@@ -1,12 +1,15 @@
-/** 홈 탭 내부 스택 — 홈 메인 + 커플 연결 + 맛집 지도 (REL-01/02, PLACE) */
+/** 홈 탭 내부 스택 — 홈 + 커플 연결 + MY(프로필·트레이너) */
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from './types';
 import { HomeScreen } from '../screens/home/HomeScreen';
 import { CoupleConnectScreen } from '../screens/home/CoupleConnectScreen';
-import { PlaceMapScreen } from '../screens/place/PlaceMapScreen';
-import { PlaceAddScreen } from '../screens/place/PlaceAddScreen';
-import { PlaceDetailScreen } from '../screens/place/PlaceDetailScreen';
+import { MyScreen } from '../screens/my/MyScreen';
+import { TrainerRegisterScreen } from '../screens/trainer/TrainerRegisterScreen';
+import { TrainerDashboardScreen } from '../screens/trainer/TrainerDashboardScreen';
+import { TrainerMemberDetailScreen } from '../screens/trainer/TrainerMemberDetailScreen';
+import { TrainerRoutineAssignScreen } from '../screens/trainer/TrainerRoutineAssignScreen';
+import { TrainerConnectScreen } from '../screens/trainer/TrainerConnectScreen';
 import { colors } from '../constants/theme';
 
 const Stack = createNativeStackNavigator<HomeStackParamList>();
@@ -26,16 +29,31 @@ export function HomeStackNavigator() {
         component={CoupleConnectScreen}
         options={{ title: '커플 연결' }}
       />
-      <Stack.Screen name="PlaceMap" component={PlaceMapScreen} options={{ title: '우리 맛집 지도' }} />
+      <Stack.Screen name="My" component={MyScreen} options={{ title: 'MY' }} />
       <Stack.Screen
-        name="PlaceAdd"
-        component={PlaceAddScreen}
-        options={{ title: '장소 추가', presentation: 'modal' }}
+        name="TrainerRegister"
+        component={TrainerRegisterScreen}
+        options={{ title: '트레이너 등록' }}
       />
       <Stack.Screen
-        name="PlaceDetail"
-        component={PlaceDetailScreen}
+        name="TrainerDashboard"
+        component={TrainerDashboardScreen}
+        options={{ title: '트레이너 대시보드' }}
+      />
+      <Stack.Screen
+        name="TrainerMemberDetail"
+        component={TrainerMemberDetailScreen}
         options={({ route }) => ({ title: route.params.name })}
+      />
+      <Stack.Screen
+        name="TrainerRoutineAssign"
+        component={TrainerRoutineAssignScreen}
+        options={({ route }) => ({ title: `${route.params.name}님 루틴 배정`, presentation: 'modal' })}
+      />
+      <Stack.Screen
+        name="TrainerConnect"
+        component={TrainerConnectScreen}
+        options={{ title: '트레이너 연결' }}
       />
     </Stack.Navigator>
   );

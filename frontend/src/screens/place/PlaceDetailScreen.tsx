@@ -12,7 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { HomeStackParamList } from '../../navigation/types';
+import type { PlaceStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
 import { placeApi } from '../../api/place';
@@ -23,7 +23,7 @@ import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { PlaceVisit } from '../../types';
 
-type Props = NativeStackScreenProps<HomeStackParamList, 'PlaceDetail'>;
+type Props = NativeStackScreenProps<PlaceStackParamList, 'PlaceDetail'>;
 
 function stars(rating?: number | null): string {
   if (!rating) return '';

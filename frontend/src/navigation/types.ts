@@ -8,26 +8,27 @@ export type OnboardingStackParamList = {
   Register: undefined;
 };
 
-// 홈 탭 내부 스택 — 커플 연결 / 맛집 지도 (REL-01/02, PLACE)
+// 홈 탭 내부 스택 — 홈 / 커플 연결 / MY(프로필·트레이너)
 export type HomeStackParamList = {
   HomeMain: undefined;
   CoupleConnect: undefined;
-  PlaceMap: undefined;
-  PlaceAdd: undefined;
-  PlaceDetail: { placeId: number; name: string };
+  // MY (구 MY 탭에서 이전) — 홈 헤더 프로필 아이콘으로 진입
+  My: undefined;
+  TrainerRegister: undefined;
+  TrainerDashboard: undefined;
+  TrainerMemberDetail: { memberId: number; name: string };
+  TrainerRoutineAssign: { memberId: number; name: string };
+  TrainerConnect: undefined;
 };
 
-// 운동 탭 내부 스택 — 기록 입력 / 캘린더 (WORKOUT-01/04)
+// 운동 탭 내부 스택 — 운동 + 식단(세그먼트로 통합)
 export type WorkoutStackParamList = {
   WorkoutMain: undefined;
   WorkoutRecord: undefined;
   WorkoutCalendar: undefined;
   WorkoutStats: undefined;
   WorkoutRecommend: undefined;
-};
-
-// 식단 탭 내부 스택 — 메인 / 기록 입력 / 캘린더 / 통계
-export type DietStackParamList = {
+  // 식단 (구 식단 탭에서 이전) — WorkoutMain 상단 세그먼트로 토글
   DietMain: undefined;
   DietRecord: undefined;
   DietCalendar: undefined;
@@ -40,23 +41,19 @@ export type ChatStackParamList = {
   ChatRoom: { relationId: number; title: string };
 };
 
-// MY 탭 내부 스택 — 프로필 / 트레이너(등록·대시보드·회원·연결)
-export type MyStackParamList = {
-  MyMain: undefined;
-  TrainerRegister: undefined;
-  TrainerDashboard: undefined;
-  TrainerMemberDetail: { memberId: number; name: string };
-  TrainerRoutineAssign: { memberId: number; name: string };
-  TrainerConnect: undefined;
+// 맛집 탭 내부 스택 — 지도 / 추가 / 상세 (PLACE)
+export type PlaceStackParamList = {
+  PlaceMap: undefined;
+  PlaceAdd: undefined;
+  PlaceDetail: { placeId: number; name: string };
 };
 
-// 2.2 메인 탭 (홈/운동/식단/채팅/MY)
+// 2.2 메인 탭 (홈 / 운동+식단 / 채팅 / 맛집) + 중앙 FAB
 export type MainTabParamList = {
   Home: NavigatorScreenParams<HomeStackParamList>;
   Workout: NavigatorScreenParams<WorkoutStackParamList>;
-  Diet: NavigatorScreenParams<DietStackParamList>;
   Chat: NavigatorScreenParams<ChatStackParamList>;
-  My: NavigatorScreenParams<MyStackParamList>;
+  Place: NavigatorScreenParams<PlaceStackParamList>;
 };
 
 export type RootStackParamList = {

@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { HomeStackParamList } from '../../navigation/types';
+import type { PlaceStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
 import { KakaoMap } from '../../components/KakaoMap';
@@ -24,7 +24,7 @@ import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { PlaceStatus } from '../../types';
 
-type Props = NativeStackScreenProps<HomeStackParamList, 'PlaceAdd'>;
+type Props = NativeStackScreenProps<PlaceStackParamList, 'PlaceAdd'>;
 
 const CATEGORIES = ['한식', '중식', '일식', '양식', '카페', '디저트', '술집', '기타'];
 

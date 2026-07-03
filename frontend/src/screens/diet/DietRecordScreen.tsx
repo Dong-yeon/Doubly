@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { DietStackParamList } from '../../navigation/types';
+import type { WorkoutStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
 import { MEAL_EMOJI } from '../../components/MealCard';
@@ -29,7 +29,7 @@ import { toDateString } from '../../utils/date';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { MealType } from '../../types';
 
-type Props = NativeStackScreenProps<DietStackParamList, 'DietRecord'>;
+type Props = NativeStackScreenProps<WorkoutStackParamList, 'DietRecord'>;
 
 const MEAL_TYPES: { value: MealType; label: string }[] = [
   { value: 'BREAKFAST', label: '아침' },

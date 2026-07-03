@@ -13,9 +13,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { DietStackParamList } from '../../navigation/types';
+import type { WorkoutStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { MealCard } from '../../components/MealCard';
+import { WorkoutDietSegment } from '../../components/WorkoutDietSegment';
 import { EmptyState } from '../../components/EmptyState';
 import { useDietStore } from '../../store/dietStore';
 import { useRelationStore } from '../../store/relationStore';
@@ -27,7 +28,7 @@ import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { CoupleMealGoal, Meal, Streak } from '../../types';
 
-type Props = NativeStackScreenProps<DietStackParamList, 'DietMain'>;
+type Props = NativeStackScreenProps<WorkoutStackParamList, 'DietMain'>;
 
 export function DietScreen({ navigation }: Props) {
   const { today, history, loading, loadingMore, fetchToday, fetchHistory, loadMoreHistory, remove } =
@@ -89,16 +90,14 @@ export function DietScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <View style={styles.header}>
-        <Text style={styles.title}>식단</Text>
-        <View style={styles.headerLinks}>
-          <TouchableOpacity onPress={() => navigation.navigate('DietStats')}>
-            <Text style={styles.link}>📊 통계</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('DietCalendar')}>
-            <Text style={styles.link}>📅 캘린더</Text>
-          </TouchableOpacity>
-        </View>
+      <WorkoutDietSegment active="diet" />
+      <View style={styles.linksRow}>
+        <TouchableOpacity onPress={() => navigation.navigate('DietStats')}>
+          <Text style={styles.link}>📊 통계</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => navigation.navigate('DietCalendar')}>
+          <Text style={styles.link}>📅 캘린더</Text>
+        </TouchableOpacity>
       </View>
 
       <FlatList
@@ -222,6 +221,13 @@ const styles = StyleSheet.create({
   title: { fontSize: fontSize.title, fontWeight: '800', color: colors.textPrimary },
   headerLinks: { flexDirection: 'row', gap: spacing.md },
   link: { fontSize: fontSize.body, color: colors.primary, fontWeight: '600' },
+  linksRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+  },
   list: { padding: spacing.lg, paddingBottom: 120 },
   streakRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
   streakText: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
