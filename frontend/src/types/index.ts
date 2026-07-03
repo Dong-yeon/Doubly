@@ -134,6 +134,9 @@ export interface TrainerRoutine {
   description?: string | null;
   routineDate?: string | null;
   isCompleted: boolean;
+  completedAt?: string | null;
+  /** 회원 화면 표시용 (트레이너 조회 시 null) */
+  trainerName?: string | null;
 }
 
 // 식단 (meals) — 끼니별 사진/메모/칼로리

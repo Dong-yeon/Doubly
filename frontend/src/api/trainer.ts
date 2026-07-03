@@ -1,6 +1,13 @@
-/** 트레이너 API — 설계서 v2.0 4.6 (등록·프로필·대시보드·회원 기록) */
+/** 트레이너 API — 설계서 v2.0 4.6 (등록·프로필·대시보드·회원 기록·루틴) */
 import { apiClient, unwrap } from './client';
-import type { ApiResponse, TrainerProfile, User, Workout } from '../types';
+import type { ApiResponse, TrainerProfile, TrainerRoutine, User, Workout } from '../types';
+
+export interface AssignRoutinePayload {
+  memberId: number;
+  title: string;
+  description?: string;
+  routineDate?: string; // YYYY-MM-DD
+}
 
 export interface TrainerProfilePayload {
   specialty?: string;
@@ -33,4 +40,15 @@ export const trainerApi = {
   dashboard: () => unwrap(apiClient.get<ApiResponse<TrainerDashboard>>('/trainer/dashboard')),
   memberWorkouts: (memberId: number) =>
     unwrap(apiClient.get<ApiResponse<Workout[]>>(`/trainer/members/${memberId}/workouts`)),
+
+  // 루틴 (phase 7)
+  assignRoutine: (payload: AssignRoutinePayload) =>
+    unwrap(apiClient.post<ApiResponse<TrainerRoutine>>('/trainer/routines', payload)),
+  memberRoutines: (memberId: number) =>
+    unwrap(apiClient.get<ApiResponse<TrainerRoutine[]>>('/trainer/routines', { params: { memberId } })),
+  myRoutines: () => unwrap(apiClient.get<ApiResponse<TrainerRoutine[]>>('/trainer/routines/my')),
+  completeRoutine: (id: number) =>
+    unwrap(apiClient.post<ApiResponse<TrainerRoutine>>(`/trainer/routines/${id}/complete`)),
+  deleteRoutine: (id: number) =>
+    unwrap(apiClient.delete<ApiResponse<void>>(`/trainer/routines/${id}`)),
 };
