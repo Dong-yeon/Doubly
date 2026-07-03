@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "index.ts",
   "dependencies": {
+    "@expo/vector-icons": "^15.1.1",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-navigation/bottom-tabs": "^7.18.3",
     "@react-navigation/native": "^7.3.4",
@@ -11,6 +12,7 @@
     "axios": "^1.18.1",
     "expo": "~56.0.12",
     "expo-clipboard": "~56.0.4",
+    "expo-font": "~56.0.7",
     "expo-haptics": "~56.0.3",
     "expo-image-picker": "~56.0.18",
     "expo-linear-gradient": "~56.0.4",

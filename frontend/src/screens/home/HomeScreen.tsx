@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { CompositeScreenProps } from '@react-navigation/native';
@@ -38,7 +39,8 @@ type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList>
 >;
 
-const GRADIENT: [string, string, string] = ['#FF9AAE', '#FF7A93', '#FF6FA0'];
+// 커플 히어로 그라데이션 — couple(코랄) 톤으로 리파인
+const GRADIENT: [string, string, string] = ['#FF9E9E', '#FF8080', '#E86A6A'];
 
 function daysTogether(connectedAt?: string | null): number {
   if (!connectedAt) return 0;
@@ -139,7 +141,8 @@ export function HomeScreen({ navigation }: Props) {
         {connected ? (
           <View style={styles.topBar}>
             <Pressable style={styles.bgBtn} onPress={onChangeBg}>
-              <Text style={styles.bgBtnText}>🖼️ 배경</Text>
+              <MaterialCommunityIcons name="image-outline" size={14} color={colors.white} />
+              <Text style={styles.bgBtnText}>배경</Text>
             </Pressable>
           </View>
         ) : null}
@@ -177,17 +180,22 @@ export function HomeScreen({ navigation }: Props) {
             <Text style={styles.myStreak}>🔥 내 연속 {myStreak?.currentCount ?? 0}일 · 최고 {myStreak?.maxCount ?? 0}일</Text>
 
             {/* 우리 맛집 지도 */}
-            <Pressable style={styles.mealChip} onPress={() => navigation.navigate('PlaceMap')}>
-              <Text style={styles.mealChipText}>📍 우리 맛집 지도</Text>
+            <Pressable
+              style={[styles.mealChip, styles.chipRow]}
+              onPress={() => navigation.navigate('PlaceMap')}
+            >
+              <MaterialCommunityIcons name="map-marker-outline" size={15} color={colors.white} />
+              <Text style={styles.mealChipText}>우리 맛집 지도</Text>
             </Pressable>
 
             {/* 오늘 식단 상태 */}
             <Pressable
-              style={styles.mealChip}
+              style={[styles.mealChip, styles.chipRow]}
               onPress={() => navigation.navigate('Diet', { screen: 'DietMain' })}
             >
+              <MaterialCommunityIcons name="silverware-fork-knife" size={15} color={colors.white} />
               <Text style={styles.mealChipText}>
-                🍽️ 오늘 식단 · 나 {myMealDone ? '✓' : '–'} / {partnerMeal?.partnerName ?? '상대'}{' '}
+                오늘 식단 · 나 {myMealDone ? '✓' : '–'} / {partnerMeal?.partnerName ?? '상대'}{' '}
                 {partnerMeal?.completed ? '✓' : '–'}
               </Text>
             </Pressable>
@@ -283,7 +291,8 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   container: { flexGrow: 1, padding: spacing.lg },
   topBar: { flexDirection: 'row', justifyContent: 'flex-end' },
-  bgBtn: { backgroundColor: 'rgba(255,255,255,0.25)', borderRadius: radius.pill, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
+  bgBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.25)', borderRadius: radius.pill, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
+  chipRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
   bgBtnText: { color: colors.white, fontSize: fontSize.caption, fontWeight: '700' },
 
   ddayWrap: { alignItems: 'center', marginTop: spacing.xl },
