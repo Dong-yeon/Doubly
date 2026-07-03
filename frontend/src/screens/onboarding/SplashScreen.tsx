@@ -23,7 +23,7 @@ export function SplashScreen({ navigation }: Props) {
   return (
     <View style={styles.container}>
       <Animated.View style={[styles.center, { opacity, transform: [{ scale }] }]}>
-        <Text style={styles.logo}>💑</Text>
+        <Text style={styles.logo}>👩‍❤️‍👨</Text>
         <Text style={styles.brand}>Fitto</Text>
         <View style={styles.sloganWrap}>
           <Text style={styles.slogan}>함께라서 더 건강해</Text>
