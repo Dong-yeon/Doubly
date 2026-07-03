@@ -8,10 +8,13 @@ export type OnboardingStackParamList = {
   Register: undefined;
 };
 
-// 홈 탭 내부 스택 — 커플 연결 진입 (REL-01/02)
+// 홈 탭 내부 스택 — 커플 연결 / 맛집 지도 (REL-01/02, PLACE)
 export type HomeStackParamList = {
   HomeMain: undefined;
   CoupleConnect: undefined;
+  PlaceMap: undefined;
+  PlaceAdd: undefined;
+  PlaceDetail: { placeId: number; name: string };
 };
 
 // 운동 탭 내부 스택 — 기록 입력 / 캘린더 (WORKOUT-01/04)
