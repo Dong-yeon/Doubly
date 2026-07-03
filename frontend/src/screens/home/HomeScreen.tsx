@@ -176,6 +176,11 @@ export function HomeScreen({ navigation }: Props) {
             {/* 내 연속 */}
             <Text style={styles.myStreak}>🔥 내 연속 {myStreak?.currentCount ?? 0}일 · 최고 {myStreak?.maxCount ?? 0}일</Text>
 
+            {/* 우리 맛집 지도 */}
+            <Pressable style={styles.mealChip} onPress={() => navigation.navigate('PlaceMap')}>
+              <Text style={styles.mealChipText}>📍 우리 맛집 지도</Text>
+            </Pressable>
+
             {/* 오늘 식단 상태 */}
             <Pressable
               style={styles.mealChip}

@@ -139,6 +139,35 @@ export interface TrainerRoutine {
   trainerName?: string | null;
 }
 
+// 커플 맛집 지도 (PLAN.md Place Map) — 장소 핀 + 방문 기록
+export type PlaceStatus = 'WISHLIST' | 'VISITED';
+export interface Place {
+  id: number;
+  name: string;
+  address?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  category?: string | null;
+  status: PlaceStatus;
+  addedBy: number;
+  visitCount: number;
+  avgRating?: number | null;
+  lastVisitedAt?: string | null;
+  createdAt: string;
+}
+export interface PlaceVisit {
+  id: number;
+  placeId: number;
+  visitedBy: number;
+  visitedByName?: string | null;
+  visitedAt: string;
+  rating?: number | null;
+  memo?: string | null;
+  imageUrl?: string | null;
+  mealId?: number | null;
+  createdAt: string;
+}
+
 // 식단 (meals) — 끼니별 사진/메모/칼로리
 export type MealType = 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK';
 export interface Meal {
