@@ -104,15 +104,59 @@ public class FoodAnalysisService {
             if (body == null || body.length == 0 || body.length > MAX_IMAGE_BYTES) {
                 throw new BusinessException(ErrorCode.INVALID_PHOTO_URL);
             }
-            MediaType contentType = entity.getHeaders().getContentType();
-            String mimeType = (contentType != null && "image".equals(contentType.getType()))
-                    ? contentType.toString()
-                    : MediaType.IMAGE_JPEG_VALUE;
+            String mimeType = resolveMimeType(body, entity.getHeaders().getContentType());
             return new Image(body, mimeType);
         } catch (RestClientResponseException | ResourceAccessException e) {
             log.warn("식단 사진 다운로드 실패: {}", e.getMessage());
             throw new BusinessException(ErrorCode.INVALID_PHOTO_URL);
         }
+    }
+
+    /**
+     * 실제 이미지 포맷을 판별한다. Gemini 는 선언된 mimeType 과 실제 바이트가 일치하지 않으면
+     * 거부하므로, CDN 이 보내는 Content-Type 헤더(누락되거나 부정확할 수 있음)를 그대로 믿지 않고
+     * 파일 시그니처(매직 바이트)를 우선 사용한다.
+     */
+    private String resolveMimeType(byte[] body, MediaType headerContentType) {
+        String sniffed = sniffImageMimeType(body);
+        if (sniffed != null) {
+            return sniffed;
+        }
+        if (headerContentType != null && "image".equals(headerContentType.getType())) {
+            return headerContentType.getType() + "/" + headerContentType.getSubtype();
+        }
+        log.warn("이미지 포맷을 식별하지 못해 기본값(jpeg)으로 처리합니다. header={}", headerContentType);
+        return MediaType.IMAGE_JPEG_VALUE;
+    }
+
+    /** 파일 시그니처로 이미지 포맷 판별 — Gemini 가 지원하는 포맷(PNG/JPEG/WEBP/HEIC/HEIF/GIF)만 확인 */
+    private String sniffImageMimeType(byte[] b) {
+        if (startsWith(b, 0xFF, 0xD8, 0xFF)) return MediaType.IMAGE_JPEG_VALUE;
+        if (startsWith(b, 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)) return MediaType.IMAGE_PNG_VALUE;
+        if (startsWith(b, 0x47, 0x49, 0x46, 0x38)) return MediaType.IMAGE_GIF_VALUE;
+        if (b.length >= 12 && startsWith(b, 0x52, 0x49, 0x46, 0x46) && matches(b, 8, 0x57, 0x45, 0x42, 0x50)) {
+            return "image/webp";
+        }
+        if (b.length >= 12 && matches(b, 4, 0x66, 0x74, 0x79, 0x70)) { // "ftyp" box (HEIC/HEIF container)
+            String brand = new String(b, 8, 4, java.nio.charset.StandardCharsets.US_ASCII);
+            if (brand.startsWith("heic") || brand.startsWith("heix") || brand.startsWith("hevc")
+                    || brand.startsWith("hevx") || brand.startsWith("mif1") || brand.startsWith("msf1")) {
+                return brand.startsWith("mif1") || brand.startsWith("msf1") ? "image/heif" : "image/heic";
+            }
+        }
+        return null;
+    }
+
+    private boolean startsWith(byte[] b, int... signature) {
+        return matches(b, 0, signature);
+    }
+
+    private boolean matches(byte[] b, int offset, int... signature) {
+        if (b.length < offset + signature.length) return false;
+        for (int i = 0; i < signature.length; i++) {
+            if ((b[offset + i] & 0xFF) != signature[i]) return false;
+        }
+        return true;
     }
 
     private record Image(byte[] bytes, String mimeType) {
