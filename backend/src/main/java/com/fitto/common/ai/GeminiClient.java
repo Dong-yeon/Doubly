@@ -74,23 +74,7 @@ public class GeminiClient {
                         "responseMimeType", "application/json",
                         "responseSchema", responseSchema));
 
-        JsonNode root;
-        try {
-            root = restClient.post()
-                    .uri(GEMINI_ENDPOINT.formatted(properties.getModel()))
-                    .header("x-goog-api-key", properties.getApiKey())
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(body)
-                    .retrieve()
-                    .body(JsonNode.class);
-        } catch (RestClientResponseException e) {
-            log.warn("Gemini 호출 실패: status={} body={}", e.getStatusCode(), e.getResponseBodyAsString());
-            throw new BusinessException(e.getStatusCode().value() == 429
-                    ? ErrorCode.AI_RATE_LIMITED : ErrorCode.AI_ANALYSIS_FAILED);
-        } catch (ResourceAccessException e) {
-            log.warn("Gemini 호출 타임아웃/네트워크 오류: {}", e.getMessage());
-            throw new BusinessException(ErrorCode.AI_ANALYSIS_FAILED);
-        }
+        JsonNode root = callWithRetry(body);
 
         String text = root == null ? null
                 : root.path("candidates").path(0).path("content")
@@ -103,6 +87,49 @@ public class GeminiClient {
             return objectMapper.readTree(text);
         } catch (Exception e) {
             log.warn("Gemini 결과 JSON 파싱 실패: {}", text);
+            throw new BusinessException(ErrorCode.AI_ANALYSIS_FAILED);
+        }
+    }
+
+    /**
+     * Gemini 호출 — 일시적 과부하(503)는 무료 티어에서 흔하므로 짧은 백오프로 자동 재시도한다.
+     * (Google 공식 가이드도 503 에 지수 백오프 재시도를 권장)
+     */
+    private JsonNode callWithRetry(Map<String, Object> body) {
+        int maxAttempts = 3;
+        long backoffMillis = 500;
+        for (int attempt = 1; ; attempt++) {
+            try {
+                return restClient.post()
+                        .uri(GEMINI_ENDPOINT.formatted(properties.getModel()))
+                        .header("x-goog-api-key", properties.getApiKey())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body(body)
+                        .retrieve()
+                        .body(JsonNode.class);
+            } catch (RestClientResponseException e) {
+                int status = e.getStatusCode().value();
+                if (status == 503 && attempt < maxAttempts) {
+                    log.info("Gemini 일시 과부하(503) — {}ms 후 재시도 ({}/{})", backoffMillis, attempt, maxAttempts);
+                    sleep(backoffMillis);
+                    backoffMillis *= 3;
+                    continue;
+                }
+                log.warn("Gemini 호출 실패: status={} body={}", status, e.getResponseBodyAsString());
+                throw new BusinessException(status == 429 || status == 503
+                        ? ErrorCode.AI_RATE_LIMITED : ErrorCode.AI_ANALYSIS_FAILED);
+            } catch (ResourceAccessException e) {
+                log.warn("Gemini 호출 타임아웃/네트워크 오류: {}", e.getMessage());
+                throw new BusinessException(ErrorCode.AI_ANALYSIS_FAILED);
+            }
+        }
+    }
+
+    private void sleep(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
             throw new BusinessException(ErrorCode.AI_ANALYSIS_FAILED);
         }
     }
