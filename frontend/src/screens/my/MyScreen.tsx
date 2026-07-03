@@ -33,6 +33,8 @@ export function MyScreen() {
   const { user, logout, withdraw, updateProfile } = useAuthStore();
   const couple = useRelationStore((s) => s.couple);
   const fetchRelations = useRelationStore((s) => s.fetchAll);
+  const endRelation = useRelationStore((s) => s.end);
+  const [disconnecting, setDisconnecting] = useState(false);
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(user?.name ?? '');
   const [saving, setSaving] = useState(false);
@@ -118,6 +120,34 @@ export function MyScreen() {
     ]);
   };
 
+  const onDisconnectCouple = () => {
+    if (!couple) return;
+    const partnerName = couple.partner?.name ?? '상대방';
+    Alert.alert(
+      '커플 연결 끊기',
+      `${partnerName}님과의 연결을 끊을까요?\n채팅·공유 기록은 더 이상 볼 수 없게 돼요.`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '연결 끊기',
+          style: 'destructive',
+          onPress: async () => {
+            setDisconnecting(true);
+            try {
+              await endRelation(couple.id);
+              haptics.success();
+              toast.success('커플 연결을 끊었어요.');
+            } catch (e) {
+              Alert.alert('오류', getErrorMessage(e));
+            } finally {
+              setDisconnecting(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const onWithdraw = () => {
     Alert.alert('회원 탈퇴', '탈퇴하면 연결된 관계도 해제됩니다. 계속할까요?', [
       { text: '취소', style: 'cancel' },
@@ -194,6 +224,19 @@ export function MyScreen() {
             <Text style={styles.menuText}>로그아웃</Text>
             <Text style={styles.chevron}>›</Text>
           </Pressable>
+          {couple ? (
+            <>
+              <View style={styles.divider} />
+              <Pressable
+                style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
+                onPress={onDisconnectCouple}
+                disabled={disconnecting}
+              >
+                <Text style={[styles.menuText, styles.danger]}>💔 커플 연결 끊기</Text>
+                {disconnecting ? <ActivityIndicator size="small" color={colors.danger} /> : <Text style={styles.chevron}>›</Text>}
+              </Pressable>
+            </>
+          ) : null}
           <View style={styles.divider} />
           <Pressable style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]} onPress={onWithdraw}>
             <Text style={[styles.menuText, styles.danger]}>회원 탈퇴</Text>
