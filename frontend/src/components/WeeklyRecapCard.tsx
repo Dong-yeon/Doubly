@@ -36,7 +36,7 @@ export function WeeklyRecapCard({ recap, onShare, sharing }: Props) {
             meal={recap.partnerMealDays}
           />
           <View style={styles.divider} />
-          <Row label="함께 💑" workout={recap.bothWorkoutDays} meal={recap.bothMealDays} highlight />
+          <Row label="함께 👩‍❤️‍👨" workout={recap.bothWorkoutDays} meal={recap.bothMealDays} highlight />
         </>
       ) : null}
 

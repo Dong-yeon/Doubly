@@ -39,7 +39,7 @@ export function LoginScreen({ navigation }: Props) {
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
           <View style={styles.hero}>
-            <Text style={styles.logo}>💑</Text>
+            <Text style={styles.logo}>👩‍❤️‍👨</Text>
             <Text style={styles.brand}>Fitto</Text>
             <Text style={styles.slogan}>함께라서 더 건강해</Text>
           </View>

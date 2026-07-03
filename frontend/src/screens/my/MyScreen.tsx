@@ -69,7 +69,7 @@ export function MyScreen({ navigation }: Props) {
         `📊 지난주 결산\n` +
         `나 💪${recap.myWorkoutDays}일 🥗${recap.myMealDays}일 · ` +
         `${partner} 💪${recap.partnerWorkoutDays}일 🥗${recap.partnerMealDays}일\n` +
-        `함께 💪${recap.bothWorkoutDays}일 🥗${recap.bothMealDays}일 💑`;
+        `함께 💪${recap.bothWorkoutDays}일 🥗${recap.bothMealDays}일 👩‍❤️‍👨`;
       const ok = await publishEnsuringConnection(couple.id, { messageType: 'TEXT', content });
       if (ok) {
         haptics.success();

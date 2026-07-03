@@ -117,7 +117,7 @@ export function DietScreen({ navigation }: Props) {
             <View style={styles.streakRow}>
               <Text style={styles.streakText}>🥗 연속 {myStreak?.currentCount ?? 0}일</Text>
               {goal?.connected ? (
-                <Text style={styles.streakText}>💑 함께 {coupleStreak?.currentCount ?? 0}일</Text>
+                <Text style={styles.streakText}>👩‍❤️‍👨 함께 {coupleStreak?.currentCount ?? 0}일</Text>
               ) : null}
               <Text style={styles.streakMax}>최고 {myStreak?.maxCount ?? 0}일</Text>
             </View>
