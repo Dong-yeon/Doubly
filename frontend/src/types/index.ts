@@ -105,6 +105,25 @@ export interface WorkoutStats {
   categoryBreakdown: { category: string; count: number }[];
 }
 
+// AI 운동 추천 (POST /workout/recommend) — 최근 기록 기반 제안
+export interface RecommendedExercise {
+  name: string;
+  category?: string | null;
+  sets?: number | null;
+  reps?: number | null;
+  comment?: string | null;
+}
+export interface WorkoutPlanDay {
+  dayOffset: number; // 0=오늘, 1=내일 …
+  focus: string;
+  exercises: RecommendedExercise[];
+  comment?: string | null;
+}
+export interface WorkoutRecommendation {
+  days: WorkoutPlanDay[];
+  overallComment?: string | null;
+}
+
 // 5.7 trainer_routines
 export interface TrainerRoutine {
   id: number;

@@ -4,9 +4,12 @@ import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
 import com.fitto.workout.dto.CalendarDayResponse;
 import com.fitto.workout.dto.PartnerTodayResponse;
+import com.fitto.workout.dto.RecommendWorkoutRequest;
 import com.fitto.workout.dto.SaveWorkoutRequest;
+import com.fitto.workout.dto.WorkoutRecommendationResponse;
 import com.fitto.workout.dto.WorkoutResponse;
 import com.fitto.workout.dto.WorkoutStatsResponse;
+import com.fitto.workout.service.WorkoutRecommendationService;
 import com.fitto.workout.service.WorkoutService;
 import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -29,15 +32,26 @@ import java.util.List;
 public class WorkoutController {
 
     private final WorkoutService workoutService;
+    private final WorkoutRecommendationService recommendationService;
 
-    public WorkoutController(WorkoutService workoutService) {
+    public WorkoutController(WorkoutService workoutService,
+                             WorkoutRecommendationService recommendationService) {
         this.workoutService = workoutService;
+        this.recommendationService = recommendationService;
     }
 
     @PostMapping
     public ApiResponse<WorkoutResponse> save(@AuthenticationPrincipal AuthUser user,
                                              @Valid @RequestBody SaveWorkoutRequest request) {
         return ApiResponse.success(workoutService.save(user.id(), request), "운동 기록이 저장되었습니다.");
+    }
+
+    /** AI 운동 추천 — 최근 기록 기반으로 오늘(days=1) 또는 며칠간의 루틴을 제안 */
+    @PostMapping("/recommend")
+    public ApiResponse<WorkoutRecommendationResponse> recommend(@AuthenticationPrincipal AuthUser user,
+                                                                @Valid @RequestBody RecommendWorkoutRequest request) {
+        return ApiResponse.success(recommendationService.recommend(user.id(), request.daysOrDefault()),
+                "AI 운동 추천이 완료되었습니다.");
     }
 
     @GetMapping("/today")

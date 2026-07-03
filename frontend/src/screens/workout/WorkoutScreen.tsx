@@ -48,6 +48,9 @@ export function WorkoutScreen({ navigation }: Props) {
       <View style={styles.header}>
         <Text style={styles.title}>운동</Text>
         <View style={styles.headerLinks}>
+          <TouchableOpacity onPress={() => navigation.navigate('WorkoutRecommend')}>
+            <Text style={styles.calendarLink}>🤖 AI 추천</Text>
+          </TouchableOpacity>
           <TouchableOpacity onPress={() => navigation.navigate('WorkoutStats')}>
             <Text style={styles.calendarLink}>📊 통계</Text>
           </TouchableOpacity>
