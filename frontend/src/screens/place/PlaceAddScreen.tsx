@@ -15,7 +15,9 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
+import { KakaoMap } from '../../components/KakaoMap';
 import { placeApi } from '../../api/place';
+import { isKakaoMapConfigured } from '../../constants/config';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
@@ -36,7 +38,16 @@ export function PlaceAddScreen({ navigation }: Props) {
   const [address, setAddress] = useState('');
   const [category, setCategory] = useState<string | null>(null);
   const [status, setStatus] = useState<PlaceStatus>('WISHLIST');
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // 지도 탭 → 좌표 저장 + (주소가 비어 있으면) 자동 입력
+  const onMapSelect = (pos: { lat: number; lng: number; address?: string | null }) => {
+    setCoords({ lat: pos.lat, lng: pos.lng });
+    if (pos.address) {
+      setAddress((prev) => (prev.trim() ? prev : pos.address ?? ''));
+    }
+  };
 
   const onSave = async () => {
     if (!name.trim()) return;
@@ -45,6 +56,8 @@ export function PlaceAddScreen({ navigation }: Props) {
       await placeApi.save({
         name: name.trim(),
         address: address.trim() || undefined,
+        lat: coords?.lat,
+        lng: coords?.lng,
         category: category ?? undefined,
         status,
       });
@@ -75,6 +88,16 @@ export function PlaceAddScreen({ navigation }: Props) {
             value={address}
             onChangeText={setAddress}
           />
+
+          {isKakaoMapConfigured() ? (
+            <>
+              <Text style={styles.label}>위치 선택 (선택) — 지도를 탭하면 핀이 찍혀요</Text>
+              <KakaoMap selectable height={240} onSelect={onMapSelect} />
+              <Text style={styles.coordText}>
+                {coords ? `📍 위치 선택됨 (${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)})` : '아직 위치를 선택하지 않았어요'}
+              </Text>
+            </>
+          ) : null}
 
           <Text style={styles.label}>카테고리 (선택)</Text>
           <View style={styles.chipRow}>
@@ -140,5 +163,6 @@ const styles = StyleSheet.create({
   chipActive: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
   chipText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
   chipTextActive: { color: colors.textPrimary, fontWeight: '800' },
+  coordText: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xs },
   submit: { marginTop: spacing.lg },
 });

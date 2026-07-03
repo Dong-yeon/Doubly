@@ -41,3 +41,12 @@ export const CLOUDINARY = {
 
 export const isCloudinaryConfigured = () =>
   CLOUDINARY.cloudName !== 'YOUR_CLOUD_NAME' && CLOUDINARY.uploadPreset !== 'YOUR_UNSIGNED_PRESET';
+
+/**
+ * 카카오맵 JavaScript 키 (맛집 지도).
+ * 클라이언트 노출 전제 키 — 카카오 개발자 콘솔의 Web 플랫폼 도메인 등록으로 보호된다.
+ * (등록 필요: http://localhost:8081 + 웹 배포 도메인)
+ */
+export const KAKAO_JS_KEY = '6d931bf80f9fc59a27ef78e3c135c91e';
+
+export const isKakaoMapConfigured = () => KAKAO_JS_KEY.length > 0;

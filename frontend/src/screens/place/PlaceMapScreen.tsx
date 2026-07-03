@@ -7,7 +7,9 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
+import { KakaoMap } from '../../components/KakaoMap';
 import { placeApi } from '../../api/place';
+import { isKakaoMapConfigured } from '../../constants/config';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
@@ -25,6 +27,7 @@ const FILTERS: { value: PlaceStatus | 'ALL'; label: string }[] = [
 export function PlaceMapScreen({ navigation }: Props) {
   const [places, setPlaces] = useState<Place[]>([]);
   const [filter, setFilter] = useState<PlaceStatus | 'ALL'>('ALL');
+  const [mapMode, setMapMode] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const load = useCallback(async () => {
@@ -65,6 +68,10 @@ export function PlaceMapScreen({ navigation }: Props) {
   };
 
   const filtered = filter === 'ALL' ? places : places.filter((p) => p.status === filter);
+  // 좌표가 등록된 장소만 지도에 핀으로 표시
+  const markers = filtered
+    .filter((p) => p.lat != null && p.lng != null)
+    .map((p) => ({ id: p.id, lat: p.lat as number, lng: p.lng as number, title: p.name }));
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
@@ -78,8 +85,34 @@ export function PlaceMapScreen({ navigation }: Props) {
             <Text style={[styles.filterText, filter === f.value && styles.filterTextActive]}>{f.label}</Text>
           </TouchableOpacity>
         ))}
+        {isKakaoMapConfigured() ? (
+          <TouchableOpacity
+            style={[styles.filterChip, mapMode && styles.filterChipActive]}
+            onPress={() => setMapMode((v) => !v)}
+          >
+            <Text style={[styles.filterText, mapMode && styles.filterTextActive]}>🗺️ 지도</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
 
+      {mapMode ? (
+        <View style={styles.mapWrap}>
+          <KakaoMap
+            markers={markers}
+            height={0} // style 의 flex 로 채움
+            style={styles.map}
+            onMarkerPress={(id) => {
+              const place = places.find((p) => p.id === id);
+              if (place) navigation.navigate('PlaceDetail', { placeId: place.id, name: place.name });
+            }}
+          />
+          <Text style={styles.mapHint}>
+            {markers.length === 0
+              ? '위치가 등록된 장소가 없어요. 장소 추가 시 지도에서 위치를 선택해보세요!'
+              : '핀을 탭하면 상세로 이동해요.'}
+          </Text>
+        </View>
+      ) : (
       <FlatList
         data={filtered}
         keyExtractor={(p) => String(p.id)}
@@ -124,6 +157,7 @@ export function PlaceMapScreen({ navigation }: Props) {
           ) : null
         }
       />
+      )}
 
       <View style={styles.fabWrap}>
         <Button title="＋ 장소 추가하기" onPress={() => navigation.navigate('PlaceAdd')} />
@@ -176,4 +210,7 @@ const styles = StyleSheet.create({
   statusBadge: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textPrimary },
   visitInfo: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '700' },
   fabWrap: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: spacing.lg },
+  mapWrap: { flex: 1, padding: spacing.lg, paddingBottom: 96 },
+  map: { flex: 1 },
+  mapHint: { fontSize: fontSize.caption, color: colors.textSecondary, textAlign: 'center', marginTop: spacing.sm },
 });
