@@ -5,6 +5,7 @@ import type {
   CalendarDay,
   CoupleMealGoal,
   Meal,
+  MealAnalysis,
   MealStats,
   MealType,
   PartnerToday,
@@ -21,6 +22,9 @@ export interface SaveMealPayload {
 export const dietApi = {
   save: (payload: SaveMealPayload) =>
     unwrap(apiClient.post<ApiResponse<Meal>>('/meal', payload)),
+  // AI 분석은 이미지 처리 시간이 길어 기본 timeout(10s)을 늘린다
+  analyze: (photoUrl: string) =>
+    unwrap(apiClient.post<ApiResponse<MealAnalysis>>('/meal/analyze', { photoUrl }, { timeout: 60000 })),
   today: () => unwrap(apiClient.get<ApiResponse<Meal[]>>('/meal/today')),
   history: (cursor?: number) =>
     unwrap(apiClient.get<ApiResponse<Meal[]>>('/meal/history', { params: { cursor } })),
