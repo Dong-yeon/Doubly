@@ -4,7 +4,7 @@ import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { HomeStackParamList } from '../../navigation/types';
+import type { PlaceStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { KakaoMap } from '../../components/KakaoMap';
@@ -16,7 +16,7 @@ import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { Place, PlaceStatus } from '../../types';
 
-type Props = NativeStackScreenProps<HomeStackParamList, 'PlaceMap'>;
+type Props = NativeStackScreenProps<PlaceStackParamList, 'PlaceMap'>;
 
 const FILTERS: { value: PlaceStatus | 'ALL'; label: string }[] = [
   { value: 'ALL', label: '전체' },
@@ -74,7 +74,8 @@ export function PlaceMapScreen({ navigation }: Props) {
     .map((p) => ({ id: p.id, lat: p.lat as number, lng: p.lng as number, title: p.name }));
 
   return (
-    <SafeAreaView style={styles.safe} edges={['bottom']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      <Text style={styles.screenTitle}>우리 맛집 지도</Text>
       <View style={styles.filterRow}>
         {FILTERS.map((f) => (
           <TouchableOpacity
@@ -168,6 +169,13 @@ export function PlaceMapScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
+  screenTitle: {
+    fontSize: fontSize.title,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+  },
   filterRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.md },
   filterChip: {
     paddingHorizontal: spacing.md,

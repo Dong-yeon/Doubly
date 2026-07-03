@@ -4,7 +4,7 @@ import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { MyStackParamList } from '../../navigation/types';
+import type { HomeStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { WorkoutCard } from '../../components/WorkoutCard';
 import { EmptyState } from '../../components/EmptyState';
@@ -15,7 +15,7 @@ import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { TrainerRoutine, Workout } from '../../types';
 
-type Props = NativeStackScreenProps<MyStackParamList, 'TrainerMemberDetail'>;
+type Props = NativeStackScreenProps<HomeStackParamList, 'TrainerMemberDetail'>;
 
 export function TrainerMemberDetailScreen({ navigation, route }: Props) {
   const { memberId, name } = route.params;

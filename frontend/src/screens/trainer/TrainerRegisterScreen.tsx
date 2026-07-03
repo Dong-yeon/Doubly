@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { MyStackParamList } from '../../navigation/types';
+import type { HomeStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
 import { trainerApi } from '../../api/trainer';
@@ -13,7 +13,7 @@ import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, spacing } from '../../constants/theme';
 
-type Props = NativeStackScreenProps<MyStackParamList, 'TrainerRegister'>;
+type Props = NativeStackScreenProps<HomeStackParamList, 'TrainerRegister'>;
 
 export function TrainerRegisterScreen({ navigation }: Props) {
   const refreshMe = useAuthStore((s) => s.refreshMe);

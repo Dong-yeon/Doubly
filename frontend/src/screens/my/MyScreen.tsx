@@ -4,7 +4,7 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { MyStackParamList } from '../../navigation/types';
+import type { HomeStackParamList } from '../../navigation/types';
 import { Avatar } from '../../components/Avatar';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
@@ -31,7 +31,7 @@ const MEAL_BADGES = [
   { days: 100, emoji: '💎', label: '100일' },
 ];
 
-type Props = NativeStackScreenProps<MyStackParamList, 'MyMain'>;
+type Props = NativeStackScreenProps<HomeStackParamList, 'My'>;
 
 export function MyScreen({ navigation }: Props) {
   const { user, logout, withdraw, updateProfile } = useAuthStore();

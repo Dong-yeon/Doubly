@@ -9,6 +9,7 @@ import { Button } from '../../components/Button';
 import { WorkoutCard } from '../../components/WorkoutCard';
 import { EmptyState } from '../../components/EmptyState';
 import { useWorkoutStore } from '../../store/workoutStore';
+import { WorkoutDietSegment } from '../../components/WorkoutDietSegment';
 import { trainerApi } from '../../api/trainer';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
@@ -75,19 +76,17 @@ export function WorkoutScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <View style={styles.header}>
-        <Text style={styles.title}>운동</Text>
-        <View style={styles.headerLinks}>
-          <TouchableOpacity onPress={() => navigation.navigate('WorkoutRecommend')}>
-            <Text style={styles.calendarLink}>🤖 AI 추천</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('WorkoutStats')}>
-            <Text style={styles.calendarLink}>📊 통계</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('WorkoutCalendar')}>
-            <Text style={styles.calendarLink}>📅 캘린더</Text>
-          </TouchableOpacity>
-        </View>
+      <WorkoutDietSegment active="workout" />
+      <View style={styles.linksRow}>
+        <TouchableOpacity onPress={() => navigation.navigate('WorkoutRecommend')}>
+          <Text style={styles.calendarLink}>🤖 AI 추천</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => navigation.navigate('WorkoutStats')}>
+          <Text style={styles.calendarLink}>📊 통계</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => navigation.navigate('WorkoutCalendar')}>
+          <Text style={styles.calendarLink}>📅 캘린더</Text>
+        </TouchableOpacity>
       </View>
 
       <FlatList
@@ -170,6 +169,13 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: fontSize.title, fontWeight: '800', color: colors.textPrimary },
   headerLinks: { flexDirection: 'row', gap: spacing.md },
+  linksRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+  },
   calendarLink: { fontSize: fontSize.body, color: colors.primary, fontWeight: '600' },
   list: { padding: spacing.lg, paddingBottom: 120 },
   sectionTitle: {

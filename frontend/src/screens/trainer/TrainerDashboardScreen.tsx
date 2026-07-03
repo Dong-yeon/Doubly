@@ -4,7 +4,7 @@ import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { MyStackParamList } from '../../navigation/types';
+import type { HomeStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { Avatar } from '../../components/Avatar';
 import { EmptyState } from '../../components/EmptyState';
@@ -16,7 +16,7 @@ import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 
-type Props = NativeStackScreenProps<MyStackParamList, 'TrainerDashboard'>;
+type Props = NativeStackScreenProps<HomeStackParamList, 'TrainerDashboard'>;
 
 export function TrainerDashboardScreen({ navigation }: Props) {
   const [dashboard, setDashboard] = useState<TrainerDashboard | null>(null);

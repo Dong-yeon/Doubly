@@ -137,15 +137,24 @@ export function HomeScreen({ navigation }: Props) {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={refresh} tintColor={colors.white} />}
       >
-        {/* 상단: 배경 변경 (커플 연결 시) */}
-        {connected ? (
-          <View style={styles.topBar}>
+        {/* 상단 바: (커플 연결 시) 배경 변경 · 우측 프로필(MY 진입) */}
+        <View style={styles.topBar}>
+          {connected ? (
             <Pressable style={styles.bgBtn} onPress={onChangeBg}>
               <MaterialCommunityIcons name="image-outline" size={14} color={colors.white} />
               <Text style={styles.bgBtnText}>배경</Text>
             </Pressable>
-          </View>
-        ) : null}
+          ) : (
+            <View />
+          )}
+          <Pressable
+            style={styles.profileBtn}
+            onPress={() => navigation.navigate('My')}
+            hitSlop={8}
+          >
+            <Avatar name={user?.name} imageUrl={user?.profileImageUrl} size={36} color={colors.primaryDark} />
+          </Pressable>
+        </View>
 
         {connected ? (
           <>
@@ -182,7 +191,7 @@ export function HomeScreen({ navigation }: Props) {
             {/* 우리 맛집 지도 */}
             <Pressable
               style={[styles.mealChip, styles.chipRow]}
-              onPress={() => navigation.navigate('PlaceMap')}
+              onPress={() => navigation.navigate('Place', { screen: 'PlaceMap' })}
             >
               <MaterialCommunityIcons name="map-marker-outline" size={15} color={colors.white} />
               <Text style={styles.mealChipText}>우리 맛집 지도</Text>
@@ -191,7 +200,7 @@ export function HomeScreen({ navigation }: Props) {
             {/* 오늘 식단 상태 */}
             <Pressable
               style={[styles.mealChip, styles.chipRow]}
-              onPress={() => navigation.navigate('Diet', { screen: 'DietMain' })}
+              onPress={() => navigation.navigate('Workout', { screen: 'DietMain' })}
             >
               <MaterialCommunityIcons name="silverware-fork-knife" size={15} color={colors.white} />
               <Text style={styles.mealChipText}>
@@ -211,7 +220,7 @@ export function HomeScreen({ navigation }: Props) {
               <Button
                 title={myMealDone ? '식단 더 하기' : '＋ 식단 기록!'}
                 variant="soft"
-                onPress={() => navigation.navigate('Diet', { screen: 'DietRecord' })}
+                onPress={() => navigation.navigate('Workout', { screen: 'DietRecord' })}
                 style={styles.quickBtn}
               />
             </View>
@@ -290,7 +299,12 @@ const styles = StyleSheet.create({
   overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.28)' },
   safe: { flex: 1 },
   container: { flexGrow: 1, padding: spacing.lg },
-  topBar: { flexDirection: 'row', justifyContent: 'flex-end' },
+  topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  profileBtn: {
+    borderRadius: radius.pill,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.6)',
+  },
   bgBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.25)', borderRadius: radius.pill, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
   chipRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
   bgBtnText: { color: colors.white, fontSize: fontSize.caption, fontWeight: '700' },
