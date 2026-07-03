@@ -20,6 +20,7 @@ export type WorkoutStackParamList = {
   WorkoutRecord: undefined;
   WorkoutCalendar: undefined;
   WorkoutStats: undefined;
+  WorkoutRecommend: undefined;
 };
 
 // 식단 탭 내부 스택 — 메인 / 기록 입력 / 캘린더 / 통계

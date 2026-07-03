@@ -6,6 +6,7 @@ import type {
   PartnerToday,
   TrainerRoutine,
   Workout,
+  WorkoutRecommendation,
   WorkoutSet,
   WorkoutStats,
 } from '../types';
@@ -32,6 +33,11 @@ export const workoutApi = {
   partnerToday: () =>
     unwrap(apiClient.get<ApiResponse<PartnerToday>>('/workout/partner/today')),
   stats: () => unwrap(apiClient.get<ApiResponse<WorkoutStats>>('/workout/stats')),
+  // AI 운동 추천 — 생성 시간이 길어 기본 timeout(10s)을 늘린다
+  recommend: (days: number) =>
+    unwrap(
+      apiClient.post<ApiResponse<WorkoutRecommendation>>('/workout/recommend', { days }, { timeout: 60000 }),
+    ),
 
   // 트레이너가 회원 오늘 기록 조회 (TRAINER, phase 6)
   memberToday: (userId: number) =>
