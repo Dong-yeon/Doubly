@@ -11,13 +11,13 @@ interface Props extends ViewProps {
 }
 
 const TINTS = {
-  surface: colors.surface,
-  pink: colors.primarySoft,
+  surface: colors.surfaceCard,
+  pink: colors.primaryBg,
   mint: colors.secondarySoft,
   yellow: colors.accentSoft,
 };
 
-/** 둥근 모서리 + 부드러운 그림자 카드 */
+/** 둥근 모서리 + 부드러운 그림자 카드 (radius 16 · 얇은 뉴트럴 보더 · elevation 2) */
 export function Card({ elevation = 'sm', tint = 'surface', style, children, ...rest }: Props) {
   return (
     <View
@@ -38,10 +38,10 @@ export function Card({ elevation = 'sm', tint = 'surface', style, children, ...r
 const styles = StyleSheet.create({
   card: {
     borderRadius: radius.lg,
-    padding: spacing.lg,
+    padding: spacing.md,
   },
   bordered: {
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
   },
 });
