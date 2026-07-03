@@ -47,6 +47,18 @@ public class RelationController {
                 relationService.connectCouple(user.id(), request.code()), "커플로 연결되었습니다.");
     }
 
+    @PostMapping("/trainer/invite")
+    public ApiResponse<InviteCodeResponse> createTrainerInvite(@AuthenticationPrincipal AuthUser user) {
+        return ApiResponse.success(relationService.createTrainerInvite(user.id()), "회원 초대코드가 생성되었습니다.");
+    }
+
+    @PostMapping("/trainer/connect")
+    public ApiResponse<RelationResponse> connectTrainer(@AuthenticationPrincipal AuthUser user,
+                                                        @Valid @RequestBody ConnectRequest request) {
+        return ApiResponse.success(
+                relationService.connectTrainer(user.id(), request.code()), "트레이너와 연결되었습니다.");
+    }
+
     @GetMapping
     public ApiResponse<List<RelationResponse>> myRelations(@AuthenticationPrincipal AuthUser user) {
         return ApiResponse.success(relationService.findMyRelations(user.id()));

@@ -26,11 +26,9 @@ export const relationApi = {
   detail: (id: number) => unwrap(apiClient.get<ApiResponse<Relation>>(`/relations/${id}`)),
   end: (id: number) => unwrap(apiClient.delete<ApiResponse<void>>(`/relations/${id}`)),
 
-  // 트레이너 (phase 6~7)
-  registerTrainer: (payload: { specialty?: string; introduction?: string; career?: string }) =>
-    unwrap(apiClient.post<ApiResponse<Relation>>('/relations/trainer/register', payload)),
+  // 트레이너-회원 연결 (등록/프로필은 api/trainer.ts)
   createTrainerInvite: () =>
     unwrap(apiClient.post<ApiResponse<InviteCode>>('/relations/trainer/invite')),
-  connectMember: (code: string) =>
+  connectTrainer: (code: string) =>
     unwrap(apiClient.post<ApiResponse<Relation>>('/relations/trainer/connect', { code })),
 };

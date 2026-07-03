@@ -37,13 +37,22 @@ export type ChatStackParamList = {
   ChatRoom: { relationId: number; title: string };
 };
 
+// MY 탭 내부 스택 — 프로필 / 트레이너(등록·대시보드·회원·연결)
+export type MyStackParamList = {
+  MyMain: undefined;
+  TrainerRegister: undefined;
+  TrainerDashboard: undefined;
+  TrainerMemberDetail: { memberId: number; name: string };
+  TrainerConnect: undefined;
+};
+
 // 2.2 메인 탭 (홈/운동/식단/채팅/MY)
 export type MainTabParamList = {
   Home: NavigatorScreenParams<HomeStackParamList>;
   Workout: NavigatorScreenParams<WorkoutStackParamList>;
   Diet: NavigatorScreenParams<DietStackParamList>;
   Chat: NavigatorScreenParams<ChatStackParamList>;
-  My: undefined;
+  My: NavigatorScreenParams<MyStackParamList>;
 };
 
 export type RootStackParamList = {

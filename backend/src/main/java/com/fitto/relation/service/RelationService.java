@@ -32,12 +32,15 @@ public class RelationService {
     private final SecureRandom random = new SecureRandom();
     private final RelationRepository relationRepository;
     private final UserRepository userRepository;
+    private final com.fitto.trainer.repository.TrainerProfileRepository trainerProfileRepository;
     private final com.fitto.common.event.CoupleEventPublisher coupleEventPublisher;
 
     public RelationService(RelationRepository relationRepository, UserRepository userRepository,
+                           com.fitto.trainer.repository.TrainerProfileRepository trainerProfileRepository,
                            com.fitto.common.event.CoupleEventPublisher coupleEventPublisher) {
         this.relationRepository = relationRepository;
         this.userRepository = userRepository;
+        this.trainerProfileRepository = trainerProfileRepository;
         this.coupleEventPublisher = coupleEventPublisher;
     }
 
@@ -81,6 +84,60 @@ public class RelationService {
         relation.connect(userId);
         User partner = userRepository.findById(relation.getUserAId()).orElse(null);
         return RelationResponse.of(relation, partner);
+    }
+
+    /** 트레이너 회원 초대코드 생성 (REL-03) — 정원·수락 여부 확인. */
+    @Transactional
+    public InviteCodeResponse createTrainerInvite(Long trainerId) {
+        com.fitto.trainer.domain.TrainerProfile profile = trainerProfileRepository.findByUserId(trainerId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_A_TRAINER));
+        if (!profile.isAccepting()) {
+            throw new BusinessException(ErrorCode.TRAINER_NOT_ACCEPTING);
+        }
+        if (countActiveMembers(trainerId) >= profile.getMaxMembers()) {
+            throw new BusinessException(ErrorCode.TRAINER_MEMBER_LIMIT);
+        }
+        Relation relation = Relation.builder()
+                .relationType(RelationType.TRAINER_MEMBER)
+                .userAId(trainerId)
+                .status(RelationStatus.PENDING)
+                .inviteCode(generateUniqueCode())
+                .codeExpiresAt(LocalDateTime.now().plusHours(CODE_TTL_HOURS))
+                .build();
+        relationRepository.save(relation);
+        return new InviteCodeResponse(relation.getInviteCode(), relation.getCodeExpiresAt());
+    }
+
+    /** 초대코드로 회원이 트레이너와 연결 (REL-04). */
+    @Transactional
+    public RelationResponse connectTrainer(Long memberId, String code) {
+        Relation relation = relationRepository.findByInviteCode(code.trim().toUpperCase())
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVITE_CODE_INVALID));
+
+        if (relation.getRelationType() != RelationType.TRAINER_MEMBER
+                || relation.getStatus() != RelationStatus.PENDING) {
+            throw new BusinessException(ErrorCode.INVITE_CODE_INVALID);
+        }
+        if (relation.isExpired()) {
+            throw new BusinessException(ErrorCode.INVITE_CODE_EXPIRED);
+        }
+        Long trainerId = relation.getUserAId();
+        if (trainerId.equals(memberId)) {
+            throw new BusinessException(ErrorCode.INVITE_CODE_INVALID, "본인이 생성한 코드로는 연결할 수 없습니다.");
+        }
+        if (hasActiveTrainer(memberId)) {
+            throw new BusinessException(ErrorCode.ALREADY_CONNECTED, "이미 트레이너와 연결되어 있습니다.");
+        }
+        // 코드 발급 이후 다른 회원이 먼저 연결됐을 수 있으므로 정원 재확인
+        com.fitto.trainer.domain.TrainerProfile profile = trainerProfileRepository.findByUserId(trainerId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVITE_CODE_INVALID));
+        if (countActiveMembers(trainerId) >= profile.getMaxMembers()) {
+            throw new BusinessException(ErrorCode.TRAINER_MEMBER_LIMIT);
+        }
+
+        relation.connect(memberId);
+        User trainer = userRepository.findById(trainerId).orElse(null);
+        return RelationResponse.of(relation, trainer);
     }
 
     /** 내 관계 목록 전체 (REL-05). */
@@ -142,6 +199,19 @@ public class RelationService {
         return !relationRepository
                 .findByUserAndTypeAndStatus(userId, RelationType.COUPLE, RelationStatus.ACTIVE)
                 .isEmpty();
+    }
+
+    /** 회원(userB) 기준 활성 트레이너 존재 여부 — 회원은 트레이너 1명만 연결 가능 */
+    private boolean hasActiveTrainer(Long memberId) {
+        return relationRepository
+                .findByUserAndTypeAndStatus(memberId, RelationType.TRAINER_MEMBER, RelationStatus.ACTIVE)
+                .stream()
+                .anyMatch(r -> memberId.equals(r.getUserBId()));
+    }
+
+    private long countActiveMembers(Long trainerId) {
+        return relationRepository.countByUserAAndTypeAndStatus(
+                trainerId, RelationType.TRAINER_MEMBER, RelationStatus.ACTIVE);
     }
 
     private Relation getOwnedRelation(Long userId, Long relationId) {
