@@ -96,6 +96,11 @@ cd frontend && npm install && npm start   # a: Android, i: iOS, w: Web
 `npm run build:web` → `frontend/dist/` 정적 빌드 → Netlify/Vercel 등에 배포하면
 폰 브라우저에서 URL로 바로 사용(앱스토어 불필요). 단계는 **[docs/WEB_DEPLOY.md](docs/WEB_DEPLOY.md)**.
 
+### 네이티브 앱 빌드 (EAS Build — 안드로이드 APK)
+
+Expo 클라우드 빌드로 `.apk` 를 만들어 폰에 직접 설치(Play 스토어 불필요, QR/Expo Go 불필요).
+단계는 **[docs/EAS_BUILD.md](docs/EAS_BUILD.md)**.
+
 ### 클라우드 배포 (Railway)
 
 `DATABASE_URL`(URI)이 있으면 자동으로 클라우드 DB에 연결됩니다(없으면 로컬 설정 사용).
