@@ -47,6 +47,12 @@ fitto:
     access-token-expire-minutes: 30
     refresh-token-expire-days: 14
 
+  # 음식 사진 AI 분석 (Google AI Studio 무료 티어) — 키 미설정 시 기능만 비활성, 앱은 정상 동작
+  gemini:
+    api-key: ${GEMINI_API_KEY:}
+    model: ${GEMINI_MODEL:gemini-2.5-flash-lite}
+    daily-limit-per-user: ${GEMINI_DAILY_LIMIT_PER_USER:10}
+
 logging:
   level:
     com.fitto: DEBUG

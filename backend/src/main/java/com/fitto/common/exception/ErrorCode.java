@@ -31,7 +31,14 @@ public enum ErrorCode {
     TRAINER_MEMBER_LIMIT(HttpStatus.CONFLICT, "회원 정원이 가득 찼습니다."),
 
     // 운동 (WORKOUT)
-    WORKOUT_NOT_FOUND(HttpStatus.NOT_FOUND, "운동 기록을 찾을 수 없습니다.");
+    WORKOUT_NOT_FOUND(HttpStatus.NOT_FOUND, "운동 기록을 찾을 수 없습니다."),
+
+    // 식단 AI 분석 (DIET AI)
+    AI_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "AI 분석 기능이 아직 준비되지 않았어요."),
+    AI_DAILY_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "오늘의 AI 분석 횟수를 모두 사용했어요. 내일 다시 시도해주세요."),
+    AI_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "지금은 AI 분석 요청이 많아요. 잠시 후 다시 시도해주세요."),
+    AI_ANALYSIS_FAILED(HttpStatus.BAD_GATEWAY, "AI 분석에 실패했어요. 잠시 후 다시 시도해주세요."),
+    INVALID_PHOTO_URL(HttpStatus.BAD_REQUEST, "지원하지 않는 사진 주소입니다.");
 
     private final HttpStatus status;
     private final String message;

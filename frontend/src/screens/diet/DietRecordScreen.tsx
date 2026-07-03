@@ -1,5 +1,5 @@
 /** 식단 기록 입력 — 끼니·사진·칼로리·메모. 운동(WorkoutRecordScreen) 미러링 */
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   Alert,
   Image,
@@ -20,7 +20,8 @@ import { MEAL_EMOJI } from '../../components/MealCard';
 import { useDietStore } from '../../store/dietStore';
 import { useRelationStore } from '../../store/relationStore';
 import { publishEnsuringConnection } from '../../api/chatSocket';
-import { pickImage, uploadImage } from '../../utils/imageUpload';
+import { dietApi } from '../../api/diet';
+import { pickImage, takePhoto, uploadImage } from '../../utils/imageUpload';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
@@ -57,17 +58,63 @@ export function DietRecordScreen({ navigation }: Props) {
   const [calories, setCalories] = useState('');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  // 업로드 결과 캐시 — AI 분석과 저장이 같은 사진을 두 번 올리지 않도록
+  const uploadedRef = useRef<{ uri: string; url: string } | null>(null);
 
   const addPreset = (food: string) => {
     setMemo((prev) => (prev.trim() ? `${prev.trim()}, ${food}` : food));
   };
 
-  const onPickPhoto = async () => {
+  const pickFrom = async (source: 'camera' | 'gallery') => {
     try {
-      const uri = await pickImage();
+      const uri = source === 'camera' ? await takePhoto() : await pickImage();
       if (uri) setPhotoUri(uri);
     } catch (e) {
       toast.error(getErrorMessage(e, '사진 선택에 실패했어요.'));
+    }
+  };
+
+  const onPickPhoto = () => {
+    // 웹은 카메라 촬영 UX가 어색하므로 갤러리(파일 선택)만 사용
+    if (Platform.OS === 'web') {
+      void pickFrom('gallery');
+      return;
+    }
+    Alert.alert('사진 추가', '어떻게 추가할까요?', [
+      { text: '📷 카메라 촬영', onPress: () => void pickFrom('camera') },
+      { text: '🖼️ 갤러리에서 선택', onPress: () => void pickFrom('gallery') },
+      { text: '취소', style: 'cancel' },
+    ]);
+  };
+
+  const ensureUploaded = async (uri: string): Promise<string> => {
+    if (uploadedRef.current?.uri === uri) return uploadedRef.current.url;
+    const url = await uploadImage(uri);
+    uploadedRef.current = { uri, url };
+    return url;
+  };
+
+  // AI 음식 분석 — 결과는 추정치라 필드에 채워만 주고 확정(저장)은 사용자가 한다
+  const onAnalyze = async () => {
+    if (!photoUri) return;
+    setAnalyzing(true);
+    try {
+      const photoUrl = await ensureUploaded(photoUri);
+      const result = await dietApi.analyze(photoUrl);
+      if (!result.isFood || result.foods.length === 0) {
+        toast.error('음식 사진이 아닌 것 같아요 🤔');
+        return;
+      }
+      const names = result.foods.map((f) => f.name).join(', ');
+      setMemo((prev) => (prev.trim() ? `${prev.trim()}, ${names}` : names));
+      if (result.totalCalories > 0) setCalories(String(result.totalCalories));
+      haptics.success();
+      toast.success(result.comment?.trim() || 'AI 분석 완료! 🤖');
+    } catch (e) {
+      toast.error(getErrorMessage(e, 'AI 분석에 실패했어요.'));
+    } finally {
+      setAnalyzing(false);
     }
   };
 
@@ -80,7 +127,7 @@ export function DietRecordScreen({ navigation }: Props) {
     try {
       let photoUrl: string | undefined;
       if (photoUri) {
-        photoUrl = await uploadImage(photoUri);
+        photoUrl = await ensureUploaded(photoUri);
       }
       const label = MEAL_TYPES.find((t) => t.value === mealType)?.label ?? '';
       const saved = await save({
@@ -163,6 +210,21 @@ export function DietRecordScreen({ navigation }: Props) {
             </TouchableOpacity>
           ) : null}
 
+          {/* AI 음식 분석 — 사진이 있을 때만 노출, 결과는 메모/칼로리에 자동 입력 */}
+          {photoUri ? (
+            <>
+              <Button
+                title="🤖 AI로 음식 분석"
+                variant="soft"
+                size="md"
+                onPress={onAnalyze}
+                loading={analyzing}
+                style={styles.analyzeButton}
+              />
+              <Text style={styles.analyzeHint}>분석 결과는 추정치예요. 저장 전에 수정할 수 있어요.</Text>
+            </>
+          ) : null}
+
           {/* 자주 먹는 음식 */}
           <Text style={styles.label}>자주 먹는 음식</Text>
           <View style={styles.presetRow}>
@@ -226,6 +288,8 @@ const styles = StyleSheet.create({
   photo: { width: '100%', height: '100%' },
   photoPlaceholder: { color: colors.textSecondary, fontSize: fontSize.body, fontWeight: '600' },
   removePhoto: { color: colors.danger, fontSize: fontSize.caption, marginTop: spacing.xs, alignSelf: 'flex-end' },
+  analyzeButton: { marginTop: spacing.sm },
+  analyzeHint: { color: colors.textSecondary, fontSize: fontSize.caption, marginTop: spacing.xs, textAlign: 'center' },
   presetRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   presetChip: {
     paddingHorizontal: spacing.md,

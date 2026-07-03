@@ -2,10 +2,13 @@ package com.fitto.diet.controller;
 
 import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
+import com.fitto.diet.dto.AnalyzeMealRequest;
 import com.fitto.diet.dto.CoupleMealGoalResponse;
+import com.fitto.diet.dto.MealAnalysisResponse;
 import com.fitto.diet.dto.MealResponse;
 import com.fitto.diet.dto.MealStatsResponse;
 import com.fitto.diet.dto.SaveMealRequest;
+import com.fitto.diet.service.FoodAnalysisService;
 import com.fitto.diet.service.MealService;
 import com.fitto.workout.dto.CalendarDayResponse;
 import com.fitto.workout.dto.PartnerTodayResponse;
@@ -30,15 +33,24 @@ import java.util.List;
 public class MealController {
 
     private final MealService mealService;
+    private final FoodAnalysisService foodAnalysisService;
 
-    public MealController(MealService mealService) {
+    public MealController(MealService mealService, FoodAnalysisService foodAnalysisService) {
         this.mealService = mealService;
+        this.foodAnalysisService = foodAnalysisService;
     }
 
     @PostMapping
     public ApiResponse<MealResponse> save(@AuthenticationPrincipal AuthUser user,
                                           @Valid @RequestBody SaveMealRequest request) {
         return ApiResponse.success(mealService.save(user.id(), request), "식단이 기록되었습니다.");
+    }
+
+    /** 음식 사진 AI 분석 — 결과는 추정치이며 저장은 기존 POST /meal 로 사용자가 확정한다 */
+    @PostMapping("/analyze")
+    public ApiResponse<MealAnalysisResponse> analyze(@AuthenticationPrincipal AuthUser user,
+                                                     @Valid @RequestBody AnalyzeMealRequest request) {
+        return ApiResponse.success(foodAnalysisService.analyze(user.id(), request.photoUrl()), "AI 분석이 완료되었습니다.");
     }
 
     @GetMapping("/today")

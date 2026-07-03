@@ -17,6 +17,20 @@ export async function pickImage(): Promise<string | null> {
   return result.assets[0].uri;
 }
 
+/** 카메라 촬영 → uri (취소/권한 거부 시 null) */
+export async function takePhoto(): Promise<string | null> {
+  const perm = await ImagePicker.requestCameraPermissionsAsync();
+  if (!perm.granted) return null;
+
+  const result = await ImagePicker.launchCameraAsync({
+    mediaTypes: ['images'],
+    quality: 0.7,
+    allowsEditing: false,
+  });
+  if (result.canceled || result.assets.length === 0) return null;
+  return result.assets[0].uri;
+}
+
 /** Cloudinary unsigned 업로드 → secure_url */
 export async function uploadImage(uri: string): Promise<string> {
   if (!isCloudinaryConfigured()) {

@@ -130,6 +130,19 @@ export interface Meal {
   createdAt: string;
 }
 
+// AI 음식 사진 분석 (POST /meal/analyze) — 칼로리는 추정치, 사용자가 수정 후 저장
+export interface AnalyzedFood {
+  name: string;
+  calories: number;
+  portion?: string | null;
+}
+export interface MealAnalysis {
+  isFood: boolean;
+  foods: AnalyzedFood[];
+  totalCalories: number;
+  comment?: string | null;
+}
+
 // 식단 통계
 export interface MealStats {
   weeklyDays: number;
