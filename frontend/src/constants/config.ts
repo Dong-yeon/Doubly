@@ -35,8 +35,8 @@ export const STORAGE_KEYS = {
  * (docs/IMAGE_UPLOAD.md 참고)
  */
 export const CLOUDINARY = {
-  cloudName: 'YOUR_CLOUD_NAME',
-  uploadPreset: 'YOUR_UNSIGNED_PRESET',
+  cloudName: 'l0z6b5eu',
+  uploadPreset: 'fitto_unsigned',
 };
 
 export const isCloudinaryConfigured = () =>
