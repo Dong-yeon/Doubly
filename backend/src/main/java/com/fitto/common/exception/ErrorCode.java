@@ -31,6 +31,7 @@ public enum ErrorCode {
     TRAINER_MEMBER_LIMIT(HttpStatus.CONFLICT, "회원 정원이 가득 찼습니다."),
     ALREADY_TRAINER(HttpStatus.CONFLICT, "이미 트레이너로 등록되어 있습니다."),
     TRAINER_NOT_ACCEPTING(HttpStatus.CONFLICT, "지금은 신규 회원을 받지 않는 트레이너입니다."),
+    ROUTINE_NOT_FOUND(HttpStatus.NOT_FOUND, "루틴을 찾을 수 없습니다."),
 
     // 운동 (WORKOUT)
     WORKOUT_NOT_FOUND(HttpStatus.NOT_FOUND, "운동 기록을 찾을 수 없습니다."),

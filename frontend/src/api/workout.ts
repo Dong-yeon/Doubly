@@ -4,7 +4,6 @@ import type {
   ApiResponse,
   CalendarDay,
   PartnerToday,
-  TrainerRoutine,
   Workout,
   WorkoutRecommendation,
   WorkoutSet,
@@ -38,18 +37,4 @@ export const workoutApi = {
     unwrap(
       apiClient.post<ApiResponse<WorkoutRecommendation>>('/workout/recommend', { days }, { timeout: 60000 }),
     ),
-
-  // 트레이너가 회원 오늘 기록 조회 (TRAINER, phase 6)
-  memberToday: (userId: number) =>
-    unwrap(apiClient.get<ApiResponse<Workout | null>>(`/workout/member/${userId}/today`)),
-
-  // 트레이너 루틴 (phase 7)
-  assignRoutine: (payload: {
-    relationId: number;
-    memberId: number;
-    title: string;
-    description?: string;
-    routineDate?: string;
-  }) => unwrap(apiClient.post<ApiResponse<TrainerRoutine>>('/workout/routine', payload)),
-  myRoutines: () => unwrap(apiClient.get<ApiResponse<TrainerRoutine[]>>('/workout/routine/my')),
 };

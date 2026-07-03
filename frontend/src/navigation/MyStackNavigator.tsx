@@ -6,6 +6,7 @@ import { MyScreen } from '../screens/my/MyScreen';
 import { TrainerRegisterScreen } from '../screens/trainer/TrainerRegisterScreen';
 import { TrainerDashboardScreen } from '../screens/trainer/TrainerDashboardScreen';
 import { TrainerMemberDetailScreen } from '../screens/trainer/TrainerMemberDetailScreen';
+import { TrainerRoutineAssignScreen } from '../screens/trainer/TrainerRoutineAssignScreen';
 import { TrainerConnectScreen } from '../screens/trainer/TrainerConnectScreen';
 import { colors } from '../constants/theme';
 
@@ -35,6 +36,11 @@ export function MyStackNavigator() {
         name="TrainerMemberDetail"
         component={TrainerMemberDetailScreen}
         options={({ route }) => ({ title: route.params.name })}
+      />
+      <Stack.Screen
+        name="TrainerRoutineAssign"
+        component={TrainerRoutineAssignScreen}
+        options={({ route }) => ({ title: `${route.params.name}님 루틴 배정`, presentation: 'modal' })}
       />
       <Stack.Screen
         name="TrainerConnect"

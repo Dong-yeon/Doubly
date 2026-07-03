@@ -43,6 +43,7 @@ export type MyStackParamList = {
   TrainerRegister: undefined;
   TrainerDashboard: undefined;
   TrainerMemberDetail: { memberId: number; name: string };
+  TrainerRoutineAssign: { memberId: number; name: string };
   TrainerConnect: undefined;
 };
 
