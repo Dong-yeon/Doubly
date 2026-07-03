@@ -31,6 +31,15 @@ public interface RelationRepository extends JpaRepository<Relation, Long> {
                                               @Param("type") RelationType type,
                                               @Param("status") RelationStatus status);
 
+    /** 요청자(userA) 기준 특정 유형·상태 관계 수 — 트레이너 회원 정원 체크 */
+    @Query("""
+            select count(r) from Relation r
+            where r.relationType = :type and r.status = :status and r.userAId = :userAId
+            """)
+    long countByUserAAndTypeAndStatus(@Param("userAId") Long userAId,
+                                      @Param("type") RelationType type,
+                                      @Param("status") RelationStatus status);
+
     /** 회원 탈퇴 시 본인이 속한 모든 관계 삭제 */
     @Modifying
     @Query("delete from Relation r where r.userAId = :userId or r.userBId = :userId")

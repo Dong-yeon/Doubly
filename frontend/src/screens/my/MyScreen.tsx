@@ -3,6 +3,8 @@ import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { MyStackParamList } from '../../navigation/types';
 import { Avatar } from '../../components/Avatar';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
@@ -29,9 +31,12 @@ const MEAL_BADGES = [
   { days: 100, emoji: '💎', label: '100일' },
 ];
 
-export function MyScreen() {
+type Props = NativeStackScreenProps<MyStackParamList, 'MyMain'>;
+
+export function MyScreen({ navigation }: Props) {
   const { user, logout, withdraw, updateProfile } = useAuthStore();
   const couple = useRelationStore((s) => s.couple);
+  const relations = useRelationStore((s) => s.relations);
   const fetchRelations = useRelationStore((s) => s.fetchAll);
   const endRelation = useRelationStore((s) => s.end);
   const [disconnecting, setDisconnecting] = useState(false);
@@ -117,6 +122,33 @@ export function MyScreen() {
     Alert.alert('로그아웃', '로그아웃 하시겠어요?', [
       { text: '취소', style: 'cancel' },
       { text: '로그아웃', style: 'destructive', onPress: () => logout() },
+    ]);
+  };
+
+  const isTrainer = user?.role === 'TRAINER';
+  // 회원 측 활성 트레이너 관계 (트레이너 본인은 회원 관리 화면을 쓰므로 제외)
+  const myTrainer = !isTrainer
+    ? relations.find((r) => r.relationType === 'TRAINER_MEMBER' && r.status === 'ACTIVE') ?? null
+    : null;
+
+  const onDisconnectTrainer = () => {
+    if (!myTrainer) return;
+    const trainerName = myTrainer.partner?.name ?? '트레이너';
+    Alert.alert('트레이너 연결 끊기', `${trainerName}님과의 연결을 끊을까요?`, [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '연결 끊기',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await endRelation(myTrainer.id);
+            haptics.success();
+            toast.success('트레이너 연결을 끊었어요.');
+          } catch (e) {
+            Alert.alert('오류', getErrorMessage(e));
+          }
+        },
+      },
     ]);
   };
 
@@ -218,6 +250,47 @@ export function MyScreen() {
         <View style={styles.badgeWrap}>
           <BadgeCard title="🍱 식단 뱃지" maxStreak={maxMealStreak} badges={MEAL_BADGES} />
         </View>
+
+        {/* 트레이너 — 트레이너면 대시보드, 아니면 등록/연결 진입 */}
+        <Card elevation="sm" style={styles.menu}>
+          {isTrainer ? (
+            <Pressable
+              style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
+              onPress={() => navigation.navigate('TrainerDashboard')}
+            >
+              <Text style={styles.menuText}>🏋️ 트레이너 대시보드</Text>
+              <Text style={styles.chevron}>›</Text>
+            </Pressable>
+          ) : (
+            <>
+              <Pressable
+                style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
+                onPress={() => navigation.navigate('TrainerRegister')}
+              >
+                <Text style={styles.menuText}>🏋️ 트레이너로 등록하기</Text>
+                <Text style={styles.chevron}>›</Text>
+              </Pressable>
+              <View style={styles.divider} />
+              {myTrainer ? (
+                <Pressable
+                  style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
+                  onPress={onDisconnectTrainer}
+                >
+                  <Text style={styles.menuText}>🤝 내 트레이너 · {myTrainer.partner?.name ?? '트레이너'}</Text>
+                  <Text style={styles.chevron}>›</Text>
+                </Pressable>
+              ) : (
+                <Pressable
+                  style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
+                  onPress={() => navigation.navigate('TrainerConnect')}
+                >
+                  <Text style={styles.menuText}>🤝 트레이너 연결하기</Text>
+                  <Text style={styles.chevron}>›</Text>
+                </Pressable>
+              )}
+            </>
+          )}
+        </Card>
 
         <Card elevation="sm" style={styles.menu}>
           <Pressable style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]} onPress={onLogout}>

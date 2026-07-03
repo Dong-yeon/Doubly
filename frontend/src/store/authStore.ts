@@ -21,6 +21,8 @@ interface AuthState {
   logout: () => Promise<void>;
   withdraw: () => Promise<void>;
   updateProfile: (payload: { name?: string; profileImageUrl?: string }) => Promise<void>;
+  /** 서버 기준으로 내 정보 재조회 (역할 변경 등 반영) */
+  refreshMe: () => Promise<void>;
   setSession: (tokens: AuthTokens) => Promise<void>;
 }
 
@@ -79,6 +81,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   updateProfile: async (payload) => {
     const user = await authApi.updateMe(payload);
+    set({ user });
+  },
+
+  refreshMe: async () => {
+    const user = await authApi.me();
     set({ user });
   },
 

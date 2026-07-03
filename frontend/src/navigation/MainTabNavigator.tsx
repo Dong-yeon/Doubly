@@ -8,7 +8,7 @@ import { HomeStackNavigator } from './HomeStackNavigator';
 import { WorkoutStackNavigator } from './WorkoutStackNavigator';
 import { DietStackNavigator } from './DietStackNavigator';
 import { ChatStackNavigator } from './ChatStackNavigator';
-import { MyScreen } from '../screens/my/MyScreen';
+import { MyStackNavigator } from './MyStackNavigator';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
@@ -58,7 +58,7 @@ export function MainTabNavigator() {
       />
       <Tab.Screen
         name="My"
-        component={MyScreen}
+        component={MyStackNavigator}
         options={{ title: 'MY', tabBarIcon: icon('👤') }}
       />
     </Tab.Navigator>

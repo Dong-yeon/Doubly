@@ -53,6 +53,10 @@ public interface WorkoutRepository extends JpaRepository<Workout, Long> {
     List<CategoryCount> categoryBreakdown(@Param("userId") Long userId,
                                           @Param("since") LocalDate since);
 
+    /** 마지막 운동 날짜 (기록 없으면 null) — 트레이너 대시보드용. */
+    @Query("select max(w.workoutDate) from Workout w where w.userId = :userId")
+    LocalDate findLastWorkoutDate(@Param("userId") Long userId);
+
     /** 회원 탈퇴 시 본인 운동 기록 삭제 (workout_sets 는 DB ON DELETE CASCADE). */
     @Modifying
     @Query("delete from Workout w where w.userId = :userId")
