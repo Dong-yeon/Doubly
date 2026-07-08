@@ -27,9 +27,11 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtTokenProvider tokenProvider;
+    private final CorsProperties corsProperties;
 
-    public SecurityConfig(JwtTokenProvider tokenProvider) {
+    public SecurityConfig(JwtTokenProvider tokenProvider, CorsProperties corsProperties) {
         this.tokenProvider = tokenProvider;
+        this.corsProperties = corsProperties;
     }
 
     @Bean
@@ -59,16 +61,17 @@ public class SecurityConfig {
     }
 
     /**
-     * CORS — Expo 클라이언트(개발) 허용. 운영 도메인은 phase 6에서 제한.
-     * Security 필터체인이 이 빈을 사용해 프리플라이트를 처리한다.
+     * CORS — fitto.cors.allowed-origins 로 허용 출처를 제어한다.
+     * 개발 기본값은 "*", 운영(prod)은 CORS_ALLOWED_ORIGINS 환경변수로 웹 배포 도메인만 허용.
+     * 인증은 Authorization 헤더(JWT)로만 하므로 쿠키 자격증명은 차단한다.
      */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOriginPatterns(List.of("*"));
+        config.setAllowedOriginPatterns(corsProperties.effectiveAllowedOrigins());
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
-        config.setAllowCredentials(true);
+        config.setAllowCredentials(false);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/**", config);

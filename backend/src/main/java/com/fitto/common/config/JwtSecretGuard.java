@@ -13,7 +13,11 @@ import java.util.Arrays;
 @Component
 public class JwtSecretGuard {
 
-    private static final String DEV_MARKER = "dev-only";
+    /** 예시/개발용 시크릿을 식별하는 마커 — 하나라도 포함되면 운영 부팅 차단. */
+    private static final String[] WEAK_MARKERS = {"dev-only", "change-me"};
+
+    /** HS256 서명 키 최소 길이(바이트) — 이보다 짧으면 무차별 대입에 취약. */
+    private static final int MIN_SECRET_LENGTH = 32;
 
     private final JwtProperties jwtProperties;
     private final Environment environment;
@@ -30,9 +34,13 @@ public class JwtSecretGuard {
             return;
         }
         String secret = jwtProperties.getSecret();
-        if (secret == null || secret.isBlank() || secret.contains(DEV_MARKER)) {
+        boolean weak = secret == null || secret.isBlank()
+                || secret.length() < MIN_SECRET_LENGTH
+                || Arrays.stream(WEAK_MARKERS).anyMatch(secret::contains);
+        if (weak) {
             throw new IllegalStateException(
-                    "운영 환경에서는 JWT_SECRET 환경변수에 안전한 시크릿을 반드시 설정해야 합니다.");
+                    "운영 환경에서는 JWT_SECRET 환경변수에 32자 이상의 안전한 무작위 시크릿을 "
+                            + "반드시 설정해야 합니다 (예: openssl rand -hex 32).");
         }
     }
 }
