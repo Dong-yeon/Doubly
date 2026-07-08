@@ -89,8 +89,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ user });
   },
 
-  // v2.0: 로그아웃은 클라이언트에서 토큰만 삭제
   logout: async () => {
+    // 서버에서 리프레시 토큰 폐기(베스트 에포트) 후 로컬 토큰 삭제
+    try {
+      const refreshToken = await storage.getItem(STORAGE_KEYS.refreshToken);
+      if (refreshToken) await authApi.logout(refreshToken);
+    } catch {
+      // 네트워크 오류 등은 무시 — 로컬 세션 정리는 항상 수행
+    }
     await clearTokens();
     set({ user: null, isAuthenticated: false });
   },

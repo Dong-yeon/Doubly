@@ -71,5 +71,7 @@ export const WS_BASE_URL = 'wss://<your-app>.up.railway.app/ws/chat'; // TLS 이
 | 빌드 실패(루트에서 Gradle 못 찾음) | Root Directory 가 `backend` 인지 확인 |
 | `DATABASE_URL 이 비어 있습니다` | 변수 참조 `${{Postgres.DATABASE_URL}}` 오타/서비스명 확인 |
 | Redis 인증 오류 | `SPRING_DATA_REDIS_URL` 이 `${{Redis.REDIS_URL}}`(비밀번호 포함)인지 확인 |
+| 배포/Redis 재시작 후 전체 로그아웃 | 정상 — 리프레시 토큰 화이트리스트가 Redis 에 있어, Redis 데이터가 사라지면 안전을 위해 재로그인을 요구합니다. Railway Redis 는 기본 영속이라 평상시엔 발생하지 않습니다 |
+| 로그인 시 429 (요청이 너무 많습니다) | 브루트포스 방어 — 15분 내 5회 로그인 실패 시 차단, 15분 후 자동 해제 |
 | `validate failed` | 기존 DB 스키마 불일치 → 새 DB이거나, 마이그레이션 충돌 점검 |
 | 앱에서 연결 안 됨 | 프론트의 `API_BASE_URL`/`WS_BASE_URL` 이 배포 도메인+`https/wss` 인지 확인 |

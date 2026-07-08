@@ -7,6 +7,8 @@ import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
@@ -14,7 +16,9 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
+import java.time.Duration;
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -25,8 +29,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Gemini API 공용 클라이언트 — 음식 사진 분석/운동 추천 등 AI 기능이 공유한다.
  * <p>
  * 무료 티어 한도(프로젝트 단위 RPD)를 지키기 위해 사용자별 일일 횟수를 여기서 공통 제한한다
- * (AI 기능 전체가 한도를 공유). 카운터는 인메모리(단일 인스턴스 전제)라 재배포 시 리셋되지만,
- * 남용 방지 목적으로는 충분하다.
+ * (AI 기능 전체가 한도를 공유). 카운터는 Redis(다중 인스턴스·재배포에도 유지)이며,
+ * Redis 장애 시에만 인메모리 카운터로 폴백한다.
  */
 @Component
 public class GeminiClient {
@@ -36,16 +40,21 @@ public class GeminiClient {
     private static final String GEMINI_ENDPOINT =
             "https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent";
 
+    private static final DateTimeFormatter QUOTA_DATE = DateTimeFormatter.BASIC_ISO_DATE;
+
     private final GeminiProperties properties;
     private final ObjectMapper objectMapper;
+    private final StringRedisTemplate redis;
     private final RestClient restClient;
 
-    /** userId → 오늘 사용량 */
-    private final ConcurrentHashMap<Long, DailyUsage> usageByUser = new ConcurrentHashMap<>();
+    /** userId → 오늘 사용량 — Redis 장애 시에만 쓰는 폴백 카운터 */
+    private final ConcurrentHashMap<Long, DailyUsage> fallbackUsageByUser = new ConcurrentHashMap<>();
 
-    public GeminiClient(GeminiProperties properties, ObjectMapper objectMapper) {
+    public GeminiClient(GeminiProperties properties, ObjectMapper objectMapper,
+                        StringRedisTemplate redis) {
         this.properties = properties;
         this.objectMapper = objectMapper;
+        this.redis = redis;
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(5_000);
         factory.setReadTimeout(60_000);
@@ -57,11 +66,27 @@ public class GeminiClient {
         if (!properties.isConfigured()) {
             throw new BusinessException(ErrorCode.AI_NOT_CONFIGURED);
         }
-        LocalDate today = LocalDate.now();
-        DailyUsage usage = usageByUser.compute(userId, (id, prev) ->
-                (prev == null || !prev.date().equals(today)) ? new DailyUsage(today, new AtomicInteger()) : prev);
-        if (usage.count().incrementAndGet() > properties.getDailyLimitPerUser()) {
+        if (countTodayUsage(userId) > properties.getDailyLimitPerUser()) {
             throw new BusinessException(ErrorCode.AI_DAILY_LIMIT_EXCEEDED);
+        }
+    }
+
+    /** 오늘 누적 사용량(이번 호출 포함)을 반환 — Redis 우선, 장애 시 인메모리 폴백. */
+    private long countTodayUsage(Long userId) {
+        LocalDate today = LocalDate.now();
+        try {
+            String key = "ai:quota:" + userId + ":" + today.format(QUOTA_DATE);
+            Long count = redis.opsForValue().increment(key);
+            if (count != null && count == 1L) {
+                redis.expire(key, Duration.ofDays(2)); // 날짜가 키에 포함 — 자정 이월분 자동 소멸
+            }
+            return count == null ? 1 : count;
+        } catch (DataAccessException e) {
+            log.error("AI 사용량 카운트 실패(Redis) — 인메모리 폴백 사용: {}", e.getMessage());
+            DailyUsage usage = fallbackUsageByUser.compute(userId, (id, prev) ->
+                    (prev == null || !prev.date().equals(today))
+                            ? new DailyUsage(today, new AtomicInteger()) : prev);
+            return usage.count().incrementAndGet();
         }
     }
 
