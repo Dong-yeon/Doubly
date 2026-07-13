@@ -77,7 +77,7 @@ CREATE INDEX idx_feed_posts_couple ON feed_posts (couple_id, created_at DESC);
 
 ### Non-goals (이번 MVP 제외)
 - 일자별 상세 일정표 (itinerary)
-- 카카오 플레이스 키워드 검색 (별도 과제 — 장소 수동 입력 개선)
+- ~~카카오 플레이스 키워드 검색~~ → 이후 구현됨 (장소 추가 화면)
 - 여행 회고 피드 포스트 연동 (피드에서 사진+글로 대체 가능)
 - 경비 기록·정산
 
@@ -138,7 +138,7 @@ CREATE INDEX idx_places_trip ON places (trip_id);
 
 ### Non-goals (이번 MVP 제외)
 - AI 데이트 코스 추천
-- 외부 맛집 DB 연동 (네이버, 카카오 플레이스 검색)
+- ~~외부 맛집 DB 연동 (네이버, 카카오 플레이스 검색)~~ → 카카오 플레이스 키워드 검색은 이후 구현됨 (장소 추가 화면, SDK services)
 - 리뷰 공개/소셜 기능
 
 ### DB 스키마
