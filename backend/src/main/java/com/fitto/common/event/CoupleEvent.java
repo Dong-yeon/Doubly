@@ -10,4 +10,5 @@ public record CoupleEvent(String type) {
     public static final String WORKOUT = "WORKOUT";
     public static final String DIET = "DIET";
     public static final String DIET_GOAL = "DIET_GOAL";
+    public static final String FEED = "FEED";
 }

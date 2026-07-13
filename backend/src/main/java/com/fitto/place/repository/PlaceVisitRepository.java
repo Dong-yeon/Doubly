@@ -30,4 +30,21 @@ public interface PlaceVisitRepository extends JpaRepository<PlaceVisit, Long> {
 
         java.time.LocalDate getLastVisitedAt();
     }
+
+    /** 커플 피드 타임라인 — 커플 장소의 방문 기록(장소명 포함), 커서 이전 최신순. */
+    @Query("""
+            select v as visit, p.name as placeName
+            from PlaceVisit v join Place p on p.id = v.placeId
+            where p.coupleId = :coupleId and v.createdAt < :cursor
+            order by v.createdAt desc
+            """)
+    List<VisitWithPlace> findRecentForFeed(@Param("coupleId") Long coupleId,
+                                           @Param("cursor") java.time.LocalDateTime cursor,
+                                           org.springframework.data.domain.Pageable pageable);
+
+    interface VisitWithPlace {
+        PlaceVisit getVisit();
+
+        String getPlaceName();
+    }
 }

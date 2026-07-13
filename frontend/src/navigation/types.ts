@@ -8,10 +8,13 @@ export type OnboardingStackParamList = {
   Register: undefined;
 };
 
-// 홈 탭 내부 스택 — 홈 / 커플 연결 / MY(프로필·트레이너)
+// 홈 탭 내부 스택 — 홈 / 커플 연결 / 우리 기록(피드) / MY(프로필·트레이너)
 export type HomeStackParamList = {
   HomeMain: undefined;
   CoupleConnect: undefined;
+  // 커플 일상 피드 (PLAN.md Couple Feed)
+  Feed: undefined;
+  FeedCompose: undefined;
   // MY (구 MY 탭에서 이전) — 홈 헤더 프로필 아이콘으로 진입
   My: undefined;
   TrainerRegister: undefined;
