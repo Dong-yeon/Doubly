@@ -188,6 +188,15 @@ export function HomeScreen({ navigation }: Props) {
             {/* 내 연속 */}
             <Text style={styles.myStreak}>🔥 내 연속 {myStreak?.currentCount ?? 0}일 · 최고 {myStreak?.maxCount ?? 0}일</Text>
 
+            {/* 우리 기록 (일상 피드) */}
+            <Pressable
+              style={[styles.mealChip, styles.chipRow]}
+              onPress={() => navigation.navigate('Feed')}
+            >
+              <MaterialCommunityIcons name="notebook-outline" size={15} color={colors.white} />
+              <Text style={styles.mealChipText}>우리 기록</Text>
+            </Pressable>
+
             {/* 우리 맛집 지도 */}
             <Pressable
               style={[styles.mealChip, styles.chipRow]}

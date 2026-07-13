@@ -237,6 +237,32 @@ export interface CoupleMealGoal {
   achieved: boolean;
 }
 
+// 커플 일상 피드 (PLAN.md Couple Feed) — 포스트 + 운동/식단/맛집 방문 통합 타임라인
+export type FeedItemType = 'POST' | 'WORKOUT' | 'MEAL' | 'PLACE_VISIT';
+export interface ReactionSummary {
+  emoji: string;
+  count: number;
+  mine: boolean;
+}
+export interface FeedItem {
+  type: FeedItemType;
+  refId: number;
+  userId: number;
+  userName: string;
+  mine: boolean;
+  title?: string | null;
+  content?: string | null;
+  imageUrl?: string | null;
+  occurredAt: string;
+  /** POST 에만 존재 */
+  reactions?: ReactionSummary[] | null;
+}
+export interface FeedTimeline {
+  items: FeedItem[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
 // 5.8 chat_messages
 export type MessageType = 'TEXT' | 'IMAGE' | 'WORKOUT_CARD' | 'MEAL_CARD' | 'ROUTINE_CARD';
 export interface ChatMessage {

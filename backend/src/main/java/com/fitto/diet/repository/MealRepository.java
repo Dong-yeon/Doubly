@@ -43,6 +43,16 @@ public interface MealRepository extends JpaRepository<Meal, Long> {
     @Query("select count(distinct m.mealDate) from Meal m where m.userId = :userId")
     long countDistinctMealDates(@Param("userId") Long userId);
 
+    /** 커플 피드 타임라인 — 두 사람의 기록 중 커서(createdAt) 이전, 최신순. */
+    @Query("""
+            select m from Meal m
+            where m.userId in :userIds and m.createdAt < :cursor
+            order by m.createdAt desc
+            """)
+    List<Meal> findRecentForFeed(@Param("userIds") List<Long> userIds,
+                                 @Param("cursor") java.time.LocalDateTime cursor,
+                                 Pageable pageable);
+
     /** 회원 탈퇴 시 본인 식단 기록 삭제. */
     @Modifying
     @Query("delete from Meal m where m.userId = :userId")
