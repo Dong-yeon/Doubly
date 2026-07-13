@@ -17,6 +17,7 @@ public record PlaceResponse(
         String category,
         PlaceStatus status,
         Long addedBy,
+        Long tripId,
         long visitCount,
         Double avgRating,
         LocalDate lastVisitedAt,
@@ -24,7 +25,7 @@ public record PlaceResponse(
 ) {
     public static PlaceResponse of(Place p, long visitCount, Double avgRating, LocalDate lastVisitedAt) {
         return new PlaceResponse(p.getId(), p.getName(), p.getAddress(), p.getLat(), p.getLng(),
-                p.getCategory(), p.getStatus(), p.getAddedBy(),
+                p.getCategory(), p.getStatus(), p.getAddedBy(), p.getTripId(),
                 visitCount, avgRating, lastVisitedAt, p.getCreatedAt());
     }
 }

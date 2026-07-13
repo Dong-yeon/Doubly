@@ -5,6 +5,9 @@ import type { PlaceStackParamList } from './types';
 import { PlaceMapScreen } from '../screens/place/PlaceMapScreen';
 import { PlaceAddScreen } from '../screens/place/PlaceAddScreen';
 import { PlaceDetailScreen } from '../screens/place/PlaceDetailScreen';
+import { TripListScreen } from '../screens/trip/TripListScreen';
+import { TripFormScreen } from '../screens/trip/TripFormScreen';
+import { TripDetailScreen } from '../screens/trip/TripDetailScreen';
 import { colors } from '../constants/theme';
 
 const Stack = createNativeStackNavigator<PlaceStackParamList>();
@@ -28,6 +31,20 @@ export function PlaceStackNavigator() {
         name="PlaceDetail"
         component={PlaceDetailScreen}
         options={({ route }) => ({ title: route.params.name })}
+      />
+      <Stack.Screen name="TripList" component={TripListScreen} options={{ title: '우리 여행' }} />
+      <Stack.Screen
+        name="TripForm"
+        component={TripFormScreen}
+        options={({ route }) => ({
+          title: route.params.trip ? '여행 수정' : '여행 만들기',
+          presentation: 'modal',
+        })}
+      />
+      <Stack.Screen
+        name="TripDetail"
+        component={TripDetailScreen}
+        options={({ route }) => ({ title: route.params.title })}
       />
     </Stack.Navigator>
   );
