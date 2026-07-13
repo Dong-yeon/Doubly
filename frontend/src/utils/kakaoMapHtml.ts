@@ -11,9 +11,20 @@ export interface KakaoMapMarker {
   title: string;
 }
 
+/** 카카오 플레이스 키워드 검색 결과 1건 */
+export interface KakaoPlaceResult {
+  name: string;
+  address?: string | null;
+  /** 카카오 category_group_code (FD6=음식점, CE7=카페 등) */
+  categoryGroup?: string | null;
+  lat: number;
+  lng: number;
+}
+
 export type KakaoMapMessage =
   | { source: 'fitto-kakao-map'; type: 'select'; lat: number; lng: number; address?: string | null }
-  | { source: 'fitto-kakao-map'; type: 'marker'; id: number };
+  | { source: 'fitto-kakao-map'; type: 'marker'; id: number }
+  | { source: 'fitto-kakao-map'; type: 'search-results'; keyword: string; results: KakaoPlaceResult[] };
 
 export interface KakaoMapOptions {
   markers?: KakaoMapMarker[];
@@ -66,6 +77,48 @@ kakao.maps.load(function () {
     level: ${level}
   });
 
+  // ---- 외부 명령 (RN: injectJavaScript / 웹: iframe postMessage) ----
+  var selMarker = null;
+
+  // 검색 결과 선택 시 핀 이동 + 지도 센터링 (좌표 전달은 RN 쪽에서 이미 처리)
+  window.fittoSetPin = function (lat, lng) {
+    var pos = new kakao.maps.LatLng(lat, lng);
+    if (selMarker) { selMarker.setPosition(pos); }
+    else { selMarker = new kakao.maps.Marker({ map: map, position: pos }); }
+    map.setCenter(pos);
+    if (map.getLevel() > 4) { map.setLevel(4); }
+  };
+
+  // 카카오 플레이스 키워드 검색 (SDK services 라이브러리 — 별도 REST 키 불필요)
+  var places = new kakao.maps.services.Places();
+  window.fittoSearch = function (keyword) {
+    if (!keyword) { return; }
+    places.keywordSearch(keyword, function (res, status) {
+      var results = [];
+      if (status === kakao.maps.services.Status.OK) {
+        results = res.slice(0, 10).map(function (p) {
+          return {
+            name: p.place_name,
+            address: p.road_address_name || p.address_name || null,
+            categoryGroup: p.category_group_code || null,
+            lat: parseFloat(p.y),
+            lng: parseFloat(p.x)
+          };
+        });
+      }
+      post({ type: 'search-results', keyword: keyword, results: results });
+    });
+  };
+
+  // 웹(iframe)은 postMessage 명령으로 호출
+  window.addEventListener('message', function (e) {
+    var d = e.data;
+    try { if (typeof d === 'string') { d = JSON.parse(d); } } catch (err) { return; }
+    if (!d || d.source !== 'fitto-kakao-map-cmd') { return; }
+    if (d.type === 'search') { window.fittoSearch(d.keyword); }
+    if (d.type === 'pin') { window.fittoSetPin(d.lat, d.lng); }
+  });
+
   var markers = ${JSON.stringify(markers)};
   var bounds = new kakao.maps.LatLngBounds();
   markers.forEach(function (m) {
@@ -84,7 +137,6 @@ kakao.maps.load(function () {
 
   ${options.selectable ? `
   var geocoder = new kakao.maps.services.Geocoder();
-  var selMarker = null;
   kakao.maps.event.addListener(map, 'click', function (e) {
     var pos = e.latLng;
     if (selMarker) { selMarker.setPosition(pos); }
