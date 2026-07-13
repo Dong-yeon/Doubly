@@ -4,10 +4,12 @@ import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
 import com.fitto.diet.dto.AnalyzeMealRequest;
 import com.fitto.diet.dto.CoupleMealGoalResponse;
+import com.fitto.diet.dto.DietCoachResponse;
 import com.fitto.diet.dto.MealAnalysisResponse;
 import com.fitto.diet.dto.MealResponse;
 import com.fitto.diet.dto.MealStatsResponse;
 import com.fitto.diet.dto.SaveMealRequest;
+import com.fitto.diet.service.DietCoachService;
 import com.fitto.diet.service.FoodAnalysisService;
 import com.fitto.diet.service.MealService;
 import com.fitto.workout.dto.CalendarDayResponse;
@@ -34,10 +36,13 @@ public class MealController {
 
     private final MealService mealService;
     private final FoodAnalysisService foodAnalysisService;
+    private final DietCoachService dietCoachService;
 
-    public MealController(MealService mealService, FoodAnalysisService foodAnalysisService) {
+    public MealController(MealService mealService, FoodAnalysisService foodAnalysisService,
+                          DietCoachService dietCoachService) {
         this.mealService = mealService;
         this.foodAnalysisService = foodAnalysisService;
+        this.dietCoachService = dietCoachService;
     }
 
     @PostMapping
@@ -90,5 +95,11 @@ public class MealController {
     @GetMapping("/couple/goal")
     public ApiResponse<CoupleMealGoalResponse> coupleGoal(@AuthenticationPrincipal AuthUser user) {
         return ApiResponse.success(mealService.coupleGoal(user.id()));
+    }
+
+    /** 주간 식단 AI 코칭 — 최근 7일 기록 기반 영양 균형 피드백 */
+    @GetMapping("/coach")
+    public ApiResponse<DietCoachResponse> coach(@AuthenticationPrincipal AuthUser user) {
+        return ApiResponse.success(dietCoachService.coach(user.id()));
     }
 }

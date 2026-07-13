@@ -183,16 +183,48 @@ export interface Meal {
   createdAt: string;
 }
 
-// AI 음식 사진 분석 (POST /meal/analyze) — 칼로리는 추정치, 사용자가 수정 후 저장
+// AI 음식 사진 분석 (POST /meal/analyze) — 칼로리·매크로는 추정치, 사용자가 수정 후 저장
 export interface AnalyzedFood {
   name: string;
   calories: number;
   portion?: string | null;
+  carbs: number;
+  protein: number;
+  fat: number;
 }
 export interface MealAnalysis {
   isFood: boolean;
   foods: AnalyzedFood[];
   totalCalories: number;
+  totalCarbs: number;
+  totalProtein: number;
+  totalFat: number;
+  comment?: string | null;
+}
+
+// 주간 식단 AI 코칭 (GET /meal/coach)
+export interface DietCoach {
+  hasData: boolean;
+  headline: string;
+  tips: string[];
+  balanceScore: number;
+}
+
+// AI 커플 주간 레터 (GET /summary/ai-letter)
+export interface WeeklyLetter {
+  hasData: boolean;
+  letter: string;
+}
+
+// AI 데이트 코스 추천 (GET /places/date-course)
+export interface DateCourseStop {
+  name: string;
+  category?: string | null;
+  reason?: string | null;
+}
+export interface DateCourse {
+  hasData: boolean;
+  stops: DateCourseStop[];
   comment?: string | null;
 }
 

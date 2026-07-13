@@ -18,15 +18,41 @@ import { Button } from '../../components/Button';
 import { MealCard } from '../../components/MealCard';
 import { WorkoutDietSegment } from '../../components/WorkoutDietSegment';
 import { EmptyState } from '../../components/EmptyState';
+import { AiInsightButton } from '../../components/AiInsightButton';
 import { useDietStore } from '../../store/dietStore';
 import { useRelationStore } from '../../store/relationStore';
 import { dietApi } from '../../api/diet';
+import { summaryApi } from '../../api/summary';
 import { streakApi } from '../../api/streak';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { CoupleMealGoal, Meal, Streak } from '../../types';
+import type { CoupleMealGoal, DietCoach, Meal, Streak, WeeklyLetter } from '../../types';
+
+/** 주간 식단 코칭 결과 렌더 */
+function renderCoach(c: DietCoach) {
+  return (
+    <View style={{ gap: spacing.md }}>
+      <Text style={styles.aiHeadline}>{c.headline}</Text>
+      {c.hasData ? (
+        <>
+          <Text style={styles.aiScore}>영양 균형 점수 {c.balanceScore}/100</Text>
+          {c.tips.map((tip, i) => (
+            <Text key={i} style={styles.aiTip}>
+              • {tip}
+            </Text>
+          ))}
+        </>
+      ) : null}
+    </View>
+  );
+}
+
+/** 커플 주간 레터 렌더 */
+function renderLetter(l: WeeklyLetter) {
+  return <Text style={styles.aiLetter}>{l.letter}</Text>;
+}
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'DietMain'>;
 
@@ -98,6 +124,26 @@ export function DietScreen({ navigation }: Props) {
         <TouchableOpacity onPress={() => navigation.navigate('DietCalendar')}>
           <Text style={styles.link}>📅 캘린더</Text>
         </TouchableOpacity>
+      </View>
+
+      {/* AI 인사이트 — 주간 식단 코칭 / 커플 주간 레터 */}
+      <View style={styles.aiRow}>
+        <AiInsightButton
+          label="주간 식단 코칭"
+          emoji="🤖"
+          title="주간 식단 코칭"
+          fetcher={dietApi.coach}
+          render={renderCoach}
+          style={styles.aiBtn}
+        />
+        <AiInsightButton
+          label="커플 주간 레터"
+          emoji="💌"
+          title="우리 주간 레터"
+          fetcher={summaryApi.aiLetter}
+          render={renderLetter}
+          style={styles.aiBtn}
+        />
       </View>
 
       <FlatList
@@ -228,6 +274,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
   },
+  aiRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
+  aiBtn: { flex: 1 },
+  aiHeadline: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary, lineHeight: 22 },
+  aiScore: { fontSize: fontSize.caption, fontWeight: '700', color: colors.primary },
+  aiTip: { fontSize: fontSize.body, color: colors.textPrimary, lineHeight: 21 },
+  aiLetter: { fontSize: fontSize.body, color: colors.textPrimary, lineHeight: 24 },
   list: { padding: spacing.lg, paddingBottom: 120 },
   streakRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
   streakText: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },

@@ -1,0 +1,86 @@
+package com.fitto.diet.service;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fitto.common.ai.GeminiClient;
+import com.fitto.diet.domain.Meal;
+import com.fitto.diet.dto.DietCoachResponse;
+import com.fitto.diet.repository.MealRepository;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 주간 식단 AI 코칭 — 최근 7일 식단 기록을 모아 Gemini 로 영양 균형 피드백을 생성한다.
+ * 개별 사진 분석({@link FoodAnalysisService})과 달리 '기간 단위 습관'을 본다.
+ */
+@Service
+@Transactional(readOnly = true)
+public class DietCoachService {
+
+    private static final int MIN_MEALS = 3; // 이보다 적으면 코칭 무의미
+
+    private static final String PROMPT = """
+            아래는 한 사용자의 최근 7일 식단 기록입니다. 영양·식습관 코치로서 분석해 주세요.
+            - headline: 이번 주 식단을 한 줄로 다정하게 요약 (한국어, 격려 톤)
+            - tips: 구체적이고 실천 가능한 개선 제안 2~3개 (각 한 문장, 한국어). 예: "저녁에 단백질이 부족해요. 닭가슴살이나 두부를 더해보세요."
+            - balanceScore: 영양 균형/규칙성을 0~100 으로 평가
+            기록이 적더라도 있는 정보로만 판단하고, 단정적 의학 조언은 피하세요.
+
+            [식단 기록]
+            %s
+            """;
+
+    private static final Map<String, Object> SCHEMA = Map.of(
+            "type", "OBJECT",
+            "properties", Map.of(
+                    "headline", Map.of("type", "STRING"),
+                    "tips", Map.of("type", "ARRAY", "items", Map.of("type", "STRING")),
+                    "balanceScore", Map.of("type", "INTEGER")),
+            "required", List.of("headline", "tips", "balanceScore"));
+
+    private final GeminiClient geminiClient;
+    private final MealRepository mealRepository;
+
+    public DietCoachService(GeminiClient geminiClient, MealRepository mealRepository) {
+        this.geminiClient = geminiClient;
+        this.mealRepository = mealRepository;
+    }
+
+    public DietCoachResponse coach(Long userId) {
+        LocalDate today = LocalDate.now();
+        List<Meal> meals = mealRepository.findByUserIdAndMealDateBetween(userId, today.minusDays(6), today);
+        if (meals.size() < MIN_MEALS) {
+            return DietCoachResponse.empty();
+        }
+
+        geminiClient.requireConfiguredAndCountUsage(userId);
+        JsonNode result = geminiClient.generateJson(
+                List.of(GeminiClient.textPart(PROMPT.formatted(summarize(meals)))), SCHEMA);
+
+        List<String> tips = new ArrayList<>();
+        for (JsonNode t : result.path("tips")) {
+            String tip = t.asText("");
+            if (!tip.isBlank()) tips.add(tip);
+        }
+        int score = Math.max(0, Math.min(100, result.path("balanceScore").asInt(0)));
+        String headline = result.path("headline").asText("이번 주도 기록하느라 수고했어요!");
+        return new DietCoachResponse(true, headline, tips, score);
+    }
+
+    /** 기록을 날짜·끼니별 한 줄로 요약 (칼로리·메모 포함). */
+    private String summarize(List<Meal> meals) {
+        StringBuilder sb = new StringBuilder();
+        for (Meal m : meals) {
+            sb.append("- ").append(m.getMealDate()).append(' ')
+                    .append(m.getMealType().label());
+            if (m.getCalories() != null) sb.append(" (").append(m.getCalories()).append("kcal)");
+            if (m.getMemo() != null && !m.getMemo().isBlank()) sb.append(": ").append(m.getMemo().trim());
+            sb.append('\n');
+        }
+        return sb.toString();
+    }
+}
