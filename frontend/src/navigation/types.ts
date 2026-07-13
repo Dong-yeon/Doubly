@@ -1,5 +1,6 @@
 /** 네비게이션 파라미터 타입 — 설계서 2. 화면 설계 */
 import type { NavigatorScreenParams } from '@react-navigation/native';
+import type { Trip } from '../types';
 
 // 2.1 온보딩 플로우 (인증 전)
 export type OnboardingStackParamList = {
@@ -8,10 +9,13 @@ export type OnboardingStackParamList = {
   Register: undefined;
 };
 
-// 홈 탭 내부 스택 — 홈 / 커플 연결 / MY(프로필·트레이너)
+// 홈 탭 내부 스택 — 홈 / 커플 연결 / 우리 기록(피드) / MY(프로필·트레이너)
 export type HomeStackParamList = {
   HomeMain: undefined;
   CoupleConnect: undefined;
+  // 커플 일상 피드 (PLAN.md Couple Feed)
+  Feed: undefined;
+  FeedCompose: undefined;
   // MY (구 MY 탭에서 이전) — 홈 헤더 프로필 아이콘으로 진입
   My: undefined;
   TrainerRegister: undefined;
@@ -41,11 +45,15 @@ export type ChatStackParamList = {
   ChatRoom: { relationId: number; title: string };
 };
 
-// 맛집 탭 내부 스택 — 지도 / 추가 / 상세 (PLACE)
+// 맛집 탭 내부 스택 — 지도 / 추가 / 상세 (PLACE) + 여행 (TRIP)
 export type PlaceStackParamList = {
   PlaceMap: undefined;
   PlaceAdd: undefined;
   PlaceDetail: { placeId: number; name: string };
+  // 커플 여행 (PLAN.md Trip) — 장소를 여행으로 그룹핑
+  TripList: undefined;
+  TripForm: { trip?: Trip };
+  TripDetail: { tripId: number; title: string };
 };
 
 // 2.2 메인 탭 (홈 / 운동+식단 / 채팅 / 맛집) + 중앙 FAB

@@ -150,6 +150,8 @@ export interface Place {
   category?: string | null;
   status: PlaceStatus;
   addedBy: number;
+  /** 담긴 여행 (PLAN.md Trip) — 미연결 시 null */
+  tripId?: number | null;
   visitCount: number;
   avgRating?: number | null;
   lastVisitedAt?: string | null;
@@ -235,6 +237,49 @@ export interface CoupleMealGoal {
   partnerDays: number;
   bothDays: number;
   achieved: boolean;
+}
+
+// 커플 여행 (PLAN.md Trip) — 장소(places)를 여행 단위로 그룹핑
+export interface Trip {
+  id: number;
+  title: string;
+  startDate: string;
+  endDate: string;
+  memo?: string | null;
+  coverImageUrl?: string | null;
+  createdBy: number;
+  placeCount: number;
+  createdAt: string;
+}
+export interface TripDetail {
+  trip: Trip;
+  places: Place[];
+}
+
+// 커플 일상 피드 (PLAN.md Couple Feed) — 포스트 + 운동/식단/맛집 방문 통합 타임라인
+export type FeedItemType = 'POST' | 'WORKOUT' | 'MEAL' | 'PLACE_VISIT';
+export interface ReactionSummary {
+  emoji: string;
+  count: number;
+  mine: boolean;
+}
+export interface FeedItem {
+  type: FeedItemType;
+  refId: number;
+  userId: number;
+  userName: string;
+  mine: boolean;
+  title?: string | null;
+  content?: string | null;
+  imageUrl?: string | null;
+  occurredAt: string;
+  /** POST 에만 존재 */
+  reactions?: ReactionSummary[] | null;
+}
+export interface FeedTimeline {
+  items: FeedItem[];
+  nextCursor: string | null;
+  hasMore: boolean;
 }
 
 // 5.8 chat_messages

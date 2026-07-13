@@ -59,6 +59,10 @@ public class Place {
     @Column(name = "added_by", nullable = false)
     private Long addedBy;
 
+    /** 담긴 여행 (PLAN.md Trip) — 미연결 시 null */
+    @Column(name = "trip_id")
+    private Long tripId;
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -90,5 +94,10 @@ public class Place {
     /** 방문 기록이 생기면 자동으로 방문완료 전환 */
     public void markVisited() {
         this.status = PlaceStatus.VISITED;
+    }
+
+    /** 여행에 담기 / 빼기(null) */
+    public void assignTrip(Long tripId) {
+        this.tripId = tripId;
     }
 }

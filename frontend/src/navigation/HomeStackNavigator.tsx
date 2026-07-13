@@ -5,6 +5,8 @@ import type { HomeStackParamList } from './types';
 import { HomeScreen } from '../screens/home/HomeScreen';
 import { CoupleConnectScreen } from '../screens/home/CoupleConnectScreen';
 import { MyScreen } from '../screens/my/MyScreen';
+import { FeedScreen } from '../screens/feed/FeedScreen';
+import { FeedComposeScreen } from '../screens/feed/FeedComposeScreen';
 import { TrainerRegisterScreen } from '../screens/trainer/TrainerRegisterScreen';
 import { TrainerDashboardScreen } from '../screens/trainer/TrainerDashboardScreen';
 import { TrainerMemberDetailScreen } from '../screens/trainer/TrainerMemberDetailScreen';
@@ -28,6 +30,12 @@ export function HomeStackNavigator() {
         name="CoupleConnect"
         component={CoupleConnectScreen}
         options={{ title: '커플 연결' }}
+      />
+      <Stack.Screen name="Feed" component={FeedScreen} options={{ title: '우리 기록' }} />
+      <Stack.Screen
+        name="FeedCompose"
+        component={FeedComposeScreen}
+        options={{ title: '일상 남기기', presentation: 'modal' }}
       />
       <Stack.Screen name="My" component={MyScreen} options={{ title: 'MY' }} />
       <Stack.Screen

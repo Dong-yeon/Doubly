@@ -1,5 +1,5 @@
-/** 장소 추가 — 이름·주소·카테고리·상태(위시/방문). 좌표는 지도 SDK 도입 후 지원 */
-import React, { useState } from 'react';
+/** 장소 추가 — 카카오 플레이스 검색 자동 입력 + 이름·주소·카테고리·상태(위시/방문)·지도 위치 선택 */
+import React, { useRef, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -16,6 +16,7 @@ import type { PlaceStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
 import { KakaoMap } from '../../components/KakaoMap';
+import type { KakaoMapHandle, KakaoPlaceResult } from '../../components/KakaoMap.types';
 import { placeApi } from '../../api/place';
 import { isKakaoMapConfigured } from '../../constants/config';
 import { getErrorMessage } from '../../utils/error';
@@ -40,6 +41,43 @@ export function PlaceAddScreen({ navigation }: Props) {
   const [status, setStatus] = useState<PlaceStatus>('WISHLIST');
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // 카카오 플레이스 키워드 검색 (지도 SDK services — WebView 브리지)
+  const mapRef = useRef<KakaoMapHandle>(null);
+  const [keyword, setKeyword] = useState('');
+  const [results, setResults] = useState<KakaoPlaceResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const onSearch = () => {
+    const q = keyword.trim();
+    if (!q) return;
+    setSearching(true);
+    setResults([]);
+    mapRef.current?.search(q);
+    // 지도 로딩 전 등 응답이 없을 때를 대비한 안전장치
+    if (searchTimeout.current) clearTimeout(searchTimeout.current);
+    searchTimeout.current = setTimeout(() => setSearching(false), 6000);
+  };
+
+  const onSearchResults = (_kw: string, found: KakaoPlaceResult[]) => {
+    if (searchTimeout.current) clearTimeout(searchTimeout.current);
+    setSearching(false);
+    setResults(found);
+    if (found.length === 0) toast.error('검색 결과가 없어요.');
+  };
+
+  // 검색 결과 선택 → 이름·주소·좌표 자동 입력 + 지도 핀
+  const onPickResult = (place: KakaoPlaceResult) => {
+    setName(place.name);
+    if (place.address) setAddress(place.address);
+    setCoords({ lat: place.lat, lng: place.lng });
+    if (place.categoryGroup === 'CE7') setCategory((prev) => prev ?? '카페');
+    mapRef.current?.setPin(place.lat, place.lng);
+    setResults([]);
+    setKeyword('');
+    haptics.light();
+  };
 
   // 지도 탭 → 좌표 저장 + (주소가 비어 있으면) 자동 입력
   const onMapSelect = (pos: { lat: number; lng: number; address?: string | null }) => {
@@ -75,6 +113,35 @@ export function PlaceAddScreen({ navigation }: Props) {
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+          {isKakaoMapConfigured() ? (
+            <>
+              <Text style={styles.label}>🔍 카카오 장소 검색 — 이름·주소·위치가 자동 입력돼요</Text>
+              <View style={styles.searchRow}>
+                <View style={styles.flex}>
+                  <TextField
+                    placeholder="예: 온기족발"
+                    value={keyword}
+                    onChangeText={setKeyword}
+                    onSubmitEditing={onSearch}
+                    returnKeyType="search"
+                  />
+                </View>
+                <Button title="검색" size="md" onPress={onSearch} loading={searching} />
+              </View>
+              {results.map((r) => (
+                <TouchableOpacity
+                  key={`${r.name}-${r.lat}-${r.lng}`}
+                  style={styles.resultCard}
+                  activeOpacity={0.7}
+                  onPress={() => onPickResult(r)}
+                >
+                  <Text style={styles.resultName}>{r.name}</Text>
+                  {r.address ? <Text style={styles.resultAddress}>{r.address}</Text> : null}
+                </TouchableOpacity>
+              ))}
+            </>
+          ) : null}
+
           <TextField
             label="장소 이름"
             placeholder="예: 온기족발 본점"
@@ -91,8 +158,8 @@ export function PlaceAddScreen({ navigation }: Props) {
 
           {isKakaoMapConfigured() ? (
             <>
-              <Text style={styles.label}>위치 선택 (선택) — 지도를 탭하면 핀이 찍혀요</Text>
-              <KakaoMap selectable height={240} onSelect={onMapSelect} />
+              <Text style={styles.label}>위치 확인 (선택) — 지도를 탭해 직접 고를 수도 있어요</Text>
+              <KakaoMap ref={mapRef} selectable height={240} onSelect={onMapSelect} onSearchResults={onSearchResults} />
               <Text style={styles.coordText}>
                 {coords ? `📍 위치 선택됨 (${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)})` : '아직 위치를 선택하지 않았어요'}
               </Text>
@@ -136,6 +203,17 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
   container: { padding: spacing.lg, paddingBottom: spacing.xl },
+  searchRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },
+  resultCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginBottom: spacing.xs,
+  },
+  resultName: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
+  resultAddress: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
   label: {
     fontSize: fontSize.caption,
     color: colors.textSecondary,

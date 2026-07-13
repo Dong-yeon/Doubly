@@ -28,6 +28,7 @@ const FAB_ACTIONS: { icon: IconName; label: string; go: (nav: BottomTabBarProps[
   { icon: 'dumbbell', label: '운동 기록', go: (n) => n.navigate('Workout', { screen: 'WorkoutRecord' }) },
   { icon: 'camera-outline', label: '음식 촬영', go: (n) => n.navigate('Workout', { screen: 'DietRecord' }) },
   { icon: 'map-marker-plus-outline', label: '맛집 핀', go: (n) => n.navigate('Place', { screen: 'PlaceAdd' }) },
+  { icon: 'image-plus', label: '일상 남기기', go: (n) => n.navigate('Home', { screen: 'FeedCompose' }) },
 ];
 
 function CustomTabBar({ state, navigation }: BottomTabBarProps) {

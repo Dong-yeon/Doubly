@@ -57,6 +57,16 @@ public interface WorkoutRepository extends JpaRepository<Workout, Long> {
     @Query("select max(w.workoutDate) from Workout w where w.userId = :userId")
     LocalDate findLastWorkoutDate(@Param("userId") Long userId);
 
+    /** 커플 피드 타임라인 — 두 사람의 기록 중 커서(createdAt) 이전, 최신순. */
+    @Query("""
+            select w from Workout w
+            where w.userId in :userIds and w.createdAt < :cursor
+            order by w.createdAt desc
+            """)
+    List<Workout> findRecentForFeed(@Param("userIds") List<Long> userIds,
+                                    @Param("cursor") java.time.LocalDateTime cursor,
+                                    Pageable pageable);
+
     /** 회원 탈퇴 시 본인 운동 기록 삭제 (workout_sets 는 DB ON DELETE CASCADE). */
     @Modifying
     @Query("delete from Workout w where w.userId = :userId")
