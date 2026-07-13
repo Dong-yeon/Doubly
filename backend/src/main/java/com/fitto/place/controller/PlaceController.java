@@ -2,11 +2,13 @@ package com.fitto.place.controller;
 
 import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
+import com.fitto.place.dto.DateCourseResponse;
 import com.fitto.place.dto.PlaceResponse;
 import com.fitto.place.dto.PlaceVisitResponse;
 import com.fitto.place.dto.RecordVisitRequest;
 import com.fitto.place.dto.SavePlaceRequest;
 import com.fitto.place.dto.UpdatePlaceRequest;
+import com.fitto.place.service.DateCourseService;
 import com.fitto.place.service.PlaceService;
 import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -29,9 +31,11 @@ import java.util.List;
 public class PlaceController {
 
     private final PlaceService placeService;
+    private final DateCourseService dateCourseService;
 
-    public PlaceController(PlaceService placeService) {
+    public PlaceController(PlaceService placeService, DateCourseService dateCourseService) {
         this.placeService = placeService;
+        this.dateCourseService = dateCourseService;
     }
 
     @PostMapping
@@ -43,6 +47,12 @@ public class PlaceController {
     @GetMapping
     public ApiResponse<List<PlaceResponse>> list(@AuthenticationPrincipal AuthUser user) {
         return ApiResponse.success(placeService.list(user.id()));
+    }
+
+    /** AI 데이트 코스 추천 — 저장한 장소로 코스 구성 (GET /places/date-course) */
+    @GetMapping("/date-course")
+    public ApiResponse<DateCourseResponse> dateCourse(@AuthenticationPrincipal AuthUser user) {
+        return ApiResponse.success(dateCourseService.recommend(user.id()));
     }
 
     @PutMapping("/{id}")

@@ -18,7 +18,11 @@ export function ChatStackNavigator() {
       }}
     >
       <Stack.Screen name="ChatRooms" component={ChatScreen} options={{ headerShown: false }} />
-      <Stack.Screen name="ChatRoom" component={ChatRoomScreen} options={{ title: '채팅' }} />
+      <Stack.Screen
+        name="ChatRoom"
+        component={ChatRoomScreen}
+        options={({ route }) => ({ title: route.params.title ?? '채팅' })}
+      />
     </Stack.Navigator>
   );
 }

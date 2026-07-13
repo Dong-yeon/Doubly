@@ -42,8 +42,9 @@ public class FoodAnalysisService {
             - 음식 사진이 아니면 isFood 를 false 로, foods 는 빈 배열로 응답합니다.
             - 각 음식의 이름(name)은 한국어로 적습니다. 한국 음식이면 정확한 한국어 명칭을 사용합니다.
             - calories 는 사진에 보이는 양 기준의 추정 칼로리(kcal), portion 은 대략적인 양(예: "1인분", "밥 반 공기")입니다.
-            - totalCalories 는 모든 음식 칼로리의 합계입니다.
-            - comment 에는 이 식단에 대한 짧고 다정한 한 줄 코멘트를 한국어로 작성합니다. (건강한 식단이면 칭찬, 아니면 부드러운 제안)
+            - carbs/protein/fat 은 각 음식의 탄수화물/단백질/지방 추정량(그램, g)입니다.
+            - totalCalories, totalCarbs, totalProtein, totalFat 은 모든 음식의 합계입니다.
+            - comment 에는 이 식단에 대한 짧고 다정한 한 줄 코멘트를 한국어로 작성합니다. (영양 균형 관점에서 칭찬 또는 부드러운 제안)
             """;
 
     /** Gemini 구조화 출력(JSON mode) 스키마 — 응답 파싱을 안정화한다 */
@@ -58,9 +59,15 @@ public class FoodAnalysisService {
                                     "properties", Map.of(
                                             "name", Map.of("type", "STRING"),
                                             "calories", Map.of("type", "INTEGER"),
-                                            "portion", Map.of("type", "STRING")),
+                                            "portion", Map.of("type", "STRING"),
+                                            "carbs", Map.of("type", "INTEGER"),
+                                            "protein", Map.of("type", "INTEGER"),
+                                            "fat", Map.of("type", "INTEGER")),
                                     "required", List.of("name", "calories"))),
                     "totalCalories", Map.of("type", "INTEGER"),
+                    "totalCarbs", Map.of("type", "INTEGER"),
+                    "totalProtein", Map.of("type", "INTEGER"),
+                    "totalFat", Map.of("type", "INTEGER"),
                     "comment", Map.of("type", "STRING")),
             "required", List.of("isFood", "foods", "totalCalories"));
 
@@ -107,18 +114,22 @@ public class FoodAnalysisService {
         try {
             // 전체 버퍼링 대신 스트리밍으로 상한+1 바이트까지만 읽는다 — 초대형 응답의 메모리 스파이크 방지.
             // 리다이렉트(3xx)는 팩토리에서 미추종이므로 2xx 가 아니면 전부 거부된다.
+            // 실패 원인은 코드별로 분리해 어떤 문제인지 바로 보이게 한다.
             return restClient.get().uri(uri).exchange((request, response) -> {
                 if (!response.getStatusCode().is2xxSuccessful()) {
-                    throw new BusinessException(ErrorCode.INVALID_PHOTO_URL);
+                    throw new BusinessException(ErrorCode.PHOTO_DOWNLOAD_FAILED);
                 }
                 long declared = response.getHeaders().getContentLength();
                 if (declared > MAX_IMAGE_BYTES) {
-                    throw new BusinessException(ErrorCode.INVALID_PHOTO_URL);
+                    throw new BusinessException(ErrorCode.PHOTO_TOO_LARGE);
                 }
                 try (InputStream in = response.getBody()) {
                     byte[] body = in.readNBytes(MAX_IMAGE_BYTES + 1);
-                    if (body.length == 0 || body.length > MAX_IMAGE_BYTES) {
-                        throw new BusinessException(ErrorCode.INVALID_PHOTO_URL);
+                    if (body.length == 0) {
+                        throw new BusinessException(ErrorCode.PHOTO_DOWNLOAD_FAILED);
+                    }
+                    if (body.length > MAX_IMAGE_BYTES) {
+                        throw new BusinessException(ErrorCode.PHOTO_TOO_LARGE);
                     }
                     String mimeType = resolveMimeType(body, response.getHeaders().getContentType());
                     return new Image(body, mimeType);
@@ -126,25 +137,34 @@ public class FoodAnalysisService {
             });
         } catch (RestClientResponseException | ResourceAccessException e) {
             log.warn("식단 사진 다운로드 실패: {}", e.getMessage());
-            throw new BusinessException(ErrorCode.INVALID_PHOTO_URL);
+            throw new BusinessException(ErrorCode.PHOTO_DOWNLOAD_FAILED);
         }
     }
+
+    /** Gemini 가 지원하는 이미지 MIME 화이트리스트 */
+    private static final java.util.Set<String> SUPPORTED_MIME = java.util.Set.of(
+            MediaType.IMAGE_JPEG_VALUE, MediaType.IMAGE_PNG_VALUE, MediaType.IMAGE_GIF_VALUE,
+            "image/webp", "image/heic", "image/heif");
 
     /**
      * 실제 이미지 포맷을 판별한다. Gemini 는 선언된 mimeType 과 실제 바이트가 일치하지 않으면
      * 거부하므로, CDN 이 보내는 Content-Type 헤더(누락되거나 부정확할 수 있음)를 그대로 믿지 않고
-     * 파일 시그니처(매직 바이트)를 우선 사용한다.
+     * 파일 시그니처(매직 바이트)를 우선 사용한다. 지원 포맷을 특정할 수 없으면 명확히 거부한다.
      */
     private String resolveMimeType(byte[] body, MediaType headerContentType) {
         String sniffed = sniffImageMimeType(body);
         if (sniffed != null) {
             return sniffed;
         }
-        if (headerContentType != null && "image".equals(headerContentType.getType())) {
-            return headerContentType.getType() + "/" + headerContentType.getSubtype();
+        // 시그니처로 판별 못 하면, 헤더가 지원 포맷을 명시할 때만 신뢰
+        if (headerContentType != null) {
+            String type = headerContentType.getType() + "/" + headerContentType.getSubtype();
+            if (SUPPORTED_MIME.contains(type)) {
+                return type;
+            }
         }
-        log.warn("이미지 포맷을 식별하지 못해 기본값(jpeg)으로 처리합니다. header={}", headerContentType);
-        return MediaType.IMAGE_JPEG_VALUE;
+        log.warn("지원하지 않는 이미지 포맷. header={}", headerContentType);
+        throw new BusinessException(ErrorCode.PHOTO_UNSUPPORTED_FORMAT);
     }
 
     /** 파일 시그니처로 이미지 포맷 판별 — Gemini 가 지원하는 포맷(PNG/JPEG/WEBP/HEIC/HEIF/GIF)만 확인 */
@@ -194,17 +214,27 @@ public class FoodAnalysisService {
             foods.add(new AnalyzedFood(
                     name,
                     Math.max(0, food.path("calories").asInt(0)),
-                    food.path("portion").asText(null)));
+                    food.path("portion").asText(null),
+                    Math.max(0, food.path("carbs").asInt(0)),
+                    Math.max(0, food.path("protein").asInt(0)),
+                    Math.max(0, food.path("fat").asInt(0))));
         }
         if (foods.isEmpty()) {
             return MealAnalysisResponse.notFood();
         }
 
-        int totalCalories = result.path("totalCalories").asInt(0);
-        if (totalCalories <= 0) {
-            totalCalories = foods.stream().mapToInt(AnalyzedFood::calories).sum();
-        }
+        int totalCalories = positiveOrSum(result, "totalCalories", foods, AnalyzedFood::calories);
+        int totalCarbs = positiveOrSum(result, "totalCarbs", foods, AnalyzedFood::carbs);
+        int totalProtein = positiveOrSum(result, "totalProtein", foods, AnalyzedFood::protein);
+        int totalFat = positiveOrSum(result, "totalFat", foods, AnalyzedFood::fat);
         String comment = result.path("comment").asText(null);
-        return new MealAnalysisResponse(true, foods, totalCalories, comment);
+        return new MealAnalysisResponse(true, foods, totalCalories, totalCarbs, totalProtein, totalFat, comment);
+    }
+
+    /** 합계 필드가 비었으면 개별 음식값을 합산해 보정한다. */
+    private int positiveOrSum(JsonNode result, String field, List<AnalyzedFood> foods,
+                              java.util.function.ToIntFunction<AnalyzedFood> extractor) {
+        int total = result.path(field).asInt(0);
+        return total > 0 ? total : foods.stream().mapToInt(extractor).sum();
     }
 }

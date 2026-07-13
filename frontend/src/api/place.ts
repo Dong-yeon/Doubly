@@ -1,6 +1,6 @@
 /** 커플 맛집 지도 API — PLAN.md Place Map */
 import { apiClient, unwrap } from './client';
-import type { ApiResponse, Place, PlaceStatus, PlaceVisit } from '../types';
+import type { ApiResponse, DateCourse, Place, PlaceStatus, PlaceVisit } from '../types';
 
 export interface SavePlacePayload {
   name: string;
@@ -33,4 +33,8 @@ export const placeApi = {
     unwrap(apiClient.get<ApiResponse<PlaceVisit[]>>(`/places/${placeId}/visits`)),
   removeVisit: (placeId: number, visitId: number) =>
     unwrap(apiClient.delete<ApiResponse<void>>(`/places/${placeId}/visits/${visitId}`)),
+
+  // AI 데이트 코스 추천 — 저장한 장소로 코스 구성 (생성에 시간 걸려 timeout 상향)
+  dateCourse: () =>
+    unwrap(apiClient.get<ApiResponse<DateCourse>>('/places/date-course', { timeout: 60000 })),
 };

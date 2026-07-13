@@ -4,6 +4,7 @@ import type {
   ApiResponse,
   CalendarDay,
   CoupleMealGoal,
+  DietCoach,
   Meal,
   MealAnalysis,
   MealStats,
@@ -34,4 +35,6 @@ export const dietApi = {
   partnerToday: () => unwrap(apiClient.get<ApiResponse<PartnerToday>>('/meal/partner/today')),
   stats: () => unwrap(apiClient.get<ApiResponse<MealStats>>('/meal/stats')),
   coupleGoal: () => unwrap(apiClient.get<ApiResponse<CoupleMealGoal>>('/meal/couple/goal')),
+  // 주간 식단 AI 코칭 — 최근 7일 기반, 시간이 걸려 timeout 상향
+  coach: () => unwrap(apiClient.get<ApiResponse<DietCoach>>('/meal/coach', { timeout: 60000 })),
 };
