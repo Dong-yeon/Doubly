@@ -94,6 +94,9 @@ export function PlaceMapScreen({ navigation }: Props) {
             <Text style={[styles.filterText, mapMode && styles.filterTextActive]}>🗺️ 지도</Text>
           </TouchableOpacity>
         ) : null}
+        <TouchableOpacity style={styles.filterChip} onPress={() => navigation.navigate('TripList')}>
+          <Text style={styles.filterText}>✈️ 여행</Text>
+        </TouchableOpacity>
       </View>
 
       {mapMode ? (
