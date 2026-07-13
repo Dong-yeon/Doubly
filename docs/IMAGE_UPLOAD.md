@@ -49,3 +49,19 @@ npx expo start -c      # → w
 - 더 엄격히 하려면 추후 **백엔드 경유 서명 업로드**(Cloudinary SDK)로 전환할 수 있습니다.
   우리는 메시지에 URL만 저장하므로 저장소(S3 등)로 바꿔도 백엔드 구조는 그대로입니다.
 - 설정 전(placeholder)에는 📷 전송 시 "이미지 업로드가 아직 설정되지 않았어요" 안내가 뜹니다.
+
+---
+
+## 서명(signed) 업로드로 전환 (권장 — 출시 준비)
+
+unsigned preset 은 클라이언트에 노출되어 악용 시 스토리지가 오염될 수 있다.
+백엔드에 Cloudinary 자격을 설정하면 앱이 자동으로 **서명 업로드**를 사용한다
+(미설정 시 기존 unsigned 로 폴백하므로 점진 전환 가능).
+
+1. Cloudinary 콘솔 → Settings → API Keys 에서 `API Key` / `API Secret` 확인
+2. 백엔드 환경변수 설정 (Railway Variables 또는 로컬 `.env`):
+   - `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`
+   - `CLOUDINARY_FOLDER` (선택, 기본 `fitto`)
+3. 동작: 앱이 `POST /api/v1/uploads/signature` 로 로그인 사용자에게만 단기 서명을 받아
+   Cloudinary 에 업로드한다. 서명이 폴더를 고정하므로 클라이언트가 임의 변경할 수 없다.
+4. 전환 완료 후 콘솔에서 unsigned preset(`fitto_unsigned`)을 비활성화하면 마무리.

@@ -45,6 +45,9 @@ public enum ErrorCode {
     // 여행 (TRIP)
     TRIP_NOT_FOUND(HttpStatus.NOT_FOUND, "여행을 찾을 수 없습니다."),
 
+    // 이미지 업로드 (UPLOAD)
+    UPLOAD_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "서명 업로드가 아직 설정되지 않았어요."),
+
     // 식단 AI 분석 (DIET AI)
     AI_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "AI 분석 기능이 아직 준비되지 않았어요."),
     AI_DAILY_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "오늘의 AI 분석 횟수를 모두 사용했어요. 내일 다시 시도해주세요."),
