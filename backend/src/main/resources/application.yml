@@ -27,7 +27,7 @@ spring:
     enabled: true
     baseline-on-migrate: true
 
-  # Redis (초대코드/세션/소켓 — 설계서 6.1).
+  # Redis — AI(Gemini) 사용자별 일일 사용량 카운터 (미가용 시 인메모리 폴백).
   # 로컬은 host/port 사용. 클라우드(Railway 등)는 SPRING_DATA_REDIS_URL 환경변수
   # (redis://default:password@host:port)로 덮어쓰면 인증까지 자동 처리된다.
   data:
@@ -46,6 +46,13 @@ fitto:
     secret: ${JWT_SECRET:dev-only-secret-change-me-in-production-0123456789}
     access-token-expire-minutes: 30
     refresh-token-expire-days: 14
+
+  # Cloudinary 서명 업로드 — 미설정 시 프론트가 unsigned preset 으로 폴백
+  cloudinary:
+    cloud-name: ${CLOUDINARY_CLOUD_NAME:}
+    api-key: ${CLOUDINARY_API_KEY:}
+    api-secret: ${CLOUDINARY_API_SECRET:}
+    folder: ${CLOUDINARY_FOLDER:fitto}
 
   # 음식 사진 AI 분석 (Google AI Studio 무료 티어) — 키 미설정 시 기능만 비활성, 앱은 정상 동작
   gemini:
