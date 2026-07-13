@@ -13,8 +13,7 @@ export type OnboardingStackParamList = {
 export type HomeStackParamList = {
   HomeMain: undefined;
   CoupleConnect: undefined;
-  // 커플 일상 피드 (PLAN.md Couple Feed)
-  Feed: undefined;
+  // 커플 일상 피드 작성 (홈이 피드 타임라인 역할)
   FeedCompose: undefined;
   // MY (구 MY 탭에서 이전) — 홈 헤더 프로필 아이콘으로 진입
   My: undefined;

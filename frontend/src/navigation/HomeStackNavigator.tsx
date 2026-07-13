@@ -5,7 +5,6 @@ import type { HomeStackParamList } from './types';
 import { HomeScreen } from '../screens/home/HomeScreen';
 import { CoupleConnectScreen } from '../screens/home/CoupleConnectScreen';
 import { MyScreen } from '../screens/my/MyScreen';
-import { FeedScreen } from '../screens/feed/FeedScreen';
 import { FeedComposeScreen } from '../screens/feed/FeedComposeScreen';
 import { TrainerRegisterScreen } from '../screens/trainer/TrainerRegisterScreen';
 import { TrainerDashboardScreen } from '../screens/trainer/TrainerDashboardScreen';
@@ -31,7 +30,6 @@ export function HomeStackNavigator() {
         component={CoupleConnectScreen}
         options={{ title: '커플 연결' }}
       />
-      <Stack.Screen name="Feed" component={FeedScreen} options={{ title: '우리 기록' }} />
       <Stack.Screen
         name="FeedCompose"
         component={FeedComposeScreen}

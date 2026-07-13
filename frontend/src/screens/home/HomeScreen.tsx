@@ -1,13 +1,17 @@
-/** 홈 — 비트윈 스타일 커플 메인 (배경 · D+ 카운터 · 커플 프로필 · 오늘 운동 상태) */
-import React, { useCallback, useState } from 'react';
+/** 홈 = 우리 기록(피드) + 상단 커플 대시보드 (비트윈 스타일)
+ *  상단: 배경·D+·커플 프로필(오늘 상태). 그 아래: 통합 타임라인(포스트+운동+식단+맛집). */
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Image,
   ImageBackground,
   Modal,
   Pressable,
-  RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,20 +22,22 @@ import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList, MainTabParamList } from '../../navigation/types';
-import { Button } from '../../components/Button';
 import { Avatar } from '../../components/Avatar';
 import { Card } from '../../components/Card';
 import { TextField } from '../../components/TextField';
+import { EmptyState } from '../../components/EmptyState';
 import { useAuthStore } from '../../store/authStore';
 import { useRelationStore } from '../../store/relationStore';
 import { workoutApi } from '../../api/workout';
-import { dietApi } from '../../api/diet';
 import { streakApi } from '../../api/streak';
+import { feedApi } from '../../api/feed';
 import { connectSocket, subscribeCouple, unsubscribeCouple } from '../../api/chatSocket';
 import { pickImage, uploadImage } from '../../utils/imageUpload';
 import { toast } from '../../store/toastStore';
 import { getErrorMessage } from '../../utils/error';
-import type { PartnerToday, Streak } from '../../types';
+import { relativeDateLabel } from '../../utils/date';
+import { haptics } from '../../utils/haptics';
+import type { FeedItem, PartnerToday, ReactionSummary, Streak } from '../../types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 
 type Props = CompositeScreenProps<
@@ -39,8 +45,8 @@ type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList>
 >;
 
-// 커플 히어로 그라데이션 — couple(코랄) 톤으로 리파인
 const GRADIENT: [string, string, string] = ['#FF9E9E', '#FF8080', '#E86A6A'];
+const QUICK_EMOJIS = ['❤️', '🥰', '😆', '👍', '💪'];
 
 function daysTogether(connectedAt?: string | null): number {
   if (!connectedAt) return 0;
@@ -48,33 +54,92 @@ function daysTogether(connectedAt?: string | null): number {
   return Math.max(1, Math.floor(diff / 86400000) + 1);
 }
 
+function timeLabel(occurredAt: string): string {
+  const date = relativeDateLabel(occurredAt.slice(0, 10));
+  const time = occurredAt.slice(11, 16);
+  return time ? `${date} ${time}` : date;
+}
+
+function itemKey(item: FeedItem): string {
+  return `${item.type}-${item.refId}`;
+}
+
 export function HomeScreen({ navigation }: Props) {
   const user = useAuthStore((s) => s.user);
   const { couple, loading, fetchAll, setBackground, setAnniversary } = useRelationStore();
+
   const [partner, setPartner] = useState<PartnerToday | null>(null);
   const [myStreak, setMyStreak] = useState<Streak | null>(null);
-  const [coupleStreak, setCoupleStreak] = useState<Streak | null>(null);
   const [myDone, setMyDone] = useState(false);
-  const [myMealDone, setMyMealDone] = useState(false);
-  const [partnerMeal, setPartnerMeal] = useState<PartnerToday | null>(null);
   const [annModal, setAnnModal] = useState(false);
   const [annInput, setAnnInput] = useState('');
   const [annSaving, setAnnSaving] = useState(false);
-  const bgUrl = couple?.backgroundImageUrl ?? null;
 
-  const refresh = useCallback(() => {
+  // 피드
+  const [items, setItems] = useState<FeedItem[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [feedLoading, setFeedLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const feedLoadingRef = useRef(false);
+
+  const connected = !!couple?.partner;
+  const bgUrl = couple?.backgroundImageUrl ?? null;
+  const dday = daysTogether(couple?.anniversaryDate ?? couple?.connectedAt);
+
+  const refreshStatus = useCallback(() => {
     fetchAll();
     workoutApi.today().then((l) => setMyDone(l.length > 0)).catch(() => setMyDone(false));
     workoutApi.partnerToday().then(setPartner).catch(() => setPartner(null));
-    dietApi.today().then((l) => setMyMealDone(l.length > 0)).catch(() => setMyMealDone(false));
-    dietApi.partnerToday().then(setPartnerMeal).catch(() => setPartnerMeal(null));
     streakApi.me().then(setMyStreak).catch(() => setMyStreak(null));
-    streakApi.couple().then(setCoupleStreak).catch(() => setCoupleStreak(null));
   }, [fetchAll]);
+
+  const loadFeed = useCallback(async () => {
+    if (feedLoadingRef.current) return;
+    feedLoadingRef.current = true;
+    setFeedLoading(true);
+    try {
+      const page = await feedApi.timeline(null);
+      setItems(page.items);
+      setNextCursor(page.nextCursor);
+      setHasMore(page.hasMore);
+    } catch {
+      // 커플 미연결 등은 조용히 무시 (헤더가 연결 안내를 표시)
+      setItems([]);
+    } finally {
+      feedLoadingRef.current = false;
+      setFeedLoading(false);
+    }
+  }, []);
+
+  const loadMore = useCallback(async () => {
+    if (feedLoadingRef.current || !hasMore || !nextCursor) return;
+    feedLoadingRef.current = true;
+    setLoadingMore(true);
+    try {
+      const page = await feedApi.timeline(nextCursor);
+      setItems((prev) => {
+        const seen = new Set(prev.map(itemKey));
+        return [...prev, ...page.items.filter((i) => !seen.has(itemKey(i)))];
+      });
+      setNextCursor(page.nextCursor);
+      setHasMore(page.hasMore);
+    } catch (e) {
+      toast.error(getErrorMessage(e, '피드를 불러오지 못했어요.'));
+    } finally {
+      feedLoadingRef.current = false;
+      setLoadingMore(false);
+    }
+  }, [hasMore, nextCursor]);
+
+  const refresh = useCallback(() => {
+    refreshStatus();
+    loadFeed();
+  }, [refreshStatus, loadFeed]);
 
   useFocusEffect(useCallback(() => refresh(), [refresh]));
 
-  // 커플 실시간 이벤트 구독 — 배경/기념일/상대방 운동 변경 시 자동 새로고침
+  // 커플 실시간 이벤트 — 피드/상태 변경 시 자동 새로고침
   const relationId = couple?.id;
   useFocusEffect(
     useCallback(() => {
@@ -97,7 +162,7 @@ export function HomeScreen({ navigation }: Props) {
       const uri = await pickImage();
       if (!uri) return;
       const url = await uploadImage(uri);
-      await setBackground(url); // 커플 공유 배경 (양쪽에 반영)
+      await setBackground(url);
       toast.success('배경을 변경했어요 🖼️');
     } catch (e) {
       toast.error(getErrorMessage(e, '배경 변경에 실패했어요.'));
@@ -126,123 +191,184 @@ export function HomeScreen({ navigation }: Props) {
     }
   };
 
-  const connected = !!couple?.partner;
-  // 기념일이 있으면 그 날 기준, 없으면 커플 연결일 기준
-  const dday = daysTogether(couple?.anniversaryDate ?? couple?.connectedAt);
+  // ---- 피드 반응/삭제 ----
+  const onReact = async (item: FeedItem, emoji: string) => {
+    haptics.light();
+    try {
+      const reactions = await feedApi.react(item.refId, emoji);
+      setItems((prev) => prev.map((i) => (itemKey(i) === itemKey(item) ? { ...i, reactions } : i)));
+    } catch (e) {
+      toast.error(getErrorMessage(e, '반응을 남기지 못했어요.'));
+    }
+  };
 
-  const content = (
-    <SafeAreaView style={styles.safe} edges={['top']}>
-      <ScrollView
-        contentContainerStyle={styles.container}
-        showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={refresh} tintColor={colors.white} />}
-      >
-        {/* 상단 바: (커플 연결 시) 배경 변경 · 우측 프로필(MY 진입) */}
+  const onDeletePost = (item: FeedItem) => {
+    if (item.type !== 'POST' || !item.mine) return;
+    Alert.alert('포스트 삭제', '이 일상 기록을 삭제할까요?', [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '삭제',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await feedApi.removePost(item.refId);
+            haptics.light();
+            setItems((prev) => prev.filter((i) => itemKey(i) !== itemKey(item)));
+          } catch (e) {
+            Alert.alert('오류', getErrorMessage(e));
+          }
+        },
+      },
+    ]);
+  };
+
+  const renderReactions = (item: FeedItem) => {
+    const summaries = item.reactions ?? [];
+    const extra = summaries.map((r) => r.emoji).filter((e) => !QUICK_EMOJIS.includes(e));
+    const emojis = [...QUICK_EMOJIS, ...extra];
+    const byEmoji = new Map<string, ReactionSummary>(summaries.map((r) => [r.emoji, r]));
+    return (
+      <View style={styles.reactionRow}>
+        {emojis.map((emoji) => {
+          const s = byEmoji.get(emoji);
+          return (
+            <TouchableOpacity
+              key={emoji}
+              style={[styles.reactionChip, s?.mine && styles.reactionChipMine]}
+              activeOpacity={0.7}
+              onPress={() => onReact(item, emoji)}
+            >
+              <Text style={styles.reactionEmoji}>{emoji}</Text>
+              {s && s.count > 0 ? <Text style={styles.reactionCount}>{s.count}</Text> : null}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    );
+  };
+
+  const renderItem = ({ item }: { item: FeedItem }) => (
+    <TouchableOpacity
+      style={styles.card}
+      activeOpacity={item.type === 'POST' && item.mine ? 0.8 : 1}
+      onLongPress={() => onDeletePost(item)}
+    >
+      <View style={styles.cardHeader}>
+        <Text style={styles.author}>{item.mine ? '나' : item.userName}</Text>
+        <Text style={styles.time}>{timeLabel(item.occurredAt)}</Text>
+      </View>
+      {item.title ? <Text style={styles.itemTitle}>{item.title}</Text> : null}
+      {item.imageUrl ? (
+        <Image source={{ uri: item.imageUrl }} style={styles.photo} resizeMode="cover" />
+      ) : null}
+      {item.content ? <Text style={styles.content}>{item.content}</Text> : null}
+      {item.type === 'POST' ? renderReactions(item) : null}
+      {item.type === 'POST' && item.mine ? <Text style={styles.hint}>길게 눌러 삭제</Text> : null}
+    </TouchableOpacity>
+  );
+
+  // ---- 상단 대시보드 헤더 ----
+  const hero = (
+    <View>
+      <View style={styles.heroWrap}>
+        {bgUrl ? (
+          <ImageBackground source={{ uri: bgUrl }} style={styles.hero} imageStyle={styles.heroImg}>
+            <View style={styles.heroOverlay} />
+            {renderHeroContent()}
+          </ImageBackground>
+        ) : (
+          <LinearGradient colors={GRADIENT} style={styles.hero} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+            {renderHeroContent()}
+          </LinearGradient>
+        )}
+      </View>
+
+      {connected ? (
+        <TouchableOpacity
+          style={styles.composeBtn}
+          activeOpacity={0.85}
+          onPress={() => navigation.navigate('FeedCompose')}
+        >
+          <Text style={styles.composeText}>✍️ 일상 남기기</Text>
+        </TouchableOpacity>
+      ) : null}
+    </View>
+  );
+
+  function renderHeroContent() {
+    return (
+      <View style={styles.heroContent}>
         <View style={styles.topBar}>
           {connected ? (
             <Pressable style={styles.bgBtn} onPress={onChangeBg}>
-              <MaterialCommunityIcons name="image-outline" size={14} color={colors.white} />
+              <MaterialCommunityIcons name="image-outline" size={13} color={colors.white} />
               <Text style={styles.bgBtnText}>배경</Text>
             </Pressable>
           ) : (
             <View />
           )}
-          <Pressable
-            style={styles.profileBtn}
-            onPress={() => navigation.navigate('My')}
-            hitSlop={8}
-          >
-            <Avatar name={user?.name} imageUrl={user?.profileImageUrl} size={36} color={colors.primaryDark} />
+          <Pressable style={styles.profileBtn} onPress={() => navigation.navigate('My')} hitSlop={8}>
+            <Avatar name={user?.name} imageUrl={user?.profileImageUrl} size={32} color={colors.primaryDark} />
           </Pressable>
         </View>
 
         {connected ? (
           <>
-            {/* D+ 카운터 (탭하면 기념일 설정) */}
             <Pressable style={styles.ddayWrap} onPress={openAnnModal}>
-              <Text style={styles.ddayLabel}>
-                {couple?.anniversaryDate ? '기념일부터' : '함께한 지'} ✏️
-              </Text>
+              <Text style={styles.ddayLabel}>{couple?.anniversaryDate ? '기념일부터' : '함께한 지'} ✏️</Text>
               <Text style={styles.dday}>D+{dday}</Text>
-              <Text style={styles.cheer}>오늘도 함께라서 더 건강해요 💪</Text>
             </Pressable>
-
-            {/* 커플 프로필 두 개 */}
             <View style={styles.coupleRow}>
               <CoupleProfile name={user?.name ?? '나'} imageUrl={user?.profileImageUrl} done={myDone} />
               <Text style={styles.heart}>❤️</Text>
-              <CoupleProfile name={partner?.partnerName ?? couple?.partner?.name ?? '상대방'} imageUrl={couple?.partner?.profileImageUrl} done={!!partner?.completed} />
+              <CoupleProfile
+                name={partner?.partnerName ?? couple?.partner?.name ?? '상대방'}
+                imageUrl={couple?.partner?.profileImageUrl}
+                done={!!partner?.completed}
+              />
             </View>
-
-            {/* 커플 스트릭 */}
-            {coupleStreak && coupleStreak.currentCount > 0 ? (
-              <View style={styles.streakChip}>
-                <Text style={styles.streakChipText}>🔥 함께 {coupleStreak.currentCount}일째 운동 중!</Text>
-              </View>
-            ) : (
-              <View style={styles.streakChip}>
-                <Text style={styles.streakChipText}>오늘 둘 다 운동하면 커플 스트릭 시작 ✨</Text>
-              </View>
-            )}
-
-            {/* 내 연속 */}
             <Text style={styles.myStreak}>🔥 내 연속 {myStreak?.currentCount ?? 0}일 · 최고 {myStreak?.maxCount ?? 0}일</Text>
-
-            {/* 우리 기록 (일상 피드) */}
-            <Pressable
-              style={[styles.mealChip, styles.chipRow]}
-              onPress={() => navigation.navigate('Feed')}
-            >
-              <MaterialCommunityIcons name="notebook-outline" size={15} color={colors.white} />
-              <Text style={styles.mealChipText}>우리 기록</Text>
-            </Pressable>
-
-            {/* 우리 맛집 지도 */}
-            <Pressable
-              style={[styles.mealChip, styles.chipRow]}
-              onPress={() => navigation.navigate('Place', { screen: 'PlaceMap' })}
-            >
-              <MaterialCommunityIcons name="map-marker-outline" size={15} color={colors.white} />
-              <Text style={styles.mealChipText}>우리 맛집 지도</Text>
-            </Pressable>
-
-            {/* 오늘 식단 상태 */}
-            <Pressable
-              style={[styles.mealChip, styles.chipRow]}
-              onPress={() => navigation.navigate('Workout', { screen: 'DietMain' })}
-            >
-              <MaterialCommunityIcons name="silverware-fork-knife" size={15} color={colors.white} />
-              <Text style={styles.mealChipText}>
-                오늘 식단 · 나 {myMealDone ? '✓' : '–'} / {partnerMeal?.partnerName ?? '상대'}{' '}
-                {partnerMeal?.completed ? '✓' : '–'}
-              </Text>
-            </Pressable>
-
-            {/* 빠른 기록 */}
-            <View style={styles.quickRow}>
-              <Button
-                title={myDone ? '운동 더 하기' : '＋ 운동 완료!'}
-                variant={myDone ? 'soft' : 'secondary'}
-                onPress={() => navigation.navigate('Workout', { screen: 'WorkoutRecord' })}
-                style={styles.quickBtn}
-              />
-              <Button
-                title={myMealDone ? '식단 더 하기' : '＋ 식단 기록!'}
-                variant="soft"
-                onPress={() => navigation.navigate('Workout', { screen: 'DietRecord' })}
-                style={styles.quickBtn}
-              />
-            </View>
           </>
         ) : (
           <View style={styles.connectWrap}>
             <Text style={styles.connectEmoji}>💌</Text>
             <Text style={styles.connectTitle}>커플을 연결해보세요</Text>
-            <Text style={styles.connectDesc}>초대코드를 만들거나 상대방 코드를 입력해{'\n'}함께 운동을 응원할 수 있어요.</Text>
-            <Button title="커플 연결하기" variant="soft" onPress={() => navigation.navigate('CoupleConnect')} style={styles.connectBtn} />
+            <Text style={styles.connectDesc}>초대코드로 연결하면 우리의 기록이 시작돼요.</Text>
+            <TouchableOpacity style={styles.connectBtn} onPress={() => navigation.navigate('CoupleConnect')}>
+              <Text style={styles.connectBtnText}>커플 연결하기</Text>
+            </TouchableOpacity>
           </View>
         )}
-      </ScrollView>
+      </View>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      <FlatList
+        data={connected ? items : []}
+        keyExtractor={itemKey}
+        contentContainerStyle={styles.list}
+        showsVerticalScrollIndicator={false}
+        refreshing={loading || feedLoading}
+        onRefresh={refresh}
+        onEndReached={loadMore}
+        onEndReachedThreshold={0.4}
+        renderItem={renderItem}
+        ListHeaderComponent={hero}
+        ListEmptyComponent={
+          connected && !feedLoading ? (
+            <EmptyState
+              emoji="📖"
+              title="아직 기록이 없어요"
+              description={'운동·식단·맛집을 기록하거나\n첫 일상을 남겨보세요!'}
+            />
+          ) : null
+        }
+        ListFooterComponent={
+          loadingMore ? <ActivityIndicator style={styles.loadMore} color={colors.primary} /> : null
+        }
+      />
 
       {/* 기념일 설정 모달 */}
       <Modal visible={annModal} transparent animationType="fade" onRequestClose={() => setAnnModal(false)}>
@@ -259,8 +385,12 @@ export function HomeScreen({ navigation }: Props) {
                 maxLength={10}
               />
               <View style={styles.modalActions}>
-                <Button title="취소" variant="ghost" size="md" onPress={() => setAnnModal(false)} style={styles.modalBtn} />
-                <Button title="저장" size="md" onPress={onSaveAnniversary} loading={annSaving} style={styles.modalBtn} />
+                <TouchableOpacity style={styles.modalCancel} onPress={() => setAnnModal(false)}>
+                  <Text style={styles.modalCancelText}>취소</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.modalSave} onPress={onSaveAnniversary} disabled={annSaving}>
+                  <Text style={styles.modalSaveText}>{annSaving ? '저장 중…' : '저장'}</Text>
+                </TouchableOpacity>
               </View>
             </Card>
           </Pressable>
@@ -268,90 +398,144 @@ export function HomeScreen({ navigation }: Props) {
       </Modal>
     </SafeAreaView>
   );
-
-  if (bgUrl) {
-    return (
-      <ImageBackground source={{ uri: bgUrl }} style={styles.bg} resizeMode="cover">
-        <View style={styles.overlay} />
-        {content}
-      </ImageBackground>
-    );
-  }
-  return (
-    <LinearGradient colors={GRADIENT} style={styles.bg} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-      {content}
-    </LinearGradient>
-  );
 }
 
 function CoupleProfile({ name, imageUrl, done }: { name: string; imageUrl?: string | null; done: boolean }) {
   return (
     <View style={styles.profile}>
       <View>
-        <Avatar name={name} imageUrl={imageUrl} size={88} color={colors.primaryDark} />
+        <Avatar name={name} imageUrl={imageUrl} size={64} color={colors.primaryDark} />
         {done ? (
           <View style={styles.doneBadge}>
             <Text style={styles.doneCheck}>✓</Text>
           </View>
         ) : null}
       </View>
-      <Text style={styles.profileName} numberOfLines={1}>{name}</Text>
-      <Text style={[styles.profileStatus, done && styles.profileStatusDone]}>
-        {done ? '운동 완료!' : '운동 전'}
+      <Text style={styles.profileName} numberOfLines={1}>
+        {name}
       </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  bg: { flex: 1 },
-  overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.28)' },
-  safe: { flex: 1 },
-  container: { flexGrow: 1, padding: spacing.lg },
+  safe: { flex: 1, backgroundColor: colors.background },
+  list: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl },
+
+  // 히어로
+  heroWrap: { marginTop: spacing.sm, borderRadius: radius.xl, overflow: 'hidden' },
+  hero: { minHeight: 220 },
+  heroImg: { borderRadius: radius.xl },
+  heroOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.28)' },
+  heroContent: { padding: spacing.lg },
   topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  profileBtn: {
+  profileBtn: { borderRadius: radius.pill, borderWidth: 2, borderColor: 'rgba(255,255,255,0.6)' },
+  bgBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255,255,255,0.25)',
     borderRadius: radius.pill,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.6)',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
   },
-  bgBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.25)', borderRadius: radius.pill, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
-  chipRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
   bgBtnText: { color: colors.white, fontSize: fontSize.caption, fontWeight: '700' },
+  ddayWrap: { alignItems: 'center', marginTop: spacing.md },
+  ddayLabel: { color: 'rgba(255,255,255,0.9)', fontSize: fontSize.caption, fontWeight: '600' },
+  dday: {
+    color: colors.white,
+    fontSize: 44,
+    fontWeight: '800',
+    letterSpacing: -1,
+    textShadowColor: 'rgba(0,0,0,0.15)',
+    textShadowRadius: 6,
+    textShadowOffset: { width: 0, height: 2 },
+  },
+  coupleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: spacing.md, gap: spacing.md },
+  heart: { fontSize: 22 },
+  profile: { alignItems: 'center', width: 90 },
+  profileName: { color: colors.white, fontSize: fontSize.body, fontWeight: '800', marginTop: spacing.xs },
+  doneBadge: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.success,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: colors.white,
+  },
+  doneCheck: { color: colors.white, fontWeight: '800', fontSize: 12 },
+  myStreak: { color: 'rgba(255,255,255,0.92)', textAlign: 'center', marginTop: spacing.md, fontSize: fontSize.caption, fontWeight: '600' },
 
-  ddayWrap: { alignItems: 'center', marginTop: spacing.xl },
-  ddayLabel: { color: 'rgba(255,255,255,0.9)', fontSize: fontSize.body, fontWeight: '600' },
-  dday: { color: colors.white, fontSize: 56, fontWeight: '800', letterSpacing: -1, textShadowColor: 'rgba(0,0,0,0.15)', textShadowRadius: 6, textShadowOffset: { width: 0, height: 2 } },
-  cheer: { color: 'rgba(255,255,255,0.95)', fontSize: fontSize.body, marginTop: spacing.xs },
+  connectWrap: { alignItems: 'center', paddingVertical: spacing.lg },
+  connectEmoji: { fontSize: 44 },
+  connectTitle: { color: colors.white, fontSize: fontSize.title, fontWeight: '800', marginTop: spacing.sm },
+  connectDesc: { color: 'rgba(255,255,255,0.92)', fontSize: fontSize.body, textAlign: 'center', marginTop: spacing.xs },
+  connectBtn: {
+    marginTop: spacing.md,
+    backgroundColor: colors.white,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.sm,
+  },
+  connectBtnText: { color: colors.primaryDark, fontWeight: '800', fontSize: fontSize.body },
 
-  coupleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: spacing.xl, gap: spacing.md },
-  heart: { fontSize: 26 },
-  profile: { alignItems: 'center', width: 110 },
-  profileName: { color: colors.white, fontSize: fontSize.subtitle, fontWeight: '800', marginTop: spacing.sm },
-  profileStatus: { color: 'rgba(255,255,255,0.85)', fontSize: fontSize.caption, marginTop: 2, fontWeight: '600' },
-  profileStatusDone: { color: '#EAFFF4' },
-  doneBadge: { position: 'absolute', right: -2, bottom: -2, width: 30, height: 30, borderRadius: 15, backgroundColor: colors.success, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.white },
-  doneCheck: { color: colors.white, fontWeight: '800' },
+  composeBtn: {
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
+    backgroundColor: colors.primaryBg,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+  },
+  composeText: { color: colors.primary, fontWeight: '800', fontSize: fontSize.body },
 
-  streakChip: { alignSelf: 'center', backgroundColor: 'rgba(255,255,255,0.25)', borderRadius: radius.pill, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, marginTop: spacing.xl },
-  streakChipText: { color: colors.white, fontWeight: '800', fontSize: fontSize.body },
-  myStreak: { color: 'rgba(255,255,255,0.9)', textAlign: 'center', marginTop: spacing.md, fontSize: fontSize.caption, fontWeight: '600' },
-
-  mealChip: { alignSelf: 'center', backgroundColor: 'rgba(255,255,255,0.22)', borderRadius: radius.pill, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, marginTop: spacing.md },
-  mealChipText: { color: colors.white, fontWeight: '700', fontSize: fontSize.caption },
-
-  quickRow: { flexDirection: 'row', gap: spacing.sm, marginTop: 'auto' },
-  quickBtn: { flex: 1 },
-
-  connectWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: spacing.xxl },
-  connectEmoji: { fontSize: 56 },
-  connectTitle: { color: colors.white, fontSize: fontSize.title, fontWeight: '800', marginTop: spacing.md },
-  connectDesc: { color: 'rgba(255,255,255,0.92)', fontSize: fontSize.body, textAlign: 'center', marginTop: spacing.sm, lineHeight: 21 },
-  connectBtn: { marginTop: spacing.lg, alignSelf: 'stretch' },
+  // 피드 카드
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  author: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
+  time: { fontSize: fontSize.caption, color: colors.textMuted },
+  itemTitle: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary, marginTop: spacing.xs },
+  photo: { width: '100%', height: 200, borderRadius: radius.md, marginTop: spacing.sm },
+  content: { fontSize: fontSize.body, color: colors.textPrimary, marginTop: spacing.sm, lineHeight: 21 },
+  reactionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.sm },
+  reactionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceAlt,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+  },
+  reactionChipMine: { borderColor: colors.primary, backgroundColor: colors.primaryBg },
+  reactionEmoji: { fontSize: fontSize.body },
+  reactionCount: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
+  hint: { fontSize: 10, color: colors.textMuted, marginTop: spacing.xs, textAlign: 'right' },
+  loadMore: { paddingVertical: spacing.md },
 
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: spacing.xl },
   modalCard: { gap: spacing.xs },
   modalTitle: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
   modalDesc: { fontSize: fontSize.caption, color: colors.textSecondary, marginBottom: spacing.sm },
   modalActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
-  modalBtn: { flex: 1 },
+  modalCancel: { flex: 1, alignItems: 'center', paddingVertical: spacing.md, borderRadius: radius.md, backgroundColor: colors.surfaceAlt },
+  modalCancelText: { color: colors.textSecondary, fontWeight: '700' },
+  modalSave: { flex: 1, alignItems: 'center', paddingVertical: spacing.md, borderRadius: radius.md, backgroundColor: colors.primary },
+  modalSaveText: { color: colors.white, fontWeight: '800' },
 });

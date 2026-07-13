@@ -17,10 +17,10 @@ const Tab = createBottomTabNavigator<MainTabParamList>();
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 const TAB_META: Record<keyof MainTabParamList, { label: string; icon: IconName }> = {
-  Home: { label: '홈', icon: 'home-variant-outline' },
-  Workout: { label: '운동', icon: 'dumbbell' },
+  Home: { label: '홈', icon: 'heart-multiple-outline' },
+  Workout: { label: '건강', icon: 'heart-pulse' },
   Chat: { label: '채팅', icon: 'chat-outline' },
-  Place: { label: '맛집', icon: 'map-marker-outline' },
+  Place: { label: '플레이스', icon: 'map-marker-outline' },
 };
 
 // FAB 액션시트 항목 — 탭(스택)+중첩 화면으로 이동
