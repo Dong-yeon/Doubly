@@ -108,32 +108,44 @@ public class FoodAnalysisService {
         try {
             ResponseEntity<byte[]> entity = restClient.get().uri(uri).retrieve().toEntity(byte[].class);
             byte[] body = entity.getBody();
-            if (body == null || body.length == 0 || body.length > MAX_IMAGE_BYTES) {
-                throw new BusinessException(ErrorCode.INVALID_PHOTO_URL);
+            if (body == null || body.length == 0) {
+                throw new BusinessException(ErrorCode.PHOTO_DOWNLOAD_FAILED);
+            }
+            if (body.length > MAX_IMAGE_BYTES) {
+                throw new BusinessException(ErrorCode.PHOTO_TOO_LARGE);
             }
             String mimeType = resolveMimeType(body, entity.getHeaders().getContentType());
             return new Image(body, mimeType);
         } catch (RestClientResponseException | ResourceAccessException e) {
             log.warn("식단 사진 다운로드 실패: {}", e.getMessage());
-            throw new BusinessException(ErrorCode.INVALID_PHOTO_URL);
+            throw new BusinessException(ErrorCode.PHOTO_DOWNLOAD_FAILED);
         }
     }
+
+    /** Gemini 가 지원하는 이미지 MIME 화이트리스트 */
+    private static final java.util.Set<String> SUPPORTED_MIME = java.util.Set.of(
+            MediaType.IMAGE_JPEG_VALUE, MediaType.IMAGE_PNG_VALUE, MediaType.IMAGE_GIF_VALUE,
+            "image/webp", "image/heic", "image/heif");
 
     /**
      * 실제 이미지 포맷을 판별한다. Gemini 는 선언된 mimeType 과 실제 바이트가 일치하지 않으면
      * 거부하므로, CDN 이 보내는 Content-Type 헤더(누락되거나 부정확할 수 있음)를 그대로 믿지 않고
-     * 파일 시그니처(매직 바이트)를 우선 사용한다.
+     * 파일 시그니처(매직 바이트)를 우선 사용한다. 지원 포맷을 특정할 수 없으면 명확히 거부한다.
      */
     private String resolveMimeType(byte[] body, MediaType headerContentType) {
         String sniffed = sniffImageMimeType(body);
         if (sniffed != null) {
             return sniffed;
         }
-        if (headerContentType != null && "image".equals(headerContentType.getType())) {
-            return headerContentType.getType() + "/" + headerContentType.getSubtype();
+        // 시그니처로 판별 못 하면, 헤더가 지원 포맷을 명시할 때만 신뢰
+        if (headerContentType != null) {
+            String type = headerContentType.getType() + "/" + headerContentType.getSubtype();
+            if (SUPPORTED_MIME.contains(type)) {
+                return type;
+            }
         }
-        log.warn("이미지 포맷을 식별하지 못해 기본값(jpeg)으로 처리합니다. header={}", headerContentType);
-        return MediaType.IMAGE_JPEG_VALUE;
+        log.warn("지원하지 않는 이미지 포맷. header={}", headerContentType);
+        throw new BusinessException(ErrorCode.PHOTO_UNSUPPORTED_FORMAT);
     }
 
     /** 파일 시그니처로 이미지 포맷 판별 — Gemini 가 지원하는 포맷(PNG/JPEG/WEBP/HEIC/HEIF/GIF)만 확인 */

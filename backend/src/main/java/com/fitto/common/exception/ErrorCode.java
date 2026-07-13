@@ -53,7 +53,11 @@ public enum ErrorCode {
     AI_DAILY_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "오늘의 AI 분석 횟수를 모두 사용했어요. 내일 다시 시도해주세요."),
     AI_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "지금은 AI 분석 요청이 많아요. 잠시 후 다시 시도해주세요."),
     AI_ANALYSIS_FAILED(HttpStatus.BAD_GATEWAY, "AI 분석에 실패했어요. 잠시 후 다시 시도해주세요."),
-    INVALID_PHOTO_URL(HttpStatus.BAD_REQUEST, "지원하지 않는 사진 주소입니다.");
+    // 사진 관련 — 원인별로 분리해 어떤 문제인지 바로 보이게 한다
+    INVALID_PHOTO_URL(HttpStatus.BAD_REQUEST, "앱에서 촬영·선택해 올린 사진만 분석할 수 있어요."),
+    PHOTO_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "사진 용량이 너무 커요 (최대 10MB). 더 작은 사진으로 시도해주세요."),
+    PHOTO_DOWNLOAD_FAILED(HttpStatus.BAD_GATEWAY, "사진을 불러오지 못했어요. 잠시 후 다시 시도해주세요."),
+    PHOTO_UNSUPPORTED_FORMAT(HttpStatus.BAD_REQUEST, "지원하지 않는 이미지 형식이에요. (JPG·PNG·WEBP·HEIC 지원)");
 
     private final HttpStatus status;
     private final String message;
