@@ -1,6 +1,8 @@
-/** 채팅방 목록 — 미니멀·발랄. 설계서 2.5 / 4.5 CHAT-01 */
-import React, { useCallback } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+/** 채팅방 목록 — 미니멀·발랄. 설계서 2.5 / 4.5 CHAT-01
+ *  커플 채팅방이 있으면 방 선택 없이 바로 대화로 진입한다(커플 앱 특성상 상대는 한 명).
+ *  여러 방(트레이너-회원 등)이 있을 때만 목록을 보여준다. */
+import React, { useCallback, useEffect, useRef } from 'react';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -28,8 +30,37 @@ const preview = (type: MessageType, content?: string | null): string => {
 
 export function ChatScreen({ navigation }: Props) {
   const { rooms, loadingRooms, loadRooms } = useChatStore();
+  const enteredRef = useRef(false);
 
-  useFocusEffect(useCallback(() => { loadRooms(); }, [loadRooms]));
+  useFocusEffect(
+    useCallback(() => {
+      enteredRef.current = false;
+      loadRooms();
+    }, [loadRooms]),
+  );
+
+  // 커플 채팅방 — 있으면 방 선택 없이 바로 대화로 진입 (replace 라 뒤로가기 루프 없음)
+  const coupleRoom = rooms.find((r) => r.relationType === 'COUPLE');
+  useEffect(() => {
+    if (coupleRoom && !enteredRef.current) {
+      enteredRef.current = true;
+      navigation.replace('ChatRoom', {
+        relationId: coupleRoom.relationId,
+        title: coupleRoom.partner?.name ?? '채팅',
+      });
+    }
+  }, [coupleRoom, navigation]);
+
+  // 커플 방으로 진입 중이거나 최초 로딩 중이면 스피너 (목록 깜빡임 방지)
+  if (coupleRoom || (loadingRooms && rooms.length === 0)) {
+    return (
+      <SafeAreaView style={styles.safe} edges={['top']}>
+        <View style={styles.center}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   const renderRoom = ({ item }: { item: ChatRoom }) => (
     <Pressable
@@ -74,6 +105,7 @@ export function ChatScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: fontSize.heading, fontWeight: '800', color: colors.textPrimary, paddingHorizontal: spacing.lg, paddingTop: spacing.sm, letterSpacing: -0.5 },
   list: { padding: spacing.md, flexGrow: 1 },
   room: { flexDirection: 'row', alignItems: 'center', padding: spacing.md, borderRadius: radius.lg },
