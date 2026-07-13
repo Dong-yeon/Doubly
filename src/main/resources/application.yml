@@ -1,0 +1,14 @@
+spring:
+  # DATABASE_URL 은 URI 형식(postgresql://user:pass@host:5432/db)이므로
+  # spring.datasource.url 에 직접 넣지 않고 DataSourceConfig 에서 JDBC URL 로 변환한다.
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+    open-in-view: false
+  data:
+    redis:
+      # REDIS_URL 은 redis://[:password@]host:port[/db] 형식을 Spring 이 그대로 파싱한다.
+      url: ${REDIS_URL}
