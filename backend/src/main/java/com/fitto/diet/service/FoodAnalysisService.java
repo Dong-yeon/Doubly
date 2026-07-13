@@ -9,14 +9,16 @@ import com.fitto.diet.dto.MealAnalysisResponse.AnalyzedFood;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
+import java.io.InputStream;
 import java.net.URI;
+import java.net.http.HttpClient;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -74,9 +76,13 @@ public class FoodAnalysisService {
 
     public FoodAnalysisService(GeminiClient geminiClient) {
         this.geminiClient = geminiClient;
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(5_000);
-        factory.setReadTimeout(30_000);
+        // 리다이렉트 미추종 — 화이트리스트(cloudinary) 검증을 3xx 로 우회하는 SSRF 방지
+        HttpClient httpClient = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(5))
+                .followRedirects(HttpClient.Redirect.NEVER)
+                .build();
+        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(httpClient);
+        factory.setReadTimeout(Duration.ofSeconds(30));
         this.restClient = RestClient.builder().requestFactory(factory).build();
     }
 
@@ -106,16 +112,29 @@ public class FoodAnalysisService {
         }
 
         try {
-            ResponseEntity<byte[]> entity = restClient.get().uri(uri).retrieve().toEntity(byte[].class);
-            byte[] body = entity.getBody();
-            if (body == null || body.length == 0) {
-                throw new BusinessException(ErrorCode.PHOTO_DOWNLOAD_FAILED);
-            }
-            if (body.length > MAX_IMAGE_BYTES) {
-                throw new BusinessException(ErrorCode.PHOTO_TOO_LARGE);
-            }
-            String mimeType = resolveMimeType(body, entity.getHeaders().getContentType());
-            return new Image(body, mimeType);
+            // 전체 버퍼링 대신 스트리밍으로 상한+1 바이트까지만 읽는다 — 초대형 응답의 메모리 스파이크 방지.
+            // 리다이렉트(3xx)는 팩토리에서 미추종이므로 2xx 가 아니면 전부 거부된다.
+            // 실패 원인은 코드별로 분리해 어떤 문제인지 바로 보이게 한다.
+            return restClient.get().uri(uri).exchange((request, response) -> {
+                if (!response.getStatusCode().is2xxSuccessful()) {
+                    throw new BusinessException(ErrorCode.PHOTO_DOWNLOAD_FAILED);
+                }
+                long declared = response.getHeaders().getContentLength();
+                if (declared > MAX_IMAGE_BYTES) {
+                    throw new BusinessException(ErrorCode.PHOTO_TOO_LARGE);
+                }
+                try (InputStream in = response.getBody()) {
+                    byte[] body = in.readNBytes(MAX_IMAGE_BYTES + 1);
+                    if (body.length == 0) {
+                        throw new BusinessException(ErrorCode.PHOTO_DOWNLOAD_FAILED);
+                    }
+                    if (body.length > MAX_IMAGE_BYTES) {
+                        throw new BusinessException(ErrorCode.PHOTO_TOO_LARGE);
+                    }
+                    String mimeType = resolveMimeType(body, response.getHeaders().getContentType());
+                    return new Image(body, mimeType);
+                }
+            });
         } catch (RestClientResponseException | ResourceAccessException e) {
             log.warn("식단 사진 다운로드 실패: {}", e.getMessage());
             throw new BusinessException(ErrorCode.PHOTO_DOWNLOAD_FAILED);

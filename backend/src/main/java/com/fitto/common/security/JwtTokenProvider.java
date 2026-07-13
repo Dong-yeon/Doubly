@@ -49,12 +49,19 @@ public class JwtTokenProvider {
     public String createRefreshToken(Long userId) {
         Date now = new Date();
         return Jwts.builder()
+                // jti — 토큰 회전/무효화(RefreshTokenStore)의 식별자
+                .id(java.util.UUID.randomUUID().toString())
                 .subject(String.valueOf(userId))
                 .claim(CLAIM_TYPE, TYPE_REFRESH)
                 .issuedAt(now)
                 .expiration(new Date(now.getTime() + refreshExpireMillis))
                 .signWith(key)
                 .compact();
+    }
+
+    /** 리프레시 토큰 남은 유효기간(전체 기간 기준) — RefreshTokenStore TTL 용. */
+    public java.time.Duration refreshTokenTtl() {
+        return java.time.Duration.ofMillis(refreshExpireMillis);
     }
 
     /** 서명/만료 검증 후 Claims 반환. 실패 시 JwtException. */

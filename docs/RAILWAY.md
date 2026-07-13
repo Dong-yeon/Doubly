@@ -24,8 +24,13 @@ Railway에 **PostgreSQL**, **Redis** 플러그인을 이미 추가한 상태를 
 | --- | --- |
 | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` |
 | `SPRING_DATA_REDIS_URL` | `${{Redis.REDIS_URL}}` |
-| `JWT_SECRET` | 안전한 무작위 값 (예: `openssl rand -hex 32`) |
+| `JWT_SECRET` | **필수** — 32자 이상 무작위 값 (예: `openssl rand -hex 32`) |
+| `CORS_ALLOWED_ORIGINS` | 웹 배포 도메인(쉼표 구분, 예: `https://fitto.netlify.app`). 웹 미배포 시 생략 가능 |
 
+- **Dockerfile 이 `SPRING_PROFILES_ACTIVE=prod` 를 기본 설정**합니다. prod 프로파일에서는
+  `JWT_SECRET` 이 없거나 약하면(32자 미만, 예시 값 포함) **부팅이 의도적으로 실패**합니다.
+- `CORS_ALLOWED_ORIGINS` 가 비어 있으면 브라우저(웹)의 교차 출처 요청이 전부 차단됩니다.
+  네이티브 앱(Expo/APK)은 CORS 대상이 아니므로 영향이 없습니다.
 - `PORT` 는 Railway 가 자동 주입합니다(앱이 `${PORT}` 로 리스닝하도록 이미 설정됨).
 - `${{서비스.변수}}` 는 Railway 의 변수 참조 문법입니다.
 - DB 스키마는 **첫 기동 시 Flyway 가 자동 생성**합니다(수동 DDL 불필요).
@@ -61,8 +66,12 @@ export const WS_BASE_URL = 'wss://<your-app>.up.railway.app/ws/chat'; // TLS 이
 
 | 증상 | 원인 / 해결 |
 | --- | --- |
+| 부팅 실패: `JWT_SECRET ... 반드시 설정` | prod 프로파일 안전장치 — Variables 에 32자 이상 무작위 `JWT_SECRET` 설정 |
+| 웹 브라우저에서 API CORS 오류 | `CORS_ALLOWED_ORIGINS` 에 웹 배포 도메인 추가 (네이티브 앱은 무관) |
 | 빌드 실패(루트에서 Gradle 못 찾음) | Root Directory 가 `backend` 인지 확인 |
 | `DATABASE_URL 이 비어 있습니다` | 변수 참조 `${{Postgres.DATABASE_URL}}` 오타/서비스명 확인 |
 | Redis 인증 오류 | `SPRING_DATA_REDIS_URL` 이 `${{Redis.REDIS_URL}}`(비밀번호 포함)인지 확인 |
+| 배포/Redis 재시작 후 전체 로그아웃 | 정상 — 리프레시 토큰 화이트리스트가 Redis 에 있어, Redis 데이터가 사라지면 안전을 위해 재로그인을 요구합니다. Railway Redis 는 기본 영속이라 평상시엔 발생하지 않습니다 |
+| 로그인 시 429 (요청이 너무 많습니다) | 브루트포스 방어 — 15분 내 5회 로그인 실패 시 차단, 15분 후 자동 해제 |
 | `validate failed` | 기존 DB 스키마 불일치 → 새 DB이거나, 마이그레이션 충돌 점검 |
 | 앱에서 연결 안 됨 | 프론트의 `API_BASE_URL`/`WS_BASE_URL` 이 배포 도메인+`https/wss` 인지 확인 |

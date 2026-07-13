@@ -1,0 +1,22 @@
+# 운영(prod) 프로파일 — Dockerfile 이 SPRING_PROFILES_ACTIVE=prod 로 활성화한다.
+# 이 프로파일이 켜지면 JwtSecretGuard 가 약한 JWT_SECRET 을 부팅 단계에서 차단한다.
+
+spring:
+  jpa:
+    properties:
+      hibernate:
+        format_sql: false   # 운영 로그에 포매팅된 SQL 미출력
+
+  flyway:
+    # 운영 DB에 실수로 베이스라인이 찍히는 것을 방지 (기존 DB는 이미 history 보유 → 영향 없음)
+    baseline-on-migrate: false
+
+logging:
+  level:
+    com.fitto: INFO   # 운영에서는 DEBUG 금지 — 사용자 데이터/쿼리 로그 노출 방지
+
+fitto:
+  cors:
+    # 웹(브라우저) 배포 도메인만 쉼표로 나열. 예: https://fitto.netlify.app,https://fitto.app
+    # 비어 있으면 브라우저 교차 출처 요청을 전부 차단한다 — 네이티브 앱(Expo)은 영향 없음.
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:}

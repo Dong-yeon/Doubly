@@ -12,5 +12,8 @@ RUN gradle clean bootJar -x test --no-daemon
 FROM eclipse-temurin:21-jre
 WORKDIR /app
 COPY --from=build /app/build/libs/*.jar app.jar
+# Docker 배포 = 운영으로 간주 — prod 프로파일 활성화 (JwtSecretGuard 등 안전장치 작동).
+# JWT_SECRET 미설정/약한 값이면 부팅이 의도적으로 실패한다. 필요 시 환경변수로 덮어쓰기 가능.
+ENV SPRING_PROFILES_ACTIVE=prod
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]

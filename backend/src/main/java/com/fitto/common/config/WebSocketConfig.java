@@ -24,6 +24,9 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
+        // Origin 은 제한하지 않는다: 쿠키 인증이 없어 CSWSH 위험이 없고(STOMP CONNECT 에서
+        // JWT 필수 — StompAuthChannelInterceptor), 네이티브(RN) 클라이언트의 Origin 값이
+        // 플랫폼마다 달라 화이트리스트가 오히려 채팅을 끊을 수 있다.
         registry.addEndpoint("/ws/chat").setAllowedOriginPatterns("*");
     }
 
