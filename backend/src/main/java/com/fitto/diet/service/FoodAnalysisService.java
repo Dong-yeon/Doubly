@@ -40,8 +40,9 @@ public class FoodAnalysisService {
             - 음식 사진이 아니면 isFood 를 false 로, foods 는 빈 배열로 응답합니다.
             - 각 음식의 이름(name)은 한국어로 적습니다. 한국 음식이면 정확한 한국어 명칭을 사용합니다.
             - calories 는 사진에 보이는 양 기준의 추정 칼로리(kcal), portion 은 대략적인 양(예: "1인분", "밥 반 공기")입니다.
-            - totalCalories 는 모든 음식 칼로리의 합계입니다.
-            - comment 에는 이 식단에 대한 짧고 다정한 한 줄 코멘트를 한국어로 작성합니다. (건강한 식단이면 칭찬, 아니면 부드러운 제안)
+            - carbs/protein/fat 은 각 음식의 탄수화물/단백질/지방 추정량(그램, g)입니다.
+            - totalCalories, totalCarbs, totalProtein, totalFat 은 모든 음식의 합계입니다.
+            - comment 에는 이 식단에 대한 짧고 다정한 한 줄 코멘트를 한국어로 작성합니다. (영양 균형 관점에서 칭찬 또는 부드러운 제안)
             """;
 
     /** Gemini 구조화 출력(JSON mode) 스키마 — 응답 파싱을 안정화한다 */
@@ -56,9 +57,15 @@ public class FoodAnalysisService {
                                     "properties", Map.of(
                                             "name", Map.of("type", "STRING"),
                                             "calories", Map.of("type", "INTEGER"),
-                                            "portion", Map.of("type", "STRING")),
+                                            "portion", Map.of("type", "STRING"),
+                                            "carbs", Map.of("type", "INTEGER"),
+                                            "protein", Map.of("type", "INTEGER"),
+                                            "fat", Map.of("type", "INTEGER")),
                                     "required", List.of("name", "calories"))),
                     "totalCalories", Map.of("type", "INTEGER"),
+                    "totalCarbs", Map.of("type", "INTEGER"),
+                    "totalProtein", Map.of("type", "INTEGER"),
+                    "totalFat", Map.of("type", "INTEGER"),
                     "comment", Map.of("type", "STRING")),
             "required", List.of("isFood", "foods", "totalCalories"));
 
@@ -176,17 +183,27 @@ public class FoodAnalysisService {
             foods.add(new AnalyzedFood(
                     name,
                     Math.max(0, food.path("calories").asInt(0)),
-                    food.path("portion").asText(null)));
+                    food.path("portion").asText(null),
+                    Math.max(0, food.path("carbs").asInt(0)),
+                    Math.max(0, food.path("protein").asInt(0)),
+                    Math.max(0, food.path("fat").asInt(0))));
         }
         if (foods.isEmpty()) {
             return MealAnalysisResponse.notFood();
         }
 
-        int totalCalories = result.path("totalCalories").asInt(0);
-        if (totalCalories <= 0) {
-            totalCalories = foods.stream().mapToInt(AnalyzedFood::calories).sum();
-        }
+        int totalCalories = positiveOrSum(result, "totalCalories", foods, AnalyzedFood::calories);
+        int totalCarbs = positiveOrSum(result, "totalCarbs", foods, AnalyzedFood::carbs);
+        int totalProtein = positiveOrSum(result, "totalProtein", foods, AnalyzedFood::protein);
+        int totalFat = positiveOrSum(result, "totalFat", foods, AnalyzedFood::fat);
         String comment = result.path("comment").asText(null);
-        return new MealAnalysisResponse(true, foods, totalCalories, comment);
+        return new MealAnalysisResponse(true, foods, totalCalories, totalCarbs, totalProtein, totalFat, comment);
+    }
+
+    /** 합계 필드가 비었으면 개별 음식값을 합산해 보정한다. */
+    private int positiveOrSum(JsonNode result, String field, List<AnalyzedFood> foods,
+                              java.util.function.ToIntFunction<AnalyzedFood> extractor) {
+        int total = result.path(field).asInt(0);
+        return total > 0 ? total : foods.stream().mapToInt(extractor).sum();
     }
 }

@@ -59,6 +59,8 @@ export function DietRecordScreen({ navigation }: Props) {
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  // AI 분석 매크로(탄단지) — 결과 표시용
+  const [macros, setMacros] = useState<{ carbs: number; protein: number; fat: number } | null>(null);
   // 업로드 결과 캐시 — AI 분석과 저장이 같은 사진을 두 번 올리지 않도록
   const uploadedRef = useRef<{ uri: string; url: string } | null>(null);
 
@@ -109,6 +111,7 @@ export function DietRecordScreen({ navigation }: Props) {
       const names = result.foods.map((f) => f.name).join(', ');
       setMemo((prev) => (prev.trim() ? `${prev.trim()}, ${names}` : names));
       if (result.totalCalories > 0) setCalories(String(result.totalCalories));
+      setMacros({ carbs: result.totalCarbs, protein: result.totalProtein, fat: result.totalFat });
       haptics.success();
       toast.success(result.comment?.trim() || 'AI 분석 완료! 🤖');
     } catch (e) {
@@ -222,6 +225,22 @@ export function DietRecordScreen({ navigation }: Props) {
                 style={styles.analyzeButton}
               />
               <Text style={styles.analyzeHint}>분석 결과는 추정치예요. 저장 전에 수정할 수 있어요.</Text>
+              {macros ? (
+                <View style={styles.macroRow}>
+                  <View style={styles.macroItem}>
+                    <Text style={styles.macroValue}>{macros.carbs}g</Text>
+                    <Text style={styles.macroLabel}>탄수화물</Text>
+                  </View>
+                  <View style={styles.macroItem}>
+                    <Text style={styles.macroValue}>{macros.protein}g</Text>
+                    <Text style={styles.macroLabel}>단백질</Text>
+                  </View>
+                  <View style={styles.macroItem}>
+                    <Text style={styles.macroValue}>{macros.fat}g</Text>
+                    <Text style={styles.macroLabel}>지방</Text>
+                  </View>
+                </View>
+              ) : null}
             </>
           ) : null}
 
@@ -290,6 +309,22 @@ const styles = StyleSheet.create({
   removePhoto: { color: colors.danger, fontSize: fontSize.caption, marginTop: spacing.xs, alignSelf: 'flex-end' },
   analyzeButton: { marginTop: spacing.sm },
   analyzeHint: { color: colors.textSecondary, fontSize: fontSize.caption, marginTop: spacing.xs, textAlign: 'center' },
+  macroRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  macroItem: {
+    flex: 1,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+  },
+  macroValue: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
+  macroLabel: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
   presetRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   presetChip: {
     paddingHorizontal: spacing.md,

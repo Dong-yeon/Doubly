@@ -8,15 +8,37 @@ import type { PlaceStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { KakaoMap } from '../../components/KakaoMap';
+import { AiInsightButton } from '../../components/AiInsightButton';
 import { placeApi } from '../../api/place';
 import { isKakaoMapConfigured } from '../../constants/config';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { Place, PlaceStatus } from '../../types';
+import type { DateCourse, Place, PlaceStatus } from '../../types';
 
 type Props = NativeStackScreenProps<PlaceStackParamList, 'PlaceMap'>;
+
+/** AI 데이트 코스 결과 렌더 */
+function renderDateCourse(c: DateCourse) {
+  return (
+    <View style={{ gap: spacing.sm }}>
+      {c.comment ? <Text style={styles.courseComment}>{c.comment}</Text> : null}
+      {c.stops.map((s, i) => (
+        <View key={i} style={styles.courseStop}>
+          <Text style={styles.courseNum}>{i + 1}</Text>
+          <View style={styles.courseStopBody}>
+            <Text style={styles.courseName}>
+              {s.name}
+              {s.category ? ` · ${s.category}` : ''}
+            </Text>
+            {s.reason ? <Text style={styles.courseReason}>{s.reason}</Text> : null}
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
 
 const FILTERS: { value: PlaceStatus | 'ALL'; label: string }[] = [
   { value: 'ALL', label: '전체' },
@@ -75,7 +97,16 @@ export function PlaceMapScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <Text style={styles.screenTitle}>우리 맛집 지도</Text>
+      <View style={styles.titleRow}>
+        <Text style={styles.screenTitle}>우리 맛집 지도</Text>
+        <AiInsightButton
+          label="AI 데이트 코스"
+          emoji="💕"
+          title="AI 데이트 코스"
+          fetcher={placeApi.dateCourse}
+          render={renderDateCourse}
+        />
+      </View>
       <View style={styles.filterRow}>
         {FILTERS.map((f) => (
           <TouchableOpacity
@@ -172,13 +203,35 @@ export function PlaceMapScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+  },
   screenTitle: {
     fontSize: fontSize.title,
     fontWeight: '800',
     color: colors.textPrimary,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
   },
+  courseComment: { fontSize: fontSize.body, color: colors.textSecondary, lineHeight: 22, marginBottom: spacing.xs },
+  courseStop: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start' },
+  courseNum: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.primary,
+    color: colors.white,
+    fontWeight: '800',
+    fontSize: fontSize.caption,
+    textAlign: 'center',
+    lineHeight: 24,
+    overflow: 'hidden',
+  },
+  courseStopBody: { flex: 1 },
+  courseName: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
+  courseReason: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2, lineHeight: 18 },
   filterRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.md },
   filterChip: {
     paddingHorizontal: spacing.md,
