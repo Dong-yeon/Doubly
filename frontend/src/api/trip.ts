@@ -1,6 +1,7 @@
 /** 커플 여행 API — PLAN.md Trip */
 import { apiClient, unwrap } from './client';
 import type {
+  AlbumPost,
   ApiResponse,
   Checklist,
   ChecklistItem,
@@ -100,6 +101,16 @@ export const tripApi = {
     unwrap(apiClient.post<ApiResponse<ChecklistItem>>(`/trips/${tripId}/checklist/${itemId}/toggle`)),
   removeChecklistItem: (tripId: number, itemId: number) =>
     unwrap(apiClient.delete<ApiResponse<void>>(`/trips/${tripId}/checklist/${itemId}`)),
+
+  // 여행 앨범 (Trip Album) — 피드 포스트 큐레이션
+  album: (tripId: number) =>
+    unwrap(apiClient.get<ApiResponse<AlbumPost[]>>(`/trips/${tripId}/album`)),
+  albumCandidates: (tripId: number) =>
+    unwrap(apiClient.get<ApiResponse<AlbumPost[]>>(`/trips/${tripId}/album/candidates`)),
+  attachAlbum: (tripId: number, postId: number) =>
+    unwrap(apiClient.post<ApiResponse<void>>(`/trips/${tripId}/album/${postId}`)),
+  detachAlbum: (tripId: number, postId: number) =>
+    unwrap(apiClient.delete<ApiResponse<void>>(`/trips/${tripId}/album/${postId}`)),
 };
 
 export interface SaveExpensePayload {

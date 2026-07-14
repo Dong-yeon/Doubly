@@ -189,7 +189,7 @@ CREATE INDEX idx_trip_items_trip_day ON trip_items (trip_id, day_no, sort_order)
   - AI 생성 모달: 요청사항(선택) 입력 + 대체 경고 + 생성 중 로딩(최대 1분)
 
 ### 이후 확장 (제안)
-- 여행 앨범(feed_posts.trip_id) — 경비 정산·준비물 체크리스트는 아래에 구현됨
+- 경비 정산·준비물 체크리스트·여행 앨범 모두 아래에 구현됨. 이후: 지도 경로 폴리라인, 여행 회고 카드 등
 
 ---
 
@@ -286,6 +286,42 @@ CREATE INDEX idx_trip_checklist_trip ON trip_checklist_items (trip_id, sort_orde
 - `TripChecklistScreen` — 진행률 바 + 인라인 추가 + 체크 토글(낙관적 반영) + 이름수정/삭제(길게 눌러)
   - 체크 시 "○○님이 챙김" 표시
 - `TripDetailScreen` 상단에 "🧳 준비물" 진입 버튼(경비 정산과 나란히)
+
+---
+
+## Feature: 커플 여행 앨범 (Trip Album) ✅
+
+### 목표
+여행별로 우리 사진을 모아 본다. 새 도메인 없이 **기존 일상 피드(feed_posts)를 재사용** —
+`feed_posts.trip_id` 로 연결만 하는 큐레이션 뷰라, 앨범에 담아도/빼도 피드 포스트는 그대로다.
+
+### 핵심 기능 (MVP)
+1. 앨범 사진 목록 — 여행에 담긴 포스트를 그리드로
+2. 사진 담기 — 사진 있는 커플 포스트 중에서 골라 담기(다른 여행 것은 옮겨짐)
+3. 사진 빼기 — 연결만 해제, 포스트는 피드에 유지
+4. 변경 시 커플 채널 TRIP 이벤트 발행
+
+### Non-goals (이번 MVP 제외)
+- 앨범 전용 업로드(피드 작성 재사용), 사진 정렬·표지 지정
+- 반응·댓글(피드에서), 슬라이드쇼
+
+### API (`/api/v1/trips/{tripId}/album`)
+- `GET    ` — 앨범 사진 목록(최신순)
+- `GET    /candidates` — 담기 후보(사진 있고 이 여행에 없는 커플 포스트, 최대 60)
+- `POST   /{postId}` — 담기(다른 여행 것이면 이 여행으로 이동)
+- `DELETE /{postId}` — 빼기(연결 해제, 포스트 유지)
+
+### DB 스키마 (V21)
+
+```sql
+-- 일상 피드 포스트를 여행 앨범으로 큐레이션 (여행 삭제 시 포스트는 유지)
+ALTER TABLE feed_posts ADD COLUMN trip_id BIGINT REFERENCES trips (id) ON DELETE SET NULL;
+CREATE INDEX idx_feed_posts_trip ON feed_posts (trip_id, created_at DESC);
+```
+
+### 화면 (frontend)
+- `TripAlbumScreen` — 2열 사진 그리드 + "＋ 사진 담기"(후보 모달) + 길게 눌러 빼기
+- `TripDetailScreen` 상단에 "📸 앨범" 진입 버튼(경비·준비물과 3열)
 
 ---
 

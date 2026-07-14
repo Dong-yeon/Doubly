@@ -344,15 +344,14 @@ export function TripDetailScreen({ navigation, route }: Props) {
             </Text>
             {trip.memo ? <Text style={styles.memo}>{trip.memo}</Text> : null}
 
-            {/* 경비 정산 · 준비물 진입 */}
+            {/* 경비 · 준비물 · 앨범 진입 */}
             <View style={styles.entryRow}>
               <TouchableOpacity
                 style={styles.entryCard}
                 activeOpacity={0.8}
                 onPress={() => navigation.navigate('TripExpense', { tripId, title: trip.title })}
               >
-                <Text style={styles.entryText}>💰 경비 정산</Text>
-                <Text style={styles.entryArrow}>›</Text>
+                <Text style={styles.entryText}>💰 경비</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.entryCard}
@@ -360,7 +359,13 @@ export function TripDetailScreen({ navigation, route }: Props) {
                 onPress={() => navigation.navigate('TripChecklist', { tripId, title: trip.title })}
               >
                 <Text style={styles.entryText}>🧳 준비물</Text>
-                <Text style={styles.entryArrow}>›</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.entryCard}
+                activeOpacity={0.8}
+                onPress={() => navigation.navigate('TripAlbum', { tripId, title: trip.title })}
+              >
+                <Text style={styles.entryText}>📸 앨범</Text>
               </TouchableOpacity>
             </View>
 
@@ -728,18 +733,16 @@ const styles = StyleSheet.create({
   entryRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
   entryCard: {
     flex: 1,
-    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.sm,
     borderRadius: radius.md,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
   },
   entryText: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
-  entryArrow: { fontSize: fontSize.title, color: colors.textTertiary, fontWeight: '700' },
   tabs: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg },
   tab: {
     flex: 1,

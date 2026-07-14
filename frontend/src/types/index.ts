@@ -441,6 +441,17 @@ export interface Checklist {
   items: ChecklistItem[];
 }
 
+// 여행 앨범 (PLAN.md Trip Album) — 피드 포스트를 여행에 큐레이션
+export interface AlbumPost {
+  id: number;
+  authorId: number;
+  authorName: string;
+  mine: boolean;
+  content?: string | null;
+  imageUrl?: string | null;
+  createdAt: string;
+}
+
 // 커플 일상 피드 (PLAN.md Couple Feed) — 포스트 + 운동/식단/맛집 방문 통합 타임라인
 export type FeedItemType = 'POST' | 'WORKOUT' | 'MEAL' | 'PLACE_VISIT';
 export interface ReactionSummary {
