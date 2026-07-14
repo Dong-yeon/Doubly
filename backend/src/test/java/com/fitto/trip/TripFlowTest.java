@@ -3,6 +3,7 @@ package com.fitto.trip;
 import com.fitto.auth.dto.RegisterRequest;
 import com.fitto.auth.service.AuthService;
 import com.fitto.common.exception.BusinessException;
+import com.fitto.common.exception.ErrorCode;
 import com.fitto.place.domain.PlaceStatus;
 import com.fitto.place.dto.PlaceResponse;
 import com.fitto.place.dto.SavePlaceRequest;
@@ -210,5 +211,30 @@ class TripFlowTest {
 
         assertThatThrownBy(() -> tripService.deleteItem(c2[0], trip.id(), item.id()))
                 .isInstanceOf(BusinessException.class);
+    }
+
+    // ---- AI 일정 생성 ----
+
+    @Test
+    void AI_일정_생성은_소유권_확인_후_AI_설정을_요구한다() {
+        // 테스트 프로파일엔 Gemini 키가 없어, 소유 여행이면 AI 미설정 에러까지 도달한다
+        long[] c = couple("ai1@fitto.com", "ai2@fitto.com");
+        TripResponse trip = tripService.save(c[0], jeju());
+
+        assertThatThrownBy(() -> tripService.generateItinerary(c[0], trip.id(), "맛집 위주로"))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.AI_NOT_CONFIGURED);
+    }
+
+    @Test
+    void 다른_커플의_여행엔_AI_일정을_생성할_수_없다() {
+        // 소유권 검사가 AI 게이트보다 먼저 — FORBIDDEN 이 나야 한다
+        long[] c1 = couple("ai3@fitto.com", "ai4@fitto.com");
+        long[] c2 = couple("ai5@fitto.com", "ai6@fitto.com");
+        TripResponse trip = tripService.save(c1[0], jeju());
+
+        assertThatThrownBy(() -> tripService.generateItinerary(c2[0], trip.id(), null))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.FORBIDDEN);
     }
 }

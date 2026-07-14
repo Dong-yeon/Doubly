@@ -1,6 +1,7 @@
 /** 여행 상세 — 일자별 일정표(Itinerary) + 담긴 장소 목록(지도 핀) */
 import React, { useCallback, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   Image,
@@ -77,6 +78,11 @@ export function TripDetailScreen({ navigation, route }: Props) {
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkCandidates, setLinkCandidates] = useState<Place[]>([]);
 
+  // AI 일정 생성 모달
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiPreferences, setAiPreferences] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -106,6 +112,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
     [days, selectedDay],
   );
   const dayItems = currentDay?.items ?? [];
+  const totalItems = days.reduce((n, d) => n + d.items.length, 0);
 
   // 선택한 Day 의 지도 마커 — 목록 순번(no)을 붙여 동선을 나타낸다
   const dayMarkers = dayItems
@@ -295,6 +302,24 @@ export function TripDetailScreen({ navigation, route }: Props) {
     }
   };
 
+  // AI 일정 생성 — 기존 일정을 대체
+  const runGenerate = async () => {
+    setAiLoading(true);
+    try {
+      await tripApi.generateItinerary(tripId, aiPreferences.trim() || undefined);
+      haptics.light();
+      toast.success('AI가 일정을 짰어요 ✨');
+      setAiOpen(false);
+      setAiPreferences('');
+      setSelectedDay(1);
+      await load();
+    } catch (e) {
+      Alert.alert('오류', getErrorMessage(e, 'AI 일정 생성에 실패했어요.'));
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       <ScrollView
@@ -330,6 +355,18 @@ export function TripDetailScreen({ navigation, route }: Props) {
         {/* 일정 탭 */}
         {trip && tab === 'itinerary' ? (
           <View>
+            {/* AI 일정 생성 */}
+            <TouchableOpacity
+              style={styles.aiButton}
+              activeOpacity={0.85}
+              onPress={() => {
+                setAiPreferences('');
+                setAiOpen(true);
+              }}
+            >
+              <Text style={styles.aiButtonText}>✨ AI로 일정 짜기</Text>
+            </TouchableOpacity>
+
             {/* Day 선택 */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dayBar}>
               {days.map((d) => {
@@ -547,6 +584,50 @@ export function TripDetailScreen({ navigation, route }: Props) {
         </Pressable>
       </Modal>
 
+      {/* AI 일정 생성 모달 */}
+      <Modal
+        visible={aiOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          if (!aiLoading) setAiOpen(false);
+        }}
+      >
+        <Pressable style={styles.backdrop} onPress={() => !aiLoading && setAiOpen(false)}>
+          <Pressable style={styles.sheet}>
+            <Text style={styles.sheetTitle}>✨ AI 여행 일정 생성</Text>
+            <Text style={styles.aiDesc}>
+              "{trip?.title}" 여행에 맞춰 {days.length}일치 일정을 AI가 짜드려요.
+              {totalItems > 0 ? `\n⚠️ 지금 있는 일정 ${totalItems}개는 새 일정으로 대체돼요.` : ''}
+            </Text>
+
+            <Text style={styles.fieldLabel}>요청사항 (선택)</Text>
+            <TextInput
+              style={[styles.input, styles.inputMulti]}
+              placeholder="예: 맛집 위주로 느긋하게, 실내 위주로"
+              placeholderTextColor={colors.textTertiary}
+              value={aiPreferences}
+              onChangeText={setAiPreferences}
+              editable={!aiLoading}
+              maxLength={200}
+              multiline
+            />
+
+            {aiLoading ? (
+              <View style={styles.aiLoading}>
+                <ActivityIndicator color={colors.accent} />
+                <Text style={styles.aiLoadingText}>AI가 일정을 짜는 중이에요… (최대 1분)</Text>
+              </View>
+            ) : (
+              <View style={styles.sheetActions}>
+                <Button title="취소" variant="ghost" size="md" onPress={() => setAiOpen(false)} />
+                <Button title="일정 생성" size="md" onPress={runGenerate} />
+              </View>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       {/* 장소 연결 선택 모달 */}
       <Modal visible={linkOpen} transparent animationType="fade" onRequestClose={() => setLinkOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setLinkOpen(false)}>
@@ -654,6 +735,21 @@ const styles = StyleSheet.create({
   dayChipTextOn: { color: '#fff' },
 
   mapWrap: { marginTop: spacing.xs, marginBottom: spacing.md, borderRadius: radius.lg, overflow: 'hidden' },
+
+  // AI 일정 생성
+  aiButton: {
+    marginTop: spacing.md,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.accentSoft,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    alignItems: 'center',
+  },
+  aiButtonText: { fontSize: fontSize.body, fontWeight: '800', color: colors.accent },
+  aiDesc: { fontSize: fontSize.body, color: colors.textSecondary, lineHeight: 21, marginBottom: spacing.sm },
+  aiLoading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingVertical: spacing.lg },
+  aiLoadingText: { fontSize: fontSize.body, color: colors.textSecondary, fontWeight: '700' },
 
   // 일정 항목 카드
   itemCard: {

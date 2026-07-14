@@ -2,6 +2,7 @@ package com.fitto.trip.controller;
 
 import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
+import com.fitto.trip.dto.GenerateItineraryRequest;
 import com.fitto.trip.dto.ReorderTripItemsRequest;
 import com.fitto.trip.dto.SaveTripItemRequest;
 import com.fitto.trip.dto.SaveTripRequest;
@@ -97,6 +98,17 @@ public class TripController {
                                                  @PathVariable Long id,
                                                  @Valid @RequestBody SaveTripItemRequest request) {
         return ApiResponse.success(tripService.addItem(user.id(), id, request), "일정을 추가했습니다.");
+    }
+
+    /** AI 여행 일정 생성 — 기존 일정을 대체한다. 본문(요청사항)은 선택. */
+    @PostMapping("/{id}/items/generate")
+    public ApiResponse<List<TripDayResponse>> generate(@AuthenticationPrincipal AuthUser user,
+                                                       @PathVariable Long id,
+                                                       @Valid @RequestBody(required = false)
+                                                       GenerateItineraryRequest request) {
+        String preferences = request != null ? request.preferences() : null;
+        return ApiResponse.success(tripService.generateItinerary(user.id(), id, preferences),
+                "AI가 여행 일정을 짰어요.");
     }
 
     /** 순서 일괄 변경 — {itemId} 보다 먼저 매칭되도록 리터럴 경로 사용. */

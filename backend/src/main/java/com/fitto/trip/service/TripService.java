@@ -1,5 +1,7 @@
 package com.fitto.trip.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fitto.common.ai.GeminiClient;
 import com.fitto.common.event.CoupleEvent;
 import com.fitto.common.event.CoupleEventPublisher;
 import com.fitto.common.exception.BusinessException;
@@ -33,9 +35,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -51,6 +55,31 @@ public class TripService {
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("M월 d일");
 
+    /** AI 일정 생성 응답 스키마 — days[dayNo, stops[startTime, title, category, placeName, reason]]. */
+    private static final Map<String, Object> ITINERARY_SCHEMA = Map.of(
+            "type", "OBJECT",
+            "properties", Map.of(
+                    "days", Map.of(
+                            "type", "ARRAY",
+                            "items", Map.of(
+                                    "type", "OBJECT",
+                                    "properties", Map.of(
+                                            "dayNo", Map.of("type", "INTEGER"),
+                                            "stops", Map.of(
+                                                    "type", "ARRAY",
+                                                    "items", Map.of(
+                                                            "type", "OBJECT",
+                                                            "properties", Map.of(
+                                                                    "startTime", Map.of("type", "STRING"),
+                                                                    "title", Map.of("type", "STRING"),
+                                                                    "category", Map.of("type", "STRING"),
+                                                                    "placeName", Map.of("type", "STRING"),
+                                                                    "reason", Map.of("type", "STRING")),
+                                                            "required", List.of("title")))),
+                                    "required", List.of("dayNo", "stops"))),
+                    "comment", Map.of("type", "STRING")),
+            "required", List.of("days"));
+
     private final TripRepository tripRepository;
     private final TripItemRepository tripItemRepository;
     private final PlaceRepository placeRepository;
@@ -59,6 +88,7 @@ public class TripService {
     private final UserRepository userRepository;
     private final NotificationService notificationService;
     private final CoupleEventPublisher coupleEventPublisher;
+    private final GeminiClient geminiClient;
 
     public TripService(TripRepository tripRepository,
                        TripItemRepository tripItemRepository,
@@ -67,7 +97,8 @@ public class TripService {
                        RelationRepository relationRepository,
                        UserRepository userRepository,
                        NotificationService notificationService,
-                       CoupleEventPublisher coupleEventPublisher) {
+                       CoupleEventPublisher coupleEventPublisher,
+                       GeminiClient geminiClient) {
         this.tripRepository = tripRepository;
         this.tripItemRepository = tripItemRepository;
         this.placeRepository = placeRepository;
@@ -76,6 +107,7 @@ public class TripService {
         this.userRepository = userRepository;
         this.notificationService = notificationService;
         this.coupleEventPublisher = coupleEventPublisher;
+        this.geminiClient = geminiClient;
     }
 
     /** 여행 생성 (TRIP-01) — 상대에게 푸시 + TRIP 이벤트. */
@@ -236,6 +268,130 @@ public class TripService {
         coupleEventPublisher.publish(trip.getCoupleId(), CoupleEvent.TRIP);
     }
 
+    /**
+     * AI 여행 일정 생성 (ITEM-04) — 여행 제목(지역)·기간·저장 장소·요청사항을 Gemini 에 보내
+     * Day 바이 Day 일정을 받아 trip_items 로 저장한다. 기존 일정은 대체된다.
+     */
+    @Transactional
+    public List<TripDayResponse> generateItinerary(Long userId, Long tripId, String preferences) {
+        Trip trip = getCoupleTrip(userId, tripId);
+        int totalDays = daysOf(trip);
+        List<Place> places = placeRepository.findByCoupleIdOrderByIdDesc(trip.getCoupleId());
+
+        geminiClient.requireConfiguredAndCountUsage(userId);
+        JsonNode result = geminiClient.generateJson(
+                List.of(GeminiClient.textPart(itineraryPrompt(trip, totalDays, places, preferences))),
+                ITINERARY_SCHEMA);
+
+        Map<String, Place> placeByName = new HashMap<>();
+        for (Place p : places) {
+            placeByName.putIfAbsent(p.getName(), p);
+        }
+
+        List<TripItem> generated = new ArrayList<>();
+        for (JsonNode dayNode : result.path("days")) {
+            int dayNo = dayNode.path("dayNo").asInt(0);
+            if (dayNo < 1 || dayNo > totalDays) {
+                continue; // 기간을 벗어난 Day 는 버린다
+            }
+            int order = 0;
+            for (JsonNode s : dayNode.path("stops")) {
+                String title = cap(s.path("title").asText(""), 100);
+                if (title == null || title.isBlank()) {
+                    continue;
+                }
+                Place linked = placeByName.get(s.path("placeName").asText(null));
+                generated.add(TripItem.builder()
+                        .tripId(trip.getId())
+                        .placeId(linked != null ? linked.getId() : null)
+                        .dayNo(dayNo)
+                        .sortOrder(order++)
+                        .startTime(parseTime(s.path("startTime").asText(null)))
+                        .title(title)
+                        .category(cap(s.path("category").asText(null), 30))
+                        .memo(s.path("reason").asText(null))
+                        .createdBy(userId)
+                        .build());
+            }
+        }
+        if (generated.isEmpty()) {
+            throw new BusinessException(ErrorCode.AI_ANALYSIS_FAILED);
+        }
+
+        tripItemRepository.deleteByTripId(trip.getId()); // 기존 일정 대체 (벌크 DELETE 후 INSERT)
+        tripItemRepository.saveAll(generated);
+
+        Relation couple = activeCouple(userId);
+        Long partnerId = couple.partnerOf(userId);
+        if (partnerId != null) {
+            notificationService.notify(partnerId, "AI가 여행 일정을 짰어요 ✨",
+                    userName(userId) + " — " + trip.getTitle());
+        }
+        coupleEventPublisher.publish(trip.getCoupleId(), CoupleEvent.TRIP);
+        return buildDays(trip);
+    }
+
+    private String itineraryPrompt(Trip trip, int totalDays, List<Place> places, String preferences) {
+        String placeBlock = places.isEmpty()
+                ? "없음"
+                : places.stream()
+                        .map(p -> "- " + p.getName()
+                                + (p.getCategory() != null ? " [" + p.getCategory() + "]" : "")
+                                + (p.getAddress() != null ? " (" + p.getAddress() + ")" : ""))
+                        .collect(Collectors.joining("\n"));
+        String pref = (preferences != null && !preferences.isBlank())
+                ? "\n            - 커플 요청사항: " + preferences.trim() : "";
+        return """
+                아래 여행에 대한 %d일치 데이 바이 데이 일정을 짜주세요.
+                - 여행: %s (%s ~ %s)
+                - days: dayNo(1~%d) 별로, 각 day 의 stops 는 2~5곳.
+                - 각 stop: startTime("HH:mm" 24시간), title(장소·활동명, 한국어),
+                  category(관광/식사/카페/이동/숙소 중 하나), reason(추천 이유 한 문장 한국어).
+                - 오전 관광 → 점심 → 오후 → 저녁 식사처럼 시간대와 동선이 자연스럽게 흐르도록.
+                - 여행 제목의 지역을 실제 대표 명소·맛집으로 채우되, 아래 [저장된 장소]가 있으면
+                  우선 포함하고 그 경우 placeName 에 목록의 이름을 그대로 씁니다.
+                  목록에 없는 곳은 placeName 을 비웁니다.%s
+
+                [저장된 장소]
+                %s
+                """.formatted(totalDays, trip.getTitle(), trip.getStartDate(), trip.getEndDate(),
+                totalDays, pref, placeBlock);
+    }
+
+    /** "HH:mm" | "H:mm" | "HH:mm:ss" → LocalTime (형식이 어긋나면 null) */
+    private LocalTime parseTime(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        String[] parts = raw.trim().split(":");
+        if (parts.length < 2) {
+            return null;
+        }
+        try {
+            int h = Integer.parseInt(parts[0].trim());
+            int m = Integer.parseInt(parts[1].trim());
+            if (h < 0 || h > 23 || m < 0 || m > 59) {
+                return null;
+            }
+            return LocalTime.of(h, m);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /** 컬럼 길이 안전 절단 (공백 정리 후 max 초과 시 자름). */
+    private String cap(String s, int max) {
+        if (s == null) {
+            return null;
+        }
+        String trimmed = s.trim();
+        return trimmed.length() > max ? trimmed.substring(0, max) : trimmed;
+    }
+
+    private int daysOf(Trip trip) {
+        return (int) ChronoUnit.DAYS.between(trip.getStartDate(), trip.getEndDate()) + 1;
+    }
+
     /** 여행 기간(1~N일차)만큼 Day 를 만들고, 각 Day 에 시간순 항목을 채운다. */
     private List<TripDayResponse> buildDays(Trip trip) {
         List<TripItem> items = tripItemRepository
@@ -253,7 +409,7 @@ public class TripService {
                 Collectors.mapping(it -> TripItemResponse.of(it, placeById.get(it.getPlaceId())),
                         Collectors.toList())));
 
-        int totalDays = (int) ChronoUnit.DAYS.between(trip.getStartDate(), trip.getEndDate()) + 1;
+        int totalDays = daysOf(trip);
         List<TripDayResponse> days = new ArrayList<>(totalDays);
         for (int day = 1; day <= totalDays; day++) {
             days.add(new TripDayResponse(day, trip.getStartDate().plusDays(day - 1),
@@ -263,7 +419,7 @@ public class TripService {
     }
 
     private void validateDayNo(Trip trip, int dayNo) {
-        int totalDays = (int) ChronoUnit.DAYS.between(trip.getStartDate(), trip.getEndDate()) + 1;
+        int totalDays = daysOf(trip);
         if (dayNo < 1 || dayNo > totalDays) {
             throw new BusinessException(ErrorCode.INVALID_INPUT,
                     "일정은 1일차부터 " + totalDays + "일차 사이여야 해요.");

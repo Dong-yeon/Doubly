@@ -88,6 +88,7 @@ feed_posts / feed_reactions / trips / trip_items(일자별 일정표).
 | 확장 | 커플 일상 피드 (통합 타임라인) — PLAN.md Couple Feed | ✅ 완료 |
 | 확장 | 커플 여행 (장소 그룹핑·D-day) — PLAN.md Trip | ✅ 완료 |
 | 확장 | 커플 여행 일자별 일정표 (Trip Itinerary) — PLAN.md | ✅ 완료 |
+| 확장 | AI 여행 일정 생성 (Gemini — Day 바이 Day) — PLAN.md | ✅ 완료 |
 | 출시 준비 | Cloudinary 서명 업로드, Redis 카운터, 테스트 보강 | ✅ 완료 |
 | 확장 | 카카오 플레이스 검색 (장소 추가 자동 입력) | ✅ 완료 |
 | 출시 후 | 트레이너 결제, 소셜 로그인 | 예정 |

@@ -58,4 +58,14 @@ export const tripApi = {
     unwrap(apiClient.delete<ApiResponse<void>>(`/trips/${tripId}/items/${itemId}`)),
   reorderItems: (tripId: number, items: ReorderEntry[]) =>
     unwrap(apiClient.put<ApiResponse<void>>(`/trips/${tripId}/items/reorder`, { items })),
+
+  // AI 여행 일정 생성 — 기존 일정을 대체. 생성에 시간이 걸려 timeout 상향
+  generateItinerary: (tripId: number, preferences?: string) =>
+    unwrap(
+      apiClient.post<ApiResponse<TripDay[]>>(
+        `/trips/${tripId}/items/generate`,
+        { preferences },
+        { timeout: 60000 },
+      ),
+    ),
 };

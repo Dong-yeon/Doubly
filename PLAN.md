@@ -134,6 +134,8 @@ CREATE INDEX idx_places_trip ON places (trip_id);
 3. 순서 변경 — 하루 안 ▲/▼ 이동(전체 재배치), Day 이동(수정 시 며칠차 재선택)
 4. 장소 연결(선택) — 맛집 지도 장소를 항목에 연결하면 Day 지도에 순번 마커로 표시
 5. **실시간 협업 편집** — 모든 항목 변경 시 커플 채널 `/sub/couple/{id}` TRIP 이벤트 발행
+6. **AI 일정 생성** — 여행 제목(지역)·기간·저장 장소·요청사항을 Gemini 에 보내 Day 바이 Day
+   일정을 받아 자동 채움(기존 일정 대체). `DateCourseService`(데이트 코스)의 여행 확장판
 
 ### Non-goals (이번 MVP 제외)
 - 드래그 앤 드롭 정렬 (▲/▼ 버튼으로 대체 — 추가 네이티브 의존성 없이)
@@ -148,6 +150,9 @@ CREATE INDEX idx_places_trip ON places (trip_id);
 - `DELETE /{id}/items/{itemId}` — 삭제
 - `PUT    /{id}/items/reorder` `{items:[{itemId, dayNo, sortOrder}]}` — 순서/Day 일괄 재배치
   - `{itemId}` 보다 리터럴 `reorder` 가 먼저 매칭됨
+- `POST   /{id}/items/generate` `{preferences?}` — **AI 일정 생성**(기존 일정 대체), `days` 반환
+  - Gemini 미설정 시 `AI_NOT_CONFIGURED`, 사용자별 일일 한도는 다른 AI 기능과 공유
+  - 벌크 DELETE 후 `saveAll` 로 대체(삭제→삽입 순서 보장), 상대에게 푸시 + TRIP 이벤트
 
 응답 형태: `TripDayResponse{dayNo, date, items[]}`,
 `TripItemResponse{id, dayNo, sortOrder, startTime, title, category, memo, placeId, placeName, lat, lng, createdBy}`
@@ -177,12 +182,13 @@ CREATE INDEX idx_trip_items_trip_day ON trip_items (trip_id, day_no, sort_order)
 
 ### 화면 (frontend)
 - `TripDetailScreen` — **일정/장소 탭** 구조로 개편
-  - 일정 탭: Day 선택 바 → 선택 Day 동선 지도(순번 마커) → 시간순 항목 카드(▲/▼·수정·삭제) → "＋ 일정 추가"
+  - 일정 탭: **✨ AI로 일정 짜기** → Day 선택 바 → 선택 Day 동선 지도(순번 마커) →
+    시간순 항목 카드(▲/▼·수정·삭제) → "＋ 일정 추가"
   - 장소 탭: 담긴 장소 지도·목록 + "＋ 장소 담기"(기존 유지)
   - 추가/수정 모달: 며칠차·제목·시간·종류·메모(+추가 시 장소 연결)
+  - AI 생성 모달: 요청사항(선택) 입력 + 대체 경고 + 생성 중 로딩(최대 1분)
 
 ### 이후 확장 (제안)
-- AI 여행 일정 생성(DateCourseService 확장 → Day·시간 포함)
 - 경비 가계부·정산(trip_expenses), 준비물 체크리스트, 여행 앨범(feed_posts.trip_id)
 
 ---
