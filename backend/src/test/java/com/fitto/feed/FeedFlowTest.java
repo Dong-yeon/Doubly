@@ -47,7 +47,7 @@ class FeedFlowTest {
 
     private Long register(String email) {
         return authService.register(
-                new RegisterRequest(email, "password123", "테스터", null, null)).user().id();
+                new RegisterRequest(email, "password123", "테스터", null, null), "127.0.0.1").user().id();
     }
 
     private long[] couple(String emailA, String emailB) {
@@ -79,7 +79,7 @@ class FeedFlowTest {
         feedService.createPost(c[0], new CreatePostRequest("한강 러닝 최고 🌇", null));
         workoutService.save(c[1], new SaveWorkoutRequest(LocalDate.now(), null, 30, null,
                 List.of(new WorkoutSetRequest("러닝", "유산소", 1, null, null, 1))));
-        mealService.save(c[0], new SaveMealRequest(LocalDate.now(), MealType.DINNER, "회식", null, 800));
+        mealService.save(c[0], new SaveMealRequest(LocalDate.now(), MealType.DINNER, "회식", null, 800, null, null, null));
 
         FeedTimelineResponse timeline = feedService.timeline(c[0], null, 20);
         List<FeedItemType> types = timeline.items().stream().map(FeedItemResponse::type).toList();

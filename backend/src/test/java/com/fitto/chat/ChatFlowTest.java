@@ -32,7 +32,7 @@ class ChatFlowTest {
 
     private Long register(String email) {
         return authService.register(
-                new RegisterRequest(email, "password123", email.substring(0, 2), null, null)).user().id();
+                new RegisterRequest(email, "password123", email.substring(0, 2), null, null), "127.0.0.1").user().id();
     }
 
     private Long connectCouple(Long a, Long b) {

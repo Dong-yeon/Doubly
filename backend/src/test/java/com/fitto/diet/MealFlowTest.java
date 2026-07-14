@@ -35,11 +35,11 @@ class MealFlowTest {
 
     private Long register(String email) {
         return authService.register(
-                new RegisterRequest(email, "password123", "테스터", null, null)).user().id();
+                new RegisterRequest(email, "password123", "테스터", null, null), "127.0.0.1").user().id();
     }
 
     private SaveMealRequest sample(LocalDate date, MealType type) {
-        return new SaveMealRequest(date, type, "닭가슴살 샐러드", null, 420);
+        return new SaveMealRequest(date, type, "닭가슴살 샐러드", null, 420, null, null, null);
     }
 
     @Test
