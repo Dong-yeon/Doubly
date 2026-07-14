@@ -1,0 +1,8 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- Doubly 심볼: 겹치는 두 원 (나=Coral · 상대=Indigo · 겹침=Violet). 앱 아이콘 마스터. -->
+  <rect width="1024" height="1024" rx="230" fill="#FBF8F3"/>
+  <g transform="translate(512,512)">
+    <circle cx="-120" cy="0" r="230" fill="#FF6A4D"/>
+    <circle cx="120" cy="0" r="230" fill="#4A5BFF" style="mix-blend-mode:multiply"/>
+  </g>
+</svg>

@@ -1,19 +1,19 @@
 {
   "expo": {
-    "name": "Fitto",
-    "slug": "fitto",
+    "name": "Doubly",
+    "slug": "doubly",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "scheme": "fitto",
+    "scheme": "doubly",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "plugins": [
       [
         "expo-image-picker",
         {
-          "photosPermission": "채팅에서 사진을 공유하기 위해 사진 접근 권한이 필요해요.",
-          "cameraPermission": "음식 사진을 촬영하기 위해 카메라 접근 권한이 필요해요."
+          "photosPermission": "사진을 공유하기 위해 사진 접근 권한이 필요해요.",
+          "cameraPermission": "음식·진행 사진을 촬영하기 위해 카메라 접근 권한이 필요해요."
         }
       ],
       [
@@ -28,16 +28,16 @@
       ]
     ],
     "splash": {
-      "backgroundColor": "#FF7A93"
+      "backgroundColor": "#FBF8F3"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.fitto.app"
+      "bundleIdentifier": "com.doubly.app"
     },
     "android": {
-      "package": "com.fitto.app",
+      "package": "com.doubly.app",
       "adaptiveIcon": {
-        "backgroundColor": "#FF7A93",
+        "backgroundColor": "#FBF8F3",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -46,13 +46,13 @@
     },
     "web": {
       "favicon": "./assets/favicon.png",
-      "name": "Fitto",
-      "shortName": "Fitto",
+      "name": "Doubly",
+      "shortName": "Doubly",
       "lang": "ko",
-      "themeColor": "#FF7A93",
-      "backgroundColor": "#FFF9FA",
+      "themeColor": "#14162B",
+      "backgroundColor": "#FBF8F3",
       "display": "standalone",
-      "description": "커플 운동 채팅 앱 — 함께라서 더 건강해"
+      "description": "Doubly — 둘이라서, 두 배로. 커플 운동·식단·여행·일상 공유"
     }
   }
 }

@@ -7,6 +7,7 @@ import type { OnboardingStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
 import { Card } from '../../components/Card';
+import { DoublyMark } from '../../components/DoublyLogo';
 import { useAuthStore } from '../../store/authStore';
 import { getErrorMessage } from '../../utils/error';
 import { colors, fontSize, spacing } from '../../constants/theme';
@@ -39,9 +40,9 @@ export function LoginScreen({ navigation }: Props) {
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
           <View style={styles.hero}>
-            <Text style={styles.logo}>👩‍❤️‍👨</Text>
-            <Text style={styles.brand}>Fitto</Text>
-            <Text style={styles.slogan}>함께라서 더 건강해</Text>
+            <DoublyMark size={56} />
+            <Text style={styles.brand}>Doubly</Text>
+            <Text style={styles.slogan}>둘이라서, 두 배로</Text>
           </View>
 
           <Card elevation="md" style={styles.card}>
@@ -81,7 +82,7 @@ const styles = StyleSheet.create({
   container: { flexGrow: 1, justifyContent: 'center', padding: spacing.lg },
   hero: { alignItems: 'center', marginBottom: spacing.xl },
   logo: { fontSize: 56 },
-  brand: { fontSize: fontSize.display, fontWeight: '800', color: colors.primary, marginTop: spacing.xs, letterSpacing: -0.5 },
+  brand: { fontSize: fontSize.display, fontWeight: '800', color: colors.ink, marginTop: spacing.sm, letterSpacing: -1 },
   slogan: { fontSize: fontSize.subtitle, color: colors.textSecondary, marginTop: spacing.xs },
   card: { gap: spacing.xs },
   loginBtn: { marginTop: spacing.sm },

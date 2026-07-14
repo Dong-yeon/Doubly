@@ -23,6 +23,7 @@ import type { CompositeScreenProps } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList, MainTabParamList } from '../../navigation/types';
 import { Avatar } from '../../components/Avatar';
+import { DoublyMark } from '../../components/DoublyLogo';
 import { Card } from '../../components/Card';
 import { TextField } from '../../components/TextField';
 import { EmptyState } from '../../components/EmptyState';
@@ -45,7 +46,8 @@ type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList>
 >;
 
-const GRADIENT: [string, string, string] = ['#FF9E9E', '#FF8080', '#E86A6A'];
+// Ink 히어로 — 데이터(코랄/인디고 아바타 + 바이올렛 겹침)가 돋보이게 절제된 배경
+const GRADIENT: [string, string, string] = ['#1B1D3A', '#14162B', '#0D0F22'];
 const QUICK_EMOJIS = ['❤️', '🥰', '😆', '👍', '💪'];
 
 function daysTogether(connectedAt?: string | null): number {
@@ -323,19 +325,20 @@ export function HomeScreen({ navigation }: Props) {
 
         {connected ? (
           <>
-            <Pressable style={styles.ddayWrap} onPress={openAnnModal}>
-              <Text style={styles.ddayLabel}>{couple?.anniversaryDate ? '기념일부터' : '함께한 지'} ✏️</Text>
-              <Text style={styles.dday}>D+{dday}</Text>
-            </Pressable>
+            {/* 두 사람이 히어로 — 나=코랄 / 상대=인디고 / 겹침=바이올렛 */}
             <View style={styles.coupleRow}>
-              <CoupleProfile name={user?.name ?? '나'} imageUrl={user?.profileImageUrl} done={myDone} />
-              <Text style={styles.heart}>❤️</Text>
+              <CoupleProfile name={user?.name ?? '나'} imageUrl={user?.profileImageUrl} done={myDone} color={colors.coral} />
+              <DoublyMark size={26} />
               <CoupleProfile
                 name={partner?.partnerName ?? couple?.partner?.name ?? '상대방'}
                 imageUrl={couple?.partner?.profileImageUrl}
                 done={!!partner?.completed}
+                color={colors.indigo}
               />
             </View>
+            <Pressable style={styles.ddayChip} onPress={openAnnModal}>
+              <Text style={styles.ddayChipText}>함께한 지 D+{dday} · ✏️</Text>
+            </Pressable>
             <Text style={styles.myStreak}>🔥 내 연속 {myStreak?.currentCount ?? 0}일 · 최고 {myStreak?.maxCount ?? 0}일</Text>
           </>
         ) : (
@@ -409,13 +412,13 @@ export function HomeScreen({ navigation }: Props) {
   );
 }
 
-function CoupleProfile({ name, imageUrl, done }: { name: string; imageUrl?: string | null; done: boolean }) {
+function CoupleProfile({ name, imageUrl, done, color }: { name: string; imageUrl?: string | null; done: boolean; color: string }) {
   return (
     <View style={styles.profile}>
-      <View>
-        <Avatar name={name} imageUrl={imageUrl} size={64} color={colors.primaryDark} />
+      <View style={[styles.avatarRing, { borderColor: color }]}>
+        <Avatar name={name} imageUrl={imageUrl} size={60} color={color} />
         {done ? (
-          <View style={styles.doneBadge}>
+          <View style={[styles.doneBadge, { backgroundColor: color }]}>
             <Text style={styles.doneCheck}>✓</Text>
           </View>
         ) : null}
@@ -460,9 +463,9 @@ const styles = StyleSheet.create({
     textShadowRadius: 6,
     textShadowOffset: { width: 0, height: 2 },
   },
-  coupleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: spacing.md, gap: spacing.md },
-  heart: { fontSize: 22 },
+  coupleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: spacing.lg, gap: spacing.md },
   profile: { alignItems: 'center', width: 90 },
+  avatarRing: { borderWidth: 2, borderRadius: 999, padding: 2 },
   profileName: { color: colors.white, fontSize: fontSize.body, fontWeight: '800', marginTop: spacing.xs },
   doneBadge: {
     position: 'absolute',
@@ -471,13 +474,21 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: colors.success,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: colors.white,
+    borderColor: colors.ink,
   },
   doneCheck: { color: colors.white, fontWeight: '800', fontSize: 12 },
+  ddayChip: {
+    alignSelf: 'center',
+    marginTop: spacing.md,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderRadius: 999,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  ddayChipText: { color: 'rgba(255,255,255,0.92)', fontSize: fontSize.caption, fontWeight: '700' },
   myStreak: { color: 'rgba(255,255,255,0.92)', textAlign: 'center', marginTop: spacing.md, fontSize: fontSize.caption, fontWeight: '600' },
 
   connectWrap: { alignItems: 'center', paddingVertical: spacing.lg },

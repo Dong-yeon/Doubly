@@ -317,7 +317,7 @@ export function MyScreen({ navigation }: Props) {
           </Pressable>
         </Card>
 
-        <Text style={styles.footer}>Fitto · 함께라서 더 건강해 💖</Text>
+        <Text style={styles.footer}>Doubly · 둘이라서, 두 배로</Text>
       </ScrollView>
     </SafeAreaView>
   );
