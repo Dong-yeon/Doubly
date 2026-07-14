@@ -119,6 +119,10 @@ export function TripDetailScreen({ navigation, route }: Props) {
     .map((it, idx) => ({ it, no: idx + 1 }))
     .filter(({ it }) => it.lat != null && it.lng != null)
     .map(({ it, no }) => ({ id: it.id, lat: it.lat as number, lng: it.lng as number, title: `${no}. ${it.title}` }));
+  // 좌표 있는 항목을 일정 순서대로 이어 동선(폴리라인)을 그린다
+  const dayPath = dayItems
+    .filter((it) => it.lat != null && it.lng != null)
+    .map((it) => ({ lat: it.lat as number, lng: it.lng as number }));
 
   // ---- 장소 담기 (장소 탭) ----
   const openPicker = async () => {
@@ -415,6 +419,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
               <View style={styles.mapWrap}>
                 <KakaoMap
                   markers={dayMarkers}
+                  path={dayPath}
                   height={200}
                   onMarkerPress={(id) => {
                     const it = dayItems.find((i) => i.id === id);

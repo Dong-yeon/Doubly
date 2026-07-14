@@ -1,11 +1,13 @@
 /** KakaoMap 공유 Props — 네이티브(KakaoMap.tsx)/웹(KakaoMap.web.tsx) 공통 */
 import type { ViewStyle } from 'react-native';
-import type { KakaoMapMarker, KakaoPlaceResult } from '../utils/kakaoMapHtml';
+import type { KakaoLatLng, KakaoMapMarker, KakaoPlaceResult } from '../utils/kakaoMapHtml';
 
 export type { KakaoPlaceResult };
 
 export interface KakaoMapProps {
   markers?: KakaoMapMarker[];
+  /** 순서대로 이어 그릴 동선 (일정 경로). 2점 이상일 때만 표시 */
+  path?: KakaoLatLng[];
   /** 지도 탭으로 좌표 선택 (주소 자동 조회) */
   selectable?: boolean;
   centerLat?: number;

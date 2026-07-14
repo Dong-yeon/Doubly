@@ -8,15 +8,15 @@ import type { KakaoMapHandle, KakaoMapProps } from './KakaoMap.types';
 export type { KakaoMapHandle, KakaoMapProps };
 
 export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap(
-  { markers, selectable, centerLat, centerLng, height = 300, style, onSelect, onMarkerPress, onSearchResults },
+  { markers, path, selectable, centerLat, centerLng, height = 300, style, onSelect, onMarkerPress, onSearchResults },
   ref,
 ) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
   const html = useMemo(
-    () => buildKakaoMapHtml({ markers, selectable, centerLat, centerLng }),
+    () => buildKakaoMapHtml({ markers, path, selectable, centerLat, centerLng }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [JSON.stringify(markers), selectable, centerLat, centerLng],
+    [JSON.stringify(markers), JSON.stringify(path), selectable, centerLat, centerLng],
   );
 
   const command = (payload: Record<string, unknown>) => {
