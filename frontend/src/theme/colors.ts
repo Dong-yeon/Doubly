@@ -1,45 +1,60 @@
 /**
- * Fitto 컬러 토큰 — 프리미엄 리브랜드.
- * 메인은 차분한 브릭 로즈(#C9504B), 커플/식단/건강은 의미별 액센트로 분리.
+ * Doubly 컬러 토큰 — Duo Color System.
+ * 크롬(버튼·탭·링크)은 Ink 단색, 데이터는 색으로 소유자를 구분한다:
+ *   나 = Coral, 상대 = Indigo, 함께 = Violet.
+ * 배경은 순백 대신 Cream, 텍스트는 검정 대신 Ink.
  *
- * 아래 "호환 별칭" 섹션은 기존 코드(46개 파일)가 참조하던 키를 새 팔레트로 매핑해
+ * 아래 "호환 별칭"은 기존 코드(수십 개 파일)가 참조하던 키를 새 팔레트로 매핑해
  * 앱 전체가 한 번에 리스킨되도록 한다. (constants/theme.ts 가 이 파일을 re-export)
  */
 export const colors = {
-  // 브랜드
-  primary: '#C9504B',
-  primaryLight: '#F5908B',
-  primaryBg: '#FFF0EF',
+  // ── Doubly 코어 ──────────────────────────────────────────────
+  cream: '#FBF8F3',
+  ink: '#14162B',
+  coral: '#FF6A4D', // 나
+  indigo: '#4A5BFF', // 상대
+  violet: '#9B57FF', // 함께
 
-  // 의미별 액센트
-  couple: '#FF8080',
-  food: '#F0A020',
-  health: '#5A9E5A',
+  // ── Duo 시맨틱 (나/상대/함께) ─────────────────────────────────
+  me: '#FF6A4D',
+  meBg: '#FFF0EC',
+  partner: '#4A5BFF',
+  partnerBg: '#EEF0FF',
+  together: '#9B57FF',
+  togetherBg: '#F5EDFF',
 
-  // 텍스트
-  textPrimary: '#1A1A18',
-  textSecondary: '#5C5B58',
-  textMuted: '#9A9894',
+  // ── 크롬 (Ink) — 버튼·활성탭·링크 ─────────────────────────────
+  primary: '#14162B',
+  primaryDark: '#05061A',
+  primaryLight: '#3A3D55',
+  primaryBg: '#ECECF1',
 
-  // 표면
-  surface: '#FAFAFA',
+  // ── 텍스트 ───────────────────────────────────────────────────
+  textPrimary: '#14162B',
+  textSecondary: '#6B7080',
+  textMuted: '#9A98A4',
+
+  // ── 표면 ─────────────────────────────────────────────────────
+  surface: '#FFFFFF',
   surfaceCard: '#FFFFFF',
+  surfaceAlt: '#F2EEE7',
+  background: '#FBF8F3',
 
-  // 보더
-  border: 'rgba(0,0,0,0.08)',
-  borderStrong: 'rgba(0,0,0,0.15)',
+  // ── 보더 ─────────────────────────────────────────────────────
+  border: '#E4DFD6',
+  borderStrong: 'rgba(20,22,43,0.15)',
 
-  // ── 호환 별칭 (기존 키 → 새 팔레트) ─────────────────────────────
-  primaryDark: '#A83F3B', // pressed/강조
-  primarySoft: '#FFF0EF', // = primaryBg
-  secondary: '#5A9E5A', // 운동/건강 → health(green)
-  secondarySoft: '#EAF3DE',
-  accent: '#F0A020', // 스트릭/포인트 → food(amber)
-  accentSoft: '#FAEEDA',
-  background: '#FAFAFA', // = surface
-  surfaceAlt: '#F4F3F1', // 뉴트럴 alt 표면(칩 등)
-  textTertiary: '#9A9894', // = textMuted
-  success: '#5A9E5A',
+  // ── 호환 별칭 (기존 키 → Doubly 팔레트) ───────────────────────
+  couple: '#FF6A4D', // 커플 대표 → coral
+  food: '#9B57FF', // (구 amber) → violet
+  health: '#4A5BFF', // (구 green) → indigo
+  primarySoft: '#ECECF1', // = primaryBg
+  secondary: '#4A5BFF', // 보조 액센트 → indigo
+  secondarySoft: '#EEF0FF',
+  accent: '#9B57FF', // 하이라이트/포인트 → violet
+  accentSoft: '#F5EDFF',
+  textTertiary: '#9A98A4',
+  success: '#2FA36B', // 기능색(체크·완료)은 그린 유지
   danger: '#E5484D',
   white: '#FFFFFF',
 } as const;

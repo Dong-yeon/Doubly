@@ -55,7 +55,7 @@ export function TrainerDashboardScreen({ navigation }: Props) {
         },
         {
           text: '📤 공유',
-          onPress: () => shareText(`Fitto에서 회원으로 연결해요! 초대코드: ${invite.code} (24시간 유효)`),
+          onPress: () => shareText(`Doubly에서 회원으로 연결해요! 초대코드: ${invite.code} (24시간 유효)`),
         },
         { text: '닫기', style: 'cancel' },
       ]);

@@ -6,7 +6,7 @@ plugins {
 
 group = 'com.fitto'
 version = '0.0.1-SNAPSHOT'
-description = 'Fitto - 커플 운동 채팅 앱 백엔드'
+description = 'Doubly - 커플 라이프 공유 앱 백엔드'
 
 java {
     toolchain {

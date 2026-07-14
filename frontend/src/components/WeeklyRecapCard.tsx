@@ -27,16 +27,17 @@ export function WeeklyRecapCard({ recap, onShare, sharing }: Props) {
         </Text>
       </View>
 
-      <Row label="나" workout={recap.myWorkoutDays} meal={recap.myMealDays} />
+      <Row label="나" workout={recap.myWorkoutDays} meal={recap.myMealDays} dot={colors.me} />
       {recap.coupleConnected ? (
         <>
           <Row
             label={recap.partnerName ?? '상대'}
             workout={recap.partnerWorkoutDays}
             meal={recap.partnerMealDays}
+            dot={colors.partner}
           />
           <View style={styles.divider} />
-          <Row label="함께 👩‍❤️‍👨" workout={recap.bothWorkoutDays} meal={recap.bothMealDays} highlight />
+          <Row label="함께" workout={recap.bothWorkoutDays} meal={recap.bothMealDays} highlight dot={colors.together} />
         </>
       ) : null}
 
@@ -54,15 +55,18 @@ function Row({
   workout,
   meal,
   highlight,
+  dot,
 }: {
   label: string;
   workout: number;
   meal: number;
   highlight?: boolean;
+  dot: string;
 }) {
   return (
     <View style={styles.row}>
-      <Text style={[styles.rowLabel, highlight && styles.rowLabelHi]} numberOfLines={1}>
+      <View style={[styles.dot, { backgroundColor: dot }]} />
+      <Text style={[styles.rowLabel, highlight && { color: dot }]} numberOfLines={1}>
         {label}
       </Text>
       <Text style={[styles.rowValue, highlight && styles.rowValueHi]}>💪 {workout}일</Text>
@@ -76,9 +80,9 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs },
   title: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
   period: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
-  row: { flexDirection: 'row', alignItems: 'center' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  dot: { width: 9, height: 9, borderRadius: 5 },
   rowLabel: { flex: 1, fontSize: fontSize.body, color: colors.textSecondary, fontWeight: '700' },
-  rowLabelHi: { color: colors.primary },
   rowValue: { width: 76, textAlign: 'right', fontSize: fontSize.body, color: colors.textPrimary, fontWeight: '600' },
   rowValueHi: { fontWeight: '800' },
   divider: { height: 1, backgroundColor: colors.border },

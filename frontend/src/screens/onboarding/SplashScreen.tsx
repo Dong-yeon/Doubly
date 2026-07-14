@@ -1,8 +1,9 @@
-/** 스플래시 — 설계서 2.1 (로고 + 슬로건 '함께라서 더 건강해') */
+/** 스플래시 — Doubly 로고 + 슬로건 '둘이라서, 두 배로' */
 import React, { useEffect, useRef } from 'react';
 import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { OnboardingStackParamList } from '../../navigation/types';
+import { DoublyMark } from '../../components/DoublyLogo';
 import { colors, fontSize, spacing } from '../../constants/theme';
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, 'Splash'>;
@@ -23,10 +24,10 @@ export function SplashScreen({ navigation }: Props) {
   return (
     <View style={styles.container}>
       <Animated.View style={[styles.center, { opacity, transform: [{ scale }] }]}>
-        <Text style={styles.logo}>👩‍❤️‍👨</Text>
-        <Text style={styles.brand}>Fitto</Text>
+        <DoublyMark size={72} />
+        <Text style={styles.brand}>Doubly</Text>
         <View style={styles.sloganWrap}>
-          <Text style={styles.slogan}>함께라서 더 건강해</Text>
+          <Text style={styles.slogan}>둘이라서, 두 배로</Text>
         </View>
       </Animated.View>
     </View>
@@ -34,10 +35,9 @@ export function SplashScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary },
+  container: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.cream },
   center: { alignItems: 'center' },
-  logo: { fontSize: 72, textAlign: 'center' },
-  brand: { fontSize: fontSize.display, fontWeight: '800', color: colors.white, textAlign: 'center', marginTop: spacing.sm, letterSpacing: -0.5 },
-  sloganWrap: { marginTop: spacing.md, backgroundColor: 'rgba(255,255,255,0.22)', borderRadius: 999, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
-  slogan: { fontSize: fontSize.body, color: colors.white, fontWeight: '700' },
+  brand: { fontSize: fontSize.display, fontWeight: '800', color: colors.ink, textAlign: 'center', marginTop: spacing.lg, letterSpacing: -1 },
+  sloganWrap: { marginTop: spacing.md, backgroundColor: colors.togetherBg, borderRadius: 999, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
+  slogan: { fontSize: fontSize.body, color: colors.violet, fontWeight: '700' },
 });
