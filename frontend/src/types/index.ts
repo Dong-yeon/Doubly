@@ -424,6 +424,23 @@ export interface TripExpenses {
   expenses: TripExpense[];
 }
 
+// 여행 준비물 체크리스트 (PLAN.md Trip Checklist)
+export interface ChecklistItem {
+  id: number;
+  content: string;
+  checked: boolean;
+  checkedBy?: number | null;
+  checkedByName?: string | null;
+  sortOrder: number;
+  createdBy: number;
+  createdAt: string;
+}
+export interface Checklist {
+  total: number;
+  checkedCount: number;
+  items: ChecklistItem[];
+}
+
 // 커플 일상 피드 (PLAN.md Couple Feed) — 포스트 + 운동/식단/맛집 방문 통합 타임라인
 export type FeedItemType = 'POST' | 'WORKOUT' | 'MEAL' | 'PLACE_VISIT';
 export interface ReactionSummary {

@@ -75,6 +75,8 @@ export type PlaceStackParamList = {
   TripDetail: { tripId: number; title: string };
   // 여행 경비 정산 (PLAN.md Trip Expenses)
   TripExpense: { tripId: number; title: string };
+  // 여행 준비물 체크리스트 (PLAN.md Trip Checklist)
+  TripChecklist: { tripId: number; title: string };
 };
 
 // 2.2 메인 탭 (홈 / 운동+식단 / 채팅 / 맛집) + 중앙 FAB

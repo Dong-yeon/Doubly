@@ -1,6 +1,16 @@
 /** 커플 여행 API — PLAN.md Trip */
 import { apiClient, unwrap } from './client';
-import type { ApiResponse, Trip, TripDay, TripDetail, TripExpense, TripExpenses, TripItem } from '../types';
+import type {
+  ApiResponse,
+  Checklist,
+  ChecklistItem,
+  Trip,
+  TripDay,
+  TripDetail,
+  TripExpense,
+  TripExpenses,
+  TripItem,
+} from '../types';
 
 export interface SaveTripPayload {
   title: string;
@@ -78,6 +88,18 @@ export const tripApi = {
     unwrap(apiClient.put<ApiResponse<TripExpense>>(`/trips/${tripId}/expenses/${expenseId}`, payload)),
   removeExpense: (tripId: number, expenseId: number) =>
     unwrap(apiClient.delete<ApiResponse<void>>(`/trips/${tripId}/expenses/${expenseId}`)),
+
+  // 준비물 체크리스트 (Trip Checklist)
+  checklist: (tripId: number) =>
+    unwrap(apiClient.get<ApiResponse<Checklist>>(`/trips/${tripId}/checklist`)),
+  addChecklistItem: (tripId: number, content: string) =>
+    unwrap(apiClient.post<ApiResponse<ChecklistItem>>(`/trips/${tripId}/checklist`, { content })),
+  renameChecklistItem: (tripId: number, itemId: number, content: string) =>
+    unwrap(apiClient.put<ApiResponse<ChecklistItem>>(`/trips/${tripId}/checklist/${itemId}`, { content })),
+  toggleChecklistItem: (tripId: number, itemId: number) =>
+    unwrap(apiClient.post<ApiResponse<ChecklistItem>>(`/trips/${tripId}/checklist/${itemId}/toggle`)),
+  removeChecklistItem: (tripId: number, itemId: number) =>
+    unwrap(apiClient.delete<ApiResponse<void>>(`/trips/${tripId}/checklist/${itemId}`)),
 };
 
 export interface SaveExpensePayload {
