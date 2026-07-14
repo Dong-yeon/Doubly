@@ -189,7 +189,8 @@ CREATE INDEX idx_trip_items_trip_day ON trip_items (trip_id, day_no, sort_order)
   - AI 생성 모달: 요청사항(선택) 입력 + 대체 경고 + 생성 중 로딩(최대 1분)
 
 ### 이후 확장 (제안)
-- 경비 정산·준비물 체크리스트·여행 앨범·지도 경로 폴리라인 모두 구현됨(폴리라인은 KakaoMap `path` prop). 이후: 여행 회고 카드 등
+- 경비 정산·준비물 체크리스트·여행 앨범·지도 경로 폴리라인·여행 회고 카드 모두 구현됨.
+  이후: 회고 AI 코멘트, 앨범 슬라이드쇼 등
 
 ---
 
@@ -322,6 +323,33 @@ CREATE INDEX idx_feed_posts_trip ON feed_posts (trip_id, created_at DESC);
 ### 화면 (frontend)
 - `TripAlbumScreen` — 2열 사진 그리드 + "＋ 사진 담기"(후보 모달) + 길게 눌러 빼기
 - `TripDetailScreen` 상단에 "📸 앨범" 진입 버튼(경비·준비물과 3열)
+
+---
+
+## Feature: 커플 여행 회고 카드 (Trip Recap) ✅
+
+### 목표
+여행 하나에 쌓인 것들(일정·장소·경비·사진·준비물)을 **한 장의 요약 카드**로 모아 회고한다.
+다녀온 여행을 돌아보고 공유하기 좋은, 리텐션·감성 포인트.
+
+### 핵심 기능 (MVP)
+1. 집계 카드 — 기간(N박 M일)·상태(예정/여행 중/다녀옴) + 스탯 타일(일정 수·장소 수·방문 수·
+   경비 총액·사진 수·준비물 체크 n/m)
+2. 순수 집계 — **AI 없이 항상 빠르게 동작**(카드 조회가 AI 한도를 쓰지 않는다)
+
+### Non-goals (이번 MVP 제외)
+- AI 회고 코멘트(이후 확장 — 명시적 버튼으로), 이미지 카드 내보내기·공유, 카테고리별 지출 분해
+
+### API (`/api/v1/trips/{tripId}`)
+- `GET /recap` — 회고 집계. `status`(UPCOMING/ONGOING/PAST), `nights`/`days`,
+  `itineraryItemCount`, `placeCount`/`visitedPlaceCount`, `expenseTotal`/`currency`,
+  `photoCount`, `checklistTotal`/`checklistChecked`
+  - 여러 소스(trip_items·places·trip_expenses·trip_checklist_items·feed_posts)를 카운트로 집계.
+    **신규 테이블 없음**
+
+### 화면 (frontend)
+- `TripRecapScreen` — 히어로(제목·기간·상태) + 스탯 타일 그리드 + 마무리 한 줄
+- `TripDetailScreen` 진입 버튼을 경비·준비물·앨범·회고 **2×2 그리드**로
 
 ---
 

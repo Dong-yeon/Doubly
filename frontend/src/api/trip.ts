@@ -11,6 +11,7 @@ import type {
   TripExpense,
   TripExpenses,
   TripItem,
+  TripRecap,
 } from '../types';
 
 export interface SaveTripPayload {
@@ -111,6 +112,10 @@ export const tripApi = {
     unwrap(apiClient.post<ApiResponse<void>>(`/trips/${tripId}/album/${postId}`)),
   detachAlbum: (tripId: number, postId: number) =>
     unwrap(apiClient.delete<ApiResponse<void>>(`/trips/${tripId}/album/${postId}`)),
+
+  // 여행 회고 카드 (Trip Recap) — 집계 요약
+  recap: (tripId: number) =>
+    unwrap(apiClient.get<ApiResponse<TripRecap>>(`/trips/${tripId}/recap`)),
 };
 
 export interface SaveExpensePayload {

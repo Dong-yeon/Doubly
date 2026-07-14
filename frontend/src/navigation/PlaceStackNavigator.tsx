@@ -11,6 +11,7 @@ import { TripDetailScreen } from '../screens/trip/TripDetailScreen';
 import { TripExpenseScreen } from '../screens/trip/TripExpenseScreen';
 import { TripChecklistScreen } from '../screens/trip/TripChecklistScreen';
 import { TripAlbumScreen } from '../screens/trip/TripAlbumScreen';
+import { TripRecapScreen } from '../screens/trip/TripRecapScreen';
 import { colors } from '../constants/theme';
 
 const Stack = createNativeStackNavigator<PlaceStackParamList>();
@@ -60,6 +61,7 @@ export function PlaceStackNavigator() {
         options={{ title: '준비물 체크리스트' }}
       />
       <Stack.Screen name="TripAlbum" component={TripAlbumScreen} options={{ title: '여행 앨범' }} />
+      <Stack.Screen name="TripRecap" component={TripRecapScreen} options={{ title: '여행 회고' }} />
     </Stack.Navigator>
   );
 }

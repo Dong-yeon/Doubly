@@ -452,6 +452,26 @@ export interface AlbumPost {
   createdAt: string;
 }
 
+// 여행 회고 카드 (PLAN.md Trip Recap) — 여행 하나의 집계 요약
+export type TripStatus = 'UPCOMING' | 'ONGOING' | 'PAST';
+export interface TripRecap {
+  tripId: number;
+  title: string;
+  startDate: string;
+  endDate: string;
+  nights: number;
+  days: number;
+  status: TripStatus;
+  itineraryItemCount: number;
+  placeCount: number;
+  visitedPlaceCount: number;
+  expenseTotal: number;
+  currency: string;
+  photoCount: number;
+  checklistTotal: number;
+  checklistChecked: number;
+}
+
 // 커플 일상 피드 (PLAN.md Couple Feed) — 포스트 + 운동/식단/맛집 방문 통합 타임라인
 export type FeedItemType = 'POST' | 'WORKOUT' | 'MEAL' | 'PLACE_VISIT';
 export interface ReactionSummary {

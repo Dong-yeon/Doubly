@@ -12,4 +12,6 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
     List<Place> findByTripIdOrderByIdDesc(Long tripId);
 
     long countByTripId(Long tripId);
+
+    long countByTripIdAndStatus(Long tripId, com.fitto.place.domain.PlaceStatus status);
 }

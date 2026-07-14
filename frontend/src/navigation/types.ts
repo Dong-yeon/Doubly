@@ -79,6 +79,8 @@ export type PlaceStackParamList = {
   TripChecklist: { tripId: number; title: string };
   // 여행 앨범 (PLAN.md Trip Album)
   TripAlbum: { tripId: number; title: string };
+  // 여행 회고 카드 (PLAN.md Trip Recap)
+  TripRecap: { tripId: number; title: string };
 };
 
 // 2.2 메인 탭 (홈 / 운동+식단 / 채팅 / 맛집) + 중앙 FAB

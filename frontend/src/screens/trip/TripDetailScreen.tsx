@@ -348,7 +348,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
             </Text>
             {trip.memo ? <Text style={styles.memo}>{trip.memo}</Text> : null}
 
-            {/* 경비 · 준비물 · 앨범 진입 */}
+            {/* 경비 · 준비물 · 앨범 · 회고 진입 (2×2) */}
             <View style={styles.entryRow}>
               <TouchableOpacity
                 style={styles.entryCard}
@@ -370,6 +370,13 @@ export function TripDetailScreen({ navigation, route }: Props) {
                 onPress={() => navigation.navigate('TripAlbum', { tripId, title: trip.title })}
               >
                 <Text style={styles.entryText}>📸 앨범</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.entryCard}
+                activeOpacity={0.8}
+                onPress={() => navigation.navigate('TripRecap', { tripId, title: trip.title })}
+              >
+                <Text style={styles.entryText}>🧾 회고</Text>
               </TouchableOpacity>
             </View>
 
@@ -735,9 +742,10 @@ const styles = StyleSheet.create({
   dates: { fontSize: fontSize.body, color: colors.textPrimary, fontWeight: '700', marginTop: spacing.sm },
   memo: { fontSize: fontSize.body, color: colors.textSecondary, marginTop: spacing.xs, lineHeight: 21 },
 
-  entryRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
+  entryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
   entryCard: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: '47%',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: spacing.md,
