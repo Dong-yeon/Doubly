@@ -10,6 +10,7 @@ import type {
   MealAnalysis,
   MealStats,
   MealType,
+  NutritionSummary,
   PartnerToday,
 } from '../types';
 
@@ -27,6 +28,16 @@ export interface SaveMealPayload {
   memo?: string;
   photoUrl?: string;
   calories?: number;
+  carbs?: number;
+  protein?: number;
+  fat?: number;
+}
+
+export interface NutritionGoalPayload {
+  targetCalories?: number;
+  targetCarbs?: number;
+  targetProtein?: number;
+  targetFat?: number;
 }
 
 export const dietApi = {
@@ -46,6 +57,11 @@ export const dietApi = {
   coupleGoal: () => unwrap(apiClient.get<ApiResponse<CoupleMealGoal>>('/meal/couple/goal')),
   // 주간 식단 AI 코칭 — 최근 7일 기반, 시간이 걸려 timeout 상향
   coach: () => unwrap(apiClient.get<ApiResponse<DietCoach>>('/meal/coach', { timeout: 60000 })),
+
+  // 오늘 영양 요약 (목표 대비 섭취)
+  nutrition: () => unwrap(apiClient.get<ApiResponse<NutritionSummary>>('/meal/nutrition')),
+  setNutritionGoal: (payload: NutritionGoalPayload) =>
+    unwrap(apiClient.put<ApiResponse<NutritionSummary>>('/meal/nutrition/goal', payload)),
 
   // 즐겨찾는 음식 — 원탭 추가용
   favorites: () => unwrap(apiClient.get<ApiResponse<FavoriteFood[]>>('/meal/favorites')),

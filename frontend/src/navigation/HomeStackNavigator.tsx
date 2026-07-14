@@ -6,6 +6,7 @@ import { HomeScreen } from '../screens/home/HomeScreen';
 import { CoupleConnectScreen } from '../screens/home/CoupleConnectScreen';
 import { MyScreen } from '../screens/my/MyScreen';
 import { FeedComposeScreen } from '../screens/feed/FeedComposeScreen';
+import { DailyQuestionScreen } from '../screens/home/DailyQuestionScreen';
 import { TrainerRegisterScreen } from '../screens/trainer/TrainerRegisterScreen';
 import { TrainerDashboardScreen } from '../screens/trainer/TrainerDashboardScreen';
 import { TrainerMemberDetailScreen } from '../screens/trainer/TrainerMemberDetailScreen';
@@ -35,6 +36,7 @@ export function HomeStackNavigator() {
         component={FeedComposeScreen}
         options={{ title: '일상 남기기', presentation: 'modal' }}
       />
+      <Stack.Screen name="DailyQuestion" component={DailyQuestionScreen} options={{ title: '오늘의 질문' }} />
       <Stack.Screen name="My" component={MyScreen} options={{ title: 'MY' }} />
       <Stack.Screen
         name="TrainerRegister"

@@ -124,6 +124,51 @@ export interface WorkoutRecommendation {
   overallComment?: string | null;
 }
 
+// 데일리 질문 (커플 Q&A)
+export interface DailyQuestion {
+  questionDate: string;
+  question: string;
+  myAnswer?: string | null;
+  partnerAnswer?: string | null;
+  partnerName?: string | null;
+  bothAnswered: boolean;
+}
+export interface QuestionHistory {
+  questionDate: string;
+  question: string;
+  myAnswer: string;
+  partnerAnswer: string;
+}
+
+// 커플 챌린지/대결 — 기간 내 운동/식단 기록일로 겨루기
+export type ChallengeType = 'WORKOUT' | 'MEAL';
+export interface Challenge {
+  id: number;
+  type: ChallengeType;
+  typeLabel: string;
+  title: string;
+  startDate: string;
+  endDate: string;
+  stake?: string | null;
+  myCount: number;
+  partnerCount: number;
+  partnerName?: string | null;
+  ended: boolean;
+  leader: 'ME' | 'PARTNER' | 'TIE';
+  createdAt: string;
+}
+
+// 신체 측정 & 진행 사진 — 체중·체지방·둘레 추적
+export interface BodyMetric {
+  id: number;
+  measuredDate: string;
+  weightKg?: number | null;
+  bodyFatPct?: number | null;
+  waistCm?: number | null;
+  photoUrl?: string | null;
+  memo?: string | null;
+}
+
 // 사용자 본인 운동 루틴 (짐앱 스타일) — 세션 실행 기반
 export interface RoutineExercise {
   exerciseName: string;
@@ -195,7 +240,22 @@ export interface Meal {
   memo?: string | null;
   photoUrl?: string | null;
   calories?: number | null;
+  carbs?: number | null;
+  protein?: number | null;
+  fat?: number | null;
   createdAt: string;
+}
+
+// 오늘 영양 요약 (목표 대비 섭취) — GET /meal/nutrition
+export interface NutritionSummary {
+  targetCalories?: number | null;
+  targetCarbs?: number | null;
+  targetProtein?: number | null;
+  targetFat?: number | null;
+  consumedCalories: number;
+  consumedCarbs: number;
+  consumedProtein: number;
+  consumedFat: number;
 }
 
 // AI 음식 사진 분석 (POST /meal/analyze) — 칼로리·매크로는 추정치, 사용자가 수정 후 저장

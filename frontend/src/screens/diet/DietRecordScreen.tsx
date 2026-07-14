@@ -198,6 +198,9 @@ export function DietRecordScreen({ navigation }: Props) {
         memo: memo.trim() || undefined,
         photoUrl,
         calories: calories ? Number(calories) : undefined,
+        carbs: macros?.carbs,
+        protein: macros?.protein,
+        fat: macros?.fat,
       });
       haptics.success();
       toast.success('식단 기록 완료! 🍽️');

@@ -17,6 +17,12 @@ public record SaveMealRequest(
 
         String photoUrl,
 
-        Integer calories
+        Integer calories,
+
+        Integer carbs,
+
+        Integer protein,
+
+        Integer fat
 ) {
 }

@@ -15,6 +15,8 @@ export type HomeStackParamList = {
   CoupleConnect: undefined;
   // 커플 일상 피드 작성 (홈이 피드 타임라인 역할)
   FeedCompose: undefined;
+  // 데일리 질문 (커플 Q&A)
+  DailyQuestion: undefined;
   // MY (구 MY 탭에서 이전) — 홈 헤더 프로필 아이콘으로 진입
   My: undefined;
   TrainerRegister: undefined;
@@ -45,6 +47,10 @@ export type WorkoutStackParamList = {
   // 내 운동 루틴 (짐앱 스타일)
   WorkoutRoutines: undefined;
   WorkoutRoutineForm: undefined;
+  // 신체 측정 & 진행 사진
+  BodyMetric: undefined;
+  // 커플 챌린지/대결
+  Challenge: undefined;
   // 식단 (구 식단 탭에서 이전) — WorkoutMain 상단 세그먼트로 토글
   DietMain: undefined;
   DietRecord: undefined;
