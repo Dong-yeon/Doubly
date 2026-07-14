@@ -28,6 +28,29 @@ function dayLabel(offset: number): string {
 export function WorkoutRecommendScreen() {
   const [loadingDays, setLoadingDays] = useState<number | null>(null);
   const [result, setResult] = useState<WorkoutRecommendation | null>(null);
+  const [savingRoutine, setSavingRoutine] = useState<number | null>(null);
+
+  // AI 추천 하루 계획을 내 루틴으로 저장
+  const saveAsRoutine = async (day: WorkoutRecommendation['days'][number]) => {
+    setSavingRoutine(day.dayOffset);
+    try {
+      await workoutApi.saveRoutine({
+        title: day.focus || 'AI 추천 루틴',
+        exercises: day.exercises.map((ex) => ({
+          exerciseName: ex.name,
+          category: ex.category ?? undefined,
+          targetSets: ex.sets ?? undefined,
+          reps: ex.reps ?? undefined,
+        })),
+      });
+      haptics.success();
+      toast.success('내 루틴으로 저장했어요 📋');
+    } catch (e) {
+      toast.error(getErrorMessage(e, '루틴 저장에 실패했어요.'));
+    } finally {
+      setSavingRoutine(null);
+    }
+  };
 
   const onRecommend = async (days: number) => {
     setLoadingDays(days);
@@ -94,6 +117,15 @@ export function WorkoutRecommendScreen() {
                   </View>
                 ))}
                 {day.comment ? <Text style={styles.dayComment}>✨ {day.comment}</Text> : null}
+                <Button
+                  title={savingRoutine === day.dayOffset ? '저장 중…' : '📋 내 루틴으로 저장'}
+                  variant="secondary"
+                  size="md"
+                  onPress={() => saveAsRoutine(day)}
+                  loading={savingRoutine === day.dayOffset}
+                  disabled={savingRoutine !== null}
+                  style={styles.saveRoutineBtn}
+                />
               </View>
             ))}
 
@@ -154,6 +186,7 @@ const styles = StyleSheet.create({
   setInfo: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '700' },
   exerciseComment: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
   dayComment: { fontSize: fontSize.caption, color: colors.textPrimary, marginTop: spacing.xs },
+  saveRoutineBtn: { marginTop: spacing.md },
   footnote: {
     fontSize: fontSize.caption,
     color: colors.textSecondary,

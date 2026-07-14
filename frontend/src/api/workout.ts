@@ -6,9 +6,21 @@ import type {
   PartnerToday,
   Workout,
   WorkoutRecommendation,
+  WorkoutRoutine,
   WorkoutSet,
   WorkoutStats,
 } from '../types';
+
+export interface SaveRoutinePayload {
+  title: string;
+  exercises: {
+    exerciseName: string;
+    category?: string;
+    targetSets?: number;
+    reps?: number;
+    weightKg?: number;
+  }[];
+}
 
 export interface SaveWorkoutPayload {
   workoutDate: string;
@@ -37,4 +49,11 @@ export const workoutApi = {
     unwrap(
       apiClient.post<ApiResponse<WorkoutRecommendation>>('/workout/recommend', { days }, { timeout: 60000 }),
     ),
+
+  // 내 운동 루틴 (짐앱 스타일)
+  routines: () => unwrap(apiClient.get<ApiResponse<WorkoutRoutine[]>>('/workout/routines')),
+  saveRoutine: (payload: SaveRoutinePayload) =>
+    unwrap(apiClient.post<ApiResponse<WorkoutRoutine>>('/workout/routines', payload)),
+  removeRoutine: (id: number) =>
+    unwrap(apiClient.delete<ApiResponse<void>>(`/workout/routines/${id}`)),
 };

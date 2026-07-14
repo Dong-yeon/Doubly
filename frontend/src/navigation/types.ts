@@ -25,6 +25,15 @@ export type HomeStackParamList = {
   TrainerConnect: undefined;
 };
 
+// 운동 세션(짐 보조)에 넘기는 운동 항목 — 루틴 실행 시 사용
+export interface SessionExerciseParam {
+  name: string;
+  category?: string;
+  targetSets?: number;
+  reps?: number;
+  weightKg?: number;
+}
+
 // 운동 탭 내부 스택 — 운동 + 식단(세그먼트로 통합)
 export type WorkoutStackParamList = {
   WorkoutMain: undefined;
@@ -32,6 +41,11 @@ export type WorkoutStackParamList = {
   WorkoutCalendar: undefined;
   WorkoutStats: undefined;
   WorkoutRecommend: undefined;
+  // 운동 세션 보조 (세트 체크·휴식 타이머). 루틴 실행 시 exercises 전달
+  WorkoutSession: { exercises?: SessionExerciseParam[] } | undefined;
+  // 내 운동 루틴 (짐앱 스타일)
+  WorkoutRoutines: undefined;
+  WorkoutRoutineForm: undefined;
   // 식단 (구 식단 탭에서 이전) — WorkoutMain 상단 세그먼트로 토글
   DietMain: undefined;
   DietRecord: undefined;
