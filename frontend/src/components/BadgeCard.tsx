@@ -1,20 +1,23 @@
 /** 뱃지 — 설계서 GAME-04 (7/30/100일 달성). 최고 연속 일수(maxStreak) 기준 */
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Card } from './Card';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 
+type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+
 interface Badge {
   days: number;
-  emoji: string;
+  icon: IconName;
   label: string;
 }
 
 // 기본: 운동 뱃지
 const WORKOUT_BADGES: Badge[] = [
-  { days: 7, emoji: '🔥', label: '7일' },
-  { days: 30, emoji: '⭐', label: '30일' },
-  { days: 100, emoji: '👑', label: '100일' },
+  { days: 7, icon: 'medal-outline', label: '7일' },
+  { days: 30, icon: 'medal', label: '30일' },
+  { days: 100, icon: 'trophy', label: '100일' },
 ];
 
 interface Props {
@@ -23,7 +26,7 @@ interface Props {
   badges?: Badge[];
 }
 
-export function BadgeCard({ maxStreak, title = '🏅 뱃지', badges = WORKOUT_BADGES }: Props) {
+export function BadgeCard({ maxStreak, title = '뱃지', badges = WORKOUT_BADGES }: Props) {
   const earned = badges.filter((b) => maxStreak >= b.days).length;
   const next = badges.find((b) => maxStreak < b.days);
 
@@ -40,9 +43,11 @@ export function BadgeCard({ maxStreak, title = '🏅 뱃지', badges = WORKOUT_B
           return (
             <View key={b.days} style={styles.badge}>
               <View style={[styles.circle, unlocked ? styles.circleOn : styles.circleOff]}>
-                <Text style={[styles.emoji, !unlocked && styles.emojiOff]}>
-                  {unlocked ? b.emoji : '🔒'}
-                </Text>
+                <MaterialCommunityIcons
+                  name={unlocked ? b.icon : 'lock-outline'}
+                  size={unlocked ? 28 : 22}
+                  color={unlocked ? colors.accent : colors.textTertiary}
+                />
               </View>
               <Text style={[styles.label, unlocked && styles.labelOn]}>{b.label}</Text>
             </View>
@@ -53,7 +58,7 @@ export function BadgeCard({ maxStreak, title = '🏅 뱃지', badges = WORKOUT_B
       <Text style={styles.progress}>
         {next
           ? `최고 연속 ${maxStreak}일 · ${next.label} 뱃지까지 ${next.days - maxStreak}일!`
-          : '모든 뱃지를 달성했어요! 🎉'}
+          : '모든 뱃지를 달성했어요! '}
       </Text>
     </Card>
   );

@@ -19,14 +19,13 @@ import { colors, fontSize, radius, spacing } from '../constants/theme';
 
 interface Props<T> {
   label: string;
-  emoji: string;
   title: string;
   fetcher: () => Promise<T>;
   render: (data: T) => React.ReactNode;
   style?: ViewStyle;
 }
 
-export function AiInsightButton<T>({ label, emoji, title, fetcher, render, style }: Props<T>) {
+export function AiInsightButton<T>({ label, title, fetcher, render, style }: Props<T>) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<T | null>(null);
@@ -49,15 +48,13 @@ export function AiInsightButton<T>({ label, emoji, title, fetcher, render, style
   return (
     <>
       <TouchableOpacity style={[styles.button, style]} activeOpacity={0.8} onPress={onPress}>
-        <Text style={styles.buttonText}>
-          {emoji} {label}
-        </Text>
+        <Text style={styles.buttonText}>{label}</Text>
       </TouchableOpacity>
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
           <Pressable style={styles.card} onPress={() => {}}>
-            <Text style={styles.title}>{emoji} {title}</Text>
+            <Text style={styles.title}>{title}</Text>
             {loading ? (
               <View style={styles.loading}>
                 <ActivityIndicator color={colors.primary} />

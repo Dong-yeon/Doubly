@@ -158,7 +158,7 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
     try {
       await save({ workoutDate: toDateString(), sets: payloadSets as never });
       haptics.success();
-      toast.success('운동 완료! 기록했어요 💪');
+      toast.success('운동 완료! 기록했어요 ');
       navigation.goBack();
     } catch (e) {
       Alert.alert('오류', getErrorMessage(e));
@@ -247,7 +247,7 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
       {/* 휴식 타이머 바 */}
       {rest > 0 ? (
         <View style={styles.timerBar}>
-          <Text style={styles.timerText}>💤 휴식 {mmss(rest)}</Text>
+          <Text style={styles.timerText}>휴식 {mmss(rest)}</Text>
           <View style={styles.timerBtns}>
             <TouchableOpacity style={styles.timerBtn} onPress={() => setRest((r) => Math.max(0, r - 15))}>
               <Text style={styles.timerBtnText}>-15</Text>

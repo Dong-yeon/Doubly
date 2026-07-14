@@ -32,7 +32,7 @@ export function TrainerRegisterScreen({ navigation }: Props) {
       });
       await refreshMe(); // 역할(TRAINER) 갱신
       haptics.success();
-      toast.success('트레이너로 등록되었어요! 🏋️');
+      toast.success('트레이너로 등록되었어요! ');
       navigation.replace('TrainerDashboard');
     } catch (e) {
       Alert.alert('오류', getErrorMessage(e));
@@ -45,7 +45,7 @@ export function TrainerRegisterScreen({ navigation }: Props) {
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-          <Text style={styles.title}>🏋️ 트레이너로 활동하기</Text>
+          <Text style={styles.title}>트레이너로 활동하기</Text>
           <Text style={styles.desc}>
             등록하면 회원을 초대해 운동 현황을 관리할 수 있어요.{'\n'}프로필은 나중에 수정할 수 있어요.
           </Text>

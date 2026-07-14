@@ -47,7 +47,7 @@ export function DailyQuestionScreen(_: Props) {
       const updated = await questionApi.answer(draft.trim());
       setToday(updated);
       haptics.success();
-      toast.success(updated.bothAnswered ? '서로의 답이 공개됐어요! 💞' : '답을 저장했어요. 상대의 답을 기다려요!');
+      toast.success(updated.bothAnswered ? '서로의 답이 공개됐어요! ' : '답을 저장했어요. 상대의 답을 기다려요!');
       questionApi.history().then(setHistory).catch(() => undefined);
     } catch (e) {
       toast.error(getErrorMessage(e, '저장에 실패했어요.'));
@@ -76,7 +76,7 @@ export function DailyQuestionScreen(_: Props) {
                 <Text style={styles.answerText}>{today.partnerAnswer}</Text>
               </View>
             ) : (
-              <Text style={styles.waiting}>💌 {today.partnerName ?? '상대'}님이 답하면 서로 볼 수 있어요.</Text>
+              <Text style={styles.waiting}>{today.partnerName ?? '상대'}님이 답하면 서로 볼 수 있어요.</Text>
             )}
           </>
         ) : (

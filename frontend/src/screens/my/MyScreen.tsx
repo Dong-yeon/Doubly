@@ -1,6 +1,7 @@
 /** MY — 미니멀·발랄. 프로필(이름 편집) + 로그아웃/탈퇴 */
 import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -26,9 +27,9 @@ import type { UserLevel, WeeklyRecap } from '../../types';
 
 // 식단 뱃지 — 운동(7/30/100)과 같은 단계, 식단 스트릭 기준
 const MEAL_BADGES = [
-  { days: 7, emoji: '🥗', label: '7일' },
-  { days: 30, emoji: '🌟', label: '30일' },
-  { days: 100, emoji: '💎', label: '100일' },
+  { days: 7, icon: 'medal-outline' as const, label: '7일' },
+  { days: 30, icon: 'medal' as const, label: '30일' },
+  { days: 100, icon: 'trophy' as const, label: '100일' },
 ];
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'My'>;
@@ -66,14 +67,14 @@ export function MyScreen({ navigation }: Props) {
     try {
       const partner = recap.partnerName ?? '상대';
       const content =
-        `📊 지난주 결산\n` +
-        `나 💪${recap.myWorkoutDays}일 🥗${recap.myMealDays}일 · ` +
-        `${partner} 💪${recap.partnerWorkoutDays}일 🥗${recap.partnerMealDays}일\n` +
-        `함께 💪${recap.bothWorkoutDays}일 🥗${recap.bothMealDays}일 👩‍❤️‍👨`;
+        `지난주 결산\n` +
+        `나 ${recap.myWorkoutDays}일 ${recap.myMealDays}일 · ` +
+        `${partner} ${recap.partnerWorkoutDays}일 ${recap.partnerMealDays}일\n` +
+        `함께 ${recap.bothWorkoutDays}일 ${recap.bothMealDays}일 `;
       const ok = await publishEnsuringConnection(couple.id, { messageType: 'TEXT', content });
       if (ok) {
         haptics.success();
-        toast.success('채팅에 공유했어요 💬');
+        toast.success('채팅에 공유했어요 ');
       } else {
         toast.error('연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
       }
@@ -93,7 +94,7 @@ export function MyScreen({ navigation }: Props) {
     try {
       await updateProfile({ name: name.trim() });
       haptics.success();
-      toast.success('프로필을 수정했어요 ✨');
+      toast.success('프로필을 수정했어요 ');
       setEditing(false);
     } catch (e) {
       Alert.alert('오류', getErrorMessage(e));
@@ -110,7 +111,7 @@ export function MyScreen({ navigation }: Props) {
       const url = await uploadImage(uri);
       await updateProfile({ profileImageUrl: url });
       haptics.success();
-      toast.success('프로필 사진을 변경했어요 📸');
+      toast.success('프로필 사진을 변경했어요 ');
     } catch (e) {
       Alert.alert('오류', getErrorMessage(e));
     } finally {
@@ -209,7 +210,7 @@ export function MyScreen({ navigation }: Props) {
               {photoUploading ? (
                 <ActivityIndicator size="small" color={colors.white} />
               ) : (
-                <Text style={styles.cameraIcon}>📷</Text>
+                <MaterialCommunityIcons name="camera" size={15} color={colors.white} />
               )}
             </View>
           </Pressable>
@@ -226,8 +227,8 @@ export function MyScreen({ navigation }: Props) {
             <>
               <Text style={styles.name}>{user?.name ?? '사용자'}</Text>
               <Text style={styles.email}>{user?.email ?? ''}</Text>
-              {user?.role === 'TRAINER' ? <Text style={styles.badge}>🏋️ 트레이너</Text> : null}
-              <Button title="✏️ 이름 수정" variant="soft" size="md" onPress={startEdit} style={styles.editBtn} />
+              {user?.role === 'TRAINER' ? <Text style={styles.badge}>트레이너</Text> : null}
+              <Button title="이름 수정" variant="soft" size="md" onPress={startEdit} style={styles.editBtn} />
             </>
           )}
         </Card>
@@ -245,10 +246,10 @@ export function MyScreen({ navigation }: Props) {
         ) : null}
 
         <View style={styles.badgeWrap}>
-          <BadgeCard title="🏅 운동 뱃지" maxStreak={maxStreak} />
+          <BadgeCard title="운동 뱃지" maxStreak={maxStreak} />
         </View>
         <View style={styles.badgeWrap}>
-          <BadgeCard title="🍱 식단 뱃지" maxStreak={maxMealStreak} badges={MEAL_BADGES} />
+          <BadgeCard title="식단 뱃지" maxStreak={maxMealStreak} badges={MEAL_BADGES} />
         </View>
 
         {/* 트레이너 — 트레이너면 대시보드, 아니면 등록/연결 진입 */}
@@ -258,7 +259,7 @@ export function MyScreen({ navigation }: Props) {
               style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
               onPress={() => navigation.navigate('TrainerDashboard')}
             >
-              <Text style={styles.menuText}>🏋️ 트레이너 대시보드</Text>
+              <Text style={styles.menuText}>트레이너 대시보드</Text>
               <Text style={styles.chevron}>›</Text>
             </Pressable>
           ) : (
@@ -267,7 +268,7 @@ export function MyScreen({ navigation }: Props) {
                 style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
                 onPress={() => navigation.navigate('TrainerRegister')}
               >
-                <Text style={styles.menuText}>🏋️ 트레이너로 등록하기</Text>
+                <Text style={styles.menuText}>트레이너로 등록하기</Text>
                 <Text style={styles.chevron}>›</Text>
               </Pressable>
               <View style={styles.divider} />
@@ -276,7 +277,7 @@ export function MyScreen({ navigation }: Props) {
                   style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
                   onPress={onDisconnectTrainer}
                 >
-                  <Text style={styles.menuText}>🤝 내 트레이너 · {myTrainer.partner?.name ?? '트레이너'}</Text>
+                  <Text style={styles.menuText}>내 트레이너 · {myTrainer.partner?.name ?? '트레이너'}</Text>
                   <Text style={styles.chevron}>›</Text>
                 </Pressable>
               ) : (
@@ -284,7 +285,7 @@ export function MyScreen({ navigation }: Props) {
                   style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
                   onPress={() => navigation.navigate('TrainerConnect')}
                 >
-                  <Text style={styles.menuText}>🤝 트레이너 연결하기</Text>
+                  <Text style={styles.menuText}>트레이너 연결하기</Text>
                   <Text style={styles.chevron}>›</Text>
                 </Pressable>
               )}
@@ -305,7 +306,7 @@ export function MyScreen({ navigation }: Props) {
                 onPress={onDisconnectCouple}
                 disabled={disconnecting}
               >
-                <Text style={[styles.menuText, styles.danger]}>💔 커플 연결 끊기</Text>
+                <Text style={[styles.menuText, styles.danger]}>커플 연결 끊기</Text>
                 {disconnecting ? <ActivityIndicator size="small" color={colors.danger} /> : <Text style={styles.chevron}>›</Text>}
               </Pressable>
             </>

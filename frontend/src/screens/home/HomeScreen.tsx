@@ -165,7 +165,7 @@ export function HomeScreen({ navigation }: Props) {
       if (!uri) return;
       const url = await uploadImage(uri);
       await setBackground(url);
-      toast.success('배경을 변경했어요 🖼️');
+      toast.success('배경을 변경했어요 ');
     } catch (e) {
       toast.error(getErrorMessage(e, '배경 변경에 실패했어요.'));
     }
@@ -184,7 +184,7 @@ export function HomeScreen({ navigation }: Props) {
     setAnnSaving(true);
     try {
       await setAnniversary(annInput);
-      toast.success('기념일을 설정했어요 💖');
+      toast.success('기념일을 설정했어요 ');
       setAnnModal(false);
     } catch (e) {
       toast.error(getErrorMessage(e, '기념일 설정에 실패했어요.'));
@@ -292,14 +292,14 @@ export function HomeScreen({ navigation }: Props) {
             activeOpacity={0.85}
             onPress={() => navigation.navigate('FeedCompose')}
           >
-            <Text style={styles.composeText}>✍️ 일상 남기기</Text>
+            <Text style={styles.composeText}>일상 남기기</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.composeBtn}
             activeOpacity={0.85}
             onPress={() => navigation.navigate('DailyQuestion')}
           >
-            <Text style={styles.composeText}>💬 오늘의 질문</Text>
+            <Text style={styles.composeText}>오늘의 질문</Text>
           </TouchableOpacity>
         </View>
       ) : null}
@@ -337,13 +337,18 @@ export function HomeScreen({ navigation }: Props) {
               />
             </View>
             <Pressable style={styles.ddayChip} onPress={openAnnModal}>
-              <Text style={styles.ddayChipText}>함께한 지 D+{dday} · ✏️</Text>
+              <Text style={styles.ddayChipText}>함께한 지 D+{dday}</Text>
             </Pressable>
-            <Text style={styles.myStreak}>🔥 내 연속 {myStreak?.currentCount ?? 0}일 · 최고 {myStreak?.maxCount ?? 0}일</Text>
+            <Text style={styles.myStreak}>내 연속 {myStreak?.currentCount ?? 0}일 · 최고 {myStreak?.maxCount ?? 0}일</Text>
           </>
         ) : (
           <View style={styles.connectWrap}>
-            <Text style={styles.connectEmoji}>💌</Text>
+            <MaterialCommunityIcons
+              name="account-multiple-plus-outline"
+              size={40}
+              color={colors.white}
+              style={styles.connectEmoji}
+            />
             <Text style={styles.connectTitle}>커플을 연결해보세요</Text>
             <Text style={styles.connectDesc}>초대코드로 연결하면 우리의 기록이 시작돼요.</Text>
             <TouchableOpacity style={styles.connectBtn} onPress={() => navigation.navigate('CoupleConnect')}>
@@ -371,7 +376,7 @@ export function HomeScreen({ navigation }: Props) {
         ListEmptyComponent={
           connected && !feedLoading ? (
             <EmptyState
-              emoji="📖"
+              icon="timeline-text-outline"
               title="아직 기록이 없어요"
               description={'운동·식단·맛집을 기록하거나\n첫 일상을 남겨보세요!'}
             />
@@ -387,7 +392,7 @@ export function HomeScreen({ navigation }: Props) {
         <Pressable style={styles.modalBackdrop} onPress={() => setAnnModal(false)}>
           <Pressable>
             <Card elevation="md" style={styles.modalCard}>
-              <Text style={styles.modalTitle}>💖 커플 기념일</Text>
+              <Text style={styles.modalTitle}>커플 기념일</Text>
               <Text style={styles.modalDesc}>D+ 카운터의 기준 날짜를 설정해요.</Text>
               <TextField
                 value={annInput}

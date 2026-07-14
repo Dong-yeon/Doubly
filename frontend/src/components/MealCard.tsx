@@ -1,5 +1,6 @@
 import React from 'react';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { Meal, MealType } from '../types';
 import { relativeDateLabel } from '../utils/date';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
@@ -11,11 +12,13 @@ interface Props {
   showDate?: boolean;
 }
 
-export const MEAL_EMOJI: Record<MealType, string> = {
-  BREAKFAST: '🌅',
-  LUNCH: '🍚',
-  DINNER: '🌙',
-  SNACK: '🍪',
+type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+
+export const MEAL_ICON: Record<MealType, IconName> = {
+  BREAKFAST: 'weather-sunset-up',
+  LUNCH: 'white-balance-sunny',
+  DINNER: 'weather-night',
+  SNACK: 'cookie-outline',
 };
 
 /** 식단 기록 카드 — 끼니·사진·칼로리·메모 요약 */
@@ -27,9 +30,10 @@ export function MealCard({ meal, onLongPress, showDate }: Props) {
       style={styles.card}
     >
       <View style={styles.header}>
-        <Text style={styles.type}>
-          {MEAL_EMOJI[meal.mealType]} {meal.mealTypeLabel}
-        </Text>
+        <View style={styles.typeWrap}>
+          <MaterialCommunityIcons name={MEAL_ICON[meal.mealType]} size={18} color={colors.textSecondary} />
+          <Text style={styles.type}>{meal.mealTypeLabel}</Text>
+        </View>
         <View style={styles.headerRight}>
           {meal.calories ? <Text style={styles.cal}>{meal.calories} kcal</Text> : null}
           {showDate ? <Text style={styles.date}>{relativeDateLabel(meal.mealDate)}</Text> : null}
@@ -56,6 +60,7 @@ const styles = StyleSheet.create({
   },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  typeWrap: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   type: { fontSize: fontSize.subtitle, fontWeight: '700', color: colors.textPrimary },
   cal: { fontSize: fontSize.caption, color: colors.accent, fontWeight: '800' },
   date: { fontSize: fontSize.caption, color: colors.textSecondary },

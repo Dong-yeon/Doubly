@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Button } from '../../components/Button';
 import { workoutApi } from '../../api/workout';
 import { getErrorMessage } from '../../utils/error';
@@ -11,8 +12,8 @@ import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { WorkoutRecommendation } from '../../types';
 
 const PLANS = [
-  { days: 1, title: '💪 오늘 뭐하지?' },
-  { days: 5, title: '🗓️ 5일 루틴 만들기' },
+  { days: 1, title: '오늘 뭐하지?' },
+  { days: 5, title: '5일 루틴 만들기' },
 ] as const;
 
 // dayOffset → "오늘" / "내일" / "7/5 (금)"
@@ -44,7 +45,7 @@ export function WorkoutRecommendScreen() {
         })),
       });
       haptics.success();
-      toast.success('내 루틴으로 저장했어요 📋');
+      toast.success('내 루틴으로 저장했어요 ');
     } catch (e) {
       toast.error(getErrorMessage(e, '루틴 저장에 실패했어요.'));
     } finally {
@@ -89,7 +90,7 @@ export function WorkoutRecommendScreen() {
           <View>
             {result.overallComment ? (
               <View style={styles.overallCard}>
-                <Text style={styles.overallText}>💬 {result.overallComment}</Text>
+                <Text style={styles.overallText}>{result.overallComment}</Text>
               </View>
             ) : null}
 
@@ -116,9 +117,9 @@ export function WorkoutRecommendScreen() {
                     {ex.comment ? <Text style={styles.exerciseComment}>{ex.comment}</Text> : null}
                   </View>
                 ))}
-                {day.comment ? <Text style={styles.dayComment}>✨ {day.comment}</Text> : null}
+                {day.comment ? <Text style={styles.dayComment}>{day.comment}</Text> : null}
                 <Button
-                  title={savingRoutine === day.dayOffset ? '저장 중…' : '📋 내 루틴으로 저장'}
+                  title={savingRoutine === day.dayOffset ? '저장 중…' : '내 루틴으로 저장'}
                   variant="secondary"
                   size="md"
                   onPress={() => saveAsRoutine(day)}
@@ -135,7 +136,7 @@ export function WorkoutRecommendScreen() {
           </View>
         ) : loadingDays === null ? (
           <View style={styles.empty}>
-            <Text style={styles.emptyEmoji}>🤖</Text>
+            <MaterialCommunityIcons name="robot-happy-outline" size={40} color={colors.textMuted} style={styles.emptyEmoji} />
             <Text style={styles.emptyText}>위 버튼을 눌러 추천을 받아보세요</Text>
           </View>
         ) : null}

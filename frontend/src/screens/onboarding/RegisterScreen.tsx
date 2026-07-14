@@ -53,7 +53,7 @@ export function RegisterScreen({ navigation }: Props) {
     <SafeAreaView style={styles.safe}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-          <Text style={styles.title}>반가워요! 👋</Text>
+          <Text style={styles.title}>반가워요! </Text>
           <Text style={styles.subtitle}>함께 운동할 준비를 시작해요</Text>
 
           <Card elevation="md" style={styles.card}>
@@ -87,7 +87,7 @@ export function RegisterScreen({ navigation }: Props) {
                   onPress={() => setGender(gender === g ? undefined : g)}
                 >
                   <Text style={[styles.genderText, gender === g && styles.genderTextActive]}>
-                    {g === 'MALE' ? '🙋‍♂️ 남성' : '🙋‍♀️ 여성'}
+                    {g === 'MALE' ? '남성' : '여성'}
                   </Text>
                 </Pressable>
               ))}

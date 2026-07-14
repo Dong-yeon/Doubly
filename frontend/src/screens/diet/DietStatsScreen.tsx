@@ -65,7 +65,7 @@ export function DietStatsScreen() {
         </Card>
 
         {loaded && stats && stats.totalDays === 0 ? (
-          <EmptyState emoji="📊" title="아직 통계가 없어요" description="식단을 기록하면 여기에 모여요!" />
+          <EmptyState icon="chart-box-outline" title="아직 통계가 없어요" description="식단을 기록하면 여기에 모여요!" />
         ) : null}
       </ScrollView>
     </SafeAreaView>

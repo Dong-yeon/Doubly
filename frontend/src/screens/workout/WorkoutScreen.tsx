@@ -48,7 +48,7 @@ export function WorkoutScreen({ navigation }: Props) {
     try {
       await trainerApi.completeRoutine(routine.id);
       haptics.success();
-      toast.success(`"${routine.title}" 완료! 트레이너에게 알렸어요 💪`);
+      toast.success(`"${routine.title}" 완료! 트레이너에게 알렸어요 `);
       fetchRoutines();
     } catch (e) {
       toast.error(getErrorMessage(e, '루틴 완료 처리에 실패했어요.'));
@@ -79,22 +79,22 @@ export function WorkoutScreen({ navigation }: Props) {
       <WorkoutDietSegment active="workout" />
       <View style={styles.linksRow}>
         <TouchableOpacity onPress={() => navigation.navigate('WorkoutRoutines')}>
-          <Text style={styles.calendarLink}>📋 내 루틴</Text>
+          <Text style={styles.calendarLink}>내 루틴</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => navigation.navigate('BodyMetric')}>
-          <Text style={styles.calendarLink}>📈 몸 변화</Text>
+          <Text style={styles.calendarLink}>몸 변화</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => navigation.navigate('Challenge')}>
-          <Text style={styles.calendarLink}>🏆 대결</Text>
+          <Text style={styles.calendarLink}>대결</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => navigation.navigate('WorkoutRecommend')}>
-          <Text style={styles.calendarLink}>🤖 AI 추천</Text>
+          <Text style={styles.calendarLink}>AI 추천</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => navigation.navigate('WorkoutStats')}>
-          <Text style={styles.calendarLink}>📊 통계</Text>
+          <Text style={styles.calendarLink}>통계</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => navigation.navigate('WorkoutCalendar')}>
-          <Text style={styles.calendarLink}>📅 캘린더</Text>
+          <Text style={styles.calendarLink}>캘린더</Text>
         </TouchableOpacity>
       </View>
 
@@ -114,7 +114,7 @@ export function WorkoutScreen({ navigation }: Props) {
             {/* 트레이너가 배정한 루틴 */}
             {routines.length > 0 ? (
               <View style={styles.routineSection}>
-                <Text style={styles.sectionTitle}>📋 트레이너 루틴</Text>
+                <Text style={styles.sectionTitle}>트레이너 루틴</Text>
                 {routines.map((r) => (
                   <View key={r.id} style={styles.routineCard}>
                     <View style={styles.routineInfo}>
@@ -143,7 +143,7 @@ export function WorkoutScreen({ navigation }: Props) {
               today.map((w) => <WorkoutCard key={w.id} workout={w} onLongPress={onLongPress} />)
             ) : (
               <View style={styles.emptyToday}>
-                <Text style={styles.emptyText}>오늘 운동 기록이 아직 없어요 💪</Text>
+                <Text style={styles.emptyText}>오늘 운동 기록이 아직 없어요 </Text>
               </View>
             )}
             <Text style={[styles.sectionTitle, styles.historyTitle]}>히스토리</Text>
@@ -152,7 +152,7 @@ export function WorkoutScreen({ navigation }: Props) {
         renderItem={({ item }) => <WorkoutCard workout={item} onLongPress={onLongPress} />}
         ListEmptyComponent={
           !loading ? (
-            <EmptyState emoji="📝" title="아직 운동 기록이 없어요" description="아래 버튼으로 첫 운동을 기록해보세요!" />
+            <EmptyState icon="dumbbell" title="아직 운동 기록이 없어요" description="아래 버튼으로 첫 운동을 기록해보세요!" />
           ) : null
         }
         ListFooterComponent={
@@ -163,7 +163,7 @@ export function WorkoutScreen({ navigation }: Props) {
       <View style={styles.fabWrap}>
         <View style={styles.fabRow}>
           <Button
-            title="▶️ 세션 시작"
+            title="세션 시작"
             variant="secondary"
             onPress={() => navigation.navigate('WorkoutSession')}
             style={styles.fabBtn}

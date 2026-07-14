@@ -9,8 +9,8 @@ import { colors, fontSize, radius, spacing } from '../constants/theme';
 type Nav = NativeStackNavigationProp<WorkoutStackParamList>;
 
 const TABS: { key: 'workout' | 'diet'; label: string; target: keyof WorkoutStackParamList }[] = [
-  { key: 'workout', label: '💪 운동', target: 'WorkoutMain' },
-  { key: 'diet', label: '🍽️ 식단', target: 'DietMain' },
+  { key: 'workout', label: '운동', target: 'WorkoutMain' },
+  { key: 'diet', label: '식단', target: 'DietMain' },
 ];
 
 /** active 화면에서 반대쪽을 누르면 replace 로 전환 → 세그먼트처럼 동작 */

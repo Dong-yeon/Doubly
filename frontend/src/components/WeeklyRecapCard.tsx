@@ -21,7 +21,7 @@ export function WeeklyRecapCard({ recap, onShare, sharing }: Props) {
   return (
     <Card elevation="sm" style={styles.card}>
       <View style={styles.header}>
-        <Text style={styles.title}>📊 지난주 결산</Text>
+        <Text style={styles.title}>지난주 결산</Text>
         <Text style={styles.period}>
           {md(recap.weekStart)} ~ {md(recap.weekEnd)}
         </Text>
@@ -43,7 +43,7 @@ export function WeeklyRecapCard({ recap, onShare, sharing }: Props) {
 
       {recap.coupleConnected && onShare ? (
         <TouchableOpacity style={styles.shareBtn} onPress={onShare} disabled={sharing}>
-          <Text style={styles.shareText}>{sharing ? '공유 중…' : '💬 채팅에 공유'}</Text>
+          <Text style={styles.shareText}>{sharing ? '공유 중…' : '채팅에 공유'}</Text>
         </TouchableOpacity>
       ) : null}
     </Card>
@@ -69,8 +69,8 @@ function Row({
       <Text style={[styles.rowLabel, highlight && { color: dot }]} numberOfLines={1}>
         {label}
       </Text>
-      <Text style={[styles.rowValue, highlight && styles.rowValueHi]}>💪 {workout}일</Text>
-      <Text style={[styles.rowValue, highlight && styles.rowValueHi]}>🥗 {meal}일</Text>
+      <Text style={[styles.rowValue, highlight && styles.rowValueHi]}>{workout}일</Text>
+      <Text style={[styles.rowValue, highlight && styles.rowValueHi]}>{meal}일</Text>
     </View>
   );
 }

@@ -71,7 +71,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
     try {
       await tripApi.attachPlace(tripId, place.id);
       haptics.light();
-      toast.success(`"${place.name}"을(를) 여행에 담았어요 📍`);
+      toast.success(`"${place.name}"을(를) 여행에 담았어요 `);
       load();
     } catch (e) {
       Alert.alert('오류', getErrorMessage(e));
@@ -122,7 +122,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
                   <Text style={styles.statusText}>{tripStatusLabel(trip)}</Text>
                 </View>
                 <TouchableOpacity onPress={() => navigation.navigate('TripForm', { trip })}>
-                  <Text style={styles.editLink}>✏️ 수정</Text>
+                  <Text style={styles.editLink}>수정</Text>
                 </TouchableOpacity>
               </View>
               <Text style={styles.dates}>
@@ -162,7 +162,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
             <View style={styles.placeHeader}>
               <Text style={styles.placeName}>{item.name}</Text>
               <Text style={styles.placeStatus}>
-                {item.status === 'VISITED' ? '✅' : '💛'}
+                {item.status === 'VISITED' ? '다녀옴' : '가보고파'}
               </Text>
             </View>
             {item.address ? <Text style={styles.placeAddress}>{item.address}</Text> : null}

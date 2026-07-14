@@ -45,16 +45,16 @@ export function TrainerDashboardScreen({ navigation }: Props) {
     try {
       const invite = await relationApi.createTrainerInvite();
       haptics.success();
-      Alert.alert('회원 초대코드 🎟️', `${invite.code}\n(24시간 동안 유효해요)`, [
+      Alert.alert('회원 초대코드 ', `${invite.code}\n(24시간 동안 유효해요)`, [
         {
-          text: '📋 복사',
+          text: '복사',
           onPress: async () => {
             await copyText(invite.code);
-            toast.success('초대코드를 복사했어요 📋');
+            toast.success('초대코드를 복사했어요 ');
           },
         },
         {
-          text: '📤 공유',
+          text: '공유',
           onPress: () => shareText(`Doubly에서 회원으로 연결해요! 초대코드: ${invite.code} (24시간 유효)`),
         },
         { text: '닫기', style: 'cancel' },
@@ -86,7 +86,7 @@ export function TrainerDashboardScreen({ navigation }: Props) {
                 <Text style={styles.statLabel}>오늘 운동 완료</Text>
               </View>
             </View>
-            <Button title="🎟️ 회원 초대코드 만들기" variant="secondary" onPress={onInvite} loading={inviting} />
+            <Button title="회원 초대코드 만들기" variant="secondary" onPress={onInvite} loading={inviting} />
             <Text style={styles.sectionTitle}>회원 목록</Text>
           </View>
         }
@@ -108,13 +108,13 @@ export function TrainerDashboardScreen({ navigation }: Props) {
                 {item.lastWorkoutDate ? `마지막 운동 ${item.lastWorkoutDate}` : '아직 운동 기록이 없어요'}
               </Text>
             </View>
-            <Text style={styles.todayBadge}>{item.todayCompleted ? '✅ 완료' : '💤 미완료'}</Text>
+            <Text style={styles.todayBadge}>{item.todayCompleted ? '완료' : '미완료'}</Text>
           </TouchableOpacity>
         )}
         ListEmptyComponent={
           !loading ? (
             <EmptyState
-              emoji="🤝"
+              icon="account-group-outline"
               title="아직 연결된 회원이 없어요"
               description="초대코드를 만들어 회원에게 공유해보세요!"
             />
