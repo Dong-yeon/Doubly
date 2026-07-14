@@ -51,18 +51,27 @@ public class Meal {
 
     private Integer calories;
 
+    /** 매크로(g) — AI 분석/수동 입력. 목표 대비 남은 양 계산에 사용 */
+    private Integer carbs;
+    private Integer protein;
+    private Integer fat;
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
     @Builder
     private Meal(Long userId, LocalDate mealDate, MealType mealType,
-                String memo, String photoUrl, Integer calories) {
+                String memo, String photoUrl, Integer calories,
+                Integer carbs, Integer protein, Integer fat) {
         this.userId = userId;
         this.mealDate = mealDate;
         this.mealType = mealType;
         this.memo = memo;
         this.photoUrl = photoUrl;
         this.calories = calories;
+        this.carbs = carbs;
+        this.protein = protein;
+        this.fat = fat;
     }
 }

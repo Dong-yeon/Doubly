@@ -15,6 +15,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { WorkoutStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
+import { TextField } from '../../components/TextField';
 import { MealCard } from '../../components/MealCard';
 import { WorkoutDietSegment } from '../../components/WorkoutDietSegment';
 import { EmptyState } from '../../components/EmptyState';
@@ -28,7 +29,25 @@ import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { CoupleMealGoal, DietCoach, Meal, Streak, WeeklyLetter } from '../../types';
+import type { CoupleMealGoal, DietCoach, Meal, NutritionSummary, Streak, WeeklyLetter } from '../../types';
+
+/** 목표 대비 섭취 바 */
+function NutritionBar({ label, consumed, target, unit }: { label: string; consumed: number; target?: number | null; unit: string }) {
+  const pct = target && target > 0 ? Math.min(100, (consumed / target) * 100) : 0;
+  const over = target != null && consumed > target;
+  return (
+    <View style={styles.nutRow}>
+      <Text style={styles.nutLabel}>{label}</Text>
+      <View style={styles.nutTrack}>
+        <View style={[styles.nutFill, { width: `${pct}%` }, over && styles.nutFillOver]} />
+      </View>
+      <Text style={styles.nutVal}>
+        {consumed}
+        {target != null ? `/${target}` : ''}{unit}
+      </Text>
+    </View>
+  );
+}
 
 /** 주간 식단 코칭 결과 렌더 */
 function renderCoach(c: DietCoach) {
@@ -66,11 +85,49 @@ export function DietScreen({ navigation }: Props) {
   const [goalModal, setGoalModal] = useState(false);
   const [savingGoal, setSavingGoal] = useState(false);
 
+  // 영양 목표 대시보드
+  const [nutrition, setNutrition] = useState<NutritionSummary | null>(null);
+  const [nutModal, setNutModal] = useState(false);
+  const [tCal, setTCal] = useState('');
+  const [tCarbs, setTCarbs] = useState('');
+  const [tProtein, setTProtein] = useState('');
+  const [tFat, setTFat] = useState('');
+  const [savingNut, setSavingNut] = useState(false);
+
   const refreshExtras = useCallback(() => {
     streakApi.mealMe().then(setMyStreak).catch(() => setMyStreak(null));
     streakApi.mealCouple().then(setCoupleStreak).catch(() => setCoupleStreak(null));
     dietApi.coupleGoal().then(setGoal).catch(() => setGoal(null));
+    dietApi.nutrition().then(setNutrition).catch(() => setNutrition(null));
   }, []);
+
+  const openNutModal = () => {
+    setTCal(nutrition?.targetCalories ? String(nutrition.targetCalories) : '');
+    setTCarbs(nutrition?.targetCarbs ? String(nutrition.targetCarbs) : '');
+    setTProtein(nutrition?.targetProtein ? String(nutrition.targetProtein) : '');
+    setTFat(nutrition?.targetFat ? String(nutrition.targetFat) : '');
+    setNutModal(true);
+  };
+
+  const onSaveNutGoal = async () => {
+    setSavingNut(true);
+    try {
+      const updated = await dietApi.setNutritionGoal({
+        targetCalories: tCal ? Number(tCal) : undefined,
+        targetCarbs: tCarbs ? Number(tCarbs) : undefined,
+        targetProtein: tProtein ? Number(tProtein) : undefined,
+        targetFat: tFat ? Number(tFat) : undefined,
+      });
+      setNutrition(updated);
+      haptics.success();
+      toast.success('목표를 저장했어요 🎯');
+      setNutModal(false);
+    } catch (e) {
+      toast.error(getErrorMessage(e, '목표 저장에 실패했어요.'));
+    } finally {
+      setSavingNut(false);
+    }
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -159,6 +216,27 @@ export function DietScreen({ navigation }: Props) {
         onEndReached={loadMoreHistory}
         ListHeaderComponent={
           <View>
+            {/* 오늘 영양 목표 대시보드 */}
+            {nutrition ? (
+              <Pressable style={styles.nutCard} onPress={openNutModal}>
+                <View style={styles.nutHeader}>
+                  <Text style={styles.nutTitle}>🎯 오늘 영양</Text>
+                  <Text style={styles.nutSet}>
+                    {nutrition.targetCalories ? '목표 수정' : '목표 설정 ›'}
+                  </Text>
+                </View>
+                <NutritionBar label="칼로리" consumed={nutrition.consumedCalories} target={nutrition.targetCalories} unit="kcal" />
+                <NutritionBar label="탄수" consumed={nutrition.consumedCarbs} target={nutrition.targetCarbs} unit="g" />
+                <NutritionBar label="단백" consumed={nutrition.consumedProtein} target={nutrition.targetProtein} unit="g" />
+                <NutritionBar label="지방" consumed={nutrition.consumedFat} target={nutrition.targetFat} unit="g" />
+                {nutrition.targetCalories ? (
+                  <Text style={styles.nutRemain}>
+                    남은 칼로리 {Math.max(0, nutrition.targetCalories - nutrition.consumedCalories)}kcal
+                  </Text>
+                ) : null}
+              </Pressable>
+            ) : null}
+
             {/* 식단 스트릭 */}
             <View style={styles.streakRow}>
               <Text style={styles.streakText}>🥗 연속 {myStreak?.currentCount ?? 0}일</Text>
@@ -251,6 +329,33 @@ export function DietScreen({ navigation }: Props) {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* 영양 목표 설정 모달 */}
+      <Modal visible={nutModal} transparent animationType="fade" onRequestClose={() => setNutModal(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setNutModal(false)}>
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            <Text style={styles.modalTitle}>🎯 하루 영양 목표</Text>
+            <Text style={styles.modalDesc}>비워두면 해당 항목은 목표 없이 섭취량만 표시돼요.</Text>
+            <View style={styles.nutFormRow}>
+              <View style={styles.nutFormItem}>
+                <TextField label="칼로리" value={tCal} onChangeText={setTCal} keyboardType="number-pad" />
+              </View>
+              <View style={styles.nutFormItem}>
+                <TextField label="탄수(g)" value={tCarbs} onChangeText={setTCarbs} keyboardType="number-pad" />
+              </View>
+            </View>
+            <View style={styles.nutFormRow}>
+              <View style={styles.nutFormItem}>
+                <TextField label="단백(g)" value={tProtein} onChangeText={setTProtein} keyboardType="number-pad" />
+              </View>
+              <View style={styles.nutFormItem}>
+                <TextField label="지방(g)" value={tFat} onChangeText={setTFat} keyboardType="number-pad" />
+              </View>
+            </View>
+            <Button title="저장" onPress={onSaveNutGoal} loading={savingNut} style={styles.nutSaveBtn} />
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -274,6 +379,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
   },
+  nutCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    gap: spacing.xs,
+  },
+  nutHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs },
+  nutTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
+  nutSet: { fontSize: fontSize.caption, fontWeight: '700', color: colors.primary },
+  nutRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  nutLabel: { width: 36, fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
+  nutTrack: { flex: 1, height: 10, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
+  nutFill: { height: '100%', borderRadius: radius.pill, backgroundColor: colors.accent },
+  nutFillOver: { backgroundColor: colors.primary },
+  nutVal: { width: 92, textAlign: 'right', fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '700' },
+  nutRemain: { fontSize: fontSize.caption, color: colors.accent, fontWeight: '800', textAlign: 'right', marginTop: spacing.xs },
+  nutFormRow: { flexDirection: 'row', gap: spacing.sm },
+  nutFormItem: { flex: 1 },
+  nutSaveBtn: { marginTop: spacing.sm },
   aiRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
   aiBtn: { flex: 1 },
   aiHeadline: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary, lineHeight: 22 },

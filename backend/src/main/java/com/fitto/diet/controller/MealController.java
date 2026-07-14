@@ -8,10 +8,14 @@ import com.fitto.diet.dto.DietCoachResponse;
 import com.fitto.diet.dto.MealAnalysisResponse;
 import com.fitto.diet.dto.MealResponse;
 import com.fitto.diet.dto.MealStatsResponse;
+import com.fitto.diet.dto.NutritionGoalRequest;
+import com.fitto.diet.dto.NutritionSummaryResponse;
 import com.fitto.diet.dto.SaveMealRequest;
 import com.fitto.diet.service.DietCoachService;
 import com.fitto.diet.service.FoodAnalysisService;
 import com.fitto.diet.service.MealService;
+import com.fitto.diet.service.NutritionService;
+import org.springframework.web.bind.annotation.PutMapping;
 import com.fitto.workout.dto.CalendarDayResponse;
 import com.fitto.workout.dto.PartnerTodayResponse;
 import jakarta.validation.Valid;
@@ -37,12 +41,14 @@ public class MealController {
     private final MealService mealService;
     private final FoodAnalysisService foodAnalysisService;
     private final DietCoachService dietCoachService;
+    private final NutritionService nutritionService;
 
     public MealController(MealService mealService, FoodAnalysisService foodAnalysisService,
-                          DietCoachService dietCoachService) {
+                          DietCoachService dietCoachService, NutritionService nutritionService) {
         this.mealService = mealService;
         this.foodAnalysisService = foodAnalysisService;
         this.dietCoachService = dietCoachService;
+        this.nutritionService = nutritionService;
     }
 
     @PostMapping
@@ -101,5 +107,18 @@ public class MealController {
     @GetMapping("/coach")
     public ApiResponse<DietCoachResponse> coach(@AuthenticationPrincipal AuthUser user) {
         return ApiResponse.success(dietCoachService.coach(user.id()));
+    }
+
+    /** 오늘 영양 요약 (목표 대비 섭취) */
+    @GetMapping("/nutrition")
+    public ApiResponse<NutritionSummaryResponse> nutrition(@AuthenticationPrincipal AuthUser user) {
+        return ApiResponse.success(nutritionService.today(user.id()));
+    }
+
+    /** 영양 목표 설정 */
+    @PutMapping("/nutrition/goal")
+    public ApiResponse<NutritionSummaryResponse> setGoal(@AuthenticationPrincipal AuthUser user,
+                                                         @jakarta.validation.Valid @RequestBody NutritionGoalRequest request) {
+        return ApiResponse.success(nutritionService.setGoal(user.id(), request), "목표를 저장했어요.");
     }
 }

@@ -79,6 +79,9 @@ public class MealService {
                 .memo(req.memo())
                 .photoUrl(req.photoUrl())
                 .calories(req.calories())
+                .carbs(req.carbs())
+                .protein(req.protein())
+                .fat(req.fat())
                 .build();
         mealRepository.save(meal);
 

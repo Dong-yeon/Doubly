@@ -10,6 +10,8 @@ import { WorkoutRecommendScreen } from '../screens/workout/WorkoutRecommendScree
 import { WorkoutSessionScreen } from '../screens/workout/WorkoutSessionScreen';
 import { WorkoutRoutineListScreen } from '../screens/workout/WorkoutRoutineListScreen';
 import { WorkoutRoutineFormScreen } from '../screens/workout/WorkoutRoutineFormScreen';
+import { BodyMetricScreen } from '../screens/workout/BodyMetricScreen';
+import { ChallengeScreen } from '../screens/workout/ChallengeScreen';
 import { DietScreen } from '../screens/diet/DietScreen';
 import { DietRecordScreen } from '../screens/diet/DietRecordScreen';
 import { DietCalendarScreen } from '../screens/diet/DietCalendarScreen';
@@ -63,6 +65,8 @@ export function WorkoutStackNavigator() {
         component={WorkoutRoutineFormScreen}
         options={{ title: '루틴 만들기', presentation: 'modal' }}
       />
+      <Stack.Screen name="BodyMetric" component={BodyMetricScreen} options={{ title: '몸 변화' }} />
+      <Stack.Screen name="Challenge" component={ChallengeScreen} options={{ title: '커플 대결' }} />
       {/* 식단 (구 식단 탭) — WorkoutMain 세그먼트로 토글, 하위 화면은 이 스택에 배치 */}
       <Stack.Screen name="DietMain" component={DietScreen} options={{ headerShown: false }} />
       <Stack.Screen

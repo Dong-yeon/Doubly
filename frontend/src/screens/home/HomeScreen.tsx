@@ -284,13 +284,22 @@ export function HomeScreen({ navigation }: Props) {
       </View>
 
       {connected ? (
-        <TouchableOpacity
-          style={styles.composeBtn}
-          activeOpacity={0.85}
-          onPress={() => navigation.navigate('FeedCompose')}
-        >
-          <Text style={styles.composeText}>✍️ 일상 남기기</Text>
-        </TouchableOpacity>
+        <View style={styles.actionRow}>
+          <TouchableOpacity
+            style={styles.composeBtn}
+            activeOpacity={0.85}
+            onPress={() => navigation.navigate('FeedCompose')}
+          >
+            <Text style={styles.composeText}>✍️ 일상 남기기</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.composeBtn}
+            activeOpacity={0.85}
+            onPress={() => navigation.navigate('DailyQuestion')}
+          >
+            <Text style={styles.composeText}>💬 오늘의 질문</Text>
+          </TouchableOpacity>
+        </View>
       ) : null}
     </View>
   );
@@ -484,9 +493,9 @@ const styles = StyleSheet.create({
   },
   connectBtnText: { color: colors.primaryDark, fontWeight: '800', fontSize: fontSize.body },
 
+  actionRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md, marginBottom: spacing.sm },
   composeBtn: {
-    marginTop: spacing.md,
-    marginBottom: spacing.sm,
+    flex: 1,
     backgroundColor: colors.primaryBg,
     borderRadius: radius.lg,
     borderWidth: 1,
