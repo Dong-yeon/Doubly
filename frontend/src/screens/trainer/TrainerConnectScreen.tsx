@@ -28,7 +28,7 @@ export function TrainerConnectScreen({ navigation }: Props) {
       const relation = await relationApi.connectTrainer(input.trim().toUpperCase());
       await fetchRelations();
       haptics.success();
-      toast.success(`${relation.partner?.name ?? '트레이너'}님과 연결되었어요! 🏋️`);
+      toast.success(`${relation.partner?.name ?? '트레이너'}님과 연결되었어요! `);
       navigation.goBack();
     } catch (e) {
       setError(getErrorMessage(e));
@@ -40,7 +40,7 @@ export function TrainerConnectScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>🤝 트레이너와 연결하기</Text>
+        <Text style={styles.title}>트레이너와 연결하기</Text>
         <Text style={styles.desc}>
           트레이너에게 받은 6자리 초대코드를 입력하세요.{'\n'}연결하면 트레이너가 내 운동 현황을 볼 수 있어요.
         </Text>

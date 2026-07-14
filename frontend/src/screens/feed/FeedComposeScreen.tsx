@@ -42,7 +42,7 @@ export function FeedComposeScreen({ navigation }: Props) {
       }
       await feedApi.createPost({ content: content.trim() || undefined, imageUrl });
       haptics.success();
-      toast.success('일상을 남겼어요 📸');
+      toast.success('일상을 남겼어요 ');
       navigation.goBack();
     } catch (e) {
       Alert.alert('오류', getErrorMessage(e));
@@ -58,7 +58,7 @@ export function FeedComposeScreen({ navigation }: Props) {
           {photoUri ? (
             <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />
           ) : (
-            <Text style={styles.photoPlaceholder}>📷 사진 추가하기 (선택)</Text>
+            <Text style={styles.photoPlaceholder}>사진 추가하기 (선택)</Text>
           )}
         </TouchableOpacity>
         {photoUri ? (
@@ -69,7 +69,7 @@ export function FeedComposeScreen({ navigation }: Props) {
 
         <TextField
           label="오늘의 일상"
-          placeholder="예: 퇴근하고 같이 한강 러닝 🌇 날씨 최고!"
+          placeholder="예: 퇴근하고 같이 한강 러닝 날씨 최고!"
           value={content}
           onChangeText={setContent}
           multiline

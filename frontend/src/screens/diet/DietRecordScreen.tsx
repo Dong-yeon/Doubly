@@ -17,7 +17,6 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { WorkoutStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
-import { MEAL_EMOJI } from '../../components/MealCard';
 import { useDietStore } from '../../store/dietStore';
 import { useRelationStore } from '../../store/relationStore';
 import { publishEnsuringConnection } from '../../api/chatSocket';
@@ -101,7 +100,7 @@ export function DietRecordScreen({ navigation }: Props) {
         fat: macros?.fat,
       });
       haptics.success();
-      toast.success('즐겨찾기에 저장했어요 ⭐');
+      toast.success('즐겨찾기에 저장했어요 ');
       setFavorites((prev) => [fav, ...prev]);
     } catch (e) {
       toast.error(getErrorMessage(e, '즐겨찾기 저장에 실패했어요.'));
@@ -143,8 +142,8 @@ export function DietRecordScreen({ navigation }: Props) {
       return;
     }
     Alert.alert('사진 추가', '어떻게 추가할까요?', [
-      { text: '📷 카메라 촬영', onPress: () => void pickFrom('camera') },
-      { text: '🖼️ 갤러리에서 선택', onPress: () => void pickFrom('gallery') },
+      { text: '카메라 촬영', onPress: () => void pickFrom('camera') },
+      { text: '갤러리에서 선택', onPress: () => void pickFrom('gallery') },
       { text: '취소', style: 'cancel' },
     ]);
   };
@@ -164,7 +163,7 @@ export function DietRecordScreen({ navigation }: Props) {
       const photoUrl = await ensureUploaded(photoUri);
       const result = await dietApi.analyze(photoUrl);
       if (!result.isFood || result.foods.length === 0) {
-        toast.error('음식 사진이 아닌 것 같아요 🤔');
+        toast.error('음식 사진이 아닌 것 같아요 ');
         return;
       }
       const names = result.foods.map((f) => f.name).join(', ');
@@ -172,7 +171,7 @@ export function DietRecordScreen({ navigation }: Props) {
       if (result.totalCalories > 0) setCalories(String(result.totalCalories));
       setMacros({ carbs: result.totalCarbs, protein: result.totalProtein, fat: result.totalFat });
       haptics.success();
-      toast.success(result.comment?.trim() || 'AI 분석 완료! 🤖');
+      toast.success(result.comment?.trim() || 'AI 분석 완료! ');
     } catch (e) {
       toast.error(getErrorMessage(e, 'AI 분석에 실패했어요.'));
     } finally {
@@ -203,14 +202,14 @@ export function DietRecordScreen({ navigation }: Props) {
         fat: macros?.fat,
       });
       haptics.success();
-      toast.success('식단 기록 완료! 🍽️');
+      toast.success('식단 기록 완료! ');
 
       // 커플이 연결돼 있으면 채팅 공유 제안
       if (couple?.id) {
-        const summary = `${MEAL_EMOJI[mealType]} ${label}${memo.trim() ? ` · ${memo.trim()}` : ''}${
+        const summary = `${label}${memo.trim() ? ` · ${memo.trim()}` : ''}${
           calories ? ` (${calories}kcal)` : ''
         }`;
-        Alert.alert('식단 기록 완료! 🎉', '이 식단을 채팅에 공유할까요?', [
+        Alert.alert('식단 기록 완료! ', '이 식단을 채팅에 공유할까요?', [
           { text: '다음에', style: 'cancel', onPress: () => navigation.goBack() },
           {
             text: '공유하기',
@@ -220,7 +219,7 @@ export function DietRecordScreen({ navigation }: Props) {
                 content: summary,
                 imageUrl: saved.photoUrl ?? undefined,
               });
-              toast.success('채팅에 공유했어요 💬');
+              toast.success('채팅에 공유했어요 ');
               navigation.goBack();
             },
           },
@@ -242,7 +241,7 @@ export function DietRecordScreen({ navigation }: Props) {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-          <Text style={styles.date}>📅 {toDateString()}</Text>
+          <Text style={styles.date}>{toDateString()}</Text>
 
           {/* 끼니 선택 */}
           <Text style={styles.label}>끼니</Text>
@@ -254,7 +253,7 @@ export function DietRecordScreen({ navigation }: Props) {
                 onPress={() => setMealType(t.value)}
               >
                 <Text style={[styles.typeText, mealType === t.value && styles.typeTextActive]}>
-                  {MEAL_EMOJI[t.value]} {t.label}
+                  {t.label}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -266,7 +265,7 @@ export function DietRecordScreen({ navigation }: Props) {
             {photoUri ? (
               <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />
             ) : (
-              <Text style={styles.photoPlaceholder}>📷 사진 추가하기</Text>
+              <Text style={styles.photoPlaceholder}>사진 추가하기</Text>
             )}
           </TouchableOpacity>
           {photoUri ? (
@@ -279,7 +278,7 @@ export function DietRecordScreen({ navigation }: Props) {
           {photoUri ? (
             <>
               <Button
-                title="🤖 AI로 음식 분석"
+                title="AI로 음식 분석"
                 variant="soft"
                 size="md"
                 onPress={onAnalyze}
@@ -308,7 +307,7 @@ export function DietRecordScreen({ navigation }: Props) {
 
           {/* 즐겨찾기 — 원탭 추가 (길게 눌러 삭제). 없으면 시작용 추천 */}
           <View style={styles.favHeader}>
-            <Text style={styles.label}>⭐ 즐겨찾기</Text>
+            <Text style={styles.label}>즐겨찾기</Text>
             <TouchableOpacity onPress={saveCurrentAsFavorite}>
               <Text style={styles.favSave}>＋ 현재 저장</Text>
             </TouchableOpacity>

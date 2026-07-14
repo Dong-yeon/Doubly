@@ -1,4 +1,4 @@
-/** 메인 하단 탭 — 홈 🏠 / 운동+식단 💪 / [＋FAB] / 채팅 💬 / 맛집 📍 */
+/** 메인 하단 탭 — 홈 / 건강(운동+식단) / [＋FAB] / 채팅 / 플레이스 */
 import React, { useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';

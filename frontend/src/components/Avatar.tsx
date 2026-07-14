@@ -18,7 +18,7 @@ export function Avatar({ name, imageUrl, size = 48, color = colors.primary }: Pr
   }
   return (
     <View style={[dim, styles.fallback, { backgroundColor: color }]}>
-      <Text style={[styles.letter, { fontSize: size * 0.42 }]}>{name?.charAt(0) ?? '🙂'}</Text>
+      <Text style={[styles.letter, { fontSize: size * 0.42 }]}>{name?.charAt(0) ?? ''}</Text>
     </View>
   );
 }

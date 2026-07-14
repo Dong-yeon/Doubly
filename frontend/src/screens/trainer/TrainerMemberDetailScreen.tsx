@@ -76,7 +76,7 @@ export function TrainerMemberDetailScreen({ navigation, route }: Props) {
         ListHeaderComponent={
           <View>
             {/* 루틴 섹션 */}
-            <Text style={styles.sectionTitle}>📋 배정한 루틴</Text>
+            <Text style={styles.sectionTitle}>배정한 루틴</Text>
             {routines.length > 0 ? (
               routines.map((r) => (
                 <TouchableOpacity
@@ -92,27 +92,27 @@ export function TrainerMemberDetailScreen({ navigation, route }: Props) {
                       {r.description ? ` · ${r.description.split('\n')[0]}` : ''}
                     </Text>
                   </View>
-                  <Text style={styles.routineBadge}>{r.isCompleted ? '✅ 완료' : '⏳ 대기'}</Text>
+                  <Text style={styles.routineBadge}>{r.isCompleted ? '완료' : '대기'}</Text>
                 </TouchableOpacity>
               ))
             ) : (
               <Text style={styles.emptyRoutine}>아직 배정한 루틴이 없어요. (길게 눌러 삭제)</Text>
             )}
             <Button
-              title="➕ 루틴 배정하기"
+              title="루틴 배정하기"
               variant="secondary"
               size="md"
               onPress={() => navigation.navigate('TrainerRoutineAssign', { memberId, name })}
               style={styles.assignBtn}
             />
 
-            <Text style={[styles.sectionTitle, styles.workoutTitle]}>💪 최근 운동 기록</Text>
+            <Text style={[styles.sectionTitle, styles.workoutTitle]}>최근 운동 기록</Text>
           </View>
         }
         renderItem={({ item }) => <WorkoutCard workout={item} />}
         ListEmptyComponent={
           !loading ? (
-            <EmptyState emoji="📝" title="아직 운동 기록이 없어요" description="회원이 운동을 기록하면 여기에 표시돼요." />
+            <EmptyState icon="dumbbell" title="아직 운동 기록이 없어요" description="회원이 운동을 기록하면 여기에 표시돼요." />
           ) : null
         }
       />

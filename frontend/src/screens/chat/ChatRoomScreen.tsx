@@ -15,6 +15,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { ChatStackParamList } from '../../navigation/types';
 import { useChatStore } from '../../store/chatStore';
@@ -115,12 +116,12 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           <Image source={{ uri: item.imageUrl! }} style={styles.msgImage} resizeMode="cover" />
         ) : isWorkout ? (
           <View style={[styles.workoutCard, mine ? styles.workoutCardMine : styles.workoutCardTheirs]}>
-            <Text style={styles.workoutBadge}>💪 운동 기록</Text>
+            <Text style={styles.workoutBadge}>운동 기록</Text>
             <Text style={[styles.workoutText, mine && styles.workoutTextMine]}>{item.content}</Text>
           </View>
         ) : isMeal ? (
           <View style={[styles.mealCard, mine ? styles.mealCardMine : styles.mealCardTheirs]}>
-            <Text style={styles.mealBadge}>🍽️ 식단</Text>
+            <Text style={styles.mealBadge}>식단</Text>
             {item.imageUrl ? (
               <Image source={{ uri: item.imageUrl }} style={styles.mealImage} resizeMode="cover" />
             ) : null}
@@ -169,7 +170,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             {uploading ? (
               <ActivityIndicator size="small" color={colors.primary} />
             ) : (
-              <Text style={styles.imageBtnText}>📷</Text>
+              <MaterialCommunityIcons name="camera-outline" size={22} color={colors.textSecondary} />
             )}
           </TouchableOpacity>
           <TextInput

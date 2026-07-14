@@ -26,8 +26,8 @@ export function tripStatusLabel(trip: Trip): string {
     );
     return `D-${diff}`;
   }
-  if (today <= trip.endDate) return '✈️ 여행 중';
-  return '🧳 다녀옴';
+  if (today <= trip.endDate) return '여행 중';
+  return '다녀옴';
 }
 
 export function TripListScreen({ navigation }: Props) {
@@ -101,14 +101,14 @@ export function TripListScreen({ navigation }: Props) {
               <Text style={styles.dates}>
                 {item.startDate} ~ {item.endDate}
               </Text>
-              <Text style={styles.placeCount}>📍 담긴 장소 {item.placeCount}곳</Text>
+              <Text style={styles.placeCount}>담긴 장소 {item.placeCount}곳</Text>
             </View>
           </TouchableOpacity>
         )}
         ListEmptyComponent={
           !loading ? (
             <EmptyState
-              emoji="✈️"
+              icon="airplane"
               title="아직 여행이 없어요"
               description="함께 갈 여행을 계획해보세요! (카드를 길게 눌러 삭제)"
             />

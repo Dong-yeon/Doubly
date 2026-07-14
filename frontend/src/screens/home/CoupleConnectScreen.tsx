@@ -40,7 +40,7 @@ export function CoupleConnectScreen({ navigation }: Props) {
     if (!code) return;
     await copyText(code);
     haptics.light();
-    toast.success('초대코드를 복사했어요 📋');
+    toast.success('초대코드를 복사했어요 ');
   };
 
   const onShare = async () => {
@@ -54,7 +54,7 @@ export function CoupleConnectScreen({ navigation }: Props) {
     try {
       await connectCouple(input.trim().toUpperCase());
       haptics.success();
-      toast.success('커플로 연결되었어요! 💞');
+      toast.success('커플로 연결되었어요! ');
       navigation.goBack();
     } catch (e) {
       setError(getErrorMessage(e));
@@ -76,8 +76,8 @@ export function CoupleConnectScreen({ navigation }: Props) {
                 <Text style={styles.code}>{code}</Text>
               </View>
               <View style={styles.codeActions}>
-                <Button title="📋 복사" variant="soft" size="md" onPress={onCopy} style={styles.actionBtn} />
-                <Button title="📤 공유" variant="soft" size="md" onPress={onShare} style={styles.actionBtn} />
+                <Button title="복사" variant="soft" size="md" onPress={onCopy} style={styles.actionBtn} />
+                <Button title="공유" variant="soft" size="md" onPress={onShare} style={styles.actionBtn} />
               </View>
             </>
           ) : null}

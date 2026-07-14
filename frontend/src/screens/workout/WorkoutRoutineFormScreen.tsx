@@ -82,7 +82,7 @@ export function WorkoutRoutineFormScreen({ navigation }: Props) {
         })),
       });
       haptics.success();
-      toast.success('루틴을 저장했어요 📋');
+      toast.success('루틴을 저장했어요 ');
       navigation.goBack();
     } catch (e) {
       Alert.alert('오류', getErrorMessage(e));

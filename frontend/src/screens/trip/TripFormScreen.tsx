@@ -63,10 +63,10 @@ export function TripFormScreen({ navigation, route }: Props) {
       };
       if (editing) {
         await tripApi.update(editing.id, payload);
-        toast.success('여행을 수정했어요 ✈️');
+        toast.success('여행을 수정했어요 ');
       } else {
         await tripApi.save(payload);
-        toast.success('여행을 만들었어요 ✈️');
+        toast.success('여행을 만들었어요 ');
       }
       haptics.success();
       navigation.goBack();
@@ -86,13 +86,13 @@ export function TripFormScreen({ navigation, route }: Props) {
           {coverPreview ? (
             <Image source={{ uri: coverPreview }} style={styles.photo} resizeMode="cover" />
           ) : (
-            <Text style={styles.photoPlaceholder}>🖼️ 커버 사진 추가하기 (선택)</Text>
+            <Text style={styles.photoPlaceholder}>커버 사진 추가하기 (선택)</Text>
           )}
         </TouchableOpacity>
 
         <TextField
           label="여행 이름"
-          placeholder="예: 제주도 2박 3일 🍊"
+          placeholder="예: 제주도 2박 3일 "
           value={title}
           onChangeText={setTitle}
           maxLength={100}

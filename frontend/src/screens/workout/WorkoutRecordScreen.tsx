@@ -99,14 +99,14 @@ export function WorkoutRecordScreen({ navigation }: Props) {
         })),
       });
       haptics.success();
-      toast.success('운동 기록 완료! 🔥');
+      toast.success('운동 기록 완료! ');
 
       // 커플이 연결돼 있으면 채팅 공유 제안 (CHAT-04)
       if (couple?.id) {
-        const summary = `💪 ${filled.map((s) => s.exerciseName.trim()).join(', ')}${
+        const summary = `${filled.map((s) => s.exerciseName.trim()).join(', ')}${
           duration ? ` · ${duration}분` : ''
         }`;
-        Alert.alert('운동 완료! 🎉', '이 운동을 채팅에 공유할까요?', [
+        Alert.alert('운동 완료! ', '이 운동을 채팅에 공유할까요?', [
           { text: '다음에', style: 'cancel', onPress: () => navigation.goBack() },
           {
             text: '공유하기',
@@ -116,7 +116,7 @@ export function WorkoutRecordScreen({ navigation }: Props) {
                 content: summary,
                 workoutId: saved.id,
               });
-              toast.success('채팅에 공유했어요 💬');
+              toast.success('채팅에 공유했어요 ');
               navigation.goBack();
             },
           },
@@ -138,7 +138,7 @@ export function WorkoutRecordScreen({ navigation }: Props) {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-          <Text style={styles.date}>📅 {toDateString()}</Text>
+          <Text style={styles.date}>{toDateString()}</Text>
 
           <Text style={styles.presetLabel}>자주 하는 운동</Text>
           <View style={styles.presetRow}>

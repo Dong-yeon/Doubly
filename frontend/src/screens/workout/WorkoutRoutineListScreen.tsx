@@ -82,7 +82,7 @@ export function WorkoutRoutineListScreen({ navigation }: Props) {
           >
             <View style={styles.cardHeader}>
               <Text style={styles.title}>{item.title}</Text>
-              <Text style={styles.start}>▶ 시작</Text>
+              <Text style={styles.start}>시작</Text>
             </View>
             <Text style={styles.summary} numberOfLines={2}>
               {item.exercises.map((e) => e.exerciseName).join(' · ') || '운동 없음'}
@@ -93,7 +93,7 @@ export function WorkoutRoutineListScreen({ navigation }: Props) {
         ListEmptyComponent={
           !loading ? (
             <EmptyState
-              emoji="📋"
+              icon="clipboard-text-outline"
               title="아직 루틴이 없어요"
               description="자주 하는 운동을 루틴으로 만들면 원탭으로 세션을 시작할 수 있어요."
             />
