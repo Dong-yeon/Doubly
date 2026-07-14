@@ -15,10 +15,17 @@ import com.fitto.relation.domain.RelationStatus;
 import com.fitto.relation.domain.RelationType;
 import com.fitto.relation.repository.RelationRepository;
 import com.fitto.trip.domain.Trip;
+import com.fitto.trip.domain.TripItem;
+import com.fitto.trip.dto.ReorderTripItemsRequest;
+import com.fitto.trip.dto.SaveTripItemRequest;
 import com.fitto.trip.dto.SaveTripRequest;
+import com.fitto.trip.dto.TripDayResponse;
 import com.fitto.trip.dto.TripDetailResponse;
+import com.fitto.trip.dto.TripItemResponse;
 import com.fitto.trip.dto.TripResponse;
+import com.fitto.trip.dto.UpdateTripItemRequest;
 import com.fitto.trip.dto.UpdateTripRequest;
+import com.fitto.trip.repository.TripItemRepository;
 import com.fitto.trip.repository.TripRepository;
 import com.fitto.user.domain.User;
 import com.fitto.user.repository.UserRepository;
@@ -27,6 +34,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -43,6 +52,7 @@ public class TripService {
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("M월 d일");
 
     private final TripRepository tripRepository;
+    private final TripItemRepository tripItemRepository;
     private final PlaceRepository placeRepository;
     private final PlaceVisitRepository placeVisitRepository;
     private final RelationRepository relationRepository;
@@ -51,6 +61,7 @@ public class TripService {
     private final CoupleEventPublisher coupleEventPublisher;
 
     public TripService(TripRepository tripRepository,
+                       TripItemRepository tripItemRepository,
                        PlaceRepository placeRepository,
                        PlaceVisitRepository placeVisitRepository,
                        RelationRepository relationRepository,
@@ -58,6 +69,7 @@ public class TripService {
                        NotificationService notificationService,
                        CoupleEventPublisher coupleEventPublisher) {
         this.tripRepository = tripRepository;
+        this.tripItemRepository = tripItemRepository;
         this.placeRepository = placeRepository;
         this.placeVisitRepository = placeVisitRepository;
         this.relationRepository = relationRepository;
@@ -100,11 +112,12 @@ public class TripService {
                 .toList();
     }
 
-    /** 여행 상세 (TRIP-03) — 담긴 장소 목록(방문 요약 포함). */
+    /** 여행 상세 (TRIP-03) — Day별 일정표 + 담긴 장소 목록(방문 요약 포함). */
     public TripDetailResponse detail(Long userId, Long tripId) {
         Trip trip = getCoupleTrip(userId, tripId);
         List<Place> places = placeRepository.findByTripIdOrderByIdDesc(trip.getId());
-        return new TripDetailResponse(TripResponse.of(trip, places.size()), withSummaries(places));
+        List<TripDayResponse> days = buildDays(trip);
+        return new TripDetailResponse(TripResponse.of(trip, places.size()), days, withSummaries(places));
     }
 
     /** 여행 수정 — 커플 둘 다 가능. */
@@ -149,6 +162,121 @@ public class TripService {
         }
         place.assignTrip(null);
         coupleEventPublisher.publish(trip.getCoupleId(), CoupleEvent.TRIP);
+    }
+
+    // ---- 일자별 일정표 (Itinerary) ----
+
+    /** 일정 목록 (ITEM-01) — Day별 그룹. */
+    public List<TripDayResponse> items(Long userId, Long tripId) {
+        Trip trip = getCoupleTrip(userId, tripId);
+        return buildDays(trip);
+    }
+
+    /** 일정 항목 추가 (ITEM-02) — 하루 맨 뒤에 붙인다. 장소 연결은 선택. */
+    @Transactional
+    public TripItemResponse addItem(Long userId, Long tripId, SaveTripItemRequest request) {
+        Trip trip = getCoupleTrip(userId, tripId);
+        validateDayNo(trip, request.dayNo());
+        Place place = request.placeId() != null
+                ? getCouplePlace(trip.getCoupleId(), request.placeId()) : null;
+
+        int nextOrder = tripItemRepository.findByTripIdAndDayNo(trip.getId(), request.dayNo()).size();
+        TripItem item = TripItem.builder()
+                .tripId(trip.getId())
+                .placeId(place != null ? place.getId() : null)
+                .dayNo(request.dayNo())
+                .sortOrder(nextOrder)
+                .startTime(request.startTime())
+                .title(request.title().trim())
+                .category(request.category())
+                .memo(request.memo())
+                .createdBy(userId)
+                .build();
+        tripItemRepository.save(item);
+        coupleEventPublisher.publish(trip.getCoupleId(), CoupleEvent.TRIP);
+        return TripItemResponse.of(item, place);
+    }
+
+    /** 일정 항목 수정 — 커플 둘 다 가능. Day·순서는 reorder 로. */
+    @Transactional
+    public TripItemResponse updateItem(Long userId, Long tripId, Long itemId, UpdateTripItemRequest request) {
+        Trip trip = getCoupleTrip(userId, tripId);
+        TripItem item = getTripItem(trip.getId(), itemId);
+        item.update(request.title(), request.startTime(), request.category(), request.memo());
+        coupleEventPublisher.publish(trip.getCoupleId(), CoupleEvent.TRIP);
+        Place place = item.getPlaceId() != null
+                ? placeRepository.findById(item.getPlaceId()).orElse(null) : null;
+        return TripItemResponse.of(item, place);
+    }
+
+    /** 일정 항목 삭제. */
+    @Transactional
+    public void deleteItem(Long userId, Long tripId, Long itemId) {
+        Trip trip = getCoupleTrip(userId, tripId);
+        TripItem item = getTripItem(trip.getId(), itemId);
+        tripItemRepository.delete(item);
+        coupleEventPublisher.publish(trip.getCoupleId(), CoupleEvent.TRIP);
+    }
+
+    /** 일정 순서 일괄 변경 (ITEM-03) — 넘어온 항목만 dayNo·sortOrder 재배치. */
+    @Transactional
+    public void reorderItems(Long userId, Long tripId, ReorderTripItemsRequest request) {
+        Trip trip = getCoupleTrip(userId, tripId);
+        Map<Long, TripItem> byId = tripItemRepository
+                .findByTripIdOrderByDayNoAscSortOrderAscIdAsc(trip.getId()).stream()
+                .collect(Collectors.toMap(TripItem::getId, Function.identity()));
+        for (ReorderTripItemsRequest.Entry e : request.items()) {
+            TripItem item = byId.get(e.itemId());
+            if (item == null) {
+                throw new BusinessException(ErrorCode.TRIP_ITEM_NOT_FOUND);
+            }
+            validateDayNo(trip, e.dayNo());
+            item.moveTo(e.dayNo(), e.sortOrder());
+        }
+        coupleEventPublisher.publish(trip.getCoupleId(), CoupleEvent.TRIP);
+    }
+
+    /** 여행 기간(1~N일차)만큼 Day 를 만들고, 각 Day 에 시간순 항목을 채운다. */
+    private List<TripDayResponse> buildDays(Trip trip) {
+        List<TripItem> items = tripItemRepository
+                .findByTripIdOrderByDayNoAscSortOrderAscIdAsc(trip.getId());
+        Map<Long, Place> placeById = items.stream()
+                .map(TripItem::getPlaceId)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .map(placeRepository::findById)
+                .flatMap(java.util.Optional::stream)
+                .collect(Collectors.toMap(Place::getId, Function.identity()));
+
+        Map<Integer, List<TripItemResponse>> byDay = items.stream().collect(Collectors.groupingBy(
+                TripItem::getDayNo,
+                Collectors.mapping(it -> TripItemResponse.of(it, placeById.get(it.getPlaceId())),
+                        Collectors.toList())));
+
+        int totalDays = (int) ChronoUnit.DAYS.between(trip.getStartDate(), trip.getEndDate()) + 1;
+        List<TripDayResponse> days = new ArrayList<>(totalDays);
+        for (int day = 1; day <= totalDays; day++) {
+            days.add(new TripDayResponse(day, trip.getStartDate().plusDays(day - 1),
+                    byDay.getOrDefault(day, List.of())));
+        }
+        return days;
+    }
+
+    private void validateDayNo(Trip trip, int dayNo) {
+        int totalDays = (int) ChronoUnit.DAYS.between(trip.getStartDate(), trip.getEndDate()) + 1;
+        if (dayNo < 1 || dayNo > totalDays) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT,
+                    "일정은 1일차부터 " + totalDays + "일차 사이여야 해요.");
+        }
+    }
+
+    private TripItem getTripItem(Long tripId, Long itemId) {
+        TripItem item = tripItemRepository.findById(itemId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.TRIP_ITEM_NOT_FOUND));
+        if (!item.getTripId().equals(tripId)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+        return item;
     }
 
     // ---- helpers ----

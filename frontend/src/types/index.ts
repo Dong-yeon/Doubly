@@ -368,8 +368,30 @@ export interface Trip {
   placeCount: number;
   createdAt: string;
 }
+
+// 일자별 일정표 (PLAN.md Trip Itinerary) — Day별·시간순 항목
+export interface TripItem {
+  id: number;
+  dayNo: number;
+  sortOrder: number;
+  startTime?: string | null; // HH:mm:ss
+  title: string;
+  category?: string | null;
+  memo?: string | null;
+  placeId?: number | null;
+  placeName?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  createdBy: number;
+}
+export interface TripDay {
+  dayNo: number;
+  date: string; // YYYY-MM-DD
+  items: TripItem[];
+}
 export interface TripDetail {
   trip: Trip;
+  days: TripDay[];
   places: Place[];
 }
 

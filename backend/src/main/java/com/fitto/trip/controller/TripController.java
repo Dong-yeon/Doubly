@@ -2,9 +2,14 @@ package com.fitto.trip.controller;
 
 import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
+import com.fitto.trip.dto.ReorderTripItemsRequest;
+import com.fitto.trip.dto.SaveTripItemRequest;
 import com.fitto.trip.dto.SaveTripRequest;
+import com.fitto.trip.dto.TripDayResponse;
 import com.fitto.trip.dto.TripDetailResponse;
+import com.fitto.trip.dto.TripItemResponse;
 import com.fitto.trip.dto.TripResponse;
+import com.fitto.trip.dto.UpdateTripItemRequest;
 import com.fitto.trip.dto.UpdateTripRequest;
 import com.fitto.trip.service.TripService;
 import jakarta.validation.Valid;
@@ -77,5 +82,45 @@ public class TripController {
                                          @PathVariable Long placeId) {
         tripService.detachPlace(user.id(), id, placeId);
         return ApiResponse.success(null, "장소를 여행에서 뺐습니다.");
+    }
+
+    // ---- 일자별 일정표 (Itinerary) ----
+
+    @GetMapping("/{id}/items")
+    public ApiResponse<List<TripDayResponse>> items(@AuthenticationPrincipal AuthUser user,
+                                                    @PathVariable Long id) {
+        return ApiResponse.success(tripService.items(user.id(), id));
+    }
+
+    @PostMapping("/{id}/items")
+    public ApiResponse<TripItemResponse> addItem(@AuthenticationPrincipal AuthUser user,
+                                                 @PathVariable Long id,
+                                                 @Valid @RequestBody SaveTripItemRequest request) {
+        return ApiResponse.success(tripService.addItem(user.id(), id, request), "일정을 추가했습니다.");
+    }
+
+    /** 순서 일괄 변경 — {itemId} 보다 먼저 매칭되도록 리터럴 경로 사용. */
+    @PutMapping("/{id}/items/reorder")
+    public ApiResponse<Void> reorderItems(@AuthenticationPrincipal AuthUser user,
+                                          @PathVariable Long id,
+                                          @Valid @RequestBody ReorderTripItemsRequest request) {
+        tripService.reorderItems(user.id(), id, request);
+        return ApiResponse.success(null, "일정 순서를 바꿨습니다.");
+    }
+
+    @PutMapping("/{id}/items/{itemId}")
+    public ApiResponse<TripItemResponse> updateItem(@AuthenticationPrincipal AuthUser user,
+                                                    @PathVariable Long id,
+                                                    @PathVariable Long itemId,
+                                                    @Valid @RequestBody UpdateTripItemRequest request) {
+        return ApiResponse.success(tripService.updateItem(user.id(), id, itemId, request), "일정을 수정했습니다.");
+    }
+
+    @DeleteMapping("/{id}/items/{itemId}")
+    public ApiResponse<Void> deleteItem(@AuthenticationPrincipal AuthUser user,
+                                        @PathVariable Long id,
+                                        @PathVariable Long itemId) {
+        tripService.deleteItem(user.id(), id, itemId);
+        return ApiResponse.success(null, "일정을 삭제했습니다.");
     }
 }
