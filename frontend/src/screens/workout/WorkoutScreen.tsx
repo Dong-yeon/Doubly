@@ -79,22 +79,22 @@ export function WorkoutScreen({ navigation }: Props) {
       <WorkoutDietSegment active="workout" />
       <View style={styles.linksRow}>
         <TouchableOpacity onPress={() => navigation.navigate('WorkoutRoutines')}>
-          <Text style={styles.calendarLink}>📋 내 루틴</Text>
+          <Text style={styles.calendarLink}>내 루틴</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => navigation.navigate('BodyMetric')}>
-          <Text style={styles.calendarLink}>📈 몸 변화</Text>
+          <Text style={styles.calendarLink}>몸 변화</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => navigation.navigate('Challenge')}>
-          <Text style={styles.calendarLink}>🏆 대결</Text>
+          <Text style={styles.calendarLink}>대결</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => navigation.navigate('WorkoutRecommend')}>
-          <Text style={styles.calendarLink}>🤖 AI 추천</Text>
+          <Text style={styles.calendarLink}>AI 추천</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => navigation.navigate('WorkoutStats')}>
-          <Text style={styles.calendarLink}>📊 통계</Text>
+          <Text style={styles.calendarLink}>통계</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => navigation.navigate('WorkoutCalendar')}>
-          <Text style={styles.calendarLink}>📅 캘린더</Text>
+          <Text style={styles.calendarLink}>캘린더</Text>
         </TouchableOpacity>
       </View>
 
@@ -163,7 +163,7 @@ export function WorkoutScreen({ navigation }: Props) {
       <View style={styles.fabWrap}>
         <View style={styles.fabRow}>
           <Button
-            title="▶️ 세션 시작"
+            title="세션 시작"
             variant="secondary"
             onPress={() => navigation.navigate('WorkoutSession')}
             style={styles.fabBtn}

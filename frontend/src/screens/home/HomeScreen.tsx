@@ -292,14 +292,14 @@ export function HomeScreen({ navigation }: Props) {
             activeOpacity={0.85}
             onPress={() => navigation.navigate('FeedCompose')}
           >
-            <Text style={styles.composeText}>✍️ 일상 남기기</Text>
+            <Text style={styles.composeText}>일상 남기기</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.composeBtn}
             activeOpacity={0.85}
             onPress={() => navigation.navigate('DailyQuestion')}
           >
-            <Text style={styles.composeText}>💬 오늘의 질문</Text>
+            <Text style={styles.composeText}>오늘의 질문</Text>
           </TouchableOpacity>
         </View>
       ) : null}
@@ -337,9 +337,9 @@ export function HomeScreen({ navigation }: Props) {
               />
             </View>
             <Pressable style={styles.ddayChip} onPress={openAnnModal}>
-              <Text style={styles.ddayChipText}>함께한 지 D+{dday} · ✏️</Text>
+              <Text style={styles.ddayChipText}>함께한 지 D+{dday}</Text>
             </Pressable>
-            <Text style={styles.myStreak}>🔥 내 연속 {myStreak?.currentCount ?? 0}일 · 최고 {myStreak?.maxCount ?? 0}일</Text>
+            <Text style={styles.myStreak}>내 연속 {myStreak?.currentCount ?? 0}일 · 최고 {myStreak?.maxCount ?? 0}일</Text>
           </>
         ) : (
           <View style={styles.connectWrap}>

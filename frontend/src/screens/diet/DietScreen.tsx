@@ -176,10 +176,10 @@ export function DietScreen({ navigation }: Props) {
       <WorkoutDietSegment active="diet" />
       <View style={styles.linksRow}>
         <TouchableOpacity onPress={() => navigation.navigate('DietStats')}>
-          <Text style={styles.link}>📊 통계</Text>
+          <Text style={styles.link}>통계</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => navigation.navigate('DietCalendar')}>
-          <Text style={styles.link}>📅 캘린더</Text>
+          <Text style={styles.link}>캘린더</Text>
         </TouchableOpacity>
       </View>
 
@@ -220,7 +220,7 @@ export function DietScreen({ navigation }: Props) {
             {nutrition ? (
               <Pressable style={styles.nutCard} onPress={openNutModal}>
                 <View style={styles.nutHeader}>
-                  <Text style={styles.nutTitle}>🎯 오늘 영양</Text>
+                  <Text style={styles.nutTitle}>오늘 영양</Text>
                   <Text style={styles.nutSet}>
                     {nutrition.targetCalories ? '목표 수정' : '목표 설정 ›'}
                   </Text>
@@ -239,7 +239,7 @@ export function DietScreen({ navigation }: Props) {
 
             {/* 식단 스트릭 */}
             <View style={styles.streakRow}>
-              <Text style={styles.streakText}>🥗 연속 {myStreak?.currentCount ?? 0}일</Text>
+              <Text style={styles.streakText}>연속 {myStreak?.currentCount ?? 0}일</Text>
               {goal?.connected ? (
                 <Text style={styles.streakText}>👩‍❤️‍👨 함께 {coupleStreak?.currentCount ?? 0}일</Text>
               ) : null}

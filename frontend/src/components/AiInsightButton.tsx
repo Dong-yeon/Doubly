@@ -49,15 +49,13 @@ export function AiInsightButton<T>({ label, emoji, title, fetcher, render, style
   return (
     <>
       <TouchableOpacity style={[styles.button, style]} activeOpacity={0.8} onPress={onPress}>
-        <Text style={styles.buttonText}>
-          {emoji} {label}
-        </Text>
+        <Text style={styles.buttonText}>{label}</Text>
       </TouchableOpacity>
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
           <Pressable style={styles.card} onPress={() => {}}>
-            <Text style={styles.title}>{emoji} {title}</Text>
+            <Text style={styles.title}>{title}</Text>
             {loading ? (
               <View style={styles.loading}>
                 <ActivityIndicator color={colors.primary} />

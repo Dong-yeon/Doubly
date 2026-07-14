@@ -21,7 +21,7 @@ export function WeeklyRecapCard({ recap, onShare, sharing }: Props) {
   return (
     <Card elevation="sm" style={styles.card}>
       <View style={styles.header}>
-        <Text style={styles.title}>📊 지난주 결산</Text>
+        <Text style={styles.title}>지난주 결산</Text>
         <Text style={styles.period}>
           {md(recap.weekStart)} ~ {md(recap.weekEnd)}
         </Text>
