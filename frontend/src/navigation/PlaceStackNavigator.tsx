@@ -8,6 +8,7 @@ import { PlaceDetailScreen } from '../screens/place/PlaceDetailScreen';
 import { TripListScreen } from '../screens/trip/TripListScreen';
 import { TripFormScreen } from '../screens/trip/TripFormScreen';
 import { TripDetailScreen } from '../screens/trip/TripDetailScreen';
+import { TripExpenseScreen } from '../screens/trip/TripExpenseScreen';
 import { colors } from '../constants/theme';
 
 const Stack = createNativeStackNavigator<PlaceStackParamList>();
@@ -45,6 +46,11 @@ export function PlaceStackNavigator() {
         name="TripDetail"
         component={TripDetailScreen}
         options={({ route }) => ({ title: route.params.title })}
+      />
+      <Stack.Screen
+        name="TripExpense"
+        component={TripExpenseScreen}
+        options={{ title: '경비 정산' }}
       />
     </Stack.Navigator>
   );

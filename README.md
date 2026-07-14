@@ -68,10 +68,10 @@ com.fitto
 └── trainer/       # 트레이너 프로필·대시보드·루틴 (phase 6~7)
 ```
 
-DB 스키마는 `backend/src/main/resources/db/migration/` 의 Flyway 마이그레이션(V1~V18)에 정의되어
+DB 스키마는 `backend/src/main/resources/db/migration/` 의 Flyway 마이그레이션(V1~V19)에 정의되어
 있습니다. 핵심 테이블: users / relations / trainer_profiles / workouts / workout_sets /
 trainer_routines / chat_messages / streaks / device_tokens / meals / places / place_visits /
-feed_posts / feed_reactions / trips / trip_items(일자별 일정표).
+feed_posts / feed_reactions / trips / trip_items(일자별 일정표) / trip_expenses(경비 정산).
 
 ## 개발 로드맵 (설계서 6.3 + 확장)
 
@@ -89,6 +89,7 @@ feed_posts / feed_reactions / trips / trip_items(일자별 일정표).
 | 확장 | 커플 여행 (장소 그룹핑·D-day) — PLAN.md Trip | ✅ 완료 |
 | 확장 | 커플 여행 일자별 일정표 (Trip Itinerary) — PLAN.md | ✅ 완료 |
 | 확장 | AI 여행 일정 생성 (Gemini — Day 바이 Day) — PLAN.md | ✅ 완료 |
+| 확장 | 커플 여행 경비 정산 (반반 정산) — PLAN.md | ✅ 완료 |
 | 출시 준비 | Cloudinary 서명 업로드, Redis 카운터, 테스트 보강 | ✅ 완료 |
 | 확장 | 카카오 플레이스 검색 (장소 추가 자동 입력) | ✅ 완료 |
 | 출시 후 | 트레이너 결제, 소셜 로그인 | 예정 |

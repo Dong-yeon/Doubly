@@ -344,6 +344,16 @@ export function TripDetailScreen({ navigation, route }: Props) {
             </Text>
             {trip.memo ? <Text style={styles.memo}>{trip.memo}</Text> : null}
 
+            {/* 경비 정산 진입 */}
+            <TouchableOpacity
+              style={styles.expenseEntry}
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate('TripExpense', { tripId, title: trip.title })}
+            >
+              <Text style={styles.expenseEntryText}>💰 경비 정산</Text>
+              <Text style={styles.expenseEntryArrow}>›</Text>
+            </TouchableOpacity>
+
             {/* 탭 전환 */}
             <View style={styles.tabs}>
               <TabButton label="🗓️ 일정" active={tab === 'itinerary'} onPress={() => setTab('itinerary')} />
@@ -705,6 +715,20 @@ const styles = StyleSheet.create({
   dates: { fontSize: fontSize.body, color: colors.textPrimary, fontWeight: '700', marginTop: spacing.sm },
   memo: { fontSize: fontSize.body, color: colors.textSecondary, marginTop: spacing.xs, lineHeight: 21 },
 
+  expenseEntry: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  expenseEntryText: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
+  expenseEntryArrow: { fontSize: fontSize.title, color: colors.textTertiary, fontWeight: '700' },
   tabs: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg },
   tab: {
     flex: 1,

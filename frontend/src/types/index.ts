@@ -395,6 +395,35 @@ export interface TripDetail {
   places: Place[];
 }
 
+// 여행 경비 정산 (PLAN.md Trip Expenses) — 커플 반반 기준
+export type SettlementDirection = 'SETTLED' | 'PARTNER_OWES_ME' | 'I_OWE_PARTNER';
+export interface Settlement {
+  direction: SettlementDirection;
+  amount: number;
+}
+export interface TripExpense {
+  id: number;
+  paidBy: number;
+  paidByName: string;
+  mine: boolean;
+  amount: number;
+  currency: string;
+  category?: string | null;
+  dayNo?: number | null;
+  memo?: string | null;
+  createdAt: string;
+}
+export interface TripExpenses {
+  total: number;
+  myPaid: number;
+  partnerPaid: number;
+  currency: string;
+  partnerId?: number | null;
+  partnerName?: string | null;
+  settlement: Settlement;
+  expenses: TripExpense[];
+}
+
 // 커플 일상 피드 (PLAN.md Couple Feed) — 포스트 + 운동/식단/맛집 방문 통합 타임라인
 export type FeedItemType = 'POST' | 'WORKOUT' | 'MEAL' | 'PLACE_VISIT';
 export interface ReactionSummary {

@@ -46,6 +46,7 @@ public enum ErrorCode {
     // 여행 (TRIP)
     TRIP_NOT_FOUND(HttpStatus.NOT_FOUND, "여행을 찾을 수 없습니다."),
     TRIP_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "일정 항목을 찾을 수 없습니다."),
+    TRIP_EXPENSE_NOT_FOUND(HttpStatus.NOT_FOUND, "경비 항목을 찾을 수 없습니다."),
 
     // 이미지 업로드 (UPLOAD)
     UPLOAD_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "서명 업로드가 아직 설정되지 않았어요."),

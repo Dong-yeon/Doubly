@@ -1,6 +1,6 @@
 /** 커플 여행 API — PLAN.md Trip */
 import { apiClient, unwrap } from './client';
-import type { ApiResponse, Trip, TripDay, TripDetail, TripItem } from '../types';
+import type { ApiResponse, Trip, TripDay, TripDetail, TripExpense, TripExpenses, TripItem } from '../types';
 
 export interface SaveTripPayload {
   title: string;
@@ -68,4 +68,23 @@ export const tripApi = {
         { timeout: 60000 },
       ),
     ),
+
+  // 경비 정산 (Trip Expenses)
+  expenses: (tripId: number) =>
+    unwrap(apiClient.get<ApiResponse<TripExpenses>>(`/trips/${tripId}/expenses`)),
+  addExpense: (tripId: number, payload: SaveExpensePayload) =>
+    unwrap(apiClient.post<ApiResponse<TripExpense>>(`/trips/${tripId}/expenses`, payload)),
+  updateExpense: (tripId: number, expenseId: number, payload: SaveExpensePayload) =>
+    unwrap(apiClient.put<ApiResponse<TripExpense>>(`/trips/${tripId}/expenses/${expenseId}`, payload)),
+  removeExpense: (tripId: number, expenseId: number) =>
+    unwrap(apiClient.delete<ApiResponse<void>>(`/trips/${tripId}/expenses/${expenseId}`)),
 };
+
+export interface SaveExpensePayload {
+  amount: number;
+  paidBy?: number | null;
+  currency?: string | null;
+  category?: string | null;
+  dayNo?: number | null;
+  memo?: string | null;
+}
