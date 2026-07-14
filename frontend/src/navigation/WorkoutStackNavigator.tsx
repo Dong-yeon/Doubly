@@ -7,6 +7,9 @@ import { WorkoutRecordScreen } from '../screens/workout/WorkoutRecordScreen';
 import { WorkoutCalendarScreen } from '../screens/workout/WorkoutCalendarScreen';
 import { WorkoutStatsScreen } from '../screens/workout/WorkoutStatsScreen';
 import { WorkoutRecommendScreen } from '../screens/workout/WorkoutRecommendScreen';
+import { WorkoutSessionScreen } from '../screens/workout/WorkoutSessionScreen';
+import { WorkoutRoutineListScreen } from '../screens/workout/WorkoutRoutineListScreen';
+import { WorkoutRoutineFormScreen } from '../screens/workout/WorkoutRoutineFormScreen';
 import { DietScreen } from '../screens/diet/DietScreen';
 import { DietRecordScreen } from '../screens/diet/DietRecordScreen';
 import { DietCalendarScreen } from '../screens/diet/DietCalendarScreen';
@@ -44,6 +47,21 @@ export function WorkoutStackNavigator() {
         name="WorkoutRecommend"
         component={WorkoutRecommendScreen}
         options={{ title: 'AI 운동 추천' }}
+      />
+      <Stack.Screen
+        name="WorkoutSession"
+        component={WorkoutSessionScreen}
+        options={{ title: '운동 세션' }}
+      />
+      <Stack.Screen
+        name="WorkoutRoutines"
+        component={WorkoutRoutineListScreen}
+        options={{ title: '내 루틴' }}
+      />
+      <Stack.Screen
+        name="WorkoutRoutineForm"
+        component={WorkoutRoutineFormScreen}
+        options={{ title: '루틴 만들기', presentation: 'modal' }}
       />
       {/* 식단 (구 식단 탭) — WorkoutMain 세그먼트로 토글, 하위 화면은 이 스택에 배치 */}
       <Stack.Screen name="DietMain" component={DietScreen} options={{ headerShown: false }} />

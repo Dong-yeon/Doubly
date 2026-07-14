@@ -1,5 +1,5 @@
-/** 식단 기록 입력 — 끼니·사진·칼로리·메모. 운동(WorkoutRecordScreen) 미러링 */
-import React, { useRef, useState } from 'react';
+/** 식단 기록 입력 — 끼니·사진·칼로리·메모 + 즐겨찾기 원탭 추가. 운동(WorkoutRecordScreen) 미러링 */
+import React, { useCallback, useRef, useState } from 'react';
 import {
   Alert,
   Image,
@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { WorkoutStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
@@ -27,7 +28,7 @@ import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { toDateString } from '../../utils/date';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { MealType } from '../../types';
+import type { FavoriteFood, MealType } from '../../types';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'DietRecord'>;
 
@@ -47,8 +48,8 @@ function defaultMealType(): MealType {
   return 'SNACK';
 }
 
-// 자주 먹는 음식 — 탭하면 메모에 추가
-const PRESETS = ['닭가슴살', '샐러드', '현미밥', '고구마', '계란', '단백질쉐이크', '아메리카노', '치팅데이 🍕'];
+// 즐겨찾기가 없을 때 보여줄 시작용 추천 (탭하면 이름만 추가)
+const STARTER_SUGGESTIONS = ['닭가슴살', '샐러드', '현미밥', '고구마', '계란', '단백질쉐이크', '아메리카노'];
 
 export function DietRecordScreen({ navigation }: Props) {
   const save = useDietStore((s) => s.save);
@@ -64,8 +65,66 @@ export function DietRecordScreen({ navigation }: Props) {
   // 업로드 결과 캐시 — AI 분석과 저장이 같은 사진을 두 번 올리지 않도록
   const uploadedRef = useRef<{ uri: string; url: string } | null>(null);
 
-  const addPreset = (food: string) => {
+  // 즐겨찾는 음식
+  const [favorites, setFavorites] = useState<FavoriteFood[]>([]);
+  const loadFavorites = useCallback(() => {
+    dietApi.favorites().then(setFavorites).catch(() => setFavorites([]));
+  }, []);
+  useFocusEffect(useCallback(() => loadFavorites(), [loadFavorites]));
+
+  const addName = (food: string) => {
     setMemo((prev) => (prev.trim() ? `${prev.trim()}, ${food}` : food));
+  };
+
+  // 즐겨찾기 탭 — 이름은 메모에, 칼로리는 합산
+  const addFavorite = (fav: FavoriteFood) => {
+    haptics.light();
+    addName(fav.name);
+    if (fav.calories) {
+      setCalories((prev) => String((Number(prev) || 0) + (fav.calories ?? 0)));
+    }
+  };
+
+  // 현재 입력을 즐겨찾기로 저장
+  const saveCurrentAsFavorite = async () => {
+    const name = memo.trim();
+    if (!name) {
+      toast.error('음식 이름(메모)을 먼저 입력해주세요.');
+      return;
+    }
+    try {
+      const fav = await dietApi.saveFavorite({
+        name,
+        calories: calories ? Number(calories) : undefined,
+        carbs: macros?.carbs,
+        protein: macros?.protein,
+        fat: macros?.fat,
+      });
+      haptics.success();
+      toast.success('즐겨찾기에 저장했어요 ⭐');
+      setFavorites((prev) => [fav, ...prev]);
+    } catch (e) {
+      toast.error(getErrorMessage(e, '즐겨찾기 저장에 실패했어요.'));
+    }
+  };
+
+  const deleteFavorite = (fav: FavoriteFood) => {
+    Alert.alert('즐겨찾기 삭제', `"${fav.name}"을(를) 즐겨찾기에서 뺄까요?`, [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '삭제',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await dietApi.removeFavorite(fav.id);
+            haptics.light();
+            setFavorites((prev) => prev.filter((f) => f.id !== fav.id));
+          } catch (e) {
+            toast.error(getErrorMessage(e));
+          }
+        },
+      },
+    ]);
   };
 
   const pickFrom = async (source: 'camera' | 'gallery') => {
@@ -244,15 +303,39 @@ export function DietRecordScreen({ navigation }: Props) {
             </>
           ) : null}
 
-          {/* 자주 먹는 음식 */}
-          <Text style={styles.label}>자주 먹는 음식</Text>
-          <View style={styles.presetRow}>
-            {PRESETS.map((p) => (
-              <TouchableOpacity key={p} style={styles.presetChip} onPress={() => addPreset(p)}>
-                <Text style={styles.presetText}>{p}</Text>
-              </TouchableOpacity>
-            ))}
+          {/* 즐겨찾기 — 원탭 추가 (길게 눌러 삭제). 없으면 시작용 추천 */}
+          <View style={styles.favHeader}>
+            <Text style={styles.label}>⭐ 즐겨찾기</Text>
+            <TouchableOpacity onPress={saveCurrentAsFavorite}>
+              <Text style={styles.favSave}>＋ 현재 저장</Text>
+            </TouchableOpacity>
           </View>
+          {favorites.length > 0 ? (
+            <View style={styles.presetRow}>
+              {favorites.map((f) => (
+                <TouchableOpacity
+                  key={f.id}
+                  style={styles.favChip}
+                  onPress={() => addFavorite(f)}
+                  onLongPress={() => deleteFavorite(f)}
+                >
+                  <Text style={styles.favChipText}>{f.name}</Text>
+                  {f.calories ? <Text style={styles.favChipCal}>{f.calories}kcal</Text> : null}
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : (
+            <>
+              <Text style={styles.favHint}>자주 먹는 음식을 저장하면 원탭으로 추가할 수 있어요.</Text>
+              <View style={styles.presetRow}>
+                {STARTER_SUGGESTIONS.map((p) => (
+                  <TouchableOpacity key={p} style={styles.presetChip} onPress={() => addName(p)}>
+                    <Text style={styles.presetText}>{p}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
+          )}
 
           <TextField
             label="먹은 음식 / 메모"
@@ -325,6 +408,22 @@ const styles = StyleSheet.create({
   },
   macroValue: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
   macroLabel: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
+  favHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  favSave: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '800' },
+  favHint: { fontSize: fontSize.caption, color: colors.textSecondary, marginBottom: spacing.sm },
+  favChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryBg,
+  },
+  favChipText: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '700' },
+  favChipCal: { fontSize: 10, color: colors.textSecondary, fontWeight: '700' },
   presetRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   presetChip: {
     paddingHorizontal: spacing.md,

@@ -78,6 +78,9 @@ export function WorkoutScreen({ navigation }: Props) {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <WorkoutDietSegment active="workout" />
       <View style={styles.linksRow}>
+        <TouchableOpacity onPress={() => navigation.navigate('WorkoutRoutines')}>
+          <Text style={styles.calendarLink}>📋 내 루틴</Text>
+        </TouchableOpacity>
         <TouchableOpacity onPress={() => navigation.navigate('WorkoutRecommend')}>
           <Text style={styles.calendarLink}>🤖 AI 추천</Text>
         </TouchableOpacity>
@@ -152,7 +155,19 @@ export function WorkoutScreen({ navigation }: Props) {
       />
 
       <View style={styles.fabWrap}>
-        <Button title="＋ 오늘 운동 기록하기" onPress={() => navigation.navigate('WorkoutRecord')} />
+        <View style={styles.fabRow}>
+          <Button
+            title="▶️ 세션 시작"
+            variant="secondary"
+            onPress={() => navigation.navigate('WorkoutSession')}
+            style={styles.fabBtn}
+          />
+          <Button
+            title="＋ 기록하기"
+            onPress={() => navigation.navigate('WorkoutRecord')}
+            style={styles.fabBtn}
+          />
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -214,4 +229,6 @@ const styles = StyleSheet.create({
   routineDone: { paddingHorizontal: spacing.md },
   footer: { textAlign: 'center', color: colors.textSecondary, paddingVertical: spacing.md },
   fabWrap: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: spacing.lg },
+  fabRow: { flexDirection: 'row', gap: spacing.sm },
+  fabBtn: { flex: 1 },
 });

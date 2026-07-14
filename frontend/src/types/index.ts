@@ -124,6 +124,21 @@ export interface WorkoutRecommendation {
   overallComment?: string | null;
 }
 
+// 사용자 본인 운동 루틴 (짐앱 스타일) — 세션 실행 기반
+export interface RoutineExercise {
+  exerciseName: string;
+  category?: string | null;
+  targetSets?: number | null;
+  reps?: number | null;
+  weightKg?: number | null;
+}
+export interface WorkoutRoutine {
+  id: number;
+  title: string;
+  exercises: RoutineExercise[];
+  createdAt: string;
+}
+
 // 5.7 trainer_routines
 export interface TrainerRoutine {
   id: number;
@@ -226,6 +241,16 @@ export interface DateCourse {
   hasData: boolean;
   stops: DateCourseStop[];
   comment?: string | null;
+}
+
+// 식단 즐겨찾기 — 자주 먹는 음식 (원탭 추가)
+export interface FavoriteFood {
+  id: number;
+  name: string;
+  calories?: number | null;
+  carbs?: number | null;
+  protein?: number | null;
+  fat?: number | null;
 }
 
 // 식단 통계
