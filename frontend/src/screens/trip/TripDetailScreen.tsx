@@ -16,6 +16,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { PlaceStackParamList } from '../../navigation/types';
@@ -140,7 +141,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
     try {
       await tripApi.attachPlace(tripId, place.id);
       haptics.light();
-      toast.success(`"${place.name}"을(를) 여행에 담았어요 📍`);
+      toast.success(`"${place.name}"을(를) 여행에 담았어요.`);
       load();
     } catch (e) {
       Alert.alert('오류', getErrorMessage(e));
@@ -251,7 +252,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
           memo: form.memo.trim() || null,
           placeId: form.placeId,
         });
-        toast.success('일정을 추가했어요 🗓️');
+        toast.success('일정을 추가했어요.');
       }
       haptics.light();
       setEditorOpen(false);
@@ -312,7 +313,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
     try {
       await tripApi.generateItinerary(tripId, aiPreferences.trim() || undefined);
       haptics.light();
-      toast.success('AI가 일정을 짰어요 ✨');
+      toast.success('AI가 일정을 짰어요.');
       setAiOpen(false);
       setAiPreferences('');
       setSelectedDay(1);
@@ -340,7 +341,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
                 <Text style={styles.statusText}>{tripStatusLabel(trip)}</Text>
               </View>
               <TouchableOpacity onPress={() => navigation.navigate('TripForm', { trip })}>
-                <Text style={styles.editLink}>✏️ 여행 수정</Text>
+                <Text style={styles.editLink}>수정</Text>
               </TouchableOpacity>
             </View>
             <Text style={styles.dates}>
@@ -355,35 +356,39 @@ export function TripDetailScreen({ navigation, route }: Props) {
                 activeOpacity={0.8}
                 onPress={() => navigation.navigate('TripExpense', { tripId, title: trip.title })}
               >
-                <Text style={styles.entryText}>💰 경비</Text>
+                <MaterialCommunityIcons name="wallet-outline" size={18} color={colors.textSecondary} />
+                <Text style={styles.entryText}>경비</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.entryCard}
                 activeOpacity={0.8}
                 onPress={() => navigation.navigate('TripChecklist', { tripId, title: trip.title })}
               >
-                <Text style={styles.entryText}>🧳 준비물</Text>
+                <MaterialCommunityIcons name="bag-personal-outline" size={18} color={colors.textSecondary} />
+                <Text style={styles.entryText}>준비물</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.entryCard}
                 activeOpacity={0.8}
                 onPress={() => navigation.navigate('TripAlbum', { tripId, title: trip.title })}
               >
-                <Text style={styles.entryText}>📸 앨범</Text>
+                <MaterialCommunityIcons name="image-multiple-outline" size={18} color={colors.textSecondary} />
+                <Text style={styles.entryText}>앨범</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.entryCard}
                 activeOpacity={0.8}
                 onPress={() => navigation.navigate('TripRecap', { tripId, title: trip.title })}
               >
-                <Text style={styles.entryText}>🧾 회고</Text>
+                <MaterialCommunityIcons name="text-box-outline" size={18} color={colors.textSecondary} />
+                <Text style={styles.entryText}>회고</Text>
               </TouchableOpacity>
             </View>
 
             {/* 탭 전환 */}
             <View style={styles.tabs}>
-              <TabButton label="🗓️ 일정" active={tab === 'itinerary'} onPress={() => setTab('itinerary')} />
-              <TabButton label={`📍 장소 ${places.length}`} active={tab === 'places'} onPress={() => setTab('places')} />
+              <TabButton label="일정" active={tab === 'itinerary'} onPress={() => setTab('itinerary')} />
+              <TabButton label={`장소 ${places.length}`} active={tab === 'places'} onPress={() => setTab('places')} />
             </View>
           </View>
         ) : null}
@@ -400,7 +405,8 @@ export function TripDetailScreen({ navigation, route }: Props) {
                 setAiOpen(true);
               }}
             >
-              <Text style={styles.aiButtonText}>✨ AI로 일정 짜기</Text>
+              <MaterialCommunityIcons name="auto-fix" size={18} color={colors.accent} />
+              <Text style={styles.aiButtonText}>AI로 일정 짜기</Text>
             </TouchableOpacity>
 
             {/* Day 선택 */}
@@ -457,7 +463,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
                         </View>
                       ) : null}
                     </View>
-                    {item.placeName ? <Text style={styles.itemPlace}>📍 {item.placeName}</Text> : null}
+                    {item.placeName ? <Text style={styles.itemPlace}>{item.placeName}</Text> : null}
                     {item.memo ? <Text style={styles.itemMemo}>{item.memo}</Text> : null}
                   </TouchableOpacity>
                   <View style={styles.itemActions}>
@@ -525,7 +531,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
                 >
                   <View style={styles.placeHeader}>
                     <Text style={styles.placeName}>{item.name}</Text>
-                    <Text style={styles.placeStatus}>{item.status === 'VISITED' ? '✅' : '💛'}</Text>
+                    <Text style={styles.placeStatus}>{item.status === 'VISITED' ? '다녀옴' : '가보고파'}</Text>
                   </View>
                   {item.address ? <Text style={styles.placeAddress}>{item.address}</Text> : null}
                 </TouchableOpacity>
@@ -609,7 +615,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
             {!editingItem ? (
               <TouchableOpacity style={styles.linkRow} onPress={openLink}>
                 <Text style={styles.linkLabel}>장소 연결</Text>
-                <Text style={styles.linkValue}>{form.placeName ? `📍 ${form.placeName}` : '연결 안 함 ›'}</Text>
+                <Text style={styles.linkValue}>{form.placeName ? form.placeName : '연결 안 함 ›'}</Text>
               </TouchableOpacity>
             ) : null}
 
@@ -632,10 +638,10 @@ export function TripDetailScreen({ navigation, route }: Props) {
       >
         <Pressable style={styles.backdrop} onPress={() => !aiLoading && setAiOpen(false)}>
           <Pressable style={styles.sheet}>
-            <Text style={styles.sheetTitle}>✨ AI 여행 일정 생성</Text>
+            <Text style={styles.sheetTitle}>AI 여행 일정 생성</Text>
             <Text style={styles.aiDesc}>
               "{trip?.title}" 여행에 맞춰 {days.length}일치 일정을 AI가 짜드려요.
-              {totalItems > 0 ? `\n⚠️ 지금 있는 일정 ${totalItems}개는 새 일정으로 대체돼요.` : ''}
+              {totalItems > 0 ? `\n지금 있는 일정 ${totalItems}개는 새 일정으로 대체돼요.` : ''}
             </Text>
 
             <Text style={styles.fieldLabel}>요청사항 (선택)</Text>
@@ -746,8 +752,10 @@ const styles = StyleSheet.create({
   entryCard: {
     flexGrow: 1,
     flexBasis: '47%',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: spacing.sm,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.sm,
     borderRadius: radius.md,
@@ -795,7 +803,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accentSoft,
     borderWidth: 1,
     borderColor: colors.accent,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
   },
   aiButtonText: { fontSize: fontSize.body, fontWeight: '800', color: colors.accent },
   aiDesc: { fontSize: fontSize.body, color: colors.textSecondary, lineHeight: 21, marginBottom: spacing.sm },

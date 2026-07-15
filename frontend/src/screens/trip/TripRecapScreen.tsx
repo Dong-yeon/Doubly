@@ -2,6 +2,7 @@
 import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { PlaceStackParamList } from '../../navigation/types';
@@ -18,15 +19,15 @@ function money(n: number): string {
 }
 
 function statusLabel(status: TripStatus): string {
-  if (status === 'UPCOMING') return '✈️ 곧 떠나요';
-  if (status === 'ONGOING') return '🧳 여행 중';
-  return '🗺️ 다녀온 여행';
+  if (status === 'UPCOMING') return '곧 떠나요';
+  if (status === 'ONGOING') return '여행 중';
+  return '다녀온 여행';
 }
 
 function closingLine(r: TripRecap): string {
-  if (r.status === 'UPCOMING') return '설레는 여행, 차근차근 준비해요 💛';
-  if (r.status === 'ONGOING') return '여행 중이에요! 순간순간을 담아봐요 ✨';
-  return `둘이 함께한 ${r.days}일, 좋은 추억이 됐어요 ✨`;
+  if (r.status === 'UPCOMING') return '설레는 여행, 차근차근 준비해요';
+  if (r.status === 'ONGOING') return '여행 중이에요! 순간순간을 담아봐요';
+  return `둘이 함께한 ${r.days}일, 좋은 추억이 됐어요`;
 }
 
 export function TripRecapScreen({ route }: Props) {
@@ -60,13 +61,13 @@ export function TripRecapScreen({ route }: Props) {
   }
 
   const tiles = [
-    { emoji: '🗓️', value: `${recap.itineraryItemCount}`, label: '일정' },
-    { emoji: '📍', value: `${recap.placeCount}`, label: `장소 (방문 ${recap.visitedPlaceCount})` },
-    { emoji: '💰', value: recap.expenseTotal > 0 ? money(recap.expenseTotal) : '0원', label: '총 지출' },
-    { emoji: '📸', value: `${recap.photoCount}`, label: '사진' },
-    { emoji: '🧳', value: `${recap.checklistChecked}/${recap.checklistTotal}`, label: '준비물' },
-    { emoji: '🌙', value: `${recap.nights}박 ${recap.days}일`, label: '기간' },
-  ];
+    { icon: 'calendar-check-outline', value: `${recap.itineraryItemCount}`, label: '일정' },
+    { icon: 'map-marker-outline', value: `${recap.placeCount}`, label: `장소 (방문 ${recap.visitedPlaceCount})` },
+    { icon: 'wallet-outline', value: recap.expenseTotal > 0 ? money(recap.expenseTotal) : '0원', label: '총 지출' },
+    { icon: 'image-multiple-outline', value: `${recap.photoCount}`, label: '사진' },
+    { icon: 'bag-personal-outline', value: `${recap.checklistChecked}/${recap.checklistTotal}`, label: '준비물' },
+    { icon: 'calendar-range', value: `${recap.nights}박 ${recap.days}일`, label: '기간' },
+  ] as const;
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
@@ -86,7 +87,7 @@ export function TripRecapScreen({ route }: Props) {
         <View style={styles.tiles}>
           {tiles.map((t) => (
             <View key={t.label} style={styles.tile}>
-              <Text style={styles.tileEmoji}>{t.emoji}</Text>
+              <MaterialCommunityIcons name={t.icon} size={22} color={colors.textSecondary} />
               <Text style={styles.tileValue} numberOfLines={1} adjustsFontSizeToFit>
                 {t.value}
               </Text>
@@ -141,7 +142,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     alignItems: 'center',
   },
-  tileEmoji: { fontSize: 22 },
   tileValue: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary, marginTop: spacing.xs },
   tileLabel: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2, textAlign: 'center' },
 

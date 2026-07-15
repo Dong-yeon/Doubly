@@ -30,8 +30,8 @@ type Props = NativeStackScreenProps<PlaceStackParamList, 'PlaceAdd'>;
 const CATEGORIES = ['한식', '중식', '일식', '양식', '카페', '디저트', '술집', '기타'];
 
 const STATUS_OPTIONS: { value: PlaceStatus; label: string }[] = [
-  { value: 'WISHLIST', label: '💛 가고 싶어요' },
-  { value: 'VISITED', label: '✅ 다녀왔어요' },
+  { value: 'WISHLIST', label: '가고 싶어요' },
+  { value: 'VISITED', label: '다녀왔어요' },
 ];
 
 export function PlaceAddScreen({ navigation }: Props) {
@@ -100,7 +100,7 @@ export function PlaceAddScreen({ navigation }: Props) {
         status,
       });
       haptics.success();
-      toast.success('장소를 추가했어요 📍');
+      toast.success('장소를 추가했어요 ');
       navigation.goBack();
     } catch (e) {
       Alert.alert('오류', getErrorMessage(e));
@@ -115,7 +115,7 @@ export function PlaceAddScreen({ navigation }: Props) {
         <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
           {isKakaoMapConfigured() ? (
             <>
-              <Text style={styles.label}>🔍 카카오 장소 검색 — 이름·주소·위치가 자동 입력돼요</Text>
+              <Text style={styles.label}>카카오 장소 검색 — 이름·주소·위치가 자동 입력돼요</Text>
               <View style={styles.searchRow}>
                 <View style={styles.flex}>
                   <TextField
@@ -161,7 +161,7 @@ export function PlaceAddScreen({ navigation }: Props) {
               <Text style={styles.label}>위치 확인 (선택) — 지도를 탭해 직접 고를 수도 있어요</Text>
               <KakaoMap ref={mapRef} selectable height={240} onSelect={onMapSelect} onSearchResults={onSearchResults} />
               <Text style={styles.coordText}>
-                {coords ? `📍 위치 선택됨 (${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)})` : '아직 위치를 선택하지 않았어요'}
+                {coords ? `위치 선택됨 (${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)})` : '아직 위치를 선택하지 않았어요'}
               </Text>
             </>
           ) : null}

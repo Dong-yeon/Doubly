@@ -166,7 +166,7 @@ export function TripChecklistScreen({ route }: Props) {
                 <View style={[styles.progressFill, { width: `${pct}%` }]} />
               </View>
               {total > 0 && checked === total ? (
-                <Text style={styles.progressDone}>모두 챙겼어요! ✨</Text>
+                <Text style={styles.progressDone}>모두 챙겼어요!</Text>
               ) : null}
             </View>
 

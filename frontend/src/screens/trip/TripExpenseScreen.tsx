@@ -109,7 +109,7 @@ export function TripExpenseScreen({ route }: Props) {
         toast.success('경비를 수정했어요.');
       } else {
         await tripApi.addExpense(tripId, payload);
-        toast.success('경비를 추가했어요 💰');
+        toast.success('경비를 추가했어요.');
       }
       haptics.light();
       setModalOpen(false);
@@ -142,7 +142,7 @@ export function TripExpenseScreen({ route }: Props) {
   const settlementLine = () => {
     if (!data) return '';
     const { direction, amount } = data.settlement;
-    if (direction === 'SETTLED') return '정산 완료 — 딱 반반이에요 ✨';
+    if (direction === 'SETTLED') return '정산 완료 — 딱 반반이에요';
     if (direction === 'PARTNER_OWES_ME') return `${partnerName}님이 나에게 ${money(amount)} 줄 차례예요`;
     return `내가 ${partnerName}님에게 ${money(amount)} 줄 차례예요`;
   };

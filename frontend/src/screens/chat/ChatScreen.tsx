@@ -18,11 +18,11 @@ type Props = NativeStackScreenProps<ChatStackParamList, 'ChatRooms'>;
 const preview = (type: MessageType, content?: string | null): string => {
   switch (type) {
     case 'IMAGE':
-      return '📷 사진';
+      return '사진';
     case 'WORKOUT_CARD':
-      return '💪 운동 기록';
+      return '운동 기록';
     case 'ROUTINE_CARD':
-      return '📋 루틴';
+      return '루틴';
     default:
       return content ?? '';
   }
@@ -71,7 +71,7 @@ export function ChatScreen({ navigation }: Props) {
       <View style={styles.roomBody}>
         <Text style={styles.partnerName}>{item.partner?.name ?? '채팅방'}</Text>
         <Text style={styles.lastMessage} numberOfLines={1}>
-          {item.lastMessage ? preview(item.lastMessage.messageType, item.lastMessage.content) : '대화를 시작해보세요 ✨'}
+          {item.lastMessage ? preview(item.lastMessage.messageType, item.lastMessage.content) : '대화를 시작해보세요 '}
         </Text>
       </View>
       {item.unreadCount > 0 ? (
@@ -95,7 +95,7 @@ export function ChatScreen({ navigation }: Props) {
         ItemSeparatorComponent={() => <View style={styles.sep} />}
         ListEmptyComponent={
           !loadingRooms ? (
-            <EmptyState emoji="💬" title="아직 채팅방이 없어요" description="커플을 연결하면 채팅을 시작할 수 있어요 💞" />
+            <EmptyState icon="chat-outline" title="아직 채팅방이 없어요" description="커플을 연결하면 채팅을 시작할 수 있어요 " />
           ) : null
         }
       />

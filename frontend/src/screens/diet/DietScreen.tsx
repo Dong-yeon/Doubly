@@ -120,7 +120,7 @@ export function DietScreen({ navigation }: Props) {
       });
       setNutrition(updated);
       haptics.success();
-      toast.success('목표를 저장했어요 🎯');
+      toast.success('목표를 저장했어요 ');
       setNutModal(false);
     } catch (e) {
       toast.error(getErrorMessage(e, '목표 저장에 실패했어요.'));
@@ -142,7 +142,7 @@ export function DietScreen({ navigation }: Props) {
     try {
       await setDietGoal(days);
       haptics.success();
-      toast.success(`커플 식단 목표: 주 ${days}일 🎯`);
+      toast.success(`커플 식단 목표: 주 ${days}일 `);
       setGoalModal(false);
       refreshExtras();
     } catch (e) {
@@ -176,10 +176,10 @@ export function DietScreen({ navigation }: Props) {
       <WorkoutDietSegment active="diet" />
       <View style={styles.linksRow}>
         <TouchableOpacity onPress={() => navigation.navigate('DietStats')}>
-          <Text style={styles.link}>📊 통계</Text>
+          <Text style={styles.link}>통계</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => navigation.navigate('DietCalendar')}>
-          <Text style={styles.link}>📅 캘린더</Text>
+          <Text style={styles.link}>캘린더</Text>
         </TouchableOpacity>
       </View>
 
@@ -187,7 +187,6 @@ export function DietScreen({ navigation }: Props) {
       <View style={styles.aiRow}>
         <AiInsightButton
           label="주간 식단 코칭"
-          emoji="🤖"
           title="주간 식단 코칭"
           fetcher={dietApi.coach}
           render={renderCoach}
@@ -195,7 +194,6 @@ export function DietScreen({ navigation }: Props) {
         />
         <AiInsightButton
           label="커플 주간 레터"
-          emoji="💌"
           title="우리 주간 레터"
           fetcher={summaryApi.aiLetter}
           render={renderLetter}
@@ -220,7 +218,7 @@ export function DietScreen({ navigation }: Props) {
             {nutrition ? (
               <Pressable style={styles.nutCard} onPress={openNutModal}>
                 <View style={styles.nutHeader}>
-                  <Text style={styles.nutTitle}>🎯 오늘 영양</Text>
+                  <Text style={styles.nutTitle}>오늘 영양</Text>
                   <Text style={styles.nutSet}>
                     {nutrition.targetCalories ? '목표 수정' : '목표 설정 ›'}
                   </Text>
@@ -239,9 +237,9 @@ export function DietScreen({ navigation }: Props) {
 
             {/* 식단 스트릭 */}
             <View style={styles.streakRow}>
-              <Text style={styles.streakText}>🥗 연속 {myStreak?.currentCount ?? 0}일</Text>
+              <Text style={styles.streakText}>연속 {myStreak?.currentCount ?? 0}일</Text>
               {goal?.connected ? (
-                <Text style={styles.streakText}>👩‍❤️‍👨 함께 {coupleStreak?.currentCount ?? 0}일</Text>
+                <Text style={styles.streakText}>함께 {coupleStreak?.currentCount ?? 0}일</Text>
               ) : null}
               <Text style={styles.streakMax}>최고 {myStreak?.maxCount ?? 0}일</Text>
             </View>
@@ -253,9 +251,9 @@ export function DietScreen({ navigation }: Props) {
                   <>
                     <View style={styles.goalHeader}>
                       <Text style={styles.goalTitle}>
-                        🎯 이번 주 함께 식단 {goal.bothDays}/{goal.goalDays}일
+                        이번 주 함께 식단 {goal.bothDays}/{goal.goalDays}일
                       </Text>
-                      {goal.achieved ? <Text style={styles.goalBadge}>달성! 🎉</Text> : null}
+                      {goal.achieved ? <Text style={styles.goalBadge}>달성! </Text> : null}
                     </View>
                     <View style={styles.goalTrack}>
                       <View
@@ -271,7 +269,7 @@ export function DietScreen({ navigation }: Props) {
                   </>
                 ) : (
                   <View style={styles.goalHeader}>
-                    <Text style={styles.goalTitle}>🎯 커플 식단 목표를 정해볼까요?</Text>
+                    <Text style={styles.goalTitle}>커플 식단 목표를 정해볼까요?</Text>
                     <Text style={styles.goalSet}>설정하기 ›</Text>
                   </View>
                 )}
@@ -288,7 +286,7 @@ export function DietScreen({ navigation }: Props) {
               today.map((m) => <MealCard key={m.id} meal={m} onLongPress={onLongPress} />)
             ) : (
               <View style={styles.emptyToday}>
-                <Text style={styles.emptyText}>오늘 식단 기록이 아직 없어요 🍽️</Text>
+                <Text style={styles.emptyText}>오늘 식단 기록이 아직 없어요 </Text>
               </View>
             )}
             <Text style={[styles.sectionTitle, styles.historyTitle]}>히스토리</Text>
@@ -297,7 +295,7 @@ export function DietScreen({ navigation }: Props) {
         renderItem={({ item }) => <MealCard meal={item} onLongPress={onLongPress} showDate />}
         ListEmptyComponent={
           !loading ? (
-            <EmptyState emoji="🍽️" title="아직 식단 기록이 없어요" description="아래 버튼으로 첫 식단을 기록해보세요!" />
+            <EmptyState icon="silverware-fork-knife" title="아직 식단 기록이 없어요" description="아래 버튼으로 첫 식단을 기록해보세요!" />
           ) : null
         }
         ListFooterComponent={loadingMore ? <Text style={styles.footer}>불러오는 중…</Text> : null}
@@ -311,7 +309,7 @@ export function DietScreen({ navigation }: Props) {
       <Modal visible={goalModal} transparent animationType="fade" onRequestClose={() => setGoalModal(false)}>
         <Pressable style={styles.modalBackdrop} onPress={() => setGoalModal(false)}>
           <Pressable style={styles.modalCard} onPress={() => {}}>
-            <Text style={styles.modalTitle}>커플 식단 목표 🎯</Text>
+            <Text style={styles.modalTitle}>커플 식단 목표 </Text>
             <Text style={styles.modalDesc}>이번 주에 둘 다 식단을 기록할 목표 일수를 정해요.</Text>
             <View style={styles.dayRow}>
               {[1, 2, 3, 4, 5, 6, 7].map((d) => (
@@ -334,7 +332,7 @@ export function DietScreen({ navigation }: Props) {
       <Modal visible={nutModal} transparent animationType="fade" onRequestClose={() => setNutModal(false)}>
         <Pressable style={styles.modalBackdrop} onPress={() => setNutModal(false)}>
           <Pressable style={styles.modalCard} onPress={() => {}}>
-            <Text style={styles.modalTitle}>🎯 하루 영양 목표</Text>
+            <Text style={styles.modalTitle}>하루 영양 목표</Text>
             <Text style={styles.modalDesc}>비워두면 해당 항목은 목표 없이 섭취량만 표시돼요.</Text>
             <View style={styles.nutFormRow}>
               <View style={styles.nutFormItem}>

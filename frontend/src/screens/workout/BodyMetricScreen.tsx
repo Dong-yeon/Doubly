@@ -113,7 +113,7 @@ export function BodyMetricScreen(_: Props) {
         photoUrl,
       });
       haptics.success();
-      toast.success('측정 기록을 저장했어요 📈');
+      toast.success('측정 기록을 저장했어요 ');
       setAddOpen(false);
       resetForm();
       load();
@@ -195,7 +195,7 @@ export function BodyMetricScreen(_: Props) {
         ListEmptyComponent={
           !loading ? (
             <EmptyState
-              emoji="📈"
+              icon="chart-line"
               title="몸의 변화를 기록해보세요"
               description="체중·체지방·둘레와 진행 사진을 남기면 변화를 그래프로 볼 수 있어요."
             />
@@ -226,7 +226,7 @@ export function BodyMetricScreen(_: Props) {
               {photoUri ? (
                 <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />
               ) : (
-                <Text style={styles.photoPlaceholder}>📷 진행 사진 (선택)</Text>
+                <Text style={styles.photoPlaceholder}>진행 사진 (선택)</Text>
               )}
             </TouchableOpacity>
             <Button title="저장" onPress={onSave} loading={saving} style={styles.modalBtn} />

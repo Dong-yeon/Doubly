@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, TextInputProps, View } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 
 interface Props extends TextInputProps {
@@ -38,7 +39,11 @@ export function TextField({ label, errorText, style, secureTextEntry, onFocus, o
         />
         {isPassword ? (
           <Pressable style={styles.eye} onPress={() => setReveal((v) => !v)} hitSlop={8}>
-            <Text style={styles.eyeText}>{reveal ? '🙈' : '👁️'}</Text>
+            <MaterialCommunityIcons
+              name={reveal ? 'eye-off-outline' : 'eye-outline'}
+              size={20}
+              color={colors.textTertiary}
+            />
           </Pressable>
         ) : null}
       </View>

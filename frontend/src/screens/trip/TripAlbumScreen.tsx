@@ -13,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { PlaceStackParamList } from '../../navigation/types';
@@ -67,7 +68,7 @@ export function TripAlbumScreen({ route }: Props) {
     try {
       await tripApi.attachAlbum(tripId, post.id);
       haptics.light();
-      toast.success('사진을 앨범에 담았어요 📸');
+      toast.success('사진을 앨범에 담았어요.');
       load();
     } catch (e) {
       Alert.alert('오류', getErrorMessage(e));
@@ -119,7 +120,7 @@ export function TripAlbumScreen({ route }: Props) {
               <Image source={{ uri: item.imageUrl }} style={[styles.photo, { width: cell, height: cell }]} />
             ) : (
               <View style={[styles.photo, styles.photoEmpty, { width: cell, height: cell }]}>
-                <Text style={styles.photoEmptyText}>📷</Text>
+                <MaterialCommunityIcons name="image-off-outline" size={28} color={colors.textMuted} />
               </View>
             )}
             {item.content ? (
@@ -156,7 +157,7 @@ export function TripAlbumScreen({ route }: Props) {
                     <Image source={{ uri: item.imageUrl }} style={styles.candThumb} />
                   ) : (
                     <View style={[styles.candThumb, styles.photoEmpty]}>
-                      <Text style={styles.photoEmptyText}>📷</Text>
+                      <MaterialCommunityIcons name="image-off-outline" size={20} color={colors.textMuted} />
                     </View>
                   )}
                   <View style={styles.candBody}>
@@ -196,7 +197,6 @@ const styles = StyleSheet.create({
   cell: { marginBottom: spacing.md },
   photo: { borderRadius: radius.lg, backgroundColor: colors.surfaceAlt },
   photoEmpty: { alignItems: 'center', justifyContent: 'center' },
-  photoEmptyText: { fontSize: 28 },
   caption: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textPrimary, marginTop: spacing.xs },
   by: { fontSize: 11, color: colors.textSecondary, marginTop: 2 },
 

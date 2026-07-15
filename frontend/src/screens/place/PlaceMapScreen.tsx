@@ -42,8 +42,8 @@ function renderDateCourse(c: DateCourse) {
 
 const FILTERS: { value: PlaceStatus | 'ALL'; label: string }[] = [
   { value: 'ALL', label: '전체' },
-  { value: 'WISHLIST', label: '💛 가고 싶어요' },
-  { value: 'VISITED', label: '✅ 다녀왔어요' },
+  { value: 'WISHLIST', label: '가고 싶어요' },
+  { value: 'VISITED', label: '다녀왔어요' },
 ];
 
 export function PlaceMapScreen({ navigation }: Props) {
@@ -101,7 +101,6 @@ export function PlaceMapScreen({ navigation }: Props) {
         <Text style={styles.screenTitle}>우리 맛집 지도</Text>
         <AiInsightButton
           label="AI 데이트 코스"
-          emoji="💕"
           title="AI 데이트 코스"
           fetcher={placeApi.dateCourse}
           render={renderDateCourse}
@@ -122,11 +121,11 @@ export function PlaceMapScreen({ navigation }: Props) {
             style={[styles.filterChip, mapMode && styles.filterChipActive]}
             onPress={() => setMapMode((v) => !v)}
           >
-            <Text style={[styles.filterText, mapMode && styles.filterTextActive]}>🗺️ 지도</Text>
+            <Text style={[styles.filterText, mapMode && styles.filterTextActive]}>지도</Text>
           </TouchableOpacity>
         ) : null}
         <TouchableOpacity style={styles.filterChip} onPress={() => navigation.navigate('TripList')}>
-          <Text style={styles.filterText}>✈️ 여행</Text>
+          <Text style={styles.filterText}>여행</Text>
         </TouchableOpacity>
       </View>
 
@@ -172,11 +171,11 @@ export function PlaceMapScreen({ navigation }: Props) {
             {item.address ? <Text style={styles.address}>{item.address}</Text> : null}
             <View style={styles.cardFooter}>
               <Text style={styles.statusBadge}>
-                {item.status === 'VISITED' ? '✅ 다녀왔어요' : '💛 가고 싶어요'}
+                {item.status === 'VISITED' ? '다녀왔어요' : '가고 싶어요'}
               </Text>
               {item.visitCount > 0 ? (
                 <Text style={styles.visitInfo}>
-                  {item.avgRating ? `★ ${item.avgRating.toFixed(1)} · ` : ''}방문 {item.visitCount}회
+                  {item.avgRating ? `${item.avgRating.toFixed(1)} · ` : ''}방문 {item.visitCount}회
                 </Text>
               ) : null}
             </View>
@@ -185,7 +184,7 @@ export function PlaceMapScreen({ navigation }: Props) {
         ListEmptyComponent={
           !loading ? (
             <EmptyState
-              emoji="📍"
+              icon="map-marker-outline"
               title="아직 저장한 장소가 없어요"
               description="함께 가고 싶은 맛집을 추가해보세요! (카드를 길게 눌러 삭제)"
             />

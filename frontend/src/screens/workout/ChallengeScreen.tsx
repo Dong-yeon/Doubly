@@ -74,7 +74,7 @@ export function ChallengeScreen(_: Props) {
     try {
       await challengeApi.create({ type, title: title.trim(), startDate: start, endDate: end, stake: stake.trim() || undefined });
       haptics.success();
-      toast.success('대결을 시작했어요! 🏆');
+      toast.success('대결을 시작했어요! ');
       setAddOpen(false);
       load();
     } catch (e) {
@@ -116,7 +116,7 @@ export function ChallengeScreen(_: Props) {
         />
       </View>
       <Text style={[styles.barCount, leading && styles.barCountLead]}>
-        {count}일{leading ? ' 👑' : ''}
+        {count}일{leading ? ' ' : ''}
       </Text>
     </View>
   );
@@ -146,15 +146,15 @@ export function ChallengeScreen(_: Props) {
               </Text>
               {renderBar(true, item.myCount, max, item.leader === 'ME')}
               {renderBar(false, item.partnerCount, max, item.leader === 'PARTNER')}
-              {item.leader === 'TIE' ? <Text style={styles.tie}>현재 동점! 🤝</Text> : null}
-              {item.stake ? <Text style={styles.stake}>🎁 {item.stake}</Text> : null}
+              {item.leader === 'TIE' ? <Text style={styles.tie}>현재 동점! </Text> : null}
+              {item.stake ? <Text style={styles.stake}>{item.stake}</Text> : null}
             </TouchableOpacity>
           );
         }}
         ListEmptyComponent={
           !loading ? (
             <EmptyState
-              emoji="🏆"
+              icon="trophy-outline"
               title="커플 대결을 시작해보세요"
               description="이번 주 누가 더 많이 운동/식단을 기록하는지 겨뤄봐요. 벌칙도 걸 수 있어요!"
             />
@@ -177,7 +177,7 @@ export function ChallengeScreen(_: Props) {
                   onPress={() => setType(t)}
                 >
                   <Text style={[styles.typeText, type === t && styles.typeTextActive]}>
-                    {t === 'WORKOUT' ? '💪 운동' : '🍱 식단'}
+                    {t === 'WORKOUT' ? '운동' : '식단'}
                   </Text>
                 </TouchableOpacity>
               ))}

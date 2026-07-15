@@ -54,7 +54,7 @@ export function TrainerRoutineAssignScreen({ navigation, route }: Props) {
         routineDate: dateFromOffset(dateOffset),
       });
       haptics.success();
-      toast.success(`${name}님에게 루틴을 배정했어요 📋`);
+      toast.success(`${name}님에게 루틴을 배정했어요 `);
       navigation.goBack();
     } catch (e) {
       Alert.alert('오류', getErrorMessage(e));

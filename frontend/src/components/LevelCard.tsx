@@ -1,18 +1,21 @@
 /** 레벨 카드 — 칭호 + XP 진행바. XP = 운동일×10 + 식단일×5 (서버 파생 계산) */
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Card } from './Card';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 import type { UserLevel } from '../types';
 
-// 레벨 구간별 칭호 — 발랄 톤
-const TITLES: { minLevel: number; emoji: string; title: string }[] = [
-  { minLevel: 15, emoji: '👑', title: '전설' },
-  { minLevel: 10, emoji: '🔥', title: '헬스왕' },
-  { minLevel: 7, emoji: '💪', title: '열정러' },
-  { minLevel: 5, emoji: '🏃', title: '꾸준러' },
-  { minLevel: 3, emoji: '🐣', title: '병아리' },
-  { minLevel: 1, emoji: '🌱', title: '새싹' },
+type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+
+// 레벨 구간별 칭호
+const TITLES: { minLevel: number; icon: IconName; title: string }[] = [
+  { minLevel: 15, icon: 'crown', title: '전설' },
+  { minLevel: 10, icon: 'trophy', title: '헬스왕' },
+  { minLevel: 7, icon: 'fire', title: '열정러' },
+  { minLevel: 5, icon: 'run', title: '꾸준러' },
+  { minLevel: 3, icon: 'leaf', title: '병아리' },
+  { minLevel: 1, icon: 'sprout', title: '새싹' },
 ];
 
 export function levelTitle(level: number) {
@@ -20,7 +23,7 @@ export function levelTitle(level: number) {
 }
 
 export function LevelCard({ level }: { level: UserLevel }) {
-  const { emoji, title } = levelTitle(level.level);
+  const { icon, title } = levelTitle(level.level);
   const span = level.nextLevelXp - level.levelStartXp;
   const progress = span > 0 ? (level.xp - level.levelStartXp) / span : 0;
   const remain = level.nextLevelXp - level.xp;
@@ -29,11 +32,13 @@ export function LevelCard({ level }: { level: UserLevel }) {
     <Card elevation="sm" style={styles.card}>
       <View style={styles.header}>
         <View style={styles.titleWrap}>
-          <Text style={styles.emoji}>{emoji}</Text>
+          <View style={styles.iconBadge}>
+            <MaterialCommunityIcons name={icon} size={20} color={colors.primary} />
+          </View>
           <View>
             <Text style={styles.levelText}>Lv.{level.level} {title}</Text>
             <Text style={styles.sub}>
-              💪 운동 {level.workoutDays}일 · 🥗 식단 {level.mealDays}일
+              운동 {level.workoutDays}일 · 식단 {level.mealDays}일
             </Text>
           </View>
         </View>
@@ -52,7 +57,14 @@ const styles = StyleSheet.create({
   card: { gap: spacing.sm },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   titleWrap: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  emoji: { fontSize: 32 },
+  iconBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primaryBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   levelText: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
   sub: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
   xp: { fontSize: fontSize.body, fontWeight: '800', color: colors.primary },

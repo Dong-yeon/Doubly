@@ -21,7 +21,7 @@ export function WorkoutCard({ workout, onLongPress }: Props) {
       <View style={styles.header}>
         <Text style={styles.date}>{relativeDateLabel(workout.workoutDate)}</Text>
         {workout.totalDurationMin ? (
-          <Text style={styles.duration}>⏱ {workout.totalDurationMin}분</Text>
+          <Text style={styles.duration}>{workout.totalDurationMin}분</Text>
         ) : null}
       </View>
 

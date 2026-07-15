@@ -81,7 +81,7 @@ export function PlaceDetailScreen({ route }: Props) {
         imageUrl,
       });
       haptics.success();
-      toast.success('방문 기록 완료! 🍽️');
+      toast.success('방문 기록 완료! ');
       setFormOpen(false);
       setRating(0);
       setMemo('');
@@ -139,7 +139,7 @@ export function PlaceDetailScreen({ route }: Props) {
                   {photoUri ? (
                     <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />
                   ) : (
-                    <Text style={styles.photoPlaceholder}>📷 사진 추가하기</Text>
+                    <Text style={styles.photoPlaceholder}>사진 추가하기</Text>
                   )}
                 </TouchableOpacity>
 
@@ -163,7 +163,7 @@ export function PlaceDetailScreen({ route }: Props) {
                 </View>
               </View>
             ) : (
-              <Button title="✍️ 방문 기록 남기기" variant="secondary" onPress={() => setFormOpen(true)} />
+              <Button title="방문 기록 남기기" variant="secondary" onPress={() => setFormOpen(true)} />
             )}
 
             <Text style={styles.sectionTitle}>방문 기록</Text>
