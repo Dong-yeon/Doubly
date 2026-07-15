@@ -9,16 +9,16 @@ import type { KakaoMapHandle, KakaoMapProps } from './KakaoMap.types';
 export type { KakaoMapHandle, KakaoMapProps };
 
 export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap(
-  { markers, selectable, centerLat, centerLng, height = 300, style, onSelect, onMarkerPress, onSearchResults },
+  { markers, path, selectable, centerLat, centerLng, height = 300, style, onSelect, onMarkerPress, onSearchResults },
   ref,
 ) {
   const webViewRef = useRef<WebView>(null);
 
   const html = useMemo(
-    () => buildKakaoMapHtml({ markers, selectable, centerLat, centerLng }),
-    // markers 내용이 바뀔 때만 재생성 (참조 변경마다 지도 리로드 방지)
+    () => buildKakaoMapHtml({ markers, path, selectable, centerLat, centerLng }),
+    // markers/path 내용이 바뀔 때만 재생성 (참조 변경마다 지도 리로드 방지)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [JSON.stringify(markers), selectable, centerLat, centerLng],
+    [JSON.stringify(markers), JSON.stringify(path), selectable, centerLat, centerLng],
   );
 
   useImperativeHandle(ref, () => ({

@@ -26,8 +26,16 @@ export type KakaoMapMessage =
   | { source: 'fitto-kakao-map'; type: 'marker'; id: number }
   | { source: 'fitto-kakao-map'; type: 'search-results'; keyword: string; results: KakaoPlaceResult[] };
 
+/** 동선 폴리라인 좌표 (정렬 순서대로 이어 그린다) */
+export interface KakaoLatLng {
+  lat: number;
+  lng: number;
+}
+
 export interface KakaoMapOptions {
   markers?: KakaoMapMarker[];
+  /** 순서대로 이어 그릴 경로 (일정 동선). 2점 이상일 때만 표시 */
+  path?: KakaoLatLng[];
   /** 지도 탭으로 좌표 선택 (주소 자동 조회 포함) */
   selectable?: boolean;
   centerLat?: number;
@@ -51,6 +59,7 @@ export function parseKakaoMapMessage(raw: unknown): KakaoMapMessage | null {
 
 export function buildKakaoMapHtml(options: KakaoMapOptions): string {
   const markers = options.markers ?? [];
+  const path = options.path ?? [];
   const centerLat = options.centerLat ?? markers[0]?.lat ?? DEFAULT_LAT;
   const centerLng = options.centerLng ?? markers[0]?.lng ?? DEFAULT_LNG;
   const level = options.level ?? 5;
@@ -133,7 +142,18 @@ kakao.maps.load(function () {
                m.title.replace(/</g, '&lt;') + '</div>'
     });
   });
-  if (markers.length > 1) { map.setBounds(bounds, 40, 40, 40, 40); }
+  // 동선 폴리라인 — 일정 순서대로 이어 그린다 (2점 이상)
+  var path = ${JSON.stringify(path)};
+  if (path.length > 1) {
+    var linePath = path.map(function (p) { return new kakao.maps.LatLng(p.lat, p.lng); });
+    new kakao.maps.Polyline({
+      map: map, path: linePath,
+      strokeWeight: 4, strokeColor: '#4A5BFF', strokeOpacity: 0.85, strokeStyle: 'solid'
+    });
+    path.forEach(function (p) { bounds.extend(new kakao.maps.LatLng(p.lat, p.lng)); });
+  }
+
+  if (markers.length > 1 || path.length > 1) { map.setBounds(bounds, 40, 40, 40, 40); }
 
   ${options.selectable ? `
   var geocoder = new kakao.maps.services.Geocoder();

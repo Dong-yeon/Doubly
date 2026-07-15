@@ -42,6 +42,10 @@ public class FeedPost {
     @Column(name = "image_url", length = 500)
     private String imageUrl;
 
+    /** 담긴 여행 앨범 (PLAN.md Trip Album) — 미연결 시 null */
+    @Column(name = "trip_id")
+    private Long tripId;
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -52,5 +56,10 @@ public class FeedPost {
         this.authorId = authorId;
         this.content = content;
         this.imageUrl = imageUrl;
+    }
+
+    /** 여행 앨범에 담기 / 빼기(null) */
+    public void assignTrip(Long tripId) {
+        this.tripId = tripId;
     }
 }

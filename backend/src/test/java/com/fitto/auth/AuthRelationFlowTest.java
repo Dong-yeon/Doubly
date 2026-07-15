@@ -37,7 +37,7 @@ class AuthRelationFlowTest {
 
     @Test
     void 회원가입_시_USER_역할과_토큰이_발급된다() {
-        TokenResponse res = authService.register(registerReq("a@fitto.com"));
+        TokenResponse res = authService.register(registerReq("a@fitto.com"), "127.0.0.1");
 
         assertThat(res.accessToken()).isNotBlank();
         assertThat(res.refreshToken()).isNotBlank();
@@ -47,27 +47,27 @@ class AuthRelationFlowTest {
 
     @Test
     void 중복_이메일_가입은_거부된다() {
-        authService.register(registerReq("dup@fitto.com"));
+        authService.register(registerReq("dup@fitto.com"), "127.0.0.1");
 
-        assertThatThrownBy(() -> authService.register(registerReq("dup@fitto.com")))
+        assertThatThrownBy(() -> authService.register(registerReq("dup@fitto.com"), "127.0.0.1"))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.EMAIL_ALREADY_EXISTS);
     }
 
     @Test
     void 잘못된_비밀번호_로그인은_거부된다() {
-        authService.register(registerReq("login@fitto.com"));
+        authService.register(registerReq("login@fitto.com"), "127.0.0.1");
 
-        assertThatThrownBy(() -> authService.login(new LoginRequest("login@fitto.com", "wrongpass1")))
+        assertThatThrownBy(() -> authService.login(new LoginRequest("login@fitto.com", "wrongpass1"), "127.0.0.1"))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.INVALID_CREDENTIALS);
     }
 
     @Test
     void refresh_토큰으로_재발급된다() {
-        TokenResponse first = authService.register(registerReq("refresh@fitto.com"));
+        TokenResponse first = authService.register(registerReq("refresh@fitto.com"), "127.0.0.1");
 
-        TokenResponse renewed = authService.refresh(first.refreshToken());
+        TokenResponse renewed = authService.refresh(first.refreshToken(), "127.0.0.1");
 
         assertThat(renewed.accessToken()).isNotBlank();
         assertThat(renewed.user().email()).isEqualTo("refresh@fitto.com");
@@ -75,8 +75,8 @@ class AuthRelationFlowTest {
 
     @Test
     void 커플_초대코드로_연결되고_관계가_조회된다() {
-        Long userA = authService.register(registerReq("coupleA@fitto.com")).user().id();
-        Long userB = authService.register(registerReq("coupleB@fitto.com")).user().id();
+        Long userA = authService.register(registerReq("coupleA@fitto.com"), "127.0.0.1").user().id();
+        Long userB = authService.register(registerReq("coupleB@fitto.com"), "127.0.0.1").user().id();
 
         InviteCodeResponse invite = relationService.createCoupleInvite(userA);
         assertThat(invite.code()).hasSize(6);
@@ -97,7 +97,7 @@ class AuthRelationFlowTest {
 
     @Test
     void 본인_코드로는_연결할_수_없다() {
-        Long userA = authService.register(registerReq("self@fitto.com")).user().id();
+        Long userA = authService.register(registerReq("self@fitto.com"), "127.0.0.1").user().id();
         InviteCodeResponse invite = relationService.createCoupleInvite(userA);
 
         assertThatThrownBy(() -> relationService.connectCouple(userA, invite.code()))

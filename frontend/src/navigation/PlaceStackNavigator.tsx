@@ -8,6 +8,10 @@ import { PlaceDetailScreen } from '../screens/place/PlaceDetailScreen';
 import { TripListScreen } from '../screens/trip/TripListScreen';
 import { TripFormScreen } from '../screens/trip/TripFormScreen';
 import { TripDetailScreen } from '../screens/trip/TripDetailScreen';
+import { TripExpenseScreen } from '../screens/trip/TripExpenseScreen';
+import { TripChecklistScreen } from '../screens/trip/TripChecklistScreen';
+import { TripAlbumScreen } from '../screens/trip/TripAlbumScreen';
+import { TripRecapScreen } from '../screens/trip/TripRecapScreen';
 import { colors } from '../constants/theme';
 
 const Stack = createNativeStackNavigator<PlaceStackParamList>();
@@ -46,6 +50,18 @@ export function PlaceStackNavigator() {
         component={TripDetailScreen}
         options={({ route }) => ({ title: route.params.title })}
       />
+      <Stack.Screen
+        name="TripExpense"
+        component={TripExpenseScreen}
+        options={{ title: '경비 정산' }}
+      />
+      <Stack.Screen
+        name="TripChecklist"
+        component={TripChecklistScreen}
+        options={{ title: '준비물 체크리스트' }}
+      />
+      <Stack.Screen name="TripAlbum" component={TripAlbumScreen} options={{ title: '여행 앨범' }} />
+      <Stack.Screen name="TripRecap" component={TripRecapScreen} options={{ title: '여행 회고' }} />
     </Stack.Navigator>
   );
 }

@@ -1,5 +1,7 @@
 package com.fitto.trip.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fitto.common.ai.GeminiClient;
 import com.fitto.common.event.CoupleEvent;
 import com.fitto.common.event.CoupleEventPublisher;
 import com.fitto.common.exception.BusinessException;
@@ -15,10 +17,17 @@ import com.fitto.relation.domain.RelationStatus;
 import com.fitto.relation.domain.RelationType;
 import com.fitto.relation.repository.RelationRepository;
 import com.fitto.trip.domain.Trip;
+import com.fitto.trip.domain.TripItem;
+import com.fitto.trip.dto.ReorderTripItemsRequest;
+import com.fitto.trip.dto.SaveTripItemRequest;
 import com.fitto.trip.dto.SaveTripRequest;
+import com.fitto.trip.dto.TripDayResponse;
 import com.fitto.trip.dto.TripDetailResponse;
+import com.fitto.trip.dto.TripItemResponse;
 import com.fitto.trip.dto.TripResponse;
+import com.fitto.trip.dto.UpdateTripItemRequest;
 import com.fitto.trip.dto.UpdateTripRequest;
+import com.fitto.trip.repository.TripItemRepository;
 import com.fitto.trip.repository.TripRepository;
 import com.fitto.user.domain.User;
 import com.fitto.user.repository.UserRepository;
@@ -26,7 +35,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -42,28 +55,59 @@ public class TripService {
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("M월 d일");
 
+    /** AI 일정 생성 응답 스키마 — days[dayNo, stops[startTime, title, category, placeName, reason]]. */
+    private static final Map<String, Object> ITINERARY_SCHEMA = Map.of(
+            "type", "OBJECT",
+            "properties", Map.of(
+                    "days", Map.of(
+                            "type", "ARRAY",
+                            "items", Map.of(
+                                    "type", "OBJECT",
+                                    "properties", Map.of(
+                                            "dayNo", Map.of("type", "INTEGER"),
+                                            "stops", Map.of(
+                                                    "type", "ARRAY",
+                                                    "items", Map.of(
+                                                            "type", "OBJECT",
+                                                            "properties", Map.of(
+                                                                    "startTime", Map.of("type", "STRING"),
+                                                                    "title", Map.of("type", "STRING"),
+                                                                    "category", Map.of("type", "STRING"),
+                                                                    "placeName", Map.of("type", "STRING"),
+                                                                    "reason", Map.of("type", "STRING")),
+                                                            "required", List.of("title")))),
+                                    "required", List.of("dayNo", "stops"))),
+                    "comment", Map.of("type", "STRING")),
+            "required", List.of("days"));
+
     private final TripRepository tripRepository;
+    private final TripItemRepository tripItemRepository;
     private final PlaceRepository placeRepository;
     private final PlaceVisitRepository placeVisitRepository;
     private final RelationRepository relationRepository;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
     private final CoupleEventPublisher coupleEventPublisher;
+    private final GeminiClient geminiClient;
 
     public TripService(TripRepository tripRepository,
+                       TripItemRepository tripItemRepository,
                        PlaceRepository placeRepository,
                        PlaceVisitRepository placeVisitRepository,
                        RelationRepository relationRepository,
                        UserRepository userRepository,
                        NotificationService notificationService,
-                       CoupleEventPublisher coupleEventPublisher) {
+                       CoupleEventPublisher coupleEventPublisher,
+                       GeminiClient geminiClient) {
         this.tripRepository = tripRepository;
+        this.tripItemRepository = tripItemRepository;
         this.placeRepository = placeRepository;
         this.placeVisitRepository = placeVisitRepository;
         this.relationRepository = relationRepository;
         this.userRepository = userRepository;
         this.notificationService = notificationService;
         this.coupleEventPublisher = coupleEventPublisher;
+        this.geminiClient = geminiClient;
     }
 
     /** 여행 생성 (TRIP-01) — 상대에게 푸시 + TRIP 이벤트. */
@@ -100,11 +144,12 @@ public class TripService {
                 .toList();
     }
 
-    /** 여행 상세 (TRIP-03) — 담긴 장소 목록(방문 요약 포함). */
+    /** 여행 상세 (TRIP-03) — Day별 일정표 + 담긴 장소 목록(방문 요약 포함). */
     public TripDetailResponse detail(Long userId, Long tripId) {
         Trip trip = getCoupleTrip(userId, tripId);
         List<Place> places = placeRepository.findByTripIdOrderByIdDesc(trip.getId());
-        return new TripDetailResponse(TripResponse.of(trip, places.size()), withSummaries(places));
+        List<TripDayResponse> days = buildDays(trip);
+        return new TripDetailResponse(TripResponse.of(trip, places.size()), days, withSummaries(places));
     }
 
     /** 여행 수정 — 커플 둘 다 가능. */
@@ -149,6 +194,245 @@ public class TripService {
         }
         place.assignTrip(null);
         coupleEventPublisher.publish(trip.getCoupleId(), CoupleEvent.TRIP);
+    }
+
+    // ---- 일자별 일정표 (Itinerary) ----
+
+    /** 일정 목록 (ITEM-01) — Day별 그룹. */
+    public List<TripDayResponse> items(Long userId, Long tripId) {
+        Trip trip = getCoupleTrip(userId, tripId);
+        return buildDays(trip);
+    }
+
+    /** 일정 항목 추가 (ITEM-02) — 하루 맨 뒤에 붙인다. 장소 연결은 선택. */
+    @Transactional
+    public TripItemResponse addItem(Long userId, Long tripId, SaveTripItemRequest request) {
+        Trip trip = getCoupleTrip(userId, tripId);
+        validateDayNo(trip, request.dayNo());
+        Place place = request.placeId() != null
+                ? getCouplePlace(trip.getCoupleId(), request.placeId()) : null;
+
+        int nextOrder = tripItemRepository.findByTripIdAndDayNo(trip.getId(), request.dayNo()).size();
+        TripItem item = TripItem.builder()
+                .tripId(trip.getId())
+                .placeId(place != null ? place.getId() : null)
+                .dayNo(request.dayNo())
+                .sortOrder(nextOrder)
+                .startTime(request.startTime())
+                .title(request.title().trim())
+                .category(request.category())
+                .memo(request.memo())
+                .createdBy(userId)
+                .build();
+        tripItemRepository.save(item);
+        coupleEventPublisher.publish(trip.getCoupleId(), CoupleEvent.TRIP);
+        return TripItemResponse.of(item, place);
+    }
+
+    /** 일정 항목 수정 — 커플 둘 다 가능. Day·순서는 reorder 로. */
+    @Transactional
+    public TripItemResponse updateItem(Long userId, Long tripId, Long itemId, UpdateTripItemRequest request) {
+        Trip trip = getCoupleTrip(userId, tripId);
+        TripItem item = getTripItem(trip.getId(), itemId);
+        item.update(request.title(), request.startTime(), request.category(), request.memo());
+        coupleEventPublisher.publish(trip.getCoupleId(), CoupleEvent.TRIP);
+        Place place = item.getPlaceId() != null
+                ? placeRepository.findById(item.getPlaceId()).orElse(null) : null;
+        return TripItemResponse.of(item, place);
+    }
+
+    /** 일정 항목 삭제. */
+    @Transactional
+    public void deleteItem(Long userId, Long tripId, Long itemId) {
+        Trip trip = getCoupleTrip(userId, tripId);
+        TripItem item = getTripItem(trip.getId(), itemId);
+        tripItemRepository.delete(item);
+        coupleEventPublisher.publish(trip.getCoupleId(), CoupleEvent.TRIP);
+    }
+
+    /** 일정 순서 일괄 변경 (ITEM-03) — 넘어온 항목만 dayNo·sortOrder 재배치. */
+    @Transactional
+    public void reorderItems(Long userId, Long tripId, ReorderTripItemsRequest request) {
+        Trip trip = getCoupleTrip(userId, tripId);
+        Map<Long, TripItem> byId = tripItemRepository
+                .findByTripIdOrderByDayNoAscSortOrderAscIdAsc(trip.getId()).stream()
+                .collect(Collectors.toMap(TripItem::getId, Function.identity()));
+        for (ReorderTripItemsRequest.Entry e : request.items()) {
+            TripItem item = byId.get(e.itemId());
+            if (item == null) {
+                throw new BusinessException(ErrorCode.TRIP_ITEM_NOT_FOUND);
+            }
+            validateDayNo(trip, e.dayNo());
+            item.moveTo(e.dayNo(), e.sortOrder());
+        }
+        coupleEventPublisher.publish(trip.getCoupleId(), CoupleEvent.TRIP);
+    }
+
+    /**
+     * AI 여행 일정 생성 (ITEM-04) — 여행 제목(지역)·기간·저장 장소·요청사항을 Gemini 에 보내
+     * Day 바이 Day 일정을 받아 trip_items 로 저장한다. 기존 일정은 대체된다.
+     */
+    @Transactional
+    public List<TripDayResponse> generateItinerary(Long userId, Long tripId, String preferences) {
+        Trip trip = getCoupleTrip(userId, tripId);
+        int totalDays = daysOf(trip);
+        List<Place> places = placeRepository.findByCoupleIdOrderByIdDesc(trip.getCoupleId());
+
+        geminiClient.requireConfiguredAndCountUsage(userId);
+        JsonNode result = geminiClient.generateJson(
+                List.of(GeminiClient.textPart(itineraryPrompt(trip, totalDays, places, preferences))),
+                ITINERARY_SCHEMA);
+
+        Map<String, Place> placeByName = new HashMap<>();
+        for (Place p : places) {
+            placeByName.putIfAbsent(p.getName(), p);
+        }
+
+        List<TripItem> generated = new ArrayList<>();
+        for (JsonNode dayNode : result.path("days")) {
+            int dayNo = dayNode.path("dayNo").asInt(0);
+            if (dayNo < 1 || dayNo > totalDays) {
+                continue; // 기간을 벗어난 Day 는 버린다
+            }
+            int order = 0;
+            for (JsonNode s : dayNode.path("stops")) {
+                String title = cap(s.path("title").asText(""), 100);
+                if (title == null || title.isBlank()) {
+                    continue;
+                }
+                Place linked = placeByName.get(s.path("placeName").asText(null));
+                generated.add(TripItem.builder()
+                        .tripId(trip.getId())
+                        .placeId(linked != null ? linked.getId() : null)
+                        .dayNo(dayNo)
+                        .sortOrder(order++)
+                        .startTime(parseTime(s.path("startTime").asText(null)))
+                        .title(title)
+                        .category(cap(s.path("category").asText(null), 30))
+                        .memo(s.path("reason").asText(null))
+                        .createdBy(userId)
+                        .build());
+            }
+        }
+        if (generated.isEmpty()) {
+            throw new BusinessException(ErrorCode.AI_ANALYSIS_FAILED);
+        }
+
+        tripItemRepository.deleteByTripId(trip.getId()); // 기존 일정 대체 (벌크 DELETE 후 INSERT)
+        tripItemRepository.saveAll(generated);
+
+        Relation couple = activeCouple(userId);
+        Long partnerId = couple.partnerOf(userId);
+        if (partnerId != null) {
+            notificationService.notify(partnerId, "AI가 여행 일정을 짰어요 ✨",
+                    userName(userId) + " — " + trip.getTitle());
+        }
+        coupleEventPublisher.publish(trip.getCoupleId(), CoupleEvent.TRIP);
+        return buildDays(trip);
+    }
+
+    private String itineraryPrompt(Trip trip, int totalDays, List<Place> places, String preferences) {
+        String placeBlock = places.isEmpty()
+                ? "없음"
+                : places.stream()
+                        .map(p -> "- " + p.getName()
+                                + (p.getCategory() != null ? " [" + p.getCategory() + "]" : "")
+                                + (p.getAddress() != null ? " (" + p.getAddress() + ")" : ""))
+                        .collect(Collectors.joining("\n"));
+        String pref = (preferences != null && !preferences.isBlank())
+                ? "\n            - 커플 요청사항: " + preferences.trim() : "";
+        return """
+                아래 여행에 대한 %d일치 데이 바이 데이 일정을 짜주세요.
+                - 여행: %s (%s ~ %s)
+                - days: dayNo(1~%d) 별로, 각 day 의 stops 는 2~5곳.
+                - 각 stop: startTime("HH:mm" 24시간), title(장소·활동명, 한국어),
+                  category(관광/식사/카페/이동/숙소 중 하나), reason(추천 이유 한 문장 한국어).
+                - 오전 관광 → 점심 → 오후 → 저녁 식사처럼 시간대와 동선이 자연스럽게 흐르도록.
+                - 여행 제목의 지역을 실제 대표 명소·맛집으로 채우되, 아래 [저장된 장소]가 있으면
+                  우선 포함하고 그 경우 placeName 에 목록의 이름을 그대로 씁니다.
+                  목록에 없는 곳은 placeName 을 비웁니다.%s
+
+                [저장된 장소]
+                %s
+                """.formatted(totalDays, trip.getTitle(), trip.getStartDate(), trip.getEndDate(),
+                totalDays, pref, placeBlock);
+    }
+
+    /** "HH:mm" | "H:mm" | "HH:mm:ss" → LocalTime (형식이 어긋나면 null) */
+    private LocalTime parseTime(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        String[] parts = raw.trim().split(":");
+        if (parts.length < 2) {
+            return null;
+        }
+        try {
+            int h = Integer.parseInt(parts[0].trim());
+            int m = Integer.parseInt(parts[1].trim());
+            if (h < 0 || h > 23 || m < 0 || m > 59) {
+                return null;
+            }
+            return LocalTime.of(h, m);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /** 컬럼 길이 안전 절단 (공백 정리 후 max 초과 시 자름). */
+    private String cap(String s, int max) {
+        if (s == null) {
+            return null;
+        }
+        String trimmed = s.trim();
+        return trimmed.length() > max ? trimmed.substring(0, max) : trimmed;
+    }
+
+    private int daysOf(Trip trip) {
+        return (int) ChronoUnit.DAYS.between(trip.getStartDate(), trip.getEndDate()) + 1;
+    }
+
+    /** 여행 기간(1~N일차)만큼 Day 를 만들고, 각 Day 에 시간순 항목을 채운다. */
+    private List<TripDayResponse> buildDays(Trip trip) {
+        List<TripItem> items = tripItemRepository
+                .findByTripIdOrderByDayNoAscSortOrderAscIdAsc(trip.getId());
+        Map<Long, Place> placeById = items.stream()
+                .map(TripItem::getPlaceId)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .map(placeRepository::findById)
+                .flatMap(java.util.Optional::stream)
+                .collect(Collectors.toMap(Place::getId, Function.identity()));
+
+        Map<Integer, List<TripItemResponse>> byDay = items.stream().collect(Collectors.groupingBy(
+                TripItem::getDayNo,
+                Collectors.mapping(it -> TripItemResponse.of(it, placeById.get(it.getPlaceId())),
+                        Collectors.toList())));
+
+        int totalDays = daysOf(trip);
+        List<TripDayResponse> days = new ArrayList<>(totalDays);
+        for (int day = 1; day <= totalDays; day++) {
+            days.add(new TripDayResponse(day, trip.getStartDate().plusDays(day - 1),
+                    byDay.getOrDefault(day, List.of())));
+        }
+        return days;
+    }
+
+    private void validateDayNo(Trip trip, int dayNo) {
+        int totalDays = daysOf(trip);
+        if (dayNo < 1 || dayNo > totalDays) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT,
+                    "일정은 1일차부터 " + totalDays + "일차 사이여야 해요.");
+        }
+    }
+
+    private TripItem getTripItem(Long tripId, Long itemId) {
+        TripItem item = tripItemRepository.findById(itemId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.TRIP_ITEM_NOT_FOUND));
+        if (!item.getTripId().equals(tripId)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+        return item;
     }
 
     // ---- helpers ----
