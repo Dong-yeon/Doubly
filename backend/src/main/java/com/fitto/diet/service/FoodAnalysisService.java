@@ -47,6 +47,26 @@ public class FoodAnalysisService {
             - comment 에는 이 식단에 대한 짧고 다정한 한 줄 코멘트를 한국어로 작성합니다. (영양 균형 관점에서 칭찬 또는 부드러운 제안)
             """;
 
+    /**
+     * 텍스트로 적은 음식 분석 — 사진 분석과 같은 스키마로 응답받아 매핑을 공유한다.
+     * 텍스트에 리터럴 % 를 쓰지 않는다 (formatted() 사용 시 이스케이프 필요).
+     */
+    private static final String TEXT_PROMPT = """
+            아래는 사용자가 먹은 음식을 직접 적은 메모입니다. 이 메모를 분석해 주세요.
+
+            - 음식이 아니거나 무엇을 먹었는지 알 수 없으면 isFood 를 false 로, foods 는 빈 배열로 응답합니다.
+            - 쉼표·줄바꿈 등으로 나열된 음식을 각각 분리해 foods 에 담습니다. (예: "단백질쉐이크, 계란" → 2개)
+            - 각 음식의 이름(name)은 메모의 표현을 존중하되 한국어 표준 명칭으로 다듬습니다.
+            - 양이 적혀 있으면(예: "계란 2개", "밥 한 공기") 그 양을 반영하고, 없으면 한국인 기준
+              일반적인 1인분으로 가정합니다. portion 에 가정한 양을 적습니다. (예: "1개", "1인분")
+            - calories 는 그 양 기준 추정 칼로리(kcal), carbs/protein/fat 은 탄수화물/단백질/지방 추정량(g)입니다.
+            - totalCalories, totalCarbs, totalProtein, totalFat 은 모든 음식의 합계입니다.
+            - comment 에는 이 식단에 대한 짧고 다정한 한 줄 코멘트를 한국어로 작성합니다.
+
+            [메모]
+            %s
+            """;
+
     /** Gemini 구조화 출력(JSON mode) 스키마 — 응답 파싱을 안정화한다 */
     private static final Map<String, Object> RESPONSE_SCHEMA = Map.of(
             "type", "OBJECT",
@@ -94,6 +114,23 @@ public class FoodAnalysisService {
                 List.of(GeminiClient.imagePart(image.mimeType(), image.bytes()), GeminiClient.textPart(PROMPT)),
                 RESPONSE_SCHEMA);
         return toResponse(result);
+    }
+
+    /**
+     * 텍스트 음식 분석 — 메모(예: "단백질쉐이크, 계란")로 칼로리·매크로를 추정한다.
+     * 사진 분석과 스키마/매핑을 공유하므로 응답 형태가 같다.
+     */
+    public MealAnalysisResponse analyzeText(Long userId, String text) {
+        geminiClient.requireConfiguredAndCountUsage(userId);
+
+        JsonNode result = geminiClient.generateJson(
+                List.of(GeminiClient.textPart(buildTextPrompt(text))), RESPONSE_SCHEMA);
+        return toResponse(result);
+    }
+
+    /** 프롬프트 조립 — 테스트에서 직접 검증하려고 package-private 로 둔다. */
+    String buildTextPrompt(String text) {
+        return TEXT_PROMPT.formatted(text.trim());
     }
 
     // ---- 이미지 다운로드 (Cloudinary) ----

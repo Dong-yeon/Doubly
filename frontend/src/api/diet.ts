@@ -46,6 +46,9 @@ export const dietApi = {
   // AI 분석은 이미지 처리 시간이 길어 기본 timeout(10s)을 늘린다
   analyze: (photoUrl: string) =>
     unwrap(apiClient.post<ApiResponse<MealAnalysis>>('/meal/analyze', { photoUrl }, { timeout: 60000 })),
+  // 텍스트로 적은 음식의 칼로리·매크로 추정 (사진 분석과 응답 형태 동일)
+  analyzeText: (text: string) =>
+    unwrap(apiClient.post<ApiResponse<MealAnalysis>>('/meal/analyze-text', { text }, { timeout: 60000 })),
   today: () => unwrap(apiClient.get<ApiResponse<Meal[]>>('/meal/today')),
   history: (cursor?: number) =>
     unwrap(apiClient.get<ApiResponse<Meal[]>>('/meal/history', { params: { cursor } })),
