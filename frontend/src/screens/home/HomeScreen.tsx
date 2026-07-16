@@ -374,13 +374,45 @@ export function HomeScreen({ navigation }: Props) {
         renderItem={renderItem}
         ListHeaderComponent={hero}
         ListEmptyComponent={
-          connected && !feedLoading ? (
+          feedLoading ? null : connected ? (
             <EmptyState
               icon="timeline-text-outline"
               title="아직 기록이 없어요"
               description={'운동·식단·맛집을 기록하거나\n첫 일상을 남겨보세요!'}
             />
-          ) : null
+          ) : (
+            /* 미연결 첫인상 — 연결 카드 아래가 텅 비어 보이지 않게, 혼자서도
+               시작할 수 있는 행동을 안내한다 (FAB 액션시트와 같은 목적지) */
+            <View style={styles.soloGuide}>
+              <Text style={styles.soloTitle}>연결을 기다리는 동안, 혼자서도 시작할 수 있어요</Text>
+              <Card elevation="sm" style={styles.soloCard}>
+                {(
+                  [
+                    { icon: 'dumbbell', label: '운동 기록하기', desc: '오늘 운동을 남기면 스트릭이 시작돼요', go: () => navigation.navigate('Workout', { screen: 'WorkoutRecord' }) },
+                    { icon: 'silverware-fork-knife', label: '식단 기록하기', desc: '사진이나 글로 적으면 AI가 칼로리를 계산해요', go: () => navigation.navigate('Workout', { screen: 'DietRecord' }) },
+                    { icon: 'map-marker-plus-outline', label: '가고 싶은 맛집 저장', desc: '나중에 둘이 함께 갈 곳을 미리 담아두세요', go: () => navigation.navigate('Place', { screen: 'PlaceAdd' }) },
+                  ] as const
+                ).map((a, i, arr) => (
+                  <React.Fragment key={a.label}>
+                    <Pressable
+                      style={({ pressed }) => [styles.soloItem, pressed && styles.soloPressed]}
+                      onPress={a.go}
+                    >
+                      <View style={styles.soloIcon}>
+                        <MaterialCommunityIcons name={a.icon} size={22} color={colors.primary} />
+                      </View>
+                      <View style={styles.soloBody}>
+                        <Text style={styles.soloLabel}>{a.label}</Text>
+                        <Text style={styles.soloDesc}>{a.desc}</Text>
+                      </View>
+                      <Text style={styles.soloChevron}>›</Text>
+                    </Pressable>
+                    {i < arr.length - 1 ? <View style={styles.soloDivider} /> : null}
+                  </React.Fragment>
+                ))}
+              </Card>
+            </View>
+          )
         }
         ListFooterComponent={
           loadingMore ? <ActivityIndicator style={styles.loadMore} color={colors.primary} /> : null
@@ -510,6 +542,32 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   connectBtnText: { color: colors.primaryDark, fontWeight: '800', fontSize: fontSize.body },
+
+  // 미연결 첫인상 — 혼자서도 시작할 수 있는 행동 안내
+  soloGuide: { marginTop: spacing.lg },
+  soloTitle: {
+    fontSize: fontSize.caption,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
+    marginLeft: spacing.xs,
+  },
+  soloCard: { paddingVertical: spacing.xs, paddingHorizontal: spacing.md },
+  soloItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, minHeight: 44 },
+  soloPressed: { opacity: 0.6 },
+  soloIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    backgroundColor: colors.primaryBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  soloBody: { flex: 1 },
+  soloLabel: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
+  soloDesc: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
+  soloChevron: { fontSize: fontSize.title, color: colors.textMuted, fontWeight: '700' },
+  soloDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
 
   actionRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md, marginBottom: spacing.sm },
   composeBtn: {
