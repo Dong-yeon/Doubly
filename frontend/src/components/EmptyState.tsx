@@ -18,7 +18,8 @@ export function EmptyState({ icon = 'inbox-outline', title, description }: Props
   return (
     <View style={styles.wrap}>
       <View style={styles.iconCircle}>
-        <MaterialCommunityIcons name={name} size={40} color={colors.textMuted} />
+        {/* textSecondary — textMuted 는 iconCircle(surfaceAlt) 위 2.45:1 로 그래픽 기준(3:1) 미달 */}
+        <MaterialCommunityIcons name={name} size={40} color={colors.textSecondary} />
       </View>
       <Text style={styles.title}>{title}</Text>
       {description ? <Text style={styles.desc}>{description}</Text> : null}

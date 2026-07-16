@@ -48,12 +48,13 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
           if (!focused && !event.defaultPrevented) navigation.navigate(routeName);
         }}
       >
+        {/* 비활성도 textSecondary — textMuted(#9A98A4)는 흰 탭바 위 2.84:1 로 WCAG 미달 */}
         <MaterialCommunityIcons
           name={meta.icon}
           size={24}
-          color={focused ? colors.primary : colors.textMuted}
+          color={focused ? colors.primary : colors.textSecondary}
         />
-        <Text style={[styles.tabLabel, { color: focused ? colors.primary : colors.textMuted }]}>
+        <Text style={[styles.tabLabel, { color: focused ? colors.primary : colors.textSecondary }]}>
           {meta.label}
         </Text>
       </TouchableOpacity>
@@ -141,12 +142,13 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
     ...shadow.md,
   },
-  tabItem: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2 },
+  // minHeight 48 — 아이콘+라벨만으론 40px 이라 터치 타깃 권장(44px)에 못 미친다
+  tabItem: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2, minHeight: 48 },
   tabLabel: { fontSize: 11, fontWeight: '700', lineHeight: 14 },
   fabSlot: { width: 72, alignItems: 'center', justifyContent: 'center' },
   fab: {
     position: 'absolute',
-    top: -28,
+    top: -32, // tabItem minHeight 48 로 슬롯 중심이 4px 내려간 만큼 보정 (탭바 상단과 플러시 유지)
     width: FAB_SIZE,
     height: FAB_SIZE,
     borderRadius: FAB_SIZE / 2,
