@@ -506,6 +506,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.sm,
+    minHeight: 44, // 터치 타깃 — 텍스트+패딩만으론 36px
+    justifyContent: 'center',
   },
   connectBtnText: { color: colors.primaryDark, fontWeight: '800', fontSize: fontSize.body },
 
