@@ -2,11 +2,14 @@ package com.fitto.diet.service;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+import java.util.Map;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
 /**
- * 텍스트 음식 분석 프롬프트 조립 — 스프링 컨텍스트 없는 순수 단위 테스트.
+ * 텍스트 음식 분석 프롬프트/스키마 — 스프링 컨텍스트 없는 순수 단위 테스트.
  * <p>
  * 회귀 방지: 프롬프트에 리터럴 % 를 이스케이프(%%)하지 않으면 formatted() 가
  * UnknownFormatConversionException 을 던져 500 이 된다 (AI 운동 추천에서 실제로 겪음).
@@ -40,5 +43,31 @@ class FoodAnalysisTextPromptTest {
     @Test
     void 앞뒤_공백은_정리된다() {
         assertThat(service.buildTextPrompt("  계란  ")).contains("[메모]\n계란\n");
+    }
+
+    // ---- 응답 스키마 계약 ----
+
+    /**
+     * portion·탄단지가 required 에서 빠지면 모델이 생략하고, 매핑 기본값 0 때문에
+     * "계란 지방 0g" 처럼 모름이 0 으로 둔갑한다 (실제로 겪음). 계약을 고정한다.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void 음식_항목은_양과_탄단지를_반드시_채우게_한다() {
+        Map<String, Object> foods = (Map<String, Object>)
+                ((Map<String, Object>) FoodAnalysisService.RESPONSE_SCHEMA.get("properties")).get("foods");
+        Map<String, Object> items = (Map<String, Object>) foods.get("items");
+        List<String> required = (List<String>) items.get("required");
+
+        assertThat(required).contains("name", "calories", "portion", "carbs", "protein", "fat");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void 합계도_반드시_채우게_한다() {
+        List<String> required = (List<String>) FoodAnalysisService.RESPONSE_SCHEMA.get("required");
+
+        assertThat(required).contains("isFood", "foods", "totalCalories",
+                "totalCarbs", "totalProtein", "totalFat");
     }
 }
