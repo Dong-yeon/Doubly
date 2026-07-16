@@ -1,6 +1,6 @@
 /** 운동 메인 — 설계서 2.4 (오늘 기록 + 트레이너 루틴 + 히스토리 + 캘린더 진입). WORKOUT-02/03 */
 import React, { useCallback, useState } from 'react';
-import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, FlatList, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -79,7 +79,14 @@ export function WorkoutScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <WorkoutDietSegment active="workout" />
-      <View style={styles.linksRow}>
+      {/* 링크 6개 — 좁은 화면(320px)에선 한 줄에 안 들어가 가로 스크롤로 둔다.
+          wrap 으로 두면 "캘린더" 만 둘째 줄에 홀로 떨어져 깨져 보인다. */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.linksScroll}
+        contentContainerStyle={styles.linksRow}
+      >
         <TouchableOpacity onPress={() => navigation.navigate('WorkoutRoutines')}>
           <Text style={styles.calendarLink}>내 루틴</Text>
         </TouchableOpacity>
@@ -98,7 +105,7 @@ export function WorkoutScreen({ navigation }: Props) {
         <TouchableOpacity onPress={() => navigation.navigate('WorkoutCalendar')}>
           <Text style={styles.calendarLink}>캘린더</Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
 
       <FlatList
         data={history}
@@ -193,10 +200,11 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: fontSize.title, fontWeight: '800', color: colors.textPrimary },
   headerLinks: { flexDirection: 'row', gap: spacing.md },
+  // 가로 스크롤 — 세로 공간을 차지하지 않도록 flexGrow 0
+  linksScroll: { flexGrow: 0 },
   linksRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'flex-end',
+    alignItems: 'center',
     gap: spacing.md,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
