@@ -71,7 +71,12 @@ public class WorkoutRecommendationService {
 
     // ---- 프롬프트 ----
 
-    private String buildPrompt(int days, String historyText) {
+    /**
+     * 프롬프트 조립 — 텍스트에 리터럴 % 를 쓸 땐 반드시 %% 로 이스케이프해야 한다
+     * ({@code formatted()} 가 String.format 이라 %) 같은 건 UnknownFormatConversionException).
+     * 테스트에서 직접 검증하려고 package-private 로 둔다.
+     */
+    String buildPrompt(int days, String historyText) {
         return """
                 당신은 커플 운동 앱의 다정한 퍼스널 트레이너입니다. 아래 사용자의 최근 운동 기록을 참고해
                 오늘부터 %d일간의 운동 계획을 제안해 주세요.
@@ -81,7 +86,7 @@ public class WorkoutRecommendationService {
                 - 최근에 많이 한 부위/운동은 피하고 부족한 부분을 보완하도록 구성하며, 근육 회복도 고려합니다.
                   (예: 어제 등을 했다면 오늘은 하체나 가슴, 또는 가벼운 유산소를 제안)
                 - **점진적 과부하**: 이전에 한 운동을 다시 제안할 땐 지난 기록의 무게·횟수보다
-                  살짝(약 5~10%) 높여서 성장하도록 하되, 절대 무리하지 않는 선으로 합니다.
+                  살짝(약 5~10%%) 높여서 성장하도록 하되, 절대 무리하지 않는 선으로 합니다.
                 - focus 는 그 날의 핵심 테마입니다. (예: "하체 근력", "가벼운 유산소 + 코어")
                 - 각 운동의 category 는 반드시 근력/유산소/유연성 중 하나입니다.
                 - sets/reps 는 근력 운동에만 제안하고, 유산소/유연성은 comment 에 시간·강도를 적습니다.
