@@ -126,6 +126,7 @@ export function MyScreen({ navigation }: Props) {
     ]);
   };
 
+  /* [트레이너 기능 일시 비활성화] 되돌리려면 이 블록과 아래 트레이너 메뉴/배지 주석을 해제한다.
   const isTrainer = user?.role === 'TRAINER';
   // 회원 측 활성 트레이너 관계 (트레이너 본인은 회원 관리 화면을 쓰므로 제외)
   const myTrainer = !isTrainer
@@ -152,6 +153,7 @@ export function MyScreen({ navigation }: Props) {
       },
     ]);
   };
+  */
 
   const onDisconnectCouple = () => {
     if (!couple) return;
@@ -227,7 +229,9 @@ export function MyScreen({ navigation }: Props) {
             <>
               <Text style={styles.name}>{user?.name ?? '사용자'}</Text>
               <Text style={styles.email}>{user?.email ?? ''}</Text>
+              {/* [트레이너 기능 일시 비활성화]
               {user?.role === 'TRAINER' ? <Text style={styles.badge}>트레이너</Text> : null}
+              */}
               <Button title="이름 수정" variant="soft" size="md" onPress={startEdit} style={styles.editBtn} />
             </>
           )}
@@ -252,7 +256,7 @@ export function MyScreen({ navigation }: Props) {
           <BadgeCard title="식단 뱃지" maxStreak={maxMealStreak} badges={MEAL_BADGES} />
         </View>
 
-        {/* 트레이너 — 트레이너면 대시보드, 아니면 등록/연결 진입 */}
+        {/* [트레이너 기능 일시 비활성화] 트레이너 — 트레이너면 대시보드, 아니면 등록/연결 진입
         <Card elevation="sm" style={styles.menu}>
           {isTrainer ? (
             <Pressable
@@ -292,6 +296,7 @@ export function MyScreen({ navigation }: Props) {
             </>
           )}
         </Card>
+        */}
 
         <Card elevation="sm" style={styles.menu}>
           <Pressable style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]} onPress={onLogout}>
