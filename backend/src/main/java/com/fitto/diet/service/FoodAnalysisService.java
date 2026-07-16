@@ -43,6 +43,8 @@ public class FoodAnalysisService {
             - 각 음식의 이름(name)은 한국어로 적습니다. 한국 음식이면 정확한 한국어 명칭을 사용합니다.
             - calories 는 사진에 보이는 양 기준의 추정 칼로리(kcal), portion 은 대략적인 양(예: "1인분", "밥 반 공기")입니다.
             - carbs/protein/fat 은 각 음식의 탄수화물/단백질/지방 추정량(그램, g)입니다.
+            - portion 과 carbs/protein/fat 은 반드시 채웁니다. 정확히 모르면 일반적인 값으로 추정하되,
+              실제로 거의 없는 경우가 아니면 0 으로 두지 않습니다. (예: 계란은 지방이 0 이 아닙니다)
             - totalCalories, totalCarbs, totalProtein, totalFat 은 모든 음식의 합계입니다.
             - comment 에는 이 식단에 대한 짧고 다정한 한 줄 코멘트를 한국어로 작성합니다. (영양 균형 관점에서 칭찬 또는 부드러운 제안)
             """;
@@ -58,8 +60,10 @@ public class FoodAnalysisService {
             - 쉼표·줄바꿈 등으로 나열된 음식을 각각 분리해 foods 에 담습니다. (예: "단백질쉐이크, 계란" → 2개)
             - 각 음식의 이름(name)은 메모의 표현을 존중하되 한국어 표준 명칭으로 다듬습니다.
             - 양이 적혀 있으면(예: "계란 2개", "밥 한 공기") 그 양을 반영하고, 없으면 한국인 기준
-              일반적인 1인분으로 가정합니다. portion 에 가정한 양을 적습니다. (예: "1개", "1인분")
+              일반적인 1인분으로 가정합니다. portion 에 **가정한 양을 반드시 적습니다**. (예: "1개", "1인분")
             - calories 는 그 양 기준 추정 칼로리(kcal), carbs/protein/fat 은 탄수화물/단백질/지방 추정량(g)입니다.
+            - carbs/protein/fat 은 반드시 채웁니다. 정확히 모르면 일반적인 값으로 추정하되,
+              실제로 거의 없는 경우가 아니면 0 으로 두지 않습니다. (예: 계란은 지방이 0 이 아닙니다)
             - totalCalories, totalCarbs, totalProtein, totalFat 은 모든 음식의 합계입니다.
             - comment 에는 이 식단에 대한 짧고 다정한 한 줄 코멘트를 한국어로 작성합니다.
 
@@ -67,8 +71,14 @@ public class FoodAnalysisService {
             %s
             """;
 
-    /** Gemini 구조화 출력(JSON mode) 스키마 — 응답 파싱을 안정화한다 */
-    private static final Map<String, Object> RESPONSE_SCHEMA = Map.of(
+    /**
+     * Gemini 구조화 출력(JSON mode) 스키마 — 응답 파싱을 안정화한다.
+     * <p>
+     * portion·carbs·protein·fat 을 required 에 넣는 이유: 빼두면 모델이 그냥 생략해버리고,
+     * 매핑에서 기본값 0 으로 채워져 "계란 지방 0g" 처럼 <b>모름이 0 으로 둔갑</b>한다.
+     * 필수로 지정해야 모델이 실제 추정치를 채운다. (사진/텍스트 분석이 이 스키마를 공유)
+     */
+    static final Map<String, Object> RESPONSE_SCHEMA = Map.of(
             "type", "OBJECT",
             "properties", Map.of(
                     "isFood", Map.of("type", "BOOLEAN"),
@@ -83,13 +93,15 @@ public class FoodAnalysisService {
                                             "carbs", Map.of("type", "INTEGER"),
                                             "protein", Map.of("type", "INTEGER"),
                                             "fat", Map.of("type", "INTEGER")),
-                                    "required", List.of("name", "calories"))),
+                                    "required", List.of("name", "calories", "portion",
+                                            "carbs", "protein", "fat"))),
                     "totalCalories", Map.of("type", "INTEGER"),
                     "totalCarbs", Map.of("type", "INTEGER"),
                     "totalProtein", Map.of("type", "INTEGER"),
                     "totalFat", Map.of("type", "INTEGER"),
                     "comment", Map.of("type", "STRING")),
-            "required", List.of("isFood", "foods", "totalCalories"));
+            "required", List.of("isFood", "foods", "totalCalories",
+                    "totalCarbs", "totalProtein", "totalFat"));
 
     private final GeminiClient geminiClient;
     private final RestClient restClient;
