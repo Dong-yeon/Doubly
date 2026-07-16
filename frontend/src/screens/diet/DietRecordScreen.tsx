@@ -59,6 +59,7 @@ export function DietRecordScreen({ navigation }: Props) {
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  const [analyzingText, setAnalyzingText] = useState(false);
   // AI 분석 매크로(탄단지) — 결과 표시용
   const [macros, setMacros] = useState<{ carbs: number; protein: number; fat: number } | null>(null);
   // 업로드 결과 캐시 — AI 분석과 저장이 같은 사진을 두 번 올리지 않도록
@@ -176,6 +177,28 @@ export function DietRecordScreen({ navigation }: Props) {
       toast.error(getErrorMessage(e, 'AI 분석에 실패했어요.'));
     } finally {
       setAnalyzing(false);
+    }
+  };
+
+  // 메모에 적은 음식으로 칼로리 추정 — 사진 없이도 쓰는 경로. 결과는 추정치라 필드에 채워만 준다
+  const onAnalyzeText = async () => {
+    const text = memo.trim();
+    if (!text) return;
+    setAnalyzingText(true);
+    try {
+      const result = await dietApi.analyzeText(text);
+      if (!result.isFood || result.foods.length === 0) {
+        toast.error('무엇을 먹었는지 알아보지 못했어요. 음식 이름을 적어주세요.');
+        return;
+      }
+      if (result.totalCalories > 0) setCalories(String(result.totalCalories));
+      setMacros({ carbs: result.totalCarbs, protein: result.totalProtein, fat: result.totalFat });
+      haptics.success();
+      toast.success(result.comment?.trim() || 'AI 칼로리 계산 완료!');
+    } catch (e) {
+      toast.error(getErrorMessage(e, 'AI 계산에 실패했어요.'));
+    } finally {
+      setAnalyzingText(false);
     }
   };
 
@@ -346,6 +369,20 @@ export function DietRecordScreen({ navigation }: Props) {
             onChangeText={setMemo}
             multiline
           />
+          {/* 적어둔 음식으로 칼로리 추정 — 사진이 없을 때의 경로 (사진이 있으면 위 사진 분석을 쓴다) */}
+          {!photoUri && memo.trim() ? (
+            <>
+              <Button
+                title="AI로 칼로리 계산"
+                variant="soft"
+                size="md"
+                onPress={onAnalyzeText}
+                loading={analyzingText}
+                style={styles.analyzeButton}
+              />
+              <Text style={styles.analyzeHint}>계산 결과는 추정치예요. 저장 전에 수정할 수 있어요.</Text>
+            </>
+          ) : null}
           <TextField
             label="칼로리 (kcal, 선택)"
             placeholder="450"

@@ -3,6 +3,7 @@ package com.fitto.diet.controller;
 import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
 import com.fitto.diet.dto.AnalyzeMealRequest;
+import com.fitto.diet.dto.AnalyzeMealTextRequest;
 import com.fitto.diet.dto.CoupleMealGoalResponse;
 import com.fitto.diet.dto.DietCoachResponse;
 import com.fitto.diet.dto.MealAnalysisResponse;
@@ -62,6 +63,14 @@ public class MealController {
     public ApiResponse<MealAnalysisResponse> analyze(@AuthenticationPrincipal AuthUser user,
                                                      @Valid @RequestBody AnalyzeMealRequest request) {
         return ApiResponse.success(foodAnalysisService.analyze(user.id(), request.photoUrl()), "AI 분석이 완료되었습니다.");
+    }
+
+    /** 음식 텍스트 AI 분석 — 메모("단백질쉐이크, 계란")로 칼로리 추정. 사진 분석과 응답 형태가 같다 */
+    @PostMapping("/analyze-text")
+    public ApiResponse<MealAnalysisResponse> analyzeText(@AuthenticationPrincipal AuthUser user,
+                                                         @Valid @RequestBody AnalyzeMealTextRequest request) {
+        return ApiResponse.success(foodAnalysisService.analyzeText(user.id(), request.text()),
+                "AI 분석이 완료되었습니다.");
     }
 
     @GetMapping("/today")
