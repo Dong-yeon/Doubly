@@ -148,15 +148,21 @@ export function WorkoutScreen({ navigation }: Props) {
             ) : null}
             */}
 
-            <Text style={styles.sectionTitle}>오늘</Text>
-            {today.length > 0 ? (
-              today.map((w) => <WorkoutCard key={w.id} workout={w} onLongPress={onLongPress} />)
-            ) : (
-              <View style={styles.emptyToday}>
-                <Text style={styles.emptyText}>오늘 운동 기록이 아직 없어요 </Text>
-              </View>
-            )}
-            <Text style={[styles.sectionTitle, styles.historyTitle]}>히스토리</Text>
+            {/* 기록이 하나도 없으면 섹션을 숨긴다 — "오늘 없어요" 카드와 EmptyState 가
+                겹쳐 빈 안내가 두 번 보이던 중복 제거 (ListEmptyComponent 하나로 통일) */}
+            {today.length > 0 || history.length > 0 ? (
+              <>
+                <Text style={styles.sectionTitle}>오늘</Text>
+                {today.length > 0 ? (
+                  today.map((w) => <WorkoutCard key={w.id} workout={w} onLongPress={onLongPress} />)
+                ) : (
+                  <View style={styles.emptyToday}>
+                    <Text style={styles.emptyText}>오늘 운동 기록이 아직 없어요 </Text>
+                  </View>
+                )}
+                <Text style={[styles.sectionTitle, styles.historyTitle]}>히스토리</Text>
+              </>
+            ) : null}
           </View>
         }
         renderItem={({ item }) => <WorkoutCard workout={item} onLongPress={onLongPress} />}
