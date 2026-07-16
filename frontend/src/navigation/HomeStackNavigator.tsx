@@ -1,4 +1,4 @@
-/** 홈 탭 내부 스택 — 홈 + 커플 연결 + MY(프로필·트레이너) */
+/** 홈 탭 내부 스택 — 홈 + 커플 연결 + MY(프로필) */
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from './types';
@@ -7,11 +7,13 @@ import { CoupleConnectScreen } from '../screens/home/CoupleConnectScreen';
 import { MyScreen } from '../screens/my/MyScreen';
 import { FeedComposeScreen } from '../screens/feed/FeedComposeScreen';
 import { DailyQuestionScreen } from '../screens/home/DailyQuestionScreen';
-import { TrainerRegisterScreen } from '../screens/trainer/TrainerRegisterScreen';
-import { TrainerDashboardScreen } from '../screens/trainer/TrainerDashboardScreen';
-import { TrainerMemberDetailScreen } from '../screens/trainer/TrainerMemberDetailScreen';
-import { TrainerRoutineAssignScreen } from '../screens/trainer/TrainerRoutineAssignScreen';
-import { TrainerConnectScreen } from '../screens/trainer/TrainerConnectScreen';
+// [트레이너 기능 일시 비활성화] 되돌리려면 아래 import 와 하단 Stack.Screen 5개의 주석을 해제한다.
+// 화면·API·타입·백엔드는 그대로 남아 있으므로 주석만 풀면 복구된다.
+// import { TrainerRegisterScreen } from '../screens/trainer/TrainerRegisterScreen';
+// import { TrainerDashboardScreen } from '../screens/trainer/TrainerDashboardScreen';
+// import { TrainerMemberDetailScreen } from '../screens/trainer/TrainerMemberDetailScreen';
+// import { TrainerRoutineAssignScreen } from '../screens/trainer/TrainerRoutineAssignScreen';
+// import { TrainerConnectScreen } from '../screens/trainer/TrainerConnectScreen';
 import { colors } from '../constants/theme';
 
 const Stack = createNativeStackNavigator<HomeStackParamList>();
@@ -38,6 +40,7 @@ export function HomeStackNavigator() {
       />
       <Stack.Screen name="DailyQuestion" component={DailyQuestionScreen} options={{ title: '오늘의 질문' }} />
       <Stack.Screen name="My" component={MyScreen} options={{ title: 'MY' }} />
+      {/* [트레이너 기능 일시 비활성화] 라우트 미등록 → 진입 불가. 되돌리려면 주석 해제 + 상단 import 복구.
       <Stack.Screen
         name="TrainerRegister"
         component={TrainerRegisterScreen}
@@ -63,6 +66,7 @@ export function HomeStackNavigator() {
         component={TrainerConnectScreen}
         options={{ title: '트레이너 연결' }}
       />
+      */}
     </Stack.Navigator>
   );
 }

@@ -22,6 +22,8 @@ type Props = NativeStackScreenProps<WorkoutStackParamList, 'WorkoutMain'>;
 export function WorkoutScreen({ navigation }: Props) {
   const { today, history, loading, loadingMore, fetchToday, fetchHistory, loadMoreHistory, remove } =
     useWorkoutStore();
+  /* [트레이너 기능 일시 비활성화] 되돌리려면 이 블록과 아래 "트레이너 루틴" 섹션 주석을 해제하고
+     useFocusEffect 에 fetchRoutines() 를 다시 넣는다.
   // 트레이너가 배정한 미완료 루틴 (트레이너 미연결이면 빈 배열)
   const [routines, setRoutines] = useState<TrainerRoutine[]>([]);
   const [completingId, setCompletingId] = useState<number | null>(null);
@@ -34,14 +36,6 @@ export function WorkoutScreen({ navigation }: Props) {
       setRoutines([]); // 루틴은 부가 정보 — 실패해도 화면은 정상 동작
     }
   }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      fetchToday();
-      fetchHistory();
-      fetchRoutines();
-    }, [fetchToday, fetchHistory, fetchRoutines]),
-  );
 
   const onCompleteRoutine = async (routine: TrainerRoutine) => {
     setCompletingId(routine.id);
@@ -56,6 +50,14 @@ export function WorkoutScreen({ navigation }: Props) {
       setCompletingId(null);
     }
   };
+  */
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchToday();
+      fetchHistory();
+    }, [fetchToday, fetchHistory]),
+  );
 
   const onLongPress = (w: Workout) => {
     Alert.alert('운동 기록 삭제', `${w.workoutDate} 기록을 삭제할까요?`, [
@@ -111,7 +113,7 @@ export function WorkoutScreen({ navigation }: Props) {
         onEndReached={loadMoreHistory}
         ListHeaderComponent={
           <View>
-            {/* 트레이너가 배정한 루틴 */}
+            {/* [트레이너 기능 일시 비활성화] 트레이너가 배정한 루틴
             {routines.length > 0 ? (
               <View style={styles.routineSection}>
                 <Text style={styles.sectionTitle}>트레이너 루틴</Text>
@@ -137,6 +139,7 @@ export function WorkoutScreen({ navigation }: Props) {
                 ))}
               </View>
             ) : null}
+            */}
 
             <Text style={styles.sectionTitle}>오늘</Text>
             {today.length > 0 ? (
