@@ -7,10 +7,17 @@ spring:
     password:
   jpa:
     hibernate:
-      ddl-auto: create-drop
+      # 스키마는 Flyway 가 만든다. validate 로 엔티티↔스키마 불일치까지 잡는다.
+      ddl-auto: validate
     database-platform: org.hibernate.dialect.H2Dialect
   flyway:
-    enabled: false      # 운영 마이그레이션은 Postgres 전용 (phase별 엔티티 검증은 ddl-auto)
+    # 운영과 동일한 마이그레이션을 테스트에서도 적용한다.
+    #
+    # 이전에는 flyway 를 끄고 ddl-auto: create-drop 을 썼는데, 엔티티가 @ManyToOne 대신
+    # 평범한 Long 컬럼을 쓰는 구조라 Hibernate 가 FK 를 만들지 않았다. 그 결과 테스트
+    # 스키마에는 외래키가 하나도 없었고, 운영(Postgres)에서만 터지는 FK 위반을
+    # 테스트가 원천적으로 잡을 수 없었다 — 실제로 회원 탈퇴가 그렇게 깨져 있었다.
+    enabled: true
   data:
     redis:
       repositories:

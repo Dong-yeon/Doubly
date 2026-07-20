@@ -60,7 +60,7 @@ class TripRecapFlowTest {
 
     private Long register(String email) {
         return authService.register(
-                new RegisterRequest(email, "password123", "테스터", null, null), "127.0.0.1").user().id();
+                new RegisterRequest(email, "password123", "테스터", null, null, true, true, false), "127.0.0.1").user().id();
     }
 
     private long[] couple(String emailA, String emailB) {

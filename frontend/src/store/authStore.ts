@@ -23,6 +23,8 @@ interface AuthState {
   updateProfile: (payload: { name?: string; profileImageUrl?: string }) => Promise<void>;
   /** 서버 기준으로 내 정보 재조회 (역할 변경 등 반영) */
   refreshMe: () => Promise<void>;
+  /** 갱신된 사용자로 교체 — 설정 변경 API 가 최신 User 를 돌려주므로 재조회가 불필요하다 */
+  setUser: (user: User) => void;
   setSession: (tokens: AuthTokens) => Promise<void>;
 }
 
@@ -78,6 +80,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const tokens = await authApi.register(payload);
     await get().setSession(tokens);
   },
+
+  setUser: (user) => set({ user }),
 
   updateProfile: async (payload) => {
     const user = await authApi.updateMe(payload);

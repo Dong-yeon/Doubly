@@ -4,8 +4,8 @@
     {
       "name": "doubly-web",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "frontend", "run", "web"],
-      "port": 8081
+      "runtimeArgs": ["--prefix", "frontend", "run", "web", "--", "--port", "19006"],
+      "port": 19006
     }
   ]
 }

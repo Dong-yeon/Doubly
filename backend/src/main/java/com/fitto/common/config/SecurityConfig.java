@@ -61,6 +61,10 @@ public class SecurityConfig {
                                 "/api/v1/auth/register",
                                 "/api/v1/auth/refresh",
                                 "/api/v1/auth/logout",
+                                // 비밀번호 재설정 — 로그인할 수 없는 상태에서 쓰는 기능이므로 공개
+                                // (/auth/password/change 는 로그인 상태 전용이라 제외)
+                                "/api/v1/auth/password/forgot",
+                                "/api/v1/auth/password/reset",
                                 "/api/v1/health",
                                 "/ws/**")
                         .permitAll()

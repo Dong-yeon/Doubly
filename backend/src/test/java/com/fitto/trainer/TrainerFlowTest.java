@@ -35,7 +35,7 @@ class TrainerFlowTest {
 
     private Long register(String email) {
         return authService.register(
-                new RegisterRequest(email, "password123", "테스터", null, null), "127.0.0.1").user().id();
+                new RegisterRequest(email, "password123", "테스터", null, null, true, true, false), "127.0.0.1").user().id();
     }
 
     /** 트레이너 등록 + 회원 연결까지 만든다 */

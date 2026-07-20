@@ -19,8 +19,9 @@ import java.security.Principal;
  * <ul>
  *   <li>CONNECT: Authorization 헤더의 JWT 를 검증해 세션 Principal 을 설정한다.
  *       이후 @MessageMapping 에서 Principal 로 발신자를 식별한다.</li>
- *   <li>SUBSCRIBE: /sub/rooms/{relationId} 구독 시 해당 관계의 구성원인지 검증한다.
- *       (없으면 아무 로그인 사용자나 임의 relationId 를 구독해 남의 커플 채팅을 실시간 도청 가능)</li>
+ *   <li>SUBSCRIBE: /sub/rooms/{relationId} 구독 시 해당 관계의 <b>활성</b> 구성원인지 검증한다.
+ *       (구성원 검사가 없으면 아무 로그인 사용자나 임의 relationId 를 구독해 남의 채팅을 도청 가능,
+ *        활성 검사가 없으면 연결을 끊은 상대가 계속 대화를 실시간 수신 가능)</li>
  * </ul>
  */
 @Component
@@ -83,6 +84,10 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
         Relation relation = relationRepository.findById(relationId).orElse(null);
         if (relation == null || !relation.involves(userId)) {
             throw new IllegalArgumentException("이 채팅방을 구독할 권한이 없습니다.");
+        }
+        // 연결이 끊긴 뒤에도 구독이 유지되면 종료된 관계의 대화를 계속 실시간 수신할 수 있다.
+        if (!relation.isActive()) {
+            throw new IllegalArgumentException("연결이 끊긴 채팅방입니다.");
         }
     }
 

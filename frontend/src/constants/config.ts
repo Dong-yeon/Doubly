@@ -50,3 +50,21 @@ export const isCloudinaryConfigured = () =>
 export const KAKAO_JS_KEY = '6d931bf80f9fc59a27ef78e3c135c91e';
 
 export const isKakaoMapConfigured = () => KAKAO_JS_KEY.length > 0;
+
+/**
+ * Sentry DSN — 크래시/에러 리포팅.
+ *
+ * DSN 은 클라이언트 번들에 포함되는 것을 전제로 설계된 값이라 노출되어도 무방하다
+ * (카카오 JS 키와 동일한 성격). 이벤트 전송만 가능하고 데이터 조회는 불가능하다.
+ *
+ * 비워두면 리포팅이 비활성화되고 콘솔 출력으로 폴백한다.
+ */
+export const SENTRY_DSN =
+  'https://0e49f62524d1765099062ca6247613d0@o4511765897019392.ingest.us.sentry.io/4511765904097280';
+
+/**
+ * 앱 버전 — 설정 화면 표시용.
+ * expo-constants 를 의존성에 추가하지 않기 위해 상수로 둔다.
+ * ⚠️ app.json / package.json 의 version 을 올릴 때 여기도 함께 올려야 한다.
+ */
+export const APP_VERSION = '1.0.0';

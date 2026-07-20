@@ -64,6 +64,12 @@ export function LoginScreen({ navigation }: Props) {
               errorText={error ?? undefined}
             />
             <Button title="로그인" onPress={onSubmit} loading={loading} disabled={!canSubmit} style={styles.loginBtn} />
+            <Button
+              title="비밀번호를 잊으셨나요?"
+              variant="ghost"
+              size="md"
+              onPress={() => navigation.navigate('ForgotPassword')}
+            />
           </Card>
 
           <View style={styles.signupRow}>

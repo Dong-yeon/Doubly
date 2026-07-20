@@ -11,7 +11,6 @@ import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.notification.NotificationService;
 import com.fitto.relation.domain.Relation;
-import com.fitto.relation.domain.RelationStatus;
 import com.fitto.relation.repository.RelationRepository;
 import com.fitto.user.domain.User;
 import com.fitto.user.repository.UserRepository;
@@ -48,7 +47,7 @@ public class ChatService {
     /** 내 채팅방 목록 (활성 관계별 1개). */
     public List<ChatRoomResponse> getRooms(Long userId) {
         return relationRepository.findAllByUser(userId).stream()
-                .filter(r -> r.getStatus() == RelationStatus.ACTIVE)
+                .filter(Relation::isActive)
                 .map(r -> {
                     Long partnerId = r.partnerOf(userId);
                     UserResponse partner = partnerId == null ? null
@@ -101,11 +100,22 @@ public class ChatService {
 
     // ---- helpers ----
 
+    /**
+     * 방 접근 권한 검사 — 구성원 여부 <b>와</b> 관계 활성 여부를 모두 본다.
+     *
+     * <p>구성원 검사만 하면 연결을 끊은 뒤에도 상대가 계속 메시지를 보내고 과거 대화를
+     * 읽을 수 있다. 종료된 관계도 user_a_id / user_b_id 를 그대로 보존하기 때문이다.
+     * 방 목록(getRooms)에서만 ACTIVE 로 걸러도 소용없다 — relationId 를 알면 API 로 직접
+     * 접근할 수 있고, 수신자에게는 푸시 알림이 그대로 전달된다.
+     */
     private Relation requireMember(Long userId, Long relationId) {
         Relation relation = relationRepository.findById(relationId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RELATION_NOT_FOUND));
         if (!relation.involves(userId)) {
             throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+        if (!relation.isActive()) {
+            throw new BusinessException(ErrorCode.RELATION_NOT_ACTIVE);
         }
         return relation;
     }

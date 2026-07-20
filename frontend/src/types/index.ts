@@ -26,6 +26,16 @@ export interface User {
   gender?: Gender | null;
   profileImageUrl?: string | null;
   socialType?: SocialType | null;
+  /** 마케팅 수신 동의 — 선택 항목이라 언제든 철회할 수 있다 */
+  marketingConsent?: boolean;
+  /** 푸시 알림 수신 여부 */
+  notificationsEnabled?: boolean;
+}
+
+/** 지난 기록 불러오기 결과 — 양쪽이 모두 요청해야 RESTORED 가 된다 */
+export interface RestoreRecords {
+  status: 'WAITING_PARTNER' | 'RESTORED';
+  movedCount: number;
 }
 
 // 5.3 relations — COUPLE / TRAINER_MEMBER

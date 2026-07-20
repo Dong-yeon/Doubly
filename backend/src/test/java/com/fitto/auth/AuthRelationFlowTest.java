@@ -32,7 +32,7 @@ class AuthRelationFlowTest {
     RelationService relationService;
 
     private RegisterRequest registerReq(String email) {
-        return new RegisterRequest(email, "password123", "테스터", null, null);
+        return new RegisterRequest(email, "password123", "테스터", null, null, true, true, false);
     }
 
     @Test

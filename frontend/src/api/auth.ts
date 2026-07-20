@@ -9,6 +9,10 @@ export interface RegisterPayload {
   birthDate?: string;
   gender?: Gender;
   weeklyGoal?: number; // 목표 운동 횟수/주
+  /** 약관 동의 — 필수 두 항목은 서버가 거부하므로 반드시 true 여야 한다 */
+  agreeTerms: boolean;
+  agreePrivacy: boolean;
+  agreeMarketing: boolean;
 }
 
 export const authApi = {
@@ -37,4 +41,31 @@ export const authApi = {
       }),
     ),
   withdraw: () => unwrap(apiClient.delete<ApiResponse<void>>('/auth/withdraw')),
+
+  /** 마케팅 수신 동의/철회 — 개인정보보호법상 선택 동의는 철회 가능해야 한다. */
+  updateMarketingConsent: (agreed: boolean) =>
+    unwrap(apiClient.put<ApiResponse<User>>('/auth/me/marketing-consent', { agreed })),
+  /** 푸시 알림 수신 설정 — 끄면 모든 푸시가 발송되지 않는다. */
+  updateNotificationSetting: (enabled: boolean) =>
+    unwrap(apiClient.put<ApiResponse<User>>('/auth/me/notification-setting', { enabled })),
+
+  /**
+   * 비밀번호 재설정 코드 발송.
+   * 가입되지 않은 이메일이어도 성공으로 응답한다(서버가 가입 여부를 노출하지 않음).
+   */
+  forgotPassword: (email: string) =>
+    unwrap(apiClient.post<ApiResponse<void>>('/auth/password/forgot', { email })),
+  /** 인증코드로 비밀번호 재설정 — 성공 시 기존 세션이 모두 만료된다. */
+  resetPassword: (email: string, code: string, newPassword: string) =>
+    unwrap(
+      apiClient.post<ApiResponse<void>>('/auth/password/reset', { email, code, newPassword }),
+    ),
+  /** 로그인 상태에서 비밀번호 변경 — 성공 시 모든 기기에서 로그아웃된다. */
+  changePassword: (currentPassword: string, newPassword: string) =>
+    unwrap(
+      apiClient.post<ApiResponse<void>>('/auth/password/change', {
+        currentPassword,
+        newPassword,
+      }),
+    ),
 };

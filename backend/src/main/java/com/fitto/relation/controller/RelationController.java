@@ -5,6 +5,7 @@ import com.fitto.common.security.AuthUser;
 import com.fitto.relation.dto.ConnectRequest;
 import com.fitto.relation.dto.InviteCodeResponse;
 import com.fitto.relation.dto.RelationResponse;
+import com.fitto.relation.dto.RestoreRecordsResponse;
 import com.fitto.relation.dto.SetAnniversaryRequest;
 import com.fitto.relation.dto.SetBackgroundRequest;
 import com.fitto.relation.dto.SetDietGoalRequest;
@@ -99,5 +100,35 @@ public class RelationController {
                                          @PathVariable Long id) {
         relationService.endRelation(user.id(), id);
         return ApiResponse.success(null, "관계가 해제되었습니다.");
+    }
+
+    /**
+     * 지난 기록 불러오기 요청 (REL-07).
+     * 양쪽이 모두 요청해야 복원된다 — 첫 요청은 접수만 되고 상대 동의를 기다린다.
+     */
+    @PostMapping("/couple/records/restore")
+    public ApiResponse<RestoreRecordsResponse> restoreRecords(@AuthenticationPrincipal AuthUser user) {
+        RestoreRecordsResponse result = relationService.requestRestore(user.id());
+        String message = result.status() == RestoreRecordsResponse.Status.RESTORED
+                ? "지난 기록 " + result.movedCount() + "건을 불러왔어요."
+                : "요청했어요. 상대방이 동의하면 지난 기록을 불러옵니다.";
+        return ApiResponse.success(result, message);
+    }
+
+    /** 복원 가능한 지난 기록이 있는지 — 안내 노출 여부 판단용. */
+    @GetMapping("/couple/records/restorable")
+    public ApiResponse<Boolean> hasRestorableRecords(@AuthenticationPrincipal AuthUser user) {
+        return ApiResponse.success(relationService.hasRestorableRecords(user.id()));
+    }
+
+    /**
+     * 지난 기록 완전 삭제 (AUTH-10) — 되돌릴 수 없다.
+     * 연결을 끊은 관계에만 사용할 수 있고, 한쪽이 지우면 양쪽 모두에서 사라진다.
+     */
+    @DeleteMapping("/{id}/records")
+    public ApiResponse<Void> purgeRecords(@AuthenticationPrincipal AuthUser user,
+                                          @PathVariable Long id) {
+        relationService.purgeRecords(user.id(), id);
+        return ApiResponse.success(null, "지난 기록을 완전히 삭제했습니다.");
     }
 }

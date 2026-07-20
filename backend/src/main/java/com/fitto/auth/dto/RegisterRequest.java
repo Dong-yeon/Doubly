@@ -1,6 +1,7 @@
 package com.fitto.auth.dto;
 
 import com.fitto.user.domain.Gender;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -23,6 +24,20 @@ public record RegisterRequest(
 
         LocalDate birthDate,
 
-        Gender gender
+        Gender gender,
+
+        /*
+         * 약관 동의 (AUTH-09).
+         * 필수 두 항목은 @AssertTrue 로 강제한다 — 서버가 최종 관문이어야 하며,
+         * 프론트 체크박스만으로는 API 직접 호출을 막을 수 없다.
+         */
+        @AssertTrue(message = "이용약관에 동의해야 가입할 수 있습니다.")
+        boolean agreeTerms,
+
+        @AssertTrue(message = "개인정보 수집·이용에 동의해야 가입할 수 있습니다.")
+        boolean agreePrivacy,
+
+        /** 마케팅 수신 — 선택 항목 */
+        boolean agreeMarketing
 ) {
 }

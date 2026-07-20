@@ -4,21 +4,17 @@ import com.fitto.auth.dto.LoginRequest;
 import com.fitto.auth.dto.RegisterRequest;
 import com.fitto.auth.dto.TokenResponse;
 import com.fitto.auth.dto.UserResponse;
-import com.fitto.chat.repository.ChatMessageRepository;
-import com.fitto.diet.repository.MealRepository;
-import com.fitto.notification.repository.DeviceTokenRepository;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.security.AuthRateLimiter;
+import com.fitto.common.upload.CloudinaryImageDeleter;
+import com.fitto.common.policy.PolicyVersion;
 import com.fitto.common.security.JwtTokenProvider;
 import com.fitto.common.security.RefreshTokenStore;
-import com.fitto.relation.repository.RelationRepository;
-import com.fitto.streak.repository.StreakRepository;
 import com.fitto.user.domain.Role;
 import com.fitto.user.domain.SocialType;
 import com.fitto.user.domain.User;
 import com.fitto.user.repository.UserRepository;
-import com.fitto.workout.repository.WorkoutRepository;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import org.slf4j.Logger;
@@ -26,6 +22,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 /**
  * 인증 서비스 — 설계서 3.1 / 4.2.
@@ -38,12 +36,8 @@ public class AuthService {
     private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
     private final UserRepository userRepository;
-    private final RelationRepository relationRepository;
-    private final WorkoutRepository workoutRepository;
-    private final ChatMessageRepository chatMessageRepository;
-    private final StreakRepository streakRepository;
-    private final DeviceTokenRepository deviceTokenRepository;
-    private final MealRepository mealRepository;
+    private final UserDataPurger userDataPurger;
+    private final CloudinaryImageDeleter imageDeleter;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider tokenProvider;
     private final RefreshTokenStore refreshTokenStore;
@@ -56,23 +50,15 @@ public class AuthService {
     private final String timingDummyHash;
 
     public AuthService(UserRepository userRepository,
-                       RelationRepository relationRepository,
-                       WorkoutRepository workoutRepository,
-                       ChatMessageRepository chatMessageRepository,
-                       StreakRepository streakRepository,
-                       DeviceTokenRepository deviceTokenRepository,
-                       MealRepository mealRepository,
+                       UserDataPurger userDataPurger,
+                       CloudinaryImageDeleter imageDeleter,
                        PasswordEncoder passwordEncoder,
                        JwtTokenProvider tokenProvider,
                        RefreshTokenStore refreshTokenStore,
                        AuthRateLimiter rateLimiter) {
         this.userRepository = userRepository;
-        this.relationRepository = relationRepository;
-        this.workoutRepository = workoutRepository;
-        this.chatMessageRepository = chatMessageRepository;
-        this.streakRepository = streakRepository;
-        this.deviceTokenRepository = deviceTokenRepository;
-        this.mealRepository = mealRepository;
+        this.userDataPurger = userDataPurger;
+        this.imageDeleter = imageDeleter;
         this.passwordEncoder = passwordEncoder;
         this.tokenProvider = tokenProvider;
         this.refreshTokenStore = refreshTokenStore;
@@ -95,6 +81,9 @@ public class AuthService {
                 .role(Role.USER)
                 .socialType(SocialType.EMAIL)
                 .build();
+        // 동의 필수 여부는 RegisterRequest 의 @AssertTrue 가 이미 검증했다.
+        user.agreeToRequiredTerms(PolicyVersion.TERMS, PolicyVersion.PRIVACY);
+        user.setMarketingConsent(request.agreeMarketing());
         userRepository.save(user);
         return issueTokens(user);
     }
@@ -170,20 +159,35 @@ public class AuthService {
         return UserResponse.from(user);
     }
 
+    /** 마케팅 수신 동의/철회 — AUTH-09. 선택 동의이므로 언제든 되돌릴 수 있어야 한다. */
+    @Transactional
+    public UserResponse updateMarketingConsent(Long userId, boolean agreed) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
+        user.setMarketingConsent(agreed);
+        return UserResponse.from(user);
+    }
+
+    /** 푸시 알림 수신 설정 — SET-01. 끄면 모든 푸시가 발송되지 않는다. */
+    @Transactional
+    public UserResponse updateNotificationSetting(Long userId, boolean enabled) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
+        user.setNotificationsEnabled(enabled);
+        return UserResponse.from(user);
+    }
+
     /** 회원 탈퇴 — 연결된 관계를 종료한 뒤 계정 삭제 (AUTH-06). */
     @Transactional
     public void withdraw(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
-        // 의존 데이터 정리 후 계정 삭제 (FK 순서: 메시지/스트릭 → 운동 → 관계 → 사용자)
-        chatMessageRepository.deleteAllByUserRelations(userId);
-        streakRepository.deleteAllByUserId(userId);
-        streakRepository.deleteAllByUserRelations(userId);
-        workoutRepository.deleteAllByUserId(userId);
-        mealRepository.deleteAllByUserId(userId);
-        deviceTokenRepository.deleteAllByUserId(userId);
-        relationRepository.deleteAllByUser(userId);
+        // 의존 데이터 정리 — 삭제 순서와 대상은 UserDataPurger 에 모여 있다.
+        // (커플 콘텐츠까지 지우지 않으면 relations 삭제가 외래키 위반으로 실패한다)
+        List<String> imageUrls = userDataPurger.purgeFor(userId);
         userRepository.delete(user);
+        // 업로드된 이미지는 커밋 이후에 지운다 — DB 롤백이 나도 파일은 되돌릴 수 없기 때문
+        imageDeleter.deleteAllAfterCommit(imageUrls);
         // 탈퇴 후에는 남은 리프레시 토큰으로 재로그인할 수 없도록 전부 폐기
         refreshTokenStore.revokeAll(userId);
     }

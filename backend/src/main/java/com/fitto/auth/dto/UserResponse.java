@@ -16,7 +16,11 @@ public record UserResponse(
         LocalDate birthDate,
         Gender gender,
         String profileImageUrl,
-        SocialType socialType
+        SocialType socialType,
+        /** 마케팅 수신 동의 여부 — 설정 화면에서 철회할 수 있어야 한다(AUTH-09) */
+        boolean marketingConsent,
+        /** 푸시 알림 수신 여부 (SET-01) */
+        boolean notificationsEnabled
 ) {
     public static UserResponse from(User user) {
         return new UserResponse(
@@ -27,6 +31,8 @@ public record UserResponse(
                 user.getBirthDate(),
                 user.getGender(),
                 user.getProfileImageUrl(),
-                user.getSocialType());
+                user.getSocialType(),
+                user.hasMarketingConsent(),
+                user.isNotificationsEnabled());
     }
 }

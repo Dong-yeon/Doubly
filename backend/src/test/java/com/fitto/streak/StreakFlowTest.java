@@ -35,7 +35,7 @@ class StreakFlowTest {
 
     private Long register(String email) {
         return authService.register(
-                new RegisterRequest(email, "password123", "U", null, null), "127.0.0.1").user().id();
+                new RegisterRequest(email, "password123", "U", null, null, true, true, false), "127.0.0.1").user().id();
     }
 
     private void workoutOn(Long userId, LocalDate date) {

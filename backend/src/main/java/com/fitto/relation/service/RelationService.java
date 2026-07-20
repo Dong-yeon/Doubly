@@ -7,9 +7,13 @@ import com.fitto.relation.domain.RelationStatus;
 import com.fitto.relation.domain.RelationType;
 import com.fitto.relation.dto.InviteCodeResponse;
 import com.fitto.relation.dto.RelationResponse;
+import com.fitto.relation.dto.RestoreRecordsResponse;
 import com.fitto.relation.repository.RelationRepository;
 import com.fitto.user.domain.User;
+import com.fitto.common.upload.CloudinaryImageDeleter;
 import com.fitto.user.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,19 +33,30 @@ public class RelationService {
     private static final int CODE_LENGTH = 6;
     private static final long CODE_TTL_HOURS = 24;
 
+    private static final Logger log = LoggerFactory.getLogger(RelationService.class);
+
     private final SecureRandom random = new SecureRandom();
     private final RelationRepository relationRepository;
     private final UserRepository userRepository;
     private final com.fitto.trainer.repository.TrainerProfileRepository trainerProfileRepository;
     private final com.fitto.common.event.CoupleEventPublisher coupleEventPublisher;
+    private final RelationRecordPurger relationRecordPurger;
+    private final RelationRecordRestorer relationRecordRestorer;
+    private final CloudinaryImageDeleter imageDeleter;
 
     public RelationService(RelationRepository relationRepository, UserRepository userRepository,
                            com.fitto.trainer.repository.TrainerProfileRepository trainerProfileRepository,
-                           com.fitto.common.event.CoupleEventPublisher coupleEventPublisher) {
+                           com.fitto.common.event.CoupleEventPublisher coupleEventPublisher,
+                           RelationRecordPurger relationRecordPurger,
+                           RelationRecordRestorer relationRecordRestorer,
+                           CloudinaryImageDeleter imageDeleter) {
         this.relationRepository = relationRepository;
         this.userRepository = userRepository;
         this.trainerProfileRepository = trainerProfileRepository;
         this.coupleEventPublisher = coupleEventPublisher;
+        this.relationRecordPurger = relationRecordPurger;
+        this.relationRecordRestorer = relationRecordRestorer;
+        this.imageDeleter = imageDeleter;
     }
 
     /** 커플 초대코드 생성 — 6자리, 24시간 유효 (REL-01). */
@@ -191,6 +206,77 @@ public class RelationService {
     public void endRelation(Long userId, Long relationId) {
         Relation relation = getOwnedRelation(userId, relationId);
         relation.end();
+    }
+
+    /**
+     * 지난 기록 불러오기 요청 (REL-07).
+     *
+     * <p>재회하면 새 관계가 만들어지고 옛 기록은 보이지 않는 상태로 남는다.
+     * 이 API 로 <b>양쪽이 모두</b> 요청하면 그때 복원된다 — 공유 기록이라
+     * 한쪽이 단독으로 되살리면 상대가 원치 않는 과거를 다시 마주하게 된다.
+     *
+     * <p>첫 호출은 요청만 접수하고(WAITING_PARTNER), 상대가 호출하면 실행된다(RESTORED).
+     * 같은 사람이 두 번 눌러도 실행되지 않는다.
+     */
+    @Transactional
+    public RestoreRecordsResponse requestRestore(Long userId) {
+        Relation current = activeCouple(userId);
+        Long partnerId = current.partnerOf(userId);
+        if (partnerId == null) {
+            throw new BusinessException(ErrorCode.RELATION_NOT_FOUND);
+        }
+
+        Relation previous = relationRepository.findEndedCoupleBetween(userId, partnerId)
+                .stream().findFirst()
+                .orElseThrow(() -> new BusinessException(ErrorCode.NO_RECORDS_TO_RESTORE));
+
+        if (!previous.isRestoreAgreedBy(userId)) {
+            previous.requestRestore(userId);
+            log.info("지난 기록 불러오기 요청 접수: oldRelationId={}, 요청자={}", previous.getId(), userId);
+            return RestoreRecordsResponse.waiting();
+        }
+
+        int moved = relationRecordRestorer.restore(previous.getId(), current.getId());
+        coupleEventPublisher.publish(current.getId(), com.fitto.common.event.CoupleEvent.BACKGROUND);
+        log.info("지난 기록 복원 완료: {} → {}, {}건", previous.getId(), current.getId(), moved);
+        return RestoreRecordsResponse.restored(moved);
+    }
+
+    /** 복원 가능한 지난 기록이 있는지 — 안내 배너 노출 여부 판단용. */
+    public boolean hasRestorableRecords(Long userId) {
+        return relationRepository.findByUserAndTypeAndStatus(
+                        userId, RelationType.COUPLE, RelationStatus.ACTIVE).stream()
+                .findFirst()
+                .map(current -> current.partnerOf(userId))
+                .filter(java.util.Objects::nonNull)
+                .map(partnerId -> !relationRepository.findEndedCoupleBetween(userId, partnerId).isEmpty())
+                .orElse(false);
+    }
+
+    /**
+     * 지난 기록 완전 삭제 (AUTH-10) — 되돌릴 수 없다.
+     *
+     * <p>연결을 끊으면 기록은 남아있되 보이지 않는 상태가 된다(나중에 불러오기 위함).
+     * 이 API 는 그 기록을 업로드된 이미지까지 영구히 지운다.
+     *
+     * <p><b>활성 관계에는 쓸 수 없다.</b> 연결된 상태에서 실수로 호출하면 사용 중인 기록이
+     * 통째로 사라지므로, 먼저 연결을 끊도록 강제한다.
+     *
+     * <p><b>한쪽이 지우면 양쪽 모두에서 사라진다.</b> 커플 콘텐츠는 관계에 매여 있어
+     * 한 사람의 몫만 남길 수 없다. 개인정보 삭제 요구를 상대 동의에 묶어둘 수도 없으므로
+     * 단독 삭제를 허용하되, 클라이언트가 되돌릴 수 없음을 분명히 알려야 한다.
+     */
+    @Transactional
+    public void purgeRecords(Long userId, Long relationId) {
+        Relation relation = getOwnedRelation(userId, relationId);
+        if (relation.isActive()) {
+            throw new BusinessException(ErrorCode.RELATION_STILL_ACTIVE);
+        }
+        List<String> imageUrls = relationRecordPurger.purge(relationId);
+        // 이미지는 커밋 이후에 — 롤백돼도 파일은 되돌릴 수 없다
+        imageDeleter.deleteAllAfterCommit(imageUrls);
+        log.info("지난 기록 완전 삭제: relationId={}, 요청자={}, 이미지={}건",
+                relationId, userId, imageUrls.size());
     }
 
     // ---- helpers ----

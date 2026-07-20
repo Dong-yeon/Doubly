@@ -35,6 +35,16 @@ public class AuthRateLimiter {
     private static final int REFRESH_MAX = 30;
     private static final Duration REFRESH_WINDOW = Duration.ofMinutes(5);
 
+    /** 코드 발송: 이메일 기준(메일 폭탄 방지) + IP 기준(대량 정찰 방지) 이중 한도 */
+    private static final int FORGOT_EMAIL_MAX = 3;
+    private static final Duration FORGOT_EMAIL_WINDOW = Duration.ofHours(1);
+    private static final int FORGOT_IP_MAX = 10;
+    private static final Duration FORGOT_IP_WINDOW = Duration.ofHours(1);
+
+    /** 코드 검증: 이메일별 시도 한도(토큰 자체의 5회 제한을 코드 재발급으로 우회하는 것 차단) */
+    private static final int RESET_MAX = 10;
+    private static final Duration RESET_WINDOW = Duration.ofMinutes(15);
+
     private final StringRedisTemplate redis;
 
     public AuthRateLimiter(StringRedisTemplate redis) {
@@ -72,6 +82,26 @@ public class AuthRateLimiter {
     /** 토큰 갱신 — IP 기준 한도(탈취 토큰 무차별 시도 억제). */
     public void checkRefresh(String clientIp) {
         if (increment("rl:refresh:" + clientIp, REFRESH_WINDOW) > REFRESH_MAX) {
+            throw new BusinessException(ErrorCode.TOO_MANY_REQUESTS);
+        }
+    }
+
+    /**
+     * 비밀번호 재설정 코드 발송 — 이메일·IP 이중 한도.
+     * 한도 초과는 예외를 던지지 않고 false 를 돌려준다. 여기서 429 를 내면 응답 차이로
+     * 가입된 이메일을 골라낼 수 있기 때문이다 — 호출자는 조용히 발송만 건너뛴다.
+     */
+    public boolean allowForgotPassword(String clientIp, String email) {
+        boolean emailOk = increment("rl:forgot:email:" + email.toLowerCase(Locale.ROOT),
+                FORGOT_EMAIL_WINDOW) <= FORGOT_EMAIL_MAX;
+        boolean ipOk = increment("rl:forgot:ip:" + clientIp, FORGOT_IP_WINDOW) <= FORGOT_IP_MAX;
+        return emailOk && ipOk;
+    }
+
+    /** 비밀번호 재설정 코드 검증 시도 — 한도 초과 시 429. */
+    public void checkResetPassword(String clientIp, String email) {
+        if (increment("rl:reset:" + clientIp + ":" + email.toLowerCase(Locale.ROOT),
+                RESET_WINDOW) > RESET_MAX) {
             throw new BusinessException(ErrorCode.TOO_MANY_REQUESTS);
         }
     }
