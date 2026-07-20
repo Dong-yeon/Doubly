@@ -92,7 +92,7 @@ public class AuthController {
             @Valid @RequestBody NotificationSettingRequest request) {
         UserResponse updated = authService.updateNotificationSetting(user.id(), request.enabled());
         return ApiResponse.success(updated,
-                request.enabled() ? "알림을 받습니다." : "알림을 끄었습니다.");
+                request.enabled() ? "알림을 받습니다." : "알림을 껐습니다.");
     }
 
     /** 마케팅 수신 동의/철회 — AUTH-09. */

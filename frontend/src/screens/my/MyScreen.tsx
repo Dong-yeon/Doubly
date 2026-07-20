@@ -212,6 +212,9 @@ export function MyScreen({ navigation }: Props) {
               const result = await restoreRecords();
               haptics.success();
               if (result.status === 'RESTORED') {
+                // 복원되면 지난 기록이 사라지므로 배너를 즉시 내린다.
+                // (focus 재진입까지 두면 다시 눌러 "불러올 기록 없음" 에러를 본다)
+                setCanRestore(false);
                 toast.success(`지난 기록 ${result.movedCount}건을 불러왔어요.`);
               } else {
                 toast.info(`요청했어요. ${partnerName}님이 동의하면 불러옵니다.`);
