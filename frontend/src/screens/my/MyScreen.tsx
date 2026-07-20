@@ -14,7 +14,8 @@ import { BadgeCard } from '../../components/BadgeCard';
 import { LevelCard } from '../../components/LevelCard';
 import { WeeklyRecapCard } from '../../components/WeeklyRecapCard';
 import { useAuthStore } from '../../store/authStore';
-import { useRelationStore } from '../../store/relationStore';
+import { relationApi } from '../../api/relation';
+import { selectEndedCouples, useRelationStore } from '../../store/relationStore';
 import { streakApi } from '../../api/streak';
 import { summaryApi } from '../../api/summary';
 import { publishEnsuringConnection } from '../../api/chatSocket';
@@ -40,7 +41,13 @@ export function MyScreen({ navigation }: Props) {
   const relations = useRelationStore((s) => s.relations);
   const fetchRelations = useRelationStore((s) => s.fetchAll);
   const endRelation = useRelationStore((s) => s.end);
+  const purgeRecords = useRelationStore((s) => s.purgeRecords);
+  const restoreRecords = useRelationStore((s) => s.restoreRecords);
+  const endedCouples = selectEndedCouples(relations);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [purgingId, setPurgingId] = useState<number | null>(null);
+  const [restoring, setRestoring] = useState(false);
+  const [canRestore, setCanRestore] = useState(false);
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(user?.name ?? '');
   const [saving, setSaving] = useState(false);
@@ -58,6 +65,8 @@ export function MyScreen({ navigation }: Props) {
       summaryApi.weeklyRecap().then(setRecap).catch(() => setRecap(null));
       summaryApi.level().then(setLevel).catch(() => setLevel(null));
       fetchRelations().catch(() => {});
+      // 커플 연결이 없으면 404 가 나므로 실패는 "없음"으로 취급한다
+      relationApi.hasRestorableRecords().then(setCanRestore).catch(() => setCanRestore(false));
     }, [fetchRelations]),
   );
 
@@ -183,6 +192,80 @@ export function MyScreen({ navigation }: Props) {
     );
   };
 
+  /**
+   * 지난 기록 불러오기 — 양쪽이 모두 요청해야 복원된다.
+   * 첫 요청은 접수만 되므로, 대기 상태임을 분명히 알려야 사용자가 실패로 오해하지 않는다.
+   */
+  const onRestoreRecords = () => {
+    const partnerName = couple?.partner?.name ?? '상대방';
+    Alert.alert(
+      '지난 기록 불러오기',
+      `${partnerName}님과 예전에 함께 남긴 기록을 다시 가져올까요?\n`
+        + '두 사람이 모두 요청해야 불러와져요.',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '불러오기',
+          onPress: async () => {
+            setRestoring(true);
+            try {
+              const result = await restoreRecords();
+              haptics.success();
+              if (result.status === 'RESTORED') {
+                toast.success(`지난 기록 ${result.movedCount}건을 불러왔어요.`);
+              } else {
+                toast.info(`요청했어요. ${partnerName}님이 동의하면 불러옵니다.`);
+              }
+            } catch (e) {
+              Alert.alert('오류', getErrorMessage(e));
+            } finally {
+              setRestoring(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  /**
+   * 지난 기록 완전 삭제 — 되돌릴 수 없어 2단계로 확인받는다.
+   * 첫 안내에서 "양쪽 모두에서 사라진다"는 점을 반드시 알린다.
+   */
+  const onPurgeRecords = (relationId: number, partnerName: string) => {
+    Alert.alert(
+      '지난 기록 완전 삭제',
+      `${partnerName}님과의 사진·기록이 서버에서 영구히 지워져요.\n`
+        + '되돌릴 수 없고, 상대방도 다시 불러올 수 없어요.',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '삭제',
+          style: 'destructive',
+          onPress: () =>
+            Alert.alert('정말 삭제할까요?', '이 작업은 되돌릴 수 없어요.', [
+              { text: '취소', style: 'cancel' },
+              {
+                text: '영구 삭제',
+                style: 'destructive',
+                onPress: async () => {
+                  setPurgingId(relationId);
+                  try {
+                    await purgeRecords(relationId);
+                    haptics.success();
+                    toast.success('지난 기록을 완전히 삭제했어요.');
+                  } catch (e) {
+                    Alert.alert('오류', getErrorMessage(e));
+                  } finally {
+                    setPurgingId(null);
+                  }
+                },
+              },
+            ]),
+        },
+      ],
+    );
+  };
+
   const onWithdraw = () => {
     Alert.alert('회원 탈퇴', '탈퇴하면 연결된 관계도 해제됩니다. 계속할까요?', [
       { text: '취소', style: 'cancel' },
@@ -298,7 +381,65 @@ export function MyScreen({ navigation }: Props) {
         </Card>
         */}
 
+        {couple && canRestore ? (
+          <Card elevation="sm" style={styles.menu}>
+            <Text style={styles.sectionLabel}>지난 기록</Text>
+            <Text style={styles.sectionDesc}>
+              예전에 함께 남긴 기록이 남아있어요. 두 사람이 모두 요청하면 다시 가져올 수 있어요.
+            </Text>
+            <View style={styles.divider} />
+            <Pressable
+              style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
+              onPress={onRestoreRecords}
+              disabled={restoring}
+            >
+              <Text style={styles.menuText}>지난 기록 불러오기</Text>
+              {restoring ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Text style={styles.chevron}>›</Text>
+              )}
+            </Pressable>
+          </Card>
+        ) : null}
+
+        {endedCouples.length > 0 ? (
+          <Card elevation="sm" style={styles.menu}>
+            <Text style={styles.sectionLabel}>지난 기록</Text>
+            <Text style={styles.sectionDesc}>
+              연결이 끊긴 기록이에요. 다시 연결하면 불러올 수 있고, 원하면 지금 완전히 지울 수 있어요.
+            </Text>
+            {endedCouples.map((rel) => (
+              <View key={rel.id}>
+                <View style={styles.divider} />
+                <Pressable
+                  style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
+                  onPress={() => onPurgeRecords(rel.id, rel.partner?.name ?? '상대방')}
+                  disabled={purgingId === rel.id}
+                >
+                  <Text style={[styles.menuText, styles.danger]}>
+                    {rel.partner?.name ?? '상대방'}님과의 기록 완전 삭제
+                  </Text>
+                  {purgingId === rel.id ? (
+                    <ActivityIndicator size="small" color={colors.danger} />
+                  ) : (
+                    <Text style={styles.chevron}>›</Text>
+                  )}
+                </Pressable>
+              </View>
+            ))}
+          </Card>
+        ) : null}
+
         <Card elevation="sm" style={styles.menu}>
+          <Pressable
+            style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
+            onPress={() => navigation.navigate('Settings')}
+          >
+            <Text style={styles.menuText}>설정</Text>
+            <Text style={styles.chevron}>›</Text>
+          </Pressable>
+          <View style={styles.divider} />
           <Pressable style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]} onPress={onLogout}>
             <Text style={styles.menuText}>로그아웃</Text>
             <Text style={styles.chevron}>›</Text>
@@ -362,6 +503,21 @@ const styles = StyleSheet.create({
   pressed: { backgroundColor: colors.surfaceAlt },
   menuText: { fontSize: fontSize.subtitle, color: colors.textPrimary, fontWeight: '600' },
   danger: { color: colors.danger },
+  sectionLabel: {
+    fontSize: fontSize.caption,
+    fontWeight: '800',
+    color: colors.textSecondary,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+  },
+  sectionDesc: {
+    fontSize: fontSize.caption,
+    color: colors.textSecondary,
+    lineHeight: 18,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.sm,
+  },
   chevron: { fontSize: 22, color: colors.textTertiary },
   divider: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.lg },
   footer: { textAlign: 'center', color: colors.textTertiary, fontSize: fontSize.caption, marginTop: 'auto', paddingTop: spacing.xl },

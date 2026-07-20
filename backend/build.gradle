@@ -48,6 +48,10 @@ dependencies {
     runtimeOnly "io.jsonwebtoken:jjwt-impl:${jjwtVersion}"
     runtimeOnly "io.jsonwebtoken:jjwt-jackson:${jjwtVersion}"
 
+    // 메일 발송 — 비밀번호 재설정 인증코드 (AUTH-07)
+    // spring.mail.host 가 없으면 JavaMailSender 빈이 만들어지지 않고 개발용 로그 발송으로 폴백된다.
+    implementation 'org.springframework.boot:spring-boot-starter-mail'
+
     // DB 마이그레이션 — Flyway (DB 구성)
     implementation 'org.flywaydb:flyway-core'
     implementation 'org.flywaydb:flyway-database-postgresql'

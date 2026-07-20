@@ -25,7 +25,8 @@
             "./assets/fonts/Pretendard-SemiBold.otf"
           ]
         }
-      ]
+      ],
+      "@sentry/react-native"
     ],
     "splash": {
       "backgroundColor": "#FBF8F3"

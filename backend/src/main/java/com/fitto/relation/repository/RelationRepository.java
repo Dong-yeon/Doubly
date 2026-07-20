@@ -40,6 +40,21 @@ public interface RelationRepository extends JpaRepository<Relation, Long> {
                                       @Param("type") RelationType type,
                                       @Param("status") RelationStatus status);
 
+    /**
+     * 같은 두 사람 사이의 종료된 커플 관계 — 지난 기록 불러오기 대상 (REL-07).
+     * A/B 슬롯 순서는 누가 초대했느냐에 따라 달라지므로 양방향으로 찾는다.
+     * 여러 번 만나고 헤어졌다면 가장 최근 것이 앞에 온다.
+     */
+    @Query("""
+            select r from Relation r
+            where r.relationType = com.fitto.relation.domain.RelationType.COUPLE
+              and r.status = com.fitto.relation.domain.RelationStatus.ENDED
+              and ((r.userAId = :one and r.userBId = :other)
+                or (r.userAId = :other and r.userBId = :one))
+            order by r.id desc
+            """)
+    List<Relation> findEndedCoupleBetween(@Param("one") Long one, @Param("other") Long other);
+
     /** 회원 탈퇴 시 본인이 속한 모든 관계 삭제 */
     @Modifying
     @Query("delete from Relation r where r.userAId = :userId or r.userBId = :userId")

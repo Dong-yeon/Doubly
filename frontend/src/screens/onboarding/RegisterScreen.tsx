@@ -15,6 +15,7 @@ import type { OnboardingStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
 import { Card } from '../../components/Card';
+import { Checkbox } from '../../components/Checkbox';
 import { useAuthStore } from '../../store/authStore';
 import { getErrorMessage } from '../../utils/error';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
@@ -28,8 +29,18 @@ export function RegisterScreen({ navigation }: Props) {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [gender, setGender] = useState<Gender | undefined>(undefined);
+  const [agreeTerms, setAgreeTerms] = useState(false);
+  const [agreePrivacy, setAgreePrivacy] = useState(false);
+  const [agreeMarketing, setAgreeMarketing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const allAgreed = agreeTerms && agreePrivacy && agreeMarketing;
+  const toggleAll = (checked: boolean) => {
+    setAgreeTerms(checked);
+    setAgreePrivacy(checked);
+    setAgreeMarketing(checked);
+  };
 
   const onSubmit = async () => {
     setError(null);
@@ -39,7 +50,15 @@ export function RegisterScreen({ navigation }: Props) {
     }
     setLoading(true);
     try {
-      await register({ email: email.trim(), password, name: name.trim(), gender });
+      await register({
+        email: email.trim(),
+        password,
+        name: name.trim(),
+        gender,
+        agreeTerms,
+        agreePrivacy,
+        agreeMarketing,
+      });
     } catch (e) {
       setError(getErrorMessage(e));
     } finally {
@@ -47,7 +66,8 @@ export function RegisterScreen({ navigation }: Props) {
     }
   };
 
-  const canSubmit = !!email && !!password && !!name && !loading;
+  // 필수 동의 두 개가 모두 켜져야 가입할 수 있다(서버도 동일하게 강제한다)
+  const canSubmit = !!email && !!password && !!name && agreeTerms && agreePrivacy && !loading;
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -93,6 +113,51 @@ export function RegisterScreen({ navigation }: Props) {
               ))}
             </View>
 
+            <View style={styles.consent}>
+              <Checkbox
+                checked={allAgreed}
+                onChange={toggleAll}
+                label="전체 동의"
+                emphasized
+              />
+              <View style={styles.consentDivider} />
+              <Checkbox
+                checked={agreeTerms}
+                onChange={setAgreeTerms}
+                label="[필수] 이용약관 동의"
+                trailing={
+                  <Button
+                    title="보기"
+                    variant="ghost"
+                    size="md"
+                    onPress={() => navigation.navigate('LegalDocument', { doc: 'terms' })}
+                  />
+                }
+              />
+              <Checkbox
+                checked={agreePrivacy}
+                onChange={setAgreePrivacy}
+                label="[필수] 개인정보 수집·이용 동의"
+                trailing={
+                  <Button
+                    title="보기"
+                    variant="ghost"
+                    size="md"
+                    onPress={() => navigation.navigate('LegalDocument', { doc: 'privacy' })}
+                  />
+                }
+              />
+              <Checkbox
+                checked={agreeMarketing}
+                onChange={setAgreeMarketing}
+                label="[선택] 마케팅 정보 수신 동의"
+              />
+              <Text style={styles.consentNote}>
+                만 14세 미만은 가입할 수 없어요. 선택 항목은 동의하지 않아도 가입할 수 있고,
+                나중에 언제든 바꿀 수 있어요.
+              </Text>
+            </View>
+
             {error ? <Text style={styles.error}>{error}</Text> : null}
 
             <Button title="가입하고 시작하기" onPress={onSubmit} loading={loading} disabled={!canSubmit} style={styles.submit} />
@@ -128,6 +193,19 @@ const styles = StyleSheet.create({
   genderText: { color: colors.textSecondary, fontWeight: '700' },
   genderTextActive: { color: colors.primaryDark },
   pressed: { transform: [{ scale: 0.97 }] },
+  consent: { marginTop: spacing.sm, marginBottom: spacing.sm },
+  consentDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: spacing.xs,
+  },
+  consentNote: {
+    fontSize: fontSize.caption,
+    color: colors.textSecondary,
+    lineHeight: 18,
+    marginTop: spacing.xs,
+    marginLeft: spacing.xs,
+  },
   error: { color: colors.danger, fontSize: fontSize.caption, marginBottom: spacing.sm, marginLeft: spacing.xs },
   submit: { marginTop: spacing.sm },
 });

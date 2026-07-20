@@ -74,6 +74,13 @@ public class Relation {
     @Column(name = "diet_goal_days")
     private Integer dietGoalDays;
 
+    /**
+     * 지난 기록 불러오기를 먼저 요청한 사람 (REL-07).
+     * 상대가 요청하면 그 시점에 복원이 실행된다. NULL = 아직 아무도 요청하지 않음.
+     */
+    @Column(name = "restore_requested_by")
+    private Long restoreRequestedBy;
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -115,12 +122,39 @@ public class Relation {
         this.dietGoalDays = days;
     }
 
+    /** 불러오기 요청 기록 — 첫 요청자만 남긴다. */
+    public void requestRestore(Long userId) {
+        if (this.restoreRequestedBy == null) {
+            this.restoreRequestedBy = userId;
+        }
+    }
+
+    /**
+     * 상대가 이미 요청해둔 상태인지 — 이 사용자가 요청하면 복원이 성립한다.
+     * 같은 사람이 두 번 눌러도 성립하지 않아야 하므로 요청자가 <b>다른</b> 사람인지 본다.
+     */
+    public boolean isRestoreAgreedBy(Long userId) {
+        return this.restoreRequestedBy != null && !this.restoreRequestedBy.equals(userId);
+    }
+
     public boolean isExpired() {
         return codeExpiresAt != null && codeExpiresAt.isBefore(LocalDateTime.now());
     }
 
     public boolean involves(Long userId) {
         return userId.equals(userAId) || userId.equals(userBId);
+    }
+
+    /**
+     * 현재 유효한 관계인지.
+     *
+     * <p>주의: {@link #involves(Long)} 만으로 접근을 허용하면 안 된다.
+     * 관계를 종료해도 user_a_id / user_b_id 는 그대로 남기 때문에 involves 는 계속 true 다.
+     * 즉 "연결을 끊었는데도 상대가 계속 접근 가능한" 상태가 된다.
+     * 채팅처럼 종료 후 차단되어야 하는 기능은 반드시 이 검사를 함께 해야 한다.
+     */
+    public boolean isActive() {
+        return this.status == RelationStatus.ACTIVE;
     }
 
     /** 주어진 사용자 기준 상대방 ID (없으면 null) */

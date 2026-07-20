@@ -5,6 +5,9 @@ import type { OnboardingStackParamList } from './types';
 import { SplashScreen } from '../screens/onboarding/SplashScreen';
 import { LoginScreen } from '../screens/onboarding/LoginScreen';
 import { RegisterScreen } from '../screens/onboarding/RegisterScreen';
+import { ForgotPasswordScreen } from '../screens/onboarding/ForgotPasswordScreen';
+import { ResetPasswordScreen } from '../screens/onboarding/ResetPasswordScreen';
+import { LegalDocumentScreen } from '../screens/onboarding/LegalDocumentScreen';
 
 const Stack = createNativeStackNavigator<OnboardingStackParamList>();
 
@@ -14,6 +17,13 @@ export function OnboardingNavigator() {
       <Stack.Screen name="Splash" component={SplashScreen} />
       <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen name="Register" component={RegisterScreen} />
+      <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+      <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
+      <Stack.Screen
+        name="LegalDocument"
+        component={LegalDocumentScreen}
+        options={{ presentation: 'modal' }}
+      />
     </Stack.Navigator>
   );
 }

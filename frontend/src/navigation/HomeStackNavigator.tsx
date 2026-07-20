@@ -5,6 +5,9 @@ import type { HomeStackParamList } from './types';
 import { HomeScreen } from '../screens/home/HomeScreen';
 import { CoupleConnectScreen } from '../screens/home/CoupleConnectScreen';
 import { MyScreen } from '../screens/my/MyScreen';
+import { SettingsScreen } from '../screens/my/SettingsScreen';
+import { ChangePasswordScreen } from '../screens/my/ChangePasswordScreen';
+import { LegalDocumentScreen } from '../screens/onboarding/LegalDocumentScreen';
 import { FeedComposeScreen } from '../screens/feed/FeedComposeScreen';
 import { DailyQuestionScreen } from '../screens/home/DailyQuestionScreen';
 // [트레이너 기능 일시 비활성화] 되돌리려면 아래 import 와 하단 Stack.Screen 5개의 주석을 해제한다.
@@ -40,6 +43,17 @@ export function HomeStackNavigator() {
       />
       <Stack.Screen name="DailyQuestion" component={DailyQuestionScreen} options={{ title: '오늘의 질문' }} />
       <Stack.Screen name="My" component={MyScreen} options={{ title: 'MY' }} />
+      <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: '설정' }} />
+      <Stack.Screen
+        name="ChangePassword"
+        component={ChangePasswordScreen}
+        options={{ title: '비밀번호 변경' }}
+      />
+      <Stack.Screen
+        name="LegalDocument"
+        component={LegalDocumentScreen}
+        options={{ headerShown: false, presentation: 'modal' }}
+      />
       {/* [트레이너 기능 일시 비활성화] 라우트 미등록 → 진입 불가. 되돌리려면 주석 해제 + 상단 import 복구.
       <Stack.Screen
         name="TrainerRegister"

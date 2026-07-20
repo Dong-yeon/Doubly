@@ -1,11 +1,17 @@
 package com.fitto.auth.controller;
 
+import com.fitto.auth.dto.ChangePasswordRequest;
+import com.fitto.auth.dto.ForgotPasswordRequest;
 import com.fitto.auth.dto.LoginRequest;
+import com.fitto.auth.dto.MarketingConsentRequest;
+import com.fitto.auth.dto.NotificationSettingRequest;
 import com.fitto.auth.dto.RegisterRequest;
+import com.fitto.auth.dto.ResetPasswordRequest;
 import com.fitto.auth.dto.TokenResponse;
 import com.fitto.auth.dto.UpdateProfileRequest;
 import com.fitto.auth.dto.UserResponse;
 import com.fitto.auth.service.AuthService;
+import com.fitto.auth.service.PasswordResetService;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.response.ApiResponse;
@@ -33,9 +39,11 @@ public class AuthController {
     private static final String BEARER = "Bearer ";
 
     private final AuthService authService;
+    private final PasswordResetService passwordResetService;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, PasswordResetService passwordResetService) {
         this.authService = authService;
+        this.passwordResetService = passwordResetService;
     }
 
     @PostMapping("/register")
@@ -75,6 +83,56 @@ public class AuthController {
         return ApiResponse.success(
                 authService.updateMe(user.id(), request.name(), request.profileImageUrl()),
                 "프로필이 수정되었습니다.");
+    }
+
+    /** 푸시 알림 수신 설정 — SET-01. */
+    @PutMapping("/me/notification-setting")
+    public ApiResponse<UserResponse> updateNotificationSetting(
+            @AuthenticationPrincipal AuthUser user,
+            @Valid @RequestBody NotificationSettingRequest request) {
+        UserResponse updated = authService.updateNotificationSetting(user.id(), request.enabled());
+        return ApiResponse.success(updated,
+                request.enabled() ? "알림을 받습니다." : "알림을 끄었습니다.");
+    }
+
+    /** 마케팅 수신 동의/철회 — AUTH-09. */
+    @PutMapping("/me/marketing-consent")
+    public ApiResponse<UserResponse> updateMarketingConsent(
+            @AuthenticationPrincipal AuthUser user,
+            @Valid @RequestBody MarketingConsentRequest request) {
+        UserResponse updated = authService.updateMarketingConsent(user.id(), request.agreed());
+        return ApiResponse.success(updated,
+                request.agreed() ? "마케팅 수신에 동의했습니다." : "마케팅 수신을 철회했습니다.");
+    }
+
+    /**
+     * 비밀번호 재설정 코드 발송 — AUTH-07.
+     * 가입되지 않은 이메일이어도 동일한 성공 응답을 준다(가입 여부 노출 방지).
+     */
+    @PostMapping("/password/forgot")
+    public ApiResponse<Void> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request,
+                                            HttpServletRequest http) {
+        passwordResetService.sendResetCode(request.email(), clientIp(http));
+        return ApiResponse.success(null,
+                "입력하신 이메일로 인증코드를 보냈습니다. 메일함을 확인해주세요.");
+    }
+
+    /** 인증코드로 비밀번호 재설정 — AUTH-07. 성공 시 기존 세션이 모두 만료되어 재로그인이 필요하다. */
+    @PostMapping("/password/reset")
+    public ApiResponse<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request,
+                                           HttpServletRequest http) {
+        passwordResetService.resetPassword(
+                request.email(), request.code(), request.newPassword(), clientIp(http));
+        return ApiResponse.success(null, "비밀번호가 변경되었습니다. 새 비밀번호로 로그인해주세요.");
+    }
+
+    /** 로그인 상태에서 비밀번호 변경 — AUTH-08. 성공 시 모든 기기에서 로그아웃된다. */
+    @PostMapping("/password/change")
+    public ApiResponse<Void> changePassword(@AuthenticationPrincipal AuthUser user,
+                                            @Valid @RequestBody ChangePasswordRequest request) {
+        passwordResetService.changePassword(
+                user.id(), request.currentPassword(), request.newPassword());
+        return ApiResponse.success(null, "비밀번호가 변경되었습니다. 다시 로그인해주세요.");
     }
 
     @DeleteMapping("/withdraw")

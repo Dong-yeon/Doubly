@@ -20,12 +20,22 @@ public enum ErrorCode {
     EMAIL_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 가입된 이메일입니다."),
     INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "이메일 또는 비밀번호가 올바르지 않습니다."),
     INVALID_TOKEN(HttpStatus.UNAUTHORIZED, "유효하지 않은 토큰입니다."),
+    // 비밀번호 재설정 (AUTH-07) — 코드 오류/만료를 한 코드로 묶어 유효한 코드 탐색 단서를 주지 않는다
+    INVALID_RESET_CODE(HttpStatus.BAD_REQUEST, "인증코드가 올바르지 않거나 만료되었습니다."),
+    RESET_CODE_ATTEMPTS_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "인증코드를 5회 이상 틀렸습니다. 코드를 다시 발급받아주세요."),
+    SAME_AS_CURRENT_PASSWORD(HttpStatus.BAD_REQUEST, "현재 비밀번호와 다른 비밀번호를 입력해주세요."),
+    PASSWORD_NOT_SET(HttpStatus.BAD_REQUEST, "소셜 로그인 계정은 비밀번호를 사용하지 않습니다."),
 
     // 관계 (RELATION) — 커플 / 트레이너-회원
     INVITE_CODE_EXPIRED(HttpStatus.BAD_REQUEST, "만료된 초대코드입니다."),
     INVITE_CODE_INVALID(HttpStatus.BAD_REQUEST, "유효하지 않은 초대코드입니다."),
     ALREADY_CONNECTED(HttpStatus.CONFLICT, "이미 연결된 관계입니다."),
     RELATION_NOT_FOUND(HttpStatus.NOT_FOUND, "관계를 찾을 수 없습니다."),
+    // 연결이 끊긴 뒤의 접근 — 상대가 종료된 관계로 계속 메시지를 보내는 것을 막는다
+    RELATION_NOT_ACTIVE(HttpStatus.FORBIDDEN, "연결이 끊긴 관계입니다."),
+    // 기록 완전 삭제는 연결을 끊은 뒤에만 — 사용 중인 기록을 실수로 지우는 것을 막는다
+    RELATION_STILL_ACTIVE(HttpStatus.CONFLICT, "연결을 먼저 끊어야 기록을 삭제할 수 있습니다."),
+    NO_RECORDS_TO_RESTORE(HttpStatus.NOT_FOUND, "불러올 지난 기록이 없습니다."),
 
     // 트레이너 (TRAINER)
     NOT_A_TRAINER(HttpStatus.FORBIDDEN, "트레이너만 사용할 수 있는 기능입니다."),

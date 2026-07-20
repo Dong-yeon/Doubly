@@ -35,6 +35,21 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
 
+  # 비밀번호 재설정 인증코드 메일(AUTH-07).
+  # MAIL_HOST 가 비어 있으면 JavaMailSender 빈이 생성되지 않고, 코드가 서버 로그로 출력된다
+  # (개발 전용 폴백 — LoggingPasswordResetMailSender). 운영에서는 반드시 설정할 것.
+  mail:
+    host: ${MAIL_HOST:}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
 server:
   # 클라우드(Railway 등)는 PORT 환경변수로 리스닝 포트를 주입한다.
   port: ${PORT:8080}

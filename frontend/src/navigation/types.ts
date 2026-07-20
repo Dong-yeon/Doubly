@@ -7,6 +7,11 @@ export type OnboardingStackParamList = {
   Splash: undefined;
   Login: undefined;
   Register: undefined;
+  // 비밀번호 재설정 — 코드 발송 → 코드 입력+새 비밀번호 설정
+  ForgotPassword: undefined;
+  ResetPassword: { email: string };
+  // 약관 전문 보기
+  LegalDocument: { doc: 'terms' | 'privacy' };
 };
 
 // 홈 탭 내부 스택 — 홈 / 커플 연결 / 우리 기록(피드) / MY(프로필·트레이너)
@@ -19,6 +24,11 @@ export type HomeStackParamList = {
   DailyQuestion: undefined;
   // MY (구 MY 탭에서 이전) — 홈 헤더 프로필 아이콘으로 진입
   My: undefined;
+  // 설정 — 알림·마케팅 수신, 비밀번호 변경, 약관 열람
+  Settings: undefined;
+  ChangePassword: undefined;
+  // 약관 전문 (온보딩 스택과 동일 화면을 재사용)
+  LegalDocument: { doc: 'terms' | 'privacy' };
   TrainerRegister: undefined;
   TrainerDashboard: undefined;
   TrainerMemberDetail: { memberId: number; name: string };
