@@ -8,7 +8,10 @@ export interface CreatePostPayload {
 }
 
 export const feedApi = {
-  /** 통합 타임라인 — cursor 는 이전 페이지의 nextCursor */
+  /**
+   * 통합 타임라인 — cursor 는 이전 페이지의 nextCursor 를 그대로 넘긴다.
+   * 서버가 만든 불투명 토큰이므로 해석하거나 가공하지 말 것(내부 형식은 바뀔 수 있다).
+   */
   timeline: (cursor?: string | null, limit = 20) =>
     unwrap(
       apiClient.get<ApiResponse<FeedTimeline>>('/feed', {

@@ -11,14 +11,22 @@ import java.util.List;
 
 public interface FeedPostRepository extends JpaRepository<FeedPost, Long> {
 
-    /** 타임라인 — 커서(createdAt) 이전 포스트, 최신순. */
+    /**
+     * 타임라인 — 커서 (createdAt, id) 이전 포스트, 최신순.
+     * id 보조키가 없으면 같은 시각의 포스트가 페이지 경계에서 누락된다.
+     * cursorAt 이 null 이면 첫 페이지(전체 조회)다.
+     */
     @Query("""
             select p from FeedPost p
-            where p.coupleId = :coupleId and p.createdAt < :cursor
-            order by p.createdAt desc
+            where p.coupleId = :coupleId
+              and (:cursorAt is null
+                   or p.createdAt < :cursorAt
+                   or (p.createdAt = :cursorAt and p.id < :cursorId))
+            order by p.createdAt desc, p.id desc
             """)
     List<FeedPost> findTimeline(@Param("coupleId") Long coupleId,
-                                @Param("cursor") LocalDateTime cursor,
+                                @Param("cursorAt") LocalDateTime cursorAt,
+                                @Param("cursorId") Long cursorId,
                                 Pageable pageable);
 
     /** 여행 앨범 — 해당 여행에 담긴 포스트, 최신순. */

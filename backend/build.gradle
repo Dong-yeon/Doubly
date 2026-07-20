@@ -10,7 +10,7 @@ description = 'Doubly - 커플 라이프 공유 앱 백엔드'
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+        languageVersion = JavaLanguageVersion.of(17)
     }
 }
 

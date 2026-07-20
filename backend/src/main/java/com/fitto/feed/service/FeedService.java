@@ -10,6 +10,7 @@ import com.fitto.diet.repository.MealRepository;
 import com.fitto.feed.domain.FeedPost;
 import com.fitto.feed.domain.FeedReaction;
 import com.fitto.feed.dto.CreatePostRequest;
+import com.fitto.feed.dto.FeedCursor;
 import com.fitto.feed.dto.FeedItemResponse;
 import com.fitto.feed.dto.FeedItemType;
 import com.fitto.feed.dto.FeedTimelineResponse;
@@ -33,6 +34,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -78,37 +80,69 @@ public class FeedService {
         this.coupleEventPublisher = coupleEventPublisher;
     }
 
-    /** 통합 타임라인 (FEED-01) — 소스별 상위 N건을 모아 병합 정렬 후 limit 로 자른다. */
-    public FeedTimelineResponse timeline(Long userId, LocalDateTime cursor, int limit) {
+    /**
+     * 통합 타임라인 — 포스트·운동·식단·방문 4개 소스를 합쳐 최신순으로 돌려준다.
+     *
+     * <p>커서는 소스별 (createdAt, id) 위치를 담는다({@link FeedCursor}).
+     * 타임스탬프 하나만 쓰면 같은 시각의 아이템이 페이지 경계에서 누락되고,
+     * 테이블마다 id 공간이 달라 전역 보조키를 쓸 수도 없다.
+     *
+     * <p>각 소스에서 {@code size + 1} 건을 읽어 "더 있는지"를 판단한다.
+     * 정확히 size 건만 읽으면 남은 데이터가 있어도 hasMore 가 false 가 된다.
+     */
+    public FeedTimelineResponse timeline(Long userId, String cursor, int limit) {
         Relation couple = activeCouple(userId);
         int size = Math.min(Math.max(limit, 1), MAX_LIMIT);
-        LocalDateTime before = cursor != null ? cursor : LocalDateTime.now().plusDays(1);
-        Pageable page = PageRequest.of(0, size);
+        FeedCursor from = FeedCursor.decode(cursor);
+        // 다음 페이지 존재 여부를 알려면 한 건 더 읽어야 한다
+        Pageable page = PageRequest.of(0, size + 1);
 
         Long partnerId = couple.partnerOf(userId);
         List<Long> userIds = partnerId != null ? List.of(userId, partnerId) : List.of(userId);
         Map<Long, String> names = userNames(userIds);
 
         List<FeedItemResponse> merged = new ArrayList<>();
-        for (FeedPost p : feedPostRepository.findTimeline(couple.getId(), before, page)) {
+        for (FeedPost p : feedPostRepository.findTimeline(couple.getId(),
+                from.createdAtOf(FeedItemType.POST), from.idOf(FeedItemType.POST), page)) {
             merged.add(toItem(p, names, userId, null));
         }
-        for (Workout w : workoutRepository.findRecentForFeed(userIds, before, page)) {
+        for (Workout w : workoutRepository.findRecentForFeed(userIds,
+                from.createdAtOf(FeedItemType.WORKOUT), from.idOf(FeedItemType.WORKOUT), page)) {
             merged.add(toItem(w, names, userId));
         }
-        for (Meal m : mealRepository.findRecentForFeed(userIds, before, page)) {
+        for (Meal m : mealRepository.findRecentForFeed(userIds,
+                from.createdAtOf(FeedItemType.MEAL), from.idOf(FeedItemType.MEAL), page)) {
             merged.add(toItem(m, names, userId));
         }
-        for (VisitWithPlace v : placeVisitRepository.findRecentForFeed(couple.getId(), before, page)) {
+        for (VisitWithPlace v : placeVisitRepository.findRecentForFeed(couple.getId(),
+                from.createdAtOf(FeedItemType.PLACE_VISIT), from.idOf(FeedItemType.PLACE_VISIT), page)) {
             merged.add(toItem(v, names, userId));
         }
 
-        merged.sort(Comparator.comparing(FeedItemResponse::occurredAt).reversed());
-        List<FeedItemResponse> items = merged.size() > size ? merged.subList(0, size) : merged;
-        items = attachReactions(items, userId);
+        // 정렬도 (occurredAt, refId) 복합키 — 같은 시각이면 id 역순으로 안정 정렬한다
+        merged.sort(Comparator.comparing(FeedItemResponse::occurredAt)
+                .thenComparing(FeedItemResponse::refId)
+                .reversed());
 
-        LocalDateTime nextCursor = items.isEmpty() ? null : items.get(items.size() - 1).occurredAt();
-        return new FeedTimelineResponse(items, nextCursor, merged.size() > size);
+        boolean hasMore = merged.size() > size;
+        List<FeedItemResponse> items = hasMore ? new ArrayList<>(merged.subList(0, size)) : merged;
+
+        String nextCursor = items.isEmpty() ? null : nextCursorOf(from, items).encode();
+        items = attachReactions(items, userId);
+        return new FeedTimelineResponse(items, nextCursor, hasMore);
+    }
+
+    /**
+     * 이번 페이지에서 각 소스를 어디까지 읽었는지로 다음 커서를 만든다.
+     * 이번 페이지에 등장하지 않은 소스는 이전 위치를 그대로 유지한다
+     * — 그래야 다음 페이지에서 그 소스의 후보가 다시 검토된다.
+     */
+    private FeedCursor nextCursorOf(FeedCursor previous, List<FeedItemResponse> items) {
+        Map<FeedItemType, FeedCursor.Position> next = new EnumMap<>(previous.positions());
+        for (FeedItemResponse item : items) {
+            next.put(item.type(), new FeedCursor.Position(item.occurredAt(), item.refId()));
+        }
+        return new FeedCursor(next);
     }
 
     /** 포스트 작성 (FEED-02) — 글/사진 중 하나는 필수. 상대에게 푸시 + FEED 이벤트. */

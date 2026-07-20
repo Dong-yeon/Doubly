@@ -9,7 +9,6 @@ import com.fitto.feed.dto.ReactRequest;
 import com.fitto.feed.dto.ReactionSummary;
 import com.fitto.feed.service.FeedService;
 import jakarta.validation.Valid;
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,7 +19,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -39,8 +37,8 @@ public class FeedController {
     @GetMapping
     public ApiResponse<FeedTimelineResponse> timeline(
             @AuthenticationPrincipal AuthUser user,
-            @RequestParam(required = false)
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime cursor,
+            // 커서는 서버가 만든 불투명 토큰 — 클라이언트는 받은 값을 그대로 되돌려준다
+            @RequestParam(required = false) String cursor,
             @RequestParam(defaultValue = "20") int limit) {
         return ApiResponse.success(feedService.timeline(user.id(), cursor, limit));
     }

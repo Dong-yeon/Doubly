@@ -43,14 +43,21 @@ public interface MealRepository extends JpaRepository<Meal, Long> {
     @Query("select count(distinct m.mealDate) from Meal m where m.userId = :userId")
     long countDistinctMealDates(@Param("userId") Long userId);
 
-    /** 커플 피드 타임라인 — 두 사람의 기록 중 커서(createdAt) 이전, 최신순. */
+    /**
+     * 커플 피드 타임라인 — 두 사람의 기록 중 커서 (createdAt, id) 이전, 최신순.
+     * cursorAt 이 null 이면 첫 페이지(전체 조회)다.
+     */
     @Query("""
             select m from Meal m
-            where m.userId in :userIds and m.createdAt < :cursor
-            order by m.createdAt desc
+            where m.userId in :userIds
+              and (:cursorAt is null
+                   or m.createdAt < :cursorAt
+                   or (m.createdAt = :cursorAt and m.id < :cursorId))
+            order by m.createdAt desc, m.id desc
             """)
     List<Meal> findRecentForFeed(@Param("userIds") List<Long> userIds,
-                                 @Param("cursor") java.time.LocalDateTime cursor,
+                                 @Param("cursorAt") java.time.LocalDateTime cursorAt,
+                                 @Param("cursorId") Long cursorId,
                                  Pageable pageable);
 
     /** 회원 탈퇴 시 본인 식단 기록 삭제. */
