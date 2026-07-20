@@ -135,7 +135,7 @@ public class FeedService {
             String preview = content != null && !content.isEmpty()
                     ? (content.length() > 40 ? content.substring(0, 40) + "…" : content)
                     : "사진을 남겼어요";
-            notificationService.notify(partnerId, authorName + "님의 새 일상 📸", preview);
+            notificationService.notify(partnerId, authorName + "님의 새 일상", preview);
         }
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.FEED);
 

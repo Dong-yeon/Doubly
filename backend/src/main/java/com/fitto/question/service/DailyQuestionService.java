@@ -129,7 +129,7 @@ public class DailyQuestionService {
 
         Long partnerId = couple.partnerOf(userId);
         if (partnerId != null && existing == null) {
-            notificationService.notify(partnerId, "오늘의 질문 💬",
+            notificationService.notify(partnerId, "오늘의 질문",
                     userName(userId) + "님이 답했어요. 답하면 서로 볼 수 있어요!");
         }
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.QUESTION);

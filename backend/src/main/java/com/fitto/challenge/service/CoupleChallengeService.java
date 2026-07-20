@@ -74,7 +74,7 @@ public class CoupleChallengeService {
 
         Long partnerId = couple.partnerOf(userId);
         if (partnerId != null) {
-            notificationService.notify(partnerId, "커플 대결 신청! 🏆",
+            notificationService.notify(partnerId, "커플 대결 신청!",
                     userName(userId) + " — " + challenge.getTitle() + " (" + req.type().label() + " 대결)");
         }
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.CHALLENGE);

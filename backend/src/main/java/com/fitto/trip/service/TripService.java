@@ -128,7 +128,7 @@ public class TripService {
 
         Long partnerId = couple.partnerOf(userId);
         if (partnerId != null) {
-            notificationService.notify(partnerId, "새 여행 계획 ✈️",
+            notificationService.notify(partnerId, "새 여행 계획",
                     userName(userId) + " — " + trip.getTitle()
                             + " (" + trip.getStartDate().format(DATE_FMT) + "~)");
         }
@@ -324,7 +324,7 @@ public class TripService {
         Relation couple = activeCouple(userId);
         Long partnerId = couple.partnerOf(userId);
         if (partnerId != null) {
-            notificationService.notify(partnerId, "AI가 여행 일정을 짰어요 ✨",
+            notificationService.notify(partnerId, "AI가 여행 일정을 짰어요",
                     userName(userId) + " — " + trip.getTitle());
         }
         coupleEventPublisher.publish(trip.getCoupleId(), CoupleEvent.TRIP);

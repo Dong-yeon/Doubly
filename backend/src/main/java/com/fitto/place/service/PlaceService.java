@@ -139,7 +139,7 @@ public class PlaceService {
 
         Long partnerId = activeCouple(userId).partnerOf(userId);
         if (partnerId != null) {
-            notificationService.notify(partnerId, "새 맛집 방문 기록! 🍽️",
+            notificationService.notify(partnerId, "새 맛집 방문 기록!",
                     userName(userId) + " — " + place.getName()
                             + (visit.getRating() != null ? " ★" + visit.getRating() : ""));
         }

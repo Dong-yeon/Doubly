@@ -101,7 +101,7 @@ public class WorkoutService {
                     coupleEventPublisher.publish(c.getId(), com.fitto.common.event.CoupleEvent.WORKOUT);
                     Long partnerId = c.partnerOf(userId);
                     String myName = userRepository.findById(userId).map(u -> u.getName()).orElse("상대방");
-                    notificationService.notify(partnerId, "함께 운동해요! 💪", myName + "님이 오늘 운동을 완료했어요!");
+                    notificationService.notify(partnerId, "함께 운동해요!", myName + "님이 오늘 운동을 완료했어요!");
                 });
 
         return WorkoutResponse.from(workout);

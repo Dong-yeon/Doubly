@@ -101,10 +101,10 @@ public class MealService {
                     Long partnerId = c.partnerOf(userId);
                     String myName = userRepository.findById(userId).map(u -> u.getName()).orElse("상대방");
                     if (justAchievedGoal(c, userId, partnerId, req.mealDate(), firstMealOfDay)) {
-                        notificationService.notify(partnerId, "이번 주 식단 목표 달성! 🎉",
+                        notificationService.notify(partnerId, "이번 주 식단 목표 달성!",
                                 myName + "님과 함께 주 " + c.getDietGoalDays() + "일 목표를 채웠어요!");
                     } else {
-                        notificationService.notify(partnerId, "오늘 뭐 먹었을까? 🍽️",
+                        notificationService.notify(partnerId, "오늘 뭐 먹었을까?",
                                 myName + "님이 식단을 기록했어요!");
                     }
                 });

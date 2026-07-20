@@ -148,7 +148,7 @@ public class TrainerService {
         trainerRoutineRepository.save(routine);
 
         String trainerName = userName(trainerId);
-        notificationService.notify(request.memberId(), "새 운동 루틴이 도착했어요! 📋",
+        notificationService.notify(request.memberId(), "새 운동 루틴이 도착했어요!",
                 trainerName + " 트레이너 — " + routine.getTitle());
         return TrainerRoutineResponse.from(routine, trainerName);
     }
@@ -183,7 +183,7 @@ public class TrainerService {
         boolean firstComplete = !routine.isCompleted();
         routine.complete();
         if (firstComplete) {
-            notificationService.notify(routine.getTrainerId(), "회원이 루틴을 완료했어요! ✅",
+            notificationService.notify(routine.getTrainerId(), "회원이 루틴을 완료했어요!",
                     userName(memberId) + " — " + routine.getTitle());
         }
         return TrainerRoutineResponse.from(routine, userName(routine.getTrainerId()));
