@@ -226,13 +226,28 @@ public class RelationService {
             throw new BusinessException(ErrorCode.RELATION_NOT_FOUND);
         }
 
-        Relation previous = relationRepository.findEndedCoupleBetween(userId, partnerId)
+        Long previousId = relationRepository.findEndedCoupleBetween(userId, partnerId)
                 .stream().findFirst()
+                .map(Relation::getId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NO_RECORDS_TO_RESTORE));
 
+        // 빈 슬롯이면 원자적으로 선점 — 동시 요청도 DB 가 행 단위로 직렬화한다
+        if (relationRepository.claimRestoreRequest(previousId, userId) == 1) {
+            log.info("지난 기록 불러오기 요청 접수: oldRelationId={}, 요청자={}", previousId, userId);
+            return RestoreRecordsResponse.waiting();
+        }
+
+        /*
+         * 슬롯이 이미 차 있다 — 내가 이전에 요청해둔 것(중복 탭)인지 상대의 요청인지 확인.
+         * 행 잠금으로 재조회해 (1) 복원 실행을 직렬화하고(같은 합의로 두 번 복원 방지),
+         * (2) 잠금 대기 중 완전삭제로 행이 사라진 경우를 empty 로 감지한다.
+         * claimRestoreRequest 의 clearAutomatically 덕에 이 조회는 1차 캐시가 아닌
+         * DB 의 최신 값을 읽는다.
+         */
+        Relation previous = relationRepository.findByIdForUpdate(previousId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NO_RECORDS_TO_RESTORE));
         if (!previous.isRestoreAgreedBy(userId)) {
-            previous.requestRestore(userId);
-            log.info("지난 기록 불러오기 요청 접수: oldRelationId={}, 요청자={}", previous.getId(), userId);
+            // 요청자가 나 자신 — 이미 접수된 상태 그대로
             return RestoreRecordsResponse.waiting();
         }
 
@@ -272,6 +287,10 @@ public class RelationService {
         if (relation.isActive()) {
             throw new BusinessException(ErrorCode.RELATION_STILL_ACTIVE);
         }
+        // 행 잠금 — 불러오기(restore)와 동시에 돌면 이동과 삭제가 뒤섞여 기록이 유실될 수 있다.
+        // 잠금 대기 중 복원으로 행이 사라졌으면 지울 기록도 없는 것이다.
+        relationRepository.findByIdForUpdate(relationId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RELATION_NOT_FOUND));
         List<String> imageUrls = relationRecordPurger.purge(relationId);
         // 이미지는 커밋 이후에 — 롤백돼도 파일은 되돌릴 수 없다
         imageDeleter.deleteAllAfterCommit(imageUrls);

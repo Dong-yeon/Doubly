@@ -122,12 +122,10 @@ public class Relation {
         this.dietGoalDays = days;
     }
 
-    /** 불러오기 요청 기록 — 첫 요청자만 남긴다. */
-    public void requestRestore(Long userId) {
-        if (this.restoreRequestedBy == null) {
-            this.restoreRequestedBy = userId;
-        }
-    }
+    /*
+     * 불러오기 요청 기록은 도메인 메서드가 아니라 RelationRepository.claimRestoreRequest
+     * (조건부 UPDATE) 로만 쓴다 — 읽고-쓰는 방식은 동시 요청에서 서로를 덮어쓴다.
+     */
 
     /**
      * 상대가 이미 요청해둔 상태인지 — 이 사용자가 요청하면 복원이 성립한다.
