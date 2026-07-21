@@ -61,6 +61,38 @@ class PasswordResetMailConfigTest {
         }
     }
 
+    @SpringBootTest
+    @ActiveProfiles("test")
+    @TestPropertySource(properties = "fitto.resend.api-key=re_test_key")
+    static class Resend_키가_있으면 {
+
+        @Autowired
+        PasswordResetMailSender sender;
+
+        @Test
+        void Resend_발송을_사용한다() {
+            assertThat(sender).isInstanceOf(ResendMailSender.class);
+        }
+    }
+
+    /** Resend 와 SMTP 가 모두 설정되면 Resend 가 우선한다(PaaS 에서 SMTP 가 막히므로). */
+    @SpringBootTest
+    @ActiveProfiles("test")
+    @TestPropertySource(properties = {
+            "fitto.resend.api-key=re_test_key",
+            "spring.mail.host=smtp.example.com"
+    })
+    static class Resend_와_SMTP_가_모두_있으면 {
+
+        @Autowired
+        PasswordResetMailSender sender;
+
+        @Test
+        void Resend_가_우선한다() {
+            assertThat(sender).isInstanceOf(ResendMailSender.class);
+        }
+    }
+
     /**
      * 표시 이름이 없으면 수신함에 발신 계정 주소(예: 개인 Gmail)가 그대로 보여
      * 서비스가 보낸 메일로 읽히지 않는다.
