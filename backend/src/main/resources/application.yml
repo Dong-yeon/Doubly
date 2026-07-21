@@ -47,6 +47,12 @@ spring:
       mail:
         smtp:
           auth: true
+          # 연결/응답 타임아웃(ms). 없으면 JavaMail 기본값이 무한(-1)이라,
+          # SMTP 서버에 닿지 못하면 발송이 요청 스레드에서 영영 멈춘다.
+          # 5초 안에 실패시키고, 발송 실패는 삼켜 로깅한다(SmtpPasswordResetMailSender).
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
           starttls:
             enable: true
 
