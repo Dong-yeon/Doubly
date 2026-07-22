@@ -27,6 +27,8 @@ export const WS_BASE_URL = USE_LOCAL_BACKEND
 export const STORAGE_KEYS = {
   accessToken: 'fitto.accessToken',
   refreshToken: 'fitto.refreshToken',
+  // 온보딩 인트로를 한 번 본 뒤로는 다시 보여주지 않기 위한 플래그
+  onboardingSeen: 'doubly.onboardingSeen',
 } as const;
 
 /**

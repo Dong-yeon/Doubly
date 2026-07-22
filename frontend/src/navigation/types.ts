@@ -5,6 +5,8 @@ import type { Trip } from '../types';
 // 2.1 온보딩 플로우 (인증 전)
 export type OnboardingStackParamList = {
   Splash: undefined;
+  // 첫 실행 인트로 (서비스 소개 3장)
+  Onboarding: undefined;
   Login: undefined;
   Register: undefined;
   // 비밀번호 재설정 — 코드 발송 → 코드 입력+새 비밀번호 설정

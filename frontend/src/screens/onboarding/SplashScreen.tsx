@@ -4,6 +4,8 @@ import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { OnboardingStackParamList } from '../../navigation/types';
 import { DoublyMark } from '../../components/DoublyLogo';
+import { storage } from '../../utils/storage';
+import { STORAGE_KEYS } from '../../constants/config';
 import { colors, fontSize, spacing } from '../../constants/theme';
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, 'Splash'>;
@@ -17,8 +19,20 @@ export function SplashScreen({ navigation }: Props) {
       Animated.spring(scale, { toValue: 1, friction: 5, useNativeDriver: true }),
       Animated.timing(opacity, { toValue: 1, duration: 400, easing: Easing.out(Easing.ease), useNativeDriver: true }),
     ]).start();
-    const t = setTimeout(() => navigation.replace('Login'), 1600);
-    return () => clearTimeout(t);
+
+    // 첫 실행이면 인트로, 아니면 로그인으로. 플래그 읽기는 애니메이션 시간 안에 끝난다.
+    let cancelled = false;
+    const seenPromise = storage.getItem(STORAGE_KEYS.onboardingSeen).catch(() => null);
+    const t = setTimeout(async () => {
+      const seen = await seenPromise;
+      if (!cancelled) {
+        navigation.replace(seen ? 'Login' : 'Onboarding');
+      }
+    }, 1600);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
   }, [navigation, scale, opacity]);
 
   return (
