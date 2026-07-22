@@ -12,11 +12,11 @@ package com.fitto.common.policy;
  */
 public final class PolicyVersion {
 
-    /** 이용약관 버전 */
-    public static final String TERMS = "1.0";
+    /** 이용약관 버전 — 1.1: 운영 주체 정보 반영(개인 개발자·문의처·책임 한계 조항) */
+    public static final String TERMS = "1.1";
 
-    /** 개인정보처리방침 버전 — 1.1: 처리 위탁에 Sentry(오류 수집) 추가 */
-    public static final String PRIVACY = "1.1";
+    /** 개인정보처리방침 버전 — 1.2: 운영 주체·수탁사(Railway)·보유기간·보호책임자·국외이전 반영 */
+    public static final String PRIVACY = "1.2";
 
     private PolicyVersion() {
     }
