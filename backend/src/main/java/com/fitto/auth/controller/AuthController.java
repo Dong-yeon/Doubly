@@ -1,6 +1,7 @@
 package com.fitto.auth.controller;
 
 import com.fitto.auth.dto.ChangePasswordRequest;
+import com.fitto.auth.dto.ConsentRequest;
 import com.fitto.auth.dto.ForgotPasswordRequest;
 import com.fitto.auth.dto.LoginRequest;
 import com.fitto.auth.dto.MarketingConsentRequest;
@@ -93,6 +94,15 @@ public class AuthController {
         UserResponse updated = authService.updateNotificationSetting(user.id(), request.enabled());
         return ApiResponse.success(updated,
                 request.enabled() ? "알림을 받습니다." : "알림을 껐습니다.");
+    }
+
+    /** 필수 약관 재동의 — AUTH-09. 개정된 약관에 다시 동의한다(재동의 게이트). */
+    @PutMapping("/me/consent")
+    public ApiResponse<UserResponse> agreeToCurrentTerms(
+            @AuthenticationPrincipal AuthUser user,
+            @Valid @RequestBody ConsentRequest request) {
+        return ApiResponse.success(
+                authService.agreeToCurrentTerms(user.id()), "약관 동의가 완료되었습니다.");
     }
 
     /** 마케팅 수신 동의/철회 — AUTH-09. */

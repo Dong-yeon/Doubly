@@ -279,9 +279,9 @@ cd frontend && npm install && npm start   # a: Android, i: iOS, w: Web
 | `frontend/src/constants/legal.ts` | `TERMS_VERSION` / `PRIVACY_VERSION` |
 | `backend/.../common/policy/PolicyVersion.java` | `TERMS` / `PRIVACY` |
 
-**미구현 — 기존 가입자 재동의 게이트**: V23 이전에 가입한 계정은 동의 이력이 `NULL` 이라
-`User.hasAgreedTo()` 가 `false` 를 반환합니다. 판별 로직은 준비되어 있으나, 앱 진입 시
-재동의를 요구하는 화면은 아직 없습니다.
+**재동의 게이트**: 버전이 올라가면(또는 V23 이전 가입자처럼 동의 이력이 `NULL` 이면)
+`GET /auth/me` 의 `requiresConsent` 가 `true` 로 내려오고, 앱은 메인 대신
+재동의 화면(`ConsentGateScreen`)을 띄워 동의(`PUT /auth/me/consent`) 전까지 진입을 막습니다.
 
 ### 테스트 스키마
 

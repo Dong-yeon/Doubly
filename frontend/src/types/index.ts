@@ -30,6 +30,8 @@ export interface User {
   marketingConsent?: boolean;
   /** 푸시 알림 수신 여부 */
   notificationsEnabled?: boolean;
+  /** 필수 약관 재동의 필요 여부 — 약관 개정 또는 동의 이력 없는 기존 가입자면 true */
+  requiresConsent?: boolean;
 }
 
 /** 지난 기록 불러오기 결과 — 양쪽이 모두 요청해야 RESTORED 가 된다 */
