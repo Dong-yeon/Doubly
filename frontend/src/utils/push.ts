@@ -21,25 +21,56 @@ if (Platform.OS !== 'web') {
   });
 }
 
-export async function registerForPush(): Promise<void> {
+/**
+ * 이미 권한이 허용돼 있으면 푸시 토큰을 등록한다. <b>권한을 요청하지 않는다.</b>
+ * 로그인/부트스트랩마다 호출해도 안전하다 — 미허용이면 조용히 종료한다.
+ * (권한 요청은 사전 설명 후 requestPushPermission 으로만 한다 — 콜드 프롬프트 방지)
+ */
+export async function registerPushTokenIfGranted(): Promise<void> {
   if (Platform.OS === 'web') return;
   try {
     const current = await Notifications.getPermissionsAsync();
-    let granted = current.granted;
-    if (!granted) {
-      granted = (await Notifications.requestPermissionsAsync()).granted;
-    }
-    if (!granted) return;
-
-    const projectId =
-      Constants.expoConfig?.extra?.eas?.projectId ??
-      Constants.easConfig?.projectId;
-
-    const { data: token } = await Notifications.getExpoPushTokenAsync(
-      projectId ? { projectId } : undefined,
-    );
-    await notificationApi.registerToken(token, Platform.OS);
+    if (!current.granted) return;
+    await registerToken();
   } catch {
-    // Expo Go / projectId 없음 / 권한 거부 등 → 무시
+    // Expo Go / projectId 없음 등 → 무시
   }
+}
+
+/** 첫 요청 가능 상태(undetermined)인지 — 사전 설명 노출 여부 판단용. */
+export async function canAskPushPermission(): Promise<boolean> {
+  if (Platform.OS === 'web') return false;
+  try {
+    const current = await Notifications.getPermissionsAsync();
+    return current.status === 'undetermined';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * OS 권한창을 띄우고, 허용되면 토큰까지 등록한다.
+ * 사전 설명 모달에서 사용자가 "받기"를 눌렀을 때만 호출한다.
+ */
+export async function requestPushPermission(): Promise<boolean> {
+  if (Platform.OS === 'web') return false;
+  try {
+    const granted = (await Notifications.requestPermissionsAsync()).granted;
+    if (granted) {
+      await registerToken();
+    }
+    return granted;
+  } catch {
+    return false;
+  }
+}
+
+/** Expo 푸시 토큰을 발급받아 서버에 등록한다. */
+async function registerToken(): Promise<void> {
+  const projectId =
+    Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
+  const { data: token } = await Notifications.getExpoPushTokenAsync(
+    projectId ? { projectId } : undefined,
+  );
+  await notificationApi.registerToken(token, Platform.OS);
 }

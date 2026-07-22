@@ -29,6 +29,8 @@ export const STORAGE_KEYS = {
   refreshToken: 'fitto.refreshToken',
   // 온보딩 인트로를 한 번 본 뒤로는 다시 보여주지 않기 위한 플래그
   onboardingSeen: 'doubly.onboardingSeen',
+  // 푸시 권한 사전 설명을 한 번 보여준 뒤로는 다시 묻지 않기 위한 플래그
+  pushPrimed: 'doubly.pushPrimed',
 } as const;
 
 /**
