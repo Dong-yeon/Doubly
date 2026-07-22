@@ -360,9 +360,11 @@ cd frontend && npm install && npm start   # a: Android, i: iOS, w: Web
 > 지원하지 않아 웹에서는 초기화를 건너뛰고 콘솔 폴백을 씁니다.
 > 웹까지 수집하려면 `@sentry/browser` 를 별도로 붙여야 합니다.
 
-> ⚠️ **소스맵 업로드는 미설정입니다.** 현재는 오류가 수집되지만 스택트레이스가
-> 난독화된 상태로 보입니다. 읽을 수 있게 하려면 EAS 빌드에 `SENTRY_AUTH_TOKEN` 과
-> `app.json` 플러그인 옵션(`organization`·`project`)이 필요합니다.
+**소스맵 업로드** — 코드 배선은 완료: `metro.config.js`(getSentryExpoConfig)가 번들에
+Debug ID 를 심고, `app.json` 의 Sentry 플러그인이 빌드 시 자동 업로드합니다.
+빌드 환경에 `SENTRY_ORG` / `SENTRY_PROJECT` / `SENTRY_AUTH_TOKEN`(EAS 환경변수, 최초 1회)이
+있어야 실제로 업로드되며, 없으면 조용히 생략됩니다 — 등록 절차는
+[docs/EAS_BUILD.md](docs/EAS_BUILD.md) 7절 참고.
 
 **개인정보처리방침**: Sentry 는 처리 위탁 대상이므로 `legal.ts` 위탁 목록에 추가했고,
 `PRIVACY_VERSION` 을 1.1 로 올렸습니다(백엔드 `PolicyVersion.PRIVACY` 와 동기화).
