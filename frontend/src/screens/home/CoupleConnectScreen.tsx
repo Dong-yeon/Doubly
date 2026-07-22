@@ -45,7 +45,7 @@ export function CoupleConnectScreen({ navigation }: Props) {
 
   const onShare = async () => {
     if (!code) return;
-    await shareText(`Fitto에서 커플로 연결해요! 초대코드: ${code} (24시간 유효)`);
+    await shareText(`Doubly에서 커플로 연결해요! 초대코드: ${code} (24시간 유효)`);
   };
 
   const onConnect = async () => {

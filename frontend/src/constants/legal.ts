@@ -19,8 +19,8 @@ export const PRIVACY_VERSION = '1.2';
 /** 정식 출시일이 정해지면 교체할 자리 표시자 (약관·방침 시행일) */
 const EFFECTIVE_DATE = '[정식 출시일]';
 
-/** 문의·개인정보 연락처 */
-const CONTACT_EMAIL = 'ehddus5712@gmail.com';
+/** 문의·개인정보 연락처 (설정의 문의하기, 약관 문의처 등 단일 출처) */
+export const CONTACT_EMAIL = 'ehddus5712@gmail.com';
 
 export const TERMS_OF_SERVICE = `제1조 (목적)
 이 약관은 Doubly(이하 "서비스")를 이용함에 있어 서비스와 이용자의 권리·의무 및

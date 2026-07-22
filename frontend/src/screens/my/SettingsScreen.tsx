@@ -5,7 +5,7 @@
  * — 비밀번호 변경, 알림 수신, 마케팅 동의 철회, 약관 열람.
  */
 import React, { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Alert, Linking, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../navigation/types';
@@ -15,7 +15,7 @@ import { useAuthStore } from '../../store/authStore';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { APP_VERSION } from '../../constants/config';
-import { PRIVACY_VERSION, TERMS_VERSION } from '../../constants/legal';
+import { CONTACT_EMAIL, PRIVACY_VERSION, TERMS_VERSION } from '../../constants/legal';
 import { colors, fontSize, spacing } from '../../constants/theme';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'Settings'>;
@@ -55,6 +55,31 @@ export function SettingsScreen({ navigation }: Props) {
   };
 
   const isSocialAccount = !!user?.socialType && user.socialType !== 'EMAIL';
+
+  /**
+   * 문의·버그 신고 — 메일 앱을 연다.
+   * 앱 버전·플랫폼을 본문에 미리 채워 베타 리포트 분류를 돕는다.
+   */
+  const onContact = async () => {
+    const subject = `[Doubly 문의] `;
+    const body =
+      `\n\n----------\n`
+      + `아래 정보는 문제 확인용이에요. 지워도 괜찮아요.\n`
+      + `앱 버전: ${APP_VERSION}\n`
+      + `기기: ${Platform.OS} ${Platform.Version}\n`;
+    const url = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    try {
+      const canOpen = await Linking.canOpenURL(url);
+      if (!canOpen) {
+        // 메일 앱이 없는 기기 — 주소라도 안내한다
+        Alert.alert('문의 이메일', `메일 앱을 열 수 없어요.\n${CONTACT_EMAIL} 로 보내주세요.`);
+        return;
+      }
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert('문의 이메일', `${CONTACT_EMAIL} 로 보내주세요.`);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
@@ -127,6 +152,22 @@ export function SettingsScreen({ navigation }: Props) {
           >
             <Text style={styles.rowTitle}>개인정보처리방침</Text>
             <Text style={styles.version}>v{PRIVACY_VERSION}</Text>
+          </Pressable>
+        </Card>
+
+        <Card elevation="sm" style={styles.section}>
+          <Text style={styles.sectionLabel}>문의 및 지원</Text>
+          <Pressable
+            style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
+            onPress={onContact}
+            accessibilityRole="button"
+            accessibilityLabel="문의 및 버그 신고"
+          >
+            <View style={styles.rowText}>
+              <Text style={styles.rowTitle}>문의 · 버그 신고</Text>
+              <Text style={styles.rowDesc}>불편한 점이나 오류를 알려주세요.</Text>
+            </View>
+            <Text style={styles.chevron}>›</Text>
           </Pressable>
         </Card>
 

@@ -11,6 +11,8 @@ import { WorkoutStackNavigator } from './WorkoutStackNavigator';
 import { ChatStackNavigator } from './ChatStackNavigator';
 import { PlaceStackNavigator } from './PlaceStackNavigator';
 import { haptics } from '../utils/haptics';
+import { useRelationStore } from '../store/relationStore';
+import { toast } from '../store/toastStore';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
@@ -23,17 +25,28 @@ const TAB_META: Record<keyof MainTabParamList, { label: string; icon: IconName }
   Place: { label: '플레이스', icon: 'map-marker-outline' },
 };
 
-// FAB 액션시트 항목 — 탭(스택)+중첩 화면으로 이동
-const FAB_ACTIONS: { icon: IconName; label: string; go: (nav: BottomTabBarProps['navigation']) => void }[] = [
+/**
+ * FAB 액션시트 항목 — 탭(스택)+중첩 화면으로 이동.
+ * requiresCouple: 맛집·일상은 서버가 activeCouple 을 요구한다(couple_id NOT NULL).
+ * 커플 미연결 상태에서 이 화면에 들어가면 다 작성한 뒤 에러가 나므로,
+ * 진입 자체를 막고 커플 연결로 안내한다.
+ */
+const FAB_ACTIONS: {
+  icon: IconName;
+  label: string;
+  go: (nav: BottomTabBarProps['navigation']) => void;
+  requiresCouple?: boolean;
+}[] = [
   { icon: 'dumbbell', label: '운동 기록', go: (n) => n.navigate('Workout', { screen: 'WorkoutRecord' }) },
   { icon: 'camera-outline', label: '음식 촬영', go: (n) => n.navigate('Workout', { screen: 'DietRecord' }) },
-  { icon: 'map-marker-plus-outline', label: '맛집 핀', go: (n) => n.navigate('Place', { screen: 'PlaceAdd' }) },
-  { icon: 'image-plus', label: '일상 남기기', go: (n) => n.navigate('Home', { screen: 'FeedCompose' }) },
+  { icon: 'map-marker-plus-outline', label: '맛집 핀', go: (n) => n.navigate('Place', { screen: 'PlaceAdd' }), requiresCouple: true },
+  { icon: 'image-plus', label: '일상 남기기', go: (n) => n.navigate('Home', { screen: 'FeedCompose' }), requiresCouple: true },
 ];
 
 function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const [sheetOpen, setSheetOpen] = useState(false);
+  const couple = useRelationStore((s) => s.couple);
 
   const renderTab = (routeName: keyof MainTabParamList, index: number) => {
     const meta = TAB_META[routeName];
@@ -63,10 +76,16 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
 
   const routeNames = state.routes.map((r) => r.name as keyof MainTabParamList);
 
-  const onAction = (go: (nav: BottomTabBarProps['navigation']) => void) => {
+  const onAction = (action: (typeof FAB_ACTIONS)[number]) => {
     setSheetOpen(false);
     haptics.light();
-    go(navigation);
+    // 커플이 필요한 액션인데 미연결이면 — 작성 후 에러 대신 연결로 안내
+    if (action.requiresCouple && !couple) {
+      toast.info('커플을 연결하면 함께 남길 수 있어요.');
+      navigation.navigate('Home', { screen: 'CoupleConnect' });
+      return;
+    }
+    action.go(navigation);
   };
 
   return (
@@ -99,7 +118,7 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
           <Pressable style={[styles.sheet, { paddingBottom: insets.bottom + spacing.md }]}>
             <View style={styles.grabber} />
             {FAB_ACTIONS.map((a) => (
-              <TouchableOpacity key={a.label} style={styles.action} activeOpacity={0.7} onPress={() => onAction(a.go)}>
+              <TouchableOpacity key={a.label} style={styles.action} activeOpacity={0.7} onPress={() => onAction(a)}>
                 <View style={styles.actionIcon}>
                   <MaterialCommunityIcons name={a.icon} size={22} color={colors.primary} />
                 </View>
