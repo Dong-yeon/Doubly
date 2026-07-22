@@ -73,6 +73,12 @@ fitto:
     access-token-expire-minutes: 30
     refresh-token-expire-days: 14
 
+  # 비밀번호 재설정 메일 — Resend(HTTP). RESEND_API_KEY 가 있으면 SMTP 보다 우선 사용.
+  # (env 이름과 프로퍼티 이름이 다르므로 여기서 명시적으로 배선해야 바인딩된다)
+  resend:
+    api-key: ${RESEND_API_KEY:}
+    from: ${RESEND_FROM:Doubly <onboarding@resend.dev>}
+
   # Cloudinary 서명 업로드 — 미설정 시 프론트가 unsigned preset 으로 폴백
   cloudinary:
     cloud-name: ${CLOUDINARY_CLOUD_NAME:}

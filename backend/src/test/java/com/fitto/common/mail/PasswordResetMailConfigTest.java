@@ -61,10 +61,15 @@ class PasswordResetMailConfigTest {
         }
     }
 
+    /**
+     * env 변수명(RESEND_API_KEY)으로 검증한다 — 프로퍼티명(fitto.resend.api-key)이 아니라.
+     * application.yml 의 ${RESEND_API_KEY:} 배선이 빠지면 이 테스트가 실패한다.
+     * (실제 운영에서 배선 누락으로 Resend 가 선택되지 않은 버그를 재발 방지)
+     */
     @SpringBootTest
     @ActiveProfiles("test")
-    @TestPropertySource(properties = "fitto.resend.api-key=re_test_key")
-    static class Resend_키가_있으면 {
+    @TestPropertySource(properties = "RESEND_API_KEY=re_test_key")
+    static class RESEND_API_KEY_가_있으면 {
 
         @Autowired
         PasswordResetMailSender sender;
@@ -79,7 +84,7 @@ class PasswordResetMailConfigTest {
     @SpringBootTest
     @ActiveProfiles("test")
     @TestPropertySource(properties = {
-            "fitto.resend.api-key=re_test_key",
+            "RESEND_API_KEY=re_test_key",
             "spring.mail.host=smtp.example.com"
     })
     static class Resend_와_SMTP_가_모두_있으면 {
