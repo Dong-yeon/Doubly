@@ -35,6 +35,40 @@ Railway에 **PostgreSQL**, **Redis** 플러그인을 이미 추가한 상태를 
 - `${{서비스.변수}}` 는 Railway 의 변수 참조 문법입니다.
 - DB 스키마는 **첫 기동 시 Flyway 가 자동 생성**합니다(수동 DDL 불필요).
 
+## 2-1. 비밀번호 재설정 메일 (Resend — 운영 필수)
+
+메일 미설정 상태로 운영에 내보내면 인증코드가 **서버 로그로 출력**됩니다(개발 전용 폴백) —
+로그 열람자가 임의 계정의 비밀번호를 재설정할 수 있으므로 반드시 설정해야 합니다.
+Railway 는 아웃바운드 SMTP(587)를 막기 때문에 HTTPS 로 발송하는 **Resend** 를 사용합니다
+(코드가 `RESEND_API_KEY` 존재 시 자동으로 Resend 를 선택).
+
+**1) Resend 가입·키 발급 (최초 1회)**
+
+1. https://resend.com 가입 (무료: 월 3,000통 / 일 100통 — 베타에 충분)
+2. 대시보드 → **API Keys → Create API Key** → 권한은 `Sending access` 면 충분
+3. 생성된 `re_...` 키 복사 (커밋 금지)
+
+**2) Railway 변수 추가 (백엔드 서비스 → Variables)**
+
+| 변수 | 값 |
+| --- | --- |
+| `RESEND_API_KEY` | `re_...` (필수) |
+| `RESEND_FROM` | 발신자. 미설정 시 `Doubly <onboarding@resend.dev>` |
+
+저장하면 Railway 가 자동 재배포합니다.
+
+> ⚠️ **`onboarding@resend.dev` 는 테스트 전용입니다** — Resend 가입에 쓴 본인 이메일로만
+> 발송됩니다. **베타 테스터 등 다른 사용자에게 보내려면 도메인 인증이 필수**입니다:
+> Resend → **Domains → Add Domain** → 안내되는 DNS 레코드(SPF/DKIM)를 도메인 등록기관에
+> 추가 → 인증 완료 후 `RESEND_FROM` 을 `Doubly <no-reply@<도메인>>` 으로 변경.
+
+**3) 확인**
+
+- 배포 로그(부팅 시)에 `비밀번호 재설정 메일: Resend(HTTP) 발송 사용` 이 보이면 배선 완료
+  (미설정이면 이 줄이 없고 로그 폴백으로 동작)
+- 앱 로그인 화면 → "비밀번호를 잊으셨나요?" → 본인 이메일 입력 → 메일함에서 인증코드 수신 확인
+- 발송 실패는 보안상 API 응답에 드러나지 않고 서버 로그(`메일 발송 실패`)에만 남습니다
+
 ## 3. 배포 확인
 
 배포 후 서비스 **Settings → Networking → Generate Domain** 으로 공개 URL 생성:

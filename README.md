@@ -262,9 +262,11 @@ cd frontend && npm install && npm start   # a: Android, i: iOS, w: Web
 ```
 
 - 백엔드 환경변수: `backend/.env.example` 참고 (`DB_*`, `REDIS_*`, `JWT_SECRET`, `GEMINI_*`, `CLOUDINARY_*`, `MAIL_*`)
-- 비밀번호 재설정 메일: `MAIL_HOST` 미설정 시 인증코드가 **서버 로그로 출력**됩니다(개발 전용).
-  운영 배포 전 `MAIL_*` 설정이 필요합니다 — 미설정 상태로 두면 로그 열람자가 임의 계정의
-  비밀번호를 재설정할 수 있습니다.
+- 비밀번호 재설정 메일: 미설정 시 인증코드가 **서버 로그로 출력**됩니다(개발 전용).
+  운영은 **Resend(HTTP)** 를 사용합니다 — Railway 가 SMTP 아웃바운드를 막기 때문.
+  `RESEND_API_KEY` 만 넣으면 되고, 절차는 [docs/RAILWAY.md](docs/RAILWAY.md) 2-1절 참고.
+  (도메인 인증 전 기본 발신자 `onboarding@resend.dev` 는 본인 계정으로만 발송되는 테스트
+  전용 — 실사용자 발송은 도메인 인증 필요)
 
 ### ⚠️ 약관 본문 — 출시 전 필수 작업
 
