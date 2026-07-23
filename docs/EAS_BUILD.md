@@ -79,15 +79,19 @@ Sentry 연동 자체는 코드에 포함돼 있어(`src/utils/sentry.ts`) 빌드
 
 ### 7-2. EAS 환경변수 등록 (최초 1회)
 
-`frontend` 폴더에서 (값은 Sentry 대시보드 URL `sentry.io/organizations/<org>/projects/<project>` 에서 확인):
+조직·프로젝트 슬러그는 `app.json` 의 Sentry 플러그인 설정에 고정돼 있으므로
+(`organization: happyeon`, `project: doubly`), 등록할 것은 **인증 토큰 하나**뿐입니다:
 
 ```bash
-npx eas-cli env:create --scope project --name SENTRY_ORG --value <조직 슬러그> --visibility plaintext --environment production --environment preview
-npx eas-cli env:create --scope project --name SENTRY_PROJECT --value <프로젝트 슬러그> --visibility plaintext --environment production --environment preview
 npx eas-cli env:create --scope project --name SENTRY_AUTH_TOKEN --value <토큰> --visibility secret --environment production --environment preview
 ```
 
-(expo.dev 대시보드 → 프로젝트 → Environment variables 에서 웹으로 등록해도 동일합니다.)
+(expo.dev 대시보드 → 프로젝트 → Environment variables 에서 웹으로 등록해도 동일합니다.
+플래그가 안 먹으면 `npx eas-cli env:create` 만 입력해 대화형으로 진행하세요.)
+
+> ⚠️ 환경변수는 **EAS 프로젝트 단위**입니다. EAS 프로젝트를 새로 만들면(projectId 변경)
+> 새 프로젝트에 다시 등록해야 합니다. 토큰이 없으면 소스맵 업로드 단계에서
+> 그레이들 빌드 전체가 실패합니다.
 
 ### 7-3. 확인
 
