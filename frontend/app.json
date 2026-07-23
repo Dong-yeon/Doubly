@@ -26,7 +26,13 @@
           ]
         }
       ],
-      "@sentry/react-native"
+      [
+        "@sentry/react-native",
+        {
+          "organization": "happyeon",
+          "project": "doubly"
+        }
+      ]
     ],
     "splash": {
       "backgroundColor": "#FBF8F3"
