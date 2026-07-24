@@ -6,8 +6,16 @@
  *
  * 아래 "호환 별칭"은 기존 코드(수십 개 파일)가 참조하던 키를 새 팔레트로 매핑해
  * 앱 전체가 한 번에 리스킨되도록 한다. (constants/theme.ts 가 이 파일을 re-export)
+ *
+ * ── 다크모드 ─────────────────────────────────────────────────────
+ * 시스템 테마(Appearance)를 따라 앱 시작 시 팔레트를 고른다.
+ * 모든 화면의 StyleSheet 가 모듈 로드 시점에 이 값으로 만들어지므로,
+ * 실행 중 시스템 테마를 바꾸면 앱을 다시 시작해야 반영된다 (재실행 시 자동 적용).
+ * 브랜드 색(Coral/Indigo/Violet)은 두 테마에서 동일하고, 배경·표면·텍스트만 반전된다.
  */
-export const colors = {
+import { Appearance } from 'react-native';
+
+const light = {
   // ── Doubly 코어 ──────────────────────────────────────────────
   cream: '#FBF8F3',
   ink: '#14162B',
@@ -59,4 +67,62 @@ export const colors = {
   success: '#2FA36B', // 기능색(체크·완료)은 그린 유지
   danger: '#E5484D',
   white: '#FFFFFF',
-} as const;
+};
+
+/**
+ * 다크 팔레트 — 같은 키, 반전된 명도.
+ * - 배경/표면: Ink 계열 남색 (#101220 → #1B1D2E → #232538)
+ * - 크롬: 어두운 배경에서 Ink 가 안 보이므로 Indigo 계열로 대체
+ *   (colors.primary 위에 white 텍스트를 얹는 기존 스타일이 그대로 성립해야 한다)
+ * - 소유자 색(Coral/Indigo/Violet)은 어두운 배경 대비를 위해 한 단계 밝게,
+ *   연한 배경(…Bg/…Soft)은 어둡게. white 는 "색 위에 얹는 텍스트" 용도라 유지
+ */
+const dark: typeof light = {
+  cream: '#FBF8F3',
+  ink: '#F2F1F7',
+  coral: '#FF7A5E',
+  indigo: '#7C88FF',
+  violet: '#B07EFF',
+
+  me: '#FF7A5E',
+  meBg: '#3A241E',
+  partner: '#7C88FF',
+  partnerBg: '#20243D',
+  together: '#B07EFF',
+  togetherBg: '#2C2340',
+
+  primary: '#5B6BFF',
+  primaryDark: '#4A5BFF',
+  primaryLight: '#8A93FF',
+  primaryBg: '#242741',
+
+  textPrimary: '#F2F1F7',
+  textSecondary: '#A7ACC0', // background #101220 위 7.8:1 · surfaceAlt #232538 위 5.9:1
+  textMuted: '#6F7488',
+
+  surface: '#1B1D2E',
+  surfaceCard: '#1B1D2E',
+  surfaceAlt: '#232538',
+  background: '#101220',
+
+  border: '#32354A',
+  borderStrong: 'rgba(242,241,247,0.18)',
+
+  couple: '#FF7A5E',
+  food: '#B07EFF',
+  health: '#7C88FF',
+  primarySoft: '#242741',
+  secondary: '#7C88FF',
+  secondarySoft: '#20243D',
+  accent: '#B07EFF',
+  accentSoft: '#2C2340',
+  textTertiary: '#6F7488',
+  success: '#3FBF80',
+  danger: '#F2555A',
+  white: '#FFFFFF',
+};
+
+/** 현재 시스템 테마가 다크인지 — 지도(웹뷰) 등 팔레트 밖 분기에 사용 */
+export const isDarkMode = Appearance.getColorScheme() === 'dark';
+
+export const colors = isDarkMode ? dark : light;

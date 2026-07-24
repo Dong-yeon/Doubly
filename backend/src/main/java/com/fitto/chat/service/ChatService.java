@@ -132,6 +132,8 @@ public class ChatService {
     private String preview(ChatMessage message) {
         return switch (message.getMessageType()) {
             case IMAGE -> "[이미지]";
+            // 스티커는 이모지 자체가 가장 좋은 미리보기다
+            case STICKER -> message.getContent() != null ? message.getContent() : "[스티커]";
             case WORKOUT_CARD -> "[운동 기록]";
             case MEAL_CARD -> "[식단]";
             case ROUTINE_CARD -> "[루틴]";
