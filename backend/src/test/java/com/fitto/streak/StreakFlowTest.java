@@ -84,4 +84,29 @@ class StreakFlowTest {
         workoutOn(b, today);
         assertThat(streakService.getCoupleStreak(a).currentCount()).isEqualTo(1);
     }
+
+    /** 홈 위젯용 — 상대의 개인 스트릭을 조회한다. */
+    @Test
+    void 상대의_개인_스트릭을_조회할_수_있다() {
+        Long a = register("sp1@fitto.com");
+        Long b = register("sp2@fitto.com");
+        InviteCodeResponse invite = relationService.createCoupleInvite(a);
+        relationService.connectCouple(b, invite.code());
+
+        LocalDate today = LocalDate.now();
+        workoutOn(b, today.minusDays(1));
+        workoutOn(b, today);
+
+        // A 가 보는 상대(B) 스트릭 = B 의 개인 스트릭
+        assertThat(streakService.getPartnerStreak(a).currentCount()).isEqualTo(2);
+        // B 가 보는 상대(A)는 운동 기록이 없어 0
+        assertThat(streakService.getPartnerStreak(b).currentCount()).isZero();
+    }
+
+    /** 커플 미연결이면 상대 스트릭은 빈 값이다. */
+    @Test
+    void 커플_미연결이면_상대_스트릭은_빈_값이다() {
+        Long solo = register("sp3@fitto.com");
+        assertThat(streakService.getPartnerStreak(solo).currentCount()).isZero();
+    }
 }

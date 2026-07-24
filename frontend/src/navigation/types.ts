@@ -106,4 +106,6 @@ export type MainTabParamList = {
 export type RootStackParamList = {
   Onboarding: NavigatorScreenParams<OnboardingStackParamList>;
   Main: NavigatorScreenParams<MainTabParamList>;
+  // 약관 재동의 게이트 — 개정 약관에 동의할 때까지 메인 진입을 막는다
+  ConsentGate: undefined;
 };

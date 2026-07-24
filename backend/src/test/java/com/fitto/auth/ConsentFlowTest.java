@@ -1,5 +1,6 @@
 package com.fitto.auth;
 
+import com.fitto.auth.dto.ConsentRequest;
 import com.fitto.auth.dto.RegisterRequest;
 import com.fitto.auth.dto.UserResponse;
 import com.fitto.auth.service.AuthService;
@@ -98,5 +99,53 @@ class ConsentFlowTest {
         assertThat(user.hasAgreedTo(PolicyVersion.TERMS, PolicyVersion.PRIVACY)).isTrue();
         assertThat(user.hasAgreedTo("2.0", PolicyVersion.PRIVACY)).isFalse();
         assertThat(user.hasAgreedTo(PolicyVersion.TERMS, "2.0")).isFalse();
+    }
+
+    @Test
+    void 가입_직후에는_재동의가_필요없다() {
+        UserResponse res = authService.register(req("consent-fresh@fitto.com", true, true, false), IP).user();
+
+        assertThat(res.requiresConsent()).isFalse();
+        assertThat(authService.getMe(res.id()).requiresConsent()).isFalse();
+    }
+
+    /**
+     * 재동의 게이트 — V23 이전 가입자는 동의 이력이 NULL 이라 requiresConsent 가 true 로
+     * 내려가고, 재동의 API 호출로 현재 버전이 기록되면 게이트가 풀려야 한다.
+     */
+    @Test
+    void 동의_이력이_없는_기존_가입자는_재동의_후_게이트가_풀린다() {
+        // User.builder() 는 동의 필드를 채우지 않는다 — V23 이전 가입자와 동일한 상태
+        User legacy = userRepository.save(User.builder()
+                .email("consent-legacy@fitto.com")
+                .password("encoded")
+                .name("기존가입자")
+                .build());
+
+        assertThat(authService.getMe(legacy.getId()).requiresConsent()).isTrue();
+
+        UserResponse agreed = authService.agreeToCurrentTerms(legacy.getId());
+
+        assertThat(agreed.requiresConsent()).isFalse();
+        User saved = userRepository.findById(legacy.getId()).orElseThrow();
+        assertThat(saved.getTermsAgreedAt()).isNotNull();
+        assertThat(saved.getPrivacyAgreedAt()).isNotNull();
+        assertThat(saved.getTermsVersion()).isEqualTo(PolicyVersion.TERMS);
+        assertThat(saved.getPrivacyVersion()).isEqualTo(PolicyVersion.PRIVACY);
+    }
+
+    /** 재동의 요청도 가입과 동일하게 필수 두 항목이 모두 true 여야 한다. */
+    @Test
+    void 재동의_요청에서_필수_동의를_빠뜨리면_검증에_걸린다() {
+        Set<ConstraintViolation<ConsentRequest>> noTerms =
+                validator.validate(new ConsentRequest(false, true));
+        Set<ConstraintViolation<ConsentRequest>> noPrivacy =
+                validator.validate(new ConsentRequest(true, false));
+        Set<ConstraintViolation<ConsentRequest>> ok =
+                validator.validate(new ConsentRequest(true, true));
+
+        assertThat(noTerms).extracting(v -> v.getPropertyPath().toString()).contains("agreeTerms");
+        assertThat(noPrivacy).extracting(v -> v.getPropertyPath().toString()).contains("agreePrivacy");
+        assertThat(ok).isEmpty();
     }
 }

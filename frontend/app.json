@@ -26,7 +26,31 @@
           ]
         }
       ],
-      "@sentry/react-native"
+      [
+        "@sentry/react-native",
+        {
+          "organization": "happyeon",
+          "project": "doubly"
+        }
+      ],
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "Doubly",
+              "label": "Doubly",
+              "description": "함께한 D-day와 우리의 스트릭",
+              "minWidth": "250dp",
+              "minHeight": "60dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 1,
+              "resizeMode": "horizontal|vertical",
+              "updatePeriodMillis": 1800000
+            }
+          ]
+        }
+      ]
     ],
     "splash": {
       "backgroundColor": "#FBF8F3"
@@ -57,11 +81,6 @@
       "backgroundColor": "#FBF8F3",
       "display": "standalone",
       "description": "Doubly — 둘이라서, 두 배로. 커플 운동·식단·여행·일상 공유"
-    },
-    "extra": {
-      "eas": {
-        "projectId": "696016d6-2106-44e3-884b-553e54710297"
-      }
     }
   }
 }

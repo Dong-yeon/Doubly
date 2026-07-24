@@ -61,6 +61,44 @@ npx eas-cli build --platform android --profile preview
 [EAS Update](https://docs.expo.dev/eas-update/introduction/)로 앱을 재설치하지 않고 갱신할 수도
 있습니다(다음 단계에서 필요 시 별도 가이드 추가).
 
+## 7. Sentry 소스맵 업로드 (읽을 수 있는 스택트레이스)
+
+Sentry 연동 자체는 코드에 포함돼 있어(`src/utils/sentry.ts`) 빌드만 해도 오류는 수집되지만,
+소스맵이 없으면 스택트레이스가 난독화된 채로 보입니다. 아래 환경변수를 **한 번만** 등록해 두면
+이후 모든 EAS 빌드에서 소스맵이 자동 업로드됩니다.
+
+> 코드 쪽 배선은 이미 되어 있습니다 — `app.json` 의 `@sentry/react-native` 플러그인이
+> 빌드 시 업로드 스크립트를 심고, `metro.config.js`(getSentryExpoConfig)가 번들·소스맵에
+> Debug ID 를 넣어 업로드본과 매칭합니다. 환경변수가 없으면 업로드만 조용히 생략됩니다.
+
+### 7-1. Sentry 인증 토큰 생성 (최초 1회)
+
+1. https://sentry.io → Settings → **Auth Tokens** → "Create New Token"
+2. 스코프는 `project:releases` (+ `org:read`) 면 충분합니다
+3. 생성된 토큰(`sntrys_...`)을 복사 — **저장소에 커밋하지 마세요**
+
+### 7-2. EAS 환경변수 등록 (최초 1회)
+
+조직·프로젝트 슬러그는 `app.json` 의 Sentry 플러그인 설정에 고정돼 있으므로
+(`organization: happyeon`, `project: doubly`), 등록할 것은 **인증 토큰 하나**뿐입니다:
+
+```bash
+npx eas-cli env:create --scope project --name SENTRY_AUTH_TOKEN --value <토큰> --visibility secret --environment production --environment preview
+```
+
+(expo.dev 대시보드 → 프로젝트 → Environment variables 에서 웹으로 등록해도 동일합니다.
+플래그가 안 먹으면 `npx eas-cli env:create` 만 입력해 대화형으로 진행하세요.)
+
+> ⚠️ 환경변수는 **EAS 프로젝트 단위**입니다. EAS 프로젝트를 새로 만들면(projectId 변경)
+> 새 프로젝트에 다시 등록해야 합니다. 토큰이 없으면 소스맵 업로드 단계에서
+> 그레이들 빌드 전체가 실패합니다.
+
+### 7-3. 확인
+
+다음 빌드(`npx eas-cli build ...`)의 로그에 `sentry-cli ... sourcemaps upload` 류 문구가 보이고,
+이후 Sentry 이슈의 스택트레이스가 원본 TypeScript 파일·줄 번호로 표시되면 성공입니다.
+업로드가 생략되면 빌드 로그에 "SENTRY_AUTH_TOKEN environment variable" 안내가 남습니다.
+
 ## 트러블슈팅
 
 | 증상 | 원인 / 해결 |

@@ -42,6 +42,14 @@ export const authApi = {
     ),
   withdraw: () => unwrap(apiClient.delete<ApiResponse<void>>('/auth/withdraw')),
 
+  /** 필수 약관 재동의 — 개정된 현재 버전 약관에 다시 동의한다(재동의 게이트). */
+  agreeToCurrentTerms: () =>
+    unwrap(
+      apiClient.put<ApiResponse<User>>('/auth/me/consent', {
+        agreeTerms: true,
+        agreePrivacy: true,
+      }),
+    ),
   /** 마케팅 수신 동의/철회 — 개인정보보호법상 선택 동의는 철회 가능해야 한다. */
   updateMarketingConsent: (agreed: boolean) =>
     unwrap(apiClient.put<ApiResponse<User>>('/auth/me/marketing-consent', { agreed })),

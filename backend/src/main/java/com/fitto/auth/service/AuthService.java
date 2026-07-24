@@ -159,6 +159,18 @@ public class AuthService {
         return UserResponse.from(user);
     }
 
+    /**
+     * 필수 약관 재동의 — AUTH-09. 약관 개정(버전 불일치) 또는 동의 이력이 없는
+     * 기존 가입자가 현재 버전에 다시 동의한다. 동의 여부는 ConsentRequest 가 이미 검증했다.
+     */
+    @Transactional
+    public UserResponse agreeToCurrentTerms(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
+        user.agreeToRequiredTerms(PolicyVersion.TERMS, PolicyVersion.PRIVACY);
+        return UserResponse.from(user);
+    }
+
     /** 마케팅 수신 동의/철회 — AUTH-09. 선택 동의이므로 언제든 되돌릴 수 있어야 한다. */
     @Transactional
     public UserResponse updateMarketingConsent(Long userId, boolean agreed) {

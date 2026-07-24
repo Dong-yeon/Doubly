@@ -1,9 +1,6 @@
 # 폰트 (Pretendard)
 
-이 폴더에 **Pretendard OTF 3종**을 넣어야 앱에 프리미엄 폰트가 적용됩니다.
-파일이 없으면 시스템 폰트로 자연 폴백되어 앱은 정상 동작합니다.
-
-## 넣어야 할 파일 (파일명 정확히 일치해야 함)
+앱 전역에 쓰는 **Pretendard OTF 3종**이 이 폴더에 포함되어 있습니다.
 
 ```
 assets/fonts/Pretendard-Regular.otf
@@ -11,22 +8,17 @@ assets/fonts/Pretendard-Medium.otf
 assets/fonts/Pretendard-SemiBold.otf
 ```
 
-## 복사 방법 (로컬 PC에서)
-
-내려받은 `Pretendard-1.3.9` 안의 `public/static/` (또는 `static/`) 폴더에서
-위 3개 파일을 이 폴더로 복사하세요. 예 (Windows PowerShell):
-
-```powershell
-copy "C:\Users\happy\Downloads\Pretendard-1.3.9\public\static\Pretendard-Regular.otf" frontend\assets\fonts\
-copy "C:\Users\happy\Downloads\Pretendard-1.3.9\public\static\Pretendard-Medium.otf" frontend\assets\fonts\
-copy "C:\Users\happy\Downloads\Pretendard-1.3.9\public\static\Pretendard-SemiBold.otf" frontend\assets\fonts\
-```
-
-> 파일이 `.ttf` 라면 확장자에 맞춰 `app.json` 의 `expo-font` 플러그인 경로도 `.ttf` 로 바꿔주세요.
-
-## 적용 방식
-
-- `app.json` 의 `expo-font` 플러그인에 등록되어 있어, **네이티브/EAS 빌드 시 자동 임베드**됩니다.
-- 폰트 반영을 보려면 파일을 넣은 뒤 EAS 빌드(또는 dev client)를 다시 하세요:
-  `npx eas-cli build --platform android --profile preview`
+- `app.json` 의 `expo-font` 플러그인에 등록되어 있어 **네이티브/EAS 빌드 시 자동 임베드**됩니다.
+  플러그인이 참조하는 파일이라 **삭제하면 EAS prebuild 가 실패**합니다 (파일을 빼려면
+  `app.json` 의 `expo-font` 항목도 함께 제거해야 합니다).
 - Expo Go / 웹 개발 모드에서는 임베드가 되지 않아 시스템 폰트로 보일 수 있습니다(정상).
+
+## 라이선스
+
+Pretendard 는 [SIL Open Font License 1.1](https://github.com/orioncactus/pretendard/blob/main/LICENSE)
+로 배포됩니다 — 앱 임베드·저장소 포함·상업적 사용 모두 허용됩니다.
+출처: https://github.com/orioncactus/pretendard (v1.3.x static OTF)
+
+## 버전 올릴 때
+
+새 버전의 `public/static/` 폴더에서 같은 파일명 3종을 이 폴더에 덮어쓰면 됩니다.

@@ -235,6 +235,7 @@ RelationType
 | 출시 준비 | 에러 바운더리 + 전역 예외 수집 | ✅ 완료 (리포팅 도구 연동은 예정) |
 | 버그 수정 | 회원 탈퇴 FK 위반 — 커플 콘텐츠 미정리로 탈퇴 실패 | ✅ 완료 |
 | 테스트 | 테스트에 Flyway 적용 (운영과 동일 스키마 검증) | ✅ 완료 |
+| 확장 | 홈 위젯 (Android — D-day·나/상대 스트릭) | ✅ 완료 (EAS 빌드에서만 동작) |
 | 출시 후 | 트레이너 결제, 소셜 로그인 | 예정 |
 | 패밀리(보류) | 관계 모델 N인 확장 (`relation_members` 조인 테이블) | ⏸ 보류 |
 | 패밀리(보류) | 아이 프로필 (관리 대상 → 연동 계정 승격) | ⏸ 보류 |
@@ -262,9 +263,11 @@ cd frontend && npm install && npm start   # a: Android, i: iOS, w: Web
 ```
 
 - 백엔드 환경변수: `backend/.env.example` 참고 (`DB_*`, `REDIS_*`, `JWT_SECRET`, `GEMINI_*`, `CLOUDINARY_*`, `MAIL_*`)
-- 비밀번호 재설정 메일: `MAIL_HOST` 미설정 시 인증코드가 **서버 로그로 출력**됩니다(개발 전용).
-  운영 배포 전 `MAIL_*` 설정이 필요합니다 — 미설정 상태로 두면 로그 열람자가 임의 계정의
-  비밀번호를 재설정할 수 있습니다.
+- 비밀번호 재설정 메일: 미설정 시 인증코드가 **서버 로그로 출력**됩니다(개발 전용).
+  운영은 **Resend(HTTP)** 를 사용합니다 — Railway 가 SMTP 아웃바운드를 막기 때문.
+  `RESEND_API_KEY` 만 넣으면 되고, 절차는 [docs/RAILWAY.md](docs/RAILWAY.md) 2-1절 참고.
+  (도메인 인증 전 기본 발신자 `onboarding@resend.dev` 는 본인 계정으로만 발송되는 테스트
+  전용 — 실사용자 발송은 도메인 인증 필요)
 
 ### ⚠️ 약관 본문 — 출시 전 필수 작업
 
@@ -279,9 +282,9 @@ cd frontend && npm install && npm start   # a: Android, i: iOS, w: Web
 | `frontend/src/constants/legal.ts` | `TERMS_VERSION` / `PRIVACY_VERSION` |
 | `backend/.../common/policy/PolicyVersion.java` | `TERMS` / `PRIVACY` |
 
-**미구현 — 기존 가입자 재동의 게이트**: V23 이전에 가입한 계정은 동의 이력이 `NULL` 이라
-`User.hasAgreedTo()` 가 `false` 를 반환합니다. 판별 로직은 준비되어 있으나, 앱 진입 시
-재동의를 요구하는 화면은 아직 없습니다.
+**재동의 게이트**: 버전이 올라가면(또는 V23 이전 가입자처럼 동의 이력이 `NULL` 이면)
+`GET /auth/me` 의 `requiresConsent` 가 `true` 로 내려오고, 앱은 메인 대신
+재동의 화면(`ConsentGateScreen`)을 띄워 동의(`PUT /auth/me/consent`) 전까지 진입을 막습니다.
 
 ### 테스트 스키마
 
@@ -360,9 +363,11 @@ cd frontend && npm install && npm start   # a: Android, i: iOS, w: Web
 > 지원하지 않아 웹에서는 초기화를 건너뛰고 콘솔 폴백을 씁니다.
 > 웹까지 수집하려면 `@sentry/browser` 를 별도로 붙여야 합니다.
 
-> ⚠️ **소스맵 업로드는 미설정입니다.** 현재는 오류가 수집되지만 스택트레이스가
-> 난독화된 상태로 보입니다. 읽을 수 있게 하려면 EAS 빌드에 `SENTRY_AUTH_TOKEN` 과
-> `app.json` 플러그인 옵션(`organization`·`project`)이 필요합니다.
+**소스맵 업로드** — 코드 배선은 완료: `metro.config.js`(getSentryExpoConfig)가 번들에
+Debug ID 를 심고, `app.json` 의 Sentry 플러그인이 빌드 시 자동 업로드합니다.
+빌드 환경에 `SENTRY_ORG` / `SENTRY_PROJECT` / `SENTRY_AUTH_TOKEN`(EAS 환경변수, 최초 1회)이
+있어야 실제로 업로드되며, 없으면 조용히 생략됩니다 — 등록 절차는
+[docs/EAS_BUILD.md](docs/EAS_BUILD.md) 7절 참고.
 
 **개인정보처리방침**: Sentry 는 처리 위탁 대상이므로 `legal.ts` 위탁 목록에 추가했고,
 `PRIVACY_VERSION` 을 1.1 로 올렸습니다(백엔드 `PolicyVersion.PRIVACY` 와 동기화).
