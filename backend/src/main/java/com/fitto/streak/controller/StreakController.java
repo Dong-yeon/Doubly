@@ -27,6 +27,12 @@ public class StreakController {
         return ApiResponse.success(streakService.getMyStreak(user.id()));
     }
 
+    /** 상대의 개인 운동 스트릭 — 홈 위젯·응원 표시용. */
+    @GetMapping("/partner")
+    public ApiResponse<StreakResponse> partner(@AuthenticationPrincipal AuthUser user) {
+        return ApiResponse.success(streakService.getPartnerStreak(user.id()));
+    }
+
     @GetMapping("/couple")
     public ApiResponse<StreakResponse> couple(@AuthenticationPrincipal AuthUser user) {
         return ApiResponse.success(streakService.getCoupleStreak(user.id()));

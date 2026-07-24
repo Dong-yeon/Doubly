@@ -97,6 +97,17 @@ public class StreakService {
                 .orElseGet(() -> StreakResponse.empty(StreakType.PERSONAL));
     }
 
+    /** 상대의 개인 운동 스트릭 — 홈 위젯·응원 표시용. 커플 미연결이면 빈 값. */
+    public StreakResponse getPartnerStreak(Long userId) {
+        LocalDate today = LocalDate.now();
+        return activeCouple(userId)
+                .map(c -> c.partnerOf(userId))   // 상대가 아직 없으면(null) empty 로 이어진다
+                .flatMap(partnerId -> streakRepository
+                        .findByUserIdAndStreakType(partnerId, StreakType.PERSONAL))
+                .map(s -> StreakResponse.of(s, today))
+                .orElseGet(() -> StreakResponse.empty(StreakType.PERSONAL));
+    }
+
     public StreakResponse getCoupleStreak(Long userId) {
         LocalDate today = LocalDate.now();
         return activeCouple(userId)

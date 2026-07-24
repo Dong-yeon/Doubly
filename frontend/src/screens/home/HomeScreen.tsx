@@ -38,6 +38,7 @@ import { toast } from '../../store/toastStore';
 import { getErrorMessage } from '../../utils/error';
 import { relativeDateLabel } from '../../utils/date';
 import { haptics } from '../../utils/haptics';
+import { updateHomeWidget } from '../../widget/updateHomeWidget';
 import type { FeedItem, PartnerToday, ReactionSummary, Streak } from '../../types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 
@@ -72,6 +73,7 @@ export function HomeScreen({ navigation }: Props) {
 
   const [partner, setPartner] = useState<PartnerToday | null>(null);
   const [myStreak, setMyStreak] = useState<Streak | null>(null);
+  const [partnerStreak, setPartnerStreak] = useState<Streak | null>(null);
   const [myDone, setMyDone] = useState(false);
   const [annModal, setAnnModal] = useState(false);
   const [annInput, setAnnInput] = useState('');
@@ -94,7 +96,20 @@ export function HomeScreen({ navigation }: Props) {
     workoutApi.today().then((l) => setMyDone(l.length > 0)).catch(() => setMyDone(false));
     workoutApi.partnerToday().then(setPartner).catch(() => setPartner(null));
     streakApi.me().then(setMyStreak).catch(() => setMyStreak(null));
+    streakApi.partner().then(setPartnerStreak).catch(() => setPartnerStreak(null));
   }, [fetchAll]);
+
+  // 홈 위젯 갱신 (Android) — 홈 데이터가 바뀔 때마다 위젯 캐시를 남기고 다시 그린다
+  useEffect(() => {
+    updateHomeWidget({
+      connected,
+      anniversaryDate: couple?.anniversaryDate ?? couple?.connectedAt ?? null,
+      partnerName: couple?.partner?.name ?? null,
+      myStreak: myStreak?.currentCount ?? 0,
+      partnerStreak: partnerStreak?.currentCount ?? 0,
+      updatedAt: new Date().toISOString(),
+    });
+  }, [connected, couple, myStreak, partnerStreak]);
 
   const loadFeed = useCallback(async () => {
     if (feedLoadingRef.current) return;
