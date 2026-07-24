@@ -18,6 +18,9 @@ export interface RegisterPayload {
 export const authApi = {
   kakaoLogin: (accessToken: string) =>
     unwrap(apiClient.post<ApiResponse<AuthTokens>>('/auth/kakao', { accessToken })),
+  /** 구글 로그인 — 기존 계정이면 로그인, 없으면 가입까지 한 번에 (약관 동의는 게이트에서) */
+  googleLogin: (idToken: string) =>
+    unwrap(apiClient.post<ApiResponse<AuthTokens>>('/auth/google', { idToken })),
   appleLogin: (identityToken: string) =>
     unwrap(apiClient.post<ApiResponse<AuthTokens>>('/auth/apple', { identityToken })),
   login: (email: string, password: string) =>
