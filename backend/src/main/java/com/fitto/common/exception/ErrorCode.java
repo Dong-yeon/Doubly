@@ -62,6 +62,9 @@ public enum ErrorCode {
     // 이미지 업로드 (UPLOAD)
     UPLOAD_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "서명 업로드가 아직 설정되지 않았어요."),
 
+    // 소셜 로그인 (AUTH)
+    SOCIAL_LOGIN_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "구글 로그인이 아직 준비되지 않았어요."),
+
     // 식단 AI 분석 (DIET AI)
     AI_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "AI 분석 기능이 아직 준비되지 않았어요."),
     AI_DAILY_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "오늘의 AI 분석 횟수를 모두 사용했어요. 내일 다시 시도해주세요."),

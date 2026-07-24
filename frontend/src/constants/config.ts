@@ -67,6 +67,21 @@ export const SENTRY_DSN =
   'https://0e49f62524d1765099062ca6247613d0@o4511765897019392.ingest.us.sentry.io/4511765904097280';
 
 /**
+ * 구글 로그인 — Google Cloud Console(APIs & Services > Credentials)의 OAuth 클라이언트 id.
+ * - webClientId: "웹 애플리케이션" 유형 — ID 토큰 발급 기준이라 필수
+ * - androidClientId: "Android" 유형 — 패키지명 com.doubly.app + EAS 키스토어 SHA-1 등록
+ *
+ * 클라이언트 id 는 비밀값이 아니다(노출 전제). 비워두면 로그인 화면에서 구글 버튼이 숨겨진다.
+ * ⚠️ 서버(Railway 의 GOOGLE_CLIENT_IDS)에도 같은 id 를 등록해야 토큰이 통과한다.
+ */
+export const GOOGLE_AUTH = {
+  webClientId: '',
+  androidClientId: '',
+};
+
+export const isGoogleLoginConfigured = () => GOOGLE_AUTH.webClientId.length > 0;
+
+/**
  * 앱 버전 — 설정 화면 표시용.
  * expo-constants 를 의존성에 추가하지 않기 위해 상수로 둔다.
  * ⚠️ app.json / package.json 의 version 을 올릴 때 여기도 함께 올려야 한다.

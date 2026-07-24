@@ -4,5 +4,6 @@ package com.fitto.user.domain;
 public enum SocialType {
     KAKAO,
     APPLE,
+    GOOGLE,
     EMAIL
 }
