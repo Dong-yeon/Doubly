@@ -14,4 +14,5 @@ public record CoupleEvent(String type) {
     public static final String TRIP = "TRIP";
     public static final String CHALLENGE = "CHALLENGE";
     public static final String QUESTION = "QUESTION";
+    public static final String CALENDAR = "CALENDAR";
 }

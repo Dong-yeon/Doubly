@@ -52,6 +52,7 @@ public class RelationRecordPurger {
         exec("delete from places where couple_id = :rid", relationId);
 
         exec("delete from couple_challenges where couple_id = :rid", relationId);
+        exec("delete from couple_events where couple_id = :rid", relationId);
         exec("delete from daily_answers where couple_id = :rid", relationId);
         exec("delete from chat_messages where relation_id = :rid", relationId);
         exec("delete from trainer_routines where relation_id = :rid", relationId);

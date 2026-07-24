@@ -34,6 +34,24 @@ export interface User {
   requiresConsent?: boolean;
 }
 
+// 커플 캘린더 — 기념일 외 일정(생일·데이트 약속) + D-day 푸시
+export type CalendarEventType = 'ANNIVERSARY' | 'BIRTHDAY' | 'DATE' | 'ETC';
+
+export interface CoupleCalendarEvent {
+  id: number;
+  title: string;
+  /** 이 응답이 가리키는 발생일 (반복 일정은 조회 문맥의 연도로 계산) */
+  date: string;
+  /** 원본 기준일 — 반복 일정의 최초 날짜 */
+  eventDate: string;
+  eventType: CalendarEventType;
+  repeatYearly: boolean;
+  memo?: string | null;
+  /** 오늘 기준 D-day — 0=오늘, 양수=N일 남음, 음수=지남 */
+  dday: number;
+  createdBy: number;
+}
+
 /** 지난 기록 불러오기 결과 — 양쪽이 모두 요청해야 RESTORED 가 된다 */
 export interface RestoreRecords {
   status: 'WAITING_PARTNER' | 'RESTORED';

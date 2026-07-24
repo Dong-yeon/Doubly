@@ -316,6 +316,13 @@ export function HomeScreen({ navigation }: Props) {
           >
             <Text style={styles.composeText}>오늘의 질문</Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.composeBtn}
+            activeOpacity={0.85}
+            onPress={() => navigation.navigate('CoupleCalendar')}
+          >
+            <Text style={styles.composeText}>캘린더</Text>
+          </TouchableOpacity>
         </View>
       ) : null}
     </View>
