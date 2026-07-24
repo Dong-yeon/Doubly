@@ -21,7 +21,7 @@ Doubly는 **관계(Relation) 기반 커플 라이프 공유 앱**입니다. 커�
 | 모바일 | React Native + Expo (TypeScript) |
 | 상태관리 | Zustand |
 | 백엔드 | Spring Boot 3.4 (Java 21) |
-| DB | PostgreSQL (Flyway 마이그레이션 V1~V24) |
+| DB | PostgreSQL (Flyway 마이그레이션 V1~V26) |
 | 캐시 | Redis — AI 사용량 일일 카운터 (미가용 시 인메모리 폴백) |
 | 실시간 | WebSocket (STOMP) — 채팅 + 커플 이벤트(`/sub/couple/{id}`) |
 | 인증 | JWT (Access/Refresh) + 역할 기반 접근 제어(RBAC) |
@@ -73,12 +73,12 @@ com.fitto
 └── trainer/       # 트레이너 프로필·대시보드·루틴 (phase 6~7)
 ```
 
-DB 스키마는 `backend/src/main/resources/db/migration/` 의 Flyway 마이그레이션(V1~V24)에 정의되어
+DB 스키마는 `backend/src/main/resources/db/migration/` 의 Flyway 마이그레이션(V1~V26)에 정의되어
 있습니다. 핵심 테이블: users / relations / trainer_profiles / workouts / workout_sets /
 trainer_routines / chat_messages / streaks / device_tokens / meals / places / place_visits /
 feed_posts(+trip_id 앨범 연동) / feed_reactions / trips / trip_items(일자별 일정표) /
 trip_expenses(경비 정산) / trip_checklist_items(준비물 체크리스트) /
-password_reset_tokens(비밀번호 재설정 인증코드).
+password_reset_tokens(비밀번호 재설정 인증코드) / couple_events(커플 캘린더).
 
 ## 관계 모델 — 커플 · 패밀리(아이) 공존
 
@@ -236,6 +236,8 @@ RelationType
 | 버그 수정 | 회원 탈퇴 FK 위반 — 커플 콘텐츠 미정리로 탈퇴 실패 | ✅ 완료 |
 | 테스트 | 테스트에 Flyway 적용 (운영과 동일 스키마 검증) | ✅ 완료 |
 | 확장 | 홈 위젯 (Android — D-day·나/상대 스트릭) | ✅ 완료 (EAS 빌드에서만 동작) |
+| 확장 | 커플 캘린더 (일정·생일·데이트 약속 + 매일 09시 KST D-day 푸시) | ✅ 완료 |
+| 확장 | 우리 사진첩 (피드 사진 전체 모아보기 — 3열 그리드·큰 보기) | ✅ 완료 |
 | 출시 후 | 트레이너 결제, 소셜 로그인 | 예정 |
 | 패밀리(보류) | 관계 모델 N인 확장 (`relation_members` 조인 테이블) | ⏸ 보류 |
 | 패밀리(보류) | 아이 프로필 (관리 대상 → 연동 계정 승격) | ⏸ 보류 |

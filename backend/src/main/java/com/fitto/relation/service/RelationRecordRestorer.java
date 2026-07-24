@@ -34,6 +34,7 @@ public class RelationRecordRestorer {
         moved += move("feed_posts", "couple_id", oldRelationId, newRelationId);
         moved += move("trips", "couple_id", oldRelationId, newRelationId);
         moved += move("couple_challenges", "couple_id", oldRelationId, newRelationId);
+        moved += move("couple_events", "couple_id", oldRelationId, newRelationId);
 
         /*
          * daily_answers 는 UNIQUE (couple_id, question_date, user_id) 다.

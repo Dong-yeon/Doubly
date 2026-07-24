@@ -4,6 +4,7 @@ import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
 import com.fitto.feed.dto.CreatePostRequest;
 import com.fitto.feed.dto.FeedItemResponse;
+import com.fitto.feed.dto.FeedPhotosResponse;
 import com.fitto.feed.dto.FeedTimelineResponse;
 import com.fitto.feed.dto.ReactRequest;
 import com.fitto.feed.dto.ReactionSummary;
@@ -41,6 +42,15 @@ public class FeedController {
             @RequestParam(required = false) String cursor,
             @RequestParam(defaultValue = "20") int limit) {
         return ApiResponse.success(feedService.timeline(user.id(), cursor, limit));
+    }
+
+    /** 전체 사진첩 — 사진 있는 커플 포스트만 keyset 페이징으로 모아본다. */
+    @GetMapping("/photos")
+    public ApiResponse<FeedPhotosResponse> photos(
+            @AuthenticationPrincipal AuthUser user,
+            @RequestParam(required = false) String cursor,
+            @RequestParam(defaultValue = "30") int limit) {
+        return ApiResponse.success(feedService.photos(user.id(), cursor, limit));
     }
 
     @PostMapping("/posts")

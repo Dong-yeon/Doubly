@@ -6,6 +6,7 @@ import com.fitto.feed.dto.CreatePostRequest;
 import com.fitto.feed.dto.FeedCursor;
 import com.fitto.feed.dto.FeedItemResponse;
 import com.fitto.feed.dto.FeedItemType;
+import com.fitto.feed.dto.FeedPhotosResponse;
 import com.fitto.feed.dto.FeedTimelineResponse;
 import com.fitto.feed.service.FeedService;
 import com.fitto.relation.dto.InviteCodeResponse;
@@ -168,6 +169,33 @@ class FeedPaginationTest {
         FeedTimelineResponse page = feedService.timeline(c[0], "2026-03-01T12:00:00", 20);
 
         assertThat(page.items()).hasSize(1);
+    }
+
+    /** 사진첩 (FEED-02) — 사진 있는 포스트만, 페이지 경계에서 중복·누락 없이. */
+    @Test
+    void 사진첩은_사진_있는_포스트만_페이징으로_모아본다() {
+        long[] c = couple("pg-photo-a@fitto.com", "pg-photo-b@fitto.com");
+        feedService.createPost(c[0], new CreatePostRequest("글만 있는 포스트", null));
+        for (int i = 0; i < 5; i++) {
+            feedService.createPost(i % 2 == 0 ? c[0] : c[1],
+                    new CreatePostRequest("사진 " + i, "https://img.example.com/" + i + ".jpg"));
+        }
+
+        FeedPhotosResponse first = feedService.photos(c[0], null, 3);
+        assertThat(first.items()).hasSize(3);
+        assertThat(first.hasMore()).isTrue();
+
+        FeedPhotosResponse second = feedService.photos(c[0], first.nextCursor(), 3);
+        assertThat(second.items()).hasSize(2);
+        assertThat(second.hasMore()).isFalse();
+
+        Set<Long> ids = new HashSet<>();
+        first.items().forEach(p -> ids.add(p.postId()));
+        second.items().forEach(p -> ids.add(p.postId()));
+        assertThat(ids).hasSize(5);   // 글만 있는 포스트 제외, 중복·누락 없음
+        assertThat(first.items()).allSatisfy(p -> assertThat(p.imageUrl()).isNotNull());
+        // 상대가 올린 사진은 mine=false 로 구분된다
+        assertThat(first.items()).anySatisfy(p -> assertThat(p.mine()).isFalse());
     }
 
     @Test
