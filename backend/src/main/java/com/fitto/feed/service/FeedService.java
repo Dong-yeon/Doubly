@@ -13,6 +13,8 @@ import com.fitto.feed.dto.CreatePostRequest;
 import com.fitto.feed.dto.FeedCursor;
 import com.fitto.feed.dto.FeedItemResponse;
 import com.fitto.feed.dto.FeedItemType;
+import com.fitto.feed.dto.FeedPhotoResponse;
+import com.fitto.feed.dto.FeedPhotosResponse;
 import com.fitto.feed.dto.FeedTimelineResponse;
 import com.fitto.feed.dto.ReactionSummary;
 import com.fitto.feed.repository.FeedPostRepository;
@@ -130,6 +132,48 @@ public class FeedService {
         String nextCursor = items.isEmpty() ? null : nextCursorOf(from, items).encode();
         items = attachReactions(items, userId);
         return new FeedTimelineResponse(items, nextCursor, hasMore);
+    }
+
+    /**
+     * 전체 사진첩 — 사진이 있는 커플 포스트만 모아본다.
+     * 타임라인과 동일한 (createdAt, id) keyset 이지만 소스가 포스트 하나라 커서도 POST 위치만 담는다.
+     */
+    public FeedPhotosResponse photos(Long userId, String cursor, int limit) {
+        Relation couple = activeCouple(userId);
+        int size = Math.min(Math.max(limit, 1), MAX_LIMIT);
+        FeedCursor from = FeedCursor.decode(cursor);
+        Pageable page = PageRequest.of(0, size + 1);
+
+        List<FeedPost> posts = feedPostRepository.findPhotos(couple.getId(),
+                from.createdAtOf(FeedItemType.POST), from.idOf(FeedItemType.POST), page);
+        boolean hasMore = posts.size() > size;
+        if (hasMore) {
+            posts = posts.subList(0, size);
+        }
+
+        Long partnerId = couple.partnerOf(userId);
+        Map<Long, String> names = userNames(
+                partnerId != null ? List.of(userId, partnerId) : List.of(userId));
+
+        List<FeedPhotoResponse> items = posts.stream()
+                .map(p -> new FeedPhotoResponse(
+                        p.getId(),
+                        p.getImageUrl(),
+                        p.getContent(),
+                        names.getOrDefault(p.getAuthorId(), "상대방"),
+                        p.getAuthorId().equals(userId),
+                        p.getTripId(),
+                        p.getCreatedAt()))
+                .toList();
+
+        String nextCursor = null;
+        if (!posts.isEmpty()) {
+            FeedPost last = posts.get(posts.size() - 1);
+            Map<FeedItemType, FeedCursor.Position> positions = new EnumMap<>(FeedItemType.class);
+            positions.put(FeedItemType.POST, new FeedCursor.Position(last.getCreatedAt(), last.getId()));
+            nextCursor = new FeedCursor(positions).encode();
+        }
+        return new FeedPhotosResponse(items, nextCursor, hasMore);
     }
 
     /**

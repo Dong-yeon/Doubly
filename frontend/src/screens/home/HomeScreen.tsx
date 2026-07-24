@@ -323,6 +323,13 @@ export function HomeScreen({ navigation }: Props) {
           >
             <Text style={styles.composeText}>캘린더</Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.composeBtn}
+            activeOpacity={0.85}
+            onPress={() => navigation.navigate('PhotoAlbum')}
+          >
+            <Text style={styles.composeText}>사진첩</Text>
+          </TouchableOpacity>
         </View>
       ) : null}
     </View>
@@ -591,9 +598,11 @@ const styles = StyleSheet.create({
   soloChevron: { fontSize: fontSize.title, color: colors.textMuted, fontWeight: '700' },
   soloDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
 
-  actionRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md, marginBottom: spacing.sm },
+  // 4개 버튼 — 2×2 그리드 (한 줄에 넣으면 좁은 화면에서 라벨이 줄바꿈된다)
+  actionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md, marginBottom: spacing.sm },
   composeBtn: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: '45%',
     backgroundColor: colors.primaryBg,
     borderRadius: radius.lg,
     borderWidth: 1,

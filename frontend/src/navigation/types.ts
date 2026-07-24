@@ -26,6 +26,8 @@ export type HomeStackParamList = {
   DailyQuestion: undefined;
   // 커플 캘린더 — 기념일 외 일정·생일·데이트 약속 + D-day 푸시
   CoupleCalendar: undefined;
+  // 우리 사진첩 — 피드 사진 전체 모아보기
+  PhotoAlbum: undefined;
   // MY (구 MY 탭에서 이전) — 홈 헤더 프로필 아이콘으로 진입
   My: undefined;
   // 설정 — 알림·마케팅 수신, 비밀번호 변경, 약관 열람

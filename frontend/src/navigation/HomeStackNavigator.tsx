@@ -11,6 +11,7 @@ import { LegalDocumentScreen } from '../screens/onboarding/LegalDocumentScreen';
 import { FeedComposeScreen } from '../screens/feed/FeedComposeScreen';
 import { DailyQuestionScreen } from '../screens/home/DailyQuestionScreen';
 import { CoupleCalendarScreen } from '../screens/home/CoupleCalendarScreen';
+import { PhotoAlbumScreen } from '../screens/feed/PhotoAlbumScreen';
 // [트레이너 기능 일시 비활성화] 되돌리려면 아래 import 와 하단 Stack.Screen 5개의 주석을 해제한다.
 // 화면·API·타입·백엔드는 그대로 남아 있으므로 주석만 풀면 복구된다.
 // import { TrainerRegisterScreen } from '../screens/trainer/TrainerRegisterScreen';
@@ -44,6 +45,7 @@ export function HomeStackNavigator() {
       />
       <Stack.Screen name="DailyQuestion" component={DailyQuestionScreen} options={{ title: '오늘의 질문' }} />
       <Stack.Screen name="CoupleCalendar" component={CoupleCalendarScreen} options={{ title: '커플 캘린더' }} />
+      <Stack.Screen name="PhotoAlbum" component={PhotoAlbumScreen} options={{ title: '우리 사진첩' }} />
       <Stack.Screen name="My" component={MyScreen} options={{ title: 'MY' }} />
       <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: '설정' }} />
       <Stack.Screen

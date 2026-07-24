@@ -1,6 +1,6 @@
 /** 커플 일상 피드 API — PLAN.md Couple Feed */
 import { apiClient, unwrap } from './client';
-import type { ApiResponse, FeedItem, FeedTimeline, ReactionSummary } from '../types';
+import type { ApiResponse, FeedItem, FeedPhotosPage, FeedTimeline, ReactionSummary } from '../types';
 
 export interface CreatePostPayload {
   content?: string;
@@ -15,6 +15,14 @@ export const feedApi = {
   timeline: (cursor?: string | null, limit = 20) =>
     unwrap(
       apiClient.get<ApiResponse<FeedTimeline>>('/feed', {
+        params: { cursor: cursor ?? undefined, limit },
+      }),
+    ),
+
+  /** 전체 사진첩 — 사진 있는 커플 포스트만. cursor 규칙은 timeline 과 동일 */
+  photos: (cursor?: string | null, limit = 30) =>
+    unwrap(
+      apiClient.get<ApiResponse<FeedPhotosPage>>('/feed/photos', {
         params: { cursor: cursor ?? undefined, limit },
       }),
     ),

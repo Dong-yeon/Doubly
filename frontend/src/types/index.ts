@@ -34,6 +34,24 @@ export interface User {
   requiresConsent?: boolean;
 }
 
+// 전체 사진첩 — 사진 있는 피드 포스트 모아보기
+export interface FeedPhoto {
+  postId: number;
+  imageUrl: string;
+  content?: string | null;
+  authorName: string;
+  mine: boolean;
+  /** 여행 앨범에 담긴 사진이면 그 여행 id */
+  tripId?: number | null;
+  createdAt: string;
+}
+
+export interface FeedPhotosPage {
+  items: FeedPhoto[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
 // 커플 캘린더 — 기념일 외 일정(생일·데이트 약속) + D-day 푸시
 export type CalendarEventType = 'ANNIVERSARY' | 'BIRTHDAY' | 'DATE' | 'ETC';
 

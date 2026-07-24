@@ -29,6 +29,23 @@ public interface FeedPostRepository extends JpaRepository<FeedPost, Long> {
                                 @Param("cursorId") Long cursorId,
                                 Pageable pageable);
 
+    /**
+     * 전체 사진첩 — 사진 있는 커플 포스트만, 타임라인과 동일한 (createdAt, id) keyset.
+     */
+    @Query("""
+            select p from FeedPost p
+            where p.coupleId = :coupleId
+              and p.imageUrl is not null
+              and (:cursorAt is null
+                   or p.createdAt < :cursorAt
+                   or (p.createdAt = :cursorAt and p.id < :cursorId))
+            order by p.createdAt desc, p.id desc
+            """)
+    List<FeedPost> findPhotos(@Param("coupleId") Long coupleId,
+                              @Param("cursorAt") LocalDateTime cursorAt,
+                              @Param("cursorId") Long cursorId,
+                              Pageable pageable);
+
     /** 여행 앨범 — 해당 여행에 담긴 포스트, 최신순. */
     List<FeedPost> findByTripIdOrderByCreatedAtDescIdDesc(Long tripId);
 
