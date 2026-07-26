@@ -19,6 +19,8 @@ const preview = (type: MessageType, content?: string | null): string => {
   switch (type) {
     case 'IMAGE':
       return '사진';
+    case 'STICKER':
+      return content ?? '스티커';
     case 'WORKOUT_CARD':
       return '운동 기록';
     case 'ROUTINE_CARD':

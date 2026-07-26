@@ -29,6 +29,14 @@ import type { ChatMessage } from '../../types';
 
 const REACTIONS = ['💗', '🔥', '💪', '👍', '🎉'];
 
+/** 스티커 세트 — 말풍선 없이 크게 그려지는 이모지. 커플 대화 감정 표현 위주로 큐레이션 */
+const STICKERS = [
+  '💕', '😘', '🥰', '😍',
+  '🤗', '😆', '😂', '🥹',
+  '😴', '😤', '🥺', '😭',
+  '👍', '💪', '🎉', '❤️‍🔥',
+];
+
 // zustand 셀렉터가 매번 새 배열을 만들면 무한 리렌더(하얀 화면)가 나므로 안정 참조 사용
 const EMPTY_MESSAGES: ChatMessage[] = [];
 
@@ -48,6 +56,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const { openRoom, closeRoom, send, markRead } = useChatStore();
   const [text, setText] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [showStickers, setShowStickers] = useState(false);
   // 이미 읽음 처리한 최대 메시지 id — 중복 PUT 방지
   const markedUpToRef = useRef(0);
 
@@ -89,6 +98,16 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     else Alert.alert('전송 실패', '연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
   };
 
+  const sendSticker = (sticker: string) => {
+    const ok = send(relationId, { messageType: 'STICKER', content: sticker });
+    if (ok) {
+      setShowStickers(false);
+      haptics.light();
+    } else {
+      Alert.alert('전송 실패', '연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
+    }
+  };
+
   const onPickImage = async () => {
     try {
       const uri = await pickImage();
@@ -108,11 +127,14 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const renderItem = ({ item }: { item: ChatMessage }) => {
     const mine = item.senderId === myId;
     const isImage = item.messageType === 'IMAGE' && !!item.imageUrl;
+    const isSticker = item.messageType === 'STICKER';
     const isWorkout = item.messageType === 'WORKOUT_CARD';
     const isMeal = item.messageType === 'MEAL_CARD';
     return (
       <View style={[styles.row, mine ? styles.rowMine : styles.rowTheirs]}>
-        {isImage ? (
+        {isSticker ? (
+          <Text style={styles.sticker}>{item.content}</Text>
+        ) : isImage ? (
           <Image source={{ uri: item.imageUrl! }} style={styles.msgImage} resizeMode="cover" />
         ) : isWorkout ? (
           <View style={[styles.workoutCard, mine ? styles.workoutCardMine : styles.workoutCardTheirs]}>
@@ -165,7 +187,34 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             </Pressable>
           ))}
         </View>
+        {showStickers ? (
+          <View style={styles.stickerPanel}>
+            {STICKERS.map((s) => (
+              <Pressable
+                key={s}
+                style={({ pressed }) => [styles.stickerBtn, pressed && styles.reactionPressed]}
+                onPress={() => sendSticker(s)}
+                accessibilityRole="button"
+                accessibilityLabel={`스티커 ${s} 보내기`}
+              >
+                <Text style={styles.stickerEmoji}>{s}</Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
         <View style={styles.inputBar}>
+          <TouchableOpacity
+            style={[styles.imageBtn, showStickers && styles.stickerToggleActive]}
+            onPress={() => setShowStickers((v) => !v)}
+            accessibilityRole="button"
+            accessibilityLabel="스티커 선택"
+          >
+            <MaterialCommunityIcons
+              name="sticker-emoji"
+              size={22}
+              color={showStickers ? colors.primary : colors.textSecondary}
+            />
+          </TouchableOpacity>
           <TouchableOpacity style={styles.imageBtn} onPress={onPickImage} disabled={uploading}>
             {uploading ? (
               <ActivityIndicator size="small" color={colors.primary} />
@@ -207,6 +256,25 @@ const styles = StyleSheet.create({
   msgText: { fontSize: fontSize.subtitle, color: colors.textPrimary, lineHeight: 21 },
   msgTextMine: { color: colors.white },
   msgImage: { width: 200, height: 200, borderRadius: radius.lg, backgroundColor: colors.surfaceAlt },
+  // 스티커 — 말풍선 없이 크게. lineHeight 를 주지 않으면 안드로이드에서 이모지가 잘린다
+  sticker: { fontSize: 56, lineHeight: 68 },
+  stickerPanel: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: spacing.sm,
+    paddingTop: spacing.sm,
+    gap: spacing.xs,
+  },
+  stickerBtn: {
+    width: '11.5%',
+    aspectRatio: 1,
+    minWidth: 40,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stickerEmoji: { fontSize: 28 },
+  stickerToggleActive: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
   workoutCard: { paddingVertical: 10, paddingHorizontal: spacing.md, borderRadius: radius.lg, borderWidth: 1.5, maxWidth: 240 },
   workoutCardMine: { backgroundColor: colors.secondarySoft, borderColor: colors.secondary },
   workoutCardTheirs: { backgroundColor: colors.surface, borderColor: colors.secondary },
