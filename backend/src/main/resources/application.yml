@@ -86,6 +86,11 @@ fitto:
     api-secret: ${CLOUDINARY_API_SECRET:}
     folder: ${CLOUDINARY_FOLDER:fitto}
 
+  # 구글 로그인 — 허용할 OAuth 클라이언트 id 목록(쉼표 구분: 웹/안드로이드).
+  # 미설정 시 기능만 비활성(SOCIAL_LOGIN_NOT_CONFIGURED), 이메일 로그인은 그대로 동작.
+  google-auth:
+    client-ids: ${GOOGLE_CLIENT_IDS:}
+
   # 음식 사진 AI 분석 (Google AI Studio 무료 티어) — 키 미설정 시 기능만 비활성, 앱은 정상 동작
   gemini:
     api-key: ${GEMINI_API_KEY:}

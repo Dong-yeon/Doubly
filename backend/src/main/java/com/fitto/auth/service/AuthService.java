@@ -42,6 +42,7 @@ public class AuthService {
     private final JwtTokenProvider tokenProvider;
     private final RefreshTokenStore refreshTokenStore;
     private final AuthRateLimiter rateLimiter;
+    private final GoogleTokenVerifier googleTokenVerifier;
 
     /**
      * 존재하지 않는 이메일 로그인 시에도 BCrypt 매칭을 수행해 응답 시간을 균일화한다
@@ -55,7 +56,8 @@ public class AuthService {
                        PasswordEncoder passwordEncoder,
                        JwtTokenProvider tokenProvider,
                        RefreshTokenStore refreshTokenStore,
-                       AuthRateLimiter rateLimiter) {
+                       AuthRateLimiter rateLimiter,
+                       GoogleTokenVerifier googleTokenVerifier) {
         this.userRepository = userRepository;
         this.userDataPurger = userDataPurger;
         this.imageDeleter = imageDeleter;
@@ -63,6 +65,7 @@ public class AuthService {
         this.tokenProvider = tokenProvider;
         this.refreshTokenStore = refreshTokenStore;
         this.rateLimiter = rateLimiter;
+        this.googleTokenVerifier = googleTokenVerifier;
         this.timingDummyHash = passwordEncoder.encode("timing-equalization-dummy");
     }
 
@@ -103,6 +106,38 @@ public class AuthService {
             throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
         }
         rateLimiter.resetLogin(clientIp, request.email());
+        return issueTokens(user);
+    }
+
+    /**
+     * 구글 로그인 — AUTH-11. 검증된 ID 토큰으로 로그인하거나 계정을 만든다.
+     *
+     * <p>조회 순서: (1) 구글 sub 로 기존 소셜 계정 → (2) 같은 이메일의 기존 계정
+     * (인증된 이메일이므로 소유 증명으로 간주하고 로그인 — 계정이 이메일/구글로 갈라지지 않게)
+     * → (3) 신규 생성. 신규 소셜 가입자는 약관 동의 이력이 없으므로
+     * {@code requiresConsent=true} 로 내려가 재동의 게이트가 동의를 받는다.
+     */
+    @Transactional
+    public TokenResponse googleLogin(String idToken, String clientIp) {
+        rateLimiter.checkRefresh(clientIp);   // 토큰 검증 남용 방지 — 갱신과 같은 완만한 한도
+        GoogleTokenVerifier.GoogleProfile profile = googleTokenVerifier.verify(idToken);
+
+        User user = userRepository
+                .findBySocialTypeAndSocialId(SocialType.GOOGLE, profile.sub())
+                .or(() -> userRepository.findByEmail(profile.email()))
+                .orElse(null);
+        if (user == null) {
+            String name = profile.name() != null && !profile.name().isBlank()
+                    ? profile.name() : "사용자";
+            user = userRepository.save(User.builder()
+                    .email(profile.email())
+                    .name(name.length() > 50 ? name.substring(0, 50) : name)
+                    .profileImageUrl(profile.picture())
+                    .role(Role.USER)
+                    .socialType(SocialType.GOOGLE)
+                    .socialId(profile.sub())
+                    .build());
+        }
         return issueTokens(user);
     }
 
