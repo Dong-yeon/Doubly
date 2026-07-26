@@ -238,8 +238,9 @@ RelationType
 | 확장 | 홈 위젯 (Android — D-day·나/상대 스트릭) | ✅ 완료 (EAS 빌드에서만 동작) |
 | 확장 | 커플 캘린더 (일정·생일·데이트 약속 + 매일 09시 KST D-day 푸시) | ✅ 완료 |
 | 확장 | 우리 사진첩 (피드 사진 전체 모아보기 — 3열 그리드·큰 보기) | ✅ 완료 |
+| 확장 | 구글 로그인 (가입까지 한 번에, 약관 동의는 게이트에서) | ✅ 완료 (클라이언트 id 등록 필요) |
 | 확장 | 다크모드 (시스템 테마 추종 — 실행 중 변경은 앱 재시작 시 반영) | ✅ 완료 |
-| 출시 후 | 트레이너 결제, 소셜 로그인 | 예정 |
+| 출시 후 | 트레이너 결제, 카카오·애플 로그인 | 예정 |
 | 패밀리(보류) | 관계 모델 N인 확장 (`relation_members` 조인 테이블) | ⏸ 보류 |
 | 패밀리(보류) | 아이 프로필 (관리 대상 → 연동 계정 승격) | ⏸ 보류 |
 | 패밀리(보류) | 성장 기록 (키·몸무게·성장곡선 백분위) | ⏸ 보류 |
@@ -265,7 +266,10 @@ cd backend && ./gradlew bootRun
 cd frontend && npm install && npm start   # a: Android, i: iOS, w: Web
 ```
 
-- 백엔드 환경변수: `backend/.env.example` 참고 (`DB_*`, `REDIS_*`, `JWT_SECRET`, `GEMINI_*`, `CLOUDINARY_*`, `MAIL_*`)
+- 백엔드 환경변수: `backend/.env.example` 참고 (`DB_*`, `REDIS_*`, `JWT_SECRET`, `GEMINI_*`, `CLOUDINARY_*`, `MAIL_*`, `GOOGLE_CLIENT_IDS`)
+- 구글 로그인: Google Cloud Console 에서 OAuth 클라이언트(웹 + Android)를 만들고,
+  같은 id 를 **프론트**(`frontend/src/constants/config.ts` 의 `GOOGLE_AUTH`)와
+  **백엔드**(`GOOGLE_CLIENT_IDS`) 양쪽에 넣어야 동작합니다. 비워두면 버튼이 숨겨집니다.
 - 비밀번호 재설정 메일: 미설정 시 인증코드가 **서버 로그로 출력**됩니다(개발 전용).
   운영은 **Resend(HTTP)** 를 사용합니다 — Railway 가 SMTP 아웃바운드를 막기 때문.
   `RESEND_API_KEY` 만 넣으면 되고, 절차는 [docs/RAILWAY.md](docs/RAILWAY.md) 2-1절 참고.

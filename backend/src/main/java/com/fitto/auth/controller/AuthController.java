@@ -3,6 +3,7 @@ package com.fitto.auth.controller;
 import com.fitto.auth.dto.ChangePasswordRequest;
 import com.fitto.auth.dto.ConsentRequest;
 import com.fitto.auth.dto.ForgotPasswordRequest;
+import com.fitto.auth.dto.GoogleLoginRequest;
 import com.fitto.auth.dto.LoginRequest;
 import com.fitto.auth.dto.MarketingConsentRequest;
 import com.fitto.auth.dto.NotificationSettingRequest;
@@ -52,6 +53,13 @@ public class AuthController {
                                                HttpServletRequest http) {
         return ApiResponse.success(
                 authService.register(request, clientIp(http)), "회원가입이 완료되었습니다.");
+    }
+
+    /** 구글 로그인 — AUTH-11. 기존 계정이면 로그인, 없으면 가입까지 한 번에. */
+    @PostMapping("/google")
+    public ApiResponse<TokenResponse> googleLogin(@Valid @RequestBody GoogleLoginRequest request,
+                                                  HttpServletRequest http) {
+        return ApiResponse.success(authService.googleLogin(request.idToken(), clientIp(http)));
     }
 
     @PostMapping("/login")
