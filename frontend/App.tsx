@@ -23,7 +23,8 @@ export default function App() {
         Toast 는 바깥에 두어 네비게이터가 죽어도 토스트 레이어는 살아있게 한다.
       */}
       <SafeAreaProvider>
-        <StatusBar style="dark" />
+        {/* 시스템 테마를 따라 아이콘 색 반전 (다크모드에서 style="dark" 는 아이콘이 안 보인다) */}
+        <StatusBar style="auto" />
         <ErrorBoundary label="root">
           <RootNavigator />
         </ErrorBoundary>
