@@ -136,4 +136,20 @@ class ChatFlowTest {
         assertThat(chatService.getRooms(a)).isEmpty();
         assertThat(chatService.getRooms(b)).isEmpty();
     }
+
+    /** 스티커 — content 에 이모지를 담은 STICKER 타입으로 저장·조회된다. */
+    @Test
+    void 스티커_메시지를_보내면_타입과_내용이_보존된다() {
+        Long a = register("cs-a@fitto.com");
+        Long b = register("cs-b@fitto.com");
+        Long relationId = connectCouple(a, b);
+
+        ChatMessageResponse sent = chatService.send(a, relationId,
+                new SendMessageRequest(com.fitto.chat.domain.MessageType.STICKER, "🥰", null, null, null));
+
+        assertThat(sent.messageType()).isEqualTo(com.fitto.chat.domain.MessageType.STICKER);
+        assertThat(sent.content()).isEqualTo("🥰");
+        // 방 목록 마지막 메시지로도 노출된다
+        assertThat(chatService.getRooms(b).get(0).lastMessage().content()).isEqualTo("🥰");
+    }
 }

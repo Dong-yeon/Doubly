@@ -547,7 +547,7 @@ export interface FeedTimeline {
 }
 
 // 5.8 chat_messages
-export type MessageType = 'TEXT' | 'IMAGE' | 'WORKOUT_CARD' | 'MEAL_CARD' | 'ROUTINE_CARD';
+export type MessageType = 'TEXT' | 'IMAGE' | 'STICKER' | 'WORKOUT_CARD' | 'MEAL_CARD' | 'ROUTINE_CARD';
 export interface ChatMessage {
   id: number;
   relationId: number;
