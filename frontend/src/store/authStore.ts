@@ -17,6 +17,8 @@ interface AuthState {
   isAuthenticated: boolean;
   bootstrap: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
+  /** 구글 로그인 — 검증된 ID 토큰으로 로그인/가입 */
+  loginWithGoogle: (idToken: string) => Promise<void>;
   register: (payload: RegisterPayload) => Promise<void>;
   logout: () => Promise<void>;
   withdraw: () => Promise<void>;
@@ -73,6 +75,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   login: async (email, password) => {
     const tokens = await authApi.login(email, password);
+    await get().setSession(tokens);
+  },
+
+  loginWithGoogle: async (idToken) => {
+    const tokens = await authApi.googleLogin(idToken);
     await get().setSession(tokens);
   },
 

@@ -10,7 +10,7 @@ export interface ApiResponse<T> {
   errorCode: string | null;
 }
 
-export type SocialType = 'KAKAO' | 'APPLE' | 'EMAIL';
+export type SocialType = 'KAKAO' | 'APPLE' | 'GOOGLE' | 'EMAIL';
 export type Gender = 'MALE' | 'FEMALE';
 
 // 1.3 사용자 역할

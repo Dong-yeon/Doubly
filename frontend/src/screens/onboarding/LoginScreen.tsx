@@ -8,8 +8,10 @@ import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
 import { Card } from '../../components/Card';
 import { DoublyMark } from '../../components/DoublyLogo';
+import { GoogleLoginButton } from '../../components/GoogleLoginButton';
 import { useAuthStore } from '../../store/authStore';
 import { getErrorMessage } from '../../utils/error';
+import { isGoogleLoginConfigured } from '../../constants/config';
 import { colors, fontSize, spacing } from '../../constants/theme';
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, 'Login'>;
@@ -64,6 +66,16 @@ export function LoginScreen({ navigation }: Props) {
               errorText={error ?? undefined}
             />
             <Button title="로그인" onPress={onSubmit} loading={loading} disabled={!canSubmit} style={styles.loginBtn} />
+            {isGoogleLoginConfigured() ? (
+              <>
+                <View style={styles.dividerRow}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>또는</Text>
+                  <View style={styles.dividerLine} />
+                </View>
+                <GoogleLoginButton onError={setError} />
+              </>
+            ) : null}
             <Button
               title="비밀번호를 잊으셨나요?"
               variant="ghost"
@@ -85,6 +97,9 @@ export function LoginScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
+  dividerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginVertical: spacing.sm },
+  dividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
+  dividerText: { fontSize: fontSize.caption, color: colors.textSecondary },
   container: { flexGrow: 1, justifyContent: 'center', padding: spacing.lg },
   hero: { alignItems: 'center', marginBottom: spacing.xl },
   logo: { fontSize: 56 },
