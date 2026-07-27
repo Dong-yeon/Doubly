@@ -12,6 +12,7 @@ export function TextField({ label, errorText, style, secureTextEntry, onFocus, o
   const [focused, setFocused] = useState(false);
   const [reveal, setReveal] = useState(false);
   const isPassword = !!secureTextEntry;
+  const isMultiline = !!rest.multiline;
 
   return (
     <View style={styles.wrapper}>
@@ -20,8 +21,11 @@ export function TextField({ label, errorText, style, secureTextEntry, onFocus, o
         <TextInput
           placeholderTextColor={colors.textTertiary}
           secureTextEntry={isPassword && !reveal}
+          // 여러 줄 입력은 첫 줄이 위에서 시작해야 한다 (안드로이드 기본은 세로 가운데)
+          textAlignVertical={isMultiline ? 'top' : undefined}
           style={[
             styles.input,
+            isMultiline && styles.inputMultiline,
             isPassword && styles.inputWithToggle,
             focused && styles.inputFocused,
             !!errorText && styles.inputError,
@@ -71,6 +75,17 @@ const styles = StyleSheet.create({
     fontSize: fontSize.subtitle,
     color: colors.textPrimary,
     backgroundColor: colors.surfaceAlt,
+  },
+  /*
+   * 여러 줄 입력 — 고정 height(54) 를 그대로 두면 한 줄 높이에 갇혀 글이 잘리고
+   * 세로 가운데 정렬이라 깨져 보인다. 높이를 풀고 최소 높이만 준다.
+   */
+  inputMultiline: {
+    height: undefined,
+    minHeight: 108,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.md,
+    lineHeight: 22,
   },
   inputWithToggle: { paddingRight: 48 },
   inputFocused: { borderColor: colors.primary, backgroundColor: colors.surface },

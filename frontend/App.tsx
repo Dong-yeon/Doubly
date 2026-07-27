@@ -2,7 +2,6 @@ import React from 'react';
 import { View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { RootNavigator } from './src/navigation/RootNavigator';
@@ -31,7 +30,15 @@ export default function App() {
    * 실패해도(error) 렌더는 진행한다 — 폰트 하나 때문에 앱이 멈추면 안 된다.
    */
   const [fontsLoaded, fontError] = useFonts({
-    ...MaterialCommunityIcons.font,
+    /*
+     * 아이콘 폰트는 패키지(MaterialCommunityIcons.font) 대신 <b>프로젝트 에셋 사본</b>을 쓴다.
+     * 패키지 폰트를 그대로 쓰면 웹 빌드 산출물이
+     *   dist/assets/node_modules/@expo/vector-icons/.../MaterialCommunityIcons.ttf
+     * 경로로 나가는데, 정적 호스팅에 올릴 때 node_modules 경로가 통째로 누락돼
+     * 폰트가 404 → 아이콘이 전부 두부(☒)로 떨어졌다.
+     * 'material-community' 는 @expo/vector-icons 가 쓰는 실제 패밀리명이다.
+     */
+    'material-community': require('./assets/fonts/MaterialCommunityIcons.ttf'),
     'Pretendard-Regular': require('./assets/fonts/Pretendard-Regular.otf'),
     'Pretendard-Medium': require('./assets/fonts/Pretendard-Medium.otf'),
     'Pretendard-SemiBold': require('./assets/fonts/Pretendard-SemiBold.otf'),
