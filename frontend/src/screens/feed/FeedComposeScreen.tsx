@@ -10,6 +10,7 @@ import { feedApi } from '../../api/feed';
 import { pickImage, uploadImage } from '../../utils/imageUpload';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
+import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 
@@ -38,7 +39,7 @@ export function FeedComposeScreen({ navigation }: Props) {
     try {
       let imageUrl: string | undefined;
       if (photoUri) {
-        imageUrl = await uploadImage(photoUri);
+        imageUrl = await runBusy('사진 올리는 중…', () => uploadImage(photoUri));
       }
       await feedApi.createPost({ content: content.trim() || undefined, imageUrl });
       haptics.success();

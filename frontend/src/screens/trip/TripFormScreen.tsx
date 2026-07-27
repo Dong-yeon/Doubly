@@ -10,6 +10,7 @@ import { tripApi } from '../../api/trip';
 import { pickImage, uploadImage } from '../../utils/imageUpload';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
+import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 
@@ -52,7 +53,7 @@ export function TripFormScreen({ navigation, route }: Props) {
     try {
       let coverImageUrl: string | undefined;
       if (photoUri) {
-        coverImageUrl = await uploadImage(photoUri);
+        coverImageUrl = await runBusy('사진 올리는 중…', () => uploadImage(photoUri));
       }
       const payload = {
         title: title.trim(),

@@ -27,6 +27,7 @@ import { placeApi } from '../../api/place';
 import { isKakaoMapConfigured } from '../../constants/config';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
+import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { Place, TripDay, TripDetail, TripItem } from '../../types';
@@ -311,7 +312,8 @@ export function TripDetailScreen({ navigation, route }: Props) {
   const runGenerate = async () => {
     setAiLoading(true);
     try {
-      await tripApi.generateItinerary(tripId, aiPreferences.trim() || undefined);
+      await runBusy('AI가 일정을 짜고 있어요', () =>
+        tripApi.generateItinerary(tripId, aiPreferences.trim() || undefined));
       haptics.light();
       toast.success('AI가 일정을 짰어요.');
       setAiOpen(false);

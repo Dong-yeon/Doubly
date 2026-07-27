@@ -23,6 +23,7 @@ import { pickImage, uploadImage } from '../../utils/imageUpload';
 import { getErrorMessage } from '../../utils/error';
 import { relativeDateLabel, toDateString } from '../../utils/date';
 import { toast } from '../../store/toastStore';
+import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { BodyMetric } from '../../types';
@@ -104,7 +105,7 @@ export function BodyMetricScreen(_: Props) {
     setSaving(true);
     try {
       let photoUrl: string | undefined;
-      if (photoUri) photoUrl = await uploadImage(photoUri);
+      if (photoUri) photoUrl = await runBusy('사진 올리는 중…', () => uploadImage(photoUri));
       await bodyApi.save({
         measuredDate: toDateString(),
         weightKg: weight ? Number(weight) : undefined,

@@ -34,6 +34,7 @@ import { feedApi } from '../../api/feed';
 import { connectSocket, subscribeCouple, unsubscribeCouple } from '../../api/chatSocket';
 import { pickImage, uploadImage } from '../../utils/imageUpload';
 import { toast } from '../../store/toastStore';
+import { runBusy } from '../../store/busyStore';
 import { getErrorMessage } from '../../utils/error';
 import { relativeDateLabel } from '../../utils/date';
 import { haptics } from '../../utils/haptics';
@@ -188,7 +189,7 @@ export function HomeScreen({ navigation }: Props) {
     try {
       const uri = await pickImage();
       if (!uri) return;
-      const url = await uploadImage(uri);
+      const url = await runBusy('배경 올리는 중…', () => uploadImage(uri));
       await setBackground(url);
       toast.success('배경을 변경했어요 ');
     } catch (e) {

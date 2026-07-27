@@ -24,6 +24,7 @@ import { haptics } from '../../utils/haptics';
 import { pickImage, uploadImage } from '../../utils/imageUpload';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
+import { runBusy } from '../../store/busyStore';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { ChatMessage } from '../../types';
 
@@ -113,7 +114,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
       const uri = await pickImage();
       if (!uri) return;
       setUploading(true);
-      const url = await uploadImage(uri);
+      const url = await runBusy('사진 보내는 중…', () => uploadImage(uri));
       const ok = send(relationId, { messageType: 'IMAGE', imageUrl: url });
       if (ok) haptics.light();
       else Alert.alert('전송 실패', '연결이 끊겼어요. 잠시 후 다시 시도해주세요.');

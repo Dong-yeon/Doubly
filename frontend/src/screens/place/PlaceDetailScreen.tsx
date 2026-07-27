@@ -19,6 +19,7 @@ import { placeApi } from '../../api/place';
 import { pickImage, uploadImage } from '../../utils/imageUpload';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
+import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { PlaceVisit } from '../../types';
@@ -73,7 +74,7 @@ export function PlaceDetailScreen({ route }: Props) {
     try {
       let imageUrl: string | undefined;
       if (photoUri) {
-        imageUrl = await uploadImage(photoUri);
+        imageUrl = await runBusy('사진 올리는 중…', () => uploadImage(photoUri));
       }
       await placeApi.recordVisit(placeId, {
         rating: rating > 0 ? rating : undefined,

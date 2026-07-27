@@ -7,6 +7,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { Toast } from './src/components/Toast';
+import { BusyOverlay } from './src/components/BusyOverlay';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { installGlobalErrorHandlers } from './src/utils/globalErrorHandler';
 import { initSentry } from './src/utils/sentry';
@@ -55,6 +56,8 @@ export default function App() {
           <RootNavigator />
         </ErrorBoundary>
         <Toast />
+        {/* 업로드·AI 작업 중 화면 잠금 — 네비게이터 밖이라 탭바까지 덮는다 */}
+        <BusyOverlay />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
