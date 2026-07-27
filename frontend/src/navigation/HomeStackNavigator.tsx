@@ -19,19 +19,14 @@ import { PhotoAlbumScreen } from '../screens/feed/PhotoAlbumScreen';
 // import { TrainerMemberDetailScreen } from '../screens/trainer/TrainerMemberDetailScreen';
 // import { TrainerRoutineAssignScreen } from '../screens/trainer/TrainerRoutineAssignScreen';
 // import { TrainerConnectScreen } from '../screens/trainer/TrainerConnectScreen';
-import { modalOptions } from './modalOptions';
-import { colors } from '../constants/theme';
+import { stackScreenOptions, modalOptions } from './headerOptions';
 
 const Stack = createNativeStackNavigator<HomeStackParamList>();
 
 export function HomeStackNavigator() {
   return (
     <Stack.Navigator
-      screenOptions={{
-        headerStyle: { backgroundColor: colors.background },
-        headerTintColor: colors.textPrimary,
-        headerShadowVisible: false,
-      }}
+      screenOptions={stackScreenOptions}
     >
       <Stack.Screen name="HomeMain" component={HomeScreen} options={{ headerShown: false }} />
       <Stack.Screen
