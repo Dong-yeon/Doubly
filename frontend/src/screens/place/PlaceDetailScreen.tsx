@@ -1,7 +1,6 @@
 /** 장소 상세 — 방문 기록 목록 + 기록 추가 (별점·사진·메모) */
 import React, { useCallback, useState } from 'react';
 import {
-  Alert,
   FlatList,
   Image,
   StyleSheet,
@@ -9,6 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';

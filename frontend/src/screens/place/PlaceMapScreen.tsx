@@ -1,6 +1,7 @@
 /** 우리 맛집 지도 — 커플 공유 장소 목록 (위시리스트/방문완료). 지도 렌더링은 카카오맵 키 발급 후 확장 */
 import React, { useCallback, useState } from 'react';
-import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
