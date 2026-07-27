@@ -12,19 +12,14 @@ import { TripExpenseScreen } from '../screens/trip/TripExpenseScreen';
 import { TripChecklistScreen } from '../screens/trip/TripChecklistScreen';
 import { TripAlbumScreen } from '../screens/trip/TripAlbumScreen';
 import { TripRecapScreen } from '../screens/trip/TripRecapScreen';
-import { modalOptions } from './modalOptions';
-import { colors } from '../constants/theme';
+import { stackScreenOptions, modalOptions } from './headerOptions';
 
 const Stack = createNativeStackNavigator<PlaceStackParamList>();
 
 export function PlaceStackNavigator() {
   return (
     <Stack.Navigator
-      screenOptions={{
-        headerStyle: { backgroundColor: colors.background },
-        headerTintColor: colors.textPrimary,
-        headerShadowVisible: false,
-      }}
+      screenOptions={stackScreenOptions}
     >
       <Stack.Screen name="PlaceMap" component={PlaceMapScreen} options={{ headerShown: false }} />
       <Stack.Screen

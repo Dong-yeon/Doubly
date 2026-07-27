@@ -16,19 +16,14 @@ import { DietScreen } from '../screens/diet/DietScreen';
 import { DietRecordScreen } from '../screens/diet/DietRecordScreen';
 import { DietCalendarScreen } from '../screens/diet/DietCalendarScreen';
 import { DietStatsScreen } from '../screens/diet/DietStatsScreen';
-import { modalOptions } from './modalOptions';
-import { colors } from '../constants/theme';
+import { stackScreenOptions, modalOptions } from './headerOptions';
 
 const Stack = createNativeStackNavigator<WorkoutStackParamList>();
 
 export function WorkoutStackNavigator() {
   return (
     <Stack.Navigator
-      screenOptions={{
-        headerStyle: { backgroundColor: colors.background },
-        headerTintColor: colors.textPrimary,
-        headerShadowVisible: false,
-      }}
+      screenOptions={stackScreenOptions}
     >
       <Stack.Screen name="WorkoutMain" component={WorkoutScreen} options={{ headerShown: false }} />
       <Stack.Screen

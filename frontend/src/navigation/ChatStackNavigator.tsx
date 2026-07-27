@@ -4,18 +4,14 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { ChatStackParamList } from './types';
 import { ChatScreen } from '../screens/chat/ChatScreen';
 import { ChatRoomScreen } from '../screens/chat/ChatRoomScreen';
-import { colors } from '../constants/theme';
+import { stackScreenOptions } from './headerOptions';
 
 const Stack = createNativeStackNavigator<ChatStackParamList>();
 
 export function ChatStackNavigator() {
   return (
     <Stack.Navigator
-      screenOptions={{
-        headerStyle: { backgroundColor: colors.background },
-        headerTintColor: colors.textPrimary,
-        headerShadowVisible: false,
-      }}
+      screenOptions={stackScreenOptions}
     >
       <Stack.Screen name="ChatRooms" component={ChatScreen} options={{ headerShown: false }} />
       <Stack.Screen
