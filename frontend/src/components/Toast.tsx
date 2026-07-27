@@ -1,6 +1,6 @@
 /** 화면 상단에 잠깐 떴다 사라지는 토스트 */
 import React, { useEffect, useRef } from 'react';
-import { Animated, StyleSheet, Text } from 'react-native';
+import { Animated, Platform, StyleSheet, Text } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useToastStore } from '../store/toastStore';
 import { colors, fontSize, radius, shadow, spacing } from '../constants/theme';
@@ -34,6 +34,12 @@ export function Toast() {
       pointerEvents="none"
       style={[
         styles.wrap,
+        /*
+         * 웹에서는 position:fixed 로 띄운다. absolute 면 모달로 표시되는 화면
+         * (식단 기록 등)의 스택 컨텍스트에 갇혀 토스트가 뒤로 가려질 수 있다.
+         * 네이티브에는 fixed 가 없으므로 웹에서만 적용한다.
+         */
+        Platform.OS === 'web' ? ({ position: 'fixed', zIndex: 99999 } as object) : null,
         { top: insets.top + spacing.sm, backgroundColor: BG[toast.type] },
         shadow.md,
         {
