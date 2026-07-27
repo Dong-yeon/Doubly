@@ -19,6 +19,7 @@ import { PhotoAlbumScreen } from '../screens/feed/PhotoAlbumScreen';
 // import { TrainerMemberDetailScreen } from '../screens/trainer/TrainerMemberDetailScreen';
 // import { TrainerRoutineAssignScreen } from '../screens/trainer/TrainerRoutineAssignScreen';
 // import { TrainerConnectScreen } from '../screens/trainer/TrainerConnectScreen';
+import { modalOptions } from './modalOptions';
 import { colors } from '../constants/theme';
 
 const Stack = createNativeStackNavigator<HomeStackParamList>();
@@ -41,7 +42,7 @@ export function HomeStackNavigator() {
       <Stack.Screen
         name="FeedCompose"
         component={FeedComposeScreen}
-        options={{ title: '일상 남기기', presentation: 'modal' }}
+        options={{ title: '일상 남기기', ...modalOptions }}
       />
       <Stack.Screen name="DailyQuestion" component={DailyQuestionScreen} options={{ title: '오늘의 질문' }} />
       <Stack.Screen name="CoupleCalendar" component={CoupleCalendarScreen} options={{ title: '커플 캘린더' }} />
@@ -77,7 +78,7 @@ export function HomeStackNavigator() {
       <Stack.Screen
         name="TrainerRoutineAssign"
         component={TrainerRoutineAssignScreen}
-        options={({ route }) => ({ title: `${route.params.name}님 루틴 배정`, presentation: 'modal' })}
+        options={({ route }) => ({ title: `${route.params.name}님 루틴 배정`, ...modalOptions })}
       />
       <Stack.Screen
         name="TrainerConnect"
