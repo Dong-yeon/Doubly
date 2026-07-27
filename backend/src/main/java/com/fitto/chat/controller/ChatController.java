@@ -2,9 +2,11 @@ package com.fitto.chat.controller;
 
 import com.fitto.chat.dto.ChatMessageResponse;
 import com.fitto.chat.dto.ChatRoomResponse;
+import com.fitto.chat.dto.ReadReceipt;
 import com.fitto.chat.service.ChatService;
 import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -23,9 +25,11 @@ import java.util.List;
 public class ChatController {
 
     private final ChatService chatService;
+    private final SimpMessagingTemplate messagingTemplate;
 
-    public ChatController(ChatService chatService) {
+    public ChatController(ChatService chatService, SimpMessagingTemplate messagingTemplate) {
         this.chatService = chatService;
+        this.messagingTemplate = messagingTemplate;
     }
 
     @GetMapping("/rooms")
@@ -43,7 +47,10 @@ public class ChatController {
     @PutMapping("/read/{messageId}")
     public ApiResponse<Void> read(@AuthenticationPrincipal AuthUser user,
                                   @PathVariable Long messageId) {
-        chatService.markRead(user.id(), messageId);
+        Long relationId = chatService.markRead(user.id(), messageId);
+        // 발신자 화면의 "읽음" 표시를 즉시 갱신한다 (메시지 스트림과 채널 분리)
+        messagingTemplate.convertAndSend("/sub/rooms/" + relationId + "/read",
+                new ReadReceipt(user.id(), messageId));
         return ApiResponse.success(null);
     }
 }

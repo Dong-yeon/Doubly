@@ -23,6 +23,7 @@ import { pickImage, uploadImage } from '../../utils/imageUpload';
 import { getErrorMessage } from '../../utils/error';
 import { relativeDateLabel, toDateString } from '../../utils/date';
 import { toast } from '../../store/toastStore';
+import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { BodyMetric } from '../../types';
@@ -104,7 +105,7 @@ export function BodyMetricScreen(_: Props) {
     setSaving(true);
     try {
       let photoUrl: string | undefined;
-      if (photoUri) photoUrl = await uploadImage(photoUri);
+      if (photoUri) photoUrl = await runBusy('사진 올리는 중…', () => uploadImage(photoUri));
       await bodyApi.save({
         measuredDate: toDateString(),
         weightKg: weight ? Number(weight) : undefined,
@@ -222,7 +223,7 @@ export function BodyMetricScreen(_: Props) {
                 <TextField label="허리(cm)" value={waist} onChangeText={setWaist} keyboardType="decimal-pad" />
               </View>
             </View>
-            <TouchableOpacity style={styles.photoBox} onPress={onPickPhoto} activeOpacity={0.8}>
+            <TouchableOpacity style={[styles.photoBox, photoUri ? styles.photoBoxFilled : null]} onPress={onPickPhoto} activeOpacity={0.8}>
               {photoUri ? (
                 <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />
               ) : (
@@ -283,6 +284,7 @@ const styles = StyleSheet.create({
   formRow: { flexDirection: 'row', gap: spacing.sm },
   flex: { flex: 1 },
   photoBox: {
+    // 사진이 없을 때(안내 문구)만 쓰는 높이 — 사진이 들어오면 photoBoxFilled 가 4:3 으로 키운다
     height: 120,
     borderRadius: radius.md,
     borderWidth: 1,
@@ -293,6 +295,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginTop: spacing.sm,
   },
+  /* 사진은 잘리지 않고 크게 — 고정 높이 + cover 조합은 세로 사진을 심하게 잘라냈다 */
+  photoBoxFilled: { height: undefined, aspectRatio: 4 / 3 },
   photo: { width: '100%', height: '100%' },
   photoPlaceholder: { color: colors.textSecondary, fontSize: fontSize.body, fontWeight: '600' },
   modalBtn: { marginTop: spacing.md },

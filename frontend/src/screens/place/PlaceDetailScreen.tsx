@@ -19,6 +19,7 @@ import { placeApi } from '../../api/place';
 import { pickImage, uploadImage } from '../../utils/imageUpload';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
+import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { PlaceVisit } from '../../types';
@@ -73,7 +74,7 @@ export function PlaceDetailScreen({ route }: Props) {
     try {
       let imageUrl: string | undefined;
       if (photoUri) {
-        imageUrl = await uploadImage(photoUri);
+        imageUrl = await runBusy('사진 올리는 중…', () => uploadImage(photoUri));
       }
       await placeApi.recordVisit(placeId, {
         rating: rating > 0 ? rating : undefined,
@@ -135,7 +136,7 @@ export function PlaceDetailScreen({ route }: Props) {
                   ))}
                 </View>
 
-                <TouchableOpacity style={styles.photoBox} onPress={onPickPhoto} activeOpacity={0.8}>
+                <TouchableOpacity style={[styles.photoBox, photoUri ? styles.photoBoxFilled : null]} onPress={onPickPhoto} activeOpacity={0.8}>
                   {photoUri ? (
                     <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />
                   ) : (
@@ -207,6 +208,7 @@ const styles = StyleSheet.create({
   starRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
   star: { fontSize: 32, color: colors.accent },
   photoBox: {
+    // 사진이 없을 때(안내 문구)만 쓰는 높이 — 사진이 들어오면 photoBoxFilled 가 4:3 으로 키운다
     height: 140,
     borderRadius: radius.md,
     borderWidth: 1,
@@ -217,6 +219,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: spacing.md,
   },
+  /* 사진은 잘리지 않고 크게 — 고정 높이 + cover 조합은 세로 사진을 심하게 잘라냈다 */
+  photoBoxFilled: { height: undefined, aspectRatio: 4 / 3 },
   photo: { width: '100%', height: '100%' },
   photoPlaceholder: { color: colors.textSecondary, fontSize: fontSize.body, fontWeight: '600' },
   formActions: { flexDirection: 'row', gap: spacing.sm },

@@ -24,6 +24,7 @@ import { dietApi } from '../../api/diet';
 import { pickImage, takePhoto, uploadImage } from '../../utils/imageUpload';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
+import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
 import { toDateString } from '../../utils/date';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
@@ -161,8 +162,8 @@ export function DietRecordScreen({ navigation }: Props) {
     if (!photoUri) return;
     setAnalyzing(true);
     try {
-      const photoUrl = await ensureUploaded(photoUri);
-      const result = await dietApi.analyze(photoUrl);
+      const photoUrl = await runBusy('사진 올리는 중…', () => ensureUploaded(photoUri));
+      const result = await runBusy('AI가 음식을 분석하고 있어요', () => dietApi.analyze(photoUrl));
       if (!result.isFood || result.foods.length === 0) {
         toast.error('음식 사진이 아닌 것 같아요 ');
         return;
@@ -186,7 +187,7 @@ export function DietRecordScreen({ navigation }: Props) {
     if (!text) return;
     setAnalyzingText(true);
     try {
-      const result = await dietApi.analyzeText(text);
+      const result = await runBusy('AI가 칼로리를 계산하고 있어요', () => dietApi.analyzeText(text));
       if (!result.isFood || result.foods.length === 0) {
         toast.error('무엇을 먹었는지 알아보지 못했어요. 음식 이름을 적어주세요.');
         return;
@@ -211,7 +212,7 @@ export function DietRecordScreen({ navigation }: Props) {
     try {
       let photoUrl: string | undefined;
       if (photoUri) {
-        photoUrl = await ensureUploaded(photoUri);
+        photoUrl = await runBusy('사진 올리는 중…', () => ensureUploaded(photoUri));
       }
       const label = MEAL_TYPES.find((t) => t.value === mealType)?.label ?? '';
       const saved = await save({
@@ -284,7 +285,7 @@ export function DietRecordScreen({ navigation }: Props) {
 
           {/* 사진 */}
           <Text style={styles.label}>사진</Text>
-          <TouchableOpacity style={styles.photoBox} onPress={onPickPhoto} activeOpacity={0.8}>
+          <TouchableOpacity style={[styles.photoBox, photoUri ? styles.photoBoxFilled : null]} onPress={onPickPhoto} activeOpacity={0.8}>
             {photoUri ? (
               <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />
             ) : (
@@ -417,6 +418,7 @@ const styles = StyleSheet.create({
   typeText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
   typeTextActive: { color: colors.textPrimary, fontWeight: '800' },
   photoBox: {
+    // 사진이 없을 때(안내 문구)만 쓰는 높이 — 사진이 들어오면 photoBoxFilled 가 4:3 으로 키운다
     height: 160,
     borderRadius: radius.lg,
     borderWidth: 1,
@@ -426,6 +428,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
+  /* 사진은 잘리지 않고 크게 — 고정 높이 + cover 조합은 세로 사진을 심하게 잘라냈다 */
+  photoBoxFilled: { height: undefined, aspectRatio: 4 / 3 },
   photo: { width: '100%', height: '100%' },
   photoPlaceholder: { color: colors.textSecondary, fontSize: fontSize.body, fontWeight: '600' },
   removePhoto: { color: colors.danger, fontSize: fontSize.caption, marginTop: spacing.xs, alignSelf: 'flex-end' },

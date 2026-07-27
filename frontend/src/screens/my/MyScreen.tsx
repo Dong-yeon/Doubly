@@ -21,6 +21,7 @@ import { summaryApi } from '../../api/summary';
 import { publishEnsuringConnection } from '../../api/chatSocket';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
+import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
 import { pickImage, uploadImage } from '../../utils/imageUpload';
 import { colors, fontSize, spacing } from '../../constants/theme';
@@ -117,7 +118,7 @@ export function MyScreen({ navigation }: Props) {
       const uri = await pickImage();
       if (!uri) return;
       setPhotoUploading(true);
-      const url = await uploadImage(uri);
+      const url = await runBusy('사진 올리는 중…', () => uploadImage(uri));
       await updateProfile({ profileImageUrl: url });
       haptics.success();
       toast.success('프로필 사진을 변경했어요 ');

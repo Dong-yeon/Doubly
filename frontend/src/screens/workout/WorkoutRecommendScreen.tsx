@@ -7,6 +7,7 @@ import { Button } from '../../components/Button';
 import { workoutApi } from '../../api/workout';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
+import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { WorkoutRecommendation } from '../../types';
@@ -56,7 +57,7 @@ export function WorkoutRecommendScreen() {
   const onRecommend = async (days: number) => {
     setLoadingDays(days);
     try {
-      const res = await workoutApi.recommend(days);
+      const res = await runBusy('AI가 운동을 추천하고 있어요', () => workoutApi.recommend(days));
       setResult(res);
       haptics.success();
     } catch (e) {

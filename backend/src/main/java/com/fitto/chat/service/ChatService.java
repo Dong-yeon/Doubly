@@ -89,13 +89,19 @@ public class ChatService {
         return ChatMessageResponse.from(message);
     }
 
-    /** 특정 메시지까지 읽음 처리 — 설계서 4.5 PUT /chat/read/{messageId}. */
+    /**
+     * 특정 메시지까지 읽음 처리 — 설계서 4.5 PUT /chat/read/{messageId}.
+     *
+     * @return 읽음이 반영된 관계 id — 호출자가 상대(발신자)에게 실시간으로 알릴 수 있도록 돌려준다.
+     *         발신자는 자기 화면의 "읽음" 표시를 이 신호로 갱신한다.
+     */
     @Transactional
-    public void markRead(Long userId, Long messageId) {
+    public Long markRead(Long userId, Long messageId) {
         ChatMessage message = chatMessageRepository.findById(messageId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
         requireMember(userId, message.getRelationId());
         chatMessageRepository.markReadUpTo(message.getRelationId(), messageId, userId);
+        return message.getRelationId();
     }
 
     // ---- helpers ----

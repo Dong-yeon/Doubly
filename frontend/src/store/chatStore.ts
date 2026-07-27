@@ -7,6 +7,7 @@ import {
   OutgoingMessage,
   publishMessage,
   subscribeRoom,
+  subscribeRoomRead,
   unsubscribeRoom,
 } from '../api/chatSocket';
 import type { ChatMessage, ChatRoom } from '../types';
@@ -55,6 +56,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
           const existing = s.messages[relationId] ?? [];
           if (existing.some((m) => m.id === msg.id)) return s;
           return { messages: { ...s.messages, [relationId]: [msg, ...existing] } };
+        });
+      });
+      // 상대가 읽으면 내가 보낸 메시지에 "읽음"을 붙인다
+      subscribeRoomRead(relationId, ({ lastReadMessageId }) => {
+        set((s) => {
+          const existing = s.messages[relationId] ?? [];
+          if (!existing.some((m) => !m.isRead && m.id <= lastReadMessageId)) return s;
+          return {
+            messages: {
+              ...s.messages,
+              [relationId]: existing.map((m) =>
+                m.isRead || m.id > lastReadMessageId ? m : { ...m, isRead: true },
+              ),
+            },
+          };
         });
       });
     } catch {
