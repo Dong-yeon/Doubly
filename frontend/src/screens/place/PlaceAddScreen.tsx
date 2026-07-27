@@ -1,7 +1,6 @@
 /** 장소 추가 — 카카오 플레이스 검색 자동 입력 + 이름·주소·카테고리·상태(위시/방문)·지도 위치 선택 */
 import React, { useRef, useState } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -10,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { PlaceStackParamList } from '../../navigation/types';

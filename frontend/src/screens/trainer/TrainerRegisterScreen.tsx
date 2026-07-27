@@ -1,6 +1,7 @@
 /** 트레이너 등록 — 프로필 입력 후 역할 승격 (TRAINER-01) */
 import React, { useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text } from 'react-native';
+import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../navigation/types';

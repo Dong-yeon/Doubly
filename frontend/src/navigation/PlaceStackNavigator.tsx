@@ -12,6 +12,7 @@ import { TripExpenseScreen } from '../screens/trip/TripExpenseScreen';
 import { TripChecklistScreen } from '../screens/trip/TripChecklistScreen';
 import { TripAlbumScreen } from '../screens/trip/TripAlbumScreen';
 import { TripRecapScreen } from '../screens/trip/TripRecapScreen';
+import { modalOptions } from './modalOptions';
 import { colors } from '../constants/theme';
 
 const Stack = createNativeStackNavigator<PlaceStackParamList>();
@@ -29,7 +30,7 @@ export function PlaceStackNavigator() {
       <Stack.Screen
         name="PlaceAdd"
         component={PlaceAddScreen}
-        options={{ title: '장소 추가', presentation: 'modal' }}
+        options={{ title: '장소 추가', ...modalOptions }}
       />
       <Stack.Screen
         name="PlaceDetail"
@@ -42,7 +43,7 @@ export function PlaceStackNavigator() {
         component={TripFormScreen}
         options={({ route }) => ({
           title: route.params.trip ? '여행 수정' : '여행 만들기',
-          presentation: 'modal',
+          ...modalOptions,
         })}
       />
       <Stack.Screen

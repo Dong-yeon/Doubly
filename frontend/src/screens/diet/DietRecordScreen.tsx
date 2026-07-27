@@ -1,7 +1,6 @@
 /** 식단 기록 입력 — 끼니·사진·칼로리·메모 + 즐겨찾기 원탭 추가. 운동(WorkoutRecordScreen) 미러링 */
 import React, { useCallback, useRef, useState } from 'react';
 import {
-  Alert,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -11,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -170,7 +170,12 @@ export function DietRecordScreen({ navigation }: Props) {
       }
       const names = result.foods.map((f) => f.name).join(', ');
       setMemo((prev) => (prev.trim() ? `${prev.trim()}, ${names}` : names));
-      if (result.totalCalories > 0) setCalories(String(result.totalCalories));
+      if (result.totalCalories > 0) {
+        setCalories(String(result.totalCalories));
+      } else {
+        // 음식은 알아봤지만 양을 가늠하지 못한 경우 — 빈 칸으로 두면 실패로 오해한다
+        toast.info('칼로리는 추정하지 못했어요. 직접 입력해주세요.');
+      }
       setMacros({ carbs: result.totalCarbs, protein: result.totalProtein, fat: result.totalFat });
       haptics.success();
       toast.success(result.comment?.trim() || 'AI 분석 완료! ');
@@ -192,7 +197,11 @@ export function DietRecordScreen({ navigation }: Props) {
         toast.error('무엇을 먹었는지 알아보지 못했어요. 음식 이름을 적어주세요.');
         return;
       }
-      if (result.totalCalories > 0) setCalories(String(result.totalCalories));
+      if (result.totalCalories > 0) {
+        setCalories(String(result.totalCalories));
+      } else {
+        toast.info('칼로리는 추정하지 못했어요. 직접 입력해주세요.');
+      }
       setMacros({ carbs: result.totalCarbs, protein: result.totalProtein, fat: result.totalFat });
       haptics.success();
       toast.success(result.comment?.trim() || 'AI 칼로리 계산 완료!');
@@ -429,7 +438,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   /* 사진은 잘리지 않고 크게 — 고정 높이 + cover 조합은 세로 사진을 심하게 잘라냈다 */
-  photoBoxFilled: { height: undefined, aspectRatio: 4 / 3 },
+  // 음식 사진은 정사각에 가까운 경우가 많아 1:1 로 — 4:3 보다 눈에 띄게 커진다
+  photoBoxFilled: { height: undefined, aspectRatio: 1 },
   photo: { width: '100%', height: '100%' },
   photoPlaceholder: { color: colors.textSecondary, fontSize: fontSize.body, fontWeight: '600' },
   removePhoto: { color: colors.danger, fontSize: fontSize.caption, marginTop: spacing.xs, alignSelf: 'flex-end' },

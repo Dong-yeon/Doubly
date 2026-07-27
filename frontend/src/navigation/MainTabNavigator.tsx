@@ -90,7 +90,11 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
 
   return (
     <>
-      <View style={[styles.bar, { paddingBottom: insets.bottom || spacing.sm }]}>
+      {/*
+        홈 인디케이터가 있는 기기는 insets.bottom(≈34) 으로 충분하지만, 웹·구형 안드로이드는
+        insets.bottom 이 0 이라 라벨이 화면 바닥에 붙어 보였다. 최소 여백을 보장한다.
+      */}
+      <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
         {renderTab(routeNames[0], 0)}
         {renderTab(routeNames[1], 1)}
 

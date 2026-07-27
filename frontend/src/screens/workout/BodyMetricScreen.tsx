@@ -1,7 +1,6 @@
 /** 몸 변화 — 체중·체지방·둘레 추적 + 진행 사진(before/after). 경량 막대 그래프. */
 import React, { useCallback, useState } from 'react';
 import {
-  Alert,
   FlatList,
   Image,
   Modal,
@@ -11,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';

@@ -1,6 +1,7 @@
 /** 운동 메인 — 설계서 2.4 (오늘 기록 + 트레이너 루틴 + 히스토리 + 캘린더 진입). WORKOUT-02/03 */
 import React, { useCallback, useState } from 'react';
-import { Alert, FlatList, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';

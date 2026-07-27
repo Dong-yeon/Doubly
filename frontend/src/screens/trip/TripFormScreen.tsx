@@ -1,6 +1,7 @@
 /** 여행 만들기/수정 — 제목·날짜·메모·커버 사진 */
 import React, { useState } from 'react';
-import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { PlaceStackParamList } from '../../navigation/types';

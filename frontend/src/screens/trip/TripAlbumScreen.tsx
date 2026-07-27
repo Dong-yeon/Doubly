@@ -1,7 +1,6 @@
 /** 여행 앨범 — 피드 사진을 여행에 담아 그리드로 모아 본다 (담기/빼기) */
 import React, { useCallback, useState } from 'react';
 import {
-  Alert,
   FlatList,
   Image,
   Modal,
@@ -12,6 +11,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';

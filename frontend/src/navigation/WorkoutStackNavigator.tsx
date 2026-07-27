@@ -16,6 +16,7 @@ import { DietScreen } from '../screens/diet/DietScreen';
 import { DietRecordScreen } from '../screens/diet/DietRecordScreen';
 import { DietCalendarScreen } from '../screens/diet/DietCalendarScreen';
 import { DietStatsScreen } from '../screens/diet/DietStatsScreen';
+import { modalOptions } from './modalOptions';
 import { colors } from '../constants/theme';
 
 const Stack = createNativeStackNavigator<WorkoutStackParamList>();
@@ -33,7 +34,7 @@ export function WorkoutStackNavigator() {
       <Stack.Screen
         name="WorkoutRecord"
         component={WorkoutRecordScreen}
-        options={{ title: '운동 기록', presentation: 'modal' }}
+        options={{ title: '운동 기록', ...modalOptions }}
       />
       <Stack.Screen
         name="WorkoutCalendar"
@@ -63,7 +64,7 @@ export function WorkoutStackNavigator() {
       <Stack.Screen
         name="WorkoutRoutineForm"
         component={WorkoutRoutineFormScreen}
-        options={{ title: '루틴 만들기', presentation: 'modal' }}
+        options={{ title: '루틴 만들기', ...modalOptions }}
       />
       <Stack.Screen name="BodyMetric" component={BodyMetricScreen} options={{ title: '몸 변화' }} />
       <Stack.Screen name="Challenge" component={ChallengeScreen} options={{ title: '커플 대결' }} />
@@ -72,7 +73,7 @@ export function WorkoutStackNavigator() {
       <Stack.Screen
         name="DietRecord"
         component={DietRecordScreen}
-        options={{ title: '식단 기록', presentation: 'modal' }}
+        options={{ title: '식단 기록', ...modalOptions }}
       />
       <Stack.Screen name="DietCalendar" component={DietCalendarScreen} options={{ title: '식단 캘린더' }} />
       <Stack.Screen name="DietStats" component={DietStatsScreen} options={{ title: '식단 통계' }} />

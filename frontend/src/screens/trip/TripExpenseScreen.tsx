@@ -1,7 +1,6 @@
 /** 여행 경비 정산 — 합계·정산(누가 누구에게)·항목 목록 + 추가/수정 */
 import React, { useCallback, useState } from 'react';
 import {
-  Alert,
   FlatList,
   Modal,
   Pressable,
@@ -11,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
