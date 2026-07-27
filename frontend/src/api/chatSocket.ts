@@ -10,6 +10,7 @@ import type { ChatMessage, MessageType } from '../types';
 let client: Client | null = null;
 let connecting: Promise<Client> | null = null;
 const subscriptions = new Map<number, StompSubscription>();
+const readSubscriptions = new Map<number, StompSubscription>();
 const coupleSubscriptions = new Map<number, StompSubscription>();
 
 export interface OutgoingMessage {
@@ -66,6 +67,29 @@ export function subscribeRoom(relationId: number, onMessage: (msg: ChatMessage) 
 export function unsubscribeRoom(relationId: number) {
   subscriptions.get(relationId)?.unsubscribe();
   subscriptions.delete(relationId);
+  readSubscriptions.get(relationId)?.unsubscribe();
+  readSubscriptions.delete(relationId);
+}
+
+/**
+ * 읽음 확인 구독 (/sub/rooms/{relationId}/read).
+ * 상대가 내 메시지를 읽으면 lastReadMessageId 가 온다 — 그 이하의 내 메시지에 "읽음"을 붙인다.
+ * 메시지 스트림과 채널을 나눈 이유는 서버 ReadReceipt 주석 참고.
+ */
+export function subscribeRoomRead(
+  relationId: number,
+  onRead: (receipt: { readerId: number; lastReadMessageId: number }) => void,
+) {
+  if (!client?.connected) return;
+  readSubscriptions.get(relationId)?.unsubscribe();
+  const sub = client.subscribe(`/sub/rooms/${relationId}/read`, (frame: IMessage) => {
+    try {
+      onRead(JSON.parse(frame.body));
+    } catch {
+      // ignore malformed frame
+    }
+  });
+  readSubscriptions.set(relationId, sub);
 }
 
 /** 커플 실시간 이벤트 구독 (/sub/couple/{relationId}) — 배경/기념일/운동 변경 알림 */

@@ -156,7 +156,15 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             <Text style={[styles.msgText, mine && styles.msgTextMine]}>{item.content}</Text>
           </View>
         )}
-        <Text style={styles.time}>{timeOf(item.createdAt)}</Text>
+        <View style={mine ? styles.metaMine : styles.meta}>
+          {/* 읽음은 내가 보낸 메시지에만 — 상대 메시지의 읽음 여부는 알 필요가 없다 */}
+          {mine ? (
+            <Text style={[styles.read, item.isRead && styles.readDone]}>
+              {item.isRead ? '읽음' : '1'}
+            </Text>
+          ) : null}
+          <Text style={styles.time}>{timeOf(item.createdAt)}</Text>
+        </View>
       </View>
     );
   };
@@ -286,7 +294,12 @@ const styles = StyleSheet.create({
   mealCardTheirs: { backgroundColor: colors.surface, borderColor: colors.accent },
   mealBadge: { fontSize: fontSize.caption, fontWeight: '800', color: '#E0A020' },
   mealImage: { width: 208, height: 156, borderRadius: radius.md, backgroundColor: colors.surfaceAlt },
-  time: { fontSize: 10, color: colors.textTertiary, marginHorizontal: spacing.xs },
+  time: { fontSize: 10, color: colors.textTertiary },
+  meta: { marginHorizontal: spacing.xs, justifyContent: 'flex-end' },
+  metaMine: { marginHorizontal: spacing.xs, alignItems: 'flex-end', justifyContent: 'flex-end' },
+  // 안 읽음은 카카오톡처럼 "1", 읽으면 "읽음" — 색으로도 구분한다
+  read: { fontSize: 10, fontWeight: '800', color: colors.coral, marginBottom: 1 },
+  readDone: { color: colors.textTertiary, fontWeight: '600' },
   reactions: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.sm, paddingTop: spacing.xs },
   reactionBtn: {
     width: 40,
