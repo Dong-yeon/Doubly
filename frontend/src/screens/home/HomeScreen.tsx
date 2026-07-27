@@ -6,7 +6,6 @@ import {
   Alert,
   FlatList,
   Image,
-  ImageBackground,
   Modal,
   Pressable,
   StyleSheet,
@@ -49,6 +48,17 @@ type Props = CompositeScreenProps<
 
 // Ink 히어로 — 데이터(코랄/인디고 아바타 + 바이올렛 겹침)가 돋보이게 절제된 배경
 const GRADIENT: [string, string, string] = ['#1B1D3A', '#14162B', '#0D0F22'];
+
+/**
+ * 배경 위 스크림 — 위(히어로)는 옅게 두어 배경 사진이 살고,
+ * 아래(피드)로 갈수록 진해져 카드가 배경에서 떠 보인다.
+ * 사진 밝기와 무관하게 흰 글씨 대비를 보장하려고 검정 기반으로 고정한다(테마 무관).
+ */
+const SCRIM: [string, string, string] = [
+  'rgba(0,0,0,0.28)',
+  'rgba(0,0,0,0.45)',
+  'rgba(0,0,0,0.70)',
+];
 const QUICK_EMOJIS = ['❤️', '🥰', '😆', '👍', '💪'];
 
 function daysTogether(connectedAt?: string | null): number {
@@ -287,18 +297,8 @@ export function HomeScreen({ navigation }: Props) {
   // ---- 상단 대시보드 헤더 ----
   const hero = (
     <View>
-      <View style={styles.heroWrap}>
-        {bgUrl ? (
-          <ImageBackground source={{ uri: bgUrl }} style={styles.hero} imageStyle={styles.heroImg}>
-            <View style={styles.heroOverlay} />
-            {renderHeroContent()}
-          </ImageBackground>
-        ) : (
-          <LinearGradient colors={GRADIENT} style={styles.hero} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-            {renderHeroContent()}
-          </LinearGradient>
-        )}
-      </View>
+      {/* 배경은 화면 전체를 채우므로(아래 return 참고) 여기서는 내용만 얹는다 */}
+      {renderHeroContent()}
 
       {connected ? (
         <View style={styles.actionRow}>
@@ -390,7 +390,33 @@ export function HomeScreen({ navigation }: Props) {
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <View style={styles.root}>
+      {/*
+        배경화면을 화면 전체에 깐다 — 예전에는 상단 220px 카드 안에만 보였다.
+        고정 레이어라 피드를 스크롤해도 배경은 그대로 있어 '벽지' 처럼 보인다.
+      */}
+      {bgUrl ? (
+        <Image source={{ uri: bgUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+      ) : (
+        <LinearGradient
+          colors={GRADIENT}
+          style={StyleSheet.absoluteFill}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        />
+      )}
+      {/*
+        스크림 — 사진이 밝든 어둡든 흰 글씨(히어로)가 읽혀야 하고, 아래로 갈수록
+        진해져 카드가 배경에서 분리돼 보인다. 터치는 통과시킨다.
+      */}
+      <LinearGradient
+        colors={SCRIM}
+        locations={[0, 0.4, 1]}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
+
+      <SafeAreaView style={styles.safe} edges={['top']}>
       <FlatList
         data={connected ? items : []}
         keyExtractor={itemKey}
@@ -404,11 +430,14 @@ export function HomeScreen({ navigation }: Props) {
         ListHeaderComponent={hero}
         ListEmptyComponent={
           feedLoading ? null : connected ? (
-            <EmptyState
-              icon="timeline-text-outline"
-              title="아직 기록이 없어요"
-              description={'운동·식단·맛집을 기록하거나\n첫 일상을 남겨보세요!'}
-            />
+            // 배경 사진 위에서도 읽히도록 카드에 얹는다 (EmptyState 는 테마색 텍스트다)
+            <Card elevation="sm" style={styles.emptyCard}>
+              <EmptyState
+                icon="timeline-text-outline"
+                title="아직 기록이 없어요"
+                description={'운동·식단·맛집을 기록하거나\n첫 일상을 남겨보세요!'}
+              />
+            </Card>
           ) : (
             /* 미연결 첫인상 — 연결 카드 아래가 텅 비어 보이지 않게, 혼자서도
                시작할 수 있는 행동을 안내한다 (FAB 액션시트와 같은 목적지) */
@@ -474,7 +503,8 @@ export function HomeScreen({ navigation }: Props) {
           </Pressable>
         </Pressable>
       </Modal>
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 }
 
@@ -497,15 +527,13 @@ function CoupleProfile({ name, imageUrl, done, color }: { name: string; imageUrl
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
+  // 배경(사진/그라디언트)이 화면 전체를 채우므로 그 위 레이어는 모두 투명이다
+  root: { flex: 1, backgroundColor: colors.background },
+  safe: { flex: 1, backgroundColor: 'transparent' },
   list: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl },
 
-  // 히어로
-  heroWrap: { marginTop: spacing.sm, borderRadius: radius.xl, overflow: 'hidden' },
-  hero: { minHeight: 220 },
-  heroImg: { borderRadius: radius.xl },
-  heroOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.28)' },
-  heroContent: { padding: spacing.lg },
+  // 히어로 — 카드 프레임 없이 배경 위에 바로 얹힌다
+  heroContent: { paddingHorizontal: spacing.xs, paddingTop: spacing.sm, paddingBottom: spacing.lg },
   topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   profileBtn: { borderRadius: radius.pill, borderWidth: 2, borderColor: 'rgba(255,255,255,0.6)' },
   bgBtn: {
@@ -572,12 +600,15 @@ const styles = StyleSheet.create({
   },
   connectBtnText: { color: colors.primaryDark, fontWeight: '800', fontSize: fontSize.body },
 
+  emptyCard: { paddingVertical: spacing.md },
+
   // 미연결 첫인상 — 혼자서도 시작할 수 있는 행동 안내
   soloGuide: { marginTop: spacing.lg },
   soloTitle: {
     fontSize: fontSize.caption,
     fontWeight: '700',
-    color: colors.textSecondary,
+    // 배경 사진 위에 놓이므로 테마색이 아니라 흰색 고정
+    color: 'rgba(255,255,255,0.92)',
     marginBottom: spacing.sm,
     marginLeft: spacing.xs,
   },
