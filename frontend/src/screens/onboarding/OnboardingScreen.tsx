@@ -77,12 +77,19 @@ export function OnboardingScreen({ navigation }: Props) {
       finish();
       return;
     }
-    listRef.current?.scrollToIndex({ index: index + 1, animated: true });
+    /*
+     * 웹(react-native-web)은 onMomentumScrollEnd 를 발화하지 않아 스크롤 콜백만으로는
+     * index 가 영영 갱신되지 않는다. 버튼이 상태를 직접 전진시키고, 스크롤 콜백은
+     * 네이티브에서 손가락 스와이프를 동기화하는 보조 역할만 한다.
+     */
+    const next = index + 1;
+    setIndex(next);
+    listRef.current?.scrollToIndex({ index: next, animated: true });
   };
 
   const onScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const next = Math.round(e.nativeEvent.contentOffset.x / width);
-    if (next !== index) {
+    if (next !== index && next >= 0 && next < SLIDES.length) {
       setIndex(next);
     }
   };
@@ -108,6 +115,8 @@ export function OnboardingScreen({ navigation }: Props) {
         pagingEnabled
         showsHorizontalScrollIndicator={false}
         onMomentumScrollEnd={onScrollEnd}
+        // scrollToIndex 는 레이아웃을 모르면 무시될 수 있다 — 슬라이드 폭이 고정이므로 명시
+        getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
         renderItem={({ item }) => (
           <View style={[styles.slide, { width }]}>
             <View style={[styles.iconCircle, { backgroundColor: item.accentBg }]}>
