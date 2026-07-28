@@ -223,7 +223,7 @@ export function BodyMetricScreen(_: Props) {
                 <TextField label="허리(cm)" value={waist} onChangeText={setWaist} keyboardType="decimal-pad" />
               </View>
             </View>
-            <TouchableOpacity style={[styles.photoBox, photoUri ? styles.photoBoxFilled : null]} onPress={onPickPhoto} activeOpacity={0.8}>
+            <TouchableOpacity style={[styles.photoBox, photoUri ? styles.photoBoxFilled : styles.photoBoxEmpty]} onPress={onPickPhoto} activeOpacity={0.8}>
               {photoUri ? (
                 <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />
               ) : (
@@ -284,8 +284,6 @@ const styles = StyleSheet.create({
   formRow: { flexDirection: 'row', gap: spacing.sm },
   flex: { flex: 1 },
   photoBox: {
-    // 사진이 없을 때(안내 문구)만 쓰는 높이 — 사진이 들어오면 photoBoxFilled 가 4:3 으로 키운다
-    height: 120,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
@@ -295,8 +293,14 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginTop: spacing.sm,
   },
-  /* 사진은 잘리지 않고 크게 — 고정 높이 + cover 조합은 세로 사진을 심하게 잘라냈다 */
-  photoBoxFilled: { height: undefined, aspectRatio: 4 / 3 },
+  /*
+   * 사진 유무로 높이 규칙이 다르다. 예전엔 photoBox 에 고정 height 를 두고
+   * photoBoxFilled 에서 `height: undefined` 로 지우려 했는데, 스타일 병합에서
+   * undefined 는 무시되어 고정 높이가 그대로 남고 aspectRatio 가 먹지 않았다.
+   * 그래서 기본에는 높이를 두지 않고 상태별 스타일로 나눈다.
+   */
+  photoBoxEmpty: { height: 120 },
+  photoBoxFilled: { width: '100%', aspectRatio: 4 / 3 },
   photo: { width: '100%', height: '100%' },
   photoPlaceholder: { color: colors.textSecondary, fontSize: fontSize.body, fontWeight: '600' },
   modalBtn: { marginTop: spacing.md },

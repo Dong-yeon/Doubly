@@ -294,7 +294,7 @@ export function DietRecordScreen({ navigation }: Props) {
 
           {/* 사진 */}
           <Text style={styles.label}>사진</Text>
-          <TouchableOpacity style={[styles.photoBox, photoUri ? styles.photoBoxFilled : null]} onPress={onPickPhoto} activeOpacity={0.8}>
+          <TouchableOpacity style={[styles.photoBox, photoUri ? styles.photoBoxFilled : styles.photoBoxEmpty]} onPress={onPickPhoto} activeOpacity={0.8}>
             {photoUri ? (
               <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />
             ) : (
@@ -427,8 +427,6 @@ const styles = StyleSheet.create({
   typeText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
   typeTextActive: { color: colors.textPrimary, fontWeight: '800' },
   photoBox: {
-    // 사진이 없을 때(안내 문구)만 쓰는 높이 — 사진이 들어오면 photoBoxFilled 가 4:3 으로 키운다
-    height: 160,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
@@ -437,9 +435,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  /* 사진은 잘리지 않고 크게 — 고정 높이 + cover 조합은 세로 사진을 심하게 잘라냈다 */
-  // 음식 사진은 정사각에 가까운 경우가 많아 1:1 로 — 4:3 보다 눈에 띄게 커진다
-  photoBoxFilled: { height: undefined, aspectRatio: 1 },
+  /*
+   * 사진 유무로 높이 규칙이 다르다. 예전엔 photoBox 에 고정 height 를 두고
+   * photoBoxFilled 에서 `height: undefined` 로 지우려 했는데, 스타일 병합에서
+   * undefined 는 무시되어 고정 높이가 그대로 남고 aspectRatio 가 먹지 않았다.
+   * 그래서 기본에는 높이를 두지 않고 상태별 스타일로 나눈다.
+   */
+  photoBoxEmpty: { height: 160 },
+  photoBoxFilled: { width: '100%', aspectRatio: 1 },
   photo: { width: '100%', height: '100%' },
   photoPlaceholder: { color: colors.textSecondary, fontSize: fontSize.body, fontWeight: '600' },
   removePhoto: { color: colors.danger, fontSize: fontSize.caption, marginTop: spacing.xs, alignSelf: 'flex-end' },
