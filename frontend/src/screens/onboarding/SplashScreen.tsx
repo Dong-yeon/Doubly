@@ -49,7 +49,7 @@ export function SplashScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.cream },
+  container: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
   center: { alignItems: 'center' },
   brand: { fontSize: fontSize.display, fontWeight: '800', color: colors.ink, textAlign: 'center', marginTop: spacing.lg, letterSpacing: -1 },
   sloganWrap: { marginTop: spacing.md, backgroundColor: colors.togetherBg, borderRadius: 999, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },

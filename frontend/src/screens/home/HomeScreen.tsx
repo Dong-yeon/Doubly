@@ -572,7 +572,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: colors.ink,
+    // 히어로는 스크림으로 항상 어둡다 — 테마에 따라 뒤집히면 안 되므로 고정색
+    borderColor: '#14162B',
   },
   doneCheck: { color: colors.white, fontWeight: '800', fontSize: 12 },
   ddayChip: {
