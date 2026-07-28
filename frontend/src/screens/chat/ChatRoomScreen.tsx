@@ -25,6 +25,8 @@ import { pickImage, uploadImage } from '../../utils/imageUpload';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
+import { EmojiPicker } from '../../components/EmojiPicker';
+import { chatApi } from '../../api/chat';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { ChatMessage } from '../../types';
 
@@ -54,10 +56,15 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const { relationId, title } = route.params;
   const myId = useAuthStore((s) => s.user?.id);
   const messages = useChatStore((s) => s.messages[relationId] ?? EMPTY_MESSAGES);
-  const { openRoom, closeRoom, send, markRead } = useChatStore();
+  const { openRoom, closeRoom, send, markRead, replaceMessage } = useChatStore();
   const [text, setText] = useState('');
   const [uploading, setUploading] = useState(false);
   const [showStickers, setShowStickers] = useState(false);
+  // 답장 대상 / 수정 중인 메시지 / 리액션 피커 대상
+  const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
+  const [editing, setEditing] = useState<ChatMessage | null>(null);
+  const [reactingTo, setReactingTo] = useState<ChatMessage | null>(null);
+  const [showEmojiSheet, setShowEmojiSheet] = useState(false);
   // 이미 읽음 처리한 최대 메시지 id — 중복 PUT 방지
   const markedUpToRef = useRef(0);
 
@@ -81,15 +88,85 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     }
   }, [messages, myId, markRead]);
 
-  const onSend = () => {
+  const onSend = async () => {
     const content = text.trim();
     if (!content) return;
-    const ok = send(relationId, { messageType: 'TEXT', content });
+
+    // 수정 모드 — 전송 대신 기존 메시지를 고친다
+    if (editing) {
+      try {
+        const updated = await chatApi.edit(editing.id, content);
+        replaceMessage(relationId, updated);
+        setEditing(null);
+        setText('');
+        haptics.light();
+      } catch (e) {
+        toast.error(getErrorMessage(e, '메시지를 수정하지 못했어요.'));
+      }
+      return;
+    }
+
+    const ok = send(relationId, {
+      messageType: 'TEXT',
+      content,
+      replyToId: replyTo?.id,
+    });
     if (ok) {
       setText('');
+      setReplyTo(null);
       haptics.light();
     } else {
       Alert.alert('전송 실패', '연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
+    }
+  };
+
+  /** 메시지 길게 누르기 — 리액션/답장/수정/삭제 */
+  const onLongPressMessage = (msg: ChatMessage) => {
+    if (msg.deleted) return;
+    haptics.light();
+    const mine = msg.senderId === myId;
+    const actions: { text: string; style?: 'cancel' | 'destructive'; onPress?: () => void }[] = [
+      { text: '리액션 달기', onPress: () => setReactingTo(msg) },
+      { text: '답장하기', onPress: () => { setEditing(null); setReplyTo(msg); } },
+    ];
+    // 수정은 내가 보낸 텍스트만 (사진·스티커는 고칠 내용이 없다)
+    if (mine && msg.messageType === 'TEXT') {
+      actions.push({
+        text: '수정하기',
+        onPress: () => { setReplyTo(null); setEditing(msg); setText(msg.content ?? ''); },
+      });
+    }
+    if (mine) {
+      actions.push({ text: '삭제하기', style: 'destructive', onPress: () => onDelete(msg) });
+    }
+    actions.push({ text: '취소', style: 'cancel' });
+    Alert.alert('메시지', undefined, actions);
+  };
+
+  const onDelete = (msg: ChatMessage) => {
+    Alert.alert('메시지 삭제', '이 메시지를 삭제할까요?', [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '삭제',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            replaceMessage(relationId, await chatApi.remove(msg.id));
+          } catch (e) {
+            toast.error(getErrorMessage(e, '메시지를 삭제하지 못했어요.'));
+          }
+        },
+      },
+    ]);
+  };
+
+  const onReact = async (msg: ChatMessage, emoji: string) => {
+    try {
+      const reactions = await chatApi.react(msg.id, emoji);
+      replaceMessage(relationId, { ...msg, reactions });
+      haptics.light();
+    } catch (e) {
+      toast.error(getErrorMessage(e, '리액션을 남기지 못했어요.'));
     }
   };
 
@@ -131,8 +208,37 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     const isSticker = item.messageType === 'STICKER';
     const isWorkout = item.messageType === 'WORKOUT_CARD';
     const isMeal = item.messageType === 'MEAL_CARD';
+    // 삭제된 메시지는 자리만 남기고 내용을 감춘다 (답장·리액션 참조가 살아있다)
+    if (item.deleted) {
+      return (
+        <View style={[styles.row, mine ? styles.rowMine : styles.rowTheirs]}>
+          <View style={[styles.bubble, styles.bubbleDeleted]}>
+            <Text style={styles.deletedText}>삭제된 메시지예요</Text>
+          </View>
+          <Text style={styles.time}>{timeOf(item.createdAt)}</Text>
+        </View>
+      );
+    }
+
     return (
-      <View style={[styles.row, mine ? styles.rowMine : styles.rowTheirs]}>
+      <View style={[styles.msgBlock, mine ? styles.blockMine : styles.blockTheirs]}>
+        {/* 인용한 원본 — 말풍선 위에 한 줄 */}
+        {item.replyTo ? (
+          <View style={[styles.quote, mine ? styles.quoteMine : styles.quoteTheirs]}>
+            <Text style={styles.quoteWho}>
+              {item.replyTo.senderId === myId ? '나' : title}에게 답장
+            </Text>
+            <Text style={styles.quoteText} numberOfLines={1}>
+              {item.replyTo.content ?? '삭제된 메시지'}
+            </Text>
+          </View>
+        ) : null}
+
+        <Pressable
+          onLongPress={() => onLongPressMessage(item)}
+          delayLongPress={300}
+          style={[styles.row, mine ? styles.rowMine : styles.rowTheirs]}
+        >
         {isSticker ? (
           <Text style={styles.sticker}>{item.content}</Text>
         ) : isImage ? (
@@ -164,8 +270,29 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               {item.isRead ? '읽음' : '1'}
             </Text>
           ) : null}
+          {item.edited ? <Text style={styles.editedMark}>수정됨</Text> : null}
           <Text style={styles.time}>{timeOf(item.createdAt)}</Text>
         </View>
+        </Pressable>
+
+        {/* 리액션 칩 — 다시 누르면 해제된다. mine 은 userIds 로 판단(브로드캐스트 공용) */}
+        {item.reactions && item.reactions.length > 0 ? (
+          <View style={[styles.reactionRow, mine ? styles.reactionRowMine : null]}>
+            {item.reactions.map((r) => {
+              const isMine = !!myId && r.userIds.includes(myId);
+              return (
+                <Pressable
+                  key={r.emoji}
+                  style={[styles.reactionChip, isMine && styles.reactionChipMine]}
+                  onPress={() => onReact(item, r.emoji)}
+                >
+                  <Text style={styles.reactionChipEmoji}>{r.emoji}</Text>
+                  {r.count > 1 ? <Text style={styles.reactionChipCount}>{r.count}</Text> : null}
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
       </View>
     );
   };
@@ -198,6 +325,14 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         </View>
         {showStickers ? (
           <View style={styles.stickerPanel}>
+            <Pressable
+              style={({ pressed }) => [styles.stickerBtn, pressed && styles.reactionPressed]}
+              onPress={() => { setShowStickers(false); setShowEmojiSheet(true); }}
+              accessibilityRole="button"
+              accessibilityLabel="이모지 더 보기"
+            >
+              <MaterialCommunityIcons name="dots-horizontal" size={24} color={colors.textSecondary} />
+            </Pressable>
             {STICKERS.map((s) => (
               <Pressable
                 key={s}
@@ -209,6 +344,27 @@ export function ChatRoomScreen({ navigation, route }: Props) {
                 <Text style={styles.stickerEmoji}>{s}</Text>
               </Pressable>
             ))}
+          </View>
+        ) : null}
+        {/* 답장·수정 중 배너 — 무엇에 대해 쓰고 있는지 보여주고 취소할 수 있게 */}
+        {replyTo || editing ? (
+          <View style={styles.composeBanner}>
+            <View style={styles.composeBannerBody}>
+              <Text style={styles.composeBannerLabel}>
+                {editing ? '메시지 수정 중' : '답장'}
+              </Text>
+              <Text style={styles.composeBannerText} numberOfLines={1}>
+                {(editing ?? replyTo)?.content ?? '사진'}
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => { setReplyTo(null); setEditing(null); setText(''); }}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="취소"
+            >
+              <MaterialCommunityIcons name="close" size={20} color={colors.textSecondary} />
+            </Pressable>
           </View>
         ) : null}
         <View style={styles.inputBar}>
@@ -248,6 +404,24 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+
+      {/* 리액션 선택 — 길게 누른 메시지에 이모지를 붙인다 */}
+      <EmojiPicker
+        visible={reactingTo !== null}
+        title="리액션 선택"
+        onClose={() => setReactingTo(null)}
+        onSelect={(emoji) => {
+          if (reactingTo) onReact(reactingTo, emoji);
+          setReactingTo(null);
+        }}
+      />
+      {/* 스티커 전송 — 말풍선 없이 크게 그려진다 */}
+      <EmojiPicker
+        visible={showEmojiSheet}
+        title="스티커 보내기"
+        onClose={() => setShowEmojiSheet(false)}
+        onSelect={(emoji) => sendSticker(emoji)}
+      />
     </SafeAreaView>
   );
 }
@@ -296,6 +470,67 @@ const styles = StyleSheet.create({
   mealBadge: { fontSize: fontSize.caption, fontWeight: '800', color: '#E0A020' },
   mealImage: { width: 208, height: 156, borderRadius: radius.md, backgroundColor: colors.surfaceAlt },
   time: { fontSize: 10, color: colors.textTertiary },
+  editedMark: { fontSize: 10, color: colors.textTertiary },
+
+  // 메시지 블록 — 인용/말풍선/리액션을 한 덩어리로 묶는다
+  msgBlock: { marginVertical: spacing.xs, maxWidth: '82%' },
+  blockMine: { alignSelf: 'flex-end', alignItems: 'flex-end' },
+  blockTheirs: { alignSelf: 'flex-start', alignItems: 'flex-start' },
+
+  // 인용(답장 원본)
+  quote: {
+    borderLeftWidth: 3,
+    paddingLeft: spacing.sm,
+    paddingVertical: 2,
+    marginBottom: 3,
+    maxWidth: '100%',
+  },
+  quoteMine: { borderLeftColor: colors.coral },
+  quoteTheirs: { borderLeftColor: colors.indigo },
+  quoteWho: { fontSize: 10, fontWeight: '800', color: colors.textSecondary },
+  quoteText: { fontSize: fontSize.caption, color: colors.textSecondary },
+
+  // 삭제된 메시지
+  bubbleDeleted: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.border,
+  },
+  deletedText: { fontSize: fontSize.caption, color: colors.textTertiary, fontStyle: 'italic' },
+
+  // 리액션 칩 (말풍선 아래)
+  reactionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 3 },
+  reactionRowMine: { justifyContent: 'flex-end' },
+  reactionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  reactionChipMine: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
+  reactionChipEmoji: { fontSize: 13 },
+  reactionChipCount: { fontSize: 11, fontWeight: '800', color: colors.textSecondary },
+
+  // 답장·수정 배너
+  composeBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginHorizontal: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceAlt,
+  },
+  composeBannerBody: { flex: 1 },
+  composeBannerLabel: { fontSize: 10, fontWeight: '800', color: colors.primary },
+  composeBannerText: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 1 },
   meta: { marginHorizontal: spacing.xs, justifyContent: 'flex-end' },
   metaMine: { marginHorizontal: spacing.xs, alignItems: 'flex-end', justifyContent: 'flex-end' },
   // 안 읽음은 카카오톡처럼 "1", 읽으면 "읽음" — 색으로도 구분한다

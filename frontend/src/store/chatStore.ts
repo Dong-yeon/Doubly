@@ -8,6 +8,7 @@ import {
   publishMessage,
   subscribeRoom,
   subscribeRoomRead,
+  subscribeRoomUpdates,
   unsubscribeRoom,
 } from '../api/chatSocket';
 import type { ChatMessage, ChatRoom } from '../types';
@@ -24,6 +25,8 @@ interface ChatState {
   closeRoom: (relationId: number) => void;
   send: (relationId: number, payload: OutgoingMessage) => boolean;
   markRead: (messageId: number) => Promise<void>;
+  /** REST 응답으로 받은 메시지를 목록에서 제자리 교체 (리액션·수정·삭제) */
+  replaceMessage: (relationId: number, updated: ChatMessage) => void;
   teardown: () => void;
 }
 
@@ -58,6 +61,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
           return { messages: { ...s.messages, [relationId]: [msg, ...existing] } };
         });
       });
+      // 리액션·수정·삭제로 바뀐 메시지를 제자리에서 교체한다
+      subscribeRoomUpdates(relationId, (updated) => {
+        set((s) => ({
+          messages: {
+            ...s.messages,
+            [relationId]: (s.messages[relationId] ?? []).map((m) =>
+              m.id === updated.id ? updated : m,
+            ),
+          },
+        }));
+      });
       // 상대가 읽으면 내가 보낸 메시지에 "읽음"을 붙인다
       subscribeRoomRead(relationId, ({ lastReadMessageId }) => {
         set((s) => {
@@ -83,6 +97,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   send: (relationId, payload) => publishMessage(relationId, payload),
+
+  replaceMessage: (relationId, updated) =>
+    set((s) => ({
+      messages: {
+        ...s.messages,
+        [relationId]: (s.messages[relationId] ?? []).map((m) =>
+          m.id === updated.id ? updated : m,
+        ),
+      },
+    })),
 
   markRead: async (messageId) => {
     await chatApi.markRead(messageId);

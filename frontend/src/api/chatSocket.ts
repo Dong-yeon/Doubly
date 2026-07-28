@@ -11,6 +11,7 @@ let client: Client | null = null;
 let connecting: Promise<Client> | null = null;
 const subscriptions = new Map<number, StompSubscription>();
 const readSubscriptions = new Map<number, StompSubscription>();
+const updateSubscriptions = new Map<number, StompSubscription>();
 const coupleSubscriptions = new Map<number, StompSubscription>();
 
 export interface OutgoingMessage {
@@ -19,6 +20,8 @@ export interface OutgoingMessage {
   imageUrl?: string;
   workoutId?: number;
   routineId?: number;
+  /** 답장 — 인용할 메시지 id (같은 방이어야 한다) */
+  replyToId?: number;
 }
 
 /** 소켓 연결 (이미 연결됐거나 연결 중이면 재사용). */
@@ -69,6 +72,26 @@ export function unsubscribeRoom(relationId: number) {
   subscriptions.delete(relationId);
   readSubscriptions.get(relationId)?.unsubscribe();
   readSubscriptions.delete(relationId);
+  updateSubscriptions.get(relationId)?.unsubscribe();
+  updateSubscriptions.delete(relationId);
+}
+
+/**
+ * 메시지 변경 구독 (/sub/rooms/{relationId}/updates).
+ * 리액션·수정·삭제로 <b>기존 메시지가 바뀐</b> 경우가 온다. 새 메시지 스트림과
+ * 채널을 나눈 이유는 서버 ReadReceipt 주석 참고.
+ */
+export function subscribeRoomUpdates(relationId: number, onUpdate: (msg: ChatMessage) => void) {
+  if (!client?.connected) return;
+  updateSubscriptions.get(relationId)?.unsubscribe();
+  const sub = client.subscribe(`/sub/rooms/${relationId}/updates`, (frame: IMessage) => {
+    try {
+      onUpdate(JSON.parse(frame.body) as ChatMessage);
+    } catch {
+      // ignore malformed frame
+    }
+  });
+  updateSubscriptions.set(relationId, sub);
 }
 
 /**
@@ -137,6 +160,10 @@ export async function publishEnsuringConnection(
 export function disconnectSocket() {
   subscriptions.forEach((s) => s.unsubscribe());
   subscriptions.clear();
+  readSubscriptions.forEach((s) => s.unsubscribe());
+  readSubscriptions.clear();
+  updateSubscriptions.forEach((s) => s.unsubscribe());
+  updateSubscriptions.clear();
   coupleSubscriptions.forEach((s) => s.unsubscribe());
   coupleSubscriptions.clear();
   client?.deactivate();
