@@ -72,6 +72,12 @@ dependencies {
 
 tasks.named('test') {
     useJUnitPlatform()
+
+    // `-Dspring.*` 를 테스트 JVM 으로 넘긴다 — 데이터소스를 갈아끼워 돌리기 위한 통로다.
+    // 기본은 H2 지만 운영은 PostgreSQL 이고, 둘은 SQL 해석이 달라
+    // H2 에서 통과한 쿼리가 운영에서만 500 을 내는 일이 실제로 있었다(피드 타임라인).
+    // 실행법은 docs/RUNNING.md 참고.
+    systemProperties System.getProperties().findAll { k, v -> k.toString().startsWith('spring.') }
 }
 
 // Spring Boot 실행형 jar 만 생성 (plain jar 비활성화 → 산출물 단일화)

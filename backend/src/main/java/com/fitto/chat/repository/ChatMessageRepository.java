@@ -15,7 +15,7 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
     /** 방 메시지 — 커서(id) 기반 최신순 페이징. */
     @Query("""
             select m from ChatMessage m
-            where m.relationId = :relationId and (:cursor is null or m.id < :cursor)
+            where m.relationId = :relationId and (cast(:cursor as Long) is null or m.id < :cursor)
             order by m.id desc
             """)
     List<ChatMessage> findMessages(@Param("relationId") Long relationId,

@@ -58,6 +58,37 @@ curl http://localhost:8080/api/v1/health
 - 환경변수 미설정 시 기본값(localhost DB/Redis, dev JWT 시크릿)으로 동작합니다.
 - 운영 배포 시에는 `JWT_SECRET` 을 반드시 안전한 값으로 설정하세요 (prod 프로파일에서 dev 시크릿이면 기동이 차단됩니다).
 
+### 테스트 — H2 와 PostgreSQL 양쪽으로
+
+```bash
+cd backend
+./gradlew test                                    # 기본: H2 (빠름, 외부 인프라 불필요)
+```
+
+기본 테스트는 H2 를 쓰지만 **운영은 PostgreSQL** 입니다. 두 DB 는 SQL 해석이 달라
+H2 에서 통과한 쿼리가 운영에서만 터지는 경우가 있습니다.
+(실제로 피드 타임라인이 그렇게 500 을 냈습니다 — `:param is null` 을 PostgreSQL 이
+`could not determine data type of parameter` 로 거절합니다.)
+
+쿼리를 건드렸다면 릴리스 전에 PostgreSQL 로도 한 번 돌리세요.
+
+```bash
+docker run --rm -d -p 55432:5432 -e POSTGRES_USER=doubly \
+  -e POSTGRES_PASSWORD=doubly -e POSTGRES_DB=doubly_test --name doubly-pg postgres:16
+
+./gradlew test \
+  -Dspring.datasource.url=jdbc:postgresql://127.0.0.1:55432/doubly_test \
+  -Dspring.datasource.driver-class-name=org.postgresql.Driver \
+  -Dspring.datasource.username=doubly \
+  -Dspring.datasource.password=doubly \
+  -Dspring.jpa.database-platform=org.hibernate.dialect.PostgreSQLDialect
+
+docker rm -f doubly-pg
+```
+
+> `build.gradle` 이 `-Dspring.*` 시스템 프로퍼티를 테스트 JVM 으로 넘겨주므로
+> 테스트 설정 파일을 고치지 않고도 데이터소스만 바꿔 끼울 수 있습니다.
+
 ### 빠른 스모크 테스트 (선택)
 
 ```bash
