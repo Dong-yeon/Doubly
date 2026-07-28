@@ -8,6 +8,7 @@ import { RootNavigator } from './src/navigation/RootNavigator';
 import { Toast } from './src/components/Toast';
 import { BusyOverlay } from './src/components/BusyOverlay';
 import { ConfirmDialog } from './src/components/ConfirmDialog';
+import { DatePickerSheet } from './src/components/DatePickerSheet';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { installGlobalErrorHandlers } from './src/utils/globalErrorHandler';
 import { initSentry } from './src/utils/sentry';
@@ -68,6 +69,11 @@ export default function App() {
         <BusyOverlay />
         {/* 확인 다이얼로그 — utils/alert 의 Alert.alert 이 여기로 들어온다 */}
         <ConfirmDialog />
+        {/*
+          날짜 선택 달력 — pickDate() 가 여기로 들어온다.
+          화면 쪽 Modal(일정 추가·대결 만들기 등) 안에서 열려도 가려지지 않도록 최상단에 둔다.
+        */}
+        <DatePickerSheet />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

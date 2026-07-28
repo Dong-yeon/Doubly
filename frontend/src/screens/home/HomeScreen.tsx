@@ -24,7 +24,7 @@ import type { HomeStackParamList, MainTabParamList } from '../../navigation/type
 import { Avatar } from '../../components/Avatar';
 import { DoublyMark } from '../../components/DoublyLogo';
 import { Card } from '../../components/Card';
-import { TextField } from '../../components/TextField';
+import { DateField } from '../../components/DateField';
 import { EmptyState } from '../../components/EmptyState';
 import { useAuthStore } from '../../store/authStore';
 import { useRelationStore } from '../../store/relationStore';
@@ -203,8 +203,8 @@ export function HomeScreen({ navigation }: Props) {
   };
 
   const onSaveAnniversary = async () => {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(annInput)) {
-      toast.error('YYYY-MM-DD 형식으로 입력해주세요.');
+    if (!annInput) {
+      toast.error('기념일 날짜를 선택해주세요.');
       return;
     }
     setAnnSaving(true);
@@ -485,12 +485,11 @@ export function HomeScreen({ navigation }: Props) {
             <Card elevation="md" style={styles.modalCard}>
               <Text style={styles.modalTitle}>커플 기념일</Text>
               <Text style={styles.modalDesc}>D+ 카운터의 기준 날짜를 설정해요.</Text>
-              <TextField
+              <DateField
                 value={annInput}
-                onChangeText={setAnnInput}
-                placeholder="YYYY-MM-DD (예: 2024-02-14)"
-                keyboardType="numbers-and-punctuation"
-                maxLength={10}
+                onChange={setAnnInput}
+                placeholder="날짜 선택"
+                pickerTitle="커플 기념일"
               />
               <View style={styles.modalActions}>
                 <TouchableOpacity style={styles.modalCancel} onPress={() => setAnnModal(false)}>
