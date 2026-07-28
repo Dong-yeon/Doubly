@@ -2,10 +2,14 @@ package com.fitto.chat.service;
 
 import com.fitto.auth.dto.UserResponse;
 import com.fitto.chat.domain.ChatMessage;
+import com.fitto.chat.domain.ChatMessageReaction;
 import com.fitto.chat.domain.MessageType;
 import com.fitto.chat.dto.ChatMessageResponse;
+import com.fitto.chat.dto.ChatReactionSummary;
 import com.fitto.chat.dto.ChatRoomResponse;
+import com.fitto.chat.dto.ReplyPreview;
 import com.fitto.chat.dto.SendMessageRequest;
+import com.fitto.chat.repository.ChatMessageReactionRepository;
 import com.fitto.chat.repository.ChatMessageRepository;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
@@ -18,7 +22,10 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 채팅 서비스 — 설계서 3.4 / 4.5. 관계별 채팅방, 메시지 영속/조회/읽음.
@@ -30,15 +37,18 @@ public class ChatService {
     private static final int PAGE_SIZE = 30;
 
     private final ChatMessageRepository chatMessageRepository;
+    private final ChatMessageReactionRepository reactionRepository;
     private final RelationRepository relationRepository;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
 
     public ChatService(ChatMessageRepository chatMessageRepository,
+                       ChatMessageReactionRepository reactionRepository,
                        RelationRepository relationRepository,
                        UserRepository userRepository,
                        NotificationService notificationService) {
         this.chatMessageRepository = chatMessageRepository;
+        this.reactionRepository = reactionRepository;
         this.relationRepository = relationRepository;
         this.userRepository = userRepository;
         this.notificationService = notificationService;
@@ -65,8 +75,9 @@ public class ChatService {
     /** 방 메시지 — 최신순 커서 페이징. */
     public List<ChatMessageResponse> getMessages(Long userId, Long relationId, Long cursor) {
         requireMember(userId, relationId);
-        return chatMessageRepository.findMessages(relationId, cursor, PageRequest.of(0, PAGE_SIZE))
-                .stream().map(ChatMessageResponse::from).toList();
+        List<ChatMessage> messages =
+                chatMessageRepository.findMessages(relationId, cursor, PageRequest.of(0, PAGE_SIZE));
+        return attachDetails(messages);
     }
 
     /** 메시지 전송(영속 + 알림). 브로드캐스트는 호출자(STOMP 컨트롤러)가 담당. */
@@ -82,11 +93,60 @@ public class ChatService {
                 .imageUrl(req.imageUrl())
                 .workoutId(req.workoutId())
                 .routineId(req.routineId())
+                .replyToId(resolveReplyTarget(req.replyToId(), relationId))
                 .build();
         chatMessageRepository.save(message);
 
         notifyRecipient(relation, senderId, message);
-        return ChatMessageResponse.from(message);
+        return ChatMessageResponse.from(message, replyPreview(message.getReplyToId()), List.of());
+    }
+
+    /**
+     * 메시지 리액션 토글 — 같은 (message, user, emoji) 재요청 시 해제.
+     *
+     * @return 갱신된 리액션 요약 (호출자가 방 전체에 브로드캐스트한다)
+     */
+    @Transactional
+    public List<ChatReactionSummary> toggleReaction(Long userId, Long messageId, String emoji) {
+        ChatMessage message = requireRoomMessage(userId, messageId);
+        // 삭제된 메시지에는 새 리액션을 달 수 없다 (이미 달린 것은 해제만 가능)
+        reactionRepository.findByMessageIdAndUserIdAndEmoji(messageId, userId, emoji)
+                .ifPresentOrElse(reactionRepository::delete, () -> {
+                    if (message.isDeleted()) {
+                        throw new BusinessException(ErrorCode.NOT_FOUND);
+                    }
+                    reactionRepository.save(ChatMessageReaction.builder()
+                            .messageId(messageId)
+                            .userId(userId)
+                            .emoji(emoji)
+                            .build());
+                    if (!userId.equals(message.getSenderId())) {
+                        notificationService.notify(message.getSenderId(), "메시지에 반응이 달렸어요",
+                                userName(userId) + "님이 " + emoji + " 를 남겼어요");
+                    }
+                });
+        return summarize(reactionRepository.findByMessageId(messageId));
+    }
+
+    /** 메시지 수정 — 작성자 본인의 텍스트 메시지만. */
+    @Transactional
+    public ChatMessageResponse edit(Long userId, Long messageId, String content) {
+        ChatMessage message = requireRoomMessage(userId, messageId);
+        requireAuthor(message, userId);
+        if (message.getMessageType() != MessageType.TEXT) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT);
+        }
+        message.edit(content);
+        return detailOf(message);
+    }
+
+    /** 메시지 삭제 — 작성자 본인만. 행은 남기고 표시만 바꾼다(답장·리액션 참조 유지). */
+    @Transactional
+    public ChatMessageResponse delete(Long userId, Long messageId) {
+        ChatMessage message = requireRoomMessage(userId, messageId);
+        requireAuthor(message, userId);
+        message.softDelete();
+        return detailOf(message);
     }
 
     /**
@@ -133,6 +193,99 @@ public class ChatService {
         }
         String senderName = userRepository.findById(senderId).map(User::getName).orElse("상대방");
         notificationService.notify(recipientId, senderName, preview(message));
+    }
+
+    /** 답장 대상이 같은 방의 메시지인지 확인 — 다른 방 메시지를 인용하면 대화가 새어나간다. */
+    private Long resolveReplyTarget(Long replyToId, Long relationId) {
+        if (replyToId == null) return null;
+        ChatMessage target = chatMessageRepository.findById(replyToId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        if (!target.getRelationId().equals(relationId)) {
+            throw new BusinessException(ErrorCode.NOT_FOUND);
+        }
+        return replyToId;
+    }
+
+    /** 메시지가 내가 속한 방의 것인지 확인 — 남의 대화에 손대지 못하게. */
+    private ChatMessage requireRoomMessage(Long userId, Long messageId) {
+        ChatMessage message = chatMessageRepository.findById(messageId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        requireMember(userId, message.getRelationId());
+        return message;
+    }
+
+    private void requireAuthor(ChatMessage message, Long userId) {
+        if (!message.getSenderId().equals(userId)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+    }
+
+    /** 메시지 한 건에 답장 미리보기·리액션을 붙인다. */
+    private ChatMessageResponse detailOf(ChatMessage message) {
+        return ChatMessageResponse.from(message, replyPreview(message.getReplyToId()),
+                summarize(reactionRepository.findByMessageId(message.getId())));
+    }
+
+    /**
+     * 메시지 목록에 답장 미리보기·리액션을 <b>배치로</b> 붙인다.
+     * 메시지마다 개별 조회하면 30건에 60번 쿼리가 나간다.
+     */
+    private List<ChatMessageResponse> attachDetails(List<ChatMessage> messages) {
+        if (messages.isEmpty()) return List.of();
+
+        List<Long> ids = messages.stream().map(ChatMessage::getId).toList();
+        Map<Long, List<ChatMessageReaction>> byMessage = new LinkedHashMap<>();
+        for (ChatMessageReaction r : reactionRepository.findByMessageIdIn(ids)) {
+            byMessage.computeIfAbsent(r.getMessageId(), k -> new ArrayList<>()).add(r);
+        }
+
+        // 인용된 원본들을 한 번에 읽어 맵으로 (같은 원본을 여러 번 인용할 수 있다)
+        List<Long> replyIds = messages.stream()
+                .map(ChatMessage::getReplyToId).filter(java.util.Objects::nonNull).distinct().toList();
+        Map<Long, ChatMessage> originals = new LinkedHashMap<>();
+        if (!replyIds.isEmpty()) {
+            chatMessageRepository.findAllById(replyIds).forEach(m -> originals.put(m.getId(), m));
+        }
+
+        List<ChatMessageResponse> result = new ArrayList<>(messages.size());
+        for (ChatMessage m : messages) {
+            ChatMessage original = m.getReplyToId() == null ? null : originals.get(m.getReplyToId());
+            result.add(ChatMessageResponse.from(m, toPreview(original),
+                    summarize(byMessage.getOrDefault(m.getId(), List.of()))));
+        }
+        return result;
+    }
+
+    private ReplyPreview replyPreview(Long replyToId) {
+        if (replyToId == null) return null;
+        return toPreview(chatMessageRepository.findById(replyToId).orElse(null));
+    }
+
+    private ReplyPreview toPreview(ChatMessage original) {
+        if (original == null) return null;
+        return new ReplyPreview(original.getId(), original.getSenderId(), original.getMessageType(),
+                original.isDeleted() ? null : preview(original));
+    }
+
+    /** 이모지별 누른 사람 목록 — 등장 순서를 유지한다. mine 판단은 클라이언트 몫이다. */
+    private List<ChatReactionSummary> summarize(List<ChatMessageReaction> reactions) {
+        if (reactions.isEmpty()) return List.of();
+        Map<String, List<Long>> byEmoji = new LinkedHashMap<>();
+        for (ChatMessageReaction r : reactions) {
+            byEmoji.computeIfAbsent(r.getEmoji(), k -> new ArrayList<>()).add(r.getUserId());
+        }
+        return byEmoji.entrySet().stream()
+                .map(e -> new ChatReactionSummary(e.getKey(), e.getValue().size(), List.copyOf(e.getValue())))
+                .toList();
+    }
+
+    /** 브로드캐스트용 메시지 상세 — 뷰어에 따라 달라지는 값이 없다. */
+    public java.util.Optional<ChatMessageResponse> findForBroadcast(Long messageId) {
+        return chatMessageRepository.findById(messageId).map(this::detailOf);
+    }
+
+    private String userName(Long userId) {
+        return userRepository.findById(userId).map(User::getName).orElse("상대방");
     }
 
     private String preview(ChatMessage message) {

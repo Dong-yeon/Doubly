@@ -548,6 +548,21 @@ export interface FeedTimeline {
 
 // 5.8 chat_messages
 export type MessageType = 'TEXT' | 'IMAGE' | 'STICKER' | 'WORKOUT_CARD' | 'MEAL_CARD' | 'ROUTINE_CARD';
+/** 메시지 이모지 리액션 — mine 은 userIds 에 내 id 가 있는지로 판단한다(브로드캐스트 공용) */
+export interface ChatReactionSummary {
+  emoji: string;
+  count: number;
+  userIds: number[];
+}
+
+/** 답장이 인용한 원본 요약 — content 가 null 이면 원본이 삭제된 것 */
+export interface ReplyPreview {
+  id: number;
+  senderId: number;
+  messageType: MessageType;
+  content?: string | null;
+}
+
 export interface ChatMessage {
   id: number;
   relationId: number;
@@ -559,6 +574,10 @@ export interface ChatMessage {
   routineId?: number | null;
   isRead: boolean;
   createdAt: string;
+  replyTo?: ReplyPreview | null;
+  reactions?: ChatReactionSummary[];
+  edited?: boolean;
+  deleted?: boolean;
 }
 
 // 채팅방 목록 (4.5 GET /chat/rooms)
