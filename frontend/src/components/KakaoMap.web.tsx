@@ -187,7 +187,8 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
         <View style={styles.failed}>
           <Text style={styles.failedText}>
             지도를 불러오지 못했어요.{'\n'}
-            카카오 개발자 콘솔의 Web 플랫폼에 이 주소가 등록됐는지 확인해주세요.
+            카카오 개발자 콘솔의 JavaScript 키와{'\n'}
+            SDK 도메인 등록을 확인해주세요.
           </Text>
         </View>
       ) : null}

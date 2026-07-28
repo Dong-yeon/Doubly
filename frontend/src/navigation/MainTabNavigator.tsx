@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createBottomTabNavigator, BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { MainTabParamList } from './types';
 import { colors, fontSize, radius, shadow, spacing } from '../constants/theme';
@@ -43,6 +44,15 @@ const FAB_ACTIONS: {
   { icon: 'image-plus', label: '일상 남기기', go: (n) => n.navigate('Home', { screen: 'FeedCompose' }), requiresCouple: true },
 ];
 
+/**
+ * 탭바를 숨길 중첩 화면들.
+ *
+ * <p>채팅방은 입력창이 화면 바닥에 붙는다. 탭바가 남아 있으면 키보드가 올라올 때
+ * 탭바까지 같이 밀려 올라와 입력창 아래에 떠 있는 꼴이 됐다. 대화 중에는 탭 이동도
+ * 필요 없으므로(카톡·라인도 대화방에선 하단 내비가 없다) 아예 감춘다.
+ */
+const HIDE_TAB_BAR_ON = new Set(['ChatRoom']);
+
 function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -75,6 +85,10 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   };
 
   const routeNames = state.routes.map((r) => r.name as keyof MainTabParamList);
+
+  // 훅 호출이 끝난 뒤에 판단한다 — 조기 return 이 앞에 오면 훅 순서가 깨진다
+  const nestedRoute = getFocusedRouteNameFromRoute(state.routes[state.index]);
+  if (nestedRoute && HIDE_TAB_BAR_ON.has(nestedRoute)) return null;
 
   const onAction = (action: (typeof FAB_ACTIONS)[number]) => {
     setSheetOpen(false);

@@ -48,10 +48,22 @@ export const isCloudinaryConfigured = () =>
 
 /**
  * 카카오맵 JavaScript 키 (맛집 지도).
- * 클라이언트 노출 전제 키 — 카카오 개발자 콘솔의 Web 플랫폼 도메인 등록으로 보호된다.
- * (등록 필요: http://localhost:8081 + 웹 배포 도메인)
+ *
+ * <p>클라이언트 노출 전제 키다 — 보호 장치는 키를 숨기는 게 아니라
+ * <b>도메인 등록</b>이다. 카카오 개발자 콘솔에서
+ * {@code 앱 → 플랫폼 키 → JavaScript 키 → JavaScript SDK 도메인} 에
+ * 쓰는 주소를 등록해야 한다 (http://localhost:8081 + 웹 배포 도메인).
+ * 등록 안 된 곳에서의 요청은 거절된다.
+ *
+ * <p>키가 틀리면 SDK 요청이 <b>401</b> 로 떨어지고 지도가 뜨지 않는다.
+ * 콘솔에서 JavaScript 키를 여러 개 만들 수 있으므로, 도메인을 등록한 키와
+ * 여기 값이 같은지 확인할 것.
+ *
+ * <p>{@code EXPO_PUBLIC_KAKAO_JS_KEY} 로 덮어쓸 수 있다 — 키를 바꿀 때마다
+ * 소스를 고치고 커밋할 필요가 없도록. (.env 또는 빌드 환경변수)
  */
-export const KAKAO_JS_KEY = '6d931bf80f9fc59a27ef78e3c135c91e';
+export const KAKAO_JS_KEY =
+  process.env.EXPO_PUBLIC_KAKAO_JS_KEY ?? '8349ffe1bb05ed42c9c09dcab71970f1';
 
 export const isKakaoMapConfigured = () => KAKAO_JS_KEY.length > 0;
 

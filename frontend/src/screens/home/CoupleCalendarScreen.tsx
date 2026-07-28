@@ -320,7 +320,7 @@ export function CoupleCalendarScreen(_props: Props) {
                 label="제목"
                 value={form?.title ?? ''}
                 onChangeText={(t) => setForm((f) => (f ? { ...f, title: t } : f))}
-                placeholder="예: 우리 200일, 은지 생일"
+                placeholder="예: 우리 200일, 수인 생일"
                 maxLength={100}
               />
               <DateField
