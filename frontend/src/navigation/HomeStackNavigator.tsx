@@ -9,6 +9,7 @@ import { SettingsScreen } from '../screens/my/SettingsScreen';
 import { ChangePasswordScreen } from '../screens/my/ChangePasswordScreen';
 import { LegalDocumentScreen } from '../screens/onboarding/LegalDocumentScreen';
 import { FeedComposeScreen } from '../screens/feed/FeedComposeScreen';
+import { FeedTimelineScreen } from '../screens/feed/FeedTimelineScreen';
 import { DailyQuestionScreen } from '../screens/home/DailyQuestionScreen';
 import { CoupleCalendarScreen } from '../screens/home/CoupleCalendarScreen';
 import { PhotoAlbumScreen } from '../screens/feed/PhotoAlbumScreen';
@@ -34,6 +35,7 @@ export function HomeStackNavigator() {
         component={CoupleConnectScreen}
         options={{ title: '커플 연결' }}
       />
+      <Stack.Screen name="FeedTimeline" component={FeedTimelineScreen} options={{ title: '우리 기록' }} />
       <Stack.Screen
         name="FeedCompose"
         component={FeedComposeScreen}

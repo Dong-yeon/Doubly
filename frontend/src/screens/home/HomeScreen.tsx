@@ -1,18 +1,16 @@
-/** 홈 = 우리 기록(피드) + 상단 커플 대시보드 (비트윈 스타일)
- *  상단: 배경·D+·커플 프로필(오늘 상태). 그 아래: 통합 타임라인(포스트+운동+식단+맛집). */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  Image,
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import { Alert } from '../../utils/alert';
+/**
+ * 홈 — 배경 사진 위의 "우리" 화면. <b>스크롤이 없다.</b>
+ *
+ * <p>예전에는 이 화면이 통합 타임라인까지 겸했다. 배경을 벽지처럼 전체에 깔아뒀는데,
+ * 기록이 쌓일수록 그 위로 카드가 계속 얹혀 정작 사진이 파묻혔다. 그래서 목록은
+ * {@link FeedTimelineScreen}(우리 기록)으로 옮기고, 홈은 한 화면에 고정했다.
+ *
+ * <p>구성은 위에서부터 — 상단 바(배경·프로필) / D+ 히어로(남는 공간 가운데) /
+ * 최근 기록 한 줄 / 바로가기. 히어로가 {@code flex: 1} 을 먹으므로 화면이
+ * 크든 작든 아래 두 줄은 항상 바닥에 붙고 스크롤이 생기지 않는다.
+ */
+import React, { useCallback, useEffect, useState } from 'react';
+import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -23,23 +21,21 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList, MainTabParamList } from '../../navigation/types';
 import { Avatar } from '../../components/Avatar';
 import { Card } from '../../components/Card';
-import { CoupleHero } from './components/CoupleHero';
-import { FeedCard } from './components/FeedCard';
-import { QuickActions } from './components/QuickActions';
 import { DateField } from '../../components/DateField';
-import { EmptyState } from '../../components/EmptyState';
+import { CoupleHero } from './components/CoupleHero';
+import { QuickActions } from './components/QuickActions';
+import { RecentPeek } from './components/RecentPeek';
 import { useAuthStore } from '../../store/authStore';
 import { useRelationStore } from '../../store/relationStore';
 import { workoutApi } from '../../api/workout';
 import { streakApi } from '../../api/streak';
 import { feedApi } from '../../api/feed';
+import { feedTimeLabel } from '../feed/FeedTimelineScreen';
 import { connectSocket, subscribeCouple, unsubscribeCouple } from '../../api/chatSocket';
 import { pickImage, uploadImage } from '../../utils/imageUpload';
 import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { getErrorMessage } from '../../utils/error';
-import { relativeDateLabel } from '../../utils/date';
-import { haptics } from '../../utils/haptics';
 import { updateHomeWidget } from '../../widget/updateHomeWidget';
 import type { FeedItem, PartnerToday, Streak } from '../../types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
@@ -49,24 +45,19 @@ type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList>
 >;
 
-// Ink 히어로 — 데이터(코랄/인디고 아바타 + 바이올렛 겹침)가 돋보이게 절제된 배경
+// Ink 히어로 — 배경 사진이 없을 때의 기본 벽지
 const GRADIENT: [string, string, string] = ['#1B1D3A', '#14162B', '#0D0F22'];
 
 /**
- * 배경 위 스크림 — 위(히어로)는 옅게 두어 배경 사진이 살고,
- * 아래(피드)로 갈수록 진해져 카드가 배경에서 떠 보인다.
- * 사진 밝기와 무관하게 흰 글씨 대비를 보장하려고 검정 기반으로 고정한다(테마 무관).
- *
- * <p>상단을 0.28 → 0.12 로 낮췄다. 배경을 화면 전체로 깐 뒤에도 사진이 거의
- * 안 보인다는 인상이었는데, 원인은 스크림이 위에서부터 이미 짙었던 것이다.
- * 히어로 글씨는 그림자(textShadow)로 따로 대비를 확보한다.
+ * 배경 위 스크림 — 사진이 밝든 어둡든 흰 글씨가 읽혀야 한다.
+ * 위는 옅게 두어 사진이 살고, 아래로 갈수록 진해져 유리 카드가 배경에서 분리된다.
+ * 사진 밝기와 무관하게 대비를 보장하려고 검정 기반으로 고정한다(테마 무관).
  */
 const SCRIM: [string, string, string] = [
   'rgba(0,0,0,0.12)',
-  'rgba(0,0,0,0.34)',
-  'rgba(0,0,0,0.68)',
+  'rgba(0,0,0,0.30)',
+  'rgba(0,0,0,0.62)',
 ];
-const QUICK_EMOJIS = ['❤️', '🥰', '😆', '👍', '💪'];
 
 function daysTogether(connectedAt?: string | null): number {
   if (!connectedAt) return 0;
@@ -74,47 +65,39 @@ function daysTogether(connectedAt?: string | null): number {
   return Math.max(1, Math.floor(diff / 86400000) + 1);
 }
 
-function timeLabel(occurredAt: string): string {
-  const date = relativeDateLabel(occurredAt.slice(0, 10));
-  const time = occurredAt.slice(11, 16);
-  return time ? `${date} ${time}` : date;
-}
-
-function itemKey(item: FeedItem): string {
-  return `${item.type}-${item.refId}`;
-}
-
 export function HomeScreen({ navigation }: Props) {
   const user = useAuthStore((s) => s.user);
-  const { couple, loading, fetchAll, setBackground, setAnniversary } = useRelationStore();
+  const { couple, fetchAll, setBackground, setAnniversary } = useRelationStore();
 
   const [partner, setPartner] = useState<PartnerToday | null>(null);
   const [myStreak, setMyStreak] = useState<Streak | null>(null);
   const [partnerStreak, setPartnerStreak] = useState<Streak | null>(null);
   const [myDone, setMyDone] = useState(false);
+  // 최근 기록 한 건만 — 홈은 목록을 갖지 않는다
+  const [latest, setLatest] = useState<FeedItem | null>(null);
+
   const [annModal, setAnnModal] = useState(false);
   const [annInput, setAnnInput] = useState('');
   const [annSaving, setAnnSaving] = useState(false);
-
-  // 피드
-  const [items, setItems] = useState<FeedItem[]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [hasMore, setHasMore] = useState(false);
-  const [feedLoading, setFeedLoading] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const feedLoadingRef = useRef(false);
 
   const connected = !!couple?.partner;
   const bgUrl = couple?.backgroundImageUrl ?? null;
   const dday = daysTogether(couple?.anniversaryDate ?? couple?.connectedAt);
 
-  const refreshStatus = useCallback(() => {
+  const refresh = useCallback(() => {
     fetchAll();
     workoutApi.today().then((l) => setMyDone(l.length > 0)).catch(() => setMyDone(false));
     workoutApi.partnerToday().then(setPartner).catch(() => setPartner(null));
     streakApi.me().then(setMyStreak).catch(() => setMyStreak(null));
     streakApi.partner().then(setPartnerStreak).catch(() => setPartnerStreak(null));
+    // 커플 미연결이면 피드가 404 다 — 조용히 비운다
+    feedApi
+      .timeline(null)
+      .then((page) => setLatest(page.items[0] ?? null))
+      .catch(() => setLatest(null));
   }, [fetchAll]);
+
+  useFocusEffect(useCallback(() => refresh(), [refresh]));
 
   // 홈 위젯 갱신 (Android) — 홈 데이터가 바뀔 때마다 위젯 캐시를 남기고 다시 그린다
   useEffect(() => {
@@ -128,52 +111,7 @@ export function HomeScreen({ navigation }: Props) {
     });
   }, [connected, couple, myStreak, partnerStreak]);
 
-  const loadFeed = useCallback(async () => {
-    if (feedLoadingRef.current) return;
-    feedLoadingRef.current = true;
-    setFeedLoading(true);
-    try {
-      const page = await feedApi.timeline(null);
-      setItems(page.items);
-      setNextCursor(page.nextCursor);
-      setHasMore(page.hasMore);
-    } catch {
-      // 커플 미연결 등은 조용히 무시 (헤더가 연결 안내를 표시)
-      setItems([]);
-    } finally {
-      feedLoadingRef.current = false;
-      setFeedLoading(false);
-    }
-  }, []);
-
-  const loadMore = useCallback(async () => {
-    if (feedLoadingRef.current || !hasMore || !nextCursor) return;
-    feedLoadingRef.current = true;
-    setLoadingMore(true);
-    try {
-      const page = await feedApi.timeline(nextCursor);
-      setItems((prev) => {
-        const seen = new Set(prev.map(itemKey));
-        return [...prev, ...page.items.filter((i) => !seen.has(itemKey(i)))];
-      });
-      setNextCursor(page.nextCursor);
-      setHasMore(page.hasMore);
-    } catch (e) {
-      toast.error(getErrorMessage(e, '피드를 불러오지 못했어요.'));
-    } finally {
-      feedLoadingRef.current = false;
-      setLoadingMore(false);
-    }
-  }, [hasMore, nextCursor]);
-
-  const refresh = useCallback(() => {
-    refreshStatus();
-    loadFeed();
-  }, [refreshStatus, loadFeed]);
-
-  useFocusEffect(useCallback(() => refresh(), [refresh]));
-
-  // 커플 실시간 이벤트 — 피드/상태 변경 시 자동 새로고침
+  // 커플 실시간 이벤트 — 상대가 기록하면 바로 반영
   const relationId = couple?.id;
   useFocusEffect(
     useCallback(() => {
@@ -225,120 +163,25 @@ export function HomeScreen({ navigation }: Props) {
     }
   };
 
-  // ---- 피드 반응/삭제 ----
-  const onReact = async (item: FeedItem, emoji: string) => {
-    haptics.light();
-    try {
-      const reactions = await feedApi.react(item.refId, emoji);
-      setItems((prev) => prev.map((i) => (itemKey(i) === itemKey(item) ? { ...i, reactions } : i)));
-    } catch (e) {
-      toast.error(getErrorMessage(e, '반응을 남기지 못했어요.'));
-    }
-  };
-
-  const onDeletePost = (item: FeedItem) => {
-    if (item.type !== 'POST' || !item.mine) return;
-    Alert.alert('포스트 삭제', '이 일상 기록을 삭제할까요?', [
-      { text: '취소', style: 'cancel' },
-      {
-        text: '삭제',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await feedApi.removePost(item.refId);
-            haptics.light();
-            setItems((prev) => prev.filter((i) => itemKey(i) !== itemKey(item)));
-          } catch (e) {
-            Alert.alert('오류', getErrorMessage(e));
-          }
-        },
-      },
-    ]);
-  };
-
-  const renderItem = ({ item }: { item: FeedItem }) => (
-    <FeedCard
-      item={item}
-      timeLabel={timeLabel(item.occurredAt)}
-      quickEmojis={QUICK_EMOJIS}
-      onReact={onReact}
-      onLongPress={onDeletePost}
-    />
-  );
-
-  // ---- 상단 대시보드 헤더 ----
-  const hero = (
-    <View>
-      {/* 배경은 화면 전체를 채우므로(아래 return 참고) 여기서는 내용만 얹는다 */}
-      {renderHeroContent()}
-
+  const topBar = (
+    <View style={styles.topBar}>
       {connected ? (
-        <QuickActions
-          actions={[
-            { icon: 'image-plus', label: '일상', onPress: () => navigation.navigate('FeedCompose') },
-            { icon: 'comment-question-outline', label: '오늘의 질문', onPress: () => navigation.navigate('DailyQuestion') },
-            { icon: 'calendar-heart', label: '캘린더', onPress: () => navigation.navigate('CoupleCalendar') },
-            { icon: 'image-multiple-outline', label: '사진첩', onPress: () => navigation.navigate('PhotoAlbum') },
-          ]}
-        />
-      ) : null}
+        <Pressable style={styles.bgBtn} onPress={onChangeBg} hitSlop={8}>
+          <MaterialCommunityIcons name="image-outline" size={13} color={colors.white} />
+          <Text style={styles.bgBtnText}>배경</Text>
+        </Pressable>
+      ) : (
+        <View />
+      )}
+      <Pressable style={styles.profileBtn} onPress={() => navigation.navigate('My')} hitSlop={8}>
+        <Avatar name={user?.name} imageUrl={user?.profileImageUrl} size={32} color={colors.primaryDark} />
+      </Pressable>
     </View>
   );
 
-  function renderHeroContent() {
-    return (
-      <View style={styles.heroContent}>
-        {/* 연결 전에는 배경 버튼이 의미 없으므로 프로필만 — 연결 후 상단 줄은 CoupleHero 가 그린다 */}
-        {!connected ? (
-          <View style={styles.topBar}>
-            <View />
-            <Pressable style={styles.profileBtn} onPress={() => navigation.navigate('My')} hitSlop={8}>
-              <Avatar name={user?.name} imageUrl={user?.profileImageUrl} size={32} color={colors.primaryDark} />
-            </Pressable>
-          </View>
-        ) : null}
-
-        {connected ? (
-          <CoupleHero
-            meName={user?.name ?? '나'}
-            meImageUrl={user?.profileImageUrl}
-            meDone={myDone}
-            partnerName={partner?.partnerName ?? couple?.partner?.name ?? '상대방'}
-            partnerImageUrl={couple?.partner?.profileImageUrl}
-            partnerDone={!!partner?.completed}
-            dday={dday}
-            anniversaryDate={couple?.anniversaryDate ?? null}
-            myStreak={myStreak?.currentCount ?? 0}
-            partnerStreak={partnerStreak?.currentCount ?? 0}
-            onPressDday={openAnnModal}
-            onPressBackground={onChangeBg}
-            onPressProfile={() => navigation.navigate('My')}
-          />
-        ) : (
-          <View style={styles.connectWrap}>
-            <MaterialCommunityIcons
-              name="account-multiple-plus-outline"
-              size={40}
-              color={colors.white}
-              style={styles.connectEmoji}
-            />
-            <Text style={styles.connectTitle}>커플을 연결해보세요</Text>
-            <Text style={styles.connectDesc}>초대코드로 연결하면 우리의 기록이 시작돼요.</Text>
-            <TouchableOpacity style={styles.connectBtn} onPress={() => navigation.navigate('CoupleConnect')}>
-              <Text style={styles.connectBtnText}>커플 연결하기</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
-    );
-  }
-
   return (
     <View style={styles.root}>
-      {/*
-        배경화면을 화면 전체에 깐다 — 예전에는 상단 220px 카드 안에만 보였다.
-        고정 레이어라 피드를 스크롤해도 배경은 그대로 있어 '벽지' 처럼 보인다.
-      */}
+      {/* 배경화면은 화면 전체를 채운다 — 그 위 레이어는 모두 투명이다 */}
       {bgUrl ? (
         <Image source={{ uri: bgUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
       ) : (
@@ -349,77 +192,96 @@ export function HomeScreen({ navigation }: Props) {
           end={{ x: 1, y: 1 }}
         />
       )}
-      {/*
-        스크림 — 사진이 밝든 어둡든 흰 글씨(히어로)가 읽혀야 하고, 아래로 갈수록
-        진해져 카드가 배경에서 분리돼 보인다. 터치는 통과시킨다.
-      */}
       <LinearGradient
         colors={SCRIM}
-        locations={[0, 0.4, 1]}
+        locations={[0, 0.45, 1]}
         style={StyleSheet.absoluteFill}
         pointerEvents="none"
       />
 
       <SafeAreaView style={styles.safe} edges={['top']}>
-      <FlatList
-        data={connected ? items : []}
-        keyExtractor={itemKey}
-        contentContainerStyle={styles.list}
-        showsVerticalScrollIndicator={false}
-        refreshing={loading || feedLoading}
-        onRefresh={refresh}
-        onEndReached={loadMore}
-        onEndReachedThreshold={0.4}
-        renderItem={renderItem}
-        ListHeaderComponent={hero}
-        ListEmptyComponent={
-          feedLoading ? null : connected ? (
-            // 배경 사진 위에서도 읽히도록 카드에 얹는다 (EmptyState 는 테마색 텍스트다)
-            <Card elevation="sm" style={styles.emptyCard}>
-              <EmptyState
-                icon="timeline-text-outline"
-                title="아직 기록이 없어요"
-                description={'운동·식단·맛집을 기록하거나\n첫 일상을 남겨보세요!'}
+        {topBar}
+
+        {connected ? (
+          <View style={styles.body}>
+            {/* 남는 세로 공간을 히어로가 먹는다 → 아래 두 줄은 항상 바닥에 붙는다 */}
+            <View style={styles.heroSlot}>
+              <CoupleHero
+                meName={user?.name ?? '나'}
+                meImageUrl={user?.profileImageUrl}
+                meDone={myDone}
+                partnerName={partner?.partnerName ?? couple?.partner?.name ?? '상대방'}
+                partnerImageUrl={couple?.partner?.profileImageUrl}
+                partnerDone={!!partner?.completed}
+                dday={dday}
+                anniversaryDate={couple?.anniversaryDate ?? null}
+                myStreak={myStreak?.currentCount ?? 0}
+                partnerStreak={partnerStreak?.currentCount ?? 0}
+                onPressDday={openAnnModal}
               />
-            </Card>
-          ) : (
-            /* 미연결 첫인상 — 연결 카드 아래가 텅 비어 보이지 않게, 혼자서도
-               시작할 수 있는 행동을 안내한다 (FAB 액션시트와 같은 목적지) */
-            <View style={styles.soloGuide}>
-              <Text style={styles.soloTitle}>연결을 기다리는 동안, 혼자서도 시작할 수 있어요</Text>
-              <Card elevation="sm" style={styles.soloCard}>
-                {(
-                  [
-                    { icon: 'dumbbell', label: '운동 기록하기', desc: '오늘 운동을 남기면 스트릭이 시작돼요', go: () => navigation.navigate('Workout', { screen: 'WorkoutRecord' }) },
-                    { icon: 'silverware-fork-knife', label: '식단 기록하기', desc: '사진이나 글로 적으면 AI가 칼로리를 계산해요', go: () => navigation.navigate('Workout', { screen: 'DietRecord' }) },
-                    { icon: 'map-marker-plus-outline', label: '가고 싶은 맛집 저장', desc: '나중에 둘이 함께 갈 곳을 미리 담아두세요', go: () => navigation.navigate('Place', { screen: 'PlaceAdd' }) },
-                  ] as const
-                ).map((a, i, arr) => (
-                  <React.Fragment key={a.label}>
-                    <Pressable
-                      style={({ pressed }) => [styles.soloItem, pressed && styles.soloPressed]}
-                      onPress={a.go}
-                    >
-                      <View style={styles.soloIcon}>
-                        <MaterialCommunityIcons name={a.icon} size={22} color={colors.primary} />
-                      </View>
-                      <View style={styles.soloBody}>
-                        <Text style={styles.soloLabel}>{a.label}</Text>
-                        <Text style={styles.soloDesc}>{a.desc}</Text>
-                      </View>
-                      <Text style={styles.soloChevron}>›</Text>
-                    </Pressable>
-                    {i < arr.length - 1 ? <View style={styles.soloDivider} /> : null}
-                  </React.Fragment>
-                ))}
-              </Card>
             </View>
-          )
-        }
-        ListFooterComponent={
-          loadingMore ? <ActivityIndicator style={styles.loadMore} color={colors.primary} /> : null
-        }
-      />
+
+            <RecentPeek
+              latest={latest}
+              timeLabel={latest ? feedTimeLabel(latest.occurredAt) : ''}
+              onPress={() => navigation.navigate('FeedTimeline')}
+            />
+
+            <QuickActions
+              actions={[
+                { icon: 'timeline-text-outline', label: '우리 기록', onPress: () => navigation.navigate('FeedTimeline') },
+                { icon: 'image-plus', label: '일상', onPress: () => navigation.navigate('FeedCompose') },
+                { icon: 'comment-question-outline', label: '질문', onPress: () => navigation.navigate('DailyQuestion') },
+                { icon: 'calendar-heart', label: '캘린더', onPress: () => navigation.navigate('CoupleCalendar') },
+                { icon: 'image-multiple-outline', label: '사진첩', onPress: () => navigation.navigate('PhotoAlbum') },
+              ]}
+            />
+          </View>
+        ) : (
+          /*
+           * 미연결 상태만 스크롤을 허용한다 — 연결 안내 + 혼자 시작하기 목록이
+           * 작은 화면에서 한 눈에 안 들어올 수 있다. 연결되면 고정 화면으로 바뀐다.
+           */
+          <ScrollView contentContainerStyle={styles.disconnected} showsVerticalScrollIndicator={false}>
+            <View style={styles.connectWrap}>
+              <MaterialCommunityIcons name="account-multiple-plus-outline" size={40} color={colors.white} />
+              <Text style={styles.connectTitle}>커플을 연결해보세요</Text>
+              <Text style={styles.connectDesc}>초대코드로 연결하면 우리의 기록이 시작돼요.</Text>
+              <TouchableOpacity style={styles.connectBtn} onPress={() => navigation.navigate('CoupleConnect')}>
+                <Text style={styles.connectBtnText}>커플 연결하기</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.soloTitle}>연결을 기다리는 동안, 혼자서도 시작할 수 있어요</Text>
+            <Card elevation="sm" style={styles.soloCard}>
+              {(
+                [
+                  { icon: 'dumbbell', label: '운동 기록하기', desc: '오늘 운동을 남기면 스트릭이 시작돼요', go: () => navigation.navigate('Workout', { screen: 'WorkoutRecord' }) },
+                  { icon: 'silverware-fork-knife', label: '식단 기록하기', desc: '사진이나 글로 적으면 AI가 칼로리를 계산해요', go: () => navigation.navigate('Workout', { screen: 'DietRecord' }) },
+                  { icon: 'map-marker-plus-outline', label: '가고 싶은 맛집 저장', desc: '나중에 둘이 함께 갈 곳을 미리 담아두세요', go: () => navigation.navigate('Place', { screen: 'PlaceAdd' }) },
+                ] as const
+              ).map((a, i, arr) => (
+                <React.Fragment key={a.label}>
+                  <Pressable
+                    style={({ pressed }) => [styles.soloItem, pressed && styles.soloPressed]}
+                    onPress={a.go}
+                  >
+                    <View style={styles.soloIcon}>
+                      <MaterialCommunityIcons name={a.icon} size={22} color={colors.primary} />
+                    </View>
+                    <View style={styles.soloBody}>
+                      <Text style={styles.soloLabel}>{a.label}</Text>
+                      <Text style={styles.soloDesc}>{a.desc}</Text>
+                    </View>
+                    <Text style={styles.soloChevron}>›</Text>
+                  </Pressable>
+                  {i < arr.length - 1 ? <View style={styles.soloDivider} /> : null}
+                </React.Fragment>
+              ))}
+            </Card>
+          </ScrollView>
+        )}
+      </SafeAreaView>
 
       {/* 기념일 설정 모달 */}
       <Modal visible={annModal} transparent animationType="fade" onRequestClose={() => setAnnModal(false)}>
@@ -446,23 +308,39 @@ export function HomeScreen({ navigation }: Props) {
           </Pressable>
         </Pressable>
       </Modal>
-      </SafeAreaView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  // 배경(사진/그라디언트)이 화면 전체를 채우므로 그 위 레이어는 모두 투명이다
   root: { flex: 1, backgroundColor: colors.background },
   safe: { flex: 1, backgroundColor: 'transparent' },
-  list: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl },
 
-  // 히어로 — 카드 프레임 없이 배경 위에 바로 얹힌다
-  heroContent: { paddingHorizontal: spacing.xs, paddingTop: spacing.sm, paddingBottom: spacing.lg },
-  topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  topBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+  },
   profileBtn: { borderRadius: radius.pill, borderWidth: 2, borderColor: 'rgba(255,255,255,0.6)' },
+  bgBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  bgBtnText: { color: colors.white, fontSize: fontSize.caption, fontWeight: '700' },
+
+  body: { flex: 1, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, gap: spacing.md },
+  // 히어로가 남는 공간을 다 먹고 그 안에서 가운데 정렬된다
+  heroSlot: { flex: 1, justifyContent: 'center' },
+
+  disconnected: { padding: spacing.lg },
   connectWrap: { alignItems: 'center', paddingVertical: spacing.lg },
-  connectEmoji: { fontSize: 44 },
   connectTitle: { color: colors.white, fontSize: fontSize.title, fontWeight: '800', marginTop: spacing.sm },
   connectDesc: { color: 'rgba(255,255,255,0.92)', fontSize: fontSize.body, textAlign: 'center', marginTop: spacing.xs },
   connectBtn: {
@@ -476,15 +354,12 @@ const styles = StyleSheet.create({
   },
   connectBtnText: { color: colors.primaryDark, fontWeight: '800', fontSize: fontSize.body },
 
-  emptyCard: { paddingVertical: spacing.md },
-
-  // 미연결 첫인상 — 혼자서도 시작할 수 있는 행동 안내
-  soloGuide: { marginTop: spacing.lg },
   soloTitle: {
     fontSize: fontSize.caption,
     fontWeight: '700',
     // 배경 사진 위에 놓이므로 테마색이 아니라 흰색 고정
     color: 'rgba(255,255,255,0.92)',
+    marginTop: spacing.lg,
     marginBottom: spacing.sm,
     marginLeft: spacing.xs,
   },
@@ -504,8 +379,6 @@ const styles = StyleSheet.create({
   soloDesc: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
   soloChevron: { fontSize: fontSize.title, color: colors.textMuted, fontWeight: '700' },
   soloDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
-
-  loadMore: { paddingVertical: spacing.md },
 
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: spacing.xl },
   modalCard: { gap: spacing.xs },

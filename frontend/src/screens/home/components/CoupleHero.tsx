@@ -30,8 +30,6 @@ export interface CoupleHeroProps {
   myStreak: number;
   partnerStreak: number;
   onPressDday: () => void;
-  onPressBackground: () => void;
-  onPressProfile: () => void;
 }
 
 /** 오늘 상태 한 줄 — 숫자 나열 대신 지금 무슨 상황인지 문장으로 */
@@ -54,21 +52,9 @@ export function CoupleHero({
   myStreak,
   partnerStreak,
   onPressDday,
-  onPressBackground,
-  onPressProfile,
 }: CoupleHeroProps) {
   return (
     <View style={styles.wrap}>
-      <View style={styles.topBar}>
-        <Pressable style={styles.bgBtn} onPress={onPressBackground} hitSlop={8}>
-          <MaterialCommunityIcons name="image-outline" size={13} color={colors.white} />
-          <Text style={styles.bgBtnText}>배경</Text>
-        </Pressable>
-        <Pressable style={styles.profileBtn} onPress={onPressProfile} hitSlop={8}>
-          <Avatar name={meName} imageUrl={meImageUrl} size={32} color={colors.primaryDark} />
-        </Pressable>
-      </View>
-
       {/* 주인공 — D+ 숫자 */}
       <Pressable style={styles.ddayWrap} onPress={onPressDday} accessibilityRole="button">
         <Text style={styles.ddayLabel}>함께한 지</Text>
@@ -135,22 +121,10 @@ function Face({
 }
 
 const styles = StyleSheet.create({
-  wrap: { paddingHorizontal: spacing.xs, paddingTop: spacing.sm, paddingBottom: spacing.lg },
+  wrap: { paddingHorizontal: spacing.xs, alignItems: 'stretch' },
 
-  topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  profileBtn: { borderRadius: radius.pill, borderWidth: 2, borderColor: 'rgba(255,255,255,0.6)' },
-  bgBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(255,255,255,0.22)',
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-  },
-  bgBtnText: { color: colors.white, fontSize: fontSize.caption, fontWeight: '700' },
 
-  ddayWrap: { alignItems: 'center', marginTop: spacing.lg },
+  ddayWrap: { alignItems: 'center' },
   ddayLabel: {
     color: 'rgba(255,255,255,0.85)',
     fontSize: fontSize.caption,

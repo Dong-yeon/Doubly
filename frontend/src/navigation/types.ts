@@ -20,7 +20,10 @@ export type OnboardingStackParamList = {
 export type HomeStackParamList = {
   HomeMain: undefined;
   CoupleConnect: undefined;
-  // 커플 일상 피드 작성 (홈이 피드 타임라인 역할)
+  // 우리 기록 — 포스트·운동·식단·맛집 통합 타임라인.
+  // 홈에 붙어 있었으나, 기록이 쌓일수록 배경 사진을 덮어서 별도 화면으로 분리했다.
+  FeedTimeline: undefined;
+  // 커플 일상 피드 작성
   FeedCompose: undefined;
   // 데일리 질문 (커플 Q&A)
   DailyQuestion: undefined;
