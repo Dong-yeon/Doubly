@@ -35,17 +35,25 @@ function HeaderIconButton({ icon, label }: { icon: IconName; label: string }) {
   );
 }
 
-/** 스택 네비게이터 공통 `screenOptions`. */
+/**
+ * 스택 네비게이터 공통 `screenOptions`.
+ *
+ * `headerBackVisible: false` 가 필요한 이유: 이걸 끄지 않으면 네이티브 스택이 기본
+ * 뒤로가기 버튼을 함께 그리고, 그게 우리 버튼보다 앞에 놓여 <b>보이지 않는(검은) 화살표</b>가
+ * 그대로 남는다. 기본 버튼을 끄고 우리 아이콘만 쓴다.
+ */
 export const stackScreenOptions = {
   headerStyle: { backgroundColor: colors.background },
   headerTintColor: colors.textPrimary,
   headerShadowVisible: false,
+  headerBackVisible: false,
   headerLeft: () => <HeaderIconButton icon="arrow-left" label="뒤로 가기" />,
 } as const;
 
 /** 모달 화면 옵션 — `options={{ title: '...', ...modalOptions }}` 로 펼쳐 쓴다. */
 export const modalOptions = {
   presentation: 'modal',
+  headerBackVisible: false,
   headerLeft: () => <HeaderIconButton icon="close" label="닫기" />,
 } as const;
 

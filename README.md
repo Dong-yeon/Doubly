@@ -399,6 +399,22 @@ Debug ID 를 심고, `app.json` 의 Sentry 플러그인이 빌드 시 자동 업
 - 앱 API 주소: `frontend/src/constants/config.ts` (iOS/웹=localhost, Android 에뮬=10.0.2.2, 실기기=PC LAN IP)
 - 커플·채팅 기능 확인에는 계정 2개가 필요합니다.
 
+### 로컬 개발 (수정 → 즉시 확인)
+
+UI 를 고칠 때마다 빌드해서 올리지 말고 개발 서버를 켜두면 **저장하는 즉시 브라우저에 반영**됩니다.
+
+```bash
+cd frontend && npm run web      # http://localhost:8081 (Fast Refresh)
+```
+
+- 백엔드는 배포된 Railway 를 그대로 씁니다(`config.ts` 의 `USE_LOCAL_BACKEND = false`).
+  단, **Railway 의 `CORS_ALLOWED_ORIGINS` 에 `http://localhost:8081` 을 추가**해야
+  브라우저 요청이 통과합니다(운영은 빈 값이면 전부 차단).
+- 백엔드까지 로컬로 돌리려면 `USE_LOCAL_BACKEND = true` + `docker compose up -d` + `./gradlew bootRun`.
+- 같은 와이파이의 폰에서 보려면 `http://<PC-LAN-IP>:8081` — 그 주소도 CORS 목록에 넣어야 합니다.
+
+**Netlify 배포는 검증이 끝난 뒤에만** 하면 됩니다(아래).
+
 ### 웹 배포 (빠른 공유 — PWA)
 
 `npm run build:web` → `frontend/dist/` 정적 빌드 → Netlify/Vercel 등에 배포하면

@@ -5,8 +5,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useToastStore } from '../store/toastStore';
 import { colors, fontSize, radius, shadow, spacing } from '../constants/theme';
 
+/*
+ * 토스트 배경 — 글씨가 항상 흰색이므로 배경은 <b>두 테마 모두에서 어두워야</b> 한다.
+ * 예전 success 는 colors.textPrimary 였는데, 다크모드에서 이 값이 밝은 색(#F2F1F7)으로
+ * 뒤집혀 흰 글씨가 그대로 사라졌다. 세 종류 모두 테마와 무관하게 대비가 유지되는
+ * 기능색을 쓴다.
+ */
 const BG = {
-  success: colors.textPrimary,
+  success: colors.success,
   error: colors.danger,
   info: colors.primary,
 };

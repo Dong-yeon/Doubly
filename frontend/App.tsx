@@ -7,6 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { Toast } from './src/components/Toast';
 import { BusyOverlay } from './src/components/BusyOverlay';
+import { ConfirmDialog } from './src/components/ConfirmDialog';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { installGlobalErrorHandlers } from './src/utils/globalErrorHandler';
 import { initSentry } from './src/utils/sentry';
@@ -65,6 +66,8 @@ export default function App() {
         <Toast />
         {/* 업로드·AI 작업 중 화면 잠금 — 네비게이터 밖이라 탭바까지 덮는다 */}
         <BusyOverlay />
+        {/* 확인 다이얼로그 — utils/alert 의 Alert.alert 이 여기로 들어온다 */}
+        <ConfirmDialog />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
