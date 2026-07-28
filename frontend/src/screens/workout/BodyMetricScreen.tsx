@@ -299,7 +299,7 @@ const styles = StyleSheet.create({
    * undefined 는 무시되어 고정 높이가 그대로 남고 aspectRatio 가 먹지 않았다.
    * 그래서 기본에는 높이를 두지 않고 상태별 스타일로 나눈다.
    */
-  photoBoxEmpty: { height: 120 },
+  photoBoxEmpty: { width: '100%', aspectRatio: 16 / 9 },
   photoBoxFilled: { width: '100%', aspectRatio: 4 / 3 },
   photo: { width: '100%', height: '100%' },
   photoPlaceholder: { color: colors.textSecondary, fontSize: fontSize.body, fontWeight: '600' },
