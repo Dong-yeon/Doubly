@@ -20,7 +20,7 @@ public interface WorkoutRepository extends JpaRepository<Workout, Long> {
     /** 히스토리 — 커서(id) 기반 페이징. cursor 가 null 이면 최신부터. */
     @Query("""
             select w from Workout w
-            where w.userId = :userId and (:cursor is null or w.id < :cursor)
+            where w.userId = :userId and (cast(:cursor as Long) is null or w.id < :cursor)
             order by w.id desc
             """)
     List<Workout> findHistory(@Param("userId") Long userId,
@@ -64,7 +64,7 @@ public interface WorkoutRepository extends JpaRepository<Workout, Long> {
     @Query("""
             select w from Workout w
             where w.userId in :userIds
-              and (:cursorAt is null
+              and (cast(:cursorAt as LocalDateTime) is null
                    or w.createdAt < :cursorAt
                    or (w.createdAt = :cursorAt and w.id < :cursorId))
             order by w.createdAt desc, w.id desc

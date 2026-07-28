@@ -20,6 +20,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../navigation/types';
 import { Card } from '../../components/Card';
 import { TextField } from '../../components/TextField';
+import { DateField } from '../../components/DateField';
 import { EmptyState } from '../../components/EmptyState';
 import { calendarApi } from '../../api/calendar';
 import { toast } from '../../store/toastStore';
@@ -142,8 +143,8 @@ export function CoupleCalendarScreen(_props: Props) {
       toast.error('제목을 입력해주세요.');
       return;
     }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(form.date)) {
-      toast.error('날짜를 YYYY-MM-DD 형식으로 입력해주세요.');
+    if (!form.date) {
+      toast.error('날짜를 선택해주세요.');
       return;
     }
     setSaving(true);
@@ -322,13 +323,10 @@ export function CoupleCalendarScreen(_props: Props) {
                 placeholder="예: 우리 200일, 은지 생일"
                 maxLength={100}
               />
-              <TextField
+              <DateField
                 label="날짜"
                 value={form?.date ?? ''}
-                onChangeText={(t) => setForm((f) => (f ? { ...f, date: t } : f))}
-                placeholder="YYYY-MM-DD"
-                keyboardType="numbers-and-punctuation"
-                maxLength={10}
+                onChange={(d) => setForm((f) => (f ? { ...f, date: d } : f))}
               />
 
               <Text style={styles.fieldLabel}>종류</Text>

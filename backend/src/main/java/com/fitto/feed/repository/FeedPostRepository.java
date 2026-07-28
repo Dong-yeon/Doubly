@@ -15,11 +15,17 @@ public interface FeedPostRepository extends JpaRepository<FeedPost, Long> {
      * 타임라인 — 커서 (createdAt, id) 이전 포스트, 최신순.
      * id 보조키가 없으면 같은 시각의 포스트가 페이지 경계에서 누락된다.
      * cursorAt 이 null 이면 첫 페이지(전체 조회)다.
+     *
+     * <p><b>{@code cast(:cursorAt as LocalDateTime)} 를 지우지 말 것.</b>
+     * 그냥 {@code :cursorAt is null} 로 쓰면 PostgreSQL 이 바인딩 파라미터의 타입을
+     * 추론하지 못해 {@code could not determine data type of parameter} 로 쿼리를 거절한다
+     * — 첫 페이지(cursorAt = null)마다 500 이 났다. H2 는 통과시키므로 테스트로는 안 잡힌다
+     * (PostgreSQL 로 테스트 돌리는 법은 docs/RUNNING.md).
      */
     @Query("""
             select p from FeedPost p
             where p.coupleId = :coupleId
-              and (:cursorAt is null
+              and (cast(:cursorAt as LocalDateTime) is null
                    or p.createdAt < :cursorAt
                    or (p.createdAt = :cursorAt and p.id < :cursorId))
             order by p.createdAt desc, p.id desc
@@ -36,7 +42,7 @@ public interface FeedPostRepository extends JpaRepository<FeedPost, Long> {
             select p from FeedPost p
             where p.coupleId = :coupleId
               and p.imageUrl is not null
-              and (:cursorAt is null
+              and (cast(:cursorAt as LocalDateTime) is null
                    or p.createdAt < :cursorAt
                    or (p.createdAt = :cursorAt and p.id < :cursorId))
             order by p.createdAt desc, p.id desc

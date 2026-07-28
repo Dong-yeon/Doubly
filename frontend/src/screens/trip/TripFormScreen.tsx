@@ -7,6 +7,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { PlaceStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
+import { DateField } from '../../components/DateField';
 import { tripApi } from '../../api/trip';
 import { pickImage, uploadImage } from '../../utils/imageUpload';
 import { getErrorMessage } from '../../utils/error';
@@ -17,8 +18,6 @@ import { colors, fontSize, radius, spacing } from '../../constants/theme';
 
 type Props = NativeStackScreenProps<PlaceStackParamList, 'TripForm'>;
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-
 export function TripFormScreen({ navigation, route }: Props) {
   const editing = route.params.trip;
   const [title, setTitle] = useState(editing?.title ?? '');
@@ -27,6 +26,12 @@ export function TripFormScreen({ navigation, route }: Props) {
   const [memo, setMemo] = useState(editing?.memo ?? '');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  /** 시작일을 종료일 뒤로 옮기면 종료일이 뒤집힌다 — 함께 밀어준다 */
+  const onChangeStart = (value: string) => {
+    setStartDate(value);
+    if (endDate && endDate < value) setEndDate(value);
+  };
 
   const onPickPhoto = async () => {
     try {
@@ -42,12 +47,8 @@ export function TripFormScreen({ navigation, route }: Props) {
       toast.error('여행 이름을 입력해주세요.');
       return;
     }
-    if (!DATE_RE.test(startDate) || !DATE_RE.test(endDate)) {
-      toast.error('날짜는 YYYY-MM-DD 형식으로 입력해주세요.');
-      return;
-    }
-    if (endDate < startDate) {
-      toast.error('종료일은 시작일 이후여야 해요.');
+    if (!startDate || !endDate) {
+      toast.error('여행 날짜를 선택해주세요.');
       return;
     }
     setSaving(true);
@@ -101,24 +102,11 @@ export function TripFormScreen({ navigation, route }: Props) {
         />
         <View style={styles.dateRow}>
           <View style={styles.flex}>
-            <TextField
-              label="시작일"
-              placeholder="YYYY-MM-DD"
-              value={startDate}
-              onChangeText={setStartDate}
-              keyboardType="numbers-and-punctuation"
-              maxLength={10}
-            />
+            <DateField label="시작일" value={startDate} onChange={onChangeStart} max={endDate || undefined} />
           </View>
           <View style={styles.flex}>
-            <TextField
-              label="종료일"
-              placeholder="YYYY-MM-DD"
-              value={endDate}
-              onChangeText={setEndDate}
-              keyboardType="numbers-and-punctuation"
-              maxLength={10}
-            />
+            {/* 시작일보다 앞선 날은 아예 못 고르게 한다 */}
+            <DateField label="종료일" value={endDate} onChange={setEndDate} min={startDate || undefined} />
           </View>
         </View>
         <TextField

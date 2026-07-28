@@ -8,6 +8,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { WorkoutStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
+import { DateField } from '../../components/DateField';
 import { EmptyState } from '../../components/EmptyState';
 import { challengeApi } from '../../api/challenge';
 import { getErrorMessage } from '../../utils/error';
@@ -19,7 +20,6 @@ import type { Challenge, ChallengeType } from '../../types';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'Challenge'>;
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** 이번 주 월~일 */
 function thisWeek(): { start: string; end: string } {
@@ -67,10 +67,15 @@ export function ChallengeScreen(_: Props) {
     setAddOpen(true);
   };
 
+  /** 시작일을 종료일 뒤로 옮기면 종료일이 뒤집힌다 — 함께 밀어준다 */
+  const onChangeStart = (value: string) => {
+    setStart(value);
+    if (end && end < value) setEnd(value);
+  };
+
   const onCreate = async () => {
     if (!title.trim()) return toast.error('제목을 입력해주세요.');
-    if (!DATE_RE.test(start) || !DATE_RE.test(end)) return toast.error('날짜는 YYYY-MM-DD 형식이어야 해요.');
-    if (end < start) return toast.error('종료일은 시작일 이후여야 해요.');
+    if (!start || !end) return toast.error('대결 기간을 선택해주세요.');
     setSaving(true);
     try {
       await challengeApi.create({ type, title: title.trim(), startDate: start, endDate: end, stake: stake.trim() || undefined });
@@ -186,10 +191,11 @@ export function ChallengeScreen(_: Props) {
             <TextField label="제목" value={title} onChangeText={setTitle} maxLength={100} />
             <View style={styles.formRow}>
               <View style={styles.flex}>
-                <TextField label="시작일" value={start} onChangeText={setStart} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation" maxLength={10} />
+                <DateField label="시작일" value={start} onChange={onChangeStart} max={end || undefined} />
               </View>
               <View style={styles.flex}>
-                <TextField label="종료일" value={end} onChangeText={setEnd} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation" maxLength={10} />
+                {/* 시작일보다 앞선 날은 아예 못 고르게 한다 */}
+                <DateField label="종료일" value={end} onChange={setEnd} min={start || undefined} />
               </View>
             </View>
             <TextField label="벌칙/보상 (선택)" value={stake} onChangeText={setStake} placeholder="예: 진 사람이 저녁 쏘기" />

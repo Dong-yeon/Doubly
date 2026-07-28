@@ -39,7 +39,7 @@ public interface PlaceVisitRepository extends JpaRepository<PlaceVisit, Long> {
             select v as visit, p.name as placeName
             from PlaceVisit v join Place p on p.id = v.placeId
             where p.coupleId = :coupleId
-              and (:cursorAt is null
+              and (cast(:cursorAt as LocalDateTime) is null
                    or v.createdAt < :cursorAt
                    or (v.createdAt = :cursorAt and v.id < :cursorId))
             order by v.createdAt desc, v.id desc

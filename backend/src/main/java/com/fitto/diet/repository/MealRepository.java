@@ -22,7 +22,7 @@ public interface MealRepository extends JpaRepository<Meal, Long> {
     /** 히스토리 — 커서(id) 기반 페이징. cursor 가 null 이면 최신부터. */
     @Query("""
             select m from Meal m
-            where m.userId = :userId and (:cursor is null or m.id < :cursor)
+            where m.userId = :userId and (cast(:cursor as Long) is null or m.id < :cursor)
             order by m.id desc
             """)
     List<Meal> findHistory(@Param("userId") Long userId,
@@ -50,7 +50,7 @@ public interface MealRepository extends JpaRepository<Meal, Long> {
     @Query("""
             select m from Meal m
             where m.userId in :userIds
-              and (:cursorAt is null
+              and (cast(:cursorAt as LocalDateTime) is null
                    or m.createdAt < :cursorAt
                    or (m.createdAt = :cursorAt and m.id < :cursorId))
             order by m.createdAt desc, m.id desc

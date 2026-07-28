@@ -1,6 +1,9 @@
 package com.fitto.common.exception;
 
 import com.fitto.common.response.ApiResponse;
+import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
@@ -19,6 +22,8 @@ import java.util.stream.Collectors;
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponse<Void>> handleBusiness(BusinessException e) {
@@ -59,8 +64,17 @@ public class GlobalExceptionHandler {
         return error(ErrorCode.NOT_FOUND);
     }
 
+    /**
+     * 예상 못 한 예외 → 500.
+     *
+     * <p>여기서 <b>반드시 스택트레이스를 남긴다</b>. 예전에는 조용히 500 만 돌려줘서
+     * 운영 로그(Railway)에 아무 흔적이 없었고, 사용자가 "피드가 500 난다"고 알려와도
+     * 서버 쪽에서 원인을 찾을 방법이 없었다. 응답 본문은 그대로 일반 메시지만 내보내
+     * 내부 정보를 노출하지 않는다.
+     */
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiResponse<Void>> handleUnexpected(Exception e) {
+    public ResponseEntity<ApiResponse<Void>> handleUnexpected(Exception e, HttpServletRequest request) {
+        log.error("처리되지 않은 예외 [{} {}]", request.getMethod(), request.getRequestURI(), e);
         return error(ErrorCode.INTERNAL_ERROR);
     }
 
