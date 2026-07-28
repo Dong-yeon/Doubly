@@ -22,8 +22,10 @@ import type { CompositeScreenProps } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList, MainTabParamList } from '../../navigation/types';
 import { Avatar } from '../../components/Avatar';
-import { DoublyMark } from '../../components/DoublyLogo';
 import { Card } from '../../components/Card';
+import { CoupleHero } from './components/CoupleHero';
+import { FeedCard } from './components/FeedCard';
+import { QuickActions } from './components/QuickActions';
 import { DateField } from '../../components/DateField';
 import { EmptyState } from '../../components/EmptyState';
 import { useAuthStore } from '../../store/authStore';
@@ -39,7 +41,7 @@ import { getErrorMessage } from '../../utils/error';
 import { relativeDateLabel } from '../../utils/date';
 import { haptics } from '../../utils/haptics';
 import { updateHomeWidget } from '../../widget/updateHomeWidget';
-import type { FeedItem, PartnerToday, ReactionSummary, Streak } from '../../types';
+import type { FeedItem, PartnerToday, Streak } from '../../types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 
 type Props = CompositeScreenProps<
@@ -54,11 +56,15 @@ const GRADIENT: [string, string, string] = ['#1B1D3A', '#14162B', '#0D0F22'];
  * 배경 위 스크림 — 위(히어로)는 옅게 두어 배경 사진이 살고,
  * 아래(피드)로 갈수록 진해져 카드가 배경에서 떠 보인다.
  * 사진 밝기와 무관하게 흰 글씨 대비를 보장하려고 검정 기반으로 고정한다(테마 무관).
+ *
+ * <p>상단을 0.28 → 0.12 로 낮췄다. 배경을 화면 전체로 깐 뒤에도 사진이 거의
+ * 안 보인다는 인상이었는데, 원인은 스크림이 위에서부터 이미 짙었던 것이다.
+ * 히어로 글씨는 그림자(textShadow)로 따로 대비를 확보한다.
  */
 const SCRIM: [string, string, string] = [
-  'rgba(0,0,0,0.28)',
-  'rgba(0,0,0,0.45)',
-  'rgba(0,0,0,0.70)',
+  'rgba(0,0,0,0.12)',
+  'rgba(0,0,0,0.34)',
+  'rgba(0,0,0,0.68)',
 ];
 const QUICK_EMOJIS = ['❤️', '🥰', '😆', '👍', '💪'];
 
@@ -250,49 +256,14 @@ export function HomeScreen({ navigation }: Props) {
     ]);
   };
 
-  const renderReactions = (item: FeedItem) => {
-    const summaries = item.reactions ?? [];
-    const extra = summaries.map((r) => r.emoji).filter((e) => !QUICK_EMOJIS.includes(e));
-    const emojis = [...QUICK_EMOJIS, ...extra];
-    const byEmoji = new Map<string, ReactionSummary>(summaries.map((r) => [r.emoji, r]));
-    return (
-      <View style={styles.reactionRow}>
-        {emojis.map((emoji) => {
-          const s = byEmoji.get(emoji);
-          return (
-            <TouchableOpacity
-              key={emoji}
-              style={[styles.reactionChip, s?.mine && styles.reactionChipMine]}
-              activeOpacity={0.7}
-              onPress={() => onReact(item, emoji)}
-            >
-              <Text style={styles.reactionEmoji}>{emoji}</Text>
-              {s && s.count > 0 ? <Text style={styles.reactionCount}>{s.count}</Text> : null}
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-    );
-  };
-
   const renderItem = ({ item }: { item: FeedItem }) => (
-    <TouchableOpacity
-      style={styles.card}
-      activeOpacity={item.type === 'POST' && item.mine ? 0.8 : 1}
-      onLongPress={() => onDeletePost(item)}
-    >
-      <View style={styles.cardHeader}>
-        <Text style={styles.author}>{item.mine ? '나' : item.userName}</Text>
-        <Text style={styles.time}>{timeLabel(item.occurredAt)}</Text>
-      </View>
-      {item.title ? <Text style={styles.itemTitle}>{item.title}</Text> : null}
-      {item.imageUrl ? (
-        <Image source={{ uri: item.imageUrl }} style={styles.photo} resizeMode="cover" />
-      ) : null}
-      {item.content ? <Text style={styles.content}>{item.content}</Text> : null}
-      {item.type === 'POST' ? renderReactions(item) : null}
-      {item.type === 'POST' && item.mine ? <Text style={styles.hint}>길게 눌러 삭제</Text> : null}
-    </TouchableOpacity>
+    <FeedCard
+      item={item}
+      timeLabel={timeLabel(item.occurredAt)}
+      quickEmojis={QUICK_EMOJIS}
+      onReact={onReact}
+      onLongPress={onDeletePost}
+    />
   );
 
   // ---- 상단 대시보드 헤더 ----
@@ -302,36 +273,14 @@ export function HomeScreen({ navigation }: Props) {
       {renderHeroContent()}
 
       {connected ? (
-        <View style={styles.actionRow}>
-          <TouchableOpacity
-            style={styles.composeBtn}
-            activeOpacity={0.85}
-            onPress={() => navigation.navigate('FeedCompose')}
-          >
-            <Text style={styles.composeText}>일상 남기기</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.composeBtn}
-            activeOpacity={0.85}
-            onPress={() => navigation.navigate('DailyQuestion')}
-          >
-            <Text style={styles.composeText}>오늘의 질문</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.composeBtn}
-            activeOpacity={0.85}
-            onPress={() => navigation.navigate('CoupleCalendar')}
-          >
-            <Text style={styles.composeText}>캘린더</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.composeBtn}
-            activeOpacity={0.85}
-            onPress={() => navigation.navigate('PhotoAlbum')}
-          >
-            <Text style={styles.composeText}>사진첩</Text>
-          </TouchableOpacity>
-        </View>
+        <QuickActions
+          actions={[
+            { icon: 'image-plus', label: '일상', onPress: () => navigation.navigate('FeedCompose') },
+            { icon: 'comment-question-outline', label: '오늘의 질문', onPress: () => navigation.navigate('DailyQuestion') },
+            { icon: 'calendar-heart', label: '캘린더', onPress: () => navigation.navigate('CoupleCalendar') },
+            { icon: 'image-multiple-outline', label: '사진첩', onPress: () => navigation.navigate('PhotoAlbum') },
+          ]}
+        />
       ) : null}
     </View>
   );
@@ -339,38 +288,32 @@ export function HomeScreen({ navigation }: Props) {
   function renderHeroContent() {
     return (
       <View style={styles.heroContent}>
-        <View style={styles.topBar}>
-          {connected ? (
-            <Pressable style={styles.bgBtn} onPress={onChangeBg}>
-              <MaterialCommunityIcons name="image-outline" size={13} color={colors.white} />
-              <Text style={styles.bgBtnText}>배경</Text>
-            </Pressable>
-          ) : (
+        {/* 연결 전에는 배경 버튼이 의미 없으므로 프로필만 — 연결 후 상단 줄은 CoupleHero 가 그린다 */}
+        {!connected ? (
+          <View style={styles.topBar}>
             <View />
-          )}
-          <Pressable style={styles.profileBtn} onPress={() => navigation.navigate('My')} hitSlop={8}>
-            <Avatar name={user?.name} imageUrl={user?.profileImageUrl} size={32} color={colors.primaryDark} />
-          </Pressable>
-        </View>
+            <Pressable style={styles.profileBtn} onPress={() => navigation.navigate('My')} hitSlop={8}>
+              <Avatar name={user?.name} imageUrl={user?.profileImageUrl} size={32} color={colors.primaryDark} />
+            </Pressable>
+          </View>
+        ) : null}
 
         {connected ? (
-          <>
-            {/* 두 사람이 히어로 — 나=코랄 / 상대=인디고 / 겹침=바이올렛 */}
-            <View style={styles.coupleRow}>
-              <CoupleProfile name={user?.name ?? '나'} imageUrl={user?.profileImageUrl} done={myDone} color={colors.coral} />
-              <DoublyMark size={26} />
-              <CoupleProfile
-                name={partner?.partnerName ?? couple?.partner?.name ?? '상대방'}
-                imageUrl={couple?.partner?.profileImageUrl}
-                done={!!partner?.completed}
-                color={colors.indigo}
-              />
-            </View>
-            <Pressable style={styles.ddayChip} onPress={openAnnModal}>
-              <Text style={styles.ddayChipText}>함께한 지 D+{dday}</Text>
-            </Pressable>
-            <Text style={styles.myStreak}>내 연속 {myStreak?.currentCount ?? 0}일 · 최고 {myStreak?.maxCount ?? 0}일</Text>
-          </>
+          <CoupleHero
+            meName={user?.name ?? '나'}
+            meImageUrl={user?.profileImageUrl}
+            meDone={myDone}
+            partnerName={partner?.partnerName ?? couple?.partner?.name ?? '상대방'}
+            partnerImageUrl={couple?.partner?.profileImageUrl}
+            partnerDone={!!partner?.completed}
+            dday={dday}
+            anniversaryDate={couple?.anniversaryDate ?? null}
+            myStreak={myStreak?.currentCount ?? 0}
+            partnerStreak={partnerStreak?.currentCount ?? 0}
+            onPressDday={openAnnModal}
+            onPressBackground={onChangeBg}
+            onPressProfile={() => navigation.navigate('My')}
+          />
         ) : (
           <View style={styles.connectWrap}>
             <MaterialCommunityIcons
@@ -508,24 +451,6 @@ export function HomeScreen({ navigation }: Props) {
   );
 }
 
-function CoupleProfile({ name, imageUrl, done, color }: { name: string; imageUrl?: string | null; done: boolean; color: string }) {
-  return (
-    <View style={styles.profile}>
-      <View style={[styles.avatarRing, { borderColor: color }]}>
-        <Avatar name={name} imageUrl={imageUrl} size={60} color={color} />
-        {done ? (
-          <View style={[styles.doneBadge, { backgroundColor: color }]}>
-            <Text style={styles.doneCheck}>✓</Text>
-          </View>
-        ) : null}
-      </View>
-      <Text style={styles.profileName} numberOfLines={1}>
-        {name}
-      </Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   // 배경(사진/그라디언트)이 화면 전체를 채우므로 그 위 레이어는 모두 투명이다
   root: { flex: 1, backgroundColor: colors.background },
@@ -536,56 +461,6 @@ const styles = StyleSheet.create({
   heroContent: { paddingHorizontal: spacing.xs, paddingTop: spacing.sm, paddingBottom: spacing.lg },
   topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   profileBtn: { borderRadius: radius.pill, borderWidth: 2, borderColor: 'rgba(255,255,255,0.6)' },
-  bgBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-  },
-  bgBtnText: { color: colors.white, fontSize: fontSize.caption, fontWeight: '700' },
-  ddayWrap: { alignItems: 'center', marginTop: spacing.md },
-  ddayLabel: { color: 'rgba(255,255,255,0.9)', fontSize: fontSize.caption, fontWeight: '600' },
-  dday: {
-    color: colors.white,
-    fontSize: 44,
-    fontWeight: '800',
-    letterSpacing: -1,
-    textShadowColor: 'rgba(0,0,0,0.15)',
-    textShadowRadius: 6,
-    textShadowOffset: { width: 0, height: 2 },
-  },
-  coupleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: spacing.lg, gap: spacing.md },
-  profile: { alignItems: 'center', width: 90 },
-  avatarRing: { borderWidth: 2, borderRadius: 999, padding: 2 },
-  profileName: { color: colors.white, fontSize: fontSize.body, fontWeight: '800', marginTop: spacing.xs },
-  doneBadge: {
-    position: 'absolute',
-    right: -2,
-    bottom: -2,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    // 히어로는 스크림으로 항상 어둡다 — 테마에 따라 뒤집히면 안 되므로 고정색
-    borderColor: '#14162B',
-  },
-  doneCheck: { color: colors.white, fontWeight: '800', fontSize: 12 },
-  ddayChip: {
-    alignSelf: 'center',
-    marginTop: spacing.md,
-    backgroundColor: 'rgba(255,255,255,0.14)',
-    borderRadius: 999,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-  },
-  ddayChipText: { color: 'rgba(255,255,255,0.92)', fontSize: fontSize.caption, fontWeight: '700' },
-  myStreak: { color: 'rgba(255,255,255,0.92)', textAlign: 'center', marginTop: spacing.md, fontSize: fontSize.caption, fontWeight: '600' },
-
   connectWrap: { alignItems: 'center', paddingVertical: spacing.lg },
   connectEmoji: { fontSize: 44 },
   connectTitle: { color: colors.white, fontSize: fontSize.title, fontWeight: '800', marginTop: spacing.sm },
@@ -630,51 +505,6 @@ const styles = StyleSheet.create({
   soloChevron: { fontSize: fontSize.title, color: colors.textMuted, fontWeight: '700' },
   soloDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
 
-  // 4개 버튼 — 2×2 그리드 (한 줄에 넣으면 좁은 화면에서 라벨이 줄바꿈된다)
-  actionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md, marginBottom: spacing.sm },
-  composeBtn: {
-    flexGrow: 1,
-    flexBasis: '45%',
-    backgroundColor: colors.primaryBg,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    paddingVertical: spacing.md,
-    alignItems: 'center',
-  },
-  composeText: { color: colors.primary, fontWeight: '800', fontSize: fontSize.body },
-
-  // 피드 카드
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  author: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
-  time: { fontSize: fontSize.caption, color: colors.textMuted },
-  itemTitle: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary, marginTop: spacing.xs },
-  photo: { width: '100%', height: 200, borderRadius: radius.md, marginTop: spacing.sm },
-  content: { fontSize: fontSize.body, color: colors.textPrimary, marginTop: spacing.sm, lineHeight: 21 },
-  reactionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.sm },
-  reactionChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceAlt,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-  },
-  reactionChipMine: { borderColor: colors.primary, backgroundColor: colors.primaryBg },
-  reactionEmoji: { fontSize: fontSize.body },
-  reactionCount: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
-  hint: { fontSize: 10, color: colors.textMuted, marginTop: spacing.xs, textAlign: 'right' },
   loadMore: { paddingVertical: spacing.md },
 
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: spacing.xl },
