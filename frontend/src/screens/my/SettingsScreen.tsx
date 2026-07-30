@@ -13,6 +13,7 @@ import type { HomeStackParamList } from '../../navigation/types';
 import { Card } from '../../components/Card';
 import { authApi } from '../../api/auth';
 import { useAuthStore } from '../../store/authStore';
+import { useSettingsStore } from '../../store/settingsStore';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { APP_VERSION } from '../../constants/config';
@@ -24,6 +25,8 @@ type Props = NativeStackScreenProps<HomeStackParamList, 'Settings'>;
 export function SettingsScreen({ navigation }: Props) {
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
+  const spellCheckEnabled = useSettingsStore((s) => s.spellCheckEnabled);
+  const setSpellCheckEnabled = useSettingsStore((s) => s.setSpellCheckEnabled);
   const [savingNotification, setSavingNotification] = useState(false);
   const [savingMarketing, setSavingMarketing] = useState(false);
 
@@ -112,6 +115,25 @@ export function SettingsScreen({ navigation }: Props) {
               value={marketingConsent}
               onValueChange={onToggleMarketing}
               disabled={savingMarketing}
+              trackColor={{ true: colors.primary }}
+            />
+          </View>
+        </Card>
+
+        <Card elevation="sm" style={styles.section}>
+          <Text style={styles.sectionLabel}>채팅</Text>
+
+          <View style={styles.row}>
+            <View style={styles.rowText}>
+              <Text style={styles.rowTitle}>맞춤법 제안</Text>
+              <Text style={styles.rowDesc}>
+                되/돼처럼 헷갈리는 말을 입력창 위에서 알려줘요. 기기 안에서만 검사하고
+                대화 내용은 어디로도 보내지 않아요.
+              </Text>
+            </View>
+            <Switch
+              value={spellCheckEnabled}
+              onValueChange={setSpellCheckEnabled}
               trackColor={{ true: colors.primary }}
             />
           </View>

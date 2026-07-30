@@ -12,6 +12,7 @@ import { DatePickerSheet } from './src/components/DatePickerSheet';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { installGlobalErrorHandlers } from './src/utils/globalErrorHandler';
 import { initSentry } from './src/utils/sentry';
+import { useSettingsStore } from './src/store/settingsStore';
 import { colors } from './src/constants/theme';
 
 // Sentry 를 먼저 붙여야 이후 발생하는 예외가 리포터로 전달된다.
@@ -19,6 +20,8 @@ import { colors } from './src/constants/theme';
 initSentry();
 // 렌더 이전에 설치해야 초기화 단계의 예외도 수집된다.
 installGlobalErrorHandlers();
+// 기기에 저장된 설정(맞춤법 제안 on/off) 복원 — 실패해도 기본값으로 진행한다.
+useSettingsStore.getState().load();
 
 export default function App() {
   /*
