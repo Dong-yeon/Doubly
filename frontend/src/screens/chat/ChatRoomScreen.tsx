@@ -1,5 +1,5 @@
 /** 채팅 대화 — 설계서 2.5 / 4.5 CHAT-02 (실시간 메시지) */
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -26,6 +26,9 @@ import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { EmojiPicker } from '../../components/EmojiPicker';
+import { SpellCheckBar } from '../../components/SpellCheckBar';
+import { useSettingsStore } from '../../store/settingsStore';
+import { applySuggestion, checkKoreanSpelling } from '../../utils/koreanSpellCheck';
 import { chatApi } from '../../api/chat';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { ChatMessage } from '../../types';
@@ -65,8 +68,28 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const [editing, setEditing] = useState<ChatMessage | null>(null);
   const [reactingTo, setReactingTo] = useState<ChatMessage | null>(null);
   const [showEmojiSheet, setShowEmojiSheet] = useState(false);
+  // 맞춤법 제안을 닫은 시점의 입력값 — 글을 더 치면(값이 달라지면) 다시 뜬다
+  const [spellDismissedFor, setSpellDismissedFor] = useState<string | null>(null);
+  const spellCheckEnabled = useSettingsStore((s) => s.spellCheckEnabled);
   // 이미 읽음 처리한 최대 메시지 id — 중복 PUT 방지
   const markedUpToRef = useRef(0);
+
+  /*
+   * 맞춤법 검사는 기기 안에서만 돈다(외부 전송 없음). 규칙 몇 개짜리라
+   * 입력할 때마다 돌려도 부담이 없지만, 렌더마다 다시 하지 않도록 text 에 묶는다.
+   */
+  const suggestions = useMemo(
+    () => (spellCheckEnabled ? checkKoreanSpelling(text) : []),
+    [spellCheckEnabled, text],
+  );
+
+  /** 첫 제안을 적용한다. 남은 게 있으면 이어서 뜬다 */
+  const applySpelling = () => {
+    const first = suggestions[0];
+    if (!first) return;
+    haptics.light();
+    setText((prev) => applySuggestion(prev, first));
+  };
 
   useLayoutEffect(() => {
     navigation.setOptions({ title });
@@ -367,6 +390,12 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             </Pressable>
           </View>
         ) : null}
+        <SpellCheckBar
+          suggestion={spellDismissedFor === text ? null : (suggestions[0] ?? null)}
+          total={suggestions.length}
+          onApply={applySpelling}
+          onDismiss={() => setSpellDismissedFor(text)}
+        />
         <View style={styles.inputBar}>
           <TouchableOpacity
             style={[styles.imageBtn, showStickers && styles.stickerToggleActive]}
