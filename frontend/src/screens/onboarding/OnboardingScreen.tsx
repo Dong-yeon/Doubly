@@ -87,7 +87,15 @@ export function OnboardingScreen({ navigation }: Props) {
     listRef.current?.scrollToIndex({ index: next, animated: true });
   };
 
-  const onScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+  /**
+   * 스크롤 위치 → 현재 페이지 동기화.
+   *
+   * <p><b>{@code onScroll} 에도 물려야 한다.</b> 웹(react-native-web)은
+   * {@code onMomentumScrollEnd} 를 발화하지 않아서, 버튼을 누르지 않고 스와이프로만
+   * 마지막 장까지 넘기면 index 가 0 에 멈춘다 — 버튼이 "시작하기"로 안 바뀌고
+   * "다음"인 채로 남아 한 번 더 눌러야 했다.
+   */
+  const syncIndex = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const next = Math.round(e.nativeEvent.contentOffset.x / width);
     if (next !== index && next >= 0 && next < SLIDES.length) {
       setIndex(next);
@@ -114,7 +122,9 @@ export function OnboardingScreen({ navigation }: Props) {
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
-        onMomentumScrollEnd={onScrollEnd}
+        onScroll={syncIndex}
+        scrollEventThrottle={32}
+        onMomentumScrollEnd={syncIndex}
         // scrollToIndex 는 레이아웃을 모르면 무시될 수 있다 — 슬라이드 폭이 고정이므로 명시
         getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
         renderItem={({ item }) => (
