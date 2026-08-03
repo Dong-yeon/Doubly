@@ -25,9 +25,11 @@ import { DateField } from '../../components/DateField';
 import { CoupleHero } from './components/CoupleHero';
 import { QuickActions } from './components/QuickActions';
 import { RecentPeek } from './components/RecentPeek';
+import { MemoryPeek } from './components/MemoryPeek';
 import { useAuthStore } from '../../store/authStore';
 import { useRelationStore } from '../../store/relationStore';
 import { workoutApi } from '../../api/workout';
+import { dietApi } from '../../api/diet';
 import { streakApi } from '../../api/streak';
 import { feedApi } from '../../api/feed';
 import { feedTimeLabel } from '../feed/FeedTimelineScreen';
@@ -37,27 +39,40 @@ import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { getErrorMessage } from '../../utils/error';
 import { updateHomeWidget } from '../../widget/updateHomeWidget';
-import type { FeedItem, PartnerToday, Streak } from '../../types';
+import type { FeedItem, Memories, PartnerToday, Streak } from '../../types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
+import { isDarkMode } from '../../theme';
 
 type Props = CompositeScreenProps<
   NativeStackScreenProps<HomeStackParamList, 'HomeMain'>,
   BottomTabScreenProps<MainTabParamList>
 >;
 
-// Ink 히어로 — 배경 사진이 없을 때의 기본 벽지
-const GRADIENT: [string, string, string] = ['#1B1D3A', '#14162B', '#0D0F22'];
+/**
+ * 배경 사진이 없을 때의 기본 벽지 — 테마를 따른다.
+ */
+const GRADIENT: [string, string, string] = isDarkMode
+  ? ['#262823', '#1E201C', '#151713']
+  : ['#FFFFFF', '#FAFAF9', '#F1F2F0'];
 
 /**
- * 배경 위 스크림 — 사진이 밝든 어둡든 흰 글씨가 읽혀야 한다.
- * 위는 옅게 두어 사진이 살고, 아래로 갈수록 진해져 유리 카드가 배경에서 분리된다.
- * 사진 밝기와 무관하게 대비를 보장하려고 검정 기반으로 고정한다(테마 무관).
+ * 배경 사진 위 스크림 — 사진이 밝든 어둡든 그 위의 글씨가 읽혀야 한다.
+ *
+ * <p>예전에는 <b>검정 기반 + 흰 글씨</b> 고정이었다. 안전했지만 앱에서 홈만 늘 어두워
+ * 커플앱치고 무거웠다. 지금은 스크림도 테마를 따르고, 글씨는 테마색을 그대로 쓴다 —
+ * 라이트에서는 크림 스크림 + 어두운 글씨(= 밝은 홈), 다크에서는 반대다.
+ *
+ * <p><b>⚠️ 스크림과 글씨의 테마가 어긋나면 안 된다.</b> 스크림만 크림으로 고정했다가
+ * 다크 모드에서 밝은 글씨가 크림 위에 올라가 <b>대비 1.3:1</b> 로 안 읽힌 적이 있다.
+ * 값을 만질 때는 반드시 두 테마 모두에서 확인할 것.
+ *
+ * <p><b>0.84 아래로 내리지 말 것.</b> 최악(순흑 사진 · 라이트)에서도 보조 텍스트가
+ * AA(4.5)를 넘겨야 한다. 맨 위는 topBar(자체 배경이 있는 칩·아바타)만 있어 조금 옅어도 된다.
  */
-const SCRIM: [string, string, string] = [
-  'rgba(0,0,0,0.12)',
-  'rgba(0,0,0,0.30)',
-  'rgba(0,0,0,0.62)',
-];
+const SCRIM: [string, string, string] = isDarkMode
+  // 다크는 하한이 더 높아야 한다 — 순백 사진 위 0.84 면 보조 텍스트가 4.35 로 미달이다
+  ? ['rgba(30,32,28,0.88)', 'rgba(30,32,28,0.93)', 'rgba(30,32,28,0.97)']
+  : ['rgba(255,255,255,0.84)', 'rgba(255,255,255,0.92)', 'rgba(255,255,255,0.97)'];
 
 function daysTogether(connectedAt?: string | null): number {
   if (!connectedAt) return 0;
@@ -72,9 +87,14 @@ export function HomeScreen({ navigation }: Props) {
   const [partner, setPartner] = useState<PartnerToday | null>(null);
   const [myStreak, setMyStreak] = useState<Streak | null>(null);
   const [partnerStreak, setPartnerStreak] = useState<Streak | null>(null);
-  const [myDone, setMyDone] = useState(false);
+  // 오늘의 운동·식단 — 나/상대 각각. 히어로의 두 사람 아래에 나란히 표시된다
+  const [myWorkoutDone, setMyWorkoutDone] = useState(false);
+  const [myMealDone, setMyMealDone] = useState(false);
+  const [partnerMeal, setPartnerMeal] = useState<PartnerToday | null>(null);
   // 최근 기록 한 건만 — 홈은 목록을 갖지 않는다
   const [latest, setLatest] = useState<FeedItem | null>(null);
+  // 작년 오늘 — 있는 날에만 최근 기록 자리를 대신 차지한다 (PLAN.md Memories)
+  const [memories, setMemories] = useState<Memories | null>(null);
 
   const [annModal, setAnnModal] = useState(false);
   const [annInput, setAnnInput] = useState('');
@@ -86,8 +106,10 @@ export function HomeScreen({ navigation }: Props) {
 
   const refresh = useCallback(() => {
     fetchAll();
-    workoutApi.today().then((l) => setMyDone(l.length > 0)).catch(() => setMyDone(false));
+    workoutApi.today().then((l) => setMyWorkoutDone(l.length > 0)).catch(() => setMyWorkoutDone(false));
     workoutApi.partnerToday().then(setPartner).catch(() => setPartner(null));
+    dietApi.today().then((l) => setMyMealDone(l.length > 0)).catch(() => setMyMealDone(false));
+    dietApi.partnerToday().then(setPartnerMeal).catch(() => setPartnerMeal(null));
     streakApi.me().then(setMyStreak).catch(() => setMyStreak(null));
     streakApi.partner().then(setPartnerStreak).catch(() => setPartnerStreak(null));
     // 커플 미연결이면 피드가 404 다 — 조용히 비운다
@@ -95,6 +117,11 @@ export function HomeScreen({ navigation }: Props) {
       .timeline(null)
       .then((page) => setLatest(page.items[0] ?? null))
       .catch(() => setLatest(null));
+    // 추억은 대부분의 날에 비어 있다 — 없으면 최근 기록이 그대로 남는다
+    feedApi
+      .memories()
+      .then((res) => setMemories(res.groups.length > 0 ? res : null))
+      .catch(() => setMemories(null));
   }, [fetchAll]);
 
   useFocusEffect(useCallback(() => refresh(), [refresh]));
@@ -167,7 +194,7 @@ export function HomeScreen({ navigation }: Props) {
     <View style={styles.topBar}>
       {connected ? (
         <Pressable style={styles.bgBtn} onPress={onChangeBg} hitSlop={8}>
-          <MaterialCommunityIcons name="image-outline" size={13} color={colors.white} />
+          <MaterialCommunityIcons name="image-outline" size={13} color={colors.textPrimary} />
           <Text style={styles.bgBtnText}>배경</Text>
         </Pressable>
       ) : (
@@ -209,10 +236,12 @@ export function HomeScreen({ navigation }: Props) {
               <CoupleHero
                 meName={user?.name ?? '나'}
                 meImageUrl={user?.profileImageUrl}
-                meDone={myDone}
+                meWorkoutDone={myWorkoutDone}
+                meMealDone={myMealDone}
                 partnerName={partner?.partnerName ?? couple?.partner?.name ?? '상대방'}
                 partnerImageUrl={couple?.partner?.profileImageUrl}
-                partnerDone={!!partner?.completed}
+                partnerWorkoutDone={!!partner?.completed}
+                partnerMealDone={!!partnerMeal?.completed}
                 dday={dday}
                 anniversaryDate={couple?.anniversaryDate ?? null}
                 myStreak={myStreak?.currentCount ?? 0}
@@ -221,11 +250,19 @@ export function HomeScreen({ navigation }: Props) {
               />
             </View>
 
-            <RecentPeek
-              latest={latest}
-              timeLabel={latest ? feedTimeLabel(latest.occurredAt) : ''}
-              onPress={() => navigation.navigate('FeedTimeline')}
-            />
+            {/*
+              추억이 있는 날에만 이 한 줄이 추억으로 바뀐다. 카드를 추가하지 않는 이유는
+              MemoryPeek 주석 참고 — 홈은 스크롤 없는 고정 화면이다.
+            */}
+            {memories ? (
+              <MemoryPeek memories={memories} onPress={() => navigation.navigate('Memories')} />
+            ) : (
+              <RecentPeek
+                latest={latest}
+                timeLabel={latest ? feedTimeLabel(latest.occurredAt) : ''}
+                onPress={() => navigation.navigate('FeedTimeline')}
+              />
+            )}
 
             <QuickActions
               actions={[
@@ -244,7 +281,7 @@ export function HomeScreen({ navigation }: Props) {
            */
           <ScrollView contentContainerStyle={styles.disconnected} showsVerticalScrollIndicator={false}>
             <View style={styles.connectWrap}>
-              <MaterialCommunityIcons name="account-multiple-plus-outline" size={40} color={colors.white} />
+              <MaterialCommunityIcons name="account-multiple-plus-outline" size={40} color={colors.primary} />
               <Text style={styles.connectTitle}>커플을 연결해보세요</Text>
               <Text style={styles.connectDesc}>초대코드로 연결하면 우리의 기록이 시작돼요.</Text>
               <TouchableOpacity style={styles.connectBtn} onPress={() => navigation.navigate('CoupleConnect')}>
@@ -323,17 +360,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
   },
-  profileBtn: { borderRadius: radius.pill, borderWidth: 2, borderColor: 'rgba(255,255,255,0.6)' },
+  profileBtn: { borderRadius: radius.pill, borderWidth: 2, borderColor: colors.borderStrong },
   bgBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(255,255,255,0.22)',
+    backgroundColor: colors.surfaceAlt,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
   },
-  bgBtnText: { color: colors.white, fontSize: fontSize.caption, fontWeight: '700' },
+  bgBtnText: { color: colors.textPrimary, fontSize: fontSize.caption, fontWeight: '700' },
 
   body: { flex: 1, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, gap: spacing.md },
   // 히어로가 남는 공간을 다 먹고 그 안에서 가운데 정렬된다
@@ -341,24 +378,25 @@ const styles = StyleSheet.create({
 
   disconnected: { padding: spacing.lg },
   connectWrap: { alignItems: 'center', paddingVertical: spacing.lg },
-  connectTitle: { color: colors.white, fontSize: fontSize.title, fontWeight: '800', marginTop: spacing.sm },
-  connectDesc: { color: 'rgba(255,255,255,0.92)', fontSize: fontSize.body, textAlign: 'center', marginTop: spacing.xs },
+  connectTitle: { color: colors.textPrimary, fontSize: fontSize.title, fontWeight: '800', marginTop: spacing.sm },
+  connectDesc: { color: colors.textSecondary, fontSize: fontSize.body, textAlign: 'center', marginTop: spacing.xs },
   connectBtn: {
     marginTop: spacing.md,
-    backgroundColor: colors.white,
+    backgroundColor: colors.primary,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.sm,
     minHeight: 44, // 터치 타깃 — 텍스트+패딩만으론 36px
     justifyContent: 'center',
   },
-  connectBtnText: { color: colors.primaryDark, fontWeight: '800', fontSize: fontSize.body },
+  // 버튼 배경이 primary(딥 포레스트)라 글자는 흰색 — white 위 10.61:1
+  connectBtnText: { color: colors.white, fontWeight: '800', fontSize: fontSize.body },
 
   soloTitle: {
     fontSize: fontSize.caption,
     fontWeight: '700',
     // 배경 사진 위에 놓이므로 테마색이 아니라 흰색 고정
-    color: 'rgba(255,255,255,0.92)',
+    color: colors.textSecondary,
     marginTop: spacing.lg,
     marginBottom: spacing.sm,
     marginLeft: spacing.xs,
