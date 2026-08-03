@@ -546,6 +546,26 @@ export interface FeedTimeline {
   hasMore: boolean;
 }
 
+// 추억 리마인드 — 오늘과 같은 월·일의 1년 이상 전 기록 (PLAN.md Memories)
+export interface MemoryGroup {
+  /** 몇 년 전인지 (1 이상) */
+  yearsAgo: number;
+  /** 그 해의 대표 발생일 (yyyy-MM-dd) */
+  date: string;
+  /** 서버가 만든 표시 문구 — "1년 전 오늘" */
+  label: string;
+  /** 타임라인과 같은 카드 형태. POST 에만 reactions 가 채워진다 */
+  items: FeedItem[];
+}
+
+export interface Memories {
+  /** 기준 날짜 (KST, yyyy-MM-dd) */
+  on: string;
+  totalCount: number;
+  /** 최신 연도부터. 추억이 없으면 빈 배열 */
+  groups: MemoryGroup[];
+}
+
 // 5.8 chat_messages
 export type MessageType = 'TEXT' | 'IMAGE' | 'STICKER' | 'WORKOUT_CARD' | 'MEAL_CARD' | 'ROUTINE_CARD';
 /** 메시지 이모지 리액션 — mine 은 userIds 에 내 id 가 있는지로 판단한다(브로드캐스트 공용) */

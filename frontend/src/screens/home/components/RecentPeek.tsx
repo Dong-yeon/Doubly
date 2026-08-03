@@ -5,7 +5,7 @@
  * 그렇다고 목록을 되돌리면 배경 사진이 다시 파묻힌다. 그래서 <b>가장 최근 한 건만</b>
  * 고정 높이로 보여주고, 나머지는 우리 기록 화면으로 넘긴다.
  *
- * <p>배경 사진 위에 얹히므로 색은 테마를 따르지 않고 흰색 계열로 고정한다.
+ * <p>스크림이 크림 기반이라 색은 테마를 그대로 따른다.
  */
 import React from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -45,7 +45,7 @@ export function RecentPeek({ latest, timeLabel, onPress }: Props) {
           <MaterialCommunityIcons
             name={latest ? TYPE_ICON[latest.type] : 'timeline-text-outline'}
             size={19}
-            color={colors.white}
+            color={colors.primary}
           />
         </View>
       )}
@@ -70,7 +70,7 @@ export function RecentPeek({ latest, timeLabel, onPress }: Props) {
         )}
       </View>
 
-      <MaterialCommunityIcons name="chevron-right" size={22} color="rgba(255,255,255,0.75)" />
+      <MaterialCommunityIcons name="chevron-right" size={22} color={colors.textMuted} />
     </Pressable>
   );
 }
@@ -80,25 +80,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    // 배경 사진이 비쳐 보이는 유리 카드
-    backgroundColor: 'rgba(255,255,255,0.16)',
+    // 크림 스크림 위 — 표면색 카드로 배경에서 분리한다
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.24)',
+    borderColor: colors.border,
     borderRadius: radius.lg,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
   },
   pressed: { opacity: 0.65 },
-  thumb: { width: 38, height: 38, borderRadius: radius.sm, backgroundColor: 'rgba(255,255,255,0.2)' },
+  thumb: { width: 38, height: 38, borderRadius: radius.sm, backgroundColor: colors.surfaceAlt },
   iconBox: {
     width: 38,
     height: 38,
     borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: colors.primaryBg,
   },
   body: { flex: 1 },
-  meta: { color: 'rgba(255,255,255,0.78)', fontSize: 11, fontWeight: '700' },
-  summary: { color: colors.white, fontSize: fontSize.body, fontWeight: '600', marginTop: 1 },
+  meta: { color: colors.textSecondary, fontSize: 11, fontWeight: '700' },
+  summary: { color: colors.textPrimary, fontSize: fontSize.body, fontWeight: '600', marginTop: 1 },
 });

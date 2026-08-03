@@ -30,6 +30,24 @@ apiClient.interceptors.request.use(async (config) => {
   return config;
 });
 
+/**
+ * refresh 로 되살릴 수 없는 엔드포인트 — 여기서의 401 은 <b>자격증명 오류 그 자체</b>다.
+ *
+ * <p>이걸 거르지 않으면 로그인 실패(401)가 refresh 를 유발하고, 저장된 refresh token 이
+ * 없으니 "refresh token 없음" 이 던져져 <b>서버의 진짜 메시지를 덮는다</b>
+ * ("이메일 또는 비밀번호가 올바르지 않습니다"가 사라진다).
+ */
+const NO_REFRESH_PATHS = [
+  '/auth/login',
+  '/auth/register',
+  '/auth/refresh',
+  '/auth/google',
+  '/auth/kakao',
+  '/auth/apple',
+];
+const skipsRefresh = (url?: string) =>
+  !!url && NO_REFRESH_PATHS.some((p) => url.startsWith(p));
+
 // 진행 중인 refresh 를 공유해 동시 401 을 한 번만 갱신
 let refreshPromise: Promise<string> | null = null;
 
@@ -51,7 +69,12 @@ apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     const original = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
-    if (error.response?.status !== 401 || !original || original._retry) {
+    if (
+      error.response?.status !== 401 ||
+      !original ||
+      original._retry ||
+      skipsRefresh(original.url)
+    ) {
       return Promise.reject(error);
     }
     original._retry = true;

@@ -53,7 +53,10 @@
       ]
     ],
     "splash": {
-      "backgroundColor": "#FBF8F3"
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "imageWidth": 220,
+      "backgroundColor": "#FFFFFF"
     },
     "ios": {
       "supportsTablet": true,
@@ -62,7 +65,7 @@
     "android": {
       "package": "com.doubly.app",
       "adaptiveIcon": {
-        "backgroundColor": "#FBF8F3",
+        "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -77,8 +80,8 @@
       "name": "Doubly",
       "shortName": "Doubly",
       "lang": "ko",
-      "themeColor": "#14162B",
-      "backgroundColor": "#FBF8F3",
+      "themeColor": "#FFFFFF",
+      "backgroundColor": "#FFFFFF",
       "display": "standalone",
       "description": "Doubly — 둘이라서, 두 배로. 커플 운동·식단·여행·일상 공유"
     }

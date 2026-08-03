@@ -25,8 +25,6 @@ import com.fitto.relation.domain.Relation;
 import com.fitto.relation.domain.RelationStatus;
 import com.fitto.relation.domain.RelationType;
 import com.fitto.relation.repository.RelationRepository;
-import com.fitto.user.domain.User;
-import com.fitto.user.repository.UserRepository;
 import com.fitto.workout.domain.Workout;
 import com.fitto.workout.repository.WorkoutRepository;
 import org.springframework.data.domain.PageRequest;
@@ -34,11 +32,9 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -55,31 +51,31 @@ public class FeedService {
     private final FeedPostRepository feedPostRepository;
     private final FeedReactionRepository feedReactionRepository;
     private final RelationRepository relationRepository;
-    private final UserRepository userRepository;
     private final WorkoutRepository workoutRepository;
     private final MealRepository mealRepository;
     private final PlaceVisitRepository placeVisitRepository;
     private final NotificationService notificationService;
     private final CoupleEventPublisher coupleEventPublisher;
+    private final FeedItemMapper mapper;
 
     public FeedService(FeedPostRepository feedPostRepository,
                        FeedReactionRepository feedReactionRepository,
                        RelationRepository relationRepository,
-                       UserRepository userRepository,
                        WorkoutRepository workoutRepository,
                        MealRepository mealRepository,
                        PlaceVisitRepository placeVisitRepository,
                        NotificationService notificationService,
-                       CoupleEventPublisher coupleEventPublisher) {
+                       CoupleEventPublisher coupleEventPublisher,
+                       FeedItemMapper mapper) {
         this.feedPostRepository = feedPostRepository;
         this.feedReactionRepository = feedReactionRepository;
         this.relationRepository = relationRepository;
-        this.userRepository = userRepository;
         this.workoutRepository = workoutRepository;
         this.mealRepository = mealRepository;
         this.placeVisitRepository = placeVisitRepository;
         this.notificationService = notificationService;
         this.coupleEventPublisher = coupleEventPublisher;
+        this.mapper = mapper;
     }
 
     /**
@@ -101,24 +97,24 @@ public class FeedService {
 
         Long partnerId = couple.partnerOf(userId);
         List<Long> userIds = partnerId != null ? List.of(userId, partnerId) : List.of(userId);
-        Map<Long, String> names = userNames(userIds);
+        Map<Long, String> names = mapper.userNames(userIds);
 
         List<FeedItemResponse> merged = new ArrayList<>();
         for (FeedPost p : feedPostRepository.findTimeline(couple.getId(),
                 from.createdAtOf(FeedItemType.POST), from.idOf(FeedItemType.POST), page)) {
-            merged.add(toItem(p, names, userId, null));
+            merged.add(mapper.toItem(p, names, userId, null));
         }
         for (Workout w : workoutRepository.findRecentForFeed(userIds,
                 from.createdAtOf(FeedItemType.WORKOUT), from.idOf(FeedItemType.WORKOUT), page)) {
-            merged.add(toItem(w, names, userId));
+            merged.add(mapper.toItem(w, names, userId));
         }
         for (Meal m : mealRepository.findRecentForFeed(userIds,
                 from.createdAtOf(FeedItemType.MEAL), from.idOf(FeedItemType.MEAL), page)) {
-            merged.add(toItem(m, names, userId));
+            merged.add(mapper.toItem(m, names, userId));
         }
         for (VisitWithPlace v : placeVisitRepository.findRecentForFeed(couple.getId(),
                 from.createdAtOf(FeedItemType.PLACE_VISIT), from.idOf(FeedItemType.PLACE_VISIT), page)) {
-            merged.add(toItem(v, names, userId));
+            merged.add(mapper.toItem(v, names, userId));
         }
 
         // 정렬도 (occurredAt, refId) 복합키 — 같은 시각이면 id 역순으로 안정 정렬한다
@@ -130,7 +126,7 @@ public class FeedService {
         List<FeedItemResponse> items = hasMore ? new ArrayList<>(merged.subList(0, size)) : merged;
 
         String nextCursor = items.isEmpty() ? null : nextCursorOf(from, items).encode();
-        items = attachReactions(items, userId);
+        items = mapper.attachReactions(items, userId);
         return new FeedTimelineResponse(items, nextCursor, hasMore);
     }
 
@@ -152,7 +148,7 @@ public class FeedService {
         }
 
         Long partnerId = couple.partnerOf(userId);
-        Map<Long, String> names = userNames(
+        Map<Long, String> names = mapper.userNames(
                 partnerId != null ? List.of(userId, partnerId) : List.of(userId));
 
         List<FeedPhotoResponse> items = posts.stream()
@@ -208,7 +204,7 @@ public class FeedService {
         feedPostRepository.save(post);
 
         Long partnerId = couple.partnerOf(userId);
-        String authorName = userName(userId);
+        String authorName = mapper.userName(userId);
         if (partnerId != null) {
             String preview = content != null && !content.isEmpty()
                     ? (content.length() > 40 ? content.substring(0, 40) + "…" : content)
@@ -217,7 +213,7 @@ public class FeedService {
         }
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.FEED);
 
-        return toItem(post, Map.of(userId, authorName), userId, List.of());
+        return mapper.toItem(post, Map.of(userId, authorName), userId, List.of());
     }
 
     /** 포스트 삭제 — 작성자 본인만. */
@@ -246,94 +242,11 @@ public class FeedService {
                     .build());
             if (!userId.equals(post.getAuthorId())) {
                 notificationService.notify(post.getAuthorId(), "일상에 반응이 달렸어요",
-                        userName(userId) + "님이 " + emoji + " 를 남겼어요");
+                        mapper.userName(userId) + "님이 " + emoji + " 를 남겼어요");
             }
         }
         coupleEventPublisher.publish(post.getCoupleId(), CoupleEvent.FEED);
-        return summarize(feedReactionRepository.findByPostId(postId), userId);
-    }
-
-    // ---- 아이템 변환 ----
-
-    private FeedItemResponse toItem(FeedPost p, Map<Long, String> names, Long viewerId,
-                                    List<ReactionSummary> reactions) {
-        return new FeedItemResponse(FeedItemType.POST, p.getId(), p.getAuthorId(),
-                names.getOrDefault(p.getAuthorId(), "커플"), viewerId.equals(p.getAuthorId()),
-                null, p.getContent(), p.getImageUrl(), p.getCreatedAt(), reactions);
-    }
-
-    private FeedItemResponse toItem(Workout w, Map<Long, String> names, Long viewerId) {
-        StringBuilder summary = new StringBuilder();
-        if (!w.getSets().isEmpty()) {
-            summary.append(w.getSets().get(0).getExerciseName());
-            if (w.getSets().size() > 1) {
-                summary.append(" 외 ").append(w.getSets().size() - 1).append("개");
-            }
-        }
-        if (w.getTotalDurationMin() != null) {
-            if (summary.length() > 0) summary.append(" · ");
-            summary.append(w.getTotalDurationMin()).append("분");
-        }
-        return new FeedItemResponse(FeedItemType.WORKOUT, w.getId(), w.getUserId(),
-                names.getOrDefault(w.getUserId(), "커플"), viewerId.equals(w.getUserId()),
-                "운동 완료 💪", summary.length() > 0 ? summary.toString() : null,
-                null, w.getCreatedAt(), null);
-    }
-
-    private FeedItemResponse toItem(Meal m, Map<Long, String> names, Long viewerId) {
-        String calories = m.getCalories() != null ? m.getCalories() + "kcal" : null;
-        String content = m.getMemo() != null && !m.getMemo().isBlank()
-                ? (calories != null ? m.getMemo() + " · " + calories : m.getMemo())
-                : calories;
-        return new FeedItemResponse(FeedItemType.MEAL, m.getId(), m.getUserId(),
-                names.getOrDefault(m.getUserId(), "커플"), viewerId.equals(m.getUserId()),
-                m.getMealType().label() + " 식단 🍽️", content, m.getPhotoUrl(),
-                m.getCreatedAt(), null);
-    }
-
-    private FeedItemResponse toItem(VisitWithPlace vp, Map<Long, String> names, Long viewerId) {
-        var v = vp.getVisit();
-        String stars = v.getRating() != null ? "★".repeat(v.getRating()) : null;
-        String content = v.getMemo() != null && !v.getMemo().isBlank()
-                ? (stars != null ? stars + " " + v.getMemo() : v.getMemo())
-                : stars;
-        return new FeedItemResponse(FeedItemType.PLACE_VISIT, v.getId(), v.getVisitedBy(),
-                names.getOrDefault(v.getVisitedBy(), "커플"), viewerId.equals(v.getVisitedBy()),
-                vp.getPlaceName() + " 방문 📍", content, v.getImageUrl(),
-                v.getCreatedAt(), null);
-    }
-
-    /** POST 아이템에만 반응 요약을 채워 넣는다 (일괄 조회). */
-    private List<FeedItemResponse> attachReactions(List<FeedItemResponse> items, Long viewerId) {
-        List<Long> postIds = items.stream()
-                .filter(i -> i.type() == FeedItemType.POST)
-                .map(FeedItemResponse::refId)
-                .toList();
-        if (postIds.isEmpty()) {
-            return items;
-        }
-        Map<Long, List<FeedReaction>> byPost = new LinkedHashMap<>();
-        for (FeedReaction r : feedReactionRepository.findByPostIdIn(postIds)) {
-            byPost.computeIfAbsent(r.getPostId(), k -> new ArrayList<>()).add(r);
-        }
-        return items.stream()
-                .map(i -> i.type() == FeedItemType.POST
-                        ? new FeedItemResponse(i.type(), i.refId(), i.userId(), i.userName(), i.mine(),
-                        i.title(), i.content(), i.imageUrl(), i.occurredAt(),
-                        summarize(byPost.getOrDefault(i.refId(), List.of()), viewerId))
-                        : i)
-                .toList();
-    }
-
-    private List<ReactionSummary> summarize(List<FeedReaction> reactions, Long viewerId) {
-        Map<String, List<FeedReaction>> byEmoji = new LinkedHashMap<>();
-        for (FeedReaction r : reactions) {
-            byEmoji.computeIfAbsent(r.getEmoji(), k -> new ArrayList<>()).add(r);
-        }
-        return byEmoji.entrySet().stream()
-                .map(e -> new ReactionSummary(e.getKey(), e.getValue().size(),
-                        e.getValue().stream().anyMatch(r -> viewerId.equals(r.getUserId()))))
-                .toList();
+        return mapper.summarize(feedReactionRepository.findByPostId(postId), userId);
     }
 
     // ---- helpers ----
@@ -353,17 +266,5 @@ public class FeedService {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
         return post;
-    }
-
-    private Map<Long, String> userNames(List<Long> userIds) {
-        Map<Long, String> names = new LinkedHashMap<>();
-        for (User u : userRepository.findAllById(userIds)) {
-            names.put(u.getId(), u.getName());
-        }
-        return names;
-    }
-
-    private String userName(Long userId) {
-        return userRepository.findById(userId).map(User::getName).orElse("커플");
     }
 }

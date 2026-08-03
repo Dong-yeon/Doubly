@@ -2,7 +2,7 @@
  * Fitto 디자인 토큰 진입점. 신규 코드는 `../theme` 에서 임포트한다.
  * (기존 `../constants/theme` 임포트도 이 토큰을 re-export 하므로 동일하게 동작)
  */
-export { colors } from './colors';
+export { colors, isDarkMode } from './colors';
 export { fonts } from './fonts';
 export { spacing, radius } from './spacing';
 
