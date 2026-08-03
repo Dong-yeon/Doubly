@@ -52,6 +52,64 @@ public interface FeedPostRepository extends JpaRepository<FeedPost, Long> {
                               @Param("cursorId") Long cursorId,
                               Pageable pageable);
 
+    /**
+     * 추억 리마인드 — 하루 범위의 포스트 (PLAN.md Memories).
+     *
+     * <p><b>{@code extract(month from created_at)} 같은 함수 조건으로 쓰지 말 것.</b>
+     * 인덱스 {@code idx_feed_posts_couple (couple_id, created_at DESC)} 를 타지 못해
+     * 커플의 전체 포스트를 스캔하고, PostgreSQL·H2 의 날짜 함수 방언 차이까지 떠안는다.
+     * 반각 범위 {@code [from, to)} 로 조회하면 인덱스를 그대로 쓴다.
+     *
+     * <p>여기서는 {@code cast(:param as LocalDateTime)} 이 필요 없다 — 두 파라미터 모두
+     * 절대 null 이 아니라 타입 추론이 실패할 자리가 없다 (첫 페이지 null 을 다루는
+     * {@link #findTimeline} 과 다른 점).
+     */
+    @Query("""
+            select p from FeedPost p
+            where p.coupleId = :coupleId
+              and p.createdAt >= :from and p.createdAt < :to
+            order by p.createdAt desc, p.id desc
+            """)
+    List<FeedPost> findInPeriod(@Param("coupleId") Long coupleId,
+                                @Param("from") LocalDateTime from,
+                                @Param("to") LocalDateTime to);
+
+    /**
+     * 추억 조회의 하한 연도용 — 커플의 첫 포스트 시각 (없으면 null).
+     *
+     * <p>관계 생성일({@code relations.connected_at})을 하한으로 쓸 수 없다 —
+     * 재회 후 불러오기(RelationRecordRestorer)가 옛 포스트의 {@code couple_id} 를
+     * 새 관계로 옮기므로, 기록이 관계보다 앞설 수 있다.
+     */
+    @Query("select min(p.createdAt) from FeedPost p where p.coupleId = :coupleId")
+    LocalDateTime findEarliestCreatedAt(@Param("coupleId") Long coupleId);
+
+    /**
+     * 추억 푸시 대상 — 하루 범위에 포스트가 있는 <b>커플과 그 개수</b>.
+     *
+     * <p>스케줄러는 커플을 하나씩 돌며 묻지 않는다. 커플 수만큼 쿼리가 늘기 때문이다.
+     * 기록 쪽에서 한 번에 집계해 대상 커플을 뽑는다
+     * ({@code CalendarDdayNotifier} 가 일정에서 커플을 역으로 찾는 것과 같은 방향).
+     */
+    @Query("""
+            select p.coupleId as coupleId, count(p) as itemCount
+            from FeedPost p
+            where p.createdAt >= :from and p.createdAt < :to
+            group by p.coupleId
+            """)
+    List<CoupleItemCount> countByCoupleInPeriod(@Param("from") LocalDateTime from,
+                                                @Param("to") LocalDateTime to);
+
+    /** 전체를 통틀어 가장 오래된 포스트 — 스케줄러가 훑을 연도의 하한 (없으면 null). */
+    @Query("select min(p.createdAt) from FeedPost p")
+    LocalDateTime findGlobalEarliestCreatedAt();
+
+    interface CoupleItemCount {
+        Long getCoupleId();
+
+        long getItemCount();
+    }
+
     /** 여행 앨범 — 해당 여행에 담긴 포스트, 최신순. */
     List<FeedPost> findByTripIdOrderByCreatedAtDescIdDesc(Long tripId);
 
