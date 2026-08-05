@@ -287,7 +287,16 @@ export function HomeScreen({ navigation }: Props) {
                 dday={dday}
                 anniversaryDate={couple?.anniversaryDate ?? null}
                 onPressDday={openAnnModal}
-                onPressPerson={() => navigation.navigate('FeedTimeline')}
+                // 예전엔 어느 열을 눌러도 똑같이 전체 '우리 기록'으로 갔다 —
+                // 그 화면은 바로 아래 바로가기에도 있어 버튼 기능이 겹쳤다.
+                // 열을 누르면 그 사람 기록만 거른 화면으로 간다.
+                onPressPerson={(who) => navigation.navigate('FeedTimeline', { who })}
+                // 운동/식단 칩은 그 종류의 기록 화면(건강 탭)으로 간다.
+                // 두 화면 모두 로그인한 나의 기록만 보여준다(상대 것을 보는 화면은
+                // 앱에 따로 없다) — 어느 열의 칩을 눌러도 목적지는 같다.
+                onPressToday={(_who, kind) =>
+                  navigation.navigate('Workout', { screen: kind === 'workout' ? 'WorkoutMain' : 'DietMain' })
+                }
               />
             </View>
 

@@ -45,8 +45,10 @@ export interface CoupleHeroProps {
   /** 기준 날짜 (YYYY-MM-DD) — 없으면 "눌러서 설정" 안내가 뜬다 */
   anniversaryDate?: string | null;
   onPressDday: () => void;
-  /** 한 사람의 열을 눌렀을 때 — 그 사람 기록으로 이동 */
+  /** 한 사람의 열(아바타·이름·최근 기록)을 눌렀을 때 — 그 사람의 기록으로 이동 */
   onPressPerson?: (who: 'me' | 'partner') => void;
+  /** 오늘 운동/식단 칩을 눌렀을 때 — 그 종류의 기록 화면으로 이동 */
+  onPressToday?: (who: 'me' | 'partner', kind: 'workout' | 'meal') => void;
 }
 
 export function CoupleHero({
@@ -56,6 +58,7 @@ export function CoupleHero({
   anniversaryDate,
   onPressDday,
   onPressPerson,
+  onPressToday,
 }: CoupleHeroProps) {
   return (
     <View style={styles.wrap}>
@@ -74,82 +77,133 @@ export function CoupleHero({
 
       {/* 좌=나 / 우=상대. 가운데 마크가 경계선을 겸한다 */}
       <View style={styles.split}>
-        <Column person={me} color={colors.me} onPress={() => onPressPerson?.('me')} />
+        <Column
+          person={me}
+          color={colors.me}
+          onPress={() => onPressPerson?.('me')}
+          onPressToday={(kind) => onPressToday?.('me', kind)}
+        />
         <View style={styles.divider}>
           <View style={styles.dividerLine} />
           <DoublyMark size={20} />
           <View style={styles.dividerLine} />
         </View>
-        <Column person={partner} color={colors.partner} onPress={() => onPressPerson?.('partner')} />
+        <Column
+          person={partner}
+          color={colors.partner}
+          onPress={() => onPressPerson?.('partner')}
+          onPressToday={(kind) => onPressToday?.('partner', kind)}
+        />
       </View>
     </View>
   );
 }
 
-/** 한 사람의 열 — 아바타 · 이름 · 오늘 두 줄 · 최근 기록 */
+/**
+ * 한 사람의 열 — 아바타 · 이름 · 오늘 두 줄 · 최근 기록.
+ *
+ * <p><b>버튼 세 개, 형제 관계</b>. 예전엔 열 전체가 버튼 하나(TodayRow 는 그 안의
+ * 평범한 View)였는데, TodayRow 를 눌러도 그 종류가 아니라 사람 전체 기록으로
+ * 가버려 "운동을 눌렀는데 왜 전체가 열리지" 문제가 생겼다. 그래서 TodayRow 도
+ * 버튼으로 만들었더니 — 웹에서 <b>&lt;button&gt; 안에 &lt;button&gt;이 중첩</b>되는
+ * 문제가 났다(react-native-web 은 accessibilityRole="button" Pressable 을
+ * 진짜 &lt;button&gt; 으로 그린다 — HTML 스펙상 버튼은 못 중첩되고, stopPropagation
+ * 을 걸어도 클릭이 안정적으로 안 먹혔다).
+ *
+ * <p>그래서 열 전체를 감싸는 버튼 하나 대신, <b>형제로 나열된 버튼 셋</b>으로 바꿨다 —
+ * ① 위(아바타·이름·연속기록) ② todayBox 안의 운동/식단(각자 버튼) ③ 아래(최근 기록).
+ * ①·③ 은 같은 동작(그 사람 기록)이라 같은 핸들러를 쓴다.
+ */
 function Column({
   person,
   color,
   onPress,
+  onPressToday,
 }: {
   person: PersonToday;
   color: string;
   onPress: () => void;
+  onPressToday: (kind: 'workout' | 'meal') => void;
 }) {
   const active = person.workoutDone || person.mealDone;
+  const label = `${person.name}님의 기록 보기`;
   return (
-    <Pressable
-      style={({ pressed }) => [styles.column, pressed && styles.pressed]}
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={`${person.name}님의 기록 보기`}
-    >
-      <View style={[styles.avatarRing, { borderColor: active ? color : colors.border }]}>
-        <Avatar name={person.name} imageUrl={person.imageUrl} size={58} color={color} />
-      </View>
-      <Text style={styles.name} numberOfLines={1}>
-        {person.name}
-      </Text>
-      {/*
-        연속 기록. 0일은 알려주는 정보가 없어 <b>글자만</b> 감추고 자리는 남긴다 —
-        한쪽만 줄이 사라지면 아래의 운동/식단 칩이 좌우로 어긋나 비교가 깨진다
-        (실측 17px 어긋남).
-      */}
-      <View style={styles.streakSlot}>
-        {person.streak > 0 ? <Text style={styles.streak}>🔥 {person.streak}일</Text> : null}
-      </View>
+    <View style={styles.column}>
+      <Pressable
+        style={({ pressed }) => [styles.profileArea, pressed && styles.pressed]}
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+      >
+        <View style={[styles.avatarRing, { borderColor: active ? color : colors.border }]}>
+          <Avatar name={person.name} imageUrl={person.imageUrl} size={58} color={color} />
+        </View>
+        <Text style={styles.name} numberOfLines={1}>
+          {person.name}
+        </Text>
+        {/*
+          연속 기록. 0일은 알려주는 정보가 없어 <b>글자만</b> 감추고 자리는 남긴다 —
+          한쪽만 줄이 사라지면 아래의 운동/식단 칩이 좌우로 어긋나 비교가 깨진다
+          (실측 17px 어긋남).
+        */}
+        <View style={styles.streakSlot}>
+          {person.streak > 0 ? <Text style={styles.streak}>🔥 {person.streak}일</Text> : null}
+        </View>
+      </Pressable>
 
-      {/* 오늘 — 두 줄을 좌우 같은 높이에 두어 가로로 비교되게 한다 */}
+      {/* 오늘 — 두 줄을 좌우 같은 높이에 두어 가로로 비교되게 한다. 각자 그 종류의 기록 화면으로 가는 버튼이다 */}
       <View style={styles.todayBox}>
-        <TodayRow icon="dumbbell" label="운동" done={person.workoutDone} color={color} />
-        <TodayRow icon="silverware-fork-knife" label="식단" done={person.mealDone} color={color} />
+        <TodayRow
+          icon="dumbbell"
+          label="운동"
+          done={person.workoutDone}
+          color={color}
+          onPress={() => onPressToday('workout')}
+        />
+        <TodayRow
+          icon="silverware-fork-knife"
+          label="식단"
+          done={person.mealDone}
+          color={color}
+          onPress={() => onPressToday('meal')}
+        />
       </View>
 
-      <Text style={styles.latest} numberOfLines={2}>
-        {person.latestLabel ?? '아직 기록이 없어요'}
-      </Text>
-      {person.latestTime ? <Text style={styles.latestTime}>{person.latestTime}</Text> : null}
-    </Pressable>
+      <Pressable
+        style={({ pressed }) => [styles.latestArea, pressed && styles.pressed]}
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+      >
+        <Text style={styles.latest} numberOfLines={2}>
+          {person.latestLabel ?? '아직 기록이 없어요'}
+        </Text>
+        {person.latestTime ? <Text style={styles.latestTime}>{person.latestTime}</Text> : null}
+      </Pressable>
+    </View>
   );
 }
 
-/** 오늘의 한 종류 — 했으면 사람 색으로 채우고, 아니면 비운다 */
+/** 오늘의 한 종류 — 했으면 사람 색으로 채우고, 아니면 비운다. 그 종류의 기록 화면으로 가는 버튼이다 */
 function TodayRow({
   icon,
   label,
   done,
   color,
+  onPress,
 }: {
   icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
   label: string;
   done: boolean;
   color: string;
+  onPress: () => void;
 }) {
   return (
-    <View
-      style={[styles.todayRow, done && { backgroundColor: color, borderColor: color }]}
-      accessibilityRole="text"
-      accessibilityLabel={`오늘 ${label} ${done ? '기록함' : '기록 없음'}`}
+    <Pressable
+      style={({ pressed }) => [styles.todayRow, done && { backgroundColor: color, borderColor: color }, pressed && styles.todayRowPressed]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`오늘 ${label} ${done ? '기록함' : '기록 없음'} — ${label} 기록 보기`}
     >
       <MaterialCommunityIcons
         name={icon}
@@ -159,7 +213,7 @@ function TodayRow({
       />
       <Text style={[styles.todayLabel, done && { color: onColor(color) }]}>{label}</Text>
       <Text style={[styles.todayMark, done && { color: onColor(color) }]}>{done ? '✓' : '—'}</Text>
-    </View>
+    </Pressable>
   );
 }
 
@@ -190,13 +244,13 @@ const styles = themedStyles((colors) => ({
   ddaySince: { color: colors.textSecondary, fontSize: fontSize.caption, fontWeight: '600', marginTop: 2 },
 
   split: { flexDirection: 'row', alignItems: 'flex-start', marginTop: spacing.lg },
-  // 두 열은 정확히 반씩 — 같은 항목이 좌우 같은 높이에 놓여야 비교가 된다
-  column: {
-    flex: 1,
-    alignItems: 'center',
-    paddingHorizontal: spacing.xs,
-    minHeight: layout.touchTarget,
-  },
+  // 두 열은 정확히 반씩 — 같은 항목이 좌우 같은 높이에 놓여야 비교가 된다.
+  // 열 자체는 이제 버튼이 아니라 순수 레이아웃 컨테이너다 — 버튼 셋(위/오늘/아래)을 세로로 쌓는다.
+  column: { flex: 1, alignItems: 'center', paddingHorizontal: spacing.xs },
+  // 위 버튼 — 아바타·이름·연속기록. alignSelf:stretch 로 열 폭 전체를 눌림 영역으로 준다
+  profileArea: { alignSelf: 'stretch', alignItems: 'center', minHeight: layout.touchTarget, justifyContent: 'center' },
+  // 아래 버튼 — 최근 기록 한 줄. 위와 같은 동작(그 사람 기록 보기)
+  latestArea: { alignSelf: 'stretch', alignItems: 'center', minHeight: layout.touchTarget, justifyContent: 'center' },
   pressed: { opacity: 0.7 },
 
   // 가운데 경계 — 선 사이에 마크를 끼워 "둘"을 나타낸다
@@ -221,6 +275,7 @@ const styles = themedStyles((colors) => ({
     borderColor: colors.border,
     backgroundColor: colors.surface,
   },
+  todayRowPressed: { opacity: 0.65 },
   todayLabel: { flex: 1, color: colors.textSecondary, fontSize: fontSize.caption, fontWeight: '700' },
   todayMark: { color: colors.textMuted, fontSize: fontSize.caption, fontWeight: '800' },
 
