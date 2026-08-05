@@ -115,9 +115,14 @@ export function HomeScreen({ navigation }: Props) {
     dietApi.partnerToday().then(setPartnerMeal).catch(() => setPartnerMeal(null));
     streakApi.me().then(setMyStreak).catch(() => setMyStreak(null));
     streakApi.partner().then(setPartnerStreak).catch(() => setPartnerStreak(null));
-    // 커플 미연결이면 피드가 404 다 — 조용히 비운다
+    /*
+     * 최근 기록은 <b>한 건</b>만 보여준다 — limit 1 로 받는다.
+     * 기본값(20)으로 받으면 홈에 들어올 때마다, 그리고 커플 이벤트가 올 때마다
+     * 타임라인 한 페이지를 통째로 받아놓고 첫 항목만 쓰고 버렸다.
+     * (커플 미연결이면 피드가 404 다 — 조용히 비운다)
+     */
     feedApi
-      .timeline(null)
+      .timeline(null, 1)
       .then((page) => setLatest(page.items[0] ?? null))
       .catch(() => setLatest(null));
     // 추억은 대부분의 날에 비어 있다 — 없으면 최근 기록이 그대로 남는다

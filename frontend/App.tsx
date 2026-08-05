@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import * as Font from 'expo-font';
 import { useFonts } from 'expo-font';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -45,13 +46,28 @@ export default function App() {
      * 'material-community' 는 @expo/vector-icons 가 쓰는 실제 패밀리명이다.
      */
     'material-community': require('./assets/fonts/MaterialCommunityIcons.ttf'),
-    'Pretendard-Regular': require('./assets/fonts/Pretendard-Regular.otf'),
-    'Pretendard-Medium': require('./assets/fonts/Pretendard-Medium.otf'),
-    'Pretendard-SemiBold': require('./assets/fonts/Pretendard-SemiBold.otf'),
   });
 
+  /*
+   * Pretendard 는 <b>렌더를 막지 않고</b> 뒤에서 받는다.
+   *
+   * 예전에는 아이콘 폰트와 함께 기다렸는데, 웨이트당 1.5MB 라 첫 진입에서만
+   * 3MB 를 붙잡고 흰 화면을 보여줬다. 정작 이 폰트를 쓰는 곳은 Button·Badge 두 곳뿐이고
+   * 나머지 화면은 처음부터 시스템 폰트로 그려진다 — 기다릴 이유가 없다.
+   * 도착하면 그 두 곳만 자연스럽게 바뀐다.
+   *
+   * 아이콘 폰트는 계속 기다린다. 아이콘만 있는 버튼(헤더 뒤로가기 등)은 폰트가 없으면
+   * 두부(☒)가 아니라 <b>아무것도 안 보이는</b> 상태가 되어 조작이 막힌다.
+   */
+  useEffect(() => {
+    void Font.loadAsync({
+      'Pretendard-Medium': require('./assets/fonts/Pretendard-Medium.otf'),
+      'Pretendard-SemiBold': require('./assets/fonts/Pretendard-SemiBold.otf'),
+    }).catch(() => undefined);
+  }, []);
+
   if (!fontsLoaded && !fontError) {
-    // 폰트 적용 전 화면이 잠깐 보였다가 바뀌는 깜빡임을 막는다 (배경색만 유지)
+    // 아이콘 폰트만 기다린다 — 배경색만 깔아 깜빡임을 줄인다
     return <View style={{ flex: 1, backgroundColor: colors.background }} />;
   }
 
