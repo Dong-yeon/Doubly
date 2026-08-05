@@ -6,6 +6,7 @@ import { colors, fontSize, radius, spacing } from '../constants/theme';
 import type { WeeklyRecap } from '../types';
 import { themedStyles } from '../theme/themedStyles';
 import { layout } from '../theme/layout';
+import { isDarkMode } from '../theme';
 
 interface Props {
   recap: WeeklyRecap;
@@ -98,5 +99,20 @@ const styles = themedStyles((colors) => ({
     borderRadius: radius.pill,
     backgroundColor: colors.primarySoft,
   },
-  shareText: { color: colors.primaryDark, fontWeight: '800', fontSize: fontSize.caption },
+  /*
+   * 다크의 primarySoft 는 배경보다 어두운 웰(#12211A)이라, 같은 어두운 계열인
+   * primaryDark(#2F7A55) 글자는 3.21:1 로 거의 안 보였다(라이트는 7.20:1 로 정상).
+   * onColor() 의 흰색/잉크 이진 선택 대신 <b>더 밝은 같은 계열</b>(primaryLight,
+   * 6.81:1)을 쓴다 — "채팅에 공유" 는 브랜드 색 알약이라 그냥 흰 글자로 바꾸면
+   * 알약 자체가 사라져 보이는 다른 문제가 생긴다.
+   *
+   * isDarkMode() 를 팩토리 안에서 쓰는 게 안전한 이유: themedStyles 의 resolve() 는
+   * getScheme() 을 읽은 직후 동기적으로(await 없이) factory(palettes[scheme]) 를
+   * 호출하므로, 이 시점의 isDarkMode() 는 항상 지금 만들어지는 스킴과 일치한다.
+   */
+  shareText: {
+    color: isDarkMode() ? colors.primaryLight : colors.primaryDark,
+    fontWeight: '800',
+    fontSize: fontSize.caption,
+  },
 }));

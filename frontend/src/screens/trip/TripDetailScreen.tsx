@@ -34,6 +34,7 @@ import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { Place, TripDay, TripDetail, TripItem } from '../../types';
 import { tripStatusLabel } from './TripListScreen';
 import { themedStyles } from '../../theme/themedStyles';
+import { onColor } from '../../theme/onColor';
 
 type Props = NativeStackScreenProps<PlaceStackParamList, 'TripDetail'>;
 type Tab = 'itinerary' | 'places';
@@ -623,7 +624,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
                     style={[styles.catSelect, on && styles.catSelectOn]}
                     onPress={() => setForm((f) => ({ ...f, category: on ? null : c }))}
                   >
-                    <Text style={[styles.catSelectText, on && styles.dayChipTextOn]}>{c}</Text>
+                    <Text style={[styles.catSelectText, on && styles.catSelectTextOn]}>{c}</Text>
                   </TouchableOpacity>
                 );
               })}
@@ -822,7 +823,8 @@ const styles = themedStyles((colors) => ({
   dayChipOn: { backgroundColor: colors.secondary, borderColor: colors.secondary },
   dayChipDay: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
   dayChipDate: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
-  dayChipTextOn: { color: '#fff' },
+  // 다크의 secondary 는 파스텔이라 '#fff' 고정이 1.69:1 이었다 — 배경 휘도로 고른다
+  dayChipTextOn: { color: onColor(colors.secondary) },
 
   mapWrap: { marginTop: spacing.xs, marginBottom: spacing.md, borderRadius: radius.lg, overflow: 'hidden' },
 
@@ -951,6 +953,8 @@ const styles = themedStyles((colors) => ({
   },
   catSelectOn: { backgroundColor: colors.accent, borderColor: colors.accent },
   catSelectText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary },
+  // accent 는 secondary 와 다른 토큰이라 별도로 계산한다 — 다크에서 1.50:1 이었다
+  catSelectTextOn: { color: onColor(colors.accent) },
   linkRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

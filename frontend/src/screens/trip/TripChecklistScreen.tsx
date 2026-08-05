@@ -24,6 +24,7 @@ import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { Checklist, ChecklistItem } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
+import { onColor } from '../../theme/onColor';
 
 type Props = NativeStackScreenProps<PlaceStackParamList, 'TripChecklist'>;
 
@@ -302,7 +303,8 @@ const styles = themedStyles((colors) => ({
     marginRight: spacing.md,
   },
   checkboxOn: { backgroundColor: colors.success, borderColor: colors.success },
-  checkMark: { color: '#fff', fontSize: 14, fontWeight: '900', lineHeight: 18 },
+  // 다크의 success(#3FBF80, L=0.399)는 흰 글자가 2.34:1 이었다 — ink 면 7.27:1
+  checkMark: { color: onColor(colors.success), fontSize: 14, fontWeight: '900', lineHeight: 18 },
   rowBody: { flex: 1 },
   rowText: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
   rowTextChecked: { color: colors.textTertiary, textDecorationLine: 'line-through' },

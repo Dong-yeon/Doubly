@@ -31,6 +31,7 @@ import type { CalendarEventType, CoupleCalendarEvent } from '../../types';
 import { confirmDiscard } from '../../utils/discardGuard';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
+import { onColor } from '../../theme/onColor';
 import { layout } from '../../theme/layout';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'CoupleCalendar'>;
@@ -317,7 +318,11 @@ export function CoupleCalendarScreen(_props: Props) {
                         ]}
                       >
                         <Text
-                          style={[styles.ddayText, event.dday === 0 && { color: colors.white }]}
+                          // 다크의 coral 은 파스텔이라 흰 글자가 1.55:1 이었다 — 배경 휘도로 고른다
+                          style={[
+                            styles.ddayText,
+                            event.dday === 0 && { color: onColor(colors.coral) },
+                          ]}
                         >
                           {ddayLabel(event.dday)}
                         </Text>

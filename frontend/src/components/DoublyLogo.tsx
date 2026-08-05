@@ -74,16 +74,31 @@ function leafPoints(x: number, y: number, ang: number, len: number): Pt[] {
 
 const toPolygon = (pts: Pt[]) => pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
 
-/** 잎이 붙는 위치 (반쪽 경로의 진행도) */
+/** 잎이 붙는 위치 (반쪽 경로의 진행도 — "위 꼭지에서 얼마나 왔나") */
 const LEAF_AT = [0.16, 0.42, 0.7];
 
-/** 한 반쪽의 기하 — 줄기 점들과 잎 세 장 */
+/**
+ * 한 반쪽의 기하 — 줄기 점들과 잎 세 장.
+ *
+ * <p><b>진짜 원인</b>: 줄기 곡선 자체는 완전히 대칭이지만({@code halfPoints(1)[i]}
+ * 를 세로축으로 뒤집으면 {@code halfPoints(-1)[56-i]} 와 정확히 겹친다 — 이건
+ * {@code i ↔ 56-i} 다), <b>{@link LEAF_AT}은 두 반쪽에서 같은 index 를 가리킨다</b>.
+ * 오른쪽은 t 가 위→아래로 흐르고 왼쪽은 아래→위로 흐르므로, 같은 index 9 가
+ * 오른쪽에서는 "위 꼭지 근처", 왼쪽에서는 "아래 끝 근처"를 가리켜 잎이 대각선으로
+ * 몰렸다(실측: bbox 중심이 뷰박스 중앙에서 2.51 벗어남).
+ *
+ * <p><b>고침</b>: 왼쪽만 index 를 {@code (N-1-i)} 로 뒤집고, 접선을 재는 이웃점도
+ * 반대 방향({@code i-3})에서 뽑는다 — "위 꼭지에서부터의 진행도"라는 뜻을 양쪽에서
+ * 같게 맞춘다. 검증(면적·무게중심·bbox, 신발끈 공식): 세 잎 모두 좌우 오차 0.0000.
+ */
 function halfGeometry(side: 1 | -1): { stem: Pt[]; leaves: Pt[][] } {
   const stem = halfPoints(side);
+  const N = stem.length;
   const leaves = LEAF_AT.map((f) => {
-    const i = Math.round(f * (stem.length - 1));
+    const iFromTop = Math.round(f * (N - 1));
+    const i = side > 0 ? iFromTop : N - 1 - iFromTop;
     const p = stem[i];
-    const n = stem[Math.min(i + 3, stem.length - 1)];
+    const n = stem[side > 0 ? Math.min(i + 3, N - 1) : Math.max(i - 3, 0)];
     const ang = Math.atan2(n.y - p.y, n.x - p.x) + side * Math.PI * 0.46;
     return leafPoints(p.x, p.y, ang, H * 0.16);
   });
@@ -93,17 +108,11 @@ function halfGeometry(side: 1 | -1): { stem: Pt[]; leaves: Pt[][] } {
 const GEOMETRY = { right: halfGeometry(1), left: halfGeometry(-1) };
 
 /**
- * 그림을 뷰박스 한가운데로 옮기는 보정값.
+ * 그림을 뷰박스 한가운데로 옮기는 안전망.
  *
- * <p><b>왜 필요한가</b>: 줄기 곡선({@code 16·sin³t})은 좌우 대칭이지만 <b>잎은 아니다</b>.
- * {@link LEAF_AT} 은 "반쪽 경로의 진행도"인데, 오른쪽 반쪽은 위→아래로,
- * 왼쪽 반쪽은 아래→위로 매개변수가 흐른다. 그래서 잎이 대각선으로 몰리고
- * 그림 전체가 뷰박스 중앙에서 벗어난다 — 실측 <b>가로 약 5% 왼쪽</b>.
- *
- * <p>홈 히어로에서는 마크 위아래로 정확히 가운데인 세로선이 지나가므로 이 어긋남이
- * 눈에 띄었다. 잎 배치(=브랜드 모양)를 건드리지 않고 <b>위치만</b> 바로잡는다.
- *
- * <p>값은 그림을 만드는 함수에서 직접 계산한다 — 모양을 고치면 보정도 따라 움직인다.
+ * <p>위 halfGeometry 수정으로 그림은 이미 완전 대칭이라(bbox 중심 오차 0.000,
+ * verify-logo 스크립트로 확인) 이 보정은 사실상 항등(dx≈dy≈0)이다. 향후 잎 모양이나
+ * 각도를 조정해 미세한 비대칭이 다시 생기더라도 자동으로 잡히도록 남겨 둔다.
  */
 const CENTERING = (() => {
   const all: Pt[] = [];
@@ -160,7 +169,7 @@ export function DoublyMark({ size = 40, onDark = false }: { size?: number; onDar
   const leaf = onDark ? ON_DARK.together : colors.together;
   return (
     <Svg width={size} height={size} viewBox={`0 0 ${V} ${V}`}>
-      {/* 잎이 비대칭이라 그림이 뷰박스 중앙에서 벗어난다 — CENTERING 주석 참고 */}
+      {/* halfGeometry 가 이제 좌우 완전 대칭이라 이 이동은 사실상 0 — CENTERING 주석 참고 */}
       <G transform={`translate(${CENTERING.dx.toFixed(2)} ${CENTERING.dy.toFixed(2)})`}>
         {/* 상대(뒤) → 나(앞) 순서로 겹쳐 '얽힌' 인상을 만든다 */}
         <Half side={1} color={partner} leafColor={leaf} />

@@ -33,6 +33,7 @@ import { formatKcal, formatKcalOfGoal, formatNumber } from '../../utils/format';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { CoupleMealGoal, DietCoach, Meal, NutritionSummary, Streak, WeeklyLetter } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
+import { onColor } from '../../theme/onColor';
 import { layout } from '../../theme/layout';
 
 /** 목표 대비 섭취 바 */
@@ -491,6 +492,7 @@ const styles = themedStyles((colors) => ({
   },
   dayChipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
   dayText: { fontSize: fontSize.subtitle, fontWeight: '700', color: colors.textPrimary },
-  dayTextActive: { color: colors.white },
+  // 다크 accent 위 white 는 팔레트 전체에서 가장 낮은 1.50:1 이었다 — 배경 휘도로 고른다
+  dayTextActive: { color: onColor(colors.accent) },
   modalHint: { fontSize: fontSize.caption, color: colors.textTertiary, textAlign: 'center' },
 }));

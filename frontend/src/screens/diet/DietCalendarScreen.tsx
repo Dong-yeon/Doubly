@@ -8,6 +8,7 @@ import { Button } from '../../components/Button';
 import { dietApi } from '../../api/diet';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
+import { onColor } from '../../theme/onColor';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'DietCalendar'>;
 
@@ -172,7 +173,8 @@ const styles = themedStyles((colors) => ({
   daySelected: { borderWidth: 2, borderColor: colors.primary },
   dayDone: { backgroundColor: colors.accent },
   dayText: { fontSize: fontSize.body, color: colors.textPrimary },
-  dayTextDone: { color: colors.white, fontWeight: '700' },
+  // 다크 accent 위 white 는 1.50:1 — 선택 여부와 무관하게 완료된 모든 날짜가 이랬다
+  dayTextDone: { color: onColor(colors.accent), fontWeight: '700' },
   legend: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.xl, gap: spacing.sm },
   selectedBox: { marginTop: spacing.xl, gap: spacing.sm },
   selectedText: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },

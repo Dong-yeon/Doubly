@@ -26,6 +26,7 @@ import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { TripExpense, TripExpenses } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
+import { onColor } from '../../theme/onColor';
 import { layout } from '../../theme/layout';
 
 type Props = NativeStackScreenProps<PlaceStackParamList, 'TripExpense'>;
@@ -282,7 +283,7 @@ export function TripExpenseScreen({ route }: Props) {
                     style={[styles.catSelect, on && styles.catSelectOn]}
                     onPress={() => setForm((f) => ({ ...f, category: on ? null : c }))}
                   >
-                    <Text style={[styles.catSelectText, on && styles.payerTextOn]}>{c}</Text>
+                    <Text style={[styles.catSelectText, on && styles.catSelectTextOn]}>{c}</Text>
                   </TouchableOpacity>
                 );
               })}
@@ -399,7 +400,9 @@ const styles = themedStyles((colors) => ({
   },
   payerBtnOn: { backgroundColor: colors.secondary, borderColor: colors.secondary },
   payerText: { fontSize: fontSize.body, fontWeight: '800', color: colors.textSecondary },
-  payerTextOn: { color: '#fff' },
+  // 다크의 secondary 는 파스텔이라 '#fff' 고정이 1.69:1 이었다 — 배경 휘도로 고른다.
+  // 결제자 토글은 둘 중 하나만 켜져 이름이 안 보이면 누가 냈는지 판별이 안 된다.
+  payerTextOn: { color: onColor(colors.secondary) },
   catRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   catSelect: {
     paddingHorizontal: spacing.md,
@@ -411,4 +414,6 @@ const styles = themedStyles((colors) => ({
   },
   catSelectOn: { backgroundColor: colors.accent, borderColor: colors.accent },
   catSelectText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary },
+  // accent 는 secondary 와 다른 토큰이라 별도로 계산한다 — 다크에서 1.50:1 이었다
+  catSelectTextOn: { color: onColor(colors.accent) },
 }));

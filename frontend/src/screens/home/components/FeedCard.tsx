@@ -18,6 +18,7 @@ import type { FeedItem, FeedItemType, ReactionSummary } from '../../../types';
 import { colors, fontSize, radius, spacing } from '../../../constants/theme';
 import { themedStyles } from '../../../theme/themedStyles';
 import { layout } from '../../../theme/layout';
+import { onColor } from '../../../theme/onColor';
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -61,7 +62,8 @@ function RecordCard({ item, timeLabel }: { item: FeedItem; timeLabel: string }) 
   return (
     <View style={styles.record}>
       <View style={[styles.recordIcon, { backgroundColor: meta.color }]}>
-        <MaterialCommunityIcons name={meta.icon} size={18} color={colors.white} />
+        {/* 다크의 소유자 색은 파스텔이라 흰 아이콘이 1.50~1.69:1 이었다 — 배경 휘도로 고른다 */}
+        <MaterialCommunityIcons name={meta.icon} size={18} color={onColor(meta.color)} />
       </View>
       <View style={styles.recordBody}>
         <Text style={styles.recordTitle} numberOfLines={1}>
