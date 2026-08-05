@@ -5,6 +5,7 @@ import type { Meal, MealType } from '../types';
 import { relativeDateLabel } from '../utils/date';
 import { formatKcal } from '../utils/format';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
+import { themedStyles } from '../theme/themedStyles';
 
 interface Props {
   meal: Meal;
@@ -50,7 +51,7 @@ export function MealCard({ meal, onLongPress, showDate }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -73,4 +74,4 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   memo: { fontSize: fontSize.body, color: colors.textPrimary, marginTop: spacing.sm },
-});
+}));

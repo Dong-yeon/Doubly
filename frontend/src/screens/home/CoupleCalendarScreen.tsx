@@ -30,16 +30,27 @@ import { getErrorMessage } from '../../utils/error';
 import type { CalendarEventType, CoupleCalendarEvent } from '../../types';
 import { confirmDiscard } from '../../utils/discardGuard';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'CoupleCalendar'>;
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
-const TYPE_META: Record<CalendarEventType, { label: string; color: string }> = {
-  ANNIVERSARY: { label: '기념일', color: colors.violet },
-  BIRTHDAY: { label: '생일', color: colors.coral },
-  DATE: { label: '데이트', color: colors.indigo },
-  ETC: { label: '기타', color: colors.textSecondary },
+/** 렌더 시점에 현재 팔레트를 읽는다 — 객체로 굳히면 테마 전환을 못 따라온다 */
+const typeMeta = (type: CalendarEventType): { label: string; color: string } =>
+  ({
+    ANNIVERSARY: { label: '기념일', color: colors.violet },
+    BIRTHDAY: { label: '생일', color: colors.coral },
+    DATE: { label: '데이트', color: colors.indigo },
+    ETC: { label: '기타', color: colors.textSecondary },
+  })[type];
+
+/** 라벨만 필요한 곳 — 색과 달리 테마와 무관하다 */
+const TYPE_LABEL: Record<CalendarEventType, string> = {
+  ANNIVERSARY: '기념일',
+  BIRTHDAY: '생일',
+  DATE: '데이트',
+  ETC: '기타',
 };
 
 function pad2(n: number): string {
@@ -257,7 +268,7 @@ export function CoupleCalendarScreen(_props: Props) {
                     {dayEvents.slice(0, 3).map((e) => (
                       <View
                         key={e.id}
-                        style={[styles.dot, { backgroundColor: TYPE_META[e.eventType].color }]}
+                        style={[styles.dot, { backgroundColor: typeMeta(e.eventType).color }]}
                       />
                     ))}
                   </View>
@@ -287,7 +298,7 @@ export function CoupleCalendarScreen(_props: Props) {
           />
         ) : (
           listEvents.map((event) => {
-            const meta = TYPE_META[event.eventType];
+            const meta = typeMeta(event.eventType);
             return (
               <TouchableOpacity key={`${event.id}-${event.date}`} activeOpacity={0.8} onPress={() => openEdit(event)}>
                 <Card elevation="sm" style={styles.eventCard}>
@@ -356,20 +367,20 @@ export function CoupleCalendarScreen(_props: Props) {
 
                   <Text style={styles.fieldLabel}>종류</Text>
                   <View style={styles.typeRow}>
-                    {(Object.keys(TYPE_META) as CalendarEventType[]).map((t) => {
+                    {(Object.keys(TYPE_LABEL) as CalendarEventType[]).map((t) => {
                       const active = form?.eventType === t;
                       return (
                         <Pressable
                           key={t}
                           style={[
                             styles.typeChip,
-                            active && { borderColor: TYPE_META[t].color, backgroundColor: colors.surfaceAlt },
+                            active && { borderColor: typeMeta(t).color, backgroundColor: colors.surfaceAlt },
                           ]}
                           onPress={() => setForm((f) => (f ? { ...f, eventType: t } : f))}
                         >
-                          <View style={[styles.dot, { backgroundColor: TYPE_META[t].color }]} />
+                          <View style={[styles.dot, { backgroundColor: typeMeta(t).color }]} />
                           <Text style={[styles.typeChipText, active && { color: colors.textPrimary, fontWeight: '700' }]}>
-                            {TYPE_META[t].label}
+                            {typeMeta(t).label}
                           </Text>
                         </Pressable>
                       );
@@ -422,7 +433,7 @@ export function CoupleCalendarScreen(_props: Props) {
 
 const CELL = `${100 / 7}%` as const;
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   container: { flex: 1, backgroundColor: colors.background },
   scroll: { padding: spacing.lg, paddingBottom: 96 },
   flex: { flex: 1 },
@@ -562,4 +573,4 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
   },
   modalSaveText: { color: colors.white, fontWeight: '800' },
-});
+}));

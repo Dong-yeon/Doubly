@@ -25,6 +25,7 @@ import { formatMoney } from '../../utils/format';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { TripExpense, TripExpenses } from '../../types';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<PlaceStackParamList, 'TripExpense'>;
 
@@ -307,7 +308,7 @@ export function TripExpenseScreen({ route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   list: { padding: spacing.lg, paddingBottom: 120 },
 
@@ -409,4 +410,4 @@ const styles = StyleSheet.create({
   },
   catSelectOn: { backgroundColor: colors.accent, borderColor: colors.accent },
   catSelectText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary },
-});
+}));

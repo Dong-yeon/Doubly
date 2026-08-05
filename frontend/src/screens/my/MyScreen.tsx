@@ -27,6 +27,7 @@ import { haptics } from '../../utils/haptics';
 import { pickImage, uploadImage } from '../../utils/imageUpload';
 import { colors, fontSize, spacing } from '../../constants/theme';
 import type { UserLevel, WeeklyRecap } from '../../types';
+import { themedStyles } from '../../theme/themedStyles';
 
 // 식단 뱃지 — 운동(7/30/100)과 같은 단계, 식단 스트릭 기준
 const MEAL_BADGES = [
@@ -507,7 +508,7 @@ export function MyScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   container: { padding: spacing.lg, flexGrow: 1 },
   profile: { alignItems: 'center', paddingVertical: spacing.xl },
@@ -559,4 +560,4 @@ const styles = StyleSheet.create({
   chevron: { fontSize: 22, color: colors.textTertiary },
   divider: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.lg },
   footer: { textAlign: 'center', color: colors.textTertiary, fontSize: fontSize.caption, marginTop: 'auto', paddingTop: spacing.xl },
-});
+}));

@@ -27,6 +27,7 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, fontSize, spacing } from '../constants/theme';
+import { themedStyles } from '../theme/themedStyles';
 
 export interface ViewerImage {
   /** 목록 키 — 같은 사진이 두 번 들어가도 구분되게 호출부에서 고유값을 준다 */
@@ -141,7 +142,7 @@ export function ImageViewer({ images, initialIndex, onClose }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.94)' },
   page: { alignItems: 'center', justifyContent: 'center' },
   close: {
@@ -169,4 +170,4 @@ const styles = StyleSheet.create({
   },
   title: { color: colors.white, fontSize: fontSize.body, fontWeight: '800', marginBottom: 2 },
   captionText: { color: colors.white, fontSize: fontSize.body, lineHeight: 21 },
-});
+}));

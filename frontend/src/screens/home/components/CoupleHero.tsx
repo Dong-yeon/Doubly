@@ -15,6 +15,7 @@ import { Avatar } from '../../../components/Avatar';
 import { DoublyMark } from '../../../components/DoublyLogo';
 import { formatDateLabel } from '../../../utils/date';
 import { colors, fontSize, radius, spacing } from '../../../constants/theme';
+import { themedStyles } from '../../../theme/themedStyles';
 
 export interface CoupleHeroProps {
   meName: string;
@@ -120,7 +121,7 @@ function Face({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   wrap: { paddingHorizontal: spacing.xs, alignItems: 'stretch' },
 
 
@@ -177,4 +178,4 @@ const styles = StyleSheet.create({
     fontSize: fontSize.body,
     fontWeight: '600',
   },
-});
+}));

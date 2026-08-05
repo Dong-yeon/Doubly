@@ -25,6 +25,7 @@ import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { AlbumPost } from '../../types';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<PlaceStackParamList, 'TripAlbum'>;
 
@@ -211,7 +212,7 @@ export function TripAlbumScreen({ route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   list: { padding: spacing.lg, paddingBottom: spacing.xxl },
   header: {
@@ -245,4 +246,4 @@ const styles = StyleSheet.create({
   candThumb: { width: 52, height: 52, borderRadius: radius.md, backgroundColor: colors.surfaceAlt, marginRight: spacing.md },
   candBody: { flex: 1 },
   candCaption: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
-});
+}));

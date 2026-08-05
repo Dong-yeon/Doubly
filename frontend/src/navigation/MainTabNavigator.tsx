@@ -14,6 +14,7 @@ import { PlaceStackNavigator } from './PlaceStackNavigator';
 import { haptics } from '../utils/haptics';
 import { useRelationStore } from '../store/relationStore';
 import { toast } from '../store/toastStore';
+import { themedStyles } from '../theme/themedStyles';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
@@ -191,7 +192,7 @@ const FAB_SIZE = 58;
 /** FAB 가 탭바 상단 위로 튀어나오는 높이 — barWrap 의 투명 상단 여백과 같아야 한다 */
 const FAB_PROTRUSION = 24;
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   // 투명 래퍼 — FAB 돌출분을 경계 안에 포함시킨다 (Android 터치 클리핑 대응)
   barWrap: { paddingTop: FAB_PROTRUSION },
   bar: {
@@ -248,4 +249,4 @@ const styles = StyleSheet.create({
   actionLabel: { fontSize: fontSize.subtitle, fontWeight: '700', color: colors.textPrimary },
   cancel: { alignItems: 'center', paddingVertical: spacing.md, marginTop: spacing.xs },
   cancelText: { fontSize: fontSize.subtitle, fontWeight: '700', color: colors.textSecondary },
-});
+}));

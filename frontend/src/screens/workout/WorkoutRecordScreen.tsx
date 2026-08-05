@@ -22,6 +22,7 @@ import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { toDateString } from '../../utils/date';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'WorkoutRecord'>;
 
@@ -324,7 +325,7 @@ export function WorkoutRecordScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
   container: { padding: spacing.lg, paddingBottom: spacing.xl },
@@ -375,4 +376,4 @@ const styles = StyleSheet.create({
   flex1: { flex: 1 },
   meta: { marginTop: spacing.sm },
   save: { marginTop: spacing.md },
-});
+}));

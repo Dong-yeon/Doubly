@@ -34,6 +34,7 @@ import { applySuggestion, checkKoreanSpelling } from '../../utils/koreanSpellChe
 import { chatApi } from '../../api/chat';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { ChatMessage } from '../../types';
+import { themedStyles } from '../../theme/themedStyles';
 
 const REACTIONS = ['💗', '🔥', '💪', '👍', '🎉'];
 
@@ -499,7 +500,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
   list: { padding: spacing.md },
@@ -659,4 +660,4 @@ const styles = StyleSheet.create({
   },
   sendDisabled: { opacity: 0.4 },
   sendText: { color: colors.white, fontWeight: '800' },
-});
+}));

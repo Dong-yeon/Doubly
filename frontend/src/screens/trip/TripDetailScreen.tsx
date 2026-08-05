@@ -33,6 +33,7 @@ import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { Place, TripDay, TripDetail, TripItem } from '../../types';
 import { tripStatusLabel } from './TripListScreen';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<PlaceStackParamList, 'TripDetail'>;
 type Tab = 'itinerary' | 'places';
@@ -762,7 +763,7 @@ function TabButton({ label, active, onPress }: { label: string; active: boolean;
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   scroll: { padding: spacing.lg, paddingBottom: spacing.xxl },
   cover: { width: '100%', height: 160, borderRadius: radius.lg, marginBottom: spacing.md },
@@ -961,4 +962,4 @@ const styles = StyleSheet.create({
   },
   linkLabel: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
   linkValue: { fontSize: fontSize.body, color: colors.secondary, fontWeight: '700' },
-});
+}));

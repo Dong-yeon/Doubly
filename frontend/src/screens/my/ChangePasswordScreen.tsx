@@ -14,6 +14,7 @@ import { useAuthStore } from '../../store/authStore';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { colors, fontSize, spacing } from '../../constants/theme';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'ChangePassword'>;
 
@@ -124,7 +125,7 @@ export function ChangePasswordScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
   container: { flexGrow: 1, justifyContent: 'center', padding: spacing.lg },
@@ -139,4 +140,4 @@ const styles = StyleSheet.create({
   card: { gap: spacing.xs },
   submit: { marginTop: spacing.sm },
   footer: { alignItems: 'center', marginTop: spacing.md },
-});
+}));

@@ -32,6 +32,7 @@ import { confirmDiscard } from '../../utils/discardGuard';
 import { formatKcal, formatKcalOfGoal, formatNumber } from '../../utils/format';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { CoupleMealGoal, DietCoach, Meal, NutritionSummary, Streak, WeeklyLetter } from '../../types';
+import { themedStyles } from '../../theme/themedStyles';
 
 /** 목표 대비 섭취 바 */
 function NutritionBar({ label, consumed, target, unit }: { label: string; consumed: number; target?: number | null; unit: string }) {
@@ -380,7 +381,7 @@ export function DietScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   header: {
     flexDirection: 'row',
@@ -482,4 +483,4 @@ const styles = StyleSheet.create({
   dayText: { fontSize: fontSize.subtitle, fontWeight: '700', color: colors.textPrimary },
   dayTextActive: { color: colors.white },
   modalHint: { fontSize: fontSize.caption, color: colors.textTertiary, textAlign: 'center' },
-});
+}));

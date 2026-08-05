@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, TextInputProps, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
+import { themedStyles } from '../theme/themedStyles';
 
 interface Props extends TextInputProps {
   label?: string;
@@ -56,7 +57,7 @@ export function TextField({ label, errorText, style, secureTextEntry, onFocus, o
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   wrapper: { marginBottom: spacing.md },
   label: {
     fontSize: fontSize.caption,
@@ -93,4 +94,4 @@ const styles = StyleSheet.create({
   eye: { position: 'absolute', right: spacing.sm, height: 40, width: 40, alignItems: 'center', justifyContent: 'center' },
   eyeText: { fontSize: 18 },
   error: { color: colors.danger, fontSize: fontSize.caption, marginTop: spacing.xs, marginLeft: spacing.xs },
-});
+}));

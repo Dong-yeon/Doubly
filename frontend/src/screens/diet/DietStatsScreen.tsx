@@ -8,6 +8,7 @@ import { EmptyState } from '../../components/EmptyState';
 import { dietApi } from '../../api/diet';
 import type { MealStats } from '../../types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
+import { themedStyles } from '../../theme/themedStyles';
 
 export function DietStatsScreen() {
   const [stats, setStats] = useState<MealStats | null>(null);
@@ -95,7 +96,7 @@ function SummaryCard({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   container: { padding: spacing.lg, gap: spacing.md },
   summaryRow: { flexDirection: 'row', gap: spacing.sm },
@@ -113,4 +114,4 @@ const styles = StyleSheet.create({
   barFill: { width: '100%', borderRadius: radius.pill },
   barCal: { fontSize: 9, color: colors.textSecondary },
   dayLabel: { fontSize: fontSize.caption, color: colors.textSecondary },
-});
+}));

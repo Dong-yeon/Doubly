@@ -39,6 +39,7 @@ import { getErrorMessage } from '../../utils/error';
 import { updateHomeWidget } from '../../widget/updateHomeWidget';
 import type { FeedItem, PartnerToday, Streak } from '../../types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = CompositeScreenProps<
   NativeStackScreenProps<HomeStackParamList, 'HomeMain'>,
@@ -312,7 +313,7 @@ export function HomeScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   root: { flex: 1, backgroundColor: colors.background },
   safe: { flex: 1, backgroundColor: 'transparent' },
 
@@ -389,4 +390,4 @@ const styles = StyleSheet.create({
   modalCancelText: { color: colors.textSecondary, fontWeight: '700' },
   modalSave: { flex: 1, alignItems: 'center', paddingVertical: spacing.md, borderRadius: radius.md, backgroundColor: colors.primary },
   modalSaveText: { color: colors.white, fontWeight: '800' },
-});
+}));

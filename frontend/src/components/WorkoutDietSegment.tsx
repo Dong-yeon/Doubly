@@ -5,6 +5,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { WorkoutStackParamList } from '../navigation/types';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
+import { themedStyles } from '../theme/themedStyles';
 
 type Nav = NativeStackNavigationProp<WorkoutStackParamList>;
 
@@ -36,7 +37,7 @@ export function WorkoutDietSegment({ active }: { active: 'workout' | 'diet' }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   wrap: {
     flexDirection: 'row',
     backgroundColor: colors.surfaceAlt,
@@ -54,4 +55,4 @@ const styles = StyleSheet.create({
   tabActive: { backgroundColor: colors.surfaceCard },
   tabText: { fontSize: fontSize.body, fontWeight: '700', color: colors.textSecondary },
   tabTextActive: { color: colors.textPrimary },
-});
+}));

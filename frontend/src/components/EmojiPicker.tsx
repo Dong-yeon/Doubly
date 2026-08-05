@@ -7,6 +7,7 @@
 import React, { useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
+import { themedStyles } from '../theme/themedStyles';
 
 interface EmojiEntry {
   char: string;
@@ -174,7 +175,7 @@ export function EmojiPicker({ visible, onClose, onSelect, title = '이모지 선
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: colors.surface,
@@ -235,4 +236,4 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     paddingVertical: spacing.xl,
   },
-});
+}));

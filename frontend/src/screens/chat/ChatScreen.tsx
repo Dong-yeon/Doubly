@@ -12,6 +12,7 @@ import { EmptyState } from '../../components/EmptyState';
 import { useChatStore } from '../../store/chatStore';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { ChatRoom, MessageType } from '../../types';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<ChatStackParamList, 'ChatRooms'>;
 
@@ -105,7 +106,7 @@ export function ChatScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: fontSize.heading, fontWeight: '800', color: colors.textPrimary, paddingHorizontal: spacing.lg, paddingTop: spacing.sm, letterSpacing: -0.5 },
@@ -118,4 +119,4 @@ const styles = StyleSheet.create({
   badge: { minWidth: 24, height: 24, borderRadius: radius.pill, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 7 },
   badgeText: { color: colors.white, fontSize: fontSize.caption, fontWeight: '800' },
   sep: { height: spacing.xs },
-});
+}));

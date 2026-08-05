@@ -26,6 +26,7 @@ import { haptics } from '../../utils/haptics';
 import { useDirtyGuard } from '../../hooks/useDirtyGuard';
 import { confirmDiscard } from '../../utils/discardGuard';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'WorkoutSession'>;
 
@@ -324,7 +325,7 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   progressBar: {
     flexDirection: 'row',
@@ -442,4 +443,4 @@ const styles = StyleSheet.create({
   catTextActive: { color: colors.primary },
   formRow: { flexDirection: 'row', gap: spacing.sm },
   modalBtn: { marginTop: spacing.sm },
-});
+}));

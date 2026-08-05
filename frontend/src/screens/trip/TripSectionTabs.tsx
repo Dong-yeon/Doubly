@@ -16,6 +16,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { PlaceStackParamList } from '../../navigation/types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Nav = NativeStackNavigationProp<PlaceStackParamList>;
 type SectionRoute = 'TripExpense' | 'TripChecklist' | 'TripAlbum' | 'TripRecap';
@@ -69,7 +70,7 @@ export function TripSectionTabs({ tripId, title }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   row: {
     flexDirection: 'row',
     gap: spacing.xs,
@@ -91,4 +92,4 @@ const styles = StyleSheet.create({
   tabActive: { backgroundColor: colors.primaryBg, borderColor: colors.primary },
   label: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
   labelActive: { color: colors.primary, fontWeight: '800' },
-});
+}));

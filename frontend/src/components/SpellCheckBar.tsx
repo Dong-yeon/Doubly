@@ -13,6 +13,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { SpellSuggestion } from '../utils/koreanSpellCheck';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
+import { themedStyles } from '../theme/themedStyles';
 
 interface Props {
   suggestion: SpellSuggestion | null;
@@ -56,7 +57,7 @@ export function SpellCheckBar({ suggestion, total, onApply, onDismiss }: Props) 
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   bar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -83,4 +84,4 @@ const styles = StyleSheet.create({
   },
   // 배경이 colors.primary — 라이트/다크 모두 흰 글씨가 대비를 만족한다
   applyText: { color: colors.white, fontWeight: '800', fontSize: fontSize.caption },
-});
+}));

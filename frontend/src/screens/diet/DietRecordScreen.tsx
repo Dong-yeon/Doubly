@@ -24,6 +24,7 @@ import { haptics } from '../../utils/haptics';
 import { toDateString } from '../../utils/date';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { FavoriteFood, MealType } from '../../types';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'DietRecord'>;
 
@@ -430,7 +431,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
   container: { padding: spacing.lg, paddingBottom: spacing.xl },
@@ -513,4 +514,4 @@ const styles = StyleSheet.create({
   },
   presetText: { fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '600' },
   save: { marginTop: spacing.lg },
-});
+}));

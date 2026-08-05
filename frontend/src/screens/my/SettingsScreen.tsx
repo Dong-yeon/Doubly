@@ -12,12 +12,8 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../navigation/types';
 import { Card } from '../../components/Card';
 import { Chip } from '../../components/Chip';
-import {
-  applyToAppearance,
-  loadThemeMode,
-  saveThemeMode,
-  type ThemeMode,
-} from '../../theme/themePreference';
+import { useThemeStore } from '../../store/themeStore';
+import type { ThemeMode } from '../../theme/themePreference';
 import { authApi } from '../../api/auth';
 import { useAuthStore } from '../../store/authStore';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -26,6 +22,7 @@ import { toast } from '../../store/toastStore';
 import { APP_VERSION } from '../../constants/config';
 import { CONTACT_EMAIL, PRIVACY_VERSION, TERMS_VERSION } from '../../constants/legal';
 import { colors, fontSize, spacing } from '../../constants/theme';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'Settings'>;
 
@@ -40,27 +37,9 @@ export function SettingsScreen({ navigation }: Props) {
   const setUser = useAuthStore((s) => s.setUser);
   const spellCheckEnabled = useSettingsStore((s) => s.spellCheckEnabled);
   const setSpellCheckEnabled = useSettingsStore((s) => s.setSpellCheckEnabled);
-  /*
-   * 테마 — 팔레트는 앱이 시작할 때 한 번 정해지므로(88개 화면의 StyleSheet 가
-   * 그 값을 복사해 간다) 바꾸면 웹은 새로고침, 네이티브는 다음 실행에 적용된다.
-   */
-  const [themeMode, setThemeMode] = useState<ThemeMode>('system');
-  useEffect(() => {
-    void loadThemeMode().then(setThemeMode);
-  }, []);
-
-  const onChangeTheme = async (mode: ThemeMode) => {
-    if (mode === themeMode) return;
-    setThemeMode(mode);
-    await saveThemeMode(mode);
-    applyToAppearance(mode);
-    if (Platform.OS === 'web') {
-      // 웹은 저장값을 동기로 읽으므로 새로고침만 하면 바로 반영된다
-      location.reload();
-      return;
-    }
-    toast.info('앱을 다시 열면 새 테마로 보여요.');
-  };
+  /* 테마 — 고르는 즉시 화면에 반영된다 (RootNavigator 가 트리를 다시 그린다) */
+  const themeMode = useThemeStore((s) => s.mode);
+  const setThemeMode = useThemeStore((s) => s.setMode);
 
   const [savingNotification, setSavingNotification] = useState(false);
   const [savingMarketing, setSavingMarketing] = useState(false);
@@ -178,10 +157,7 @@ export function SettingsScreen({ navigation }: Props) {
           <Text style={styles.sectionLabel}>화면</Text>
           <View style={styles.rowText}>
             <Text style={styles.rowTitle}>테마</Text>
-            <Text style={styles.rowDesc}>
-              시스템을 고르면 기기 설정을 따라가요.
-              {Platform.OS === 'web' ? '' : ' 바꾸면 앱을 다시 열었을 때 적용돼요.'}
-            </Text>
+            <Text style={styles.rowDesc}>시스템을 고르면 기기 설정을 따라가요.</Text>
           </View>
           <View style={styles.themeRow}>
             {THEME_OPTIONS.map((o) => (
@@ -189,7 +165,7 @@ export function SettingsScreen({ navigation }: Props) {
                 key={o.value}
                 label={o.label}
                 selected={themeMode === o.value}
-                onPress={() => onChangeTheme(o.value)}
+                onPress={() => void setThemeMode(o.value)}
                 fill
               />
             ))}
@@ -257,7 +233,7 @@ export function SettingsScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   container: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xl },
   section: { paddingVertical: spacing.sm },
@@ -299,4 +275,4 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: spacing.sm,
   },
-});
+}));

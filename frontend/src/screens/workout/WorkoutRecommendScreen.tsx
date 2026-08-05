@@ -11,6 +11,7 @@ import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { WorkoutRecommendation } from '../../types';
+import { themedStyles } from '../../theme/themedStyles';
 
 const PLANS = [
   { days: 1, title: '오늘 뭐하지?' },
@@ -146,7 +147,7 @@ export function WorkoutRecommendScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   container: { padding: spacing.lg, paddingBottom: spacing.xl },
   hint: { fontSize: fontSize.caption, color: colors.textSecondary, marginBottom: spacing.md },
@@ -198,4 +199,4 @@ const styles = StyleSheet.create({
   empty: { alignItems: 'center', paddingVertical: spacing.xl },
   emptyEmoji: { fontSize: 44, marginBottom: spacing.sm },
   emptyText: { fontSize: fontSize.body, color: colors.textSecondary },
-});
+}));

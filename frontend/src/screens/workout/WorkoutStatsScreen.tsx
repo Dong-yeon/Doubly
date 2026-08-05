@@ -8,6 +8,7 @@ import { EmptyState } from '../../components/EmptyState';
 import { workoutApi } from '../../api/workout';
 import type { WorkoutStats } from '../../types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
+import { themedStyles } from '../../theme/themedStyles';
 
 const CAT_COLORS: Record<string, string> = {
   근력: colors.primary,
@@ -113,7 +114,7 @@ function SummaryCard({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   container: { padding: spacing.lg, gap: spacing.md },
   summaryRow: { flexDirection: 'row', gap: spacing.sm },
@@ -135,4 +136,4 @@ const styles = StyleSheet.create({
   barFill: { height: '100%', borderRadius: radius.pill },
   catCount: { width: 56, textAlign: 'right', fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
   empty: { color: colors.textSecondary, fontSize: fontSize.body },
-});
+}));

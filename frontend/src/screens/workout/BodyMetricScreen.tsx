@@ -32,6 +32,7 @@ import { haptics } from '../../utils/haptics';
 import { confirmDiscard } from '../../utils/discardGuard';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { BodyMetric } from '../../types';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'BodyMetric'>;
 
@@ -271,7 +272,7 @@ export function BodyMetricScreen(_: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   list: { padding: spacing.lg, paddingBottom: 100 },
   summary: { alignItems: 'center', paddingVertical: spacing.md },
@@ -340,4 +341,4 @@ const styles = StyleSheet.create({
   photo: { width: '100%', height: '100%' },
   photoPlaceholder: { color: colors.textSecondary, fontSize: fontSize.body, fontWeight: '600' },
   modalBtn: { marginTop: spacing.md },
-});
+}));

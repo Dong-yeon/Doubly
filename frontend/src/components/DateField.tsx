@@ -13,6 +13,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { pickDate } from '../store/datePickerStore';
 import { formatDateCompact, formatDateLabel } from '../utils/date';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
+import { themedStyles } from '../theme/themedStyles';
 
 interface Props {
   label?: string;
@@ -69,7 +70,7 @@ export function DateField({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   wrapper: { marginBottom: spacing.md },
   label: {
     fontSize: fontSize.caption,
@@ -95,4 +96,4 @@ const styles = StyleSheet.create({
   text: { flex: 1, fontSize: fontSize.subtitle, color: colors.textPrimary },
   placeholder: { color: colors.textTertiary },
   error: { color: colors.danger, fontSize: fontSize.caption, marginTop: spacing.xs, marginLeft: spacing.xs },
-});
+}));

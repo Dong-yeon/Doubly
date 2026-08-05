@@ -12,6 +12,7 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
+import { themedStyles } from '../theme/themedStyles';
 
 interface Props {
   label: string;
@@ -80,7 +81,7 @@ export function NumberStepper({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   wrap: { flex: 1 },
   label: {
     fontSize: fontSize.caption,
@@ -107,4 +108,4 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     paddingHorizontal: 0,
   },
-});
+}));

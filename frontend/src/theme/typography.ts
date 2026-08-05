@@ -25,8 +25,9 @@
 import { StyleSheet } from 'react-native';
 import { colors } from './colors';
 import { fontSize } from './index';
+import { themedStyles } from './themedStyles';
 
-export const type = StyleSheet.create({
+export const type = themedStyles((colors) => ({
   /** 화면 제목 — 헤더가 없는(headerShown:false) 루트 화면에서만 */
   screenTitle: {
     fontSize: fontSize.heading,
@@ -91,4 +92,4 @@ export const type = StyleSheet.create({
     fontWeight: '600',
     color: colors.textSecondary,
   },
-});
+}));

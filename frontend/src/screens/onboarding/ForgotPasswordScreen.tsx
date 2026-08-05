@@ -11,6 +11,7 @@ import { Card } from '../../components/Card';
 import { authApi } from '../../api/auth';
 import { getErrorMessage } from '../../utils/error';
 import { colors, fontSize, spacing } from '../../constants/theme';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, 'ForgotPassword'>;
 
@@ -87,7 +88,7 @@ export function ForgotPasswordScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
   container: { flexGrow: 1, justifyContent: 'center', padding: spacing.lg },
@@ -108,4 +109,4 @@ const styles = StyleSheet.create({
   card: { gap: spacing.xs },
   submitBtn: { marginTop: spacing.sm },
   footer: { alignItems: 'center', marginTop: spacing.lg, gap: spacing.xs },
-});
+}));

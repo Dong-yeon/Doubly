@@ -15,6 +15,7 @@ import { storage } from '../utils/storage';
 import { STORAGE_KEYS } from '../constants/config';
 import { canAskPushPermission, requestPushPermission } from '../utils/push';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
+import { themedStyles } from '../theme/themedStyles';
 
 export function PushPermissionPrimer() {
   const [visible, setVisible] = useState(false);
@@ -89,7 +90,7 @@ export function PushPermissionPrimer() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(20, 22, 43, 0.45)',
@@ -128,4 +129,4 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.6 },
   laterText: { fontSize: fontSize.body, color: colors.textSecondary, fontWeight: '600' },
   note: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.sm },
-});
+}));

@@ -17,6 +17,7 @@ import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { TrainerRoutine, Workout } from '../../types';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'WorkoutMain'>;
 
@@ -196,7 +197,7 @@ export function WorkoutScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   header: {
     flexDirection: 'row',
@@ -256,4 +257,4 @@ const styles = StyleSheet.create({
   fabWrap: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: spacing.lg },
   fabRow: { flexDirection: 'row', gap: spacing.sm },
   fabBtn: { flex: 1 },
-});
+}));

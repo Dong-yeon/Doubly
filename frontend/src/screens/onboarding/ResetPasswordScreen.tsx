@@ -12,6 +12,7 @@ import { authApi } from '../../api/auth';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { colors, fontSize, spacing } from '../../constants/theme';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, 'ResetPassword'>;
 
@@ -145,7 +146,7 @@ export function ResetPasswordScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
   container: { flexGrow: 1, justifyContent: 'center', padding: spacing.lg },
@@ -167,4 +168,4 @@ const styles = StyleSheet.create({
   codeInput: { letterSpacing: 8, fontSize: fontSize.title, fontWeight: '700' },
   submitBtn: { marginTop: spacing.sm },
   footer: { alignItems: 'center', marginTop: spacing.lg, gap: spacing.xs },
-});
+}));

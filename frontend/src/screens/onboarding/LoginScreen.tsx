@@ -14,6 +14,7 @@ import { useAuthStore } from '../../store/authStore';
 import { getErrorMessage } from '../../utils/error';
 import { isGoogleLoginConfigured } from '../../constants/config';
 import { colors, fontSize, spacing } from '../../constants/theme';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, 'Login'>;
 
@@ -93,7 +94,7 @@ export function LoginScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
   dividerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginVertical: spacing.sm },
@@ -108,4 +109,4 @@ const styles = StyleSheet.create({
   loginBtn: { marginTop: spacing.sm },
   signupRow: { alignItems: 'center', marginTop: spacing.lg, gap: spacing.xs },
   signupText: { color: colors.textSecondary, fontSize: fontSize.body },
-});
+}));

@@ -9,6 +9,7 @@ import {
   TERMS_VERSION,
 } from '../../constants/legal';
 import { colors, fontSize, spacing } from '../../constants/theme';
+import { themedStyles } from '../../theme/themedStyles';
 
 /**
  * 온보딩(가입 전)과 설정(가입 후) 양쪽 스택에서 쓰이므로 특정 ParamList 에 묶지 않는다.
@@ -47,7 +48,7 @@ export function LegalDocumentScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   header: {
     flexDirection: 'row',
@@ -64,4 +65,4 @@ const styles = StyleSheet.create({
   version: { fontSize: fontSize.caption, color: colors.textSecondary },
   container: { padding: spacing.lg, paddingBottom: spacing.xl },
   body: { fontSize: fontSize.body, color: colors.textPrimary, lineHeight: 24 },
-});
+}));

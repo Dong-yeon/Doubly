@@ -16,6 +16,7 @@ import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
 import { useDirtyGuard } from '../../hooks/useDirtyGuard';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'FeedCompose'>;
 
@@ -90,7 +91,7 @@ export function FeedComposeScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
   container: { padding: spacing.lg, paddingBottom: spacing.xl },
@@ -122,4 +123,4 @@ const styles = StyleSheet.create({
     textDecorationLine: 'underline',
   },
   saveBtn: { marginTop: spacing.md },
-});
+}));

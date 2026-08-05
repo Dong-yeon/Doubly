@@ -16,6 +16,7 @@ import React from 'react';
 import { Modal, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radius, spacing } from '../constants/theme';
+import { themedStyles } from '../theme/themedStyles';
 
 interface Props {
   visible: boolean;
@@ -71,7 +72,7 @@ export function Sheet({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   backdrop: { flex: 1, backgroundColor: colors.backdrop },
   backdropCenter: { justifyContent: 'center', padding: spacing.lg },
   backdropBottom: { justifyContent: 'flex-end' },
@@ -89,4 +90,4 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border,
     marginBottom: spacing.md,
   },
-});
+}));

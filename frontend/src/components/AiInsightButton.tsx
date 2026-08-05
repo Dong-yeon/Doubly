@@ -16,6 +16,7 @@ import { toast } from '../store/toastStore';
 import { getErrorMessage } from '../utils/error';
 import { haptics } from '../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
+import { themedStyles } from '../theme/themedStyles';
 
 interface Props<T> {
   label: string;
@@ -75,7 +76,7 @@ export function AiInsightButton<T>({ label, title, fetcher, render, style }: Pro
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   button: {
     backgroundColor: colors.primaryBg,
     borderRadius: radius.pill,
@@ -95,4 +96,4 @@ const styles = StyleSheet.create({
   bodyContent: { paddingBottom: spacing.sm },
   close: { alignItems: 'center', paddingVertical: spacing.md, marginTop: spacing.sm },
   closeText: { color: colors.textSecondary, fontWeight: '700', fontSize: fontSize.body },
-});
+}));

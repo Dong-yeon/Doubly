@@ -19,6 +19,7 @@ import { haptics } from '../../utils/haptics';
 import { useDirtyGuard } from '../../hooks/useDirtyGuard';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { PlaceStatus } from '../../types';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<PlaceStackParamList, 'PlaceAdd'>;
 
@@ -201,7 +202,7 @@ export function PlaceAddScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
   container: { padding: spacing.lg, paddingBottom: spacing.xl },
@@ -245,4 +246,4 @@ const styles = StyleSheet.create({
   chipTextActive: { color: colors.textPrimary, fontWeight: '800' },
   coordText: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xs },
   submit: { marginTop: spacing.lg },
-});
+}));

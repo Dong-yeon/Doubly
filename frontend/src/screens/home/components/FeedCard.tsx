@@ -16,15 +16,22 @@ import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { FeedItem, FeedItemType, ReactionSummary } from '../../../types';
 import { colors, fontSize, radius, spacing } from '../../../constants/theme';
+import { themedStyles } from '../../../theme/themedStyles';
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
-/** 자동 기록의 종류별 아이콘·색 — 한눈에 무슨 기록인지 구분되게 */
-const TYPE_META: Record<Exclude<FeedItemType, 'POST'>, { icon: IconName; color: string }> = {
-  WORKOUT: { icon: 'dumbbell', color: colors.indigo },
-  MEAL: { icon: 'silverware-fork-knife', color: colors.violet },
-  PLACE_VISIT: { icon: 'map-marker', color: colors.coral },
-};
+/**
+ * 자동 기록의 종류별 아이콘·색 — 한눈에 무슨 기록인지 구분되게.
+ * 함수로 두어 렌더 시점에 현재 팔레트를 읽는다(객체로 굳히면 테마 전환을 못 따라온다).
+ */
+const typeMeta = (
+  type: Exclude<FeedItemType, 'POST'>,
+): { icon: IconName; color: string } =>
+  ({
+    WORKOUT: { icon: 'dumbbell' as IconName, color: colors.indigo },
+    MEAL: { icon: 'silverware-fork-knife' as IconName, color: colors.violet },
+    PLACE_VISIT: { icon: 'map-marker' as IconName, color: colors.coral },
+  })[type];
 
 export interface FeedCardProps {
   item: FeedItem;
@@ -49,7 +56,7 @@ export function FeedCard({ item, timeLabel, quickEmojis, onReact, onLongPress }:
 
 /** 운동·식단·맛집 — 자동으로 쌓이는 기록이라 작게 */
 function RecordCard({ item, timeLabel }: { item: FeedItem; timeLabel: string }) {
-  const meta = TYPE_META[item.type as Exclude<FeedItemType, 'POST'>];
+  const meta = typeMeta(item.type as Exclude<FeedItemType, 'POST'>);
   return (
     <View style={styles.record}>
       <View style={[styles.recordIcon, { backgroundColor: meta.color }]}>
@@ -146,7 +153,7 @@ function Reactions({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   // ---- 자동 기록 (작게) ----
   record: {
     flexDirection: 'row',
@@ -203,4 +210,4 @@ const styles = StyleSheet.create({
   chipCount: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '800' },
   // 내가 누른 칩은 배경이 colors.primary — 라이트/다크 모두 흰 글씨가 대비를 만족한다
   chipCountMine: { color: colors.white },
-});
+}));

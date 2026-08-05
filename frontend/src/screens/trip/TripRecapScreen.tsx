@@ -13,6 +13,7 @@ import { toast } from '../../store/toastStore';
 import { formatMoney } from '../../utils/format';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { TripRecap, TripStatus } from '../../types';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<PlaceStackParamList, 'TripRecap'>;
 
@@ -106,7 +107,7 @@ export function TripRecapScreen({ route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   center: { alignItems: 'center', justifyContent: 'center' },
   scroll: { padding: spacing.lg, paddingBottom: spacing.xxl },
@@ -156,4 +157,4 @@ const styles = StyleSheet.create({
     marginTop: spacing.xl,
     lineHeight: 22,
   },
-});
+}));

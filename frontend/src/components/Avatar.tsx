@@ -1,6 +1,7 @@
 import React from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import { colors, radius } from '../constants/theme';
+import { themedStyles } from '../theme/themedStyles';
 
 interface Props {
   name?: string | null;
@@ -23,8 +24,8 @@ export function Avatar({ name, imageUrl, size = 48, color = colors.primary }: Pr
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   img: { backgroundColor: colors.surfaceAlt },
   fallback: { alignItems: 'center', justifyContent: 'center' },
   letter: { color: colors.white, fontWeight: '800' },
-});
+}));

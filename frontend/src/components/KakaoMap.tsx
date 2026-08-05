@@ -5,6 +5,7 @@ import { WebView } from 'react-native-webview';
 import { buildKakaoMapHtml, parseKakaoMapMessage } from '../utils/kakaoMapHtml';
 import { colors, radius } from '../constants/theme';
 import type { KakaoMapHandle, KakaoMapProps } from './KakaoMap.types';
+import { themedStyles } from '../theme/themedStyles';
 
 export type { KakaoMapHandle, KakaoMapProps };
 
@@ -74,7 +75,7 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
   );
 });
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   container: {
     borderRadius: radius.lg,
     overflow: 'hidden',
@@ -82,4 +83,4 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.surfaceAlt,
   },
-});
+}));

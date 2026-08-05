@@ -13,6 +13,7 @@ import { useAuthStore } from '../../store/authStore';
 import { getErrorMessage } from '../../utils/error';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { Gender } from '../../types';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, 'Register'>;
 
@@ -162,7 +163,7 @@ export function RegisterScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
   container: { flexGrow: 1, justifyContent: 'center', padding: spacing.lg },
@@ -200,4 +201,4 @@ const styles = StyleSheet.create({
   },
   error: { color: colors.danger, fontSize: fontSize.caption, marginBottom: spacing.sm, marginLeft: spacing.xs },
   submit: { marginTop: spacing.sm },
-});
+}));

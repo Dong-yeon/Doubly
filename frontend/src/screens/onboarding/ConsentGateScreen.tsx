@@ -17,6 +17,7 @@ import { useAuthStore } from '../../store/authStore';
 import { getErrorMessage } from '../../utils/error';
 import { PRIVACY_VERSION, TERMS_VERSION } from '../../constants/legal';
 import { colors, fontSize, spacing } from '../../constants/theme';
+import { themedStyles } from '../../theme/themedStyles';
 
 export function ConsentGateScreen() {
   const setUser = useAuthStore((s) => s.setUser);
@@ -105,7 +106,7 @@ export function ConsentGateScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   container: { flexGrow: 1, justifyContent: 'center', padding: spacing.lg },
   title: { fontSize: fontSize.heading, fontWeight: '800', color: colors.textPrimary, marginLeft: spacing.xs },
@@ -128,4 +129,4 @@ const styles = StyleSheet.create({
   },
   error: { color: colors.danger, fontSize: fontSize.caption, marginTop: spacing.sm, marginLeft: spacing.xs },
   submit: { marginTop: spacing.md },
-});
+}));

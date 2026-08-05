@@ -17,6 +17,7 @@ import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { DateCourse, Place, PlaceStatus } from '../../types';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<PlaceStackParamList, 'PlaceMap'>;
 
@@ -201,7 +202,7 @@ export function PlaceMapScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   titleRow: {
     flexDirection: 'row',
@@ -277,4 +278,4 @@ const styles = StyleSheet.create({
   mapWrap: { flex: 1, padding: spacing.lg, paddingBottom: 96 },
   map: { flex: 1 },
   mapHint: { fontSize: fontSize.caption, color: colors.textSecondary, textAlign: 'center', marginTop: spacing.sm },
-});
+}));

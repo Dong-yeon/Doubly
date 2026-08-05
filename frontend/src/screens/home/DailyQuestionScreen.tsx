@@ -14,6 +14,7 @@ import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { DailyQuestion, QuestionHistory } from '../../types';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'DailyQuestion'>;
 
@@ -127,7 +128,7 @@ export function DailyQuestionScreen(_: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
   list: { padding: spacing.lg, paddingBottom: spacing.xl },
@@ -164,4 +165,4 @@ const styles = StyleSheet.create({
   histDate: { fontSize: fontSize.caption, color: colors.textMuted, fontWeight: '700' },
   histQuestion: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary, marginTop: 2 },
   histAnswer: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xs, lineHeight: 18 },
-});
+}));

@@ -23,6 +23,7 @@ import { Button } from '../../components/Button';
 import { storage } from '../../utils/storage';
 import { STORAGE_KEYS } from '../../constants/config';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, 'Onboarding'>;
 
@@ -147,7 +148,7 @@ export function OnboardingScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   skipRow: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: spacing.md },
   skip: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.sm },
@@ -185,4 +186,4 @@ const styles = StyleSheet.create({
   },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.border },
   footer: { paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
-});
+}));

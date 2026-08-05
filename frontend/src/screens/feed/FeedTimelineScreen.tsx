@@ -21,6 +21,7 @@ import { relativeDateLabel } from '../../utils/date';
 import { haptics } from '../../utils/haptics';
 import type { FeedItem } from '../../types';
 import { colors, spacing } from '../../constants/theme';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'FeedTimeline'>;
 
@@ -158,9 +159,9 @@ export function FeedTimelineScreen(_props: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   list: { padding: spacing.lg },
   loadMore: { paddingVertical: spacing.md },
   tail: { height: spacing.lg },
-});
+}));

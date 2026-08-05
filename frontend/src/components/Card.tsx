@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, View, ViewProps, ViewStyle } from 'react-native';
 import { colors, radius, shadow, spacing } from '../constants/theme';
+import { themedStyles } from '../theme/themedStyles';
 
 interface Props extends ViewProps {
   /** 그림자 강도 */
@@ -17,15 +18,20 @@ interface Props extends ViewProps {
   style?: ViewStyle;
 }
 
-const TINTS = {
-  surface: colors.surfaceCard,
-  /** 중립 강조 — 소유자와 무관한 카드 */
-  neutral: colors.primaryBg,
-  /** 상대(Indigo) 계열 배경 */
-  partner: colors.secondarySoft,
-  /** 함께(Violet) 계열 배경 */
-  together: colors.accentSoft,
-};
+/*
+ * 함수로 두는 이유: 모듈 최상위에서 객체로 만들면 앱이 시작할 때의 색이 그대로 굳어
+ * 테마를 바꿔도 따라오지 않는다. 렌더될 때 호출해 현재 팔레트를 읽는다.
+ */
+const tintColor = (tint: NonNullable<Props['tint']>): string =>
+  ({
+    surface: colors.surfaceCard,
+    /** 중립 강조 — 소유자와 무관한 카드 */
+    neutral: colors.primaryBg,
+    /** 상대(Indigo) 계열 배경 */
+    partner: colors.secondarySoft,
+    /** 함께(Violet) 계열 배경 */
+    together: colors.accentSoft,
+  })[tint];
 
 /** 둥근 모서리 + 부드러운 그림자 카드 (radius 16 · 얇은 뉴트럴 보더 · elevation 2) */
 export function Card({ elevation = 'sm', tint = 'surface', style, children, ...rest }: Props) {
@@ -33,7 +39,7 @@ export function Card({ elevation = 'sm', tint = 'surface', style, children, ...r
     <View
       style={[
         styles.card,
-        { backgroundColor: TINTS[tint] },
+        { backgroundColor: tintColor(tint) },
         elevation !== 'none' && shadow[elevation],
         tint === 'surface' && styles.bordered,
         style,
@@ -45,7 +51,7 @@ export function Card({ elevation = 'sm', tint = 'surface', style, children, ...r
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   card: {
     borderRadius: radius.lg,
     padding: spacing.md,
@@ -54,4 +60,4 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
   },
-});
+}));

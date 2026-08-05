@@ -24,6 +24,7 @@ import { getErrorMessage } from '../../utils/error';
 import { relativeDateLabel } from '../../utils/date';
 import type { FeedPhoto } from '../../types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'PhotoAlbum'>;
 
@@ -145,7 +146,7 @@ export function PhotoAlbumScreen(_props: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   container: { flex: 1, backgroundColor: colors.background },
   list: { paddingBottom: spacing.xl },
   emptyWrap: { flexGrow: 1, justifyContent: 'center' },
@@ -153,4 +154,4 @@ const styles = StyleSheet.create({
   cell: { width: CELL, height: CELL, backgroundColor: colors.surfaceAlt },
   footer: { paddingVertical: spacing.lg },
   /* 큰 보기 스타일은 ImageViewer 로 옮겼다 */
-});
+}));

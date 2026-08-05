@@ -7,6 +7,7 @@ import { DoublyMark } from '../../components/DoublyLogo';
 import { storage } from '../../utils/storage';
 import { STORAGE_KEYS } from '../../constants/config';
 import { colors, fontSize, spacing } from '../../constants/theme';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, 'Splash'>;
 
@@ -48,11 +49,11 @@ export function SplashScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   container: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
   center: { alignItems: 'center' },
   brand: { fontSize: fontSize.display, fontWeight: '800', color: colors.ink, textAlign: 'center', marginTop: spacing.lg, letterSpacing: -1 },
   sloganWrap: { marginTop: spacing.md, backgroundColor: colors.togetherBg, borderRadius: 999, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
   /* togetherBg 위 원색 violet 은 3.55:1 로 미달 — 텍스트 변형을 쓴다 */
   slogan: { fontSize: fontSize.body, color: colors.togetherText, fontWeight: '700' },
-});
+}));

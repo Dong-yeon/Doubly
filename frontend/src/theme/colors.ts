@@ -161,18 +161,49 @@ const dark: typeof light = {
   white: '#FFFFFF',
 };
 
+export type Palette = typeof light;
+export type Scheme = 'light' | 'dark';
+
+export const palettes: Record<Scheme, Palette> = { light, dark };
+
 /*
- * 팔레트 결정 — 앱에서 가장 먼저 실행되는 코드 중 하나다.
+ * 현재 스킴 — <b>모듈 수준 가변값</b>이다.
  *
- * 우선순위: 사용자가 설정에서 고른 값 > 기기 시스템 테마.
- * 사용자 선택은 동기로 읽을 수 있을 때만 반영된다(웹의 localStorage).
- * 네이티브에서는 선택이 Appearance 덮어쓰기로 남아 있어
- * `getColorScheme()` 이 이미 선택된 값을 돌려준다 — 아래 한 줄로 양쪽이 처리된다.
+ * 팔레트를 상수로 고정하면(예전 방식) 90개 화면의 StyleSheet 가 시작 시점의 색을
+ * 복사해 가버려, 테마를 바꿔도 앱을 다시 열기 전에는 반영되지 않았다.
+ * 값을 바꿀 수 있게 두고, 아래 colors 프록시와 themedStyles 가 <b>읽는 시점</b>에
+ * 현재 스킴을 참조하게 해서 즉시 전환을 가능하게 한다.
  */
-const preferred = readThemeModeSync();
-const resolved = preferred === 'system' ? Appearance.getColorScheme() : preferred;
+let currentScheme: Scheme = (() => {
+  const preferred = readThemeModeSync();
+  const resolved = preferred === 'system' ? Appearance.getColorScheme() : preferred;
+  return resolved === 'dark' ? 'dark' : 'light';
+})();
+
+export function getScheme(): Scheme {
+  return currentScheme;
+}
+
+/** 스킴 교체 — 화면 갱신은 themeStore 가 맡는다 (여기서는 값만 바꾼다) */
+export function setScheme(scheme: Scheme): void {
+  currentScheme = scheme;
+}
 
 /** 현재 테마가 다크인지 — 지도(웹뷰) 등 팔레트 밖 분기에 사용 */
-export const isDarkMode = resolved === 'dark';
+export function isDarkMode(): boolean {
+  return currentScheme === 'dark';
+}
 
-export const colors = isDarkMode ? dark : light;
+/*
+ * colors — 속성을 <b>읽을 때</b> 현재 팔레트에서 값을 꺼내는 프록시.
+ *
+ * 덕분에 JSX 안의 `color={colors.primary}` 같은 인라인 사용은 렌더될 때마다
+ * 최신 색을 얻는다. 반면 모듈 최상위의 StyleSheet.create 는 한 번만 평가되므로
+ * 그쪽은 themedStyles 로 감싸야 한다.
+ */
+export const colors: Palette = new Proxy({} as Palette, {
+  get: (_target, key: string) => palettes[currentScheme][key as keyof Palette],
+  // 스프레드(...colors)나 Object.keys 가 동작하도록 열거도 지원한다
+  ownKeys: () => Reflect.ownKeys(light),
+  getOwnPropertyDescriptor: () => ({ enumerable: true, configurable: true }),
+});

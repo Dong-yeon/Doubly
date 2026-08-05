@@ -17,6 +17,7 @@ import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
 import { useDirtyGuard } from '../../hooks/useDirtyGuard';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<PlaceStackParamList, 'TripForm'>;
 
@@ -141,7 +142,7 @@ export function TripFormScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   container: { padding: spacing.lg, paddingBottom: spacing.xl },
   photoBox: {
@@ -160,4 +161,4 @@ const styles = StyleSheet.create({
   dateRow: { flexDirection: 'row', gap: spacing.sm },
   flex: { flex: 1 },
   saveBtn: { marginTop: spacing.md },
-});
+}));

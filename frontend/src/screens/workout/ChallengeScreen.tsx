@@ -18,6 +18,7 @@ import { haptics } from '../../utils/haptics';
 import { confirmDiscard } from '../../utils/discardGuard';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { Challenge, ChallengeType } from '../../types';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'Challenge'>;
 
@@ -223,7 +224,7 @@ export function ChallengeScreen(_: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   list: { padding: spacing.lg, paddingBottom: 100 },
   card: {
@@ -263,4 +264,4 @@ const styles = StyleSheet.create({
   formRow: { flexDirection: 'row', gap: spacing.sm },
   flex: { flex: 1 },
   modalBtn: { marginTop: spacing.md },
-});
+}));

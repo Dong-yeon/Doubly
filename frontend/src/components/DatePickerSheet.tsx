@@ -14,6 +14,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useDatePickerStore } from '../store/datePickerStore';
 import { parseDateString, toDateString } from '../utils/date';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
+import { themedStyles } from '../theme/themedStyles';
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -258,7 +259,7 @@ export function DatePickerSheet() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',
@@ -350,4 +351,4 @@ const styles = StyleSheet.create({
   },
   todayText: { fontSize: fontSize.body, fontWeight: '800', color: colors.primary },
   cancelText: { fontSize: fontSize.body, fontWeight: '800', color: colors.textSecondary },
-});
+}));

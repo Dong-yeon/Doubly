@@ -14,6 +14,7 @@ import { copyText, shareText } from '../../utils/share';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'CoupleConnect'>;
 
@@ -120,7 +121,7 @@ export function CoupleConnectScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
   container: { padding: spacing.lg },
@@ -140,4 +141,4 @@ const styles = StyleSheet.create({
   gap: { marginTop: spacing.sm },
   divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
   codeInput: { letterSpacing: 4, fontWeight: '700' },
-});
+}));

@@ -13,6 +13,7 @@ import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, spacing } from '../../constants/theme';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'TrainerConnect'>;
 
@@ -61,11 +62,11 @@ export function TrainerConnectScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
   container: { padding: spacing.lg },
   title: { fontSize: fontSize.title, fontWeight: '800', color: colors.textPrimary, marginBottom: spacing.sm },
   desc: { fontSize: fontSize.body, color: colors.textSecondary, marginBottom: spacing.lg, lineHeight: 20 },
   codeInput: { letterSpacing: 4, fontWeight: '700' },
-});
+}));

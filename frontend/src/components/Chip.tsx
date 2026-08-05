@@ -10,6 +10,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, type StyleProp, type ViewStyle } from 'react-native';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
+import { themedStyles } from '../theme/themedStyles';
 
 interface Props {
   label: string;
@@ -45,7 +46,7 @@ export function Chip({ label, selected = false, onPress, fill, disabled, style }
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   chip: {
     minHeight: 44, // iOS HIG 44pt / Android 48dp — 칩이 가장 자주 미달하던 지점
     paddingHorizontal: spacing.md,
@@ -63,4 +64,4 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.85 },
   text: { fontSize: fontSize.body, color: colors.textSecondary, fontWeight: '600' },
   textSelected: { color: colors.primary, fontWeight: '800' },
-});
+}));

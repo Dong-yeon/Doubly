@@ -13,7 +13,6 @@ import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { installGlobalErrorHandlers } from './src/utils/globalErrorHandler';
 import { initSentry } from './src/utils/sentry';
 import { useSettingsStore } from './src/store/settingsStore';
-import { restoreThemePreference } from './src/theme/themePreference';
 import { colors } from './src/constants/theme';
 
 // Sentry 를 먼저 붙여야 이후 발생하는 예외가 리포터로 전달된다.
@@ -23,12 +22,7 @@ initSentry();
 installGlobalErrorHandlers();
 // 기기에 저장된 설정(맞춤법 제안 on/off) 복원 — 실패해도 기본값으로 진행한다.
 useSettingsStore.getState().load();
-/*
- * 저장된 테마 선택을 네이티브 Appearance 에 되돌려 놓는다.
- * 이 값은 네이티브 쪽에 남아 다음 실행의 팔레트 결정에 쓰인다
- * (팔레트는 모듈 로드 시 한 번 정해지므로 이번 실행에는 반영되지 않는다).
- */
-void restoreThemePreference();
+/* 저장된 테마 선택 복원은 RootNavigator 가 themeStore.load() 로 처리한다 */
 
 export default function App() {
   /*

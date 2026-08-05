@@ -4,6 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Card } from './Card';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
+import { themedStyles } from '../theme/themedStyles';
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -64,7 +65,7 @@ export function BadgeCard({ maxStreak, title = '뱃지', badges = WORKOUT_BADGES
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   card: { gap: spacing.md },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   title: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
@@ -79,4 +80,4 @@ const styles = StyleSheet.create({
   label: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
   labelOn: { color: colors.textPrimary },
   progress: { fontSize: fontSize.caption, color: colors.textSecondary, textAlign: 'center' },
-});
+}));

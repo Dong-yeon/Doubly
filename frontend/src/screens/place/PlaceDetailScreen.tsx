@@ -25,6 +25,7 @@ import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { PlaceVisit } from '../../types';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<PlaceStackParamList, 'PlaceDetail'>;
 
@@ -201,7 +202,7 @@ export function PlaceDetailScreen({ route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   list: { padding: spacing.lg, paddingBottom: spacing.xl },
   form: {
@@ -257,4 +258,4 @@ const styles = StyleSheet.create({
   visitPhoto: { width: '100%', height: 160, borderRadius: radius.md, marginTop: spacing.sm },
   visitMemo: { fontSize: fontSize.body, color: colors.textPrimary, marginTop: spacing.sm },
   empty: { fontSize: fontSize.caption, color: colors.textSecondary, textAlign: 'center', paddingVertical: spacing.lg },
-});
+}));

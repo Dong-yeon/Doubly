@@ -4,6 +4,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Card } from './Card';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 import type { WeeklyRecap } from '../types';
+import { themedStyles } from '../theme/themedStyles';
 
 interface Props {
   recap: WeeklyRecap;
@@ -75,7 +76,7 @@ function Row({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   card: { gap: spacing.sm },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs },
   title: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
@@ -95,4 +96,4 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primarySoft,
   },
   shareText: { color: colors.primaryDark, fontWeight: '800', fontSize: fontSize.caption },
-});
+}));

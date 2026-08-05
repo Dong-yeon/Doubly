@@ -7,6 +7,7 @@ import type { WorkoutStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { dietApi } from '../../api/diet';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'DietCalendar'>;
 
@@ -155,7 +156,7 @@ export function DietCalendarScreen({ navigation }: Props) {
 
 const CELL = `${100 / 7}%`;
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background, padding: spacing.lg },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.lg },
   nav: { fontSize: 28, color: colors.primary, paddingHorizontal: spacing.md },
@@ -177,4 +178,4 @@ const styles = StyleSheet.create({
   selectedText: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
   legendDot: { width: 20, height: 20 },
   legendText: { color: colors.textSecondary, fontSize: fontSize.caption },
-});
+}));
