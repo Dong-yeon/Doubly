@@ -24,7 +24,6 @@ import { Card } from '../../components/Card';
 import { DateField } from '../../components/DateField';
 import { CoupleHero } from './components/CoupleHero';
 import { QuickActions } from './components/QuickActions';
-import { RecentPeek } from './components/RecentPeek';
 import { MemoryPeek } from './components/MemoryPeek';
 import { useAuthStore } from '../../store/authStore';
 import { useRelationStore } from '../../store/relationStore';
@@ -78,6 +77,12 @@ const scrim = (): [string, string, string] =>
     ? ['rgba(30,32,28,0.88)', 'rgba(30,32,28,0.93)', 'rgba(30,32,28,0.97)']
     : ['rgba(255,255,255,0.84)', 'rgba(255,255,255,0.92)', 'rgba(255,255,255,0.97)'];
 
+/** 열에 들어갈 최근 기록 한 줄 — 종류마다 제목/본문 중 있는 쪽을 쓴다 */
+function recordLabel(item: FeedItem | null): string | null {
+  if (!item) return null;
+  return item.content || item.title || '기록을 남겼어요';
+}
+
 function daysTogether(connectedAt?: string | null): number {
   if (!connectedAt) return 0;
   const diff = Date.now() - new Date(connectedAt).getTime();
@@ -95,8 +100,13 @@ export function HomeScreen({ navigation }: Props) {
   const [myWorkoutDone, setMyWorkoutDone] = useState(false);
   const [myMealDone, setMyMealDone] = useState(false);
   const [partnerMeal, setPartnerMeal] = useState<PartnerToday | null>(null);
-  // 최근 기록 한 건만 — 홈은 목록을 갖지 않는다
-  const [latest, setLatest] = useState<FeedItem | null>(null);
+  /*
+   * 최근 기록 — 좌우 열이 <b>각자의</b> 마지막 기록을 보여주므로 두 건이 필요하다.
+   * 타임라인은 시간순 한 줄이라 사람별로 나눠 받을 수 없어, 한 페이지를 받아
+   * mine 으로 갈라 각각 첫 건만 쓴다.
+   */
+  const [myLatest, setMyLatest] = useState<FeedItem | null>(null);
+  const [partnerLatest, setPartnerLatest] = useState<FeedItem | null>(null);
   // 작년 오늘 — 있는 날에만 최근 기록 자리를 대신 차지한다 (PLAN.md Memories)
   const [memories, setMemories] = useState<Memories | null>(null);
 
@@ -117,15 +127,21 @@ export function HomeScreen({ navigation }: Props) {
     streakApi.me().then(setMyStreak).catch(() => setMyStreak(null));
     streakApi.partner().then(setPartnerStreak).catch(() => setPartnerStreak(null));
     /*
-     * 최근 기록은 <b>한 건</b>만 보여준다 — limit 1 로 받는다.
-     * 기본값(20)으로 받으면 홈에 들어올 때마다, 그리고 커플 이벤트가 올 때마다
-     * 타임라인 한 페이지를 통째로 받아놓고 첫 항목만 쓰고 버렸다.
+     * 좌우 열이 각자의 마지막 기록을 보여주므로 <b>두 사람 몫</b>이 필요하다.
+     * 12건이면 한쪽이 연속으로 기록한 날에도 반대쪽 한 건이 대개 들어온다 —
+     * 그래도 없으면 그 열은 "아직 기록이 없어요" 로 둔다(추가 호출은 하지 않는다).
      * (커플 미연결이면 피드가 404 다 — 조용히 비운다)
      */
     feedApi
-      .timeline(null, 1)
-      .then((page) => setLatest(page.items[0] ?? null))
-      .catch(() => setLatest(null));
+      .timeline(null, 12)
+      .then((page) => {
+        setMyLatest(page.items.find((i) => i.mine) ?? null);
+        setPartnerLatest(page.items.find((i) => !i.mine) ?? null);
+      })
+      .catch(() => {
+        setMyLatest(null);
+        setPartnerLatest(null);
+      });
     // 추억은 대부분의 날에 비어 있다 — 없으면 최근 기록이 그대로 남는다
     feedApi
       .memories()
@@ -199,22 +215,16 @@ export function HomeScreen({ navigation }: Props) {
     }
   };
 
+  /*
+   * 상단바는 프로필 하나만 둔다.
+   *
+   * 예전에는 좌상단에 '배경' 버튼이 있었다 — 가장 눈에 띄는 자리를 <b>거의 안 쓰는
+   * 유틸리티</b>가 차지했다. 배경 변경은 MY > 설정으로 옮기고, 여기서는 사진을
+   * <b>길게 눌러</b> 바꿀 수 있게 남겨 둔다(자주 쓰는 사람을 위한 지름길).
+   */
   const topBar = (
     <View style={styles.topBar}>
-      {connected ? (
-        <Pressable
-          style={styles.bgBtn}
-          onPress={onChangeBg}
-          // 배경 사진 위에 얹히는 작은 알약이라 크기는 그대로 두고 터치 영역만 넓힌다.
-          // 실측 25px + 10*2 = 45px (8 이면 41px 로 3px 모자랐다)
-          hitSlop={10}
-        >
-          <MaterialCommunityIcons name="image-outline" size={13} color={colors.textPrimary} />
-          <Text style={styles.bgBtnText}>배경</Text>
-        </Pressable>
-      ) : (
-        <View />
-      )}
+      <View />
       <Pressable style={styles.profileBtn} onPress={() => navigation.navigate('My')} hitSlop={8}>
         <Avatar name={user?.name} imageUrl={user?.profileImageUrl} size={32} color={colors.primaryDark} />
       </Pressable>
@@ -225,7 +235,14 @@ export function HomeScreen({ navigation }: Props) {
     <View style={styles.root}>
       {/* 배경화면은 화면 전체를 채운다 — 그 위 레이어는 모두 투명이다 */}
       {bgUrl ? (
-        <Image source={{ uri: bgUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onLongPress={connected ? onChangeBg : undefined}
+          accessibilityRole="button"
+          accessibilityLabel="배경 사진 — 길게 눌러 변경"
+        >
+          <Image source={{ uri: bgUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        </Pressable>
       ) : (
         <LinearGradient
           colors={gradient()}
@@ -249,35 +266,38 @@ export function HomeScreen({ navigation }: Props) {
             {/* 남는 세로 공간을 히어로가 먹는다 → 아래 두 줄은 항상 바닥에 붙는다 */}
             <View style={styles.heroSlot}>
               <CoupleHero
-                meName={user?.name ?? '나'}
-                meImageUrl={user?.profileImageUrl}
-                meWorkoutDone={myWorkoutDone}
-                meMealDone={myMealDone}
-                partnerName={partner?.partnerName ?? couple?.partner?.name ?? '상대방'}
-                partnerImageUrl={couple?.partner?.profileImageUrl}
-                partnerWorkoutDone={!!partner?.completed}
-                partnerMealDone={!!partnerMeal?.completed}
+                me={{
+                  name: user?.name ?? '나',
+                  imageUrl: user?.profileImageUrl,
+                  workoutDone: myWorkoutDone,
+                  mealDone: myMealDone,
+                  streak: myStreak?.currentCount ?? 0,
+                  latestLabel: recordLabel(myLatest),
+                  latestTime: myLatest ? feedTimeLabel(myLatest.occurredAt) : null,
+                }}
+                partner={{
+                  name: partner?.partnerName ?? couple?.partner?.name ?? '상대방',
+                  imageUrl: couple?.partner?.profileImageUrl,
+                  workoutDone: !!partner?.completed,
+                  mealDone: !!partnerMeal?.completed,
+                  streak: partnerStreak?.currentCount ?? 0,
+                  latestLabel: recordLabel(partnerLatest),
+                  latestTime: partnerLatest ? feedTimeLabel(partnerLatest.occurredAt) : null,
+                }}
                 dday={dday}
                 anniversaryDate={couple?.anniversaryDate ?? null}
-                myStreak={myStreak?.currentCount ?? 0}
-                partnerStreak={partnerStreak?.currentCount ?? 0}
                 onPressDday={openAnnModal}
+                onPressPerson={() => navigation.navigate('FeedTimeline')}
               />
             </View>
 
             {/*
-              추억이 있는 날에만 이 한 줄이 추억으로 바뀐다. 카드를 추가하지 않는 이유는
-              MemoryPeek 주석 참고 — 홈은 스크롤 없는 고정 화면이다.
+              추억이 있는 날에만 한 줄이 붙는다. 대부분의 날은 비어 있다.
+              공용 "최근 기록" 줄은 없앴다 — 좌우 열이 각자의 마지막 기록을 이미 보여준다.
             */}
             {memories ? (
               <MemoryPeek memories={memories} onPress={() => navigation.navigate('Memories')} />
-            ) : (
-              <RecentPeek
-                latest={latest}
-                timeLabel={latest ? feedTimeLabel(latest.occurredAt) : ''}
-                onPress={() => navigation.navigate('FeedTimeline')}
-              />
-            )}
+            ) : null}
 
             <QuickActions
               actions={[
@@ -398,8 +418,8 @@ const styles = themedStyles((colors) => ({
   bgBtnText: { color: colors.textPrimary, fontSize: fontSize.caption, fontWeight: '700' },
 
   body: { flex: 1, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, gap: spacing.md },
-  // 히어로가 남는 공간을 다 먹고 그 안에서 가운데 정렬된다
-  heroSlot: { flex: 1, justifyContent: 'center' },
+  // 히어로가 남는 공간을 다 먹는다. 그 안의 분배는 CoupleHero 가 한다
+  heroSlot: { flex: 1 },
 
   disconnected: { padding: spacing.lg },
   connectWrap: { alignItems: 'center', paddingVertical: spacing.lg },
