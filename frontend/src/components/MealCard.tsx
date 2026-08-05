@@ -3,6 +3,7 @@ import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { Meal, MealType } from '../types';
 import { relativeDateLabel } from '../utils/date';
+import { formatKcal } from '../utils/format';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 
 interface Props {
@@ -35,7 +36,7 @@ export function MealCard({ meal, onLongPress, showDate }: Props) {
           <Text style={styles.type}>{meal.mealTypeLabel}</Text>
         </View>
         <View style={styles.headerRight}>
-          {meal.calories ? <Text style={styles.cal}>{meal.calories} kcal</Text> : null}
+          {meal.calories ? <Text style={styles.cal}>{formatKcal(meal.calories)}</Text> : null}
           {showDate ? <Text style={styles.date}>{relativeDateLabel(meal.mealDate)}</Text> : null}
         </View>
       </View>

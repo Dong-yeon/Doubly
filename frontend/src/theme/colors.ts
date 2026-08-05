@@ -14,6 +14,7 @@
  * 브랜드 색(Coral/Indigo/Violet)은 두 테마에서 동일하고, 배경·표면·텍스트만 반전된다.
  */
 import { Appearance } from 'react-native';
+import { readThemeModeSync } from './themePreference';
 
 const light = {
   // ── Doubly 코어 ──────────────────────────────────────────────
@@ -30,6 +31,22 @@ const light = {
   partnerBg: '#EEF0FF',
   together: '#9B57FF',
   togetherBg: '#F5EDFF',
+
+  /*
+   * ── 소유자 색의 "텍스트용" 변형 ──────────────────────────────
+   *
+   * 브랜드 원색은 채도가 높아 흰/크림 배경 위 <b>텍스트</b>로 쓰면 대비가 모자란다.
+   *   coral  on white 2.83:1 · on meBg 2.55:1
+   *   violet on white 4.04:1 · on togetherBg 3.55:1   (WCAG AA 는 4.5:1)
+   * 원색을 낮추면 브랜드 톤이 바뀌므로, 배경·아이콘·그래프에는 원색을 그대로 두고
+   * <b>읽어야 하는 글자</b>에만 이 어두운 변형을 쓴다.
+   *
+   * indigo(#4A5BFF)는 흰 배경 4.96:1 로 이미 통과해 원색과 같은 값을 유지한다 —
+   * 호출부가 "텍스트면 …Text" 하나로 일관되게 쓸 수 있도록 키는 만들어 둔다.
+   */
+  meText: '#C43A1E', // white 5.02 · meBg 4.52
+  partnerText: '#3B49D8', // white 5.51 · partnerBg 4.96
+  togetherText: '#7433D6', // white 5.24 · togetherBg 4.61
 
   // ── 크롬 (Ink) — 버튼·활성탭·링크 ─────────────────────────────
   primary: '#14162B',
@@ -54,6 +71,11 @@ const light = {
   border: '#E4DFD6',
   borderStrong: 'rgba(20,22,43,0.15)',
 
+  // 모달·시트 뒤에 까는 어둡게 덮개. 화면마다 rgba(0,0,0,0.4~0.45) 를 직접 쓰다 보니
+  // 값이 갈렸다. 다크에서는 이미 어두운 배경 위에 얹는 것이라 더 진하게 해야
+  // 시트와 배경이 분리돼 보인다(아래 dark 참고).
+  backdrop: 'rgba(0,0,0,0.42)',
+
   // ── 호환 별칭 (기존 키 → Doubly 팔레트) ───────────────────────
   couple: '#FF6A4D', // 커플 대표 → coral
   food: '#9B57FF', // (구 amber) → violet
@@ -65,6 +87,9 @@ const light = {
   accentSoft: '#F5EDFF',
   textTertiary: '#9A98A4',
   success: '#2FA36B', // 기능색(체크·완료)은 그린 유지
+  // success 의 연한 배경 — 정산 완료 배너 등. 하드코딩 민트(#E7F5EE)가
+  // 다크모드에서 흰 덩어리로 남던 것을 토큰으로 흡수했다
+  successBg: '#E7F5EE',
   danger: '#E5484D',
   white: '#FFFFFF',
 };
@@ -91,6 +116,15 @@ const dark: typeof light = {
   together: '#B07EFF',
   togetherBg: '#2C2340',
 
+  /*
+   * 다크에서는 원색이 이미 어두운 배경 위 5~7:1 로 통과한다(coral 7.26 · indigo 5.41 ·
+   * violet 5.77). 여기서 더 어둡게 만들면 오히려 대비가 나빠지므로 원색을 그대로 쓴다 —
+   * 라이트와 키 이름을 맞춰 호출부가 테마를 신경 쓰지 않게 한다.
+   */
+  meText: '#FF7A5E',
+  partnerText: '#7C88FF',
+  togetherText: '#B07EFF',
+
   primary: '#5B6BFF',
   primaryDark: '#4A5BFF',
   primaryLight: '#8A93FF',
@@ -108,6 +142,9 @@ const dark: typeof light = {
   border: '#32354A',
   borderStrong: 'rgba(242,241,247,0.18)',
 
+  // 라이트보다 진하게 — 어두운 배경 위 검은 덮개는 분리감이 약하다
+  backdrop: 'rgba(0,0,0,0.62)',
+
   couple: '#FF7A5E',
   food: '#B07EFF',
   health: '#7C88FF',
@@ -118,11 +155,24 @@ const dark: typeof light = {
   accentSoft: '#2C2340',
   textTertiary: '#6F7488',
   success: '#3FBF80',
+  // 다크 success 배경 — success(#3FBF80) 텍스트가 위에서 4.5:1 이상 나오는 어두운 그린
+  successBg: '#1C3327',
   danger: '#F2555A',
   white: '#FFFFFF',
 };
 
-/** 현재 시스템 테마가 다크인지 — 지도(웹뷰) 등 팔레트 밖 분기에 사용 */
-export const isDarkMode = Appearance.getColorScheme() === 'dark';
+/*
+ * 팔레트 결정 — 앱에서 가장 먼저 실행되는 코드 중 하나다.
+ *
+ * 우선순위: 사용자가 설정에서 고른 값 > 기기 시스템 테마.
+ * 사용자 선택은 동기로 읽을 수 있을 때만 반영된다(웹의 localStorage).
+ * 네이티브에서는 선택이 Appearance 덮어쓰기로 남아 있어
+ * `getColorScheme()` 이 이미 선택된 값을 돌려준다 — 아래 한 줄로 양쪽이 처리된다.
+ */
+const preferred = readThemeModeSync();
+const resolved = preferred === 'system' ? Appearance.getColorScheme() : preferred;
+
+/** 현재 테마가 다크인지 — 지도(웹뷰) 등 팔레트 밖 분기에 사용 */
+export const isDarkMode = resolved === 'dark';
 
 export const colors = isDarkMode ? dark : light;

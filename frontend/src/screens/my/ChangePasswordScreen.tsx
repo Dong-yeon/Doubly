@@ -1,6 +1,6 @@
 /** 비밀번호 변경 — AUTH-08. 변경 시 모든 기기에서 로그아웃된다. */
 import React, { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -8,6 +8,7 @@ import type { HomeStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
 import { Card } from '../../components/Card';
+import { FormKeyboardView } from '../../components/FormKeyboardView';
 import { authApi } from '../../api/auth';
 import { useAuthStore } from '../../store/authStore';
 import { getErrorMessage } from '../../utils/error';
@@ -57,11 +58,7 @@ export function ChangePasswordScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+      <FormKeyboardView contentContainerStyle={styles.container}>
           <Text style={styles.desc}>
             비밀번호를 변경하면 <Text style={styles.bold}>모든 기기에서 로그아웃</Text>되고
             다시 로그인해야 해요.
@@ -122,8 +119,7 @@ export function ChangePasswordScreen({ navigation }: Props) {
               }
             />
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </FormKeyboardView>
     </SafeAreaView>
   );
 }

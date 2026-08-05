@@ -1,6 +1,7 @@
 /** 로그인 — 미니멀·발랄 톤. 설계서 2.1 / 3.1 (이메일 로그인) */
 import React, { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { FormKeyboardView } from '../../components/FormKeyboardView';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { OnboardingStackParamList } from '../../navigation/types';
@@ -39,8 +40,7 @@ export function LoginScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+      <FormKeyboardView contentContainerStyle={styles.container}>
           <View style={styles.hero}>
             <DoublyMark size={56} />
             <Text style={styles.brand}>Doubly</Text>
@@ -88,8 +88,7 @@ export function LoginScreen({ navigation }: Props) {
             <Text style={styles.signupText}>아직 계정이 없나요?</Text>
             <Button title="이메일로 회원가입" variant="ghost" size="md" onPress={() => navigation.navigate('Register')} />
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </FormKeyboardView>
     </SafeAreaView>
   );
 }

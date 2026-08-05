@@ -3,6 +3,8 @@ import React, { useCallback, useState } from 'react';
 import {
   FlatList,
   Image,
+  KeyboardAvoidingView,
+  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -117,79 +119,84 @@ export function PlaceDetailScreen({ route }: Props) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
-      <FlatList
-        data={visits}
-        keyExtractor={(v) => String(v.id)}
-        contentContainerStyle={styles.list}
-        refreshing={loading}
-        onRefresh={load}
-        ListHeaderComponent={
-          <View>
-            {formOpen ? (
-              <View style={styles.form}>
-                <Text style={styles.label}>별점</Text>
-                <View style={styles.starRow}>
-                  {[1, 2, 3, 4, 5].map((n) => (
-                    <TouchableOpacity key={n} onPress={() => setRating(rating === n ? 0 : n)}>
-                      <Text style={styles.star}>{n <= rating ? '★' : '☆'}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+      {/* 키보드가 "기록 저장" 버튼을 가리지 않도록 회피 */}
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <FlatList
+          data={visits}
+          keyExtractor={(v) => String(v.id)}
+          contentContainerStyle={styles.list}
+          // 키보드가 열려 있어도 "기록 저장" 첫 탭이 바로 동작하도록
+          keyboardShouldPersistTaps="handled"
+          refreshing={loading}
+          onRefresh={load}
+          ListHeaderComponent={
+            <View>
+              {formOpen ? (
+                <View style={styles.form}>
+                  <Text style={styles.label}>별점</Text>
+                  <View style={styles.starRow}>
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <TouchableOpacity key={n} onPress={() => setRating(rating === n ? 0 : n)}>
+                        <Text style={styles.star}>{n <= rating ? '★' : '☆'}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
 
-                <TouchableOpacity style={[styles.photoBox, photoUri ? styles.photoBoxFilled : styles.photoBoxEmpty]} onPress={onPickPhoto} activeOpacity={0.8}>
-                  {photoUri ? (
-                    <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />
-                  ) : (
-                    <Text style={styles.photoPlaceholder}>사진 추가하기</Text>
-                  )}
-                </TouchableOpacity>
+                  <TouchableOpacity style={[styles.photoBox, photoUri ? styles.photoBoxFilled : styles.photoBoxEmpty]} onPress={onPickPhoto} activeOpacity={0.8}>
+                    {photoUri ? (
+                      <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />
+                    ) : (
+                      <Text style={styles.photoPlaceholder}>사진 추가하기</Text>
+                    )}
+                  </TouchableOpacity>
 
-                <TextField
-                  label="메모 (선택)"
-                  placeholder="예: 족발이 진짜 부드러워요. 웨이팅 30분"
-                  value={memo}
-                  onChangeText={setMemo}
-                  multiline
-                />
-
-                <View style={styles.formActions}>
-                  <Button
-                    title="취소"
-                    variant="ghost"
-                    size="md"
-                    onPress={() => setFormOpen(false)}
-                    style={styles.flex}
+                  <TextField
+                    label="메모 (선택)"
+                    placeholder="예: 족발이 진짜 부드러워요. 웨이팅 30분"
+                    value={memo}
+                    onChangeText={setMemo}
+                    multiline
                   />
-                  <Button title="기록 저장" size="md" onPress={onSaveVisit} loading={saving} style={styles.flex} />
-                </View>
-              </View>
-            ) : (
-              <Button title="방문 기록 남기기" variant="secondary" onPress={() => setFormOpen(true)} />
-            )}
 
-            <Text style={styles.sectionTitle}>방문 기록</Text>
-          </View>
-        }
-        renderItem={({ item }) => (
-          <TouchableOpacity style={styles.visitCard} activeOpacity={0.8} onLongPress={() => onDeleteVisit(item)}>
-            <View style={styles.visitHeader}>
-              <Text style={styles.visitDate}>
-                {item.visitedAt} · {item.visitedByName ?? '커플'}
-              </Text>
-              {item.rating ? <Text style={styles.visitStars}>{stars(item.rating)}</Text> : null}
+                  <View style={styles.formActions}>
+                    <Button
+                      title="취소"
+                      variant="ghost"
+                      size="md"
+                      onPress={() => setFormOpen(false)}
+                      style={styles.flex}
+                    />
+                    <Button title="기록 저장" size="md" onPress={onSaveVisit} loading={saving} style={styles.flex} />
+                  </View>
+                </View>
+              ) : (
+                <Button title="방문 기록 남기기" variant="secondary" onPress={() => setFormOpen(true)} />
+              )}
+
+              <Text style={styles.sectionTitle}>방문 기록</Text>
             </View>
-            {item.imageUrl ? (
-              <Image source={{ uri: item.imageUrl }} style={styles.visitPhoto} resizeMode="cover" />
-            ) : null}
-            {item.memo ? <Text style={styles.visitMemo}>{item.memo}</Text> : null}
-          </TouchableOpacity>
-        )}
-        ListEmptyComponent={
-          !loading ? (
-            <Text style={styles.empty}>아직 방문 기록이 없어요. 다녀오셨다면 남겨보세요! (길게 눌러 삭제)</Text>
-          ) : null
-        }
-      />
+          }
+          renderItem={({ item }) => (
+            <TouchableOpacity style={styles.visitCard} activeOpacity={0.8} onLongPress={() => onDeleteVisit(item)}>
+              <View style={styles.visitHeader}>
+                <Text style={styles.visitDate}>
+                  {item.visitedAt} · {item.visitedByName ?? '커플'}
+                </Text>
+                {item.rating ? <Text style={styles.visitStars}>{stars(item.rating)}</Text> : null}
+              </View>
+              {item.imageUrl ? (
+                <Image source={{ uri: item.imageUrl }} style={styles.visitPhoto} resizeMode="cover" />
+              ) : null}
+              {item.memo ? <Text style={styles.visitMemo}>{item.memo}</Text> : null}
+            </TouchableOpacity>
+          )}
+          ListEmptyComponent={
+            !loading ? (
+              <Text style={styles.empty}>아직 방문 기록이 없어요. 다녀오셨다면 남겨보세요! (길게 눌러 삭제)</Text>
+            ) : null
+          }
+        />
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -246,7 +253,7 @@ const styles = StyleSheet.create({
   },
   visitHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   visitDate: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
-  visitStars: { fontSize: fontSize.body, color: colors.accent, fontWeight: '700' },
+  visitStars: { fontSize: fontSize.body, color: colors.togetherText, fontWeight: '700' },
   visitPhoto: { width: '100%', height: 160, borderRadius: radius.md, marginTop: spacing.sm },
   visitMemo: { fontSize: fontSize.body, color: colors.textPrimary, marginTop: spacing.sm },
   empty: { fontSize: fontSize.caption, color: colors.textSecondary, textAlign: 'center', paddingVertical: spacing.lg },

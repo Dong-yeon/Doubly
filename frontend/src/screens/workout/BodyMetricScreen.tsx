@@ -3,8 +3,11 @@ import React, { useCallback, useState } from 'react';
 import {
   FlatList,
   Image,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -17,6 +20,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { WorkoutStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
+import { DateField } from '../../components/DateField';
 import { EmptyState } from '../../components/EmptyState';
 import { bodyApi } from '../../api/body';
 import { pickImage, uploadImage } from '../../utils/imageUpload';
@@ -25,6 +29,7 @@ import { relativeDateLabel, toDateString } from '../../utils/date';
 import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
+import { confirmDiscard } from '../../utils/discardGuard';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { BodyMetric } from '../../types';
 
@@ -65,8 +70,21 @@ export function BodyMetricScreen(_: Props) {
   const [weight, setWeight] = useState('');
   const [bodyFat, setBodyFat] = useState('');
   const [waist, setWaist] = useState('');
+  /** 측정일 — 기본은 오늘이되 어제 잰 인바디도 그 날짜로 기록할 수 있다 */
+  const [measuredDate, setMeasuredDate] = useState(toDateString());
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // 측정 모달 닫기 — 입력이 있으면 확인 후 닫는다 (백드롭·Android 백 공용).
+  // "사라져요"라고 안내했으므로 닫을 때 실제로 비운다 (남기면 다음에 또 확인이 뜬다)
+  const closeAddModal = () =>
+    confirmDiscard(
+      weight.trim().length > 0 || bodyFat.trim().length > 0 || waist.trim().length > 0 || photoUri != null,
+      () => {
+        setAddOpen(false);
+        resetForm();
+      },
+    );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -95,6 +113,7 @@ export function BodyMetricScreen(_: Props) {
     setBodyFat('');
     setWaist('');
     setPhotoUri(null);
+    setMeasuredDate(toDateString());
   };
 
   const onSave = async () => {
@@ -107,7 +126,7 @@ export function BodyMetricScreen(_: Props) {
       let photoUrl: string | undefined;
       if (photoUri) photoUrl = await runBusy('사진 올리는 중…', () => uploadImage(photoUri));
       await bodyApi.save({
-        measuredDate: toDateString(),
+        measuredDate,
         weightKg: weight ? Number(weight) : undefined,
         bodyFatPct: bodyFat ? Number(bodyFat) : undefined,
         waistCm: waist ? Number(waist) : undefined,
@@ -208,30 +227,44 @@ export function BodyMetricScreen(_: Props) {
       </View>
 
       {/* 측정 추가 모달 */}
-      <Modal visible={addOpen} transparent animationType="fade" onRequestClose={() => setAddOpen(false)}>
-        <Pressable style={styles.backdrop} onPress={() => setAddOpen(false)}>
-          <Pressable style={styles.modalCard} onPress={() => {}}>
-            <Text style={styles.modalTitle}>오늘 측정</Text>
-            <View style={styles.formRow}>
-              <View style={styles.flex}>
-                <TextField label="체중(kg)" value={weight} onChangeText={setWeight} keyboardType="decimal-pad" />
-              </View>
-              <View style={styles.flex}>
-                <TextField label="체지방(%)" value={bodyFat} onChangeText={setBodyFat} keyboardType="decimal-pad" />
-              </View>
-              <View style={styles.flex}>
-                <TextField label="허리(cm)" value={waist} onChangeText={setWaist} keyboardType="decimal-pad" />
-              </View>
-            </View>
-            <TouchableOpacity style={[styles.photoBox, photoUri ? styles.photoBoxFilled : styles.photoBoxEmpty]} onPress={onPickPhoto} activeOpacity={0.8}>
-              {photoUri ? (
-                <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />
-              ) : (
-                <Text style={styles.photoPlaceholder}>진행 사진 (선택)</Text>
-              )}
-            </TouchableOpacity>
-            <Button title="저장" onPress={onSave} loading={saving} style={styles.modalBtn} />
-          </Pressable>
+      <Modal visible={addOpen} transparent animationType="fade" onRequestClose={closeAddModal}>
+        <Pressable style={styles.backdrop} onPress={closeAddModal}>
+          {/* 키보드가 "저장" 버튼을 가리지 않도록 카드째로 밀어올린다 */}
+          <KeyboardAvoidingView style={styles.modalAvoid} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <Pressable style={styles.modalCard} onPress={() => {}}>
+              {/* 사진까지 있으면 내용이 길어져 작은 화면에서는 카드 안에서 스크롤한다 */}
+              <ScrollView keyboardShouldPersistTaps="handled">
+                <Text style={styles.modalTitle}>측정 기록</Text>
+                {/* 측정일 선택 — 예전엔 저장 시각의 오늘로 고정이었다 */}
+                <DateField
+                  label="측정일"
+                  value={measuredDate}
+                  onChange={setMeasuredDate}
+                  max={toDateString()}
+                  pickerTitle="언제 측정했나요?"
+                />
+                <View style={styles.formRow}>
+                  <View style={styles.flex}>
+                    <TextField label="체중(kg)" value={weight} onChangeText={setWeight} keyboardType="decimal-pad" />
+                  </View>
+                  <View style={styles.flex}>
+                    <TextField label="체지방(%)" value={bodyFat} onChangeText={setBodyFat} keyboardType="decimal-pad" />
+                  </View>
+                  <View style={styles.flex}>
+                    <TextField label="허리(cm)" value={waist} onChangeText={setWaist} keyboardType="decimal-pad" />
+                  </View>
+                </View>
+                <TouchableOpacity style={[styles.photoBox, photoUri ? styles.photoBoxFilled : styles.photoBoxEmpty]} onPress={onPickPhoto} activeOpacity={0.8}>
+                  {photoUri ? (
+                    <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />
+                  ) : (
+                    <Text style={styles.photoPlaceholder}>진행 사진 (선택)</Text>
+                  )}
+                </TouchableOpacity>
+                <Button title="저장" onPress={onSave} loading={saving} style={styles.modalBtn} />
+              </ScrollView>
+            </Pressable>
+          </KeyboardAvoidingView>
         </Pressable>
       </Modal>
     </SafeAreaView>
@@ -279,7 +312,10 @@ const styles = StyleSheet.create({
   cardMetrics: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
   fabWrap: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: spacing.lg },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: spacing.lg },
-  modalCard: { backgroundColor: colors.surface, borderRadius: radius.xl, padding: spacing.lg },
+  // 카드 maxHeight(%)가 계산되도록 부모(KAV)에 확정 높이를 준다
+  modalAvoid: { flex: 1, justifyContent: 'center' },
+  // maxHeight: 키보드가 올라온 작은 화면에서도 카드가 화면을 넘지 않게 (내부는 ScrollView)
+  modalCard: { backgroundColor: colors.surface, borderRadius: radius.xl, padding: spacing.lg, maxHeight: '85%' },
   modalTitle: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary, marginBottom: spacing.sm },
   formRow: { flexDirection: 'row', gap: spacing.sm },
   flex: { flex: 1 },

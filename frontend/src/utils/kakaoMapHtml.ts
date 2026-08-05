@@ -126,34 +126,54 @@ kakao.maps.load(function () {
     if (!d || d.source !== 'fitto-kakao-map-cmd') { return; }
     if (d.type === 'search') { window.fittoSearch(d.keyword); }
     if (d.type === 'pin') { window.fittoSetPin(d.lat, d.lng); }
+    if (d.type === 'markers') { window.fittoSetMarkers(d.markers, d.path, false); }
   });
 
-  var markers = ${JSON.stringify(markers)};
-  var bounds = new kakao.maps.LatLngBounds();
-  markers.forEach(function (m) {
-    var pos = new kakao.maps.LatLng(m.lat, m.lng);
-    bounds.extend(pos);
-    var marker = new kakao.maps.Marker({ map: map, position: pos, title: m.title });
-    kakao.maps.event.addListener(marker, 'click', function () { post({ type: 'marker', id: m.id }); });
-    new kakao.maps.CustomOverlay({
-      map: map, position: pos, yAnchor: 0,
-      content: '<div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:2px 8px;' +
-               'font-size:11px;font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.15);white-space:nowrap;">' +
-               m.title.replace(/</g, '&lt;') + '</div>'
-    });
-  });
-  // 동선 폴리라인 — 일정 순서대로 이어 그린다 (2점 이상)
-  var path = ${JSON.stringify(path)};
-  if (path.length > 1) {
-    var linePath = path.map(function (p) { return new kakao.maps.LatLng(p.lat, p.lng); });
-    new kakao.maps.Polyline({
-      map: map, path: linePath,
-      strokeWeight: 4, strokeColor: '#4A5BFF', strokeOpacity: 0.85, strokeStyle: 'solid'
-    });
-    path.forEach(function (p) { bounds.extend(new kakao.maps.LatLng(p.lat, p.lng)); });
-  }
+  /*
+   * 마커·동선 그리기를 함수로 둔다.
+   *
+   * 예전에는 마커 목록이 바뀔 때마다 HTML 전체를 다시 만들어 WebView 를 리로드했다.
+   * 그러면 카카오 SDK 를 매번 다시 받고, 사용자가 잡아둔 확대·중심이 초기화된다
+   * (여행 상세에서 Day 를 누를 때마다 지도가 하얗게 깜빡였다).
+   * 이제 fittoSetMarkers 만 호출해 그린 것만 바꾼다.
+   */
+  var drawn = [];
+  window.fittoSetMarkers = function (markers, path, fit) {
+    drawn.forEach(function (o) { o.setMap(null); });
+    drawn = [];
 
-  if (markers.length > 1 || path.length > 1) { map.setBounds(bounds, 40, 40, 40, 40); }
+    var bounds = new kakao.maps.LatLngBounds();
+    markers.forEach(function (m) {
+      var pos = new kakao.maps.LatLng(m.lat, m.lng);
+      bounds.extend(pos);
+      var marker = new kakao.maps.Marker({ map: map, position: pos, title: m.title });
+      kakao.maps.event.addListener(marker, 'click', function () { post({ type: 'marker', id: m.id }); });
+      drawn.push(marker);
+      var label = new kakao.maps.CustomOverlay({
+        map: map, position: pos, yAnchor: 0,
+        content: '<div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:2px 8px;' +
+                 'font-size:11px;font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.15);white-space:nowrap;">' +
+                 m.title.replace(/</g, '&lt;') + '</div>'
+      });
+      drawn.push(label);
+    });
+
+    // 동선 폴리라인 — 일정 순서대로 이어 그린다 (2점 이상)
+    if (path.length > 1) {
+      var linePath = path.map(function (p) { return new kakao.maps.LatLng(p.lat, p.lng); });
+      var line = new kakao.maps.Polyline({
+        map: map, path: linePath,
+        strokeWeight: 4, strokeColor: '#4A5BFF', strokeOpacity: 0.85, strokeStyle: 'solid'
+      });
+      drawn.push(line);
+      path.forEach(function (p) { bounds.extend(new kakao.maps.LatLng(p.lat, p.lng)); });
+    }
+
+    // 화면 맞추기는 처음 그릴 때만 — 갱신마다 하면 사용자가 옮긴 시야를 뺏는다
+    if (fit && (markers.length > 1 || path.length > 1)) { map.setBounds(bounds, 40, 40, 40, 40); }
+  };
+
+  window.fittoSetMarkers(${JSON.stringify(markers)}, ${JSON.stringify(path)}, true);
 
   ${options.selectable ? `
   var geocoder = new kakao.maps.services.Geocoder();

@@ -119,7 +119,8 @@ export function EmojiPicker({ visible, onClose, onSelect, title = '이모지 선
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={close}>
       <Pressable style={styles.backdrop} onPress={close}>
-        <Pressable style={styles.sheet}>
+        {/* onPress 로 탭을 흡수한다 — 없으면 시트 빈 곳 터치가 배경으로 새어나가 닫힌다 */}
+        <Pressable style={styles.sheet} onPress={() => {}}>
           <View style={styles.handle} />
           <Text style={styles.title}>{title}</Text>
 

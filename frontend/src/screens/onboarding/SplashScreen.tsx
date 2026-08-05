@@ -53,5 +53,6 @@ const styles = StyleSheet.create({
   center: { alignItems: 'center' },
   brand: { fontSize: fontSize.display, fontWeight: '800', color: colors.ink, textAlign: 'center', marginTop: spacing.lg, letterSpacing: -1 },
   sloganWrap: { marginTop: spacing.md, backgroundColor: colors.togetherBg, borderRadius: 999, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
-  slogan: { fontSize: fontSize.body, color: colors.violet, fontWeight: '700' },
+  /* togetherBg 위 원색 violet 은 3.55:1 로 미달 — 텍스트 변형을 쓴다 */
+  slogan: { fontSize: fontSize.body, color: colors.togetherText, fontWeight: '700' },
 });

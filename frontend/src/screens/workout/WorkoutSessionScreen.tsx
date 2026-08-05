@@ -1,8 +1,10 @@
 /** 운동 세션 보조 (Jefit/Strong 스타일) — 세트별 체크 + 휴식 타이머 + 세트 카운터.
  *  종료하면 완료한 세트가 운동 기록으로 저장된다. 루틴으로 실행 시 exercises 파라미터로 시작. */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -21,6 +23,8 @@ import { getErrorMessage } from '../../utils/error';
 import { toDateString } from '../../utils/date';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
+import { useDirtyGuard } from '../../hooks/useDirtyGuard';
+import { confirmDiscard } from '../../utils/discardGuard';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'WorkoutSession'>;
@@ -159,6 +163,7 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
       await save({ workoutDate: toDateString(), sets: payloadSets as never });
       haptics.success();
       toast.success('운동 완료! 기록했어요 ');
+      allowLeave();
       navigation.goBack();
     } catch (e) {
       Alert.alert('오류', getErrorMessage(e));
@@ -167,16 +172,26 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
     }
   };
 
-  const confirmExit = useCallback(() => {
-    if (doneSets === 0) {
-      navigation.goBack();
-      return;
-    }
-    Alert.alert('세션 종료', '기록하지 않고 나갈까요?', [
-      { text: '계속하기', style: 'cancel' },
-      { text: '나가기', style: 'destructive', onPress: () => navigation.goBack() },
-    ]);
-  }, [doneSets, navigation]);
+  /*
+   * 이탈 가드 — 예전 confirmExit 은 하단 "종료" 버튼에만 걸려 있어서
+   * 헤더 뒤로가기·하드웨어 백·스와이프백으로 나가면 체크한 세트가 통째로 사라졌다.
+   * usePreventRemove 기반 훅은 모든 이탈 경로를 가로챈다.
+   */
+  const allowLeave = useDirtyGuard(doneSets > 0, {
+    title: '세션 종료',
+    message: '기록하지 않고 나갈까요?',
+    stayText: '계속하기',
+    leaveText: '나가기',
+  });
+
+  // 운동 추가 모달 닫기 — 입력이 있으면 확인 후 닫는다 (백드롭·Android 백 공용).
+  // "사라져요"라고 안내했으므로 닫을 때 실제로 비운다 (남기면 다음에 또 확인이 뜬다)
+  const closeAddModal = () =>
+    confirmDiscard(fName.trim().length > 0 || fWeight.trim().length > 0, () => {
+      setAddOpen(false);
+      setFName('');
+      setFWeight('');
+    });
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
@@ -264,41 +279,45 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
 
       {/* 하단 액션 */}
       <View style={styles.footer}>
-        <Button title="종료" variant="ghost" size="md" onPress={confirmExit} style={styles.flex} />
+        {/* 세트를 체크했으면 useDirtyGuard 가 확인 다이얼로그를 띄운다 */}
+        <Button title="종료" variant="ghost" size="md" onPress={() => navigation.goBack()} style={styles.flex} />
         <Button title="운동 완료" size="md" onPress={onFinish} loading={saving} style={styles.flex} />
       </View>
 
       {/* 운동 추가 모달 */}
-      <Modal visible={addOpen} transparent animationType="fade" onRequestClose={() => setAddOpen(false)}>
-        <Pressable style={styles.backdrop} onPress={() => setAddOpen(false)}>
-          <Pressable style={styles.modalCard} onPress={() => {}}>
-            <Text style={styles.modalTitle}>운동 추가</Text>
-            <TextField label="운동 이름" placeholder="예: 벤치프레스" value={fName} onChangeText={setFName} />
-            <Text style={styles.modalLabel}>부위</Text>
-            <View style={styles.catRow}>
-              {CATEGORIES.map((c) => (
-                <TouchableOpacity
-                  key={c}
-                  style={[styles.catChip, fCategory === c && styles.catChipActive]}
-                  onPress={() => setFCategory(c)}
-                >
-                  <Text style={[styles.catText, fCategory === c && styles.catTextActive]}>{c}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <View style={styles.formRow}>
-              <View style={styles.flex}>
-                <TextField label="세트" value={fSets} onChangeText={setFSets} keyboardType="number-pad" />
+      <Modal visible={addOpen} transparent animationType="fade" onRequestClose={closeAddModal}>
+        <Pressable style={styles.backdrop} onPress={closeAddModal}>
+          {/* 키보드가 모달 하단 버튼을 가리지 않도록 카드째로 밀어올린다 */}
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <Pressable style={styles.modalCard} onPress={() => {}}>
+              <Text style={styles.modalTitle}>운동 추가</Text>
+              <TextField label="운동 이름" placeholder="예: 벤치프레스" value={fName} onChangeText={setFName} />
+              <Text style={styles.modalLabel}>부위</Text>
+              <View style={styles.catRow}>
+                {CATEGORIES.map((c) => (
+                  <TouchableOpacity
+                    key={c}
+                    style={[styles.catChip, fCategory === c && styles.catChipActive]}
+                    onPress={() => setFCategory(c)}
+                  >
+                    <Text style={[styles.catText, fCategory === c && styles.catTextActive]}>{c}</Text>
+                  </TouchableOpacity>
+                ))}
               </View>
-              <View style={styles.flex}>
-                <TextField label="횟수" value={fReps} onChangeText={setFReps} keyboardType="number-pad" />
+              <View style={styles.formRow}>
+                <View style={styles.flex}>
+                  <TextField label="세트" value={fSets} onChangeText={setFSets} keyboardType="number-pad" />
+                </View>
+                <View style={styles.flex}>
+                  <TextField label="횟수" value={fReps} onChangeText={setFReps} keyboardType="number-pad" />
+                </View>
+                <View style={styles.flex}>
+                  <TextField label="무게(kg)" value={fWeight} onChangeText={setFWeight} keyboardType="decimal-pad" />
+                </View>
               </View>
-              <View style={styles.flex}>
-                <TextField label="무게(kg)" value={fWeight} onChangeText={setFWeight} keyboardType="decimal-pad" />
-              </View>
-            </View>
-            <Button title="추가" onPress={onAddExercise} style={styles.modalBtn} />
-          </Pressable>
+              <Button title="추가" onPress={onAddExercise} style={styles.modalBtn} />
+            </Pressable>
+          </KeyboardAvoidingView>
         </Pressable>
       </Modal>
     </SafeAreaView>

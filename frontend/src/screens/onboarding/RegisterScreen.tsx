@@ -1,19 +1,12 @@
 /** 회원가입 — 미니멀·발랄 톤. 설계서 2.1 / 3.1 AUTH-03 */
 import React, { useState } from 'react';
-import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { OnboardingStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
+import { FormKeyboardView } from '../../components/FormKeyboardView';
 import { Card } from '../../components/Card';
 import { Checkbox } from '../../components/Checkbox';
 import { useAuthStore } from '../../store/authStore';
@@ -70,9 +63,9 @@ export function RegisterScreen({ navigation }: Props) {
   const canSubmit = !!email && !!password && !!name && agreeTerms && agreePrivacy && !loading;
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+    // 헤더가 상단 인셋을 처리하므로 top 을 빼서 이중 여백을 막는다
+    <SafeAreaView style={styles.safe} edges={['bottom', 'left', 'right']}>
+      <FormKeyboardView contentContainerStyle={styles.container}>
           <Text style={styles.title}>반가워요! </Text>
           <Text style={styles.subtitle}>함께 운동할 준비를 시작해요</Text>
 
@@ -164,8 +157,7 @@ export function RegisterScreen({ navigation }: Props) {
           </Card>
 
           <Button title="이미 계정이 있어요" variant="ghost" size="md" onPress={() => navigation.goBack()} />
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </FormKeyboardView>
     </SafeAreaView>
   );
 }

@@ -231,7 +231,7 @@ const styles = StyleSheet.create({
   },
   courseStopBody: { flex: 1 },
   courseName: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
-  courseReason: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2, lineHeight: 18 },
+  courseReason: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xxs, lineHeight: 18 },
   filterRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.md },
   filterChip: {
     paddingHorizontal: spacing.md,

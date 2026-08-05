@@ -48,6 +48,15 @@ export const stackScreenOptions = {
   headerShadowVisible: false,
   headerBackVisible: false,
   headerLeft: () => <HeaderIconButton icon="arrow-left" label="뒤로 가기" />,
+  /*
+   * iOS 스와이프백 보장 — 커스텀 headerLeft 는 UIKit 의
+   * interactivePopGestureRecognizer 를 꺼뜨리는 고전 패턴이다.
+   * fullScreenGestureEnabled 는 react-native-screens 자체 팬 제스처를 쓰므로
+   * 커스텀 버튼과 무관하게 화면 어디서든 스와이프백이 동작한다.
+   * (웹에서 기본 뒤로가기 아이콘이 안 보이는 문제 때문에 커스텀 버튼은 유지)
+   */
+  gestureEnabled: true,
+  fullScreenGestureEnabled: true,
 } as const;
 
 /** 모달 화면 옵션 — `options={{ title: '...', ...modalOptions }}` 로 펼쳐 쓴다. */

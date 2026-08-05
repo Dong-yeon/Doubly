@@ -3,9 +3,11 @@
  * 월 그리드(일정 있는 날 점 표시) + 일정 목록(D-day 배지) + 추가/수정 모달.
  * 매일 아침(KST) 당일 일정은 서버가 커플 양쪽에 푸시한다.
  */
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -26,6 +28,7 @@ import { calendarApi } from '../../api/calendar';
 import { toast } from '../../store/toastStore';
 import { getErrorMessage } from '../../utils/error';
 import type { CalendarEventType, CoupleCalendarEvent } from '../../types';
+import { confirmDiscard } from '../../utils/discardGuard';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'CoupleCalendar'>;
@@ -122,20 +125,37 @@ export function CoupleCalendarScreen(_props: Props) {
 
   const listEvents = selectedDate ? byDate.get(selectedDate) ?? [] : events;
 
+  /*
+   * 모달을 연 시점의 폼 스냅샷 — 백드롭으로 닫을 때 "달라진 게 있는지"를 판단한다.
+   * 수정 모달은 열자마자 값이 차 있으므로, 단순히 "비어있지 않음"으로는
+   * 편집 여부를 알 수 없다.
+   */
+  const formInitialRef = useRef('');
+
   const openCreate = () => {
-    setForm({ ...EMPTY_FORM, date: selectedDate ?? todayStr });
+    const initial = { ...EMPTY_FORM, date: selectedDate ?? todayStr };
+    formInitialRef.current = JSON.stringify(initial);
+    setForm(initial);
   };
 
   const openEdit = (event: CoupleCalendarEvent) => {
-    setForm({
+    const initial = {
       id: event.id,
       title: event.title,
       date: event.eventDate.slice(0, 10),
       eventType: event.eventType,
       repeatYearly: event.repeatYearly,
       memo: event.memo ?? '',
-    });
+    };
+    formInitialRef.current = JSON.stringify(initial);
+    setForm(initial);
   };
+
+  // 백드롭·Android 백 공용 — 입력이 달라졌으면 확인 후 닫는다 (취소 버튼은 바로 닫힘)
+  const closeForm = () =>
+    confirmDiscard(form != null && JSON.stringify(form) !== formInitialRef.current, () =>
+      setForm(null),
+    );
 
   const onSave = async () => {
     if (!form) return;
@@ -310,83 +330,90 @@ export function CoupleCalendarScreen(_props: Props) {
       </TouchableOpacity>
 
       {/* 추가/수정 모달 */}
-      <Modal visible={form !== null} transparent animationType="fade" onRequestClose={() => setForm(null)}>
-        <Pressable style={styles.modalBackdrop} onPress={() => setForm(null)}>
-          <Pressable>
-            <Card elevation="md" style={styles.modalCard}>
-              <Text style={styles.modalTitle}>{form?.id == null ? '일정 추가' : '일정 수정'}</Text>
+      <Modal visible={form !== null} transparent animationType="fade" onRequestClose={closeForm}>
+        <Pressable style={styles.modalBackdrop} onPress={closeForm}>
+          {/* 키보드가 저장/삭제 버튼을 가리지 않도록 카드째로 밀어올린다 */}
+          <KeyboardAvoidingView style={styles.modalAvoid} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            {/* onPress 로 탭을 흡수한다 — 없으면 카드 빈 곳 터치가 배경으로 새어나가 닫힌다 */}
+            <Pressable style={styles.modalCardWrap} onPress={() => {}}>
+              <Card elevation="md" style={styles.modalCard}>
+                {/* 내용이 길어(약 460~500pt) 작은 화면·키보드 위에서는 카드 안에서 스크롤한다 */}
+                <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.modalScroll}>
+                  <Text style={styles.modalTitle}>{form?.id == null ? '일정 추가' : '일정 수정'}</Text>
 
-              <TextField
-                label="제목"
-                value={form?.title ?? ''}
-                onChangeText={(t) => setForm((f) => (f ? { ...f, title: t } : f))}
-                placeholder="예: 우리 200일, 수인 생일"
-                maxLength={100}
-              />
-              <DateField
-                label="날짜"
-                value={form?.date ?? ''}
-                onChange={(d) => setForm((f) => (f ? { ...f, date: d } : f))}
-              />
+                  <TextField
+                    label="제목"
+                    value={form?.title ?? ''}
+                    onChangeText={(t) => setForm((f) => (f ? { ...f, title: t } : f))}
+                    placeholder="예: 우리 200일, 수인 생일"
+                    maxLength={100}
+                  />
+                  <DateField
+                    label="날짜"
+                    value={form?.date ?? ''}
+                    onChange={(d) => setForm((f) => (f ? { ...f, date: d } : f))}
+                  />
 
-              <Text style={styles.fieldLabel}>종류</Text>
-              <View style={styles.typeRow}>
-                {(Object.keys(TYPE_META) as CalendarEventType[]).map((t) => {
-                  const active = form?.eventType === t;
-                  return (
-                    <Pressable
-                      key={t}
-                      style={[
-                        styles.typeChip,
-                        active && { borderColor: TYPE_META[t].color, backgroundColor: colors.surfaceAlt },
-                      ]}
-                      onPress={() => setForm((f) => (f ? { ...f, eventType: t } : f))}
-                    >
-                      <View style={[styles.dot, { backgroundColor: TYPE_META[t].color }]} />
-                      <Text style={[styles.typeChipText, active && { color: colors.textPrimary, fontWeight: '700' }]}>
-                        {TYPE_META[t].label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
+                  <Text style={styles.fieldLabel}>종류</Text>
+                  <View style={styles.typeRow}>
+                    {(Object.keys(TYPE_META) as CalendarEventType[]).map((t) => {
+                      const active = form?.eventType === t;
+                      return (
+                        <Pressable
+                          key={t}
+                          style={[
+                            styles.typeChip,
+                            active && { borderColor: TYPE_META[t].color, backgroundColor: colors.surfaceAlt },
+                          ]}
+                          onPress={() => setForm((f) => (f ? { ...f, eventType: t } : f))}
+                        >
+                          <View style={[styles.dot, { backgroundColor: TYPE_META[t].color }]} />
+                          <Text style={[styles.typeChipText, active && { color: colors.textPrimary, fontWeight: '700' }]}>
+                            {TYPE_META[t].label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
 
-              <View style={styles.repeatRow}>
-                <View style={styles.flex}>
-                  <Text style={styles.fieldLabel}>매년 반복</Text>
-                  <Text style={styles.repeatHint}>생일·기념일처럼 해마다 돌아오는 날</Text>
-                </View>
-                <Switch
-                  value={form?.repeatYearly ?? false}
-                  onValueChange={(v) => setForm((f) => (f ? { ...f, repeatYearly: v } : f))}
-                  trackColor={{ true: colors.coral }}
-                />
-              </View>
+                  <View style={styles.repeatRow}>
+                    <View style={styles.flex}>
+                      <Text style={styles.fieldLabel}>매년 반복</Text>
+                      <Text style={styles.repeatHint}>생일·기념일처럼 해마다 돌아오는 날</Text>
+                    </View>
+                    <Switch
+                      value={form?.repeatYearly ?? false}
+                      onValueChange={(v) => setForm((f) => (f ? { ...f, repeatYearly: v } : f))}
+                      trackColor={{ true: colors.coral }}
+                    />
+                  </View>
 
-              <TextField
-                label="메모 (선택)"
-                value={form?.memo ?? ''}
-                onChangeText={(t) => setForm((f) => (f ? { ...f, memo: t } : f))}
-                placeholder="예: 레스토랑 예약해두기"
-                maxLength={500}
-              />
+                  <TextField
+                    label="메모 (선택)"
+                    value={form?.memo ?? ''}
+                    onChangeText={(t) => setForm((f) => (f ? { ...f, memo: t } : f))}
+                    placeholder="예: 레스토랑 예약해두기"
+                    maxLength={500}
+                  />
 
-              <View style={styles.modalActions}>
-                {form?.id != null ? (
-                  <TouchableOpacity style={styles.modalDelete} onPress={onDelete}>
-                    <Text style={styles.modalDeleteText}>삭제</Text>
-                  </TouchableOpacity>
-                ) : null}
-                <View style={styles.flex} />
-                <TouchableOpacity style={styles.modalCancel} onPress={() => setForm(null)}>
-                  <Text style={styles.modalCancelText}>취소</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.modalSave} onPress={onSave} disabled={saving}>
-                  <Text style={styles.modalSaveText}>{saving ? '저장 중…' : '저장'}</Text>
-                </TouchableOpacity>
-              </View>
-            </Card>
-          </Pressable>
+                  <View style={styles.modalActions}>
+                    {form?.id != null ? (
+                      <TouchableOpacity style={styles.modalDelete} onPress={onDelete}>
+                        <Text style={styles.modalDeleteText}>삭제</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                    <View style={styles.flex} />
+                    <TouchableOpacity style={styles.modalCancel} onPress={() => setForm(null)}>
+                      <Text style={styles.modalCancelText}>취소</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.modalSave} onPress={onSave} disabled={saving}>
+                      <Text style={styles.modalSaveText}>{saving ? '저장 중…' : '저장'}</Text>
+                    </TouchableOpacity>
+                  </View>
+                </ScrollView>
+              </Card>
+            </Pressable>
+          </KeyboardAvoidingView>
         </Pressable>
       </Modal>
     </View>
@@ -486,6 +513,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: spacing.lg,
   },
+  /*
+   * 키보드 회피 래퍼는 배경 전체를 덮되(flex:1) 카드는 세로 중앙에 둔다.
+   * 카드 높이를 화면의 80% 로 제한해야 안쪽 ScrollView 가 실제로 스크롤된다 —
+   * 제한이 없으면 카드가 내용만큼 늘어나 버튼이 화면 밖으로 밀린다.
+   */
+  modalAvoid: { flex: 1, justifyContent: 'center' },
+  modalCardWrap: { maxHeight: '80%' },
+  modalScroll: { paddingBottom: spacing.xs },
   modalCard: { gap: spacing.xs },
   modalTitle: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.ink, marginBottom: spacing.sm },
   fieldLabel: {

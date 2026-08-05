@@ -1,11 +1,12 @@
 /** 커플 연결 — 설계서 3.2 REL-01/REL-02 (초대코드 생성 / 코드 입력 연결) */
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
+import { FormKeyboardView } from '../../components/FormKeyboardView';
 import { TextField } from '../../components/TextField';
 import { useRelationStore } from '../../store/relationStore';
 import { getErrorMessage } from '../../utils/error';
@@ -66,60 +67,62 @@ export function CoupleConnectScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        {/* 초대코드 생성 */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>내 초대코드 만들기</Text>
-          <Text style={styles.desc}>코드를 상대방에게 공유하세요. (24시간 동안 유효)</Text>
-          {code ? (
-            <>
-              <View style={styles.codeBox}>
-                <Text style={styles.code}>{code}</Text>
-              </View>
-              <View style={styles.codeActions}>
-                <Button title="복사" variant="soft" size="md" onPress={onCopy} style={styles.actionBtn} />
-                <Button title="공유" variant="soft" size="md" onPress={onShare} style={styles.actionBtn} />
-              </View>
-            </>
-          ) : null}
-          <Button
-            title={code ? '새 코드 생성' : '초대코드 생성'}
-            variant="secondary"
-            onPress={onGenerate}
-            loading={generating}
-            style={styles.gap}
-          />
-        </View>
+      {/* 키보드가 "연결하기" 버튼을 가리지 않도록 회피 (스크롤하면 키보드가 내려간다) */}
+      <FormKeyboardView contentContainerStyle={styles.container}>
+          {/* 초대코드 생성 */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>내 초대코드 만들기</Text>
+            <Text style={styles.desc}>코드를 상대방에게 공유하세요. (24시간 동안 유효)</Text>
+            {code ? (
+              <>
+                <View style={styles.codeBox}>
+                  <Text style={styles.code}>{code}</Text>
+                </View>
+                <View style={styles.codeActions}>
+                  <Button title="복사" variant="soft" size="md" onPress={onCopy} style={styles.actionBtn} />
+                  <Button title="공유" variant="soft" size="md" onPress={onShare} style={styles.actionBtn} />
+                </View>
+              </>
+            ) : null}
+            <Button
+              title={code ? '새 코드 생성' : '초대코드 생성'}
+              variant="secondary"
+              onPress={onGenerate}
+              loading={generating}
+              style={styles.gap}
+            />
+          </View>
 
-        <View style={styles.divider} />
+          <View style={styles.divider} />
 
-        {/* 코드 입력 연결 */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>상대방 코드 입력</Text>
-          <Text style={styles.desc}>받은 6자리 코드를 입력해 연결하세요.</Text>
-          <TextField
-            value={input}
-            onChangeText={(t) => setInput(t.toUpperCase())}
-            placeholder="예: ABC123"
-            autoCapitalize="characters"
-            maxLength={6}
-            errorText={error ?? undefined}
-            style={styles.codeInput}
-          />
-          <Button
-            title="연결하기"
-            onPress={onConnect}
-            loading={connecting}
-            disabled={input.trim().length < 6}
-          />
-        </View>
-      </ScrollView>
+          {/* 코드 입력 연결 */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>상대방 코드 입력</Text>
+            <Text style={styles.desc}>받은 6자리 코드를 입력해 연결하세요.</Text>
+            <TextField
+              value={input}
+              onChangeText={(t) => setInput(t.toUpperCase())}
+              placeholder="예: ABC123"
+              autoCapitalize="characters"
+              maxLength={6}
+              errorText={error ?? undefined}
+              style={styles.codeInput}
+            />
+            <Button
+              title="연결하기"
+              onPress={onConnect}
+              loading={connecting}
+              disabled={input.trim().length < 6}
+            />
+          </View>
+      </FormKeyboardView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
+  flex: { flex: 1 },
   container: { padding: spacing.lg },
   section: { marginBottom: spacing.lg },
   sectionTitle: { fontSize: fontSize.subtitle, fontWeight: '700', color: colors.textPrimary },

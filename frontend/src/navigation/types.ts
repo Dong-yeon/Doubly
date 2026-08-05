@@ -57,7 +57,8 @@ export interface SessionExerciseParam {
 // 운동 탭 내부 스택 — 운동 + 식단(세그먼트로 통합)
 export type WorkoutStackParamList = {
   WorkoutMain: undefined;
-  WorkoutRecord: undefined;
+  // date: 캘린더에서 특정 날짜를 골라 들어올 때 그 날짜로 시작한다 (없으면 오늘)
+  WorkoutRecord: { date?: string } | undefined;
   WorkoutCalendar: undefined;
   WorkoutStats: undefined;
   WorkoutRecommend: undefined;
@@ -72,7 +73,8 @@ export type WorkoutStackParamList = {
   Challenge: undefined;
   // 식단 (구 식단 탭에서 이전) — WorkoutMain 상단 세그먼트로 토글
   DietMain: undefined;
-  DietRecord: undefined;
+  // date: 캘린더에서 특정 날짜를 골라 들어올 때 그 날짜로 시작한다 (없으면 오늘)
+  DietRecord: { date?: string } | undefined;
   DietCalendar: undefined;
   DietStats: undefined;
 };

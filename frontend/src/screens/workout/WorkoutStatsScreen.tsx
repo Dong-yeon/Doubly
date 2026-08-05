@@ -36,9 +36,13 @@ export function WorkoutStatsScreen() {
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         {/* 요약 카드 3개 */}
         <View style={styles.summaryRow}>
-          <SummaryCard label="이번 주" value={stats?.weeklyDays ?? 0} unit="일" tint="pink" />
-          <SummaryCard label="이번 달" value={stats?.monthlyDays ?? 0} unit="일" tint="mint" />
-          <SummaryCard label="누적" value={stats?.totalDays ?? 0} unit="일" tint="yellow" />
+          {/*
+            셋 다 "내 기록"이라 같은 톤으로 둔다. 예전엔 Ink→Indigo(상대)→Violet(함께) 로
+            흘러서, 소유자 색 규칙을 아는 사용자에게는 없는 의미를 만들어 보였다.
+          */}
+          <SummaryCard label="이번 주" value={stats?.weeklyDays ?? 0} unit="일" tint="neutral" />
+          <SummaryCard label="이번 달" value={stats?.monthlyDays ?? 0} unit="일" tint="neutral" />
+          <SummaryCard label="누적" value={stats?.totalDays ?? 0} unit="일" tint="neutral" />
         </View>
 
         {/* 최근 7일 */}
@@ -87,7 +91,17 @@ export function WorkoutStatsScreen() {
   );
 }
 
-function SummaryCard({ label, value, unit, tint }: { label: string; value: number; unit: string; tint: 'pink' | 'mint' | 'yellow' }) {
+function SummaryCard({
+  label,
+  value,
+  unit,
+  tint,
+}: {
+  label: string;
+  value: number;
+  unit: string;
+  tint: 'surface' | 'neutral' | 'partner' | 'together';
+}) {
   return (
     <Card elevation="sm" tint={tint} style={styles.summaryCard}>
       <Text style={styles.summaryValue}>

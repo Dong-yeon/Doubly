@@ -16,10 +16,12 @@ import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { PlaceStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
+import { TripSectionTabs } from './TripSectionTabs';
 import { tripApi } from '../../api/trip';
 import { useAuthStore } from '../../store/authStore';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
+import { formatMoney } from '../../utils/format';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { TripExpense, TripExpenses } from '../../types';
@@ -28,10 +30,11 @@ type Props = NativeStackScreenProps<PlaceStackParamList, 'TripExpense'>;
 
 const CATEGORIES = ['식비', '교통', '숙박', '쇼핑', '관광', '기타'];
 
-/** 1234567 → "1,234,567원" (Intl 의존 없이 천단위 구분) */
-function money(n: number): string {
-  return `${Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')}원`;
-}
+/*
+ * 천단위 구분은 공용 유틸(utils/format)로 옮겼다 — 이 화면에만 로컬 함수가 있어서
+ * 칼로리 등 다른 숫자는 구분 없이 표기되고 있었다.
+ */
+const money = formatMoney;
 
 interface ExpenseForm {
   amount: string;
@@ -41,7 +44,7 @@ interface ExpenseForm {
 }
 
 export function TripExpenseScreen({ route }: Props) {
-  const { tripId } = route.params;
+  const { tripId, title } = route.params;
   const myId = useAuthStore((s) => s.user?.id);
   const [data, setData] = useState<TripExpenses | null>(null);
   const [loading, setLoading] = useState(false);
@@ -151,6 +154,8 @@ export function TripExpenseScreen({ route }: Props) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
+      {/* 형제 화면(준비물·앨범·회고)으로 바로 이동 — 여행 상세를 거치지 않는다 */}
+      <TripSectionTabs tripId={tripId} title={title} />
       <FlatList
         data={data?.expenses ?? []}
         keyExtractor={(e) => String(e.id)}
@@ -227,7 +232,8 @@ export function TripExpenseScreen({ route }: Props) {
       {/* 추가/수정 모달 */}
       <Modal visible={modalOpen} transparent animationType="slide" onRequestClose={() => setModalOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setModalOpen(false)}>
-          <Pressable style={styles.sheet}>
+          {/* onPress 로 탭을 흡수한다 — 없으면 시트 빈 곳 터치가 배경으로 새어나가 닫힌다 */}
+          <Pressable style={styles.sheet} onPress={() => {}}>
             <Text style={styles.sheetTitle}>{editing ? '경비 수정' : '경비 추가'}</Text>
 
             <Text style={styles.fieldLabel}>금액 (원)</Text>
@@ -240,6 +246,13 @@ export function TripExpenseScreen({ route }: Props) {
               keyboardType="number-pad"
               maxLength={12}
             />
+            {/*
+              입력창은 숫자만 담고(커서 위치가 튀지 않게), 읽기용 콤마는 아래에 보조로 보여준다.
+              1250000 을 콤마 없이 읽으며 자릿수를 세야 했던 문제를 이 한 줄이 없앤다.
+            */}
+            {form.amount ? (
+              <Text style={styles.amountPreview}>{formatMoney(Number(form.amount))}</Text>
+            ) : null}
 
             <Text style={styles.fieldLabel}>누가 냈나요</Text>
             <View style={styles.payerRow}>
@@ -303,7 +316,7 @@ const styles = StyleSheet.create({
   totalValue: { fontSize: fontSize.display, color: colors.textPrimary, fontWeight: '800', marginTop: 2 },
 
   settleBanner: { marginTop: spacing.md, padding: spacing.md, borderRadius: radius.lg },
-  settleDone: { backgroundColor: '#E7F5EE' },
+  settleDone: { backgroundColor: colors.successBg },
   settleOwe: { backgroundColor: colors.accentSoft },
   settleText: { fontSize: fontSize.body, fontWeight: '800', textAlign: 'center' },
   settleTextDone: { color: colors.success },
@@ -354,6 +367,14 @@ const styles = StyleSheet.create({
   sheetActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, marginTop: spacing.lg },
 
   fieldLabel: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700', marginBottom: spacing.xs, marginTop: spacing.sm },
+  /* 입력 중 자릿수 확인용 보조 표시 */
+  amountPreview: {
+    fontSize: fontSize.body,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    marginTop: spacing.xs,
+    textAlign: 'right',
+  },
   input: {
     backgroundColor: colors.surface,
     borderRadius: radius.md,

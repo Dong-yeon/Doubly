@@ -21,6 +21,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { PlaceStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
+import { IconButton } from '../../components/IconButton';
 import { KakaoMap } from '../../components/KakaoMap';
 import { tripApi } from '../../api/trip';
 import { placeApi } from '../../api/place';
@@ -308,7 +309,26 @@ export function TripDetailScreen({ navigation, route }: Props) {
     }
   };
 
-  // AI 일정 생성 — 기존 일정을 대체
+  /*
+   * AI 일정 생성 — 기존 일정을 <b>전부 대체</b>한다.
+   * 손으로 짠 일정이 있는데 확인 없이 날려버리면 되돌릴 방법이 없으므로,
+   * 지울 것이 있을 때만 한 번 묻는다. (빈 상태면 바로 실행 — 물을 이유가 없다)
+   */
+  const onGenerate = () => {
+    if (totalItems === 0) {
+      void runGenerate();
+      return;
+    }
+    Alert.alert(
+      'AI로 일정 다시 짜기',
+      `지금 있는 일정 ${totalItems}개가 새 일정으로 바뀌어요. 되돌릴 수 없어요.`,
+      [
+        { text: '취소', style: 'cancel' },
+        { text: '다시 짜기', style: 'destructive', onPress: () => void runGenerate() },
+      ],
+    );
+  };
+
   const runGenerate = async () => {
     setAiLoading(true);
     try {
@@ -468,26 +488,30 @@ export function TripDetailScreen({ navigation, route }: Props) {
                     {item.placeName ? <Text style={styles.itemPlace}>{item.placeName}</Text> : null}
                     {item.memo ? <Text style={styles.itemMemo}>{item.memo}</Text> : null}
                   </TouchableOpacity>
+                  {/*
+                    44×44 아이콘 버튼 — 예전엔 ▲▼✕ 가 26×18px 로 gap 2 에 붙어 있어
+                    아래로 내리려다 삭제를 누르는 사고가 났다. 삭제는 한 칸 띄운다.
+                  */}
                   <View style={styles.itemActions}>
-                    <TouchableOpacity
+                    <IconButton
+                      icon="chevron-up"
+                      label="위로 옮기기"
                       onPress={() => moveItem(idx, -1)}
                       disabled={idx === 0}
-                      hitSlop={8}
-                      style={styles.moveBtn}
-                    >
-                      <Text style={[styles.moveText, idx === 0 && styles.moveDisabled]}>▲</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
+                    />
+                    <IconButton
+                      icon="chevron-down"
+                      label="아래로 옮기기"
                       onPress={() => moveItem(idx, 1)}
                       disabled={idx === dayItems.length - 1}
-                      hitSlop={8}
-                      style={styles.moveBtn}
-                    >
-                      <Text style={[styles.moveText, idx === dayItems.length - 1 && styles.moveDisabled]}>▼</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => deleteItem(item)} hitSlop={8} style={styles.moveBtn}>
-                      <Text style={styles.delText}>✕</Text>
-                    </TouchableOpacity>
+                    />
+                    <IconButton
+                      icon="close"
+                      label="일정 삭제"
+                      onPress={() => deleteItem(item)}
+                      color={colors.danger}
+                      style={styles.deleteBtn}
+                    />
                   </View>
                 </View>
               ))
@@ -546,7 +570,8 @@ export function TripDetailScreen({ navigation, route }: Props) {
       {/* 일정 추가/수정 모달 */}
       <Modal visible={editorOpen} transparent animationType="slide" onRequestClose={() => setEditorOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setEditorOpen(false)}>
-          <Pressable style={styles.sheet}>
+          {/* onPress 로 탭을 흡수한다 — 없으면 시트 빈 곳 터치가 배경으로 새어나가 닫힌다 */}
+          <Pressable style={styles.sheet} onPress={() => {}}>
             <Text style={styles.sheetTitle}>{editingItem ? '일정 수정' : '일정 추가'}</Text>
 
             {/* Day 선택 */}
@@ -639,7 +664,8 @@ export function TripDetailScreen({ navigation, route }: Props) {
         }}
       >
         <Pressable style={styles.backdrop} onPress={() => !aiLoading && setAiOpen(false)}>
-          <Pressable style={styles.sheet}>
+          {/* onPress 로 탭을 흡수한다 — 없으면 시트 빈 곳 터치가 배경으로 새어나가 닫힌다 */}
+          <Pressable style={styles.sheet} onPress={() => {}}>
             <Text style={styles.sheetTitle}>AI 여행 일정 생성</Text>
             <Text style={styles.aiDesc}>
               "{trip?.title}" 여행에 맞춰 {days.length}일치 일정을 AI가 짜드려요.
@@ -666,7 +692,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
             ) : (
               <View style={styles.sheetActions}>
                 <Button title="취소" variant="ghost" size="md" onPress={() => setAiOpen(false)} />
-                <Button title="일정 생성" size="md" onPress={runGenerate} />
+                <Button title="일정 생성" size="md" onPress={onGenerate} />
               </View>
             )}
           </Pressable>
@@ -676,7 +702,8 @@ export function TripDetailScreen({ navigation, route }: Props) {
       {/* 장소 연결 선택 모달 */}
       <Modal visible={linkOpen} transparent animationType="fade" onRequestClose={() => setLinkOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setLinkOpen(false)}>
-          <Pressable style={styles.sheet}>
+          {/* onPress 로 탭을 흡수한다 — 없으면 시트 빈 곳 터치가 배경으로 새어나가 닫힌다 */}
+          <Pressable style={styles.sheet} onPress={() => {}}>
             <Text style={styles.sheetTitle}>어떤 장소를 연결할까요?</Text>
             <FlatList
               data={linkCandidates}
@@ -700,7 +727,8 @@ export function TripDetailScreen({ navigation, route }: Props) {
       {/* 장소 담기 모달 (장소 탭) */}
       <Modal visible={pickerOpen} transparent animationType="fade" onRequestClose={() => setPickerOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setPickerOpen(false)}>
-          <Pressable style={styles.sheet}>
+          {/* onPress 로 탭을 흡수한다 — 없으면 시트 빈 곳 터치가 배경으로 새어나가 닫힌다 */}
+          <Pressable style={styles.sheet} onPress={() => {}}>
             <Text style={styles.sheetTitle}>어떤 장소를 담을까요?</Text>
             <FlatList
               data={candidates}
@@ -847,11 +875,9 @@ const styles = StyleSheet.create({
   catChipText: { fontSize: 11, color: colors.primary, fontWeight: '700' },
   itemPlace: { fontSize: fontSize.caption, color: colors.secondary, marginTop: spacing.xs, fontWeight: '600' },
   itemMemo: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xs, lineHeight: 18 },
-  itemActions: { alignItems: 'center', justifyContent: 'flex-start', gap: 2 },
-  moveBtn: { paddingHorizontal: 6, paddingVertical: 2 },
-  moveText: { fontSize: 14, color: colors.textSecondary, fontWeight: '800' },
-  moveDisabled: { color: colors.border },
-  delText: { fontSize: 14, color: colors.danger, fontWeight: '800', marginTop: 2 },
+  itemActions: { alignItems: 'center', justifyContent: 'flex-start' },
+  /* 삭제는 이동 버튼과 붙여두지 않는다 — 오탭 비용이 되돌릴 수 없는 쪽이라 완충 여백을 준다 */
+  deleteBtn: { marginTop: spacing.sm },
 
   addWrap: { marginTop: spacing.md },
 

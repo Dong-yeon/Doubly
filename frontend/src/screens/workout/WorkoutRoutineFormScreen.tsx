@@ -1,6 +1,6 @@
 /** 루틴 만들기 — 제목 + 운동 목록 추가 후 저장 */
 import React, { useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -11,6 +11,7 @@ import { workoutApi } from '../../api/workout';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
+import { confirmDiscard } from '../../utils/discardGuard';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'WorkoutRoutineForm'>;
@@ -39,6 +40,15 @@ export function WorkoutRoutineFormScreen({ navigation }: Props) {
   const [fSets, setFSets] = useState('3');
   const [fReps, setFReps] = useState('10');
   const [fWeight, setFWeight] = useState('');
+
+  // 운동 추가 모달 닫기 — 입력이 있으면 확인 후 닫는다 (백드롭·Android 백 공용).
+  // "사라져요"라고 안내했으므로 닫을 때 실제로 비운다 (남기면 다음에 또 확인이 뜬다)
+  const closeAddModal = () =>
+    confirmDiscard(fName.trim().length > 0 || fWeight.trim().length > 0, () => {
+      setAddOpen(false);
+      setFName('');
+      setFWeight('');
+    });
 
   const onAddExercise = () => {
     if (!fName.trim()) {
@@ -122,36 +132,39 @@ export function WorkoutRoutineFormScreen({ navigation }: Props) {
         <Button title="루틴 저장" onPress={onSave} loading={saving} style={styles.saveBtn} />
       </ScrollView>
 
-      <Modal visible={addOpen} transparent animationType="fade" onRequestClose={() => setAddOpen(false)}>
-        <Pressable style={styles.backdrop} onPress={() => setAddOpen(false)}>
-          <Pressable style={styles.modalCard} onPress={() => {}}>
-            <Text style={styles.modalTitle}>운동 추가</Text>
-            <TextField label="운동 이름" placeholder="예: 랫풀다운" value={fName} onChangeText={setFName} />
-            <Text style={styles.modalLabel}>부위</Text>
-            <View style={styles.catRow}>
-              {CATEGORIES.map((c) => (
-                <TouchableOpacity
-                  key={c}
-                  style={[styles.catChip, fCategory === c && styles.catChipActive]}
-                  onPress={() => setFCategory(c)}
-                >
-                  <Text style={[styles.catText, fCategory === c && styles.catTextActive]}>{c}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <View style={styles.formRow}>
-              <View style={styles.flex}>
-                <TextField label="세트" value={fSets} onChangeText={setFSets} keyboardType="number-pad" />
+      <Modal visible={addOpen} transparent animationType="fade" onRequestClose={closeAddModal}>
+        <Pressable style={styles.backdrop} onPress={closeAddModal}>
+          {/* 키보드가 모달 하단 버튼을 가리지 않도록 카드째로 밀어올린다 */}
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <Pressable style={styles.modalCard} onPress={() => {}}>
+              <Text style={styles.modalTitle}>운동 추가</Text>
+              <TextField label="운동 이름" placeholder="예: 랫풀다운" value={fName} onChangeText={setFName} />
+              <Text style={styles.modalLabel}>부위</Text>
+              <View style={styles.catRow}>
+                {CATEGORIES.map((c) => (
+                  <TouchableOpacity
+                    key={c}
+                    style={[styles.catChip, fCategory === c && styles.catChipActive]}
+                    onPress={() => setFCategory(c)}
+                  >
+                    <Text style={[styles.catText, fCategory === c && styles.catTextActive]}>{c}</Text>
+                  </TouchableOpacity>
+                ))}
               </View>
-              <View style={styles.flex}>
-                <TextField label="횟수" value={fReps} onChangeText={setFReps} keyboardType="number-pad" />
+              <View style={styles.formRow}>
+                <View style={styles.flex}>
+                  <TextField label="세트" value={fSets} onChangeText={setFSets} keyboardType="number-pad" />
+                </View>
+                <View style={styles.flex}>
+                  <TextField label="횟수" value={fReps} onChangeText={setFReps} keyboardType="number-pad" />
+                </View>
+                <View style={styles.flex}>
+                  <TextField label="무게(kg)" value={fWeight} onChangeText={setFWeight} keyboardType="decimal-pad" />
+                </View>
               </View>
-              <View style={styles.flex}>
-                <TextField label="무게(kg)" value={fWeight} onChangeText={setFWeight} keyboardType="decimal-pad" />
-              </View>
-            </View>
-            <Button title="추가" onPress={onAddExercise} style={styles.modalBtn} />
-          </Pressable>
+              <Button title="추가" onPress={onAddExercise} style={styles.modalBtn} />
+            </Pressable>
+          </KeyboardAvoidingView>
         </Pressable>
       </Modal>
     </SafeAreaView>

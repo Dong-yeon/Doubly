@@ -2,16 +2,35 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { WorkoutStackParamList } from '../../navigation/types';
+import { Button } from '../../components/Button';
 import { dietApi } from '../../api/diet';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 
+type Props = NativeStackScreenProps<WorkoutStackParamList, 'DietCalendar'>;
+
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
-export function DietCalendarScreen() {
+/** (2026, 8, 4) → "2026-08-04" */
+function dateStringOf(year: number, month: number, day: number): string {
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+export function DietCalendarScreen({ navigation }: Props) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [completedDays, setCompletedDays] = useState<Set<number>>(new Set());
+  /** 선택한 날짜(일) — 그 날의 상태를 보여주고 바로 기록할 수 있게 한다 */
+  const [selectedDay, setSelectedDay] = useState<number | null>(null);
+
+  const goToday = () => {
+    const today = new Date();
+    setYear(today.getFullYear());
+    setMonth(today.getMonth() + 1);
+    setSelectedDay(null);
+  };
 
   useEffect(() => {
     let active = true;
@@ -56,9 +75,17 @@ export function DietCalendarScreen() {
         <TouchableOpacity onPress={() => changeMonth(-1)} hitSlop={12}>
           <Text style={styles.nav}>‹</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>
-          {year}년 {month}월
-        </Text>
+        {/* 제목을 누르면 이번 달로 — 먼 달에서 돌아오려면 ‹ 를 여러 번 눌러야 했다 */}
+        <TouchableOpacity
+          onPress={goToday}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="이번 달로 이동"
+        >
+          <Text style={styles.title}>
+            {year}년 {month}월
+          </Text>
+        </TouchableOpacity>
         <TouchableOpacity onPress={() => changeMonth(1)} hitSlop={12}>
           <Text style={styles.nav}>›</Text>
         </TouchableOpacity>
@@ -72,24 +99,56 @@ export function DietCalendarScreen() {
         ))}
       </View>
 
+      {/* 날짜를 누를 수 있게 — 예전엔 View 라 눌러도 반응이 없었다 */}
       <View style={styles.grid}>
         {cells.map((day, i) => (
           <View key={i} style={styles.cell}>
             {day ? (
-              <View style={[styles.dayCircle, completedDays.has(day) && styles.dayDone]}>
-                <Text style={[styles.dayText, completedDays.has(day) && styles.dayTextDone]}>
-                  {day}
-                </Text>
-              </View>
+              <TouchableOpacity
+                onPress={() => setSelectedDay(day === selectedDay ? null : day)}
+                accessibilityRole="button"
+                accessibilityLabel={`${year}년 ${month}월 ${day}일`}
+                accessibilityState={{ selected: selectedDay === day }}
+                style={styles.dayTouch}
+              >
+                <View
+                  style={[
+                    styles.dayCircle,
+                    completedDays.has(day) && styles.dayDone,
+                    selectedDay === day && styles.daySelected,
+                  ]}
+                >
+                  <Text style={[styles.dayText, completedDays.has(day) && styles.dayTextDone]}>
+                    {day}
+                  </Text>
+                </View>
+              </TouchableOpacity>
             ) : null}
           </View>
         ))}
       </View>
 
-      <View style={styles.legend}>
-        <View style={[styles.dayCircle, styles.dayDone, styles.legendDot]} />
-        <Text style={styles.legendText}>식단 기록한 날</Text>
-      </View>
+      {selectedDay ? (
+        <View style={styles.selectedBox}>
+          <Text style={styles.selectedText}>
+            {month}월 {selectedDay}일 ·{' '}
+            {completedDays.has(selectedDay) ? '식단을 기록한 날이에요' : '기록이 없어요'}
+          </Text>
+          <Button
+            title="이 날 기록하기"
+            size="md"
+            variant="secondary"
+            onPress={() =>
+              navigation.navigate('DietRecord', { date: dateStringOf(year, month, selectedDay) })
+            }
+          />
+        </View>
+      ) : (
+        <View style={styles.legend}>
+          <View style={[styles.dayCircle, styles.dayDone, styles.legendDot]} />
+          <Text style={styles.legendText}>식단 기록한 날</Text>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -105,11 +164,17 @@ const styles = StyleSheet.create({
   weekday: { width: CELL, textAlign: 'center', color: colors.textSecondary, fontSize: fontSize.caption },
   grid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: spacing.sm },
   cell: { width: CELL, aspectRatio: 1, alignItems: 'center', justifyContent: 'center' },
+  /* 셀 전체를 터치 영역으로 — 36px 원만 누르게 하면 타깃이 작다 */
+  dayTouch: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   dayCircle: { width: 36, height: 36, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  /* 선택 표시는 테두리로 — 기록(채움)과 겹쳐도 둘 다 읽힌다 */
+  daySelected: { borderWidth: 2, borderColor: colors.primary },
   dayDone: { backgroundColor: colors.accent },
   dayText: { fontSize: fontSize.body, color: colors.textPrimary },
   dayTextDone: { color: colors.white, fontWeight: '700' },
   legend: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.xl, gap: spacing.sm },
+  selectedBox: { marginTop: spacing.xl, gap: spacing.sm },
+  selectedText: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
   legendDot: { width: 20, height: 20 },
   legendText: { color: colors.textSecondary, fontSize: fontSize.caption },
 });

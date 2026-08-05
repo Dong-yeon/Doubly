@@ -1,4 +1,4 @@
-/** Doubly 심볼 — 겹치는 두 하트 (나=Pink · 상대=Sky).
+/** Doubly 심볼 — 겹치는 두 하트 (나=Coral · 상대=Indigo).
  *
  *  SVG 패스로 그린다. 예전에는 원 2개 + 삼각형을 겹쳐 만들었는데, 도형 경계에
  *  이음매가 보이고 아래쪽이 각져서 작은 크기(26px 커플 줄)에서 깨져 보였다.
@@ -19,9 +19,19 @@ interface Props {
   style?: ViewStyle;
 }
 
-/** 🩷/🩵 에 대응하는 브랜드 하트 색 */
-const PINK = '#FF7EB9';
-const SKY = '#7DD3F0';
+/*
+ * 하트 색은 Duo Color System 을 따른다 — 나=Coral · 상대=Indigo.
+ *
+ * 예전에는 Pink(#FF7EB9)/Sky(#7DD3F0) 를 썼는데, 이 마크가 홈 히어로에서
+ * Coral 얼굴과 Indigo 얼굴 <b>사이</b>에 놓인다. 같은 "나/상대" 개념이 한 화면에서
+ * 두 벌의 색으로 동시에 나와, 사용자가 학습한 색 코드가 무너졌다.
+ *
+ * 팔레트 토큰(colors.coral/indigo)을 직접 쓰지 않고 상수로 고정하는 이유:
+ * 로고는 라이트/다크에서 같은 색이어야 하는 브랜드 자산이라 테마 반전을 타면 안 된다.
+ * 값은 라이트 팔레트의 브랜드 원색과 일치시킨다.
+ */
+const CORAL = '#FF6A4D';
+const INDIGO = '#4A5BFF';
 
 /** 24×24 뷰박스 기준 하트 — 위 두 로브가 둥글고 아래로 부드럽게 모인다 */
 const HEART_PATH =
@@ -42,13 +52,13 @@ export function DoublyMark({ size = 40 }: { size?: number }) {
   const width = size * 2 - overlap;
   return (
     <View style={{ width, height: size }}>
-      {/* 상대 (Sky) — 뒤에 깔린다 */}
+      {/* 상대 (Indigo) — 뒤에 깔린다 */}
       <View style={{ position: 'absolute', left: size - overlap, top: 0 }}>
-        <Heart size={size} color={SKY} />
+        <Heart size={size} color={INDIGO} />
       </View>
-      {/* 나 (Pink) — 앞에 온다 */}
+      {/* 나 (Coral) — 앞에 온다 */}
       <View style={{ position: 'absolute', left: 0, top: 0 }}>
-        <Heart size={size} color={PINK} />
+        <Heart size={size} color={CORAL} />
       </View>
     </View>
   );
