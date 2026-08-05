@@ -3,7 +3,12 @@
  */
 import React, { useEffect, useRef } from 'react';
 import { ActivityIndicator, View } from 'react-native';
-import { NavigationContainer, type NavigationState } from '@react-navigation/native';
+import {
+  DarkTheme,
+  DefaultTheme,
+  NavigationContainer,
+  type NavigationState,
+} from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { RootStackParamList } from './types';
 import { linking } from './linking';
@@ -14,8 +19,35 @@ import { ConsentGateScreen } from '../screens/onboarding/ConsentGateScreen';
 import { useAuthStore } from '../store/authStore';
 import { useThemeStore } from '../store/themeStore';
 import { colors } from '../constants/theme';
+import { isDarkMode } from '../theme';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+
+/**
+ * 네비게이터 자체의 배경색 — 우리 팔레트를 따르게 한다.
+ *
+ * <p>테마를 안 넘기면 react-navigation 기본값 <b>rgb(242,242,242)</b> 이 쓰인다.
+ * 화면이 덮고 있어 평소엔 안 보이지만, <b>탭바 위 24px</b>(FAB 이 튀어나오도록
+ * 투명하게 둔 구간)에서 그대로 비쳐 <b>회색 띠</b>가 생겼다. 다크 모드에서는
+ * 어두운 앱에 밝은 회색이 그어져 더 도드라진다.
+ *
+ * <p>{@code key={themeVersion}} 으로 트리를 다시 마운트하므로 이 함수는
+ * 전환 때마다 현재 팔레트로 다시 계산된다.
+ */
+function navTheme() {
+  const base = isDarkMode() ? DarkTheme : DefaultTheme;
+  return {
+    ...base,
+    colors: {
+      ...base.colors,
+      background: colors.background,
+      card: colors.surface,
+      text: colors.textPrimary,
+      border: colors.border,
+      primary: colors.primary,
+    },
+  };
+}
 
 export function RootNavigator() {
   const { isAuthenticated, isLoading, user, bootstrap } = useAuthStore();
@@ -53,6 +85,7 @@ export function RootNavigator() {
       {/* linking — 웹 히스토리(pushState) 연동. 없으면 PWA 에서 스와이프백이 앱 이탈이 된다 */}
       <NavigationContainer
         key={themeVersion}
+        theme={navTheme()}
         linking={linking}
         initialState={navStateRef.current}
         onStateChange={(state) => {
