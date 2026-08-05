@@ -15,6 +15,7 @@ import { Pressable, StyleSheet } from 'react-native';
 import { MaterialCommunityIcons } from '../components/Icon';
 import { useNavigation } from '@react-navigation/native';
 import { colors, spacing } from '../constants/theme';
+import { layout } from '../theme/layout';
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -71,6 +72,13 @@ const styles = StyleSheet.create({
     minWidth: 44,
     minHeight: 44,
     justifyContent: 'center',
+    /*
+     * 왼쪽 여백이 없어 아이콘이 <b>화면 벽에 붙어</b> 있었다(실측 x=0).
+     * 본문은 screenPadding(20)에서 시작하므로 헤더 아이콘과 본문의 좌측
+     * 정렬선이 어긋났다. 아이콘의 시작점을 본문과 맞춘다.
+     * (터치 영역은 패딩을 포함하므로 44 아래로 내려가지 않는다)
+     */
+    paddingLeft: layout.screenPadding,
     paddingRight: spacing.sm,
   },
   pressed: { opacity: 0.6 },

@@ -12,7 +12,7 @@
  */
 import React from 'react';
 import { StyleSheet, Text, View, ViewStyle } from 'react-native';
-import Svg, { Path, Polygon } from 'react-native-svg';
+import Svg, { G, Path, Polygon } from 'react-native-svg';
 import { colors, fontSize } from '../constants/theme';
 
 interface Props {
@@ -51,11 +51,16 @@ function toPath(pts: { x: number; y: number }[]): string {
   return pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join('');
 }
 
+type Pt = { x: number; y: number };
+
 /** 잎 — 양 끝이 모이는 아몬드형. 줄기 위 한 점에서 바깥으로 뻗는다 */
-function leafPoints(x: number, y: number, ang: number, len: number): string {
-  const pts: string[] = [];
+function leafPoints(x: number, y: number, ang: number, len: number): Pt[] {
+  const pts: Pt[] = [];
   const push = (u: number, v: number) =>
-    pts.push(`${(x + u * Math.cos(ang) - v * Math.sin(ang)).toFixed(1)},${(y + u * Math.sin(ang) + v * Math.cos(ang)).toFixed(1)}`);
+    pts.push({
+      x: x + u * Math.cos(ang) - v * Math.sin(ang),
+      y: y + u * Math.sin(ang) + v * Math.cos(ang),
+    });
   for (let i = 0; i <= 12; i += 1) {
     const u = i / 12;
     push(u * len, len * 0.3 * Math.sin(Math.PI * u) ** 0.85);
@@ -64,11 +69,58 @@ function leafPoints(x: number, y: number, ang: number, len: number): string {
     const u = i / 12;
     push(u * len, -len * 0.3 * Math.sin(Math.PI * u) ** 0.85);
   }
-  return pts.join(' ');
+  return pts;
 }
+
+const toPolygon = (pts: Pt[]) => pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
 
 /** 잎이 붙는 위치 (반쪽 경로의 진행도) */
 const LEAF_AT = [0.16, 0.42, 0.7];
+
+/** 한 반쪽의 기하 — 줄기 점들과 잎 세 장 */
+function halfGeometry(side: 1 | -1): { stem: Pt[]; leaves: Pt[][] } {
+  const stem = halfPoints(side);
+  const leaves = LEAF_AT.map((f) => {
+    const i = Math.round(f * (stem.length - 1));
+    const p = stem[i];
+    const n = stem[Math.min(i + 3, stem.length - 1)];
+    const ang = Math.atan2(n.y - p.y, n.x - p.x) + side * Math.PI * 0.46;
+    return leafPoints(p.x, p.y, ang, H * 0.16);
+  });
+  return { stem, leaves };
+}
+
+const GEOMETRY = { right: halfGeometry(1), left: halfGeometry(-1) };
+
+/**
+ * 그림을 뷰박스 한가운데로 옮기는 보정값.
+ *
+ * <p><b>왜 필요한가</b>: 줄기 곡선({@code 16·sin³t})은 좌우 대칭이지만 <b>잎은 아니다</b>.
+ * {@link LEAF_AT} 은 "반쪽 경로의 진행도"인데, 오른쪽 반쪽은 위→아래로,
+ * 왼쪽 반쪽은 아래→위로 매개변수가 흐른다. 그래서 잎이 대각선으로 몰리고
+ * 그림 전체가 뷰박스 중앙에서 벗어난다 — 실측 <b>가로 약 5% 왼쪽</b>.
+ *
+ * <p>홈 히어로에서는 마크 위아래로 정확히 가운데인 세로선이 지나가므로 이 어긋남이
+ * 눈에 띄었다. 잎 배치(=브랜드 모양)를 건드리지 않고 <b>위치만</b> 바로잡는다.
+ *
+ * <p>값은 그림을 만드는 함수에서 직접 계산한다 — 모양을 고치면 보정도 따라 움직인다.
+ */
+const CENTERING = (() => {
+  const all: Pt[] = [];
+  for (const half of [GEOMETRY.right, GEOMETRY.left]) {
+    // 줄기는 선 굵기의 절반만큼 더 번진다
+    for (const p of half.stem) {
+      all.push({ x: p.x - STROKE / 2, y: p.y - STROKE / 2 });
+      all.push({ x: p.x + STROKE / 2, y: p.y + STROKE / 2 });
+    }
+    for (const leaf of half.leaves) all.push(...leaf);
+  }
+  const xs = all.map((p) => p.x);
+  const ys = all.map((p) => p.y);
+  const dx = V / 2 - (Math.min(...xs) + Math.max(...xs)) / 2;
+  const dy = V / 2 - (Math.min(...ys) + Math.max(...ys)) / 2;
+  return { dx, dy };
+})();
 
 /**
  * 어두운 배경 위에 얹을 때 쓰는 밝은 변형.
@@ -79,21 +131,14 @@ const LEAF_AT = [0.16, 0.42, 0.7];
 const ON_DARK = { me: '#F1C999', partner: '#A7D2A9', together: '#C9DA97' };
 
 function Half({ side, color, leafColor }: { side: 1 | -1; color: string; leafColor: string }) {
-  const pts = halfPoints(side);
-  const leaves = LEAF_AT.map((f) => {
-    const i = Math.round(f * (pts.length - 1));
-    const p = pts[i];
-    const n = pts[Math.min(i + 3, pts.length - 1)];
-    const ang = Math.atan2(n.y - p.y, n.x - p.x) + side * Math.PI * 0.46;
-    return leafPoints(p.x, p.y, ang, H * 0.16);
-  });
+  const { stem, leaves } = side > 0 ? GEOMETRY.right : GEOMETRY.left;
   return (
     <>
-      {leaves.map((pl) => (
-        <Polygon key={pl.slice(0, 24)} points={pl} fill={leafColor} />
+      {leaves.map((leaf, i) => (
+        <Polygon key={`${side}-${i}`} points={toPolygon(leaf)} fill={leafColor} />
       ))}
       <Path
-        d={toPath(pts)}
+        d={toPath(stem)}
         stroke={color}
         strokeWidth={STROKE}
         strokeLinecap="round"
@@ -115,9 +160,12 @@ export function DoublyMark({ size = 40, onDark = false }: { size?: number; onDar
   const leaf = onDark ? ON_DARK.together : colors.together;
   return (
     <Svg width={size} height={size} viewBox={`0 0 ${V} ${V}`}>
-      {/* 상대(뒤) → 나(앞) 순서로 겹쳐 '얽힌' 인상을 만든다 */}
-      <Half side={1} color={partner} leafColor={leaf} />
-      <Half side={-1} color={me} leafColor={leaf} />
+      {/* 잎이 비대칭이라 그림이 뷰박스 중앙에서 벗어난다 — CENTERING 주석 참고 */}
+      <G transform={`translate(${CENTERING.dx.toFixed(2)} ${CENTERING.dy.toFixed(2)})`}>
+        {/* 상대(뒤) → 나(앞) 순서로 겹쳐 '얽힌' 인상을 만든다 */}
+        <Half side={1} color={partner} leafColor={leaf} />
+        <Half side={-1} color={me} leafColor={leaf} />
+      </G>
     </Svg>
   );
 }

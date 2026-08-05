@@ -205,8 +205,14 @@ export function MainTabNavigator() {
 }
 
 const FAB_SIZE = 58;
-/** FAB 가 탭바 상단 위로 튀어나오는 높이 — barWrap 의 투명 상단 여백과 같아야 한다 */
-const FAB_PROTRUSION = 24;
+/**
+ * FAB 가 탭바 상단 위로 튀어나오는 높이 — barWrap 의 투명 상단 여백과 같아야 한다.
+ *
+ * <p><b>정확히 반지름이어야 한다.</b> 24 였을 때 탭바의 1px 경계선이 FAB 위에서
+ * 24/58 지점을 지나 중심(29)보다 5px 위였고, FAB 의 흰 링이 만드는 선의 끊김이
+ * <b>비대칭</b>으로 보였다. 반지름으로 두면 선이 정확히 지름을 지난다.
+ */
+const FAB_PROTRUSION = FAB_SIZE / 2;
 
 const styles = themedStyles((colors) => ({
   // 투명 래퍼 — FAB 돌출분을 경계 안에 포함시킨다 (Android 터치 클리핑 대응)
