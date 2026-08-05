@@ -1,6 +1,13 @@
 /** 커플 일상 피드 API — PLAN.md Couple Feed */
 import { apiClient, unwrap } from './client';
-import type { ApiResponse, FeedItem, FeedPhotosPage, FeedTimeline, ReactionSummary } from '../types';
+import type {
+  ApiResponse,
+  FeedItem,
+  FeedPhotosPage,
+  FeedTimeline,
+  Memories,
+  ReactionSummary,
+} from '../types';
 
 export interface CreatePostPayload {
   content?: string;
@@ -24,6 +31,17 @@ export const feedApi = {
     unwrap(
       apiClient.get<ApiResponse<FeedPhotosPage>>('/feed/photos', {
         params: { cursor: cursor ?? undefined, limit },
+      }),
+    ),
+
+  /**
+   * 추억 리마인드 — 오늘과 같은 월·일의 1년 이상 전 기록.
+   * on 을 생략하면 서버가 오늘(KST)로 잡는다. 추억이 없어도 200 + 빈 groups 다.
+   */
+  memories: (on?: string) =>
+    unwrap(
+      apiClient.get<ApiResponse<Memories>>('/feed/memories', {
+        params: { on: on ?? undefined },
       }),
     ),
 

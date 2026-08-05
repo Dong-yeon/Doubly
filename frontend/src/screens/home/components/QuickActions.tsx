@@ -29,7 +29,7 @@ export function QuickActions({ actions }: { actions: QuickAction[] }) {
           accessibilityRole="button"
         >
           <View style={styles.iconBox}>
-            <MaterialCommunityIcons name={a.icon} size={21} color={colors.white} />
+            <MaterialCommunityIcons name={a.icon} size={21} color={colors.primary} />
           </View>
           <Text style={styles.label} numberOfLines={1}>
             {a.label}
@@ -50,11 +50,10 @@ const styles = StyleSheet.create({
     borderRadius: 23,
     alignItems: 'center',
     justifyContent: 'center',
-    // 배경 사진 위에 얹히는 유리 느낌 — 사진이 비쳐 보이도록 반투명
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    // 크림 스크림 위 — 표면 틴트로 눌러 담는다
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.28)',
+    borderColor: colors.border,
   },
-  // 배경 사진 위라 테마색이 아니라 흰색 고정
-  label: { color: 'rgba(255,255,255,0.95)', fontSize: 11, fontWeight: '700' },
+  label: { color: colors.textSecondary, fontSize: 11, fontWeight: '700' },
 });

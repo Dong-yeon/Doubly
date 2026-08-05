@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createBottomTabNavigator, BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
+import { getFocusedRouteNameFromRoute, StackActions } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { MainTabParamList } from './types';
 import { colors, fontSize, radius, shadow, spacing } from '../constants/theme';
@@ -74,8 +74,24 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
         style={styles.tabItem}
         activeOpacity={0.7}
         onPress={() => {
-          const event = navigation.emit({ type: 'tabPress', target: state.routes[index].key, canPreventDefault: true });
-          if (!focused && !event.defaultPrevented) navigation.navigate(routeName);
+          const route = state.routes[index];
+          const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
+          if (event.defaultPrevented) return;
+          if (!focused) navigation.navigate(routeName);
+          /*
+           * 탭을 누르면 <b>그 탭의 첫 화면</b>으로 돌아간다.
+           *
+           * 예전에는 focused 일 때 아무 것도 하지 않아, 중첩 스택에 남은 깊은 화면에서
+           * 빠져나올 방법이 없었다. FAB "음식 촬영"이 건강 탭 스택에 DietRecord 를
+           * 밀어넣으면 그 뒤로 건강 탭이 계속 식단 기록으로 열렸다.
+           *
+           * 대가로 탭을 옮겼다 돌아올 때 보던 위치를 잃는다. 이 앱의 탭은 대부분
+           * 얕고, FAB 가 기록 화면을 탭 스택에 남기는 구조라 예측 가능성을 택했다.
+           */
+          const nestedKey = route.state?.key;
+          if (nestedKey) {
+            navigation.dispatch({ ...StackActions.popToTop(), target: nestedKey });
+          }
         }}
       >
         {/* 비활성도 textSecondary — textMuted(#9A98A4)는 흰 탭바 위 2.84:1 로 WCAG 미달 */}
