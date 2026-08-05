@@ -4,7 +4,7 @@ import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'reac
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createBottomTabNavigator, BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { getFocusedRouteNameFromRoute, StackActions } from '@react-navigation/native';
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { MaterialCommunityIcons } from '../components/Icon';
 import type { MainTabParamList } from './types';
 import { colors, fontSize, radius, shadow, spacing } from '../constants/theme';
 import { HomeStackNavigator } from './HomeStackNavigator';

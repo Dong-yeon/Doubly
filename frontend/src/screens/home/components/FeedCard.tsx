@@ -13,7 +13,7 @@
  */
 import React from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { MaterialCommunityIcons } from '../../../components/Icon';
 import type { FeedItem, FeedItemType, ReactionSummary } from '../../../types';
 import { colors, fontSize, radius, spacing } from '../../../constants/theme';
 import { themedStyles } from '../../../theme/themedStyles';

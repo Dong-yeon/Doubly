@@ -10,7 +10,7 @@
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { MaterialCommunityIcons } from './Icon';
 import { useDatePickerStore } from '../store/datePickerStore';
 import { parseDateString, toDateString } from '../utils/date';
 import { colors, fontSize, radius, spacing } from '../constants/theme';

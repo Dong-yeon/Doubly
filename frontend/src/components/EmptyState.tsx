@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { MaterialCommunityIcons } from './Icon';
 import { colors, fontSize, spacing } from '../constants/theme';
 import { themedStyles } from '../theme/themedStyles';
 

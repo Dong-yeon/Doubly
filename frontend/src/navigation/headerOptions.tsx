@@ -12,7 +12,7 @@
  */
 import React from 'react';
 import { Pressable, StyleSheet } from 'react-native';
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { MaterialCommunityIcons } from '../components/Icon';
 import { useNavigation } from '@react-navigation/native';
 import { colors, spacing } from '../constants/theme';
 

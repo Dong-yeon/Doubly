@@ -7,7 +7,7 @@
  */
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { MaterialCommunityIcons } from '../../../components/Icon';
 import { colors, fontSize, spacing } from '../../../constants/theme';
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];

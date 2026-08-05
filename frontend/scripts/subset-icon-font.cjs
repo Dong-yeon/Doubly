@@ -1,9 +1,14 @@
 /**
  * MaterialCommunityIcons 서브셋 — 앱이 실제로 쓰는 글리프만 남긴다.
  *
- * <p><b>왜</b>: 전체 폰트는 7,448 글리프에 1.3MB 다. 앱이 쓰는 건 100개 남짓인데,
- * 이 파일은 <b>렌더를 막는</b> 경로에 있다(아이콘만 있는 버튼은 폰트가 없으면
- * 보이지 않아 조작이 막히므로 기다릴 수밖에 없다). 서브셋하면 ~98% 줄어든다.
+ * <p>산출물이 <b>둘</b>이다. 같은 이름 목록에서 나오므로 서로 어긋나지 않는다.
+ * <ul>
+ *   <li><b>폰트</b>(.ttf) — 7,448 글리프 1.3MB. <b>렌더를 막는</b> 경로에 있다
+ *       (아이콘만 있는 버튼은 폰트가 없으면 보이지 않아 조작이 막힌다).</li>
+ *   <li><b>글리프맵</b>(icon-glyphmap.json) — 이름→코드포인트 표. 패키지 기본값은
+ *       225KB 이며 JS 번들에 실린다. 앱은 이 생성본으로 아이콘 세트를 만든다
+ *       ({@code src/components/Icon.tsx}).</li>
+ * </ul>
  *
  * <p><b>어떻게</b>: 소스에서 따옴표로 감싼 문자열을 전부 긁어 글리프맵과 대조한다.
  * 아이콘 이름은 name="x" · icon: 'x' 같은 리터럴로만 쓰이고 템플릿 조합은 없다
@@ -21,14 +26,20 @@
  * <p>fontTools 가 없으면 <b>실패시키지 않고</b> 경고만 남기고 넘어간다 —
  * 이미 커밋된 서브셋으로 빌드가 진행된다. 대신 아이콘을 새로 추가했다면
  * 개발 머신에서 한 번은 이 스크립트가 돌아야 한다.
+ * (글리프맵은 순수 JS 라 Python 유무와 무관하게 항상 갱신된다.)
+ *
+ * <p><b>안전망</b>: 글리프맵이 줄면 {@code IconName} 유니온도 함께 줄어든다.
+ * 목록에서 빠진 아이콘 이름은 <b>tsc 에러</b>로 드러나므로 조용히 사라지지 않는다.
  */
 const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-const FONT_DIR = path.join(__dirname, '..', 'assets', 'fonts');
+const ASSET_DIR = path.join(__dirname, '..', 'assets');
+const FONT_DIR = path.join(ASSET_DIR, 'fonts');
 const SOURCE = path.join(FONT_DIR, 'MaterialCommunityIcons.full.ttf');
 const OUTPUT = path.join(FONT_DIR, 'MaterialCommunityIcons.ttf');
+const GLYPHMAP = path.join(ASSET_DIR, 'icon-glyphmap.json');
 
 const glyphMap = require('@expo/vector-icons/build/vendor/react-native-vector-icons/glyphmaps/MaterialCommunityIcons.json');
 
@@ -66,6 +77,12 @@ function main() {
     return;
   }
 
+  // 글리프맵부터 쓴다 — 폰트 서브셋과 달리 순수 JS 라 Python 유무와 무관하게 항상 갱신된다.
+  // 여기서 줄어든 키 집합이 곧 IconName 유니온이 되므로, 빠진 아이콘은 tsc 가 잡아준다.
+  const subsetMap = {};
+  for (const n of names) subsetMap[n] = glyphMap[n];
+  fs.writeFileSync(GLYPHMAP, JSON.stringify(subsetMap, null, 2) + '\n');
+
   const unicodes = names.map((n) => 'U+' + glyphMap[n].toString(16).toUpperCase()).join(',');
 
   try {
@@ -88,19 +105,23 @@ function main() {
   } catch (e) {
     // Python·fontTools 부재는 빌드를 막지 않는다 — 커밋된 서브셋으로 진행한다
     console.warn(
-      '[icon-subset] 서브셋을 만들지 못했습니다 (python -m pip install fonttools).\n' +
-        '             이미 커밋된 폰트로 빌드를 계속합니다. 아이콘을 새로 추가했다면\n' +
-        '             개발 머신에서 이 스크립트를 한 번 돌려 커밋하세요.',
+      '[icon-subset] 폰트 서브셋을 만들지 못했습니다 (python -m pip install fonttools).\n' +
+        '             글리프맵은 갱신했고, 폰트는 이미 커밋된 것으로 빌드를 계속합니다.\n' +
+        '             아이콘을 새로 추가했다면 개발 머신에서 한 번 돌려 커밋하세요.',
     );
     return;
   }
 
-  const before = fs.statSync(SOURCE).size;
-  const after = fs.statSync(OUTPUT).size;
   const kb = (n) => Math.round(n / 1024);
+  const pct = (before, after) => Math.round((1 - after / before) * 100);
+  const fontBefore = fs.statSync(SOURCE).size;
+  const fontAfter = fs.statSync(OUTPUT).size;
+  const mapBefore = JSON.stringify(glyphMap).length;
+  const mapAfter = fs.statSync(GLYPHMAP).size;
   console.log(
-    `[icon-subset] 아이콘 ${names.length}개 / 전체 ${Object.keys(glyphMap).length}개 · ` +
-      `${kb(before)}KB → ${kb(after)}KB (${Math.round((1 - after / before) * 100)}% 감소)`,
+    `[icon-subset] 아이콘 ${names.length}개 / 전체 ${Object.keys(glyphMap).length}개\n` +
+      `              폰트   ${kb(fontBefore)}KB → ${kb(fontAfter)}KB (${pct(fontBefore, fontAfter)}% 감소)\n` +
+      `              글리프맵 ${kb(mapBefore)}KB → ${kb(mapAfter)}KB (${pct(mapBefore, mapAfter)}% 감소)`,
   );
 }
 

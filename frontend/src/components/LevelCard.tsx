@@ -1,7 +1,7 @@
 /** 레벨 카드 — 칭호 + XP 진행바. XP = 운동일×10 + 식단일×5 (서버 파생 계산) */
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { MaterialCommunityIcons } from './Icon';
 import { Card } from './Card';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 import type { UserLevel } from '../types';
