@@ -31,6 +31,7 @@ import type { CalendarEventType, CoupleCalendarEvent } from '../../types';
 import { confirmDiscard } from '../../utils/discardGuard';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
+import { layout } from '../../theme/layout';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'CoupleCalendar'>;
 
@@ -435,7 +436,7 @@ const CELL = `${100 / 7}%` as const;
 
 const styles = themedStyles((colors) => ({
   container: { flex: 1, backgroundColor: colors.background },
-  scroll: { padding: spacing.lg, paddingBottom: 96 },
+  scroll: { padding: spacing.lg, paddingBottom: layout.listBottomWithFab },
   flex: { flex: 1 },
 
   monthBar: {
@@ -445,8 +446,8 @@ const styles = themedStyles((colors) => ({
     marginBottom: spacing.md,
   },
   monthBtn: {
-    width: 40,
-    height: 40,
+    width: layout.touchTarget,
+    height: layout.touchTarget,
     borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
@@ -547,7 +548,7 @@ const styles = themedStyles((colors) => ({
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: spacing.md,
-    height: 36,
+    minHeight: layout.touchTarget,
     borderRadius: radius.pill,
     borderWidth: 1.5,
     borderColor: colors.border,

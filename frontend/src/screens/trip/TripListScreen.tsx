@@ -16,6 +16,7 @@ import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { Trip } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
+import { layout } from '../../theme/layout';
 
 type Props = NativeStackScreenProps<PlaceStackParamList, 'TripList'>;
 
@@ -126,7 +127,7 @@ export function TripListScreen({ navigation }: Props) {
 
 const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
-  list: { padding: spacing.lg, paddingBottom: 120 },
+  list: { padding: spacing.lg, paddingBottom: layout.listBottomWithFab },
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,

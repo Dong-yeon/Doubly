@@ -8,6 +8,7 @@ import React, { useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 import { themedStyles } from '../theme/themedStyles';
+import { layout } from '../theme/layout';
 
 interface EmojiEntry {
   char: string;
@@ -211,7 +212,7 @@ const styles = themedStyles((colors) => ({
   tabs: { marginTop: spacing.sm, flexGrow: 0 },
   tab: {
     paddingHorizontal: spacing.md,
-    height: 34,
+    minHeight: layout.touchTarget,
     justifyContent: 'center',
     borderRadius: radius.pill,
     marginRight: spacing.xs,

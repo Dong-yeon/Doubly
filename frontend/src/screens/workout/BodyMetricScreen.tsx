@@ -33,6 +33,7 @@ import { confirmDiscard } from '../../utils/discardGuard';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { BodyMetric } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
+import { layout } from '../../theme/layout';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'BodyMetric'>;
 
@@ -274,7 +275,7 @@ export function BodyMetricScreen(_: Props) {
 
 const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
-  list: { padding: spacing.lg, paddingBottom: 100 },
+  list: { padding: spacing.lg, paddingBottom: layout.listBottomWithFab },
   summary: { alignItems: 'center', paddingVertical: spacing.md },
   summaryLabel: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
   summaryValue: { fontSize: 40, fontWeight: '800', color: colors.textPrimary, marginTop: spacing.xs },
@@ -291,7 +292,8 @@ const styles = themedStyles((colors) => ({
   },
   chartBars: { flexDirection: 'row', alignItems: 'flex-end', height: 100, gap: 4 },
   chartCol: { flex: 1, alignItems: 'center', justifyContent: 'flex-end' },
-  chartVal: { fontSize: 9, color: colors.textMuted, marginBottom: 2 },
+  // 9pt 는 읽기 어렵다 — 막대 위 수치라 작아도 되지만 하한은 지킨다
+  chartVal: { fontSize: 11, color: colors.textMuted, marginBottom: 2 },
   chartBar: { width: '70%', borderRadius: 3, backgroundColor: colors.primaryBg },
   chartBarLast: { backgroundColor: colors.primary },
   chartCaption: { fontSize: fontSize.caption, color: colors.textSecondary, textAlign: 'center', marginTop: spacing.sm },

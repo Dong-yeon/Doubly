@@ -26,6 +26,7 @@ import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { TripExpense, TripExpenses } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
+import { layout } from '../../theme/layout';
 
 type Props = NativeStackScreenProps<PlaceStackParamList, 'TripExpense'>;
 
@@ -310,7 +311,7 @@ export function TripExpenseScreen({ route }: Props) {
 
 const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
-  list: { padding: spacing.lg, paddingBottom: 120 },
+  list: { padding: spacing.lg, paddingBottom: layout.listBottomWithFab },
 
   summary: { marginBottom: spacing.md },
   totalLabel: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },

@@ -17,6 +17,7 @@ import { MaterialCommunityIcons } from '../../../components/Icon';
 import type { FeedItem, FeedItemType, ReactionSummary } from '../../../types';
 import { colors, fontSize, radius, spacing } from '../../../constants/theme';
 import { themedStyles } from '../../../theme/themedStyles';
+import { layout } from '../../../theme/layout';
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -141,6 +142,8 @@ function Reactions({
               pressed && styles.chipPressed,
             ]}
             onPress={() => onPress(emoji)}
+            // 높이 30px — 칩 크기는 유지하고 터치 영역만 넓힌다
+            hitSlop={7}
           >
             <Text style={styles.chipEmoji}>{emoji}</Text>
             {summary && summary.count > 0 ? (
@@ -202,7 +205,8 @@ const styles = themedStyles((colors) => ({
     backgroundColor: colors.surfaceAlt,
     paddingHorizontal: spacing.sm,
     paddingVertical: 5,
-    minHeight: 30,
+    // hitSlop 은 웹에서 무효 — 최소 높이를 직접 준다
+    minHeight: layout.touchTarget,
   },
   chipMine: { backgroundColor: colors.primary },
   chipPressed: { opacity: 0.6 },

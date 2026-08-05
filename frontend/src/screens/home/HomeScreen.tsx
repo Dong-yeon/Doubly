@@ -43,6 +43,7 @@ import type { FeedItem, Memories, PartnerToday, Streak } from '../../types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { isDarkMode } from '../../theme';
 import { themedStyles } from '../../theme/themedStyles';
+import { layout } from '../../theme/layout';
 
 type Props = CompositeScreenProps<
   NativeStackScreenProps<HomeStackParamList, 'HomeMain'>,
@@ -201,7 +202,13 @@ export function HomeScreen({ navigation }: Props) {
   const topBar = (
     <View style={styles.topBar}>
       {connected ? (
-        <Pressable style={styles.bgBtn} onPress={onChangeBg} hitSlop={8}>
+        <Pressable
+          style={styles.bgBtn}
+          onPress={onChangeBg}
+          // 배경 사진 위에 얹히는 작은 알약이라 크기는 그대로 두고 터치 영역만 넓힌다.
+          // 실측 25px + 10*2 = 45px (8 이면 41px 로 3px 모자랐다)
+          hitSlop={10}
+        >
           <MaterialCommunityIcons name="image-outline" size={13} color={colors.textPrimary} />
           <Text style={styles.bgBtnText}>배경</Text>
         </Pressable>
@@ -368,7 +375,16 @@ const styles = themedStyles((colors) => ({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
   },
-  profileBtn: { borderRadius: radius.pill, borderWidth: 2, borderColor: colors.borderStrong },
+  // 아바타는 32px 이라 테두리를 더해도 36px 이다 — hitSlop 이 안 먹는 웹을 위해 크기를 보장한다
+  profileBtn: {
+    minWidth: layout.touchTarget,
+    minHeight: layout.touchTarget,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.pill,
+    borderWidth: 2,
+    borderColor: colors.borderStrong,
+  },
   bgBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -376,7 +392,8 @@ const styles = themedStyles((colors) => ({
     backgroundColor: colors.surfaceAlt,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
+    // hitSlop 은 웹에서 무효라 높이를 직접 확보한다 (실측 25px 였다)
+    minHeight: layout.touchTarget,
   },
   bgBtnText: { color: colors.textPrimary, fontSize: fontSize.caption, fontWeight: '700' },
 

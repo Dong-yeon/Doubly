@@ -19,6 +19,7 @@ import { confirmDiscard } from '../../utils/discardGuard';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { Challenge, ChallengeType } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
+import { layout } from '../../theme/layout';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'Challenge'>;
 
@@ -226,7 +227,7 @@ export function ChallengeScreen(_: Props) {
 
 const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
-  list: { padding: spacing.lg, paddingBottom: 100 },
+  list: { padding: spacing.lg, paddingBottom: layout.listBottomWithFab },
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,

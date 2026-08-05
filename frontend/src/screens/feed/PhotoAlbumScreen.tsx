@@ -25,6 +25,7 @@ import { relativeDateLabel } from '../../utils/date';
 import type { FeedPhoto } from '../../types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
+import { layout } from '../../theme/layout';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'PhotoAlbum'>;
 
@@ -148,7 +149,8 @@ export function PhotoAlbumScreen(_props: Props) {
 
 const styles = themedStyles((colors) => ({
   container: { flex: 1, backgroundColor: colors.background },
-  list: { paddingBottom: spacing.xl },
+  // spacing.xl(32) 로는 FAB 이 가리는 하단 97px 을 못 벗어나 마지막 줄이 잘렸다
+  list: { paddingBottom: layout.listBottomWithFab },
   emptyWrap: { flexGrow: 1, justifyContent: 'center' },
   row: { gap: GAP, marginBottom: GAP },
   cell: { width: CELL, height: CELL, backgroundColor: colors.surfaceAlt },

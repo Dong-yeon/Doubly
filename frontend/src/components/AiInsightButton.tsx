@@ -17,6 +17,7 @@ import { getErrorMessage } from '../utils/error';
 import { haptics } from '../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 import { themedStyles } from '../theme/themedStyles';
+import { layout } from '../theme/layout';
 
 interface Props<T> {
   label: string;
@@ -83,7 +84,9 @@ const styles = themedStyles((colors) => ({
     borderWidth: 1,
     borderColor: colors.primary,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    // 패딩만으로는 35px — 최소 터치 크기를 맞춘다
+    minHeight: layout.touchTarget,
+    justifyContent: 'center',
     alignItems: 'center',
   },
   buttonText: { color: colors.primary, fontWeight: '800', fontSize: fontSize.caption },

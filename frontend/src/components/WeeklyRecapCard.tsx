@@ -5,6 +5,7 @@ import { Card } from './Card';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 import type { WeeklyRecap } from '../types';
 import { themedStyles } from '../theme/themedStyles';
+import { layout } from '../theme/layout';
 
 interface Props {
   recap: WeeklyRecap;
@@ -91,7 +92,9 @@ const styles = themedStyles((colors) => ({
     marginTop: spacing.xs,
     alignSelf: 'center',
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
+    // 패딩만으로는 33px — 최소 터치 크기를 맞춘다
+    minHeight: layout.touchTarget,
+    justifyContent: 'center',
     borderRadius: radius.pill,
     backgroundColor: colors.primarySoft,
   },

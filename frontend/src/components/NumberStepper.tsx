@@ -13,6 +13,7 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { MaterialCommunityIcons } from './Icon';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 import { themedStyles } from '../theme/themedStyles';
+import { layout } from '../theme/layout';
 
 interface Props {
   label: string;
@@ -98,7 +99,7 @@ const styles = themedStyles((colors) => ({
     borderRadius: radius.md,
     overflow: 'hidden',
   },
-  btn: { width: 40, height: 44, alignItems: 'center', justifyContent: 'center' },
+  btn: { width: layout.touchTarget, height: layout.touchTarget, alignItems: 'center', justifyContent: 'center' },
   pressed: { opacity: 0.5 },
   input: {
     flex: 1,

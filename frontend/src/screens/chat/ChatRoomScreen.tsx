@@ -35,6 +35,7 @@ import { chatApi } from '../../api/chat';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { ChatMessage } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
+import { layout } from '../../theme/layout';
 
 const REACTIONS = ['💗', '🔥', '💪', '👍', '🎉'];
 
@@ -379,6 +380,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               key={e}
               style={({ pressed }) => [styles.reactionBtn, pressed && styles.reactionPressed]}
               onPress={() => sendReaction(e)}
+              // 40x40 이라 기준 미달. 행이 빽빽해 크기 대신 터치 영역만 넓힌다(간격의 절반)
+              hitSlop={4}
             >
               <Text style={styles.reactionEmoji}>{e}</Text>
             </Pressable>
@@ -391,6 +394,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               onPress={() => { setShowStickers(false); setShowEmojiSheet(true); }}
               accessibilityRole="button"
               accessibilityLabel="이모지 더 보기"
+              // 격자라 크기를 키우면 열 수가 바뀐다 — 터치 영역만 넓힌다
+              hitSlop={4}
             >
               <MaterialCommunityIcons name="dots-horizontal" size={24} color={colors.textSecondary} />
             </Pressable>
@@ -616,8 +621,9 @@ const styles = themedStyles((colors) => ({
   readDone: { color: colors.textTertiary, fontWeight: '600' },
   reactions: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.sm, paddingTop: spacing.xs },
   reactionBtn: {
-    width: 40,
-    height: 40,
+    // hitSlop 은 웹에서 무효라 실제 크기로 맞춘다 (5개 * 44 + 간격 = 268px, 440 에 여유)
+    width: layout.touchTarget,
+    height: layout.touchTarget,
     borderRadius: radius.pill,
     backgroundColor: colors.surface,
     borderWidth: 1,

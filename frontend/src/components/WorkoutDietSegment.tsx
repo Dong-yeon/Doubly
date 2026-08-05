@@ -6,6 +6,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { WorkoutStackParamList } from '../navigation/types';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 import { themedStyles } from '../theme/themedStyles';
+import { layout } from '../theme/layout';
 
 type Nav = NativeStackNavigationProp<WorkoutStackParamList>;
 
@@ -56,7 +57,9 @@ const styles = themedStyles((colors) => ({
   tab: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: spacing.sm,
+    // 화면 전환의 1차 입구다 — 패딩만으로는 36px 이라 최소 터치 크기를 명시한다
+    minHeight: layout.touchTarget,
+    justifyContent: 'center',
     borderRadius: radius.pill,
   },
   tabActive: { backgroundColor: colors.surfaceCard },

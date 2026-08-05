@@ -33,6 +33,7 @@ import { formatKcal, formatKcalOfGoal, formatNumber } from '../../utils/format';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { CoupleMealGoal, DietCoach, Meal, NutritionSummary, Streak, WeeklyLetter } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
+import { layout } from '../../theme/layout';
 
 /** 목표 대비 섭취 바 */
 function NutritionBar({ label, consumed, target, unit }: { label: string; consumed: number; target?: number | null; unit: string }) {
@@ -192,10 +193,10 @@ export function DietScreen({ navigation }: Props) {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <WorkoutDietSegment active="diet" />
       <View style={styles.linksRow}>
-        <TouchableOpacity onPress={() => navigation.navigate('DietStats')}>
+        <TouchableOpacity style={styles.linkHit} onPress={() => navigation.navigate('DietStats')}>
           <Text style={styles.link}>통계</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => navigation.navigate('DietCalendar')}>
+        <TouchableOpacity style={styles.linkHit} onPress={() => navigation.navigate('DietCalendar')}>
           <Text style={styles.link}>캘린더</Text>
         </TouchableOpacity>
       </View>
@@ -393,12 +394,21 @@ const styles = themedStyles((colors) => ({
   title: { fontSize: fontSize.title, fontWeight: '800', color: colors.textPrimary },
   headerLinks: { flexDirection: 'row', gap: spacing.md },
   link: { fontSize: fontSize.body, color: colors.primary, fontWeight: '600' },
+  /** 터치 영역 — 맨 텍스트만 감싸면 높이 20px 이라 누르기 어렵다 (WorkoutScreen 과 같은 처리) */
+  linkHit: {
+    minHeight: layout.touchTarget,
+    // 2글자 라벨('대결'·'통계')은 폭이 42px 에 그쳐 가로도 함께 보장한다
+    minWidth: layout.touchTarget,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
+  },
   linksRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    gap: spacing.md,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.xs,
   },
   nutCard: {
     backgroundColor: colors.surface,
@@ -429,7 +439,7 @@ const styles = themedStyles((colors) => ({
   aiScore: { fontSize: fontSize.caption, fontWeight: '700', color: colors.primary },
   aiTip: { fontSize: fontSize.body, color: colors.textPrimary, lineHeight: 21 },
   aiLetter: { fontSize: fontSize.body, color: colors.textPrimary, lineHeight: 24 },
-  list: { padding: spacing.lg, paddingBottom: 120 },
+  list: { padding: spacing.lg, paddingBottom: layout.listBottomWithFab },
   streakRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
   streakText: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
   streakMax: { fontSize: fontSize.caption, color: colors.textSecondary, marginLeft: 'auto' },

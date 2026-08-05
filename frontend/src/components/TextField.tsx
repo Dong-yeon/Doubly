@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, TextInput, TextInputProps, View } from 're
 import { MaterialCommunityIcons } from './Icon';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 import { themedStyles } from '../theme/themedStyles';
+import { layout } from '../theme/layout';
 
 interface Props extends TextInputProps {
   label?: string;
@@ -91,7 +92,7 @@ const styles = themedStyles((colors) => ({
   inputWithToggle: { paddingRight: 48 },
   inputFocused: { borderColor: colors.primary, backgroundColor: colors.surface },
   inputError: { borderColor: colors.danger, backgroundColor: colors.surface },
-  eye: { position: 'absolute', right: spacing.sm, height: 40, width: 40, alignItems: 'center', justifyContent: 'center' },
+  eye: { position: 'absolute', right: spacing.sm, height: layout.touchTarget, width: layout.touchTarget, alignItems: 'center', justifyContent: 'center' },
   eyeText: { fontSize: 18 },
   error: { color: colors.danger, fontSize: fontSize.caption, marginTop: spacing.xs, marginLeft: spacing.xs },
 }));

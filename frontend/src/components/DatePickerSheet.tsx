@@ -15,6 +15,7 @@ import { useDatePickerStore } from '../store/datePickerStore';
 import { parseDateString, toDateString } from '../utils/date';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 import { themedStyles } from '../theme/themedStyles';
+import { layout } from '../theme/layout';
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -288,7 +289,7 @@ const styles = themedStyles((colors) => ({
     marginTop: spacing.md,
     marginBottom: spacing.sm,
   },
-  navBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  navBtn: { width: layout.touchTarget, height: layout.touchTarget, alignItems: 'center', justifyContent: 'center' },
   monthLabelBtn: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingHorizontal: spacing.sm },
   monthLabel: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
 

@@ -14,6 +14,7 @@ import { MaterialCommunityIcons } from './Icon';
 import type { SpellSuggestion } from '../utils/koreanSpellCheck';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 import { themedStyles } from '../theme/themedStyles';
+import { layout } from '../theme/layout';
 
 interface Props {
   suggestion: SpellSuggestion | null;
@@ -79,7 +80,7 @@ const styles = themedStyles((colors) => ({
     backgroundColor: colors.primary,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.md,
-    minHeight: 32,
+    minHeight: layout.touchTarget,
     justifyContent: 'center',
   },
   // 배경이 colors.primary — 라이트/다크 모두 흰 글씨가 대비를 만족한다

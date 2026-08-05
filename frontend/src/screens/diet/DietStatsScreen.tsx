@@ -112,6 +112,7 @@ const styles = themedStyles((colors) => ({
   barCol: { flex: 1, alignItems: 'center', gap: spacing.xs },
   barTrack: { width: 18, height: 90, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, justifyContent: 'flex-end', overflow: 'hidden' },
   barFill: { width: '100%', borderRadius: radius.pill },
-  barCal: { fontSize: 9, color: colors.textSecondary },
+  // 9pt 는 읽기 어렵다 — 막대 위 수치라 작아도 되지만 하한은 지킨다
+  barCal: { fontSize: 11, color: colors.textSecondary },
   dayLabel: { fontSize: fontSize.caption, color: colors.textSecondary },
 }));

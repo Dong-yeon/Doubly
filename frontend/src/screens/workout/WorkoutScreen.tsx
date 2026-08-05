@@ -18,6 +18,7 @@ import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { TrainerRoutine, Workout } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
+import { layout } from '../../theme/layout';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'WorkoutMain'>;
 
@@ -89,22 +90,22 @@ export function WorkoutScreen({ navigation }: Props) {
         style={styles.linksScroll}
         contentContainerStyle={styles.linksRow}
       >
-        <TouchableOpacity onPress={() => navigation.navigate('WorkoutRoutines')}>
+        <TouchableOpacity style={styles.linkHit} onPress={() => navigation.navigate('WorkoutRoutines')}>
           <Text style={styles.calendarLink}>내 루틴</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => navigation.navigate('BodyMetric')}>
+        <TouchableOpacity style={styles.linkHit} onPress={() => navigation.navigate('BodyMetric')}>
           <Text style={styles.calendarLink}>몸 변화</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => navigation.navigate('Challenge')}>
+        <TouchableOpacity style={styles.linkHit} onPress={() => navigation.navigate('Challenge')}>
           <Text style={styles.calendarLink}>대결</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => navigation.navigate('WorkoutRecommend')}>
+        <TouchableOpacity style={styles.linkHit} onPress={() => navigation.navigate('WorkoutRecommend')}>
           <Text style={styles.calendarLink}>AI 추천</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => navigation.navigate('WorkoutStats')}>
+        <TouchableOpacity style={styles.linkHit} onPress={() => navigation.navigate('WorkoutStats')}>
           <Text style={styles.calendarLink}>통계</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => navigation.navigate('WorkoutCalendar')}>
+        <TouchableOpacity style={styles.linkHit} onPress={() => navigation.navigate('WorkoutCalendar')}>
           <Text style={styles.calendarLink}>캘린더</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -213,12 +214,25 @@ const styles = themedStyles((colors) => ({
   linksRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.xs,
+  },
+  /**
+   * 링크 하나의 터치 영역. 예전엔 TouchableOpacity 가 <b>맨 텍스트만</b> 감싸
+   * 높이 20px 이었다 — 화면 전환 입구 6개가 전부 그 크기였다.
+   * 글자 크기는 그대로 두고 터치 영역만 키운다.
+   */
+  linkHit: {
+    minHeight: layout.touchTarget,
+    // 2글자 라벨('대결'·'통계')은 폭이 42px 에 그쳐 가로도 함께 보장한다
+    minWidth: layout.touchTarget,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
   },
   calendarLink: { fontSize: fontSize.body, color: colors.primary, fontWeight: '600' },
-  list: { padding: spacing.lg, paddingBottom: 120 },
+  list: { padding: spacing.lg, paddingBottom: layout.listBottomWithFab },
   sectionTitle: {
     fontSize: fontSize.subtitle,
     fontWeight: '700',

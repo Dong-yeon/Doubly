@@ -18,6 +18,7 @@ import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { DateCourse, Place, PlaceStatus } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
+import { layout } from '../../theme/layout';
 
 type Props = NativeStackScreenProps<PlaceStackParamList, 'PlaceMap'>;
 
@@ -236,7 +237,9 @@ const styles = themedStyles((colors) => ({
   filterRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.md },
   filterChip: {
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    // 패딩만으로는 35px — 자주 누르는 필터라 최소 터치 크기를 맞춘다
+    minHeight: layout.touchTarget,
+    justifyContent: 'center',
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: colors.border,
@@ -245,7 +248,7 @@ const styles = themedStyles((colors) => ({
   filterChipActive: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
   filterText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
   filterTextActive: { color: colors.textPrimary, fontWeight: '800' },
-  list: { padding: spacing.lg, paddingBottom: 120 },
+  list: { padding: spacing.lg, paddingBottom: layout.listBottomWithFab },
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -275,7 +278,7 @@ const styles = themedStyles((colors) => ({
   statusBadge: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textPrimary },
   visitInfo: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '700' },
   fabWrap: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: spacing.lg },
-  mapWrap: { flex: 1, padding: spacing.lg, paddingBottom: 96 },
+  mapWrap: { flex: 1, padding: spacing.lg, paddingBottom: layout.listBottomWithFab },
   map: { flex: 1 },
   mapHint: { fontSize: fontSize.caption, color: colors.textSecondary, textAlign: 'center', marginTop: spacing.sm },
 }));
