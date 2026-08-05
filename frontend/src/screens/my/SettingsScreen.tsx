@@ -236,7 +236,9 @@ export function SettingsScreen({ navigation }: Props) {
 const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   container: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xl },
-  section: { paddingVertical: spacing.sm },
+  // Card 기본 좌우 패딩(16)을 지운다 — 안 지우면 container(24)+card(16)+row(24)=64 로
+  // MY 화면(24+0+24=48)보다 텍스트가 16px 더 안쪽에서 시작해 두 화면이 어긋났다
+  section: { paddingVertical: spacing.sm, paddingHorizontal: 0 },
   themeRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
   sectionLabel: {
     fontSize: fontSize.caption,

@@ -134,7 +134,6 @@ const styles = themedStyles((colors) => ({
     color: colors.textSecondary,
     lineHeight: 22,
     marginBottom: spacing.md,
-    marginLeft: spacing.xs,
   },
   bold: { fontWeight: '800', color: colors.textPrimary },
   card: { gap: spacing.xs },

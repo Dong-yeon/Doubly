@@ -909,7 +909,9 @@ const styles = themedStyles((colors) => ({
   empty: { fontSize: fontSize.caption, color: colors.textSecondary, textAlign: 'center', paddingVertical: spacing.lg, lineHeight: 20 },
 
   // 모달
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: spacing.xl },
+  // spacing.lg 로 통일 — 앱의 다른 모달 8곳이 전부 이 값이라, xl(32) 만 카드 폭이
+  // 16px 더 좁았다(392 vs 376, 440 기준)
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: spacing.lg },
   sheet: { backgroundColor: colors.surfaceCard, borderRadius: radius.xl, padding: spacing.lg, maxHeight: '85%' },
   sheetTitle: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary, marginBottom: spacing.md },
   sheetList: { marginBottom: spacing.sm },

@@ -492,7 +492,6 @@ const styles = themedStyles((colors) => ({
     justifyContent: 'space-between',
     marginTop: spacing.lg,
     marginBottom: spacing.sm,
-    marginLeft: spacing.xs,
   },
   listTitle: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.ink },
   listClear: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
@@ -545,7 +544,6 @@ const styles = themedStyles((colors) => ({
     color: colors.textSecondary,
     fontWeight: '700',
     marginBottom: spacing.xs,
-    marginLeft: spacing.xs,
   },
   typeRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md, flexWrap: 'wrap' },
   typeChip: {
@@ -565,7 +563,7 @@ const styles = themedStyles((colors) => ({
     marginBottom: spacing.md,
     marginTop: spacing.xs,
   },
-  repeatHint: { fontSize: fontSize.caption, color: colors.textSecondary, marginLeft: spacing.xs },
+  repeatHint: { fontSize: fontSize.caption, color: colors.textSecondary },
 
   modalActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm },
   modalDelete: { paddingVertical: spacing.sm, paddingHorizontal: spacing.sm },

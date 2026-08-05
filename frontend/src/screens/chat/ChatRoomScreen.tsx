@@ -523,6 +523,10 @@ const styles = themedStyles((colors) => ({
   stickerPanel: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    // width:'11.5%' 는 gap 을 계산에 안 넣어 좁은 기기(360dp)에서 한 줄에 7개만
+    // 들어가고 남는 폭이 전부 오른쪽에 몰렸다(실측 40px). space-between 이면
+    // 그 여백이 줄 안의 아이템 사이 간격으로 고르게 흩어진다.
+    justifyContent: 'space-between',
     paddingHorizontal: spacing.sm,
     paddingTop: spacing.sm,
     gap: spacing.xs,

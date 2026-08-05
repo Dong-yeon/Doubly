@@ -76,7 +76,6 @@ const styles = themedStyles((colors) => ({
     fontSize: fontSize.caption,
     color: colors.textSecondary,
     marginBottom: spacing.xs,
-    marginLeft: spacing.xs,
     fontWeight: '700',
   },
   // TextField 와 같은 치수·색을 쓴다 — 한 폼 안에서 줄이 어긋나 보이면 안 된다
@@ -95,5 +94,5 @@ const styles = themedStyles((colors) => ({
   boxError: { borderColor: colors.danger, backgroundColor: colors.surface },
   text: { flex: 1, fontSize: fontSize.subtitle, color: colors.textPrimary },
   placeholder: { color: colors.textTertiary },
-  error: { color: colors.danger, fontSize: fontSize.caption, marginTop: spacing.xs, marginLeft: spacing.xs },
+  error: { color: colors.danger, fontSize: fontSize.caption, marginTop: spacing.xs },
 }));

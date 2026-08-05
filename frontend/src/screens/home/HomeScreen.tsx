@@ -444,7 +444,6 @@ const styles = themedStyles((colors) => ({
     color: colors.textSecondary,
     marginTop: spacing.lg,
     marginBottom: spacing.sm,
-    marginLeft: spacing.xs,
   },
   soloCard: { paddingVertical: spacing.xs, paddingHorizontal: spacing.md },
   soloItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, minHeight: 44 },
@@ -463,7 +462,8 @@ const styles = themedStyles((colors) => ({
   soloChevron: { fontSize: fontSize.title, color: colors.textMuted, fontWeight: '700' },
   soloDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
 
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: spacing.xl },
+  // spacing.lg 로 통일 — 앱의 다른 모달 8곳과 맞춘다
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: spacing.lg },
   modalCard: { gap: spacing.xs },
   modalTitle: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
   modalDesc: { fontSize: fontSize.caption, color: colors.textSecondary, marginBottom: spacing.sm },

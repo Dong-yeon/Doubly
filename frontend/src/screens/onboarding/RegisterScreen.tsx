@@ -167,10 +167,10 @@ const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
   container: { flexGrow: 1, justifyContent: 'center', padding: spacing.lg },
-  title: { fontSize: fontSize.heading, fontWeight: '800', color: colors.textPrimary, marginLeft: spacing.xs },
-  subtitle: { fontSize: fontSize.body, color: colors.textSecondary, marginTop: spacing.xs, marginBottom: spacing.lg, marginLeft: spacing.xs },
+  title: { fontSize: fontSize.heading, fontWeight: '800', color: colors.textPrimary },
+  subtitle: { fontSize: fontSize.body, color: colors.textSecondary, marginTop: spacing.xs, marginBottom: spacing.lg },
   card: { gap: spacing.xs },
-  fieldLabel: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700', marginBottom: spacing.sm, marginLeft: spacing.xs },
+  fieldLabel: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700', marginBottom: spacing.sm },
   genderRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
   genderChip: {
     flex: 1,
@@ -197,8 +197,7 @@ const styles = themedStyles((colors) => ({
     color: colors.textSecondary,
     lineHeight: 18,
     marginTop: spacing.xs,
-    marginLeft: spacing.xs,
   },
-  error: { color: colors.danger, fontSize: fontSize.caption, marginBottom: spacing.sm, marginLeft: spacing.xs },
+  error: { color: colors.danger, fontSize: fontSize.caption, marginBottom: spacing.sm },
   submit: { marginTop: spacing.sm },
 }));
