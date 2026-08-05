@@ -37,6 +37,12 @@ public enum ErrorCode {
     RELATION_STILL_ACTIVE(HttpStatus.CONFLICT, "연결을 먼저 끊어야 기록을 삭제할 수 있습니다."),
     NO_RECORDS_TO_RESTORE(HttpStatus.NOT_FOUND, "불러올 지난 기록이 없습니다."),
 
+    // 가족 (FAMILY) — N인 관계 (README "관계 모델")
+    FAMILY_NOT_FOUND(HttpStatus.NOT_FOUND, "가족을 찾을 수 없습니다."),
+    FAMILY_ALREADY_JOINED(HttpStatus.CONFLICT, "이미 가족에 속해 있습니다."),
+    FAMILY_MEMBER_LIMIT(HttpStatus.CONFLICT, "가족 인원이 가득 찼습니다."),
+    NOT_A_GUARDIAN(HttpStatus.FORBIDDEN, "보호자만 할 수 있는 작업입니다."),
+
     // 트레이너 (TRAINER)
     NOT_A_TRAINER(HttpStatus.FORBIDDEN, "트레이너만 사용할 수 있는 기능입니다."),
     TRAINER_MEMBER_LIMIT(HttpStatus.CONFLICT, "회원 정원이 가득 찼습니다."),

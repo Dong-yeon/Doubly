@@ -2,12 +2,15 @@ package com.fitto.relation.service;
 
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
+import com.fitto.relation.domain.MemberRole;
 import com.fitto.relation.domain.Relation;
+import com.fitto.relation.domain.RelationMember;
 import com.fitto.relation.domain.RelationStatus;
 import com.fitto.relation.domain.RelationType;
 import com.fitto.relation.dto.InviteCodeResponse;
 import com.fitto.relation.dto.RelationResponse;
 import com.fitto.relation.dto.RestoreRecordsResponse;
+import com.fitto.relation.repository.RelationMemberRepository;
 import com.fitto.relation.repository.RelationRepository;
 import com.fitto.user.domain.User;
 import com.fitto.common.upload.CloudinaryImageDeleter;
@@ -37,6 +40,7 @@ public class RelationService {
 
     private final SecureRandom random = new SecureRandom();
     private final RelationRepository relationRepository;
+    private final RelationMemberRepository relationMemberRepository;
     private final UserRepository userRepository;
     private final com.fitto.trainer.repository.TrainerProfileRepository trainerProfileRepository;
     private final com.fitto.common.event.CoupleEventPublisher coupleEventPublisher;
@@ -44,13 +48,16 @@ public class RelationService {
     private final RelationRecordRestorer relationRecordRestorer;
     private final CloudinaryImageDeleter imageDeleter;
 
-    public RelationService(RelationRepository relationRepository, UserRepository userRepository,
+    public RelationService(RelationRepository relationRepository,
+                           RelationMemberRepository relationMemberRepository,
+                           UserRepository userRepository,
                            com.fitto.trainer.repository.TrainerProfileRepository trainerProfileRepository,
                            com.fitto.common.event.CoupleEventPublisher coupleEventPublisher,
                            RelationRecordPurger relationRecordPurger,
                            RelationRecordRestorer relationRecordRestorer,
                            CloudinaryImageDeleter imageDeleter) {
         this.relationRepository = relationRepository;
+        this.relationMemberRepository = relationMemberRepository;
         this.userRepository = userRepository;
         this.trainerProfileRepository = trainerProfileRepository;
         this.coupleEventPublisher = coupleEventPublisher;
@@ -73,6 +80,7 @@ public class RelationService {
                 .codeExpiresAt(LocalDateTime.now().plusHours(CODE_TTL_HOURS))
                 .build();
         relationRepository.save(relation);
+        addMember(relation.getId(), userId, MemberRole.PARTNER);
         return new InviteCodeResponse(relation.getInviteCode(), relation.getCodeExpiresAt());
     }
 
@@ -97,6 +105,7 @@ public class RelationService {
         }
 
         relation.connect(userId);
+        addMember(relation.getId(), userId, MemberRole.PARTNER);
         User partner = userRepository.findById(relation.getUserAId()).orElse(null);
         return RelationResponse.of(relation, partner);
     }
@@ -120,6 +129,7 @@ public class RelationService {
                 .codeExpiresAt(LocalDateTime.now().plusHours(CODE_TTL_HOURS))
                 .build();
         relationRepository.save(relation);
+        addMember(relation.getId(), trainerId, MemberRole.TRAINER);
         return new InviteCodeResponse(relation.getInviteCode(), relation.getCodeExpiresAt());
     }
 
@@ -151,6 +161,7 @@ public class RelationService {
         }
 
         relation.connect(memberId);
+        addMember(relation.getId(), memberId, MemberRole.MEMBER);
         User trainer = userRepository.findById(trainerId).orElse(null);
         return RelationResponse.of(relation, trainer);
     }
@@ -322,10 +333,24 @@ public class RelationService {
     private Relation getOwnedRelation(Long userId, Long relationId) {
         Relation relation = relationRepository.findById(relationId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RELATION_NOT_FOUND));
-        if (!relation.involves(userId)) {
+        // FAMILY 는 3번째 이후 멤버가 A/B 슬롯에 없으므로 멤버십도 함께 본다
+        if (!relation.involves(userId)
+                && !relationMemberRepository.existsByRelationIdAndUserId(relationId, userId)) {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
         return relation;
+    }
+
+    /** 멤버 행 이중 기록 — backfill 된 기존 관계와 겹칠 수 있어 멱등하게 넣는다. */
+    private void addMember(Long relationId, Long userId, MemberRole role) {
+        if (relationMemberRepository.existsByRelationIdAndUserId(relationId, userId)) {
+            return;
+        }
+        relationMemberRepository.save(RelationMember.builder()
+                .relationId(relationId)
+                .userId(userId)
+                .memberRole(role)
+                .build());
     }
 
     private RelationResponse toResponse(Relation relation, Long viewerId) {
