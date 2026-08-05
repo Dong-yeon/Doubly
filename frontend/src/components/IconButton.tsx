@@ -10,7 +10,7 @@
  */
 import React from 'react';
 import { Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { colors } from '../constants/theme';
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];

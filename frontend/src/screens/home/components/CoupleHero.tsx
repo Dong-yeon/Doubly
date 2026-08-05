@@ -13,7 +13,7 @@
  */
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { Avatar } from '../../../components/Avatar';
 import { DoublyMark } from '../../../components/DoublyLogo';
 import { formatDateLabel } from '../../../utils/date';

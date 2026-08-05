@@ -1,7 +1,7 @@
 /** 뱃지 — 설계서 GAME-04 (7/30/100일 달성). 최고 연속 일수(maxStreak) 기준 */
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { Card } from './Card';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 import { themedStyles } from '../theme/themedStyles';

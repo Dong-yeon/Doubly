@@ -10,7 +10,7 @@
  */
 import React from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import type { Memories } from '../../../types';
 import { colors, fontSize, radius, spacing } from '../../../constants/theme';
 

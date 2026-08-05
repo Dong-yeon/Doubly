@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { Button } from '../../components/Button';
 import { workoutApi } from '../../api/workout';
 import { getErrorMessage } from '../../utils/error';

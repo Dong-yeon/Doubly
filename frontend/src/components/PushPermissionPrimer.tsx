@@ -9,7 +9,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { Button } from './Button';
 import { storage } from '../utils/storage';
 import { STORAGE_KEYS } from '../constants/config';

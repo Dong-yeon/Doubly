@@ -24,7 +24,7 @@ import {
   useWindowDimensions,
   type ListRenderItemInfo,
 } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, fontSize, spacing } from '../constants/theme';
 import { themedStyles } from '../theme/themedStyles';

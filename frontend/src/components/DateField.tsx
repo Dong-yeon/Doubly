@@ -9,7 +9,7 @@
  */
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { pickDate } from '../store/datePickerStore';
 import { formatDateCompact, formatDateLabel } from '../utils/date';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
