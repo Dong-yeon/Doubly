@@ -98,7 +98,21 @@ function main() {
         '--layout-features=',
         '--drop-tables+=DSIG',
         '--name-IDs=*',
-        '--recalc-bounds',
+        /*
+         * ⚠️ --recalc-bounds 를 쓰면 안 된다 — 렌더된 글리프가 왼쪽으로 크게 밀린다.
+         *
+         * 원인: 이 폰트는 hmtx.lsb 가 0 으로 고정돼 있는데(실제 잉크 시작점과
+         * 무관하게), --recalc-bounds 는 glyf 헤더의 xMin 만 실제 점 좌표에 맞게
+         * "고친다"(예: plus 글리프 0→107). 그러면 hmtx.lsb(0)와 glyf.xMin(107)이
+         * 어긋나고, 래스터라이저(FreeType 등)가 이 불일치를 보정한답시고 그
+         * 차이만큼(-107 유닛, 30px 렌더 기준 약 -6px) 글리프를 밀어버린다.
+         * 원본 폰트는 lsb 와 xMin 이 둘 다 0 이라 — 둘 다 틀렸지만 서로 일관돼서 —
+         * 이 보정이 발동하지 않았을 뿐이다.
+         *
+         * 실측: 98개 글리프 중 95개가 최대 -43유닛(약 -8.6px)까지 밀렸었다
+         * (plus·arrow-left·chevron-left/right 등 거의 전부). 이 플래그를 빼면
+         * 전부 원본과 동일하게 렌더된다 — 검증: verify-icon-centering.cjs.
+         */
       ],
       { stdio: 'pipe' },
     );
