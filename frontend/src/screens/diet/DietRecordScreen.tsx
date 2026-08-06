@@ -13,6 +13,7 @@ import {
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { WorkoutStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
@@ -28,7 +29,7 @@ import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
 import { toDateString } from '../../utils/date';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { FavoriteFood, MealType } from '../../types';
+import type { AnalyzedFood, FavoriteFood, MealType } from '../../types';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'DietRecord'>;
 
@@ -61,10 +62,34 @@ export function DietRecordScreen({ navigation }: Props) {
   const [saving, setSaving] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzingText, setAnalyzingText] = useState(false);
-  // AI 분석 매크로(탄단지) — 결과 표시용
-  const [macros, setMacros] = useState<{ carbs: number; protein: number; fat: number } | null>(null);
+  // AI가 인식한 음식 목록 — 칩으로 보여주고 잘못 잡힌 항목은 하나씩 뺄 수 있다.
+  // 칼로리·탄단지는 항상 이 목록의 합으로 파생시킨다(별도 state 로 안 들고 다닌다 — 둘이
+  // 따로 놀면 칩을 지웠는데 합계가 안 바뀌는 식으로 어긋나기 쉽다).
+  const [detectedFoods, setDetectedFoods] = useState<AnalyzedFood[]>([]);
   // 업로드 결과 캐시 — AI 분석과 저장이 같은 사진을 두 번 올리지 않도록
   const uploadedRef = useRef<{ uri: string; url: string } | null>(null);
+
+  const foodTotals = detectedFoods.reduce(
+    (acc, f) => ({
+      calories: acc.calories + (f.calories || 0),
+      carbs: acc.carbs + (f.carbs || 0),
+      protein: acc.protein + (f.protein || 0),
+      fat: acc.fat + (f.fat || 0),
+    }),
+    { calories: 0, carbs: 0, protein: 0, fat: 0 },
+  );
+
+  // AI 결과 반영 — 사진 분석·텍스트 분석 공통. 메모는 건드리지 않는다(아래 onAnalyze 참고).
+  const applyFoods = (foods: AnalyzedFood[]) => {
+    setDetectedFoods(foods);
+    const total = foods.reduce((sum, f) => sum + (f.calories || 0), 0);
+    setCalories(foods.length > 0 ? String(total) : '');
+  };
+
+  const removeDetectedFood = (index: number) => {
+    haptics.light();
+    applyFoods(detectedFoods.filter((_, i) => i !== index));
+  };
 
   // 즐겨찾는 음식
   const [favorites, setFavorites] = useState<FavoriteFood[]>([]);
@@ -97,9 +122,9 @@ export function DietRecordScreen({ navigation }: Props) {
       const fav = await dietApi.saveFavorite({
         name,
         calories: calories ? Number(calories) : undefined,
-        carbs: macros?.carbs,
-        protein: macros?.protein,
-        fat: macros?.fat,
+        carbs: detectedFoods.length > 0 ? foodTotals.carbs : undefined,
+        protein: detectedFoods.length > 0 ? foodTotals.protein : undefined,
+        fat: detectedFoods.length > 0 ? foodTotals.fat : undefined,
       });
       haptics.success();
       toast.success('즐겨찾기에 저장했어요 ');
@@ -157,7 +182,10 @@ export function DietRecordScreen({ navigation }: Props) {
     return url;
   };
 
-  // AI 음식 분석 — 결과는 추정치라 필드에 채워만 주고 확정(저장)은 사용자가 한다
+  // AI 음식 분석 — 인식된 음식은 칩으로 보여주고, 메모는 건드리지 않는다.
+  // (사진이 이미 무엇을 먹었는지 말해주므로 이름을 텍스트로 또 채울 필요가 없다 —
+  //  칩을 나중에 하나 지웠을 때 메모 문자열에서 정확히 그 이름만 잘라내야 하는
+  //  꼬임도 애초에 생기지 않는다.)
   const onAnalyze = async () => {
     if (!photoUri) return;
     setAnalyzing(true);
@@ -168,15 +196,11 @@ export function DietRecordScreen({ navigation }: Props) {
         toast.error('음식 사진이 아닌 것 같아요 ');
         return;
       }
-      const names = result.foods.map((f) => f.name).join(', ');
-      setMemo((prev) => (prev.trim() ? `${prev.trim()}, ${names}` : names));
-      if (result.totalCalories > 0) {
-        setCalories(String(result.totalCalories));
-      } else {
+      applyFoods(result.foods);
+      if (result.totalCalories <= 0) {
         // 음식은 알아봤지만 양을 가늠하지 못한 경우 — 빈 칸으로 두면 실패로 오해한다
         toast.info('칼로리는 추정하지 못했어요. 직접 입력해주세요.');
       }
-      setMacros({ carbs: result.totalCarbs, protein: result.totalProtein, fat: result.totalFat });
       haptics.success();
       toast.success(result.comment?.trim() || 'AI 분석 완료! ');
     } catch (e) {
@@ -186,7 +210,8 @@ export function DietRecordScreen({ navigation }: Props) {
     }
   };
 
-  // 메모에 적은 음식으로 칼로리 추정 — 사진 없이도 쓰는 경로. 결과는 추정치라 필드에 채워만 준다
+  // 메모에 적은 음식으로 칼로리 추정 — 사진 없이도 쓰는 경로.
+  // 메모는 사용자가 직접 쓴 설명이라 그대로 두고, 파싱된 음식만 칩으로 보여준다.
   const onAnalyzeText = async () => {
     const text = memo.trim();
     if (!text) return;
@@ -197,12 +222,10 @@ export function DietRecordScreen({ navigation }: Props) {
         toast.error('무엇을 먹었는지 알아보지 못했어요. 음식 이름을 적어주세요.');
         return;
       }
-      if (result.totalCalories > 0) {
-        setCalories(String(result.totalCalories));
-      } else {
+      applyFoods(result.foods);
+      if (result.totalCalories <= 0) {
         toast.info('칼로리는 추정하지 못했어요. 직접 입력해주세요.');
       }
-      setMacros({ carbs: result.totalCarbs, protein: result.totalProtein, fat: result.totalFat });
       haptics.success();
       toast.success(result.comment?.trim() || 'AI 칼로리 계산 완료!');
     } catch (e) {
@@ -230,9 +253,9 @@ export function DietRecordScreen({ navigation }: Props) {
         memo: memo.trim() || undefined,
         photoUrl,
         calories: calories ? Number(calories) : undefined,
-        carbs: macros?.carbs,
-        protein: macros?.protein,
-        fat: macros?.fat,
+        carbs: detectedFoods.length > 0 ? foodTotals.carbs : undefined,
+        protein: detectedFoods.length > 0 ? foodTotals.protein : undefined,
+        fat: detectedFoods.length > 0 ? foodTotals.fat : undefined,
       });
       haptics.success();
       toast.success('식단 기록 완료! ');
@@ -302,12 +325,18 @@ export function DietRecordScreen({ navigation }: Props) {
             )}
           </TouchableOpacity>
           {photoUri ? (
-            <TouchableOpacity onPress={() => setPhotoUri(null)}>
+            <TouchableOpacity
+              onPress={() => {
+                setPhotoUri(null);
+                // 이 사진에서 나온 인식 결과라 사진이 사라지면 같이 지운다
+                applyFoods([]);
+              }}
+            >
               <Text style={styles.removePhoto}>사진 제거</Text>
             </TouchableOpacity>
           ) : null}
 
-          {/* AI 음식 분석 — 사진이 있을 때만 노출, 결과는 메모/칼로리에 자동 입력 */}
+          {/* AI 음식 분석 — 사진이 있을 때만 노출. 결과(칩)는 아래 공통 섹션에서 보여준다 */}
           {photoUri ? (
             <>
               <Button
@@ -319,22 +348,6 @@ export function DietRecordScreen({ navigation }: Props) {
                 style={styles.analyzeButton}
               />
               <Text style={styles.analyzeHint}>분석 결과는 추정치예요. 저장 전에 수정할 수 있어요.</Text>
-              {macros ? (
-                <View style={styles.macroRow}>
-                  <View style={styles.macroItem}>
-                    <Text style={styles.macroValue}>{macros.carbs}g</Text>
-                    <Text style={styles.macroLabel}>탄수화물</Text>
-                  </View>
-                  <View style={styles.macroItem}>
-                    <Text style={styles.macroValue}>{macros.protein}g</Text>
-                    <Text style={styles.macroLabel}>단백질</Text>
-                  </View>
-                  <View style={styles.macroItem}>
-                    <Text style={styles.macroValue}>{macros.fat}g</Text>
-                    <Text style={styles.macroLabel}>지방</Text>
-                  </View>
-                </View>
-              ) : null}
             </>
           ) : null}
 
@@ -391,6 +404,44 @@ export function DietRecordScreen({ navigation }: Props) {
                 style={styles.analyzeButton}
               />
               <Text style={styles.analyzeHint}>계산 결과는 추정치예요. 저장 전에 수정할 수 있어요.</Text>
+            </>
+          ) : null}
+
+          {/* AI가 인식한 음식 — 사진 분석·텍스트 분석 공통. 잘못 잡힌 항목은 칩의 ×로 뺀다.
+              빼면 칼로리·탄단지 합계가 바로 그만큼 줄어든다 (applyFoods 에서 재계산). */}
+          {detectedFoods.length > 0 ? (
+            <>
+              <Text style={styles.label}>AI가 알아본 음식</Text>
+              <View style={styles.presetRow}>
+                {detectedFoods.map((f, i) => (
+                  <View key={`${f.name}-${i}`} style={styles.foodChip}>
+                    <Text style={styles.foodChipText}>{f.name}</Text>
+                    {f.calories ? <Text style={styles.foodChipCal}>{f.calories}kcal</Text> : null}
+                    <TouchableOpacity
+                      onPress={() => removeDetectedFood(i)}
+                      hitSlop={8}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${f.name} 빼기`}
+                    >
+                      <MaterialCommunityIcons name="close" size={13} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+              <View style={styles.macroRow}>
+                <View style={styles.macroItem}>
+                  <Text style={styles.macroValue}>{foodTotals.carbs}g</Text>
+                  <Text style={styles.macroLabel}>탄수화물</Text>
+                </View>
+                <View style={styles.macroItem}>
+                  <Text style={styles.macroValue}>{foodTotals.protein}g</Text>
+                  <Text style={styles.macroLabel}>단백질</Text>
+                </View>
+                <View style={styles.macroItem}>
+                  <Text style={styles.macroValue}>{foodTotals.fat}g</Text>
+                  <Text style={styles.macroLabel}>지방</Text>
+                </View>
+              </View>
             </>
           ) : null}
           <TextField
@@ -464,6 +515,21 @@ const styles = StyleSheet.create({
   },
   macroValue: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
   macroLabel: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
+  // 즐겨찾기 칩(primary)과 색을 달리해 "AI가 방금 추측한 것 — 지울 수 있다"는 걸 구분한다
+  foodChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingLeft: spacing.md,
+    paddingRight: spacing.xs,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    backgroundColor: colors.accentSoft,
+  },
+  foodChipText: { fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '700' },
+  foodChipCal: { fontSize: 10, color: colors.textSecondary, fontWeight: '700' },
   favHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   favSave: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '800' },
   favHint: { fontSize: fontSize.caption, color: colors.textSecondary, marginBottom: spacing.sm },
