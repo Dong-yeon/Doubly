@@ -62,6 +62,8 @@ const styles = StyleSheet.create({
     minWidth: 44,
     minHeight: 44,
     justifyContent: 'center',
+    // 왼쪽 여백이 없으면 화면 맨 끝에 아이콘이 붙어버린다 — 오른쪽과 대칭으로 맞춘다
+    paddingLeft: spacing.sm,
     paddingRight: spacing.sm,
   },
   pressed: { opacity: 0.6 },
