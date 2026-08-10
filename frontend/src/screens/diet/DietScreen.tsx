@@ -18,6 +18,7 @@ import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
 import { MealCard } from '../../components/MealCard';
 import { WorkoutDietSegment } from '../../components/WorkoutDietSegment';
+import { QuickLinkChips } from '../../components/QuickLinkChips';
 import { EmptyState } from '../../components/EmptyState';
 import { AiInsightButton } from '../../components/AiInsightButton';
 import { ProteinRing } from '../../components/ProteinRing';
@@ -192,14 +193,14 @@ export function DietScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <WorkoutDietSegment active="diet" />
-      <View style={styles.linksRow}>
-        <TouchableOpacity onPress={() => navigation.navigate('DietStats')}>
-          <Text style={styles.link}>통계</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => navigation.navigate('DietCalendar')}>
-          <Text style={styles.link}>캘린더</Text>
-        </TouchableOpacity>
-      </View>
+      {/* 운동 탭과 같은 QuickLinkChips — 항목이 2개뿐이라도 같은 컴포넌트를 써서
+          정렬·톤이 세그먼트를 넘나들며 흔들리지 않게 한다. */}
+      <QuickLinkChips
+        links={[
+          { icon: 'chart-bar', label: '통계', onPress: () => navigation.navigate('DietStats') },
+          { icon: 'calendar-blank-outline', label: '캘린더', onPress: () => navigation.navigate('DietCalendar') },
+        ]}
+      />
 
       {/* AI 인사이트 — 주간 식단 코칭 / 커플 주간 레터 */}
       <View style={styles.aiRow}>
@@ -424,23 +425,6 @@ export function DietScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-  },
-  title: { fontSize: fontSize.title, fontWeight: '800', color: colors.textPrimary },
-  headerLinks: { flexDirection: 'row', gap: spacing.md },
-  link: { fontSize: fontSize.body, color: colors.primary, fontWeight: '600' },
-  linksRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: spacing.md,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-  },
   nutCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
