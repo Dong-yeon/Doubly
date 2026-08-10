@@ -111,6 +111,15 @@ export interface TrainerProfile {
 }
 
 // 5.5 / 5.6 workouts
+/** 세트 1회 실제 수행 기록 — 무게/횟수/완료 여부. 종목당 여러 개(세트 수만큼) 존재 */
+export interface WorkoutSetEntry {
+  id?: number;
+  setNo: number;
+  weightKg?: number | null;
+  reps?: number | null;
+  completed: boolean;
+}
+
 export interface WorkoutSet {
   id?: number;
   exerciseName: string;
@@ -119,6 +128,13 @@ export interface WorkoutSet {
   reps?: number | null;
   weightKg?: number | null;
   orderNo: number;
+  /** 종목 카탈로그에서 골랐다면 그 id — 자유 입력 시 없음 */
+  exerciseCatalogId?: number | null;
+  /** 자극 부위 — 대체 종목 추천/시각화에 사용 */
+  muscleGroup?: string | null;
+  equipment?: string | null;
+  /** 세트별 실제 수행 기록 — 생략 가능(기존처럼 종목 단위 평균값만 저장) */
+  entries?: WorkoutSetEntry[];
 }
 
 export interface Workout {
@@ -128,7 +144,28 @@ export interface Workout {
   workoutDate: string;
   totalDurationMin?: number | null;
   memo?: string | null;
+  /** 이 기록이 시작된 내 루틴 템플릿 id — 스마트 루틴 동기화(Save-on-Finish)의 전제 */
+  sourceRoutineId?: number | null;
   sets: WorkoutSet[];
+}
+
+// 종목 카탈로그 — 자극 부위/기구 태그. 대체 종목 후보(같은 muscleGroup)/자동완성에 사용
+export interface ExerciseCatalogItem {
+  id: number;
+  name: string;
+  category: string;
+  muscleGroup: string;
+  equipment?: string | null;
+}
+
+// 종목의 직전 수행 기록 — 세션 진입 시 무게/횟수 프리필에 사용
+export interface ExerciseLastPerformance {
+  exerciseName: string;
+  workoutDate: string;
+  sets?: number | null;
+  reps?: number | null;
+  weightKg?: number | null;
+  entries: WorkoutSetEntry[];
 }
 
 // 캘린더 응답 (4.4 GET /workout/calendar)
@@ -218,16 +255,31 @@ export interface BodyMetric {
 }
 
 // 사용자 본인 운동 루틴 (짐앱 스타일) — 세션 실행 기반
+// 대체 종목 사전 지정 — 루틴 작성 시 종목마다 미리 묶어둔 대체 후보(④)
+export interface RoutineExerciseAlternative {
+  exerciseCatalogId: number;
+  name: string;
+  muscleGroup: string;
+  equipment?: string | null;
+}
 export interface RoutineExercise {
   exerciseName: string;
   category?: string | null;
   targetSets?: number | null;
   reps?: number | null;
   weightKg?: number | null;
+  exerciseCatalogId?: number | null;
+  muscleGroup?: string | null;
+  equipment?: string | null;
+  // 이 종목만의 휴식 시간(초) — 없으면 세션 전역 기본값 사용(③)
+  restSeconds?: number | null;
+  alternatives?: RoutineExerciseAlternative[];
 }
 export interface WorkoutRoutine {
   id: number;
   title: string;
+  // 검증된 분할 템플릿(⑤)이면 true — 시스템 제공, 복사해서만 쓸 수 있음
+  systemTemplate: boolean;
   exercises: RoutineExercise[];
   createdAt: string;
 }
