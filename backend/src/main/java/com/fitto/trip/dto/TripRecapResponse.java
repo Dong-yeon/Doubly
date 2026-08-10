@@ -22,7 +22,9 @@ public record TripRecapResponse(
         String currency,
         long photoCount,
         int checklistTotal,
-        int checklistChecked
+        int checklistChecked,
+        long workoutCount,
+        boolean travelModeEnabled
 ) {
     public static final String UPCOMING = "UPCOMING";
     public static final String ONGOING = "ONGOING";

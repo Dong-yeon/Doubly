@@ -66,6 +66,7 @@ export function TripRecapScreen({ route }: Props) {
     { icon: 'wallet-outline', value: recap.expenseTotal > 0 ? money(recap.expenseTotal) : '0원', label: '총 지출' },
     { icon: 'image-multiple-outline', value: `${recap.photoCount}`, label: '사진' },
     { icon: 'bag-personal-outline', value: `${recap.checklistChecked}/${recap.checklistTotal}`, label: '준비물' },
+    { icon: 'run', value: `${recap.workoutCount}`, label: '여행 중 운동' },
     { icon: 'calendar-range', value: `${recap.nights}박 ${recap.days}일`, label: '기간' },
   ] as const;
 
@@ -77,6 +78,11 @@ export function TripRecapScreen({ route }: Props) {
           <View style={styles.statusChip}>
             <Text style={styles.statusText}>{statusLabel(recap.status)}</Text>
           </View>
+          {recap.travelModeEnabled ? (
+            <View style={[styles.statusChip, styles.travelModeChip]}>
+              <Text style={styles.statusText}>✈️ 여행 모드</Text>
+            </View>
+          ) : null}
           <Text style={styles.title}>{recap.title}</Text>
           <Text style={styles.dates}>
             {recap.startDate} ~ {recap.endDate}
@@ -121,6 +127,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   statusText: { fontSize: fontSize.caption, color: colors.accent, fontWeight: '800' },
+  travelModeChip: { marginTop: spacing.xs },
   title: {
     fontSize: fontSize.heading,
     fontWeight: '800',

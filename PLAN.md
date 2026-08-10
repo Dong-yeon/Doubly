@@ -353,6 +353,64 @@ CREATE INDEX idx_feed_posts_trip ON feed_posts (trip_id, created_at DESC);
 
 ---
 
+## Feature: 커플 여행 모드 (Travel Mode) ✅
+
+### 목표
+하드코어하게 식단을 재는 커플도 여행 중에는 목표 압박 없이 다녀오게 한다. 여행 기간 동안
+식단 목표 **표시를 잠시 끄는 스위치** — 새 목표값을 계산해 대체하는 게 아니라, 기존
+"목표 미설정 시 `target*`가 `null`로 내려가고 대시보드가 빈 상태를 그린다"는 경로를
+그대로 재사용한다. 여행이 끝나면 **날짜만으로 자동 복귀**(되돌리는 로직 자체가 없다).
+
+### 핵심 기능 (MVP)
+1. 여행 모드 켜기/끄기 — `TripDetailScreen` 토글. 커플 둘 다 가능
+2. 켜져 있고 **오늘이 그 여행 기간 안**이면 `GET /meal/nutrition` 의 `target*` 4개가 전부
+   `null` — 이미 있는 "목표 미설정" 표시를 그대로 탄다(새 UI 상태 아님)
+3. 응답에 `travelMode`/`travelModeTripTitle` 을 실어 "✈️ 여행 모드 · {제목}" 배지만 별도로
+   보여준다 — 목표를 없앤 이유를 설명하는 용도
+4. 여행 중 운동 기록은 평소처럼 그대로 카운트 — `Trip Recap` 스탯에 "여행 중 운동 n회"
+   (두 사람 합산) 추가
+5. 토글 시 커플 채널 `TRIP` + `DIET_GOAL` 이벤트 발행(트립 화면·식단 대시보드 동시 갱신)
+
+### Non-goals (이번 MVP 제외)
+- 여행 전용 "유지 칼로리" 자동 계산(TDEE) — 이 앱에 체성분 기반 계산기가 없다. 목표를
+  아예 숨겨 압박을 없애는 쪽을 택한다. 원하면 여행 모드와 무관하게 이미 있는
+  `PUT /meal/nutrition/goal` 로 직접 다른 숫자를 넣어도 된다
+- 스트릭 조정·면제 — 스트릭은 "그날 기록했는지"만 보고 목표 달성 여부를 보지 않으므로
+  건드릴 이유가 없다. 건드리면 오히려 "여행 중엔 스트릭이 다르게 돈다"는 특수 케이스가
+  하나 늘어난다
+- 여러 여행이 겹치고 둘 다 여행 모드면 우선순위 규칙 — 하나만 골라 보여준다(현실적으로
+  거의 없는 케이스라 규칙을 만들 실익이 없다)
+- 여행 등록 시 자동 켜짐 — 하드코어 유저는 여행 중에도 계속 재고 싶을 수 있어 **옵트인**으로 둔다
+- 목표값 저장/복원 — 여행 모드를 꺼도 `nutrition_goals` 원래 값이 그대로 남아 있다.
+  "숨기기"만 하므로 애초에 저장했다 복원할 값 자체가 없다
+
+### API
+- `PUT /api/v1/trips/{id}/travel-mode` `{enabled}` — 토글, 커플 둘 다 가능. `TripResponse` 반환
+- `GET /api/v1/meal/nutrition` — 기존 응답에 `travelMode`(boolean), `travelModeTripTitle`
+  (String?) 두 필드 추가. 여행 모드면 `target*` 전부 `null`
+- `GET /api/v1/trips/{tripId}/recap` — 기존 응답에 `workoutCount`(long, 여행 기간 두 사람
+  합산), `travelModeEnabled`(boolean) 추가
+
+### DB 스키마 (V28)
+
+```sql
+ALTER TABLE trips ADD COLUMN travel_mode_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+```
+
+- 신규 테이블 없음. 트립 삭제 시 컬럼도 함께 삭제되니 별도 정리 불필요
+- `nutrition_goals`(기존 목표값)는 건드리지 않는다
+
+### 화면 (frontend)
+- `TripDetailScreen` 헤더에 "✈️ 여행 모드" 토글(켜짐 시 강조 색) — 자주 여닫는 스위치라
+  경비·준비물 같은 진입 버튼 그리드가 아니라 여행 기간 바로 아래에 노출
+- 식단 대시보드(`DietScreen`) — 여행 모드 중이면 목표 게이지 대신
+  "✈️ 여행 모드 중 · {여행 제목} — 목표는 잠깐 쉬어가요" 배지. 기존 목표 게이지 자리를
+  대체(카드를 새로 늘리지 않는다)
+- `TripRecapScreen` 스탯 타일에 "🏃 여행 중 운동 n회" 한 칸 추가(6→7, `flexWrap`이라
+  그리드가 알아서 재배치된다)
+
+---
+
 ## Feature: 커플 맛집 지도 (Place Map)
 
 ### 목표

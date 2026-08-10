@@ -6,11 +6,13 @@ import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.notification.NotificationService;
 import com.fitto.diet.domain.Meal;
+import com.fitto.diet.domain.NutritionGoal;
 import com.fitto.diet.dto.CoupleMealGoalResponse;
 import com.fitto.diet.dto.MealResponse;
 import com.fitto.diet.dto.MealStatsResponse;
 import com.fitto.diet.dto.SaveMealRequest;
 import com.fitto.diet.repository.MealRepository;
+import com.fitto.diet.repository.NutritionGoalRepository;
 import com.fitto.relation.domain.Relation;
 import com.fitto.relation.domain.RelationStatus;
 import com.fitto.relation.domain.RelationType;
@@ -45,6 +47,7 @@ public class MealService {
     private static final int HISTORY_PAGE_SIZE = 20;
 
     private final MealRepository mealRepository;
+    private final NutritionGoalRepository nutritionGoalRepository;
     private final RelationRepository relationRepository;
     private final UserRepository userRepository;
     private final StreakService streakService;
@@ -52,12 +55,14 @@ public class MealService {
     private final NotificationService notificationService;
 
     public MealService(MealRepository mealRepository,
+                       NutritionGoalRepository nutritionGoalRepository,
                        RelationRepository relationRepository,
                        UserRepository userRepository,
                        StreakService streakService,
                        CoupleEventPublisher coupleEventPublisher,
                        NotificationService notificationService) {
         this.mealRepository = mealRepository;
+        this.nutritionGoalRepository = nutritionGoalRepository;
         this.relationRepository = relationRepository;
         this.userRepository = userRepository;
         this.streakService = streakService;
@@ -72,6 +77,11 @@ public class MealService {
         }
         // 목표 달성 판정용 — 이 저장이 해당 날짜의 첫 기록인지 (중복 축하 방지)
         boolean firstMealOfDay = !mealRepository.existsByUserIdAndMealDate(userId, req.mealDate());
+        // 영양 목표 판정용 — 이번 기록을 반영하기 전, 그 날짜까지 먹은 단백질(g) 합계.
+        // 새 Meal 을 저장하기 전에 구해야 "이전"과 "이번 기록 반영 후"를 나눌 수 있다.
+        int proteinBeforeThisMeal = mealRepository.findByUserIdAndMealDateOrderByIdAsc(userId, req.mealDate())
+                .stream().mapToInt(m -> nz(m.getProtein())).sum();
+
         Meal meal = Meal.builder()
                 .userId(userId)
                 .mealDate(req.mealDate())
@@ -84,8 +94,12 @@ public class MealService {
                 .fat(req.fat())
                 .build();
         mealRepository.save(meal);
+
+        List<MealResponse.GoalHighlight> goals =
+                detectGoalsAchieved(userId, proteinBeforeThisMeal, meal.getProtein());
+
         afterMealsAdded(userId, meal.getMealDate(), firstMealOfDay, false);
-        return MealResponse.from(meal);
+        return MealResponse.from(meal, goals);
     }
 
     /**
@@ -149,6 +163,31 @@ public class MealService {
                                 myName + "님이 식단을 기록했어요!");
                     }
                 });
+    }
+
+    /**
+     * 영양 목표 달성 감지 — 이번 기록으로 그 날짜의 단백질 누적 섭취가 <b>막</b> 목표를
+     * 넘겼는지. 이전에 이미 넘겼었다면(그 날 이미 축하했으므로) 다시 알리지 않는다.
+     *
+     * <p>목표(target)가 설정 안 돼 있으면(대시보드 목표 미사용) 볼 게 없다.
+     * 지금은 단백질만 본다 — 다른 매크로는 필요해지면 같은 방식으로 여기에 추가한다.
+     */
+    private List<MealResponse.GoalHighlight> detectGoalsAchieved(Long userId, int proteinBefore,
+                                                                  Integer proteinInThisMeal) {
+        Integer target = nutritionGoalRepository.findById(userId)
+                .map(NutritionGoal::getTargetProtein).orElse(null);
+        if (target == null || target <= 0) {
+            return List.of();
+        }
+        int consumed = proteinBefore + nz(proteinInThisMeal);
+        if (proteinBefore >= target || consumed < target) {
+            return List.of();
+        }
+        return List.of(new MealResponse.GoalHighlight("protein", consumed, target));
+    }
+
+    private int nz(Integer v) {
+        return v != null ? v : 0;
     }
 
     /**

@@ -103,9 +103,9 @@ class TripRecapFlowTest {
 
         // 장소 2곳(1곳 방문완료)
         PlaceResponse visited = placeService.save(c[0], new SavePlaceRequest(
-                "성산일출봉", null, null, null, "관광", PlaceStatus.VISITED));
+                "성산일출봉", null, null, null, "관광", PlaceStatus.VISITED, null));
         PlaceResponse wish = placeService.save(c[0], new SavePlaceRequest(
-                "흑돼지집", null, null, null, "식당", PlaceStatus.WISHLIST));
+                "흑돼지집", null, null, null, "식당", PlaceStatus.WISHLIST, null));
         tripService.attachPlace(c[0], tripId, visited.id());
         tripService.attachPlace(c[0], tripId, wish.id());
 

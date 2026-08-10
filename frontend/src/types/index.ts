@@ -113,6 +113,15 @@ export interface TrainerProfile {
 }
 
 // 5.5 / 5.6 workouts
+/** 세트 1회 실제 수행 기록 — 무게/횟수/완료 여부. 종목당 여러 개(세트 수만큼) 존재 */
+export interface WorkoutSetEntry {
+  id?: number;
+  setNo: number;
+  weightKg?: number | null;
+  reps?: number | null;
+  completed: boolean;
+}
+
 export interface WorkoutSet {
   id?: number;
   exerciseName: string;
@@ -121,6 +130,20 @@ export interface WorkoutSet {
   reps?: number | null;
   weightKg?: number | null;
   orderNo: number;
+  /** 종목 카탈로그에서 골랐다면 그 id — 자유 입력 시 없음 */
+  exerciseCatalogId?: number | null;
+  /** 자극 부위 — 대체 종목 추천/시각화에 사용 */
+  muscleGroup?: string | null;
+  equipment?: string | null;
+  /** 세트별 실제 수행 기록 — 생략 가능(기존처럼 종목 단위 평균값만 저장) */
+  entries?: WorkoutSetEntry[];
+}
+
+// 저장 시점에만 채워지는 PR(자기 최고 기록) 갱신 — 오늘/히스토리 등 재조회 시엔 항상 빈 배열
+export interface WorkoutPrHighlight {
+  exerciseName: string;
+  weightKg: number;
+  previousBestKg: number;
 }
 
 export interface Workout {
@@ -130,7 +153,29 @@ export interface Workout {
   workoutDate: string;
   totalDurationMin?: number | null;
   memo?: string | null;
+  /** 이 기록이 시작된 내 루틴 템플릿 id — 스마트 루틴 동기화(Save-on-Finish)의 전제 */
+  sourceRoutineId?: number | null;
   sets: WorkoutSet[];
+  prs?: WorkoutPrHighlight[];
+}
+
+// 종목 카탈로그 — 자극 부위/기구 태그. 대체 종목 후보(같은 muscleGroup)/자동완성에 사용
+export interface ExerciseCatalogItem {
+  id: number;
+  name: string;
+  category: string;
+  muscleGroup: string;
+  equipment?: string | null;
+}
+
+// 종목의 직전 수행 기록 — 세션 진입 시 무게/횟수 프리필에 사용
+export interface ExerciseLastPerformance {
+  exerciseName: string;
+  workoutDate: string;
+  sets?: number | null;
+  reps?: number | null;
+  weightKg?: number | null;
+  entries: WorkoutSetEntry[];
 }
 
 // 캘린더 응답 (4.4 GET /workout/calendar)
@@ -220,16 +265,31 @@ export interface BodyMetric {
 }
 
 // 사용자 본인 운동 루틴 (짐앱 스타일) — 세션 실행 기반
+// 대체 종목 사전 지정 — 루틴 작성 시 종목마다 미리 묶어둔 대체 후보(④)
+export interface RoutineExerciseAlternative {
+  exerciseCatalogId: number;
+  name: string;
+  muscleGroup: string;
+  equipment?: string | null;
+}
 export interface RoutineExercise {
   exerciseName: string;
   category?: string | null;
   targetSets?: number | null;
   reps?: number | null;
   weightKg?: number | null;
+  exerciseCatalogId?: number | null;
+  muscleGroup?: string | null;
+  equipment?: string | null;
+  // 이 종목만의 휴식 시간(초) — 없으면 세션 전역 기본값 사용(③)
+  restSeconds?: number | null;
+  alternatives?: RoutineExerciseAlternative[];
 }
 export interface WorkoutRoutine {
   id: number;
   title: string;
+  // 검증된 분할 템플릿(⑤)이면 true — 시스템 제공, 복사해서만 쓸 수 있음
+  systemTemplate: boolean;
   exercises: RoutineExercise[];
   createdAt: string;
 }
@@ -251,6 +311,8 @@ export interface TrainerRoutine {
 
 // 커플 맛집 지도 (PLAN.md Place Map) — 장소 핀 + 방문 기록
 export type PlaceStatus = 'WISHLIST' | 'VISITED';
+// 클린식/치팅데이 구분 — 하드코어 운동·식단 커플용 필터·핀 색상에 쓰인다
+export type PlaceDietTag = 'CLEAN' | 'CHEAT' | 'NEUTRAL';
 export interface Place {
   id: number;
   name: string;
@@ -259,6 +321,7 @@ export interface Place {
   lng?: number | null;
   category?: string | null;
   status: PlaceStatus;
+  dietTag: PlaceDietTag;
   addedBy: number;
   /** 담긴 여행 (PLAN.md Trip) — 미연결 시 null */
   tripId?: number | null;
@@ -282,6 +345,13 @@ export interface PlaceVisit {
 
 // 식단 (meals) — 끼니별 사진/메모/칼로리
 export type MealType = 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK';
+// 저장 시점에만 채워지는 영양 목표 달성 — 오늘/히스토리 등 재조회 시엔 항상 빈 배열
+export interface MealGoalHighlight {
+  nutrient: 'protein';
+  consumed: number;
+  target: number;
+}
+
 export interface Meal {
   id: number;
   mealDate: string;
@@ -293,6 +363,7 @@ export interface Meal {
   carbs?: number | null;
   protein?: number | null;
   fat?: number | null;
+  goals?: MealGoalHighlight[];
   createdAt: string;
 }
 
@@ -312,6 +383,9 @@ export interface NutritionSummary {
   exerciseCalories: number;
   /** 기초대사량 + 오늘 운동 소모 - 오늘 섭취. bmr 이 없으면 null */
   energyBalance?: number | null;
+  // 여행 모드 중이면(PLAN.md Travel Mode) target* 는 전부 null — travelModeTripTitle 이 그 이유
+  travelMode: boolean;
+  travelModeTripTitle?: string | null;
 }
 
 // AI 음식 사진 분석 (POST /meal/analyze) — 칼로리·매크로는 추정치, 사용자가 수정 후 저장
@@ -433,6 +507,7 @@ export interface Trip {
   coverImageUrl?: string | null;
   createdBy: number;
   placeCount: number;
+  travelModeEnabled: boolean; // PLAN.md Travel Mode
   createdAt: string;
 }
 
@@ -537,6 +612,8 @@ export interface TripRecap {
   photoCount: number;
   checklistTotal: number;
   checklistChecked: number;
+  workoutCount: number; // 여행 기간 두 사람 합산 — PLAN.md Travel Mode
+  travelModeEnabled: boolean;
 }
 
 // 커플 일상 피드 (PLAN.md Couple Feed) — 포스트 + 운동/식단/맛집 방문 통합 타임라인
@@ -563,26 +640,6 @@ export interface FeedTimeline {
   items: FeedItem[];
   nextCursor: string | null;
   hasMore: boolean;
-}
-
-// 추억 리마인드 — 오늘과 같은 월·일의 1년 이상 전 기록 (PLAN.md Memories)
-export interface MemoryGroup {
-  /** 몇 년 전인지 (1 이상) */
-  yearsAgo: number;
-  /** 그 해의 대표 발생일 (yyyy-MM-dd) */
-  date: string;
-  /** 서버가 만든 표시 문구 — "1년 전 오늘" */
-  label: string;
-  /** 타임라인과 같은 카드 형태. POST 에만 reactions 가 채워진다 */
-  items: FeedItem[];
-}
-
-export interface Memories {
-  /** 기준 날짜 (KST, yyyy-MM-dd) */
-  on: string;
-  totalCount: number;
-  /** 최신 연도부터. 추억이 없으면 빈 배열 */
-  groups: MemoryGroup[];
 }
 
 // 5.8 chat_messages

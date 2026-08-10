@@ -27,6 +27,7 @@ import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
 import { toDateString } from '../../utils/date';
+import { buildDietShareCopy } from '../../utils/dietShare';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { FavoriteFood, MealType } from '../../types';
 
@@ -250,21 +251,26 @@ export function DietRecordScreen({ navigation }: Props) {
       toast.success('식단 기록 완료! ');
 
       // 커플이 연결돼 있으면 채팅 공유 제안
+      // 단백질 목표를 이번 기록으로 막 채웠으면 확인창·카드 문구를 다르게 만든다 (saved.goals 는
+      // 저장 응답에만 실리는 일회성 정보 — MealService.detectGoalsAchieved 참고)
       if (couple?.id) {
         const summary = `${label}${memo.trim() ? ` · ${memo.trim()}` : ''}${
           calories ? ` (${calories}kcal)` : ''
         }`;
-        Alert.alert('식단 기록 완료! ', '이 식단을 채팅에 공유할까요?', [
+        const { alertTitle, alertMessage, cardContent } = buildDietShareCopy(summary, saved.goals);
+        const isGoalAchieved = !!saved.goals && saved.goals.length > 0;
+
+        Alert.alert(alertTitle, alertMessage, [
           { text: '다음에', style: 'cancel', onPress: () => navigation.goBack() },
           {
             text: '공유하기',
             onPress: async () => {
               await publishEnsuringConnection(couple.id, {
                 messageType: 'MEAL_CARD',
-                content: summary,
+                content: cardContent,
                 imageUrl: saved.photoUrl ?? undefined,
               });
-              toast.success('채팅에 공유했어요 ');
+              toast.success(isGoalAchieved ? '🎯 목표 달성 소식을 공유했어요 ' : '채팅에 공유했어요 ');
               navigation.goBack();
             },
           },

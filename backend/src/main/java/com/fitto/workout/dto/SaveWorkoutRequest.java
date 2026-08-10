@@ -19,8 +19,16 @@ public record SaveWorkoutRequest(
 
         String memo,
 
+        /** 이 세션이 시작된 내 루틴 템플릿 id — 스마트 루틴 동기화(Save-on-Finish)의 전제. 자유 운동은 생략 */
+        Long sourceRoutineId,
+
         @Valid
         @NotEmpty(message = "운동 세트를 1개 이상 입력해주세요.")
         List<WorkoutSetRequest> sets
 ) {
+    /** sourceRoutineId 없이 넘기던 이전 호출부와의 호환용 */
+    public SaveWorkoutRequest(LocalDate workoutDate, Long relationId, Integer totalDurationMin,
+                              String memo, List<WorkoutSetRequest> sets) {
+        this(workoutDate, relationId, totalDurationMin, memo, null, sets);
+    }
 }

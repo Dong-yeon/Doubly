@@ -241,6 +241,11 @@ export function DietScreen({ navigation }: Props) {
                     {nutrition.targetCalories ? '목표 수정' : '목표 설정 ›'}
                   </Text>
                 </View>
+                {nutrition.travelMode ? (
+                  <Text style={styles.travelModeBadge}>
+                    ✈️ 여행 모드 중 · {nutrition.travelModeTripTitle} — 목표는 잠깐 쉬어가요
+                  </Text>
+                ) : null}
                 <View style={styles.nutMain}>
                   {/* 단백질만 원형 게이지로 분리 — 운동 유저는 단백질 달성률에 가장 민감하다 */}
                   <ProteinRing consumed={nutrition.consumedProtein} target={nutrition.targetProtein} />
@@ -450,6 +455,7 @@ const styles = StyleSheet.create({
   nutSet: { fontSize: fontSize.caption, fontWeight: '700', color: colors.primary },
   nutMain: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   nutSecondary: { flex: 1, gap: spacing.xs },
+  travelModeBadge: { fontSize: fontSize.caption, fontWeight: '700', color: colors.accent, marginBottom: spacing.xs },
   nutRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   nutLabel: { width: 36, fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
   nutTrack: { flex: 1, height: 10, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
