@@ -121,6 +121,13 @@ export interface WorkoutSet {
   orderNo: number;
 }
 
+// 저장 시점에만 채워지는 PR(자기 최고 기록) 갱신 — 오늘/히스토리 등 재조회 시엔 항상 빈 배열
+export interface WorkoutPrHighlight {
+  exerciseName: string;
+  weightKg: number;
+  previousBestKg: number;
+}
+
 export interface Workout {
   id: number;
   userId: number;
@@ -129,6 +136,7 @@ export interface Workout {
   totalDurationMin?: number | null;
   memo?: string | null;
   sets: WorkoutSet[];
+  prs?: WorkoutPrHighlight[];
 }
 
 // 캘린더 응답 (4.4 GET /workout/calendar)
@@ -280,6 +288,13 @@ export interface PlaceVisit {
 
 // 식단 (meals) — 끼니별 사진/메모/칼로리
 export type MealType = 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK';
+// 저장 시점에만 채워지는 영양 목표 달성 — 오늘/히스토리 등 재조회 시엔 항상 빈 배열
+export interface MealGoalHighlight {
+  nutrient: 'protein';
+  consumed: number;
+  target: number;
+}
+
 export interface Meal {
   id: number;
   mealDate: string;
@@ -291,6 +306,7 @@ export interface Meal {
   carbs?: number | null;
   protein?: number | null;
   fat?: number | null;
+  goals?: MealGoalHighlight[];
   createdAt: string;
 }
 

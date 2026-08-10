@@ -5,8 +5,10 @@ import com.fitto.auth.service.AuthService;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.diet.domain.MealType;
 import com.fitto.diet.dto.MealResponse;
+import com.fitto.diet.dto.NutritionGoalRequest;
 import com.fitto.diet.dto.SaveMealRequest;
 import com.fitto.diet.service.MealService;
+import com.fitto.diet.service.NutritionService;
 import com.fitto.relation.dto.InviteCodeResponse;
 import com.fitto.relation.service.RelationService;
 import com.fitto.workout.dto.PartnerTodayResponse;
@@ -32,6 +34,8 @@ class MealFlowTest {
     RelationService relationService;
     @Autowired
     MealService mealService;
+    @Autowired
+    NutritionService nutritionService;
 
     private Long register(String email) {
         return authService.register(
@@ -40,6 +44,10 @@ class MealFlowTest {
 
     private SaveMealRequest sample(LocalDate date, MealType type) {
         return new SaveMealRequest(date, type, "닭가슴살 샐러드", null, 420, null, null, null);
+    }
+
+    private SaveMealRequest withProtein(LocalDate date, MealType type, int protein) {
+        return new SaveMealRequest(date, type, "단백질 식단", null, null, null, protein, null);
     }
 
     @Test
@@ -63,6 +71,43 @@ class MealFlowTest {
         List<MealResponse> history = mealService.findHistory(user, null);
         assertThat(history).hasSize(2);
         assertThat(history.get(0).id()).isGreaterThan(history.get(1).id());
+    }
+
+    @Test
+    void 단백질_목표를_막_채우면_감지된다() {
+        Long user = register("pg1@fitto.com");
+        nutritionService.setGoal(user, new NutritionGoalRequest(null, null, 100, null));
+
+        // 60g — 아직 목표(100g) 미달
+        MealResponse first = mealService.save(user, withProtein(LocalDate.now(), MealType.BREAKFAST, 60));
+        assertThat(first.goals()).isEmpty();
+
+        // 60 + 45 = 105g — 이번 기록으로 막 목표를 넘었다
+        MealResponse second = mealService.save(user, withProtein(LocalDate.now(), MealType.LUNCH, 45));
+        assertThat(second.goals()).hasSize(1);
+        assertThat(second.goals().get(0).nutrient()).isEqualTo("protein");
+        assertThat(second.goals().get(0).consumed()).isEqualTo(105);
+        assertThat(second.goals().get(0).target()).isEqualTo(100);
+    }
+
+    @Test
+    void 이미_달성한_날_또_기록해도_중복으로_감지되지_않는다() {
+        Long user = register("pg2@fitto.com");
+        nutritionService.setGoal(user, new NutritionGoalRequest(null, null, 50, null));
+
+        mealService.save(user, withProtein(LocalDate.now(), MealType.BREAKFAST, 60)); // 이미 달성
+        MealResponse third = mealService.save(user, withProtein(LocalDate.now(), MealType.DINNER, 20));
+
+        assertThat(third.goals()).isEmpty();
+    }
+
+    @Test
+    void 목표를_설정하지_않았으면_감지되지_않는다() {
+        Long user = register("pg3@fitto.com");
+        // setGoal 호출 없음 — 목표 미설정
+
+        MealResponse saved = mealService.save(user, withProtein(LocalDate.now(), MealType.LUNCH, 999));
+        assertThat(saved.goals()).isEmpty();
     }
 
     @Test
