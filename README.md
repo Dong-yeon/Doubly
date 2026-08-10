@@ -33,10 +33,16 @@ Doubly는 **관계(Relation) 기반 커플 라이프 공유 앱**입니다. 커�
 ## 모노레포 구조
 
 ```
-fitto/
+Doubly/
 ├── frontend/   # Expo (React Native) 앱
 └── backend/    # Spring Boot API + WebSocket 서버
 ```
+
+> **이름 표기 규칙**: 사람이 읽는 곳(문서·주석·UI)은 **Doubly**, 기계가 읽는 식별자는
+> **`fitto` 유지**입니다 — Java 패키지 `com.fitto`, 설정 prefix `fitto.*`,
+> 스토리지 키 `fitto.accessToken`, Railway 호스트 `fitto-production…`, Cloudinary preset
+> `fitto_unsigned` 등. 이들은 배포된 인프라·기존 사용자 세션과 짝이 맞아야 해서
+> **문자열만 바꾸면 깨집니다**. 자세한 목록은 [이름 전환 범위](#이름-전환-범위--doubly-로-바꿀-것과-두어야-할-것).
 
 ### frontend/ (Expo)
 
@@ -61,7 +67,7 @@ com.fitto
 ├── user/          # 사용자, Role(USER/TRAINER/ADMIN)
 ├── auth/          # 로그인·회원가입·JWT (phase 2)
 ├── relation/      # 관계: 커플 / 트레이너-회원, 배경·기념일·식단 목표 (phase 2)
-├── workout/       # 운동 기록·히스토리·캘린더·통계·AI 추천 (phase 3)
+├── workout/       # 운동 기록·히스토리·캘린더·통계·AI 추천 (phase 3, 세트 단위 전환 예정)
 ├── diet/          # 식단 기록·AI 사진 분석 (확장)
 ├── chat/          # 관계별 실시간 채팅 (phase 4)
 ├── streak/        # 개인·커플 스트릭 — 운동/식단 (phase 5)
@@ -73,12 +79,130 @@ com.fitto
 └── trainer/       # 트레이너 프로필·대시보드·루틴 (phase 6~7)
 ```
 
-DB 스키마는 `backend/src/main/resources/db/migration/` 의 Flyway 마이그레이션(V1~V26)에 정의되어
+DB 스키마는 `backend/src/main/resources/db/migration/` 의 Flyway 마이그레이션(V1~V27)에 정의되어
 있습니다. 핵심 테이블: users / relations / trainer_profiles / workouts / workout_sets /
 trainer_routines / chat_messages / streaks / device_tokens / meals / places / place_visits /
 feed_posts(+trip_id 앨범 연동) / feed_reactions / trips / trip_items(일자별 일정표) /
 trip_expenses(경비 정산) / trip_checklist_items(준비물 체크리스트) /
 password_reset_tokens(비밀번호 재설정 인증코드) / couple_events(커플 캘린더).
+
+> ⚠️ `workout_sets` 는 **이름과 달리 세트가 아니라 "운동 종목 1개"를 담는 테이블**입니다
+> (`sets` 컬럼에 세트 수를 넣는 요약 구조). 세트 단위 로그로의 전환 계획은
+> [운동 기록 모델](#운동-기록-모델--세트-단위-로그-전환-예정) 참고.
+
+## 이름 전환 범위 — Doubly 로 바꿀 것과 두어야 할 것
+
+프로젝트는 `Fitto` 에서 `Doubly` 로 리브랜딩됐지만, 코드·인프라 식별자까지 한꺼번에 바꾸면
+**배포된 서비스와 기존 사용자 세션이 깨집니다.** 경계는 아래와 같습니다.
+
+### ✅ Doubly 로 바꾼다 — 사람이 읽는 곳
+
+문서 제목·주석·UI 문구. 동작에 영향이 없습니다.
+
+| 위치 | 내용 |
+| --- | --- |
+| `README.md` / `PLAN.md` | 제목, 모노레포 트리 표기 |
+| `docs/RUNNING.md` | 가이드 제목 |
+| `docs/EAS_BUILD.md` | "홈 화면에 Doubly 아이콘 생성" |
+| `docker-compose.yml` · `backend/Dockerfile` | 최상단 주석 |
+| `frontend/src/theme/*.ts` · `constants/theme.ts` | "Doubly 디자인 토큰" 주석 |
+
+### ⛔ 두어야 한다 — 기계가 읽는 식별자
+
+| 대상 | 왜 두는가 | 바꾸려면 |
+| --- | --- | --- |
+| `com.fitto` 패키지 · `FittoApplication` · `build.gradle` 의 `group` | 히스토리 보존(기존 방침). 전체 import 경로가 딸려옴 | IDE 일괄 리팩터링 + `settings.gradle` · Dockerfile jar 경로 동시 변경 |
+| `application.yml` 의 `fitto:` prefix | `@ConfigurationProperties(prefix = "fitto.…")` 5개 클래스와 짝 (`GeminiProperties`·`JwtProperties`·`CorsProperties`·`ResendProperties`·Cloudinary) | yml·prod yml·Java 5개 + **Railway 환경변수**를 한 배포에 함께 |
+| `constants/config.ts` 의 `PROD_HOST = 'fitto-production.up.railway.app'` | **실제 배포 도메인**. 바꾸면 앱이 서버를 못 찾음 | Railway 에서 도메인 먼저 변경 → 앱 배포 |
+| `constants/config.ts` 의 `fitto.accessToken` / `fitto.refreshToken` | 기기 저장소 키. 바꾸면 **기존 사용자 전원 강제 로그아웃** | 굳이 바꾼다면 구 키를 읽어 신 키로 옮기는 1회성 마이그레이션 코드 필요 |
+| `fitto_unsigned` 업로드 preset · `CLOUDINARY_FOLDER=fitto` | Cloudinary 콘솔의 실제 값. 폴더를 바꿔도 기존 이미지 URL 은 옛 경로 그대로 | 콘솔에서 새 preset 생성 후 교체 (기존 이미지는 이동하지 않음) |
+| `kakaoMapHtml.ts` 의 `source: 'fitto-kakao-map'` · `window.fittoSearch` / `fittoSetPin` | WebView 내부 통신 프로토콜. `KakaoMap.tsx` 와 문자열이 정확히 짝맞아야 동작 | 5개 지점을 동시에. 외부에 노출되지 않아 **바꿀 실익이 없음** |
+| 로컬 DB `fitto` / 유저 `fitto` (`.env.example`·`docker-compose.yml`·`RUNNING.md`) | 개발자 로컬 볼륨과 짝 | 바꾸면 각자 로컬 DB 재생성 필요 — 팀 합의 후 |
+| `docs/RAILWAY.md` 의 `Dong-yeon/fitto`, `Started FittoApplication` | 실제 GitHub 저장소명과 실제 기동 로그 출력 | 저장소 rename / 클래스 rename 을 실제로 한 뒤에만 |
+
+> 요약: **표기(Doubly)와 식별자(fitto)를 분리**해서 관리합니다.
+> 식별자 전환은 리브랜딩이 아니라 **인프라 마이그레이션**이므로, 하려면 별도 작업으로 잡으세요.
+
+## 운동 기록 모델 — 세트 단위 로그 (전환 예정)
+
+> **상태: 착수 예정.** 현재 코드는 "종목 1개 = 1행 요약" 구조입니다.
+> 상세 스펙(스키마 V28·API·화면·체크리스트)은 **[PLAN.md — Workout Log v2](PLAN.md#feature-운동-기록-고도화-workout-log-v2--짐워크형-세트-로그)** 에 있습니다.
+
+### 지향점
+
+운동 기록의 **정확도는 짐워크 수준**으로 올리되, 짐워크 클론이 목적은 아닙니다.
+짐워크는 개인 운동일지 앱이고, Doubly 는 그 결과를 **둘이 나누는** 앱입니다.
+따라서 세트 로그·볼륨·1RM 은 *수단*이고, 목적은 **볼륨·PR·성장을 커플 피드·대결·스트릭에 태우는 것**입니다.
+이 구분이 흐려지면 Doubly 가 존재할 이유가 사라집니다.
+
+### 현재 구조가 막고 있는 것
+
+| 지점 | 현재 | 그래서 불가능한 것 |
+| --- | --- | --- |
+| `workout_sets` 1행 = **종목 1개** (`sets`·`reps`·`weight_kg` 를 하나로 요약) | 60kg×10 / 70kg×8 / 50kg×12 를 한 행에 못 담음 | 드롭세트·탑세트·피라미드, **점진적 과부하 추적** |
+| `exercise_name` 자유 문자열 | "벤치프레스"/"벤치 프레스"가 다른 종목이 됨 | 종목별 이력·PR·직전 기록 자동 로드 |
+| `category` = 근력/유산소/유연성 | **운동 종류**이지 부위가 아님 (UI 라벨만 "부위") | 가슴·등·하체 **부위별 볼륨 밸런스** |
+| 통계가 "운동한 날 수 / 세트 수" | 무게 정보가 집계에 안 들어감 | **총 볼륨**, 추정 1RM, 성장 그래프 |
+| **운동을 다 끝내고 한 번에 저장** (`POST /workout` 1회) | 종료 전까지 서버는 세션의 존재조차 모름 | **운동 중 실시간 기록**, 중량·세트 추천, 중단 복구 |
+| `workouts.total_duration_min` | 컬럼만 있고 아무도 채우지 않음 | 세션 실측 시간 |
+
+> `WorkoutSessionScreen` 은 이미 세트별 체크·휴식 타이머까지 짐워크형으로 만들어져 있지만,
+> ① 저장할 때 `sets: 완료 세트 개수` 로 **접어서** 보내기 때문에 세트별 무게·횟수가 버려지고,
+> ② 모든 상태가 컴포넌트 로컬 state 라 **앱을 내리거나 폰이 꺼지면 운동 전체가 사라집니다**.
+> **화면은 v2, 저장 구조는 v1** 인 상태 — 체감상 "비슷한데 뭔가 다른" 이유가 여기 있습니다.
+
+### 사후 저장 → 운동 중 저장
+
+구조적으로 가장 큰 갈림은 **저장 시점**입니다. 지금은 사후 저장(post-hoc)이라
+운동 중에 서버가 개입할 수 없고, 그래서 **중량 추천이 붙을 자리가 없습니다.**
+
+```
+현재  [운동 시작] ────── 전부 로컬 state ────── [종료] → POST /workout (1회)
+v2    [시작] POST /session → [세트마다] PUT /session/{id}/sets/{setId}
+                            [추천]     GET /session/{id}/next
+                          → [종료] POST /session/{id}/finish
+```
+
+- 세션이 서버에 살아있으면 **앱이 죽어도 이어서** 할 수 있고, **다음 세트 무게를 추천**할 수 있고,
+  상대에게 **"지금 운동 중"** 을 띄울 수 있습니다 (마지막 항목은 짐워크에 없는 Doubly 고유 기능)
+- 추천은 AI 가 아니라 **규칙 기반 더블 프로그레션**입니다 — 목표 횟수를 다 채우고 RPE ≤ 8 이면
+  다음에 +2.5kg(하체 +5kg), 2회 연속 미달이면 −10% 디로드. 세트마다 Gemini 를 부르는 건
+  느리고(수 초) 일일 한도를 먹습니다
+
+### 전환 원칙
+
+1. **세션 → 종목 → 세트** 3단 구조. `workout_sets` 를 `workout_exercises` 로 개명하고,
+   그 아래에 진짜 세트 테이블을 새로 만듭니다
+2. **종목 마스터(`exercises`)를 둡니다.** 부위(`body_part`) × 기구(`equipment`) 분류 +
+   사용자 커스텀 종목. 단 `workout_exercises.exercise_name` 은 **스냅샷으로 남깁니다** —
+   종목 이름이 바뀌어도 과거 기록은 당시 이름을 유지해야 합니다
+3. **볼륨·1RM 은 저장하지 않고 계산합니다.** 볼륨 `Σ(weight × reps)`, 추정 1RM 은
+   Epley `w × (1 + reps/30)`. 워밍업 세트와 유산소는 볼륨 집계에서 제외합니다
+4. **PR(`workout_records`)만 별도 저장**합니다. 매 조회마다 전체 스캔할 수 없기 때문
+5. **운동 중 세션은 `workouts.status` 로 구분합니다.** `IN_PROGRESS` 는 히스토리·통계·스트릭·
+   피드·대결에서 **전부 제외**해야 합니다. 운동을 시작만 했는데 스트릭이 오르면 안 됩니다
+6. **추천은 제안일 뿐 강제하지 않습니다.** placeholder 로만 띄우고 사용자가 덮어쓸 수 있어야 합니다.
+   계산은 프론트가 아니라 **서버**에서 — 규칙이 바뀔 때 앱 배포를 기다릴 수 없습니다
+7. **한 번에 다 하지 않습니다.** 스키마 → 종목 마스터/직전기록 → **운동 중 세션** → 추천 →
+   통계 → 커플 연동 순 (단계별 범위는 PLAN.md)
+
+### 착수 시 주의사항
+
+- **마이그레이션은 H2 에서도 돌아야 합니다.** 테스트가 운영과 동일한 Flyway 를 H2 에 적용합니다
+  (→ [테스트 스키마](#테스트-스키마)). 기존 요약 행을 세트 행으로 펼칠 때 `generate_series` 는
+  H2 에 없으므로 `VALUES` 조인을 씁니다
+- **`UserDataPurger` 를 같이 고쳐야 합니다.** 새 테이블(`workout_sets` 신규 · `workout_records` ·
+  커스텀 `exercises`)이 삭제 순서에서 빠지면 **회원 탈퇴 전체가 FK 위반으로 실패**합니다
+  (→ [계정 삭제](#계정-삭제))
+- **`status` 필터를 빠뜨리면 조용히 망가집니다.** `WorkoutRepository` 의 조회 쿼리 6개
+  (`findByUserIdAndWorkoutDate…`·`findHistory`·`findWorkoutDates`·`countDistinctWorkoutDates`·
+  `findRecentForFeed`·`findLastWorkoutDate`)에 `status = 'COMPLETED'` 를 전부 넣어야 합니다
+- **테스트 3종이 `workout_sets` 를 직접 씁니다** — `WorkoutFlowTest` · `StreakFlowTest` ·
+  `FeedFlowTest` 픽스처를 함께 수정해야 합니다
+- **헬스장은 지하가 많습니다.** 세트 확정은 오프라인 큐 + 재연결 flush 가 필요하고,
+  `setId` 기준 **멱등 upsert** 여야 중복 저장이 안 생깁니다
+- **대결(`couple_challenges`) 기준을 볼륨으로 바꿀 때는 절대값을 쓰지 마세요.** 체급 차이 때문에
+  불공정합니다. **직전 4주 대비 증가율**이 커플 대결에 맞습니다
 
 ## 관계 모델 — 커플 · 패밀리(아이) 공존
 
@@ -214,7 +338,7 @@ RelationType
 | --- | --- | --- |
 | 1단계 | Expo + Spring Boot 세팅, DB 구성, 공통 구조 | ✅ 완료 |
 | 2단계 | 인증(이메일·JWT) + 커플 연결 (relations 기반) | ✅ 완료 |
-| 3단계 | 운동 기록, 히스토리, 캘린더 | ✅ 완료 |
+| 3단계 | 운동 기록, 히스토리, 캘린더 | ✅ 완료 (종목 단위 요약 — v2 에서 세트 단위로 전환) |
 | 4단계 | 실시간 채팅(STOMP), 알림 추상화 | ✅ 완료 |
 | 5단계 | 스트릭(개인·커플), 홈 화면 완성 | ✅ 완료 |
 | 6~7단계 | 트레이너 등록·대시보드·루틴 배정 | ✅ 완료 (결제만 출시 후) |
@@ -241,6 +365,14 @@ RelationType
 | 확장 | 구글 로그인 (가입까지 한 번에, 약관 동의는 게이트에서) | ✅ 완료 (클라이언트 id 등록 필요) |
 | 확장 | 다크모드 (시스템 테마 추종 — 실행 중 변경은 앱 재시작 시 반영) | ✅ 완료 |
 | 확장 | 채팅 스티커 (16종 큐레이션 — 말풍선 없이 크게) | ✅ 완료 |
+| 운동 v2 | 세트 단위 스키마 전환 (V28 — `workout_exercises` + `workout_sets`) — PLAN.md | 🚧 예정 |
+| 운동 v2 | 운동 종목 마스터(`exercises`, 부위×기구) + 종목 선택 화면 | 🚧 예정 |
+| 운동 v2 | 직전 기록 자동 로드 (종목 선택 시 지난번 세트 채움) | 🚧 예정 |
+| 운동 v2 | **운동 중 세션** — 세트마다 서버 저장, 중단 복구, 오프라인 큐 (`workouts.status`) | 🚧 예정 |
+| 운동 v2 | **중량·세트 추천** — 규칙 기반 더블 프로그레션 + 워밍업 세트 제안 + 5×5/3×10 프리셋 | 🚧 예정 |
+| 운동 v2 | 총 볼륨 · 추정 1RM · 부위별 볼륨 밸런스 통계 | 🚧 예정 |
+| 운동 v2 | 세트 유형(워밍업/드롭/실패) · RPE · 세션 시간 실측 | 🚧 예정 |
+| 운동 v2 | 개인 기록(PR) 감지 + 커플 연동 (실시간 "운동 중"·피드 볼륨·PR 푸시·대결 기준 전환) | 🚧 예정 |
 | 출시 후 | 트레이너 결제, 카카오·애플 로그인 | 예정 |
 | 패밀리(보류) | 관계 모델 N인 확장 (`relation_members` 조인 테이블) | ⏸ 보류 |
 | 패밀리(보류) | 아이 프로필 (관리 대상 → 연동 계정 승격) | ⏸ 보류 |

@@ -1,4 +1,4 @@
-# Fitto 로컬 실행 가이드
+# Doubly 로컬 실행 가이드
 
 백엔드(Spring Boot) + 프론트엔드(Expo)를 로컬에서 실제로 구동하는 방법입니다.
 (이 구성은 실제 PostgreSQL 16 + Redis 7 에서 부팅 및 핵심 API end-to-end 동작이 검증되었습니다.)
