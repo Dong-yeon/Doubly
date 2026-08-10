@@ -52,6 +52,10 @@ public class Trip {
     @Column(name = "created_by", nullable = false)
     private Long createdBy;
 
+    /** 여행 모드 — PLAN.md Travel Mode. 켜져 있고 오늘이 여행 기간 안이면 식단 목표를 숨긴다. */
+    @Column(name = "travel_mode_enabled", nullable = false)
+    private boolean travelModeEnabled;
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -66,6 +70,7 @@ public class Trip {
         this.memo = memo;
         this.coverImageUrl = coverImageUrl;
         this.createdBy = createdBy;
+        this.travelModeEnabled = false;
     }
 
     /** 부분 수정 — null 이 아닌 값만 반영 (커플 둘 다 수정 가능) */
@@ -76,5 +81,10 @@ public class Trip {
         if (endDate != null) this.endDate = endDate;
         if (memo != null) this.memo = memo;
         if (coverImageUrl != null) this.coverImageUrl = coverImageUrl;
+    }
+
+    /** 여행 모드 토글 — 값을 저장/복원하지 않고 켜고 끄기만 한다. */
+    public void setTravelMode(boolean enabled) {
+        this.travelModeEnabled = enabled;
     }
 }

@@ -196,6 +196,20 @@ public class TripService {
         coupleEventPublisher.publish(trip.getCoupleId(), CoupleEvent.TRIP);
     }
 
+    /**
+     * 여행 모드 토글 (PLAN.md Travel Mode) — 값을 계산·저장하지 않고 켜고 끄기만 한다.
+     * 켜져 있고 오늘이 여행 기간 안이면 {@link com.fitto.diet.service.NutritionService} 가
+     * 식단 목표를 숨긴다. 식단 대시보드도 즉시 갱신되도록 DIET_GOAL 이벤트를 함께 발행한다.
+     */
+    @Transactional
+    public TripResponse setTravelMode(Long userId, Long tripId, boolean enabled) {
+        Trip trip = getCoupleTrip(userId, tripId);
+        trip.setTravelMode(enabled);
+        coupleEventPublisher.publish(trip.getCoupleId(), CoupleEvent.TRIP);
+        coupleEventPublisher.publish(trip.getCoupleId(), CoupleEvent.DIET_GOAL);
+        return TripResponse.of(trip, placeRepository.countByTripId(trip.getId()));
+    }
+
     // ---- 일자별 일정표 (Itinerary) ----
 
     /** 일정 목록 (ITEM-01) — Day별 그룹. */

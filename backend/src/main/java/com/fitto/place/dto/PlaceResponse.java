@@ -1,6 +1,7 @@
 package com.fitto.place.dto;
 
 import com.fitto.place.domain.Place;
+import com.fitto.place.domain.PlaceDietTag;
 import com.fitto.place.domain.PlaceStatus;
 
 import java.math.BigDecimal;
@@ -16,6 +17,7 @@ public record PlaceResponse(
         BigDecimal lng,
         String category,
         PlaceStatus status,
+        PlaceDietTag dietTag,
         Long addedBy,
         Long tripId,
         long visitCount,
@@ -25,7 +27,7 @@ public record PlaceResponse(
 ) {
     public static PlaceResponse of(Place p, long visitCount, Double avgRating, LocalDate lastVisitedAt) {
         return new PlaceResponse(p.getId(), p.getName(), p.getAddress(), p.getLat(), p.getLng(),
-                p.getCategory(), p.getStatus(), p.getAddedBy(), p.getTripId(),
+                p.getCategory(), p.getStatus(), p.getDietTag(), p.getAddedBy(), p.getTripId(),
                 visitCount, avgRating, lastVisitedAt, p.getCreatedAt());
     }
 }

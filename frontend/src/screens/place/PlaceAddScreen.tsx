@@ -18,7 +18,7 @@ import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { useDirtyGuard } from '../../hooks/useDirtyGuard';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { PlaceStatus } from '../../types';
+import type { PlaceDietTag, PlaceStatus } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<PlaceStackParamList, 'PlaceAdd'>;
@@ -30,11 +30,19 @@ const STATUS_OPTIONS: { value: PlaceStatus; label: string }[] = [
   { value: 'VISITED', label: '다녀왔어요' },
 ];
 
+// 클린식/치팅데이 구분 — 평소엔 클린식, 주말·보상 데이트엔 치팅데이 맛집을 따로 찾는 수요 반영
+const DIET_TAG_OPTIONS: { value: PlaceDietTag; label: string }[] = [
+  { value: 'NEUTRAL', label: '구분 없음' },
+  { value: 'CLEAN', label: '🥗 클린식' },
+  { value: 'CHEAT', label: '🍔 치팅데이' },
+];
+
 export function PlaceAddScreen({ navigation }: Props) {
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
   const [category, setCategory] = useState<string | null>(null);
   const [status, setStatus] = useState<PlaceStatus>('WISHLIST');
+  const [dietTag, setDietTag] = useState<PlaceDietTag>('NEUTRAL');
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -103,6 +111,7 @@ export function PlaceAddScreen({ navigation }: Props) {
         lng: coords?.lng,
         category: category ?? undefined,
         status,
+        dietTag,
       });
       haptics.success();
       toast.success('장소를 추가했어요 ');
@@ -193,6 +202,19 @@ export function PlaceAddScreen({ navigation }: Props) {
                 onPress={() => setStatus(o.value)}
                 fill
               />
+            ))}
+          </View>
+
+          <Text style={styles.label}>식단 구분 (선택) — 평소엔 클린식, 보상 데이트엔 치팅데이로 찾아볼 수 있어요</Text>
+          <View style={styles.chipRow}>
+            {DIET_TAG_OPTIONS.map((o) => (
+              <TouchableOpacity
+                key={o.value}
+                style={[styles.statusChip, dietTag === o.value && styles.chipActive]}
+                onPress={() => setDietTag(o.value)}
+              >
+                <Text style={[styles.chipText, dietTag === o.value && styles.chipTextActive]}>{o.label}</Text>
+              </TouchableOpacity>
             ))}
           </View>
 

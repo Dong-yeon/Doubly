@@ -47,6 +47,10 @@ public class User extends BaseTimeEntity {
     @Column(length = 10)
     private Gender gender;
 
+    /** 키(cm) — 실시간 에너지 밸런스(기초대사량) 계산용. 가입 시 받지 않아 NULL 허용 */
+    @Column(name = "height_cm")
+    private Integer heightCm;
+
     @Column(name = "profile_image_url", length = 500)
     private String profileImageUrl;
 
@@ -100,6 +104,13 @@ public class User extends BaseTimeEntity {
     public void updateProfile(String name, String profileImageUrl) {
         if (name != null) this.name = name;
         if (profileImageUrl != null) this.profileImageUrl = profileImageUrl;
+    }
+
+    /** 신체 정보 수정 — 생년월일/성별/키(제공된 값만 반영). 에너지 밸런스 계산에 쓰인다. */
+    public void updateBodyProfile(LocalDate birthDate, Gender gender, Integer heightCm) {
+        if (birthDate != null) this.birthDate = birthDate;
+        if (gender != null) this.gender = gender;
+        if (heightCm != null) this.heightCm = heightCm;
     }
 
     /** 필수 약관(이용약관·개인정보) 동의 기록 — 가입 시점에 호출된다. */

@@ -9,6 +9,8 @@ export interface KakaoMapMarker {
   lat: number;
   lng: number;
   title: string;
+  /** 커스텀 핀 색상(hex) — 미지정 시 카카오 기본(빨강) 핀. 예: 클린식/치팅데이 구분 */
+  color?: string;
 }
 
 /** 카카오 플레이스 키워드 검색 결과 1건 */
@@ -129,6 +131,16 @@ kakao.maps.load(function () {
     if (d.type === 'markers') { window.fittoSetMarkers(d.markers, d.path, false); }
   });
 
+  // 색상 지정 핀 — 원형 SVG 를 데이터 URI 로 인라인 렌더링 (외부 이미지 호스팅 불필요)
+  function pinImage(color) {
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28">' +
+      '<circle cx="14" cy="14" r="10" fill="' + color + '" stroke="#ffffff" stroke-width="3"/></svg>';
+    var url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    return new kakao.maps.MarkerImage(url, new kakao.maps.Size(28, 28), {
+      offset: new kakao.maps.Point(14, 14)
+    });
+  }
+
   /*
    * 마커·동선 그리기를 함수로 둔다.
    *
@@ -146,7 +158,9 @@ kakao.maps.load(function () {
     markers.forEach(function (m) {
       var pos = new kakao.maps.LatLng(m.lat, m.lng);
       bounds.extend(pos);
-      var marker = new kakao.maps.Marker({ map: map, position: pos, title: m.title });
+      var markerOpts = { map: map, position: pos, title: m.title };
+      if (m.color) { markerOpts.image = pinImage(m.color); }
+      var marker = new kakao.maps.Marker(markerOpts);
       kakao.maps.event.addListener(marker, 'click', function () { post({ type: 'marker', id: m.id }); });
       drawn.push(marker);
       var label = new kakao.maps.CustomOverlay({

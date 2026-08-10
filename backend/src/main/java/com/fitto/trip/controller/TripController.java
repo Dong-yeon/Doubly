@@ -6,6 +6,7 @@ import com.fitto.trip.dto.GenerateItineraryRequest;
 import com.fitto.trip.dto.ReorderTripItemsRequest;
 import com.fitto.trip.dto.SaveTripItemRequest;
 import com.fitto.trip.dto.SaveTripRequest;
+import com.fitto.trip.dto.SetTravelModeRequest;
 import com.fitto.trip.dto.TripDayResponse;
 import com.fitto.trip.dto.TripDetailResponse;
 import com.fitto.trip.dto.TripItemResponse;
@@ -83,6 +84,15 @@ public class TripController {
                                          @PathVariable Long placeId) {
         tripService.detachPlace(user.id(), id, placeId);
         return ApiResponse.success(null, "장소를 여행에서 뺐습니다.");
+    }
+
+    /** 여행 모드 토글 (PLAN.md Travel Mode) — 켜져 있으면 여행 기간 동안 식단 목표를 숨긴다. */
+    @PutMapping("/{id}/travel-mode")
+    public ApiResponse<TripResponse> setTravelMode(@AuthenticationPrincipal AuthUser user,
+                                                   @PathVariable Long id,
+                                                   @Valid @RequestBody SetTravelModeRequest request) {
+        TripResponse trip = tripService.setTravelMode(user.id(), id, request.enabled());
+        return ApiResponse.success(trip, trip.travelModeEnabled() ? "여행 모드를 켰어요." : "여행 모드를 껐어요.");
     }
 
     // ---- 일자별 일정표 (Itinerary) ----

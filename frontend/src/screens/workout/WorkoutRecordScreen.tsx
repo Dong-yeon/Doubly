@@ -21,6 +21,7 @@ import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { toDateString } from '../../utils/date';
+import { buildWorkoutShareCopy } from '../../utils/workoutShare';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 
@@ -165,21 +166,26 @@ export function WorkoutRecordScreen({ navigation, route }: Props) {
       navigation.goBack();
 
       // 커플이 연결돼 있으면 채팅 공유 제안 (CHAT-04)
+      // PR(자기 최고 기록) 종목이 있으면 확인창·카드 문구를 다르게 만든다 (saved.prs 는
+      // 저장 응답에만 실리는 일회성 정보 — WorkoutService.detectPrs 참고)
       if (couple?.id) {
         const summary = `${filled.map((s) => s.exerciseName.trim()).join(', ')}${
           duration ? ` · ${duration}분` : ''
         }`;
-        Alert.alert('운동 완료! ', '이 운동을 채팅에 공유할까요?', [
+        const { alertTitle, alertMessage, cardContent } = buildWorkoutShareCopy(summary, saved.prs);
+        const isPr = !!saved.prs && saved.prs.length > 0;
+
+        Alert.alert(alertTitle, alertMessage, [
           { text: '다음에', style: 'cancel' },
           {
             text: '공유하기',
             onPress: async () => {
               await publishEnsuringConnection(couple.id, {
                 messageType: 'WORKOUT_CARD',
-                content: summary,
+                content: cardContent,
                 workoutId: saved.id,
               });
-              toast.success('채팅에 공유했어요 ');
+              toast.success(isPr ? '🔥 PR 소식을 공유했어요 ' : '채팅에 공유했어요 ');
             },
           },
         ]);

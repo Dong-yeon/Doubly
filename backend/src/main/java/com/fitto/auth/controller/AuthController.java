@@ -90,7 +90,7 @@ public class AuthController {
     public ApiResponse<UserResponse> updateMe(@AuthenticationPrincipal AuthUser user,
                                               @Valid @RequestBody UpdateProfileRequest request) {
         return ApiResponse.success(
-                authService.updateMe(user.id(), request.name(), request.profileImageUrl()),
+                authService.updateMe(user.id(), request),
                 "프로필이 수정되었습니다.");
     }
 

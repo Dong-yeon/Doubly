@@ -32,6 +32,8 @@ import { SpellCheckBar } from '../../components/SpellCheckBar';
 import { useSettingsStore } from '../../store/settingsStore';
 import { applySuggestion, checkKoreanSpelling } from '../../utils/koreanSpellCheck';
 import { chatApi } from '../../api/chat';
+import { isPrShareContent } from '../../utils/workoutShare';
+import { isGoalShareContent } from '../../utils/dietShare';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { ChatMessage } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
@@ -240,6 +242,10 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     const isSticker = item.messageType === 'STICKER';
     const isWorkout = item.messageType === 'WORKOUT_CARD';
     const isMeal = item.messageType === 'MEAL_CARD';
+    // PR(자기 최고 기록) 공유 카드 — 문구 접두어로 구분한다(workoutShare.ts, 단일 출처)
+    const isPr = isWorkout && isPrShareContent(item.content);
+    // 영양 목표 달성 공유 카드 — 문구 접두어로 구분한다(dietShare.ts, 단일 출처)
+    const isGoal = isMeal && isGoalShareContent(item.content);
     // 삭제된 메시지는 자리만 남기고 내용을 감춘다 (답장·리액션 참조가 살아있다)
     if (item.deleted) {
       return (
@@ -283,13 +289,25 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             <Image source={{ uri: item.imageUrl! }} style={styles.msgImage} resizeMode="cover" />
           </Pressable>
         ) : isWorkout ? (
-          <View style={[styles.workoutCard, mine ? styles.workoutCardMine : styles.workoutCardTheirs]}>
-            <Text style={styles.workoutBadge}>운동 기록</Text>
+          <View style={[
+            styles.workoutCard,
+            mine ? styles.workoutCardMine : styles.workoutCardTheirs,
+            isPr && styles.workoutCardPr,
+          ]}>
+            <Text style={[styles.workoutBadge, isPr && styles.workoutBadgePr]}>
+              {isPr ? 'PR 달성 🔥' : '운동 기록'}
+            </Text>
             <Text style={[styles.workoutText, mine && styles.workoutTextMine]}>{item.content}</Text>
           </View>
         ) : isMeal ? (
-          <View style={[styles.mealCard, mine ? styles.mealCardMine : styles.mealCardTheirs]}>
-            <Text style={styles.mealBadge}>식단</Text>
+          <View style={[
+            styles.mealCard,
+            mine ? styles.mealCardMine : styles.mealCardTheirs,
+            isGoal && styles.mealCardGoal,
+          ]}>
+            <Text style={[styles.mealBadge, isGoal && styles.mealBadgeGoal]}>
+              {isGoal ? '목표 달성 🎯' : '식단'}
+            </Text>
             {item.imageUrl ? (
               <Pressable
                 onPress={() => openImage(item.imageUrl!)}
@@ -545,6 +563,9 @@ const styles = themedStyles((colors) => ({
   workoutCardMine: { backgroundColor: colors.secondarySoft, borderColor: colors.secondary },
   workoutCardTheirs: { backgroundColor: colors.surface, borderColor: colors.secondary },
   workoutBadge: { fontSize: fontSize.caption, fontWeight: '800', color: colors.secondary, marginBottom: 2 },
+  // PR 카드 — 같은 카드 레이아웃에 골드 강조만 얹는다(couple 토큰 = Gold, 성취를 나타내는 색)
+  workoutCardPr: { borderColor: colors.couple, backgroundColor: colors.meBg },
+  workoutBadgePr: { color: colors.couple },
   workoutText: { fontSize: fontSize.subtitle, color: colors.textPrimary, fontWeight: '600' },
   workoutTextMine: { color: colors.textPrimary },
   mealCard: { paddingVertical: 10, paddingHorizontal: spacing.md, borderRadius: radius.lg, borderWidth: 1.5, maxWidth: 240, gap: 6 },
@@ -552,6 +573,9 @@ const styles = themedStyles((colors) => ({
   mealCardTheirs: { backgroundColor: colors.surface, borderColor: colors.accent },
   // 카드 보더(accent)와 같은 계열로 — 팔레트 밖 앰버는 다크에서 대비가 무너졌다
   mealBadge: { fontSize: fontSize.caption, fontWeight: '800', color: colors.accent },
+  // 목표 달성 카드 — 같은 카드 레이아웃에 골드 강조만 얹는다(PR 카드와 같은 톤)
+  mealCardGoal: { borderColor: colors.couple, backgroundColor: colors.meBg },
+  mealBadgeGoal: { color: colors.couple },
   mealImage: { width: 208, height: 156, borderRadius: radius.md, backgroundColor: colors.surfaceAlt },
   // inverted 목록의 footer = 맨 위(과거 방향) — 과거 페이지 로딩 스피너
   olderSpinner: { paddingVertical: spacing.md },

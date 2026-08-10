@@ -6,11 +6,13 @@ import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.notification.NotificationService;
 import com.fitto.diet.domain.Meal;
+import com.fitto.diet.domain.NutritionGoal;
 import com.fitto.diet.dto.CoupleMealGoalResponse;
 import com.fitto.diet.dto.MealResponse;
 import com.fitto.diet.dto.MealStatsResponse;
 import com.fitto.diet.dto.SaveMealRequest;
 import com.fitto.diet.repository.MealRepository;
+import com.fitto.diet.repository.NutritionGoalRepository;
 import com.fitto.relation.domain.Relation;
 import com.fitto.relation.domain.RelationStatus;
 import com.fitto.relation.domain.RelationType;
@@ -45,6 +47,7 @@ public class MealService {
     private static final int HISTORY_PAGE_SIZE = 20;
 
     private final MealRepository mealRepository;
+    private final NutritionGoalRepository nutritionGoalRepository;
     private final RelationRepository relationRepository;
     private final UserRepository userRepository;
     private final StreakService streakService;
@@ -52,12 +55,14 @@ public class MealService {
     private final NotificationService notificationService;
 
     public MealService(MealRepository mealRepository,
+                       NutritionGoalRepository nutritionGoalRepository,
                        RelationRepository relationRepository,
                        UserRepository userRepository,
                        StreakService streakService,
                        CoupleEventPublisher coupleEventPublisher,
                        NotificationService notificationService) {
         this.mealRepository = mealRepository;
+        this.nutritionGoalRepository = nutritionGoalRepository;
         this.relationRepository = relationRepository;
         this.userRepository = userRepository;
         this.streakService = streakService;
@@ -72,6 +77,11 @@ public class MealService {
         }
         // 목표 달성 판정용 — 이 저장이 해당 날짜의 첫 기록인지 (중복 축하 방지)
         boolean firstMealOfDay = !mealRepository.existsByUserIdAndMealDate(userId, req.mealDate());
+        // 영양 목표 판정용 — 이번 기록을 반영하기 전, 그 날짜까지 먹은 단백질(g) 합계.
+        // 새 Meal 을 저장하기 전에 구해야 "이전"과 "이번 기록 반영 후"를 나눌 수 있다.
+        int proteinBeforeThisMeal = mealRepository.findByUserIdAndMealDateOrderByIdAsc(userId, req.mealDate())
+                .stream().mapToInt(m -> nz(m.getProtein())).sum();
+
         Meal meal = Meal.builder()
                 .userId(userId)
                 .mealDate(req.mealDate())
@@ -85,12 +95,54 @@ public class MealService {
                 .build();
         mealRepository.save(meal);
 
+        List<MealResponse.GoalHighlight> goals =
+                detectGoalsAchieved(userId, proteinBeforeThisMeal, meal.getProtein());
+
+        afterMealsAdded(userId, meal.getMealDate(), firstMealOfDay, false);
+        return MealResponse.from(meal, goals);
+    }
+
+    /**
+     * 지정한 날짜(기본: 어제)의 식단을 오늘 날짜로 통째로 복사 — 매일 비슷한 식단을 먹는
+     * 운동 유저를 위한 3초 퀵 로깅. 사진/메모/칼로리/매크로를 그대로 들고 오고, 끼니 종류도 유지한다.
+     */
+    @Transactional
+    public List<MealResponse> copyFrom(Long userId, LocalDate sourceDate) {
+        if (sourceDate.isAfter(LocalDate.now())) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "미래 날짜는 불러올 수 없습니다.");
+        }
+        List<Meal> sourceMeals = mealRepository.findByUserIdAndMealDateOrderByIdAsc(userId, sourceDate);
+        if (sourceMeals.isEmpty()) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "해당 날짜에는 식단 기록이 없어요.");
+        }
+        LocalDate today = LocalDate.now();
+        boolean firstMealOfDay = !mealRepository.existsByUserIdAndMealDate(userId, today);
+        List<Meal> copies = sourceMeals.stream()
+                .map(m -> Meal.builder()
+                        .userId(userId)
+                        .mealDate(today)
+                        .mealType(m.getMealType())
+                        .memo(m.getMemo())
+                        .photoUrl(m.getPhotoUrl())
+                        .calories(m.getCalories())
+                        .carbs(m.getCarbs())
+                        .protein(m.getProtein())
+                        .fat(m.getFat())
+                        .build())
+                .toList();
+        mealRepository.saveAll(copies);
+        afterMealsAdded(userId, today, firstMealOfDay, true);
+        return copies.stream().map(MealResponse::from).toList();
+    }
+
+    /** 저장/복사 공통 후처리 — 스트릭 갱신 + 커플 실시간 반영/응원 푸시(+목표 달성 축하). */
+    private void afterMealsAdded(Long userId, LocalDate mealDate, boolean firstMealOfDay, boolean copied) {
         // 식단 스트릭 갱신 (개인 + 커플) — 별도 트랜잭션, 실패해도 식단 저장은 유지
         try {
-            streakService.updateOnMeal(userId, meal.getMealDate());
+            streakService.updateOnMeal(userId, mealDate);
         } catch (RuntimeException e) {
             log.warn("식단 스트릭 갱신 실패 (기록은 저장됨) userId={}, date={}: {}",
-                    userId, meal.getMealDate(), e.getMessage());
+                    userId, mealDate, e.getMessage());
         }
 
         // 커플 실시간 반영 + 응원 푸시 (+ 목표 달성 축하)
@@ -100,16 +152,42 @@ public class MealService {
                     coupleEventPublisher.publish(c.getId(), CoupleEvent.DIET);
                     Long partnerId = c.partnerOf(userId);
                     String myName = userRepository.findById(userId).map(u -> u.getName()).orElse("상대방");
-                    if (justAchievedGoal(c, userId, partnerId, req.mealDate(), firstMealOfDay)) {
+                    if (justAchievedGoal(c, userId, partnerId, mealDate, firstMealOfDay)) {
                         notificationService.notify(partnerId, "이번 주 식단 목표 달성!",
                                 myName + "님과 함께 주 " + c.getDietGoalDays() + "일 목표를 채웠어요!");
+                    } else if (copied) {
+                        notificationService.notify(partnerId, "오늘도 같은 식단!",
+                                myName + "님이 어제 식단을 그대로 기록했어요!");
                     } else {
                         notificationService.notify(partnerId, "오늘 뭐 먹었을까?",
                                 myName + "님이 식단을 기록했어요!");
                     }
                 });
+    }
 
-        return MealResponse.from(meal);
+    /**
+     * 영양 목표 달성 감지 — 이번 기록으로 그 날짜의 단백질 누적 섭취가 <b>막</b> 목표를
+     * 넘겼는지. 이전에 이미 넘겼었다면(그 날 이미 축하했으므로) 다시 알리지 않는다.
+     *
+     * <p>목표(target)가 설정 안 돼 있으면(대시보드 목표 미사용) 볼 게 없다.
+     * 지금은 단백질만 본다 — 다른 매크로는 필요해지면 같은 방식으로 여기에 추가한다.
+     */
+    private List<MealResponse.GoalHighlight> detectGoalsAchieved(Long userId, int proteinBefore,
+                                                                  Integer proteinInThisMeal) {
+        Integer target = nutritionGoalRepository.findById(userId)
+                .map(NutritionGoal::getTargetProtein).orElse(null);
+        if (target == null || target <= 0) {
+            return List.of();
+        }
+        int consumed = proteinBefore + nz(proteinInThisMeal);
+        if (proteinBefore >= target || consumed < target) {
+            return List.of();
+        }
+        return List.of(new MealResponse.GoalHighlight("protein", consumed, target));
+    }
+
+    private int nz(Integer v) {
+        return v != null ? v : 0;
     }
 
     /**

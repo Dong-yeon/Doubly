@@ -1,6 +1,8 @@
-/** 운동 메인 — 설계서 2.4 (오늘 기록 + 트레이너 루틴 + 히스토리 + 캘린더 진입). WORKOUT-02/03 */
+/** 운동 메인 — 설계서 2.4 (오늘 기록 + 히스토리 + 캘린더 진입). WORKOUT-02/03
+ *  트레이너가 배정한 루틴은 이 화면에서 뺐다 — 필요하면 git 히스토리(이 파일의 이전 버전)에서
+ *  복원할 수 있다. 트레이너 기능 자체는 src/screens/trainer 에 살아있다. */
 import React, { useCallback, useState } from 'react';
-import { FlatList, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -10,13 +12,13 @@ import { Button } from '../../components/Button';
 import { WorkoutCard } from '../../components/WorkoutCard';
 import { EmptyState } from '../../components/EmptyState';
 import { useWorkoutStore } from '../../store/workoutStore';
+import { useRelationStore } from '../../store/relationStore';
 import { WorkoutDietSegment } from '../../components/WorkoutDietSegment';
-import { trainerApi } from '../../api/trainer';
+import { QuickLinkChips } from '../../components/QuickLinkChips';
+import { streakApi } from '../../api/streak';
 import { getErrorMessage } from '../../utils/error';
-import { toast } from '../../store/toastStore';
-import { haptics } from '../../utils/haptics';
-import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { TrainerRoutine, Workout } from '../../types';
+import { colors, fontSize, spacing } from '../../constants/theme';
+import type { Streak, Workout } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { layout } from '../../theme/layout';
 
@@ -25,41 +27,26 @@ type Props = NativeStackScreenProps<WorkoutStackParamList, 'WorkoutMain'>;
 export function WorkoutScreen({ navigation }: Props) {
   const { today, history, loading, loadingMore, fetchToday, fetchHistory, loadMoreHistory, remove } =
     useWorkoutStore();
-  /* [트레이너 기능 일시 비활성화] 되돌리려면 이 블록과 아래 "트레이너 루틴" 섹션 주석을 해제하고
-     useFocusEffect 에 fetchRoutines() 를 다시 넣는다.
-  // 트레이너가 배정한 미완료 루틴 (트레이너 미연결이면 빈 배열)
-  const [routines, setRoutines] = useState<TrainerRoutine[]>([]);
-  const [completingId, setCompletingId] = useState<number | null>(null);
+  // 커플 연결 여부 — "함께 N일"은 연결됐을 때만 의미가 있다 (식단 탭과 동일한 기준)
+  const couple = useRelationStore((s) => s.couple);
+  const connected = !!couple?.partner;
+  const [myStreak, setMyStreak] = useState<Streak | null>(null);
+  const [coupleStreak, setCoupleStreak] = useState<Streak | null>(null);
 
-  const fetchRoutines = useCallback(async () => {
-    try {
-      const all = await trainerApi.myRoutines();
-      setRoutines(all.filter((r) => !r.isCompleted).slice(0, 5));
-    } catch {
-      setRoutines([]); // 루틴은 부가 정보 — 실패해도 화면은 정상 동작
+  // 운동 스트릭 — 부가 정보라 실패해도 화면은 정상 동작 (0일로 표시)
+  const refreshStreaks = useCallback(() => {
+    streakApi.me().then(setMyStreak).catch(() => setMyStreak(null));
+    if (connected) {
+      streakApi.couple().then(setCoupleStreak).catch(() => setCoupleStreak(null));
     }
-  }, []);
-
-  const onCompleteRoutine = async (routine: TrainerRoutine) => {
-    setCompletingId(routine.id);
-    try {
-      await trainerApi.completeRoutine(routine.id);
-      haptics.success();
-      toast.success(`"${routine.title}" 완료! 트레이너에게 알렸어요 `);
-      fetchRoutines();
-    } catch (e) {
-      toast.error(getErrorMessage(e, '루틴 완료 처리에 실패했어요.'));
-    } finally {
-      setCompletingId(null);
-    }
-  };
-  */
+  }, [connected]);
 
   useFocusEffect(
     useCallback(() => {
       fetchToday();
       fetchHistory();
-    }, [fetchToday, fetchHistory]),
+      refreshStreaks();
+    }, [fetchToday, fetchHistory, refreshStreaks]),
   );
 
   const onLongPress = (w: Workout) => {
@@ -82,33 +69,18 @@ export function WorkoutScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <WorkoutDietSegment active="workout" />
-      {/* 링크 6개 — 좁은 화면(320px)에선 한 줄에 안 들어가 가로 스크롤로 둔다.
-          wrap 으로 두면 "캘린더" 만 둘째 줄에 홀로 떨어져 깨져 보인다. */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.linksScroll}
-        contentContainerStyle={styles.linksRow}
-      >
-        <TouchableOpacity style={styles.linkHit} onPress={() => navigation.navigate('WorkoutRoutines')}>
-          <Text style={styles.calendarLink}>내 루틴</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.linkHit} onPress={() => navigation.navigate('BodyMetric')}>
-          <Text style={styles.calendarLink}>몸 변화</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.linkHit} onPress={() => navigation.navigate('Challenge')}>
-          <Text style={styles.calendarLink}>대결</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.linkHit} onPress={() => navigation.navigate('WorkoutRecommend')}>
-          <Text style={styles.calendarLink}>AI 추천</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.linkHit} onPress={() => navigation.navigate('WorkoutStats')}>
-          <Text style={styles.calendarLink}>통계</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.linkHit} onPress={() => navigation.navigate('WorkoutCalendar')}>
-          <Text style={styles.calendarLink}>캘린더</Text>
-        </TouchableOpacity>
-      </ScrollView>
+      {/* 아이콘 칩 6개 — 식단 탭과 같은 QuickLinkChips 를 써서 톤을 맞춘다.
+          좁은 화면에선 넘치는 만큼 가로 스크롤되고, 오른쪽 페이드가 그 힌트를 준다. */}
+      <QuickLinkChips
+        links={[
+          { icon: 'notebook-outline', label: '내 루틴', onPress: () => navigation.navigate('WorkoutRoutines') },
+          { icon: 'human', label: '몸 변화', onPress: () => navigation.navigate('BodyMetric') },
+          { icon: 'sword-cross', label: '대결', onPress: () => navigation.navigate('Challenge') },
+          { icon: 'creation', label: 'AI 추천', onPress: () => navigation.navigate('WorkoutRecommend') },
+          { icon: 'chart-bar', label: '통계', onPress: () => navigation.navigate('WorkoutStats') },
+          { icon: 'calendar-blank-outline', label: '캘린더', onPress: () => navigation.navigate('WorkoutCalendar') },
+        ]}
+      />
 
       <FlatList
         data={history}
@@ -123,33 +95,14 @@ export function WorkoutScreen({ navigation }: Props) {
         onEndReached={loadMoreHistory}
         ListHeaderComponent={
           <View>
-            {/* [트레이너 기능 일시 비활성화] 트레이너가 배정한 루틴
-            {routines.length > 0 ? (
-              <View style={styles.routineSection}>
-                <Text style={styles.sectionTitle}>트레이너 루틴</Text>
-                {routines.map((r) => (
-                  <View key={r.id} style={styles.routineCard}>
-                    <View style={styles.routineInfo}>
-                      <Text style={styles.routineTitle}>{r.title}</Text>
-                      <Text style={styles.routineSub}>
-                        {r.trainerName ? `${r.trainerName} 트레이너` : '트레이너'}
-                        {r.routineDate ? ` · ${r.routineDate}` : ''}
-                      </Text>
-                      {r.description ? <Text style={styles.routineDesc}>{r.description}</Text> : null}
-                    </View>
-                    <Button
-                      title="완료"
-                      size="md"
-                      variant="soft"
-                      onPress={() => onCompleteRoutine(r)}
-                      loading={completingId === r.id}
-                      style={styles.routineDone}
-                    />
-                  </View>
-                ))}
-              </View>
-            ) : null}
-            */}
+            {/* 운동 스트릭 — 식단 탭과 같은 표시 형식(연속/함께/최고) */}
+            <View style={styles.streakRow}>
+              <Text style={styles.streakText}>연속 {myStreak?.currentCount ?? 0}일</Text>
+              {connected ? (
+                <Text style={styles.streakText}>함께 {coupleStreak?.currentCount ?? 0}일</Text>
+              ) : null}
+              <Text style={styles.streakMax}>최고 {myStreak?.maxCount ?? 0}일</Text>
+            </View>
 
             {/* 기록이 하나도 없으면 섹션을 숨긴다 — "오늘 없어요" 카드와 EmptyState 가
                 겹쳐 빈 안내가 두 번 보이던 중복 제거 (ListEmptyComponent 하나로 통일) */}
@@ -200,39 +153,10 @@ export function WorkoutScreen({ navigation }: Props) {
 
 const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-  },
-  title: { fontSize: fontSize.title, fontWeight: '800', color: colors.textPrimary },
-  headerLinks: { flexDirection: 'row', gap: spacing.md },
-  // 가로 스크롤 — 세로 공간을 차지하지 않도록 flexGrow 0
-  linksScroll: { flexGrow: 0 },
-  linksRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.xs,
-  },
-  /**
-   * 링크 하나의 터치 영역. 예전엔 TouchableOpacity 가 <b>맨 텍스트만</b> 감싸
-   * 높이 20px 이었다 — 화면 전환 입구 6개가 전부 그 크기였다.
-   * 글자 크기는 그대로 두고 터치 영역만 키운다.
-   */
-  linkHit: {
-    minHeight: layout.touchTarget,
-    // 2글자 라벨('대결'·'통계')은 폭이 42px 에 그쳐 가로도 함께 보장한다
-    minWidth: layout.touchTarget,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: spacing.sm,
-  },
-  calendarLink: { fontSize: fontSize.body, color: colors.primary, fontWeight: '600' },
   list: { padding: spacing.lg, paddingBottom: layout.listBottomWithFab },
+  streakRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
+  streakText: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
+  streakMax: { fontSize: fontSize.caption, color: colors.textSecondary, marginLeft: 'auto' },
   sectionTitle: {
     fontSize: fontSize.subtitle,
     fontWeight: '700',
@@ -250,23 +174,6 @@ const styles = themedStyles((colors) => ({
     marginBottom: spacing.md,
   },
   emptyText: { color: colors.textSecondary, fontSize: fontSize.body },
-  routineSection: { marginBottom: spacing.md },
-  routineCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.accent,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-    gap: spacing.md,
-  },
-  routineInfo: { flex: 1 },
-  routineTitle: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
-  routineSub: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
-  routineDesc: { fontSize: fontSize.caption, color: colors.textPrimary, marginTop: spacing.xs },
-  routineDone: { paddingHorizontal: spacing.md },
   footer: { textAlign: 'center', color: colors.textSecondary, paddingVertical: spacing.md },
   fabWrap: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: spacing.lg },
   fabRow: { flexDirection: 'row', gap: spacing.sm },

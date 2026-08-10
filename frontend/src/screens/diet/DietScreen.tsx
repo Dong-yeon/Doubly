@@ -18,8 +18,10 @@ import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
 import { MealCard } from '../../components/MealCard';
 import { WorkoutDietSegment } from '../../components/WorkoutDietSegment';
+import { QuickLinkChips } from '../../components/QuickLinkChips';
 import { EmptyState } from '../../components/EmptyState';
 import { AiInsightButton } from '../../components/AiInsightButton';
+import { ProteinRing } from '../../components/ProteinRing';
 import { useDietStore } from '../../store/dietStore';
 import { useRelationStore } from '../../store/relationStore';
 import { dietApi } from '../../api/diet';
@@ -98,6 +100,7 @@ export function DietScreen({ navigation }: Props) {
   const [tProtein, setTProtein] = useState('');
   const [tFat, setTFat] = useState('');
   const [savingNut, setSavingNut] = useState(false);
+  const [copyingYesterday, setCopyingYesterday] = useState(false);
 
   const refreshExtras = useCallback(() => {
     streakApi.mealMe().then(setMyStreak).catch(() => setMyStreak(null));
@@ -190,17 +193,33 @@ export function DietScreen({ navigation }: Props) {
 
   const todayCalories = today.reduce((sum, m) => sum + (m.calories ?? 0), 0);
 
+  // 어제 식단을 오늘 날짜로 통째로 복사 — 매일 비슷한 식단을 먹는 유저를 위한 3초 퀵 로깅
+  const onCopyYesterday = async () => {
+    setCopyingYesterday(true);
+    try {
+      const copied = await dietApi.copyFromYesterday();
+      haptics.success();
+      toast.success(`어제 식단 ${copied.length}개를 불러왔어요 `);
+      fetchToday();
+      fetchHistory();
+    } catch (e) {
+      toast.error(getErrorMessage(e, '어제 식단을 불러오지 못했어요.'));
+    } finally {
+      setCopyingYesterday(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <WorkoutDietSegment active="diet" />
-      <View style={styles.linksRow}>
-        <TouchableOpacity style={styles.linkHit} onPress={() => navigation.navigate('DietStats')}>
-          <Text style={styles.link}>통계</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.linkHit} onPress={() => navigation.navigate('DietCalendar')}>
-          <Text style={styles.link}>캘린더</Text>
-        </TouchableOpacity>
-      </View>
+      {/* 운동 탭과 같은 QuickLinkChips — 항목이 2개뿐이라도 같은 컴포넌트를 써서
+          정렬·톤이 세그먼트를 넘나들며 흔들리지 않게 한다. */}
+      <QuickLinkChips
+        links={[
+          { icon: 'chart-bar', label: '통계', onPress: () => navigation.navigate('DietStats') },
+          { icon: 'calendar-blank-outline', label: '캘린더', onPress: () => navigation.navigate('DietCalendar') },
+        ]}
+      />
 
       {/* AI 인사이트 — 주간 식단 코칭 / 커플 주간 레터 */}
       <View style={styles.aiRow}>
@@ -242,15 +261,48 @@ export function DietScreen({ navigation }: Props) {
                     {nutrition.targetCalories ? '목표 수정' : '목표 설정 ›'}
                   </Text>
                 </View>
-                <NutritionBar label="칼로리" consumed={nutrition.consumedCalories} target={nutrition.targetCalories} unit="kcal" />
-                <NutritionBar label="탄수" consumed={nutrition.consumedCarbs} target={nutrition.targetCarbs} unit="g" />
-                <NutritionBar label="단백" consumed={nutrition.consumedProtein} target={nutrition.targetProtein} unit="g" />
-                <NutritionBar label="지방" consumed={nutrition.consumedFat} target={nutrition.targetFat} unit="g" />
+                {nutrition.travelMode ? (
+                  <Text style={styles.travelModeBadge}>
+                    ✈️ 여행 모드 중 · {nutrition.travelModeTripTitle} — 목표는 잠깐 쉬어가요
+                  </Text>
+                ) : null}
+                <View style={styles.nutMain}>
+                  {/* 단백질만 원형 게이지로 분리 — 운동 유저는 단백질 달성률에 가장 민감하다 */}
+                  <ProteinRing consumed={nutrition.consumedProtein} target={nutrition.targetProtein} />
+                  <View style={styles.nutSecondary}>
+                    <NutritionBar label="칼로리" consumed={nutrition.consumedCalories} target={nutrition.targetCalories} unit="kcal" />
+                    <NutritionBar label="탄수" consumed={nutrition.consumedCarbs} target={nutrition.targetCarbs} unit="g" />
+                    <NutritionBar label="지방" consumed={nutrition.consumedFat} target={nutrition.targetFat} unit="g" />
+                  </View>
+                </View>
                 {nutrition.targetCalories ? (
                   <Text style={styles.nutRemain}>
                     남은 칼로리 {formatKcal(Math.max(0, nutrition.targetCalories - nutrition.consumedCalories))}
                   </Text>
                 ) : null}
+
+                {/* 실시간 에너지 밸런스 — 기초대사량 + 오늘 운동 소모 - 섭취. 수동 목표와 별개로,
+                    "오늘 움직인 만큼" 반영된 잔여 칼로리를 보여준다. 프로필(키/생년월일/성별)이나
+                    체중 기록이 없으면 계산할 수 없어 등록 안내만 노출한다. */}
+                <View style={styles.energyBox}>
+                  {nutrition.bmr != null ? (
+                    <>
+                      <Text style={styles.energyFormula}>
+                        기초대사량 {nutrition.bmr} + 운동 소모 {nutrition.exerciseCalories} − 섭취 {nutrition.consumedCalories}
+                      </Text>
+                      <Text style={styles.energyResult}>
+                        {(nutrition.energyBalance ?? 0) >= 0
+                          ? `오늘 ${nutrition.energyBalance}kcal 더 섭취 가능`
+                          : `목표보다 ${Math.abs(nutrition.energyBalance ?? 0)}kcal 더 먹었어요`}
+                      </Text>
+                    </>
+                  ) : (
+                    <Text style={styles.energyHint}>
+                      MY 탭 → 신체 정보에서 키·생년월일·성별을 등록하면 오늘 운동한 만큼 실시간으로 섭취
+                      가능 칼로리를 계산해줘요.
+                    </Text>
+                  )}
+                </View>
               </Pressable>
             ) : null}
 
@@ -301,9 +353,16 @@ export function DietScreen({ navigation }: Props) {
               <>
                 <View style={styles.todayHeader}>
                   <Text style={styles.sectionTitle}>오늘</Text>
-                  {todayCalories > 0 ? (
-                    <Text style={styles.todayCal}>총 {formatKcal(todayCalories)}</Text>
-                  ) : null}
+                  <View style={styles.todayHeaderRight}>
+                    {todayCalories > 0 ? (
+                      <Text style={styles.todayCal}>총 {formatKcal(todayCalories)}</Text>
+                    ) : null}
+                    <TouchableOpacity onPress={onCopyYesterday} disabled={copyingYesterday}>
+                      <Text style={styles.copyYesterday}>
+                        {copyingYesterday ? '불러오는 중…' : '↺ 어제 식단 불러오기'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
                 {today.length > 0 ? (
                   today.map((m) => <MealCard key={m.id} meal={m} onLongPress={onLongPress} />)
@@ -385,32 +444,6 @@ export function DietScreen({ navigation }: Props) {
 
 const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-  },
-  title: { fontSize: fontSize.title, fontWeight: '800', color: colors.textPrimary },
-  headerLinks: { flexDirection: 'row', gap: spacing.md },
-  link: { fontSize: fontSize.body, color: colors.primary, fontWeight: '600' },
-  /** 터치 영역 — 맨 텍스트만 감싸면 높이 20px 이라 누르기 어렵다 (WorkoutScreen 과 같은 처리) */
-  linkHit: {
-    minHeight: layout.touchTarget,
-    // 2글자 라벨('대결'·'통계')은 폭이 42px 에 그쳐 가로도 함께 보장한다
-    minWidth: layout.touchTarget,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: spacing.sm,
-  },
-  linksRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.xs,
-  },
   nutCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -423,6 +456,9 @@ const styles = themedStyles((colors) => ({
   nutHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs },
   nutTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
   nutSet: { fontSize: fontSize.caption, fontWeight: '700', color: colors.primary },
+  nutMain: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  nutSecondary: { flex: 1, gap: spacing.xs },
+  travelModeBadge: { fontSize: fontSize.caption, fontWeight: '700', color: colors.accent, marginBottom: spacing.xs },
   nutRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   // width 48 — "칼로리"(3글자)가 36px 에서 줄바꿈되어 첫 행만 높이가 달라졌다
   nutLabel: { width: 48, fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
@@ -431,6 +467,16 @@ const styles = themedStyles((colors) => ({
   nutFillOver: { backgroundColor: colors.primary },
   nutVal: { width: 92, textAlign: 'right', fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '700' },
   nutRemain: { fontSize: fontSize.caption, color: colors.togetherText, fontWeight: '800', textAlign: 'right', marginTop: spacing.xs },
+  energyBox: {
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    gap: 2,
+  },
+  energyFormula: { fontSize: 10, color: colors.textTertiary, fontWeight: '600' },
+  energyResult: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '800' },
+  energyHint: { fontSize: fontSize.caption, color: colors.textSecondary, lineHeight: 18 },
   nutFormRow: { flexDirection: 'row', gap: spacing.sm },
   nutFormItem: { flex: 1 },
   nutSaveBtn: { marginTop: spacing.sm },
@@ -461,7 +507,9 @@ const styles = themedStyles((colors) => ({
   goalFill: { height: '100%', borderRadius: radius.pill, backgroundColor: colors.accent },
   goalSub: { fontSize: fontSize.caption, color: colors.textSecondary },
   todayHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
+  todayHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   todayCal: { fontSize: fontSize.body, color: colors.togetherText, fontWeight: '800' },
+  copyYesterday: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '700' },
   sectionTitle: { fontSize: fontSize.subtitle, fontWeight: '700', color: colors.textPrimary },
   historyTitle: { marginTop: spacing.lg, marginBottom: spacing.sm },
   emptyToday: {

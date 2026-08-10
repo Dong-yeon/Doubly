@@ -39,12 +39,24 @@ export function WorkoutRoutineListScreen({ navigation }: Props) {
   const startSession = (routine: WorkoutRoutine) => {
     haptics.light();
     navigation.navigate('WorkoutSession', {
+      routineId: routine.id,
+      routineTitle: routine.title,
       exercises: routine.exercises.map((e) => ({
         name: e.exerciseName,
         category: e.category ?? undefined,
         targetSets: e.targetSets ?? undefined,
         reps: e.reps ?? undefined,
         weightKg: e.weightKg ?? undefined,
+        muscleGroup: e.muscleGroup ?? undefined,
+        equipment: e.equipment ?? undefined,
+        exerciseCatalogId: e.exerciseCatalogId ?? undefined,
+        restSeconds: e.restSeconds ?? undefined,
+        alternatives: e.alternatives?.map((a) => ({
+          exerciseCatalogId: a.exerciseCatalogId,
+          name: a.name,
+          muscleGroup: a.muscleGroup,
+          equipment: a.equipment ?? undefined,
+        })),
       })),
     });
   };
@@ -102,6 +114,14 @@ export function WorkoutRoutineListScreen({ navigation }: Props) {
             />
           ) : null
         }
+        ListFooterComponent={
+          <TouchableOpacity
+            style={styles.templatesLink}
+            onPress={() => navigation.navigate('WorkoutRoutineTemplates')}
+          >
+            <Text style={styles.templatesLinkText}>✨ 검증된 루틴 둘러보기</Text>
+          </TouchableOpacity>
+        }
       />
       <View style={styles.fabWrap}>
         <Button title="＋ 루틴 만들기" onPress={() => navigation.navigate('WorkoutRoutineForm')} />
@@ -127,4 +147,15 @@ const styles = themedStyles((colors) => ({
   summary: { fontSize: fontSize.caption, color: colors.textPrimary, marginTop: spacing.xs, lineHeight: 18 },
   count: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xs },
   fabWrap: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: spacing.lg },
+  templatesLink: {
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    marginTop: spacing.xs,
+    marginBottom: 80,
+  },
+  templatesLinkText: { fontSize: fontSize.body, fontWeight: '800', color: colors.textSecondary },
 }));
