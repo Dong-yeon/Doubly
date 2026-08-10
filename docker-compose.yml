@@ -1,4 +1,4 @@
-# Fitto 로컬 개발 인프라 (PostgreSQL + Redis)
+# Doubly 로컬 개발 인프라 (PostgreSQL + Redis)
 # 실행:  docker compose up -d
 # 종료:  docker compose down   (데이터 삭제: docker compose down -v)
 services:

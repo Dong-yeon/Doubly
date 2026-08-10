@@ -1,4 +1,4 @@
-# Fitto 백엔드 빌드/실행 (Railway 등 Dockerfile 빌드용)
+# Doubly 백엔드 빌드/실행 (Railway 등 Dockerfile 빌드용)
 # Railway: 서비스 Root Directory 를 backend 로 두면 이 Dockerfile 로 빌드한다.
 
 # --- 빌드 단계 ---
