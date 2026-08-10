@@ -15,6 +15,7 @@ public record WorkoutResponse(
         LocalDate workoutDate,
         Integer totalDurationMin,
         String memo,
+        Long sourceRoutineId,
         List<SetResponse> sets,
         List<PrHighlight> prs,
         LocalDateTime createdAt
@@ -26,11 +27,17 @@ public record WorkoutResponse(
             Integer sets,
             Integer reps,
             BigDecimal weightKg,
-            Integer orderNo
+            Integer orderNo,
+            Long exerciseCatalogId,
+            String muscleGroup,
+            String equipment,
+            List<WorkoutSetEntryResponse> entries
     ) {
         static SetResponse from(WorkoutSet s) {
             return new SetResponse(s.getId(), s.getExerciseName(), s.getCategory(),
-                    s.getSets(), s.getReps(), s.getWeightKg(), s.getOrderNo());
+                    s.getSets(), s.getReps(), s.getWeightKg(), s.getOrderNo(),
+                    s.getExerciseCatalogId(), s.getMuscleGroup(), s.getEquipment(),
+                    s.getEntries().stream().map(WorkoutSetEntryResponse::of).toList());
         }
     }
 
@@ -55,6 +62,6 @@ public record WorkoutResponse(
     public static WorkoutResponse from(Workout w, List<PrHighlight> prs) {
         List<SetResponse> sets = w.getSets().stream().map(SetResponse::from).toList();
         return new WorkoutResponse(w.getId(), w.getRelationId(), w.getWorkoutDate(),
-                w.getTotalDurationMin(), w.getMemo(), sets, prs, w.getCreatedAt());
+                w.getTotalDurationMin(), w.getMemo(), w.getSourceRoutineId(), sets, prs, w.getCreatedAt());
     }
 }

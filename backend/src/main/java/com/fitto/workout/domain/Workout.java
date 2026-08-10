@@ -52,6 +52,13 @@ public class Workout {
     @Column(columnDefinition = "text")
     private String memo;
 
+    /**
+     * 이 기록이 시작된 루틴 템플릿 — 스마트 루틴 동기화(Save-on-Finish)의 전제.
+     * 루틴 없이 자유 운동으로 시작했거나(역방향 루틴 생성 흐름) 루틴이 삭제된 경우 null.
+     */
+    @Column(name = "source_routine_id")
+    private Long sourceRoutineId;
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -62,12 +69,13 @@ public class Workout {
 
     @Builder
     private Workout(Long userId, Long relationId, LocalDate workoutDate,
-                    Integer totalDurationMin, String memo) {
+                    Integer totalDurationMin, String memo, Long sourceRoutineId) {
         this.userId = userId;
         this.relationId = relationId;
         this.workoutDate = workoutDate;
         this.totalDurationMin = totalDurationMin;
         this.memo = memo;
+        this.sourceRoutineId = sourceRoutineId;
     }
 
     public void addSet(WorkoutSet set) {

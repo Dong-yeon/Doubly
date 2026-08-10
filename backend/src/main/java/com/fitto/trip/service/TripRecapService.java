@@ -17,6 +17,7 @@ import com.fitto.trip.repository.TripChecklistItemRepository;
 import com.fitto.trip.repository.TripExpenseRepository;
 import com.fitto.trip.repository.TripItemRepository;
 import com.fitto.trip.repository.TripRepository;
+import com.fitto.workout.repository.WorkoutRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,6 +41,7 @@ public class TripRecapService {
     private final PlaceRepository placeRepository;
     private final FeedPostRepository feedPostRepository;
     private final RelationRepository relationRepository;
+    private final WorkoutRepository workoutRepository;
 
     public TripRecapService(TripRepository tripRepository,
                             TripItemRepository tripItemRepository,
@@ -47,7 +49,8 @@ public class TripRecapService {
                             TripChecklistItemRepository checklistRepository,
                             PlaceRepository placeRepository,
                             FeedPostRepository feedPostRepository,
-                            RelationRepository relationRepository) {
+                            RelationRepository relationRepository,
+                            WorkoutRepository workoutRepository) {
         this.tripRepository = tripRepository;
         this.tripItemRepository = tripItemRepository;
         this.tripExpenseRepository = tripExpenseRepository;
@@ -55,6 +58,7 @@ public class TripRecapService {
         this.placeRepository = placeRepository;
         this.feedPostRepository = feedPostRepository;
         this.relationRepository = relationRepository;
+        this.workoutRepository = workoutRepository;
     }
 
     public TripRecapResponse recap(Long userId, Long tripId) {
@@ -75,6 +79,12 @@ public class TripRecapService {
         int checklistTotal = checklist.size();
         int checklistChecked = (int) checklist.stream().filter(TripChecklistItem::isChecked).count();
 
+        List<Long> memberIds = List.of(couple.getUserAId(), couple.getUserBId()).stream()
+                .filter(java.util.Objects::nonNull).toList();
+        long workoutCount = memberIds.isEmpty() ? 0
+                : workoutRepository.countByUserIdInAndWorkoutDateBetween(
+                        memberIds, trip.getStartDate(), trip.getEndDate());
+
         return new TripRecapResponse(
                 id, trip.getTitle(), trip.getStartDate(), trip.getEndDate(),
                 nights, days, status,
@@ -83,7 +93,8 @@ public class TripRecapService {
                 placeRepository.countByTripIdAndStatus(id, PlaceStatus.VISITED),
                 expenseTotal, currency,
                 feedPostRepository.countByTripId(id),
-                checklistTotal, checklistChecked);
+                checklistTotal, checklistChecked,
+                workoutCount, trip.isTravelModeEnabled());
     }
 
     private String status(Trip trip) {

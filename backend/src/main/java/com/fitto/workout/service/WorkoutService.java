@@ -10,9 +10,11 @@ import com.fitto.streak.service.StreakService;
 import com.fitto.user.repository.UserRepository;
 import com.fitto.workout.domain.Workout;
 import com.fitto.workout.domain.WorkoutSet;
+import com.fitto.workout.domain.WorkoutSetEntry;
 import com.fitto.workout.dto.CalendarDayResponse;
 import com.fitto.workout.dto.CategoryCount;
 import com.fitto.workout.dto.ExerciseBest;
+import com.fitto.workout.dto.ExerciseLastPerformanceResponse;
 import com.fitto.workout.dto.PartnerTodayResponse;
 import com.fitto.workout.dto.SaveWorkoutRequest;
 import com.fitto.workout.dto.WorkoutResponse;
@@ -79,18 +81,33 @@ public class WorkoutService {
                 .workoutDate(req.workoutDate())
                 .totalDurationMin(req.totalDurationMin())
                 .memo(req.memo())
+                .sourceRoutineId(req.sourceRoutineId())
                 .build();
 
         int order = 1;
         for (var s : req.sets()) {
-            workout.addSet(WorkoutSet.builder()
+            WorkoutSet set = WorkoutSet.builder()
                     .exerciseName(s.exerciseName())
                     .category(s.category())
                     .sets(s.sets())
                     .reps(s.reps())
                     .weightKg(s.weightKg())
                     .orderNo(s.orderNo() != null ? s.orderNo() : order)
-                    .build());
+                    .exerciseCatalogId(s.exerciseCatalogId())
+                    .muscleGroup(s.muscleGroup())
+                    .equipment(s.equipment())
+                    .build();
+            if (s.entries() != null) {
+                for (var entry : s.entries()) {
+                    set.addEntry(WorkoutSetEntry.builder()
+                            .setNo(entry.setNo())
+                            .weightKg(entry.weightKg())
+                            .reps(entry.reps())
+                            .completed(entry.completed())
+                            .build());
+                }
+            }
+            workout.addSet(set);
             order++;
         }
         workoutRepository.save(workout);
@@ -162,6 +179,20 @@ public class WorkoutService {
         return workoutRepository
                 .findHistory(userId, cursor, PageRequest.of(0, HISTORY_PAGE_SIZE))
                 .stream().map(WorkoutResponse::from).toList();
+    }
+
+    /**
+     * 종목별 직전 수행 기록 — 세션 시작 시 무게/횟수 기본값 프리필(④)에 사용.
+     * 기록이 없는 종목은 결과에서 빠지므로, 호출부는 exerciseName 기준으로 매칭해야 한다.
+     */
+    public List<ExerciseLastPerformanceResponse> lastPerformance(Long userId, List<String> exerciseNames) {
+        List<ExerciseLastPerformanceResponse> result = new ArrayList<>();
+        for (String name : exerciseNames) {
+            workoutSetRepository.findRecentByExerciseName(userId, name, PageRequest.of(0, 1))
+                    .stream().findFirst()
+                    .ifPresent(s -> result.add(ExerciseLastPerformanceResponse.of(s)));
+        }
+        return result;
     }
 
     public List<CalendarDayResponse> calendar(Long userId, int year, int month) {

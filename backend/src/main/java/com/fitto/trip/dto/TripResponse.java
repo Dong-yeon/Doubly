@@ -15,10 +15,12 @@ public record TripResponse(
         String coverImageUrl,
         Long createdBy,
         long placeCount,
+        boolean travelModeEnabled,
         LocalDateTime createdAt
 ) {
     public static TripResponse of(Trip t, long placeCount) {
         return new TripResponse(t.getId(), t.getTitle(), t.getStartDate(), t.getEndDate(),
-                t.getMemo(), t.getCoverImageUrl(), t.getCreatedBy(), placeCount, t.getCreatedAt());
+                t.getMemo(), t.getCoverImageUrl(), t.getCreatedBy(), placeCount,
+                t.isTravelModeEnabled(), t.getCreatedAt());
     }
 }
