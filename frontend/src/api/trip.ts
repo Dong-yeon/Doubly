@@ -59,6 +59,10 @@ export const tripApi = {
   detachPlace: (tripId: number, placeId: number) =>
     unwrap(apiClient.delete<ApiResponse<void>>(`/trips/${tripId}/places/${placeId}`)),
 
+  // 여행 모드 (PLAN.md Travel Mode) — 켜져 있으면 여행 기간 동안 식단 목표를 숨긴다
+  setTravelMode: (tripId: number, enabled: boolean) =>
+    unwrap(apiClient.put<ApiResponse<Trip>>(`/trips/${tripId}/travel-mode`, { enabled })),
+
   // 일자별 일정표 (Itinerary)
   items: (tripId: number) =>
     unwrap(apiClient.get<ApiResponse<TripDay[]>>(`/trips/${tripId}/items`)),

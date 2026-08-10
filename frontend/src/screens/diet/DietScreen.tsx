@@ -223,6 +223,11 @@ export function DietScreen({ navigation }: Props) {
                     {nutrition.targetCalories ? '목표 수정' : '목표 설정 ›'}
                   </Text>
                 </View>
+                {nutrition.travelMode ? (
+                  <Text style={styles.travelModeBadge}>
+                    ✈️ 여행 모드 중 · {nutrition.travelModeTripTitle} — 목표는 잠깐 쉬어가요
+                  </Text>
+                ) : null}
                 <NutritionBar label="칼로리" consumed={nutrition.consumedCalories} target={nutrition.targetCalories} unit="kcal" />
                 <NutritionBar label="탄수" consumed={nutrition.consumedCarbs} target={nutrition.targetCarbs} unit="g" />
                 <NutritionBar label="단백" consumed={nutrition.consumedProtein} target={nutrition.targetProtein} unit="g" />
@@ -395,6 +400,7 @@ const styles = StyleSheet.create({
   nutHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs },
   nutTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
   nutSet: { fontSize: fontSize.caption, fontWeight: '700', color: colors.primary },
+  travelModeBadge: { fontSize: fontSize.caption, fontWeight: '700', color: colors.accent, marginBottom: spacing.xs },
   nutRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   nutLabel: { width: 36, fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
   nutTrack: { flex: 1, height: 10, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },

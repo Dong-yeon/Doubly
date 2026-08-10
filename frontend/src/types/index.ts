@@ -304,6 +304,9 @@ export interface NutritionSummary {
   consumedCarbs: number;
   consumedProtein: number;
   consumedFat: number;
+  // 여행 모드 중이면(PLAN.md Travel Mode) target* 는 전부 null — travelModeTripTitle 이 그 이유
+  travelMode: boolean;
+  travelModeTripTitle?: string | null;
 }
 
 // AI 음식 사진 분석 (POST /meal/analyze) — 칼로리·매크로는 추정치, 사용자가 수정 후 저장
@@ -414,6 +417,7 @@ export interface Trip {
   coverImageUrl?: string | null;
   createdBy: number;
   placeCount: number;
+  travelModeEnabled: boolean; // PLAN.md Travel Mode
   createdAt: string;
 }
 
@@ -518,6 +522,8 @@ export interface TripRecap {
   photoCount: number;
   checklistTotal: number;
   checklistChecked: number;
+  workoutCount: number; // 여행 기간 두 사람 합산 — PLAN.md Travel Mode
+  travelModeEnabled: boolean;
 }
 
 // 커플 일상 피드 (PLAN.md Couple Feed) — 포스트 + 운동/식단/맛집 방문 통합 타임라인
