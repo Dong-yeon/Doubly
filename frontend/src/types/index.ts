@@ -309,6 +309,8 @@ export interface TrainerRoutine {
 
 // 커플 맛집 지도 (PLAN.md Place Map) — 장소 핀 + 방문 기록
 export type PlaceStatus = 'WISHLIST' | 'VISITED';
+// 클린식/치팅데이 구분 — 하드코어 운동·식단 커플용 필터·핀 색상에 쓰인다
+export type PlaceDietTag = 'CLEAN' | 'CHEAT' | 'NEUTRAL';
 export interface Place {
   id: number;
   name: string;
@@ -317,6 +319,7 @@ export interface Place {
   lng?: number | null;
   category?: string | null;
   status: PlaceStatus;
+  dietTag: PlaceDietTag;
   addedBy: number;
   /** 담긴 여행 (PLAN.md Trip) — 미연결 시 null */
   tripId?: number | null;
@@ -618,26 +621,6 @@ export interface FeedTimeline {
   items: FeedItem[];
   nextCursor: string | null;
   hasMore: boolean;
-}
-
-// 추억 리마인드 — 오늘과 같은 월·일의 1년 이상 전 기록 (PLAN.md Memories)
-export interface MemoryGroup {
-  /** 몇 년 전인지 (1 이상) */
-  yearsAgo: number;
-  /** 그 해의 대표 발생일 (yyyy-MM-dd) */
-  date: string;
-  /** 서버가 만든 표시 문구 — "1년 전 오늘" */
-  label: string;
-  /** 타임라인과 같은 카드 형태. POST 에만 reactions 가 채워진다 */
-  items: FeedItem[];
-}
-
-export interface Memories {
-  /** 기준 날짜 (KST, yyyy-MM-dd) */
-  on: string;
-  totalCount: number;
-  /** 최신 연도부터. 추억이 없으면 빈 배열 */
-  groups: MemoryGroup[];
 }
 
 // 5.8 chat_messages

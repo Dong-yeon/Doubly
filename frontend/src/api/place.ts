@@ -1,6 +1,6 @@
 /** 커플 맛집 지도 API — PLAN.md Place Map */
 import { apiClient, unwrap } from './client';
-import type { ApiResponse, DateCourse, Place, PlaceStatus, PlaceVisit } from '../types';
+import type { ApiResponse, DateCourse, Place, PlaceDietTag, PlaceStatus, PlaceVisit } from '../types';
 
 export interface SavePlacePayload {
   name: string;
@@ -9,6 +9,7 @@ export interface SavePlacePayload {
   lng?: number;
   category?: string;
   status?: PlaceStatus;
+  dietTag?: PlaceDietTag;
 }
 
 export interface RecordVisitPayload {
