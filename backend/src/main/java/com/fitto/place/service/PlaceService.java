@@ -69,6 +69,7 @@ public class PlaceService {
                 .lng(request.lng())
                 .category(request.category())
                 .status(request.status())
+                .dietTag(request.dietTag())
                 .addedBy(userId)
                 .build();
         placeRepository.save(place);
@@ -101,7 +102,7 @@ public class PlaceService {
     public PlaceResponse update(Long userId, Long placeId, UpdatePlaceRequest request) {
         Place place = getCouplePlace(userId, placeId);
         place.update(request.name(), request.address(), request.lat(), request.lng(),
-                request.category(), request.status());
+                request.category(), request.status(), request.dietTag());
         return withSummary(place);
     }
 
