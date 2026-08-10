@@ -85,6 +85,12 @@
       "backgroundColor": "#FFFFFF",
       "display": "standalone",
       "description": "Doubly — 둘이라서, 두 배로. 커플 운동·식단·여행·일상 공유"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "0c8c5a85-cdfd-4a54-9f45-c95d6cba079e"
+      }
+    },
+    "owner": "happyeon"
   }
 }
