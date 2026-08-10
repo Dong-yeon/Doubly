@@ -16,6 +16,7 @@ public record UserResponse(
         Role role,
         LocalDate birthDate,
         Gender gender,
+        Integer heightCm,
         String profileImageUrl,
         SocialType socialType,
         /** 마케팅 수신 동의 여부 — 설정 화면에서 철회할 수 있어야 한다(AUTH-09) */
@@ -36,6 +37,7 @@ public record UserResponse(
                 user.getRole(),
                 user.getBirthDate(),
                 user.getGender(),
+                user.getHeightCm(),
                 user.getProfileImageUrl(),
                 user.getSocialType(),
                 user.hasMarketingConsent(),

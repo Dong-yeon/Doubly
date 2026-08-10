@@ -84,13 +84,51 @@ public class MealService {
                 .fat(req.fat())
                 .build();
         mealRepository.save(meal);
+        afterMealsAdded(userId, meal.getMealDate(), firstMealOfDay, false);
+        return MealResponse.from(meal);
+    }
 
+    /**
+     * 지정한 날짜(기본: 어제)의 식단을 오늘 날짜로 통째로 복사 — 매일 비슷한 식단을 먹는
+     * 운동 유저를 위한 3초 퀵 로깅. 사진/메모/칼로리/매크로를 그대로 들고 오고, 끼니 종류도 유지한다.
+     */
+    @Transactional
+    public List<MealResponse> copyFrom(Long userId, LocalDate sourceDate) {
+        if (sourceDate.isAfter(LocalDate.now())) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "미래 날짜는 불러올 수 없습니다.");
+        }
+        List<Meal> sourceMeals = mealRepository.findByUserIdAndMealDateOrderByIdAsc(userId, sourceDate);
+        if (sourceMeals.isEmpty()) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "해당 날짜에는 식단 기록이 없어요.");
+        }
+        LocalDate today = LocalDate.now();
+        boolean firstMealOfDay = !mealRepository.existsByUserIdAndMealDate(userId, today);
+        List<Meal> copies = sourceMeals.stream()
+                .map(m -> Meal.builder()
+                        .userId(userId)
+                        .mealDate(today)
+                        .mealType(m.getMealType())
+                        .memo(m.getMemo())
+                        .photoUrl(m.getPhotoUrl())
+                        .calories(m.getCalories())
+                        .carbs(m.getCarbs())
+                        .protein(m.getProtein())
+                        .fat(m.getFat())
+                        .build())
+                .toList();
+        mealRepository.saveAll(copies);
+        afterMealsAdded(userId, today, firstMealOfDay, true);
+        return copies.stream().map(MealResponse::from).toList();
+    }
+
+    /** 저장/복사 공통 후처리 — 스트릭 갱신 + 커플 실시간 반영/응원 푸시(+목표 달성 축하). */
+    private void afterMealsAdded(Long userId, LocalDate mealDate, boolean firstMealOfDay, boolean copied) {
         // 식단 스트릭 갱신 (개인 + 커플) — 별도 트랜잭션, 실패해도 식단 저장은 유지
         try {
-            streakService.updateOnMeal(userId, meal.getMealDate());
+            streakService.updateOnMeal(userId, mealDate);
         } catch (RuntimeException e) {
             log.warn("식단 스트릭 갱신 실패 (기록은 저장됨) userId={}, date={}: {}",
-                    userId, meal.getMealDate(), e.getMessage());
+                    userId, mealDate, e.getMessage());
         }
 
         // 커플 실시간 반영 + 응원 푸시 (+ 목표 달성 축하)
@@ -100,16 +138,17 @@ public class MealService {
                     coupleEventPublisher.publish(c.getId(), CoupleEvent.DIET);
                     Long partnerId = c.partnerOf(userId);
                     String myName = userRepository.findById(userId).map(u -> u.getName()).orElse("상대방");
-                    if (justAchievedGoal(c, userId, partnerId, req.mealDate(), firstMealOfDay)) {
+                    if (justAchievedGoal(c, userId, partnerId, mealDate, firstMealOfDay)) {
                         notificationService.notify(partnerId, "이번 주 식단 목표 달성!",
                                 myName + "님과 함께 주 " + c.getDietGoalDays() + "일 목표를 채웠어요!");
+                    } else if (copied) {
+                        notificationService.notify(partnerId, "오늘도 같은 식단!",
+                                myName + "님이 어제 식단을 그대로 기록했어요!");
                     } else {
                         notificationService.notify(partnerId, "오늘 뭐 먹었을까?",
                                 myName + "님이 식단을 기록했어요!");
                     }
                 });
-
-        return MealResponse.from(meal);
     }
 
     /**

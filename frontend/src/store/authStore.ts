@@ -9,7 +9,7 @@ import { setAuthFailureHandler } from '../api/client';
 import { storage } from '../utils/storage';
 import { registerPushTokenIfGranted } from '../utils/push';
 import { useChatStore } from './chatStore';
-import type { AuthTokens, User } from '../types';
+import type { AuthTokens, Gender, User } from '../types';
 
 interface AuthState {
   user: User | null;
@@ -22,7 +22,13 @@ interface AuthState {
   register: (payload: RegisterPayload) => Promise<void>;
   logout: () => Promise<void>;
   withdraw: () => Promise<void>;
-  updateProfile: (payload: { name?: string; profileImageUrl?: string }) => Promise<void>;
+  updateProfile: (payload: {
+    name?: string;
+    profileImageUrl?: string;
+    birthDate?: string;
+    gender?: Gender;
+    heightCm?: number;
+  }) => Promise<void>;
   /** 서버 기준으로 내 정보 재조회 (역할 변경 등 반영) */
   refreshMe: () => Promise<void>;
   /** 갱신된 사용자로 교체 — 설정 변경 API 가 최신 User 를 돌려주므로 재조회가 불필요하다 */

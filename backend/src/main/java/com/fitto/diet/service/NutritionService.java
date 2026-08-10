@@ -2,6 +2,7 @@ package com.fitto.diet.service;
 
 import com.fitto.diet.domain.Meal;
 import com.fitto.diet.domain.NutritionGoal;
+import com.fitto.diet.dto.EnergyBalance;
 import com.fitto.diet.dto.NutritionGoalRequest;
 import com.fitto.diet.dto.NutritionSummaryResponse;
 import com.fitto.diet.repository.MealRepository;
@@ -13,7 +14,8 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * 영양 목표 & 오늘 섭취 요약 — 목표 대비 남은 칼로리·매크로 대시보드.
+ * 영양 목표 & 오늘 섭취 요약 — 목표 대비 남은 칼로리·매크로 대시보드
+ * + 실시간 에너지 밸런스(기초대사량 + 오늘 운동 소모 - 섭취).
  */
 @Service
 @Transactional(readOnly = true)
@@ -21,10 +23,13 @@ public class NutritionService {
 
     private final NutritionGoalRepository goalRepository;
     private final MealRepository mealRepository;
+    private final EnergyBalanceService energyBalanceService;
 
-    public NutritionService(NutritionGoalRepository goalRepository, MealRepository mealRepository) {
+    public NutritionService(NutritionGoalRepository goalRepository, MealRepository mealRepository,
+                            EnergyBalanceService energyBalanceService) {
         this.goalRepository = goalRepository;
         this.mealRepository = mealRepository;
+        this.energyBalanceService = energyBalanceService;
     }
 
     public NutritionSummaryResponse today(Long userId) {
@@ -34,12 +39,14 @@ public class NutritionService {
         int carbs = meals.stream().mapToInt(m -> nz(m.getCarbs())).sum();
         int protein = meals.stream().mapToInt(m -> nz(m.getProtein())).sum();
         int fat = meals.stream().mapToInt(m -> nz(m.getFat())).sum();
+        EnergyBalance energy = energyBalanceService.compute(userId, cal);
         return new NutritionSummaryResponse(
                 goal != null ? goal.getTargetCalories() : null,
                 goal != null ? goal.getTargetCarbs() : null,
                 goal != null ? goal.getTargetProtein() : null,
                 goal != null ? goal.getTargetFat() : null,
-                cal, carbs, protein, fat);
+                cal, carbs, protein, fat,
+                energy.bmr(), energy.exerciseCalories(), energy.energyBalance());
     }
 
     @Transactional

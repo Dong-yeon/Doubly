@@ -3,6 +3,7 @@ package com.fitto.auth.service;
 import com.fitto.auth.dto.LoginRequest;
 import com.fitto.auth.dto.RegisterRequest;
 import com.fitto.auth.dto.TokenResponse;
+import com.fitto.auth.dto.UpdateProfileRequest;
 import com.fitto.auth.dto.UserResponse;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
@@ -185,12 +186,13 @@ public class AuthService {
         return UserResponse.from(user);
     }
 
-    /** 프로필 수정 — 제공된 필드(이름/사진)만 반영. */
+    /** 프로필 수정 — 제공된 필드(이름/사진/생년월일/성별/키)만 반영. */
     @Transactional
-    public UserResponse updateMe(Long userId, String name, String profileImageUrl) {
+    public UserResponse updateMe(Long userId, UpdateProfileRequest request) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
-        user.updateProfile(name, profileImageUrl);
+        user.updateProfile(request.name(), request.profileImageUrl());
+        user.updateBodyProfile(request.birthDate(), request.gender(), request.heightCm());
         return UserResponse.from(user);
     }
 

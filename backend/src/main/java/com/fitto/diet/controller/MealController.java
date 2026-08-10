@@ -30,6 +30,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -71,6 +72,16 @@ public class MealController {
                                                          @Valid @RequestBody AnalyzeMealTextRequest request) {
         return ApiResponse.success(foodAnalysisService.analyzeText(user.id(), request.text()),
                 "AI 분석이 완료되었습니다.");
+    }
+
+    /**
+     * 지정한 날짜(기본: 어제)의 식단을 오늘 날짜로 통째로 복사 — "어제 식단 불러오기" 3초 퀵 로깅.
+     */
+    @PostMapping("/copy")
+    public ApiResponse<List<MealResponse>> copyFrom(@AuthenticationPrincipal AuthUser user,
+                                                     @RequestParam(required = false) LocalDate sourceDate) {
+        LocalDate from = sourceDate != null ? sourceDate : LocalDate.now().minusDays(1);
+        return ApiResponse.success(mealService.copyFrom(user.id(), from), "어제 식단을 불러왔어요.");
     }
 
     @GetMapping("/today")
