@@ -3,6 +3,8 @@ import { apiClient, unwrap } from './client';
 import type {
   ApiResponse,
   CalendarDay,
+  ExerciseCatalogItem,
+  ExerciseLastPerformance,
   PartnerToday,
   Workout,
   WorkoutRecommendation,
@@ -19,6 +21,13 @@ export interface SaveRoutinePayload {
     targetSets?: number;
     reps?: number;
     weightKg?: number;
+    exerciseCatalogId?: number;
+    muscleGroup?: string;
+    equipment?: string;
+    // 이 종목만의 휴식 시간(초) — 생략하면 세션 전역 기본값 사용(③)
+    restSeconds?: number;
+    // 사전 지정 대체 종목 — 카탈로그 id 목록, 최대 3개(④)
+    alternativeExerciseCatalogIds?: number[];
   }[];
 }
 
@@ -27,6 +36,8 @@ export interface SaveWorkoutPayload {
   relationId?: number;
   totalDurationMin?: number;
   memo?: string;
+  /** 이 세션이 시작된 내 루틴 템플릿 id — 스마트 루틴 동기화의 전제. 자유 운동은 생략 */
+  sourceRoutineId?: number;
   sets: Omit<WorkoutSet, 'id'>[];
 }
 
@@ -54,6 +65,30 @@ export const workoutApi = {
   routines: () => unwrap(apiClient.get<ApiResponse<WorkoutRoutine[]>>('/workout/routines')),
   saveRoutine: (payload: SaveRoutinePayload) =>
     unwrap(apiClient.post<ApiResponse<WorkoutRoutine>>('/workout/routines', payload)),
+  // 스마트 루틴 동기화(Save-on-Finish) — 세션에서 바뀐 구성을 기존 루틴에 반영(전체 교체)
+  updateRoutine: (id: number, payload: SaveRoutinePayload) =>
+    unwrap(apiClient.patch<ApiResponse<WorkoutRoutine>>(`/workout/routines/${id}`, payload)),
   removeRoutine: (id: number) =>
     unwrap(apiClient.delete<ApiResponse<void>>(`/workout/routines/${id}`)),
+  // ⑤ 검증된 분할 템플릿 — 목록 조회 + 내 루틴으로 복사
+  routineTemplates: () =>
+    unwrap(apiClient.get<ApiResponse<WorkoutRoutine[]>>('/workout/routines/templates')),
+  copyRoutine: (id: number) =>
+    unwrap(apiClient.post<ApiResponse<WorkoutRoutine>>(`/workout/routines/${id}/copy`)),
+
+  // 종목 카탈로그 — 자극 부위 필터 시 대체 종목 후보, 생략 시 전체(자동완성)
+  exerciseCatalog: (muscleGroup?: string) =>
+    unwrap(
+      apiClient.get<ApiResponse<ExerciseCatalogItem[]>>('/workout/exercise-catalog', {
+        params: { muscleGroup },
+      }),
+    ),
+
+  // 종목별 직전 수행 기록 배치 조회 — 세션 시작 시 무게/횟수 프리필
+  lastPerformance: (exerciseNames: string[]) =>
+    unwrap(
+      apiClient.post<ApiResponse<ExerciseLastPerformance[]>>('/workout/exercises/last-performance', {
+        exerciseNames,
+      }),
+    ),
 };
