@@ -22,7 +22,9 @@ export type HomeStackParamList = {
   CoupleConnect: undefined;
   // 우리 기록 — 포스트·운동·식단·맛집 통합 타임라인.
   // 홈에 붙어 있었으나, 기록이 쌓일수록 배경 사진을 덮어서 별도 화면으로 분리했다.
-  FeedTimeline: undefined;
+  // who 를 주면 그 사람 기록만 거른다 — 홈 히어로의 좌/우 열을 누르면 각자의 기록으로 간다
+  // (없으면 기존처럼 둘 다 섞인 전체 타임라인).
+  FeedTimeline: { who?: 'me' | 'partner' } | undefined;
   // 커플 일상 피드 작성
   FeedCompose: undefined;
   // 데일리 질문 (커플 Q&A)
@@ -31,6 +33,8 @@ export type HomeStackParamList = {
   CoupleCalendar: undefined;
   // 우리 사진첩 — 피드 사진 전체 모아보기
   PhotoAlbum: undefined;
+  // 추억 — 작년 오늘. on 을 주면 그 날짜 기준(생략 시 오늘)
+  Memories: { on?: string } | undefined;
   // MY (구 MY 탭에서 이전) — 홈 헤더 프로필 아이콘으로 진입
   My: undefined;
   // 설정 — 알림·마케팅 수신, 비밀번호 변경, 약관 열람
@@ -45,6 +49,15 @@ export type HomeStackParamList = {
   TrainerConnect: undefined;
 };
 
+// 대체 종목 사전 지정 — 루틴 작성 시 종목마다 미리 묶어둔 대체 후보(④)
+export interface SessionExerciseAlternativeParam {
+  exerciseCatalogId: number;
+  name: string;
+  category?: string;
+  muscleGroup: string;
+  equipment?: string;
+}
+
 // 운동 세션(짐 보조)에 넘기는 운동 항목 — 루틴 실행 시 사용
 export interface SessionExerciseParam {
   name: string;
@@ -52,27 +65,42 @@ export interface SessionExerciseParam {
   targetSets?: number;
   reps?: number;
   weightKg?: number;
+  // 자극 부위/기구/카탈로그 참조 — 대체 종목 추천(②)에 사용. 루틴에 저장돼 있을 때만 채워짐
+  muscleGroup?: string;
+  equipment?: string;
+  exerciseCatalogId?: number;
+  // 이 종목만의 휴식 시간(초) — 없으면 세션 전역 기본값 사용(③)
+  restSeconds?: number;
+  // 사전 지정 대체 종목 — 세션의 대체 종목 모달에서 '추천'으로 먼저 보여줌(④)
+  alternatives?: SessionExerciseAlternativeParam[];
 }
 
 // 운동 탭 내부 스택 — 운동 + 식단(세그먼트로 통합)
 export type WorkoutStackParamList = {
   WorkoutMain: undefined;
-  WorkoutRecord: undefined;
+  // date: 캘린더에서 특정 날짜를 골라 들어올 때 그 날짜로 시작한다 (없으면 오늘)
+  WorkoutRecord: { date?: string } | undefined;
   WorkoutCalendar: undefined;
   WorkoutStats: undefined;
   WorkoutRecommend: undefined;
   // 운동 세션 보조 (세트 체크·휴식 타이머). 루틴 실행 시 exercises 전달
-  WorkoutSession: { exercises?: SessionExerciseParam[] } | undefined;
+  // routineId/routineTitle 은 루틴에서 시작했을 때만 채워짐 — 스마트 루틴 동기화(Save-on-Finish)의 전제
+  WorkoutSession:
+    | { exercises?: SessionExerciseParam[]; routineId?: number; routineTitle?: string }
+    | undefined;
   // 내 운동 루틴 (짐앱 스타일)
   WorkoutRoutines: undefined;
   WorkoutRoutineForm: undefined;
+  // 검증된 분할 템플릿(⑤) — 목록에서 골라 내 루틴으로 복사
+  WorkoutRoutineTemplates: undefined;
   // 신체 측정 & 진행 사진
   BodyMetric: undefined;
   // 커플 챌린지/대결
   Challenge: undefined;
   // 식단 (구 식단 탭에서 이전) — WorkoutMain 상단 세그먼트로 토글
   DietMain: undefined;
-  DietRecord: undefined;
+  // date: 캘린더에서 특정 날짜를 골라 들어올 때 그 날짜로 시작한다 (없으면 오늘)
+  DietRecord: { date?: string } | undefined;
   DietCalendar: undefined;
   DietStats: undefined;
 };

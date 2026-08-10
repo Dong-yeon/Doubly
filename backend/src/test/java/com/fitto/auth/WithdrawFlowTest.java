@@ -74,7 +74,7 @@ class WithdrawFlowTest {
 
         // relations 를 참조하는 커플 콘텐츠
         placeService.save(me, new SavePlaceRequest(
-                "맛집", "서울", new BigDecimal("37.5"), new BigDecimal("127.0"), null, null));
+                "맛집", "서울", new BigDecimal("37.5"), new BigDecimal("127.0"), null, null, null));
         feedService.createPost(me, new CreatePostRequest("오늘의 기록", null));
         tripService.save(me, new SaveTripRequest(
                 "여행", LocalDate.now(), LocalDate.now().plusDays(2), null, null));
@@ -102,7 +102,7 @@ class WithdrawFlowTest {
         relationService.connectCouple(partner, invite.code());
 
         placeService.save(me, new SavePlaceRequest(
-                "맛집", "서울", new BigDecimal("37.5"), new BigDecimal("127.0"), null, null));
+                "맛집", "서울", new BigDecimal("37.5"), new BigDecimal("127.0"), null, null, null));
         feedService.createPost(partner, new CreatePostRequest("상대의 기록", null));
 
         authService.withdraw(me);

@@ -1,6 +1,7 @@
 /** 트레이너 등록 — 프로필 입력 후 역할 승격 (TRAINER-01) */
 import React, { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
+import { FormKeyboardView } from '../../components/FormKeyboardView';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -13,6 +14,7 @@ import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, spacing } from '../../constants/theme';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'TrainerRegister'>;
 
@@ -44,8 +46,7 @@ export function TrainerRegisterScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+      <FormKeyboardView contentContainerStyle={styles.container}>
           <Text style={styles.title}>트레이너로 활동하기</Text>
           <Text style={styles.desc}>
             등록하면 회원을 초대해 운동 현황을 관리할 수 있어요.{'\n'}프로필은 나중에 수정할 수 있어요.
@@ -74,17 +75,16 @@ export function TrainerRegisterScreen({ navigation }: Props) {
           />
 
           <Button title="트레이너로 등록하기" onPress={onRegister} loading={saving} style={styles.submit} />
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </FormKeyboardView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
   container: { padding: spacing.lg, paddingBottom: spacing.xl },
   title: { fontSize: fontSize.title, fontWeight: '800', color: colors.textPrimary, marginBottom: spacing.sm },
   desc: { fontSize: fontSize.body, color: colors.textSecondary, marginBottom: spacing.lg, lineHeight: 20 },
   submit: { marginTop: spacing.lg },
-});
+}));

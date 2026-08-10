@@ -34,8 +34,13 @@ export const authApi = {
       }),
     ),
   me: () => unwrap(apiClient.get<ApiResponse<User>>('/auth/me')),
-  updateMe: (payload: { name?: string; profileImageUrl?: string }) =>
-    unwrap(apiClient.put<ApiResponse<User>>('/auth/me', payload)),
+  updateMe: (payload: {
+    name?: string;
+    profileImageUrl?: string;
+    birthDate?: string;
+    gender?: Gender;
+    heightCm?: number;
+  }) => unwrap(apiClient.put<ApiResponse<User>>('/auth/me', payload)),
   /** 서버에서 리프레시 토큰 폐기 — 만료 전이라도 재사용 불가하게 만든다 */
   logout: (refreshToken: string) =>
     unwrap(

@@ -16,7 +16,9 @@ import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { DateCourse, Place, PlaceStatus } from '../../types';
+import type { DateCourse, Place, PlaceDietTag, PlaceStatus } from '../../types';
+import { themedStyles } from '../../theme/themedStyles';
+import { layout } from '../../theme/layout';
 
 type Props = NativeStackScreenProps<PlaceStackParamList, 'PlaceMap'>;
 
@@ -47,9 +49,23 @@ const FILTERS: { value: PlaceStatus | 'ALL'; label: string }[] = [
   { value: 'VISITED', label: '다녀왔어요' },
 ];
 
+// 클린식/치팅데이 필터 — 평소 식단 유지용 vs 보상 데이트용을 스위치로 구분
+const DIET_FILTERS: { value: PlaceDietTag | 'ALL'; label: string }[] = [
+  { value: 'ALL', label: '전체' },
+  { value: 'CLEAN', label: '🥗 클린식' },
+  { value: 'CHEAT', label: '🍔 치팅데이' },
+];
+
+// 지도 핀 색상 — 클린식은 초록, 치팅데이는 주황. 구분 없는 장소는 기본(빨강) 핀 유지
+const DIET_TAG_PIN_COLOR: Partial<Record<PlaceDietTag, string>> = {
+  CLEAN: '#22C55E',
+  CHEAT: '#F97316',
+};
+
 export function PlaceMapScreen({ navigation }: Props) {
   const [places, setPlaces] = useState<Place[]>([]);
   const [filter, setFilter] = useState<PlaceStatus | 'ALL'>('ALL');
+  const [dietFilter, setDietFilter] = useState<PlaceDietTag | 'ALL'>('ALL');
   const [mapMode, setMapMode] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -90,11 +106,19 @@ export function PlaceMapScreen({ navigation }: Props) {
     ]);
   };
 
-  const filtered = filter === 'ALL' ? places : places.filter((p) => p.status === filter);
-  // 좌표가 등록된 장소만 지도에 핀으로 표시
+  const filtered = places
+    .filter((p) => filter === 'ALL' || p.status === filter)
+    .filter((p) => dietFilter === 'ALL' || p.dietTag === dietFilter);
+  // 좌표가 등록된 장소만 지도에 핀으로 표시 — 클린식/치팅데이는 색상으로 구분
   const markers = filtered
     .filter((p) => p.lat != null && p.lng != null)
-    .map((p) => ({ id: p.id, lat: p.lat as number, lng: p.lng as number, title: p.name }));
+    .map((p) => ({
+      id: p.id,
+      lat: p.lat as number,
+      lng: p.lng as number,
+      title: p.name,
+      color: DIET_TAG_PIN_COLOR[p.dietTag],
+    }));
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
@@ -128,6 +152,17 @@ export function PlaceMapScreen({ navigation }: Props) {
         <TouchableOpacity style={styles.filterChip} onPress={() => navigation.navigate('TripList')}>
           <Text style={styles.filterText}>여행</Text>
         </TouchableOpacity>
+      </View>
+      <View style={styles.filterRow}>
+        {DIET_FILTERS.map((f) => (
+          <TouchableOpacity
+            key={f.value}
+            style={[styles.filterChip, dietFilter === f.value && styles.filterChipActive]}
+            onPress={() => setDietFilter(f.value)}
+          >
+            <Text style={[styles.filterText, dietFilter === f.value && styles.filterTextActive]}>{f.label}</Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
       {mapMode ? (
@@ -168,6 +203,11 @@ export function PlaceMapScreen({ navigation }: Props) {
                   <Text style={styles.categoryText}>{item.category}</Text>
                 </View>
               ) : null}
+              {item.dietTag !== 'NEUTRAL' ? (
+                <View style={[styles.categoryChip, styles.dietTagChip]}>
+                  <Text style={styles.categoryText}>{item.dietTag === 'CLEAN' ? '🥗 클린식' : '🍔 치팅데이'}</Text>
+                </View>
+              ) : null}
             </View>
             {item.address ? <Text style={styles.address}>{item.address}</Text> : null}
             <View style={styles.cardFooter}>
@@ -201,7 +241,7 @@ export function PlaceMapScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   titleRow: {
     flexDirection: 'row',
@@ -231,11 +271,13 @@ const styles = StyleSheet.create({
   },
   courseStopBody: { flex: 1 },
   courseName: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
-  courseReason: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2, lineHeight: 18 },
+  courseReason: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xxs, lineHeight: 18 },
   filterRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.md },
   filterChip: {
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    // 패딩만으로는 35px — 자주 누르는 필터라 최소 터치 크기를 맞춘다
+    minHeight: layout.touchTarget,
+    justifyContent: 'center',
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: colors.border,
@@ -244,7 +286,7 @@ const styles = StyleSheet.create({
   filterChipActive: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
   filterText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
   filterTextActive: { color: colors.textPrimary, fontWeight: '800' },
-  list: { padding: spacing.lg, paddingBottom: 120 },
+  list: { padding: spacing.lg, paddingBottom: layout.listBottomWithFab },
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -264,6 +306,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   categoryText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
+  dietTagChip: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
   address: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xs },
   cardFooter: {
     flexDirection: 'row',
@@ -274,7 +317,7 @@ const styles = StyleSheet.create({
   statusBadge: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textPrimary },
   visitInfo: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '700' },
   fabWrap: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: spacing.lg },
-  mapWrap: { flex: 1, padding: spacing.lg, paddingBottom: 96 },
+  mapWrap: { flex: 1, padding: spacing.lg, paddingBottom: layout.listBottomWithFab },
   map: { flex: 1 },
   mapHint: { fontSize: fontSize.caption, color: colors.textSecondary, textAlign: 'center', marginTop: spacing.sm },
-});
+}));

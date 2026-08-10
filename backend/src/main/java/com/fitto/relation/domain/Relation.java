@@ -81,19 +81,25 @@ public class Relation {
     @Column(name = "restore_requested_by")
     private Long restoreRequestedBy;
 
+    /** FAMILY 표시 이름 (커플/트레이너는 NULL) */
+    @Column(name = "relation_name", length = 50)
+    private String relationName;
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
     @Builder
     private Relation(RelationType relationType, Long userAId, Long userBId,
-                     String inviteCode, LocalDateTime codeExpiresAt, RelationStatus status) {
+                     String inviteCode, LocalDateTime codeExpiresAt, RelationStatus status,
+                     String relationName) {
         this.relationType = relationType;
         this.userAId = userAId;
         this.userBId = userBId;
         this.inviteCode = inviteCode;
         this.codeExpiresAt = codeExpiresAt;
         this.status = status != null ? status : RelationStatus.PENDING;
+        this.relationName = relationName;
     }
 
     /** 초대코드로 상대방이 연결. 코드는 비우고 ACTIVE 로 전환. */
@@ -108,6 +114,33 @@ public class Relation {
     public void end() {
         this.status = RelationStatus.ENDED;
         this.endedAt = LocalDateTime.now();
+    }
+
+    /** 생성 즉시 활성화 — FAMILY 는 만든 사람 혼자여도 바로 사용 가능하다. */
+    public void activate() {
+        this.status = RelationStatus.ACTIVE;
+        this.connectedAt = LocalDateTime.now();
+    }
+
+    /**
+     * 초대코드 재발급 — FAMILY 전용.
+     * 커플과 달리 참여해도 코드를 비우지 않으므로(여러 명이 같은 코드로 참여),
+     * 만료되면 이 메서드로 새 코드를 발급한다.
+     */
+    public void issueInviteCode(String code, LocalDateTime expiresAt) {
+        this.inviteCode = code;
+        this.codeExpiresAt = expiresAt;
+    }
+
+    /**
+     * 대표(user_a) 재배정 — FAMILY 에서 대표가 나가도 관계를 유지하기 위함.
+     * user_a_id 가 NOT NULL 이라 남은 멤버 중 한 명에게 넘겨야 한다.
+     */
+    public void reassignOwner(Long newOwnerId) {
+        this.userAId = newOwnerId;
+        if (newOwnerId.equals(this.userBId)) {
+            this.userBId = null;
+        }
     }
 
     public void updateBackground(String url) {

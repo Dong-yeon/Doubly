@@ -4,6 +4,7 @@ import { Animated, Platform, StyleSheet, Text } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useToastStore } from '../store/toastStore';
 import { colors, fontSize, radius, shadow, spacing } from '../constants/theme';
+import { themedStyles } from '../theme/themedStyles';
 
 /*
  * 토스트 배경 — 글씨가 항상 흰색이므로 배경은 <b>두 테마 모두에서 어두워야</b> 한다.
@@ -11,11 +12,9 @@ import { colors, fontSize, radius, shadow, spacing } from '../constants/theme';
  * 뒤집혀 흰 글씨가 그대로 사라졌다. 세 종류 모두 테마와 무관하게 대비가 유지되는
  * 기능색을 쓴다.
  */
-const BG = {
-  success: colors.success,
-  error: colors.danger,
-  info: colors.primary,
-};
+/* 렌더 시점에 현재 팔레트를 읽는다 — 객체로 굳히면 테마 전환을 따라오지 못한다 */
+const bgOf = (kind: 'success' | 'error' | 'info'): string =>
+  ({ success: colors.success, error: colors.danger, info: colors.primary })[kind];
 
 export function Toast() {
   const toast = useToastStore((s) => s.toast);
@@ -46,7 +45,7 @@ export function Toast() {
          * 네이티브에는 fixed 가 없으므로 웹에서만 적용한다.
          */
         Platform.OS === 'web' ? ({ position: 'fixed', zIndex: 99999 } as object) : null,
-        { top: insets.top + spacing.sm, backgroundColor: BG[toast.type] },
+        { top: insets.top + spacing.sm, backgroundColor: bgOf(toast.type) },
         shadow.md,
         {
           opacity: anim,
@@ -59,7 +58,7 @@ export function Toast() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   wrap: {
     position: 'absolute',
     alignSelf: 'center',
@@ -70,4 +69,4 @@ const styles = StyleSheet.create({
     zIndex: 999,
   },
   text: { color: colors.white, fontSize: fontSize.body, fontWeight: '700', textAlign: 'center' },
-});
+}));

@@ -3,8 +3,8 @@ import React, { useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createBottomTabNavigator, BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { getFocusedRouteNameFromRoute, StackActions } from '@react-navigation/native';
+import { MaterialCommunityIcons } from '../components/Icon';
 import type { MainTabParamList } from './types';
 import { colors, fontSize, radius, shadow, spacing } from '../constants/theme';
 import { HomeStackNavigator } from './HomeStackNavigator';
@@ -14,6 +14,7 @@ import { PlaceStackNavigator } from './PlaceStackNavigator';
 import { haptics } from '../utils/haptics';
 import { useRelationStore } from '../store/relationStore';
 import { toast } from '../store/toastStore';
+import { themedStyles } from '../theme/themedStyles';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
@@ -38,10 +39,16 @@ const FAB_ACTIONS: {
   go: (nav: BottomTabBarProps['navigation']) => void;
   requiresCouple?: boolean;
 }[] = [
-  { icon: 'dumbbell', label: '운동 기록', go: (n) => n.navigate('Workout', { screen: 'WorkoutRecord' }) },
-  { icon: 'camera-outline', label: '음식 촬영', go: (n) => n.navigate('Workout', { screen: 'DietRecord' }) },
-  { icon: 'map-marker-plus-outline', label: '맛집 핀', go: (n) => n.navigate('Place', { screen: 'PlaceAdd' }), requiresCouple: true },
-  { icon: 'image-plus', label: '일상 남기기', go: (n) => n.navigate('Home', { screen: 'FeedCompose' }), requiresCouple: true },
+  /*
+   * initial: false — 대상 탭을 방문한 적 없으면 지정 화면이 스택의 유일한 화면으로
+   * 마운트된다. 그 상태에서 저장 후 goBack 하면 스택에서 팝되는 게 아니라 이전 탭으로
+   * 이동만 하고, 작성 화면이 입력값째 스택에 남아 재진입 시 중복 등록으로 이어졌다.
+   * initial: false 는 탭의 initialRouteName 을 아래에 깔아 goBack 이 항상 팝이 되게 한다.
+   */
+  { icon: 'dumbbell', label: '운동 기록', go: (n) => n.navigate('Workout', { screen: 'WorkoutRecord', initial: false }) },
+  { icon: 'camera-outline', label: '음식 촬영', go: (n) => n.navigate('Workout', { screen: 'DietRecord', initial: false }) },
+  { icon: 'map-marker-plus-outline', label: '맛집 핀', go: (n) => n.navigate('Place', { screen: 'PlaceAdd', initial: false }), requiresCouple: true },
+  { icon: 'image-plus', label: '일상 남기기', go: (n) => n.navigate('Home', { screen: 'FeedCompose', initial: false }), requiresCouple: true },
 ];
 
 /**
@@ -67,8 +74,24 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
         style={styles.tabItem}
         activeOpacity={0.7}
         onPress={() => {
-          const event = navigation.emit({ type: 'tabPress', target: state.routes[index].key, canPreventDefault: true });
-          if (!focused && !event.defaultPrevented) navigation.navigate(routeName);
+          const route = state.routes[index];
+          const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
+          if (event.defaultPrevented) return;
+          if (!focused) navigation.navigate(routeName);
+          /*
+           * 탭을 누르면 <b>그 탭의 첫 화면</b>으로 돌아간다.
+           *
+           * 예전에는 focused 일 때 아무 것도 하지 않아, 중첩 스택에 남은 깊은 화면에서
+           * 빠져나올 방법이 없었다. FAB "음식 촬영"이 건강 탭 스택에 DietRecord 를
+           * 밀어넣으면 그 뒤로 건강 탭이 계속 식단 기록으로 열렸다.
+           *
+           * 대가로 탭을 옮겼다 돌아올 때 보던 위치를 잃는다. 이 앱의 탭은 대부분
+           * 얕고, FAB 가 기록 화면을 탭 스택에 남기는 구조라 예측 가능성을 택했다.
+           */
+          const nestedKey = route.state?.key;
+          if (nestedKey) {
+            navigation.dispatch({ ...StackActions.popToTop(), target: nestedKey });
+          }
         }}
       >
         {/* 비활성도 textSecondary — textMuted(#9A98A4)는 흰 탭바 위 2.84:1 로 WCAG 미달 */}
@@ -108,15 +131,28 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
         홈 인디케이터가 있는 기기는 insets.bottom(≈34) 으로 충분하지만, 웹·구형 안드로이드는
         insets.bottom 이 0 이라 라벨이 화면 바닥에 붙어 보였다. 최소 여백을 보장한다.
       */}
-      <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
-        {renderTab(routeNames[0], 0)}
-        {renderTab(routeNames[1], 1)}
+      {/*
+        FAB 는 바(bar) 바깥 래퍼에 올린다 — 예전엔 fabSlot(높이 0) 안에서 top:-32 로
+        띄웠는데, Android 는 부모 경계 밖 자식에 터치를 전달하지 않아 FAB 상단이
+        눌리지 않았다. 래퍼에 돌출분만큼 투명 상단 여백을 줘 FAB 전체가
+        래퍼 경계 안에 들어오게 한다.
+      */}
+      <View style={styles.barWrap} pointerEvents="box-none">
+        <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
+          {renderTab(routeNames[0], 0)}
+          {renderTab(routeNames[1], 1)}
+          {/* 중앙 FAB 자리 확보용 스페이서 */}
+          <View style={styles.fabSlot} />
+          {renderTab(routeNames[2], 2)}
+          {renderTab(routeNames[3], 3)}
+        </View>
 
-        {/* 중앙 FAB */}
-        <View style={styles.fabSlot}>
+        <View style={styles.fabOverlay} pointerEvents="box-none">
           <TouchableOpacity
             style={styles.fab}
             activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="기록 추가"
             onPress={() => {
               haptics.light();
               setSheetOpen(true);
@@ -125,15 +161,16 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
             <MaterialCommunityIcons name="plus" size={30} color={colors.white} />
           </TouchableOpacity>
         </View>
-
-        {renderTab(routeNames[2], 2)}
-        {renderTab(routeNames[3], 3)}
       </View>
 
       {/* 액션시트 */}
       <Modal visible={sheetOpen} transparent animationType="fade" onRequestClose={() => setSheetOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setSheetOpen(false)}>
-          <Pressable style={[styles.sheet, { paddingBottom: insets.bottom + spacing.md }]}>
+          {/* onPress 로 탭을 흡수한다 — 없으면 시트 빈 곳 터치가 배경으로 새어나가 닫힌다 */}
+          <Pressable
+            style={[styles.sheet, { paddingBottom: insets.bottom + spacing.md }]}
+            onPress={() => {}}
+          >
             <View style={styles.grabber} />
             {FAB_ACTIONS.map((a) => (
               <TouchableOpacity key={a.label} style={styles.action} activeOpacity={0.7} onPress={() => onAction(a)}>
@@ -168,8 +205,18 @@ export function MainTabNavigator() {
 }
 
 const FAB_SIZE = 58;
+/**
+ * FAB 가 탭바 상단 위로 튀어나오는 높이 — barWrap 의 투명 상단 여백과 같아야 한다.
+ *
+ * <p><b>정확히 반지름이어야 한다.</b> 24 였을 때 탭바의 1px 경계선이 FAB 위에서
+ * 24/58 지점을 지나 중심(29)보다 5px 위였고, FAB 의 흰 링이 만드는 선의 끊김이
+ * <b>비대칭</b>으로 보였다. 반지름으로 두면 선이 정확히 지름을 지난다.
+ */
+const FAB_PROTRUSION = FAB_SIZE / 2;
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
+  // 투명 래퍼 — FAB 돌출분을 경계 안에 포함시킨다 (Android 터치 클리핑 대응)
+  barWrap: { paddingTop: FAB_PROTRUSION },
   bar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -182,10 +229,10 @@ const styles = StyleSheet.create({
   // minHeight 48 — 아이콘+라벨만으론 40px 이라 터치 타깃 권장(44px)에 못 미친다
   tabItem: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2, minHeight: 48 },
   tabLabel: { fontSize: 11, fontWeight: '700', lineHeight: 14 },
-  fabSlot: { width: 72, alignItems: 'center', justifyContent: 'center' },
+  fabSlot: { width: 72 },
+  // 래퍼 상단 기준 중앙 정렬 — FAB 가 바 위로 FAB_PROTRUSION 만큼 떠 보인다
+  fabOverlay: { position: 'absolute', top: 0, left: 0, right: 0, alignItems: 'center' },
   fab: {
-    position: 'absolute',
-    top: -32, // tabItem minHeight 48 로 슬롯 중심이 4px 내려간 만큼 보정 (탭바 상단과 플러시 유지)
     width: FAB_SIZE,
     height: FAB_SIZE,
     borderRadius: FAB_SIZE / 2,
@@ -224,4 +271,4 @@ const styles = StyleSheet.create({
   actionLabel: { fontSize: fontSize.subtitle, fontWeight: '700', color: colors.textPrimary },
   cancel: { alignItems: 'center', paddingVertical: spacing.md, marginTop: spacing.xs },
   cancelText: { fontSize: fontSize.subtitle, fontWeight: '700', color: colors.textSecondary },
-});
+}));

@@ -1,10 +1,11 @@
 /** 레벨 카드 — 칭호 + XP 진행바. XP = 운동일×10 + 식단일×5 (서버 파생 계산) */
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from './Icon';
 import { Card } from './Card';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 import type { UserLevel } from '../types';
+import { themedStyles } from '../theme/themedStyles';
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -53,7 +54,7 @@ export function LevelCard({ level }: { level: UserLevel }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   card: { gap: spacing.sm },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   titleWrap: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
@@ -71,4 +72,4 @@ const styles = StyleSheet.create({
   track: { height: 12, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
   fill: { height: '100%', borderRadius: radius.pill, backgroundColor: colors.primary },
   next: { fontSize: fontSize.caption, color: colors.textSecondary, textAlign: 'center' },
-});
+}));

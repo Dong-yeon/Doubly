@@ -49,6 +49,53 @@ public interface PlaceVisitRepository extends JpaRepository<PlaceVisit, Long> {
                                            @Param("cursorId") Long cursorId,
                                            org.springframework.data.domain.Pageable pageable);
 
+    /**
+     * 추억 리마인드 — 그 날 방문한 기록 (PLAN.md Memories).
+     *
+     * <p>{@code visited_at} 은 {@code DATE} 라 시간대 보정이 필요 없고, "방문한 날"이라는
+     * 의미도 정확하다. 피드 타임라인({@link #findRecentForFeed})은 등록 시각
+     * {@code created_at} 을 쓰지만 추억은 방문일이 기준이다 — <b>통일하지 말 것.</b>
+     * 어제 다녀와서 오늘 등록한 방문은 "어제의 추억"이어야 한다.
+     */
+    @Query("""
+            select v as visit, p.name as placeName
+            from PlaceVisit v join Place p on p.id = v.placeId
+            where p.coupleId = :coupleId and v.visitedAt = :visitedAt
+            order by v.id desc
+            """)
+    List<VisitWithPlace> findByCoupleAndVisitedAt(@Param("coupleId") Long coupleId,
+                                                  @Param("visitedAt") java.time.LocalDate visitedAt);
+
+    /** 추억 조회의 하한 연도용 — 커플의 첫 방문일 (없으면 null). */
+    @Query("""
+            select min(v.visitedAt) from PlaceVisit v join Place p on p.id = v.placeId
+            where p.coupleId = :coupleId
+            """)
+    java.time.LocalDate findEarliestVisitedAt(@Param("coupleId") Long coupleId);
+
+    /**
+     * 추억 푸시 대상 — 그 날 방문 기록이 있는 커플과 그 개수.
+     * 커플을 하나씩 도는 대신 기록 쪽에서 집계한다
+     * ({@code FeedPostRepository.countByCoupleInPeriod} 와 같은 이유).
+     */
+    @Query("""
+            select p.coupleId as coupleId, count(v) as itemCount
+            from PlaceVisit v join Place p on p.id = v.placeId
+            where v.visitedAt = :visitedAt
+            group by p.coupleId
+            """)
+    List<CoupleItemCount> countByCoupleOnVisitedAt(@Param("visitedAt") java.time.LocalDate visitedAt);
+
+    /** 전체를 통틀어 가장 오래된 방문일 — 스케줄러가 훑을 연도의 하한 (없으면 null). */
+    @Query("select min(v.visitedAt) from PlaceVisit v")
+    java.time.LocalDate findGlobalEarliestVisitedAt();
+
+    interface CoupleItemCount {
+        Long getCoupleId();
+
+        long getItemCount();
+    }
+
     interface VisitWithPlace {
         PlaceVisit getVisit();
 

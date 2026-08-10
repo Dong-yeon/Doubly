@@ -8,6 +8,7 @@ import { EmptyState } from '../../components/EmptyState';
 import { workoutApi } from '../../api/workout';
 import type { WorkoutStats } from '../../types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
+import { themedStyles } from '../../theme/themedStyles';
 
 const CAT_COLORS: Record<string, string> = {
   근력: colors.primary,
@@ -36,9 +37,13 @@ export function WorkoutStatsScreen() {
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         {/* 요약 카드 3개 */}
         <View style={styles.summaryRow}>
-          <SummaryCard label="이번 주" value={stats?.weeklyDays ?? 0} unit="일" tint="pink" />
-          <SummaryCard label="이번 달" value={stats?.monthlyDays ?? 0} unit="일" tint="mint" />
-          <SummaryCard label="누적" value={stats?.totalDays ?? 0} unit="일" tint="yellow" />
+          {/*
+            셋 다 "내 기록"이라 같은 톤으로 둔다. 예전엔 Ink→Indigo(상대)→Violet(함께) 로
+            흘러서, 소유자 색 규칙을 아는 사용자에게는 없는 의미를 만들어 보였다.
+          */}
+          <SummaryCard label="이번 주" value={stats?.weeklyDays ?? 0} unit="일" tint="neutral" />
+          <SummaryCard label="이번 달" value={stats?.monthlyDays ?? 0} unit="일" tint="neutral" />
+          <SummaryCard label="누적" value={stats?.totalDays ?? 0} unit="일" tint="neutral" />
         </View>
 
         {/* 최근 7일 */}
@@ -87,7 +92,17 @@ export function WorkoutStatsScreen() {
   );
 }
 
-function SummaryCard({ label, value, unit, tint }: { label: string; value: number; unit: string; tint: 'pink' | 'mint' | 'yellow' }) {
+function SummaryCard({
+  label,
+  value,
+  unit,
+  tint,
+}: {
+  label: string;
+  value: number;
+  unit: string;
+  tint: 'surface' | 'neutral' | 'partner' | 'together';
+}) {
   return (
     <Card elevation="sm" tint={tint} style={styles.summaryCard}>
       <Text style={styles.summaryValue}>
@@ -99,7 +114,7 @@ function SummaryCard({ label, value, unit, tint }: { label: string; value: numbe
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   container: { padding: spacing.lg, gap: spacing.md },
   summaryRow: { flexDirection: 'row', gap: spacing.sm },
@@ -121,4 +136,4 @@ const styles = StyleSheet.create({
   barFill: { height: '100%', borderRadius: radius.pill },
   catCount: { width: 56, textAlign: 'right', fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
   empty: { color: colors.textSecondary, fontSize: fontSize.body },
-});
+}));

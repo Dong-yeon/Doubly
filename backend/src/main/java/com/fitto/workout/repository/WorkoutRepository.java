@@ -17,6 +17,9 @@ public interface WorkoutRepository extends JpaRepository<Workout, Long> {
 
     boolean existsByUserIdAndWorkoutDate(Long userId, LocalDate workoutDate);
 
+    /** 여행 회고(Trip Recap) — 기간 내 두 사람 합산 운동 기록 수. */
+    long countByUserIdInAndWorkoutDateBetween(List<Long> userIds, LocalDate start, LocalDate end);
+
     /** 히스토리 — 커서(id) 기반 페이징. cursor 가 null 이면 최신부터. */
     @Query("""
             select w from Workout w

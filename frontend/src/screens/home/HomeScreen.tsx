@@ -13,7 +13,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '../../components/Icon';
 import { useFocusEffect } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { CompositeScreenProps } from '@react-navigation/native';
@@ -24,10 +24,11 @@ import { Card } from '../../components/Card';
 import { DateField } from '../../components/DateField';
 import { CoupleHero } from './components/CoupleHero';
 import { QuickActions } from './components/QuickActions';
-import { RecentPeek } from './components/RecentPeek';
+import { MemoryPeek } from './components/MemoryPeek';
 import { useAuthStore } from '../../store/authStore';
 import { useRelationStore } from '../../store/relationStore';
 import { workoutApi } from '../../api/workout';
+import { dietApi } from '../../api/diet';
 import { streakApi } from '../../api/streak';
 import { feedApi } from '../../api/feed';
 import { feedTimeLabel } from '../feed/FeedTimelineScreen';
@@ -37,27 +38,50 @@ import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { getErrorMessage } from '../../utils/error';
 import { updateHomeWidget } from '../../widget/updateHomeWidget';
-import type { FeedItem, PartnerToday, Streak } from '../../types';
+import type { FeedItem, Memories, PartnerToday, Streak } from '../../types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
+import { isDarkMode } from '../../theme';
+import { themedStyles } from '../../theme/themedStyles';
+import { layout } from '../../theme/layout';
 
 type Props = CompositeScreenProps<
   NativeStackScreenProps<HomeStackParamList, 'HomeMain'>,
   BottomTabScreenProps<MainTabParamList>
 >;
 
-// Ink 히어로 — 배경 사진이 없을 때의 기본 벽지
-const GRADIENT: [string, string, string] = ['#1B1D3A', '#14162B', '#0D0F22'];
+/**
+ * 배경 사진이 없을 때의 기본 벽지 — 테마를 따른다.
+ */
+const gradient = (): [string, string, string] =>
+  isDarkMode()
+    ? ['#262823', '#1E201C', '#151713']
+    : ['#FFFFFF', '#FAFAF9', '#F1F2F0'];
 
 /**
- * 배경 위 스크림 — 사진이 밝든 어둡든 흰 글씨가 읽혀야 한다.
- * 위는 옅게 두어 사진이 살고, 아래로 갈수록 진해져 유리 카드가 배경에서 분리된다.
- * 사진 밝기와 무관하게 대비를 보장하려고 검정 기반으로 고정한다(테마 무관).
+ * 배경 사진 위 스크림 — 사진이 밝든 어둡든 그 위의 글씨가 읽혀야 한다.
+ *
+ * <p>예전에는 <b>검정 기반 + 흰 글씨</b> 고정이었다. 안전했지만 앱에서 홈만 늘 어두워
+ * 커플앱치고 무거웠다. 지금은 스크림도 테마를 따르고, 글씨는 테마색을 그대로 쓴다 —
+ * 라이트에서는 크림 스크림 + 어두운 글씨(= 밝은 홈), 다크에서는 반대다.
+ *
+ * <p><b>⚠️ 스크림과 글씨의 테마가 어긋나면 안 된다.</b> 스크림만 크림으로 고정했다가
+ * 다크 모드에서 밝은 글씨가 크림 위에 올라가 <b>대비 1.3:1</b> 로 안 읽힌 적이 있다.
+ * 값을 만질 때는 반드시 두 테마 모두에서 확인할 것.
+ *
+ * <p><b>0.84 아래로 내리지 말 것.</b> 최악(순흑 사진 · 라이트)에서도 보조 텍스트가
+ * AA(4.5)를 넘겨야 한다. 맨 위는 topBar(자체 배경이 있는 칩·아바타)만 있어 조금 옅어도 된다.
  */
-const SCRIM: [string, string, string] = [
-  'rgba(0,0,0,0.12)',
-  'rgba(0,0,0,0.30)',
-  'rgba(0,0,0,0.62)',
-];
+const scrim = (): [string, string, string] =>
+  isDarkMode()
+    // 다크는 하한이 더 높아야 한다 — 순백 사진 위 0.84 면 보조 텍스트가 4.35 로 미달이다
+    ? ['rgba(30,32,28,0.88)', 'rgba(30,32,28,0.93)', 'rgba(30,32,28,0.97)']
+    : ['rgba(255,255,255,0.84)', 'rgba(255,255,255,0.92)', 'rgba(255,255,255,0.97)'];
+
+/** 열에 들어갈 최근 기록 한 줄 — 종류마다 제목/본문 중 있는 쪽을 쓴다 */
+function recordLabel(item: FeedItem | null): string | null {
+  if (!item) return null;
+  return item.content || item.title || '기록을 남겼어요';
+}
 
 function daysTogether(connectedAt?: string | null): number {
   if (!connectedAt) return 0;
@@ -72,9 +96,19 @@ export function HomeScreen({ navigation }: Props) {
   const [partner, setPartner] = useState<PartnerToday | null>(null);
   const [myStreak, setMyStreak] = useState<Streak | null>(null);
   const [partnerStreak, setPartnerStreak] = useState<Streak | null>(null);
-  const [myDone, setMyDone] = useState(false);
-  // 최근 기록 한 건만 — 홈은 목록을 갖지 않는다
-  const [latest, setLatest] = useState<FeedItem | null>(null);
+  // 오늘의 운동·식단 — 나/상대 각각. 히어로의 두 사람 아래에 나란히 표시된다
+  const [myWorkoutDone, setMyWorkoutDone] = useState(false);
+  const [myMealDone, setMyMealDone] = useState(false);
+  const [partnerMeal, setPartnerMeal] = useState<PartnerToday | null>(null);
+  /*
+   * 최근 기록 — 좌우 열이 <b>각자의</b> 마지막 기록을 보여주므로 두 건이 필요하다.
+   * 타임라인은 시간순 한 줄이라 사람별로 나눠 받을 수 없어, 한 페이지를 받아
+   * mine 으로 갈라 각각 첫 건만 쓴다.
+   */
+  const [myLatest, setMyLatest] = useState<FeedItem | null>(null);
+  const [partnerLatest, setPartnerLatest] = useState<FeedItem | null>(null);
+  // 작년 오늘 — 있는 날에만 최근 기록 자리를 대신 차지한다 (PLAN.md Memories)
+  const [memories, setMemories] = useState<Memories | null>(null);
 
   const [annModal, setAnnModal] = useState(false);
   const [annInput, setAnnInput] = useState('');
@@ -86,15 +120,33 @@ export function HomeScreen({ navigation }: Props) {
 
   const refresh = useCallback(() => {
     fetchAll();
-    workoutApi.today().then((l) => setMyDone(l.length > 0)).catch(() => setMyDone(false));
+    workoutApi.today().then((l) => setMyWorkoutDone(l.length > 0)).catch(() => setMyWorkoutDone(false));
     workoutApi.partnerToday().then(setPartner).catch(() => setPartner(null));
+    dietApi.today().then((l) => setMyMealDone(l.length > 0)).catch(() => setMyMealDone(false));
+    dietApi.partnerToday().then(setPartnerMeal).catch(() => setPartnerMeal(null));
     streakApi.me().then(setMyStreak).catch(() => setMyStreak(null));
     streakApi.partner().then(setPartnerStreak).catch(() => setPartnerStreak(null));
-    // 커플 미연결이면 피드가 404 다 — 조용히 비운다
+    /*
+     * 좌우 열이 각자의 마지막 기록을 보여주므로 <b>두 사람 몫</b>이 필요하다.
+     * 12건이면 한쪽이 연속으로 기록한 날에도 반대쪽 한 건이 대개 들어온다 —
+     * 그래도 없으면 그 열은 "아직 기록이 없어요" 로 둔다(추가 호출은 하지 않는다).
+     * (커플 미연결이면 피드가 404 다 — 조용히 비운다)
+     */
     feedApi
-      .timeline(null)
-      .then((page) => setLatest(page.items[0] ?? null))
-      .catch(() => setLatest(null));
+      .timeline(null, 12)
+      .then((page) => {
+        setMyLatest(page.items.find((i) => i.mine) ?? null);
+        setPartnerLatest(page.items.find((i) => !i.mine) ?? null);
+      })
+      .catch(() => {
+        setMyLatest(null);
+        setPartnerLatest(null);
+      });
+    // 추억은 대부분의 날에 비어 있다 — 없으면 최근 기록이 그대로 남는다
+    feedApi
+      .memories()
+      .then((res) => setMemories(res.groups.length > 0 ? res : null))
+      .catch(() => setMemories(null));
   }, [fetchAll]);
 
   useFocusEffect(useCallback(() => refresh(), [refresh]));
@@ -163,16 +215,16 @@ export function HomeScreen({ navigation }: Props) {
     }
   };
 
+  /*
+   * 상단바는 프로필 하나만 둔다.
+   *
+   * 예전에는 좌상단에 '배경' 버튼이 있었다 — 가장 눈에 띄는 자리를 <b>거의 안 쓰는
+   * 유틸리티</b>가 차지했다. 배경 변경은 MY > 설정으로 옮기고, 여기서는 사진을
+   * <b>길게 눌러</b> 바꿀 수 있게 남겨 둔다(자주 쓰는 사람을 위한 지름길).
+   */
   const topBar = (
     <View style={styles.topBar}>
-      {connected ? (
-        <Pressable style={styles.bgBtn} onPress={onChangeBg} hitSlop={8}>
-          <MaterialCommunityIcons name="image-outline" size={13} color={colors.white} />
-          <Text style={styles.bgBtnText}>배경</Text>
-        </Pressable>
-      ) : (
-        <View />
-      )}
+      <View />
       <Pressable style={styles.profileBtn} onPress={() => navigation.navigate('My')} hitSlop={8}>
         <Avatar name={user?.name} imageUrl={user?.profileImageUrl} size={32} color={colors.primaryDark} />
       </Pressable>
@@ -183,17 +235,24 @@ export function HomeScreen({ navigation }: Props) {
     <View style={styles.root}>
       {/* 배경화면은 화면 전체를 채운다 — 그 위 레이어는 모두 투명이다 */}
       {bgUrl ? (
-        <Image source={{ uri: bgUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onLongPress={connected ? onChangeBg : undefined}
+          accessibilityRole="button"
+          accessibilityLabel="배경 사진 — 길게 눌러 변경"
+        >
+          <Image source={{ uri: bgUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        </Pressable>
       ) : (
         <LinearGradient
-          colors={GRADIENT}
+          colors={gradient()}
           style={StyleSheet.absoluteFill}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
         />
       )}
       <LinearGradient
-        colors={SCRIM}
+        colors={scrim()}
         locations={[0, 0.45, 1]}
         style={StyleSheet.absoluteFill}
         pointerEvents="none"
@@ -207,25 +266,47 @@ export function HomeScreen({ navigation }: Props) {
             {/* 남는 세로 공간을 히어로가 먹는다 → 아래 두 줄은 항상 바닥에 붙는다 */}
             <View style={styles.heroSlot}>
               <CoupleHero
-                meName={user?.name ?? '나'}
-                meImageUrl={user?.profileImageUrl}
-                meDone={myDone}
-                partnerName={partner?.partnerName ?? couple?.partner?.name ?? '상대방'}
-                partnerImageUrl={couple?.partner?.profileImageUrl}
-                partnerDone={!!partner?.completed}
+                me={{
+                  name: user?.name ?? '나',
+                  imageUrl: user?.profileImageUrl,
+                  workoutDone: myWorkoutDone,
+                  mealDone: myMealDone,
+                  streak: myStreak?.currentCount ?? 0,
+                  latestLabel: recordLabel(myLatest),
+                  latestTime: myLatest ? feedTimeLabel(myLatest.occurredAt) : null,
+                }}
+                partner={{
+                  name: partner?.partnerName ?? couple?.partner?.name ?? '상대방',
+                  imageUrl: couple?.partner?.profileImageUrl,
+                  workoutDone: !!partner?.completed,
+                  mealDone: !!partnerMeal?.completed,
+                  streak: partnerStreak?.currentCount ?? 0,
+                  latestLabel: recordLabel(partnerLatest),
+                  latestTime: partnerLatest ? feedTimeLabel(partnerLatest.occurredAt) : null,
+                }}
                 dday={dday}
                 anniversaryDate={couple?.anniversaryDate ?? null}
-                myStreak={myStreak?.currentCount ?? 0}
-                partnerStreak={partnerStreak?.currentCount ?? 0}
                 onPressDday={openAnnModal}
+                // 예전엔 어느 열을 눌러도 똑같이 전체 '우리 기록'으로 갔다 —
+                // 그 화면은 바로 아래 바로가기에도 있어 버튼 기능이 겹쳤다.
+                // 열을 누르면 그 사람 기록만 거른 화면으로 간다.
+                onPressPerson={(who) => navigation.navigate('FeedTimeline', { who })}
+                // 운동/식단 칩은 그 종류의 기록 화면(건강 탭)으로 간다.
+                // 두 화면 모두 로그인한 나의 기록만 보여준다(상대 것을 보는 화면은
+                // 앱에 따로 없다) — 어느 열의 칩을 눌러도 목적지는 같다.
+                onPressToday={(_who, kind) =>
+                  navigation.navigate('Workout', { screen: kind === 'workout' ? 'WorkoutMain' : 'DietMain' })
+                }
               />
             </View>
 
-            <RecentPeek
-              latest={latest}
-              timeLabel={latest ? feedTimeLabel(latest.occurredAt) : ''}
-              onPress={() => navigation.navigate('FeedTimeline')}
-            />
+            {/*
+              추억이 있는 날에만 한 줄이 붙는다. 대부분의 날은 비어 있다.
+              공용 "최근 기록" 줄은 없앴다 — 좌우 열이 각자의 마지막 기록을 이미 보여준다.
+            */}
+            {memories ? (
+              <MemoryPeek memories={memories} onPress={() => navigation.navigate('Memories')} />
+            ) : null}
 
             <QuickActions
               actions={[
@@ -244,7 +325,7 @@ export function HomeScreen({ navigation }: Props) {
            */
           <ScrollView contentContainerStyle={styles.disconnected} showsVerticalScrollIndicator={false}>
             <View style={styles.connectWrap}>
-              <MaterialCommunityIcons name="account-multiple-plus-outline" size={40} color={colors.white} />
+              <MaterialCommunityIcons name="account-multiple-plus-outline" size={40} color={colors.primary} />
               <Text style={styles.connectTitle}>커플을 연결해보세요</Text>
               <Text style={styles.connectDesc}>초대코드로 연결하면 우리의 기록이 시작돼요.</Text>
               <TouchableOpacity style={styles.connectBtn} onPress={() => navigation.navigate('CoupleConnect')}>
@@ -312,7 +393,7 @@ export function HomeScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   root: { flex: 1, backgroundColor: colors.background },
   safe: { flex: 1, backgroundColor: 'transparent' },
 
@@ -323,45 +404,55 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
   },
-  profileBtn: { borderRadius: radius.pill, borderWidth: 2, borderColor: 'rgba(255,255,255,0.6)' },
+  // 아바타는 32px 이라 테두리를 더해도 36px 이다 — hitSlop 이 안 먹는 웹을 위해 크기를 보장한다
+  profileBtn: {
+    minWidth: layout.touchTarget,
+    minHeight: layout.touchTarget,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.pill,
+    borderWidth: 2,
+    borderColor: colors.borderStrong,
+  },
   bgBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(255,255,255,0.22)',
+    backgroundColor: colors.surfaceAlt,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
+    // hitSlop 은 웹에서 무효라 높이를 직접 확보한다 (실측 25px 였다)
+    minHeight: layout.touchTarget,
   },
-  bgBtnText: { color: colors.white, fontSize: fontSize.caption, fontWeight: '700' },
+  bgBtnText: { color: colors.textPrimary, fontSize: fontSize.caption, fontWeight: '700' },
 
   body: { flex: 1, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, gap: spacing.md },
-  // 히어로가 남는 공간을 다 먹고 그 안에서 가운데 정렬된다
-  heroSlot: { flex: 1, justifyContent: 'center' },
+  // 히어로가 남는 공간을 다 먹는다. 그 안의 분배는 CoupleHero 가 한다
+  heroSlot: { flex: 1 },
 
   disconnected: { padding: spacing.lg },
   connectWrap: { alignItems: 'center', paddingVertical: spacing.lg },
-  connectTitle: { color: colors.white, fontSize: fontSize.title, fontWeight: '800', marginTop: spacing.sm },
-  connectDesc: { color: 'rgba(255,255,255,0.92)', fontSize: fontSize.body, textAlign: 'center', marginTop: spacing.xs },
+  connectTitle: { color: colors.textPrimary, fontSize: fontSize.title, fontWeight: '800', marginTop: spacing.sm },
+  connectDesc: { color: colors.textSecondary, fontSize: fontSize.body, textAlign: 'center', marginTop: spacing.xs },
   connectBtn: {
     marginTop: spacing.md,
-    backgroundColor: colors.white,
+    backgroundColor: colors.primary,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.sm,
     minHeight: 44, // 터치 타깃 — 텍스트+패딩만으론 36px
     justifyContent: 'center',
   },
-  connectBtnText: { color: colors.primaryDark, fontWeight: '800', fontSize: fontSize.body },
+  // 버튼 배경이 primary(딥 포레스트)라 글자는 흰색 — white 위 10.61:1
+  connectBtnText: { color: colors.white, fontWeight: '800', fontSize: fontSize.body },
 
   soloTitle: {
     fontSize: fontSize.caption,
     fontWeight: '700',
     // 배경 사진 위에 놓이므로 테마색이 아니라 흰색 고정
-    color: 'rgba(255,255,255,0.92)',
+    color: colors.textSecondary,
     marginTop: spacing.lg,
     marginBottom: spacing.sm,
-    marginLeft: spacing.xs,
   },
   soloCard: { paddingVertical: spacing.xs, paddingHorizontal: spacing.md },
   soloItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, minHeight: 44 },
@@ -380,7 +471,8 @@ const styles = StyleSheet.create({
   soloChevron: { fontSize: fontSize.title, color: colors.textMuted, fontWeight: '700' },
   soloDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
 
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: spacing.xl },
+  // spacing.lg 로 통일 — 앱의 다른 모달 8곳과 맞춘다
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: spacing.lg },
   modalCard: { gap: spacing.xs },
   modalTitle: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
   modalDesc: { fontSize: fontSize.caption, color: colors.textSecondary, marginBottom: spacing.sm },
@@ -389,4 +481,4 @@ const styles = StyleSheet.create({
   modalCancelText: { color: colors.textSecondary, fontWeight: '700' },
   modalSave: { flex: 1, alignItems: 'center', paddingVertical: spacing.md, borderRadius: radius.md, backgroundColor: colors.primary },
   modalSaveText: { color: colors.white, fontWeight: '800' },
-});
+}));

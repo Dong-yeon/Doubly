@@ -1,6 +1,6 @@
 /** 여행 만들기/수정 — 제목·날짜·메모·커버 사진 */
 import React, { useState } from 'react';
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -8,13 +8,16 @@ import type { PlaceStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
 import { DateField } from '../../components/DateField';
+import { FormKeyboardView } from '../../components/FormKeyboardView';
 import { tripApi } from '../../api/trip';
 import { pickImage, uploadImage } from '../../utils/imageUpload';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
+import { useDirtyGuard } from '../../hooks/useDirtyGuard';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<PlaceStackParamList, 'TripForm'>;
 
@@ -26,6 +29,15 @@ export function TripFormScreen({ navigation, route }: Props) {
   const [memo, setMemo] = useState(editing?.memo ?? '');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // 처음 값(수정 모드면 기존 여행)에서 달라진 게 있으면 이탈 전에 확인한다
+  const dirty =
+    title !== (editing?.title ?? '') ||
+    startDate !== (editing?.startDate ?? '') ||
+    endDate !== (editing?.endDate ?? '') ||
+    memo !== (editing?.memo ?? '') ||
+    photoUri != null;
+  const allowLeave = useDirtyGuard(dirty);
 
   /** 시작일을 종료일 뒤로 옮기면 종료일이 뒤집힌다 — 함께 밀어준다 */
   const onChangeStart = (value: string) => {
@@ -72,6 +84,7 @@ export function TripFormScreen({ navigation, route }: Props) {
         toast.success('여행을 만들었어요 ');
       }
       haptics.success();
+      allowLeave();
       navigation.goBack();
     } catch (e) {
       Alert.alert('오류', getErrorMessage(e));
@@ -84,51 +97,52 @@ export function TripFormScreen({ navigation, route }: Props) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <TouchableOpacity style={styles.photoBox} onPress={onPickPhoto} activeOpacity={0.8}>
-          {coverPreview ? (
-            <Image source={{ uri: coverPreview }} style={styles.photo} resizeMode="cover" />
-          ) : (
-            <Text style={styles.photoPlaceholder}>커버 사진 추가하기 (선택)</Text>
-          )}
-        </TouchableOpacity>
+      {/* 키보드가 저장 버튼을 가리지 않도록 회피 (스크롤하면 키보드가 내려간다) */}
+      <FormKeyboardView contentContainerStyle={styles.container}>
+          <TouchableOpacity style={styles.photoBox} onPress={onPickPhoto} activeOpacity={0.8}>
+            {coverPreview ? (
+              <Image source={{ uri: coverPreview }} style={styles.photo} resizeMode="cover" />
+            ) : (
+              <Text style={styles.photoPlaceholder}>커버 사진 추가하기 (선택)</Text>
+            )}
+          </TouchableOpacity>
 
-        <TextField
-          label="여행 이름"
-          placeholder="예: 제주도 2박 3일 "
-          value={title}
-          onChangeText={setTitle}
-          maxLength={100}
-        />
-        <View style={styles.dateRow}>
-          <View style={styles.flex}>
-            <DateField label="시작일" value={startDate} onChange={onChangeStart} max={endDate || undefined} />
+          <TextField
+            label="여행 이름"
+            placeholder="예: 제주도 2박 3일 "
+            value={title}
+            onChangeText={setTitle}
+            maxLength={100}
+          />
+          <View style={styles.dateRow}>
+            <View style={styles.flex}>
+              <DateField label="시작일" value={startDate} onChange={onChangeStart} max={endDate || undefined} />
+            </View>
+            <View style={styles.flex}>
+              {/* 시작일보다 앞선 날은 아예 못 고르게 한다 */}
+              <DateField label="종료일" value={endDate} onChange={setEndDate} min={startDate || undefined} />
+            </View>
           </View>
-          <View style={styles.flex}>
-            {/* 시작일보다 앞선 날은 아예 못 고르게 한다 */}
-            <DateField label="종료일" value={endDate} onChange={setEndDate} min={startDate || undefined} />
-          </View>
-        </View>
-        <TextField
-          label="메모 (선택)"
-          placeholder="예: 렌터카 예약 완료, 흑돼지 필수!"
-          value={memo}
-          onChangeText={setMemo}
-          multiline
-        />
+          <TextField
+            label="메모 (선택)"
+            placeholder="예: 렌터카 예약 완료, 흑돼지 필수!"
+            value={memo}
+            onChangeText={setMemo}
+            multiline
+          />
 
-        <Button
-          title={editing ? '수정하기' : '여행 만들기'}
-          onPress={onSave}
-          loading={saving}
-          style={styles.saveBtn}
-        />
-      </ScrollView>
+          <Button
+            title={editing ? '수정하기' : '여행 만들기'}
+            onPress={onSave}
+            loading={saving}
+            style={styles.saveBtn}
+          />
+      </FormKeyboardView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   container: { padding: spacing.lg, paddingBottom: spacing.xl },
   photoBox: {
@@ -147,4 +161,4 @@ const styles = StyleSheet.create({
   dateRow: { flexDirection: 'row', gap: spacing.sm },
   flex: { flex: 1 },
   saveBtn: { marginTop: spacing.md },
-});
+}));

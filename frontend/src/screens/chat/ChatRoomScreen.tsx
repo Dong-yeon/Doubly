@@ -15,9 +15,11 @@ import {
 } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '../../components/Icon';
+import { useHeaderHeight } from '@react-navigation/elements';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { ChatStackParamList } from '../../navigation/types';
+import { ImageViewer } from '../../components/ImageViewer';
 import { useChatStore } from '../../store/chatStore';
 import { useAuthStore } from '../../store/authStore';
 import { haptics } from '../../utils/haptics';
@@ -30,8 +32,12 @@ import { SpellCheckBar } from '../../components/SpellCheckBar';
 import { useSettingsStore } from '../../store/settingsStore';
 import { applySuggestion, checkKoreanSpelling } from '../../utils/koreanSpellCheck';
 import { chatApi } from '../../api/chat';
+import { isPrShareContent } from '../../utils/workoutShare';
+import { isGoalShareContent } from '../../utils/dietShare';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { ChatMessage } from '../../types';
+import { themedStyles } from '../../theme/themedStyles';
+import { layout } from '../../theme/layout';
 
 const REACTIONS = ['💗', '🔥', '💪', '👍', '🎉'];
 
@@ -57,9 +63,14 @@ const timeOf = (iso: string): string => {
 
 export function ChatRoomScreen({ navigation, route }: Props) {
   const { relationId, title } = route.params;
+  const headerHeight = useHeaderHeight();
+  /* 탭한 사진 하나만 전체화면으로 — 대화 전체를 훑는 갤러리는 아니라 단건으로 연다 */
+  const [viewingImage, setViewingImage] = useState<string | null>(null);
+  const openImage = (uri: string) => setViewingImage(uri);
   const myId = useAuthStore((s) => s.user?.id);
   const messages = useChatStore((s) => s.messages[relationId] ?? EMPTY_MESSAGES);
-  const { openRoom, closeRoom, send, markRead, replaceMessage } = useChatStore();
+  const loadingOlder = useChatStore((s) => s.loadingOlder[relationId] ?? false);
+  const { openRoom, closeRoom, send, markRead, replaceMessage, loadOlder } = useChatStore();
   const [text, setText] = useState('');
   const [uploading, setUploading] = useState(false);
   const [showStickers, setShowStickers] = useState(false);
@@ -231,6 +242,10 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     const isSticker = item.messageType === 'STICKER';
     const isWorkout = item.messageType === 'WORKOUT_CARD';
     const isMeal = item.messageType === 'MEAL_CARD';
+    // PR(자기 최고 기록) 공유 카드 — 문구 접두어로 구분한다(workoutShare.ts, 단일 출처)
+    const isPr = isWorkout && isPrShareContent(item.content);
+    // 영양 목표 달성 공유 카드 — 문구 접두어로 구분한다(dietShare.ts, 단일 출처)
+    const isGoal = isMeal && isGoalShareContent(item.content);
     // 삭제된 메시지는 자리만 남기고 내용을 감춘다 (답장·리액션 참조가 살아있다)
     if (item.deleted) {
       return (
@@ -265,17 +280,42 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         {isSticker ? (
           <Text style={styles.sticker}>{item.content}</Text>
         ) : isImage ? (
-          <Image source={{ uri: item.imageUrl! }} style={styles.msgImage} resizeMode="cover" />
+          /* 탭하면 전체화면 — 예전엔 200×200 으로 잘린 썸네일이 전부라 원본을 볼 수 없었다 */
+          <Pressable
+            onPress={() => openImage(item.imageUrl!)}
+            accessibilityRole="imagebutton"
+            accessibilityLabel="사진 크게 보기"
+          >
+            <Image source={{ uri: item.imageUrl! }} style={styles.msgImage} resizeMode="cover" />
+          </Pressable>
         ) : isWorkout ? (
-          <View style={[styles.workoutCard, mine ? styles.workoutCardMine : styles.workoutCardTheirs]}>
-            <Text style={styles.workoutBadge}>운동 기록</Text>
+          <View style={[
+            styles.workoutCard,
+            mine ? styles.workoutCardMine : styles.workoutCardTheirs,
+            isPr && styles.workoutCardPr,
+          ]}>
+            <Text style={[styles.workoutBadge, isPr && styles.workoutBadgePr]}>
+              {isPr ? 'PR 달성 🔥' : '운동 기록'}
+            </Text>
             <Text style={[styles.workoutText, mine && styles.workoutTextMine]}>{item.content}</Text>
           </View>
         ) : isMeal ? (
-          <View style={[styles.mealCard, mine ? styles.mealCardMine : styles.mealCardTheirs]}>
-            <Text style={styles.mealBadge}>식단</Text>
+          <View style={[
+            styles.mealCard,
+            mine ? styles.mealCardMine : styles.mealCardTheirs,
+            isGoal && styles.mealCardGoal,
+          ]}>
+            <Text style={[styles.mealBadge, isGoal && styles.mealBadgeGoal]}>
+              {isGoal ? '목표 달성 🎯' : '식단'}
+            </Text>
             {item.imageUrl ? (
-              <Image source={{ uri: item.imageUrl }} style={styles.mealImage} resizeMode="cover" />
+              <Pressable
+                onPress={() => openImage(item.imageUrl!)}
+                accessibilityRole="imagebutton"
+                accessibilityLabel="식단 사진 크게 보기"
+              >
+                <Image source={{ uri: item.imageUrl }} style={styles.mealImage} resizeMode="cover" />
+              </Pressable>
             ) : null}
             {item.content ? (
               <Text style={styles.workoutText}>{item.content}</Text>
@@ -325,7 +365,11 @@ export function ChatRoomScreen({ navigation, route }: Props) {
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+        /*
+         * 오프셋은 실제 헤더 높이로 — 예전엔 90 을 상수로 박아서 노치 없는 기기
+         * (헤더 ≈64)에서 26pt 과보정돼 입력창과 키보드 사이에 빈 띠가 생겼다.
+         */
+        keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
       >
         <FlatList
           style={styles.flex}
@@ -334,6 +378,19 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           keyExtractor={(m) => String(m.id)}
           renderItem={renderItem}
           contentContainerStyle={styles.list}
+          /*
+           * 과거 메시지 페이징 — inverted 목록이라 onEndReached = 위(가장 오래된 쪽) 도달.
+           * 서버 커서는 준비돼 있었지만 연결이 안 돼 첫 페이지 이전 대화를 볼 수 없었다.
+           */
+          onEndReached={() => loadOlder(relationId)}
+          onEndReachedThreshold={0.3}
+          ListFooterComponent={
+            loadingOlder ? (
+              <ActivityIndicator size="small" color={colors.primary} style={styles.olderSpinner} />
+            ) : null
+          }
+          // 스크롤 드래그로 키보드를 내릴 수 있게 (iOS 는 손가락을 따라 내려간다)
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         />
         <View style={styles.reactions}>
           {REACTIONS.map((e) => (
@@ -341,6 +398,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               key={e}
               style={({ pressed }) => [styles.reactionBtn, pressed && styles.reactionPressed]}
               onPress={() => sendReaction(e)}
+              // 40x40 이라 기준 미달. 행이 빽빽해 크기 대신 터치 영역만 넓힌다(간격의 절반)
+              hitSlop={4}
             >
               <Text style={styles.reactionEmoji}>{e}</Text>
             </Pressable>
@@ -353,6 +412,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               onPress={() => { setShowStickers(false); setShowEmojiSheet(true); }}
               accessibilityRole="button"
               accessibilityLabel="이모지 더 보기"
+              // 격자라 크기를 키우면 열 수가 바뀐다 — 터치 영역만 넓힌다
+              hitSlop={4}
             >
               <MaterialCommunityIcons name="dots-horizontal" size={24} color={colors.textSecondary} />
             </Pressable>
@@ -434,6 +495,13 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         </View>
       </KeyboardAvoidingView>
 
+      {/* 사진 전체화면 보기 */}
+      <ImageViewer
+        images={viewingImage ? [{ key: viewingImage, uri: viewingImage }] : []}
+        initialIndex={viewingImage ? 0 : null}
+        onClose={() => setViewingImage(null)}
+      />
+
       {/* 리액션 선택 — 길게 누른 메시지에 이모지를 붙인다 */}
       <EmojiPicker
         visible={reactingTo !== null}
@@ -455,7 +523,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
   list: { padding: spacing.md },
@@ -473,6 +541,10 @@ const styles = StyleSheet.create({
   stickerPanel: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    // width:'11.5%' 는 gap 을 계산에 안 넣어 좁은 기기(360dp)에서 한 줄에 7개만
+    // 들어가고 남는 폭이 전부 오른쪽에 몰렸다(실측 40px). space-between 이면
+    // 그 여백이 줄 안의 아이템 사이 간격으로 고르게 흩어진다.
+    justifyContent: 'space-between',
     paddingHorizontal: spacing.sm,
     paddingTop: spacing.sm,
     gap: spacing.xs,
@@ -491,13 +563,22 @@ const styles = StyleSheet.create({
   workoutCardMine: { backgroundColor: colors.secondarySoft, borderColor: colors.secondary },
   workoutCardTheirs: { backgroundColor: colors.surface, borderColor: colors.secondary },
   workoutBadge: { fontSize: fontSize.caption, fontWeight: '800', color: colors.secondary, marginBottom: 2 },
+  // PR 카드 — 같은 카드 레이아웃에 골드 강조만 얹는다(couple 토큰 = Gold, 성취를 나타내는 색)
+  workoutCardPr: { borderColor: colors.couple, backgroundColor: colors.meBg },
+  workoutBadgePr: { color: colors.couple },
   workoutText: { fontSize: fontSize.subtitle, color: colors.textPrimary, fontWeight: '600' },
   workoutTextMine: { color: colors.textPrimary },
   mealCard: { paddingVertical: 10, paddingHorizontal: spacing.md, borderRadius: radius.lg, borderWidth: 1.5, maxWidth: 240, gap: 6 },
   mealCardMine: { backgroundColor: colors.accentSoft, borderColor: colors.accent },
   mealCardTheirs: { backgroundColor: colors.surface, borderColor: colors.accent },
-  mealBadge: { fontSize: fontSize.caption, fontWeight: '800', color: '#E0A020' },
+  // 카드 보더(accent)와 같은 계열로 — 팔레트 밖 앰버는 다크에서 대비가 무너졌다
+  mealBadge: { fontSize: fontSize.caption, fontWeight: '800', color: colors.accent },
+  // 목표 달성 카드 — 같은 카드 레이아웃에 골드 강조만 얹는다(PR 카드와 같은 톤)
+  mealCardGoal: { borderColor: colors.couple, backgroundColor: colors.meBg },
+  mealBadgeGoal: { color: colors.couple },
   mealImage: { width: 208, height: 156, borderRadius: radius.md, backgroundColor: colors.surfaceAlt },
+  // inverted 목록의 footer = 맨 위(과거 방향) — 과거 페이지 로딩 스피너
+  olderSpinner: { paddingVertical: spacing.md },
   time: { fontSize: 10, color: colors.textTertiary },
   editedMark: { fontSize: 10, color: colors.textTertiary },
 
@@ -563,12 +644,14 @@ const styles = StyleSheet.create({
   meta: { marginHorizontal: spacing.xs, justifyContent: 'flex-end' },
   metaMine: { marginHorizontal: spacing.xs, alignItems: 'flex-end', justifyContent: 'flex-end' },
   // 안 읽음은 카카오톡처럼 "1", 읽으면 "읽음" — 색으로도 구분한다
-  read: { fontSize: 10, fontWeight: '800', color: colors.coral, marginBottom: 1 },
+  /* 10px 작은 글씨라 대비가 특히 중요하다 — 원색 coral 은 흰 배경 2.83:1 로 미달 */
+  read: { fontSize: 10, fontWeight: '800', color: colors.meText, marginBottom: 1 },
   readDone: { color: colors.textTertiary, fontWeight: '600' },
   reactions: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.sm, paddingTop: spacing.xs },
   reactionBtn: {
-    width: 40,
-    height: 40,
+    // hitSlop 은 웹에서 무효라 실제 크기로 맞춘다 (5개 * 44 + 간격 = 268px, 440 에 여유)
+    width: layout.touchTarget,
+    height: layout.touchTarget,
     borderRadius: radius.pill,
     backgroundColor: colors.surface,
     borderWidth: 1,
@@ -611,4 +694,4 @@ const styles = StyleSheet.create({
   },
   sendDisabled: { opacity: 0.4 },
   sendText: { color: colors.white, fontWeight: '800' },
-});
+}));

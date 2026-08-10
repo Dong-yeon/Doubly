@@ -1,9 +1,11 @@
 import React from 'react';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from './Icon';
 import type { Meal, MealType } from '../types';
 import { relativeDateLabel } from '../utils/date';
+import { formatKcal } from '../utils/format';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
+import { themedStyles } from '../theme/themedStyles';
 
 interface Props {
   meal: Meal;
@@ -35,7 +37,7 @@ export function MealCard({ meal, onLongPress, showDate }: Props) {
           <Text style={styles.type}>{meal.mealTypeLabel}</Text>
         </View>
         <View style={styles.headerRight}>
-          {meal.calories ? <Text style={styles.cal}>{meal.calories} kcal</Text> : null}
+          {meal.calories ? <Text style={styles.cal}>{formatKcal(meal.calories)}</Text> : null}
           {showDate ? <Text style={styles.date}>{relativeDateLabel(meal.mealDate)}</Text> : null}
         </View>
       </View>
@@ -49,7 +51,7 @@ export function MealCard({ meal, onLongPress, showDate }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -72,4 +74,4 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   memo: { fontSize: fontSize.body, color: colors.textPrimary, marginTop: spacing.sm },
-});
+}));

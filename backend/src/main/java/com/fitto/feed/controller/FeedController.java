@@ -6,10 +6,13 @@ import com.fitto.feed.dto.CreatePostRequest;
 import com.fitto.feed.dto.FeedItemResponse;
 import com.fitto.feed.dto.FeedPhotosResponse;
 import com.fitto.feed.dto.FeedTimelineResponse;
+import com.fitto.feed.dto.MemoriesResponse;
 import com.fitto.feed.dto.ReactRequest;
 import com.fitto.feed.dto.ReactionSummary;
 import com.fitto.feed.service.FeedService;
+import com.fitto.feed.service.MemoriesService;
 import jakarta.validation.Valid;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -30,9 +34,11 @@ import java.util.List;
 public class FeedController {
 
     private final FeedService feedService;
+    private final MemoriesService memoriesService;
 
-    public FeedController(FeedService feedService) {
+    public FeedController(FeedService feedService, MemoriesService memoriesService) {
         this.feedService = feedService;
+        this.memoriesService = memoriesService;
     }
 
     @GetMapping
@@ -51,6 +57,20 @@ public class FeedController {
             @RequestParam(required = false) String cursor,
             @RequestParam(defaultValue = "30") int limit) {
         return ApiResponse.success(feedService.photos(user.id(), cursor, limit));
+    }
+
+    /**
+     * 추억 리마인드 — 오늘과 같은 월·일의 1년 이상 전 기록 (PLAN.md Memories).
+     *
+     * <p>{@code on} 을 생략하면 오늘(KST). 추억이 없어도 빈 {@code groups} 로 200 을 준다
+     * — 홈이 매일 물어보고 조용히 넘어가야 한다.
+     */
+    @GetMapping("/memories")
+    public ApiResponse<MemoriesResponse> memories(
+            @AuthenticationPrincipal AuthUser user,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate on) {
+        return ApiResponse.success(memoriesService.memories(user.id(), on));
     }
 
     @PostMapping("/posts")

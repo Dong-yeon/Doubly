@@ -657,6 +657,64 @@ CREATE INDEX idx_feed_posts_trip ON feed_posts (trip_id, created_at DESC);
 
 ---
 
+## Feature: 커플 여행 모드 (Travel Mode) ✅
+
+### 목표
+하드코어하게 식단을 재는 커플도 여행 중에는 목표 압박 없이 다녀오게 한다. 여행 기간 동안
+식단 목표 **표시를 잠시 끄는 스위치** — 새 목표값을 계산해 대체하는 게 아니라, 기존
+"목표 미설정 시 `target*`가 `null`로 내려가고 대시보드가 빈 상태를 그린다"는 경로를
+그대로 재사용한다. 여행이 끝나면 **날짜만으로 자동 복귀**(되돌리는 로직 자체가 없다).
+
+### 핵심 기능 (MVP)
+1. 여행 모드 켜기/끄기 — `TripDetailScreen` 토글. 커플 둘 다 가능
+2. 켜져 있고 **오늘이 그 여행 기간 안**이면 `GET /meal/nutrition` 의 `target*` 4개가 전부
+   `null` — 이미 있는 "목표 미설정" 표시를 그대로 탄다(새 UI 상태 아님)
+3. 응답에 `travelMode`/`travelModeTripTitle` 을 실어 "✈️ 여행 모드 · {제목}" 배지만 별도로
+   보여준다 — 목표를 없앤 이유를 설명하는 용도
+4. 여행 중 운동 기록은 평소처럼 그대로 카운트 — `Trip Recap` 스탯에 "여행 중 운동 n회"
+   (두 사람 합산) 추가
+5. 토글 시 커플 채널 `TRIP` + `DIET_GOAL` 이벤트 발행(트립 화면·식단 대시보드 동시 갱신)
+
+### Non-goals (이번 MVP 제외)
+- 여행 전용 "유지 칼로리" 자동 계산(TDEE) — 이 앱에 체성분 기반 계산기가 없다. 목표를
+  아예 숨겨 압박을 없애는 쪽을 택한다. 원하면 여행 모드와 무관하게 이미 있는
+  `PUT /meal/nutrition/goal` 로 직접 다른 숫자를 넣어도 된다
+- 스트릭 조정·면제 — 스트릭은 "그날 기록했는지"만 보고 목표 달성 여부를 보지 않으므로
+  건드릴 이유가 없다. 건드리면 오히려 "여행 중엔 스트릭이 다르게 돈다"는 특수 케이스가
+  하나 늘어난다
+- 여러 여행이 겹치고 둘 다 여행 모드면 우선순위 규칙 — 하나만 골라 보여준다(현실적으로
+  거의 없는 케이스라 규칙을 만들 실익이 없다)
+- 여행 등록 시 자동 켜짐 — 하드코어 유저는 여행 중에도 계속 재고 싶을 수 있어 **옵트인**으로 둔다
+- 목표값 저장/복원 — 여행 모드를 꺼도 `nutrition_goals` 원래 값이 그대로 남아 있다.
+  "숨기기"만 하므로 애초에 저장했다 복원할 값 자체가 없다
+
+### API
+- `PUT /api/v1/trips/{id}/travel-mode` `{enabled}` — 토글, 커플 둘 다 가능. `TripResponse` 반환
+- `GET /api/v1/meal/nutrition` — 기존 응답에 `travelMode`(boolean), `travelModeTripTitle`
+  (String?) 두 필드 추가. 여행 모드면 `target*` 전부 `null`
+- `GET /api/v1/trips/{tripId}/recap` — 기존 응답에 `workoutCount`(long, 여행 기간 두 사람
+  합산), `travelModeEnabled`(boolean) 추가
+
+### DB 스키마 (V28)
+
+```sql
+ALTER TABLE trips ADD COLUMN travel_mode_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+```
+
+- 신규 테이블 없음. 트립 삭제 시 컬럼도 함께 삭제되니 별도 정리 불필요
+- `nutrition_goals`(기존 목표값)는 건드리지 않는다
+
+### 화면 (frontend)
+- `TripDetailScreen` 헤더에 "✈️ 여행 모드" 토글(켜짐 시 강조 색) — 자주 여닫는 스위치라
+  경비·준비물 같은 진입 버튼 그리드가 아니라 여행 기간 바로 아래에 노출
+- 식단 대시보드(`DietScreen`) — 여행 모드 중이면 목표 게이지 대신
+  "✈️ 여행 모드 중 · {여행 제목} — 목표는 잠깐 쉬어가요" 배지. 기존 목표 게이지 자리를
+  대체(카드를 새로 늘리지 않는다)
+- `TripRecapScreen` 스탯 타일에 "🏃 여행 중 운동 n회" 한 칸 추가(6→7, `flexWrap`이라
+  그리드가 알아서 재배치된다)
+
+---
+
 ## Feature: 커플 맛집 지도 (Place Map)
 
 ### 목표
@@ -710,3 +768,257 @@ CREATE TABLE place_visits (
 CREATE INDEX idx_places_couple ON places(couple_id);
 CREATE INDEX idx_places_location ON places(lat, lng);
 ```
+
+---
+
+## Feature: 추억 리마인드 (Memories — "작년 오늘") ✅
+
+### 목표
+`feed_posts` 에 사진·글이 쌓이고 있지만 **과거로 돌아가는 경로가 없다.** 사진첩
+(`PhotoAlbumScreen`)은 전체 그리드일 뿐이고, 타임라인은 아래로 긁어야 과거에 닿는다.
+"작년 오늘 우리 여기 있었어" 를 **가만히 있어도 찾아오게** 만들어 이미 쌓인 데이터에
+두 번째 수명을 준다. 신규 테이블 없이 조회 하나 + 스케줄러 하나로 끝난다.
+
+### 핵심 기능 (MVP)
+1. **그 날의 추억 조회** — 오늘과 같은 월·일의 **1년 이상 전** 기록. 여러 해가 있으면 모두
+   (1년 전 / 2년 전 …), 최신 연도부터
+2. **홈 진입** — 추억이 있는 날에만 홈의 `RecentPeek` 슬롯이 추억 카드로 **교체**된다
+   (아래 [화면](#화면-frontend-5) 의 배치 제약 참고)
+3. **전용 화면** — 연도별 그룹으로 사진·글·방문 기록을 보고, 기존 이모지 반응을 그대로 남긴다
+4. **아침 푸시** — 추억이 있는 날 10:00 KST 에 커플 양쪽에 알린다
+
+### 대상 소스 — POST + PLACE_VISIT 만
+
+타임라인은 4개 소스(POST·WORKOUT·MEAL·PLACE_VISIT)를 합치지만, 추억은 **2개만** 쓴다.
+
+| 소스 | 채택 | 이유 |
+| --- | --- | --- |
+| `POST` | ○ | 사진·글 — 회상 가치의 본체 |
+| `PLACE_VISIT` | ○ | 장소명·별점·사진·메모. 커플 스코프(`couple_id`)라 "우리" 정의가 명확 |
+| `WORKOUT` | ✗ | "운동 완료 💪 벤치프레스 외 3개" — 1년 뒤에 아무 의미가 없다. 매일 있으니 추억을 노이즈로 덮는다 |
+| `MEAL` | ✗ | 동일. 게다가 둘 다 `couple_id` 가 아니라 `userIds` 스코프라 "우리 추억"의 경계가 흐려진다 |
+
+### 날짜 기준 컬럼 — 소스마다 다르다 (의도적)
+
+| 소스 | 사용 컬럼 | 타입 | 이유 |
+| --- | --- | --- | --- |
+| `POST` | `feed_posts.created_at` | `TIMESTAMP` | 다른 날짜 컬럼이 없다. 아래 시간대 보정이 **반드시** 필요 |
+| `PLACE_VISIT` | `place_visits.visited_at` | `DATE` | 타임존이 없어 보정이 불필요하고, "방문한 날"이라는 의미도 더 정확 |
+
+> ⚠️ 피드 타임라인은 방문 기록도 `created_at` 으로 정렬한다(`FeedService.toItem(VisitWithPlace)`).
+> 추억은 `visited_at` 을 쓴다 — 어제 다녀와서 오늘 등록한 방문은 "어제의 추억"이어야 한다.
+> **의도된 불일치이므로 통일하지 말 것.**
+
+### Non-goals (이번 MVP 제외)
+- **"6개월 전 / 100일 전"** — 연 단위만. 6개월·100일까지 넣으면 알림이 흔해져 희소성이 사라지고,
+  100일은 `relations.anniversary_date` 기반 산술이라 "같은 월·일" 메커니즘과 다른 기능이 된다
+- **푸시 딥링크** — 탭하면 앱만 열린다. `NotificationService.notify(userId, title, body)` 에
+  data payload 자리가 없고 Expo 메시지에도 `data` 키가 없다
+  (`ExpoPushNotificationService` 의 messages 맵). 호출부가 13곳이라 시그니처 변경은 별도 작업
+- **추억 푸시만 끄기** — `users.notifications_enabled` 단일 boolean 이라 카테고리 분리가 선행돼야 한다
+  (V25 마이그레이션 주석이 이미 확장 지점을 명시)
+- 자동 콜라주·슬라이드쇼·이미지 카드 내보내기, AI 회고 코멘트
+- 페이징 — 하루치 × 몇 개 연도라 총량이 작다. 상한만 두고 커서는 쓰지 않는다
+
+### API (`/api/v1/feed/memories`)
+
+```
+GET /api/v1/feed/memories?on={yyyy-MM-dd}   # on 생략 시 오늘(KST)
+```
+
+```jsonc
+{
+  "on": "2026-07-30",
+  "totalCount": 5,
+  "groups": [                       // 최신 연도부터
+    {
+      "yearsAgo": 1,
+      "date": "2025-07-30",
+      "label": "1년 전 오늘",
+      "items": [ /* FeedItemResponse — 기존 형태 그대로 */ ]
+    },
+    { "yearsAgo": 3, "date": "2023-07-30", "label": "3년 전 오늘", "items": [ … ] }
+  ]
+}
+```
+
+- `items` 는 **기존 `FeedItemResponse` 를 그대로 재사용**한다 — 새 DTO를 만들면 프론트에
+  카드 렌더러가 두 벌이 된다. `POST` 아이템에는 `FeedService.attachReactions` 로 반응을 채운다
+- 추억이 없으면 `groups: []`, `totalCount: 0` (204 나 404 가 아니다 — 홈이 조용히 넘어가야 한다)
+- 커플 미연결이면 기존 `activeCouple()` 이 `RELATION_NOT_FOUND` 를 던진다.
+  홈은 `feedApi.timeline` 과 같은 패턴으로 조용히 catch 한다
+- 상한 `MAX_ITEMS = 30` — 넘으면 최신 연도부터 채우고 자른다. **자를 때는 로그를 남긴다**
+  (조용히 truncate 하면 "다 보여줬다"로 읽힌다)
+- 반응 토글은 기존 `POST /feed/posts/{id}/reactions` 를 그대로 쓴다. 신규 엔드포인트 없음
+
+### DB 스키마 — **신규 테이블·마이그레이션 없음**
+
+기존 인덱스 `idx_feed_posts_couple (couple_id, created_at DESC)` 를 그대로 쓴다.
+
+> ⚠️ **`extract(month from created_at) = ?` 로 쓰지 말 것.** 함수 조건이라 위 인덱스를
+> 타지 못해 커플의 전체 포스트를 스캔하고, PostgreSQL·H2 의 날짜 함수 방언 차이까지 떠안는다.
+> 대신 **연도별 반각 범위**(`created_at >= dayStart and created_at < dayStart + 1일`)를
+> 연도 수만큼 반복 조회한다. 현실적으로 1~5회이므로 N+1 부담이 없고 인덱스를 그대로 쓴다.
+
+리포지토리 메서드 4개를 추가한다.
+
+```java
+// FeedPostRepository
+List<FeedPost>  findInPeriod(Long coupleId, LocalDateTime from, LocalDateTime to);   // 하루 범위
+LocalDateTime   findEarliestCreatedAt(Long coupleId);                                // 하한 연도용
+
+// PlaceVisitRepository — visited_at 은 DATE 라 단일 일자 비교로 끝난다
+List<VisitWithPlace> findByCoupleAndVisitedAt(Long coupleId, LocalDate visitedAt);
+LocalDate            findEarliestVisitedAt(Long coupleId);
+```
+
+> 처음에는 파생 쿼리로 충분할 줄 알았으나 넷 다 `@Query` 가 필요했다.
+> `place_visits` 에는 `couple_id` 가 없어 **`places` 로 조인**해야 하고
+> (`findRecentForFeed` 와 같은 구조), 하한 연도는 집계(`min`)라 파생 쿼리로 표현되지 않는다.
+> 대신 범위 조건이라 `cast(:param as LocalDateTime)` 우회는 필요 없다 — 파라미터가 절대 null 이 아니다.
+
+조회 대상 연도는 **커플의 첫 기록 연도부터 작년까지**다.
+
+> ⚠️ **`relations.connected_at` 을 하한으로 쓰면 안 된다.** 재회 후 불러오기
+> (`RelationRecordRestorer`)가 옛 포스트의 `couple_id` 를 새 관계로 옮기므로
+> **기록이 관계보다 앞설 수 있다.** 그래서 위 `findEarliest*` 두 개로 실제 첫 기록을 찾는다.
+
+### ⚠️ 시간대 처리 — 이 기능의 핵심 함정
+
+`feed_posts.created_at` 은 `BaseTimeEntity` 의 `@CreatedDate` + `LocalDateTime` 이고,
+`hibernate.jdbc.time_zone` 도 Dockerfile 의 `TZ` 도 **설정된 곳이 없다.**
+즉 **JVM 기본 TZ 의 벽시계 그대로** 저장된다.
+
+| 환경 | JVM 기본 TZ | 결과 |
+| --- | --- | --- |
+| 운영 (Railway 컨테이너) | UTC | KST 00:00~09:00 에 남긴 기록이 **전날**로 저장된다 |
+| 로컬 개발 (Windows) | KST | 그대로 저장된다 |
+
+같은 코드가 두 환경에서 다르게 동작하고, 표시용 오차와 달리 **"작년 오늘"은 날짜 경계가
+기능의 정의 자체**라서 하루가 통째로 밀린다. KST 하루의 경계를 저장 TZ 벽시계로 환산해야 한다.
+
+```java
+private static final ZoneId KST = ZoneId.of("Asia/Seoul");
+/** created_at 이 어느 TZ 벽시계로 적혔는지 — 위 표 참고. 운영은 UTC, 로컬은 KST. */
+private static final ZoneId STORAGE = ZoneId.systemDefault();
+
+/** KST 기준 하루의 시작을, 저장된 벽시계 값과 비교할 수 있는 형태로 바꾼다. */
+private static LocalDateTime storageBoundary(LocalDate kstDate) {
+    return kstDate.atStartOfDay(KST).withZoneSameInstant(STORAGE).toLocalDateTime();
+}
+// 조회 범위: [storageBoundary(d), storageBoundary(d.plusDays(1)))
+```
+
+`PLACE_VISIT` 은 `visited_at` 이 `DATE` 라 이 보정이 필요 없다 — 그래서 컬럼을 나눠 쓴다.
+
+> 근본 해결은 `spring.jpa.properties.hibernate.jdbc.time_zone: Asia/Seoul` 을 박거나
+> 전 테이블을 `TIMESTAMPTZ` 로 옮기는 것이지만, **기존 데이터 해석이 바뀌므로 이 기능에
+> 끼워 넣지 말 것.** 별도 작업으로 분리한다.
+
+### 윤년 규칙
+
+`CalendarEvent.occurrenceInYear` 와 **같은 규칙**을 쓴다 — 2/29 는 평년에 2/28 로 당긴다.
+
+| 오늘 | 대상 연도 Y | 조회 일자 |
+| --- | --- | --- |
+| 2/29 (윤년) | 평년 | Y의 2/28 |
+| 2/28 (평년) | 윤년 | Y의 2/28 **+ 2/29 도 함께** |
+| 그 외 | — | Y의 (오늘 월, 오늘 일) |
+
+두 번째 행이 없으면 **윤년 2/29 에 남긴 기록이 4년에 한 번만 보인다.** 역방향 보정이라
+빠뜨리기 쉬우니 테스트로 고정한다.
+
+### 푸시 — `MemoriesNotifier`
+
+`CalendarDdayNotifier` 를 그대로 본뜬다.
+
+```java
+@Scheduled(cron = "0 0 10 * * *", zone = "Asia/Seoul")   // 캘린더 D-day(09:00)와 1시간 띄운다
+```
+
+- **09:00 이 아니라 10:00** — 같은 시각이면 기념일 알림과 추억 알림이 동시에 뜬다
+- 문구: `"3년 전 오늘, 둘이 함께한 기록이 2개 있어요 💐"`
+  - 연도는 **가장 오래된 해** — 그게 회상 가치가 가장 크다
+  - 개수는 **그 해 것만** 센다. 여러 해를 합치면 "3년 전 오늘"이라 해놓고 작년 기록까지
+    세는 문구가 된다
+- **대상은 커플이 아니라 기록에서 찾는다.** 커플을 하나씩 돌며 물으면 쿼리가 커플 수만큼
+  늘어난다. `count(...) group by couple_id` 로 한 번에 집계한다 —
+  `CalendarDdayNotifier` 가 일정에서 커플을 역으로 찾는 것과 같은 방향
+- `RelationStatus.ACTIVE` 커플만 — 끊긴 관계의 기록은 보이지 않는 상태이므로 알림도 없다
+  (`CalendarDdayNotifier:57` 과 동일)
+- 저장 TZ 는 `MemoryDates.storageZoneOf` 로 **조회와 같은 규칙**을 쓴다.
+  둘이 어긋나면 "푸시는 왔는데 열면 비어 있다"가 된다
+- 발송 이력 테이블 없음 — 하루 한 번만 도니 중복이 없다.
+  > ⚠️ 단, **인스턴스가 2대 이상이면 커플마다 알림이 2번 간다.** `CalendarDdayNotifier` 와
+  > `PasswordResetTokenCleaner` 가 이미 단일 인스턴스를 가정하고 있어 같은 리스크를 상속한다.
+  > 스케일아웃 시점에 세 스케줄러를 함께 잠금(shedlock 등)으로 감싸야 한다
+- 대상 판별은 `eventsOccurringOn` 처럼 **순수 메서드로 분리**해 테스트에서 직접 검증한다
+
+### 화면 (frontend)
+
+**홈 — 새 카드를 추가하지 않는다.** 커밋 `4199fa3` 이 홈을 스크롤 없는 고정 화면으로 만들었고
+`HomeScreen.tsx` 주석이 이유를 남겼다: *"기록이 쌓일수록 그 위로 카드가 계속 얹혀 정작
+사진이 파묻혔다."* 카드를 하나 더 얹으면 그 결정을 되돌린다.
+
+| 안 | 판단 |
+| --- | --- |
+| **A. `RecentPeek` 슬롯을 추억이 있는 날에만 교체** | **채택.** 같은 슬롯·같은 고정 높이·같은 유리 카드 스타일이라 레이아웃이 그대로다. 추억은 흔하지 않으니 최근 기록이 사라지는 날도 드물다 |
+| B. `QuickActions` 에 '추억' 항목 추가 | 기각. 이미 5개라 6개면 라벨이 좁아지고, 추억이 없는 날에도 빈 화면으로 들어가게 된다 |
+| C. 홈에 카드 한 줄 추가 | 기각. 위 결정과 정면으로 충돌 |
+
+- `MemoryPeek.tsx` (`screens/home/components/`) — `RecentPeek` 의 스타일·구조를 복제하고
+  썸네일 + `"작년 오늘 · 사진 3장"`. 배경 사진 위이므로 색은 흰색 계열 고정
+- `MemoriesScreen.tsx` (`screens/feed/`, HomeStack 에 등록) — 연도 헤더(`1년 전 · 2025.07.30`)로
+  섹션을 묶고, 카드는 `FeedTimelineScreen` 의 렌더러를 재사용. 반응 바는 `POST` 에만
+- 빈 상태: `EmptyState` — `"아직 이 날의 추억이 없어요. 오늘을 남기면 내년에 찾아올 거예요."`
+
+`feedApi` 에 한 줄:
+
+```ts
+memories: (on?: string) =>
+  unwrap(apiClient.get<ApiResponse<MemoriesResponse>>('/feed/memories', {
+    params: { on: on ?? undefined },
+  })),
+```
+
+### 테스트 (`MemoriesFlowTest`)
+
+| 케이스 | 검증 |
+| --- | --- |
+| 1년 전·3년 전 포스트 | 두 그룹, 최신 연도 먼저 |
+| 올해·어제 기록 | 대상에서 제외 (1년 이상 전만) |
+| 윤년 2/29 → 평년 2/28 조회 | 당겨서 잡힌다 |
+| 평년 2/28 → 윤년 2/29 기록 | 함께 잡힌다 (역방향 보정) |
+| `visited_at` 이 어제인 방문을 오늘 등록 | `created_at` 이 아니라 `visited_at` 기준으로 묶인다 |
+| KST 00:30 에 남긴 포스트 (UTC 저장 시 전날) | KST 날짜로 묶인다 |
+| WORKOUT·MEAL 존재 | 결과에 포함되지 않는다 |
+| 커플 미연결 | `RELATION_NOT_FOUND` |
+| `MemoriesNotifier` 대상 판별 | ACTIVE 커플만, 추억 없으면 0건 |
+
+> H2 는 `cast(:param as LocalDateTime)` 누락 같은 PostgreSQL 전용 실패를 통과시킨다
+> (`FeedPostRepository.findTimeline` 주석 참고). 파생 쿼리만 쓰면 이 함정은 피하지만,
+> **시간대 경계 케이스는 반드시 PostgreSQL 로도 한 번 돌려볼 것** (docs/RUNNING.md).
+
+### 구현 순서
+
+1. ✅ `MemoriesResponse` / `MemoryGroupResponse` DTO + 리포지토리 메서드 4개
+2. ✅ `MemoriesService` — 연도 목록 산출, 시간대 보정, 윤년 규칙, `FeedItemResponse` 변환
+   - 공용 변환은 `FeedItemMapper` 로 **추출**했다(복제 대신). `FeedService` 도 이제 이걸 쓴다
+   - 날짜 규칙은 `MemoryDates` 로 분리 — 저장 TZ 를 파라미터로 받아 단위 테스트가
+     UTC·KST 양쪽을 고정한다
+3. ✅ `GET /feed/memories` + `MemoriesFlowTest`(10건) + `MemoryDatesTest`(8건)
+4. ✅ `MemoriesNotifier` (10:00 KST) + `MemoriesNotifierTest`(5건)
+   - 대상 판별 `memoriesOn(today)` 과 발송 `notifyTodayMemories(today)` 를 기준일 받는
+     형태로 분리 — 테스트가 실제 날짜에 의존하지 않는다
+     (`CalendarDdayNotifier.eventsOccurringOn` 과 같은 이유)
+5. ✅ 프론트 `memories()` API → `MemoriesScreen` → `MemoryPeek` 슬롯 교체
+   - `MemoriesScreen` 은 `SectionList`(연도 헤더) + **기존 `FeedCard` 재사용**.
+     추억 화면에서는 길게 눌러 삭제를 막았다 — 되돌아보는 화면에서 실수하기 쉽다
+   - 홈은 추억이 있는 날에만 `RecentPeek` → `MemoryPeek` 으로 **자리를 바꾼다**.
+     카드를 늘리지 않으므로 고정 화면 레이아웃이 그대로다
+   - 추억 조회 실패(미연결·미배포)는 조용히 무시하고 최근 기록을 그대로 둔다
+     (`feedApi.timeline` 과 같은 패턴)
+
+> **1~3 단계에서 추가된 설정**: `fitto.storage-zone` (환경변수 `FITTO_STORAGE_ZONE`).
+> 비워두면 JVM 기본 TZ 를 쓴다 — 컨테이너 TZ 가 바뀌었을 때 저장 TZ 를 고정하는 탈출구이고,
+> 테스트는 이걸 `UTC` 로 못박아 개발 머신(KST)에서도 운영 경로를 검증한다.

@@ -10,10 +10,12 @@
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from './Icon';
 import { useDatePickerStore } from '../store/datePickerStore';
 import { parseDateString, toDateString } from '../utils/date';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
+import { themedStyles } from '../theme/themedStyles';
+import { layout } from '../theme/layout';
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -140,6 +142,9 @@ export function DatePickerSheet() {
               onPress={() => setMode((m) => (m === 'day' ? 'ym' : 'day'))}
               accessibilityRole="button"
             >
+              {/* 캐럿 아이콘(20)만큼 왼쪽에 빈 공간을 둔다 — 아니면 "년 월" 텍스트가
+                  버튼 정중앙보다 11px 왼쪽에서 읽힌다(캐럿이 오른쪽에만 무게를 더해서) */}
+              <View style={styles.monthLabelSpacer} />
               <Text style={styles.monthLabel}>
                 {year}년 {month}월
               </Text>
@@ -258,7 +263,7 @@ export function DatePickerSheet() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',
@@ -287,8 +292,10 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     marginBottom: spacing.sm,
   },
-  navBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  navBtn: { width: layout.touchTarget, height: layout.touchTarget, alignItems: 'center', justifyContent: 'center' },
   monthLabelBtn: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingHorizontal: spacing.sm },
+  // 오른쪽 캐럿(20px)과 같은 폭 — 텍스트를 광학 중앙에 두는 왼쪽 균형추
+  monthLabelSpacer: { width: 20 },
   monthLabel: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
 
   weekRow: { flexDirection: 'row', marginBottom: spacing.xs },
@@ -350,4 +357,4 @@ const styles = StyleSheet.create({
   },
   todayText: { fontSize: fontSize.body, fontWeight: '800', color: colors.primary },
   cancelText: { fontSize: fontSize.body, fontWeight: '800', color: colors.textSecondary },
-});
+}));

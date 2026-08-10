@@ -17,6 +17,7 @@ import { useAuthStore } from '../../store/authStore';
 import { getErrorMessage } from '../../utils/error';
 import { PRIVACY_VERSION, TERMS_VERSION } from '../../constants/legal';
 import { colors, fontSize, spacing } from '../../constants/theme';
+import { themedStyles } from '../../theme/themedStyles';
 
 export function ConsentGateScreen() {
   const setUser = useAuthStore((s) => s.setUser);
@@ -105,17 +106,16 @@ export function ConsentGateScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   container: { flexGrow: 1, justifyContent: 'center', padding: spacing.lg },
-  title: { fontSize: fontSize.heading, fontWeight: '800', color: colors.textPrimary, marginLeft: spacing.xs },
+  title: { fontSize: fontSize.heading, fontWeight: '800', color: colors.textPrimary },
   subtitle: {
     fontSize: fontSize.body,
     color: colors.textSecondary,
     lineHeight: 22,
     marginTop: spacing.xs,
     marginBottom: spacing.lg,
-    marginLeft: spacing.xs,
   },
   card: { gap: spacing.xs, marginBottom: spacing.sm },
   divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.xs },
@@ -124,8 +124,7 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     lineHeight: 18,
     marginTop: spacing.xs,
-    marginLeft: spacing.xs,
   },
-  error: { color: colors.danger, fontSize: fontSize.caption, marginTop: spacing.sm, marginLeft: spacing.xs },
+  error: { color: colors.danger, fontSize: fontSize.caption, marginTop: spacing.sm },
   submit: { marginTop: spacing.md },
-});
+}));

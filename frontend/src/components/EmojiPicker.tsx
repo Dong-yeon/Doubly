@@ -7,6 +7,8 @@
 import React, { useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
+import { themedStyles } from '../theme/themedStyles';
+import { layout } from '../theme/layout';
 
 interface EmojiEntry {
   char: string;
@@ -119,7 +121,8 @@ export function EmojiPicker({ visible, onClose, onSelect, title = '이모지 선
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={close}>
       <Pressable style={styles.backdrop} onPress={close}>
-        <Pressable style={styles.sheet}>
+        {/* onPress 로 탭을 흡수한다 — 없으면 시트 빈 곳 터치가 배경으로 새어나가 닫힌다 */}
+        <Pressable style={styles.sheet} onPress={() => {}}>
           <View style={styles.handle} />
           <Text style={styles.title}>{title}</Text>
 
@@ -173,7 +176,7 @@ export function EmojiPicker({ visible, onClose, onSelect, title = '이모지 선
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: colors.surface,
@@ -209,7 +212,7 @@ const styles = StyleSheet.create({
   tabs: { marginTop: spacing.sm, flexGrow: 0 },
   tab: {
     paddingHorizontal: spacing.md,
-    height: 34,
+    minHeight: layout.touchTarget,
     justifyContent: 'center',
     borderRadius: radius.pill,
     marginRight: spacing.xs,
@@ -234,4 +237,4 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     paddingVertical: spacing.xl,
   },
-});
+}));

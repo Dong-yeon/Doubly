@@ -3,6 +3,8 @@ package com.fitto.workout.controller;
 import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
 import com.fitto.workout.dto.CalendarDayResponse;
+import com.fitto.workout.dto.ExerciseLastPerformanceRequest;
+import com.fitto.workout.dto.ExerciseLastPerformanceResponse;
 import com.fitto.workout.dto.PartnerTodayResponse;
 import com.fitto.workout.dto.RecommendWorkoutRequest;
 import com.fitto.workout.dto.SaveWorkoutRequest;
@@ -52,6 +54,14 @@ public class WorkoutController {
                                                                 @Valid @RequestBody RecommendWorkoutRequest request) {
         return ApiResponse.success(recommendationService.recommend(user.id(), request.daysOrDefault()),
                 "AI 운동 추천이 완료되었습니다.");
+    }
+
+    /** 종목별 직전 수행 기록 배치 조회 — 세션 시작 시 무게/횟수 프리필(④). */
+    @PostMapping("/exercises/last-performance")
+    public ApiResponse<List<ExerciseLastPerformanceResponse>> lastPerformance(
+            @AuthenticationPrincipal AuthUser user,
+            @Valid @RequestBody ExerciseLastPerformanceRequest request) {
+        return ApiResponse.success(workoutService.lastPerformance(user.id(), request.exerciseNames()));
     }
 
     @GetMapping("/today")

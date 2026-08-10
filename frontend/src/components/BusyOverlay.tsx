@@ -8,6 +8,7 @@ import React from 'react';
 import { ActivityIndicator, Modal, StyleSheet, Text, View } from 'react-native';
 import { useBusyStore } from '../store/busyStore';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
+import { themedStyles } from '../theme/themedStyles';
 
 export function BusyOverlay() {
   const message = useBusyStore((s) => s.message);
@@ -32,7 +33,7 @@ export function BusyOverlay() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',
@@ -55,4 +56,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   hint: { fontSize: fontSize.caption, color: colors.textSecondary },
-});
+}));

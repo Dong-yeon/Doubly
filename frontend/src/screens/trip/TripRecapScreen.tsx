@@ -2,21 +2,23 @@
 import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '../../components/Icon';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { PlaceStackParamList } from '../../navigation/types';
+import { TripSectionTabs } from './TripSectionTabs';
 import { tripApi } from '../../api/trip';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
+import { formatMoney } from '../../utils/format';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { TripRecap, TripStatus } from '../../types';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<PlaceStackParamList, 'TripRecap'>;
 
-function money(n: number): string {
-  return `${Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')}원`;
-}
+/* 천단위 구분은 공용 유틸(utils/format)로 통일했다 */
+const money = formatMoney;
 
 function statusLabel(status: TripStatus): string {
   if (status === 'UPCOMING') return '곧 떠나요';
@@ -31,7 +33,7 @@ function closingLine(r: TripRecap): string {
 }
 
 export function TripRecapScreen({ route }: Props) {
-  const { tripId } = route.params;
+  const { tripId, title } = route.params;
   const [recap, setRecap] = useState<TripRecap | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -66,17 +68,25 @@ export function TripRecapScreen({ route }: Props) {
     { icon: 'wallet-outline', value: recap.expenseTotal > 0 ? money(recap.expenseTotal) : '0원', label: '총 지출' },
     { icon: 'image-multiple-outline', value: `${recap.photoCount}`, label: '사진' },
     { icon: 'bag-personal-outline', value: `${recap.checklistChecked}/${recap.checklistTotal}`, label: '준비물' },
+    { icon: 'run', value: `${recap.workoutCount}`, label: '여행 중 운동' },
     { icon: 'calendar-range', value: `${recap.nights}박 ${recap.days}일`, label: '기간' },
   ] as const;
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
+      {/* 형제 화면(경비·준비물·앨범)으로 바로 이동 — 여행 상세를 거치지 않는다 */}
+      <TripSectionTabs tripId={tripId} title={title} />
       <ScrollView contentContainerStyle={styles.scroll}>
         {/* 히어로 */}
         <View style={styles.hero}>
           <View style={styles.statusChip}>
             <Text style={styles.statusText}>{statusLabel(recap.status)}</Text>
           </View>
+          {recap.travelModeEnabled ? (
+            <View style={[styles.statusChip, styles.travelModeChip]}>
+              <Text style={styles.statusText}>✈️ 여행 모드</Text>
+            </View>
+          ) : null}
           <Text style={styles.title}>{recap.title}</Text>
           <Text style={styles.dates}>
             {recap.startDate} ~ {recap.endDate}
@@ -103,7 +113,7 @@ export function TripRecapScreen({ route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   center: { alignItems: 'center', justifyContent: 'center' },
   scroll: { padding: spacing.lg, paddingBottom: spacing.xxl },
@@ -120,7 +130,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     backgroundColor: colors.surface,
   },
-  statusText: { fontSize: fontSize.caption, color: colors.accent, fontWeight: '800' },
+  statusText: { fontSize: fontSize.caption, color: colors.togetherText, fontWeight: '800' },
+  travelModeChip: { marginTop: spacing.xs },
   title: {
     fontSize: fontSize.heading,
     fontWeight: '800',
@@ -143,7 +154,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   tileValue: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary, marginTop: spacing.xs },
-  tileLabel: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2, textAlign: 'center' },
+  tileLabel: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xxs, textAlign: 'center' },
 
   closing: {
     fontSize: fontSize.body,
@@ -153,4 +164,4 @@ const styles = StyleSheet.create({
     marginTop: spacing.xl,
     lineHeight: 22,
   },
-});
+}));

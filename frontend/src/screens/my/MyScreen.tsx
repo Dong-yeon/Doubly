@@ -2,7 +2,7 @@
 import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Alert } from '../../utils/alert';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '../../components/Icon';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -11,6 +11,7 @@ import { Avatar } from '../../components/Avatar';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
+import { DateField } from '../../components/DateField';
 import { BadgeCard } from '../../components/BadgeCard';
 import { LevelCard } from '../../components/LevelCard';
 import { WeeklyRecapCard } from '../../components/WeeklyRecapCard';
@@ -25,8 +26,9 @@ import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
 import { pickImage, uploadImage } from '../../utils/imageUpload';
-import { colors, fontSize, spacing } from '../../constants/theme';
-import type { UserLevel, WeeklyRecap } from '../../types';
+import { colors, fontSize, radius, spacing } from '../../constants/theme';
+import type { Gender, UserLevel, WeeklyRecap } from '../../types';
+import { themedStyles } from '../../theme/themedStyles';
 
 // 식단 뱃지 — 운동(7/30/100)과 같은 단계, 식단 스트릭 기준
 const MEAL_BADGES = [
@@ -53,6 +55,12 @@ export function MyScreen({ navigation }: Props) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(user?.name ?? '');
   const [saving, setSaving] = useState(false);
+  // 신체 정보(키/생년월일/성별) — 실시간 에너지 밸런스(기초대사량) 계산에 쓰인다
+  const [bodyEditing, setBodyEditing] = useState(false);
+  const [heightCm, setHeightCm] = useState('');
+  const [birthDate, setBirthDate] = useState('');
+  const [gender, setGender] = useState<Gender | undefined>(undefined);
+  const [savingBody, setSavingBody] = useState(false);
   const [maxStreak, setMaxStreak] = useState(0);
   const [maxMealStreak, setMaxMealStreak] = useState(0);
   const [recap, setRecap] = useState<WeeklyRecap | null>(null);
@@ -111,6 +119,31 @@ export function MyScreen({ navigation }: Props) {
       Alert.alert('오류', getErrorMessage(e));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const startBodyEdit = () => {
+    setHeightCm(user?.heightCm ? String(user.heightCm) : '');
+    setBirthDate(user?.birthDate ?? '');
+    setGender(user?.gender ?? undefined);
+    setBodyEditing(true);
+  };
+
+  const onSaveBody = async () => {
+    setSavingBody(true);
+    try {
+      await updateProfile({
+        heightCm: heightCm ? Number(heightCm) : undefined,
+        birthDate: birthDate || undefined,
+        gender,
+      });
+      haptics.success();
+      toast.success('신체 정보를 저장했어요 ');
+      setBodyEditing(false);
+    } catch (e) {
+      Alert.alert('오류', getErrorMessage(e));
+    } finally {
+      setSavingBody(false);
     }
   };
 
@@ -271,28 +304,49 @@ export function MyScreen({ navigation }: Props) {
     );
   };
 
+  /*
+   * 회원 탈퇴 — 가장 파괴적인 동작이므로 "지난 기록 완전 삭제"와 같은 2단계 확인을 쓴다.
+   * 이전엔 1단계 확인뿐이었고 진행 중 표시도 없어, 무엇이 지워지는지 모른 채
+   * 탈퇴되거나 응답 대기 중 중복 탭이 가능했다.
+   */
+  const [withdrawing, setWithdrawing] = useState(false);
   const onWithdraw = () => {
-    Alert.alert('회원 탈퇴', '탈퇴하면 연결된 관계도 해제됩니다. 계속할까요?', [
-      { text: '취소', style: 'cancel' },
-      {
-        text: '탈퇴',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await withdraw();
-          } catch (e) {
-            Alert.alert('오류', getErrorMessage(e));
-          }
+    Alert.alert(
+      '회원 탈퇴',
+      '계정과 개인 기록(운동·식단·체중)이 삭제되고, 연결된 관계도 해제됩니다.\n커플 공동 기록(맛집·피드·여행)은 상대방 화면에서도 사라집니다.',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '계속',
+          style: 'destructive',
+          onPress: () =>
+            Alert.alert('정말 탈퇴할까요?', '삭제된 데이터는 되돌릴 수 없어요.', [
+              { text: '취소', style: 'cancel' },
+              {
+                text: '탈퇴',
+                style: 'destructive',
+                onPress: async () => {
+                  setWithdrawing(true);
+                  try {
+                    await withdraw();
+                  } catch (e) {
+                    Alert.alert('오류', getErrorMessage(e));
+                  } finally {
+                    setWithdrawing(false);
+                  }
+                },
+              },
+            ]),
         },
-      },
-    ]);
+      ],
+    );
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    // 헤더(title: 'MY')가 상단 인셋과 제목을 담당한다 — top 인셋과 화면 내 제목을
+    // 중복으로 그리면 "MY"가 두 번 보이고 제목 위 여백이 과다해진다
+    <SafeAreaView style={styles.safe} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>MY</Text>
-
         <Card elevation="md" style={styles.profile}>
           <Pressable onPress={onChangePhoto} disabled={photoUploading} style={styles.avatarWrap}>
             <Avatar name={user?.name} imageUrl={user?.profileImageUrl} size={80} />
@@ -322,6 +376,58 @@ export function MyScreen({ navigation }: Props) {
               */}
               <Button title="이름 수정" variant="soft" size="md" onPress={startEdit} style={styles.editBtn} />
             </>
+          )}
+        </Card>
+
+        {/* 신체 정보 — 실시간 에너지 밸런스(기초대사량 + 오늘 운동 소모 - 섭취) 계산에 쓰인다.
+            식단 탭 홈에서 이 정보가 없으면 계산을 못 하고 CTA 로 여기로 안내한다. */}
+        <Card elevation="sm" style={styles.bodyCard}>
+          <Text style={styles.bodyLabel}>신체 정보</Text>
+          <Text style={styles.bodyDesc}>키·생년월일·성별을 등록하면 식단 탭에서 실시간 칼로리 잔여량을 계산해줘요.</Text>
+          {bodyEditing ? (
+            <View style={styles.editBox}>
+              <TextField
+                label="키(cm)"
+                value={heightCm}
+                onChangeText={(t) => setHeightCm(t.replace(/[^0-9]/g, ''))}
+                keyboardType="number-pad"
+                placeholder="170"
+              />
+              <DateField label="생년월일" value={birthDate} onChange={setBirthDate} max={new Date().toISOString().slice(0, 10)} />
+              <Text style={styles.fieldLabel}>성별</Text>
+              <View style={styles.genderRow}>
+                {(['MALE', 'FEMALE'] as const).map((g) => (
+                  <Pressable
+                    key={g}
+                    style={({ pressed }) => [
+                      styles.genderChip,
+                      gender === g && styles.genderChipActive,
+                      pressed && styles.genderChipPressed,
+                    ]}
+                    onPress={() => setGender(gender === g ? undefined : g)}
+                  >
+                    <Text style={[styles.genderText, gender === g && styles.genderTextActive]}>
+                      {g === 'MALE' ? '남성' : '여성'}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              <View style={styles.editActions}>
+                <Button title="취소" variant="ghost" size="md" onPress={() => setBodyEditing(false)} style={styles.flex} />
+                <Button title="저장" size="md" onPress={onSaveBody} loading={savingBody} style={styles.flex} />
+              </View>
+            </View>
+          ) : (
+            <View style={styles.bodyRow}>
+              <Text style={styles.bodyValue}>
+                {user?.heightCm ? `${user.heightCm}cm` : '키 미등록'}
+                {' · '}
+                {user?.birthDate ?? '생년월일 미등록'}
+                {' · '}
+                {user?.gender ? (user.gender === 'MALE' ? '남성' : '여성') : '성별 미등록'}
+              </Text>
+              <Button title="수정" variant="soft" size="sm" onPress={startBodyEdit} />
+            </View>
           )}
         </Card>
 
@@ -449,9 +555,16 @@ export function MyScreen({ navigation }: Props) {
             <Text style={styles.menuText}>로그아웃</Text>
             <Text style={styles.chevron}>›</Text>
           </Pressable>
+        </Card>
+
+        {/*
+          파괴적 액션은 별도 카드로 분리한다 — 로그아웃 바로 아래 연결 끊기·탈퇴가
+          1px 구분선만 두고 붙어 있으면 스크롤 관성 중 오탭 한 번으로 되돌릴 수 없는
+          동작에 진입한다. 카드 사이 여백이 완충 지대 역할을 한다.
+        */}
+        <Card elevation="sm" style={styles.dangerMenu}>
           {couple ? (
             <>
-              <View style={styles.divider} />
               <Pressable
                 style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
                 onPress={onDisconnectCouple}
@@ -460,12 +573,16 @@ export function MyScreen({ navigation }: Props) {
                 <Text style={[styles.menuText, styles.danger]}>커플 연결 끊기</Text>
                 {disconnecting ? <ActivityIndicator size="small" color={colors.danger} /> : <Text style={styles.chevron}>›</Text>}
               </Pressable>
+              <View style={styles.divider} />
             </>
           ) : null}
-          <View style={styles.divider} />
-          <Pressable style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]} onPress={onWithdraw}>
+          <Pressable
+            style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
+            onPress={onWithdraw}
+            disabled={withdrawing}
+          >
             <Text style={[styles.menuText, styles.danger]}>회원 탈퇴</Text>
-            <Text style={styles.chevron}>›</Text>
+            {withdrawing ? <ActivityIndicator size="small" color={colors.danger} /> : <Text style={styles.chevron}>›</Text>}
           </Pressable>
         </Card>
 
@@ -475,10 +592,9 @@ export function MyScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   container: { padding: spacing.lg, flexGrow: 1 },
-  title: { fontSize: fontSize.heading, fontWeight: '800', color: colors.textPrimary, letterSpacing: -0.5, marginBottom: spacing.lg },
   profile: { alignItems: 'center', paddingVertical: spacing.xl },
   avatarWrap: { position: 'relative' },
   cameraBadge: {
@@ -503,7 +619,30 @@ const styles = StyleSheet.create({
   editBox: { alignSelf: 'stretch', marginTop: spacing.lg },
   editActions: { flexDirection: 'row', gap: spacing.sm },
   flex: { flex: 1 },
+  bodyCard: { marginTop: spacing.lg, gap: spacing.xs },
+  bodyLabel: { fontSize: fontSize.caption, fontWeight: '800', color: colors.textSecondary },
+  bodyDesc: { fontSize: fontSize.caption, color: colors.textSecondary, lineHeight: 18 },
+  bodyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.xs, gap: spacing.sm },
+  bodyValue: { flex: 1, fontSize: fontSize.body, color: colors.textPrimary, fontWeight: '600' },
+  fieldLabel: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700', marginBottom: spacing.sm },
+  genderRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
+  genderChip: {
+    flex: 1,
+    height: 50,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceAlt,
+  },
+  genderChipActive: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
+  genderChipPressed: { opacity: 0.7 },
+  genderText: { color: colors.textSecondary, fontWeight: '700' },
+  genderTextActive: { color: colors.primaryDark },
   menu: { marginTop: spacing.lg, padding: 0 },
+  // 파괴 액션 카드 — 위쪽 여백을 넓혀 일반 메뉴와 시각적으로 분리한다
+  dangerMenu: { marginTop: spacing.xl, padding: 0 },
   menuItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.md, paddingHorizontal: spacing.lg },
   pressed: { backgroundColor: colors.surfaceAlt },
   menuText: { fontSize: fontSize.subtitle, color: colors.textPrimary, fontWeight: '600' },
@@ -526,4 +665,4 @@ const styles = StyleSheet.create({
   chevron: { fontSize: 22, color: colors.textTertiary },
   divider: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.lg },
   footer: { textAlign: 'center', color: colors.textTertiary, fontSize: fontSize.caption, marginTop: 'auto', paddingTop: spacing.xl },
-});
+}));

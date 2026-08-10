@@ -16,6 +16,7 @@ import { copyText, shareText } from '../../utils/share';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'TrainerDashboard'>;
 
@@ -126,7 +127,7 @@ export function TrainerDashboardScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   list: { padding: spacing.lg, paddingBottom: spacing.xl },
   statsRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
@@ -163,4 +164,4 @@ const styles = StyleSheet.create({
   memberName: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
   memberSub: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
   todayBadge: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textPrimary },
-});
+}));

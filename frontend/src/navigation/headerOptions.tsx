@@ -12,9 +12,10 @@
  */
 import React from 'react';
 import { Pressable, StyleSheet } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '../components/Icon';
 import { useNavigation } from '@react-navigation/native';
 import { colors, spacing } from '../constants/theme';
+import { layout } from '../theme/layout';
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -48,6 +49,15 @@ export const stackScreenOptions = {
   headerShadowVisible: false,
   headerBackVisible: false,
   headerLeft: () => <HeaderIconButton icon="arrow-left" label="뒤로 가기" />,
+  /*
+   * iOS 스와이프백 보장 — 커스텀 headerLeft 는 UIKit 의
+   * interactivePopGestureRecognizer 를 꺼뜨리는 고전 패턴이다.
+   * fullScreenGestureEnabled 는 react-native-screens 자체 팬 제스처를 쓰므로
+   * 커스텀 버튼과 무관하게 화면 어디서든 스와이프백이 동작한다.
+   * (웹에서 기본 뒤로가기 아이콘이 안 보이는 문제 때문에 커스텀 버튼은 유지)
+   */
+  gestureEnabled: true,
+  fullScreenGestureEnabled: true,
 } as const;
 
 /** 모달 화면 옵션 — `options={{ title: '...', ...modalOptions }}` 로 펼쳐 쓴다. */
@@ -62,6 +72,13 @@ const styles = StyleSheet.create({
     minWidth: 44,
     minHeight: 44,
     justifyContent: 'center',
+    /*
+     * 왼쪽 여백이 없어 아이콘이 <b>화면 벽에 붙어</b> 있었다(실측 x=0).
+     * 본문은 screenPadding(20)에서 시작하므로 헤더 아이콘과 본문의 좌측
+     * 정렬선이 어긋났다. 아이콘의 시작점을 본문과 맞춘다.
+     * (터치 영역은 패딩을 포함하므로 44 아래로 내려가지 않는다)
+     */
+    paddingLeft: layout.screenPadding,
     paddingRight: spacing.sm,
   },
   pressed: { opacity: 0.6 },

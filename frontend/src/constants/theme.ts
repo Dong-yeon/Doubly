@@ -4,4 +4,5 @@
  * 기존 코드의 `from '../constants/theme'` 임포트를 깨지 않으면서
  * 새 프리미엄 팔레트/폰트를 앱 전체에 적용하기 위한 shim.
  */
-export { colors, fonts, spacing, radius, fontSize, shadow } from '../theme';
+export { colors, fonts, spacing, radius, fontSize, shadow, iconSize, layout } from '../theme';
+export { type } from '../theme/typography';

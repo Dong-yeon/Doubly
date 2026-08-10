@@ -5,8 +5,10 @@ import com.fitto.auth.service.AuthService;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.diet.domain.MealType;
 import com.fitto.diet.dto.MealResponse;
+import com.fitto.diet.dto.NutritionGoalRequest;
 import com.fitto.diet.dto.SaveMealRequest;
 import com.fitto.diet.service.MealService;
+import com.fitto.diet.service.NutritionService;
 import com.fitto.relation.dto.InviteCodeResponse;
 import com.fitto.relation.service.RelationService;
 import com.fitto.workout.dto.PartnerTodayResponse;
@@ -32,6 +34,8 @@ class MealFlowTest {
     RelationService relationService;
     @Autowired
     MealService mealService;
+    @Autowired
+    NutritionService nutritionService;
 
     private Long register(String email) {
         return authService.register(
@@ -40,6 +44,10 @@ class MealFlowTest {
 
     private SaveMealRequest sample(LocalDate date, MealType type) {
         return new SaveMealRequest(date, type, "닭가슴살 샐러드", null, 420, null, null, null);
+    }
+
+    private SaveMealRequest withProtein(LocalDate date, MealType type, int protein) {
+        return new SaveMealRequest(date, type, "단백질 식단", null, null, null, protein, null);
     }
 
     @Test
@@ -66,12 +74,74 @@ class MealFlowTest {
     }
 
     @Test
+    void 단백질_목표를_막_채우면_감지된다() {
+        Long user = register("pg1@fitto.com");
+        nutritionService.setGoal(user, new NutritionGoalRequest(null, null, 100, null));
+
+        // 60g — 아직 목표(100g) 미달
+        MealResponse first = mealService.save(user, withProtein(LocalDate.now(), MealType.BREAKFAST, 60));
+        assertThat(first.goals()).isEmpty();
+
+        // 60 + 45 = 105g — 이번 기록으로 막 목표를 넘었다
+        MealResponse second = mealService.save(user, withProtein(LocalDate.now(), MealType.LUNCH, 45));
+        assertThat(second.goals()).hasSize(1);
+        assertThat(second.goals().get(0).nutrient()).isEqualTo("protein");
+        assertThat(second.goals().get(0).consumed()).isEqualTo(105);
+        assertThat(second.goals().get(0).target()).isEqualTo(100);
+    }
+
+    @Test
+    void 이미_달성한_날_또_기록해도_중복으로_감지되지_않는다() {
+        Long user = register("pg2@fitto.com");
+        nutritionService.setGoal(user, new NutritionGoalRequest(null, null, 50, null));
+
+        mealService.save(user, withProtein(LocalDate.now(), MealType.BREAKFAST, 60)); // 이미 달성
+        MealResponse third = mealService.save(user, withProtein(LocalDate.now(), MealType.DINNER, 20));
+
+        assertThat(third.goals()).isEmpty();
+    }
+
+    @Test
+    void 목표를_설정하지_않았으면_감지되지_않는다() {
+        Long user = register("pg3@fitto.com");
+        // setGoal 호출 없음 — 목표 미설정
+
+        MealResponse saved = mealService.save(user, withProtein(LocalDate.now(), MealType.LUNCH, 999));
+        assertThat(saved.goals()).isEmpty();
+    }
+
+    @Test
     void 남의_기록은_삭제할_수_없다() {
         Long owner = register("m3@fitto.com");
         Long other = register("m4@fitto.com");
         MealResponse saved = mealService.save(owner, sample(LocalDate.now(), MealType.SNACK));
 
         assertThatThrownBy(() -> mealService.delete(other, saved.id()))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void 어제_식단을_오늘로_복사하면_끼니와_매크로가_그대로_유지된다() {
+        Long user = register("m5@fitto.com");
+        mealService.save(user, new SaveMealRequest(
+                LocalDate.now().minusDays(1), MealType.BREAKFAST, "닭가슴살 샐러드", null, 420, 30, 40, 10));
+        mealService.save(user, sample(LocalDate.now().minusDays(1), MealType.LUNCH));
+
+        List<MealResponse> copied = mealService.copyFrom(user, LocalDate.now().minusDays(1));
+
+        assertThat(copied).hasSize(2);
+        assertThat(copied).allMatch(m -> m.mealDate().equals(LocalDate.now()));
+        assertThat(mealService.findToday(user)).hasSize(2);
+        MealResponse breakfast = copied.stream()
+                .filter(m -> m.mealType() == MealType.BREAKFAST).findFirst().orElseThrow();
+        assertThat(breakfast.calories()).isEqualTo(420);
+    }
+
+    @Test
+    void 복사할_기록이_없는_날짜는_예외를_던진다() {
+        Long user = register("m6@fitto.com");
+
+        assertThatThrownBy(() -> mealService.copyFrom(user, LocalDate.now().minusDays(1)))
                 .isInstanceOf(BusinessException.class);
     }
 

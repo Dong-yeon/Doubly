@@ -16,11 +16,12 @@ import {
 } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '../../components/Icon';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { PlaceStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
+import { IconButton } from '../../components/IconButton';
 import { KakaoMap } from '../../components/KakaoMap';
 import { tripApi } from '../../api/trip';
 import { placeApi } from '../../api/place';
@@ -32,6 +33,8 @@ import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { Place, TripDay, TripDetail, TripItem } from '../../types';
 import { tripStatusLabel } from './TripListScreen';
+import { themedStyles } from '../../theme/themedStyles';
+import { onColor } from '../../theme/onColor';
 
 type Props = NativeStackScreenProps<PlaceStackParamList, 'TripDetail'>;
 type Tab = 'itinerary' | 'places';
@@ -146,6 +149,20 @@ export function TripDetailScreen({ navigation, route }: Props) {
       load();
     } catch (e) {
       Alert.alert('오류', getErrorMessage(e));
+    }
+  };
+
+  // ---- 여행 모드 (PLAN.md Travel Mode) ----
+  const onToggleTravelMode = async () => {
+    if (!trip) return;
+    const next = !trip.travelModeEnabled;
+    try {
+      const updated = await tripApi.setTravelMode(tripId, next);
+      haptics.light();
+      toast.success(next ? '여행 모드를 켰어요. 식단 목표를 잠시 쉬어가요.' : '여행 모드를 껐어요.');
+      setDetail((d) => (d ? { ...d, trip: updated } : d));
+    } catch (e) {
+      toast.error(getErrorMessage(e, '여행 모드를 바꾸지 못했어요.'));
     }
   };
 
@@ -308,7 +325,26 @@ export function TripDetailScreen({ navigation, route }: Props) {
     }
   };
 
-  // AI 일정 생성 — 기존 일정을 대체
+  /*
+   * AI 일정 생성 — 기존 일정을 <b>전부 대체</b>한다.
+   * 손으로 짠 일정이 있는데 확인 없이 날려버리면 되돌릴 방법이 없으므로,
+   * 지울 것이 있을 때만 한 번 묻는다. (빈 상태면 바로 실행 — 물을 이유가 없다)
+   */
+  const onGenerate = () => {
+    if (totalItems === 0) {
+      void runGenerate();
+      return;
+    }
+    Alert.alert(
+      'AI로 일정 다시 짜기',
+      `지금 있는 일정 ${totalItems}개가 새 일정으로 바뀌어요. 되돌릴 수 없어요.`,
+      [
+        { text: '취소', style: 'cancel' },
+        { text: '다시 짜기', style: 'destructive', onPress: () => void runGenerate() },
+      ],
+    );
+  };
+
   const runGenerate = async () => {
     setAiLoading(true);
     try {
@@ -350,6 +386,25 @@ export function TripDetailScreen({ navigation, route }: Props) {
               {trip.startDate} ~ {trip.endDate} · {days.length}일
             </Text>
             {trip.memo ? <Text style={styles.memo}>{trip.memo}</Text> : null}
+
+            {/* 여행 모드 — 켜져 있으면 여행 기간 동안 식단 목표를 잠시 숨긴다 */}
+            <TouchableOpacity
+              style={[styles.travelModeRow, trip.travelModeEnabled && styles.travelModeRowOn]}
+              activeOpacity={0.8}
+              onPress={onToggleTravelMode}
+            >
+              <View style={styles.travelModeText}>
+                <Text style={[styles.travelModeTitle, trip.travelModeEnabled && styles.travelModeTitleOn]}>
+                  ✈️ 여행 모드
+                </Text>
+                <Text style={[styles.travelModeDesc, trip.travelModeEnabled && styles.travelModeDescOn]}>
+                  {trip.travelModeEnabled ? '여행 기간 동안 식단 목표를 잠시 쉬어가요' : '켜면 여행 기간 동안 식단 목표를 숨겨요'}
+                </Text>
+              </View>
+              <View style={[styles.travelModeSwitch, trip.travelModeEnabled && styles.travelModeSwitchOn]}>
+                <View style={[styles.travelModeKnob, trip.travelModeEnabled && styles.travelModeKnobOn]} />
+              </View>
+            </TouchableOpacity>
 
             {/* 경비 · 준비물 · 앨범 · 회고 진입 (2×2) */}
             <View style={styles.entryRow}>
@@ -468,26 +523,30 @@ export function TripDetailScreen({ navigation, route }: Props) {
                     {item.placeName ? <Text style={styles.itemPlace}>{item.placeName}</Text> : null}
                     {item.memo ? <Text style={styles.itemMemo}>{item.memo}</Text> : null}
                   </TouchableOpacity>
+                  {/*
+                    44×44 아이콘 버튼 — 예전엔 ▲▼✕ 가 26×18px 로 gap 2 에 붙어 있어
+                    아래로 내리려다 삭제를 누르는 사고가 났다. 삭제는 한 칸 띄운다.
+                  */}
                   <View style={styles.itemActions}>
-                    <TouchableOpacity
+                    <IconButton
+                      icon="chevron-up"
+                      label="위로 옮기기"
                       onPress={() => moveItem(idx, -1)}
                       disabled={idx === 0}
-                      hitSlop={8}
-                      style={styles.moveBtn}
-                    >
-                      <Text style={[styles.moveText, idx === 0 && styles.moveDisabled]}>▲</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
+                    />
+                    <IconButton
+                      icon="chevron-down"
+                      label="아래로 옮기기"
                       onPress={() => moveItem(idx, 1)}
                       disabled={idx === dayItems.length - 1}
-                      hitSlop={8}
-                      style={styles.moveBtn}
-                    >
-                      <Text style={[styles.moveText, idx === dayItems.length - 1 && styles.moveDisabled]}>▼</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => deleteItem(item)} hitSlop={8} style={styles.moveBtn}>
-                      <Text style={styles.delText}>✕</Text>
-                    </TouchableOpacity>
+                    />
+                    <IconButton
+                      icon="close"
+                      label="일정 삭제"
+                      onPress={() => deleteItem(item)}
+                      color={colors.danger}
+                      style={styles.deleteBtn}
+                    />
                   </View>
                 </View>
               ))
@@ -546,7 +605,8 @@ export function TripDetailScreen({ navigation, route }: Props) {
       {/* 일정 추가/수정 모달 */}
       <Modal visible={editorOpen} transparent animationType="slide" onRequestClose={() => setEditorOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setEditorOpen(false)}>
-          <Pressable style={styles.sheet}>
+          {/* onPress 로 탭을 흡수한다 — 없으면 시트 빈 곳 터치가 배경으로 새어나가 닫힌다 */}
+          <Pressable style={styles.sheet} onPress={() => {}}>
             <Text style={styles.sheetTitle}>{editingItem ? '일정 수정' : '일정 추가'}</Text>
 
             {/* Day 선택 */}
@@ -597,7 +657,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
                     style={[styles.catSelect, on && styles.catSelectOn]}
                     onPress={() => setForm((f) => ({ ...f, category: on ? null : c }))}
                   >
-                    <Text style={[styles.catSelectText, on && styles.dayChipTextOn]}>{c}</Text>
+                    <Text style={[styles.catSelectText, on && styles.catSelectTextOn]}>{c}</Text>
                   </TouchableOpacity>
                 );
               })}
@@ -639,7 +699,8 @@ export function TripDetailScreen({ navigation, route }: Props) {
         }}
       >
         <Pressable style={styles.backdrop} onPress={() => !aiLoading && setAiOpen(false)}>
-          <Pressable style={styles.sheet}>
+          {/* onPress 로 탭을 흡수한다 — 없으면 시트 빈 곳 터치가 배경으로 새어나가 닫힌다 */}
+          <Pressable style={styles.sheet} onPress={() => {}}>
             <Text style={styles.sheetTitle}>AI 여행 일정 생성</Text>
             <Text style={styles.aiDesc}>
               "{trip?.title}" 여행에 맞춰 {days.length}일치 일정을 AI가 짜드려요.
@@ -666,7 +727,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
             ) : (
               <View style={styles.sheetActions}>
                 <Button title="취소" variant="ghost" size="md" onPress={() => setAiOpen(false)} />
-                <Button title="일정 생성" size="md" onPress={runGenerate} />
+                <Button title="일정 생성" size="md" onPress={onGenerate} />
               </View>
             )}
           </Pressable>
@@ -676,7 +737,8 @@ export function TripDetailScreen({ navigation, route }: Props) {
       {/* 장소 연결 선택 모달 */}
       <Modal visible={linkOpen} transparent animationType="fade" onRequestClose={() => setLinkOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setLinkOpen(false)}>
-          <Pressable style={styles.sheet}>
+          {/* onPress 로 탭을 흡수한다 — 없으면 시트 빈 곳 터치가 배경으로 새어나가 닫힌다 */}
+          <Pressable style={styles.sheet} onPress={() => {}}>
             <Text style={styles.sheetTitle}>어떤 장소를 연결할까요?</Text>
             <FlatList
               data={linkCandidates}
@@ -700,7 +762,8 @@ export function TripDetailScreen({ navigation, route }: Props) {
       {/* 장소 담기 모달 (장소 탭) */}
       <Modal visible={pickerOpen} transparent animationType="fade" onRequestClose={() => setPickerOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setPickerOpen(false)}>
-          <Pressable style={styles.sheet}>
+          {/* onPress 로 탭을 흡수한다 — 없으면 시트 빈 곳 터치가 배경으로 새어나가 닫힌다 */}
+          <Pressable style={styles.sheet} onPress={() => {}}>
             <Text style={styles.sheetTitle}>어떤 장소를 담을까요?</Text>
             <FlatList
               data={candidates}
@@ -734,7 +797,7 @@ function TabButton({ label, active, onPress }: { label: string; active: boolean;
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   scroll: { padding: spacing.lg, paddingBottom: spacing.xxl },
   cover: { width: '100%', height: 160, borderRadius: radius.lg, marginBottom: spacing.md },
@@ -749,6 +812,41 @@ const styles = StyleSheet.create({
   editLink: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
   dates: { fontSize: fontSize.body, color: colors.textPrimary, fontWeight: '700', marginTop: spacing.sm },
   memo: { fontSize: fontSize.body, color: colors.textSecondary, marginTop: spacing.xs, lineHeight: 21 },
+
+  // 여행 모드 토글
+  travelModeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  travelModeRowOn: { backgroundColor: colors.accentSoft, borderColor: colors.accent },
+  travelModeText: { flex: 1, paddingRight: spacing.md },
+  travelModeTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
+  travelModeTitleOn: { color: colors.accent },
+  travelModeDesc: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
+  travelModeDescOn: { color: colors.accent },
+  travelModeSwitch: {
+    width: 44,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: colors.border,
+    padding: 2,
+    justifyContent: 'center',
+  },
+  travelModeSwitchOn: { backgroundColor: colors.accent },
+  travelModeKnob: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#fff',
+  },
+  travelModeKnobOn: { alignSelf: 'flex-end' },
 
   entryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
   entryCard: {
@@ -793,7 +891,8 @@ const styles = StyleSheet.create({
   dayChipOn: { backgroundColor: colors.secondary, borderColor: colors.secondary },
   dayChipDay: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
   dayChipDate: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
-  dayChipTextOn: { color: '#fff' },
+  // 다크의 secondary 는 파스텔이라 '#fff' 고정이 1.69:1 이었다 — 배경 휘도로 고른다
+  dayChipTextOn: { color: onColor(colors.secondary) },
 
   mapWrap: { marginTop: spacing.xs, marginBottom: spacing.md, borderRadius: radius.lg, overflow: 'hidden' },
 
@@ -847,11 +946,9 @@ const styles = StyleSheet.create({
   catChipText: { fontSize: 11, color: colors.primary, fontWeight: '700' },
   itemPlace: { fontSize: fontSize.caption, color: colors.secondary, marginTop: spacing.xs, fontWeight: '600' },
   itemMemo: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xs, lineHeight: 18 },
-  itemActions: { alignItems: 'center', justifyContent: 'flex-start', gap: 2 },
-  moveBtn: { paddingHorizontal: 6, paddingVertical: 2 },
-  moveText: { fontSize: 14, color: colors.textSecondary, fontWeight: '800' },
-  moveDisabled: { color: colors.border },
-  delText: { fontSize: 14, color: colors.danger, fontWeight: '800', marginTop: 2 },
+  itemActions: { alignItems: 'center', justifyContent: 'flex-start' },
+  /* 삭제는 이동 버튼과 붙여두지 않는다 — 오탭 비용이 되돌릴 수 없는 쪽이라 완충 여백을 준다 */
+  deleteBtn: { marginTop: spacing.sm },
 
   addWrap: { marginTop: spacing.md },
 
@@ -880,7 +977,9 @@ const styles = StyleSheet.create({
   empty: { fontSize: fontSize.caption, color: colors.textSecondary, textAlign: 'center', paddingVertical: spacing.lg, lineHeight: 20 },
 
   // 모달
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: spacing.xl },
+  // spacing.lg 로 통일 — 앱의 다른 모달 8곳이 전부 이 값이라, xl(32) 만 카드 폭이
+  // 16px 더 좁았다(392 vs 376, 440 기준)
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: spacing.lg },
   sheet: { backgroundColor: colors.surfaceCard, borderRadius: radius.xl, padding: spacing.lg, maxHeight: '85%' },
   sheetTitle: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary, marginBottom: spacing.md },
   sheetList: { marginBottom: spacing.sm },
@@ -924,6 +1023,8 @@ const styles = StyleSheet.create({
   },
   catSelectOn: { backgroundColor: colors.accent, borderColor: colors.accent },
   catSelectText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary },
+  // accent 는 secondary 와 다른 토큰이라 별도로 계산한다 — 다크에서 1.50:1 이었다
+  catSelectTextOn: { color: onColor(colors.accent) },
   linkRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -935,4 +1036,4 @@ const styles = StyleSheet.create({
   },
   linkLabel: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
   linkValue: { fontSize: fontSize.body, color: colors.secondary, fontWeight: '700' },
-});
+}));

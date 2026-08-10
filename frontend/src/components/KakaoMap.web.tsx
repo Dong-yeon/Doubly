@@ -12,6 +12,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { KAKAO_JS_KEY } from '../constants/config';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 import type { KakaoMapHandle, KakaoMapProps } from './KakaoMap.types';
+import { themedStyles } from '../theme/themedStyles';
 
 export type { KakaoMapHandle, KakaoMapProps };
 
@@ -42,6 +43,17 @@ function loadSdk(): Promise<void> {
 const DEFAULT_LAT = 37.5665;
 const DEFAULT_LNG = 126.978;
 
+// 색상 지정 핀 — 원형 SVG 를 데이터 URI 로 인라인 렌더링 (kakaoMapHtml.ts 의 네이티브 버전과 동일 규칙)
+function pinImage(kakao: any, color: string) {
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28">` +
+    `<circle cx="14" cy="14" r="10" fill="${color}" stroke="#ffffff" stroke-width="3"/></svg>`;
+  const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+  return new kakao.maps.MarkerImage(url, new kakao.maps.Size(28, 28), {
+    offset: new kakao.maps.Point(14, 14),
+  });
+}
+
 export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap(
   { markers, path, selectable, centerLat, centerLng, height = 300, style, onSelect, onMarkerPress, onSearchResults },
   ref,
@@ -50,6 +62,8 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
   const mapRef = useRef<any>(null);
   const selMarkerRef = useRef<any>(null);
   const overlaysRef = useRef<any[]>([]);
+  /** 화면 맞추기를 이미 했는지 — 갱신마다 시야를 다시 잡지 않기 위해 */
+  const fittedRef = useRef(false);
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
 
@@ -92,7 +106,9 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
     (markers ?? []).forEach((m) => {
       const pos = new kakao.maps.LatLng(m.lat, m.lng);
       bounds.extend(pos);
-      const marker = new kakao.maps.Marker({ map, position: pos, title: m.title });
+      const markerOpts: any = { map, position: pos, title: m.title };
+      if (m.color) markerOpts.image = pinImage(kakao, m.color);
+      const marker = new kakao.maps.Marker(markerOpts);
       kakao.maps.event.addListener(marker, 'click', () => cbRef.current.onMarkerPress?.(m.id));
       const label = new kakao.maps.CustomOverlay({
         map,
@@ -120,6 +136,13 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
       path.forEach((p) => bounds.extend(new kakao.maps.LatLng(p.lat, p.lng)));
     }
 
+    /*
+     * 화면 맞추기는 <b>처음 그릴 때만</b> 한다.
+     * 갱신마다 setBounds 를 부르면(여행 상세의 Day 전환 등) 사용자가 확대·이동해둔
+     * 시야를 매번 빼앗는다. 이후에는 마커만 바꾸고 시야는 그대로 둔다.
+     */
+    if (fittedRef.current) return;
+    fittedRef.current = true;
     if ((markers?.length ?? 0) > 1 || (path?.length ?? 0) > 1) {
       map.setBounds(bounds, 40, 40, 40, 40);
     } else if (markers?.length === 1) {
@@ -200,7 +223,7 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
   );
 });
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   container: {
     borderRadius: radius.lg,
     overflow: 'hidden',
@@ -225,4 +248,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
-});
+}));

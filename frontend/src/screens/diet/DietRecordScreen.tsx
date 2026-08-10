@@ -1,15 +1,6 @@
 /** 식단 기록 입력 — 끼니·사진·칼로리·메모 + 즐겨찾기 원탭 추가. 운동(WorkoutRecordScreen) 미러링 */
 import React, { useCallback, useRef, useState } from 'react';
-import {
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Image, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -17,8 +8,12 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { WorkoutStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
+import { FormKeyboardView } from '../../components/FormKeyboardView';
+import { DateField } from '../../components/DateField';
+import { Chip } from '../../components/Chip';
 import { useDietStore } from '../../store/dietStore';
 import { useRelationStore } from '../../store/relationStore';
+import { useDirtyGuard } from '../../hooks/useDirtyGuard';
 import { publishEnsuringConnection } from '../../api/chatSocket';
 import { dietApi } from '../../api/diet';
 import { pickImage, takePhoto, uploadImage } from '../../utils/imageUpload';
@@ -27,8 +22,10 @@ import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
 import { toDateString } from '../../utils/date';
+import { buildDietShareCopy } from '../../utils/dietShare';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { FavoriteFood, MealType } from '../../types';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'DietRecord'>;
 
@@ -51,10 +48,12 @@ function defaultMealType(): MealType {
 // 즐겨찾기가 없을 때 보여줄 시작용 추천 (탭하면 이름만 추가)
 const STARTER_SUGGESTIONS = ['닭가슴살', '샐러드', '현미밥', '고구마', '계란', '단백질쉐이크', '아메리카노'];
 
-export function DietRecordScreen({ navigation }: Props) {
+export function DietRecordScreen({ navigation, route }: Props) {
   const save = useDietStore((s) => s.save);
   const couple = useRelationStore((s) => s.couple);
   const [mealType, setMealType] = useState<MealType>(defaultMealType());
+  /** 기록할 날짜 — 캘린더에서 날짜를 골라 들어오면 그 날짜, 아니면 오늘 */
+  const [mealDate, setMealDate] = useState(route.params?.date ?? toDateString());
   const [memo, setMemo] = useState('');
   const [calories, setCalories] = useState('');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
@@ -65,6 +64,10 @@ export function DietRecordScreen({ navigation }: Props) {
   const [macros, setMacros] = useState<{ carbs: number; protein: number; fat: number } | null>(null);
   // 업로드 결과 캐시 — AI 분석과 저장이 같은 사진을 두 번 올리지 않도록
   const uploadedRef = useRef<{ uri: string; url: string } | null>(null);
+
+  // 입력이 하나라도 있으면 이탈(뒤로가기·스와이프) 전에 확인한다
+  const dirty = memo.trim().length > 0 || calories.trim().length > 0 || photoUri != null;
+  const allowLeave = useDirtyGuard(dirty);
 
   // 즐겨찾는 음식
   const [favorites, setFavorites] = useState<FavoriteFood[]>([]);
@@ -77,30 +80,42 @@ export function DietRecordScreen({ navigation }: Props) {
     setMemo((prev) => (prev.trim() ? `${prev.trim()}, ${food}` : food));
   };
 
-  // 즐겨찾기 탭 — 이름은 메모에, 칼로리는 합산
+  // 즐겨찾기 세트 탭 — 항목명은 모두 메모에, 칼로리·매크로는 세트 합산치를 더한다
   const addFavorite = (fav: FavoriteFood) => {
     haptics.light();
-    addName(fav.name);
-    if (fav.calories) {
-      setCalories((prev) => String((Number(prev) || 0) + (fav.calories ?? 0)));
+    addName(fav.items.map((i) => i.name).join(', '));
+    if (fav.totalCalories) {
+      setCalories((prev) => String((Number(prev) || 0) + fav.totalCalories));
+    }
+    if (fav.totalCarbs || fav.totalProtein || fav.totalFat) {
+      setMacros((prev) => ({
+        carbs: (prev?.carbs ?? 0) + fav.totalCarbs,
+        protein: (prev?.protein ?? 0) + fav.totalProtein,
+        fat: (prev?.fat ?? 0) + fav.totalFat,
+      }));
     }
   };
 
-  // 현재 입력을 즐겨찾기로 저장
+  /**
+   * 현재 입력을 즐겨찾기 세트로 저장 — 메모에 콤마로 적어둔 여러 음식을 각각의 항목으로 나눈다
+   * (예: "닭가슴살, 고구마, 아몬드" → 3개 항목). 항목별 칼로리/매크로 입력 UI는 아직 없어서
+   * 현재 입력한 칼로리·매크로 합계는 첫 항목에 몰아 저장한다 — 세트 전체 합산치는 정확하게 유지된다.
+   */
   const saveCurrentAsFavorite = async () => {
-    const name = memo.trim();
-    if (!name) {
+    const names = memo.split(',').map((s) => s.trim()).filter(Boolean);
+    if (names.length === 0) {
       toast.error('음식 이름(메모)을 먼저 입력해주세요.');
       return;
     }
     try {
-      const fav = await dietApi.saveFavorite({
-        name,
-        calories: calories ? Number(calories) : undefined,
-        carbs: macros?.carbs,
-        protein: macros?.protein,
-        fat: macros?.fat,
-      });
+      const items = names.map((itemName, i) => ({
+        name: itemName,
+        calories: i === 0 && calories ? Number(calories) : undefined,
+        carbs: i === 0 ? macros?.carbs : undefined,
+        protein: i === 0 ? macros?.protein : undefined,
+        fat: i === 0 ? macros?.fat : undefined,
+      }));
+      const fav = await dietApi.saveFavorite({ items });
       haptics.success();
       toast.success('즐겨찾기에 저장했어요 ');
       setFavorites((prev) => [fav, ...prev]);
@@ -225,7 +240,7 @@ export function DietRecordScreen({ navigation }: Props) {
       }
       const label = MEAL_TYPES.find((t) => t.value === mealType)?.label ?? '';
       const saved = await save({
-        mealDate: toDateString(),
+        mealDate,
         mealType,
         memo: memo.trim() || undefined,
         photoUrl,
@@ -237,29 +252,42 @@ export function DietRecordScreen({ navigation }: Props) {
       haptics.success();
       toast.success('식단 기록 완료! ');
 
+      /*
+       * 저장이 끝나면 공유 여부와 무관하게 화면부터 닫는다.
+       * goBack 을 공유 Alert 의 버튼 안에만 두면, Android 에서 바깥 탭·뒤로가기로
+       * Alert 를 닫았을 때 입력이 채워진 화면이 스택에 남는다 — 이후 건강 탭으로
+       * 재진입해 "완료!"를 다시 누르면 같은 기록이 중복 등록된다.
+       * Alert 는 전역이라 화면이 닫힌 뒤에도 정상 표시되고, 공유 핸들러도
+       * 클로저에 잡힌 값만 쓰므로 화면 상태에 의존하지 않는다.
+       */
+      allowLeave();
+      navigation.goBack();
+
       // 커플이 연결돼 있으면 채팅 공유 제안
+      // 단백질 목표를 이번 기록으로 막 채웠으면 확인창·카드 문구를 다르게 만든다 (saved.goals 는
+      // 저장 응답에만 실리는 일회성 정보 — MealService.detectGoalsAchieved 참고)
       if (couple?.id) {
         const summary = `${label}${memo.trim() ? ` · ${memo.trim()}` : ''}${
           calories ? ` (${calories}kcal)` : ''
         }`;
-        Alert.alert('식단 기록 완료! ', '이 식단을 채팅에 공유할까요?', [
-          { text: '다음에', style: 'cancel', onPress: () => navigation.goBack() },
+        const { alertTitle, alertMessage, cardContent } = buildDietShareCopy(summary, saved.goals);
+        const isGoalAchieved = !!saved.goals && saved.goals.length > 0;
+
+        Alert.alert(alertTitle, alertMessage, [
+          { text: '다음에', style: 'cancel' },
           {
             text: '공유하기',
             onPress: async () => {
               await publishEnsuringConnection(couple.id, {
                 messageType: 'MEAL_CARD',
-                content: summary,
+                content: cardContent,
                 imageUrl: saved.photoUrl ?? undefined,
               });
-              toast.success('채팅에 공유했어요 ');
-              navigation.goBack();
+              toast.success(isGoalAchieved ? '🎯 목표 달성 소식을 공유했어요 ' : '채팅에 공유했어요 ');
             },
           },
         ]);
-        return;
       }
-      navigation.goBack();
     } catch (e) {
       Alert.alert('오류', getErrorMessage(e));
     } finally {
@@ -269,26 +297,27 @@ export function DietRecordScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-          <Text style={styles.date}>{toDateString()}</Text>
+      <FormKeyboardView contentContainerStyle={styles.container}>
+          {/* 지난 끼니도 기록할 수 있게 — 예전엔 저장 시각의 오늘로 고정이었다 */}
+          <DateField
+            label="먹은 날"
+            value={mealDate}
+            onChange={setMealDate}
+            max={toDateString()}
+            pickerTitle="언제 먹은 식단인가요?"
+          />
 
           {/* 끼니 선택 */}
           <Text style={styles.label}>끼니</Text>
           <View style={styles.typeRow}>
             {MEAL_TYPES.map((t) => (
-              <TouchableOpacity
+              <Chip
                 key={t.value}
-                style={[styles.typeChip, mealType === t.value && styles.typeChipActive]}
+                label={t.label}
+                selected={mealType === t.value}
                 onPress={() => setMealType(t.value)}
-              >
-                <Text style={[styles.typeText, mealType === t.value && styles.typeTextActive]}>
-                  {t.label}
-                </Text>
-              </TouchableOpacity>
+                fill
+              />
             ))}
           </View>
 
@@ -302,7 +331,15 @@ export function DietRecordScreen({ navigation }: Props) {
             )}
           </TouchableOpacity>
           {photoUri ? (
-            <TouchableOpacity onPress={() => setPhotoUri(null)}>
+            <TouchableOpacity
+              onPress={() => {
+                setPhotoUri(null);
+                // 사진 분석 결과·업로드 캐시도 함께 버린다 — 남겨두면 다른 음식
+                // 메모로 저장할 때 이전 사진의 탄단지가 그 기록에 붙는다
+                setMacros(null);
+                uploadedRef.current = null;
+              }}
+            >
               <Text style={styles.removePhoto}>사진 제거</Text>
             </TouchableOpacity>
           ) : null}
@@ -319,26 +356,11 @@ export function DietRecordScreen({ navigation }: Props) {
                 style={styles.analyzeButton}
               />
               <Text style={styles.analyzeHint}>분석 결과는 추정치예요. 저장 전에 수정할 수 있어요.</Text>
-              {macros ? (
-                <View style={styles.macroRow}>
-                  <View style={styles.macroItem}>
-                    <Text style={styles.macroValue}>{macros.carbs}g</Text>
-                    <Text style={styles.macroLabel}>탄수화물</Text>
-                  </View>
-                  <View style={styles.macroItem}>
-                    <Text style={styles.macroValue}>{macros.protein}g</Text>
-                    <Text style={styles.macroLabel}>단백질</Text>
-                  </View>
-                  <View style={styles.macroItem}>
-                    <Text style={styles.macroValue}>{macros.fat}g</Text>
-                    <Text style={styles.macroLabel}>지방</Text>
-                  </View>
-                </View>
-              ) : null}
             </>
           ) : null}
 
-          {/* 즐겨찾기 — 원탭 추가 (길게 눌러 삭제). 없으면 시작용 추천 */}
+          {/* 즐겨찾기 세트 — 원탭 추가(길게 눌러 삭제). 여러 음식을 한 세트로 묶어뒀다가 한 번에 불러온다.
+              없으면 시작용 추천 */}
           <View style={styles.favHeader}>
             <Text style={styles.label}>즐겨찾기</Text>
             <TouchableOpacity onPress={saveCurrentAsFavorite}>
@@ -355,7 +377,7 @@ export function DietRecordScreen({ navigation }: Props) {
                   onLongPress={() => deleteFavorite(f)}
                 >
                   <Text style={styles.favChipText}>{f.name}</Text>
-                  {f.calories ? <Text style={styles.favChipCal}>{f.calories}kcal</Text> : null}
+                  {f.totalCalories ? <Text style={styles.favChipCal}>{f.totalCalories}kcal</Text> : null}
                 </TouchableOpacity>
               ))}
             </View>
@@ -393,6 +415,27 @@ export function DietRecordScreen({ navigation }: Props) {
               <Text style={styles.analyzeHint}>계산 결과는 추정치예요. 저장 전에 수정할 수 있어요.</Text>
             </>
           ) : null}
+          {/*
+            AI 분석 탄단지 — 사진 분석·텍스트 분석 공통 표시.
+            예전엔 사진 블록 안에만 있어서, 사진 없이 "AI로 칼로리 계산"을 하면
+            탄단지가 저장은 되는데 화면에는 한 번도 보이지 않았다.
+          */}
+          {macros ? (
+            <View style={styles.macroRow}>
+              <View style={styles.macroItem}>
+                <Text style={styles.macroValue}>{macros.carbs}g</Text>
+                <Text style={styles.macroLabel}>탄수화물</Text>
+              </View>
+              <View style={styles.macroItem}>
+                <Text style={styles.macroValue}>{macros.protein}g</Text>
+                <Text style={styles.macroLabel}>단백질</Text>
+              </View>
+              <View style={styles.macroItem}>
+                <Text style={styles.macroValue}>{macros.fat}g</Text>
+                <Text style={styles.macroLabel}>지방</Text>
+              </View>
+            </View>
+          ) : null}
           <TextField
             label="칼로리 (kcal, 선택)"
             placeholder="450"
@@ -402,13 +445,12 @@ export function DietRecordScreen({ navigation }: Props) {
           />
 
           <Button title="완료!" onPress={onSave} loading={saving} style={styles.save} />
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </FormKeyboardView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
   container: { padding: spacing.lg, paddingBottom: spacing.xl },
@@ -491,4 +533,4 @@ const styles = StyleSheet.create({
   },
   presetText: { fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '600' },
   save: { marginTop: spacing.lg },
-});
+}));

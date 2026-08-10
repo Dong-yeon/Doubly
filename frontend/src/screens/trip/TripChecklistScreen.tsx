@@ -2,8 +2,6 @@
 import React, { useCallback, useState } from 'react';
 import {
   FlatList,
-  Modal,
-  Pressable,
   StyleSheet,
   Text,
   TextInput,
@@ -16,17 +14,22 @@ import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { PlaceStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
+import { TripSectionTabs } from './TripSectionTabs';
+import { Sheet } from '../../components/Sheet';
+import { confirmDiscard } from '../../utils/discardGuard';
 import { tripApi } from '../../api/trip';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { Checklist, ChecklistItem } from '../../types';
+import { themedStyles } from '../../theme/themedStyles';
+import { onColor } from '../../theme/onColor';
 
 type Props = NativeStackScreenProps<PlaceStackParamList, 'TripChecklist'>;
 
 export function TripChecklistScreen({ route }: Props) {
-  const { tripId } = route.params;
+  const { tripId, title } = route.params;
   const [data, setData] = useState<Checklist | null>(null);
   const [loading, setLoading] = useState(false);
   const [newText, setNewText] = useState('');
@@ -146,6 +149,8 @@ export function TripChecklistScreen({ route }: Props) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
+      {/* 형제 화면(경비·앨범·회고)으로 바로 이동 — 여행 상세를 거치지 않는다 */}
+      <TripSectionTabs tripId={tripId} title={title} />
       <FlatList
         data={data?.items ?? []}
         keyExtractor={(i) => String(i.id)}
@@ -213,15 +218,13 @@ export function TripChecklistScreen({ route }: Props) {
         }
       />
 
-      {/* 이름 수정 모달 */}
-      <Modal
+      {/* 이름 수정 모달 — 입력 중이면 백드롭 탭에 확인을 건다 */}
+      <Sheet
         visible={renameItem != null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setRenameItem(null)}
+        onClose={() =>
+          confirmDiscard(renameText.trim() !== (renameItem?.content ?? ''), () => setRenameItem(null))
+        }
       >
-        <Pressable style={styles.backdrop} onPress={() => setRenameItem(null)}>
-          <Pressable style={styles.sheet}>
             <Text style={styles.sheetTitle}>준비물 이름 수정</Text>
             <TextInput
               style={styles.addInput}
@@ -236,14 +239,12 @@ export function TripChecklistScreen({ route }: Props) {
               <Button title="취소" variant="ghost" size="md" onPress={() => setRenameItem(null)} />
               <Button title="수정" size="md" onPress={saveRename} />
             </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
+      </Sheet>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   list: { padding: spacing.lg, paddingBottom: spacing.xxl },
 
@@ -302,7 +303,8 @@ const styles = StyleSheet.create({
     marginRight: spacing.md,
   },
   checkboxOn: { backgroundColor: colors.success, borderColor: colors.success },
-  checkMark: { color: '#fff', fontSize: 14, fontWeight: '900', lineHeight: 18 },
+  // 다크의 success(#3FBF80, L=0.399)는 흰 글자가 2.34:1 이었다 — ink 면 7.27:1
+  checkMark: { color: onColor(colors.success), fontSize: 14, fontWeight: '900', lineHeight: 18 },
   rowBody: { flex: 1 },
   rowText: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
   rowTextChecked: { color: colors.textTertiary, textDecorationLine: 'line-through' },
@@ -310,8 +312,7 @@ const styles = StyleSheet.create({
 
   empty: { fontSize: fontSize.caption, color: colors.textSecondary, textAlign: 'center', paddingVertical: spacing.xl, lineHeight: 20 },
 
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: spacing.xl },
-  sheet: { backgroundColor: colors.surfaceCard, borderRadius: radius.xl, padding: spacing.lg },
+  /* 배경·모서리·패딩은 Sheet 가 담당한다 */
   sheetTitle: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary, marginBottom: spacing.md },
   sheetActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, marginTop: spacing.md },
-});
+}));

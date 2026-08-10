@@ -12,6 +12,7 @@ import { EmptyState } from '../../components/EmptyState';
 import { useChatStore } from '../../store/chatStore';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { ChatRoom, MessageType } from '../../types';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<ChatStackParamList, 'ChatRooms'>;
 
@@ -105,12 +106,14 @@ export function ChatScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: fontSize.heading, fontWeight: '800', color: colors.textPrimary, paddingHorizontal: spacing.lg, paddingTop: spacing.sm, letterSpacing: -0.5 },
-  list: { padding: spacing.md, flexGrow: 1 },
-  room: { flexDirection: 'row', alignItems: 'center', padding: spacing.md, borderRadius: radius.lg },
+  // 좌우 여백을 title 과 맞춘다(24) — 행 자체는 세로 패딩만 갖고, 좌우는 list 가 담당해
+  // 아바타가 "채팅" 제목과 같은 세로선에서 시작한다(예전엔 16+16=32 로 8px 밀려 있었다)
+  list: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, flexGrow: 1 },
+  room: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm, borderRadius: radius.lg },
   pressed: { backgroundColor: colors.surfaceAlt, transform: [{ scale: 0.99 }] },
   roomBody: { flex: 1, marginLeft: spacing.md },
   partnerName: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
@@ -118,4 +121,4 @@ const styles = StyleSheet.create({
   badge: { minWidth: 24, height: 24, borderRadius: radius.pill, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 7 },
   badgeText: { color: colors.white, fontSize: fontSize.caption, fontWeight: '800' },
   sep: { height: spacing.xs },
-});
+}));
