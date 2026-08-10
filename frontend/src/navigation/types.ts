@@ -22,7 +22,9 @@ export type HomeStackParamList = {
   CoupleConnect: undefined;
   // 우리 기록 — 포스트·운동·식단·맛집 통합 타임라인.
   // 홈에 붙어 있었으나, 기록이 쌓일수록 배경 사진을 덮어서 별도 화면으로 분리했다.
-  FeedTimeline: undefined;
+  // who 를 주면 그 사람 기록만 거른다 — 홈 히어로의 좌/우 열을 누르면 각자의 기록으로 간다
+  // (없으면 기존처럼 둘 다 섞인 전체 타임라인).
+  FeedTimeline: { who?: 'me' | 'partner' } | undefined;
   // 커플 일상 피드 작성
   FeedCompose: undefined;
   // 데일리 질문 (커플 Q&A)
@@ -76,7 +78,8 @@ export interface SessionExerciseParam {
 // 운동 탭 내부 스택 — 운동 + 식단(세그먼트로 통합)
 export type WorkoutStackParamList = {
   WorkoutMain: undefined;
-  WorkoutRecord: undefined;
+  // date: 캘린더에서 특정 날짜를 골라 들어올 때 그 날짜로 시작한다 (없으면 오늘)
+  WorkoutRecord: { date?: string } | undefined;
   WorkoutCalendar: undefined;
   WorkoutStats: undefined;
   WorkoutRecommend: undefined;
@@ -96,7 +99,8 @@ export type WorkoutStackParamList = {
   Challenge: undefined;
   // 식단 (구 식단 탭에서 이전) — WorkoutMain 상단 세그먼트로 토글
   DietMain: undefined;
-  DietRecord: undefined;
+  // date: 캘린더에서 특정 날짜를 골라 들어올 때 그 날짜로 시작한다 (없으면 오늘)
+  DietRecord: { date?: string } | undefined;
   DietCalendar: undefined;
   DietStats: undefined;
 };

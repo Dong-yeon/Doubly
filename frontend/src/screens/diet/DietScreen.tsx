@@ -1,5 +1,5 @@
 /** 식단 메인 — 오늘 기록 + 히스토리 + 스트릭/커플 목표 + 캘린더/통계 진입 */
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   FlatList,
   Modal,
@@ -30,8 +30,13 @@ import { streakApi } from '../../api/streak';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
+import { confirmDiscard } from '../../utils/discardGuard';
+import { formatKcal, formatKcalOfGoal, formatNumber } from '../../utils/format';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { CoupleMealGoal, DietCoach, Meal, NutritionSummary, Streak, WeeklyLetter } from '../../types';
+import { themedStyles } from '../../theme/themedStyles';
+import { onColor } from '../../theme/onColor';
+import { layout } from '../../theme/layout';
 
 /** 목표 대비 섭취 바 */
 function NutritionBar({ label, consumed, target, unit }: { label: string; consumed: number; target?: number | null; unit: string }) {
@@ -39,13 +44,13 @@ function NutritionBar({ label, consumed, target, unit }: { label: string; consum
   const over = target != null && consumed > target;
   return (
     <View style={styles.nutRow}>
-      <Text style={styles.nutLabel}>{label}</Text>
+      <Text style={styles.nutLabel} numberOfLines={1}>{label}</Text>
       <View style={styles.nutTrack}>
         <View style={[styles.nutFill, { width: `${pct}%` }, over && styles.nutFillOver]} />
       </View>
+      {/* 표기는 format 유틸로 통일 — 한 화면 안에서 kcal 표기가 세 갈래였다 */}
       <Text style={styles.nutVal}>
-        {consumed}
-        {target != null ? `/${target}` : ''}{unit}
+        {unit === 'kcal' ? formatKcalOfGoal(consumed, target) : `${formatNumber(consumed)}${target != null ? ` / ${formatNumber(target)}` : ''}${unit}`}
       </Text>
     </View>
   );
@@ -104,13 +109,27 @@ export function DietScreen({ navigation }: Props) {
     dietApi.nutrition().then(setNutrition).catch(() => setNutrition(null));
   }, []);
 
+  // 모달을 연 시점의 목표 스냅샷 — 백드롭으로 닫을 때 "달라진 게 있는지"를 판단한다
+  const nutInitialRef = useRef('');
+
   const openNutModal = () => {
-    setTCal(nutrition?.targetCalories ? String(nutrition.targetCalories) : '');
-    setTCarbs(nutrition?.targetCarbs ? String(nutrition.targetCarbs) : '');
-    setTProtein(nutrition?.targetProtein ? String(nutrition.targetProtein) : '');
-    setTFat(nutrition?.targetFat ? String(nutrition.targetFat) : '');
+    const cal = nutrition?.targetCalories ? String(nutrition.targetCalories) : '';
+    const carbs = nutrition?.targetCarbs ? String(nutrition.targetCarbs) : '';
+    const protein = nutrition?.targetProtein ? String(nutrition.targetProtein) : '';
+    const fat = nutrition?.targetFat ? String(nutrition.targetFat) : '';
+    setTCal(cal);
+    setTCarbs(carbs);
+    setTProtein(protein);
+    setTFat(fat);
+    nutInitialRef.current = [cal, carbs, protein, fat].join('|');
     setNutModal(true);
   };
+
+  // 백드롭·Android 백 공용 — 입력이 달라졌으면 확인 후 닫는다
+  const closeNutModal = () =>
+    confirmDiscard([tCal, tCarbs, tProtein, tFat].join('|') !== nutInitialRef.current, () =>
+      setNutModal(false),
+    );
 
   const onSaveNutGoal = async () => {
     setSavingNut(true);
@@ -258,7 +277,7 @@ export function DietScreen({ navigation }: Props) {
                 </View>
                 {nutrition.targetCalories ? (
                   <Text style={styles.nutRemain}>
-                    남은 칼로리 {Math.max(0, nutrition.targetCalories - nutrition.consumedCalories)}kcal
+                    남은 칼로리 {formatKcal(Math.max(0, nutrition.targetCalories - nutrition.consumedCalories))}
                   </Text>
                 ) : null}
 
@@ -336,7 +355,7 @@ export function DietScreen({ navigation }: Props) {
                   <Text style={styles.sectionTitle}>오늘</Text>
                   <View style={styles.todayHeaderRight}>
                     {todayCalories > 0 ? (
-                      <Text style={styles.todayCal}>총 {todayCalories} kcal</Text>
+                      <Text style={styles.todayCal}>총 {formatKcal(todayCalories)}</Text>
                     ) : null}
                     <TouchableOpacity onPress={onCopyYesterday} disabled={copyingYesterday}>
                       <Text style={styles.copyYesterday}>
@@ -394,8 +413,8 @@ export function DietScreen({ navigation }: Props) {
       </Modal>
 
       {/* 영양 목표 설정 모달 */}
-      <Modal visible={nutModal} transparent animationType="fade" onRequestClose={() => setNutModal(false)}>
-        <Pressable style={styles.modalBackdrop} onPress={() => setNutModal(false)}>
+      <Modal visible={nutModal} transparent animationType="fade" onRequestClose={closeNutModal}>
+        <Pressable style={styles.modalBackdrop} onPress={closeNutModal}>
           <Pressable style={styles.modalCard} onPress={() => {}}>
             <Text style={styles.modalTitle}>하루 영양 목표</Text>
             <Text style={styles.modalDesc}>비워두면 해당 항목은 목표 없이 섭취량만 표시돼요.</Text>
@@ -423,7 +442,7 @@ export function DietScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   nutCard: {
     backgroundColor: colors.surface,
@@ -441,12 +460,13 @@ const styles = StyleSheet.create({
   nutSecondary: { flex: 1, gap: spacing.xs },
   travelModeBadge: { fontSize: fontSize.caption, fontWeight: '700', color: colors.accent, marginBottom: spacing.xs },
   nutRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  nutLabel: { width: 36, fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
+  // width 48 — "칼로리"(3글자)가 36px 에서 줄바꿈되어 첫 행만 높이가 달라졌다
+  nutLabel: { width: 48, fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
   nutTrack: { flex: 1, height: 10, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
   nutFill: { height: '100%', borderRadius: radius.pill, backgroundColor: colors.accent },
   nutFillOver: { backgroundColor: colors.primary },
   nutVal: { width: 92, textAlign: 'right', fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '700' },
-  nutRemain: { fontSize: fontSize.caption, color: colors.accent, fontWeight: '800', textAlign: 'right', marginTop: spacing.xs },
+  nutRemain: { fontSize: fontSize.caption, color: colors.togetherText, fontWeight: '800', textAlign: 'right', marginTop: spacing.xs },
   energyBox: {
     marginTop: spacing.sm,
     paddingTop: spacing.sm,
@@ -466,7 +486,7 @@ const styles = StyleSheet.create({
   aiScore: { fontSize: fontSize.caption, fontWeight: '700', color: colors.primary },
   aiTip: { fontSize: fontSize.body, color: colors.textPrimary, lineHeight: 21 },
   aiLetter: { fontSize: fontSize.body, color: colors.textPrimary, lineHeight: 24 },
-  list: { padding: spacing.lg, paddingBottom: 120 },
+  list: { padding: spacing.lg, paddingBottom: layout.listBottomWithFab },
   streakRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
   streakText: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
   streakMax: { fontSize: fontSize.caption, color: colors.textSecondary, marginLeft: 'auto' },
@@ -488,7 +508,7 @@ const styles = StyleSheet.create({
   goalSub: { fontSize: fontSize.caption, color: colors.textSecondary },
   todayHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
   todayHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  todayCal: { fontSize: fontSize.body, color: colors.accent, fontWeight: '800' },
+  todayCal: { fontSize: fontSize.body, color: colors.togetherText, fontWeight: '800' },
   copyYesterday: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '700' },
   sectionTitle: { fontSize: fontSize.subtitle, fontWeight: '700', color: colors.textPrimary },
   historyTitle: { marginTop: spacing.lg, marginBottom: spacing.sm },
@@ -520,6 +540,7 @@ const styles = StyleSheet.create({
   },
   dayChipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
   dayText: { fontSize: fontSize.subtitle, fontWeight: '700', color: colors.textPrimary },
-  dayTextActive: { color: colors.white },
+  // 다크 accent 위 white 는 팔레트 전체에서 가장 낮은 1.50:1 이었다 — 배경 휘도로 고른다
+  dayTextActive: { color: onColor(colors.accent) },
   modalHint: { fontSize: fontSize.caption, color: colors.textTertiary, textAlign: 'center' },
-});
+}));

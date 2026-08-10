@@ -7,6 +7,7 @@ import { DoublyMark } from '../../components/DoublyLogo';
 import { storage } from '../../utils/storage';
 import { STORAGE_KEYS } from '../../constants/config';
 import { colors, fontSize, spacing } from '../../constants/theme';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, 'Splash'>;
 
@@ -20,18 +21,26 @@ export function SplashScreen({ navigation }: Props) {
       Animated.timing(opacity, { toValue: 1, duration: 400, easing: Easing.out(Easing.ease), useNativeDriver: true }),
     ]).start();
 
-    // 첫 실행이면 인트로, 아니면 로그인으로. 플래그 읽기는 애니메이션 시간 안에 끝난다.
+    /*
+     * 첫 실행이면 인트로, 아니면 로그인으로.
+     *
+     * 예전에는 setTimeout(1600) 이 <b>하한선</b>이었다. 저장소 읽기는 보통 수십 ms 에
+     * 끝나는데도 매 실행마다 1.6초를 기다려야 했고, 그 시간이 앱 진입 체감 속도를
+     * 그대로 깎아먹었다. 지금은 <b>읽기가 끝나는 즉시</b> 넘어간다.
+     *
+     * 다만 0ms 로 넘어가면 로고가 뜨자마자 사라져 깜빡임처럼 보이므로,
+     * 등장 애니메이션이 자리잡을 최소 시간(360ms)만 함께 기다린다.
+     */
     let cancelled = false;
     const seenPromise = storage.getItem(STORAGE_KEYS.onboardingSeen).catch(() => null);
-    const t = setTimeout(async () => {
-      const seen = await seenPromise;
-      if (!cancelled) {
-        navigation.replace(seen ? 'Login' : 'Onboarding');
-      }
-    }, 1600);
+    const minShow = new Promise((r) => setTimeout(r, 360));
+
+    void Promise.all([seenPromise, minShow]).then(([seen]) => {
+      if (!cancelled) navigation.replace(seen ? 'Login' : 'Onboarding');
+    });
+
     return () => {
       cancelled = true;
-      clearTimeout(t);
     };
   }, [navigation, scale, opacity]);
 
@@ -48,10 +57,11 @@ export function SplashScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   container: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
   center: { alignItems: 'center' },
   brand: { fontSize: fontSize.display, fontWeight: '800', color: colors.ink, textAlign: 'center', marginTop: spacing.lg, letterSpacing: -1 },
   sloganWrap: { marginTop: spacing.md, backgroundColor: colors.togetherBg, borderRadius: 999, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
-  slogan: { fontSize: fontSize.body, color: colors.violet, fontWeight: '700' },
-});
+  /* togetherBg 위 원색 violet 은 3.55:1 로 미달 — 텍스트 변형을 쓴다 */
+  slogan: { fontSize: fontSize.body, color: colors.togetherText, fontWeight: '700' },
+}));

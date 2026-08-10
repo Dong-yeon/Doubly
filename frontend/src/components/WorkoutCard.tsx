@@ -3,6 +3,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { Workout } from '../types';
 import { relativeDateLabel } from '../utils/date';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
+import { themedStyles } from '../theme/themedStyles';
 
 interface Props {
   workout: Workout;
@@ -40,7 +41,7 @@ export function WorkoutCard({ workout, onLongPress }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -60,4 +61,4 @@ const styles = StyleSheet.create({
   setLine: { fontSize: fontSize.body, color: colors.textPrimary, marginTop: 2 },
   more: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
   memo: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.sm, fontStyle: 'italic' },
-});
+}));

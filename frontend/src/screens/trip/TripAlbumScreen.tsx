@@ -1,10 +1,8 @@
 /** 여행 앨범 — 피드 사진을 여행에 담아 그리드로 모아 본다 (담기/빼기) */
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   FlatList,
   Image,
-  Modal,
-  Pressable,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -13,29 +11,53 @@ import {
 } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '../../components/Icon';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { PlaceStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
+import { TripSectionTabs } from './TripSectionTabs';
+import { ImageViewer, type ViewerImage } from '../../components/ImageViewer';
+import { Sheet } from '../../components/Sheet';
 import { tripApi } from '../../api/trip';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { AlbumPost } from '../../types';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<PlaceStackParamList, 'TripAlbum'>;
 
 export function TripAlbumScreen({ route }: Props) {
-  const { tripId } = route.params;
+  const { tripId, title } = route.params;
   const { width } = useWindowDimensions();
   const cell = (width - spacing.lg * 2 - spacing.sm) / 2; // 2열 정사각형 셀
 
   const [photos, setPhotos] = useState<AlbumPost[]>([]);
   const [loading, setLoading] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  /* 사진을 탭하면 전체화면으로 — 예전엔 onPress 가 없어 눌러도 아무 일이 없었다 */
+  const [viewingIndex, setViewingIndex] = useState<number | null>(null);
   const [candidates, setCandidates] = useState<AlbumPost[]>([]);
+
+  /*
+   * 뷰어에는 사진이 있는 항목만 넣는다. 그래서 그리드 위치와 뷰어 위치가 어긋나므로
+   * id → 뷰어 인덱스 맵을 함께 만들어 탭한 사진이 정확히 열리게 한다.
+   */
+  const { viewerImages, viewerIndexById } = useMemo(() => {
+    const withPhoto = photos.filter((p) => p.imageUrl);
+    return {
+      viewerImages: withPhoto.map<ViewerImage>((p) => ({
+        key: String(p.id),
+        uri: p.imageUrl as string,
+        title: `${p.mine ? '내가' : `${p.authorName}님이`}  ·  ${p.createdAt.slice(5, 10)}`,
+        titleColor: p.mine ? colors.coral : colors.indigo,
+        caption: p.content ?? undefined,
+      })),
+      viewerIndexById: new Map(withPhoto.map((p, i) => [p.id, i])),
+    };
+  }, [photos]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -96,6 +118,8 @@ export function TripAlbumScreen({ route }: Props) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
+      {/* 형제 화면(경비·준비물·회고)으로 바로 이동 — 여행 상세를 거치지 않는다 */}
+      <TripSectionTabs tripId={tripId} title={title} />
       <FlatList
         data={photos}
         keyExtractor={(p) => String(p.id)}
@@ -114,7 +138,10 @@ export function TripAlbumScreen({ route }: Props) {
           <TouchableOpacity
             style={[styles.cell, { width: cell }]}
             activeOpacity={0.85}
+            onPress={item.imageUrl ? () => setViewingIndex(viewerIndexById.get(item.id) ?? 0) : undefined}
             onLongPress={() => detach(item)}
+            accessibilityRole="imagebutton"
+            accessibilityLabel={`${item.mine ? '내' : item.authorName} 사진 크게 보기`}
           >
             {item.imageUrl ? (
               <Image source={{ uri: item.imageUrl }} style={[styles.photo, { width: cell, height: cell }]} />
@@ -143,9 +170,7 @@ export function TripAlbumScreen({ route }: Props) {
       />
 
       {/* 사진 담기 모달 */}
-      <Modal visible={pickerOpen} transparent animationType="fade" onRequestClose={() => setPickerOpen(false)}>
-        <Pressable style={styles.backdrop} onPress={() => setPickerOpen(false)}>
-          <Pressable style={styles.sheet}>
+      <Sheet visible={pickerOpen} onClose={() => setPickerOpen(false)} cardStyle={styles.sheet}>
             <Text style={styles.sheetTitle}>어떤 사진을 담을까요?</Text>
             <FlatList
               data={candidates}
@@ -175,14 +200,19 @@ export function TripAlbumScreen({ route }: Props) {
               }
             />
             <Button title="닫기" variant="ghost" size="md" onPress={() => setPickerOpen(false)} />
-          </Pressable>
-        </Pressable>
-      </Modal>
+      </Sheet>
+
+      {/* 전체화면 보기 — 좌우 스와이프로 앨범을 이어서 넘긴다 */}
+      <ImageViewer
+        images={viewerImages}
+        initialIndex={viewingIndex}
+        onClose={() => setViewingIndex(null)}
+      />
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   list: { padding: spacing.lg, paddingBottom: spacing.xxl },
   header: {
@@ -202,8 +232,8 @@ const styles = StyleSheet.create({
 
   empty: { fontSize: fontSize.caption, color: colors.textSecondary, textAlign: 'center', paddingVertical: spacing.xl, lineHeight: 20 },
 
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: spacing.xl },
-  sheet: { backgroundColor: colors.surfaceCard, borderRadius: radius.xl, padding: spacing.lg, maxHeight: '75%' },
+  /* 배경·모서리·패딩은 Sheet 가 담당한다 — 여기서는 높이 상한만 준다 */
+  sheet: { maxHeight: '75%' },
   sheetTitle: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary, marginBottom: spacing.md },
   sheetList: { marginBottom: spacing.sm },
   candidate: {
@@ -216,4 +246,4 @@ const styles = StyleSheet.create({
   candThumb: { width: 52, height: 52, borderRadius: radius.md, backgroundColor: colors.surfaceAlt, marginRight: spacing.md },
   candBody: { flex: 1 },
   candCaption: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
-});
+}));

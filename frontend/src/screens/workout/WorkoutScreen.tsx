@@ -19,6 +19,8 @@ import { streakApi } from '../../api/streak';
 import { getErrorMessage } from '../../utils/error';
 import { colors, fontSize, spacing } from '../../constants/theme';
 import type { Streak, Workout } from '../../types';
+import { themedStyles } from '../../theme/themedStyles';
+import { layout } from '../../theme/layout';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'WorkoutMain'>;
 
@@ -149,9 +151,9 @@ export function WorkoutScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
-  list: { padding: spacing.lg, paddingBottom: 120 },
+  list: { padding: spacing.lg, paddingBottom: layout.listBottomWithFab },
   streakRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
   streakText: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
   streakMax: { fontSize: fontSize.caption, color: colors.textSecondary, marginLeft: 'auto' },
@@ -176,4 +178,4 @@ const styles = StyleSheet.create({
   fabWrap: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: spacing.lg },
   fabRow: { flexDirection: 'row', gap: spacing.sm },
   fabBtn: { flex: 1 },
-});
+}));

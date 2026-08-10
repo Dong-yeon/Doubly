@@ -1,20 +1,14 @@
 /** 장소 추가 — 카카오 플레이스 검색 자동 입력 + 이름·주소·카테고리·상태(위시/방문)·지도 위치 선택 */
 import React, { useRef, useState } from 'react';
-import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { PlaceStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
+import { FormKeyboardView } from '../../components/FormKeyboardView';
+import { Chip } from '../../components/Chip';
 import { KakaoMap } from '../../components/KakaoMap';
 import type { KakaoMapHandle, KakaoPlaceResult } from '../../components/KakaoMap.types';
 import { placeApi } from '../../api/place';
@@ -22,8 +16,10 @@ import { isKakaoMapConfigured } from '../../constants/config';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
+import { useDirtyGuard } from '../../hooks/useDirtyGuard';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { PlaceDietTag, PlaceStatus } from '../../types';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<PlaceStackParamList, 'PlaceAdd'>;
 
@@ -56,6 +52,15 @@ export function PlaceAddScreen({ navigation }: Props) {
   const [results, setResults] = useState<KakaoPlaceResult[]>([]);
   const [searching, setSearching] = useState(false);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 입력이 하나라도 있으면 이탈(뒤로가기·스와이프) 전에 확인한다
+  const dirty =
+    name.trim().length > 0 ||
+    address.trim().length > 0 ||
+    category != null ||
+    coords != null ||
+    keyword.trim().length > 0;
+  const allowLeave = useDirtyGuard(dirty);
 
   const onSearch = () => {
     const q = keyword.trim();
@@ -110,6 +115,7 @@ export function PlaceAddScreen({ navigation }: Props) {
       });
       haptics.success();
       toast.success('장소를 추가했어요 ');
+      allowLeave();
       navigation.goBack();
     } catch (e) {
       Alert.alert('오류', getErrorMessage(e));
@@ -120,8 +126,7 @@ export function PlaceAddScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+      <FormKeyboardView contentContainerStyle={styles.container}>
           {isKakaoMapConfigured() ? (
             <>
               <Text style={styles.label}>카카오 장소 검색 — 이름·주소·위치가 자동 입력돼요</Text>
@@ -178,26 +183,25 @@ export function PlaceAddScreen({ navigation }: Props) {
           <Text style={styles.label}>카테고리 (선택)</Text>
           <View style={styles.chipRow}>
             {CATEGORIES.map((c) => (
-              <TouchableOpacity
+              <Chip
                 key={c}
-                style={[styles.chip, category === c && styles.chipActive]}
+                label={c}
+                selected={category === c}
                 onPress={() => setCategory(category === c ? null : c)}
-              >
-                <Text style={[styles.chipText, category === c && styles.chipTextActive]}>{c}</Text>
-              </TouchableOpacity>
+              />
             ))}
           </View>
 
           <Text style={styles.label}>상태</Text>
           <View style={styles.chipRow}>
             {STATUS_OPTIONS.map((o) => (
-              <TouchableOpacity
+              <Chip
                 key={o.value}
-                style={[styles.statusChip, status === o.value && styles.chipActive]}
+                label={o.label}
+                selected={status === o.value}
                 onPress={() => setStatus(o.value)}
-              >
-                <Text style={[styles.chipText, status === o.value && styles.chipTextActive]}>{o.label}</Text>
-              </TouchableOpacity>
+                fill
+              />
             ))}
           </View>
 
@@ -215,13 +219,12 @@ export function PlaceAddScreen({ navigation }: Props) {
           </View>
 
           <Button title="추가하기" onPress={onSave} loading={saving} disabled={!name.trim()} style={styles.submit} />
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </FormKeyboardView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
   container: { padding: spacing.lg, paddingBottom: spacing.xl },
@@ -265,4 +268,4 @@ const styles = StyleSheet.create({
   chipTextActive: { color: colors.textPrimary, fontWeight: '800' },
   coordText: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xs },
   submit: { marginTop: spacing.lg },
-});
+}));

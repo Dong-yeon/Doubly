@@ -9,6 +9,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { colors, fonts, fontSize, radius, shadow, spacing } from '../constants/theme';
+import { themedStyles } from '../theme/themedStyles';
 
 interface Props extends PressableProps {
   title: string;
@@ -73,7 +74,7 @@ const textStyle = (variant: Props['variant']) => {
   }
 };
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   base: {
     borderRadius: radius.pill,
     alignItems: 'center',
@@ -101,4 +102,4 @@ const styles = StyleSheet.create({
   disabled: { opacity: 0.45 },
   text: { fontFamily: fonts.semiBold, fontSize: fontSize.subtitle, fontWeight: '700', letterSpacing: 0.2 },
   textSm: { fontSize: fontSize.body },
-});
+}));

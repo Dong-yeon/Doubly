@@ -6,11 +6,11 @@
     "@expo/vector-icons": "^15.1.1",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-navigation/bottom-tabs": "^7.18.3",
+    "@react-navigation/elements": "^2.9.36",
     "@react-navigation/native": "^7.3.4",
     "@react-navigation/native-stack": "^7.17.6",
     "@sentry/react-native": "~7.11.0",
     "@stomp/stompjs": "^7.3.0",
-    "axios": "^1.18.1",
     "expo": "~56.0.12",
     "expo-auth-session": "~56.0.14",
     "expo-clipboard": "~56.0.4",
@@ -48,7 +48,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "build:web": "expo export --platform web"
+    "build:web": "node scripts/subset-icon-font.cjs && expo export --platform web",
+    "subset:icons": "node scripts/subset-icon-font.cjs"
   },
   "private": true
 }

@@ -2,6 +2,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
+import { themedStyles } from '../theme/themedStyles';
 
 interface Props {
   checked: boolean;
@@ -35,7 +36,7 @@ export function Checkbox({ checked, onChange, label, trailing, emphasized }: Pro
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   row: { flexDirection: 'row', alignItems: 'center' },
   hit: {
     flex: 1,
@@ -59,4 +60,4 @@ const styles = StyleSheet.create({
   check: { color: '#FFFFFF', fontSize: fontSize.caption, fontWeight: '800' },
   label: { flex: 1, fontSize: fontSize.body, color: colors.textSecondary },
   labelEmphasized: { color: colors.textPrimary, fontWeight: '600' },
-});
+}));

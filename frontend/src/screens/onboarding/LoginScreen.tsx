@@ -1,6 +1,7 @@
 /** 로그인 — 미니멀·발랄 톤. 설계서 2.1 / 3.1 (이메일 로그인) */
 import React, { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { FormKeyboardView } from '../../components/FormKeyboardView';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { OnboardingStackParamList } from '../../navigation/types';
@@ -13,6 +14,7 @@ import { useAuthStore } from '../../store/authStore';
 import { getErrorMessage } from '../../utils/error';
 import { isGoogleLoginConfigured } from '../../constants/config';
 import { colors, fontSize, spacing } from '../../constants/theme';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, 'Login'>;
 
@@ -39,8 +41,7 @@ export function LoginScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+      <FormKeyboardView contentContainerStyle={styles.container}>
           <View style={styles.hero}>
             <DoublyMark size={56} />
             <Text style={styles.brand}>Doubly</Text>
@@ -88,13 +89,12 @@ export function LoginScreen({ navigation }: Props) {
             <Text style={styles.signupText}>아직 계정이 없나요?</Text>
             <Button title="이메일로 회원가입" variant="ghost" size="md" onPress={() => navigation.navigate('Register')} />
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </FormKeyboardView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
   dividerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginVertical: spacing.sm },
@@ -109,4 +109,4 @@ const styles = StyleSheet.create({
   loginBtn: { marginTop: spacing.sm },
   signupRow: { alignItems: 'center', marginTop: spacing.lg, gap: spacing.xs },
   signupText: { color: colors.textSecondary, fontSize: fontSize.body },
-});
+}));

@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { DoublyMark } from './DoublyLogo';
 import { reportError } from '../utils/errorReporter';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
+import { themedStyles } from '../theme/themedStyles';
 
 interface Props {
   children: React.ReactNode;
@@ -95,7 +96,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
   }
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   container: {
     flexGrow: 1,
@@ -140,4 +141,4 @@ const styles = StyleSheet.create({
   },
   pressed: { opacity: 0.8, transform: [{ scale: 0.98 }] },
   buttonText: { color: '#FFFFFF', fontSize: fontSize.body, fontWeight: '800' },
-});
+}));

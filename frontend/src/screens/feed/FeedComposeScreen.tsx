@@ -1,19 +1,22 @@
 /** 일상 남기기 — 사진(선택) + 글 작성. 글/사진 중 하나는 필수 */
 import React, { useState } from 'react';
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity } from 'react-native';
+import { Image, StyleSheet, Text, TouchableOpacity } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
+import { FormKeyboardView } from '../../components/FormKeyboardView';
 import { feedApi } from '../../api/feed';
 import { pickImage, uploadImage } from '../../utils/imageUpload';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
+import { useDirtyGuard } from '../../hooks/useDirtyGuard';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'FeedCompose'>;
 
@@ -21,6 +24,9 @@ export function FeedComposeScreen({ navigation }: Props) {
   const [content, setContent] = useState('');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // 글이나 사진이 있으면 이탈(뒤로가기·스와이프) 전에 확인한다
+  const allowLeave = useDirtyGuard(content.trim().length > 0 || photoUri != null);
 
   const onPickPhoto = async () => {
     try {
@@ -45,6 +51,7 @@ export function FeedComposeScreen({ navigation }: Props) {
       await feedApi.createPost({ content: content.trim() || undefined, imageUrl });
       haptics.success();
       toast.success('일상을 남겼어요 ');
+      allowLeave();
       navigation.goBack();
     } catch (e) {
       Alert.alert('오류', getErrorMessage(e));
@@ -55,36 +62,38 @@ export function FeedComposeScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <TouchableOpacity style={[styles.photoBox, photoUri ? styles.photoBoxFilled : styles.photoBoxEmpty]} onPress={onPickPhoto} activeOpacity={0.8}>
-          {photoUri ? (
-            <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />
-          ) : (
-            <Text style={styles.photoPlaceholder}>사진 추가하기 (선택)</Text>
-          )}
-        </TouchableOpacity>
-        {photoUri ? (
-          <TouchableOpacity onPress={() => setPhotoUri(null)}>
-            <Text style={styles.removePhoto}>사진 지우기</Text>
+      {/* 키보드가 "남기기" 버튼을 가리지 않도록 회피 (스크롤하면 키보드가 내려간다) */}
+      <FormKeyboardView contentContainerStyle={styles.container}>
+          <TouchableOpacity style={[styles.photoBox, photoUri ? styles.photoBoxFilled : styles.photoBoxEmpty]} onPress={onPickPhoto} activeOpacity={0.8}>
+            {photoUri ? (
+              <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />
+            ) : (
+              <Text style={styles.photoPlaceholder}>사진 추가하기 (선택)</Text>
+            )}
           </TouchableOpacity>
-        ) : null}
+          {photoUri ? (
+            <TouchableOpacity onPress={() => setPhotoUri(null)}>
+              <Text style={styles.removePhoto}>사진 지우기</Text>
+            </TouchableOpacity>
+          ) : null}
 
-        <TextField
-          label="오늘의 일상"
-          placeholder="예: 퇴근하고 같이 한강 러닝 날씨 최고!"
-          value={content}
-          onChangeText={setContent}
-          multiline
-        />
+          <TextField
+            label="오늘의 일상"
+            placeholder="예: 퇴근하고 같이 한강 러닝 날씨 최고!"
+            value={content}
+            onChangeText={setContent}
+            multiline
+          />
 
-        <Button title="남기기" onPress={onSave} loading={saving} style={styles.saveBtn} />
-      </ScrollView>
+          <Button title="남기기" onPress={onSave} loading={saving} style={styles.saveBtn} />
+      </FormKeyboardView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
+  flex: { flex: 1 },
   container: { padding: spacing.lg, paddingBottom: spacing.xl },
   photoBox: {
     borderRadius: radius.lg,
@@ -114,4 +123,4 @@ const styles = StyleSheet.create({
     textDecorationLine: 'underline',
   },
   saveBtn: { marginTop: spacing.md },
-});
+}));

@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, TextInputProps, View } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from './Icon';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
+import { themedStyles } from '../theme/themedStyles';
+import { layout } from '../theme/layout';
 
 interface Props extends TextInputProps {
   label?: string;
@@ -56,13 +58,15 @@ export function TextField({ label, errorText, style, secureTextEntry, onFocus, o
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   wrapper: { marginBottom: spacing.md },
+  // 예전엔 marginLeft: spacing.xs 로 라벨만 4px 들여써서 입력 박스 테두리와
+  // 어긋났다(라벨 28 / 박스 24 / 입력 텍스트 41.5, 세 개의 다른 시작선). 라벨을
+  // 박스와 같은 시작선에 맞춘다.
   label: {
     fontSize: fontSize.caption,
     color: colors.textSecondary,
     marginBottom: spacing.xs,
-    marginLeft: spacing.xs,
     fontWeight: '700',
   },
   inputRow: { justifyContent: 'center' },
@@ -90,7 +94,7 @@ const styles = StyleSheet.create({
   inputWithToggle: { paddingRight: 48 },
   inputFocused: { borderColor: colors.primary, backgroundColor: colors.surface },
   inputError: { borderColor: colors.danger, backgroundColor: colors.surface },
-  eye: { position: 'absolute', right: spacing.sm, height: 40, width: 40, alignItems: 'center', justifyContent: 'center' },
+  eye: { position: 'absolute', right: spacing.sm, height: layout.touchTarget, width: layout.touchTarget, alignItems: 'center', justifyContent: 'center' },
   eyeText: { fontSize: 18 },
-  error: { color: colors.danger, fontSize: fontSize.caption, marginTop: spacing.xs, marginLeft: spacing.xs },
-});
+  error: { color: colors.danger, fontSize: fontSize.caption, marginTop: spacing.xs },
+}));

@@ -1,7 +1,7 @@
 /** 루틴 만들기 — 제목 + 운동 목록 추가 후 저장.
  *  세트 프리셋으로 1탭 완성, 종목별 휴식 시간, 대체 종목 사전 지정을 지원한다. */
 import React, { useEffect, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -12,7 +12,9 @@ import { workoutApi } from '../../api/workout';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
+import { confirmDiscard } from '../../utils/discardGuard';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
+import { themedStyles } from '../../theme/themedStyles';
 import type { ExerciseCatalogItem } from '../../types';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'WorkoutRoutineForm'>;
@@ -110,6 +112,15 @@ export function WorkoutRoutineFormScreen({ navigation }: Props) {
     setAltGroup(MUSCLE_GROUPS[0]);
   };
 
+  // 운동 추가 모달 닫기 — 입력이 있으면 확인 후 닫는다 (백드롭·Android 백 공용).
+  // "사라져요"라고 안내했으므로 닫을 때 실제로 비운다 (남기면 다음에 또 확인이 뜬다)
+  const closeAddModal = () =>
+    confirmDiscard(fName.trim().length > 0 || fWeight.trim().length > 0, () => {
+      setAddOpen(false);
+      setFName('');
+      setFWeight('');
+    });
+
   const onAddExercise = () => {
     if (!fName.trim()) {
       toast.error('운동 이름을 입력해주세요.');
@@ -199,108 +210,111 @@ export function WorkoutRoutineFormScreen({ navigation }: Props) {
         <Button title="루틴 저장" onPress={onSave} loading={saving} style={styles.saveBtn} />
       </ScrollView>
 
-      <Modal visible={addOpen} transparent animationType="fade" onRequestClose={() => setAddOpen(false)}>
-        <Pressable style={styles.backdrop} onPress={() => setAddOpen(false)}>
-          <Pressable style={styles.modalCard} onPress={() => {}}>
-            <ScrollView keyboardShouldPersistTaps="handled">
-              <Text style={styles.modalTitle}>운동 추가</Text>
-              <TextField label="운동 이름" placeholder="예: 랫풀다운" value={fName} onChangeText={setFName} />
-              <Text style={styles.modalLabel}>부위</Text>
-              <View style={styles.catRow}>
-                {CATEGORIES.map((c) => (
-                  <TouchableOpacity
-                    key={c}
-                    style={[styles.catChip, fCategory === c && styles.catChipActive]}
-                    onPress={() => setFCategory(c)}
-                  >
-                    <Text style={[styles.catText, fCategory === c && styles.catTextActive]}>{c}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <Text style={styles.modalLabel}>세트 프리셋</Text>
-              <View style={styles.groupRow}>
-                {SET_PRESETS.map((p) => (
-                  <TouchableOpacity key={p.label} style={styles.presetChip} onPress={() => applyPreset(p)}>
-                    <Text style={styles.presetChipText}>{p.label}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              {fPresetHint ? <Text style={styles.presetHint}>{fPresetHint}</Text> : null}
-
-              <View style={styles.formRow}>
-                <View style={styles.flex}>
-                  <TextField label="세트" value={fSets} onChangeText={setFSets} keyboardType="number-pad" />
+      <Modal visible={addOpen} transparent animationType="fade" onRequestClose={closeAddModal}>
+        <Pressable style={styles.backdrop} onPress={closeAddModal}>
+          {/* 키보드가 모달 하단 버튼을 가리지 않도록 카드째로 밀어올린다 */}
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <Pressable style={styles.modalCard} onPress={() => {}}>
+              <ScrollView keyboardShouldPersistTaps="handled">
+                <Text style={styles.modalTitle}>운동 추가</Text>
+                <TextField label="운동 이름" placeholder="예: 랫풀다운" value={fName} onChangeText={setFName} />
+                <Text style={styles.modalLabel}>부위</Text>
+                <View style={styles.catRow}>
+                  {CATEGORIES.map((c) => (
+                    <TouchableOpacity
+                      key={c}
+                      style={[styles.catChip, fCategory === c && styles.catChipActive]}
+                      onPress={() => setFCategory(c)}
+                    >
+                      <Text style={[styles.catText, fCategory === c && styles.catTextActive]}>{c}</Text>
+                    </TouchableOpacity>
+                  ))}
                 </View>
-                <View style={styles.flex}>
-                  <TextField label="횟수" value={fReps} onChangeText={setFReps} keyboardType="number-pad" />
-                </View>
-                <View style={styles.flex}>
-                  <TextField label="무게(kg)" value={fWeight} onChangeText={setFWeight} keyboardType="decimal-pad" />
-                </View>
-              </View>
 
-              <Text style={styles.modalLabel}>휴식 시간 (종목별 지정, 생략 시 세션 기본값)</Text>
-              <View style={styles.groupRow}>
-                {REST_PRESETS.map((r) => (
-                  <TouchableOpacity
-                    key={r}
-                    style={[styles.catChipSmall, fRestSeconds === r && styles.catChipActive]}
-                    onPress={() => setFRestSeconds((prev) => (prev === r ? null : r))}
-                  >
-                    <Text style={[styles.catText, fRestSeconds === r && styles.catTextActive]}>{r}s</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <Text style={styles.modalLabel}>
-                대체 종목 (선택, 최대 {MAX_ALTERNATIVES}개) — 헬스장에서 기구가 겹칠 때 1탭으로 바꿀 종목
-              </Text>
-              <View style={styles.groupRow}>
-                {MUSCLE_GROUPS.map((g) => (
-                  <TouchableOpacity
-                    key={g}
-                    style={[styles.catChipSmall, altGroup === g && styles.catChipActive]}
-                    onPress={() => setAltGroup(g)}
-                  >
-                    <Text style={[styles.catText, altGroup === g && styles.catTextActive]}>{g}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              {altLoading ? (
-                <Text style={styles.emptyHint}>불러오는 중…</Text>
-              ) : (
+                <Text style={styles.modalLabel}>세트 프리셋</Text>
                 <View style={styles.groupRow}>
-                  {altCandidates
-                    .filter((c) => c.name !== fName.trim())
-                    .map((c) => {
-                      const selected = fAlternatives.some((a) => a.exerciseCatalogId === c.id);
-                      return (
-                        <TouchableOpacity
-                          key={c.id}
-                          style={[styles.catChipSmall, selected && styles.catChipActive]}
-                          onPress={() => toggleAlternative(c)}
-                        >
-                          <Text style={[styles.catText, selected && styles.catTextActive]}>
-                            {selected ? '✓ ' : ''}
-                            {c.name}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
+                  {SET_PRESETS.map((p) => (
+                    <TouchableOpacity key={p.label} style={styles.presetChip} onPress={() => applyPreset(p)}>
+                      <Text style={styles.presetChipText}>{p.label}</Text>
+                    </TouchableOpacity>
+                  ))}
                 </View>
-              )}
+                {fPresetHint ? <Text style={styles.presetHint}>{fPresetHint}</Text> : null}
 
-              <Button title="추가" onPress={onAddExercise} style={styles.modalBtn} />
-            </ScrollView>
-          </Pressable>
+                <View style={styles.formRow}>
+                  <View style={styles.flex}>
+                    <TextField label="세트" value={fSets} onChangeText={setFSets} keyboardType="number-pad" />
+                  </View>
+                  <View style={styles.flex}>
+                    <TextField label="횟수" value={fReps} onChangeText={setFReps} keyboardType="number-pad" />
+                  </View>
+                  <View style={styles.flex}>
+                    <TextField label="무게(kg)" value={fWeight} onChangeText={setFWeight} keyboardType="decimal-pad" />
+                  </View>
+                </View>
+
+                <Text style={styles.modalLabel}>휴식 시간 (종목별 지정, 생략 시 세션 기본값)</Text>
+                <View style={styles.groupRow}>
+                  {REST_PRESETS.map((r) => (
+                    <TouchableOpacity
+                      key={r}
+                      style={[styles.catChipSmall, fRestSeconds === r && styles.catChipActive]}
+                      onPress={() => setFRestSeconds((prev) => (prev === r ? null : r))}
+                    >
+                      <Text style={[styles.catText, fRestSeconds === r && styles.catTextActive]}>{r}s</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <Text style={styles.modalLabel}>
+                  대체 종목 (선택, 최대 {MAX_ALTERNATIVES}개) — 헬스장에서 기구가 겹칠 때 1탭으로 바꿀 종목
+                </Text>
+                <View style={styles.groupRow}>
+                  {MUSCLE_GROUPS.map((g) => (
+                    <TouchableOpacity
+                      key={g}
+                      style={[styles.catChipSmall, altGroup === g && styles.catChipActive]}
+                      onPress={() => setAltGroup(g)}
+                    >
+                      <Text style={[styles.catText, altGroup === g && styles.catTextActive]}>{g}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                {altLoading ? (
+                  <Text style={styles.emptyHint}>불러오는 중…</Text>
+                ) : (
+                  <View style={styles.groupRow}>
+                    {altCandidates
+                      .filter((c) => c.name !== fName.trim())
+                      .map((c) => {
+                        const selected = fAlternatives.some((a) => a.exerciseCatalogId === c.id);
+                        return (
+                          <TouchableOpacity
+                            key={c.id}
+                            style={[styles.catChipSmall, selected && styles.catChipActive]}
+                            onPress={() => toggleAlternative(c)}
+                          >
+                            <Text style={[styles.catText, selected && styles.catTextActive]}>
+                              {selected ? '✓ ' : ''}
+                              {c.name}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                  </View>
+                )}
+
+                <Button title="추가" onPress={onAddExercise} style={styles.modalBtn} />
+              </ScrollView>
+            </Pressable>
+          </KeyboardAvoidingView>
         </Pressable>
       </Modal>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   container: { padding: spacing.lg, paddingBottom: spacing.xl },
   label: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700', marginTop: spacing.md, marginBottom: spacing.sm },
@@ -353,4 +367,4 @@ const styles = StyleSheet.create({
   presetChipText: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '700' },
   presetHint: { fontSize: fontSize.caption, color: colors.textTertiary, marginTop: spacing.xs },
   emptyHint: { fontSize: fontSize.caption, color: colors.textSecondary },
-});
+}));

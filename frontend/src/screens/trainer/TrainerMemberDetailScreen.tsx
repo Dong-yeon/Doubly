@@ -15,6 +15,7 @@ import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { TrainerRoutine, Workout } from '../../types';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'TrainerMemberDetail'>;
 
@@ -121,7 +122,7 @@ export function TrainerMemberDetailScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   list: { padding: spacing.lg, paddingBottom: spacing.xl },
   sectionTitle: { fontSize: fontSize.subtitle, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.sm },
@@ -143,4 +144,4 @@ const styles = StyleSheet.create({
   routineBadge: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textPrimary },
   emptyRoutine: { fontSize: fontSize.caption, color: colors.textSecondary, marginBottom: spacing.sm },
   assignBtn: { marginTop: spacing.xs },
-});
+}));

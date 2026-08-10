@@ -1,6 +1,6 @@
 /** 커플 대결 — 기간 내 운동/식단 기록일로 겨루기. 진행바 + 승자 배지. */
-import React, { useCallback, useState } from 'react';
-import { FlatList, Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useRef, useState } from 'react';
+import { FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -15,8 +15,11 @@ import { getErrorMessage } from '../../utils/error';
 import { toDateString } from '../../utils/date';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
+import { confirmDiscard } from '../../utils/discardGuard';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { Challenge, ChallengeType } from '../../types';
+import { themedStyles } from '../../theme/themedStyles';
+import { layout } from '../../theme/layout';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'Challenge'>;
 
@@ -44,6 +47,17 @@ export function ChallengeScreen(_: Props) {
   const [stake, setStake] = useState('');
   const [saving, setSaving] = useState(false);
 
+  /*
+   * 모달을 연 시점의 폼 스냅샷 — openAdd 가 제목·기간을 미리 채우므로
+   * "비어있지 않음"으로는 사용자가 고쳤는지 알 수 없다. 달라졌을 때만 확인한다.
+   */
+  const addInitialRef = useRef('');
+  const closeAddModal = () =>
+    confirmDiscard(
+      [type, title, start, end, stake].join('|') !== addInitialRef.current,
+      () => setAddOpen(false),
+    );
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -64,6 +78,7 @@ export function ChallengeScreen(_: Props) {
     setStart(w.start);
     setEnd(w.end);
     setStake('');
+    addInitialRef.current = ['WORKOUT', '이번 주 대결', w.start, w.end, ''].join('|');
     setAddOpen(true);
   };
 
@@ -171,45 +186,48 @@ export function ChallengeScreen(_: Props) {
         <Button title="＋ 대결 만들기" onPress={openAdd} />
       </View>
 
-      <Modal visible={addOpen} transparent animationType="fade" onRequestClose={() => setAddOpen(false)}>
-        <Pressable style={styles.backdrop} onPress={() => setAddOpen(false)}>
-          <Pressable style={styles.modalCard} onPress={() => {}}>
-            <Text style={styles.modalTitle}>커플 대결 만들기</Text>
-            <View style={styles.typeRow}>
-              {(['WORKOUT', 'MEAL'] as ChallengeType[]).map((t) => (
-                <TouchableOpacity
-                  key={t}
-                  style={[styles.typeChip, type === t && styles.typeChipActive]}
-                  onPress={() => setType(t)}
-                >
-                  <Text style={[styles.typeText, type === t && styles.typeTextActive]}>
-                    {t === 'WORKOUT' ? '운동' : '식단'}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <TextField label="제목" value={title} onChangeText={setTitle} maxLength={100} />
-            <View style={styles.formRow}>
-              <View style={styles.flex}>
-                <DateField label="시작일" value={start} onChange={onChangeStart} max={end || undefined} />
+      <Modal visible={addOpen} transparent animationType="fade" onRequestClose={closeAddModal}>
+        <Pressable style={styles.backdrop} onPress={closeAddModal}>
+          {/* 키보드가 "대결 시작" 버튼을 가리지 않도록 카드째로 밀어올린다 */}
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <Pressable style={styles.modalCard} onPress={() => {}}>
+              <Text style={styles.modalTitle}>커플 대결 만들기</Text>
+              <View style={styles.typeRow}>
+                {(['WORKOUT', 'MEAL'] as ChallengeType[]).map((t) => (
+                  <TouchableOpacity
+                    key={t}
+                    style={[styles.typeChip, type === t && styles.typeChipActive]}
+                    onPress={() => setType(t)}
+                  >
+                    <Text style={[styles.typeText, type === t && styles.typeTextActive]}>
+                      {t === 'WORKOUT' ? '운동' : '식단'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
               </View>
-              <View style={styles.flex}>
-                {/* 시작일보다 앞선 날은 아예 못 고르게 한다 */}
-                <DateField label="종료일" value={end} onChange={setEnd} min={start || undefined} />
+              <TextField label="제목" value={title} onChangeText={setTitle} maxLength={100} />
+              <View style={styles.formRow}>
+                <View style={styles.flex}>
+                  <DateField label="시작일" value={start} onChange={onChangeStart} max={end || undefined} />
+                </View>
+                <View style={styles.flex}>
+                  {/* 시작일보다 앞선 날은 아예 못 고르게 한다 */}
+                  <DateField label="종료일" value={end} onChange={setEnd} min={start || undefined} />
+                </View>
               </View>
-            </View>
-            <TextField label="벌칙/보상 (선택)" value={stake} onChangeText={setStake} placeholder="예: 진 사람이 저녁 쏘기" />
-            <Button title="대결 시작" onPress={onCreate} loading={saving} style={styles.modalBtn} />
-          </Pressable>
+              <TextField label="벌칙/보상 (선택)" value={stake} onChangeText={setStake} placeholder="예: 진 사람이 저녁 쏘기" />
+              <Button title="대결 시작" onPress={onCreate} loading={saving} style={styles.modalBtn} />
+            </Pressable>
+          </KeyboardAvoidingView>
         </Pressable>
       </Modal>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
-  list: { padding: spacing.lg, paddingBottom: 100 },
+  list: { padding: spacing.lg, paddingBottom: layout.listBottomWithFab },
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -224,7 +242,7 @@ const styles = StyleSheet.create({
   statusText: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '800' },
   statusEnded: { backgroundColor: colors.surfaceAlt },
   statusEndedText: { color: colors.textSecondary },
-  meta: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2, marginBottom: spacing.sm },
+  meta: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xxs, marginBottom: spacing.sm },
   barRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.xs },
   barLabel: { width: 28, fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
   barTrack: { flex: 1, height: 14, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
@@ -234,7 +252,7 @@ const styles = StyleSheet.create({
   barCount: { width: 56, textAlign: 'right', fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '700' },
   barCountLead: { color: colors.together, fontWeight: '800' },
   tie: { fontSize: fontSize.caption, color: colors.textSecondary, textAlign: 'center', marginTop: spacing.sm, fontWeight: '700' },
-  stake: { fontSize: fontSize.caption, color: colors.accent, fontWeight: '700', marginTop: spacing.sm },
+  stake: { fontSize: fontSize.caption, color: colors.togetherText, fontWeight: '700', marginTop: spacing.sm },
   fabWrap: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: spacing.lg },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: spacing.lg },
   modalCard: { backgroundColor: colors.surface, borderRadius: radius.xl, padding: spacing.lg },
@@ -247,4 +265,4 @@ const styles = StyleSheet.create({
   formRow: { flexDirection: 'row', gap: spacing.sm },
   flex: { flex: 1 },
   modalBtn: { marginTop: spacing.md },
-});
+}));

@@ -12,7 +12,7 @@
  */
 import React from 'react';
 import { StyleSheet, Text, View, ViewStyle } from 'react-native';
-import Svg, { Path, Polygon } from 'react-native-svg';
+import Svg, { G, Path, Polygon } from 'react-native-svg';
 import { colors, fontSize } from '../constants/theme';
 
 interface Props {
@@ -51,11 +51,16 @@ function toPath(pts: { x: number; y: number }[]): string {
   return pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join('');
 }
 
+type Pt = { x: number; y: number };
+
 /** 잎 — 양 끝이 모이는 아몬드형. 줄기 위 한 점에서 바깥으로 뻗는다 */
-function leafPoints(x: number, y: number, ang: number, len: number): string {
-  const pts: string[] = [];
+function leafPoints(x: number, y: number, ang: number, len: number): Pt[] {
+  const pts: Pt[] = [];
   const push = (u: number, v: number) =>
-    pts.push(`${(x + u * Math.cos(ang) - v * Math.sin(ang)).toFixed(1)},${(y + u * Math.sin(ang) + v * Math.cos(ang)).toFixed(1)}`);
+    pts.push({
+      x: x + u * Math.cos(ang) - v * Math.sin(ang),
+      y: y + u * Math.sin(ang) + v * Math.cos(ang),
+    });
   for (let i = 0; i <= 12; i += 1) {
     const u = i / 12;
     push(u * len, len * 0.3 * Math.sin(Math.PI * u) ** 0.85);
@@ -64,11 +69,67 @@ function leafPoints(x: number, y: number, ang: number, len: number): string {
     const u = i / 12;
     push(u * len, -len * 0.3 * Math.sin(Math.PI * u) ** 0.85);
   }
-  return pts.join(' ');
+  return pts;
 }
 
-/** 잎이 붙는 위치 (반쪽 경로의 진행도) */
+const toPolygon = (pts: Pt[]) => pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+
+/** 잎이 붙는 위치 (반쪽 경로의 진행도 — "위 꼭지에서 얼마나 왔나") */
 const LEAF_AT = [0.16, 0.42, 0.7];
+
+/**
+ * 한 반쪽의 기하 — 줄기 점들과 잎 세 장.
+ *
+ * <p><b>진짜 원인</b>: 줄기 곡선 자체는 완전히 대칭이지만({@code halfPoints(1)[i]}
+ * 를 세로축으로 뒤집으면 {@code halfPoints(-1)[56-i]} 와 정확히 겹친다 — 이건
+ * {@code i ↔ 56-i} 다), <b>{@link LEAF_AT}은 두 반쪽에서 같은 index 를 가리킨다</b>.
+ * 오른쪽은 t 가 위→아래로 흐르고 왼쪽은 아래→위로 흐르므로, 같은 index 9 가
+ * 오른쪽에서는 "위 꼭지 근처", 왼쪽에서는 "아래 끝 근처"를 가리켜 잎이 대각선으로
+ * 몰렸다(실측: bbox 중심이 뷰박스 중앙에서 2.51 벗어남).
+ *
+ * <p><b>고침</b>: 왼쪽만 index 를 {@code (N-1-i)} 로 뒤집고, 접선을 재는 이웃점도
+ * 반대 방향({@code i-3})에서 뽑는다 — "위 꼭지에서부터의 진행도"라는 뜻을 양쪽에서
+ * 같게 맞춘다. 검증(면적·무게중심·bbox, 신발끈 공식): 세 잎 모두 좌우 오차 0.0000.
+ */
+function halfGeometry(side: 1 | -1): { stem: Pt[]; leaves: Pt[][] } {
+  const stem = halfPoints(side);
+  const N = stem.length;
+  const leaves = LEAF_AT.map((f) => {
+    const iFromTop = Math.round(f * (N - 1));
+    const i = side > 0 ? iFromTop : N - 1 - iFromTop;
+    const p = stem[i];
+    const n = stem[side > 0 ? Math.min(i + 3, N - 1) : Math.max(i - 3, 0)];
+    const ang = Math.atan2(n.y - p.y, n.x - p.x) + side * Math.PI * 0.46;
+    return leafPoints(p.x, p.y, ang, H * 0.16);
+  });
+  return { stem, leaves };
+}
+
+const GEOMETRY = { right: halfGeometry(1), left: halfGeometry(-1) };
+
+/**
+ * 그림을 뷰박스 한가운데로 옮기는 안전망.
+ *
+ * <p>위 halfGeometry 수정으로 그림은 이미 완전 대칭이라(bbox 중심 오차 0.000,
+ * verify-logo 스크립트로 확인) 이 보정은 사실상 항등(dx≈dy≈0)이다. 향후 잎 모양이나
+ * 각도를 조정해 미세한 비대칭이 다시 생기더라도 자동으로 잡히도록 남겨 둔다.
+ */
+const CENTERING = (() => {
+  const all: Pt[] = [];
+  for (const half of [GEOMETRY.right, GEOMETRY.left]) {
+    // 줄기는 선 굵기의 절반만큼 더 번진다
+    for (const p of half.stem) {
+      all.push({ x: p.x - STROKE / 2, y: p.y - STROKE / 2 });
+      all.push({ x: p.x + STROKE / 2, y: p.y + STROKE / 2 });
+    }
+    for (const leaf of half.leaves) all.push(...leaf);
+  }
+  const xs = all.map((p) => p.x);
+  const ys = all.map((p) => p.y);
+  const dx = V / 2 - (Math.min(...xs) + Math.max(...xs)) / 2;
+  const dy = V / 2 - (Math.min(...ys) + Math.max(...ys)) / 2;
+  return { dx, dy };
+})();
 
 /**
  * 어두운 배경 위에 얹을 때 쓰는 밝은 변형.
@@ -79,21 +140,14 @@ const LEAF_AT = [0.16, 0.42, 0.7];
 const ON_DARK = { me: '#F1C999', partner: '#A7D2A9', together: '#C9DA97' };
 
 function Half({ side, color, leafColor }: { side: 1 | -1; color: string; leafColor: string }) {
-  const pts = halfPoints(side);
-  const leaves = LEAF_AT.map((f) => {
-    const i = Math.round(f * (pts.length - 1));
-    const p = pts[i];
-    const n = pts[Math.min(i + 3, pts.length - 1)];
-    const ang = Math.atan2(n.y - p.y, n.x - p.x) + side * Math.PI * 0.46;
-    return leafPoints(p.x, p.y, ang, H * 0.16);
-  });
+  const { stem, leaves } = side > 0 ? GEOMETRY.right : GEOMETRY.left;
   return (
     <>
-      {leaves.map((pl) => (
-        <Polygon key={pl.slice(0, 24)} points={pl} fill={leafColor} />
+      {leaves.map((leaf, i) => (
+        <Polygon key={`${side}-${i}`} points={toPolygon(leaf)} fill={leafColor} />
       ))}
       <Path
-        d={toPath(pts)}
+        d={toPath(stem)}
         stroke={color}
         strokeWidth={STROKE}
         strokeLinecap="round"
@@ -115,9 +169,12 @@ export function DoublyMark({ size = 40, onDark = false }: { size?: number; onDar
   const leaf = onDark ? ON_DARK.together : colors.together;
   return (
     <Svg width={size} height={size} viewBox={`0 0 ${V} ${V}`}>
-      {/* 상대(뒤) → 나(앞) 순서로 겹쳐 '얽힌' 인상을 만든다 */}
-      <Half side={1} color={partner} leafColor={leaf} />
-      <Half side={-1} color={me} leafColor={leaf} />
+      {/* halfGeometry 가 이제 좌우 완전 대칭이라 이 이동은 사실상 0 — CENTERING 주석 참고 */}
+      <G transform={`translate(${CENTERING.dx.toFixed(2)} ${CENTERING.dy.toFixed(2)})`}>
+        {/* 상대(뒤) → 나(앞) 순서로 겹쳐 '얽힌' 인상을 만든다 */}
+        <Half side={1} color={partner} leafColor={leaf} />
+        <Half side={-1} color={me} leafColor={leaf} />
+      </G>
     </Svg>
   );
 }

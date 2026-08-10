@@ -9,10 +9,11 @@
  */
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from './Icon';
 import { pickDate } from '../store/datePickerStore';
 import { formatDateCompact, formatDateLabel } from '../utils/date';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
+import { themedStyles } from '../theme/themedStyles';
 
 interface Props {
   label?: string;
@@ -69,13 +70,12 @@ export function DateField({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   wrapper: { marginBottom: spacing.md },
   label: {
     fontSize: fontSize.caption,
     color: colors.textSecondary,
     marginBottom: spacing.xs,
-    marginLeft: spacing.xs,
     fontWeight: '700',
   },
   // TextField 와 같은 치수·색을 쓴다 — 한 폼 안에서 줄이 어긋나 보이면 안 된다
@@ -94,5 +94,5 @@ const styles = StyleSheet.create({
   boxError: { borderColor: colors.danger, backgroundColor: colors.surface },
   text: { flex: 1, fontSize: fontSize.subtitle, color: colors.textPrimary },
   placeholder: { color: colors.textTertiary },
-  error: { color: colors.danger, fontSize: fontSize.caption, marginTop: spacing.xs, marginLeft: spacing.xs },
-});
+  error: { color: colors.danger, fontSize: fontSize.caption, marginTop: spacing.xs },
+}));

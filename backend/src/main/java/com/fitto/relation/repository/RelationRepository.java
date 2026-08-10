@@ -19,9 +19,27 @@ public interface RelationRepository extends JpaRepository<Relation, Long> {
 
     boolean existsByInviteCode(String inviteCode);
 
-    /** 내가 속한(요청자 또는 수락자) 관계 전체 */
-    @Query("select r from Relation r where r.userAId = :userId or r.userBId = :userId")
+    /**
+     * 내가 속한 관계 전체.
+     * A/B 슬롯 외에 relation_members 멤버십도 본다 — FAMILY 는 3번째 이후 멤버가
+     * A/B 컬럼에 존재하지 않는다. (커플/트레이너는 이중 기록이라 어느 쪽으로도 잡힌다)
+     */
+    @Query("""
+            select r from Relation r
+            where r.userAId = :userId or r.userBId = :userId
+               or r.id in (select m.relationId from RelationMember m where m.userId = :userId)
+            """)
     List<Relation> findAllByUser(@Param("userId") Long userId);
+
+    /** 멤버십 기준 특정 유형·상태의 관계 — FAMILY 소속 조회용 */
+    @Query("""
+            select r from Relation r
+            where r.relationType = :type and r.status = :status
+              and r.id in (select m.relationId from RelationMember m where m.userId = :userId)
+            """)
+    List<Relation> findByMemberAndTypeAndStatus(@Param("userId") Long userId,
+                                                @Param("type") RelationType type,
+                                                @Param("status") RelationStatus status);
 
     /** 내가 속한 특정 유형·상태의 관계 (예: 활성 커플 중복 방지) */
     @Query("""

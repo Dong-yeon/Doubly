@@ -1,7 +1,8 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from './Icon';
 import { colors, fontSize, spacing } from '../constants/theme';
+import { themedStyles } from '../theme/themedStyles';
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -27,7 +28,7 @@ export function EmptyState({ icon = 'inbox-outline', title, description }: Props
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   wrap: { alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
   iconCircle: {
     width: 84,
@@ -46,4 +47,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
-});
+}));

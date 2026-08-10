@@ -31,6 +31,7 @@
  * 실행 중 시스템 테마를 바꾸면 앱을 다시 시작해야 반영된다 (재실행 시 자동 적용).
  */
 import { Appearance } from 'react-native';
+import { readThemeModeSync } from './themePreference';
 
 const light = {
   // ── Doubly 코어 ──────────────────────────────────────────────
@@ -47,6 +48,18 @@ const light = {
   partnerBg: '#E8F3E9',
   together: '#59772D',
   togetherBg: '#EFF4E4',
+
+  /*
+   * 소유자 색의 "텍스트용" 변형.
+   *
+   * 이전 팔레트(Coral/Indigo/Violet)는 채도가 높아 흰 배경 위 글자로 쓰면 2.5~4.0:1 로
+   * AA 에 못 미쳐 별도의 어두운 변형이 필요했다. 지금의 Gold/Green/Olive 는 위 주석의
+   * 실측대로 <b>원색 그대로 4.5 를 넘기므로</b> 같은 값을 가리킨다 —
+   * 호출부가 "글자면 …Text" 한 가지 규칙만 쓰도록 키는 남겨둔다.
+   */
+  meText: '#8A6817',
+  partnerText: '#2C7D33',
+  togetherText: '#59772D',
 
   // ── 크롬 (Green) — 버튼·활성탭·링크·선택 상태 ─────────────────
   primary: '#2A7731',
@@ -72,6 +85,11 @@ const light = {
   border: '#E4E6E3',
   borderStrong: 'rgba(26,29,26,0.15)',
 
+  // 모달·시트 뒤에 까는 어둡게 덮개. 화면마다 rgba(0,0,0,0.4~0.45) 를 직접 쓰다 보니
+  // 값이 갈렸다. 다크에서는 이미 어두운 배경 위에 얹는 것이라 더 진하게 해야
+  // 시트와 배경이 분리돼 보인다(아래 dark 참고).
+  backdrop: 'rgba(0,0,0,0.42)',
+
   // ── 호환 별칭 (기존 키 → Doubly 팔레트) ───────────────────────
   couple: '#8A6817', // 커플 대표 → gold
   food: '#59772D', // (구 amber) → olive
@@ -84,6 +102,9 @@ const light = {
   textTertiary: '#767C76',
   // 기능색(체크·완료). 브랜드 초록과 구분되도록 더 푸른 쪽으로 민다
   success: '#1F8A55',
+  // success 의 연한 배경 — 정산 완료 배너 등. 하드코딩 민트(#E7F5EE)가
+  // 다크모드에서 흰 덩어리로 남던 것을 토큰으로 흡수했다
+  successBg: '#E7F5EE',
   danger: '#E5484D',
   white: '#FFFFFF',
 };
@@ -108,6 +129,15 @@ const dark: typeof light = {
   partnerBg: '#1D2E1F',
   together: '#C9DA97',
   togetherBg: '#2A2F19',
+
+  /*
+   * 다크에서는 파스텔 액센트가 이미 8~10:1 로 통과한다(위 주석 실측 참고).
+   * 더 어둡게 만들 이유가 없어 원색을 그대로 가리킨다 — 라이트와 키 이름을 맞춰
+   * 호출부가 테마를 신경 쓰지 않게 한다.
+   */
+  meText: '#F1C999',
+  partnerText: '#A7D2A9',
+  togetherText: '#C9DA97',
 
   /*
    * primary 는 다크에서 <b>두 가지 상충하는 역할</b>을 동시에 한다.
@@ -135,6 +165,9 @@ const dark: typeof light = {
   border: '#3A3D36',
   borderStrong: 'rgba(236,238,234,0.18)',
 
+  // 라이트보다 진하게 — 어두운 배경 위 검은 덮개는 분리감이 약하다
+  backdrop: 'rgba(0,0,0,0.62)',
+
   couple: '#F1C999',
   food: '#C9DA97',
   health: '#A7D2A9',
@@ -145,11 +178,55 @@ const dark: typeof light = {
   accentSoft: '#2A2F19',
   textTertiary: '#868C84',
   success: '#3FBF80',
+  // 다크 success 배경 — success(#3FBF80) 텍스트가 위에서 4.5:1 이상 나오는 어두운 그린
+  successBg: '#1C3327',
   danger: '#F2555A',
   white: '#FFFFFF',
 };
 
-/** 현재 시스템 테마가 다크인지 — 지도(웹뷰) 등 팔레트 밖 분기에 사용 */
-export const isDarkMode = Appearance.getColorScheme() === 'dark';
+export type Palette = typeof light;
+export type Scheme = 'light' | 'dark';
 
-export const colors = isDarkMode ? dark : light;
+export const palettes: Record<Scheme, Palette> = { light, dark };
+
+/*
+ * 현재 스킴 — <b>모듈 수준 가변값</b>이다.
+ *
+ * 팔레트를 상수로 고정하면(예전 방식) 90개 화면의 StyleSheet 가 시작 시점의 색을
+ * 복사해 가버려, 테마를 바꿔도 앱을 다시 열기 전에는 반영되지 않았다.
+ * 값을 바꿀 수 있게 두고, 아래 colors 프록시와 themedStyles 가 <b>읽는 시점</b>에
+ * 현재 스킴을 참조하게 해서 즉시 전환을 가능하게 한다.
+ */
+let currentScheme: Scheme = (() => {
+  const preferred = readThemeModeSync();
+  const resolved = preferred === 'system' ? Appearance.getColorScheme() : preferred;
+  return resolved === 'dark' ? 'dark' : 'light';
+})();
+
+export function getScheme(): Scheme {
+  return currentScheme;
+}
+
+/** 스킴 교체 — 화면 갱신은 themeStore 가 맡는다 (여기서는 값만 바꾼다) */
+export function setScheme(scheme: Scheme): void {
+  currentScheme = scheme;
+}
+
+/** 현재 테마가 다크인지 — 지도(웹뷰) 등 팔레트 밖 분기에 사용 */
+export function isDarkMode(): boolean {
+  return currentScheme === 'dark';
+}
+
+/*
+ * colors — 속성을 <b>읽을 때</b> 현재 팔레트에서 값을 꺼내는 프록시.
+ *
+ * 덕분에 JSX 안의 `color={colors.primary}` 같은 인라인 사용은 렌더될 때마다
+ * 최신 색을 얻는다. 반면 모듈 최상위의 StyleSheet.create 는 한 번만 평가되므로
+ * 그쪽은 themedStyles 로 감싸야 한다.
+ */
+export const colors: Palette = new Proxy({} as Palette, {
+  get: (_target, key: string) => palettes[currentScheme][key as keyof Palette],
+  // 스프레드(...colors)나 Object.keys 가 동작하도록 열거도 지원한다
+  ownKeys: () => Reflect.ownKeys(light),
+  getOwnPropertyDescriptor: () => ({ enumerable: true, configurable: true }),
+});

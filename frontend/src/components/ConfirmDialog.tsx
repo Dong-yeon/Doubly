@@ -10,6 +10,7 @@ import React from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useDialogStore, type DialogButton } from '../store/dialogStore';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
+import { themedStyles } from '../theme/themedStyles';
 
 function textColor(style: DialogButton['style']): string {
   if (style === 'destructive') return colors.danger;
@@ -61,7 +62,7 @@ export function ConfirmDialog() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',
@@ -95,4 +96,4 @@ const styles = StyleSheet.create({
   button: { minHeight: 48, alignItems: 'center', justifyContent: 'center' },
   pressed: { opacity: 0.55 },
   buttonText: { fontSize: fontSize.body, fontWeight: '800' },
-});
+}));

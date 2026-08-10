@@ -2,6 +2,7 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { OnboardingStackParamList } from './types';
+import { stackScreenOptions } from './headerOptions';
 import { SplashScreen } from '../screens/onboarding/SplashScreen';
 import { OnboardingScreen } from '../screens/onboarding/OnboardingScreen';
 import { LoginScreen } from '../screens/onboarding/LoginScreen';
@@ -18,9 +19,26 @@ export function OnboardingNavigator() {
       <Stack.Screen name="Splash" component={SplashScreen} />
       <Stack.Screen name="Onboarding" component={OnboardingScreen} />
       <Stack.Screen name="Login" component={LoginScreen} />
-      <Stack.Screen name="Register" component={RegisterScreen} />
-      <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
-      <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
+      {/*
+        가입·재설정 화면에는 헤더(뒤로가기)를 켠다 — 스택 전체가 headerShown:false 라
+        이 화면들에 상단 이탈구가 없었고, 특히 회원가입은 스크롤이 길어
+        하단의 "이미 계정이 있어요" 링크가 첫 화면 밖이었다.
+      */}
+      <Stack.Screen
+        name="Register"
+        component={RegisterScreen}
+        options={{ headerShown: true, title: '회원가입', ...stackScreenOptions }}
+      />
+      <Stack.Screen
+        name="ForgotPassword"
+        component={ForgotPasswordScreen}
+        options={{ headerShown: true, title: '비밀번호 재설정', ...stackScreenOptions }}
+      />
+      <Stack.Screen
+        name="ResetPassword"
+        component={ResetPasswordScreen}
+        options={{ headerShown: true, title: '비밀번호 재설정', ...stackScreenOptions }}
+      />
       <Stack.Screen
         name="LegalDocument"
         component={LegalDocumentScreen}

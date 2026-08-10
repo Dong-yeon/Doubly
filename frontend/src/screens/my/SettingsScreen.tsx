@@ -4,13 +4,16 @@
  * 그동안 백엔드에만 있고 화면이 없어 닿지 못하던 기능들을 모은 곳이다
  * — 비밀번호 변경, 알림 수신, 마케팅 동의 철회, 약관 열람.
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Linking, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../navigation/types';
 import { Card } from '../../components/Card';
+import { Chip } from '../../components/Chip';
+import { useThemeStore } from '../../store/themeStore';
+import type { ThemeMode } from '../../theme/themePreference';
 import { authApi } from '../../api/auth';
 import { useAuthStore } from '../../store/authStore';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -19,14 +22,25 @@ import { toast } from '../../store/toastStore';
 import { APP_VERSION } from '../../constants/config';
 import { CONTACT_EMAIL, PRIVACY_VERSION, TERMS_VERSION } from '../../constants/legal';
 import { colors, fontSize, spacing } from '../../constants/theme';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'Settings'>;
+
+const THEME_OPTIONS: { value: ThemeMode; label: string }[] = [
+  { value: 'system', label: '시스템' },
+  { value: 'light', label: '라이트' },
+  { value: 'dark', label: '다크' },
+];
 
 export function SettingsScreen({ navigation }: Props) {
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
   const spellCheckEnabled = useSettingsStore((s) => s.spellCheckEnabled);
   const setSpellCheckEnabled = useSettingsStore((s) => s.setSpellCheckEnabled);
+  /* 테마 — 고르는 즉시 화면에 반영된다 (RootNavigator 가 트리를 다시 그린다) */
+  const themeMode = useThemeStore((s) => s.mode);
+  const setThemeMode = useThemeStore((s) => s.setMode);
+
   const [savingNotification, setSavingNotification] = useState(false);
   const [savingMarketing, setSavingMarketing] = useState(false);
 
@@ -140,6 +154,25 @@ export function SettingsScreen({ navigation }: Props) {
         </Card>
 
         <Card elevation="sm" style={styles.section}>
+          <Text style={styles.sectionLabel}>화면</Text>
+          <View style={styles.rowText}>
+            <Text style={styles.rowTitle}>테마</Text>
+            <Text style={styles.rowDesc}>시스템을 고르면 기기 설정을 따라가요.</Text>
+          </View>
+          <View style={styles.themeRow}>
+            {THEME_OPTIONS.map((o) => (
+              <Chip
+                key={o.value}
+                label={o.label}
+                selected={themeMode === o.value}
+                onPress={() => void setThemeMode(o.value)}
+                fill
+              />
+            ))}
+          </View>
+        </Card>
+
+        <Card elevation="sm" style={styles.section}>
           <Text style={styles.sectionLabel}>계정</Text>
           {isSocialAccount ? (
             <View style={styles.row}>
@@ -200,10 +233,13 @@ export function SettingsScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   container: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xl },
-  section: { paddingVertical: spacing.sm },
+  // Card 기본 좌우 패딩(16)을 지운다 — 안 지우면 container(24)+card(16)+row(24)=64 로
+  // MY 화면(24+0+24=48)보다 텍스트가 16px 더 안쪽에서 시작해 두 화면이 어긋났다
+  section: { paddingVertical: spacing.sm, paddingHorizontal: 0 },
+  themeRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
   sectionLabel: {
     fontSize: fontSize.caption,
     fontWeight: '800',
@@ -241,4 +277,4 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: spacing.sm,
   },
-});
+}));

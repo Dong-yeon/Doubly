@@ -14,6 +14,8 @@ import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { WorkoutRoutine } from '../../types';
+import { themedStyles } from '../../theme/themedStyles';
+import { layout } from '../../theme/layout';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'WorkoutRoutines'>;
 
@@ -128,9 +130,9 @@ export function WorkoutRoutineListScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
-  list: { padding: spacing.lg, paddingBottom: 100 },
+  list: { padding: spacing.lg, paddingBottom: layout.listBottomWithFab },
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -156,4 +158,4 @@ const styles = StyleSheet.create({
     marginBottom: 80,
   },
   templatesLinkText: { fontSize: fontSize.body, fontWeight: '800', color: colors.textSecondary },
-});
+}));

@@ -6,6 +6,7 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, fontSize, spacing } from '../constants/theme';
+import { themedStyles } from '../theme/themedStyles';
 
 interface Props {
   emoji: string;
@@ -25,7 +26,7 @@ export function ScreenPlaceholder({ emoji, title, description }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   container: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
   emoji: { fontSize: 56, marginBottom: spacing.md },
@@ -36,4 +37,4 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     textAlign: 'center',
   },
-});
+}));

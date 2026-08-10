@@ -9,9 +9,10 @@
  */
 import React from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '../../../components/Icon';
 import type { FeedItem, FeedItemType } from '../../../types';
 import { colors, fontSize, radius, spacing } from '../../../constants/theme';
+import { themedStyles } from '../../../theme/themedStyles';
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -75,7 +76,7 @@ export function RecentPeek({ latest, timeLabel, onPress }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   card: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -101,4 +102,4 @@ const styles = StyleSheet.create({
   body: { flex: 1 },
   meta: { color: colors.textSecondary, fontSize: 11, fontWeight: '700' },
   summary: { color: colors.textPrimary, fontSize: fontSize.body, fontWeight: '600', marginTop: 1 },
-});
+}));

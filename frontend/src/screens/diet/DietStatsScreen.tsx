@@ -8,6 +8,7 @@ import { EmptyState } from '../../components/EmptyState';
 import { dietApi } from '../../api/diet';
 import type { MealStats } from '../../types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
+import { themedStyles } from '../../theme/themedStyles';
 
 export function DietStatsScreen() {
   const [stats, setStats] = useState<MealStats | null>(null);
@@ -35,9 +36,10 @@ export function DietStatsScreen() {
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         {/* 요약 카드 3개 */}
         <View style={styles.summaryRow}>
-          <SummaryCard label="이번 주" value={stats?.weeklyDays ?? 0} unit="일" tint="pink" />
-          <SummaryCard label="이번 달" value={stats?.monthlyDays ?? 0} unit="일" tint="mint" />
-          <SummaryCard label="누적" value={stats?.totalDays ?? 0} unit="일" tint="yellow" />
+          {/* 셋 다 "내 기록" — 소유자 색(상대/함께)을 쓰면 없는 의미가 생긴다 */}
+          <SummaryCard label="이번 주" value={stats?.weeklyDays ?? 0} unit="일" tint="neutral" />
+          <SummaryCard label="이번 달" value={stats?.monthlyDays ?? 0} unit="일" tint="neutral" />
+          <SummaryCard label="누적" value={stats?.totalDays ?? 0} unit="일" tint="neutral" />
         </View>
 
         {/* 최근 7일 칼로리 */}
@@ -72,7 +74,17 @@ export function DietStatsScreen() {
   );
 }
 
-function SummaryCard({ label, value, unit, tint }: { label: string; value: number; unit: string; tint: 'pink' | 'mint' | 'yellow' }) {
+function SummaryCard({
+  label,
+  value,
+  unit,
+  tint,
+}: {
+  label: string;
+  value: number;
+  unit: string;
+  tint: 'surface' | 'neutral' | 'partner' | 'together';
+}) {
   return (
     <Card elevation="sm" tint={tint} style={styles.summaryCard}>
       <Text style={styles.summaryValue}>
@@ -84,7 +96,7 @@ function SummaryCard({ label, value, unit, tint }: { label: string; value: numbe
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   container: { padding: spacing.lg, gap: spacing.md },
   summaryRow: { flexDirection: 'row', gap: spacing.sm },
@@ -95,11 +107,12 @@ const styles = StyleSheet.create({
   section: { gap: spacing.md },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   sectionTitle: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
-  avg: { fontSize: fontSize.caption, color: colors.accent, fontWeight: '800' },
+  avg: { fontSize: fontSize.caption, color: colors.togetherText, fontWeight: '800' },
   chartRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', height: 140 },
   barCol: { flex: 1, alignItems: 'center', gap: spacing.xs },
   barTrack: { width: 18, height: 90, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, justifyContent: 'flex-end', overflow: 'hidden' },
   barFill: { width: '100%', borderRadius: radius.pill },
-  barCal: { fontSize: 9, color: colors.textSecondary },
+  // 9pt 는 읽기 어렵다 — 막대 위 수치라 작아도 되지만 하한은 지킨다
+  barCal: { fontSize: 11, color: colors.textSecondary },
   dayLabel: { fontSize: fontSize.caption, color: colors.textSecondary },
-});
+}));

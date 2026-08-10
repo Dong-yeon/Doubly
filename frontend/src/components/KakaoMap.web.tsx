@@ -12,6 +12,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { KAKAO_JS_KEY } from '../constants/config';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 import type { KakaoMapHandle, KakaoMapProps } from './KakaoMap.types';
+import { themedStyles } from '../theme/themedStyles';
 
 export type { KakaoMapHandle, KakaoMapProps };
 
@@ -61,6 +62,8 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
   const mapRef = useRef<any>(null);
   const selMarkerRef = useRef<any>(null);
   const overlaysRef = useRef<any[]>([]);
+  /** 화면 맞추기를 이미 했는지 — 갱신마다 시야를 다시 잡지 않기 위해 */
+  const fittedRef = useRef(false);
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
 
@@ -133,6 +136,13 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
       path.forEach((p) => bounds.extend(new kakao.maps.LatLng(p.lat, p.lng)));
     }
 
+    /*
+     * 화면 맞추기는 <b>처음 그릴 때만</b> 한다.
+     * 갱신마다 setBounds 를 부르면(여행 상세의 Day 전환 등) 사용자가 확대·이동해둔
+     * 시야를 매번 빼앗는다. 이후에는 마커만 바꾸고 시야는 그대로 둔다.
+     */
+    if (fittedRef.current) return;
+    fittedRef.current = true;
     if ((markers?.length ?? 0) > 1 || (path?.length ?? 0) > 1) {
       map.setBounds(bounds, 40, 40, 40, 40);
     } else if (markers?.length === 1) {
@@ -213,7 +223,7 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
   );
 });
 
-const styles = StyleSheet.create({
+const styles = themedStyles((colors) => ({
   container: {
     borderRadius: radius.lg,
     overflow: 'hidden',
@@ -238,4 +248,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
-});
+}));
