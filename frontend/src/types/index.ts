@@ -137,6 +137,13 @@ export interface WorkoutSet {
   entries?: WorkoutSetEntry[];
 }
 
+// 저장 시점에만 채워지는 PR(자기 최고 기록) 갱신 — 오늘/히스토리 등 재조회 시엔 항상 빈 배열
+export interface WorkoutPrHighlight {
+  exerciseName: string;
+  weightKg: number;
+  previousBestKg: number;
+}
+
 export interface Workout {
   id: number;
   userId: number;
@@ -147,6 +154,7 @@ export interface Workout {
   /** 이 기록이 시작된 내 루틴 템플릿 id — 스마트 루틴 동기화(Save-on-Finish)의 전제 */
   sourceRoutineId?: number | null;
   sets: WorkoutSet[];
+  prs?: WorkoutPrHighlight[];
 }
 
 // 종목 카탈로그 — 자극 부위/기구 태그. 대체 종목 후보(같은 muscleGroup)/자동완성에 사용
@@ -332,6 +340,13 @@ export interface PlaceVisit {
 
 // 식단 (meals) — 끼니별 사진/메모/칼로리
 export type MealType = 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK';
+// 저장 시점에만 채워지는 영양 목표 달성 — 오늘/히스토리 등 재조회 시엔 항상 빈 배열
+export interface MealGoalHighlight {
+  nutrient: 'protein';
+  consumed: number;
+  target: number;
+}
+
 export interface Meal {
   id: number;
   mealDate: string;
@@ -343,6 +358,7 @@ export interface Meal {
   carbs?: number | null;
   protein?: number | null;
   fat?: number | null;
+  goals?: MealGoalHighlight[];
   createdAt: string;
 }
 

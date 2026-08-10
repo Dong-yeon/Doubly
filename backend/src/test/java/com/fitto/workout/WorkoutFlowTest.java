@@ -82,6 +82,53 @@ class WorkoutFlowTest {
     }
 
     @Test
+    void 이전_기록보다_무거우면_PR로_감지된다() {
+        Long user = register("pr1@fitto.com");
+        workoutService.save(user, new SaveWorkoutRequest(LocalDate.now().minusDays(1), null, 40, null,
+                List.of(new WorkoutSetRequest("벤치프레스", "근력", 3, 10, new BigDecimal("40.00"), 1))));
+
+        WorkoutResponse second = workoutService.save(user, new SaveWorkoutRequest(LocalDate.now(), null, 40, null,
+                List.of(new WorkoutSetRequest("벤치프레스", "근력", 3, 10, new BigDecimal("45.00"), 1))));
+
+        assertThat(second.prs()).hasSize(1);
+        assertThat(second.prs().get(0).exerciseName()).isEqualTo("벤치프레스");
+        assertThat(second.prs().get(0).weightKg()).isEqualByComparingTo("45.00");
+        assertThat(second.prs().get(0).previousBestKg()).isEqualByComparingTo("40.00");
+    }
+
+    @Test
+    void 처음_하는_운동은_이전_기록이_없어_PR이_아니다() {
+        Long user = register("pr2@fitto.com");
+        WorkoutResponse first = workoutService.save(user, sample(LocalDate.now()));
+
+        assertThat(first.prs()).isEmpty();
+    }
+
+    @Test
+    void 이전_기록과_같거나_가벼우면_PR이_아니다() {
+        Long user = register("pr3@fitto.com");
+        workoutService.save(user, new SaveWorkoutRequest(LocalDate.now().minusDays(1), null, 40, null,
+                List.of(new WorkoutSetRequest("스쿼트", "근력", 3, 10, new BigDecimal("60.00"), 1))));
+
+        WorkoutResponse same = workoutService.save(user, new SaveWorkoutRequest(LocalDate.now(), null, 40, null,
+                List.of(new WorkoutSetRequest("스쿼트", "근력", 3, 10, new BigDecimal("60.00"), 1))));
+        assertThat(same.prs()).isEmpty();
+
+        WorkoutResponse lighter = workoutService.save(user, new SaveWorkoutRequest(LocalDate.now(), null, 40, null,
+                List.of(new WorkoutSetRequest("스쿼트", "근력", 3, 10, new BigDecimal("55.00"), 1))));
+        assertThat(lighter.prs()).isEmpty();
+    }
+
+    @Test
+    void 무게가_없는_유산소_운동은_PR_판정에서_제외된다() {
+        Long user = register("pr4@fitto.com");
+        WorkoutResponse saved = workoutService.save(user, new SaveWorkoutRequest(LocalDate.now(), null, 30, null,
+                List.of(new WorkoutSetRequest("러닝", "유산소", null, null, null, 1))));
+
+        assertThat(saved.prs()).isEmpty();
+    }
+
+    @Test
     void 커플_상대방의_오늘_운동_여부를_조회한다() {
         Long a = register("wc1@fitto.com");
         Long b = register("wc2@fitto.com");

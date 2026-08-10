@@ -13,6 +13,7 @@ import com.fitto.workout.domain.WorkoutSet;
 import com.fitto.workout.domain.WorkoutSetEntry;
 import com.fitto.workout.dto.CalendarDayResponse;
 import com.fitto.workout.dto.CategoryCount;
+import com.fitto.workout.dto.ExerciseBest;
 import com.fitto.workout.dto.ExerciseLastPerformanceResponse;
 import com.fitto.workout.dto.PartnerTodayResponse;
 import com.fitto.workout.dto.SaveWorkoutRequest;
@@ -26,9 +27,13 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 운동 기록 서비스 — 설계서 3.3 / 4.4.
@@ -107,6 +112,10 @@ public class WorkoutService {
         }
         workoutRepository.save(workout);
 
+        // PR(자기 최고 기록) 감지 — 세트가 DB에 반영된 뒤라야 workout.getId() 로 자기 자신을
+        // 제외한 이전 최고 기록을 조회할 수 있다.
+        List<WorkoutResponse.PrHighlight> prs = detectPrs(userId, workout);
+
         // 스트릭 갱신 (개인 + 커플) — 설계서 GAME-01/02.
         // 별도 트랜잭션이며, 경합 등으로 실패해도 운동 저장은 유지한다.
         try {
@@ -126,7 +135,38 @@ public class WorkoutService {
                     notificationService.notify(partnerId, "함께 운동해요!", myName + "님이 오늘 운동을 완료했어요!");
                 });
 
-        return WorkoutResponse.from(workout);
+        return WorkoutResponse.from(workout, prs);
+    }
+
+    /**
+     * PR(자기 최고 기록) 감지 — 이번에 저장한 세트 중 <b>무게가 있는 종목만</b> 본다.
+     *
+     * <p>같은 종목을 여러 세트 기록했으면 이번 기록에서의 최고 무게로 비교한다.
+     * 이전 기록이 아예 없는 종목(처음 해보는 운동)은 <b>PR로 치지 않는다</b> —
+     * "갱신"은 기준이 있어야 성립하고, 첫 시도를 PR이라 부르면 매번 뜨는 흔한 알림이 되어
+     * 정말 기록을 깼을 때의 특별함이 옅어진다.
+     */
+    private List<WorkoutResponse.PrHighlight> detectPrs(Long userId, Workout workout) {
+        Map<String, BigDecimal> currentBest = new LinkedHashMap<>();
+        for (WorkoutSet s : workout.getSets()) {
+            if (s.getWeightKg() == null) continue;
+            currentBest.merge(s.getExerciseName(), s.getWeightKg(), BigDecimal::max);
+        }
+        if (currentBest.isEmpty()) return List.of();
+
+        Map<String, BigDecimal> previousBest = workoutSetRepository
+                .findPreviousBestWeights(userId, List.copyOf(currentBest.keySet()), workout.getId())
+                .stream()
+                .collect(Collectors.toMap(ExerciseBest::getExerciseName, ExerciseBest::getMaxWeightKg));
+
+        List<WorkoutResponse.PrHighlight> prs = new ArrayList<>();
+        currentBest.forEach((name, weight) -> {
+            BigDecimal prev = previousBest.get(name);
+            if (prev != null && weight.compareTo(prev) > 0) {
+                prs.add(new WorkoutResponse.PrHighlight(name, weight, prev));
+            }
+        });
+        return prs;
     }
 
     public List<WorkoutResponse> findToday(Long userId) {
