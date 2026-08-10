@@ -149,6 +149,20 @@ export function TripDetailScreen({ navigation, route }: Props) {
     }
   };
 
+  // ---- 여행 모드 (PLAN.md Travel Mode) ----
+  const onToggleTravelMode = async () => {
+    if (!trip) return;
+    const next = !trip.travelModeEnabled;
+    try {
+      const updated = await tripApi.setTravelMode(tripId, next);
+      haptics.light();
+      toast.success(next ? '여행 모드를 켰어요. 식단 목표를 잠시 쉬어가요.' : '여행 모드를 껐어요.');
+      setDetail((d) => (d ? { ...d, trip: updated } : d));
+    } catch (e) {
+      toast.error(getErrorMessage(e, '여행 모드를 바꾸지 못했어요.'));
+    }
+  };
+
   const onDetach = (place: Place) => {
     Alert.alert('장소 빼기', `"${place.name}"을(를) 이 여행에서 뺄까요?\n장소는 맛집 지도에 그대로 남아요.`, [
       { text: '취소', style: 'cancel' },
@@ -350,6 +364,25 @@ export function TripDetailScreen({ navigation, route }: Props) {
               {trip.startDate} ~ {trip.endDate} · {days.length}일
             </Text>
             {trip.memo ? <Text style={styles.memo}>{trip.memo}</Text> : null}
+
+            {/* 여행 모드 — 켜져 있으면 여행 기간 동안 식단 목표를 잠시 숨긴다 */}
+            <TouchableOpacity
+              style={[styles.travelModeRow, trip.travelModeEnabled && styles.travelModeRowOn]}
+              activeOpacity={0.8}
+              onPress={onToggleTravelMode}
+            >
+              <View style={styles.travelModeText}>
+                <Text style={[styles.travelModeTitle, trip.travelModeEnabled && styles.travelModeTitleOn]}>
+                  ✈️ 여행 모드
+                </Text>
+                <Text style={[styles.travelModeDesc, trip.travelModeEnabled && styles.travelModeDescOn]}>
+                  {trip.travelModeEnabled ? '여행 기간 동안 식단 목표를 잠시 쉬어가요' : '켜면 여행 기간 동안 식단 목표를 숨겨요'}
+                </Text>
+              </View>
+              <View style={[styles.travelModeSwitch, trip.travelModeEnabled && styles.travelModeSwitchOn]}>
+                <View style={[styles.travelModeKnob, trip.travelModeEnabled && styles.travelModeKnobOn]} />
+              </View>
+            </TouchableOpacity>
 
             {/* 경비 · 준비물 · 앨범 · 회고 진입 (2×2) */}
             <View style={styles.entryRow}>
@@ -749,6 +782,41 @@ const styles = StyleSheet.create({
   editLink: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
   dates: { fontSize: fontSize.body, color: colors.textPrimary, fontWeight: '700', marginTop: spacing.sm },
   memo: { fontSize: fontSize.body, color: colors.textSecondary, marginTop: spacing.xs, lineHeight: 21 },
+
+  // 여행 모드 토글
+  travelModeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  travelModeRowOn: { backgroundColor: colors.accentSoft, borderColor: colors.accent },
+  travelModeText: { flex: 1, paddingRight: spacing.md },
+  travelModeTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
+  travelModeTitleOn: { color: colors.accent },
+  travelModeDesc: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
+  travelModeDescOn: { color: colors.accent },
+  travelModeSwitch: {
+    width: 44,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: colors.border,
+    padding: 2,
+    justifyContent: 'center',
+  },
+  travelModeSwitchOn: { backgroundColor: colors.accent },
+  travelModeKnob: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#fff',
+  },
+  travelModeKnobOn: { alignSelf: 'flex-end' },
 
   entryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
   entryCard: {
