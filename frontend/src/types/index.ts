@@ -24,6 +24,8 @@ export interface User {
   role: Role;
   birthDate?: string | null;
   gender?: Gender | null;
+  /** 키(cm) — 실시간 에너지 밸런스(기초대사량) 계산용 */
+  heightCm?: number | null;
   profileImageUrl?: string | null;
   socialType?: SocialType | null;
   /** 마케팅 수신 동의 — 선택 항목이라 언제든 철회할 수 있다 */
@@ -375,6 +377,12 @@ export interface NutritionSummary {
   consumedCarbs: number;
   consumedProtein: number;
   consumedFat: number;
+  /** 기초대사량 — 키/생년월일/성별 + 최근 체중 기록이 모두 있어야 계산된다. 없으면 null */
+  bmr?: number | null;
+  /** 오늘 운동 기록(총 시간) 기반 소모 칼로리 추정치 */
+  exerciseCalories: number;
+  /** 기초대사량 + 오늘 운동 소모 - 오늘 섭취. bmr 이 없으면 null */
+  energyBalance?: number | null;
   // 여행 모드 중이면(PLAN.md Travel Mode) target* 는 전부 null — travelModeTripTitle 이 그 이유
   travelMode: boolean;
   travelModeTripTitle?: string | null;
@@ -425,14 +433,25 @@ export interface DateCourse {
   comment?: string | null;
 }
 
-// 식단 즐겨찾기 — 자주 먹는 음식 (원탭 추가)
-export interface FavoriteFood {
+// 식단 즐겨찾기 — 자주 먹는 음식 "세트" (원탭 추가). 여러 음식을 한 번에 등록해둘 수 있다.
+export interface FavoriteFoodItem {
   id: number;
   name: string;
   calories?: number | null;
   carbs?: number | null;
   protein?: number | null;
   fat?: number | null;
+}
+
+export interface FavoriteFood {
+  id: number;
+  /** 세트 라벨 — 직접 입력하거나, 없으면 항목명을 이어붙여 자동 생성된다 */
+  name: string;
+  items: FavoriteFoodItem[];
+  totalCalories: number;
+  totalCarbs: number;
+  totalProtein: number;
+  totalFat: number;
 }
 
 // 식단 통계

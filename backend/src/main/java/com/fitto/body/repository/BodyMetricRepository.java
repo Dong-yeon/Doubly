@@ -12,4 +12,7 @@ public interface BodyMetricRepository extends JpaRepository<BodyMetric, Long> {
     List<BodyMetric> findByUserIdOrderByMeasuredDateAscIdAsc(Long userId);
 
     Optional<BodyMetric> findByIdAndUserId(Long id, Long userId);
+
+    /** 가장 최근 체중 — 에너지 밸런스(기초대사량) 계산용 */
+    Optional<BodyMetric> findTopByUserIdOrderByMeasuredDateDescIdDesc(Long userId);
 }

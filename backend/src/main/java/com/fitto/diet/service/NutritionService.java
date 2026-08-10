@@ -2,6 +2,7 @@ package com.fitto.diet.service;
 
 import com.fitto.diet.domain.Meal;
 import com.fitto.diet.domain.NutritionGoal;
+import com.fitto.diet.dto.EnergyBalance;
 import com.fitto.diet.dto.NutritionGoalRequest;
 import com.fitto.diet.dto.NutritionSummaryResponse;
 import com.fitto.diet.repository.MealRepository;
@@ -19,7 +20,8 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * 영양 목표 & 오늘 섭취 요약 — 목표 대비 남은 칼로리·매크로 대시보드.
+ * 영양 목표 & 오늘 섭취 요약 — 목표 대비 남은 칼로리·매크로 대시보드
+ * + 실시간 에너지 밸런스(기초대사량 + 오늘 운동 소모 - 섭취).
  * 여행 모드(PLAN.md Travel Mode) 중이면 목표를 숨긴다.
  */
 @Service
@@ -28,13 +30,16 @@ public class NutritionService {
 
     private final NutritionGoalRepository goalRepository;
     private final MealRepository mealRepository;
+    private final EnergyBalanceService energyBalanceService;
     private final RelationRepository relationRepository;
     private final TripRepository tripRepository;
 
     public NutritionService(NutritionGoalRepository goalRepository, MealRepository mealRepository,
+                            EnergyBalanceService energyBalanceService,
                             RelationRepository relationRepository, TripRepository tripRepository) {
         this.goalRepository = goalRepository;
         this.mealRepository = mealRepository;
+        this.energyBalanceService = energyBalanceService;
         this.relationRepository = relationRepository;
         this.tripRepository = tripRepository;
     }
@@ -46,6 +51,7 @@ public class NutritionService {
         int carbs = meals.stream().mapToInt(m -> nz(m.getCarbs())).sum();
         int protein = meals.stream().mapToInt(m -> nz(m.getProtein())).sum();
         int fat = meals.stream().mapToInt(m -> nz(m.getFat())).sum();
+        EnergyBalance energy = energyBalanceService.compute(userId, cal);
 
         Trip travelTrip = activeTravelModeTrip(userId).orElse(null);
         boolean travelMode = travelTrip != null;
@@ -55,6 +61,7 @@ public class NutritionService {
                 travelMode || goal == null ? null : goal.getTargetProtein(),
                 travelMode || goal == null ? null : goal.getTargetFat(),
                 cal, carbs, protein, fat,
+                energy.bmr(), energy.exerciseCalories(), energy.energyBalance(),
                 travelMode, travelMode ? travelTrip.getTitle() : null);
     }
 

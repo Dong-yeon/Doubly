@@ -14,12 +14,18 @@ import type {
   PartnerToday,
 } from '../types';
 
-export interface SaveFavoriteFoodPayload {
+export interface SaveFavoriteFoodItemPayload {
   name: string;
   calories?: number;
   carbs?: number;
   protein?: number;
   fat?: number;
+}
+
+export interface SaveFavoriteFoodPayload {
+  /** 세트 라벨 — 비워두면 항목명을 이어붙여 서버가 자동 생성한다 */
+  name?: string;
+  items: SaveFavoriteFoodItemPayload[];
 }
 
 export interface SaveMealPayload {
@@ -43,6 +49,9 @@ export interface NutritionGoalPayload {
 export const dietApi = {
   save: (payload: SaveMealPayload) =>
     unwrap(apiClient.post<ApiResponse<Meal>>('/meal', payload)),
+  // 어제(기본) 식단을 오늘 날짜로 통째로 복사 — 3초 퀵 로깅
+  copyFromYesterday: () =>
+    unwrap(apiClient.post<ApiResponse<Meal[]>>('/meal/copy')),
   // AI 분석은 이미지 처리 시간이 길어 기본 timeout(10s)을 늘린다
   analyze: (photoUrl: string) =>
     unwrap(apiClient.post<ApiResponse<MealAnalysis>>('/meal/analyze', { photoUrl }, { timeout: 60000 })),

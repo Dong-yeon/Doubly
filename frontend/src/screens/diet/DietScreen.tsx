@@ -20,6 +20,7 @@ import { MealCard } from '../../components/MealCard';
 import { WorkoutDietSegment } from '../../components/WorkoutDietSegment';
 import { EmptyState } from '../../components/EmptyState';
 import { AiInsightButton } from '../../components/AiInsightButton';
+import { ProteinRing } from '../../components/ProteinRing';
 import { useDietStore } from '../../store/dietStore';
 import { useRelationStore } from '../../store/relationStore';
 import { dietApi } from '../../api/diet';
@@ -93,6 +94,7 @@ export function DietScreen({ navigation }: Props) {
   const [tProtein, setTProtein] = useState('');
   const [tFat, setTFat] = useState('');
   const [savingNut, setSavingNut] = useState(false);
+  const [copyingYesterday, setCopyingYesterday] = useState(false);
 
   const refreshExtras = useCallback(() => {
     streakApi.mealMe().then(setMyStreak).catch(() => setMyStreak(null));
@@ -171,6 +173,22 @@ export function DietScreen({ navigation }: Props) {
 
   const todayCalories = today.reduce((sum, m) => sum + (m.calories ?? 0), 0);
 
+  // 어제 식단을 오늘 날짜로 통째로 복사 — 매일 비슷한 식단을 먹는 유저를 위한 3초 퀵 로깅
+  const onCopyYesterday = async () => {
+    setCopyingYesterday(true);
+    try {
+      const copied = await dietApi.copyFromYesterday();
+      haptics.success();
+      toast.success(`어제 식단 ${copied.length}개를 불러왔어요 `);
+      fetchToday();
+      fetchHistory();
+    } catch (e) {
+      toast.error(getErrorMessage(e, '어제 식단을 불러오지 못했어요.'));
+    } finally {
+      setCopyingYesterday(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <WorkoutDietSegment active="diet" />
@@ -228,15 +246,43 @@ export function DietScreen({ navigation }: Props) {
                     ✈️ 여행 모드 중 · {nutrition.travelModeTripTitle} — 목표는 잠깐 쉬어가요
                   </Text>
                 ) : null}
-                <NutritionBar label="칼로리" consumed={nutrition.consumedCalories} target={nutrition.targetCalories} unit="kcal" />
-                <NutritionBar label="탄수" consumed={nutrition.consumedCarbs} target={nutrition.targetCarbs} unit="g" />
-                <NutritionBar label="단백" consumed={nutrition.consumedProtein} target={nutrition.targetProtein} unit="g" />
-                <NutritionBar label="지방" consumed={nutrition.consumedFat} target={nutrition.targetFat} unit="g" />
+                <View style={styles.nutMain}>
+                  {/* 단백질만 원형 게이지로 분리 — 운동 유저는 단백질 달성률에 가장 민감하다 */}
+                  <ProteinRing consumed={nutrition.consumedProtein} target={nutrition.targetProtein} />
+                  <View style={styles.nutSecondary}>
+                    <NutritionBar label="칼로리" consumed={nutrition.consumedCalories} target={nutrition.targetCalories} unit="kcal" />
+                    <NutritionBar label="탄수" consumed={nutrition.consumedCarbs} target={nutrition.targetCarbs} unit="g" />
+                    <NutritionBar label="지방" consumed={nutrition.consumedFat} target={nutrition.targetFat} unit="g" />
+                  </View>
+                </View>
                 {nutrition.targetCalories ? (
                   <Text style={styles.nutRemain}>
                     남은 칼로리 {Math.max(0, nutrition.targetCalories - nutrition.consumedCalories)}kcal
                   </Text>
                 ) : null}
+
+                {/* 실시간 에너지 밸런스 — 기초대사량 + 오늘 운동 소모 - 섭취. 수동 목표와 별개로,
+                    "오늘 움직인 만큼" 반영된 잔여 칼로리를 보여준다. 프로필(키/생년월일/성별)이나
+                    체중 기록이 없으면 계산할 수 없어 등록 안내만 노출한다. */}
+                <View style={styles.energyBox}>
+                  {nutrition.bmr != null ? (
+                    <>
+                      <Text style={styles.energyFormula}>
+                        기초대사량 {nutrition.bmr} + 운동 소모 {nutrition.exerciseCalories} − 섭취 {nutrition.consumedCalories}
+                      </Text>
+                      <Text style={styles.energyResult}>
+                        {(nutrition.energyBalance ?? 0) >= 0
+                          ? `오늘 ${nutrition.energyBalance}kcal 더 섭취 가능`
+                          : `목표보다 ${Math.abs(nutrition.energyBalance ?? 0)}kcal 더 먹었어요`}
+                      </Text>
+                    </>
+                  ) : (
+                    <Text style={styles.energyHint}>
+                      MY 탭 → 신체 정보에서 키·생년월일·성별을 등록하면 오늘 운동한 만큼 실시간으로 섭취
+                      가능 칼로리를 계산해줘요.
+                    </Text>
+                  )}
+                </View>
               </Pressable>
             ) : null}
 
@@ -287,9 +333,16 @@ export function DietScreen({ navigation }: Props) {
               <>
                 <View style={styles.todayHeader}>
                   <Text style={styles.sectionTitle}>오늘</Text>
-                  {todayCalories > 0 ? (
-                    <Text style={styles.todayCal}>총 {todayCalories} kcal</Text>
-                  ) : null}
+                  <View style={styles.todayHeaderRight}>
+                    {todayCalories > 0 ? (
+                      <Text style={styles.todayCal}>총 {todayCalories} kcal</Text>
+                    ) : null}
+                    <TouchableOpacity onPress={onCopyYesterday} disabled={copyingYesterday}>
+                      <Text style={styles.copyYesterday}>
+                        {copyingYesterday ? '불러오는 중…' : '↺ 어제 식단 불러오기'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
                 {today.length > 0 ? (
                   today.map((m) => <MealCard key={m.id} meal={m} onLongPress={onLongPress} />)
@@ -400,6 +453,8 @@ const styles = StyleSheet.create({
   nutHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs },
   nutTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
   nutSet: { fontSize: fontSize.caption, fontWeight: '700', color: colors.primary },
+  nutMain: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  nutSecondary: { flex: 1, gap: spacing.xs },
   travelModeBadge: { fontSize: fontSize.caption, fontWeight: '700', color: colors.accent, marginBottom: spacing.xs },
   nutRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   nutLabel: { width: 36, fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
@@ -408,6 +463,16 @@ const styles = StyleSheet.create({
   nutFillOver: { backgroundColor: colors.primary },
   nutVal: { width: 92, textAlign: 'right', fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '700' },
   nutRemain: { fontSize: fontSize.caption, color: colors.accent, fontWeight: '800', textAlign: 'right', marginTop: spacing.xs },
+  energyBox: {
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    gap: 2,
+  },
+  energyFormula: { fontSize: 10, color: colors.textTertiary, fontWeight: '600' },
+  energyResult: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '800' },
+  energyHint: { fontSize: fontSize.caption, color: colors.textSecondary, lineHeight: 18 },
   nutFormRow: { flexDirection: 'row', gap: spacing.sm },
   nutFormItem: { flex: 1 },
   nutSaveBtn: { marginTop: spacing.sm },
@@ -438,7 +503,9 @@ const styles = StyleSheet.create({
   goalFill: { height: '100%', borderRadius: radius.pill, backgroundColor: colors.accent },
   goalSub: { fontSize: fontSize.caption, color: colors.textSecondary },
   todayHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
+  todayHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   todayCal: { fontSize: fontSize.body, color: colors.accent, fontWeight: '800' },
+  copyYesterday: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '700' },
   sectionTitle: { fontSize: fontSize.subtitle, fontWeight: '700', color: colors.textPrimary },
   historyTitle: { marginTop: spacing.lg, marginBottom: spacing.sm },
   emptyToday: {

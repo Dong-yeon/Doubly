@@ -121,6 +121,31 @@ class MealFlowTest {
     }
 
     @Test
+    void 어제_식단을_오늘로_복사하면_끼니와_매크로가_그대로_유지된다() {
+        Long user = register("m5@fitto.com");
+        mealService.save(user, new SaveMealRequest(
+                LocalDate.now().minusDays(1), MealType.BREAKFAST, "닭가슴살 샐러드", null, 420, 30, 40, 10));
+        mealService.save(user, sample(LocalDate.now().minusDays(1), MealType.LUNCH));
+
+        List<MealResponse> copied = mealService.copyFrom(user, LocalDate.now().minusDays(1));
+
+        assertThat(copied).hasSize(2);
+        assertThat(copied).allMatch(m -> m.mealDate().equals(LocalDate.now()));
+        assertThat(mealService.findToday(user)).hasSize(2);
+        MealResponse breakfast = copied.stream()
+                .filter(m -> m.mealType() == MealType.BREAKFAST).findFirst().orElseThrow();
+        assertThat(breakfast.calories()).isEqualTo(420);
+    }
+
+    @Test
+    void 복사할_기록이_없는_날짜는_예외를_던진다() {
+        Long user = register("m6@fitto.com");
+
+        assertThatThrownBy(() -> mealService.copyFrom(user, LocalDate.now().minusDays(1)))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
     void 커플_상대방의_오늘_식단_여부를_조회한다() {
         Long a = register("mc1@fitto.com");
         Long b = register("mc2@fitto.com");
