@@ -15,10 +15,12 @@ import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { DailyQuestion, QuestionHistory } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
+import { useAndroidKeyboardHeight } from '../../hooks/useAndroidKeyboardHeight';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'DailyQuestion'>;
 
 export function DailyQuestionScreen(_: Props) {
+  const androidKeyboardHeight = useAndroidKeyboardHeight();
   const [today, setToday] = useState<DailyQuestion | null>(null);
   const [history, setHistory] = useState<QuestionHistory[]>([]);
   const [loading, setLoading] = useState(false);
@@ -98,8 +100,13 @@ export function DailyQuestionScreen(_: Props) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
-      {/* 키보드가 "답 남기기" 버튼을 가리지 않도록 회피 */}
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      {/* 키보드가 "답 남기기" 버튼을 가리지 않도록 회피 — Android 는 FlatList 를 직접
+          감싸는 KeyboardAvoidingView 의 자동 높이 보정이 edge-to-edge 에서 먹지 않아
+          (실기기 확인) useAndroidKeyboardHeight 로 실측 높이만큼 직접 패딩한다. */}
+      <KeyboardAvoidingView
+        style={[styles.flex, Platform.OS === 'android' && { paddingBottom: androidKeyboardHeight }]}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
         <FlatList
           data={history}
           keyExtractor={(h) => h.questionDate}

@@ -29,6 +29,7 @@ import { toDateString } from '../../utils/date';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { MealType, PlaceVisit } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
+import { useAndroidKeyboardHeight } from '../../hooks/useAndroidKeyboardHeight';
 
 type Props = NativeStackScreenProps<PlaceStackParamList, 'PlaceDetail'>;
 
@@ -55,6 +56,7 @@ function defaultMealType(): MealType {
 
 export function PlaceDetailScreen({ route }: Props) {
   const { placeId, name: placeName } = route.params;
+  const androidKeyboardHeight = useAndroidKeyboardHeight();
   const saveMeal = useDietStore((s) => s.save);
   const [visits, setVisits] = useState<PlaceVisit[]>([]);
   const [loading, setLoading] = useState(false);
@@ -172,8 +174,13 @@ export function PlaceDetailScreen({ route }: Props) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
-      {/* 키보드가 "기록 저장" 버튼을 가리지 않도록 회피 */}
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      {/* 키보드가 "기록 저장" 버튼을 가리지 않도록 회피 — Android 는 FlatList 를 직접
+          감싸는 KeyboardAvoidingView 의 자동 높이 보정이 edge-to-edge 에서 먹지 않아
+          (실기기 확인) useAndroidKeyboardHeight 로 실측 높이만큼 직접 패딩한다. */}
+      <KeyboardAvoidingView
+        style={[styles.flex, Platform.OS === 'android' && { paddingBottom: androidKeyboardHeight }]}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
         <FlatList
           data={visits}
           keyExtractor={(v) => String(v.id)}

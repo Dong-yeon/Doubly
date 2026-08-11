@@ -38,6 +38,7 @@ import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { ChatMessage } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { layout } from '../../theme/layout';
+import { useAndroidKeyboardHeight } from '../../hooks/useAndroidKeyboardHeight';
 
 const REACTIONS = ['💗', '🔥', '💪', '👍', '🎉'];
 
@@ -64,6 +65,7 @@ const timeOf = (iso: string): string => {
 export function ChatRoomScreen({ navigation, route }: Props) {
   const { relationId, title } = route.params;
   const headerHeight = useHeaderHeight();
+  const androidKeyboardHeight = useAndroidKeyboardHeight();
   /* 탭한 사진 하나만 전체화면으로 — 대화 전체를 훑는 갤러리는 아니라 단건으로 연다 */
   const [viewingImage, setViewingImage] = useState<string | null>(null);
   const openImage = (uri: string) => setViewingImage(uri);
@@ -363,10 +365,11 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       <KeyboardAvoidingView
-        style={styles.flex}
-        // Android 15+ edge-to-edge 강제 적용 이후 adjustResize 가 창을 안 줄여줘 키보드가
-        // 입력창을 덮는 문제가 있어(실기기 확인) 'height' 로 직접 보정한다.
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        // Android 는 FlatList 를 직접 감싸면 KeyboardAvoidingView 의 자동 높이 보정이
+        // edge-to-edge 아래에서 먹지 않아(실기기 확인) behavior 를 아예 안 쓰고
+        // useAndroidKeyboardHeight 로 받은 실측 키보드 높이만큼 직접 패딩을 준다.
+        style={[styles.flex, Platform.OS === 'android' && { paddingBottom: androidKeyboardHeight }]}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         /*
          * 오프셋은 실제 헤더 높이로 — 예전엔 90 을 상수로 박아서 노치 없는 기기
          * (헤더 ≈64)에서 26pt 과보정돼 입력창과 키보드 사이에 빈 띠가 생겼다.
