@@ -16,6 +16,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { PlaceStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
+import { EmptyState } from '../../components/EmptyState';
 import { TripSectionTabs } from './TripSectionTabs';
 import { ImageViewer, type ViewerImage } from '../../components/ImageViewer';
 import { Sheet } from '../../components/Sheet';
@@ -36,6 +37,7 @@ export function TripAlbumScreen({ route }: Props) {
 
   const [photos, setPhotos] = useState<AlbumPost[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   /* 사진을 탭하면 전체화면으로 — 예전엔 onPress 가 없어 눌러도 아무 일이 없었다 */
   const [viewingIndex, setViewingIndex] = useState<number | null>(null);
@@ -61,10 +63,13 @@ export function TripAlbumScreen({ route }: Props) {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       setPhotos(await tripApi.album(tripId));
     } catch (e) {
       toast.error(getErrorMessage(e, '앨범을 불러오지 못했어요.'));
+      // 실패해도 목록은 비우지 않는다 — "진짜 빈 목록"과 구분은 loadError 로 한다
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -162,9 +167,21 @@ export function TripAlbumScreen({ route }: Props) {
         )}
         ListEmptyComponent={
           !loading ? (
-            <Text style={styles.empty}>
-              아직 앨범에 담은 사진이 없어요.{'\n'}"＋ 사진 담기"로 우리 기록의 사진을 모아보세요! (사진을 길게 눌러 빼기)
-            </Text>
+            loadError ? (
+              <EmptyState
+                icon="cloud-off-outline"
+                title="앨범을 불러오지 못했어요"
+                description="네트워크 상태를 확인하고 다시 시도해주세요."
+                error
+                onRetry={load}
+              />
+            ) : (
+              <EmptyState
+                icon="image-multiple-outline"
+                title="아직 앨범에 담은 사진이 없어요"
+                description={'"＋ 사진 담기"로 우리 기록의 사진을 모아보세요! (사진을 길게 눌러 빼기)'}
+              />
+            )
           ) : null
         }
       />

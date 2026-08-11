@@ -18,6 +18,7 @@ import type { PlaceStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
 import { Checkbox } from '../../components/Checkbox';
+import { EmptyState } from '../../components/EmptyState';
 import { placeApi } from '../../api/place';
 import { useDietStore } from '../../store/dietStore';
 import { pickImage, uploadImage } from '../../utils/imageUpload';
@@ -60,6 +61,7 @@ export function PlaceDetailScreen({ route }: Props) {
   const saveMeal = useDietStore((s) => s.save);
   const [visits, setVisits] = useState<PlaceVisit[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   // 방문 기록 입력 폼
   const [formOpen, setFormOpen] = useState(false);
@@ -78,10 +80,13 @@ export function PlaceDetailScreen({ route }: Props) {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       setVisits(await placeApi.visits(placeId));
     } catch (e) {
       toast.error(getErrorMessage(e, '방문 기록을 불러오지 못했어요.'));
+      // 실패해도 목록은 비우지 않는다 — "진짜 빈 목록"과 구분은 loadError 로 한다
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -317,7 +322,21 @@ export function PlaceDetailScreen({ route }: Props) {
           )}
           ListEmptyComponent={
             !loading ? (
-              <Text style={styles.empty}>아직 방문 기록이 없어요. 다녀오셨다면 남겨보세요! (길게 눌러 삭제)</Text>
+              loadError ? (
+                <EmptyState
+                  icon="cloud-off-outline"
+                  title="방문 기록을 불러오지 못했어요"
+                  description="네트워크 상태를 확인하고 다시 시도해주세요."
+                  error
+                  onRetry={load}
+                />
+              ) : (
+                <EmptyState
+                  icon="map-marker-outline"
+                  title="아직 방문 기록이 없어요"
+                  description="다녀오셨다면 남겨보세요! (길게 눌러 삭제)"
+                />
+              )
             ) : null
           }
         />

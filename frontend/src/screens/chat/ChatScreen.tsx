@@ -1,7 +1,7 @@
 /** 채팅방 목록 — 미니멀·발랄. 설계서 2.5 / 4.5 CHAT-01
  *  커플 채팅방이 있으면 방 선택 없이 바로 대화로 진입한다(커플 앱 특성상 상대는 한 명).
  *  여러 방(트레이너-회원 등)이 있을 때만 목록을 보여준다. */
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -10,6 +10,8 @@ import type { ChatStackParamList } from '../../navigation/types';
 import { Avatar } from '../../components/Avatar';
 import { EmptyState } from '../../components/EmptyState';
 import { useChatStore } from '../../store/chatStore';
+import { getErrorMessage } from '../../utils/error';
+import { toast } from '../../store/toastStore';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { ChatRoom, MessageType } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
@@ -34,12 +36,25 @@ const preview = (type: MessageType, content?: string | null): string => {
 export function ChatScreen({ navigation }: Props) {
   const { rooms, loadingRooms, loadRooms } = useChatStore();
   const enteredRef = useRef(false);
+  const [loadError, setLoadError] = useState(false);
+
+  // loadRooms(스토어)는 실패해도 rooms 를 비우지 않는다 — "진짜 빈 목록"과 구분은
+  // 이 화면의 loadError 로 한다
+  const load = useCallback(async () => {
+    setLoadError(false);
+    try {
+      await loadRooms();
+    } catch (e) {
+      toast.error(getErrorMessage(e, '채팅방을 불러오지 못했어요.'));
+      setLoadError(true);
+    }
+  }, [loadRooms]);
 
   useFocusEffect(
     useCallback(() => {
       enteredRef.current = false;
-      loadRooms();
-    }, [loadRooms]),
+      load();
+    }, [load]),
   );
 
   // 커플 채팅방 — 있으면 방 선택 없이 바로 대화로 진입 (replace 라 뒤로가기 루프 없음)
@@ -94,11 +109,21 @@ export function ChatScreen({ navigation }: Props) {
         renderItem={renderRoom}
         contentContainerStyle={styles.list}
         refreshing={loadingRooms}
-        onRefresh={loadRooms}
+        onRefresh={load}
         ItemSeparatorComponent={() => <View style={styles.sep} />}
         ListEmptyComponent={
           !loadingRooms ? (
-            <EmptyState icon="chat-outline" title="아직 채팅방이 없어요" description="커플을 연결하면 채팅을 시작할 수 있어요 " />
+            loadError ? (
+              <EmptyState
+                icon="cloud-off-outline"
+                title="채팅방을 불러오지 못했어요"
+                description="네트워크 상태를 확인하고 다시 시도해주세요."
+                error
+                onRetry={load}
+              />
+            ) : (
+              <EmptyState icon="chat-outline" title="아직 채팅방이 없어요" description="커플을 연결하면 채팅을 시작할 수 있어요 " />
+            )
           ) : null
         }
       />

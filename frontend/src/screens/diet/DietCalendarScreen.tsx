@@ -26,6 +26,11 @@ export function DietCalendarScreen({ navigation }: Props) {
   const [completedDays, setCompletedDays] = useState<Set<number>>(new Set());
   /** 선택한 날짜(일) — 그 날의 상태를 보여주고 바로 기록할 수 있게 한다 */
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
+  // 실패해도 빈 Set 으로 조용히 넘어가면 "이번 달 기록 안 했나?"로 오해한다
+  // (QA_CHECKLIST.md P1-8). 배너로 알리고 다시 시도할 수 있게 한다.
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const retry = () => setReloadKey((k) => k + 1);
 
   const goToday = () => {
     const today = new Date();
@@ -36,6 +41,7 @@ export function DietCalendarScreen({ navigation }: Props) {
 
   useEffect(() => {
     let active = true;
+    setLoadError(false);
     dietApi
       .calendar(year, month)
       .then((days) => {
@@ -43,11 +49,15 @@ export function DietCalendarScreen({ navigation }: Props) {
         const set = new Set(days.filter((d) => d.completed).map((d) => Number(d.date.slice(8, 10))));
         setCompletedDays(set);
       })
-      .catch(() => active && setCompletedDays(new Set()));
+      .catch(() => {
+        if (!active) return;
+        setCompletedDays(new Set());
+        setLoadError(true);
+      });
     return () => {
       active = false;
     };
-  }, [year, month]);
+  }, [year, month, reloadKey]);
 
   const cells = useMemo(() => {
     const firstDay = new Date(year, month - 1, 1).getDay();
@@ -92,6 +102,17 @@ export function DietCalendarScreen({ navigation }: Props) {
           <Text style={styles.nav}>›</Text>
         </TouchableOpacity>
       </View>
+
+      {loadError ? (
+        <TouchableOpacity
+          onPress={retry}
+          style={styles.errorBanner}
+          accessibilityRole="button"
+          accessibilityLabel="캘린더 불러오기 재시도"
+        >
+          <Text style={styles.errorBannerText}>이번 달 기록을 불러오지 못했어요 — 탭해서 다시 시도</Text>
+        </TouchableOpacity>
+      ) : null}
 
       <View style={styles.weekRow}>
         {WEEKDAYS.map((w) => (
@@ -162,6 +183,13 @@ const styles = themedStyles((colors) => ({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.lg },
   nav: { fontSize: 28, color: colors.primary, paddingHorizontal: spacing.md },
   title: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
+  errorBanner: {
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.md,
+    padding: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  errorBannerText: { color: colors.danger, fontSize: fontSize.caption, fontWeight: '700', textAlign: 'center' },
   weekRow: { flexDirection: 'row' },
   weekday: { width: CELL, textAlign: 'center', color: colors.textSecondary, fontSize: fontSize.caption },
   grid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: spacing.sm },

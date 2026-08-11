@@ -16,6 +16,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { PlaceStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
+import { EmptyState } from '../../components/EmptyState';
 import { TripSectionTabs } from './TripSectionTabs';
 import { tripApi } from '../../api/trip';
 import { useAuthStore } from '../../store/authStore';
@@ -51,6 +52,7 @@ export function TripExpenseScreen({ route }: Props) {
   const myId = useAuthStore((s) => s.user?.id);
   const [data, setData] = useState<TripExpenses | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<TripExpense | null>(null);
   const [form, setForm] = useState<ExpenseForm>({
@@ -62,10 +64,13 @@ export function TripExpenseScreen({ route }: Props) {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       setData(await tripApi.expenses(tripId));
     } catch (e) {
       toast.error(getErrorMessage(e, '경비를 불러오지 못했어요.'));
+      // 실패해도 데이터는 비우지 않는다 — "진짜 빈 목록"과 구분은 loadError 로 한다
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -221,9 +226,21 @@ export function TripExpenseScreen({ route }: Props) {
         )}
         ListEmptyComponent={
           !loading ? (
-            <Text style={styles.empty}>
-              아직 지출이 없어요. 아래 버튼으로 경비를 추가해보세요! (항목을 길게 눌러 삭제)
-            </Text>
+            loadError ? (
+              <EmptyState
+                icon="cloud-off-outline"
+                title="경비를 불러오지 못했어요"
+                description="네트워크 상태를 확인하고 다시 시도해주세요."
+                error
+                onRetry={load}
+              />
+            ) : (
+              <EmptyState
+                icon="wallet-outline"
+                title="아직 지출이 없어요"
+                description="아래 버튼으로 경비를 추가해보세요! (항목을 길게 눌러 삭제)"
+              />
+            )
           ) : null
         }
       />

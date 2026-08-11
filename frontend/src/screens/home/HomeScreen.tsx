@@ -119,7 +119,9 @@ export function HomeScreen({ navigation }: Props) {
   const dday = daysTogether(couple?.anniversaryDate ?? couple?.connectedAt);
 
   const refresh = useCallback(() => {
-    fetchAll();
+    // fetchAll 은 실패해도 store 의 기존 couple/relations 를 그대로 둔다(재시도 여지를 위해
+    // 지우지 않음) — 여기서 잡아주지 않으면 catch 가 없어 unhandled rejection 이 된다(P1-10).
+    fetchAll().catch(() => {});
     workoutApi.today().then((l) => setMyWorkoutDone(l.length > 0)).catch(() => setMyWorkoutDone(false));
     workoutApi.partnerToday().then(setPartner).catch(() => setPartner(null));
     dietApi.today().then((l) => setMyMealDone(l.length > 0)).catch(() => setMyMealDone(false));

@@ -41,14 +41,23 @@ export function CoupleConnectScreen({ navigation }: Props) {
 
   const onCopy = async () => {
     if (!code) return;
-    await copyText(code);
-    haptics.light();
-    toast.success('초대코드를 복사했어요 ');
+    try {
+      await copyText(code);
+      haptics.light();
+      toast.success('초대코드를 복사했어요 ');
+    } catch (e) {
+      toast.error(getErrorMessage(e, '복사에 실패했어요.'));
+    }
   };
 
   const onShare = async () => {
     if (!code) return;
-    await shareText(`Doubly에서 커플로 연결해요! 초대코드: ${code} (24시간 유효)`);
+    try {
+      await shareText(`Doubly에서 커플로 연결해요! 초대코드: ${code} (24시간 유효)`);
+    } catch (e) {
+      // 공유 시트를 사용자가 그냥 닫아도 일부 플랫폼은 reject 한다 — 진짜 실패만 알린다
+      toast.error(getErrorMessage(e, '공유에 실패했어요.'));
+    }
   };
 
   const onConnect = async () => {

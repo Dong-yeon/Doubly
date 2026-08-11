@@ -68,13 +68,17 @@ export function PlaceMapScreen({ navigation }: Props) {
   const [dietFilter, setDietFilter] = useState<PlaceDietTag | 'ALL'>('ALL');
   const [mapMode, setMapMode] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       setPlaces(await placeApi.list());
     } catch (e) {
       toast.error(getErrorMessage(e, '장소를 불러오지 못했어요.'));
+      // 실패해도 목록은 비우지 않는다 — "진짜 빈 목록"과 구분은 loadError 로 한다
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -224,11 +228,21 @@ export function PlaceMapScreen({ navigation }: Props) {
         )}
         ListEmptyComponent={
           !loading ? (
-            <EmptyState
-              icon="map-marker-outline"
-              title="아직 저장한 장소가 없어요"
-              description="함께 가고 싶은 맛집을 추가해보세요! (카드를 길게 눌러 삭제)"
-            />
+            loadError ? (
+              <EmptyState
+                icon="cloud-off-outline"
+                title="장소를 불러오지 못했어요"
+                description="네트워크 상태를 확인하고 다시 시도해주세요."
+                error
+                onRetry={load}
+              />
+            ) : (
+              <EmptyState
+                icon="map-marker-outline"
+                title="아직 저장한 장소가 없어요"
+                description="함께 가고 싶은 맛집을 추가해보세요! (카드를 길게 눌러 삭제)"
+              />
+            )
           ) : null
         }
       />

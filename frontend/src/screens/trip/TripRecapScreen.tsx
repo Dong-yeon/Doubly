@@ -7,6 +7,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { PlaceStackParamList } from '../../navigation/types';
 import { TripSectionTabs } from './TripSectionTabs';
+import { EmptyState } from '../../components/EmptyState';
 import { tripApi } from '../../api/trip';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
@@ -36,13 +37,17 @@ export function TripRecapScreen({ route }: Props) {
   const { tripId, title } = route.params;
   const [recap, setRecap] = useState<TripRecap | null>(null);
   const [loading, setLoading] = useState(false);
+  // 실패 시 완전히 빈 화면(스피너만 사라짐)이 되고 재시도 수단이 없었다(QA_CHECKLIST.md P1-9).
+  const [loadError, setLoadError] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       setRecap(await tripApi.recap(tripId));
     } catch (e) {
       toast.error(getErrorMessage(e, '회고를 불러오지 못했어요.'));
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -57,7 +62,17 @@ export function TripRecapScreen({ route }: Props) {
   if (!recap) {
     return (
       <SafeAreaView style={[styles.safe, styles.center]} edges={['bottom']}>
-        {loading ? <ActivityIndicator color={colors.accent} /> : null}
+        {loading ? (
+          <ActivityIndicator color={colors.accent} />
+        ) : loadError ? (
+          <EmptyState
+            icon="cloud-off-outline"
+            title="회고를 불러오지 못했어요"
+            description="네트워크 상태를 확인하고 다시 시도해주세요."
+            error
+            onRetry={load}
+          />
+        ) : null}
       </SafeAreaView>
     );
   }

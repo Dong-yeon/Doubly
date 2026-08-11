@@ -14,6 +14,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { PlaceStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
+import { EmptyState } from '../../components/EmptyState';
 import { TripSectionTabs } from './TripSectionTabs';
 import { Sheet } from '../../components/Sheet';
 import { confirmDiscard } from '../../utils/discardGuard';
@@ -32,6 +33,7 @@ export function TripChecklistScreen({ route }: Props) {
   const { tripId, title } = route.params;
   const [data, setData] = useState<Checklist | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [newText, setNewText] = useState('');
   const [adding, setAdding] = useState(false);
 
@@ -41,10 +43,13 @@ export function TripChecklistScreen({ route }: Props) {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       setData(await tripApi.checklist(tripId));
     } catch (e) {
       toast.error(getErrorMessage(e, '준비물을 불러오지 못했어요.'));
+      // 실패해도 데이터는 비우지 않는다 — "진짜 빈 목록"과 구분은 loadError 로 한다
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -211,9 +216,21 @@ export function TripChecklistScreen({ route }: Props) {
         )}
         ListEmptyComponent={
           !loading ? (
-            <Text style={styles.empty}>
-              아직 준비물이 없어요. 위에서 함께 챙길 것을 추가해보세요! (항목을 길게 눌러 수정·삭제)
-            </Text>
+            loadError ? (
+              <EmptyState
+                icon="cloud-off-outline"
+                title="준비물을 불러오지 못했어요"
+                description="네트워크 상태를 확인하고 다시 시도해주세요."
+                error
+                onRetry={load}
+              />
+            ) : (
+              <EmptyState
+                icon="clipboard-text-outline"
+                title="아직 준비물이 없어요"
+                description="위에서 함께 챙길 것을 추가해보세요! (항목을 길게 눌러 수정·삭제)"
+              />
+            )
           ) : null
         }
       />

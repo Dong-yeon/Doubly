@@ -19,18 +19,40 @@ const CAT_COLORS: Record<string, string> = {
 export function WorkoutStatsScreen() {
   const [stats, setStats] = useState<WorkoutStats | null>(null);
   const [loaded, setLoaded] = useState(false);
+  // 실패해도 stats 를 null 로 지우지 않는다 — 그러면 "0일" 카드들이 실제 0인 것처럼
+  // 보인다(QA_CHECKLIST.md P1-7). error 로 별도 표시해 재시도할 수 있게 한다.
+  const [error, setError] = useState(false);
+
+  const load = useCallback(() => {
+    setError(false);
+    return workoutApi
+      .stats()
+      .then(setStats)
+      .catch(() => setError(true))
+      .finally(() => setLoaded(true));
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
-      workoutApi
-        .stats()
-        .then(setStats)
-        .catch(() => setStats(null))
-        .finally(() => setLoaded(true));
-    }, []),
+      load();
+    }, [load]),
   );
 
   const maxCat = Math.max(1, ...(stats?.categoryBreakdown.map((c) => c.count) ?? [1]));
+
+  if (loaded && error && !stats) {
+    return (
+      <SafeAreaView style={styles.safe} edges={['bottom']}>
+        <EmptyState
+          icon="cloud-off-outline"
+          title="통계를 불러오지 못했어요"
+          description="네트워크 상태를 확인하고 다시 시도해주세요."
+          error
+          onRetry={load}
+        />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>

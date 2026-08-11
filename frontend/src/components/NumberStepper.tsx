@@ -43,7 +43,26 @@ export function NumberStepper({
     onChange(decimal ? String(Number(next.toFixed(2))) : String(Math.round(next)));
   };
 
-  const sanitize = (t: string) => onChange(decimal ? t.replace(/[^0-9.]/g, '') : t.replace(/[^0-9]/g, ''));
+  /**
+   * 숫자만 허용 + 소수점은 최대 1개.
+   * 예전엔 `[^0-9.]` 로만 걸러 "1.2.3" 같은 값이 그대로 통과했다 — Number("1.2.3") 이
+   * NaN 이 되고, JSON.stringify(NaN) 은 null 이라 사용자는 입력했다고 믿는데
+   * 서버엔 조용히 값이 빠지는 문제였다(QA_CHECKLIST.md P0-2). 두 번째부터의 점은
+   * 버리고 나머지 숫자는 그대로 이어붙인다 — 입력이 툭 끊기지 않게.
+   */
+  const sanitize = (t: string) => {
+    if (!decimal) {
+      onChange(t.replace(/[^0-9]/g, ''));
+      return;
+    }
+    const stripped = t.replace(/[^0-9.]/g, '');
+    const firstDot = stripped.indexOf('.');
+    const cleaned =
+      firstDot === -1
+        ? stripped
+        : stripped.slice(0, firstDot + 1) + stripped.slice(firstDot + 1).replace(/\./g, '');
+    onChange(cleaned);
+  };
 
   return (
     <View style={styles.wrap}>

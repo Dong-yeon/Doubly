@@ -69,7 +69,14 @@ export function OnboardingScreen({ navigation }: Props) {
   const isLast = index === SLIDES.length - 1;
 
   const finish = async () => {
-    await storage.setItem(STORAGE_KEYS.onboardingSeen, 'true');
+    // storage.setItem 이 실패해도 로그인 화면으로는 넘어가야 한다 — 실패 시 여기서
+    // 막히면 사용자가 온보딩에 갇힌다(QA_CHECKLIST.md P1-12). 못 저장한 채로 넘어가면
+    // 다음 실행 때 온보딩을 한 번 더 보는 정도라 안전한 폴백이다.
+    try {
+      await storage.setItem(STORAGE_KEYS.onboardingSeen, 'true');
+    } catch {
+      // 저장 실패는 무시 — 화면 전환은 계속 진행한다
+    }
     navigation.replace('Login');
   };
 
