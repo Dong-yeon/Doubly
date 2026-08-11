@@ -642,6 +642,25 @@ export interface FeedTimeline {
   hasMore: boolean;
 }
 
+// 추억 리마인드 (PLAN.md Memories) — "작년 오늘" 조회. 백엔드 MemoriesResponse/MemoryGroupResponse 대응.
+// 누락돼 있던 타입 — tsc --noEmit 이 전체적으로 실패하고 있던 원인 중 하나였다.
+export interface MemoryGroup {
+  /** 몇 년 전인지 (1 이상) */
+  yearsAgo: number;
+  /** 그 해의 대표 발생일 */
+  date: string;
+  /** 화면 표시용 — "1년 전 오늘" */
+  label: string;
+  items: FeedItem[];
+}
+export interface Memories {
+  /** 기준 날짜 (KST) */
+  on: string;
+  totalCount: number;
+  /** 최신 연도부터 */
+  groups: MemoryGroup[];
+}
+
 // 5.8 chat_messages
 export type MessageType = 'TEXT' | 'IMAGE' | 'STICKER' | 'WORKOUT_CARD' | 'MEAL_CARD' | 'ROUTINE_CARD';
 /** 메시지 이모지 리액션 — mine 은 userIds 에 내 id 가 있는지로 판단한다(브로드캐스트 공용) */

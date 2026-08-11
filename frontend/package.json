@@ -50,7 +50,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "build:web": "node scripts/subset-icon-font.cjs && expo export --platform web",
-    "subset:icons": "node scripts/subset-icon-font.cjs"
+    "subset:icons": "node scripts/subset-icon-font.cjs",
+    "typecheck": "tsc --noEmit"
   },
   "private": true
 }

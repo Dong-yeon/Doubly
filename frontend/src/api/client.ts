@@ -182,6 +182,9 @@ export const apiClient = {
   get: <T>(url: string, config?: RequestConfig) => request<T>('GET', url, undefined, config),
   post: <T>(url: string, body?: unknown, config?: RequestConfig) => request<T>('POST', url, body, config),
   put: <T>(url: string, body?: unknown, config?: RequestConfig) => request<T>('PUT', url, body, config),
+  // 루틴 부분 수정(PATCH /workout/routines/{id})처럼 REST 상 PATCH 가 맞는 엔드포인트가 있어 추가.
+  // 없어서 workoutApi.updateRoutine 가 런타임에 "apiClient.patch is not a function" 으로 죽고 있었다.
+  patch: <T>(url: string, body?: unknown, config?: RequestConfig) => request<T>('PATCH', url, body, config),
   delete: <T>(url: string, config?: RequestConfig) => request<T>('DELETE', url, undefined, config),
 };
 
