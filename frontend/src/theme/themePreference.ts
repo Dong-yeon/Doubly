@@ -62,8 +62,10 @@ export async function saveThemeMode(mode: ThemeMode): Promise<void> {
  */
 export function applyToAppearance(mode: ThemeMode): void {
   if (Platform.OS === 'web') return;
-  // 타입 정의상 null 을 받지 않지만, 런타임에서 null 은 "덮어쓰기 해제"를 뜻한다
-  Appearance.setColorScheme(mode === 'system' ? (null as never) : mode);
+  // 'unspecified' 가 "덮어쓰기 해제"(기기 설정 따르기) — 이 RN 버전은 null 을 받지 않고
+  // (ColorSchemeName 타입에도 null 이 없다) 네이티브 AppearanceModule.setColorScheme 이
+  // null 로 호출되면 NPE 로 즉시 크래시한다(스플래시 화면에서 앱이 죽는 원인이었음).
+  Appearance.setColorScheme(mode === 'system' ? 'unspecified' : mode);
 }
 
 /** 앱 시작 직후 저장된 선택을 네이티브 Appearance 에 복원한다 */
