@@ -200,7 +200,14 @@ export function BodyMetricScreen(_: Props) {
           ) : null
         }
         renderItem={({ item }) => (
-          <TouchableOpacity style={styles.card} activeOpacity={0.8} onLongPress={() => onDelete(item)}>
+          // 탭에 연결된 동작이 없다 — 상세/수정 화면이 따로 없으므로 activeOpacity 를
+          // 1로 두어 눌러도 눌린 것처럼 보이지 않게 한다(길게 누르면 삭제는 그대로 동작).
+          <TouchableOpacity
+            style={styles.card}
+            activeOpacity={1}
+            onLongPress={() => onDelete(item)}
+            accessibilityHint="길게 눌러 삭제"
+          >
             {item.photoUrl ? (
               <Image source={{ uri: item.photoUrl }} style={styles.thumb} resizeMode="cover" />
             ) : null}

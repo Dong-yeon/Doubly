@@ -91,7 +91,7 @@ function daysTogether(connectedAt?: string | null): number {
 
 export function HomeScreen({ navigation }: Props) {
   const user = useAuthStore((s) => s.user);
-  const { couple, fetchAll, setBackground, setAnniversary } = useRelationStore();
+  const { couple, loading: relationLoading, fetchAll, setBackground, setAnniversary } = useRelationStore();
 
   const [partner, setPartner] = useState<PartnerToday | null>(null);
   const [myStreak, setMyStreak] = useState<Streak | null>(null);
@@ -114,7 +114,10 @@ export function HomeScreen({ navigation }: Props) {
   const [annInput, setAnnInput] = useState('');
   const [annSaving, setAnnSaving] = useState(false);
 
-  const connected = !!couple?.partner;
+  // relationStore 의 fetchAll 이 아직 안 끝났으면 couple 이 null 이어도 "미연결"이
+  // 아니라 "아직 모름"이다 — 로딩 중엔 연결된 것으로 간주해 연결 안내 화면이
+  // 잠깐 스쳤다 사라지는 깜빡임(P2-13)을 막는다. 로딩이 끝나면 실제 값을 따른다.
+  const connected = relationLoading ? true : !!couple?.partner;
   const bgUrl = couple?.backgroundImageUrl ?? null;
   const dday = daysTogether(couple?.anniversaryDate ?? couple?.connectedAt);
 

@@ -80,25 +80,30 @@ export function TrainerMemberDetailScreen({ navigation, route }: Props) {
             {/* 루틴 섹션 */}
             <Text style={styles.sectionTitle}>배정한 루틴</Text>
             {routines.length > 0 ? (
-              routines.map((r) => (
-                <TouchableOpacity
-                  key={r.id}
-                  style={styles.routineRow}
-                  activeOpacity={0.7}
-                  onLongPress={() => onDeleteRoutine(r)}
-                >
-                  <View style={styles.routineInfo}>
-                    <Text style={styles.routineTitle}>{r.title}</Text>
-                    <Text style={styles.routineSub}>
-                      {r.routineDate ?? '날짜 미지정'}
-                      {r.description ? ` · ${r.description.split('\n')[0]}` : ''}
-                    </Text>
-                  </View>
-                  <Text style={styles.routineBadge}>{r.isCompleted ? '완료' : '대기'}</Text>
-                </TouchableOpacity>
-              ))
+              <>
+                {/* 길게 눌러 삭제 힌트는 지울 루틴이 있을 때만 의미가 있다 — 빈 목록에
+                    있던 예전 위치는 정작 상호작용할 대상이 없어 앞뒤가 안 맞았다. */}
+                <Text style={styles.routineHint}>길게 눌러 삭제</Text>
+                {routines.map((r) => (
+                  <TouchableOpacity
+                    key={r.id}
+                    style={styles.routineRow}
+                    activeOpacity={0.7}
+                    onLongPress={() => onDeleteRoutine(r)}
+                  >
+                    <View style={styles.routineInfo}>
+                      <Text style={styles.routineTitle}>{r.title}</Text>
+                      <Text style={styles.routineSub}>
+                        {r.routineDate ?? '날짜 미지정'}
+                        {r.description ? ` · ${r.description.split('\n')[0]}` : ''}
+                      </Text>
+                    </View>
+                    <Text style={styles.routineBadge}>{r.isCompleted ? '완료' : '대기'}</Text>
+                  </TouchableOpacity>
+                ))}
+              </>
             ) : (
-              <Text style={styles.emptyRoutine}>아직 배정한 루틴이 없어요. (길게 눌러 삭제)</Text>
+              <Text style={styles.emptyRoutine}>아직 배정한 루틴이 없어요.</Text>
             )}
             <Button
               title="루틴 배정하기"
@@ -127,6 +132,7 @@ const styles = themedStyles((colors) => ({
   list: { padding: spacing.lg, paddingBottom: spacing.xl },
   sectionTitle: { fontSize: fontSize.subtitle, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.sm },
   workoutTitle: { marginTop: spacing.lg },
+  routineHint: { fontSize: fontSize.caption, color: colors.textSecondary, marginBottom: spacing.sm, marginTop: -spacing.xs },
   routineRow: {
     flexDirection: 'row',
     alignItems: 'center',

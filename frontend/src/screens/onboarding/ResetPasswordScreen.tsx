@@ -97,6 +97,9 @@ export function ResetPasswordScreen({ navigation, route }: Props) {
               maxLength={6}
               autoComplete="one-time-code"
               style={styles.codeInput}
+              // 서버 에러(인증코드 만료/불일치)는 이 필드에 대한 것이다 — 예전엔
+              // "새 비밀번호 확인" 아래에 붙어 엉뚱한 필드가 문제인 것처럼 보였다.
+              errorText={error ?? undefined}
             />
             <TextField
               label="새 비밀번호"
@@ -114,7 +117,7 @@ export function ResetPasswordScreen({ navigation, route }: Props) {
               placeholder="한 번 더 입력"
               secureTextEntry
               autoComplete="new-password"
-              errorText={mismatch ? '비밀번호가 일치하지 않아요.' : (error ?? undefined)}
+              errorText={mismatch ? '비밀번호가 일치하지 않아요.' : undefined}
             />
             <Button
               title="비밀번호 변경"

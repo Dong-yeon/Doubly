@@ -94,10 +94,23 @@ export function CoupleCalendarScreen(_props: Props) {
   const [form, setForm] = useState<FormState | null>(null);
   const [saving, setSaving] = useState(false);
 
+  /*
+   * 월을 빠르게 넘기면 먼저 보낸 요청이 나중에 응답할 수 있다 — 응답 순서가
+   * 보장되지 않아, 늦게 도착한 "옛 달" 응답이 이미 넘어간 화면의 events 를
+   * 덮어써 헤더(year/month)와 표시되는 일정이 어긋났다(QA_CHECKLIST.md P2-14).
+   * 매 호출마다 토큰을 발급하고, 응답 시점에 "가장 최근 호출인지"를 확인해
+   * 아니면 버린다. DietCalendarScreen 의 `active` 플래그와 같은 목적, 다만
+   * 여기는 콜백이 (y,m) 인자를 받아 재사용되므로 ref 카운터로 구현한다.
+   */
+  const latestRequestRef = useRef(0);
   const load = useCallback(async (y: number, m: number) => {
+    const requestId = ++latestRequestRef.current;
     try {
-      setEvents(await calendarApi.month(y, m));
+      const data = await calendarApi.month(y, m);
+      if (latestRequestRef.current !== requestId) return;
+      setEvents(data);
     } catch (e) {
+      if (latestRequestRef.current !== requestId) return;
       // 커플 미연결(RELATION_NOT_FOUND)은 빈 상태로 안내
       setEvents([]);
     }

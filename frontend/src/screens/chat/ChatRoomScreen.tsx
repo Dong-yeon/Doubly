@@ -83,6 +83,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const [showEmojiSheet, setShowEmojiSheet] = useState(false);
   // 맞춤법 제안을 닫은 시점의 입력값 — 글을 더 치면(값이 달라지면) 다시 뜬다
   const [spellDismissedFor, setSpellDismissedFor] = useState<string | null>(null);
+  // 수정 모드에서 응답 대기 중 전송 버튼이 안 막혀 중복 PUT 이 가능했다(QA_CHECKLIST.md P2-19)
+  const [editSaving, setEditSaving] = useState(false);
   const spellCheckEnabled = useSettingsStore((s) => s.spellCheckEnabled);
   // 이미 읽음 처리한 최대 메시지 id — 중복 PUT 방지
   const markedUpToRef = useRef(0);
@@ -116,12 +118,27 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   // 새 메시지 도착 시 상대방 최신 메시지까지 읽음 처리 (id 게이트로 중복 호출 방지)
   useEffect(() => {
     const latestIncoming = messages.find((m) => m.senderId !== myId); // 최신순이라 첫 항목
-    if (latestIncoming && latestIncoming.id > markedUpToRef.current) {
-      markedUpToRef.current = latestIncoming.id;
-      markRead(latestIncoming.id).catch(() => {
-        markedUpToRef.current = 0; // 실패 시 다음 변경에서 재시도
+    if (!latestIncoming || latestIncoming.id <= markedUpToRef.current) return;
+
+    /*
+     * 예전엔 실패 시 markedUpToRef 만 0 으로 되돌리고 끝이라, messages 가 다시
+     * 바뀌어야만(=새 메시지 도착) 재시도됐다. 조용히 실패하면 새 메시지가 없는 한
+     * 영영 재시도가 안 됐다(QA_CHECKLIST.md P2-20). 새 메시지 없이도 언젠가는
+     * 재시도되도록 짧은 지연 후 스스로 다시 시도한다 — 언마운트/재실행 시 정리한다.
+     */
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const attempt = (targetId: number) => {
+      markedUpToRef.current = targetId;
+      markRead(targetId).catch(() => {
+        markedUpToRef.current = 0;
+        timeoutId = setTimeout(() => attempt(targetId), 5000);
       });
-    }
+    };
+    attempt(latestIncoming.id);
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, [messages, myId, markRead]);
 
   const onSend = async () => {
@@ -130,6 +147,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
 
     // 수정 모드 — 전송 대신 기존 메시지를 고친다
     if (editing) {
+      if (editSaving) return; // 응답 대기 중 중복 탭 방지
+      setEditSaving(true);
       try {
         const updated = await chatApi.edit(editing.id, content);
         replaceMessage(relationId, updated);
@@ -138,6 +157,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         haptics.light();
       } catch (e) {
         toast.error(getErrorMessage(e, '메시지를 수정하지 못했어요.'));
+      } finally {
+        setEditSaving(false);
       }
       return;
     }
@@ -491,9 +512,9 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             multiline
           />
           <TouchableOpacity
-            style={[styles.sendBtn, !text.trim() && styles.sendDisabled]}
+            style={[styles.sendBtn, (!text.trim() || editSaving) && styles.sendDisabled]}
             onPress={onSend}
-            disabled={!text.trim()}
+            disabled={!text.trim() || editSaving}
           >
             <Text style={styles.sendText}>전송</Text>
           </TouchableOpacity>

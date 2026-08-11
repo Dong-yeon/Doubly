@@ -153,7 +153,14 @@ export function ChallengeScreen(_: Props) {
         renderItem={({ item }) => {
           const max = Math.max(item.myCount, item.partnerCount, 1);
           return (
-            <TouchableOpacity style={styles.card} activeOpacity={0.9} onLongPress={() => onDelete(item)}>
+            // 탭에 연결된 동작이 없다 — 상세 화면이 따로 없으므로 activeOpacity 를
+            // 1로 두어 눌러도 눌린 것처럼 보이지 않게 한다(길게 누르면 삭제는 그대로 동작).
+            <TouchableOpacity
+              style={styles.card}
+              activeOpacity={1}
+              onLongPress={() => onDelete(item)}
+              accessibilityHint="길게 눌러 삭제"
+            >
               <View style={styles.cardHeader}>
                 <Text style={styles.title}>{item.title}</Text>
                 <View style={[styles.statusChip, item.ended && styles.statusEnded]}>

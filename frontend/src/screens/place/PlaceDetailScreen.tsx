@@ -1,5 +1,5 @@
 /** 장소 상세 — 방문 기록 목록 + 기록 추가 (별점·사진·메모) */
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   FlatList,
   Image,
@@ -19,6 +19,7 @@ import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
 import { Checkbox } from '../../components/Checkbox';
 import { EmptyState } from '../../components/EmptyState';
+import { ImageViewer } from '../../components/ImageViewer';
 import { placeApi } from '../../api/place';
 import { useDietStore } from '../../store/dietStore';
 import { pickImage, uploadImage } from '../../utils/imageUpload';
@@ -62,6 +63,10 @@ export function PlaceDetailScreen({ route }: Props) {
   const [visits, setVisits] = useState<PlaceVisit[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
+  // 사진 있는 카드를 눌러 전체화면으로 본다 — 예전엔 onLongPress(삭제)만 있고
+  // 탭엔 반응이 없어 "눌리는데 아무 일도 안 남" 이었다(QA_CHECKLIST.md P2-22)
+  const [viewingIndex, setViewingIndex] = useState<number | null>(null);
+  const photoVisits = useMemo(() => visits.filter((v) => v.imageUrl), [visits]);
 
   // 방문 기록 입력 폼
   const [formOpen, setFormOpen] = useState(false);
@@ -107,6 +112,18 @@ export function PlaceDetailScreen({ route }: Props) {
     }
   };
 
+  const resetForm = () => {
+    setRating(0);
+    setMemo('');
+    setPhotoUri(null);
+    setLogMeal(false);
+    setMealType(defaultMealType());
+    setCalories('');
+    setProtein('');
+    setCarbs('');
+    setFat('');
+  };
+
   const onSaveVisit = async () => {
     setSaving(true);
     try {
@@ -140,15 +157,7 @@ export function PlaceDetailScreen({ route }: Props) {
       haptics.success();
       toast.success(logMeal ? '방문 기록과 식단을 함께 남겼어요! ' : '방문 기록 완료! ');
       setFormOpen(false);
-      setRating(0);
-      setMemo('');
-      setPhotoUri(null);
-      setLogMeal(false);
-      setMealType(defaultMealType());
-      setCalories('');
-      setProtein('');
-      setCarbs('');
-      setFat('');
+      resetForm();
       load();
     } catch (e) {
       Alert.alert('오류', getErrorMessage(e));
@@ -292,7 +301,12 @@ export function PlaceDetailScreen({ route }: Props) {
                       title="취소"
                       variant="ghost"
                       size="md"
-                      onPress={() => setFormOpen(false)}
+                      onPress={() => {
+                        // 취소해도 별점·메모·사진이 남아있어 다시 열면 이전 입력이
+                        // 그대로 보였다(QA_CHECKLIST.md P2-23) — 닫을 때 함께 비운다.
+                        setFormOpen(false);
+                        resetForm();
+                      }}
                       style={styles.flex}
                     />
                     <Button title="기록 저장" size="md" onPress={onSaveVisit} loading={saving} style={styles.flex} />
@@ -306,7 +320,17 @@ export function PlaceDetailScreen({ route }: Props) {
             </View>
           }
           renderItem={({ item }) => (
-            <TouchableOpacity style={styles.visitCard} activeOpacity={0.8} onLongPress={() => onDeleteVisit(item)}>
+            <TouchableOpacity
+              style={styles.visitCard}
+              activeOpacity={item.imageUrl ? 0.8 : 1}
+              onLongPress={() => onDeleteVisit(item)}
+              onPress={
+                item.imageUrl
+                  ? () => setViewingIndex(photoVisits.findIndex((v) => v.id === item.id))
+                  : undefined
+              }
+              accessibilityHint={item.imageUrl ? '탭해서 사진 크게 보기 · 길게 눌러 삭제' : '길게 눌러 삭제'}
+            >
               <View style={styles.visitHeader}>
                 <Text style={styles.visitDate}>
                   {item.visitedAt} · {item.visitedByName ?? '커플'}
@@ -341,6 +365,16 @@ export function PlaceDetailScreen({ route }: Props) {
           }
         />
       </KeyboardAvoidingView>
+      <ImageViewer
+        images={photoVisits.map((v) => ({
+          key: String(v.id),
+          uri: v.imageUrl as string,
+          title: `${v.visitedAt} · ${v.visitedByName ?? '커플'}`,
+          caption: v.memo ?? undefined,
+        }))}
+        initialIndex={viewingIndex}
+        onClose={() => setViewingIndex(null)}
+      />
     </SafeAreaView>
   );
 }

@@ -68,9 +68,14 @@ export function PlaceAddScreen({ navigation }: Props) {
     setSearching(true);
     setResults([]);
     mapRef.current?.search(q);
-    // 지도 로딩 전 등 응답이 없을 때를 대비한 안전장치
+    // 지도 로딩 전 등 응답이 없을 때를 대비한 안전장치. 결과가 먼저 도착하면
+    // onSearchResults 가 이 타이머를 지우므로, 여기가 실행됐다는 건 타임아웃이 이긴
+    // 것이다 — 검색이 조용히 아무것도 못 찾은 것처럼 보이지 않게 이유를 알려준다.
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
-    searchTimeout.current = setTimeout(() => setSearching(false), 6000);
+    searchTimeout.current = setTimeout(() => {
+      setSearching(false);
+      toast.error('검색이 너무 오래 걸려요. 다시 시도해주세요.');
+    }, 6000);
   };
 
   const onSearchResults = (_kw: string, found: KakaoPlaceResult[]) => {

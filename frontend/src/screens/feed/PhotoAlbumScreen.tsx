@@ -5,12 +5,12 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Dimensions,
   FlatList,
   Image,
   Pressable,
   RefreshControl,
   StyleSheet,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
@@ -31,9 +31,13 @@ type Props = NativeStackScreenProps<HomeStackParamList, 'PhotoAlbum'>;
 
 const COLUMNS = 3;
 const GAP = 2;
-const CELL = (Dimensions.get('window').width - GAP * (COLUMNS - 1)) / COLUMNS;
 
 export function PhotoAlbumScreen(_props: Props) {
+  // Dimensions.get() 은 정적 스냅샷이라 회전·창 크기 변경에 반응하지 않았다.
+  // useWindowDimensions 는 매 렌더마다 최신 width 를 주므로 그 값으로 다시 계산한다.
+  const { width: windowWidth } = useWindowDimensions();
+  const CELL = useMemo(() => (windowWidth - GAP * (COLUMNS - 1)) / COLUMNS, [windowWidth]);
+
   const [photos, setPhotos] = useState<FeedPhoto[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
@@ -116,7 +120,7 @@ export function PhotoAlbumScreen(_props: Props) {
             accessibilityRole="imagebutton"
             accessibilityLabel={`${item.mine ? '내' : item.authorName} 사진 크게 보기`}
           >
-            <Image source={{ uri: item.imageUrl }} style={styles.cell} />
+            <Image source={{ uri: item.imageUrl }} style={[styles.cell, { width: CELL, height: CELL }]} />
           </Pressable>
         )}
         ListEmptyComponent={
@@ -153,7 +157,8 @@ const styles = themedStyles((colors) => ({
   list: { paddingBottom: layout.listBottomWithFab },
   emptyWrap: { flexGrow: 1, justifyContent: 'center' },
   row: { gap: GAP, marginBottom: GAP },
-  cell: { width: CELL, height: CELL, backgroundColor: colors.surfaceAlt },
+  // width/height 는 렌더 시점의 useWindowDimensions 값으로 인라인 적용한다 (아래 참고)
+  cell: { backgroundColor: colors.surfaceAlt },
   footer: { paddingVertical: spacing.lg },
   /* 큰 보기 스타일은 ImageViewer 로 옮겼다 */
 }));

@@ -1,5 +1,5 @@
 /** 여행 상세 — 일자별 일정표(Itinerary) + 담긴 장소 목록(지도 핀) */
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -62,6 +62,8 @@ export function TripDetailScreen({ navigation, route }: Props) {
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<Tab>('itinerary');
   const [selectedDay, setSelectedDay] = useState(1);
+  // moveItem 연타 레이스 방지 가드 (QA_CHECKLIST.md P2-17) — 상세는 moveItem 정의부 참고
+  const movingRef = useRef(false);
 
   // 장소 담기 모달 (장소 탭)
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -240,8 +242,10 @@ export function TripDetailScreen({ navigation, route }: Props) {
       return;
     }
     const startTime = form.startTime.trim();
-    if (startTime && !/^\d{1,2}:\d{2}$/.test(startTime)) {
-      toast.error('시간은 09:00 형식으로 입력해주세요.');
+    // 예전엔 /^\d{1,2}:\d{2}$/ 로 자릿수만 봐서 "25:99" 도 통과했다(QA_CHECKLIST.md P2-18).
+    // 실제 시(0-23)·분(0-59) 범위까지 검증한다.
+    if (startTime && !/^([01]?\d|2[0-3]):[0-5]\d$/.test(startTime)) {
+      toast.error('시간은 09:00 형식으로, 00:00~23:59 범위로 입력해주세요.');
       return;
     }
     const time = startTime || null;
@@ -256,9 +260,23 @@ export function TripDetailScreen({ navigation, route }: Props) {
         // Day 가 바뀌면 대상 Day 맨 뒤로 이동
         if (form.dayNo !== editingItem.dayNo) {
           const target = days.find((d) => d.dayNo === form.dayNo);
-          await tripApi.reorderItems(tripId, [
-            { itemId: editingItem.id, dayNo: form.dayNo, sortOrder: target ? target.items.length : 0 },
-          ]);
+          try {
+            await tripApi.reorderItems(tripId, [
+              { itemId: editingItem.id, dayNo: form.dayNo, sortOrder: target ? target.items.length : 0 },
+            ]);
+          } catch (reorderError) {
+            /*
+             * updateItem 은 이미 서버에 반영됐다 — 여기서 바깥 catch 로 빠지면
+             * load() 가 안 돌아 화면이 옛 상태로 남는다(QA_CHECKLIST.md P2-16).
+             * 별도로 알리고 반드시 load() 로 실제 서버 상태와 맞춘다.
+             */
+            toast.error(getErrorMessage(reorderError, '수정은 됐지만 날짜 이동에 실패했어요.'));
+            haptics.light();
+            setEditorOpen(false);
+            setSelectedDay(form.dayNo);
+            load();
+            return;
+          }
         }
         toast.success('일정을 수정했어요.');
       } else {
@@ -303,8 +321,16 @@ export function TripDetailScreen({ navigation, route }: Props) {
 
   // 하루 안에서 순서 이동 (↑/↓) — 해당 Day 전체를 0..N-1 로 재배치해 일관성 유지
   const moveItem = async (index: number, dir: -1 | 1) => {
+    /*
+     * ▲▼ 연타 시 이전 호출이 끝나기 전에 새 호출이 dayItems 를 클로저로 캡처해,
+     * 스왑 전 배열 기준으로 계산된 sortOrder 가 경합 상태로 전송됐다
+     * (QA_CHECKLIST.md P2-17). 진행 중엔 새 이동을 막아 항상 최신 상태 위에서만
+     * 계산되게 한다 — 버튼은 빠르게 다시 눌러도 이전 요청이 끝난 뒤에 반영된다.
+     */
+    if (movingRef.current) return;
     const target = index + dir;
     if (target < 0 || target >= dayItems.length) return;
+    movingRef.current = true;
     const reordered = [...dayItems];
     [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
     // 낙관적 반영
@@ -322,6 +348,8 @@ export function TripDetailScreen({ navigation, route }: Props) {
     } catch (e) {
       toast.error(getErrorMessage(e, '순서를 바꾸지 못했어요.'));
       load();
+    } finally {
+      movingRef.current = false;
     }
   };
 

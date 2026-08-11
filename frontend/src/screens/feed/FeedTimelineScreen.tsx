@@ -120,7 +120,14 @@ export function FeedTimelineScreen({ navigation, route }: Props) {
   };
 
   const onLongPress = (item: FeedItem) => {
-    if (item.type !== 'POST' || !item.mine) return;
+    // 운동·식단·맛집 카드(RecordCard)는 길게 눌러도 애초에 이 핸들러가 호출되지
+    // 않는다 — FeedCard 가 그 종류엔 onLongPress 를 연결하지 않는다. 여기서 실제로
+    // 걸러지는 건 "POST 인데 내 글이 아닌" 경우뿐이라, 그 경우에만 피드백을 준다.
+    if (item.type !== 'POST') return;
+    if (!item.mine) {
+      toast.info('내가 쓴 글만 삭제할 수 있어요.');
+      return;
+    }
     Alert.alert('포스트 삭제', '이 일상 기록을 삭제할까요?', [
       { text: '취소', style: 'cancel' },
       {

@@ -64,8 +64,11 @@ export function LoginScreen({ navigation }: Props) {
               onChangeText={setPassword}
               placeholder="비밀번호"
               secureTextEntry
-              errorText={error ?? undefined}
             />
+            {/* 로그인 실패는 이메일·비밀번호 어느 쪽 문제인지 서버 메시지만으론 특정할 수
+                없다(예: "가입되지 않은 이메일"). 비밀번호 칸에만 붙이면 오해를 부르므로
+                폼 공용 에러로 둔다. */}
+            {error ? <Text style={styles.formError}>{error}</Text> : null}
             <Button title="로그인" onPress={onSubmit} loading={loading} disabled={!canSubmit} style={styles.loginBtn} />
             {isGoogleLoginConfigured() ? (
               <>
@@ -106,6 +109,7 @@ const styles = themedStyles((colors) => ({
   brand: { fontSize: fontSize.display, fontWeight: '800', color: colors.ink, marginTop: spacing.sm, letterSpacing: -1 },
   slogan: { fontSize: fontSize.subtitle, color: colors.textSecondary, marginTop: spacing.xs },
   card: { gap: spacing.xs },
+  formError: { color: colors.danger, fontSize: fontSize.caption, marginTop: -4 },
   loginBtn: { marginTop: spacing.sm },
   signupRow: { alignItems: 'center', marginTop: spacing.lg, gap: spacing.xs },
   signupText: { color: colors.textSecondary, fontSize: fontSize.body },
