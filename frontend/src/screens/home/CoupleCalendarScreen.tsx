@@ -350,7 +350,7 @@ export function CoupleCalendarScreen(_props: Props) {
       <Modal visible={form !== null} transparent animationType="fade" onRequestClose={closeForm}>
         <Pressable style={styles.modalBackdrop} onPress={closeForm}>
           {/* 키보드가 저장/삭제 버튼을 가리지 않도록 카드째로 밀어올린다 */}
-          <KeyboardAvoidingView style={styles.modalAvoid} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <KeyboardAvoidingView style={styles.modalAvoid} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
             {/* onPress 로 탭을 흡수한다 — 없으면 카드 빈 곳 터치가 배경으로 새어나가 닫힌다 */}
             <Pressable style={styles.modalCardWrap} onPress={() => {}}>
               <Card elevation="md" style={styles.modalCard}>

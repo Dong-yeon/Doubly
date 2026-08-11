@@ -173,7 +173,7 @@ export function PlaceDetailScreen({ route }: Props) {
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       {/* 키보드가 "기록 저장" 버튼을 가리지 않도록 회피 */}
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <FlatList
           data={visits}
           keyExtractor={(v) => String(v.id)}

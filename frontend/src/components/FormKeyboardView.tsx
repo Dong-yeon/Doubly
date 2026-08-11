@@ -9,9 +9,11 @@
  * <ul>
  *   <li>iOS: `padding` + 헤더 높이만큼 오프셋. 오프셋을 상수로 박으면(예: 90) 노치 없는
  *       기기에서 과보정돼 입력창과 키보드 사이에 빈 띠가 생긴다 — 실제 높이를 읽는다.</li>
- *   <li>Android: `behavior` 를 주지 않는다. `app.json` 의
- *       `softwareKeyboardLayoutMode: "resize"` 가 창 자체를 줄여주므로, 여기에 다시
- *       behavior 를 얹으면 이중 보정이 되어 화면이 튄다.</li>
+ *   <li>Android: `height`. 원래는 `behavior` 를 아예 주지 않고 `app.json` 의
+ *       `softwareKeyboardLayoutMode: "resize"`(= adjustResize) 가 창을 줄여주는 데
+ *       맡겼었는데, Android 15+ 의 edge-to-edge 강제 적용 이후로는 adjustResize 가
+ *       더 이상 창을 줄여주지 않아 키보드가 입력창을 그대로 덮어버렸다
+ *       (실기기 adb logcat 으로 재현·확인). `height` 로 직접 보정한다.</li>
  * </ul>
  *
  * <p>`keyboardDismissMode` 로 <b>목록을 스크롤하면 키보드가 내려간다</b> — 폼이 길 때
@@ -46,7 +48,7 @@ export function FormKeyboardView({ children, contentContainerStyle, style, scrol
   return (
     <KeyboardAvoidingView
       style={[styles.flex, style]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
     >
       <ScrollView

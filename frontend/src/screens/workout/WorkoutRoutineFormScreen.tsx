@@ -213,7 +213,7 @@ export function WorkoutRoutineFormScreen({ navigation }: Props) {
       <Modal visible={addOpen} transparent animationType="fade" onRequestClose={closeAddModal}>
         <Pressable style={styles.backdrop} onPress={closeAddModal}>
           {/* 키보드가 모달 하단 버튼을 가리지 않도록 카드째로 밀어올린다 */}
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
             <Pressable style={styles.modalCard} onPress={() => {}}>
               <ScrollView keyboardShouldPersistTaps="handled">
                 <Text style={styles.modalTitle}>운동 추가</Text>

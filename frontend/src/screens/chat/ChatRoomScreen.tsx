@@ -364,7 +364,9 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        // Android 15+ edge-to-edge 강제 적용 이후 adjustResize 가 창을 안 줄여줘 키보드가
+        // 입력창을 덮는 문제가 있어(실기기 확인) 'height' 로 직접 보정한다.
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         /*
          * 오프셋은 실제 헤더 높이로 — 예전엔 90 을 상수로 박아서 노치 없는 기기
          * (헤더 ≈64)에서 26pt 과보정돼 입력창과 키보드 사이에 빈 띠가 생겼다.

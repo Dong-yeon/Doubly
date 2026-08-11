@@ -232,7 +232,7 @@ export function BodyMetricScreen(_: Props) {
       <Modal visible={addOpen} transparent animationType="fade" onRequestClose={closeAddModal}>
         <Pressable style={styles.backdrop} onPress={closeAddModal}>
           {/* 키보드가 "저장" 버튼을 가리지 않도록 카드째로 밀어올린다 */}
-          <KeyboardAvoidingView style={styles.modalAvoid} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <KeyboardAvoidingView style={styles.modalAvoid} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
             <Pressable style={styles.modalCard} onPress={() => {}}>
               {/* 사진까지 있으면 내용이 길어져 작은 화면에서는 카드 안에서 스크롤한다 */}
               <ScrollView keyboardShouldPersistTaps="handled">
