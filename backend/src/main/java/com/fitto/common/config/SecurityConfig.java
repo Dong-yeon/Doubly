@@ -100,6 +100,16 @@ public class SecurityConfig {
      * CORS — fitto.cors.allowed-origins 로 허용 출처를 제어한다.
      * 개발 기본값은 "*", 운영(prod)은 CORS_ALLOWED_ORIGINS 환경변수로 웹 배포 도메인만 허용.
      * 인증은 Authorization 헤더(JWT)로만 하므로 쿠키 자격증명은 차단한다.
+     *
+     * <p><b>{@code /ws/**} 는 여기 등록하지 않는다</b> — 예전엔 등록돼 있었는데, React
+     * Native 안드로이드의 WebSocket 이 {@code wss://host} 에서 {@code Origin: https://host}
+     * 를 자동으로 붙여 보내는 바람에, 그 Origin 이 브라우저용 화이트리스트(웹 배포 도메인만
+     * 들어있음)에 없어 핸드셰이크가 403 으로 거부됐다 — 웹은 되고 안드로이드 채팅 전송만
+     * "연결이 끊겼어요"로 실패하던 원인이었다(logcat 으로 재현: onWebSocketClose code 1006,
+     * reason "Expected HTTP 101 response but was '403 Forbidden'"). WebSocketConfig 가
+     * {@code /ws/chat} 자체에 이미 {@code setAllowedOriginPatterns("*")} 로 origin 을 열어
+     * 두고 STOMP CONNECT 의 JWT 로 인증하므로, 여기서 브라우저 CORS 화이트리스트를 얹는 건
+     * 중복 방어가 아니라 상충하는 두 번째 게이트였다.
      */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
@@ -111,7 +121,6 @@ public class SecurityConfig {
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/**", config);
-        source.registerCorsConfiguration("/ws/**", config);
         return source;
     }
 
