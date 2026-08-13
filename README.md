@@ -885,9 +885,14 @@ cd frontend && npm install && npm start   # a: Android, i: iOS, w: Web
 
 ### 계정 삭제
 
-`users` / `relations` 를 참조하는 외래키가 20개가 넘습니다. 삭제 순서와 대상은
-`auth/service/UserDataPurger.java` 한 곳에 모여 있으니, **테이블을 추가하면 여기도
-함께 갱신**해야 합니다. 하나라도 빠지면 탈퇴 전체가 FK 위반으로 실패합니다.
+`users` / `relations` 를 참조하는 외래키가 20개가 넘습니다. 개인 데이터 삭제 순서는
+`auth/service/UserDataPurger.java`, 관계(커플) 콘텐츠 삭제 순서는
+`relation/service/RelationRecordPurger.java` 한 곳에 모여 있으니 (탈퇴·지난 기록 완전
+삭제가 공용으로 씀 — [지난 기록](#지난-기록--숨김--삭제--불러오기) 참고), **`relations`
+를 참조하는 테이블을 추가하면 두 파일 중 해당하는 쪽도 함께 갱신**해야 합니다.
+하나라도 빠지면 탈퇴·완전 삭제 전체가 FK 위반으로 실패합니다 —
+`relation_members`(`V32__relation_members.sql`)가 삭제 순서에서 빠져 있던 게
+실제로 그렇게 터진 사례입니다 (`relations` 삭제 전에 먼저 지워야 함).
 
 > ⚠️ **한쪽이 탈퇴하면 커플 공동 기록(맛집·피드·여행)이 양쪽 모두에서 삭제됩니다.**
 > `couple_id` 가 `NOT NULL` 이라 관계 없이는 존재할 수 없기 때문입니다.

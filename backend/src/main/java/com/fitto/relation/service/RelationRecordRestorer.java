@@ -78,7 +78,10 @@ public class RelationRecordRestorer {
                 .setParameter("old", oldRelationId).setParameter("new", newRelationId)
                 .executeUpdate();
 
-        // 콘텐츠가 모두 빠져나갔으므로 옛 관계 행은 남길 이유가 없다
+        // 콘텐츠가 모두 빠져나갔으므로 옛 관계 행은 남길 이유가 없다 —
+        // 새 관계는 재연결 시 자기 몫의 relation_members 를 이미 새로 갖고 있으므로 옛 것은 옮기지 않고 지운다
+        em.createNativeQuery("delete from relation_members where relation_id = :old")
+                .setParameter("old", oldRelationId).executeUpdate();
         em.createNativeQuery("delete from relations where id = :old")
                 .setParameter("old", oldRelationId).executeUpdate();
 
