@@ -2,6 +2,7 @@ package com.fitto.diet.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fitto.common.ai.GeminiClient;
+import com.fitto.common.plan.Feature;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.diet.dto.MealAnalysisResponse;
@@ -119,7 +120,7 @@ public class FoodAnalysisService {
     }
 
     public MealAnalysisResponse analyze(Long userId, String photoUrl) {
-        geminiClient.requireConfiguredAndCountUsage(userId);
+        geminiClient.requireConfiguredAndCountUsage(userId, Feature.AI_FOOD_PHOTO);
 
         Image image = downloadImage(photoUrl);
         JsonNode result = geminiClient.generateJson(
@@ -133,7 +134,7 @@ public class FoodAnalysisService {
      * 사진 분석과 스키마/매핑을 공유하므로 응답 형태가 같다.
      */
     public MealAnalysisResponse analyzeText(Long userId, String text) {
-        geminiClient.requireConfiguredAndCountUsage(userId);
+        geminiClient.requireConfiguredAndCountUsage(userId, Feature.AI_FOOD_TEXT);
 
         JsonNode result = geminiClient.generateJson(
                 List.of(GeminiClient.textPart(buildTextPrompt(text))), RESPONSE_SCHEMA);

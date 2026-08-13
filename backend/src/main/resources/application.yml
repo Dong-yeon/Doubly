@@ -91,6 +91,16 @@ fitto:
   google-auth:
     client-ids: ${GOOGLE_CLIENT_IDS:}
 
+  # 요금제 — FREE / PRO
+  plan:
+    # true 면 전원 PRO 로 판정된다(출시 초기 무료 체험).
+    #
+    # 한도 숫자는 실사용 분포를 재기 전에는 근거가 없어서, 제한을 켜는 대신 "판정 경로"만
+    # 먼저 깔아두는 상태다. 결제를 붙이고 한도를 확정한 뒤 PLAN_FREE_TRIAL=false 로 끈다.
+    # 이 플래그가 켜져 있는 동안 PlanResolver 는 DB 조회 없이 즉시 PRO 를 돌려주므로
+    # 성능 부담도 없다.
+    free-trial: ${PLAN_FREE_TRIAL:true}
+
   # 음식 사진 AI 분석 (Google AI Studio 무료 티어) — 키 미설정 시 기능만 비활성, 앱은 정상 동작
   gemini:
     api-key: ${GEMINI_API_KEY:}

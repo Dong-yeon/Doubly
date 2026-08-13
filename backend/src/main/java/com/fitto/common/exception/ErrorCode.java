@@ -71,6 +71,14 @@ public enum ErrorCode {
     // 소셜 로그인 (AUTH)
     SOCIAL_LOGIN_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "구글 로그인이 아직 준비되지 않았어요."),
 
+    /* --- 요금제 (PLAN) ---
+     * 402 와 429 를 나누는 이유: 앱은 402 를 받으면 업그레이드 시트를, 429 를 받으면
+     * "잠시 후 다시"를 띄운다. 돈 낸 사용자가 한도에 걸렸을 때 결제를 또 권하지 않기 위해
+     * 유료 사용자의 한도 초과는 429(USAGE_LIMIT_EXCEEDED)로 내려간다. */
+    PLAN_UPGRADE_REQUIRED(HttpStatus.PAYMENT_REQUIRED, "PRO에서 이용할 수 있는 기능이에요."),
+    PLAN_LIMIT_EXCEEDED(HttpStatus.PAYMENT_REQUIRED, "무료 플랜의 이용 한도를 모두 사용했어요."),
+    USAGE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "이용 한도를 모두 사용했어요."),
+
     // 식단 AI 분석 (DIET AI)
     AI_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "AI 분석 기능이 아직 준비되지 않았어요."),
     AI_DAILY_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "오늘의 AI 분석 횟수를 모두 사용했어요. 내일 다시 시도해주세요."),

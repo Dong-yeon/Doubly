@@ -2,6 +2,7 @@ package com.fitto.trip.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fitto.common.ai.GeminiClient;
+import com.fitto.common.plan.Feature;
 import com.fitto.common.event.CoupleEvent;
 import com.fitto.common.event.CoupleEventPublisher;
 import com.fitto.common.exception.BusinessException;
@@ -292,7 +293,7 @@ public class TripService {
         int totalDays = daysOf(trip);
         List<Place> places = placeRepository.findByCoupleIdOrderByIdDesc(trip.getCoupleId());
 
-        geminiClient.requireConfiguredAndCountUsage(userId);
+        geminiClient.requireConfiguredAndCountUsage(userId, Feature.AI_TRIP_ITINERARY);
         JsonNode result = geminiClient.generateJson(
                 List.of(GeminiClient.textPart(itineraryPrompt(trip, totalDays, places, preferences))),
                 ITINERARY_SCHEMA);

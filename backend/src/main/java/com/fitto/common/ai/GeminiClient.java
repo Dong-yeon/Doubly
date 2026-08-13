@@ -5,10 +5,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fitto.common.config.GeminiProperties;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
+import com.fitto.common.plan.Feature;
+import com.fitto.common.plan.PlanGuard;
+import com.fitto.common.plan.Quota;
+import com.fitto.common.plan.UsageCounter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
@@ -16,20 +18,24 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
-import java.time.Duration;
-import java.time.LocalDate;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Gemini API 공용 클라이언트 — 음식 사진 분석/운동 추천 등 AI 기능이 공유한다.
- * <p>
- * 무료 티어 한도(프로젝트 단위 RPD)를 지키기 위해 사용자별 일일 횟수를 여기서 공통 제한한다
- * (AI 기능 전체가 한도를 공유). 카운터는 Redis(INCR)가 기본이라 재배포/다중 인스턴스에도
- * 유지되며, Redis 미가용 시 인메모리로 폴백한다 (남용 방지 목적으로는 충분).
+ *
+ * <p><b>한도는 두 겹이다.</b>
+ * <ol>
+ *   <li><b>기능별 · 플랜별</b> 한도 — {@link PlanGuard}. 무료는 음식 사진 분석 하루 2회,
+ *       PRO 는 30회처럼 기능마다 다르다. 숫자는 {@link Feature} 한 곳에 모여 있다</li>
+ *   <li><b>사용자별 총량</b> 안전망 — {@code fitto.gemini.daily-limit-per-user}.
+ *       Google AI Studio 무료 티어는 <b>프로젝트 단위</b> 일일 한도가 따로 있어서,
+ *       기능별 한도를 아무리 잘 잡아도 사용자 수가 늘면 프로젝트 쿼터가 먼저 터지고
+ *       <b>전원이</b> AI 를 못 쓴다. 플랜과 무관하게 이 상한을 함께 건다</li>
+ * </ol>
+ *
+ * <p>카운터는 {@link UsageCounter}(Redis INCR, 미가용 시 인메모리 폴백)가 담당한다.
  */
 @Component
 public class GeminiClient {
@@ -42,60 +48,37 @@ public class GeminiClient {
     private final GeminiProperties properties;
     private final ObjectMapper objectMapper;
     private final RestClient restClient;
-    private final ObjectProvider<StringRedisTemplate> redisProvider;
-
-    /** userId → 오늘 사용량 (Redis 미가용 시 폴백) */
-    private final ConcurrentHashMap<Long, DailyUsage> usageByUser = new ConcurrentHashMap<>();
+    private final PlanGuard planGuard;
+    private final UsageCounter usageCounter;
 
     public GeminiClient(GeminiProperties properties, ObjectMapper objectMapper,
-                        ObjectProvider<StringRedisTemplate> redisProvider) {
+                        PlanGuard planGuard, UsageCounter usageCounter) {
         this.properties = properties;
         this.objectMapper = objectMapper;
-        this.redisProvider = redisProvider;
+        this.planGuard = planGuard;
+        this.usageCounter = usageCounter;
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(5_000);
         factory.setReadTimeout(60_000);
         this.restClient = RestClient.builder().requestFactory(factory).build();
     }
 
-    /** AI 기능 사용 전 공통 관문 — 키 설정 확인 + 사용자별 일일 한도 차감 */
-    public void requireConfiguredAndCountUsage(Long userId) {
+    /**
+     * AI 기능 사용 전 공통 관문 — 키 설정 확인 + 플랜 한도 차감 + 총량 안전망.
+     *
+     * <p>플랜 한도를 <b>먼저</b> 본다. 무료에서 막힌 기능이 총량 카운터를 갉아먹으면
+     * 쓰지도 못한 기능 때문에 쓸 수 있는 기능의 잔여 횟수가 줄어든다.
+     */
+    public void requireConfiguredAndCountUsage(Long userId, Feature feature) {
         if (!properties.isConfigured()) {
             throw new BusinessException(ErrorCode.AI_NOT_CONFIGURED);
         }
-        LocalDate today = LocalDate.now();
-        Integer count = countWithRedis(userId, today);
-        if (count == null) {
-            count = countInMemory(userId, today);
-        }
-        if (count > properties.getDailyLimitPerUser()) {
+        planGuard.consume(userId, feature);
+
+        Quota backstop = Quota.perDay(properties.getDailyLimitPerUser());
+        if (usageCounter.increment(userId, Feature.AI_TOTAL, backstop) > backstop.limit()) {
             throw new BusinessException(ErrorCode.AI_DAILY_LIMIT_EXCEEDED);
         }
-    }
-
-    /** Redis INCR 카운터 — 미가용(로컬 개발/테스트 등)이면 null 로 폴백 신호 */
-    private Integer countWithRedis(Long userId, LocalDate today) {
-        StringRedisTemplate redis = redisProvider.getIfAvailable();
-        if (redis == null) {
-            return null;
-        }
-        try {
-            String key = "fitto:ai:usage:" + today + ":" + userId;
-            Long value = redis.opsForValue().increment(key);
-            if (value != null && value == 1L) {
-                redis.expire(key, Duration.ofDays(2)); // 날짜가 키에 포함 — 만료는 청소용
-            }
-            return value == null ? null : value.intValue();
-        } catch (Exception e) {
-            log.debug("Redis 미가용 — AI 사용량 인메모리 카운터로 폴백: {}", e.getMessage());
-            return null;
-        }
-    }
-
-    private int countInMemory(Long userId, LocalDate today) {
-        DailyUsage usage = usageByUser.compute(userId, (id, prev) ->
-                (prev == null || !prev.date().equals(today)) ? new DailyUsage(today, new AtomicInteger()) : prev);
-        return usage.count().incrementAndGet();
     }
 
     /** parts(텍스트/이미지)를 보내 구조화 출력(JSON mode) 결과를 파싱해 반환 */
@@ -175,8 +158,5 @@ public class GeminiClient {
         return Map.of("inlineData", Map.of(
                 "mimeType", mimeType,
                 "data", Base64.getEncoder().encodeToString(bytes)));
-    }
-
-    private record DailyUsage(LocalDate date, AtomicInteger count) {
     }
 }

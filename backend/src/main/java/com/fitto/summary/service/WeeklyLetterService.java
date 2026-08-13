@@ -2,6 +2,7 @@ package com.fitto.summary.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fitto.common.ai.GeminiClient;
+import com.fitto.common.plan.Feature;
 import com.fitto.summary.dto.WeeklyLetterResponse;
 import com.fitto.summary.dto.WeeklyRecapResponse;
 import org.springframework.stereotype.Service;
@@ -49,7 +50,7 @@ public class WeeklyLetterService {
             return WeeklyLetterResponse.empty();
         }
 
-        geminiClient.requireConfiguredAndCountUsage(userId);
+        geminiClient.requireConfiguredAndCountUsage(userId, Feature.AI_WEEKLY_LETTER);
         JsonNode result = geminiClient.generateJson(
                 List.of(GeminiClient.textPart(PROMPT.formatted(describe(recap)))), SCHEMA);
         String letter = result.path("letter").asText("");

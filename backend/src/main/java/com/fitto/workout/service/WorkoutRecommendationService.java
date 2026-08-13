@@ -2,6 +2,7 @@ package com.fitto.workout.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fitto.common.ai.GeminiClient;
+import com.fitto.common.plan.Feature;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.workout.dto.WorkoutRecommendationResponse;
@@ -59,7 +60,7 @@ public class WorkoutRecommendationService {
     }
 
     public WorkoutRecommendationResponse recommend(Long userId, int days) {
-        geminiClient.requireConfiguredAndCountUsage(userId);
+        geminiClient.requireConfiguredAndCountUsage(userId, Feature.AI_WORKOUT_RECOMMEND);
 
         // 최근 기록(최신순 1페이지)을 트랜잭션 안에서 DTO 로 받아온 뒤, Gemini 호출은 트랜잭션 밖에서 수행
         List<WorkoutResponse> history = workoutService.findHistory(userId, null);

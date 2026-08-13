@@ -48,10 +48,39 @@ export function isApiError(error: unknown): error is ApiError {
   return error instanceof ApiError;
 }
 
+/**
+ * 백엔드 {@code ApiResponse.errorCode} 추출 — 원인별로 분기해야 할 때 쓴다.
+ *
+ * <p>상태 코드만 보면 원인이 뭉개진다. 예를 들어 503 은 "업로드 미설정"일 수도,
+ * 단순 서버 장애일 수도 있는데 <b>폴백해도 되는 건 앞의 하나뿐</b>이다.
+ */
+export function errorCodeOf(error: unknown): string | null {
+  if (!isApiError(error)) return null;
+  return (error.data as ApiResponse<unknown> | undefined)?.errorCode ?? null;
+}
+
 // 인증 실패(refresh 불가) 시 호출되는 콜백 — authStore 가 등록해 로그아웃 처리.
 let onAuthFailure: (() => void) | null = null;
 export function setAuthFailureHandler(handler: () => void) {
   onAuthFailure = handler;
+}
+
+/** 플랜 한도에 걸렸을 때의 서버 응답 — 앱은 이걸로 업그레이드 안내를 띄운다. */
+export interface PlanGateInfo {
+  errorCode: 'PLAN_UPGRADE_REQUIRED' | 'PLAN_LIMIT_EXCEEDED';
+  message: string;
+}
+
+/**
+ * 플랜 게이트(402) 콜백 — planStore 가 등록한다.
+ *
+ * <p><b>왜 여기서 가로채나</b>: 한도는 어느 화면에서든 걸릴 수 있는데, 화면마다
+ * 402 를 분기하면 60개 화면에 같은 코드가 흩어진다. 한 곳에서 알리고, 에러 자체는
+ * 그대로 던져 호출부가 로딩 해제 등 제 할 일을 하게 둔다.
+ */
+let onPlanGate: ((info: PlanGateInfo) => void) | null = null;
+export function setPlanGateHandler(handler: ((info: PlanGateInfo) => void) | null) {
+  onPlanGate = handler;
 }
 
 /**
@@ -175,6 +204,13 @@ async function request<T>(
 
   const errorBody = await readBody(response);
   const message = (errorBody as ApiResponse<unknown> | undefined)?.message;
+
+  // 402 = 플랜 한도. 앱 전체에서 한 번만 처리한다(위 setPlanGateHandler 참고).
+  const errorCode = (errorBody as ApiResponse<unknown> | undefined)?.errorCode;
+  if (errorCode === 'PLAN_UPGRADE_REQUIRED' || errorCode === 'PLAN_LIMIT_EXCEEDED') {
+    onPlanGate?.({ errorCode, message: message ?? 'PRO에서 이용할 수 있는 기능이에요.' });
+  }
+
   throw new ApiError(response.status, errorBody, message ?? `HTTP ${response.status}`);
 }
 
