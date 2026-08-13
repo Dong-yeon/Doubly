@@ -66,6 +66,8 @@ public class RelationRecordPurger {
         // 운동 기록은 개인 소유다 — 삭제하지 않고 관계 참조만 끊는다
         exec("update workouts set relation_id = null where relation_id = :rid", relationId);
 
+        exec("delete from relation_members where relation_id = :rid", relationId);
+
         exec("delete from relations where id = :rid", relationId);
 
         em.flush();
