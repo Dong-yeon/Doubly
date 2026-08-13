@@ -14,6 +14,22 @@ public record MemoriesResponse(
         LocalDate on,
         int totalCount,
         /** 최신 연도부터 */
-        List<MemoryGroupResponse> groups
+        List<MemoryGroupResponse> groups,
+        /**
+         * 플랜 때문에 잠겨 있는가 (PRO 기능).
+         *
+         * <p>여기서 402 를 던지지 않는 이유: 홈이 <b>실행할 때마다</b> 이 값을 부른다.
+         * 막아버리면 앱을 열 때마다 업그레이드 시트가 뜬다. 대신 빈 결과에 이 표시를 달아
+         * 홈이 그 자리에 안내를 그리게 한다.
+         */
+        boolean locked
 ) {
+
+    public static MemoriesResponse empty(LocalDate on) {
+        return new MemoriesResponse(on, 0, List.of(), false);
+    }
+
+    public static MemoriesResponse locked(LocalDate on) {
+        return new MemoriesResponse(on, 0, List.of(), true);
+    }
 }

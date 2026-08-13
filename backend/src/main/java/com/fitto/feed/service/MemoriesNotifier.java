@@ -1,5 +1,8 @@
 package com.fitto.feed.service;
 
+import com.fitto.common.plan.Feature;
+import com.fitto.common.plan.PlanResolver;
+import com.fitto.common.plan.Plan;
 import com.fitto.common.notification.NotificationService;
 import com.fitto.feed.repository.FeedPostRepository;
 import com.fitto.place.repository.PlaceVisitRepository;
@@ -43,18 +46,21 @@ public class MemoriesNotifier {
     private final RelationRepository relationRepository;
     private final NotificationService notificationService;
     private final ZoneId storageZone;
+    private final PlanResolver planResolver;
 
     public MemoriesNotifier(FeedPostRepository feedPostRepository,
                             PlaceVisitRepository placeVisitRepository,
                             RelationRepository relationRepository,
                             NotificationService notificationService,
-                            @Value("${fitto.storage-zone:}") String storageZone) {
+                            @Value("${fitto.storage-zone:}") String storageZone,
+                            PlanResolver planResolver) {
         this.feedPostRepository = feedPostRepository;
         this.placeVisitRepository = placeVisitRepository;
         this.relationRepository = relationRepository;
         this.notificationService = notificationService;
         // MemoriesService 와 반드시 같은 규칙으로 푼다 — 다르면 "푸시는 왔는데 열면 비어 있다"
         this.storageZone = MemoryDates.storageZoneOf(storageZone);
+        this.planResolver = planResolver;
     }
 
     /** 매일 10:00 KST. */
@@ -76,6 +82,11 @@ public class MemoriesNotifier {
             Relation couple = relationRepository.findById(e.getKey()).orElse(null);
             // 연결이 끊긴 관계의 기록은 보이지 않는 상태 — 알림도 보내지 않는다
             if (couple == null || couple.getStatus() != RelationStatus.ACTIVE) {
+                continue;
+            }
+            // 열어봐야 잠겨 있는 알림은 보내지 않는다 — 추억은 PRO 기능이다.
+            // (MEMORIES 는 커플 단위 판정이라 한쪽만 확인해도 관계 전체가 결정된다)
+            if (planResolver.resolveFor(couple.getUserAId(), Feature.MEMORIES) != Plan.PRO) {
                 continue;
             }
             String body = body(e.getValue());

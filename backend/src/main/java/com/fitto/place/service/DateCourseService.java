@@ -2,6 +2,7 @@ package com.fitto.place.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fitto.common.ai.GeminiClient;
+import com.fitto.common.plan.Feature;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.place.domain.Place;
@@ -76,7 +77,7 @@ public class DateCourseService {
             return DateCourseResponse.empty();
         }
 
-        geminiClient.requireConfiguredAndCountUsage(userId);
+        geminiClient.requireConfiguredAndCountUsage(userId, Feature.AI_DATE_COURSE);
         JsonNode result = geminiClient.generateJson(
                 List.of(GeminiClient.textPart(PROMPT.formatted(describe(places)))), SCHEMA);
 

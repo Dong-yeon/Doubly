@@ -71,7 +71,7 @@ class TripTravelModeFlowTest {
 
     @Test
     void 여행_모드를_켜면_기간_안에서_식단_목표가_숨는다() {
-        long[] c = couple("tm1@fitto.com", "tm2@fitto.com");
+        long[] c = couple("tvm1@fitto.com", "tvm2@fitto.com");
         nutritionService.setGoal(c[0], new NutritionGoalRequest(2000, 200, 150, 60));
         assertThat(nutritionService.today(c[0]).targetCalories()).isEqualTo(2000);
 
@@ -88,7 +88,7 @@ class TripTravelModeFlowTest {
 
     @Test
     void 여행_모드를_꺼도_목표값은_그대로_남아있다() {
-        long[] c = couple("tm3@fitto.com", "tm4@fitto.com");
+        long[] c = couple("tvm3@fitto.com", "tvm4@fitto.com");
         nutritionService.setGoal(c[0], new NutritionGoalRequest(1800, null, null, null));
         TripResponse trip = tripService.save(c[0], ongoingTrip());
 
@@ -103,7 +103,7 @@ class TripTravelModeFlowTest {
 
     @Test
     void 여행_기간_밖이면_여행_모드가_켜져도_목표를_숨기지_않는다() {
-        long[] c = couple("tm5@fitto.com", "tm6@fitto.com");
+        long[] c = couple("tvm5@fitto.com", "tvm6@fitto.com");
         nutritionService.setGoal(c[0], new NutritionGoalRequest(2200, null, null, null));
         TripResponse trip = tripService.save(c[0], futureTrip());
 
@@ -116,8 +116,8 @@ class TripTravelModeFlowTest {
 
     @Test
     void 다른_커플은_여행_모드를_토글할_수_없다() {
-        long[] c1 = couple("tm7@fitto.com", "tm8@fitto.com");
-        long[] c2 = couple("tm9@fitto.com", "tm10@fitto.com");
+        long[] c1 = couple("tvm7@fitto.com", "tvm8@fitto.com");
+        long[] c2 = couple("tvm9@fitto.com", "tvm10@fitto.com");
         TripResponse trip = tripService.save(c1[0], ongoingTrip());
 
         assertThatThrownBy(() -> tripService.setTravelMode(c2[0], trip.id(), true))
@@ -127,7 +127,7 @@ class TripTravelModeFlowTest {
 
     @Test
     void 여행_중_운동_기록은_회고에_두_사람_합산으로_잡힌다() {
-        long[] c = couple("tm11@fitto.com", "tm12@fitto.com");
+        long[] c = couple("tvm11@fitto.com", "tvm12@fitto.com");
         TripResponse trip = tripService.save(c[0], ongoingTrip());
         tripService.setTravelMode(c[0], trip.id(), true);
 

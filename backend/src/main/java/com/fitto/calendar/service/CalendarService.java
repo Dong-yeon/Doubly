@@ -1,5 +1,7 @@
 package com.fitto.calendar.service;
 
+import com.fitto.common.plan.Feature;
+import com.fitto.common.plan.PlanGuard;
 import com.fitto.calendar.domain.CalendarEvent;
 import com.fitto.calendar.dto.CreateEventRequest;
 import com.fitto.calendar.dto.EventResponse;
@@ -36,15 +38,18 @@ public class CalendarService {
     private final RelationRepository relationRepository;
     private final NotificationService notificationService;
     private final CoupleEventPublisher coupleEventPublisher;
+    private final PlanGuard planGuard;
 
     public CalendarService(CalendarEventRepository eventRepository,
                            RelationRepository relationRepository,
                            NotificationService notificationService,
-                           CoupleEventPublisher coupleEventPublisher) {
+                           CoupleEventPublisher coupleEventPublisher,
+                           PlanGuard planGuard) {
         this.eventRepository = eventRepository;
         this.relationRepository = relationRepository;
         this.notificationService = notificationService;
         this.coupleEventPublisher = coupleEventPublisher;
+        this.planGuard = planGuard;
     }
 
     /** 해당 월의 일정 — 반복 일정은 그 달에 발생하는 연도로 계산해 포함한다. */
@@ -82,6 +87,7 @@ public class CalendarService {
     @Transactional
     public EventResponse create(Long userId, CreateEventRequest req) {
         Relation couple = requireCouple(userId);
+        planGuard.consume(userId, Feature.CALENDAR_EVENT);
         CalendarEvent event = eventRepository.save(CalendarEvent.builder()
                 .coupleId(couple.getId())
                 .title(req.title())

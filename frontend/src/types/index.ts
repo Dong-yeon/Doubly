@@ -16,6 +16,58 @@ export type Gender = 'MALE' | 'FEMALE';
 // 1.3 사용자 역할
 export type Role = 'USER' | 'TRAINER' | 'ADMIN';
 
+/* ── 요금제 (GET /plan/me) ─────────────────────────────────────────────────
+ * 한도 숫자는 여기에 두지 않는다. 앱에 박아두면 정책을 바꿀 때마다 스토어 심사를
+ * 기다려야 한다 — 판정도 표시도 서버(Feature.java)가 하고, 앱은 받은 값을 그린다.
+ * 아래 키 목록만 백엔드 Feature enum 과 짝을 맞춘다(PlanFeatureSyncTest 가 검증). */
+
+export type Plan = 'FREE' | 'PRO';
+
+export type FeatureKey =
+  | 'AI_FOOD_PHOTO'
+  | 'AI_FOOD_TEXT'
+  | 'AI_DIET_COACH'
+  | 'AI_DATE_COURSE'
+  | 'AI_WEEKLY_LETTER'
+  | 'AI_TRIP_ITINERARY'
+  | 'AI_WORKOUT_RECOMMEND'
+  | 'PHOTO_UPLOAD'
+  | 'TRIP_ACTIVE'
+  | 'PLACE_PIN'
+  | 'WORKOUT_ROUTINE'
+  | 'CALENDAR_EVENT'
+  | 'FAVORITE_FOOD'
+  | 'MEMORIES'
+  | 'FULL_STATS'
+  | 'WEEKLY_RECAP'
+  | 'TRIP_EXPENSE'
+  | 'TRIP_CHECKLIST'
+  | 'CUSTOM_BACKGROUND'
+  | 'PREMIUM_STICKER';
+
+/** 한도 주기 — TOTAL 은 리셋되지 않는 보유 개수 상한 */
+export type QuotaPeriod = 'DAY' | 'WEEK' | 'MONTH' | 'TOTAL' | 'NONE';
+
+export interface FeatureState {
+  feature: FeatureKey;
+  /** 사용자에게 보여줄 기능 이름 */
+  name: string;
+  allowed: boolean;
+  /** -1 무제한, 0 차단 */
+  limit: number;
+  used: number;
+  /** 무제한·차단·개수형이면 null */
+  remaining: number | null;
+  period: QuotaPeriod;
+}
+
+export interface PlanInfo {
+  plan: Plan;
+  /** 무료 체험 기간 — true 면 "체험 중" 배지를 띄운다(나중에 "뺏겼다"로 읽히지 않게) */
+  freeTrial: boolean;
+  features: FeatureState[];
+}
+
 // 5.2 users
 export interface User {
   id: number;
@@ -484,6 +536,11 @@ export interface WeeklyRecap {
   partnerMealDays: number;
   bothWorkoutDays: number;
   bothMealDays: number;
+  /**
+   * 플랜 때문에 잠김 (PRO 기능). 잠기면 모든 수치가 0 으로 내려온다 —
+   * 그대로 그리면 "지난주에 아무것도 안 했어요"로 보이므로 반드시 이 값을 먼저 본다.
+   */
+  locked?: boolean;
 }
 
 // 커플 공동 식단 목표 진행률 (GET /meal/couple/goal)
@@ -659,6 +716,13 @@ export interface Memories {
   totalCount: number;
   /** 최신 연도부터 */
   groups: MemoryGroup[];
+  /**
+   * 플랜 때문에 잠김 (PRO 기능).
+   *
+   * 홈이 매일 부르는 조회라 서버가 402 를 던지지 않는다 — 대신 빈 결과에 이 표시가 붙는다.
+   * `groups` 가 비었을 때 "추억이 없음"과 "잠김"을 구분하는 유일한 값이다.
+   */
+  locked?: boolean;
 }
 
 // 5.8 chat_messages

@@ -69,6 +69,9 @@ public class UserDataPurger {
         exec("delete from device_tokens where user_id = :uid", userId);
         exec("delete from password_reset_tokens where user_id = :uid", userId);
         exec("delete from trainer_profiles where user_id = :uid", userId);
+        // 구독 이력 — users FK 를 물고 있어서 빠뜨리면 탈퇴 전체가 FK 위반으로 실패한다.
+        // (환불·정산 근거는 스토어 콘솔에 남으므로 여기서 지워도 된다)
+        exec("delete from subscriptions where user_id = :uid", userId);
 
         em.flush();
         em.clear();

@@ -1,5 +1,7 @@
 package com.fitto.diet.service;
 
+import com.fitto.common.plan.Feature;
+import com.fitto.common.plan.PlanGuard;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.diet.domain.FavoriteFood;
@@ -20,12 +22,14 @@ import java.util.List;
 @Transactional(readOnly = true)
 public class FavoriteFoodService {
 
-    private static final int MAX_FAVORITES = 50;
 
     private final FavoriteFoodRepository repository;
+    private final PlanGuard planGuard;
 
-    public FavoriteFoodService(FavoriteFoodRepository repository) {
+    public FavoriteFoodService(FavoriteFoodRepository repository,
+                               PlanGuard planGuard) {
         this.repository = repository;
+        this.planGuard = planGuard;
     }
 
     public List<FavoriteFoodResponse> list(Long userId) {
@@ -40,9 +44,7 @@ public class FavoriteFoodService {
         if (repository.existsByUserIdAndName(userId, name)) {
             throw new BusinessException(ErrorCode.INVALID_INPUT, "이미 즐겨찾기에 있는 음식이에요.");
         }
-        if (repository.findByUserIdOrderByIdDesc(userId).size() >= MAX_FAVORITES) {
-            throw new BusinessException(ErrorCode.INVALID_INPUT, "즐겨찾기는 최대 " + MAX_FAVORITES + "개까지 저장할 수 있어요.");
-        }
+        planGuard.requireCapacity(userId, Feature.FAVORITE_FOOD, repository.countByUserId(userId));
         FavoriteFood food = FavoriteFood.builder()
                 .userId(userId)
                 .name(name)
