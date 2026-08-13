@@ -16,6 +16,7 @@
     "expo-auth-session": "~56.0.14",
     "expo-clipboard": "~56.0.4",
     "expo-crypto": "~56.0.4",
+    "expo-dev-client": "~56.0.24",
     "expo-font": "~56.0.7",
     "expo-haptics": "~56.0.3",
     "expo-image-picker": "~56.0.18",
