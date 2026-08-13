@@ -1,18 +1,17 @@
-/** Doubly 심볼 — 두 덩굴이 얽혀 이루는 하트 (나=Gold · 상대=Forest).
+/** Doubly 심볼 — 겹친 두 하트 아웃라인 + 반짝임 셋. 전부 초록 계열이다:
+ *  뒤(연함) = 상대, 앞(짙음) = 나. 하트 곡선은 파라메트릭 카디오이드 공식(heartPoints).
  *
- *  앱 아이콘과 같은 모티프다. 예전에는 겹친 두 하트(Pink/Sky)였는데, 아이콘을
- *  덩굴 하트로 바꾸면서 <b>앱을 열자마자 다른 마크가 나오는</b> 상태가 됐다.
- *  색도 팔레트 밖의 값(#FF7EB9/#7DD3F0)을 쓰고 있어 앱 어디와도 맞지 않았다.
+ *  앱 아이콘(DoublySquareMark)은 초록 그라데이션 정사각 배경 위에 이 두 하트를 얹은
+ *  것이고(assets/doubly-logo.svg 가 마스터), 인앱 마크(DoublyMark, 20~72px 로 여러 곳에
+ *  쓰인다)는 배경 없이 하트 두 개만 그린다 — 배경이 항상 밝다는 보장이 없어서(사진 위
+ *  스크림 등) onDark prop 으로 밝은/어두운 배경용 색을 고른다.
  *
- *  하트는 파라메트릭 곡선을 좌/우 반쪽으로 갈라 그린다. 왼쪽이 나, 오른쪽이 상대이고
- *  위·아래 두 지점에서 만난다. 잎은 각 반쪽에서 바깥으로 뻗는다.
- *
- *  이모지(🩷🩵)를 글자로 쓰지 않는 이유: Unicode 15(2022) 라 구형 기기에서 두부(☒)가
- *  되고, 플랫폼마다 모양이 달라 브랜드 마크로 쓸 수 없다.
+ *  이전에는 톱니(레코드) 하트였다(Gold/Green). 그 전엔 덩굴이 얽힌 하트(Gold/Green, 잎 셋).
+ *  그 전엔 겹친 두 하트(Pink/Sky)였다.
  */
 import React from 'react';
 import { StyleSheet, Text, View, ViewStyle } from 'react-native';
-import Svg, { G, Path, Polygon } from 'react-native-svg';
+import Svg, { Defs, LinearGradient, Path, Polygon, Rect, Stop } from 'react-native-svg';
 import { colors, fontSize } from '../constants/theme';
 
 interface Props {
@@ -22,159 +21,121 @@ interface Props {
   style?: ViewStyle;
 }
 
+export type Pt = { x: number; y: number };
+
 /** 뷰박스 한 변 — 모든 좌표가 이 기준이다 */
 const V = 100;
-/** 하트 높이 (뷰박스 대비) */
-const H = 78;
-/** 덩굴 굵기 */
-const STROKE = 9;
 
 /**
- * 파라메트릭 하트의 반쪽 좌표.
- * t 0..π 가 오른쪽(위 꼭지 → 아래 끝), π..2π 가 왼쪽이다.
+ * 매끈한 하트 곡선(카디오이드류 파라메트릭 공식). 두 하트, 반짝임 별 모두 이 하나의
+ * 곡선을 스케일만 바꿔 재사용한다.
  */
-function halfPoints(side: 1 | -1): { x: number; y: number }[] {
-  const [a, b] = side > 0 ? [0, Math.PI] : [Math.PI, 2 * Math.PI];
-  const k = H / 34;
-  const out: { x: number; y: number }[] = [];
-  for (let i = 0; i <= 56; i += 1) {
-    const t = a + ((b - a) * i) / 56;
+export function heartPoints(scale: number, segments = 96): Pt[] {
+  const out: Pt[] = [];
+  for (let i = 0; i <= segments; i += 1) {
+    const t = (2 * Math.PI * i) / segments;
     const x = 16 * Math.sin(t) ** 3;
-    const y =
-      13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
-    out.push({ x: V / 2 + x * k, y: V / 2 + 3 - y * k });
+    const y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
+    out.push({ x: x * scale, y: -y * scale });
   }
   return out;
 }
 
-function toPath(pts: { x: number; y: number }[]): string {
-  return pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join('');
+function toPath(pts: Pt[], dx = 0, dy = 0, scale = 1): string {
+  return (
+    pts
+      .map((p, i) => `${i === 0 ? 'M' : 'L'}${(p.x * scale + dx).toFixed(2)},${(p.y * scale + dy).toFixed(2)}`)
+      .join(' ') + ' Z'
+  );
 }
 
-type Pt = { x: number; y: number };
-
-/** 잎 — 양 끝이 모이는 아몬드형. 줄기 위 한 점에서 바깥으로 뻗는다 */
-function leafPoints(x: number, y: number, ang: number, len: number): Pt[] {
-  const pts: Pt[] = [];
-  const push = (u: number, v: number) =>
-    pts.push({
-      x: x + u * Math.cos(ang) - v * Math.sin(ang),
-      y: y + u * Math.sin(ang) + v * Math.cos(ang),
-    });
-  for (let i = 0; i <= 12; i += 1) {
-    const u = i / 12;
-    push(u * len, len * 0.3 * Math.sin(Math.PI * u) ** 0.85);
+/** 네 꼭짓점 반짝임 별 하나의 폴리곤 점 (Polygon points 문자열용) */
+function starPoints(cx: number, cy: number, s: number): string {
+  const pts: string[] = [];
+  for (let i = 0; i < 8; i += 1) {
+    const r = i % 2 === 0 ? 1 : 0.28;
+    const ang = (Math.PI / 4) * i;
+    pts.push(`${(cx + r * s * Math.cos(ang)).toFixed(2)},${(cy + r * s * Math.sin(ang)).toFixed(2)}`);
   }
-  for (let i = 12; i >= 0; i -= 1) {
-    const u = i / 12;
-    push(u * len, -len * 0.3 * Math.sin(Math.PI * u) ** 0.85);
-  }
-  return pts;
+  return pts.join(' ');
 }
 
-const toPolygon = (pts: Pt[]) => pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+/** 뒤(상대) 하트 — 위·왼쪽으로 살짝 치우친다 */
+const BACK_SCALE = 1.5;
+const BACK_CX = 40;
+const BACK_CY = 44;
+/** 앞(나) 하트 — 아래·오른쪽, 뒤 하트보다 살짝 크다 */
+const FRONT_SCALE = 1.55;
+const FRONT_CX = 60;
+const FRONT_CY = 58;
 
-/** 잎이 붙는 위치 (반쪽 경로의 진행도 — "위 꼭지에서 얼마나 왔나") */
-const LEAF_AT = [0.16, 0.42, 0.7];
+const BACK_HEART = heartPoints(BACK_SCALE, 120);
+const FRONT_HEART = heartPoints(FRONT_SCALE, 120);
+const BACK_D = toPath(BACK_HEART, BACK_CX, BACK_CY, 1);
+const FRONT_D = toPath(FRONT_HEART, FRONT_CX, FRONT_CY, 1);
 
-/**
- * 한 반쪽의 기하 — 줄기 점들과 잎 세 장.
- *
- * <p><b>진짜 원인</b>: 줄기 곡선 자체는 완전히 대칭이지만({@code halfPoints(1)[i]}
- * 를 세로축으로 뒤집으면 {@code halfPoints(-1)[56-i]} 와 정확히 겹친다 — 이건
- * {@code i ↔ 56-i} 다), <b>{@link LEAF_AT}은 두 반쪽에서 같은 index 를 가리킨다</b>.
- * 오른쪽은 t 가 위→아래로 흐르고 왼쪽은 아래→위로 흐르므로, 같은 index 9 가
- * 오른쪽에서는 "위 꼭지 근처", 왼쪽에서는 "아래 끝 근처"를 가리켜 잎이 대각선으로
- * 몰렸다(실측: bbox 중심이 뷰박스 중앙에서 2.51 벗어남).
- *
- * <p><b>고침</b>: 왼쪽만 index 를 {@code (N-1-i)} 로 뒤집고, 접선을 재는 이웃점도
- * 반대 방향({@code i-3})에서 뽑는다 — "위 꼭지에서부터의 진행도"라는 뜻을 양쪽에서
- * 같게 맞춘다. 검증(면적·무게중심·bbox, 신발끈 공식): 세 잎 모두 좌우 오차 0.0000.
- */
-function halfGeometry(side: 1 | -1): { stem: Pt[]; leaves: Pt[][] } {
-  const stem = halfPoints(side);
-  const N = stem.length;
-  const leaves = LEAF_AT.map((f) => {
-    const iFromTop = Math.round(f * (N - 1));
-    const i = side > 0 ? iFromTop : N - 1 - iFromTop;
-    const p = stem[i];
-    const n = stem[side > 0 ? Math.min(i + 3, N - 1) : Math.max(i - 3, 0)];
-    const ang = Math.atan2(n.y - p.y, n.x - p.x) + side * Math.PI * 0.46;
-    return leafPoints(p.x, p.y, ang, H * 0.16);
-  });
-  return { stem, leaves };
-}
+/** 하트 위쪽 반짝임 세 개 — 위치·크기는 아이콘 마스터(doubly-logo.svg)와 맞춘다 */
+const SPARKLES: { cx: number; cy: number; s: number }[] = [
+  { cx: 48, cy: 18, s: 3.2 },
+  { cx: 56, cy: 14, s: 1.8 },
+  { cx: 62, cy: 20, s: 1.3 },
+];
 
-const GEOMETRY = { right: halfGeometry(1), left: halfGeometry(-1) };
+/** 밝은 배경(흰/크림)용 색 — 인앱 마크 기본값 */
+const ON_LIGHT = { back: '#8FCB98', front: '#1F5A25', sparkle: '#D9A441' };
+/** 어두운 배경(다크모드, 사진 위 스크림)용 색 — 밝을수록 잘 읽힌다 */
+const ON_DARK = { back: '#BFE3C4', front: '#5FBE73', sparkle: '#FFF3C4' };
 
-/**
- * 그림을 뷰박스 한가운데로 옮기는 안전망.
- *
- * <p>위 halfGeometry 수정으로 그림은 이미 완전 대칭이라(bbox 중심 오차 0.000,
- * verify-logo 스크립트로 확인) 이 보정은 사실상 항등(dx≈dy≈0)이다. 향후 잎 모양이나
- * 각도를 조정해 미세한 비대칭이 다시 생기더라도 자동으로 잡히도록 남겨 둔다.
- */
-const CENTERING = (() => {
-  const all: Pt[] = [];
-  for (const half of [GEOMETRY.right, GEOMETRY.left]) {
-    // 줄기는 선 굵기의 절반만큼 더 번진다
-    for (const p of half.stem) {
-      all.push({ x: p.x - STROKE / 2, y: p.y - STROKE / 2 });
-      all.push({ x: p.x + STROKE / 2, y: p.y + STROKE / 2 });
-    }
-    for (const leaf of half.leaves) all.push(...leaf);
-  }
-  const xs = all.map((p) => p.x);
-  const ys = all.map((p) => p.y);
-  const dx = V / 2 - (Math.min(...xs) + Math.max(...xs)) / 2;
-  const dy = V / 2 - (Math.min(...ys) + Math.max(...ys)) / 2;
-  return { dx, dy };
-})();
+/** 아이콘 배경 그라데이션(초록, 좌상단 밝음 → 우하단 짙음) + 아이콘 전용 하트 색 */
+const ICON_GRADIENT = { from: '#4E9E56', to: '#143D19' };
+const ICON_HEART = { back: '#D7F0D6', front: '#0F3D16', sparkle: '#FFF3C4' };
 
-/**
- * 어두운 배경 위에 얹을 때 쓰는 밝은 변형.
- *
- * <p>홈 히어로는 배경 사진 위 스크림이라 <b>테마와 무관하게 항상 어둡다</b>.
- * 라이트 팔레트의 짙은 골드·포레스트를 그대로 쓰면 묻히므로 다크 팔레트 값을 고정으로 쓴다.
- */
-const ON_DARK = { me: '#F1C999', partner: '#A7D2A9', together: '#C9DA97' };
-
-function Half({ side, color, leafColor }: { side: 1 | -1; color: string; leafColor: string }) {
-  const { stem, leaves } = side > 0 ? GEOMETRY.right : GEOMETRY.left;
+function Sparkles({ color }: { color: string }) {
   return (
     <>
-      {leaves.map((leaf, i) => (
-        <Polygon key={`${side}-${i}`} points={toPolygon(leaf)} fill={leafColor} />
+      {SPARKLES.map((sp, i) => (
+        <Polygon key={i} points={starPoints(sp.cx, sp.cy, sp.s)} fill={color} />
       ))}
-      <Path
-        d={toPath(stem)}
-        stroke={color}
-        strokeWidth={STROKE}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill="none"
-      />
     </>
   );
 }
 
 /**
- * 덩굴 하트 마크 (텍스트 없음) — 왼쪽 나 · 오른쪽 상대.
- *
- * @param onDark 어두운 배경(배경 사진 위 스크림 등)에 얹을 때 true. 밝은 변형을 쓴다
+ * 앱 아이콘과 같은 정사각 마크 — 초록 그라데이션 배경 위에 두 하트 + 반짝임.
+ * 실제 icon.png 등은 assets/doubly-logo.svg 를 래스터화해서 만들지만, 인앱에서
+ * (공유 카드 미리보기 등) 아이콘 그대로가 필요할 때 이 컴포넌트를 쓸 수 있다.
  */
-export function DoublyMark({ size = 40, onDark = false }: { size?: number; onDark?: boolean }) {
-  const me = onDark ? ON_DARK.me : colors.me;
-  const partner = onDark ? ON_DARK.partner : colors.partner;
-  const leaf = onDark ? ON_DARK.together : colors.together;
+export function DoublySquareMark({ size = 96, radius = 22 }: { size?: number; radius?: number }) {
   return (
     <Svg width={size} height={size} viewBox={`0 0 ${V} ${V}`}>
-      {/* halfGeometry 가 이제 좌우 완전 대칭이라 이 이동은 사실상 0 — CENTERING 주석 참고 */}
-      <G transform={`translate(${CENTERING.dx.toFixed(2)} ${CENTERING.dy.toFixed(2)})`}>
-        {/* 상대(뒤) → 나(앞) 순서로 겹쳐 '얽힌' 인상을 만든다 */}
-        <Half side={1} color={partner} leafColor={leaf} />
-        <Half side={-1} color={me} leafColor={leaf} />
-      </G>
+      <Defs>
+        <LinearGradient id="doublyBg" x1="0" y1="0" x2="1" y2="1">
+          <Stop offset="0" stopColor={ICON_GRADIENT.from} />
+          <Stop offset="1" stopColor={ICON_GRADIENT.to} />
+        </LinearGradient>
+      </Defs>
+      <Rect width={V} height={V} rx={radius} fill="url(#doublyBg)" />
+      <Path d={BACK_D} fill="none" stroke={ICON_HEART.back} strokeWidth={5} strokeLinejoin="round" strokeLinecap="round" />
+      <Path d={FRONT_D} fill="none" stroke={ICON_HEART.front} strokeWidth={5} strokeLinejoin="round" strokeLinecap="round" />
+      <Sparkles color={ICON_HEART.sparkle} />
+    </Svg>
+  );
+}
+
+/**
+ * 인앱 마크(텍스트 없음) — 겹친 두 하트 아웃라인 + 반짝임. 배경은 없다(호출부 배경 위에
+ * 얹힌다).
+ *
+ * @param onDark 어두운 배경(배경 사진 위 스크림 등)에 얹을 때 true. 밝을수록 잘 읽히는
+ *   색으로 바꾼다
+ */
+export function DoublyMark({ size = 40, onDark = false }: { size?: number; onDark?: boolean }) {
+  const palette = onDark ? ON_DARK : ON_LIGHT;
+  return (
+    <Svg width={size} height={size} viewBox={`0 0 ${V} ${V}`}>
+      <Path d={BACK_D} fill="none" stroke={palette.back} strokeWidth={5} strokeLinejoin="round" strokeLinecap="round" />
+      <Path d={FRONT_D} fill="none" stroke={palette.front} strokeWidth={5} strokeLinejoin="round" strokeLinecap="round" />
+      <Sparkles color={palette.sparkle} />
     </Svg>
   );
 }

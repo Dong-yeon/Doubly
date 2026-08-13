@@ -19,6 +19,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '../../../components/Icon';
 import { Avatar } from '../../../components/Avatar';
 import { DoublyMark } from '../../../components/DoublyLogo';
+import { HeartSproutIcon } from '../../../components/HeartSproutIcon';
 import { formatDateLabel } from '../../../utils/date';
 import { colors, fontSize, radius, spacing } from '../../../constants/theme';
 import { themedStyles } from '../../../theme/themedStyles';
@@ -147,7 +148,12 @@ function Column({
           (실측 17px 어긋남).
         */}
         <View style={styles.streakSlot}>
-          {person.streak > 0 ? <Text style={styles.streak}>🔥 {person.streak}일</Text> : null}
+          {person.streak > 0 ? (
+            <View style={styles.streakRow}>
+              <HeartSproutIcon size={14} />
+              <Text style={styles.streak}>{person.streak}일</Text>
+            </View>
+          ) : null}
         </View>
       </Pressable>
 
@@ -261,6 +267,7 @@ const styles = themedStyles((colors) => ({
   name: { color: colors.textPrimary, fontSize: fontSize.body, fontWeight: '800', marginTop: spacing.xs },
   // 높이를 고정해 좌우 칩의 시작 높이를 맞춘다 (streak 유무와 무관)
   streakSlot: { height: 18, justifyContent: 'center' },
+  streakRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   streak: { color: colors.textSecondary, fontSize: fontSize.caption, fontWeight: '700' },
 
   todayBox: { alignSelf: 'stretch', gap: 4, marginTop: spacing.sm },
