@@ -25,6 +25,7 @@ import { DateField } from '../../components/DateField';
 import { CoupleHero } from './components/CoupleHero';
 import { QuickActions } from './components/QuickActions';
 import { MemoryPeek } from './components/MemoryPeek';
+import { LockedCard } from '../../components/LockedCard';
 import { useAuthStore } from '../../store/authStore';
 import { useRelationStore } from '../../store/relationStore';
 import { workoutApi } from '../../api/workout';
@@ -150,7 +151,8 @@ export function HomeScreen({ navigation }: Props) {
     // 추억은 대부분의 날에 비어 있다 — 없으면 최근 기록이 그대로 남는다
     feedApi
       .memories()
-      .then((res) => setMemories(res.groups.length > 0 ? res : null))
+      // 잠긴 응답(locked)도 들고 있는다 — 빈 결과와 구분해서 잠금 카드를 그려야 한다
+      .then((res) => setMemories(res.locked || res.groups.length > 0 ? res : null))
       .catch(() => setMemories(null));
   }, [fetchAll]);
 
@@ -310,7 +312,15 @@ export function HomeScreen({ navigation }: Props) {
               공용 "최근 기록" 줄은 없앴다 — 좌우 열이 각자의 마지막 기록을 이미 보여준다.
             */}
             {memories ? (
-              <MemoryPeek memories={memories} onPress={() => navigation.navigate('Memories')} />
+              memories.locked ? (
+                <LockedCard
+                  title="작년 오늘"
+                  description="함께한 기록을 해마다 다시 꺼내볼 수 있어요"
+                  upgradeMessage="작년 오늘의 추억은 PRO에서 볼 수 있어요."
+                />
+              ) : (
+                <MemoryPeek memories={memories} onPress={() => navigation.navigate('Memories')} />
+              )
             ) : null}
 
             <QuickActions

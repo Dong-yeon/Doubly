@@ -99,3 +99,14 @@ export const isGoogleLoginConfigured = () => GOOGLE_AUTH.webClientId.length > 0;
  * ⚠️ app.json / package.json 의 version 을 올릴 때 여기도 함께 올려야 한다.
  */
 export const APP_VERSION = '1.0.0';
+
+/**
+ * 인앱결제가 붙었는가.
+ *
+ * <p>아직 `react-native-iap` 이 없어 <b>구매 흐름 자체가 존재하지 않는다.</b>
+ * 업그레이드 시트가 "PRO 시작하기" 버튼을 띄워도 누를 곳이 없으므로, 결제를 연결하기
+ * 전까지는 "준비 중" 안내만 보여준다 — 없는 화면으로 보내면 막다른 길이 된다.
+ *
+ * <p>결제를 붙일 때 이 값을 켜고 시트의 버튼에 구매 함수를 연결한다.
+ */
+export const PURCHASE_ENABLED = false;

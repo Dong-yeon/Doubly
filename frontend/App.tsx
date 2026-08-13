@@ -10,6 +10,7 @@ import { Toast } from './src/components/Toast';
 import { BusyOverlay } from './src/components/BusyOverlay';
 import { ConfirmDialog } from './src/components/ConfirmDialog';
 import { DatePickerSheet } from './src/components/DatePickerSheet';
+import { UpgradeSheet } from './src/components/UpgradeSheet';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { installGlobalErrorHandlers } from './src/utils/globalErrorHandler';
 import { initSentry } from './src/utils/sentry';
@@ -94,6 +95,11 @@ export default function App() {
           화면 쪽 Modal(일정 추가·대결 만들기 등) 안에서 열려도 가려지지 않도록 최상단에 둔다.
         */}
         <DatePickerSheet />
+        {/*
+          플랜 한도 안내 — api/client 가 402 를 가로채 planStore 에 담으면 여기서 뜬다.
+          어느 화면에서 걸렸든 한 곳에서만 그린다.
+        */}
+        <UpgradeSheet />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

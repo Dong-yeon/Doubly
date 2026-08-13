@@ -9,6 +9,7 @@ import { setAuthFailureHandler } from '../api/client';
 import { storage } from '../utils/storage';
 import { registerPushTokenIfGranted } from '../utils/push';
 import { useChatStore } from './chatStore';
+import { usePlanStore } from './planStore';
 import type { AuthTokens, Gender, User } from '../types';
 
 interface AuthState {
@@ -66,6 +67,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ user, isAuthenticated: true, isLoading: false });
       // 인증 복원 후 푸시 토큰 등록 (실패해도 무시)
       registerPushTokenIfGranted();
+      // 플랜·잔여 한도 로드 — 실패해도 앱은 그대로 동작한다(서버가 최종 판정을 한다)
+      void usePlanStore.getState().load();
     } catch {
       await clearTokens();
       set({ user: null, isAuthenticated: false, isLoading: false });
@@ -77,6 +80,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ user: tokens.user, isAuthenticated: true });
     // 로그인/회원가입 직후 푸시 토큰 등록 (실패해도 무시)
     registerPushTokenIfGranted();
+    // 로그인 직후에도 플랜을 읽는다 — 계정이 바뀌면 한도도 바뀐다
+    void usePlanStore.getState().load();
   },
 
   login: async (email, password) => {

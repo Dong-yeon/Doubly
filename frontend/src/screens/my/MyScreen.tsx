@@ -15,6 +15,7 @@ import { DateField } from '../../components/DateField';
 import { BadgeCard } from '../../components/BadgeCard';
 import { LevelCard } from '../../components/LevelCard';
 import { WeeklyRecapCard } from '../../components/WeeklyRecapCard';
+import { LockedCard } from '../../components/LockedCard';
 import { useAuthStore } from '../../store/authStore';
 import { relationApi } from '../../api/relation';
 import { selectEndedCouples, useRelationStore } from '../../store/relationStore';
@@ -439,7 +440,19 @@ export function MyScreen({ navigation }: Props) {
 
         {recap ? (
           <View style={styles.badgeWrap}>
-            <WeeklyRecapCard recap={recap} onShare={onShareRecap} sharing={sharing} />
+            {/*
+              잠기면 수치가 전부 0 으로 내려온다. 그대로 그리면
+              "지난주에 아무것도 안 했어요"로 보이므로 반드시 locked 를 먼저 본다.
+            */}
+            {recap.locked ? (
+              <LockedCard
+                title="지난주 결산"
+                description="둘이 함께한 한 주를 요약해서 볼 수 있어요"
+                upgradeMessage="주간 결산은 PRO에서 볼 수 있어요."
+              />
+            ) : (
+              <WeeklyRecapCard recap={recap} onShare={onShareRecap} sharing={sharing} />
+            )}
           </View>
         ) : null}
 
