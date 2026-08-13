@@ -10,6 +10,9 @@ public interface WorkoutRoutineRepository extends JpaRepository<WorkoutRoutine, 
 
     List<WorkoutRoutine> findByUserIdOrderByIdDesc(Long userId);
 
+    /** 내 루틴 개수 — 플랜 상한 판정 */
+    long countByUserId(Long userId);
+
     Optional<WorkoutRoutine> findByIdAndUserId(Long id, Long userId);
 
     /** ⑤ 검증된 분할 템플릿 목록 — 시스템 제공 루틴만. */

@@ -3,6 +3,7 @@ package com.fitto.trip.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fitto.common.ai.GeminiClient;
 import com.fitto.common.plan.Feature;
+import com.fitto.common.plan.PlanGuard;
 import com.fitto.common.event.CoupleEvent;
 import com.fitto.common.event.CoupleEventPublisher;
 import com.fitto.common.exception.BusinessException;
@@ -90,6 +91,7 @@ public class TripService {
     private final NotificationService notificationService;
     private final CoupleEventPublisher coupleEventPublisher;
     private final GeminiClient geminiClient;
+    private final PlanGuard planGuard;
 
     public TripService(TripRepository tripRepository,
                        TripItemRepository tripItemRepository,
@@ -99,7 +101,8 @@ public class TripService {
                        UserRepository userRepository,
                        NotificationService notificationService,
                        CoupleEventPublisher coupleEventPublisher,
-                       GeminiClient geminiClient) {
+                       GeminiClient geminiClient,
+                       PlanGuard planGuard) {
         this.tripRepository = tripRepository;
         this.tripItemRepository = tripItemRepository;
         this.placeRepository = placeRepository;
@@ -109,6 +112,7 @@ public class TripService {
         this.notificationService = notificationService;
         this.coupleEventPublisher = coupleEventPublisher;
         this.geminiClient = geminiClient;
+        this.planGuard = planGuard;
     }
 
     /** 여행 생성 (TRIP-01) — 상대에게 푸시 + TRIP 이벤트. */
@@ -116,6 +120,8 @@ public class TripService {
     public TripResponse save(Long userId, SaveTripRequest request) {
         validateDates(request.startDate(), request.endDate());
         Relation couple = activeCouple(userId);
+        planGuard.requireCapacity(userId, Feature.TRIP_ACTIVE,
+                tripRepository.countByCoupleIdAndEndDateGreaterThanEqual(couple.getId(), LocalDate.now()));
         Trip trip = Trip.builder()
                 .coupleId(couple.getId())
                 .title(request.title().trim())

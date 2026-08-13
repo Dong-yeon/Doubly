@@ -1,5 +1,7 @@
 package com.fitto.trip.service;
 
+import com.fitto.common.plan.Feature;
+import com.fitto.common.plan.PlanGuard;
 import com.fitto.common.event.CoupleEvent;
 import com.fitto.common.event.CoupleEventPublisher;
 import com.fitto.common.exception.BusinessException;
@@ -37,17 +39,20 @@ public class TripChecklistService {
     private final RelationRepository relationRepository;
     private final UserRepository userRepository;
     private final CoupleEventPublisher coupleEventPublisher;
+    private final PlanGuard planGuard;
 
     public TripChecklistService(TripRepository tripRepository,
                                 TripChecklistItemRepository checklistRepository,
                                 RelationRepository relationRepository,
                                 UserRepository userRepository,
-                                CoupleEventPublisher coupleEventPublisher) {
+                                CoupleEventPublisher coupleEventPublisher,
+                                PlanGuard planGuard) {
         this.tripRepository = tripRepository;
         this.checklistRepository = checklistRepository;
         this.relationRepository = relationRepository;
         this.userRepository = userRepository;
         this.coupleEventPublisher = coupleEventPublisher;
+        this.planGuard = planGuard;
     }
 
     /** 체크리스트 목록 + 진행 개수. */
@@ -60,6 +65,7 @@ public class TripChecklistService {
     /** 준비물 추가 — 맨 뒤에 붙인다. */
     @Transactional
     public ChecklistItemResponse add(Long userId, Long tripId, SaveChecklistItemRequest request) {
+        planGuard.require(userId, Feature.TRIP_CHECKLIST);
         Relation couple = activeCouple(userId);
         Trip trip = getCoupleTrip(couple, tripId);
 

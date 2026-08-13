@@ -1,5 +1,7 @@
 package com.fitto.feed.service;
 
+import com.fitto.common.plan.Feature;
+import com.fitto.common.plan.PlanGuard;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.feed.domain.FeedPost;
@@ -50,6 +52,7 @@ public class MemoriesService {
     private final PlaceVisitRepository placeVisitRepository;
     private final RelationRepository relationRepository;
     private final FeedItemMapper mapper;
+    private final PlanGuard planGuard;
 
     /**
      * {@code created_at} 이 어느 TZ 벽시계로 적혔는지 — {@link MemoryDates#storageStartOfDay} 참고.
@@ -61,11 +64,13 @@ public class MemoriesService {
                            PlaceVisitRepository placeVisitRepository,
                            RelationRepository relationRepository,
                            FeedItemMapper mapper,
+                           PlanGuard planGuard,
                            @Value("${fitto.storage-zone:}") String storageZone) {
         this.feedPostRepository = feedPostRepository;
         this.placeVisitRepository = placeVisitRepository;
         this.relationRepository = relationRepository;
         this.mapper = mapper;
+        this.planGuard = planGuard;
         this.storageZone = MemoryDates.storageZoneOf(storageZone);
     }
 
@@ -78,10 +83,16 @@ public class MemoriesService {
         Relation couple = activeCouple(userId);
         LocalDate today = on != null ? on : MemoryDates.todayInKst();
 
+        // 잠겨 있어도 200 을 준다 — 홈이 매일 부르는 조회라 402 를 던지면
+        // 앱을 열 때마다 업그레이드 시트가 뜬다.
+        if (!planGuard.allows(userId, Feature.MEMORIES)) {
+            return MemoriesResponse.locked(today);
+        }
+
         Integer earliestYear = earliestRecordYear(couple.getId());
         if (earliestYear == null || earliestYear >= today.getYear()) {
             // 기록이 없거나 전부 올해 것 — 추억이 될 만큼 오래된 게 없다
-            return new MemoriesResponse(today, 0, List.of());
+            return MemoriesResponse.empty(today);
         }
 
         Long partnerId = couple.partnerOf(userId);
@@ -113,7 +124,7 @@ public class MemoriesService {
             log.info("추억 리마인드 상한 — coupleId={} on={} 상한 {}건, {}년 이전은 조회하지 않음",
                     couple.getId(), today, MAX_ITEMS, year + 1);
         }
-        return new MemoriesResponse(today, total, groups);
+        return new MemoriesResponse(today, total, groups, false);
     }
 
     /** 한 연도의 아이템 — 윤년 보정이 걸리면 두 날짜를 함께 읽어 한 그룹으로 묶는다. */

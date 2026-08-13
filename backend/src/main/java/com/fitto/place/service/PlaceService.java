@@ -1,5 +1,7 @@
 package com.fitto.place.service;
 
+import com.fitto.common.plan.Feature;
+import com.fitto.common.plan.PlanGuard;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.notification.NotificationService;
@@ -42,25 +44,30 @@ public class PlaceService {
     private final UserRepository userRepository;
     private final MealRepository mealRepository;
     private final NotificationService notificationService;
+    private final PlanGuard planGuard;
 
     public PlaceService(PlaceRepository placeRepository,
                         PlaceVisitRepository placeVisitRepository,
                         RelationRepository relationRepository,
                         UserRepository userRepository,
                         MealRepository mealRepository,
-                        NotificationService notificationService) {
+                        NotificationService notificationService,
+                        PlanGuard planGuard) {
         this.placeRepository = placeRepository;
         this.placeVisitRepository = placeVisitRepository;
         this.relationRepository = relationRepository;
         this.userRepository = userRepository;
         this.mealRepository = mealRepository;
         this.notificationService = notificationService;
+        this.planGuard = planGuard;
     }
 
     /** 장소 등록 (PLACE-01) */
     @Transactional
     public PlaceResponse save(Long userId, SavePlaceRequest request) {
         Relation couple = activeCouple(userId);
+        planGuard.requireCapacity(userId, Feature.PLACE_PIN,
+                placeRepository.countByCoupleId(couple.getId()));
         Place place = Place.builder()
                 .coupleId(couple.getId())
                 .name(request.name().trim())

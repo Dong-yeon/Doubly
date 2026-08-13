@@ -1,5 +1,7 @@
 package com.fitto.relation.service;
 
+import com.fitto.common.plan.Feature;
+import com.fitto.common.plan.PlanGuard;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.relation.domain.MemberRole;
@@ -47,6 +49,7 @@ public class RelationService {
     private final RelationRecordPurger relationRecordPurger;
     private final RelationRecordRestorer relationRecordRestorer;
     private final CloudinaryImageDeleter imageDeleter;
+    private final PlanGuard planGuard;
 
     public RelationService(RelationRepository relationRepository,
                            RelationMemberRepository relationMemberRepository,
@@ -55,7 +58,8 @@ public class RelationService {
                            com.fitto.common.event.CoupleEventPublisher coupleEventPublisher,
                            RelationRecordPurger relationRecordPurger,
                            RelationRecordRestorer relationRecordRestorer,
-                           CloudinaryImageDeleter imageDeleter) {
+                           CloudinaryImageDeleter imageDeleter,
+                           PlanGuard planGuard) {
         this.relationRepository = relationRepository;
         this.relationMemberRepository = relationMemberRepository;
         this.userRepository = userRepository;
@@ -64,6 +68,7 @@ public class RelationService {
         this.relationRecordPurger = relationRecordPurger;
         this.relationRecordRestorer = relationRecordRestorer;
         this.imageDeleter = imageDeleter;
+        this.planGuard = planGuard;
     }
 
     /** 커플 초대코드 생성 — 6자리, 24시간 유효 (REL-01). */
@@ -181,6 +186,7 @@ public class RelationService {
     /** 커플 공유 배경 설정. */
     @Transactional
     public RelationResponse setCoupleBackground(Long userId, String url) {
+        planGuard.require(userId, Feature.CUSTOM_BACKGROUND);
         Relation couple = activeCouple(userId);
         couple.updateBackground(url);
         coupleEventPublisher.publish(couple.getId(), com.fitto.common.event.CoupleEvent.BACKGROUND);

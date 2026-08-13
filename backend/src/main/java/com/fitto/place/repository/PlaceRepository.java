@@ -9,6 +9,9 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
 
     List<Place> findByCoupleIdOrderByIdDesc(Long coupleId);
 
+    /** 커플 맛집 핀 개수 — 플랜 상한 판정 */
+    long countByCoupleId(Long coupleId);
+
     List<Place> findByTripIdOrderByIdDesc(Long tripId);
 
     long countByTripId(Long tripId);

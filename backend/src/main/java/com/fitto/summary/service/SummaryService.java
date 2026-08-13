@@ -1,5 +1,7 @@
 package com.fitto.summary.service;
 
+import com.fitto.common.plan.Feature;
+import com.fitto.common.plan.PlanGuard;
 import com.fitto.diet.repository.MealRepository;
 import com.fitto.relation.domain.Relation;
 import com.fitto.relation.domain.RelationStatus;
@@ -29,15 +31,18 @@ public class SummaryService {
     private final MealRepository mealRepository;
     private final RelationRepository relationRepository;
     private final UserRepository userRepository;
+    private final PlanGuard planGuard;
 
     public SummaryService(WorkoutRepository workoutRepository,
                           MealRepository mealRepository,
                           RelationRepository relationRepository,
-                          UserRepository userRepository) {
+                          UserRepository userRepository,
+                          PlanGuard planGuard) {
         this.workoutRepository = workoutRepository;
         this.mealRepository = mealRepository;
         this.relationRepository = relationRepository;
         this.userRepository = userRepository;
+        this.planGuard = planGuard;
     }
 
     /** 레벨 — 누적 기록일에서 파생 계산. */
@@ -51,6 +56,11 @@ public class SummaryService {
         LocalDate weekStart = LocalDate.now().with(DayOfWeek.MONDAY).minusWeeks(1);
         LocalDate weekEnd = weekStart.plusDays(6);
 
+        // MY 탭 진입 시마다 부르는 조회 — 402 대신 잠김 표시로 내린다.
+        if (!planGuard.allows(userId, Feature.WEEKLY_RECAP)) {
+            return WeeklyRecapResponse.locked(weekStart, weekEnd);
+        }
+
         Set<LocalDate> myWorkouts = new HashSet<>(workoutRepository.findWorkoutDates(userId, weekStart, weekEnd));
         Set<LocalDate> myMeals = new HashSet<>(mealRepository.findMealDates(userId, weekStart, weekEnd));
 
@@ -60,7 +70,7 @@ public class SummaryService {
 
         if (partnerId == null) {
             return new WeeklyRecapResponse(weekStart, weekEnd, myWorkouts.size(), myMeals.size(),
-                    false, null, 0, 0, 0, 0);
+                    false, null, 0, 0, 0, 0, false);
         }
 
         String partnerName = userRepository.findById(partnerId)
@@ -75,6 +85,6 @@ public class SummaryService {
 
         return new WeeklyRecapResponse(weekStart, weekEnd, myWorkouts.size(), myMeals.size(),
                 true, partnerName, partnerWorkouts.size(), partnerMeals.size(),
-                bothWorkouts.size(), bothMeals.size());
+                bothWorkouts.size(), bothMeals.size(), false);
     }
 }
