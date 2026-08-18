@@ -7,6 +7,7 @@ import com.fitto.body.dto.SaveBodyMetricRequest;
 import com.fitto.body.service.BodyMetricService;
 import com.fitto.diet.domain.ActivityLevel;
 import com.fitto.diet.domain.DietGoalType;
+import com.fitto.diet.domain.MacroPreset;
 import com.fitto.diet.dto.NutritionGoalSuggestionRequest;
 import com.fitto.diet.dto.NutritionGoalSuggestionResponse;
 import com.fitto.diet.service.NutritionService;
@@ -43,7 +44,7 @@ class NutritionGoalSuggestionTest {
         Long user = register("ngs1@fitto.com");
 
         NutritionGoalSuggestionResponse res = nutritionService.suggestGoal(user,
-                new NutritionGoalSuggestionRequest(ActivityLevel.MODERATE, DietGoalType.MAINTAIN, null));
+                new NutritionGoalSuggestionRequest(ActivityLevel.MODERATE, DietGoalType.MAINTAIN, null, null));
 
         assertThat(res.targetCalories()).isNull();
         assertThat(res.message()).isNotBlank();
@@ -56,7 +57,7 @@ class NutritionGoalSuggestionTest {
         bodyMetricService.save(user, new SaveBodyMetricRequest(LocalDate.now(), new BigDecimal("70.0"), null, null, null, null));
 
         NutritionGoalSuggestionResponse res = nutritionService.suggestGoal(user,
-                new NutritionGoalSuggestionRequest(ActivityLevel.MODERATE, DietGoalType.MAINTAIN, null));
+                new NutritionGoalSuggestionRequest(ActivityLevel.MODERATE, DietGoalType.MAINTAIN, null, null));
 
         assertThat(res.bmr()).isNotNull();
         assertThat(res.tdee()).isEqualTo((int) Math.round(res.bmr() * ActivityLevel.MODERATE.multiplier()));
@@ -70,9 +71,9 @@ class NutritionGoalSuggestionTest {
         bodyMetricService.save(user, new SaveBodyMetricRequest(LocalDate.now(), new BigDecimal("60.0"), null, null, null, null));
 
         NutritionGoalSuggestionResponse lose = nutritionService.suggestGoal(user,
-                new NutritionGoalSuggestionRequest(ActivityLevel.LIGHT, DietGoalType.LOSE, 0.5));
+                new NutritionGoalSuggestionRequest(ActivityLevel.LIGHT, DietGoalType.LOSE, 0.5, null));
         NutritionGoalSuggestionResponse gain = nutritionService.suggestGoal(user,
-                new NutritionGoalSuggestionRequest(ActivityLevel.LIGHT, DietGoalType.GAIN, 0.5));
+                new NutritionGoalSuggestionRequest(ActivityLevel.LIGHT, DietGoalType.GAIN, 0.5, null));
 
         assertThat(lose.targetCalories()).isLessThan(lose.tdee());
         assertThat(gain.targetCalories()).isGreaterThan(gain.tdee());
@@ -88,8 +89,30 @@ class NutritionGoalSuggestionTest {
 
         // 활동량 최소 + 감량 속도 최대로 밀어붙여도 절대 하한(1200) 아래로 내려가지 않는다
         NutritionGoalSuggestionResponse res = nutritionService.suggestGoal(user,
-                new NutritionGoalSuggestionRequest(ActivityLevel.SEDENTARY, DietGoalType.LOSE, 1.5));
+                new NutritionGoalSuggestionRequest(ActivityLevel.SEDENTARY, DietGoalType.LOSE, 1.5, null));
 
         assertThat(res.targetCalories()).isGreaterThanOrEqualTo(1200);
+    }
+
+    @Test
+    void 프리셋에_따라_매크로_배분이_달라진다() {
+        Long user = register("ngs5@fitto.com");
+        authService.updateMe(user, new UpdateProfileRequest(null, null, LocalDate.of(1995, 1, 1), Gender.MALE, 175));
+        bodyMetricService.save(user, new SaveBodyMetricRequest(LocalDate.now(), new BigDecimal("70.0"), null, null, null, null));
+
+        NutritionGoalSuggestionResponse balanced = nutritionService.suggestGoal(user,
+                new NutritionGoalSuggestionRequest(ActivityLevel.MODERATE, DietGoalType.MAINTAIN, null, MacroPreset.BALANCED));
+        NutritionGoalSuggestionResponse lowCarb = nutritionService.suggestGoal(user,
+                new NutritionGoalSuggestionRequest(ActivityLevel.MODERATE, DietGoalType.MAINTAIN, null, MacroPreset.LOW_CARB));
+        NutritionGoalSuggestionResponse highProtein = nutritionService.suggestGoal(user,
+                new NutritionGoalSuggestionRequest(ActivityLevel.MODERATE, DietGoalType.MAINTAIN, null, MacroPreset.HIGH_PROTEIN));
+        NutritionGoalSuggestionResponse keto = nutritionService.suggestGoal(user,
+                new NutritionGoalSuggestionRequest(ActivityLevel.MODERATE, DietGoalType.MAINTAIN, null, MacroPreset.KETO));
+
+        // 같은 목표 칼로리(유지) 기준 — 저탄고지/키토는 균형보다 탄수가 적고, 고단백은 단백질이 더 많다
+        assertThat(lowCarb.targetCarbs()).isLessThan(balanced.targetCarbs());
+        assertThat(keto.targetCarbs()).isLessThan(lowCarb.targetCarbs());
+        assertThat(highProtein.targetProtein()).isGreaterThan(balanced.targetProtein());
+        assertThat(keto.targetFat()).isGreaterThan(balanced.targetFat());
     }
 }

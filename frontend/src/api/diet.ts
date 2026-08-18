@@ -8,6 +8,7 @@ import type {
   DietCoach,
   DietGoalType,
   FavoriteFood,
+  MacroPreset,
   Meal,
   MealAnalysis,
   MealStats,
@@ -57,6 +58,7 @@ export interface NutritionGoalSuggestionPayload {
   activityLevel: ActivityLevel;
   goalType: DietGoalType;
   weeklyRateKg?: number;
+  macroPreset?: MacroPreset;
 }
 
 export const dietApi = {

@@ -483,6 +483,8 @@ export interface RecentFood {
 // 목표 칼로리 자동 계산(TDEE 마법사) — POST /meal/nutrition/goal/suggest
 export type ActivityLevel = 'SEDENTARY' | 'LIGHT' | 'MODERATE' | 'ACTIVE' | 'VERY_ACTIVE';
 export type DietGoalType = 'LOSE' | 'MAINTAIN' | 'GAIN';
+// 매크로 비율 프리셋 — 탄단지 배분 방식(균형/저탄고지/고단백/키토)
+export type MacroPreset = 'BALANCED' | 'LOW_CARB' | 'HIGH_PROTEIN' | 'KETO';
 
 export interface NutritionGoalSuggestion {
   bmr?: number | null;
@@ -502,6 +504,29 @@ export interface WaterSummary {
   coupleConnected: boolean;
   partnerName?: string | null;
   partnerConsumedMl?: number | null;
+}
+
+// 간헐적 단식 타이머
+export type FastingPlan = 'SIXTEEN_EIGHT' | 'EIGHTEEN_SIX' | 'TWENTY_FOUR' | 'OMAD' | 'CUSTOM';
+
+export interface FastingStatus {
+  active: boolean;
+  planType?: FastingPlan | null;
+  planLabel?: string | null;
+  targetHours?: number | null;
+  startedAt?: string | null;
+  elapsedMin?: number | null;
+  remainingMin?: number | null;
+  achieved: boolean;
+  progressPct?: number | null;
+}
+
+export interface PartnerFasting {
+  connected: boolean;
+  partnerName?: string | null;
+  active: boolean;
+  elapsedMin?: number | null;
+  targetHours?: number | null;
 }
 
 // 주간 식단 AI 코칭 (GET /meal/coach)

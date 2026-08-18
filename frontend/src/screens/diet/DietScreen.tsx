@@ -1,5 +1,5 @@
 /** 식단 메인 — 오늘 기록 + 히스토리 + 스트릭/커플 목표 + 캘린더/통계 진입 */
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   FlatList,
   Modal,
@@ -26,6 +26,7 @@ import { useDietStore } from '../../store/dietStore';
 import { useRelationStore } from '../../store/relationStore';
 import { dietApi } from '../../api/diet';
 import { waterApi } from '../../api/water';
+import { fastingApi } from '../../api/fasting';
 import { summaryApi } from '../../api/summary';
 import { streakApi } from '../../api/streak';
 import { getErrorMessage } from '../../utils/error';
@@ -39,8 +40,12 @@ import type {
   CoupleMealGoal,
   DietCoach,
   DietGoalType,
+  FastingPlan,
+  FastingStatus,
+  MacroPreset,
   Meal,
   NutritionSummary,
+  PartnerFasting,
   Streak,
   WaterSummary,
   WeeklyLetter,
@@ -65,6 +70,14 @@ function NutritionBar({ label, consumed, target, unit }: { label: string; consum
       </Text>
     </View>
   );
+}
+
+/** 분 → "H시간 M분" (음수면 부호 없이, 호출부에서 "초과"를 붙인다) */
+function formatHM(min: number): string {
+  const abs = Math.abs(Math.round(min));
+  const h = Math.floor(abs / 60);
+  const m = abs % 60;
+  return h > 0 ? `${h}시간 ${m}분` : `${m}분`;
 }
 
 /** 주간 식단 코칭 결과 렌더 */
@@ -118,6 +131,7 @@ export function DietScreen({ navigation }: Props) {
   const [wizActivity, setWizActivity] = useState<ActivityLevel>('MODERATE');
   const [wizGoalType, setWizGoalType] = useState<DietGoalType>('MAINTAIN');
   const [wizRate, setWizRate] = useState(0.5);
+  const [wizPreset, setWizPreset] = useState<MacroPreset>('BALANCED');
   const [calculating, setCalculating] = useState(false);
 
   // 물 섭취 트래커
@@ -126,13 +140,38 @@ export function DietScreen({ navigation }: Props) {
     waterApi.today().then(setWater).catch(() => setWater(null));
   }, []);
 
+  // 간헐적 단식 타이머
+  const [fasting, setFasting] = useState<FastingStatus | null>(null);
+  const [partnerFasting, setPartnerFasting] = useState<PartnerFasting | null>(null);
+  const [fastingModal, setFastingModal] = useState(false);
+  const [fastingBusy, setFastingBusy] = useState(false);
+  const [customHours, setCustomHours] = useState('16');
+  const refreshFasting = useCallback(() => {
+    fastingApi.active().then(setFasting).catch(() => setFasting(null));
+    fastingApi.partner().then(setPartnerFasting).catch(() => setPartnerFasting(null));
+  }, []);
+
+  // 진행 중일 때만 1분마다 화면을 다시 그려 경과 시간을 갱신한다(재조회 없이 클라이언트에서 계산)
+  const [, forceTick] = useState(0);
+  useEffect(() => {
+    if (!fasting?.active) return;
+    const id = setInterval(() => forceTick((t) => t + 1), 60000);
+    return () => clearInterval(id);
+  }, [fasting?.active]);
+
+  const liveElapsedMin =
+    fasting?.active && fasting.startedAt
+      ? Math.max(0, Math.floor((Date.now() - new Date(fasting.startedAt).getTime()) / 60000))
+      : (fasting?.elapsedMin ?? 0);
+
   const refreshExtras = useCallback(() => {
     streakApi.mealMe().then(setMyStreak).catch(() => setMyStreak(null));
     streakApi.mealCouple().then(setCoupleStreak).catch(() => setCoupleStreak(null));
     dietApi.coupleGoal().then(setGoal).catch(() => setGoal(null));
     dietApi.nutrition().then(setNutrition).catch(() => setNutrition(null));
     refreshWater();
-  }, [refreshWater]);
+    refreshFasting();
+  }, [refreshWater, refreshFasting]);
 
   // 모달을 연 시점의 목표 스냅샷 — 백드롭으로 닫을 때 "달라진 게 있는지"를 판단한다
   const nutInitialRef = useRef('');
@@ -184,6 +223,7 @@ export function DietScreen({ navigation }: Props) {
         activityLevel: wizActivity,
         goalType: wizGoalType,
         weeklyRateKg: wizGoalType === 'MAINTAIN' ? undefined : wizRate,
+        macroPreset: wizPreset,
       });
       if (res.targetCalories == null) {
         toast.error(res.message || '계산에 필요한 정보가 부족해요.');
@@ -212,6 +252,41 @@ export function DietScreen({ navigation }: Props) {
     } catch (e) {
       toast.error(getErrorMessage(e, '물 섭취 기록에 실패했어요.'));
     }
+  };
+
+  const onStartFasting = async (planType: FastingPlan) => {
+    setFastingBusy(true);
+    try {
+      const hours = planType === 'CUSTOM' ? Number(customHours) : undefined;
+      const res = await fastingApi.start(planType, hours);
+      setFasting(res);
+      haptics.success();
+      toast.success(`${res.planLabel} 단식을 시작했어요 ⏱️`);
+      setFastingModal(false);
+    } catch (e) {
+      toast.error(getErrorMessage(e, '단식 시작에 실패했어요.'));
+    } finally {
+      setFastingBusy(false);
+    }
+  };
+
+  const onEndFasting = () => {
+    Alert.alert('단식 종료', '지금 단식을 종료할까요?', [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '종료',
+        onPress: async () => {
+          try {
+            const res = await fastingApi.end();
+            setFasting({ ...res, active: false });
+            haptics.success();
+            toast.success(res.achieved ? '목표 시간을 채웠어요! 🎉' : '단식을 종료했어요.');
+          } catch (e) {
+            toast.error(getErrorMessage(e, '단식 종료에 실패했어요.'));
+          }
+        },
+      },
+    ]);
   };
 
   useFocusEffect(
@@ -414,6 +489,53 @@ export function DietScreen({ navigation }: Props) {
               </View>
             ) : null}
 
+            {/* 간헐적 단식 타이머 — 세션이 서버에 살아있어 커플 상대방 진행 상태도 함께 보여준다 */}
+            <View style={styles.fastingCard}>
+              {fasting?.active ? (
+                <>
+                  <View style={styles.waterHeader}>
+                    <Text style={styles.waterTitle}>⏱️ {fasting.planLabel} 단식 중</Text>
+                    <Text style={styles.waterTarget}>목표 {fasting.targetHours}시간</Text>
+                  </View>
+                  <View style={styles.nutTrack}>
+                    <View
+                      style={[
+                        styles.nutFill,
+                        fasting.achieved && styles.nutFillOver,
+                        { width: `${Math.min(100, fasting.progressPct ?? 0)}%` },
+                      ]}
+                    />
+                  </View>
+                  <Text style={styles.fastingElapsed}>
+                    {formatHM(liveElapsedMin)} 경과
+                    {fasting.achieved ? ' · 목표 달성! 🎉' : ` · ${formatHM((fasting.targetHours ?? 0) * 60 - liveElapsedMin)} 남음`}
+                  </Text>
+                  {partnerFasting?.connected && partnerFasting.active ? (
+                    <Text style={styles.waterPartner}>
+                      상대 {partnerFasting.partnerName} · {formatHM(partnerFasting.elapsedMin ?? 0)} 경과
+                    </Text>
+                  ) : null}
+                  <TouchableOpacity style={styles.waterUndoBtn} onPress={onEndFasting}>
+                    <Text style={styles.waterUndoText}>단식 종료</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <View style={styles.waterHeader}>
+                    <Text style={styles.waterTitle}>⏱️ 간헐적 단식</Text>
+                  </View>
+                  {partnerFasting?.connected && partnerFasting.active ? (
+                    <Text style={styles.waterPartner}>
+                      상대 {partnerFasting.partnerName}님은 지금 단식 중 · {formatHM(partnerFasting.elapsedMin ?? 0)} 경과
+                    </Text>
+                  ) : null}
+                  <TouchableOpacity style={styles.waterBtn} onPress={() => setFastingModal(true)}>
+                    <Text style={styles.waterBtnText}>단식 시작하기</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+
             {/* 식단 스트릭 */}
             <View style={styles.streakRow}>
               <Text style={styles.streakText}>연속 {myStreak?.currentCount ?? 0}일</Text>
@@ -606,6 +728,28 @@ export function DietScreen({ navigation }: Props) {
               ))}
             </View>
 
+            <Text style={styles.wizardLabel}>탄단지 비율</Text>
+            <View style={styles.wizardChipRow}>
+              {(
+                [
+                  ['BALANCED', '균형'],
+                  ['LOW_CARB', '저탄고지'],
+                  ['HIGH_PROTEIN', '고단백'],
+                  ['KETO', '키토'],
+                ] as [MacroPreset, string][]
+              ).map(([value, label]) => (
+                <TouchableOpacity
+                  key={value}
+                  style={[styles.wizardChip, wizPreset === value && styles.wizardChipActive]}
+                  onPress={() => setWizPreset(value)}
+                >
+                  <Text style={[styles.wizardChipText, wizPreset === value && styles.wizardChipTextActive]}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
             {wizGoalType !== 'MAINTAIN' ? (
               <>
                 <Text style={styles.wizardLabel}>주당 {wizGoalType === 'LOSE' ? '감량' : '증량'} 속도</Text>
@@ -626,6 +770,52 @@ export function DietScreen({ navigation }: Props) {
             ) : null}
 
             <Button title="계산해서 채우기" onPress={onCalculateGoal} loading={calculating} style={styles.nutSaveBtn} />
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* 간헐적 단식 시작 — 방식 선택. CUSTOM 만 목표 시간을 직접 입력한다 */}
+      <Modal visible={fastingModal} transparent animationType="fade" onRequestClose={() => setFastingModal(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setFastingModal(false)}>
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            <Text style={styles.modalTitle}>간헐적 단식 시작</Text>
+            <Text style={styles.modalDesc}>방식을 고르면 바로 시작돼요.</Text>
+            <View style={styles.wizardChipRow}>
+              {(
+                [
+                  ['SIXTEEN_EIGHT', '16:8'],
+                  ['EIGHTEEN_SIX', '18:6'],
+                  ['TWENTY_FOUR', '20:4'],
+                  ['OMAD', 'OMAD'],
+                ] as [FastingPlan, string][]
+              ).map(([value, label]) => (
+                <TouchableOpacity
+                  key={value}
+                  style={styles.wizardChip}
+                  disabled={fastingBusy}
+                  onPress={() => onStartFasting(value)}
+                >
+                  <Text style={styles.wizardChipText}>{label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Text style={styles.wizardLabel}>커스텀 시간</Text>
+            <View style={styles.customFastingRow}>
+              <View style={styles.customFastingInput}>
+                <TextField
+                  label="목표 시간"
+                  value={customHours}
+                  onChangeText={(t) => setCustomHours(t.replace(/[^0-9]/g, ''))}
+                  keyboardType="number-pad"
+                />
+              </View>
+              <Button
+                title="시작"
+                onPress={() => onStartFasting('CUSTOM')}
+                loading={fastingBusy}
+                style={styles.customFastingBtn}
+              />
+            </View>
           </Pressable>
         </Pressable>
       </Modal>
@@ -722,6 +912,20 @@ const styles = themedStyles((colors) => ({
     justifyContent: 'center',
   },
   waterUndoText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary },
+  // 간헐적 단식 타이머 — waterCard 와 같은 톤이라 waterHeader/waterTitle 등 스타일을 그대로 공유한다
+  fastingCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  fastingElapsed: { fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '700' },
+  customFastingRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-end' },
+  customFastingInput: { flex: 1 },
+  customFastingBtn: { marginBottom: 2 },
   aiRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
   aiBtn: { flex: 1 },
   aiHeadline: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary, lineHeight: 22 },

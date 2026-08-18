@@ -3,6 +3,7 @@ package com.fitto.diet.service;
 import com.fitto.body.domain.BodyMetric;
 import com.fitto.body.repository.BodyMetricRepository;
 import com.fitto.diet.domain.DietGoalType;
+import com.fitto.diet.domain.MacroPreset;
 import com.fitto.diet.domain.Meal;
 import com.fitto.diet.domain.NutritionGoal;
 import com.fitto.diet.dto.EnergyBalance;
@@ -125,9 +126,11 @@ public class NutritionService {
         // 기초대사량 아래 · 절대 하한(1200kcal) 아래로는 내려가지 않는다 — 극단적 저칼로리 방지
         targetCalories = Math.max(targetCalories, Math.max(MIN_TARGET_CALORIES, bmr));
 
-        // 매크로 — 단백질은 체중 기준(운동 병행 전제 1.8g/kg), 지방은 목표 칼로리의 25%, 탄수는 나머지
-        double proteinG = weightKg.doubleValue() * 1.8;
-        double fatG = targetCalories * 0.25 / 9;
+        // 매크로 — 프리셋(균형/저탄고지/고단백/키토)에 따라 단백질(체중 기준 g/kg)·지방(칼로리 비율)을
+        // 정하고 탄수화물이 나머지를 채운다. KETO 는 별도 계산식 없이 지방 비율만 높여 자연히 저탄수가 된다.
+        MacroPreset preset = req.macroPreset() != null ? req.macroPreset() : MacroPreset.BALANCED;
+        double proteinG = weightKg.doubleValue() * preset.proteinPerKg();
+        double fatG = targetCalories * preset.fatRatio() / 9;
         double carbsG = Math.max(0, (targetCalories - proteinG * 4 - fatG * 9) / 4);
 
         return new NutritionGoalSuggestionResponse(bmr, tdee, targetCalories,
