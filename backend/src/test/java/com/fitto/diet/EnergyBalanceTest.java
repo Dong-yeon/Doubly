@@ -82,7 +82,7 @@ class EnergyBalanceTest {
         assertThat(before.exerciseCalories()).isGreaterThan(0);
         assertThat(before.energyBalance()).isEqualTo(before.bmr() + before.exerciseCalories());
 
-        mealService.save(user, new SaveMealRequest(LocalDate.now(), MealType.LUNCH, "닭가슴살", null, 500, null, null, null, null, null, null));
+        mealService.save(user, new SaveMealRequest(LocalDate.now(), MealType.LUNCH, "닭가슴살", null, 500, null, null, null, null, null, null, null));
         NutritionSummaryResponse after = nutritionService.today(user);
         assertThat(after.energyBalance()).isEqualTo(before.energyBalance() - 500);
     }

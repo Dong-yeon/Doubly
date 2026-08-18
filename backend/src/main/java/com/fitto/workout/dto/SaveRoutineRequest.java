@@ -6,7 +6,9 @@ import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
+import java.time.DayOfWeek;
 import java.util.List;
+import java.util.Set;
 
 /** 운동 루틴 저장 — 제목 + 운동 목록. AI 추천을 그대로 담아 저장할 수도 있다. */
 public record SaveRoutineRequest(
@@ -15,8 +17,22 @@ public record SaveRoutineRequest(
         String title,
         @NotEmpty(message = "운동을 하나 이상 담아주세요.")
         @Valid
-        List<Exercise> exercises
+        List<Exercise> exercises,
+        /**
+         * 이 루틴을 하는 요일 — 짐워크 스타일 "Day1은 월/목" 배정. 비우면 특정 요일에
+         * 매이지 않는 자유 루틴(지금까지의 동작)이다.
+         */
+        Set<DayOfWeek> scheduledDays
 ) {
+    /** 요일 배정 없이 넘기던 이전 호출부와의 호환용 */
+    public SaveRoutineRequest(String title, List<Exercise> exercises) {
+        this(title, exercises, null);
+    }
+
+    public Set<DayOfWeek> scheduledDaysOrEmpty() {
+        return scheduledDays != null ? scheduledDays : Set.of();
+    }
+
     public record Exercise(
             @NotBlank(message = "운동 이름은 필수입니다.")
             @Size(max = 100)
@@ -34,12 +50,42 @@ public record SaveRoutineRequest(
             Integer restSeconds,
             /** 사전 지정 대체 종목 — 카탈로그 id 목록(최대 3개), 항상 카탈로그에서만 고를 수 있다 */
             @Size(max = 3, message = "대체 종목은 최대 3개까지 지정할 수 있어요.")
-            List<Long> alternativeExerciseCatalogIds
+            List<Long> alternativeExerciseCatalogIds,
+            /**
+             * 세트별 목표 — 램프업/피라미드/드롭세트/탑세트+백오프처럼 세트마다 다른 횟수·무게를
+             * 계획할 때 쓴다. 담으면 위 targetSets/reps/weightKg 는 서버가 세트에서 다시 계산해
+             * 덮어쓴다(요청에 같이 보내도 무시됨). 생략하면 지금처럼 종목 단위 목표만 쓴다.
+             */
+            @Valid
+            @Size(max = 30, message = "한 종목에 담을 수 있는 세트는 30개까지예요.")
+            List<SetRequest> sets
     ) {
-        /** restSeconds/대체 종목 없이 넘기던 이전 호출부와의 호환용 */
+        /** restSeconds/대체 종목/세트별 목표 없이 넘기던 이전 호출부와의 호환용 */
         public Exercise(String exerciseName, String category, Integer targetSets, Integer reps,
                         BigDecimal weightKg, Long exerciseCatalogId, String muscleGroup, String equipment) {
-            this(exerciseName, category, targetSets, reps, weightKg, exerciseCatalogId, muscleGroup, equipment, null, null);
+            this(exerciseName, category, targetSets, reps, weightKg, exerciseCatalogId, muscleGroup, equipment,
+                    null, null, null);
         }
+
+        /** 세트별 목표 없이 넘기던 호출부와의 호환용 (restSeconds/대체 종목까지) */
+        public Exercise(String exerciseName, String category, Integer targetSets, Integer reps,
+                        BigDecimal weightKg, Long exerciseCatalogId, String muscleGroup, String equipment,
+                        Integer restSeconds, List<Long> alternativeExerciseCatalogIds) {
+            this(exerciseName, category, targetSets, reps, weightKg, exerciseCatalogId, muscleGroup, equipment,
+                    restSeconds, alternativeExerciseCatalogIds, null);
+        }
+
+        public List<SetRequest> setsOrEmpty() {
+            return sets != null ? sets : List.of();
+        }
+    }
+
+    /** 종목에 담긴 세트 한 줄 */
+    public record SetRequest(
+            Integer reps,
+            BigDecimal weightKg,
+            /** 세트 성격 — WARMUP/NORMAL/TOP/BACKOFF/DROP 등. UI 배지 표시용, 계산에는 안 쓴다 */
+            @Size(max = 10) String setType
+    ) {
     }
 }

@@ -243,6 +243,19 @@ export interface PartnerToday {
   completed: boolean;
 }
 
+// 커플 음성 응원 — 애인 목소리로 녹음한 짧은 응원 문구. 운동 중 정해진 순간에 재생된다
+export type VoicePhrase = 'REST_END' | 'PR' | 'WORKOUT_COMPLETE';
+export interface VoiceClip {
+  phrase: VoicePhrase;
+  phraseLabel: string;
+  audioUrl: string;
+}
+// 상대방이 녹음해둔 클립 — 운동 세션 시작 시 한 번 받아 재생에 쓴다
+export interface PartnerVoiceClips {
+  connected: boolean;
+  clips: VoiceClip[];
+}
+
 // 운동 통계 (WORKOUT-07)
 export interface WorkoutStats {
   weeklyDays: number;
@@ -324,9 +337,19 @@ export interface RoutineExerciseAlternative {
   muscleGroup: string;
   equipment?: string | null;
 }
+// 종목에 담긴 세트 한 줄 — 램프업/피라미드/드롭세트/탑세트+백오프처럼 세트마다 다른
+// 횟수·무게를 계획할 때 쓴다. 비어 있으면 targetSets/reps/weightKg 로 균등 세트를 구성한다
+export interface RoutineExerciseSet {
+  setNo: number;
+  reps?: number | null;
+  weightKg?: number | null;
+  // 세트 성격 — WARMUP/NORMAL/TOP/BACKOFF/DROP. UI 배지 표시용, 계산에는 안 쓴다
+  setType?: string | null;
+}
 export interface RoutineExercise {
   exerciseName: string;
   category?: string | null;
+  // targetSets/reps/weightKg 는 요약값 — sets 가 있으면 서버가 거기서 다시 계산해 채운다
   targetSets?: number | null;
   reps?: number | null;
   weightKg?: number | null;
@@ -336,13 +359,19 @@ export interface RoutineExercise {
   // 이 종목만의 휴식 시간(초) — 없으면 세션 전역 기본값 사용(③)
   restSeconds?: number | null;
   alternatives?: RoutineExerciseAlternative[];
+  sets?: RoutineExerciseSet[];
 }
+// 루틴 요일 배정(짐워크 스타일 "Day1은 월/목") — java.time.DayOfWeek 이름과 동일한 문자열
+export type WeekDay = 'MONDAY' | 'TUESDAY' | 'WEDNESDAY' | 'THURSDAY' | 'FRIDAY' | 'SATURDAY' | 'SUNDAY';
+
 export interface WorkoutRoutine {
   id: number;
   title: string;
   // 검증된 분할 템플릿(⑤)이면 true — 시스템 제공, 복사해서만 쓸 수 있음
   systemTemplate: boolean;
   exercises: RoutineExercise[];
+  // 이 루틴을 하는 요일 — 월→일 순 정렬. 비어 있으면 특정 요일에 매이지 않는 자유 루틴
+  scheduledDays: WeekDay[];
   createdAt: string;
 }
 
@@ -404,6 +433,17 @@ export interface MealGoalHighlight {
   target: number;
 }
 
+/** 끼니를 이루는 음식 하나(반찬 단위) — 항목별로 칼로리·매크로를 따로 들고 수정한다 */
+export interface MealItem {
+  id: number;
+  name: string;
+  portion?: string | null;
+  calories?: number | null;
+  carbs?: number | null;
+  protein?: number | null;
+  fat?: number | null;
+}
+
 export interface Meal {
   id: number;
   mealDate: string;
@@ -411,10 +451,13 @@ export interface Meal {
   mealTypeLabel: string;
   memo?: string | null;
   photoUrl?: string | null;
+  /** 항목 합계 — 항목이 있으면 서버가 items 를 더해 채운다 */
   calories?: number | null;
   carbs?: number | null;
   protein?: number | null;
   fat?: number | null;
+  /** 항목 없이 합계만 기록한 건(레거시 포함)은 빈 배열 — 그때는 memo 로 보여준다 */
+  items?: MealItem[];
   goals?: MealGoalHighlight[];
   createdAt: string;
 }

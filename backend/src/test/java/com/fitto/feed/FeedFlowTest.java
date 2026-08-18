@@ -4,6 +4,7 @@ import com.fitto.auth.dto.RegisterRequest;
 import com.fitto.auth.service.AuthService;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.diet.domain.MealType;
+import com.fitto.diet.dto.MealItemRequest;
 import com.fitto.diet.dto.SaveMealRequest;
 import com.fitto.diet.service.MealService;
 import com.fitto.feed.dto.CreatePostRequest;
@@ -79,13 +80,41 @@ class FeedFlowTest {
         feedService.createPost(c[0], new CreatePostRequest("한강 러닝 최고 🌇", null));
         workoutService.save(c[1], new SaveWorkoutRequest(LocalDate.now(), null, 30, null,
                 List.of(new WorkoutSetRequest("러닝", "유산소", 1, null, null, 1))));
-        mealService.save(c[0], new SaveMealRequest(LocalDate.now(), MealType.DINNER, "회식", null, 800, null, null, null, null, null, null));
+        mealService.save(c[0], new SaveMealRequest(LocalDate.now(), MealType.DINNER, "회식", null, 800, null, null, null, null, null, null, null));
 
         FeedTimelineResponse timeline = feedService.timeline(c[0], null, 20);
         List<FeedItemType> types = timeline.items().stream().map(FeedItemResponse::type).toList();
         assertThat(types).contains(FeedItemType.POST, FeedItemType.WORKOUT, FeedItemType.MEAL);
         // 상대(파트너)의 기록도 mine=false 로 포함된다
         assertThat(timeline.items()).anyMatch(i -> i.type() == FeedItemType.WORKOUT && !i.mine());
+    }
+
+    @Test
+    void 식단_카드는_음식_항목을_요약해_보여준다() {
+        long[] c = couple("fm1@fitto.com", "fm2@fitto.com");
+        mealService.save(c[0], new SaveMealRequest(
+                LocalDate.now(), MealType.DINNER, null, null, null, null, null, null, null, null, null, List.of(
+                        new MealItemRequest("삼겹살", "1인분", 500, 0, 30, 40),
+                        new MealItemRequest("공기밥", "1공기", 300, 90, 6, 1),
+                        new MealItemRequest("김치", "조금", 20, 4, 1, 0))));
+
+        FeedItemResponse meal = feedService.timeline(c[0], null, 20).items().stream()
+                .filter(i -> i.type() == FeedItemType.MEAL).findFirst().orElseThrow();
+
+        // 운동 카드("러닝 외 3개 · 40분")와 같은 요약 형태
+        assertThat(meal.content()).isEqualTo("삼겹살 외 2개 · 820kcal");
+    }
+
+    @Test
+    void 항목이_없는_식단_카드는_메모로_보여준다() {
+        long[] c = couple("fm3@fitto.com", "fm4@fitto.com");
+        mealService.save(c[0], new SaveMealRequest(
+                LocalDate.now(), MealType.LUNCH, "회식", null, 800, null, null, null, null, null, null, null));
+
+        FeedItemResponse meal = feedService.timeline(c[0], null, 20).items().stream()
+                .filter(i -> i.type() == FeedItemType.MEAL).findFirst().orElseThrow();
+
+        assertThat(meal.content()).isEqualTo("회식 · 800kcal");
     }
 
     @Test

@@ -11,11 +11,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.time.Instant;
-import java.util.HexFormat;
-
 /**
  * 이미지 업로드 서명 발급 — Cloudinary signed upload.
  * unsigned preset 은 클라이언트에 노출되어 악용 시 스토리지가 오염될 수 있어,
@@ -27,6 +22,9 @@ import java.util.HexFormat;
  *
  * <p>사진은 AI 와 달리 <b>진짜로 원가가 나가는</b> 항목이다 — Cloudinary 무료 티어(≈25GB)는
  * 유예가 아니라 절벽이라, 무료 체험 기간에도 상한이 필요하다.
+ *
+ * <p>서명 생성 자체는 {@link CloudinarySigner} 로 뺐다 — 음성 클립(VoiceClipController)도
+ * 같은 계정·같은 규칙을 쓰지만 한도 정책이 다르다(문구당 1개, 재녹음은 교체).
  */
 @RestController
 @RequestMapping("/api/v1/uploads")
@@ -47,22 +45,6 @@ public class UploadController {
             throw new BusinessException(ErrorCode.UPLOAD_NOT_CONFIGURED);
         }
         planGuard.consume(user.id(), Feature.PHOTO_UPLOAD);
-
-        long timestamp = Instant.now().getEpochSecond();
-        // Cloudinary 서명 규칙: 파라미터를 키 알파벳순으로 '&' 연결 후 api_secret 을 붙여 SHA-1
-        String toSign = "folder=" + properties.getFolder() + "&timestamp=" + timestamp
-                + properties.getApiSecret();
-        return ApiResponse.success(new UploadSignatureResponse(
-                properties.getCloudName(), properties.getApiKey(), timestamp,
-                properties.getFolder(), sha1Hex(toSign)));
-    }
-
-    private String sha1Hex(String value) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-1");
-            return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
-        } catch (Exception e) {
-            throw new BusinessException(ErrorCode.INTERNAL_ERROR);
-        }
+        return ApiResponse.success(CloudinarySigner.sign(properties));
     }
 }

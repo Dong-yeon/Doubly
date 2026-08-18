@@ -1,6 +1,6 @@
 /** 네비게이션 파라미터 타입 — 설계서 2. 화면 설계 */
 import type { NavigatorScreenParams } from '@react-navigation/native';
-import type { BarcodeLookup, Trip } from '../types';
+import type { BarcodeLookup, Meal, Trip, WeekDay } from '../types';
 
 // 2.1 온보딩 플로우 (인증 전)
 export type OnboardingStackParamList = {
@@ -58,6 +58,13 @@ export interface SessionExerciseAlternativeParam {
   equipment?: string;
 }
 
+// 루틴에 세트별 목표가 있을 때 세션에 넘기는 세트 한 줄 — 없으면 targetSets 만큼 균등 분배
+export interface SessionExerciseSetParam {
+  reps?: number;
+  weightKg?: number;
+  setType?: string;
+}
+
 // 운동 세션(짐 보조)에 넘기는 운동 항목 — 루틴 실행 시 사용
 export interface SessionExerciseParam {
   name: string;
@@ -73,6 +80,28 @@ export interface SessionExerciseParam {
   restSeconds?: number;
   // 사전 지정 대체 종목 — 세션의 대체 종목 모달에서 '추천'으로 먼저 보여줌(④)
   alternatives?: SessionExerciseAlternativeParam[];
+  // 세트별 목표 — 있으면 세션 세트가 이 값으로 채워지고, 없으면 targetSets 만큼 균등 분배
+  sets?: SessionExerciseSetParam[];
+}
+
+/*
+ * AI 추천(WorkoutRecommendScreen) → 루틴 만들기 폼에 미리 채워 넣는 초안.
+ * 예전엔 "내 루틴으로 저장" 버튼이 폼을 거치지 않고 바로 저장해, 카탈로그 연결도
+ * 세트별 목표도 요일 배정도 없는 밋밋한 루틴이 만들어졌다(짐워크와 달리 검토·수정 기회가
+ * 없었다). 이제는 폼으로 보내 사용자가 검토·수정한 뒤 명시적으로 저장한다.
+ */
+export interface RoutineFormDraftExercise {
+  name: string;
+  category?: string;
+  targetSets?: number;
+  reps?: number;
+}
+export interface RoutineFormDraft {
+  title?: string;
+  exercises?: RoutineFormDraftExercise[];
+  // AI 하루치 계획의 실제 날짜(dayOffset)에 해당하는 요일을 미리 체크해둔다 — 매주 이
+  // 요일에 반복하고 싶을 때 손댈 것 없이 바로 "루틴 저장"만 누르면 되게
+  scheduledDays?: WeekDay[];
 }
 
 // 운동 탭 내부 스택 — 운동 + 식단(세그먼트로 통합)
@@ -90,7 +119,10 @@ export type WorkoutStackParamList = {
     | undefined;
   // 내 운동 루틴 (짐앱 스타일)
   WorkoutRoutines: undefined;
-  WorkoutRoutineForm: undefined;
+  // draft: AI 추천에서 넘어올 때 미리 채워 넣을 초안(선택) — 없으면 빈 폼(지금까지의 동작)
+  WorkoutRoutineForm: { draft?: RoutineFormDraft } | undefined;
+  // 커플 음성 응원 — 애인 목소리로 녹음한 짧은 문구(휴식 종료·PR·운동 완료)
+  VoiceClips: undefined;
   // 검증된 분할 템플릿(⑤) — 목록에서 골라 내 루틴으로 복사
   WorkoutRoutineTemplates: undefined;
   // 신체 측정 & 진행 사진
@@ -99,9 +131,14 @@ export type WorkoutStackParamList = {
   Challenge: undefined;
   // 식단 (구 식단 탭에서 이전) — WorkoutMain 상단 세그먼트로 토글
   DietMain: undefined;
-  // date: 캘린더에서 특정 날짜를 골라 들어올 때 그 날짜로 시작한다 (없으면 오늘)
-  // barcodeResult: BarcodeScan 에서 스캔·조회를 마치고 돌아올 때만 채워짐(같은 화면 인스턴스로 복귀)
-  DietRecord: { date?: string; barcodeResult?: BarcodeLookup } | undefined;
+  /*
+   * date: 캘린더에서 특정 날짜를 골라 들어올 때 그 날짜로 시작한다 (없으면 오늘)
+   * meal: 이미 저장한 기록을 고치러 들어올 때 그 기록. id 만 넘기지 않는 이유는
+   *   단건 조회 API(GET /meal/{id}) 가 없고, 어차피 방금 탭한 카드의 데이터라
+   *   다시 받아올 게 없기 때문이다 — 로딩·실패 상태가 통째로 사라진다.
+   * barcodeResult: BarcodeScan 에서 스캔·조회를 마치고 돌아올 때만 채워짐(같은 화면 인스턴스로 복귀)
+   */
+  DietRecord: { date?: string; meal?: Meal; barcodeResult?: BarcodeLookup } | undefined;
   DietCalendar: undefined;
   // 바코드로 포장식품 조회 — 결과를 들고 DietRecord 로 돌아간다
   BarcodeScan: undefined;

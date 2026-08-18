@@ -8,12 +8,14 @@ import com.fitto.workout.domain.ExerciseCatalog;
 import com.fitto.workout.domain.WorkoutRoutine;
 import com.fitto.workout.domain.WorkoutRoutineExercise;
 import com.fitto.workout.domain.WorkoutRoutineExerciseAlternative;
+import com.fitto.workout.domain.WorkoutRoutineExerciseSet;
 import com.fitto.workout.dto.RoutineResponse;
 import com.fitto.workout.dto.SaveRoutineRequest;
 import com.fitto.workout.repository.ExerciseCatalogRepository;
 import com.fitto.workout.repository.WorkoutRoutineRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -63,11 +65,12 @@ public class WorkoutRoutineService {
         WorkoutRoutine routine = WorkoutRoutine.builder()
                 .userId(userId)
                 .title(request.title().trim())
+                .scheduledDays(request.scheduledDaysOrEmpty())
                 .build();
-        Map<Long, ExerciseCatalog> catalogById = loadCatalog(request.exercises());
+        CatalogLookup catalog = loadCatalog(request.exercises());
         int order = 1;
         for (SaveRoutineRequest.Exercise e : request.exercises()) {
-            routine.addExercise(toEntity(e, order++, catalogById));
+            routine.addExercise(toEntity(e, order++, catalog));
         }
         routineRepository.save(routine);
         return RoutineResponse.of(routine);
@@ -80,19 +83,21 @@ public class WorkoutRoutineService {
     @Transactional
     public RoutineResponse update(Long userId, Long routineId, SaveRoutineRequest request) {
         WorkoutRoutine routine = getOwned(userId, routineId);
-        Map<Long, ExerciseCatalog> catalogById = loadCatalog(request.exercises());
+        CatalogLookup catalog = loadCatalog(request.exercises());
         List<WorkoutRoutineExercise> newExercises = new ArrayList<>();
         int order = 1;
         for (SaveRoutineRequest.Exercise e : request.exercises()) {
-            newExercises.add(toEntity(e, order++, catalogById));
+            newExercises.add(toEntity(e, order++, catalog));
         }
-        routine.update(request.title().trim(), newExercises);
+        routine.update(request.title().trim(), newExercises, request.scheduledDaysOrEmpty());
         return RoutineResponse.of(routine);
     }
 
     /**
      * ⑤ 시스템 템플릿을 내 루틴으로 복사 — 무게는 사람마다 달라 담아오지 않고,
-     * 종목 구성·목표 세트/횟수·대체 종목만 그대로 가져온다.
+     * 종목 구성·목표 세트/횟수·대체 종목·세트별 목표는 그대로 가져온다(세트의 무게만 비운다).
+     * 요일 배정도 담아오지 않는다 — 템플릿 이름이 "Day1"이어도 그걸 실제로 무슨 요일에
+     * 할지는 사람마다 다르므로, 복사 직후엔 비워두고 사용자가 직접 고른다.
      */
     @Transactional
     public RoutineResponse copy(Long userId, Long sourceRoutineId) {
@@ -126,6 +131,17 @@ public class WorkoutRoutineService {
                         .sortOrder(alt.getSortOrder())
                         .build());
             }
+            for (WorkoutRoutineExerciseSet s : e.getSets()) {
+                copiedExercise.addSet(WorkoutRoutineExerciseSet.builder()
+                        .setNo(s.getSetNo())
+                        .reps(s.getReps())
+                        .weightKg(null) // 무게는 개인차가 커서 복사하지 않는다 — 위 exercise 무게와 같은 방침
+                        .setType(s.getSetType())
+                        .build());
+            }
+            // recalcSetSummary 는 weightKg 를 세트 중 최댓값으로 다시 계산한다. 세트를 전부
+            // 무게 없이 복사했으니 여기서도 null 이 나와 위의 weightKg(null) 방침과 일치한다.
+            copiedExercise.recalcSetSummary();
         }
         routineRepository.save(copy);
         return RoutineResponse.of(copy);
@@ -141,20 +157,60 @@ public class WorkoutRoutineService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "루틴을 찾을 수 없습니다."));
     }
 
-    /** 요청에 등장하는 대체 종목 카탈로그 id를 한 번에 조회해 N+1 을 피한다. */
-    private Map<Long, ExerciseCatalog> loadCatalog(List<SaveRoutineRequest.Exercise> exercises) {
-        List<Long> ids = exercises.stream()
+    /**
+     * 요청에 등장하는 카탈로그를 두 갈래로 한 번에 모아 N+1 을 피한다 — 대체 종목은 항상
+     * id 로 오고(카탈로그 선택기 전용), 본 종목은 id 가 없을 때만 이름으로 보충 조회한다.
+     */
+    private CatalogLookup loadCatalog(List<SaveRoutineRequest.Exercise> exercises) {
+        List<Long> altIds = exercises.stream()
                 .flatMap(e -> e.alternativeExerciseCatalogIds() == null
                         ? java.util.stream.Stream.<Long>empty()
                         : e.alternativeExerciseCatalogIds().stream())
                 .distinct()
                 .toList();
-        if (ids.isEmpty()) return Map.of();
-        return catalogRepository.findAllById(ids).stream()
-                .collect(java.util.stream.Collectors.toMap(ExerciseCatalog::getId, Function.identity()));
+        Map<Long, ExerciseCatalog> byId = altIds.isEmpty() ? Map.of()
+                : catalogRepository.findAllById(altIds).stream()
+                        .collect(java.util.stream.Collectors.toMap(ExerciseCatalog::getId, Function.identity()));
+
+        // resolveCatalogByName 안전망 대상 — id 도, muscleGroup 도 없는 종목만 이름으로 찾는다.
+        // (카탈로그 선택기를 쓰면 클라이언트가 muscleGroup 을 이미 같이 보내므로 대상에서 빠진다)
+        List<String> namesNeedingLookup = exercises.stream()
+                .filter(e -> e.exerciseCatalogId() == null && !StringUtils.hasText(e.muscleGroup()))
+                .map(e -> e.exerciseName().trim())
+                .distinct()
+                .toList();
+        Map<String, ExerciseCatalog> byName = namesNeedingLookup.isEmpty() ? Map.of()
+                : catalogRepository.findByNameIn(namesNeedingLookup).stream()
+                        .collect(java.util.stream.Collectors.toMap(ExerciseCatalog::getName, Function.identity()));
+
+        return new CatalogLookup(byId, byName);
     }
 
-    private WorkoutRoutineExercise toEntity(SaveRoutineRequest.Exercise e, int order, Map<Long, ExerciseCatalog> catalogById) {
+    private record CatalogLookup(Map<Long, ExerciseCatalog> byId, Map<String, ExerciseCatalog> byName) {
+    }
+
+    /**
+     * 본 종목 하나에 쓸 카탈로그를 정한다 — id 가 있으면 그 카탈로그, 없고 muscleGroup 도
+     * 없으면 이름이 정확히 일치하는 카탈로그로 자극 부위·기구를 채운다.
+     *
+     * <p><b>왜 필요한가</b>: 루틴 작성 폼이 예전엔 운동 이름을 자유 텍스트로만 받아 카탈로그와
+     * 연결되지 않았다(대체 종목 고를 때만 카탈로그를 썼다). 그래서 세션 중 "대체 종목으로
+     * 교체"를 열면 muscleGroup 이 항상 비어 기본값(가슴)으로 고정됐었다. 폼은 이제 카탈로그
+     * 선택기를 쓰지만, AI 추천 저장처럼 이름만 보내는 경로가 여전히 있어 안전망으로 남겨둔다.
+     * 이미 muscleGroup 이 채워져 왔으면(카탈로그 선택기 경로) 손대지 않는다.
+     */
+    private ExerciseCatalog resolveCatalogByName(SaveRoutineRequest.Exercise e, CatalogLookup catalog) {
+        if (e.exerciseCatalogId() != null) {
+            return catalog.byId().get(e.exerciseCatalogId());
+        }
+        if (StringUtils.hasText(e.muscleGroup())) {
+            return null;
+        }
+        return catalog.byName().get(e.exerciseName().trim());
+    }
+
+    private WorkoutRoutineExercise toEntity(SaveRoutineRequest.Exercise e, int order, CatalogLookup catalog) {
+        ExerciseCatalog resolved = resolveCatalogByName(e, catalog);
         WorkoutRoutineExercise entity = WorkoutRoutineExercise.builder()
                 .exerciseName(e.exerciseName().trim())
                 .category(e.category())
@@ -162,21 +218,36 @@ public class WorkoutRoutineService {
                 .reps(e.reps())
                 .weightKg(e.weightKg())
                 .orderNo(order)
-                .exerciseCatalogId(e.exerciseCatalogId())
-                .muscleGroup(e.muscleGroup())
-                .equipment(e.equipment())
+                .exerciseCatalogId(resolved != null ? resolved.getId() : e.exerciseCatalogId())
+                .muscleGroup(resolved != null ? resolved.getMuscleGroup() : e.muscleGroup())
+                .equipment(resolved != null ? resolved.getEquipment() : e.equipment())
                 .restSeconds(e.restSeconds())
                 .build();
+
         if (e.alternativeExerciseCatalogIds() != null) {
             int altOrder = 1;
             for (Long catalogId : e.alternativeExerciseCatalogIds()) {
-                ExerciseCatalog catalog = catalogById.get(catalogId);
-                if (catalog == null) continue; // 존재하지 않는 id는 조용히 무시
+                ExerciseCatalog altCatalog = catalog.byId().get(catalogId);
+                if (altCatalog == null) continue; // 존재하지 않는 id는 조용히 무시
                 entity.addAlternative(WorkoutRoutineExerciseAlternative.builder()
-                        .exerciseCatalog(catalog)
+                        .exerciseCatalog(altCatalog)
                         .sortOrder(altOrder++)
                         .build());
             }
+        }
+
+        List<SaveRoutineRequest.SetRequest> requestedSets = e.setsOrEmpty();
+        if (!requestedSets.isEmpty()) {
+            int setNo = 1;
+            for (SaveRoutineRequest.SetRequest s : requestedSets) {
+                entity.addSet(WorkoutRoutineExerciseSet.builder()
+                        .setNo(setNo++)
+                        .reps(s.reps())
+                        .weightKg(s.weightKg())
+                        .setType(s.setType())
+                        .build());
+            }
+            entity.recalcSetSummary();
         }
         return entity;
     }

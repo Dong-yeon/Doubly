@@ -11,6 +11,7 @@ import { WorkoutSessionScreen } from '../screens/workout/WorkoutSessionScreen';
 import { WorkoutRoutineListScreen } from '../screens/workout/WorkoutRoutineListScreen';
 import { WorkoutRoutineFormScreen } from '../screens/workout/WorkoutRoutineFormScreen';
 import { WorkoutRoutineTemplatesScreen } from '../screens/workout/WorkoutRoutineTemplatesScreen';
+import { VoiceClipsScreen } from '../screens/workout/VoiceClipsScreen';
 import { BodyMetricScreen } from '../screens/workout/BodyMetricScreen';
 import { ChallengeScreen } from '../screens/workout/ChallengeScreen';
 import { DietScreen } from '../screens/diet/DietScreen';
@@ -67,6 +68,11 @@ export function WorkoutStackNavigator() {
         name="WorkoutRoutineTemplates"
         component={WorkoutRoutineTemplatesScreen}
         options={{ title: '검증된 루틴' }}
+      />
+      <Stack.Screen
+        name="VoiceClips"
+        component={VoiceClipsScreen}
+        options={{ title: '커플 음성 응원' }}
       />
       <Stack.Screen name="BodyMetric" component={BodyMetricScreen} options={{ title: '몸 변화' }} />
       <Stack.Screen name="Challenge" component={ChallengeScreen} options={{ title: '커플 대결' }} />

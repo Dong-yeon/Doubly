@@ -236,7 +236,7 @@ class MemoriesFlowTest {
         workoutService.save(c[0], new SaveWorkoutRequest(LocalDate.of(2025, 7, 30), null, 30, null,
                 List.of(new WorkoutSetRequest("러닝", "유산소", 1, null, null, 1))));
         mealService.save(c[0], new SaveMealRequest(LocalDate.of(2025, 7, 30), MealType.DINNER,
-                "회식", null, 800, null, null, null, null, null, null));
+                "회식", null, 800, null, null, null, null, null, null, null));
         em.flush();
         em.createNativeQuery("update workouts set created_at = :t")
                 .setParameter("t", LocalDateTime.of(2025, 7, 30, 3, 0)).executeUpdate();

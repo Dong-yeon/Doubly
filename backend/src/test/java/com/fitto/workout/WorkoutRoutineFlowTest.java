@@ -27,6 +27,8 @@ class WorkoutRoutineFlowTest {
     com.fitto.workout.service.WorkoutRoutineService routineService;
     @Autowired
     ExerciseCatalogRepository catalogRepository;
+    @Autowired
+    com.fitto.workout.repository.WorkoutRoutineRepository routineRepository;
 
     private Long register(String email) {
         return authService.register(
@@ -113,6 +115,170 @@ class WorkoutRoutineFlowTest {
     }
 
     @Test
+    void 시스템_템플릿은_마이그레이션_백필로_자극_부위가_채워져_있다() {
+        // V38 백필 전에는 시드(V30)가 muscle_group 을 안 넣어 세션 대체 종목 후보 조회가
+        // 항상 비어 있었다(WorkoutSessionScreen.openSubstitute 참고).
+        RoutineResponse template = routineService.systemTemplates().stream()
+                .filter(t -> t.title().contains("3분할 Day1"))
+                .findFirst().orElseThrow();
+
+        assertThat(template.exercises()).isNotEmpty();
+        assertThat(template.exercises()).allMatch(e -> e.muscleGroup() != null);
+        assertThat(template.exercises().get(0).exerciseCatalogId()).isNotNull();
+    }
+
+    @Test
+    void 카탈로그_id_없이_이름만_보내면_자극_부위가_자동으로_채워진다() {
+        Long user = register("r9@fitto.com");
+
+        // muscleGroup·exerciseCatalogId 둘 다 생략 — 카탈로그와 이름이 정확히 같은 "스쿼트"
+        RoutineResponse saved = routineService.save(user, new SaveRoutineRequest("하체 루틴", List.of(
+                new SaveRoutineRequest.Exercise("스쿼트", "근력", 4, 8, null, null, null, null))));
+
+        var exercise = saved.exercises().get(0);
+        assertThat(exercise.muscleGroup()).isEqualTo("하체");
+        assertThat(exercise.equipment()).isEqualTo("바벨");
+        assertThat(exercise.exerciseCatalogId()).isNotNull();
+    }
+
+    @Test
+    void 카탈로그에_없는_이름은_자극_부위가_비워진_채로_저장된다() {
+        Long user = register("r10@fitto.com");
+
+        RoutineResponse saved = routineService.save(user, new SaveRoutineRequest("커스텀 루틴", List.of(
+                new SaveRoutineRequest.Exercise("나만의 특수 운동", "근력", 3, 10, null, null, null, null))));
+
+        assertThat(saved.exercises().get(0).muscleGroup()).isNull();
+        assertThat(saved.exercises().get(0).exerciseCatalogId()).isNull();
+    }
+
+    @Test
+    void 세트별_목표를_저장하면_요약이_세트에서_다시_계산된다() {
+        Long user = register("r11@fitto.com");
+
+        // 탑세트(1×5×100kg) + 백오프(3×5×80kg) — 종목 하나에 무게가 다른 세트 4개
+        RoutineResponse saved = routineService.save(user, new SaveRoutineRequest("가슴 루틴", List.of(
+                new SaveRoutineRequest.Exercise("벤치프레스", "근력", null, null, null, null, "가슴", "바벨",
+                        null, null, List.of(
+                                new SaveRoutineRequest.SetRequest(5, java.math.BigDecimal.valueOf(100), "TOP"),
+                                new SaveRoutineRequest.SetRequest(5, java.math.BigDecimal.valueOf(80), "BACKOFF"),
+                                new SaveRoutineRequest.SetRequest(5, java.math.BigDecimal.valueOf(80), "BACKOFF"),
+                                new SaveRoutineRequest.SetRequest(5, java.math.BigDecimal.valueOf(80), "BACKOFF"))))));
+
+        var exercise = saved.exercises().get(0);
+        assertThat(exercise.sets()).hasSize(4);
+        assertThat(exercise.sets().get(0).setType()).isEqualTo("TOP");
+        assertThat(exercise.sets().get(0).weightKg()).isEqualByComparingTo("100");
+        // 요약: 4세트 · 5회(전부 동일) · 최댓값 100kg(탑세트)
+        assertThat(exercise.targetSets()).isEqualTo(4);
+        assertThat(exercise.reps()).isEqualTo(5);
+        assertThat(exercise.weightKg()).isEqualByComparingTo("100");
+    }
+
+    @Test
+    void 세트가_없으면_기존처럼_종목_단위_요약값을_그대로_쓴다() {
+        Long user = register("r12@fitto.com");
+
+        RoutineResponse saved = routineService.save(user, sample("가슴 루틴"));
+
+        assertThat(saved.exercises().get(0).sets()).isEmpty();
+        assertThat(saved.exercises().get(0).targetSets()).isEqualTo(3);
+    }
+
+    @Test
+    void 스마트_동기화로_세트별_목표를_교체하면_요약도_다시_계산된다() {
+        Long user = register("r13@fitto.com");
+        RoutineResponse saved = routineService.save(user, sample("가슴 루틴"));
+
+        RoutineResponse updated = routineService.update(user, saved.id(), new SaveRoutineRequest("가슴 루틴", List.of(
+                new SaveRoutineRequest.Exercise("벤치프레스", "근력", null, null, null, null, "가슴", "바벨",
+                        null, null, List.of(
+                                new SaveRoutineRequest.SetRequest(10, java.math.BigDecimal.valueOf(40), null),
+                                new SaveRoutineRequest.SetRequest(8, java.math.BigDecimal.valueOf(50), null))))));
+
+        assertThat(updated.exercises().get(0).sets()).hasSize(2);
+        assertThat(updated.exercises().get(0).targetSets()).isEqualTo(2);
+        assertThat(updated.exercises().get(0).weightKg()).isEqualByComparingTo("50");
+    }
+
+    @Test
+    void 요일을_배정해_루틴을_저장하면_월요일_순으로_정렬돼_돌아온다() {
+        Long user = register("r16@fitto.com");
+
+        RoutineResponse saved = routineService.save(user, new SaveRoutineRequest("Day1", List.of(
+                new SaveRoutineRequest.Exercise("벤치프레스", "근력", 3, 10, null, null, "가슴", "바벨")),
+                java.util.Set.of(java.time.DayOfWeek.THURSDAY, java.time.DayOfWeek.MONDAY)));
+
+        // 저장 순서(목,월)와 무관하게 월→일 순으로 정렬된다
+        assertThat(saved.scheduledDays())
+                .containsExactly(java.time.DayOfWeek.MONDAY, java.time.DayOfWeek.THURSDAY);
+    }
+
+    @Test
+    void 요일_없이_저장하면_지금까지처럼_빈_목록이다() {
+        Long user = register("r17@fitto.com");
+
+        RoutineResponse saved = routineService.save(user, sample("가슴 루틴"));
+
+        assertThat(saved.scheduledDays()).isEmpty();
+    }
+
+    @Test
+    void 스마트_동기화로_요일_배정을_바꿀_수_있다() {
+        Long user = register("r18@fitto.com");
+        RoutineResponse saved = routineService.save(user, new SaveRoutineRequest("Day1", List.of(
+                new SaveRoutineRequest.Exercise("벤치프레스", "근력", 3, 10, null, null, "가슴", "바벨")),
+                java.util.Set.of(java.time.DayOfWeek.MONDAY)));
+
+        RoutineResponse updated = routineService.update(user, saved.id(), new SaveRoutineRequest("Day1", List.of(
+                new SaveRoutineRequest.Exercise("벤치프레스", "근력", 3, 10, null, null, "가슴", "바벨")),
+                java.util.Set.of(java.time.DayOfWeek.TUESDAY, java.time.DayOfWeek.FRIDAY)));
+
+        assertThat(updated.scheduledDays())
+                .containsExactly(java.time.DayOfWeek.TUESDAY, java.time.DayOfWeek.FRIDAY);
+        // 재조회해도 유지된다
+        assertThat(routineService.detail(user, saved.id()).scheduledDays())
+                .containsExactly(java.time.DayOfWeek.TUESDAY, java.time.DayOfWeek.FRIDAY);
+    }
+
+    @Test
+    void 같은_요일에_루틴_두_개를_배정해도_막지_않는다() {
+        Long user = register("r19@fitto.com");
+
+        routineService.save(user, new SaveRoutineRequest("Day1", List.of(
+                new SaveRoutineRequest.Exercise("벤치프레스", "근력", 3, 10, null, null, "가슴", "바벨")),
+                java.util.Set.of(java.time.DayOfWeek.MONDAY)));
+        RoutineResponse second = routineService.save(user, new SaveRoutineRequest("Day1 대체", List.of(
+                new SaveRoutineRequest.Exercise("스쿼트", "근력", 3, 10, null, null, "하체", "바벨")),
+                java.util.Set.of(java.time.DayOfWeek.MONDAY)));
+
+        assertThat(second.scheduledDays()).containsExactly(java.time.DayOfWeek.MONDAY);
+        assertThat(routineService.list(user).stream()
+                .filter(r -> r.scheduledDays().contains(java.time.DayOfWeek.MONDAY)))
+                .hasSize(2);
+    }
+
+    @Test
+    void 시스템_템플릿을_복사하면_요일_배정은_비워진_채로_시작한다() {
+        Long user = register("r20@fitto.com");
+        RoutineResponse template = routineService.systemTemplates().stream()
+                .filter(t -> t.title().contains("20분 전신"))
+                .findFirst().orElseThrow();
+
+        RoutineResponse copied = routineService.copy(user, template.id());
+
+        // 템플릿 이름이 "Day1" 이어도 실제 요일은 개인 일정이라 복사 시 가져오지 않는다
+        assertThat(copied.scheduledDays()).isEmpty();
+    }
+
+    @Test
+    void 시스템_템플릿_목록의_요일_배정은_항상_비어있다() {
+        List<RoutineResponse> templates = routineService.systemTemplates();
+
+        assertThat(templates).allMatch(t -> t.scheduledDays().isEmpty());
+    }
+
+    @Test
     void 시스템_템플릿을_내_루틴으로_복사한다() {
         Long user = register("r6@fitto.com");
         RoutineResponse template = routineService.systemTemplates().stream()
@@ -130,6 +296,36 @@ class WorkoutRoutineFlowTest {
 
         // 내 루틴 목록에도 들어간다
         assertThat(routineService.list(user)).anyMatch(r -> r.id().equals(copied.id()));
+    }
+
+    @Test
+    void 세트별_목표가_있는_시스템_템플릿을_복사하면_세트_구성은_오되_무게는_비워진다() {
+        // 시스템 템플릿은 관리자만 만들 수 있어 SaveRoutineRequest 경로가 아니라 시드와
+        // 같은 방식(엔티티 직접 구성)으로 세트 있는 템플릿을 준비한다.
+        var template = com.fitto.workout.domain.WorkoutRoutine.builder()
+                .userId(null).title("테스트 템플릿").systemTemplate(true).build();
+        var exercise = com.fitto.workout.domain.WorkoutRoutineExercise.builder()
+                .exerciseName("벤치프레스").category("근력").orderNo(1).build();
+        template.addExercise(exercise);
+        exercise.addSet(com.fitto.workout.domain.WorkoutRoutineExerciseSet.builder()
+                .setNo(1).reps(5).weightKg(java.math.BigDecimal.valueOf(100)).setType("TOP").build());
+        exercise.addSet(com.fitto.workout.domain.WorkoutRoutineExerciseSet.builder()
+                .setNo(2).reps(5).weightKg(java.math.BigDecimal.valueOf(80)).setType("BACKOFF").build());
+        exercise.recalcSetSummary();
+        routineRepository.save(template);
+
+        Long copier = register("r14@fitto.com");
+        RoutineResponse copied = routineService.copy(copier, template.getId());
+
+        var copiedExercise = copied.exercises().get(0);
+        assertThat(copiedExercise.sets()).hasSize(2);
+        assertThat(copiedExercise.sets()).extracting(RoutineResponse.SetSummary::setType)
+                .containsExactly("TOP", "BACKOFF");
+        // 무게는 개인차가 커서 세트도, 요약값도 비운다
+        assertThat(copiedExercise.sets()).allMatch(s -> s.weightKg() == null);
+        assertThat(copiedExercise.weightKg()).isNull();
+        assertThat(copiedExercise.targetSets()).isEqualTo(2);
+        assertThat(copiedExercise.reps()).isEqualTo(5);
     }
 
     @Test

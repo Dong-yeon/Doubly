@@ -6,7 +6,7 @@ import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { WorkoutStackParamList } from '../../navigation/types';
-import type { WorkoutSet } from '../../types';
+import type { VoicePhrase, WorkoutSet } from '../../types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
 import { DateField } from '../../components/DateField';
@@ -17,6 +17,8 @@ import { useWorkoutStore } from '../../store/workoutStore';
 import { useRelationStore } from '../../store/relationStore';
 import { useDirtyGuard } from '../../hooks/useDirtyGuard';
 import { publishEnsuringConnection } from '../../api/chatSocket';
+import { voiceClipsApi } from '../../api/voiceClips';
+import { playVoiceClip } from '../../utils/voicePlayback';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
@@ -66,6 +68,22 @@ export function WorkoutRecordScreen({ navigation, route }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const couple = useRelationStore((s) => s.couple);
+
+  // 커플 음성 응원 — 애인이 녹음해둔 클립. 저장 직후(PR·완료) 재생하므로 화면
+  // 진입 시 한 번만 받아둔다. 실패하거나 커플 미연결이면 조용히 빈 목록.
+  const [partnerClips, setPartnerClips] = useState<Partial<Record<VoicePhrase, string>>>({});
+  useEffect(() => {
+    if (!couple?.id) return;
+    voiceClipsApi
+      .partner()
+      .then((res) => {
+        const byPhrase: Partial<Record<VoicePhrase, string>> = {};
+        res.clips.forEach((c) => { byPhrase[c.phrase] = c.audioUrl; });
+        setPartnerClips(byPhrase);
+      })
+      .catch(() => undefined);
+  }, [couple?.id]);
+
   const [sets, setSets] = useState<SetForm[]>([emptySet()]);
   /** 기록할 날짜 — 캘린더에서 날짜를 골라 들어오면 그 날짜, 아니면 오늘 */
   const [workoutDate, setWorkoutDate] = useState(route.params?.date ?? toDateString());
@@ -155,6 +173,10 @@ export function WorkoutRecordScreen({ navigation, route }: Props) {
       });
       haptics.success();
       toast.success('운동 기록 완료! ');
+      // 커플 음성 응원 — PR 을 세웠으면 그 응원을, 아니면 완료 응원을 재생한다.
+      // 클립을 안 녹음해뒀으면(partnerClips 에 없음) playVoiceClip 이 조용히 넘어간다.
+      const isPrRun = !!saved.prs && saved.prs.length > 0;
+      playVoiceClip(partnerClips[isPrRun ? 'PR' : 'WORKOUT_COMPLETE']);
 
       /*
        * 저장이 끝나면 공유 여부와 무관하게 화면부터 닫는다.
@@ -173,7 +195,6 @@ export function WorkoutRecordScreen({ navigation, route }: Props) {
           duration ? ` · ${duration}분` : ''
         }`;
         const { alertTitle, alertMessage, cardContent } = buildWorkoutShareCopy(summary, saved.prs);
-        const isPr = !!saved.prs && saved.prs.length > 0;
 
         Alert.alert(alertTitle, alertMessage, [
           { text: '다음에', style: 'cancel' },
@@ -185,7 +206,7 @@ export function WorkoutRecordScreen({ navigation, route }: Props) {
                 content: cardContent,
                 workoutId: saved.id,
               });
-              toast.success(isPr ? '🔥 PR 소식을 공유했어요 ' : '채팅에 공유했어요 ');
+              toast.success(isPrRun ? '🔥 PR 소식을 공유했어요 ' : '채팅에 공유했어요 ');
             },
           },
         ]);

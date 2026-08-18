@@ -6,6 +6,7 @@ import type {
   ExerciseCatalogItem,
   ExerciseLastPerformance,
   PartnerToday,
+  WeekDay,
   Workout,
   WorkoutRecommendation,
   WorkoutRoutine,
@@ -15,6 +16,8 @@ import type {
 
 export interface SaveRoutinePayload {
   title: string;
+  // 이 루틴을 하는 요일 — 짐워크 스타일 "Day1은 월/목" 배정. 생략하면 자유 루틴
+  scheduledDays?: WeekDay[];
   exercises: {
     exerciseName: string;
     category?: string;
@@ -28,6 +31,8 @@ export interface SaveRoutinePayload {
     restSeconds?: number;
     // 사전 지정 대체 종목 — 카탈로그 id 목록, 최대 3개(④)
     alternativeExerciseCatalogIds?: number[];
+    // 세트별 목표 — 담으면 위 targetSets/reps/weightKg 는 서버가 세트에서 다시 계산해 덮어쓴다
+    sets?: { reps?: number; weightKg?: number; setType?: string }[];
   }[];
 }
 

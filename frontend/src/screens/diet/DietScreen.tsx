@@ -312,6 +312,9 @@ export function DietScreen({ navigation }: Props) {
     }
   };
 
+  // 탭하면 그 기록을 채운 수정 화면으로. 길게 누르면 삭제(기존 동작 유지)
+  const onEdit = (m: Meal) => navigation.navigate('DietRecord', { meal: m });
+
   const onLongPress = (m: Meal) => {
     Alert.alert('식단 기록 삭제', `${m.mealTypeLabel} 기록을 삭제할까요?`, [
       { text: '취소', style: 'cancel' },
@@ -595,7 +598,9 @@ export function DietScreen({ navigation }: Props) {
                   </View>
                 </View>
                 {today.length > 0 ? (
-                  today.map((m) => <MealCard key={m.id} meal={m} onLongPress={onLongPress} />)
+                  today.map((m) => (
+                    <MealCard key={m.id} meal={m} onPress={onEdit} onLongPress={onLongPress} />
+                  ))
                 ) : (
                   <View style={styles.emptyToday}>
                     <Text style={styles.emptyText}>오늘 식단 기록이 아직 없어요 </Text>
@@ -606,7 +611,9 @@ export function DietScreen({ navigation }: Props) {
             ) : null}
           </View>
         }
-        renderItem={({ item }) => <MealCard meal={item} onLongPress={onLongPress} showDate />}
+        renderItem={({ item }) => (
+          <MealCard meal={item} onPress={onEdit} onLongPress={onLongPress} showDate />
+        )}
         ListEmptyComponent={
           !loading ? (
             <EmptyState icon="silverware-fork-knife" title="아직 식단 기록이 없어요" description="아래 버튼으로 첫 식단을 기록해보세요!" />

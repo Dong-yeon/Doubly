@@ -66,11 +66,28 @@ public class FeedItemMapper {
                 null, w.getCreatedAt(), null);
     }
 
+    /**
+     * 식단 — 무엇을 먹었는지가 요약의 핵심이라 음식 항목 이름을 앞세운다
+     * ("삼겹살 외 2개 · 820kcal"). 바로 위 운동 카드와 같은 타임라인에 나란히 서므로
+     * 요약 형태를 맞춘다("러닝 외 3개 · 40분").
+     *
+     * <p>항목이 없는 기록(합계만 적었거나 항목 도입 이전)은 예전처럼 memo 로 보여준다.
+     */
     public FeedItemResponse toItem(Meal m, Map<Long, String> names, Long viewerId) {
-        String calories = m.getCalories() != null ? m.getCalories() + "kcal" : null;
-        String content = m.getMemo() != null && !m.getMemo().isBlank()
-                ? (calories != null ? m.getMemo() + " · " + calories : m.getMemo())
-                : calories;
+        StringBuilder summary = new StringBuilder();
+        if (!m.getItems().isEmpty()) {
+            summary.append(m.getItems().get(0).getName());
+            if (m.getItems().size() > 1) {
+                summary.append(" 외 ").append(m.getItems().size() - 1).append("개");
+            }
+        } else if (m.getMemo() != null && !m.getMemo().isBlank()) {
+            summary.append(m.getMemo());
+        }
+        if (m.getCalories() != null) {
+            if (summary.length() > 0) summary.append(" · ");
+            summary.append(m.getCalories()).append("kcal");
+        }
+        String content = summary.length() > 0 ? summary.toString() : null;
         return new FeedItemResponse(FeedItemType.MEAL, m.getId(), m.getUserId(),
                 names.getOrDefault(m.getUserId(), "커플"), viewerId.equals(m.getUserId()),
                 m.getMealType().label() + " 식단 🍽️", content, m.getPhotoUrl(),
