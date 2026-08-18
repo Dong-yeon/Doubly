@@ -35,11 +35,16 @@ export const WEEK_DAYS: { value: WeekDay; label: string }[] = [
   { value: 'SUNDAY', label: '일' },
 ];
 
-/** 오늘의 요일 코드(로컬 기준) — 루틴 목록에서 "오늘의 루틴" 판정에 쓴다 */
-export function todayWeekDay(): WeekDay {
+/** 특정 날짜의 요일 코드 — 루틴 요일 배정과 형식을 맞춘다 */
+export function weekDayOf(date: Date): WeekDay {
   // Date.getDay(): 0=일요일 ... 6=토요일. WEEK_DAYS 는 월요일부터 시작하므로 따로 매핑한다
   const byJsDay: WeekDay[] = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
-  return byJsDay[new Date().getDay()];
+  return byJsDay[date.getDay()];
+}
+
+/** 오늘의 요일 코드(로컬 기준) — 루틴 목록에서 "오늘의 루틴" 판정에 쓴다 */
+export function todayWeekDay(): WeekDay {
+  return weekDayOf(new Date());
 }
 
 /** 'YYYY-MM-DD' → '2026년 7월 28일 (화)'. 못 읽으면 원본 그대로 */

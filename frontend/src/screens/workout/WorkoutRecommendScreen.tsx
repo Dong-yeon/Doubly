@@ -1,7 +1,16 @@
-/** AI 운동 추천 — 최근 기록 기반 오늘 추천 / 5일 루틴 (결과는 참고용 제안) */
+/**
+ * AI 운동 추천 — 최근 기록 기반 오늘 추천 / 5일 루틴 (결과는 참고용 제안).
+ *
+ * <p>"저장" 버튼은 API 를 바로 부르지 않는다 — 짐워크·플랜핏 둘 다 AI/추천 결과가 바로
+ * 저장되지 않고 사용자가 종목·세트·무게를 조정할 수 있는 루틴 편집 화면을 거친다.
+ * 예전엔 여기서 바로 저장해 카탈로그 연결도 세트별 목표도 요일도 없는 밋밋한 루틴이
+ * 만들어졌다. 지금은 루틴 만들기 폼에 초안으로 넘겨 검토·수정 후 명시적으로 저장한다.
+ */
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { WorkoutStackParamList } from '../../navigation/types';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { Button } from '../../components/Button';
 import { workoutApi } from '../../api/workout';
@@ -9,9 +18,12 @@ import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
+import { weekDayOf } from '../../utils/date';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { WorkoutRecommendation } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
+
+type Props = NativeStackScreenProps<WorkoutStackParamList, 'WorkoutRecommend'>;
 
 const PLANS = [
   { days: 1, title: '오늘 뭐하지?' },
@@ -28,31 +40,29 @@ function dayLabel(offset: number): string {
   return `${d.getMonth() + 1}/${d.getDate()} (${weekday})`;
 }
 
-export function WorkoutRecommendScreen() {
+export function WorkoutRecommendScreen({ navigation }: Props) {
   const [loadingDays, setLoadingDays] = useState<number | null>(null);
   const [result, setResult] = useState<WorkoutRecommendation | null>(null);
-  const [savingRoutine, setSavingRoutine] = useState<number | null>(null);
 
-  // AI 추천 하루 계획을 내 루틴으로 저장
-  const saveAsRoutine = async (day: WorkoutRecommendation['days'][number]) => {
-    setSavingRoutine(day.dayOffset);
-    try {
-      await workoutApi.saveRoutine({
+  // AI 추천 하루 계획을 루틴 만들기 폼으로 — 폼에서 검토·수정한 뒤 사용자가 직접 저장한다
+  const editAsRoutine = (day: WorkoutRecommendation['days'][number]) => {
+    haptics.light();
+    const d = new Date();
+    d.setDate(d.getDate() + day.dayOffset);
+    navigation.navigate('WorkoutRoutineForm', {
+      draft: {
         title: day.focus || 'AI 추천 루틴',
         exercises: day.exercises.map((ex) => ({
-          exerciseName: ex.name,
+          name: ex.name,
           category: ex.category ?? undefined,
           targetSets: ex.sets ?? undefined,
           reps: ex.reps ?? undefined,
         })),
-      });
-      haptics.success();
-      toast.success('내 루틴으로 저장했어요 ');
-    } catch (e) {
-      toast.error(getErrorMessage(e, '루틴 저장에 실패했어요.'));
-    } finally {
-      setSavingRoutine(null);
-    }
+        // 이 날짜의 실제 요일을 미리 체크해둔다 — 매주 이 요일에 반복하고 싶으면
+        // 폼에서 손댈 것 없이 "루틴 저장"만 누르면 된다
+        scheduledDays: [weekDayOf(d)],
+      },
+    });
   };
 
   const onRecommend = async (days: number) => {
@@ -121,12 +131,10 @@ export function WorkoutRecommendScreen() {
                 ))}
                 {day.comment ? <Text style={styles.dayComment}>{day.comment}</Text> : null}
                 <Button
-                  title={savingRoutine === day.dayOffset ? '저장 중…' : '내 루틴으로 저장'}
+                  title="루틴으로 편집하기 ›"
                   variant="secondary"
                   size="md"
-                  onPress={() => saveAsRoutine(day)}
-                  loading={savingRoutine === day.dayOffset}
-                  disabled={savingRoutine !== null}
+                  onPress={() => editAsRoutine(day)}
                   style={styles.saveRoutineBtn}
                 />
               </View>

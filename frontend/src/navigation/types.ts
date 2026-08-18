@@ -1,6 +1,6 @@
 /** 네비게이션 파라미터 타입 — 설계서 2. 화면 설계 */
 import type { NavigatorScreenParams } from '@react-navigation/native';
-import type { Meal, Trip } from '../types';
+import type { Meal, Trip, WeekDay } from '../types';
 
 // 2.1 온보딩 플로우 (인증 전)
 export type OnboardingStackParamList = {
@@ -84,6 +84,26 @@ export interface SessionExerciseParam {
   sets?: SessionExerciseSetParam[];
 }
 
+/*
+ * AI 추천(WorkoutRecommendScreen) → 루틴 만들기 폼에 미리 채워 넣는 초안.
+ * 예전엔 "내 루틴으로 저장" 버튼이 폼을 거치지 않고 바로 저장해, 카탈로그 연결도
+ * 세트별 목표도 요일 배정도 없는 밋밋한 루틴이 만들어졌다(짐워크와 달리 검토·수정 기회가
+ * 없었다). 이제는 폼으로 보내 사용자가 검토·수정한 뒤 명시적으로 저장한다.
+ */
+export interface RoutineFormDraftExercise {
+  name: string;
+  category?: string;
+  targetSets?: number;
+  reps?: number;
+}
+export interface RoutineFormDraft {
+  title?: string;
+  exercises?: RoutineFormDraftExercise[];
+  // AI 하루치 계획의 실제 날짜(dayOffset)에 해당하는 요일을 미리 체크해둔다 — 매주 이
+  // 요일에 반복하고 싶을 때 손댈 것 없이 바로 "루틴 저장"만 누르면 되게
+  scheduledDays?: WeekDay[];
+}
+
 // 운동 탭 내부 스택 — 운동 + 식단(세그먼트로 통합)
 export type WorkoutStackParamList = {
   WorkoutMain: undefined;
@@ -99,7 +119,8 @@ export type WorkoutStackParamList = {
     | undefined;
   // 내 운동 루틴 (짐앱 스타일)
   WorkoutRoutines: undefined;
-  WorkoutRoutineForm: undefined;
+  // draft: AI 추천에서 넘어올 때 미리 채워 넣을 초안(선택) — 없으면 빈 폼(지금까지의 동작)
+  WorkoutRoutineForm: { draft?: RoutineFormDraft } | undefined;
   // 검증된 분할 템플릿(⑤) — 목록에서 골라 내 루틴으로 복사
   WorkoutRoutineTemplates: undefined;
   // 신체 측정 & 진행 사진

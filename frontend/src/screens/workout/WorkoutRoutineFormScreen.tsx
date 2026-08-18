@@ -3,7 +3,7 @@
  *  종목은 카탈로그에서 골라 자극 부위·기구가 자동으로 붙고(대체 종목 추천의 전제),
  *  세트 프리셋으로 1탭 완성하거나 세트마다 다른 무게·횟수(램프업/백오프)를 계획할 수 있다.
  *  종목별 휴식 시간, 대체 종목 사전 지정도 지원한다. */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -84,12 +84,30 @@ interface DraftExercise {
 let seq = 0;
 let setRowSeq = 0;
 
-export function WorkoutRoutineFormScreen({ navigation }: Props) {
-  const [title, setTitle] = useState('');
+export function WorkoutRoutineFormScreen({ navigation, route }: Props) {
+  // AI 추천(WorkoutRecommendScreen)에서 넘어올 때만 채워짐 — 카탈로그·세트별 목표·요일
+  // 없이 바로 저장되던 것을, 이 화면에서 검토·수정한 뒤 명시적으로 저장하게 한다
+  const draft = route.params?.draft;
+  const [title, setTitle] = useState(draft?.title ?? '');
   // 이 루틴을 하는 요일 — 짐워크 스타일 "Day1은 월/목" 배정. 비워두면 자유 루틴
-  const [scheduledDays, setScheduledDays] = useState<WeekDay[]>([]);
-  const [exercises, setExercises] = useState<DraftExercise[]>([]);
+  const [scheduledDays, setScheduledDays] = useState<WeekDay[]>(draft?.scheduledDays ?? []);
+  const [exercises, setExercises] = useState<DraftExercise[]>(() =>
+    (draft?.exercises ?? []).map((e) => ({
+      key: `d-${seq++}`,
+      name: e.name,
+      category: e.category ?? '근력',
+      targetSets: e.targetSets ?? undefined,
+      reps: e.reps ?? undefined,
+      alternatives: [],
+      sets: [],
+    })),
+  );
   const [saving, setSaving] = useState(false);
+
+  // 헤더 제목 — AI 추천을 다듬으러 들어온 걸 알려준다 (스택 옵션은 "루틴 만들기"로 고정돼 있음)
+  useLayoutEffect(() => {
+    if (draft) navigation.setOptions({ title: 'AI 추천 다듬기' });
+  }, [draft, navigation]);
 
   const [addOpen, setAddOpen] = useState(false);
   const [fName, setFName] = useState('');
@@ -114,6 +132,25 @@ export function WorkoutRoutineFormScreen({ navigation }: Props) {
   useEffect(() => {
     workoutApi.exerciseCatalog().then(setCatalog).catch(() => setCatalog([]));
   }, []);
+
+  /*
+   * AI 추천 초안으로 들어왔으면, 카탈로그가 로드되는 대로 이름이 정확히 일치하는 종목에
+   * 자극 부위·기구를 자동으로 붙인다. 서버(WorkoutRoutineService.resolveCatalogByName)도
+   * 같은 안전망이 있지만, 여기서 붙여야 화면에 바로 "가슴 · 바벨 연결됨"이 보이고 사용자가
+   * 손대지 않고 그대로 저장해도 놓치지 않는다. catalog 는 마운트 시 한 번만 채워지므로
+   * 무한 루프 걱정 없이 그 시점에 딱 한 번 돈다.
+   */
+  useEffect(() => {
+    if (catalog.length === 0) return;
+    setExercises((prev) =>
+      prev.map((e) => {
+        if (e.exerciseCatalogId) return e; // 이미 연결됐으면 손대지 않는다
+        const match = catalog.find((c) => c.name === e.name);
+        if (!match) return e;
+        return { ...e, muscleGroup: match.muscleGroup, equipment: match.equipment ?? undefined, exerciseCatalogId: match.id };
+      }),
+    );
+  }, [catalog]);
 
   useEffect(() => {
     if (!addOpen) return;
