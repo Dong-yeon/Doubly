@@ -17,6 +17,7 @@ import { DietScreen } from '../screens/diet/DietScreen';
 import { DietRecordScreen } from '../screens/diet/DietRecordScreen';
 import { DietCalendarScreen } from '../screens/diet/DietCalendarScreen';
 import { DietStatsScreen } from '../screens/diet/DietStatsScreen';
+import { BarcodeScanScreen } from '../screens/diet/BarcodeScanScreen';
 import { stackScreenOptions, modalOptions } from './headerOptions';
 
 const Stack = createNativeStackNavigator<WorkoutStackParamList>();
@@ -78,6 +79,11 @@ export function WorkoutStackNavigator() {
       />
       <Stack.Screen name="DietCalendar" component={DietCalendarScreen} options={{ title: '식단 캘린더' }} />
       <Stack.Screen name="DietStats" component={DietStatsScreen} options={{ title: '식단 통계' }} />
+      <Stack.Screen
+        name="BarcodeScan"
+        component={BarcodeScanScreen}
+        options={{ title: '바코드 스캔', ...modalOptions }}
+      />
     </Stack.Navigator>
   );
 }

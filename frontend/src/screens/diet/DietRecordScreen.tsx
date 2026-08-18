@@ -1,5 +1,5 @@
 /** 식단 기록 입력 — 끼니·사진·칼로리·메모 + 즐겨찾기 원탭 추가. 운동(WorkoutRecordScreen) 미러링 */
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Image, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -87,6 +87,23 @@ export function DietRecordScreen({ navigation, route }: Props) {
       dietApi.recentFoods().then(setRecentFoods).catch(() => setRecentFoods([]));
     }, []),
   );
+
+  // 바코드 스캔 결과 — BarcodeScanScreen 이 같은 DietRecord 인스턴스로 돌아오며 채운다.
+  // 소비 후 파라미터를 지워야 뒤로가기·재진입 시 같은 결과가 다시 적용되지 않는다.
+  useEffect(() => {
+    const result = route.params?.barcodeResult;
+    if (!result) return;
+    addName(result.foodName || `바코드 ${result.barcode}`);
+    if (result.calories) setCalories(String(result.calories));
+    setMacros({
+      carbs: result.carbs ?? 0, protein: result.protein ?? 0, fat: result.fat ?? 0,
+      sugar: result.sugar ?? undefined, sodium: result.sodium ?? undefined, fiber: result.fiber ?? undefined,
+    });
+    haptics.success();
+    toast.success(result.foodName ? `${result.foodName} 정보를 불러왔어요` : '바코드 정보를 불러왔어요');
+    navigation.setParams({ barcodeResult: undefined });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route.params?.barcodeResult]);
 
   // 최근 항목 탭 — 즐겨찾기(addFavorite)와 같은 방식으로 메모·칼로리·매크로를 더한다
   const addRecent = (food: RecentFood) => {
@@ -358,6 +375,11 @@ export function DietRecordScreen({ navigation, route }: Props) {
             ))}
           </View>
 
+          {/* 포장식품은 바코드로 바로 조회 — 사진/텍스트 AI 분석보다 정확하다(추정이 아니라 실제 표기값) */}
+          <TouchableOpacity style={styles.barcodeBtn} onPress={() => navigation.navigate('BarcodeScan')}>
+            <Text style={styles.barcodeBtnText}>📷 바코드로 찾기</Text>
+          </TouchableOpacity>
+
           {/* 사진 */}
           <Text style={styles.label}>사진</Text>
           <TouchableOpacity style={[styles.photoBox, photoUri ? styles.photoBoxFilled : styles.photoBoxEmpty]} onPress={onPickPhoto} activeOpacity={0.8}>
@@ -531,6 +553,16 @@ const styles = themedStyles((colors) => ({
   typeChipActive: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
   typeText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
   typeTextActive: { color: colors.textPrimary, fontWeight: '800' },
+  barcodeBtn: {
+    marginTop: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryBg,
+    alignItems: 'center',
+  },
+  barcodeBtnText: { fontSize: fontSize.body, fontWeight: '800', color: colors.primary },
   photoBox: {
     borderRadius: radius.lg,
     borderWidth: 1,

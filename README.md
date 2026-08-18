@@ -79,12 +79,13 @@ com.fitto
 └── trainer/       # 트레이너 프로필·대시보드·루틴 (phase 6~7)
 ```
 
-DB 스키마는 `backend/src/main/resources/db/migration/` 의 Flyway 마이그레이션(V1~V27)에 정의되어
+DB 스키마는 `backend/src/main/resources/db/migration/` 의 Flyway 마이그레이션(V1~V38)에 정의되어
 있습니다. 핵심 테이블: users / relations / trainer_profiles / workouts / workout_sets /
 trainer_routines / chat_messages / streaks / device_tokens / meals / places / place_visits /
 feed_posts(+trip_id 앨범 연동) / feed_reactions / trips / trip_items(일자별 일정표) /
 trip_expenses(경비 정산) / trip_checklist_items(준비물 체크리스트) /
-password_reset_tokens(비밀번호 재설정 인증코드) / couple_events(커플 캘린더).
+password_reset_tokens(비밀번호 재설정 인증코드) / couple_events(커플 캘린더) /
+water_logs(물 섭취 트래커) / fasting_sessions(간헐적 단식 타이머).
 
 > ⚠️ `workout_sets` 는 **이름과 달리 세트가 아니라 "운동 종목 1개"를 담는 테이블**입니다
 > (`sets` 컬럼에 세트 수를 넣는 요약 구조). 세트 단위 로그로의 전환 계획은

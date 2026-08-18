@@ -529,6 +529,20 @@ export interface PartnerFasting {
   targetHours?: number | null;
 }
 
+// 바코드 식품 DB 조회 (GET /food-db/barcode/{code}) — 그대로 저장되지 않고 폼을 채우기만 한다
+export interface BarcodeLookup {
+  barcode: string;
+  foodName?: string | null;
+  servingSize?: string | null;
+  calories?: number | null;
+  carbs?: number | null;
+  protein?: number | null;
+  fat?: number | null;
+  sugar?: number | null;
+  sodium?: number | null;
+  fiber?: number | null;
+}
+
 // 주간 식단 AI 코칭 (GET /meal/coach)
 export interface DietCoach {
   hasData: boolean;
