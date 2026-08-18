@@ -24,7 +24,7 @@ import { haptics } from '../../utils/haptics';
 import { toDateString } from '../../utils/date';
 import { buildDietShareCopy } from '../../utils/dietShare';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { FavoriteFood, MealType } from '../../types';
+import type { FavoriteFood, MealType, RecentFood } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'DietRecord'>;
@@ -60,8 +60,12 @@ export function DietRecordScreen({ navigation, route }: Props) {
   const [saving, setSaving] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzingText, setAnalyzingText] = useState(false);
-  // AI 분석 매크로(탄단지) — 결과 표시용
-  const [macros, setMacros] = useState<{ carbs: number; protein: number; fat: number } | null>(null);
+  // AI 분석 매크로(탄단지) + 추가 영양소(당류/나트륨/식이섬유) — 결과 표시용. sugar/sodium/fiber 는
+  // 즐겨찾기 추가 경로에는 없어서 옵션으로 둔다(그 경로는 이 값들을 채우지 않는다).
+  const [macros, setMacros] = useState<{
+    carbs: number; protein: number; fat: number;
+    sugar?: number; sodium?: number; fiber?: number;
+  } | null>(null);
   // 업로드 결과 캐시 — AI 분석과 저장이 같은 사진을 두 번 올리지 않도록
   const uploadedRef = useRef<{ uri: string; url: string } | null>(null);
 
@@ -75,6 +79,30 @@ export function DietRecordScreen({ navigation, route }: Props) {
     dietApi.favorites().then(setFavorites).catch(() => setFavorites([]));
   }, []);
   useFocusEffect(useCallback(() => loadFavorites(), [loadFavorites]));
+
+  // 최근 먹은 음식 — 즐겨찾기와 달리 저장 없이 최근 기록에서 자동으로 뽑힌다
+  const [recentFoods, setRecentFoods] = useState<RecentFood[]>([]);
+  useFocusEffect(
+    useCallback(() => {
+      dietApi.recentFoods().then(setRecentFoods).catch(() => setRecentFoods([]));
+    }, []),
+  );
+
+  // 최근 항목 탭 — 즐겨찾기(addFavorite)와 같은 방식으로 메모·칼로리·매크로를 더한다
+  const addRecent = (food: RecentFood) => {
+    haptics.light();
+    addName(food.memo);
+    if (food.calories) {
+      setCalories((prev) => String((Number(prev) || 0) + (food.calories ?? 0)));
+    }
+    if (food.carbs || food.protein || food.fat) {
+      setMacros((prev) => ({
+        carbs: (prev?.carbs ?? 0) + (food.carbs ?? 0),
+        protein: (prev?.protein ?? 0) + (food.protein ?? 0),
+        fat: (prev?.fat ?? 0) + (food.fat ?? 0),
+      }));
+    }
+  };
 
   const addName = (food: string) => {
     setMemo((prev) => (prev.trim() ? `${prev.trim()}, ${food}` : food));
@@ -191,7 +219,10 @@ export function DietRecordScreen({ navigation, route }: Props) {
         // 음식은 알아봤지만 양을 가늠하지 못한 경우 — 빈 칸으로 두면 실패로 오해한다
         toast.info('칼로리는 추정하지 못했어요. 직접 입력해주세요.');
       }
-      setMacros({ carbs: result.totalCarbs, protein: result.totalProtein, fat: result.totalFat });
+      setMacros({
+        carbs: result.totalCarbs, protein: result.totalProtein, fat: result.totalFat,
+        sugar: result.totalSugar, sodium: result.totalSodium, fiber: result.totalFiber,
+      });
       haptics.success();
       toast.success(result.comment?.trim() || 'AI 분석 완료! ');
     } catch (e) {
@@ -217,7 +248,10 @@ export function DietRecordScreen({ navigation, route }: Props) {
       } else {
         toast.info('칼로리는 추정하지 못했어요. 직접 입력해주세요.');
       }
-      setMacros({ carbs: result.totalCarbs, protein: result.totalProtein, fat: result.totalFat });
+      setMacros({
+        carbs: result.totalCarbs, protein: result.totalProtein, fat: result.totalFat,
+        sugar: result.totalSugar, sodium: result.totalSodium, fiber: result.totalFiber,
+      });
       haptics.success();
       toast.success(result.comment?.trim() || 'AI 칼로리 계산 완료!');
     } catch (e) {
@@ -248,6 +282,9 @@ export function DietRecordScreen({ navigation, route }: Props) {
         carbs: macros?.carbs,
         protein: macros?.protein,
         fat: macros?.fat,
+        sugar: macros?.sugar,
+        sodium: macros?.sodium,
+        fiber: macros?.fiber,
       });
       haptics.success();
       toast.success('식단 기록 완료! ');
@@ -394,6 +431,25 @@ export function DietRecordScreen({ navigation, route }: Props) {
             </>
           )}
 
+          {/* 최근 먹은 음식 — 즐겨찾기와 달리 따로 저장하지 않아도 최근 기록에서 자동으로 뽑힌다 */}
+          {recentFoods.length > 0 ? (
+            <>
+              <Text style={styles.label}>최근 먹은 음식</Text>
+              <View style={styles.presetRow}>
+                {recentFoods.map((f) => (
+                  <TouchableOpacity
+                    key={f.memo}
+                    style={styles.recentChip}
+                    onPress={() => addRecent(f)}
+                  >
+                    <Text style={styles.recentChipText} numberOfLines={1}>{f.memo}</Text>
+                    {f.calories ? <Text style={styles.favChipCal}>{f.calories}kcal</Text> : null}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
+          ) : null}
+
           <TextField
             label="먹은 음식 / 메모"
             placeholder="예: 닭가슴살 샐러드, 현미밥"
@@ -435,6 +491,13 @@ export function DietRecordScreen({ navigation, route }: Props) {
                 <Text style={styles.macroLabel}>지방</Text>
               </View>
             </View>
+          ) : null}
+          {/* 추가 영양소 — AI 분석에서만 채워진다(즐겨찾기 경로는 없음). 목표(target)는 없는
+              정보성 지표라 위 매크로보다 한 톤 낮춰 작게 보여준다. */}
+          {macros && (macros.sugar != null || macros.sodium != null || macros.fiber != null) ? (
+            <Text style={styles.extraNutrients}>
+              당류 {macros.sugar ?? 0}g · 나트륨 {macros.sodium ?? 0}mg · 식이섬유 {macros.fiber ?? 0}g
+            </Text>
           ) : null}
           <TextField
             label="칼로리 (kcal, 선택)"
@@ -506,6 +569,7 @@ const styles = themedStyles((colors) => ({
   },
   macroValue: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
   macroLabel: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
+  extraNutrients: { fontSize: fontSize.caption, color: colors.textTertiary, marginTop: spacing.xs, textAlign: 'center' },
   favHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   favSave: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '800' },
   favHint: { fontSize: fontSize.caption, color: colors.textSecondary, marginBottom: spacing.sm },
@@ -522,6 +586,19 @@ const styles = themedStyles((colors) => ({
   },
   favChipText: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '700' },
   favChipCal: { fontSize: 10, color: colors.textSecondary, fontWeight: '700' },
+  recentChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    maxWidth: 160,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceAlt,
+  },
+  recentChipText: { fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '700', flexShrink: 1 },
   presetRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   presetChip: {
     paddingHorizontal: spacing.md,

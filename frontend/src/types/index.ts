@@ -429,6 +429,10 @@ export interface NutritionSummary {
   consumedCarbs: number;
   consumedProtein: number;
   consumedFat: number;
+  // 당류(g)/나트륨(mg)/식이섬유(g) — target 없이 오늘 합계만 보여주는 정보성 지표
+  consumedSugar: number;
+  consumedSodium: number;
+  consumedFiber: number;
   /** 기초대사량 — 키/생년월일/성별 + 최근 체중 기록이 모두 있어야 계산된다. 없으면 null */
   bmr?: number | null;
   /** 오늘 운동 기록(총 시간) 기반 소모 칼로리 추정치 */
@@ -448,6 +452,9 @@ export interface AnalyzedFood {
   carbs: number;
   protein: number;
   fat: number;
+  sugar: number;
+  sodium: number;
+  fiber: number;
 }
 export interface MealAnalysis {
   isFood: boolean;
@@ -456,7 +463,45 @@ export interface MealAnalysis {
   totalCarbs: number;
   totalProtein: number;
   totalFat: number;
+  totalSugar: number;
+  totalSodium: number;
+  totalFiber: number;
   comment?: string | null;
+}
+
+// 최근 먹은 음식 자동완성 (GET /meal/recent-foods) — 즐겨찾기와 달리 저장 없이 자동으로 뽑힌다
+export interface RecentFood {
+  memo: string;
+  mealType: MealType;
+  calories?: number | null;
+  carbs?: number | null;
+  protein?: number | null;
+  fat?: number | null;
+  count: number;
+}
+
+// 목표 칼로리 자동 계산(TDEE 마법사) — POST /meal/nutrition/goal/suggest
+export type ActivityLevel = 'SEDENTARY' | 'LIGHT' | 'MODERATE' | 'ACTIVE' | 'VERY_ACTIVE';
+export type DietGoalType = 'LOSE' | 'MAINTAIN' | 'GAIN';
+
+export interface NutritionGoalSuggestion {
+  bmr?: number | null;
+  tdee?: number | null;
+  targetCalories?: number | null;
+  targetCarbs?: number | null;
+  targetProtein?: number | null;
+  targetFat?: number | null;
+  /** 계산 불가 시(프로필/체중 미등록) 안내 문구 */
+  message?: string | null;
+}
+
+// 물 섭취 트래커 (GET /water/today)
+export interface WaterSummary {
+  consumedMl: number;
+  targetMl: number;
+  coupleConnected: boolean;
+  partnerName?: string | null;
+  partnerConsumedMl?: number | null;
 }
 
 // 주간 식단 AI 코칭 (GET /meal/coach)

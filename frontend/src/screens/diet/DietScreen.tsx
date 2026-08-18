@@ -25,6 +25,7 @@ import { ProteinRing } from '../../components/ProteinRing';
 import { useDietStore } from '../../store/dietStore';
 import { useRelationStore } from '../../store/relationStore';
 import { dietApi } from '../../api/diet';
+import { waterApi } from '../../api/water';
 import { summaryApi } from '../../api/summary';
 import { streakApi } from '../../api/streak';
 import { getErrorMessage } from '../../utils/error';
@@ -33,7 +34,17 @@ import { haptics } from '../../utils/haptics';
 import { confirmDiscard } from '../../utils/discardGuard';
 import { formatKcal, formatKcalOfGoal, formatNumber } from '../../utils/format';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { CoupleMealGoal, DietCoach, Meal, NutritionSummary, Streak, WeeklyLetter } from '../../types';
+import type {
+  ActivityLevel,
+  CoupleMealGoal,
+  DietCoach,
+  DietGoalType,
+  Meal,
+  NutritionSummary,
+  Streak,
+  WaterSummary,
+  WeeklyLetter,
+} from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { onColor } from '../../theme/onColor';
 import { layout } from '../../theme/layout';
@@ -102,12 +113,26 @@ export function DietScreen({ navigation }: Props) {
   const [savingNut, setSavingNut] = useState(false);
   const [copyingYesterday, setCopyingYesterday] = useState(false);
 
+  // 목표 칼로리 자동 계산(TDEE 마법사) — 계산만 하고, 확정 저장은 기존 목표 모달의 "저장"으로 한다
+  const [wizardModal, setWizardModal] = useState(false);
+  const [wizActivity, setWizActivity] = useState<ActivityLevel>('MODERATE');
+  const [wizGoalType, setWizGoalType] = useState<DietGoalType>('MAINTAIN');
+  const [wizRate, setWizRate] = useState(0.5);
+  const [calculating, setCalculating] = useState(false);
+
+  // 물 섭취 트래커
+  const [water, setWater] = useState<WaterSummary | null>(null);
+  const refreshWater = useCallback(() => {
+    waterApi.today().then(setWater).catch(() => setWater(null));
+  }, []);
+
   const refreshExtras = useCallback(() => {
     streakApi.mealMe().then(setMyStreak).catch(() => setMyStreak(null));
     streakApi.mealCouple().then(setCoupleStreak).catch(() => setCoupleStreak(null));
     dietApi.coupleGoal().then(setGoal).catch(() => setGoal(null));
     dietApi.nutrition().then(setNutrition).catch(() => setNutrition(null));
-  }, []);
+    refreshWater();
+  }, [refreshWater]);
 
   // 모달을 연 시점의 목표 스냅샷 — 백드롭으로 닫을 때 "달라진 게 있는지"를 판단한다
   const nutInitialRef = useRef('');
@@ -148,6 +173,44 @@ export function DietScreen({ navigation }: Props) {
       toast.error(getErrorMessage(e, '목표 저장에 실패했어요.'));
     } finally {
       setSavingNut(false);
+    }
+  };
+
+  // 목표 칼로리 자동 계산 — 결과를 목표 모달 입력칸에 채워만 준다. 저장은 사용자가 "저장" 버튼으로.
+  const onCalculateGoal = async () => {
+    setCalculating(true);
+    try {
+      const res = await dietApi.suggestNutritionGoal({
+        activityLevel: wizActivity,
+        goalType: wizGoalType,
+        weeklyRateKg: wizGoalType === 'MAINTAIN' ? undefined : wizRate,
+      });
+      if (res.targetCalories == null) {
+        toast.error(res.message || '계산에 필요한 정보가 부족해요.');
+        return;
+      }
+      setTCal(String(res.targetCalories));
+      setTCarbs(String(res.targetCarbs));
+      setTProtein(String(res.targetProtein));
+      setTFat(String(res.targetFat));
+      haptics.success();
+      toast.success('계산했어요. 확인 후 저장해주세요 ');
+      setWizardModal(false);
+    } catch (e) {
+      toast.error(getErrorMessage(e, '계산에 실패했어요.'));
+    } finally {
+      setCalculating(false);
+    }
+  };
+
+  // 물 섭취 +/- — 실패해도 조용히 되돌리지 않고 에러만 안내(연타 시 중복 요청은 서버가 누적 처리)
+  const onAddWater = async (amountMl: number) => {
+    try {
+      const res = await waterApi.add(amountMl);
+      setWater(res);
+      haptics.light();
+    } catch (e) {
+      toast.error(getErrorMessage(e, '물 섭취 기록에 실패했어요.'));
     }
   };
 
@@ -281,6 +344,15 @@ export function DietScreen({ navigation }: Props) {
                   </Text>
                 ) : null}
 
+                {/* 당류/나트륨/식이섬유 — 목표(target) 없이 오늘 합계만 참고하는 정보성 지표라
+                    게이지 없이 한 줄로만 보여준다. */}
+                {nutrition.consumedSugar > 0 || nutrition.consumedSodium > 0 || nutrition.consumedFiber > 0 ? (
+                  <Text style={styles.extraNutrients}>
+                    당류 {formatNumber(nutrition.consumedSugar)}g · 나트륨 {formatNumber(nutrition.consumedSodium)}mg
+                    {' '}· 식이섬유 {formatNumber(nutrition.consumedFiber)}g
+                  </Text>
+                ) : null}
+
                 {/* 실시간 에너지 밸런스 — 기초대사량 + 오늘 운동 소모 - 섭취. 수동 목표와 별개로,
                     "오늘 움직인 만큼" 반영된 잔여 칼로리를 보여준다. 프로필(키/생년월일/성별)이나
                     체중 기록이 없으면 계산할 수 없어 등록 안내만 노출한다. */}
@@ -304,6 +376,42 @@ export function DietScreen({ navigation }: Props) {
                   )}
                 </View>
               </Pressable>
+            ) : null}
+
+            {/* 물 섭취 트래커 — 원가 없는 단순 카운터라 무료로 열어둔다(YAZIO 도 물은 무료) */}
+            {water ? (
+              <View style={styles.waterCard}>
+                <View style={styles.waterHeader}>
+                  <Text style={styles.waterTitle}>💧 물 {formatNumber(water.consumedMl)}ml</Text>
+                  <Text style={styles.waterTarget}>목표 {formatNumber(water.targetMl)}ml</Text>
+                </View>
+                <View style={styles.nutTrack}>
+                  <View
+                    style={[
+                      styles.nutFill,
+                      { width: `${Math.min(100, (water.consumedMl / water.targetMl) * 100)}%` },
+                    ]}
+                  />
+                </View>
+                {water.coupleConnected ? (
+                  <Text style={styles.waterPartner}>
+                    상대 {formatNumber(water.partnerConsumedMl ?? 0)}ml
+                  </Text>
+                ) : null}
+                <View style={styles.waterButtonRow}>
+                  <TouchableOpacity style={styles.waterBtn} onPress={() => onAddWater(250)}>
+                    <Text style={styles.waterBtnText}>＋250ml</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.waterBtn} onPress={() => onAddWater(500)}>
+                    <Text style={styles.waterBtnText}>＋500ml</Text>
+                  </TouchableOpacity>
+                  {water.consumedMl > 0 ? (
+                    <TouchableOpacity style={styles.waterUndoBtn} onPress={() => onAddWater(-250)}>
+                      <Text style={styles.waterUndoText}>−250ml</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              </View>
             ) : null}
 
             {/* 식단 스트릭 */}
@@ -416,7 +524,12 @@ export function DietScreen({ navigation }: Props) {
       <Modal visible={nutModal} transparent animationType="fade" onRequestClose={closeNutModal}>
         <Pressable style={styles.modalBackdrop} onPress={closeNutModal}>
           <Pressable style={styles.modalCard} onPress={() => {}}>
-            <Text style={styles.modalTitle}>하루 영양 목표</Text>
+            <View style={styles.nutModalHeader}>
+              <Text style={styles.modalTitle}>하루 영양 목표</Text>
+              <TouchableOpacity onPress={() => setWizardModal(true)}>
+                <Text style={styles.wizardLink}>🧮 자동 계산</Text>
+              </TouchableOpacity>
+            </View>
             <Text style={styles.modalDesc}>비워두면 해당 항목은 목표 없이 섭취량만 표시돼요.</Text>
             <View style={styles.nutFormRow}>
               <View style={styles.nutFormItem}>
@@ -435,6 +548,84 @@ export function DietScreen({ navigation }: Props) {
               </View>
             </View>
             <Button title="저장" onPress={onSaveNutGoal} loading={savingNut} style={styles.nutSaveBtn} />
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* 목표 칼로리 자동 계산(TDEE 마법사) — 계산만 하고, 위 목표 모달 입력칸을 채운다.
+          저장은 사용자가 위 모달의 "저장" 버튼을 눌러야 확정된다. */}
+      <Modal visible={wizardModal} transparent animationType="fade" onRequestClose={() => setWizardModal(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setWizardModal(false)}>
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            <Text style={styles.modalTitle}>목표 칼로리 자동 계산</Text>
+            <Text style={styles.modalDesc}>
+              기초대사량(BMR) × 활동량으로 하루 소비 칼로리를 추정해 목표를 제안해요.
+            </Text>
+
+            <Text style={styles.wizardLabel}>활동량</Text>
+            <View style={styles.wizardChipRow}>
+              {(
+                [
+                  ['SEDENTARY', '거의 안 함'],
+                  ['LIGHT', '가벼운 운동'],
+                  ['MODERATE', '보통'],
+                  ['ACTIVE', '활발함'],
+                  ['VERY_ACTIVE', '매우 활발'],
+                ] as [ActivityLevel, string][]
+              ).map(([value, label]) => (
+                <TouchableOpacity
+                  key={value}
+                  style={[styles.wizardChip, wizActivity === value && styles.wizardChipActive]}
+                  onPress={() => setWizActivity(value)}
+                >
+                  <Text style={[styles.wizardChipText, wizActivity === value && styles.wizardChipTextActive]}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={styles.wizardLabel}>목표</Text>
+            <View style={styles.wizardChipRow}>
+              {(
+                [
+                  ['LOSE', '감량'],
+                  ['MAINTAIN', '유지'],
+                  ['GAIN', '증량'],
+                ] as [DietGoalType, string][]
+              ).map(([value, label]) => (
+                <TouchableOpacity
+                  key={value}
+                  style={[styles.wizardChip, wizGoalType === value && styles.wizardChipActive]}
+                  onPress={() => setWizGoalType(value)}
+                >
+                  <Text style={[styles.wizardChipText, wizGoalType === value && styles.wizardChipTextActive]}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {wizGoalType !== 'MAINTAIN' ? (
+              <>
+                <Text style={styles.wizardLabel}>주당 {wizGoalType === 'LOSE' ? '감량' : '증량'} 속도</Text>
+                <View style={styles.wizardChipRow}>
+                  {[0.25, 0.5, 0.75].map((rate) => (
+                    <TouchableOpacity
+                      key={rate}
+                      style={[styles.wizardChip, wizRate === rate && styles.wizardChipActive]}
+                      onPress={() => setWizRate(rate)}
+                    >
+                      <Text style={[styles.wizardChipText, wizRate === rate && styles.wizardChipTextActive]}>
+                        {rate}kg
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
+            ) : null}
+
+            <Button title="계산해서 채우기" onPress={onCalculateGoal} loading={calculating} style={styles.nutSaveBtn} />
           </Pressable>
         </Pressable>
       </Modal>
@@ -467,6 +658,7 @@ const styles = themedStyles((colors) => ({
   nutFillOver: { backgroundColor: colors.primary },
   nutVal: { width: 92, textAlign: 'right', fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '700' },
   nutRemain: { fontSize: fontSize.caption, color: colors.togetherText, fontWeight: '800', textAlign: 'right', marginTop: spacing.xs },
+  extraNutrients: { fontSize: 10, color: colors.textTertiary, fontWeight: '600', marginTop: spacing.xs },
   energyBox: {
     marginTop: spacing.sm,
     paddingTop: spacing.sm,
@@ -480,6 +672,56 @@ const styles = themedStyles((colors) => ({
   nutFormRow: { flexDirection: 'row', gap: spacing.sm },
   nutFormItem: { flex: 1 },
   nutSaveBtn: { marginTop: spacing.sm },
+  nutModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  wizardLink: { fontSize: fontSize.caption, fontWeight: '800', color: colors.primary },
+  wizardLabel: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700', marginTop: spacing.sm },
+  wizardChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  wizardChip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceAlt,
+  },
+  wizardChipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
+  wizardChipText: { fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '600' },
+  wizardChipTextActive: { color: onColor(colors.accent), fontWeight: '800' },
+  // 물 섭취 트래커
+  waterCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  waterHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  waterTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
+  waterTarget: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
+  waterPartner: { fontSize: fontSize.caption, color: colors.textSecondary },
+  waterButtonRow: { flexDirection: 'row', gap: spacing.sm },
+  waterBtn: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    backgroundColor: colors.accentSoft,
+    alignItems: 'center',
+  },
+  waterBtnText: { fontSize: fontSize.caption, fontWeight: '800', color: colors.textPrimary },
+  waterUndoBtn: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  waterUndoText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary },
   aiRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
   aiBtn: { flex: 1 },
   aiHeadline: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary, lineHeight: 22 },

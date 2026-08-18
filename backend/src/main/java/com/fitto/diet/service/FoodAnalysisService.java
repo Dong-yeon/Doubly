@@ -44,9 +44,12 @@ public class FoodAnalysisService {
             - 각 음식의 이름(name)은 한국어로 적습니다. 한국 음식이면 정확한 한국어 명칭을 사용합니다.
             - calories 는 사진에 보이는 양 기준의 추정 칼로리(kcal), portion 은 대략적인 양(예: "1인분", "밥 반 공기")입니다.
             - carbs/protein/fat 은 각 음식의 탄수화물/단백질/지방 추정량(그램, g)입니다.
-            - portion 과 carbs/protein/fat 은 반드시 채웁니다. 정확히 모르면 일반적인 값으로 추정하되,
-              실제로 거의 없는 경우가 아니면 0 으로 두지 않습니다. (예: 계란은 지방이 0 이 아닙니다)
-            - totalCalories, totalCarbs, totalProtein, totalFat 은 모든 음식의 합계입니다.
+            - sugar/fiber 는 당류/식이섬유 추정량(그램, g), sodium 은 나트륨 추정량(밀리그램, mg)입니다.
+            - portion 과 carbs/protein/fat/sugar/sodium/fiber 는 반드시 채웁니다. 정확히 모르면
+              일반적인 값으로 추정하되, 실제로 거의 없는 경우가 아니면 0 으로 두지 않습니다.
+              (예: 계란은 지방이 0 이 아니고, 흰쌀밥은 나트륨이 거의 0에 가깝습니다)
+            - totalCalories, totalCarbs, totalProtein, totalFat, totalSugar, totalSodium, totalFiber
+              는 모든 음식의 합계입니다.
             - comment 에는 이 식단에 대한 짧고 다정한 한 줄 코멘트를 한국어로 작성합니다. (영양 균형 관점에서 칭찬 또는 부드러운 제안)
             """;
 
@@ -63,9 +66,11 @@ public class FoodAnalysisService {
             - 양이 적혀 있으면(예: "계란 2개", "밥 한 공기") 그 양을 반영하고, 없으면 한국인 기준
               일반적인 1인분으로 가정합니다. portion 에 **가정한 양을 반드시 적습니다**. (예: "1개", "1인분")
             - calories 는 그 양 기준 추정 칼로리(kcal), carbs/protein/fat 은 탄수화물/단백질/지방 추정량(g)입니다.
-            - carbs/protein/fat 은 반드시 채웁니다. 정확히 모르면 일반적인 값으로 추정하되,
-              실제로 거의 없는 경우가 아니면 0 으로 두지 않습니다. (예: 계란은 지방이 0 이 아닙니다)
-            - totalCalories, totalCarbs, totalProtein, totalFat 은 모든 음식의 합계입니다.
+            - sugar/fiber 는 당류/식이섬유 추정량(그램, g), sodium 은 나트륨 추정량(밀리그램, mg)입니다.
+            - carbs/protein/fat/sugar/sodium/fiber 는 반드시 채웁니다. 정확히 모르면 일반적인 값으로
+              추정하되, 실제로 거의 없는 경우가 아니면 0 으로 두지 않습니다. (예: 계란은 지방이 0 이 아닙니다)
+            - totalCalories, totalCarbs, totalProtein, totalFat, totalSugar, totalSodium, totalFiber
+              는 모든 음식의 합계입니다.
             - comment 에는 이 식단에 대한 짧고 다정한 한 줄 코멘트를 한국어로 작성합니다.
 
             [메모]
@@ -87,19 +92,25 @@ public class FoodAnalysisService {
                             "type", "ARRAY",
                             "items", Map.of(
                                     "type", "OBJECT",
-                                    "properties", Map.of(
-                                            "name", Map.of("type", "STRING"),
-                                            "calories", Map.of("type", "INTEGER"),
-                                            "portion", Map.of("type", "STRING"),
-                                            "carbs", Map.of("type", "INTEGER"),
-                                            "protein", Map.of("type", "INTEGER"),
-                                            "fat", Map.of("type", "INTEGER")),
+                                    "properties", Map.ofEntries(
+                                            Map.entry("name", Map.of("type", "STRING")),
+                                            Map.entry("calories", Map.of("type", "INTEGER")),
+                                            Map.entry("portion", Map.of("type", "STRING")),
+                                            Map.entry("carbs", Map.of("type", "INTEGER")),
+                                            Map.entry("protein", Map.of("type", "INTEGER")),
+                                            Map.entry("fat", Map.of("type", "INTEGER")),
+                                            Map.entry("sugar", Map.of("type", "INTEGER")),
+                                            Map.entry("sodium", Map.of("type", "INTEGER")),
+                                            Map.entry("fiber", Map.of("type", "INTEGER"))),
                                     "required", List.of("name", "calories", "portion",
-                                            "carbs", "protein", "fat"))),
+                                            "carbs", "protein", "fat", "sugar", "sodium", "fiber"))),
                     "totalCalories", Map.of("type", "INTEGER"),
                     "totalCarbs", Map.of("type", "INTEGER"),
                     "totalProtein", Map.of("type", "INTEGER"),
                     "totalFat", Map.of("type", "INTEGER"),
+                    "totalSugar", Map.of("type", "INTEGER"),
+                    "totalSodium", Map.of("type", "INTEGER"),
+                    "totalFiber", Map.of("type", "INTEGER"),
                     "comment", Map.of("type", "STRING")),
             "required", List.of("isFood", "foods", "totalCalories",
                     "totalCarbs", "totalProtein", "totalFat"));
@@ -267,7 +278,10 @@ public class FoodAnalysisService {
                     food.path("portion").asText(null),
                     Math.max(0, food.path("carbs").asInt(0)),
                     Math.max(0, food.path("protein").asInt(0)),
-                    Math.max(0, food.path("fat").asInt(0))));
+                    Math.max(0, food.path("fat").asInt(0)),
+                    Math.max(0, food.path("sugar").asInt(0)),
+                    Math.max(0, food.path("sodium").asInt(0)),
+                    Math.max(0, food.path("fiber").asInt(0))));
         }
         if (foods.isEmpty()) {
             return MealAnalysisResponse.notFood();
@@ -277,8 +291,12 @@ public class FoodAnalysisService {
         int totalCarbs = positiveOrSum(result, "totalCarbs", foods, AnalyzedFood::carbs);
         int totalProtein = positiveOrSum(result, "totalProtein", foods, AnalyzedFood::protein);
         int totalFat = positiveOrSum(result, "totalFat", foods, AnalyzedFood::fat);
+        int totalSugar = positiveOrSum(result, "totalSugar", foods, AnalyzedFood::sugar);
+        int totalSodium = positiveOrSum(result, "totalSodium", foods, AnalyzedFood::sodium);
+        int totalFiber = positiveOrSum(result, "totalFiber", foods, AnalyzedFood::fiber);
         String comment = result.path("comment").asText(null);
-        return new MealAnalysisResponse(true, foods, totalCalories, totalCarbs, totalProtein, totalFat, comment);
+        return new MealAnalysisResponse(true, foods, totalCalories, totalCarbs, totalProtein, totalFat,
+                totalSugar, totalSodium, totalFiber, comment);
     }
 
     /** 합계 필드가 비었으면 개별 음식값을 합산해 보정한다. */
