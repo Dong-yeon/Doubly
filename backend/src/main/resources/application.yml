@@ -107,6 +107,12 @@ fitto:
     model: ${GEMINI_MODEL:gemini-2.5-flash-lite}
     daily-limit-per-user: ${GEMINI_DAILY_LIMIT_PER_USER:10}
 
+  # 통화 벨/웨이크업 스파이크(claude/call-spike-android) — 키 미설정 시 /call-spike/token 이 503
+  stream:
+    api-key: ${STREAM_API_KEY:}
+    api-secret: ${STREAM_API_SECRET:}
+    expire-minutes: ${STREAM_TOKEN_EXPIRE_MINUTES:60}
+
 logging:
   level:
     com.fitto: DEBUG
