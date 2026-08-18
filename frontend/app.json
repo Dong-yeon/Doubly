@@ -71,9 +71,7 @@
             "minSdkVersion": 24
           }
         }
-      ],
-      "@react-native-firebase/app",
-      "@react-native-firebase/messaging"
+      ]
     ],
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -87,7 +85,6 @@
     },
     "android": {
       "package": "com.doubly.app",
-      "googleServicesFile": "./google-services.json",
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF",

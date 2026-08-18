@@ -15,14 +15,23 @@ const PROD_HOST = 'fitto-production.up.railway.app';
 // Android 에뮬레이터는 호스트 머신을 10.0.2.2 로 접근
 const LOCAL_HOST = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
 
-export const API_BASE_URL = USE_LOCAL_BACKEND
-  ? `http://${LOCAL_HOST}:8080/api/v1`
-  : `https://${PROD_HOST}/api/v1`;
+/*
+ * 통화 벨/웨이크업 스파이크(claude/call-spike-android, PLAN.md "통화·영상통화" 참고) 전용
+ * 오버라이드 — 스파이크 백엔드는 이 브랜치에만 있어(/api/v1/call-spike/token) fitto-production
+ * 에는 없다. 별도 Railway 서비스를 띄우고 그 URL을 EAS 환경변수로 넘기면 여기서만 적용된다.
+ * 값이 없으면(일반 빌드) 기존 동작 그대로다 — 메인 앱 흐름에 영향 없음.
+ */
+const CALL_SPIKE_API_URL = process.env.EXPO_PUBLIC_CALL_SPIKE_API_URL;
+const CALL_SPIKE_WS_URL = process.env.EXPO_PUBLIC_CALL_SPIKE_WS_URL;
+
+export const API_BASE_URL =
+  CALL_SPIKE_API_URL ??
+  (USE_LOCAL_BACKEND ? `http://${LOCAL_HOST}:8080/api/v1` : `https://${PROD_HOST}/api/v1`);
 
 // STOMP over WebSocket — 설계서 4.5 (@stomp/stompjs brokerURL 스킴: 로컬 ws / 배포 wss)
-export const WS_BASE_URL = USE_LOCAL_BACKEND
-  ? `ws://${LOCAL_HOST}:8080/ws/chat`
-  : `wss://${PROD_HOST}/ws/chat`;
+export const WS_BASE_URL =
+  CALL_SPIKE_WS_URL ??
+  (USE_LOCAL_BACKEND ? `ws://${LOCAL_HOST}:8080/ws/chat` : `wss://${PROD_HOST}/ws/chat`);
 
 export const STORAGE_KEYS = {
   accessToken: 'fitto.accessToken',
