@@ -59,6 +59,17 @@ public class MealController {
         return ApiResponse.success(mealService.save(user.id(), request), "식단이 기록되었습니다.");
     }
 
+    /**
+     * 기록 수정 — 반찬(항목) 하나만 고치거나 빼는 경로. 항목 목록은 전량 교체다
+     * (요청에 담긴 것이 곧 최종 상태). {@link SaveMealRequest} 를 그대로 쓴다.
+     */
+    @PutMapping("/{id}")
+    public ApiResponse<MealResponse> update(@AuthenticationPrincipal AuthUser user,
+                                            @PathVariable Long id,
+                                            @Valid @RequestBody SaveMealRequest request) {
+        return ApiResponse.success(mealService.update(user.id(), id, request), "식단이 수정되었습니다.");
+    }
+
     /** 음식 사진 AI 분석 — 결과는 추정치이며 저장은 기존 POST /meal 로 사용자가 확정한다 */
     @PostMapping("/analyze")
     public ApiResponse<MealAnalysisResponse> analyze(@AuthenticationPrincipal AuthUser user,

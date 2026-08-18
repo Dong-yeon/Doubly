@@ -16,6 +16,11 @@ public record MealResponse(
         String memo,
         String photoUrl,
         Integer calories,
+        Integer carbs,
+        Integer protein,
+        Integer fat,
+        /** 음식 항목(반찬 단위). 항목 없이 합계만 기록한 건(레거시 포함)은 빈 목록이다. */
+        List<MealItemResponse> items,
         List<GoalHighlight> goals,
         LocalDateTime createdAt
 ) {
@@ -35,7 +40,7 @@ public record MealResponse(
             int target
     ) {}
 
-    /** 저장 시점이 아닌 조회(오늘/히스토리 등)용 — 목표 달성 목록은 항상 비운다. */
+    /** 저장 시점이 아닌 조회(오늘/히스토리 등)·수정용 — 목표 달성 목록은 항상 비운다. */
     public static MealResponse from(Meal m) {
         return from(m, List.of());
     }
@@ -44,6 +49,9 @@ public record MealResponse(
     public static MealResponse from(Meal m, List<GoalHighlight> goals) {
         return new MealResponse(
                 m.getId(), m.getMealDate(), m.getMealType(), m.getMealType().label(),
-                m.getMemo(), m.getPhotoUrl(), m.getCalories(), goals, m.getCreatedAt());
+                m.getMemo(), m.getPhotoUrl(), m.getCalories(),
+                m.getCarbs(), m.getProtein(), m.getFat(),
+                m.getItems().stream().map(MealItemResponse::of).toList(),
+                goals, m.getCreatedAt());
     }
 }

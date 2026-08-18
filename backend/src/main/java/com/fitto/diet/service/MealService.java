@@ -6,8 +6,10 @@ import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.notification.NotificationService;
 import com.fitto.diet.domain.Meal;
+import com.fitto.diet.domain.MealItem;
 import com.fitto.diet.domain.NutritionGoal;
 import com.fitto.diet.dto.CoupleMealGoalResponse;
+import com.fitto.diet.dto.MealItemRequest;
 import com.fitto.diet.dto.MealResponse;
 import com.fitto.diet.dto.MealStatsResponse;
 import com.fitto.diet.dto.SaveMealRequest;
@@ -93,6 +95,9 @@ public class MealService {
                 .protein(req.protein())
                 .fat(req.fat())
                 .build();
+        // 항목을 보냈으면 그게 기준 — 합계는 서버가 다시 더한다(요청의 합계값은 무시)
+        toItems(req).forEach(meal::addItem);
+        meal.recalcTotals();
         mealRepository.save(meal);
 
         List<MealResponse.GoalHighlight> goals =
@@ -117,22 +122,99 @@ public class MealService {
         }
         LocalDate today = LocalDate.now();
         boolean firstMealOfDay = !mealRepository.existsByUserIdAndMealDate(userId, today);
-        List<Meal> copies = sourceMeals.stream()
-                .map(m -> Meal.builder()
-                        .userId(userId)
-                        .mealDate(today)
-                        .mealType(m.getMealType())
-                        .memo(m.getMemo())
-                        .photoUrl(m.getPhotoUrl())
-                        .calories(m.getCalories())
-                        .carbs(m.getCarbs())
-                        .protein(m.getProtein())
-                        .fat(m.getFat())
-                        .build())
-                .toList();
+        List<Meal> copies = sourceMeals.stream().map(this::copyOf).toList();
         mealRepository.saveAll(copies);
         afterMealsAdded(userId, today, firstMealOfDay, true);
         return copies.stream().map(MealResponse::from).toList();
+    }
+
+    /**
+     * 기록 수정 — 반찬(항목) 하나만 고치거나 빼는 경로. 항목은 부분 병합이 아니라
+     * <b>전량 교체</b>다(요청에 담긴 목록이 곧 최종 상태). 칼로리·매크로는 항목이 있으면
+     * 서버가 다시 합산하고, 항목이 없으면 요청의 합계값을 그대로 쓴다.
+     *
+     * <p>저장(save)과 달리 스트릭 갱신·응원 푸시·목표 달성 축하를 하지 않는다 — 이미 기록한
+     * 끼니를 손보는 것이라 그때마다 상대방에게 알림이 가면 소음이고, 단백질 목표 축하는
+     * 같은 날 몇 번이고 다시 뜬다. 대신 커플 화면이 바로 갱신되도록 DIET 이벤트만 발행한다.
+     */
+    @Transactional
+    public MealResponse update(Long userId, Long mealId, SaveMealRequest req) {
+        if (req.mealDate().isAfter(LocalDate.now())) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "미래 날짜는 기록할 수 없습니다.");
+        }
+        Meal meal = mealRepository.findById(mealId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        if (!meal.getUserId().equals(userId)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+
+        meal.update(req.mealDate(), req.mealType(), req.memo(), req.photoUrl());
+        meal.replaceItems(toItems(req));
+        if (meal.getItems().isEmpty()) {
+            meal.applyTotals(req.calories(), req.carbs(), req.protein(), req.fat());
+        } else {
+            meal.recalcTotals();
+        }
+
+        publishDietEvent(userId);
+        return MealResponse.from(meal);
+    }
+
+    /** 요청의 음식 항목 → 엔티티. 화면에 보이는 순서를 order_no 로 굳힌다. */
+    private List<MealItem> toItems(SaveMealRequest req) {
+        List<MealItemRequest> requested = req.itemsOrEmpty();
+        List<MealItem> items = new ArrayList<>();
+        for (int i = 0; i < requested.size(); i++) {
+            MealItemRequest item = requested.get(i);
+            items.add(MealItem.builder()
+                    .name(item.name().trim())
+                    .portion(blankToNull(item.portion()))
+                    .calories(item.calories())
+                    .carbs(item.carbs())
+                    .protein(item.protein())
+                    .fat(item.fat())
+                    .orderNo(i)
+                    .build());
+        }
+        return items;
+    }
+
+    /** 어제 식단 복사 — 항목까지 그대로 들고 와야 복사한 뒤에도 반찬 단위로 손볼 수 있다. */
+    private Meal copyOf(Meal source) {
+        Meal copy = Meal.builder()
+                .userId(source.getUserId())
+                .mealDate(LocalDate.now())
+                .mealType(source.getMealType())
+                .memo(source.getMemo())
+                .photoUrl(source.getPhotoUrl())
+                .calories(source.getCalories())
+                .carbs(source.getCarbs())
+                .protein(source.getProtein())
+                .fat(source.getFat())
+                .build();
+        for (MealItem item : source.getItems()) {
+            copy.addItem(MealItem.builder()
+                    .name(item.getName())
+                    .portion(item.getPortion())
+                    .calories(item.getCalories())
+                    .carbs(item.getCarbs())
+                    .protein(item.getProtein())
+                    .fat(item.getFat())
+                    .orderNo(item.getOrderNo())
+                    .build());
+        }
+        return copy;
+    }
+
+    private String blankToNull(String v) {
+        return v == null || v.isBlank() ? null : v.trim();
+    }
+
+    /** 커플 화면 실시간 갱신만 — 푸시 없이. */
+    private void publishDietEvent(Long userId) {
+        relationRepository.findByUserAndTypeAndStatus(userId, RelationType.COUPLE, RelationStatus.ACTIVE)
+                .stream().findFirst()
+                .ifPresent(c -> coupleEventPublisher.publish(c.getId(), CoupleEvent.DIET));
     }
 
     /** 저장/복사 공통 후처리 — 스트릭 갱신 + 커플 실시간 반영/응원 푸시(+목표 달성 축하). */

@@ -4,6 +4,7 @@ import com.fitto.auth.dto.RegisterRequest;
 import com.fitto.auth.service.AuthService;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.diet.domain.MealType;
+import com.fitto.diet.dto.MealItemRequest;
 import com.fitto.diet.dto.MealResponse;
 import com.fitto.diet.dto.NutritionGoalRequest;
 import com.fitto.diet.dto.SaveMealRequest;
@@ -43,11 +44,19 @@ class MealFlowTest {
     }
 
     private SaveMealRequest sample(LocalDate date, MealType type) {
-        return new SaveMealRequest(date, type, "닭가슴살 샐러드", null, 420, null, null, null);
+        return new SaveMealRequest(date, type, "닭가슴살 샐러드", null, 420, null, null, null, null);
     }
 
     private SaveMealRequest withProtein(LocalDate date, MealType type, int protein) {
-        return new SaveMealRequest(date, type, "단백질 식단", null, null, null, protein, null);
+        return new SaveMealRequest(date, type, "단백질 식단", null, null, null, protein, null, null);
+    }
+
+    /** 반찬 3개짜리 한 끼 — 합계 820kcal / 탄 100 · 단 45 · 지 25 */
+    private SaveMealRequest withItems(LocalDate date, MealType type) {
+        return new SaveMealRequest(date, type, null, null, null, null, null, null, List.of(
+                new MealItemRequest("삼겹살", "1인분", 500, 0, 30, 40),
+                new MealItemRequest("공기밥", "1공기", 300, 90, 6, 1),
+                new MealItemRequest("김치", "조금", 20, 4, 1, 0)));
     }
 
     @Test
@@ -124,7 +133,7 @@ class MealFlowTest {
     void 어제_식단을_오늘로_복사하면_끼니와_매크로가_그대로_유지된다() {
         Long user = register("m5@fitto.com");
         mealService.save(user, new SaveMealRequest(
-                LocalDate.now().minusDays(1), MealType.BREAKFAST, "닭가슴살 샐러드", null, 420, 30, 40, 10));
+                LocalDate.now().minusDays(1), MealType.BREAKFAST, "닭가슴살 샐러드", null, 420, 30, 40, 10, null));
         mealService.save(user, sample(LocalDate.now().minusDays(1), MealType.LUNCH));
 
         List<MealResponse> copied = mealService.copyFrom(user, LocalDate.now().minusDays(1));
@@ -159,5 +168,138 @@ class MealFlowTest {
         mealService.save(b, sample(LocalDate.now(), MealType.LUNCH));
         PartnerTodayResponse after = mealService.partnerToday(a);
         assertThat(after.completed()).isTrue();
+    }
+
+    @Test
+    void 항목으로_저장하면_칼로리와_매크로가_항목_합으로_계산된다() {
+        Long user = register("mi1@fitto.com");
+
+        MealResponse saved = mealService.save(user, withItems(LocalDate.now(), MealType.DINNER));
+
+        assertThat(saved.items()).extracting(i -> i.name())
+                .containsExactly("삼겹살", "공기밥", "김치");
+        assertThat(saved.calories()).isEqualTo(820);
+        assertThat(saved.carbs()).isEqualTo(94);
+        assertThat(saved.protein()).isEqualTo(37);
+        assertThat(saved.fat()).isEqualTo(41);
+        // 조회 경로에서도 항목이 그대로 실린다
+        assertThat(mealService.findToday(user).get(0).items()).hasSize(3);
+    }
+
+    @Test
+    void 항목을_보내면_요청의_합계값은_무시하고_다시_더한다() {
+        Long user = register("mi2@fitto.com");
+
+        MealResponse saved = mealService.save(user, new SaveMealRequest(
+                LocalDate.now(), MealType.LUNCH, null, null, 9999, 9999, 9999, 9999,
+                List.of(new MealItemRequest("계란", "2개", 140, 1, 12, 10))));
+
+        assertThat(saved.calories()).isEqualTo(140);
+        assertThat(saved.protein()).isEqualTo(12);
+    }
+
+    @Test
+    void 반찬_하나를_빼면_끼니_칼로리가_그만큼_줄어든다() {
+        Long user = register("mi3@fitto.com");
+        MealResponse saved = mealService.save(user, withItems(LocalDate.now(), MealType.DINNER));
+
+        // 공기밥(300kcal)을 빼고 나머지 둘만 남긴다 — 수정은 전량 교체
+        MealResponse updated = mealService.update(user, saved.id(), new SaveMealRequest(
+                LocalDate.now(), MealType.DINNER, null, null, null, null, null, null, List.of(
+                        new MealItemRequest("삼겹살", "1인분", 500, 0, 30, 40),
+                        new MealItemRequest("김치", "조금", 20, 4, 1, 0))));
+
+        assertThat(updated.items()).extracting(i -> i.name()).containsExactly("삼겹살", "김치");
+        assertThat(updated.calories()).isEqualTo(520);
+        assertThat(updated.carbs()).isEqualTo(4);
+        // 다시 조회해도 지운 항목이 살아있지 않다 (orphanRemoval)
+        assertThat(mealService.findToday(user).get(0).items()).hasSize(2);
+    }
+
+    @Test
+    void 반찬_하나의_칼로리만_고칠_수_있다() {
+        Long user = register("mi4@fitto.com");
+        MealResponse saved = mealService.save(user, withItems(LocalDate.now(), MealType.DINNER));
+
+        // 공기밥을 반 공기(150kcal)로 — 나머지 항목은 그대로 다시 보낸다
+        MealResponse updated = mealService.update(user, saved.id(), new SaveMealRequest(
+                LocalDate.now(), MealType.DINNER, null, null, null, null, null, null, List.of(
+                        new MealItemRequest("삼겹살", "1인분", 500, 0, 30, 40),
+                        new MealItemRequest("공기밥", "반 공기", 150, 45, 3, 1),
+                        new MealItemRequest("김치", "조금", 20, 4, 1, 0))));
+
+        assertThat(updated.calories()).isEqualTo(670);
+        assertThat(updated.items().get(1).portion()).isEqualTo("반 공기");
+    }
+
+    @Test
+    void 항목_없이_합계만_수정하면_보낸_값이_그대로_반영된다() {
+        Long user = register("mi5@fitto.com");
+        MealResponse saved = mealService.save(user, sample(LocalDate.now(), MealType.LUNCH));
+
+        MealResponse updated = mealService.update(user, saved.id(), new SaveMealRequest(
+                LocalDate.now(), MealType.DINNER, "닭가슴살 샐러드(수정)", null, 500, null, null, null, null));
+
+        assertThat(updated.items()).isEmpty();
+        assertThat(updated.calories()).isEqualTo(500);
+        assertThat(updated.mealType()).isEqualTo(MealType.DINNER);
+        assertThat(updated.memo()).isEqualTo("닭가슴살 샐러드(수정)");
+    }
+
+    @Test
+    void 수정은_목표_달성_축하를_다시_띄우지_않는다() {
+        Long user = register("mi6@fitto.com");
+        nutritionService.setGoal(user, new NutritionGoalRequest(null, null, 100, null));
+        MealResponse saved = mealService.save(user, withProtein(LocalDate.now(), MealType.LUNCH, 120));
+        assertThat(saved.goals()).hasSize(1);
+
+        MealResponse updated = mealService.update(user, saved.id(),
+                new SaveMealRequest(LocalDate.now(), MealType.LUNCH, "단백질 식단", null, null, null, 130, null, null));
+
+        assertThat(updated.goals()).isEmpty();
+    }
+
+    @Test
+    void 남의_기록은_수정할_수_없다() {
+        Long owner = register("mi7@fitto.com");
+        Long other = register("mi8@fitto.com");
+        MealResponse saved = mealService.save(owner, sample(LocalDate.now(), MealType.SNACK));
+
+        assertThatThrownBy(() -> mealService.update(other, saved.id(),
+                sample(LocalDate.now(), MealType.SNACK)))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void 미래_날짜로는_수정할_수_없다() {
+        Long user = register("mi9@fitto.com");
+        MealResponse saved = mealService.save(user, sample(LocalDate.now(), MealType.LUNCH));
+
+        assertThatThrownBy(() -> mealService.update(user, saved.id(),
+                sample(LocalDate.now().plusDays(1), MealType.LUNCH)))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void 어제_식단을_복사하면_항목까지_따라온다() {
+        Long user = register("mi10@fitto.com");
+        mealService.save(user, withItems(LocalDate.now().minusDays(1), MealType.DINNER));
+
+        List<MealResponse> copied = mealService.copyFrom(user, LocalDate.now().minusDays(1));
+
+        assertThat(copied).hasSize(1);
+        assertThat(copied.get(0).items()).extracting(i -> i.name())
+                .containsExactly("삼겹살", "공기밥", "김치");
+        assertThat(copied.get(0).calories()).isEqualTo(820);
+    }
+
+    @Test
+    void 기록을_지우면_항목도_함께_사라진다() {
+        Long user = register("mi11@fitto.com");
+        MealResponse saved = mealService.save(user, withItems(LocalDate.now(), MealType.DINNER));
+
+        mealService.delete(user, saved.id());
+
+        assertThat(mealService.findToday(user)).isEmpty();
     }
 }
