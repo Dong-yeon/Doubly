@@ -31,6 +31,7 @@ import { EmojiPicker } from '../../components/EmojiPicker';
 import { TouchGesturePicker } from '../../components/TouchGesturePicker';
 import { MoodPicker } from '../../components/MoodPicker';
 import { SpellCheckBar } from '../../components/SpellCheckBar';
+import { SwipeBackView } from '../../components/SwipeBackView';
 import { useSettingsStore } from '../../store/settingsStore';
 import { applySuggestion, checkKoreanSpelling } from '../../utils/koreanSpellCheck';
 import { chatApi } from '../../api/chat';
@@ -432,6 +433,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   };
 
   return (
+    <SwipeBackView style={styles.flex}>
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       <KeyboardAvoidingView
         // Android 는 FlatList 를 직접 감싸면 KeyboardAvoidingView 의 자동 높이 보정이
@@ -622,6 +624,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         onSelect={sendMood}
       />
     </SafeAreaView>
+    </SwipeBackView>
   );
 }
 
