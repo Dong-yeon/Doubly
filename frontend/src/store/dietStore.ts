@@ -15,6 +15,7 @@ interface DietState {
   fetchHistory: () => Promise<void>;
   loadMoreHistory: () => Promise<void>;
   save: (payload: SaveMealPayload) => Promise<Meal>;
+  update: (id: number, payload: SaveMealPayload) => Promise<Meal>;
   remove: (id: number) => Promise<void>;
 }
 
@@ -58,6 +59,14 @@ export const useDietStore = create<DietState>((set, get) => ({
     await get().fetchToday();
     await get().fetchHistory();
     return saved;
+  },
+
+  update: async (id, payload) => {
+    const updated = await dietApi.update(id, payload);
+    // 끼니 종류·날짜까지 바뀔 수 있어 부분 치환 대신 다시 받아온다 (save 와 같은 방식)
+    await get().fetchToday();
+    await get().fetchHistory();
+    return updated;
   },
 
   remove: async (id) => {

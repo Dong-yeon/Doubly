@@ -404,6 +404,17 @@ export interface MealGoalHighlight {
   target: number;
 }
 
+/** 끼니를 이루는 음식 하나(반찬 단위) — 항목별로 칼로리·매크로를 따로 들고 수정한다 */
+export interface MealItem {
+  id: number;
+  name: string;
+  portion?: string | null;
+  calories?: number | null;
+  carbs?: number | null;
+  protein?: number | null;
+  fat?: number | null;
+}
+
 export interface Meal {
   id: number;
   mealDate: string;
@@ -411,10 +422,13 @@ export interface Meal {
   mealTypeLabel: string;
   memo?: string | null;
   photoUrl?: string | null;
+  /** 항목 합계 — 항목이 있으면 서버가 items 를 더해 채운다 */
   calories?: number | null;
   carbs?: number | null;
   protein?: number | null;
   fat?: number | null;
+  /** 항목 없이 합계만 기록한 건(레거시 포함)은 빈 배열 — 그때는 memo 로 보여준다 */
+  items?: MealItem[];
   goals?: MealGoalHighlight[];
   createdAt: string;
 }

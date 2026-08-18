@@ -9,6 +9,8 @@ import { themedStyles } from '../theme/themedStyles';
 
 interface Props {
   meal: Meal;
+  /** 탭 — 보통 수정 화면으로 보낸다 */
+  onPress?: (meal: Meal) => void;
   onLongPress?: (meal: Meal) => void;
   /** 날짜 라벨 표시 (히스토리에서 유용) */
   showDate?: boolean;
@@ -23,12 +25,19 @@ export const MEAL_ICON: Record<MealType, IconName> = {
   SNACK: 'cookie-outline',
 };
 
-/** 식단 기록 카드 — 끼니·사진·칼로리·메모 요약 */
-export function MealCard({ meal, onLongPress, showDate }: Props) {
+/** 카드에 펼쳐 보여줄 항목 수 — 나머지는 "외 N개" 로 접는다 */
+const PREVIEW_COUNT = 3;
+
+/** 식단 기록 카드 — 끼니·사진·음식 항목·칼로리·메모 요약 */
+export function MealCard({ meal, onPress, onLongPress, showDate }: Props) {
+  const items = meal.items ?? [];
   return (
     <TouchableOpacity
-      activeOpacity={onLongPress ? 0.7 : 1}
+      activeOpacity={onPress || onLongPress ? 0.7 : 1}
+      onPress={onPress ? () => onPress(meal) : undefined}
       onLongPress={onLongPress ? () => onLongPress(meal) : undefined}
+      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityLabel={onPress ? `${meal.mealTypeLabel} 기록 수정` : undefined}
       style={styles.card}
     >
       <View style={styles.header}>
@@ -46,7 +55,30 @@ export function MealCard({ meal, onLongPress, showDate }: Props) {
         <Image source={{ uri: meal.photoUrl }} style={styles.photo} resizeMode="cover" />
       ) : null}
 
-      {meal.memo ? <Text style={styles.memo}>{meal.memo}</Text> : null}
+      {/*
+        음식 항목 — 반찬 단위로 저장된 기록. 카드가 길어지지 않게 3개까지만 보여주고
+        나머지는 개수로 접는다. 항목이 없는 기록(합계만 적었거나 레거시)은 memo 로 보여준다.
+      */}
+      {items.length > 0 ? (
+        <View style={styles.items}>
+          {items.slice(0, PREVIEW_COUNT).map((it) => (
+            <View key={it.id} style={styles.itemRow}>
+              <Text style={styles.itemName} numberOfLines={1}>
+                {it.name}
+                {it.portion ? <Text style={styles.itemPortion}>{` ${it.portion}`}</Text> : null}
+              </Text>
+              {it.calories ? <Text style={styles.itemKcal}>{formatKcal(it.calories)}</Text> : null}
+            </View>
+          ))}
+          {items.length > PREVIEW_COUNT ? (
+            <Text style={styles.itemMore}>외 {items.length - PREVIEW_COUNT}개</Text>
+          ) : null}
+        </View>
+      ) : null}
+
+      {meal.memo ? (
+        <Text style={items.length > 0 ? styles.memoAside : styles.memo}>{meal.memo}</Text>
+      ) : null}
     </TouchableOpacity>
   );
 }
@@ -73,5 +105,14 @@ const styles = themedStyles((colors) => ({
     backgroundColor: colors.surfaceAlt,
     marginTop: spacing.sm,
   },
+  items: { marginTop: spacing.sm, gap: 2 },
+  itemRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.sm },
+  itemName: { flex: 1, fontSize: fontSize.body, color: colors.textPrimary },
+  itemPortion: { fontSize: fontSize.caption, color: colors.textSecondary },
+  itemKcal: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
+  itemMore: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
+  // 항목이 없는 기록(합계만 적었거나 레거시)에서는 memo 가 본문이다
   memo: { fontSize: fontSize.body, color: colors.textPrimary, marginTop: spacing.sm },
+  // 항목이 있으면 memo 는 곁들이는 한마디라 한 단계 낮춘다
+  memoAside: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.sm },
 }));

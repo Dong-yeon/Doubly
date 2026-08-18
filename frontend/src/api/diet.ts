@@ -28,11 +28,22 @@ export interface SaveFavoriteFoodPayload {
   items: SaveFavoriteFoodItemPayload[];
 }
 
+export interface SaveMealItemPayload {
+  name: string;
+  portion?: string;
+  calories?: number;
+  carbs?: number;
+  protein?: number;
+  fat?: number;
+}
+
 export interface SaveMealPayload {
   mealDate: string;
   mealType: MealType;
   memo?: string;
   photoUrl?: string;
+  /** 항목을 보내면 칼로리·매크로는 서버가 항목 합으로 계산한다 (아래 합계 필드는 무시됨) */
+  items?: SaveMealItemPayload[];
   calories?: number;
   carbs?: number;
   protein?: number;
@@ -49,6 +60,9 @@ export interface NutritionGoalPayload {
 export const dietApi = {
   save: (payload: SaveMealPayload) =>
     unwrap(apiClient.post<ApiResponse<Meal>>('/meal', payload)),
+  // 기록 수정 — items 는 전량 교체(보낸 목록이 곧 최종 상태)
+  update: (id: number, payload: SaveMealPayload) =>
+    unwrap(apiClient.put<ApiResponse<Meal>>(`/meal/${id}`, payload)),
   // 어제(기본) 식단을 오늘 날짜로 통째로 복사 — 3초 퀵 로깅
   copyFromYesterday: () =>
     unwrap(apiClient.post<ApiResponse<Meal[]>>('/meal/copy')),

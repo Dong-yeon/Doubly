@@ -1,6 +1,6 @@
 /** 네비게이션 파라미터 타입 — 설계서 2. 화면 설계 */
 import type { NavigatorScreenParams } from '@react-navigation/native';
-import type { Trip } from '../types';
+import type { Meal, Trip } from '../types';
 
 // 2.1 온보딩 플로우 (인증 전)
 export type OnboardingStackParamList = {
@@ -99,8 +99,13 @@ export type WorkoutStackParamList = {
   Challenge: undefined;
   // 식단 (구 식단 탭에서 이전) — WorkoutMain 상단 세그먼트로 토글
   DietMain: undefined;
-  // date: 캘린더에서 특정 날짜를 골라 들어올 때 그 날짜로 시작한다 (없으면 오늘)
-  DietRecord: { date?: string } | undefined;
+  /*
+   * date: 캘린더에서 특정 날짜를 골라 들어올 때 그 날짜로 시작한다 (없으면 오늘)
+   * meal: 이미 저장한 기록을 고치러 들어올 때 그 기록. id 만 넘기지 않는 이유는
+   *   단건 조회 API(GET /meal/{id}) 가 없고, 어차피 방금 탭한 카드의 데이터라
+   *   다시 받아올 게 없기 때문이다 — 로딩·실패 상태가 통째로 사라진다.
+   */
+  DietRecord: { date?: string; meal?: Meal } | undefined;
   DietCalendar: undefined;
   DietStats: undefined;
 };
