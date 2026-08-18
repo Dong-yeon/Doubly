@@ -145,7 +145,12 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
       exerciseCatalogId: e.exerciseCatalogId ?? undefined,
       restSeconds: e.restSeconds ?? undefined,
       alternatives: e.alternatives,
-      sets: Array.from({ length: Math.max(1, e.targetSets ?? 3) }, () => buildSet(e.weightKg, e.reps)),
+      // 세트별 목표(램프업/백오프 등)가 있으면 세트마다 다른 무게·횟수로 시작한다.
+      // 없으면 지금처럼 종목 단위 값으로 목표 세트수만큼 균등 분배한다.
+      sets:
+        e.sets && e.sets.length > 0
+          ? e.sets.map((s) => buildSet(s.weightKg, s.reps))
+          : Array.from({ length: Math.max(1, e.targetSets ?? 3) }, () => buildSet(e.weightKg, e.reps)),
     })),
   );
 

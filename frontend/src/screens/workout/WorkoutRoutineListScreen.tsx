@@ -51,6 +51,12 @@ export function WorkoutRoutineListScreen({ navigation }: Props) {
         equipment: e.equipment ?? undefined,
         exerciseCatalogId: e.exerciseCatalogId ?? undefined,
         restSeconds: e.restSeconds ?? undefined,
+        // 세트별 목표가 있으면 세션이 종목마다 다른 무게·횟수로 시작한다(램프업/백오프 등)
+        sets: e.sets?.map((s) => ({
+          reps: s.reps ?? undefined,
+          weightKg: s.weightKg ?? undefined,
+          setType: s.setType ?? undefined,
+        })),
         alternatives: e.alternatives?.map((a) => ({
           exerciseCatalogId: a.exerciseCatalogId,
           name: a.name,

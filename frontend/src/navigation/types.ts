@@ -58,6 +58,13 @@ export interface SessionExerciseAlternativeParam {
   equipment?: string;
 }
 
+// 루틴에 세트별 목표가 있을 때 세션에 넘기는 세트 한 줄 — 없으면 targetSets 만큼 균등 분배
+export interface SessionExerciseSetParam {
+  reps?: number;
+  weightKg?: number;
+  setType?: string;
+}
+
 // 운동 세션(짐 보조)에 넘기는 운동 항목 — 루틴 실행 시 사용
 export interface SessionExerciseParam {
   name: string;
@@ -73,6 +80,8 @@ export interface SessionExerciseParam {
   restSeconds?: number;
   // 사전 지정 대체 종목 — 세션의 대체 종목 모달에서 '추천'으로 먼저 보여줌(④)
   alternatives?: SessionExerciseAlternativeParam[];
+  // 세트별 목표 — 있으면 세션 세트가 이 값으로 채워지고, 없으면 targetSets 만큼 균등 분배
+  sets?: SessionExerciseSetParam[];
 }
 
 // 운동 탭 내부 스택 — 운동 + 식단(세그먼트로 통합)

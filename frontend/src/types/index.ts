@@ -324,9 +324,19 @@ export interface RoutineExerciseAlternative {
   muscleGroup: string;
   equipment?: string | null;
 }
+// 종목에 담긴 세트 한 줄 — 램프업/피라미드/드롭세트/탑세트+백오프처럼 세트마다 다른
+// 횟수·무게를 계획할 때 쓴다. 비어 있으면 targetSets/reps/weightKg 로 균등 세트를 구성한다
+export interface RoutineExerciseSet {
+  setNo: number;
+  reps?: number | null;
+  weightKg?: number | null;
+  // 세트 성격 — WARMUP/NORMAL/TOP/BACKOFF/DROP. UI 배지 표시용, 계산에는 안 쓴다
+  setType?: string | null;
+}
 export interface RoutineExercise {
   exerciseName: string;
   category?: string | null;
+  // targetSets/reps/weightKg 는 요약값 — sets 가 있으면 서버가 거기서 다시 계산해 채운다
   targetSets?: number | null;
   reps?: number | null;
   weightKg?: number | null;
@@ -336,6 +346,7 @@ export interface RoutineExercise {
   // 이 종목만의 휴식 시간(초) — 없으면 세션 전역 기본값 사용(③)
   restSeconds?: number | null;
   alternatives?: RoutineExerciseAlternative[];
+  sets?: RoutineExerciseSet[];
 }
 export interface WorkoutRoutine {
   id: number;
