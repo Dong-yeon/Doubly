@@ -26,20 +26,30 @@ import { CoupleHero } from './components/CoupleHero';
 import { QuickActions } from './components/QuickActions';
 import { MemoryPeek } from './components/MemoryPeek';
 import { LockedCard } from '../../components/LockedCard';
+import { TouchGesturePicker } from '../../components/TouchGesturePicker';
 import { useAuthStore } from '../../store/authStore';
 import { useRelationStore } from '../../store/relationStore';
 import { workoutApi } from '../../api/workout';
 import { dietApi } from '../../api/diet';
 import { streakApi } from '../../api/streak';
 import { feedApi } from '../../api/feed';
+import { chatApi } from '../../api/chat';
+import { moodApi } from '../../api/mood';
 import { feedTimeLabel } from '../feed/FeedTimelineScreen';
-import { connectSocket, subscribeCouple, unsubscribeCouple } from '../../api/chatSocket';
+import {
+  connectSocket,
+  publishEnsuringConnection,
+  subscribeCouple,
+  unsubscribeCouple,
+} from '../../api/chatSocket';
 import { pickImage, uploadImage } from '../../utils/imageUpload';
 import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { getErrorMessage } from '../../utils/error';
 import { updateHomeWidget } from '../../widget/updateHomeWidget';
-import type { FeedItem, Memories, PartnerToday, Streak } from '../../types';
+import { touchGestureOf } from '../../constants/touchGestures';
+import { playTouchGesture } from '../../utils/haptics';
+import type { FeedItem, Memories, MoodResponse, PartnerToday, Streak, TouchGestureCode } from '../../types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { isDarkMode } from '../../theme';
 import { themedStyles } from '../../theme/themedStyles';
@@ -114,6 +124,15 @@ export function HomeScreen({ navigation }: Props) {
   const [annModal, setAnnModal] = useState(false);
   const [annInput, setAnnInput] = useState('');
   const [annSaving, setAnnSaving] = useState(false);
+  // 가상 터치 — 채팅방을 열지 않고도 보낼 수 있는 진입점(PLAN.md "가상 터치" 참고)
+  const [showTouchPicker, setShowTouchPicker] = useState(false);
+  /*
+   * 무드 상태 — 나/상대 지금 기분(PLAN.md "무드 상태" 참고). 홈은 <b>표시만</b> 한다
+   * (아바타 배지). 보내는 진입점은 ChatRoomScreen 에 둔다 — 이 화면은 세로 여백이
+   * 빠듯해(파일 상단 주석) QuickActions 에 항목을 더 넣으면(터치까지 이미 6개)
+   * 좁은 기기에서 고정폭 아이콘이 겹칠 위험이 있다.
+   */
+  const [mood, setMood] = useState<MoodResponse | null>(null);
 
   // relationStore 의 fetchAll 이 아직 안 끝났으면 couple 이 null 이어도 "미연결"이
   // 아니라 "아직 모름"이다 — 로딩 중엔 연결된 것으로 간주해 연결 안내 화면이
@@ -132,6 +151,9 @@ export function HomeScreen({ navigation }: Props) {
     dietApi.partnerToday().then(setPartnerMeal).catch(() => setPartnerMeal(null));
     streakApi.me().then(setMyStreak).catch(() => setMyStreak(null));
     streakApi.partner().then(setPartnerStreak).catch(() => setPartnerStreak(null));
+    // 무드는 커플 이벤트(MOOD)가 오면 이 refresh() 가 그대로 다시 불려 최신값을 반영한다
+    // — 가상 터치와 달리 즉시 반응(진동)이 필요 없어 별도 이벤트 분기가 필요 없다
+    moodApi.current().then(setMood).catch(() => setMood(null));
     /*
      * 좌우 열이 각자의 마지막 기록을 보여주므로 <b>두 사람 몫</b>이 필요하다.
      * 12건이면 한쪽이 연속으로 기록한 날에도 반대쪽 한 건이 대개 들어온다 —
@@ -172,21 +194,52 @@ export function HomeScreen({ navigation }: Props) {
 
   // 커플 실시간 이벤트 — 상대가 기록하면 바로 반영
   const relationId = couple?.id;
+
+  /*
+   * 가상 터치 수신 — CoupleEvent 는 페이로드가 없으므로(다른 이벤트와 동일한 설계) 받으면
+   * 최신 터치를 다시 조회해 진동 + 토스트로 알린다. 채팅방을 안 열어도 반응하는 경로다
+   * (PLAN.md "가상 터치" 참고).
+   */
+  const onIncomingTouch = useCallback(() => {
+    if (!relationId) return;
+    chatApi
+      .latestTouch(relationId)
+      .then((latest) => {
+        if (!latest) return;
+        playTouchGesture(latest.gestureType);
+        const g = touchGestureOf(latest.gestureType);
+        toast.success(`${couple?.partner?.name ?? '상대'}님이 ${g?.label ?? '터치'}를 보냈어요 ${g?.emoji ?? ''}`);
+      })
+      .catch(() => undefined);
+  }, [relationId, couple?.partner?.name]);
+
   useFocusEffect(
     useCallback(() => {
       if (!relationId) return;
       let active = true;
       connectSocket()
         .then(() => {
-          if (active) subscribeCouple(relationId, () => refresh());
+          if (!active) return;
+          subscribeCouple(relationId, (type) => {
+            refresh();
+            // 가상 터치는 새로고침 대상이 아니라 즉시 반응(진동) 대상이다
+            if (type === 'TOUCH') onIncomingTouch();
+          });
         })
         .catch(() => undefined);
       return () => {
         active = false;
         unsubscribeCouple(relationId);
       };
-    }, [relationId, refresh]),
+    }, [relationId, refresh, onIncomingTouch]),
   );
+
+  const sendTouch = (code: TouchGestureCode) => {
+    if (!relationId) return;
+    publishEnsuringConnection(relationId, { messageType: 'TOUCH', content: code }).then((ok) => {
+      if (!ok) toast.error('연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
+    });
+  };
 
   const onChangeBg = async () => {
     try {
@@ -281,6 +334,7 @@ export function HomeScreen({ navigation }: Props) {
                   streak: myStreak?.currentCount ?? 0,
                   latestLabel: recordLabel(myLatest),
                   latestTime: myLatest ? feedTimeLabel(myLatest.occurredAt) : null,
+                  moodEmoji: mood?.mine?.emoji,
                 }}
                 partner={{
                   name: partner?.partnerName ?? couple?.partner?.name ?? '상대방',
@@ -290,6 +344,7 @@ export function HomeScreen({ navigation }: Props) {
                   streak: partnerStreak?.currentCount ?? 0,
                   latestLabel: recordLabel(partnerLatest),
                   latestTime: partnerLatest ? feedTimeLabel(partnerLatest.occurredAt) : null,
+                  moodEmoji: mood?.partner?.emoji,
                 }}
                 dday={dday}
                 anniversaryDate={couple?.anniversaryDate ?? null}
@@ -330,6 +385,7 @@ export function HomeScreen({ navigation }: Props) {
                 { icon: 'comment-question-outline', label: '질문', onPress: () => navigation.navigate('DailyQuestion') },
                 { icon: 'calendar-heart', label: '캘린더', onPress: () => navigation.navigate('CoupleCalendar') },
                 { icon: 'image-multiple-outline', label: '사진첩', onPress: () => navigation.navigate('PhotoAlbum') },
+                { icon: 'hand-heart-outline', label: '터치', onPress: () => setShowTouchPicker(true) },
               ]}
             />
           </View>
@@ -404,6 +460,13 @@ export function HomeScreen({ navigation }: Props) {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* 가상 터치 — 채팅방을 열지 않고도 보낼 수 있는 진입점 */}
+      <TouchGesturePicker
+        visible={showTouchPicker}
+        onClose={() => setShowTouchPicker(false)}
+        onSelect={sendTouch}
+      />
     </View>
   );
 }

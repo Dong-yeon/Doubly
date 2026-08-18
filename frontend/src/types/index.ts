@@ -43,7 +43,8 @@ export type FeatureKey =
   | 'TRIP_EXPENSE'
   | 'TRIP_CHECKLIST'
   | 'CUSTOM_BACKGROUND'
-  | 'PREMIUM_STICKER';
+  | 'PREMIUM_STICKER'
+  | 'TOUCH_GESTURE_PREMIUM';
 
 /** 한도 주기 — TOTAL 은 리셋되지 않는 보유 개수 상한 */
 export type QuotaPeriod = 'DAY' | 'WEEK' | 'MONTH' | 'TOTAL' | 'NONE';
@@ -853,7 +854,14 @@ export interface Memories {
 }
 
 // 5.8 chat_messages
-export type MessageType = 'TEXT' | 'IMAGE' | 'STICKER' | 'WORKOUT_CARD' | 'MEAL_CARD' | 'ROUTINE_CARD';
+export type MessageType =
+  | 'TEXT'
+  | 'IMAGE'
+  | 'STICKER'
+  | 'WORKOUT_CARD'
+  | 'MEAL_CARD'
+  | 'ROUTINE_CARD'
+  | 'TOUCH';
 /** 메시지 이모지 리액션 — mine 은 userIds 에 내 id 가 있는지로 판단한다(브로드캐스트 공용) */
 export interface ChatReactionSummary {
   emoji: string;
@@ -884,6 +892,30 @@ export interface ChatMessage {
   reactions?: ChatReactionSummary[];
   edited?: boolean;
   deleted?: boolean;
+}
+
+/** GET/POST /mood 한 사람의 현재 무드 — 아직 설정 안 했으면 자리 자체가 null */
+export interface MoodEntry {
+  emoji: string;
+  message?: string | null;
+  createdAt: string;
+}
+
+/** GET /mood 응답 — mine/partner 각각 없을 수 있다 */
+export interface MoodResponse {
+  mine: MoodEntry | null;
+  partner: MoodEntry | null;
+}
+
+/** 가상 터치 제스처 코드 — constants/touchGestures.ts 의 TOUCH_GESTURES 와 짝 */
+export type TouchGestureCode = 'HAND_HOLD' | 'PAT' | 'POKE' | 'HUG' | 'KISS';
+
+/** GET /chat/{relationId}/touch/latest — 없으면 null */
+export interface LatestTouch {
+  messageId: number;
+  senderId: number;
+  gestureType: TouchGestureCode;
+  createdAt: string;
 }
 
 // 채팅방 목록 (4.5 GET /chat/rooms)

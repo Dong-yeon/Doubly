@@ -4,16 +4,22 @@ import com.fitto.auth.dto.UserResponse;
 import com.fitto.chat.domain.ChatMessage;
 import com.fitto.chat.domain.ChatMessageReaction;
 import com.fitto.chat.domain.MessageType;
+import com.fitto.chat.domain.TouchGesture;
 import com.fitto.chat.dto.ChatMessageResponse;
 import com.fitto.chat.dto.ChatReactionSummary;
 import com.fitto.chat.dto.ChatRoomResponse;
+import com.fitto.chat.dto.LatestTouchResponse;
 import com.fitto.chat.dto.ReplyPreview;
 import com.fitto.chat.dto.SendMessageRequest;
 import com.fitto.chat.repository.ChatMessageReactionRepository;
 import com.fitto.chat.repository.ChatMessageRepository;
+import com.fitto.common.event.CoupleEvent;
+import com.fitto.common.event.CoupleEventPublisher;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.notification.NotificationService;
+import com.fitto.common.plan.Feature;
+import com.fitto.common.plan.PlanGuard;
 import com.fitto.relation.domain.Relation;
 import com.fitto.relation.repository.RelationRepository;
 import com.fitto.user.domain.User;
@@ -26,6 +32,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * 채팅 서비스 — 설계서 3.4 / 4.5. 관계별 채팅방, 메시지 영속/조회/읽음.
@@ -41,17 +48,23 @@ public class ChatService {
     private final RelationRepository relationRepository;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
+    private final PlanGuard planGuard;
+    private final CoupleEventPublisher coupleEventPublisher;
 
     public ChatService(ChatMessageRepository chatMessageRepository,
                        ChatMessageReactionRepository reactionRepository,
                        RelationRepository relationRepository,
                        UserRepository userRepository,
-                       NotificationService notificationService) {
+                       NotificationService notificationService,
+                       PlanGuard planGuard,
+                       CoupleEventPublisher coupleEventPublisher) {
         this.chatMessageRepository = chatMessageRepository;
         this.reactionRepository = reactionRepository;
         this.relationRepository = relationRepository;
         this.userRepository = userRepository;
         this.notificationService = notificationService;
+        this.planGuard = planGuard;
+        this.coupleEventPublisher = coupleEventPublisher;
     }
 
     /** 내 채팅방 목록 (활성 관계별 1개). */
@@ -84,11 +97,15 @@ public class ChatService {
     @Transactional
     public ChatMessageResponse send(Long senderId, Long relationId, SendMessageRequest req) {
         Relation relation = requireMember(senderId, relationId);
+        MessageType messageType = req.messageType() != null ? req.messageType() : MessageType.TEXT;
+        if (messageType == MessageType.TOUCH) {
+            requireValidTouch(senderId, req.content());
+        }
 
         ChatMessage message = ChatMessage.builder()
                 .relationId(relationId)
                 .senderId(senderId)
-                .messageType(req.messageType() != null ? req.messageType() : MessageType.TEXT)
+                .messageType(messageType)
                 .content(req.content())
                 .imageUrl(req.imageUrl())
                 .workoutId(req.workoutId())
@@ -98,7 +115,36 @@ public class ChatService {
         chatMessageRepository.save(message);
 
         notifyRecipient(relation, senderId, message);
+        if (messageType == MessageType.TOUCH) {
+            // 홈 화면 등 채팅방 밖에서도 즉시 반응할 수 있도록 커플 채널에도 알린다
+            // (수신측은 페이로드 없이 GET .../touch/latest 로 다시 조회 — 다른 CoupleEvent 와 동일 패턴)
+            coupleEventPublisher.publish(relationId, CoupleEvent.TOUCH);
+        }
         return ChatMessageResponse.from(message, replyPreview(message.getReplyToId()), List.of());
+    }
+
+    /**
+     * 가상 터치 제스처 검증 — 허용된 코드인지, 프리미엄 제스처면 PRO 인지.
+     *
+     * <p>STOMP 경로는 REST 처럼 402 를 그대로 클라이언트에 돌려줄 방법이 없다
+     * (앱은 전송 전에 {@code usePlanStore.can()} 으로 미리 막는다 — PLAN.md 참고).
+     * 여기 검증은 그 우회 방지용 방어선이다.
+     */
+    private void requireValidTouch(Long senderId, String content) {
+        TouchGesture gesture = TouchGesture.from(content)
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_INPUT, "알 수 없는 터치 제스처예요."));
+        if (gesture.isPremium()) {
+            planGuard.require(senderId, Feature.TOUCH_GESTURE_PREMIUM);
+        }
+    }
+
+    /** 내가 받은(상대가 보낸) 가장 최근 터치 — 홈 화면이 CoupleEvent.TOUCH 수신 시 조회한다. */
+    public Optional<LatestTouchResponse> getLatestTouch(Long userId, Long relationId) {
+        requireMember(userId, relationId);
+        return chatMessageRepository
+                .findTopByRelationIdAndMessageTypeAndSenderIdNotOrderByIdDesc(
+                        relationId, MessageType.TOUCH, userId)
+                .map(m -> new LatestTouchResponse(m.getId(), m.getSenderId(), m.getContent(), m.getCreatedAt()));
     }
 
     /**
@@ -296,6 +342,8 @@ public class ChatService {
             case WORKOUT_CARD -> "[운동 기록]";
             case MEAL_CARD -> "[식단]";
             case ROUTINE_CARD -> "[루틴]";
+            // 알 수 없는 코드는 이론상 오지 않는다(전송 시점에 검증됨) — 방어적으로만 처리
+            case TOUCH -> "[" + TouchGesture.from(message.getContent()).map(TouchGesture::label).orElse("터치") + "]";
             default -> message.getContent();
         };
     }

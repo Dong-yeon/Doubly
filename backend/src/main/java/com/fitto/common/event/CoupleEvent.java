@@ -16,4 +16,8 @@ public record CoupleEvent(String type) {
     public static final String CHALLENGE = "CHALLENGE";
     public static final String QUESTION = "QUESTION";
     public static final String CALENDAR = "CALENDAR";
+    /** 가상 터치 전송 — 수신측은 GET /api/v1/chat/{relationId}/touch/latest 로 다시 조회한다 */
+    public static final String TOUCH = "TOUCH";
+    /** 무드 상태 변경 — 수신측은 GET /api/v1/mood 로 다시 조회한다 */
+    public static final String MOOD = "MOOD";
 }

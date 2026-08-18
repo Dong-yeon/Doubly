@@ -28,14 +28,19 @@ import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { EmojiPicker } from '../../components/EmojiPicker';
+import { TouchGesturePicker } from '../../components/TouchGesturePicker';
+import { MoodPicker } from '../../components/MoodPicker';
 import { SpellCheckBar } from '../../components/SpellCheckBar';
 import { useSettingsStore } from '../../store/settingsStore';
 import { applySuggestion, checkKoreanSpelling } from '../../utils/koreanSpellCheck';
 import { chatApi } from '../../api/chat';
+import { moodApi } from '../../api/mood';
 import { isPrShareContent } from '../../utils/workoutShare';
 import { isGoalShareContent } from '../../utils/dietShare';
+import { touchGestureOf } from '../../constants/touchGestures';
+import { playTouchGesture } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { ChatMessage } from '../../types';
+import type { ChatMessage, TouchGestureCode } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { layout } from '../../theme/layout';
 import { useAndroidKeyboardHeight } from '../../hooks/useAndroidKeyboardHeight';
@@ -76,6 +81,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const [text, setText] = useState('');
   const [uploading, setUploading] = useState(false);
   const [showStickers, setShowStickers] = useState(false);
+  const [showTouchPicker, setShowTouchPicker] = useState(false);
+  const [showMoodPicker, setShowMoodPicker] = useState(false);
   // 답장 대상 / 수정 중인 메시지 / 리액션 피커 대상
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const [editing, setEditing] = useState<ChatMessage | null>(null);
@@ -88,6 +95,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const spellCheckEnabled = useSettingsStore((s) => s.spellCheckEnabled);
   // 이미 읽음 처리한 최대 메시지 id — 중복 PUT 방지
   const markedUpToRef = useRef(0);
+  // 이미 진동을 울린 최대 메시지 id — 화면 재마운트·리렌더로 같은 터치가 다시 울리지 않게
+  const hapticedUpToRef = useRef(0);
 
   /*
    * 맞춤법 검사는 기기 안에서만 돈다(외부 전송 없음). 규칙 몇 개짜리라
@@ -140,6 +149,20 @@ export function ChatRoomScreen({ navigation, route }: Props) {
       if (timeoutId) clearTimeout(timeoutId);
     };
   }, [messages, myId, markRead]);
+
+  /*
+   * 상대가 보낸 가상 터치를 받으면 즉시 진동한다 — 채팅방이 열려 있을 때(포그라운드)만
+   * 되는 경로다. 백그라운드/종료 상태는 일반 푸시 알림으로 대체된다(PLAN.md "가상 터치" 참고).
+   * messages 는 최신순(inverted)이라 첫 항목이 최신 메시지다.
+   */
+  useEffect(() => {
+    const latest = messages[0];
+    if (!latest || latest.id <= hapticedUpToRef.current) return;
+    hapticedUpToRef.current = latest.id;
+    if (latest.messageType === 'TOUCH' && latest.senderId !== myId) {
+      playTouchGesture(latest.content);
+    }
+  }, [messages, myId]);
 
   const onSend = async () => {
     const content = text.trim();
@@ -243,6 +266,24 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     }
   };
 
+  const sendTouch = (code: TouchGestureCode) => {
+    const ok = send(relationId, { messageType: 'TOUCH', content: code });
+    if (ok) haptics.light();
+    else Alert.alert('전송 실패', '연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
+  };
+
+  /*
+   * 무드는 채팅 메시지가 아니라 별도 REST(POST /mood)로 남는다 — 대화 로그에 쌓이는
+   * 게 아니라 홈 화면 아바타 배지로만 보여주는 "지금 상태"이기 때문(PLAN.md 참고).
+   * 그래서 send() 소켓이 아니라 moodApi 를 직접 부른다.
+   */
+  const sendMood = (emoji: string, message?: string) => {
+    moodApi
+      .set(emoji, message)
+      .then(() => { haptics.light(); toast.success('무드를 남겼어요'); })
+      .catch((e) => toast.error(getErrorMessage(e, '무드를 남기지 못했어요.')));
+  };
+
   const onPickImage = async () => {
     try {
       const uri = await pickImage();
@@ -263,6 +304,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     const mine = item.senderId === myId;
     const isImage = item.messageType === 'IMAGE' && !!item.imageUrl;
     const isSticker = item.messageType === 'STICKER';
+    const isTouch = item.messageType === 'TOUCH';
     const isWorkout = item.messageType === 'WORKOUT_CARD';
     const isMeal = item.messageType === 'MEAL_CARD';
     // PR(자기 최고 기록) 공유 카드 — 문구 접두어로 구분한다(workoutShare.ts, 단일 출처)
@@ -302,6 +344,12 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         >
         {isSticker ? (
           <Text style={styles.sticker}>{item.content}</Text>
+        ) : isTouch ? (
+          // 스티커처럼 말풍선 없이 크게 — 이모지 아래 제스처 라벨을 붙인다
+          <View style={styles.touchBlock}>
+            <Text style={styles.sticker}>{touchGestureOf(item.content)?.emoji ?? '🤍'}</Text>
+            <Text style={styles.touchLabel}>{touchGestureOf(item.content)?.label ?? '터치'}</Text>
+          </View>
         ) : isImage ? (
           /* 탭하면 전체화면 — 예전엔 200×200 으로 잘린 썸네일이 전부라 원본을 볼 수 없었다 */
           <Pressable
@@ -496,6 +544,22 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               color={showStickers ? colors.primary : colors.textSecondary}
             />
           </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.imageBtn}
+            onPress={() => setShowTouchPicker(true)}
+            accessibilityRole="button"
+            accessibilityLabel="터치 보내기"
+          >
+            <MaterialCommunityIcons name="hand-heart-outline" size={22} color={colors.textSecondary} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.imageBtn}
+            onPress={() => setShowMoodPicker(true)}
+            accessibilityRole="button"
+            accessibilityLabel="지금 기분 남기기"
+          >
+            <MaterialCommunityIcons name="creation" size={22} color={colors.textSecondary} />
+          </TouchableOpacity>
           <TouchableOpacity style={styles.imageBtn} onPress={onPickImage} disabled={uploading}>
             {uploading ? (
               <ActivityIndicator size="small" color={colors.primary} />
@@ -545,6 +609,18 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         onClose={() => setShowEmojiSheet(false)}
         onSelect={(emoji) => sendSticker(emoji)}
       />
+      {/* 가상 터치 — 상대 폰에 즉시 진동. 프리미엄 제스처는 시트 안에서 자체적으로 게이팅한다 */}
+      <TouchGesturePicker
+        visible={showTouchPicker}
+        onClose={() => setShowTouchPicker(false)}
+        onSelect={sendTouch}
+      />
+      {/* 무드 상태 — 대화 로그가 아니라 홈 화면 아바타 배지로 반영된다 */}
+      <MoodPicker
+        visible={showMoodPicker}
+        onClose={() => setShowMoodPicker(false)}
+        onSelect={sendMood}
+      />
     </SafeAreaView>
   );
 }
@@ -564,6 +640,9 @@ const styles = themedStyles((colors) => ({
   msgImage: { width: 200, height: 200, borderRadius: radius.lg, backgroundColor: colors.surfaceAlt },
   // 스티커 — 말풍선 없이 크게. lineHeight 를 주지 않으면 안드로이드에서 이모지가 잘린다
   sticker: { fontSize: 56, lineHeight: 68 },
+  // 가상 터치 — 스티커와 같은 크기 + 아래 제스처 라벨 한 줄
+  touchBlock: { alignItems: 'center' },
+  touchLabel: { fontSize: 11, fontWeight: '700', color: colors.textSecondary, marginTop: -4 },
   stickerPanel: {
     flexDirection: 'row',
     flexWrap: 'wrap',

@@ -4,6 +4,9 @@ import com.fitto.auth.dto.RegisterRequest;
 import com.fitto.auth.service.AuthService;
 import com.fitto.calendar.dto.CreateEventRequest;
 import com.fitto.calendar.service.CalendarService;
+import com.fitto.chat.domain.MessageType;
+import com.fitto.chat.dto.SendMessageRequest;
+import com.fitto.chat.service.ChatService;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.diet.dto.FavoriteFoodItemRequest;
@@ -59,6 +62,7 @@ class PlanGatingFlowTest {
     @Autowired CalendarService calendarService;
     @Autowired MemoriesService memoriesService;
     @Autowired SummaryService summaryService;
+    @Autowired ChatService chatService;
 
     private Long register(String email) {
         return authService.register(
@@ -201,6 +205,25 @@ class PlanGatingFlowTest {
 
         assertThatThrownBy(() ->
                 relationService.setCoupleBackground(user, "https://example.com/bg.jpg"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(this::errorCodeOf)
+                .isEqualTo(ErrorCode.PLAN_UPGRADE_REQUIRED);
+    }
+
+    @Test
+    void 무료는_프리미엄_터치_제스처를_보낼_수_없다() {
+        // 기본 3종(손잡기·토닥임·콕찌르기)은 무료에도 전부 열려 있다 — 프리미엄(포옹·뽀뽀)만 막힌다
+        Long user = register("gate-touch-a@fitto.com");
+        Long partner = register("gate-touch-b@fitto.com");
+        InviteCodeResponse invite = relationService.createCoupleInvite(user);
+        Long relationId = relationService.connectCouple(partner, invite.code()).id();
+
+        assertThatCode(() -> chatService.send(user, relationId,
+                new SendMessageRequest(MessageType.TOUCH, "PAT", null, null, null, null)))
+                .doesNotThrowAnyException();
+
+        assertThatThrownBy(() -> chatService.send(user, relationId,
+                new SendMessageRequest(MessageType.TOUCH, "HUG", null, null, null, null)))
                 .isInstanceOf(BusinessException.class)
                 .extracting(this::errorCodeOf)
                 .isEqualTo(ErrorCode.PLAN_UPGRADE_REQUIRED);

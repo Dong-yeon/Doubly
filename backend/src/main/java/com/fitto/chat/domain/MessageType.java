@@ -8,5 +8,7 @@ public enum MessageType {
     STICKER,
     WORKOUT_CARD,
     MEAL_CARD,
-    ROUTINE_CARD
+    ROUTINE_CARD,
+    /** 가상 터치 — content 에 제스처 코드(TouchGesture.CODES 중 하나)를 담는다. PLAN.md "가상 터치" 참고 */
+    TOUCH
 }

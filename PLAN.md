@@ -308,6 +308,520 @@ CREATE TABLE workout_records (
 
 ---
 
+## Feature: 가상 터치 (Touch Gesture — Obimy 벤치마킹)
+
+> **상태: 제안 (미착수).** Obimy(원거리 커플 앱) 벤치마킹에서 도출 — "텍스트 없이 촉각으로
+> 존재감을 전달"하는 저마찰 채널이 Doubly에 없다는 관찰에서 시작. 신규 테이블·신규 네이티브
+> SDK 없이 **기존 채팅 파이프라인에 얹는** 최소 구현안이다.
+
+### 목표
+
+상대에게 "지금 생각나서"를 문장 없이 전달한다. 제스처 하나를 고르면 상대 폰이 즉시
+진동한다. Obimy의 "가상 터치"를 Doubly 식으로 좁힌 버전 — Obimy는 다자(친구·가족 포함)를
+전제하지만 Doubly는 처음부터 관계가 1:1로 고정돼 있어 "누구에게 보낼지 고르는" 단계 자체가
+없다. 이 점이 오히려 장점이다.
+
+### 왜 새 인프라가 거의 필요 없는가
+
+- `frontend/src/utils/haptics.ts` — 햅틱 트리거가 이미 있음(지금은 버튼 탭 등 로컬 피드백 전용)
+- `MessageType.STICKER` — "content에 짧은 코드를 담고 말풍선 없이 크게 그린다"는 패턴이
+  이미 존재. 터치 제스처는 이 패턴에 햅틱 부수효과만 추가한 형태
+- `/sub/rooms/{relationId}` — 채팅 소켓이 이미 페이로드를 통째로 실어 나름(`/sub/couple/{id}`와
+  달리 type뿐 아니라 데이터까지 옴)
+- `publishEnsuringConnection()`(`frontend/src/api/chatSocket.ts`) — "채팅방 밖에서 운동 카드
+  공유"에 이미 쓰이는, 소켓 연결을 보장한 뒤 발행하는 함수. 홈 화면 등 채팅방 밖 진입점에서도
+  그대로 재사용 가능
+- `chat_messages` 삭제 경로가 `RelationRecordPurger`에 이미 있어(관계 삭제 시 통째로 삭제)
+  **신규 테이블을 만들지 않으면 탈퇴 정리 코드를 손댈 필요가 없다**
+
+즉 이 스펙의 핵심 결정은 "새로 만들지 않고 STICKER 옆에 TOUCH를 하나 추가한다"이다.
+
+### 핵심 기능 (MVP)
+
+1. 제스처 5종 프리셋 전송 — 손잡기 / 토닥임 / 콕 찌르기(무료), 포옹 / 뽀뽀(PRO)
+2. 수신 측 즉시 햅틱 — **채팅방이 열려 있거나 홈 화면에 있을 때(포그라운드)만** 즉시 진동.
+   앱이 백그라운드/종료 상태면 일반 푸시 알림으로 대체(통화 기능과 동일한 현재 인프라 한계)
+3. 채팅 로그에 남음 — 스티커처럼 말풍선 없이 큰 아이콘 + "○○님이 토닥임을 보냈어요"
+4. 홈 화면 빠른 전송 — 채팅방을 열지 않고도 `CoupleHero` 근처에서 원탭 전송(Locket/Obimy의
+   "저마찰" 철학과 합류)
+5. 홈 화면에 있을 때도 반응 — 채팅방을 안 열어도 `/sub/couple/{id}` 이벤트로 감지해 햅틱 발화
+
+### Non-goals (이번 MVP 제외)
+
+- 커스텀 진동 패턴 제작 — 프리셋 5종 고정. 사용자 편집 UI는 다음 단계
+- "누르고 있는 동안 실시간 전송"되는 홀드형 터치(진짜 Obimy의 손잡기 방식) — 저지연 프레임
+  스트리밍이 필요해 범위 밖. MVP는 디스크리트(1회성) 제스처 전송만
+- 앱 종료/백그라운드 상태에서의 즉시 햅틱 — 현재 푸시가 "유실돼도 되는" fire-and-forget
+  구조([ExpoPushNotificationService.java](backend/src/main/java/com/fitto/notification/service/ExpoPushNotificationService.java) 주석 참고)라 보장 불가. 통화 기능(별도 스펙)의 VoIP
+  push 작업과 묶지 않는다 — 터치는 놓쳐도 되는 기능이라 그 정도 투자는 과함
+- Obi One류 AI 반응(제스처에 AI가 코멘트) — 브랜드 결정(트래커 앱 vs 컴패니언 앱)이 선행돼야
+  하는 별개 사안. 이번 스펙에서 제외
+- 무료/PRO 구분 없는 전면 무료 — 아래 게이팅 참고
+
+### 코드 변경 지점
+
+```java
+// chat/domain/MessageType.java — 한 줄 추가
+public enum MessageType {
+    TEXT, IMAGE, STICKER, WORKOUT_CARD, MEAL_CARD, ROUTINE_CARD,
+    TOUCH   // 신규 — content 에 제스처 코드(HAND_HOLD/PAT/POKE/HUG/KISS)
+}
+```
+
+```java
+// common/event/CoupleEvent.java — 한 줄 추가
+public static final String TOUCH = "TOUCH";
+```
+
+```java
+// common/plan/Feature.java — "꾸미기(원가 0, 마진 100%)" 카테고리에 추가
+// PREMIUM_STICKER 와 완전히 같은 판정 근거(원가 없음, 커플 중 한쪽만 PRO여도 함께 쓸 수 있어야 함)
+TOUCH_GESTURE_PREMIUM("프리미엄 터치 제스처", Quota.blocked(), Quota.unlimited()),
+```
+
+`isCoupleScoped()` 스위치의 `CUSTOM_BACKGROUND, PREMIUM_STICKER` 목록에 `TOUCH_GESTURE_PREMIUM`도
+같이 추가한다 — 커플 중 한 명만 PRO여도 둘 다 포옹/뽀뽀를 보낼 수 있어야 "커플당 결제 1건"
+모델과 맞는다.
+
+`ChatService.send()`에 검증 2가지 추가:
+1. `messageType == TOUCH`면 `content`가 허용된 5개 코드 중 하나인지 확인(아니면 `INVALID_INPUT`)
+2. `HUG`/`KISS`(프리미엄 세트)면 `PlanGuard.require(relation, Feature.TOUCH_GESTURE_PREMIUM)` 통과해야 전송
+
+`ChatService.preview()` switch에 케이스 추가:
+```java
+case TOUCH -> "[" + touchLabel(message.getContent()) + "]"; // 예: "[토닥임]"
+```
+
+### API
+
+기존 채팅 API를 그대로 쓴다 — **신규 REST 엔드포인트는 발신 쪽에 없다.**
+
+- 발신: 기존 `/pub/chat/{relationId}` STOMP 발행 그대로. `{messageType: "TOUCH", content: "PAT"}`
+- 신규: `GET /api/v1/chat/{relationId}/touch/latest` — 홈 화면이 `CoupleEvent.TOUCH` 수신 시
+  호출. 내가 받은 가장 최근 TOUCH 메시지 `{messageId, senderId, gestureType, createdAt}` 반환.
+  이미 처리한 `messageId`면 프론트에서 중복 발화 무시(로컬에 마지막 처리 id 저장)
+
+### DB 스키마
+
+**변경 없음.** `chat_messages.message_type`은 `VARCHAR(20)`이고 DB 레벨 CHECK 제약이 없어
+([V1__init_schema.sql:94](backend/src/main/resources/db/migration/V1__init_schema.sql)) 새 enum 값 추가에 마이그레이션이 필요 없다.
+
+### 화면 (frontend)
+
+- `ChatRoomScreen` — 입력창 옆에 터치 제스처 버튼(스티커 버튼과 나란히) → 5종 그리드 시트
+- `ChatRoomScreen` 메시지 렌더러 — `TOUCH` 타입이면 스티커처럼 말풍선 없이 큰 아이콘 +
+  수신 시 `haptics` 패턴 발화(발화는 소켓 `onMessage` 콜백에서, 즉시)
+- `HomeScreen` — `CoupleHero` 근처에 작은 터치 버튼(원탭, 마지막 쓴 제스처 or 기본값 "토닥임")
+  → `publishEnsuringConnection()`으로 채팅방 열지 않고 전송
+- `HomeScreen`의 기존 `subscribeCouple` 콜백에 `type === 'TOUCH'` 분기 추가 — 감지 시
+  `GET .../touch/latest` 호출 → 햅틱 발화 + `CoupleHero`에 짧은 하트/제스처 애니메이션
+- 제스처 5종 → 라벨/아이콘/햅틱 패턴 매핑 테이블(프론트 상수):
+
+| 코드 | 라벨 | 등급 | 햅틱 패턴(expo-haptics) |
+|---|---|---|---|
+| `HAND_HOLD` | 손잡기 | 무료 | Light 1회 |
+| `PAT` | 토닥임 | 무료 | Medium 2회(150ms 간격) |
+| `POKE` | 콕 찌르기 | 무료 | Light 1회(즉시) |
+| `HUG` | 포옹 | PRO | Heavy 3회(200ms 간격) |
+| `KISS` | 뽀뽀 | PRO | Success 알림 패턴 1회 |
+
+> ⚠️ expo-haptics는 Light/Medium/Heavy/Success/Warning/Error/Selection 밖에 없어 표현할 수
+> 있는 "촉감의 폭"이 좁다. `HAND_HOLD`와 `POKE`가 물리적으로 거의 같게 느껴질 수 있음 —
+> 라벨·아이콘·애니메이션으로 차이를 보완해야 한다(진동 자체로 완전히 구분하려 하지 말 것).
+
+### 이후 확장 (제안)
+
+- Locket 벤치마킹(위젯)과 결합 — 최근 받은 터치를 홈 위젯에 표시
+- 월간 "우리가 나눈 터치" 집계 카드 — `Trip Recap`과 같은 순수 집계 패턴(AI 미사용) 재사용
+- 커스텀 진동 패턴(사용자가 리듬 직접 찍기) — Obimy 원본에 가까워지는 방향, PRO 전용 후보
+
+---
+
+## Feature: 무드 상태 (Mood Status — Obimy 벤치마킹)
+
+> **상태: 제안 (미착수).** Obimy 벤치마킹 2순위 — "가상 터치"가 순간적인 제스처라면, 무드
+> 상태는 **몇 시간 동안 유지되는 배경 정보**다. 답장을 요구하지 않는다는 점에서 "오늘의
+> 질문"보다 가볍다. `DailyQuestionService`(`question` 패키지)와 같은 모듈 구조·게시 패턴을
+> 그대로 따른다.
+
+### 목표
+
+이모지 하나로 "지금 상태"를 커플 화면 상단에 띄운다. 텍스트도, 답장도 필요 없다 — 상대가
+"오늘 기분이 별로구나"를 문장 없이 알 수 있게 한다.
+
+### 왜 `question` 모듈을 본뜨는가
+
+- `daily_answers`가 "그날 하루" 단위 답변을 관계별로 쌓는 로그 테이블이고, `bothAnswered`
+  판정처럼 **간단한 조회 + 커플 이벤트 발행**만으로 동작한다 — 무드 상태도 정확히 같은 모양
+  (관계별 로그 + 최신값 조회)
+- 가상 터치와 달리 "즉시 햅틱을 쏴야 하는" 실시간 요구가 없다. 그래서 별도의 latest 조회
+  API·dedup 로직 없이, **기존 `CoupleEvent` → 클라이언트가 `refresh()`** 패턴(운동·식단·챌린지가
+  이미 쓰는 것과 동일)을 그대로 써도 충분하다 — 세 기능 중 가장 단순한 구현
+
+### 핵심 기능 (MVP)
+
+1. 무드 선택 — 12종 고정 프리셋(😊 😢 😴 😤 🥰 😮‍💨 🤒 😎 🥳 😔 🫠 🤔) 중 하나 탭
+2. 선택 즉시 저장 + 상대에게 알림("○○님 지금 기분: 😊")
+3. 커플 화면(홈)에 나/상대 무드를 나란히 표시 — 아바타 옆 작은 이모지 배지
+4. 시간 경과 표시 — "3시간 전"처럼. **24시간이 지나면 클라이언트에서 흐리게/숨김 처리**(서버는
+   데이터를 지우지 않는다 — 나중에 월간 리캡에 쓸 수 있으므로 원장처럼 남겨둔다)
+5. 짧은 메모(선택, 최대 20자) — 이모지만으로 부족할 때만. 필수 아님
+
+### Non-goals (이번 MVP 제외)
+
+- Obimy의 60여 종 무드 — 처음부터 다 만들면 선택 마비만 생긴다. 12종으로 시작해 반응을 보고
+  늘린다(README 전반의 "숫자는 데이터 없이 정하지 않는다" 원칙과 동일)
+- 무드에 대한 리액션 — 채팅 리액션과 기능이 겹친다. 대신 무드 배지를 탭하면 채팅방으로
+  이동하게만 해서, 진짜 대화는 채팅으로 흡수시킨다
+- 무드 히스토리·통계 화면 — `Trip Recap`과 같은 순수 집계 패턴으로 이후 확장(아래 참고)
+- 서버 TTL 자동 삭제 — 안 지운다. "24시간 지나면 흐리게"는 화면 표시 규칙일 뿐, 데이터는
+  원장처럼 유지
+- AI가 무드를 분석해 코멘트를 붙이는 것 — Obi One(AI 컴패니언, 보류)과 방향이 겹치므로 제외
+- PRO/FREE 게이팅 — 아래 참고
+
+### DB 스키마 (V38)
+
+```sql
+-- 무드 상태 — daily_answers 와 같은 모양(관계별 로그). "지금 상태"는 최신 행으로 조회한다
+CREATE TABLE mood_statuses (
+    id         BIGINT       GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    couple_id  BIGINT       NOT NULL REFERENCES relations (id),
+    user_id    BIGINT       NOT NULL REFERENCES users (id),
+    emoji      VARCHAR(10)  NOT NULL,
+    message    VARCHAR(20),
+    created_at TIMESTAMP    NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_mood_statuses_couple_user ON mood_statuses (couple_id, user_id, created_at DESC);
+```
+
+- `UNIQUE` 제약을 두지 않는다 — `daily_answers`는 "하루 1개"라 유니크가 맞지만, 무드는 하루에
+  여러 번 바뀔 수 있어야 하므로 매번 새 행을 쌓는다(원장 방식). "지금 상태"는
+  `ORDER BY created_at DESC LIMIT 1`로 구한다.
+
+### API (`/api/v1/mood`)
+
+- `GET  ` — `{mine: {emoji, message, createdAt} | null, partner: {emoji, message, createdAt} | null}`.
+  각각 관계 내 최신 1건(`findTopByCoupleIdAndUserIdOrderByCreatedAtDesc`)
+- `POST ` `{emoji, message?}` — 새 행 추가. 저장 후 상대에게 알림 + `CoupleEvent.MOOD` 발행
+
+```java
+// common/event/CoupleEvent.java — 한 줄 추가
+public static final String MOOD = "MOOD";
+```
+
+새 패키지 `com.fitto.mood` — `question` 패키지와 같은 구성:
+
+```
+mood/
+├── domain/MoodStatus.java
+├── repository/MoodStatusRepository.java
+├── dto/MoodRequest.java, MoodResponse.java
+├── service/MoodService.java     (activeCouple() 조회는 DailyQuestionService 와 동일한 패턴)
+└── controller/MoodController.java
+```
+
+### 화면 (frontend)
+
+- `HomeScreen` — `CoupleHero` 아바타 옆에 나/상대 무드 이모지 배지(24시간 넘으면 회색 처리)
+- 배지 탭 → 짧은 메모가 있으면 툴팁, 없으면 바로 채팅방으로 이동(리액션·답장은 채팅에서)
+- 무드 선택 진입점 — 홈 화면 내 작은 버튼(가상 터치 버튼과 나란히) → 12종 이모지 그리드
+  바텀시트 → 탭 한 번으로 전송·시트 닫힘
+- `HomeScreen`의 기존 `subscribeCouple` 콜백은 이미 모든 이벤트에 `refresh()`를 호출하므로,
+  `CoupleEvent.MOOD`가 와도 **코드 변경 없이** 최신 무드가 반영된다(운동/식단 이벤트와 동일)
+
+### 함께 고쳐야 하는 곳
+
+| 파일 | 왜 |
+|---|---|
+| `auth/service/UserDataPurger.java` · `relation/service/RelationRecordPurger.java` | `mood_statuses` 신규 테이블 — 삭제 경로 추가 필요(반복되는 패턴, 빠지면 탈퇴가 FK 위반으로 실패) |
+
+가상 터치·통화 스펙과 비교하면 손댈 곳이 가장 적다 — 신규 패키지 하나, 신규 테이블 하나,
+프론트 화면 변경 없이 기존 이벤트 구독이 그대로 재사용된다는 점이 이 기능의 특징이다.
+
+### Plan 게이팅 — 이번엔 넣지 않는다
+
+`Feature.java` 주석의 원칙("체감가치를 보여주는 훅은 무료에도 남긴다" — `AI_FOOD_PHOTO` 사례)을
+그대로 따른다. 무드 상태는 원가가 없고, 매일 여는 습관을 만드는 것이 목적인 기능이라 **처음부터
+전부 무료**로 둔다. 확장 무드팩(계절 한정판 등)이 생기면 그때 `PREMIUM_STICKER`/
+`TOUCH_GESTURE_PREMIUM`과 같은 자리에 게이팅을 추가한다 — 지금 12종 기본 세트를 막을 이유는 없다.
+
+### 이후 확장 (제안)
+
+- 무드팩 확장(PRO 게이팅) — `PREMIUM_STICKER` 판정 방식 재사용
+- 월간 "우리 기분 기록" 리캡 — `Trip Recap`과 같은 순수 집계(감정 분포 비율 등)
+- 가상 터치와 진입점 통합 — 홈 화면에 "표현하기" 버튼 하나로 무드/터치를 함께 노출하는
+  UX 실험(기능 자체는 지금처럼 분리 유지)
+
+---
+
+## Feature: 사진 위젯 (Photo Widget — Locket 벤치마킹)
+
+> **상태: 제안 (미착수).** Locket 벤치마킹 3순위 — 기존 홈 위젯(`react-native-android-widget`,
+> D-day·스트릭)을 실제로 뜯어본 결과, 겉보기와 달리 **데이터 파이프라인이 순수 로컬 캐시라서
+> "확장"보다 "새 위젯 하나 추가"에 가깝다.** 아래에 그 근거를 먼저 적는다 — 이게 이 스펙의
+> 범위를 결정한다.
+
+### 지금 위젯 파이프라인의 실제 동작 — 먼저 확인한 것
+
+[`widgetData.ts`](frontend/src/widget/widgetData.ts) · [`widgetTaskHandler.tsx`](frontend/src/widget/widgetTaskHandler.tsx) ·
+[`updateHomeWidget.tsx`](frontend/src/widget/updateHomeWidget.tsx)를 읽어보면:
+
+- 위젯은 **순수 로컬 캐시(`AsyncStorage`)만 읽는다** — 주석에 "네트워크·인증을 쓰지 않고
+  headless로 그려져야 한다"고 명시돼 있음
+- 갱신은 오직 **앱을 열어 `HomeScreen`이 데이터를 fetch에 성공했을 때만** 일어난다
+  (`updateHomeWidget()` 호출 지점 — 홈 진입 시 1번)
+- Android의 30분 주기 리프레시(`updatePeriodMillis: 1800000`, `app.json`)는 새로 네트워크를
+  부르지 않고 **기존 캐시를 다시 그릴 뿐**이다. D-day만 렌더 시점에 다시 계산돼 자동으로
+  맞고, 스트릭 등 나머지 숫자는 마지막 캐시 값 그대로 남는다
+- 현재 위젯 규격은 `targetCellWidth: 4, targetCellHeight: 1`(`app.json`) — **얇은 가로 배너**다.
+  Locket류 사진 위젯은 정사각 타일이 표준이라 지금 규격에 사진을 넣을 자리가 없다
+
+**결론**: "상대가 사진을 올리면 내 위젯에 바로 뜬다"는 지금 구조로는 원천적으로 안 된다 —
+내가 앱을 열어야만 내 위젯이 갱신된다. 이건 Locket 벤치마킹의 핵심 가치("앱을 안 열어도
+안다")를 정확히 비껴가는 지점이므로, MVP 범위를 여기 맞춰 정직하게 좁힌다.
+
+### 목표 (좁힌 범위)
+
+"실시간"이 아니라 **"최근 앱을 연 시점 기준 최신 사진"**을 보여주는 위젯. 완전한 Locket
+경험은 아니지만, D-day 위젯보다는 확실히 더 자주 볼 이유를 준다.
+
+### 왜 기존 위젯을 고치지 않고 새로 추가하는가
+
+기존 D-day 위젯(4×1 배너)을 사진용으로 바꾸면 레이아웃이 완전히 달라지고, 이미 이 위젯을
+홈 화면에 추가해둔 사용자의 배치가 깨진다. `react-native-android-widget` 플러그인은
+`app.json`의 `widgets` 배열에 여러 위젯을 등록할 수 있으므로, 기존 걸 그대로 두고
+**`DoublyPhoto`(2×2, 정사각) 위젯을 새로 추가**한다.
+
+### 핵심 기능 (MVP)
+
+1. 새 위젯 `DoublyPhoto`(2×2) — 커플 최근 피드 사진 1장 + 작성자 이름 배지
+2. 홈 화면 진입 시 최신 피드 사진을 로컬 파일로 다운로드·캐시 + 위젯 갱신(기존
+   `updateHomeWidget()`과 같은 흐름을 사진용으로 하나 더 추가)
+3. 사진이 없는 커플(피드 미작성) — 빈 상태 문구("우리 첫 기록을 남겨보세요", 기존 D-day 위젯의
+   빈 상태 패턴 재사용)
+4. 위젯 탭 → 앱 실행(가능하면 피드 화면으로 딥링크 — 아래 "확인 필요" 참고)
+
+### Non-goals (이번 MVP 제외)
+
+- **진짜 실시간 갱신**(상대 업로드 → 내 위젯이 즉시 바뀜) — 앱이 백그라운드/종료 상태에서
+  위젯을 갱신하려면 무음(data-only) 푸시로 앱을 깨워 `requestWidgetUpdate`를 호출해야 한다.
+  이건 [통화 스펙](#feature-통화--영상통화-관리형-sdk--stream-video)에서 지적한 "고우선순위 FCM 네이티브 등록" 문제와
+  **사실상 같은 종류의 작업**이다 — 이번 MVP에는 넣지 않고 이후 확장으로 미룬다
+- iOS 위젯 — WidgetKit 네이티브 익스텐션이 필요해 Expo config plugin만으로는 불가능(prebuild +
+  Swift 코드, 별도 Xcode 타깃 추가). Android로 먼저 내고 반응을 본 뒤 별도 스펙으로 분리
+- Crush/Best Friend 전용 위젯 구분 — Doubly는 이미 관계가 1:1 고정이라 이 구분 자체가 필요
+  없음(Locket 대비 오히려 단순함)
+- 위젯에서 바로 리액션 남기기 — Android RemoteViews의 상호작용은 제한적이라 클릭 = 앱 열기
+  하나로 제한
+- 여러 장 슬라이드/캐러셀 — 최신 1장만
+- 가상 터치·무드 상태를 위젯에 함께 표시 — 사진 하나부터 검증한 뒤 결합 검토(아래 이후 확장)
+
+### 확인이 필요한 기술적 전제 — 착수 전 스파이크 먼저
+
+- `react-native-android-widget`이 이 코드베이스에서 아직 이미지를 그려본 적이 없다(`ImageWidget`
+  컴포넌트 존재는 라이브러리 문서상 확인되나 실사용 사례 없음) — 로컬 파일 URI를 넘겨 정상
+  렌더되는지 실제로 검증 필요
+- 위젯 클릭 시 특정 화면(피드)으로 딥링크 가능한지 — 현재 `clickAction`은 `"OPEN_APP"` 고정
+  문자열만 쓰고 있어 화면 지정 방식을 별도 확인해야 함
+
+두 항목 다 "안 되면 못 만드는" 종류는 아니고(최악의 경우 이미지 없이 텍스트로 대체하거나,
+클릭 시 홈 화면만 열면 됨) 범위를 깎을 수 있는 리스크라 스펙 확정 전에 짧게 검증하는 걸 권한다.
+
+### DB / 백엔드 변경
+
+**없음.** 기존 `GET /api/v1/feed`(커서 페이징)의 첫 페이지를 그대로 쓸 수 있다. 다만 "사진
+있는 포스트만" 필터가 지금 없다면 그 필터 하나는 추가가 필요할 수 있음(확인 필요 — 없으면
+프론트에서 사진 있는 첫 항목을 찾을 때까지 페이지를 넘겨야 해서 비효율적).
+
+### 코드 변경 지점
+
+- [`widgetData.ts`](frontend/src/widget/widgetData.ts) — `WidgetData`에 `latestPhotoUri`(로컬 캐시 경로), `latestPhotoAuthor` 필드 추가
+- `widget/DoublyPhotoWidget.tsx`(신규) — `ImageWidget` 기반 2×2 위젯 컴포넌트, 기존
+  `DoublyWidget.tsx`와 같은 Duo Color System 팔레트 재사용
+- [`updateHomeWidget.tsx`](frontend/src/widget/updateHomeWidget.tsx) — 사진 다운로드(`expo-file-system`) + 캐시 저장 로직 추가,
+  `widgetName: 'DoublyPhoto'`로 두 번째 `requestWidgetUpdate` 호출
+- [`widgetTaskHandler.tsx`](frontend/src/widget/widgetTaskHandler.tsx) — `DoublyPhoto` 위젯의 `WIDGET_ADDED`/`WIDGET_UPDATE` 분기 추가
+- `frontend/app.json` — `react-native-android-widget` 플러그인의 `widgets` 배열에 `DoublyPhoto`
+  항목 추가(2×2 규격 — `targetCellWidth: 2, targetCellHeight: 2`)
+
+### 단계 제안
+
+| 순서 | 범위 | 이유 |
+|---|---|---|
+| 1 | `DoublyPhoto` 위젯 정의 + 더미 이미지로 렌더 검증 | 이미지 렌더링 가능 여부부터 확인 — 안 되면 범위 전체가 바뀜 |
+| 2 | 홈 화면 fetch 시 사진 다운로드·캐시·위젯 갱신 파이프라인 | |
+| 3 | 빈 상태·탭 딥링크 처리 | |
+| 4 | (이후 확장) 무음 푸시 기반 백그라운드 갱신 | 통화 스펙의 네이티브 푸시 작업과 함께 검토하면 투자 중복을 줄일 수 있음 — 둘 다 "앱이 안 켜져 있어도 뭔가 일어나야 한다"는 같은 문제 |
+
+### 이후 확장 (제안)
+
+- 무음 푸시로 실시간에 가깝게(위 Non-goals 참고)
+- iOS WidgetKit 확장(별도 스펙)
+- 가상 터치·무드 상태를 위젯 한 켠에 함께 표시(사진 위젯이 자리 잡은 뒤 검토)
+
+---
+
+## Feature: 통화 · 영상통화 (관리형 SDK — Stream Video)
+
+> **상태: 제안 (미착수).** 별도 트랙으로 분리 — 위 [가상 터치](#feature-가상-터치-touch-gesture--obimy-벤치마킹)와
+> 달리 신규 미디어 인프라(WebRTC·VoIP push·CallKit)가 필요해 엔지니어링 비용이 다른 급이다.
+> Doubly 관계 모델이 **엄격히 2인 고정**이라는 제약이 통화에서는 오히려 최적 조건 — 3인 이상
+> 그룹 통화에 필요한 SFU/미디어 서버 부하 걱정 없이 가장 단순한 1:1 케이스만 다루면 된다.
+
+### 왜 직접 구축이 아니라 관리형 SDK인가
+
+| | 직접 구축(react-native-webrtc + 자체 TURN) | 관리형 SDK |
+|---|---|---|
+| TURN/STUN 서버 | coturn 등 직접 운영 — NAT 환경별 연결 실패 대응 필요 | SDK 벤더가 운영 |
+| CallKit/ConnectionService | `react-native-callkeep` 등 직접 연동 | 벤더 SDK가 대부분 내장 |
+| 앱 종료 시 벨 웨이크업(VoIP push) | PushKit·고우선순위 FCM 직접 구현 | 벤더가 "링잉" 기능으로 제공(그래도 네이티브 연동은 필요) |
+| 비용 구조 | 인프라 운영비만(트래픽 늘어도 종량 아님) | 분당 과금 |
+| 엔지니어링 리스크 | 큼 — 1인 개발 체제([README](README.md)에 드러나는 개발 규모)에서 부담 | 작음 — SDK가 어려운 부분을 흡수 |
+
+이 repo는 사실상 단독 개발 체제이고, Cloudinary·Gemini·Resend 등 기존에도 "직접 운영하지
+않고 관리형 서비스를 쓰는" 선택을 반복해 왔다(README 기술 스택 참고). 같은 원칙을 통화에도
+적용한다.
+
+### 벤더 — Stream Video 채택
+
+| 후보 | 비고 |
+|---|---|
+| **Stream Video** (선택) | 1:1 통화 특화, "링잉(ringing)" 기능이 CallKit/VoIP push 연동까지 묶여 있어 별도 신호 설계 최소화. React Native SDK + Expo config plugin 제공 |
+| Agora | 대규모 트래픽에서 단가 유리하나 CallKit/링잉은 직접 조립해야 함 |
+| LiveKit Cloud | 오픈소스라 자체 호스팅 탈출구가 있음(락인 완화). 링잉 기능은 상대적으로 얇음 |
+| Twilio Video | 안정적이나 단가가 높은 편, RN 생태계 문서가 Stream보다 얇음 |
+
+지금 규모(소수 커플, 1:1 전용)에서는 "링잉까지 내장된" 벤더를 골라 **네이티브 연동 작업량을
+줄이는 것**이 단가보다 중요하다고 판단해 Stream Video를 1순위로 둔다. 착수 시점에 요금표를
+다시 확인할 것(가격은 스펙에 숫자로 박아두지 않는다 — `Feature.java`의 "숫자는 근거 생기면
+그때 확정" 원칙과 동일).
+
+### 핵심 기능 (MVP)
+
+1. 1:1 음성 통화 발신/수신
+2. 1:1 영상 통화 발신/수신 — 카메라 on/off, 전/후면 전환
+3. 수신 벨 화면 — CallKit(iOS)/ConnectionService(Android) 네이티브 통합, 잠금 화면에서 수락/거절
+4. 앱이 백그라운드·종료 상태에서도 벨이 울림 — PushKit VoIP(iOS) + 고우선순위 FCM(Android)
+5. 통화 중 컨트롤 — 음소거, 스피커폰, 카메라 전환, 종료
+6. 통화 기록 — 발신/수신/부재중 구분, 채팅 로그에 통화 카드로 남김(`WORKOUT_CARD`와 같은 패턴)
+7. 부재중 통화 배지 — 기존 안 읽은 채팅 배지와 같은 자리에 표시
+
+### Non-goals (이번 MVP 제외)
+
+- 3인 이상 그룹 통화 — `relations`가 2인 고정 구조([README 관계 모델](README.md#관계-모델--커플--패밀리아이-공존) 참고)라 지금은 의미가 없고,
+  N인 확장 전까지는 붙일 이유도 없음
+- 화면 공유, 통화 녹화, 배경 필터·뷰티 모드
+- 통화 중 다른 화면 동시 사용(PIP) — 후순위
+- 커스텀 시그널링(자체 WebRTC) — 관리형 SDK가 전담하므로 해당 없음
+
+### 아키텍처
+
+```
+[발신자 앱] --POST /api/v1/calls--> [Doubly 백엔드] --Server SDK--> [Stream Video]
+                                          │
+                                          ├─ 기존 CoupleEventPublisher → /sub/couple/{id}
+                                          │   CALL_INCOMING (포그라운드 즉시 알림, 최단 경로)
+                                          └─ VoIP push(iOS)/고우선순위 FCM(Android, 신규)
+                                              → 백그라운드·종료 상태 대응(벨 웨이크업)
+
+[수신자 앱] --Stream RN SDK로 콜 조인--> [Stream Video] <--WebRTC 미디어--> [발신자 앱]
+```
+
+Doubly 백엔드는 미디어를 다루지 않는다 — "누가 누구에게 걸었는지"만 중개(콜 세션 생성·토큰
+발급·커플 채널 알림·벨 푸시)하고, 실제 오디오/비디오는 Stream이 전담한다.
+
+### DB 스키마 (V37)
+
+```sql
+CREATE TABLE call_sessions (
+    id               BIGINT       GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    relation_id      BIGINT       NOT NULL REFERENCES relations (id),
+    caller_id        BIGINT       NOT NULL REFERENCES users (id),
+    callee_id        BIGINT       NOT NULL REFERENCES users (id),
+    call_type        VARCHAR(10)  NOT NULL,                    -- VOICE / VIDEO
+    status           VARCHAR(12)  NOT NULL DEFAULT 'RINGING',  -- RINGING/ONGOING/ENDED/MISSED/DECLINED
+    provider_call_id VARCHAR(100) NOT NULL,                    -- Stream call id
+    started_at       TIMESTAMP,                                -- 수락 시각(=통화 시작)
+    ended_at         TIMESTAMP,
+    duration_sec     INT,
+    created_at       TIMESTAMP    NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_call_sessions_relation ON call_sessions (relation_id, created_at DESC);
+```
+
+- 운동 v2 계획의 `IN_PROGRESS`/`COMPLETED` 상태 패턴과 동일한 사고방식 — `status`로 통화의
+  생명주기를 구분한다.
+- 24시간 넘게 `RINGING`/`ONGOING`이면 스케줄러가 강제 종료(운동 세션의 24시간 자동 종료 안전장치와
+  동일한 이유 — 종료 버튼을 안 누르는 사용자, 네트워크 유실로 종료 신호가 안 온 경우 대비).
+
+### API
+
+- `POST /api/v1/calls` `{relationId, callType}` — 발신. `call_sessions` `RINGING` 행 생성 +
+  Stream 토큰 발급 + `CoupleEvent.CALL_INCOMING` 발행 + 벨 푸시 발송.
+  `{callSessionId, streamCallId, streamToken}` 반환
+- `POST /api/v1/calls/{id}/accept` — 수신자 수락. `status → ONGOING`, `started_at` 기록,
+  수신자용 `{streamToken}` 반환
+- `POST /api/v1/calls/{id}/decline` — 거절. `status → DECLINED`, 발신자에게 즉시 이벤트(화면 종료)
+- `POST /api/v1/calls/{id}/end` — 종료(양쪽 다 호출 가능). `status → ENDED`, `duration_sec` 계산.
+  아무도 수락하지 않은 채 끝나면 `MISSED`
+- `GET /api/v1/calls?cursor=` — 통화 기록(발신/수신/부재중 아이콘 구분), 커서 페이징
+
+### 화면 (frontend)
+
+- `IncomingCallScreen`(신규, 전체화면) — CallKit/ConnectionService 네이티브 UI가 1차 경로이고,
+  이 화면은 네이티브 콜 UI가 뜨지 않는 상황(일부 Android 벤더 등)의 인앱 폴백
+- `CallScreen`(신규) — Stream RN SDK 컴포넌트로 구성. 음소거/스피커/카메라 토글/종료
+- `ChatRoomScreen` 헤더에 음성/영상 통화 진입 버튼
+- 채팅 로그에 통화 카드(`MessageType.CALL_CARD` 신규, `WORKOUT_CARD`와 같은 패턴) —
+  "12분 32초 통화" / "부재중 전화"
+- 안 읽은 채팅 배지 자리에 "부재중 통화 n건" 배지 추가
+
+### 네이티브 통합 — SDK가 대신 안 해주는 부분 (가장 위험한 지점)
+
+- **iOS**: PushKit VoIP 등록 + CallKit 연동. Expo 관리형 워크플로우만으로는 불가 — prebuild/config
+  plugin 필요. 다만 이미 `expo-dev-client` + 커스텀 네이티브 플러그인 2종(`@sentry/react-native`,
+  `react-native-android-widget`)을 쓰고 있어 EAS 커스텀 빌드 체계 자체는 선례가 있음
+- **Android**: 고우선순위 FCM 등록 — 현재 `expo-notifications`/Expo Push 경로는 우선순위를
+  세밀하게 제어하지 못할 가능성이 있어([ExpoPushNotificationService.java](backend/src/main/java/com/fitto/notification/service/ExpoPushNotificationService.java)는 애초에 "유실돼도 되는" 설계),
+  통화 벨은 별도의 네이티브 FCM 등록 경로가 필요할 수 있음 — **착수 전 확인 필요 항목**
+- 이 항목을 과소평가하면 "통화 연결은 되는데 앱이 꺼져 있으면 상대가 전화 온 걸 모른다"는
+  상태로 반쯤 완성된 채 멈추기 쉽다. 전체 스펙에서 가장 시간을 넉넉히 잡아야 하는 단계.
+
+### Plan 게이팅 (Feature.java)
+
+```java
+// "원가형" 카테고리 — 분당 과금 SDK이므로 AI 카테고리와 같은 성격
+CALL_VOICE("음성 통화", Quota.perMonth(30 /* 분 단위 커스텀 Quota 필요 */), Quota.unlimited()),
+CALL_VIDEO("영상 통화", Quota.blocked(), Quota.unlimited()),
+```
+
+- `Quota`가 현재 "횟수" 기준(`perDay`/`perMonth`/`upTo`)이라 "통화 분(分)" 단위 한도를 표현하려면
+  `Quota`에 새 종류(예: `Quota.minutesPerMonth(n)`) 추가가 필요 — 기존 열거형을 그대로 쓸 수 없는
+  유일한 지점이라 별도 확인 필요
+- `isCoupleScoped()`에는 넣지 않는다 — `PHOTO_UPLOAD`가 예외적으로 커플 스코프인 이유는
+  "업로드 시점에 용도(개인/커플)를 알 수 없어서"였는데, 통화는 발신자가 항상 명확해 개인 등급
+  판정이 자연스럽다
+
+### 함께 고쳐야 하는 곳
+
+| 파일 | 왜 |
+|---|---|
+| `auth/service/UserDataPurger.java` · `relation/service/RelationRecordPurger.java` | `call_sessions` 신규 테이블 — 삭제 경로에 추가 안 하면 탈퇴 전체가 FK 위반으로 실패(이 repo에서 반복 강조되는 패턴) |
+| `common/config/WebSocketConfig.java` | `enableSimpleBroker`(인메모리, 단일 인스턴스 전제) — 통화 신호 트래픽 자체는 지금 규모에서 문제없지만, 서버가 여러 인스턴스로 확장되는 시점엔 이 기능도 함께 걸림. **지금 고치라는 뜻이 아니라, 알고 있어야 하는 제약**으로 남겨둠 |
+| `common/plan/Quota.java` | "분(分) 단위" 한도 표현 방식 추가 |
+
+### 단계 제안 (한 번에 다 하지 말 것)
+
+| 순서 | 범위 | 이유 |
+|---|---|---|
+| 1 | `call_sessions` 스키마 + Stream 서버 SDK 연동 + REST API | 포그라운드-포그라운드 통화만 우선 동작시켜 SDK 통합 자체를 검증 |
+| 2 | `CallScreen`(통화 중 UI) | 음소거/스피커/카메라 |
+| 3 | **네이티브 벨 웨이크업**(VoIP push + CallKit/ConnectionService) | 가장 위험한 단계 — 별도로 시간을 넉넉히 잡는다. 이게 없으면 "앱 켜놓고 기다려야 걸 수 있는 통화"에 머무름 |
+| 4 | 채팅 통화 카드 + 부재중 배지 + 통화 기록 목록 | |
+| 5 | Plan 게이팅(`CALL_VOICE`/`CALL_VIDEO`, `Quota` 분 단위 확장) | |
+
+---
+
 ## Feature: 커플 일상 피드 (Couple Feed — "우리 기록")
 
 ### 목표
