@@ -15,12 +15,24 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.BatchSize;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
-/** 루틴에 포함된 운동 한 종목 — 목표 세트/횟수/무게 */
+/**
+ * 루틴에 포함된 운동 한 종목 — 목표 세트/횟수/무게.
+ *
+ * <p>targetSets/reps/weightKg 는 <b>요약값</b>이다. {@link #sets} 가 있으면(세트별 목표를
+ * 쓰는 종목) {@link #recalcSetSummary()} 가 세트에서 다시 계산해 채운다 — 루틴 목록 카드·
+ * 세션 프리필·AI 추천이 전부 이 요약 컬럼만 조인 없이 읽으므로, 세트가 있는 종목도 여전히
+ * "3세트 · 10회" 처럼 한 줄로 보여줄 수 있어야 한다(식단 항목 합계와 같은 전략).
+ */
 @Entity
 @Table(name = "workout_routine_exercises")
 @Getter
@@ -72,6 +84,16 @@ public class WorkoutRoutineExercise {
     @OrderBy("sortOrder asc")
     private List<WorkoutRoutineExerciseAlternative> alternatives = new ArrayList<>();
 
+    /**
+     * 세트별 목표 — 램프업/피라미드/드롭세트/탑세트+백오프처럼 세트마다 다른 횟수·무게를
+     * 계획할 때 쓴다. 비어 있으면(대부분의 종목) targetSets/reps/weightKg 만으로 "N세트 균등"
+     * 처럼 다룬다 — 지금까지의 동작 그대로.
+     */
+    @OneToMany(mappedBy = "routineExercise", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("setNo asc")
+    @BatchSize(size = 50)
+    private List<WorkoutRoutineExerciseSet> sets = new ArrayList<>();
+
     @Builder
     private WorkoutRoutineExercise(String exerciseName, String category, Integer targetSets,
                                    Integer reps, BigDecimal weightKg, Integer orderNo,
@@ -96,5 +118,41 @@ public class WorkoutRoutineExercise {
     public void addAlternative(WorkoutRoutineExerciseAlternative alternative) {
         alternatives.add(alternative);
         alternative.assignTo(this);
+    }
+
+    public void addSet(WorkoutRoutineExerciseSet set) {
+        sets.add(set);
+        set.assignTo(this);
+    }
+
+    /**
+     * 세트별 목표를 요약(targetSets/reps/weightKg)에 반영. 세트가 없으면 아무것도 하지 않는다
+     * (그때는 이 필드들이 직접 입력값이므로 건드리지 않는다 — 식단 Meal.recalcTotals 와 같은 규칙).
+     *
+     * <p>reps 는 가장 많이 등장하는 값을 대표로 삼는다(작업 세트는 보통 횟수가 반복된다).
+     * weightKg 는 세트 중 최댓값 — 웜업을 제외한 실제 작업 무게가 보통 가장 무겁다.
+     */
+    public void recalcSetSummary() {
+        if (sets.isEmpty()) {
+            return;
+        }
+        this.targetSets = sets.size();
+        this.reps = modeReps();
+        this.weightKg = sets.stream()
+                .map(WorkoutRoutineExerciseSet::getWeightKg)
+                .filter(java.util.Objects::nonNull)
+                .max(Comparator.naturalOrder())
+                .orElse(null);
+    }
+
+    private Integer modeReps() {
+        Map<Integer, Long> counts = sets.stream()
+                .map(WorkoutRoutineExerciseSet::getReps)
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.groupingBy(r -> r, LinkedHashMap::new, Collectors.counting()));
+        return counts.entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .map(Map.Entry::getKey)
+                .orElse(null);
     }
 }
