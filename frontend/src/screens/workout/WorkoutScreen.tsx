@@ -77,6 +77,7 @@ export function WorkoutScreen({ navigation }: Props) {
           { icon: 'human', label: '몸 변화', onPress: () => navigation.navigate('BodyMetric') },
           { icon: 'sword-cross', label: '대결', onPress: () => navigation.navigate('Challenge') },
           { icon: 'creation', label: 'AI 추천', onPress: () => navigation.navigate('WorkoutRecommend') },
+          { icon: 'microphone-outline', label: '음성 응원', onPress: () => navigation.navigate('VoiceClips') },
           { icon: 'chart-bar', label: '통계', onPress: () => navigation.navigate('WorkoutStats') },
           { icon: 'calendar-blank-outline', label: '캘린더', onPress: () => navigation.navigate('WorkoutCalendar') },
         ]}

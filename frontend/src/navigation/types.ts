@@ -121,6 +121,8 @@ export type WorkoutStackParamList = {
   WorkoutRoutines: undefined;
   // draft: AI 추천에서 넘어올 때 미리 채워 넣을 초안(선택) — 없으면 빈 폼(지금까지의 동작)
   WorkoutRoutineForm: { draft?: RoutineFormDraft } | undefined;
+  // 커플 음성 응원 — 애인 목소리로 녹음한 짧은 문구(휴식 종료·PR·운동 완료)
+  VoiceClips: undefined;
   // 검증된 분할 템플릿(⑤) — 목록에서 골라 내 루틴으로 복사
   WorkoutRoutineTemplates: undefined;
   // 신체 측정 & 진행 사진

@@ -28,6 +28,8 @@ import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
 import { useWorkoutStore } from '../../store/workoutStore';
 import { workoutApi } from '../../api/workout';
+import { voiceClipsApi } from '../../api/voiceClips';
+import { playVoiceClip } from '../../utils/voicePlayback';
 import { getErrorMessage } from '../../utils/error';
 import { toDateString } from '../../utils/date';
 import { toast } from '../../store/toastStore';
@@ -36,7 +38,7 @@ import { useDirtyGuard } from '../../hooks/useDirtyGuard';
 import { confirmDiscard } from '../../utils/discardGuard';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
-import type { ExerciseCatalogItem, ExerciseLastPerformance } from '../../types';
+import type { ExerciseCatalogItem, ExerciseLastPerformance, VoicePhrase } from '../../types';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'WorkoutSession'>;
 
@@ -157,6 +159,23 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
   const [restSeconds, setRestSeconds] = useState(90);
   const [rest, setRest] = useState(0); // 남은 휴식 초
   const [saving, setSaving] = useState(false);
+
+  /*
+   * 커플 음성 응원 — 애인이 녹음해둔 클립. 휴식 타이머는 setInterval 클로저 안에서
+   * 재생을 트리거하는데, 그 클로저는 effect 가 만들어질 때(rest 가 0→양수로 바뀔 때)의
+   * 값을 붙잡으므로 상태 대신 ref 로 최신값을 보장한다(바로 아래 restRef 와 같은 이유).
+   */
+  const partnerClipsRef = useRef<Partial<Record<VoicePhrase, string>>>({});
+  useEffect(() => {
+    voiceClipsApi
+      .partner()
+      .then((res) => {
+        const byPhrase: Partial<Record<VoicePhrase, string>> = {};
+        res.clips.forEach((c) => { byPhrase[c.phrase] = c.audioUrl; });
+        partnerClipsRef.current = byPhrase;
+      })
+      .catch(() => undefined);
+  }, []);
 
   // 운동 추가 모달
   const [addOpen, setAddOpen] = useState(false);
@@ -285,6 +304,9 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
       const next = restRef.current - 1;
       if (next <= 0) {
         haptics.success();
+        // 타이머가 다 돼서 자연스럽게 끝났을 때만 재생한다 — 건너뛰기/시간 조절 버튼으로
+        // 직접 끝냈을 때는 안 튼다(haptics.success() 도 이 분기에서만 울리는 것과 같은 이유)
+        playVoiceClip(partnerClipsRef.current.REST_END);
         setRest(0);
       } else {
         setRest(next);
@@ -401,13 +423,16 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
 
     setSaving(true);
     try {
-      await save({
+      const saved = await save({
         workoutDate: toDateString(),
         sourceRoutineId: routineId,
         sets: payloadSets as never,
       });
       haptics.success();
       toast.success('운동 완료! 기록했어요 ');
+      // 커플 음성 응원 — PR 을 세웠으면 그 응원을, 아니면 완료 응원을 재생한다
+      const isPrRun = !!saved.prs && saved.prs.length > 0;
+      playVoiceClip(partnerClipsRef.current[isPrRun ? 'PR' : 'WORKOUT_COMPLETE']);
       // 이미 저장이 끝났으므로 이후의 모든 이탈(goBack)은 이탈 가드 확인 없이 통과시킨다
       allowLeave();
       if (routineId != null) {

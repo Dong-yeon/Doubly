@@ -243,6 +243,19 @@ export interface PartnerToday {
   completed: boolean;
 }
 
+// 커플 음성 응원 — 애인 목소리로 녹음한 짧은 응원 문구. 운동 중 정해진 순간에 재생된다
+export type VoicePhrase = 'REST_END' | 'PR' | 'WORKOUT_COMPLETE';
+export interface VoiceClip {
+  phrase: VoicePhrase;
+  phraseLabel: string;
+  audioUrl: string;
+}
+// 상대방이 녹음해둔 클립 — 운동 세션 시작 시 한 번 받아 재생에 쓴다
+export interface PartnerVoiceClips {
+  connected: boolean;
+  clips: VoiceClip[];
+}
+
 // 운동 통계 (WORKOUT-07)
 export interface WorkoutStats {
   weeklyDays: number;
