@@ -6,6 +6,7 @@ import com.fitto.workout.domain.WorkoutRoutineExerciseAlternative;
 import com.fitto.workout.domain.WorkoutRoutineExerciseSet;
 
 import java.math.BigDecimal;
+import java.time.DayOfWeek;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -15,6 +16,8 @@ public record RoutineResponse(
         String title,
         boolean systemTemplate,
         List<Exercise> exercises,
+        /** 이 루틴을 하는 요일 — 월→일 순으로 정렬. 비어 있으면 특정 요일에 매이지 않는 자유 루틴 */
+        List<DayOfWeek> scheduledDays,
         LocalDateTime createdAt
 ) {
     public record Alternative(
@@ -66,6 +69,8 @@ public record RoutineResponse(
 
     public static RoutineResponse of(WorkoutRoutine r) {
         return new RoutineResponse(r.getId(), r.getTitle(), r.isSystemTemplate(),
-                r.getExercises().stream().map(Exercise::of).toList(), r.getCreatedAt());
+                r.getExercises().stream().map(Exercise::of).toList(),
+                r.getScheduledDays().stream().sorted().toList(),
+                r.getCreatedAt());
     }
 }

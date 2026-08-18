@@ -65,6 +65,7 @@ public class WorkoutRoutineService {
         WorkoutRoutine routine = WorkoutRoutine.builder()
                 .userId(userId)
                 .title(request.title().trim())
+                .scheduledDays(request.scheduledDaysOrEmpty())
                 .build();
         CatalogLookup catalog = loadCatalog(request.exercises());
         int order = 1;
@@ -88,13 +89,15 @@ public class WorkoutRoutineService {
         for (SaveRoutineRequest.Exercise e : request.exercises()) {
             newExercises.add(toEntity(e, order++, catalog));
         }
-        routine.update(request.title().trim(), newExercises);
+        routine.update(request.title().trim(), newExercises, request.scheduledDaysOrEmpty());
         return RoutineResponse.of(routine);
     }
 
     /**
      * ⑤ 시스템 템플릿을 내 루틴으로 복사 — 무게는 사람마다 달라 담아오지 않고,
      * 종목 구성·목표 세트/횟수·대체 종목·세트별 목표는 그대로 가져온다(세트의 무게만 비운다).
+     * 요일 배정도 담아오지 않는다 — 템플릿 이름이 "Day1"이어도 그걸 실제로 무슨 요일에
+     * 할지는 사람마다 다르므로, 복사 직후엔 비워두고 사용자가 직접 고른다.
      */
     @Transactional
     public RoutineResponse copy(Long userId, Long sourceRoutineId) {

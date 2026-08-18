@@ -6,7 +6,9 @@ import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
+import java.time.DayOfWeek;
 import java.util.List;
+import java.util.Set;
 
 /** 운동 루틴 저장 — 제목 + 운동 목록. AI 추천을 그대로 담아 저장할 수도 있다. */
 public record SaveRoutineRequest(
@@ -15,8 +17,22 @@ public record SaveRoutineRequest(
         String title,
         @NotEmpty(message = "운동을 하나 이상 담아주세요.")
         @Valid
-        List<Exercise> exercises
+        List<Exercise> exercises,
+        /**
+         * 이 루틴을 하는 요일 — 짐워크 스타일 "Day1은 월/목" 배정. 비우면 특정 요일에
+         * 매이지 않는 자유 루틴(지금까지의 동작)이다.
+         */
+        Set<DayOfWeek> scheduledDays
 ) {
+    /** 요일 배정 없이 넘기던 이전 호출부와의 호환용 */
+    public SaveRoutineRequest(String title, List<Exercise> exercises) {
+        this(title, exercises, null);
+    }
+
+    public Set<DayOfWeek> scheduledDaysOrEmpty() {
+        return scheduledDays != null ? scheduledDays : Set.of();
+    }
+
     public record Exercise(
             @NotBlank(message = "운동 이름은 필수입니다.")
             @Size(max = 100)
