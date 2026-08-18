@@ -10,6 +10,7 @@ import com.fitto.diet.domain.NutritionGoal;
 import com.fitto.diet.dto.CoupleMealGoalResponse;
 import com.fitto.diet.dto.MealResponse;
 import com.fitto.diet.dto.MealStatsResponse;
+import com.fitto.diet.dto.RecentFoodResponse;
 import com.fitto.diet.dto.SaveMealRequest;
 import com.fitto.diet.repository.MealRepository;
 import com.fitto.diet.repository.NutritionGoalRepository;
@@ -30,8 +31,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -45,6 +48,7 @@ public class MealService {
 
     private static final Logger log = LoggerFactory.getLogger(MealService.class);
     private static final int HISTORY_PAGE_SIZE = 20;
+    private static final int RECENT_FOODS_LIMIT = 8;
 
     private final MealRepository mealRepository;
     private final NutritionGoalRepository nutritionGoalRepository;
@@ -92,6 +96,9 @@ public class MealService {
                 .carbs(req.carbs())
                 .protein(req.protein())
                 .fat(req.fat())
+                .sugar(req.sugar())
+                .sodium(req.sodium())
+                .fiber(req.fiber())
                 .build();
         mealRepository.save(meal);
 
@@ -128,6 +135,9 @@ public class MealService {
                         .carbs(m.getCarbs())
                         .protein(m.getProtein())
                         .fat(m.getFat())
+                        .sugar(m.getSugar())
+                        .sodium(m.getSodium())
+                        .fiber(m.getFiber())
                         .build())
                 .toList();
         mealRepository.saveAll(copies);
@@ -222,6 +232,32 @@ public class MealService {
     public List<MealResponse> findHistory(Long userId, Long cursor) {
         return mealRepository.findHistory(userId, cursor, PageRequest.of(0, HISTORY_PAGE_SIZE))
                 .stream().map(MealResponse::from).toList();
+    }
+
+    /**
+     * 최근 먹은 음식 자동완성 — 즐겨찾기와 달리 <b>따로 저장하지 않아도</b> 최근 기록에서 자동으로
+     * 뽑힌다. 최신 200건을 memo 기준으로 묶어(가장 최근 값을 대표로) 빈도 → 최근순으로 상위 N개.
+     */
+    public List<RecentFoodResponse> recentFoods(Long userId) {
+        List<Meal> recent = mealRepository.findTop200ByUserIdOrderByCreatedAtDesc(userId);
+        // LinkedHashMap 순회 순서 = 최초 삽입 순서 = createdAt desc 이므로,
+        // 각 memo 의 첫 등장이 가장 최근 기록이다 → 대표값으로 그대로 쓴다.
+        Map<String, Meal> representative = new LinkedHashMap<>();
+        Map<String, Integer> counts = new HashMap<>();
+        for (Meal m : recent) {
+            String memo = m.getMemo();
+            if (memo == null || memo.isBlank()) continue;
+            String key = memo.trim();
+            representative.putIfAbsent(key, m);
+            counts.merge(key, 1, Integer::sum);
+        }
+        return representative.entrySet().stream()
+                .sorted(Comparator
+                        .<Map.Entry<String, Meal>>comparingInt(e -> counts.get(e.getKey())).reversed()
+                        .thenComparing(e -> e.getValue().getCreatedAt(), Comparator.reverseOrder()))
+                .limit(RECENT_FOODS_LIMIT)
+                .map(e -> RecentFoodResponse.of(e.getValue(), counts.get(e.getKey())))
+                .toList();
     }
 
     public List<CalendarDayResponse> calendar(Long userId, int year, int month) {

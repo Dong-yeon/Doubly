@@ -43,11 +43,11 @@ class MealFlowTest {
     }
 
     private SaveMealRequest sample(LocalDate date, MealType type) {
-        return new SaveMealRequest(date, type, "닭가슴살 샐러드", null, 420, null, null, null);
+        return new SaveMealRequest(date, type, "닭가슴살 샐러드", null, 420, null, null, null, null, null, null);
     }
 
     private SaveMealRequest withProtein(LocalDate date, MealType type, int protein) {
-        return new SaveMealRequest(date, type, "단백질 식단", null, null, null, protein, null);
+        return new SaveMealRequest(date, type, "단백질 식단", null, null, null, protein, null, null, null, null);
     }
 
     @Test
@@ -124,7 +124,7 @@ class MealFlowTest {
     void 어제_식단을_오늘로_복사하면_끼니와_매크로가_그대로_유지된다() {
         Long user = register("m5@fitto.com");
         mealService.save(user, new SaveMealRequest(
-                LocalDate.now().minusDays(1), MealType.BREAKFAST, "닭가슴살 샐러드", null, 420, 30, 40, 10));
+                LocalDate.now().minusDays(1), MealType.BREAKFAST, "닭가슴살 샐러드", null, 420, 30, 40, 10, null, null, null));
         mealService.save(user, sample(LocalDate.now().minusDays(1), MealType.LUNCH));
 
         List<MealResponse> copied = mealService.copyFrom(user, LocalDate.now().minusDays(1));

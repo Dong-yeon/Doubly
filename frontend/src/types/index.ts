@@ -429,6 +429,10 @@ export interface NutritionSummary {
   consumedCarbs: number;
   consumedProtein: number;
   consumedFat: number;
+  // 당류(g)/나트륨(mg)/식이섬유(g) — target 없이 오늘 합계만 보여주는 정보성 지표
+  consumedSugar: number;
+  consumedSodium: number;
+  consumedFiber: number;
   /** 기초대사량 — 키/생년월일/성별 + 최근 체중 기록이 모두 있어야 계산된다. 없으면 null */
   bmr?: number | null;
   /** 오늘 운동 기록(총 시간) 기반 소모 칼로리 추정치 */
@@ -448,6 +452,9 @@ export interface AnalyzedFood {
   carbs: number;
   protein: number;
   fat: number;
+  sugar: number;
+  sodium: number;
+  fiber: number;
 }
 export interface MealAnalysis {
   isFood: boolean;
@@ -456,7 +463,84 @@ export interface MealAnalysis {
   totalCarbs: number;
   totalProtein: number;
   totalFat: number;
+  totalSugar: number;
+  totalSodium: number;
+  totalFiber: number;
   comment?: string | null;
+}
+
+// 최근 먹은 음식 자동완성 (GET /meal/recent-foods) — 즐겨찾기와 달리 저장 없이 자동으로 뽑힌다
+export interface RecentFood {
+  memo: string;
+  mealType: MealType;
+  calories?: number | null;
+  carbs?: number | null;
+  protein?: number | null;
+  fat?: number | null;
+  count: number;
+}
+
+// 목표 칼로리 자동 계산(TDEE 마법사) — POST /meal/nutrition/goal/suggest
+export type ActivityLevel = 'SEDENTARY' | 'LIGHT' | 'MODERATE' | 'ACTIVE' | 'VERY_ACTIVE';
+export type DietGoalType = 'LOSE' | 'MAINTAIN' | 'GAIN';
+// 매크로 비율 프리셋 — 탄단지 배분 방식(균형/저탄고지/고단백/키토)
+export type MacroPreset = 'BALANCED' | 'LOW_CARB' | 'HIGH_PROTEIN' | 'KETO';
+
+export interface NutritionGoalSuggestion {
+  bmr?: number | null;
+  tdee?: number | null;
+  targetCalories?: number | null;
+  targetCarbs?: number | null;
+  targetProtein?: number | null;
+  targetFat?: number | null;
+  /** 계산 불가 시(프로필/체중 미등록) 안내 문구 */
+  message?: string | null;
+}
+
+// 물 섭취 트래커 (GET /water/today)
+export interface WaterSummary {
+  consumedMl: number;
+  targetMl: number;
+  coupleConnected: boolean;
+  partnerName?: string | null;
+  partnerConsumedMl?: number | null;
+}
+
+// 간헐적 단식 타이머
+export type FastingPlan = 'SIXTEEN_EIGHT' | 'EIGHTEEN_SIX' | 'TWENTY_FOUR' | 'OMAD' | 'CUSTOM';
+
+export interface FastingStatus {
+  active: boolean;
+  planType?: FastingPlan | null;
+  planLabel?: string | null;
+  targetHours?: number | null;
+  startedAt?: string | null;
+  elapsedMin?: number | null;
+  remainingMin?: number | null;
+  achieved: boolean;
+  progressPct?: number | null;
+}
+
+export interface PartnerFasting {
+  connected: boolean;
+  partnerName?: string | null;
+  active: boolean;
+  elapsedMin?: number | null;
+  targetHours?: number | null;
+}
+
+// 바코드 식품 DB 조회 (GET /food-db/barcode/{code}) — 그대로 저장되지 않고 폼을 채우기만 한다
+export interface BarcodeLookup {
+  barcode: string;
+  foodName?: string | null;
+  servingSize?: string | null;
+  calories?: number | null;
+  carbs?: number | null;
+  protein?: number | null;
+  fat?: number | null;
+  sugar?: number | null;
+  sodium?: number | null;
+  fiber?: number | null;
 }
 
 // 주간 식단 AI 코칭 (GET /meal/coach)

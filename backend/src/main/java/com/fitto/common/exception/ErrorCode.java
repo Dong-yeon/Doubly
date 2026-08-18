@@ -88,7 +88,12 @@ public enum ErrorCode {
     INVALID_PHOTO_URL(HttpStatus.BAD_REQUEST, "앱에서 촬영·선택해 올린 사진만 분석할 수 있어요."),
     PHOTO_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "사진 용량이 너무 커요 (최대 10MB). 더 작은 사진으로 시도해주세요."),
     PHOTO_DOWNLOAD_FAILED(HttpStatus.BAD_GATEWAY, "사진을 불러오지 못했어요. 잠시 후 다시 시도해주세요."),
-    PHOTO_UNSUPPORTED_FORMAT(HttpStatus.BAD_REQUEST, "지원하지 않는 이미지 형식이에요. (JPG·PNG·WEBP·HEIC 지원)");
+    PHOTO_UNSUPPORTED_FORMAT(HttpStatus.BAD_REQUEST, "지원하지 않는 이미지 형식이에요. (JPG·PNG·WEBP·HEIC 지원)"),
+
+    // 바코드 식품 DB 조회 (FOOD-DB)
+    FOOD_DB_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "바코드 조회 기능이 아직 준비되지 않았어요."),
+    FOOD_DB_NOT_FOUND(HttpStatus.NOT_FOUND, "등록되지 않은 바코드예요. 직접 입력해주세요."),
+    FOOD_DB_LOOKUP_FAILED(HttpStatus.BAD_GATEWAY, "바코드 조회에 실패했어요. 잠시 후 다시 시도해주세요.");
 
     private final HttpStatus status;
     private final String message;

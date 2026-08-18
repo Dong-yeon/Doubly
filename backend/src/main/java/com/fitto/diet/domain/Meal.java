@@ -56,6 +56,12 @@ public class Meal {
     private Integer protein;
     private Integer fat;
 
+    /** 추가 영양소 — AI 분석/수동 입력. 목표(target)는 없고 오늘 합계만 표시하는 정보성 지표 */
+    private Integer sugar;
+    /** 나트륨(mg) — g 단위인 다른 필드와 달리 mg */
+    private Integer sodium;
+    private Integer fiber;
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -63,7 +69,8 @@ public class Meal {
     @Builder
     private Meal(Long userId, LocalDate mealDate, MealType mealType,
                 String memo, String photoUrl, Integer calories,
-                Integer carbs, Integer protein, Integer fat) {
+                Integer carbs, Integer protein, Integer fat,
+                Integer sugar, Integer sodium, Integer fiber) {
         this.userId = userId;
         this.mealDate = mealDate;
         this.mealType = mealType;
@@ -73,5 +80,8 @@ public class Meal {
         this.carbs = carbs;
         this.protein = protein;
         this.fat = fat;
+        this.sugar = sugar;
+        this.sodium = sodium;
+        this.fiber = fiber;
     }
 }

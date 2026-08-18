@@ -3,7 +3,6 @@ package com.fitto.diet.service;
 import com.fitto.body.domain.BodyMetric;
 import com.fitto.body.repository.BodyMetricRepository;
 import com.fitto.diet.dto.EnergyBalance;
-import com.fitto.user.domain.Gender;
 import com.fitto.user.domain.User;
 import com.fitto.user.repository.UserRepository;
 import com.fitto.workout.domain.Workout;
@@ -13,7 +12,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.Period;
 import java.util.List;
 
 /**
@@ -53,22 +51,11 @@ public class EnergyBalanceService {
                 .map(BodyMetric::getWeightKg)
                 .orElse(null);
 
-        Integer bmr = (user != null && weightKg != null) ? calcBmr(user, weightKg) : null;
+        Integer bmr = BmrCalculator.calc(user, weightKg);
         int exerciseCalories = weightKg != null ? todayExerciseCalories(userId, weightKg) : 0;
         Integer energyBalance = bmr != null ? bmr + exerciseCalories - consumedCalories : null;
 
         return new EnergyBalance(bmr, exerciseCalories, energyBalance);
-    }
-
-    /** Mifflin-St Jeor 공식 — 남: 10×체중+6.25×키-5×나이+5, 여: 10×체중+6.25×키-5×나이-161 */
-    private Integer calcBmr(User user, BigDecimal weightKg) {
-        if (user.getHeightCm() == null || user.getBirthDate() == null || user.getGender() == null) {
-            return null;
-        }
-        int age = Period.between(user.getBirthDate(), LocalDate.now()).getYears();
-        double base = 10 * weightKg.doubleValue() + 6.25 * user.getHeightCm() - 5 * age;
-        double bmr = user.getGender() == Gender.MALE ? base + 5 : base - 161;
-        return (int) Math.round(bmr);
     }
 
     /** 오늘 운동 기록의 총 시간(분)을 가정 MET 로 환산 — kcal = MET × 3.5 × 체중(kg) / 200 × 시간(분) */

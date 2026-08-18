@@ -10,7 +10,10 @@ import com.fitto.diet.dto.MealAnalysisResponse;
 import com.fitto.diet.dto.MealResponse;
 import com.fitto.diet.dto.MealStatsResponse;
 import com.fitto.diet.dto.NutritionGoalRequest;
+import com.fitto.diet.dto.NutritionGoalSuggestionRequest;
+import com.fitto.diet.dto.NutritionGoalSuggestionResponse;
 import com.fitto.diet.dto.NutritionSummaryResponse;
+import com.fitto.diet.dto.RecentFoodResponse;
 import com.fitto.diet.dto.SaveMealRequest;
 import com.fitto.diet.service.DietCoachService;
 import com.fitto.diet.service.FoodAnalysisService;
@@ -140,5 +143,22 @@ public class MealController {
     public ApiResponse<NutritionSummaryResponse> setGoal(@AuthenticationPrincipal AuthUser user,
                                                          @jakarta.validation.Valid @RequestBody NutritionGoalRequest request) {
         return ApiResponse.success(nutritionService.setGoal(user.id(), request), "목표를 저장했어요.");
+    }
+
+    /**
+     * 목표 칼로리 자동 계산(TDEE 마법사) — 계산만 하고 저장은 안 한다.
+     * 결과를 확인한 사용자가 위 {@code PUT /nutrition/goal} 로 확정 저장한다.
+     */
+    @PostMapping("/nutrition/goal/suggest")
+    public ApiResponse<NutritionGoalSuggestionResponse> suggestGoal(
+            @AuthenticationPrincipal AuthUser user,
+            @Valid @RequestBody NutritionGoalSuggestionRequest request) {
+        return ApiResponse.success(nutritionService.suggestGoal(user.id(), request));
+    }
+
+    /** 최근 먹은 음식 자동완성 — 즐겨찾기와 달리 저장 없이 최근 기록에서 자동으로 뽑힌다 */
+    @GetMapping("/recent-foods")
+    public ApiResponse<List<RecentFoodResponse>> recentFoods(@AuthenticationPrincipal AuthUser user) {
+        return ApiResponse.success(mealService.recentFoods(user.id()));
     }
 }

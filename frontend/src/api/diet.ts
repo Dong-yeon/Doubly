@@ -1,17 +1,22 @@
 /** 식단 기록 API — 운동(workout.ts) 구조 미러링 */
 import { apiClient, unwrap } from './client';
 import type {
+  ActivityLevel,
   ApiResponse,
   CalendarDay,
   CoupleMealGoal,
   DietCoach,
+  DietGoalType,
   FavoriteFood,
+  MacroPreset,
   Meal,
   MealAnalysis,
   MealStats,
   MealType,
+  NutritionGoalSuggestion,
   NutritionSummary,
   PartnerToday,
+  RecentFood,
 } from '../types';
 
 export interface SaveFavoriteFoodItemPayload {
@@ -37,6 +42,9 @@ export interface SaveMealPayload {
   carbs?: number;
   protein?: number;
   fat?: number;
+  sugar?: number;
+  sodium?: number;
+  fiber?: number;
 }
 
 export interface NutritionGoalPayload {
@@ -44,6 +52,13 @@ export interface NutritionGoalPayload {
   targetCarbs?: number;
   targetProtein?: number;
   targetFat?: number;
+}
+
+export interface NutritionGoalSuggestionPayload {
+  activityLevel: ActivityLevel;
+  goalType: DietGoalType;
+  weeklyRateKg?: number;
+  macroPreset?: MacroPreset;
 }
 
 export const dietApi = {
@@ -74,6 +89,12 @@ export const dietApi = {
   nutrition: () => unwrap(apiClient.get<ApiResponse<NutritionSummary>>('/meal/nutrition')),
   setNutritionGoal: (payload: NutritionGoalPayload) =>
     unwrap(apiClient.put<ApiResponse<NutritionSummary>>('/meal/nutrition/goal', payload)),
+  // 목표 칼로리 자동 계산(TDEE 마법사) — 계산만 하고 저장은 안 한다. 확정은 setNutritionGoal 로.
+  suggestNutritionGoal: (payload: NutritionGoalSuggestionPayload) =>
+    unwrap(apiClient.post<ApiResponse<NutritionGoalSuggestion>>('/meal/nutrition/goal/suggest', payload)),
+
+  // 최근 먹은 음식 자동완성 — 즐겨찾기와 달리 저장 없이 최근 기록에서 자동으로 뽑힌다
+  recentFoods: () => unwrap(apiClient.get<ApiResponse<RecentFood[]>>('/meal/recent-foods')),
 
   // 즐겨찾는 음식 — 원탭 추가용
   favorites: () => unwrap(apiClient.get<ApiResponse<FavoriteFood[]>>('/meal/favorites')),

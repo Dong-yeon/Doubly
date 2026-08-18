@@ -1,6 +1,6 @@
 /** 네비게이션 파라미터 타입 — 설계서 2. 화면 설계 */
 import type { NavigatorScreenParams } from '@react-navigation/native';
-import type { Trip } from '../types';
+import type { BarcodeLookup, Trip } from '../types';
 
 // 2.1 온보딩 플로우 (인증 전)
 export type OnboardingStackParamList = {
@@ -100,8 +100,11 @@ export type WorkoutStackParamList = {
   // 식단 (구 식단 탭에서 이전) — WorkoutMain 상단 세그먼트로 토글
   DietMain: undefined;
   // date: 캘린더에서 특정 날짜를 골라 들어올 때 그 날짜로 시작한다 (없으면 오늘)
-  DietRecord: { date?: string } | undefined;
+  // barcodeResult: BarcodeScan 에서 스캔·조회를 마치고 돌아올 때만 채워짐(같은 화면 인스턴스로 복귀)
+  DietRecord: { date?: string; barcodeResult?: BarcodeLookup } | undefined;
   DietCalendar: undefined;
+  // 바코드로 포장식품 조회 — 결과를 들고 DietRecord 로 돌아간다
+  BarcodeScan: undefined;
   DietStats: undefined;
 };
 

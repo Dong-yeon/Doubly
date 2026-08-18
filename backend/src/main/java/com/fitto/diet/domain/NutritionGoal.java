@@ -33,6 +33,10 @@ public class NutritionGoal {
     @Column(name = "target_fat")
     private Integer targetFat;
 
+    /** 하루 물 섭취 목표(ml) — 미설정 시 서비스 레이어 기본값(2000ml)을 쓴다 */
+    @Column(name = "target_water_ml")
+    private Integer targetWaterMl;
+
     public NutritionGoal(Long userId) {
         this.userId = userId;
     }
@@ -42,5 +46,9 @@ public class NutritionGoal {
         this.targetCarbs = carbs;
         this.targetProtein = protein;
         this.targetFat = fat;
+    }
+
+    public void updateWaterGoal(Integer targetWaterMl) {
+        this.targetWaterMl = targetWaterMl;
     }
 }

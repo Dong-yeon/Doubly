@@ -1,6 +1,7 @@
 package com.fitto.diet.dto;
 
 import com.fitto.diet.domain.MealType;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 
 import java.time.LocalDate;
@@ -23,6 +24,13 @@ public record SaveMealRequest(
 
         Integer protein,
 
-        Integer fat
+        Integer fat,
+
+        @Min(0) Integer sugar,
+
+        /** 나트륨(mg) — g 단위인 다른 필드와 달리 mg */
+        @Min(0) Integer sodium,
+
+        @Min(0) Integer fiber
 ) {
 }

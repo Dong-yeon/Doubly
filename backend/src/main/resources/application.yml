@@ -107,6 +107,11 @@ fitto:
     model: ${GEMINI_MODEL:gemini-2.5-flash-lite}
     daily-limit-per-user: ${GEMINI_DAILY_LIMIT_PER_USER:10}
 
+  # 바코드 식품 DB 조회 (식품안전나라 OpenAPI, 무료) — 키 미설정 시 바코드 조회만 비활성
+  food-db:
+    api-key: ${FOOD_DB_API_KEY:}
+    base-url: ${FOOD_DB_BASE_URL:http://openapi.foodsafetykorea.go.kr/api}
+
 logging:
   level:
     com.fitto: DEBUG
