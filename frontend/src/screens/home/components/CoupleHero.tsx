@@ -36,6 +36,12 @@ export interface PersonToday {
   /** 그 사람의 가장 최근 기록 한 줄. 없으면 안내 문구가 뜬다 */
   latestLabel?: string | null;
   latestTime?: string | null;
+  /**
+   * 지금 무드(Obimy 벤치마킹, PLAN.md "무드 상태" 참고) — 있으면 아바타 모서리에 작은 배지로.
+   * 새 행이 아니라 <b>오버레이</b>로만 넣는다 — 이 화면은 세로 여백이 빠듯해(파일 상단 주석
+   * 참고) 줄을 하나 늘리면 작은 기기에서 레이아웃이 깨진다.
+   */
+  moodEmoji?: string | null;
 }
 
 export interface CoupleHeroProps {
@@ -138,6 +144,12 @@ function Column({
       >
         <View style={[styles.avatarRing, { borderColor: active ? color : colors.border }]}>
           <Avatar name={person.name} imageUrl={person.imageUrl} size={58} color={color} />
+          {/* 무드 배지 — 절대 위치 오버레이라 열 높이에 영향이 없다 */}
+          {person.moodEmoji ? (
+            <View style={styles.moodBadge}>
+              <Text style={styles.moodBadgeEmoji}>{person.moodEmoji}</Text>
+            </View>
+          ) : null}
         </View>
         <Text style={styles.name} numberOfLines={1}>
           {person.name}
@@ -264,6 +276,22 @@ const styles = themedStyles((colors) => ({
   dividerLine: { flex: 1, width: 1, backgroundColor: colors.border, marginVertical: spacing.xs },
 
   avatarRing: { borderWidth: 2.5, borderRadius: 999, padding: 3 },
+  // 아바타 오른쪽 아래 모서리에 얹는 작은 배지 — RN 기본 position 이 relative 라
+  // avatarRing 을 건드리지 않고도 이 안에서 절대 위치로 겹칠 수 있다
+  moodBadge: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  moodBadgeEmoji: { fontSize: 12, lineHeight: 14 },
   name: { color: colors.textPrimary, fontSize: fontSize.body, fontWeight: '800', marginTop: spacing.xs },
   // 높이를 고정해 좌우 칩의 시작 높이를 맞춘다 (streak 유무와 무관)
   streakSlot: { height: 18, justifyContent: 'center' },

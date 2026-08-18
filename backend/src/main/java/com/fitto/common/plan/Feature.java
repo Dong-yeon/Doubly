@@ -77,7 +77,12 @@ public enum Feature {
     /* ── 꾸미기 (원가 0, 마진 100%) ───────────────────────────────────────── */
 
     CUSTOM_BACKGROUND("커플 배경 꾸미기", Quota.blocked(), Quota.unlimited()),
-    PREMIUM_STICKER("프리미엄 스티커", Quota.blocked(), Quota.unlimited());
+    PREMIUM_STICKER("프리미엄 스티커", Quota.blocked(), Quota.unlimited()),
+    /**
+     * 가상 터치 프리미엄 제스처(포옹·뽀뽀) — PREMIUM_STICKER 와 판정 근거가 같다(원가 0).
+     * 기본 3종(손잡기·토닥임·콕찌르기)은 게이팅 없이 전부 무료. PLAN.md "가상 터치" 참고.
+     */
+    TOUCH_GESTURE_PREMIUM("프리미엄 터치 제스처", Quota.blocked(), Quota.unlimited());
 
     private final String displayName;
     private final Quota free;
@@ -108,7 +113,7 @@ public enum Feature {
             case AI_DATE_COURSE, AI_TRIP_ITINERARY, AI_WEEKLY_LETTER,
                  TRIP_ACTIVE, TRIP_EXPENSE, TRIP_CHECKLIST,
                  PLACE_PIN, CALENDAR_EVENT, MEMORIES, WEEKLY_RECAP,
-                 CUSTOM_BACKGROUND, PREMIUM_STICKER,
+                 CUSTOM_BACKGROUND, PREMIUM_STICKER, TOUCH_GESTURE_PREMIUM,
                  // 사진은 서명 발급 시점에 용도를 알 수 없다(피드=커플, 체중=개인).
                  // 물량의 대부분이 커플 콘텐츠라 커플 단위로 본다 — "커플당 결제 1건" 모델과도 맞는다.
                  PHOTO_UPLOAD -> true;

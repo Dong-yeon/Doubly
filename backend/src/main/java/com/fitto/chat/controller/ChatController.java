@@ -4,6 +4,7 @@ import com.fitto.chat.dto.ChatMessageResponse;
 import com.fitto.chat.dto.ChatReactionSummary;
 import com.fitto.chat.dto.ChatRoomResponse;
 import com.fitto.chat.dto.EditMessageRequest;
+import com.fitto.chat.dto.LatestTouchResponse;
 import com.fitto.chat.dto.ReadReceipt;
 import com.fitto.feed.dto.ReactRequest;
 import com.fitto.chat.service.ChatService;
@@ -49,6 +50,16 @@ public class ChatController {
                                                            @PathVariable Long relationId,
                                                            @RequestParam(required = false) Long cursor) {
         return ApiResponse.success(chatService.getMessages(user.id(), relationId, cursor));
+    }
+
+    /**
+     * 내가 받은 가장 최근 가상 터치 — 홈 화면이 {@code CoupleEvent.TOUCH} 수신 시 호출해
+     * 햅틱을 발화한다(채팅방을 열지 않아도 반응하기 위함). 없으면 데이터 없이 200을 돌려준다.
+     */
+    @GetMapping("/{relationId}/touch/latest")
+    public ApiResponse<LatestTouchResponse> latestTouch(@AuthenticationPrincipal AuthUser user,
+                                                         @PathVariable Long relationId) {
+        return ApiResponse.success(chatService.getLatestTouch(user.id(), relationId).orElse(null));
     }
 
     @PutMapping("/read/{messageId}")

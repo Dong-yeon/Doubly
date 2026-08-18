@@ -1,6 +1,7 @@
 package com.fitto.chat.repository;
 
 import com.fitto.chat.domain.ChatMessage;
+import com.fitto.chat.domain.MessageType;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -23,6 +24,10 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
                                    Pageable pageable);
 
     Optional<ChatMessage> findTopByRelationIdOrderByIdDesc(Long relationId);
+
+    /** 내가 받은(상대가 보낸) 가장 최근 특정 타입 메시지 — 가상 터치 latest 조회에 쓴다. */
+    Optional<ChatMessage> findTopByRelationIdAndMessageTypeAndSenderIdNotOrderByIdDesc(
+            Long relationId, MessageType messageType, Long senderId);
 
     /** 내가 받은(상대가 보낸) 안 읽은 메시지 수 */
     long countByRelationIdAndSenderIdNotAndIsReadFalse(Long relationId, Long senderId);

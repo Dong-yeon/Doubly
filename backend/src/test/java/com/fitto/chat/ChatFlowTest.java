@@ -156,6 +156,40 @@ class ChatFlowTest {
         assertThat(chatService.getRooms(b).get(0).lastMessage().content()).isEqualTo("🥰");
     }
 
+    /** 가상 터치 — 타입과 제스처 코드가 보존되고, 받은 쪽이 최신 터치로 조회할 수 있다. */
+    @Test
+    void 가상_터치를_보내면_상대가_최신_터치로_조회한다() {
+        Long a = register("ct-a@fitto.com");
+        Long b = register("ct-b@fitto.com");
+        Long relationId = connectCouple(a, b);
+
+        ChatMessageResponse sent = chatService.send(a, relationId,
+                new SendMessageRequest(com.fitto.chat.domain.MessageType.TOUCH, "PAT", null, null, null, null));
+        assertThat(sent.messageType()).isEqualTo(com.fitto.chat.domain.MessageType.TOUCH);
+        assertThat(sent.content()).isEqualTo("PAT");
+
+        // 받은 사람(b) 기준 최신 터치 — 보낸 사람(a) 기준으로는 없어야 한다(자기 자신은 제외)
+        var latestForB = chatService.getLatestTouch(b, relationId);
+        assertThat(latestForB).isPresent();
+        assertThat(latestForB.get().senderId()).isEqualTo(a);
+        assertThat(latestForB.get().gestureType()).isEqualTo("PAT");
+
+        assertThat(chatService.getLatestTouch(a, relationId)).isEmpty();
+    }
+
+    /** 알 수 없는 제스처 코드는 거부된다 — 클라이언트가 임의 문자열을 보내는 우회 방지. */
+    @Test
+    void 알_수_없는_터치_제스처는_거부된다() {
+        Long a = register("cu-a@fitto.com");
+        Long b = register("cu-b@fitto.com");
+        Long relationId = connectCouple(a, b);
+
+        assertThatThrownBy(() -> chatService.send(a, relationId,
+                new SendMessageRequest(com.fitto.chat.domain.MessageType.TOUCH, "NOT_A_GESTURE", null, null, null, null)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_INPUT);
+    }
+
     /** 리액션 — 같은 이모지를 다시 누르면 해제되고, 누른 사람 id 로 내려간다. */
     @Test
     void 메시지_리액션은_토글되고_누른_사람이_함께_내려온다() {

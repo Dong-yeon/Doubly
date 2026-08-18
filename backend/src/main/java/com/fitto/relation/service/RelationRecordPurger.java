@@ -54,6 +54,7 @@ public class RelationRecordPurger {
         exec("delete from couple_challenges where couple_id = :rid", relationId);
         exec("delete from couple_events where couple_id = :rid", relationId);
         exec("delete from daily_answers where couple_id = :rid", relationId);
+        exec("delete from mood_statuses where couple_id = :rid", relationId);
         // 리액션·답장이 chat_messages 를 참조하므로 자식부터 지운다
         exec("delete from chat_message_reactions where message_id in "
                 + "(select m.id from chat_messages m where m.relation_id = :rid)", relationId);
