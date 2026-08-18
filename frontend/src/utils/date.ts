@@ -1,4 +1,5 @@
 /** 날짜 유틸 */
+import type { WeekDay } from '../types';
 
 /** YYYY-MM-DD (로컬 기준) */
 export function toDateString(date: Date = new Date()): string {
@@ -19,6 +20,27 @@ export function parseDateString(value: string | null | undefined): Date | null {
 }
 
 const WEEKDAY_NAMES = ['일', '월', '화', '수', '목', '금', '토'];
+
+/**
+ * 루틴 요일 배정(WorkoutRoutine.scheduledDays) 표시용 — 월→일 순으로 고정한 목록.
+ * value 는 서버(java.time.DayOfWeek) 와 형식을 맞춘 문자열이라 그대로 API 에 보낸다.
+ */
+export const WEEK_DAYS: { value: WeekDay; label: string }[] = [
+  { value: 'MONDAY', label: '월' },
+  { value: 'TUESDAY', label: '화' },
+  { value: 'WEDNESDAY', label: '수' },
+  { value: 'THURSDAY', label: '목' },
+  { value: 'FRIDAY', label: '금' },
+  { value: 'SATURDAY', label: '토' },
+  { value: 'SUNDAY', label: '일' },
+];
+
+/** 오늘의 요일 코드(로컬 기준) — 루틴 목록에서 "오늘의 루틴" 판정에 쓴다 */
+export function todayWeekDay(): WeekDay {
+  // Date.getDay(): 0=일요일 ... 6=토요일. WEEK_DAYS 는 월요일부터 시작하므로 따로 매핑한다
+  const byJsDay: WeekDay[] = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+  return byJsDay[new Date().getDay()];
+}
 
 /** 'YYYY-MM-DD' → '2026년 7월 28일 (화)'. 못 읽으면 원본 그대로 */
 export function formatDateLabel(value: string | null | undefined): string {

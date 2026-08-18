@@ -348,12 +348,17 @@ export interface RoutineExercise {
   alternatives?: RoutineExerciseAlternative[];
   sets?: RoutineExerciseSet[];
 }
+// 루틴 요일 배정(짐워크 스타일 "Day1은 월/목") — java.time.DayOfWeek 이름과 동일한 문자열
+export type WeekDay = 'MONDAY' | 'TUESDAY' | 'WEDNESDAY' | 'THURSDAY' | 'FRIDAY' | 'SATURDAY' | 'SUNDAY';
+
 export interface WorkoutRoutine {
   id: number;
   title: string;
   // 검증된 분할 템플릿(⑤)이면 true — 시스템 제공, 복사해서만 쓸 수 있음
   systemTemplate: boolean;
   exercises: RoutineExercise[];
+  // 이 루틴을 하는 요일 — 월→일 순 정렬. 비어 있으면 특정 요일에 매이지 않는 자유 루틴
+  scheduledDays: WeekDay[];
   createdAt: string;
 }
 

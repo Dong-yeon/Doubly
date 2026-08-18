@@ -6,6 +6,7 @@ import type {
   ExerciseCatalogItem,
   ExerciseLastPerformance,
   PartnerToday,
+  WeekDay,
   Workout,
   WorkoutRecommendation,
   WorkoutRoutine,
@@ -15,6 +16,8 @@ import type {
 
 export interface SaveRoutinePayload {
   title: string;
+  // 이 루틴을 하는 요일 — 짐워크 스타일 "Day1은 월/목" 배정. 생략하면 자유 루틴
+  scheduledDays?: WeekDay[];
   exercises: {
     exerciseName: string;
     category?: string;

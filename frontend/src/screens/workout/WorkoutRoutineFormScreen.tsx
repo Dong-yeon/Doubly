@@ -1,4 +1,5 @@
-/** 루틴 만들기 — 제목 + 운동 목록 추가 후 저장.
+/** 루틴 만들기 — 제목 + 요일 배정 + 운동 목록 추가 후 저장.
+ *  요일을 골라두면(짐워크 스타일) 루틴 목록에서 오늘 할 루틴이 앞으로 오고 "오늘" 배지가 붙는다.
  *  종목은 카탈로그에서 골라 자극 부위·기구가 자동으로 붙고(대체 종목 추천의 전제),
  *  세트 프리셋으로 1탭 완성하거나 세트마다 다른 무게·횟수(램프업/백오프)를 계획할 수 있다.
  *  종목별 휴식 시간, 대체 종목 사전 지정도 지원한다. */
@@ -10,14 +11,16 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { WorkoutStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
+import { Chip } from '../../components/Chip';
 import { workoutApi } from '../../api/workout';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { confirmDiscard } from '../../utils/discardGuard';
+import { WEEK_DAYS } from '../../utils/date';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
-import type { ExerciseCatalogItem } from '../../types';
+import type { ExerciseCatalogItem, WeekDay } from '../../types';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'WorkoutRoutineForm'>;
 
@@ -83,6 +86,8 @@ let setRowSeq = 0;
 
 export function WorkoutRoutineFormScreen({ navigation }: Props) {
   const [title, setTitle] = useState('');
+  // 이 루틴을 하는 요일 — 짐워크 스타일 "Day1은 월/목" 배정. 비워두면 자유 루틴
+  const [scheduledDays, setScheduledDays] = useState<WeekDay[]>([]);
   const [exercises, setExercises] = useState<DraftExercise[]>([]);
   const [saving, setSaving] = useState(false);
 
@@ -203,6 +208,11 @@ export function WorkoutRoutineFormScreen({ navigation }: Props) {
     });
   };
 
+  const toggleScheduledDay = (d: WeekDay) => {
+    haptics.light();
+    setScheduledDays((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]));
+  };
+
   const resetAddForm = () => {
     setFName('');
     setFCategory('근력');
@@ -266,6 +276,7 @@ export function WorkoutRoutineFormScreen({ navigation }: Props) {
     try {
       await workoutApi.saveRoutine({
         title: title.trim(),
+        scheduledDays: scheduledDays.length > 0 ? scheduledDays : undefined,
         exercises: exercises.map((e) => ({
           exerciseName: e.name,
           category: e.category,
@@ -302,6 +313,29 @@ export function WorkoutRoutineFormScreen({ navigation }: Props) {
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         <TextField label="루틴 이름" placeholder="예: 등·이두 데이" value={title} onChangeText={setTitle} maxLength={100} />
+
+        {/*
+          요일 배정(짐워크 스타일) — 미리 골라두면 루틴 목록에서 오늘 할 루틴이 앞으로 오고
+          "오늘" 배지가 붙는다(WorkoutRoutineListScreen). 안 고르면 지금처럼 요일에
+          매이지 않는 자유 루틴이라, 매주 루틴을 새로 짜지 않는 사용자는 그냥 건너뛰면 된다.
+        */}
+        <Text style={styles.label}>운동할 요일 (선택)</Text>
+        <View style={styles.dayRow}>
+          {WEEK_DAYS.map((d) => (
+            <Chip
+              key={d.value}
+              label={d.label}
+              selected={scheduledDays.includes(d.value)}
+              onPress={() => toggleScheduledDay(d.value)}
+              fill
+            />
+          ))}
+        </View>
+        <Text style={styles.dayHint}>
+          {scheduledDays.length > 0
+            ? `${WEEK_DAYS.filter((d) => scheduledDays.includes(d.value)).map((d) => d.label).join('·')}요일마다 이 루틴을 하도록 표시할게요.`
+            : '고르지 않으면 요일에 매이지 않는 자유 루틴이 돼요.'}
+        </Text>
 
         <Text style={styles.label}>운동 ({exercises.length})</Text>
         {exercises.map((e) => (
@@ -524,6 +558,8 @@ const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   container: { padding: spacing.lg, paddingBottom: spacing.xl },
   label: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700', marginTop: spacing.md, marginBottom: spacing.sm },
+  dayRow: { flexDirection: 'row', gap: spacing.xs },
+  dayHint: { fontSize: fontSize.caption, color: colors.textTertiary, marginTop: spacing.xs },
   exRow: {
     flexDirection: 'row',
     alignItems: 'center',
