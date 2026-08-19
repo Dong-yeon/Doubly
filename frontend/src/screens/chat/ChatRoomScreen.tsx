@@ -29,7 +29,6 @@ import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { EmojiPicker } from '../../components/EmojiPicker';
 import { TouchGesturePicker } from '../../components/TouchGesturePicker';
-import { MoodPicker } from '../../components/MoodPicker';
 import { SpellCheckBar } from '../../components/SpellCheckBar';
 import { MessageActionSheet } from '../../components/MessageActionSheet';
 import { SwipeBackView } from '../../components/SwipeBackView';
@@ -40,7 +39,6 @@ import {
   checkKoreanSpelling,
 } from '../../utils/koreanSpellCheck';
 import { chatApi } from '../../api/chat';
-import { moodApi } from '../../api/mood';
 import { isPrShareContent } from '../../utils/workoutShare';
 import { isGoalShareContent } from '../../utils/dietShare';
 import { touchGestureOf } from '../../constants/touchGestures';
@@ -93,7 +91,6 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const [showStickers, setShowStickers] = useState(false);
   const [showExtras, setShowExtras] = useState(false);
   const [showTouchPicker, setShowTouchPicker] = useState(false);
-  const [showMoodPicker, setShowMoodPicker] = useState(false);
   // 답장 대상 / 수정 중인 메시지 / 리액션 피커 대상
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const [editing, setEditing] = useState<ChatMessage | null>(null);
@@ -300,18 +297,6 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     const ok = send(relationId, { messageType: 'TOUCH', content: code });
     if (ok) haptics.light();
     else Alert.alert('전송 실패', '연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
-  };
-
-  /*
-   * 무드는 채팅 메시지가 아니라 별도 REST(POST /mood)로 남는다 — 대화 로그에 쌓이는
-   * 게 아니라 홈 화면 아바타 배지로만 보여주는 "지금 상태"이기 때문(PLAN.md 참고).
-   * 그래서 send() 소켓이 아니라 moodApi 를 직접 부른다.
-   */
-  const sendMood = (emoji: string, message?: string) => {
-    moodApi
-      .set(emoji, message)
-      .then(() => { haptics.light(); toast.success('무드를 남겼어요'); })
-      .catch((e) => toast.error(getErrorMessage(e, '무드를 남기지 못했어요.')));
   };
 
   const onPickImage = async () => {
@@ -546,6 +531,10 @@ export function ChatRoomScreen({ navigation, route }: Props) {
          * 보조 도구 트레이 — 예전엔 스티커·터치·무드·카메라 4개 버튼이 입력바에 항상 떠
          * 있어(46px×4) 좁은 기기에서 입력창이 짓눌렸다. "+" 로 펼치는 트레이 하나로
          * 모으고, 스티커 패널과 자리를 공유한다(둘 중 하나만 뜬다).
+         *
+         * 무드는 여기 없다 — "대화창에 보내는" 액션(스티커·터치·사진)이 아니라 대화
+         * 로그에 안 남는 "내 상태" 이기 때문에 카테고리가 안 맞았다. 지금은 HomeScreen
+         * 상단바에서 설정한다(그 파일 topBar 주석 참고).
          */}
         {showExtras ? (
           <View style={styles.extrasPanel}>
@@ -558,11 +547,6 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               icon="hand-heart-outline"
               label="터치"
               onPress={() => { setShowExtras(false); setShowTouchPicker(true); }}
-            />
-            <ExtraButton
-              icon="creation"
-              label="무드"
-              onPress={() => { setShowExtras(false); setShowMoodPicker(true); }}
             />
             <ExtraButton
               icon="camera-outline"
@@ -635,7 +619,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               style={[styles.imageBtn, showExtras && styles.stickerToggleActive]}
               onPress={() => { setShowStickers(false); setShowExtras((v) => !v); }}
               accessibilityRole="button"
-              accessibilityLabel={showExtras ? '보조 도구 닫기' : '스티커·터치·무드·사진 더 보기'}
+              accessibilityLabel={showExtras ? '보조 도구 닫기' : '스티커·터치·사진 더 보기'}
             >
               <MaterialCommunityIcons
                 name={showExtras ? 'close' : 'plus'}
@@ -694,13 +678,6 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         onClose={() => setShowTouchPicker(false)}
         onSelect={sendTouch}
       />
-      {/* 무드 상태 — 대화 로그가 아니라 홈 화면 아바타 배지로 반영된다 */}
-      <MoodPicker
-        visible={showMoodPicker}
-        onClose={() => setShowMoodPicker(false)}
-        onSelect={sendMood}
-      />
-
       {/* 메시지 길게 누르기 — 리액션/답장/수정/삭제를 한 시트에 모아 보여준다 */}
       <MessageActionSheet
         message={actionSheetFor}
@@ -884,7 +861,7 @@ const styles = themedStyles((colors) => ({
   readDone: { color: colors.textTertiary, fontWeight: '600' },
   // 눌림 효과 — 스티커·트레이 버튼 공용(예전엔 "reactionPressed" 로 리액션 바 전용이었다)
   iconPressed: { transform: [{ scale: 0.88 }], backgroundColor: colors.primarySoft },
-  // 보조 도구 트레이 — "+" 로 펼치는 스티커/터치/무드/사진 4개
+  // 보조 도구 트레이 — "+" 로 펼치는 스티커/터치/사진 3개
   extrasPanel: {
     flexDirection: 'row',
     justifyContent: 'space-around',
