@@ -27,6 +27,7 @@ import { QuickActions } from './components/QuickActions';
 import { MemoryPeek } from './components/MemoryPeek';
 import { LockedCard } from '../../components/LockedCard';
 import { TouchGesturePicker } from '../../components/TouchGesturePicker';
+import { MoodPicker } from '../../components/MoodPicker';
 import { useAuthStore } from '../../store/authStore';
 import { useRelationStore } from '../../store/relationStore';
 import { workoutApi } from '../../api/workout';
@@ -43,6 +44,7 @@ import {
   unsubscribeCouple,
 } from '../../api/chatSocket';
 import { pickImage, uploadImage } from '../../utils/imageUpload';
+import { haptics } from '../../utils/haptics';
 import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { getErrorMessage } from '../../utils/error';
@@ -127,12 +129,18 @@ export function HomeScreen({ navigation }: Props) {
   // 가상 터치 — 채팅방을 열지 않고도 보낼 수 있는 진입점(PLAN.md "가상 터치" 참고)
   const [showTouchPicker, setShowTouchPicker] = useState(false);
   /*
-   * 무드 상태 — 나/상대 지금 기분(PLAN.md "무드 상태" 참고). 홈은 <b>표시만</b> 한다
-   * (아바타 배지). 보내는 진입점은 ChatRoomScreen 에 둔다 — 이 화면은 세로 여백이
-   * 빠듯해(파일 상단 주석) QuickActions 에 항목을 더 넣으면(터치까지 이미 6개)
-   * 좁은 기기에서 고정폭 아이콘이 겹칠 위험이 있다.
+   * 무드 상태 — 나/상대 지금 기분(PLAN.md "무드 상태" 참고). 아바타 배지로 표시하고,
+   * 설정하는 진입점도 여기 topBar 에 둔다(아래 topBar 참고).
+   *
+   * 예전엔 설정 진입점이 ChatRoomScreen 에 있었다 — "대화창에 보내는" 액션(스티커·
+   * 터치·사진)도 아니고 대화 로그에 남지도 않는데 그 트레이에 같이 있어 카테고리가
+   * 안 맞았다. 그렇다고 QuickActions 에 넣기도 어렵다: 이 화면은 세로 여백이
+   * 빠듯하고(파일 상단 주석) QuickActions 는 이미 6개라 항목을 더 넣으면 360dp 에서
+   * 46px 고정폭 아이콘이 겹친다(312px÷7≈44.6px < 46px). topBar 좌측은 예전 "배경"
+   * 버튼이 빠지고 비어 있던 자리라 폭 예산 걱정 없이 새 진입점을 넣을 수 있었다.
    */
   const [mood, setMood] = useState<MoodResponse | null>(null);
+  const [showMoodPicker, setShowMoodPicker] = useState(false);
 
   // relationStore 의 fetchAll 이 아직 안 끝났으면 couple 이 null 이어도 "미연결"이
   // 아니라 "아직 모름"이다 — 로딩 중엔 연결된 것으로 간주해 연결 안내 화면이
@@ -241,6 +249,15 @@ export function HomeScreen({ navigation }: Props) {
     });
   };
 
+  // moodApi.set 이 갱신된 나/상대 무드를 함께 돌려주므로, 소켓 이벤트를 기다리지 않고
+  // 응답으로 바로 반영한다(홈을 나가지 않고 연달아 바꿔도 배지가 즉시 따라온다).
+  const sendMood = (emoji: string, message?: string) => {
+    moodApi
+      .set(emoji, message)
+      .then((res) => { setMood(res); haptics.light(); toast.success('무드를 남겼어요'); })
+      .catch((e) => toast.error(getErrorMessage(e, '무드를 남기지 못했어요.')));
+  };
+
   const onChangeBg = async () => {
     try {
       const uri = await pickImage();
@@ -284,7 +301,16 @@ export function HomeScreen({ navigation }: Props) {
    */
   const topBar = (
     <View style={styles.topBar}>
-      <View />
+      <Pressable
+        style={styles.moodBtn}
+        onPress={() => setShowMoodPicker(true)}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel={mood?.mine ? `지금 기분 ${mood.mine.emoji} — 눌러서 바꾸기` : '지금 기분 남기기'}
+      >
+        <Text style={styles.moodBtnEmoji}>{mood?.mine?.emoji ?? '🙂'}</Text>
+        <Text style={styles.moodBtnText}>{mood?.mine ? '기분 바꾸기' : '기분 남기기'}</Text>
+      </Pressable>
       <Pressable style={styles.profileBtn} onPress={() => navigation.navigate('My')} hitSlop={8}>
         <Avatar name={user?.name} imageUrl={user?.profileImageUrl} size={32} color={colors.primaryDark} />
       </Pressable>
@@ -475,6 +501,12 @@ export function HomeScreen({ navigation }: Props) {
         onClose={() => setShowTouchPicker(false)}
         onSelect={sendTouch}
       />
+      {/* 무드 상태 — topBar 의 진입점에서 연다(위 mood 주석 참고) */}
+      <MoodPicker
+        visible={showMoodPicker}
+        onClose={() => setShowMoodPicker(false)}
+        onSelect={sendMood}
+      />
     </View>
   );
 }
@@ -500,7 +532,8 @@ const styles = themedStyles((colors) => ({
     borderWidth: 2,
     borderColor: colors.borderStrong,
   },
-  bgBtn: {
+  // topBar 좌측 — 예전 "배경 변경" 버튼이 있던 자리(지금은 MY>설정으로 옮겨 비어 있었다)
+  moodBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
@@ -510,7 +543,8 @@ const styles = themedStyles((colors) => ({
     // hitSlop 은 웹에서 무효라 높이를 직접 확보한다 (실측 25px 였다)
     minHeight: layout.touchTarget,
   },
-  bgBtnText: { color: colors.textPrimary, fontSize: fontSize.caption, fontWeight: '700' },
+  moodBtnEmoji: { fontSize: 15, lineHeight: 18 },
+  moodBtnText: { color: colors.textPrimary, fontSize: fontSize.caption, fontWeight: '700' },
 
   body: { flex: 1, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, gap: spacing.md },
   // 히어로가 남는 공간을 다 먹는다. 그 안의 분배는 CoupleHero 가 한다
