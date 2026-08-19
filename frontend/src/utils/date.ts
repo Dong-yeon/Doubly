@@ -79,3 +79,25 @@ export function relativeDateLabel(dateStr: string): string {
   if (diff > 2 && diff < 7) return `${diff}일 전`;
   return `${d.getMonth() + 1}월 ${d.getDate()}일`;
 }
+
+/**
+ * 두 ISO 타임스탬프가 로컬 기준 같은 날짜인지 — 채팅 날짜 구분선/메시지 그룹핑에 쓴다.
+ * `new Date(iso)` 의 getFullYear/getMonth/getDate 는 이미 로컬 기준이라(UTC 메서드가
+ * 아님) 별도 타임존 보정이 필요 없다 — V27 "오늘 판정 UTC/KST 버그" 와 같은 함정을
+ * 여기서도 피하려면 반드시 이 헬퍼(또는 toDateString)를 거쳐야 한다.
+ */
+export function isSameLocalDay(isoA: string, isoB: string): boolean {
+  return toDateString(new Date(isoA)) === toDateString(new Date(isoB));
+}
+
+/** ISO 타임스탬프 → 채팅방 날짜 구분선 라벨 ('오늘' / '어제' / '2026년 8월 19일 수요일') */
+export function chatDateDividerLabel(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const target = toDateString(d);
+  if (target === toDateString()) return '오늘';
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (target === toDateString(yesterday)) return '어제';
+  return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 ${WEEKDAY_NAMES[d.getDay()]}요일`;
+}
