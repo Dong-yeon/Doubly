@@ -7,6 +7,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import com.fitto.common.time.KstClock;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -62,7 +63,7 @@ public class PlaceVisit {
                        Integer rating, String memo, String imageUrl, Long mealId) {
         this.placeId = placeId;
         this.visitedBy = visitedBy;
-        this.visitedAt = visitedAt != null ? visitedAt : LocalDate.now();
+        this.visitedAt = visitedAt != null ? visitedAt : KstClock.today();
         this.rating = rating;
         this.memo = memo;
         this.imageUrl = imageUrl;

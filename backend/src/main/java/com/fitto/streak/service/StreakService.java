@@ -10,6 +10,7 @@ import com.fitto.streak.domain.StreakType;
 import com.fitto.streak.dto.StreakResponse;
 import com.fitto.streak.repository.StreakRepository;
 import com.fitto.workout.repository.WorkoutRepository;
+import com.fitto.common.time.KstClock;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -91,7 +92,7 @@ public class StreakService {
     }
 
     public StreakResponse getMyStreak(Long userId) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = KstClock.today();
         return streakRepository.findByUserIdAndStreakType(userId, StreakType.PERSONAL)
                 .map(s -> StreakResponse.of(s, today))
                 .orElseGet(() -> StreakResponse.empty(StreakType.PERSONAL));
@@ -99,7 +100,7 @@ public class StreakService {
 
     /** 상대의 개인 운동 스트릭 — 홈 위젯·응원 표시용. 커플 미연결이면 빈 값. */
     public StreakResponse getPartnerStreak(Long userId) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = KstClock.today();
         return activeCouple(userId)
                 .map(c -> c.partnerOf(userId))   // 상대가 아직 없으면(null) empty 로 이어진다
                 .flatMap(partnerId -> streakRepository
@@ -109,7 +110,7 @@ public class StreakService {
     }
 
     public StreakResponse getCoupleStreak(Long userId) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = KstClock.today();
         return activeCouple(userId)
                 .flatMap(c -> streakRepository.findByRelationIdAndStreakType(c.getId(), StreakType.COUPLE))
                 .map(s -> StreakResponse.of(s, today))
@@ -117,14 +118,14 @@ public class StreakService {
     }
 
     public StreakResponse getMyMealStreak(Long userId) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = KstClock.today();
         return streakRepository.findByUserIdAndStreakType(userId, StreakType.PERSONAL_MEAL)
                 .map(s -> StreakResponse.of(s, today))
                 .orElseGet(() -> StreakResponse.empty(StreakType.PERSONAL_MEAL));
     }
 
     public StreakResponse getCoupleMealStreak(Long userId) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = KstClock.today();
         return activeCouple(userId)
                 .flatMap(c -> streakRepository.findByRelationIdAndStreakType(c.getId(), StreakType.COUPLE_MEAL))
                 .map(s -> StreakResponse.of(s, today))

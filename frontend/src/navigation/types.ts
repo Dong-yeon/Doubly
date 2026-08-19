@@ -119,6 +119,8 @@ export type WorkoutStackParamList = {
     | undefined;
   // 내 운동 루틴 (짐앱 스타일)
   WorkoutRoutines: undefined;
+  // 커플 루틴 선물함 — 받은/보낸 루틴 선물
+  WorkoutRoutineGiftInbox: undefined;
   // draft: AI 추천에서 넘어올 때 미리 채워 넣을 초안(선택) — 없으면 빈 폼(지금까지의 동작)
   WorkoutRoutineForm: { draft?: RoutineFormDraft } | undefined;
   // 커플 음성 응원 — 애인 목소리로 녹음한 짧은 문구(휴식 종료·PR·운동 완료)

@@ -9,6 +9,7 @@ import { WorkoutStatsScreen } from '../screens/workout/WorkoutStatsScreen';
 import { WorkoutRecommendScreen } from '../screens/workout/WorkoutRecommendScreen';
 import { WorkoutSessionScreen } from '../screens/workout/WorkoutSessionScreen';
 import { WorkoutRoutineListScreen } from '../screens/workout/WorkoutRoutineListScreen';
+import { WorkoutRoutineGiftInboxScreen } from '../screens/workout/WorkoutRoutineGiftInboxScreen';
 import { WorkoutRoutineFormScreen } from '../screens/workout/WorkoutRoutineFormScreen';
 import { WorkoutRoutineTemplatesScreen } from '../screens/workout/WorkoutRoutineTemplatesScreen';
 import { VoiceClipsScreen } from '../screens/workout/VoiceClipsScreen';
@@ -53,6 +54,11 @@ export function WorkoutStackNavigator() {
         name="WorkoutRoutines"
         component={WorkoutRoutineListScreen}
         options={{ title: '내 루틴' }}
+      />
+      <Stack.Screen
+        name="WorkoutRoutineGiftInbox"
+        component={WorkoutRoutineGiftInboxScreen}
+        options={{ title: '루틴 선물함' }}
       />
       <Stack.Screen
         name="WorkoutRoutineForm"

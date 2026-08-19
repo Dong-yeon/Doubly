@@ -3,6 +3,7 @@ package com.fitto.trainer.service;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.notification.NotificationService;
+import com.fitto.common.time.KstClock;
 import com.fitto.auth.dto.UserResponse;
 import com.fitto.relation.domain.Relation;
 import com.fitto.relation.domain.RelationStatus;
@@ -103,7 +104,7 @@ public class TrainerService {
     public TrainerDashboardResponse dashboard(Long trainerId) {
         getProfile(trainerId); // 트레이너 검증
 
-        LocalDate today = LocalDate.now();
+        LocalDate today = KstClock.today();
         List<MemberSummary> members = new ArrayList<>();
         for (Relation relation : activeMemberRelations(trainerId)) {
             userRepository.findById(relation.getUserBId()).ifPresent(member -> members.add(new MemberSummary(

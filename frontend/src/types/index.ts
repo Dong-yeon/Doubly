@@ -279,7 +279,9 @@ export interface RecommendedExercise {
   comment?: string | null;
 }
 export interface WorkoutPlanDay {
-  dayOffset: number; // 0=오늘, 1=내일 …
+  dayOffset: number; // 0=오늘, 1=내일 … (프로그램 모드에서는 의미 없음, dayOfWeek 참고)
+  // 프로그램 모드(맞춤 프로그램 만들기)일 때만 채워짐 — 이 하루 계획이 배정된 실제 요일
+  dayOfWeek?: WeekDay | null;
   focus: string;
   exercises: RecommendedExercise[];
   comment?: string | null;
@@ -378,6 +380,22 @@ export interface WorkoutRoutine {
   // 이 루틴을 하는 요일 — 월→일 순 정렬. 비어 있으면 특정 요일에 매이지 않는 자유 루틴
   scheduledDays: WeekDay[];
   createdAt: string;
+}
+
+// 커플 루틴 선물하기 — 내 운동 루틴을 애인에게 보내면 수락 시 애인 루틴 목록에 그대로 추가된다.
+// routine 은 상태에 따라 다른 걸 보여준다: 수락 전엔 전송 시점 스냅샷, 수락 후엔 받는 사람
+// 소유로 복사된 결과물(삭제됐으면 null).
+export interface RoutineGift {
+  id: number;
+  status: 'PENDING' | 'ACCEPTED' | 'DECLINED';
+  message?: string | null;
+  routine?: WorkoutRoutine | null;
+  /** 받은 선물 목록에서 채워짐 */
+  senderName?: string | null;
+  /** 보낸 선물 목록에서 채워짐 */
+  receiverName?: string | null;
+  createdAt: string;
+  respondedAt?: string | null;
 }
 
 // 5.7 trainer_routines

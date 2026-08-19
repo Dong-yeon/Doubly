@@ -6,6 +6,7 @@ import type {
   ExerciseCatalogItem,
   ExerciseLastPerformance,
   PartnerToday,
+  RoutineGift,
   WeekDay,
   Workout,
   WorkoutRecommendation,
@@ -33,6 +34,18 @@ export interface SaveRoutinePayload {
     alternativeExerciseCatalogIds?: number[];
     // 세트별 목표 — 담으면 위 targetSets/reps/weightKg 는 서버가 세트에서 다시 계산해 덮어쓴다
     sets?: { reps?: number; weightKg?: number; setType?: string }[];
+  }[];
+}
+
+/**
+ * 맞춤 프로그램 만들기(짐워크 스타일) — AI가 요일별로 제안한 하루치들을 한 번에 여러
+ * 루틴으로 저장. 요일 하루당 루틴 하나가 만들어지고 그 요일에 자동 배정된다.
+ */
+export interface SaveProgramPayload {
+  programTitle: string;
+  days: {
+    dayOfWeek: WeekDay;
+    exercises: SaveRoutinePayload['exercises'];
   }[];
 }
 
@@ -65,11 +78,23 @@ export const workoutApi = {
     unwrap(
       apiClient.post<ApiResponse<WorkoutRecommendation>>('/workout/recommend', { days }, { timeout: 60000 }),
     ),
+  // 맞춤 프로그램 만들기 — 무슨 요일에 운동할지 넘기면 요일마다 다른 하루를 짜서 돌려준다
+  recommendProgram: (weekdays: WeekDay[]) =>
+    unwrap(
+      apiClient.post<ApiResponse<WorkoutRecommendation>>(
+        '/workout/recommend',
+        { weekdays },
+        { timeout: 60000 },
+      ),
+    ),
 
   // 내 운동 루틴 (짐앱 스타일)
   routines: () => unwrap(apiClient.get<ApiResponse<WorkoutRoutine[]>>('/workout/routines')),
   saveRoutine: (payload: SaveRoutinePayload) =>
     unwrap(apiClient.post<ApiResponse<WorkoutRoutine>>('/workout/routines', payload)),
+  // 맞춤 프로그램 만들기 — 요일별 하루치를 한 번에 여러 루틴으로 저장
+  saveProgram: (payload: SaveProgramPayload) =>
+    unwrap(apiClient.post<ApiResponse<WorkoutRoutine[]>>('/workout/routines/program', payload)),
   // 스마트 루틴 동기화(Save-on-Finish) — 세션에서 바뀐 구성을 기존 루틴에 반영(전체 교체)
   updateRoutine: (id: number, payload: SaveRoutinePayload) =>
     unwrap(apiClient.patch<ApiResponse<WorkoutRoutine>>(`/workout/routines/${id}`, payload)),
@@ -80,6 +105,20 @@ export const workoutApi = {
     unwrap(apiClient.get<ApiResponse<WorkoutRoutine[]>>('/workout/routines/templates')),
   copyRoutine: (id: number) =>
     unwrap(apiClient.post<ApiResponse<WorkoutRoutine>>(`/workout/routines/${id}/copy`)),
+
+  // 커플 루틴 선물하기 — 내 루틴을 애인에게 보내고 애인이 수락/거절
+  sendRoutineGift: (routineId: number, message?: string) =>
+    unwrap(
+      apiClient.post<ApiResponse<RoutineGift>>(`/workout/routine-gifts/${routineId}/send`, { message }),
+    ),
+  receivedRoutineGifts: () =>
+    unwrap(apiClient.get<ApiResponse<RoutineGift[]>>('/workout/routine-gifts/received')),
+  sentRoutineGifts: () =>
+    unwrap(apiClient.get<ApiResponse<RoutineGift[]>>('/workout/routine-gifts/sent')),
+  acceptRoutineGift: (giftId: number) =>
+    unwrap(apiClient.post<ApiResponse<RoutineGift>>(`/workout/routine-gifts/${giftId}/accept`)),
+  declineRoutineGift: (giftId: number) =>
+    unwrap(apiClient.post<ApiResponse<void>>(`/workout/routine-gifts/${giftId}/decline`)),
 
   // 종목 카탈로그 — 자극 부위 필터 시 대체 종목 후보, 생략 시 전체(자동완성).
   // names 를 넘기면 그 이름들만 정확히 매칭해 내려준다(muscleGroup 보다 우선) — 세션 화면이

@@ -20,4 +20,6 @@ public record CoupleEvent(String type) {
     public static final String TOUCH = "TOUCH";
     /** 무드 상태 변경 — 수신측은 GET /api/v1/mood 로 다시 조회한다 */
     public static final String MOOD = "MOOD";
+    /** 루틴 선물 전송/응답 — 수신측은 GET /api/v1/workout/routine-gifts/received|sent 로 다시 조회한다 */
+    public static final String ROUTINE_GIFT = "ROUTINE_GIFT";
 }

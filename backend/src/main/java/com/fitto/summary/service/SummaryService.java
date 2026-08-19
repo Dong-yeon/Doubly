@@ -2,6 +2,7 @@ package com.fitto.summary.service;
 
 import com.fitto.common.plan.Feature;
 import com.fitto.common.plan.PlanGuard;
+import com.fitto.common.time.KstClock;
 import com.fitto.diet.repository.MealRepository;
 import com.fitto.relation.domain.Relation;
 import com.fitto.relation.domain.RelationStatus;
@@ -53,7 +54,7 @@ public class SummaryService {
     }
 
     public WeeklyRecapResponse weeklyRecap(Long userId) {
-        LocalDate weekStart = LocalDate.now().with(DayOfWeek.MONDAY).minusWeeks(1);
+        LocalDate weekStart = KstClock.today().with(DayOfWeek.MONDAY).minusWeeks(1);
         LocalDate weekEnd = weekStart.plusDays(6);
 
         // MY 탭 진입 시마다 부르는 조회 — 402 대신 잠김 표시로 내린다.

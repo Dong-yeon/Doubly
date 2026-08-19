@@ -48,12 +48,17 @@ public class WorkoutController {
         return ApiResponse.success(workoutService.save(user.id(), request), "운동 기록이 저장되었습니다.");
     }
 
-    /** AI 운동 추천 — 최근 기록 기반으로 오늘(days=1) 또는 며칠간의 루틴을 제안 */
+    /**
+     * AI 운동 추천 — 최근 기록 기반으로 오늘(days=1) 또는 며칠간의 루틴을 제안.
+     * weekdays 를 보내면(맞춤 프로그램 만들기) 그 요일마다 서로 다른 하루를 짜서 돌려준다.
+     */
     @PostMapping("/recommend")
     public ApiResponse<WorkoutRecommendationResponse> recommend(@AuthenticationPrincipal AuthUser user,
                                                                 @Valid @RequestBody RecommendWorkoutRequest request) {
-        return ApiResponse.success(recommendationService.recommend(user.id(), request.daysOrDefault()),
-                "AI 운동 추천이 완료되었습니다.");
+        WorkoutRecommendationResponse response = request.isProgramMode()
+                ? recommendationService.recommend(user.id(), request.weekdays())
+                : recommendationService.recommend(user.id(), request.daysOrDefault());
+        return ApiResponse.success(response, "AI 운동 추천이 완료되었습니다.");
     }
 
     /** 종목별 직전 수행 기록 배치 조회 — 세션 시작 시 무게/횟수 프리필(④). */
