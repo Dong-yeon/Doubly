@@ -81,12 +81,17 @@ export const workoutApi = {
     unwrap(
       apiClient.post<ApiResponse<WorkoutRecommendation>>('/workout/recommend', { days }, { timeout: 60000 }),
     ),
-  // 맞춤 프로그램 만들기 — 무슨 요일에 운동할지 넘기면 요일마다 다른 하루를 짜서 돌려준다
-  recommendProgram: (weekdays: WeekDay[]) =>
+  // 맞춤 프로그램 만들기 — 무슨 요일에 운동할지에 더해, 집중 부위·운동 목적(선택)까지 넘기면
+  // 그에 맞춰 요일마다 다른 하루를 짜서 돌려준다
+  recommendProgram: (weekdays: WeekDay[], focusMuscleGroups?: string[], goal?: string) =>
     unwrap(
       apiClient.post<ApiResponse<WorkoutRecommendation>>(
         '/workout/recommend',
-        { weekdays },
+        {
+          weekdays,
+          focusMuscleGroups: focusMuscleGroups && focusMuscleGroups.length > 0 ? focusMuscleGroups : undefined,
+          goal: goal || undefined,
+        },
         { timeout: 60000 },
       ),
     ),
