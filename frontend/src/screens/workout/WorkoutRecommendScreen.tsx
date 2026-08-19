@@ -41,6 +41,12 @@ const WEEKDAY_LABEL: Record<WeekDay, string> = Object.fromEntries(
   WEEK_DAYS.map((d) => [d.value, d.label]),
 ) as Record<WeekDay, string>;
 
+// 집중 부위 — 종목 카탈로그의 muscleGroup 값과 동일(백엔드 허용 목록과 짝: 밖의 값은 무시된다)
+const FOCUS_GROUPS = ['가슴', '등', '어깨', '하체', '팔', '코어'] as const;
+
+// 운동 목적 — 백엔드 GOAL_DIRECTIVES 의 키와 정확히 일치해야 프롬프트에 반영된다
+const GOALS = ['근력 향상', '근육 증가', '체지방 감량', '체력·건강 유지'] as const;
+
 // dayOffset → "오늘" / "내일" / "7/5 (금)"
 function dayLabel(offset: number): string {
   if (offset === 0) return '오늘';
@@ -59,16 +65,30 @@ export function WorkoutRecommendScreen({ navigation }: Props) {
   // 요청 시점에 이미 아는 값이라 별도로 들고 있는 게 더 명확하다) 따로 상태로 둔다.
   const [resultIsProgram, setResultIsProgram] = useState(false);
 
-  // 맞춤 프로그램 만들기(짐워크 스타일) — 무슨 요일에 운동할지 고르는 패널
+  // 맞춤 프로그램 만들기(짐워크 스타일) — 요일·집중 부위·운동 목적을 고르는 패널
   const [programOpen, setProgramOpen] = useState(false);
   const [programTitle, setProgramTitle] = useState('');
   const [programWeekdays, setProgramWeekdays] = useState<WeekDay[]>([]);
+  // 집중 부위(선택, 복수) — 비우면 균형 잡힌 분배
+  const [focusGroups, setFocusGroups] = useState<string[]>([]);
+  // 운동 목적(선택, 단일) — 다시 누르면 해제
+  const [goal, setGoal] = useState<string | null>(null);
   const [recommendingProgram, setRecommendingProgram] = useState(false);
   const [savingProgram, setSavingProgram] = useState(false);
 
   const toggleProgramWeekday = (d: WeekDay) => {
     haptics.light();
     setProgramWeekdays((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]));
+  };
+
+  const toggleFocusGroup = (g: string) => {
+    haptics.light();
+    setFocusGroups((prev) => (prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]));
+  };
+
+  const toggleGoal = (g: string) => {
+    haptics.light();
+    setGoal((prev) => (prev === g ? null : g));
   };
 
   // AI 추천 하루 계획을 루틴 만들기 폼으로 — 폼에서 검토·수정한 뒤 사용자가 직접 저장한다
@@ -115,7 +135,7 @@ export function WorkoutRecommendScreen({ navigation }: Props) {
     setRecommendingProgram(true);
     try {
       const res = await runBusy('AI가 프로그램을 짜고 있어요', () =>
-        workoutApi.recommendProgram(programWeekdays),
+        workoutApi.recommendProgram(programWeekdays, focusGroups, goal ?? undefined),
       );
       setResult(res);
       setResultIsProgram(true);
@@ -219,6 +239,28 @@ export function WorkoutRecommendScreen({ navigation }: Props) {
                 ? `${WEEK_DAYS.filter((d) => programWeekdays.includes(d.value)).map((d) => d.label).join('·')}요일 — 요일마다 다른 루틴을 만들어드려요.`
                 : '매주 운동할 요일을 골라주세요.'}
             </Text>
+
+            {/* 집중 부위(선택, 복수) — 고른 부위에 주간 볼륨을 더 배정한다. 안 고르면 균형 분배 */}
+            <Text style={styles.label}>더 키우고 싶은 부위 (선택)</Text>
+            <View style={styles.focusRow}>
+              {FOCUS_GROUPS.map((g) => (
+                <Chip
+                  key={g}
+                  label={g}
+                  selected={focusGroups.includes(g)}
+                  onPress={() => toggleFocusGroup(g)}
+                />
+              ))}
+            </View>
+
+            {/* 운동 목적(선택, 단일) — 프로그램 구성 스타일(고중량/근비대/서킷/균형)이 바뀐다 */}
+            <Text style={styles.label}>운동 목적 (선택)</Text>
+            <View style={styles.focusRow}>
+              {GOALS.map((g) => (
+                <Chip key={g} label={g} selected={goal === g} onPress={() => toggleGoal(g)} />
+              ))}
+            </View>
+
             <Button
               title="프로그램 추천받기"
               onPress={onRecommendProgram}
@@ -326,6 +368,8 @@ const styles = themedStyles((colors) => ({
   label: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700', marginTop: spacing.md, marginBottom: spacing.sm },
   dayRow: { flexDirection: 'row', gap: spacing.xs },
   dayHint: { fontSize: fontSize.caption, color: colors.textTertiary, marginTop: spacing.xs },
+  // 집중 부위·운동 목적 칩 — 요일과 달리 개수·글자폭이 제각각이라 균등분할(fill) 대신 줄바꿈으로 흐른다
+  focusRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
   programRecommendBtn: { marginTop: spacing.md },
   saveProgramBtn: { marginTop: spacing.xs, marginBottom: spacing.md },
   overallCard: {

@@ -61,7 +61,8 @@ public class WorkoutController {
     public ApiResponse<WorkoutRecommendationResponse> recommend(@AuthenticationPrincipal AuthUser user,
                                                                 @Valid @RequestBody RecommendWorkoutRequest request) {
         WorkoutRecommendationResponse response = request.isProgramMode()
-                ? recommendationService.recommend(user.id(), request.weekdays())
+                ? recommendationService.recommend(user.id(), request.weekdays(),
+                        request.focusMuscleGroups(), request.goal())
                 : recommendationService.recommend(user.id(), request.daysOrDefault());
         return ApiResponse.success(response, "AI 운동 추천이 완료되었습니다.");
     }

@@ -85,10 +85,15 @@ public class WorkoutRecommendationService {
      * 서로 다른 하루 계획(예: 월=가슴, 수=등, 금=하체)을 세워 각 요일에 배정해 돌려준다.
      * 요청한 요일 수만큼 정확히 채워지도록, AI 응답의 dayOfWeek 가 비거나 요청 밖이면
      * 순서대로 폴백한다({@link #toResponse}).
+     *
+     * @param focusMuscleGroups 더 키우고 싶은 집중 부위(선택) — 허용 목록 밖 값은 무시
+     * @param goal              운동 목적(선택) — 허용 목록 밖 값은 무시
      */
-    public WorkoutRecommendationResponse recommend(Long userId, Set<DayOfWeek> weekdays) {
+    public WorkoutRecommendationResponse recommend(Long userId, Set<DayOfWeek> weekdays,
+                                                   Set<String> focusMuscleGroups, String goal) {
         List<DayOfWeek> ordered = WEEK_ORDER.stream().filter(weekdays::contains).toList();
-        return generate(userId, historyText -> buildProgramPrompt(ordered, historyText), ordered);
+        return generate(userId,
+                historyText -> buildProgramPrompt(ordered, focusMuscleGroups, goal, historyText), ordered);
     }
 
     private WorkoutRecommendationResponse generate(
@@ -134,15 +139,47 @@ public class WorkoutRecommendationService {
                 """.formatted(days, days, historyText);
     }
 
+    /** 집중 부위 허용 목록 — 카탈로그의 muscle_group 값과 동일. 이 밖의 값은 프롬프트에 넣지 않는다. */
+    private static final Set<String> ALLOWED_FOCUS_GROUPS = Set.of("가슴", "등", "어깨", "하체", "팔", "코어");
+
+    /**
+     * 운동 목적 허용 목록 → 프롬프트 지시문. 사용자 입력 문자열이 AI 프롬프트에 그대로
+     * 들어가지 않게(프롬프트 인젝션·오타 방어) 정해진 키만 매핑한다 — 프론트의 GOAL 칩과 짝.
+     */
+    private static final Map<String, String> GOAL_DIRECTIVES = Map.of(
+            "근력 향상", "고중량·저반복(3~6회) 위주의 스트렝스 구성으로, 복합 다관절 운동(스쿼트·데드리프트·벤치프레스 등)을 각 날의 중심에 둡니다.",
+            "근육 증가", "중간 무게·중간 반복(8~12회) 위주의 근비대 구성으로, 부위별 볼륨을 충분히 확보합니다.",
+            "체지방 감량", "운동 사이 휴식을 짧게 가져가는 서킷 느낌의 구성에 유산소를 곁들여, 세션 전체 칼로리 소모를 높입니다.",
+            "체력·건강 유지", "무리 없는 전신 균형 구성으로, 근력·유산소·유연성을 고루 섞습니다.");
+
     /**
      * 프로그램 모드 프롬프트(맞춤 프로그램 만들기) — "월/수/금마다 운동해요" 처럼 실제 반복
-     * 요일을 그대로 주고, 요일마다 다른 하루를 짜게 한다. {@link #buildPrompt} 와 마찬가지로
-     * 리터럴 %는 %% 로 이스케이프해야 한다(package-private, 테스트에서 직접 검증).
+     * 요일을 그대로 주고, 요일마다 다른 하루를 짜게 한다. 집중 부위·운동 목적이 있으면
+     * 그에 맞는 지시문을 덧붙인다. {@link #buildPrompt} 와 마찬가지로 리터럴 %는 %% 로
+     * 이스케이프해야 한다(package-private, 테스트에서 직접 검증).
      */
-    String buildProgramPrompt(List<DayOfWeek> weekdays, String historyText) {
+    String buildProgramPrompt(List<DayOfWeek> weekdays, Set<String> focusMuscleGroups, String goal,
+                              String historyText) {
         String weekdayNames = weekdays.stream()
                 .map(d -> KOREAN_WEEKDAY_NAMES.get(WEEK_ORDER.indexOf(d)))
                 .collect(Collectors.joining(", "));
+
+        // 집중 부위·목적은 허용 목록으로 거른 뒤에만 프롬프트에 싣는다 — 자유 문자열이
+        // 지시문 자리에 그대로 들어가는 걸 막는 안전망(오타·프롬프트 인젝션 방어).
+        String focusDirective = "";
+        if (focusMuscleGroups != null) {
+            String filtered = focusMuscleGroups.stream()
+                    .filter(ALLOWED_FOCUS_GROUPS::contains)
+                    .collect(Collectors.joining(", "));
+            if (!filtered.isEmpty()) {
+                focusDirective = "\n- **집중 부위**: 사용자가 %s 를 더 키우고 싶어합니다. 이 부위(들)에 주간 볼륨을 더 배정하되(예: 주 2회 편성 또는 그 날의 운동 수를 늘림), 다른 부위도 최소한의 균형은 유지합니다."
+                        .formatted(filtered);
+            }
+        }
+        String goalDirective = goal != null && GOAL_DIRECTIVES.containsKey(goal)
+                ? "\n- **운동 목적(%s)**: %s".formatted(goal, GOAL_DIRECTIVES.get(goal))
+                : "";
+
         return """
                 당신은 커플 운동 앱의 다정한 퍼스널 트레이너입니다. 사용자가 매주 %s 에 운동합니다.
                 아래 사용자의 최근 운동 기록을 참고해, 이 요일들에 각각 다른 하루 계획을 세워
@@ -152,7 +189,7 @@ public class WorkoutRecommendationService {
                 - days 배열은 정확히 %d개(%s) 를 빠짐없이 채우고, 각 항목의 dayOfWeek 는 위 요일 중
                   하나와 정확히 일치해야 하며 중복 없이 서로 달라야 합니다. dayOffset 은 채우지 않아도 됩니다.
                 - 같은 부위를 이틀 연속 요일에 몰아넣지 말고, 요일 순서대로 부위를 분산합니다.
-                  (예: 월=가슴, 수=등, 금=하체 처럼 — 요일 사이 간격이 짧을수록 회복을 더 고려)
+                  (예: 월=가슴, 수=등, 금=하체 처럼 — 요일 사이 간격이 짧을수록 회복을 더 고려)%s%s
                 - **점진적 과부하**: 이전에 한 운동을 다시 제안할 땐 지난 기록의 무게·횟수보다
                   살짝(약 5~10%%) 높여서 성장하도록 하되, 절대 무리하지 않는 선으로 합니다.
                 - focus 는 그 날의 핵심 테마입니다. (예: "가슴·삼두", "하체 근력")
@@ -165,7 +202,8 @@ public class WorkoutRecommendationService {
 
                 최근 운동 기록(최신순):
                 %s
-                """.formatted(weekdayNames, weekdays.size(), weekdayNames, historyText);
+                """.formatted(weekdayNames, weekdays.size(), weekdayNames, focusDirective, goalDirective,
+                historyText);
     }
 
     private String buildHistoryText(List<WorkoutResponse> history) {

@@ -24,8 +24,23 @@ public record RecommendWorkoutRequest(
         @Max(value = 7, message = "추천 일수는 최대 7일입니다.")
         Integer days,
         @Size(max = 7, message = "요일은 최대 7개까지 선택할 수 있어요.")
-        Set<DayOfWeek> weekdays
+        Set<DayOfWeek> weekdays,
+        /**
+         * 프로그램 모드 전용 — 더 키우고 싶은 집중 부위(가슴/등/어깨/하체/팔/코어 중 선택).
+         * 비우면 균형 잡힌 분배. 검증은 프롬프트 조립부에서 허용 목록으로 거른다(자유 문자열이
+         * 프롬프트에 그대로 들어가는 걸 막는 안전망 — buildProgramPrompt 참고).
+         */
+        @Size(max = 6, message = "집중 부위는 최대 6개까지 선택할 수 있어요.")
+        Set<String> focusMuscleGroups,
+        /** 프로그램 모드 전용 — 운동 목적(예: "근력 향상"). 비우면 목적 없이 일반 추천. */
+        @Size(max = 20, message = "운동 목적이 올바르지 않아요.")
+        String goal
 ) {
+    /** days 만 넘기던 이전 호출부(순차 모드 테스트 등)와의 호환용 */
+    public RecommendWorkoutRequest(Integer days, Set<DayOfWeek> weekdays) {
+        this(days, weekdays, null, null);
+    }
+
     public int daysOrDefault() {
         return days == null ? 1 : days;
     }
