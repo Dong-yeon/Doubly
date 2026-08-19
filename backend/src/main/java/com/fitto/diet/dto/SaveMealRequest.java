@@ -44,10 +44,28 @@ public record SaveMealRequest(
 
         @Valid
         @Size(max = 30, message = "한 끼니에 담을 수 있는 음식은 30개까지예요.")
-        List<MealItemRequest> items
+        List<MealItemRequest> items,
+
+        /**
+         * "데이트" 칩 — true 면 커플 상대방에게도 같은 끼니가 칼로리 절반으로 자동 등록된다.
+         * 커플이 연결돼 있지 않으면 조용히 무시된다(혼자 저장). 기본값 false.
+         */
+        Boolean sharedWithPartner
 ) {
+    /** 데이트 플래그 이전부터 쓰던 12개짜리 호출부(기존 테스트 등) 호환용 — 기본값 false. */
+    public SaveMealRequest(LocalDate mealDate, MealType mealType, String memo, String photoUrl,
+                           Integer calories, Integer carbs, Integer protein, Integer fat,
+                           Integer sugar, Integer sodium, Integer fiber, List<MealItemRequest> items) {
+        this(mealDate, mealType, memo, photoUrl, calories, carbs, protein, fat,
+                sugar, sodium, fiber, items, false);
+    }
+
     /** null 을 매번 방어하지 않도록 — 항목 미전송은 빈 목록과 같게 다룬다. */
     public List<MealItemRequest> itemsOrEmpty() {
         return items != null ? items : List.of();
+    }
+
+    public boolean sharedWithPartnerOrDefault() {
+        return Boolean.TRUE.equals(sharedWithPartner);
     }
 }

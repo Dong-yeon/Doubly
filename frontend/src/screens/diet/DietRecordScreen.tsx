@@ -81,6 +81,8 @@ interface ItemForm {
 
 const num = (v: string) => (v.trim() ? Number(v) : undefined);
 const isFilled = (i: ItemForm) => i.name.trim().length > 0;
+// 서버(MealService.half)와 같은 반올림 — 미리보기 숫자가 실제 저장값과 어긋나지 않게
+const halfRound = (v: number) => Math.round(v / 2);
 
 export function DietRecordScreen({ navigation, route }: Props) {
   const save = useDietStore((s) => s.save);
@@ -100,6 +102,13 @@ export function DietRecordScreen({ navigation, route }: Props) {
     editing && !editing.items?.length && editing.calories ? String(editing.calories) : '',
   );
   const [photoUri, setPhotoUri] = useState<string | null>(editing?.photoUrl ?? null);
+  /**
+   * "데이트" 칩 — 켜면 상대방에게도 같은 끼니가 절반 칼로리로 자동 등록된다.
+   * 수정 화면에서는 노출하지 않는다 — 서버의 update() 는 상대방에게 아무 영향도 주지 않아서
+   * (조용한 손보기 전용 경로), 이미 저장된 기록의 데이트 여부를 여기서 바꿀 수 있는 것처럼
+   * 보이면 오해를 산다.
+   */
+  const [dateMeal, setDateMeal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzingText, setAnalyzingText] = useState(false);
@@ -155,6 +164,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
   }, [editing, navigation]);
 
   const filled = useMemo(() => items.filter(isFilled), [items]);
+  const partnerName = couple?.partner?.name ?? '상대방';
 
   /** 끼니 합계 — 서버도 같은 방식으로 다시 더한다(여기 값은 화면 표시용) */
   const totals = useMemo(
@@ -183,6 +193,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
     memo,
     totalCalories,
     photoUri,
+    dateMeal,
     items: items.map((i) => [i.name, i.portion, i.calories, i.carbs, i.protein, i.fat]),
   });
   const initialSnapshot = useRef<string | null>(null);
@@ -459,6 +470,8 @@ export function DietRecordScreen({ navigation, route }: Props) {
         sugar: extras?.sugar,
         sodium: extras?.sodium,
         fiber: extras?.fiber,
+        // 커플이 아니면 서버가 조용히 무시하므로 editing 상태에서만 항상 false 로 둔다
+        sharedWithPartner: !editing && dateMeal ? true : undefined,
       };
 
       /*
@@ -476,7 +489,11 @@ export function DietRecordScreen({ navigation, route }: Props) {
 
       const saved = await save(payload);
       haptics.success();
-      toast.success('식단 기록 완료! ');
+      toast.success(
+        payload.sharedWithPartner
+          ? `데이트 식단 완료! ${partnerName}님에게도 등록됐어요 💕`
+          : '식단 기록 완료! ',
+      );
 
       /*
        * 저장이 끝나면 공유 여부와 무관하게 화면부터 닫는다.
@@ -546,6 +563,27 @@ export function DietRecordScreen({ navigation, route }: Props) {
               />
             ))}
           </View>
+
+          {/*
+            "데이트" 칩 — 커플 연결돼 있을 때만 노출. 수정 화면에서는 안 보여준다(update()
+            는 상대방에게 아무 영향이 없어서, 여기서 데이트 여부를 바꿀 수 있는 것처럼
+            보이면 오해를 산다).
+          */}
+          {couple?.id && !editing ? (
+            <>
+              <Text style={styles.label}>함께</Text>
+              <Chip
+                label={`🍽️ ${partnerName}님과 같이 먹었어요`}
+                selected={dateMeal}
+                onPress={() => setDateMeal((v) => !v)}
+              />
+              {dateMeal ? (
+                <Text style={styles.dateMealHint}>
+                  {partnerName}님에게도 같은 끼니가 등록되고, 칼로리는 서로 절반씩 나눠 담겨요.
+                </Text>
+              ) : null}
+            </>
+          ) : null}
 
           {/* 포장식품은 바코드로 바로 조회 — 사진/텍스트 AI 분석보다 정확하다(추정이 아니라 실제 표기값) */}
           <TouchableOpacity style={styles.barcodeBtn} onPress={() => navigation.navigate('BarcodeScan')}>
@@ -765,6 +803,14 @@ export function DietRecordScreen({ navigation, route }: Props) {
             />
           )}
 
+          {/* 데이트 식단 미리보기 — 저장하면 실제로 이 값으로 나뉘어 각자에게 기록된다는 걸 미리 보여준다 */}
+          {dateMeal && (filled.length > 0 || num(totalCalories)) ? (
+            <Text style={styles.dateMealPreview}>
+              🍽 나와 {partnerName}님 각각{' '}
+              {halfRound(filled.length > 0 ? totals.calories : num(totalCalories) ?? 0)}kcal씩 기록돼요
+            </Text>
+          ) : null}
+
           {/* 추가 영양소 — AI 분석·바코드에서만 채워진다(즐겨찾기 경로는 없음). 목표(target)는 없는
               정보성 지표라 위 매크로보다 한 톤 낮춰 작게 보여준다. */}
           {extras && (extras.sugar != null || extras.sodium != null || extras.fiber != null) ? (
@@ -834,6 +880,15 @@ const styles = themedStyles((colors) => ({
   removePhoto: { color: colors.danger, fontSize: fontSize.caption, marginTop: spacing.xs, alignSelf: 'flex-end' },
   analyzeButton: { marginTop: spacing.sm },
   analyzeHint: { color: colors.textSecondary, fontSize: fontSize.caption, marginTop: spacing.xs, textAlign: 'center' },
+  dateMealHint: { color: colors.textSecondary, fontSize: fontSize.caption, marginTop: spacing.xs },
+  dateMealPreview: {
+    color: colors.primary,
+    fontSize: fontSize.caption,
+    fontWeight: '700',
+    marginTop: -spacing.sm,
+    marginBottom: spacing.md,
+    textAlign: 'center',
+  },
 
   // 음식 항목 카드 — 운동 기록의 세트 카드와 같은 형태
   itemCard: {

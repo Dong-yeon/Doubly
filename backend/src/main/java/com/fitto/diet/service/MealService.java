@@ -40,6 +40,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * 식단 기록 서비스 — 저장·오늘 조회·히스토리·캘린더·통계·삭제, 커플 상대방 오늘 여부.
@@ -82,6 +83,17 @@ public class MealService {
         if (req.mealDate().isAfter(KstClock.today())) {
             throw new BusinessException(ErrorCode.INVALID_INPUT, "미래 날짜는 기록할 수 없습니다.");
         }
+
+        // "데이트" 칩 — 연결된 커플이 있을 때만 실제로 나눠 담는다. 없으면 플래그가 와도 조용히 무시(혼자 저장).
+        Relation couple = null;
+        Long partnerId = null;
+        if (req.sharedWithPartnerOrDefault()) {
+            couple = relationRepository.findByUserAndTypeAndStatus(userId, RelationType.COUPLE, RelationStatus.ACTIVE)
+                    .stream().findFirst().orElse(null);
+            partnerId = couple != null ? couple.partnerOf(userId) : null;
+        }
+        boolean isDateMeal = partnerId != null;
+
         // 목표 달성 판정용 — 이 저장이 해당 날짜의 첫 기록인지 (중복 축하 방지)
         boolean firstMealOfDay = !mealRepository.existsByUserIdAndMealDate(userId, req.mealDate());
         // 영양 목표 판정용 — 이번 기록을 반영하기 전, 그 날짜까지 먹은 단백질(g) 합계.
@@ -89,29 +101,53 @@ public class MealService {
         int proteinBeforeThisMeal = mealRepository.findByUserIdAndMealDateOrderByIdAsc(userId, req.mealDate())
                 .stream().mapToInt(m -> nz(m.getProtein())).sum();
 
+        // 데이트 식단은 "함께 먹은 총량"이 아니라 "내가 먹은 몫"을 기록하는 것 — 항목/합계를 절반으로 줄인다.
+        List<MealItem> items = toItems(req);
+        Integer calories = req.calories(), carbs = req.carbs(), protein = req.protein(), fat = req.fat();
+        Integer sugar = req.sugar(), sodium = req.sodium(), fiber = req.fiber();
+        if (isDateMeal) {
+            items = items.stream().map(this::halveItem).toList();
+            calories = half(calories);
+            carbs = half(carbs);
+            protein = half(protein);
+            fat = half(fat);
+            sugar = half(sugar);
+            sodium = half(sodium);
+            fiber = half(fiber);
+        }
+        String sharedGroupId = isDateMeal ? UUID.randomUUID().toString() : null;
+
         Meal meal = Meal.builder()
                 .userId(userId)
                 .mealDate(req.mealDate())
                 .mealType(req.mealType())
                 .memo(req.memo())
                 .photoUrl(req.photoUrl())
-                .calories(req.calories())
-                .carbs(req.carbs())
-                .protein(req.protein())
-                .fat(req.fat())
-                .sugar(req.sugar())
-                .sodium(req.sodium())
-                .fiber(req.fiber())
+                .calories(calories)
+                .carbs(carbs)
+                .protein(protein)
+                .fat(fat)
+                .sugar(sugar)
+                .sodium(sodium)
+                .fiber(fiber)
+                .sharedGroupId(sharedGroupId)
                 .build();
         // 항목을 보냈으면 그게 기준 — 합계는 서버가 다시 더한다(요청의 합계값은 무시)
-        toItems(req).forEach(meal::addItem);
+        items.forEach(meal::addItem);
         meal.recalcTotals();
         mealRepository.save(meal);
 
         List<MealResponse.GoalHighlight> goals =
                 detectGoalsAchieved(userId, proteinBeforeThisMeal, meal.getProtein());
 
-        afterMealsAdded(userId, meal.getMealDate(), firstMealOfDay, false);
+        if (isDateMeal) {
+            // halving 은 위에서 이미 끝났다 — 파트너 몫은 내 기록을 그대로 복제만 한다(두 번 나누지 않도록).
+            Meal partnerMeal = copyForPartner(meal, partnerId, userId);
+            mealRepository.save(partnerMeal);
+            afterSharedMealAdded(couple, userId, partnerId, meal.getMealDate(), firstMealOfDay);
+        } else {
+            afterMealsAdded(userId, meal.getMealDate(), firstMealOfDay, false);
+        }
         return MealResponse.from(meal, goals);
     }
 
@@ -226,6 +262,59 @@ public class MealService {
         return v == null || v.isBlank() ? null : v.trim();
     }
 
+    /** 데이트 식단 — 항목 하나를 절반 값으로 복제(원본 리스트는 손대지 않고 새 인스턴스를 만든다). */
+    private MealItem halveItem(MealItem item) {
+        return MealItem.builder()
+                .name(item.getName())
+                .portion(item.getPortion())
+                .calories(half(item.getCalories()))
+                .carbs(half(item.getCarbs()))
+                .protein(half(item.getProtein()))
+                .fat(half(item.getFat()))
+                .orderNo(item.getOrderNo())
+                .build();
+    }
+
+    /** 반올림 — 항목/합계 절반화 공통. null 은 null 그대로(입력 안 한 값은 계속 안 한 값). */
+    private Integer half(Integer v) {
+        return v == null ? null : Math.round(v / 2f);
+    }
+
+    /**
+     * 데이트 식단 — 이미 절반으로 계산된 내 기록을 파트너 명의로 그대로 복제한다.
+     * halving 은 save() 에서 한 번만 하고 여기서는 복제만 한다(두 번 나누는 실수를 막기 위해).
+     */
+    private Meal copyForPartner(Meal source, Long partnerId, Long createdBy) {
+        Meal copy = Meal.builder()
+                .userId(partnerId)
+                .mealDate(source.getMealDate())
+                .mealType(source.getMealType())
+                .memo(source.getMemo())
+                .photoUrl(source.getPhotoUrl())
+                .calories(source.getCalories())
+                .carbs(source.getCarbs())
+                .protein(source.getProtein())
+                .fat(source.getFat())
+                .sugar(source.getSugar())
+                .sodium(source.getSodium())
+                .fiber(source.getFiber())
+                .sharedGroupId(source.getSharedGroupId())
+                .createdBy(createdBy)
+                .build();
+        for (MealItem item : source.getItems()) {
+            copy.addItem(MealItem.builder()
+                    .name(item.getName())
+                    .portion(item.getPortion())
+                    .calories(item.getCalories())
+                    .carbs(item.getCarbs())
+                    .protein(item.getProtein())
+                    .fat(item.getFat())
+                    .orderNo(item.getOrderNo())
+                    .build());
+        }
+        return copy;
+    }
+
     /** 커플 화면 실시간 갱신만 — 푸시 없이. */
     private void publishDietEvent(Long userId) {
         relationRepository.findByUserAndTypeAndStatus(userId, RelationType.COUPLE, RelationStatus.ACTIVE)
@@ -261,6 +350,38 @@ public class MealService {
                                 myName + "님이 식단을 기록했어요!");
                     }
                 });
+    }
+
+    /**
+     * 데이트 식단 저장 후처리 — 양쪽 스트릭 갱신 + 커플 실시간 반영 + 전용 푸시(파트너에게 1건만).
+     * 일반 저장({@link #afterMealsAdded})과 갈라 둔 이유: 이 저장은 나와 파트너 두 곳에 각각
+     * insert 가 일어나는데, 응원 푸시가 저장 횟수만큼(2번) 가면 스팸이다. 문구도 "함께 기록했다"로
+     * 다르게 준다. 스트릭은 두 사람 다 오늘 진짜로 기록이 생겼으니 둘 다 갱신한다.
+     */
+    private void afterSharedMealAdded(Relation couple, Long userId, Long partnerId,
+                                      LocalDate mealDate, boolean firstMealOfDay) {
+        try {
+            streakService.updateOnMeal(userId, mealDate);
+        } catch (RuntimeException e) {
+            log.warn("식단 스트릭 갱신 실패 (기록은 저장됨) userId={}, date={}: {}",
+                    userId, mealDate, e.getMessage());
+        }
+        try {
+            streakService.updateOnMeal(partnerId, mealDate);
+        } catch (RuntimeException e) {
+            log.warn("식단 스트릭 갱신 실패 (기록은 저장됨) userId={}, date={}: {}",
+                    partnerId, mealDate, e.getMessage());
+        }
+
+        coupleEventPublisher.publish(couple.getId(), CoupleEvent.DIET);
+        String myName = userRepository.findById(userId).map(u -> u.getName()).orElse("상대방");
+        if (justAchievedGoal(couple, userId, partnerId, mealDate, firstMealOfDay)) {
+            notificationService.notify(partnerId, "이번 주 식단 목표 달성!",
+                    myName + "님과 함께 주 " + couple.getDietGoalDays() + "일 목표를 채웠어요!");
+        } else {
+            notificationService.notify(partnerId, "함께 먹었어요 🍽",
+                    myName + "님과 데이트 식단을 함께 기록했어요!");
+        }
     }
 
     /**

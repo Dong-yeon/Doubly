@@ -22,6 +22,8 @@ public record MealResponse(
         /** 음식 항목(반찬 단위). 항목 없이 합계만 기록한 건(레거시 포함)은 빈 목록이다. */
         List<MealItemResponse> items,
         List<GoalHighlight> goals,
+        /** 데이트 식단(같이 먹기)으로 등록됐는지 — 커플 상대방에게도 짝이 있다. */
+        boolean sharedWithPartner,
         LocalDateTime createdAt
 ) {
     /**
@@ -52,6 +54,6 @@ public record MealResponse(
                 m.getMemo(), m.getPhotoUrl(), m.getCalories(),
                 m.getCarbs(), m.getProtein(), m.getFat(),
                 m.getItems().stream().map(MealItemResponse::of).toList(),
-                goals, m.getCreatedAt());
+                goals, m.isSharedMeal(), m.getCreatedAt());
     }
 }
