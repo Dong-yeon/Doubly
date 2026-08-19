@@ -7,8 +7,11 @@ import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { PlaceStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
+import { Chip } from '../../components/Chip';
 import { EmptyState } from '../../components/EmptyState';
+import { IconButton } from '../../components/IconButton';
 import { KakaoMap } from '../../components/KakaoMap';
+import { TextField } from '../../components/TextField';
 import { AiInsightButton } from '../../components/AiInsightButton';
 import { placeApi } from '../../api/place';
 import { isKakaoMapConfigured } from '../../constants/config';
@@ -56,14 +59,17 @@ const DIET_FILTERS: { value: PlaceDietTag | 'ALL'; label: string }[] = [
   { value: 'CHEAT', label: '🍔 치팅데이' },
 ];
 
-// 지도 핀 색상 — 클린식은 초록, 치팅데이는 주황. 구분 없는 장소는 기본(빨강) 핀 유지
-const DIET_TAG_PIN_COLOR: Partial<Record<PlaceDietTag, string>> = {
+// 지도 핀 색상 — 식단 구분(클린식=초록/치팅데이=주황/구분 없음=빨강)을 항상 나타낸다.
+// 방문 여부는 색과 별개 축이라 핀을 채우거나(다녀옴) 테두리만 남겨(위시리스트) 구분한다 — 아래 지도 범례 참고
+const DIET_TAG_PIN_COLOR: Record<PlaceDietTag, string> = {
   CLEAN: '#22C55E',
   CHEAT: '#F97316',
+  NEUTRAL: colors.danger,
 };
 
 export function PlaceMapScreen({ navigation }: Props) {
   const [places, setPlaces] = useState<Place[]>([]);
+  const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<PlaceStatus | 'ALL'>('ALL');
   const [dietFilter, setDietFilter] = useState<PlaceDietTag | 'ALL'>('ALL');
   const [mapMode, setMapMode] = useState(false);
@@ -111,9 +117,10 @@ export function PlaceMapScreen({ navigation }: Props) {
   };
 
   const filtered = places
+    .filter((p) => !search.trim() || p.name.toLowerCase().includes(search.trim().toLowerCase()))
     .filter((p) => filter === 'ALL' || p.status === filter)
     .filter((p) => dietFilter === 'ALL' || p.dietTag === dietFilter);
-  // 좌표가 등록된 장소만 지도에 핀으로 표시 — 클린식/치팅데이는 색상으로 구분
+  // 좌표가 등록된 장소만 지도에 핀으로 표시 — 색은 식단 구분, 채움 여부는 방문 여부
   const markers = filtered
     .filter((p) => p.lat != null && p.lng != null)
     .map((p) => ({
@@ -122,55 +129,85 @@ export function PlaceMapScreen({ navigation }: Props) {
       lng: p.lng as number,
       title: p.name,
       color: DIET_TAG_PIN_COLOR[p.dietTag],
+      filled: p.status === 'VISITED',
     }));
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <View style={styles.titleRow}>
         <Text style={styles.screenTitle}>우리 장소 지도</Text>
-        <AiInsightButton
-          label="AI 데이트 코스"
-          title="AI 데이트 코스"
-          fetcher={placeApi.dateCourse}
-          render={renderDateCourse}
-        />
+        <View style={styles.titleActions}>
+          <AiInsightButton
+            label="AI 데이트 코스"
+            title="AI 데이트 코스"
+            fetcher={placeApi.dateCourse}
+            render={renderDateCourse}
+          />
+          <IconButton icon="airplane" label="우리 여행" onPress={() => navigation.navigate('TripList')} />
+        </View>
       </View>
+
+      {/* 장소가 쌓이면 스크롤로 찾기 어려워진다 — 이름으로 바로 걸러낸다. 빈 목록일 땐 걸러낼 게 없어 숨긴다 */}
+      {places.length > 0 ? (
+        <View style={styles.searchWrap}>
+          <TextField
+            placeholder="장소 이름으로 검색"
+            value={search}
+            onChangeText={setSearch}
+            returnKeyType="search"
+          />
+        </View>
+      ) : null}
+
+      {/* 목록/지도는 같은 데이터를 다르게 "보는 방식"이라 상태 필터와는 분리한다 */}
+      {isKakaoMapConfigured() ? (
+        <View style={styles.viewToggleRow}>
+          <Chip label="목록" selected={!mapMode} onPress={() => setMapMode(false)} fill />
+          <Chip label="지도" selected={mapMode} onPress={() => setMapMode(true)} fill />
+        </View>
+      ) : null}
+
       <View style={styles.filterRow}>
         {FILTERS.map((f) => (
-          <TouchableOpacity
-            key={f.value}
-            style={[styles.filterChip, filter === f.value && styles.filterChipActive]}
-            onPress={() => setFilter(f.value)}
-          >
-            <Text style={[styles.filterText, filter === f.value && styles.filterTextActive]}>{f.label}</Text>
-          </TouchableOpacity>
+          <Chip key={f.value} label={f.label} selected={filter === f.value} onPress={() => setFilter(f.value)} />
         ))}
-        {isKakaoMapConfigured() ? (
-          <TouchableOpacity
-            style={[styles.filterChip, mapMode && styles.filterChipActive]}
-            onPress={() => setMapMode((v) => !v)}
-          >
-            <Text style={[styles.filterText, mapMode && styles.filterTextActive]}>지도</Text>
-          </TouchableOpacity>
-        ) : null}
-        <TouchableOpacity style={styles.filterChip} onPress={() => navigation.navigate('TripList')}>
-          <Text style={styles.filterText}>여행</Text>
-        </TouchableOpacity>
       </View>
       <View style={styles.filterRow}>
         {DIET_FILTERS.map((f) => (
-          <TouchableOpacity
+          <Chip
             key={f.value}
-            style={[styles.filterChip, dietFilter === f.value && styles.filterChipActive]}
+            label={f.label}
+            selected={dietFilter === f.value}
             onPress={() => setDietFilter(f.value)}
-          >
-            <Text style={[styles.filterText, dietFilter === f.value && styles.filterTextActive]}>{f.label}</Text>
-          </TouchableOpacity>
+          />
         ))}
       </View>
 
       {mapMode ? (
         <View style={styles.mapWrap}>
+          {/* 핀 색=식단 구분, 채움/테두리=방문 여부 — 두 축이 한 핀에 겹쳐 있어 범례 없이는 못 읽는다 */}
+          <View style={styles.legendRow}>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: DIET_TAG_PIN_COLOR.CLEAN }]} />
+              <Text style={styles.legendText}>클린식</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: DIET_TAG_PIN_COLOR.CHEAT }]} />
+              <Text style={styles.legendText}>치팅데이</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: DIET_TAG_PIN_COLOR.NEUTRAL }]} />
+              <Text style={styles.legendText}>구분 없음</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, styles.legendDotFilled]} />
+              <Text style={styles.legendText}>다녀옴</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, styles.legendDotOutline]} />
+              <Text style={styles.legendText}>가고 싶어요</Text>
+            </View>
+          </View>
           <KakaoMap
             markers={markers}
             height={0} // style 의 flex 로 채움
@@ -193,6 +230,8 @@ export function PlaceMapScreen({ navigation }: Props) {
         contentContainerStyle={styles.list}
         refreshing={loading}
         onRefresh={load}
+        // 빈 목록에는 지울 게 없어 힌트가 의미 없다 — 카드가 있을 때만 보여준다
+        ListHeaderComponent={filtered.length > 0 ? <Text style={styles.deleteHint}>카드를 길게 눌러 삭제할 수 있어요</Text> : null}
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.card}
@@ -212,6 +251,11 @@ export function PlaceMapScreen({ navigation }: Props) {
                   <Text style={styles.categoryText}>{item.dietTag === 'CLEAN' ? '🥗 클린식' : '🍔 치팅데이'}</Text>
                 </View>
               ) : null}
+              {item.tripId != null ? (
+                <View style={styles.categoryChip}>
+                  <Text style={styles.categoryText}>✈️ 여행에 담김</Text>
+                </View>
+              ) : null}
             </View>
             {item.address ? <Text style={styles.address}>{item.address}</Text> : null}
             <View style={styles.cardFooter}>
@@ -221,6 +265,7 @@ export function PlaceMapScreen({ navigation }: Props) {
               {item.visitCount > 0 ? (
                 <Text style={styles.visitInfo}>
                   {item.avgRating ? `${item.avgRating.toFixed(1)} · ` : ''}방문 {item.visitCount}회
+                  {item.lastVisitedAt ? ` · 최근 ${item.lastVisitedAt}` : ''}
                 </Text>
               ) : null}
             </View>
@@ -236,6 +281,9 @@ export function PlaceMapScreen({ navigation }: Props) {
                 error
                 onRetry={load}
               />
+            ) : places.length > 0 ? (
+              // 검색·필터로 걸러져 빈 것 — "아직 저장한 장소가 없어요"는 오해를 준다
+              <EmptyState icon="map-marker-outline" title="조건에 맞는 장소가 없어요" description="검색어나 필터를 바꿔보세요." />
             ) : (
               <EmptyState
                 icon="map-marker-outline"
@@ -269,6 +317,8 @@ const styles = themedStyles((colors) => ({
     fontWeight: '800',
     color: colors.textPrimary,
   },
+  titleActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  searchWrap: { paddingHorizontal: spacing.lg, paddingTop: spacing.md },
   courseComment: { fontSize: fontSize.body, color: colors.textSecondary, lineHeight: 22, marginBottom: spacing.xs },
   courseStop: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start' },
   courseNum: {
@@ -286,21 +336,20 @@ const styles = themedStyles((colors) => ({
   courseStopBody: { flex: 1 },
   courseName: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
   courseReason: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xxs, lineHeight: 18 },
-  filterRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.md },
-  filterChip: {
-    paddingHorizontal: spacing.md,
-    // 패딩만으로는 35px — 자주 누르는 필터라 최소 터치 크기를 맞춘다
-    minHeight: layout.touchTarget,
-    justifyContent: 'center',
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
+  viewToggleRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.md },
+  filterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
   },
-  filterChipActive: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
-  filterText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
-  filterTextActive: { color: colors.textPrimary, fontWeight: '800' },
   list: { padding: spacing.lg, paddingBottom: layout.listBottomWithFab },
+  deleteHint: {
+    fontSize: fontSize.caption,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
+  },
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -332,6 +381,12 @@ const styles = themedStyles((colors) => ({
   visitInfo: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '700' },
   fabWrap: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: spacing.lg },
   mapWrap: { flex: 1, padding: spacing.lg, paddingBottom: layout.listBottomWithFab },
+  legendRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, marginBottom: spacing.sm },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  legendDot: { width: 10, height: 10, borderRadius: 5 },
+  legendDotFilled: { backgroundColor: colors.textSecondary },
+  legendDotOutline: { backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.textSecondary },
+  legendText: { fontSize: fontSize.caption, color: colors.textSecondary },
   map: { flex: 1 },
   mapHint: { fontSize: fontSize.caption, color: colors.textSecondary, textAlign: 'center', marginTop: spacing.sm },
 }));

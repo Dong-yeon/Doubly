@@ -24,6 +24,7 @@ export const placeApi = {
   save: (payload: SavePlacePayload) =>
     unwrap(apiClient.post<ApiResponse<Place>>('/places', payload)),
   list: () => unwrap(apiClient.get<ApiResponse<Place[]>>('/places')),
+  get: (id: number) => unwrap(apiClient.get<ApiResponse<Place>>(`/places/${id}`)),
   update: (id: number, payload: Partial<SavePlacePayload>) =>
     unwrap(apiClient.put<ApiResponse<Place>>(`/places/${id}`, payload)),
   remove: (id: number) => unwrap(apiClient.delete<ApiResponse<void>>(`/places/${id}`)),

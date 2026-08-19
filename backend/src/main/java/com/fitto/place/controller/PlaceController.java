@@ -55,6 +55,11 @@ public class PlaceController {
         return ApiResponse.success(dateCourseService.recommend(user.id()));
     }
 
+    @GetMapping("/{id}")
+    public ApiResponse<PlaceResponse> get(@AuthenticationPrincipal AuthUser user, @PathVariable Long id) {
+        return ApiResponse.success(placeService.get(user.id(), id));
+    }
+
     @PutMapping("/{id}")
     public ApiResponse<PlaceResponse> update(@AuthenticationPrincipal AuthUser user,
                                              @PathVariable Long id,

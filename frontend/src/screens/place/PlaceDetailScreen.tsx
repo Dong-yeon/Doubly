@@ -20,6 +20,9 @@ import { TextField } from '../../components/TextField';
 import { Checkbox } from '../../components/Checkbox';
 import { EmptyState } from '../../components/EmptyState';
 import { ImageViewer } from '../../components/ImageViewer';
+import { IconButton } from '../../components/IconButton';
+import { KakaoMap } from '../../components/KakaoMap';
+import { isKakaoMapConfigured } from '../../constants/config';
 import { placeApi } from '../../api/place';
 import { useDietStore } from '../../store/dietStore';
 import { pickImage, uploadImage } from '../../utils/imageUpload';
@@ -29,7 +32,7 @@ import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
 import { toDateString } from '../../utils/date';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { MealType, PlaceVisit } from '../../types';
+import type { MealType, Place, PlaceVisit } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { useAndroidKeyboardHeight } from '../../hooks/useAndroidKeyboardHeight';
 
@@ -56,10 +59,11 @@ function defaultMealType(): MealType {
   return 'SNACK';
 }
 
-export function PlaceDetailScreen({ route }: Props) {
+export function PlaceDetailScreen({ route, navigation }: Props) {
   const { placeId, name: placeName } = route.params;
   const androidKeyboardHeight = useAndroidKeyboardHeight();
   const saveMeal = useDietStore((s) => s.save);
+  const [place, setPlace] = useState<Place | null>(null);
   const [visits, setVisits] = useState<PlaceVisit[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -87,15 +91,19 @@ export function PlaceDetailScreen({ route }: Props) {
     setLoading(true);
     setLoadError(false);
     try {
-      setVisits(await placeApi.visits(placeId));
+      const [p, v] = await Promise.all([placeApi.get(placeId), placeApi.visits(placeId)]);
+      setPlace(p);
+      setVisits(v);
+      // 수정 후 돌아왔을 때도 헤더 타이틀이 최신 이름을 따라가도록
+      navigation.setOptions({ title: p.name });
     } catch (e) {
-      toast.error(getErrorMessage(e, '방문 기록을 불러오지 못했어요.'));
+      toast.error(getErrorMessage(e, '장소 정보를 불러오지 못했어요.'));
       // 실패해도 목록은 비우지 않는다 — "진짜 빈 목록"과 구분은 loadError 로 한다
       setLoadError(true);
     } finally {
       setLoading(false);
     }
-  }, [placeId]);
+  }, [placeId, navigation]);
 
   useFocusEffect(
     useCallback(() => {
@@ -166,6 +174,29 @@ export function PlaceDetailScreen({ route }: Props) {
     }
   };
 
+  // 장소 자체 삭제 — 예전엔 목록 화면에서 카드를 길게 눌러야만 가능해서, 상세로 들어온
+  // 뒤에는 지울 방법이 없었다. 정보 카드에 명시적인 삭제 버튼을 둔다.
+  const onDeletePlace = () => {
+    if (!place) return;
+    Alert.alert('장소 삭제', `"${place.name}"을(를) 삭제할까요?\n방문 기록도 함께 삭제돼요.`, [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '삭제',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await placeApi.remove(place.id);
+            haptics.light();
+            toast.success('장소를 삭제했어요.');
+            navigation.goBack();
+          } catch (e) {
+            Alert.alert('오류', getErrorMessage(e));
+          }
+        },
+      },
+    ]);
+  };
+
   const onDeleteVisit = (visit: PlaceVisit) => {
     Alert.alert('방문 기록 삭제', `${visit.visitedAt} 기록을 삭제할까요?`, [
       { text: '취소', style: 'cancel' },
@@ -205,6 +236,65 @@ export function PlaceDetailScreen({ route }: Props) {
           onRefresh={load}
           ListHeaderComponent={
             <View>
+              {place ? (
+                <View style={styles.infoCard}>
+                  <View style={styles.infoTop}>
+                    <Text style={styles.infoName}>{place.name}</Text>
+                    <View style={styles.infoActions}>
+                      <IconButton
+                        icon="pencil-outline"
+                        label="장소 정보 수정"
+                        onPress={() => navigation.navigate('PlaceAdd', { place })}
+                      />
+                      <IconButton
+                        icon="delete-outline"
+                        label="장소 삭제"
+                        color={colors.danger}
+                        onPress={onDeletePlace}
+                      />
+                    </View>
+                  </View>
+                  <View style={styles.infoChipRow}>
+                    <View style={styles.infoChip}>
+                      <Text style={styles.infoChipText}>
+                        {place.status === 'VISITED' ? '다녀왔어요' : '가고 싶어요'}
+                      </Text>
+                    </View>
+                    {place.category ? (
+                      <View style={styles.infoChip}>
+                        <Text style={styles.infoChipText}>{place.category}</Text>
+                      </View>
+                    ) : null}
+                    {place.dietTag !== 'NEUTRAL' ? (
+                      <View style={[styles.infoChip, styles.infoDietChip]}>
+                        <Text style={styles.infoChipText}>
+                          {place.dietTag === 'CLEAN' ? '🥗 클린식' : '🍔 치팅데이'}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                  {place.address ? <Text style={styles.infoAddress}>{place.address}</Text> : null}
+                  {place.visitCount > 0 ? (
+                    <Text style={styles.infoStats}>
+                      {place.avgRating ? `${place.avgRating.toFixed(1)} · ` : ''}
+                      방문 {place.visitCount}회
+                      {place.lastVisitedAt ? ` · 최근 ${place.lastVisitedAt}` : ''}
+                    </Text>
+                  ) : null}
+                  {isKakaoMapConfigured() && place.lat != null && place.lng != null ? (
+                    <KakaoMap
+                      markers={[
+                        { id: place.id, lat: place.lat as number, lng: place.lng as number, title: place.name },
+                      ]}
+                      centerLat={place.lat as number}
+                      centerLng={place.lng as number}
+                      height={140}
+                      style={styles.infoMap}
+                    />
+                  ) : null}
+                </View>
+              ) : null}
+
               {formOpen ? (
                 <View style={styles.form}>
                   <Text style={styles.label}>별점</Text>
@@ -317,6 +407,8 @@ export function PlaceDetailScreen({ route }: Props) {
               )}
 
               <Text style={styles.sectionTitle}>방문 기록</Text>
+              {/* 지울 기록이 있을 때만 의미가 있다 — 빈 목록에는 EmptyState 쪽 안내로 충분 */}
+              {visits.length > 0 ? <Text style={styles.visitHint}>길게 눌러 삭제 · 사진은 탭해서 크게 보기</Text> : null}
             </View>
           }
           renderItem={({ item }) => (
@@ -382,6 +474,31 @@ export function PlaceDetailScreen({ route }: Props) {
 const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   list: { padding: spacing.lg, paddingBottom: spacing.xl },
+  infoCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  infoTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  infoName: { flex: 1, fontSize: fontSize.title, fontWeight: '800', color: colors.textPrimary },
+  infoActions: { flexDirection: 'row', alignItems: 'center' },
+  infoChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
+  infoChip: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  infoDietChip: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
+  infoChipText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
+  infoAddress: { fontSize: fontSize.body, color: colors.textSecondary, marginTop: spacing.sm },
+  infoStats: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '700', marginTop: spacing.xs },
+  infoMap: { marginTop: spacing.md },
   form: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -441,6 +558,7 @@ const styles = themedStyles((colors) => ({
     marginTop: spacing.lg,
     marginBottom: spacing.sm,
   },
+  visitHint: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: -spacing.xs, marginBottom: spacing.sm },
   visitCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,

@@ -1,6 +1,6 @@
 /** 네비게이션 파라미터 타입 — 설계서 2. 화면 설계 */
 import type { NavigatorScreenParams } from '@react-navigation/native';
-import type { BarcodeLookup, Meal, Trip, WeekDay } from '../types';
+import type { BarcodeLookup, Meal, Place, Trip, WeekDay } from '../types';
 
 // 2.1 온보딩 플로우 (인증 전)
 export type OnboardingStackParamList = {
@@ -159,7 +159,8 @@ export type ChatStackParamList = {
 // 맛집 탭 내부 스택 — 지도 / 추가 / 상세 (PLACE) + 여행 (TRIP)
 export type PlaceStackParamList = {
   PlaceMap: undefined;
-  PlaceAdd: undefined;
+  // place: 기존 장소를 수정하러 들어올 때만 채워짐 (없으면 새 장소 추가)
+  PlaceAdd: { place?: Place } | undefined;
   PlaceDetail: { placeId: number; name: string };
   // 커플 여행 (PLAN.md Trip) — 장소를 여행으로 그룹핑
   TripList: undefined;

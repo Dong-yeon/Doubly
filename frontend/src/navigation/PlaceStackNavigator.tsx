@@ -25,7 +25,10 @@ export function PlaceStackNavigator() {
       <Stack.Screen
         name="PlaceAdd"
         component={PlaceAddScreen}
-        options={{ title: '장소 추가', ...modalOptions }}
+        options={({ route }) => ({
+          title: route.params?.place ? '장소 수정' : '장소 추가',
+          ...modalOptions,
+        })}
       />
       <Stack.Screen
         name="PlaceDetail"

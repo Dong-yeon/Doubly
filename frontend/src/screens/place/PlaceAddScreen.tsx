@@ -45,13 +45,21 @@ const DIET_TAG_OPTIONS: { value: PlaceDietTag; label: string }[] = [
   { value: 'CHEAT', label: '🍔 치팅데이' },
 ];
 
-export function PlaceAddScreen({ navigation }: Props) {
-  const [name, setName] = useState('');
-  const [address, setAddress] = useState('');
-  const [category, setCategory] = useState<string | null>(null);
-  const [status, setStatus] = useState<PlaceStatus>('WISHLIST');
-  const [dietTag, setDietTag] = useState<PlaceDietTag>('NEUTRAL');
-  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+export function PlaceAddScreen({ navigation, route }: Props) {
+  // 기존 장소를 들고 들어오면 수정 모드 — 필드를 채워두고 저장 시 update 를 호출한다
+  const editingPlace = route.params?.place;
+  const isEdit = editingPlace != null;
+
+  const [name, setName] = useState(editingPlace?.name ?? '');
+  const [address, setAddress] = useState(editingPlace?.address ?? '');
+  const [category, setCategory] = useState<string | null>(editingPlace?.category ?? null);
+  const [status, setStatus] = useState<PlaceStatus>(editingPlace?.status ?? 'WISHLIST');
+  const [dietTag, setDietTag] = useState<PlaceDietTag>(editingPlace?.dietTag ?? 'NEUTRAL');
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(
+    editingPlace?.lat != null && editingPlace?.lng != null
+      ? { lat: editingPlace.lat, lng: editingPlace.lng }
+      : null,
+  );
   const [saving, setSaving] = useState(false);
 
   // 카카오 플레이스 키워드 검색 (지도 SDK services — WebView 브리지)
@@ -61,13 +69,20 @@ export function PlaceAddScreen({ navigation }: Props) {
   const [searching, setSearching] = useState(false);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 입력이 하나라도 있으면 이탈(뒤로가기·스와이프) 전에 확인한다
-  const dirty =
-    name.trim().length > 0 ||
-    address.trim().length > 0 ||
-    category != null ||
-    coords != null ||
-    keyword.trim().length > 0;
+  // 입력이 하나라도 있으면(수정 모드는 원본과 달라지면) 이탈(뒤로가기·스와이프) 전에 확인한다
+  const dirty = isEdit
+    ? name.trim() !== (editingPlace?.name ?? '') ||
+      address.trim() !== (editingPlace?.address ?? '') ||
+      category !== (editingPlace?.category ?? null) ||
+      status !== (editingPlace?.status ?? 'WISHLIST') ||
+      dietTag !== (editingPlace?.dietTag ?? 'NEUTRAL') ||
+      (coords?.lat ?? null) !== (editingPlace?.lat ?? null) ||
+      (coords?.lng ?? null) !== (editingPlace?.lng ?? null)
+    : name.trim().length > 0 ||
+      address.trim().length > 0 ||
+      category != null ||
+      coords != null ||
+      keyword.trim().length > 0;
   const allowLeave = useDirtyGuard(dirty);
 
   const onSearch = () => {
@@ -118,7 +133,7 @@ export function PlaceAddScreen({ navigation }: Props) {
     if (!name.trim()) return;
     setSaving(true);
     try {
-      await placeApi.save({
+      const payload = {
         name: name.trim(),
         address: address.trim() || undefined,
         lat: coords?.lat,
@@ -126,9 +141,16 @@ export function PlaceAddScreen({ navigation }: Props) {
         category: category ?? undefined,
         status,
         dietTag,
-      });
-      haptics.success();
-      toast.success('장소를 추가했어요 ');
+      };
+      if (editingPlace) {
+        await placeApi.update(editingPlace.id, payload);
+        haptics.success();
+        toast.success('장소를 수정했어요 ');
+      } else {
+        await placeApi.save(payload);
+        haptics.success();
+        toast.success('장소를 추가했어요 ');
+      }
       allowLeave();
       navigation.goBack();
     } catch (e) {
@@ -187,7 +209,28 @@ export function PlaceAddScreen({ navigation }: Props) {
           {isKakaoMapConfigured() ? (
             <>
               <Text style={styles.label}>위치 확인 (선택) — 지도를 탭해 직접 고를 수도 있어요</Text>
-              <KakaoMap ref={mapRef} selectable height={240} onSelect={onMapSelect} onSearchResults={onSearchResults} />
+              <KakaoMap
+                ref={mapRef}
+                selectable
+                height={240}
+                // 수정 모드에서는 기존 위치를 핀으로 미리 보여준다 (탭·검색으로 바꾸면 새 핀이 함께 표시됨)
+                markers={
+                  editingPlace?.lat != null && editingPlace?.lng != null
+                    ? [
+                        {
+                          id: editingPlace.id,
+                          lat: editingPlace.lat as number,
+                          lng: editingPlace.lng as number,
+                          title: editingPlace.name,
+                        },
+                      ]
+                    : undefined
+                }
+                centerLat={editingPlace?.lat ?? undefined}
+                centerLng={editingPlace?.lng ?? undefined}
+                onSelect={onMapSelect}
+                onSearchResults={onSearchResults}
+              />
               <Text style={styles.coordText}>
                 {coords ? `위치 선택됨 (${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)})` : '아직 위치를 선택하지 않았어요'}
               </Text>
@@ -222,17 +265,23 @@ export function PlaceAddScreen({ navigation }: Props) {
           <Text style={styles.label}>식단 구분 (선택) — 맛집이라면 클린식/치팅데이로 구분해보세요</Text>
           <View style={styles.chipRow}>
             {DIET_TAG_OPTIONS.map((o) => (
-              <TouchableOpacity
+              <Chip
                 key={o.value}
-                style={[styles.statusChip, dietTag === o.value && styles.chipActive]}
+                label={o.label}
+                selected={dietTag === o.value}
                 onPress={() => setDietTag(o.value)}
-              >
-                <Text style={[styles.chipText, dietTag === o.value && styles.chipTextActive]}>{o.label}</Text>
-              </TouchableOpacity>
+                fill
+              />
             ))}
           </View>
 
-          <Button title="추가하기" onPress={onSave} loading={saving} disabled={!name.trim()} style={styles.submit} />
+          <Button
+            title={isEdit ? '수정하기' : '추가하기'}
+            onPress={onSave}
+            loading={saving}
+            disabled={!name.trim()}
+            style={styles.submit}
+          />
       </FormKeyboardView>
     </SafeAreaView>
   );
@@ -261,25 +310,6 @@ const styles = themedStyles((colors) => ({
     marginTop: spacing.md,
   },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  chip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceAlt,
-  },
-  statusChip: {
-    flex: 1,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-  },
-  chipActive: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
-  chipText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
-  chipTextActive: { color: colors.textPrimary, fontWeight: '800' },
   coordText: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xs },
   submit: { marginTop: spacing.lg },
 }));
