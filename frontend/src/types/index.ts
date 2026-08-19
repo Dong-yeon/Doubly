@@ -380,6 +380,22 @@ export interface WorkoutRoutine {
   createdAt: string;
 }
 
+// 커플 루틴 선물하기 — 내 운동 루틴을 애인에게 보내면 수락 시 애인 루틴 목록에 그대로 추가된다.
+// routine 은 상태에 따라 다른 걸 보여준다: 수락 전엔 전송 시점 스냅샷, 수락 후엔 받는 사람
+// 소유로 복사된 결과물(삭제됐으면 null).
+export interface RoutineGift {
+  id: number;
+  status: 'PENDING' | 'ACCEPTED' | 'DECLINED';
+  message?: string | null;
+  routine?: WorkoutRoutine | null;
+  /** 받은 선물 목록에서 채워짐 */
+  senderName?: string | null;
+  /** 보낸 선물 목록에서 채워짐 */
+  receiverName?: string | null;
+  createdAt: string;
+  respondedAt?: string | null;
+}
+
 // 5.7 trainer_routines
 export interface TrainerRoutine {
   id: number;

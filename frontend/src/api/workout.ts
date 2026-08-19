@@ -6,6 +6,7 @@ import type {
   ExerciseCatalogItem,
   ExerciseLastPerformance,
   PartnerToday,
+  RoutineGift,
   WeekDay,
   Workout,
   WorkoutRecommendation,
@@ -80,6 +81,20 @@ export const workoutApi = {
     unwrap(apiClient.get<ApiResponse<WorkoutRoutine[]>>('/workout/routines/templates')),
   copyRoutine: (id: number) =>
     unwrap(apiClient.post<ApiResponse<WorkoutRoutine>>(`/workout/routines/${id}/copy`)),
+
+  // 커플 루틴 선물하기 — 내 루틴을 애인에게 보내고 애인이 수락/거절
+  sendRoutineGift: (routineId: number, message?: string) =>
+    unwrap(
+      apiClient.post<ApiResponse<RoutineGift>>(`/workout/routine-gifts/${routineId}/send`, { message }),
+    ),
+  receivedRoutineGifts: () =>
+    unwrap(apiClient.get<ApiResponse<RoutineGift[]>>('/workout/routine-gifts/received')),
+  sentRoutineGifts: () =>
+    unwrap(apiClient.get<ApiResponse<RoutineGift[]>>('/workout/routine-gifts/sent')),
+  acceptRoutineGift: (giftId: number) =>
+    unwrap(apiClient.post<ApiResponse<RoutineGift>>(`/workout/routine-gifts/${giftId}/accept`)),
+  declineRoutineGift: (giftId: number) =>
+    unwrap(apiClient.post<ApiResponse<void>>(`/workout/routine-gifts/${giftId}/decline`)),
 
   // 종목 카탈로그 — 자극 부위 필터 시 대체 종목 후보, 생략 시 전체(자동완성).
   // names 를 넘기면 그 이름들만 정확히 매칭해 내려준다(muscleGroup 보다 우선) — 세션 화면이
