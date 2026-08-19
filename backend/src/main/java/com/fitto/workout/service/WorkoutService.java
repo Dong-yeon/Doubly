@@ -2,6 +2,7 @@ package com.fitto.workout.service;
 
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
+import com.fitto.common.time.KstClock;
 import com.fitto.relation.domain.Relation;
 import com.fitto.relation.domain.RelationStatus;
 import com.fitto.relation.domain.RelationType;
@@ -72,7 +73,7 @@ public class WorkoutService {
 
     @Transactional
     public WorkoutResponse save(Long userId, SaveWorkoutRequest req) {
-        if (req.workoutDate().isAfter(LocalDate.now())) {
+        if (req.workoutDate().isAfter(KstClock.today())) {
             throw new BusinessException(ErrorCode.INVALID_INPUT, "미래 날짜는 기록할 수 없습니다.");
         }
         Workout workout = Workout.builder()
@@ -172,7 +173,7 @@ public class WorkoutService {
 
     public List<WorkoutResponse> findToday(Long userId) {
         return workoutRepository
-                .findByUserIdAndWorkoutDateOrderByIdDesc(userId, LocalDate.now())
+                .findByUserIdAndWorkoutDateOrderByIdDesc(userId, KstClock.today())
                 .stream().map(WorkoutResponse::from).toList();
     }
 
@@ -206,7 +207,7 @@ public class WorkoutService {
 
     /** 운동 통계 — 설계서 WORKOUT-07. */
     public WorkoutStatsResponse stats(Long userId) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = KstClock.today();
         LocalDate weekStart = today.with(java.time.DayOfWeek.MONDAY);
         LocalDate monthStart = today.withDayOfMonth(1);
 
@@ -257,7 +258,7 @@ public class WorkoutService {
         }
         String partnerName = userRepository.findById(partnerId)
                 .map(u -> u.getName()).orElse(null);
-        boolean completed = workoutRepository.existsByUserIdAndWorkoutDate(partnerId, LocalDate.now());
+        boolean completed = workoutRepository.existsByUserIdAndWorkoutDate(partnerId, KstClock.today());
         return new PartnerTodayResponse(true, partnerName, completed);
     }
 }
