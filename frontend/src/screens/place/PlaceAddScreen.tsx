@@ -23,7 +23,15 @@ import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<PlaceStackParamList, 'PlaceAdd'>;
 
-const CATEGORIES = ['한식', '중식', '일식', '양식', '카페', '디저트', '술집', '기타'];
+// 맛집뿐 아니라 여행지·전시 같은 데이트 장소 전반을 담는다 — 음식 → 나들이 순
+const CATEGORIES = ['한식', '중식', '일식', '양식', '카페', '디저트', '술집', '여행지', '박물관·전시', '액티비티', '기타'];
+
+// 카카오 카테고리 그룹 코드 → 앱 카테고리 자동 매핑 (CE7 카페 / AT4 관광명소 / CT1 문화시설)
+const KAKAO_CATEGORY_AUTO: Record<string, string> = {
+  CE7: '카페',
+  AT4: '여행지',
+  CT1: '박물관·전시',
+};
 
 const STATUS_OPTIONS: { value: PlaceStatus; label: string }[] = [
   { value: 'WISHLIST', label: '가고 싶어요' },
@@ -90,7 +98,8 @@ export function PlaceAddScreen({ navigation }: Props) {
     setName(place.name);
     if (place.address) setAddress(place.address);
     setCoords({ lat: place.lat, lng: place.lng });
-    if (place.categoryGroup === 'CE7') setCategory((prev) => prev ?? '카페');
+    const auto = place.categoryGroup ? KAKAO_CATEGORY_AUTO[place.categoryGroup] : undefined;
+    if (auto) setCategory((prev) => prev ?? auto);
     mapRef.current?.setPin(place.lat, place.lng);
     setResults([]);
     setKeyword('');
@@ -138,7 +147,7 @@ export function PlaceAddScreen({ navigation }: Props) {
               <View style={styles.searchRow}>
                 <View style={styles.flex}>
                   <TextField
-                    placeholder="예: 온기족발"
+                    placeholder="예: 국립중앙박물관"
                     value={keyword}
                     onChangeText={setKeyword}
                     onSubmitEditing={onSearch}
@@ -163,7 +172,7 @@ export function PlaceAddScreen({ navigation }: Props) {
 
           <TextField
             label="장소 이름"
-            placeholder="예: 온기족발 본점"
+            placeholder="예: 남산서울타워"
             value={name}
             onChangeText={setName}
             maxLength={100}
@@ -210,7 +219,7 @@ export function PlaceAddScreen({ navigation }: Props) {
             ))}
           </View>
 
-          <Text style={styles.label}>식단 구분 (선택) — 평소엔 클린식, 보상 데이트엔 치팅데이로 찾아볼 수 있어요</Text>
+          <Text style={styles.label}>식단 구분 (선택) — 맛집이라면 클린식/치팅데이로 구분해보세요</Text>
           <View style={styles.chipRow}>
             {DIET_TAG_OPTIONS.map((o) => (
               <TouchableOpacity

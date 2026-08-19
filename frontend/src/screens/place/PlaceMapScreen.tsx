@@ -1,4 +1,4 @@
-/** 우리 맛집 지도 — 커플 공유 장소 목록 (위시리스트/방문완료). 지도 렌더링은 카카오맵 키 발급 후 확장 */
+/** 우리 장소 지도 — 커플 공유 장소 목록 (맛집·여행지·전시 등, 위시리스트/방문완료). 지도 렌더링은 카카오맵 키 발급 후 확장 */
 import React, { useCallback, useState } from 'react';
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Alert } from '../../utils/alert';
@@ -127,7 +127,7 @@ export function PlaceMapScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <View style={styles.titleRow}>
-        <Text style={styles.screenTitle}>우리 맛집 지도</Text>
+        <Text style={styles.screenTitle}>우리 장소 지도</Text>
         <AiInsightButton
           label="AI 데이트 코스"
           title="AI 데이트 코스"
@@ -240,7 +240,7 @@ export function PlaceMapScreen({ navigation }: Props) {
               <EmptyState
                 icon="map-marker-outline"
                 title="아직 저장한 장소가 없어요"
-                description="함께 가고 싶은 맛집을 추가해보세요! (카드를 길게 눌러 삭제)"
+                description="함께 가고 싶은 맛집, 여행지, 전시를 추가해보세요! (카드를 길게 눌러 삭제)"
               />
             )
           ) : null

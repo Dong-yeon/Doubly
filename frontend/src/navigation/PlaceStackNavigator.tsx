@@ -1,4 +1,4 @@
-/** 맛집 탭 내부 스택 — 지도 / 추가 / 상세 (PLACE) */
+/** 장소 탭 내부 스택 — 지도 / 추가 / 상세 (PLACE) */
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { PlaceStackParamList } from './types';

@@ -418,7 +418,7 @@ export function HomeScreen({ navigation }: Props) {
                 [
                   { icon: 'dumbbell', label: '운동 기록하기', desc: '오늘 운동을 남기면 스트릭이 시작돼요', go: () => navigation.navigate('Workout', { screen: 'WorkoutRecord' }) },
                   { icon: 'silverware-fork-knife', label: '식단 기록하기', desc: '사진이나 글로 적으면 AI가 칼로리를 계산해요', go: () => navigation.navigate('Diet', { screen: 'DietRecord' }) },
-                  { icon: 'map-marker-plus-outline', label: '가고 싶은 맛집 저장', desc: '나중에 둘이 함께 갈 곳을 미리 담아두세요', go: () => navigation.navigate('Place', { screen: 'PlaceAdd' }) },
+                  { icon: 'map-marker-plus-outline', label: '가고 싶은 장소 저장', desc: '맛집, 여행지, 전시… 둘이 함께 갈 곳을 미리 담아두세요', go: () => navigation.navigate('Place', { screen: 'PlaceAdd' }) },
                 ] as const
               ).map((a, i, arr) => (
                 <React.Fragment key={a.label}>
