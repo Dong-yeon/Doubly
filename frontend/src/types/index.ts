@@ -658,6 +658,26 @@ export interface FavoriteFood {
   totalFat: number;
 }
 
+// 즐겨찾기 음식 공유 — 내 즐겨찾기 세트를 애인에게 보내면 수락 시 애인 즐겨찾기 목록에
+// 그대로 추가된다. items 는 전송 시점 스냅샷이라 상태와 무관하게 항상 볼 수 있다.
+export interface FavoriteFoodGift {
+  id: number;
+  status: 'PENDING' | 'ACCEPTED' | 'DECLINED';
+  name: string;
+  items: FavoriteFoodItem[];
+  totalCalories: number;
+  totalCarbs: number;
+  totalProtein: number;
+  totalFat: number;
+  message?: string | null;
+  /** 받은 선물 목록에서 채워짐 */
+  senderName?: string | null;
+  /** 보낸 선물 목록에서 채워짐 */
+  receiverName?: string | null;
+  createdAt: string;
+  respondedAt?: string | null;
+}
+
 // 식단 통계
 export interface MealStats {
   weeklyDays: number;

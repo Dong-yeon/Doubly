@@ -22,4 +22,6 @@ public record CoupleEvent(String type) {
     public static final String MOOD = "MOOD";
     /** 루틴 선물 전송/응답 — 수신측은 GET /api/v1/workout/routine-gifts/received|sent 로 다시 조회한다 */
     public static final String ROUTINE_GIFT = "ROUTINE_GIFT";
+    /** 즐겨찾기 음식 선물 전송/응답 — 수신측은 GET /api/v1/meal/favorite-gifts/received|sent 로 다시 조회한다 */
+    public static final String FAVORITE_FOOD_GIFT = "FAVORITE_FOOD_GIFT";
 }

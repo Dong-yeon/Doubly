@@ -7,6 +7,7 @@ import { DietRecordScreen } from '../screens/diet/DietRecordScreen';
 import { DietCalendarScreen } from '../screens/diet/DietCalendarScreen';
 import { DietStatsScreen } from '../screens/diet/DietStatsScreen';
 import { BarcodeScanScreen } from '../screens/diet/BarcodeScanScreen';
+import { FavoriteFoodGiftInboxScreen } from '../screens/diet/FavoriteFoodGiftInboxScreen';
 import { stackScreenOptions, modalOptions } from './headerOptions';
 
 const Stack = createNativeStackNavigator<DietStackParamList>();
@@ -26,6 +27,11 @@ export function DietStackNavigator() {
         name="BarcodeScan"
         component={BarcodeScanScreen}
         options={{ title: '바코드 스캔', ...modalOptions }}
+      />
+      <Stack.Screen
+        name="FavoriteFoodGiftInbox"
+        component={FavoriteFoodGiftInboxScreen}
+        options={{ title: '즐겨찾기 선물함' }}
       />
     </Stack.Navigator>
   );

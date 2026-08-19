@@ -8,6 +8,7 @@ import type {
   DietCoach,
   DietGoalType,
   FavoriteFood,
+  FavoriteFoodGift,
   MacroPreset,
   Meal,
   MealAnalysis,
@@ -118,4 +119,18 @@ export const dietApi = {
     unwrap(apiClient.post<ApiResponse<FavoriteFood>>('/meal/favorites', payload)),
   removeFavorite: (id: number) =>
     unwrap(apiClient.delete<ApiResponse<void>>(`/meal/favorites/${id}`)),
+
+  // 즐겨찾기 음식 공유 — 내 즐겨찾기 세트를 애인에게 보내고 애인이 수락/거절
+  sendFavoriteFoodGift: (favoriteFoodId: number, message?: string) =>
+    unwrap(
+      apiClient.post<ApiResponse<FavoriteFoodGift>>(`/meal/favorite-gifts/${favoriteFoodId}/send`, { message }),
+    ),
+  receivedFavoriteFoodGifts: () =>
+    unwrap(apiClient.get<ApiResponse<FavoriteFoodGift[]>>('/meal/favorite-gifts/received')),
+  sentFavoriteFoodGifts: () =>
+    unwrap(apiClient.get<ApiResponse<FavoriteFoodGift[]>>('/meal/favorite-gifts/sent')),
+  acceptFavoriteFoodGift: (giftId: number) =>
+    unwrap(apiClient.post<ApiResponse<FavoriteFoodGift>>(`/meal/favorite-gifts/${giftId}/accept`)),
+  declineFavoriteFoodGift: (giftId: number) =>
+    unwrap(apiClient.post<ApiResponse<void>>(`/meal/favorite-gifts/${giftId}/decline`)),
 };
