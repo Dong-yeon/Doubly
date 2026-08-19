@@ -148,6 +148,8 @@ export type DietStackParamList = {
   // 바코드로 포장식품 조회 — 결과를 들고 DietRecord 로 돌아간다
   BarcodeScan: undefined;
   DietStats: undefined;
+  // 즐겨찾기 음식 선물함 — 받은/보낸 즐겨찾기 선물
+  FavoriteFoodGiftInbox: undefined;
 };
 
 // 채팅 탭 내부 스택 — 방 목록 / 대화 (CHAT-01/02)

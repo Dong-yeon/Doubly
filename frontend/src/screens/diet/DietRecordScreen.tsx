@@ -207,6 +207,40 @@ export function DietRecordScreen({ navigation, route }: Props) {
   }, []);
   useFocusEffect(useCallback(() => loadFavorites(), [loadFavorites]));
 
+  // 받은 즐겨찾기 선물 배지 — 실패해도 화면 전체를 막을 정도는 아니라 조용히 무시한다
+  const [pendingGiftCount, setPendingGiftCount] = useState(0);
+  useFocusEffect(
+    useCallback(() => {
+      dietApi
+        .receivedFavoriteFoodGifts()
+        .then((gifts) => setPendingGiftCount(gifts.filter((g) => g.status === 'PENDING').length))
+        .catch(() => undefined);
+    }, []),
+  );
+
+  const [giftingId, setGiftingId] = useState<number | null>(null);
+  const giftFavorite = (fav: FavoriteFood) => {
+    Alert.alert('즐겨찾기 공유', `"${fav.name}"을(를) 애인에게 공유할까요?`, [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '공유하기',
+        onPress: async () => {
+          haptics.light();
+          setGiftingId(fav.id);
+          try {
+            await dietApi.sendFavoriteFoodGift(fav.id);
+            haptics.success();
+            toast.success('즐겨찾기를 공유했어요!');
+          } catch (e) {
+            toast.error(getErrorMessage(e, '공유에 실패했어요.'));
+          } finally {
+            setGiftingId(null);
+          }
+        },
+      },
+    ]);
+  };
+
   // 최근 먹은 음식 — 즐겨찾기와 달리 저장 없이 최근 기록에서 자동으로 뽑힌다
   const [recentFoods, setRecentFoods] = useState<RecentFood[]>([]);
   useFocusEffect(
@@ -632,9 +666,22 @@ export function DietRecordScreen({ navigation, route }: Props) {
               없으면 시작용 추천 */}
           <View style={styles.favHeader}>
             <Text style={styles.label}>즐겨찾기</Text>
-            <TouchableOpacity onPress={saveCurrentAsFavorite}>
-              <Text style={styles.favSave}>＋ 현재 저장</Text>
-            </TouchableOpacity>
+            <View style={styles.favHeaderActions}>
+              <TouchableOpacity
+                style={styles.favInboxLink}
+                onPress={() => navigation.navigate('FavoriteFoodGiftInbox')}
+              >
+                <Text style={styles.favSave}>🎁 선물함</Text>
+                {pendingGiftCount > 0 ? (
+                  <View style={styles.giftCountBadge}>
+                    <Text style={styles.giftCountBadgeText}>{pendingGiftCount}</Text>
+                  </View>
+                ) : null}
+              </TouchableOpacity>
+              <TouchableOpacity onPress={saveCurrentAsFavorite}>
+                <Text style={styles.favSave}>＋ 현재 저장</Text>
+              </TouchableOpacity>
+            </View>
           </View>
           {favorites.length > 0 ? (
             <View style={styles.presetRow}>
@@ -647,6 +694,13 @@ export function DietRecordScreen({ navigation, route }: Props) {
                 >
                   <Text style={styles.favChipText}>{f.name}</Text>
                   {f.totalCalories ? <Text style={styles.favChipCal}>{f.totalCalories}kcal</Text> : null}
+                  <TouchableOpacity
+                    hitSlop={8}
+                    disabled={giftingId === f.id}
+                    onPress={() => giftFavorite(f)}
+                  >
+                    <Text style={styles.favChipGift}>🎁</Text>
+                  </TouchableOpacity>
                 </TouchableOpacity>
               ))}
             </View>
@@ -925,8 +979,20 @@ const styles = themedStyles((colors) => ({
   extraNutrients: { fontSize: fontSize.caption, color: colors.textTertiary, marginTop: spacing.xs, textAlign: 'center' },
 
   favHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  favHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  favInboxLink: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   favSave: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '800' },
   favHint: { fontSize: fontSize.caption, color: colors.textSecondary, marginBottom: spacing.sm },
+  giftCountBadge: {
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    backgroundColor: colors.danger,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  giftCountBadgeText: { fontSize: 9, fontWeight: '800', color: colors.white },
   favChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -940,6 +1006,8 @@ const styles = themedStyles((colors) => ({
   },
   favChipText: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '700' },
   favChipCal: { fontSize: 10, color: colors.textSecondary, fontWeight: '700' },
+  // 선물 아이콘 — 칩 전체 탭(항목 추가)과 겹치지 않도록 별도 터치 영역을 준다
+  favChipGift: { fontSize: fontSize.caption, marginLeft: 2 },
   recentChip: {
     flexDirection: 'row',
     alignItems: 'center',
