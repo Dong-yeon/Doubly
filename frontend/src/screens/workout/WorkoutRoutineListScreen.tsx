@@ -28,6 +28,8 @@ type Props = NativeStackScreenProps<WorkoutStackParamList, 'WorkoutRoutines'>;
 export function WorkoutRoutineListScreen({ navigation }: Props) {
   const [routines, setRoutines] = useState<WorkoutRoutine[]>([]);
   const [loading, setLoading] = useState(false);
+  const [pendingGiftCount, setPendingGiftCount] = useState(0);
+  const [giftingId, setGiftingId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -40,7 +42,44 @@ export function WorkoutRoutineListScreen({ navigation }: Props) {
     }
   }, []);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
+  // 받은 선물 배지 — 실패해도 화면 전체를 막을 정도는 아니라 조용히 무시한다
+  const loadPendingGiftCount = useCallback(async () => {
+    try {
+      const gifts = await workoutApi.receivedRoutineGifts();
+      setPendingGiftCount(gifts.filter((g) => g.status === 'PENDING').length);
+    } catch {
+      // 배지는 선택 정보 — 실패해도 토스트로 방해하지 않는다
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      load();
+      loadPendingGiftCount();
+    }, [load, loadPendingGiftCount]),
+  );
+
+  const onGift = (routine: WorkoutRoutine) => {
+    Alert.alert('루틴 선물하기', `"${routine.title}"을(를) 애인에게 선물할까요?`, [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '선물하기',
+        onPress: async () => {
+          haptics.light();
+          setGiftingId(routine.id);
+          try {
+            await workoutApi.sendRoutineGift(routine.id);
+            haptics.success();
+            toast.success('루틴을 선물했어요!');
+          } catch (e) {
+            toast.error(getErrorMessage(e, '선물에 실패했어요.'));
+          } finally {
+            setGiftingId(null);
+          }
+        },
+      },
+    ]);
+  };
 
   const today = todayWeekDay();
   // 오늘 요일이 배정된 루틴을 앞으로 — Array.sort 는 안정 정렬이라 같은 그룹 안에서는
@@ -129,7 +168,16 @@ export function WorkoutRoutineListScreen({ navigation }: Props) {
                     </View>
                   ) : null}
                 </View>
-                <Text style={styles.start}>시작</Text>
+                <View style={styles.headerActions}>
+                  <TouchableOpacity
+                    style={styles.giftBtn}
+                    disabled={giftingId === item.id}
+                    onPress={() => onGift(item)}
+                  >
+                    <Text style={styles.giftBtnText}>🎁</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.start}>시작</Text>
+                </View>
               </View>
               {/* 요일 배정 — 짐워크 스타일 미니 캘린더 점. 비어 있으면(자유 루틴) 아예 숨긴다 */}
               {item.scheduledDays.length > 0 ? (
@@ -161,12 +209,25 @@ export function WorkoutRoutineListScreen({ navigation }: Props) {
           ) : null
         }
         ListFooterComponent={
-          <TouchableOpacity
-            style={styles.templatesLink}
-            onPress={() => navigation.navigate('WorkoutRoutineTemplates')}
-          >
-            <Text style={styles.templatesLinkText}>✨ 검증된 루틴 둘러보기</Text>
-          </TouchableOpacity>
+          <View style={styles.footerWrap}>
+            <TouchableOpacity
+              style={styles.templatesLink}
+              onPress={() => navigation.navigate('WorkoutRoutineGiftInbox')}
+            >
+              <Text style={styles.templatesLinkText}>🎁 루틴 선물함</Text>
+              {pendingGiftCount > 0 ? (
+                <View style={styles.giftCountBadge}>
+                  <Text style={styles.giftCountBadgeText}>{pendingGiftCount}</Text>
+                </View>
+              ) : null}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.templatesLink}
+              onPress={() => navigation.navigate('WorkoutRoutineTemplates')}
+            >
+              <Text style={styles.templatesLinkText}>✨ 검증된 루틴 둘러보기</Text>
+            </TouchableOpacity>
+          </View>
         }
       />
       <View style={styles.fabWrap}>
@@ -199,6 +260,10 @@ const styles = themedStyles((colors) => ({
     backgroundColor: colors.primary,
   },
   todayBadgeText: { fontSize: 10, fontWeight: '800', color: colors.white },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  // 선물 버튼 — 카드 전체 탭(세션 시작)과 겹치지 않도록 별도 터치 영역을 넉넉히 준다
+  giftBtn: { padding: spacing.xs },
+  giftBtnText: { fontSize: fontSize.body },
   start: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '800' },
   // 요일 배정 — 짐워크 스타일 미니 캘린더 점 7개(월→일), 배정된 요일만 채운다
   dayDotRow: { flexDirection: 'row', gap: 4, marginTop: spacing.xs },
@@ -218,15 +283,27 @@ const styles = themedStyles((colors) => ({
   summary: { fontSize: fontSize.caption, color: colors.textPrimary, marginTop: spacing.xs, lineHeight: 18 },
   count: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xs },
   fabWrap: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: spacing.lg },
+  footerWrap: { gap: spacing.sm, marginTop: spacing.xs, marginBottom: 80 },
   templatesLink: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: spacing.xs,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     borderStyle: 'dashed',
     paddingVertical: spacing.md,
-    alignItems: 'center',
-    marginTop: spacing.xs,
-    marginBottom: 80,
   },
   templatesLinkText: { fontSize: fontSize.body, fontWeight: '800', color: colors.textSecondary },
+  giftCountBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 5,
+    backgroundColor: colors.danger,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  giftCountBadgeText: { fontSize: 10, fontWeight: '800', color: colors.white },
 }));

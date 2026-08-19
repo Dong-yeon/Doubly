@@ -132,8 +132,20 @@ public class WorkoutRoutineService {
             throw new BusinessException(ErrorCode.FORBIDDEN, "복사할 수 없는 루틴이에요.");
         }
         planGuard.requireCapacity(userId, Feature.WORKOUT_ROUTINE, routineRepository.countByUserId(userId));
+        WorkoutRoutine copy = deepCopy(source, userId);
+        routineRepository.save(copy);
+        return RoutineResponse.of(copy);
+    }
+
+    /**
+     * 종목·대체 종목·세트별 목표까지 통째로 복제한 새 루틴(미저장)을 만든다. 무게는 개인차가
+     * 커서 담지 않는다 — 시스템 템플릿 복사(⑤)와 커플 루틴 선물({@code RoutineGiftService})이
+     * 함께 쓰는 핵심 로직이라 여기 하나로 모아둔다. 요일 배정도 담지 않는다(위 copy 방침과 동일).
+     * 호출부가 소유자·플랜 한도를 각자의 방식으로 검증한 뒤 부르고, 저장도 호출부가 한다.
+     */
+    WorkoutRoutine deepCopy(WorkoutRoutine source, Long targetUserId) {
         WorkoutRoutine copy = WorkoutRoutine.builder()
-                .userId(userId)
+                .userId(targetUserId)
                 .title(source.getTitle())
                 .build();
         for (WorkoutRoutineExercise e : source.getExercises()) {
@@ -168,8 +180,7 @@ public class WorkoutRoutineService {
             // 무게 없이 복사했으니 여기서도 null 이 나와 위의 weightKg(null) 방침과 일치한다.
             copiedExercise.recalcSetSummary();
         }
-        routineRepository.save(copy);
-        return RoutineResponse.of(copy);
+        return copy;
     }
 
     @Transactional

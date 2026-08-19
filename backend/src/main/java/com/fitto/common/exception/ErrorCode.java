@@ -53,6 +53,10 @@ public enum ErrorCode {
     // 운동 (WORKOUT)
     WORKOUT_NOT_FOUND(HttpStatus.NOT_FOUND, "운동 기록을 찾을 수 없습니다."),
 
+    // 커플 루틴 선물 (ROUTINE GIFT)
+    GIFT_NOT_FOUND(HttpStatus.NOT_FOUND, "선물을 찾을 수 없습니다."),
+    GIFT_ALREADY_RESPONDED(HttpStatus.CONFLICT, "이미 응답한 선물이에요."),
+
     // 맛집 지도 (PLACE)
     PLACE_NOT_FOUND(HttpStatus.NOT_FOUND, "장소를 찾을 수 없습니다."),
 
