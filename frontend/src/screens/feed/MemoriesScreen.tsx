@@ -8,7 +8,7 @@
  * <p>페이징이 없다. 하루치 × 몇 개 연도라 서버가 한 번에 다 준다(상한 30건).
  */
 import React, { useCallback, useState } from 'react';
-import { SectionList, StyleSheet, Text, View } from 'react-native';
+import { SectionList, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -22,6 +22,7 @@ import { getErrorMessage } from '../../utils/error';
 import { haptics } from '../../utils/haptics';
 import type { FeedItem, MemoryGroup } from '../../types';
 import { colors, fontSize, spacing } from '../../constants/theme';
+import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'Memories'>;
 
@@ -119,7 +120,8 @@ export function MemoriesScreen({ route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+// themedStyles — StyleSheet.create 는 모듈 로드 시 색이 굳어 실행 중 테마 전환이 반영되지 않았다
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   list: { padding: spacing.lg },
   header: {
@@ -132,4 +134,4 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
   headerDate: { fontSize: fontSize.caption, color: colors.textMuted, fontWeight: '600' },
   tail: { height: spacing.lg },
-});
+}));

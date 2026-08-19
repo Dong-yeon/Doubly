@@ -789,6 +789,9 @@ const styles = themedStyles((colors) => ({
   imageBtnText: { fontSize: 20 },
   input: {
     flex: 1,
+    // 웹 필수 — <textarea> 내재 최소 폭 탓에 flex:1 이어도 안 줄어든다
+    // (WorkoutSessionScreen.setInput 과 같은 문제). 네이티브에는 영향 없다.
+    minWidth: 0,
     maxHeight: 110,
     minHeight: 46,
     paddingHorizontal: spacing.md,

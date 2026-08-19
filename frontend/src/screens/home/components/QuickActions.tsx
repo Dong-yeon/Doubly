@@ -6,9 +6,10 @@
  * 아이콘 + 짧은 라벨의 반투명 칩 한 줄로 눌러 담았다.
  */
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '../../../components/Icon';
 import { colors, fontSize, spacing } from '../../../constants/theme';
+import { themedStyles } from '../../../theme/themedStyles';
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -40,7 +41,8 @@ export function QuickActions({ actions }: { actions: QuickAction[] }) {
   );
 }
 
-const styles = StyleSheet.create({
+// themedStyles — StyleSheet.create 는 모듈 로드 시 색이 굳어 실행 중 테마 전환이 반영되지 않았다
+const styles = themedStyles((colors) => ({
   row: { flexDirection: 'row', marginBottom: spacing.md },
   item: { flex: 1, alignItems: 'center', gap: spacing.xs, paddingVertical: spacing.xs },
   pressed: { opacity: 0.6 },
@@ -56,4 +58,4 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   label: { color: colors.textSecondary, fontSize: 11, fontWeight: '700' },
-});
+}));

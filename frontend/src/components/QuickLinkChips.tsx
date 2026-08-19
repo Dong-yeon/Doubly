@@ -9,10 +9,11 @@
  * "더 있다"는 걸 알려준다 — 이전엔 스크롤 가능 여부를 알려주는 단서가 전혀 없었다.
  */
 import React, { useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
+import { themedStyles } from '../theme/themedStyles';
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -79,7 +80,8 @@ export function QuickLinkChips({ links }: { links: QuickLink[] }) {
   );
 }
 
-const styles = StyleSheet.create({
+// themedStyles — StyleSheet.create 는 모듈 로드 시 색이 굳어 실행 중 테마 전환이 반영되지 않았다
+const styles = themedStyles((colors) => ({
   wrap: { flexGrow: 0 },
   scroll: { flexGrow: 0 },
   row: {
@@ -102,4 +104,4 @@ const styles = StyleSheet.create({
   },
   chipText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textPrimary },
   fade: { position: 'absolute', right: 0, top: 0, bottom: 0, width: 28 },
-});
+}));
