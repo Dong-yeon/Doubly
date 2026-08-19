@@ -59,7 +59,7 @@ export function TripListScreen({ navigation }: Props) {
   );
 
   const onDelete = (trip: Trip) => {
-    Alert.alert('여행 삭제', `"${trip.title}"을(를) 삭제할까요?\n담긴 장소는 맛집 지도에 그대로 남아요.`, [
+    Alert.alert('여행 삭제', `"${trip.title}"을(를) 삭제할까요?\n담긴 장소는 장소 지도에 그대로 남아요.`, [
       { text: '취소', style: 'cancel' },
       {
         text: '삭제',

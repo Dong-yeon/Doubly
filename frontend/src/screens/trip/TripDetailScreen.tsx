@@ -169,7 +169,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
   };
 
   const onDetach = (place: Place) => {
-    Alert.alert('장소 빼기', `"${place.name}"을(를) 이 여행에서 뺄까요?\n장소는 맛집 지도에 그대로 남아요.`, [
+    Alert.alert('장소 빼기', `"${place.name}"을(를) 이 여행에서 뺄까요?\n장소는 장소 지도에 그대로 남아요.`, [
       { text: '취소', style: 'cancel' },
       {
         text: '빼기',
@@ -608,7 +608,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
               <Button title="＋ 장소 담기" variant="secondary" size="md" onPress={openPicker} />
             </View>
             {places.length === 0 ? (
-              <Text style={styles.empty}>아직 담긴 장소가 없어요. 맛집 지도의 장소를 담아보세요! (길게 눌러 빼기)</Text>
+              <Text style={styles.empty}>아직 담긴 장소가 없어요. 장소 지도의 장소를 담아보세요! (길게 눌러 빼기)</Text>
             ) : (
               places.map((item) => (
                 <TouchableOpacity
@@ -779,7 +779,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
                 </TouchableOpacity>
               )}
               ListEmptyComponent={
-                <Text style={styles.empty}>연결할 장소가 없어요. 맛집 지도에서 먼저 추가해주세요!</Text>
+                <Text style={styles.empty}>연결할 장소가 없어요. 장소 지도에서 먼저 추가해주세요!</Text>
               }
             />
             <Button title="닫기" variant="ghost" size="md" onPress={() => setLinkOpen(false)} />
@@ -806,7 +806,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
                 </TouchableOpacity>
               )}
               ListEmptyComponent={
-                <Text style={styles.empty}>담을 수 있는 장소가 없어요. 맛집 지도에서 먼저 추가해주세요!</Text>
+                <Text style={styles.empty}>담을 수 있는 장소가 없어요. 장소 지도에서 먼저 추가해주세요!</Text>
               }
             />
             <Button title="닫기" variant="ghost" size="md" onPress={() => setPickerOpen(false)} />
