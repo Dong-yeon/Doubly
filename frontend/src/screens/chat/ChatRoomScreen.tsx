@@ -31,6 +31,7 @@ import { EmojiPicker } from '../../components/EmojiPicker';
 import { TouchGesturePicker } from '../../components/TouchGesturePicker';
 import { MoodPicker } from '../../components/MoodPicker';
 import { SpellCheckBar } from '../../components/SpellCheckBar';
+import { MessageActionSheet } from '../../components/MessageActionSheet';
 import { useSettingsStore } from '../../store/settingsStore';
 import {
   applyAllSuggestions,
@@ -43,13 +44,12 @@ import { isPrShareContent } from '../../utils/workoutShare';
 import { isGoalShareContent } from '../../utils/dietShare';
 import { touchGestureOf } from '../../constants/touchGestures';
 import { playTouchGesture } from '../../utils/haptics';
+import { messagePreview } from '../../utils/messagePreview';
+import { chatDateDividerLabel, isSameLocalDay } from '../../utils/date';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { ChatMessage, TouchGestureCode } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
-import { layout } from '../../theme/layout';
 import { useAndroidKeyboardHeight } from '../../hooks/useAndroidKeyboardHeight';
-
-const REACTIONS = ['💗', '🔥', '💪', '👍', '🎉'];
 
 /** 스티커 세트 — 말풍선 없이 크게 그려지는 이모지. 커플 대화 감정 표현 위주로 큐레이션 */
 const STICKERS = [
@@ -71,6 +71,9 @@ const timeOf = (iso: string): string => {
   return `${hh}:${mm}`;
 };
 
+/** 같은 사람이 이 시간 안에 연달아 보내면 한 그룹(카톡처럼 시간 표시를 마지막에만) */
+const GROUP_GAP_MS = 5 * 60 * 1000;
+
 export function ChatRoomScreen({ navigation, route }: Props) {
   const { relationId, title } = route.params;
   const headerHeight = useHeaderHeight();
@@ -84,13 +87,18 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const { openRoom, closeRoom, send, markRead, replaceMessage, loadOlder } = useChatStore();
   const [text, setText] = useState('');
   const [uploading, setUploading] = useState(false);
+  // 입력바 보조 도구는 기본으로 숨겨져 있다가 "+"로 펼친다 — 스티커 패널과는
+  // 자리를 공유해서 항상 둘 중 하나만 뜬다(토글 핸들러들이 서로를 닫아준다).
   const [showStickers, setShowStickers] = useState(false);
+  const [showExtras, setShowExtras] = useState(false);
   const [showTouchPicker, setShowTouchPicker] = useState(false);
   const [showMoodPicker, setShowMoodPicker] = useState(false);
   // 답장 대상 / 수정 중인 메시지 / 리액션 피커 대상
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const [editing, setEditing] = useState<ChatMessage | null>(null);
   const [reactingTo, setReactingTo] = useState<ChatMessage | null>(null);
+  // 길게 누른 메시지 — MessageActionSheet 가 이 값의 존재 여부로 노출된다
+  const [actionSheetFor, setActionSheetFor] = useState<ChatMessage | null>(null);
   const [showEmojiSheet, setShowEmojiSheet] = useState(false);
   // 맞춤법 제안을 닫은 시점의 입력값 — 글을 더 치면(값이 달라지면) 다시 뜬다
   const [spellDismissedFor, setSpellDismissedFor] = useState<string | null>(null);
@@ -211,27 +219,43 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     }
   };
 
-  /** 메시지 길게 누르기 — 리액션/답장/수정/삭제 */
+  /** 메시지 길게 누르기 — MessageActionSheet 로 리액션/답장/수정/삭제를 한 시트에 모은다 */
   const onLongPressMessage = (msg: ChatMessage) => {
     if (msg.deleted) return;
     haptics.light();
-    const mine = msg.senderId === myId;
-    const actions: { text: string; style?: 'cancel' | 'destructive'; onPress?: () => void }[] = [
-      { text: '리액션 달기', onPress: () => setReactingTo(msg) },
-      { text: '답장하기', onPress: () => { setEditing(null); setReplyTo(msg); } },
-    ];
-    // 수정은 내가 보낸 텍스트만 (사진·스티커는 고칠 내용이 없다)
-    if (mine && msg.messageType === 'TEXT') {
-      actions.push({
-        text: '수정하기',
-        onPress: () => { setReplyTo(null); setEditing(msg); setText(msg.content ?? ''); },
-      });
-    }
-    if (mine) {
-      actions.push({ text: '삭제하기', style: 'destructive', onPress: () => onDelete(msg) });
-    }
-    actions.push({ text: '취소', style: 'cancel' });
-    Alert.alert('메시지', undefined, actions);
+    setActionSheetFor(msg);
+  };
+
+  const closeActionSheet = () => setActionSheetFor(null);
+
+  const onQuickReactFromSheet = (emoji: string) => {
+    const msg = actionSheetFor;
+    closeActionSheet();
+    if (msg) onReact(msg, emoji);
+  };
+
+  const onMoreEmojiFromSheet = () => {
+    const msg = actionSheetFor;
+    closeActionSheet();
+    if (msg) setReactingTo(msg);
+  };
+
+  const onReplyFromSheet = () => {
+    const msg = actionSheetFor;
+    closeActionSheet();
+    if (msg) { setEditing(null); setReplyTo(msg); }
+  };
+
+  const onEditFromSheet = () => {
+    const msg = actionSheetFor;
+    closeActionSheet();
+    if (msg) { setReplyTo(null); setEditing(msg); setText(msg.content ?? ''); }
+  };
+
+  const onDeleteFromSheet = () => {
+    const msg = actionSheetFor;
+    closeActionSheet();
+    if (msg) onDelete(msg);
   };
 
   const onDelete = (msg: ChatMessage) => {
@@ -259,12 +283,6 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     } catch (e) {
       toast.error(getErrorMessage(e, '리액션을 남기지 못했어요.'));
     }
-  };
-
-  const sendReaction = (emoji: string) => {
-    const ok = send(relationId, { messageType: 'TEXT', content: emoji });
-    if (ok) haptics.light();
-    else Alert.alert('전송 실패', '연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
   };
 
   const sendSticker = (sticker: string) => {
@@ -311,31 +329,67 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     }
   };
 
-  const renderItem = ({ item }: { item: ChatMessage }) => {
+  const renderItem = ({ item, index }: { item: ChatMessage; index: number }) => {
     const mine = item.senderId === myId;
     const isImage = item.messageType === 'IMAGE' && !!item.imageUrl;
     const isSticker = item.messageType === 'STICKER';
     const isTouch = item.messageType === 'TOUCH';
     const isWorkout = item.messageType === 'WORKOUT_CARD';
     const isMeal = item.messageType === 'MEAL_CARD';
+    // 루틴 공유(트레이너-회원) — 운동 카드와 같은 레이아웃에 배지만 다르게
+    const isRoutine = item.messageType === 'ROUTINE_CARD';
     // PR(자기 최고 기록) 공유 카드 — 문구 접두어로 구분한다(workoutShare.ts, 단일 출처)
     const isPr = isWorkout && isPrShareContent(item.content);
     // 영양 목표 달성 공유 카드 — 문구 접두어로 구분한다(dietShare.ts, 단일 출처)
     const isGoal = isMeal && isGoalShareContent(item.content);
+
+    /*
+     * 메시지 그룹핑 — 카카오톡처럼 같은 사람이 짧은 간격으로 연달아 보내면
+     * 한 덩어리로 묶는다. messages 는 최신순(inverted FlatList)이라 배열의
+     * 다음 인덱스(+1)가 더 과거, 이전 인덱스(-1)가 더 최근이다.
+     */
+    const older = messages[index + 1];
+    const newer = messages[index - 1];
+    const closeTo = (other: ChatMessage | undefined) =>
+      !!other && !item.deleted && !other.deleted && other.senderId === item.senderId
+      && isSameLocalDay(item.createdAt, other.createdAt)
+      && Math.abs(new Date(item.createdAt).getTime() - new Date(other.createdAt).getTime()) <= GROUP_GAP_MS;
+    // 그룹의 첫 메시지(= 위와 간격을 띄운다) / 마지막 메시지(= 시간·읽음을 보여준다)
+    const isGroupStart = !closeTo(older);
+    const isGroupEnd = !closeTo(newer);
+    // 날짜가 바뀌는 경계 — 더 과거 메시지가 없거나 날짜가 다르면 그 앞에 구분선
+    const showDateDivider = !older || !isSameLocalDay(item.createdAt, older.createdAt);
+    const divider = showDateDivider ? (
+      <View style={styles.dateDivider}>
+        <View style={styles.dateDividerLine} />
+        <Text style={styles.dateDividerText}>{chatDateDividerLabel(item.createdAt)}</Text>
+        <View style={styles.dateDividerLine} />
+      </View>
+    ) : null;
+
     // 삭제된 메시지는 자리만 남기고 내용을 감춘다 (답장·리액션 참조가 살아있다)
     if (item.deleted) {
       return (
-        <View style={[styles.row, mine ? styles.rowMine : styles.rowTheirs]}>
-          <View style={[styles.bubble, styles.bubbleDeleted]}>
-            <Text style={styles.deletedText}>삭제된 메시지예요</Text>
+        <View>
+          {divider}
+          <View style={[styles.row, mine ? styles.rowMine : styles.rowTheirs, isGroupStart ? styles.rowSpaced : styles.rowGrouped]}>
+            <View style={[styles.bubble, styles.bubbleDeleted]}>
+              <Text style={styles.deletedText}>삭제된 메시지예요</Text>
+            </View>
+            <Text style={styles.time}>{timeOf(item.createdAt)}</Text>
           </View>
-          <Text style={styles.time}>{timeOf(item.createdAt)}</Text>
         </View>
       );
     }
 
     return (
-      <View style={[styles.msgBlock, mine ? styles.blockMine : styles.blockTheirs]}>
+      <View>
+      {divider}
+      <View style={[
+        styles.msgBlock,
+        mine ? styles.blockMine : styles.blockTheirs,
+        isGroupStart ? styles.msgBlockSpaced : styles.msgBlockGrouped,
+      ]}>
         {/* 인용한 원본 — 말풍선 위에 한 줄 */}
         {item.replyTo ? (
           <View style={[styles.quote, mine ? styles.quoteMine : styles.quoteTheirs]}>
@@ -370,14 +424,14 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           >
             <Image source={{ uri: item.imageUrl! }} style={styles.msgImage} resizeMode="cover" />
           </Pressable>
-        ) : isWorkout ? (
+        ) : isWorkout || isRoutine ? (
           <View style={[
             styles.workoutCard,
             mine ? styles.workoutCardMine : styles.workoutCardTheirs,
             isPr && styles.workoutCardPr,
           ]}>
             <Text style={[styles.workoutBadge, isPr && styles.workoutBadgePr]}>
-              {isPr ? 'PR 달성 🔥' : '운동 기록'}
+              {isPr ? 'PR 달성 🔥' : isRoutine ? '루틴' : '운동 기록'}
             </Text>
             <Text style={[styles.workoutText, mine && styles.workoutTextMine]}>{item.content}</Text>
           </View>
@@ -404,20 +458,28 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             ) : null}
           </View>
         ) : (
-          <View style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleTheirs]}>
+          // 꼬리(뾰족한 모서리)는 그룹의 마지막 말풍선에만 — 나머지는 완전히 둥글게 이어붙는다
+          <View style={[
+            styles.bubble,
+            mine ? styles.bubbleMine : styles.bubbleTheirs,
+            !isGroupEnd && (mine ? styles.bubbleMineGrouped : styles.bubbleTheirsGrouped),
+          ]}>
             <Text style={[styles.msgText, mine && styles.msgTextMine]}>{item.content}</Text>
           </View>
         )}
-        <View style={mine ? styles.metaMine : styles.meta}>
-          {/* 읽음은 내가 보낸 메시지에만 — 상대 메시지의 읽음 여부는 알 필요가 없다 */}
-          {mine ? (
-            <Text style={[styles.read, item.isRead && styles.readDone]}>
-              {item.isRead ? '읽음' : '1'}
-            </Text>
-          ) : null}
-          {item.edited ? <Text style={styles.editedMark}>수정됨</Text> : null}
-          <Text style={styles.time}>{timeOf(item.createdAt)}</Text>
-        </View>
+        {/* 시간·읽음·수정 표시는 그룹의 마지막(가장 최근) 메시지에만 — 카톡처럼 한 번만 */}
+        {isGroupEnd ? (
+          <View style={mine ? styles.metaMine : styles.meta}>
+            {/* 읽음은 내가 보낸 메시지에만 — 상대 메시지의 읽음 여부는 알 필요가 없다 */}
+            {mine ? (
+              <Text style={[styles.read, item.isRead && styles.readDone]}>
+                {item.isRead ? '읽음' : '1'}
+              </Text>
+            ) : null}
+            {item.edited ? <Text style={styles.editedMark}>수정됨</Text> : null}
+            <Text style={styles.time}>{timeOf(item.createdAt)}</Text>
+          </View>
+        ) : null}
         </Pressable>
 
         {/* 리액션 칩 — 다시 누르면 해제된다. mine 은 userIds 로 판단(브로드캐스트 공용) */}
@@ -438,6 +500,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             })}
           </View>
         ) : null}
+      </View>
       </View>
     );
   };
@@ -477,23 +540,39 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           // 스크롤 드래그로 키보드를 내릴 수 있게 (iOS 는 손가락을 따라 내려간다)
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         />
-        <View style={styles.reactions}>
-          {REACTIONS.map((e) => (
-            <Pressable
-              key={e}
-              style={({ pressed }) => [styles.reactionBtn, pressed && styles.reactionPressed]}
-              onPress={() => sendReaction(e)}
-              // 40x40 이라 기준 미달. 행이 빽빽해 크기 대신 터치 영역만 넓힌다(간격의 절반)
-              hitSlop={4}
-            >
-              <Text style={styles.reactionEmoji}>{e}</Text>
-            </Pressable>
-          ))}
-        </View>
+        {/*
+         * 보조 도구 트레이 — 예전엔 스티커·터치·무드·카메라 4개 버튼이 입력바에 항상 떠
+         * 있어(46px×4) 좁은 기기에서 입력창이 짓눌렸다. "+" 로 펼치는 트레이 하나로
+         * 모으고, 스티커 패널과 자리를 공유한다(둘 중 하나만 뜬다).
+         */}
+        {showExtras ? (
+          <View style={styles.extrasPanel}>
+            <ExtraButton
+              icon="sticker-emoji"
+              label="스티커"
+              onPress={() => { setShowExtras(false); setShowStickers(true); }}
+            />
+            <ExtraButton
+              icon="hand-heart-outline"
+              label="터치"
+              onPress={() => { setShowExtras(false); setShowTouchPicker(true); }}
+            />
+            <ExtraButton
+              icon="creation"
+              label="무드"
+              onPress={() => { setShowExtras(false); setShowMoodPicker(true); }}
+            />
+            <ExtraButton
+              icon="camera-outline"
+              label="사진"
+              onPress={() => { setShowExtras(false); onPickImage(); }}
+            />
+          </View>
+        ) : null}
         {showStickers ? (
           <View style={styles.stickerPanel}>
             <Pressable
-              style={({ pressed }) => [styles.stickerBtn, pressed && styles.reactionPressed]}
+              style={({ pressed }) => [styles.stickerBtn, pressed && styles.iconPressed]}
               onPress={() => { setShowStickers(false); setShowEmojiSheet(true); }}
               accessibilityRole="button"
               accessibilityLabel="이모지 더 보기"
@@ -505,7 +584,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             {STICKERS.map((s) => (
               <Pressable
                 key={s}
-                style={({ pressed }) => [styles.stickerBtn, pressed && styles.reactionPressed]}
+                style={({ pressed }) => [styles.stickerBtn, pressed && styles.iconPressed]}
                 onPress={() => sendSticker(s)}
                 accessibilityRole="button"
                 accessibilityLabel={`스티커 ${s} 보내기`}
@@ -522,8 +601,9 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               <Text style={styles.composeBannerLabel}>
                 {editing ? '메시지 수정 중' : '답장'}
               </Text>
+              {/* content 를 그대로 쓰면 TOUCH 는 'HAND_HOLD' 같은 제스처 코드가 노출된다 */}
               <Text style={styles.composeBannerText} numberOfLines={1}>
-                {(editing ?? replyTo)?.content ?? '사진'}
+                {messagePreview((editing ?? replyTo)!.messageType, (editing ?? replyTo)!.content)}
               </Text>
             </View>
             <Pressable
@@ -544,41 +624,24 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           onDismiss={() => setSpellDismissedFor(text)}
         />
         <View style={styles.inputBar}>
-          <TouchableOpacity
-            style={[styles.imageBtn, showStickers && styles.stickerToggleActive]}
-            onPress={() => setShowStickers((v) => !v)}
-            accessibilityRole="button"
-            accessibilityLabel="스티커 선택"
-          >
-            <MaterialCommunityIcons
-              name="sticker-emoji"
-              size={22}
-              color={showStickers ? colors.primary : colors.textSecondary}
-            />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.imageBtn}
-            onPress={() => setShowTouchPicker(true)}
-            accessibilityRole="button"
-            accessibilityLabel="터치 보내기"
-          >
-            <MaterialCommunityIcons name="hand-heart-outline" size={22} color={colors.textSecondary} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.imageBtn}
-            onPress={() => setShowMoodPicker(true)}
-            accessibilityRole="button"
-            accessibilityLabel="지금 기분 남기기"
-          >
-            <MaterialCommunityIcons name="creation" size={22} color={colors.textSecondary} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.imageBtn} onPress={onPickImage} disabled={uploading}>
-            {uploading ? (
+          {uploading ? (
+            <View style={styles.imageBtn}>
               <ActivityIndicator size="small" color={colors.primary} />
-            ) : (
-              <MaterialCommunityIcons name="camera-outline" size={22} color={colors.textSecondary} />
-            )}
-          </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={[styles.imageBtn, showExtras && styles.stickerToggleActive]}
+              onPress={() => { setShowStickers(false); setShowExtras((v) => !v); }}
+              accessibilityRole="button"
+              accessibilityLabel={showExtras ? '보조 도구 닫기' : '스티커·터치·무드·사진 더 보기'}
+            >
+              <MaterialCommunityIcons
+                name={showExtras ? 'close' : 'plus'}
+                size={24}
+                color={showExtras ? colors.primary : colors.textSecondary}
+              />
+            </TouchableOpacity>
+          )}
           <TextInput
             style={styles.input}
             value={text}
@@ -591,8 +654,10 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             style={[styles.sendBtn, (!text.trim() || editSaving) && styles.sendDisabled]}
             onPress={onSend}
             disabled={!text.trim() || editSaving}
+            accessibilityRole="button"
+            accessibilityLabel={editing ? '수정 완료' : '전송'}
           >
-            <Text style={styles.sendText}>전송</Text>
+            <MaterialCommunityIcons name="send" size={20} color={colors.white} />
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -633,7 +698,43 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         onClose={() => setShowMoodPicker(false)}
         onSelect={sendMood}
       />
+
+      {/* 메시지 길게 누르기 — 리액션/답장/수정/삭제를 한 시트에 모아 보여준다 */}
+      <MessageActionSheet
+        message={actionSheetFor}
+        mine={!!actionSheetFor && actionSheetFor.senderId === myId}
+        canEdit={!!actionSheetFor && actionSheetFor.senderId === myId && actionSheetFor.messageType === 'TEXT'}
+        onClose={closeActionSheet}
+        onQuickReact={onQuickReactFromSheet}
+        onMoreEmoji={onMoreEmojiFromSheet}
+        onReply={onReplyFromSheet}
+        onEdit={onEditFromSheet}
+        onDelete={onDeleteFromSheet}
+      />
     </SafeAreaView>
+  );
+}
+
+/** 보조 도구 트레이 버튼 — 아이콘 + 라벨 한 줄 (트레이 안이라 별도 발견성 힌트가 필요) */
+function ExtraButton({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      style={({ pressed }) => [styles.extraBtn, pressed && styles.iconPressed]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
+      <MaterialCommunityIcons name={icon} size={22} color={colors.textSecondary} />
+      <Text style={styles.extraLabel}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -641,12 +742,18 @@ const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
   list: { padding: spacing.md },
-  row: { marginVertical: spacing.xs, maxWidth: '80%', flexDirection: 'row', alignItems: 'flex-end' },
+  // 그룹 간 세로 간격은 msgBlock(정상 메시지)·row(삭제된 메시지)가 각각 spaced/grouped 로 담당한다
+  row: { maxWidth: '80%', flexDirection: 'row', alignItems: 'flex-end' },
   rowMine: { alignSelf: 'flex-end', flexDirection: 'row-reverse' },
   rowTheirs: { alignSelf: 'flex-start' },
+  rowSpaced: { marginTop: spacing.sm },
+  rowGrouped: { marginTop: spacing.xxs },
   bubble: { paddingVertical: 10, paddingHorizontal: spacing.md, borderRadius: radius.lg },
   bubbleMine: { backgroundColor: colors.primary, borderBottomRightRadius: 6 },
   bubbleTheirs: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderBottomLeftRadius: 6 },
+  // 그룹 중간 말풍선(마지막이 아님) — 꼬리 없이 완전히 둥글게 이어붙는다
+  bubbleMineGrouped: { borderBottomRightRadius: radius.lg },
+  bubbleTheirsGrouped: { borderBottomLeftRadius: radius.lg },
   msgText: { fontSize: fontSize.subtitle, color: colors.textPrimary, lineHeight: 21 },
   msgTextMine: { color: colors.white },
   msgImage: { width: 200, height: 200, borderRadius: radius.lg, backgroundColor: colors.surfaceAlt },
@@ -699,8 +806,16 @@ const styles = themedStyles((colors) => ({
   time: { fontSize: 10, color: colors.textTertiary },
   editedMark: { fontSize: 10, color: colors.textTertiary },
 
-  // 메시지 블록 — 인용/말풍선/리액션을 한 덩어리로 묶는다
-  msgBlock: { marginVertical: spacing.xs, maxWidth: '82%' },
+  // 날짜 구분선 — 가운데 라벨 + 양옆 선
+  dateDivider: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginVertical: spacing.md },
+  dateDividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
+  dateDividerText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textTertiary },
+
+  // 메시지 블록 — 인용/말풍선/리액션을 한 덩어리로 묶는다.
+  // 그룹 첫 메시지는 넉넉하게(spaced), 같은 사람이 이어 보낸 메시지는 바짝(grouped) 붙인다
+  msgBlock: { maxWidth: '82%' },
+  msgBlockSpaced: { marginTop: spacing.sm },
+  msgBlockGrouped: { marginTop: spacing.xxs },
   blockMine: { alignSelf: 'flex-end', alignItems: 'flex-end' },
   blockTheirs: { alignSelf: 'flex-start', alignItems: 'flex-start' },
 
@@ -764,20 +879,17 @@ const styles = themedStyles((colors) => ({
   /* 10px 작은 글씨라 대비가 특히 중요하다 — 원색 coral 은 흰 배경 2.83:1 로 미달 */
   read: { fontSize: 10, fontWeight: '800', color: colors.meText, marginBottom: 1 },
   readDone: { color: colors.textTertiary, fontWeight: '600' },
-  reactions: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.sm, paddingTop: spacing.xs },
-  reactionBtn: {
-    // hitSlop 은 웹에서 무효라 실제 크기로 맞춘다 (5개 * 44 + 간격 = 268px, 440 에 여유)
-    width: layout.touchTarget,
-    height: layout.touchTarget,
-    borderRadius: radius.pill,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
+  // 눌림 효과 — 스티커·트레이 버튼 공용(예전엔 "reactionPressed" 로 리액션 바 전용이었다)
+  iconPressed: { transform: [{ scale: 0.88 }], backgroundColor: colors.primarySoft },
+  // 보조 도구 트레이 — "+" 로 펼치는 스티커/터치/무드/사진 4개
+  extrasPanel: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
   },
-  reactionPressed: { transform: [{ scale: 0.88 }], backgroundColor: colors.primarySoft },
-  reactionEmoji: { fontSize: 20 },
+  extraBtn: { width: 64, alignItems: 'center', justifyContent: 'center', gap: 2, paddingVertical: spacing.xs, borderRadius: radius.md },
+  extraLabel: { fontSize: 11, fontWeight: '600', color: colors.textSecondary },
   inputBar: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -786,7 +898,6 @@ const styles = themedStyles((colors) => ({
     backgroundColor: colors.background,
   },
   imageBtn: { width: 46, height: 46, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
-  imageBtnText: { fontSize: 20 },
   input: {
     flex: 1,
     // 웹 필수 — <textarea> 내재 최소 폭 탓에 flex:1 이어도 안 줄어든다
@@ -804,14 +915,14 @@ const styles = themedStyles((colors) => ({
     borderWidth: 1,
     borderColor: colors.border,
   },
+  // 텍스트 "전송" 대신 아이콘 하나 — 폭을 아껴 입력창에 더 준다("+" 트레이 통합과 같은 목적)
   sendBtn: {
     backgroundColor: colors.primary,
     borderRadius: radius.pill,
-    paddingHorizontal: spacing.lg,
+    width: 46,
     height: 46,
     alignItems: 'center',
     justifyContent: 'center',
   },
   sendDisabled: { opacity: 0.4 },
-  sendText: { color: colors.white, fontWeight: '800' },
 }));

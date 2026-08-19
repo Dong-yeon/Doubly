@@ -13,25 +13,11 @@ import { useChatStore } from '../../store/chatStore';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { ChatRoom, MessageType } from '../../types';
+import type { ChatRoom } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
+import { messagePreview } from '../../utils/messagePreview';
 
 type Props = NativeStackScreenProps<ChatStackParamList, 'ChatRooms'>;
-
-const preview = (type: MessageType, content?: string | null): string => {
-  switch (type) {
-    case 'IMAGE':
-      return '사진';
-    case 'STICKER':
-      return content ?? '스티커';
-    case 'WORKOUT_CARD':
-      return '운동 기록';
-    case 'ROUTINE_CARD':
-      return '루틴';
-    default:
-      return content ?? '';
-  }
-};
 
 export function ChatScreen({ navigation }: Props) {
   const { rooms, loadingRooms, loadRooms } = useChatStore();
@@ -89,7 +75,7 @@ export function ChatScreen({ navigation }: Props) {
       <View style={styles.roomBody}>
         <Text style={styles.partnerName}>{item.partner?.name ?? '채팅방'}</Text>
         <Text style={styles.lastMessage} numberOfLines={1}>
-          {item.lastMessage ? preview(item.lastMessage.messageType, item.lastMessage.content) : '대화를 시작해보세요 '}
+          {item.lastMessage ? messagePreview(item.lastMessage.messageType, item.lastMessage.content) : '대화를 시작해보세요 '}
         </Text>
       </View>
       {item.unreadCount > 0 ? (
