@@ -1,5 +1,6 @@
 package com.fitto.common.plan;
 
+import com.fitto.common.time.KstClock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -8,7 +9,6 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -28,26 +28,19 @@ public class UsageCounter {
 
     private static final Logger log = LoggerFactory.getLogger(UsageCounter.class);
 
-    /**
-     * 한도의 "오늘"은 <b>한국 시간</b> 기준이다.
-     *
-     * <p>서버(Railway)는 UTC 로 돈다. {@code LocalDate.now()} 를 그대로 쓰면 일일 한도가
-     * 한국 시간 <b>오전 9시</b>에 리셋된다 — 사용자가 생각하는 "내일"과 다르다.
-     */
-    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
-
     private final ObjectProvider<StringRedisTemplate> redisProvider;
 
     /** Redis 미가용 시 폴백. 날짜가 바뀌면 통째로 비워 무한 증가를 막는다. */
     private final Map<String, AtomicInteger> fallback = new ConcurrentHashMap<>();
-    private volatile LocalDate fallbackDate = LocalDate.now(KST);
+    private volatile LocalDate fallbackDate = KstClock.today();
 
     public UsageCounter(ObjectProvider<StringRedisTemplate> redisProvider) {
         this.redisProvider = redisProvider;
     }
 
+    /** 한도의 "오늘"(KST) — {@link KstClock} 참고. 다른 서비스가 계속 참조하던 진입점이라 남겨둔다. */
     public static LocalDate today() {
-        return LocalDate.now(KST);
+        return KstClock.today();
     }
 
     /** 1 증가시키고 <b>증가 후</b> 값을 돌려준다. (첫 사용이면 1) */

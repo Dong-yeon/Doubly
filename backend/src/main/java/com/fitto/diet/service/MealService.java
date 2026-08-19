@@ -5,6 +5,7 @@ import com.fitto.common.event.CoupleEventPublisher;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.notification.NotificationService;
+import com.fitto.common.time.KstClock;
 import com.fitto.diet.domain.Meal;
 import com.fitto.diet.domain.MealItem;
 import com.fitto.diet.domain.NutritionGoal;
@@ -78,7 +79,7 @@ public class MealService {
 
     @Transactional
     public MealResponse save(Long userId, SaveMealRequest req) {
-        if (req.mealDate().isAfter(LocalDate.now())) {
+        if (req.mealDate().isAfter(KstClock.today())) {
             throw new BusinessException(ErrorCode.INVALID_INPUT, "미래 날짜는 기록할 수 없습니다.");
         }
         // 목표 달성 판정용 — 이 저장이 해당 날짜의 첫 기록인지 (중복 축하 방지)
@@ -120,14 +121,14 @@ public class MealService {
      */
     @Transactional
     public List<MealResponse> copyFrom(Long userId, LocalDate sourceDate) {
-        if (sourceDate.isAfter(LocalDate.now())) {
+        if (sourceDate.isAfter(KstClock.today())) {
             throw new BusinessException(ErrorCode.INVALID_INPUT, "미래 날짜는 불러올 수 없습니다.");
         }
         List<Meal> sourceMeals = mealRepository.findByUserIdAndMealDateOrderByIdAsc(userId, sourceDate);
         if (sourceMeals.isEmpty()) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "해당 날짜에는 식단 기록이 없어요.");
         }
-        LocalDate today = LocalDate.now();
+        LocalDate today = KstClock.today();
         boolean firstMealOfDay = !mealRepository.existsByUserIdAndMealDate(userId, today);
         List<Meal> copies = sourceMeals.stream().map(this::copyOf).toList();
         mealRepository.saveAll(copies);
@@ -146,7 +147,7 @@ public class MealService {
      */
     @Transactional
     public MealResponse update(Long userId, Long mealId, SaveMealRequest req) {
-        if (req.mealDate().isAfter(LocalDate.now())) {
+        if (req.mealDate().isAfter(KstClock.today())) {
             throw new BusinessException(ErrorCode.INVALID_INPUT, "미래 날짜는 기록할 수 없습니다.");
         }
         Meal meal = mealRepository.findById(mealId)
@@ -195,7 +196,7 @@ public class MealService {
     private Meal copyOf(Meal source) {
         Meal copy = Meal.builder()
                 .userId(source.getUserId())
-                .mealDate(LocalDate.now())
+                .mealDate(KstClock.today())
                 .mealType(source.getMealType())
                 .memo(source.getMemo())
                 .photoUrl(source.getPhotoUrl())
@@ -297,7 +298,7 @@ public class MealService {
         if (goalDays == null || !firstMealOfDay || partnerId == null) {
             return false;
         }
-        LocalDate today = LocalDate.now();
+        LocalDate today = KstClock.today();
         LocalDate weekStart = today.with(DayOfWeek.MONDAY);
         // 이번 주 범위 밖의 (과거) 기록은 목표에 반영되지 않음
         if (mealDate.isBefore(weekStart) || mealDate.isAfter(today)) {
@@ -312,7 +313,7 @@ public class MealService {
     }
 
     public List<MealResponse> findToday(Long userId) {
-        return mealRepository.findByUserIdAndMealDateOrderByIdAsc(userId, LocalDate.now())
+        return mealRepository.findByUserIdAndMealDateOrderByIdAsc(userId, KstClock.today())
                 .stream().map(MealResponse::from).toList();
     }
 
@@ -356,7 +357,7 @@ public class MealService {
     }
 
     public MealStatsResponse stats(Long userId) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = KstClock.today();
         LocalDate weekStart = today.with(DayOfWeek.MONDAY);
         LocalDate monthStart = today.withDayOfMonth(1);
 
@@ -406,7 +407,7 @@ public class MealService {
         Relation couple = couples.get(0);
         Long partnerId = couple.partnerOf(userId);
 
-        LocalDate today = LocalDate.now();
+        LocalDate today = KstClock.today();
         LocalDate weekStart = today.with(DayOfWeek.MONDAY);
 
         var myDates = new HashSet<>(mealRepository.findMealDates(userId, weekStart, today));
@@ -436,7 +437,7 @@ public class MealService {
         }
         String partnerName = userRepository.findById(partnerId)
                 .map(u -> u.getName()).orElse(null);
-        boolean completed = mealRepository.existsByUserIdAndMealDate(partnerId, LocalDate.now());
+        boolean completed = mealRepository.existsByUserIdAndMealDate(partnerId, KstClock.today());
         return new PartnerTodayResponse(true, partnerName, completed);
     }
 }
