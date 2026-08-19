@@ -5,12 +5,14 @@ import com.fitto.common.security.AuthUser;
 import com.fitto.workout.dto.CalendarDayResponse;
 import com.fitto.workout.dto.ExerciseLastPerformanceRequest;
 import com.fitto.workout.dto.ExerciseLastPerformanceResponse;
+import com.fitto.workout.dto.MuscleRecoveryResponse;
 import com.fitto.workout.dto.PartnerTodayResponse;
 import com.fitto.workout.dto.RecommendWorkoutRequest;
 import com.fitto.workout.dto.SaveWorkoutRequest;
 import com.fitto.workout.dto.WorkoutRecommendationResponse;
 import com.fitto.workout.dto.WorkoutResponse;
 import com.fitto.workout.dto.WorkoutStatsResponse;
+import com.fitto.workout.service.MuscleRecoveryService;
 import com.fitto.workout.service.WorkoutRecommendationService;
 import com.fitto.workout.service.WorkoutService;
 import jakarta.validation.Valid;
@@ -35,11 +37,14 @@ public class WorkoutController {
 
     private final WorkoutService workoutService;
     private final WorkoutRecommendationService recommendationService;
+    private final MuscleRecoveryService muscleRecoveryService;
 
     public WorkoutController(WorkoutService workoutService,
-                             WorkoutRecommendationService recommendationService) {
+                             WorkoutRecommendationService recommendationService,
+                             MuscleRecoveryService muscleRecoveryService) {
         this.workoutService = workoutService;
         this.recommendationService = recommendationService;
+        this.muscleRecoveryService = muscleRecoveryService;
     }
 
     @PostMapping
@@ -101,5 +106,11 @@ public class WorkoutController {
     @GetMapping("/partner/today")
     public ApiResponse<PartnerTodayResponse> partnerToday(@AuthenticationPrincipal AuthUser user) {
         return ApiResponse.success(workoutService.partnerToday(user.id()));
+    }
+
+    /** 근육 회복 현황 — 부위별 마지막 수행 이후 경과 시간·추정 회복률(홈 화면 요약 카드). */
+    @GetMapping("/recovery")
+    public ApiResponse<MuscleRecoveryResponse> recovery(@AuthenticationPrincipal AuthUser user) {
+        return ApiResponse.success(muscleRecoveryService.recovery(user.id()));
     }
 }

@@ -5,6 +5,7 @@ import type {
   CalendarDay,
   ExerciseCatalogItem,
   ExerciseLastPerformance,
+  MuscleRecoveryStatus,
   PartnerToday,
   RoutineGift,
   WeekDay,
@@ -73,6 +74,8 @@ export const workoutApi = {
   partnerToday: () =>
     unwrap(apiClient.get<ApiResponse<PartnerToday>>('/workout/partner/today')),
   stats: () => unwrap(apiClient.get<ApiResponse<WorkoutStats>>('/workout/stats')),
+  // 근육 회복 현황 — 부위별 마지막 수행 이후 경과 시간·추정 회복률(홈 화면 요약 카드)
+  recovery: () => unwrap(apiClient.get<ApiResponse<MuscleRecoveryStatus>>('/workout/recovery')),
   // AI 운동 추천 — 생성 시간이 길어 기본 timeout(10s)을 늘린다
   recommend: (days: number) =>
     unwrap(

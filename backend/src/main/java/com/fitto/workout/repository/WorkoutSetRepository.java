@@ -2,6 +2,7 @@ package com.fitto.workout.repository;
 
 import com.fitto.workout.domain.WorkoutSet;
 import com.fitto.workout.dto.ExerciseBest;
+import com.fitto.workout.dto.MuscleLastTrained;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -43,4 +44,13 @@ public interface WorkoutSetRepository extends JpaRepository<WorkoutSet, Long> {
     List<WorkoutSet> findRecentByExerciseName(@Param("userId") Long userId,
                                               @Param("exerciseName") String exerciseName,
                                               Pageable pageable);
+
+    /** 부위별 마지막 수행 시각 — 근육 회복 계산(MuscleRecoveryService)의 원본 데이터. */
+    @Query("""
+            select s.muscleGroup as muscleGroup, max(s.workout.createdAt) as lastTrainedAt
+            from WorkoutSet s
+            where s.workout.userId = :userId and s.muscleGroup is not null
+            group by s.muscleGroup
+            """)
+    List<MuscleLastTrained> findLastTrainedByMuscleGroup(@Param("userId") Long userId);
 }
