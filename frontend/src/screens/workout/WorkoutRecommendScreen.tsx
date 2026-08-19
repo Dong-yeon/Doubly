@@ -1,10 +1,15 @@
 /**
- * AI 운동 추천 — 최근 기록 기반 오늘 추천 / 5일 루틴 (결과는 참고용 제안).
+ * AI 운동 추천 — 최근 기록 기반 오늘 추천 / 5일 루틴 / 맞춤 프로그램(결과는 참고용 제안).
  *
  * <p>"저장" 버튼은 API 를 바로 부르지 않는다 — 짐워크·플랜핏 둘 다 AI/추천 결과가 바로
  * 저장되지 않고 사용자가 종목·세트·무게를 조정할 수 있는 루틴 편집 화면을 거친다.
  * 예전엔 여기서 바로 저장해 카탈로그 연결도 세트별 목표도 요일도 없는 밋밋한 루틴이
  * 만들어졌다. 지금은 루틴 만들기 폼에 초안으로 넘겨 검토·수정 후 명시적으로 저장한다.
+ *
+ * <p><b>맞춤 프로그램 만들기</b>(짐워크 벤치마킹)는 이 원칙에서 한 가지만 다르다 — 요일별로
+ * 여러 하루를 한 번에 만드는 거라 하루씩 편집 화면을 오가면 번거롭다. 그래서 프로그램
+ * 모드는 결과를 검토만 하고(수정은 저장 후 각 루틴 편집 화면에서), "프로그램으로 저장"
+ * 한 번으로 요일 수만큼의 루틴을 일괄 생성한다.
  */
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -13,14 +18,16 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { WorkoutStackParamList } from '../../navigation/types';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { Button } from '../../components/Button';
+import { TextField } from '../../components/TextField';
+import { Chip } from '../../components/Chip';
 import { workoutApi } from '../../api/workout';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
-import { weekDayOf } from '../../utils/date';
+import { WEEK_DAYS, weekDayOf } from '../../utils/date';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { WorkoutRecommendation } from '../../types';
+import type { WeekDay, WorkoutRecommendation } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'WorkoutRecommend'>;
@@ -29,6 +36,10 @@ const PLANS = [
   { days: 1, title: '오늘 뭐하지?' },
   { days: 5, title: '5일 루틴 만들기' },
 ] as const;
+
+const WEEKDAY_LABEL: Record<WeekDay, string> = Object.fromEntries(
+  WEEK_DAYS.map((d) => [d.value, d.label]),
+) as Record<WeekDay, string>;
 
 // dayOffset → "오늘" / "내일" / "7/5 (금)"
 function dayLabel(offset: number): string {
@@ -43,8 +54,25 @@ function dayLabel(offset: number): string {
 export function WorkoutRecommendScreen({ navigation }: Props) {
   const [loadingDays, setLoadingDays] = useState<number | null>(null);
   const [result, setResult] = useState<WorkoutRecommendation | null>(null);
+  // result 가 프로그램 모드(요일별) 응답인지 순차 모드(dayOffset) 응답인지 — 렌더링 분기용.
+  // WorkoutRecommendation 자체엔 이 구분이 없어서(day 마다 dayOfWeek 유무로 알 수도 있지만
+  // 요청 시점에 이미 아는 값이라 별도로 들고 있는 게 더 명확하다) 따로 상태로 둔다.
+  const [resultIsProgram, setResultIsProgram] = useState(false);
+
+  // 맞춤 프로그램 만들기(짐워크 스타일) — 무슨 요일에 운동할지 고르는 패널
+  const [programOpen, setProgramOpen] = useState(false);
+  const [programTitle, setProgramTitle] = useState('');
+  const [programWeekdays, setProgramWeekdays] = useState<WeekDay[]>([]);
+  const [recommendingProgram, setRecommendingProgram] = useState(false);
+  const [savingProgram, setSavingProgram] = useState(false);
+
+  const toggleProgramWeekday = (d: WeekDay) => {
+    haptics.light();
+    setProgramWeekdays((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]));
+  };
 
   // AI 추천 하루 계획을 루틴 만들기 폼으로 — 폼에서 검토·수정한 뒤 사용자가 직접 저장한다
+  // (순차 모드 전용 — 프로그램 모드는 onSaveProgram 으로 한 번에 저장한다)
   const editAsRoutine = (day: WorkoutRecommendation['days'][number]) => {
     haptics.light();
     const d = new Date();
@@ -70,11 +98,62 @@ export function WorkoutRecommendScreen({ navigation }: Props) {
     try {
       const res = await runBusy('AI가 운동을 추천하고 있어요', () => workoutApi.recommend(days));
       setResult(res);
+      setResultIsProgram(false);
       haptics.success();
     } catch (e) {
       toast.error(getErrorMessage(e, 'AI 추천에 실패했어요.'));
     } finally {
       setLoadingDays(null);
+    }
+  };
+
+  const onRecommendProgram = async () => {
+    if (programWeekdays.length === 0) {
+      toast.error('운동할 요일을 하나 이상 골라주세요.');
+      return;
+    }
+    setRecommendingProgram(true);
+    try {
+      const res = await runBusy('AI가 프로그램을 짜고 있어요', () =>
+        workoutApi.recommendProgram(programWeekdays),
+      );
+      setResult(res);
+      setResultIsProgram(true);
+      haptics.success();
+    } catch (e) {
+      toast.error(getErrorMessage(e, 'AI 추천에 실패했어요.'));
+    } finally {
+      setRecommendingProgram(false);
+    }
+  };
+
+  // 프로그램 결과를 한 번에 여러 루틴으로 저장 — 하루씩 편집하러 갈 필요 없이 요일 수만큼 일괄 생성
+  const onSaveProgram = async () => {
+    if (!result) return;
+    const title = programTitle.trim() || '맞춤 프로그램';
+    setSavingProgram(true);
+    try {
+      const saved = await workoutApi.saveProgram({
+        programTitle: title,
+        days: result.days
+          .filter((d) => d.dayOfWeek)
+          .map((d) => ({
+            dayOfWeek: d.dayOfWeek as WeekDay,
+            exercises: d.exercises.map((ex) => ({
+              exerciseName: ex.name,
+              category: ex.category ?? undefined,
+              targetSets: ex.sets ?? undefined,
+              reps: ex.reps ?? undefined,
+            })),
+          })),
+      });
+      haptics.success();
+      toast.success(`루틴 ${saved.length}개로 프로그램을 저장했어요!`);
+      navigation.navigate('WorkoutRoutines');
+    } catch (e) {
+      toast.error(getErrorMessage(e, '프로그램 저장에 실패했어요.'));
+    } finally {
+      setSavingProgram(false);
     }
   };
 
@@ -91,12 +170,64 @@ export function WorkoutRecommendScreen({ navigation }: Props) {
               variant={p.days === 1 ? 'primary' : 'soft'}
               size="md"
               style={styles.planButton}
-              onPress={() => onRecommend(p.days)}
+              onPress={() => {
+                setProgramOpen(false);
+                onRecommend(p.days);
+              }}
               loading={loadingDays === p.days}
-              disabled={loadingDays !== null}
+              disabled={loadingDays !== null || recommendingProgram}
             />
           ))}
         </View>
+
+        {/* 맞춤 프로그램 만들기(짐워크 벤치마킹) — 매주 반복할 요일을 고르면 요일마다 다른
+            하루를 짜서, 승인 한 번으로 그 요일 수만큼 루틴을 한꺼번에 만들어준다. */}
+        <Button
+          title={programOpen ? '맞춤 프로그램 만들기 ▲' : '✨ 맞춤 프로그램 만들기'}
+          variant="soft"
+          size="md"
+          onPress={() => {
+            haptics.light();
+            setProgramOpen((v) => !v);
+          }}
+          disabled={loadingDays !== null || recommendingProgram}
+          style={styles.programToggle}
+        />
+        {programOpen ? (
+          <View style={styles.programPanel}>
+            <TextField
+              label="프로그램 이름"
+              placeholder="예: 전신 밸런스 프로그램"
+              value={programTitle}
+              onChangeText={setProgramTitle}
+              maxLength={80}
+            />
+            <Text style={styles.label}>운동할 요일</Text>
+            <View style={styles.dayRow}>
+              {WEEK_DAYS.map((d) => (
+                <Chip
+                  key={d.value}
+                  label={d.label}
+                  selected={programWeekdays.includes(d.value)}
+                  onPress={() => toggleProgramWeekday(d.value)}
+                  fill
+                />
+              ))}
+            </View>
+            <Text style={styles.dayHint}>
+              {programWeekdays.length > 0
+                ? `${WEEK_DAYS.filter((d) => programWeekdays.includes(d.value)).map((d) => d.label).join('·')}요일 — 요일마다 다른 루틴을 만들어드려요.`
+                : '매주 운동할 요일을 골라주세요.'}
+            </Text>
+            <Button
+              title="프로그램 추천받기"
+              onPress={onRecommendProgram}
+              loading={recommendingProgram}
+              disabled={loadingDays !== null || programWeekdays.length === 0}
+              style={styles.programRecommendBtn}
+            />
+          </View>
+        ) : null}
 
         {result ? (
           <View>
@@ -106,13 +237,23 @@ export function WorkoutRecommendScreen({ navigation }: Props) {
               </View>
             ) : null}
 
-            {result.days.map((day) => (
-              <View key={day.dayOffset} style={styles.dayCard}>
+            {(resultIsProgram
+              ? [...result.days].sort(
+                  (a, b) =>
+                    WEEK_DAYS.findIndex((d) => d.value === a.dayOfWeek) -
+                    WEEK_DAYS.findIndex((d) => d.value === b.dayOfWeek),
+                )
+              : result.days
+            ).map((day) => (
+              <View key={day.dayOfWeek ?? day.dayOffset} style={styles.dayCard}>
                 <Text style={styles.dayTitle}>
-                  {dayLabel(day.dayOffset)} · {day.focus}
+                  {resultIsProgram && day.dayOfWeek
+                    ? `${WEEKDAY_LABEL[day.dayOfWeek]}요일`
+                    : dayLabel(day.dayOffset)}{' '}
+                  · {day.focus}
                 </Text>
                 {day.exercises.map((ex, i) => (
-                  <View key={`${day.dayOffset}-${i}`} style={styles.exerciseRow}>
+                  <View key={`${day.dayOfWeek ?? day.dayOffset}-${i}`} style={styles.exerciseRow}>
                     <View style={styles.exerciseHeader}>
                       <Text style={styles.exerciseName}>{ex.name}</Text>
                       {ex.category ? (
@@ -130,21 +271,33 @@ export function WorkoutRecommendScreen({ navigation }: Props) {
                   </View>
                 ))}
                 {day.comment ? <Text style={styles.dayComment}>{day.comment}</Text> : null}
-                <Button
-                  title="루틴으로 편집하기 ›"
-                  variant="secondary"
-                  size="md"
-                  onPress={() => editAsRoutine(day)}
-                  style={styles.saveRoutineBtn}
-                />
+                {/* 프로그램 모드는 하루씩 편집하러 가지 않고 전체를 아래 버튼 하나로 일괄 저장한다 */}
+                {!resultIsProgram ? (
+                  <Button
+                    title="루틴으로 편집하기 ›"
+                    variant="secondary"
+                    size="md"
+                    onPress={() => editAsRoutine(day)}
+                    style={styles.saveRoutineBtn}
+                  />
+                ) : null}
               </View>
             ))}
+
+            {resultIsProgram ? (
+              <Button
+                title={`프로그램으로 저장 (루틴 ${result.days.length}개)`}
+                onPress={onSaveProgram}
+                loading={savingProgram}
+                style={styles.saveProgramBtn}
+              />
+            ) : null}
 
             <Text style={styles.footnote}>
               AI 제안은 참고용이에요. 몸 상태에 맞게 조절하고, 운동 후 기록해 주세요!
             </Text>
           </View>
-        ) : loadingDays === null ? (
+        ) : loadingDays === null && !recommendingProgram ? (
           <View style={styles.empty}>
             <MaterialCommunityIcons name="robot-happy-outline" size={40} color={colors.textMuted} style={styles.emptyEmoji} />
             <Text style={styles.emptyText}>위 버튼을 눌러 추천을 받아보세요</Text>
@@ -161,6 +314,20 @@ const styles = themedStyles((colors) => ({
   hint: { fontSize: fontSize.caption, color: colors.textSecondary, marginBottom: spacing.md },
   planRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.lg },
   planButton: { flex: 1 },
+  programToggle: { marginBottom: spacing.lg },
+  programPanel: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  label: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700', marginTop: spacing.md, marginBottom: spacing.sm },
+  dayRow: { flexDirection: 'row', gap: spacing.xs },
+  dayHint: { fontSize: fontSize.caption, color: colors.textTertiary, marginTop: spacing.xs },
+  programRecommendBtn: { marginTop: spacing.md },
+  saveProgramBtn: { marginTop: spacing.xs, marginBottom: spacing.md },
   overallCard: {
     backgroundColor: colors.accentSoft,
     borderRadius: radius.md,

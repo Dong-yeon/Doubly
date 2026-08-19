@@ -2,6 +2,9 @@ package com.fitto.workout.service;
 
 import org.junit.jupiter.api.Test;
 
+import java.time.DayOfWeek;
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
@@ -39,6 +42,32 @@ class WorkoutRecommendPromptTest {
         String prompt = service.buildPrompt(3, "(기록 없음)");
 
         // %% 로 이스케이프한 값이 최종 프롬프트에선 % 하나로 렌더링돼야 한다
+        assertThat(prompt).contains("약 5~10%)");
+        assertThat(prompt).doesNotContain("5~10%%");
+    }
+
+    // ---- 프로그램 모드(맞춤 프로그램 만들기) — 같은 %% 이스케이프 위험이 있는 별도 프롬프트 ----
+
+    @Test
+    void 프로그램_프롬프트는_예외없이_조립된다() {
+        assertThatCode(() -> service.buildProgramPrompt(
+                List.of(DayOfWeek.MONDAY, DayOfWeek.WEDNESDAY, DayOfWeek.FRIDAY), "(기록 없음)"))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void 요일이_프로그램_프롬프트에_치환된다() {
+        String prompt = service.buildProgramPrompt(
+                List.of(DayOfWeek.MONDAY, DayOfWeek.WEDNESDAY, DayOfWeek.FRIDAY), "(기록 없음)");
+
+        assertThat(prompt).contains("매주 월요일, 수요일, 금요일 에 운동합니다");
+        assertThat(prompt).contains("정확히 3개(월요일, 수요일, 금요일)");
+    }
+
+    @Test
+    void 프로그램_프롬프트도_리터럴_퍼센트가_그대로_출력된다() {
+        String prompt = service.buildProgramPrompt(List.of(DayOfWeek.MONDAY), "(기록 없음)");
+
         assertThat(prompt).contains("약 5~10%)");
         assertThat(prompt).doesNotContain("5~10%%");
     }

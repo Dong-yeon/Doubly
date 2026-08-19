@@ -1,5 +1,6 @@
 package com.fitto.workout.dto;
 
+import java.time.DayOfWeek;
 import java.util.List;
 
 /**
@@ -10,9 +11,16 @@ public record WorkoutRecommendationResponse(
         String overallComment
 ) {
 
-    /** 하루치 계획. dayOffset 0=오늘, 1=내일 … */
+    /**
+     * 하루치 계획.
+     * <p>순차 모드(dayOffset)와 프로그램 모드(dayOfWeek)는 요청에 따라 둘 중 하나만 채워진다 —
+     * {@link RecommendWorkoutRequest#isProgramMode()} 참고.
+     */
     public record DayPlan(
+            /** 순차 모드: 0=오늘, 1=내일 … 프로그램 모드에서는 채우지 않는다(요일이 기준이라 의미 없음). */
             int dayOffset,
+            /** 프로그램 모드에서만 채워짐 — 이 하루 계획이 배정된 실제 요일 */
+            DayOfWeek dayOfWeek,
             String focus,
             List<RecommendedExercise> exercises,
             String comment

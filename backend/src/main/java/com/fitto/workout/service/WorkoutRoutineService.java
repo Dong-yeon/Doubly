@@ -10,6 +10,7 @@ import com.fitto.workout.domain.WorkoutRoutineExercise;
 import com.fitto.workout.domain.WorkoutRoutineExerciseAlternative;
 import com.fitto.workout.domain.WorkoutRoutineExerciseSet;
 import com.fitto.workout.dto.RoutineResponse;
+import com.fitto.workout.dto.SaveProgramRequest;
 import com.fitto.workout.dto.SaveRoutineRequest;
 import com.fitto.workout.repository.ExerciseCatalogRepository;
 import com.fitto.workout.repository.WorkoutRoutineRepository;
@@ -20,6 +21,7 @@ import org.springframework.util.StringUtils;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -74,6 +76,29 @@ public class WorkoutRoutineService {
         }
         routineRepository.save(routine);
         return RoutineResponse.of(routine);
+    }
+
+    /**
+     * 맞춤 프로그램 만들기(짐워크 스타일) — AI가 요일별로 제안한 하루치들을 한 번에 여러
+     * 루틴으로 저장한다. 요일 하루당 루틴 하나, 제목은 "{프로그램명} - DayN"(N은 요청에
+     * 담긴 순서), scheduledDays 는 그 요일 하나로 자동 배정된다.
+     *
+     * <p>기존 {@link #save} 를 그대로 반복 호출해 로직을 재사용한다 — 카탈로그 매칭·플랜
+     * 용량 체크가 루틴 하나 저장할 때와 동일하게 적용된다. 한 트랜잭션이라 중간에 용량
+     * 초과 등으로 실패하면 이미 만든 루틴까지 전부 롤백된다(프로그램이 반쪽만 만들어지지 않게).
+     */
+    @Transactional
+    public List<RoutineResponse> saveProgram(Long userId, SaveProgramRequest request) {
+        List<RoutineResponse> saved = new ArrayList<>();
+        int dayNo = 1;
+        for (SaveProgramRequest.ProgramDay day : request.days()) {
+            String title = "%s - Day%d".formatted(request.programTitle().trim(), dayNo);
+            SaveRoutineRequest routineRequest =
+                    new SaveRoutineRequest(title, day.exercises(), Set.of(day.dayOfWeek()));
+            saved.add(save(userId, routineRequest));
+            dayNo++;
+        }
+        return saved;
     }
 
     /**
