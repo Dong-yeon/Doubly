@@ -314,7 +314,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
         })),
       });
       haptics.success();
-      toast.success('즐겨찾기에 저장했어요 ');
+      toast.success('즐겨찾기에 저장했어요');
       setFavorites((prev) => [fav, ...prev]);
     } catch (e) {
       toast.error(getErrorMessage(e, '즐겨찾기 저장에 실패했어요.'));
@@ -377,7 +377,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
       const photoUrl = await runBusy('사진 올리는 중…', () => ensureUploaded(photoUri));
       const result = await runBusy('AI가 음식을 분석하고 있어요', () => dietApi.analyze(photoUrl));
       if (!result.isFood || result.foods.length === 0) {
-        toast.error('음식 사진이 아닌 것 같아요 ');
+        toast.error('음식 사진이 아닌 것 같아요');
         return;
       }
       appendFoods(result.foods.map(toForm));
@@ -468,7 +468,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
       if (editing) {
         await update(editing.id, payload);
         haptics.success();
-        toast.success('식단을 수정했어요 ');
+        toast.success('식단을 수정했어요');
         allowLeave();
         navigation.goBack();
         return;
@@ -549,7 +549,8 @@ export function DietRecordScreen({ navigation, route }: Props) {
 
           {/* 포장식품은 바코드로 바로 조회 — 사진/텍스트 AI 분석보다 정확하다(추정이 아니라 실제 표기값) */}
           <TouchableOpacity style={styles.barcodeBtn} onPress={() => navigation.navigate('BarcodeScan')}>
-            <Text style={styles.barcodeBtnText}>📷 바코드로 찾기</Text>
+            <MaterialCommunityIcons name="camera-outline" size={18} color={colors.primary} />
+            <Text style={styles.barcodeBtnText}>바코드로 찾기</Text>
           </TouchableOpacity>
 
           {/* 사진 */}
@@ -805,7 +806,10 @@ const styles = themedStyles((colors) => ({
     borderWidth: 1,
     borderColor: colors.primary,
     backgroundColor: colors.primaryBg,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
   },
   barcodeBtnText: { fontSize: fontSize.body, fontWeight: '800', color: colors.primary },
   photoBox: {
