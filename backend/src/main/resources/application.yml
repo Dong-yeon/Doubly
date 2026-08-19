@@ -34,6 +34,11 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+      # Redis는 StringRedisTemplate으로만 쓰고(@RedisHash 엔티티 없음) 리포지토리 계층이 없다.
+      # 꺼두지 않으면 JPA 리포지토리 37개와 같은 베이스 패키지를 스캔하면서
+      # "Could not safely identify store assignment" 경고가 기동 로그마다 반복 출력된다.
+      repositories:
+        enabled: false
 
   # 비밀번호 재설정 인증코드 메일(AUTH-07).
   # MAIL_HOST 가 비어 있으면 JavaMailSender 빈이 생성되지 않고, 코드가 서버 로그로 출력된다
