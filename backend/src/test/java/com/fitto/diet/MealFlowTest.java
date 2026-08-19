@@ -302,4 +302,52 @@ class MealFlowTest {
 
         assertThat(mealService.findToday(user)).isEmpty();
     }
+
+    private SaveMealRequest sharedWithItems(LocalDate date, MealType type) {
+        return new SaveMealRequest(date, type, null, null, null, null, null, null, null, null, null,
+                List.of(
+                        new MealItemRequest("삼겹살", "1인분", 500, 0, 30, 40),
+                        new MealItemRequest("공기밥", "1공기", 300, 90, 6, 1),
+                        new MealItemRequest("김치", "조금", 20, 4, 1, 0)),
+                true);
+    }
+
+    @Test
+    void 데이트_식단으로_저장하면_상대방에게도_절반_칼로리로_등록된다() {
+        Long a = register("date1@fitto.com");
+        Long b = register("date2@fitto.com");
+        InviteCodeResponse invite = relationService.createCoupleInvite(a);
+        relationService.connectCouple(b, invite.code());
+
+        // 원본 합계는 820kcal / 탄 94 · 단 37 · 지 41 (항목으로 저장하면 요청의 합계값은 무시하고 항목을 다시 더한다)
+        MealResponse mine = mealService.save(a, sharedWithItems(LocalDate.now(), MealType.DINNER));
+
+        assertThat(mine.calories()).isEqualTo(410);
+        assertThat(mine.carbs()).isEqualTo(47);
+        assertThat(mine.protein()).isEqualTo(19);
+        assertThat(mine.fat()).isEqualTo(21);
+        assertThat(mine.sharedWithPartner()).isTrue();
+        assertThat(mine.items()).extracting(i -> i.calories())
+                .containsExactly(250, 150, 10);
+
+        List<MealResponse> partnerToday = mealService.findToday(b);
+        assertThat(partnerToday).hasSize(1);
+        MealResponse partnerMeal = partnerToday.get(0);
+        assertThat(partnerMeal.calories()).isEqualTo(410);
+        assertThat(partnerMeal.mealType()).isEqualTo(MealType.DINNER);
+        assertThat(partnerMeal.sharedWithPartner()).isTrue();
+        assertThat(partnerMeal.items()).extracting(i -> i.name())
+                .containsExactly("삼겹살", "공기밥", "김치");
+    }
+
+    @Test
+    void 커플이_아니면_데이트_플래그를_보내도_혼자만_저장된다() {
+        Long user = register("date3@fitto.com");
+
+        MealResponse saved = mealService.save(user, sharedWithItems(LocalDate.now(), MealType.LUNCH));
+
+        assertThat(saved.calories()).isEqualTo(820);
+        assertThat(saved.sharedWithPartner()).isFalse();
+        assertThat(mealService.findToday(user)).hasSize(1);
+    }
 }
