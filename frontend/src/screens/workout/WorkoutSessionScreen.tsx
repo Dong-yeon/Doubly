@@ -1068,6 +1068,14 @@ const styles = themedStyles((colors) => ({
   warmupBadgeText: { fontSize: 9, fontWeight: '700', color: colors.textMuted },
   setInput: {
     flex: 1,
+    /*
+     * 웹(react-native-web) 필수 — <input> 은 내재 최소 폭(~180px)이 있고 CSS 의
+     * flex 아이템 기본값(min-width: auto)은 그 이하로 줄지 못하게 막는다.
+     * 그래서 flex:1 인데도 무게·횟수 입력 둘이 화면보다 넓어져 RPE·완료 체크가
+     * 화면 밖으로 밀려났다(헤더 행은 Text 라 줄어들어서 헤더만 제자리인 증상).
+     * 네이티브(yoga)는 원래 0 까지 줄어들므로 영향이 없다.
+     */
+    minWidth: 0,
     height: 40,
     borderRadius: radius.md,
     borderWidth: 1,
