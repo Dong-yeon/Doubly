@@ -21,13 +21,21 @@ import { getErrorMessage } from '../../utils/error';
 import { haptics } from '../../utils/haptics';
 import { todayWeekDay } from '../../utils/date';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { Streak, Workout, WorkoutRoutine } from '../../types';
+import type { MuscleRecoveryStatus, Streak, Workout, WorkoutRoutine } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { layout } from '../../theme/layout';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'WorkoutMain'>;
 
 const WEEKDAY_LETTERS = ['일', '월', '화', '수', '목', '금', '토'];
+
+/** N시간 전 → "6시간 전"/"어제"/"3일 전". 회복 카드는 시간 단위까지만 다루므로 이 정도 정밀도면 충분 */
+function hoursAgoLabel(hoursAgo: number): string {
+  if (hoursAgo < 1) return '방금';
+  if (hoursAgo < 24) return `${hoursAgo}시간 전`;
+  const days = Math.floor(hoursAgo / 24);
+  return days === 1 ? '어제' : `${days}일 전`;
+}
 
 /** 이번 주(월~일) 날짜 7개 — 상단 요일 스트립용. 일요일이면 지난주로 안 넘어가게 월요일 기준으로 계산 */
 function thisWeekDates(): Date[] {
@@ -71,13 +79,20 @@ export function WorkoutScreen({ navigation }: Props) {
     }
   }, [connected]);
 
+  // 근육 회복 — 가장 최근에 훈련한 부위·경과시간 요약 카드. 부가 정보라 실패해도 카드만 안 뜬다.
+  const [recovery, setRecovery] = useState<MuscleRecoveryStatus | null>(null);
+  const loadRecovery = useCallback(() => {
+    workoutApi.recovery().then(setRecovery).catch(() => setRecovery(null));
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       fetchToday();
       fetchHistory();
       refreshStreaks();
       loadRoutines();
-    }, [fetchToday, fetchHistory, refreshStreaks, loadRoutines]),
+      loadRecovery();
+    }, [fetchToday, fetchHistory, refreshStreaks, loadRoutines, loadRecovery]),
   );
 
   // 루틴 카드를 탭하면 바로 세션 시작 — WorkoutRoutineListScreen.startSession 과 동일 로직
@@ -155,6 +170,19 @@ export function WorkoutScreen({ navigation }: Props) {
           })}
         </View>
       </View>
+
+      {/* 근육 회복 — 가장 최근에 훈련한 부위·경과시간 요약 카드(MVP: 이 한 줄만, 부위별
+          상세 회복률 화면은 다음 단계). 기록이 하나도 없으면(mostRecent=null) 아예 숨긴다 —
+          "회복할 게 없다"를 굳이 문구로 보여줄 필요는 없다. */}
+      {recovery?.mostRecent ? (
+        <View style={styles.recoveryCard}>
+          <MaterialCommunityIcons name="leaf" size={20} color={colors.primary} />
+          <Text style={styles.recoveryLabel}>근육 회복</Text>
+          <Text style={styles.recoveryValue}>
+            {recovery.mostRecent.muscleGroup} · {hoursAgoLabel(recovery.mostRecent.hoursAgo ?? 0)}
+          </Text>
+        </View>
+      ) : null}
 
       {/* 아이콘 칩 — 식단 탭과 같은 QuickLinkChips 를 써서 톤을 맞춘다. "내 루틴"·"AI 추천"은
           이제 이 화면 안에 각각 목록 섹션·하단 버튼으로 직접 있어서 칩에서 뺐다(중복 진입점
@@ -320,6 +348,21 @@ const styles = themedStyles((colors) => ({
   weekCellDateWrapToday: { backgroundColor: colors.primary },
   weekCellDate: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
   weekCellDateToday: { color: colors.white },
+  recoveryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  recoveryLabel: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
+  recoveryValue: { fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '800', marginLeft: 'auto' },
   list: { padding: spacing.lg, paddingBottom: layout.listBottomWithFab },
   streakRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
   streakText: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },

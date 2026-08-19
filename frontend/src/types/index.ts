@@ -270,6 +270,21 @@ export interface WorkoutStats {
   categoryBreakdown: { category: string; count: number }[];
 }
 
+// 근육 회복 현황 (GET /workout/recovery) — 부위별 마지막 수행 이후 경과 시간·추정 회복률
+export interface MuscleRecovery {
+  muscleGroup: string;
+  // 한 번도 안 한 부위면 둘 다 null
+  lastTrainedAt?: string | null;
+  hoursAgo?: number | null;
+  // 0~100. 한 번도 안 한 부위는 100(바로 해도 되는 상태)
+  recoveryPercent: number;
+}
+export interface MuscleRecoveryStatus {
+  muscles: MuscleRecovery[];
+  // 가장 최근에 훈련한 부위 — 홈 화면 요약 카드용. 기록이 하나도 없으면 null
+  mostRecent: MuscleRecovery | null;
+}
+
 // AI 운동 추천 (POST /workout/recommend) — 최근 기록 기반 제안
 export interface RecommendedExercise {
   name: string;
