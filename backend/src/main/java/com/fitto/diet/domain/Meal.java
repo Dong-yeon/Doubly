@@ -73,6 +73,20 @@ public class Meal {
     private Integer sodium;
     private Integer fiber;
 
+    /**
+     * 데이트 식단(같이 먹기) 묶음 키 — 커플 양쪽에 절반씩 등록된 짝을 연결한다.
+     * 일반 기록은 null.
+     */
+    @Column(name = "shared_group_id", length = 36)
+    private String sharedGroupId;
+
+    /**
+     * 실제로 등록한 사람 — 파트너 명의로 자동 생성된 데이트 식단 복제본에서만 {@link #userId} 와
+     * 다르다(내 명의가 아닌 기록이 생기는 유일한 경로라 감사 목적으로 남긴다).
+     */
+    @Column(name = "created_by")
+    private Long createdBy;
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -90,7 +104,8 @@ public class Meal {
     private Meal(Long userId, LocalDate mealDate, MealType mealType,
                 String memo, String photoUrl, Integer calories,
                 Integer carbs, Integer protein, Integer fat,
-                Integer sugar, Integer sodium, Integer fiber) {
+                Integer sugar, Integer sodium, Integer fiber,
+                String sharedGroupId, Long createdBy) {
         this.userId = userId;
         this.mealDate = mealDate;
         this.mealType = mealType;
@@ -103,6 +118,13 @@ public class Meal {
         this.sugar = sugar;
         this.sodium = sodium;
         this.fiber = fiber;
+        this.sharedGroupId = sharedGroupId;
+        this.createdBy = createdBy;
+    }
+
+    /** 데이트 식단(같이 먹기)으로 등록된 기록인지 — 커플 양쪽에 짝이 있다. */
+    public boolean isSharedMeal() {
+        return sharedGroupId != null;
     }
 
     /** 끼니 자체(날짜·끼니·메모·사진) 수정 — 칼로리/매크로는 항목 교체 후 재합산으로 정해진다. */
