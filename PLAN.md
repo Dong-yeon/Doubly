@@ -1536,3 +1536,117 @@ memories: (on?: string) =>
 > **1~3 단계에서 추가된 설정**: `fitto.storage-zone` (환경변수 `FITTO_STORAGE_ZONE`).
 > 비워두면 JVM 기본 TZ 를 쓴다 — 컨테이너 TZ 가 바뀌었을 때 저장 TZ 를 고정하는 탈출구이고,
 > 테스트는 이걸 `UTC` 로 못박아 개발 머신(KST)에서도 운영 경로를 검증한다.
+
+---
+
+## Feature: 하단 탭 재구성 — 운동/식단 분리 + FAB 제거
+
+> 🚧 **상태: 화면설계.** 아직 코드 변경 없음. 프론트엔드 전용(백엔드·DB 영향 없음).
+
+### 왜 — 현재 구조의 문제
+
+지금은 4탭(홈 / **건강**(운동+식단 세그먼트 통합) / 채팅 / 플레이스) + 중앙 FAB 구조다.
+
+1. **"건강" 탭이 운동과 식단을 세그먼트(상단 토글)로 묶어놓아**, 둘 중 하나를 확인하려 해도
+   먼저 그 탭에 들어간 뒤 토글을 한 번 더 눌러야 하는 경우가 있다. 운동·식단은 사용자가
+   **독립적으로, 자주** 들여다보는 항목이라 토글 한 단계가 매번 마찰이 된다.
+2. **FAB(중앙 ＋버튼)의 액션 4개가 전부 각 화면에 중복 존재한다.**
+
+   | FAB 액션 | 화면 내 동일 버튼 |
+   | --- | --- |
+   | 운동 기록 | `WorkoutScreen` 의 "＋ 기록하기" |
+   | 음식 촬영 | `DietScreen`(당시 세그먼트) 의 "＋ 식단 기록하기" |
+   | 맛집 핀 | `PlaceMapScreen` 의 "＋ 장소 추가하기" |
+   | 일상 남기기 | 홈 `QuickActions` 의 "일상" |
+
+   FAB 가 실제로 벌어주는 건 "탭을 안 옮기고 어디서든 바로 기록 시작" 뿐이고, 나머지는 전부
+   같은 목적지로 가는 두 번째 경로다.
+
+### 목표
+
+운동·식단을 별도 탭으로 분리하고, 중복 진입점이던 FAB 는 없앤 뒤 **기존 UI를 재활용**해
+같은 진입 속도를 유지한다. 새 화면·새 버튼을 늘리지 않는 것이 원칙이다 — 홈의 `QuickActions`
+줄은 이미 6개로 꽉 차 있고(`QuickActions.tsx` 주석: 무드 배지도 이 이유로 별도 줄 대신
+아바타 오버레이로 뺐다), 항목을 더 넣으면 좁은 기기에서 고정폭 아이콘이 겹친다.
+
+### 새 탭 구조 (5탭, FAB 없음)
+
+| 순서 | 탭 | 라벨 | 아이콘(MaterialCommunityIcons) | 연결 스택 |
+| --- | --- | --- | --- | --- |
+| 1 | Home | 홈 | `heart-multiple-outline` | `HomeStackNavigator` (변경 없음) |
+| 2 | Workout | 운동 | `dumbbell` | `WorkoutStackNavigator` — 식단 화면 제거, 나머지(루틴·챌린지·바디메트릭·음성응원) 유지 |
+| 3 | Chat | 채팅 | `chat-outline` | `ChatStackNavigator` (변경 없음) |
+| 4 | Diet | 식단 | `silverware-fork-knife` | **신규** `DietStackNavigator` — 기존 `WorkoutStackParamList` 의 `DietMain/DietRecord/DietCalendar/DietStats/BarcodeScan` 5개를 그대로 옮긴다 |
+| 5 | Place | **장소** (← 기존 "플레이스") | `map-marker-outline` | `PlaceStackNavigator` (변경 없음) |
+
+> 순서는 사용자가 원한 원안(홈·운동·채팅·식단·장소) 그대로다. FAB 를 없애면서 좌우 개수를
+> 맞출 이유가 사라져, 운동↔식단을 억지로 붙여둘 필요도 없어졌다.
+>
+> **"플레이스" → "장소"**: 이 탭은 맛집 지도(`PlaceMap/Add/Detail`, 3화면)와 여행
+> (`TripList/Form/Detail/Expense/Checklist/Album/Recap`, 7화면)을 함께 담는다. PLAN.md
+> "커플 여행(Trip)" 절이 이미 "장소를 여행으로 그룹핑"이라고 정의해뒀듯 **여행은 장소의
+> 상위 집합**이라 "장소"가 정확한 상위 개념이다. "맛집"으로 좁히면 여행 스위트(화면 수로는
+> 더 큰 비중)를 가리고, "여행"으로 좁히면 자주 쓰는 캐주얼한 맛집 핀 저장을 가린다.
+> 라벨만 바꾸는 것이고 코드상 화면·스택·API 이름(`Place*`, `place.ts`)은 그대로 둔다 —
+> `TAB_META.Place.label` 한 줄만 `'플레이스'` → `'장소'`.
+
+FAB 가 없으므로 5개 탭은 `flex: 1` 균등 배치로 끝난다 — 기존 `MainTabNavigator.tsx` 의
+FAB 돌출·Android 터치 클리핑 대응 코드(`barWrap` paddingTop, `fabOverlay`, `fabSlot`,
+액션시트 `Modal`)를 전부 걷어낸다. 홀수 탭 좌우 비대칭을 flex 로 미러링하는 식의 대응도
+필요 없어진다.
+
+`WorkoutScreen`/`DietScreen` 상단의 `WorkoutDietSegment`(운동↔식단 토글) 컴포넌트는
+탭 자체가 그 역할을 대신하므로 **삭제** — 사용처가 그 두 화면뿐이라 죽은 코드가 남지 않는다.
+
+### FAB 액션 → 대체 진입점
+
+| 기존 FAB 액션 | 대체 진입점 | 비고 |
+| --- | --- | --- |
+| 운동 기록 | 홈 `CoupleHero` 의 "운동" 칩(아래) + `WorkoutScreen` 자체 버튼 | 목적지 로직 변경 (아래) |
+| 음식 촬영 | 홈 `CoupleHero` 의 "식단" 칩(아래) + `DietScreen` 자체 버튼 | 목적지 로직 변경 (아래) |
+| 일상 남기기 | 홈 `QuickActions` "일상" | 변경 없음 — 이미 있음 |
+| 맛집 핀 | `PlaceMapScreen` 의 "＋ 장소 추가하기" | **홈 진입점은 만들지 않는다** (Non-goals 참고) |
+
+### 홈 — `CoupleHero` 오늘 칩의 목적지 변경
+
+`CoupleHero.tsx` 의 `TodayRow`(운동/식단 칩, `Column` 컴포넌트 내부)는 이미 "나"와 "상대"
+양쪽 열에 오늘 완료 여부를 보여주고, 누르면 `onPressToday(who, kind)` 로
+`HomeScreen.tsx` 의 핸들러를 부른다. 지금은 어느 칩을 눌러도 항상 그 종류의 **메인 화면**
+(`WorkoutMain`/`DietMain`)으로 간다.
+
+바꿀 것은 **HomeScreen 의 핸들러 로직뿐**이다 (`CoupleHero`/`TodayRow` 컴포넌트 자체는
+무수정):
+
+- 로그인한 **내(me) 기록** 기준으로 — 오늘 아직 안 했으면(`myWorkoutDone`/`myMealDone`
+  이 `false`) → 바로 `WorkoutRecord`/`DietRecord` (기록 입력) 로 이동
+- 오늘 이미 했으면(`true`) → 지금처럼 `WorkoutMain`/`DietMain` (기록 확인/수정) 으로 이동
+
+> ⚠️ 어느 열(나/상대)을 눌렀는지는 **지금처럼 무시한다.** 기존 코드도 `onPressToday`
+> 콜백의 `who` 파라미터를 쓰지 않는다(`(_who, kind) =>`) — "두 화면 모두 로그인한 나의
+> 기록만 보여준다"는 기존 원칙 그대로다. 상대 열의 칩을 누른다고 상대 대신 기록을
+> 입력하게 되는 건 아니다. 목적지를 가르는 완료 여부도 항상 **나**의 것
+> (`myWorkoutDone`/`myMealDone`) 이지, 눌린 열의 `done` 이 아니다.
+
+### 영향 받는 파일 (구현 체크리스트)
+
+| 파일 | 변경 |
+| --- | --- |
+| `frontend/src/navigation/types.ts` | `WorkoutStackParamList` 에서 `Diet*` 5개 제거, 신규 `DietStackParamList` 로 분리. `MainTabParamList` 에 `Diet` 추가 |
+| `frontend/src/navigation/DietStackNavigator.tsx` | **신규** — `WorkoutStackNavigator.tsx` 의 식단 부분을 그대로 옮김 |
+| `frontend/src/navigation/WorkoutStackNavigator.tsx` | 식단 화면 5개 + import 제거 |
+| `frontend/src/navigation/MainTabNavigator.tsx` | `Diet` 탭을 `Home,Workout,Chat,Diet,Place` 순서로 등록, `TAB_META` 갱신(운동/식단 라벨·아이콘 + `Place.label`을 `'플레이스'`→`'장소'`), FAB 관련 코드·`FAB_ACTIONS`·액션시트 `Modal` 전부 제거, 탭바를 단순 `flex:1 × 5` 로 |
+| `frontend/src/navigation/linking.ts` | `Diet` 화면 딥링크를 `Workout` 블록에서 `Diet` 블록으로 이동 (경로 문자열은 그대로: `diet`, `diet/record` …) |
+| `frontend/src/screens/diet/*.tsx` (Diet/DietRecord/DietCalendar/DietStats/BarcodeScan) | `WorkoutStackParamList` → `DietStackParamList` 타입 교체 |
+| `frontend/src/screens/diet/DietScreen.tsx`, `frontend/src/screens/workout/WorkoutScreen.tsx` | `WorkoutDietSegment` 사용 제거 |
+| `frontend/src/components/WorkoutDietSegment.tsx` | **삭제** (사용처 없음) |
+| `frontend/src/screens/home/HomeScreen.tsx` | `onPressToday` 핸들러를 완료 여부 기반 분기로 변경, 솔로(미연결) 안내 카드의 `Workout`/`DietRecord` 이동을 `Diet` 탭으로 교정 |
+| `frontend/src/screens/home/components/CoupleHero.tsx` | 무수정 (props 계약 그대로) |
+
+### Non-goals (이번 스펙 제외)
+
+- **맛집 핀의 홈 진입점** — 운동·식단처럼 "오늘 했나" 개념이 아니라 `CoupleHero` 칩으로
+  표현이 안 되고, `QuickActions` 는 이미 자리가 없다. 사용 빈도도 낮아 `PlaceMapScreen`
+  자체 버튼만으로 충분하다고 본다
+- **"건강" 우산에 있던 `BodyMetric`/`Challenge`/루틴 3화면 재배치** — 운동도 식단도 아닌
+  종합 건강 성격이지만, 이번 스펙은 운동/식단 분리만 다룬다. 당장은 `Workout` 탭에 그대로 둔다
+- **백엔드·DB 변경** — 없음. 프론트 네비게이션·화면 구성만 바뀐다

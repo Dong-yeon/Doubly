@@ -3,14 +3,14 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { WorkoutStackParamList } from '../../navigation/types';
+import type { DietStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { dietApi } from '../../api/diet';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 import { onColor } from '../../theme/onColor';
 
-type Props = NativeStackScreenProps<WorkoutStackParamList, 'DietCalendar'>;
+type Props = NativeStackScreenProps<DietStackParamList, 'DietCalendar'>;
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 

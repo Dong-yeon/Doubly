@@ -73,10 +73,6 @@ export const linking: LinkingOptions<RootStackParamList> = {
               WorkoutRoutineForm: 'workout/routines/new',
               BodyMetric: 'workout/body',
               Challenge: 'workout/challenge',
-              DietMain: 'diet',
-              DietRecord: 'diet/record',
-              DietCalendar: 'diet/calendar',
-              DietStats: 'diet/stats',
             },
           },
           Chat: {
@@ -86,6 +82,14 @@ export const linking: LinkingOptions<RootStackParamList> = {
                 path: 'chat/:relationId',
                 parse: { relationId: Number },
               },
+            },
+          },
+          Diet: {
+            screens: {
+              DietMain: 'diet',
+              DietRecord: 'diet/record',
+              DietCalendar: 'diet/calendar',
+              DietStats: 'diet/stats',
             },
           },
           Place: {

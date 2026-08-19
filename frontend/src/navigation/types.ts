@@ -104,7 +104,7 @@ export interface RoutineFormDraft {
   scheduledDays?: WeekDay[];
 }
 
-// 운동 탭 내부 스택 — 운동 + 식단(세그먼트로 통합)
+// 운동 탭 내부 스택 — 운동 전용 (식단은 별도 탭인 DietStackParamList 로 분리)
 export type WorkoutStackParamList = {
   WorkoutMain: undefined;
   // date: 캘린더에서 특정 날짜를 골라 들어올 때 그 날짜로 시작한다 (없으면 오늘)
@@ -129,7 +129,10 @@ export type WorkoutStackParamList = {
   BodyMetric: undefined;
   // 커플 챌린지/대결
   Challenge: undefined;
-  // 식단 (구 식단 탭에서 이전) — WorkoutMain 상단 세그먼트로 토글
+};
+
+// 식단 탭 내부 스택 — 구 "건강" 탭에서 운동과 세그먼트로 묶여 있던 걸 별도 탭으로 분리
+export type DietStackParamList = {
   DietMain: undefined;
   /*
    * date: 캘린더에서 특정 날짜를 골라 들어올 때 그 날짜로 시작한다 (없으면 오늘)
@@ -170,11 +173,12 @@ export type PlaceStackParamList = {
   TripRecap: { tripId: number; title: string };
 };
 
-// 2.2 메인 탭 (홈 / 운동+식단 / 채팅 / 맛집) + 중앙 FAB
+// 2.2 메인 탭 (홈 / 운동 / 채팅 / 식단 / 장소) — FAB 없음
 export type MainTabParamList = {
   Home: NavigatorScreenParams<HomeStackParamList>;
   Workout: NavigatorScreenParams<WorkoutStackParamList>;
   Chat: NavigatorScreenParams<ChatStackParamList>;
+  Diet: NavigatorScreenParams<DietStackParamList>;
   Place: NavigatorScreenParams<PlaceStackParamList>;
 };
 
