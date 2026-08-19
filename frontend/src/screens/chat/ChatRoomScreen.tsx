@@ -493,7 +493,13 @@ export function ChatRoomScreen({ navigation, route }: Props) {
 
   return (
     <SwipeBackView style={styles.flex}>
-    <SafeAreaView style={styles.safe} edges={['bottom']}>
+    {/*
+     * left/right 도 인셋에 포함한다(가로 화면·노치가 옆에 오는 기기 대비) — 온보딩의
+     * 여백 없는 화면들(RegisterScreen 등)과 같은 패턴. 아래 inputBar 의 가로 여백은
+     * 별개로 늘렸다 — 화면 모서리가 물리적으로 둥글어서, 세로 인셋만으론 안 잡히는
+     * "동그란 버튼이 모서리 곡률에 살짝 잘려 보이는" 문제라 안전 영역과는 무관하다.
+     */}
+    <SafeAreaView style={styles.safe} edges={['bottom', 'left', 'right']}>
       <KeyboardAvoidingView
         // Android 는 FlatList 를 직접 감싸면 KeyboardAvoidingView 의 자동 높이 보정이
         // edge-to-edge 아래에서 먹지 않아(실기기 확인) behavior 를 아예 안 쓰고
@@ -873,7 +879,11 @@ const styles = themedStyles((colors) => ({
   inputBar: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    padding: spacing.sm,
+    // 가로 여백을 세로보다 넉넉히 — 동그란 "+"/전송 버튼이 화면 맨 끝에 거의 붙어
+    // 있으면 기기의 둥근 모서리 곡률에 살짝 잘려 보인다(실기기 확인). safe-area
+    // 인셋은 좌우가 대개 0 이라(코너 곡률까지 잡아주지 않는다) 여백을 직접 늘렸다.
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     gap: spacing.sm,
     backgroundColor: colors.background,
   },
