@@ -1,5 +1,6 @@
 /** 음성 응원 녹음 업로드 — Cloudinary 로 직접 올린다 (사진과 같은 계정, 별도 서명 엔드포인트) */
 import { Platform } from 'react-native';
+import { File as FsFile } from 'expo-file-system';
 import { voiceClipsApi } from '../api/voiceClips';
 
 async function buildFileForm(uri: string): Promise<FormData> {
@@ -8,8 +9,10 @@ async function buildFileForm(uri: string): Promise<FormData> {
     const blob = await (await fetch(uri)).blob();
     form.append('file', blob);
   } else {
-    // React Native FormData 파일 형식 — RecordingPresets.LOW_QUALITY 확장자(.m4a)와 맞춘다
-    form.append('file', { uri, type: 'audio/m4a', name: 'voice.m4a' } as unknown as Blob);
+    // Expo(SDK 54+) 전역 fetch 는 RN 전통 {uri,type,name} 파트를 지원하지 않는다
+    // ("Unsupported FormDataPart implementation"). bytes() 를 구현한
+    // expo-file-system File 이 공식 지원 경로다.
+    form.append('file', new FsFile(uri) as Blob);
   }
   return form;
 }

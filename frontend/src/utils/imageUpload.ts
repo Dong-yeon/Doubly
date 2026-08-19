@@ -1,5 +1,6 @@
 /** 이미지 선택(expo-image-picker) + Cloudinary 업로드 (signed 우선, unsigned 폴백) */
 import { Platform } from 'react-native';
+import { File as FsFile } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { CLOUDINARY, isCloudinaryConfigured } from '../constants/config';
 import { uploadApi } from '../api/upload';
@@ -39,8 +40,10 @@ async function buildFileForm(uri: string): Promise<FormData> {
     const blob = await (await fetch(uri)).blob();
     form.append('file', blob);
   } else {
-    // React Native FormData 파일 형식
-    form.append('file', { uri, type: 'image/jpeg', name: 'upload.jpg' } as unknown as Blob);
+    // Expo(SDK 54+) 전역 fetch 는 RN 전통 {uri,type,name} 파트를 지원하지 않는다
+    // ("Unsupported FormDataPart implementation"). bytes() 를 구현한
+    // expo-file-system File 이 공식 지원 경로다.
+    form.append('file', new FsFile(uri) as Blob);
   }
   return form;
 }

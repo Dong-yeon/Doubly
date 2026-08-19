@@ -19,6 +19,7 @@
     "expo-clipboard": "~56.0.4",
     "expo-crypto": "~56.0.4",
     "expo-dev-client": "~56.0.24",
+    "expo-file-system": "~56.0.8",
     "expo-font": "~56.0.7",
     "expo-haptics": "~56.0.3",
     "expo-image-picker": "~56.0.18",
@@ -54,8 +55,7 @@
     "web": "expo start --web",
     "build:web": "node scripts/subset-icon-font.cjs && expo export --platform web",
     "subset:icons": "node scripts/subset-icon-font.cjs",
-    "typecheck": "tsc --noEmit",
-    "verify:spellcheck": "node scripts/verify-spellcheck.mjs"
+    "typecheck": "tsc --noEmit"
   },
   "private": true
 }
