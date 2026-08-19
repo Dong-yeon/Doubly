@@ -155,7 +155,9 @@ export function SettingsScreen({ navigation }: Props) {
 
         <Card elevation="sm" style={styles.section}>
           <Text style={styles.sectionLabel}>화면</Text>
-          <View style={styles.rowText}>
+          {/* section 이 좌우 패딩 0 이라(위 주석) 행마다 패딩을 직접 준다 — 테마 블록은
+              row 를 안 쓰므로 빠뜨리면 제목이 카드 벽에 붙는다 */}
+          <View style={[styles.rowText, styles.themeIntro]}>
             <Text style={styles.rowTitle}>테마</Text>
             <Text style={styles.rowDesc}>시스템을 고르면 기기 설정을 따라가요.</Text>
           </View>
@@ -239,7 +241,14 @@ const styles = themedStyles((colors) => ({
   // Card 기본 좌우 패딩(16)을 지운다 — 안 지우면 container(24)+card(16)+row(24)=64 로
   // MY 화면(24+0+24=48)보다 텍스트가 16px 더 안쪽에서 시작해 두 화면이 어긋났다
   section: { paddingVertical: spacing.sm, paddingHorizontal: 0 },
-  themeRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
+  themeIntro: { paddingHorizontal: spacing.lg, paddingTop: spacing.xs },
+  themeRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.xs,
+  },
   sectionLabel: {
     fontSize: fontSize.caption,
     fontWeight: '800',

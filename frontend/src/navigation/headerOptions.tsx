@@ -44,8 +44,19 @@ function HeaderIconButton({ icon, label }: { icon: IconName; label: string }) {
  * 그대로 남는다. 기본 버튼을 끄고 우리 아이콘만 쓴다.
  */
 export const stackScreenOptions = {
-  headerStyle: { backgroundColor: colors.background },
-  headerTintColor: colors.textPrimary,
+  /*
+   * 색은 값이 아니라 <b>getter</b> 로 둔다. 이 객체는 모듈 로드 시점에 한 번만
+   * 만들어지는데, `colors.background` 를 값으로 넣으면 그 순간의 팔레트가 굳어버려
+   * 실행 중 테마를 바꿔도 헤더만 이전 테마 색으로 남았다 — 다크 전환 시
+   * 라이트 헤더 위에 밝은 아이콘·글자가 얹혀 뒤로가기가 안 보이는 증상.
+   * getter 면 react-navigation 이 헤더를 그릴 때마다 현재 팔레트를 읽는다.
+   */
+  get headerStyle() {
+    return { backgroundColor: colors.background };
+  },
+  get headerTintColor() {
+    return colors.textPrimary;
+  },
   headerShadowVisible: false,
   headerBackVisible: false,
   headerLeft: () => <HeaderIconButton icon="arrow-left" label="뒤로 가기" />,
