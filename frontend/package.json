@@ -54,7 +54,8 @@
     "web": "expo start --web",
     "build:web": "node scripts/subset-icon-font.cjs && expo export --platform web",
     "subset:icons": "node scripts/subset-icon-font.cjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "verify:spellcheck": "node scripts/verify-spellcheck.mjs"
   },
   "private": true
 }
