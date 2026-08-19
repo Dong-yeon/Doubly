@@ -17,7 +17,7 @@ import { FeedCard } from '../home/components/FeedCard';
 import { feedApi } from '../../api/feed';
 import { toast } from '../../store/toastStore';
 import { getErrorMessage } from '../../utils/error';
-import { relativeDateLabel } from '../../utils/date';
+import { relativeDateLabel, toDateString } from '../../utils/date';
 import { haptics } from '../../utils/haptics';
 import { useRelationStore } from '../../store/relationStore';
 import type { FeedItem } from '../../types';
@@ -32,10 +32,22 @@ export function feedItemKey(item: FeedItem): string {
   return `${item.type}-${item.refId}`;
 }
 
+/**
+ * occurredAt(서버 UTC + 'Z')을 기기 로컬(KST) 날짜·시각으로 바꿔 표시한다.
+ *
+ * <p>과거엔 문자열을 그대로 `slice(0, 10)`/`slice(11, 16)` 해서 UTC 값을 KST인 것처럼
+ * 보여주는 버그가 있었다(12:14 KST 등록 → 서버에 03:14 UTC 저장 → 화면에 "03:14",
+ * 자정 근처엔 날짜까지 하루 밀림). {@link ChatRoomScreen}의 `timeOf`처럼
+ * `new Date(iso)`로 파싱해야 기기가 로컬로 변환해준다 — 날짜·시각 둘 다 이 변환된
+ * `Date`에서 뽑는다.
+ */
 export function feedTimeLabel(occurredAt: string): string {
-  const date = relativeDateLabel(occurredAt.slice(0, 10));
-  const time = occurredAt.slice(11, 16);
-  return time ? `${date} ${time}` : date;
+  const d = new Date(occurredAt);
+  if (Number.isNaN(d.getTime())) return occurredAt;
+  const date = relativeDateLabel(toDateString(d));
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return `${date} ${hh}:${mm}`;
 }
 
 export function FeedTimelineScreen({ navigation, route }: Props) {
