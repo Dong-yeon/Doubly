@@ -32,7 +32,11 @@ import { TouchGesturePicker } from '../../components/TouchGesturePicker';
 import { MoodPicker } from '../../components/MoodPicker';
 import { SpellCheckBar } from '../../components/SpellCheckBar';
 import { useSettingsStore } from '../../store/settingsStore';
-import { applySuggestion, checkKoreanSpelling } from '../../utils/koreanSpellCheck';
+import {
+  applyAllSuggestions,
+  applySuggestion,
+  checkKoreanSpelling,
+} from '../../utils/koreanSpellCheck';
 import { chatApi } from '../../api/chat';
 import { moodApi } from '../../api/mood';
 import { isPrShareContent } from '../../utils/workoutShare';
@@ -113,6 +117,13 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     if (!first) return;
     haptics.light();
     setText((prev) => applySuggestion(prev, first));
+  };
+
+  /** 제안 전부를 한 번에 적용한다. prev 기준으로 다시 검사해 위치 어긋남을 막는다 */
+  const applyAllSpelling = () => {
+    if (!suggestions.length) return;
+    haptics.light();
+    setText((prev) => applyAllSuggestions(prev, checkKoreanSpelling(prev)));
   };
 
   useLayoutEffect(() => {
@@ -529,6 +540,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           suggestion={spellDismissedFor === text ? null : (suggestions[0] ?? null)}
           total={suggestions.length}
           onApply={applySpelling}
+          onApplyAll={applyAllSpelling}
           onDismiss={() => setSpellDismissedFor(text)}
         />
         <View style={styles.inputBar}>

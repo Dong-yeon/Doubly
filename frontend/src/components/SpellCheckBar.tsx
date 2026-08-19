@@ -7,6 +7,7 @@
  *
  * <p>한 번에 하나만 보여준다. 제안 여러 개를 늘어놓으면 입력창을 덮어버리고,
  * 실제로 헷갈리는 건 대개 한 군데다. 고치면 다음 것이 이어서 뜬다.
+ * 다만 여러 개일 때는 '모두' 버튼으로 한 번에 적용할 수 있다.
  */
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -21,10 +22,12 @@ interface Props {
   /** 남은 제안 수 (1개면 표시하지 않는다) */
   total: number;
   onApply: () => void;
+  /** 제안 전부를 한 번에 적용 — 2개 이상일 때만 버튼이 뜬다 */
+  onApplyAll?: () => void;
   onDismiss: () => void;
 }
 
-export function SpellCheckBar({ suggestion, total, onApply, onDismiss }: Props) {
+export function SpellCheckBar({ suggestion, total, onApply, onApplyAll, onDismiss }: Props) {
   if (!suggestion) return null;
 
   return (
@@ -46,6 +49,16 @@ export function SpellCheckBar({ suggestion, total, onApply, onDismiss }: Props) 
       <Pressable style={styles.apply} onPress={onApply} accessibilityRole="button">
         <Text style={styles.applyText}>바꾸기</Text>
       </Pressable>
+      {total > 1 && onApplyAll ? (
+        <Pressable
+          style={styles.applyAll}
+          onPress={onApplyAll}
+          accessibilityRole="button"
+          accessibilityLabel={`맞춤법 제안 ${total}개 모두 바꾸기`}
+        >
+          <Text style={styles.applyAllText}>모두</Text>
+        </Pressable>
+      ) : null}
       <Pressable
         onPress={onDismiss}
         hitSlop={10}
@@ -85,4 +98,13 @@ const styles = themedStyles((colors) => ({
   },
   // 배경이 colors.primary — 라이트/다크 모두 흰 글씨가 대비를 만족한다
   applyText: { color: colors.white, fontWeight: '800', fontSize: fontSize.caption },
+  applyAll: {
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    minHeight: layout.touchTarget,
+    justifyContent: 'center',
+  },
+  applyAllText: { color: colors.primary, fontWeight: '800', fontSize: fontSize.caption },
 }));
