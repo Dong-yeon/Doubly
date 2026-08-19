@@ -3,6 +3,7 @@ package com.fitto.workout.controller;
 import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
 import com.fitto.workout.dto.RoutineResponse;
+import com.fitto.workout.dto.SaveProgramRequest;
 import com.fitto.workout.dto.SaveRoutineRequest;
 import com.fitto.workout.service.WorkoutRoutineService;
 import jakarta.validation.Valid;
@@ -51,6 +52,14 @@ public class WorkoutRoutineController {
     public ApiResponse<RoutineResponse> save(@AuthenticationPrincipal AuthUser user,
                                              @Valid @RequestBody SaveRoutineRequest request) {
         return ApiResponse.success(routineService.save(user.id(), request), "루틴을 저장했어요.");
+    }
+
+    /** 맞춤 프로그램 만들기(짐워크 스타일) — AI가 요일별로 제안한 하루치들을 한 번에 여러 루틴으로 저장. */
+    @PostMapping("/program")
+    public ApiResponse<List<RoutineResponse>> saveProgram(@AuthenticationPrincipal AuthUser user,
+                                                           @Valid @RequestBody SaveProgramRequest request) {
+        return ApiResponse.success(routineService.saveProgram(user.id(), request),
+                "%d개 루틴으로 프로그램을 저장했어요.".formatted(request.days().size()));
     }
 
     /** 스마트 루틴 동기화(Save-on-Finish) — 세션에서 바뀐 구성을 이 루틴에 반영. */

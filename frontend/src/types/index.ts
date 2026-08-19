@@ -279,7 +279,9 @@ export interface RecommendedExercise {
   comment?: string | null;
 }
 export interface WorkoutPlanDay {
-  dayOffset: number; // 0=오늘, 1=내일 …
+  dayOffset: number; // 0=오늘, 1=내일 … (프로그램 모드에서는 의미 없음, dayOfWeek 참고)
+  // 프로그램 모드(맞춤 프로그램 만들기)일 때만 채워짐 — 이 하루 계획이 배정된 실제 요일
+  dayOfWeek?: WeekDay | null;
   focus: string;
   exercises: RecommendedExercise[];
   comment?: string | null;
