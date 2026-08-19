@@ -172,6 +172,8 @@ export interface WorkoutSetEntry {
   setNo: number;
   weightKg?: number | null;
   reps?: number | null;
+  // 자각 강도(RPE) — 1.0~10.0, 보통 0.5 단위. 세트를 몇 회 더 할 수 있었는지의 체감치
+  rpe?: number | null;
   completed: boolean;
 }
 
@@ -219,6 +221,8 @@ export interface ExerciseCatalogItem {
   category: string;
   muscleGroup: string;
   equipment?: string | null;
+  // 자세 큐/안내 문구 — 운동 세션 화면의 TIP 카드에 쓰인다. 커스텀 종목은 없을 수 있다
+  tip?: string | null;
 }
 
 // 종목의 직전 수행 기록 — 세션 진입 시 무게/횟수 프리필에 사용

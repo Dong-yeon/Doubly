@@ -38,6 +38,7 @@ import { useDirtyGuard } from '../../hooks/useDirtyGuard';
 import { confirmDiscard } from '../../utils/discardGuard';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
+import { formatNumber, formatWeight } from '../../utils/format';
 import type { ExerciseCatalogItem, ExerciseLastPerformance, VoicePhrase } from '../../types';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'WorkoutSession'>;
@@ -51,6 +52,11 @@ interface SessionSet {
   weightKg: string;
   reps: string;
   done: boolean;
+  // 세트 성격 — WARMUP/NORMAL/TOP/BACKOFF/DROP. 루틴에서 지정한 값을 그대로 들고 와 배지로만
+  // 보여준다(합계·볼륨 계산에는 안 쓴다 — 백엔드 WorkoutRoutineExerciseSet.setType 주석과 동일 원칙).
+  setType?: string;
+  // 자각 강도(RPE) — 1.0~10.0, 직접 입력. 직전 수행 기록이 있으면 프리필된다(applyPrefill)
+  rpe: string;
 }
 interface SessionExercise {
   key: string;
@@ -66,6 +72,9 @@ interface SessionExercise {
   restSeconds?: number;
   // 루틴 작성 시 사전 지정해둔 대체 종목(④) — 세션 중 교체 시 먼저 추천된다
   alternatives?: SessionExerciseAlternativeParam[];
+  // 카탈로그의 자세 큐/안내 문구 — 세션 시작 시 이름으로 배치 조회해 채운다. 커스텀 종목이거나
+  // 아직 못 불러왔으면 undefined이고, 그때는 TIP 카드를 그냥 숨긴다.
+  tip?: string;
   sets: SessionSet[];
 }
 
@@ -86,16 +95,40 @@ function toNum(s: string): number | undefined {
   return Number.isNaN(n) ? undefined : n;
 }
 
-function buildSet(weightKg?: number | null, reps?: number | null): SessionSet {
+/** Epley 공식 추정 1RM — 1회만 했으면 그 무게 자체가 1RM */
+function estimate1RM(weightKg: number, reps: number): number {
+  if (reps <= 1) return weightKg;
+  return weightKg * (1 + reps / 30);
+}
+
+/** 종목의 e1RM — 완료된 본세트 중 추정치가 가장 높은 세트 기준. 웜업 세트는 전력이 아니라
+ *  1RM 추정에 넣으면 값을 왜곡하므로 제외한다(가벼운 워밍업 세트에 안 낮아지게). */
+function bestE1RM(sets: SessionSet[]): number | null {
+  let best: number | null = null;
+  for (const s of sets) {
+    if (!s.done || s.setType === 'WARMUP') continue;
+    const w = toNum(s.weightKg);
+    const r = toNum(s.reps);
+    if (w == null || r == null || w <= 0 || r <= 0) continue;
+    const e = estimate1RM(w, r);
+    if (best == null || e > best) best = e;
+  }
+  return best;
+}
+
+function buildSet(weightKg?: number | null, reps?: number | null, setType?: string | null): SessionSet {
   return {
     weightKg: weightKg != null ? String(weightKg) : '',
     reps: reps != null ? String(reps) : '',
     done: false,
+    setType: setType ?? undefined,
+    rpe: '',
   };
 }
 
 /** 종목의 직전 수행 기록으로 세트 배열을 채운다 — 세트별 실제 기록(entries)이 있으면 그 값을,
- *  없으면 직전 종목 평균값을 기본값으로 쓴다. 이미 체크된 세트는 건드리지 않는다. */
+ *  없으면 직전 종목 평균값을 기본값으로 쓴다. 이미 체크된 세트는 건드리지 않는다.
+ *  RPE는 종목 평균값이 따로 없어(주관적 체감치라 평균 낼 이유가 없다) 세트별 기록만 프리필한다. */
 function applyPrefill(sets: SessionSet[], perf: ExerciseLastPerformance): SessionSet[] {
   return sets.map((s, i) => {
     if (s.done) return s;
@@ -106,6 +139,7 @@ function applyPrefill(sets: SessionSet[], perf: ExerciseLastPerformance): Sessio
       ...s,
       weightKg: weightKg != null ? String(weightKg) : s.weightKg,
       reps: reps != null ? String(reps) : s.reps,
+      rpe: entry?.rpe != null ? String(entry.rpe) : s.rpe,
     };
   });
 }
@@ -151,7 +185,7 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
       // 없으면 지금처럼 종목 단위 값으로 목표 세트수만큼 균등 분배한다.
       sets:
         e.sets && e.sets.length > 0
-          ? e.sets.map((s) => buildSet(s.weightKg, s.reps))
+          ? e.sets.map((s) => buildSet(s.weightKg, s.reps, s.setType))
           : Array.from({ length: Math.max(1, e.targetSets ?? 3) }, () => buildSet(e.weightKg, e.reps)),
     })),
   );
@@ -159,6 +193,13 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
   const [restSeconds, setRestSeconds] = useState(90);
   const [rest, setRest] = useState(0); // 남은 휴식 초
   const [saving, setSaving] = useState(false);
+
+  // 세션 경과 시간 — 화면 진입 시부터 1초씩 누적(상단 요약바 "운동 시간 N분"에 쓰인다)
+  const [elapsedSec, setElapsedSec] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setElapsedSec((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   /*
    * 커플 음성 응원 — 애인이 녹음해둔 클립. 휴식 타이머는 setInterval 클로저 안에서
@@ -220,6 +261,10 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
     muscleGroup: string;
     equipment?: string | null;
     exerciseCatalogId: number;
+    // 자극 부위 탐색(카탈로그 응답)에서는 바로 오지만, 루틴 사전 지정 대체 종목에는 아직 없다 —
+    // 그 경우 undefined 로 넘어와 일단 TIP 카드를 비워두고(아래 배치 조회 effect가 채우진 않음,
+    // ⇄ 로 한 번 더 바꾸거나 다음 세션부터 채워짐), 잘못된 이전 종목의 TIP이 남지 않게만 한다.
+    tip?: string | null;
   }) => {
     const targetKey = substituteFor?.key;
     if (!targetKey) return;
@@ -233,6 +278,7 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
               muscleGroup: candidate.muscleGroup,
               equipment: candidate.equipment ?? undefined,
               exerciseCatalogId: candidate.exerciseCatalogId,
+              tip: candidate.tip ?? undefined,
             }
           : x,
       ),
@@ -261,6 +307,7 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
       muscleGroup: candidate.muscleGroup,
       equipment: candidate.equipment,
       exerciseCatalogId: candidate.id,
+      tip: candidate.tip,
     });
 
   /** 루틴 작성 시 미리 지정해둔 대체 종목(④) 교체 — 탐색 없이 바로 적용 */
@@ -295,6 +342,29 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 세션 시작 시 종목들의 TIP(자세 큐)을 이름으로 한 번에 배치 조회해 카드로 채운다.
+  // 커스텀 종목(카탈로그에 없는 이름)은 응답에 안 잡히므로 자연히 TIP 카드가 안 뜬다.
+  useEffect(() => {
+    const names = Array.from(new Set((route.params?.exercises ?? []).map((e) => e.name)));
+    if (names.length === 0) return;
+    workoutApi
+      .exerciseCatalog(undefined, names)
+      .then((list) => {
+        if (list.length === 0) return;
+        const byName = new Map(list.map((c) => [c.name, c.tip]));
+        setExercises((prev) =>
+          prev.map((e) => {
+            const tip = byName.get(e.name);
+            return tip ? { ...e, tip } : e;
+          }),
+        );
+      })
+      .catch(() => {
+        // TIP 도 프리필처럼 편의 기능 — 실패해도 카드만 안 뜰 뿐 세션 진행엔 지장 없다.
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // 휴식 타이머 — rest>0 이면 1초씩 감소
   const restRef = useRef(rest);
   restRef.current = rest;
@@ -317,6 +387,16 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
 
   const totalSets = exercises.reduce((n, e) => n + e.sets.length, 0);
   const doneSets = exercises.reduce((n, e) => n + e.sets.filter((s) => s.done).length, 0);
+  // 총 볼륨(kg) — 완료된 세트만 합산(무게 × 횟수). 체크 전 세트는 아직 실제로 든 게 아니라 제외.
+  const totalVolumeKg = exercises.reduce(
+    (sum, e) =>
+      sum +
+      e.sets.reduce((s, set) => {
+        if (!set.done) return s;
+        return s + (toNum(set.weightKg) ?? 0) * (toNum(set.reps) ?? 0);
+      }, 0),
+    0,
+  );
 
   const toggleSet = (exKey: string, idx: number) => {
     haptics.light();
@@ -331,7 +411,7 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
     );
   };
 
-  const updateSetField = (exKey: string, idx: number, field: 'weightKg' | 'reps', value: string) =>
+  const updateSetField = (exKey: string, idx: number, field: 'weightKg' | 'reps' | 'rpe', value: string) =>
     setExercises((prev) =>
       prev.map((e) => {
         if (e.key !== exKey) return e;
@@ -344,9 +424,13 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
     setExercises((prev) =>
       prev.map((e) => {
         if (e.key !== exKey) return e;
-        // 새 세트는 직전 세트 값을 기본으로 이어받는다 — 매번 다시 입력할 필요 없게.
+        // 새 세트는 직전 세트 무게·횟수를 기본으로 이어받는다 — 매번 다시 입력할 필요 없게.
+        // RPE는 세트마다 체감이 다른 주관적 값이라 이어받지 않고 비워둔다.
         const last = e.sets[e.sets.length - 1];
-        return { ...e, sets: [...e.sets, { weightKg: last?.weightKg ?? '', reps: last?.reps ?? '', done: false }] };
+        return {
+          ...e,
+          sets: [...e.sets, { weightKg: last?.weightKg ?? '', reps: last?.reps ?? '', done: false, rpe: '' }],
+        };
       }),
     );
 
@@ -402,10 +486,12 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
           // 세트별 실제 입력값 — 프리필 그대로면 지난 기록과 같은 값, 수정했으면 그 값이 그대로 남는다.
           entries: e.sets.map((s, idx) => {
             const w = toNum(s.weightKg);
+            const r = toNum(s.rpe);
             return {
               setNo: idx + 1,
               weightKg: w != null ? String(w) : null,
               reps: toNum(s.reps) ?? null,
+              rpe: r != null ? String(r) : null,
               completed: s.done,
             };
           }),
@@ -551,6 +637,28 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
+      {/* 상단 요약바 — 운동 중 실시간으로 누적되는 경과 시간·총 볼륨·완료 세트 수 */}
+      <View style={styles.summaryBar}>
+        <Text style={styles.summaryTime}>⏱ 운동 시간 {Math.floor(elapsedSec / 60)}분</Text>
+        <View style={styles.summaryStats}>
+          <View style={styles.summaryStatItem}>
+            <Text style={styles.summaryStatValue}>
+              {formatNumber(Math.round(totalVolumeKg))}
+              <Text style={styles.summaryStatUnit}> kg</Text>
+            </Text>
+            <Text style={styles.summaryStatLabel}>총 볼륨</Text>
+          </View>
+          <View style={styles.summaryStatDivider} />
+          <View style={styles.summaryStatItem}>
+            <Text style={styles.summaryStatValue}>
+              {doneSets}
+              <Text style={styles.summaryStatUnit}> 세트</Text>
+            </Text>
+            <Text style={styles.summaryStatLabel}>완료</Text>
+          </View>
+        </View>
+      </View>
+
       {/* 진행 헤더 */}
       <View style={styles.progressBar}>
         <Text style={styles.progressText}>
@@ -577,6 +685,7 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
         contentContainerStyle={styles.list}
         renderItem={({ item: e, drag, isActive }: RenderItemParams<SessionExercise>) => {
           const done = e.sets.filter((s) => s.done).length;
+          const e1rm = bestE1RM(e.sets);
           return (
             <ScaleDecorator>
               <View style={[styles.exCard, isActive && styles.exCardActive]}>
@@ -597,19 +706,41 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
                 <Text style={styles.exMeta}>
                   {e.category}
                   {e.muscleGroup ? ` · ${e.muscleGroup}` : ''} · {done}/{e.sets.length} 세트
+                  {/* e1RM(추정 1RM) — 완료한 세트가 있어야 계산 가능. 워밍업만 하고 본세트 전이면 아직 안 뜬다 */}
+                  {e1rm != null ? ` · e1RM ${formatWeight(e1rm)}` : ''}
                 </Text>
+
+                {/* TIP 카드 — 카탈로그에 있는 종목만(커스텀 종목/아직 못 불러왔으면 안 뜬다) */}
+                {e.tip ? (
+                  <View style={styles.tipCard}>
+                    <View style={styles.tipBadge}>
+                      <Text style={styles.tipBadgeText}>TIP</Text>
+                    </View>
+                    <Text style={styles.tipText}>{e.tip}</Text>
+                  </View>
+                ) : null}
 
                 <View style={styles.setColHeader}>
                   <Text style={styles.setColHeaderIndex} />
                   <Text style={styles.setColHeaderText}>무게(kg)</Text>
                   <Text style={styles.setColHeaderX} />
                   <Text style={styles.setColHeaderText}>횟수</Text>
+                  <Text style={styles.setColHeaderRpe}>RPE</Text>
                   <Text style={styles.setColHeaderCheck} />
                 </View>
                 <View style={styles.setRows}>
                   {e.sets.map((s, i) => (
                     <View key={i} style={styles.setRow}>
-                      <Text style={styles.setRowIndex}>{i + 1}</Text>
+                      <View style={styles.setRowIndexCol}>
+                        <Text style={styles.setRowIndex}>{i + 1}</Text>
+                        {/* 루틴에서 이 세트를 웜업으로 지정해뒀으면 배지로 표시 — 무게를 낮춰 가볍게
+                            푸는 세트임을 실제 운동 중에도 한눈에 구분할 수 있게 */}
+                        {s.setType === 'WARMUP' ? (
+                          <View style={styles.warmupBadge}>
+                            <Text style={styles.warmupBadgeText}>웜업</Text>
+                          </View>
+                        ) : null}
+                      </View>
                       <TextInput
                         style={[styles.setInput, s.done && styles.setInputDone]}
                         value={s.weightKg}
@@ -626,6 +757,18 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
                         onChangeText={(v) => updateSetField(e.key, i, 'reps', v)}
                         keyboardType="number-pad"
                         placeholder="회"
+                        placeholderTextColor={colors.textTertiary}
+                        editable={!s.done}
+                      />
+                      {/* RPE(자각 강도) — 직접 입력. 직전 기록이 있으면 프리필된다(applyPrefill).
+                          무게·횟수와 마찬가지로 완료 체크 후에는 잠긴다(updateSetField가 done인
+                          세트는 막는다) — 다시 고치려면 체크를 풀어야 한다. */}
+                      <TextInput
+                        style={[styles.setRpeInput, s.done && styles.setInputDone]}
+                        value={s.rpe}
+                        onChangeText={(v) => updateSetField(e.key, i, 'rpe', v)}
+                        keyboardType="decimal-pad"
+                        placeholder="-"
                         placeholderTextColor={colors.textTertiary}
                         editable={!s.done}
                       />
@@ -823,6 +966,24 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
 
 const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
+  summaryBar: {
+    backgroundColor: colors.primaryDark,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
+  },
+  summaryTime: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: fontSize.caption,
+    fontWeight: '700',
+    marginBottom: spacing.xs,
+  },
+  summaryStats: { flexDirection: 'row', alignItems: 'center' },
+  summaryStatItem: { marginRight: spacing.lg },
+  summaryStatValue: { color: colors.white, fontSize: fontSize.title, fontWeight: '800' },
+  summaryStatUnit: { fontSize: fontSize.body, fontWeight: '700' },
+  summaryStatLabel: { color: 'rgba(255,255,255,0.7)', fontSize: fontSize.caption, marginTop: 2 },
+  summaryStatDivider: { width: StyleSheet.hairlineWidth, height: 28, backgroundColor: 'rgba(255,255,255,0.25)', marginRight: spacing.lg },
   progressBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -863,19 +1024,48 @@ const styles = themedStyles((colors) => ({
   exSwap: { fontSize: fontSize.body, color: colors.primary, fontWeight: '800' },
   exRemove: { fontSize: fontSize.body, color: colors.textMuted, fontWeight: '700' },
   exMeta: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
+  tipCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.xs,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.md,
+    padding: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  tipBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: radius.sm,
+    backgroundColor: colors.primaryBg,
+  },
+  tipBadgeText: { fontSize: 10, fontWeight: '800', color: colors.primary },
+  tipText: { flex: 1, fontSize: fontSize.caption, color: colors.textSecondary, lineHeight: 18 },
   setColHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
     marginTop: spacing.md,
   },
-  setColHeaderIndex: { width: 20 },
+  setColHeaderIndex: { width: 34 },
   setColHeaderText: { flex: 1, fontSize: fontSize.caption, color: colors.textMuted, textAlign: 'center' },
   setColHeaderX: { width: 12 },
+  setColHeaderRpe: { width: 40, fontSize: fontSize.caption, color: colors.textMuted, textAlign: 'center' },
   setColHeaderCheck: { width: 40 },
   setRows: { gap: spacing.xs, marginTop: spacing.xs },
   setRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  setRowIndex: { width: 20, textAlign: 'center', fontSize: fontSize.caption, fontWeight: '800', color: colors.textSecondary },
+  // 인덱스 숫자 + (있으면) 웜업 배지를 세로로 쌓는 칼럼 — 헤더의 setColHeaderIndex 와 너비를 맞춘다
+  setRowIndexCol: { width: 34, alignItems: 'center', gap: 2 },
+  setRowIndex: { textAlign: 'center', fontSize: fontSize.caption, fontWeight: '800', color: colors.textSecondary },
+  warmupBadge: {
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceAlt,
+  },
+  warmupBadgeText: { fontSize: 9, fontWeight: '700', color: colors.textMuted },
   setInput: {
     flex: 1,
     height: 40,
@@ -890,6 +1080,19 @@ const styles = themedStyles((colors) => ({
   },
   setInputDone: { backgroundColor: colors.surface, color: colors.textSecondary },
   setRowX: { width: 12, textAlign: 'center', fontSize: fontSize.caption, color: colors.textMuted, fontWeight: '700' },
+  // 무게·횟수 입력(setInput)과 같은 패턴이지만 flex:1이 아니라 고정 너비 — "1~10" 두 자리면 충분해서
+  setRpeInput: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceAlt,
+    textAlign: 'center',
+    fontSize: fontSize.caption,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
   setCheck: {
     width: 40,
     height: 40,

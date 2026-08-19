@@ -10,9 +10,10 @@ public record WorkoutSetEntryResponse(
         Integer setNo,
         BigDecimal weightKg,
         Integer reps,
+        BigDecimal rpe,
         boolean completed
 ) {
     public static WorkoutSetEntryResponse of(WorkoutSetEntry e) {
-        return new WorkoutSetEntryResponse(e.getId(), e.getSetNo(), e.getWeightKg(), e.getReps(), e.isCompleted());
+        return new WorkoutSetEntryResponse(e.getId(), e.getSetNo(), e.getWeightKg(), e.getReps(), e.getRpe(), e.isCompleted());
     }
 }

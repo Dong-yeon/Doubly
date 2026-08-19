@@ -81,11 +81,13 @@ export const workoutApi = {
   copyRoutine: (id: number) =>
     unwrap(apiClient.post<ApiResponse<WorkoutRoutine>>(`/workout/routines/${id}/copy`)),
 
-  // 종목 카탈로그 — 자극 부위 필터 시 대체 종목 후보, 생략 시 전체(자동완성)
-  exerciseCatalog: (muscleGroup?: string) =>
+  // 종목 카탈로그 — 자극 부위 필터 시 대체 종목 후보, 생략 시 전체(자동완성).
+  // names 를 넘기면 그 이름들만 정확히 매칭해 내려준다(muscleGroup 보다 우선) — 세션 화면이
+  // 진행 중인 종목들의 TIP(자세 큐)을 한 번에 배치 조회할 때 쓴다.
+  exerciseCatalog: (muscleGroup?: string, names?: string[]) =>
     unwrap(
       apiClient.get<ApiResponse<ExerciseCatalogItem[]>>('/workout/exercise-catalog', {
-        params: { muscleGroup },
+        params: { muscleGroup, names: names && names.length > 0 ? names.join(',') : undefined },
       }),
     ),
 
