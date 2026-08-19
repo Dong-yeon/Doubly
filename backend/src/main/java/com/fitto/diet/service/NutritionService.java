@@ -20,6 +20,7 @@ import com.fitto.trip.domain.Trip;
 import com.fitto.trip.repository.TripRepository;
 import com.fitto.user.domain.User;
 import com.fitto.user.repository.UserRepository;
+import com.fitto.common.time.KstClock;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -65,7 +66,7 @@ public class NutritionService {
 
     public NutritionSummaryResponse today(Long userId) {
         NutritionGoal goal = goalRepository.findById(userId).orElse(null);
-        List<Meal> meals = mealRepository.findByUserIdAndMealDateOrderByIdAsc(userId, LocalDate.now());
+        List<Meal> meals = mealRepository.findByUserIdAndMealDateOrderByIdAsc(userId, KstClock.today());
         int cal = meals.stream().mapToInt(m -> nz(m.getCalories())).sum();
         int carbs = meals.stream().mapToInt(m -> nz(m.getCarbs())).sum();
         int protein = meals.stream().mapToInt(m -> nz(m.getProtein())).sum();
@@ -142,7 +143,7 @@ public class NutritionService {
         return relationRepository.findByUserAndTypeAndStatus(userId, RelationType.COUPLE, RelationStatus.ACTIVE)
                 .stream().findFirst()
                 .flatMap(couple -> {
-                    LocalDate today = LocalDate.now();
+                    LocalDate today = KstClock.today();
                     return tripRepository
                             .findFirstByCoupleIdAndTravelModeEnabledTrueAndStartDateLessThanEqualAndEndDateGreaterThanEqualOrderByIdAsc(
                                     couple.getId(), today, today);

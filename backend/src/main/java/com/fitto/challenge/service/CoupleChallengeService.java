@@ -10,6 +10,7 @@ import com.fitto.common.event.CoupleEventPublisher;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.notification.NotificationService;
+import com.fitto.common.time.KstClock;
 import com.fitto.diet.repository.MealRepository;
 import com.fitto.relation.domain.Relation;
 import com.fitto.relation.domain.RelationStatus;
@@ -102,7 +103,7 @@ public class CoupleChallengeService {
         int myCount = count(c.getType(), userId, c.getStartDate(), c.getEndDate());
         int partnerCount = partnerId != null ? count(c.getType(), partnerId, c.getStartDate(), c.getEndDate()) : 0;
         String leader = myCount == partnerCount ? "TIE" : (myCount > partnerCount ? "ME" : "PARTNER");
-        boolean ended = LocalDate.now().isAfter(c.getEndDate());
+        boolean ended = KstClock.today().isAfter(c.getEndDate());
         String partnerName = partnerId != null ? userName(partnerId) : null;
         return new ChallengeResponse(c.getId(), c.getType(), c.getType().label(), c.getTitle(),
                 c.getStartDate(), c.getEndDate(), c.getStake(), myCount, partnerCount, partnerName,

@@ -12,6 +12,7 @@ import com.fitto.common.event.CoupleEventPublisher;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.notification.NotificationService;
+import com.fitto.common.time.KstClock;
 import com.fitto.relation.domain.Relation;
 import com.fitto.relation.domain.RelationStatus;
 import com.fitto.relation.domain.RelationType;
@@ -56,7 +57,7 @@ public class CalendarService {
     public List<EventResponse> monthEvents(Long userId, int year, int month) {
         Relation couple = requireCouple(userId);
         YearMonth ym = YearMonth.of(year, month);
-        LocalDate today = LocalDate.now();
+        LocalDate today = KstClock.today();
 
         List<EventResponse> result = new ArrayList<>();
         eventRepository.findByCoupleIdAndRepeatYearlyFalseAndEventDateBetween(
@@ -75,7 +76,7 @@ public class CalendarService {
     /** 다가오는 일정 — 오늘 포함, 발생일 순 상위 limit 건. */
     public List<EventResponse> upcoming(Long userId, int limit) {
         Relation couple = requireCouple(userId);
-        LocalDate today = LocalDate.now();
+        LocalDate today = KstClock.today();
         return eventRepository.findByCoupleId(couple.getId()).stream()
                 .map(e -> EventResponse.of(e, e.nextOccurrence(today), today))
                 .filter(r -> r.dday() >= 0)
@@ -101,7 +102,7 @@ public class CalendarService {
         notificationService.notify(couple.partnerOf(userId),
                 "커플 캘린더", "새 일정이 등록됐어요: " + req.title());
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.CALENDAR);
-        return EventResponse.of(event, event.nextOccurrence(LocalDate.now()), LocalDate.now());
+        return EventResponse.of(event, event.nextOccurrence(KstClock.today()), KstClock.today());
     }
 
     @Transactional
@@ -110,7 +111,7 @@ public class CalendarService {
         CalendarEvent event = requireEvent(eventId, couple);
         event.update(req.title(), req.eventDate(), req.eventType(), req.repeatYearly(), req.memo());
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.CALENDAR);
-        return EventResponse.of(event, event.nextOccurrence(LocalDate.now()), LocalDate.now());
+        return EventResponse.of(event, event.nextOccurrence(KstClock.today()), KstClock.today());
     }
 
     @Transactional

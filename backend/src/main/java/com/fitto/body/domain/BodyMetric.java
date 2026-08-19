@@ -7,6 +7,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import com.fitto.common.time.KstClock;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -61,7 +62,7 @@ public class BodyMetric {
     private BodyMetric(Long userId, LocalDate measuredDate, BigDecimal weightKg, BigDecimal bodyFatPct,
                        BigDecimal waistCm, String photoUrl, String memo) {
         this.userId = userId;
-        this.measuredDate = measuredDate != null ? measuredDate : LocalDate.now();
+        this.measuredDate = measuredDate != null ? measuredDate : KstClock.today();
         this.weightKg = weightKg;
         this.bodyFatPct = bodyFatPct;
         this.waistCm = waistCm;

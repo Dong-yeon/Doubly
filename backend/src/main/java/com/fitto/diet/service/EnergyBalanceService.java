@@ -7,6 +7,7 @@ import com.fitto.user.domain.User;
 import com.fitto.user.repository.UserRepository;
 import com.fitto.workout.domain.Workout;
 import com.fitto.workout.repository.WorkoutRepository;
+import com.fitto.common.time.KstClock;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -60,7 +61,7 @@ public class EnergyBalanceService {
 
     /** 오늘 운동 기록의 총 시간(분)을 가정 MET 로 환산 — kcal = MET × 3.5 × 체중(kg) / 200 × 시간(분) */
     private int todayExerciseCalories(Long userId, BigDecimal weightKg) {
-        List<Workout> todayWorkouts = workoutRepository.findByUserIdAndWorkoutDateOrderByIdDesc(userId, LocalDate.now());
+        List<Workout> todayWorkouts = workoutRepository.findByUserIdAndWorkoutDateOrderByIdDesc(userId, KstClock.today());
         int totalMin = todayWorkouts.stream()
                 .mapToInt(w -> w.getTotalDurationMin() != null ? w.getTotalDurationMin() : 0)
                 .sum();

@@ -3,6 +3,7 @@ package com.fitto.diet.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fitto.common.ai.GeminiClient;
 import com.fitto.common.plan.Feature;
+import com.fitto.common.time.KstClock;
 import com.fitto.diet.domain.Meal;
 import com.fitto.diet.dto.DietCoachResponse;
 import com.fitto.diet.repository.MealRepository;
@@ -52,7 +53,7 @@ public class DietCoachService {
     }
 
     public DietCoachResponse coach(Long userId) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = KstClock.today();
         List<Meal> meals = mealRepository.findByUserIdAndMealDateBetween(userId, today.minusDays(6), today);
         if (meals.size() < MIN_MEALS) {
             return DietCoachResponse.empty();
