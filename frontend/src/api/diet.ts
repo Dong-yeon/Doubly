@@ -56,6 +56,8 @@ export interface SaveMealPayload {
   sugar?: number;
   sodium?: number;
   fiber?: number;
+  /** "데이트" 칩 — true 면 커플 상대방에게도 같은 끼니가 칼로리 절반으로 자동 등록된다 */
+  sharedWithPartner?: boolean;
 }
 
 export interface NutritionGoalPayload {

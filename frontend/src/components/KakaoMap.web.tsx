@@ -44,10 +44,12 @@ const DEFAULT_LAT = 37.5665;
 const DEFAULT_LNG = 126.978;
 
 // 색상 지정 핀 — 원형 SVG 를 데이터 URI 로 인라인 렌더링 (kakaoMapHtml.ts 의 네이티브 버전과 동일 규칙)
-function pinImage(kakao: any, color: string) {
-  const svg =
-    `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28">` +
-    `<circle cx="14" cy="14" r="10" fill="${color}" stroke="#ffffff" stroke-width="3"/></svg>`;
+// filled=false 면 속을 비우고 테두리만 색을 입힌다 — 색(예: 식단 구분)과는 별개 축(예: 방문 여부)을 표현할 때 쓴다
+function pinImage(kakao: any, color: string, filled: boolean) {
+  const circle = filled
+    ? `<circle cx="14" cy="14" r="10" fill="${color}" stroke="#ffffff" stroke-width="3"/>`
+    : `<circle cx="14" cy="14" r="10" fill="#ffffff" stroke="${color}" stroke-width="3"/>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28">${circle}</svg>`;
   const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
   return new kakao.maps.MarkerImage(url, new kakao.maps.Size(28, 28), {
     offset: new kakao.maps.Point(14, 14),
@@ -107,7 +109,7 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
       const pos = new kakao.maps.LatLng(m.lat, m.lng);
       bounds.extend(pos);
       const markerOpts: any = { map, position: pos, title: m.title };
-      if (m.color) markerOpts.image = pinImage(kakao, m.color);
+      if (m.color) markerOpts.image = pinImage(kakao, m.color, m.filled !== false);
       const marker = new kakao.maps.Marker(markerOpts);
       kakao.maps.event.addListener(marker, 'click', () => cbRef.current.onMarkerPress?.(m.id));
       const label = new kakao.maps.CustomOverlay({

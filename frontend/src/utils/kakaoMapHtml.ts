@@ -11,6 +11,8 @@ export interface KakaoMapMarker {
   title: string;
   /** 커스텀 핀 색상(hex) — 미지정 시 카카오 기본(빨강) 핀. 예: 클린식/치팅데이 구분 */
   color?: string;
+  /** color 지정 시에만 의미 있음 — false 면 속이 빈 테두리 핀(예: 위시리스트). 미지정 시 채워진 핀(기존 동작 유지) */
+  filled?: boolean;
 }
 
 /** 카카오 플레이스 키워드 검색 결과 1건 */
@@ -132,9 +134,12 @@ kakao.maps.load(function () {
   });
 
   // 색상 지정 핀 — 원형 SVG 를 데이터 URI 로 인라인 렌더링 (외부 이미지 호스팅 불필요)
-  function pinImage(color) {
-    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28">' +
-      '<circle cx="14" cy="14" r="10" fill="' + color + '" stroke="#ffffff" stroke-width="3"/></svg>';
+  // filled=false 면 속을 비우고 테두리만 색을 입힌다 — 색(예: 식단 구분)과는 별개 축(예: 방문 여부)을 표현할 때 쓴다
+  function pinImage(color, filled) {
+    var circle = filled
+      ? '<circle cx="14" cy="14" r="10" fill="' + color + '" stroke="#ffffff" stroke-width="3"/>'
+      : '<circle cx="14" cy="14" r="10" fill="#ffffff" stroke="' + color + '" stroke-width="3"/>';
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28">' + circle + '</svg>';
     var url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
     return new kakao.maps.MarkerImage(url, new kakao.maps.Size(28, 28), {
       offset: new kakao.maps.Point(14, 14)
@@ -159,7 +164,7 @@ kakao.maps.load(function () {
       var pos = new kakao.maps.LatLng(m.lat, m.lng);
       bounds.extend(pos);
       var markerOpts = { map: map, position: pos, title: m.title };
-      if (m.color) { markerOpts.image = pinImage(m.color); }
+      if (m.color) { markerOpts.image = pinImage(m.color, m.filled !== false); }
       var marker = new kakao.maps.Marker(markerOpts);
       kakao.maps.event.addListener(marker, 'click', function () { post({ type: 'marker', id: m.id }); });
       drawn.push(marker);

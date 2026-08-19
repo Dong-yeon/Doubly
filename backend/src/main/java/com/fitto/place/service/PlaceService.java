@@ -104,6 +104,11 @@ public class PlaceService {
                 .toList();
     }
 
+    /** 장소 단건 조회 — 상세 화면 정보 카드 */
+    public PlaceResponse get(Long userId, Long placeId) {
+        return withSummary(getCouplePlace(userId, placeId));
+    }
+
     /** 장소 수정 — 커플 둘 다 가능 (PLACE-03) */
     @Transactional
     public PlaceResponse update(Long userId, Long placeId, UpdatePlaceRequest request) {

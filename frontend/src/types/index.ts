@@ -482,6 +482,8 @@ export interface Meal {
   /** 항목 없이 합계만 기록한 건(레거시 포함)은 빈 배열 — 그때는 memo 로 보여준다 */
   items?: MealItem[];
   goals?: MealGoalHighlight[];
+  /** 데이트 식단(같이 먹기)으로 등록됐는지 — true 면 커플 상대방에게도 짝이 있다 */
+  sharedWithPartner?: boolean;
   createdAt: string;
 }
 

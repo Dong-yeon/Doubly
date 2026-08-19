@@ -205,7 +205,7 @@ export function DietScreen({ navigation }: Props) {
       });
       setNutrition(updated);
       haptics.success();
-      toast.success('목표를 저장했어요 ');
+      toast.success('목표를 저장했어요');
       setNutModal(false);
     } catch (e) {
       toast.error(getErrorMessage(e, '목표 저장에 실패했어요.'));
@@ -233,7 +233,7 @@ export function DietScreen({ navigation }: Props) {
       setTProtein(String(res.targetProtein));
       setTFat(String(res.targetFat));
       haptics.success();
-      toast.success('계산했어요. 확인 후 저장해주세요 ');
+      toast.success('계산했어요. 확인 후 저장해주세요');
       setWizardModal(false);
     } catch (e) {
       toast.error(getErrorMessage(e, '계산에 실패했어요.'));
@@ -260,7 +260,7 @@ export function DietScreen({ navigation }: Props) {
       const res = await fastingApi.start(planType, hours);
       setFasting(res);
       haptics.success();
-      toast.success(`${res.planLabel} 단식을 시작했어요 ⏱️`);
+      toast.success(`${res.planLabel} 단식을 시작했어요`);
       setFastingModal(false);
     } catch (e) {
       toast.error(getErrorMessage(e, '단식 시작에 실패했어요.'));
@@ -279,7 +279,7 @@ export function DietScreen({ navigation }: Props) {
             const res = await fastingApi.end();
             setFasting({ ...res, active: false });
             haptics.success();
-            toast.success(res.achieved ? '목표 시간을 채웠어요! 🎉' : '단식을 종료했어요.');
+            toast.success(res.achieved ? '목표 시간을 채웠어요!' : '단식을 종료했어요.');
           } catch (e) {
             toast.error(getErrorMessage(e, '단식 종료에 실패했어요.'));
           }
@@ -301,7 +301,7 @@ export function DietScreen({ navigation }: Props) {
     try {
       await setDietGoal(days);
       haptics.success();
-      toast.success(`커플 식단 목표: 주 ${days}일 `);
+      toast.success(`커플 식단 목표: 주 ${days}일`);
       setGoalModal(false);
       refreshExtras();
     } catch (e) {
@@ -339,7 +339,7 @@ export function DietScreen({ navigation }: Props) {
     try {
       const copied = await dietApi.copyFromYesterday();
       haptics.success();
-      toast.success(`어제 식단 ${copied.length}개를 불러왔어요 `);
+      toast.success(`어제 식단 ${copied.length}개를 불러왔어요`);
       fetchToday();
       fetchHistory();
     } catch (e) {
@@ -386,23 +386,36 @@ export function DietScreen({ navigation }: Props) {
         onRefresh={() => {
           fetchToday();
           fetchHistory();
+          refreshExtras();
         }}
         onEndReachedThreshold={0.3}
         onEndReached={loadMoreHistory}
         ListHeaderComponent={
           <View>
+            {/* 식단 스트릭 — 운동 탭과 같은 표시 형식(연속/함께/최고), 같은 위치(최상단) */}
+            <View style={styles.streakRow}>
+              <Text style={styles.streakText}>연속 {myStreak?.currentCount ?? 0}일</Text>
+              {goal?.connected ? (
+                <Text style={styles.streakText}>함께 {coupleStreak?.currentCount ?? 0}일</Text>
+              ) : null}
+              <Text style={styles.streakMax}>최고 {myStreak?.maxCount ?? 0}일</Text>
+            </View>
+
             {/* 오늘 영양 목표 대시보드 */}
             {nutrition ? (
-              <Pressable style={styles.nutCard} onPress={openNutModal}>
+              <View style={styles.nutCard}>
                 <View style={styles.nutHeader}>
                   <Text style={styles.nutTitle}>오늘 영양</Text>
-                  <Text style={styles.nutSet}>
-                    {nutrition.targetCalories ? '목표 수정' : '목표 설정 ›'}
-                  </Text>
+                  {/* 카드 전체를 누르면 정보를 읽으려다 실수로 모달이 열렸다 — 버튼만 탭 영역으로 좁힌다 */}
+                  <TouchableOpacity onPress={openNutModal} hitSlop={8} accessibilityRole="button">
+                    <Text style={styles.nutSet}>
+                      {nutrition.targetCalories ? '목표 수정' : '목표 설정 ›'}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
                 {nutrition.travelMode ? (
                   <Text style={styles.travelModeBadge}>
-                    ✈️ 여행 모드 중 · {nutrition.travelModeTripTitle} — 목표는 잠깐 쉬어가요
+                    여행 모드 중 · {nutrition.travelModeTripTitle} — 목표는 잠깐 쉬어가요
                   </Text>
                 ) : null}
                 <View style={styles.nutMain}>
@@ -451,99 +464,95 @@ export function DietScreen({ navigation }: Props) {
                     </Text>
                   )}
                 </View>
-              </Pressable>
-            ) : null}
-
-            {/* 물 섭취 트래커 — 원가 없는 단순 카운터라 무료로 열어둔다(YAZIO 도 물은 무료) */}
-            {water ? (
-              <View style={styles.waterCard}>
-                <View style={styles.waterHeader}>
-                  <Text style={styles.waterTitle}>💧 물 {formatNumber(water.consumedMl)}ml</Text>
-                  <Text style={styles.waterTarget}>목표 {formatNumber(water.targetMl)}ml</Text>
-                </View>
-                <View style={styles.nutTrack}>
-                  <View
-                    style={[
-                      styles.nutFill,
-                      { width: `${Math.min(100, (water.consumedMl / water.targetMl) * 100)}%` },
-                    ]}
-                  />
-                </View>
-                {water.coupleConnected ? (
-                  <Text style={styles.waterPartner}>
-                    상대 {formatNumber(water.partnerConsumedMl ?? 0)}ml
-                  </Text>
-                ) : null}
-                <View style={styles.waterButtonRow}>
-                  <TouchableOpacity style={styles.waterBtn} onPress={() => onAddWater(250)}>
-                    <Text style={styles.waterBtnText}>＋250ml</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.waterBtn} onPress={() => onAddWater(500)}>
-                    <Text style={styles.waterBtnText}>＋500ml</Text>
-                  </TouchableOpacity>
-                  {water.consumedMl > 0 ? (
-                    <TouchableOpacity style={styles.waterUndoBtn} onPress={() => onAddWater(-250)}>
-                      <Text style={styles.waterUndoText}>−250ml</Text>
-                    </TouchableOpacity>
-                  ) : null}
-                </View>
               </View>
             ) : null}
 
-            {/* 간헐적 단식 타이머 — 세션이 서버에 살아있어 커플 상대방 진행 상태도 함께 보여준다 */}
-            <View style={styles.fastingCard}>
-              {fasting?.active ? (
-                <>
+            {/* 물 + 간헐적 단식 트래커 — 둘 다 "오늘 몸 상태"를 재는 같은 성격의 트래커라
+                예전엔 카드가 따로였던 걸 한 카드로 묶어 스크롤 공간을 줄인다. */}
+            <View style={styles.trackerCard}>
+              {water ? (
+                <View style={styles.trackerSection}>
                   <View style={styles.waterHeader}>
-                    <Text style={styles.waterTitle}>⏱️ {fasting.planLabel} 단식 중</Text>
-                    <Text style={styles.waterTarget}>목표 {fasting.targetHours}시간</Text>
+                    <Text style={styles.waterTitle}>물 {formatNumber(water.consumedMl)}ml</Text>
+                    <Text style={styles.waterTarget}>목표 {formatNumber(water.targetMl)}ml</Text>
                   </View>
                   <View style={styles.nutTrack}>
                     <View
                       style={[
                         styles.nutFill,
-                        fasting.achieved && styles.nutFillOver,
-                        { width: `${Math.min(100, fasting.progressPct ?? 0)}%` },
+                        { width: `${Math.min(100, (water.consumedMl / water.targetMl) * 100)}%` },
                       ]}
                     />
                   </View>
-                  <Text style={styles.fastingElapsed}>
-                    {formatHM(liveElapsedMin)} 경과
-                    {fasting.achieved ? ' · 목표 달성! 🎉' : ` · ${formatHM((fasting.targetHours ?? 0) * 60 - liveElapsedMin)} 남음`}
-                  </Text>
-                  {partnerFasting?.connected && partnerFasting.active ? (
+                  {water.coupleConnected ? (
                     <Text style={styles.waterPartner}>
-                      상대 {partnerFasting.partnerName} · {formatHM(partnerFasting.elapsedMin ?? 0)} 경과
+                      상대 {formatNumber(water.partnerConsumedMl ?? 0)}ml
                     </Text>
                   ) : null}
-                  <TouchableOpacity style={styles.waterUndoBtn} onPress={onEndFasting}>
-                    <Text style={styles.waterUndoText}>단식 종료</Text>
-                  </TouchableOpacity>
-                </>
-              ) : (
-                <>
-                  <View style={styles.waterHeader}>
-                    <Text style={styles.waterTitle}>⏱️ 간헐적 단식</Text>
+                  <View style={styles.waterButtonRow}>
+                    <TouchableOpacity style={styles.waterBtn} onPress={() => onAddWater(250)}>
+                      <Text style={styles.waterBtnText}>＋250ml</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.waterBtn} onPress={() => onAddWater(500)}>
+                      <Text style={styles.waterBtnText}>＋500ml</Text>
+                    </TouchableOpacity>
+                    {water.consumedMl > 0 ? (
+                      <TouchableOpacity style={styles.waterUndoBtn} onPress={() => onAddWater(-250)}>
+                        <Text style={styles.waterUndoText}>−250ml</Text>
+                      </TouchableOpacity>
+                    ) : null}
                   </View>
-                  {partnerFasting?.connected && partnerFasting.active ? (
-                    <Text style={styles.waterPartner}>
-                      상대 {partnerFasting.partnerName}님은 지금 단식 중 · {formatHM(partnerFasting.elapsedMin ?? 0)} 경과
-                    </Text>
-                  ) : null}
-                  <TouchableOpacity style={styles.waterBtn} onPress={() => setFastingModal(true)}>
-                    <Text style={styles.waterBtnText}>단식 시작하기</Text>
-                  </TouchableOpacity>
-                </>
-              )}
-            </View>
-
-            {/* 식단 스트릭 */}
-            <View style={styles.streakRow}>
-              <Text style={styles.streakText}>연속 {myStreak?.currentCount ?? 0}일</Text>
-              {goal?.connected ? (
-                <Text style={styles.streakText}>함께 {coupleStreak?.currentCount ?? 0}일</Text>
+                </View>
               ) : null}
-              <Text style={styles.streakMax}>최고 {myStreak?.maxCount ?? 0}일</Text>
+
+              {water ? <View style={styles.trackerDivider} /> : null}
+
+              {/* 간헐적 단식 — 세션이 서버에 살아있어 커플 상대방 진행 상태도 함께 보여준다 */}
+              <View style={styles.trackerSection}>
+                {fasting?.active ? (
+                  <>
+                    <View style={styles.waterHeader}>
+                      <Text style={styles.waterTitle}>{fasting.planLabel} 단식 중</Text>
+                      <Text style={styles.waterTarget}>목표 {fasting.targetHours}시간</Text>
+                    </View>
+                    <View style={styles.nutTrack}>
+                      <View
+                        style={[
+                          styles.nutFill,
+                          fasting.achieved && styles.nutFillOver,
+                          { width: `${Math.min(100, fasting.progressPct ?? 0)}%` },
+                        ]}
+                      />
+                    </View>
+                    <Text style={styles.fastingElapsed}>
+                      {formatHM(liveElapsedMin)} 경과
+                      {fasting.achieved ? ' · 목표 달성!' : ` · ${formatHM((fasting.targetHours ?? 0) * 60 - liveElapsedMin)} 남음`}
+                    </Text>
+                    {partnerFasting?.connected && partnerFasting.active ? (
+                      <Text style={styles.waterPartner}>
+                        상대 {partnerFasting.partnerName} · {formatHM(partnerFasting.elapsedMin ?? 0)} 경과
+                      </Text>
+                    ) : null}
+                    <TouchableOpacity style={styles.waterUndoBtn} onPress={onEndFasting}>
+                      <Text style={styles.waterUndoText}>단식 종료</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <>
+                    <View style={styles.waterHeader}>
+                      <Text style={styles.waterTitle}>간헐적 단식</Text>
+                    </View>
+                    {partnerFasting?.connected && partnerFasting.active ? (
+                      <Text style={styles.waterPartner}>
+                        상대 {partnerFasting.partnerName}님은 지금 단식 중 · {formatHM(partnerFasting.elapsedMin ?? 0)} 경과
+                      </Text>
+                    ) : null}
+                    <TouchableOpacity style={styles.waterBtn} onPress={() => setFastingModal(true)}>
+                      <Text style={styles.waterBtnText}>단식 시작하기</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
             </View>
 
             {/* 커플 공동 목표 */}
@@ -555,7 +564,7 @@ export function DietScreen({ navigation }: Props) {
                       <Text style={styles.goalTitle}>
                         이번 주 함께 식단 {goal.bothDays}/{goal.goalDays}일
                       </Text>
-                      {goal.achieved ? <Text style={styles.goalBadge}>달성! </Text> : null}
+                      {goal.achieved ? <Text style={styles.goalBadge}>달성!</Text> : null}
                     </View>
                     <View style={styles.goalTrack}>
                       <View
@@ -601,7 +610,7 @@ export function DietScreen({ navigation }: Props) {
                   ))
                 ) : (
                   <View style={styles.emptyToday}>
-                    <Text style={styles.emptyText}>오늘 식단 기록이 아직 없어요 </Text>
+                    <Text style={styles.emptyText}>오늘 식단 기록이 아직 없어요</Text>
                   </View>
                 )}
                 <Text style={[styles.sectionTitle, styles.historyTitle]}>히스토리</Text>
@@ -628,7 +637,7 @@ export function DietScreen({ navigation }: Props) {
       <Modal visible={goalModal} transparent animationType="fade" onRequestClose={() => setGoalModal(false)}>
         <Pressable style={styles.modalBackdrop} onPress={() => setGoalModal(false)}>
           <Pressable style={styles.modalCard} onPress={() => {}}>
-            <Text style={styles.modalTitle}>커플 식단 목표 </Text>
+            <Text style={styles.modalTitle}>커플 식단 목표</Text>
             <Text style={styles.modalDesc}>이번 주에 둘 다 식단을 기록할 목표 일수를 정해요.</Text>
             <View style={styles.dayRow}>
               {[1, 2, 3, 4, 5, 6, 7].map((d) => (
@@ -654,7 +663,7 @@ export function DietScreen({ navigation }: Props) {
             <View style={styles.nutModalHeader}>
               <Text style={styles.modalTitle}>하루 영양 목표</Text>
               <TouchableOpacity onPress={() => setWizardModal(true)}>
-                <Text style={styles.wizardLink}>🧮 자동 계산</Text>
+                <Text style={styles.wizardLink}>자동 계산</Text>
               </TouchableOpacity>
             </View>
             <Text style={styles.modalDesc}>비워두면 해당 항목은 목표 없이 섭취량만 표시돼요.</Text>
@@ -882,16 +891,17 @@ const styles = themedStyles((colors) => ({
   wizardChipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
   wizardChipText: { fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '600' },
   wizardChipTextActive: { color: onColor(colors.accent), fontWeight: '800' },
-  // 물 섭취 트래커
-  waterCard: {
+  // 물 + 간헐적 단식 트래커 — 한 카드 안에서 구획만 나눈다(물 섹션은 물 데이터가 있을 때만 노출)
+  trackerCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.md,
     marginBottom: spacing.md,
-    gap: spacing.sm,
   },
+  trackerSection: { gap: spacing.sm },
+  trackerDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginVertical: spacing.sm },
   waterHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   waterTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
   waterTarget: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
@@ -917,16 +927,6 @@ const styles = themedStyles((colors) => ({
     justifyContent: 'center',
   },
   waterUndoText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary },
-  // 간헐적 단식 타이머 — waterCard 와 같은 톤이라 waterHeader/waterTitle 등 스타일을 그대로 공유한다
-  fastingCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-    gap: spacing.sm,
-  },
   fastingElapsed: { fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '700' },
   customFastingRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-end' },
   customFastingInput: { flex: 1 },
@@ -954,7 +954,8 @@ const styles = themedStyles((colors) => ({
   goalTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
   goalBadge: { fontSize: fontSize.caption, fontWeight: '800', color: colors.success },
   goalSet: { fontSize: fontSize.caption, fontWeight: '700', color: colors.primary },
-  goalTrack: { height: 10, borderRadius: radius.pill, backgroundColor: colors.white, overflow: 'hidden' },
+  // colors.white 는 양 테마 모두 순백 고정이라 다크 카드 위에서 번쩍였다 — nutTrack 과 같은 surfaceAlt 로
+  goalTrack: { height: 10, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
   goalFill: { height: '100%', borderRadius: radius.pill, backgroundColor: colors.accent },
   goalSub: { fontSize: fontSize.caption, color: colors.textSecondary },
   todayHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },

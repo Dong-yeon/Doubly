@@ -44,6 +44,12 @@ export function MealCard({ meal, onPress, onLongPress, showDate }: Props) {
         <View style={styles.typeWrap}>
           <MaterialCommunityIcons name={MEAL_ICON[meal.mealType]} size={18} color={colors.textSecondary} />
           <Text style={styles.type}>{meal.mealTypeLabel}</Text>
+          {/* 데이트 식단(같이 먹기) — 상대방에게도 절반 칼로리로 짝이 등록된 기록 */}
+          {meal.sharedWithPartner ? (
+            <View style={styles.dateBadge}>
+              <Text style={styles.dateBadgeText}>🍽️ 데이트</Text>
+            </View>
+          ) : null}
         </View>
         <View style={styles.headerRight}>
           {meal.calories ? <Text style={styles.cal}>{formatKcal(meal.calories)}</Text> : null}
@@ -96,6 +102,13 @@ const styles = themedStyles((colors) => ({
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   typeWrap: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   type: { fontSize: fontSize.subtitle, fontWeight: '700', color: colors.textPrimary },
+  dateBadge: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primaryBg,
+  },
+  dateBadgeText: { fontSize: 10, fontWeight: '800', color: colors.primary },
   cal: { fontSize: fontSize.caption, color: colors.accent, fontWeight: '800' },
   date: { fontSize: fontSize.caption, color: colors.textSecondary },
   photo: {
