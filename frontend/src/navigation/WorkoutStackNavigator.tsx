@@ -1,4 +1,4 @@
-/** 운동 탭 내부 스택 — 운동 + 식단(세그먼트 통합) */
+/** 운동 탭 내부 스택 — 운동 전용 (식단은 DietStackNavigator 로 분리됨) */
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { WorkoutStackParamList } from './types';
@@ -14,11 +14,6 @@ import { WorkoutRoutineTemplatesScreen } from '../screens/workout/WorkoutRoutine
 import { VoiceClipsScreen } from '../screens/workout/VoiceClipsScreen';
 import { BodyMetricScreen } from '../screens/workout/BodyMetricScreen';
 import { ChallengeScreen } from '../screens/workout/ChallengeScreen';
-import { DietScreen } from '../screens/diet/DietScreen';
-import { DietRecordScreen } from '../screens/diet/DietRecordScreen';
-import { DietCalendarScreen } from '../screens/diet/DietCalendarScreen';
-import { DietStatsScreen } from '../screens/diet/DietStatsScreen';
-import { BarcodeScanScreen } from '../screens/diet/BarcodeScanScreen';
 import { stackScreenOptions, modalOptions } from './headerOptions';
 
 const Stack = createNativeStackNavigator<WorkoutStackParamList>();
@@ -76,20 +71,6 @@ export function WorkoutStackNavigator() {
       />
       <Stack.Screen name="BodyMetric" component={BodyMetricScreen} options={{ title: '몸 변화' }} />
       <Stack.Screen name="Challenge" component={ChallengeScreen} options={{ title: '커플 대결' }} />
-      {/* 식단 (구 식단 탭) — WorkoutMain 세그먼트로 토글, 하위 화면은 이 스택에 배치 */}
-      <Stack.Screen name="DietMain" component={DietScreen} options={{ headerShown: false }} />
-      <Stack.Screen
-        name="DietRecord"
-        component={DietRecordScreen}
-        options={{ title: '식단 기록', ...modalOptions }}
-      />
-      <Stack.Screen name="DietCalendar" component={DietCalendarScreen} options={{ title: '식단 캘린더' }} />
-      <Stack.Screen name="DietStats" component={DietStatsScreen} options={{ title: '식단 통계' }} />
-      <Stack.Screen
-        name="BarcodeScan"
-        component={BarcodeScanScreen}
-        options={{ title: '바코드 스캔', ...modalOptions }}
-      />
     </Stack.Navigator>
   );
 }

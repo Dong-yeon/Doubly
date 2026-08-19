@@ -8,7 +8,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { WorkoutStackParamList } from '../../navigation/types';
+import type { DietStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { foodDbApi } from '../../api/foodDb';
 import { getErrorMessage } from '../../utils/error';
@@ -17,7 +17,7 @@ import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 
-type Props = NativeStackScreenProps<WorkoutStackParamList, 'BarcodeScan'>;
+type Props = NativeStackScreenProps<DietStackParamList, 'BarcodeScan'>;
 
 // 국내 포장식품은 대부분 EAN-13. UPC 는 수입식품 대비
 const BARCODE_TYPES = ['ean13', 'ean8', 'upc_a', 'upc_e'] as const;

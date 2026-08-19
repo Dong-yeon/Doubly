@@ -16,7 +16,7 @@ import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { WorkoutStackParamList } from '../../navigation/types';
+import type { DietStackParamList } from '../../navigation/types';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
@@ -40,7 +40,7 @@ import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { AnalyzedFood, FavoriteFood, MealType, RecentFood } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 
-type Props = NativeStackScreenProps<WorkoutStackParamList, 'DietRecord'>;
+type Props = NativeStackScreenProps<DietStackParamList, 'DietRecord'>;
 
 const MEAL_TYPES: { value: MealType; label: string }[] = [
   { value: 'BREAKFAST', label: '아침' },

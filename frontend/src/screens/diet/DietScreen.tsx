@@ -13,11 +13,10 @@ import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { WorkoutStackParamList } from '../../navigation/types';
+import type { DietStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
 import { MealCard } from '../../components/MealCard';
-import { WorkoutDietSegment } from '../../components/WorkoutDietSegment';
 import { QuickLinkChips } from '../../components/QuickLinkChips';
 import { EmptyState } from '../../components/EmptyState';
 import { AiInsightButton } from '../../components/AiInsightButton';
@@ -104,7 +103,7 @@ function renderLetter(l: WeeklyLetter) {
   return <Text style={styles.aiLetter}>{l.letter}</Text>;
 }
 
-type Props = NativeStackScreenProps<WorkoutStackParamList, 'DietMain'>;
+type Props = NativeStackScreenProps<DietStackParamList, 'DietMain'>;
 
 export function DietScreen({ navigation }: Props) {
   const { today, history, loading, loadingMore, fetchToday, fetchHistory, loadMoreHistory, remove } =
@@ -352,9 +351,8 @@ export function DietScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <WorkoutDietSegment active="diet" />
       {/* 운동 탭과 같은 QuickLinkChips — 항목이 2개뿐이라도 같은 컴포넌트를 써서
-          정렬·톤이 세그먼트를 넘나들며 흔들리지 않게 한다. */}
+          정렬·톤이 탭을 넘나들며 흔들리지 않게 한다. */}
       <QuickLinkChips
         links={[
           { icon: 'chart-bar', label: '통계', onPress: () => navigation.navigate('DietStats') },

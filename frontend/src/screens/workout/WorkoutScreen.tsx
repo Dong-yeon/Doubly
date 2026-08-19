@@ -13,7 +13,6 @@ import { WorkoutCard } from '../../components/WorkoutCard';
 import { EmptyState } from '../../components/EmptyState';
 import { useWorkoutStore } from '../../store/workoutStore';
 import { useRelationStore } from '../../store/relationStore';
-import { WorkoutDietSegment } from '../../components/WorkoutDietSegment';
 import { QuickLinkChips } from '../../components/QuickLinkChips';
 import { streakApi } from '../../api/streak';
 import { getErrorMessage } from '../../utils/error';
@@ -68,7 +67,6 @@ export function WorkoutScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <WorkoutDietSegment active="workout" />
       {/* 아이콘 칩 6개 — 식단 탭과 같은 QuickLinkChips 를 써서 톤을 맞춘다.
           좁은 화면에선 넘치는 만큼 가로 스크롤되고, 오른쪽 페이드가 그 힌트를 준다. */}
       <QuickLinkChips

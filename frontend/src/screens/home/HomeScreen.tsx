@@ -353,11 +353,19 @@ export function HomeScreen({ navigation }: Props) {
                 // 그 화면은 바로 아래 바로가기에도 있어 버튼 기능이 겹쳤다.
                 // 열을 누르면 그 사람 기록만 거른 화면으로 간다.
                 onPressPerson={(who) => navigation.navigate('FeedTimeline', { who })}
-                // 운동/식단 칩은 그 종류의 기록 화면(건강 탭)으로 간다.
-                // 두 화면 모두 로그인한 나의 기록만 보여준다(상대 것을 보는 화면은
-                // 앱에 따로 없다) — 어느 열의 칩을 눌러도 목적지는 같다.
+                /*
+                 * 운동/식단 칩 — 예전엔 중앙 FAB 로 "탭 안 옮기고 바로 기록"이 가능했다.
+                 * FAB 를 없앤 대신, 이 칩이 그 역할을 대신하도록 목적지를 완료 여부로 가른다:
+                 * 오늘 안 했으면 기록 화면으로 바로(FAB 와 동급 속도), 이미 했으면 그 탭의
+                 * 메인 화면으로(확인·수정). 어느 열(나/상대)을 눌렀는지는 지금처럼 무시한다 —
+                 * 두 화면 모두 로그인한 나의 기록만 보여준다(상대 것을 보는 화면은 앱에 따로
+                 * 없다). 그래서 분기 기준도 항상 "나"의 완료 여부(myWorkoutDone/myMealDone)지,
+                 * 눌린 열의 done 이 아니다.
+                 */
                 onPressToday={(_who, kind) =>
-                  navigation.navigate('Workout', { screen: kind === 'workout' ? 'WorkoutMain' : 'DietMain' })
+                  kind === 'workout'
+                    ? navigation.navigate('Workout', { screen: myWorkoutDone ? 'WorkoutMain' : 'WorkoutRecord' })
+                    : navigation.navigate('Diet', { screen: myMealDone ? 'DietMain' : 'DietRecord' })
                 }
               />
             </View>
@@ -409,7 +417,7 @@ export function HomeScreen({ navigation }: Props) {
               {(
                 [
                   { icon: 'dumbbell', label: '운동 기록하기', desc: '오늘 운동을 남기면 스트릭이 시작돼요', go: () => navigation.navigate('Workout', { screen: 'WorkoutRecord' }) },
-                  { icon: 'silverware-fork-knife', label: '식단 기록하기', desc: '사진이나 글로 적으면 AI가 칼로리를 계산해요', go: () => navigation.navigate('Workout', { screen: 'DietRecord' }) },
+                  { icon: 'silverware-fork-knife', label: '식단 기록하기', desc: '사진이나 글로 적으면 AI가 칼로리를 계산해요', go: () => navigation.navigate('Diet', { screen: 'DietRecord' }) },
                   { icon: 'map-marker-plus-outline', label: '가고 싶은 맛집 저장', desc: '나중에 둘이 함께 갈 곳을 미리 담아두세요', go: () => navigation.navigate('Place', { screen: 'PlaceAdd' }) },
                 ] as const
               ).map((a, i, arr) => (
