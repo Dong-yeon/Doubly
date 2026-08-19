@@ -2,6 +2,7 @@ package com.fitto.trip.service;
 
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
+import com.fitto.common.time.KstClock;
 import com.fitto.feed.repository.FeedPostRepository;
 import com.fitto.place.domain.PlaceStatus;
 import com.fitto.place.repository.PlaceRepository;
@@ -98,7 +99,7 @@ public class TripRecapService {
     }
 
     private String status(Trip trip) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = KstClock.today();
         if (today.isBefore(trip.getStartDate())) {
             return TripRecapResponse.UPCOMING;
         }

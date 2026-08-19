@@ -9,6 +9,7 @@ import com.fitto.common.event.CoupleEventPublisher;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.notification.NotificationService;
+import com.fitto.common.time.KstClock;
 import com.fitto.place.domain.Place;
 import com.fitto.place.dto.PlaceResponse;
 import com.fitto.place.repository.PlaceRepository;
@@ -121,7 +122,7 @@ public class TripService {
         validateDates(request.startDate(), request.endDate());
         Relation couple = activeCouple(userId);
         planGuard.requireCapacity(userId, Feature.TRIP_ACTIVE,
-                tripRepository.countByCoupleIdAndEndDateGreaterThanEqual(couple.getId(), LocalDate.now()));
+                tripRepository.countByCoupleIdAndEndDateGreaterThanEqual(couple.getId(), KstClock.today()));
         Trip trip = Trip.builder()
                 .coupleId(couple.getId())
                 .title(request.title().trim())

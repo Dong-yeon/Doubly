@@ -16,6 +16,7 @@ import com.fitto.relation.domain.RelationType;
 import com.fitto.relation.repository.RelationRepository;
 import com.fitto.user.domain.User;
 import com.fitto.user.repository.UserRepository;
+import com.fitto.common.time.KstClock;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -90,7 +91,7 @@ public class DailyQuestionService {
     public DailyQuestionResponse today(Long userId) {
         Relation couple = activeCouple(userId);
         Long partnerId = couple.partnerOf(userId);
-        LocalDate today = LocalDate.now();
+        LocalDate today = KstClock.today();
         String question = questionFor(today);
 
         String myAnswer = answerRepository
@@ -110,7 +111,7 @@ public class DailyQuestionService {
     @Transactional
     public DailyQuestionResponse answer(Long userId, AnswerRequest req) {
         Relation couple = activeCouple(userId);
-        LocalDate today = LocalDate.now();
+        LocalDate today = KstClock.today();
         String question = questionFor(today);
 
         DailyAnswer existing = answerRepository

@@ -10,6 +10,7 @@ import com.fitto.relation.domain.RelationStatus;
 import com.fitto.relation.domain.RelationType;
 import com.fitto.relation.repository.RelationRepository;
 import com.fitto.user.repository.UserRepository;
+import com.fitto.common.time.KstClock;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,7 +43,7 @@ public class WaterService {
     }
 
     public WaterSummaryResponse today(Long userId) {
-        int consumed = waterLogRepository.findByUserIdAndLogDate(userId, LocalDate.now())
+        int consumed = waterLogRepository.findByUserIdAndLogDate(userId, KstClock.today())
                 .map(WaterLog::getAmountMl).orElse(0);
         int target = nutritionGoalRepository.findById(userId)
                 .map(NutritionGoal::getTargetWaterMl)
@@ -58,14 +59,14 @@ public class WaterService {
             return new WaterSummaryResponse(consumed, target, false, null, null);
         }
         String partnerName = userRepository.findById(partnerId).map(u -> u.getName()).orElse(null);
-        int partnerConsumed = waterLogRepository.findByUserIdAndLogDate(partnerId, LocalDate.now())
+        int partnerConsumed = waterLogRepository.findByUserIdAndLogDate(partnerId, KstClock.today())
                 .map(WaterLog::getAmountMl).orElse(0);
         return new WaterSummaryResponse(consumed, target, true, partnerName, partnerConsumed);
     }
 
     @Transactional
     public WaterSummaryResponse add(Long userId, int deltaMl) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = KstClock.today();
         WaterLog log = waterLogRepository.findByUserIdAndLogDate(userId, today)
                 .orElseGet(() -> waterLogRepository.save(
                         WaterLog.builder().userId(userId).logDate(today).amountMl(0).build()));
