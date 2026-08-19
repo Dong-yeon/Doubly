@@ -288,6 +288,9 @@ const styles = themedStyles((colors) => ({
   addRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.md, marginBottom: spacing.sm },
   addInput: {
     flex: 1,
+    // 웹 필수 — <input> 내재 최소 폭 탓에 flex:1 이어도 안 줄어든다
+    // (WorkoutSessionScreen.setInput 과 같은 문제). 네이티브에는 영향 없다.
+    minWidth: 0,
     backgroundColor: colors.surface,
     borderRadius: radius.md,
     borderWidth: 1,

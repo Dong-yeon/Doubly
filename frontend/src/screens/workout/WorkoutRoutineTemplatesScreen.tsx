@@ -1,7 +1,7 @@
 /** ⑤ 검증된 분할 템플릿 — 루틴 짜기가 막막한 초보를 위한 시스템 제공 루틴.
  *  "복사해서 담기"로 내 루틴 목록에 그대로 가져간 뒤 자유롭게 편집해서 쓴다. */
 import React, { useCallback, useState } from 'react';
-import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -12,6 +12,7 @@ import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
+import { themedStyles } from '../../theme/themedStyles';
 import type { WorkoutRoutine } from '../../types';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'WorkoutRoutineTemplates'>;
@@ -94,7 +95,8 @@ export function WorkoutRoutineTemplatesScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+// themedStyles — StyleSheet.create 는 모듈 로드 시 색이 굳어 실행 중 테마 전환이 반영되지 않았다
+const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   list: { padding: spacing.lg, paddingBottom: 40 },
   headerHint: { fontSize: fontSize.caption, color: colors.textSecondary, marginBottom: spacing.md, lineHeight: 18 },
@@ -117,4 +119,4 @@ const styles = StyleSheet.create({
   copyBtnText: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '800' },
   summary: { fontSize: fontSize.caption, color: colors.textPrimary, marginTop: spacing.xs, lineHeight: 18 },
   count: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xs },
-});
+}));

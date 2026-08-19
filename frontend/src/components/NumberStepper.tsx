@@ -122,6 +122,9 @@ const styles = themedStyles((colors) => ({
   pressed: { opacity: 0.5 },
   input: {
     flex: 1,
+    // 웹 필수 — <input> 내재 최소 폭(~170px) 탓에 flex:1 이어도 안 줄어든다
+    // (WorkoutSessionScreen.setInput 과 같은 문제). 네이티브에는 영향 없다.
+    minWidth: 0,
     height: 44,
     fontSize: fontSize.subtitle,
     fontWeight: '700',

@@ -675,6 +675,9 @@ const styles = themedStyles((colors) => ({
   setRowIndex: { width: 20, textAlign: 'center', fontSize: fontSize.caption, fontWeight: '800', color: colors.textSecondary },
   setInput: {
     flex: 1,
+    // 웹 필수 — <input> 내재 최소 폭(~170px) 탓에 flex:1 이어도 안 줄어들어
+    // 무게·횟수 두 칸이 화면 밖으로 넘쳤다 (WorkoutSessionScreen.setInput 과 동일).
+    minWidth: 0,
     height: 40,
     borderRadius: radius.md,
     borderWidth: 1,

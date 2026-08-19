@@ -4,9 +4,10 @@
  * (참고: frontend/src/screens/diet/DietScreen.tsx 의 NutritionBar 는 칼로리/탄수/지방용으로 유지)
  */
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { colors, fontSize, spacing } from '../constants/theme';
+import { themedStyles } from '../theme/themedStyles';
 
 interface Props {
   consumed: number;
@@ -61,7 +62,8 @@ export function ProteinRing({ consumed, target, size = 96, strokeWidth = 10 }: P
   );
 }
 
-const styles = StyleSheet.create({
+// themedStyles — StyleSheet.create 는 모듈 로드 시 색이 굳어 실행 중 테마 전환이 반영되지 않았다
+const styles = themedStyles((colors) => ({
   wrap: { alignItems: 'center', gap: spacing.xs },
   centerText: {
     position: 'absolute',
@@ -71,4 +73,4 @@ const styles = StyleSheet.create({
   value: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
   target: { fontSize: 10, color: colors.textSecondary, fontWeight: '600' },
   label: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
-});
+}));
