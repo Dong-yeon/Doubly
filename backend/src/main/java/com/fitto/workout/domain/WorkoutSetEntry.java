@@ -42,14 +42,19 @@ public class WorkoutSetEntry {
 
     private Integer reps;
 
+    /** 자각 강도(RPE) — 1.0~10.0, 보통 0.5 단위로 기록. 세트를 몇 회 더 할 수 있었는지의 체감치. */
+    @Column(precision = 3, scale = 1)
+    private BigDecimal rpe;
+
     @Column(nullable = false)
     private boolean completed;
 
     @Builder
-    private WorkoutSetEntry(Integer setNo, BigDecimal weightKg, Integer reps, boolean completed) {
+    private WorkoutSetEntry(Integer setNo, BigDecimal weightKg, Integer reps, BigDecimal rpe, boolean completed) {
         this.setNo = setNo;
         this.weightKg = weightKg;
         this.reps = reps;
+        this.rpe = rpe;
         this.completed = completed;
     }
 

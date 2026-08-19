@@ -103,6 +103,7 @@ public class WorkoutService {
                             .setNo(entry.setNo())
                             .weightKg(entry.weightKg())
                             .reps(entry.reps())
+                            .rpe(entry.rpe())
                             .completed(entry.completed())
                             .build());
                 }
