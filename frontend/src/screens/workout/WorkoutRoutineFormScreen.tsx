@@ -17,6 +17,7 @@ import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { confirmDiscard } from '../../utils/discardGuard';
+import { recommendRestSeconds } from '../../utils/restRecommend';
 import { WEEK_DAYS } from '../../utils/date';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
@@ -169,6 +170,13 @@ export function WorkoutRoutineFormScreen({ navigation, route }: Props) {
     return catalog.filter((c) => c.name.includes(q)).slice(0, MAX_NAME_SUGGESTIONS);
   }, [fName, fCatalog, catalog]);
 
+  // 지금 입력된 반복 횟수 기준 휴식 시간 추천 — 세트마다 다르게 설정 중이면 그 종목의 목표가
+  // 균일하지 않을 수 있어(램프업 등) 이땐 추천을 보여주지 않는다(간단 입력일 때만 유효)
+  const restRecommendation = useMemo(
+    () => (fSetRows.length === 0 ? recommendRestSeconds(Number(fReps)) : null),
+    [fReps, fSetRows.length],
+  );
+
   const onChangeName = (t: string) => {
     setFName(t);
     // 골라둔 카탈로그와 이름이 달라지면(직접 고쳐 씀) 연결을 해제 — 다른 종목인데
@@ -196,6 +204,10 @@ export function WorkoutRoutineFormScreen({ navigation, route }: Props) {
     setFSets(String(preset.sets));
     setFReps(String(preset.reps));
     setFPresetHint(preset.hint ?? null);
+    // 프리셋은 "알아서 채워줘"라는 의도가 명확한 액션이라, 반복수에 맞는 휴식 시간도
+    // 같이 채운다(사용자가 직접 반복수를 타이핑할 때는 힌트만 보여주고 건드리지 않는다).
+    const rec = recommendRestSeconds(preset.reps);
+    if (rec) setFRestSeconds(rec.seconds);
     if (preset.label === '탑세트+백오프') {
       // 이 프리셋만 세트마다 무게가 달라 균등 그리드로 표현할 수 없다 — 곧바로 세트별 편집을 연다
       setFSetRows([
@@ -531,6 +543,14 @@ export function WorkoutRoutineFormScreen({ navigation, route }: Props) {
                 )}
 
                 <Text style={styles.modalLabel}>휴식 시간 (종목별 지정, 생략 시 세션 기본값)</Text>
+                {/* 목표 횟수 기반 추천 — 고중량·저반복(근력)은 길게, 고반복(근지구력)은 짧게.
+                    자동 적용은 프리셋 탭에서만 하고(위 applyPreset), 여기선 힌트 + 칩 표시만 해서
+                    직접 타이핑한 값을 마음대로 덮어쓰지 않는다. */}
+                {restRecommendation ? (
+                  <Text style={styles.restRecommendHint}>
+                    💡 {fReps}회면 {restRecommendation.seconds}s 추천 — {restRecommendation.reason}
+                  </Text>
+                ) : null}
                 <View style={styles.groupRow}>
                   {REST_PRESETS.map((r) => (
                     <TouchableOpacity
@@ -538,7 +558,9 @@ export function WorkoutRoutineFormScreen({ navigation, route }: Props) {
                       style={[styles.catChipSmall, fRestSeconds === r && styles.catChipActive]}
                       onPress={() => setFRestSeconds((prev) => (prev === r ? null : r))}
                     >
-                      <Text style={[styles.catText, fRestSeconds === r && styles.catTextActive]}>{r}s</Text>
+                      <Text style={[styles.catText, fRestSeconds === r && styles.catTextActive]}>
+                        {r}s{restRecommendation?.seconds === r ? ' 💡' : ''}
+                      </Text>
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -646,6 +668,7 @@ const styles = themedStyles((colors) => ({
   },
   presetChipText: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '700' },
   presetHint: { fontSize: fontSize.caption, color: colors.textTertiary, marginTop: spacing.xs },
+  restRecommendHint: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '600', marginBottom: spacing.xs },
   emptyHint: { fontSize: fontSize.caption, color: colors.textSecondary },
 
   // 이름 자동완성 — 카탈로그 종목 후보 칩
