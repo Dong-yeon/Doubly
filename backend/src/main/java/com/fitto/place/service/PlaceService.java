@@ -7,12 +7,15 @@ import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.notification.NotificationService;
 import com.fitto.diet.repository.MealRepository;
 import com.fitto.place.domain.Place;
+import com.fitto.place.domain.PlaceRating;
 import com.fitto.place.domain.PlaceVisit;
 import com.fitto.place.dto.PlaceResponse;
 import com.fitto.place.dto.PlaceVisitResponse;
+import com.fitto.place.dto.RatePlaceRequest;
 import com.fitto.place.dto.RecordVisitRequest;
 import com.fitto.place.dto.SavePlaceRequest;
 import com.fitto.place.dto.UpdatePlaceRequest;
+import com.fitto.place.repository.PlaceRatingRepository;
 import com.fitto.place.repository.PlaceRepository;
 import com.fitto.place.repository.PlaceVisitRepository;
 import com.fitto.place.repository.PlaceVisitRepository.VisitSummary;
@@ -25,6 +28,7 @@ import com.fitto.user.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -40,6 +44,7 @@ public class PlaceService {
 
     private final PlaceRepository placeRepository;
     private final PlaceVisitRepository placeVisitRepository;
+    private final PlaceRatingRepository placeRatingRepository;
     private final RelationRepository relationRepository;
     private final UserRepository userRepository;
     private final MealRepository mealRepository;
@@ -48,6 +53,7 @@ public class PlaceService {
 
     public PlaceService(PlaceRepository placeRepository,
                         PlaceVisitRepository placeVisitRepository,
+                        PlaceRatingRepository placeRatingRepository,
                         RelationRepository relationRepository,
                         UserRepository userRepository,
                         MealRepository mealRepository,
@@ -55,6 +61,7 @@ public class PlaceService {
                         PlanGuard planGuard) {
         this.placeRepository = placeRepository;
         this.placeVisitRepository = placeVisitRepository;
+        this.placeRatingRepository = placeRatingRepository;
         this.relationRepository = relationRepository;
         this.userRepository = userRepository;
         this.mealRepository = mealRepository;
@@ -80,33 +87,39 @@ public class PlaceService {
                 .addedBy(userId)
                 .build();
         placeRepository.save(place);
-        return PlaceResponse.of(place, 0, null, null);
+        return toResponse(place, null, RatingPair.EMPTY, null);
     }
 
-    /** 커플 공유 장소 목록 — 방문 요약 포함 (PLACE-02) */
+    /** 커플 공유 장소 목록 — 방문 요약 + 럽슐랭 평가 + 매거진 카드용 커버 포함 (PLACE-02) */
     public List<PlaceResponse> list(Long userId) {
         Relation couple = activeCouple(userId);
         List<Place> places = placeRepository.findByCoupleIdOrderByIdDesc(couple.getId());
         if (places.isEmpty()) {
             return List.of();
         }
+        List<Long> placeIds = places.stream().map(Place::getId).toList();
         Map<Long, VisitSummary> summaries = placeVisitRepository
-                .summarize(places.stream().map(Place::getId).toList())
+                .summarize(placeIds)
                 .stream()
                 .collect(Collectors.toMap(VisitSummary::getPlaceId, Function.identity()));
+        Map<Long, List<PlaceRating>> ratingsByPlace = placeRatingRepository.findByPlaceIdIn(placeIds)
+                .stream()
+                .collect(Collectors.groupingBy(PlaceRating::getPlaceId));
+        // 장소별 최근 방문순으로 이미 정렬돼 온다(리포지토리 쿼리) — 그룹핑해도 그룹 내 순서는 유지된다
+        Map<Long, List<PlaceVisit>> visitsByPlace = placeVisitRepository
+                .findByPlaceIdInOrderByPlaceIdAscIdDesc(placeIds)
+                .stream()
+                .collect(Collectors.groupingBy(PlaceVisit::getPlaceId));
         return places.stream()
-                .map(p -> {
-                    VisitSummary s = summaries.get(p.getId());
-                    return s == null
-                            ? PlaceResponse.of(p, 0, null, null)
-                            : PlaceResponse.of(p, s.getVisitCount(), s.getAvgRating(), s.getLastVisitedAt());
-                })
+                .map(p -> toResponse(p, summaries.get(p.getId()),
+                        ratingPairOf(ratingsByPlace.getOrDefault(p.getId(), List.of()), userId),
+                        coverOf(visitsByPlace.getOrDefault(p.getId(), List.of()))))
                 .toList();
     }
 
     /** 장소 단건 조회 — 상세 화면 정보 카드 */
     public PlaceResponse get(Long userId, Long placeId) {
-        return withSummary(getCouplePlace(userId, placeId));
+        return withSummary(getCouplePlace(userId, placeId), userId);
     }
 
     /** 장소 수정 — 커플 둘 다 가능 (PLACE-03) */
@@ -115,7 +128,7 @@ public class PlaceService {
         Place place = getCouplePlace(userId, placeId);
         place.update(request.name(), request.address(), request.lat(), request.lng(),
                 request.category(), request.status(), request.dietTag());
-        return withSummary(place);
+        return withSummary(place, userId);
     }
 
     /** 장소 삭제 — 방문 기록도 함께 삭제(DB ON DELETE CASCADE) */
@@ -180,7 +193,127 @@ public class PlaceService {
         placeVisitRepository.delete(visit);
     }
 
+    /**
+     * 럽슐랭 대표 평점 등록/수정 — 장소당 한 사람당 1개만 유지되며 재평가 시 덮어쓴다.
+     * 두 사람 평점이 모두 모이면 등급(tier)을 재산정하고, 새로 등극했을 때만 상대에게 알린다.
+     */
+    @Transactional
+    public PlaceResponse rate(Long userId, Long placeId, RatePlaceRequest request) {
+        Place place = getCouplePlace(userId, placeId);
+
+        PlaceRating mine = placeRatingRepository.findByPlaceIdAndUserId(placeId, userId)
+                .orElse(null);
+        if (mine == null) {
+            mine = PlaceRating.builder()
+                    .placeId(placeId)
+                    .userId(userId)
+                    .rating(request.rating())
+                    .revisitIntent(request.revisitIntent())
+                    .build();
+            placeRatingRepository.save(mine);
+        } else {
+            mine.update(request.rating(), request.revisitIntent());
+        }
+
+        List<PlaceRating> ratings = placeRatingRepository.findByPlaceId(placeId);
+        RatingPair pair = ratingPairOf(ratings, userId);
+
+        int previousTier = place.getLovelichelinTier();
+        int newTier = computeTier(pair.mine(), pair.partner());
+        if (newTier != previousTier) {
+            // certifiedAt 은 "0→양수로 처음 등극한 시각"이다. 1↔2↔3 사이를 오가는 재평가는
+            // 등급이 바뀌어도 새로 등극한 게 아니므로 시각을 갱신하거나 알리지 않는다 —
+            // 그렇지 않으면 3→2로 재평가만 해도 "새로 등극!" 알림이 잘못 나가고 등극일이
+            // 오늘로 밀린다.
+            if (previousTier == 0 && newTier > 0) {
+                place.applyLovelichelinTier(newTier, LocalDateTime.now());
+                Long partnerId = activeCouple(userId).partnerOf(userId);
+                if (partnerId != null) {
+                    notificationService.notify(partnerId, "럽슐랭 " + newTier + "스타 등극! 🎉",
+                            place.getName() + "이(가) 우리 둘의 럽슐랭으로 인증됐어요.");
+                }
+            } else if (newTier == 0) {
+                place.applyLovelichelinTier(0, null);
+            } else {
+                place.applyLovelichelinTier(newTier, place.getLovelichelinCertifiedAt());
+            }
+        }
+
+        VisitSummary s = placeVisitRepository.summarize(List.of(placeId)).stream().findFirst().orElse(null);
+        Cover cover = coverOf(placeVisitRepository.findByPlaceIdOrderByIdDesc(placeId));
+        return toResponse(place, s, pair, cover);
+    }
+
     // ---- helpers ----
+
+    /** 방문 요약·평점·커버를 한 곳에서만 PlaceResponse 로 조립한다 — list/get/update/rate/save 공통 */
+    private PlaceResponse toResponse(Place place, VisitSummary s, RatingPair pair, Cover cover) {
+        return PlaceResponse.of(place,
+                s == null ? 0 : s.getVisitCount(),
+                s == null ? null : s.getAvgRating(),
+                s == null ? null : s.getLastVisitedAt(),
+                pair.mine(), pair.partner(),
+                cover == null ? null : cover.imageUrl(),
+                cover == null ? null : cover.memo());
+    }
+
+    /** 럽슐랭 가이드 매거진 카드 커버 — 사진 있는 가장 최근 방문, 없으면 그냥 가장 최근 방문 */
+    private Cover coverOf(List<PlaceVisit> visitsMostRecentFirst) {
+        if (visitsMostRecentFirst.isEmpty()) {
+            return null;
+        }
+        PlaceVisit withPhoto = visitsMostRecentFirst.stream()
+                .filter(v -> v.getImageUrl() != null)
+                .findFirst()
+                .orElse(visitsMostRecentFirst.get(0));
+        return new Cover(withPhoto.getImageUrl(), withPhoto.getMemo());
+    }
+
+    private record Cover(String imageUrl, String memo) {
+    }
+
+    /**
+     * 럽슐랭 등급 산정 — 둘 다 평가해야 하고, 한쪽이라도 2점 이하면 탈락(0)이다.
+     * 남은 조합은 두 점수 모두 3점 이상이라 평균이 항상 3.0 이상이다.
+     */
+    static int computeTier(Integer my, Integer partner) {
+        if (my == null || partner == null) {
+            return 0;
+        }
+        if (my <= 2 || partner <= 2) {
+            return 0;
+        }
+        double avg = (my + partner) / 2.0;
+        if (avg >= 5.0) {
+            return 3;
+        }
+        if (avg >= 4.0) {
+            return 2;
+        }
+        return 1;
+    }
+
+    /**
+     * 평점 목록에서 나/상대 것을 갈라낸다 — {@link com.fitto.trip.service.TripService}도
+     * 같은 나/상대 분리가 필요해 여기 public static 으로 둬서 재사용한다(패키지가 달라
+     * 인스턴스 주입 없이도 쓸 수 있게).
+     */
+    public static RatingPair ratingPairOf(List<PlaceRating> ratings, Long userId) {
+        Integer mine = null;
+        Integer partner = null;
+        for (PlaceRating r : ratings) {
+            if (userId.equals(r.getUserId())) {
+                mine = r.getRating();
+            } else {
+                partner = r.getRating();
+            }
+        }
+        return new RatingPair(mine, partner);
+    }
+
+    public record RatingPair(Integer mine, Integer partner) {
+        public static final RatingPair EMPTY = new RatingPair(null, null);
+    }
 
     private Relation activeCouple(Long userId) {
         return relationRepository
@@ -199,12 +332,12 @@ public class PlaceService {
         return place;
     }
 
-    private PlaceResponse withSummary(Place place) {
+    private PlaceResponse withSummary(Place place, Long userId) {
         VisitSummary s = placeVisitRepository.summarize(List.of(place.getId()))
                 .stream().findFirst().orElse(null);
-        return s == null
-                ? PlaceResponse.of(place, 0, null, null)
-                : PlaceResponse.of(place, s.getVisitCount(), s.getAvgRating(), s.getLastVisitedAt());
+        RatingPair pair = ratingPairOf(placeRatingRepository.findByPlaceId(place.getId()), userId);
+        Cover cover = coverOf(placeVisitRepository.findByPlaceIdOrderByIdDesc(place.getId()));
+        return toResponse(place, s, pair, cover);
     }
 
     private String userName(Long userId) {

@@ -3,12 +3,15 @@ package com.fitto.place.controller;
 import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
 import com.fitto.place.dto.DateCourseResponse;
+import com.fitto.place.dto.LovelichelinSummaryResponse;
 import com.fitto.place.dto.PlaceResponse;
 import com.fitto.place.dto.PlaceVisitResponse;
+import com.fitto.place.dto.RatePlaceRequest;
 import com.fitto.place.dto.RecordVisitRequest;
 import com.fitto.place.dto.SavePlaceRequest;
 import com.fitto.place.dto.UpdatePlaceRequest;
 import com.fitto.place.service.DateCourseService;
+import com.fitto.place.service.LovelichelinReviewService;
 import com.fitto.place.service.PlaceService;
 import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -32,10 +35,13 @@ public class PlaceController {
 
     private final PlaceService placeService;
     private final DateCourseService dateCourseService;
+    private final LovelichelinReviewService lovelichelinReviewService;
 
-    public PlaceController(PlaceService placeService, DateCourseService dateCourseService) {
+    public PlaceController(PlaceService placeService, DateCourseService dateCourseService,
+                           LovelichelinReviewService lovelichelinReviewService) {
         this.placeService = placeService;
         this.dateCourseService = dateCourseService;
+        this.lovelichelinReviewService = lovelichelinReviewService;
     }
 
     @PostMapping
@@ -55,6 +61,12 @@ public class PlaceController {
         return ApiResponse.success(dateCourseService.recommend(user.id()));
     }
 
+    /** AI 럽슐랭 에디터 총평 — 인증된 장소로 커플 취향 총평 (GET /places/lovelichelin/summary) */
+    @GetMapping("/lovelichelin/summary")
+    public ApiResponse<LovelichelinSummaryResponse> lovelichelinSummary(@AuthenticationPrincipal AuthUser user) {
+        return ApiResponse.success(lovelichelinReviewService.summary(user.id()));
+    }
+
     @GetMapping("/{id}")
     public ApiResponse<PlaceResponse> get(@AuthenticationPrincipal AuthUser user, @PathVariable Long id) {
         return ApiResponse.success(placeService.get(user.id(), id));
@@ -71,6 +83,14 @@ public class PlaceController {
     public ApiResponse<Void> delete(@AuthenticationPrincipal AuthUser user, @PathVariable Long id) {
         placeService.delete(user.id(), id);
         return ApiResponse.success(null, "장소가 삭제되었습니다.");
+    }
+
+    /** 럽슐랭 대표 평점 등록/수정 — 나의 평점을 매기고 등급을 재산정한다 */
+    @PutMapping("/{id}/rating")
+    public ApiResponse<PlaceResponse> rate(@AuthenticationPrincipal AuthUser user,
+                                           @PathVariable Long id,
+                                           @Valid @RequestBody RatePlaceRequest request) {
+        return ApiResponse.success(placeService.rate(user.id(), id, request), "럽슐랭 평가가 저장되었습니다.");
     }
 
     @PostMapping("/{id}/visits")

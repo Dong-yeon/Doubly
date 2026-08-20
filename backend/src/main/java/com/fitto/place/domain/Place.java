@@ -68,6 +68,14 @@ public class Place {
     @Column(name = "trip_id")
     private Long tripId;
 
+    /** 럽슐랭 등급 — 0=후보/일반, 1~3=럽스타. 산정 로직은 PlaceService.computeTier 참고 */
+    @Column(name = "lovelichelin_tier", nullable = false)
+    private Integer lovelichelinTier = 0;
+
+    /** 럽슐랭 등극(0→양수로 전환) 시각 — 재평가로 탈락하면 다시 null */
+    @Column(name = "lovelichelin_certified_at")
+    private LocalDateTime lovelichelinCertifiedAt;
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -106,5 +114,11 @@ public class Place {
     /** 여행에 담기 / 빼기(null) */
     public void assignTrip(Long tripId) {
         this.tripId = tripId;
+    }
+
+    /** 럽슐랭 등급 갱신 — 나/상대 대표 평점이 바뀔 때마다 재산정되어 호출된다 */
+    public void applyLovelichelinTier(int tier, LocalDateTime certifiedAt) {
+        this.lovelichelinTier = tier;
+        this.lovelichelinCertifiedAt = certifiedAt;
     }
 }

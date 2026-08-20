@@ -13,6 +13,8 @@ export interface KakaoMapMarker {
   color?: string;
   /** color 지정 시에만 의미 있음 — false 면 속이 빈 테두리 핀(예: 위시리스트). 미지정 시 채워진 핀(기존 동작 유지) */
   filled?: boolean;
+  /** 럽슐랭 등급(1~3) — 지정하면 핀 우상단에 금색 등급 뱃지가 덧그려진다. 0/미지정 시 없음 */
+  tier?: number;
 }
 
 /** 카카오 플레이스 키워드 검색 결과 1건 */
@@ -134,14 +136,20 @@ kakao.maps.load(function () {
   });
 
   // 색상 지정 핀 — 원형 SVG 를 데이터 URI 로 인라인 렌더링 (외부 이미지 호스팅 불필요)
-  // filled=false 면 속을 비우고 테두리만 색을 입힌다 — 색(예: 식단 구분)과는 별개 축(예: 방문 여부)을 표현할 때 쓴다
-  function pinImage(color, filled) {
+  // filled=false 면 속을 비우고 테두리만 색을 입힌다 — 색(예: 식단 구분)과는 별개 축(예: 방문 여부)을 표현할 때 쓴다.
+  // tier(1~3)가 있으면 우상단에 금색 등급 뱃지를 덧그린다 — 럽슐랭 인증 여부는 또 다른 별개 축이다.
+  // 이미지 캔버스를 32x32 로 늘려도 원의 중심(=지도 좌표 앵커)은 그대로 (14,14) 라 핀 위치는 안 밀린다.
+  function pinImage(color, filled, tier) {
     var circle = filled
       ? '<circle cx="14" cy="14" r="10" fill="' + color + '" stroke="#ffffff" stroke-width="3"/>'
       : '<circle cx="14" cy="14" r="10" fill="#ffffff" stroke="' + color + '" stroke-width="3"/>';
-    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28">' + circle + '</svg>';
+    var badge = tier > 0
+      ? '<circle cx="23" cy="7" r="6.5" fill="#D4A017" stroke="#ffffff" stroke-width="1.5"/>' +
+        '<text x="23" y="10" font-size="8" font-weight="700" text-anchor="middle" fill="#ffffff">' + tier + '</text>'
+      : '';
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32">' + circle + badge + '</svg>';
     var url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
-    return new kakao.maps.MarkerImage(url, new kakao.maps.Size(28, 28), {
+    return new kakao.maps.MarkerImage(url, new kakao.maps.Size(32, 32), {
       offset: new kakao.maps.Point(14, 14)
     });
   }
@@ -164,7 +172,7 @@ kakao.maps.load(function () {
       var pos = new kakao.maps.LatLng(m.lat, m.lng);
       bounds.extend(pos);
       var markerOpts = { map: map, position: pos, title: m.title };
-      if (m.color) { markerOpts.image = pinImage(m.color, m.filled !== false); }
+      if (m.color) { markerOpts.image = pinImage(m.color, m.filled !== false, m.tier || 0); }
       var marker = new kakao.maps.Marker(markerOpts);
       kakao.maps.event.addListener(marker, 'click', function () { post({ type: 'marker', id: m.id }); });
       drawn.push(marker);

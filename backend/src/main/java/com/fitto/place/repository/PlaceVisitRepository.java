@@ -11,6 +11,14 @@ public interface PlaceVisitRepository extends JpaRepository<PlaceVisit, Long> {
 
     List<PlaceVisit> findByPlaceIdOrderByIdDesc(Long placeId);
 
+    /**
+     * 럽슐랭 가이드 매거진 카드의 커버 사진/한줄평용 배치 조회 — 장소별로 최근 방문순.
+     * place_id 로 in 절 하나만 날리고 "장소별 최근 방문(사진 있으면 그걸, 없으면 가장 최근
+     * 것)" 선택은 서비스 레이어에서 그룹핑해 고른다(장소별 사진 유무가 갈려 SQL 한 줄로
+     * 뽑기 애매함) — {@link #summarize} 와 같은 이유로 place 마다 개별 조회하지 않는다.
+     */
+    List<PlaceVisit> findByPlaceIdInOrderByPlaceIdAscIdDesc(List<Long> placeIds);
+
     /** 커플의 장소별 방문 요약 (횟수·평균 별점·최근 방문일) */
     @Query("""
             select v.placeId as placeId, count(v) as visitCount,
