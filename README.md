@@ -21,7 +21,7 @@ Doubly는 **관계(Relation) 기반 커플 라이프 공유 앱**입니다. 커�
 | 모바일 | React Native + Expo (TypeScript) |
 | 상태관리 | Zustand |
 | 백엔드 | Spring Boot 3.4 (Java 21) |
-| DB | PostgreSQL (Flyway 마이그레이션 V1~V49) |
+| DB | PostgreSQL (Flyway 마이그레이션 V1~V54) |
 | 캐시 | Redis — AI 사용량 일일 카운터 (미가용 시 인메모리 폴백) |
 | 실시간 | WebSocket (STOMP) — 채팅 + 커플 이벤트(`/sub/couple/{id}`) |
 | 인증 | JWT (Access/Refresh) + 역할 기반 접근 제어(RBAC) |
@@ -71,8 +71,8 @@ com.fitto
 ├── diet/          # 식단 기록·AI 사진 분석 (확장)
 ├── chat/          # 관계별 실시간 채팅 (phase 4)
 ├── streak/        # 개인·커플 스트릭 — 운동/식단 (phase 5)
-├── place/         # 커플 맛집 지도 — 장소 핀·방문 기록 (PLAN.md)
-├── trip/          # 커플 여행 — 여행 계획·장소 그룹핑 (PLAN.md)
+├── place/         # 럽슐랭(Lovelichelin) — 맛집 지도·장소 핀·방문 기록·대표 평점·등급 산정 (PLAN.md)
+├── trip/          # 커플 여행 — 여행 계획·장소 그룹핑 (PLAN.md, 진입로 임시 숨김 — 아래 로드맵 참고)
 ├── feed/          # 커플 일상 피드 — 통합 타임라인·포스트·반응 (PLAN.md)
 ├── summary/       # 주간 결산·레벨
 ├── notification/  # Expo 푸시·디바이스 토큰
@@ -89,7 +89,8 @@ water_logs(물 섭취 트래커) / fasting_sessions(간헐적 단식 타이머) 
 meal_items(식단 항목 편집) / routine_exercise_sets(루틴 세트별 목표) /
 workout_routine_days(루틴 요일 배정) / voice_clips(커플 음성 응원) /
 mood_statuses(무드 상태) / couple_characters(커플 캐릭터 — 도메인 레이어만) /
-routine_gifts(루틴 선물하기).
+routine_gifts(루틴 선물하기) / place_ratings(럽슐랭 대표 평점 — 장소당 1인 1개, 재평가는
+upsert. `place_visits.rating`과 별개 개념).
 
 > ⚠️ `workout_sets` 는 **이름과 달리 세트가 아니라 "운동 종목 1개"를 담는 요약 테이블**입니다
 > (`sets` 컬럼에 세트 수를 넣는 구조). 실제 세트별 무게·횟수는 V28 에서 신설된 자식 테이블
@@ -189,7 +190,10 @@ v2    [시작] POST /session → [세트마다] PUT /session/{id}/sets/{setId}
 2. ~~**종목 마스터(`exercises`)를 둡니다.**~~ → **완료**: `exercise_catalog`(V28)로
    부위(`body_part`) × 기구(`equipment`) 분류 + 사용자 커스텀 종목을 구현했습니다.
    `exercise_name` 은 여전히 스냅샷으로 남아 종목 이름이 바뀌어도 과거 기록은
-   당시 이름을 유지합니다
+   당시 이름을 유지합니다. 운동 기록 추가·루틴 대체 종목·세션 종목 교체 세 화면 모두
+   부위→기구 순으로 좁혀 고르는 공통 모달(`ExercisePickerModal`)로 통일했고, 그 과정에서
+   기록 저장 시 `exerciseCatalogId`가 payload 에서 누락돼 카탈로그 연동이 조용히 끊겨
+   있던 버그를 함께 고쳤습니다
 3. **볼륨·1RM 은 저장하지 않고 계산합니다.** 볼륨 `Σ(weight × reps)`, 추정 1RM 은
    Epley `w × (1 + reps/30)`. 워밍업 세트와 유산소는 볼륨 집계에서 제외합니다
 4. **PR(`workout_records`)만 별도 저장**합니다. 매 조회마다 전체 스캔할 수 없기 때문
@@ -631,8 +635,11 @@ point_ledger              -- 포인트 적립·사용 내역 (잔액을 컬럼�
 
 ## 요금제 — FREE / PRO
 
-> **상태: 판정 경로만 구현. 지금은 전원 PRO 다** (`PLAN_FREE_TRIAL=true`).
-> 결제 연동은 아직 없다.
+> **상태: 판정 경로 + 인앱결제 연동 코드 완료. 지금은 전원 PRO 다** (`PLAN_FREE_TRIAL=true`).
+> Google Play 구독 결제(`react-native-iap` 클라이언트 + 서버 즉시 검증 +
+> RTDN 웹훅)는 코드상 준비됐지만 `PURCHASE_ENABLED=false`로 꺼져 있다 — 남은 건
+> Play Console에서 사람이 직접 해야 하는 설정(구독 상품 생성·서비스 계정 발급 등)뿐이다.
+> 절차는 [docs/GOOGLE_PLAY_BILLING.md](docs/GOOGLE_PLAY_BILLING.md) 참고.
 
 ### 왜 지금 넣었나
 
@@ -665,7 +672,9 @@ point_ledger              -- 포인트 적립·사용 내역 (잔액을 컬럼�
 | `common/plan/PlanResolver.java` | "이 사람(이 커플)은 무슨 플랜인가" 판정의 단일 출처 |
 | `common/plan/PlanGuard.java` | 사용 전 관문 — `require` / `consume` / `requireCapacity` |
 | `common/plan/UsageCounter.java` | 기간별 사용량 (Redis INCR, 미가용 시 인메모리 폴백) |
-| `common/plan/Subscription.java` | 구독 (V36). 스토어 웹훅이 갱신할 자리 |
+| `common/plan/Subscription.java` | 구독 (V36) — 즉시 검증(`POST /plan/purchases/google`)과 Google Play RTDN 웹훅(`GooglePlayWebhookController`) 양쪽이 갱신 |
+| `common/plan/GooglePlaySubscriptionSyncService.java` | Play Developer API로 구매 상태를 다시 조회해 확정 |
+| `frontend/src/utils/iap.ts` | 클라이언트 결제 흐름(react-native-iap) — 구매 요청·리스너·서버 검증 |
 | `GET /api/v1/plan/me` | 내 플랜 + 기능별 한도·사용량 |
 | `frontend/src/store/planStore.ts` | 표시용 상태 + 402 수신 시 업그레이드 안내 |
 
@@ -769,8 +778,10 @@ point_ledger              -- 포인트 적립·사용 내역 (잔액을 컬럼�
 1. 이벤트 로깅으로 실사용 분포(p60~p75) 측정 → `Feature.java` 의 FREE 숫자 확정
 2. 약관에 **유료 서비스·환불 조항** 추가 — 사용자가 적은 지금이 `PolicyVersion` 상향
    비용이 가장 싸다 (아래 "약관 본문" 절 참고. 버전을 올리면 전원 재동의 게이트가 뜬다)
-3. `react-native-iap` + 서버 영수증 검증 + 스토어 웹훅 → `subscriptions` 갱신
-4. `PLAN_FREE_TRIAL=false`
+3. ~~`react-native-iap` + 서버 영수증 검증 + 스토어 웹훅 → `subscriptions` 갱신~~ →
+   **완료**: 코드는 준비됐고, 남은 건 [Play Console 수동 설정](docs/GOOGLE_PLAY_BILLING.md)뿐이다
+4. Play Console 설정을 마친 뒤 `PURCHASE_ENABLED=true` (`GOOGLE_PLAY_BILLING.md` 5번) + EAS 재빌드
+5. `PLAN_FREE_TRIAL=false`
 
 > **만료 시 원칙: 읽기는 남기고 쓰기만 막는다.** PRO 때 만든 여행 5개를 만료 후
 > 숨기거나 지우면 안 된다. 조회는 유지하고 신규 생성만 차단한다.
@@ -831,8 +842,8 @@ point_ledger              -- 포인트 적립·사용 내역 (잔액을 컬럼�
 | 요금제 | 한도 실측 → `Feature.java` 의 FREE 숫자 확정 (이벤트 로깅 선행) | 예정 |
 | 요금제 | 게이팅 적용 — AI 7종·사진·여행·맛집핀·루틴·즐겨찾기·캘린더·경비·준비물·배경·추억·주간결산 | ✅ 완료 |
 | 요금제 | 잠금 UI (`LockedCard`) + 전역 업그레이드 시트(`UpgradeSheet`) | ✅ 완료 |
-| 요금제 | 인앱결제 연동 시 `PURCHASE_ENABLED=true` + 구매 버튼 연결 | 예정 |
-| 요금제 | 인앱결제 (react-native-iap + 서버 영수증 검증 + 스토어 웹훅) | 예정 |
+| 요금제 | 인앱결제 (react-native-iap + 서버 즉시 검증 + Google Play RTDN 웹훅) | ✅ 완료 (코드) |
+| 요금제 | `PURCHASE_ENABLED=true` 전환 — Play Console 수동 설정 후 (docs/GOOGLE_PLAY_BILLING.md) | 🚧 예정 |
 | 출시 후 | 트레이너 결제, 카카오·애플 로그인 | 예정 |
 | 패밀리(보류) | 관계 모델 N인 확장 (`relation_members` 조인 테이블) | ⏸ 보류 |
 | 패밀리(보류) | 아이 프로필 (관리 대상 → 연동 계정 승격) | ⏸ 보류 |
@@ -850,8 +861,13 @@ point_ledger              -- 포인트 적립·사용 내역 (잔액을 컬럼�
 | 확장 | 커플 루틴 선물하기 (스냅샷 전송 → 수락 시 복사) | ✅ 완료 |
 | 확장 | 데이트 식단 "같이 먹기" (자동 등록·50:50 분할·복제) | ✅ 완료 |
 | 확장 | 장소 화면 리디자인 (상세 카드·수정/삭제 동선·검색·지도 범례) | ✅ 완료 |
+| 확장 | 럽슐랭(Lovelichelin) 등급 시스템 — 대표 평점(`place_ratings`)·둘 다 3점 이상이어야 등급 산정 | ✅ 완료 |
+| 확장 | 럽슐랭 화면 통합 — 가이드/위시리스트/지도를 Chip 세그먼트 한 화면(`PlaceScreen`)으로 | ✅ 완료 |
+| 확장 | 방문 기록 시 식단 구분(dietTag) 지정 — 장소 추가 시점에서 방문 시점으로 이동 | ✅ 완료 |
+| 여행 | "우리 여행" 진입 버튼 임시 숨김 (Trip 기능·코드는 유지, 주석만 해제하면 복구) | 🚧 임시 숨김 |
 | 확장 | 운동 홈 화면 진입점 정리 (내 루틴 임베드 + 짐워크 스타일 CTA) | ✅ 완료 |
 | 확장 | AI 추천 맞춤 루틴 만들기 | ✅ 완료 |
+| 확장 | 운동 추가/루틴 대체/세션 교체 종목 선택 — 부위→기구 필터 공통 모달(`ExercisePickerModal`) | ✅ 완료 |
 | 게임화(보류) | 커플 캐릭터 도메인 레이어 프로토타입 (`couple_characters`, 엔티티·리포지토리만 — 서비스·화면 없음) | 🚧 실험적 |
 
 ## 실행 방법
