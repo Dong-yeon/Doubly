@@ -10,6 +10,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from './Icon';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 import { themedStyles } from '../theme/themedStyles';
+import { filledStars } from '../utils/ratingStars';
 
 const TIERS: { tier: number; label: string }[] = [
   { tier: 3, label: '3 럽스타' },
@@ -37,7 +38,7 @@ export function LovelichelinBadge({ tier, size = 'md' }: Props) {
     <View style={[styles.badge, small && styles.badgeSm]}>
       <MaterialCommunityIcons name="crown" size={small ? 12 : 14} color={colors.togetherText} />
       <Text style={[styles.text, small && styles.textSm]} numberOfLines={1}>
-        {'★'.repeat(tier)} {label}
+        {filledStars(tier)} {label}
       </Text>
     </View>
   );

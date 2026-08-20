@@ -3,9 +3,10 @@
  * 둘 다 평가 전이거나 탈락한 곳이든 여기 모인다. 방문 후 나/상대가 모두 평점을 매기면
  * 자동으로 럽슐랭 가이드로 승격된다.
  *
- * <p>검색·상태·식단 필터와 카드 목록은 예전 PlaceMapScreen 의 목록 뷰를 그대로 옮겨왔다.
+ * <p>검색·상태·식단 필터는 {@link usePlaceStore}에 둬서 지도 화면과 공유한다 — 세그먼트를
+ * 오가도 검색 조건이 유지된다(예전엔 목록/지도가 한 화면이라 자연히 공유됐었다).
  */
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,57 +19,40 @@ import { EmptyState } from '../../components/EmptyState';
 import { IconButton } from '../../components/IconButton';
 import { TextField } from '../../components/TextField';
 import { PlaceSectionTabs } from './PlaceSectionTabs';
+import { STATUS_FILTERS, DIET_FILTERS } from './placeFilters';
 import { placeApi } from '../../api/place';
+import { usePlaceStore } from '../../store/placeStore';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { Place, PlaceDietTag, PlaceStatus } from '../../types';
+import type { Place } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { layout } from '../../theme/layout';
 
 type Nav = NativeStackNavigationProp<PlaceStackParamList>;
 
-const FILTERS: { value: PlaceStatus | 'ALL'; label: string }[] = [
-  { value: 'ALL', label: '전체' },
-  { value: 'WISHLIST', label: '가고 싶어요' },
-  { value: 'VISITED', label: '다녀왔어요' },
-];
-
-const DIET_FILTERS: { value: PlaceDietTag | 'ALL'; label: string }[] = [
-  { value: 'ALL', label: '전체' },
-  { value: 'CLEAN', label: '🥗 클린식' },
-  { value: 'CHEAT', label: '🍔 치팅데이' },
-];
-
 export function PlaceWishlistScreen() {
   const navigation = useNavigation<Nav>();
-  const [places, setPlaces] = useState<Place[]>([]);
-  const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<PlaceStatus | 'ALL'>('ALL');
-  const [dietFilter, setDietFilter] = useState<PlaceDietTag | 'ALL'>('ALL');
-  const [loading, setLoading] = useState(false);
-  const [loadError, setLoadError] = useState(false);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setLoadError(false);
-    try {
-      const all = await placeApi.list();
-      setPlaces(all.filter((p) => p.lovelichelinTier === 0));
-    } catch (e) {
-      toast.error(getErrorMessage(e, '장소를 불러오지 못했어요.'));
-      setLoadError(true);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const allPlaces = usePlaceStore((s) => s.places);
+  const loading = usePlaceStore((s) => s.loading);
+  const loadError = usePlaceStore((s) => s.loadError);
+  const load = usePlaceStore((s) => s.load);
+  const search = usePlaceStore((s) => s.search);
+  const setSearch = usePlaceStore((s) => s.setSearch);
+  const filter = usePlaceStore((s) => s.statusFilter);
+  const setFilter = usePlaceStore((s) => s.setStatusFilter);
+  const dietFilter = usePlaceStore((s) => s.dietFilter);
+  const setDietFilter = usePlaceStore((s) => s.setDietFilter);
+  const invalidate = usePlaceStore((s) => s.invalidate);
 
   useFocusEffect(
     useCallback(() => {
-      load();
+      load().catch(() => {});
     }, [load]),
   );
+
+  const places = useMemo(() => allPlaces.filter((p) => p.lovelichelinTier === 0), [allPlaces]);
 
   const onDelete = (place: Place) => {
     Alert.alert('장소 삭제', `"${place.name}"을(를) 삭제할까요?\n방문 기록도 함께 삭제돼요.`, [
@@ -81,7 +65,8 @@ export function PlaceWishlistScreen() {
             await placeApi.remove(place.id);
             haptics.light();
             toast.success('장소를 삭제했어요.');
-            load();
+            invalidate();
+            load(true);
           } catch (e) {
             Alert.alert('오류', getErrorMessage(e));
           }
@@ -115,7 +100,7 @@ export function PlaceWishlistScreen() {
       ) : null}
 
       <View style={styles.filterRow}>
-        {FILTERS.map((f) => (
+        {STATUS_FILTERS.map((f) => (
           <Chip key={f.value} label={f.label} selected={filter === f.value} onPress={() => setFilter(f.value)} />
         ))}
       </View>
@@ -135,7 +120,7 @@ export function PlaceWishlistScreen() {
         keyExtractor={(p) => String(p.id)}
         contentContainerStyle={styles.list}
         refreshing={loading}
-        onRefresh={load}
+        onRefresh={() => load(true)}
         ListHeaderComponent={filtered.length > 0 ? <Text style={styles.deleteHint}>카드를 길게 눌러 삭제할 수 있어요</Text> : null}
         renderItem={({ item }) => (
           <TouchableOpacity
@@ -192,7 +177,7 @@ export function PlaceWishlistScreen() {
                 title="장소를 불러오지 못했어요"
                 description="네트워크 상태를 확인하고 다시 시도해주세요."
                 error
-                onRetry={load}
+                onRetry={() => load()}
               />
             ) : places.length > 0 ? (
               <EmptyState icon="map-marker-outline" title="조건에 맞는 장소가 없어요" description="검색어나 필터를 바꿔보세요." />

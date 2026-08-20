@@ -1,5 +1,10 @@
-/** 럽슐랭 가이드 — 둘이 함께 검증해 등급을 받은(tier>0) 장소들의 매거진 카드뷰 + AI 총평 */
-import React, { useCallback, useState } from 'react';
+/**
+ * 럽슐랭 가이드 — 둘이 함께 검증해 등급을 받은(tier>0) 장소들의 매거진 카드뷰 + AI 총평.
+ * 목록은 {@link usePlaceStore}(위시리스트/지도와 공유하는 캐시)를 그대로 걸러서 쓴다 —
+ * 세그먼트를 오갈 때마다 다시 받아오지 않는다. 커버 사진/한줄평도 백엔드가 목록 응답에
+ * 이미 실어주므로(place_visits N+1 없음) 여기서 따로 조회하지 않는다.
+ */
+import React, { useCallback, useMemo } from 'react';
 import { FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -14,23 +19,14 @@ import { AiInsightButton } from '../../components/AiInsightButton';
 import { LovelichelinBadge } from '../../components/LovelichelinBadge';
 import { PlaceSectionTabs } from './PlaceSectionTabs';
 import { placeApi } from '../../api/place';
-import { getErrorMessage } from '../../utils/error';
-import { toast } from '../../store/toastStore';
+import { usePlaceStore } from '../../store/placeStore';
+import { stars } from '../../utils/ratingStars';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { LovelichelinSummary, Place } from '../../types';
+import type { LovelichelinSummary } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { layout } from '../../theme/layout';
 
 type Nav = NativeStackNavigationProp<PlaceStackParamList>;
-
-function stars(rating?: number | null): string {
-  return rating ? '★'.repeat(rating) : '-';
-}
-
-interface Cover {
-  imageUrl?: string | null;
-  memo?: string | null;
-}
 
 /** AI 럽슐랭 에디터 총평 렌더 — AiInsightButton 의 데이트 코스와 같은 구조 */
 function renderSummary(s: LovelichelinSummary) {
@@ -58,48 +54,26 @@ function renderSummary(s: LovelichelinSummary) {
 
 export function PlaceGuideScreen() {
   const navigation = useNavigation<Nav>();
-  const [places, setPlaces] = useState<Place[]>([]);
-  const [covers, setCovers] = useState<Record<number, Cover>>({});
-  const [loading, setLoading] = useState(false);
-  const [loadError, setLoadError] = useState(false);
+  const allPlaces = usePlaceStore((s) => s.places);
+  const loading = usePlaceStore((s) => s.loading);
+  const loadError = usePlaceStore((s) => s.loadError);
+  const load = usePlaceStore((s) => s.load);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setLoadError(false);
-    try {
-      const all = await placeApi.list();
-      const certified = all
+  useFocusEffect(
+    useCallback(() => {
+      load().catch(() => {}); // 에러는 loadError 로 화면에 이미 반영된다
+    }, [load]),
+  );
+
+  const places = useMemo(
+    () =>
+      allPlaces
         .filter((p) => p.lovelichelinTier > 0)
         .sort((a, b) => {
           if (b.lovelichelinTier !== a.lovelichelinTier) return b.lovelichelinTier - a.lovelichelinTier;
           return (b.lovelichelinCertifiedAt ?? '').localeCompare(a.lovelichelinCertifiedAt ?? '');
-        });
-      setPlaces(certified);
-
-      // 매거진 카드의 사진·한줄평은 각 장소의 최근 방문기록에서 가져온다 — 인증된 곳만
-      // 대상이라(대개 소수) N+1 조회 비용이 작다.
-      const visitsByPlace = await Promise.all(
-        certified.map((p) => placeApi.visits(p.id).catch(() => [])),
-      );
-      const coverMap: Record<number, Cover> = {};
-      certified.forEach((p, i) => {
-        const visits = visitsByPlace[i];
-        const withPhoto = visits.find((v) => v.imageUrl) ?? visits[0];
-        coverMap[p.id] = { imageUrl: withPhoto?.imageUrl, memo: withPhoto?.memo };
-      });
-      setCovers(coverMap);
-    } catch (e) {
-      toast.error(getErrorMessage(e, '럽슐랭 가이드를 불러오지 못했어요.'));
-      setLoadError(true);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load]),
+        }),
+    [allPlaces],
   );
 
   return (
@@ -123,47 +97,46 @@ export function PlaceGuideScreen() {
         keyExtractor={(p) => String(p.id)}
         contentContainerStyle={styles.list}
         refreshing={loading}
-        onRefresh={load}
-        renderItem={({ item }) => {
-          const cover = covers[item.id];
-          return (
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => navigation.navigate('PlaceDetail', { placeId: item.id, name: item.name })}
-            >
-              <Card elevation="sm" tint="together" style={styles.magazineCard}>
-                {cover?.imageUrl ? (
-                  <Image source={{ uri: cover.imageUrl }} style={styles.coverPhoto} resizeMode="cover" />
-                ) : (
-                  <View style={styles.coverPlaceholder}>
-                    <MaterialCommunityIcons name="crown" size={32} color={colors.togetherText} />
-                  </View>
-                )}
-                <View style={styles.magazineBody}>
-                  <View style={styles.magazineHeaderRow}>
-                    <Text style={styles.magazineName}>{item.name}</Text>
-                    <LovelichelinBadge tier={item.lovelichelinTier} size="sm" />
-                  </View>
-                  {item.category ? <Text style={styles.magazineCategory}>{item.category}</Text> : null}
-                  <View style={styles.magazineRatingRow}>
-                    <Text style={[styles.magazineRating, { color: colors.me }]}>나 {stars(item.myRating)}</Text>
-                    <Text style={[styles.magazineRating, { color: colors.partner }]}>
-                      상대 {stars(item.partnerRating)}
-                    </Text>
-                  </View>
-                  {cover?.memo ? (
-                    <Text style={styles.magazineMemo} numberOfLines={2}>
-                      “{cover.memo}”
-                    </Text>
-                  ) : null}
-                  {item.lovelichelinCertifiedAt ? (
-                    <Text style={styles.magazineDate}>{item.lovelichelinCertifiedAt.slice(0, 10)} 등극</Text>
-                  ) : null}
+        onRefresh={() => load(true)}
+        renderItem={({ item }) => (
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => navigation.navigate('PlaceDetail', { placeId: item.id, name: item.name })}
+          >
+            <Card elevation="sm" tint="together" style={styles.magazineCard}>
+              {item.coverImageUrl ? (
+                <Image source={{ uri: item.coverImageUrl }} style={styles.coverPhoto} resizeMode="cover" />
+              ) : (
+                <View style={styles.coverPlaceholder}>
+                  <MaterialCommunityIcons name="crown" size={32} color={colors.togetherText} />
                 </View>
-              </Card>
-            </TouchableOpacity>
-          );
-        }}
+              )}
+              <View style={styles.magazineBody}>
+                <View style={styles.magazineHeaderRow}>
+                  <Text style={styles.magazineName}>{item.name}</Text>
+                  <LovelichelinBadge tier={item.lovelichelinTier} size="sm" />
+                </View>
+                {item.category ? <Text style={styles.magazineCategory}>{item.category}</Text> : null}
+                <View style={styles.magazineRatingRow}>
+                  <Text style={[styles.magazineRating, { color: colors.me }]}>
+                    나 {item.myRating ? stars(item.myRating) : '미평가'}
+                  </Text>
+                  <Text style={[styles.magazineRating, { color: colors.partner }]}>
+                    상대 {item.partnerRating ? stars(item.partnerRating) : '미평가'}
+                  </Text>
+                </View>
+                {item.coverMemo ? (
+                  <Text style={styles.magazineMemo} numberOfLines={2}>
+                    “{item.coverMemo}”
+                  </Text>
+                ) : null}
+                {item.lovelichelinCertifiedAt ? (
+                  <Text style={styles.magazineDate}>{item.lovelichelinCertifiedAt.slice(0, 10)} 등극</Text>
+                ) : null}
+              </View>
+            </Card>
+          </TouchableOpacity>
+        )}
         ListEmptyComponent={
           !loading ? (
             loadError ? (
@@ -172,7 +145,7 @@ export function PlaceGuideScreen() {
                 title="가이드를 불러오지 못했어요"
                 description="네트워크 상태를 확인하고 다시 시도해주세요."
                 error
-                onRetry={load}
+                onRetry={() => load()}
               />
             ) : (
               <EmptyState

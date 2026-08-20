@@ -24,6 +24,7 @@ import { IconButton } from '../../components/IconButton';
 import { KakaoMap } from '../../components/KakaoMap';
 import { LovelichelinBadge } from '../../components/LovelichelinBadge';
 import { LovelichelinFanfareModal } from '../../components/LovelichelinFanfareModal';
+import { usePlaceStore } from '../../store/placeStore';
 import { isKakaoMapConfigured } from '../../constants/config';
 import { placeApi } from '../../api/place';
 import { useDietStore } from '../../store/dietStore';
@@ -33,17 +34,13 @@ import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
 import { toDateString } from '../../utils/date';
+import { stars } from '../../utils/ratingStars';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { MealType, Place, PlaceVisit } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { useAndroidKeyboardHeight } from '../../hooks/useAndroidKeyboardHeight';
 
 type Props = NativeStackScreenProps<PlaceStackParamList, 'PlaceDetail'>;
-
-function stars(rating?: number | null): string {
-  if (!rating) return '';
-  return '★'.repeat(rating) + '☆'.repeat(5 - rating);
-}
 
 const MEAL_TYPES: { value: MealType; label: string }[] = [
   { value: 'BREAKFAST', label: '아침' },
@@ -180,6 +177,9 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
       setFormOpen(false);
       resetForm();
       load();
+      // 방문 기록이 상태·평균 별점·커버 사진을 바꿀 수 있다 — 가이드/위시리스트/지도가
+      // 다음에 focus 될 때 캐시된 목록 대신 다시 받아오게 한다
+      usePlaceStore.getState().invalidate();
     } catch (e) {
       Alert.alert('오류', getErrorMessage(e));
     } finally {
@@ -196,6 +196,8 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
       const updated = await placeApi.rate(placeId, { rating: myRatingInput, revisitIntent });
       setPlace(updated);
       haptics.success();
+      // 등급이 바뀌면 가이드↔위시리스트 사이를 오갈 수 있다 — 캐시를 무효화한다
+      usePlaceStore.getState().invalidate();
       if (previousTier === 0 && updated.lovelichelinTier > 0) {
         setFanfareTier(updated.lovelichelinTier);
       } else {
@@ -222,6 +224,7 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
             await placeApi.remove(place.id);
             haptics.light();
             toast.success('장소를 삭제했어요.');
+            usePlaceStore.getState().invalidate();
             navigation.goBack();
           } catch (e) {
             Alert.alert('오류', getErrorMessage(e));
@@ -243,6 +246,7 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
             haptics.light();
             toast.success('방문 기록을 삭제했어요.');
             load();
+            usePlaceStore.getState().invalidate();
           } catch (e) {
             Alert.alert('오류', getErrorMessage(e));
           }

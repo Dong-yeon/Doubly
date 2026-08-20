@@ -3,8 +3,9 @@
  * 예전엔 이 화면이 목록/지도를 겸했지만, 목록은 럽슐랭 가이드/위시리스트 화면으로
  * 옮겨가고 여기는 지도 전용으로 축소됐다 — {@link PlaceSectionTabs} 참고.
  * 핀 색=식단 구분(그대로), 왕관 오버레이=럽슐랭 인증(tier>0) — 서로 다른 축이라 겹쳐 그린다.
+ * 검색·필터는 위시리스트 화면과 {@link usePlaceStore}를 공유한다.
  */
-import React, { useCallback, useState } from 'react';
+import React, { useCallback } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -18,12 +19,12 @@ import { KakaoMap } from '../../components/KakaoMap';
 import { TextField } from '../../components/TextField';
 import { AiInsightButton } from '../../components/AiInsightButton';
 import { PlaceSectionTabs } from './PlaceSectionTabs';
+import { STATUS_FILTERS, DIET_FILTERS } from './placeFilters';
 import { placeApi } from '../../api/place';
+import { usePlaceStore } from '../../store/placeStore';
 import { isKakaoMapConfigured } from '../../constants/config';
-import { getErrorMessage } from '../../utils/error';
-import { toast } from '../../store/toastStore';
 import { colors, fontSize, spacing } from '../../constants/theme';
-import type { DateCourse, Place, PlaceDietTag, PlaceStatus } from '../../types';
+import type { DateCourse, PlaceDietTag } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { layout } from '../../theme/layout';
 
@@ -50,19 +51,6 @@ function renderDateCourse(c: DateCourse) {
   );
 }
 
-const FILTERS: { value: PlaceStatus | 'ALL'; label: string }[] = [
-  { value: 'ALL', label: '전체' },
-  { value: 'WISHLIST', label: '가고 싶어요' },
-  { value: 'VISITED', label: '다녀왔어요' },
-];
-
-// 클린식/치팅데이 필터 — 평소 식단 유지용 vs 보상 데이트용을 스위치로 구분
-const DIET_FILTERS: { value: PlaceDietTag | 'ALL'; label: string }[] = [
-  { value: 'ALL', label: '전체' },
-  { value: 'CLEAN', label: '🥗 클린식' },
-  { value: 'CHEAT', label: '🍔 치팅데이' },
-];
-
 // 지도 핀 색상 — 식단 구분(클린식=초록/치팅데이=주황/구분 없음=빨강)을 항상 나타낸다.
 // 방문 여부는 색과 별개 축이라 핀을 채우거나(다녀옴) 테두리만 남겨(위시리스트) 구분한다 — 아래 지도 범례 참고
 const DIET_TAG_PIN_COLOR: Record<PlaceDietTag, string> = {
@@ -73,30 +61,18 @@ const DIET_TAG_PIN_COLOR: Record<PlaceDietTag, string> = {
 
 export function PlaceMapScreen() {
   const navigation = useNavigation<Nav>();
-  const [places, setPlaces] = useState<Place[]>([]);
-  const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<PlaceStatus | 'ALL'>('ALL');
-  const [dietFilter, setDietFilter] = useState<PlaceDietTag | 'ALL'>('ALL');
-  const [loading, setLoading] = useState(false);
-  const [loadError, setLoadError] = useState(false);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setLoadError(false);
-    try {
-      setPlaces(await placeApi.list());
-    } catch (e) {
-      toast.error(getErrorMessage(e, '장소를 불러오지 못했어요.'));
-      // 실패해도 목록은 비우지 않는다 — "진짜 빈 목록"과 구분은 loadError 로 한다
-      setLoadError(true);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const places = usePlaceStore((s) => s.places);
+  const load = usePlaceStore((s) => s.load);
+  const search = usePlaceStore((s) => s.search);
+  const setSearch = usePlaceStore((s) => s.setSearch);
+  const filter = usePlaceStore((s) => s.statusFilter);
+  const setFilter = usePlaceStore((s) => s.setStatusFilter);
+  const dietFilter = usePlaceStore((s) => s.dietFilter);
+  const setDietFilter = usePlaceStore((s) => s.setDietFilter);
 
   useFocusEffect(
     useCallback(() => {
-      load();
+      load().catch(() => {});
     }, [load]),
   );
 
@@ -155,7 +131,7 @@ export function PlaceMapScreen() {
             </View>
           ) : null}
           <View style={styles.filterRow}>
-            {FILTERS.map((f) => (
+            {STATUS_FILTERS.map((f) => (
               <Chip key={f.value} label={f.label} selected={filter === f.value} onPress={() => setFilter(f.value)} />
             ))}
           </View>

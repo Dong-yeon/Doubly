@@ -17,6 +17,7 @@ import com.fitto.place.repository.PlaceRatingRepository;
 import com.fitto.place.repository.PlaceRepository;
 import com.fitto.place.repository.PlaceVisitRepository;
 import com.fitto.place.repository.PlaceVisitRepository.VisitSummary;
+import com.fitto.place.service.PlaceService;
 import com.fitto.relation.domain.Relation;
 import com.fitto.relation.domain.RelationStatus;
 import com.fitto.relation.domain.RelationType;
@@ -511,19 +512,15 @@ public class TripService {
         return places.stream()
                 .map(p -> {
                     VisitSummary s = summaries.get(p.getId());
-                    Integer myRating = null;
-                    Integer partnerRating = null;
-                    for (PlaceRating r : ratingsByPlace.getOrDefault(p.getId(), List.of())) {
-                        if (userId.equals(r.getUserId())) {
-                            myRating = r.getRating();
-                        } else {
-                            partnerRating = r.getRating();
-                        }
-                    }
+                    // 나/상대 분리는 PlaceService 의 것을 그대로 쓴다 — 같은 로직을 두 번
+                    // 구현하면 산정 규칙이 바뀔 때 한쪽만 고쳐질 위험이 있다.
+                    PlaceService.RatingPair pair = PlaceService.ratingPairOf(
+                            ratingsByPlace.getOrDefault(p.getId(), List.of()), userId);
+                    // 여행 상세는 매거진 카드가 아니라 목록이라 커버 사진은 필요 없다
                     return s == null
-                            ? PlaceResponse.of(p, 0, null, null, myRating, partnerRating)
+                            ? PlaceResponse.of(p, 0, null, null, pair.mine(), pair.partner(), null, null)
                             : PlaceResponse.of(p, s.getVisitCount(), s.getAvgRating(), s.getLastVisitedAt(),
-                                    myRating, partnerRating);
+                                    pair.mine(), pair.partner(), null, null);
                 })
                 .toList();
     }

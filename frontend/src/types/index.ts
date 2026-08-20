@@ -474,6 +474,9 @@ export interface Place {
   lovelichelinTier: number;
   /** 럽슐랭 등극(0→양수) 시각 — 미인증/탈락 시 null */
   lovelichelinCertifiedAt?: string | null;
+  /** 매거진 카드용 커버 — 사진 있는 가장 최근 방문(없으면 그냥 가장 최근 방문)에서 뽑힌다 */
+  coverImageUrl?: string | null;
+  coverMemo?: string | null;
   createdAt: string;
 }
 export interface PlaceVisit {

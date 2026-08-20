@@ -6,6 +6,7 @@ import com.fitto.common.exception.BusinessException;
 import com.fitto.place.domain.PlaceRating;
 import com.fitto.place.dto.PlaceResponse;
 import com.fitto.place.dto.RatePlaceRequest;
+import com.fitto.place.dto.RecordVisitRequest;
 import com.fitto.place.dto.SavePlaceRequest;
 import com.fitto.place.repository.PlaceRatingRepository;
 import com.fitto.place.service.PlaceService;
@@ -140,6 +141,41 @@ class PlaceLovelichelinFlowTest {
         PlaceRating mine = placeRatingRepository.findByPlaceIdAndUserId(placeId, users[0]).orElseThrow();
         assertThat(mine.getRating()).isEqualTo(4);
         assertThat(mine.getRevisitIntent()).isFalse();
+    }
+
+    // 럽슐랭 가이드 매거진 카드 커버 — 회귀 테스트. N+1 프론트 조회를 없애려고 목록
+    // API(list)가 배치로 커버를 채워주게 바꿨는데, 그룹핑이 꼬이면 엉뚱한 장소의
+    // 사진이 섞일 수 있어 확인한다.
+    @Test
+    void 목록_조회_시_사진_있는_가장_최근_방문이_커버로_뽑힌다() {
+        long[] users = couple("lc9a@fitto.com", "lc9b@fitto.com");
+        Long placeId = place(users[0]);
+        placeService.recordVisit(users[0], placeId,
+                new RecordVisitRequest(null, null, "사진 없는 오래된 기록", null, null));
+        placeService.recordVisit(users[0], placeId,
+                new RecordVisitRequest(null, null, "사진 있는 기록", "https://img/1.jpg", null));
+        placeService.recordVisit(users[0], placeId,
+                new RecordVisitRequest(null, null, "사진 없는 가장 최근 기록", null, null));
+
+        PlaceResponse found = placeService.list(users[0]).stream()
+                .filter(p -> p.id().equals(placeId)).findFirst().orElseThrow();
+
+        assertThat(found.coverImageUrl()).isEqualTo("https://img/1.jpg");
+        assertThat(found.coverMemo()).isEqualTo("사진 있는 기록");
+    }
+
+    @Test
+    void 사진_있는_방문이_없으면_그냥_가장_최근_방문이_커버가_된다() {
+        long[] users = couple("lc10a@fitto.com", "lc10b@fitto.com");
+        Long placeId = place(users[0]);
+        placeService.recordVisit(users[0], placeId, new RecordVisitRequest(null, null, "첫 방문", null, null));
+        placeService.recordVisit(users[0], placeId, new RecordVisitRequest(null, null, "가장 최근 방문", null, null));
+
+        PlaceResponse found = placeService.list(users[0]).stream()
+                .filter(p -> p.id().equals(placeId)).findFirst().orElseThrow();
+
+        assertThat(found.coverImageUrl()).isNull();
+        assertThat(found.coverMemo()).isEqualTo("가장 최근 방문");
     }
 
     @Test

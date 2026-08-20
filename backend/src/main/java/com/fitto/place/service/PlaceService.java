@@ -87,10 +87,10 @@ public class PlaceService {
                 .addedBy(userId)
                 .build();
         placeRepository.save(place);
-        return PlaceResponse.of(place, 0, null, null, null, null);
+        return toResponse(place, null, RatingPair.EMPTY, null);
     }
 
-    /** 커플 공유 장소 목록 — 방문 요약 + 럽슐랭 평가 포함 (PLACE-02) */
+    /** 커플 공유 장소 목록 — 방문 요약 + 럽슐랭 평가 + 매거진 카드용 커버 포함 (PLACE-02) */
     public List<PlaceResponse> list(Long userId) {
         Relation couple = activeCouple(userId);
         List<Place> places = placeRepository.findByCoupleIdOrderByIdDesc(couple.getId());
@@ -105,15 +105,15 @@ public class PlaceService {
         Map<Long, List<PlaceRating>> ratingsByPlace = placeRatingRepository.findByPlaceIdIn(placeIds)
                 .stream()
                 .collect(Collectors.groupingBy(PlaceRating::getPlaceId));
+        // 장소별 최근 방문순으로 이미 정렬돼 온다(리포지토리 쿼리) — 그룹핑해도 그룹 내 순서는 유지된다
+        Map<Long, List<PlaceVisit>> visitsByPlace = placeVisitRepository
+                .findByPlaceIdInOrderByPlaceIdAscIdDesc(placeIds)
+                .stream()
+                .collect(Collectors.groupingBy(PlaceVisit::getPlaceId));
         return places.stream()
-                .map(p -> {
-                    VisitSummary s = summaries.get(p.getId());
-                    RatingPair pair = ratingPairOf(ratingsByPlace.getOrDefault(p.getId(), List.of()), userId);
-                    return s == null
-                            ? PlaceResponse.of(p, 0, null, null, pair.mine(), pair.partner())
-                            : PlaceResponse.of(p, s.getVisitCount(), s.getAvgRating(), s.getLastVisitedAt(),
-                                    pair.mine(), pair.partner());
-                })
+                .map(p -> toResponse(p, summaries.get(p.getId()),
+                        ratingPairOf(ratingsByPlace.getOrDefault(p.getId(), List.of()), userId),
+                        coverOf(visitsByPlace.getOrDefault(p.getId(), List.of()))))
                 .toList();
     }
 
@@ -240,13 +240,37 @@ public class PlaceService {
         }
 
         VisitSummary s = placeVisitRepository.summarize(List.of(placeId)).stream().findFirst().orElse(null);
-        return s == null
-                ? PlaceResponse.of(place, 0, null, null, pair.mine(), pair.partner())
-                : PlaceResponse.of(place, s.getVisitCount(), s.getAvgRating(), s.getLastVisitedAt(),
-                        pair.mine(), pair.partner());
+        Cover cover = coverOf(placeVisitRepository.findByPlaceIdOrderByIdDesc(placeId));
+        return toResponse(place, s, pair, cover);
     }
 
     // ---- helpers ----
+
+    /** 방문 요약·평점·커버를 한 곳에서만 PlaceResponse 로 조립한다 — list/get/update/rate/save 공통 */
+    private PlaceResponse toResponse(Place place, VisitSummary s, RatingPair pair, Cover cover) {
+        return PlaceResponse.of(place,
+                s == null ? 0 : s.getVisitCount(),
+                s == null ? null : s.getAvgRating(),
+                s == null ? null : s.getLastVisitedAt(),
+                pair.mine(), pair.partner(),
+                cover == null ? null : cover.imageUrl(),
+                cover == null ? null : cover.memo());
+    }
+
+    /** 럽슐랭 가이드 매거진 카드 커버 — 사진 있는 가장 최근 방문, 없으면 그냥 가장 최근 방문 */
+    private Cover coverOf(List<PlaceVisit> visitsMostRecentFirst) {
+        if (visitsMostRecentFirst.isEmpty()) {
+            return null;
+        }
+        PlaceVisit withPhoto = visitsMostRecentFirst.stream()
+                .filter(v -> v.getImageUrl() != null)
+                .findFirst()
+                .orElse(visitsMostRecentFirst.get(0));
+        return new Cover(withPhoto.getImageUrl(), withPhoto.getMemo());
+    }
+
+    private record Cover(String imageUrl, String memo) {
+    }
 
     /**
      * 럽슐랭 등급 산정 — 둘 다 평가해야 하고, 한쪽이라도 2점 이하면 탈락(0)이다.
@@ -269,7 +293,12 @@ public class PlaceService {
         return 1;
     }
 
-    private RatingPair ratingPairOf(List<PlaceRating> ratings, Long userId) {
+    /**
+     * 평점 목록에서 나/상대 것을 갈라낸다 — {@link com.fitto.trip.service.TripService}도
+     * 같은 나/상대 분리가 필요해 여기 public static 으로 둬서 재사용한다(패키지가 달라
+     * 인스턴스 주입 없이도 쓸 수 있게).
+     */
+    public static RatingPair ratingPairOf(List<PlaceRating> ratings, Long userId) {
         Integer mine = null;
         Integer partner = null;
         for (PlaceRating r : ratings) {
@@ -282,7 +311,8 @@ public class PlaceService {
         return new RatingPair(mine, partner);
     }
 
-    private record RatingPair(Integer mine, Integer partner) {
+    public record RatingPair(Integer mine, Integer partner) {
+        public static final RatingPair EMPTY = new RatingPair(null, null);
     }
 
     private Relation activeCouple(Long userId) {
@@ -306,10 +336,8 @@ public class PlaceService {
         VisitSummary s = placeVisitRepository.summarize(List.of(place.getId()))
                 .stream().findFirst().orElse(null);
         RatingPair pair = ratingPairOf(placeRatingRepository.findByPlaceId(place.getId()), userId);
-        return s == null
-                ? PlaceResponse.of(place, 0, null, null, pair.mine(), pair.partner())
-                : PlaceResponse.of(place, s.getVisitCount(), s.getAvgRating(), s.getLastVisitedAt(),
-                        pair.mine(), pair.partner());
+        Cover cover = coverOf(placeVisitRepository.findByPlaceIdOrderByIdDesc(place.getId()));
+        return toResponse(place, s, pair, cover);
     }
 
     private String userName(Long userId) {

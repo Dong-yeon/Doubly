@@ -12,6 +12,7 @@ import { Chip } from '../../components/Chip';
 import { KakaoMap } from '../../components/KakaoMap';
 import type { KakaoMapHandle, KakaoPlaceResult } from '../../components/KakaoMap.types';
 import { placeApi } from '../../api/place';
+import { usePlaceStore } from '../../store/placeStore';
 import { isKakaoMapConfigured } from '../../constants/config';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
@@ -152,6 +153,7 @@ export function PlaceAddScreen({ navigation, route }: Props) {
         toast.success('장소를 추가했어요 ');
       }
       allowLeave();
+      usePlaceStore.getState().invalidate();
       navigation.goBack();
     } catch (e) {
       Alert.alert('오류', getErrorMessage(e));
