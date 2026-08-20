@@ -66,6 +66,10 @@ public class SecurityConfig {
                                 "/api/v1/auth/password/forgot",
                                 "/api/v1/auth/password/reset",
                                 "/api/v1/health",
+                                // 스토어(Google Play RTDN)가 직접 호출 — 사용자 JWT가 없다.
+                                // 발신자 확인은 GooglePlayWebhookController 내부의 공유 비밀
+                                // 토큰(?token=)이 담당한다.
+                                "/api/v1/webhooks/google-play",
                                 "/ws/**")
                         .permitAll()
                         // /auth/me, /auth/withdraw 등 그 외 모든 요청은 인증 필요
