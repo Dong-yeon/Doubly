@@ -1,4 +1,4 @@
-/** 1~5(또는 1~3) 평점을 ★☆ 문자열로 — PlaceDetailScreen/PlaceGuideScreen/LovelichelinBadge 공용 */
+/** 1~5(또는 1~3) 평점을 ★☆ 문자열로 — PlaceDetailScreen/PlaceScreen/LovelichelinBadge 공용 */
 export function stars(rating?: number | null): string {
   if (!rating) return '';
   return '★'.repeat(rating) + '☆'.repeat(Math.max(0, 5 - rating));

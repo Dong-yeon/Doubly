@@ -1,10 +1,8 @@
-/** 럽슐랭 탭 내부 스택 — 가이드 / 위시리스트 / 지도 / 추가 / 상세 (PLACE) */
+/** 럽슐랭 탭 내부 스택 — 가이드/위시리스트/지도(한 화면) / 추가 / 상세 (PLACE) */
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { PlaceStackParamList } from './types';
-import { PlaceGuideScreen } from '../screens/place/PlaceGuideScreen';
-import { PlaceWishlistScreen } from '../screens/place/PlaceWishlistScreen';
-import { PlaceMapScreen } from '../screens/place/PlaceMapScreen';
+import { PlaceScreen } from '../screens/place/PlaceScreen';
 import { PlaceAddScreen } from '../screens/place/PlaceAddScreen';
 import { PlaceDetailScreen } from '../screens/place/PlaceDetailScreen';
 import { TripListScreen } from '../screens/trip/TripListScreen';
@@ -21,12 +19,10 @@ const Stack = createNativeStackNavigator<PlaceStackParamList>();
 export function PlaceStackNavigator() {
   return (
     <Stack.Navigator
-      initialRouteName="PlaceGuide"
+      initialRouteName="PlaceMain"
       screenOptions={stackScreenOptions}
     >
-      <Stack.Screen name="PlaceGuide" component={PlaceGuideScreen} options={{ headerShown: false }} />
-      <Stack.Screen name="PlaceWishlist" component={PlaceWishlistScreen} options={{ headerShown: false }} />
-      <Stack.Screen name="PlaceMap" component={PlaceMapScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="PlaceMain" component={PlaceScreen} options={{ headerShown: false }} />
       <Stack.Screen
         name="PlaceAdd"
         component={PlaceAddScreen}
