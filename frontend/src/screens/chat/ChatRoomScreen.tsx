@@ -20,8 +20,10 @@ import { useHeaderHeight } from '@react-navigation/elements';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { ChatStackParamList } from '../../navigation/types';
 import { ImageViewer } from '../../components/ImageViewer';
+import { Avatar } from '../../components/Avatar';
 import { useChatStore } from '../../store/chatStore';
 import { useAuthStore } from '../../store/authStore';
+import { useRelationStore } from '../../store/relationStore';
 import { haptics } from '../../utils/haptics';
 import { pickImage, uploadImage } from '../../utils/imageUpload';
 import { getErrorMessage } from '../../utils/error';
@@ -85,6 +87,18 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const [viewingImage, setViewingImage] = useState<string | null>(null);
   const openImage = (uri: string) => setViewingImage(uri);
   const myId = useAuthStore((s) => s.user?.id);
+  /*
+   * 말풍선 옆 프로필 사진용 — relationId/title 만 오는 라우트 파라미터엔 이미지가
+   * 없어(navigation/types.ts) HomeScreen 이 이미 채워둔 relationStore 를 재사용한다.
+   * 채팅 탭으로 바로 진입해 아직 비어 있으면 여기서 한 번 채운다.
+   */
+  const couple = useRelationStore((s) => s.couple);
+  const fetchRelations = useRelationStore((s) => s.fetchAll);
+  useEffect(() => {
+    if (!couple) fetchRelations().catch(() => {});
+  }, [couple, fetchRelations]);
+  const partnerName = couple?.partner?.name ?? title;
+  const partnerAvatarUrl = couple?.partner?.profileImageUrl;
   const messages = useChatStore((s) => s.messages[relationId] ?? EMPTY_MESSAGES);
   const loadingOlder = useChatStore((s) => s.loadingOlder[relationId] ?? false);
   const { openRoom, closeRoom, send, markRead, replaceMessage, loadOlder } = useChatStore();
@@ -363,6 +377,12 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         <View>
           {divider}
           <View style={[styles.row, mine ? styles.rowMine : styles.rowTheirs, isGroupStart ? styles.rowSpaced : styles.rowGrouped]}>
+            {/* 삭제된 메시지는 그룹핑 대상이 아니라(항상 혼자) 아바타를 조건 없이 보여준다 */}
+            {!mine ? (
+              <View style={styles.avatarSlot}>
+                <Avatar name={partnerName} imageUrl={partnerAvatarUrl} size={26} color={colors.partner} />
+              </View>
+            ) : null}
             <View style={[styles.bubble, styles.bubbleDeleted]}>
               <Text style={styles.deletedText}>삭제된 메시지예요</Text>
             </View>
@@ -401,6 +421,18 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           delayLongPress={300}
           style={[styles.row, mine ? styles.rowMine : styles.rowTheirs]}
         >
+        {/*
+          상대 프로필 — 그룹의 마지막(가장 최근) 말풍선 옆에만, 시간·읽음과 같은 자리에.
+          그룹 중간 메시지는 폭이 같은 빈 슬롯을 둬서 말풍선이 계단식으로 밀리지 않게 한다.
+          내 메시지는 정렬·색으로 이미 구분되므로 아바타를 붙이지 않는다(불필요한 중복).
+        */}
+        {!mine ? (
+          <View style={styles.avatarSlot}>
+            {isGroupEnd ? (
+              <Avatar name={partnerName} imageUrl={partnerAvatarUrl} size={26} color={colors.partner} />
+            ) : null}
+          </View>
+        ) : null}
         {isSticker ? (
           stickerImageOf(item.content) ? (
             <Image source={stickerImageOf(item.content)!.source} style={styles.stickerImage} resizeMode="contain" />
@@ -468,11 +500,19 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         {/* 시간·읽음·수정 표시는 그룹의 마지막(가장 최근) 메시지에만 — 카톡처럼 한 번만 */}
         {isGroupEnd ? (
           <View style={mine ? styles.metaMine : styles.meta}>
-            {/* 읽음은 내가 보낸 메시지에만 — 상대 메시지의 읽음 여부는 알 필요가 없다 */}
+            {/*
+              읽음은 내가 보낸 메시지에만 — 상대 메시지의 읽음 여부는 알 필요가 없다.
+              "읽음"/"1" 텍스트 대신 하트로 — 채워진 하트=읽음, 테두리만=아직.
+              커플 앱 톤에 맞고(비교 벤치마크 앱도 같은 패턴), 10px 텍스트보다 작게
+              그려도 뜻이 분명하다.
+            */}
             {mine ? (
-              <Text style={[styles.read, item.isRead && styles.readDone]}>
-                {item.isRead ? '읽음' : '1'}
-              </Text>
+              <MaterialCommunityIcons
+                name={item.isRead ? 'heart' : 'heart-outline'}
+                size={11}
+                color={item.isRead ? colors.meText : colors.textTertiary}
+                style={styles.readHeart}
+              />
             ) : null}
             {item.edited ? <Text style={styles.editedMark}>수정됨</Text> : null}
             <Text style={styles.time}>{timeOf(item.createdAt)}</Text>
@@ -507,9 +547,10 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     <SwipeBackView style={styles.flex}>
     {/*
      * left/right 도 인셋에 포함한다(가로 화면·노치가 옆에 오는 기기 대비) — 온보딩의
-     * 여백 없는 화면들(RegisterScreen 등)과 같은 패턴. 아래 inputBar 의 가로 여백은
-     * 별개로 늘렸다 — 화면 모서리가 물리적으로 둥글어서, 세로 인셋만으론 안 잡히는
-     * "동그란 버튼이 모서리 곡률에 살짝 잘려 보이는" 문제라 안전 영역과는 무관하다.
+     * 여백 없는 화면들(RegisterScreen 등)과 같은 패턴. 아래 inputBar 의 가로·세로
+     * 여백은 별개로 늘렸다 — 화면 모서리가 물리적으로 둥글어서, safe-area 인셋만
+     * 으론 안 잡히는 "동그란 버튼이 모서리 곡률에 살짝 잘려 보이는" 문제라 안전
+     * 영역과는 무관하다(inputBar 스타일 주석 참고).
      */}
     <SafeAreaView style={styles.safe} edges={['bottom', 'left', 'right']}>
       <KeyboardAvoidingView
@@ -759,7 +800,10 @@ const styles = themedStyles((colors) => ({
   // 그룹 중간 말풍선(마지막이 아님) — 꼬리 없이 완전히 둥글게 이어붙는다
   bubbleMineGrouped: { borderBottomRightRadius: radius.lg },
   bubbleTheirsGrouped: { borderBottomLeftRadius: radius.lg },
-  msgText: { fontSize: fontSize.subtitle, color: colors.textPrimary, lineHeight: 21 },
+  // subtitle(16)이던 걸 한 단계 내렸다 — 그룹핑·아바타로 밀도가 오른 목록에서
+  // 상대적으로 더 커 보였다(비교 화면 피드백). lineHeight 는 body(14)의 기존
+  // 1.5배 관행(typography.ts cardBody)과 같은 21을 그대로 쓴다.
+  msgText: { fontSize: fontSize.body, color: colors.textPrimary, lineHeight: 21 },
   msgTextMine: { color: colors.white },
   msgImage: { width: 200, height: 200, borderRadius: radius.lg, backgroundColor: colors.surfaceAlt },
   // 스티커 — 말풍선 없이 크게. lineHeight 를 주지 않으면 안드로이드에서 이모지가 잘린다
@@ -883,10 +927,10 @@ const styles = themedStyles((colors) => ({
   composeBannerText: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 1 },
   meta: { marginHorizontal: spacing.xs, justifyContent: 'flex-end' },
   metaMine: { marginHorizontal: spacing.xs, alignItems: 'flex-end', justifyContent: 'flex-end' },
-  // 안 읽음은 카카오톡처럼 "1", 읽으면 "읽음" — 색으로도 구분한다
-  /* 10px 작은 글씨라 대비가 특히 중요하다 — 원색 coral 은 흰 배경 2.83:1 로 미달 */
-  read: { fontSize: 10, fontWeight: '800', color: colors.meText, marginBottom: 1 },
-  readDone: { color: colors.textTertiary, fontWeight: '600' },
+  // 읽음 표시 — 채워진 하트/테두리 하트로 구분(색은 MaterialCommunityIcons color prop)
+  readHeart: { marginBottom: 1 },
+  // 상대 아바타 자리 — 그룹 중간엔 내용 없이 폭만 차지해 말풍선이 계단식으로 안 밀린다
+  avatarSlot: { width: 26, marginRight: spacing.xs },
   // 눌림 효과 — 스티커·트레이 버튼 공용(예전엔 "reactionPressed" 로 리액션 바 전용이었다)
   iconPressed: { transform: [{ scale: 0.88 }], backgroundColor: colors.primarySoft },
   // 보조 도구 트레이 — "+" 로 펼치는 스티커/터치/사진 3개
@@ -901,11 +945,17 @@ const styles = themedStyles((colors) => ({
   inputBar: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    // 가로 여백을 세로보다 넉넉히 — 동그란 "+"/전송 버튼이 화면 맨 끝에 거의 붙어
-    // 있으면 기기의 둥근 모서리 곡률에 살짝 잘려 보인다(실기기 확인). safe-area
-    // 인셋은 좌우가 대개 0 이라(코너 곡률까지 잡아주지 않는다) 여백을 직접 늘렸다.
+    /*
+     * 동그란 "+"/전송 버튼이 화면 맨 끝에 거의 붙어 있으면 기기의 둥근 모서리
+     * 곡률에 살짝 잘려 보인다(실기기 확인). safe-area 인셋은 좌우가 대개 0 이라
+     * (코너 곡률까지 잡아주진 않는다) 여백을 직접 늘렸다 — 물리적으로 둥근 건
+     * 가장자리 전체가 아니라 네 "꼭짓점" 부근이라, 가로(paddingHorizontal)만
+     * 늘렸을 때보다 세로(paddingBottom)도 함께 늘리면 버튼이 꼭짓점에서 대각선
+     * 으로 더 멀어진다. 위쪽은 꼭짓점과 무관해 기존 값을 유지한다.
+     */
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
     gap: spacing.sm,
     backgroundColor: colors.background,
   },
