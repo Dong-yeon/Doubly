@@ -3,7 +3,7 @@ package com.fitto.place.controller;
 import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
 import com.fitto.place.dto.DateCourseResponse;
-import com.fitto.place.dto.LovelichelinSummaryResponse;
+import com.fitto.place.dto.LovelichelinRecommendationResponse;
 import com.fitto.place.dto.PlaceResponse;
 import com.fitto.place.dto.PlaceVisitResponse;
 import com.fitto.place.dto.RatePlaceRequest;
@@ -11,7 +11,7 @@ import com.fitto.place.dto.RecordVisitRequest;
 import com.fitto.place.dto.SavePlaceRequest;
 import com.fitto.place.dto.UpdatePlaceRequest;
 import com.fitto.place.service.DateCourseService;
-import com.fitto.place.service.LovelichelinReviewService;
+import com.fitto.place.service.LovelichelinRecommendService;
 import com.fitto.place.service.PlaceService;
 import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -35,13 +35,13 @@ public class PlaceController {
 
     private final PlaceService placeService;
     private final DateCourseService dateCourseService;
-    private final LovelichelinReviewService lovelichelinReviewService;
+    private final LovelichelinRecommendService lovelichelinRecommendService;
 
     public PlaceController(PlaceService placeService, DateCourseService dateCourseService,
-                           LovelichelinReviewService lovelichelinReviewService) {
+                           LovelichelinRecommendService lovelichelinRecommendService) {
         this.placeService = placeService;
         this.dateCourseService = dateCourseService;
-        this.lovelichelinReviewService = lovelichelinReviewService;
+        this.lovelichelinRecommendService = lovelichelinRecommendService;
     }
 
     @PostMapping
@@ -61,10 +61,10 @@ public class PlaceController {
         return ApiResponse.success(dateCourseService.recommend(user.id()));
     }
 
-    /** AI 럽슐랭 에디터 총평 — 인증된 장소로 커플 취향 총평 (GET /places/lovelichelin/summary) */
-    @GetMapping("/lovelichelin/summary")
-    public ApiResponse<LovelichelinSummaryResponse> lovelichelinSummary(@AuthenticationPrincipal AuthUser user) {
-        return ApiResponse.success(lovelichelinReviewService.summary(user.id()));
+    /** AI 맛집 추천 — 럽슐랭 취향 분석(Gemini) + 카카오 실존 장소 검색 (GET /places/lovelichelin/recommendations) */
+    @GetMapping("/lovelichelin/recommendations")
+    public ApiResponse<LovelichelinRecommendationResponse> lovelichelinRecommend(@AuthenticationPrincipal AuthUser user) {
+        return ApiResponse.success(lovelichelinRecommendService.recommend(user.id()));
     }
 
     @GetMapping("/{id}")

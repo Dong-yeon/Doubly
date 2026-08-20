@@ -23,6 +23,7 @@ import { MaterialCommunityIcons } from '../../components/Icon';
 import { TextField } from '../../components/TextField';
 import { AiInsightButton } from '../../components/AiInsightButton';
 import { LovelichelinBadge } from '../../components/LovelichelinBadge';
+import { LovelichelinRecommendCards } from './LovelichelinRecommendCards';
 import { STATUS_FILTERS, DIET_FILTERS } from './placeFilters';
 import { placeApi } from '../../api/place';
 import { usePlaceStore } from '../../store/placeStore';
@@ -32,7 +33,7 @@ import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { stars } from '../../utils/ratingStars';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { DateCourse, LovelichelinSummary, Place, PlaceDietTag, PlaceStatus } from '../../types';
+import type { DateCourse, LovelichelinRecommendation, Place, PlaceDietTag, PlaceStatus } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { layout } from '../../theme/layout';
 
@@ -73,27 +74,9 @@ function renderDateCourse(c: DateCourse) {
   );
 }
 
-function renderSummary(s: LovelichelinSummary) {
-  if (!s.available) {
-    return (
-      <Text style={styles.summaryEmpty}>
-        아직 인증된 럽슐랭 장소가 없어요. 둘이 함께 다녀온 곳에 평점을 매겨보세요!
-      </Text>
-    );
-  }
-  return (
-    <View style={{ gap: spacing.sm }}>
-      {s.review ? <Text style={styles.summaryText}>{s.review}</Text> : null}
-      {s.nextRecommendation ? (
-        <View style={styles.summaryNext}>
-          <Text style={styles.summaryNextArea}>💡 다음 추천: {s.nextRecommendation.area}</Text>
-          {s.nextRecommendation.reason ? (
-            <Text style={styles.summaryNextReason}>{s.nextRecommendation.reason}</Text>
-          ) : null}
-        </View>
-      ) : null}
-    </View>
-  );
+// 담기 진행/완료 상태가 필요해 렌더 함수가 아니라 컴포넌트(LovelichelinRecommendCards)로 그린다
+function renderRecommendation(data: LovelichelinRecommendation) {
+  return <LovelichelinRecommendCards data={data} />;
 }
 
 export function PlaceScreen() {
@@ -110,6 +93,11 @@ export function PlaceScreen() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<PlaceStatus | 'ALL'>('ALL');
   const [dietFilter, setDietFilter] = useState<PlaceDietTag | 'ALL'>('ALL');
+
+  // 지도 탭에서 빈 자리를 탭해 고른 좌표 — 확정 전까지는 "여기에 추가" 바만 뜬다
+  const [pendingPin, setPendingPin] = useState<{ lat: number; lng: number; address?: string | null } | null>(
+    null,
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -181,10 +169,10 @@ export function PlaceScreen() {
         <View style={styles.titleActions}>
           {mode === 'guide' ? (
             <AiInsightButton
-              label="AI 총평"
-              title="AI 럽슐랭 에디터의 총평"
-              fetcher={placeApi.lovelichelinSummary}
-              render={renderSummary}
+              label="AI 맛집 추천"
+              title="럽슐랭 취향 맞춤 추천"
+              fetcher={placeApi.lovelichelinRecommend}
+              render={renderRecommendation}
             />
           ) : null}
           {mode === 'map' ? (
@@ -202,7 +190,18 @@ export function PlaceScreen() {
 
       <View style={styles.modeRow}>
         {MODES.map((m) => (
-          <Chip key={m.value} label={m.label} selected={mode === m.value} onPress={() => setMode(m.value)} fill />
+          <Chip
+            key={m.value}
+            label={m.label}
+            selected={mode === m.value}
+            onPress={() => {
+              setMode(m.value);
+              // 지도를 벗어나면 고르던 좌표는 의미가 없다 — 다음에 지도로 돌아왔을 때
+              // 엉뚱한 위치에 "여기에 추가" 바가 떠 있지 않게 비운다.
+              if (m.value !== 'map') setPendingPin(null);
+            }}
+            fill
+          />
         ))}
       </View>
 
@@ -224,20 +223,27 @@ export function PlaceScreen() {
                 key={f.value}
                 label={f.label}
                 selected={statusFilter === f.value}
-                onPress={() => setStatusFilter(f.value)}
+                onPress={() => {
+                  setStatusFilter(f.value);
+                  // 클린식/치팅데이는 방문 기록을 남길 때만 붙는 태그라 "가고 싶어요"엔
+                  // 절대 걸리는 게 없다 — 필터 줄 자체를 접으면서 남아있던 선택도 지운다.
+                  if (f.value === 'WISHLIST') setDietFilter('ALL');
+                }}
               />
             ))}
           </View>
-          <View style={styles.filterRow}>
-            {DIET_FILTERS.map((f) => (
-              <Chip
-                key={f.value}
-                label={f.label}
-                selected={dietFilter === f.value}
-                onPress={() => setDietFilter(f.value)}
-              />
-            ))}
-          </View>
+          {statusFilter !== 'WISHLIST' ? (
+            <View style={styles.filterRow}>
+              {DIET_FILTERS.map((f) => (
+                <Chip
+                  key={f.value}
+                  label={f.label}
+                  selected={dietFilter === f.value}
+                  onPress={() => setDietFilter(f.value)}
+                />
+              ))}
+            </View>
+          ) : null}
         </>
       ) : null}
 
@@ -428,22 +434,48 @@ export function PlaceScreen() {
               markers={markers}
               height={0}
               style={styles.map}
+              selectable
+              onSelect={(pos) => setPendingPin(pos)}
               onMarkerPress={(id) => {
                 const place = mapPlaces.find((p) => p.id === id);
                 if (place) navigation.navigate('PlaceDetail', { placeId: place.id, name: place.name });
               }}
             />
             <Text style={styles.mapHint}>
-              {markers.length === 0
-                ? '위치가 등록된 장소가 없어요. 장소 추가 시 지도에서 위치를 선택해보세요!'
-                : '핀을 탭하면 상세로 이동해요.'}
+              {pendingPin
+                ? '이 위치로 장소를 추가할까요?'
+                : markers.length === 0
+                  ? '위치가 등록된 장소가 없어요. 빈 곳을 탭해 장소를 추가해보세요!'
+                  : '핀을 탭하면 상세로, 빈 곳을 탭하면 그 자리에 장소를 추가할 수 있어요.'}
             </Text>
           </View>
         )
       ) : null}
 
       <View style={styles.fabWrap}>
-        <Button title="＋ 장소 추가하기" onPress={() => navigation.navigate('PlaceAdd')} />
+        {mode === 'map' && pendingPin ? (
+          <View style={styles.pendingPinBar}>
+            <View style={styles.pendingPinInfo}>
+              <MaterialCommunityIcons name="map-marker" size={18} color={colors.primary} />
+              <Text style={styles.pendingPinText} numberOfLines={1}>
+                {pendingPin.address ?? `${pendingPin.lat.toFixed(5)}, ${pendingPin.lng.toFixed(5)}`}
+              </Text>
+            </View>
+            <View style={styles.pendingPinActions}>
+              <IconButton icon="close" label="위치 선택 취소" onPress={() => setPendingPin(null)} />
+              <Button
+                title="여기에 추가"
+                size="sm"
+                onPress={() => {
+                  navigation.navigate('PlaceAdd', { initialCoords: pendingPin });
+                  setPendingPin(null);
+                }}
+              />
+            </View>
+          </View>
+        ) : (
+          <Button title="＋ 장소 추가하기" onPress={() => navigation.navigate('PlaceAdd')} />
+        )}
       </View>
     </SafeAreaView>
   );
@@ -533,11 +565,6 @@ const styles = themedStyles((colors) => ({
   courseStopBody: { flex: 1 },
   courseName: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
   courseReason: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xxs, lineHeight: 18 },
-  summaryEmpty: { fontSize: fontSize.body, color: colors.textSecondary, lineHeight: 22 },
-  summaryText: { fontSize: fontSize.body, color: colors.textSecondary, lineHeight: 22 },
-  summaryNext: { padding: spacing.sm, borderRadius: radius.md, backgroundColor: colors.togetherBg },
-  summaryNextArea: { fontSize: fontSize.body, fontWeight: '800', color: colors.togetherText },
-  summaryNextReason: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xxs },
   // 지도
   mapUnavailable: { flex: 1, justifyContent: 'center', padding: spacing.lg },
   mapWrap: { flex: 1, padding: spacing.lg, paddingBottom: layout.listBottomWithFab },
@@ -551,4 +578,20 @@ const styles = themedStyles((colors) => ({
   map: { flex: 1 },
   mapHint: { fontSize: fontSize.caption, color: colors.textSecondary, textAlign: 'center', marginTop: spacing.sm },
   fabWrap: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: spacing.lg },
+  // 지도에서 좌표를 고른 직후 뜨는 바 — 기본 FAB 자리를 그대로 대체한다
+  pendingPinBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.surfaceCard,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    paddingLeft: spacing.md,
+    paddingRight: spacing.xs,
+    paddingVertical: spacing.xs,
+  },
+  pendingPinInfo: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  pendingPinText: { flex: 1, fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '600' },
+  pendingPinActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
 }));

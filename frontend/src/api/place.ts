@@ -3,7 +3,7 @@ import { apiClient, unwrap } from './client';
 import type {
   ApiResponse,
   DateCourse,
-  LovelichelinSummary,
+  LovelichelinRecommendation,
   Place,
   PlaceDietTag,
   PlaceStatus,
@@ -59,7 +59,11 @@ export const placeApi = {
   // 럽슐랭 대표 평점 등록/수정 — 장소당 1개, 재평가 시 덮어쓰며 등급이 재산정된다
   rate: (placeId: number, payload: RatePlacePayload) =>
     unwrap(apiClient.put<ApiResponse<Place>>(`/places/${placeId}/rating`, payload)),
-  // AI 럽슐랭 에디터 총평 — 인증된 장소로 커플 취향 총평 (생성에 시간 걸려 timeout 상향)
-  lovelichelinSummary: () =>
-    unwrap(apiClient.get<ApiResponse<LovelichelinSummary>>('/places/lovelichelin/summary', { timeout: 60000 })),
+  // AI 맛집 추천 — 럽슐랭 취향 분석(Gemini) + 카카오 실존 장소 검색 (생성에 시간 걸려 timeout 상향)
+  lovelichelinRecommend: () =>
+    unwrap(
+      apiClient.get<ApiResponse<LovelichelinRecommendation>>('/places/lovelichelin/recommendations', {
+        timeout: 60000,
+      }),
+    ),
 };
