@@ -201,6 +201,7 @@ public class PlaceService {
     /**
      * 럽슐랭 대표 평점 등록/수정 — 장소당 한 사람당 1개만 유지되며 재평가 시 덮어쓴다.
      * 두 사람 평점이 모두 모이면 등급(tier)을 재산정하고, 새로 등극했을 때만 상대에게 알린다.
+     * 상대가 아직 평가 전이면 <b>내 첫 평가 때 한 번만</b> 재촉 푸시를 보낸다.
      */
     @Transactional
     public PlaceResponse rate(Long userId, Long placeId, RatePlaceRequest request) {
@@ -208,6 +209,9 @@ public class PlaceService {
 
         PlaceRating mine = placeRatingRepository.findByPlaceIdAndUserId(placeId, userId)
                 .orElse(null);
+        // 재촉 푸시의 스팸 방지 — 별점만 고쳐 다시 저장하는 재평가는 첫 평가가 아니므로
+        // 상대에게 다시 보내지 않는다 (별도 상태 없이 upsert 분기로 자연스럽게 1회 보장).
+        boolean firstRating = mine == null;
         if (mine == null) {
             mine = PlaceRating.builder()
                     .placeId(placeId)
@@ -241,6 +245,18 @@ public class PlaceService {
                 place.applyLovelichelinTier(0, null);
             } else {
                 place.applyLovelichelinTier(newTier, place.getLovelichelinCertifiedAt());
+            }
+        }
+
+        // 등급은 둘 다 평가해야 매겨지는데, 정작 상대는 내가 평가했다는 사실을 알 길이 없었다
+        // ("상대 평가 대기 중" 문구는 내 화면에만 보인다) — 첫 평가 시 상대에게 차례를 알린다.
+        // 등극 알림과는 상호배타적이다: 등극은 상대 평점이 있어야, 재촉은 없어야 나간다.
+        if (firstRating && pair.partner() == null) {
+            Long partnerId = activeCouple(userId).partnerOf(userId);
+            if (partnerId != null) {
+                notificationService.notify(partnerId, "럽슐랭 평가를 기다려요 ⭐",
+                        userName(userId) + "이(가) " + place.getName()
+                                + "에 별점을 남겼어요. 당신의 평점이 등급을 결정해요!");
             }
         }
 
