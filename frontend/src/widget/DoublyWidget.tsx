@@ -3,7 +3,9 @@
  *
  * react-native-android-widget 의 위젯 프리미티브만 사용해야 한다
  * (일반 RN 컴포넌트·훅 사용 불가 — 네이티브 RemoteViews 로 변환된다).
- * 색은 Duo Color System: 나=Coral, 상대=Indigo, 배경=Cream, 텍스트=Ink.
+ * 색은 Duo Color System: 나=Gold, 상대=Green, 배경=Cream, 텍스트=Ink.
+ * 값은 theme/colors.ts 라이트 팔레트(coral/indigo)와 동일 — 위젯은 헤드리스 태스크로
+ * 그려져 Appearance 기반 다크모드를 따르지 않으므로 라이트 값을 그대로 고정한다.
  */
 import React from 'react';
 import { FlexWidget, TextWidget } from 'react-native-android-widget';
@@ -14,8 +16,8 @@ const COLORS = {
   background: '#FBF8F3' as const, // cream
   ink: '#14162B' as const,
   sub: '#62687A' as const,
-  me: '#FF6A4D' as const, // coral
-  partner: '#4A5BFF' as const, // indigo
+  me: '#8A6817' as const, // gold (theme.light.coral)
+  partner: '#2C7D33' as const, // green (theme.light.indigo)
 };
 
 export function DoublyWidget({ data }: { data: WidgetData | null }) {
