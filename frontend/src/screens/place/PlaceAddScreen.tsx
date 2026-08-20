@@ -43,15 +43,19 @@ export function PlaceAddScreen({ navigation, route }: Props) {
   // 기존 장소를 들고 들어오면 수정 모드 — 필드를 채워두고 저장 시 update 를 호출한다
   const editingPlace = route.params?.place;
   const isEdit = editingPlace != null;
+  // 지도 탭에서 빈 곳을 탭해 "여기에 추가"로 들어오면 좌표·주소가 미리 채워져 있다
+  const initialCoords = route.params?.initialCoords;
 
   const [name, setName] = useState(editingPlace?.name ?? '');
-  const [address, setAddress] = useState(editingPlace?.address ?? '');
+  const [address, setAddress] = useState(editingPlace?.address ?? initialCoords?.address ?? '');
   const [category, setCategory] = useState<string | null>(editingPlace?.category ?? null);
   const [status, setStatus] = useState<PlaceStatus>(editingPlace?.status ?? 'WISHLIST');
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(
     editingPlace?.lat != null && editingPlace?.lng != null
       ? { lat: editingPlace.lat, lng: editingPlace.lng }
-      : null,
+      : initialCoords
+        ? { lat: initialCoords.lat, lng: initialCoords.lng }
+        : null,
   );
   const [saving, setSaving] = useState(false);
 
@@ -205,7 +209,8 @@ export function PlaceAddScreen({ navigation, route }: Props) {
                 ref={mapRef}
                 selectable
                 height={240}
-                // 수정 모드에서는 기존 위치를 핀으로 미리 보여준다 (탭·검색으로 바꾸면 새 핀이 함께 표시됨)
+                // 수정 모드는 기존 위치를, 지도 탭 "여기에 추가"로 들어온 경우엔 그 좌표를
+                // 핀으로 미리 보여준다 (탭·검색으로 바꾸면 새 핀이 함께 표시됨)
                 markers={
                   editingPlace?.lat != null && editingPlace?.lng != null
                     ? [
@@ -216,10 +221,12 @@ export function PlaceAddScreen({ navigation, route }: Props) {
                           title: editingPlace.name,
                         },
                       ]
-                    : undefined
+                    : initialCoords
+                      ? [{ id: -1, lat: initialCoords.lat, lng: initialCoords.lng, title: '선택한 위치' }]
+                      : undefined
                 }
-                centerLat={editingPlace?.lat ?? undefined}
-                centerLng={editingPlace?.lng ?? undefined}
+                centerLat={editingPlace?.lat ?? initialCoords?.lat ?? undefined}
+                centerLng={editingPlace?.lng ?? initialCoords?.lng ?? undefined}
                 onSelect={onMapSelect}
                 onSearchResults={onSearchResults}
               />

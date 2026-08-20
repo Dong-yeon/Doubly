@@ -125,6 +125,11 @@ fitto:
     api-key: ${FOOD_DB_API_KEY:}
     base-url: ${FOOD_DB_BASE_URL:http://openapi.foodsafetykorea.go.kr/api}
 
+  # 카카오 로컬 REST API (AI 맛집 추천의 실존 장소 검색) — 프론트 지도용 JS 키와 별개.
+  # 카카오 개발자 콘솔의 같은 앱에서 "REST API 키"를 복사한다. 미설정 시 맛집 추천만 비활성.
+  kakao:
+    rest-api-key: ${KAKAO_REST_API_KEY:}
+
 logging:
   level:
     com.fitto: DEBUG

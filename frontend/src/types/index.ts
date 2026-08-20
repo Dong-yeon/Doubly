@@ -28,7 +28,7 @@ export type FeatureKey =
   | 'AI_FOOD_TEXT'
   | 'AI_DIET_COACH'
   | 'AI_DATE_COURSE'
-  | 'AI_LOVELICHELIN_REVIEW'
+  | 'AI_RESTAURANT_RECOMMEND'
   | 'AI_WEEKLY_LETTER'
   | 'AI_TRIP_ITINERARY'
   | 'AI_WORKOUT_RECOMMEND'
@@ -682,15 +682,24 @@ export interface DateCourse {
   comment?: string | null;
 }
 
-// AI 럽슐랭 에디터 총평 — 인증된(tier>0) 장소로 커플 취향을 요약
-export interface LovelichelinNextRecommendation {
-  area: string;
+// AI 맛집 추천 — 럽슐랭 취향 분석(Gemini)이 검색 의도를 만들고 실존 장소는 카카오에서 온다.
+// 이름·주소·좌표는 카카오 응답 그대로(환각 없음), reason 만 AI 가 쓴다.
+export interface LovelichelinRecommendedPlace {
+  name: string;
+  address?: string | null;
+  category?: string | null;
+  lat?: number | null;
+  lng?: number | null;
   reason?: string | null;
+  /** 카카오맵 상세 페이지 — 담기 전에 직접 확인용 */
+  placeUrl?: string | null;
 }
-export interface LovelichelinSummary {
+export interface LovelichelinRecommendation {
+  /** false = 인증된 럽슐랭 장소가 아직 없어 추천 근거가 없음 */
   available: boolean;
-  review?: string | null;
-  nextRecommendation?: LovelichelinNextRecommendation | null;
+  /** 커플 취향 총평 한두 문장 (구 AI 총평의 재치를 흡수) */
+  greeting?: string | null;
+  places: LovelichelinRecommendedPlace[];
 }
 
 // 식단 즐겨찾기 — 자주 먹는 음식 "세트" (원탭 추가). 여러 음식을 한 번에 등록해둘 수 있다.

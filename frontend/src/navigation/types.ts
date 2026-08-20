@@ -165,7 +165,8 @@ export type PlaceStackParamList = {
   // 럽슐랭 가이드(인증 장소)/위시리스트(후보)/지도를 Chip 세그먼트로 전환하는 한 화면
   PlaceMain: undefined;
   // place: 기존 장소를 수정하러 들어올 때만 채워짐 (없으면 새 장소 추가)
-  PlaceAdd: { place?: Place } | undefined;
+  // initialCoords: 지도 탭에서 빈 곳을 탭해 "여기에 추가"로 들어올 때만 채워짐 (좌표·주소 미리 채움)
+  PlaceAdd: { place?: Place; initialCoords?: { lat: number; lng: number; address?: string | null } } | undefined;
   PlaceDetail: { placeId: number; name: string };
   // 커플 여행 (PLAN.md Trip) — 장소를 여행으로 그룹핑
   TripList: undefined;
