@@ -19,7 +19,7 @@ import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { useDirtyGuard } from '../../hooks/useDirtyGuard';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { PlaceDietTag, PlaceStatus } from '../../types';
+import type { PlaceStatus } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<PlaceStackParamList, 'PlaceAdd'>;
@@ -39,13 +39,6 @@ const STATUS_OPTIONS: { value: PlaceStatus; label: string }[] = [
   { value: 'VISITED', label: '다녀왔어요' },
 ];
 
-// 클린식/치팅데이 구분 — 평소엔 클린식, 주말·보상 데이트엔 치팅데이 맛집을 따로 찾는 수요 반영
-const DIET_TAG_OPTIONS: { value: PlaceDietTag; label: string }[] = [
-  { value: 'NEUTRAL', label: '구분 없음' },
-  { value: 'CLEAN', label: '🥗 클린식' },
-  { value: 'CHEAT', label: '🍔 치팅데이' },
-];
-
 export function PlaceAddScreen({ navigation, route }: Props) {
   // 기존 장소를 들고 들어오면 수정 모드 — 필드를 채워두고 저장 시 update 를 호출한다
   const editingPlace = route.params?.place;
@@ -55,7 +48,6 @@ export function PlaceAddScreen({ navigation, route }: Props) {
   const [address, setAddress] = useState(editingPlace?.address ?? '');
   const [category, setCategory] = useState<string | null>(editingPlace?.category ?? null);
   const [status, setStatus] = useState<PlaceStatus>(editingPlace?.status ?? 'WISHLIST');
-  const [dietTag, setDietTag] = useState<PlaceDietTag>(editingPlace?.dietTag ?? 'NEUTRAL');
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(
     editingPlace?.lat != null && editingPlace?.lng != null
       ? { lat: editingPlace.lat, lng: editingPlace.lng }
@@ -76,7 +68,6 @@ export function PlaceAddScreen({ navigation, route }: Props) {
       address.trim() !== (editingPlace?.address ?? '') ||
       category !== (editingPlace?.category ?? null) ||
       status !== (editingPlace?.status ?? 'WISHLIST') ||
-      dietTag !== (editingPlace?.dietTag ?? 'NEUTRAL') ||
       (coords?.lat ?? null) !== (editingPlace?.lat ?? null) ||
       (coords?.lng ?? null) !== (editingPlace?.lng ?? null)
     : name.trim().length > 0 ||
@@ -141,7 +132,6 @@ export function PlaceAddScreen({ navigation, route }: Props) {
         lng: coords?.lng,
         category: category ?? undefined,
         status,
-        dietTag,
       };
       if (editingPlace) {
         await placeApi.update(editingPlace.id, payload);
@@ -259,19 +249,6 @@ export function PlaceAddScreen({ navigation, route }: Props) {
                 label={o.label}
                 selected={status === o.value}
                 onPress={() => setStatus(o.value)}
-                fill
-              />
-            ))}
-          </View>
-
-          <Text style={styles.label}>식단 구분 (선택) — 맛집이라면 클린식/치팅데이로 구분해보세요</Text>
-          <View style={styles.chipRow}>
-            {DIET_TAG_OPTIONS.map((o) => (
-              <Chip
-                key={o.value}
-                label={o.label}
-                selected={dietTag === o.value}
-                onPress={() => setDietTag(o.value)}
                 fill
               />
             ))}

@@ -214,7 +214,7 @@ class MemoriesFlowTest {
                 "성산일출봉", "제주", null, null, "관광", PlaceStatus.WISHLIST, null)).id();
         // 오늘 등록하지만 방문일은 1년 전
         placeService.recordVisit(c[0], placeId,
-                new RecordVisitRequest(LocalDate.of(2025, 7, 30), 5, "최고였다", null, null));
+                new RecordVisitRequest(LocalDate.of(2025, 7, 30), 5, "최고였다", null, null, null));
 
         MemoriesResponse res = memoriesService.memories(c[0], TODAY);
 
