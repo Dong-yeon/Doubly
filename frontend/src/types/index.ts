@@ -397,6 +397,21 @@ export interface WorkoutRoutine {
   createdAt: string;
 }
 
+// 맞춤 프로그램(짐워크 스타일, 주차 지정) — 요일별 Day 루틴들을 하나로 묶은 것.
+// "내 루틴" 목록에는 이 프로그램 카드 하나만 보이고, 안의 Day 루틴들은 여기 안에서만 조회된다.
+export interface WorkoutProgram {
+  id: number;
+  title: string;
+  totalWeeks: number;
+  createdAt: string;
+  days: WorkoutProgramDay[];
+}
+
+export interface WorkoutProgramDay {
+  dayNo: number;
+  routine: WorkoutRoutine;
+}
+
 // 커플 루틴 선물하기 — 내 운동 루틴을 애인에게 보내면 수락 시 애인 루틴 목록에 그대로 추가된다.
 // routine 은 상태에 따라 다른 걸 보여준다: 수락 전엔 전송 시점 스냅샷, 수락 후엔 받는 사람
 // 소유로 복사된 결과물(삭제됐으면 null).

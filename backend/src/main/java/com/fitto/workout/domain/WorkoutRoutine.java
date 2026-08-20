@@ -12,6 +12,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
@@ -79,6 +80,15 @@ public class WorkoutRoutine {
     @BatchSize(size = 50)
     private Set<DayOfWeek> scheduledDays = new HashSet<>();
 
+    /** 맞춤 프로그램 소속이면 그 프로그램 — 자유 루틴(기존 전부, 시스템 템플릿)은 null. */
+    @ManyToOne(fetch = jakarta.persistence.FetchType.LAZY)
+    @JoinColumn(name = "program_id")
+    private WorkoutProgram program;
+
+    /** 프로그램 안에서의 순번(Day1=1, Day2=2…) — program 이 null 이면 같이 null. */
+    @Column(name = "day_no")
+    private Integer dayNo;
+
     @Builder
     private WorkoutRoutine(Long userId, String title, boolean systemTemplate, Set<DayOfWeek> scheduledDays) {
         this.userId = userId;
@@ -92,6 +102,11 @@ public class WorkoutRoutine {
     public void addExercise(WorkoutRoutineExercise exercise) {
         exercises.add(exercise);
         exercise.assignTo(this);
+    }
+
+    void assignToProgram(WorkoutProgram program, int dayNo) {
+        this.program = program;
+        this.dayNo = dayNo;
     }
 
     /** 요일 배정 전량 교체 — 저장/수정 어느 쪽에서든 "지금 보낸 게 최종 상태"로 다룬다. */

@@ -5,19 +5,23 @@ import com.fitto.common.plan.PlanGuard;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.workout.domain.ExerciseCatalog;
+import com.fitto.workout.domain.WorkoutProgram;
 import com.fitto.workout.domain.WorkoutRoutine;
 import com.fitto.workout.domain.WorkoutRoutineExercise;
 import com.fitto.workout.domain.WorkoutRoutineExerciseAlternative;
 import com.fitto.workout.domain.WorkoutRoutineExerciseSet;
+import com.fitto.workout.dto.ProgramResponse;
 import com.fitto.workout.dto.RoutineResponse;
 import com.fitto.workout.dto.SaveProgramRequest;
 import com.fitto.workout.dto.SaveRoutineRequest;
 import com.fitto.workout.repository.ExerciseCatalogRepository;
+import com.fitto.workout.repository.WorkoutProgramRepository;
 import com.fitto.workout.repository.WorkoutRoutineRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.time.DayOfWeek;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -25,7 +29,7 @@ import java.util.Set;
 import java.util.function.Function;
 
 /**
- * 사용자 본인 운동 루틴 — 저장/조회/삭제, 시스템 템플릿 조회·복사. 세션 실행의 기반.
+ * 사용자 본인 운동 루틴 — 저장/조회/삭제, 시스템 템플릿 조회·복사, 맞춤 프로그램. 세션 실행의 기반.
  */
 @Service
 @Transactional(readOnly = true)
@@ -33,21 +37,45 @@ public class WorkoutRoutineService {
 
 
     private final WorkoutRoutineRepository routineRepository;
+    private final WorkoutProgramRepository programRepository;
     private final ExerciseCatalogRepository catalogRepository;
     private final PlanGuard planGuard;
 
     public WorkoutRoutineService(WorkoutRoutineRepository routineRepository,
+                                 WorkoutProgramRepository programRepository,
                                  ExerciseCatalogRepository catalogRepository,
                                  PlanGuard planGuard) {
         this.routineRepository = routineRepository;
+        this.programRepository = programRepository;
         this.catalogRepository = catalogRepository;
         this.planGuard = planGuard;
     }
 
+    /** 자유 루틴만 — 프로그램 소속 Day 는 프로그램 카드로 따로 묶여 나가므로 여기 안 섞는다. */
     public List<RoutineResponse> list(Long userId) {
-        return routineRepository.findByUserIdOrderByIdDesc(userId).stream()
+        return routineRepository.findByUserIdAndProgramIsNullOrderByIdDesc(userId).stream()
                 .map(RoutineResponse::of)
                 .toList();
+    }
+
+    public List<ProgramResponse> listPrograms(Long userId) {
+        return programRepository.findByUserIdOrderByIdDesc(userId).stream()
+                .map(ProgramResponse::of)
+                .toList();
+    }
+
+    public ProgramResponse programDetail(Long userId, Long programId) {
+        return ProgramResponse.of(getOwnedProgram(userId, programId));
+    }
+
+    @Transactional
+    public void deleteProgram(Long userId, Long programId) {
+        programRepository.delete(getOwnedProgram(userId, programId));
+    }
+
+    private WorkoutProgram getOwnedProgram(Long userId, Long programId) {
+        return programRepository.findByIdAndUserId(programId, userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "프로그램을 찾을 수 없습니다."));
     }
 
     public RoutineResponse detail(Long userId, Long routineId) {
@@ -64,41 +92,61 @@ public class WorkoutRoutineService {
     @Transactional
     public RoutineResponse save(Long userId, SaveRoutineRequest request) {
         planGuard.requireCapacity(userId, Feature.WORKOUT_ROUTINE, routineRepository.countByUserId(userId));
-        WorkoutRoutine routine = WorkoutRoutine.builder()
-                .userId(userId)
-                .title(request.title().trim())
-                .scheduledDays(request.scheduledDaysOrEmpty())
-                .build();
-        CatalogLookup catalog = loadCatalog(request.exercises());
-        int order = 1;
-        for (SaveRoutineRequest.Exercise e : request.exercises()) {
-            routine.addExercise(toEntity(e, order++, catalog));
-        }
+        WorkoutRoutine routine = buildRoutine(userId, request.title().trim(), request.exercises(),
+                request.scheduledDaysOrEmpty());
         routineRepository.save(routine);
         return RoutineResponse.of(routine);
     }
 
     /**
-     * 맞춤 프로그램 만들기(짐워크 스타일) — AI가 요일별로 제안한 하루치들을 한 번에 여러
-     * 루틴으로 저장한다. 요일 하루당 루틴 하나, 제목은 "{프로그램명} - DayN"(N은 요청에
-     * 담긴 순서), scheduledDays 는 그 요일 하나로 자동 배정된다.
+     * 맞춤 프로그램 만들기(짐워크 스타일, 주차 지정) — AI가 요일별로 제안한 하루치들을
+     * {@link WorkoutProgram} 하나로 묶어 한 번에 저장한다. 요일 하루당 Day 루틴 하나,
+     * 제목은 "{프로그램명} - DayN"(N은 요청에 담긴 순서), scheduledDays 는 그 요일 하나로
+     * 자동 배정된다. {@code totalWeeks} 는 Day 구성을 바꾸지 않고 프로그램 메타데이터로만
+     * 저장된다(진행률 표시용).
      *
-     * <p>기존 {@link #save} 를 그대로 반복 호출해 로직을 재사용한다 — 카탈로그 매칭·플랜
-     * 용량 체크가 루틴 하나 저장할 때와 동일하게 적용된다. 한 트랜잭션이라 중간에 용량
-     * 초과 등으로 실패하면 이미 만든 루틴까지 전부 롤백된다(프로그램이 반쪽만 만들어지지 않게).
+     * <p>플랜 용량은 "완성 후 총 루틴 개수"(기존 개수 + 이번에 만들 Day 수) 전부가 한도
+     * 안에 들어오는지 미리 확인한다 — 예전처럼 {@link #save} 를 루프 안에서 반복 호출하며
+     * 매번 새로 세지 않고, 한 트랜잭션의 최종 결과 기준으로 한 번에 판단한다(그래도 실패하면
+     * {@code @Transactional} 이라 이미 만든 Day 까지 전부 롤백되는 건 기존과 동일).
      */
     @Transactional
-    public List<RoutineResponse> saveProgram(Long userId, SaveProgramRequest request) {
-        List<RoutineResponse> saved = new ArrayList<>();
+    public ProgramResponse saveProgram(Long userId, SaveProgramRequest request) {
+        long baseCount = routineRepository.countByUserId(userId);
+        for (int i = 0; i < request.days().size(); i++) {
+            planGuard.requireCapacity(userId, Feature.WORKOUT_ROUTINE, baseCount + i);
+        }
+
+        WorkoutProgram program = WorkoutProgram.builder()
+                .userId(userId)
+                .title(request.programTitle().trim())
+                .totalWeeks(request.totalWeeks())
+                .build();
         int dayNo = 1;
         for (SaveProgramRequest.ProgramDay day : request.days()) {
             String title = "%s - Day%d".formatted(request.programTitle().trim(), dayNo);
-            SaveRoutineRequest routineRequest =
-                    new SaveRoutineRequest(title, day.exercises(), Set.of(day.dayOfWeek()));
-            saved.add(save(userId, routineRequest));
+            WorkoutRoutine routine = buildRoutine(userId, title, day.exercises(), Set.of(day.dayOfWeek()));
+            program.addRoutine(routine, dayNo);
             dayNo++;
         }
-        return saved;
+        programRepository.save(program);
+        return ProgramResponse.of(program);
+    }
+
+    /** {@link #save}·{@link #saveProgram} 이 공유하는 루틴 조립 로직 — 카탈로그 매칭까지 끝낸, 아직 저장 전인 엔티티를 돌려준다. */
+    private WorkoutRoutine buildRoutine(Long userId, String title, List<SaveRoutineRequest.Exercise> exercises,
+                                        Set<DayOfWeek> scheduledDays) {
+        WorkoutRoutine routine = WorkoutRoutine.builder()
+                .userId(userId)
+                .title(title)
+                .scheduledDays(scheduledDays)
+                .build();
+        CatalogLookup catalog = loadCatalog(exercises);
+        int order = 1;
+        for (SaveRoutineRequest.Exercise e : exercises) {
+            routine.addExercise(toEntity(e, order++, catalog));
+        }
+        return routine;
     }
 
     /**

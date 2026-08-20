@@ -20,8 +20,9 @@ import { workoutApi } from '../../api/workout';
 import { getErrorMessage } from '../../utils/error';
 import { haptics } from '../../utils/haptics';
 import { todayWeekDay } from '../../utils/date';
+import { routineToSessionParams } from '../../utils/routine';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { MuscleRecoveryStatus, Streak, Workout, WorkoutRoutine } from '../../types';
+import type { MuscleRecoveryStatus, Streak, Workout, WorkoutProgram, WorkoutRoutine } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { layout } from '../../theme/layout';
 
@@ -67,8 +68,10 @@ export function WorkoutScreen({ navigation }: Props) {
   // 같은 패턴: 별도 스토어 없이 화면 로컬 state + API 직접 호출). 전체 목록·수정·삭제는
   // 여전히 "전체 보기"에서 그 화면으로 간다 — 여기서 관리 기능까지 만들진 않는다.
   const [routines, setRoutines] = useState<WorkoutRoutine[]>([]);
+  const [programs, setPrograms] = useState<WorkoutProgram[]>([]);
   const loadRoutines = useCallback(() => {
     workoutApi.routines().then(setRoutines).catch(() => setRoutines([]));
+    workoutApi.programs().then(setPrograms).catch(() => setPrograms([]));
   }, []);
 
   // 운동 스트릭 — 부가 정보라 실패해도 화면은 정상 동작 (0일로 표시)
@@ -95,36 +98,11 @@ export function WorkoutScreen({ navigation }: Props) {
     }, [fetchToday, fetchHistory, refreshStreaks, loadRoutines, loadRecovery]),
   );
 
-  // 루틴 카드를 탭하면 바로 세션 시작 — WorkoutRoutineListScreen.startSession 과 동일 로직
+  // 루틴 카드를 탭하면 바로 세션 시작 — WorkoutRoutineListScreen 과 동일 로직(공용 헬퍼)
   // (같은 화면이 아니라도 "루틴 탭 = 그 루틴으로 세션 시작"은 앱 전체에서 하나의 동작이어야 한다)
   const startSession = (routine: WorkoutRoutine) => {
     haptics.light();
-    navigation.navigate('WorkoutSession', {
-      routineId: routine.id,
-      routineTitle: routine.title,
-      exercises: routine.exercises.map((e) => ({
-        name: e.exerciseName,
-        category: e.category ?? undefined,
-        targetSets: e.targetSets ?? undefined,
-        reps: e.reps ?? undefined,
-        weightKg: e.weightKg ?? undefined,
-        muscleGroup: e.muscleGroup ?? undefined,
-        equipment: e.equipment ?? undefined,
-        exerciseCatalogId: e.exerciseCatalogId ?? undefined,
-        restSeconds: e.restSeconds ?? undefined,
-        sets: e.sets?.map((s) => ({
-          reps: s.reps ?? undefined,
-          weightKg: s.weightKg ?? undefined,
-          setType: s.setType ?? undefined,
-        })),
-        alternatives: e.alternatives?.map((a) => ({
-          exerciseCatalogId: a.exerciseCatalogId,
-          name: a.name,
-          muscleGroup: a.muscleGroup,
-          equipment: a.equipment ?? undefined,
-        })),
-      })),
-    });
+    navigation.navigate('WorkoutSession', routineToSessionParams(routine));
   };
 
   const onLongPress = (w: Workout) => {
@@ -234,9 +212,9 @@ export function WorkoutScreen({ navigation }: Props) {
               </>
             ) : null}
 
-            {/* 내 루틴 — 탭하면 바로 그 루틴으로 세션 시작. 홈 화면은 상위 몇 개만 보여주고
-                전체 관리(수정·삭제·요일 배정·템플릿)는 여전히 전체 목록 화면에서 한다. */}
-            {routines.length > 0 ? (
+            {/* 내 루틴 — 탭하면 바로 그 루틴으로 세션 시작(프로그램은 Day 선택 화면으로).
+                홈 화면은 상위 몇 개만 보여주고 전체 관리는 여전히 전체 목록 화면에서 한다. */}
+            {routines.length > 0 || programs.length > 0 ? (
               <>
                 <View style={styles.routineSectionHeader}>
                   <Text style={styles.sectionTitle}>내 루틴</Text>
@@ -247,6 +225,33 @@ export function WorkoutScreen({ navigation }: Props) {
                     전체 보기 ›
                   </Text>
                 </View>
+                {programs.slice(0, 2).map((p) => {
+                  const isToday = p.days.some((d) => d.routine.scheduledDays.includes(todayWeekDay()));
+                  return (
+                    <TouchableOpacity
+                      key={`p${p.id}`}
+                      style={[styles.routineCard, styles.programCard]}
+                      onPress={() => navigation.navigate('WorkoutProgramDetail', { programId: p.id })}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.flex}>
+                        <View style={styles.routineTitleRow}>
+                          <MaterialCommunityIcons name="calendar-month-outline" size={16} color={colors.primary} />
+                          <Text style={styles.routineTitle}>{p.title}</Text>
+                          {isToday ? (
+                            <View style={styles.routineTodayBadge}>
+                              <Text style={styles.routineTodayBadgeText}>오늘</Text>
+                            </View>
+                          ) : null}
+                        </View>
+                        <Text style={styles.routineMeta}>
+                          {p.totalWeeks}주 · Day {p.days.length}개
+                        </Text>
+                      </View>
+                      <MaterialCommunityIcons name="chevron-right" size={28} color={colors.primary} />
+                    </TouchableOpacity>
+                  );
+                })}
                 {routines.slice(0, 4).map((r) => {
                   const isToday = r.scheduledDays.includes(todayWeekDay());
                   return (
@@ -393,6 +398,8 @@ const styles = themedStyles((colors) => ({
     padding: spacing.md,
     marginBottom: spacing.sm,
   },
+  // 프로그램 카드 — 자유 루틴과 구분되도록 은은한 배경을 살짝 얹는다
+  programCard: { backgroundColor: colors.accentSoft },
   flex: { flex: 1 },
   routineTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   routineTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },

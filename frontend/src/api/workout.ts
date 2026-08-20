@@ -10,6 +10,7 @@ import type {
   RoutineGift,
   WeekDay,
   Workout,
+  WorkoutProgram,
   WorkoutRecommendation,
   WorkoutRoutine,
   WorkoutSet,
@@ -44,6 +45,8 @@ export interface SaveRoutinePayload {
  */
 export interface SaveProgramPayload {
   programTitle: string;
+  // 몇 주짜리 프로그램인지 — Day 구성은 주차별로 안 바뀌고 진행률 표시에만 쓰인다
+  totalWeeks: number;
   days: {
     dayOfWeek: WeekDay;
     exercises: SaveRoutinePayload['exercises'];
@@ -96,13 +99,20 @@ export const workoutApi = {
       ),
     ),
 
-  // 내 운동 루틴 (짐앱 스타일)
+  // 내 운동 루틴 (짐앱 스타일) — 프로그램 소속 Day 루틴은 여기 안 실린다(프로그램 카드로만 보임)
   routines: () => unwrap(apiClient.get<ApiResponse<WorkoutRoutine[]>>('/workout/routines')),
   saveRoutine: (payload: SaveRoutinePayload) =>
     unwrap(apiClient.post<ApiResponse<WorkoutRoutine>>('/workout/routines', payload)),
-  // 맞춤 프로그램 만들기 — 요일별 하루치를 한 번에 여러 루틴으로 저장
+  // 맞춤 프로그램 만들기 — 요일별 하루치를 한 번에 여러 루틴으로 저장, 하나의 프로그램으로 묶임
   saveProgram: (payload: SaveProgramPayload) =>
-    unwrap(apiClient.post<ApiResponse<WorkoutRoutine[]>>('/workout/routines/program', payload)),
+    unwrap(apiClient.post<ApiResponse<WorkoutProgram>>('/workout/routines/program', payload)),
+  // 내 프로그램 목록 — "내 루틴" 화면의 프로그램 카드용(Day 는 상세에서 조회)
+  programs: () => unwrap(apiClient.get<ApiResponse<WorkoutProgram[]>>('/workout/routines/programs')),
+  // 프로그램 상세 — Day 목록 포함, Day 선택 화면이 이걸로 그린다
+  programDetail: (id: number) =>
+    unwrap(apiClient.get<ApiResponse<WorkoutProgram>>(`/workout/routines/programs/${id}`)),
+  removeProgram: (id: number) =>
+    unwrap(apiClient.delete<ApiResponse<void>>(`/workout/routines/programs/${id}`)),
   // 스마트 루틴 동기화(Save-on-Finish) — 세션에서 바뀐 구성을 기존 루틴에 반영(전체 교체)
   updateRoutine: (id: number, payload: SaveRoutinePayload) =>
     unwrap(apiClient.patch<ApiResponse<WorkoutRoutine>>(`/workout/routines/${id}`, payload)),

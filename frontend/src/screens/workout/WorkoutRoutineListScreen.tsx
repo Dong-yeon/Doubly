@@ -13,20 +13,29 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { WorkoutStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
+import { MaterialCommunityIcons } from '../../components/Icon';
 import { workoutApi } from '../../api/workout';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { WEEK_DAYS, todayWeekDay } from '../../utils/date';
+import { routineToSessionParams } from '../../utils/routine';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { WorkoutRoutine } from '../../types';
+import type { WorkoutProgram, WorkoutRoutine } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { layout } from '../../theme/layout';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'WorkoutRoutines'>;
 
+// FlatList 는 단일 아이템 타입만 받아서, 프로그램 카드와 자유 루틴 카드를 하나의 목록에
+// 함께 보여주기 위한 구분 유니언 — "오늘" 정렬도 이 위에서 함께 처리한다.
+type ListItem =
+  | { kind: 'program'; program: WorkoutProgram }
+  | { kind: 'routine'; routine: WorkoutRoutine };
+
 export function WorkoutRoutineListScreen({ navigation }: Props) {
   const [routines, setRoutines] = useState<WorkoutRoutine[]>([]);
+  const [programs, setPrograms] = useState<WorkoutProgram[]>([]);
   const [loading, setLoading] = useState(false);
   const [pendingGiftCount, setPendingGiftCount] = useState(0);
   const [giftingId, setGiftingId] = useState<number | null>(null);
@@ -34,7 +43,9 @@ export function WorkoutRoutineListScreen({ navigation }: Props) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setRoutines(await workoutApi.routines());
+      const [r, p] = await Promise.all([workoutApi.routines(), workoutApi.programs()]);
+      setRoutines(r);
+      setPrograms(p);
     } catch (e) {
       toast.error(getErrorMessage(e, '루틴을 불러오지 못했어요.'));
     } finally {
@@ -82,45 +93,27 @@ export function WorkoutRoutineListScreen({ navigation }: Props) {
   };
 
   const today = todayWeekDay();
-  // 오늘 요일이 배정된 루틴을 앞으로 — Array.sort 는 안정 정렬이라 같은 그룹 안에서는
-  // 원래 순서(최근 만든 순, WorkoutRoutineService.list)가 유지된다
-  const sortedRoutines = useMemo(
-    () =>
-      [...routines].sort(
-        (a, b) => Number(b.scheduledDays.includes(today)) - Number(a.scheduledDays.includes(today)),
-      ),
-    [routines, today],
-  );
+  const programIsToday = (p: WorkoutProgram) =>
+    p.days.some((d) => d.routine.scheduledDays.includes(today));
+
+  // 프로그램 카드 + 자유 루틴 카드를 하나의 목록으로 합치고, 오늘 해당하는 걸 앞으로 —
+  // Array.sort 는 안정 정렬이라 같은 그룹 안에서는 원래 순서(최근 만든 순)가 유지된다
+  const items = useMemo<ListItem[]>(() => {
+    const combined: ListItem[] = [
+      ...programs.map((program): ListItem => ({ kind: 'program', program })),
+      ...routines.map((routine): ListItem => ({ kind: 'routine', routine })),
+    ];
+    return combined.sort((a, b) => {
+      const aToday = a.kind === 'program' ? programIsToday(a.program) : a.routine.scheduledDays.includes(today);
+      const bToday = b.kind === 'program' ? programIsToday(b.program) : b.routine.scheduledDays.includes(today);
+      return Number(bToday) - Number(aToday);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routines, programs, today]);
 
   const startSession = (routine: WorkoutRoutine) => {
     haptics.light();
-    navigation.navigate('WorkoutSession', {
-      routineId: routine.id,
-      routineTitle: routine.title,
-      exercises: routine.exercises.map((e) => ({
-        name: e.exerciseName,
-        category: e.category ?? undefined,
-        targetSets: e.targetSets ?? undefined,
-        reps: e.reps ?? undefined,
-        weightKg: e.weightKg ?? undefined,
-        muscleGroup: e.muscleGroup ?? undefined,
-        equipment: e.equipment ?? undefined,
-        exerciseCatalogId: e.exerciseCatalogId ?? undefined,
-        restSeconds: e.restSeconds ?? undefined,
-        // 세트별 목표가 있으면 세션이 종목마다 다른 무게·횟수로 시작한다(램프업/백오프 등)
-        sets: e.sets?.map((s) => ({
-          reps: s.reps ?? undefined,
-          weightKg: s.weightKg ?? undefined,
-          setType: s.setType ?? undefined,
-        })),
-        alternatives: e.alternatives?.map((a) => ({
-          exerciseCatalogId: a.exerciseCatalogId,
-          name: a.name,
-          muscleGroup: a.muscleGroup,
-          equipment: a.equipment ?? undefined,
-        })),
-      })),
-    });
+    navigation.navigate('WorkoutSession', routineToSessionParams(routine));
   };
 
   const onDelete = (routine: WorkoutRoutine) => {
@@ -142,26 +135,78 @@ export function WorkoutRoutineListScreen({ navigation }: Props) {
     ]);
   };
 
+  const onDeleteProgram = (program: WorkoutProgram) => {
+    Alert.alert('프로그램 삭제', `"${program.title}"과(와) Day ${program.days.length}개를 모두 삭제할까요?`, [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '삭제',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await workoutApi.removeProgram(program.id);
+            haptics.light();
+            setPrograms((prev) => prev.filter((p) => p.id !== program.id));
+          } catch (e) {
+            toast.error(getErrorMessage(e));
+          }
+        },
+      },
+    ]);
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       <FlatList
-        data={sortedRoutines}
-        keyExtractor={(r) => String(r.id)}
+        data={items}
+        keyExtractor={(item) => (item.kind === 'program' ? `p${item.program.id}` : `r${item.routine.id}`)}
         contentContainerStyle={styles.list}
         refreshing={loading}
         onRefresh={load}
         renderItem={({ item }) => {
-          const isToday = item.scheduledDays.includes(today);
+          if (item.kind === 'program') {
+            const { program } = item;
+            const isToday = programIsToday(program);
+            return (
+              <TouchableOpacity
+                style={[styles.card, styles.programCard, isToday && styles.cardToday]}
+                activeOpacity={0.8}
+                onPress={() => navigation.navigate('WorkoutProgramDetail', { programId: program.id })}
+                onLongPress={() => onDeleteProgram(program)}
+              >
+                <View style={styles.cardHeader}>
+                  <View style={styles.titleRow}>
+                    <MaterialCommunityIcons name="calendar-month-outline" size={16} color={colors.primary} />
+                    <Text style={styles.title}>{program.title}</Text>
+                    {isToday ? (
+                      <View style={styles.todayBadge}>
+                        <Text style={styles.todayBadgeText}>오늘</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                  <Text style={styles.start}>Day 선택 ›</Text>
+                </View>
+                <Text style={styles.summary} numberOfLines={2}>
+                  {program.days.map((d) => d.routine.title.split(' - ').pop()).join(' · ')}
+                </Text>
+                <Text style={styles.count}>
+                  {program.totalWeeks}주 프로그램 · Day {program.days.length}개 · 길게 눌러 삭제
+                </Text>
+              </TouchableOpacity>
+            );
+          }
+
+          const routine = item.routine;
+          const isToday = routine.scheduledDays.includes(today);
           return (
             <TouchableOpacity
               style={[styles.card, isToday && styles.cardToday]}
               activeOpacity={0.8}
-              onPress={() => startSession(item)}
-              onLongPress={() => onDelete(item)}
+              onPress={() => startSession(routine)}
+              onLongPress={() => onDelete(routine)}
             >
               <View style={styles.cardHeader}>
                 <View style={styles.titleRow}>
-                  <Text style={styles.title}>{item.title}</Text>
+                  <Text style={styles.title}>{routine.title}</Text>
                   {isToday ? (
                     <View style={styles.todayBadge}>
                       <Text style={styles.todayBadgeText}>오늘</Text>
@@ -171,8 +216,8 @@ export function WorkoutRoutineListScreen({ navigation }: Props) {
                 <View style={styles.headerActions}>
                   <TouchableOpacity
                     style={styles.giftBtn}
-                    disabled={giftingId === item.id}
-                    onPress={() => onGift(item)}
+                    disabled={giftingId === routine.id}
+                    onPress={() => onGift(routine)}
                   >
                     <Text style={styles.giftBtnText}>🎁</Text>
                   </TouchableOpacity>
@@ -180,10 +225,10 @@ export function WorkoutRoutineListScreen({ navigation }: Props) {
                 </View>
               </View>
               {/* 요일 배정 — 짐워크 스타일 미니 캘린더 점. 비어 있으면(자유 루틴) 아예 숨긴다 */}
-              {item.scheduledDays.length > 0 ? (
+              {routine.scheduledDays.length > 0 ? (
                 <View style={styles.dayDotRow}>
                   {WEEK_DAYS.map((d) => {
-                    const active = item.scheduledDays.includes(d.value);
+                    const active = routine.scheduledDays.includes(d.value);
                     return (
                       <View key={d.value} style={[styles.dayDot, active && styles.dayDotActive]}>
                         <Text style={[styles.dayDotText, active && styles.dayDotTextActive]}>{d.label}</Text>
@@ -193,9 +238,9 @@ export function WorkoutRoutineListScreen({ navigation }: Props) {
                 </View>
               ) : null}
               <Text style={styles.summary} numberOfLines={2}>
-                {item.exercises.map((e) => e.exerciseName).join(' · ') || '운동 없음'}
+                {routine.exercises.map((e) => e.exerciseName).join(' · ') || '운동 없음'}
               </Text>
-              <Text style={styles.count}>{item.exercises.length}개 운동 · 길게 눌러 삭제</Text>
+              <Text style={styles.count}>{routine.exercises.length}개 운동 · 길게 눌러 삭제</Text>
             </TouchableOpacity>
           );
         }}
@@ -250,6 +295,8 @@ const styles = themedStyles((colors) => ({
   },
   // 오늘 요일이 배정된 루틴 — 테두리로만 강조한다(배경을 바꾸면 다크모드에서 항상 도드라져 소음이 된다)
   cardToday: { borderColor: colors.primary, borderWidth: 1.5 },
+  // 프로그램 카드 — 자유 루틴과 구분되도록 은은한 배경을 살짝 얹는다
+  programCard: { backgroundColor: colors.accentSoft },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, flexShrink: 1 },
   title: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
