@@ -7,14 +7,16 @@
  */
 import type { MessageType } from '../types';
 import { touchGestureOf } from '../constants/touchGestures';
+import { stickerImageOf } from '../constants/stickerImages';
 
 export function messagePreview(type: MessageType, content?: string | null): string {
   switch (type) {
     case 'IMAGE':
       return '사진';
-    // 스티커는 이모지 자체가 가장 좋은 미리보기다
+    // 이모지 스티커는 이모지 자체가 가장 좋은 미리보기다. 이미지 스티커는 content 가
+    // 'LOVE_BEAR' 같은 코드라 라벨로 바꿔야 한다(TOUCH 와 같은 이유).
     case 'STICKER':
-      return content ?? '스티커';
+      return stickerImageOf(content)?.label ?? content ?? '스티커';
     case 'WORKOUT_CARD':
       return '운동 기록';
     case 'MEAL_CARD':
