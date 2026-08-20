@@ -26,6 +26,7 @@ import type {
 } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
+import { MuscleBodyBadge } from '../../components/MuscleBodyBadge';
 import { useWorkoutStore } from '../../store/workoutStore';
 import { workoutApi } from '../../api/workout';
 import { voiceClipsApi } from '../../api/voiceClips';
@@ -712,6 +713,9 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
                   {/* 이 종목이 뭔지 한눈에 보여주는 그림 — 카탈로그에 있는 종목만(커스텀 종목은 안 뜬다) */}
                   {e.emoji ? <Text style={styles.exEmoji}>{e.emoji}</Text> : null}
                   <Text style={styles.exName}>{e.name}</Text>
+                  {/* 자극 부위 배지 — 몸 실루엣에 부위를 색칠. muscleGroup 만 있으면 되므로
+                      emoji/TIP 과 달리 커스텀 종목도(루틴에 부위가 저장돼 있으면) 뜬다 */}
+                  {e.muscleGroup ? <MuscleBodyBadge muscleGroup={e.muscleGroup} size={18} /> : null}
                   <View style={styles.exHeaderActions}>
                     <TouchableOpacity onPress={() => openSubstitute(e)} hitSlop={8}>
                       <Text style={styles.exSwap}>⇄</Text>
@@ -948,6 +952,7 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
                     <View style={styles.substituteNameRow}>
                       {c.emoji ? <Text style={styles.exEmoji}>{c.emoji}</Text> : null}
                       <Text style={styles.substituteName}>{c.name}</Text>
+                      <MuscleBodyBadge muscleGroup={c.muscleGroup} size={16} />
                     </View>
                     {c.equipment ? <Text style={styles.substituteMeta}>{c.equipment}</Text> : null}
                   </TouchableOpacity>
