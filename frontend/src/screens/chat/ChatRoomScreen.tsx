@@ -42,6 +42,7 @@ import { chatApi } from '../../api/chat';
 import { isPrShareContent } from '../../utils/workoutShare';
 import { isGoalShareContent } from '../../utils/dietShare';
 import { touchGestureOf } from '../../constants/touchGestures';
+import { stickerImageOf } from '../../constants/stickerImages';
 import { playTouchGesture } from '../../utils/haptics';
 import { messagePreview } from '../../utils/messagePreview';
 import { chatDateDividerLabel, isSameLocalDay } from '../../utils/date';
@@ -56,6 +57,9 @@ const STICKERS = [
   '🤗', '😆', '😂', '🥹',
   '😴', '😤', '🥺', '😭',
   '👍', '💪', '🎉', '❤️‍🔥',
+  // 이미지 스티커 — 값은 이모지가 아니라 StickerImage 코드. 아래 렌더 두 곳(말풍선,
+  // 이 패널)이 stickerImageOf() 로 분기해 이미지로 그린다.
+  'LOVE_BEAR',
 ];
 
 // zustand 셀렉터가 매번 새 배열을 만들면 무한 리렌더(하얀 화면)가 나므로 안정 참조 사용
@@ -382,8 +386,12 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             <Text style={styles.quoteWho}>
               {item.replyTo.senderId === myId ? '나' : title}에게 답장
             </Text>
+            {/* content 를 그대로 쓰면 TOUCH/이미지 스티커는 'HAND_HOLD', 'LOVE_BEAR' 같은
+                코드가 그대로 노출된다 — 아래 배너와 같은 이유로 messagePreview 를 거친다 */}
             <Text style={styles.quoteText} numberOfLines={1}>
-              {item.replyTo.content ?? '삭제된 메시지'}
+              {item.replyTo.content != null
+                ? messagePreview(item.replyTo.messageType, item.replyTo.content)
+                : '삭제된 메시지'}
             </Text>
           </View>
         ) : null}
@@ -394,7 +402,11 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           style={[styles.row, mine ? styles.rowMine : styles.rowTheirs]}
         >
         {isSticker ? (
-          <Text style={styles.sticker}>{item.content}</Text>
+          stickerImageOf(item.content) ? (
+            <Image source={stickerImageOf(item.content)!.source} style={styles.stickerImage} resizeMode="contain" />
+          ) : (
+            <Text style={styles.sticker}>{item.content}</Text>
+          )
         ) : isTouch ? (
           // 스티커처럼 말풍선 없이 크게 — 이모지 아래 제스처 라벨을 붙인다
           <View style={styles.touchBlock}>
@@ -573,17 +585,24 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             >
               <MaterialCommunityIcons name="dots-horizontal" size={24} color={colors.textSecondary} />
             </Pressable>
-            {STICKERS.map((s) => (
-              <Pressable
-                key={s}
-                style={({ pressed }) => [styles.stickerBtn, pressed && styles.iconPressed]}
-                onPress={() => sendSticker(s)}
-                accessibilityRole="button"
-                accessibilityLabel={`스티커 ${s} 보내기`}
-              >
-                <Text style={styles.stickerEmoji}>{s}</Text>
-              </Pressable>
-            ))}
+            {STICKERS.map((s) => {
+              const img = stickerImageOf(s);
+              return (
+                <Pressable
+                  key={s}
+                  style={({ pressed }) => [styles.stickerBtn, pressed && styles.iconPressed]}
+                  onPress={() => sendSticker(s)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`스티커 ${img?.label ?? s} 보내기`}
+                >
+                  {img ? (
+                    <Image source={img.source} style={styles.stickerBtnImage} resizeMode="contain" />
+                  ) : (
+                    <Text style={styles.stickerEmoji}>{s}</Text>
+                  )}
+                </Pressable>
+              );
+            })}
           </View>
         ) : null}
         {/* 답장·수정 중 배너 — 무엇에 대해 쓰고 있는지 보여주고 취소할 수 있게 */}
@@ -745,6 +764,8 @@ const styles = themedStyles((colors) => ({
   msgImage: { width: 200, height: 200, borderRadius: radius.lg, backgroundColor: colors.surfaceAlt },
   // 스티커 — 말풍선 없이 크게. lineHeight 를 주지 않으면 안드로이드에서 이모지가 잘린다
   sticker: { fontSize: 56, lineHeight: 68 },
+  // 이미지 스티커 — 이모지 스티커와 비슷한 존재감을 갖도록 정사각형으로
+  stickerImage: { width: 132, height: 132 },
   // 가상 터치 — 스티커와 같은 크기 + 아래 제스처 라벨 한 줄
   touchBlock: { alignItems: 'center' },
   touchLabel: { fontSize: 11, fontWeight: '700', color: colors.textSecondary, marginTop: -4 },
@@ -768,6 +789,7 @@ const styles = themedStyles((colors) => ({
     justifyContent: 'center',
   },
   stickerEmoji: { fontSize: 28 },
+  stickerBtnImage: { width: 32, height: 32 },
   stickerToggleActive: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
   workoutCard: { paddingVertical: 10, paddingHorizontal: spacing.md, borderRadius: radius.lg, borderWidth: 1.5, maxWidth: 240 },
   workoutCardMine: { backgroundColor: colors.secondarySoft, borderColor: colors.secondary },

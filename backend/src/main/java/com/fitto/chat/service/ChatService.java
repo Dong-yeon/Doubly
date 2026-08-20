@@ -4,6 +4,7 @@ import com.fitto.auth.dto.UserResponse;
 import com.fitto.chat.domain.ChatMessage;
 import com.fitto.chat.domain.ChatMessageReaction;
 import com.fitto.chat.domain.MessageType;
+import com.fitto.chat.domain.StickerImage;
 import com.fitto.chat.domain.TouchGesture;
 import com.fitto.chat.dto.ChatMessageResponse;
 import com.fitto.chat.dto.ChatReactionSummary;
@@ -337,8 +338,11 @@ public class ChatService {
     private String preview(ChatMessage message) {
         return switch (message.getMessageType()) {
             case IMAGE -> "[이미지]";
-            // 스티커는 이모지 자체가 가장 좋은 미리보기다
-            case STICKER -> message.getContent() != null ? message.getContent() : "[스티커]";
+            // 이모지 스티커는 이모지 자체가 가장 좋은 미리보기다. 이미지 스티커(StickerImage)는
+            // content 가 "LOVE_BEAR" 같은 코드라 그대로 보여주면 안 되고 라벨로 바꿔야 한다.
+            case STICKER -> StickerImage.from(message.getContent())
+                    .map(s -> "[스티커] " + s.label())
+                    .orElse(message.getContent() != null ? message.getContent() : "[스티커]");
             case WORKOUT_CARD -> "[운동 기록]";
             case MEAL_CARD -> "[식단]";
             case ROUTINE_CARD -> "[루틴]";
