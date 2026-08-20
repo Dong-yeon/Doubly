@@ -27,6 +27,8 @@ public enum Feature {
     AI_FOOD_TEXT("AI 음식 분석", Quota.perDay(2), Quota.perDay(30)),
     AI_DIET_COACH("AI 식단 코치", Quota.blocked(), Quota.perDay(10)),
     AI_DATE_COURSE("AI 데이트 코스 추천", Quota.perMonth(1), Quota.perDay(10)),
+    /** 럽슐랭 인증 장소로 커플 미식 취향을 총평 — AI_DATE_COURSE 와 같은 근거로 같은 한도를 준다. */
+    AI_LOVELICHELIN_REVIEW("럽슐랭 AI 총평", Quota.perMonth(1), Quota.perDay(10)),
     AI_WEEKLY_LETTER("AI 주간 편지", Quota.blocked(), Quota.perDay(5)),
     AI_TRIP_ITINERARY("AI 여행 일정 생성", Quota.blocked(), Quota.perDay(5)),
     AI_WORKOUT_RECOMMEND("AI 운동 추천", Quota.perWeek(1), Quota.perDay(10)),
@@ -110,7 +112,7 @@ public enum Feature {
      */
     public boolean isCoupleScoped() {
         return switch (this) {
-            case AI_DATE_COURSE, AI_TRIP_ITINERARY, AI_WEEKLY_LETTER,
+            case AI_DATE_COURSE, AI_LOVELICHELIN_REVIEW, AI_TRIP_ITINERARY, AI_WEEKLY_LETTER,
                  TRIP_ACTIVE, TRIP_EXPENSE, TRIP_CHECKLIST,
                  PLACE_PIN, CALENDAR_EVENT, MEMORIES, WEEKLY_RECAP,
                  CUSTOM_BACKGROUND, PREMIUM_STICKER, TOUCH_GESTURE_PREMIUM,

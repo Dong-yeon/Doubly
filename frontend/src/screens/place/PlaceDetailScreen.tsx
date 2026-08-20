@@ -22,6 +22,8 @@ import { EmptyState } from '../../components/EmptyState';
 import { ImageViewer } from '../../components/ImageViewer';
 import { IconButton } from '../../components/IconButton';
 import { KakaoMap } from '../../components/KakaoMap';
+import { LovelichelinBadge } from '../../components/LovelichelinBadge';
+import { LovelichelinFanfareModal } from '../../components/LovelichelinFanfareModal';
 import { isKakaoMapConfigured } from '../../constants/config';
 import { placeApi } from '../../api/place';
 import { useDietStore } from '../../store/dietStore';
@@ -87,6 +89,16 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
   const [carbs, setCarbs] = useState('');
   const [fat, setFat] = useState('');
 
+  // 럽슐랭 대표 평점 — 방문기록 별점(위)과 별개로, 장소당 한 사람당 1개만 유지된다.
+  // revisitIntent 는 API가 되돌려주지 않는 선택 응답이라, 사용자가 이번에 직접 건드리지
+  // 않으면 undefined 로 두고 저장 요청에서도 생략한다 — 그래야 별점만 다시 매기려고
+  // 재평가할 때 이전에 남긴 "다시 안 올래요" 응답을 조용히 true 로 덮어쓰지 않는다.
+  const [myRatingInput, setMyRatingInput] = useState(0);
+  const [revisitIntent, setRevisitIntent] = useState<boolean | undefined>(undefined);
+  const [ratingSaving, setRatingSaving] = useState(false);
+  // 재평가로 등급이 유지/하락할 때는 축하 모달을 열지 않는다 — 0→양수로 "새로 등극"할 때만
+  const [fanfareTier, setFanfareTier] = useState(0);
+
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError(false);
@@ -94,6 +106,7 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
       const [p, v] = await Promise.all([placeApi.get(placeId), placeApi.visits(placeId)]);
       setPlace(p);
       setVisits(v);
+      setMyRatingInput(p.myRating ?? 0);
       // 수정 후 돌아왔을 때도 헤더 타이틀이 최신 이름을 따라가도록
       navigation.setOptions({ title: p.name });
     } catch (e) {
@@ -171,6 +184,27 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
       Alert.alert('오류', getErrorMessage(e));
     } finally {
       setSaving(false);
+    }
+  };
+
+  // 럽슐랭 대표 평점 저장 — 재평가 시 upsert. 등급이 0→양수로 새로 등극하면 축하 모달을 연다
+  const onSaveRating = async () => {
+    if (!place || myRatingInput === 0) return;
+    setRatingSaving(true);
+    try {
+      const previousTier = place.lovelichelinTier;
+      const updated = await placeApi.rate(placeId, { rating: myRatingInput, revisitIntent });
+      setPlace(updated);
+      haptics.success();
+      if (previousTier === 0 && updated.lovelichelinTier > 0) {
+        setFanfareTier(updated.lovelichelinTier);
+      } else {
+        toast.success('럽슐랭 평가를 저장했어요.');
+      }
+    } catch (e) {
+      Alert.alert('오류', getErrorMessage(e));
+    } finally {
+      setRatingSaving(false);
     }
   };
 
@@ -292,6 +326,51 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
                       style={styles.infoMap}
                     />
                   ) : null}
+
+                  {/* 럽슐랭 평가 — 방문기록 별점(아래)과 별개로, 장소당 나/상대 대표 평점이 각 1개씩 유지된다 */}
+                  <View style={styles.lovelichelinSection}>
+                    <View style={styles.lovelichelinHeader}>
+                      <Text style={styles.label}>럽슐랭 평가</Text>
+                      <LovelichelinBadge tier={place.lovelichelinTier} size="sm" />
+                    </View>
+                    <View style={styles.ratingRow}>
+                      <View style={styles.ratingCol}>
+                        <Text style={styles.ratingColLabel}>나</Text>
+                        <View style={styles.starRowSm}>
+                          {[1, 2, 3, 4, 5].map((n) => (
+                            <TouchableOpacity
+                              key={n}
+                              onPress={() => setMyRatingInput(myRatingInput === n ? 0 : n)}
+                              accessibilityLabel={`나의 럽슐랭 평점 ${n}점`}
+                            >
+                              <Text style={[styles.starSm, { color: colors.me }]}>
+                                {n <= myRatingInput ? '★' : '☆'}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </View>
+                      <View style={styles.ratingCol}>
+                        <Text style={styles.ratingColLabel}>상대</Text>
+                        <Text style={[styles.starSmReadonly, { color: colors.partner }]}>
+                          {place.partnerRating ? stars(place.partnerRating) : '아직 평가 전'}
+                        </Text>
+                      </View>
+                    </View>
+                    <Checkbox
+                      checked={revisitIntent ?? true}
+                      onChange={setRevisitIntent}
+                      label="다시 올래요?"
+                    />
+                    <Button
+                      title="럽슐랭 평가 저장"
+                      variant="secondary"
+                      size="sm"
+                      onPress={onSaveRating}
+                      loading={ratingSaving}
+                      disabled={myRatingInput === 0}
+                    />
+                  </View>
                 </View>
               ) : null}
 
@@ -467,6 +546,12 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
         initialIndex={viewingIndex}
         onClose={() => setViewingIndex(null)}
       />
+      <LovelichelinFanfareModal
+        visible={fanfareTier > 0}
+        tier={fanfareTier}
+        placeName={place?.name ?? ''}
+        onClose={() => setFanfareTier(0)}
+      />
     </SafeAreaView>
   );
 }
@@ -499,6 +584,20 @@ const styles = themedStyles((colors) => ({
   infoAddress: { fontSize: fontSize.body, color: colors.textSecondary, marginTop: spacing.sm },
   infoStats: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '700', marginTop: spacing.xs },
   infoMap: { marginTop: spacing.md },
+  lovelichelinSection: {
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    gap: spacing.sm,
+  },
+  lovelichelinHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  ratingRow: { flexDirection: 'row', gap: spacing.lg },
+  ratingCol: { flex: 1 },
+  ratingColLabel: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700', marginBottom: 2 },
+  starRowSm: { flexDirection: 'row', gap: 2 },
+  starSm: { fontSize: 22 },
+  starSmReadonly: { fontSize: fontSize.body, fontWeight: '700' },
   form: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,

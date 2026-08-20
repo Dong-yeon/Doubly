@@ -160,8 +160,12 @@ export type ChatStackParamList = {
   ChatRoom: { relationId: number; title: string };
 };
 
-// 맛집 탭 내부 스택 — 지도 / 추가 / 상세 (PLACE) + 여행 (TRIP)
+// 럽슐랭 탭 내부 스택 — 가이드(인증된 곳) / 위시리스트(후보) / 지도 + 추가 / 상세 (PLACE) + 여행 (TRIP)
 export type PlaceStackParamList = {
+  // 럽슐랭 인증(tier>0)된 장소 — 매거진 카드뷰 + AI 총평
+  PlaceGuide: undefined;
+  // 아직 인증 전(미방문 후보든, 방문했지만 둘 다 평가 전이거나 탈락한 곳이든)인 장소
+  PlaceWishlist: undefined;
   PlaceMap: undefined;
   // place: 기존 장소를 수정하러 들어올 때만 채워짐 (없으면 새 장소 추가)
   PlaceAdd: { place?: Place } | undefined;

@@ -98,7 +98,10 @@ export const linking: LinkingOptions<RootStackParamList> = {
           },
           Place: {
             screens: {
-              PlaceMap: 'place',
+              // 'place' 는 탭의 랜딩 화면을 가리킨다 — 랜딩이 지도에서 가이드로 바뀌어 이동
+              PlaceGuide: 'place',
+              PlaceWishlist: 'place/wishlist',
+              PlaceMap: 'place/map',
               PlaceAdd: 'place/add',
               PlaceDetail: {
                 path: 'place/:placeId',

@@ -11,7 +11,9 @@ import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.notification.NotificationService;
 import com.fitto.common.time.KstClock;
 import com.fitto.place.domain.Place;
+import com.fitto.place.domain.PlaceRating;
 import com.fitto.place.dto.PlaceResponse;
+import com.fitto.place.repository.PlaceRatingRepository;
 import com.fitto.place.repository.PlaceRepository;
 import com.fitto.place.repository.PlaceVisitRepository;
 import com.fitto.place.repository.PlaceVisitRepository.VisitSummary;
@@ -87,6 +89,7 @@ public class TripService {
     private final TripItemRepository tripItemRepository;
     private final PlaceRepository placeRepository;
     private final PlaceVisitRepository placeVisitRepository;
+    private final PlaceRatingRepository placeRatingRepository;
     private final RelationRepository relationRepository;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
@@ -98,6 +101,7 @@ public class TripService {
                        TripItemRepository tripItemRepository,
                        PlaceRepository placeRepository,
                        PlaceVisitRepository placeVisitRepository,
+                       PlaceRatingRepository placeRatingRepository,
                        RelationRepository relationRepository,
                        UserRepository userRepository,
                        NotificationService notificationService,
@@ -108,6 +112,7 @@ public class TripService {
         this.tripItemRepository = tripItemRepository;
         this.placeRepository = placeRepository;
         this.placeVisitRepository = placeVisitRepository;
+        this.placeRatingRepository = placeRatingRepository;
         this.relationRepository = relationRepository;
         this.userRepository = userRepository;
         this.notificationService = notificationService;
@@ -157,7 +162,7 @@ public class TripService {
         Trip trip = getCoupleTrip(userId, tripId);
         List<Place> places = placeRepository.findByTripIdOrderByIdDesc(trip.getId());
         List<TripDayResponse> days = buildDays(trip);
-        return new TripDetailResponse(TripResponse.of(trip, places.size()), days, withSummaries(places));
+        return new TripDetailResponse(TripResponse.of(trip, places.size()), days, withSummaries(places, userId));
     }
 
     /** 여행 수정 — 커플 둘 다 가능. */
@@ -491,20 +496,34 @@ public class TripService {
         return place;
     }
 
-    private List<PlaceResponse> withSummaries(List<Place> places) {
+    private List<PlaceResponse> withSummaries(List<Place> places, Long userId) {
         if (places.isEmpty()) {
             return List.of();
         }
+        List<Long> placeIds = places.stream().map(Place::getId).toList();
         Map<Long, VisitSummary> summaries = placeVisitRepository
-                .summarize(places.stream().map(Place::getId).toList())
+                .summarize(placeIds)
                 .stream()
                 .collect(Collectors.toMap(VisitSummary::getPlaceId, Function.identity()));
+        Map<Long, List<PlaceRating>> ratingsByPlace = placeRatingRepository.findByPlaceIdIn(placeIds)
+                .stream()
+                .collect(Collectors.groupingBy(PlaceRating::getPlaceId));
         return places.stream()
                 .map(p -> {
                     VisitSummary s = summaries.get(p.getId());
+                    Integer myRating = null;
+                    Integer partnerRating = null;
+                    for (PlaceRating r : ratingsByPlace.getOrDefault(p.getId(), List.of())) {
+                        if (userId.equals(r.getUserId())) {
+                            myRating = r.getRating();
+                        } else {
+                            partnerRating = r.getRating();
+                        }
+                    }
                     return s == null
-                            ? PlaceResponse.of(p, 0, null, null)
-                            : PlaceResponse.of(p, s.getVisitCount(), s.getAvgRating(), s.getLastVisitedAt());
+                            ? PlaceResponse.of(p, 0, null, null, myRating, partnerRating)
+                            : PlaceResponse.of(p, s.getVisitCount(), s.getAvgRating(), s.getLastVisitedAt(),
+                                    myRating, partnerRating);
                 })
                 .toList();
     }

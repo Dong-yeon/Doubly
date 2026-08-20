@@ -28,6 +28,7 @@ export type FeatureKey =
   | 'AI_FOOD_TEXT'
   | 'AI_DIET_COACH'
   | 'AI_DATE_COURSE'
+  | 'AI_LOVELICHELIN_REVIEW'
   | 'AI_WEEKLY_LETTER'
   | 'AI_TRIP_ITINERARY'
   | 'AI_WORKOUT_RECOMMEND'
@@ -466,6 +467,13 @@ export interface Place {
   visitCount: number;
   avgRating?: number | null;
   lastVisitedAt?: string | null;
+  /** 럽슐랭 대표 평점(장소당 1개, 방문기록 avgRating과 별개) — 미평가 시 null */
+  myRating?: number | null;
+  partnerRating?: number | null;
+  /** 럽슐랭 등급 — 0=후보/일반, 1~3=럽스타 */
+  lovelichelinTier: number;
+  /** 럽슐랭 등극(0→양수) 시각 — 미인증/탈락 시 null */
+  lovelichelinCertifiedAt?: string | null;
   createdAt: string;
 }
 export interface PlaceVisit {
@@ -669,6 +677,17 @@ export interface DateCourse {
   hasData: boolean;
   stops: DateCourseStop[];
   comment?: string | null;
+}
+
+// AI 럽슐랭 에디터 총평 — 인증된(tier>0) 장소로 커플 취향을 요약
+export interface LovelichelinNextRecommendation {
+  area: string;
+  reason?: string | null;
+}
+export interface LovelichelinSummary {
+  available: boolean;
+  review?: string | null;
+  nextRecommendation?: LovelichelinNextRecommendation | null;
 }
 
 // 식단 즐겨찾기 — 자주 먹는 음식 "세트" (원탭 추가). 여러 음식을 한 번에 등록해둘 수 있다.

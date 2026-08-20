@@ -28,9 +28,9 @@ const TAB_META: Record<keyof MainTabParamList, { label: string; icon: IconName }
   Workout: { label: '운동', icon: 'dumbbell' },
   Chat: { label: '채팅', icon: 'chat-outline' },
   Diet: { label: '식단', icon: 'silverware-fork-knife' },
-  // 맛집 지도 + 여행(Trip) 을 함께 담는다 — "여행 = 장소를 그룹핑한 것"이라 상위 개념인
-  // "장소"가 정확하다. 기존 "플레이스" 는 5탭 중 유일한 영어 표기였다.
-  Place: { label: '장소', icon: 'map-marker-outline' },
+  // 맛집 지도 + 여행(Trip) 을 함께 담는다. "장소"(단순 저장)에서 "럽슐랭"(둘이 함께
+  // 검증한 미식 가이드북)으로 리브랜딩 — PLAN.md Lovelichelin 참고.
+  Place: { label: '럽슐랭', icon: 'crown' },
 };
 
 /**
