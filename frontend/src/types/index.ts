@@ -223,6 +223,10 @@ export interface ExerciseCatalogItem {
   equipment?: string | null;
   // 자세 큐/안내 문구 — 운동 세션 화면의 TIP 카드에 쓰인다. 커스텀 종목은 없을 수 있다
   tip?: string | null;
+  // 이 종목이 뭔지 한눈에 보여주는 이모지 — 세션 카드 종목명 옆에 노출. 커스텀 종목은 없을 수 있다
+  emoji?: string | null;
+  // 언제 숨을 내쉬고 마시는지 — TIP 카드에 자세 큐와 함께 항상 붙는다. 커스텀 종목은 없을 수 있다
+  breathingCue?: string | null;
 }
 
 // 종목의 직전 수행 기록 — 세션 진입 시 무게/횟수 프리필에 사용

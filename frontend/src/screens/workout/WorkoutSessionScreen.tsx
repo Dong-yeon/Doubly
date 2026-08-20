@@ -75,6 +75,10 @@ interface SessionExercise {
   // 카탈로그의 자세 큐/안내 문구 — 세션 시작 시 이름으로 배치 조회해 채운다. 커스텀 종목이거나
   // 아직 못 불러왔으면 undefined이고, 그때는 TIP 카드를 그냥 숨긴다.
   tip?: string;
+  // 이 종목이 뭔지 한눈에 보여주는 이모지 — tip 과 같은 배치 조회로 채워진다
+  emoji?: string;
+  // 언제 숨을 내쉬고 마시는지 — TIP 카드에 tip 과 함께 항상 붙는 호흡 타이밍 문구
+  breathingCue?: string;
   sets: SessionSet[];
 }
 
@@ -265,6 +269,8 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
     // 그 경우 undefined 로 넘어와 일단 TIP 카드를 비워두고(아래 배치 조회 effect가 채우진 않음,
     // ⇄ 로 한 번 더 바꾸거나 다음 세션부터 채워짐), 잘못된 이전 종목의 TIP이 남지 않게만 한다.
     tip?: string | null;
+    emoji?: string | null;
+    breathingCue?: string | null;
   }) => {
     const targetKey = substituteFor?.key;
     if (!targetKey) return;
@@ -279,6 +285,8 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
               equipment: candidate.equipment ?? undefined,
               exerciseCatalogId: candidate.exerciseCatalogId,
               tip: candidate.tip ?? undefined,
+              emoji: candidate.emoji ?? undefined,
+              breathingCue: candidate.breathingCue ?? undefined,
             }
           : x,
       ),
@@ -308,6 +316,8 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
       equipment: candidate.equipment,
       exerciseCatalogId: candidate.id,
       tip: candidate.tip,
+      emoji: candidate.emoji,
+      breathingCue: candidate.breathingCue,
     });
 
   /** 루틴 작성 시 미리 지정해둔 대체 종목(④) 교체 — 탐색 없이 바로 적용 */
@@ -342,7 +352,7 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 세션 시작 시 종목들의 TIP(자세 큐)을 이름으로 한 번에 배치 조회해 카드로 채운다.
+  // 세션 시작 시 종목들의 TIP(자세 큐)·이모지·호흡 타이밍을 이름으로 한 번에 배치 조회해 채운다.
   // 커스텀 종목(카탈로그에 없는 이름)은 응답에 안 잡히므로 자연히 TIP 카드가 안 뜬다.
   useEffect(() => {
     const names = Array.from(new Set((route.params?.exercises ?? []).map((e) => e.name)));
@@ -351,11 +361,17 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
       .exerciseCatalog(undefined, names)
       .then((list) => {
         if (list.length === 0) return;
-        const byName = new Map(list.map((c) => [c.name, c.tip]));
+        const byName = new Map(list.map((c) => [c.name, c]));
         setExercises((prev) =>
           prev.map((e) => {
-            const tip = byName.get(e.name);
-            return tip ? { ...e, tip } : e;
+            const c = byName.get(e.name);
+            if (!c) return e;
+            return {
+              ...e,
+              tip: c.tip ?? e.tip,
+              emoji: c.emoji ?? e.emoji,
+              breathingCue: c.breathingCue ?? e.breathingCue,
+            };
           }),
         );
       })
@@ -693,6 +709,8 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
                   <Pressable onLongPress={drag} disabled={isActive} hitSlop={8} style={styles.dragHandle}>
                     <Text style={styles.dragHandleText}>⠿</Text>
                   </Pressable>
+                  {/* 이 종목이 뭔지 한눈에 보여주는 그림 — 카탈로그에 있는 종목만(커스텀 종목은 안 뜬다) */}
+                  {e.emoji ? <Text style={styles.exEmoji}>{e.emoji}</Text> : null}
                   <Text style={styles.exName}>{e.name}</Text>
                   <View style={styles.exHeaderActions}>
                     <TouchableOpacity onPress={() => openSubstitute(e)} hitSlop={8}>
@@ -710,13 +728,19 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
                   {e1rm != null ? ` · e1RM ${formatWeight(e1rm)}` : ''}
                 </Text>
 
-                {/* TIP 카드 — 카탈로그에 있는 종목만(커스텀 종목/아직 못 불러왔으면 안 뜬다) */}
+                {/* TIP 카드 — 카탈로그에 있는 종목만(커스텀 종목/아직 못 불러왔으면 안 뜬다).
+                    호흡 타이밍(breathingCue)은 항상 자세 큐 아래 별도 줄로 붙는다. */}
                 {e.tip ? (
                   <View style={styles.tipCard}>
                     <View style={styles.tipBadge}>
                       <Text style={styles.tipBadgeText}>TIP</Text>
                     </View>
-                    <Text style={styles.tipText}>{e.tip}</Text>
+                    <View style={styles.tipTextCol}>
+                      <Text style={styles.tipText}>{e.tip}</Text>
+                      {e.breathingCue ? (
+                        <Text style={styles.breathingText}>🌬️ {e.breathingCue}</Text>
+                      ) : null}
+                    </View>
                   </View>
                 ) : null}
 
@@ -921,7 +945,10 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
                     style={styles.substituteRow}
                     onPress={() => applySubstitute(c)}
                   >
-                    <Text style={styles.substituteName}>{c.name}</Text>
+                    <View style={styles.substituteNameRow}>
+                      {c.emoji ? <Text style={styles.exEmoji}>{c.emoji}</Text> : null}
+                      <Text style={styles.substituteName}>{c.name}</Text>
+                    </View>
                     {c.equipment ? <Text style={styles.substituteMeta}>{c.equipment}</Text> : null}
                   </TouchableOpacity>
                 ))}
@@ -1019,6 +1046,8 @@ const styles = themedStyles((colors) => ({
   exHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   dragHandle: { paddingRight: spacing.xs, paddingVertical: 2 },
   dragHandleText: { fontSize: fontSize.subtitle, color: colors.textMuted, fontWeight: '800' },
+  // 종목 그림(이모지) — 이름 앞에 살짝 크게 둬서 무슨 운동인지 한눈에 들어오게 한다
+  exEmoji: { fontSize: fontSize.subtitle },
   exName: { flex: 1, fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
   exHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   exSwap: { fontSize: fontSize.body, color: colors.primary, fontWeight: '800' },
@@ -1040,7 +1069,10 @@ const styles = themedStyles((colors) => ({
     backgroundColor: colors.primaryBg,
   },
   tipBadgeText: { fontSize: 10, fontWeight: '800', color: colors.primary },
-  tipText: { flex: 1, fontSize: fontSize.caption, color: colors.textSecondary, lineHeight: 18 },
+  tipTextCol: { flex: 1, gap: 2 },
+  tipText: { fontSize: fontSize.caption, color: colors.textSecondary, lineHeight: 18 },
+  // 호흡 타이밍 — 자세 큐와 구분되게 살짝 옅은 색으로, 항상 TIP 카드 안에 같이 붙는다
+  breathingText: { fontSize: fontSize.caption, color: colors.textTertiary, lineHeight: 18 },
   setColHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1225,6 +1257,7 @@ const styles = themedStyles((colors) => ({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
+  substituteNameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   substituteName: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
   substituteMeta: { fontSize: fontSize.caption, color: colors.textSecondary },
 }));
