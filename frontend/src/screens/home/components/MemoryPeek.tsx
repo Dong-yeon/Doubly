@@ -77,7 +77,7 @@ const styles = themedStyles((colors) => ({
     borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.togetherBg,
+    backgroundColor: colors.togetherPastelBg,
   },
   body: { flex: 1 },
   meta: { color: colors.textSecondary, fontSize: 11, fontWeight: '700' },

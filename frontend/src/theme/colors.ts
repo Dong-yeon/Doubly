@@ -50,6 +50,17 @@ const light = {
   togetherBg: '#EFF4E4',
 
   /*
+   * 파스텔 서피스 — …Bg 보다 한 단계 짙은 파스텔. 배지·칩용 …Bg 는 이미 meText/together
+   * 같은 원색 텍스트와 짝지어 대비가 4.5:1 턱걸이로 맞춰져 있어(위 실측 참고) 더 짙게
+   * 만들 수 없다. 이 토큰은 <b>ink 텍스트 전용</b>이다 — ink 는 어떤 밝기의 배경과
+   * 짝지어도 12:1 이상 나오므로, "덜 흰 배경"으로 파스텔감을 내는 유일한 안전지대다.
+   * 아이콘만 얹는 자리는 원색 아이콘을 그대로 써도 된다(그래픽 기준 3:1, 실측 3.9~4.0).
+   */
+  mePastelBg: '#F6E2B2',
+  partnerPastelBg: '#C6E1C8',
+  togetherPastelBg: '#DAE6C1',
+
+  /*
    * 소유자 색의 "텍스트용" 변형.
    *
    * 이전 팔레트(Coral/Indigo/Violet)는 채도가 높아 흰 배경 위 글자로 쓰면 2.5~4.0:1 로
@@ -129,6 +140,11 @@ const dark: typeof light = {
   partnerBg: '#1D2E1F',
   together: '#C9DA97',
   togetherBg: '#2A2F19',
+
+  // 다크는 …Bg 가 이미 짙은 웰이라 그대로 재사용 — 텍스트(ink)가 밝아 대비가 넉넉하다
+  mePastelBg: '#332811',
+  partnerPastelBg: '#1D2E1F',
+  togetherPastelBg: '#2A2F19',
 
   /*
    * 다크에서는 파스텔 액센트가 이미 8~10:1 로 통과한다(위 주석 실측 참고).
