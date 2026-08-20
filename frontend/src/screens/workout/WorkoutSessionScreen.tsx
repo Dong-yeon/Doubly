@@ -28,6 +28,7 @@ import type {
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
 import { MuscleBodyBadge } from '../../components/MuscleBodyBadge';
+import { ExercisePickerModal } from '../../components/workout/ExercisePickerModal';
 import { useWorkoutStore } from '../../store/workoutStore';
 import { workoutApi } from '../../api/workout';
 import { voiceClipsApi } from '../../api/voiceClips';
@@ -47,8 +48,6 @@ type Props = NativeStackScreenProps<WorkoutStackParamList, 'WorkoutSession'>;
 
 const CATEGORIES = ['근력', '유산소', '유연성'];
 const REST_PRESETS = [60, 90, 120];
-// 종목 카탈로그 시드 데이터와 맞춘 자극 부위 목록 — 대체 종목 탐색용
-const MUSCLE_GROUPS = ['가슴', '등', '어깨', '하체', '팔', '코어', '전신'];
 
 interface SessionSet {
   weightKg: string;
@@ -238,27 +237,25 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
   const [saveRoutineTitle, setSaveRoutineTitle] = useState('');
   const [savingRoutine, setSavingRoutine] = useState(false);
 
-  // 대체 종목 바텀시트 — 같은 자극 부위 운동으로 1탭 교체
+  // 대체 종목 바텀시트 — 루틴이 미리 지정해둔 추천 종목, 없으면(또는 다른 걸 원하면)
+  // ExercisePickerModal 로 부위→기구를 좁혀가며 직접 찾는다
   const [substituteFor, setSubstituteFor] = useState<SessionExercise | null>(null);
-  const [substituteGroup, setSubstituteGroup] = useState(MUSCLE_GROUPS[0]);
-  const [substituteCandidates, setSubstituteCandidates] = useState<ExerciseCatalogItem[]>([]);
-  const [substituteLoading, setSubstituteLoading] = useState(false);
+  const [substitutePickerOpen, setSubstitutePickerOpen] = useState(false);
+
+  // 대체 종목 탐색용 전체 카탈로그 — 종목 수가 적어(수십 개) 한 번만 받아 로컬에서 필터링한다
+  const [catalog, setCatalog] = useState<ExerciseCatalogItem[]>([]);
+  useEffect(() => {
+    workoutApi.exerciseCatalog().then(setCatalog).catch(() => setCatalog([]));
+  }, []);
 
   const openSubstitute = (e: SessionExercise) => {
     haptics.light();
     setSubstituteFor(e);
-    setSubstituteGroup(e.muscleGroup ?? MUSCLE_GROUPS[0]);
   };
-
-  useEffect(() => {
-    if (!substituteFor) return;
-    setSubstituteLoading(true);
-    workoutApi
-      .exerciseCatalog(substituteGroup)
-      .then((list) => setSubstituteCandidates(list.filter((c) => c.name !== substituteFor.name)))
-      .catch(() => setSubstituteCandidates([]))
-      .finally(() => setSubstituteLoading(false));
-  }, [substituteFor, substituteGroup]);
+  const closeSubstituteSheet = () => {
+    setSubstituteFor(null);
+    setSubstitutePickerOpen(false);
+  };
 
   /** 대체 종목 적용(공통) — 세트 구성(무게·횟수·완료 여부)은 그대로 두고 종목 정보만 바꾼다(데이터 손실 없음). */
   const applySubstituteCandidate = async (candidate: {
@@ -293,7 +290,7 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
           : x,
       ),
     );
-    setSubstituteFor(null);
+    closeSubstituteSheet();
     haptics.success();
     toast.success(`${candidate.name}(으)로 교체했어요`);
     // 새 종목의 직전 기록이 있으면 아직 체크 안 한 세트만 이어서 프리필한다.
@@ -920,18 +917,18 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
         </Pressable>
       </Modal>
 
-      {/* 대체 종목 선택 — 동일 자극 부위 운동으로 1탭 교체 */}
+      {/* 대체 종목 선택 — 루틴이 미리 지정해둔 추천 종목 + 부위·기구로 직접 찾기 */}
       <Modal
         visible={!!substituteFor}
         transparent
         animationType="fade"
-        onRequestClose={() => setSubstituteFor(null)}
+        onRequestClose={() => closeSubstituteSheet()}
       >
-        <Pressable style={styles.backdrop} onPress={() => setSubstituteFor(null)}>
+        <Pressable style={styles.backdrop} onPress={() => closeSubstituteSheet()}>
           <Pressable style={styles.modalCard} onPress={() => {}}>
             <Text style={styles.modalTitle}>대체 종목 선택</Text>
             <Text style={styles.modalLabel}>
-              {substituteFor?.name} 대신 같은 자극 부위 운동으로 바꿔요 · 세트 기록은 그대로 유지돼요
+              {substituteFor?.name} 대신 다른 운동으로 바꿔요 · 세트 기록은 그대로 유지돼요
             </Text>
             {substituteFor?.alternatives && substituteFor.alternatives.length > 0 ? (
               <>
@@ -947,45 +944,25 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
                     </TouchableOpacity>
                   ))}
                 </View>
-                <Text style={styles.modalLabel}>다른 종목 찾기</Text>
               </>
             ) : null}
-            <View style={styles.groupRow}>
-              {MUSCLE_GROUPS.map((g) => (
-                <TouchableOpacity
-                  key={g}
-                  style={[styles.groupChip, substituteGroup === g && styles.groupChipActive]}
-                  onPress={() => setSubstituteGroup(g)}
-                >
-                  <Text style={[styles.groupText, substituteGroup === g && styles.groupTextActive]}>{g}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            {substituteLoading ? (
-              <Text style={styles.emptyHint}>불러오는 중…</Text>
-            ) : substituteCandidates.length === 0 ? (
-              <Text style={styles.emptyHint}>이 부위의 다른 종목이 없어요.</Text>
-            ) : (
-              <ScrollView style={styles.substituteList}>
-                {substituteCandidates.map((c) => (
-                  <TouchableOpacity
-                    key={c.id}
-                    style={styles.substituteRow}
-                    onPress={() => applySubstitute(c)}
-                  >
-                    <View style={styles.substituteNameRow}>
-                      {c.emoji ? <Text style={styles.exEmoji}>{c.emoji}</Text> : null}
-                      <Text style={styles.substituteName}>{c.name}</Text>
-                      <MuscleBodyBadge muscleGroup={c.muscleGroup} size={16} />
-                    </View>
-                    {c.equipment ? <Text style={styles.substituteMeta}>{c.equipment}</Text> : null}
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            )}
+            <TouchableOpacity style={styles.findSubstituteBtn} onPress={() => setSubstitutePickerOpen(true)}>
+              <Text style={styles.findSubstituteBtnText}>🔍 부위·기구로 다른 종목 찾기</Text>
+            </TouchableOpacity>
           </Pressable>
         </Pressable>
       </Modal>
+
+      <ExercisePickerModal
+        visible={substitutePickerOpen}
+        catalog={catalog}
+        excludeName={substituteFor?.name}
+        onClose={() => setSubstitutePickerOpen(false)}
+        onSelect={(item) => {
+          applySubstitute(item);
+          setSubstitutePickerOpen(false);
+        }}
+      />
 
       {/* ② 역방향 루틴 저장 — 자유 세션 종료 시 다음에 원탭으로 시작할 수 있게 루틴화 제안 */}
       <Modal
@@ -1257,16 +1234,6 @@ const styles = themedStyles((colors) => ({
   formRow: { flexDirection: 'row', gap: spacing.sm },
   modalBtn: { marginTop: spacing.sm },
   groupRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.sm },
-  groupChip: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  groupChipActive: { borderColor: colors.primary, backgroundColor: colors.primaryBg },
-  groupText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
-  groupTextActive: { color: colors.primary },
   presetChip: {
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
@@ -1276,17 +1243,14 @@ const styles = themedStyles((colors) => ({
     backgroundColor: colors.primaryBg,
   },
   presetChipText: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '700' },
-  substituteList: { maxHeight: 280 },
-  substituteRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  findSubstituteBtn: {
+    marginTop: spacing.sm,
+    minHeight: 44,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.primary,
     alignItems: 'center',
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.xs,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+    justifyContent: 'center',
   },
-  substituteNameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  substituteName: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
-  substituteMeta: { fontSize: fontSize.caption, color: colors.textSecondary },
+  findSubstituteBtnText: { fontSize: fontSize.body, color: colors.primary, fontWeight: '700' },
 }));
