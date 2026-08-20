@@ -103,10 +103,18 @@ export const APP_VERSION = '1.0.0';
 /**
  * 인앱결제가 붙었는가.
  *
- * <p>아직 `react-native-iap` 이 없어 <b>구매 흐름 자체가 존재하지 않는다.</b>
- * 업그레이드 시트가 "PRO 시작하기" 버튼을 띄워도 누를 곳이 없으므로, 결제를 연결하기
- * 전까지는 "준비 중" 안내만 보여준다 — 없는 화면으로 보내면 막다른 길이 된다.
+ * <p>`react-native-iap` 연동(구매 흐름, 서버 검증)은 되어 있다({@code utils/iap.ts} 참고).
+ * 그런데도 기본값이 여전히 `false`인 이유는 <b>Google Play Console에 구독 상품
+ * ({@link PRO_SUBSCRIPTION_SKU})이 아직 등록되지 않았기 때문</b>이다 — 스토어에 없는
+ * SKU로 결제창을 열면 "상품을 찾을 수 없음" 에러만 난다.
  *
- * <p>결제를 붙일 때 이 값을 켜고 시트의 버튼에 구매 함수를 연결한다.
+ * <p>Play Console에서 구독 상품을 만들고(id가 {@link PRO_SUBSCRIPTION_SKU}와 일치해야
+ * 함) 라이선스 테스터를 등록한 뒤 이 값을 켠다.
  */
 export const PURCHASE_ENABLED = false;
+
+/**
+ * PRO 정기결제 상품 id. Google Play Console(수익 창출 → 구독)에서 만드는 상품의
+ * "제품 ID"와 정확히 같아야 한다. Apple도 동일 id로 등록해 플랫폼 분기를 없앤다.
+ */
+export const PRO_SUBSCRIPTION_SKU = 'pro_monthly';

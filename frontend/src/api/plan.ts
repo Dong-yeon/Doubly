@@ -11,4 +11,10 @@ import type { ApiResponse, PlanInfo } from '../types';
 export const planApi = {
   /** 내 플랜 + 기능별 한도·사용량 */
   me: () => unwrap(apiClient.get<ApiResponse<PlanInfo>>('/plan/me')),
+  /**
+   * 인앱결제 완료 직후 즉시 검증 — 스토어 웹훅(RTDN)이 오기 전에 서버가 먼저 확인해
+   * PRO를 반영한다. 반영된 최신 플랜을 그대로 돌려준다({@code planStore.load()}와 동일 형태).
+   */
+  verifyGooglePurchase: (purchaseToken: string) =>
+    unwrap(apiClient.post<ApiResponse<PlanInfo>>('/plan/purchases/google', { purchaseToken })),
 };

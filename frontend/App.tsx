@@ -14,8 +14,10 @@ import { UpgradeSheet } from './src/components/UpgradeSheet';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { installGlobalErrorHandlers } from './src/utils/globalErrorHandler';
 import { initSentry } from './src/utils/sentry';
+import { initIap, endIap } from './src/utils/iap';
 import { useSettingsStore } from './src/store/settingsStore';
 import { colors } from './src/constants/theme';
+import { PURCHASE_ENABLED } from './src/constants/config';
 
 // Sentry 를 먼저 붙여야 이후 발생하는 예외가 리포터로 전달된다.
 // (미설정·웹에서는 콘솔 출력으로 폴백)
@@ -65,6 +67,18 @@ export default function App() {
       'Pretendard-Medium': require('./assets/fonts/Pretendard-Medium.otf'),
       'Pretendard-SemiBold': require('./assets/fonts/Pretendard-SemiBold.otf'),
     }).catch(() => undefined);
+  }, []);
+
+  /*
+   * 스토어 결제 연결 — PURCHASE_ENABLED 일 때만 연다. 아직 Play Console에 구독 상품이
+   * 없는 동안(config.ts 참고) 굳이 스토어 연결을 시도할 이유가 없다.
+   */
+  useEffect(() => {
+    if (!PURCHASE_ENABLED) return undefined;
+    void initIap();
+    return () => {
+      void endIap();
+    };
   }, []);
 
   if (!fontsLoaded && !fontError) {
