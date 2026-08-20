@@ -11,6 +11,8 @@ expo-env.d.ts
 
 # 로컬에 받아둔 EAS 빌드 산출물(APK/AAB) — 용량이 커서(수십~백MB) 커밋 금지
 build/
+*.aab
+*.apk
 
 # Native
 .kotlin/
