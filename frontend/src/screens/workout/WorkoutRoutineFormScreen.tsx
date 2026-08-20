@@ -12,6 +12,7 @@ import type { WorkoutStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
 import { Chip } from '../../components/Chip';
+import { ExercisePickerModal } from '../../components/workout/ExercisePickerModal';
 import { workoutApi } from '../../api/workout';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
@@ -26,7 +27,6 @@ import type { ExerciseCatalogItem, WeekDay } from '../../types';
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'WorkoutRoutineForm'>;
 
 const CATEGORIES = ['근력', '유산소', '유연성'];
-const MUSCLE_GROUPS = ['가슴', '등', '어깨', '하체', '팔', '코어', '전신'];
 const REST_PRESETS = [60, 90, 120, 180];
 const MAX_ALTERNATIVES = 3;
 // 카탈로그 이름 검색 결과로 보여줄 최대 후보 수 — 많아 봐야 스크롤만 늘어난다
@@ -123,12 +123,11 @@ export function WorkoutRoutineFormScreen({ navigation, route }: Props) {
   const [fCatalog, setFCatalog] = useState<ExerciseCatalogItem | null>(null);
   const [fSetRows, setFSetRows] = useState<DraftSetRow[]>([]);
 
-  // 대체 종목 탐색 — 자극 부위 칩으로 카탈로그 검색
-  const [altGroup, setAltGroup] = useState(MUSCLE_GROUPS[0]);
-  const [altCandidates, setAltCandidates] = useState<ExerciseCatalogItem[]>([]);
-  const [altLoading, setAltLoading] = useState(false);
+  // 대체 종목 탐색 — 부위→기구로 좁혀가며 고르는 ExercisePickerModal (다중 선택)
+  const [altPickerOpen, setAltPickerOpen] = useState(false);
 
-  // 운동 이름 자동완성용 전체 카탈로그 — 종목 수가 적어(수십 개) 한 번만 받아 로컬에서 필터링한다
+  // 운동 이름 자동완성 + 대체 종목 탐색용 전체 카탈로그 — 종목 수가 적어(수십 개) 한 번만
+  // 받아 로컬에서 필터링한다(모달을 열 때마다 다시 요청하지 않는다)
   const [catalog, setCatalog] = useState<ExerciseCatalogItem[]>([]);
   useEffect(() => {
     workoutApi.exerciseCatalog().then(setCatalog).catch(() => setCatalog([]));
@@ -152,16 +151,6 @@ export function WorkoutRoutineFormScreen({ navigation, route }: Props) {
       }),
     );
   }, [catalog]);
-
-  useEffect(() => {
-    if (!addOpen) return;
-    setAltLoading(true);
-    workoutApi
-      .exerciseCatalog(altGroup)
-      .then(setAltCandidates)
-      .catch(() => setAltCandidates([]))
-      .finally(() => setAltLoading(false));
-  }, [addOpen, altGroup]);
 
   // 입력 중인 이름과 일치하는 카탈로그 후보 — 이미 카탈로그를 골랐으면(fCatalog) 숨긴다
   const nameSuggestions = useMemo(() => {
@@ -271,7 +260,6 @@ export function WorkoutRoutineFormScreen({ navigation, route }: Props) {
     setFRestSeconds(null);
     setFPresetHint(null);
     setFAlternatives([]);
-    setAltGroup(MUSCLE_GROUPS[0]);
     setFCatalog(null);
     setFSetRows([]);
   };
@@ -569,39 +557,21 @@ export function WorkoutRoutineFormScreen({ navigation, route }: Props) {
                   대체 종목 (선택, 최대 {MAX_ALTERNATIVES}개) — 헬스장에서 기구가 겹칠 때 1탭으로 바꿀 종목
                 </Text>
                 <View style={styles.groupRow}>
-                  {MUSCLE_GROUPS.map((g) => (
+                  {fAlternatives.map((a) => (
                     <TouchableOpacity
-                      key={g}
-                      style={[styles.catChipSmall, altGroup === g && styles.catChipActive]}
-                      onPress={() => setAltGroup(g)}
+                      key={a.exerciseCatalogId}
+                      style={[styles.catChipSmall, styles.catChipActive]}
+                      onPress={() => setFAlternatives((prev) => prev.filter((x) => x.exerciseCatalogId !== a.exerciseCatalogId))}
                     >
-                      <Text style={[styles.catText, altGroup === g && styles.catTextActive]}>{g}</Text>
+                      <Text style={[styles.catText, styles.catTextActive]}>✓ {a.name}</Text>
                     </TouchableOpacity>
                   ))}
+                  {fAlternatives.length < MAX_ALTERNATIVES ? (
+                    <TouchableOpacity style={styles.presetChip} onPress={() => setAltPickerOpen(true)}>
+                      <Text style={styles.presetChipText}>부위·기구로 찾기 ›</Text>
+                    </TouchableOpacity>
+                  ) : null}
                 </View>
-                {altLoading ? (
-                  <Text style={styles.emptyHint}>불러오는 중…</Text>
-                ) : (
-                  <View style={styles.groupRow}>
-                    {altCandidates
-                      .filter((c) => c.name !== fName.trim())
-                      .map((c) => {
-                        const selected = fAlternatives.some((a) => a.exerciseCatalogId === c.id);
-                        return (
-                          <TouchableOpacity
-                            key={c.id}
-                            style={[styles.catChipSmall, selected && styles.catChipActive]}
-                            onPress={() => toggleAlternative(c)}
-                          >
-                            <Text style={[styles.catText, selected && styles.catTextActive]}>
-                              {selected ? '✓ ' : ''}
-                              {c.name}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                  </View>
-                )}
 
                 <Button title="추가" onPress={onAddExercise} style={styles.modalBtn} />
               </ScrollView>
@@ -609,6 +579,15 @@ export function WorkoutRoutineFormScreen({ navigation, route }: Props) {
           </KeyboardAvoidingView>
         </Pressable>
       </Modal>
+
+      {/* 대체 종목 고르기 — 부위 → 기구 순으로 좁혀가며 최대 {MAX_ALTERNATIVES}개까지 다중 선택 */}
+      <ExercisePickerModal
+        visible={altPickerOpen}
+        catalog={catalog}
+        excludeName={fName.trim() || undefined}
+        onClose={() => setAltPickerOpen(false)}
+        multiSelect={{ selectedIds: fAlternatives.map((a) => a.exerciseCatalogId), max: MAX_ALTERNATIVES, onToggle: toggleAlternative }}
+      />
     </SafeAreaView>
   );
 }

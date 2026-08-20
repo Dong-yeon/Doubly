@@ -13,11 +13,13 @@ import { DateField } from '../../components/DateField';
 import { NumberStepper } from '../../components/NumberStepper';
 import { FormKeyboardView } from '../../components/FormKeyboardView';
 import { Chip } from '../../components/Chip';
+import { ExercisePickerModal } from '../../components/workout/ExercisePickerModal';
 import { useWorkoutStore } from '../../store/workoutStore';
 import { useRelationStore } from '../../store/relationStore';
 import { useDirtyGuard } from '../../hooks/useDirtyGuard';
 import { publishEnsuringConnection } from '../../api/chatSocket';
 import { voiceClipsApi } from '../../api/voiceClips';
+import { workoutApi } from '../../api/workout';
 import { playVoiceClip } from '../../utils/voicePlayback';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
@@ -26,6 +28,7 @@ import { toDateString } from '../../utils/date';
 import { buildWorkoutShareCopy } from '../../utils/workoutShare';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
+import type { ExerciseCatalogItem } from '../../types';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'WorkoutRecord'>;
 
@@ -37,6 +40,10 @@ interface SetForm {
   sets: string;
   reps: string;
   weightKg: string;
+  // 카탈로그에서 골랐을 때만 채워짐 — 자유 입력이면 전부 undefined
+  exerciseCatalogId?: number;
+  muscleGroup?: string;
+  equipment?: string;
 }
 
 const emptySet = (): SetForm => ({ exerciseName: '', sets: '', reps: '', weightKg: '' });
@@ -84,6 +91,15 @@ export function WorkoutRecordScreen({ navigation, route }: Props) {
       .catch(() => undefined);
   }, [couple?.id]);
 
+  // 운동 선택 모달용 카탈로그 — 수십 건뿐이라 한 번만 받아 클라이언트에서 부위·기구로 필터링한다.
+  // 실패해도 자유 텍스트 입력은 그대로 되므로 조용히 빈 배열로 둔다.
+  const [catalog, setCatalog] = useState<ExerciseCatalogItem[]>([]);
+  useEffect(() => {
+    workoutApi.exerciseCatalog().then(setCatalog).catch(() => setCatalog([]));
+  }, []);
+  // 운동 선택 모달이 지금 몇 번째 세트를 위해 열려있는지 — null 이면 닫힘
+  const [pickerForIndex, setPickerForIndex] = useState<number | null>(null);
+
   const [sets, setSets] = useState<SetForm[]>([emptySet()]);
   /** 기록할 날짜 — 캘린더에서 날짜를 골라 들어오면 그 날짜, 아니면 오늘 */
   const [workoutDate, setWorkoutDate] = useState(route.params?.date ?? toDateString());
@@ -103,6 +119,33 @@ export function WorkoutRecordScreen({ navigation, route }: Props) {
   };
   const addSet = () => setSets((prev) => [...prev, emptySet()]);
   const removeSet = (idx: number) => setSets((prev) => prev.filter((_, i) => i !== idx));
+
+  // 운동명을 직접 고쳐 써서 카탈로그로 골랐던 이름과 달라지면 부위·기구 링크를 해제한다 —
+  // 안 그러면 다른 운동인데 이전 종목의 부위·기구가 그대로 남아 저장된다.
+  const changeExerciseName = (idx: number, name: string) => {
+    setSets((prev) =>
+      prev.map((s, i) => {
+        if (i !== idx) return s;
+        if (s.exerciseCatalogId && s.exerciseName !== name) {
+          return { ...s, exerciseName: name, exerciseCatalogId: undefined, muscleGroup: undefined, equipment: undefined };
+        }
+        return { ...s, exerciseName: name };
+      }),
+    );
+  };
+
+  // 선택 모달에서 종목을 고르면 이름과 함께 부위·기구·카탈로그 id 를 같이 채운다
+  const selectFromCatalog = (item: ExerciseCatalogItem) => {
+    if (pickerForIndex === null) return;
+    updateSet(pickerForIndex, {
+      exerciseName: item.name,
+      category: item.category,
+      exerciseCatalogId: item.id,
+      muscleGroup: item.muscleGroup,
+      equipment: item.equipment ?? undefined,
+    });
+    setPickerForIndex(null);
+  };
 
   /*
    * 직전 기록 찾기 — 같은 운동을 마지막으로 했을 때의 무게·횟수·세트.
@@ -137,16 +180,21 @@ export function WorkoutRecordScreen({ navigation, route }: Props) {
     haptics.light();
   };
 
-  // 프리셋 탭: 비어있는 첫 세트에 채우고, 없으면 새 세트로 추가
+  // 프리셋 탭: 비어있는 첫 세트에 채우고, 없으면 새 세트로 추가.
+  // 이름이 로드된 카탈로그와 일치하면(근력 프리셋 대부분 그렇다) 부위·기구도 함께 붙인다.
   const applyPreset = (preset: { name: string; category: string }) => {
+    const match = catalog.find((c) => c.name === preset.name);
+    const linked = match
+      ? { exerciseCatalogId: match.id, muscleGroup: match.muscleGroup, equipment: match.equipment ?? undefined }
+      : {};
     setSets((prev) => {
       const emptyIdx = prev.findIndex((s) => !s.exerciseName.trim());
       if (emptyIdx >= 0) {
         return prev.map((s, i) =>
-          i === emptyIdx ? { ...s, exerciseName: preset.name, category: preset.category } : s,
+          i === emptyIdx ? { ...s, exerciseName: preset.name, category: preset.category, ...linked } : s,
         );
       }
-      return [...prev, { ...emptySet(), exerciseName: preset.name, category: preset.category }];
+      return [...prev, { ...emptySet(), exerciseName: preset.name, category: preset.category, ...linked }];
     });
   };
 
@@ -169,6 +217,9 @@ export function WorkoutRecordScreen({ navigation, route }: Props) {
           reps: s.reps ? Number(s.reps) : null,
           weightKg: s.weightKg ? Number(s.weightKg) : null,
           orderNo: i + 1,
+          exerciseCatalogId: s.exerciseCatalogId ?? undefined,
+          muscleGroup: s.muscleGroup ?? undefined,
+          equipment: s.equipment ?? undefined,
         })),
       });
       haptics.success();
@@ -254,11 +305,32 @@ export function WorkoutRecordScreen({ navigation, route }: Props) {
                 ) : null}
               </View>
 
-              <TextField
-                placeholder="운동명 (예: 벤치프레스)"
-                value={s.exerciseName}
-                onChangeText={(t) => updateSet(idx, { exerciseName: t })}
-              />
+              <View style={styles.nameRow}>
+                <View style={styles.flex1}>
+                  <TextField
+                    placeholder="운동명 (예: 벤치프레스)"
+                    value={s.exerciseName}
+                    onChangeText={(t) => changeExerciseName(idx, t)}
+                  />
+                </View>
+                {/*
+                  부위 → 기구 순으로 좁혀 카탈로그에서 고르는 버튼 — 매번 이름을 직접
+                  타이핑하지 않아도 되고, 고르면 부위·기구가 함께 연결돼 회복 현황 등에 반영된다.
+                */}
+                <TouchableOpacity
+                  style={styles.findBtn}
+                  onPress={() => setPickerForIndex(idx)}
+                  accessibilityRole="button"
+                  accessibilityLabel="부위·기구로 운동 찾기"
+                >
+                  <Text style={styles.findBtnText}>🔍 찾기</Text>
+                </TouchableOpacity>
+              </View>
+              {s.muscleGroup ? (
+                <Text style={styles.linkedHint}>
+                  ✓ {s.muscleGroup} · {s.equipment ?? '맨몸'} 종목으로 연결돼요
+                </Text>
+              ) : null}
 
               {/*
                 지난 값 불러오기 — 자동으로 덮어쓰지 않고 버튼으로 둔다.
@@ -348,6 +420,14 @@ export function WorkoutRecordScreen({ navigation, route }: Props) {
 
           <Button title="완료!" onPress={onSave} loading={saving} style={styles.save} />
       </FormKeyboardView>
+
+      <ExercisePickerModal
+        visible={pickerForIndex !== null}
+        catalog={catalog}
+        onClose={() => setPickerForIndex(null)}
+        onSelect={selectFromCatalog}
+        onFreeInput={() => setPickerForIndex(null)}
+      />
     </SafeAreaView>
   );
 }
@@ -379,6 +459,19 @@ const styles = themedStyles((colors) => ({
   setHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.sm },
   setNo: { fontSize: fontSize.body, fontWeight: '700', color: colors.primary },
   remove: { color: colors.danger, fontSize: fontSize.caption },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  findBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    minHeight: 44,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  findBtnText: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '700' },
+  linkedHint: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '600', marginTop: -spacing.xs, marginBottom: spacing.xs },
   catRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
   catChip: {
     paddingHorizontal: spacing.md,
