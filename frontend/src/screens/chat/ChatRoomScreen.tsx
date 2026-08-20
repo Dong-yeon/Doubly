@@ -840,8 +840,9 @@ const styles = themedStyles((colors) => ({
   workoutCardTheirs: { backgroundColor: colors.surface, borderColor: colors.secondary },
   workoutBadge: { fontSize: fontSize.caption, fontWeight: '800', color: colors.secondary, marginBottom: 2 },
   // PR 카드 — 같은 카드 레이아웃에 골드 강조만 얹는다(couple 토큰 = Gold, 성취를 나타내는 색)
-  workoutCardPr: { borderColor: colors.couple, backgroundColor: colors.meBg },
-  workoutBadgePr: { color: colors.couple },
+  // 배경은 mePastelBg(파스텔) — 그 위 배지 글자는 couple 원색이면 대비가 안 나와 ink 를 쓴다
+  workoutCardPr: { borderColor: colors.couple, backgroundColor: colors.mePastelBg },
+  workoutBadgePr: { color: colors.ink },
   workoutText: { fontSize: fontSize.subtitle, color: colors.textPrimary, fontWeight: '600' },
   workoutTextMine: { color: colors.textPrimary },
   mealCard: { paddingVertical: 10, paddingHorizontal: spacing.md, borderRadius: radius.lg, borderWidth: 1.5, maxWidth: 240, gap: 6 },
@@ -850,8 +851,8 @@ const styles = themedStyles((colors) => ({
   // 카드 보더(accent)와 같은 계열로 — 팔레트 밖 앰버는 다크에서 대비가 무너졌다
   mealBadge: { fontSize: fontSize.caption, fontWeight: '800', color: colors.accent },
   // 목표 달성 카드 — 같은 카드 레이아웃에 골드 강조만 얹는다(PR 카드와 같은 톤)
-  mealCardGoal: { borderColor: colors.couple, backgroundColor: colors.meBg },
-  mealBadgeGoal: { color: colors.couple },
+  mealCardGoal: { borderColor: colors.couple, backgroundColor: colors.mePastelBg },
+  mealBadgeGoal: { color: colors.ink },
   mealImage: { width: 208, height: 156, borderRadius: radius.md, backgroundColor: colors.surfaceAlt },
   // inverted 목록의 footer = 맨 위(과거 방향) — 과거 페이지 로딩 스피너
   olderSpinner: { paddingVertical: spacing.md },
