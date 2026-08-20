@@ -547,9 +547,10 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     <SwipeBackView style={styles.flex}>
     {/*
      * left/right 도 인셋에 포함한다(가로 화면·노치가 옆에 오는 기기 대비) — 온보딩의
-     * 여백 없는 화면들(RegisterScreen 등)과 같은 패턴. 아래 inputBar 의 가로 여백은
-     * 별개로 늘렸다 — 화면 모서리가 물리적으로 둥글어서, 세로 인셋만으론 안 잡히는
-     * "동그란 버튼이 모서리 곡률에 살짝 잘려 보이는" 문제라 안전 영역과는 무관하다.
+     * 여백 없는 화면들(RegisterScreen 등)과 같은 패턴. 아래 inputBar 의 가로·세로
+     * 여백은 별개로 늘렸다 — 화면 모서리가 물리적으로 둥글어서, safe-area 인셋만
+     * 으론 안 잡히는 "동그란 버튼이 모서리 곡률에 살짝 잘려 보이는" 문제라 안전
+     * 영역과는 무관하다(inputBar 스타일 주석 참고).
      */}
     <SafeAreaView style={styles.safe} edges={['bottom', 'left', 'right']}>
       <KeyboardAvoidingView
@@ -944,11 +945,17 @@ const styles = themedStyles((colors) => ({
   inputBar: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    // 가로 여백을 세로보다 넉넉히 — 동그란 "+"/전송 버튼이 화면 맨 끝에 거의 붙어
-    // 있으면 기기의 둥근 모서리 곡률에 살짝 잘려 보인다(실기기 확인). safe-area
-    // 인셋은 좌우가 대개 0 이라(코너 곡률까지 잡아주지 않는다) 여백을 직접 늘렸다.
+    /*
+     * 동그란 "+"/전송 버튼이 화면 맨 끝에 거의 붙어 있으면 기기의 둥근 모서리
+     * 곡률에 살짝 잘려 보인다(실기기 확인). safe-area 인셋은 좌우가 대개 0 이라
+     * (코너 곡률까지 잡아주진 않는다) 여백을 직접 늘렸다 — 물리적으로 둥근 건
+     * 가장자리 전체가 아니라 네 "꼭짓점" 부근이라, 가로(paddingHorizontal)만
+     * 늘렸을 때보다 세로(paddingBottom)도 함께 늘리면 버튼이 꼭짓점에서 대각선
+     * 으로 더 멀어진다. 위쪽은 꼭짓점과 무관해 기존 값을 유지한다.
+     */
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
     gap: spacing.sm,
     backgroundColor: colors.background,
   },
