@@ -1,0 +1,83 @@
+-- 종목 카탈로그에 "이게 어떤 운동인지" 한눈에 보여주는 이모지와, TIP 카드에 항상 같이 붙는
+-- 호흡 타이밍 문구를 추가한다. 자세 큐(tip)는 그대로 두고 옆에 별도 컬럼으로 둬서, 프론트가
+-- TIP 카드를 자세 큐 줄 + 호흡 줄로 나눠 보여줄 수 있게 한다.
+ALTER TABLE exercise_catalog ADD COLUMN emoji VARCHAR(8);
+ALTER TABLE exercise_catalog ADD COLUMN breathing_cue VARCHAR(100);
+
+-- 커스텀 종목(이름이 매칭 안 되는 행)은 CASE 의 ELSE 로 그대로 NULL 유지 — TIP 카드가
+-- 원래도 tip 이 없으면 안 뜨는 것과 같은 원칙으로, emoji/breathing_cue 도 없으면 그냥 숨긴다.
+UPDATE exercise_catalog SET emoji = CASE name
+    WHEN '벤치프레스' THEN '🏋️'
+    WHEN '덤벨 프레스' THEN '🏋️'
+    WHEN '인클라인 벤치프레스' THEN '🏋️'
+    WHEN '푸시업' THEN '🤸'
+    WHEN '케이블 크로스오버' THEN '💪'
+    WHEN '딥스' THEN '🤸'
+    WHEN '데드리프트' THEN '🏋️'
+    WHEN '바벨 로우' THEN '🚣'
+    WHEN '랫풀다운' THEN '🧗'
+    WHEN '풀업' THEN '🧗'
+    WHEN '시티드 케이블 로우' THEN '🚣'
+    WHEN '오버헤드 프레스' THEN '🏋️'
+    WHEN '덤벨 숄더프레스' THEN '🏋️'
+    WHEN '사이드 레터럴 레이즈' THEN '🙆'
+    WHEN '페이스 풀' THEN '🚣'
+    WHEN '스쿼트' THEN '🦵'
+    WHEN '레그프레스' THEN '🦵'
+    WHEN '런지' THEN '🦵'
+    WHEN '레그컬' THEN '🦵'
+    WHEN '레그익스텐션' THEN '🦵'
+    WHEN '힙쓰러스트' THEN '🦵'
+    WHEN '바벨 컬' THEN '💪'
+    WHEN '덤벨 컬' THEN '💪'
+    WHEN '해머 컬' THEN '💪'
+    WHEN '트라이셉스 익스텐션' THEN '💪'
+    WHEN '플랭크' THEN '🧘'
+    WHEN '크런치' THEN '🧘'
+    WHEN '행잉 레그레이즈' THEN '🧗'
+    WHEN '케이블 크런치' THEN '🧘'
+    WHEN '러닝' THEN '🏃'
+    WHEN '사이클' THEN '🚴'
+    WHEN '로잉머신' THEN '🚣'
+    WHEN '폼롤러 스트레칭' THEN '🧘'
+    WHEN '요가 스트레칭' THEN '🧘'
+    ELSE emoji
+END;
+
+UPDATE exercise_catalog SET breathing_cue = CASE name
+    WHEN '벤치프레스' THEN '내릴 때 숨을 마시고, 밀어 올릴 때 내쉬어요.'
+    WHEN '덤벨 프레스' THEN '내릴 때 마시고, 밀어 올릴 때 내쉬어요.'
+    WHEN '인클라인 벤치프레스' THEN '내릴 때 마시고, 밀어 올릴 때 내쉬어요.'
+    WHEN '푸시업' THEN '내려갈 때 마시고, 밀어 올릴 때 내쉬어요.'
+    WHEN '케이블 크로스오버' THEN '팔을 벌릴 때 마시고, 모을 때 내쉬어요.'
+    WHEN '딥스' THEN '내려갈 때 마시고, 밀어 올릴 때 내쉬어요.'
+    WHEN '데드리프트' THEN '들어 올리기 전 마셔서 배에 압을 채우고, 다 일어선 뒤 내쉬어요.'
+    WHEN '바벨 로우' THEN '당길 때 내쉬고, 내릴 때 마셔요.'
+    WHEN '랫풀다운' THEN '당길 때 내쉬고, 올라갈 때 마셔요.'
+    WHEN '풀업' THEN '당길 때 내쉬고, 내려갈 때 마셔요.'
+    WHEN '시티드 케이블 로우' THEN '당길 때 내쉬고, 팔을 펼 때 마셔요.'
+    WHEN '오버헤드 프레스' THEN '밀어 올릴 때 내쉬고, 내릴 때 마셔요.'
+    WHEN '덤벨 숄더프레스' THEN '밀어 올릴 때 내쉬고, 내릴 때 마셔요.'
+    WHEN '사이드 레터럴 레이즈' THEN '들어 올릴 때 내쉬고, 내릴 때 마셔요.'
+    WHEN '페이스 풀' THEN '당길 때 내쉬고, 되돌아갈 때 마셔요.'
+    WHEN '스쿼트' THEN '앉을 때 마시고, 일어설 때 내쉬어요.'
+    WHEN '레그프레스' THEN '내릴 때 마시고, 밀어낼 때 내쉬어요.'
+    WHEN '런지' THEN '내려갈 때 마시고, 일어설 때 내쉬어요.'
+    WHEN '레그컬' THEN '구부릴 때 내쉬고, 펼 때 마셔요.'
+    WHEN '레그익스텐션' THEN '펼 때 내쉬고, 내릴 때 마셔요.'
+    WHEN '힙쓰러스트' THEN '밀어 올릴 때 내쉬고, 내릴 때 마셔요.'
+    WHEN '바벨 컬' THEN '들어 올릴 때 내쉬고, 내릴 때 마셔요.'
+    WHEN '덤벨 컬' THEN '감아올릴 때 내쉬고, 내릴 때 마셔요.'
+    WHEN '해머 컬' THEN '들어 올릴 때 내쉬고, 내릴 때 마셔요.'
+    WHEN '트라이셉스 익스텐션' THEN '펼 때 내쉬고, 굽힐 때 마셔요.'
+    WHEN '플랭크' THEN '숨을 참지 말고, 짧게 들이쉬고 내쉬기를 편하게 반복해요.'
+    WHEN '크런치' THEN '말아 올릴 때 내쉬고, 내려갈 때 마셔요.'
+    WHEN '행잉 레그레이즈' THEN '다리를 들 때 내쉬고, 내릴 때 마셔요.'
+    WHEN '케이블 크런치' THEN '말아 내릴 때 내쉬고, 되돌아갈 때 마셔요.'
+    WHEN '러닝' THEN '리듬에 맞춰 코로 마시고 입으로 내쉬며 호흡을 일정하게 유지해요.'
+    WHEN '사이클' THEN '페달을 밟을 때 내쉬고, 올라올 때 마시듯 리듬을 타요.'
+    WHEN '로잉머신' THEN '당길 때 내쉬고, 앞으로 되돌아갈 때 마셔요.'
+    WHEN '폼롤러 스트레칭' THEN '숨을 천천히 마셨다가, 내쉬며 압박 부위에 머물러요.'
+    WHEN '요가 스트레칭' THEN '자세를 잡을 때 마시고, 더 깊이 늘릴 때 천천히 내쉬어요.'
+    ELSE breathing_cue
+END;

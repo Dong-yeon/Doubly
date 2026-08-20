@@ -48,6 +48,14 @@ public class ExerciseCatalog {
     @Column(length = 200)
     private String tip;
 
+    /** 이 종목이 뭔지 한눈에 보여주는 이모지 — 세션 카드에서 종목명 옆에 크게 노출한다(nullable). */
+    @Column(length = 8)
+    private String emoji;
+
+    /** 언제 숨을 내쉬고 마시는지 — TIP 카드에 자세 큐와 함께 항상 붙는 호흡 타이밍 문구(nullable). */
+    @Column(name = "breathing_cue", length = 100)
+    private String breathingCue;
+
     @Column(name = "created_by")
     private Long createdBy;
 
@@ -56,12 +64,15 @@ public class ExerciseCatalog {
     private LocalDateTime createdAt;
 
     @Builder
-    private ExerciseCatalog(String name, String category, String muscleGroup, String equipment, String tip, Long createdBy) {
+    private ExerciseCatalog(String name, String category, String muscleGroup, String equipment, String tip,
+                             String emoji, String breathingCue, Long createdBy) {
         this.name = name;
         this.category = category;
         this.muscleGroup = muscleGroup;
         this.equipment = equipment;
         this.tip = tip;
+        this.emoji = emoji;
+        this.breathingCue = breathingCue;
         this.createdBy = createdBy;
     }
 }

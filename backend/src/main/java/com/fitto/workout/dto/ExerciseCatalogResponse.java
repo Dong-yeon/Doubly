@@ -9,10 +9,14 @@ public record ExerciseCatalogResponse(
         String category,
         String muscleGroup,
         String equipment,
-        String tip
+        String tip,
+        // 이 종목이 뭔지 한눈에 보여주는 이모지 — 세션 카드 종목명 옆에 노출
+        String emoji,
+        // 언제 숨을 내쉬고 마시는지 — TIP 카드에 자세 큐와 함께 항상 붙는다
+        String breathingCue
 ) {
     public static ExerciseCatalogResponse of(ExerciseCatalog e) {
         return new ExerciseCatalogResponse(e.getId(), e.getName(), e.getCategory(),
-                e.getMuscleGroup(), e.getEquipment(), e.getTip());
+                e.getMuscleGroup(), e.getEquipment(), e.getTip(), e.getEmoji(), e.getBreathingCue());
     }
 }
