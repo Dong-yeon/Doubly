@@ -10,7 +10,13 @@ public interface WorkoutRoutineRepository extends JpaRepository<WorkoutRoutine, 
 
     List<WorkoutRoutine> findByUserIdOrderByIdDesc(Long userId);
 
-    /** 내 루틴 개수 — 플랜 상한 판정 */
+    /**
+     * 프로그램 소속이 아닌(자유) 루틴만 — "내 루틴" 목록용. 프로그램 소속 Day 루틴은
+     * 프로그램 카드 하나로 묶여 별도로 조회되므로(WorkoutProgramRepository) 여기 안 섞는다.
+     */
+    List<WorkoutRoutine> findByUserIdAndProgramIsNullOrderByIdDesc(Long userId);
+
+    /** 내 루틴 개수 — 플랜 상한 판정. 프로그램 소속 Day 도 각자 루틴 한 개로 세어 한도에 포함한다. */
     long countByUserId(Long userId);
 
     Optional<WorkoutRoutine> findByIdAndUserId(Long id, Long userId);

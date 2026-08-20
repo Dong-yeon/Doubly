@@ -70,6 +70,10 @@ export const linking: LinkingOptions<RootStackParamList> = {
               WorkoutRecommend: 'workout/recommend',
               WorkoutSession: 'workout/session',
               WorkoutRoutines: 'workout/routines',
+              WorkoutProgramDetail: {
+                path: 'workout/routines/programs/:programId',
+                parse: { programId: Number },
+              },
               WorkoutRoutineForm: 'workout/routines/new',
               BodyMetric: 'workout/body',
               Challenge: 'workout/challenge',

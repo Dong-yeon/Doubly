@@ -119,6 +119,8 @@ export type WorkoutStackParamList = {
     | undefined;
   // 내 운동 루틴 (짐앱 스타일)
   WorkoutRoutines: undefined;
+  // 맞춤 프로그램 상세 — Day 선택 화면. "내 루틴"의 프로그램 카드를 탭하면 여기로 들어온다
+  WorkoutProgramDetail: { programId: number };
   // 커플 루틴 선물함 — 받은/보낸 루틴 선물
   WorkoutRoutineGiftInbox: undefined;
   // draft: AI 추천에서 넘어올 때 미리 채워 넣을 초안(선택) — 없으면 빈 폼(지금까지의 동작)

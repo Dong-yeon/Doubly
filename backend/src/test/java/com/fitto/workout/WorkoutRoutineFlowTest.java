@@ -3,7 +3,9 @@ package com.fitto.workout;
 import com.fitto.auth.dto.RegisterRequest;
 import com.fitto.auth.service.AuthService;
 import com.fitto.common.exception.BusinessException;
+import com.fitto.workout.dto.ProgramResponse;
 import com.fitto.workout.dto.RoutineResponse;
+import com.fitto.workout.dto.SaveProgramRequest;
 import com.fitto.workout.dto.SaveRoutineRequest;
 import com.fitto.workout.repository.ExerciseCatalogRepository;
 import org.junit.jupiter.api.Test;
@@ -11,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
+import java.time.DayOfWeek;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -336,5 +339,86 @@ class WorkoutRoutineFlowTest {
 
         assertThatThrownBy(() -> routineService.copy(copier, saved.id()))
                 .isInstanceOf(BusinessException.class);
+    }
+
+    // ---- 맞춤 프로그램(주차 지정, Day 그룹핑) ----
+
+    private SaveProgramRequest.ProgramDay day(DayOfWeek dow, String exerciseName, String muscleGroup) {
+        return new SaveProgramRequest.ProgramDay(dow, List.of(
+                new SaveRoutineRequest.Exercise(exerciseName, "근력", 3, 10, null, null, muscleGroup, "바벨")));
+    }
+
+    @Test
+    void 프로그램을_저장하면_요일_수만큼_Day가_생기고_주차가_저장된다() {
+        Long user = register("p1@fitto.com");
+
+        ProgramResponse saved = routineService.saveProgram(user, new SaveProgramRequest(
+                "전신 밸런스 프로그램", 8, List.of(
+                        day(DayOfWeek.MONDAY, "벤치프레스", "가슴"),
+                        day(DayOfWeek.WEDNESDAY, "데드리프트", "등"),
+                        day(DayOfWeek.FRIDAY, "스쿼트", "하체"))));
+
+        assertThat(saved.id()).isNotNull();
+        assertThat(saved.totalWeeks()).isEqualTo(8);
+        assertThat(saved.days()).hasSize(3);
+        assertThat(saved.days()).extracting(ProgramResponse.ProgramDay::dayNo).containsExactly(1, 2, 3);
+        assertThat(saved.days().get(0).routine().title()).isEqualTo("전신 밸런스 프로그램 - Day1");
+        assertThat(saved.days().get(1).routine().scheduledDays()).containsExactly(DayOfWeek.WEDNESDAY);
+    }
+
+    @Test
+    void 프로그램의_Day_루틴은_내_루틴_목록에_안_보인다() {
+        Long user = register("p2@fitto.com");
+        routineService.save(user, sample("자유 루틴"));
+        routineService.saveProgram(user, new SaveProgramRequest("프로그램", 4, List.of(
+                day(DayOfWeek.MONDAY, "벤치프레스", "가슴"),
+                day(DayOfWeek.THURSDAY, "스쿼트", "하체"))));
+
+        List<RoutineResponse> myRoutines = routineService.list(user);
+
+        // 프로그램 소속 Day 2개는 빠지고, 자유 루틴 1개만 남는다
+        assertThat(myRoutines).hasSize(1);
+        assertThat(myRoutines.get(0).title()).isEqualTo("자유 루틴");
+    }
+
+    @Test
+    void 내_프로그램_목록과_상세를_조회한다() {
+        Long user = register("p3@fitto.com");
+        ProgramResponse saved = routineService.saveProgram(user, new SaveProgramRequest("프로그램", 12, List.of(
+                day(DayOfWeek.TUESDAY, "벤치프레스", "가슴"))));
+
+        List<ProgramResponse> programs = routineService.listPrograms(user);
+        assertThat(programs).hasSize(1);
+        assertThat(programs.get(0).id()).isEqualTo(saved.id());
+
+        ProgramResponse detail = routineService.programDetail(user, saved.id());
+        assertThat(detail.totalWeeks()).isEqualTo(12);
+        assertThat(detail.days()).hasSize(1);
+    }
+
+    @Test
+    void 남의_프로그램은_조회할_수_없다() {
+        Long owner = register("p4@fitto.com");
+        Long other = register("p5@fitto.com");
+        ProgramResponse saved = routineService.saveProgram(owner, new SaveProgramRequest("프로그램", 4, List.of(
+                day(DayOfWeek.MONDAY, "벤치프레스", "가슴"))));
+
+        assertThatThrownBy(() -> routineService.programDetail(other, saved.id()))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void 프로그램을_삭제하면_소속_Day도_함께_지워진다() {
+        Long user = register("p6@fitto.com");
+        ProgramResponse saved = routineService.saveProgram(user, new SaveProgramRequest("프로그램", 4, List.of(
+                day(DayOfWeek.MONDAY, "벤치프레스", "가슴"),
+                day(DayOfWeek.THURSDAY, "스쿼트", "하체"))));
+        Long dayRoutineId = saved.days().get(0).routine().id();
+
+        routineService.deleteProgram(user, saved.id());
+
+        assertThatThrownBy(() -> routineService.programDetail(user, saved.id()))
+                .isInstanceOf(BusinessException.class);
+        assertThat(routineRepository.findById(dayRoutineId)).isEmpty();
     }
 }

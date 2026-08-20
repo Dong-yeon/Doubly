@@ -47,6 +47,9 @@ const FOCUS_GROUPS = ['가슴', '등', '어깨', '하체', '팔', '코어'] as c
 // 운동 목적 — 백엔드 GOAL_DIRECTIVES 의 키와 정확히 일치해야 프롬프트에 반영된다
 const GOALS = ['근력 향상', '근육 증가', '체지방 감량', '체력·건강 유지'] as const;
 
+// 프로그램 주차 — Day 구성 자체는 주차별로 안 바뀌고 진행률 표시에만 쓰인다(최대 52주, 백엔드와 동일)
+const WEEKS_OPTIONS = [4, 8, 12, 16] as const;
+
 // dayOffset → "오늘" / "내일" / "7/5 (금)"
 function dayLabel(offset: number): string {
   if (offset === 0) return '오늘';
@@ -69,6 +72,8 @@ export function WorkoutRecommendScreen({ navigation }: Props) {
   const [programOpen, setProgramOpen] = useState(false);
   const [programTitle, setProgramTitle] = useState('');
   const [programWeekdays, setProgramWeekdays] = useState<WeekDay[]>([]);
+  // 몇 주짜리 프로그램인지 — 기본 8주. Day 구성은 주차와 무관하게 그대로, 진행률 표시에만 쓰인다
+  const [programWeeks, setProgramWeeks] = useState<number>(8);
   // 집중 부위(선택, 복수) — 비우면 균형 잡힌 분배
   const [focusGroups, setFocusGroups] = useState<string[]>([]);
   // 운동 목적(선택, 단일) — 다시 누르면 해제
@@ -155,6 +160,7 @@ export function WorkoutRecommendScreen({ navigation }: Props) {
     try {
       const saved = await workoutApi.saveProgram({
         programTitle: title,
+        totalWeeks: programWeeks,
         days: result.days
           .filter((d) => d.dayOfWeek)
           .map((d) => ({
@@ -168,8 +174,8 @@ export function WorkoutRecommendScreen({ navigation }: Props) {
           })),
       });
       haptics.success();
-      toast.success(`루틴 ${saved.length}개로 프로그램을 저장했어요!`);
-      navigation.navigate('WorkoutRoutines');
+      toast.success(`${saved.totalWeeks}주 프로그램으로 Day ${saved.days.length}개를 저장했어요!`);
+      navigation.navigate('WorkoutProgramDetail', { programId: saved.id });
     } catch (e) {
       toast.error(getErrorMessage(e, '프로그램 저장에 실패했어요.'));
     } finally {
@@ -239,6 +245,22 @@ export function WorkoutRecommendScreen({ navigation }: Props) {
                 ? `${WEEK_DAYS.filter((d) => programWeekdays.includes(d.value)).map((d) => d.label).join('·')}요일 — 요일마다 다른 루틴을 만들어드려요.`
                 : '매주 운동할 요일을 골라주세요.'}
             </Text>
+
+            {/* 몇 주짜리 프로그램인지 — Day 구성은 그대로, 진행률 표시(예: "3/8주")에만 쓰인다 */}
+            <Text style={styles.label}>몇 주 프로그램인가요?</Text>
+            <View style={styles.focusRow}>
+              {WEEKS_OPTIONS.map((w) => (
+                <Chip
+                  key={w}
+                  label={`${w}주`}
+                  selected={programWeeks === w}
+                  onPress={() => {
+                    haptics.light();
+                    setProgramWeeks(w);
+                  }}
+                />
+              ))}
+            </View>
 
             {/* 집중 부위(선택, 복수) — 고른 부위에 주간 볼륨을 더 배정한다. 안 고르면 균형 분배 */}
             <Text style={styles.label}>더 키우고 싶은 부위 (선택)</Text>
@@ -328,7 +350,7 @@ export function WorkoutRecommendScreen({ navigation }: Props) {
 
             {resultIsProgram ? (
               <Button
-                title={`프로그램으로 저장 (루틴 ${result.days.length}개)`}
+                title={`${programWeeks}주 프로그램으로 저장 (Day ${result.days.length}개)`}
                 onPress={onSaveProgram}
                 loading={savingProgram}
                 style={styles.saveProgramBtn}
