@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "550685086709",
+    "project_id": "doubly-5f40c",
+    "storage_bucket": "doubly-5f40c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:550685086709:android:3dcc4ecf097650d1b4c6bc",
+        "android_client_info": {
+          "package_name": "com.doubly.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAtCU81IAzNnBGUTLCzjopINTPhDaznT1w"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
