@@ -8,11 +8,14 @@
  * <p><b>문구는 서버가 준다.</b> "무료 플랜은 맛집 핀을 20개까지 만들 수 있어요" 같은
  * 숫자가 들어간 문장을 앱에 박아두면, 한도를 조정할 때마다 스토어 심사를 기다려야 한다.
  */
-import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { Sheet } from './Sheet';
 import { MaterialCommunityIcons } from './Icon';
 import { usePlanStore } from '../store/planStore';
+import { useAuthStore } from '../store/authStore';
+import { requestProPurchase } from '../utils/iap';
+import { toast } from '../store/toastStore';
 import { PURCHASE_ENABLED } from '../constants/config';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 import { themedStyles } from '../theme/themedStyles';
@@ -20,8 +23,28 @@ import { themedStyles } from '../theme/themedStyles';
 export function UpgradeSheet() {
   const gate = usePlanStore((s) => s.gate);
   const dismiss = usePlanStore((s) => s.dismissGate);
+  const userId = useAuthStore((s) => s.user?.id);
+  const [purchasing, setPurchasing] = useState(false);
 
   if (!gate) return null;
+
+  /*
+   * 여기서는 결제창을 여는 요청만 보낸다 — 성공/실패는 utils/iap 의 리스너로 비동기로
+   * 온다(스토어 이벤트 기반이라 이 함수의 완료와 결제 완료는 다른 시점이다). 시트는 결과를
+   * 기다리지 않고 닫는다: 결제창이 뜬 다음엔 그 위에 이 시트가 겹쳐 있을 이유가 없다.
+   */
+  const handlePurchase = async () => {
+    if (!userId || purchasing) return;
+    setPurchasing(true);
+    try {
+      await requestProPurchase(userId);
+      dismiss();
+    } catch {
+      toast.error('결제를 시작하지 못했어요. 잠시 후 다시 시도해주세요.');
+    } finally {
+      setPurchasing(false);
+    }
+  };
 
   return (
     <Sheet visible onClose={dismiss} position="bottom">
@@ -44,11 +67,16 @@ export function UpgradeSheet() {
 
       {PURCHASE_ENABLED ? (
         <Pressable
-          style={({ pressed }) => [styles.primary, pressed && styles.pressed]}
-          onPress={dismiss}
+          style={({ pressed }) => [styles.primary, (pressed || purchasing) && styles.pressed]}
+          onPress={handlePurchase}
+          disabled={purchasing}
           accessibilityRole="button"
         >
-          <Text style={styles.primaryText}>PRO 시작하기</Text>
+          {purchasing ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text style={styles.primaryText}>PRO 시작하기</Text>
+          )}
         </Pressable>
       ) : (
         /*

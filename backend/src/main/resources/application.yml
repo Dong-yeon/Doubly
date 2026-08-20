@@ -106,6 +106,14 @@ fitto:
     # 성능 부담도 없다.
     free-trial: ${PLAN_FREE_TRIAL:true}
 
+  # Google Play 구독 웹훅(RTDN) — 서비스 계정 키(base64) 미설정 시 기능 전체 비활성,
+  # 웹훅 요청은 전부 403(GooglePlayProperties 참고). 패키지명·서비스 계정 키는 스토어
+  # 등록/심사 이후에나 발급되므로 그 전까지는 비어 있는 게 정상이다.
+  google-play:
+    package-name: ${GOOGLE_PLAY_PACKAGE_NAME:}
+    service-account-json-base64: ${GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_BASE64:}
+    webhook-token: ${GOOGLE_PLAY_WEBHOOK_TOKEN:}
+
   # 음식 사진 AI 분석 (Google AI Studio 무료 티어) — 키 미설정 시 기능만 비활성, 앱은 정상 동작
   gemini:
     api-key: ${GEMINI_API_KEY:}

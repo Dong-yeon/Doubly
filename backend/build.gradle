@@ -59,6 +59,11 @@ dependencies {
     // DB 드라이버
     runtimeOnly 'org.postgresql:postgresql'
 
+    // Google Play 구독 웹훅(RTDN) 검증 — 알림 자체엔 상태가 없어서, Play Developer API로
+    // 진짜 구독 상태(활성/만료/환불)를 다시 조회해야 한다 (GooglePlayDeveloperApiClient 참고)
+    implementation 'com.google.apis:google-api-services-androidpublisher:v3-rev20250602-2.0.0'
+    implementation 'com.google.auth:google-auth-library-oauth2-http:1.35.0'
+
     // Lombok
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
