@@ -4,6 +4,7 @@
  *  실제 운동 시에는 값이 다르지 않은 한 '완료' 버튼만 누르면 된다. */
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  FlatList,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -652,6 +653,141 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
     ]);
   };
 
+  /** 종목 카드 — 네이티브(DraggableFlatList)/웹(FlatList) 둘 다 이 렌더러를 공유한다.
+   *  drag 가 undefined 면(웹) 손잡이를 눌러도 아무 일도 없다 — 순서 바꾸기는 네이티브 전용. */
+  const renderExerciseCard = (e: SessionExercise, drag: (() => void) | undefined, isActive: boolean) => {
+    const done = e.sets.filter((s) => s.done).length;
+    const e1rm = bestE1RM(e.sets);
+    return (
+      <View style={[styles.exCard, isActive && styles.exCardActive]}>
+        <View style={styles.exHeader}>
+          <Pressable onLongPress={drag} disabled={isActive || !drag} hitSlop={8} style={styles.dragHandle}>
+            <Text style={styles.dragHandleText}>⠿</Text>
+          </Pressable>
+          {/* 이 종목이 뭔지 한눈에 보여주는 그림 — 카탈로그에 있는 종목만(커스텀 종목은 안 뜬다) */}
+          {e.emoji ? <Text style={styles.exEmoji}>{e.emoji}</Text> : null}
+          <Text style={styles.exName}>{e.name}</Text>
+          {/* 자극 부위 배지 — 몸 실루엣에 부위를 색칠. muscleGroup 만 있으면 되므로
+              emoji/TIP 과 달리 커스텀 종목도(루틴에 부위가 저장돼 있으면) 뜬다 */}
+          {e.muscleGroup ? <MuscleBodyBadge muscleGroup={e.muscleGroup} size={18} /> : null}
+          <View style={styles.exHeaderActions}>
+            <TouchableOpacity onPress={() => openSubstitute(e)} hitSlop={8}>
+              <Text style={styles.exSwap}>⇄</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => removeExercise(e.key)} hitSlop={8}>
+              <Text style={styles.exRemove}>✕</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+        <Text style={styles.exMeta}>
+          {e.category}
+          {e.muscleGroup ? ` · ${e.muscleGroup}` : ''} · {done}/{e.sets.length} 세트
+          {/* e1RM(추정 1RM) — 완료한 세트가 있어야 계산 가능. 워밍업만 하고 본세트 전이면 아직 안 뜬다 */}
+          {e1rm != null ? ` · e1RM ${formatWeight(e1rm)}` : ''}
+        </Text>
+
+        {/* TIP 카드 — 카탈로그에 있는 종목만(커스텀 종목/아직 못 불러왔으면 안 뜬다).
+            호흡 타이밍(breathingCue)은 항상 자세 큐 아래 별도 줄로 붙는다. */}
+        {e.tip ? (
+          <View style={styles.tipCard}>
+            <View style={styles.tipBadge}>
+              <Text style={styles.tipBadgeText}>TIP</Text>
+            </View>
+            <View style={styles.tipTextCol}>
+              <Text style={styles.tipText}>{e.tip}</Text>
+              {e.breathingCue ? (
+                <Text style={styles.breathingText}>🌬️ {e.breathingCue}</Text>
+              ) : null}
+            </View>
+          </View>
+        ) : null}
+
+        <View style={styles.setColHeader}>
+          <Text style={styles.setColHeaderIndex} />
+          <Text style={styles.setColHeaderText}>무게(kg)</Text>
+          <Text style={styles.setColHeaderX} />
+          <Text style={styles.setColHeaderText}>횟수</Text>
+          <Text style={styles.setColHeaderRpe}>RPE</Text>
+          <Text style={styles.setColHeaderCheck} />
+        </View>
+        <View style={styles.setRows}>
+          {e.sets.map((s, i) => (
+            <View key={i} style={styles.setRow}>
+              <View style={styles.setRowIndexCol}>
+                <Text style={styles.setRowIndex}>{i + 1}</Text>
+                {/* 루틴에서 이 세트를 웜업으로 지정해뒀으면 배지로 표시 — 무게를 낮춰 가볍게
+                    푸는 세트임을 실제 운동 중에도 한눈에 구분할 수 있게 */}
+                {s.setType === 'WARMUP' ? (
+                  <View style={styles.warmupBadge}>
+                    <Text style={styles.warmupBadgeText}>웜업</Text>
+                  </View>
+                ) : null}
+              </View>
+              <TextInput
+                style={[styles.setInput, s.done && styles.setInputDone]}
+                value={s.weightKg}
+                onChangeText={(v) => updateSetField(e.key, i, 'weightKg', v)}
+                keyboardType="decimal-pad"
+                placeholder="kg"
+                placeholderTextColor={colors.textTertiary}
+                editable={!s.done}
+              />
+              <Text style={styles.setRowX}>×</Text>
+              <TextInput
+                style={[styles.setInput, s.done && styles.setInputDone]}
+                value={s.reps}
+                onChangeText={(v) => updateSetField(e.key, i, 'reps', v)}
+                keyboardType="number-pad"
+                placeholder="회"
+                placeholderTextColor={colors.textTertiary}
+                editable={!s.done}
+              />
+              {/* RPE(자각 강도) — 직접 입력. 직전 기록이 있으면 프리필된다(applyPrefill).
+                  무게·횟수와 마찬가지로 완료 체크 후에는 잠긴다(updateSetField가 done인
+                  세트는 막는다) — 다시 고치려면 체크를 풀어야 한다. */}
+              <TextInput
+                style={[styles.setRpeInput, s.done && styles.setInputDone]}
+                value={s.rpe}
+                onChangeText={(v) => updateSetField(e.key, i, 'rpe', v)}
+                keyboardType="decimal-pad"
+                placeholder="-"
+                placeholderTextColor={colors.textTertiary}
+                editable={!s.done}
+              />
+              <TouchableOpacity
+                style={[styles.setCheck, s.done && styles.setCheckDone]}
+                onPress={() => toggleSet(e.key, i)}
+              >
+                <Text style={[styles.setCheckText, s.done && styles.setCheckTextDone]}>
+                  {s.done ? '✓' : ''}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+          <TouchableOpacity style={styles.setAddRow} onPress={() => addSetRow(e.key)}>
+            <Text style={styles.setAddText}>＋ 세트 추가</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
+  /** 목록 하단 — 종목 추가 버튼 + 안내 문구. 순서 바꾸기 힌트는 네이티브에만 보여준다
+   *  (웹은 드래그 자체가 없으니 안내해봐야 헷갈리기만 한다). */
+  const renderListFooter = (canReorder: boolean) => (
+    <>
+      <TouchableOpacity style={styles.addExercise} onPress={() => setAddOpen(true)}>
+        <Text style={styles.addExerciseText}>＋ 운동 추가</Text>
+      </TouchableOpacity>
+
+      {exercises.length === 0 ? (
+        <Text style={styles.emptyHint}>운동을 추가하면 직전 기록으로 무게·횟수가 채워져요.{'\n'}세트를 체크만 하면 자동으로 휴식 타이머가 돌아가요.</Text>
+      ) : canReorder ? (
+        <Text style={styles.reorderHint}>⠿ 을 길게 눌러 운동 순서를 바꿀 수 있어요.</Text>
+      ) : null}
+    </>
+  );
+
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       {/* 상단 요약바 — 운동 중 실시간으로 누적되는 경과 시간·총 볼륨·완료 세트 수 */}
@@ -695,143 +831,31 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
         </View>
       </View>
 
-      <DraggableFlatList
-        data={exercises}
-        keyExtractor={(e) => e.key}
-        onDragEnd={({ data }) => setExercises(data)}
-        contentContainerStyle={styles.list}
-        renderItem={({ item: e, drag, isActive }: RenderItemParams<SessionExercise>) => {
-          const done = e.sets.filter((s) => s.done).length;
-          const e1rm = bestE1RM(e.sets);
-          return (
-            <ScaleDecorator>
-              <View style={[styles.exCard, isActive && styles.exCardActive]}>
-                <View style={styles.exHeader}>
-                  <Pressable onLongPress={drag} disabled={isActive} hitSlop={8} style={styles.dragHandle}>
-                    <Text style={styles.dragHandleText}>⠿</Text>
-                  </Pressable>
-                  {/* 이 종목이 뭔지 한눈에 보여주는 그림 — 카탈로그에 있는 종목만(커스텀 종목은 안 뜬다) */}
-                  {e.emoji ? <Text style={styles.exEmoji}>{e.emoji}</Text> : null}
-                  <Text style={styles.exName}>{e.name}</Text>
-                  {/* 자극 부위 배지 — 몸 실루엣에 부위를 색칠. muscleGroup 만 있으면 되므로
-                      emoji/TIP 과 달리 커스텀 종목도(루틴에 부위가 저장돼 있으면) 뜬다 */}
-                  {e.muscleGroup ? <MuscleBodyBadge muscleGroup={e.muscleGroup} size={18} /> : null}
-                  <View style={styles.exHeaderActions}>
-                    <TouchableOpacity onPress={() => openSubstitute(e)} hitSlop={8}>
-                      <Text style={styles.exSwap}>⇄</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => removeExercise(e.key)} hitSlop={8}>
-                      <Text style={styles.exRemove}>✕</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-                <Text style={styles.exMeta}>
-                  {e.category}
-                  {e.muscleGroup ? ` · ${e.muscleGroup}` : ''} · {done}/{e.sets.length} 세트
-                  {/* e1RM(추정 1RM) — 완료한 세트가 있어야 계산 가능. 워밍업만 하고 본세트 전이면 아직 안 뜬다 */}
-                  {e1rm != null ? ` · e1RM ${formatWeight(e1rm)}` : ''}
-                </Text>
-
-                {/* TIP 카드 — 카탈로그에 있는 종목만(커스텀 종목/아직 못 불러왔으면 안 뜬다).
-                    호흡 타이밍(breathingCue)은 항상 자세 큐 아래 별도 줄로 붙는다. */}
-                {e.tip ? (
-                  <View style={styles.tipCard}>
-                    <View style={styles.tipBadge}>
-                      <Text style={styles.tipBadgeText}>TIP</Text>
-                    </View>
-                    <View style={styles.tipTextCol}>
-                      <Text style={styles.tipText}>{e.tip}</Text>
-                      {e.breathingCue ? (
-                        <Text style={styles.breathingText}>🌬️ {e.breathingCue}</Text>
-                      ) : null}
-                    </View>
-                  </View>
-                ) : null}
-
-                <View style={styles.setColHeader}>
-                  <Text style={styles.setColHeaderIndex} />
-                  <Text style={styles.setColHeaderText}>무게(kg)</Text>
-                  <Text style={styles.setColHeaderX} />
-                  <Text style={styles.setColHeaderText}>횟수</Text>
-                  <Text style={styles.setColHeaderRpe}>RPE</Text>
-                  <Text style={styles.setColHeaderCheck} />
-                </View>
-                <View style={styles.setRows}>
-                  {e.sets.map((s, i) => (
-                    <View key={i} style={styles.setRow}>
-                      <View style={styles.setRowIndexCol}>
-                        <Text style={styles.setRowIndex}>{i + 1}</Text>
-                        {/* 루틴에서 이 세트를 웜업으로 지정해뒀으면 배지로 표시 — 무게를 낮춰 가볍게
-                            푸는 세트임을 실제 운동 중에도 한눈에 구분할 수 있게 */}
-                        {s.setType === 'WARMUP' ? (
-                          <View style={styles.warmupBadge}>
-                            <Text style={styles.warmupBadgeText}>웜업</Text>
-                          </View>
-                        ) : null}
-                      </View>
-                      <TextInput
-                        style={[styles.setInput, s.done && styles.setInputDone]}
-                        value={s.weightKg}
-                        onChangeText={(v) => updateSetField(e.key, i, 'weightKg', v)}
-                        keyboardType="decimal-pad"
-                        placeholder="kg"
-                        placeholderTextColor={colors.textTertiary}
-                        editable={!s.done}
-                      />
-                      <Text style={styles.setRowX}>×</Text>
-                      <TextInput
-                        style={[styles.setInput, s.done && styles.setInputDone]}
-                        value={s.reps}
-                        onChangeText={(v) => updateSetField(e.key, i, 'reps', v)}
-                        keyboardType="number-pad"
-                        placeholder="회"
-                        placeholderTextColor={colors.textTertiary}
-                        editable={!s.done}
-                      />
-                      {/* RPE(자각 강도) — 직접 입력. 직전 기록이 있으면 프리필된다(applyPrefill).
-                          무게·횟수와 마찬가지로 완료 체크 후에는 잠긴다(updateSetField가 done인
-                          세트는 막는다) — 다시 고치려면 체크를 풀어야 한다. */}
-                      <TextInput
-                        style={[styles.setRpeInput, s.done && styles.setInputDone]}
-                        value={s.rpe}
-                        onChangeText={(v) => updateSetField(e.key, i, 'rpe', v)}
-                        keyboardType="decimal-pad"
-                        placeholder="-"
-                        placeholderTextColor={colors.textTertiary}
-                        editable={!s.done}
-                      />
-                      <TouchableOpacity
-                        style={[styles.setCheck, s.done && styles.setCheckDone]}
-                        onPress={() => toggleSet(e.key, i)}
-                      >
-                        <Text style={[styles.setCheckText, s.done && styles.setCheckTextDone]}>
-                          {s.done ? '✓' : ''}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-                  <TouchableOpacity style={styles.setAddRow} onPress={() => addSetRow(e.key)}>
-                    <Text style={styles.setAddText}>＋ 세트 추가</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </ScaleDecorator>
-          );
-        }}
-        ListFooterComponent={
-          <>
-            <TouchableOpacity style={styles.addExercise} onPress={() => setAddOpen(true)}>
-              <Text style={styles.addExerciseText}>＋ 운동 추가</Text>
-            </TouchableOpacity>
-
-            {exercises.length === 0 ? (
-              <Text style={styles.emptyHint}>운동을 추가하면 직전 기록으로 무게·횟수가 채워져요.{'\n'}세트를 체크만 하면 자동으로 휴식 타이머가 돌아가요.</Text>
-            ) : (
-              <Text style={styles.reorderHint}>⠿ 을 길게 눌러 운동 순서를 바꿀 수 있어요.</Text>
-            )}
-          </>
-        }
-      />
+      {Platform.OS === 'web' ? (
+        // 웹에서는 DraggableFlatList(react-native-gesture-handler 기반)의 내부 스크롤
+        // 컨테이너가 overflow:hidden 으로 렌더돼 목록이 아예 스크롤되지 않는 문제가 있다
+        // (마우스 휠/터치 스크롤 둘 다 먹통 — 운동이 2개만 넘어가도 아래쪽을 볼 수 없었다).
+        // 순서 바꾸기(길게 눌러 드래그)는 터치 제스처 전제라 웹에서 원래도 아쉬운 기능이니,
+        // 웹에서는 평범한 FlatList로 스크롤을 살리고 순서 바꾸기만 뺀다(네이티브는 그대로 유지).
+        <FlatList
+          data={exercises}
+          keyExtractor={(e) => e.key}
+          contentContainerStyle={styles.list}
+          renderItem={({ item: e }) => renderExerciseCard(e, undefined, false)}
+          ListFooterComponent={renderListFooter(false)}
+        />
+      ) : (
+        <DraggableFlatList
+          data={exercises}
+          keyExtractor={(e) => e.key}
+          onDragEnd={({ data }) => setExercises(data)}
+          contentContainerStyle={styles.list}
+          renderItem={({ item: e, drag, isActive }: RenderItemParams<SessionExercise>) => (
+            <ScaleDecorator>{renderExerciseCard(e, drag, isActive)}</ScaleDecorator>
+          )}
+          ListFooterComponent={renderListFooter(true)}
+        />
+      )}
 
       {/* 하단 액션 — 휴식 타이머는 이 영역 위에 오버레이로 뜬다 (레이아웃을 밀지 않음) */}
       <View style={styles.bottomArea}>
