@@ -162,6 +162,11 @@ public class PlaceService {
                 .build();
         placeVisitRepository.save(visit);
         place.markVisited();
+        // 식단 구분은 가보기 전엔 알 수 없어 장소 추가 시점이 아니라 방문 기록에서 고른다.
+        // null 이면 기존 값을 그대로 두는 null-safe 갱신이라 다른 필드에 영향 없다.
+        if (request.dietTag() != null) {
+            place.update(null, null, null, null, null, null, request.dietTag());
+        }
 
         Long partnerId = activeCouple(userId).partnerOf(userId);
         if (partnerId != null) {
