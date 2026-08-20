@@ -71,6 +71,7 @@
     },
     "android": {
       "package": "com.doubly.app",
+      "googleServicesFile": "./google-services.json",
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF",
