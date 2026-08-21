@@ -1,5 +1,5 @@
 /** 채팅 대화 — 설계서 2.5 / 4.5 CHAT-02 (실시간 메시지) */
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -24,6 +24,8 @@ import { Avatar } from '../../components/Avatar';
 import { useChatStore } from '../../store/chatStore';
 import { useAuthStore } from '../../store/authStore';
 import { useRelationStore } from '../../store/relationStore';
+import { useCallStore } from '../../store/callStore';
+import { callApi, CallType } from '../../api/call';
 import { haptics } from '../../utils/haptics';
 import { pickImage, uploadImage } from '../../utils/imageUpload';
 import { getErrorMessage } from '../../utils/error';
@@ -44,6 +46,7 @@ import { chatApi } from '../../api/chat';
 import { isPrShareContent } from '../../utils/workoutShare';
 import { isGoalShareContent } from '../../utils/dietShare';
 import { touchGestureOf } from '../../constants/touchGestures';
+import { callCardLabel, parseCallCard } from '../../utils/callCard';
 import { stickerImageOf } from '../../constants/stickerImages';
 import { playTouchGesture } from '../../utils/haptics';
 import { messagePreview } from '../../utils/messagePreview';
@@ -150,9 +153,78 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     setText((prev) => applyAllSuggestions(prev, checkKoreanSpelling(prev)));
   };
 
+  /*
+   * 통화 발신 — 이 화면은 걸기만 담당한다. 벨·통화 중 UI는 전역 CallOverlay(App.tsx)가
+   * 어느 화면에서든 뜨므로, 여기서는 세션 생성(callApi.start)과 Stream 콜 오브젝트 생성
+   * (client.call().getOrCreate({ring:true}))까지만 하면 나머지는 오버레이가 이어받는다.
+   */
+  const callClient = useCallStore((s) => s.client);
+  const [callStarting, setCallStarting] = useState(false);
+  const partnerId = couple?.partner?.id;
+
+  const startCall = useCallback(
+    async (callType: CallType) => {
+      if (!callClient) {
+        toast.error('통화 기능을 준비하지 못했어요. 잠시 후 다시 시도해주세요.');
+        return;
+      }
+      if (!myId || !partnerId || callStarting) return;
+      setCallStarting(true);
+      let joinedCallId: string | null = null;
+      try {
+        const joined = await callApi.start(callType);
+        joinedCallId = joined.callId;
+        const call = callClient.call('default', joined.callId);
+        await call.getOrCreate({
+          ring: true,
+          video: callType === 'VIDEO',
+          data: {
+            members: [{ user_id: String(myId) }, { user_id: String(partnerId) }],
+            // 음성통화는 카메라를 처음부터 꺼둔다 — CallOverlay 가 곧바로 벨 화면을 띄운다
+            settings_override: callType === 'VOICE' ? { video: { camera_default_on: false } } : undefined,
+          },
+        });
+      } catch (e) {
+        // Stream 쪽 콜 생성이 실패해도 우리 세션은 이미 RINGING 으로 남아있다 —
+        // 24시간 안전장치를 기다리지 않고 바로 정리한다(상대에게 헛벨이 안 뜬 상태이므로 무해).
+        if (joinedCallId) callApi.end(joinedCallId).catch(() => undefined);
+        toast.error(getErrorMessage(e));
+      } finally {
+        setCallStarting(false);
+      }
+    },
+    [callClient, myId, partnerId, callStarting],
+  );
+
   useLayoutEffect(() => {
-    navigation.setOptions({ title });
-  }, [navigation, title]);
+    navigation.setOptions({
+      title,
+      headerRight: () => (
+        <View style={styles.headerCallActions}>
+          <Pressable
+            onPress={() => startCall('VOICE')}
+            disabled={callStarting}
+            style={({ pressed }) => [styles.headerCallButton, pressed && styles.headerCallButtonPressed]}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="음성통화 걸기"
+          >
+            <MaterialCommunityIcons name="phone" size={22} color={colors.textPrimary} />
+          </Pressable>
+          <Pressable
+            onPress={() => startCall('VIDEO')}
+            disabled={callStarting}
+            style={({ pressed }) => [styles.headerCallButton, pressed && styles.headerCallButtonPressed]}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="영상통화 걸기"
+          >
+            <MaterialCommunityIcons name="video" size={22} color={colors.textPrimary} />
+          </Pressable>
+        </View>
+      ),
+    });
+  }, [navigation, title, startCall, callStarting]);
 
   useEffect(() => {
     openRoom(relationId);
@@ -342,6 +414,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     const isMeal = item.messageType === 'MEAL_CARD';
     // 루틴 공유(트레이너-회원) — 운동 카드와 같은 레이아웃에 배지만 다르게
     const isRoutine = item.messageType === 'ROUTINE_CARD';
+    const callCard = item.messageType === 'CALL_CARD' ? parseCallCard(item.content) : null;
     // PR(자기 최고 기록) 공유 카드 — 문구 접두어로 구분한다(workoutShare.ts, 단일 출처)
     const isPr = isWorkout && isPrShareContent(item.content);
     // 영양 목표 달성 공유 카드 — 문구 접두어로 구분한다(dietShare.ts, 단일 출처)
@@ -486,6 +559,25 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             {item.content ? (
               <Text style={styles.workoutText}>{item.content}</Text>
             ) : null}
+          </View>
+        ) : callCard ? (
+          <View style={[styles.callCard, mine ? styles.callCardMine : styles.callCardTheirs]}>
+            <MaterialCommunityIcons
+              name={callCard.callType === 'VIDEO' ? 'video' : 'phone'}
+              size={18}
+              color={callCard.outcome === 'ENDED' ? colors.textPrimary : colors.coral}
+            />
+            <Text style={styles.callCardText}>{callCardLabel(callCard)}</Text>
+            {/* 정상 종료 통화도 "다시 걸기"를 굳이 막지 않는다 — 통화 기록에서 재발신하는 흔한 동작 */}
+            <Pressable
+              onPress={() => startCall(callCard.callType)}
+              disabled={callStarting}
+              style={({ pressed }) => [styles.callCardButton, pressed && styles.headerCallButtonPressed]}
+              accessibilityRole="button"
+              accessibilityLabel="다시 걸기"
+            >
+              <Text style={styles.callCardButtonText}>다시 걸기</Text>
+            </Pressable>
           </View>
         ) : (
           // 꼬리(뾰족한 모서리)는 그룹의 마지막 말풍선에만 — 나머지는 완전히 둥글게 이어붙는다
@@ -787,6 +879,9 @@ function ExtraButton({
 const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
+  headerCallActions: { flexDirection: 'row', alignItems: 'center', paddingRight: spacing.xs },
+  headerCallButton: { minWidth: 40, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  headerCallButtonPressed: { opacity: 0.6 },
   list: { padding: spacing.md },
   // 그룹 간 세로 간격은 msgBlock(정상 메시지)·row(삭제된 메시지)가 각각 spaced/grouped 로 담당한다
   row: { maxWidth: '80%', flexDirection: 'row', alignItems: 'flex-end' },
@@ -845,6 +940,27 @@ const styles = themedStyles((colors) => ({
   workoutBadgePr: { color: colors.ink },
   workoutText: { fontSize: fontSize.subtitle, color: colors.textPrimary, fontWeight: '600' },
   workoutTextMine: { color: colors.textPrimary },
+  callCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: 10,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 1.5,
+    maxWidth: 260,
+  },
+  callCardMine: { backgroundColor: colors.surface, borderColor: colors.border },
+  callCardTheirs: { backgroundColor: colors.surface, borderColor: colors.border },
+  callCardText: { fontSize: fontSize.body, color: colors.textPrimary, fontWeight: '600', flexShrink: 1 },
+  callCardButton: {
+    marginLeft: 'auto',
+    paddingVertical: 5,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primarySoft,
+  },
+  callCardButtonText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.primary },
   mealCard: { paddingVertical: 10, paddingHorizontal: spacing.md, borderRadius: radius.lg, borderWidth: 1.5, maxWidth: 240, gap: 6 },
   mealCardMine: { backgroundColor: colors.accentSoft, borderColor: colors.accent },
   mealCardTheirs: { backgroundColor: colors.surface, borderColor: colors.accent },
