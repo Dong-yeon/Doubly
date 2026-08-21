@@ -25,8 +25,10 @@ public interface FeedReactionRepository extends JpaRepository<FeedReaction, Long
     Optional<FeedReaction> findByTargetTypeAndTargetIdAndUserIdAndEmoji(
             FeedItemType targetType, Long targetId, Long userId, String emoji);
 
-    /** 원본이 사라질 때 함께 — FK 가 없으므로(다형 참조) 호출부가 직접 지운다. */
-    @Modifying
+    /**
+     * 원본이 사라질 때 함께 — FK 가 없으므로(다형 참조) 호출부가 직접 지운다.
+     * 파생 delete 라 {@code @Modifying} 이 필요 없다(그건 {@code @Query} 전용이다).
+     */
     void deleteByTargetTypeAndTargetId(FeedItemType targetType, Long targetId);
 
     /** 데이트 식단처럼 한 번에 여러 원본이 사라지는 경우. */
