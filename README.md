@@ -843,6 +843,7 @@ point_ledger              -- 포인트 적립·사용 내역 (잔액을 컬럼�
 | 출시 준비 | GitHub Actions CI (push 시 백엔드 테스트 + 프론트 tsc 자동 실행) | ✅ 완료 |
 | 알림 | 탭 딥링크 — notify() 에 카테고리+data 페이로드(30여 곳), 프론트 navigationRef·pushDeepLink.ts | ✅ 완료 |
 | 알림 | 카테고리별 설정(채팅/기념일/상대 활동/리마인드) — `users` V58 + `SettingsScreen` 토글 + OS 권한 거부 안내 배너 | ✅ 완료 |
+| 알림 | 재방문 리마인드 3종 — 21시 스트릭 위기(`StreakRiskNotifier`) · 20시 오늘의 질문 미답변(`DailyQuestionUnansweredNotifier`) · 11시 혼자 가입자 D+1/D+3 프리뷰(`SoloSignupPreviewNotifier`, 총 2회 상한) | ✅ 완료 |
 | 요금제 | 플랜 인프라 (판정·한도·구독 스키마 V36) — 위 [요금제 절](#요금제--free--pro) | ✅ 완료 (전원 PRO·결제 미연동) |
 | 요금제 | 한도 실측 → `Feature.java` 의 FREE 숫자 확정 (이벤트 로깅 선행) | 예정 (이벤트 로깅은 완료, 데이터가 쌓이는 대로 진행) |
 | 요금제 | 게이팅 적용 — AI 7종·사진·여행·맛집핀·루틴·즐겨찾기·캘린더·경비·준비물·배경·추억·주간결산 | ✅ 완료 |

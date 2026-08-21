@@ -1,6 +1,7 @@
 package com.fitto.common.time;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 
 /**
@@ -22,5 +23,28 @@ public final class KstClock {
 
     public static LocalDate today() {
         return LocalDate.now(ZONE);
+    }
+
+    /**
+     * {@code fitto.storage-zone} 설정값 → 저장 TZ. 비어 있으면 JVM 기본 TZ.
+     *
+     * <p>{@code created_at} 류 {@code @CreatedDate} 컬럼은 {@code hibernate.jdbc.time_zone} 도
+     * 컨테이너 {@code TZ} 도 지정된 곳이 없어 <b>JVM 기본 TZ 의 벽시계 그대로</b> 저장된다
+     * (운영 Railway=UTC, 로컬 Windows=KST). "가입일로부터 D+N" 처럼 KST 날짜 경계와
+     * 그 컬럼을 비교해야 하는 모든 곳이 같은 규칙으로 풀어야 어긋나지 않는다.
+     */
+    public static ZoneId storageZoneOf(String configured) {
+        return (configured == null || configured.isBlank())
+                ? ZoneId.systemDefault()
+                : ZoneId.of(configured);
+    }
+
+    /**
+     * KST 기준 하루의 시작을, {@code storage} TZ 벽시계 값(= DB 에 저장된 형태)과
+     * 비교할 수 있는 {@link LocalDateTime} 으로 바꾼다. {@code MemoryDates.storageStartOfDay}
+     * 와 같은 계산이다 — 추억 리마인드가 처음 겪은 문제를 여기로 옮겨 재사용한다.
+     */
+    public static LocalDateTime startOfKstDayInStorageZone(LocalDate kstDate, ZoneId storage) {
+        return kstDate.atStartOfDay(ZONE).withZoneSameInstant(storage).toLocalDateTime();
     }
 }

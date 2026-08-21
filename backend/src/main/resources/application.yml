@@ -27,6 +27,14 @@ spring:
     enabled: true
     baseline-on-migrate: true
 
+  # @Scheduled 전용 스레드풀 — 기본값 1개론 CallSessionSweeper(5초 주기 상시 점유)와
+  # 나머지 cron 스케줄러(캘린더·추억·스트릭 위기·질문 리마인드·혼자가입자 프리뷰)가
+  # 같은 시각에 겹칠 때 서로 밀린다. 스케줄러 6개 이상으로 늘어난 시점에 넉넉히 잡아둔다.
+  task:
+    scheduling:
+      pool:
+        size: 4
+
   # Redis — AI(Gemini) 사용자별 일일 사용량 카운터 (미가용 시 인메모리 폴백).
   # 로컬은 host/port 사용. 클라우드(Railway 등)는 SPRING_DATA_REDIS_URL 환경변수
   # (redis://default:password@host:port)로 덮어쓰면 인증까지 자동 처리된다.
