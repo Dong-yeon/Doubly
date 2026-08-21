@@ -1,5 +1,7 @@
 package com.fitto.relation.service;
 
+import com.fitto.common.analytics.AnalyticsEvent;
+import com.fitto.common.analytics.EventLogService;
 import com.fitto.common.plan.Feature;
 import com.fitto.common.plan.PlanGuard;
 import com.fitto.common.exception.BusinessException;
@@ -50,6 +52,7 @@ public class RelationService {
     private final RelationRecordRestorer relationRecordRestorer;
     private final CloudinaryImageDeleter imageDeleter;
     private final PlanGuard planGuard;
+    private final EventLogService eventLogService;
 
     public RelationService(RelationRepository relationRepository,
                            RelationMemberRepository relationMemberRepository,
@@ -59,7 +62,8 @@ public class RelationService {
                            RelationRecordPurger relationRecordPurger,
                            RelationRecordRestorer relationRecordRestorer,
                            CloudinaryImageDeleter imageDeleter,
-                           PlanGuard planGuard) {
+                           PlanGuard planGuard,
+                           EventLogService eventLogService) {
         this.relationRepository = relationRepository;
         this.relationMemberRepository = relationMemberRepository;
         this.userRepository = userRepository;
@@ -69,6 +73,7 @@ public class RelationService {
         this.relationRecordRestorer = relationRecordRestorer;
         this.imageDeleter = imageDeleter;
         this.planGuard = planGuard;
+        this.eventLogService = eventLogService;
     }
 
     /** 커플 초대코드 생성 — 6자리, 24시간 유효 (REL-01). */
@@ -112,6 +117,7 @@ public class RelationService {
         relation.connect(userId);
         addMember(relation.getId(), userId, MemberRole.PARTNER);
         User partner = userRepository.findById(relation.getUserAId()).orElse(null);
+        eventLogService.log(userId, relation.getId(), AnalyticsEvent.COUPLE_CONNECTED, null);
         return RelationResponse.of(relation, partner);
     }
 

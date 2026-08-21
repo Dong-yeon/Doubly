@@ -1,5 +1,7 @@
 package com.fitto.common.plan;
 
+import com.fitto.common.analytics.AnalyticsEvent;
+import com.fitto.common.analytics.EventLogService;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import org.springframework.stereotype.Component;
@@ -21,16 +23,24 @@ import org.springframework.stereotype.Component;
  *   <li><b>유료인데 한도 초과</b> → {@code USAGE_LIMIT_EXCEEDED} — 이건 업셀이 아니라
  *       단순 남용 방지다. 돈 낸 사람에게 결제를 또 권하면 안 된다</li>
  * </ul>
+ *
+ * <p><b>이 세 메서드(require/consume/requireCapacity)는 이벤트 로그도 겸한다</b>
+ * ({@link AnalyticsEvent#FEATURE_USED}/{@link AnalyticsEvent#FEATURE_BLOCKED}) — 사용자가
+ * 직접 누른 동작에서 게이팅을 통과/차단하는 유일한 지점이라, 여기 하나만 계측하면 앱 전체
+ * 기능 사용량이 별도 호출부 수정 없이 모인다. {@link #allows}/{@link #state} 는 화면이
+ * 자동으로 부르는 조회라 로깅하지 않는다(찍으면 신호가 노이즈에 묻힌다).
  */
 @Component
 public class PlanGuard {
 
     private final PlanResolver planResolver;
     private final UsageCounter usageCounter;
+    private final EventLogService eventLogService;
 
-    public PlanGuard(PlanResolver planResolver, UsageCounter usageCounter) {
+    public PlanGuard(PlanResolver planResolver, UsageCounter usageCounter, EventLogService eventLogService) {
         this.planResolver = planResolver;
         this.usageCounter = usageCounter;
+        this.eventLogService = eventLogService;
     }
 
     /** 기능이 이 사용자에게 열려 있는지만 확인한다 (사용량은 건드리지 않음). */
@@ -38,14 +48,17 @@ public class PlanGuard {
         Plan plan = planResolver.resolveFor(userId, feature);
         Quota quota = feature.quotaFor(plan);
         if (quota.isBlocked()) {
+            logBlocked(userId, feature);
             throw upgradeRequired(feature);
         }
         if (quota.isCounted()) {
             int used = usageCounter.peek(userId, feature, quota);
             if (used >= quota.limit()) {
+                logBlocked(userId, feature);
                 throw limitExceeded(feature, plan, quota);
             }
         }
+        logUsed(userId, feature);
     }
 
     /**
@@ -58,15 +71,19 @@ public class PlanGuard {
         Plan plan = planResolver.resolveFor(userId, feature);
         Quota quota = feature.quotaFor(plan);
         if (quota.isBlocked()) {
+            logBlocked(userId, feature);
             throw upgradeRequired(feature);
         }
         if (quota.isUnlimited() || !quota.isCounted()) {
+            logUsed(userId, feature);
             return;
         }
         int used = usageCounter.increment(userId, feature, quota);
         if (used > quota.limit()) {
+            logBlocked(userId, feature);
             throw limitExceeded(feature, plan, quota);
         }
+        logUsed(userId, feature);
     }
 
     /**
@@ -79,14 +96,26 @@ public class PlanGuard {
         Plan plan = planResolver.resolveFor(userId, feature);
         Quota quota = feature.quotaFor(plan);
         if (quota.isBlocked()) {
+            logBlocked(userId, feature);
             throw upgradeRequired(feature);
         }
         if (quota.isUnlimited()) {
+            logUsed(userId, feature);
             return;
         }
         if (currentCount >= quota.limit()) {
+            logBlocked(userId, feature);
             throw limitExceeded(feature, plan, quota);
         }
+        logUsed(userId, feature);
+    }
+
+    private void logUsed(Long userId, Feature feature) {
+        eventLogService.log(userId, AnalyticsEvent.FEATURE_USED, feature.name());
+    }
+
+    private void logBlocked(Long userId, Feature feature) {
+        eventLogService.log(userId, AnalyticsEvent.FEATURE_BLOCKED, feature.name());
     }
 
     /**
