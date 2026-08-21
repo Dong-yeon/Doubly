@@ -7,8 +7,6 @@ import com.fitto.body.service.BodyMetricService;
 import com.fitto.challenge.domain.ChallengeType;
 import com.fitto.challenge.dto.CreateChallengeRequest;
 import com.fitto.challenge.service.CoupleChallengeService;
-import com.fitto.character.domain.CoupleCharacter;
-import com.fitto.character.repository.CoupleCharacterRepository;
 import com.fitto.diet.dto.FavoriteFoodItemRequest;
 import com.fitto.diet.dto.SaveFavoriteFoodRequest;
 import com.fitto.diet.service.FavoriteFoodGiftService;
@@ -20,7 +18,6 @@ import com.fitto.place.service.PlaceService;
 import com.fitto.question.dto.AnswerRequest;
 import com.fitto.question.service.DailyQuestionService;
 import com.fitto.relation.dto.InviteCodeResponse;
-import com.fitto.relation.dto.RelationResponse;
 import com.fitto.relation.service.RelationService;
 import com.fitto.trip.dto.SaveTripRequest;
 import com.fitto.trip.service.TripService;
@@ -70,7 +67,6 @@ class WithdrawFlowTest {
     @Autowired BodyMetricService bodyMetricService;
     @Autowired UserRepository userRepository;
     @Autowired VoiceClipService voiceClipService;
-    @Autowired CoupleCharacterRepository coupleCharacterRepository;
     @Autowired WorkoutRoutineService workoutRoutineService;
     @Autowired RoutineGiftService routineGiftService;
     @Autowired FavoriteFoodService favoriteFoodService;
@@ -136,22 +132,20 @@ class WithdrawFlowTest {
     }
 
     /**
-     * V43 이후 신설된 테이블(voice_clips, couple_characters, routine_gifts,
-     * favorite_food_gifts, workout_programs)이 purger 삭제 순서에서 빠져 있으면
-     * 이 테스트가 외래키 위반으로 실패한다 — 실제로 겪은 사고(진단 리포트 확정 버그 #1).
+     * V43 이후 신설된 테이블(voice_clips, routine_gifts, favorite_food_gifts,
+     * workout_programs)이 purger 삭제 순서에서 빠져 있으면 이 테스트가 외래키 위반으로
+     * 실패한다 — 실제로 겪은 사고(진단 리포트 확정 버그 #1). couple_characters(V45)는
+     * 게임화 보류 결정에 따라 V56에서 테이블·코드를 함께 정리해 이 목록에서 빠졌다.
      */
     @Test
-    void 음성응원_캐릭터_선물_프로그램을_쓴_계정도_탈퇴할_수_있다() {
+    void 음성응원_선물_프로그램을_쓴_계정도_탈퇴할_수_있다() {
         Long me = register("withdraw-new-tables-a@fitto.com");
         Long partner = register("withdraw-new-tables-b@fitto.com");
         InviteCodeResponse invite = relationService.createCoupleInvite(me);
-        RelationResponse relation = relationService.connectCouple(partner, invite.code());
+        relationService.connectCouple(partner, invite.code());
 
         // voice_clips — users FK
         voiceClipService.save(me, new SaveVoiceClipRequest(VoicePhrase.REST_END, "https://res.cloudinary.com/x/rest.m4a"));
-
-        // couple_characters — relations FK(UNIQUE)
-        coupleCharacterRepository.save(CoupleCharacter.of(relation.id()));
 
         // routine_gifts — relations/users/workout_routines FK
         Long routineId = workoutRoutineService.save(me, new SaveRoutineRequest(
