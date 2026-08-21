@@ -2,6 +2,7 @@ package com.fitto.calendar.service;
 
 import com.fitto.calendar.domain.CalendarEvent;
 import com.fitto.calendar.repository.CalendarEventRepository;
+import com.fitto.common.notification.NotificationCategory;
 import com.fitto.common.notification.NotificationService;
 import com.fitto.relation.domain.Relation;
 import com.fitto.relation.domain.RelationStatus;
@@ -16,6 +17,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 커플 캘린더 D-day 푸시 — 매일 아침(KST) 오늘 일정이 있는 커플 양쪽에 알린다.
@@ -57,8 +59,9 @@ public class CalendarDdayNotifier {
             if (couple == null || couple.getStatus() != RelationStatus.ACTIVE) continue;
 
             String body = "오늘은 '" + event.getTitle() + "' 날이에요 💕";
-            notificationService.notify(couple.getUserAId(), "커플 캘린더", body);
-            notificationService.notify(couple.getUserBId(), "커플 캘린더", body);
+            Map<String, String> data = Map.of("type", "calendar", "id", String.valueOf(event.getId()));
+            notificationService.notify(couple.getUserAId(), NotificationCategory.ANNIVERSARY, "커플 캘린더", body, data);
+            notificationService.notify(couple.getUserBId(), NotificationCategory.ANNIVERSARY, "커플 캘린더", body, data);
             sent++;
         }
         log.info("캘린더 D-day 푸시 — 대상 일정 {}건, 발송 커플 {}건", targets.size(), sent);

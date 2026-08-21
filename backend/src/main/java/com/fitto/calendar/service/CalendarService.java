@@ -11,6 +11,7 @@ import com.fitto.common.event.CoupleEvent;
 import com.fitto.common.event.CoupleEventPublisher;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
+import com.fitto.common.notification.NotificationCategory;
 import com.fitto.common.notification.NotificationService;
 import com.fitto.common.time.KstClock;
 import com.fitto.relation.domain.Relation;
@@ -25,6 +26,7 @@ import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 커플 캘린더 — 기념일 외 일정(생일·데이트 약속 등) CRUD + 월/다가오는 일정 조회.
@@ -99,8 +101,9 @@ public class CalendarService {
                 .createdBy(userId)
                 .build());
 
-        notificationService.notify(couple.partnerOf(userId),
-                "커플 캘린더", "새 일정이 등록됐어요: " + req.title());
+        notificationService.notify(couple.partnerOf(userId), NotificationCategory.ANNIVERSARY,
+                "커플 캘린더", "새 일정이 등록됐어요: " + req.title(),
+                Map.of("type", "calendar", "id", String.valueOf(event.getId())));
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.CALENDAR);
         return EventResponse.of(event, event.nextOccurrence(KstClock.today()), KstClock.today());
     }

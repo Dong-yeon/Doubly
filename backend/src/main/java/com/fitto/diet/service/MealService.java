@@ -359,15 +359,16 @@ public class MealService {
                     coupleEventPublisher.publish(c.getId(), CoupleEvent.DIET);
                     Long partnerId = c.partnerOf(userId);
                     String myName = userRepository.findById(userId).map(u -> u.getName()).orElse("상대방");
+                    Map<String, String> data = Map.of("type", "diet");
                     if (justAchievedGoal(c, userId, partnerId, mealDate, firstMealOfDay)) {
                         notificationService.notify(partnerId, "이번 주 식단 목표 달성!",
-                                myName + "님과 함께 주 " + c.getDietGoalDays() + "일 목표를 채웠어요!");
+                                myName + "님과 함께 주 " + c.getDietGoalDays() + "일 목표를 채웠어요!", data);
                     } else if (copied) {
                         notificationService.notify(partnerId, "오늘도 같은 식단!",
-                                myName + "님이 어제 식단을 그대로 기록했어요!");
+                                myName + "님이 어제 식단을 그대로 기록했어요!", data);
                     } else {
                         notificationService.notify(partnerId, "오늘 뭐 먹었을까?",
-                                myName + "님이 식단을 기록했어요!");
+                                myName + "님이 식단을 기록했어요!", data);
                     }
                 });
     }
@@ -397,10 +398,11 @@ public class MealService {
         String myName = userRepository.findById(userId).map(u -> u.getName()).orElse("상대방");
         if (justAchievedGoal(couple, userId, partnerId, mealDate, firstMealOfDay)) {
             notificationService.notify(partnerId, "이번 주 식단 목표 달성!",
-                    myName + "님과 함께 주 " + couple.getDietGoalDays() + "일 목표를 채웠어요!");
+                    myName + "님과 함께 주 " + couple.getDietGoalDays() + "일 목표를 채웠어요!",
+                    Map.of("type", "diet"));
         } else {
             notificationService.notify(partnerId, "함께 먹었어요 🍽",
-                    myName + "님과 데이트 식단을 함께 기록했어요!");
+                    myName + "님과 데이트 식단을 함께 기록했어요!", Map.of("type", "diet"));
         }
     }
 

@@ -14,6 +14,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
@@ -64,7 +65,7 @@ class PlaceRatingNudgeTest {
 
         placeService.rate(users[0], placeId, new RatePlaceRequest(5, true));
 
-        verify(notificationService).notify(eq(users[1]), contains("평가를 기다려요"), contains("성수 브런치"));
+        verify(notificationService).notify(eq(users[1]), contains("평가를 기다려요"), contains("성수 브런치"), any());
     }
 
     @Test
@@ -77,7 +78,7 @@ class PlaceRatingNudgeTest {
 
         placeService.rate(users[0], placeId, new RatePlaceRequest(4, true));
 
-        verify(notificationService, never()).notify(eq(users[1]), anyString(), anyString());
+        verify(notificationService, never()).notify(eq(users[1]), anyString(), anyString(), any());
     }
 
     @Test
@@ -90,7 +91,7 @@ class PlaceRatingNudgeTest {
 
         placeService.rate(users[1], placeId, new RatePlaceRequest(5, true)); // 둘 다 5점 → 3스타 등극
 
-        verify(notificationService).notify(eq(users[0]), contains("등극"), anyString());
-        verify(notificationService, never()).notify(eq(users[0]), contains("평가를 기다려요"), anyString());
+        verify(notificationService).notify(eq(users[0]), contains("등극"), anyString(), any());
+        verify(notificationService, never()).notify(eq(users[0]), contains("평가를 기다려요"), anyString(), any());
     }
 }

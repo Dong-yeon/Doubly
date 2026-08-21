@@ -18,6 +18,7 @@ import com.fitto.common.event.CoupleEvent;
 import com.fitto.common.event.CoupleEventPublisher;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
+import com.fitto.common.notification.NotificationCategory;
 import com.fitto.common.notification.NotificationService;
 import com.fitto.common.plan.Feature;
 import com.fitto.common.plan.PlanGuard;
@@ -187,8 +188,9 @@ public class ChatService {
                             .emoji(emoji)
                             .build());
                     if (!userId.equals(message.getSenderId())) {
-                        notificationService.notify(message.getSenderId(), "메시지에 반응이 달렸어요",
-                                userName(userId) + "님이 " + emoji + " 를 남겼어요");
+                        notificationService.notify(message.getSenderId(), NotificationCategory.CHAT,
+                                "메시지에 반응이 달렸어요", userName(userId) + "님이 " + emoji + " 를 남겼어요",
+                                Map.of("type", "chat", "id", String.valueOf(message.getRelationId())));
                     }
                 });
         return summarize(reactionRepository.findByMessageId(messageId));
@@ -258,7 +260,8 @@ public class ChatService {
             return;
         }
         String senderName = userRepository.findById(senderId).map(User::getName).orElse("상대방");
-        notificationService.notify(recipientId, senderName, preview(message));
+        notificationService.notify(recipientId, NotificationCategory.CHAT, senderName, preview(message),
+                Map.of("type", "chat", "id", String.valueOf(relation.getId())));
     }
 
     /** 답장 대상이 같은 방의 메시지인지 확인 — 다른 방 메시지를 인용하면 대화가 새어나간다. */

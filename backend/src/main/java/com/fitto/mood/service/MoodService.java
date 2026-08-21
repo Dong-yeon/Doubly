@@ -19,6 +19,8 @@ import com.fitto.user.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Map;
+
 /**
  * 무드 상태 — Obimy 벤치마킹. 이모지 하나로 "지금 상태"를 커플 화면 상단에 띄운다.
  * PLAN.md "무드 상태 (Mood Status — Obimy 벤치마킹)" 참고.
@@ -77,7 +79,7 @@ public class MoodService {
         Long partnerId = couple.partnerOf(userId);
         if (partnerId != null) {
             notificationService.notify(partnerId, "지금 기분",
-                    userName(userId) + "님 지금 기분: " + req.emoji());
+                    userName(userId) + "님 지금 기분: " + req.emoji(), Map.of("type", "mood"));
         }
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.MOOD);
         return current(userId);

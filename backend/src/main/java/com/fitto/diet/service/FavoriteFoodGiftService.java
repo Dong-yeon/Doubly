@@ -94,7 +94,8 @@ public class FavoriteFoodGiftService {
         giftRepository.save(gift);
 
         String senderName = userName(senderId);
-        notificationService.notify(receiverId, "즐겨찾기 음식을 공유했어요 🍽️", senderName + " — " + source.getName());
+        notificationService.notify(receiverId, "즐겨찾기 음식을 공유했어요 🍽️", senderName + " — " + source.getName(),
+                Map.of("type", "favoriteGift", "id", String.valueOf(gift.getId())));
         coupleEventPublisher.publish(relation.getId(), CoupleEvent.FAVORITE_FOOD_GIFT);
         return FavoriteFoodGiftResponse.of(gift, senderName, userName(receiverId));
     }
@@ -138,7 +139,8 @@ public class FavoriteFoodGiftService {
 
         gift.accept(favorite.getId());
         String receiverName = userName(receiverId);
-        notificationService.notify(gift.getSenderId(), "즐겨찾기를 받았어요!", receiverName + "님이 선물을 받았어요 🍽️");
+        notificationService.notify(gift.getSenderId(), "즐겨찾기를 받았어요!", receiverName + "님이 선물을 받았어요 🍽️",
+                Map.of("type", "favoriteGift", "id", String.valueOf(gift.getId())));
         coupleEventPublisher.publish(gift.getRelationId(), CoupleEvent.FAVORITE_FOOD_GIFT);
         return FavoriteFoodGiftResponse.of(gift, userName(gift.getSenderId()), receiverName);
     }

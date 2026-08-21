@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 간헐적 단식 타이머 — YAZIO 의 핵심 차별기능이지만, Doubly 는 "혼자 타이머 맞추기"가 아니라
@@ -134,7 +135,8 @@ public class FastingService {
                     Long partnerId = c.partnerOf(userId);
                     if (partnerId != null) {
                         String myName = userRepository.findById(userId).map(u -> u.getName()).orElse("상대방");
-                        notificationService.notify(partnerId, title, myName + "님이 " + bodySuffix);
+                        notificationService.notify(partnerId, title, myName + "님이 " + bodySuffix,
+                                Map.of("type", "diet"));
                     }
                 });
     }
