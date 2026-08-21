@@ -2,7 +2,7 @@
  *  트레이너가 배정한 루틴은 이 화면에서 뺐다 — 필요하면 git 히스토리(이 파일의 이전 버전)에서
  *  복원할 수 있다. 트레이너 기능 자체는 src/screens/trainer 에 살아있다. */
 import React, { useCallback, useMemo, useState } from 'react';
-import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -14,6 +14,8 @@ import { EmptyState } from '../../components/EmptyState';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { useWorkoutStore } from '../../store/workoutStore';
 import { useRelationStore } from '../../store/relationStore';
+import { usePlanStore } from '../../store/planStore';
+import { toast } from '../../store/toastStore';
 import { QuickLinkChips } from '../../components/QuickLinkChips';
 import { streakApi } from '../../api/streak';
 import { workoutApi } from '../../api/workout';
@@ -22,7 +24,14 @@ import { haptics } from '../../utils/haptics';
 import { todayWeekDay } from '../../utils/date';
 import { routineToSessionParams } from '../../utils/routine';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { MuscleRecoveryStatus, Streak, Workout, WorkoutProgram, WorkoutRoutine } from '../../types';
+import type {
+  MuscleRecoveryStatus,
+  Streak,
+  StreakRepairInfo,
+  Workout,
+  WorkoutProgram,
+  WorkoutRoutine,
+} from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { layout } from '../../theme/layout';
 
@@ -74,13 +83,44 @@ export function WorkoutScreen({ navigation }: Props) {
     workoutApi.programs().then(setPrograms).catch(() => setPrograms([]));
   }, []);
 
+  /*
+   * 스트릭 복구권 — 어제 하루만 비어 오늘 0으로 보이는 상태일 때만 뜬다.
+   *
+   * 잠겨 있어도(무료 플랜) 서버가 402 를 던지지 않고 locked 로 알려준다 — 화면이 자동으로
+   * 부르는 조회에서 402 가 나가면 운동 탭을 열 때마다 업그레이드 시트가 뜬다.
+   */
+  const [repair, setRepair] = useState<StreakRepairInfo | null>(null);
+  const [repairing, setRepairing] = useState(false);
+  const showUpgrade = usePlanStore((s) => s.showUpgrade);
+
   // 운동 스트릭 — 부가 정보라 실패해도 화면은 정상 동작 (0일로 표시)
   const refreshStreaks = useCallback(() => {
     streakApi.me().then(setMyStreak).catch(() => setMyStreak(null));
     if (connected) {
       streakApi.couple().then(setCoupleStreak).catch(() => setCoupleStreak(null));
     }
+    streakApi.repairStatus().then(setRepair).catch(() => setRepair(null));
   }, [connected]);
+
+  const onRepair = async () => {
+    if (!repair) return;
+    if (repair.locked) {
+      showUpgrade('스트릭 복구권은 PRO에서 쓸 수 있어요. 끊긴 다음날 하루를 메워줘요.');
+      return;
+    }
+    setRepairing(true);
+    try {
+      const result = await streakApi.repair();
+      setRepair(result);
+      haptics.success();
+      toast.success(`${result.targets.join(' · ')} 스트릭을 되살렸어요 🔥`);
+      refreshStreaks();
+    } catch (e) {
+      toast.error(getErrorMessage(e, '되살리지 못했어요.'));
+    } finally {
+      setRepairing(false);
+    }
+  };
 
   // 근육 회복 — 가장 최근에 훈련한 부위·경과시간 요약 카드. 부가 정보라 실패해도 카드만 안 뜬다.
   const [recovery, setRecovery] = useState<MuscleRecoveryStatus | null>(null);
@@ -196,6 +236,32 @@ export function WorkoutScreen({ navigation }: Props) {
               ) : null}
               <Text style={styles.streakMax}>최고 {myStreak?.maxCount ?? 0}일</Text>
             </View>
+
+            {/* 복구권 — 되살릴 게 있을 때만 나타난다. 평소에는 존재 자체를 알릴 필요가 없다 */}
+            {repair && (repair.repairable || (repair.locked && repair.targets.length > 0)) ? (
+              <Pressable
+                style={({ pressed }) => [styles.repairCard, pressed && styles.repairPressed]}
+                onPress={onRepair}
+                disabled={repairing}
+                accessibilityRole="button"
+                accessibilityLabel="스트릭 복구권으로 어제 메우기"
+              >
+                <MaterialCommunityIcons name="fire" size={20} color={colors.coral} />
+                <View style={styles.repairBody}>
+                  <Text style={styles.repairTitle}>
+                    어제 하루가 비었어요 — 이어붙일까요?
+                  </Text>
+                  <Text style={styles.repairHint}>
+                    {repair.locked
+                      ? 'PRO 복구권으로 끊긴 연속을 되살릴 수 있어요.'
+                      : `${repair.targets.join(' · ')}${
+                          repair.remaining != null ? ` · 이번 달 ${repair.remaining}번 남음` : ''
+                        }`}
+                  </Text>
+                </View>
+                <Text style={styles.repairAction}>{repair.locked ? 'PRO' : '되살리기'}</Text>
+              </Pressable>
+            ) : null}
 
             {/* 기록이 하나도 없으면 섹션을 숨긴다 — "오늘 없어요" 카드와 EmptyState 가
                 겹쳐 빈 안내가 두 번 보이던 중복 제거 (ListEmptyComponent 하나로 통일) */}
@@ -385,6 +451,23 @@ const styles = themedStyles((colors) => ({
   streakRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
   streakText: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
   streakMax: { fontSize: fontSize.caption, color: colors.textSecondary, marginLeft: 'auto' },
+  repairCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.coral,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  repairPressed: { opacity: 0.7 },
+  repairBody: { flex: 1 },
+  repairTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
+  repairHint: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 1 },
+  repairAction: { fontSize: fontSize.caption, fontWeight: '800', color: colors.coral },
   sectionTitle: {
     fontSize: fontSize.subtitle,
     fontWeight: '700',

@@ -29,7 +29,9 @@ import com.fitto.trip.service.TripService;
 import com.fitto.user.repository.UserRepository;
 import com.fitto.voice.domain.VoicePhrase;
 import com.fitto.voice.dto.SaveVoiceClipRequest;
+import com.fitto.voice.dto.SendBoosterRequest;
 import com.fitto.voice.service.VoiceClipService;
+import com.fitto.voice.service.WorkoutBoosterService;
 import com.fitto.workout.dto.SaveProgramRequest;
 import com.fitto.workout.dto.SaveWorkoutRequest;
 import com.fitto.workout.dto.WorkoutSetRequest;
@@ -75,6 +77,7 @@ class WithdrawFlowTest {
     @Autowired BodyMetricService bodyMetricService;
     @Autowired UserRepository userRepository;
     @Autowired VoiceClipService voiceClipService;
+    @Autowired WorkoutBoosterService boosterService;
     @Autowired WorkoutRoutineService workoutRoutineService;
     @Autowired RoutineGiftService routineGiftService;
     @Autowired FavoriteFoodService favoriteFoodService;
@@ -156,6 +159,10 @@ class WithdrawFlowTest {
 
         // voice_clips — users FK
         voiceClipService.save(me, new SaveVoiceClipRequest(VoicePhrase.REST_END, "https://res.cloudinary.com/x/rest.m4a"));
+
+        // workout_boosters(V61) — relations + users(sender/receiver) FK 3개를 동시에 문다
+        boosterService.send(me, new SendBoosterRequest("https://res.cloudinary.com/x/boost.m4a", "화이팅"));
+        boosterService.send(partner, new SendBoosterRequest("https://res.cloudinary.com/x/boost2.m4a", null));
 
         // routine_gifts — relations/users/workout_routines FK
         Long routineId = workoutRoutineService.save(me, new SaveRoutineRequest(

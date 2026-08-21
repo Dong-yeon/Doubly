@@ -82,6 +82,12 @@ public class UserDataPurger {
         exec("delete from password_reset_tokens where user_id = :uid", userId);
         exec("delete from trainer_profiles where user_id = :uid", userId);
         exec("delete from voice_clips where user_id = :uid", userId);
+        /*
+         * 운동 부스터(V61) — 관계 단위 정리에서 이미 지워졌지만, 보낸 쪽/받은 쪽 users FK 가
+         * 둘 다 걸려 있어 한 건이라도 남으면 탈퇴가 실패한다. 관계가 없는 계정(초대 대기 중
+         * 끊긴 경우 등)까지 덮도록 한 번 더 훑는다 — feed_reactions 와 같은 이유.
+         */
+        exec("delete from workout_boosters where sender_id = :uid or receiver_id = :uid", userId);
         // 구독 이력 — users FK 를 물고 있어서 빠뜨리면 탈퇴 전체가 FK 위반으로 실패한다.
         // (환불·정산 근거는 스토어 콘솔에 남으므로 여기서 지워도 된다)
         exec("delete from subscriptions where user_id = :uid", userId);

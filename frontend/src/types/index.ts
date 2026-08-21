@@ -273,7 +273,24 @@ export interface PartnerToday {
 }
 
 // 커플 음성 응원 — 애인 목소리로 녹음한 짧은 응원 문구. 운동 중 정해진 순간에 재생된다
-export type VoicePhrase = 'REST_END' | 'PR' | 'WORKOUT_COMPLETE';
+export type VoicePhrase =
+  | 'WORKOUT_START'
+  | 'REST_END'
+  | 'LAST_SET'
+  | 'PR'
+  | 'WORKOUT_COMPLETE';
+
+/**
+ * 운동 부스터 — 애인이 즉석 녹음해 보낸 일회성 응원.
+ * 다음 세션 시작 때 한 번 재생되고 소멸한다(상설 클립인 VoiceClip 과 다르다).
+ */
+export interface WorkoutBooster {
+  id: number;
+  senderName: string;
+  audioUrl: string;
+  message?: string | null;
+  createdAt: string;
+}
 export interface VoiceClip {
   phrase: VoicePhrase;
   phraseLabel: string;
@@ -782,7 +799,50 @@ export interface MealStats {
   weeklyDays: number;
   monthlyDays: number;
   totalDays: number;
-  last7Days: { date: string; weekday: string; completed: boolean; calories: number }[];
+  /** 무료 구간 — 여기까지 막으면 기록할 이유가 사라진다 */
+  last7Days: { date: string; weekday: string; completed: boolean; calories: number; protein: number }[];
+  /** 심화 통계(FULL_STATS)가 잠겨 있는지 — true 면 deep 이 없다 */
+  locked?: boolean;
+  deep?: DeepMealStats | null;
+}
+
+/** 심화 영양 통계 (PRO) — 30일 매크로 달성률·나트륨·당 추이의 원본 */
+export interface DeepMealStats {
+  last30Days: DayNutrition[];
+  /** 목표치. 미설정이면 없다 — 달성률 대신 절대량만 그린다 */
+  targets?: NutritionTargets | null;
+}
+export interface DayNutrition {
+  date: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  sugar: number;
+  /** 나트륨(mg) — g 단위인 다른 값과 달리 mg */
+  sodium: number;
+}
+export interface NutritionTargets {
+  calories?: number | null;
+  protein?: number | null;
+  carbs?: number | null;
+  fat?: number | null;
+}
+
+/**
+ * 스트릭 복구권 상태·결과 (GET/POST /streak/repair).
+ * 조회와 실행이 같은 모양이라, 실행 응답 하나로 버튼 상태까지 갱신된다.
+ */
+export interface StreakRepairInfo {
+  repairable: boolean;
+  /** 되살릴 수 있는(또는 방금 되살린) 스트릭 이름 — "내 운동", "커플 식단" */
+  targets: string[];
+  /** 이번 달 남은 복구권. 무제한·차단이면 null */
+  remaining?: number | null;
+  /** PRO 전용 기능이 잠긴 상태인지 (한도 소진과 구분된다) */
+  locked: boolean;
+  /** 실행 응답에서만 — 메운 날짜 */
+  repairedDate?: string | null;
 }
 
 // 레벨/성장 (GET /summary/level) — XP = 운동일×10 + 식단일×5

@@ -4,6 +4,7 @@ import com.fitto.auth.dto.UserResponse;
 import com.fitto.chat.domain.ChatMessage;
 import com.fitto.chat.domain.ChatMessageReaction;
 import com.fitto.chat.domain.MessageType;
+import com.fitto.chat.domain.StickerPack;
 import com.fitto.chat.domain.StickerImage;
 import com.fitto.chat.domain.TouchGesture;
 import com.fitto.chat.dto.ChatMessageResponse;
@@ -103,6 +104,10 @@ public class ChatService {
         MessageType messageType = req.messageType() != null ? req.messageType() : MessageType.TEXT;
         if (messageType == MessageType.TOUCH) {
             requireValidTouch(senderId, req.content());
+        }
+        if (messageType == MessageType.STICKER && StickerPack.isPremium(req.content())) {
+            // 시즌 스티커는 PRO 전용 — 터치 프리미엄 제스처와 같은 방어선이다(아래 주석 참고)
+            planGuard.require(senderId, Feature.PREMIUM_STICKER);
         }
 
         ChatMessage message = ChatMessage.builder()

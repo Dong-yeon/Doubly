@@ -51,7 +51,12 @@ import { confirmDiscard } from '../../utils/discardGuard';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 import { formatNumber, formatWeight } from '../../utils/format';
-import type { ExerciseCatalogItem, ExerciseLastPerformance, VoicePhrase } from '../../types';
+import type {
+  ExerciseCatalogItem,
+  ExerciseLastPerformance,
+  VoicePhrase,
+  WorkoutBooster as WorkoutBoosterType,
+} from '../../types';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'WorkoutSession'>;
 
@@ -183,6 +188,11 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
           : Array.from({ length: Math.max(1, e.targetSets ?? 3) }, () => buildSet(e.weightKg, e.reps)),
     })),
   );
+
+  /** 방금 재생한 부스터 — 상단에 "누가 보낸 응원인지" 한 줄로 띄운다 */
+  const [booster, setBooster] = useState<WorkoutBoosterType | null>(null);
+  /** 마지막 세트 응원을 이미 울렸는지 — 세션당 한 번 */
+  const lastSetCheeredRef = useRef(false);
 
   const [restSeconds, setRestSeconds] = useState(90);
   const [rest, setRest] = useState(0); // 남은 휴식 초
@@ -337,8 +347,36 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
         const byPhrase: Partial<Record<VoicePhrase, string>> = {};
         res.clips.forEach((c) => { byPhrase[c.phrase] = c.audioUrl; });
         partnerClipsRef.current = byPhrase;
+        // 시작 응원은 화면에 들어오자마자 — "시작"이 가장 힘든 지점이라 여기서 튼다.
+        // 클립을 받은 뒤에 재생해야 하므로 로드 콜백 안에 둔다.
+        playVoiceClip(byPhrase.WORKOUT_START);
       })
       .catch(() => undefined);
+  }, []);
+
+  /*
+   * 운동 부스터 — 애인이 보낸 일회성 응원. 있으면 세션 시작 때 한 번 재생하고 소멸시킨다.
+   *
+   * 재생한 <b>뒤에</b> 소비를 확정한다. 조회 시점에 소비하면 앱이 여기서 죽거나 네트워크가
+   * 끊겼을 때 응원이 들리지도 않은 채 사라진다(서버 주석과 같은 이유).
+   *
+   * 상설 시작 응원(WORKOUT_START)과 겹치면 두 목소리가 동시에 난다 — 부스터가 우선이다
+   * ("지금 이 순간을 위해" 보낸 것이라 상설 문구보다 맥락이 정확하다).
+   */
+  useEffect(() => {
+    let cancelled = false;
+    void voiceClipsApi
+      .pendingBooster()
+      .then((booster) => {
+        if (cancelled || !booster) return;
+        setBooster(booster);
+        playVoiceClip(booster.audioUrl);
+        return voiceClipsApi.markBoosterPlayed(booster.id);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // 운동 추가 모달
@@ -542,7 +580,19 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
         if (e.key !== exKey) return e;
         const sets = e.sets.map((s, i) => (i === idx ? { ...s, done: !s.done } : s));
         // 방금 '완료'로 바꿨으면 휴식 타이머 시작 — 종목별 휴식 시간이 있으면 그걸, 없으면 전역 기본값(③)
-        if (!e.sets[idx].done) setRest(e.restSeconds ?? restSeconds);
+        if (!e.sets[idx].done) {
+          setRest(e.restSeconds ?? restSeconds);
+          /*
+           * 마지막 세트 응원 — 세션 전체에서 <b>한 세트만 남았을 때</b> 한 번.
+           * 종목마다 울리면 잔소리가 되므로 전체 진행률로 판정하고, 같은 세션에서
+           * 두 번 울리지 않게 ref 로 잠근다(세트를 껐다 켜면 다시 이 조건에 걸린다).
+           */
+          const remaining = prev.reduce((n, x) => n + x.sets.filter((z) => !z.done).length, 0) - 1;
+          if (remaining === 1 && !lastSetCheeredRef.current) {
+            lastSetCheeredRef.current = true;
+            playVoiceClip(partnerClipsRef.current.LAST_SET);
+          }
+        }
         return { ...e, sets };
       }),
     );
@@ -914,6 +964,20 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
+      {/*
+        부스터 배너 — 방금 재생된 응원이 누구 것인지 알려준다.
+        소리만 나고 화면에 아무 표시가 없으면 "이게 뭐였지"로 끝난다.
+        이미 소비된 뒤라 다시 듣기는 이 화면에 있는 동안만 가능하다.
+      */}
+      {booster ? (
+        <Pressable style={styles.boosterBanner} onPress={() => playVoiceClip(booster.audioUrl)}>
+          <Text style={styles.boosterBannerText} numberOfLines={2}>
+            🎤 {booster.senderName}님의 부스터{booster.message ? ` — "${booster.message}"` : ''}
+          </Text>
+          <Text style={styles.boosterBannerHint}>다시 듣기</Text>
+        </Pressable>
+      ) : null}
+
       {/* 상단 요약바 — 운동 중 실시간으로 누적되는 경과 시간·총 볼륨·완료 세트 수 */}
       <View style={styles.summaryBar}>
         <Text style={styles.summaryTime}>⏱ 운동 시간 {Math.floor(elapsedSec / 60)}분</Text>
@@ -1138,6 +1202,16 @@ const styles = themedStyles((colors) => ({
     fontWeight: '700',
     marginBottom: spacing.xs,
   },
+  boosterBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.togetherBg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+  },
+  boosterBannerText: { flex: 1, fontSize: fontSize.caption, color: colors.togetherText, fontWeight: '700' },
+  boosterBannerHint: { fontSize: fontSize.caption, color: colors.together, fontWeight: '800' },
   summaryStats: { flexDirection: 'row', alignItems: 'center' },
   summaryStatItem: { marginRight: spacing.lg },
   summaryStatValue: { color: colors.white, fontSize: fontSize.title, fontWeight: '800' },

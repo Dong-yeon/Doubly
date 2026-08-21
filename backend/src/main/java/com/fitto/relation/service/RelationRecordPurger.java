@@ -77,6 +77,8 @@ public class RelationRecordPurger {
         exec("delete from daily_answers where couple_id = :rid", relationId);
         exec("delete from mood_statuses where couple_id = :rid", relationId);
         exec("delete from call_sessions where couple_id = :rid", relationId);
+        // 운동 부스터(V61) — relations/users 를 함께 참조하므로 관계와 함께 지운다
+        exec("delete from workout_boosters where relation_id = :rid", relationId);
         // routine_gifts.snapshot_routine_id/resulting_routine_id 가 workout_routines 를
         // 참조하므로, 그 루틴들이 UserDataPurger 에서 지워지기 전인 여기서 먼저 지운다.
         exec("delete from routine_gifts where relation_id = :rid", relationId);

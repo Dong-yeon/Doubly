@@ -7,6 +7,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -37,6 +38,7 @@ import { SpellCheckBar } from '../../components/SpellCheckBar';
 import { MessageActionSheet } from '../../components/MessageActionSheet';
 import { SwipeBackView } from '../../components/SwipeBackView';
 import { useSettingsStore } from '../../store/settingsStore';
+import { usePlanStore } from '../../store/planStore';
 import {
   applyAllSuggestions,
   applySuggestion,
@@ -48,6 +50,7 @@ import { isGoalShareContent } from '../../utils/dietShare';
 import { touchGestureOf } from '../../constants/touchGestures';
 import { callCardLabel, parseCallCard } from '../../utils/callCard';
 import { stickerImageOf } from '../../constants/stickerImages';
+import { STICKER_PACKS } from '../../constants/stickerPacks';
 import { playTouchGesture } from '../../utils/haptics';
 import { messagePreview } from '../../utils/messagePreview';
 import { chatDateDividerLabel, isSameLocalDay } from '../../utils/date';
@@ -56,16 +59,6 @@ import type { ChatMessage, TouchGestureCode } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { useAndroidKeyboardHeight } from '../../hooks/useAndroidKeyboardHeight';
 
-/** 스티커 세트 — 말풍선 없이 크게 그려지는 이모지. 커플 대화 감정 표현 위주로 큐레이션 */
-const STICKERS = [
-  '💕', '😘', '🥰', '😍',
-  '🤗', '😆', '😂', '🥹',
-  '😴', '😤', '🥺', '😭',
-  '👍', '💪', '🎉', '❤️‍🔥',
-  // 이미지 스티커 — 값은 이모지가 아니라 StickerImage 코드. 아래 렌더 두 곳(말풍선,
-  // 이 패널)이 stickerImageOf() 로 분기해 이미지로 그린다.
-  'LOVE_BEAR',
-];
 
 // zustand 셀렉터가 매번 새 배열을 만들면 무한 리렌더(하얀 화면)가 나므로 안정 참조 사용
 const EMPTY_MESSAGES: ChatMessage[] = [];
@@ -110,6 +103,9 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   // 입력바 보조 도구는 기본으로 숨겨져 있다가 "+"로 펼친다 — 스티커 패널과는
   // 자리를 공유해서 항상 둘 중 하나만 뜬다(토글 핸들러들이 서로를 닫아준다).
   const [showStickers, setShowStickers] = useState(false);
+  /* 시즌 스티커 게이팅 — 표시용 판정이다(최종 판정은 서버). planStore 주석 참고 */
+  const premiumStickerAllowed = usePlanStore((s) => s.can('PREMIUM_STICKER'));
+  const showUpgrade = usePlanStore((s) => s.showUpgrade);
   const [showExtras, setShowExtras] = useState(false);
   const [showTouchPicker, setShowTouchPicker] = useState(false);
   // 답장 대상 / 수정 중인 메시지 / 리액션 피커 대상
@@ -373,7 +369,17 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     }
   };
 
-  const sendSticker = (sticker: string) => {
+  /**
+   * 시즌 스티커는 PRO 전용 — 보내기 전에 막고 이유를 알려준다.
+   *
+   * STOMP 경로는 REST 처럼 402 를 화면으로 되돌려줄 방법이 없다(서버 검증은 우회 방지용
+   * 방어선일 뿐 사용자에게는 조용히 실패로 보인다). TouchGesturePicker 와 같은 규칙.
+   */
+  const sendSticker = (sticker: string, locked: boolean, label: string) => {
+    if (locked) {
+      showUpgrade(`${label} 스티커는 PRO에서 보낼 수 있어요.`);
+      return;
+    }
     const ok = send(relationId, { messageType: 'STICKER', content: sticker });
     if (ok) {
       setShowStickers(false);
@@ -724,7 +730,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           </View>
         ) : null}
         {showStickers ? (
-          <View style={styles.stickerPanel}>
+          // 팩이 6개(64종)라 한 화면에 안 들어간다 — 패널 안에서만 스크롤한다
+          <ScrollView style={styles.stickerScroll} contentContainerStyle={styles.stickerPanel}>
             <Pressable
               style={({ pressed }) => [styles.stickerBtn, pressed && styles.iconPressed]}
               onPress={() => { setShowStickers(false); setShowEmojiSheet(true); }}
@@ -735,25 +742,43 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             >
               <MaterialCommunityIcons name="dots-horizontal" size={24} color={colors.textSecondary} />
             </Pressable>
-            {STICKERS.map((s) => {
-              const img = stickerImageOf(s);
-              return (
-                <Pressable
-                  key={s}
-                  style={({ pressed }) => [styles.stickerBtn, pressed && styles.iconPressed]}
-                  onPress={() => sendSticker(s)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`스티커 ${img?.label ?? s} 보내기`}
-                >
-                  {img ? (
-                    <Image source={img.source} style={styles.stickerBtnImage} resizeMode="contain" />
-                  ) : (
-                    <Text style={styles.stickerEmoji}>{s}</Text>
-                  )}
-                </Pressable>
-              );
+            {STICKER_PACKS.flatMap((pack) => {
+              const locked = pack.premium && !premiumStickerAllowed;
+              return [
+                // 팩 구분선 겸 이름표 — 기본 세트는 이름 없이 바로 시작한다(예전 그대로)
+                pack.premium ? (
+                  <View key={`${pack.key}-label`} style={styles.stickerPackLabel}>
+                    <Text style={styles.stickerPackLabelText}>{pack.label}</Text>
+                    {locked ? <Text style={styles.stickerPackBadge}>PRO</Text> : null}
+                  </View>
+                ) : null,
+                ...pack.stickers.map((s) => {
+                  const img = stickerImageOf(s);
+                  return (
+                    <Pressable
+                      key={s}
+                      style={({ pressed }) => [
+                        styles.stickerBtn,
+                        locked && styles.stickerLocked,
+                        pressed && styles.iconPressed,
+                      ]}
+                      onPress={() => sendSticker(s, locked, pack.label)}
+                      accessibilityRole="button"
+                      accessibilityLabel={
+                        `스티커 ${img?.label ?? s} 보내기${locked ? ' — PRO 기능' : ''}`
+                      }
+                    >
+                      {img ? (
+                        <Image source={img.source} style={styles.stickerBtnImage} resizeMode="contain" />
+                      ) : (
+                        <Text style={styles.stickerEmoji}>{s}</Text>
+                      )}
+                    </Pressable>
+                  );
+                }),
+              ];
             })}
-          </View>
+          </ScrollView>
         ) : null}
         {/* 답장·수정 중 배너 — 무엇에 대해 쓰고 있는지 보여주고 취소할 수 있게 */}
         {replyTo || editing ? (
@@ -845,7 +870,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         visible={showEmojiSheet}
         title="스티커 보내기"
         onClose={() => setShowEmojiSheet(false)}
-        onSelect={(emoji) => sendSticker(emoji)}
+        // 이모지 시트에서 직접 고른 이모지는 어느 팩에도 없으므로 무료다(stickerPacks 주석)
+        onSelect={(emoji) => sendSticker(emoji, false, '이모지')}
       />
       {/* 가상 터치 — 상대 폰에 즉시 진동. 프리미엄 제스처는 시트 안에서 자체적으로 게이팅한다 */}
       <TouchGesturePicker
@@ -946,6 +972,13 @@ const styles = themedStyles((colors) => ({
   },
   stickerEmoji: { fontSize: 28 },
   stickerBtnImage: { width: 32, height: 32 },
+  // 팩이 늘어 한 화면을 넘긴다 — 입력바를 밀어내지 않도록 높이를 묶는다
+  stickerScroll: { maxHeight: 220 },
+  // 줄 전체를 차지하는 이름표 — space-between 격자 안에서 폭 100%로 줄을 끊는다
+  stickerPackLabel: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.xs },
+  stickerPackLabelText: { fontSize: fontSize.caption, fontWeight: '800', color: colors.textSecondary },
+  stickerPackBadge: { fontSize: 9, fontWeight: '800', color: colors.together },
+  stickerLocked: { opacity: 0.45 },
   stickerToggleActive: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
   workoutCard: { paddingVertical: 10, paddingHorizontal: spacing.md, borderRadius: radius.lg, borderWidth: 1.5, maxWidth: 240 },
   workoutCardMine: { backgroundColor: colors.secondarySoft, borderColor: colors.secondary },

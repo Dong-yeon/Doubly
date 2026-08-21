@@ -5,6 +5,8 @@ import com.fitto.common.event.CoupleEventPublisher;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.notification.NotificationCategory;
+import com.fitto.common.plan.Feature;
+import com.fitto.common.plan.PlanGuard;
 import com.fitto.common.notification.NotificationService;
 import com.fitto.common.notification.PushLinks;
 import com.fitto.common.time.KstClock;
@@ -57,6 +59,8 @@ public class MealService {
     private static final Logger log = LoggerFactory.getLogger(MealService.class);
     private static final int HISTORY_PAGE_SIZE = 20;
     private static final int RECENT_FOODS_LIMIT = 8;
+    /** 기록이 없는 날의 자리표시자 — 매번 새 배열을 만들지 않도록 공유한다(읽기 전용) */
+    private static final int[] EMPTY_NUTRITION = new int[6];
 
     private final MealRepository mealRepository;
     private final NutritionGoalRepository nutritionGoalRepository;
@@ -66,6 +70,7 @@ public class MealService {
     private final FeedReactionRepository feedReactionRepository;
     private final CoupleEventPublisher coupleEventPublisher;
     private final NotificationService notificationService;
+    private final PlanGuard planGuard;
 
     public MealService(MealRepository mealRepository,
                        NutritionGoalRepository nutritionGoalRepository,
@@ -74,7 +79,8 @@ public class MealService {
                        StreakService streakService,
                        FeedReactionRepository feedReactionRepository,
                        CoupleEventPublisher coupleEventPublisher,
-                       NotificationService notificationService) {
+                       NotificationService notificationService,
+                       PlanGuard planGuard) {
         this.mealRepository = mealRepository;
         this.nutritionGoalRepository = nutritionGoalRepository;
         this.relationRepository = relationRepository;
@@ -83,6 +89,7 @@ public class MealService {
         this.feedReactionRepository = feedReactionRepository;
         this.coupleEventPublisher = coupleEventPublisher;
         this.notificationService = notificationService;
+        this.planGuard = planGuard;
     }
 
     @Transactional
@@ -514,6 +521,12 @@ public class MealService {
                 .toList();
     }
 
+    /**
+     * 식단 통계 — 무료 구간(기록일 수·최근 7일)은 항상, 심화 30일은 {@link Feature#FULL_STATS} 일 때만.
+     *
+     * <p>30일치를 <b>잠겼을 때는 조회조차 하지 않는다</b>. 어차피 안 내려줄 데이터를 읽는 건
+     * 순수 낭비이고, 무료 사용자가 통계 화면을 열 때마다 30일 스캔이 도는 것도 원가다.
+     */
     public MealStatsResponse stats(Long userId) {
         LocalDate today = KstClock.today();
         LocalDate weekStart = today.with(DayOfWeek.MONDAY);
@@ -523,14 +536,18 @@ public class MealService {
         int monthlyDays = mealRepository.findMealDates(userId, monthStart, today).size();
         long totalDays = mealRepository.countDistinctMealDates(userId);
 
-        // 최근 7일 끼니 완료 여부 + 일별 칼로리 합계
+        // 최근 7일 끼니 완료 여부 + 일별 칼로리·단백질 합계
         LocalDate from7 = today.minusDays(6);
         Map<LocalDate, Integer> calByDate = new HashMap<>();
+        Map<LocalDate, Integer> proteinByDate = new HashMap<>();
         var doneDates = new HashSet<LocalDate>();
         for (Meal m : mealRepository.findByUserIdAndMealDateBetween(userId, from7, today)) {
             doneDates.add(m.getMealDate());
             if (m.getCalories() != null) {
                 calByDate.merge(m.getMealDate(), m.getCalories(), Integer::sum);
+            }
+            if (m.getProtein() != null) {
+                proteinByDate.merge(m.getMealDate(), m.getProtein(), Integer::sum);
             }
         }
         String[] weekdays = {"월", "화", "수", "목", "금", "토", "일"};
@@ -539,10 +556,46 @@ public class MealService {
             LocalDate d = from7.plusDays(i);
             last7.add(new MealStatsResponse.DayStat(
                     d.toString(), weekdays[d.getDayOfWeek().getValue() - 1],
-                    doneDates.contains(d), calByDate.getOrDefault(d, 0)));
+                    doneDates.contains(d), calByDate.getOrDefault(d, 0),
+                    proteinByDate.getOrDefault(d, 0)));
         }
 
-        return new MealStatsResponse(weeklyDays, monthlyDays, totalDays, last7);
+        boolean deepAllowed = planGuard.allows(userId, Feature.FULL_STATS);
+        return new MealStatsResponse(weeklyDays, monthlyDays, totalDays, last7,
+                !deepAllowed, deepAllowed ? deepStats(userId, today) : null);
+    }
+
+    /** 최근 30일 일별 영양소 + 목표치 — 기록이 없는 날도 0으로 채운다(격자가 비지 않도록). */
+    private MealStatsResponse.DeepStats deepStats(Long userId, LocalDate today) {
+        LocalDate from = today.minusDays(29);
+        Map<LocalDate, int[]> byDate = new HashMap<>();
+        for (Meal m : mealRepository.findByUserIdAndMealDateBetween(userId, from, today)) {
+            int[] sums = byDate.computeIfAbsent(m.getMealDate(), k -> new int[6]);
+            sums[0] += orZero(m.getCalories());
+            sums[1] += orZero(m.getProtein());
+            sums[2] += orZero(m.getCarbs());
+            sums[3] += orZero(m.getFat());
+            sums[4] += orZero(m.getSugar());
+            sums[5] += orZero(m.getSodium());
+        }
+        List<MealStatsResponse.DayNutrition> days = new ArrayList<>();
+        for (int i = 0; i < 30; i++) {
+            LocalDate d = from.plusDays(i);
+            int[] s = byDate.getOrDefault(d, EMPTY_NUTRITION);
+            days.add(new MealStatsResponse.DayNutrition(
+                    d.toString(), s[0], s[1], s[2], s[3], s[4], s[5]));
+        }
+
+        MealStatsResponse.NutritionTargets targets = nutritionGoalRepository.findById(userId)
+                .map(g -> new MealStatsResponse.NutritionTargets(
+                        g.getTargetCalories(), g.getTargetProtein(), g.getTargetCarbs(), g.getTargetFat()))
+                .filter(t -> !t.isEmpty())
+                .orElse(null);
+        return new MealStatsResponse.DeepStats(days, targets);
+    }
+
+    private static int orZero(Integer value) {
+        return value != null ? value : 0;
     }
 
     @Transactional
