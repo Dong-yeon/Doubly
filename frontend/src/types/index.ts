@@ -989,7 +989,8 @@ export type MessageType =
   | 'WORKOUT_CARD'
   | 'MEAL_CARD'
   | 'ROUTINE_CARD'
-  | 'TOUCH';
+  | 'TOUCH'
+  | 'CALL_CARD';
 /** 메시지 이모지 리액션 — mine 은 userIds 에 내 id 가 있는지로 판단한다(브로드캐스트 공용) */
 export interface ChatReactionSummary {
   emoji: string;

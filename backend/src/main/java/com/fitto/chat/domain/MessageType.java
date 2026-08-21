@@ -10,5 +10,11 @@ public enum MessageType {
     MEAL_CARD,
     ROUTINE_CARD,
     /** 가상 터치 — content 에 제스처 코드(TouchGesture.CODES 중 하나)를 담는다. PLAN.md "가상 터치" 참고 */
-    TOUCH
+    TOUCH,
+    /**
+     * 통화 결과 카드 — content 에 "{VOICE|VIDEO}|{MISSED|DECLINED|ENDED}[|durationSec]"
+     * 형식으로 담는다. CallService 가 통화 종료 시점에 대신 남긴다(발신자=senderId).
+     * PLAN.md "통화·영상통화" 참고.
+     */
+    CALL_CARD
 }

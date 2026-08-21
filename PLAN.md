@@ -666,17 +666,56 @@ mood/
 
 ## Feature: 통화 · 영상통화 (관리형 SDK — Stream Video)
 
-> **상태: 1단계 완료(포그라운드 통화).** `call_sessions`(V55) + 백엔드 API(발신/수락/거절/
-> 종료/기록 조회 + Stream 토큰 발급) + 24시간 안전장치 스케줄러까지 구현·테스트 완료
-> (`CallFlowTest` 9건 — 아래 [단계 제안](#단계-제안-한-번에-다-하지-말-것) 표 참고).
-> **프론트 SDK 통합·CallScreen(2단계)과 네이티브 벨 웨이크업(3단계)은 아직 없다** —
-> 지금은 두 앱이 켜져 있어도 화면이 없어 통화를 걸 수 없는 "배선만 된" 상태다.
+> **상태: 2단계 완료(코드 기준) — 실기기 검증 남음.** `call_sessions`(V55) + 백엔드
+> API(발신/수락/거절/종료/기록 조회 + Stream 토큰 발급)에 이어, 프론트 Stream RN SDK 통합
+> + 전역 `CallOverlay`(어느 화면에서든 뜨는 벨·통화 중 UI) + 채팅 헤더 통화 버튼까지
+> 구현했다(`CallFlowTest`·`CallSessionSweeperTest` 12건 + 프론트 `tsc --noEmit` 통과 —
+> 아래 [단계 제안](#단계-제안-한-번에-다-하지-말-것) 표 참고). **아직 실제 기기 두 대로
+> 벨·오디오·영상이 실제로 오가는지는 검증되지 않았다** — EAS 빌드 후 확인이 다음 순서다.
+>
+> **네이티브 벨 웨이크업(원래의 3단계) 대신, 부재중 통화를 채팅 카드로 남기는 방식을
+> 택했다.** CallKit/PushKit 은 별도 EAS 커스텀 빌드·OS별 네이티브 코드·실기기 검증
+> 부담이 커서, 1인 개발 규모에 맞는 더 싼 대안을 먼저 넣었다 — 앱이 꺼져 있어 벨을
+> 못 받으면(`CallSessionSweeper`, 30초 무응답 판정) 서버가 자동으로 채팅방에
+> "부재중 전화 · 다시 걸기" 카드를 남기고, 이미 신뢰할 수 있게 동작하는 **기존 채팅 푸시
+> 경로**(앱이 꺼져 있어도 오는 그 알림)를 그대로 태운다. 새 네이티브 인프라 없이
+> "전화 왔었어요, 다시 걸어주세요"를 전달하는 목적은 이걸로 상당 부분 달성된다.
+> 네이티브 벨 웨이크업은 **선택적 미래 개선**으로 격을 낮췄다 — 아래
+> ["네이티브 벨 웨이크업(선택)"](#feature-네이티브-벨-웨이크업-callkitpushkit--선택적-고급화) 절 참고.
+>
 > Maker Account(팀 5인 미만·월 매출 $10k 미만) 조건으로 Video 월 333,000 참가자-분이
-> 무료라 분당 과금 걱정 없이 2단계로 진행 가능. 별도 트랙으로 분리 — 위
+> 무료라 분당 과금 걱정 없이 진행 중. 별도 트랙으로 분리 — 위
 > [가상 터치](#feature-가상-터치-touch-gesture--obimy-벤치마킹)와 달리 신규 미디어 인프라
-> (WebRTC·VoIP push·CallKit)가 필요해 엔지니어링 비용이 다른 급이다.
+> (WebRTC)가 필요해 엔지니어링 비용이 다른 급이다.
 > Doubly 관계 모델이 **엄격히 2인 고정**이라는 제약이 통화에서는 오히려 최적 조건 — 3인 이상
 > 그룹 통화에 필요한 SFU/미디어 서버 부하 걱정 없이 가장 단순한 1:1 케이스만 다루면 된다.
+
+### 부재중 통화 카드 — 네이티브 벨 대신 택한 경로 ✅
+
+앱이 백그라운드·종료 상태라 벨이 안 뜨는 상황을, 새 네이티브 인프라 없이 **기존 채팅
+알림 경로**로 우회한다. 원리는 단순하다 — 통화가 어떤 이유로든 끝나면(정상 종료·거절·
+무응답) `CallService.recordOutcome` 이 채팅방에 카드 메시지를 남기고, **무응답(MISSED)일
+때만** 알림을 보낸다(정상 종료·거절은 당사자가 이미 아는 상황이라 알림 없이 기록만).
+
+- **30초 무응답 판정** (`CallSessionSweeper.sweepUnansweredRinging`, 5초 주기) — 네이티브
+  벨이 없어 수신자가 앱을 보고 있지 않으면 벨 자체가 안 뜨므로, 발신자가 화면을 안 닫아도
+  서버가 스스로 짧은 시간 안에 부재중 처리한다. 이 판정이 사실상 유일한 "전화 왔었어요"
+  통지 경로다
+- **카드 메시지** — `MessageType.CALL_CARD`, content 형식은
+  `"{VOICE|VIDEO}|{MISSED|DECLINED|ENDED}[|durationSec]"`. 항상 **발신자 명의**로 남는다
+  ("누가 걸었는지"의 기록이므로). MISSED 와 DECLINED 는 채팅에서 같은 문구("부재중
+  전화")로 보인다 — 거절인지 못 받은 건지 구분해 드러내지 않는다(실제 전화 앱들의 관행과
+  동일, 발신자에게 무안함을 주지 않기 위함)
+- **다시 걸기** — 카드에 버튼이 있어 탭하면 그 자리에서 같은 종류(음성/영상)로 재발신한다.
+  `ChatRoomScreen` 헤더 버튼과 같은 `startCall` 함수를 재사용
+- **알림 억제** — `ChatService.postSystemCard` 는 `send()` 와 달리 자동 알림이 없다.
+  통화처럼 "상황마다 알릴지·누구에게·무슨 문구로"가 다른 시스템 카드를 위해 만들었다
+
+**한계**: 이건 "앱이 켜지면 알게 되는" 비동기 경로이지, 실시간 벨이 아니다. 상대가 채팅
+알림을 눈치채고 앱을 열 때까지는 전화가 왔었다는 걸 모른다 — 카카오톡 전화처럼 **폰이
+직접 울리게** 하려면 결국 [네이티브 벨 웨이크업](#feature-네이티브-벨-웨이크업-callkitpushkit--선택적-고급화)이
+필요하다. 지금 방식은 "저렴하게 80% 달성"이고, 네이티브는 "비싸게 나머지 20%(실시간성)를
+채우는" 관계다.
 
 ### 왜 직접 구축이 아니라 관리형 SDK인가
 
@@ -774,43 +813,50 @@ CREATE INDEX idx_call_sessions_couple ON call_sessions (couple_id, created_at DE
   로그인 직후 1회 호출 — 연결돼 있어야 벨을 받을 수 있다
 - `POST /api/v1/calls` `{callType}` — 발신. 활성 커플에서 상대를 자동으로 찾는다(관계 ID를
   프론트가 넘기지 않는다). `call_sessions` `RINGING` 행 생성 + `CoupleEvent.CALL_INCOMING`
-  발행 + (2단계 전까지 임시로) 기존 Expo 푸시 발송. 이미 진행 중인 통화가 있으면 409
-  `CALL_ALREADY_ACTIVE`. `{callSessionId, callId, apiKey, token}` 반환
-- `POST /api/v1/calls/{id}/accept` — 수신자 수락. `status → ONGOING`, `started_at` 기록,
-  수신자용 `{callId, apiKey, token}` 반환
-- `POST /api/v1/calls/{id}/decline` — 거절. `status → DECLINED`, `CoupleEvent.CALL_UPDATED`
-  발행(발신자 화면은 즉시 닫힘)
-- `POST /api/v1/calls/{id}/end` — 종료(양쪽 다 호출 가능, 멱등 — 이미 끝난 세션은 그대로
-  반환). `status → ENDED`, `duration_sec` 계산. 아무도 수락하지 않은 채 끝나면 `MISSED` +
-  수신자에게 부재중 알림
-- `GET /api/v1/calls/{id}` — 세션 단건. `CALL_INCOMING`/`CALL_UPDATED` 이벤트를 받은 쪽이
-  다시 조회하는 용도(민감 데이터는 이벤트에 안 싣는 기존 원칙 그대로)
+  발행 + 기존 Expo 푸시 발송(포그라운드가 아니어도 최소한의 즉시 신호). 이미 진행 중인
+  통화가 있으면 409 `CALL_ALREADY_ACTIVE`. `{callSessionId, callId, apiKey, token}` 반환
+- `POST /api/v1/calls/{providerCallId}/accept` — 수신자 수락. `status → ONGOING`,
+  `started_at` 기록, 수신자용 `{callId, apiKey, token}` 반환
+- `POST /api/v1/calls/{providerCallId}/decline` — 거절. `status → DECLINED`,
+  `CoupleEvent.CALL_UPDATED` 발행(발신자 화면은 즉시 닫힘) + 채팅 카드(`recordOutcome`)
+- `POST /api/v1/calls/{providerCallId}/end` — 종료(양쪽 다 호출 가능, 멱등 — 이미 끝난
+  세션은 그대로 반환). `status → ENDED`, `duration_sec` 계산. 아무도 수락하지 않은 채
+  끝나면 `MISSED`. 양쪽 다 채팅 카드(`recordOutcome`)를 남기고, `MISSED`일 때만
+  "부재중 전화, 다시 걸어보세요" 알림도 함께 보낸다
+- `GET /api/v1/calls/{providerCallId}` — 세션 단건. `CALL_INCOMING`/`CALL_UPDATED` 이벤트를
+  받은 쪽이 다시 조회하는 용도(민감 데이터는 이벤트에 안 싣는 기존 원칙 그대로)
 - `GET /api/v1/calls?cursor=` — 통화 기록(발신/수신 구분은 `callerId`로 클라이언트가 판별),
   cursor(마지막으로 본 id) 페이징, 최신순
 
 > 스펙 초안의 엔드포인트 응답 필드명(`streamCallId`/`streamToken`)은 구현에서
 > `callId`/`token`으로 단순화됐다 — Stream 접두어 없이도 문맥상 명확해서.
+>
+> ⚠️ **경로 키가 내부 PK(`id`)가 아니라 `providerCallId`(Stream `call.id`)로 설계됐다.**
+> 2단계(프론트 SDK 통합)에서 드러난 이유: 발신자는 `start()` 응답으로 내부 PK도 받지만,
+> **수신자는 Stream SDK(`useCalls()`)가 넘겨주는 `call.id`만 알 수 있다** — 양쪽이 공통으로
+> 쓸 수 있는 키는 이것뿐이다. 1단계 초안은 내부 PK로 라우팅했다가 이 지점에서 막혀
+> 재설계했다(`GET /calls?cursor=` 목록 응답의 `id`는 페이징 전용으로 그대로 남음).
 
-### 화면 (frontend)
+### 화면 (frontend) ✅ (2단계 — 포그라운드 통화)
 
-- `IncomingCallScreen`(신규, 전체화면) — CallKit/ConnectionService 네이티브 UI가 1차 경로이고,
-  이 화면은 네이티브 콜 UI가 뜨지 않는 상황(일부 Android 벤더 등)의 인앱 폴백
-- `CallScreen`(신규) — Stream RN SDK 컴포넌트로 구성. 음소거/스피커/카메라 토글/종료
-- `ChatRoomScreen` 헤더에 음성/영상 통화 진입 버튼
-- 채팅 로그에 통화 카드(`MessageType.CALL_CARD` 신규, `WORKOUT_CARD`와 같은 패턴) —
-  "12분 32초 통화" / "부재중 전화"
-- 안 읽은 채팅 배지 자리에 "부재중 통화 n건" 배지 추가
-
-### 네이티브 통합 — SDK가 대신 안 해주는 부분 (가장 위험한 지점)
-
-- **iOS**: PushKit VoIP 등록 + CallKit 연동. Expo 관리형 워크플로우만으로는 불가 — prebuild/config
-  plugin 필요. 다만 이미 `expo-dev-client` + 커스텀 네이티브 플러그인 2종(`@sentry/react-native`,
-  `react-native-android-widget`)을 쓰고 있어 EAS 커스텀 빌드 체계 자체는 선례가 있음
-- **Android**: 고우선순위 FCM 등록 — 현재 `expo-notifications`/Expo Push 경로는 우선순위를
-  세밀하게 제어하지 못할 가능성이 있어([ExpoPushNotificationService.java](backend/src/main/java/com/fitto/notification/service/ExpoPushNotificationService.java)는 애초에 "유실돼도 되는" 설계),
-  통화 벨은 별도의 네이티브 FCM 등록 경로가 필요할 수 있음 — **착수 전 확인 필요 항목**
-- 이 항목을 과소평가하면 "통화 연결은 되는데 앱이 꺼져 있으면 상대가 전화 온 걸 모른다"는
-  상태로 반쯤 완성된 채 멈추기 쉽다. 전체 스펙에서 가장 시간을 넉넉히 잡아야 하는 단계.
+- 전역 `CallOverlay`(`App.tsx`에 `Toast`·`UpgradeSheet`와 같은 자리로 마운트) — Stream
+  `StreamVideoClient`에 연결돼 있는 한 **어느 화면에서든** 수신 벨이 뜬다. `RingingCallContent`
+  (Stream RN SDK 제공 컴포넌트)로 발신/수신 UI를 그리고, `IncomingCall`/`OutgoingCall`/
+  `CallContent`의 `onAcceptCallHandler`/`onRejectCallHandler`/`onHangupCallHandler`
+  콜백(SDK가 자체 처리를 마친 **뒤에** 호출됨)에서 우리 백엔드 accept/decline/end 를
+  동기 호출해 `call_sessions` 상태를 맞춘다. PLAN 초안의 자체 `IncomingCallScreen`/
+  `CallScreen`을 직접 만드는 대신, 영상 렌더링·컨트롤 UI는 검증된 SDK 컴포넌트를 그대로 쓰고
+  우리 쪽 책임(발신 생성·백엔드 상태 동기화)만 얹는 방식으로 범위를 좁혔다 — 1인 개발
+  체제에서 화상 렌더링을 직접 구현하는 리스크를 피하기 위함
+  - 네이티브 벨 웨이크업(CallKit/ConnectionService)이 없는 지금은 **포그라운드에서만** 실시간
+    벨이 울린다. 그 공백은 위 [부재중 통화 카드](#부재중-통화-카드--네이티브-벨-대신-택한-경로-)
+    가 30초 안에 채팅 알림으로 메운다 — "인앱 폴백" 개념은 네이티브 벨 웨이크업을 실제로
+    붙이기로 결정한 시점에나 다시 의미가 생긴다
+- `ChatRoomScreen` 헤더에 음성/영상 통화 진입 버튼 ✅
+- 채팅 로그 통화 카드(`MessageType.CALL_CARD`, 발신/부재중/거절/정상종료 + "다시 걸기"
+  버튼) ✅ — 원래 4단계로 미뤄뒀으나 네이티브 벨 웨이크업을 대체하는 용도로 앞당겨 구현.
+  안 읽은 배지의 "부재중 통화 n건" 표시는 아직 없음(카드 자체는 일반 메시지처럼 안 읽음
+  뱃지에 이미 잡힌다 — 통화 전용 카운트만 없는 상태)
 
 ### Plan 게이팅 (Feature.java)
 
@@ -840,10 +886,33 @@ CALL_VIDEO("영상 통화", Quota.blocked(), Quota.unlimited()),
 | 순서 | 범위 | 이유 | 상태 |
 |---|---|---|---|
 | 1 | `call_sessions` 스키마 + Stream 토큰 서비스(HS256 직접 서명) + REST API(발신/수락/거절/종료/기록) + 24시간 안전장치 | 포그라운드-포그라운드 통화를 위한 백엔드 배선 검증 | ✅ 완료 — `CallController`/`CallService`/`CallSessionSweeper`, `CallFlowTest` 9건 |
-| 2 | 프론트 Stream RN SDK 통합 + `CallScreen`(통화 중 UI, 음소거/스피커/카메라) + 채팅 헤더 진입 버튼 | 포그라운드 통화 자체가 붙는지 실기기 검증 | 🚧 예정 — `claude/call-spike-android` 스파이크가 1단계(Firebase 없이) 통화 연결 자체는 검증한 바 있음, 본 구현 화면은 아직 없음 |
-| 3 | **네이티브 벨 웨이크업**(VoIP push + CallKit/ConnectionService) | 가장 위험한 단계 — 별도로 시간을 넉넉히 잡는다. 이게 없으면 "앱 켜놓고 기다려야 걸 수 있는 통화"에 머무름 | 🚧 예정 |
-| 4 | 채팅 통화 카드 + 부재중 배지 + 통화 기록 목록 화면 | | 🚧 예정(백엔드 API는 1단계에 있음) |
-| 5 | Plan 게이팅(`CALL_VOICE`/`CALL_VIDEO`, `Quota` 분 단위 확장) | Maker Account 무료 한도(월 333,000 참가자-분) 안에서는 급하지 않음 | 🚧 예정 |
+| 2 | 프론트 Stream RN SDK 통합 + 전역 `CallOverlay`(통화 중 UI, 음소거/스피커/카메라) + 채팅 헤더 진입 버튼 | 포그라운드 통화 자체가 붙는지 실기기 검증 | ✅ 완료(타입체크·백엔드 테스트 기준) — `callStore`·`CallOverlay`·`ChatRoomScreen` 헤더 버튼. **실기기 두 대 검증은 아직 안 됨**(다음 항목) |
+| — | 실기기 검증 — Stream API 키를 `fitto-production` Railway 서비스에 등록 후 EAS 빌드로 두 계정 실통화 확인 | 코드는 타입체크만 통과한 상태라 실제 벨·오디오·영상 송수신은 미검증 | 🚧 예정(동연님 확인 필요) |
+| 3 | 채팅 통화 카드(`MessageType.CALL_CARD` — 정상종료/부재중/거절 + "다시 걸기") + 30초 무응답 판정(`CallSessionSweeper`) | 네이티브 벨 웨이크업 없이 "전화 왔었어요"를 전달하는 대체 경로 — 기존 채팅 알림 인프라 재사용 | ✅ 완료 — `CallService.recordOutcome`, `CallSessionSweeperTest` 3건. 안 읽은 배지의 "부재중 통화 n건" 세분화는 남음 |
+| 4 | Plan 게이팅(`CALL_VOICE`/`CALL_VIDEO`, `Quota` 분 단위 확장) | Maker Account 무료 한도(월 333,000 참가자-분) 안에서는 급하지 않음 | 🚧 예정 |
+| (선택) | **네이티브 벨 웨이크업**(VoIP push + CallKit/ConnectionService) | 위 3단계가 같은 목적을 달성해 우선순위 하향. 실기기 검증 후 "진짜 벨이 안 울려 불편하다"는 신호가 뚜렷해지면 재검토 | ⏸ 보류 — 아래 [네이티브 벨 웨이크업](#feature-네이티브-벨-웨이크업-callkitpushkit--선택적-고급화) 참고 |
+
+---
+
+## Feature: 네이티브 벨 웨이크업 (CallKit/PushKit) — 선택적 고급화
+
+> **상태: 보류(선택).** 원래 통화 스펙의 3단계였으나, [부재중 통화
+> 카드](#부재중-통화-카드--네이티브-벨-대신-택한-경로-)가 같은 목적("전화 왔었어요, 다시
+> 걸어주세요")을 EAS 커스텀 네이티브 빌드·OS별 코드 없이 달성해 우선순위가 낮아졌다.
+> 실기기 검증 후 사용자 피드백에서 "진짜 벨이 안 울려서 불편하다"는 신호가 뚜렷해지면
+> 그때 재검토한다. 아래는 착수할 때를 위해 남겨둔 요구사항이다.
+
+### 네이티브 통합 — SDK가 대신 안 해주는 부분 (가장 위험한 지점)
+
+- **iOS**: PushKit VoIP 등록 + CallKit 연동. Expo 관리형 워크플로우만으로는 불가 — prebuild/config
+  plugin 필요. 다만 이미 `expo-dev-client` + 커스텀 네이티브 플러그인 2종(`@sentry/react-native`,
+  `react-native-android-widget`)을 쓰고 있어 EAS 커스텀 빌드 체계 자체는 선례가 있음
+- **Android**: 고우선순위 FCM 등록 — 현재 `expo-notifications`/Expo Push 경로는 우선순위를
+  세밀하게 제어하지 못할 가능성이 있어([ExpoPushNotificationService.java](backend/src/main/java/com/fitto/notification/service/ExpoPushNotificationService.java)는 애초에 "유실돼도 되는" 설계),
+  통화 벨은 별도의 네이티브 FCM 등록 경로가 필요할 수 있음 — **착수 전 확인 필요 항목**
+- 이 항목을 과소평가하면 "통화 연결은 되는데 앱이 꺼져 있으면 상대가 전화 온 걸 모른다"는
+  상태로 반쯤 완성된 채 멈추기 쉽다. 부재중 카드로 최악의 상황(영영 모름)은 이미 막았지만,
+  "폰이 직접 울리는" 경험 자체는 여전히 이 단계 없이는 없다.
 
 ---
 

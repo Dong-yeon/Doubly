@@ -11,7 +11,12 @@ import java.util.Optional;
 
 public interface CallSessionRepository extends JpaRepository<CallSession, Long> {
 
-    Optional<CallSession> findByIdAndCoupleId(Long id, Long coupleId);
+    /**
+     * 발신 응답 이후의 모든 조회는 이 키로 한다 — 캐리어는 Stream 이 준 {@code call.id}가
+     * 우리 {@code provider_call_id}와 같다는 사실만 알 뿐, 내부 PK({@code id})는 발신자만
+     * 응답으로 받는다. 수신자·양쪽 모두가 접근 가능한 유일한 공통 키가 이것이다.
+     */
+    Optional<CallSession> findByProviderCallId(String providerCallId);
 
     /** 같은 커플에 이미 진행 중(벨 울림·통화 중)인 세션이 있는가 — 동시 발신 방지. */
     boolean existsByCoupleIdAndStatusIn(Long coupleId, Collection<CallStatus> statuses);
