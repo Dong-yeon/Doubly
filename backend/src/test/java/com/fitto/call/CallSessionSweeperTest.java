@@ -17,6 +17,7 @@ import com.fitto.relation.dto.RelationResponse;
 import com.fitto.relation.service.RelationService;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import com.fitto.common.notification.NotificationCategory;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -95,7 +96,7 @@ class CallSessionSweeperTest {
         assertThat(card.messageType()).isEqualTo(MessageType.CALL_CARD);
         assertThat(card.content()).isEqualTo("VOICE|MISSED");
 
-        verify(notificationService).notify(eq(b), eq("부재중 전화"), contains("다시 걸어보세요"));
+        verify(notificationService).notify(eq(b), eq(NotificationCategory.CHAT), eq("부재중 전화"), contains("다시 걸어보세요"), anyString());
     }
 
     @Test
@@ -124,6 +125,6 @@ class CallSessionSweeperTest {
         CallJoinResponse joined = callService.start(a, new StartCallRequest(CallType.VOICE));
         callService.decline(b, joined.callId());
 
-        verify(notificationService, never()).notify(any(), eq("부재중 전화"), anyString());
+        verify(notificationService, never()).notify(any(), any(), eq("부재중 전화"), anyString(), anyString());
     }
 }

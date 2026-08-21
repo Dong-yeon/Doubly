@@ -2,7 +2,9 @@ package com.fitto.trainer.service;
 
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
+import com.fitto.common.notification.NotificationCategory;
 import com.fitto.common.notification.NotificationService;
+import com.fitto.common.notification.PushLinks;
 import com.fitto.common.time.KstClock;
 import com.fitto.auth.dto.UserResponse;
 import com.fitto.relation.domain.Relation;
@@ -149,8 +151,9 @@ public class TrainerService {
         trainerRoutineRepository.save(routine);
 
         String trainerName = userName(trainerId);
-        notificationService.notify(request.memberId(), "새 운동 루틴이 도착했어요!",
-                trainerName + " 트레이너 — " + routine.getTitle());
+        notificationService.notify(request.memberId(), NotificationCategory.PARTNER,
+                "새 운동 루틴이 도착했어요!", trainerName + " 트레이너 — " + routine.getTitle(),
+                PushLinks.WORKOUT_ROUTINES);
         return TrainerRoutineResponse.from(routine, trainerName);
     }
 
@@ -184,8 +187,9 @@ public class TrainerService {
         boolean firstComplete = !routine.isCompleted();
         routine.complete();
         if (firstComplete) {
-            notificationService.notify(routine.getTrainerId(), "회원이 루틴을 완료했어요!",
-                    userName(memberId) + " — " + routine.getTitle());
+            notificationService.notify(routine.getTrainerId(), NotificationCategory.PARTNER,
+                    "회원이 루틴을 완료했어요!", userName(memberId) + " — " + routine.getTitle(),
+                    PushLinks.TRAINER_DASHBOARD);
         }
         return TrainerRoutineResponse.from(routine, userName(routine.getTrainerId()));
     }

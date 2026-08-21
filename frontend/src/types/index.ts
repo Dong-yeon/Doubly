@@ -98,8 +98,13 @@ export interface User {
   socialType?: SocialType | null;
   /** 마케팅 수신 동의 — 선택 항목이라 언제든 철회할 수 있다 */
   marketingConsent?: boolean;
-  /** 푸시 알림 수신 여부 */
+  /** 푸시 알림 수신 여부 — 전체 스위치 */
   notificationsEnabled?: boolean;
+  /* 카테고리별 수신 여부 — 전체 스위치가 꺼져 있으면 이 값들과 무관하게 발송되지 않는다 */
+  notifyChat?: boolean;
+  notifyAnniversary?: boolean;
+  notifyPartner?: boolean;
+  notifyReminder?: boolean;
   /** 필수 약관 재동의 필요 여부 — 약관 개정 또는 동의 이력 없는 기존 가입자면 true */
   requiresConsent?: boolean;
 }
@@ -268,7 +273,24 @@ export interface PartnerToday {
 }
 
 // 커플 음성 응원 — 애인 목소리로 녹음한 짧은 응원 문구. 운동 중 정해진 순간에 재생된다
-export type VoicePhrase = 'REST_END' | 'PR' | 'WORKOUT_COMPLETE';
+export type VoicePhrase =
+  | 'WORKOUT_START'
+  | 'REST_END'
+  | 'LAST_SET'
+  | 'PR'
+  | 'WORKOUT_COMPLETE';
+
+/**
+ * 운동 부스터 — 애인이 즉석 녹음해 보낸 일회성 응원.
+ * 다음 세션 시작 때 한 번 재생되고 소멸한다(상설 클립인 VoiceClip 과 다르다).
+ */
+export interface WorkoutBooster {
+  id: number;
+  senderName: string;
+  audioUrl: string;
+  message?: string | null;
+  createdAt: string;
+}
 export interface VoiceClip {
   phrase: VoicePhrase;
   phraseLabel: string;
@@ -355,7 +377,17 @@ export interface Challenge {
   partnerCount: number;
   partnerName?: string | null;
   ended: boolean;
+  /** 지금 이 순간의 우세 — 실시간 집계 */
   leader: 'ME' | 'PARTNER' | 'TIE';
+  /** 종료 판정이 끝났는지 — 서버 스케줄러가 매일 아침 확정한다 */
+  settled?: boolean;
+  /**
+   * 확정된 승패. 아직 판정 전이면 없다.
+   *
+   * leader 와 나누는 이유: 기간이 끝난 뒤 소급 입력이 들어와도 이미 발표된(푸시로 알린)
+   * 결과가 화면에서 뒤집히면 안 된다.
+   */
+  result?: 'ME' | 'PARTNER' | 'TIE' | null;
   createdAt: string;
 }
 
@@ -767,7 +799,50 @@ export interface MealStats {
   weeklyDays: number;
   monthlyDays: number;
   totalDays: number;
-  last7Days: { date: string; weekday: string; completed: boolean; calories: number }[];
+  /** 무료 구간 — 여기까지 막으면 기록할 이유가 사라진다 */
+  last7Days: { date: string; weekday: string; completed: boolean; calories: number; protein: number }[];
+  /** 심화 통계(FULL_STATS)가 잠겨 있는지 — true 면 deep 이 없다 */
+  locked?: boolean;
+  deep?: DeepMealStats | null;
+}
+
+/** 심화 영양 통계 (PRO) — 30일 매크로 달성률·나트륨·당 추이의 원본 */
+export interface DeepMealStats {
+  last30Days: DayNutrition[];
+  /** 목표치. 미설정이면 없다 — 달성률 대신 절대량만 그린다 */
+  targets?: NutritionTargets | null;
+}
+export interface DayNutrition {
+  date: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  sugar: number;
+  /** 나트륨(mg) — g 단위인 다른 값과 달리 mg */
+  sodium: number;
+}
+export interface NutritionTargets {
+  calories?: number | null;
+  protein?: number | null;
+  carbs?: number | null;
+  fat?: number | null;
+}
+
+/**
+ * 스트릭 복구권 상태·결과 (GET/POST /streak/repair).
+ * 조회와 실행이 같은 모양이라, 실행 응답 하나로 버튼 상태까지 갱신된다.
+ */
+export interface StreakRepairInfo {
+  repairable: boolean;
+  /** 되살릴 수 있는(또는 방금 되살린) 스트릭 이름 — "내 운동", "커플 식단" */
+  targets: string[];
+  /** 이번 달 남은 복구권. 무제한·차단이면 null */
+  remaining?: number | null;
+  /** PRO 전용 기능이 잠긴 상태인지 (한도 소진과 구분된다) */
+  locked: boolean;
+  /** 실행 응답에서만 — 메운 날짜 */
+  repairedDate?: string | null;
 }
 
 // 레벨/성장 (GET /summary/level) — XP = 운동일×10 + 식단일×5
@@ -946,7 +1021,7 @@ export interface FeedItem {
   content?: string | null;
   imageUrl?: string | null;
   occurredAt: string;
-  /** POST 에만 존재 */
+  /** 모든 타입에 붙는다 — 반응이 없으면 빈 배열 */
   reactions?: ReactionSummary[] | null;
 }
 export interface FeedTimeline {
@@ -990,7 +1065,9 @@ export type MessageType =
   | 'MEAL_CARD'
   | 'ROUTINE_CARD'
   | 'TOUCH'
-  | 'CALL_CARD';
+  | 'CALL_CARD'
+  /** 스트릭 마일스톤 축하 — content 가 그대로 읽히는 축하 문장이다(서버가 대신 남긴다) */
+  | 'STREAK_CARD';
 /** 메시지 이모지 리액션 — mine 은 userIds 에 내 id 가 있는지로 판단한다(브로드캐스트 공용) */
 export interface ChatReactionSummary {
   emoji: string;

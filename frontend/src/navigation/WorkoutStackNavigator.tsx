@@ -5,6 +5,7 @@ import type { WorkoutStackParamList } from './types';
 import { WorkoutScreen } from '../screens/workout/WorkoutScreen';
 import { WorkoutRecordScreen } from '../screens/workout/WorkoutRecordScreen';
 import { WorkoutCalendarScreen } from '../screens/workout/WorkoutCalendarScreen';
+import { WorkoutDetailScreen } from '../screens/workout/WorkoutDetailScreen';
 import { WorkoutStatsScreen } from '../screens/workout/WorkoutStatsScreen';
 import { WorkoutRecommendScreen } from '../screens/workout/WorkoutRecommendScreen';
 import { WorkoutSessionScreen } from '../screens/workout/WorkoutSessionScreen';
@@ -35,6 +36,11 @@ export function WorkoutStackNavigator() {
         name="WorkoutCalendar"
         component={WorkoutCalendarScreen}
         options={{ title: '운동 캘린더' }}
+      />
+      <Stack.Screen
+        name="WorkoutDetail"
+        component={WorkoutDetailScreen}
+        options={{ title: '운동 기록' }}
       />
       <Stack.Screen
         name="WorkoutStats"

@@ -1,9 +1,9 @@
 package com.fitto.notification.service;
 
+import com.fitto.common.notification.NotificationCategory;
 import com.fitto.common.notification.NotificationService;
 import com.fitto.notification.domain.DeviceToken;
 import com.fitto.notification.repository.DeviceTokenRepository;
-import com.fitto.user.domain.User;
 import com.fitto.user.repository.UserRepository;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
@@ -15,6 +15,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.client.RestClient;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -69,7 +70,8 @@ public class ExpoPushNotificationService implements NotificationService {
     }
 
     @Override
-    public void notify(Long recipientUserId, String title, String body) {
+    public void notify(Long recipientUserId, NotificationCategory category,
+                       String title, String body, String link) {
         if (recipientUserId == null) return;
         /*
          * 트랜잭션 안에서 불렸으면 커밋 확정 후에만 발송을 예약한다 — 롤백되면 알림도 없다.
@@ -79,25 +81,27 @@ public class ExpoPushNotificationService implements NotificationService {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
-                    executor.execute(() -> send(recipientUserId, title, body));
+                    executor.execute(() -> send(recipientUserId, category, title, body, link));
                 }
             });
         } else {
-            executor.execute(() -> send(recipientUserId, title, body));
+            executor.execute(() -> send(recipientUserId, category, title, body, link));
         }
     }
 
     /** 발송 스레드에서 실행 — 어떤 실패도 앱 흐름에 전파하지 않는다. */
-    private void send(Long recipientUserId, String title, String body) {
+    private void send(Long recipientUserId, NotificationCategory category,
+                      String title, String body, String link) {
         try {
             /*
              * 수신 거부 확인은 발송 직전 이 지점에서 한 번만 한다 (SET-01).
              * 호출부에 각각 두면 새 알림을 추가할 때 검사를 빠뜨리기 쉽고,
-             * 그러면 "껐는데 오는 알림"이 생긴다.
+             * 그러면 "껐는데 오는 알림"이 생긴다. 전체 스위치와 카테고리별 스위치를
+             * 한 번에 보는 것도 같은 이유다 — allowsNotification 하나만 통과하면 발송이다.
              * 사용자를 못 찾으면 보내지 않는다 — 탈퇴 직후 잔여 호출의 유령 알림 방지.
              */
             boolean allowed = userRepository.findById(recipientUserId)
-                    .map(User::isNotificationsEnabled)
+                    .map(u -> u.allowsNotification(category))
                     .orElse(false);
             if (!allowed) return;
 
@@ -105,11 +109,7 @@ public class ExpoPushNotificationService implements NotificationService {
             if (tokens.isEmpty()) return;
 
             List<Map<String, Object>> messages = tokens.stream()
-                    .map(t -> Map.<String, Object>of(
-                            "to", t.getToken(),
-                            "title", title,
-                            "body", body,
-                            "sound", "default"))
+                    .map(t -> message(t.getToken(), title, body, link))
                     .toList();
             restClient.post()
                     .uri(EXPO_PUSH_URL)
@@ -120,6 +120,25 @@ public class ExpoPushNotificationService implements NotificationService {
         } catch (Exception e) {
             log.warn("Expo push 발송 실패 recipient={}: {}", recipientUserId, e.getMessage());
         }
+    }
+
+    /**
+     * Expo 메시지 한 건.
+     *
+     * <p>{@code data.link} 가 알림 탭 딥링크의 전부다 — 앱이 이 값 앞에 {@code doubly://} 를
+     * 붙여 열고, 없으면 앱만 열린다({@code frontend/src/navigation/linking.ts}).
+     * {@code Map.of} 를 못 쓰는 이유는 link 가 null 일 수 있어서다.
+     */
+    private Map<String, Object> message(String token, String title, String body, String link) {
+        Map<String, Object> m = new HashMap<>();
+        m.put("to", token);
+        m.put("title", title);
+        m.put("body", body);
+        m.put("sound", "default");
+        if (link != null) {
+            m.put("data", Map.of("link", link));
+        }
+        return m;
     }
 
     @PreDestroy

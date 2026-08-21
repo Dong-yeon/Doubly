@@ -21,6 +21,14 @@ import java.util.List;
 @Component
 public class RelationRecordPurger {
 
+    /**
+     * 관계의 두 사람 — {@code user_b_id} 가 아직 NULL 인 관계(초대 대기)에서도 안전하다
+     * (SQL 의 {@code IN} 은 NULL 과 매칭되지 않는다).
+     */
+    private static final String MEMBER_IDS =
+            "(select r.user_a_id from relations r where r.id = :rid"
+                    + " union select r.user_b_id from relations r where r.id = :rid)";
+
     @PersistenceContext
     private EntityManager em;
 
@@ -34,8 +42,21 @@ public class RelationRecordPurger {
         List<String> imageUrls = collectImageUrls(relationId);
 
         // --- 자식 → 부모 순서. 바꾸면 외래키 위반이 난다 ---
-        exec("delete from feed_reactions where post_id in "
+        /*
+         * 피드 반응은 대상이 4종(포스트·운동·식단·방문)이라 FK 를 걸 수 없다(V60).
+         * FK 가 없으니 DB 가 대신 지워주지도 않는다 — 커플의 콘텐츠에 달린 반응을
+         * 여기서 전부 명시적으로 거둔다. 운동·식단은 관계가 끝나도 <b>개인 기록으로 남지만</b>
+         * 그 카드에 달렸던 상대의 반응은 커플 피드에서만 보이던 것이므로 함께 지운다.
+         */
+        exec("delete from feed_reactions where target_type = 'POST' and target_id in "
                 + "(select p.id from feed_posts p where p.couple_id = :rid)", relationId);
+        exec("delete from feed_reactions where target_type = 'PLACE_VISIT' and target_id in "
+                + "(select v.id from place_visits v where v.place_id in "
+                + "(select p.id from places p where p.couple_id = :rid))", relationId);
+        exec("delete from feed_reactions where target_type = 'WORKOUT' and target_id in "
+                + "(select w.id from workouts w where w.user_id in " + MEMBER_IDS + ")", relationId);
+        exec("delete from feed_reactions where target_type = 'MEAL' and target_id in "
+                + "(select m.id from meals m where m.user_id in " + MEMBER_IDS + ")", relationId);
         // feed_posts.trip_id 가 trips 를 참조하므로 피드를 먼저 지운다
         exec("delete from feed_posts where couple_id = :rid", relationId);
 
@@ -56,6 +77,8 @@ public class RelationRecordPurger {
         exec("delete from daily_answers where couple_id = :rid", relationId);
         exec("delete from mood_statuses where couple_id = :rid", relationId);
         exec("delete from call_sessions where couple_id = :rid", relationId);
+        // 운동 부스터(V61) — relations/users 를 함께 참조하므로 관계와 함께 지운다
+        exec("delete from workout_boosters where relation_id = :rid", relationId);
         // routine_gifts.snapshot_routine_id/resulting_routine_id 가 workout_routines 를
         // 참조하므로, 그 루틴들이 UserDataPurger 에서 지워지기 전인 여기서 먼저 지운다.
         exec("delete from routine_gifts where relation_id = :rid", relationId);

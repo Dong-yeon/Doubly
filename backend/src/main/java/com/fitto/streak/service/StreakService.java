@@ -31,15 +31,18 @@ public class StreakService {
     private final RelationRepository relationRepository;
     private final WorkoutRepository workoutRepository;
     private final MealRepository mealRepository;
+    private final StreakMilestoneNotifier milestoneNotifier;
 
     public StreakService(StreakRepository streakRepository,
                          RelationRepository relationRepository,
                          WorkoutRepository workoutRepository,
-                         MealRepository mealRepository) {
+                         MealRepository mealRepository,
+                         StreakMilestoneNotifier milestoneNotifier) {
         this.streakRepository = streakRepository;
         this.relationRepository = relationRepository;
         this.workoutRepository = workoutRepository;
         this.mealRepository = mealRepository;
+        this.milestoneNotifier = milestoneNotifier;
     }
 
     /**
@@ -51,18 +54,24 @@ public class StreakService {
         // 개인 스트릭
         Streak personal = streakRepository.findByUserIdAndStreakType(userId, StreakType.PERSONAL)
                 .orElseGet(() -> Streak.personal(userId));
+        int personalBefore = personal.getCurrentCount();
         personal.applyWorkout(date);
         streakRepository.save(personal);
 
+        Optional<Relation> couple = activeCouple(userId);
+        celebratePersonal(userId, couple, StreakType.PERSONAL, personalBefore, personal.getCurrentCount());
+
         // 커플 스트릭 — 둘 다 해당 날짜에 운동했을 때만 카운트
-        activeCouple(userId).ifPresent(couple -> {
-            Long partnerId = couple.partnerOf(userId);
+        couple.ifPresent(c -> {
+            Long partnerId = c.partnerOf(userId);
             if (partnerId != null && workoutRepository.existsByUserIdAndWorkoutDate(partnerId, date)) {
                 Streak coupleStreak = streakRepository
-                        .findByRelationIdAndStreakType(couple.getId(), StreakType.COUPLE)
-                        .orElseGet(() -> Streak.couple(couple.getId()));
+                        .findByRelationIdAndStreakType(c.getId(), StreakType.COUPLE)
+                        .orElseGet(() -> Streak.couple(c.getId()));
+                int before = coupleStreak.getCurrentCount();
                 coupleStreak.applyWorkout(date);
                 streakRepository.save(coupleStreak);
+                celebrateCouple(userId, c, StreakType.COUPLE, before, coupleStreak.getCurrentCount());
             }
         });
     }
@@ -75,20 +84,45 @@ public class StreakService {
     public void updateOnMeal(Long userId, LocalDate date) {
         Streak personal = streakRepository.findByUserIdAndStreakType(userId, StreakType.PERSONAL_MEAL)
                 .orElseGet(() -> Streak.personalMeal(userId));
+        int personalBefore = personal.getCurrentCount();
         personal.applyWorkout(date);
         streakRepository.save(personal);
 
+        Optional<Relation> couple = activeCouple(userId);
+        celebratePersonal(userId, couple, StreakType.PERSONAL_MEAL, personalBefore, personal.getCurrentCount());
+
         // 커플 식단 스트릭 — 둘 다 해당 날짜에 기록했을 때만 카운트
-        activeCouple(userId).ifPresent(couple -> {
-            Long partnerId = couple.partnerOf(userId);
+        couple.ifPresent(c -> {
+            Long partnerId = c.partnerOf(userId);
             if (partnerId != null && mealRepository.existsByUserIdAndMealDate(partnerId, date)) {
                 Streak coupleStreak = streakRepository
-                        .findByRelationIdAndStreakType(couple.getId(), StreakType.COUPLE_MEAL)
-                        .orElseGet(() -> Streak.coupleMeal(couple.getId()));
+                        .findByRelationIdAndStreakType(c.getId(), StreakType.COUPLE_MEAL)
+                        .orElseGet(() -> Streak.coupleMeal(c.getId()));
+                int before = coupleStreak.getCurrentCount();
                 coupleStreak.applyWorkout(date);
                 streakRepository.save(coupleStreak);
+                celebrateCouple(userId, c, StreakType.COUPLE_MEAL, before, coupleStreak.getCurrentCount());
             }
         });
+    }
+
+    /*
+     * 마일스톤 축하 — "올라갔을 때만" 판정한다.
+     *
+     * applyWorkout 은 이어지면 +1, 끊겼으면 1 로 리셋, 중복 저장이면 그대로다.
+     * before < after 조건이 없으면 같은 날 여러 번 저장할 때마다 축하가 반복된다.
+     */
+    private void celebratePersonal(Long userId, Optional<Relation> couple, StreakType type,
+                                   int before, int after) {
+        if (after <= before || !StreakMilestoneNotifier.isMilestone(after)) return;
+        milestoneNotifier.personalReached(userId, couple.map(c -> c.partnerOf(userId)).orElse(null),
+                type, after);
+    }
+
+    private void celebrateCouple(Long triggeredBy, Relation couple, StreakType type,
+                                 int before, int after) {
+        if (after <= before || !StreakMilestoneNotifier.isMilestone(after)) return;
+        milestoneNotifier.coupleReached(triggeredBy, couple, type, after);
     }
 
     public StreakResponse getMyStreak(Long userId) {

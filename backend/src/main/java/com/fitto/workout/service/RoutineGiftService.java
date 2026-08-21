@@ -4,7 +4,9 @@ import com.fitto.common.event.CoupleEvent;
 import com.fitto.common.event.CoupleEventPublisher;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
+import com.fitto.common.notification.NotificationCategory;
 import com.fitto.common.notification.NotificationService;
+import com.fitto.common.notification.PushLinks;
 import com.fitto.common.plan.Feature;
 import com.fitto.common.plan.PlanGuard;
 import com.fitto.relation.domain.Relation;
@@ -92,7 +94,9 @@ public class RoutineGiftService {
         giftRepository.save(gift);
 
         String senderName = userName(senderId);
-        notificationService.notify(receiverId, "운동 루틴을 선물했어요 🎁", senderName + " — " + source.getTitle());
+        notificationService.notify(receiverId, NotificationCategory.PARTNER,
+                "운동 루틴을 선물했어요 🎁", senderName + " — " + source.getTitle(),
+                PushLinks.WORKOUT_ROUTINES);
         coupleEventPublisher.publish(relation.getId(), CoupleEvent.ROUTINE_GIFT);
         return RoutineGiftResponse.of(gift, RoutineResponse.of(snapshot), senderName, userName(receiverId));
     }
@@ -121,7 +125,8 @@ public class RoutineGiftService {
 
         gift.accept(copy.getId());
         String receiverName = userName(receiverId);
-        notificationService.notify(gift.getSenderId(), "루틴을 받았어요!", receiverName + "님이 선물을 받았어요 💪");
+        notificationService.notify(gift.getSenderId(), NotificationCategory.PARTNER,
+                "루틴을 받았어요!", receiverName + "님이 선물을 받았어요 💪", PushLinks.WORKOUT_ROUTINES);
         coupleEventPublisher.publish(gift.getRelationId(), CoupleEvent.ROUTINE_GIFT);
         return RoutineGiftResponse.of(gift, RoutineResponse.of(copy), userName(gift.getSenderId()), receiverName);
     }

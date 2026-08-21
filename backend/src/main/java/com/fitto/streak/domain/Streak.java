@@ -130,4 +130,33 @@ public class Streak {
         }
         return 0;
     }
+
+    /**
+     * 복구권으로 되살릴 수 있는 상태인가 — <b>어제 하루만</b> 비었을 때.
+     *
+     * <p>마지막 기록이 그저께({@code today - 2})면 어제 하루를 놓쳐 오늘 0으로 보이는
+     * 상태다. 이틀 이상 비었으면 "이어붙이기"가 아니라 새로 시작하는 것이므로 대상이 아니다
+     * — 복구권을 며칠씩 소급 적용하면 스트릭 숫자가 기록이 아니라 결제의 함수가 된다.
+     */
+    public boolean isRepairable(LocalDate today) {
+        return lastWorkoutDate != null
+                && currentCount > 0
+                && lastWorkoutDate.equals(today.minusDays(2));
+    }
+
+    /**
+     * 비어 있던 어제를 메워 연속을 잇는다 ({@code Feature.STREAK_REPAIR}).
+     *
+     * <p>메운 하루도 연속 일수에 <b>포함</b>한다 — "끊기지 않았다"가 복구권이 파는 것이고,
+     * 하루를 빼고 이으면 사용자가 세는 숫자와 화면의 숫자가 어긋난다.
+     *
+     * @return 실제로 되살렸으면 true (대상이 아니면 아무것도 하지 않고 false)
+     */
+    public boolean repair(LocalDate today) {
+        if (!isRepairable(today)) return false;
+        currentCount += 1;
+        lastWorkoutDate = today.minusDays(1);
+        bumpMax();
+        return true;
+    }
 }

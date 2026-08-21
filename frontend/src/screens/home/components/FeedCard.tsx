@@ -10,6 +10,12 @@
  *   <li><b>사진</b>이 있으면 — 사진을 카드 폭 전체에 크게 깔고 글은 아래 얹는다.</li>
  *   <li><b>자동 기록</b>(운동·식단·맛집)은 — 아이콘 한 줄짜리 작은 카드로 줄인다.</li>
  * </ul>
+ *
+ * <p><b>응원 리액션은 두 종류 모두에 붙는다.</b> 예전에는 일상 포스트에만 달렸는데,
+ * 정작 매일 쌓이는 건 운동·식단·맛집 카드다 — "기록을 상대가 봐주고 응원해주는 순간"이
+ * 이 앱의 존재 이유라, 거기에 반응할 방법이 없으면 루프가 닫히지 않는다.
+ * 다만 자동 기록은 카드가 작으므로 <b>상대의 기록</b>이거나 이미 반응이 달린 경우에만
+ * 이모지 줄을 편다 — 내 기록 밑에 응원 버튼이 줄줄이 뜨는 건 소음이다.
  */
 import React from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -44,7 +50,11 @@ export interface FeedCardProps {
 }
 
 export function FeedCard({ item, timeLabel, quickEmojis, onReact, onLongPress }: FeedCardProps) {
-  if (item.type !== 'POST') return <RecordCard item={item} timeLabel={timeLabel} />;
+  if (item.type !== 'POST') {
+    return (
+      <RecordCard item={item} timeLabel={timeLabel} quickEmojis={quickEmojis} onReact={onReact} />
+    );
+  }
   return (
     <PostCard
       item={item}
@@ -57,32 +67,51 @@ export function FeedCard({ item, timeLabel, quickEmojis, onReact, onLongPress }:
 }
 
 /** 운동·식단·맛집 — 자동으로 쌓이는 기록이라 작게 */
-function RecordCard({ item, timeLabel }: { item: FeedItem; timeLabel: string }) {
+function RecordCard({
+  item,
+  timeLabel,
+  quickEmojis,
+  onReact,
+}: Pick<FeedCardProps, 'item' | 'timeLabel' | 'quickEmojis' | 'onReact'>) {
   const meta = typeMeta(item.type as Exclude<FeedItemType, 'POST'>);
+  const reactions = item.reactions ?? [];
+  // 상대 기록엔 응원할 자리를 열어 두고, 내 기록은 이미 받은 응원만 보여준다
+  const showReactions = !item.mine || reactions.length > 0;
   return (
     <View style={styles.record}>
-      <View style={[styles.recordIcon, { backgroundColor: meta.color }]}>
-        {/* 다크의 소유자 색은 파스텔이라 흰 아이콘이 1.50~1.69:1 이었다 — 배경 휘도로 고른다 */}
-        <MaterialCommunityIcons name={meta.icon} size={18} color={onColor(meta.color)} />
-      </View>
-      <View style={styles.recordBody}>
-        <Text style={styles.recordTitle} numberOfLines={1}>
-          {item.title}
-        </Text>
-        {item.content ? (
-          <Text style={styles.recordContent} numberOfLines={1}>
-            {item.content}
+      <View style={styles.recordRow}>
+        <View style={[styles.recordIcon, { backgroundColor: meta.color }]}>
+          {/* 다크의 소유자 색은 파스텔이라 흰 아이콘이 1.50~1.69:1 이었다 — 배경 휘도로 고른다 */}
+          <MaterialCommunityIcons name={meta.icon} size={18} color={onColor(meta.color)} />
+        </View>
+        <View style={styles.recordBody}>
+          <Text style={styles.recordTitle} numberOfLines={1}>
+            {item.title}
           </Text>
-        ) : null}
+          {item.content ? (
+            <Text style={styles.recordContent} numberOfLines={1}>
+              {item.content}
+            </Text>
+          ) : null}
+        </View>
+        <View style={styles.recordMeta}>
+          <Text style={styles.recordWho} numberOfLines={1}>
+            {item.mine ? '나' : item.userName}
+          </Text>
+          <Text style={styles.recordTime}>{timeLabel}</Text>
+        </View>
+        {/* 사진이 있는 식단·맛집은 작은 썸네일까지만 */}
+        {item.imageUrl ? <Image source={{ uri: item.imageUrl }} style={styles.thumb} /> : null}
       </View>
-      <View style={styles.recordMeta}>
-        <Text style={styles.recordWho} numberOfLines={1}>
-          {item.mine ? '나' : item.userName}
-        </Text>
-        <Text style={styles.recordTime}>{timeLabel}</Text>
-      </View>
-      {/* 사진이 있는 식단·맛집은 작은 썸네일까지만 */}
-      {item.imageUrl ? <Image source={{ uri: item.imageUrl }} style={styles.thumb} /> : null}
+      {showReactions ? (
+        <Reactions
+          reactions={reactions}
+          // 내 기록에서는 받은 응원만 — 빈 이모지 버튼을 늘어놓지 않는다
+          quickEmojis={item.mine ? [] : quickEmojis}
+          onPress={(emoji) => onReact(item, emoji)}
+          compact
+        />
+      ) : null}
     </View>
   );
 }
@@ -119,20 +148,25 @@ function PostCard({ item, timeLabel, quickEmojis, onReact, onLongPress }: FeedCa
   );
 }
 
+/**
+ * @param compact 자동 기록 카드용 — 한 줄짜리 카드에 얹으므로 여백을 줄인다.
+ */
 function Reactions({
   reactions,
   quickEmojis,
   onPress,
+  compact,
 }: {
   reactions: ReactionSummary[];
   quickEmojis: readonly string[];
   onPress: (emoji: string) => void;
+  compact?: boolean;
 }) {
   // 기본 이모지 + 상대가 새로 붙인 이모지 (중복 없이)
   const extra = reactions.map((r) => r.emoji).filter((e) => !quickEmojis.includes(e));
   const byEmoji = new Map(reactions.map((r) => [r.emoji, r]));
   return (
-    <View style={styles.reactionRow}>
+    <View style={[styles.reactionRow, compact && styles.reactionRowCompact]}>
       {[...quickEmojis, ...extra].map((emoji) => {
         const summary = byEmoji.get(emoji);
         return (
@@ -161,15 +195,13 @@ function Reactions({
 const styles = themedStyles((colors) => ({
   // ---- 자동 기록 (작게) ----
   record: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
     marginBottom: spacing.sm,
   },
+  recordRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   recordIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
   recordBody: { flex: 1 },
   recordTitle: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
@@ -199,6 +231,8 @@ const styles = themedStyles((colors) => ({
   content: { fontSize: fontSize.subtitle, color: colors.textPrimary, marginTop: spacing.xs, lineHeight: 24 },
 
   reactionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.sm },
+  // 자동 기록 카드는 한 줄짜리라 위 여백을 줄이고 아이콘 열에 맞춰 들여쓴다
+  reactionRowCompact: { marginTop: spacing.xs, paddingLeft: 34 + spacing.sm },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',

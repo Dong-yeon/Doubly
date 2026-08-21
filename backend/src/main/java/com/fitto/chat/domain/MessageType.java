@@ -16,5 +16,12 @@ public enum MessageType {
      * 형식으로 담는다. CallService 가 통화 종료 시점에 대신 남긴다(발신자=senderId).
      * PLAN.md "통화·영상통화" 참고.
      */
-    CALL_CARD
+    CALL_CARD,
+    /**
+     * 스트릭 마일스톤 축하 카드 — content 에 <b>그대로 읽히는 축하 문장</b>을 담는다.
+     * {@code StreakMilestoneNotifier} 가 7·30·100일을 넘는 순간 대신 남긴다(발신자=그 순간
+     * 기록을 저장한 사람). 코드가 아니라 문장을 담는 이유는, 이 타입을 모르는 구버전 앱에서도
+     * 평범한 말풍선으로 읽히게 하기 위해서다.
+     */
+    STREAK_CARD
 }

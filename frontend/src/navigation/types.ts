@@ -110,6 +110,8 @@ export type WorkoutStackParamList = {
   // date: 캘린더에서 특정 날짜를 골라 들어올 때 그 날짜로 시작한다 (없으면 오늘)
   WorkoutRecord: { date?: string } | undefined;
   WorkoutCalendar: undefined;
+  // 운동 기록 상세 — 세트별 실기록·RPE. id 만 넘기고 화면이 다시 불러온다(딥링크로도 열린다)
+  WorkoutDetail: { workoutId: number };
   WorkoutStats: undefined;
   WorkoutRecommend: undefined;
   // 운동 세션 보조 (세트 체크·휴식 타이머). 루틴 실행 시 exercises 전달
