@@ -1,37 +1,90 @@
 /** 이미지 선택(expo-image-picker) + Cloudinary 업로드 (signed 우선, unsigned 폴백) */
-import { Platform } from 'react-native';
+import { Image, Platform } from 'react-native';
 import { File as FsFile } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { CLOUDINARY, isCloudinaryConfigured } from '../constants/config';
 import { uploadApi } from '../api/upload';
 import { errorCodeOf } from '../api/client';
+import { toast } from '../store/toastStore';
 
-/** 갤러리에서 이미지 선택 → uri (취소 시 null) */
-export async function pickImage(): Promise<string | null> {
-  const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (!perm.granted) return null;
+/** 고른 사진 한 장 — 원본 픽셀 크기까지. 크롭처럼 좌표를 계산하는 쪽이 크기를 알아야 한다 */
+export interface PickedImage {
+  uri: string;
+  width: number;
+  height: number;
+}
 
-  const result = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ['images'],
-    quality: 0.7,
-    allowsEditing: false,
+const PICKER_OPTIONS = {
+  mediaTypes: ['images'],
+  quality: 0.7,
+  // 시스템 크롭 UI 는 iOS 정사각 · 안드로이드 기기별 화면 · 웹 미지원으로 제각각이라
+  // 쓰지 않는다. 프로필 사진처럼 잘라내야 하는 자리는 AvatarCropSheet 로 직접 받는다.
+  allowsEditing: false,
+} satisfies ImagePicker.ImagePickerOptions;
+
+/**
+ * 권한 확인 — 거부됐으면 알려주고 false.
+ *
+ * <p>예전에는 거부와 취소를 똑같이 조용한 {@code null} 로 돌려줘서, 권한을 막아둔
+ * 사용자는 버튼을 눌러도 <b>아무 일도 일어나지 않는</b> 것처럼 보였다
+ * ({@code docs/UX_UI_AUDIT.md} "아바타: 권한 거부 시 무피드백 종료").
+ * 여기 한 곳에서 알리면 이 함수를 쓰는 화면 전부가 같이 고쳐진다.
+ */
+async function ensurePermission(kind: 'mediaLibrary' | 'camera'): Promise<boolean> {
+  const perm =
+    kind === 'mediaLibrary'
+      ? await ImagePicker.requestMediaLibraryPermissionsAsync()
+      : await ImagePicker.requestCameraPermissionsAsync();
+  if (perm.granted) return true;
+  toast.error(
+    kind === 'mediaLibrary'
+      ? '사진 접근 권한이 필요해요. 설정에서 허용해 주세요.'
+      : '카메라 접근 권한이 필요해요. 설정에서 허용해 주세요.',
+  );
+  return false;
+}
+
+/** RN 이 실제로 그릴 때 쓰는 크기 — 피커가 크기를 안 줬을 때의 최후 수단 */
+function measure(uri: string): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    Image.getSize(uri, (width, height) => resolve({ width, height }), reject);
   });
+}
+
+async function toPicked(asset: ImagePicker.ImagePickerAsset): Promise<PickedImage> {
+  if (asset.width > 0 && asset.height > 0) {
+    return { uri: asset.uri, width: asset.width, height: asset.height };
+  }
+  const size = await measure(asset.uri);
+  return { uri: asset.uri, ...size };
+}
+
+/** 갤러리에서 이미지 선택 → 원본 크기 포함 (취소/권한 거부 시 null) */
+export async function pickImageAsset(): Promise<PickedImage | null> {
+  if (!(await ensurePermission('mediaLibrary'))) return null;
+
+  const result = await ImagePicker.launchImageLibraryAsync(PICKER_OPTIONS);
   if (result.canceled || result.assets.length === 0) return null;
-  return result.assets[0].uri;
+  return toPicked(result.assets[0]);
+}
+
+/** 카메라 촬영 → 원본 크기 포함 (취소/권한 거부 시 null) */
+export async function takePhotoAsset(): Promise<PickedImage | null> {
+  if (!(await ensurePermission('camera'))) return null;
+
+  const result = await ImagePicker.launchCameraAsync(PICKER_OPTIONS);
+  if (result.canceled || result.assets.length === 0) return null;
+  return toPicked(result.assets[0]);
+}
+
+/** 갤러리에서 이미지 선택 → uri (취소/권한 거부 시 null) */
+export async function pickImage(): Promise<string | null> {
+  return (await pickImageAsset())?.uri ?? null;
 }
 
 /** 카메라 촬영 → uri (취소/권한 거부 시 null) */
 export async function takePhoto(): Promise<string | null> {
-  const perm = await ImagePicker.requestCameraPermissionsAsync();
-  if (!perm.granted) return null;
-
-  const result = await ImagePicker.launchCameraAsync({
-    mediaTypes: ['images'],
-    quality: 0.7,
-    allowsEditing: false,
-  });
-  if (result.canceled || result.assets.length === 0) return null;
-  return result.assets[0].uri;
+  return (await takePhotoAsset())?.uri ?? null;
 }
 
 async function buildFileForm(uri: string): Promise<FormData> {
