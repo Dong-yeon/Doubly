@@ -296,8 +296,11 @@ export function HomeScreen({ navigation }: Props) {
    * 상단바는 프로필 하나만 둔다.
    *
    * 예전에는 좌상단에 '배경' 버튼이 있었다 — 가장 눈에 띄는 자리를 <b>거의 안 쓰는
-   * 유틸리티</b>가 차지했다. 배경 변경은 MY > 설정으로 옮기고, 여기서는 사진을
-   * <b>길게 눌러</b> 바꿀 수 있게 남겨 둔다(자주 쓰는 사람을 위한 지름길).
+   * 유틸리티</b>가 차지했다. 대신 배경 화면 자체를 <b>길게 눌러</b> 바꿀 수 있게
+   * 남겨 둔다(자주 쓰는 사람을 위한 지름길) — 아직 배경을 안 정한 상태(그라데이션)에도
+   * 똑같이 동작해야 한다. 아래 배경 렌더링 블록(bgUrl 유무 분기) 참고 — 예전엔 배경이
+   * 있을 때만 long-press 가 붙어 있어서, 한 번도 배경을 안 정한 사람은 설정할 방법
+   * 자체가 없는 버그였다(P?-?? 홈 배경 변경 진입점 소실).
    */
   const topBar = (
     <View style={styles.topBar}>
@@ -319,24 +322,25 @@ export function HomeScreen({ navigation }: Props) {
 
   return (
     <View style={styles.root}>
-      {/* 배경화면은 화면 전체를 채운다 — 그 위 레이어는 모두 투명이다 */}
-      {bgUrl ? (
-        <Pressable
-          style={StyleSheet.absoluteFill}
-          onLongPress={connected ? onChangeBg : undefined}
-          accessibilityRole="button"
-          accessibilityLabel="배경 사진 — 길게 눌러 변경"
-        >
+      {/* 배경화면은 화면 전체를 채운다 — 그 위 레이어는 모두 투명이다.
+          배경이 있든 없든(그라데이션) 길게 눌러 정하거나 바꿀 수 있어야 한다. */}
+      <Pressable
+        style={StyleSheet.absoluteFill}
+        onLongPress={connected ? onChangeBg : undefined}
+        accessibilityRole="button"
+        accessibilityLabel={bgUrl ? '배경 사진 — 길게 눌러 변경' : '배경 사진 — 길게 눌러 설정'}
+      >
+        {bgUrl ? (
           <Image source={{ uri: bgUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-        </Pressable>
-      ) : (
-        <LinearGradient
-          colors={gradient()}
-          style={StyleSheet.absoluteFill}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        />
-      )}
+        ) : (
+          <LinearGradient
+            colors={gradient()}
+            style={StyleSheet.absoluteFill}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          />
+        )}
+      </Pressable>
       <LinearGradient
         colors={scrim()}
         locations={[0, 0.45, 1]}
@@ -532,7 +536,7 @@ const styles = themedStyles((colors) => ({
     borderWidth: 2,
     borderColor: colors.borderStrong,
   },
-  // topBar 좌측 — 예전 "배경 변경" 버튼이 있던 자리(지금은 MY>설정으로 옮겨 비어 있었다)
+  // topBar 좌측 — 예전 "배경 변경" 버튼이 있던 자리(지금은 배경 화면 길게 누르기로 대체)
   moodBtn: {
     flexDirection: 'row',
     alignItems: 'center',
