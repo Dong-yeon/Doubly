@@ -106,10 +106,14 @@ public enum Feature {
     /** 사귄 지 1년·연말 자동 생성 연간 결산 — WEEKLY_RECAP·AI_WEEKLY_LETTER 의 연 단위 확장. */
     ANNIVERSARY_RECAP("우리의 1년 리캡", Quota.blocked(), Quota.unlimited()),
     /**
-     * 운동 세션과 통화를 결합한 "같이 운동 라이브" — 통화 기능(PLAN.md 참고) 자체는
-     * 무료지만, 이 결합 기능만 PRO. 카카오톡이 대체할 수 없는 Doubly 고유 가치.
+     * 영상통화 — 통화 기능(PLAN.md 참고) 중 <b>영상만</b> PRO. 음성통화는 게이팅 없이
+     * 전부 무료(경쟁 커플 앱 비트윈도 무료 음성통화만 제공하고 영상통화 자체가 없음 —
+     * 이 카테고리에서 음성은 이미 표준, 영상이 Doubly만의 차별화 지점이라 여기를 판다).
+     * "같이 운동 라이브"(운동 세션+통화 결합)는 이 게이트 하나로 자동 포함된다 —
+     * 영상통화 자체가 막혀 있으면 그 위에 얹는 결합 기능도 당연히 막히므로 별도
+     * Feature 를 두지 않는다(2026-08 진단 리포트 제안, PRO_PLAN_DESIGN.md 참고).
      */
-    LIVE_WORKOUT_CALL("같이 운동 라이브", Quota.blocked(), Quota.unlimited()),
+    VIDEO_CALL("영상통화", Quota.blocked(), Quota.unlimited()),
     /**
      * 스트릭 복구권 — 끊긴 다음날 1회 이어붙이기. 강박 방지 원칙과 부합(끊김의 처벌 완화).
      */
@@ -179,8 +183,8 @@ public enum Feature {
                  PHOTO_UPLOAD,
                  // 대결·합산 목표는 본질적으로 커플 활동 — 둘 중 하나만 PRO 여도 함께 연다.
                  CHALLENGE_ACTIVE, COOP_GOAL_ACTIVE,
-                 // 파트너 회복 상태 비교·같이 운동 라이브는 상대 데이터가 전제라 개인 판정이 성립 안 함.
-                 WORKOUT_RECOVERY_FULL, LIVE_WORKOUT_CALL,
+                 // 파트너 회복 상태 비교·영상통화는 상대 데이터/상대와의 연결이 전제라 개인 판정이 성립 안 함.
+                 WORKOUT_RECOVERY_FULL, VIDEO_CALL,
                  // 무드 캘린더는 두 사람의 무드를 나란히 보여준다.
                  MOOD_CALENDAR_FULL,
                  // 연간 리캡·스트릭 복구권·기록 내보내기는 커플 단위 데이터(관계 전체 이력)를 다룬다.
