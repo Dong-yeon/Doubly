@@ -29,6 +29,7 @@ import { LockedCard } from '../../components/LockedCard';
 import { TouchGesturePicker } from '../../components/TouchGesturePicker';
 import { MoodPicker } from '../../components/MoodPicker';
 import { useAuthStore } from '../../store/authStore';
+import { usePlanStore } from '../../store/planStore';
 import { useRelationStore } from '../../store/relationStore';
 import { workoutApi } from '../../api/workout';
 import { analyticsApi } from '../../api/analytics';
@@ -50,6 +51,8 @@ import { haptics } from '../../utils/haptics';
 import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { getErrorMessage } from '../../utils/error';
+import { Alert } from '../../utils/alert';
+import { errorCodeOf } from '../../api/client';
 import { updateHomeWidget } from '../../widget/updateHomeWidget';
 import { touchGestureOf } from '../../constants/touchGestures';
 import { playTouchGesture } from '../../utils/haptics';
@@ -101,6 +104,9 @@ function recordLabel(item: FeedItem | null): string | null {
 export function HomeScreen({ navigation }: Props) {
   const user = useAuthStore((s) => s.user);
   const { couple, loading: relationLoading, fetchAll, setBackground, setAnniversary } = useRelationStore();
+  // 표시용 판정 — 모르면 열린 것으로 본다(planStore 주석 참고). 최종 판정은 서버가 한다.
+  const canUse = usePlanStore((s) => s.can);
+  const showUpgrade = usePlanStore((s) => s.showUpgrade);
 
   const [partner, setPartner] = useState<PartnerToday | null>(null);
   const [myStreak, setMyStreak] = useState<Streak | null>(null);
@@ -265,15 +271,67 @@ export function HomeScreen({ navigation }: Props) {
       .catch((e) => toast.error(getErrorMessage(e, '무드를 남기지 못했어요.')));
   };
 
-  const onChangeBg = async () => {
+  /*
+   * 배경 바꾸기 — 상단바 버튼과 화면 길게 누르기가 <b>같은 곳으로</b> 들어온다.
+   *
+   * <p><b>플랜은 사진을 고르기 전에 본다.</b> 예전에는 곧장 갤러리를 열고 Cloudinary
+   * 업로드까지 마친 <b>다음</b>에야 서버가 402 를 던졌다 — 무료 사용자는 사진을 고르고
+   * 기다린 끝에 거절당하고, 그 사이 <b>아무도 안 쓸 이미지가 이미 올라가</b> 있었다
+   * (업로드 한도와 비용은 그대로 나간다). TouchGesturePicker 와 같은 패턴이다: 여기는
+   * 우회 방지가 아니라 UX 고, 서버(RelationService)가 최종 판정을 한 번 더 한다.
+   *
+   * <p>배경이 이미 있으면 바로 갤러리를 열지 않고 먼저 물어본다 — 백엔드는 처음부터
+   * "null 이면 배경 해제"를 지원했는데 프론트에 그 경로가 없어, 한 번 정하면 기본
+   * 그라데이션으로 되돌릴 방법이 아예 없었다.
+   */
+  const onBackgroundPress = () => {
+    // 길게 누르기는 눌린 순간 아무 신호가 없으면 눌린 줄 모른다 — 제스처부터 받아준다.
+    haptics.light();
+    if (!canUse('CUSTOM_BACKGROUND')) {
+      showUpgrade('커플 배경 꾸미기는 PRO에서 이용할 수 있어요.');
+      return;
+    }
+    if (!bgUrl) {
+      void pickBackground();
+      return;
+    }
+    Alert.alert('배경 사진', '홈 배경을 바꾸거나 기본 배경으로 되돌려요.', [
+      { text: '사진 선택', onPress: () => void pickBackground() },
+      { text: '기본 배경으로', style: 'destructive', onPress: () => void clearBackground() },
+      { text: '취소', style: 'cancel' },
+    ]);
+  };
+
+  /**
+   * 402 는 여기서 토스트를 띄우지 않는다 — api/client 가 이미 업그레이드 시트를 열었다.
+   * 둘 다 띄우면 같은 사실을 두 번 알리고, 시트 뒤로 토스트가 겹쳐 뜬다.
+   */
+  const notifyUnless402 = (e: unknown, fallback: string) => {
+    const code = errorCodeOf(e);
+    if (code === 'PLAN_UPGRADE_REQUIRED' || code === 'PLAN_LIMIT_EXCEEDED') return;
+    toast.error(getErrorMessage(e, fallback));
+  };
+
+  const pickBackground = async () => {
     try {
       const uri = await pickImage();
       if (!uri) return;
       const url = await runBusy('배경 올리는 중…', () => uploadImage(uri));
       await setBackground(url);
+      haptics.success();
       toast.success('배경을 변경했어요 ');
     } catch (e) {
-      toast.error(getErrorMessage(e, '배경 변경에 실패했어요.'));
+      notifyUnless402(e, '배경 변경에 실패했어요.');
+    }
+  };
+
+  const clearBackground = async () => {
+    try {
+      await runBusy('배경 되돌리는 중…', () => setBackground(null));
+      haptics.success();
+      toast.success('기본 배경으로 되돌렸어요');
+    } catch (e) {
+      notifyUnless402(e, '배경을 되돌리지 못했어요.');
     }
   };
 
@@ -300,14 +358,17 @@ export function HomeScreen({ navigation }: Props) {
   };
 
   /*
-   * 상단바는 프로필 하나만 둔다.
+   * 상단바 — 좌측 무드, 우측 [배경][프로필].
    *
-   * 예전에는 좌상단에 '배경' 버튼이 있었다 — 가장 눈에 띄는 자리를 <b>거의 안 쓰는
-   * 유틸리티</b>가 차지했다. 대신 배경 화면 자체를 <b>길게 눌러</b> 바꿀 수 있게
-   * 남겨 둔다(자주 쓰는 사람을 위한 지름길) — 아직 배경을 안 정한 상태(그라데이션)에도
-   * 똑같이 동작해야 한다. 아래 배경 렌더링 블록(bgUrl 유무 분기) 참고 — 예전엔 배경이
-   * 있을 때만 long-press 가 붙어 있어서, 한 번도 배경을 안 정한 사람은 설정할 방법
-   * 자체가 없는 버그였다(P?-?? 홈 배경 변경 진입점 소실).
+   * <p>예전에는 좌상단 '배경' 버튼을 없애고 <b>배경 화면 길게 누르기</b> 하나만 남겼다.
+   * 가장 눈에 띄는 자리를 거의 안 쓰는 유틸리티가 차지한다는 이유였는데, 그러면
+   * <b>길게 누를 수 있다는 걸 알 방법이 없다</b> — 안내 문구는 accessibilityLabel 에만
+   * 있어서 스크린리더 사용자만 아는 기능이 됐다. 그래서 아이콘 버튼으로 되돌리되,
+   * 이번엔 우측에 작게 둔다(무드가 좌측 자리를 이미 쓰고 있다). 길게 누르기는
+   * <b>지름길로 그대로 유지</b>한다 — 아래 stage 블록 참고.
+   *
+   * <p>배경은 커플 공유 자산이라 미연결 상태에서는 버튼도 내린다(백엔드도
+   * activeCouple 을 요구한다). 길게 누르기의 disabled 조건과 같은 값을 쓴다.
    */
   const topBar = (
     <View style={styles.topBar}>
@@ -321,22 +382,62 @@ export function HomeScreen({ navigation }: Props) {
         <Text style={styles.moodBtnEmoji}>{mood?.mine?.emoji ?? '🙂'}</Text>
         <Text style={styles.moodBtnText}>{mood?.mine ? '기분 바꾸기' : '기분 남기기'}</Text>
       </Pressable>
-      <Pressable style={styles.profileBtn} onPress={() => navigation.navigate('My')} hitSlop={8}>
-        <Avatar name={user?.name} imageUrl={user?.profileImageUrl} size={32} color={colors.primaryDark} />
-      </Pressable>
+      <View style={styles.topBarRight}>
+        {connected ? (
+          <Pressable
+            style={styles.bgBtn}
+            onPress={onBackgroundPress}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={bgUrl ? '배경 사진 변경' : '배경 사진 설정'}
+            accessibilityHint="화면을 길게 눌러도 바꿀 수 있어요"
+          >
+            <MaterialCommunityIcons name="image-outline" size={20} color={colors.textPrimary} />
+          </Pressable>
+        ) : null}
+        <Pressable style={styles.profileBtn} onPress={() => navigation.navigate('My')} hitSlop={8}>
+          <Avatar name={user?.name} imageUrl={user?.profileImageUrl} size={32} color={colors.primaryDark} />
+        </Pressable>
+      </View>
     </View>
   );
 
   return (
     <View style={styles.root}>
-      {/* 배경화면은 화면 전체를 채운다 — 그 위 레이어는 모두 투명이다.
-          배경이 있든 없든(그라데이션) 길게 눌러 정하거나 바꿀 수 있어야 한다. */}
+      {/*
+        길게 눌러 배경 바꾸기 — 이 Pressable 은 <b>배경 레이어가 아니라 화면 전체의
+        조상</b>이어야 한다.
+
+        <p>예전에는 배경 이미지에만 Pressable 을 씌우고 콘텐츠를 그 <b>형제</b>로
+        뒀다. RN 의 리스폰더 협상은 터치가 닿은 뷰에서 <b>조상 방향으로만</b> 올라가는데,
+        전체를 덮는 SafeAreaView(그리고 그 안의 레이아웃 View 들)가 pointerEvents 를
+        열어둔 채 위에 얹혀 있으니 터치가 형제인 배경까지 <b>절대 내려오지 않았다</b> —
+        기능은 있는데 아무 데서도 안 눌리는 상태였다.
+
+        <p>조상으로 올리면 그 경로가 뒤집힌다. 버튼(자식 Pressable) 위에서는 자식이
+        먼저 리스폰더를 잡아 배경이 안 바뀌고, 빈 공간·글씨처럼 아무도 안 잡는 자리에서만
+        여기까지 버블링돼 갤러리가 열린다 — 원하는 동작 그대로다. 아래 기념일 모달의
+        backdrop 이 같은 원리를 쓴다(카드 탭이 backdrop 까지 올라가지 않게 안쪽에 빈
+        Pressable 을 하나 끼워 둔 것).
+
+        <p><b>모달들은 이 Pressable 밖에 둔다.</b> RN 의 이벤트 버블링은 네이티브 계층이
+        아니라 <b>React 트리</b>를 타므로, 안에 넣으면 모달 위 길게 누르기가 여기까지
+        올라온다.
+
+        <p><b>accessible 을 false 로 내리는 건 필수다.</b> Pressable 은 그 기본값이 true 라
+        화면 전체를 감싸면 iOS VoiceOver 에서 홈 전체가 <b>덩어리 하나</b>로 뭉개진다.
+        접근성 진입점은 상단바의 배경 버튼이 맡는다(topBar 주석 참고).
+      */}
       <Pressable
-        style={StyleSheet.absoluteFill}
-        onLongPress={connected ? onChangeBg : undefined}
-        accessibilityRole="button"
-        accessibilityLabel={bgUrl ? '배경 사진 — 길게 눌러 변경' : '배경 사진 — 길게 눌러 설정'}
+        style={styles.stage}
+        onLongPress={onBackgroundPress}
+        // 배경은 커플 공유 자산이다 — 미연결 상태에서는 리스폰더 경쟁 자체를 없앤다
+        // (미연결 화면은 ScrollView 라 제스처가 겹칠 이유를 만들지 않는 편이 낫다).
+        disabled={!connected}
+        accessible={false}
       >
+        {/* 배경화면은 화면 전체를 채운다 — 그 위 레이어는 모두 투명이다.
+            배경이 있든 없든(그라데이션) 길게 눌러 정하거나 바꿀 수 있어야 한다. */}
         {bgUrl ? (
           <Image source={{ uri: bgUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
         ) : (
@@ -347,138 +448,138 @@ export function HomeScreen({ navigation }: Props) {
             end={{ x: 1, y: 1 }}
           />
         )}
-      </Pressable>
-      <LinearGradient
-        colors={scrim()}
-        locations={[0, 0.45, 1]}
-        style={StyleSheet.absoluteFill}
-        pointerEvents="none"
-      />
+        <LinearGradient
+          colors={scrim()}
+          locations={[0, 0.45, 1]}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
 
-      <SafeAreaView style={styles.safe} edges={['top']}>
-        {topBar}
+        <SafeAreaView style={styles.safe} edges={['top']}>
+          {topBar}
 
-        {connected ? (
-          <View style={styles.body}>
-            {/* 남는 세로 공간을 히어로가 먹는다 → 아래 두 줄은 항상 바닥에 붙는다 */}
-            <View style={styles.heroSlot}>
-              <CoupleHero
-                me={{
-                  name: user?.name ?? '나',
-                  imageUrl: user?.profileImageUrl,
-                  workoutDone: myWorkoutDone,
-                  mealDone: myMealDone,
-                  streak: myStreak?.currentCount ?? 0,
-                  latestLabel: recordLabel(myLatest),
-                  latestTime: myLatest ? feedTimeLabel(myLatest.occurredAt) : null,
-                  moodEmoji: mood?.mine?.emoji,
-                }}
-                partner={{
-                  name: partner?.partnerName ?? couple?.partner?.name ?? '상대방',
-                  imageUrl: couple?.partner?.profileImageUrl,
-                  workoutDone: !!partner?.completed,
-                  mealDone: !!partnerMeal?.completed,
-                  streak: partnerStreak?.currentCount ?? 0,
-                  latestLabel: recordLabel(partnerLatest),
-                  latestTime: partnerLatest ? feedTimeLabel(partnerLatest.occurredAt) : null,
-                  moodEmoji: mood?.partner?.emoji,
-                }}
-                dday={dday}
-                anniversaryDate={couple?.anniversaryDate ?? null}
-                onPressDday={openAnnModal}
-                // 예전엔 어느 열을 눌러도 똑같이 전체 '우리 기록'으로 갔다 —
-                // 그 화면은 바로 아래 바로가기에도 있어 버튼 기능이 겹쳤다.
-                // 열을 누르면 그 사람 기록만 거른 화면으로 간다.
-                onPressPerson={(who) => navigation.navigate('FeedTimeline', { who })}
-                /*
-                 * 운동/식단 칩 — 예전엔 중앙 FAB 로 "탭 안 옮기고 바로 기록"이 가능했다.
-                 * FAB 를 없앤 대신, 이 칩이 그 역할을 대신하도록 목적지를 완료 여부로 가른다:
-                 * 오늘 안 했으면 기록 화면으로 바로(FAB 와 동급 속도), 이미 했으면 그 탭의
-                 * 메인 화면으로(확인·수정). 어느 열(나/상대)을 눌렀는지는 지금처럼 무시한다 —
-                 * 두 화면 모두 로그인한 나의 기록만 보여준다(상대 것을 보는 화면은 앱에 따로
-                 * 없다). 그래서 분기 기준도 항상 "나"의 완료 여부(myWorkoutDone/myMealDone)지,
-                 * 눌린 열의 done 이 아니다.
-                 */
-                onPressToday={(_who, kind) =>
-                  kind === 'workout'
-                    ? navigation.navigate('Workout', { screen: myWorkoutDone ? 'WorkoutMain' : 'WorkoutRecord' })
-                    : navigation.navigate('Diet', { screen: myMealDone ? 'DietMain' : 'DietRecord' })
-                }
+          {connected ? (
+            <View style={styles.body}>
+              {/* 남는 세로 공간을 히어로가 먹는다 → 아래 두 줄은 항상 바닥에 붙는다 */}
+              <View style={styles.heroSlot}>
+                <CoupleHero
+                  me={{
+                    name: user?.name ?? '나',
+                    imageUrl: user?.profileImageUrl,
+                    workoutDone: myWorkoutDone,
+                    mealDone: myMealDone,
+                    streak: myStreak?.currentCount ?? 0,
+                    latestLabel: recordLabel(myLatest),
+                    latestTime: myLatest ? feedTimeLabel(myLatest.occurredAt) : null,
+                    moodEmoji: mood?.mine?.emoji,
+                  }}
+                  partner={{
+                    name: partner?.partnerName ?? couple?.partner?.name ?? '상대방',
+                    imageUrl: couple?.partner?.profileImageUrl,
+                    workoutDone: !!partner?.completed,
+                    mealDone: !!partnerMeal?.completed,
+                    streak: partnerStreak?.currentCount ?? 0,
+                    latestLabel: recordLabel(partnerLatest),
+                    latestTime: partnerLatest ? feedTimeLabel(partnerLatest.occurredAt) : null,
+                    moodEmoji: mood?.partner?.emoji,
+                  }}
+                  dday={dday}
+                  anniversaryDate={couple?.anniversaryDate ?? null}
+                  onPressDday={openAnnModal}
+                  // 예전엔 어느 열을 눌러도 똑같이 전체 '우리 기록'으로 갔다 —
+                  // 그 화면은 바로 아래 바로가기에도 있어 버튼 기능이 겹쳤다.
+                  // 열을 누르면 그 사람 기록만 거른 화면으로 간다.
+                  onPressPerson={(who) => navigation.navigate('FeedTimeline', { who })}
+                  /*
+                   * 운동/식단 칩 — 예전엔 중앙 FAB 로 "탭 안 옮기고 바로 기록"이 가능했다.
+                   * FAB 를 없앤 대신, 이 칩이 그 역할을 대신하도록 목적지를 완료 여부로 가른다:
+                   * 오늘 안 했으면 기록 화면으로 바로(FAB 와 동급 속도), 이미 했으면 그 탭의
+                   * 메인 화면으로(확인·수정). 어느 열(나/상대)을 눌렀는지는 지금처럼 무시한다 —
+                   * 두 화면 모두 로그인한 나의 기록만 보여준다(상대 것을 보는 화면은 앱에 따로
+                   * 없다). 그래서 분기 기준도 항상 "나"의 완료 여부(myWorkoutDone/myMealDone)지,
+                   * 눌린 열의 done 이 아니다.
+                   */
+                  onPressToday={(_who, kind) =>
+                    kind === 'workout'
+                      ? navigation.navigate('Workout', { screen: myWorkoutDone ? 'WorkoutMain' : 'WorkoutRecord' })
+                      : navigation.navigate('Diet', { screen: myMealDone ? 'DietMain' : 'DietRecord' })
+                  }
+                />
+              </View>
+
+              {/*
+                추억이 있는 날에만 한 줄이 붙는다. 대부분의 날은 비어 있다.
+                공용 "최근 기록" 줄은 없앴다 — 좌우 열이 각자의 마지막 기록을 이미 보여준다.
+              */}
+              {memories ? (
+                memories.locked ? (
+                  <LockedCard
+                    title="작년 오늘"
+                    description="함께한 기록을 해마다 다시 꺼내볼 수 있어요"
+                    upgradeMessage="작년 오늘의 추억은 PRO에서 볼 수 있어요."
+                  />
+                ) : (
+                  <MemoryPeek memories={memories} onPress={() => navigation.navigate('Memories')} />
+                )
+              ) : null}
+
+              <QuickActions
+                actions={[
+                  { icon: 'timeline-text-outline', label: '우리 기록', onPress: () => navigation.navigate('FeedTimeline') },
+                  { icon: 'image-plus', label: '일상', onPress: () => navigation.navigate('FeedCompose') },
+                  { icon: 'comment-question-outline', label: '질문', onPress: () => navigation.navigate('DailyQuestion') },
+                  { icon: 'calendar-heart', label: '캘린더', onPress: () => navigation.navigate('CoupleCalendar') },
+                  { icon: 'image-multiple-outline', label: '사진첩', onPress: () => navigation.navigate('PhotoAlbum') },
+                  { icon: 'hand-heart-outline', label: '터치', onPress: () => setShowTouchPicker(true) },
+                ]}
               />
             </View>
+          ) : (
+            /*
+             * 미연결 상태만 스크롤을 허용한다 — 연결 안내 + 혼자 시작하기 목록이
+             * 작은 화면에서 한 눈에 안 들어올 수 있다. 연결되면 고정 화면으로 바뀐다.
+             */
+            <ScrollView contentContainerStyle={styles.disconnected} showsVerticalScrollIndicator={false}>
+              <View style={styles.connectWrap}>
+                <MaterialCommunityIcons name="account-multiple-plus-outline" size={40} color={colors.primary} />
+                <Text style={styles.connectTitle}>커플을 연결해보세요</Text>
+                <Text style={styles.connectDesc}>초대코드로 연결하면 우리의 기록이 시작돼요.</Text>
+                <TouchableOpacity style={styles.connectBtn} onPress={() => navigation.navigate('CoupleConnect')}>
+                  <Text style={styles.connectBtnText}>커플 연결하기</Text>
+                </TouchableOpacity>
+              </View>
 
-            {/*
-              추억이 있는 날에만 한 줄이 붙는다. 대부분의 날은 비어 있다.
-              공용 "최근 기록" 줄은 없앴다 — 좌우 열이 각자의 마지막 기록을 이미 보여준다.
-            */}
-            {memories ? (
-              memories.locked ? (
-                <LockedCard
-                  title="작년 오늘"
-                  description="함께한 기록을 해마다 다시 꺼내볼 수 있어요"
-                  upgradeMessage="작년 오늘의 추억은 PRO에서 볼 수 있어요."
-                />
-              ) : (
-                <MemoryPeek memories={memories} onPress={() => navigation.navigate('Memories')} />
-              )
-            ) : null}
-
-            <QuickActions
-              actions={[
-                { icon: 'timeline-text-outline', label: '우리 기록', onPress: () => navigation.navigate('FeedTimeline') },
-                { icon: 'image-plus', label: '일상', onPress: () => navigation.navigate('FeedCompose') },
-                { icon: 'comment-question-outline', label: '질문', onPress: () => navigation.navigate('DailyQuestion') },
-                { icon: 'calendar-heart', label: '캘린더', onPress: () => navigation.navigate('CoupleCalendar') },
-                { icon: 'image-multiple-outline', label: '사진첩', onPress: () => navigation.navigate('PhotoAlbum') },
-                { icon: 'hand-heart-outline', label: '터치', onPress: () => setShowTouchPicker(true) },
-              ]}
-            />
-          </View>
-        ) : (
-          /*
-           * 미연결 상태만 스크롤을 허용한다 — 연결 안내 + 혼자 시작하기 목록이
-           * 작은 화면에서 한 눈에 안 들어올 수 있다. 연결되면 고정 화면으로 바뀐다.
-           */
-          <ScrollView contentContainerStyle={styles.disconnected} showsVerticalScrollIndicator={false}>
-            <View style={styles.connectWrap}>
-              <MaterialCommunityIcons name="account-multiple-plus-outline" size={40} color={colors.primary} />
-              <Text style={styles.connectTitle}>커플을 연결해보세요</Text>
-              <Text style={styles.connectDesc}>초대코드로 연결하면 우리의 기록이 시작돼요.</Text>
-              <TouchableOpacity style={styles.connectBtn} onPress={() => navigation.navigate('CoupleConnect')}>
-                <Text style={styles.connectBtnText}>커플 연결하기</Text>
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.soloTitle}>연결을 기다리는 동안, 혼자서도 시작할 수 있어요</Text>
-            <Card elevation="sm" style={styles.soloCard}>
-              {(
-                [
-                  { icon: 'dumbbell', label: '운동 기록하기', desc: '오늘 운동을 남기면 스트릭이 시작돼요', go: () => navigation.navigate('Workout', { screen: 'WorkoutRecord' }) },
-                  { icon: 'silverware-fork-knife', label: '식단 기록하기', desc: '사진이나 글로 적으면 AI가 칼로리를 계산해요', go: () => navigation.navigate('Diet', { screen: 'DietRecord' }) },
-                  { icon: 'map-marker-plus-outline', label: '가고 싶은 장소 저장', desc: '맛집, 여행지, 전시… 둘이 함께 갈 곳을 미리 담아두세요', go: () => navigation.navigate('Place', { screen: 'PlaceAdd' }) },
-                ] as const
-              ).map((a, i, arr) => (
-                <React.Fragment key={a.label}>
-                  <Pressable
-                    style={({ pressed }) => [styles.soloItem, pressed && styles.soloPressed]}
-                    onPress={a.go}
-                  >
-                    <View style={styles.soloIcon}>
-                      <MaterialCommunityIcons name={a.icon} size={22} color={colors.primary} />
-                    </View>
-                    <View style={styles.soloBody}>
-                      <Text style={styles.soloLabel}>{a.label}</Text>
-                      <Text style={styles.soloDesc}>{a.desc}</Text>
-                    </View>
-                    <Text style={styles.soloChevron}>›</Text>
-                  </Pressable>
-                  {i < arr.length - 1 ? <View style={styles.soloDivider} /> : null}
-                </React.Fragment>
-              ))}
-            </Card>
-          </ScrollView>
-        )}
-      </SafeAreaView>
+              <Text style={styles.soloTitle}>연결을 기다리는 동안, 혼자서도 시작할 수 있어요</Text>
+              <Card elevation="sm" style={styles.soloCard}>
+                {(
+                  [
+                    { icon: 'dumbbell', label: '운동 기록하기', desc: '오늘 운동을 남기면 스트릭이 시작돼요', go: () => navigation.navigate('Workout', { screen: 'WorkoutRecord' }) },
+                    { icon: 'silverware-fork-knife', label: '식단 기록하기', desc: '사진이나 글로 적으면 AI가 칼로리를 계산해요', go: () => navigation.navigate('Diet', { screen: 'DietRecord' }) },
+                    { icon: 'map-marker-plus-outline', label: '가고 싶은 장소 저장', desc: '맛집, 여행지, 전시… 둘이 함께 갈 곳을 미리 담아두세요', go: () => navigation.navigate('Place', { screen: 'PlaceAdd' }) },
+                  ] as const
+                ).map((a, i, arr) => (
+                  <React.Fragment key={a.label}>
+                    <Pressable
+                      style={({ pressed }) => [styles.soloItem, pressed && styles.soloPressed]}
+                      onPress={a.go}
+                    >
+                      <View style={styles.soloIcon}>
+                        <MaterialCommunityIcons name={a.icon} size={22} color={colors.primary} />
+                      </View>
+                      <View style={styles.soloBody}>
+                        <Text style={styles.soloLabel}>{a.label}</Text>
+                        <Text style={styles.soloDesc}>{a.desc}</Text>
+                      </View>
+                      <Text style={styles.soloChevron}>›</Text>
+                    </Pressable>
+                    {i < arr.length - 1 ? <View style={styles.soloDivider} /> : null}
+                  </React.Fragment>
+                ))}
+              </Card>
+            </ScrollView>
+          )}
+        </SafeAreaView>
+      </Pressable>
 
       {/* 기념일 설정 모달 */}
       <Modal visible={annModal} transparent animationType="fade" onRequestClose={() => setAnnModal(false)}>
@@ -524,6 +625,9 @@ export function HomeScreen({ navigation }: Props) {
 
 const styles = themedStyles((colors) => ({
   root: { flex: 1, backgroundColor: colors.background },
+  // 배경·스크림·콘텐츠를 함께 담는 무대 — 길게 누르기 Pressable 이 여기다(위 주석 참고).
+  // absoluteFill 이 아니라 flex 로 자리를 잡는다: 형제가 아니라 조상이어야 터치가 닿는다.
+  stage: { flex: 1 },
   safe: { flex: 1, backgroundColor: 'transparent' },
 
   topBar: {
@@ -532,6 +636,18 @@ const styles = themedStyles((colors) => ({
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
+  },
+  // 우측 묶음 — [배경][프로필]
+  topBarRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  // 배경 변경 — 사진 위에 놓이므로 아이콘만 두면 밝은 배경에서 묻힌다. 무드 버튼과
+  // 같은 표면색 알약으로 깔아 대비를 만든다(크기는 프로필과 같은 최소 터치 타깃).
+  bgBtn: {
+    minWidth: layout.touchTarget,
+    minHeight: layout.touchTarget,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceAlt,
   },
   // 아바타는 32px 이라 테두리를 더해도 36px 이다 — hitSlop 이 안 먹는 웹을 위해 크기를 보장한다
   profileBtn: {
@@ -543,7 +659,7 @@ const styles = themedStyles((colors) => ({
     borderWidth: 2,
     borderColor: colors.borderStrong,
   },
-  // topBar 좌측 — 예전 "배경 변경" 버튼이 있던 자리(지금은 배경 화면 길게 누르기로 대체)
+  // topBar 좌측 — 배경 버튼은 우측(topBarRight)으로 갔고 이 자리는 무드가 쓴다
   moodBtn: {
     flexDirection: 'row',
     alignItems: 'center',
