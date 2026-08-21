@@ -79,7 +79,7 @@ com.fitto
 └── trainer/       # 트레이너 프로필·대시보드·루틴 (phase 6~7)
 ```
 
-DB 스키마는 `backend/src/main/resources/db/migration/` 의 Flyway 마이그레이션(V1~V55)에 정의되어
+DB 스키마는 `backend/src/main/resources/db/migration/` 의 Flyway 마이그레이션(V1~V56)에 정의되어
 있습니다. 핵심 테이블: users / relations / trainer_profiles / workouts / workout_sets /
 trainer_routines / chat_messages / streaks / device_tokens / meals / places / place_visits /
 feed_posts(+trip_id 앨범 연동) / feed_reactions / trips / trip_items(일자별 일정표) /
@@ -88,7 +88,7 @@ password_reset_tokens(비밀번호 재설정 인증코드) / couple_events(커�
 water_logs(물 섭취 트래커) / fasting_sessions(간헐적 단식 타이머) /
 meal_items(식단 항목 편집) / routine_exercise_sets(루틴 세트별 목표) /
 workout_routine_days(루틴 요일 배정) / voice_clips(커플 음성 응원) /
-mood_statuses(무드 상태) / couple_characters(커플 캐릭터 — 도메인 레이어만) /
+mood_statuses(무드 상태) /
 routine_gifts(루틴 선물하기) / place_ratings(럽슐랭 대표 평점 — 장소당 1인 1개, 재평가는
 upsert. `place_visits.rating`과 별개 개념) / call_sessions(통화·영상통화 — 1단계 백엔드만,
 PLAN.md 참고).
@@ -353,11 +353,12 @@ RelationType
 
 ## 게임화 — 육성 시스템 (보류)
 
-> **상태: 보류.** 기록을 유도하려고 홈에 **육성 요소**(캐릭터·나무·섬)를 넣는 방향을
-> 검토했다가 접었습니다. **기능을 다듬는 쪽을 먼저 하기로** 했습니다.
-> 단, `couple_characters`(V45) 도메인 레이어(엔티티·리포지토리)만 실험적으로 만들어져
-> 있습니다 — 서비스·컨트롤러·화면은 없어 사용자에게 노출되지 않습니다.
-> 아래는 다시 꺼낼 때를 위한 검토 기록입니다.
+> **상태: 보류 → 정리 완료(2026-08-21).** 기록을 유도하려고 홈에 **육성 요소**
+> (캐릭터·나무·섬)를 넣는 방향을 검토했다가 접었습니다. **기능을 다듬는 쪽을 먼저
+> 하기로** 했습니다. `couple_characters`(V45) 도메인 레이어(엔티티·리포지토리)만
+> 서비스·컨트롤러·화면 없이 운영 DB에 남아 있던 걸 진단 리포트가 드리프트로 지목했고,
+> 다시 열지 드롭할지를 판단한 결과 **드롭으로 확정**해 테이블(V56)과 코드를 함께
+> 정리했습니다. 아래는 다시 꺼낼 때를 위한 검토 기록입니다.
 
 ### 검토한 방향과 결론
 
@@ -869,7 +870,7 @@ point_ledger              -- 포인트 적립·사용 내역 (잔액을 컬럼�
 | 확장 | 운동 홈 화면 진입점 정리 (내 루틴 임베드 + 짐워크 스타일 CTA) | ✅ 완료 |
 | 확장 | AI 추천 맞춤 루틴 만들기 | ✅ 완료 |
 | 확장 | 운동 추가/루틴 대체/세션 교체 종목 선택 — 부위→기구 필터 공통 모달(`ExercisePickerModal`) | ✅ 완료 |
-| 게임화(보류) | 커플 캐릭터 도메인 레이어 프로토타입 (`couple_characters`, 엔티티·리포지토리만 — 서비스·화면 없음) | 🚧 실험적 |
+| 게임화(보류) | 커플 캐릭터 도메인 레이어 프로토타입 — 진단 리포트가 드리프트로 지목해 드롭 확정, 테이블(V56)·코드 정리 | ✗ 드롭 |
 | 통화 · 영상통화 | 1단계 — `call_sessions`(V55) + 백엔드 API(발신/수락/거절/종료/기록·Stream 토큰 발급) + 24시간 안전장치 — PLAN.md | ✅ 완료(백엔드만) |
 | 통화 · 영상통화 | 2단계 — 프론트 SDK 통합 + `CallScreen` (포그라운드 통화) | 🚧 예정 |
 | 통화 · 영상통화 | 3단계 — 네이티브 벨 웨이크업(VoIP push + CallKit/ConnectionService) | 🚧 예정 |
