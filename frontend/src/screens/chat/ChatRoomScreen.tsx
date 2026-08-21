@@ -1,5 +1,5 @@
 /** 채팅 대화 — 설계서 2.5 / 4.5 CHAT-02 (실시간 메시지) */
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -24,6 +24,8 @@ import { Avatar } from '../../components/Avatar';
 import { useChatStore } from '../../store/chatStore';
 import { useAuthStore } from '../../store/authStore';
 import { useRelationStore } from '../../store/relationStore';
+import { useCallStore } from '../../store/callStore';
+import { callApi, CallType } from '../../api/call';
 import { haptics } from '../../utils/haptics';
 import { pickImage, uploadImage } from '../../utils/imageUpload';
 import { getErrorMessage } from '../../utils/error';
@@ -150,9 +152,78 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     setText((prev) => applyAllSuggestions(prev, checkKoreanSpelling(prev)));
   };
 
+  /*
+   * 통화 발신 — 이 화면은 걸기만 담당한다. 벨·통화 중 UI는 전역 CallOverlay(App.tsx)가
+   * 어느 화면에서든 뜨므로, 여기서는 세션 생성(callApi.start)과 Stream 콜 오브젝트 생성
+   * (client.call().getOrCreate({ring:true}))까지만 하면 나머지는 오버레이가 이어받는다.
+   */
+  const callClient = useCallStore((s) => s.client);
+  const [callStarting, setCallStarting] = useState(false);
+  const partnerId = couple?.partner?.id;
+
+  const startCall = useCallback(
+    async (callType: CallType) => {
+      if (!callClient) {
+        toast.error('통화 기능을 준비하지 못했어요. 잠시 후 다시 시도해주세요.');
+        return;
+      }
+      if (!myId || !partnerId || callStarting) return;
+      setCallStarting(true);
+      let joinedCallId: string | null = null;
+      try {
+        const joined = await callApi.start(callType);
+        joinedCallId = joined.callId;
+        const call = callClient.call('default', joined.callId);
+        await call.getOrCreate({
+          ring: true,
+          video: callType === 'VIDEO',
+          data: {
+            members: [{ user_id: String(myId) }, { user_id: String(partnerId) }],
+            // 음성통화는 카메라를 처음부터 꺼둔다 — CallOverlay 가 곧바로 벨 화면을 띄운다
+            settings_override: callType === 'VOICE' ? { video: { camera_default_on: false } } : undefined,
+          },
+        });
+      } catch (e) {
+        // Stream 쪽 콜 생성이 실패해도 우리 세션은 이미 RINGING 으로 남아있다 —
+        // 24시간 안전장치를 기다리지 않고 바로 정리한다(상대에게 헛벨이 안 뜬 상태이므로 무해).
+        if (joinedCallId) callApi.end(joinedCallId).catch(() => undefined);
+        toast.error(getErrorMessage(e));
+      } finally {
+        setCallStarting(false);
+      }
+    },
+    [callClient, myId, partnerId, callStarting],
+  );
+
   useLayoutEffect(() => {
-    navigation.setOptions({ title });
-  }, [navigation, title]);
+    navigation.setOptions({
+      title,
+      headerRight: () => (
+        <View style={styles.headerCallActions}>
+          <Pressable
+            onPress={() => startCall('VOICE')}
+            disabled={callStarting}
+            style={({ pressed }) => [styles.headerCallButton, pressed && styles.headerCallButtonPressed]}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="음성통화 걸기"
+          >
+            <MaterialCommunityIcons name="phone" size={22} color={colors.textPrimary} />
+          </Pressable>
+          <Pressable
+            onPress={() => startCall('VIDEO')}
+            disabled={callStarting}
+            style={({ pressed }) => [styles.headerCallButton, pressed && styles.headerCallButtonPressed]}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="영상통화 걸기"
+          >
+            <MaterialCommunityIcons name="video" size={22} color={colors.textPrimary} />
+          </Pressable>
+        </View>
+      ),
+    });
+  }, [navigation, title, startCall, callStarting]);
 
   useEffect(() => {
     openRoom(relationId);
@@ -787,6 +858,9 @@ function ExtraButton({
 const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
+  headerCallActions: { flexDirection: 'row', alignItems: 'center', paddingRight: spacing.xs },
+  headerCallButton: { minWidth: 40, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  headerCallButtonPressed: { opacity: 0.6 },
   list: { padding: spacing.md },
   // 그룹 간 세로 간격은 msgBlock(정상 메시지)·row(삭제된 메시지)가 각각 spaced/grouped 로 담당한다
   row: { maxWidth: '80%', flexDirection: 'row', alignItems: 'flex-end' },

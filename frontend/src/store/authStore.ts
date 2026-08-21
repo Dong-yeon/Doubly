@@ -10,6 +10,7 @@ import { storage } from '../utils/storage';
 import { registerPushTokenIfGranted } from '../utils/push';
 import { useChatStore } from './chatStore';
 import { usePlanStore } from './planStore';
+import { useCallStore } from './callStore';
 import type { AuthTokens, Gender, User } from '../types';
 
 interface AuthState {
@@ -40,8 +41,9 @@ interface AuthState {
 async function clearTokens() {
   await storage.removeItem(STORAGE_KEYS.accessToken);
   await storage.removeItem(STORAGE_KEYS.refreshToken);
-  // 세션 종료 시 채팅 소켓 정리
+  // 세션 종료 시 채팅 소켓·통화 클라이언트 정리
   useChatStore.getState().teardown();
+  void useCallStore.getState().teardown();
 }
 
 async function persistTokens(tokens: AuthTokens) {
@@ -69,6 +71,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       registerPushTokenIfGranted();
       // 플랜·잔여 한도 로드 — 실패해도 앱은 그대로 동작한다(서버가 최종 판정을 한다)
       void usePlanStore.getState().load();
+      // 통화 클라이언트 연결 — 연결돼 있어야 상대의 발신을 받을 수 있다(선택 기능, 실패 무시)
+      void useCallStore.getState().init();
     } catch {
       await clearTokens();
       set({ user: null, isAuthenticated: false, isLoading: false });
@@ -82,6 +86,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     registerPushTokenIfGranted();
     // 로그인 직후에도 플랜을 읽는다 — 계정이 바뀌면 한도도 바뀐다
     void usePlanStore.getState().load();
+    // 통화 클라이언트 연결(선택 기능, 실패 무시)
+    void useCallStore.getState().init();
   },
 
   login: async (email, password) => {
@@ -136,5 +142,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 // refresh 실패 시(client 인터셉터) 세션을 비인증으로 전환. 토큰은 이미 정리됨.
 setAuthFailureHandler(() => {
   useChatStore.getState().teardown();
+  void useCallStore.getState().teardown();
   useAuthStore.setState({ user: null, isAuthenticated: false });
 });

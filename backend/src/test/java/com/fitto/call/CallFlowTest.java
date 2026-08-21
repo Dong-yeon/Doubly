@@ -55,7 +55,7 @@ class CallFlowTest {
         assertThat(joined.callId()).isNotBlank();
         assertThat(joined.token()).isNotBlank();
 
-        CallSessionResponse fromB = callService.get(b, joined.callSessionId());
+        CallSessionResponse fromB = callService.get(b, joined.callId());
         assertThat(fromB.status()).isEqualTo(CallStatus.RINGING);
         assertThat(fromB.callType()).isEqualTo(CallType.VOICE);
     }
@@ -67,8 +67,8 @@ class CallFlowTest {
         connectCouple(a, b);
 
         CallJoinResponse joined = callService.start(a, new StartCallRequest(CallType.VIDEO));
-        callService.accept(b, joined.callSessionId());
-        CallSessionResponse ended = callService.end(a, joined.callSessionId());
+        callService.accept(b, joined.callId());
+        CallSessionResponse ended = callService.end(a, joined.callId());
 
         assertThat(ended.status()).isEqualTo(CallStatus.ENDED);
         assertThat(ended.startedAt()).isNotNull();
@@ -82,7 +82,7 @@ class CallFlowTest {
         connectCouple(a, b);
 
         CallJoinResponse joined = callService.start(a, new StartCallRequest(CallType.VOICE));
-        CallSessionResponse ended = callService.end(a, joined.callSessionId());
+        CallSessionResponse ended = callService.end(a, joined.callId());
 
         assertThat(ended.status()).isEqualTo(CallStatus.MISSED);
     }
@@ -94,7 +94,7 @@ class CallFlowTest {
         connectCouple(a, b);
 
         CallJoinResponse joined = callService.start(a, new StartCallRequest(CallType.VOICE));
-        CallSessionResponse declined = callService.decline(b, joined.callSessionId());
+        CallSessionResponse declined = callService.decline(b, joined.callId());
 
         assertThat(declined.status()).isEqualTo(CallStatus.DECLINED);
     }
@@ -129,7 +129,7 @@ class CallFlowTest {
 
         CallJoinResponse joined = callService.start(a, new StartCallRequest(CallType.VOICE));
 
-        assertThatThrownBy(() -> callService.get(stranger, joined.callSessionId()))
+        assertThatThrownBy(() -> callService.get(stranger, joined.callId()))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode()).isEqualTo(ErrorCode.CALL_NOT_FOUND));
     }
@@ -140,15 +140,15 @@ class CallFlowTest {
         Long b = register("call-p@fitto.com");
         connectCouple(a, b);
 
-        Long first = callService.start(a, new StartCallRequest(CallType.VOICE)).callSessionId();
-        callService.end(a, first);
-        Long second = callService.start(a, new StartCallRequest(CallType.VIDEO)).callSessionId();
-        callService.end(a, second);
+        CallJoinResponse firstCall = callService.start(a, new StartCallRequest(CallType.VOICE));
+        callService.end(a, firstCall.callId());
+        CallJoinResponse secondCall = callService.start(a, new StartCallRequest(CallType.VIDEO));
+        callService.end(a, secondCall.callId());
 
         List<CallSessionResponse> history = callService.list(a, null);
         assertThat(history).hasSize(2);
-        assertThat(history.get(0).id()).isEqualTo(second);
-        assertThat(history.get(1).id()).isEqualTo(first);
+        assertThat(history.get(0).id()).isEqualTo(secondCall.callSessionId());
+        assertThat(history.get(1).id()).isEqualTo(firstCall.callSessionId());
     }
 
     @Test
