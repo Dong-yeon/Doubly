@@ -109,4 +109,42 @@ class StreakFlowTest {
         Long solo = register("sp3@fitto.com");
         assertThat(streakService.getPartnerStreak(solo).currentCount()).isZero();
     }
+
+    /**
+     * 회귀 방지: 오늘 먼저 기록한 뒤 어제를 소급 입력해도 연속선이 이어져야 한다.
+     * 예전에는 lastWorkoutDate(오늘)보다 과거라는 이유만으로 소급 입력이 전부 버려졌다.
+     */
+    @Test
+    void 오늘_기록_후_어제를_소급_입력하면_스트릭이_이어진다() {
+        Long user = register("s3@fitto.com");
+        LocalDate today = LocalDate.now();
+
+        workoutOn(user, today);
+        assertThat(streakService.getMyStreak(user).currentCount()).isEqualTo(1);
+
+        workoutOn(user, today.minusDays(1)); // 소급 입력
+
+        StreakResponse streak = streakService.getMyStreak(user);
+        assertThat(streak.currentCount()).isEqualTo(2);
+        assertThat(streak.maxCount()).isEqualTo(2);
+    }
+
+    /** 소급 입력이라도 이미 카운트된 구간이거나 구간보다 더 먼 과거면 무시된다(중복·오카운트 방지 가드 유지). */
+    @Test
+    void 이미_카운트된_날짜나_먼_과거_소급은_무시된다() {
+        Long user = register("s4@fitto.com");
+        LocalDate today = LocalDate.now();
+
+        workoutOn(user, today.minusDays(1));
+        workoutOn(user, today);
+        assertThat(streakService.getMyStreak(user).currentCount()).isEqualTo(2);
+
+        // 이미 연속 구간 안(어제)에 중복 저장 — 변화 없음
+        workoutOn(user, today.minusDays(1));
+        assertThat(streakService.getMyStreak(user).currentCount()).isEqualTo(2);
+
+        // 연속 구간 시작보다 더 먼 과거(구멍) — 이어붙지 않음
+        workoutOn(user, today.minusDays(5));
+        assertThat(streakService.getMyStreak(user).currentCount()).isEqualTo(2);
+    }
 }

@@ -199,14 +199,34 @@ public class MealService {
         } else {
             meal.recalcTotals();
         }
-        // 당·나트륨·식이섬유는 항목 단위가 없어 끼니 레벨 요청값을 쓴다. 단, 셋 다 안 보내면
-        // 기존 값을 보존한다 — MealResponse 가 이 값들을 내려주지 않아 수정 화면이 되돌려줄 수 없다.
-        if (req.sugar() != null || req.sodium() != null || req.fiber() != null) {
-            meal.applyExtraNutrients(req.sugar(), req.sodium(), req.fiber());
-        }
+        // 당·나트륨·식이섬유는 항목 단위가 없어 끼니 레벨 요청값이 그대로 진실이다
+        // (MealResponse 가 세 값을 내려주므로 수정 화면이 기존 값을 그대로 되돌려 보낸다).
+        meal.applyExtraNutrients(req.sugar(), req.sodium(), req.fiber());
+
+        // 데이트 식단은 커플 양쪽에 짝이 있다 — 한쪽만 고치면 두 기록이 어긋난다.
+        syncSharedPair(meal);
 
         publishDietEvent(userId);
         return MealResponse.from(meal);
+    }
+
+    /** 데이트 식단 짝 동기화 — 자기 자신을 뺀 나머지(파트너 몫)에 내용만 반영한다. */
+    private void syncSharedPair(Meal source) {
+        if (!source.isSharedMeal()) {
+            return;
+        }
+        for (Meal pair : mealRepository.findBySharedGroupId(source.getSharedGroupId())) {
+            if (pair.getId().equals(source.getId())) {
+                continue;
+            }
+            pair.syncFrom(source, source.getItems().stream()
+                    .map(i -> MealItem.builder()
+                            .name(i.getName()).portion(i.getPortion())
+                            .calories(i.getCalories()).carbs(i.getCarbs())
+                            .protein(i.getProtein()).fat(i.getFat())
+                            .orderNo(i.getOrderNo()).build())
+                    .toList());
+        }
     }
 
     /** 요청의 음식 항목 → 엔티티. 화면에 보이는 순서를 order_no 로 굳힌다. */
@@ -515,7 +535,14 @@ public class MealService {
         if (!meal.getUserId().equals(userId)) {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
-        mealRepository.delete(meal);
+        if (meal.isSharedMeal()) {
+            // 데이트 식단은 커플 양쪽에 짝이 있다 — 한쪽만 지우면 남은 쪽이 존재하지 않는
+            // 짝을 계속 가리켜(sharedGroupId 가 그대로 남아) "같이 먹기" 배지가 잘못 뜬다.
+            mealRepository.deleteAll(mealRepository.findBySharedGroupId(meal.getSharedGroupId()));
+            publishDietEvent(userId);
+        } else {
+            mealRepository.delete(meal);
+        }
     }
 
     /** 커플 공동 식단 목표 진행률 — 이번 주(월~) 둘 다 기록한 날 수. */

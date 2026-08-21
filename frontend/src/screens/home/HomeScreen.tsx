@@ -44,6 +44,7 @@ import {
   unsubscribeCouple,
 } from '../../api/chatSocket';
 import { pickImage, uploadImage } from '../../utils/imageUpload';
+import { daysSince } from '../../utils/date';
 import { haptics } from '../../utils/haptics';
 import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
@@ -96,12 +97,6 @@ function recordLabel(item: FeedItem | null): string | null {
   return item.content || item.title || '기록을 남겼어요';
 }
 
-function daysTogether(connectedAt?: string | null): number {
-  if (!connectedAt) return 0;
-  const diff = Date.now() - new Date(connectedAt).getTime();
-  return Math.max(1, Math.floor(diff / 86400000) + 1);
-}
-
 export function HomeScreen({ navigation }: Props) {
   const user = useAuthStore((s) => s.user);
   const { couple, loading: relationLoading, fetchAll, setBackground, setAnniversary } = useRelationStore();
@@ -147,7 +142,7 @@ export function HomeScreen({ navigation }: Props) {
   // 잠깐 스쳤다 사라지는 깜빡임(P2-13)을 막는다. 로딩이 끝나면 실제 값을 따른다.
   const connected = relationLoading ? true : !!couple?.partner;
   const bgUrl = couple?.backgroundImageUrl ?? null;
-  const dday = daysTogether(couple?.anniversaryDate ?? couple?.connectedAt);
+  const dday = daysSince(couple?.anniversaryDate ?? couple?.connectedAt);
 
   const refresh = useCallback(() => {
     // fetchAll 은 실패해도 store 의 기존 couple/relations 를 그대로 둔다(재시도 여지를 위해
@@ -157,8 +152,10 @@ export function HomeScreen({ navigation }: Props) {
     workoutApi.partnerToday().then(setPartner).catch(() => setPartner(null));
     dietApi.today().then((l) => setMyMealDone(l.length > 0)).catch(() => setMyMealDone(false));
     dietApi.partnerToday().then(setPartnerMeal).catch(() => setPartnerMeal(null));
-    streakApi.me().then(setMyStreak).catch(() => setMyStreak(null));
-    streakApi.partner().then(setPartnerStreak).catch(() => setPartnerStreak(null));
+    // 실패해도 스트릭 상태는 건드리지 않는다 — null 로 덮으면 화면이 0일로 보인다
+    // (?? 0 폴백)와 아래 위젯 캐시까지 0으로 구워버린다. 직전에 성공했던 값을 유지한다.
+    streakApi.me().then(setMyStreak).catch(() => {});
+    streakApi.partner().then(setPartnerStreak).catch(() => {});
     // 무드는 커플 이벤트(MOOD)가 오면 이 refresh() 가 그대로 다시 불려 최신값을 반영한다
     // — 가상 터치와 달리 즉시 반응(진동)이 필요 없어 별도 이벤트 분기가 필요 없다
     moodApi.current().then(setMood).catch(() => setMood(null));
@@ -190,6 +187,9 @@ export function HomeScreen({ navigation }: Props) {
 
   // 홈 위젯 갱신 (Android) — 홈 데이터가 바뀔 때마다 위젯 캐시를 남기고 다시 그린다
   useEffect(() => {
+    // 아직 한 번도 못 불러온 상태(null)를 0으로 캐시하면, 앱을 안 열어둔 동안
+    // 위젯이 계속 "스트릭 0"을 보여준다 — 값을 실제로 알기 전까진 캐시를 건드리지 않는다.
+    if (myStreak === null && partnerStreak === null) return;
     updateHomeWidget({
       connected,
       anniversaryDate: couple?.anniversaryDate ?? couple?.connectedAt ?? null,

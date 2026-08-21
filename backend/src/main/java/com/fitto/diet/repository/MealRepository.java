@@ -19,6 +19,9 @@ public interface MealRepository extends JpaRepository<Meal, Long> {
     /** 특정 기간의 기록 — 통계(끼니 완료/칼로리 집계)용. */
     List<Meal> findByUserIdAndMealDateBetween(Long userId, LocalDate start, LocalDate end);
 
+    /** 데이트 식단 짝 — 같은 shared_group_id 를 가진 커플 양쪽 레코드(자기 자신 포함). */
+    List<Meal> findBySharedGroupId(String sharedGroupId);
+
     /** 최근 먹은 음식 자동완성 원본 — 최신순 최대 200건을 가져와 서비스에서 memo 기준으로 집계한다.
      * DB 마다 다른 DISTINCT ON 류 문법을 안 쓰려고(H2 호환) Java 에서 그룹핑한다. */
     List<Meal> findTop200ByUserIdOrderByCreatedAtDesc(Long userId);

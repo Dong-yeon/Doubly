@@ -524,6 +524,10 @@ export interface Meal {
   carbs?: number | null;
   protein?: number | null;
   fat?: number | null;
+  /** 추가 영양소 — 항목 단위가 없는 끼니 레벨 값(당류 g / 나트륨 mg / 식이섬유 g) */
+  sugar?: number | null;
+  sodium?: number | null;
+  fiber?: number | null;
   /** 항목 없이 합계만 기록한 건(레거시 포함)은 빈 배열 — 그때는 memo 로 보여준다 */
   items?: MealItem[];
   goals?: MealGoalHighlight[];

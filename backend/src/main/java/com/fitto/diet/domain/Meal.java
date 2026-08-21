@@ -153,6 +153,19 @@ public class Meal {
         this.fiber = fiber;
     }
 
+    /**
+     * 데이트 식단 짝 동기화 — 원본(source)의 내용(끼니·메모·사진·합계·추가영양소·항목)을
+     * 그대로 복사한다. userId/createdBy/sharedGroupId/id 는 이 레코드(파트너 쪽)의 것을
+     * 유지한다 — 소유권은 안 바뀐다. source 값은 save() 에서 이미 절반화된 상태이므로
+     * 여기서 다시 나누지 않는다({@link #applyTotals} 를 직접 써서 재합산도 하지 않는다).
+     */
+    public void syncFrom(Meal source, List<MealItem> copiedItems) {
+        update(source.getMealDate(), source.getMealType(), source.getMemo(), source.getPhotoUrl());
+        replaceItems(copiedItems);
+        applyTotals(source.getCalories(), source.getCarbs(), source.getProtein(), source.getFat());
+        applyExtraNutrients(source.getSugar(), source.getSodium(), source.getFiber());
+    }
+
     public void addItem(MealItem item) {
         items.add(item);
         item.assignTo(this);

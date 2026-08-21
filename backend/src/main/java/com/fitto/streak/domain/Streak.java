@@ -87,19 +87,36 @@ public class Streak {
     }
 
     /**
-     * 해당 날짜의 운동을 반영. 전날에 이어지면 +1, 끊겼으면 1로 리셋.
-     * 이미 반영된 날짜이거나 과거 날짜면 변화 없음.
+     * 해당 날짜의 운동을 반영. 앞으로 이어지면(+1일) 증가, 끊겼으면 1로 리셋.
+     *
+     * <p>소급 입력(예: 오늘 먼저 기록한 뒤 어제를 나중에 채워 넣는 경우)이라도
+     * <b>현재 연속 구간의 시작 바로 앞날</b>이면 뒤로 이어붙인다. 이미 연속 구간
+     * 안에 든 날짜(오늘 중복 저장 등)는 무시한다 — {@link #lastWorkoutDate} 는
+     * {@link #liveCount} 판정이 의존하므로 소급 경로에서는 절대 뒤로 옮기지 않는다.
      */
     public void applyWorkout(LocalDate date) {
-        if (lastWorkoutDate != null && !date.isAfter(lastWorkoutDate)) {
-            return; // 이미 카운트했거나 과거 날짜
-        }
-        if (lastWorkoutDate != null && date.equals(lastWorkoutDate.plusDays(1))) {
-            currentCount += 1;
-        } else {
+        if (lastWorkoutDate == null) {
             currentCount = 1;
+            lastWorkoutDate = date;
+            bumpMax();
+            return;
         }
-        lastWorkoutDate = date;
+        if (date.isAfter(lastWorkoutDate)) {
+            currentCount = date.equals(lastWorkoutDate.plusDays(1)) ? currentCount + 1 : 1;
+            lastWorkoutDate = date;
+            bumpMax();
+            return;
+        }
+        // 소급 입력 — 연속 구간의 시작보다 정확히 하루 앞이면 뒤로 이어붙인다.
+        // 그 외(구간 내부=중복, 또는 구간보다 더 먼 과거)는 변화 없음.
+        LocalDate streakStart = lastWorkoutDate.minusDays(Math.max(currentCount - 1, 0));
+        if (date.equals(streakStart.minusDays(1))) {
+            currentCount += 1;
+            bumpMax();
+        }
+    }
+
+    private void bumpMax() {
         if (currentCount > maxCount) {
             maxCount = currentCount;
         }

@@ -14,19 +14,22 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 근육 회복 현황 — 부위별 마지막 수행 시각으로부터 경과 시간·추정 회복률을 계산한다.
+ * 근육 회복 현황 — 부위별 마지막 수행 날짜로부터 경과 시간·추정 회복률을 계산한다.
  *
- * <p>새 테이블 없이 {@code workout_sets.muscle_group} + {@code workouts.created_at} 만
+ * <p>새 테이블 없이 {@code workout_sets.muscle_group} + {@code workouts.workout_date} 만
  * 집계해서 매번 계산한다 — 저장되는 데이터가 따로 없어 동기화가 어긋날 일이 없다.
+ * {@code created_at}(입력한 시각)이 아니라 {@code workout_date}(실제 운동한 날)를 쓴다 —
+ * 소급 기록(어제 운동을 오늘 입력)에서 created_at 을 쓰면 "방금 훈련함"으로 잘못 계산된다.
  *
  * <p><b>회복 모델</b>: 정밀한 스포츠과학 모델이 아니라, "큰 근육군은 더 오래 걸린다"는
  * 단순 휴리스틱이다(가슴·등·하체 48시간, 어깨·팔·코어 24시간). 사용자에게는 정확한 예측이
  * 아니라 "오늘 뭘 해야 할지" 감을 잡는 참고용으로 보여준다.
  *
- * <p>경과 시간 계산({@code Duration.between})은 "오늘이 며칠이냐" 판정이 아니라 두 시점
- * 사이의 순수 시간차라서, {@link com.fitto.common.time.KstClock} 이 다루는 종류의
- * UTC/KST 날짜 어긋남 문제와는 무관하다 — {@code lastTrainedAt} 과 {@code now} 가 항상
- * 같은 JVM 타임존 기준으로 찍히므로 그 차이는 타임존에 관계없이 정확하다.
+ * <p>{@code workout_date} 는 시각 정보가 없는 날짜라 자정(00:00) 기준으로 경과 시간을
+ * 계산한다 — 그날 저녁에 한 운동도 자정부터 센 것으로 잡혀 최대 반나절 정도 회복률이
+ * 실제보다 높게(더 회복된 것처럼) 나올 수 있다. 이 오차는 회복 모델 자체가 시간 단위
+ * 휴리스틱(24/48시간)이라는 점을 감안하면, 소급 기록이 며칠 단위로 어긋나던 이전
+ * created_at 방식보다 훨씬 정확한 트레이드오프다.
  */
 @Service
 @Transactional(readOnly = true)
@@ -53,7 +56,7 @@ public class MuscleRecoveryService {
     public MuscleRecoveryResponse recovery(Long userId) {
         Map<String, LocalDateTime> lastTrainedByGroup = new LinkedHashMap<>();
         workoutSetRepository.findLastTrainedByMuscleGroup(userId)
-                .forEach(row -> lastTrainedByGroup.put(row.getMuscleGroup(), row.getLastTrainedAt()));
+                .forEach(row -> lastTrainedByGroup.put(row.getMuscleGroup(), row.getLastTrainedOn().atStartOfDay()));
 
         LocalDateTime now = LocalDateTime.now();
         List<MuscleRecovery> muscles = RECOVERY_WINDOW_HOURS.keySet().stream()

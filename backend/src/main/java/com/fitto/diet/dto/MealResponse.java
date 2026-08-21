@@ -19,6 +19,11 @@ public record MealResponse(
         Integer carbs,
         Integer protein,
         Integer fat,
+        /** 추가 영양소 — 항목(MealItem) 단위가 없는 끼니 레벨 값. 수정 화면 프리필에 쓰인다. */
+        Integer sugar,
+        /** 나트륨(mg) — g 단위인 다른 필드와 달리 mg */
+        Integer sodium,
+        Integer fiber,
         /** 음식 항목(반찬 단위). 항목 없이 합계만 기록한 건(레거시 포함)은 빈 목록이다. */
         List<MealItemResponse> items,
         List<GoalHighlight> goals,
@@ -53,6 +58,7 @@ public record MealResponse(
                 m.getId(), m.getMealDate(), m.getMealType(), m.getMealType().label(),
                 m.getMemo(), m.getPhotoUrl(), m.getCalories(),
                 m.getCarbs(), m.getProtein(), m.getFat(),
+                m.getSugar(), m.getSodium(), m.getFiber(),
                 m.getItems().stream().map(MealItemResponse::of).toList(),
                 goals, m.isSharedMeal(), m.getCreatedAt());
     }

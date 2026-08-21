@@ -90,6 +90,24 @@ export function isSameLocalDay(isoA: string, isoB: string): boolean {
   return toDateString(new Date(isoA)) === toDateString(new Date(isoB));
 }
 
+/**
+ * D+ 일수 — 시작일을 1일차로 센다 (홈 D+ 히어로 · 홈 위젯 공용).
+ *
+ * `new Date('2026-08-21')` 은 <b>UTC 자정</b>으로 파싱돼 KST 로는 09:00 이 된다 —
+ * 그대로 오늘과 빼면 KST 00:00~09:00 사이에는 D+ 가 하루 적게 나온다(백엔드 KstClock
+ * 도입 사유였던 "UTC 서버에서 00~09시에 어제로 판정"과 같은 함정, V27 참고). 그래서
+ * 앞 10자(날짜부)만 떼어 {@link parseDateString} 으로 로컬 자정을 만들고, 오늘도
+ * 로컬 자정으로 맞춰 뺀다 — LocalDate("2026-08-21")·LocalDateTime("2026-08-21T14:03:12")
+ * 어느 쪽이 넘어와도 앞 10자는 날짜이므로 안전하다.
+ */
+export function daysSince(baseDate: string | null | undefined): number {
+  const start = parseDateString(baseDate?.slice(0, 10));
+  if (!start) return 0;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.max(1, Math.round((today.getTime() - start.getTime()) / 86400000) + 1);
+}
+
 /** ISO 타임스탬프 → 채팅방 날짜 구분선 라벨 ('오늘' / '어제' / '2026년 8월 19일 수요일') */
 export function chatDateDividerLabel(iso: string): string {
   const d = new Date(iso);

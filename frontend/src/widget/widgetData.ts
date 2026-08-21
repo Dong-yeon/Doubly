@@ -7,6 +7,7 @@
  * 앱을 며칠 안 열어도 위젯의 D+N 은 매일 갱신된다.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { daysSince } from '../utils/date';
 
 const KEY = 'doubly.widgetData';
 
@@ -40,9 +41,7 @@ export async function loadWidgetData(): Promise<WidgetData | null> {
   }
 }
 
-/** 홈 화면과 동일한 규칙 — 시작일을 1일차로 센다. */
+/** 홈 화면과 동일한 규칙 — 시작일을 1일차로 센다 (UTC 파싱으로 인한 하루 오차는 daysSince 참고). */
 export function daysTogether(baseDate: string | null): number {
-  if (!baseDate) return 0;
-  const diff = Date.now() - new Date(baseDate).getTime();
-  return Math.max(1, Math.floor(diff / 86400000) + 1);
+  return daysSince(baseDate);
 }
