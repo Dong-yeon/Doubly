@@ -40,6 +40,9 @@ export function resolvePushDeepLink(data: Record<string, unknown> | undefined | 
       if (id) go('Chat', 'ChatRoom', { relationId: id, title: '채팅' });
       else go('Chat', 'ChatRooms');
       return;
+    case 'coupleConnect':
+      go('Home', 'CoupleConnect');
+      return;
     case 'call':
       // 통화는 목적지 화면이 아니라 실시간 오버레이 — 카드가 남는 채팅 탭으로 보낸다
       go('Chat', 'ChatRooms');

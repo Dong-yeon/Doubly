@@ -106,4 +106,13 @@ public interface RelationRepository extends JpaRepository<Relation, Long> {
     @Modifying
     @Query("delete from Relation r where r.userAId = :userId or r.userBId = :userId")
     void deleteAllByUser(@Param("userId") Long userId);
+
+    /** 활성 커플 전체 — 오늘의 질문 미답변 리마인드가 대상을 훑을 때 쓴다. */
+    @Query("""
+            select r from Relation r
+            where r.relationType = com.fitto.relation.domain.RelationType.COUPLE
+              and r.status = com.fitto.relation.domain.RelationStatus.ACTIVE
+              and r.userBId is not null
+            """)
+    List<Relation> findAllActiveCouples();
 }
