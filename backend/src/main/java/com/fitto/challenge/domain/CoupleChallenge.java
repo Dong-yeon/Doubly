@@ -59,6 +59,35 @@ public class CoupleChallenge {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    /**
+     * 종료 판정 시각 — 채워져 있으면 결과 발표가 끝난 대결이다.
+     * 스케줄러의 재발송 방지 이력을 겸한다({@code V59__challenge_settlement.sql} 참고).
+     */
+    @Column(name = "settled_at")
+    private LocalDateTime settledAt;
+
+    /** 승자 — {@link #settledAt} 이 채워진 뒤의 {@code null} 은 무승부를 뜻한다. */
+    @Column(name = "winner_user_id")
+    private Long winnerUserId;
+
+    /**
+     * 결과 확정 — 기간이 끝난 뒤 한 번만. 이미 확정된 대결은 그대로 둔다
+     * (소급 입력으로 결과가 뒤집혀 이미 발표한 승패와 어긋나는 것을 막는다).
+     *
+     * @param winnerUserId 무승부면 {@code null}
+     * @return 이번 호출로 확정됐으면 true — 결과 푸시를 보낼지 판단하는 데 쓴다
+     */
+    public boolean settle(Long winnerUserId, LocalDateTime at) {
+        if (settledAt != null) return false;
+        this.winnerUserId = winnerUserId;
+        this.settledAt = at;
+        return true;
+    }
+
+    public boolean isSettled() {
+        return settledAt != null;
+    }
+
     @Builder
     private CoupleChallenge(Long coupleId, ChallengeType type, String title, LocalDate startDate,
                             LocalDate endDate, String stake, Long createdBy) {

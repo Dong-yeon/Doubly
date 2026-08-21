@@ -122,10 +122,10 @@ class FeedFlowTest {
         long[] c = couple("f6@fitto.com", "f7@fitto.com");
         FeedItemResponse post = feedService.createPost(c[0], new CreatePostRequest("점심 뭐 먹지", null));
 
-        List<ReactionSummary> added = feedService.toggleReaction(c[1], post.refId(), "❤️");
+        List<ReactionSummary> added = feedService.toggleReaction(c[1], FeedItemType.POST, post.refId(), "❤️");
         assertThat(added).anyMatch(r -> r.emoji().equals("❤️") && r.count() == 1);
 
-        List<ReactionSummary> removed = feedService.toggleReaction(c[1], post.refId(), "❤️");
+        List<ReactionSummary> removed = feedService.toggleReaction(c[1], FeedItemType.POST, post.refId(), "❤️");
         assertThat(removed).noneMatch(r -> r.emoji().equals("❤️"));
     }
 

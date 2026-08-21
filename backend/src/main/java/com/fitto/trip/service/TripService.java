@@ -8,7 +8,9 @@ import com.fitto.common.event.CoupleEvent;
 import com.fitto.common.event.CoupleEventPublisher;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
+import com.fitto.common.notification.NotificationCategory;
 import com.fitto.common.notification.NotificationService;
+import com.fitto.common.notification.PushLinks;
 import com.fitto.common.time.KstClock;
 import com.fitto.place.domain.Place;
 import com.fitto.place.domain.PlaceRating;
@@ -142,9 +144,10 @@ public class TripService {
 
         Long partnerId = couple.partnerOf(userId);
         if (partnerId != null) {
-            notificationService.notify(partnerId, "새 여행 계획",
+            notificationService.notify(partnerId, NotificationCategory.PARTNER, "새 여행 계획",
                     userName(userId) + " — " + trip.getTitle()
-                            + " (" + trip.getStartDate().format(DATE_FMT) + "~)");
+                            + " (" + trip.getStartDate().format(DATE_FMT) + "~)",
+                    PushLinks.trip(trip.getId()));
         }
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.TRIP);
         return TripResponse.of(trip, 0);
@@ -352,8 +355,8 @@ public class TripService {
         Relation couple = activeCouple(userId);
         Long partnerId = couple.partnerOf(userId);
         if (partnerId != null) {
-            notificationService.notify(partnerId, "AI가 여행 일정을 짰어요",
-                    userName(userId) + " — " + trip.getTitle());
+            notificationService.notify(partnerId, NotificationCategory.PARTNER, "AI가 여행 일정을 짰어요",
+                    userName(userId) + " — " + trip.getTitle(), PushLinks.trip(trip.getId()));
         }
         coupleEventPublisher.publish(trip.getCoupleId(), CoupleEvent.TRIP);
         return buildDays(trip);

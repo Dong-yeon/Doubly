@@ -53,6 +53,14 @@ public class UserDataPurger {
                 "select m.photo_url from meals m "
                         + "where m.user_id = :uid and m.photo_url is not null", userId));
 
+        /*
+         * 내가 남긴 피드 반응 — feed_reactions.user_id 가 users 를 참조한다.
+         * 대상(운동·식단·포스트·방문)별 정리는 관계 단위(RelationRecordPurger)에서 이미
+         * 끝났지만, 관계가 하나도 없는 계정에도 이 행이 남아 있을 수 있어 한 번 더 훑는다
+         * — 하나라도 남으면 users 삭제가 FK 위반으로 실패한다.
+         */
+        exec("delete from feed_reactions where user_id = :uid", userId);
+
         exec("delete from workout_sets where workout_id in "
                 + "(select w.id from workouts w where w.user_id = :uid)", userId);
         exec("delete from workouts where user_id = :uid", userId);

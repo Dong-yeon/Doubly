@@ -11,8 +11,13 @@ import com.fitto.diet.dto.FavoriteFoodItemRequest;
 import com.fitto.diet.dto.SaveFavoriteFoodRequest;
 import com.fitto.diet.service.FavoriteFoodGiftService;
 import com.fitto.diet.service.FavoriteFoodService;
+import com.fitto.diet.domain.MealType;
+import com.fitto.diet.dto.SaveMealRequest;
+import com.fitto.diet.service.MealService;
 import com.fitto.feed.dto.CreatePostRequest;
+import com.fitto.feed.dto.FeedItemType;
 import com.fitto.feed.service.FeedService;
+import com.fitto.place.dto.RecordVisitRequest;
 import com.fitto.place.dto.SavePlaceRequest;
 import com.fitto.place.service.PlaceService;
 import com.fitto.question.dto.AnswerRequest;
@@ -26,10 +31,13 @@ import com.fitto.voice.domain.VoicePhrase;
 import com.fitto.voice.dto.SaveVoiceClipRequest;
 import com.fitto.voice.service.VoiceClipService;
 import com.fitto.workout.dto.SaveProgramRequest;
+import com.fitto.workout.dto.SaveWorkoutRequest;
+import com.fitto.workout.dto.WorkoutSetRequest;
 import com.fitto.workout.dto.SaveRoutineRequest;
 import com.fitto.workout.dto.SaveRoutineRequest.Exercise;
 import com.fitto.workout.service.RoutineGiftService;
 import com.fitto.workout.service.WorkoutRoutineService;
+import com.fitto.workout.service.WorkoutService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -71,6 +79,8 @@ class WithdrawFlowTest {
     @Autowired RoutineGiftService routineGiftService;
     @Autowired FavoriteFoodService favoriteFoodService;
     @Autowired FavoriteFoodGiftService favoriteFoodGiftService;
+    @Autowired WorkoutService workoutService;
+    @Autowired MealService mealService;
 
     private Long register(String email) {
         return authService.register(
@@ -167,6 +177,43 @@ class WithdrawFlowTest {
 
         assertThatCode(() -> authService.withdraw(me)).doesNotThrowAnyException();
         assertThat(userRepository.findById(me)).isEmpty();
+    }
+
+    /**
+     * 피드 반응은 V60 에서 대상이 4종(포스트·운동·식단·방문)으로 넓어지면서 FK CASCADE 를
+     * 잃었다 — 이제 반응 삭제는 코드(두 purger)의 책임이다. {@code feed_reactions.user_id}
+     * 의 users FK 는 일부러 남겨 뒀으므로, 어느 한 타입이라도 정리에서 빠지면 여기서
+     * 외래키 위반으로 즉시 드러난다.
+     */
+    @Test
+    void 운동_식단_맛집_카드에_반응을_남긴_계정도_탈퇴할_수_있다() {
+        Long me = register("withdraw-react-a@fitto.com");
+        Long partner = register("withdraw-react-b@fitto.com");
+        InviteCodeResponse invite = relationService.createCoupleInvite(me);
+        relationService.connectCouple(partner, invite.code());
+
+        Long postId = feedService.createPost(me, new CreatePostRequest("오늘의 기록", null)).refId();
+        Long workoutId = workoutService.save(me, new SaveWorkoutRequest(
+                LocalDate.now(), null, 40, null, null,
+                List.of(new WorkoutSetRequest("벤치프레스", "가슴", 3, 10, new BigDecimal("60"), 1)))).id();
+        Long mealId = mealService.save(me, new SaveMealRequest(
+                LocalDate.now(), MealType.LUNCH, "점심", null, 600, null, null, null,
+                null, null, null, null)).id();
+        Long placeId = placeService.save(me, new SavePlaceRequest(
+                "맛집", "서울", new BigDecimal("37.5"), new BigDecimal("127.0"), null, null, null)).id();
+        Long visitId = placeService.recordVisit(me, placeId, new RecordVisitRequest(
+                LocalDate.now(), 5, "좋았다", null, null, null)).id();
+
+        // 양쪽이 서로의 카드에 반응 — 지우는 쪽(관계 단위·개인 단위)이 모두 걸리도록
+        feedService.toggleReaction(partner, FeedItemType.POST, postId, "❤️");
+        feedService.toggleReaction(partner, FeedItemType.WORKOUT, workoutId, "💪");
+        feedService.toggleReaction(partner, FeedItemType.MEAL, mealId, "😋");
+        feedService.toggleReaction(partner, FeedItemType.PLACE_VISIT, visitId, "👍");
+        feedService.toggleReaction(me, FeedItemType.WORKOUT, workoutId, "🔥");
+
+        assertThatCode(() -> authService.withdraw(me)).doesNotThrowAnyException();
+        assertThat(userRepository.findById(me)).isEmpty();
+        assertThatCode(() -> authService.withdraw(partner)).doesNotThrowAnyException();
     }
 
     @Test

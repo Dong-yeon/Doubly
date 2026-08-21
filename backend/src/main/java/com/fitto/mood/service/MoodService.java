@@ -4,7 +4,9 @@ import com.fitto.common.event.CoupleEvent;
 import com.fitto.common.event.CoupleEventPublisher;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
+import com.fitto.common.notification.NotificationCategory;
 import com.fitto.common.notification.NotificationService;
+import com.fitto.common.notification.PushLinks;
 import com.fitto.mood.domain.MoodStatus;
 import com.fitto.mood.dto.MoodEntry;
 import com.fitto.mood.dto.MoodRequest;
@@ -76,8 +78,8 @@ public class MoodService {
 
         Long partnerId = couple.partnerOf(userId);
         if (partnerId != null) {
-            notificationService.notify(partnerId, "지금 기분",
-                    userName(userId) + "님 지금 기분: " + req.emoji());
+            notificationService.notify(partnerId, NotificationCategory.PARTNER, "지금 기분",
+                    userName(userId) + "님 지금 기분: " + req.emoji(), PushLinks.HOME);
         }
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.MOOD);
         return current(userId);

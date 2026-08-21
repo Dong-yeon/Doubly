@@ -2,11 +2,15 @@ package com.fitto.workout.service;
 
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
+import com.fitto.common.notification.NotificationCategory;
+import com.fitto.common.notification.PushLinks;
 import com.fitto.common.time.KstClock;
 import com.fitto.relation.domain.Relation;
 import com.fitto.relation.domain.RelationStatus;
 import com.fitto.relation.domain.RelationType;
 import com.fitto.relation.repository.RelationRepository;
+import com.fitto.feed.dto.FeedItemType;
+import com.fitto.feed.repository.FeedReactionRepository;
 import com.fitto.streak.service.StreakService;
 import com.fitto.user.repository.UserRepository;
 import com.fitto.workout.domain.Workout;
@@ -54,6 +58,7 @@ public class WorkoutService {
     private final StreakService streakService;
     private final com.fitto.common.event.CoupleEventPublisher coupleEventPublisher;
     private final com.fitto.common.notification.NotificationService notificationService;
+    private final FeedReactionRepository feedReactionRepository;
 
     public WorkoutService(WorkoutRepository workoutRepository,
                           WorkoutSetRepository workoutSetRepository,
@@ -61,7 +66,8 @@ public class WorkoutService {
                           UserRepository userRepository,
                           StreakService streakService,
                           com.fitto.common.event.CoupleEventPublisher coupleEventPublisher,
-                          com.fitto.common.notification.NotificationService notificationService) {
+                          com.fitto.common.notification.NotificationService notificationService,
+                          FeedReactionRepository feedReactionRepository) {
         this.workoutRepository = workoutRepository;
         this.workoutSetRepository = workoutSetRepository;
         this.relationRepository = relationRepository;
@@ -69,6 +75,7 @@ public class WorkoutService {
         this.streakService = streakService;
         this.coupleEventPublisher = coupleEventPublisher;
         this.notificationService = notificationService;
+        this.feedReactionRepository = feedReactionRepository;
     }
 
     @Transactional
@@ -134,7 +141,8 @@ public class WorkoutService {
                     coupleEventPublisher.publish(c.getId(), com.fitto.common.event.CoupleEvent.WORKOUT);
                     Long partnerId = c.partnerOf(userId);
                     String myName = userRepository.findById(userId).map(u -> u.getName()).orElse("상대방");
-                    notificationService.notify(partnerId, "함께 운동해요!", myName + "님이 오늘 운동을 완료했어요!");
+                    notificationService.notify(partnerId, NotificationCategory.PARTNER, "함께 운동해요!",
+                            myName + "님이 오늘 운동을 완료했어요!", PushLinks.WORKOUT);
                 });
 
         return WorkoutResponse.from(workout, prs);
@@ -242,6 +250,8 @@ public class WorkoutService {
         if (!workout.getUserId().equals(userId)) {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
+        // 피드 카드에 달린 응원 반응 — 다형 참조라 FK 가 없어 직접 지운다 (V60 주석 참고)
+        feedReactionRepository.deleteByTargetTypeAndTargetId(FeedItemType.WORKOUT, workoutId);
         workoutRepository.delete(workout);
     }
 

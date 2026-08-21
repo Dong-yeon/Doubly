@@ -4,7 +4,9 @@ import com.fitto.common.event.CoupleEvent;
 import com.fitto.common.event.CoupleEventPublisher;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
+import com.fitto.common.notification.NotificationCategory;
 import com.fitto.common.notification.NotificationService;
+import com.fitto.common.notification.PushLinks;
 import com.fitto.diet.domain.Meal;
 import com.fitto.diet.repository.MealRepository;
 import com.fitto.feed.domain.FeedPost;
@@ -19,6 +21,8 @@ import com.fitto.feed.dto.FeedTimelineResponse;
 import com.fitto.feed.dto.ReactionSummary;
 import com.fitto.feed.repository.FeedPostRepository;
 import com.fitto.feed.repository.FeedReactionRepository;
+import com.fitto.place.domain.PlaceVisit;
+import com.fitto.place.repository.PlaceRepository;
 import com.fitto.place.repository.PlaceVisitRepository;
 import com.fitto.place.repository.PlaceVisitRepository.VisitWithPlace;
 import com.fitto.relation.domain.Relation;
@@ -54,6 +58,7 @@ public class FeedService {
     private final WorkoutRepository workoutRepository;
     private final MealRepository mealRepository;
     private final PlaceVisitRepository placeVisitRepository;
+    private final PlaceRepository placeRepository;
     private final NotificationService notificationService;
     private final CoupleEventPublisher coupleEventPublisher;
     private final FeedItemMapper mapper;
@@ -64,6 +69,7 @@ public class FeedService {
                        WorkoutRepository workoutRepository,
                        MealRepository mealRepository,
                        PlaceVisitRepository placeVisitRepository,
+                       PlaceRepository placeRepository,
                        NotificationService notificationService,
                        CoupleEventPublisher coupleEventPublisher,
                        FeedItemMapper mapper) {
@@ -73,6 +79,7 @@ public class FeedService {
         this.workoutRepository = workoutRepository;
         this.mealRepository = mealRepository;
         this.placeVisitRepository = placeVisitRepository;
+        this.placeRepository = placeRepository;
         this.notificationService = notificationService;
         this.coupleEventPublisher = coupleEventPublisher;
         this.mapper = mapper;
@@ -209,7 +216,8 @@ public class FeedService {
             String preview = content != null && !content.isEmpty()
                     ? (content.length() > 40 ? content.substring(0, 40) + "…" : content)
                     : "사진을 남겼어요";
-            notificationService.notify(partnerId, authorName + "님의 새 일상", preview);
+            notificationService.notify(partnerId, NotificationCategory.PARTNER,
+                    authorName + "님의 새 일상", preview, PushLinks.FEED);
         }
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.FEED);
 
@@ -223,30 +231,89 @@ public class FeedService {
         if (!userId.equals(post.getAuthorId())) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "내가 쓴 포스트만 삭제할 수 있습니다.");
         }
+        // 반응은 더 이상 FK CASCADE 로 지워지지 않는다 (V60 — 대상이 4개 테이블이라 FK 불가)
+        feedReactionRepository.deleteByTargetTypeAndTargetId(FeedItemType.POST, postId);
         feedPostRepository.delete(post);
         coupleEventPublisher.publish(post.getCoupleId(), CoupleEvent.FEED);
     }
 
-    /** 이모지 반응 토글 (FEED-03) — 새로 달면 상대(작성자)에게 푸시. */
+    /**
+     * 이모지 반응 토글 (FEED-03) — 일상 포스트뿐 아니라 운동·식단·맛집 방문 카드에도 단다.
+     *
+     * <p>새로 달면 <b>기록의 주인</b>에게 푸시가 간다(내 기록에 내가 달면 조용히 넘어간다).
+     * "기록을 상대가 봐주고 응원해주는 순간"이 이 앱의 존재 이유라, 반응 대상이
+     * 타임라인에 보이는 카드 전부여야 그 루프가 닫힌다.
+     */
     @Transactional
-    public List<ReactionSummary> toggleReaction(Long userId, Long postId, String emoji) {
-        FeedPost post = getCouplePost(userId, postId);
-        var existing = feedReactionRepository.findByPostIdAndUserIdAndEmoji(postId, userId, emoji);
+    public List<ReactionSummary> toggleReaction(Long userId, FeedItemType type, Long refId, String emoji) {
+        ReactionTarget target = resolveTarget(userId, type, refId);
+        var existing = feedReactionRepository
+                .findByTargetTypeAndTargetIdAndUserIdAndEmoji(type, refId, userId, emoji);
         if (existing.isPresent()) {
             feedReactionRepository.delete(existing.get());
         } else {
             feedReactionRepository.save(FeedReaction.builder()
-                    .postId(postId)
+                    .targetType(type)
+                    .targetId(refId)
                     .userId(userId)
                     .emoji(emoji)
                     .build());
-            if (!userId.equals(post.getAuthorId())) {
-                notificationService.notify(post.getAuthorId(), "일상에 반응이 달렸어요",
-                        mapper.userName(userId) + "님이 " + emoji + " 를 남겼어요");
+            if (!userId.equals(target.ownerId())) {
+                notificationService.notify(target.ownerId(), NotificationCategory.PARTNER,
+                        target.pushTitle(),
+                        mapper.userName(userId) + "님이 " + emoji + " 를 남겼어요", PushLinks.FEED);
             }
         }
-        coupleEventPublisher.publish(post.getCoupleId(), CoupleEvent.FEED);
-        return mapper.summarize(feedReactionRepository.findByPostId(postId), userId);
+        coupleEventPublisher.publish(target.coupleId(), CoupleEvent.FEED);
+        return mapper.summarize(feedReactionRepository.findByTargetTypeAndTargetId(type, refId), userId);
+    }
+
+    /**
+     * 반응 대상 검증 — <b>내 커플의 타임라인에 실제로 보이는 것</b>에만 반응할 수 있다.
+     *
+     * <p>id 만 받아 무조건 저장하면 남의 운동 기록 id 를 찍어 반응을 남길 수 있고,
+     * 그 푸시가 모르는 사람에게 간다. 타입마다 소유 판정 규칙이 다르므로 여기 한 곳에 모은다.
+     */
+    private ReactionTarget resolveTarget(Long userId, FeedItemType type, Long refId) {
+        Relation couple = activeCouple(userId);
+        Long partnerId = couple.partnerOf(userId);
+        return switch (type) {
+            case POST -> {
+                FeedPost post = getCouplePost(userId, refId);
+                yield new ReactionTarget(post.getAuthorId(), couple.getId(), "일상에 반응이 달렸어요");
+            }
+            case WORKOUT -> {
+                Workout w = workoutRepository.findById(refId)
+                        .filter(x -> isCoupleMember(x.getUserId(), userId, partnerId))
+                        .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "운동 기록을 찾을 수 없습니다."));
+                yield new ReactionTarget(w.getUserId(), couple.getId(), "운동 기록에 응원이 달렸어요 💪");
+            }
+            case MEAL -> {
+                Meal m = mealRepository.findById(refId)
+                        .filter(x -> isCoupleMember(x.getUserId(), userId, partnerId))
+                        .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "식단 기록을 찾을 수 없습니다."));
+                yield new ReactionTarget(m.getUserId(), couple.getId(), "식단 기록에 응원이 달렸어요 🍽️");
+            }
+            case PLACE_VISIT -> {
+                PlaceVisit v = placeVisitRepository.findById(refId)
+                        .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "방문 기록을 찾을 수 없습니다."));
+                boolean ours = placeRepository.findById(v.getPlaceId())
+                        .map(p -> couple.getId().equals(p.getCoupleId()))
+                        .orElse(false);
+                if (!ours) {
+                    throw new BusinessException(ErrorCode.FORBIDDEN);
+                }
+                yield new ReactionTarget(v.getVisitedBy(), couple.getId(), "맛집 기록에 반응이 달렸어요 📍");
+            }
+        };
+    }
+
+    private boolean isCoupleMember(Long ownerId, Long userId, Long partnerId) {
+        return ownerId.equals(userId) || ownerId.equals(partnerId);
+    }
+
+    /** 반응 대상의 주인·소속 커플·푸시 제목 — resolveTarget 이 타입별 차이를 여기로 흡수한다. */
+    private record ReactionTarget(Long ownerId, Long coupleId, String pushTitle) {
     }
 
     // ---- helpers ----

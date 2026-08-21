@@ -1,6 +1,7 @@
 package com.fitto.user.domain;
 
 import com.fitto.common.domain.BaseTimeEntity;
+import com.fitto.common.notification.NotificationCategory;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -87,6 +88,27 @@ public class User extends BaseTimeEntity {
     @Column(name = "notifications_enabled", nullable = false)
     private boolean notificationsEnabled = true;
 
+    /*
+     * 카테고리별 수신 설정 — 위 전체 스위치의 하위 단계다(전체가 꺼져 있으면 아래는 무의미).
+     * 기본값은 전부 켜짐: 기존 사용자는 어제까지 받던 알림을 그대로 받아야 한다.
+     */
+
+    /** 채팅·통화 */
+    @Column(name = "notify_chat", nullable = false)
+    private boolean notifyChat = true;
+
+    /** 기념일·캘린더 D-day */
+    @Column(name = "notify_anniversary", nullable = false)
+    private boolean notifyAnniversary = true;
+
+    /** 상대(·트레이너)의 활동 */
+    @Column(name = "notify_partner", nullable = false)
+    private boolean notifyPartner = true;
+
+    /** 앱이 먼저 부르는 리마인드 */
+    @Column(name = "notify_reminder", nullable = false)
+    private boolean notifyReminder = true;
+
     @Builder
     private User(String email, String password, String name, LocalDate birthDate, Gender gender,
                  String profileImageUrl, Role role, SocialType socialType, String socialId) {
@@ -143,6 +165,31 @@ public class User extends BaseTimeEntity {
     /** 푸시 알림 수신 설정 변경 (SET-01). */
     public void setNotificationsEnabled(boolean enabled) {
         this.notificationsEnabled = enabled;
+    }
+
+    /** 카테고리별 수신 설정 변경 — {@code null} 인 항목은 건드리지 않는다(부분 수정). */
+    public void updateNotificationCategories(Boolean chat, Boolean anniversary,
+                                             Boolean partner, Boolean reminder) {
+        if (chat != null) this.notifyChat = chat;
+        if (anniversary != null) this.notifyAnniversary = anniversary;
+        if (partner != null) this.notifyPartner = partner;
+        if (reminder != null) this.notifyReminder = reminder;
+    }
+
+    /**
+     * 이 분류의 푸시를 받는 상태인지 — 전체 스위치 AND 카테고리 스위치.
+     *
+     * <p>발송 직전 단 한 곳({@code ExpoPushNotificationService.send})에서만 부른다.
+     * 호출부마다 검사하면 새 알림을 추가할 때 빠뜨리기 쉽다.
+     */
+    public boolean allowsNotification(NotificationCategory category) {
+        if (!notificationsEnabled) return false;
+        return switch (category) {
+            case CHAT -> notifyChat;
+            case ANNIVERSARY -> notifyAnniversary;
+            case PARTNER -> notifyPartner;
+            case REMINDER -> notifyReminder;
+        };
     }
 
     /** 비밀번호 변경 — 호출 전에 반드시 인코딩된 값을 넘겨야 한다. */

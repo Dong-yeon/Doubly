@@ -2,6 +2,7 @@ package com.fitto.notification;
 
 import com.fitto.auth.dto.RegisterRequest;
 import com.fitto.auth.service.AuthService;
+import com.fitto.common.notification.NotificationCategory;
 import com.fitto.notification.service.ExpoPushNotificationService;
 import com.fitto.user.repository.UserRepository;
 import org.junit.jupiter.api.Test;
@@ -60,7 +61,7 @@ class NotificationSettingTest {
         authService.updateNotificationSetting(id, false);
 
         // 발송 경로가 수신 거부에서 조기 종료되어 외부 호출 없이 끝난다
-        pushService.notify(id, "제목", "내용");
+        pushService.notify(id, NotificationCategory.PARTNER, "제목", "내용");
 
         assertThat(userRepository.findById(id).orElseThrow().isNotificationsEnabled()).isFalse();
     }
@@ -68,6 +69,6 @@ class NotificationSettingTest {
     /** 탈퇴 직후 잔여 호출에서 유령 알림이 나가지 않아야 한다. */
     @Test
     void 존재하지_않는_사용자에게는_발송하지_않는다() {
-        pushService.notify(999_999L, "제목", "내용");
+        pushService.notify(999_999L, NotificationCategory.PARTNER, "제목", "내용");
     }
 }

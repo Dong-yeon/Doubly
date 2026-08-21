@@ -123,25 +123,38 @@ public class FeedItemMapper {
 
     // ---- 반응 ----
 
-    /** POST 아이템에만 반응 요약을 채워 넣는다 (일괄 조회). */
+    /**
+     * 모든 아이템에 반응 요약을 채워 넣는다 (타입별 일괄 조회).
+     *
+     * <p>예전에는 POST 만 채웠다. 운동·식단·맛집 카드에도 응원을 달 수 있게 되면서
+     * 전 타입으로 넓혔다 — 반응이 하나도 없는 카드는 빈 목록을 받는다({@code null} 아님).
+     * 화면이 "반응 기능이 있는 카드"와 "없는 카드"를 구분할 필요가 없어야 하기 때문이다.
+     *
+     * <p>쿼리는 페이지당 타입 수만큼(최대 4번)이다. id 목록을 합쳐 한 번에 부르면
+     * 테이블마다 id 공간이 달라 서로 다른 카드의 반응이 섞인다.
+     */
     public List<FeedItemResponse> attachReactions(List<FeedItemResponse> items, Long viewerId) {
-        List<Long> postIds = items.stream()
-                .filter(i -> i.type() == FeedItemType.POST)
-                .map(FeedItemResponse::refId)
-                .toList();
-        if (postIds.isEmpty()) {
+        if (items.isEmpty()) {
             return items;
         }
-        Map<Long, List<FeedReaction>> byPost = new LinkedHashMap<>();
-        for (FeedReaction r : feedReactionRepository.findByPostIdIn(postIds)) {
-            byPost.computeIfAbsent(r.getPostId(), k -> new ArrayList<>()).add(r);
+        Map<FeedItemType, List<Long>> idsByType = new LinkedHashMap<>();
+        for (FeedItemResponse i : items) {
+            idsByType.computeIfAbsent(i.type(), k -> new ArrayList<>()).add(i.refId());
         }
+        Map<FeedItemType, Map<Long, List<FeedReaction>>> byTypeAndId = new LinkedHashMap<>();
+        idsByType.forEach((type, ids) -> {
+            Map<Long, List<FeedReaction>> byId = new LinkedHashMap<>();
+            for (FeedReaction r : feedReactionRepository.findByTargetTypeAndTargetIdIn(type, ids)) {
+                byId.computeIfAbsent(r.getTargetId(), k -> new ArrayList<>()).add(r);
+            }
+            byTypeAndId.put(type, byId);
+        });
         return items.stream()
-                .map(i -> i.type() == FeedItemType.POST
-                        ? new FeedItemResponse(i.type(), i.refId(), i.userId(), i.userName(), i.mine(),
+                .map(i -> new FeedItemResponse(i.type(), i.refId(), i.userId(), i.userName(), i.mine(),
                         i.title(), i.content(), i.imageUrl(), i.occurredAt(),
-                        summarize(byPost.getOrDefault(i.refId(), List.of()), viewerId))
-                        : i)
+                        summarize(byTypeAndId
+                                .getOrDefault(i.type(), Map.of())
+                                .getOrDefault(i.refId(), List.of()), viewerId)))
                 .toList();
     }
 

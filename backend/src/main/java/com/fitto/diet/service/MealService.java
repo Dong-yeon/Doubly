@@ -4,7 +4,9 @@ import com.fitto.common.event.CoupleEvent;
 import com.fitto.common.event.CoupleEventPublisher;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
+import com.fitto.common.notification.NotificationCategory;
 import com.fitto.common.notification.NotificationService;
+import com.fitto.common.notification.PushLinks;
 import com.fitto.common.time.KstClock;
 import com.fitto.diet.domain.Meal;
 import com.fitto.diet.domain.MealItem;
@@ -21,6 +23,8 @@ import com.fitto.relation.domain.Relation;
 import com.fitto.relation.domain.RelationStatus;
 import com.fitto.relation.domain.RelationType;
 import com.fitto.relation.repository.RelationRepository;
+import com.fitto.feed.dto.FeedItemType;
+import com.fitto.feed.repository.FeedReactionRepository;
 import com.fitto.streak.service.StreakService;
 import com.fitto.user.repository.UserRepository;
 import com.fitto.workout.dto.CalendarDayResponse;
@@ -59,6 +63,7 @@ public class MealService {
     private final RelationRepository relationRepository;
     private final UserRepository userRepository;
     private final StreakService streakService;
+    private final FeedReactionRepository feedReactionRepository;
     private final CoupleEventPublisher coupleEventPublisher;
     private final NotificationService notificationService;
 
@@ -67,6 +72,7 @@ public class MealService {
                        RelationRepository relationRepository,
                        UserRepository userRepository,
                        StreakService streakService,
+                       FeedReactionRepository feedReactionRepository,
                        CoupleEventPublisher coupleEventPublisher,
                        NotificationService notificationService) {
         this.mealRepository = mealRepository;
@@ -74,6 +80,7 @@ public class MealService {
         this.relationRepository = relationRepository;
         this.userRepository = userRepository;
         this.streakService = streakService;
+        this.feedReactionRepository = feedReactionRepository;
         this.coupleEventPublisher = coupleEventPublisher;
         this.notificationService = notificationService;
     }
@@ -360,14 +367,20 @@ public class MealService {
                     Long partnerId = c.partnerOf(userId);
                     String myName = userRepository.findById(userId).map(u -> u.getName()).orElse("상대방");
                     if (justAchievedGoal(c, userId, partnerId, mealDate, firstMealOfDay)) {
-                        notificationService.notify(partnerId, "이번 주 식단 목표 달성!",
-                                myName + "님과 함께 주 " + c.getDietGoalDays() + "일 목표를 채웠어요!");
+                        notificationService.notify(partnerId, NotificationCategory.PARTNER,
+                                "이번 주 식단 목표 달성!",
+                                myName + "님과 함께 주 " + c.getDietGoalDays() + "일 목표를 채웠어요!",
+                                PushLinks.DIET);
                     } else if (copied) {
-                        notificationService.notify(partnerId, "오늘도 같은 식단!",
-                                myName + "님이 어제 식단을 그대로 기록했어요!");
+                        notificationService.notify(partnerId, NotificationCategory.PARTNER,
+                                "오늘도 같은 식단!",
+                                myName + "님이 어제 식단을 그대로 기록했어요!",
+                                PushLinks.DIET);
                     } else {
-                        notificationService.notify(partnerId, "오늘 뭐 먹었을까?",
-                                myName + "님이 식단을 기록했어요!");
+                        notificationService.notify(partnerId, NotificationCategory.PARTNER,
+                                "오늘 뭐 먹었을까?",
+                                myName + "님이 식단을 기록했어요!",
+                                PushLinks.DIET);
                     }
                 });
     }
@@ -396,11 +409,15 @@ public class MealService {
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.DIET);
         String myName = userRepository.findById(userId).map(u -> u.getName()).orElse("상대방");
         if (justAchievedGoal(couple, userId, partnerId, mealDate, firstMealOfDay)) {
-            notificationService.notify(partnerId, "이번 주 식단 목표 달성!",
-                    myName + "님과 함께 주 " + couple.getDietGoalDays() + "일 목표를 채웠어요!");
+            notificationService.notify(partnerId, NotificationCategory.PARTNER,
+                    "이번 주 식단 목표 달성!",
+                    myName + "님과 함께 주 " + couple.getDietGoalDays() + "일 목표를 채웠어요!",
+                    PushLinks.DIET);
         } else {
-            notificationService.notify(partnerId, "함께 먹었어요 🍽",
-                    myName + "님과 데이트 식단을 함께 기록했어요!");
+            notificationService.notify(partnerId, NotificationCategory.PARTNER,
+                    "함께 먹었어요 🍽",
+                    myName + "님과 데이트 식단을 함께 기록했어요!",
+                    PushLinks.DIET);
         }
     }
 
@@ -538,9 +555,14 @@ public class MealService {
         if (meal.isSharedMeal()) {
             // 데이트 식단은 커플 양쪽에 짝이 있다 — 한쪽만 지우면 남은 쪽이 존재하지 않는
             // 짝을 계속 가리켜(sharedGroupId 가 그대로 남아) "같이 먹기" 배지가 잘못 뜬다.
-            mealRepository.deleteAll(mealRepository.findBySharedGroupId(meal.getSharedGroupId()));
+            List<Meal> pair = mealRepository.findBySharedGroupId(meal.getSharedGroupId());
+            // 피드 카드 응원 반응 — 다형 참조라 FK 가 없어 직접 지운다 (V60 주석 참고)
+            feedReactionRepository.deleteByTargetTypeAndTargetIdIn(FeedItemType.MEAL,
+                    pair.stream().map(Meal::getId).toList());
+            mealRepository.deleteAll(pair);
             publishDietEvent(userId);
         } else {
+            feedReactionRepository.deleteByTargetTypeAndTargetId(FeedItemType.MEAL, mealId);
             mealRepository.delete(meal);
         }
     }
