@@ -31,6 +31,7 @@ import { MoodPicker } from '../../components/MoodPicker';
 import { useAuthStore } from '../../store/authStore';
 import { useRelationStore } from '../../store/relationStore';
 import { workoutApi } from '../../api/workout';
+import { analyticsApi } from '../../api/analytics';
 import { dietApi } from '../../api/diet';
 import { streakApi } from '../../api/streak';
 import { feedApi } from '../../api/feed';
@@ -184,6 +185,12 @@ export function HomeScreen({ navigation }: Props) {
   }, [fetchAll]);
 
   useFocusEffect(useCallback(() => refresh(), [refresh]));
+
+  // 최소 이벤트 로깅(README 참고) — 서버가 자체적으로 알 수 없는 "홈 화면 진입"을 여기서만 보낸다.
+  // 실패해도 화면에 영향 없게 조용히 삼킨다.
+  useFocusEffect(useCallback(() => {
+    analyticsApi.log('HOME_VIEWED').catch(() => {});
+  }, []));
 
   // 홈 위젯 갱신 (Android) — 홈 데이터가 바뀔 때마다 위젯 캐시를 남기고 다시 그린다
   useEffect(() => {

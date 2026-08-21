@@ -5,6 +5,8 @@ import com.fitto.auth.dto.RegisterRequest;
 import com.fitto.auth.dto.TokenResponse;
 import com.fitto.auth.dto.UpdateProfileRequest;
 import com.fitto.auth.dto.UserResponse;
+import com.fitto.common.analytics.AnalyticsEvent;
+import com.fitto.common.analytics.EventLogService;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.security.AuthRateLimiter;
@@ -44,6 +46,7 @@ public class AuthService {
     private final RefreshTokenStore refreshTokenStore;
     private final AuthRateLimiter rateLimiter;
     private final GoogleTokenVerifier googleTokenVerifier;
+    private final EventLogService eventLogService;
 
     /**
      * 존재하지 않는 이메일 로그인 시에도 BCrypt 매칭을 수행해 응답 시간을 균일화한다
@@ -58,7 +61,8 @@ public class AuthService {
                        JwtTokenProvider tokenProvider,
                        RefreshTokenStore refreshTokenStore,
                        AuthRateLimiter rateLimiter,
-                       GoogleTokenVerifier googleTokenVerifier) {
+                       GoogleTokenVerifier googleTokenVerifier,
+                       EventLogService eventLogService) {
         this.userRepository = userRepository;
         this.userDataPurger = userDataPurger;
         this.imageDeleter = imageDeleter;
@@ -67,6 +71,7 @@ public class AuthService {
         this.refreshTokenStore = refreshTokenStore;
         this.rateLimiter = rateLimiter;
         this.googleTokenVerifier = googleTokenVerifier;
+        this.eventLogService = eventLogService;
         this.timingDummyHash = passwordEncoder.encode("timing-equalization-dummy");
     }
 
@@ -89,6 +94,7 @@ public class AuthService {
         user.agreeToRequiredTerms(PolicyVersion.TERMS, PolicyVersion.PRIVACY);
         user.setMarketingConsent(request.agreeMarketing());
         userRepository.save(user);
+        eventLogService.log(user.getId(), AnalyticsEvent.SIGNUP, SocialType.EMAIL.name());
         return issueTokens(user);
     }
 
@@ -107,6 +113,7 @@ public class AuthService {
             throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
         }
         rateLimiter.resetLogin(clientIp, request.email());
+        eventLogService.log(user.getId(), AnalyticsEvent.LOGIN, SocialType.EMAIL.name());
         return issueTokens(user);
     }
 
@@ -138,6 +145,9 @@ public class AuthService {
                     .socialType(SocialType.GOOGLE)
                     .socialId(profile.sub())
                     .build());
+            eventLogService.log(user.getId(), AnalyticsEvent.SIGNUP, SocialType.GOOGLE.name());
+        } else {
+            eventLogService.log(user.getId(), AnalyticsEvent.LOGIN, SocialType.GOOGLE.name());
         }
         return issueTokens(user);
     }
