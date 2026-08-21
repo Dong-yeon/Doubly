@@ -526,6 +526,9 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
     try {
       const saved = await save({
         workoutDate: toDateString(),
+        // elapsedSec 는 화면 진입 시부터 재는 세션 경과 시간 — 저장 payload에 안 실으면
+        // 운동 시간이 항상 빈 값으로 저장된다. 1분 미만은 0분이 아니라 최소 1분으로 올림.
+        totalDurationMin: Math.max(1, Math.round(elapsedSec / 60)),
         sourceRoutineId: routineId,
         sets: payloadSets as never,
       });

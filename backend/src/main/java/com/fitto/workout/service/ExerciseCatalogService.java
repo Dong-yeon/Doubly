@@ -24,12 +24,18 @@ public class ExerciseCatalogService {
         this.catalogRepository = catalogRepository;
     }
 
-    public List<ExerciseCatalogResponse> list(String muscleGroup, List<String> names) {
+    /**
+     * userId 로 시스템 기본 제공(created_by IS NULL) + 내가 만든 커스텀 종목만 걸러낸다 —
+     * 이 필터가 없으면 커스텀 종목 기능이 열리는 순간 타인이 만든 종목이 전 유저에게
+     * 노출된다(지금은 커스텀 종목 생성 경로가 없어 잠재 버그지만, 필터는 목록 조회 자체의
+     * 책임이라 여기서 미리 막아둔다).
+     */
+    public List<ExerciseCatalogResponse> list(Long userId, String muscleGroup, List<String> names) {
         var rows = names != null && !names.isEmpty()
-                ? catalogRepository.findByNameIn(names)
+                ? catalogRepository.findVisibleByNameIn(names, userId)
                 : StringUtils.hasText(muscleGroup)
-                    ? catalogRepository.findByMuscleGroupOrderByName(muscleGroup)
-                    : catalogRepository.findAllByOrderByMuscleGroupAscNameAsc();
+                    ? catalogRepository.findVisibleByMuscleGroup(muscleGroup, userId)
+                    : catalogRepository.findVisibleAll(userId);
         return rows.stream().map(ExerciseCatalogResponse::of).toList();
     }
 }

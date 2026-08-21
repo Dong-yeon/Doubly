@@ -45,9 +45,13 @@ public interface WorkoutSetRepository extends JpaRepository<WorkoutSet, Long> {
                                               @Param("exerciseName") String exerciseName,
                                               Pageable pageable);
 
-    /** 부위별 마지막 수행 시각 — 근육 회복 계산(MuscleRecoveryService)의 원본 데이터. */
+    /**
+     * 부위별 마지막 수행 날짜 — 근육 회복 계산(MuscleRecoveryService)의 원본 데이터.
+     * workoutDate(사용자가 실제로 운동한 날) 기준이다 — createdAt(입력한 시각)을 쓰면
+     * 소급 기록(어제 운동을 오늘 입력) 시 회복률이 실제보다 낮게(방금 훈련한 것처럼) 나온다.
+     */
     @Query("""
-            select s.muscleGroup as muscleGroup, max(s.workout.createdAt) as lastTrainedAt
+            select s.muscleGroup as muscleGroup, max(s.workout.workoutDate) as lastTrainedOn
             from WorkoutSet s
             where s.workout.userId = :userId and s.muscleGroup is not null
             group by s.muscleGroup

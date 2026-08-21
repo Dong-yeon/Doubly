@@ -1,8 +1,10 @@
 package com.fitto.workout.controller;
 
 import com.fitto.common.response.ApiResponse;
+import com.fitto.common.security.AuthUser;
 import com.fitto.workout.dto.ExerciseCatalogResponse;
 import com.fitto.workout.service.ExerciseCatalogService;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -32,11 +34,12 @@ public class ExerciseCatalogController {
      */
     @GetMapping
     public ApiResponse<List<ExerciseCatalogResponse>> list(
+            @AuthenticationPrincipal AuthUser user,
             @RequestParam(required = false) String muscleGroup,
             @RequestParam(required = false) String names) {
         List<String> nameList = StringUtils.hasText(names)
                 ? Arrays.stream(names.split(",")).map(String::trim).filter(StringUtils::hasText).toList()
                 : null;
-        return ApiResponse.success(catalogService.list(muscleGroup, nameList));
+        return ApiResponse.success(catalogService.list(user.id(), muscleGroup, nameList));
     }
 }

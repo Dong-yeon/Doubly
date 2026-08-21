@@ -116,7 +116,15 @@ export function DietRecordScreen({ navigation, route }: Props) {
    * 추가 영양소(당류/나트륨/식이섬유) — 항목(MealItem)에는 없는 끼니 레벨 값이라
    * AI 분석·바코드 조회에서만 채워진다. 탄단지는 항목이 들고 있으므로 여기엔 없다.
    */
-  const [extras, setExtras] = useState<{ sugar?: number; sodium?: number; fiber?: number } | null>(null);
+  const [extras, setExtras] = useState<{ sugar?: number; sodium?: number; fiber?: number } | null>(
+    editing && (editing.sugar != null || editing.sodium != null || editing.fiber != null)
+      ? {
+          sugar: editing.sugar ?? undefined,
+          sodium: editing.sodium ?? undefined,
+          fiber: editing.fiber ?? undefined,
+        }
+      : null,
+  );
 
   const keySeq = useRef(0);
   const newItem = useCallback((patch?: Partial<ItemForm>): ItemForm => {
@@ -291,11 +299,13 @@ export function DietRecordScreen({ navigation, route }: Props) {
       },
     ]);
     if (result.sugar != null || result.sodium != null || result.fiber != null) {
-      setExtras({
-        sugar: result.sugar ?? undefined,
-        sodium: result.sodium ?? undefined,
-        fiber: result.fiber ?? undefined,
-      });
+      // 통째로 교체하면 이번 스캔이 안 채운 값(예: 나트륨)이 이전에 이미 알고 있던
+      // 값을 null 로 덮어써버린다 — 기존 값과 병합한다.
+      setExtras((prev) => ({
+        sugar: result.sugar ?? prev?.sugar,
+        sodium: result.sodium ?? prev?.sodium,
+        fiber: result.fiber ?? prev?.fiber,
+      }));
     }
     haptics.success();
     toast.success(result.foodName ? `${result.foodName} 정보를 불러왔어요` : '바코드 정보를 불러왔어요');

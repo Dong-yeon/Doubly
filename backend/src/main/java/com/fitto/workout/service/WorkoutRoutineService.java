@@ -141,7 +141,7 @@ public class WorkoutRoutineService {
                 .title(title)
                 .scheduledDays(scheduledDays)
                 .build();
-        CatalogLookup catalog = loadCatalog(exercises);
+        CatalogLookup catalog = loadCatalog(userId, exercises);
         int order = 1;
         for (SaveRoutineRequest.Exercise e : exercises) {
             routine.addExercise(toEntity(e, order++, catalog));
@@ -156,7 +156,7 @@ public class WorkoutRoutineService {
     @Transactional
     public RoutineResponse update(Long userId, Long routineId, SaveRoutineRequest request) {
         WorkoutRoutine routine = getOwned(userId, routineId);
-        CatalogLookup catalog = loadCatalog(request.exercises());
+        CatalogLookup catalog = loadCatalog(userId, request.exercises());
         List<WorkoutRoutineExercise> newExercises = new ArrayList<>();
         int order = 1;
         for (SaveRoutineRequest.Exercise e : request.exercises()) {
@@ -245,7 +245,7 @@ public class WorkoutRoutineService {
      * 요청에 등장하는 카탈로그를 두 갈래로 한 번에 모아 N+1 을 피한다 — 대체 종목은 항상
      * id 로 오고(카탈로그 선택기 전용), 본 종목은 id 가 없을 때만 이름으로 보충 조회한다.
      */
-    private CatalogLookup loadCatalog(List<SaveRoutineRequest.Exercise> exercises) {
+    private CatalogLookup loadCatalog(Long userId, List<SaveRoutineRequest.Exercise> exercises) {
         List<Long> altIds = exercises.stream()
                 .flatMap(e -> e.alternativeExerciseCatalogIds() == null
                         ? java.util.stream.Stream.<Long>empty()
@@ -264,7 +264,7 @@ public class WorkoutRoutineService {
                 .distinct()
                 .toList();
         Map<String, ExerciseCatalog> byName = namesNeedingLookup.isEmpty() ? Map.of()
-                : catalogRepository.findByNameIn(namesNeedingLookup).stream()
+                : catalogRepository.findVisibleByNameIn(namesNeedingLookup, userId).stream()
                         .collect(java.util.stream.Collectors.toMap(ExerciseCatalog::getName, Function.identity()));
 
         return new CatalogLookup(byId, byName);

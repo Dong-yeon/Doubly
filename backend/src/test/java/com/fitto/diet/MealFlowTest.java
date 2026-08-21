@@ -350,4 +350,64 @@ class MealFlowTest {
         assertThat(saved.sharedWithPartner()).isFalse();
         assertThat(mealService.findToday(user)).hasSize(1);
     }
+
+    /** 회귀 방지: update() 가 sharedGroupId 짝을 건드리지 않으면 두 기록이 어긋난다. */
+    @Test
+    void 데이트_식단을_수정하면_상대방_기록도_같이_바뀐다() {
+        Long a = register("datesync1@fitto.com");
+        Long b = register("datesync2@fitto.com");
+        InviteCodeResponse invite = relationService.createCoupleInvite(a);
+        relationService.connectCouple(b, invite.code());
+
+        MealResponse mine = mealService.save(a, sharedWithItems(LocalDate.now(), MealType.DINNER));
+        assertThat(mealService.findToday(b)).hasSize(1);
+
+        SaveMealRequest updateReq = new SaveMealRequest(
+                LocalDate.now(), MealType.DINNER, "수정된 메모", null,
+                null, null, null, null, 12, 300, 4,
+                List.of(new MealItemRequest("샐러드", "1인분", 200, 20, 10, 5)));
+        mealService.update(a, mine.id(), updateReq);
+
+        MealResponse partnerMeal = mealService.findToday(b).get(0);
+        assertThat(partnerMeal.memo()).isEqualTo("수정된 메모");
+        assertThat(partnerMeal.calories()).isEqualTo(200);
+        assertThat(partnerMeal.sugar()).isEqualTo(12);
+        assertThat(partnerMeal.sodium()).isEqualTo(300);
+        assertThat(partnerMeal.fiber()).isEqualTo(4);
+        assertThat(partnerMeal.items()).extracting(i -> i.name()).containsExactly("샐러드");
+    }
+
+    /** 회귀 방지: delete() 가 짝을 남기면 상대방 화면에 존재하지 않는 기록이 남는다. */
+    @Test
+    void 데이트_식단을_삭제하면_상대방_기록도_같이_지워진다() {
+        Long a = register("datedel1@fitto.com");
+        Long b = register("datedel2@fitto.com");
+        InviteCodeResponse invite = relationService.createCoupleInvite(a);
+        relationService.connectCouple(b, invite.code());
+
+        MealResponse mine = mealService.save(a, sharedWithItems(LocalDate.now(), MealType.DINNER));
+        assertThat(mealService.findToday(b)).hasSize(1);
+
+        mealService.delete(a, mine.id());
+
+        assertThat(mealService.findToday(a)).isEmpty();
+        assertThat(mealService.findToday(b)).isEmpty();
+    }
+
+    /** 회귀 방지: MealResponse 가 당·나트륨·식이섬유를 안 내려주면 수정 시 그 값이 사라진다. */
+    @Test
+    void 수정_응답에_당류_나트륨_식이섬유가_들어있다() {
+        Long user = register("extras1@fitto.com");
+        MealResponse saved = mealService.save(user, new SaveMealRequest(
+                LocalDate.now(), MealType.BREAKFAST, null, null,
+                300, 20, 10, 5, 8, 150, 3, null));
+
+        MealResponse updated = mealService.update(user, saved.id(), new SaveMealRequest(
+                LocalDate.now(), MealType.BREAKFAST, "메모만 수정", null,
+                300, 20, 10, 5, 8, 150, 3, null));
+
+        assertThat(updated.sugar()).isEqualTo(8);
+        assertThat(updated.sodium()).isEqualTo(150);
+        assertThat(updated.fiber()).isEqualTo(3);
+    }
 }

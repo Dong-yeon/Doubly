@@ -2,6 +2,8 @@ package com.fitto.workout.repository;
 
 import com.fitto.workout.domain.ExerciseCatalog;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 
@@ -13,8 +15,30 @@ public interface ExerciseCatalogRepository extends JpaRepository<ExerciseCatalog
     List<ExerciseCatalog> findByMuscleGroupOrderByName(String muscleGroup);
 
     /**
-     * 이름으로 일괄 조회 — 루틴 저장 시 exerciseCatalogId 없이 이름만 들어온 종목을
-     * 카탈로그와 연결하는 안전망(WorkoutRoutineService.resolveCatalogByName)에 쓴다.
+     * 시스템 기본 제공(created_by IS NULL) + 내가 만든 커스텀 종목만 — created_by 필터가
+     * 없으면 커스텀 종목 기능이 열리는 순간 타인이 만든 종목이 전 유저에게 노출된다.
      */
-    List<ExerciseCatalog> findByNameIn(List<String> names);
+    @Query("""
+            select c from ExerciseCatalog c
+            where c.createdBy is null or c.createdBy = :userId
+            order by c.muscleGroup asc, c.name asc
+            """)
+    List<ExerciseCatalog> findVisibleAll(@Param("userId") Long userId);
+
+    @Query("""
+            select c from ExerciseCatalog c
+            where c.muscleGroup = :muscleGroup
+              and (c.createdBy is null or c.createdBy = :userId)
+            order by c.name asc
+            """)
+    List<ExerciseCatalog> findVisibleByMuscleGroup(@Param("muscleGroup") String muscleGroup,
+                                                   @Param("userId") Long userId);
+
+    @Query("""
+            select c from ExerciseCatalog c
+            where c.name in :names
+              and (c.createdBy is null or c.createdBy = :userId)
+            """)
+    List<ExerciseCatalog> findVisibleByNameIn(@Param("names") List<String> names,
+                                              @Param("userId") Long userId);
 }
