@@ -4,6 +4,7 @@
  * 기본은 배포된 Railway 백엔드를 사용한다(휴대폰/Expo Go 에서 바로 동작).
  * 로컬 백엔드로 테스트하려면 USE_LOCAL_BACKEND 를 true 로 바꾼다.
  */
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
 // true → 로컬 백엔드(localhost/10.0.2.2:8080) / false → 배포된 Railway 백엔드
@@ -94,11 +95,52 @@ export const GOOGLE_AUTH = {
 export const isGoogleLoginConfigured = () => GOOGLE_AUTH.webClientId.length > 0;
 
 /**
- * 앱 버전 — 설정 화면 표시용.
- * expo-constants 를 의존성에 추가하지 않기 위해 상수로 둔다.
- * ⚠️ app.json / package.json 의 version 을 올릴 때 여기도 함께 올려야 한다.
+ * 앱 버전 — 설정 화면 표시용. app.json 의 version 을 그대로 읽는다.
+ *
+ * <p>예전에는 여기에 '1.0.0' 을 박아두고 "app.json 올릴 때 같이 올릴 것"이라고 적어뒀는데,
+ * 그 약속이 지켜지지 않으면 <b>화면이 조용히 거짓말을 한다</b>. 실제로 그래서 폰에 깔린 앱이
+ * 어느 시점 코드인지 판별할 수 없었다.
  */
-export const APP_VERSION = '1.0.0';
+export const APP_VERSION = Constants.expoConfig?.version ?? '0.0.0';
+
+/**
+ * 빌드 식별 정보 — app.config.js 가 빌드 시점에 심는다(그 파일 주석 참고).
+ *
+ * <p>AAB 는 EAS 빌드를 돌린 순간의 JS 가 얼어붙고 웹은 배포할 때마다 최신이라, 같은 증상이
+ * 한쪽에서만 날 때 "빌드가 달라서인가"를 가장 먼저 확인해야 한다. 그 근거를 화면에 둔다.
+ */
+const buildExtra = (Constants.expoConfig?.extra?.build ?? {}) as {
+  commit?: string;
+  time?: string;
+  profile?: string;
+};
+
+/** 이 번들을 만든 커밋(7자리). 설정을 평가하지 못한 환경에서는 'unknown'. */
+export const BUILD_COMMIT = buildExtra.commit ?? 'unknown';
+/** 빌드 시각(ISO, UTC). */
+export const BUILD_TIME = buildExtra.time ?? '';
+/** eas.json 프로필(production/preview) 또는 netlify/local. */
+export const BUILD_PROFILE = buildExtra.profile ?? 'unknown';
+
+/** ISO → 기기 로컬 시간 "YYYY-MM-DD HH:mm" (읽는 사람이 폰 시계로 대조할 수 있게). */
+function formatBuildTime(iso: string): string {
+  if (!iso) return '';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+    + ` ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+/** 버전 아래에 한 줄로 붙이는 빌드 지문 — 예: {@code a1b2c3d · 2026-08-21 21:40 · production} */
+export const BUILD_STAMP = [
+  BUILD_COMMIT,
+  formatBuildTime(BUILD_TIME),
+  BUILD_PROFILE,
+].filter(Boolean).join(' · ');
+
+/** 문의 메일·클립보드에 넣는 한 줄 — 예: {@code v1.0.0 · a1b2c3d · 2026-08-21 21:40 · production} */
+export const BUILD_LABEL = `v${APP_VERSION} · ${BUILD_STAMP}`;
 
 /**
  * 인앱결제가 붙었는가.

@@ -61,6 +61,27 @@ npx eas-cli build --platform android --profile preview
 [EAS Update](https://docs.expo.dev/eas-update/introduction/)로 앱을 재설치하지 않고 갱신할 수도
 있습니다(다음 단계에서 필요 시 별도 가이드 추가).
 
+## 6-1. 폰에 깔린 게 어느 빌드인지 확인하기
+
+**설정 화면 맨 아래**에 버전과 함께 빌드 지문이 뜹니다:
+
+```
+Doubly v1.0.0
+a1b2c3d · 2026-08-21 21:40 · production
+```
+
+- `a1b2c3d` — 이 번들을 만든 **커밋 해시**
+- 뒤의 시각 — 빌드 시각(기기 로컬 시간)
+- `production`/`preview` — eas.json 프로필. 웹 배포본은 `netlify`, 로컬 빌드는 `local`
+
+**길게 누르면 복사**되고, 문의·버그 신고 메일 본문에도 자동으로 들어갑니다.
+
+> 왜 필요한가: AAB/APK 는 EAS 빌드를 돌린 순간의 JS 가 그대로 얼어붙는 반면 웹(Netlify)은
+> 배포할 때마다 최신입니다. "앱만 안 되고 웹은 된다" 같은 증상에서 **빌드 차이인지 아닌지**를
+> 먼저 갈라야 하는데, 그 근거가 화면에 없으면 확인할 방법이 없습니다.
+> (값은 `app.config.js` 가 빌드 시점에 심습니다 — EAS 서버에서는 `EAS_BUILD_GIT_COMMIT_HASH`,
+> 로컬에서는 `git rev-parse`.)
+
 ## 7. Sentry 소스맵 업로드 (읽을 수 있는 스택트레이스)
 
 Sentry 연동 자체는 코드에 포함돼 있어(`src/utils/sentry.ts`) 빌드만 해도 오류는 수집되지만,
@@ -105,7 +126,7 @@ npx eas-cli env:create --scope project --name SENTRY_AUTH_TOKEN --value <토큰>
 | --- | --- |
 | `eas.json` 관련 스키마 오류 | `npx eas-cli --version` 으로 최신 CLI인지 확인 후 재시도 |
 | 빌드 실패 (네이티브 모듈 오류) | Expo 대시보드의 빌드 로그 확인 — 대부분 `app.json` plugin 설정 누락이 원인 |
-| 설치 후 앱이 흰 화면 | 최신 코드로 다시 빌드했는지 확인 (오래된 APK 캐시일 수 있음) |
+| 설치 후 앱이 흰 화면 | 최신 코드로 다시 빌드했는지 확인 (오래된 APK 캐시일 수 있음) — 설정 화면 하단의 커밋 해시로 판별, 6-1 참고 |
 | "출처를 알 수 없는 앱" 이 계속 막힘 | 설정 → 보안 → 해당 브라우저/파일관리자 앱의 "알 수 없는 앱 설치" 권한 허용 |
 
 ## 다음 단계
