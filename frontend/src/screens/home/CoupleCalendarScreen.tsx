@@ -29,6 +29,7 @@ import { Card } from '../../components/Card';
 import { TextField } from '../../components/TextField';
 import { DateField } from '../../components/DateField';
 import { EmptyState } from '../../components/EmptyState';
+import { IconButton } from '../../components/IconButton';
 import { calendarApi } from '../../api/calendar';
 import { tripApi } from '../../api/trip';
 import { tripStatusLabel } from '../trip/TripListScreen';
@@ -66,7 +67,9 @@ function pad2(n: number): string {
   return String(n).padStart(2, '0');
 }
 
-function ddayLabel(dday: number): string {
+/** ongoing — 기간 일정이 시작은 지났고 아직 안 끝난 상태. "N일 지남"으로 읽히면 안 된다 */
+function ddayLabel(dday: number, ongoing = false): string {
+  if (ongoing) return '진행 중';
   if (dday === 0) return 'D-day';
   if (dday > 0) return `D-${dday}`;
   return `${-dday}일 지남`;
@@ -76,6 +79,8 @@ interface FormState {
   id: number | null;
   title: string;
   date: string;
+  /** 기간 일정의 종료일 — '' 이면 하루 일정. 반복 일정과 함께 쓸 수 없다(백엔드 검증과 동일) */
+  endDate: string;
   eventType: CalendarEventType;
   repeatYearly: boolean;
   memo: string;
@@ -85,6 +90,7 @@ const EMPTY_FORM: FormState = {
   id: null,
   title: '',
   date: '',
+  endDate: '',
   eventType: 'DATE',
   repeatYearly: false,
   memo: '',
@@ -147,13 +153,25 @@ export function CoupleCalendarScreen({ navigation }: Props) {
     setSelectedDate(null);
   };
 
-  /** 날짜(YYYY-MM-DD) → 그 날의 일정들 */
+  /** 날짜(YYYY-MM-DD) → 그 날의 일정들 — 기간 일정은 걸치는 모든 날에 점이 찍히게 편다 */
   const byDate = useMemo(() => {
     const map = new Map<string, CoupleCalendarEvent[]>();
-    events.forEach((e) => {
-      const list = map.get(e.date) ?? [];
+    const push = (key: string, e: CoupleCalendarEvent) => {
+      const list = map.get(key) ?? [];
       list.push(e);
-      map.set(e.date, list);
+      map.set(key, list);
+    };
+    events.forEach((e) => {
+      const end = e.endDate && e.endDate > e.date ? e.endDate : e.date;
+      // 문자열 비교로 하루씩 전진 — 보이는 달 밖의 키는 그리드가 조회하지 않아 그대로 둬도 된다.
+      // guard 는 데이터가 깨져도 무한 루프가 되지 않게 하는 안전핀(400일 넘는 기간은 거기서 끊는다).
+      const cur = new Date(`${e.date}T00:00:00`);
+      for (let guard = 0; guard < 400; guard++) {
+        const key = `${cur.getFullYear()}-${pad2(cur.getMonth() + 1)}-${pad2(cur.getDate())}`;
+        if (key > end) break;
+        push(key, e);
+        cur.setDate(cur.getDate() + 1);
+      }
     });
     return map;
   }, [events]);
@@ -211,6 +229,7 @@ export function CoupleCalendarScreen({ navigation }: Props) {
       id: event.id,
       title: event.title,
       date: event.eventDate.slice(0, 10),
+      endDate: event.endDate ? event.endDate.slice(0, 10) : '',
       eventType: event.eventType,
       repeatYearly: event.repeatYearly,
       memo: event.memo ?? '',
@@ -235,11 +254,18 @@ export function CoupleCalendarScreen({ navigation }: Props) {
       toast.error('날짜를 선택해주세요.');
       return;
     }
+    // DateField 의 min 이 이미 막지만, 시작일을 나중에 옮기는 경로까지 이중으로 지킨다
+    if (form.endDate && form.endDate < form.date) {
+      toast.error('종료일은 시작일보다 빠를 수 없어요.');
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
         title: form.title.trim(),
         eventDate: form.date,
+        // 반복 일정은 기간을 갖지 않는다 — UI 가 이미 막지만 페이로드에서도 한 번 더 벗긴다
+        endDate: !form.repeatYearly && form.endDate ? form.endDate : undefined,
         eventType: form.eventType,
         repeatYearly: form.repeatYearly,
         memo: form.memo.trim() || undefined,
@@ -404,6 +430,8 @@ export function CoupleCalendarScreen({ navigation }: Props) {
         ) : (
           listEvents.map((event) => {
             const meta = typeMeta(event.eventType);
+            // 시작일 당일은 D-day 로(강조 포함), 그 다음 날부터 종료일까지는 "진행 중"으로 읽는다
+            const ongoing = !!event.endDate && event.date < todayStr && todayStr <= event.endDate;
             return (
               <TouchableOpacity key={`${event.id}-${event.date}`} activeOpacity={0.8} onPress={() => openEdit(event)}>
                 <Card elevation="sm" style={styles.eventCard}>
@@ -427,13 +455,16 @@ export function CoupleCalendarScreen({ navigation }: Props) {
                             event.dday === 0 && { color: onColor(colors.coral) },
                           ]}
                         >
-                          {ddayLabel(event.dday)}
+                          {ddayLabel(event.dday, ongoing)}
                         </Text>
                       </View>
                     </View>
                     <Text style={styles.eventMeta}>
-                      {Number(event.date.slice(5, 7))}월 {Number(event.date.slice(8, 10))}일 ·{' '}
-                      {meta.label}
+                      {Number(event.date.slice(5, 7))}월 {Number(event.date.slice(8, 10))}일
+                      {event.endDate
+                        ? ` ~ ${Number(event.endDate.slice(5, 7))}월 ${Number(event.endDate.slice(8, 10))}일`
+                        : ''}{' '}
+                      · {meta.label}
                       {event.memo ? ` · ${event.memo}` : ''}
                     </Text>
                   </View>
@@ -469,10 +500,37 @@ export function CoupleCalendarScreen({ navigation }: Props) {
                     maxLength={100}
                   />
                   <DateField
-                    label="날짜"
+                    label={form?.endDate ? '시작일' : '날짜'}
                     value={form?.date ?? ''}
-                    onChange={(d) => setForm((f) => (f ? { ...f, date: d } : f))}
+                    // 시작일을 종료일 뒤로 옮기면 종료일이 뒤집힌다 — TripForm 처럼 함께 밀어준다
+                    onChange={(d) =>
+                      setForm((f) =>
+                        f ? { ...f, date: d, endDate: f.endDate && f.endDate < d ? d : f.endDate } : f,
+                      )
+                    }
                   />
+                  {/* 기간 일정 — 반복 일정은 기간을 갖지 않아(백엔드 검증과 동일) 반복이 꺼진 동안만 보인다 */}
+                  {!form?.repeatYearly ? (
+                    <View style={styles.endDateRow}>
+                      <View style={styles.flex}>
+                        <DateField
+                          label="종료일 (선택)"
+                          value={form?.endDate ?? ''}
+                          onChange={(d) => setForm((f) => (f ? { ...f, endDate: d } : f))}
+                          min={form?.date || undefined}
+                          placeholder="없음 — 하루 일정"
+                        />
+                      </View>
+                      {form?.endDate ? (
+                        <IconButton
+                          icon="close"
+                          label="종료일 지우기 (하루 일정으로)"
+                          onPress={() => setForm((f) => (f ? { ...f, endDate: '' } : f))}
+                          style={styles.endDateClear}
+                        />
+                      ) : null}
+                    </View>
+                  ) : null}
 
                   <Text style={styles.fieldLabel}>종류</Text>
                   <View style={styles.typeRow}>
@@ -503,7 +561,10 @@ export function CoupleCalendarScreen({ navigation }: Props) {
                     </View>
                     <Switch
                       value={form?.repeatYearly ?? false}
-                      onValueChange={(v) => setForm((f) => (f ? { ...f, repeatYearly: v } : f))}
+                      // 반복을 켜면 종료일을 지운다 — 종료일 필드가 접히는 게 화면 안의 피드백이다
+                      onValueChange={(v) =>
+                        setForm((f) => (f ? { ...f, repeatYearly: v, endDate: v ? '' : f.endDate } : f))
+                      }
                       trackColor={{ true: colors.coral }}
                     />
                   </View>
@@ -664,6 +725,10 @@ const styles = themedStyles((colors) => ({
     fontWeight: '700',
     marginBottom: spacing.xs,
   },
+  // 종료일 + 지우기 버튼 한 줄 — 버튼(44)을 DateField 상자(54, 아래 여백 md)의 세로 중앙에 맞춘다
+  endDateRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.xs },
+  endDateClear: { marginBottom: spacing.md + 5 },
+
   typeRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md, flexWrap: 'wrap' },
   typeChip: {
     flexDirection: 'row',

@@ -6,6 +6,12 @@ export interface SaveEventPayload {
   title: string;
   /** YYYY-MM-DD */
   eventDate: string;
+  /**
+   * 기간 일정의 종료일 — 생략하면 하루 일정. 수정 시에도 생략하면 하루 일정으로
+   * 환원된다(백엔드 UpdateEventRequest 참고 — 기간은 시작일과 한 몸이라 요청이
+   * 기간 전체를 서술한다). 반복 일정과 함께 쓸 수 없다.
+   */
+  endDate?: string;
   eventType?: CalendarEventType;
   repeatYearly: boolean;
   memo?: string;
