@@ -8,10 +8,14 @@ import com.fitto.relation.service.RelationService;
 import com.fitto.workout.dto.SaveRoutineRequest;
 import com.fitto.workout.dto.SaveRoutineRequest.Exercise;
 import com.fitto.workout.service.WorkoutRoutineService;
+import com.fitto.auth.dto.LoginRequest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -35,6 +39,8 @@ class EventLogFlowTest {
     @Autowired RelationService relationService;
     @Autowired WorkoutRoutineService workoutRoutineService;
     @Autowired EventLogRepository eventLogRepository;
+    @Autowired EventLogService eventLogService;
+    @Autowired PlatformTransactionManager txManager;
 
     private Long register(String email) {
         return authService.register(
@@ -81,5 +87,47 @@ class EventLogFlowTest {
 
         assertThat(logs).hasSize(1);
         assertThat(logs.get(0).getRelationId()).isEqualTo(relation.id());
+    }
+
+    @Test
+    void 로그인하면_LOGIN_이벤트가_남는다() {
+        register("event-login@fitto.com");
+
+        Long user = authService.login(
+                new LoginRequest("event-login@fitto.com", "password123"), IP).user().id();
+
+        List<EventLog> logs = eventLogRepository.findByUserIdAndEventType(user, AnalyticsEvent.LOGIN);
+
+        assertThat(logs).hasSize(1);
+        assertThat(logs.get(0).getDetail()).isEqualTo("EMAIL");
+    }
+
+    /**
+     * 읽기 전용 트랜잭션 안에서도 이벤트가 <b>독립적으로 커밋</b>되는지 —
+     * {@link EventLogService} 가 REQUIRES_NEW 로 떨어져 있어야만 참이다.
+     *
+     * <p>이게 깨지면 운영(PostgreSQL)에서 로그인이 500 으로 죽는다: 읽기 전용 트랜잭션의
+     * JDBC 커넥션은 read-only 라 INSERT 가 거부되고, 그 실패가 바깥 트랜잭션을
+     * rollback-only 로 만든다. <b>H2 는 read-only 커넥션을 무시하므로 "INSERT 가 되는가"로는
+     * 재현되지 않는다</b> — 그래서 바깥 트랜잭션이 아직 열려 있는 동안 <b>다른 트랜잭션에서
+     * 그 행이 보이는가</b>(=이미 커밋됐는가)로 검증한다. 같은 트랜잭션에 얹혀 있으면 안 보인다.
+     */
+    @Test
+    void 읽기전용_트랜잭션_안에서도_이벤트가_독립적으로_커밋된다() {
+        Long user = register("event-readonly-tx@fitto.com");
+
+        TransactionTemplate readOnly = new TransactionTemplate(txManager);
+        readOnly.setReadOnly(true);
+        TransactionTemplate separate = new TransactionTemplate(txManager);
+        separate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+
+        readOnly.executeWithoutResult(status -> {
+            eventLogService.log(user, AnalyticsEvent.LOGIN, "EMAIL");
+
+            List<EventLog> visibleElsewhere = separate.execute(inner ->
+                    eventLogRepository.findByUserIdAndEventType(user, AnalyticsEvent.LOGIN));
+
+            assertThat(visibleElsewhere).hasSize(1);
+        });
     }
 }
