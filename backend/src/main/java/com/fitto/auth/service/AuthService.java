@@ -1,6 +1,7 @@
 package com.fitto.auth.service;
 
 import com.fitto.auth.dto.LoginRequest;
+import com.fitto.auth.dto.NotificationCategorySettingRequest;
 import com.fitto.auth.dto.RegisterRequest;
 import com.fitto.auth.dto.TokenResponse;
 import com.fitto.auth.dto.UpdateProfileRequest;
@@ -233,6 +234,22 @@ public class AuthService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
         user.setNotificationsEnabled(enabled);
+        return UserResponse.from(user);
+    }
+
+    /**
+     * 카테고리별 푸시 수신 설정 — 넘긴 항목만 바꾼다.
+     *
+     * <p>전체 스위치({@link #updateNotificationSetting})와는 AND 로 걸린다 —
+     * 전체가 꺼져 있으면 카테고리를 켜도 발송되지 않는다.
+     */
+    @Transactional
+    public UserResponse updateNotificationCategories(Long userId,
+                                                     NotificationCategorySettingRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
+        user.updateNotificationCategories(request.chat(), request.anniversary(),
+                request.partner(), request.reminder());
         return UserResponse.from(user);
     }
 

@@ -23,3 +23,29 @@ export const MOOD_EMOJIS: MoodEmojiDef[] = [
   { emoji: '😢', label: '슬픔' },
   { emoji: '🤒', label: '아픔' },
 ];
+
+/**
+ * 확장 무드팩 (PRO — `Feature.PREMIUM_STICKER`).
+ *
+ * 백엔드 `com.fitto.chat.domain.MoodPack.PREMIUM` 과 목록이 짝을 맞춰야 한다.
+ * 기본 12종으로는 표현이 안 되던 결들만 담는다 — 무료 목록을 옮겨오는 게 아니라
+ * 위에 얹는 것이라, 기존 사용자가 쓰던 무드가 갑자기 잠기지 않는다.
+ */
+export const PREMIUM_MOOD_EMOJIS: MoodEmojiDef[] = [
+  { emoji: '🤩', label: '설렘' },
+  { emoji: '🥲', label: '뭉클' },
+  { emoji: '😌', label: '평온' },
+  { emoji: '🫶', label: '고마움' },
+  { emoji: '🙃', label: '멘붕' },
+  { emoji: '😳', label: '당황' },
+  { emoji: '🥶', label: '추움' },
+  { emoji: '🥵', label: '더움' },
+  { emoji: '🤯', label: '폭발' },
+  { emoji: '😇', label: '뿌듯' },
+  { emoji: '🫥', label: '무기력' },
+  { emoji: '🤠', label: '의욕' },
+];
+
+export function isPremiumMood(emoji: string): boolean {
+  return PREMIUM_MOOD_EMOJIS.some((m) => m.emoji === emoji);
+}

@@ -5,7 +5,9 @@ import java.util.List;
 
 /**
  * 통합 타임라인 아이템 — POST / WORKOUT / MEAL / PLACE_VISIT 공통 형태.
- * reactions 는 POST 에만 존재 (그 외 null).
+ *
+ * <p>{@code reactions} 는 <b>모든 타입</b>에 붙는다(반응이 없으면 빈 목록).
+ * 카드를 막 만들어 돌려줄 때처럼 아직 채우지 않은 상태만 {@code null} 이다.
  */
 public record FeedItemResponse(
         FeedItemType type,

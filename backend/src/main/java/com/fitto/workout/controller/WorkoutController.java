@@ -98,6 +98,13 @@ public class WorkoutController {
         return ApiResponse.success(workoutService.stats(user.id()));
     }
 
+    /** 기록 단건 — 세트별 실기록까지 (운동 기록 상세 화면). */
+    @GetMapping("/{id}")
+    public ApiResponse<WorkoutResponse> one(@AuthenticationPrincipal AuthUser user,
+                                            @PathVariable Long id) {
+        return ApiResponse.success(workoutService.findOne(user.id(), id));
+    }
+
     @DeleteMapping("/{id}")
     public ApiResponse<Void> delete(@AuthenticationPrincipal AuthUser user, @PathVariable Long id) {
         workoutService.delete(user.id(), id);

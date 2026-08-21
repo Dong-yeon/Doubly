@@ -64,6 +64,16 @@ export const authApi = {
   /** 푸시 알림 수신 설정 — 끄면 모든 푸시가 발송되지 않는다. */
   updateNotificationSetting: (enabled: boolean) =>
     unwrap(apiClient.put<ApiResponse<User>>('/auth/me/notification-setting', { enabled })),
+  /**
+   * 카테고리별 푸시 수신 설정 — 넘긴 항목만 바뀐다.
+   * 토글 하나를 만질 때 네 값을 모두 보내면 다른 기기에서 방금 바꾼 설정을 덮어쓴다.
+   */
+  updateNotificationCategories: (patch: {
+    chat?: boolean;
+    anniversary?: boolean;
+    partner?: boolean;
+    reminder?: boolean;
+  }) => unwrap(apiClient.put<ApiResponse<User>>('/auth/me/notification-categories', patch)),
 
   /**
    * 비밀번호 재설정 코드 발송.

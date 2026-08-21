@@ -53,6 +53,14 @@ public class UserDataPurger {
                 "select m.photo_url from meals m "
                         + "where m.user_id = :uid and m.photo_url is not null", userId));
 
+        /*
+         * 내가 남긴 피드 반응 — feed_reactions.user_id 가 users 를 참조한다.
+         * 대상(운동·식단·포스트·방문)별 정리는 관계 단위(RelationRecordPurger)에서 이미
+         * 끝났지만, 관계가 하나도 없는 계정에도 이 행이 남아 있을 수 있어 한 번 더 훑는다
+         * — 하나라도 남으면 users 삭제가 FK 위반으로 실패한다.
+         */
+        exec("delete from feed_reactions where user_id = :uid", userId);
+
         exec("delete from workout_sets where workout_id in "
                 + "(select w.id from workouts w where w.user_id = :uid)", userId);
         exec("delete from workouts where user_id = :uid", userId);
@@ -74,6 +82,12 @@ public class UserDataPurger {
         exec("delete from password_reset_tokens where user_id = :uid", userId);
         exec("delete from trainer_profiles where user_id = :uid", userId);
         exec("delete from voice_clips where user_id = :uid", userId);
+        /*
+         * 운동 부스터(V61) — 관계 단위 정리에서 이미 지워졌지만, 보낸 쪽/받은 쪽 users FK 가
+         * 둘 다 걸려 있어 한 건이라도 남으면 탈퇴가 실패한다. 관계가 없는 계정(초대 대기 중
+         * 끊긴 경우 등)까지 덮도록 한 번 더 훑는다 — feed_reactions 와 같은 이유.
+         */
+        exec("delete from workout_boosters where sender_id = :uid or receiver_id = :uid", userId);
         // 구독 이력 — users FK 를 물고 있어서 빠뜨리면 탈퇴 전체가 FK 위반으로 실패한다.
         // (환불·정산 근거는 스토어 콘솔에 남으므로 여기서 지워도 된다)
         exec("delete from subscriptions where user_id = :uid", userId);

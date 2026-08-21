@@ -257,7 +257,7 @@ class MemoriesFlowTest {
     void 포스트에_달린_반응이_함께_내려온다() {
         long[] c = couple("mem-react-a@fitto.com", "mem-react-b@fitto.com");
         Long postId = postAt(c[0], "작년 벚꽃", LocalDateTime.of(2025, 7, 30, 3, 0));
-        feedService.toggleReaction(c[1], postId, "❤️");
+        feedService.toggleReaction(c[1], FeedItemType.POST, postId, "❤️");
 
         MemoriesResponse res = memoriesService.memories(c[0], TODAY);
 

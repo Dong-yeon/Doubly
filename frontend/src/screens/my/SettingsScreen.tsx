@@ -15,6 +15,7 @@ import { Chip } from '../../components/Chip';
 import { useThemeStore } from '../../store/themeStore';
 import type { ThemeMode } from '../../theme/themePreference';
 import { authApi } from '../../api/auth';
+import { isPushPermissionDenied } from '../../utils/push';
 import { useAuthStore } from '../../store/authStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { getErrorMessage } from '../../utils/error';
@@ -33,6 +34,18 @@ const THEME_OPTIONS: { value: ThemeMode; label: string }[] = [
   { value: 'dark', label: '다크' },
 ];
 
+/**
+ * 알림 종류 — 보내는 도메인(운동/식단/맛집…)이 아니라 사용자가 체감하는 성가심의 결로
+ * 나눈다(서버 `NotificationCategory` 와 1:1). 도메인으로 나누면 이 목록이 20줄이 되고,
+ * 어느 걸 꺼야 조용해지는지 알 수 없다.
+ */
+const NOTIFICATION_CATEGORIES = [
+  { key: 'chat', field: 'notifyChat', title: '채팅 · 전화', desc: '메시지, 반응, 전화와 부재중 알림.' },
+  { key: 'anniversary', field: 'notifyAnniversary', title: '기념일 · 일정', desc: '커플 캘린더 당일과 D-7·D-1 미리 알림.' },
+  { key: 'partner', field: 'notifyPartner', title: '상대 활동', desc: '운동·식단·맛집·선물처럼 상대가 남긴 기록.' },
+  { key: 'reminder', field: 'notifyReminder', title: '리마인드', desc: '스트릭·오늘의 질문·추억처럼 앱이 먼저 부르는 알림.' },
+] as const;
+
 export function SettingsScreen({ navigation }: Props) {
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
@@ -44,6 +57,14 @@ export function SettingsScreen({ navigation }: Props) {
 
   const [savingNotification, setSavingNotification] = useState(false);
   const [savingMarketing, setSavingMarketing] = useState(false);
+  /** 저장 중인 카테고리 키 — 카테고리마다 상태를 두면 네 개가 되므로 하나로 관리한다 */
+  const [savingCategory, setSavingCategory] = useState<string | null>(null);
+  /** OS 권한이 거부된 상태 — 앱 안 설정으로는 되돌릴 수 없어 시스템 설정으로 보내야 한다 */
+  const [permissionDenied, setPermissionDenied] = useState(false);
+
+  useEffect(() => {
+    void isPushPermissionDenied().then(setPermissionDenied);
+  }, []);
 
   // 서버가 값을 안 내려주는 구버전 응답에서도 안전하게 동작하도록 기본값을 둔다
   const notificationsEnabled = user?.notificationsEnabled ?? true;
@@ -58,6 +79,17 @@ export function SettingsScreen({ navigation }: Props) {
       Alert.alert('오류', getErrorMessage(e));
     } finally {
       setSavingNotification(false);
+    }
+  };
+
+  const onToggleCategory = async (key: string, next: boolean) => {
+    setSavingCategory(key);
+    try {
+      setUser(await authApi.updateNotificationCategories({ [key]: next }));
+    } catch (e) {
+      Alert.alert('오류', getErrorMessage(e));
+    } finally {
+      setSavingCategory(null);
     }
   };
 
@@ -133,6 +165,28 @@ export function SettingsScreen({ navigation }: Props) {
             />
           </View>
 
+          {/*
+            OS 권한 거부는 앱에서 되돌릴 수 없다(두 번째 권한창이 뜨지 않는다).
+            이 안내가 없으면 "앱에서는 켜 놨는데 아무것도 안 온다"가 되어 알림이
+            고장 난 것처럼 보인다.
+          */}
+          {permissionDenied ? (
+            <Pressable
+              style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+              onPress={() => void Linking.openSettings()}
+              accessibilityRole="button"
+              accessibilityLabel="시스템 알림 설정 열기"
+            >
+              <View style={styles.rowText}>
+                <Text style={styles.rowTitleWarn}>기기에서 알림이 차단돼 있어요</Text>
+                <Text style={styles.rowDesc}>
+                  아래 설정을 켜도 알림이 오지 않아요. 눌러서 시스템 설정에서 허용해주세요.
+                </Text>
+              </View>
+              <Text style={styles.chevron}>›</Text>
+            </Pressable>
+          ) : null}
+
           <View style={styles.divider} />
 
           <View style={styles.row}>
@@ -147,6 +201,35 @@ export function SettingsScreen({ navigation }: Props) {
               trackColor={{ true: colors.primary }}
             />
           </View>
+        </Card>
+
+        <Card elevation="sm" style={styles.section}>
+          <Text style={styles.sectionLabel}>알림 종류</Text>
+          <View style={[styles.rowText, styles.themeIntro]}>
+            <Text style={styles.rowDesc}>
+              받고 싶은 것만 골라 받을 수 있어요. 위의 푸시 알림을 끄면 여기 설정과 상관없이
+              모두 오지 않아요.
+            </Text>
+          </View>
+          {NOTIFICATION_CATEGORIES.map((c, i) => (
+            <View key={c.key}>
+              {i > 0 ? <View style={styles.divider} /> : null}
+              <View style={styles.row}>
+                <View style={styles.rowText}>
+                  <Text style={notificationsEnabled ? styles.rowTitle : styles.rowTitleMuted}>
+                    {c.title}
+                  </Text>
+                  <Text style={styles.rowDesc}>{c.desc}</Text>
+                </View>
+                <Switch
+                  value={notificationsEnabled && (user?.[c.field] ?? true)}
+                  onValueChange={(next) => onToggleCategory(c.key, next)}
+                  disabled={!notificationsEnabled || savingCategory === c.key}
+                  trackColor={{ true: colors.primary }}
+                />
+              </View>
+            </View>
+          ))}
         </Card>
 
         <Card elevation="sm" style={styles.section}>
@@ -292,6 +375,7 @@ const styles = themedStyles((colors) => ({
   rowText: { flex: 1, gap: 2 },
   rowTitle: { fontSize: fontSize.subtitle, color: colors.textPrimary, fontWeight: '600' },
   rowTitleMuted: { fontSize: fontSize.subtitle, color: colors.textSecondary, fontWeight: '600' },
+  rowTitleWarn: { fontSize: fontSize.subtitle, color: colors.danger, fontWeight: '600' },
   rowDesc: { fontSize: fontSize.caption, color: colors.textSecondary, lineHeight: 18 },
   menuItem: {
     flexDirection: 'row',

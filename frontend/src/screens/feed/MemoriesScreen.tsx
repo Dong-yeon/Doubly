@@ -67,7 +67,7 @@ export function MemoriesScreen({ route }: Props) {
   const onReact = async (item: FeedItem, emoji: string) => {
     haptics.light();
     try {
-      const reactions = await feedApi.react(item.refId, emoji);
+      const reactions = await feedApi.react(item.type, item.refId, emoji);
       setSections((prev) =>
         prev.map((s) => ({
           ...s,

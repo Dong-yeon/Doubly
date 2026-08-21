@@ -102,6 +102,18 @@ public interface RelationRepository extends JpaRepository<Relation, Long> {
     @Query("select r from Relation r where r.id = :id")
     Optional<Relation> findByIdForUpdate(@Param("id") Long id);
 
+    /**
+     * 활성 커플 전체 — 스케줄러(재방문 리마인드)가 매일 한 번 훑는다.
+     * 아직 상대가 연결되지 않은 관계(userBId is null)는 "커플"이 아니라 제외한다.
+     */
+    @Query("""
+            select r from Relation r
+            where r.relationType = com.fitto.relation.domain.RelationType.COUPLE
+              and r.status = com.fitto.relation.domain.RelationStatus.ACTIVE
+              and r.userBId is not null
+            """)
+    List<Relation> findAllActiveCouples();
+
     /** 회원 탈퇴 시 본인이 속한 모든 관계 삭제 */
     @Modifying
     @Query("delete from Relation r where r.userAId = :userId or r.userBId = :userId")

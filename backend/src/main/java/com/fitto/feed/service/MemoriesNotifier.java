@@ -3,6 +3,8 @@ package com.fitto.feed.service;
 import com.fitto.common.plan.Feature;
 import com.fitto.common.plan.PlanResolver;
 import com.fitto.common.plan.Plan;
+import com.fitto.common.notification.NotificationCategory;
+import com.fitto.common.notification.PushLinks;
 import com.fitto.common.notification.NotificationService;
 import com.fitto.feed.repository.FeedPostRepository;
 import com.fitto.place.repository.PlaceVisitRepository;
@@ -90,8 +92,10 @@ public class MemoriesNotifier {
                 continue;
             }
             String body = body(e.getValue());
-            notificationService.notify(couple.getUserAId(), TITLE, body);
-            notificationService.notify(couple.getUserBId(), TITLE, body);
+            notificationService.notify(couple.getUserAId(), NotificationCategory.REMINDER,
+                    TITLE, body, PushLinks.HOME);
+            notificationService.notify(couple.getUserBId(), NotificationCategory.REMINDER,
+                    TITLE, body, PushLinks.HOME);
             sent++;
         }
         log.info("추억 리마인드 푸시 — 대상 커플 {}건, 발송 {}건", targets.size(), sent);
