@@ -25,6 +25,7 @@ import { DateField } from '../../components/DateField';
 import { CoupleHero } from './components/CoupleHero';
 import { QuickActions } from './components/QuickActions';
 import { MemoryPeek } from './components/MemoryPeek';
+import { TripPeek, isTripLive, isTripOngoing, pickHomeTrip } from './components/TripPeek';
 import { LockedCard } from '../../components/LockedCard';
 import { TouchGesturePicker } from '../../components/TouchGesturePicker';
 import { MoodPicker } from '../../components/MoodPicker';
@@ -38,6 +39,7 @@ import { streakApi } from '../../api/streak';
 import { feedApi } from '../../api/feed';
 import { chatApi } from '../../api/chat';
 import { moodApi } from '../../api/mood';
+import { tripApi } from '../../api/trip';
 import { feedTimeLabel } from '../feed/FeedTimelineScreen';
 import {
   connectSocket,
@@ -57,7 +59,7 @@ import { updateHomeWidget } from '../../widget/updateHomeWidget';
 import { loadWidgetData } from '../../widget/widgetData';
 import { touchGestureOf } from '../../constants/touchGestures';
 import { playTouchGesture } from '../../utils/haptics';
-import type { FeedItem, Memories, MoodResponse, PartnerToday, Streak, TouchGestureCode } from '../../types';
+import type { FeedItem, Memories, MoodResponse, PartnerToday, Streak, TouchGestureCode, Trip } from '../../types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { isDarkMode } from '../../theme';
 import { themedStyles } from '../../theme/themedStyles';
@@ -136,6 +138,8 @@ export function HomeScreen({ navigation }: Props) {
   const [partnerLatest, setPartnerLatest] = useState<FeedItem | null>(null);
   // 작년 오늘 — 있는 날에만 최근 기록 자리를 대신 차지한다 (PLAN.md Memories)
   const [memories, setMemories] = useState<Memories | null>(null);
+  // 다가오는/진행 중 여행 — 있는 기간에만 조건부 한 줄 슬롯에 D-day 카드를 띄운다 (PLAN.md Trip)
+  const [homeTrip, setHomeTrip] = useState<Trip | null>(null);
 
   const [annModal, setAnnModal] = useState(false);
   const [annInput, setAnnInput] = useState('');
@@ -215,6 +219,11 @@ export function HomeScreen({ navigation }: Props) {
       // 잠긴 응답(locked)도 들고 있는다 — 빈 결과와 구분해서 잠금 카드를 그려야 한다
       .then((res) => setMemories(res.locked || res.groups.length > 0 ? res : null))
       .catch(() => setMemories(null));
+    // 여행 — 진행 중 > 가장 가까운 예정 하나만 고른다. 없거나 실패(미연결 404 포함)면 카드도 없다
+    tripApi
+      .list()
+      .then((trips) => setHomeTrip(pickHomeTrip(trips)))
+      .catch(() => setHomeTrip(null));
   }, [fetchAll, noteOffline]);
 
   useFocusEffect(useCallback(() => {
@@ -559,10 +568,18 @@ export function HomeScreen({ navigation }: Props) {
               </View>
 
               {/*
-                추억이 있는 날에만 한 줄이 붙는다. 대부분의 날은 비어 있다.
+                조건부 한 줄 슬롯 — 홈은 스크롤 없는 고정 화면이라(MemoryPeek 주석 참고) 줄을
+                쌓지 않고 하나만 고른다. 우선순위: ① 여행 중(일정표가 지금 필요한 순간) >
+                ② 작년 오늘(그날 하루뿐인 희소 콘텐츠) > ③ 여행 D-day(기간 내내 노출되므로
+                하루 양보해도 잃는 게 없다). 대부분의 날은 셋 다 없어 비어 있다.
                 공용 "최근 기록" 줄은 없앴다 — 좌우 열이 각자의 마지막 기록을 이미 보여준다.
               */}
-              {memories ? (
+              {homeTrip && isTripLive(homeTrip) && isTripOngoing(homeTrip) ? (
+                <TripPeek
+                  trip={homeTrip}
+                  onPress={() => navigation.navigate('TripDetail', { tripId: homeTrip.id, title: homeTrip.title })}
+                />
+              ) : memories ? (
                 memories.locked ? (
                   <LockedCard
                     title="작년 오늘"
@@ -572,6 +589,11 @@ export function HomeScreen({ navigation }: Props) {
                 ) : (
                   <MemoryPeek memories={memories} onPress={() => navigation.navigate('Memories')} />
                 )
+              ) : homeTrip && isTripLive(homeTrip) ? (
+                <TripPeek
+                  trip={homeTrip}
+                  onPress={() => navigation.navigate('TripDetail', { tripId: homeTrip.id, title: homeTrip.title })}
+                />
               ) : null}
 
               <QuickActions
@@ -602,11 +624,16 @@ export function HomeScreen({ navigation }: Props) {
 
               <Text style={styles.soloTitle}>연결을 기다리는 동안, 혼자서도 시작할 수 있어요</Text>
               <Card elevation="sm" style={styles.soloCard}>
+                {/*
+                  initial: false — 럽슐랭 탭을 아직 안 연 세션에서 이 카드를 누르면 그 탭이
+                  PlaceAdd <b>하나</b>로 시작돼, 저장 후 goBack 할 곳도 가이드로 나갈 길도 없었다.
+                  아래에 PlaceMain 을 깔아둔다.
+                */}
                 {(
                   [
                     { icon: 'dumbbell', label: '운동 기록하기', desc: '오늘 운동을 남기면 스트릭이 시작돼요', go: () => navigation.navigate('Workout', { screen: 'WorkoutRecord' }) },
                     { icon: 'silverware-fork-knife', label: '식단 기록하기', desc: '사진이나 글로 적으면 AI가 칼로리를 계산해요', go: () => navigation.navigate('Diet', { screen: 'DietRecord' }) },
-                    { icon: 'map-marker-plus-outline', label: '가고 싶은 장소 저장', desc: '맛집, 여행지, 전시… 둘이 함께 갈 곳을 미리 담아두세요', go: () => navigation.navigate('Place', { screen: 'PlaceAdd' }) },
+                    { icon: 'map-marker-plus-outline', label: '가고 싶은 장소 저장', desc: '맛집, 여행지, 전시… 둘이 함께 갈 곳을 미리 담아두세요', go: () => navigation.navigate('Place', { screen: 'PlaceAdd', initial: false }) },
                   ] as const
                 ).map((a, i, arr) => (
                   <React.Fragment key={a.label}>

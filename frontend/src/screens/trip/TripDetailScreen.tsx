@@ -19,12 +19,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { PlaceStackParamList } from '../../navigation/types';
+import type { HomeStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { IconButton } from '../../components/IconButton';
 import { KakaoMap } from '../../components/KakaoMap';
 import { tripApi } from '../../api/trip';
 import { placeApi } from '../../api/place';
+import { usePlaceStore } from '../../store/placeStore';
 import { isKakaoMapConfigured } from '../../constants/config';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
@@ -36,7 +37,12 @@ import { tripStatusLabel } from './TripListScreen';
 import { themedStyles } from '../../theme/themedStyles';
 import { onColor } from '../../theme/onColor';
 
-type Props = NativeStackScreenProps<PlaceStackParamList, 'TripDetail'>;
+/*
+ * 담긴 장소 카드/핀 → 장소 상세는 <b>이 스택 안에서</b> 연다(럽슐랭 탭으로 건너가지 않는다).
+ * 홈 스택에도 PlaceDetail/PlaceAdd 를 등록해 둔 이유 — navigation/types.ts 의
+ * PlaceScreensParamList 주석 참고. 덕분에 뒤로가기가 보던 여행으로 정확히 돌아온다.
+ */
+type Props = NativeStackScreenProps<HomeStackParamList, 'TripDetail'>;
 type Tab = 'itinerary' | 'places';
 
 const CATEGORIES = ['관광', '식사', '카페', '이동', '숙소', '기타'];
@@ -58,6 +64,9 @@ interface ItemForm {
 
 export function TripDetailScreen({ navigation, route }: Props) {
   const { tripId } = route.params;
+  // 담기/빼기는 places.trip_id 를 바꾼다 — 위시리스트의 "✈️ 여행에 담김" 칩이
+  // 캐시된 목록에 남지 않게, 성공 시마다 placeStore 캐시를 무효화한다.
+  const invalidatePlaces = usePlaceStore((s) => s.invalidate);
   const [detail, setDetail] = useState<TripDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<Tab>('itinerary');
@@ -148,6 +157,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
       await tripApi.attachPlace(tripId, place.id);
       haptics.light();
       toast.success(`"${place.name}"을(를) 여행에 담았어요.`);
+      invalidatePlaces();
       load();
     } catch (e) {
       Alert.alert('오류', getErrorMessage(e));
@@ -178,6 +188,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
             await tripApi.detachPlace(tripId, place.id);
             haptics.light();
             toast.success('장소를 여행에서 뺐어요.');
+            invalidatePlaces();
             load();
           } catch (e) {
             Alert.alert('오류', getErrorMessage(e));
@@ -521,7 +532,11 @@ export function TripDetailScreen({ navigation, route }: Props) {
                   height={200}
                   onMarkerPress={(id) => {
                     const it = dayItems.find((i) => i.id === id);
-                    if (it?.placeId) navigation.navigate('PlaceDetail', { placeId: it.placeId, name: it.placeName ?? it.title });
+                    if (it?.placeId)
+                      navigation.navigate('PlaceDetail', {
+                        placeId: it.placeId,
+                        name: it.placeName ?? it.title,
+                      });
                   }}
                 />
               </View>

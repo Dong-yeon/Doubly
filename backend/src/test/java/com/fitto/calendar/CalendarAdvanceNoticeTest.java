@@ -69,7 +69,7 @@ class CalendarAdvanceNoticeTest {
         Long[] c = couple("adv-7a@fitto.com", "adv-7b@fitto.com");
         LocalDate today = BASE;
         calendarService.create(c[0], new CreateEventRequest(
-                "100일", today.plusDays(7), EventType.ANNIVERSARY, false, null));
+                "100일", today.plusDays(7), null, EventType.ANNIVERSARY, false, null));
         clearInvocations(notificationService);
 
         ddayNotifier.notifyFor(today);
@@ -86,7 +86,7 @@ class CalendarAdvanceNoticeTest {
         Long[] c = couple("adv-date-a@fitto.com", "adv-date-b@fitto.com");
         LocalDate today = BASE;
         calendarService.create(c[0], new CreateEventRequest(
-                "영화 보기", today.plusDays(7), EventType.DATE, false, null));
+                "영화 보기", today.plusDays(7), null, EventType.DATE, false, null));
         clearInvocations(notificationService);
 
         ddayNotifier.notifyFor(today);
@@ -100,7 +100,7 @@ class CalendarAdvanceNoticeTest {
         Long[] c = couple("adv-1a@fitto.com", "adv-1b@fitto.com");
         LocalDate today = BASE;
         calendarService.create(c[0], new CreateEventRequest(
-                "저녁 약속", today.plusDays(1), EventType.DATE, false, null));
+                "저녁 약속", today.plusDays(1), null, EventType.DATE, false, null));
         clearInvocations(notificationService);
 
         ddayNotifier.notifyFor(today);
@@ -114,7 +114,7 @@ class CalendarAdvanceNoticeTest {
         Long[] c = couple("adv-0a@fitto.com", "adv-0b@fitto.com");
         LocalDate today = BASE;
         calendarService.create(c[0], new CreateEventRequest(
-                "오늘 기념일", today, EventType.ANNIVERSARY, false, null));
+                "오늘 기념일", today, null, EventType.ANNIVERSARY, false, null));
         clearInvocations(notificationService);
 
         ddayNotifier.notifyFor(today);

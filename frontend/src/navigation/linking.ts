@@ -90,9 +90,20 @@ export const linking: LinkingOptions<RootStackParamList> = {
     };
   },
 
+  /*
+   * config 를 통째로 캐스팅하는 이유 — 각 탭 블록의 `initialRouteName` 때문이다.
+   * v7 의 `PathConfigMap` 은 중첩 내비게이터의 파람리스트를 `NavigatorScreenParams<infer T>`
+   * 로 되찾으려 하는데, 그 타입이 매핑된 유니온이라 추론이 `{}` 로 떨어진다 →
+   * `initialRouteName?: keyof {}` = never 가 돼 어떤 화면 이름도 못 넣는다(플레인 타입인
+   * Chat·Diet 블록도 똑같이 거부되므로 이 파일 쪽 타입 문제가 아니다). 값 자체는 아래에서
+   * 각 스택의 실제 첫 화면 이름으로 정확히 맞춰 뒀다.
+   */
   config: {
     screens: {
       Onboarding: {
+        // 딥링크로 /register·/forgot-password·/legal 로 들어와도 아래에 로그인 화면이 깔린다
+        // (없으면 그 화면 하나뿐이라 '로그인으로 돌아가기'(goBack)가 아무 일도 하지 않았다)
+        initialRouteName: 'Login',
         screens: {
           Splash: 'splash',
           Onboarding: 'intro',
@@ -106,7 +117,14 @@ export const linking: LinkingOptions<RootStackParamList> = {
       ConsentGate: 'consent',
       Main: {
         screens: {
+          /*
+           * initialRouteName — 딥링크·웹 새로고침으로 <b>깊은 화면</b>이 열릴 때 그 아래에
+           * 탭의 첫 화면을 깔아둔다. 없으면 그 탭 스택이 도착 화면 <b>하나</b>로만 만들어져
+           * 뒤로가기 버튼도 없고(탭 재탭의 popToTop 도 할 일이 없다) 그 세션 동안 탭의 첫
+           * 화면으로 못 돌아간다 — doubly://trips/5 로 열면 홈 화면 자체가 사라지는 식이다.
+           */
           Home: {
+            initialRouteName: 'HomeMain',
             screens: {
               HomeMain: '',
               CoupleConnect: 'couple/connect',
@@ -131,56 +149,10 @@ export const linking: LinkingOptions<RootStackParamList> = {
                 parse: { memberId: Number },
               },
               TrainerConnect: 'trainer/connect',
-            },
-          },
-          Workout: {
-            screens: {
-              WorkoutMain: 'workout',
-              WorkoutRecord: 'workout/record',
-              WorkoutCalendar: 'workout/calendar',
-              WorkoutDetail: {
-                path: 'workout/records/:workoutId',
-                parse: { workoutId: Number },
-              },
-              WorkoutStats: 'workout/stats',
-              WorkoutRecommend: 'workout/recommend',
-              WorkoutSession: 'workout/session',
-              WorkoutRoutines: 'workout/routines',
-              WorkoutProgramDetail: {
-                path: 'workout/routines/programs/:programId',
-                parse: { programId: Number },
-              },
-              WorkoutRoutineForm: 'workout/routines/new',
-              BodyMetric: 'workout/body',
-              Challenge: 'workout/challenge',
-            },
-          },
-          Chat: {
-            screens: {
-              ChatRooms: 'chat',
-              ChatRoom: {
-                path: 'chat/:relationId',
-                parse: { relationId: Number },
-              },
-            },
-          },
-          Diet: {
-            screens: {
-              DietMain: 'diet',
-              DietRecord: 'diet/record',
-              DietCalendar: 'diet/calendar',
-              DietStats: 'diet/stats',
-            },
-          },
-          Place: {
-            screens: {
-              // 가이드/위시리스트/지도가 한 화면(Chip 세그먼트)으로 합쳐져 경로도 하나다
-              PlaceMain: 'place',
-              PlaceAdd: 'place/add',
-              PlaceDetail: {
-                path: 'place/:placeId',
-                parse: { placeId: Number },
-              },
+              /*
+               * 여행 — 장소(Place) 스택에서 이관. 경로 문자열은 그대로 둔다:
+               * 이미 배포된 딥링크·브라우저 북마크(doubly://trips/*)가 계속 열려야 한다.
+               */
               TripList: 'trips',
               TripForm: 'trips/form',
               TripDetail: {
@@ -203,10 +175,76 @@ export const linking: LinkingOptions<RootStackParamList> = {
                 path: 'trips/:tripId/recap',
                 parse: { tripId: Number },
               },
+              /*
+               * 여행에서 연 장소 화면 — 럽슐랭 탭에도 같은 화면이 있지만 <b>경로는 나눈다</b>.
+               * 경로가 없으면 getPathFromState 가 라우트 이름을 그대로 URL 에 박아
+               * (`/PlaceDetail?placeId=3`) 새로고침 때 복원에 실패해 홈으로 튕겼다.
+               * 같은 'place/:placeId' 를 두 블록에 쓰면 어느 탭으로 복원될지 모호해지므로,
+               * 여행 쪽은 trips/ 아래에 둬 새로고침해도 홈 스택으로 돌아온다.
+               */
+              PlaceDetail: {
+                path: 'trips/place/:placeId',
+                parse: { placeId: Number },
+              },
+              PlaceAdd: 'trips/place/edit',
+            },
+          },
+          Workout: {
+            initialRouteName: 'WorkoutMain',
+            screens: {
+              WorkoutMain: 'workout',
+              WorkoutRecord: 'workout/record',
+              WorkoutCalendar: 'workout/calendar',
+              WorkoutDetail: {
+                path: 'workout/records/:workoutId',
+                parse: { workoutId: Number },
+              },
+              WorkoutStats: 'workout/stats',
+              WorkoutRecommend: 'workout/recommend',
+              WorkoutSession: 'workout/session',
+              WorkoutRoutines: 'workout/routines',
+              WorkoutProgramDetail: {
+                path: 'workout/routines/programs/:programId',
+                parse: { programId: Number },
+              },
+              WorkoutRoutineForm: 'workout/routines/new',
+              BodyMetric: 'workout/body',
+              Challenge: 'workout/challenge',
+            },
+          },
+          Chat: {
+            initialRouteName: 'ChatRooms',
+            screens: {
+              ChatRooms: 'chat',
+              ChatRoom: {
+                path: 'chat/:relationId',
+                parse: { relationId: Number },
+              },
+            },
+          },
+          Diet: {
+            initialRouteName: 'DietMain',
+            screens: {
+              DietMain: 'diet',
+              DietRecord: 'diet/record',
+              DietCalendar: 'diet/calendar',
+              DietStats: 'diet/stats',
+            },
+          },
+          Place: {
+            initialRouteName: 'PlaceMain',
+            screens: {
+              // 가이드/위시리스트/지도가 한 화면(Chip 세그먼트)으로 합쳐져 경로도 하나다
+              PlaceMain: 'place',
+              PlaceAdd: 'place/add',
+              PlaceDetail: {
+                path: 'place/:placeId',
+                parse: { placeId: Number },
+              },
             },
           },
         },
       },
     },
-  },
+  } as LinkingOptions<RootStackParamList>['config'],
 };

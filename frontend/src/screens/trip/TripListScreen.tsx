@@ -5,10 +5,11 @@ import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { PlaceStackParamList } from '../../navigation/types';
+import type { HomeStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { tripApi } from '../../api/trip';
+import { usePlaceStore } from '../../store/placeStore';
 import { getErrorMessage } from '../../utils/error';
 import { toDateString } from '../../utils/date';
 import { toast } from '../../store/toastStore';
@@ -18,7 +19,7 @@ import type { Trip } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { layout } from '../../theme/layout';
 
-type Props = NativeStackScreenProps<PlaceStackParamList, 'TripList'>;
+type Props = NativeStackScreenProps<HomeStackParamList, 'TripList'>;
 
 /** 여행 상태 라벨 — 예정(D-n) / 여행 중 / 다녀옴 */
 export function tripStatusLabel(trip: Trip): string {
@@ -34,6 +35,9 @@ export function tripStatusLabel(trip: Trip): string {
 }
 
 export function TripListScreen({ navigation }: Props) {
+  // 여행 삭제는 담긴 장소들의 trip_id 를 NULL 로 되돌린다(ON DELETE SET NULL) —
+  // 위시리스트의 "✈️ 여행에 담김" 칩이 남지 않게 placeStore 캐시를 무효화한다.
+  const invalidatePlaces = usePlaceStore((s) => s.invalidate);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -69,6 +73,7 @@ export function TripListScreen({ navigation }: Props) {
             await tripApi.remove(trip.id);
             haptics.light();
             toast.success('여행을 삭제했어요.');
+            invalidatePlaces();
             load();
           } catch (e) {
             Alert.alert('오류', getErrorMessage(e));

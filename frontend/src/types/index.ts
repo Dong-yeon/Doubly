@@ -137,6 +137,8 @@ export interface CoupleCalendarEvent {
   date: string;
   /** 원본 기준일 — 반복 일정의 최초 날짜 */
   eventDate: string;
+  /** 기간 일정의 종료일 — 없으면 하루 일정 (반복 일정은 항상 없다) */
+  endDate?: string | null;
   eventType: CalendarEventType;
   repeatYearly: boolean;
   memo?: string | null;

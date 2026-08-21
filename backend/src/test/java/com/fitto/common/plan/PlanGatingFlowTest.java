@@ -173,11 +173,11 @@ class PlanGatingFlowTest {
         LocalDate today = LocalDate.now();
 
         for (int i = 0; i < limit; i++) {
-            calendarService.create(user, new CreateEventRequest("일정" + i, today, null, false, null));
+            calendarService.create(user, new CreateEventRequest("일정" + i, today, null, null, false, null));
         }
 
         assertThatThrownBy(() -> calendarService.create(user,
-                new CreateEventRequest("한도초과", today, null, false, null)))
+                new CreateEventRequest("한도초과", today, null, null, false, null)))
                 .isInstanceOf(BusinessException.class)
                 .extracting(this::errorCodeOf)
                 .isEqualTo(ErrorCode.PLAN_LIMIT_EXCEEDED);

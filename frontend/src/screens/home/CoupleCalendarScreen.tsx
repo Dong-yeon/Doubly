@@ -2,6 +2,11 @@
  * 커플 캘린더 — 기념일 외 일정(생일·데이트 약속 등) 공유.
  * 월 그리드(일정 있는 날 점 표시) + 일정 목록(D-day 배지) + 추가/수정 모달.
  * 매일 아침(KST) 당일 일정은 서버가 커플 양쪽에 푸시한다.
+ *
+ * <p>여행(PLAN.md Trip)이 럽슐랭(장소) 탭에서 홈 스택으로 이관되면서, 이 화면이 여행의
+ * <b>상시 진입점</b>이 됐다 — 그리드에 여행 기간을 띠로 잇고, 그리드 아래 '우리 여행'
+ * 섹션에서 상세·전체 목록·만들기로 들어간다. (홈의 D-day 카드는 여행이 있는 기간에만
+ * 뜨는 조건부 표면이라, 여행이 하나도 없을 때의 생성 진입로는 여기뿐이다.)
  */
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
@@ -24,10 +29,13 @@ import { Card } from '../../components/Card';
 import { TextField } from '../../components/TextField';
 import { DateField } from '../../components/DateField';
 import { EmptyState } from '../../components/EmptyState';
+import { IconButton } from '../../components/IconButton';
 import { calendarApi } from '../../api/calendar';
+import { tripApi } from '../../api/trip';
+import { tripStatusLabel } from '../trip/TripListScreen';
 import { toast } from '../../store/toastStore';
 import { getErrorMessage } from '../../utils/error';
-import type { CalendarEventType, CoupleCalendarEvent } from '../../types';
+import type { CalendarEventType, CoupleCalendarEvent, Trip } from '../../types';
 import { confirmDiscard } from '../../utils/discardGuard';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
@@ -59,7 +67,9 @@ function pad2(n: number): string {
   return String(n).padStart(2, '0');
 }
 
-function ddayLabel(dday: number): string {
+/** ongoing — 기간 일정이 시작은 지났고 아직 안 끝난 상태. "N일 지남"으로 읽히면 안 된다 */
+function ddayLabel(dday: number, ongoing = false): string {
+  if (ongoing) return '진행 중';
   if (dday === 0) return 'D-day';
   if (dday > 0) return `D-${dday}`;
   return `${-dday}일 지남`;
@@ -69,6 +79,8 @@ interface FormState {
   id: number | null;
   title: string;
   date: string;
+  /** 기간 일정의 종료일 — '' 이면 하루 일정. 반복 일정과 함께 쓸 수 없다(백엔드 검증과 동일) */
+  endDate: string;
   eventType: CalendarEventType;
   repeatYearly: boolean;
   memo: string;
@@ -78,18 +90,28 @@ const EMPTY_FORM: FormState = {
   id: null,
   title: '',
   date: '',
+  endDate: '',
   eventType: 'DATE',
   repeatYearly: false,
   memo: '',
 };
 
-export function CoupleCalendarScreen(_props: Props) {
+export function CoupleCalendarScreen({ navigation }: Props) {
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${pad2(today.getMonth() + 1)}-${pad2(today.getDate())}`;
 
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth() + 1); // 1~12
   const [events, setEvents] = useState<CoupleCalendarEvent[]>([]);
+  // 여행 전체 목록 — 월과 무관하게 한 번 받고, 그리드 띠·'우리 여행' 섹션은 보이는 달로 거른다
+  const [trips, setTrips] = useState<Trip[]>([]);
+  /*
+   * 여행을 <b>한 번이라도 받아봤는지</b>. 첫 응답 전(=아직 모름)과 "정말 없음"을 구분한다 —
+   * 없으면 화면에 들어올 때마다 '여행이 없어요 · 만들기' CTA 가 먼저 깜빡이고, 리포커스 때
+   * 네트워크가 한 번 흔들리면 있던 여행이 통째로 사라진 채 만들기를 권한다(중복 생성 유도).
+   * TripListScreen 이 같은 이유로 "실패해도 목록은 비우지 않는다"를 지킨다.
+   */
+  const [tripsLoaded, setTripsLoaded] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
   const [saving, setSaving] = useState(false);
@@ -111,12 +133,32 @@ export function CoupleCalendarScreen(_props: Props) {
       setEvents(data);
     } catch (e) {
       if (latestRequestRef.current !== requestId) return;
-      // 커플 미연결(RELATION_NOT_FOUND)은 빈 상태로 안내
-      setEvents([]);
+      /*
+       * 실패해도 목록을 비우지 않는다 — 화면에 돌아올 때마다 재조회하므로, 네트워크가 한 번
+       * 흔들리면 있던 일정이 통째로 사라진 채 "일정이 없어요"가 떠 지워진 것처럼 보였다
+       * (바로 아래 여행 로더가 같은 이유로 지키는 규칙). 커플 미연결이면 애초에 받아둔
+       * 목록이 없어 빈 상태 그대로다.
+       */
     }
   }, []);
 
   useFocusEffect(useCallback(() => void load(year, month), [load, year, month]));
+
+  // 여행은 월 이동과 무관하게 전체를 받는다.
+  // 성공했을 때만 목록을 갈아끼운다 — 실패(일시적 네트워크 오류 등)면 직전 목록을 그대로 둔다.
+  // 커플 미연결(RELATION_NOT_FOUND)도 실패로 들어오지만, 그 경우 애초에 받아둔 목록이 없어
+  // 빈 상태 그대로다(아래 tripsLoaded 로 '아직 모름'과 구분해 CTA 를 늦춘다).
+  useFocusEffect(
+    useCallback(() => {
+      tripApi
+        .list()
+        .then((list) => {
+          setTrips(list);
+          setTripsLoaded(true);
+        })
+        .catch(() => {});
+    }, []),
+  );
 
   const moveMonth = (delta: number) => {
     let y = year;
@@ -128,16 +170,34 @@ export function CoupleCalendarScreen(_props: Props) {
     setSelectedDate(null);
   };
 
-  /** 날짜(YYYY-MM-DD) → 그 날의 일정들 */
+  /**
+   * 날짜(YYYY-MM-DD) → 그 날의 일정들 — 기간 일정은 걸치는 모든 날에 점이 찍히게 편다.
+   *
+   * <p>펴는 범위는 <b>보이는 달</b>로 자른다. 예전엔 일정의 시작일부터 하루씩 전진하며
+   * 400회에서 끊었는데, 백엔드 월 조회가 겹침 기준이라 시작일이 한참 전인 장기 일정
+   * (군 복무·유학 같은 18개월짜리)도 계속 내려온다 — 그 달의 키는 하나도 안 만들어져
+   * "목록엔 카드가 있는데 그리드엔 점이 없고 날짜를 누르면 '일정이 없어요'"가 됐다.
+   * 달 안으로 자르면 반복 횟수가 최대 31이라 안전핀도 필요 없다.
+   */
   const byDate = useMemo(() => {
     const map = new Map<string, CoupleCalendarEvent[]>();
+    const monthStart = `${year}-${pad2(month)}-01`;
+    const monthEnd = `${year}-${pad2(month)}-${pad2(new Date(year, month, 0).getDate())}`;
     events.forEach((e) => {
-      const list = map.get(e.date) ?? [];
-      list.push(e);
-      map.set(e.date, list);
+      const end = e.endDate && e.endDate > e.date ? e.endDate : e.date;
+      // 이 달과 겹치는 구간만 — 시작이 전 달이면 월초부터, 끝이 다음 달이면 월말까지
+      const from = e.date > monthStart ? e.date : monthStart;
+      const to = end < monthEnd ? end : monthEnd;
+      if (from > to) return; // 이 달과 안 겹치는 일정(반복 일정의 다른 해 등)
+      const cur = new Date(`${from}T00:00:00`);
+      for (let key = from; key <= to; ) {
+        map.set(key, [...(map.get(key) ?? []), e]);
+        cur.setDate(cur.getDate() + 1);
+        key = `${cur.getFullYear()}-${pad2(cur.getMonth() + 1)}-${pad2(cur.getDate())}`;
+      }
     });
     return map;
-  }, [events]);
+  }, [events, year, month]);
 
   /** 월 그리드 셀 — 앞쪽 공백 + 1..말일 */
   const cells = useMemo(() => {
@@ -150,6 +210,29 @@ export function CoupleCalendarScreen(_props: Props) {
   }, [year, month]);
 
   const listEvents = selectedDate ? byDate.get(selectedDate) ?? [] : events;
+
+  /** 보이는 달과 겹치는 여행들 — 그리드 틴트와 '우리 여행' 섹션이 함께 쓴다 */
+  const monthTrips = useMemo(() => {
+    const monthStart = `${year}-${pad2(month)}-01`;
+    const monthEnd = `${year}-${pad2(month)}-${pad2(new Date(year, month, 0).getDate())}`;
+    return trips.filter((t) => t.startDate <= monthEnd && t.endDate >= monthStart);
+  }, [trips, year, month]);
+
+  /** 여행 기간에 덮이는 날짜(YYYY-MM-DD) 집합 — 셀마다 여행 배열을 훑지 않게 미리 편다 */
+  const tripDays = useMemo(() => {
+    const set = new Set<string>();
+    const lastDay = new Date(year, month, 0).getDate();
+    for (let d = 1; d <= lastDay; d++) {
+      const dateStr = `${year}-${pad2(month)}-${pad2(d)}`;
+      if (monthTrips.some((t) => t.startDate <= dateStr && dateStr <= t.endDate)) set.add(dateStr);
+    }
+    return set;
+  }, [monthTrips, year, month]);
+
+  // 날짜를 고르면 그 날을 덮는 여행만, 아니면 이번 달과 겹치는 여행 전부
+  const listTrips = selectedDate
+    ? monthTrips.filter((t) => t.startDate <= selectedDate && selectedDate <= t.endDate)
+    : monthTrips;
 
   /*
    * 모달을 연 시점의 폼 스냅샷 — 백드롭으로 닫을 때 "달라진 게 있는지"를 판단한다.
@@ -169,6 +252,7 @@ export function CoupleCalendarScreen(_props: Props) {
       id: event.id,
       title: event.title,
       date: event.eventDate.slice(0, 10),
+      endDate: event.endDate ? event.endDate.slice(0, 10) : '',
       eventType: event.eventType,
       repeatYearly: event.repeatYearly,
       memo: event.memo ?? '',
@@ -193,11 +277,18 @@ export function CoupleCalendarScreen(_props: Props) {
       toast.error('날짜를 선택해주세요.');
       return;
     }
+    // DateField 의 min 이 이미 막지만, 시작일을 나중에 옮기는 경로까지 이중으로 지킨다
+    if (form.endDate && form.endDate < form.date) {
+      toast.error('종료일은 시작일보다 빠를 수 없어요.');
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
         title: form.title.trim(),
         eventDate: form.date,
+        // 반복 일정은 기간을 갖지 않는다 — UI 가 이미 막지만 페이로드에서도 한 번 더 벗긴다
+        endDate: !form.repeatYearly && form.endDate ? form.endDate : undefined,
         eventType: form.eventType,
         repeatYearly: form.repeatYearly,
         memo: form.memo.trim() || undefined,
@@ -270,6 +361,10 @@ export function CoupleCalendarScreen(_props: Props) {
               const dayEvents = byDate.get(dateStr) ?? [];
               const isToday = dateStr === todayStr;
               const isSelected = dateStr === selectedDate;
+              // 여행 기간은 점(하루 단위 일정)이 아니라 셀 아래 액센트 바로 잇는다 — 연속된 날이
+              // 하나의 띠로 보인다. 배경 틴트로 하면 선택 하이라이트(surfaceAlt)와 명도가 겹쳐
+              // 어느 날을 골랐는지 안 보이고, 다크에서는 틴트 자체도 배경과 1.08:1 로 묻힌다.
+              const inTrip = tripDays.has(dateStr);
               return (
                 <Pressable
                   key={dateStr}
@@ -287,11 +382,63 @@ export function CoupleCalendarScreen(_props: Props) {
                       />
                     ))}
                   </View>
+                  {/* 여행 기간 띠 — 셀 폭을 꽉 채워 연속된 날끼리 이어져 보인다 */}
+                  <View style={[styles.tripBar, inTrip && styles.tripBarOn]} />
                 </Pressable>
               );
             })}
           </View>
         </Card>
+
+        {/* 우리 여행 — 여행의 상시 진입점 (파일 상단 주석 참고). 목록·상세는 홈 스택의 Trip* 화면 */}
+        <View style={styles.listHeader}>
+          <Text style={styles.listTitle}>
+            {selectedDate ? `${Number(selectedDate.slice(8, 10))}일 여행` : '우리 여행'}
+          </Text>
+          {/* 아래 일정 목록의 '전체 보기'(선택 해제)와 뜻이 겹치지 않게 목적지를 밝힌다 */}
+          <Pressable onPress={() => navigation.navigate('TripList')} hitSlop={8}>
+            <Text style={styles.listClear}>여행 목록 ›</Text>
+          </Pressable>
+        </View>
+        {listTrips.length === 0 && !tripsLoaded ? (
+          // 아직 한 번도 못 받아본 상태 — '없음'이 아니라 '모름'이라 CTA 대신 자리만 비워둔다
+          null
+        ) : listTrips.length === 0 ? (
+          <TouchableOpacity
+            style={styles.tripCreate}
+            activeOpacity={0.8}
+            onPress={() => navigation.navigate('TripForm', {})}
+          >
+            <Text style={styles.tripCreateText}>
+              {selectedDate ? '이 날을 낀 여행이 없어요' : '이번 달 여행이 없어요'} · ＋ 여행 만들기
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          listTrips.map((trip) => (
+            <TouchableOpacity
+              key={trip.id}
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate('TripDetail', { tripId: trip.id, title: trip.title })}
+            >
+              <Card elevation="sm" style={styles.eventCard}>
+                <View style={[styles.typeBar, { backgroundColor: colors.accent }]} />
+                <View style={styles.eventBody}>
+                  <View style={styles.eventTitleRow}>
+                    <Text style={styles.eventTitle} numberOfLines={1}>
+                      ✈️ {trip.title}
+                    </Text>
+                    <View style={styles.ddayBadge}>
+                      <Text style={styles.ddayText}>{tripStatusLabel(trip)}</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.eventMeta}>
+                    {trip.startDate} ~ {trip.endDate} · 담긴 장소 {trip.placeCount}곳
+                  </Text>
+                </View>
+              </Card>
+            </TouchableOpacity>
+          ))
+        )}
 
         {/* 일정 목록 */}
         <View style={styles.listHeader}>
@@ -314,6 +461,8 @@ export function CoupleCalendarScreen(_props: Props) {
         ) : (
           listEvents.map((event) => {
             const meta = typeMeta(event.eventType);
+            // 시작일 당일은 D-day 로(강조 포함), 그 다음 날부터 종료일까지는 "진행 중"으로 읽는다
+            const ongoing = !!event.endDate && event.date < todayStr && todayStr <= event.endDate;
             return (
               <TouchableOpacity key={`${event.id}-${event.date}`} activeOpacity={0.8} onPress={() => openEdit(event)}>
                 <Card elevation="sm" style={styles.eventCard}>
@@ -337,13 +486,16 @@ export function CoupleCalendarScreen(_props: Props) {
                             event.dday === 0 && { color: onColor(colors.coral) },
                           ]}
                         >
-                          {ddayLabel(event.dday)}
+                          {ddayLabel(event.dday, ongoing)}
                         </Text>
                       </View>
                     </View>
                     <Text style={styles.eventMeta}>
-                      {Number(event.date.slice(5, 7))}월 {Number(event.date.slice(8, 10))}일 ·{' '}
-                      {meta.label}
+                      {Number(event.date.slice(5, 7))}월 {Number(event.date.slice(8, 10))}일
+                      {event.endDate
+                        ? ` ~ ${Number(event.endDate.slice(5, 7))}월 ${Number(event.endDate.slice(8, 10))}일`
+                        : ''}{' '}
+                      · {meta.label}
                       {event.memo ? ` · ${event.memo}` : ''}
                     </Text>
                   </View>
@@ -379,10 +531,39 @@ export function CoupleCalendarScreen(_props: Props) {
                     maxLength={100}
                   />
                   <DateField
-                    label="날짜"
+                    label={form?.endDate ? '시작일' : '날짜'}
                     value={form?.date ?? ''}
+                    /*
+                     * 종료일보다 뒤는 아예 못 고르게 한다(TripForm 과 같은 규칙).
+                     * 예전엔 고를 수 있게 두고 종료일을 시작일까지 끌어당겼는데, '9/10~9/14'의
+                     * 시작만 9/20 으로 옮기면 5일짜리가 소리 없이 하루짜리가 됐다.
+                     * 기간을 통째로 미루려면 종료일을 먼저 지우거나 나중 것부터 옮기면 된다.
+                     */
+                    max={form?.endDate || undefined}
                     onChange={(d) => setForm((f) => (f ? { ...f, date: d } : f))}
                   />
+                  {/* 기간 일정 — 반복 일정은 기간을 갖지 않아(백엔드 검증과 동일) 반복이 꺼진 동안만 보인다 */}
+                  {!form?.repeatYearly ? (
+                    <View style={styles.endDateRow}>
+                      <View style={styles.flex}>
+                        <DateField
+                          label="종료일 (선택)"
+                          value={form?.endDate ?? ''}
+                          onChange={(d) => setForm((f) => (f ? { ...f, endDate: d } : f))}
+                          min={form?.date || undefined}
+                          placeholder="없음 — 하루 일정"
+                        />
+                      </View>
+                      {form?.endDate ? (
+                        <IconButton
+                          icon="close"
+                          label="종료일 지우기 (하루 일정으로)"
+                          onPress={() => setForm((f) => (f ? { ...f, endDate: '' } : f))}
+                          style={styles.endDateClear}
+                        />
+                      ) : null}
+                    </View>
+                  ) : null}
 
                   <Text style={styles.fieldLabel}>종류</Text>
                   <View style={styles.typeRow}>
@@ -413,7 +594,10 @@ export function CoupleCalendarScreen(_props: Props) {
                     </View>
                     <Switch
                       value={form?.repeatYearly ?? false}
-                      onValueChange={(v) => setForm((f) => (f ? { ...f, repeatYearly: v } : f))}
+                      // 반복을 켜면 종료일을 지운다 — 종료일 필드가 접히는 게 화면 안의 피드백이다
+                      onValueChange={(v) =>
+                        setForm((f) => (f ? { ...f, repeatYearly: v, endDate: v ? '' : f.endDate } : f))
+                      }
                       trackColor={{ true: colors.coral }}
                     />
                   </View>
@@ -486,6 +670,9 @@ const styles = themedStyles((colors) => ({
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
   cell: { width: CELL, alignItems: 'center', paddingVertical: 4, borderRadius: radius.sm },
   cellSelected: { backgroundColor: colors.surfaceAlt },
+  // 여행 기간 띠 — 없는 날도 같은 높이를 차지해 그리드 행 높이가 흔들리지 않는다
+  tripBar: { alignSelf: 'stretch', height: 3, marginTop: 3, borderRadius: 2 },
+  tripBarOn: { backgroundColor: colors.accent },
   dayWrap: {
     width: 28,
     height: 28,
@@ -523,6 +710,20 @@ const styles = themedStyles((colors) => ({
   ddayText: { fontSize: fontSize.caption, fontWeight: '800', color: colors.textPrimary },
   eventMeta: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
 
+  // 여행이 없을 때의 생성 진입점 — 카드 대신 점선 상자로 "비어 있음 + 행동"을 한 줄에
+  tripCreate: {
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+    minHeight: layout.touchTarget,
+    justifyContent: 'center',
+  },
+  tripCreateText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
+
   addBtn: {
     position: 'absolute',
     left: spacing.lg,
@@ -558,6 +759,10 @@ const styles = themedStyles((colors) => ({
     fontWeight: '700',
     marginBottom: spacing.xs,
   },
+  // 종료일 + 지우기 버튼 한 줄 — 버튼(44)을 DateField 상자(54, 아래 여백 md)의 세로 중앙에 맞춘다
+  endDateRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.xs },
+  endDateClear: { marginBottom: spacing.md + 5 },
+
   typeRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md, flexWrap: 'wrap' },
   typeChip: {
     flexDirection: 'row',
