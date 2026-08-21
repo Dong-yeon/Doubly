@@ -122,7 +122,7 @@ export function FeedTimelineScreen({ navigation, route }: Props) {
   const onReact = async (item: FeedItem, emoji: string) => {
     haptics.light();
     try {
-      const reactions = await feedApi.react(item.refId, emoji);
+      const reactions = await feedApi.react(item.type, item.refId, emoji);
       setItems((prev) =>
         prev.map((i) => (feedItemKey(i) === feedItemKey(item) ? { ...i, reactions } : i)),
       );

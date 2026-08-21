@@ -35,6 +35,20 @@ function thisWeek(): { start: string; end: string } {
   return { start: toDateString(mon), end: toDateString(sun) };
 }
 
+/**
+ * 강조할 쪽 — 확정된 결과가 있으면 그것을, 없으면 지금 우세를 따른다.
+ * 발표된 승패와 막대 강조가 어긋나면 어느 쪽을 믿어야 할지 알 수 없다.
+ */
+function winnerSide(c: Challenge): 'ME' | 'PARTNER' | 'TIE' {
+  return c.result ?? c.leader;
+}
+
+function resultLabel(c: Challenge): string {
+  if (c.result === 'TIE') return '무승부 🤝';
+  if (c.result === 'ME') return '내가 이겼어요! 🏆';
+  return `${c.partnerName ?? '상대'}님이 이겼어요`;
+}
+
 export function ChallengeScreen(_: Props) {
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [loading, setLoading] = useState(false);
@@ -165,16 +179,23 @@ export function ChallengeScreen(_: Props) {
                 <Text style={styles.title}>{item.title}</Text>
                 <View style={[styles.statusChip, item.ended && styles.statusEnded]}>
                   <Text style={[styles.statusText, item.ended && styles.statusEndedText]}>
-                    {item.ended ? '종료' : '진행 중'}
+                    {/* 끝났지만 아직 아침 판정 전이면 "집계 중" — 종료라고만 하면
+                        결과가 왜 안 보이는지 알 수 없다 */}
+                    {!item.ended ? '진행 중' : item.settled ? '종료' : '집계 중'}
                   </Text>
                 </View>
               </View>
               <Text style={styles.meta}>
                 {item.typeLabel} 대결 · {item.startDate} ~ {item.endDate}
               </Text>
-              {renderBar(true, item.myCount, max, item.leader === 'ME')}
-              {renderBar(false, item.partnerCount, max, item.leader === 'PARTNER')}
-              {item.leader === 'TIE' ? <Text style={styles.tie}>현재 동점! </Text> : null}
+              {renderBar(true, item.myCount, max, winnerSide(item) === 'ME')}
+              {renderBar(false, item.partnerCount, max, winnerSide(item) === 'PARTNER')}
+              {/* 확정된 결과가 있으면 그걸 보여준다 — 진행 중이면 지금 우세만 */}
+              {item.result ? (
+                <Text style={[styles.tie, styles.resultText]}>{resultLabel(item)}</Text>
+              ) : item.leader === 'TIE' ? (
+                <Text style={styles.tie}>현재 동점! </Text>
+              ) : null}
               {item.stake ? <Text style={styles.stake}>{item.stake}</Text> : null}
             </TouchableOpacity>
           );
@@ -259,6 +280,7 @@ const styles = themedStyles((colors) => ({
   barCount: { width: 56, textAlign: 'right', fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '700' },
   barCountLead: { color: colors.together, fontWeight: '800' },
   tie: { fontSize: fontSize.caption, color: colors.textSecondary, textAlign: 'center', marginTop: spacing.sm, fontWeight: '700' },
+  resultText: { fontSize: fontSize.body, color: colors.textPrimary, fontWeight: '800' },
   stake: { fontSize: fontSize.caption, color: colors.togetherText, fontWeight: '700', marginTop: spacing.sm },
   fabWrap: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: spacing.lg },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: spacing.lg },

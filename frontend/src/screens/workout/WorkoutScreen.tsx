@@ -203,7 +203,14 @@ export function WorkoutScreen({ navigation }: Props) {
               <>
                 <Text style={styles.sectionTitle}>진행한 운동</Text>
                 {today.length > 0 ? (
-                  today.map((w) => <WorkoutCard key={w.id} workout={w} onLongPress={onLongPress} />)
+                  today.map((w) => (
+                    <WorkoutCard
+                      key={w.id}
+                      workout={w}
+                      onPress={(x) => navigation.navigate('WorkoutDetail', { workoutId: x.id })}
+                      onLongPress={onLongPress}
+                    />
+                  ))
                 ) : (
                   <View style={styles.emptyToday}>
                     <Text style={styles.emptyText}>오늘 운동 기록이 아직 없어요 </Text>
@@ -287,7 +294,13 @@ export function WorkoutScreen({ navigation }: Props) {
             ) : null}
           </View>
         }
-        renderItem={({ item }) => <WorkoutCard workout={item} onLongPress={onLongPress} />}
+        renderItem={({ item }) => (
+          <WorkoutCard
+            workout={item}
+            onPress={(w) => navigation.navigate('WorkoutDetail', { workoutId: w.id })}
+            onLongPress={onLongPress}
+          />
+        )}
         ListEmptyComponent={
           !loading ? (
             <EmptyState icon="dumbbell" title="아직 운동 기록이 없어요" description="아래 버튼으로 첫 운동을 기록해보세요!" />

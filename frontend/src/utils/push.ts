@@ -37,6 +37,23 @@ export async function registerPushTokenIfGranted(): Promise<void> {
   }
 }
 
+/**
+ * OS 알림 권한이 <b>거부된</b> 상태인지.
+ *
+ * <p>거부는 앱에서 되돌릴 수 없다(OS 가 두 번째 권한창을 띄워주지 않는다). 그래서
+ * 설정 화면이 "앱 안에서 알림을 켜 놨는데 아무것도 안 온다"는 상황을 설명하고
+ * 시스템 설정으로 안내해야 한다 — 안 그러면 알림이 고장 난 것처럼 보인다.
+ */
+export async function isPushPermissionDenied(): Promise<boolean> {
+  if (Platform.OS === 'web') return false;
+  try {
+    const current = await Notifications.getPermissionsAsync();
+    return !current.granted && current.status !== 'undetermined';
+  } catch {
+    return false;
+  }
+}
+
 /** 첫 요청 가능 상태(undetermined)인지 — 사전 설명 노출 여부 판단용. */
 export async function canAskPushPermission(): Promise<boolean> {
   if (Platform.OS === 'web') return false;

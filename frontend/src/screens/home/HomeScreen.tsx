@@ -9,7 +9,7 @@
  * 최근 기록 한 줄 / 바로가기. 히어로가 {@code flex: 1} 을 먹으므로 화면이
  * 크든 작든 아래 두 줄은 항상 바닥에 붙고 스크롤이 생기지 않는다.
  */
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -51,6 +51,7 @@ import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { getErrorMessage } from '../../utils/error';
 import { updateHomeWidget } from '../../widget/updateHomeWidget';
+import { loadWidgetData } from '../../widget/widgetData';
 import { touchGestureOf } from '../../constants/touchGestures';
 import { playTouchGesture } from '../../utils/haptics';
 import type { FeedItem, Memories, MoodResponse, PartnerToday, Streak, TouchGestureCode } from '../../types';
@@ -96,6 +97,17 @@ const scrim = (): [string, string, string] =>
 function recordLabel(item: FeedItem | null): string | null {
   if (!item) return null;
   return item.content || item.title || '기록을 남겼어요';
+}
+
+/**
+ * 위젯 캐시의 숫자를 화면이 쓰는 스트릭 모양으로 감싼다.
+ *
+ * <p>캐시에는 연속일 수만 있다(위젯이 그 이상을 그리지 않는다). 최고 기록은 알 수 없어
+ * 현재 값으로 둔다 — 홈 카드가 읽는 건 currentCount 뿐이고, 서버 응답이 오면 통째로
+ * 교체되므로 이 값이 오래 남지 않는다.
+ */
+function cachedStreak(currentCount: number): Streak {
+  return { streakType: 'PERSONAL', currentCount, maxCount: currentCount, lastWorkoutDate: null };
 }
 
 export function HomeScreen({ navigation }: Props) {
@@ -145,17 +157,32 @@ export function HomeScreen({ navigation }: Props) {
   const bgUrl = couple?.backgroundImageUrl ?? null;
   const dday = daysSince(couple?.anniversaryDate ?? couple?.connectedAt);
 
+  /*
+   * 오프라인 안내는 한 번만 — 홈은 포커스마다 refresh 가 돌고 그 안에서 여러 요청이
+   * 각각 실패하므로, 안내를 그대로 흘리면 지하철 한 정거장에 토스트가 열 번 뜬다.
+   */
+  const offlineNoticeShown = useRef(false);
+  const noteOffline = useCallback(() => {
+    if (offlineNoticeShown.current) return;
+    offlineNoticeShown.current = true;
+    toast.info('연결이 불안정해요. 마지막으로 본 기록을 보여주고 있어요.');
+  }, []);
+
   const refresh = useCallback(() => {
     // fetchAll 은 실패해도 store 의 기존 couple/relations 를 그대로 둔다(재시도 여지를 위해
     // 지우지 않음) — 여기서 잡아주지 않으면 catch 가 없어 unhandled rejection 이 된다(P1-10).
-    fetchAll().catch(() => {});
+    fetchAll().catch(noteOffline);
     workoutApi.today().then((l) => setMyWorkoutDone(l.length > 0)).catch(() => setMyWorkoutDone(false));
     workoutApi.partnerToday().then(setPartner).catch(() => setPartner(null));
     dietApi.today().then((l) => setMyMealDone(l.length > 0)).catch(() => setMyMealDone(false));
     dietApi.partnerToday().then(setPartnerMeal).catch(() => setPartnerMeal(null));
-    // 실패해도 스트릭 상태는 건드리지 않는다 — null 로 덮으면 화면이 0일로 보인다
-    // (?? 0 폴백)와 아래 위젯 캐시까지 0으로 구워버린다. 직전에 성공했던 값을 유지한다.
-    streakApi.me().then(setMyStreak).catch(() => {});
+    /*
+     * 실패해도 스트릭 상태는 건드리지 않는다 — null 로 덮으면 화면이 0일로 보이고
+     * (?? 0 폴백) 아래 위젯 캐시까지 0으로 구워버린다. 직전에 성공했던 값을 유지한다.
+     * 기록 앱에서 숫자가 갑자기 0이 되는 건 "헬스장 지하에서 스트릭이 사라졌다"로 읽히고,
+     * 그 한 번이 이 앱의 숫자 전체에 대한 신뢰를 무너뜨린다.
+     */
+    streakApi.me().then(setMyStreak).catch(noteOffline);
     streakApi.partner().then(setPartnerStreak).catch(() => {});
     // 무드는 커플 이벤트(MOOD)가 오면 이 refresh() 가 그대로 다시 불려 최신값을 반영한다
     // — 가상 터치와 달리 즉시 반응(진동)이 필요 없어 별도 이벤트 분기가 필요 없다
@@ -182,9 +209,33 @@ export function HomeScreen({ navigation }: Props) {
       // 잠긴 응답(locked)도 들고 있는다 — 빈 결과와 구분해서 잠금 카드를 그려야 한다
       .then((res) => setMemories(res.locked || res.groups.length > 0 ? res : null))
       .catch(() => setMemories(null));
-  }, [fetchAll]);
+  }, [fetchAll, noteOffline]);
 
-  useFocusEffect(useCallback(() => refresh(), [refresh]));
+  useFocusEffect(useCallback(() => {
+    // 다시 들어올 때는 안내를 한 번 더 받을 수 있어야 한다(계속 오프라인인데 조용하면
+    // 왜 숫자가 안 바뀌는지 알 수 없다) — 화면 진입 시점에만 되살린다
+    offlineNoticeShown.current = false;
+    refresh();
+  }, [refresh]));
+
+  /*
+   * 첫 진입의 초기값 — 서버 응답을 기다리는 동안(그리고 오프라인이면 계속) 위젯이
+   * 남겨 둔 마지막 스냅샷을 보여준다. 없으면 스트릭 자리가 0으로 그려지는데,
+   * 그건 "아직 모른다"가 아니라 "끊겼다"로 읽힌다.
+   *
+   * 서버 값이 도착하면 그쪽이 이긴다 — 여기서는 아직 null 일 때만 채운다.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    void loadWidgetData().then((cached) => {
+      if (cancelled || !cached) return;
+      setMyStreak((prev) => prev ?? cachedStreak(cached.myStreak));
+      setPartnerStreak((prev) => prev ?? cachedStreak(cached.partnerStreak));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // 최소 이벤트 로깅(README 참고) — 서버가 자체적으로 알 수 없는 "홈 화면 진입"을 여기서만 보낸다.
   // 실패해도 화면에 영향 없게 조용히 삼킨다.

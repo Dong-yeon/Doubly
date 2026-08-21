@@ -185,6 +185,21 @@ public class WorkoutService {
                 .stream().map(WorkoutResponse::from).toList();
     }
 
+    /**
+     * 기록 단건 — 세트별 실기록(entries)까지 담아 상세 화면이 그린다.
+     *
+     * <p>목록에서 객체를 통째로 넘기지 않고 다시 부르는 이유: 상세 화면이 딥링크·새로고침으로
+     * 직접 열려도 같은 화면이 그려져야 한다(다른 상세 화면들과 같은 규칙).
+     */
+    public WorkoutResponse findOne(Long userId, Long workoutId) {
+        Workout workout = workoutRepository.findById(workoutId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.WORKOUT_NOT_FOUND));
+        if (!workout.getUserId().equals(userId)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+        return WorkoutResponse.from(workout);
+    }
+
     public List<WorkoutResponse> findHistory(Long userId, Long cursor) {
         return workoutRepository
                 .findHistory(userId, cursor, PageRequest.of(0, HISTORY_PAGE_SIZE))

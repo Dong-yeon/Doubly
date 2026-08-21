@@ -465,6 +465,23 @@ export function ChatRoomScreen({ navigation, route }: Props) {
       );
     }
 
+    /*
+     * 스트릭 마일스톤 축하 — 서버가 <b>양쪽을 대신해</b> 남긴 알림이라 발신자 정렬
+     * 말풍선이 어색하다(누가 보낸 게 아니다). 날짜 구분선처럼 가운데 배너로 그린다.
+     * content 는 그대로 읽히는 문장이라 파싱이 필요 없다.
+     */
+    if (item.messageType === 'STREAK_CARD') {
+      return (
+        <View>
+          {divider}
+          <View style={styles.streakBanner}>
+            <MaterialCommunityIcons name="fire" size={16} color={colors.coral} />
+            <Text style={styles.streakBannerText}>{item.content}</Text>
+          </View>
+        </View>
+      );
+    }
+
     return (
       <View>
       {divider}
@@ -940,6 +957,25 @@ const styles = themedStyles((colors) => ({
   workoutBadgePr: { color: colors.ink },
   workoutText: { fontSize: fontSize.subtitle, color: colors.textPrimary, fontWeight: '600' },
   workoutTextMine: { color: colors.textPrimary },
+  streakBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    gap: spacing.xs,
+    marginVertical: spacing.sm,
+    paddingVertical: 7,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
+    maxWidth: '86%',
+  },
+  streakBannerText: {
+    fontSize: fontSize.caption,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    flexShrink: 1,
+    textAlign: 'center',
+  },
   callCard: {
     flexDirection: 'row',
     alignItems: 'center',

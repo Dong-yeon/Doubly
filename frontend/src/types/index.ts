@@ -98,8 +98,13 @@ export interface User {
   socialType?: SocialType | null;
   /** 마케팅 수신 동의 — 선택 항목이라 언제든 철회할 수 있다 */
   marketingConsent?: boolean;
-  /** 푸시 알림 수신 여부 */
+  /** 푸시 알림 수신 여부 — 전체 스위치 */
   notificationsEnabled?: boolean;
+  /* 카테고리별 수신 여부 — 전체 스위치가 꺼져 있으면 이 값들과 무관하게 발송되지 않는다 */
+  notifyChat?: boolean;
+  notifyAnniversary?: boolean;
+  notifyPartner?: boolean;
+  notifyReminder?: boolean;
   /** 필수 약관 재동의 필요 여부 — 약관 개정 또는 동의 이력 없는 기존 가입자면 true */
   requiresConsent?: boolean;
 }
@@ -355,7 +360,17 @@ export interface Challenge {
   partnerCount: number;
   partnerName?: string | null;
   ended: boolean;
+  /** 지금 이 순간의 우세 — 실시간 집계 */
   leader: 'ME' | 'PARTNER' | 'TIE';
+  /** 종료 판정이 끝났는지 — 서버 스케줄러가 매일 아침 확정한다 */
+  settled?: boolean;
+  /**
+   * 확정된 승패. 아직 판정 전이면 없다.
+   *
+   * leader 와 나누는 이유: 기간이 끝난 뒤 소급 입력이 들어와도 이미 발표된(푸시로 알린)
+   * 결과가 화면에서 뒤집히면 안 된다.
+   */
+  result?: 'ME' | 'PARTNER' | 'TIE' | null;
   createdAt: string;
 }
 
@@ -946,7 +961,7 @@ export interface FeedItem {
   content?: string | null;
   imageUrl?: string | null;
   occurredAt: string;
-  /** POST 에만 존재 */
+  /** 모든 타입에 붙는다 — 반응이 없으면 빈 배열 */
   reactions?: ReactionSummary[] | null;
 }
 export interface FeedTimeline {
@@ -990,7 +1005,9 @@ export type MessageType =
   | 'MEAL_CARD'
   | 'ROUTINE_CARD'
   | 'TOUCH'
-  | 'CALL_CARD';
+  | 'CALL_CARD'
+  /** 스트릭 마일스톤 축하 — content 가 그대로 읽히는 축하 문장이다(서버가 대신 남긴다) */
+  | 'STREAK_CARD';
 /** 메시지 이모지 리액션 — mine 은 userIds 에 내 id 가 있는지로 판단한다(브로드캐스트 공용) */
 export interface ChatReactionSummary {
   emoji: string;

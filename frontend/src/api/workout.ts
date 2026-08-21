@@ -67,6 +67,8 @@ export const workoutApi = {
   save: (payload: SaveWorkoutPayload) =>
     unwrap(apiClient.post<ApiResponse<Workout>>('/workout', payload)),
   today: () => unwrap(apiClient.get<ApiResponse<Workout[]>>('/workout/today')),
+  /** 기록 단건 — 세트별 실기록(entries)까지. 운동 기록 상세 화면이 쓴다 */
+  one: (id: number) => unwrap(apiClient.get<ApiResponse<Workout>>(`/workout/${id}`)),
   history: (cursor?: number) =>
     unwrap(apiClient.get<ApiResponse<Workout[]>>('/workout/history', { params: { cursor } })),
   calendar: (year: number, month: number) =>

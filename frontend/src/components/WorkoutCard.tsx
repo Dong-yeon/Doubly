@@ -9,6 +9,8 @@ import { MaterialCommunityIcons } from './Icon';
 
 interface Props {
   workout: Workout;
+  /** 탭 — 상세 화면으로. 없으면 카드가 눌리지 않는 것처럼 보인다(activeOpacity 1) */
+  onPress?: (workout: Workout) => void;
   onLongPress?: (workout: Workout) => void;
 }
 
@@ -46,7 +48,7 @@ function muscleGroupSummary(workout: Workout): string {
 }
 
 /** 운동 기록 카드 — 완료 배지·소요시간·총 볼륨·자극 부위·종목 요약(짐워크 스타일 요약 카드) */
-export function WorkoutCard({ workout, onLongPress }: Props) {
+export function WorkoutCard({ workout, onPress, onLongPress }: Props) {
   const setCount = workout.sets?.length ?? 0;
   const volume = totalVolumeKg(workout);
   const muscleGroups = muscleGroupSummary(workout);
@@ -54,9 +56,12 @@ export function WorkoutCard({ workout, onLongPress }: Props) {
 
   return (
     <TouchableOpacity
-      activeOpacity={onLongPress ? 0.7 : 1}
+      activeOpacity={onPress || onLongPress ? 0.7 : 1}
+      onPress={onPress ? () => onPress(workout) : undefined}
       onLongPress={onLongPress ? () => onLongPress(workout) : undefined}
       style={styles.card}
+      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityHint={onPress ? '눌러서 세트별 기록 보기' : undefined}
     >
       <View style={styles.row}>
         <View style={styles.flex}>
