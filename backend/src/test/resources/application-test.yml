@@ -29,3 +29,7 @@ fitto:
     secret: test-secret-test-secret-test-secret-32b
     access-token-expire-minutes: 30
     refresh-token-expire-days: 14
+  # Stream 토큰 서명은 로컬 HS256 서명뿐(네트워크 호출 없음) — 더미 값으로 통화 플로우 전체를 검증한다
+  stream:
+    api-key: test-stream-key
+    api-secret: test-stream-secret-test-stream-secret-32b

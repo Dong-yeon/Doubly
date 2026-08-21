@@ -97,7 +97,13 @@ public enum ErrorCode {
     // 바코드 식품 DB 조회 (FOOD-DB)
     FOOD_DB_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "바코드 조회 기능이 아직 준비되지 않았어요."),
     FOOD_DB_NOT_FOUND(HttpStatus.NOT_FOUND, "등록되지 않은 바코드예요. 직접 입력해주세요."),
-    FOOD_DB_LOOKUP_FAILED(HttpStatus.BAD_GATEWAY, "바코드 조회에 실패했어요. 잠시 후 다시 시도해주세요.");
+    FOOD_DB_LOOKUP_FAILED(HttpStatus.BAD_GATEWAY, "바코드 조회에 실패했어요. 잠시 후 다시 시도해주세요."),
+
+    // 통화·영상통화 (PLAN.md "통화·영상통화" — Stream Video)
+    STREAM_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "통화 기능이 아직 설정되지 않았어요. 잠시 후 다시 시도해주세요."),
+    CALL_NOT_FOUND(HttpStatus.NOT_FOUND, "통화를 찾을 수 없어요."),
+    CALL_ALREADY_ACTIVE(HttpStatus.CONFLICT, "이미 진행 중인 통화가 있어요."),
+    CALL_INVALID_STATE(HttpStatus.CONFLICT, "이미 끝났거나 받을 수 없는 통화예요.");
 
     private final HttpStatus status;
     private final String message;

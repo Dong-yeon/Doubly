@@ -130,6 +130,12 @@ fitto:
   kakao:
     rest-api-key: ${KAKAO_REST_API_KEY:}
 
+  # 통화·영상통화 (Stream Video, PLAN.md "통화·영상통화") — 키 미설정 시 통화 기능만 비활성
+  stream:
+    api-key: ${STREAM_API_KEY:}
+    api-secret: ${STREAM_API_SECRET:}
+    expire-minutes: ${STREAM_TOKEN_EXPIRE_MINUTES:60}
+
 logging:
   level:
     com.fitto: DEBUG
