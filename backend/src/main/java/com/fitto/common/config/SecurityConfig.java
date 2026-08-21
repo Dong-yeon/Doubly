@@ -55,6 +55,10 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // 공개 엔드포인트 (설계서 4.2: 로그인/회원가입/토큰갱신 인증 불필요)
                         .requestMatchers(
+                                // 구글 로그인 — 최초 로그인/가입 시점엔 아직 JWT가 없으므로
+                                // 다른 소셜 로그인(kakao/apple)과 마찬가지로 공개 처리한다.
+                                // AuthController#googleLogin(POST /api/v1/auth/google) 참고.
+                                "/api/v1/auth/google",
                                 "/api/v1/auth/kakao",
                                 "/api/v1/auth/apple",
                                 "/api/v1/auth/login",

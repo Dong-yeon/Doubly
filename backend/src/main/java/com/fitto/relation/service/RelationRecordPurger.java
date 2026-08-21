@@ -56,6 +56,14 @@ public class RelationRecordPurger {
         exec("delete from daily_answers where couple_id = :rid", relationId);
         exec("delete from mood_statuses where couple_id = :rid", relationId);
         exec("delete from call_sessions where couple_id = :rid", relationId);
+        exec("delete from couple_characters where relation_id = :rid", relationId);
+        // routine_gifts.snapshot_routine_id/resulting_routine_id 가 workout_routines 를
+        // 참조하므로, 그 루틴들이 UserDataPurger 에서 지워지기 전인 여기서 먼저 지운다.
+        exec("delete from routine_gifts where relation_id = :rid", relationId);
+        // favorite_food_gifts.resulting_favorite_food_id 가 favorite_foods 를 참조하므로
+        // 마찬가지로 favorite_foods 삭제(UserDataPurger)보다 먼저 지운다.
+        // favorite_food_gift_items 는 gift_id ON DELETE CASCADE 라 함께 지워진다.
+        exec("delete from favorite_food_gifts where relation_id = :rid", relationId);
         // 리액션·답장이 chat_messages 를 참조하므로 자식부터 지운다
         exec("delete from chat_message_reactions where message_id in "
                 + "(select m.id from chat_messages m where m.relation_id = :rid)", relationId);
