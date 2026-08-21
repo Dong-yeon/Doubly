@@ -10,7 +10,8 @@ export const relationApi = {
     unwrap(apiClient.post<ApiResponse<Relation>>('/relations/couple/connect', { code })),
 
   // 커플 공유 배경
-  setCoupleBackground: (backgroundImageUrl: string) =>
+  // null 이면 배경 해제 — 기본 그라데이션으로 돌아간다(백엔드 SetBackgroundRequest 주석 참고).
+  setCoupleBackground: (backgroundImageUrl: string | null) =>
     unwrap(apiClient.put<ApiResponse<Relation>>('/relations/couple/background', { backgroundImageUrl })),
 
   // 커플 기념일 (YYYY-MM-DD)

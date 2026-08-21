@@ -26,7 +26,8 @@ import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
-import { pickImage, uploadImage } from '../../utils/imageUpload';
+import { pickImageAsset, uploadImage, type PickedImage } from '../../utils/imageUpload';
+import { AvatarCropSheet } from '../../components/AvatarCropSheet';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { Gender, UserLevel, WeeklyRecap } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
@@ -68,6 +69,8 @@ export function MyScreen({ navigation }: Props) {
   const [level, setLevel] = useState<UserLevel | null>(null);
   const [sharing, setSharing] = useState(false);
   const [photoUploading, setPhotoUploading] = useState(false);
+  /** 크롭 대기 중인 원본 — null 이면 크롭 시트가 닫힌 상태 */
+  const [cropSource, setCropSource] = useState<PickedImage | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -148,10 +151,25 @@ export function MyScreen({ navigation }: Props) {
     }
   };
 
+  /**
+   * 사진 고르기 → <b>원형 크롭</b> → 업로드. 크롭을 사이에 끼우려고 둘로 갈랐다.
+   *
+   * <p>업로드는 크롭을 확정한 뒤 한 번만 한다 — 사진 한도가 서버의 서명 발급 시점에
+   * 깎이므로(backend UploadController), 크롭을 다시 잡을 때마다 올리면 한도만 축난다.
+   */
   const onChangePhoto = async () => {
     try {
-      const uri = await pickImage();
-      if (!uri) return;
+      const picked = await pickImageAsset();
+      if (!picked) return;
+      setCropSource(picked);
+    } catch (e) {
+      Alert.alert('오류', getErrorMessage(e));
+    }
+  };
+
+  const onCropConfirm = async (uri: string) => {
+    setCropSource(null);
+    try {
       setPhotoUploading(true);
       const url = await runBusy('사진 올리는 중…', () => uploadImage(uri));
       await updateProfile({ profileImageUrl: url });
@@ -601,6 +619,13 @@ export function MyScreen({ navigation }: Props) {
 
         <Text style={styles.footer}>Doubly · 둘이라서, 두 배로</Text>
       </ScrollView>
+
+      {/* 원형 크롭 — 동그라미 안에 들어갈 부분을 직접 맞춘 뒤에야 업로드로 넘어간다 */}
+      <AvatarCropSheet
+        source={cropSource}
+        onCancel={() => setCropSource(null)}
+        onConfirm={onCropConfirm}
+      />
     </SafeAreaView>
   );
 }

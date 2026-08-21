@@ -211,6 +211,16 @@ class PlanGatingFlowTest {
     }
 
     @Test
+    void 무료도_커플_배경을_해제할_수_있다() {
+        // 꾸미기는 PRO 기능이지만 되돌리기까지 막으면 PRO 가 끝난 사람은 배경을 영영 못 치운다
+        Long user = couple("gate-bgclear-a@fitto.com", "gate-bgclear-b@fitto.com");
+
+        assertThatCode(() -> relationService.setCoupleBackground(user, null))
+                .doesNotThrowAnyException();
+        assertThat(relationService.setCoupleBackground(user, null).backgroundImageUrl()).isNull();
+    }
+
+    @Test
     void 무료는_프리미엄_터치_제스처를_보낼_수_없다() {
         // 기본 3종(손잡기·토닥임·콕찌르기)은 무료에도 전부 열려 있다 — 프리미엄(포옹·뽀뽀)만 막힌다
         Long user = register("gate-touch-a@fitto.com");

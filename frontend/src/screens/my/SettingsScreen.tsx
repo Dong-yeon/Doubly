@@ -19,8 +19,9 @@ import { isPushPermissionDenied } from '../../utils/push';
 import { useAuthStore } from '../../store/authStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { getErrorMessage } from '../../utils/error';
+import { copyText } from '../../utils/share';
 import { toast } from '../../store/toastStore';
-import { APP_VERSION } from '../../constants/config';
+import { APP_VERSION, BUILD_LABEL, BUILD_STAMP } from '../../constants/config';
 import { CONTACT_EMAIL, PRIVACY_VERSION, TERMS_VERSION } from '../../constants/legal';
 import { colors, fontSize, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
@@ -107,16 +108,30 @@ export function SettingsScreen({ navigation }: Props) {
   const isSocialAccount = !!user?.socialType && user.socialType !== 'EMAIL';
 
   /**
+   * 문제를 알릴 때 함께 보내야 하는 정보 — 어느 빌드의 어느 기기인가.
+   *
+   * <p>버전만으로는 부족하다: 스토어 빌드(AAB)는 EAS 빌드를 돌린 순간의 JS 가 그대로
+   * 얼어붙는데 웹은 배포할 때마다 최신이라, 같은 버전 표기로도 서로 다른 코드가 돌 수 있다.
+   * 커밋 해시가 있어야 "앱만 안 되는" 증상에서 빌드 차이인지를 바로 가른다.
+   */
+  const buildDetail = `앱: Doubly ${BUILD_LABEL}\n기기: ${Platform.OS} ${Platform.Version}`;
+
+  /** 버전 줄을 길게 누르면 복사 — 폰에서 그대로 붙여넣어 알릴 수 있게. */
+  const onCopyBuildInfo = async () => {
+    await copyText(buildDetail);
+    toast.success('빌드 정보를 복사했어요.');
+  };
+
+  /**
    * 문의·버그 신고 — 메일 앱을 연다.
-   * 앱 버전·플랫폼을 본문에 미리 채워 베타 리포트 분류를 돕는다.
+   * 빌드 식별 정보·플랫폼을 본문에 미리 채워 베타 리포트 분류를 돕는다.
    */
   const onContact = async () => {
     const subject = `[Doubly 문의] `;
     const body =
       `\n\n----------\n`
       + `아래 정보는 문제 확인용이에요. 지워도 괜찮아요.\n`
-      + `앱 버전: ${APP_VERSION}\n`
-      + `기기: ${Platform.OS} ${Platform.Version}\n`;
+      + `${buildDetail}\n`;
     const url = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     try {
       const canOpen = await Linking.canOpenURL(url);
@@ -312,7 +327,16 @@ export function SettingsScreen({ navigation }: Props) {
           </Pressable>
         </Card>
 
-        <Text style={styles.appVersion}>Doubly v{APP_VERSION}</Text>
+        <Pressable
+          onLongPress={onCopyBuildInfo}
+          delayLongPress={400}
+          accessibilityRole="button"
+          accessibilityLabel={`앱 버전 ${BUILD_LABEL}`}
+          accessibilityHint="길게 누르면 빌드 정보를 복사해요."
+        >
+          <Text style={styles.appVersion}>Doubly v{APP_VERSION}</Text>
+          <Text style={styles.buildStamp}>{BUILD_STAMP}</Text>
+        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
@@ -369,5 +393,13 @@ const styles = themedStyles((colors) => ({
     fontSize: fontSize.caption,
     color: colors.textSecondary,
     marginTop: spacing.sm,
+  },
+  /* 커밋·빌드 시각 — 평소엔 눈에 걸리지 않아야 하고, 필요할 때만 읽히면 된다 */
+  buildStamp: {
+    textAlign: 'center',
+    fontSize: fontSize.micro,
+    color: colors.textSecondary,
+    opacity: 0.7,
+    marginTop: 2,
   },
 }));

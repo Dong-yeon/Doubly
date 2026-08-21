@@ -712,13 +712,16 @@ point_ledger              -- 포인트 적립·사용 내역 (잔액을 컬럼�
 | 커플 캘린더 일정 | `CalendarService.create` | 402 |
 | 여행 경비 정산 | `TripExpenseService.add` | 402 |
 | 여행 준비물 | `TripChecklistService.add` | 402 |
-| 커플 배경 꾸미기 | `RelationService.setCoupleBackground` | 402 |
+| 커플 배경 꾸미기 | `RelationService.setCoupleBackground` | 402 (설정할 때만 — 해제는 무료도 가능) |
 | **추억 리마인드** | `MemoriesService.memories` | **200 + `locked: true`** (홈이 매일 부른다) |
 | **주간 결산** | `SummaryService.weeklyRecap` | **200 + `locked: true`** (MY 탭이 매번 부른다) |
 
 - **진행 중인 여행만 센다.** 지난 여행까지 세면 무료 사용자가 *추억을 지워야* 새 여행을
   만들 수 있게 된다 — 기록 앱이 해서는 안 되는 압박이다
 - **추억 푸시(10시 KST)도 무료 커플에는 보내지 않는다.** 열어봐야 잠겨 있는 알림은 보내지 않는다
+- **배경 *해제*는 게이팅하지 않는다.** 꾸미기는 PRO 기능이지만 되돌리기까지 막으면 PRO 가
+  끝난 사람은 자기가 깔아둔 배경을 영영 못 치운다 — 요금제로 막을 것은 새로 꾸미는
+  행위지 원상복구가 아니다
 - 기존 하드코딩 상한(`MAX_ROUTINES=30`·`MAX_FAVORITES=50`)은 `Feature` 의 PRO 값으로
   옮겼다 — 상한의 출처를 한 곳으로 모으기 위해서다
 
