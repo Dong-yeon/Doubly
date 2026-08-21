@@ -10,7 +10,7 @@
  */
 import { Platform } from 'react-native';
 import * as Sentry from '@sentry/react-native';
-import { APP_VERSION, SENTRY_DSN } from '../constants/config';
+import { APP_VERSION, BUILD_COMMIT, SENTRY_DSN } from '../constants/config';
 import { setErrorReporter } from './errorReporter';
 
 export function initSentry() {
@@ -20,6 +20,11 @@ export function initSentry() {
   Sentry.init({
     dsn: SENTRY_DSN,
     release: `doubly@${APP_VERSION}`,
+    /*
+     * 같은 버전으로 여러 번 빌드하므로(EAS 재빌드) release 만으로는 어느 산출물에서 난
+     * 에러인지 구분되지 않는다. dist 에 커밋을 넣으면 이슈마다 그 값이 붙는다.
+     */
+    dist: BUILD_COMMIT,
     // 개발 중 발생한 에러까지 대시보드에 쌓이면 실제 사용자 장애가 묻힌다
     enabled: !__DEV__,
     /*
