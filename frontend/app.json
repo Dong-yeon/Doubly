@@ -61,7 +61,8 @@
       [
         "@stream-io/video-react-native-sdk",
         {
-          "ringing": true
+          "ringing": true,
+          "androidMessagingServiceBaseClass": null
         }
       ],
       [
