@@ -21,7 +21,7 @@ Doubly는 **관계(Relation) 기반 커플 라이프 공유 앱**입니다. 커�
 | 모바일 | React Native + Expo (TypeScript) |
 | 상태관리 | Zustand |
 | 백엔드 | Spring Boot 3.4 (Java 21) |
-| DB | PostgreSQL (Flyway 마이그레이션 V1~V54) |
+| DB | PostgreSQL (Flyway 마이그레이션 V1~V55) |
 | 캐시 | Redis — AI 사용량 일일 카운터 (미가용 시 인메모리 폴백) |
 | 실시간 | WebSocket (STOMP) — 채팅 + 커플 이벤트(`/sub/couple/{id}`) |
 | 인증 | JWT (Access/Refresh) + 역할 기반 접근 제어(RBAC) |
@@ -79,7 +79,7 @@ com.fitto
 └── trainer/       # 트레이너 프로필·대시보드·루틴 (phase 6~7)
 ```
 
-DB 스키마는 `backend/src/main/resources/db/migration/` 의 Flyway 마이그레이션(V1~V49)에 정의되어
+DB 스키마는 `backend/src/main/resources/db/migration/` 의 Flyway 마이그레이션(V1~V55)에 정의되어
 있습니다. 핵심 테이블: users / relations / trainer_profiles / workouts / workout_sets /
 trainer_routines / chat_messages / streaks / device_tokens / meals / places / place_visits /
 feed_posts(+trip_id 앨범 연동) / feed_reactions / trips / trip_items(일자별 일정표) /
@@ -90,7 +90,8 @@ meal_items(식단 항목 편집) / routine_exercise_sets(루틴 세트별 목표
 workout_routine_days(루틴 요일 배정) / voice_clips(커플 음성 응원) /
 mood_statuses(무드 상태) / couple_characters(커플 캐릭터 — 도메인 레이어만) /
 routine_gifts(루틴 선물하기) / place_ratings(럽슐랭 대표 평점 — 장소당 1인 1개, 재평가는
-upsert. `place_visits.rating`과 별개 개념).
+upsert. `place_visits.rating`과 별개 개념) / call_sessions(통화·영상통화 — 1단계 백엔드만,
+PLAN.md 참고).
 
 > ⚠️ `workout_sets` 는 **이름과 달리 세트가 아니라 "운동 종목 1개"를 담는 요약 테이블**입니다
 > (`sets` 컬럼에 세트 수를 넣는 구조). 실제 세트별 무게·횟수는 V28 에서 신설된 자식 테이블
@@ -869,6 +870,9 @@ point_ledger              -- 포인트 적립·사용 내역 (잔액을 컬럼�
 | 확장 | AI 추천 맞춤 루틴 만들기 | ✅ 완료 |
 | 확장 | 운동 추가/루틴 대체/세션 교체 종목 선택 — 부위→기구 필터 공통 모달(`ExercisePickerModal`) | ✅ 완료 |
 | 게임화(보류) | 커플 캐릭터 도메인 레이어 프로토타입 (`couple_characters`, 엔티티·리포지토리만 — 서비스·화면 없음) | 🚧 실험적 |
+| 통화 · 영상통화 | 1단계 — `call_sessions`(V55) + 백엔드 API(발신/수락/거절/종료/기록·Stream 토큰 발급) + 24시간 안전장치 — PLAN.md | ✅ 완료(백엔드만) |
+| 통화 · 영상통화 | 2단계 — 프론트 SDK 통합 + `CallScreen` (포그라운드 통화) | 🚧 예정 |
+| 통화 · 영상통화 | 3단계 — 네이티브 벨 웨이크업(VoIP push + CallKit/ConnectionService) | 🚧 예정 |
 
 ## 실행 방법
 

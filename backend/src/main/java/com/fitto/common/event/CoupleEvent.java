@@ -24,4 +24,8 @@ public record CoupleEvent(String type) {
     public static final String ROUTINE_GIFT = "ROUTINE_GIFT";
     /** 즐겨찾기 음식 선물 전송/응답 — 수신측은 GET /api/v1/meal/favorite-gifts/received|sent 로 다시 조회한다 */
     public static final String FAVORITE_FOOD_GIFT = "FAVORITE_FOOD_GIFT";
+    /** 통화 발신(벨) — 수신측은 GET /api/v1/calls 최신 RINGING 세션을 다시 조회한다 */
+    public static final String CALL_INCOMING = "CALL_INCOMING";
+    /** 통화 상태 변화(수락/거절/종료) — 양쪽이 GET /api/v1/calls/{id} 로 다시 조회한다 */
+    public static final String CALL_UPDATED = "CALL_UPDATED";
 }
