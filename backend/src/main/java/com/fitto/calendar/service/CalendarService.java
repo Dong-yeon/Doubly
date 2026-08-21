@@ -101,7 +101,7 @@ public class CalendarService {
                 .coupleId(couple.getId())
                 .title(req.title())
                 .eventDate(req.eventDate())
-                .endDate(req.endDate())
+                .endDate(normalizeEnd(req.eventDate(), req.endDate()))
                 .eventType(req.eventType())
                 .repeatYearly(req.repeatYearly())
                 .memo(req.memo())
@@ -124,7 +124,8 @@ public class CalendarService {
         LocalDate effectiveEnd = req.eventDate() != null ? req.endDate() : event.getEndDate();
         boolean effectiveRepeat = req.repeatYearly() != null ? req.repeatYearly() : event.isRepeatYearly();
         validatePeriod(effectiveStart, effectiveEnd, effectiveRepeat);
-        event.update(req.title(), req.eventDate(), req.endDate(), req.eventType(), req.repeatYearly(), req.memo());
+        event.update(req.title(), req.eventDate(), normalizeEnd(effectiveStart, req.endDate()),
+                req.eventType(), req.repeatYearly(), req.memo());
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.CALENDAR);
         return EventResponse.of(event, event.nextOccurrence(KstClock.today()), KstClock.today());
     }
@@ -138,6 +139,15 @@ public class CalendarService {
     }
 
     // ---- helpers ----
+
+    /**
+     * 종료일이 시작일과 같은 날이면 <b>하루 일정</b>이다 — 기간으로 저장하면 "8월 10일 ~
+     * 8월 10일" 처럼 같은 날짜를 두 번 쓰고, 다시 열 때도 기간 일정으로 취급된다.
+     * 피커에서 시작일과 같은 날을 고르는 것은 정상 조작이므로 저장 시점에 정리한다.
+     */
+    private LocalDate normalizeEnd(LocalDate start, LocalDate end) {
+        return end != null && end.equals(start) ? null : end;
+    }
 
     /** 기간 일정 규칙 — 종료일은 시작일 이후여야 하고, 반복 일정은 기간을 갖지 않는다(엔티티 주석 참고). */
     private void validatePeriod(LocalDate start, LocalDate end, boolean repeatYearly) {

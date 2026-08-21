@@ -22,8 +22,14 @@ import { themedStyles } from '../../theme/themedStyles';
 type Props = NativeStackScreenProps<HomeStackParamList, 'TripForm'>;
 
 export function TripFormScreen({ navigation, route }: Props) {
-  // 딥링크(doubly://trips/form)로 들어오면 params 자체가 없다 — navigation/types.ts TripForm 주석 참고
-  const editing = route.params?.trip;
+  /*
+   * 딥링크·웹 새로고침으로 들어오면 params 가 없거나(trips/form) 객체가 문자열로 뭉개져
+   * 온다 — URL 은 객체를 String() 으로 직렬화하므로 수정 모달을 열어둔 채 새로고침하면
+   * `trip=[object Object]` 가 된다. 그걸 그대로 믿으면 '여행 수정' 화면인데 id 가 없어
+   * 저장이 PUT /trips/undefined 로 나갔다. 진짜 객체일 때만 수정 모드로 본다.
+   */
+  const param = route.params?.trip;
+  const editing = typeof param === 'object' && param !== null ? param : undefined;
   const [title, setTitle] = useState(editing?.title ?? '');
   const [startDate, setStartDate] = useState(editing?.startDate ?? '');
   const [endDate, setEndDate] = useState(editing?.endDate ?? '');

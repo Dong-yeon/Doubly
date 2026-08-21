@@ -29,6 +29,9 @@ export const linking: LinkingOptions<RootStackParamList> = {
   config: {
     screens: {
       Onboarding: {
+        // 딥링크로 /register·/forgot-password·/legal 로 들어와도 아래에 로그인 화면이 깔린다
+        // (없으면 그 화면 하나뿐이라 '로그인으로 돌아가기'(goBack)가 아무 일도 하지 않았다)
+        initialRouteName: 'Login',
         screens: {
           Splash: 'splash',
           Onboarding: 'intro',
@@ -100,6 +103,18 @@ export const linking: LinkingOptions<RootStackParamList> = {
                 path: 'trips/:tripId/recap',
                 parse: { tripId: Number },
               },
+              /*
+               * 여행에서 연 장소 화면 — 럽슐랭 탭에도 같은 화면이 있지만 <b>경로는 나눈다</b>.
+               * 경로가 없으면 getPathFromState 가 라우트 이름을 그대로 URL 에 박아
+               * (`/PlaceDetail?placeId=3`) 새로고침 때 복원에 실패해 홈으로 튕겼다.
+               * 같은 'place/:placeId' 를 두 블록에 쓰면 어느 탭으로 복원될지 모호해지므로,
+               * 여행 쪽은 trips/ 아래에 둬 새로고침해도 홈 스택으로 돌아온다.
+               */
+              PlaceDetail: {
+                path: 'trips/place/:placeId',
+                parse: { placeId: Number },
+              },
+              PlaceAdd: 'trips/place/edit',
             },
           },
           Workout: {

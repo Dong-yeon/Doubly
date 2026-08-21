@@ -42,10 +42,21 @@ export function DatePickerSheet() {
   const [mode, setMode] = useState<'day' | 'ym'>('day');
   const yearListRef = useRef<ScrollView | null>(null);
 
-  // 열릴 때마다 현재 값(없으면 오늘)이 보이는 달로 맞춘다
+  /*
+   * 열릴 때마다 현재 값(없으면 오늘)이 보이는 달로 맞춘다.
+   *
+   * <p>단 그 달이 <b>선택 가능 범위 밖</b>이면 min/max 쪽으로 끌어온다. 예전엔 오늘 달을
+   * 그대로 열어서, 시작일이 다음 달인 기간 일정의 '종료일'을 고르려 하면 이번 달이 열리고
+   * 모든 날이 회색(=min 미만)인 죽은 달력이 떴다 — 하단 '오늘' 버튼도 범위 밖이라 아무
+   * 반응이 없어 고장으로 읽혔다. 같은 덫이 여행 폼·챌린지 종료일에도 있었다.
+   */
   useEffect(() => {
     if (!request) return;
-    const base = parseDateString(request.value) ?? parseDateString(todayStr) ?? new Date();
+    const fallback = parseDateString(todayStr) ?? new Date();
+    let base = parseDateString(request.value) ?? fallback;
+    const baseStr = toDateString(base);
+    if (request.min && baseStr < request.min) base = parseDateString(request.min) ?? base;
+    else if (request.max && baseStr > request.max) base = parseDateString(request.max) ?? base;
     setYear(base.getFullYear());
     setMonth(base.getMonth() + 1);
     setMode('day');

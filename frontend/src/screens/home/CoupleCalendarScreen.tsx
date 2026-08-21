@@ -133,8 +133,12 @@ export function CoupleCalendarScreen({ navigation }: Props) {
       setEvents(data);
     } catch (e) {
       if (latestRequestRef.current !== requestId) return;
-      // 커플 미연결(RELATION_NOT_FOUND)은 빈 상태로 안내
-      setEvents([]);
+      /*
+       * 실패해도 목록을 비우지 않는다 — 화면에 돌아올 때마다 재조회하므로, 네트워크가 한 번
+       * 흔들리면 있던 일정이 통째로 사라진 채 "일정이 없어요"가 떠 지워진 것처럼 보였다
+       * (바로 아래 여행 로더가 같은 이유로 지키는 규칙). 커플 미연결이면 애초에 받아둔
+       * 목록이 없어 빈 상태 그대로다.
+       */
     }
   }, []);
 
@@ -166,28 +170,34 @@ export function CoupleCalendarScreen({ navigation }: Props) {
     setSelectedDate(null);
   };
 
-  /** 날짜(YYYY-MM-DD) → 그 날의 일정들 — 기간 일정은 걸치는 모든 날에 점이 찍히게 편다 */
+  /**
+   * 날짜(YYYY-MM-DD) → 그 날의 일정들 — 기간 일정은 걸치는 모든 날에 점이 찍히게 편다.
+   *
+   * <p>펴는 범위는 <b>보이는 달</b>로 자른다. 예전엔 일정의 시작일부터 하루씩 전진하며
+   * 400회에서 끊었는데, 백엔드 월 조회가 겹침 기준이라 시작일이 한참 전인 장기 일정
+   * (군 복무·유학 같은 18개월짜리)도 계속 내려온다 — 그 달의 키는 하나도 안 만들어져
+   * "목록엔 카드가 있는데 그리드엔 점이 없고 날짜를 누르면 '일정이 없어요'"가 됐다.
+   * 달 안으로 자르면 반복 횟수가 최대 31이라 안전핀도 필요 없다.
+   */
   const byDate = useMemo(() => {
     const map = new Map<string, CoupleCalendarEvent[]>();
-    const push = (key: string, e: CoupleCalendarEvent) => {
-      const list = map.get(key) ?? [];
-      list.push(e);
-      map.set(key, list);
-    };
+    const monthStart = `${year}-${pad2(month)}-01`;
+    const monthEnd = `${year}-${pad2(month)}-${pad2(new Date(year, month, 0).getDate())}`;
     events.forEach((e) => {
       const end = e.endDate && e.endDate > e.date ? e.endDate : e.date;
-      // 문자열 비교로 하루씩 전진 — 보이는 달 밖의 키는 그리드가 조회하지 않아 그대로 둬도 된다.
-      // guard 는 데이터가 깨져도 무한 루프가 되지 않게 하는 안전핀(400일 넘는 기간은 거기서 끊는다).
-      const cur = new Date(`${e.date}T00:00:00`);
-      for (let guard = 0; guard < 400; guard++) {
-        const key = `${cur.getFullYear()}-${pad2(cur.getMonth() + 1)}-${pad2(cur.getDate())}`;
-        if (key > end) break;
-        push(key, e);
+      // 이 달과 겹치는 구간만 — 시작이 전 달이면 월초부터, 끝이 다음 달이면 월말까지
+      const from = e.date > monthStart ? e.date : monthStart;
+      const to = end < monthEnd ? end : monthEnd;
+      if (from > to) return; // 이 달과 안 겹치는 일정(반복 일정의 다른 해 등)
+      const cur = new Date(`${from}T00:00:00`);
+      for (let key = from; key <= to; ) {
+        map.set(key, [...(map.get(key) ?? []), e]);
         cur.setDate(cur.getDate() + 1);
+        key = `${cur.getFullYear()}-${pad2(cur.getMonth() + 1)}-${pad2(cur.getDate())}`;
       }
     });
     return map;
-  }, [events]);
+  }, [events, year, month]);
 
   /** 월 그리드 셀 — 앞쪽 공백 + 1..말일 */
   const cells = useMemo(() => {
@@ -523,12 +533,14 @@ export function CoupleCalendarScreen({ navigation }: Props) {
                   <DateField
                     label={form?.endDate ? '시작일' : '날짜'}
                     value={form?.date ?? ''}
-                    // 시작일을 종료일 뒤로 옮기면 종료일이 뒤집힌다 — TripForm 처럼 함께 밀어준다
-                    onChange={(d) =>
-                      setForm((f) =>
-                        f ? { ...f, date: d, endDate: f.endDate && f.endDate < d ? d : f.endDate } : f,
-                      )
-                    }
+                    /*
+                     * 종료일보다 뒤는 아예 못 고르게 한다(TripForm 과 같은 규칙).
+                     * 예전엔 고를 수 있게 두고 종료일을 시작일까지 끌어당겼는데, '9/10~9/14'의
+                     * 시작만 9/20 으로 옮기면 5일짜리가 소리 없이 하루짜리가 됐다.
+                     * 기간을 통째로 미루려면 종료일을 먼저 지우거나 나중 것부터 옮기면 된다.
+                     */
+                    max={form?.endDate || undefined}
+                    onChange={(d) => setForm((f) => (f ? { ...f, date: d } : f))}
                   />
                   {/* 기간 일정 — 반복 일정은 기간을 갖지 않아(백엔드 검증과 동일) 반복이 꺼진 동안만 보인다 */}
                   {!form?.repeatYearly ? (

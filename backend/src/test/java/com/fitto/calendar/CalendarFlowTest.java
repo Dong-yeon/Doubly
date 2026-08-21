@@ -195,6 +195,21 @@ class CalendarFlowTest {
     }
 
     @Test
+    void 종료일이_시작일과_같으면_하루_일정으로_정리된다() {
+        Long[] c = couple("cal9a@fitto.com", "cal9b@fitto.com");
+        LocalDate day = LocalDate.now().plusDays(2);
+
+        EventResponse created = calendarService.create(c[0], new CreateEventRequest(
+                "같은 날", day, day, EventType.DATE, false, null));
+        assertThat(created.endDate()).isNull();
+
+        // 수정으로 같은 날을 넣어도 마찬가지
+        EventResponse updated = calendarService.update(c[0], created.id(),
+                new UpdateEventRequest(null, day, day, null, null, null));
+        assertThat(updated.endDate()).isNull();
+    }
+
+    @Test
     void 진행_중인_기간_일정은_다가오는_일정에_맨_앞으로_나온다() {
         Long[] c = couple("cal8a@fitto.com", "cal8b@fitto.com");
         LocalDate today = LocalDate.now();
