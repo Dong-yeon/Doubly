@@ -310,9 +310,11 @@ CREATE TABLE workout_records (
 
 ## Feature: 가상 터치 (Touch Gesture — Obimy 벤치마킹)
 
-> **상태: 제안 (미착수).** Obimy(원거리 커플 앱) 벤치마킹에서 도출 — "텍스트 없이 촉각으로
+> ✅ **상태: 완료.** Obimy(원거리 커플 앱) 벤치마킹에서 도출 — "텍스트 없이 촉각으로
 > 존재감을 전달"하는 저마찰 채널이 Doubly에 없다는 관찰에서 시작. 신규 테이블·신규 네이티브
-> SDK 없이 **기존 채팅 파이프라인에 얹는** 최소 구현안이다.
+> SDK 없이 **기존 채팅 파이프라인에 얹는** 최소 구현안이었고, 그대로 구현됐다.
+> 프론트 `TouchGesturePicker` + `HomeScreen`(진입점) · 백엔드 `ChatService`/`ChatController`
+> (`LatestTouchResponse`, `CoupleEvent.TOUCH`) — 아래 스펙은 설계 기록으로 남긴다.
 
 ### 목표
 
@@ -439,10 +441,11 @@ case TOUCH -> "[" + touchLabel(message.getContent()) + "]"; // 예: "[토닥임]
 
 ## Feature: 무드 상태 (Mood Status — Obimy 벤치마킹)
 
-> **상태: 제안 (미착수).** Obimy 벤치마킹 2순위 — "가상 터치"가 순간적인 제스처라면, 무드
+> ✅ **상태: 완료.** Obimy 벤치마킹 2순위 — "가상 터치"가 순간적인 제스처라면, 무드
 > 상태는 **몇 시간 동안 유지되는 배경 정보**다. 답장을 요구하지 않는다는 점에서 "오늘의
 > 질문"보다 가볍다. `DailyQuestionService`(`question` 패키지)와 같은 모듈 구조·게시 패턴을
-> 그대로 따른다.
+> 그대로 따랐다. 프론트 `MoodPicker` + `HomeScreen`(아바타 배지) · 백엔드 `mood` 패키지
+> (`MoodService`, `MoodStatus`, V44 `mood_statuses`) — 아래 스펙은 설계 기록으로 남긴다.
 
 ### 목표
 
@@ -1563,7 +1566,9 @@ memories: (on?: string) =>
 
 ## Feature: 하단 탭 재구성 — 운동/식단 분리 + FAB 제거
 
-> 🚧 **상태: 화면설계.** 아직 코드 변경 없음. 프론트엔드 전용(백엔드·DB 영향 없음).
+> ✅ **상태: 완료.** 프론트엔드 전용(백엔드·DB 영향 없음) 계획대로, 홈/운동/채팅/식단/장소
+> 5탭 + FAB 제거로 구현됐다 — `MainTabNavigator`(`WorkoutDietSegment` 삭제, FAB 액션은
+> 각 화면 자체 버튼과 홈 CoupleHero 오늘 칩으로 대체). 아래 스펙은 설계 기록으로 남긴다.
 
 ### 왜 — 현재 구조의 문제
 
