@@ -642,7 +642,8 @@ export interface PartnerFasting {
   targetHours?: number | null;
 }
 
-// 바코드 식품 DB 조회 (GET /food-db/barcode/{code}) — 그대로 저장되지 않고 폼을 채우기만 한다
+// 식품 DB 조회 (GET /food-db/barcode/{code}, GET /food-db/search) — 그대로 저장되지 않고
+// 폼을 채우기만 한다. 이름 검색 결과는 barcode 가 빈 문자열일 수 있다(행에 BAR_CD 가 없을 때).
 export interface BarcodeLookup {
   barcode: string;
   foodName?: string | null;

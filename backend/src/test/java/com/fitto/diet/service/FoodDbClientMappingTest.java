@@ -73,4 +73,28 @@ class FoodDbClientMappingTest {
 
         assertThat(res.calories()).isNull();
     }
+
+    @Test
+    void 이름_검색_결과는_행의_BAR_CD로_바코드를_채운다() throws Exception {
+        JsonNode row = row("""
+                { "DESC_KOR": "단백질쉐이크 초코맛", "BAR_CD": "8801234500000", "NUTR_CONT1": "180" }
+                """);
+
+        BarcodeLookupResponse res = client.mapRow(row);
+
+        assertThat(res.barcode()).isEqualTo("8801234500000");
+        assertThat(res.foodName()).isEqualTo("단백질쉐이크 초코맛");
+        assertThat(res.calories()).isEqualTo(180);
+    }
+
+    @Test
+    void 이름_검색_결과에_BAR_CD가_없으면_빈_문자열이_된다() throws Exception {
+        JsonNode row = row("""
+                { "DESC_KOR": "바코드 없는 음식" }
+                """);
+
+        BarcodeLookupResponse res = client.mapRow(row);
+
+        assertThat(res.barcode()).isEqualTo("");
+    }
 }

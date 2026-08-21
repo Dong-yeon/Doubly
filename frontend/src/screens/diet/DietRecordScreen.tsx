@@ -11,7 +11,7 @@
  * 저장 시 PUT 으로 보낸다. 폼이 완전히 같아서 화면을 나누면 두 벌을 같이 고쳐야 한다.
  */
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Image, Platform, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, Platform, Text, TouchableOpacity, View } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -29,6 +29,7 @@ import { useRelationStore } from '../../store/relationStore';
 import { useDirtyGuard } from '../../hooks/useDirtyGuard';
 import { publishEnsuringConnection } from '../../api/chatSocket';
 import { dietApi, SaveMealItemPayload } from '../../api/diet';
+import { foodDbApi } from '../../api/foodDb';
 import { pickImage, takePhoto, uploadImage } from '../../utils/imageUpload';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
@@ -37,7 +38,7 @@ import { haptics } from '../../utils/haptics';
 import { toDateString } from '../../utils/date';
 import { buildDietShareCopy } from '../../utils/dietShare';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { AnalyzedFood, FavoriteFood, MealType, RecentFood } from '../../types';
+import type { AnalyzedFood, BarcodeLookup, FavoriteFood, MealType, RecentFood } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<DietStackParamList, 'DietRecord'>;
@@ -112,6 +113,9 @@ export function DietRecordScreen({ navigation, route }: Props) {
   const [saving, setSaving] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzingText, setAnalyzingText] = useState(false);
+  /** DB 이름 검색 — 어느 항목에 대한 결과인지(key)와 후보 목록. 한 번에 한 항목만 연다. */
+  const [dbSearch, setDbSearch] = useState<{ key: string; results: BarcodeLookup[] } | null>(null);
+  const [searchingDbKey, setSearchingDbKey] = useState<string | null>(null);
   /*
    * 추가 영양소(당류/나트륨/식이섬유) — 항목(MealItem)에는 없는 끼니 레벨 값이라
    * AI 분석·바코드 조회에서만 채워진다. 탄단지는 항목이 들고 있으므로 여기엔 없다.
@@ -472,6 +476,52 @@ export function DietRecordScreen({ navigation, route }: Props) {
     }
   };
 
+  /**
+   * 음식 이름으로 공공 DB(식품안전나라) 검색 — AI 계산과 달리 무료에 실제 표기값이다.
+   * 바코드처럼 정확히 일치하는 게 있을 때만 의미가 있어서, 못 찾으면(빈 배열) 조용히
+   * AI 계산으로 넘어가라고 안내만 한다(에러로 취급하지 않는다).
+   */
+  const onSearchDb = async (item: ItemForm) => {
+    const name = item.name.trim();
+    if (!name) {
+      toast.error('음식 이름을 먼저 적어주세요.');
+      return;
+    }
+    setDbSearch(null);
+    setSearchingDbKey(item.key);
+    try {
+      const results = await foodDbApi.search(name);
+      if (results.length === 0) {
+        toast.info('DB에 없는 음식이에요. "AI로 칼로리 계산"을 이용해보세요.');
+        return;
+      }
+      haptics.light();
+      setDbSearch({ key: item.key, results });
+    } catch (e) {
+      toast.error(getErrorMessage(e, '검색에 실패했어요.'));
+    } finally {
+      setSearchingDbKey(null);
+    }
+  };
+
+  /** DB 검색 결과 중 하나를 골라 해당 항목에 채운다 — 실제 표기값이라 그대로 신뢰한다 */
+  const pickDbResult = (item: ItemForm, r: BarcodeLookup) => {
+    haptics.success();
+    updateItem(item.key, {
+      name: (r.foodName || item.name).slice(0, MAX_NAME),
+      portion: (r.servingSize ?? '').slice(0, MAX_PORTION),
+      calories: r.calories ? String(r.calories) : '',
+      carbs: r.carbs ? String(r.carbs) : '',
+      protein: r.protein ? String(r.protein) : '',
+      fat: r.fat ? String(r.fat) : '',
+    });
+    if (r.sugar != null || r.sodium != null || r.fiber != null) {
+      setExtras({ sugar: r.sugar ?? undefined, sodium: r.sodium ?? undefined, fiber: r.fiber ?? undefined });
+    }
+    setDbSearch(null);
+    toast.success('실제 표기값으로 채웠어요');
+  };
+
   const onSave = async () => {
     if (filled.length === 0 && !memo.trim() && !photoUri) {
       Alert.alert('알림', '음식이나 사진을 하나 이상 입력해주세요.');
@@ -755,12 +805,48 @@ export function DietRecordScreen({ navigation, route }: Props) {
                 </View>
               </View>
 
-              <TextField
-                placeholder="음식명 (예: 공기밥)"
-                value={item.name}
-                maxLength={MAX_NAME}
-                onChangeText={(t) => updateItem(item.key, { name: t })}
-              />
+              <View style={styles.nameRow}>
+                <View style={styles.nameField}>
+                  <TextField
+                    placeholder="음식명 (예: 공기밥)"
+                    value={item.name}
+                    maxLength={MAX_NAME}
+                    onChangeText={(t) => updateItem(item.key, { name: t })}
+                  />
+                </View>
+                <TouchableOpacity
+                  style={styles.dbSearchBtn}
+                  onPress={() => onSearchDb(item)}
+                  disabled={searchingDbKey === item.key}
+                  hitSlop={8}
+                >
+                  {searchingDbKey === item.key ? (
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  ) : (
+                    <MaterialCommunityIcons name="magnify" size={22} color={colors.primary} />
+                  )}
+                </TouchableOpacity>
+              </View>
+              {dbSearch?.key === item.key ? (
+                <View style={styles.dbResultBox}>
+                  <Text style={styles.dbResultHint}>공공 DB 검색 결과 — 실제 표기값이에요</Text>
+                  {dbSearch.results.map((r, i) => (
+                    <TouchableOpacity
+                      key={`${r.barcode || r.foodName || i}-${i}`}
+                      style={styles.dbResultRow}
+                      onPress={() => pickDbResult(item, r)}
+                    >
+                      <Text style={styles.dbResultName} numberOfLines={1}>{r.foodName || '이름 없음'}</Text>
+                      <Text style={styles.dbResultMeta} numberOfLines={1}>
+                        {[r.servingSize, r.calories != null ? `${r.calories}kcal` : null].filter(Boolean).join(' · ')}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                  <TouchableOpacity onPress={() => setDbSearch(null)}>
+                    <Text style={styles.dbResultClose}>닫기</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
               <TextField
                 placeholder="양 (예: 1인분, 반 공기)"
                 value={item.portion}
@@ -958,6 +1044,34 @@ const styles = themedStyles((colors) => ({
   itemNo: { fontSize: fontSize.body, fontWeight: '700', color: colors.primary },
   itemKcal: { fontSize: fontSize.caption, fontWeight: '800', color: colors.accent },
   remove: { color: colors.danger, fontSize: fontSize.caption },
+  // 음식명 + DB 검색 버튼 — TextField 는 자체 marginBottom 을 갖고 있어 행 안에서도 간격이 맞는다
+  nameRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  nameField: { flex: 1 },
+  dbSearchBtn: {
+    width: 54,
+    height: 54,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // DB 이름 검색 결과 — 항목당 하나만 열리고, 실제 표기값이라 눈에 띄게 강조한다
+  dbResultBox: {
+    marginTop: -spacing.sm,
+    marginBottom: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryBg,
+    padding: spacing.sm,
+  },
+  dbResultHint: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '700', marginBottom: spacing.xs },
+  dbResultRow: { paddingVertical: spacing.xs },
+  dbResultName: { fontSize: fontSize.body, color: colors.textPrimary, fontWeight: '700' },
+  dbResultMeta: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
+  dbResultClose: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700', marginTop: spacing.xs, textAlign: 'right' },
   macroToggle: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, minHeight: 44 },
   macroToggleText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
   macroInputRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
