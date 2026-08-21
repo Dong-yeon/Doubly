@@ -103,7 +103,10 @@ public enum ErrorCode {
     STREAM_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "통화 기능이 아직 설정되지 않았어요. 잠시 후 다시 시도해주세요."),
     CALL_NOT_FOUND(HttpStatus.NOT_FOUND, "통화를 찾을 수 없어요."),
     CALL_ALREADY_ACTIVE(HttpStatus.CONFLICT, "이미 진행 중인 통화가 있어요."),
-    CALL_INVALID_STATE(HttpStatus.CONFLICT, "이미 끝났거나 받을 수 없는 통화예요.");
+    CALL_INVALID_STATE(HttpStatus.CONFLICT, "이미 끝났거나 받을 수 없는 통화예요."),
+    // 영상통화는 PRO 전용(Feature.VIDEO_CALL) — PLAN_UPGRADE_REQUIRED 를 그대로 쓴다(별도 코드 불필요).
+    // 통화 시간 안전망은 판매 문구가 아니라 Stream Video 무료 티어 보호용이라 402(업셀)가 아닌 429.
+    CALL_TIME_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "이번 달 통화 가능 시간을 모두 사용했어요. 다음 달에 다시 이용해주세요.");
 
     private final HttpStatus status;
     private final String message;
