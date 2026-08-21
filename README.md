@@ -90,8 +90,8 @@ meal_items(식단 항목 편집) / routine_exercise_sets(루틴 세트별 목표
 workout_routine_days(루틴 요일 배정) / voice_clips(커플 음성 응원) /
 mood_statuses(무드 상태) / couple_characters(커플 캐릭터 — 도메인 레이어만) /
 routine_gifts(루틴 선물하기) / place_ratings(럽슐랭 대표 평점 — 장소당 1인 1개, 재평가는
-upsert. `place_visits.rating`과 별개 개념) / call_sessions(통화·영상통화 — 1단계 백엔드만,
-PLAN.md 참고).
+upsert. `place_visits.rating`과 별개 개념) / call_sessions(통화·영상통화 — 백엔드+프론트
+포그라운드 통화까지, 네이티브 벨 웨이크업은 예정. PLAN.md 참고).
 
 > ⚠️ `workout_sets` 는 **이름과 달리 세트가 아니라 "운동 종목 1개"를 담는 요약 테이블**입니다
 > (`sets` 컬럼에 세트 수를 넣는 구조). 실제 세트별 무게·횟수는 V28 에서 신설된 자식 테이블
@@ -871,7 +871,7 @@ point_ledger              -- 포인트 적립·사용 내역 (잔액을 컬럼�
 | 확장 | 운동 추가/루틴 대체/세션 교체 종목 선택 — 부위→기구 필터 공통 모달(`ExercisePickerModal`) | ✅ 완료 |
 | 게임화(보류) | 커플 캐릭터 도메인 레이어 프로토타입 (`couple_characters`, 엔티티·리포지토리만 — 서비스·화면 없음) | 🚧 실험적 |
 | 통화 · 영상통화 | 1단계 — `call_sessions`(V55) + 백엔드 API(발신/수락/거절/종료/기록·Stream 토큰 발급) + 24시간 안전장치 — PLAN.md | ✅ 완료(백엔드만) |
-| 통화 · 영상통화 | 2단계 — 프론트 SDK 통합 + `CallScreen` (포그라운드 통화) | 🚧 예정 |
+| 통화 · 영상통화 | 2단계 — 프론트 Stream SDK 통합 + 전역 `CallOverlay`(포그라운드 통화 중 UI) + 채팅 헤더 통화 버튼 — PLAN.md | ✅ 완료(코드) — 실기기 검증 남음 |
 | 통화 · 영상통화 | 3단계 — 네이티브 벨 웨이크업(VoIP push + CallKit/ConnectionService) | 🚧 예정 |
 
 ## 실행 방법

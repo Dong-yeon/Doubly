@@ -42,24 +42,34 @@ public class CallController {
         return ApiResponse.success(callService.start(user.id(), request));
     }
 
-    @PostMapping("/{id}/accept")
-    public ApiResponse<CallJoinResponse> accept(@AuthenticationPrincipal AuthUser user, @PathVariable Long id) {
-        return ApiResponse.success(callService.accept(user.id(), id));
+    /*
+     * 아래 4개는 내부 PK(id)가 아니라 provider_call_id(Stream call.id)로 라우팅한다.
+     * 발신자는 start() 응답으로 내부 PK도 받지만, 수신자는 Stream SDK(useCalls())가
+     * 넘겨주는 call.id 만 알 수 있다 — 양쪽이 공통으로 쓸 수 있는 키는 이것뿐이다.
+     */
+
+    @PostMapping("/{providerCallId}/accept")
+    public ApiResponse<CallJoinResponse> accept(@AuthenticationPrincipal AuthUser user,
+                                                @PathVariable String providerCallId) {
+        return ApiResponse.success(callService.accept(user.id(), providerCallId));
     }
 
-    @PostMapping("/{id}/decline")
-    public ApiResponse<CallSessionResponse> decline(@AuthenticationPrincipal AuthUser user, @PathVariable Long id) {
-        return ApiResponse.success(callService.decline(user.id(), id));
+    @PostMapping("/{providerCallId}/decline")
+    public ApiResponse<CallSessionResponse> decline(@AuthenticationPrincipal AuthUser user,
+                                                     @PathVariable String providerCallId) {
+        return ApiResponse.success(callService.decline(user.id(), providerCallId));
     }
 
-    @PostMapping("/{id}/end")
-    public ApiResponse<CallSessionResponse> end(@AuthenticationPrincipal AuthUser user, @PathVariable Long id) {
-        return ApiResponse.success(callService.end(user.id(), id));
+    @PostMapping("/{providerCallId}/end")
+    public ApiResponse<CallSessionResponse> end(@AuthenticationPrincipal AuthUser user,
+                                                @PathVariable String providerCallId) {
+        return ApiResponse.success(callService.end(user.id(), providerCallId));
     }
 
-    @GetMapping("/{id}")
-    public ApiResponse<CallSessionResponse> get(@AuthenticationPrincipal AuthUser user, @PathVariable Long id) {
-        return ApiResponse.success(callService.get(user.id(), id));
+    @GetMapping("/{providerCallId}")
+    public ApiResponse<CallSessionResponse> get(@AuthenticationPrincipal AuthUser user,
+                                                @PathVariable String providerCallId) {
+        return ApiResponse.success(callService.get(user.id(), providerCallId));
     }
 
     @GetMapping

@@ -107,9 +107,9 @@ public class CallService {
 
     /** 수신자 수락 — ONGOING 전환 + 수신자용 Stream 자격 반환. */
     @Transactional
-    public CallJoinResponse accept(Long userId, Long callId) {
+    public CallJoinResponse accept(Long userId, String providerCallId) {
         requireConfigured();
-        CallSession session = memberSession(userId, callId);
+        CallSession session = memberSession(userId, providerCallId);
         if (!session.getCalleeId().equals(userId) || session.getStatus() != CallStatus.RINGING) {
             throw new BusinessException(ErrorCode.CALL_INVALID_STATE);
         }
@@ -120,8 +120,8 @@ public class CallService {
 
     /** 수신자 거절 — 발신자 화면은 CALL_UPDATED 이벤트로 즉시 닫힌다. */
     @Transactional
-    public CallSessionResponse decline(Long userId, Long callId) {
-        CallSession session = memberSession(userId, callId);
+    public CallSessionResponse decline(Long userId, String providerCallId) {
+        CallSession session = memberSession(userId, providerCallId);
         if (!session.getCalleeId().equals(userId) || session.getStatus() != CallStatus.RINGING) {
             throw new BusinessException(ErrorCode.CALL_INVALID_STATE);
         }
@@ -131,13 +131,13 @@ public class CallService {
     }
 
     /**
-     * 종료 — 양쪽 다 호출할 수 있다. 통화 중이었으면 ENDED(통화시간 기록),
-     * 아무도 수락하지 않은 채 발신자가 끊으면 MISSED(수신자에게 부재중 알림).
+     * 종료 — 양쪽 다 호출할 수 있다(발신자의 응답 대기 취소도 포함). 통화 중이었으면
+     * ENDED(통화시간 기록), 아무도 수락하지 않은 채 끝나면 MISSED(수신자에게 부재중 알림).
      * 이미 끝난 세션이면 그대로 반환한다 — 양쪽이 동시에 종료를 눌러도 에러가 아니다.
      */
     @Transactional
-    public CallSessionResponse end(Long userId, Long callId) {
-        CallSession session = memberSession(userId, callId);
+    public CallSessionResponse end(Long userId, String providerCallId) {
+        CallSession session = memberSession(userId, providerCallId);
         if (session.getStatus().isTerminal()) {
             return CallSessionResponse.from(session);
         }
@@ -161,8 +161,8 @@ public class CallService {
     }
 
     /** 세션 단건 — CALL_INCOMING 이벤트를 받은 수신측이 벨 화면을 그릴 때 조회한다. */
-    public CallSessionResponse get(Long userId, Long callId) {
-        return CallSessionResponse.from(memberSession(userId, callId));
+    public CallSessionResponse get(Long userId, String providerCallId) {
+        return CallSessionResponse.from(memberSession(userId, providerCallId));
     }
 
     private CallJoinResponse joinResponse(CallSession session, Long userId) {
@@ -173,9 +173,15 @@ public class CallService {
                 tokenService.createToken(userId));
     }
 
-    /** 통화 당사자만 세션에 접근할 수 있다 — 커플 스코프 검증을 겸한다. */
-    private CallSession memberSession(Long userId, Long callId) {
-        CallSession session = callSessionRepository.findById(callId)
+    /**
+     * 통화 당사자만 세션에 접근할 수 있다 — 커플 스코프 검증을 겸한다.
+     *
+     * <p>키는 내부 PK가 아니라 {@code providerCallId}다. 발신자는 응답으로 내부 PK도
+     * 받지만, 수신자는 Stream SDK({@code useCalls()})가 넘겨주는 {@code call.id}
+     * (=provider_call_id)만 알 수 있다 — 양쪽이 공통으로 쓸 수 있는 키는 이것뿐이다.
+     */
+    private CallSession memberSession(Long userId, String providerCallId) {
+        CallSession session = callSessionRepository.findByProviderCallId(providerCallId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CALL_NOT_FOUND));
         if (!session.isMember(userId)) {
             throw new BusinessException(ErrorCode.CALL_NOT_FOUND);

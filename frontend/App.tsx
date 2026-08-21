@@ -11,6 +11,7 @@ import { BusyOverlay } from './src/components/BusyOverlay';
 import { ConfirmDialog } from './src/components/ConfirmDialog';
 import { DatePickerSheet } from './src/components/DatePickerSheet';
 import { UpgradeSheet } from './src/components/UpgradeSheet';
+import { CallOverlay } from './src/components/CallOverlay';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { installGlobalErrorHandlers } from './src/utils/globalErrorHandler';
 import { initSentry } from './src/utils/sentry';
@@ -114,6 +115,11 @@ export default function App() {
           어느 화면에서 걸렸든 한 곳에서만 그린다.
         */}
         <UpgradeSheet />
+        {/*
+          통화 수신 벨/통화 중 화면 — Stream 클라이언트가 연결돼 있는 한 어느 화면에서든
+          뜬다. callStore.client 가 없으면(미로그인·미설정) 아무것도 렌더하지 않는다.
+        */}
+        <CallOverlay />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
