@@ -29,6 +29,7 @@ import { LockedCard } from '../../components/LockedCard';
 import { TouchGesturePicker } from '../../components/TouchGesturePicker';
 import { MoodPicker } from '../../components/MoodPicker';
 import { useAuthStore } from '../../store/authStore';
+import { usePlanStore } from '../../store/planStore';
 import { useRelationStore } from '../../store/relationStore';
 import { workoutApi } from '../../api/workout';
 import { analyticsApi } from '../../api/analytics';
@@ -50,6 +51,8 @@ import { haptics } from '../../utils/haptics';
 import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { getErrorMessage } from '../../utils/error';
+import { Alert } from '../../utils/alert';
+import { errorCodeOf } from '../../api/client';
 import { updateHomeWidget } from '../../widget/updateHomeWidget';
 import { touchGestureOf } from '../../constants/touchGestures';
 import { playTouchGesture } from '../../utils/haptics';
@@ -101,6 +104,9 @@ function recordLabel(item: FeedItem | null): string | null {
 export function HomeScreen({ navigation }: Props) {
   const user = useAuthStore((s) => s.user);
   const { couple, loading: relationLoading, fetchAll, setBackground, setAnniversary } = useRelationStore();
+  // 표시용 판정 — 모르면 열린 것으로 본다(planStore 주석 참고). 최종 판정은 서버가 한다.
+  const canUse = usePlanStore((s) => s.can);
+  const showUpgrade = usePlanStore((s) => s.showUpgrade);
 
   const [partner, setPartner] = useState<PartnerToday | null>(null);
   const [myStreak, setMyStreak] = useState<Streak | null>(null);
@@ -265,15 +271,67 @@ export function HomeScreen({ navigation }: Props) {
       .catch((e) => toast.error(getErrorMessage(e, '무드를 남기지 못했어요.')));
   };
 
-  const onChangeBg = async () => {
+  /*
+   * 배경 바꾸기 — 상단바 버튼과 화면 길게 누르기가 <b>같은 곳으로</b> 들어온다.
+   *
+   * <p><b>플랜은 사진을 고르기 전에 본다.</b> 예전에는 곧장 갤러리를 열고 Cloudinary
+   * 업로드까지 마친 <b>다음</b>에야 서버가 402 를 던졌다 — 무료 사용자는 사진을 고르고
+   * 기다린 끝에 거절당하고, 그 사이 <b>아무도 안 쓸 이미지가 이미 올라가</b> 있었다
+   * (업로드 한도와 비용은 그대로 나간다). TouchGesturePicker 와 같은 패턴이다: 여기는
+   * 우회 방지가 아니라 UX 고, 서버(RelationService)가 최종 판정을 한 번 더 한다.
+   *
+   * <p>배경이 이미 있으면 바로 갤러리를 열지 않고 먼저 물어본다 — 백엔드는 처음부터
+   * "null 이면 배경 해제"를 지원했는데 프론트에 그 경로가 없어, 한 번 정하면 기본
+   * 그라데이션으로 되돌릴 방법이 아예 없었다.
+   */
+  const onBackgroundPress = () => {
+    // 길게 누르기는 눌린 순간 아무 신호가 없으면 눌린 줄 모른다 — 제스처부터 받아준다.
+    haptics.light();
+    if (!canUse('CUSTOM_BACKGROUND')) {
+      showUpgrade('커플 배경 꾸미기는 PRO에서 이용할 수 있어요.');
+      return;
+    }
+    if (!bgUrl) {
+      void pickBackground();
+      return;
+    }
+    Alert.alert('배경 사진', '홈 배경을 바꾸거나 기본 배경으로 되돌려요.', [
+      { text: '사진 선택', onPress: () => void pickBackground() },
+      { text: '기본 배경으로', style: 'destructive', onPress: () => void clearBackground() },
+      { text: '취소', style: 'cancel' },
+    ]);
+  };
+
+  /**
+   * 402 는 여기서 토스트를 띄우지 않는다 — api/client 가 이미 업그레이드 시트를 열었다.
+   * 둘 다 띄우면 같은 사실을 두 번 알리고, 시트 뒤로 토스트가 겹쳐 뜬다.
+   */
+  const notifyUnless402 = (e: unknown, fallback: string) => {
+    const code = errorCodeOf(e);
+    if (code === 'PLAN_UPGRADE_REQUIRED' || code === 'PLAN_LIMIT_EXCEEDED') return;
+    toast.error(getErrorMessage(e, fallback));
+  };
+
+  const pickBackground = async () => {
     try {
       const uri = await pickImage();
       if (!uri) return;
       const url = await runBusy('배경 올리는 중…', () => uploadImage(uri));
       await setBackground(url);
+      haptics.success();
       toast.success('배경을 변경했어요 ');
     } catch (e) {
-      toast.error(getErrorMessage(e, '배경 변경에 실패했어요.'));
+      notifyUnless402(e, '배경 변경에 실패했어요.');
+    }
+  };
+
+  const clearBackground = async () => {
+    try {
+      await runBusy('배경 되돌리는 중…', () => setBackground(null));
+      haptics.success();
+      toast.success('기본 배경으로 되돌렸어요');
+    } catch (e) {
+      notifyUnless402(e, '배경을 되돌리지 못했어요.');
     }
   };
 
@@ -328,7 +386,7 @@ export function HomeScreen({ navigation }: Props) {
         {connected ? (
           <Pressable
             style={styles.bgBtn}
-            onPress={onChangeBg}
+            onPress={onBackgroundPress}
             hitSlop={8}
             accessibilityRole="button"
             accessibilityLabel={bgUrl ? '배경 사진 변경' : '배경 사진 설정'}
@@ -372,7 +430,7 @@ export function HomeScreen({ navigation }: Props) {
       */}
       <Pressable
         style={styles.stage}
-        onLongPress={onChangeBg}
+        onLongPress={onBackgroundPress}
         // 배경은 커플 공유 자산이다 — 미연결 상태에서는 리스폰더 경쟁 자체를 없앤다
         // (미연결 화면은 ScrollView 라 제스처가 겹칠 이유를 만들지 않는 편이 낫다).
         disabled={!connected}

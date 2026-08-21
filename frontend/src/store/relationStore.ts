@@ -11,7 +11,8 @@ interface RelationState {
   fetchAll: () => Promise<void>;
   createInvite: () => Promise<InviteCode>;
   connectCouple: (code: string) => Promise<void>;
-  setBackground: (url: string) => Promise<void>;
+  /** null 이면 배경 해제 — 기본 그라데이션으로 돌아간다 */
+  setBackground: (url: string | null) => Promise<void>;
   setAnniversary: (date: string) => Promise<void>;
   setDietGoal: (days: number) => Promise<void>;
   end: (id: number) => Promise<void>;
