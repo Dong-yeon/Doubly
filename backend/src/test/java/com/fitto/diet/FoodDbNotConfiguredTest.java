@@ -33,4 +33,11 @@ class FoodDbNotConfiguredTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.FOOD_DB_NOT_CONFIGURED);
     }
+
+    @Test
+    void 키가_없으면_이름_검색_시에도_명확한_에러를_던진다() {
+        assertThatThrownBy(() -> foodDbClient.search("단백질쉐이크"))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.FOOD_DB_NOT_CONFIGURED);
+    }
 }
