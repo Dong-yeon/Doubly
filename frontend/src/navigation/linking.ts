@@ -43,6 +43,7 @@ export const linking: LinkingOptions<RootStackParamList> = {
               DailyQuestion: 'question',
               CoupleCalendar: 'calendar',
               PhotoAlbum: 'album',
+              Memories: 'memories',
               My: 'my',
               Settings: 'settings',
               ChangePassword: 'settings/password',
@@ -75,6 +76,7 @@ export const linking: LinkingOptions<RootStackParamList> = {
                 parse: { programId: Number },
               },
               WorkoutRoutineForm: 'workout/routines/new',
+              WorkoutRoutineGiftInbox: 'workout/routines/gifts',
               BodyMetric: 'workout/body',
               Challenge: 'workout/challenge',
             },
@@ -94,6 +96,7 @@ export const linking: LinkingOptions<RootStackParamList> = {
               DietRecord: 'diet/record',
               DietCalendar: 'diet/calendar',
               DietStats: 'diet/stats',
+              FavoriteFoodGiftInbox: 'diet/favorite-gifts',
             },
           },
           Place: {

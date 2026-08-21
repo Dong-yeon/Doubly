@@ -144,7 +144,8 @@ public class TripService {
         if (partnerId != null) {
             notificationService.notify(partnerId, "새 여행 계획",
                     userName(userId) + " — " + trip.getTitle()
-                            + " (" + trip.getStartDate().format(DATE_FMT) + "~)");
+                            + " (" + trip.getStartDate().format(DATE_FMT) + "~)",
+                    Map.of("type", "trip", "id", String.valueOf(trip.getId())));
         }
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.TRIP);
         return TripResponse.of(trip, 0);
@@ -353,7 +354,8 @@ public class TripService {
         Long partnerId = couple.partnerOf(userId);
         if (partnerId != null) {
             notificationService.notify(partnerId, "AI가 여행 일정을 짰어요",
-                    userName(userId) + " — " + trip.getTitle());
+                    userName(userId) + " — " + trip.getTitle(),
+                    Map.of("type", "trip", "id", String.valueOf(trip.getId())));
         }
         coupleEventPublisher.publish(trip.getCoupleId(), CoupleEvent.TRIP);
         return buildDays(trip);

@@ -98,8 +98,13 @@ export interface User {
   socialType?: SocialType | null;
   /** 마케팅 수신 동의 — 선택 항목이라 언제든 철회할 수 있다 */
   marketingConsent?: boolean;
-  /** 푸시 알림 수신 여부 */
+  /** 푸시 알림 수신 여부 — 마스터 스위치 */
   notificationsEnabled?: boolean;
+  /** 카테고리별 알림 설정 — 마스터가 꺼져 있어도 값 자체는 그대로 유지된다(토글 상태 보존) */
+  notifyChat?: boolean;
+  notifyAnniversary?: boolean;
+  notifyPartnerActivity?: boolean;
+  notifyReminder?: boolean;
   /** 필수 약관 재동의 필요 여부 — 약관 개정 또는 동의 이력 없는 기존 가입자면 true */
   requiresConsent?: boolean;
 }

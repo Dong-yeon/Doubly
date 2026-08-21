@@ -172,7 +172,8 @@ public class PlaceService {
         if (partnerId != null) {
             notificationService.notify(partnerId, "새 맛집 방문 기록!",
                     userName(userId) + " — " + place.getName()
-                            + (visit.getRating() != null ? " ★" + visit.getRating() : ""));
+                            + (visit.getRating() != null ? " ★" + visit.getRating() : ""),
+                    Map.of("type", "place", "id", String.valueOf(place.getId())));
         }
         return PlaceVisitResponse.of(visit, userName(userId));
     }
@@ -239,7 +240,8 @@ public class PlaceService {
                 Long partnerId = activeCouple(userId).partnerOf(userId);
                 if (partnerId != null) {
                     notificationService.notify(partnerId, "럽슐랭 " + newTier + "스타 등극! 🎉",
-                            place.getName() + "이(가) 우리 둘의 럽슐랭으로 인증됐어요.");
+                            place.getName() + "이(가) 우리 둘의 럽슐랭으로 인증됐어요.",
+                            Map.of("type", "place", "id", String.valueOf(place.getId())));
                 }
             } else if (newTier == 0) {
                 place.applyLovelichelinTier(0, null);
@@ -256,7 +258,8 @@ public class PlaceService {
             if (partnerId != null) {
                 notificationService.notify(partnerId, "럽슐랭 평가를 기다려요 ⭐",
                         userName(userId) + "이(가) " + place.getName()
-                                + "에 별점을 남겼어요. 당신의 평점이 등급을 결정해요!");
+                                + "에 별점을 남겼어요. 당신의 평점이 등급을 결정해요!",
+                        Map.of("type", "place", "id", String.valueOf(place.getId())));
             }
         }
 

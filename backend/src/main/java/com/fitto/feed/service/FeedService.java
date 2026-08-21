@@ -209,7 +209,8 @@ public class FeedService {
             String preview = content != null && !content.isEmpty()
                     ? (content.length() > 40 ? content.substring(0, 40) + "…" : content)
                     : "사진을 남겼어요";
-            notificationService.notify(partnerId, authorName + "님의 새 일상", preview);
+            notificationService.notify(partnerId, authorName + "님의 새 일상", preview,
+                    Map.of("type", "feed", "id", String.valueOf(post.getId())));
         }
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.FEED);
 
@@ -242,7 +243,8 @@ public class FeedService {
                     .build());
             if (!userId.equals(post.getAuthorId())) {
                 notificationService.notify(post.getAuthorId(), "일상에 반응이 달렸어요",
-                        mapper.userName(userId) + "님이 " + emoji + " 를 남겼어요");
+                        mapper.userName(userId) + "님이 " + emoji + " 를 남겼어요",
+                        Map.of("type", "feed", "id", String.valueOf(post.getId())));
             }
         }
         coupleEventPublisher.publish(post.getCoupleId(), CoupleEvent.FEED);

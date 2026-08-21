@@ -92,7 +92,8 @@ public class RoutineGiftService {
         giftRepository.save(gift);
 
         String senderName = userName(senderId);
-        notificationService.notify(receiverId, "운동 루틴을 선물했어요 🎁", senderName + " — " + source.getTitle());
+        notificationService.notify(receiverId, "운동 루틴을 선물했어요 🎁", senderName + " — " + source.getTitle(),
+                Map.of("type", "routineGift", "id", String.valueOf(gift.getId())));
         coupleEventPublisher.publish(relation.getId(), CoupleEvent.ROUTINE_GIFT);
         return RoutineGiftResponse.of(gift, RoutineResponse.of(snapshot), senderName, userName(receiverId));
     }
@@ -121,7 +122,8 @@ public class RoutineGiftService {
 
         gift.accept(copy.getId());
         String receiverName = userName(receiverId);
-        notificationService.notify(gift.getSenderId(), "루틴을 받았어요!", receiverName + "님이 선물을 받았어요 💪");
+        notificationService.notify(gift.getSenderId(), "루틴을 받았어요!", receiverName + "님이 선물을 받았어요 💪",
+                Map.of("type", "routineGift", "id", String.valueOf(gift.getId())));
         coupleEventPublisher.publish(gift.getRelationId(), CoupleEvent.ROUTINE_GIFT);
         return RoutineGiftResponse.of(gift, RoutineResponse.of(copy), userName(gift.getSenderId()), receiverName);
     }

@@ -6,6 +6,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import { Linking, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -43,6 +44,18 @@ export function SettingsScreen({ navigation }: Props) {
 
   const [savingNotification, setSavingNotification] = useState(false);
   const [savingMarketing, setSavingMarketing] = useState(false);
+  // 카테고리 토글은 각각 독립적으로 저장 중일 수 있다 — 하나가 도는 동안 다른 걸 못 누르게
+  const [savingCategory, setSavingCategory] = useState<string | null>(null);
+  // OS 알림 권한이 거부된 상태인지 — 서버 설정(notificationsEnabled)과 별개로 확인해야 한다.
+  // null 이면 아직 조회 전(웹에서는 계속 null 이라 배너가 안 뜬다).
+  const [osPermissionDenied, setOsPermissionDenied] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    Notifications.getPermissionsAsync()
+      .then((p) => setOsPermissionDenied(p.status === 'denied'))
+      .catch(() => {});
+  }, []);
 
   // 서버가 값을 안 내려주는 구버전 응답에서도 안전하게 동작하도록 기본값을 둔다
   const notificationsEnabled = user?.notificationsEnabled ?? true;
@@ -51,12 +64,34 @@ export function SettingsScreen({ navigation }: Props) {
   const onToggleNotification = async (next: boolean) => {
     setSavingNotification(true);
     try {
-      setUser(await authApi.updateNotificationSetting(next));
+      setUser(await authApi.updateNotificationSetting({ enabled: next }));
       toast.success(next ? '알림을 받아요.' : '알림을 껐어요.');
     } catch (e) {
       Alert.alert('오류', getErrorMessage(e));
     } finally {
       setSavingNotification(false);
+    }
+  };
+
+  const CATEGORY_ROWS: {
+    key: 'notifyChat' | 'notifyAnniversary' | 'notifyPartnerActivity' | 'notifyReminder';
+    title: string;
+    desc: string;
+  }[] = [
+    { key: 'notifyChat', title: '채팅', desc: '메시지·리액션·전화 알림' },
+    { key: 'notifyAnniversary', title: '기념일', desc: '캘린더 일정·D-day·추억 리마인드' },
+    { key: 'notifyPartnerActivity', title: '상대 활동', desc: '상대의 운동·식단·기록·선물 알림' },
+    { key: 'notifyReminder', title: '리마인드', desc: '앱이 먼저 챙겨주는 재방문 알림' },
+  ];
+
+  const onToggleCategory = async (key: (typeof CATEGORY_ROWS)[number]['key'], next: boolean) => {
+    setSavingCategory(key);
+    try {
+      setUser(await authApi.updateNotificationSetting({ [key]: next }));
+    } catch (e) {
+      Alert.alert('오류', getErrorMessage(e));
+    } finally {
+      setSavingCategory(null);
     }
   };
 
@@ -105,6 +140,19 @@ export function SettingsScreen({ navigation }: Props) {
         <Card elevation="sm" style={styles.section}>
           <Text style={styles.sectionLabel}>알림</Text>
 
+          {osPermissionDenied && (
+            <Pressable
+              style={styles.permissionBanner}
+              onPress={() => void Linking.openSettings()}
+              accessibilityRole="button"
+            >
+              <Text style={styles.permissionBannerText}>
+                기기 설정에서 알림이 꺼져 있어요. 앱 설정을 켜도 알림이 오지 않아요 — 눌러서 허용해주세요.
+              </Text>
+              <Text style={styles.chevron}>›</Text>
+            </Pressable>
+          )}
+
           <View style={styles.row}>
             <View style={styles.rowText}>
               <Text style={styles.rowTitle}>푸시 알림</Text>
@@ -117,6 +165,24 @@ export function SettingsScreen({ navigation }: Props) {
               trackColor={{ true: colors.primary }}
             />
           </View>
+
+          {/* 카테고리별 설정 — 마스터가 꺼져 있으면 어차피 전부 차단이라 흐리게 두고 못 누르게 한다 */}
+          {CATEGORY_ROWS.map((row) => (
+            <View key={row.key} style={[styles.row, styles.categoryRow]}>
+              <View style={styles.rowText}>
+                <Text style={[styles.rowTitle, !notificationsEnabled && styles.rowTitleMuted]}>
+                  {row.title}
+                </Text>
+                <Text style={styles.rowDesc}>{row.desc}</Text>
+              </View>
+              <Switch
+                value={user?.[row.key] ?? true}
+                onValueChange={(next) => onToggleCategory(row.key, next)}
+                disabled={!notificationsEnabled || savingCategory === row.key}
+                trackColor={{ true: colors.primary }}
+              />
+            </View>
+          ))}
 
           <View style={styles.divider} />
 
@@ -241,6 +307,21 @@ const styles = themedStyles((colors) => ({
   // Card 기본 좌우 패딩(16)을 지운다 — 안 지우면 container(24)+card(16)+row(24)=64 로
   // MY 화면(24+0+24=48)보다 텍스트가 16px 더 안쪽에서 시작해 두 화면이 어긋났다
   section: { paddingVertical: spacing.sm, paddingHorizontal: 0 },
+  permissionBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+    padding: spacing.md,
+    borderRadius: 12,
+    backgroundColor: colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: colors.danger,
+  },
+  permissionBannerText: { flex: 1, fontSize: fontSize.caption, color: colors.danger, lineHeight: 18 },
+  // 카테고리 행은 마스터 토글 아래 한 단 들여서 종속 관계를 보여준다
+  categoryRow: { paddingLeft: spacing.xl, minHeight: 48 },
   themeIntro: { paddingHorizontal: spacing.lg, paddingTop: spacing.xs },
   themeRow: {
     flexDirection: 'row',

@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 데일리 질문 (커플 Q&A) — 매일 질문에 둘 다 답하면 서로 공개.
@@ -131,7 +132,8 @@ public class DailyQuestionService {
         Long partnerId = couple.partnerOf(userId);
         if (partnerId != null && existing == null) {
             notificationService.notify(partnerId, "오늘의 질문",
-                    userName(userId) + "님이 답했어요. 답하면 서로 볼 수 있어요!");
+                    userName(userId) + "님이 답했어요. 답하면 서로 볼 수 있어요!",
+                    Map.of("type", "question"));
         }
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.QUESTION);
         return today(userId);

@@ -31,6 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 트레이너 서비스 — 설계서 4.6. 등록(프로필), 대시보드(회원 현황), 회원 기록 조회.
@@ -150,7 +151,7 @@ public class TrainerService {
 
         String trainerName = userName(trainerId);
         notificationService.notify(request.memberId(), "새 운동 루틴이 도착했어요!",
-                trainerName + " 트레이너 — " + routine.getTitle());
+                trainerName + " 트레이너 — " + routine.getTitle(), Map.of("type", "trainerRoutine"));
         return TrainerRoutineResponse.from(routine, trainerName);
     }
 
@@ -185,7 +186,8 @@ public class TrainerService {
         routine.complete();
         if (firstComplete) {
             notificationService.notify(routine.getTrainerId(), "회원이 루틴을 완료했어요!",
-                    userName(memberId) + " — " + routine.getTitle());
+                    userName(memberId) + " — " + routine.getTitle(),
+                    Map.of("type", "trainerMember", "id", String.valueOf(memberId)));
         }
         return TrainerRoutineResponse.from(routine, userName(routine.getTrainerId()));
     }

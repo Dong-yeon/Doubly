@@ -1,6 +1,7 @@
 package com.fitto.user.domain;
 
 import com.fitto.common.domain.BaseTimeEntity;
+import com.fitto.common.notification.NotificationCategory;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -83,9 +84,23 @@ public class User extends BaseTimeEntity {
     @Column(name = "marketing_agreed_at")
     private LocalDateTime marketingAgreedAt;
 
-    /** 푸시 알림 수신 여부 (SET-01) — 끄면 모든 푸시가 발송되지 않는다 */
+    /** 푸시 알림 수신 여부 (SET-01) — 끄면 모든 푸시가 발송되지 않는다(마스터 스위치) */
     @Column(name = "notifications_enabled", nullable = false)
     private boolean notificationsEnabled = true;
+
+    /* --- 카테고리별 알림 설정 — 마스터 스위치가 켜져 있을 때만 의미가 있다 --- */
+
+    @Column(name = "notify_chat", nullable = false)
+    private boolean notifyChat = true;
+
+    @Column(name = "notify_anniversary", nullable = false)
+    private boolean notifyAnniversary = true;
+
+    @Column(name = "notify_partner_activity", nullable = false)
+    private boolean notifyPartnerActivity = true;
+
+    @Column(name = "notify_reminder", nullable = false)
+    private boolean notifyReminder = true;
 
     @Builder
     private User(String email, String password, String name, LocalDate birthDate, Gender gender,
@@ -140,9 +155,31 @@ public class User extends BaseTimeEntity {
                 && currentPrivacyVersion.equals(this.privacyVersion);
     }
 
-    /** 푸시 알림 수신 설정 변경 (SET-01). */
+    /** 푸시 알림 수신 설정 변경 (SET-01) — 마스터 스위치. */
     public void setNotificationsEnabled(boolean enabled) {
         this.notificationsEnabled = enabled;
+    }
+
+    /** 카테고리별 알림 설정 — 넘긴 값 중 null 이 아닌 것만 반영한다(부분 수정). */
+    public void setNotifyCategories(Boolean chat, Boolean anniversary, Boolean partnerActivity, Boolean reminder) {
+        if (chat != null) this.notifyChat = chat;
+        if (anniversary != null) this.notifyAnniversary = anniversary;
+        if (partnerActivity != null) this.notifyPartnerActivity = partnerActivity;
+        if (reminder != null) this.notifyReminder = reminder;
+    }
+
+    /**
+     * 이 카테고리의 알림을 받을지 최종 판정 — 마스터 스위치가 꺼져 있으면 카테고리 설정과
+     * 무관하게 차단한다(V25 도입 당시 주석이 미리 정해둔 방침).
+     */
+    public boolean allowsCategory(NotificationCategory category) {
+        if (!notificationsEnabled) return false;
+        return switch (category) {
+            case CHAT -> notifyChat;
+            case ANNIVERSARY -> notifyAnniversary;
+            case PARTNER_ACTIVITY -> notifyPartnerActivity;
+            case REMINDER -> notifyReminder;
+        };
     }
 
     /** 비밀번호 변경 — 호출 전에 반드시 인코딩된 값을 넘겨야 한다. */

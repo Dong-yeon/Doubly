@@ -1,5 +1,6 @@
 package com.fitto.notification.service;
 
+import com.fitto.common.notification.NotificationCategory;
 import com.fitto.common.notification.NotificationService;
 import com.fitto.notification.domain.DeviceToken;
 import com.fitto.notification.repository.DeviceTokenRepository;
@@ -15,6 +16,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.client.RestClient;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -26,7 +28,7 @@ import java.util.concurrent.TimeUnit;
  * 수신자의 디바이스 토큰으로 Expo Push API 에 발송한다. 토큰이 없으면 아무 것도 하지 않는다.
  * (실제 발송은 네이티브 빌드에서 등록한 토큰이 있을 때 동작)
  *
- * <p><b>발송은 요청 스레드에서 하지 않는다.</b> 호출부(채팅 전송·피드 작성 등 13곳)
+ * <p><b>발송은 요청 스레드에서 하지 않는다.</b> 호출부(채팅 전송·피드 작성 등 30곳 이상)
  * 다수가 쓰기 트랜잭션 안에서 notify 를 부르는데, 여기서 exp.host 를 동기로 기다리면
  * DB 커넥션을 문 채로 외부 지연을 흡수하게 되어 Expo 장애가 커넥션 풀 고갈로 전파된다.
  * 그래서 (1) 트랜잭션 커밋 이후에 (2) 전용 스레드에서 (3) 타임아웃을 걸고 발송한다.
@@ -69,7 +71,8 @@ public class ExpoPushNotificationService implements NotificationService {
     }
 
     @Override
-    public void notify(Long recipientUserId, String title, String body) {
+    public void notify(Long recipientUserId, NotificationCategory category, String title, String body,
+                       Map<String, String> data) {
         if (recipientUserId == null) return;
         /*
          * 트랜잭션 안에서 불렸으면 커밋 확정 후에만 발송을 예약한다 — 롤백되면 알림도 없다.
@@ -79,25 +82,27 @@ public class ExpoPushNotificationService implements NotificationService {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
-                    executor.execute(() -> send(recipientUserId, title, body));
+                    executor.execute(() -> send(recipientUserId, category, title, body, data));
                 }
             });
         } else {
-            executor.execute(() -> send(recipientUserId, title, body));
+            executor.execute(() -> send(recipientUserId, category, title, body, data));
         }
     }
 
     /** 발송 스레드에서 실행 — 어떤 실패도 앱 흐름에 전파하지 않는다. */
-    private void send(Long recipientUserId, String title, String body) {
+    private void send(Long recipientUserId, NotificationCategory category, String title, String body,
+                      Map<String, String> data) {
         try {
             /*
-             * 수신 거부 확인은 발송 직전 이 지점에서 한 번만 한다 (SET-01).
+             * 수신 거부 확인은 발송 직전 이 지점에서 한 번만 한다 (SET-01 + 카테고리별 설정).
              * 호출부에 각각 두면 새 알림을 추가할 때 검사를 빠뜨리기 쉽고,
-             * 그러면 "껐는데 오는 알림"이 생긴다.
+             * 그러면 "껐는데 오는 알림"이 생긴다. User.allowsCategory 가 마스터 스위치 +
+             * 카테고리 세부 설정을 함께 판정한다.
              * 사용자를 못 찾으면 보내지 않는다 — 탈퇴 직후 잔여 호출의 유령 알림 방지.
              */
             boolean allowed = userRepository.findById(recipientUserId)
-                    .map(User::isNotificationsEnabled)
+                    .map(u -> u.allowsCategory(category))
                     .orElse(false);
             if (!allowed) return;
 
@@ -105,11 +110,19 @@ public class ExpoPushNotificationService implements NotificationService {
             if (tokens.isEmpty()) return;
 
             List<Map<String, Object>> messages = tokens.stream()
-                    .map(t -> Map.<String, Object>of(
-                            "to", t.getToken(),
-                            "title", title,
-                            "body", body,
-                            "sound", "default"))
+                    .map(t -> {
+                        // data 가 있을 때만 실어야 무의미한 필드 확장을 피한다 — Map.of() 는
+                        // 불변이라 여기서 값을 더 못 넣으므로 새 맵을 만든다.
+                        Map<String, Object> message = new LinkedHashMap<>();
+                        message.put("to", t.getToken());
+                        message.put("title", title);
+                        message.put("body", body);
+                        message.put("sound", "default");
+                        if (!data.isEmpty()) {
+                            message.put("data", data);
+                        }
+                        return message;
+                    })
                     .toList();
             restClient.post()
                     .uri(EXPO_PUSH_URL)

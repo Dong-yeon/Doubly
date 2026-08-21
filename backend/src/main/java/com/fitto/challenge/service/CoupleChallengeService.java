@@ -24,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 커플 챌린지/대결 — 생성/조회/삭제. 점수는 기간 내 운동/식단 기록일 수로 실시간 집계.
@@ -76,7 +77,8 @@ public class CoupleChallengeService {
         Long partnerId = couple.partnerOf(userId);
         if (partnerId != null) {
             notificationService.notify(partnerId, "커플 대결 신청!",
-                    userName(userId) + " — " + challenge.getTitle() + " (" + req.type().label() + " 대결)");
+                    userName(userId) + " — " + challenge.getTitle() + " (" + req.type().label() + " 대결)",
+                    Map.of("type", "challenge", "id", String.valueOf(challenge.getId())));
         }
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.CHALLENGE);
         return toResponse(challenge, userId, partnerId);

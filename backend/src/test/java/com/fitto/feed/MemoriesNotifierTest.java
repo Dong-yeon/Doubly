@@ -2,6 +2,7 @@ package com.fitto.feed;
 
 import com.fitto.auth.dto.RegisterRequest;
 import com.fitto.auth.service.AuthService;
+import com.fitto.common.notification.NotificationCategory;
 import com.fitto.common.notification.NotificationService;
 import com.fitto.feed.dto.CreatePostRequest;
 import com.fitto.feed.dto.FeedItemResponse;
@@ -149,8 +150,8 @@ class MemoriesNotifierTest {
         notifier.notifyTodayMemories(LocalDate.of(2026, 7, 30));
 
         String body = "1년 전 오늘, 둘이 함께한 기록이 2개 있어요 💐";
-        verify(notificationService).notify(eq(c[0]), eq("우리 추억"), eq(body));
-        verify(notificationService).notify(eq(c[1]), eq("우리 추억"), eq(body));
+        verify(notificationService).notify(eq(c[0]), eq(NotificationCategory.ANNIVERSARY), eq("우리 추억"), eq(body), any());
+        verify(notificationService).notify(eq(c[1]), eq(NotificationCategory.ANNIVERSARY), eq("우리 추억"), eq(body), any());
     }
 
     /** 연결이 끊긴 관계의 기록은 보이지 않는 상태다 — 알림도 가면 안 된다. */
@@ -166,7 +167,7 @@ class MemoriesNotifierTest {
         notifier.notifyTodayMemories(LocalDate.of(2026, 7, 30));
 
         // 제목으로 좁힌다 — 포스트 작성 시 상대에게 가는 알림이 이미 기록돼 있다
-        verify(notificationService, never()).notify(eq(c[0]), eq("우리 추억"), any());
-        verify(notificationService, never()).notify(eq(c[1]), eq("우리 추억"), any());
+        verify(notificationService, never()).notify(eq(c[0]), eq(NotificationCategory.ANNIVERSARY), eq("우리 추억"), any(), any());
+        verify(notificationService, never()).notify(eq(c[1]), eq(NotificationCategory.ANNIVERSARY), eq("우리 추억"), any(), any());
     }
 }
