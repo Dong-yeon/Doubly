@@ -50,7 +50,15 @@ export const linking: LinkingOptions<RootStackParamList> = {
    * 브라우저 히스토리 연동(위 주석)을 만드는데, 여기서 가로채면 그게 깨진다.
    */
   async getInitialURL() {
-    const url = await Linking.getInitialURL();
+    /*
+     * 150ms 레이스는 react-navigation 기본 구현을 그대로 옮긴 것이다 — Android 에서
+     * Linking.getInitialURL() 이 영영 resolve 되지 않는 경우가 있어(RN #25675), 이걸
+     * 빼면 앱이 첫 화면 없이 멈춘다. 이 훅을 덮어쓰는 이상 그 방어도 같이 가져와야 한다.
+     */
+    const url = await Promise.race([
+      Linking.getInitialURL(),
+      new Promise<undefined>((resolve) => setTimeout(resolve, 150)),
+    ]);
     if (url != null) return url;
     if (Platform.OS === 'web') return null;
     try {

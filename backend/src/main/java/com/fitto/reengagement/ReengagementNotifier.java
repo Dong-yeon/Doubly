@@ -87,8 +87,9 @@ public class ReengagementNotifier {
         this.notificationService = notificationService;
     }
 
-    /** 매일 21:00 KST. */
+    /** 매일 21:00 KST. (자기호출은 프록시를 타지 않으므로 진입점에도 트랜잭션을 건다) */
     @Scheduled(cron = "0 0 21 * * *", zone = "Asia/Seoul")
+    @Transactional(readOnly = true)
     public void remind() {
         remind(LocalDate.now(KST), LocalDateTime.now());
     }

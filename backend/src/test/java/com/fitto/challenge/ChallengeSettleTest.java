@@ -128,6 +128,26 @@ class ChallengeSettleTest {
         verify(notificationService, never()).notify(eq(c[1]), any(), anyString(), anyString(), anyString());
     }
 
+    /**
+     * 스케줄 진입점(무인자)으로도 실제로 <b>저장</b>돼야 한다.
+     *
+     * <p>같은 객체의 메서드를 직접 부르면 프록시를 타지 않아 {@code @Transactional} 이
+     * 걸리지 않는다. 그러면 settle() 로 바꾼 엔티티가 아무 데도 반영되지 않고, 매일 아침
+     * 같은 대결을 다시 알리게 된다 — 기준일을 받는 메서드만 테스트하면 이 결함이 숨는다.
+     */
+    @Test
+    void 스케줄_진입점으로_돌려도_판정이_저장된다() {
+        long[] c = couple("settle-sched-a@fitto.com", "settle-sched-b@fitto.com");
+        // KST/UTC 어느 쪽으로 오늘을 재도 이미 끝난 기간
+        challengeService.create(c[0], new CreateChallengeRequest(
+                ChallengeType.WORKOUT, "스케줄 판정", LocalDate.now().minusDays(5),
+                LocalDate.now().minusDays(3), null));
+
+        settleNotifier.settleEndedChallenges();
+
+        assertThat(challengeService.list(c[0]).get(0).settled()).isTrue();
+    }
+
     @Test
     void 진행_중인_대결은_건드리지_않는다() {
         long[] c = couple("settle-live-a@fitto.com", "settle-live-b@fitto.com");

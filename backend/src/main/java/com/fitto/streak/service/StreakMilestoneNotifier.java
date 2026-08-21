@@ -14,6 +14,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.Set;
 
@@ -49,14 +54,26 @@ public class StreakMilestoneNotifier {
     private final UserRepository userRepository;
     private final SimpMessagingTemplate messagingTemplate;
 
+    /**
+     * 커밋 이후 카드 저장 전용 — <b>반드시 새 트랜잭션</b>이어야 한다.
+     *
+     * <p>{@code afterCommit} 안에서는 원래 트랜잭션의 자원이 아직 스레드에 묶여 있어,
+     * 그냥 저장하면 <b>이미 커밋이 끝난</b> 트랜잭션에 참여하게 되고 그 쓰기는 조용히
+     * 사라진다(로그도 예외도 없다 — 실제로 이 코드가 그렇게 한 번 깨졌다).
+     */
+    private final TransactionTemplate newTransaction;
+
     public StreakMilestoneNotifier(NotificationService notificationService,
                                    ChatService chatService,
                                    UserRepository userRepository,
-                                   SimpMessagingTemplate messagingTemplate) {
+                                   SimpMessagingTemplate messagingTemplate,
+                                   PlatformTransactionManager transactionManager) {
         this.notificationService = notificationService;
         this.chatService = chatService;
         this.userRepository = userRepository;
         this.messagingTemplate = messagingTemplate;
+        this.newTransaction = new TransactionTemplate(transactionManager);
+        this.newTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
     /** 이 숫자가 축하 지점인지 — 호출부가 불필요한 조회를 하지 않도록 먼저 물어본다. */
@@ -76,8 +93,12 @@ public class StreakMilestoneNotifier {
     /**
      * 커플 스트릭 마일스톤 — 양쪽 축하 푸시 + 채팅 카드.
      *
-     * <p>채팅 카드 발행이 실패해도 축하 푸시는 이미 나간 뒤다. 카드는 부가물이므로
-     * 실패를 삼키고 로그만 남긴다 — 스트릭 갱신(=운동/식단 저장)까지 되돌릴 일이 아니다.
+     * <p><b>채팅 카드는 커밋 이후에 쓴다.</b> 이 메서드는 스트릭 갱신 트랜잭션 안에서
+     * 불리는데, 거기서 곧바로 카드를 저장하면 실패가 <b>같은 트랜잭션</b>을 rollback-only
+     * 로 만든다 — 예외를 잡아도 바깥 커밋이 UnexpectedRollbackException 으로 터지고,
+     * 축하 하나 때문에 스트릭 증가가 통째로 사라진다. 커밋 뒤로 미루면 카드 실패가
+     * 로그 한 줄로 끝나고, 롤백된 스트릭의 유령 카드도 생기지 않는다
+     * ({@code ExpoPushNotificationService.notify} 와 같은 이유·같은 패턴).
      */
     public void coupleReached(Long triggeredBy, Relation couple, StreakType type, int count) {
         String body = "둘이 함께 " + count + "일 연속 " + label(type) + "을(를) 이어가고 있어요 🎉";
@@ -85,18 +106,36 @@ public class StreakMilestoneNotifier {
         notificationService.notify(couple.getUserAId(), NotificationCategory.PARTNER, title, body, link(type));
         notificationService.notify(couple.getUserBId(), NotificationCategory.PARTNER, title, body, link(type));
 
+        /*
+         * content 는 화면에 그대로 띄워도 말이 되는 문장이다.
+         * 앱이 STREAK_CARD 를 아직 모르는 구버전이어도 평범한 말풍선으로 읽힌다
+         * (CALL_CARD 처럼 코드를 담으면 구버전에서 "COUPLE|7" 같은 글자가 노출된다).
+         */
+        afterCommit(() -> postCard(triggeredBy, couple.getId(), title + " " + body));
+    }
+
+    private void postCard(Long senderId, Long coupleId, String content) {
         try {
-            /*
-             * content 는 화면에 그대로 띄워도 말이 되는 문장이다.
-             * 앱이 STREAK_CARD 를 아직 모르는 구버전이어도 평범한 말풍선으로 읽힌다
-             * (CALL_CARD 처럼 코드를 담으면 구버전에서 "COUPLE|7" 같은 글자가 노출된다).
-             */
-            ChatMessageResponse saved = chatService.postSystemCard(triggeredBy, couple.getId(),
-                    MessageType.STREAK_CARD, title + " " + body);
-            messagingTemplate.convertAndSend("/sub/rooms/" + couple.getId(), saved);
+            ChatMessageResponse saved = newTransaction.execute(status ->
+                    chatService.postSystemCard(senderId, coupleId, MessageType.STREAK_CARD, content));
+            messagingTemplate.convertAndSend("/sub/rooms/" + coupleId, saved);
         } catch (Exception e) {
-            log.warn("스트릭 마일스톤 채팅 카드 실패 couple={}: {}", couple.getId(), e.getMessage());
+            log.warn("스트릭 마일스톤 채팅 카드 실패 couple={}: {}", coupleId, e.getMessage());
         }
+    }
+
+    /** 트랜잭션 안이면 커밋 이후로 미루고, 아니면 즉시 실행한다. */
+    private void afterCommit(Runnable action) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            action.run();
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                action.run();
+            }
+        });
     }
 
     private String label(StreakType type) {

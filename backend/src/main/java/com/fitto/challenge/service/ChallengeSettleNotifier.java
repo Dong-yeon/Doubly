@@ -63,8 +63,16 @@ public class ChallengeSettleNotifier {
         this.coupleEventPublisher = coupleEventPublisher;
     }
 
-    /** 매일 09:30 KST. */
+    /**
+     * 매일 09:30 KST.
+     *
+     * <p>{@code @Transactional} 이 <b>여기에도</b> 필요하다. 아래 메서드를 같은 객체에서
+     * 직접 부르면 프록시를 타지 않아 트랜잭션이 열리지 않고, 그러면 {@code settle()} 로
+     * 바꾼 엔티티가 아무 데도 반영되지 않는다 — 매일 아침 같은 대결을 다시 알리게 된다.
+     * (테스트는 프록시를 통해 아래 메서드를 부르므로 이 결함을 재현하지 못한다)
+     */
     @Scheduled(cron = "0 30 9 * * *", zone = "Asia/Seoul")
+    @Transactional
     public void settleEndedChallenges() {
         settleEndedChallenges(LocalDate.now(KST));
     }

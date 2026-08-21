@@ -55,8 +55,9 @@ public class CalendarDdayNotifier {
         this.notificationService = notificationService;
     }
 
-    /** 매일 09:00 KST. */
+    /** 매일 09:00 KST. (자기호출은 프록시를 타지 않으므로 진입점에도 트랜잭션을 건다) */
     @Scheduled(cron = "0 0 9 * * *", zone = "Asia/Seoul")
+    @Transactional(readOnly = true)
     public void notifyTodayEvents() {
         notifyFor(LocalDate.now(KST));
     }
