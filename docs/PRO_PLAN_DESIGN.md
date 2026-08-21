@@ -23,9 +23,11 @@
 
 ## 신규 게이트 — Feature.java 등재 완료
 
-아래는 이번에 `Feature.java`에 새로 등재한 항목이다. 전부 **아직 기능 자체가 구현되지
-않은 상태**로 미리 등재해둔 것 — 값이 근거 없는 자리표시자인 것은 기존 `MEMORIES`·
-`FULL_STATS`·`PREMIUM_STICKER`와 같은 성격이다(구현 시 게이팅을 빠뜨리지 않기 위한 선등록).
+아래는 이번에 `Feature.java`에 새로 등재한 항목이다. `VIDEO_CALL`을 제외한 나머지는
+**아직 기능 자체가 구현되지 않은 상태**로 미리 등재해둔 것 — 값이 근거 없는 자리표시자인
+것은 기존 `MEMORIES`·`FULL_STATS`·`PREMIUM_STICKER`와 같은 성격이다(구현 시 게이팅을
+빠뜨리지 않기 위한 선등록). `VIDEO_CALL`은 통화 기능이 이미 구현돼 있어 실제로
+연결까지 마쳤다 — 아래 [통화·영상통화](#통화영상통화--경쟁사-리서치로-판단-뒤집음) 절 참고.
 
 | Feature | FREE | PRO | 커플 판정 |
 |---|---|---|---|
@@ -36,7 +38,7 @@
 | `MOOD_CALENDAR_FULL` (무드 캘린더 전체 기간) | ❌ (최근 30일만 무료) | ✅ | 커플 |
 | `WORKOUT_RECOVERY_FULL` (회복 부위 전체 보기) | ❌ (최근 부위 한 줄만 무료) | ✅ | 커플 |
 | `ANNIVERSARY_RECAP` (우리의 1년 리캡) | ❌ (티저 2~3장만, 화면 자체 구현) | ✅ | 커플 |
-| `VIDEO_CALL` (영상통화) | ❌ (음성통화는 게이팅 없이 항상 무료) | ✅ | 커플 |
+| `VIDEO_CALL` (영상통화) — **실제 연결됨**, 아래 절 참고 | ❌ (음성통화는 게이팅 없이 항상 무료) | ✅ | 커플 |
 | `STREAK_REPAIR` (스트릭 복구권) | ❌ | 2회/월 | 커플 |
 | `WORKOUT_BOOSTER` (운동 부스터) | ❌ (고정 3문구는 계속 무료) | 3회/주 | 커플 |
 | `CUSTOM_QUESTION` (서로에게 묻는 질문) | 1개/주 | 3개/일 | 커플 |
@@ -102,22 +104,47 @@
 | **영상통화** | **`VIDEO_CALL`로 PRO 전용 판매** | 비트윈에조차 없는 기능 — "무료 대체재가 있어서 유료화하면 이탈한다"는 논리가 여기엔 적용 안 된다. 오히려 **이 카테고리 안에서 Doubly만 가진 차별화 지점**이라 결제 유인으로 쓴다 |
 | "같이 운동 라이브" (기존 `LIVE_WORKOUT_CALL`, 삭제) | `VIDEO_CALL` 하나로 흡수 | 영상통화 자체가 PRO 전용이면, 그 위에 얹는 운동 세션 결합 기능도 자동으로 PRO만 도달 가능하다. 별도 Feature 를 두면 같은 걸 두 번 게이팅하는 죽은 코드가 된다 |
 
-### 남은 구현 과제 — 월 통화 시간 안전망
+### 구현 완료 — VIDEO_CALL 게이팅 + 월 통화 시간 안전망
+
+**`VIDEO_CALL` 게이팅**은 [`CallService.start()`](../backend/src/main/java/com/fitto/call/service/CallService.java)에
+연결돼 있다 — `req.callType() == CallType.VIDEO`일 때만 `planGuard.require(userId,
+Feature.VIDEO_CALL)`을 태운다. `VIDEO_CALL`이 커플 스코프라 `PlanResolver`가 관계
+단위(둘 중 높은 플랜)로 판정하므로, 한쪽만 PRO여도 둘 다 영상통화를 걸 수 있다
+("커플당 결제 1건" 모델, [`CallPlanGatingTest`](../backend/src/test/java/com/fitto/call/CallPlanGatingTest.java)
+가 검증). 음성통화는 이 분기를 안 타므로 계속 게이팅 없이 무료다.
 
 영상통화가 PRO 전용이어도, **무료 음성통화가 Stream Video 무료 티어(Maker Account
 기준 월 333,000 참가자-분)를 공유**하는 건 그대로다. 소수 헤비 유저(음성이든 영상이든)가
 이 풀을 독식하면 전원이 통화를 못 쓰게 되는 건 `AI_TOTAL`이 막는 문제와 정확히 같은
-모양이다. 다만 이건 기존 `Feature`/`Quota`/`UsageCounter` 체계에 그대로 넣을 수 없다:
+모양이지만, 기존 `Feature`/`Quota`/`UsageCounter` 체계에 그대로 넣을 수 없었다:
 
 - 기존 게이트는 전부 "**사용자 1명 × 기간(일/주/월)**"으로 세는 카운터다.
-- 통화 시간은 "**커플 1쌍 × 연속된 분(分)**"을 누적해야 하는 다른 모양의 계량이다.
+- 통화 시간은 "**커플 1쌍 × 연속된 초(秒)**"를 누적해야 하는 다른 모양의 계량이다.
   거는 사람 기준으로 세면 상대방은 무제한으로 보이는 이상한 상태가 된다.
 
-그래서 이 안전망은 Feature enum에 등재하지 않고 설계만 남긴다: **커플당 월 통화 분
-누적**(음성+영상 합산, FREE·PRO 모두 적용하되 PRO가 더 넉넉하게), 초과 시 402가 아니라
-**429**(PlanGuard의 "유료 사용자 한도 초과 = 남용 방지, 업셀 아님" 원칙과 동일). 구현
-시 `UsageCounter`와 별개로 "커플 단위 분 누적 카운터"가 새로 필요하고, 판정 시점도
-**종료 시점 기록**이어야 한다(통화 중간에 한도가 찼다고 끊어버리면 최악의 경험이 된다).
+그래서 [`CallMinuteGuard`](../backend/src/main/java/com/fitto/call/service/CallMinuteGuard.java)를
+`common.plan`이 아니라 **`call` 패키지에 별도로** 만들었다 — `UsageCounter`와 같은
+Redis `INCR`(여긴 `INCRBY`) + 인메모리 폴백 패턴을 재사용하되, 키를 `coupleId × 연월`로
+잡고 매번 1이 아니라 `durationSec`만큼 증가시킨다.
+
+- **커플당 월 상한**: FREE 15시간, PRO 60시간(자리표시자 — `Feature.java` 상단 주석과
+  같은 원칙, 실사용 측정 전).
+- **판정 시점이 다른 게이트와 반대다.** `PlanGuard`는 사용 *전* 선차감하지만, 통화
+  시간은 끝나기 전엔 얼마나 쓸지 알 수 없다. 그래서 `CallService.start()`에서
+  `callMinuteGuard.requireCapacity(coupleId)`로 "이미 다 썼는지"만 확인하고(새 통화를
+  못 열게), 실제 사용량은 `CallService.recordOutcome()`(정상 종료·부재중·거절·24시간
+  강제종료 전부를 거치는 공통 후처리)에서 `durationSec`이 있을 때만
+  `callMinuteGuard.record()`로 누적한다 — **진행 중인 통화는 한도를 넘겨도 끊지
+  않는다.**
+- 초과 시 402(업셀)가 아니라 **`ErrorCode.CALL_TIME_LIMIT_EXCEEDED`(429)** —
+  PlanGuard의 "유료 사용자 한도 초과 = 남용 방지, 업셀 아님" 원칙과 동일.
+- 실제 15시간을 실시간으로 채워 검증할 수 없어서, [`CallMinuteGuardTest`](../backend/src/test/java/com/fitto/call/service/CallMinuteGuardTest.java)가
+  `record()`로 누적치를 직접 채워 넣고 `requireCapacity()`가 막는지 순수 단위 테스트로
+  검증한다(`CallFlowTest`는 실제 흐름의 기본 동작만).
+- 프론트엔드 변경은 없었다 — `CALL_TIME_LIMIT_EXCEEDED`는 기존 범용 에러 토스트
+  경로(`ChatRoomScreen.startCall`의 `catch`)가 서버 메시지를 그대로 보여주고,
+  `PLAN_UPGRADE_REQUIRED`(영상통화 게이트)는 이미 전역 402 인터셉트(`UpgradeSheet`)가
+  처리한다.
 
 ## 판매 문구가 되는 축 7개 (요약)
 

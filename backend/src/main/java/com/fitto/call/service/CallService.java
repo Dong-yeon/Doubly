@@ -18,6 +18,8 @@ import com.fitto.common.event.CoupleEventPublisher;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.notification.NotificationService;
+import com.fitto.common.plan.Feature;
+import com.fitto.common.plan.PlanGuard;
 import com.fitto.relation.domain.Relation;
 import com.fitto.relation.domain.RelationStatus;
 import com.fitto.relation.domain.RelationType;
@@ -59,6 +61,8 @@ public class CallService {
     private final CoupleEventPublisher coupleEventPublisher;
     private final ChatService chatService;
     private final SimpMessagingTemplate messagingTemplate;
+    private final PlanGuard planGuard;
+    private final CallMinuteGuard callMinuteGuard;
 
     public CallService(CallSessionRepository callSessionRepository,
                        RelationRepository relationRepository,
@@ -68,7 +72,9 @@ public class CallService {
                        NotificationService notificationService,
                        CoupleEventPublisher coupleEventPublisher,
                        ChatService chatService,
-                       SimpMessagingTemplate messagingTemplate) {
+                       SimpMessagingTemplate messagingTemplate,
+                       PlanGuard planGuard,
+                       CallMinuteGuard callMinuteGuard) {
         this.callSessionRepository = callSessionRepository;
         this.relationRepository = relationRepository;
         this.userRepository = userRepository;
@@ -78,6 +84,8 @@ public class CallService {
         this.coupleEventPublisher = coupleEventPublisher;
         this.chatService = chatService;
         this.messagingTemplate = messagingTemplate;
+        this.planGuard = planGuard;
+        this.callMinuteGuard = callMinuteGuard;
     }
 
     /** StreamVideoClient 초기화용 자격 — 로그인 직후 1회. 연결돼 있어야 벨을 받는다. */
@@ -99,6 +107,13 @@ public class CallService {
         if (callSessionRepository.existsByCoupleIdAndStatusIn(couple.getId(), ACTIVE_STATUSES)) {
             throw new BusinessException(ErrorCode.CALL_ALREADY_ACTIVE);
         }
+        // 영상통화는 PRO 전용 — 비트윈에도 없는 차별화 지점(docs/PRO_PLAN_DESIGN.md 참고).
+        // 음성통화는 게이팅 없이 전면 무료라 여기서 걸리지 않는다.
+        if (req.callType() == CallType.VIDEO) {
+            planGuard.require(userId, Feature.VIDEO_CALL);
+        }
+        // 통화 종류와 무관한 안전망 — Stream Video 무료 티어를 소수가 독식하는 걸 막는다.
+        callMinuteGuard.requireCapacity(couple.getId());
 
         CallSession session = callSessionRepository.save(CallSession.builder()
                 .coupleId(couple.getId())
@@ -169,6 +184,10 @@ public class CallService {
      * 네이티브 벨이 없는 지금, 부재중 카드가 사실상 유일한 "전화 왔었다" 통지 수단이다.
      */
     void recordOutcome(CallSession session) {
+        if (session.getDurationSec() != null) {
+            // 실제 통화가 있었을 때만 안전망에 누적한다 — 벨만 울리다 끝난(MISSED) 세션은 0초.
+            callMinuteGuard.record(session.getCoupleId(), session.getDurationSec());
+        }
         String content = session.getCallType() + "|" + session.getStatus()
                 + (session.getDurationSec() != null ? "|" + session.getDurationSec() : "");
         ChatMessageResponse saved = chatService.postSystemCard(
