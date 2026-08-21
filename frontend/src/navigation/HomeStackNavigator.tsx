@@ -1,4 +1,4 @@
-/** 홈 탭 내부 스택 — 홈 + 커플 연결 + MY(프로필) */
+/** 홈 탭 내부 스택 — 홈 + 커플 연결 + MY(프로필) + 여행(Trip) */
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from './types';
@@ -14,6 +14,14 @@ import { DailyQuestionScreen } from '../screens/home/DailyQuestionScreen';
 import { CoupleCalendarScreen } from '../screens/home/CoupleCalendarScreen';
 import { PhotoAlbumScreen } from '../screens/feed/PhotoAlbumScreen';
 import { MemoriesScreen } from '../screens/feed/MemoriesScreen';
+// 커플 여행 — 장소(럽슐랭) 스택에서 이관 (navigation/types.ts 의 Trip* 주석 참고)
+import { TripListScreen } from '../screens/trip/TripListScreen';
+import { TripFormScreen } from '../screens/trip/TripFormScreen';
+import { TripDetailScreen } from '../screens/trip/TripDetailScreen';
+import { TripExpenseScreen } from '../screens/trip/TripExpenseScreen';
+import { TripChecklistScreen } from '../screens/trip/TripChecklistScreen';
+import { TripAlbumScreen } from '../screens/trip/TripAlbumScreen';
+import { TripRecapScreen } from '../screens/trip/TripRecapScreen';
 // [트레이너 기능 일시 비활성화] 되돌리려면 아래 import 와 하단 Stack.Screen 5개의 주석을 해제한다.
 // 화면·API·타입·백엔드는 그대로 남아 있으므로 주석만 풀면 복구된다.
 // import { TrainerRegisterScreen } from '../screens/trainer/TrainerRegisterScreen';
@@ -58,6 +66,32 @@ export function HomeStackNavigator() {
         component={LegalDocumentScreen}
         options={{ headerShown: false, presentation: 'modal' }}
       />
+      <Stack.Screen name="TripList" component={TripListScreen} options={{ title: '우리 여행' }} />
+      <Stack.Screen
+        name="TripForm"
+        component={TripFormScreen}
+        options={({ route }) => ({
+          title: route.params.trip ? '여행 수정' : '여행 만들기',
+          ...modalOptions,
+        })}
+      />
+      <Stack.Screen
+        name="TripDetail"
+        component={TripDetailScreen}
+        options={({ route }) => ({ title: route.params.title })}
+      />
+      <Stack.Screen
+        name="TripExpense"
+        component={TripExpenseScreen}
+        options={{ title: '경비 정산' }}
+      />
+      <Stack.Screen
+        name="TripChecklist"
+        component={TripChecklistScreen}
+        options={{ title: '준비물 체크리스트' }}
+      />
+      <Stack.Screen name="TripAlbum" component={TripAlbumScreen} options={{ title: '여행 앨범' }} />
+      <Stack.Screen name="TripRecap" component={TripRecapScreen} options={{ title: '여행 회고' }} />
       {/* [트레이너 기능 일시 비활성화] 라우트 미등록 → 진입 불가. 되돌리려면 주석 해제 + 상단 import 복구.
       <Stack.Screen
         name="TrainerRegister"

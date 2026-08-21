@@ -59,6 +59,32 @@ export const linking: LinkingOptions<RootStackParamList> = {
                 parse: { memberId: Number },
               },
               TrainerConnect: 'trainer/connect',
+              /*
+               * 여행 — 장소(Place) 스택에서 이관. 경로 문자열은 그대로 둔다:
+               * 이미 배포된 딥링크·브라우저 북마크(doubly://trips/*)가 계속 열려야 한다.
+               */
+              TripList: 'trips',
+              TripForm: 'trips/form',
+              TripDetail: {
+                path: 'trips/:tripId',
+                parse: { tripId: Number },
+              },
+              TripExpense: {
+                path: 'trips/:tripId/expense',
+                parse: { tripId: Number },
+              },
+              TripChecklist: {
+                path: 'trips/:tripId/checklist',
+                parse: { tripId: Number },
+              },
+              TripAlbum: {
+                path: 'trips/:tripId/album',
+                parse: { tripId: Number },
+              },
+              TripRecap: {
+                path: 'trips/:tripId/recap',
+                parse: { tripId: Number },
+              },
             },
           },
           Workout: {
@@ -104,28 +130,6 @@ export const linking: LinkingOptions<RootStackParamList> = {
               PlaceDetail: {
                 path: 'place/:placeId',
                 parse: { placeId: Number },
-              },
-              TripList: 'trips',
-              TripForm: 'trips/form',
-              TripDetail: {
-                path: 'trips/:tripId',
-                parse: { tripId: Number },
-              },
-              TripExpense: {
-                path: 'trips/:tripId/expense',
-                parse: { tripId: Number },
-              },
-              TripChecklist: {
-                path: 'trips/:tripId/checklist',
-                parse: { tripId: Number },
-              },
-              TripAlbum: {
-                path: 'trips/:tripId/album',
-                parse: { tripId: Number },
-              },
-              TripRecap: {
-                path: 'trips/:tripId/recap',
-                parse: { tripId: Number },
               },
             },
           },

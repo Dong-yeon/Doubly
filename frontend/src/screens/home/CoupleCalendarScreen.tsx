@@ -2,6 +2,11 @@
  * 커플 캘린더 — 기념일 외 일정(생일·데이트 약속 등) 공유.
  * 월 그리드(일정 있는 날 점 표시) + 일정 목록(D-day 배지) + 추가/수정 모달.
  * 매일 아침(KST) 당일 일정은 서버가 커플 양쪽에 푸시한다.
+ *
+ * <p>여행(PLAN.md Trip)이 럽슐랭(장소) 탭에서 홈 스택으로 이관되면서, 이 화면이 여행의
+ * <b>상시 진입점</b>이 됐다 — 그리드에 여행 기간을 틴트로 깔고, 그리드 아래 '우리 여행'
+ * 섹션에서 상세·전체 목록·만들기로 들어간다. (홈의 D-day 카드는 여행이 있는 기간에만
+ * 뜨는 조건부 표면이라, 여행이 하나도 없을 때의 생성 진입로는 여기뿐이다.)
  */
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
@@ -25,9 +30,11 @@ import { TextField } from '../../components/TextField';
 import { DateField } from '../../components/DateField';
 import { EmptyState } from '../../components/EmptyState';
 import { calendarApi } from '../../api/calendar';
+import { tripApi } from '../../api/trip';
+import { tripStatusLabel } from '../trip/TripListScreen';
 import { toast } from '../../store/toastStore';
 import { getErrorMessage } from '../../utils/error';
-import type { CalendarEventType, CoupleCalendarEvent } from '../../types';
+import type { CalendarEventType, CoupleCalendarEvent, Trip } from '../../types';
 import { confirmDiscard } from '../../utils/discardGuard';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
@@ -83,13 +90,15 @@ const EMPTY_FORM: FormState = {
   memo: '',
 };
 
-export function CoupleCalendarScreen(_props: Props) {
+export function CoupleCalendarScreen({ navigation }: Props) {
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${pad2(today.getMonth() + 1)}-${pad2(today.getDate())}`;
 
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth() + 1); // 1~12
   const [events, setEvents] = useState<CoupleCalendarEvent[]>([]);
+  // 여행 전체 목록 — 월과 무관하게 한 번 받고, 그리드 틴트·'우리 여행' 섹션은 보이는 달로 거른다
+  const [trips, setTrips] = useState<Trip[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
   const [saving, setSaving] = useState(false);
@@ -117,6 +126,16 @@ export function CoupleCalendarScreen(_props: Props) {
   }, []);
 
   useFocusEffect(useCallback(() => void load(year, month), [load, year, month]));
+
+  // 여행은 월 이동과 무관하게 전체를 받는다 — 실패(커플 미연결 포함)면 조용히 비운다
+  useFocusEffect(
+    useCallback(() => {
+      tripApi
+        .list()
+        .then(setTrips)
+        .catch(() => setTrips([]));
+    }, []),
+  );
 
   const moveMonth = (delta: number) => {
     let y = year;
@@ -150,6 +169,29 @@ export function CoupleCalendarScreen(_props: Props) {
   }, [year, month]);
 
   const listEvents = selectedDate ? byDate.get(selectedDate) ?? [] : events;
+
+  /** 보이는 달과 겹치는 여행들 — 그리드 틴트와 '우리 여행' 섹션이 함께 쓴다 */
+  const monthTrips = useMemo(() => {
+    const monthStart = `${year}-${pad2(month)}-01`;
+    const monthEnd = `${year}-${pad2(month)}-${pad2(new Date(year, month, 0).getDate())}`;
+    return trips.filter((t) => t.startDate <= monthEnd && t.endDate >= monthStart);
+  }, [trips, year, month]);
+
+  /** 여행 기간에 덮이는 날짜(YYYY-MM-DD) 집합 — 셀마다 여행 배열을 훑지 않게 미리 편다 */
+  const tripDays = useMemo(() => {
+    const set = new Set<string>();
+    const lastDay = new Date(year, month, 0).getDate();
+    for (let d = 1; d <= lastDay; d++) {
+      const dateStr = `${year}-${pad2(month)}-${pad2(d)}`;
+      if (monthTrips.some((t) => t.startDate <= dateStr && dateStr <= t.endDate)) set.add(dateStr);
+    }
+    return set;
+  }, [monthTrips, year, month]);
+
+  // 날짜를 고르면 그 날을 덮는 여행만, 아니면 이번 달과 겹치는 여행 전부
+  const listTrips = selectedDate
+    ? monthTrips.filter((t) => t.startDate <= selectedDate && selectedDate <= t.endDate)
+    : monthTrips;
 
   /*
    * 모달을 연 시점의 폼 스냅샷 — 백드롭으로 닫을 때 "달라진 게 있는지"를 판단한다.
@@ -270,10 +312,12 @@ export function CoupleCalendarScreen(_props: Props) {
               const dayEvents = byDate.get(dateStr) ?? [];
               const isToday = dateStr === todayStr;
               const isSelected = dateStr === selectedDate;
+              // 여행 기간은 점(하루 단위 일정)이 아니라 셀 틴트로 잇는다 — 기간이 한눈에 띠로 보인다
+              const inTrip = tripDays.has(dateStr);
               return (
                 <Pressable
                   key={dateStr}
-                  style={[styles.cell, isSelected && styles.cellSelected]}
+                  style={[styles.cell, inTrip && styles.cellTrip, isSelected && styles.cellSelected]}
                   onPress={() => setSelectedDate(isSelected ? null : dateStr)}
                 >
                   <View style={[styles.dayWrap, isToday && styles.todayWrap]}>
@@ -292,6 +336,52 @@ export function CoupleCalendarScreen(_props: Props) {
             })}
           </View>
         </Card>
+
+        {/* 우리 여행 — 여행의 상시 진입점 (파일 상단 주석 참고). 목록·상세는 홈 스택의 Trip* 화면 */}
+        <View style={styles.listHeader}>
+          <Text style={styles.listTitle}>
+            {selectedDate ? `${Number(selectedDate.slice(8, 10))}일 여행` : '우리 여행'}
+          </Text>
+          <Pressable onPress={() => navigation.navigate('TripList')} hitSlop={8}>
+            <Text style={styles.listClear}>전체 보기</Text>
+          </Pressable>
+        </View>
+        {listTrips.length === 0 ? (
+          <TouchableOpacity
+            style={styles.tripCreate}
+            activeOpacity={0.8}
+            onPress={() => navigation.navigate('TripForm', {})}
+          >
+            <Text style={styles.tripCreateText}>
+              {selectedDate ? '이 날을 낀 여행이 없어요' : '이번 달 여행이 없어요'} · ＋ 여행 만들기
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          listTrips.map((trip) => (
+            <TouchableOpacity
+              key={trip.id}
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate('TripDetail', { tripId: trip.id, title: trip.title })}
+            >
+              <Card elevation="sm" style={styles.eventCard}>
+                <View style={[styles.typeBar, { backgroundColor: colors.accent }]} />
+                <View style={styles.eventBody}>
+                  <View style={styles.eventTitleRow}>
+                    <Text style={styles.eventTitle} numberOfLines={1}>
+                      ✈️ {trip.title}
+                    </Text>
+                    <View style={styles.ddayBadge}>
+                      <Text style={styles.ddayText}>{tripStatusLabel(trip)}</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.eventMeta}>
+                    {trip.startDate} ~ {trip.endDate} · 담긴 장소 {trip.placeCount}곳
+                  </Text>
+                </View>
+              </Card>
+            </TouchableOpacity>
+          ))
+        )}
 
         {/* 일정 목록 */}
         <View style={styles.listHeader}>
@@ -485,6 +575,8 @@ const styles = themedStyles((colors) => ({
   },
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
   cell: { width: CELL, alignItems: 'center', paddingVertical: 4, borderRadius: radius.sm },
+  // 여행 기간 틴트 — 선택 배경(cellSelected)이 이기도록 스타일 배열에서 앞에 둔다
+  cellTrip: { backgroundColor: colors.accentSoft },
   cellSelected: { backgroundColor: colors.surfaceAlt },
   dayWrap: {
     width: 28,
@@ -522,6 +614,20 @@ const styles = themedStyles((colors) => ({
   },
   ddayText: { fontSize: fontSize.caption, fontWeight: '800', color: colors.textPrimary },
   eventMeta: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
+
+  // 여행이 없을 때의 생성 진입점 — 카드 대신 점선 상자로 "비어 있음 + 행동"을 한 줄에
+  tripCreate: {
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+    minHeight: layout.touchTarget,
+    justifyContent: 'center',
+  },
+  tripCreateText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
 
   addBtn: {
     position: 'absolute',

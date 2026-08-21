@@ -16,7 +16,7 @@ export type OnboardingStackParamList = {
   LegalDocument: { doc: 'terms' | 'privacy' };
 };
 
-// 홈 탭 내부 스택 — 홈 / 커플 연결 / 우리 기록(피드) / MY(프로필·트레이너)
+// 홈 탭 내부 스택 — 홈 / 커플 연결 / 우리 기록(피드) / MY(프로필·트레이너) / 여행(TRIP)
 export type HomeStackParamList = {
   HomeMain: undefined;
   CoupleConnect: undefined;
@@ -47,6 +47,24 @@ export type HomeStackParamList = {
   TrainerMemberDetail: { memberId: number; name: string };
   TrainerRoutineAssign: { memberId: number; name: string };
   TrainerConnect: undefined;
+  /*
+   * 커플 여행 (PLAN.md Trip) — 원래 장소(Place) 스택에 있었으나, 탭이 '럽슐랭'(미식
+   * 가이드북)으로 리브랜딩되며 여행이 탭 정체성 밖의 기능이 됐다(진입 버튼도 가려져
+   * 도달 불가). 여행의 D-day·회고 정서는 홈의 '우리의 지금' 컨텍스트(D+ 히어로·작년
+   * 오늘·커플 캘린더)와 맞아 홈 스택으로 옮겼다 — 진입은 홈의 D-day 카드(TripPeek)와
+   * 커플 캘린더의 '우리 여행' 섹션.
+   */
+  TripList: undefined;
+  TripForm: { trip?: Trip };
+  TripDetail: { tripId: number; title: string };
+  // 여행 경비 정산 (PLAN.md Trip Expenses)
+  TripExpense: { tripId: number; title: string };
+  // 여행 준비물 체크리스트 (PLAN.md Trip Checklist)
+  TripChecklist: { tripId: number; title: string };
+  // 여행 앨범 (PLAN.md Trip Album)
+  TripAlbum: { tripId: number; title: string };
+  // 여행 회고 카드 (PLAN.md Trip Recap)
+  TripRecap: { tripId: number; title: string };
 };
 
 // 대체 종목 사전 지정 — 루틴 작성 시 종목마다 미리 묶어둔 대체 후보(④)
@@ -160,7 +178,8 @@ export type ChatStackParamList = {
   ChatRoom: { relationId: number; title: string };
 };
 
-// 럽슐랭 탭 내부 스택 — 가이드/위시리스트/지도(한 화면, Chip 세그먼트) + 추가 / 상세 (PLACE) + 여행 (TRIP)
+// 럽슐랭 탭 내부 스택 — 가이드/위시리스트/지도(한 화면, Chip 세그먼트) + 추가 / 상세 (PLACE)
+// 여행(TRIP)은 HomeStackParamList 로 이관 — 위 Trip* 라우트 주석 참고
 export type PlaceStackParamList = {
   // 럽슐랭 가이드(인증 장소)/위시리스트(후보)/지도를 Chip 세그먼트로 전환하는 한 화면
   PlaceMain: undefined;
@@ -168,18 +187,6 @@ export type PlaceStackParamList = {
   // initialCoords: 지도 탭에서 빈 곳을 탭해 "여기에 추가"로 들어올 때만 채워짐 (좌표·주소 미리 채움)
   PlaceAdd: { place?: Place; initialCoords?: { lat: number; lng: number; address?: string | null } } | undefined;
   PlaceDetail: { placeId: number; name: string };
-  // 커플 여행 (PLAN.md Trip) — 장소를 여행으로 그룹핑
-  TripList: undefined;
-  TripForm: { trip?: Trip };
-  TripDetail: { tripId: number; title: string };
-  // 여행 경비 정산 (PLAN.md Trip Expenses)
-  TripExpense: { tripId: number; title: string };
-  // 여행 준비물 체크리스트 (PLAN.md Trip Checklist)
-  TripChecklist: { tripId: number; title: string };
-  // 여행 앨범 (PLAN.md Trip Album)
-  TripAlbum: { tripId: number; title: string };
-  // 여행 회고 카드 (PLAN.md Trip Recap)
-  TripRecap: { tripId: number; title: string };
 };
 
 // 2.2 메인 탭 (홈 / 운동 / 채팅 / 식단 / 장소) — FAB 없음

@@ -12,7 +12,7 @@ import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { PlaceStackParamList } from '../../navigation/types';
+import type { HomeStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { TripSectionTabs } from './TripSectionTabs';
@@ -27,7 +27,7 @@ import type { Checklist, ChecklistItem } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { onColor } from '../../theme/onColor';
 
-type Props = NativeStackScreenProps<PlaceStackParamList, 'TripChecklist'>;
+type Props = NativeStackScreenProps<HomeStackParamList, 'TripChecklist'>;
 
 export function TripChecklistScreen({ route }: Props) {
   const { tripId, title } = route.params;

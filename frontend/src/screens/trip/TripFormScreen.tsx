@@ -4,7 +4,7 @@ import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { PlaceStackParamList } from '../../navigation/types';
+import type { HomeStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
 import { DateField } from '../../components/DateField';
@@ -19,7 +19,7 @@ import { useDirtyGuard } from '../../hooks/useDirtyGuard';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 
-type Props = NativeStackScreenProps<PlaceStackParamList, 'TripForm'>;
+type Props = NativeStackScreenProps<HomeStackParamList, 'TripForm'>;
 
 export function TripFormScreen({ navigation, route }: Props) {
   const editing = route.params.trip;
