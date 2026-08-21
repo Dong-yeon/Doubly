@@ -25,7 +25,7 @@ import { DateField } from '../../components/DateField';
 import { CoupleHero } from './components/CoupleHero';
 import { QuickActions } from './components/QuickActions';
 import { MemoryPeek } from './components/MemoryPeek';
-import { TripPeek, isTripOngoing, pickHomeTrip } from './components/TripPeek';
+import { TripPeek, isTripLive, isTripOngoing, pickHomeTrip } from './components/TripPeek';
 import { LockedCard } from '../../components/LockedCard';
 import { TouchGesturePicker } from '../../components/TouchGesturePicker';
 import { MoodPicker } from '../../components/MoodPicker';
@@ -423,7 +423,7 @@ export function HomeScreen({ navigation }: Props) {
               하루 양보해도 잃는 게 없다). 대부분의 날은 셋 다 없어 비어 있다.
               공용 "최근 기록" 줄은 없앴다 — 좌우 열이 각자의 마지막 기록을 이미 보여준다.
             */}
-            {homeTrip && isTripOngoing(homeTrip) ? (
+            {homeTrip && isTripLive(homeTrip) && isTripOngoing(homeTrip) ? (
               <TripPeek
                 trip={homeTrip}
                 onPress={() => navigation.navigate('TripDetail', { tripId: homeTrip.id, title: homeTrip.title })}
@@ -438,7 +438,7 @@ export function HomeScreen({ navigation }: Props) {
               ) : (
                 <MemoryPeek memories={memories} onPress={() => navigation.navigate('Memories')} />
               )
-            ) : homeTrip ? (
+            ) : homeTrip && isTripLive(homeTrip) ? (
               <TripPeek
                 trip={homeTrip}
                 onPress={() => navigation.navigate('TripDetail', { tripId: homeTrip.id, title: homeTrip.title })}
@@ -473,11 +473,16 @@ export function HomeScreen({ navigation }: Props) {
 
             <Text style={styles.soloTitle}>연결을 기다리는 동안, 혼자서도 시작할 수 있어요</Text>
             <Card elevation="sm" style={styles.soloCard}>
+              {/*
+                initial: false — 럽슐랭 탭을 아직 안 연 세션에서 이 카드를 누르면 그 탭이
+                PlaceAdd <b>하나</b>로 시작돼, 저장 후 goBack 할 곳도 가이드로 나갈 길도 없었다.
+                아래에 PlaceMain 을 깔아둔다.
+              */}
               {(
                 [
                   { icon: 'dumbbell', label: '운동 기록하기', desc: '오늘 운동을 남기면 스트릭이 시작돼요', go: () => navigation.navigate('Workout', { screen: 'WorkoutRecord' }) },
                   { icon: 'silverware-fork-knife', label: '식단 기록하기', desc: '사진이나 글로 적으면 AI가 칼로리를 계산해요', go: () => navigation.navigate('Diet', { screen: 'DietRecord' }) },
-                  { icon: 'map-marker-plus-outline', label: '가고 싶은 장소 저장', desc: '맛집, 여행지, 전시… 둘이 함께 갈 곳을 미리 담아두세요', go: () => navigation.navigate('Place', { screen: 'PlaceAdd' }) },
+                  { icon: 'map-marker-plus-outline', label: '가고 싶은 장소 저장', desc: '맛집, 여행지, 전시… 둘이 함께 갈 곳을 미리 담아두세요', go: () => navigation.navigate('Place', { screen: 'PlaceAdd', initial: false }) },
                 ] as const
               ).map((a, i, arr) => (
                 <React.Fragment key={a.label}>

@@ -22,7 +22,8 @@ import { themedStyles } from '../../theme/themedStyles';
 type Props = NativeStackScreenProps<HomeStackParamList, 'TripForm'>;
 
 export function TripFormScreen({ navigation, route }: Props) {
-  const editing = route.params.trip;
+  // 딥링크(doubly://trips/form)로 들어오면 params 자체가 없다 — navigation/types.ts TripForm 주석 참고
+  const editing = route.params?.trip;
   const [title, setTitle] = useState(editing?.title ?? '');
   const [startDate, setStartDate] = useState(editing?.startDate ?? '');
   const [endDate, setEndDate] = useState(editing?.endDate ?? '');

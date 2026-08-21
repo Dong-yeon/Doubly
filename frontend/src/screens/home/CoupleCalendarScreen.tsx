@@ -4,7 +4,7 @@
  * 매일 아침(KST) 당일 일정은 서버가 커플 양쪽에 푸시한다.
  *
  * <p>여행(PLAN.md Trip)이 럽슐랭(장소) 탭에서 홈 스택으로 이관되면서, 이 화면이 여행의
- * <b>상시 진입점</b>이 됐다 — 그리드에 여행 기간을 틴트로 깔고, 그리드 아래 '우리 여행'
+ * <b>상시 진입점</b>이 됐다 — 그리드에 여행 기간을 띠로 잇고, 그리드 아래 '우리 여행'
  * 섹션에서 상세·전체 목록·만들기로 들어간다. (홈의 D-day 카드는 여행이 있는 기간에만
  * 뜨는 조건부 표면이라, 여행이 하나도 없을 때의 생성 진입로는 여기뿐이다.)
  */
@@ -103,8 +103,15 @@ export function CoupleCalendarScreen({ navigation }: Props) {
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth() + 1); // 1~12
   const [events, setEvents] = useState<CoupleCalendarEvent[]>([]);
-  // 여행 전체 목록 — 월과 무관하게 한 번 받고, 그리드 틴트·'우리 여행' 섹션은 보이는 달로 거른다
+  // 여행 전체 목록 — 월과 무관하게 한 번 받고, 그리드 띠·'우리 여행' 섹션은 보이는 달로 거른다
   const [trips, setTrips] = useState<Trip[]>([]);
+  /*
+   * 여행을 <b>한 번이라도 받아봤는지</b>. 첫 응답 전(=아직 모름)과 "정말 없음"을 구분한다 —
+   * 없으면 화면에 들어올 때마다 '여행이 없어요 · 만들기' CTA 가 먼저 깜빡이고, 리포커스 때
+   * 네트워크가 한 번 흔들리면 있던 여행이 통째로 사라진 채 만들기를 권한다(중복 생성 유도).
+   * TripListScreen 이 같은 이유로 "실패해도 목록은 비우지 않는다"를 지킨다.
+   */
+  const [tripsLoaded, setTripsLoaded] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
   const [saving, setSaving] = useState(false);
@@ -133,13 +140,19 @@ export function CoupleCalendarScreen({ navigation }: Props) {
 
   useFocusEffect(useCallback(() => void load(year, month), [load, year, month]));
 
-  // 여행은 월 이동과 무관하게 전체를 받는다 — 실패(커플 미연결 포함)면 조용히 비운다
+  // 여행은 월 이동과 무관하게 전체를 받는다.
+  // 성공했을 때만 목록을 갈아끼운다 — 실패(일시적 네트워크 오류 등)면 직전 목록을 그대로 둔다.
+  // 커플 미연결(RELATION_NOT_FOUND)도 실패로 들어오지만, 그 경우 애초에 받아둔 목록이 없어
+  // 빈 상태 그대로다(아래 tripsLoaded 로 '아직 모름'과 구분해 CTA 를 늦춘다).
   useFocusEffect(
     useCallback(() => {
       tripApi
         .list()
-        .then(setTrips)
-        .catch(() => setTrips([]));
+        .then((list) => {
+          setTrips(list);
+          setTripsLoaded(true);
+        })
+        .catch(() => {});
     }, []),
   );
 
@@ -338,12 +351,14 @@ export function CoupleCalendarScreen({ navigation }: Props) {
               const dayEvents = byDate.get(dateStr) ?? [];
               const isToday = dateStr === todayStr;
               const isSelected = dateStr === selectedDate;
-              // 여행 기간은 점(하루 단위 일정)이 아니라 셀 틴트로 잇는다 — 기간이 한눈에 띠로 보인다
+              // 여행 기간은 점(하루 단위 일정)이 아니라 셀 아래 액센트 바로 잇는다 — 연속된 날이
+              // 하나의 띠로 보인다. 배경 틴트로 하면 선택 하이라이트(surfaceAlt)와 명도가 겹쳐
+              // 어느 날을 골랐는지 안 보이고, 다크에서는 틴트 자체도 배경과 1.08:1 로 묻힌다.
               const inTrip = tripDays.has(dateStr);
               return (
                 <Pressable
                   key={dateStr}
-                  style={[styles.cell, inTrip && styles.cellTrip, isSelected && styles.cellSelected]}
+                  style={[styles.cell, isSelected && styles.cellSelected]}
                   onPress={() => setSelectedDate(isSelected ? null : dateStr)}
                 >
                   <View style={[styles.dayWrap, isToday && styles.todayWrap]}>
@@ -357,6 +372,8 @@ export function CoupleCalendarScreen({ navigation }: Props) {
                       />
                     ))}
                   </View>
+                  {/* 여행 기간 띠 — 셀 폭을 꽉 채워 연속된 날끼리 이어져 보인다 */}
+                  <View style={[styles.tripBar, inTrip && styles.tripBarOn]} />
                 </Pressable>
               );
             })}
@@ -368,11 +385,15 @@ export function CoupleCalendarScreen({ navigation }: Props) {
           <Text style={styles.listTitle}>
             {selectedDate ? `${Number(selectedDate.slice(8, 10))}일 여행` : '우리 여행'}
           </Text>
+          {/* 아래 일정 목록의 '전체 보기'(선택 해제)와 뜻이 겹치지 않게 목적지를 밝힌다 */}
           <Pressable onPress={() => navigation.navigate('TripList')} hitSlop={8}>
-            <Text style={styles.listClear}>전체 보기</Text>
+            <Text style={styles.listClear}>여행 목록 ›</Text>
           </Pressable>
         </View>
-        {listTrips.length === 0 ? (
+        {listTrips.length === 0 && !tripsLoaded ? (
+          // 아직 한 번도 못 받아본 상태 — '없음'이 아니라 '모름'이라 CTA 대신 자리만 비워둔다
+          null
+        ) : listTrips.length === 0 ? (
           <TouchableOpacity
             style={styles.tripCreate}
             activeOpacity={0.8}
@@ -636,9 +657,10 @@ const styles = themedStyles((colors) => ({
   },
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
   cell: { width: CELL, alignItems: 'center', paddingVertical: 4, borderRadius: radius.sm },
-  // 여행 기간 틴트 — 선택 배경(cellSelected)이 이기도록 스타일 배열에서 앞에 둔다
-  cellTrip: { backgroundColor: colors.accentSoft },
   cellSelected: { backgroundColor: colors.surfaceAlt },
+  // 여행 기간 띠 — 없는 날도 같은 높이를 차지해 그리드 행 높이가 흔들리지 않는다
+  tripBar: { alignSelf: 'stretch', height: 3, marginTop: 3, borderRadius: 2 },
+  tripBarOn: { backgroundColor: colors.accent },
   dayWrap: {
     width: 28,
     height: 28,

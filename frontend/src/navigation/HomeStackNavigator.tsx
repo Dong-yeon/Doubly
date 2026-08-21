@@ -22,6 +22,13 @@ import { TripExpenseScreen } from '../screens/trip/TripExpenseScreen';
 import { TripChecklistScreen } from '../screens/trip/TripChecklistScreen';
 import { TripAlbumScreen } from '../screens/trip/TripAlbumScreen';
 import { TripRecapScreen } from '../screens/trip/TripRecapScreen';
+/*
+ * 장소 상세·추가 — 럽슐랭 탭과 <b>공유</b>하는 화면(navigation/types.ts 의
+ * PlaceScreensParamList 주석 참고). 여행 상세에서 담긴 장소로 들어갈 때 탭을 건너지
+ * 않고 이 스택에 쌓아, 뒤로가기가 보던 여행으로 정확히 돌아오게 한다.
+ */
+import { PlaceDetailScreen } from '../screens/place/PlaceDetailScreen';
+import { PlaceAddScreen } from '../screens/place/PlaceAddScreen';
 // [트레이너 기능 일시 비활성화] 되돌리려면 아래 import 와 하단 Stack.Screen 5개의 주석을 해제한다.
 // 화면·API·타입·백엔드는 그대로 남아 있으므로 주석만 풀면 복구된다.
 // import { TrainerRegisterScreen } from '../screens/trainer/TrainerRegisterScreen';
@@ -71,7 +78,7 @@ export function HomeStackNavigator() {
         name="TripForm"
         component={TripFormScreen}
         options={({ route }) => ({
-          title: route.params.trip ? '여행 수정' : '여행 만들기',
+          title: route.params?.trip ? '여행 수정' : '여행 만들기',
           ...modalOptions,
         })}
       />
@@ -92,6 +99,20 @@ export function HomeStackNavigator() {
       />
       <Stack.Screen name="TripAlbum" component={TripAlbumScreen} options={{ title: '여행 앨범' }} />
       <Stack.Screen name="TripRecap" component={TripRecapScreen} options={{ title: '여행 회고' }} />
+      {/* 럽슐랭 탭과 공유하는 장소 화면 — 여행에서 들어온 경우 이 스택에 쌓인다 */}
+      <Stack.Screen
+        name="PlaceDetail"
+        component={PlaceDetailScreen}
+        options={({ route }) => ({ title: route.params.name })}
+      />
+      <Stack.Screen
+        name="PlaceAdd"
+        component={PlaceAddScreen}
+        options={({ route }) => ({
+          title: route.params?.place ? '장소 수정' : '장소 추가',
+          ...modalOptions,
+        })}
+      />
       {/* [트레이너 기능 일시 비활성화] 라우트 미등록 → 진입 불가. 되돌리려면 주석 해제 + 상단 import 복구.
       <Stack.Screen
         name="TrainerRegister"

@@ -18,6 +18,14 @@ import type { RootStackParamList } from './types';
 
 export const linking: LinkingOptions<RootStackParamList> = {
   prefixes: ['doubly://'],
+  /*
+   * config 를 통째로 캐스팅하는 이유 — 각 탭 블록의 `initialRouteName` 때문이다.
+   * v7 의 `PathConfigMap` 은 중첩 내비게이터의 파람리스트를 `NavigatorScreenParams<infer T>`
+   * 로 되찾으려 하는데, 그 타입이 매핑된 유니온이라 추론이 `{}` 로 떨어진다 →
+   * `initialRouteName?: keyof {}` = never 가 돼 어떤 화면 이름도 못 넣는다(플레인 타입인
+   * Chat·Diet 블록도 똑같이 거부되므로 이 파일 쪽 타입 문제가 아니다). 값 자체는 아래에서
+   * 각 스택의 실제 첫 화면 이름으로 정확히 맞춰 뒀다.
+   */
   config: {
     screens: {
       Onboarding: {
@@ -34,7 +42,14 @@ export const linking: LinkingOptions<RootStackParamList> = {
       ConsentGate: 'consent',
       Main: {
         screens: {
+          /*
+           * initialRouteName — 딥링크·웹 새로고침으로 <b>깊은 화면</b>이 열릴 때 그 아래에
+           * 탭의 첫 화면을 깔아둔다. 없으면 그 탭 스택이 도착 화면 <b>하나</b>로만 만들어져
+           * 뒤로가기 버튼도 없고(탭 재탭의 popToTop 도 할 일이 없다) 그 세션 동안 탭의 첫
+           * 화면으로 못 돌아간다 — doubly://trips/5 로 열면 홈 화면 자체가 사라지는 식이다.
+           */
           Home: {
+            initialRouteName: 'HomeMain',
             screens: {
               HomeMain: '',
               CoupleConnect: 'couple/connect',
@@ -88,6 +103,7 @@ export const linking: LinkingOptions<RootStackParamList> = {
             },
           },
           Workout: {
+            initialRouteName: 'WorkoutMain',
             screens: {
               WorkoutMain: 'workout',
               WorkoutRecord: 'workout/record',
@@ -106,6 +122,7 @@ export const linking: LinkingOptions<RootStackParamList> = {
             },
           },
           Chat: {
+            initialRouteName: 'ChatRooms',
             screens: {
               ChatRooms: 'chat',
               ChatRoom: {
@@ -115,6 +132,7 @@ export const linking: LinkingOptions<RootStackParamList> = {
             },
           },
           Diet: {
+            initialRouteName: 'DietMain',
             screens: {
               DietMain: 'diet',
               DietRecord: 'diet/record',
@@ -123,6 +141,7 @@ export const linking: LinkingOptions<RootStackParamList> = {
             },
           },
           Place: {
+            initialRouteName: 'PlaceMain',
             screens: {
               // 가이드/위시리스트/지도가 한 화면(Chip 세그먼트)으로 합쳐져 경로도 하나다
               PlaceMain: 'place',
@@ -136,5 +155,5 @@ export const linking: LinkingOptions<RootStackParamList> = {
         },
       },
     },
-  },
+  } as LinkingOptions<RootStackParamList>['config'],
 };

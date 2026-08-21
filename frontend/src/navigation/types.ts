@@ -17,7 +17,7 @@ export type OnboardingStackParamList = {
 };
 
 // 홈 탭 내부 스택 — 홈 / 커플 연결 / 우리 기록(피드) / MY(프로필·트레이너) / 여행(TRIP)
-export type HomeStackParamList = {
+export type HomeStackParamList = PlaceScreensParamList & {
   HomeMain: undefined;
   CoupleConnect: undefined;
   // 우리 기록 — 포스트·운동·식단·맛집 통합 타임라인.
@@ -55,7 +55,12 @@ export type HomeStackParamList = {
    * 커플 캘린더의 '우리 여행' 섹션.
    */
   TripList: undefined;
-  TripForm: { trip?: Trip };
+  /*
+   * trip: 기존 여행을 수정하러 들어올 때만 채워짐. 딥링크·웹 새로고침(doubly://trips/form)으로
+   * 들어오면 react-navigation 이 params 를 아예 만들지 않으므로 undefined 도 허용해야 한다
+   * (같은 스택의 PlaceAdd 와 같은 규칙) — 예전엔 필수라 그 경로에서 렌더 중 크래시했다.
+   */
+  TripForm: { trip?: Trip } | undefined;
   TripDetail: { tripId: number; title: string };
   // 여행 경비 정산 (PLAN.md Trip Expenses)
   TripExpense: { tripId: number; title: string };
@@ -178,15 +183,29 @@ export type ChatStackParamList = {
   ChatRoom: { relationId: number; title: string };
 };
 
-// 럽슐랭 탭 내부 스택 — 가이드/위시리스트/지도(한 화면, Chip 세그먼트) + 추가 / 상세 (PLACE)
-// 여행(TRIP)은 HomeStackParamList 로 이관 — 위 Trip* 라우트 주석 참고
-export type PlaceStackParamList = {
-  // 럽슐랭 가이드(인증 장소)/위시리스트(후보)/지도를 Chip 세그먼트로 전환하는 한 화면
-  PlaceMain: undefined;
+/*
+ * 장소 상세·추가 — 럽슐랭 탭과 홈 스택(여행)에 <b>양쪽 다</b> 등록되는 화면들.
+ *
+ * <p><b>왜 양쪽인가</b>: 여행 상세의 담긴 장소를 탭하면 장소 상세로 가는데, 여행이 홈
+ * 스택으로 이관되면서 이 이동이 탭을 건너게 됐다. 크로스탭으로 보내면 (1) 돌아올 길이
+ * 없고(탭바는 탭을 누를 때 그 스택을 첫 화면까지 되감는다 — MainTabNavigator 참고,
+ * 보던 여행 화면이 통째로 사라진다), (2) 럽슐랭 탭이 아직 안 열린 세션에서는 그 탭이
+ * PlaceDetail 만 담은 채 시작돼 가이드/위시리스트로 못 들어간다.
+ * 그래서 탭을 건너지 않고 <b>같은 스택에 쌓는다</b> — 뒤로가기가 정확히 여행으로 돌아온다.
+ * (react-navigation 도 스택 간 공유 화면은 중복 등록을 권한다)
+ */
+export type PlaceScreensParamList = {
   // place: 기존 장소를 수정하러 들어올 때만 채워짐 (없으면 새 장소 추가)
   // initialCoords: 지도 탭에서 빈 곳을 탭해 "여기에 추가"로 들어올 때만 채워짐 (좌표·주소 미리 채움)
   PlaceAdd: { place?: Place; initialCoords?: { lat: number; lng: number; address?: string | null } } | undefined;
   PlaceDetail: { placeId: number; name: string };
+};
+
+// 럽슐랭 탭 내부 스택 — 가이드/위시리스트/지도(한 화면, Chip 세그먼트) + 추가 / 상세 (PLACE)
+// 여행(TRIP)은 HomeStackParamList 로 이관 — 위 Trip* 라우트 주석 참고
+export type PlaceStackParamList = PlaceScreensParamList & {
+  // 럽슐랭 가이드(인증 장소)/위시리스트(후보)/지도를 Chip 세그먼트로 전환하는 한 화면
+  PlaceMain: undefined;
 };
 
 // 2.2 메인 탭 (홈 / 운동 / 채팅 / 식단 / 장소) — FAB 없음

@@ -18,10 +18,8 @@ import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { useFocusEffect } from '@react-navigation/native';
-import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
-import type { CompositeScreenProps } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { HomeStackParamList, MainTabParamList } from '../../navigation/types';
+import type { HomeStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { IconButton } from '../../components/IconButton';
 import { KakaoMap } from '../../components/KakaoMap';
@@ -39,12 +37,12 @@ import { tripStatusLabel } from './TripListScreen';
 import { themedStyles } from '../../theme/themedStyles';
 import { onColor } from '../../theme/onColor';
 
-// 담긴 장소 카드/핀 → 장소 상세는 이제 탭을 건너간다(여행은 홈 탭, 장소는 럽슐랭 탭)
-// — HomeScreen 과 같은 Composite 패턴으로 탭 내비게이터까지 타입을 연다.
-type Props = CompositeScreenProps<
-  NativeStackScreenProps<HomeStackParamList, 'TripDetail'>,
-  BottomTabScreenProps<MainTabParamList>
->;
+/*
+ * 담긴 장소 카드/핀 → 장소 상세는 <b>이 스택 안에서</b> 연다(럽슐랭 탭으로 건너가지 않는다).
+ * 홈 스택에도 PlaceDetail/PlaceAdd 를 등록해 둔 이유 — navigation/types.ts 의
+ * PlaceScreensParamList 주석 참고. 덕분에 뒤로가기가 보던 여행으로 정확히 돌아온다.
+ */
+type Props = NativeStackScreenProps<HomeStackParamList, 'TripDetail'>;
 type Tab = 'itinerary' | 'places';
 
 const CATEGORIES = ['관광', '식사', '카페', '이동', '숙소', '기타'];
@@ -535,9 +533,9 @@ export function TripDetailScreen({ navigation, route }: Props) {
                   onMarkerPress={(id) => {
                     const it = dayItems.find((i) => i.id === id);
                     if (it?.placeId)
-                      navigation.navigate('Place', {
-                        screen: 'PlaceDetail',
-                        params: { placeId: it.placeId, name: it.placeName ?? it.title },
+                      navigation.navigate('PlaceDetail', {
+                        placeId: it.placeId,
+                        name: it.placeName ?? it.title,
                       });
                   }}
                 />
@@ -615,11 +613,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
                   height={200}
                   onMarkerPress={(id) => {
                     const place = places.find((p) => p.id === id);
-                    if (place)
-                      navigation.navigate('Place', {
-                        screen: 'PlaceDetail',
-                        params: { placeId: place.id, name: place.name },
-                      });
+                    if (place) navigation.navigate('PlaceDetail', { placeId: place.id, name: place.name });
                   }}
                 />
               </View>
@@ -636,12 +630,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
                   key={item.id}
                   style={styles.placeCard}
                   activeOpacity={0.7}
-                  onPress={() =>
-                    navigation.navigate('Place', {
-                      screen: 'PlaceDetail',
-                      params: { placeId: item.id, name: item.name },
-                    })
-                  }
+                  onPress={() => navigation.navigate('PlaceDetail', { placeId: item.id, name: item.name })}
                   onLongPress={() => onDetach(item)}
                 >
                   <View style={styles.placeHeader}>

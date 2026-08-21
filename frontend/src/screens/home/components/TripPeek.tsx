@@ -24,6 +24,17 @@ export function isTripOngoing(trip: Trip): boolean {
 }
 
 /**
+ * 아직 끝나지 않은 여행인가 — 홈에 띄울 자격.
+ *
+ * <p>{@link pickHomeTrip} 이 이미 지난 여행을 걸러내지만 그건 <b>받아온 시점</b>의 판단이다.
+ * 앱을 켜둔 채 자정을 넘기면(포그라운드 복귀로는 useFocusEffect 가 다시 돌지 않는다)
+ * 어제 끝난 여행이 그대로 남아 '다녀옴' 카드로 그려진다 — 렌더 시점에도 한 번 더 본다.
+ */
+export function isTripLive(trip: Trip): boolean {
+  return toDateString() <= trip.endDate;
+}
+
+/**
  * 홈에 보여줄 여행 하나 고르기 — 진행 중이면 그 여행(겹치면 먼저 시작한 것),
  * 없으면 가장 가까운 예정 여행. 다녀온 여행은 홈에 띄우지 않는다(캘린더·여행 목록에서 회고).
  */
