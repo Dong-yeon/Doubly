@@ -125,6 +125,25 @@ public class ChatService {
     }
 
     /**
+     * 시스템이 대신 남기는 카드 메시지(통화 결과 등) — {@link #send} 와 달리 <b>자동 알림이
+     * 없다</b>. 상황마다 알릴지·누구에게·무슨 문구로 알릴지가 달라서(예: 통화는 부재중일
+     * 때만 알리고 정상 종료·거절은 조용히 기록만 한다) 호출자가 필요하면 직접
+     * {@link NotificationService} 를 부른다. 브로드캐스트도 호출자 책임(send 와 동일 원칙).
+     */
+    @Transactional
+    public ChatMessageResponse postSystemCard(Long senderId, Long relationId, MessageType type, String content) {
+        requireMember(senderId, relationId);
+        ChatMessage message = ChatMessage.builder()
+                .relationId(relationId)
+                .senderId(senderId)
+                .messageType(type)
+                .content(content)
+                .build();
+        chatMessageRepository.save(message);
+        return ChatMessageResponse.from(message);
+    }
+
+    /**
      * 가상 터치 제스처 검증 — 허용된 코드인지, 프리미엄 제스처면 PRO 인지.
      *
      * <p>STOMP 경로는 REST 처럼 402 를 그대로 클라이언트에 돌려줄 방법이 없다
@@ -348,7 +367,24 @@ public class ChatService {
             case ROUTINE_CARD -> "[루틴]";
             // 알 수 없는 코드는 이론상 오지 않는다(전송 시점에 검증됨) — 방어적으로만 처리
             case TOUCH -> "[" + TouchGesture.from(message.getContent()).map(TouchGesture::label).orElse("터치") + "]";
+            case CALL_CARD -> callCardPreview(message.getContent());
             default -> message.getContent();
         };
+    }
+
+    /**
+     * 통화 카드 미리보기 — content 형식은 {@link MessageType#CALL_CARD} 참고.
+     * MISSED/DECLINED 는 같은 문구로 보인다 — 거절인지 못 받은 건지 구분해 보여주지 않는다
+     * (실제 전화 앱들의 관행과 동일. 발신자에게 "거절당했다"는 걸 굳이 드러내지 않는다).
+     */
+    private String callCardPreview(String content) {
+        if (content == null || content.isBlank()) return "[통화]";
+        String[] parts = content.split("\\|");
+        boolean video = parts.length > 0 && "VIDEO".equals(parts[0]);
+        String outcome = parts.length > 1 ? parts[1] : "";
+        if ("ENDED".equals(outcome)) {
+            return video ? "[영상통화 종료]" : "[통화 종료]";
+        }
+        return video ? "[부재중 영상통화]" : "[부재중 전화]";
     }
 }

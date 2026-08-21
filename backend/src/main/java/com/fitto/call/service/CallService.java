@@ -10,6 +10,9 @@ import com.fitto.call.dto.CallSessionResponse;
 import com.fitto.call.dto.StartCallRequest;
 import com.fitto.call.dto.StreamCredentialsResponse;
 import com.fitto.call.repository.CallSessionRepository;
+import com.fitto.chat.domain.MessageType;
+import com.fitto.chat.dto.ChatMessageResponse;
+import com.fitto.chat.service.ChatService;
 import com.fitto.common.event.CoupleEvent;
 import com.fitto.common.event.CoupleEventPublisher;
 import com.fitto.common.exception.BusinessException;
@@ -21,6 +24,7 @@ import com.fitto.relation.domain.RelationType;
 import com.fitto.relation.repository.RelationRepository;
 import com.fitto.user.domain.User;
 import com.fitto.user.repository.UserRepository;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,13 +33,15 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * 통화 — PLAN.md "통화·영상통화" 1단계. Doubly 백엔드는 미디어를 다루지 않는다:
+ * 통화 — PLAN.md "통화·영상통화". Doubly 백엔드는 미디어를 다루지 않는다:
  * "누가 누구에게 걸었는지"만 중개(세션 생성·Stream 토큰 발급·커플 이벤트·알림)하고,
  * 실제 오디오/비디오·벨(ring) 신호는 Stream Video 가 전담한다.
  *
- * <p>벨 웨이크업(앱 종료 상태) 검증은 claude/call-spike-android 브랜치의 스파이크
- * (docs/CALL_SPIKE.md)가 담당했고, Firebase 연동은 2단계에서 붙는다. 그 전까지
- * 백그라운드 수신자에게는 기존 Expo 푸시가 임시 알림 역할을 한다(탭 → 앱 열기).
+ * <p><b>네이티브 벨 웨이크업(CallKit/VoIP push)은 없다.</b> 대신 통화가 끝날 때마다
+ * 채팅에 결과 카드를 남긴다(정상 종료/부재중/거절 — {@link #recordOutcome}) — 앱이 꺼져
+ * 있어도 오는 기존 채팅 알림 경로를 그대로 타므로, "부재중 전화, 다시 걸어주세요"를
+ * 별도 네이티브 인프라 없이 전달할 수 있다. 못 받은 벨(30초, {@link CallSessionSweeper})
+ * 은 이 카드가 곧 유일한 통지 수단이다.
  */
 @Service
 @Transactional(readOnly = true)
@@ -51,6 +57,8 @@ public class CallService {
     private final StreamTokenProperties streamProperties;
     private final NotificationService notificationService;
     private final CoupleEventPublisher coupleEventPublisher;
+    private final ChatService chatService;
+    private final SimpMessagingTemplate messagingTemplate;
 
     public CallService(CallSessionRepository callSessionRepository,
                        RelationRepository relationRepository,
@@ -58,7 +66,9 @@ public class CallService {
                        StreamTokenService tokenService,
                        StreamTokenProperties streamProperties,
                        NotificationService notificationService,
-                       CoupleEventPublisher coupleEventPublisher) {
+                       CoupleEventPublisher coupleEventPublisher,
+                       ChatService chatService,
+                       SimpMessagingTemplate messagingTemplate) {
         this.callSessionRepository = callSessionRepository;
         this.relationRepository = relationRepository;
         this.userRepository = userRepository;
@@ -66,6 +76,8 @@ public class CallService {
         this.streamProperties = streamProperties;
         this.notificationService = notificationService;
         this.coupleEventPublisher = coupleEventPublisher;
+        this.chatService = chatService;
+        this.messagingTemplate = messagingTemplate;
     }
 
     /** StreamVideoClient 초기화용 자격 — 로그인 직후 1회. 연결돼 있어야 벨을 받는다. */
@@ -127,13 +139,14 @@ public class CallService {
         }
         session.decline(LocalDateTime.now());
         coupleEventPublisher.publish(session.getCoupleId(), CoupleEvent.CALL_UPDATED);
+        recordOutcome(session);
         return CallSessionResponse.from(session);
     }
 
     /**
      * 종료 — 양쪽 다 호출할 수 있다(발신자의 응답 대기 취소도 포함). 통화 중이었으면
-     * ENDED(통화시간 기록), 아무도 수락하지 않은 채 끝나면 MISSED(수신자에게 부재중 알림).
-     * 이미 끝난 세션이면 그대로 반환한다 — 양쪽이 동시에 종료를 눌러도 에러가 아니다.
+     * ENDED(통화시간 기록), 아무도 수락하지 않은 채 끝나면 MISSED. 이미 끝난 세션이면
+     * 그대로 반환한다 — 양쪽이 동시에 종료를 눌러도 에러가 아니다.
      */
     @Transactional
     public CallSessionResponse end(Long userId, String providerCallId) {
@@ -141,14 +154,31 @@ public class CallService {
         if (session.getStatus().isTerminal()) {
             return CallSessionResponse.from(session);
         }
-        boolean wasRinging = session.getStatus() == CallStatus.RINGING;
         session.end(LocalDateTime.now());
         coupleEventPublisher.publish(session.getCoupleId(), CoupleEvent.CALL_UPDATED);
-        if (wasRinging) {
-            notificationService.notify(session.getCalleeId(), "부재중 전화",
-                    userName(session.getCallerId()) + "님의 전화를 놓쳤어요");
-        }
+        recordOutcome(session);
         return CallSessionResponse.from(session);
+    }
+
+    /**
+     * 통화가 최종 상태(ENDED/MISSED/DECLINED)로 정리된 뒤 공통 후처리 — 채팅방에 결과
+     * 카드를 남기고(발신자 명의), <b>부재중일 때만</b> 알림을 보낸다. 정상 종료·거절은
+     * 당사자가 이미 아는 상황이라 알림 없이 기록만 남긴다(실제 전화 앱들의 관행과 동일).
+     *
+     * <p>{@link CallSessionSweeper} 도 30초 무응답 판정 뒤 이 메서드를 호출한다 —
+     * 네이티브 벨이 없는 지금, 부재중 카드가 사실상 유일한 "전화 왔었다" 통지 수단이다.
+     */
+    void recordOutcome(CallSession session) {
+        String content = session.getCallType() + "|" + session.getStatus()
+                + (session.getDurationSec() != null ? "|" + session.getDurationSec() : "");
+        ChatMessageResponse saved = chatService.postSystemCard(
+                session.getCallerId(), session.getCoupleId(), MessageType.CALL_CARD, content);
+        messagingTemplate.convertAndSend("/sub/rooms/" + session.getCoupleId(), saved);
+
+        if (session.getStatus() == CallStatus.MISSED) {
+            notificationService.notify(session.getCalleeId(), "부재중 전화",
+                    userName(session.getCallerId()) + "님의 전화를 놓쳤어요. 채팅에서 다시 걸어보세요 📞");
+        }
     }
 
     /** 통화 기록 — 최신순, cursor(마지막으로 본 id) 페이징. */

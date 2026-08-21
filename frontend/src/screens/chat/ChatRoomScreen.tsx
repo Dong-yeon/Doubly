@@ -46,6 +46,7 @@ import { chatApi } from '../../api/chat';
 import { isPrShareContent } from '../../utils/workoutShare';
 import { isGoalShareContent } from '../../utils/dietShare';
 import { touchGestureOf } from '../../constants/touchGestures';
+import { callCardLabel, parseCallCard } from '../../utils/callCard';
 import { stickerImageOf } from '../../constants/stickerImages';
 import { playTouchGesture } from '../../utils/haptics';
 import { messagePreview } from '../../utils/messagePreview';
@@ -413,6 +414,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     const isMeal = item.messageType === 'MEAL_CARD';
     // 루틴 공유(트레이너-회원) — 운동 카드와 같은 레이아웃에 배지만 다르게
     const isRoutine = item.messageType === 'ROUTINE_CARD';
+    const callCard = item.messageType === 'CALL_CARD' ? parseCallCard(item.content) : null;
     // PR(자기 최고 기록) 공유 카드 — 문구 접두어로 구분한다(workoutShare.ts, 단일 출처)
     const isPr = isWorkout && isPrShareContent(item.content);
     // 영양 목표 달성 공유 카드 — 문구 접두어로 구분한다(dietShare.ts, 단일 출처)
@@ -557,6 +559,25 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             {item.content ? (
               <Text style={styles.workoutText}>{item.content}</Text>
             ) : null}
+          </View>
+        ) : callCard ? (
+          <View style={[styles.callCard, mine ? styles.callCardMine : styles.callCardTheirs]}>
+            <MaterialCommunityIcons
+              name={callCard.callType === 'VIDEO' ? 'video' : 'phone'}
+              size={18}
+              color={callCard.outcome === 'ENDED' ? colors.textPrimary : colors.coral}
+            />
+            <Text style={styles.callCardText}>{callCardLabel(callCard)}</Text>
+            {/* 정상 종료 통화도 "다시 걸기"를 굳이 막지 않는다 — 통화 기록에서 재발신하는 흔한 동작 */}
+            <Pressable
+              onPress={() => startCall(callCard.callType)}
+              disabled={callStarting}
+              style={({ pressed }) => [styles.callCardButton, pressed && styles.headerCallButtonPressed]}
+              accessibilityRole="button"
+              accessibilityLabel="다시 걸기"
+            >
+              <Text style={styles.callCardButtonText}>다시 걸기</Text>
+            </Pressable>
           </View>
         ) : (
           // 꼬리(뾰족한 모서리)는 그룹의 마지막 말풍선에만 — 나머지는 완전히 둥글게 이어붙는다
@@ -919,6 +940,27 @@ const styles = themedStyles((colors) => ({
   workoutBadgePr: { color: colors.ink },
   workoutText: { fontSize: fontSize.subtitle, color: colors.textPrimary, fontWeight: '600' },
   workoutTextMine: { color: colors.textPrimary },
+  callCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: 10,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 1.5,
+    maxWidth: 260,
+  },
+  callCardMine: { backgroundColor: colors.surface, borderColor: colors.border },
+  callCardTheirs: { backgroundColor: colors.surface, borderColor: colors.border },
+  callCardText: { fontSize: fontSize.body, color: colors.textPrimary, fontWeight: '600', flexShrink: 1 },
+  callCardButton: {
+    marginLeft: 'auto',
+    paddingVertical: 5,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primarySoft,
+  },
+  callCardButtonText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.primary },
   mealCard: { paddingVertical: 10, paddingHorizontal: spacing.md, borderRadius: radius.lg, borderWidth: 1.5, maxWidth: 240, gap: 6 },
   mealCardMine: { backgroundColor: colors.accentSoft, borderColor: colors.accent },
   mealCardTheirs: { backgroundColor: colors.surface, borderColor: colors.accent },

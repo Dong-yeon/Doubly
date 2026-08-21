@@ -8,6 +8,7 @@
 import type { MessageType } from '../types';
 import { touchGestureOf } from '../constants/touchGestures';
 import { stickerImageOf } from '../constants/stickerImages';
+import { callCardLabel, parseCallCard } from './callCard';
 
 export function messagePreview(type: MessageType, content?: string | null): string {
   switch (type) {
@@ -25,6 +26,10 @@ export function messagePreview(type: MessageType, content?: string | null): stri
       return '루틴';
     case 'TOUCH':
       return touchGestureOf(content)?.label ?? '터치';
+    case 'CALL_CARD': {
+      const info = parseCallCard(content);
+      return info ? callCardLabel(info) : '통화';
+    }
     default:
       return content ?? '';
   }
