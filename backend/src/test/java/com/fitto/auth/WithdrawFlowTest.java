@@ -7,6 +7,12 @@ import com.fitto.body.service.BodyMetricService;
 import com.fitto.challenge.domain.ChallengeType;
 import com.fitto.challenge.dto.CreateChallengeRequest;
 import com.fitto.challenge.service.CoupleChallengeService;
+import com.fitto.character.domain.CoupleCharacter;
+import com.fitto.character.repository.CoupleCharacterRepository;
+import com.fitto.diet.dto.FavoriteFoodItemRequest;
+import com.fitto.diet.dto.SaveFavoriteFoodRequest;
+import com.fitto.diet.service.FavoriteFoodGiftService;
+import com.fitto.diet.service.FavoriteFoodService;
 import com.fitto.feed.dto.CreatePostRequest;
 import com.fitto.feed.service.FeedService;
 import com.fitto.place.dto.SavePlaceRequest;
@@ -14,17 +20,28 @@ import com.fitto.place.service.PlaceService;
 import com.fitto.question.dto.AnswerRequest;
 import com.fitto.question.service.DailyQuestionService;
 import com.fitto.relation.dto.InviteCodeResponse;
+import com.fitto.relation.dto.RelationResponse;
 import com.fitto.relation.service.RelationService;
 import com.fitto.trip.dto.SaveTripRequest;
 import com.fitto.trip.service.TripService;
 import com.fitto.user.repository.UserRepository;
+import com.fitto.voice.domain.VoicePhrase;
+import com.fitto.voice.dto.SaveVoiceClipRequest;
+import com.fitto.voice.service.VoiceClipService;
+import com.fitto.workout.dto.SaveProgramRequest;
+import com.fitto.workout.dto.SaveRoutineRequest;
+import com.fitto.workout.dto.SaveRoutineRequest.Exercise;
+import com.fitto.workout.service.RoutineGiftService;
+import com.fitto.workout.service.WorkoutRoutineService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.math.BigDecimal;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -52,6 +69,12 @@ class WithdrawFlowTest {
     @Autowired DailyQuestionService dailyQuestionService;
     @Autowired BodyMetricService bodyMetricService;
     @Autowired UserRepository userRepository;
+    @Autowired VoiceClipService voiceClipService;
+    @Autowired CoupleCharacterRepository coupleCharacterRepository;
+    @Autowired WorkoutRoutineService workoutRoutineService;
+    @Autowired RoutineGiftService routineGiftService;
+    @Autowired FavoriteFoodService favoriteFoodService;
+    @Autowired FavoriteFoodGiftService favoriteFoodGiftService;
 
     private Long register(String email) {
         return authService.register(
@@ -110,6 +133,46 @@ class WithdrawFlowTest {
 
         assertThatCode(() -> authService.withdraw(partner)).doesNotThrowAnyException();
         assertThat(userRepository.findById(partner)).isEmpty();
+    }
+
+    /**
+     * V43 이후 신설된 테이블(voice_clips, couple_characters, routine_gifts,
+     * favorite_food_gifts, workout_programs)이 purger 삭제 순서에서 빠져 있으면
+     * 이 테스트가 외래키 위반으로 실패한다 — 실제로 겪은 사고(진단 리포트 확정 버그 #1).
+     */
+    @Test
+    void 음성응원_캐릭터_선물_프로그램을_쓴_계정도_탈퇴할_수_있다() {
+        Long me = register("withdraw-new-tables-a@fitto.com");
+        Long partner = register("withdraw-new-tables-b@fitto.com");
+        InviteCodeResponse invite = relationService.createCoupleInvite(me);
+        RelationResponse relation = relationService.connectCouple(partner, invite.code());
+
+        // voice_clips — users FK
+        voiceClipService.save(me, new SaveVoiceClipRequest(VoicePhrase.REST_END, "https://res.cloudinary.com/x/rest.m4a"));
+
+        // couple_characters — relations FK(UNIQUE)
+        coupleCharacterRepository.save(CoupleCharacter.of(relation.id()));
+
+        // routine_gifts — relations/users/workout_routines FK
+        Long routineId = workoutRoutineService.save(me, new SaveRoutineRequest(
+                "가슴 운동", List.of(new Exercise(
+                        "벤치프레스", "가슴", 3, 10, new BigDecimal("60"), null, "가슴", "바벨")),
+                java.util.Set.of(DayOfWeek.MONDAY))).id();
+        routineGiftService.send(me, routineId, "이 루틴 해봐");
+
+        // favorite_food_gifts — relations/users FK
+        Long favoriteFoodId = favoriteFoodService.save(me, new SaveFavoriteFoodRequest(
+                "아침 세트", List.of(new FavoriteFoodItemRequest("계란", 80, 1, 6, 5)))).id();
+        favoriteFoodGiftService.send(me, favoriteFoodId, "이거 먹어봐");
+
+        // workout_programs — users FK, workout_routines.program_id 가 이 테이블을 참조
+        workoutRoutineService.saveProgram(me, new SaveProgramRequest(
+                "4주 프로그램", 4, List.of(new SaveProgramRequest.ProgramDay(
+                        DayOfWeek.MONDAY, List.of(new Exercise(
+                                "스쿼트", "하체", 3, 10, new BigDecimal("50"), null, "하체", "바벨"))))));
+
+        assertThatCode(() -> authService.withdraw(me)).doesNotThrowAnyException();
+        assertThat(userRepository.findById(me)).isEmpty();
     }
 
     @Test
