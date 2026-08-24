@@ -41,11 +41,13 @@ import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
 import { toDateString } from '../../utils/date';
 import { buildDietShareCopy } from '../../utils/dietShare';
-import { colors, fontSize, radius, spacing } from '../../constants/theme';
+import { colors, fontSize, radius, shadow, spacing } from '../../constants/theme';
+import { onColor } from '../../theme/onColor';
 import type {
   AnalyzedFood,
   BarcodeLookup,
   FavoriteFood,
+  MealAnalysisSource,
   MealType,
   Place,
   PlaceSearchResult,
@@ -90,6 +92,12 @@ interface ItemForm {
   fat: string;
   /** 탄단지 입력 펼침 — 대부분 AI가 채우고 손대지 않아 기본은 접어둔다 */
   showMacros: boolean;
+  /**
+   * 사진 속 위치 — AI 사진 분석(source=PHOTO_FOOD)에서만 채워짐. 항목 자체에 실어두면
+   * 사용자가 항목을 고치거나 지워도 칩이 따로 관리할 상태 없이 자연히 같이 바뀐다
+   * (바코드·즐겨찾기 등 다른 경로로 들어온 항목은 항상 undefined — 칩이 안 뜬다).
+   */
+  box?: number[] | null;
 }
 
 const num = (v: string) => (v.trim() ? Number(v) : undefined);
@@ -115,6 +123,48 @@ export function DietRecordScreen({ navigation, route }: Props) {
     editing && !editing.items?.length && editing.calories ? String(editing.calories) : '',
   );
   const [photoUri, setPhotoUri] = useState<string | null>(editing?.photoUrl ?? null);
+  /**
+   * 사진 원본 크기 — 사진 위 칩(음식 위치 표시)을 정확히 앉히려고 필요하다. 사진 컨테이너가
+   * 이 비율(aspectRatio)을 그대로 쓰면 cover/contain 이 같아져(잘리는 부분이 없어) box 의
+   * 0~1000 정규화 좌표를 크롭 보정 없이 바로 퍼센트 위치로 쓸 수 있다.
+   * 새로 고른 사진뿐 아니라(원격 URL) 수정 화면의 기존 사진도 재분석하면 칩이 떠야 하므로,
+   * pickFrom 이 아니라 photoUri 변화에 걸어(Image.getSize) 두 경로를 하나로 처리한다.
+   */
+  const [photoSize, setPhotoSize] = useState<{ width: number; height: number } | null>(null);
+  useEffect(() => {
+    if (!photoUri) {
+      setPhotoSize(null);
+      return;
+    }
+    let cancelled = false;
+    Image.getSize(
+      photoUri,
+      (width, height) => {
+        if (!cancelled) setPhotoSize({ width, height });
+      },
+      () => {
+        // 실패해도 치명적이지 않다 — photoSize 가 없으면 칩을 그냥 안 그린다(기존 정사각 크롭 유지)
+        if (!cancelled) setPhotoSize(null);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [photoUri]);
+  /** AI 사진 분석이 무엇을 읽었는지 — 완료 후 안내 문구를 갈라 보여준다(신뢰도 표현) */
+  const [analysisSource, setAnalysisSource] = useState<MealAnalysisSource | null>(null);
+  /** 사진 위 칩을 탭했을 때 해당 항목 카드를 잠깐 강조 */
+  const [highlightedItemKey, setHighlightedItemKey] = useState<string | null>(null);
+  const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (highlightTimer.current) clearTimeout(highlightTimer.current);
+  }, []);
+  const onTapChip = (key: string) => {
+    haptics.light();
+    setHighlightedItemKey(key);
+    if (highlightTimer.current) clearTimeout(highlightTimer.current);
+    highlightTimer.current = setTimeout(() => setHighlightedItemKey(null), 1500);
+  };
   /**
    * "데이트" 칩 — 켜면 상대방에게도 같은 끼니가 절반 칼로리로 자동 등록된다.
    * 수정 화면에서는 노출하지 않는다 — 서버의 update() 는 상대방에게 아무 영향도 주지 않아서
@@ -455,6 +505,8 @@ export function DietRecordScreen({ navigation, route }: Props) {
     carbs: f.carbs ? String(f.carbs) : '',
     protein: f.protein ? String(f.protein) : '',
     fat: f.fat ? String(f.fat) : '',
+    // 텍스트 분석 결과는 항상 box 가 없으니(서버가 null) 자연히 undefined 로 들어온다
+    box: f.box,
   });
 
   // 즐겨찾기 세트 탭 — 세트에 담긴 음식이 각각 항목으로 들어온다.
@@ -557,6 +609,8 @@ export function DietRecordScreen({ navigation, route }: Props) {
       // 고르자마자 줄인다 — 업로드·서버 다운로드·Gemini 전송이 한꺼번에 가벼워진다
       const uri = await shrinkImage(picked);
       setPhotoUri(uri);
+      // 새 사진이니 이전 사진의 분석 안내(추정치/표기값 문구)는 더 이상 안 맞는다
+      setAnalysisSource(null);
       /*
        * 선업로드 — 사용자가 "AI로 음식 분석"이나 "저장"을 누를 때쯤이면 이미 끝나 있게 한다.
        * 업로드는 어차피 두 경로 모두의 앞 단계고, 사진을 고른 직후는 사용자가 화면을 보며
@@ -593,9 +647,13 @@ export function DietRecordScreen({ navigation, route }: Props) {
       const photoUrl = await uploadForSubmit(photoUri);
       const result = await runBusy('AI가 음식을 분석하고 있어요', () => dietApi.analyze(photoUrl));
       if (!result.isFood || result.foods.length === 0) {
+        // 실제 음식·메뉴판·영양성분표 중 아무것도 못 찾았을 때만 여기로 온다(source 세 갈래 모두 실패)
         toast.error('음식 사진이 아닌 것 같아요');
         return;
       }
+      // 다음 안내 문구·사진 위 칩 표시를 여기서 정한다 — appendFoods 보다 먼저 둬서
+      // hasChips 계산(items 기반)이 이번 렌더에 바로 반영되게 한다
+      setAnalysisSource(result.source ?? 'PHOTO_FOOD');
       appendFoods(result.foods.map(toForm));
       if (result.foods.every((f) => !f.calories)) {
         // 음식은 알아봤지만 양을 가늠하지 못한 경우 — 빈 칸으로 두면 실패로 오해한다
@@ -604,7 +662,14 @@ export function DietRecordScreen({ navigation, route }: Props) {
       // 탄단지는 항목이 들고 있으니 끼니 레벨 값(당류/나트륨/식이섬유)만 담는다
       setExtras({ sugar: result.totalSugar, sodium: result.totalSodium, fiber: result.totalFiber });
       haptics.success();
-      toast.success(result.comment?.trim() || 'AI 분석 완료! ');
+      toast.success(
+        result.comment?.trim() ||
+          (result.source === 'NUTRITION_LABEL'
+            ? '영양성분표를 읽었어요!'
+            : result.source === 'TEXT_IN_PHOTO'
+              ? '사진 속 글자로 알아냈어요!'
+              : 'AI 분석 완료! '),
+      );
     } catch (e) {
       toast.error(getErrorMessage(e, 'AI 분석에 실패했어요.'));
     } finally {
@@ -820,6 +885,10 @@ export function DietRecordScreen({ navigation, route }: Props) {
     }
   };
 
+  // 사진 위 칩(음식 위치 표시)을 하나라도 그릴지 — box 를 가진 항목이 하나도 없으면
+  // 사진 컨테이너를 기존 정사각 크롭 그대로 둔다(레이아웃이 괜히 흔들리지 않게)
+  const hasChips = items.some((i) => i.box && i.box.length === 4);
+
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       <FormKeyboardView contentContainerStyle={styles.container}>
@@ -935,17 +1004,52 @@ export function DietRecordScreen({ navigation, route }: Props) {
 
           {/* 사진 */}
           <Text style={styles.label}>사진</Text>
-          <TouchableOpacity style={[styles.photoBox, photoUri ? styles.photoBoxFilled : styles.photoBoxEmpty]} onPress={onPickPhoto} activeOpacity={0.8}>
-            {photoUri ? (
-              <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />
-            ) : (
-              <Text style={styles.photoPlaceholder}>사진 추가하기</Text>
-            )}
-          </TouchableOpacity>
+          {/*
+            칩(음식 위치 표시)을 사진 탭 영역과 형제로 둔다 — 겹치는 TouchableOpacity 를
+            중첩하면 안드로이드에서 눌림이 샌다(place 픽커의 닫기 버튼과 같은 이유).
+            hasChips 인 동안만 실제 사진 비율(photoSize)로 컨테이너를 바꾼다 — cover 크롭이
+            없어져 0~1000 정규화 좌표를 보정 없이 그대로 퍼센트 위치로 쓸 수 있다.
+          */}
+          <View
+            style={[
+              styles.photoBox,
+              photoUri
+                ? hasChips && photoSize
+                  ? { width: '100%', aspectRatio: photoSize.width / photoSize.height }
+                  : styles.photoBoxFilled
+                : styles.photoBoxEmpty,
+            ]}
+          >
+            <TouchableOpacity style={styles.photoTapArea} onPress={onPickPhoto} activeOpacity={0.8}>
+              {photoUri ? (
+                <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />
+              ) : (
+                <Text style={styles.photoPlaceholder}>사진 추가하기</Text>
+              )}
+            </TouchableOpacity>
+            {hasChips
+              ? items.map((item, idx) =>
+                  item.box && item.box.length === 4 ? (
+                    <TouchableOpacity
+                      key={item.key}
+                      style={[
+                        styles.photoChip,
+                        { left: `${item.box[1] / 10}%`, top: `${item.box[0] / 10}%` },
+                      ]}
+                      onPress={() => onTapChip(item.key)}
+                      hitSlop={4}
+                    >
+                      <Text style={styles.photoChipText}>{idx + 1}</Text>
+                    </TouchableOpacity>
+                  ) : null,
+                )
+              : null}
+          </View>
           {photoUri ? (
             <TouchableOpacity
               onPress={() => {
                 setPhotoUri(null);
+                setAnalysisSource(null);
                 // 업로드 캐시만 버린다. 분석으로 들어온 음식 항목은 그대로 둔다 —
                 // 사진을 지워도 먹은 건 먹은 것이고, 틀렸으면 항목별로 지울 수 있다.
                 uploadedRef.current = null;
@@ -967,7 +1071,17 @@ export function DietRecordScreen({ navigation, route }: Props) {
                 loading={analyzing}
                 style={styles.analyzeButton}
               />
-              <Text style={styles.analyzeHint}>분석 결과는 추정치예요. 저장 전에 항목별로 수정할 수 있어요.</Text>
+              {/*
+                신뢰도 표현 — NUTRITION_LABEL 은 추정이 아니라 표기값을 그대로 읽은 것이라
+                바코드·DB 조회와 같은 급으로 다르게 말한다(추정치라고 하면 신뢰도를 낮춰 보인다).
+              */}
+              <Text style={styles.analyzeHint}>
+                {analysisSource === 'NUTRITION_LABEL'
+                  ? '영양성분표를 읽었어요. 표기값 그대로예요 — 저장 전에 확인해주세요.'
+                  : analysisSource === 'TEXT_IN_PHOTO'
+                    ? '사진 속 글자로 알아낸 추정치예요. 저장 전에 항목별로 수정할 수 있어요.'
+                    : '분석 결과는 추정치예요. 저장 전에 항목별로 수정할 수 있어요.'}
+              </Text>
             </>
           ) : null}
 
@@ -1049,7 +1163,10 @@ export function DietRecordScreen({ navigation, route }: Props) {
           {/* 음식 항목 — 반찬 하나가 카드 하나. 칼로리·탄단지를 항목별로 고친다 */}
           <Text style={styles.label}>먹은 음식</Text>
           {items.map((item, idx) => (
-            <View key={item.key} style={styles.itemCard}>
+            <View
+              key={item.key}
+              style={[styles.itemCard, highlightedItemKey === item.key && styles.itemCardHighlighted]}
+            >
               <View style={styles.itemHeader}>
                 <Text style={styles.itemNo}>음식 {idx + 1}</Text>
                 <View style={styles.itemHeaderRight}>
@@ -1360,8 +1477,28 @@ const styles = themedStyles((colors) => ({
    */
   photoBoxEmpty: { width: '100%', aspectRatio: 3 / 2 },
   photoBoxFilled: { width: '100%', aspectRatio: 1 },
+  // 사진 탭 영역 — 칩(형제 View)과 겹치지 않는 별도 레이어. photoBox 를 그대로 채운다
+  photoTapArea: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' },
   photo: { width: '100%', height: '100%' },
   photoPlaceholder: { color: colors.textSecondary, fontSize: fontSize.body, fontWeight: '600' },
+  /*
+   * 음식 위치 칩 — box[1](xMin)/box[0](yMin) 를 퍼센트로 그대로 쓴다(둘 다 절대 위치 top/left).
+   * 음수 오프셋(중앙 정렬용 translate)을 안 쓰는 이유: photoBox 가 overflow:hidden 이라
+   * 박스 좌상단이 사진 가장자리에 붙으면 칩이 잘려 나간다 — 배지 자체를 좌상단 코너에
+   * "얹는" 모양으로 그려 항상 사진 안쪽에 머물게 한다.
+   */
+  photoChip: {
+    position: 'absolute',
+    minWidth: 22,
+    height: 22,
+    paddingHorizontal: 6,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadow.sm,
+  },
+  photoChipText: { color: onColor(colors.primary), fontSize: fontSize.caption, fontWeight: '800' },
   removePhoto: { color: colors.danger, fontSize: fontSize.caption, marginTop: spacing.xs, alignSelf: 'flex-end' },
   analyzeButton: { marginTop: spacing.sm },
   analyzeHint: { color: colors.textSecondary, fontSize: fontSize.caption, marginTop: spacing.xs, textAlign: 'center' },
@@ -1432,6 +1569,8 @@ const styles = themedStyles((colors) => ({
     borderColor: colors.border,
     marginBottom: spacing.md,
   },
+  // 사진 위 칩을 탭했을 때 그 항목 카드를 잠깐 강조 — onTapChip 참고
+  itemCardHighlighted: { borderColor: colors.primary, backgroundColor: colors.primaryBg },
   itemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
   itemHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   itemNo: { fontSize: fontSize.body, fontWeight: '700', color: colors.primary },
