@@ -35,13 +35,19 @@
 
 ## 3. 서비스 계정 발급 (서버가 구매 상태를 조회하려면 필요)
 
-1. Play Console → **설정 → API 액세스**
+1. Play Console → 왼쪽 메뉴 **개발자 계정 → API 액세스**
+   (예전에는 *설정* 아래에 있었지만 옮겨졌습니다. 메뉴가 안 보이면 주소창의
+   `.../console/u/0/developers/<숫자 ID>/...` 에서 뒤를 `api-access` 로 바꿔 직행하세요.
+   이 페이지는 **계정 소유자**에게만 보입니다 — 관리자 권한만 있으면 메뉴 자체가 없습니다.)
 2. 아직 GCP 프로젝트와 연결 안 됐다면 **연결** (Play Console이 자동으로 프로젝트를
    만들어주거나 기존 프로젝트를 고를 수 있음)
 3. **새 서비스 계정 만들기** → 안내를 따라 [Google Cloud Console](https://console.cloud.google.com/iam-admin/serviceaccounts)에서
    서비스 계정 생성 → **키 → 새 키 만들기 → JSON** → 다운로드
-4. Play Console API 액세스 화면으로 돌아와 방금 만든 서비스 계정에 **"재무 데이터 보기"**
-   권한 부여 (구독 상태 조회에 필요한 최소 권한)
+   (만든 뒤 Play Console 화면을 **새로고침**해야 목록에 뜹니다)
+4. 방금 만든 서비스 계정에 **재무 데이터, 주문, 설문조사 응답 보기** 권한 부여 —
+   구독 상태 조회에 필요한 최소 권한입니다. API 액세스 화면에서 바로 주는 버튼이 없으면
+   **사용자 및 권한 → 새 사용자 초대**에 서비스 계정 이메일
+   (`...@....iam.gserviceaccount.com`)을 넣고 같은 권한을 주면 됩니다.
 5. 다운로드한 JSON 키를 base64로 인코딩:
    ```bash
    base64 -w0 service-account.json   # macOS: base64 -i service-account.json
