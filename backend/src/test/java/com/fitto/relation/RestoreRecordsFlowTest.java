@@ -58,7 +58,7 @@ class RestoreRecordsFlowTest {
 
     private void addPlace(Long userId, String name) {
         placeService.save(userId, new SavePlaceRequest(
-                name, "서울", new BigDecimal("37.5"), new BigDecimal("127.0"), null, null, null));
+                name, "서울", new BigDecimal("37.5"), new BigDecimal("127.0"), null, null));
     }
 
     /** 헤어졌다 재회하는 전체 흐름. */

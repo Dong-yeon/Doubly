@@ -87,7 +87,7 @@ class TripFlowTest {
         long[] c = couple("tr5@fitto.com", "tr6@fitto.com");
         TripResponse trip = tripService.save(c[0], jeju());
         PlaceResponse place = placeService.save(c[1], new SavePlaceRequest(
-                "흑돼지 맛집", "제주시", null, null, "한식", PlaceStatus.WISHLIST, null));
+                "흑돼지 맛집", "제주시", null, null, "한식", PlaceStatus.WISHLIST));
 
         tripService.attachPlace(c[0], trip.id(), place.id()); // 상대가 등록한 장소도 담기 가능
         TripDetailResponse detail = tripService.detail(c[1], trip.id());
@@ -104,7 +104,7 @@ class TripFlowTest {
         long[] c = couple("tr7@fitto.com", "tr8@fitto.com");
         TripResponse trip = tripService.save(c[0], jeju());
         PlaceResponse place = placeService.save(c[0], new SavePlaceRequest(
-                "카페", null, null, null, "카페", PlaceStatus.WISHLIST, null));
+                "카페", null, null, null, "카페", PlaceStatus.WISHLIST));
         tripService.attachPlace(c[0], trip.id(), place.id());
 
         tripService.delete(c[0], trip.id());
@@ -191,7 +191,7 @@ class TripFlowTest {
         TripResponse trip = tripService.save(c[0], jeju());
         PlaceResponse place = placeService.save(c[0], new SavePlaceRequest(
                 "성산일출봉", "서귀포시", new java.math.BigDecimal("33.4580000"),
-                new java.math.BigDecimal("126.9420000"), "관광", PlaceStatus.WISHLIST, null));
+                new java.math.BigDecimal("126.9420000"), "관광", PlaceStatus.WISHLIST));
 
         TripItemResponse item = tripService.addItem(c[0], trip.id(), new SaveTripItemRequest(
                 2, place.id(), "성산일출봉 등반", LocalTime.of(10, 0), "관광", null));

@@ -5,7 +5,6 @@ import type {
   DateCourse,
   LovelichelinRecommendation,
   Place,
-  PlaceDietTag,
   PlaceSearchResponse,
   PlaceStatus,
   PlaceVisit,
@@ -18,7 +17,6 @@ export interface SavePlacePayload {
   lng?: number;
   category?: string;
   status?: PlaceStatus;
-  dietTag?: PlaceDietTag;
 }
 
 export interface RecordVisitPayload {
@@ -27,9 +25,6 @@ export interface RecordVisitPayload {
   memo?: string;
   imageUrl?: string;
   mealId?: number;
-  // 가보기 전엔 알 수 없어 장소 추가가 아니라 방문 기록에서 고른다 — 지정하면 장소의
-  // 대표 식단 구분도 함께 갱신된다(생략하면 기존 값 유지)
-  dietTag?: PlaceDietTag;
 }
 
 export interface RatePlacePayload {

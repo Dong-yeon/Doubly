@@ -56,11 +56,6 @@ public class Place {
     @Column(nullable = false, length = 20)
     private PlaceStatus status;
 
-    /** 클린식/치팅데이 구분 — 지도 필터·핀 색상에 쓰인다 */
-    @Enumerated(EnumType.STRING)
-    @Column(name = "diet_tag", nullable = false, length = 20)
-    private PlaceDietTag dietTag;
-
     @Column(name = "added_by", nullable = false)
     private Long addedBy;
 
@@ -82,7 +77,7 @@ public class Place {
 
     @Builder
     private Place(Long coupleId, String name, String address, BigDecimal lat, BigDecimal lng,
-                  String category, PlaceStatus status, PlaceDietTag dietTag, Long addedBy) {
+                  String category, PlaceStatus status, Long addedBy) {
         this.coupleId = coupleId;
         this.name = name;
         this.address = address;
@@ -90,20 +85,18 @@ public class Place {
         this.lng = lng;
         this.category = category;
         this.status = status != null ? status : PlaceStatus.WISHLIST;
-        this.dietTag = dietTag != null ? dietTag : PlaceDietTag.NEUTRAL;
         this.addedBy = addedBy;
     }
 
     /** 부분 수정 — null 이 아닌 값만 반영 (커플 둘 다 수정 가능) */
     public void update(String name, String address, BigDecimal lat, BigDecimal lng,
-                       String category, PlaceStatus status, PlaceDietTag dietTag) {
+                       String category, PlaceStatus status) {
         if (name != null) this.name = name;
         if (address != null) this.address = address;
         if (lat != null) this.lat = lat;
         if (lng != null) this.lng = lng;
         if (category != null) this.category = category;
         if (status != null) this.status = status;
-        if (dietTag != null) this.dietTag = dietTag;
     }
 
     /** 방문 기록이 생기면 자동으로 방문완료 전환 */

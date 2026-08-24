@@ -3,7 +3,6 @@ package com.fitto.place;
 import com.fitto.auth.dto.RegisterRequest;
 import com.fitto.auth.service.AuthService;
 import com.fitto.common.exception.BusinessException;
-import com.fitto.place.domain.PlaceDietTag;
 import com.fitto.place.domain.PlaceRating;
 import com.fitto.place.dto.PlaceResponse;
 import com.fitto.place.dto.RatePlaceRequest;
@@ -52,7 +51,7 @@ class PlaceLovelichelinFlowTest {
     }
 
     private Long place(Long userId) {
-        return placeService.save(userId, new SavePlaceRequest("성수 브런치", null, null, null, null, null, null)).id();
+        return placeService.save(userId, new SavePlaceRequest("성수 브런치", null, null, null, null, null)).id();
     }
 
     @Test
@@ -152,11 +151,11 @@ class PlaceLovelichelinFlowTest {
         long[] users = couple("lc9a@fitto.com", "lc9b@fitto.com");
         Long placeId = place(users[0]);
         placeService.recordVisit(users[0], placeId,
-                new RecordVisitRequest(null, null, "사진 없는 오래된 기록", null, null, null));
+                new RecordVisitRequest(null, null, "사진 없는 오래된 기록", null, null));
         placeService.recordVisit(users[0], placeId,
-                new RecordVisitRequest(null, null, "사진 있는 기록", "https://img/1.jpg", null, null));
+                new RecordVisitRequest(null, null, "사진 있는 기록", "https://img/1.jpg", null));
         placeService.recordVisit(users[0], placeId,
-                new RecordVisitRequest(null, null, "사진 없는 가장 최근 기록", null, null, null));
+                new RecordVisitRequest(null, null, "사진 없는 가장 최근 기록", null, null));
 
         PlaceResponse found = placeService.list(users[0]).stream()
                 .filter(p -> p.id().equals(placeId)).findFirst().orElseThrow();
@@ -169,39 +168,14 @@ class PlaceLovelichelinFlowTest {
     void 사진_있는_방문이_없으면_그냥_가장_최근_방문이_커버가_된다() {
         long[] users = couple("lc10a@fitto.com", "lc10b@fitto.com");
         Long placeId = place(users[0]);
-        placeService.recordVisit(users[0], placeId, new RecordVisitRequest(null, null, "첫 방문", null, null, null));
-        placeService.recordVisit(users[0], placeId, new RecordVisitRequest(null, null, "가장 최근 방문", null, null, null));
+        placeService.recordVisit(users[0], placeId, new RecordVisitRequest(null, null, "첫 방문", null, null));
+        placeService.recordVisit(users[0], placeId, new RecordVisitRequest(null, null, "가장 최근 방문", null, null));
 
         PlaceResponse found = placeService.list(users[0]).stream()
                 .filter(p -> p.id().equals(placeId)).findFirst().orElseThrow();
 
         assertThat(found.coverImageUrl()).isNull();
         assertThat(found.coverMemo()).isEqualTo("가장 최근 방문");
-    }
-
-    // 식단 구분은 장소 추가 시점이 아니라 방문 기록에서 고른다(가보기 전엔 몰랐던 것이라서).
-    @Test
-    void 방문_기록에서_식단_구분을_지정하면_장소에_반영된다() {
-        long[] users = couple("lc11a@fitto.com", "lc11b@fitto.com");
-        Long placeId = place(users[0]);
-
-        placeService.recordVisit(users[0], placeId,
-                new RecordVisitRequest(null, null, null, null, null, PlaceDietTag.CHEAT));
-
-        assertThat(placeService.get(users[0], placeId).dietTag()).isEqualTo(PlaceDietTag.CHEAT);
-    }
-
-    @Test
-    void 방문_기록에서_식단_구분을_생략하면_기존_값이_유지된다() {
-        long[] users = couple("lc12a@fitto.com", "lc12b@fitto.com");
-        Long placeId = place(users[0]);
-        placeService.recordVisit(users[0], placeId,
-                new RecordVisitRequest(null, null, null, null, null, PlaceDietTag.CLEAN));
-
-        placeService.recordVisit(users[0], placeId,
-                new RecordVisitRequest(null, null, "다음 방문, 식단 구분 안 정함", null, null, null));
-
-        assertThat(placeService.get(users[0], placeId).dietTag()).isEqualTo(PlaceDietTag.CLEAN);
     }
 
     @Test

@@ -9,7 +9,7 @@ export interface KakaoMapMarker {
   lat: number;
   lng: number;
   title: string;
-  /** 커스텀 핀 색상(hex) — 미지정 시 카카오 기본(빨강) 핀. 예: 클린식/치팅데이 구분 */
+  /** 커스텀 핀 색상(hex) — 미지정 시 카카오 기본(빨강) 핀 */
   color?: string;
   /** color 지정 시에만 의미 있음 — false 면 속이 빈 테두리 핀(예: 위시리스트). 미지정 시 채워진 핀(기존 동작 유지) */
   filled?: boolean;

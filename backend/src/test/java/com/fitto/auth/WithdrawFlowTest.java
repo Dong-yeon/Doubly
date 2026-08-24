@@ -106,7 +106,7 @@ class WithdrawFlowTest {
 
         // relations 를 참조하는 커플 콘텐츠
         placeService.save(me, new SavePlaceRequest(
-                "맛집", "서울", new BigDecimal("37.5"), new BigDecimal("127.0"), null, null, null));
+                "맛집", "서울", new BigDecimal("37.5"), new BigDecimal("127.0"), null, null));
         feedService.createPost(me, new CreatePostRequest("오늘의 기록", null));
         tripService.save(me, new SaveTripRequest(
                 "여행", LocalDate.now(), LocalDate.now().plusDays(2), null, null));
@@ -134,7 +134,7 @@ class WithdrawFlowTest {
         relationService.connectCouple(partner, invite.code());
 
         placeService.save(me, new SavePlaceRequest(
-                "맛집", "서울", new BigDecimal("37.5"), new BigDecimal("127.0"), null, null, null));
+                "맛집", "서울", new BigDecimal("37.5"), new BigDecimal("127.0"), null, null));
         feedService.createPost(partner, new CreatePostRequest("상대의 기록", null));
 
         authService.withdraw(me);
@@ -207,9 +207,9 @@ class WithdrawFlowTest {
                 LocalDate.now(), MealType.LUNCH, "점심", null, 600, null, null, null,
                 null, null, null, null)).id();
         Long placeId = placeService.save(me, new SavePlaceRequest(
-                "맛집", "서울", new BigDecimal("37.5"), new BigDecimal("127.0"), null, null, null)).id();
+                "맛집", "서울", new BigDecimal("37.5"), new BigDecimal("127.0"), null, null)).id();
         Long visitId = placeService.recordVisit(me, placeId, new RecordVisitRequest(
-                LocalDate.now(), 5, "좋았다", null, null, null)).id();
+                LocalDate.now(), 5, "좋았다", null, null)).id();
 
         // 양쪽이 서로의 카드에 반응 — 지우는 쪽(관계 단위·개인 단위)이 모두 걸리도록
         feedService.toggleReaction(partner, FeedItemType.POST, postId, "❤️");

@@ -48,7 +48,6 @@ import type {
   FavoriteFood,
   MealType,
   Place,
-  PlaceDietTag,
   PlaceSearchResult,
   RecentFood,
 } from '../../types';
@@ -61,14 +60,6 @@ const MEAL_TYPES: { value: MealType; label: string }[] = [
   { value: 'LUNCH', label: '점심' },
   { value: 'DINNER', label: '저녁' },
   { value: 'SNACK', label: '간식' },
-];
-
-// 클린식/치팅데이 구분 — PlaceDetailScreen 의 방문 기록 폼과 같은 옵션(가보기 전엔
-// 알 수 없어 장소 추가가 아니라 방문 기록에서 고른다는 것도 동일)
-const DIET_TAG_OPTIONS: { value: PlaceDietTag; label: string }[] = [
-  { value: 'NEUTRAL', label: '구분 없음' },
-  { value: 'CLEAN', label: '🥗 클린식' },
-  { value: 'CHEAT', label: '🍔 치팅데이' },
 ];
 
 /** 서버 검증(MealItemRequest)과 맞춘 길이 상한 — 저장 시점에 튕기지 않게 입력에서 막는다 */
@@ -139,9 +130,6 @@ export function DietRecordScreen({ navigation, route }: Props) {
    */
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
   const [placeRating, setPlaceRating] = useState(0);
-  // 클린식/치팅데이 — PlaceDetailScreen 의 방문 기록 폼과 같은 항목. 별점처럼 선택 사항이라
-  // 기본은 NEUTRAL(구분 없음)이고, 지정하면 방문 기록과 함께 장소의 대표 구분도 갱신된다.
-  const [placeDietTag, setPlaceDietTag] = useState<PlaceDietTag>('NEUTRAL');
   const [placeSheetOpen, setPlaceSheetOpen] = useState(false);
   const [placeSearch, setPlaceSearch] = useState('');
   /*
@@ -358,8 +346,8 @@ export function DietRecordScreen({ navigation, route }: Props) {
   /*
    * 카카오 검색 결과를 바로 럽슐랭 장소로 추가 — "다녀온 곳"으로 등록하는 화면이라
    * status 를 처음부터 VISITED 로 보낸다(위시리스트로 만들었다가 아래 방문 기록에서
-   * markVisited 되길 기다릴 이유가 없다). 추가 즉시 선택 상태로 만들어 별점·클린식
-   * 여부까지 이어서 매길 수 있게 한다.
+   * markVisited 되길 기다릴 이유가 없다). 추가 즉시 선택 상태로 만들어 별점까지
+   * 이어서 매길 수 있게 한다.
    */
   const onAddFromKakao = async (result: PlaceSearchResult) => {
     setAddingPlaceName(result.name);
@@ -377,7 +365,6 @@ export function DietRecordScreen({ navigation, route }: Props) {
       usePlaceStore.getState().invalidate();
       setSelectedPlace(saved);
       setPlaceRating(0);
-      setPlaceDietTag('NEUTRAL');
       closePlaceSheet();
     } catch (e) {
       // 402(플랜 한도)는 api/client 가 이미 업그레이드 시트를 열었다 — 여기서 또 띄우면
@@ -767,7 +754,6 @@ export function DietRecordScreen({ navigation, route }: Props) {
             visitedAt: mealDate,
             mealId: saved.id,
             rating: placeRating > 0 ? placeRating : undefined,
-            dietTag: placeDietTag,
           });
           if (placeRating > 0) {
             const previousTier = selectedPlace.lovelichelinTier;
@@ -909,7 +895,6 @@ export function DietRecordScreen({ navigation, route }: Props) {
                     onPress={() => {
                       setSelectedPlace(null);
                       setPlaceRating(0);
-                      setPlaceDietTag('NEUTRAL');
                     }}
                     hitSlop={8}
                   >
@@ -924,19 +909,6 @@ export function DietRecordScreen({ navigation, route }: Props) {
 
               {selectedPlace ? (
                 <>
-                  <Text style={styles.label}>이번엔 어땠나요? (선택)</Text>
-                  <View style={styles.typeRow}>
-                    {DIET_TAG_OPTIONS.map((o) => (
-                      <Chip
-                        key={o.value}
-                        label={o.label}
-                        selected={placeDietTag === o.value}
-                        onPress={() => setPlaceDietTag(o.value)}
-                        fill
-                      />
-                    ))}
-                  </View>
-
                   <Text style={styles.label}>같이 별점도 남길까요? (선택)</Text>
                   <View style={styles.starRow}>
                     {[1, 2, 3, 4, 5].map((n) => (
@@ -1290,7 +1262,6 @@ export function DietRecordScreen({ navigation, route }: Props) {
                   onPress={() => {
                     setSelectedPlace(item);
                     setPlaceRating(item.myRating ?? 0);
-                    setPlaceDietTag(item.dietTag ?? 'NEUTRAL');
                     closePlaceSheet();
                   }}
                 >
