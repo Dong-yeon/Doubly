@@ -7,7 +7,7 @@
  * 2번째 사본을 만드는 대신).
  */
 import React, { useCallback, useMemo, useState } from 'react';
-import { FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -23,8 +23,9 @@ import { MaterialCommunityIcons } from '../../components/Icon';
 import { TextField } from '../../components/TextField';
 import { AiInsightButton } from '../../components/AiInsightButton';
 import { LovelichelinBadge } from '../../components/LovelichelinBadge';
+import { SoloPickBadge } from '../../components/SoloPickBadge';
 import { LovelichelinRecommendCards } from './LovelichelinRecommendCards';
-import { STATUS_FILTERS, DIET_FILTERS } from './placeFilters';
+import { STATUS_FILTERS, SOLO_PICK_MIN_RATING } from './placeFilters';
 import { placeApi } from '../../api/place';
 import { usePlaceStore } from '../../store/placeStore';
 import { isKakaoMapConfigured } from '../../constants/config';
@@ -33,7 +34,7 @@ import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { stars } from '../../utils/ratingStars';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { DateCourse, LovelichelinRecommendation, Place, PlaceDietTag, PlaceStatus } from '../../types';
+import type { DateCourse, LovelichelinRecommendation, Place, PlaceStatus } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { layout } from '../../theme/layout';
 
@@ -46,13 +47,6 @@ const MODES: { value: Mode; label: string }[] = [
   { value: 'map', label: '지도' },
 ];
 
-// 지도 핀 색상 — 식단 구분(클린식=초록/치팅데이=주황/구분 없음=빨강)을 항상 나타낸다.
-// 방문 여부는 색과 별개 축이라 핀을 채우거나(다녀옴) 테두리만 남겨(위시리스트) 구분한다.
-const DIET_TAG_PIN_COLOR: Record<PlaceDietTag, string> = {
-  CLEAN: '#22C55E',
-  CHEAT: '#F97316',
-  NEUTRAL: colors.danger,
-};
 
 function renderDateCourse(c: DateCourse) {
   return (
@@ -92,7 +86,6 @@ export function PlaceScreen() {
   // 위시리스트/지도가 공유하는 검색·필터 — 가이드엔 없다(등급순 정렬 하나뿐)
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<PlaceStatus | 'ALL'>('ALL');
-  const [dietFilter, setDietFilter] = useState<PlaceDietTag | 'ALL'>('ALL');
 
   // 지도 탭에서 빈 자리를 탭해 고른 좌표 — 확정 전까지는 "여기에 추가" 바만 뜬다
   const [pendingPin, setPendingPin] = useState<{ lat: number; lng: number; address?: string | null } | null>(
@@ -116,19 +109,33 @@ export function PlaceScreen() {
     [allPlaces],
   );
 
+  // 솔로 픽 — 아직 둘 다 안 매겨(tier 0) 럽슐랭 인증엔 못 미치지만, 한쪽이 강력 추천(4점
+  // 이상)한 곳. "혼자 간 인생 맛집"도 인정받을 방법이 있어야 한다는 결정(2026-08-24).
+  const soloPicks = useMemo(
+    () =>
+      allPlaces
+        .filter((p) => p.lovelichelinTier === 0)
+        .filter(
+          (p) =>
+            (p.myRating != null && p.myRating >= SOLO_PICK_MIN_RATING && p.partnerRating == null) ||
+            (p.partnerRating != null && p.partnerRating >= SOLO_PICK_MIN_RATING && p.myRating == null),
+        )
+        .sort((a, b) => (b.myRating ?? b.partnerRating ?? 0) - (a.myRating ?? a.partnerRating ?? 0)),
+    [allPlaces],
+  );
+
   // 위시리스트 = 아직 인증 전(tier===0) 전부. 지도는 인증 여부와 무관하게 전체를 보여준다
   // (공간적으로 다 훑어보는 용도라 굳이 나눌 이유가 없다) — 검색·필터만 공유한다.
   const searchFiltered = (list: Place[]) =>
     list
       .filter((p) => !search.trim() || p.name.toLowerCase().includes(search.trim().toLowerCase()))
-      .filter((p) => statusFilter === 'ALL' || p.status === statusFilter)
-      .filter((p) => dietFilter === 'ALL' || p.dietTag === dietFilter);
+      .filter((p) => statusFilter === 'ALL' || p.status === statusFilter);
 
   const wishlistPlaces = useMemo(
     () => searchFiltered(allPlaces.filter((p) => p.lovelichelinTier === 0)),
-    [allPlaces, search, statusFilter, dietFilter],
+    [allPlaces, search, statusFilter],
   );
-  const mapPlaces = useMemo(() => searchFiltered(allPlaces), [allPlaces, search, statusFilter, dietFilter]);
+  const mapPlaces = useMemo(() => searchFiltered(allPlaces), [allPlaces, search, statusFilter]);
   const markers = mapPlaces
     .filter((p) => p.lat != null && p.lng != null)
     .map((p) => ({
@@ -136,7 +143,7 @@ export function PlaceScreen() {
       lat: p.lat as number,
       lng: p.lng as number,
       title: p.name,
-      color: DIET_TAG_PIN_COLOR[p.dietTag],
+      color: colors.danger,
       filled: p.status === 'VISITED',
       tier: p.lovelichelinTier,
     }));
@@ -222,27 +229,10 @@ export function PlaceScreen() {
                 key={f.value}
                 label={f.label}
                 selected={statusFilter === f.value}
-                onPress={() => {
-                  setStatusFilter(f.value);
-                  // 클린식/치팅데이는 방문 기록을 남길 때만 붙는 태그라 "가고 싶어요"엔
-                  // 절대 걸리는 게 없다 — 필터 줄 자체를 접으면서 남아있던 선택도 지운다.
-                  if (f.value === 'WISHLIST') setDietFilter('ALL');
-                }}
+                onPress={() => setStatusFilter(f.value)}
               />
             ))}
           </View>
-          {statusFilter !== 'WISHLIST' ? (
-            <View style={styles.filterRow}>
-              {DIET_FILTERS.map((f) => (
-                <Chip
-                  key={f.value}
-                  label={f.label}
-                  selected={dietFilter === f.value}
-                  onPress={() => setDietFilter(f.value)}
-                />
-              ))}
-            </View>
-          ) : null}
         </>
       ) : null}
 
@@ -253,6 +243,37 @@ export function PlaceScreen() {
           contentContainerStyle={styles.list}
           refreshing={loading}
           onRefresh={() => load(true)}
+          ListHeaderComponent={
+            soloPicks.length > 0 ? (
+              <View style={styles.soloPickSection}>
+                <Text style={styles.soloPickTitle}>내 픽 · 상대 픽</Text>
+                <Text style={styles.soloPickSubtitle}>아직 둘 다 안 가봤지만, 한 명은 인정한 곳이에요</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.soloPickRow}>
+                  {soloPicks.map((p) => {
+                    const who: 'me' | 'partner' = p.myRating != null ? 'me' : 'partner';
+                    const rating = p.myRating ?? p.partnerRating ?? 0;
+                    return (
+                      <TouchableOpacity
+                        key={p.id}
+                        activeOpacity={0.85}
+                        onPress={() => navigation.navigate('PlaceDetail', { placeId: p.id, name: p.name })}
+                      >
+                        <Card elevation="sm" style={styles.soloPickCard}>
+                          <SoloPickBadge who={who} size="sm" />
+                          <Text style={styles.soloPickName} numberOfLines={1}>
+                            {p.name}
+                          </Text>
+                          <Text style={[styles.soloPickStars, { color: who === 'me' ? colors.me : colors.partner }]}>
+                            {stars(rating)}
+                          </Text>
+                        </Card>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            ) : null
+          }
           renderItem={({ item }) => (
             <TouchableOpacity
               activeOpacity={0.85}
@@ -338,10 +359,9 @@ export function PlaceScreen() {
                     <Text style={styles.categoryText}>{item.category}</Text>
                   </View>
                 ) : null}
-                {item.dietTag !== 'NEUTRAL' ? (
-                  <View style={[styles.categoryChip, styles.dietTagChip]}>
-                    <Text style={styles.categoryText}>{item.dietTag === 'CLEAN' ? '🥗 클린식' : '🍔 치팅데이'}</Text>
-                  </View>
+                {(item.myRating != null && item.myRating >= SOLO_PICK_MIN_RATING && item.partnerRating == null) ||
+                (item.partnerRating != null && item.partnerRating >= SOLO_PICK_MIN_RATING && item.myRating == null) ? (
+                  <SoloPickBadge who={item.myRating != null ? 'me' : 'partner'} size="sm" />
                 ) : null}
                 {item.tripId != null ? (
                   <View style={styles.categoryChip}>
@@ -404,18 +424,6 @@ export function PlaceScreen() {
         ) : (
           <View style={styles.mapWrap}>
             <View style={styles.legendRow}>
-              <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: DIET_TAG_PIN_COLOR.CLEAN }]} />
-                <Text style={styles.legendText}>클린식</Text>
-              </View>
-              <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: DIET_TAG_PIN_COLOR.CHEAT }]} />
-                <Text style={styles.legendText}>치팅데이</Text>
-              </View>
-              <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: DIET_TAG_PIN_COLOR.NEUTRAL }]} />
-                <Text style={styles.legendText}>구분 없음</Text>
-              </View>
               <View style={styles.legendItem}>
                 <View style={[styles.legendDot, styles.legendDotFilled]} />
                 <Text style={styles.legendText}>다녀옴</Text>
@@ -519,6 +527,14 @@ const styles = themedStyles((colors) => ({
   magazineRating: { fontSize: fontSize.caption, fontWeight: '700' },
   magazineMemo: { fontSize: fontSize.body, color: colors.textPrimary, fontStyle: 'italic', marginTop: spacing.xs },
   magazineDate: { fontSize: fontSize.micro, color: colors.textSecondary, marginTop: spacing.xs },
+  // 내 픽 · 상대 픽 (솔로 트랙) — 가이드 상단 가로 스크롤 섹션
+  soloPickSection: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, marginBottom: spacing.sm },
+  soloPickTitle: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
+  soloPickSubtitle: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2, marginBottom: spacing.sm },
+  soloPickRow: { gap: spacing.sm, paddingRight: spacing.lg },
+  soloPickCard: { width: 140, gap: spacing.xs },
+  soloPickName: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
+  soloPickStars: { fontSize: fontSize.caption, fontWeight: '700' },
   // 위시리스트 카드
   deleteHint: { fontSize: fontSize.caption, color: colors.textSecondary, marginBottom: spacing.sm },
   card: {
@@ -540,7 +556,6 @@ const styles = themedStyles((colors) => ({
     borderColor: colors.border,
   },
   categoryText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
-  dietTagChip: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
   address: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xs },
   cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.sm },
   statusBadge: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textPrimary },

@@ -1,6 +1,5 @@
 package com.fitto.place.dto;
 
-import com.fitto.place.domain.PlaceDietTag;
 import com.fitto.place.domain.PlaceStatus;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -22,9 +21,6 @@ public record SavePlaceRequest(
         @Size(max = 30, message = "카테고리는 30자 이내로 입력해주세요.")
         String category,
 
-        PlaceStatus status,
-
-        /** 클린식/치팅데이 구분 — 미입력 시 NEUTRAL */
-        PlaceDietTag dietTag
+        PlaceStatus status
 ) {
 }

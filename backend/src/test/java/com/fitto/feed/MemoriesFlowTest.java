@@ -211,10 +211,10 @@ class MemoriesFlowTest {
     void 방문_기록은_등록일이_아니라_방문일로_묶인다() {
         long[] c = couple("mem-visit-a@fitto.com", "mem-visit-b@fitto.com");
         Long placeId = placeService.save(c[0], new SavePlaceRequest(
-                "성산일출봉", "제주", null, null, "관광", PlaceStatus.WISHLIST, null)).id();
+                "성산일출봉", "제주", null, null, "관광", PlaceStatus.WISHLIST)).id();
         // 오늘 등록하지만 방문일은 1년 전
         placeService.recordVisit(c[0], placeId,
-                new RecordVisitRequest(LocalDate.of(2025, 7, 30), 5, "최고였다", null, null, null));
+                new RecordVisitRequest(LocalDate.of(2025, 7, 30), 5, "최고였다", null, null));
 
         MemoriesResponse res = memoriesService.memories(c[0], TODAY);
 

@@ -18,14 +18,15 @@ import type { PlaceScreensParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
 import { Checkbox } from '../../components/Checkbox';
-import { Chip } from '../../components/Chip';
 import { EmptyState } from '../../components/EmptyState';
 import { ImageViewer } from '../../components/ImageViewer';
 import { IconButton } from '../../components/IconButton';
 import { KakaoMap } from '../../components/KakaoMap';
 import { LovelichelinBadge } from '../../components/LovelichelinBadge';
 import { LovelichelinFanfareModal } from '../../components/LovelichelinFanfareModal';
+import { SoloPickBadge } from '../../components/SoloPickBadge';
 import { usePlaceStore } from '../../store/placeStore';
+import { SOLO_PICK_MIN_RATING } from './placeFilters';
 import { isKakaoMapConfigured } from '../../constants/config';
 import { placeApi } from '../../api/place';
 import { useDietStore } from '../../store/dietStore';
@@ -37,7 +38,7 @@ import { haptics } from '../../utils/haptics';
 import { toDateString } from '../../utils/date';
 import { stars } from '../../utils/ratingStars';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { MealType, Place, PlaceDietTag, PlaceVisit } from '../../types';
+import type { MealType, Place, PlaceVisit } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { useAndroidKeyboardHeight } from '../../hooks/useAndroidKeyboardHeight';
 
@@ -49,13 +50,6 @@ const MEAL_TYPES: { value: MealType; label: string }[] = [
   { value: 'LUNCH', label: '점심' },
   { value: 'DINNER', label: '저녁' },
   { value: 'SNACK', label: '간식' },
-];
-
-// 클린식/치팅데이 구분 — 가보기 전엔 알 수 없어 장소 추가가 아니라 방문 기록에서 고른다
-const DIET_TAG_OPTIONS: { value: PlaceDietTag; label: string }[] = [
-  { value: 'NEUTRAL', label: '구분 없음' },
-  { value: 'CLEAN', label: '🥗 클린식' },
-  { value: 'CHEAT', label: '🍔 치팅데이' },
 ];
 
 // 현재 시간대에 맞는 끼니 기본 선택 (DietRecordScreen 과 동일 규칙)
@@ -85,8 +79,6 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
   const [rating, setRating] = useState(0);
   const [memo, setMemo] = useState('');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
-  // 식단 구분 — 폼을 열 때 장소의 현재 값으로 채워두고, 오늘은 달랐으면 바꾸는 식
-  const [dietTag, setDietTag] = useState<PlaceDietTag>('NEUTRAL');
   const [saving, setSaving] = useState(false);
 
   // 오늘 식단으로도 등록 — 방문 기록 저장 시 meals 에도 즉시 기록하고 place_visits.meal_id 로 연결
@@ -145,7 +137,6 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
     setRating(0);
     setMemo('');
     setPhotoUri(null);
-    setDietTag(place?.dietTag ?? 'NEUTRAL');
     setLogMeal(false);
     setMealType(defaultMealType());
     setCalories('');
@@ -183,7 +174,6 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
         memo: memo.trim() || undefined,
         imageUrl,
         mealId,
-        dietTag,
       });
       haptics.success();
       toast.success(logMeal ? '방문 기록과 식단을 함께 남겼어요! ' : '방문 기록 완료! ');
@@ -316,12 +306,12 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
                         <Text style={styles.infoChipText}>{place.category}</Text>
                       </View>
                     ) : null}
-                    {place.dietTag !== 'NEUTRAL' ? (
-                      <View style={[styles.infoChip, styles.infoDietChip]}>
-                        <Text style={styles.infoChipText}>
-                          {place.dietTag === 'CLEAN' ? '🥗 클린식' : '🍔 치팅데이'}
-                        </Text>
-                      </View>
+                    {place.lovelichelinTier === 0 &&
+                    ((place.myRating != null && place.myRating >= SOLO_PICK_MIN_RATING && place.partnerRating == null) ||
+                      (place.partnerRating != null &&
+                        place.partnerRating >= SOLO_PICK_MIN_RATING &&
+                        place.myRating == null)) ? (
+                      <SoloPickBadge who={place.myRating != null ? 'me' : 'partner'} size="sm" />
                     ) : null}
                   </View>
                   {place.address ? <Text style={styles.infoAddress}>{place.address}</Text> : null}
@@ -399,19 +389,6 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
                       <TouchableOpacity key={n} onPress={() => setRating(rating === n ? 0 : n)}>
                         <Text style={styles.star}>{n <= rating ? '★' : '☆'}</Text>
                       </TouchableOpacity>
-                    ))}
-                  </View>
-
-                  <Text style={styles.label}>식단 구분 — 이번엔 어땠나요?</Text>
-                  <View style={styles.dietTagRow}>
-                    {DIET_TAG_OPTIONS.map((o) => (
-                      <Chip
-                        key={o.value}
-                        label={o.label}
-                        selected={dietTag === o.value}
-                        onPress={() => setDietTag(o.value)}
-                        fill
-                      />
                     ))}
                   </View>
 
@@ -516,7 +493,6 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
                   title="방문 기록 남기기"
                   variant="secondary"
                   onPress={() => {
-                    // 식단 구분을 장소의 현재 값으로 채워두고 시작한다(오늘은 달랐으면 바꾸면 됨)
                     resetForm();
                     setFormOpen(true);
                   }}
@@ -617,7 +593,6 @@ const styles = themedStyles((colors) => ({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  infoDietChip: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
   infoChipText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
   infoAddress: { fontSize: fontSize.body, color: colors.textSecondary, marginTop: spacing.sm },
   infoStats: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '700', marginTop: spacing.xs },
@@ -645,7 +620,6 @@ const styles = themedStyles((colors) => ({
   },
   label: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700', marginBottom: spacing.sm },
   starRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
-  dietTagRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
   star: { fontSize: 32, color: colors.accent },
   photoBox: {
     borderRadius: radius.md,

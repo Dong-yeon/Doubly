@@ -7,7 +7,6 @@ import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.plan.Feature;
 import com.fitto.place.domain.Place;
-import com.fitto.place.domain.PlaceDietTag;
 import com.fitto.place.domain.PlaceRating;
 import com.fitto.place.dto.LovelichelinRecommendationResponse;
 import com.fitto.place.dto.LovelichelinRecommendationResponse.RecommendedPlace;
@@ -167,7 +166,7 @@ public class LovelichelinRecommendService {
         return new LovelichelinRecommendationResponse(true, greeting, places);
     }
 
-    /** 취향 프로필 — 이름·카테고리·지역(주소)·럽스타·둘의 평점·식단 성향까지 AI 에 준다 */
+    /** 취향 프로필 — 이름·카테고리·지역(주소)·럽스타·둘의 평점까지 AI 에 준다 */
     private String describe(List<Place> certified, Long userId) {
         Map<Long, List<PlaceRating>> ratingsByPlace = placeRatingRepository
                 .findByPlaceIdIn(certified.stream().map(Place::getId).toList())
@@ -182,18 +181,9 @@ public class LovelichelinRecommendService {
                             + (p.getAddress() != null ? " (" + p.getAddress() + ")" : "")
                             + " · 럽스타 " + p.getLovelichelinTier() + "개"
                             + (pair.mine() != null && pair.partner() != null
-                                    ? " · 평점 " + pair.mine() + "점/" + pair.partner() + "점" : "")
-                            + dietTagLabel(p.getDietTag());
+                                    ? " · 평점 " + pair.mine() + "점/" + pair.partner() + "점" : "");
                 })
                 .collect(Collectors.joining("\n"));
-    }
-
-    private static String dietTagLabel(PlaceDietTag tag) {
-        return switch (tag) {
-            case CLEAN -> " · 클린식";
-            case CHEAT -> " · 치팅데이";
-            case NEUTRAL -> "";
-        };
     }
 
     /** 이름 대조용 정규화 — 공백·대소문자 차이로 같은 가게를 다른 곳으로 보지 않게 */

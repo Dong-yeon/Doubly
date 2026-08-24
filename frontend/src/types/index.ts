@@ -505,8 +505,6 @@ export interface TrainerRoutine {
 
 // 커플 맛집 지도 (PLAN.md Place Map) — 장소 핀 + 방문 기록
 export type PlaceStatus = 'WISHLIST' | 'VISITED';
-// 클린식/치팅데이 구분 — 하드코어 운동·식단 커플용 필터·핀 색상에 쓰인다
-export type PlaceDietTag = 'CLEAN' | 'CHEAT' | 'NEUTRAL';
 export interface Place {
   id: number;
   name: string;
@@ -515,7 +513,6 @@ export interface Place {
   lng?: number | null;
   category?: string | null;
   status: PlaceStatus;
-  dietTag: PlaceDietTag;
   addedBy: number;
   /** 담긴 여행 (PLAN.md Trip) — 미연결 시 null */
   tripId?: number | null;

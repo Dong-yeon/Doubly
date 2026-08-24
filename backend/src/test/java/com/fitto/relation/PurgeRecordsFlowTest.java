@@ -79,7 +79,7 @@ class PurgeRecordsFlowTest {
         Long relationId = connect(me, partner);
 
         placeService.save(me, new SavePlaceRequest(
-                "맛집", "서울", new BigDecimal("37.5"), new BigDecimal("127.0"), null, null, null));
+                "맛집", "서울", new BigDecimal("37.5"), new BigDecimal("127.0"), null, null));
         feedService.createPost(me, new CreatePostRequest("기록", "https://res.cloudinary.com/x/image/upload/v1/fitto/a.jpg"));
         tripService.save(partner, new SaveTripRequest(
                 "여행", LocalDate.now(), LocalDate.now().plusDays(1), null, null));
