@@ -50,6 +50,12 @@ const GOALS = ['근력 향상', '근육 증가', '체지방 감량', '체력·�
 // 프로그램 주차 — Day 구성 자체는 주차별로 안 바뀌고 진행률 표시에만 쓰인다(최대 52주, 백엔드와 동일)
 const WEEKS_OPTIONS = [4, 8, 12, 16] as const;
 
+// 아픈 부위 — 관절 기준(집중 부위의 근육군 축과 다르다). 백엔드 허용 목록과 짝: 밖의 값은 무시된다
+const PAIN_AREAS = ['무릎', '허리', '어깨', '팔꿈치', '손목', '발목', '목'] as const;
+
+// 세션당 목표 운동 시간(분) — 비우면 시간 제약 없이 구성(백엔드 최소 15 ~ 최대 180과 호환)
+const SESSION_MINUTES_OPTIONS = [30, 45, 60, 90] as const;
+
 // dayOffset → "오늘" / "내일" / "7/5 (금)"
 function dayLabel(offset: number): string {
   if (offset === 0) return '오늘';
@@ -68,8 +74,10 @@ export function WorkoutRecommendScreen({ navigation }: Props) {
   // 요청 시점에 이미 아는 값이라 별도로 들고 있는 게 더 명확하다) 따로 상태로 둔다.
   const [resultIsProgram, setResultIsProgram] = useState(false);
 
-  // 맞춤 프로그램 만들기(짐워크 스타일) — 요일·집중 부위·운동 목적을 고르는 패널
+  // 맞춤 프로그램 만들기(짐워크 스타일) — 요일·집중 부위·운동 목적·아픈 부위·운동 시간을 고르는 패널
   const [programOpen, setProgramOpen] = useState(false);
+  // 프로그램 이름 — 더는 여기서 직접 입력받지 않는다. AI가 추천 결과와 함께 지어주면
+  // 결과 영역에서 prefill 되고, 저장 전 자유롭게 고칠 수 있다(onRecommendProgram 참고).
   const [programTitle, setProgramTitle] = useState('');
   const [programWeekdays, setProgramWeekdays] = useState<WeekDay[]>([]);
   // 몇 주짜리 프로그램인지 — 기본 8주. Day 구성은 주차와 무관하게 그대로, 진행률 표시에만 쓰인다
@@ -78,6 +86,10 @@ export function WorkoutRecommendScreen({ navigation }: Props) {
   const [focusGroups, setFocusGroups] = useState<string[]>([]);
   // 운동 목적(선택, 단일) — 다시 누르면 해제
   const [goal, setGoal] = useState<string | null>(null);
+  // 아픈 부위(선택, 복수) — 관절 기준. 고르면 그 부위에 부담 주는 동작은 제외하고 구성(집중 부위보다 항상 우선)
+  const [painAreas, setPainAreas] = useState<string[]>([]);
+  // 세션당 목표 운동 시간(분, 선택) — 고르면 그 시간에 맞춰 종목·세트 수를 조절
+  const [sessionMinutes, setSessionMinutes] = useState<number | null>(null);
   const [recommendingProgram, setRecommendingProgram] = useState(false);
   const [savingProgram, setSavingProgram] = useState(false);
 
@@ -94,6 +106,16 @@ export function WorkoutRecommendScreen({ navigation }: Props) {
   const toggleGoal = (g: string) => {
     haptics.light();
     setGoal((prev) => (prev === g ? null : g));
+  };
+
+  const togglePainArea = (a: string) => {
+    haptics.light();
+    setPainAreas((prev) => (prev.includes(a) ? prev.filter((x) => x !== a) : [...prev, a]));
+  };
+
+  const toggleSessionMinutes = (m: number) => {
+    haptics.light();
+    setSessionMinutes((prev) => (prev === m ? null : m));
   };
 
   // AI 추천 하루 계획을 루틴 만들기 폼으로 — 폼에서 검토·수정한 뒤 사용자가 직접 저장한다
@@ -140,10 +162,18 @@ export function WorkoutRecommendScreen({ navigation }: Props) {
     setRecommendingProgram(true);
     try {
       const res = await runBusy('AI가 프로그램을 짜고 있어요', () =>
-        workoutApi.recommendProgram(programWeekdays, focusGroups, goal ?? undefined),
+        workoutApi.recommendProgram(
+          programWeekdays,
+          focusGroups,
+          goal ?? undefined,
+          painAreas,
+          sessionMinutes ?? undefined,
+        ),
       );
       setResult(res);
       setResultIsProgram(true);
+      // AI가 요일·집중 부위·운동 목적을 반영해 지어준 이름으로 채운다 — 저장 전 자유롭게 고칠 수 있다
+      setProgramTitle(res.programTitle?.trim() || '맞춤 프로그램');
       haptics.success();
     } catch (e) {
       toast.error(getErrorMessage(e, 'AI 추천에 실패했어요.'));
@@ -221,13 +251,6 @@ export function WorkoutRecommendScreen({ navigation }: Props) {
         />
         {programOpen ? (
           <View style={styles.programPanel}>
-            <TextField
-              label="프로그램 이름"
-              placeholder="예: 전신 밸런스 프로그램"
-              value={programTitle}
-              onChangeText={setProgramTitle}
-              maxLength={80}
-            />
             <Text style={styles.label}>운동할 요일</Text>
             <View style={styles.dayRow}>
               {WEEK_DAYS.map((d) => (
@@ -283,6 +306,32 @@ export function WorkoutRecommendScreen({ navigation }: Props) {
               ))}
             </View>
 
+            {/* 아픈 부위(선택, 복수) — 관절 기준. 고르면 그 부위에 부담 주는 동작은 제외한다(집중 부위보다 항상 우선) */}
+            <Text style={styles.label}>현재 아픈 부위 (선택)</Text>
+            <View style={styles.focusRow}>
+              {PAIN_AREAS.map((a) => (
+                <Chip key={a} label={a} selected={painAreas.includes(a)} onPress={() => togglePainArea(a)} />
+              ))}
+            </View>
+            {painAreas.length > 0 ? (
+              <Text style={styles.dayHint}>
+                {painAreas.join('·')} 부위는 부담 없는 동작으로 대체하거나 제외할게요.
+              </Text>
+            ) : null}
+
+            {/* 운동 시간(선택, 단일) — 고르면 세트 간 휴식 포함 이 시간에 맞춰 종목·세트 수를 조절한다 */}
+            <Text style={styles.label}>운동 시간 (선택)</Text>
+            <View style={styles.focusRow}>
+              {SESSION_MINUTES_OPTIONS.map((m) => (
+                <Chip
+                  key={m}
+                  label={`${m}분`}
+                  selected={sessionMinutes === m}
+                  onPress={() => toggleSessionMinutes(m)}
+                />
+              ))}
+            </View>
+
             <Button
               title="프로그램 추천받기"
               onPress={onRecommendProgram}
@@ -295,6 +344,17 @@ export function WorkoutRecommendScreen({ navigation }: Props) {
 
         {result ? (
           <View>
+            {/* AI가 요일·집중 부위·운동 목적을 반영해 지어준 이름 — 저장 전 자유롭게 고칠 수 있다 */}
+            {resultIsProgram ? (
+              <TextField
+                label="프로그램 이름"
+                placeholder="예: 전신 밸런스 프로그램"
+                value={programTitle}
+                onChangeText={setProgramTitle}
+                maxLength={80}
+              />
+            ) : null}
+
             {result.overallComment ? (
               <View style={styles.overallCard}>
                 <Text style={styles.overallText}>{result.overallComment}</Text>
@@ -315,6 +375,7 @@ export function WorkoutRecommendScreen({ navigation }: Props) {
                     ? `${WEEKDAY_LABEL[day.dayOfWeek]}요일`
                     : dayLabel(day.dayOffset)}{' '}
                   · {day.focus}
+                  {day.estimatedDurationMin ? ` · 약 ${day.estimatedDurationMin}분` : ''}
                 </Text>
                 {day.exercises.map((ex, i) => (
                   <View key={`${day.dayOfWeek ?? day.dayOffset}-${i}`} style={styles.exerciseRow}>
