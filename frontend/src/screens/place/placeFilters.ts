@@ -1,4 +1,5 @@
-/** 위시리스트/지도 화면이 공유하는 필터 옵션 — 두 화면 모두 같은 상태(usePlaceStore)를 걸러 쓴다 */
+/** 가이드/위시리스트/지도 화면이 공유하는 필터 옵션 — 세 화면 모두 같은 상태(usePlaceStore)를 걸러 쓴다 */
+import { PLACE_CATEGORIES } from '../../constants/placeCategories';
 import type { PlaceStatus } from '../../types';
 
 export const STATUS_FILTERS: { value: PlaceStatus | 'ALL'; label: string }[] = [
@@ -11,3 +12,10 @@ export const STATUS_FILTERS: { value: PlaceStatus | 'ALL'; label: string }[] = [
 // 곳. 2점 이하는 재방문 의사가 없다는 뜻이라 "픽"으로 보기 어려워 제외한다.
 // PlaceScreen(가이드·위시리스트 카드)·PlaceDetailScreen(정보 카드)이 공유한다.
 export const SOLO_PICK_MIN_RATING = 4;
+
+// 장소가 늘면서(맛집 외 카페·전시·여행지·숙소까지) 가이드/위시리스트 목록이 한 카테고리로
+// 묻히지 않게 — 장소 추가 화면과 같은 카테고리 목록을 그대로 필터로 재사용한다.
+export const CATEGORY_FILTERS: { value: string; label: string }[] = [
+  { value: 'ALL', label: '전체' },
+  ...PLACE_CATEGORIES.map((c) => ({ value: c, label: c })),
+];
