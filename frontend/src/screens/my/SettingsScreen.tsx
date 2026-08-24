@@ -6,7 +6,6 @@
  */
 import React, { useEffect, useState } from 'react';
 import { Linking, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
-import * as Notifications from 'expo-notifications';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -16,11 +15,13 @@ import { Chip } from '../../components/Chip';
 import { useThemeStore } from '../../store/themeStore';
 import type { ThemeMode } from '../../theme/themePreference';
 import { authApi } from '../../api/auth';
+import { isPushPermissionDenied } from '../../utils/push';
 import { useAuthStore } from '../../store/authStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { getErrorMessage } from '../../utils/error';
+import { copyText } from '../../utils/share';
 import { toast } from '../../store/toastStore';
-import { APP_VERSION } from '../../constants/config';
+import { APP_VERSION, BUILD_LABEL, BUILD_STAMP } from '../../constants/config';
 import { CONTACT_EMAIL, PRIVACY_VERSION, TERMS_VERSION } from '../../constants/legal';
 import { colors, fontSize, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
@@ -33,6 +34,18 @@ const THEME_OPTIONS: { value: ThemeMode; label: string }[] = [
   { value: 'dark', label: '다크' },
 ];
 
+/**
+ * 알림 종류 — 보내는 도메인(운동/식단/맛집…)이 아니라 사용자가 체감하는 성가심의 결로
+ * 나눈다(서버 `NotificationCategory` 와 1:1). 도메인으로 나누면 이 목록이 20줄이 되고,
+ * 어느 걸 꺼야 조용해지는지 알 수 없다.
+ */
+const NOTIFICATION_CATEGORIES = [
+  { key: 'chat', field: 'notifyChat', title: '채팅 · 전화', desc: '메시지, 반응, 전화와 부재중 알림.' },
+  { key: 'anniversary', field: 'notifyAnniversary', title: '기념일 · 일정', desc: '커플 캘린더 당일과 D-7·D-1 미리 알림.' },
+  { key: 'partner', field: 'notifyPartner', title: '상대 활동', desc: '운동·식단·맛집·선물처럼 상대가 남긴 기록.' },
+  { key: 'reminder', field: 'notifyReminder', title: '리마인드', desc: '스트릭·오늘의 질문·추억처럼 앱이 먼저 부르는 알림.' },
+] as const;
+
 export function SettingsScreen({ navigation }: Props) {
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
@@ -44,17 +57,13 @@ export function SettingsScreen({ navigation }: Props) {
 
   const [savingNotification, setSavingNotification] = useState(false);
   const [savingMarketing, setSavingMarketing] = useState(false);
-  // 카테고리 토글은 각각 독립적으로 저장 중일 수 있다 — 하나가 도는 동안 다른 걸 못 누르게
+  /** 저장 중인 카테고리 키 — 카테고리마다 상태를 두면 네 개가 되므로 하나로 관리한다 */
   const [savingCategory, setSavingCategory] = useState<string | null>(null);
-  // OS 알림 권한이 거부된 상태인지 — 서버 설정(notificationsEnabled)과 별개로 확인해야 한다.
-  // null 이면 아직 조회 전(웹에서는 계속 null 이라 배너가 안 뜬다).
-  const [osPermissionDenied, setOsPermissionDenied] = useState<boolean | null>(null);
+  /** OS 권한이 거부된 상태 — 앱 안 설정으로는 되돌릴 수 없어 시스템 설정으로 보내야 한다 */
+  const [permissionDenied, setPermissionDenied] = useState(false);
 
   useEffect(() => {
-    if (Platform.OS === 'web') return;
-    Notifications.getPermissionsAsync()
-      .then((p) => setOsPermissionDenied(p.status === 'denied'))
-      .catch(() => {});
+    void isPushPermissionDenied().then(setPermissionDenied);
   }, []);
 
   // 서버가 값을 안 내려주는 구버전 응답에서도 안전하게 동작하도록 기본값을 둔다
@@ -64,7 +73,7 @@ export function SettingsScreen({ navigation }: Props) {
   const onToggleNotification = async (next: boolean) => {
     setSavingNotification(true);
     try {
-      setUser(await authApi.updateNotificationSetting({ enabled: next }));
+      setUser(await authApi.updateNotificationSetting(next));
       toast.success(next ? '알림을 받아요.' : '알림을 껐어요.');
     } catch (e) {
       Alert.alert('오류', getErrorMessage(e));
@@ -73,21 +82,10 @@ export function SettingsScreen({ navigation }: Props) {
     }
   };
 
-  const CATEGORY_ROWS: {
-    key: 'notifyChat' | 'notifyAnniversary' | 'notifyPartnerActivity' | 'notifyReminder';
-    title: string;
-    desc: string;
-  }[] = [
-    { key: 'notifyChat', title: '채팅', desc: '메시지·리액션·전화 알림' },
-    { key: 'notifyAnniversary', title: '기념일', desc: '캘린더 일정·D-day·추억 리마인드' },
-    { key: 'notifyPartnerActivity', title: '상대 활동', desc: '상대의 운동·식단·기록·선물 알림' },
-    { key: 'notifyReminder', title: '리마인드', desc: '앱이 먼저 챙겨주는 재방문 알림' },
-  ];
-
-  const onToggleCategory = async (key: (typeof CATEGORY_ROWS)[number]['key'], next: boolean) => {
+  const onToggleCategory = async (key: string, next: boolean) => {
     setSavingCategory(key);
     try {
-      setUser(await authApi.updateNotificationSetting({ [key]: next }));
+      setUser(await authApi.updateNotificationCategories({ [key]: next }));
     } catch (e) {
       Alert.alert('오류', getErrorMessage(e));
     } finally {
@@ -110,16 +108,30 @@ export function SettingsScreen({ navigation }: Props) {
   const isSocialAccount = !!user?.socialType && user.socialType !== 'EMAIL';
 
   /**
+   * 문제를 알릴 때 함께 보내야 하는 정보 — 어느 빌드의 어느 기기인가.
+   *
+   * <p>버전만으로는 부족하다: 스토어 빌드(AAB)는 EAS 빌드를 돌린 순간의 JS 가 그대로
+   * 얼어붙는데 웹은 배포할 때마다 최신이라, 같은 버전 표기로도 서로 다른 코드가 돌 수 있다.
+   * 커밋 해시가 있어야 "앱만 안 되는" 증상에서 빌드 차이인지를 바로 가른다.
+   */
+  const buildDetail = `앱: Doubly ${BUILD_LABEL}\n기기: ${Platform.OS} ${Platform.Version}`;
+
+  /** 버전 줄을 길게 누르면 복사 — 폰에서 그대로 붙여넣어 알릴 수 있게. */
+  const onCopyBuildInfo = async () => {
+    await copyText(buildDetail);
+    toast.success('빌드 정보를 복사했어요.');
+  };
+
+  /**
    * 문의·버그 신고 — 메일 앱을 연다.
-   * 앱 버전·플랫폼을 본문에 미리 채워 베타 리포트 분류를 돕는다.
+   * 빌드 식별 정보·플랫폼을 본문에 미리 채워 베타 리포트 분류를 돕는다.
    */
   const onContact = async () => {
     const subject = `[Doubly 문의] `;
     const body =
       `\n\n----------\n`
       + `아래 정보는 문제 확인용이에요. 지워도 괜찮아요.\n`
-      + `앱 버전: ${APP_VERSION}\n`
-      + `기기: ${Platform.OS} ${Platform.Version}\n`;
+      + `${buildDetail}\n`;
     const url = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     try {
       const canOpen = await Linking.canOpenURL(url);
@@ -140,19 +152,6 @@ export function SettingsScreen({ navigation }: Props) {
         <Card elevation="sm" style={styles.section}>
           <Text style={styles.sectionLabel}>알림</Text>
 
-          {osPermissionDenied && (
-            <Pressable
-              style={styles.permissionBanner}
-              onPress={() => void Linking.openSettings()}
-              accessibilityRole="button"
-            >
-              <Text style={styles.permissionBannerText}>
-                기기 설정에서 알림이 꺼져 있어요. 앱 설정을 켜도 알림이 오지 않아요 — 눌러서 허용해주세요.
-              </Text>
-              <Text style={styles.chevron}>›</Text>
-            </Pressable>
-          )}
-
           <View style={styles.row}>
             <View style={styles.rowText}>
               <Text style={styles.rowTitle}>푸시 알림</Text>
@@ -166,23 +165,27 @@ export function SettingsScreen({ navigation }: Props) {
             />
           </View>
 
-          {/* 카테고리별 설정 — 마스터가 꺼져 있으면 어차피 전부 차단이라 흐리게 두고 못 누르게 한다 */}
-          {CATEGORY_ROWS.map((row) => (
-            <View key={row.key} style={[styles.row, styles.categoryRow]}>
+          {/*
+            OS 권한 거부는 앱에서 되돌릴 수 없다(두 번째 권한창이 뜨지 않는다).
+            이 안내가 없으면 "앱에서는 켜 놨는데 아무것도 안 온다"가 되어 알림이
+            고장 난 것처럼 보인다.
+          */}
+          {permissionDenied ? (
+            <Pressable
+              style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+              onPress={() => void Linking.openSettings()}
+              accessibilityRole="button"
+              accessibilityLabel="시스템 알림 설정 열기"
+            >
               <View style={styles.rowText}>
-                <Text style={[styles.rowTitle, !notificationsEnabled && styles.rowTitleMuted]}>
-                  {row.title}
+                <Text style={styles.rowTitleWarn}>기기에서 알림이 차단돼 있어요</Text>
+                <Text style={styles.rowDesc}>
+                  아래 설정을 켜도 알림이 오지 않아요. 눌러서 시스템 설정에서 허용해주세요.
                 </Text>
-                <Text style={styles.rowDesc}>{row.desc}</Text>
               </View>
-              <Switch
-                value={user?.[row.key] ?? true}
-                onValueChange={(next) => onToggleCategory(row.key, next)}
-                disabled={!notificationsEnabled || savingCategory === row.key}
-                trackColor={{ true: colors.primary }}
-              />
-            </View>
-          ))}
+              <Text style={styles.chevron}>›</Text>
+            </Pressable>
+          ) : null}
 
           <View style={styles.divider} />
 
@@ -198,6 +201,35 @@ export function SettingsScreen({ navigation }: Props) {
               trackColor={{ true: colors.primary }}
             />
           </View>
+        </Card>
+
+        <Card elevation="sm" style={styles.section}>
+          <Text style={styles.sectionLabel}>알림 종류</Text>
+          <View style={[styles.rowText, styles.themeIntro]}>
+            <Text style={styles.rowDesc}>
+              받고 싶은 것만 골라 받을 수 있어요. 위의 푸시 알림을 끄면 여기 설정과 상관없이
+              모두 오지 않아요.
+            </Text>
+          </View>
+          {NOTIFICATION_CATEGORIES.map((c, i) => (
+            <View key={c.key}>
+              {i > 0 ? <View style={styles.divider} /> : null}
+              <View style={styles.row}>
+                <View style={styles.rowText}>
+                  <Text style={notificationsEnabled ? styles.rowTitle : styles.rowTitleMuted}>
+                    {c.title}
+                  </Text>
+                  <Text style={styles.rowDesc}>{c.desc}</Text>
+                </View>
+                <Switch
+                  value={notificationsEnabled && (user?.[c.field] ?? true)}
+                  onValueChange={(next) => onToggleCategory(c.key, next)}
+                  disabled={!notificationsEnabled || savingCategory === c.key}
+                  trackColor={{ true: colors.primary }}
+                />
+              </View>
+            </View>
+          ))}
         </Card>
 
         <Card elevation="sm" style={styles.section}>
@@ -295,7 +327,16 @@ export function SettingsScreen({ navigation }: Props) {
           </Pressable>
         </Card>
 
-        <Text style={styles.appVersion}>Doubly v{APP_VERSION}</Text>
+        <Pressable
+          onLongPress={onCopyBuildInfo}
+          delayLongPress={400}
+          accessibilityRole="button"
+          accessibilityLabel={`앱 버전 ${BUILD_LABEL}`}
+          accessibilityHint="길게 누르면 빌드 정보를 복사해요."
+        >
+          <Text style={styles.appVersion}>Doubly v{APP_VERSION}</Text>
+          <Text style={styles.buildStamp}>{BUILD_STAMP}</Text>
+        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
@@ -307,21 +348,6 @@ const styles = themedStyles((colors) => ({
   // Card 기본 좌우 패딩(16)을 지운다 — 안 지우면 container(24)+card(16)+row(24)=64 로
   // MY 화면(24+0+24=48)보다 텍스트가 16px 더 안쪽에서 시작해 두 화면이 어긋났다
   section: { paddingVertical: spacing.sm, paddingHorizontal: 0 },
-  permissionBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginHorizontal: spacing.lg,
-    marginBottom: spacing.sm,
-    padding: spacing.md,
-    borderRadius: 12,
-    backgroundColor: colors.surfaceAlt,
-    borderWidth: 1,
-    borderColor: colors.danger,
-  },
-  permissionBannerText: { flex: 1, fontSize: fontSize.caption, color: colors.danger, lineHeight: 18 },
-  // 카테고리 행은 마스터 토글 아래 한 단 들여서 종속 관계를 보여준다
-  categoryRow: { paddingLeft: spacing.xl, minHeight: 48 },
   themeIntro: { paddingHorizontal: spacing.lg, paddingTop: spacing.xs },
   themeRow: {
     flexDirection: 'row',
@@ -349,6 +375,7 @@ const styles = themedStyles((colors) => ({
   rowText: { flex: 1, gap: 2 },
   rowTitle: { fontSize: fontSize.subtitle, color: colors.textPrimary, fontWeight: '600' },
   rowTitleMuted: { fontSize: fontSize.subtitle, color: colors.textSecondary, fontWeight: '600' },
+  rowTitleWarn: { fontSize: fontSize.subtitle, color: colors.danger, fontWeight: '600' },
   rowDesc: { fontSize: fontSize.caption, color: colors.textSecondary, lineHeight: 18 },
   menuItem: {
     flexDirection: 'row',
@@ -366,5 +393,13 @@ const styles = themedStyles((colors) => ({
     fontSize: fontSize.caption,
     color: colors.textSecondary,
     marginTop: spacing.sm,
+  },
+  /* 커밋·빌드 시각 — 평소엔 눈에 걸리지 않아야 하고, 필요할 때만 읽히면 된다 */
+  buildStamp: {
+    textAlign: 'center',
+    fontSize: fontSize.micro,
+    color: colors.textSecondary,
+    opacity: 0.7,
+    marginTop: 2,
   },
 }));

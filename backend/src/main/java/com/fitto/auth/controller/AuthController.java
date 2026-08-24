@@ -6,6 +6,7 @@ import com.fitto.auth.dto.ForgotPasswordRequest;
 import com.fitto.auth.dto.GoogleLoginRequest;
 import com.fitto.auth.dto.LoginRequest;
 import com.fitto.auth.dto.MarketingConsentRequest;
+import com.fitto.auth.dto.NotificationCategorySettingRequest;
 import com.fitto.auth.dto.NotificationSettingRequest;
 import com.fitto.auth.dto.RegisterRequest;
 import com.fitto.auth.dto.ResetPasswordRequest;
@@ -94,18 +95,22 @@ public class AuthController {
                 "프로필이 수정되었습니다.");
     }
 
-    /** 푸시 알림 수신 설정 — SET-01. 마스터 스위치 + 카테고리별 설정, 전부 부분 수정. */
+    /** 푸시 알림 수신 설정 — SET-01. */
     @PutMapping("/me/notification-setting")
     public ApiResponse<UserResponse> updateNotificationSetting(
             @AuthenticationPrincipal AuthUser user,
             @Valid @RequestBody NotificationSettingRequest request) {
-        UserResponse updated = authService.updateNotificationSetting(user.id(), request.enabled(),
-                request.notifyChat(), request.notifyAnniversary(),
-                request.notifyPartnerActivity(), request.notifyReminder());
-        String message = request.enabled() == null
-                ? "알림 설정을 저장했어요."
-                : (request.enabled() ? "알림을 받습니다." : "알림을 껐습니다.");
-        return ApiResponse.success(updated, message);
+        UserResponse updated = authService.updateNotificationSetting(user.id(), request.enabled());
+        return ApiResponse.success(updated,
+                request.enabled() ? "알림을 받습니다." : "알림을 껐습니다.");
+    }
+
+    /** 카테고리별 푸시 수신 설정 — 채팅·기념일·상대 활동·리마인드를 따로 끄고 켠다. */
+    @PutMapping("/me/notification-categories")
+    public ApiResponse<UserResponse> updateNotificationCategories(
+            @AuthenticationPrincipal AuthUser user,
+            @Valid @RequestBody NotificationCategorySettingRequest request) {
+        return ApiResponse.success(authService.updateNotificationCategories(user.id(), request));
     }
 
     /** 필수 약관 재동의 — AUTH-09. 개정된 약관에 다시 동의한다(재동의 게이트). */

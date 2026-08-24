@@ -4,7 +4,11 @@ import com.fitto.common.event.CoupleEvent;
 import com.fitto.common.event.CoupleEventPublisher;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
+import com.fitto.common.notification.NotificationCategory;
+import com.fitto.common.plan.Feature;
+import com.fitto.common.plan.PlanGuard;
 import com.fitto.common.notification.NotificationService;
+import com.fitto.common.notification.PushLinks;
 import com.fitto.common.time.KstClock;
 import com.fitto.diet.domain.Meal;
 import com.fitto.diet.domain.MealItem;
@@ -21,6 +25,8 @@ import com.fitto.relation.domain.Relation;
 import com.fitto.relation.domain.RelationStatus;
 import com.fitto.relation.domain.RelationType;
 import com.fitto.relation.repository.RelationRepository;
+import com.fitto.feed.dto.FeedItemType;
+import com.fitto.feed.repository.FeedReactionRepository;
 import com.fitto.streak.service.StreakService;
 import com.fitto.user.repository.UserRepository;
 import com.fitto.workout.dto.CalendarDayResponse;
@@ -53,29 +59,37 @@ public class MealService {
     private static final Logger log = LoggerFactory.getLogger(MealService.class);
     private static final int HISTORY_PAGE_SIZE = 20;
     private static final int RECENT_FOODS_LIMIT = 8;
+    /** 기록이 없는 날의 자리표시자 — 매번 새 배열을 만들지 않도록 공유한다(읽기 전용) */
+    private static final int[] EMPTY_NUTRITION = new int[6];
 
     private final MealRepository mealRepository;
     private final NutritionGoalRepository nutritionGoalRepository;
     private final RelationRepository relationRepository;
     private final UserRepository userRepository;
     private final StreakService streakService;
+    private final FeedReactionRepository feedReactionRepository;
     private final CoupleEventPublisher coupleEventPublisher;
     private final NotificationService notificationService;
+    private final PlanGuard planGuard;
 
     public MealService(MealRepository mealRepository,
                        NutritionGoalRepository nutritionGoalRepository,
                        RelationRepository relationRepository,
                        UserRepository userRepository,
                        StreakService streakService,
+                       FeedReactionRepository feedReactionRepository,
                        CoupleEventPublisher coupleEventPublisher,
-                       NotificationService notificationService) {
+                       NotificationService notificationService,
+                       PlanGuard planGuard) {
         this.mealRepository = mealRepository;
         this.nutritionGoalRepository = nutritionGoalRepository;
         this.relationRepository = relationRepository;
         this.userRepository = userRepository;
         this.streakService = streakService;
+        this.feedReactionRepository = feedReactionRepository;
         this.coupleEventPublisher = coupleEventPublisher;
         this.notificationService = notificationService;
+        this.planGuard = planGuard;
     }
 
     @Transactional
@@ -359,16 +373,21 @@ public class MealService {
                     coupleEventPublisher.publish(c.getId(), CoupleEvent.DIET);
                     Long partnerId = c.partnerOf(userId);
                     String myName = userRepository.findById(userId).map(u -> u.getName()).orElse("상대방");
-                    Map<String, String> data = Map.of("type", "diet");
                     if (justAchievedGoal(c, userId, partnerId, mealDate, firstMealOfDay)) {
-                        notificationService.notify(partnerId, "이번 주 식단 목표 달성!",
-                                myName + "님과 함께 주 " + c.getDietGoalDays() + "일 목표를 채웠어요!", data);
+                        notificationService.notify(partnerId, NotificationCategory.PARTNER,
+                                "이번 주 식단 목표 달성!",
+                                myName + "님과 함께 주 " + c.getDietGoalDays() + "일 목표를 채웠어요!",
+                                PushLinks.DIET);
                     } else if (copied) {
-                        notificationService.notify(partnerId, "오늘도 같은 식단!",
-                                myName + "님이 어제 식단을 그대로 기록했어요!", data);
+                        notificationService.notify(partnerId, NotificationCategory.PARTNER,
+                                "오늘도 같은 식단!",
+                                myName + "님이 어제 식단을 그대로 기록했어요!",
+                                PushLinks.DIET);
                     } else {
-                        notificationService.notify(partnerId, "오늘 뭐 먹었을까?",
-                                myName + "님이 식단을 기록했어요!", data);
+                        notificationService.notify(partnerId, NotificationCategory.PARTNER,
+                                "오늘 뭐 먹었을까?",
+                                myName + "님이 식단을 기록했어요!",
+                                PushLinks.DIET);
                     }
                 });
     }
@@ -397,12 +416,15 @@ public class MealService {
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.DIET);
         String myName = userRepository.findById(userId).map(u -> u.getName()).orElse("상대방");
         if (justAchievedGoal(couple, userId, partnerId, mealDate, firstMealOfDay)) {
-            notificationService.notify(partnerId, "이번 주 식단 목표 달성!",
+            notificationService.notify(partnerId, NotificationCategory.PARTNER,
+                    "이번 주 식단 목표 달성!",
                     myName + "님과 함께 주 " + couple.getDietGoalDays() + "일 목표를 채웠어요!",
-                    Map.of("type", "diet"));
+                    PushLinks.DIET);
         } else {
-            notificationService.notify(partnerId, "함께 먹었어요 🍽",
-                    myName + "님과 데이트 식단을 함께 기록했어요!", Map.of("type", "diet"));
+            notificationService.notify(partnerId, NotificationCategory.PARTNER,
+                    "함께 먹었어요 🍽",
+                    myName + "님과 데이트 식단을 함께 기록했어요!",
+                    PushLinks.DIET);
         }
     }
 
@@ -499,6 +521,12 @@ public class MealService {
                 .toList();
     }
 
+    /**
+     * 식단 통계 — 무료 구간(기록일 수·최근 7일)은 항상, 심화 30일은 {@link Feature#FULL_STATS} 일 때만.
+     *
+     * <p>30일치를 <b>잠겼을 때는 조회조차 하지 않는다</b>. 어차피 안 내려줄 데이터를 읽는 건
+     * 순수 낭비이고, 무료 사용자가 통계 화면을 열 때마다 30일 스캔이 도는 것도 원가다.
+     */
     public MealStatsResponse stats(Long userId) {
         LocalDate today = KstClock.today();
         LocalDate weekStart = today.with(DayOfWeek.MONDAY);
@@ -508,14 +536,18 @@ public class MealService {
         int monthlyDays = mealRepository.findMealDates(userId, monthStart, today).size();
         long totalDays = mealRepository.countDistinctMealDates(userId);
 
-        // 최근 7일 끼니 완료 여부 + 일별 칼로리 합계
+        // 최근 7일 끼니 완료 여부 + 일별 칼로리·단백질 합계
         LocalDate from7 = today.minusDays(6);
         Map<LocalDate, Integer> calByDate = new HashMap<>();
+        Map<LocalDate, Integer> proteinByDate = new HashMap<>();
         var doneDates = new HashSet<LocalDate>();
         for (Meal m : mealRepository.findByUserIdAndMealDateBetween(userId, from7, today)) {
             doneDates.add(m.getMealDate());
             if (m.getCalories() != null) {
                 calByDate.merge(m.getMealDate(), m.getCalories(), Integer::sum);
+            }
+            if (m.getProtein() != null) {
+                proteinByDate.merge(m.getMealDate(), m.getProtein(), Integer::sum);
             }
         }
         String[] weekdays = {"월", "화", "수", "목", "금", "토", "일"};
@@ -524,10 +556,46 @@ public class MealService {
             LocalDate d = from7.plusDays(i);
             last7.add(new MealStatsResponse.DayStat(
                     d.toString(), weekdays[d.getDayOfWeek().getValue() - 1],
-                    doneDates.contains(d), calByDate.getOrDefault(d, 0)));
+                    doneDates.contains(d), calByDate.getOrDefault(d, 0),
+                    proteinByDate.getOrDefault(d, 0)));
         }
 
-        return new MealStatsResponse(weeklyDays, monthlyDays, totalDays, last7);
+        boolean deepAllowed = planGuard.allows(userId, Feature.FULL_STATS);
+        return new MealStatsResponse(weeklyDays, monthlyDays, totalDays, last7,
+                !deepAllowed, deepAllowed ? deepStats(userId, today) : null);
+    }
+
+    /** 최근 30일 일별 영양소 + 목표치 — 기록이 없는 날도 0으로 채운다(격자가 비지 않도록). */
+    private MealStatsResponse.DeepStats deepStats(Long userId, LocalDate today) {
+        LocalDate from = today.minusDays(29);
+        Map<LocalDate, int[]> byDate = new HashMap<>();
+        for (Meal m : mealRepository.findByUserIdAndMealDateBetween(userId, from, today)) {
+            int[] sums = byDate.computeIfAbsent(m.getMealDate(), k -> new int[6]);
+            sums[0] += orZero(m.getCalories());
+            sums[1] += orZero(m.getProtein());
+            sums[2] += orZero(m.getCarbs());
+            sums[3] += orZero(m.getFat());
+            sums[4] += orZero(m.getSugar());
+            sums[5] += orZero(m.getSodium());
+        }
+        List<MealStatsResponse.DayNutrition> days = new ArrayList<>();
+        for (int i = 0; i < 30; i++) {
+            LocalDate d = from.plusDays(i);
+            int[] s = byDate.getOrDefault(d, EMPTY_NUTRITION);
+            days.add(new MealStatsResponse.DayNutrition(
+                    d.toString(), s[0], s[1], s[2], s[3], s[4], s[5]));
+        }
+
+        MealStatsResponse.NutritionTargets targets = nutritionGoalRepository.findById(userId)
+                .map(g -> new MealStatsResponse.NutritionTargets(
+                        g.getTargetCalories(), g.getTargetProtein(), g.getTargetCarbs(), g.getTargetFat()))
+                .filter(t -> !t.isEmpty())
+                .orElse(null);
+        return new MealStatsResponse.DeepStats(days, targets);
+    }
+
+    private static int orZero(Integer value) {
+        return value != null ? value : 0;
     }
 
     @Transactional
@@ -540,9 +608,14 @@ public class MealService {
         if (meal.isSharedMeal()) {
             // 데이트 식단은 커플 양쪽에 짝이 있다 — 한쪽만 지우면 남은 쪽이 존재하지 않는
             // 짝을 계속 가리켜(sharedGroupId 가 그대로 남아) "같이 먹기" 배지가 잘못 뜬다.
-            mealRepository.deleteAll(mealRepository.findBySharedGroupId(meal.getSharedGroupId()));
+            List<Meal> pair = mealRepository.findBySharedGroupId(meal.getSharedGroupId());
+            // 피드 카드 응원 반응 — 다형 참조라 FK 가 없어 직접 지운다 (V60 주석 참고)
+            feedReactionRepository.deleteByTargetTypeAndTargetIdIn(FeedItemType.MEAL,
+                    pair.stream().map(Meal::getId).toList());
+            mealRepository.deleteAll(pair);
             publishDietEvent(userId);
         } else {
+            feedReactionRepository.deleteByTargetTypeAndTargetId(FeedItemType.MEAL, mealId);
             mealRepository.delete(meal);
         }
     }

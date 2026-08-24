@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { PlaceStackParamList } from '../../navigation/types';
+import type { HomeStackParamList } from '../../navigation/types';
 import { TripSectionTabs } from './TripSectionTabs';
 import { EmptyState } from '../../components/EmptyState';
 import { tripApi } from '../../api/trip';
@@ -16,7 +16,7 @@ import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { TripRecap, TripStatus } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 
-type Props = NativeStackScreenProps<PlaceStackParamList, 'TripRecap'>;
+type Props = NativeStackScreenProps<HomeStackParamList, 'TripRecap'>;
 
 /* 천단위 구분은 공용 유틸(utils/format)로 통일했다 */
 const money = formatMoney;

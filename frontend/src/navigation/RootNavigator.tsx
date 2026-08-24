@@ -12,7 +12,6 @@ import {
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { RootStackParamList } from './types';
 import { linking } from './linking';
-import { navigationRef } from './navigationRef';
 import { OnboardingNavigator } from './OnboardingNavigator';
 import { MainTabNavigator } from './MainTabNavigator';
 import { PushPermissionPrimer } from '../components/PushPermissionPrimer';
@@ -21,7 +20,6 @@ import { useAuthStore } from '../store/authStore';
 import { useThemeStore } from '../store/themeStore';
 import { colors } from '../constants/theme';
 import { isDarkMode } from '../theme';
-import { resolveColdStartDeepLink, wireResponseListener } from '../utils/pushDeepLink';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -74,10 +72,6 @@ export function RootNavigator() {
     void useThemeStore.getState().load();
   }, [bootstrap]);
 
-  // 푸시 알림 탭 → 화면 이동. 구독은 navigationRef 가 준비되기 전에 걸어도 안전하다
-  // (실제 탭은 항상 나중에 일어난다) — 콜드 스타트 처리는 NavigationContainer 의 onReady 에서.
-  useEffect(() => wireResponseListener(), []);
-
   if (isLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', backgroundColor: colors.background }}>
@@ -91,14 +85,12 @@ export function RootNavigator() {
       {/* linking — 웹 히스토리(pushState) 연동. 없으면 PWA 에서 스와이프백이 앱 이탈이 된다 */}
       <NavigationContainer
         key={themeVersion}
-        ref={navigationRef}
         theme={navTheme()}
         linking={linking}
         initialState={navStateRef.current}
         onStateChange={(state) => {
           navStateRef.current = state;
         }}
-        onReady={resolveColdStartDeepLink}
       >
         <Stack.Navigator screenOptions={{ headerShown: false }}>
           {!isAuthenticated ? (

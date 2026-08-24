@@ -10,8 +10,11 @@ import com.fitto.common.upload.UploadSignatureResponse;
 import com.fitto.voice.domain.VoicePhrase;
 import com.fitto.voice.dto.PartnerVoiceClipsResponse;
 import com.fitto.voice.dto.SaveVoiceClipRequest;
+import com.fitto.voice.dto.SendBoosterRequest;
 import com.fitto.voice.dto.VoiceClipResponse;
+import com.fitto.voice.dto.WorkoutBoosterResponse;
 import com.fitto.voice.service.VoiceClipService;
+import com.fitto.voice.service.WorkoutBoosterService;
 import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -33,10 +36,14 @@ import java.util.List;
 public class VoiceClipController {
 
     private final VoiceClipService voiceClipService;
+    private final WorkoutBoosterService boosterService;
     private final CloudinaryProperties cloudinaryProperties;
 
-    public VoiceClipController(VoiceClipService voiceClipService, CloudinaryProperties cloudinaryProperties) {
+    public VoiceClipController(VoiceClipService voiceClipService,
+                               WorkoutBoosterService boosterService,
+                               CloudinaryProperties cloudinaryProperties) {
         this.voiceClipService = voiceClipService;
+        this.boosterService = boosterService;
         this.cloudinaryProperties = cloudinaryProperties;
     }
 
@@ -74,5 +81,28 @@ public class VoiceClipController {
     public ApiResponse<Void> delete(@AuthenticationPrincipal AuthUser user, @PathVariable VoicePhrase phrase) {
         voiceClipService.delete(user.id(), phrase);
         return ApiResponse.success(null, "삭제했어요.");
+    }
+
+    /* ── 운동 부스터 (일회성 응원, PRO) ──────────────────────────────────── */
+
+    /** 애인에게 부스터 보내기 — 상대의 다음 세션 시작 때 한 번 재생되고 소멸한다. */
+    @PostMapping("/boosters")
+    public ApiResponse<WorkoutBoosterResponse> sendBooster(@AuthenticationPrincipal AuthUser user,
+                                                           @Valid @RequestBody SendBoosterRequest request) {
+        return ApiResponse.success(boosterService.send(user.id(), request), "부스터를 보냈어요!");
+    }
+
+    /** 대기 중인 부스터 하나 — 세션 시작 때 조회한다. 없으면 data 가 null 이다. */
+    @GetMapping("/boosters/pending")
+    public ApiResponse<WorkoutBoosterResponse> pendingBooster(@AuthenticationPrincipal AuthUser user) {
+        return ApiResponse.success(boosterService.pending(user.id()));
+    }
+
+    /** 재생 완료 — 조회가 아니라 실제 재생 뒤에 부른다(중간에 끊겨도 응원이 사라지지 않도록). */
+    @PostMapping("/boosters/{id}/played")
+    public ApiResponse<Void> markBoosterPlayed(@AuthenticationPrincipal AuthUser user,
+                                               @PathVariable Long id) {
+        boosterService.markPlayed(user.id(), id);
+        return ApiResponse.success(null);
     }
 }

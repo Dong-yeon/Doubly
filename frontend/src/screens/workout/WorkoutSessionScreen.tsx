@@ -4,6 +4,7 @@
  *  실제 운동 시에는 값이 다르지 않은 한 '완료' 버튼만 누르면 된다. */
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  AppState,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -35,6 +36,14 @@ import { voiceClipsApi } from '../../api/voiceClips';
 import { playVoiceClip } from '../../utils/voicePlayback';
 import { getErrorMessage } from '../../utils/error';
 import { toDateString } from '../../utils/date';
+import {
+  clearSessionDraft,
+  loadSessionDraft,
+  saveSessionDraft,
+  type SessionDraft,
+  type SessionExercise,
+  type SessionSet,
+} from './sessionDraft';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { useDirtyGuard } from '../../hooks/useDirtyGuard';
@@ -42,49 +51,34 @@ import { confirmDiscard } from '../../utils/discardGuard';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 import { formatNumber, formatWeight } from '../../utils/format';
-import type { ExerciseCatalogItem, ExerciseLastPerformance, VoicePhrase } from '../../types';
+import type {
+  ExerciseCatalogItem,
+  ExerciseLastPerformance,
+  VoicePhrase,
+  WorkoutBooster as WorkoutBoosterType,
+} from '../../types';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'WorkoutSession'>;
 
 const CATEGORIES = ['근력', '유산소', '유연성'];
 const REST_PRESETS = [60, 90, 120];
+/** 세션 스냅샷 주기(ms) — 최악의 손실이 이 값이다. 더 짧게 하면 디스크 쓰기만 늘어난다 */
+const SNAPSHOT_INTERVAL_MS = 10_000;
 
-interface SessionSet {
-  weightKg: string;
-  reps: string;
-  done: boolean;
-  // 세트 성격 — WARMUP/NORMAL/TOP/BACKOFF/DROP. 루틴에서 지정한 값을 그대로 들고 와 배지로만
-  // 보여준다(합계·볼륨 계산에는 안 쓴다 — 백엔드 WorkoutRoutineExerciseSet.setType 주석과 동일 원칙).
-  setType?: string;
-  // 자각 강도(RPE) — 1.0~10.0, 직접 입력. 직전 수행 기록이 있으면 프리필된다(applyPrefill)
-  rpe: string;
-}
-interface SessionExercise {
-  key: string;
-  name: string;
-  category: string;
-  reps?: number;
-  weightKg?: number;
-  // 대체 종목 추천의 기준 — 루틴에서 시작했거나 이미 한 번 대체한 경우에만 채워짐
-  muscleGroup?: string;
-  equipment?: string;
-  exerciseCatalogId?: number;
-  // 이 종목만의 휴식 시간(초) — 없으면 세션 전역 기본값 사용(③)
-  restSeconds?: number;
-  // 루틴 작성 시 사전 지정해둔 대체 종목(④) — 세션 중 교체 시 먼저 추천된다
-  alternatives?: SessionExerciseAlternativeParam[];
-  // 카탈로그의 자세 큐/안내 문구 — 세션 시작 시 이름으로 배치 조회해 채운다. 커스텀 종목이거나
-  // 아직 못 불러왔으면 undefined이고, 그때는 TIP 카드를 그냥 숨긴다.
-  tip?: string;
-  // 이 종목이 뭔지 한눈에 보여주는 이모지 — tip 과 같은 배치 조회로 채워진다
-  emoji?: string;
-  // 언제 숨을 내쉬고 마시는지 — TIP 카드에 tip 과 함께 항상 붙는 호흡 타이밍 문구
-  breathingCue?: string;
-  sets: SessionSet[];
-}
+/*
+ * SessionSet · SessionExercise 는 sessionDraft 모듈에 있다 — 크래시 복구가 이 모양을
+ * 그대로 저장하므로, 화면과 초안이 서로 다른 타입을 들면 복구가 조용히 깨진다.
+ */
 
 let keySeq = 0;
 const nextKey = () => `ex-${keySeq++}`;
+
+/** "32분째 · 5세트 완료" — 이어서 할지 정하려면 얼마나 했는지가 필요하다 */
+function describeDraft(draft: SessionDraft): string {
+  const minutes = Math.max(1, Math.round(draft.elapsedSec / 60));
+  const done = draft.exercises.reduce((n, e) => n + e.sets.filter((s) => s.done).length, 0);
+  return `${minutes}분째 · ${done}세트 완료`;
+}
 
 function mmss(sec: number): string {
   const m = Math.floor(sec / 60);
@@ -195,9 +189,29 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
     })),
   );
 
+  /** 방금 재생한 부스터 — 상단에 "누가 보낸 응원인지" 한 줄로 띄운다 */
+  const [booster, setBooster] = useState<WorkoutBoosterType | null>(null);
+  /** 마지막 세트 응원을 이미 울렸는지 — 세션당 한 번 */
+  const lastSetCheeredRef = useRef(false);
+
   const [restSeconds, setRestSeconds] = useState(90);
   const [rest, setRest] = useState(0); // 남은 휴식 초
   const [saving, setSaving] = useState(false);
+
+  /*
+   * 루틴 맥락 — 보통은 route.params 그대로지만, 크래시 복구로 되살린 세션은 초안에
+   * 담긴 값이 진짜다(그때의 params 는 이미 사라졌다). 상태로 들고 있어야 복구 후에도
+   * 스마트 루틴 동기화(구성 변경 → 템플릿 반영 제안)가 원래대로 동작한다.
+   */
+  const [routineCtx, setRoutineCtx] = useState<{
+    routineId?: number;
+    routineTitle?: string;
+    original: SessionExerciseParam[];
+  }>(() => ({
+    routineId: route.params?.routineId,
+    routineTitle: route.params?.routineTitle,
+    original: route.params?.exercises ?? [],
+  }));
 
   // 세션 경과 시간 — 화면 진입 시부터 1초씩 누적(상단 요약바 "운동 시간 N분"에 쓰인다)
   const [elapsedSec, setElapsedSec] = useState(0);
@@ -205,6 +219,120 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
     const id = setInterval(() => setElapsedSec((s) => s + 1), 1000);
     return () => clearInterval(id);
   }, []);
+
+  /*
+   * 크래시 복구 — 남아 있는 초안이 있는지 먼저 확인하고, 그 결정이 끝나기 전에는
+   * 프리필(직전 기록·TIP)을 시작하지 않는다. 순서가 뒤집히면 되살린 무게 위에
+   * 지난주 기록이 덮어써진다.
+   */
+  const [restoreChecked, setRestoreChecked] = useState(false);
+  // 되살린 세션에는 프리필을 아예 하지 않는다 — 이미 사용자가 입력한 값이 들어 있다
+  const restoredRef = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const finish = () => {
+      if (!cancelled) setRestoreChecked(true);
+    };
+    void loadSessionDraft(toDateString())
+      .then((draft) => {
+        if (cancelled) return finish();
+        if (!draft) return finish();
+        Alert.alert(
+          '하던 운동이 남아 있어요',
+          `${describeDraft(draft)}\n이어서 할까요?`,
+          [
+            {
+              text: '새로 시작',
+              style: 'cancel',
+              onPress: () => {
+                void clearSessionDraft();
+                finish();
+              },
+            },
+            {
+              text: '이어서 하기',
+              onPress: () => {
+                restoredRef.current = true;
+                setExercises(draft.exercises);
+                setElapsedSec(draft.elapsedSec);
+                setRestSeconds(draft.restSeconds);
+                setRoutineCtx({
+                  routineId: draft.routineId,
+                  routineTitle: draft.routineTitle,
+                  original: draft.originalExercises,
+                });
+                finish();
+              },
+            },
+          ],
+        );
+      })
+      .catch(finish);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /*
+   * 주기 스냅샷 — 화면 상태를 그대로 기기에 남긴다.
+   *
+   * 매 입력마다 쓰면 타이핑 한 글자에 디스크 쓰기가 붙고, 저장을 안 하면 크래시에
+   * 전부 날아간다. 10초 간격이면 최악의 손실이 10초다. 여기에 <b>백그라운드 진입 시
+   * 즉시 쓰기</b>를 더한다 — OS 가 프로세스를 정리하는 건 거의 항상 그 직후다.
+   */
+  // 최신 종목 목록 — effect 클로저가 낡은 값을 붙잡지 않도록(TIP 배치 조회가 이걸 쓴다)
+  const exercisesRef = useRef<SessionExercise[]>(exercises);
+  exercisesRef.current = exercises;
+
+  /** 서버 저장이 끝났는지 — 끝난 뒤에는 초안을 남기지도, 되살리지도 않는다 */
+  const savedRef = useRef(false);
+
+  const draftRef = useRef<SessionDraft | null>(null);
+  draftRef.current = {
+    savedAt: new Date().toISOString(),
+    sessionDate: toDateString(),
+    elapsedSec,
+    restSeconds,
+    routineId: routineCtx.routineId,
+    routineTitle: routineCtx.routineTitle,
+    originalExercises: routineCtx.original,
+    exercises,
+  };
+
+  useEffect(() => {
+    // 복구 여부를 정하기 전에 쓰면 초안을 되살리기도 전에 빈 세션으로 덮어쓴다
+    if (!restoreChecked) return undefined;
+    const snapshot = () => {
+      // 이미 서버에 저장한 세션은 스냅샷하지 않는다 — 저장 후 루틴 동기화 안내가 떠 있는
+      // 동안 다시 써버리면, 다음에 앱을 열 때 이미 기록된 세션이 되살아난다.
+      const draft = savedRef.current ? null : draftRef.current;
+      if (draft) void saveSessionDraft({ ...draft, savedAt: new Date().toISOString() });
+    };
+    const id = setInterval(snapshot, SNAPSHOT_INTERVAL_MS);
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') snapshot();
+    });
+    return () => {
+      clearInterval(id);
+      sub.remove();
+    };
+  }, [restoreChecked]);
+
+  /*
+   * 화면을 떠나면 초안을 지운다.
+   *
+   * <b>크래시는 언마운트가 아니다</b> — 그래서 이 정리는 "사용자가 스스로 나갔다"는
+   * 뜻이고, 그때는 되살릴 게 없다(저장했거나, 이탈 가드에서 버리기로 한 것이다).
+   * 복구 판정 전에는 정리를 걸지 않는다 — 개발 모드의 이중 마운트에서 초안을 되살리기도
+   * 전에 지워버리기 때문이다.
+   */
+  useEffect(() => {
+    if (!restoreChecked) return undefined;
+    return () => {
+      void clearSessionDraft();
+    };
+  }, [restoreChecked]);
 
   /*
    * 커플 음성 응원 — 애인이 녹음해둔 클립. 휴식 타이머는 setInterval 클로저 안에서
@@ -219,8 +347,36 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
         const byPhrase: Partial<Record<VoicePhrase, string>> = {};
         res.clips.forEach((c) => { byPhrase[c.phrase] = c.audioUrl; });
         partnerClipsRef.current = byPhrase;
+        // 시작 응원은 화면에 들어오자마자 — "시작"이 가장 힘든 지점이라 여기서 튼다.
+        // 클립을 받은 뒤에 재생해야 하므로 로드 콜백 안에 둔다.
+        playVoiceClip(byPhrase.WORKOUT_START);
       })
       .catch(() => undefined);
+  }, []);
+
+  /*
+   * 운동 부스터 — 애인이 보낸 일회성 응원. 있으면 세션 시작 때 한 번 재생하고 소멸시킨다.
+   *
+   * 재생한 <b>뒤에</b> 소비를 확정한다. 조회 시점에 소비하면 앱이 여기서 죽거나 네트워크가
+   * 끊겼을 때 응원이 들리지도 않은 채 사라진다(서버 주석과 같은 이유).
+   *
+   * 상설 시작 응원(WORKOUT_START)과 겹치면 두 목소리가 동시에 난다 — 부스터가 우선이다
+   * ("지금 이 순간을 위해" 보낸 것이라 상설 문구보다 맥락이 정확하다).
+   */
+  useEffect(() => {
+    let cancelled = false;
+    void voiceClipsApi
+      .pendingBooster()
+      .then((booster) => {
+        if (cancelled || !booster) return;
+        setBooster(booster);
+        playVoiceClip(booster.audioUrl);
+        return voiceClipsApi.markBoosterPlayed(booster.id);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // 운동 추가 모달
@@ -330,7 +486,9 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
     });
 
   // 세션 시작 시 루틴/파라미터로 받은 종목들의 직전 기록을 한 번에 불러와 프리필한다.
+  // 되살린 세션에는 하지 않는다 — 사용자가 이미 입력한 값을 지난주 기록으로 덮어쓰게 된다.
   useEffect(() => {
+    if (!restoreChecked || restoredRef.current) return;
     const names = Array.from(new Set((route.params?.exercises ?? []).map((e) => e.name)));
     if (names.length === 0) return;
     workoutApi
@@ -349,12 +507,14 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
         // 프리필은 편의 기능이라 실패해도 조용히 넘어간다 — 직접 입력하면 된다.
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [restoreChecked]);
 
   // 세션 시작 시 종목들의 TIP(자세 큐)·이모지·호흡 타이밍을 이름으로 한 번에 배치 조회해 채운다.
   // 커스텀 종목(카탈로그에 없는 이름)은 응답에 안 잡히므로 자연히 TIP 카드가 안 뜬다.
+  // (TIP 은 되살린 세션에도 다시 채운다 — 표시용이라 사용자 입력을 건드리지 않는다)
   useEffect(() => {
-    const names = Array.from(new Set((route.params?.exercises ?? []).map((e) => e.name)));
+    if (!restoreChecked) return;
+    const names = Array.from(new Set(exercisesRef.current.map((e) => e.name)));
     if (names.length === 0) return;
     workoutApi
       .exerciseCatalog(undefined, names)
@@ -420,7 +580,19 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
         if (e.key !== exKey) return e;
         const sets = e.sets.map((s, i) => (i === idx ? { ...s, done: !s.done } : s));
         // 방금 '완료'로 바꿨으면 휴식 타이머 시작 — 종목별 휴식 시간이 있으면 그걸, 없으면 전역 기본값(③)
-        if (!e.sets[idx].done) setRest(e.restSeconds ?? restSeconds);
+        if (!e.sets[idx].done) {
+          setRest(e.restSeconds ?? restSeconds);
+          /*
+           * 마지막 세트 응원 — 세션 전체에서 <b>한 세트만 남았을 때</b> 한 번.
+           * 종목마다 울리면 잔소리가 되므로 전체 진행률로 판정하고, 같은 세션에서
+           * 두 번 울리지 않게 ref 로 잠근다(세트를 껐다 켜면 다시 이 조건에 걸린다).
+           */
+          const remaining = prev.reduce((n, x) => n + x.sets.filter((z) => !z.done).length, 0) - 1;
+          if (remaining === 1 && !lastSetCheeredRef.current) {
+            lastSetCheeredRef.current = true;
+            playVoiceClip(partnerClipsRef.current.LAST_SET);
+          }
+        }
         return { ...e, sets };
       }),
     );
@@ -518,9 +690,9 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
       return;
     }
 
-    const routineId = route.params?.routineId;
+    const routineId = routineCtx.routineId;
     const composeChanged =
-      routineId != null && hasCompositionChanged(route.params?.exercises ?? [], exercises);
+      routineId != null && hasCompositionChanged(routineCtx.original, exercises);
 
     setSaving(true);
     try {
@@ -532,6 +704,8 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
         sourceRoutineId: routineId,
         sets: payloadSets as never,
       });
+      savedRef.current = true;
+      void clearSessionDraft();
       haptics.success();
       toast.success('운동 완료! 기록했어요 ');
       // 커플 음성 응원 — PR 을 세웠으면 그 응원을, 아니면 완료 응원을 재생한다
@@ -542,7 +716,7 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
       if (routineId != null) {
         // 루틴에서 시작한 세션 — 구성이 바뀌었으면 템플릿에도 반영할지 물어본다(스마트 동기화)
         if (composeChanged) {
-          promptRoutineSync(routineId, route.params?.routineTitle ?? '내 루틴');
+          promptRoutineSync(routineId, routineCtx.routineTitle ?? '내 루틴');
         } else {
           navigation.goBack();
         }
@@ -790,6 +964,20 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
+      {/*
+        부스터 배너 — 방금 재생된 응원이 누구 것인지 알려준다.
+        소리만 나고 화면에 아무 표시가 없으면 "이게 뭐였지"로 끝난다.
+        이미 소비된 뒤라 다시 듣기는 이 화면에 있는 동안만 가능하다.
+      */}
+      {booster ? (
+        <Pressable style={styles.boosterBanner} onPress={() => playVoiceClip(booster.audioUrl)}>
+          <Text style={styles.boosterBannerText} numberOfLines={2}>
+            🎤 {booster.senderName}님의 부스터{booster.message ? ` — "${booster.message}"` : ''}
+          </Text>
+          <Text style={styles.boosterBannerHint}>다시 듣기</Text>
+        </Pressable>
+      ) : null}
+
       {/* 상단 요약바 — 운동 중 실시간으로 누적되는 경과 시간·총 볼륨·완료 세트 수 */}
       <View style={styles.summaryBar}>
         <Text style={styles.summaryTime}>⏱ 운동 시간 {Math.floor(elapsedSec / 60)}분</Text>
@@ -1014,6 +1202,16 @@ const styles = themedStyles((colors) => ({
     fontWeight: '700',
     marginBottom: spacing.xs,
   },
+  boosterBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.togetherBg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+  },
+  boosterBannerText: { flex: 1, fontSize: fontSize.caption, color: colors.togetherText, fontWeight: '700' },
+  boosterBannerHint: { fontSize: fontSize.caption, color: colors.together, fontWeight: '800' },
   summaryStats: { flexDirection: 'row', alignItems: 'center' },
   summaryStatItem: { marginRight: spacing.lg },
   summaryStatValue: { color: colors.white, fontSize: fontSize.title, fontWeight: '800' },

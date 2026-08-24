@@ -3,6 +3,7 @@ import { apiClient, unwrap } from './client';
 import type {
   ApiResponse,
   FeedItem,
+  FeedItemType,
   FeedPhotosPage,
   FeedTimeline,
   Memories,
@@ -51,7 +52,17 @@ export const feedApi = {
   removePost: (postId: number) =>
     unwrap(apiClient.delete<ApiResponse<void>>(`/feed/posts/${postId}`)),
 
-  /** 이모지 반응 토글 — 갱신된 반응 요약을 돌려준다 */
-  react: (postId: number, emoji: string) =>
-    unwrap(apiClient.post<ApiResponse<ReactionSummary[]>>(`/feed/posts/${postId}/reactions`, { emoji })),
+  /**
+   * 이모지 반응 토글 — 갱신된 반응 요약을 돌려준다.
+   *
+   * 일상 포스트뿐 아니라 운동·식단·맛집 방문 카드에도 달 수 있다. 같은 이모지를
+   * 다시 보내면 해제된다.
+   */
+  react: (type: FeedItemType, refId: number, emoji: string) =>
+    unwrap(
+      apiClient.post<ApiResponse<ReactionSummary[]>>(
+        `/feed/items/${type}/${refId}/reactions`,
+        { emoji },
+      ),
+    ),
 };

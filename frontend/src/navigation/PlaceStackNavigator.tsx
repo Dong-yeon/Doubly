@@ -1,17 +1,13 @@
-/** 럽슐랭 탭 내부 스택 — 가이드/위시리스트/지도(한 화면) / 추가 / 상세 (PLACE) */
+/**
+ * 럽슐랭 탭 내부 스택 — 가이드/위시리스트/지도(한 화면) / 추가 / 상세 (PLACE).
+ * 여행(Trip*)은 HomeStackNavigator 로 이관 — navigation/types.ts 의 Trip* 주석 참고.
+ */
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { PlaceStackParamList } from './types';
 import { PlaceScreen } from '../screens/place/PlaceScreen';
 import { PlaceAddScreen } from '../screens/place/PlaceAddScreen';
 import { PlaceDetailScreen } from '../screens/place/PlaceDetailScreen';
-import { TripListScreen } from '../screens/trip/TripListScreen';
-import { TripFormScreen } from '../screens/trip/TripFormScreen';
-import { TripDetailScreen } from '../screens/trip/TripDetailScreen';
-import { TripExpenseScreen } from '../screens/trip/TripExpenseScreen';
-import { TripChecklistScreen } from '../screens/trip/TripChecklistScreen';
-import { TripAlbumScreen } from '../screens/trip/TripAlbumScreen';
-import { TripRecapScreen } from '../screens/trip/TripRecapScreen';
 import { stackScreenOptions, modalOptions } from './headerOptions';
 
 const Stack = createNativeStackNavigator<PlaceStackParamList>();
@@ -36,32 +32,6 @@ export function PlaceStackNavigator() {
         component={PlaceDetailScreen}
         options={({ route }) => ({ title: route.params.name })}
       />
-      <Stack.Screen name="TripList" component={TripListScreen} options={{ title: '우리 여행' }} />
-      <Stack.Screen
-        name="TripForm"
-        component={TripFormScreen}
-        options={({ route }) => ({
-          title: route.params.trip ? '여행 수정' : '여행 만들기',
-          ...modalOptions,
-        })}
-      />
-      <Stack.Screen
-        name="TripDetail"
-        component={TripDetailScreen}
-        options={({ route }) => ({ title: route.params.title })}
-      />
-      <Stack.Screen
-        name="TripExpense"
-        component={TripExpenseScreen}
-        options={{ title: '경비 정산' }}
-      />
-      <Stack.Screen
-        name="TripChecklist"
-        component={TripChecklistScreen}
-        options={{ title: '준비물 체크리스트' }}
-      />
-      <Stack.Screen name="TripAlbum" component={TripAlbumScreen} options={{ title: '여행 앨범' }} />
-      <Stack.Screen name="TripRecap" component={TripRecapScreen} options={{ title: '여행 회고' }} />
     </Stack.Navigator>
   );
 }

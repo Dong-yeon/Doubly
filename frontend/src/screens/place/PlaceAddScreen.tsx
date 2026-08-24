@@ -4,7 +4,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { PlaceStackParamList } from '../../navigation/types';
+import type { PlaceScreensParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
 import { FormKeyboardView } from '../../components/FormKeyboardView';
@@ -22,7 +22,8 @@ import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { PlaceStatus } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 
-type Props = NativeStackScreenProps<PlaceStackParamList, 'PlaceAdd'>;
+// 럽슐랭 탭과 홈(여행) 스택 양쪽에 등록되는 화면 — 두 스택이 공유하는 최소 목록으로 타입을 잡는다
+type Props = NativeStackScreenProps<PlaceScreensParamList, 'PlaceAdd'>;
 
 // 맛집뿐 아니라 여행지·전시 같은 데이트 장소 전반을 담는다 — 음식 → 나들이 순
 const CATEGORIES = ['한식', '중식', '일식', '양식', '카페', '디저트', '술집', '여행지', '박물관·전시', '액티비티', '기타'];

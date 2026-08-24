@@ -4,7 +4,9 @@ import com.fitto.common.event.CoupleEvent;
 import com.fitto.common.event.CoupleEventPublisher;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
+import com.fitto.common.notification.NotificationCategory;
 import com.fitto.common.notification.NotificationService;
+import com.fitto.common.notification.PushLinks;
 import com.fitto.diet.domain.FastingPlan;
 import com.fitto.diet.domain.FastingSession;
 import com.fitto.diet.dto.FastingStatusResponse;
@@ -22,7 +24,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Map;
 
 /**
  * 간헐적 단식 타이머 — YAZIO 의 핵심 차별기능이지만, Doubly 는 "혼자 타이머 맞추기"가 아니라
@@ -135,8 +136,8 @@ public class FastingService {
                     Long partnerId = c.partnerOf(userId);
                     if (partnerId != null) {
                         String myName = userRepository.findById(userId).map(u -> u.getName()).orElse("상대방");
-                        notificationService.notify(partnerId, title, myName + "님이 " + bodySuffix,
-                                Map.of("type", "diet"));
+                        notificationService.notify(partnerId, NotificationCategory.PARTNER,
+                                title, myName + "님이 " + bodySuffix, PushLinks.DIET);
                     }
                 });
     }

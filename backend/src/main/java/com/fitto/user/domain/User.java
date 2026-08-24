@@ -84,21 +84,28 @@ public class User extends BaseTimeEntity {
     @Column(name = "marketing_agreed_at")
     private LocalDateTime marketingAgreedAt;
 
-    /** 푸시 알림 수신 여부 (SET-01) — 끄면 모든 푸시가 발송되지 않는다(마스터 스위치) */
+    /** 푸시 알림 수신 여부 (SET-01) — 끄면 모든 푸시가 발송되지 않는다 */
     @Column(name = "notifications_enabled", nullable = false)
     private boolean notificationsEnabled = true;
 
-    /* --- 카테고리별 알림 설정 — 마스터 스위치가 켜져 있을 때만 의미가 있다 --- */
+    /*
+     * 카테고리별 수신 설정 — 위 전체 스위치의 하위 단계다(전체가 꺼져 있으면 아래는 무의미).
+     * 기본값은 전부 켜짐: 기존 사용자는 어제까지 받던 알림을 그대로 받아야 한다.
+     */
 
+    /** 채팅·통화 */
     @Column(name = "notify_chat", nullable = false)
     private boolean notifyChat = true;
 
+    /** 기념일·캘린더 D-day */
     @Column(name = "notify_anniversary", nullable = false)
     private boolean notifyAnniversary = true;
 
-    @Column(name = "notify_partner_activity", nullable = false)
-    private boolean notifyPartnerActivity = true;
+    /** 상대(·트레이너)의 활동 */
+    @Column(name = "notify_partner", nullable = false)
+    private boolean notifyPartner = true;
 
+    /** 앱이 먼저 부르는 리마인드 */
     @Column(name = "notify_reminder", nullable = false)
     private boolean notifyReminder = true;
 
@@ -155,29 +162,32 @@ public class User extends BaseTimeEntity {
                 && currentPrivacyVersion.equals(this.privacyVersion);
     }
 
-    /** 푸시 알림 수신 설정 변경 (SET-01) — 마스터 스위치. */
+    /** 푸시 알림 수신 설정 변경 (SET-01). */
     public void setNotificationsEnabled(boolean enabled) {
         this.notificationsEnabled = enabled;
     }
 
-    /** 카테고리별 알림 설정 — 넘긴 값 중 null 이 아닌 것만 반영한다(부분 수정). */
-    public void setNotifyCategories(Boolean chat, Boolean anniversary, Boolean partnerActivity, Boolean reminder) {
+    /** 카테고리별 수신 설정 변경 — {@code null} 인 항목은 건드리지 않는다(부분 수정). */
+    public void updateNotificationCategories(Boolean chat, Boolean anniversary,
+                                             Boolean partner, Boolean reminder) {
         if (chat != null) this.notifyChat = chat;
         if (anniversary != null) this.notifyAnniversary = anniversary;
-        if (partnerActivity != null) this.notifyPartnerActivity = partnerActivity;
+        if (partner != null) this.notifyPartner = partner;
         if (reminder != null) this.notifyReminder = reminder;
     }
 
     /**
-     * 이 카테고리의 알림을 받을지 최종 판정 — 마스터 스위치가 꺼져 있으면 카테고리 설정과
-     * 무관하게 차단한다(V25 도입 당시 주석이 미리 정해둔 방침).
+     * 이 분류의 푸시를 받는 상태인지 — 전체 스위치 AND 카테고리 스위치.
+     *
+     * <p>발송 직전 단 한 곳({@code ExpoPushNotificationService.send})에서만 부른다.
+     * 호출부마다 검사하면 새 알림을 추가할 때 빠뜨리기 쉽다.
      */
-    public boolean allowsCategory(NotificationCategory category) {
+    public boolean allowsNotification(NotificationCategory category) {
         if (!notificationsEnabled) return false;
         return switch (category) {
             case CHAT -> notifyChat;
             case ANNIVERSARY -> notifyAnniversary;
-            case PARTNER_ACTIVITY -> notifyPartnerActivity;
+            case PARTNER -> notifyPartner;
             case REMINDER -> notifyReminder;
         };
     }

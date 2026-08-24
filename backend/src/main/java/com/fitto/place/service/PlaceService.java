@@ -4,7 +4,11 @@ import com.fitto.common.plan.Feature;
 import com.fitto.common.plan.PlanGuard;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
+import com.fitto.common.notification.NotificationCategory;
+import com.fitto.feed.dto.FeedItemType;
+import com.fitto.feed.repository.FeedReactionRepository;
 import com.fitto.common.notification.NotificationService;
+import com.fitto.common.notification.PushLinks;
 import com.fitto.diet.repository.MealRepository;
 import com.fitto.place.domain.Place;
 import com.fitto.place.domain.PlaceRating;
@@ -50,6 +54,7 @@ public class PlaceService {
     private final MealRepository mealRepository;
     private final NotificationService notificationService;
     private final PlanGuard planGuard;
+    private final FeedReactionRepository feedReactionRepository;
 
     public PlaceService(PlaceRepository placeRepository,
                         PlaceVisitRepository placeVisitRepository,
@@ -58,7 +63,8 @@ public class PlaceService {
                         UserRepository userRepository,
                         MealRepository mealRepository,
                         NotificationService notificationService,
-                        PlanGuard planGuard) {
+                        PlanGuard planGuard,
+                        FeedReactionRepository feedReactionRepository) {
         this.placeRepository = placeRepository;
         this.placeVisitRepository = placeVisitRepository;
         this.placeRatingRepository = placeRatingRepository;
@@ -67,6 +73,7 @@ public class PlaceService {
         this.mealRepository = mealRepository;
         this.notificationService = notificationService;
         this.planGuard = planGuard;
+        this.feedReactionRepository = feedReactionRepository;
     }
 
     /** 장소 등록 (PLACE-01) */
@@ -135,6 +142,10 @@ public class PlaceService {
     @Transactional
     public void delete(Long userId, Long placeId) {
         Place place = getCouplePlace(userId, placeId);
+        // 장소를 지우면 그 장소의 방문 기록도 사라진다 — 그 카드에 달렸던 반응까지 함께
+        feedReactionRepository.deleteByTargetTypeAndTargetIdIn(FeedItemType.PLACE_VISIT,
+                placeVisitRepository.findByPlaceIdOrderByIdDesc(placeId).stream()
+                        .map(PlaceVisit::getId).toList());
         placeRepository.delete(place);
     }
 
@@ -170,10 +181,10 @@ public class PlaceService {
 
         Long partnerId = activeCouple(userId).partnerOf(userId);
         if (partnerId != null) {
-            notificationService.notify(partnerId, "새 맛집 방문 기록!",
+            notificationService.notify(partnerId, NotificationCategory.PARTNER, "새 맛집 방문 기록!",
                     userName(userId) + " — " + place.getName()
                             + (visit.getRating() != null ? " ★" + visit.getRating() : ""),
-                    Map.of("type", "place", "id", String.valueOf(place.getId())));
+                    PushLinks.place(place.getId()));
         }
         return PlaceVisitResponse.of(visit, userName(userId));
     }
@@ -196,6 +207,8 @@ public class PlaceService {
         if (!userId.equals(visit.getVisitedBy())) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "내가 남긴 방문 기록만 삭제할 수 있습니다.");
         }
+        // 피드 카드 응원 반응 — 다형 참조라 FK 가 없어 직접 지운다 (V60 주석 참고)
+        feedReactionRepository.deleteByTargetTypeAndTargetId(FeedItemType.PLACE_VISIT, visitId);
         placeVisitRepository.delete(visit);
     }
 
@@ -239,9 +252,10 @@ public class PlaceService {
                 place.applyLovelichelinTier(newTier, LocalDateTime.now());
                 Long partnerId = activeCouple(userId).partnerOf(userId);
                 if (partnerId != null) {
-                    notificationService.notify(partnerId, "럽슐랭 " + newTier + "스타 등극! 🎉",
+                    notificationService.notify(partnerId, NotificationCategory.PARTNER,
+                            "럽슐랭 " + newTier + "스타 등극! 🎉",
                             place.getName() + "이(가) 우리 둘의 럽슐랭으로 인증됐어요.",
-                            Map.of("type", "place", "id", String.valueOf(place.getId())));
+                            PushLinks.place(place.getId()));
                 }
             } else if (newTier == 0) {
                 place.applyLovelichelinTier(0, null);
@@ -256,10 +270,10 @@ public class PlaceService {
         if (firstRating && pair.partner() == null) {
             Long partnerId = activeCouple(userId).partnerOf(userId);
             if (partnerId != null) {
-                notificationService.notify(partnerId, "럽슐랭 평가를 기다려요 ⭐",
+                notificationService.notify(partnerId, NotificationCategory.PARTNER, "럽슐랭 평가를 기다려요 ⭐",
                         userName(userId) + "이(가) " + place.getName()
                                 + "에 별점을 남겼어요. 당신의 평점이 등급을 결정해요!",
-                        Map.of("type", "place", "id", String.valueOf(place.getId())));
+                        PushLinks.place(place.getId()));
             }
         }
 

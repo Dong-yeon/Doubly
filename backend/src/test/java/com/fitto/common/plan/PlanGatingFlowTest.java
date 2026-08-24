@@ -173,11 +173,11 @@ class PlanGatingFlowTest {
         LocalDate today = LocalDate.now();
 
         for (int i = 0; i < limit; i++) {
-            calendarService.create(user, new CreateEventRequest("일정" + i, today, null, false, null));
+            calendarService.create(user, new CreateEventRequest("일정" + i, today, null, null, false, null));
         }
 
         assertThatThrownBy(() -> calendarService.create(user,
-                new CreateEventRequest("한도초과", today, null, false, null)))
+                new CreateEventRequest("한도초과", today, null, null, false, null)))
                 .isInstanceOf(BusinessException.class)
                 .extracting(this::errorCodeOf)
                 .isEqualTo(ErrorCode.PLAN_LIMIT_EXCEEDED);
@@ -208,6 +208,16 @@ class PlanGatingFlowTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(this::errorCodeOf)
                 .isEqualTo(ErrorCode.PLAN_UPGRADE_REQUIRED);
+    }
+
+    @Test
+    void 무료도_커플_배경을_해제할_수_있다() {
+        // 꾸미기는 PRO 기능이지만 되돌리기까지 막으면 PRO 가 끝난 사람은 배경을 영영 못 치운다
+        Long user = couple("gate-bgclear-a@fitto.com", "gate-bgclear-b@fitto.com");
+
+        assertThatCode(() -> relationService.setCoupleBackground(user, null))
+                .doesNotThrowAnyException();
+        assertThat(relationService.setCoupleBackground(user, null).backgroundImageUrl()).isNull();
     }
 
     @Test

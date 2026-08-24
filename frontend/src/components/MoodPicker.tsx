@@ -1,12 +1,15 @@
 /**
  * 무드 선택 시트 — Obimy 벤치마킹(PLAN.md "무드 상태" 참고).
  *
- * TouchGesturePicker와 같은 구조. 게이팅이 없다 — 기본 세트는 처음부터 전부 무료라
- * usePlanStore 를 참조하지 않는다(TouchGesturePicker와의 유일한 차이).
+ * TouchGesturePicker 와 같은 구조·같은 게이팅 규칙이다. 기본 12종은 전부 무료이고,
+ * 확장 무드팩만 PRO 다(`Feature.PREMIUM_STICKER` — 스티커와 같은 게이트로 판정한다).
+ * 서버(MoodService)도 같은 규칙으로 한 번 더 막는다 — 여기는 우회 방지가 아니라
+ * UX(굳이 보냈다가 거부당하지 않게).
  */
 import React, { useState } from 'react';
-import { Modal, Pressable, Text, TextInput, View } from 'react-native';
-import { MOOD_EMOJIS } from '../constants/moodEmojis';
+import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { MOOD_EMOJIS, PREMIUM_MOOD_EMOJIS } from '../constants/moodEmojis';
+import { usePlanStore } from '../store/planStore';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 import { themedStyles } from '../theme/themedStyles';
 
@@ -18,13 +21,20 @@ interface Props {
 
 export function MoodPicker({ visible, onClose, onSelect }: Props) {
   const [message, setMessage] = useState('');
+  const can = usePlanStore((s) => s.can);
+  const showUpgrade = usePlanStore((s) => s.showUpgrade);
+  const premiumAllowed = can('PREMIUM_STICKER');
 
   const close = () => {
     setMessage('');
     onClose();
   };
 
-  const onPress = (emoji: string) => {
+  const onPress = (emoji: string, locked: boolean, label: string) => {
+    if (locked) {
+      showUpgrade(`${label} 무드는 PRO에서 쓸 수 있어요.`);
+      return;
+    }
     onSelect(emoji, message.trim() || undefined);
     close();
   };
@@ -46,12 +56,13 @@ export function MoodPicker({ visible, onClose, onSelect }: Props) {
             maxLength={20}
           />
 
-          <View style={styles.grid}>
+          {/* 확장팩까지 24종이라 작은 화면에서는 넘친다 — 시트 안에서만 스크롤한다 */}
+          <ScrollView style={styles.scroll} contentContainerStyle={styles.grid}>
             {MOOD_EMOJIS.map((m) => (
               <Pressable
                 key={m.emoji}
                 style={({ pressed }) => [styles.cell, pressed && styles.cellPressed]}
-                onPress={() => onPress(m.emoji)}
+                onPress={() => onPress(m.emoji, false, m.label)}
                 accessibilityRole="button"
                 accessibilityLabel={`${m.label} 무드로 남기기`}
               >
@@ -59,7 +70,24 @@ export function MoodPicker({ visible, onClose, onSelect }: Props) {
                 <Text style={styles.label}>{m.label}</Text>
               </Pressable>
             ))}
-          </View>
+            {PREMIUM_MOOD_EMOJIS.map((m) => (
+              <Pressable
+                key={m.emoji}
+                style={({ pressed }) => [styles.cell, pressed && styles.cellPressed]}
+                onPress={() => onPress(m.emoji, !premiumAllowed, m.label)}
+                accessibilityRole="button"
+                accessibilityLabel={`${m.label} 무드로 남기기${premiumAllowed ? '' : ' — PRO 기능'}`}
+              >
+                {!premiumAllowed ? (
+                  <View style={styles.lockBadge}>
+                    <Text style={styles.lockBadgeText}>PRO</Text>
+                  </View>
+                ) : null}
+                <Text style={styles.emoji}>{m.emoji}</Text>
+                <Text style={styles.label}>{m.label}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
         </Pressable>
       </Pressable>
     </Modal>
@@ -107,6 +135,17 @@ const styles = themedStyles((colors) => ({
     gap: 2,
   },
   cellPressed: { backgroundColor: colors.primarySoft, transform: [{ scale: 0.94 }] },
+  // 시트 전체가 아니라 격자만 스크롤한다 — 메모 입력칸은 위에 고정돼야 쓰기 편하다
+  scroll: { maxHeight: 320 },
+  lockBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    paddingHorizontal: 4,
+    borderRadius: radius.sm,
+    backgroundColor: colors.togetherBg,
+  },
+  lockBadgeText: { color: colors.together, fontSize: 8, fontWeight: '800' },
   emoji: { fontSize: 26, lineHeight: 30 },
   label: { fontSize: 10, fontWeight: '700', color: colors.textSecondary },
 }));

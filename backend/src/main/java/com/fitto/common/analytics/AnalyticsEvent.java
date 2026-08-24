@@ -28,13 +28,4 @@ public final class AnalyticsEvent {
     public static final String FEATURE_USED = "FEATURE_USED";
     /** PlanGuard 게이팅에 막힘(업그레이드 유도) — detail 에 Feature.name(). */
     public static final String FEATURE_BLOCKED = "FEATURE_BLOCKED";
-
-    /**
-     * 혼자 가입자 D+1/D+3 "함께하면 열려요" 프리뷰 발송 이력 — 순수 분석 이벤트가 아니라
-     * {@code SoloSignupPreviewNotifier} 의 중복 발송 방지 마커를 겸한다(발송 이력 테이블이
-     * 따로 없어 이미 인덱스가 맞는 이 테이블을 재사용). 집계 쿼리에서 FEATURE_USED 등과
-     * 섞어 세지 않도록 주의할 것.
-     */
-    public static final String SIGNUP_PREVIEW_D1 = "SIGNUP_PREVIEW_D1";
-    public static final String SIGNUP_PREVIEW_D3 = "SIGNUP_PREVIEW_D3";
 }

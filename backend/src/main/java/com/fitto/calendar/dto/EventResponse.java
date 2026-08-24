@@ -18,6 +18,8 @@ public record EventResponse(
         LocalDate date,
         /** 원본 기준일 (반복 일정의 최초 날짜) */
         LocalDate eventDate,
+        /** 기간 일정의 종료일 — 없으면 하루 일정 (반복 일정은 항상 없다) */
+        LocalDate endDate,
         EventType eventType,
         boolean repeatYearly,
         String memo,
@@ -31,6 +33,7 @@ public record EventResponse(
                 event.getTitle(),
                 occurrence,
                 event.getEventDate(),
+                event.getEndDate(),
                 event.getEventType(),
                 event.isRepeatYearly(),
                 event.getMemo(),

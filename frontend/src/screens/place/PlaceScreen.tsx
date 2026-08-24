@@ -183,8 +183,7 @@ export function PlaceScreen() {
               render={renderDateCourse}
             />
           ) : null}
-          {/* 여행(Trip) 진입로 임시로 가려둠 — 기능 자체는 그대로 두고 나중에 다시 노출할 수 있다 */}
-          {/* <IconButton icon="airplane" label="우리 여행" onPress={() => navigation.navigate('TripList')} /> */}
+          {/* 여행(Trip)은 홈 스택으로 이관 — 진입은 홈 D-day 카드·커플 캘린더 (navigation/types.ts 참고) */}
         </View>
       </View>
 

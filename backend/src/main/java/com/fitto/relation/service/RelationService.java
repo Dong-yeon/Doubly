@@ -189,10 +189,18 @@ public class RelationService {
         return toResponse(relation, userId);
     }
 
-    /** 커플 공유 배경 설정. */
+    /**
+     * 커플 공유 배경 설정. {@code url} 이 null 이면 해제(기본 배경으로).
+     *
+     * <p><b>해제는 게이팅하지 않는다.</b> 꾸미기는 PRO 기능이지만, 그 판정을 <b>되돌리기</b>에도
+     * 걸면 PRO 가 끝난 사람은 자기가 깔아둔 배경을 영영 못 치운다 — 요금제로 막을 것은
+     * 새로 꾸미는 행위지 원상복구가 아니다.
+     */
     @Transactional
     public RelationResponse setCoupleBackground(Long userId, String url) {
-        planGuard.require(userId, Feature.CUSTOM_BACKGROUND);
+        if (url != null) {
+            planGuard.require(userId, Feature.CUSTOM_BACKGROUND);
+        }
         Relation couple = activeCouple(userId);
         couple.updateBackground(url);
         coupleEventPublisher.publish(couple.getId(), com.fitto.common.event.CoupleEvent.BACKGROUND);

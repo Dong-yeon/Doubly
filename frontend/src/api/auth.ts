@@ -61,17 +61,19 @@ export const authApi = {
   /** 마케팅 수신 동의/철회 — 개인정보보호법상 선택 동의는 철회 가능해야 한다. */
   updateMarketingConsent: (agreed: boolean) =>
     unwrap(apiClient.put<ApiResponse<User>>('/auth/me/marketing-consent', { agreed })),
+  /** 푸시 알림 수신 설정 — 끄면 모든 푸시가 발송되지 않는다. */
+  updateNotificationSetting: (enabled: boolean) =>
+    unwrap(apiClient.put<ApiResponse<User>>('/auth/me/notification-setting', { enabled })),
   /**
-   * 푸시 알림 수신 설정 — 마스터 스위치(enabled) + 카테고리별 설정, 전부 부분 수정.
-   * 넘기지 않은(undefined) 필드는 서버에서 건드리지 않는다 — 토글 하나만 바꿔도 그것만 보내면 된다.
+   * 카테고리별 푸시 수신 설정 — 넘긴 항목만 바뀐다.
+   * 토글 하나를 만질 때 네 값을 모두 보내면 다른 기기에서 방금 바꾼 설정을 덮어쓴다.
    */
-  updateNotificationSetting: (settings: {
-    enabled?: boolean;
-    notifyChat?: boolean;
-    notifyAnniversary?: boolean;
-    notifyPartnerActivity?: boolean;
-    notifyReminder?: boolean;
-  }) => unwrap(apiClient.put<ApiResponse<User>>('/auth/me/notification-setting', settings)),
+  updateNotificationCategories: (patch: {
+    chat?: boolean;
+    anniversary?: boolean;
+    partner?: boolean;
+    reminder?: boolean;
+  }) => unwrap(apiClient.put<ApiResponse<User>>('/auth/me/notification-categories', patch)),
 
   /**
    * 비밀번호 재설정 코드 발송.

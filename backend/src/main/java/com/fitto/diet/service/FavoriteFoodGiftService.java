@@ -4,7 +4,9 @@ import com.fitto.common.event.CoupleEvent;
 import com.fitto.common.event.CoupleEventPublisher;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
+import com.fitto.common.notification.NotificationCategory;
 import com.fitto.common.notification.NotificationService;
+import com.fitto.common.notification.PushLinks;
 import com.fitto.common.plan.Feature;
 import com.fitto.common.plan.PlanGuard;
 import com.fitto.diet.domain.FavoriteFood;
@@ -94,8 +96,8 @@ public class FavoriteFoodGiftService {
         giftRepository.save(gift);
 
         String senderName = userName(senderId);
-        notificationService.notify(receiverId, "즐겨찾기 음식을 공유했어요 🍽️", senderName + " — " + source.getName(),
-                Map.of("type", "favoriteGift", "id", String.valueOf(gift.getId())));
+        notificationService.notify(receiverId, NotificationCategory.PARTNER,
+                "즐겨찾기 음식을 공유했어요 🍽️", senderName + " — " + source.getName(), PushLinks.DIET);
         coupleEventPublisher.publish(relation.getId(), CoupleEvent.FAVORITE_FOOD_GIFT);
         return FavoriteFoodGiftResponse.of(gift, senderName, userName(receiverId));
     }
@@ -139,8 +141,8 @@ public class FavoriteFoodGiftService {
 
         gift.accept(favorite.getId());
         String receiverName = userName(receiverId);
-        notificationService.notify(gift.getSenderId(), "즐겨찾기를 받았어요!", receiverName + "님이 선물을 받았어요 🍽️",
-                Map.of("type", "favoriteGift", "id", String.valueOf(gift.getId())));
+        notificationService.notify(gift.getSenderId(), NotificationCategory.PARTNER,
+                "즐겨찾기를 받았어요!", receiverName + "님이 선물을 받았어요 🍽️", PushLinks.DIET);
         coupleEventPublisher.publish(gift.getRelationId(), CoupleEvent.FAVORITE_FOOD_GIFT);
         return FavoriteFoodGiftResponse.of(gift, userName(gift.getSenderId()), receiverName);
     }

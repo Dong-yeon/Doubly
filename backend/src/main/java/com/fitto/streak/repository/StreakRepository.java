@@ -6,7 +6,6 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -14,23 +13,25 @@ public interface StreakRepository extends JpaRepository<Streak, Long> {
 
     Optional<Streak> findByUserIdAndStreakType(Long userId, com.fitto.streak.domain.StreakType type);
 
+    Optional<Streak> findByRelationIdAndStreakType(Long relationId, com.fitto.streak.domain.StreakType type);
+
     /**
-     * 21시 스트릭 위기 리마인드 대상 — 최소 minCount 일 이상 연속 중인데 마지막 기록이
-     * 어제인(=오늘 아직 기록 안 함) 개인 스트릭. last_workout_date = 어제 하나로 "살아있는
-     * 스트릭"과 "오늘 미기록"이 동시에 만족된다({@link Streak#liveCount} 판정과 동일 원리).
+     * 오늘 끊길 위기의 개인 스트릭 — 마지막 기록이 <b>어제</b>이고 일정 일수 이상 쌓인 것.
+     *
+     * <p>마지막 기록이 오늘이면 이미 이어간 것이고, 그저께 이하면 이미 끊긴 것이다.
+     * 딱 어제인 경우만 "오늘 하면 이어지는" 상태다({@code ReengagementNotifier}).
      */
     @Query("""
             select s from Streak s
-            where s.streakType = :type
-              and s.userId is not null
-              and s.currentCount >= :minCount
+            where s.userId is not null
+              and s.streakType in :types
               and s.lastWorkoutDate = :yesterday
+              and s.currentCount >= :minCount
+            order by s.currentCount desc
             """)
-    List<Streak> findAtRiskPersonalStreaks(@Param("type") com.fitto.streak.domain.StreakType type,
-                                           @Param("minCount") int minCount,
-                                           @Param("yesterday") LocalDate yesterday);
-
-    Optional<Streak> findByRelationIdAndStreakType(Long relationId, com.fitto.streak.domain.StreakType type);
+    List<Streak> findPersonalAtRisk(@Param("types") java.util.Collection<com.fitto.streak.domain.StreakType> types,
+                                    @Param("yesterday") java.time.LocalDate yesterday,
+                                    @Param("minCount") int minCount);
 
     @Modifying
     @Query("delete from Streak s where s.userId = :userId")

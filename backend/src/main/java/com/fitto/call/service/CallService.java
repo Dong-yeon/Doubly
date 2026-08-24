@@ -19,6 +19,7 @@ import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.notification.NotificationCategory;
 import com.fitto.common.notification.NotificationService;
+import com.fitto.common.notification.PushLinks;
 import com.fitto.common.plan.Feature;
 import com.fitto.common.plan.PlanGuard;
 import com.fitto.relation.domain.Relation;
@@ -33,7 +34,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -131,7 +131,7 @@ public class CallService {
         String kind = req.callType() == CallType.VIDEO ? "영상통화" : "음성통화";
         notificationService.notify(calleeId, NotificationCategory.CHAT, "전화",
                 userName(userId) + "님이 " + kind + "를 걸었어요 📞",
-                Map.of("type", "call", "id", String.valueOf(session.getId())));
+                PushLinks.chat(session.getCoupleId()));
 
         return joinResponse(session, userId);
     }
@@ -201,7 +201,7 @@ public class CallService {
         if (session.getStatus() == CallStatus.MISSED) {
             notificationService.notify(session.getCalleeId(), NotificationCategory.CHAT, "부재중 전화",
                     userName(session.getCallerId()) + "님의 전화를 놓쳤어요. 채팅에서 다시 걸어보세요 📞",
-                    Map.of("type", "chat", "id", String.valueOf(session.getCoupleId())));
+                    PushLinks.chat(session.getCoupleId()));
         }
     }
 

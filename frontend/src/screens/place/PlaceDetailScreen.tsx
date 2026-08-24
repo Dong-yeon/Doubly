@@ -14,7 +14,7 @@ import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { PlaceStackParamList } from '../../navigation/types';
+import type { PlaceScreensParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
 import { Checkbox } from '../../components/Checkbox';
@@ -41,7 +41,8 @@ import type { MealType, Place, PlaceDietTag, PlaceVisit } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { useAndroidKeyboardHeight } from '../../hooks/useAndroidKeyboardHeight';
 
-type Props = NativeStackScreenProps<PlaceStackParamList, 'PlaceDetail'>;
+// 럽슐랭 탭과 홈(여행) 스택 양쪽에 등록되는 화면 — 두 스택이 공유하는 최소 목록으로 타입을 잡는다
+type Props = NativeStackScreenProps<PlaceScreensParamList, 'PlaceDetail'>;
 
 const MEAL_TYPES: { value: MealType; label: string }[] = [
   { value: 'BREAKFAST', label: '아침' },

@@ -1,6 +1,5 @@
 package com.fitto.challenge.service;
 
-import com.fitto.challenge.domain.ChallengeType;
 import com.fitto.challenge.domain.CoupleChallenge;
 import com.fitto.challenge.dto.ChallengeResponse;
 import com.fitto.challenge.dto.CreateChallengeRequest;
@@ -9,22 +8,20 @@ import com.fitto.common.event.CoupleEvent;
 import com.fitto.common.event.CoupleEventPublisher;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
+import com.fitto.common.notification.NotificationCategory;
 import com.fitto.common.notification.NotificationService;
+import com.fitto.common.notification.PushLinks;
 import com.fitto.common.time.KstClock;
-import com.fitto.diet.repository.MealRepository;
 import com.fitto.relation.domain.Relation;
 import com.fitto.relation.domain.RelationStatus;
 import com.fitto.relation.domain.RelationType;
 import com.fitto.relation.repository.RelationRepository;
 import com.fitto.user.domain.User;
 import com.fitto.user.repository.UserRepository;
-import com.fitto.workout.repository.WorkoutRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDate;
 import java.util.List;
-import java.util.Map;
 
 /**
  * 커플 챌린지/대결 — 생성/조회/삭제. 점수는 기간 내 운동/식단 기록일 수로 실시간 집계.
@@ -36,23 +33,20 @@ public class CoupleChallengeService {
     private final CoupleChallengeRepository challengeRepository;
     private final RelationRepository relationRepository;
     private final UserRepository userRepository;
-    private final WorkoutRepository workoutRepository;
-    private final MealRepository mealRepository;
+    private final ChallengeScorer scorer;
     private final NotificationService notificationService;
     private final CoupleEventPublisher coupleEventPublisher;
 
     public CoupleChallengeService(CoupleChallengeRepository challengeRepository,
                                   RelationRepository relationRepository,
                                   UserRepository userRepository,
-                                  WorkoutRepository workoutRepository,
-                                  MealRepository mealRepository,
+                                  ChallengeScorer scorer,
                                   NotificationService notificationService,
                                   CoupleEventPublisher coupleEventPublisher) {
         this.challengeRepository = challengeRepository;
         this.relationRepository = relationRepository;
         this.userRepository = userRepository;
-        this.workoutRepository = workoutRepository;
-        this.mealRepository = mealRepository;
+        this.scorer = scorer;
         this.notificationService = notificationService;
         this.coupleEventPublisher = coupleEventPublisher;
     }
@@ -76,9 +70,9 @@ public class CoupleChallengeService {
 
         Long partnerId = couple.partnerOf(userId);
         if (partnerId != null) {
-            notificationService.notify(partnerId, "커플 대결 신청!",
+            notificationService.notify(partnerId, NotificationCategory.PARTNER, "커플 대결 신청!",
                     userName(userId) + " — " + challenge.getTitle() + " (" + req.type().label() + " 대결)",
-                    Map.of("type", "challenge", "id", String.valueOf(challenge.getId())));
+                    PushLinks.WORKOUT_CHALLENGE);
         }
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.CHALLENGE);
         return toResponse(challenge, userId, partnerId);
@@ -102,21 +96,21 @@ public class CoupleChallengeService {
     }
 
     private ChallengeResponse toResponse(CoupleChallenge c, Long userId, Long partnerId) {
-        int myCount = count(c.getType(), userId, c.getStartDate(), c.getEndDate());
-        int partnerCount = partnerId != null ? count(c.getType(), partnerId, c.getStartDate(), c.getEndDate()) : 0;
+        int myCount = scorer.score(c, userId);
+        int partnerCount = scorer.score(c, partnerId);
         String leader = myCount == partnerCount ? "TIE" : (myCount > partnerCount ? "ME" : "PARTNER");
         boolean ended = KstClock.today().isAfter(c.getEndDate());
         String partnerName = partnerId != null ? userName(partnerId) : null;
         return new ChallengeResponse(c.getId(), c.getType(), c.getType().label(), c.getTitle(),
                 c.getStartDate(), c.getEndDate(), c.getStake(), myCount, partnerCount, partnerName,
-                ended, leader, c.getCreatedAt());
+                ended, leader, c.isSettled(), result(c, userId), c.getCreatedAt());
     }
 
-    /** 기간 내 기록일 수(중복 제거) */
-    private int count(ChallengeType type, Long userId, LocalDate start, LocalDate end) {
-        return type == ChallengeType.WORKOUT
-                ? workoutRepository.findWorkoutDates(userId, start, end).size()
-                : mealRepository.findMealDates(userId, start, end).size();
+    /** 확정된 승패 — 아직 판정 전이면 null (실시간 우세는 leader 가 따로 알려준다). */
+    private String result(CoupleChallenge c, Long userId) {
+        if (!c.isSettled()) return null;
+        if (c.getWinnerUserId() == null) return "TIE";
+        return c.getWinnerUserId().equals(userId) ? "ME" : "PARTNER";
     }
 
     private Relation activeCouple(Long userId) {

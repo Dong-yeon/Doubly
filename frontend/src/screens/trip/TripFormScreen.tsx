@@ -4,7 +4,7 @@ import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { PlaceStackParamList } from '../../navigation/types';
+import type { HomeStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
 import { DateField } from '../../components/DateField';
@@ -19,10 +19,17 @@ import { useDirtyGuard } from '../../hooks/useDirtyGuard';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 
-type Props = NativeStackScreenProps<PlaceStackParamList, 'TripForm'>;
+type Props = NativeStackScreenProps<HomeStackParamList, 'TripForm'>;
 
 export function TripFormScreen({ navigation, route }: Props) {
-  const editing = route.params.trip;
+  /*
+   * 딥링크·웹 새로고침으로 들어오면 params 가 없거나(trips/form) 객체가 문자열로 뭉개져
+   * 온다 — URL 은 객체를 String() 으로 직렬화하므로 수정 모달을 열어둔 채 새로고침하면
+   * `trip=[object Object]` 가 된다. 그걸 그대로 믿으면 '여행 수정' 화면인데 id 가 없어
+   * 저장이 PUT /trips/undefined 로 나갔다. 진짜 객체일 때만 수정 모드로 본다.
+   */
+  const param = route.params?.trip;
+  const editing = typeof param === 'object' && param !== null ? param : undefined;
   const [title, setTitle] = useState(editing?.title ?? '');
   const [startDate, setStartDate] = useState(editing?.startDate ?? '');
   const [endDate, setEndDate] = useState(editing?.endDate ?? '');

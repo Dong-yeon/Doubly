@@ -4,6 +4,7 @@ import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
 import com.fitto.feed.dto.CreatePostRequest;
 import com.fitto.feed.dto.FeedItemResponse;
+import com.fitto.feed.dto.FeedItemType;
 import com.fitto.feed.dto.FeedPhotosResponse;
 import com.fitto.feed.dto.FeedTimelineResponse;
 import com.fitto.feed.dto.MemoriesResponse;
@@ -85,10 +86,27 @@ public class FeedController {
         return ApiResponse.success(null, "포스트가 삭제되었습니다.");
     }
 
+    /**
+     * 이모지 반응 토글 — 타임라인의 <b>모든</b> 카드(일상·운동·식단·맛집 방문)에 달 수 있다.
+     * 같은 이모지를 다시 보내면 해제된다.
+     */
+    @PostMapping("/items/{type}/{refId}/reactions")
+    public ApiResponse<List<ReactionSummary>> reactToItem(@AuthenticationPrincipal AuthUser user,
+                                                          @PathVariable FeedItemType type,
+                                                          @PathVariable Long refId,
+                                                          @Valid @RequestBody ReactRequest request) {
+        return ApiResponse.success(feedService.toggleReaction(user.id(), type, refId, request.emoji()));
+    }
+
+    /**
+     * 일상 포스트 반응 — 위 경로의 {@code POST} 전용 별칭.
+     * 앱이 오래 쓰던 경로라 남겨 둔다(구버전 앱이 설치된 기기에서 반응이 조용히 실패하지 않도록).
+     */
     @PostMapping("/posts/{id}/reactions")
     public ApiResponse<List<ReactionSummary>> react(@AuthenticationPrincipal AuthUser user,
                                                     @PathVariable Long id,
                                                     @Valid @RequestBody ReactRequest request) {
-        return ApiResponse.success(feedService.toggleReaction(user.id(), id, request.emoji()));
+        return ApiResponse.success(
+                feedService.toggleReaction(user.id(), FeedItemType.POST, id, request.emoji()));
     }
 }

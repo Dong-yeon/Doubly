@@ -1,6 +1,7 @@
 package com.fitto.auth.service;
 
 import com.fitto.auth.dto.LoginRequest;
+import com.fitto.auth.dto.NotificationCategorySettingRequest;
 import com.fitto.auth.dto.RegisterRequest;
 import com.fitto.auth.dto.TokenResponse;
 import com.fitto.auth.dto.UpdateProfileRequest;
@@ -227,20 +228,28 @@ public class AuthService {
         return UserResponse.from(user);
     }
 
-    /**
-     * 푸시 알림 수신 설정 — SET-01. enabled 는 마스터 스위치, 나머지는 카테고리별 설정.
-     * 전부 null 허용 부분 수정 — 보낸 필드만 바뀐다.
-     */
+    /** 푸시 알림 수신 설정 — SET-01. 끄면 모든 푸시가 발송되지 않는다. */
     @Transactional
-    public UserResponse updateNotificationSetting(Long userId, Boolean enabled, Boolean notifyChat,
-                                                   Boolean notifyAnniversary, Boolean notifyPartnerActivity,
-                                                   Boolean notifyReminder) {
+    public UserResponse updateNotificationSetting(Long userId, boolean enabled) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
-        if (enabled != null) {
-            user.setNotificationsEnabled(enabled);
-        }
-        user.setNotifyCategories(notifyChat, notifyAnniversary, notifyPartnerActivity, notifyReminder);
+        user.setNotificationsEnabled(enabled);
+        return UserResponse.from(user);
+    }
+
+    /**
+     * 카테고리별 푸시 수신 설정 — 넘긴 항목만 바꾼다.
+     *
+     * <p>전체 스위치({@link #updateNotificationSetting})와는 AND 로 걸린다 —
+     * 전체가 꺼져 있으면 카테고리를 켜도 발송되지 않는다.
+     */
+    @Transactional
+    public UserResponse updateNotificationCategories(Long userId,
+                                                     NotificationCategorySettingRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
+        user.updateNotificationCategories(request.chat(), request.anniversary(),
+                request.partner(), request.reminder());
         return UserResponse.from(user);
     }
 

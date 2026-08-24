@@ -4,6 +4,7 @@ import com.fitto.auth.dto.UserResponse;
 import com.fitto.chat.domain.ChatMessage;
 import com.fitto.chat.domain.ChatMessageReaction;
 import com.fitto.chat.domain.MessageType;
+import com.fitto.chat.domain.StickerPack;
 import com.fitto.chat.domain.StickerImage;
 import com.fitto.chat.domain.TouchGesture;
 import com.fitto.chat.dto.ChatMessageResponse;
@@ -20,6 +21,7 @@ import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.notification.NotificationCategory;
 import com.fitto.common.notification.NotificationService;
+import com.fitto.common.notification.PushLinks;
 import com.fitto.common.plan.Feature;
 import com.fitto.common.plan.PlanGuard;
 import com.fitto.relation.domain.Relation;
@@ -102,6 +104,10 @@ public class ChatService {
         MessageType messageType = req.messageType() != null ? req.messageType() : MessageType.TEXT;
         if (messageType == MessageType.TOUCH) {
             requireValidTouch(senderId, req.content());
+        }
+        if (messageType == MessageType.STICKER && StickerPack.isPremium(req.content())) {
+            // 시즌 스티커는 PRO 전용 — 터치 프리미엄 제스처와 같은 방어선이다(아래 주석 참고)
+            planGuard.require(senderId, Feature.PREMIUM_STICKER);
         }
 
         ChatMessage message = ChatMessage.builder()
@@ -189,8 +195,9 @@ public class ChatService {
                             .build());
                     if (!userId.equals(message.getSenderId())) {
                         notificationService.notify(message.getSenderId(), NotificationCategory.CHAT,
-                                "메시지에 반응이 달렸어요", userName(userId) + "님이 " + emoji + " 를 남겼어요",
-                                Map.of("type", "chat", "id", String.valueOf(message.getRelationId())));
+                                "메시지에 반응이 달렸어요",
+                                userName(userId) + "님이 " + emoji + " 를 남겼어요",
+                                PushLinks.chat(message.getRelationId()));
                     }
                 });
         return summarize(reactionRepository.findByMessageId(messageId));
@@ -260,8 +267,8 @@ public class ChatService {
             return;
         }
         String senderName = userRepository.findById(senderId).map(User::getName).orElse("상대방");
-        notificationService.notify(recipientId, NotificationCategory.CHAT, senderName, preview(message),
-                Map.of("type", "chat", "id", String.valueOf(relation.getId())));
+        notificationService.notify(recipientId, NotificationCategory.CHAT,
+                senderName, preview(message), PushLinks.chat(message.getRelationId()));
     }
 
     /** 답장 대상이 같은 방의 메시지인지 확인 — 다른 방 메시지를 인용하면 대화가 새어나간다. */

@@ -102,12 +102,10 @@ public interface RelationRepository extends JpaRepository<Relation, Long> {
     @Query("select r from Relation r where r.id = :id")
     Optional<Relation> findByIdForUpdate(@Param("id") Long id);
 
-    /** 회원 탈퇴 시 본인이 속한 모든 관계 삭제 */
-    @Modifying
-    @Query("delete from Relation r where r.userAId = :userId or r.userBId = :userId")
-    void deleteAllByUser(@Param("userId") Long userId);
-
-    /** 활성 커플 전체 — 오늘의 질문 미답변 리마인드가 대상을 훑을 때 쓴다. */
+    /**
+     * 활성 커플 전체 — 스케줄러(재방문 리마인드)가 매일 한 번 훑는다.
+     * 아직 상대가 연결되지 않은 관계(userBId is null)는 "커플"이 아니라 제외한다.
+     */
     @Query("""
             select r from Relation r
             where r.relationType = com.fitto.relation.domain.RelationType.COUPLE
@@ -115,4 +113,9 @@ public interface RelationRepository extends JpaRepository<Relation, Long> {
               and r.userBId is not null
             """)
     List<Relation> findAllActiveCouples();
+
+    /** 회원 탈퇴 시 본인이 속한 모든 관계 삭제 */
+    @Modifying
+    @Query("delete from Relation r where r.userAId = :userId or r.userBId = :userId")
+    void deleteAllByUser(@Param("userId") Long userId);
 }

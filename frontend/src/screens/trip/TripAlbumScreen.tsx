@@ -14,7 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { PlaceStackParamList } from '../../navigation/types';
+import type { HomeStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { TripSectionTabs } from './TripSectionTabs';
@@ -28,7 +28,7 @@ import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { AlbumPost } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 
-type Props = NativeStackScreenProps<PlaceStackParamList, 'TripAlbum'>;
+type Props = NativeStackScreenProps<HomeStackParamList, 'TripAlbum'>;
 
 export function TripAlbumScreen({ route }: Props) {
   const { tripId, title } = route.params;

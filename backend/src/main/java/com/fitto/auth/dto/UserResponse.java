@@ -21,12 +21,12 @@ public record UserResponse(
         SocialType socialType,
         /** 마케팅 수신 동의 여부 — 설정 화면에서 철회할 수 있어야 한다(AUTH-09) */
         boolean marketingConsent,
-        /** 푸시 알림 수신 여부 (SET-01) — 마스터 스위치 */
+        /** 푸시 알림 수신 여부 (SET-01) — 전체 스위치 */
         boolean notificationsEnabled,
-        /** 카테고리별 알림 설정 — 마스터 스위치가 꺼져 있어도 값 자체는 그대로 보여준다(토글 상태 보존) */
+        /* 카테고리별 수신 여부 — 전체 스위치가 꺼져 있으면 이 값들과 무관하게 발송되지 않는다 */
         boolean notifyChat,
         boolean notifyAnniversary,
-        boolean notifyPartnerActivity,
+        boolean notifyPartner,
         boolean notifyReminder,
         /**
          * 필수 약관 재동의 필요 여부 (AUTH-09) — 약관이 개정됐거나(버전 불일치)
@@ -49,7 +49,7 @@ public record UserResponse(
                 user.isNotificationsEnabled(),
                 user.isNotifyChat(),
                 user.isNotifyAnniversary(),
-                user.isNotifyPartnerActivity(),
+                user.isNotifyPartner(),
                 user.isNotifyReminder(),
                 !user.hasAgreedTo(PolicyVersion.TERMS, PolicyVersion.PRIVACY));
     }

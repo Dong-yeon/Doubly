@@ -14,11 +14,11 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { MaterialCommunityIcons } from '../../components/Icon';
-import type { PlaceStackParamList } from '../../navigation/types';
+import type { HomeStackParamList } from '../../navigation/types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 
-type Nav = NativeStackNavigationProp<PlaceStackParamList>;
+type Nav = NativeStackNavigationProp<HomeStackParamList>;
 type SectionRoute = 'TripExpense' | 'TripChecklist' | 'TripAlbum' | 'TripRecap';
 
 const SECTIONS: {

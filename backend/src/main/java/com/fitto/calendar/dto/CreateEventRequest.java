@@ -16,6 +16,9 @@ public record CreateEventRequest(
         @NotNull(message = "날짜는 필수입니다.")
         LocalDate eventDate,
 
+        /** 기간 일정의 종료일 — 없으면 하루 일정. 반복 일정과 함께 쓸 수 없다(서비스 검증) */
+        LocalDate endDate,
+
         EventType eventType,
 
         boolean repeatYearly,
