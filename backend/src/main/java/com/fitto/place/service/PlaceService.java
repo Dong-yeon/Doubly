@@ -14,6 +14,7 @@ import com.fitto.place.domain.Place;
 import com.fitto.place.domain.PlaceRating;
 import com.fitto.place.domain.PlaceVisit;
 import com.fitto.place.dto.PlaceResponse;
+import com.fitto.place.dto.PlaceSearchResponse;
 import com.fitto.place.dto.PlaceVisitResponse;
 import com.fitto.place.dto.RatePlaceRequest;
 import com.fitto.place.dto.RecordVisitRequest;
@@ -23,6 +24,7 @@ import com.fitto.place.repository.PlaceRatingRepository;
 import com.fitto.place.repository.PlaceRepository;
 import com.fitto.place.repository.PlaceVisitRepository;
 import com.fitto.place.repository.PlaceVisitRepository.VisitSummary;
+import com.fitto.place.service.KakaoLocalClient.KakaoPlace;
 import com.fitto.relation.domain.Relation;
 import com.fitto.relation.domain.RelationStatus;
 import com.fitto.relation.domain.RelationType;
@@ -55,6 +57,7 @@ public class PlaceService {
     private final NotificationService notificationService;
     private final PlanGuard planGuard;
     private final FeedReactionRepository feedReactionRepository;
+    private final KakaoLocalClient kakaoLocalClient;
 
     public PlaceService(PlaceRepository placeRepository,
                         PlaceVisitRepository placeVisitRepository,
@@ -64,7 +67,8 @@ public class PlaceService {
                         MealRepository mealRepository,
                         NotificationService notificationService,
                         PlanGuard planGuard,
-                        FeedReactionRepository feedReactionRepository) {
+                        FeedReactionRepository feedReactionRepository,
+                        KakaoLocalClient kakaoLocalClient) {
         this.placeRepository = placeRepository;
         this.placeVisitRepository = placeVisitRepository;
         this.placeRatingRepository = placeRatingRepository;
@@ -74,6 +78,25 @@ public class PlaceService {
         this.notificationService = notificationService;
         this.planGuard = planGuard;
         this.feedReactionRepository = feedReactionRepository;
+        this.kakaoLocalClient = kakaoLocalClient;
+    }
+
+    /**
+     * 장소 이름 검색 — 카카오 로컬 키워드 검색을 그대로 위임한다(PLACE-01 신규 장소 추가의
+     * "이름부터 찾기" 경로). 개수 자체는 {@link Feature#PLACE_PIN} 저장 시점에 걸리므로
+     * 조회인 이 메서드는 게이팅하지 않는다 — {@link LovelichelinRecommendService}가 쓰는
+     * Gemini 호출과 달리 외부 비용이 사실상 없는 단순 조회다.
+     */
+    public PlaceSearchResponse search(String query, int size) {
+        if (!kakaoLocalClient.isConfigured() || query == null || query.isBlank()) {
+            return PlaceSearchResponse.unavailable();
+        }
+        List<KakaoPlace> found = kakaoLocalClient.searchKeyword(query, Math.clamp(size, 1, 10));
+        List<PlaceSearchResponse.PlaceSearchResult> results = found.stream()
+                .map(k -> new PlaceSearchResponse.PlaceSearchResult(
+                        k.name(), k.address(), k.category(), k.lat(), k.lng(), k.placeUrl()))
+                .toList();
+        return new PlaceSearchResponse(true, results);
     }
 
     /** 장소 등록 (PLACE-01) */

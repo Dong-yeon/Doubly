@@ -759,6 +759,22 @@ export interface LovelichelinRecommendation {
   places: LovelichelinRecommendedPlace[];
 }
 
+// 장소 이름 검색 결과 — GET /places/search. 카카오 로컬 키워드 검색 그대로라 좌표까지
+// 채워져 있다(LovelichelinRecommendedPlace 와 같은 필드 모양, reason 만 없음).
+export interface PlaceSearchResult {
+  name: string;
+  address?: string | null;
+  category?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  placeUrl?: string | null;
+}
+export interface PlaceSearchResponse {
+  /** false = 카카오 REST API 키 미설정 — places 는 항상 빈 배열 */
+  available: boolean;
+  places: PlaceSearchResult[];
+}
+
 // 식단 즐겨찾기 — 자주 먹는 음식 "세트" (원탭 추가). 여러 음식을 한 번에 등록해둘 수 있다.
 export interface FavoriteFoodItem {
   id: number;
