@@ -35,13 +35,23 @@ import { foodDbApi } from '../../api/foodDb';
 import { placeApi } from '../../api/place';
 import { pickImageAsset, takePhotoAsset, shrinkImage, uploadImage } from '../../utils/imageUpload';
 import { getErrorMessage } from '../../utils/error';
+import { errorCodeOf } from '../../api/client';
 import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
 import { toDateString } from '../../utils/date';
 import { buildDietShareCopy } from '../../utils/dietShare';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { AnalyzedFood, BarcodeLookup, FavoriteFood, MealType, Place, RecentFood } from '../../types';
+import type {
+  AnalyzedFood,
+  BarcodeLookup,
+  FavoriteFood,
+  MealType,
+  Place,
+  PlaceDietTag,
+  PlaceSearchResult,
+  RecentFood,
+} from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<DietStackParamList, 'DietRecord'>;
@@ -51,6 +61,14 @@ const MEAL_TYPES: { value: MealType; label: string }[] = [
   { value: 'LUNCH', label: '점심' },
   { value: 'DINNER', label: '저녁' },
   { value: 'SNACK', label: '간식' },
+];
+
+// 클린식/치팅데이 구분 — PlaceDetailScreen 의 방문 기록 폼과 같은 옵션(가보기 전엔
+// 알 수 없어 장소 추가가 아니라 방문 기록에서 고른다는 것도 동일)
+const DIET_TAG_OPTIONS: { value: PlaceDietTag; label: string }[] = [
+  { value: 'NEUTRAL', label: '구분 없음' },
+  { value: 'CLEAN', label: '🥗 클린식' },
+  { value: 'CHEAT', label: '🍔 치팅데이' },
 ];
 
 /** 서버 검증(MealItemRequest)과 맞춘 길이 상한 — 저장 시점에 튕기지 않게 입력에서 막는다 */
@@ -121,8 +139,20 @@ export function DietRecordScreen({ navigation, route }: Props) {
    */
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
   const [placeRating, setPlaceRating] = useState(0);
+  // 클린식/치팅데이 — PlaceDetailScreen 의 방문 기록 폼과 같은 항목. 별점처럼 선택 사항이라
+  // 기본은 NEUTRAL(구분 없음)이고, 지정하면 방문 기록과 함께 장소의 대표 구분도 갱신된다.
+  const [placeDietTag, setPlaceDietTag] = useState<PlaceDietTag>('NEUTRAL');
   const [placeSheetOpen, setPlaceSheetOpen] = useState(false);
   const [placeSearch, setPlaceSearch] = useState('');
+  /*
+   * 카카오 장소 검색(새 장소 추가) — 저장된 장소 목록에 없을 때의 경로. 검색어를 그대로
+   * 재사용해 "검색" 버튼 한 번으로 저장된 목록 필터와 카카오 조회를 동시에 돌린다.
+   * addingPlaceName 은 어느 결과를 지금 담는 중인지(버튼별 로딩 표시) 판별용.
+   */
+  const [kakaoResults, setKakaoResults] = useState<PlaceSearchResult[] | null>(null);
+  const [kakaoSearching, setKakaoSearching] = useState(false);
+  const [kakaoUnavailable, setKakaoUnavailable] = useState(false);
+  const [addingPlaceName, setAddingPlaceName] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzingText, setAnalyzingText] = useState(false);
@@ -296,6 +326,69 @@ export function DietRecordScreen({ navigation, route }: Props) {
       (p) => p.name.toLowerCase().includes(q) || (p.address ?? '').toLowerCase().includes(q),
     );
   }, [places, placeSearch]);
+
+  // 시트를 닫을 때(백드롭·닫기 버튼 공통) 검색 상태까지 비운다 — 다음에 열었을 때
+  // 이전 카카오 검색 결과가 엉뚱하게 남아 있지 않게.
+  const closePlaceSheet = () => {
+    setPlaceSheetOpen(false);
+    setPlaceSearch('');
+    setKakaoResults(null);
+    setKakaoUnavailable(false);
+  };
+
+  // 저장된 장소 중에 없을 때 — 카카오에서 실존 장소를 찾는다. 검색어 입력창을 그대로
+  // 재사용해 "저장된 장소 필터"와 "카카오 검색어"가 항상 같은 텍스트를 가리키게 한다.
+  const onKakaoSearch = async () => {
+    const q = placeSearch.trim();
+    if (!q) return;
+    setKakaoSearching(true);
+    setKakaoResults(null);
+    setKakaoUnavailable(false);
+    try {
+      const res = await placeApi.search(q);
+      setKakaoUnavailable(!res.available);
+      setKakaoResults(res.places);
+    } catch (e) {
+      toast.error(getErrorMessage(e, '장소 검색에 실패했어요.'));
+    } finally {
+      setKakaoSearching(false);
+    }
+  };
+
+  /*
+   * 카카오 검색 결과를 바로 럽슐랭 장소로 추가 — "다녀온 곳"으로 등록하는 화면이라
+   * status 를 처음부터 VISITED 로 보낸다(위시리스트로 만들었다가 아래 방문 기록에서
+   * markVisited 되길 기다릴 이유가 없다). 추가 즉시 선택 상태로 만들어 별점·클린식
+   * 여부까지 이어서 매길 수 있게 한다.
+   */
+  const onAddFromKakao = async (result: PlaceSearchResult) => {
+    setAddingPlaceName(result.name);
+    try {
+      const saved = await placeApi.save({
+        name: result.name,
+        address: result.address ?? undefined,
+        lat: result.lat ?? undefined,
+        lng: result.lng ?? undefined,
+        category: result.category ?? undefined,
+        status: 'VISITED',
+      });
+      haptics.success();
+      toast.success(`${saved.name}을(를) 럽슐랭에 추가했어요`);
+      usePlaceStore.getState().invalidate();
+      setSelectedPlace(saved);
+      setPlaceRating(0);
+      setPlaceDietTag('NEUTRAL');
+      closePlaceSheet();
+    } catch (e) {
+      // 402(플랜 한도)는 api/client 가 이미 업그레이드 시트를 열었다 — 여기서 또 띄우면
+      // 같은 사실을 두 번 알리게 된다 (HomeScreen.notifyUnless402 와 같은 이유).
+      const code = errorCodeOf(e);
+      if (code === 'PLAN_UPGRADE_REQUIRED' || code === 'PLAN_LIMIT_EXCEEDED') return;
+      toast.error(getErrorMessage(e, '장소를 추가하지 못했어요.'));
+    } finally {
+      setAddingPlaceName(null);
+    }
+  };
 
   const updateItem = (key: string, patch: Partial<ItemForm>) => {
     setItems((prev) => prev.map((i) => (i.key === key ? { ...i, ...patch } : i)));
@@ -674,6 +767,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
             visitedAt: mealDate,
             mealId: saved.id,
             rating: placeRating > 0 ? placeRating : undefined,
+            dietTag: placeDietTag,
           });
           if (placeRating > 0) {
             const previousTier = selectedPlace.lovelichelinTier;
@@ -815,6 +909,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
                     onPress={() => {
                       setSelectedPlace(null);
                       setPlaceRating(0);
+                      setPlaceDietTag('NEUTRAL');
                     }}
                     hitSlop={8}
                   >
@@ -829,6 +924,19 @@ export function DietRecordScreen({ navigation, route }: Props) {
 
               {selectedPlace ? (
                 <>
+                  <Text style={styles.label}>이번엔 어땠나요? (선택)</Text>
+                  <View style={styles.typeRow}>
+                    {DIET_TAG_OPTIONS.map((o) => (
+                      <Chip
+                        key={o.value}
+                        label={o.label}
+                        selected={placeDietTag === o.value}
+                        onPress={() => setPlaceDietTag(o.value)}
+                        fill
+                      />
+                    ))}
+                  </View>
+
                   <Text style={styles.label}>같이 별점도 남길까요? (선택)</Text>
                   <View style={styles.starRow}>
                     {[1, 2, 3, 4, 5].map((n) => (
@@ -1154,43 +1262,91 @@ export function DietRecordScreen({ navigation, route }: Props) {
           />
       </FormKeyboardView>
 
-      {/* 럽슐랭 장소 선택 시트 — 이미 저장된 커플 장소 중에서만 고른다(새 장소 추가는 럽슐랭 탭에서) */}
-      <Sheet visible={placeSheetOpen} onClose={() => setPlaceSheetOpen(false)} cardStyle={styles.placeSheetCard}>
+      {/*
+        럽슐랭 장소 선택 시트 — 저장된 장소 중에서 고르거나, 없으면 카카오에서 찾아 바로
+        추가한다(다녀온 곳이니 곧장 방문완료로 생긴다 — onAddFromKakao 참고).
+      */}
+      <Sheet visible={placeSheetOpen} onClose={closePlaceSheet} cardStyle={styles.placeSheetCard}>
         <Text style={styles.sheetTitle}>어디서 드셨어요?</Text>
         <TextField
           placeholder="장소 이름으로 검색"
           value={placeSearch}
           onChangeText={setPlaceSearch}
+          onSubmitEditing={onKakaoSearch}
+          returnKeyType="search"
         />
-        <FlatList
-          data={placeCandidates}
-          keyExtractor={(p) => String(p.id)}
-          style={styles.placeSheetList}
-          keyboardShouldPersistTaps="handled"
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.placeCandidate}
-              activeOpacity={0.7}
-              onPress={() => {
-                setSelectedPlace(item);
-                setPlaceRating(item.myRating ?? 0);
-                setPlaceSheetOpen(false);
-                setPlaceSearch('');
-              }}
-            >
-              <Text style={styles.placeCandidateName}>{item.name}</Text>
-              <Text style={styles.placeCandidateInfo}>{item.category ?? item.address ?? ''}</Text>
-            </TouchableOpacity>
-          )}
-          ListEmptyComponent={
-            <Text style={styles.empty}>
-              {places.length === 0
-                ? '럽슐랭에 저장한 장소가 아직 없어요. 럽슐랭 탭에서 먼저 추가해주세요!'
-                : '검색 결과가 없어요.'}
-            </Text>
-          }
-        />
-        <Button title="닫기" variant="ghost" size="md" onPress={() => setPlaceSheetOpen(false)} />
+        {places.length > 0 ? (
+          <>
+            <Text style={styles.sheetSectionLabel}>저장된 장소</Text>
+            <FlatList
+              data={placeCandidates}
+              keyExtractor={(p) => String(p.id)}
+              style={styles.placeSheetList}
+              keyboardShouldPersistTaps="handled"
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.placeCandidate}
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    setSelectedPlace(item);
+                    setPlaceRating(item.myRating ?? 0);
+                    setPlaceDietTag(item.dietTag ?? 'NEUTRAL');
+                    closePlaceSheet();
+                  }}
+                >
+                  <Text style={styles.placeCandidateName}>{item.name}</Text>
+                  <Text style={styles.placeCandidateInfo}>{item.category ?? item.address ?? ''}</Text>
+                </TouchableOpacity>
+              )}
+              ListEmptyComponent={<Text style={styles.empty}>검색 결과가 없어요.</Text>}
+            />
+          </>
+        ) : null}
+
+        {/* 새 장소 추가 — 저장된 목록에 없을 때. 검색창의 텍스트를 그대로 카카오 키워드로 쓴다 */}
+        <View style={styles.kakaoHeaderRow}>
+          <Text style={styles.sheetSectionLabel}>
+            {places.length > 0 ? '저장된 장소에 없나요?' : '아직 저장한 장소가 없어요'}
+          </Text>
+          <Button
+            title="카카오에서 찾기"
+            size="sm"
+            variant="soft"
+            disabled={!placeSearch.trim()}
+            loading={kakaoSearching}
+            onPress={onKakaoSearch}
+          />
+        </View>
+        {kakaoUnavailable ? (
+          <Text style={styles.empty}>지금은 새 장소 검색을 쓸 수 없어요. 럽슐랭 탭에서 직접 추가해주세요.</Text>
+        ) : null}
+        {kakaoResults ? (
+          <FlatList
+            data={kakaoResults}
+            keyExtractor={(p, i) => `${p.name}-${p.lat ?? ''}-${p.lng ?? ''}-${i}`}
+            style={styles.placeSheetList}
+            keyboardShouldPersistTaps="handled"
+            renderItem={({ item }) => (
+              <View style={styles.kakaoResultRow}>
+                <View style={styles.flex}>
+                  <Text style={styles.placeCandidateName} numberOfLines={1}>{item.name}</Text>
+                  <Text style={styles.placeCandidateInfo} numberOfLines={1}>
+                    {item.category ?? item.address ?? ''}
+                  </Text>
+                </View>
+                <Button
+                  title="추가"
+                  size="sm"
+                  loading={addingPlaceName === item.name}
+                  onPress={() => onAddFromKakao(item)}
+                />
+              </View>
+            )}
+            ListEmptyComponent={<Text style={styles.empty}>검색 결과가 없어요.</Text>}
+          />
+        ) : null}
+
+        <Button title="닫기" variant="ghost" size="md" onPress={closePlaceSheet} />
       </Sheet>
     </SafeAreaView>
   );
@@ -1268,10 +1424,32 @@ const styles = themedStyles((colors) => ({
   placeRatingHint: { color: colors.textSecondary, fontSize: fontSize.caption, marginTop: spacing.xs },
   placeSheetCard: { maxHeight: '80%' },
   sheetTitle: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary, marginBottom: spacing.md },
-  placeSheetList: { marginTop: spacing.sm, marginBottom: spacing.sm },
+  sheetSectionLabel: {
+    fontSize: fontSize.caption,
+    color: colors.textSecondary,
+    fontWeight: '700',
+    marginTop: spacing.md,
+  },
+  // 저장된 장소/카카오 결과 두 목록이 한 시트 안에 같이 들어가므로, 하나가 길어져도
+  // 시트(placeSheetCard, maxHeight 80%) 밖으로 밀어내지 않게 목록마다 각자 스크롤을 준다
+  placeSheetList: { maxHeight: 200, marginTop: spacing.sm, marginBottom: spacing.sm },
   placeCandidate: { paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   placeCandidateName: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
   placeCandidateInfo: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
+  kakaoHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.md,
+  },
+  kakaoResultRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
   empty: { fontSize: fontSize.caption, color: colors.textSecondary, textAlign: 'center', paddingVertical: spacing.lg },
 
   // 음식 항목 카드 — 운동 기록의 세트 카드와 같은 형태

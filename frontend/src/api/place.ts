@@ -6,6 +6,7 @@ import type {
   LovelichelinRecommendation,
   Place,
   PlaceDietTag,
+  PlaceSearchResponse,
   PlaceStatus,
   PlaceVisit,
 } from '../types';
@@ -40,6 +41,10 @@ export const placeApi = {
   save: (payload: SavePlacePayload) =>
     unwrap(apiClient.post<ApiResponse<Place>>('/places', payload)),
   list: () => unwrap(apiClient.get<ApiResponse<Place[]>>('/places')),
+  // 장소 이름 검색 (카카오 로컬) — 결과를 그대로 save(status:'VISITED')에 넘기면 새 장소가
+  // 좌표까지 채워진 채로 바로 생긴다. /places/{id} 와 겹치지 않게 라우트 이름은 고정 경로.
+  search: (query: string, size = 8) =>
+    unwrap(apiClient.get<ApiResponse<PlaceSearchResponse>>('/places/search', { params: { query, size } })),
   get: (id: number) => unwrap(apiClient.get<ApiResponse<Place>>(`/places/${id}`)),
   update: (id: number, payload: Partial<SavePlacePayload>) =>
     unwrap(apiClient.put<ApiResponse<Place>>(`/places/${id}`, payload)),

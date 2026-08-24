@@ -5,6 +5,7 @@ import com.fitto.common.security.AuthUser;
 import com.fitto.place.dto.DateCourseResponse;
 import com.fitto.place.dto.LovelichelinRecommendationResponse;
 import com.fitto.place.dto.PlaceResponse;
+import com.fitto.place.dto.PlaceSearchResponse;
 import com.fitto.place.dto.PlaceVisitResponse;
 import com.fitto.place.dto.RatePlaceRequest;
 import com.fitto.place.dto.RecordVisitRequest;
@@ -74,6 +75,18 @@ public class PlaceController {
             @AuthenticationPrincipal AuthUser user,
             @RequestParam(defaultValue = "false") boolean refresh) {
         return ApiResponse.success(lovelichelinRecommendService.recommend(user.id(), refresh));
+    }
+
+    /**
+     * 장소 이름 검색 — 카카오 로컬 키워드 검색 (GET /places/search). 식단 기록 화면의
+     * "새 장소 추가" 진입점 — 결과를 그대로 {@link #save}(status=VISITED)에 넘기면
+     * 좌표·주소가 채워진 장소가 방문완료로 바로 생긴다.
+     */
+    @GetMapping("/search")
+    public ApiResponse<PlaceSearchResponse> search(@AuthenticationPrincipal AuthUser user,
+                                                    @RequestParam String query,
+                                                    @RequestParam(defaultValue = "8") int size) {
+        return ApiResponse.success(placeService.search(query, size));
     }
 
     @GetMapping("/{id}")
