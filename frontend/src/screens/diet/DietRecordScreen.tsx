@@ -11,7 +11,7 @@
  * 저장 시 PUT 으로 보낸다. 폼이 완전히 같아서 화면을 나누면 두 벌을 같이 고쳐야 한다.
  */
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Platform, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, FlatList, Image, Platform, Text, TouchableOpacity, View } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -24,12 +24,15 @@ import { NumberStepper } from '../../components/NumberStepper';
 import { FormKeyboardView } from '../../components/FormKeyboardView';
 import { DateField } from '../../components/DateField';
 import { Chip } from '../../components/Chip';
+import { Sheet } from '../../components/Sheet';
 import { useDietStore } from '../../store/dietStore';
 import { useRelationStore } from '../../store/relationStore';
+import { usePlaceStore } from '../../store/placeStore';
 import { useDirtyGuard } from '../../hooks/useDirtyGuard';
 import { publishEnsuringConnection } from '../../api/chatSocket';
 import { dietApi, SaveMealItemPayload } from '../../api/diet';
 import { foodDbApi } from '../../api/foodDb';
+import { placeApi } from '../../api/place';
 import { pickImageAsset, takePhotoAsset, shrinkImage, uploadImage } from '../../utils/imageUpload';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
@@ -38,7 +41,7 @@ import { haptics } from '../../utils/haptics';
 import { toDateString } from '../../utils/date';
 import { buildDietShareCopy } from '../../utils/dietShare';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { AnalyzedFood, BarcodeLookup, FavoriteFood, MealType, RecentFood } from '../../types';
+import type { AnalyzedFood, BarcodeLookup, FavoriteFood, MealType, Place, RecentFood } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<DietStackParamList, 'DietRecord'>;
@@ -110,6 +113,16 @@ export function DietRecordScreen({ navigation, route }: Props) {
    * 보이면 오해를 산다.
    */
   const [dateMeal, setDateMeal] = useState(false);
+  /*
+   * 어디서 먹었는지(럽슐랭 장소 연동) — 식단 기록 = 그 장소를 다녀왔다는 뜻이라, 고르면
+   * 저장 시 방문 기록으로도 남는다. 별점은 그 김에 럽슐랭 대표 평점까지 같이 매기는
+   * 선택 사항(방문만 남기고 평가는 건너뛸 수 있다). 수정 화면에서는 dateMeal 과 같은
+   * 이유로 노출하지 않는다.
+   */
+  const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
+  const [placeRating, setPlaceRating] = useState(0);
+  const [placeSheetOpen, setPlaceSheetOpen] = useState(false);
+  const [placeSearch, setPlaceSearch] = useState('');
   const [saving, setSaving] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzingText, setAnalyzingText] = useState(false);
@@ -269,6 +282,20 @@ export function DietRecordScreen({ navigation, route }: Props) {
       dietApi.recentFoods().then(setRecentFoods).catch(() => setRecentFoods([]));
     }, []),
   );
+
+  // 럽슐랭 장소 목록 — 이미 저장된 커플 장소 중에서 골라 방문 기록을 연동한다. 목록
+  // 자체는 usePlaceStore 가 캐싱하므로 여기선 (처음 한 번이면) 요청만 걸어둔다.
+  const places = usePlaceStore((s) => s.places);
+  useEffect(() => {
+    usePlaceStore.getState().load();
+  }, []);
+  const placeCandidates = useMemo(() => {
+    const q = placeSearch.trim().toLowerCase();
+    if (!q) return places;
+    return places.filter(
+      (p) => p.name.toLowerCase().includes(q) || (p.address ?? '').toLowerCase().includes(q),
+    );
+  }, [places, placeSearch]);
 
   const updateItem = (key: string, patch: Partial<ItemForm>) => {
     setItems((prev) => prev.map((i) => (i.key === key ? { ...i, ...patch } : i)));
@@ -633,10 +660,41 @@ export function DietRecordScreen({ navigation, route }: Props) {
 
       const saved = await save(payload);
       haptics.success();
+
+      /*
+       * 장소를 골랐으면 이 식단 기록을 그 장소 방문 기록으로도 남긴다 — "식단에 등록했다"는
+       * 곧 "거기 다녀왔다"는 뜻이라 두 번 입력받지 않는다. 별점을 같이 매겼으면 럽슐랭 대표
+       * 평점도 그 자리에서 upsert 한다(재평가라도 안전 — PlaceService.rate 참고). 이 연동이
+       * 실패해도 식단 기록 자체는 이미 저장됐으므로 전체 저장을 실패로 되돌리지 않는다.
+       */
+      let placeToastSuffix = '';
+      if (selectedPlace) {
+        try {
+          await placeApi.recordVisit(selectedPlace.id, {
+            visitedAt: mealDate,
+            mealId: saved.id,
+            rating: placeRating > 0 ? placeRating : undefined,
+          });
+          if (placeRating > 0) {
+            const previousTier = selectedPlace.lovelichelinTier;
+            const updated = await placeApi.rate(selectedPlace.id, { rating: placeRating, revisitIntent: true });
+            placeToastSuffix =
+              previousTier === 0 && updated.lovelichelinTier > 0
+                ? ` · 럽슐랭 ${updated.lovelichelinTier}스타 등극! 🎉`
+                : ` · ${selectedPlace.name} 럽슐랭 평가 완료`;
+          } else {
+            placeToastSuffix = ` · ${selectedPlace.name} 방문 기록 완료`;
+          }
+          usePlaceStore.getState().invalidate();
+        } catch (e) {
+          toast.error(getErrorMessage(e, '장소 방문 기록 연동에 실패했어요. 럽슐랭에서 다시 시도해주세요.'));
+        }
+      }
+
       toast.success(
-        payload.sharedWithPartner
+        (payload.sharedWithPartner
           ? `데이트 식단 완료! ${partnerName}님에게도 등록됐어요 💕`
-          : '식단 기록 완료! ',
+          : '식단 기록 완료! ') + placeToastSuffix,
       );
 
       /*
@@ -725,6 +783,66 @@ export function DietRecordScreen({ navigation, route }: Props) {
                 <Text style={styles.dateMealHint}>
                   {partnerName}님에게도 같은 끼니가 등록되고, 칼로리는 서로 절반씩 나눠 담겨요.
                 </Text>
+              ) : null}
+            </>
+          ) : null}
+
+          {/*
+            럽슐랭 장소 연동 — 식단 기록 = 방문. 수정 화면에서는 노출하지 않는다(위 "함께"와
+            같은 이유 — update() 는 상대방·장소 어느 쪽에도 영향이 없어서, 여기서 방문을
+            새로 만들 수 있는 것처럼 보이면 오해를 산다).
+          */}
+          {!editing ? (
+            <>
+              <Text style={styles.label}>어디서 드셨어요? (선택)</Text>
+              {/*
+                닫기 버튼을 픽커 안에 겹쳐 넣지 않고 행의 별도 형제로 둔다 — 터치 영역이
+                겹치는 중첩 TouchableOpacity 는 안드로이드에서 눌림이 새기 쉽다.
+              */}
+              <View style={styles.placePicker}>
+                <TouchableOpacity
+                  style={styles.placePickerMain}
+                  onPress={() => setPlaceSheetOpen(true)}
+                  activeOpacity={0.7}
+                >
+                  <MaterialCommunityIcons name="map-marker-outline" size={18} color={colors.textSecondary} />
+                  <Text style={styles.placePickerText} numberOfLines={1}>
+                    {selectedPlace ? selectedPlace.name : '럽슐랭에 저장한 장소에서 고르기'}
+                  </Text>
+                </TouchableOpacity>
+                {selectedPlace ? (
+                  <TouchableOpacity
+                    onPress={() => {
+                      setSelectedPlace(null);
+                      setPlaceRating(0);
+                    }}
+                    hitSlop={8}
+                  >
+                    <MaterialCommunityIcons name="close" size={18} color={colors.textTertiary} />
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity onPress={() => setPlaceSheetOpen(true)} hitSlop={8}>
+                    <MaterialCommunityIcons name="chevron-right" size={18} color={colors.textTertiary} />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {selectedPlace ? (
+                <>
+                  <Text style={styles.label}>같이 별점도 남길까요? (선택)</Text>
+                  <View style={styles.starRow}>
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <TouchableOpacity key={n} onPress={() => setPlaceRating(placeRating === n ? 0 : n)}>
+                        <Text style={styles.star}>{n <= placeRating ? '★' : '☆'}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <Text style={styles.placeRatingHint}>
+                    {placeRating > 0
+                      ? '방문 기록과 함께 럽슐랭 평가에도 반영돼요.'
+                      : '별점 없이 저장하면 방문 기록만 남아요.'}
+                  </Text>
+                </>
               ) : null}
             </>
           ) : null}
@@ -1035,6 +1153,45 @@ export function DietRecordScreen({ navigation, route }: Props) {
             style={styles.save}
           />
       </FormKeyboardView>
+
+      {/* 럽슐랭 장소 선택 시트 — 이미 저장된 커플 장소 중에서만 고른다(새 장소 추가는 럽슐랭 탭에서) */}
+      <Sheet visible={placeSheetOpen} onClose={() => setPlaceSheetOpen(false)} cardStyle={styles.placeSheetCard}>
+        <Text style={styles.sheetTitle}>어디서 드셨어요?</Text>
+        <TextField
+          placeholder="장소 이름으로 검색"
+          value={placeSearch}
+          onChangeText={setPlaceSearch}
+        />
+        <FlatList
+          data={placeCandidates}
+          keyExtractor={(p) => String(p.id)}
+          style={styles.placeSheetList}
+          keyboardShouldPersistTaps="handled"
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={styles.placeCandidate}
+              activeOpacity={0.7}
+              onPress={() => {
+                setSelectedPlace(item);
+                setPlaceRating(item.myRating ?? 0);
+                setPlaceSheetOpen(false);
+                setPlaceSearch('');
+              }}
+            >
+              <Text style={styles.placeCandidateName}>{item.name}</Text>
+              <Text style={styles.placeCandidateInfo}>{item.category ?? item.address ?? ''}</Text>
+            </TouchableOpacity>
+          )}
+          ListEmptyComponent={
+            <Text style={styles.empty}>
+              {places.length === 0
+                ? '럽슐랭에 저장한 장소가 아직 없어요. 럽슐랭 탭에서 먼저 추가해주세요!'
+                : '검색 결과가 없어요.'}
+            </Text>
+          }
+        />
+        <Button title="닫기" variant="ghost" size="md" onPress={() => setPlaceSheetOpen(false)} />
+      </Sheet>
     </SafeAreaView>
   );
 }
@@ -1090,6 +1247,32 @@ const styles = themedStyles((colors) => ({
     marginBottom: spacing.md,
     textAlign: 'center',
   },
+
+  // 럽슐랭 장소 연동 — 선택 버튼 + 별점
+  placePicker: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    minHeight: 48,
+  },
+  placePickerMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  placePickerText: { flex: 1, fontSize: fontSize.body, color: colors.textPrimary, fontWeight: '600' },
+  starRow: { flexDirection: 'row', gap: spacing.sm },
+  star: { fontSize: 32, color: colors.accent },
+  placeRatingHint: { color: colors.textSecondary, fontSize: fontSize.caption, marginTop: spacing.xs },
+  placeSheetCard: { maxHeight: '80%' },
+  sheetTitle: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary, marginBottom: spacing.md },
+  placeSheetList: { marginTop: spacing.sm, marginBottom: spacing.sm },
+  placeCandidate: { paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  placeCandidateName: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
+  placeCandidateInfo: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
+  empty: { fontSize: fontSize.caption, color: colors.textSecondary, textAlign: 'center', paddingVertical: spacing.lg },
 
   // 음식 항목 카드 — 운동 기록의 세트 카드와 같은 형태
   itemCard: {
