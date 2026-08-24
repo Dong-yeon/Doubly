@@ -58,8 +58,9 @@
    | `GOOGLE_PLAY_WEBHOOK_TOKEN` | 무작위 값 (예: `openssl rand -hex 24`) — 4번에서 웹훅 URL에 그대로 씀 |
 
    (코드: [`GooglePlayProperties`](../backend/src/main/java/com/fitto/common/config/GooglePlayProperties.java).
-   세 값이 모두 없으면 웹훅·검증 기능은 조용히 비활성 상태로 남습니다 — 기존
-   Cloudinary/Gemini 키 미설정 시 폴백과 같은 패턴.)
+   **셋 다 필요합니다** — 하나라도 비면 조용히 막힙니다: 패키지명·키가 없으면 Play Developer
+   API 조회가 통째로 꺼져 구매 검증이 항상 실패하고(`isConfigured()`), 토큰이 비면 웹훅이
+   전부 403으로 거부됩니다. 에러 없이 "PRO가 안 열리는" 증상으로만 보이니 주의.)
 
 ## 4. 실시간 개발자 알림(RTDN) 연결
 
@@ -75,7 +76,7 @@
      ```
      https://<railway-백엔드-도메인>/api/v1/webhooks/google-play?token=<3번의 GOOGLE_PLAY_WEBHOOK_TOKEN>
      ```
-4. Play Console → **수익 창출 설정 → 실시간 개발자 알림** → 2번에서 만든 토픽 이름
+4. Play Console → **수익 창출 설정 → 실시간 개발자 알림** → 1번에서 만든 토픽 이름
    (`projects/<project-id>/topics/play-rtdn`) 입력 후 저장
 5. Play Console의 **"테스트 알림 보내기"** 버튼으로 확인 — 서버 로그에
    `Play 웹훅 토큰 불일치` 없이 200이 찍히면 연결 성공(테스트 알림은 `purchaseToken`이
