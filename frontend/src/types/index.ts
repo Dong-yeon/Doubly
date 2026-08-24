@@ -335,6 +335,9 @@ export interface RecommendedExercise {
   sets?: number | null;
   reps?: number | null;
   comment?: string | null;
+  // 이 운동에 맞는 세트 구성법(표준 세트/탑 세트/드랍 세트/피라미드 세트/역피라미드 세트/
+  // 슈퍼세트/컴파운드 세트/레스트-포즈 세트/클러스터 세트) — AI가 운동 유형·목적·통증 부위를 고려해 골라준다
+  setMethod?: string | null;
 }
 export interface WorkoutPlanDay {
   dayOffset: number; // 0=오늘, 1=내일 … (프로그램 모드에서는 의미 없음, dayOfWeek 참고)

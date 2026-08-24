@@ -45,7 +45,7 @@ const WEEKDAY_LABEL: Record<WeekDay, string> = Object.fromEntries(
 const FOCUS_GROUPS = ['가슴', '등', '어깨', '하체', '팔', '코어'] as const;
 
 // 운동 목적 — 백엔드 GOAL_DIRECTIVES 의 키와 정확히 일치해야 프롬프트에 반영된다
-const GOALS = ['근력 향상', '근육 증가', '체지방 감량', '체력·건강 유지'] as const;
+const GOALS = ['근력 향상', '근육 증가', '체지방 감량', '체력·건강 유지', '정체기 돌파'] as const;
 
 // 프로그램 주차 — Day 구성 자체는 주차별로 안 바뀌고 진행률 표시에만 쓰인다(최대 52주, 백엔드와 동일)
 const WEEKS_OPTIONS = [4, 8, 12, 16] as const;
@@ -391,6 +391,12 @@ export function WorkoutRecommendScreen({ navigation }: Props) {
                           {ex.sets}세트 × {ex.reps}회
                         </Text>
                       ) : null}
+                      {/* 세트 구성법 — 표준 세트는 굳이 배지로 강조하지 않는다(대부분이 표준이라 노이즈) */}
+                      {ex.setMethod && ex.setMethod !== '표준 세트' ? (
+                        <View style={styles.setMethodChip}>
+                          <Text style={styles.setMethodText}>{ex.setMethod}</Text>
+                        </View>
+                      ) : null}
                     </View>
                     {ex.comment ? <Text style={styles.exerciseComment}>{ex.comment}</Text> : null}
                   </View>
@@ -489,6 +495,14 @@ const styles = themedStyles((colors) => ({
   },
   categoryText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
   setInfo: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '700' },
+  // 세트 구성법 배지 — 카테고리 칩과 달리 강조색으로 눈에 띄게 (드랍/레스트-포즈 세트 등 고급 기법 안내)
+  setMethodChip: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    backgroundColor: colors.accentSoft,
+  },
+  setMethodText: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '700' },
   exerciseComment: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
   dayComment: { fontSize: fontSize.caption, color: colors.textPrimary, marginTop: spacing.xs },
   saveRoutineBtn: { marginTop: spacing.md },
