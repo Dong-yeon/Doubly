@@ -64,6 +64,9 @@ public class FoodAnalysisService {
               (예: 계란은 지방이 0 이 아니고, 흰쌀밥은 나트륨이 거의 0에 가깝습니다)
             - totalCalories, totalCarbs, totalProtein, totalFat, totalSugar, totalSodium, totalFiber
               는 모든 음식의 합계입니다.
+            - box 에는 사진에서 그 음식이 있는 위치를 [yMin, xMin, yMax, xMax] 네 정수로 표시합니다.
+              값은 사진 전체를 0~1000 으로 정규화한 좌표입니다(왼쪽 위가 0,0). 위치를 특정하기
+              어려우면 box 를 생략해도 됩니다.
             - comment 에는 이 식단에 대한 짧고 다정한 한 줄 코멘트를 한국어로 작성합니다. (영양 균형 관점에서 칭찬 또는 부드러운 제안)
             """;
 
@@ -97,6 +100,10 @@ public class FoodAnalysisService {
      * portion·carbs·protein·fat 을 required 에 넣는 이유: 빼두면 모델이 그냥 생략해버리고,
      * 매핑에서 기본값 0 으로 채워져 "계란 지방 0g" 처럼 <b>모름이 0 으로 둔갑</b>한다.
      * 필수로 지정해야 모델이 실제 추정치를 채운다. (사진/텍스트 분석이 이 스키마를 공유)
+     *
+     * <p>{@code box} 는 <b>required 에 넣지 않는다</b> — 텍스트 분석(analyzeText)이 이 스키마를
+     * 그대로 공유하는데, 텍스트엔 이미지가 없어 위치를 낼 수 없다. required 로 강제하면
+     * 텍스트 분석이 좌표를 지어내거나(환각) 스키마 위반으로 파싱이 깨진다.
      */
     static final Map<String, Object> RESPONSE_SCHEMA = Map.of(
             "type", "OBJECT",
@@ -115,7 +122,11 @@ public class FoodAnalysisService {
                                             Map.entry("fat", Map.of("type", "INTEGER")),
                                             Map.entry("sugar", Map.of("type", "INTEGER")),
                                             Map.entry("sodium", Map.of("type", "INTEGER")),
-                                            Map.entry("fiber", Map.of("type", "INTEGER"))),
+                                            Map.entry("fiber", Map.of("type", "INTEGER")),
+                                            // [yMin, xMin, yMax, xMax] — 0~1000 정규화 좌표. 실측용(아직 프론트 미사용)
+                                            Map.entry("box", Map.of(
+                                                    "type", "ARRAY",
+                                                    "items", Map.of("type", "INTEGER")))),
                                     "required", List.of("name", "calories", "portion",
                                             "carbs", "protein", "fat", "sugar", "sodium", "fiber"))),
                     "totalCalories", Map.of("type", "INTEGER"),
@@ -317,6 +328,7 @@ public class FoodAnalysisService {
         for (JsonNode food : result.path("foods")) {
             String name = food.path("name").asText("");
             if (name.isBlank()) continue;
+            List<Integer> box = readBox(food.path("box"));
             foods.add(new AnalyzedFood(
                     name,
                     Math.max(0, food.path("calories").asInt(0)),
@@ -326,7 +338,10 @@ public class FoodAnalysisService {
                     Math.max(0, food.path("fat").asInt(0)),
                     Math.max(0, food.path("sugar").asInt(0)),
                     Math.max(0, food.path("sodium").asInt(0)),
-                    Math.max(0, food.path("fiber").asInt(0))));
+                    Math.max(0, food.path("fiber").asInt(0)),
+                    box));
+            // 실측용 — box 정확도를 눈으로 확인하는 동안만 남긴다. 확인 끝나면 지운다.
+            log.info("[box-probe] {} box={}", name, box);
         }
         if (foods.isEmpty()) {
             return MealAnalysisResponse.notFood();
@@ -349,5 +364,23 @@ public class FoodAnalysisService {
                               java.util.function.ToIntFunction<AnalyzedFood> extractor) {
         int total = result.path(field).asInt(0);
         return total > 0 ? total : foods.stream().mapToInt(extractor).sum();
+    }
+
+    /**
+     * box_2d — [yMin, xMin, yMax, xMax] 정수 4개. 모델이 생략했거나(required 아님) 개수가
+     * 안 맞으면(환각·부분 응답) null 로 버린다 — 반쪽짜리 좌표를 프론트에 흘려보내지 않는다.
+     */
+    private List<Integer> readBox(JsonNode boxNode) {
+        if (!boxNode.isArray() || boxNode.size() != 4) {
+            return null;
+        }
+        List<Integer> box = new ArrayList<>(4);
+        for (JsonNode v : boxNode) {
+            if (!v.isNumber()) {
+                return null;
+            }
+            box.add(v.asInt());
+        }
+        return box;
     }
 }

@@ -624,6 +624,12 @@ export interface AnalyzedFood {
   sugar: number;
   sodium: number;
   fiber: number;
+  /**
+   * 사진 속 위치 [yMin, xMin, yMax, xMax] (0~1000 정규화 좌표) — 사진 분석에서만 채워짐,
+   * 텍스트 분석은 항상 null. 아직 UI 에서 쓰지 않는 실측용 필드 — 좌표 정확도를 먼저 확인한
+   * 뒤 사진 위 칩 오버레이를 붙인다.
+   */
+  box?: number[] | null;
 }
 export interface MealAnalysis {
   isFood: boolean;
