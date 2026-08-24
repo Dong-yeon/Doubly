@@ -1,6 +1,6 @@
 /** 네비게이션 파라미터 타입 — 설계서 2. 화면 설계 */
 import type { NavigatorScreenParams } from '@react-navigation/native';
-import type { BarcodeLookup, Meal, Place, Trip, WeekDay } from '../types';
+import type { BarcodeLookup, Content, Meal, Place, Trip, WeekDay } from '../types';
 
 // 2.1 온보딩 플로우 (인증 전)
 export type OnboardingStackParamList = {
@@ -203,10 +203,18 @@ export type PlaceScreensParamList = {
   PlaceDetail: { placeId: number; name: string };
 };
 
-// 럽슐랭 탭 내부 스택 — 가이드/위시리스트/지도(한 화면, Chip 세그먼트) + 추가 / 상세 (PLACE)
+// 콘텐츠(영화·공연·드라마) 추가/상세 — Place 와 별개 도메인이라 지도·좌표 파라미터가 없다.
+// 여행(HomeStack)에서는 쓸 일이 없어 PlaceScreensParamList 가 아니라 PlaceStackParamList 에만 붙는다.
+export type ContentScreensParamList = {
+  // content: 기존 콘텐츠를 수정하러 들어올 때만 채워짐 (없으면 새 콘텐츠 추가)
+  ContentAdd: { content?: Content } | undefined;
+  ContentDetail: { contentId: number; title: string };
+};
+
+// 럽슐랭 탭 내부 스택 — 가이드/둘러보기(목록·지도)/콘텐츠(한 화면, Chip 세그먼트) + 추가 / 상세 (PLACE)
 // 여행(TRIP)은 HomeStackParamList 로 이관 — 위 Trip* 라우트 주석 참고
-export type PlaceStackParamList = PlaceScreensParamList & {
-  // 럽슐랭 가이드(인증 장소)/위시리스트(후보)/지도를 Chip 세그먼트로 전환하는 한 화면
+export type PlaceStackParamList = PlaceScreensParamList & ContentScreensParamList & {
+  // 럽슐랭 가이드(인증 장소)/둘러보기(전체, 목록·지도)/콘텐츠를 Chip 세그먼트로 전환하는 한 화면
   PlaceMain: undefined;
 };
 

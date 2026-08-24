@@ -36,6 +36,7 @@ export type FeatureKey =
   | 'PHOTO_UPLOAD'
   | 'TRIP_ACTIVE'
   | 'PLACE_PIN'
+  | 'CONTENT_ITEM'
   | 'WORKOUT_ROUTINE'
   | 'CALENDAR_EVENT'
   | 'FAVORITE_FOOD'
@@ -544,6 +545,43 @@ export interface PlaceVisit {
   createdAt: string;
 }
 
+// 커플 콘텐츠(영화·공연·드라마/OTT) — Place 와 별개 도메인(2026-08-24). 좌표·주소·카테고리가
+// 없다는 점만 빼면 같은 럽슐랭 등급 엔진을 쓴다 — Place 와 나란히 두고 비교해서 보는 게 좋다.
+export type ContentType = 'MOVIE' | 'PERFORMANCE' | 'DRAMA';
+export type ContentStatus = 'WISHLIST' | 'DONE';
+export interface Content {
+  id: number;
+  title: string;
+  type: ContentType;
+  status: ContentStatus;
+  addedBy: number;
+  logCount: number;
+  avgRating?: number | null;
+  lastWatchedAt?: string | null;
+  /** 럽슐랭 대표 평점(콘텐츠당 1개, 관람기록 avgRating과 별개) — 미평가 시 null */
+  myRating?: number | null;
+  partnerRating?: number | null;
+  /** 럽슐랭 등급 — 0=후보/일반, 1~3=럽스타 */
+  lovelichelinTier: number;
+  /** 럽슐랭 등극(0→양수) 시각 — 미인증/탈락 시 null */
+  lovelichelinCertifiedAt?: string | null;
+  /** 매거진 카드용 커버 — 사진 있는 가장 최근 관람기록(없으면 그냥 가장 최근 기록)에서 뽑힌다 */
+  coverImageUrl?: string | null;
+  coverMemo?: string | null;
+  createdAt: string;
+}
+export interface ContentLog {
+  id: number;
+  contentId: number;
+  loggedBy: number;
+  loggedByName?: string | null;
+  watchedAt: string;
+  rating?: number | null;
+  memo?: string | null;
+  imageUrl?: string | null;
+  createdAt: string;
+}
+
 // 식단 (meals) — 끼니별 사진/메모/칼로리
 export type MealType = 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK';
 // 저장 시점에만 채워지는 영양 목표 달성 — 오늘/히스토리 등 재조회 시엔 항상 빈 배열
@@ -631,6 +669,12 @@ export interface AnalyzedFood {
    */
   box?: number[] | null;
 }
+/**
+ * 사진이 무엇이었는지 — PHOTO_FOOD(실제 음식 사진, 추정치) / TEXT_IN_PHOTO(메뉴판·영수증·
+ * 손글씨 메모처럼 글자로 적힌 음식, 추정치) / NUTRITION_LABEL(영양성분표, 표기값 그대로).
+ * analyzeText() 결과는 항상 TEXT_IN_PHOTO. isFood 가 false 면 null.
+ */
+export type MealAnalysisSource = 'PHOTO_FOOD' | 'TEXT_IN_PHOTO' | 'NUTRITION_LABEL';
 export interface MealAnalysis {
   isFood: boolean;
   foods: AnalyzedFood[];
@@ -642,6 +686,7 @@ export interface MealAnalysis {
   totalSodium: number;
   totalFiber: number;
   comment?: string | null;
+  source?: MealAnalysisSource | null;
 }
 
 // 최근 먹은 음식 자동완성 (GET /meal/recent-foods) — 즐겨찾기와 달리 저장 없이 자동으로 뽑힌다

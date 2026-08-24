@@ -69,6 +69,8 @@ public enum Feature {
     /** 아직 끝나지 않은 여행 (지난 여행은 세지 않는다 — 지워야 새로 만들 수 있으면 안 된다) */
     TRIP_ACTIVE("진행 중인 여행", Quota.upTo(1), Quota.unlimited()),
     PLACE_PIN("맛집 핀", Quota.upTo(20), Quota.unlimited()),
+    /** 영화·공연·드라마 콘텐츠 — Place 와 별개 도메인이지만 상한 성격은 같다(PLACE_PIN 과 동일 패턴). */
+    CONTENT_ITEM("콘텐츠", Quota.upTo(20), Quota.unlimited()),
     /** PRO 의 30은 기존 {@code MAX_ROUTINES} 를 옮겨온 것 — 상한의 단일 출처를 여기로 모았다. */
     WORKOUT_ROUTINE("내 운동 루틴", Quota.upTo(3), Quota.upTo(30)),
     CALENDAR_EVENT("커플 캘린더 일정", Quota.perMonth(10), Quota.unlimited()),
@@ -176,7 +178,7 @@ public enum Feature {
         return switch (this) {
             case AI_DATE_COURSE, AI_RESTAURANT_RECOMMEND, AI_TRIP_ITINERARY, AI_WEEKLY_LETTER,
                  TRIP_ACTIVE, TRIP_EXPENSE, TRIP_CHECKLIST,
-                 PLACE_PIN, CALENDAR_EVENT, MEMORIES, WEEKLY_RECAP,
+                 PLACE_PIN, CONTENT_ITEM, CALENDAR_EVENT, MEMORIES, WEEKLY_RECAP,
                  CUSTOM_BACKGROUND, PREMIUM_STICKER, TOUCH_GESTURE_PREMIUM,
                  // 사진은 서명 발급 시점에 용도를 알 수 없다(피드=커플, 체중=개인).
                  // 물량의 대부분이 커플 콘텐츠라 커플 단위로 본다 — "커플당 결제 1건" 모델과도 맞는다.

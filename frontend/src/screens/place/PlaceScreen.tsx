@@ -1,10 +1,15 @@
 /**
- * 럽슐랭 — 가이드(인증 장소 매거진)/위시리스트(후보)/지도를 한 화면 안에서 Chip 세그먼트로
- * 전환한다. 예전엔 화면 3개 + `navigation.replace()`로 탭 전환을 흉내냈지만
- * ({@link PlaceSectionTabs}, 삭제됨), 세 뷰가 어차피 같은 {@link usePlaceStore} 데이터를
- * 필터만 다르게 보여주는 거라 화면을 나눌 이유가 없었다 — 리브랜딩 전 PlaceMapScreen 이
- * 목록/지도를 Chip 토글로 전환하던 방식으로 되돌아간 셈이다(TripSectionTabs 를 본뜬
- * 2번째 사본을 만드는 대신).
+ * 럽슐랭 — 가이드(인증 장소 매거진)/둘러보기(전체 장소, 목록↔지도)/콘텐츠(영화·공연·드라마)를
+ * 한 화면 안에서 Chip 세그먼트로 전환한다.
+ *
+ * <p><b>왜 "위시리스트"가 없어졌나(2026-08-24)</b>: 예전엔 위시리스트(tier===0)와 지도(전체)가
+ * 분리된 모드였는데, 지도가 꺼져 있으면(카카오 키 미설정) tier===0 이면서 좌표 없는 장소가
+ * 갈 곳이 없었다 — 가이드는 tier>0 만, 위시리스트는 없어졌으니 어디에도 안 뜨는 구멍이었다.
+ * "둘러보기"는 인증 여부와 무관하게 전체 장소를 목록↔지도 토글로 보여줘 그 구멍을 없앤다.
+ *
+ * <p><b>왜 "콘텐츠"가 별개 모드인가</b>: 영화·공연·드라마는 좌표가 없는 게 정상이라
+ * Place 도메인에 안 섞는다(constants/contentTypes.ts, api/content.ts 참고) — 그래서 둘러보기의
+ * 지도·카테고리 필터와는 다른 자기만의 목록·타입 필터를 갖는다.
  */
 import React, { useCallback, useMemo, useState } from 'react';
 import { FlatList, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -26,27 +31,43 @@ import { LovelichelinBadge } from '../../components/LovelichelinBadge';
 import { SoloPickBadge } from '../../components/SoloPickBadge';
 import { LovelichelinRecommendCards } from './LovelichelinRecommendCards';
 import { STATUS_FILTERS, SOLO_PICK_MIN_RATING, CATEGORY_FILTERS } from './placeFilters';
+import { CONTENT_TYPE_FILTERS, CONTENT_STATUS_FILTERS, contentTypeLabel } from '../../constants/contentTypes';
 import { placeApi } from '../../api/place';
+import { contentApi } from '../../api/content';
 import { usePlaceStore } from '../../store/placeStore';
+import { useContentStore } from '../../store/contentStore';
 import { isKakaoMapConfigured } from '../../constants/config';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { stars } from '../../utils/ratingStars';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { DateCourse, LovelichelinRecommendation, Place, PlaceStatus } from '../../types';
+import type {
+  Content,
+  ContentStatus,
+  ContentType,
+  DateCourse,
+  LovelichelinRecommendation,
+  Place,
+  PlaceStatus,
+} from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { layout } from '../../theme/layout';
 
 type Nav = NativeStackNavigationProp<PlaceStackParamList>;
-type Mode = 'guide' | 'wishlist' | 'map';
+type Mode = 'guide' | 'browse' | 'content';
+type BrowseView = 'list' | 'map';
 
 const MODES: { value: Mode; label: string }[] = [
-  { value: 'guide', label: '럽슐랭 가이드' },
-  { value: 'wishlist', label: '위시리스트' },
-  { value: 'map', label: '지도' },
+  { value: 'guide', label: '가이드' },
+  { value: 'browse', label: '둘러보기' },
+  { value: 'content', label: '콘텐츠' },
 ];
 
+const BROWSE_VIEWS: { value: BrowseView; label: string; icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'] }[] = [
+  { value: 'list', label: '목록', icon: 'format-list-bulleted' },
+  { value: 'map', label: '지도', icon: 'map-outline' },
+];
 
 function renderDateCourse(c: DateCourse) {
   return (
@@ -76,18 +97,29 @@ function renderRecommendation(data: LovelichelinRecommendation) {
 export function PlaceScreen() {
   const navigation = useNavigation<Nav>();
   const [mode, setMode] = useState<Mode>('guide');
+  const [browseView, setBrowseView] = useState<BrowseView>('list');
 
   const allPlaces = usePlaceStore((s) => s.places);
-  const loading = usePlaceStore((s) => s.loading);
-  const loadError = usePlaceStore((s) => s.loadError);
-  const load = usePlaceStore((s) => s.load);
-  const invalidate = usePlaceStore((s) => s.invalidate);
+  const placeLoading = usePlaceStore((s) => s.loading);
+  const placeLoadError = usePlaceStore((s) => s.loadError);
+  const loadPlaces = usePlaceStore((s) => s.load);
+  const invalidatePlaces = usePlaceStore((s) => s.invalidate);
 
-  // 위시리스트/지도가 공유하는 검색·상태 필터 — 가이드엔 없다(등급순 정렬 하나뿐).
-  // 카테고리 필터는 맛집 외 장소가 늘면서 세 모드 전부에서 필요해져 따로 공유한다.
+  const allContents = useContentStore((s) => s.contents);
+  const contentLoading = useContentStore((s) => s.loading);
+  const contentLoadError = useContentStore((s) => s.loadError);
+  const loadContents = useContentStore((s) => s.load);
+  const invalidateContents = useContentStore((s) => s.invalidate);
+
+  // 둘러보기(목록·지도)가 공유하는 검색·상태·카테고리 필터 — 가이드엔 없다(등급순 정렬 하나뿐)
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<PlaceStatus | 'ALL'>('ALL');
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
+
+  // 콘텐츠 모드가 쓰는 검색·상태·타입 필터 — 장소 쪽과 도메인이 달라 상태도 따로 둔다
+  const [contentSearch, setContentSearch] = useState('');
+  const [contentStatusFilter, setContentStatusFilter] = useState<ContentStatus | 'ALL'>('ALL');
+  const [contentTypeFilter, setContentTypeFilter] = useState<ContentType | 'ALL'>('ALL');
 
   // 지도 탭에서 빈 자리를 탭해 고른 좌표 — 확정 전까지는 "여기에 추가" 바만 뜬다
   const [pendingPin, setPendingPin] = useState<{ lat: number; lng: number; address?: string | null } | null>(
@@ -96,8 +128,9 @@ export function PlaceScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      load().catch(() => {}); // 에러는 loadError 로 화면에 이미 반영된다
-    }, [load]),
+      loadPlaces().catch(() => {}); // 에러는 loadError 로 화면에 이미 반영된다
+      loadContents().catch(() => {});
+    }, [loadPlaces, loadContents]),
   );
 
   const guidePlaces = useMemo(
@@ -127,23 +160,18 @@ export function PlaceScreen() {
     [allPlaces],
   );
 
-  // 위시리스트 = 아직 인증 전(tier===0) 전부. 지도는 인증 여부와 무관하게 전체를 보여준다
-  // (공간적으로 다 훑어보는 용도라 굳이 나눌 이유가 없다) — 검색·필터만 공유한다.
-  const searchFiltered = (list: Place[]) =>
-    list
-      .filter((p) => !search.trim() || p.name.toLowerCase().includes(search.trim().toLowerCase()))
-      .filter((p) => statusFilter === 'ALL' || p.status === statusFilter)
-      .filter((p) => categoryFilter === 'ALL' || p.category === categoryFilter);
-
-  const wishlistPlaces = useMemo(
-    () => searchFiltered(allPlaces.filter((p) => p.lovelichelinTier === 0)),
+  // 둘러보기 = 인증 여부와 무관하게 전체 장소. 목록·지도가 이 하나의 필터링 결과를 같이 쓴다
+  // (예전엔 위시리스트=tier0/지도=전체로 갈려서, 지도가 꺼져 있으면 tier0+좌표없음 장소가
+  // 갈 곳이 없었다 — 파일 상단 주석 참고).
+  const browsePlaces = useMemo(
+    () =>
+      allPlaces
+        .filter((p) => !search.trim() || p.name.toLowerCase().includes(search.trim().toLowerCase()))
+        .filter((p) => statusFilter === 'ALL' || p.status === statusFilter)
+        .filter((p) => categoryFilter === 'ALL' || p.category === categoryFilter),
     [allPlaces, search, statusFilter, categoryFilter],
   );
-  const mapPlaces = useMemo(
-    () => searchFiltered(allPlaces),
-    [allPlaces, search, statusFilter, categoryFilter],
-  );
-  const markers = mapPlaces
+  const markers = browsePlaces
     .filter((p) => p.lat != null && p.lng != null)
     .map((p) => ({
       id: p.id,
@@ -155,7 +183,16 @@ export function PlaceScreen() {
       tier: p.lovelichelinTier,
     }));
 
-  const onDelete = (place: Place) => {
+  const browseContents = useMemo(
+    () =>
+      allContents
+        .filter((c) => !contentSearch.trim() || c.title.toLowerCase().includes(contentSearch.trim().toLowerCase()))
+        .filter((c) => contentStatusFilter === 'ALL' || c.status === contentStatusFilter)
+        .filter((c) => contentTypeFilter === 'ALL' || c.type === contentTypeFilter),
+    [allContents, contentSearch, contentStatusFilter, contentTypeFilter],
+  );
+
+  const onDeletePlace = (place: Place) => {
     Alert.alert('장소 삭제', `"${place.name}"을(를) 삭제할까요?\n방문 기록도 함께 삭제돼요.`, [
       { text: '취소', style: 'cancel' },
       {
@@ -166,8 +203,29 @@ export function PlaceScreen() {
             await placeApi.remove(place.id);
             haptics.light();
             toast.success('장소를 삭제했어요.');
-            invalidate();
-            load(true);
+            invalidatePlaces();
+            loadPlaces(true);
+          } catch (e) {
+            Alert.alert('오류', getErrorMessage(e));
+          }
+        },
+      },
+    ]);
+  };
+
+  const onDeleteContent = (content: Content) => {
+    Alert.alert('콘텐츠 삭제', `"${content.title}"을(를) 삭제할까요?\n관람 기록도 함께 삭제돼요.`, [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '삭제',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await contentApi.remove(content.id);
+            haptics.light();
+            toast.success('콘텐츠를 삭제했어요.');
+            invalidateContents();
+            loadContents(true);
           } catch (e) {
             Alert.alert('오류', getErrorMessage(e));
           }
@@ -189,7 +247,7 @@ export function PlaceScreen() {
               render={renderRecommendation}
             />
           ) : null}
-          {mode === 'map' ? (
+          {mode === 'browse' && browseView === 'map' ? (
             <AiInsightButton
               label="AI 데이트 코스"
               title="AI 데이트 코스"
@@ -209,16 +267,40 @@ export function PlaceScreen() {
             selected={mode === m.value}
             onPress={() => {
               setMode(m.value);
-              // 지도를 벗어나면 고르던 좌표는 의미가 없다 — 다음에 지도로 돌아왔을 때
+              // 둘러보기를 벗어나면 지도에서 고르던 좌표는 의미가 없다 — 다음에 돌아왔을 때
               // 엉뚱한 위치에 "여기에 추가" 바가 떠 있지 않게 비운다.
-              if (m.value !== 'map') setPendingPin(null);
+              if (m.value !== 'browse') setPendingPin(null);
             }}
             fill
           />
         ))}
       </View>
 
-      {allPlaces.length > 0 ? (
+      {mode === 'browse' ? (
+        <View style={styles.browseViewRow}>
+          {BROWSE_VIEWS.map((v) => (
+            <TouchableOpacity
+              key={v.value}
+              style={[styles.browseViewBtn, browseView === v.value && styles.browseViewBtnActive]}
+              onPress={() => {
+                setBrowseView(v.value);
+                if (v.value !== 'map') setPendingPin(null);
+              }}
+            >
+              <MaterialCommunityIcons
+                name={v.icon}
+                size={16}
+                color={browseView === v.value ? colors.white : colors.textSecondary}
+              />
+              <Text style={[styles.browseViewText, browseView === v.value && styles.browseViewTextActive]}>
+                {v.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : null}
+
+      {(mode === 'guide' || mode === 'browse') && allPlaces.length > 0 ? (
         <View style={styles.filterRow}>
           {CATEGORY_FILTERS.map((f) => (
             <Chip
@@ -231,7 +313,7 @@ export function PlaceScreen() {
         </View>
       ) : null}
 
-      {mode !== 'guide' ? (
+      {mode === 'browse' ? (
         <>
           {allPlaces.length > 0 ? (
             <View style={styles.searchWrap}>
@@ -256,13 +338,50 @@ export function PlaceScreen() {
         </>
       ) : null}
 
+      {mode === 'content' ? (
+        <>
+          {allContents.length > 0 ? (
+            <>
+              <View style={styles.searchWrap}>
+                <TextField
+                  placeholder="제목으로 검색"
+                  value={contentSearch}
+                  onChangeText={setContentSearch}
+                  returnKeyType="search"
+                />
+              </View>
+              <View style={styles.filterRow}>
+                {CONTENT_TYPE_FILTERS.map((f) => (
+                  <Chip
+                    key={f.value}
+                    label={f.label}
+                    selected={contentTypeFilter === f.value}
+                    onPress={() => setContentTypeFilter(f.value)}
+                  />
+                ))}
+              </View>
+              <View style={styles.filterRow}>
+                {CONTENT_STATUS_FILTERS.map((f) => (
+                  <Chip
+                    key={f.value}
+                    label={f.label}
+                    selected={contentStatusFilter === f.value}
+                    onPress={() => setContentStatusFilter(f.value)}
+                  />
+                ))}
+              </View>
+            </>
+          ) : null}
+        </>
+      ) : null}
+
       {mode === 'guide' ? (
         <FlatList
           data={guidePlaces}
           keyExtractor={(p) => String(p.id)}
           contentContainerStyle={styles.list}
-          refreshing={loading}
-          onRefresh={() => load(true)}
+          refreshing={placeLoading}
+          onRefresh={() => loadPlaces(true)}
           ListHeaderComponent={
             soloPicks.length > 0 ? (
               <View style={styles.soloPickSection}>
@@ -334,14 +453,14 @@ export function PlaceScreen() {
             </TouchableOpacity>
           )}
           ListEmptyComponent={
-            !loading ? (
-              loadError ? (
+            !placeLoading ? (
+              placeLoadError ? (
                 <EmptyState
                   icon="cloud-off-outline"
                   title="가이드를 불러오지 못했어요"
                   description="네트워크 상태를 확인하고 다시 시도해주세요."
                   error
-                  onRetry={() => load()}
+                  onRetry={() => loadPlaces()}
                 />
               ) : allPlaces.some((p) => p.lovelichelinTier > 0) ? (
                 <EmptyState icon="crown" title="조건에 맞는 장소가 없어요" description="카테고리 필터를 바꿔보세요." />
@@ -349,7 +468,7 @@ export function PlaceScreen() {
                 <EmptyState
                   icon="crown"
                   title="아직 럽슐랭으로 인증된 장소가 없어요"
-                  description="위시리스트에 담은 곳을 다녀온 뒤, 둘 다 평점을 매기면 등급이 매겨져요!"
+                  description="둘러보기에 담은 곳을 다녀온 뒤, 둘 다 평점을 매기면 등급이 매겨져요!"
                 />
               )
             ) : null
@@ -357,32 +476,34 @@ export function PlaceScreen() {
         />
       ) : null}
 
-      {mode === 'wishlist' ? (
+      {mode === 'browse' && browseView === 'list' ? (
         <FlatList
-          data={wishlistPlaces}
+          data={browsePlaces}
           keyExtractor={(p) => String(p.id)}
           contentContainerStyle={styles.list}
-          refreshing={loading}
-          onRefresh={() => load(true)}
+          refreshing={placeLoading}
+          onRefresh={() => loadPlaces(true)}
           ListHeaderComponent={
-            wishlistPlaces.length > 0 ? <Text style={styles.deleteHint}>카드를 길게 눌러 삭제할 수 있어요</Text> : null
+            browsePlaces.length > 0 ? <Text style={styles.deleteHint}>카드를 길게 눌러 삭제할 수 있어요</Text> : null
           }
           renderItem={({ item }) => (
             <TouchableOpacity
               style={styles.card}
               activeOpacity={0.7}
               onPress={() => navigation.navigate('PlaceDetail', { placeId: item.id, name: item.name })}
-              onLongPress={() => onDelete(item)}
+              onLongPress={() => onDeletePlace(item)}
             >
               <View style={styles.cardHeader}>
                 <Text style={styles.name}>{item.name}</Text>
+                {item.lovelichelinTier > 0 ? <LovelichelinBadge tier={item.lovelichelinTier} size="sm" /> : null}
                 {item.category ? (
                   <View style={styles.categoryChip}>
                     <Text style={styles.categoryText}>{item.category}</Text>
                   </View>
                 ) : null}
-                {(item.myRating != null && item.myRating >= SOLO_PICK_MIN_RATING && item.partnerRating == null) ||
-                (item.partnerRating != null && item.partnerRating >= SOLO_PICK_MIN_RATING && item.myRating == null) ? (
+                {item.lovelichelinTier === 0 &&
+                ((item.myRating != null && item.myRating >= SOLO_PICK_MIN_RATING && item.partnerRating == null) ||
+                  (item.partnerRating != null && item.partnerRating >= SOLO_PICK_MIN_RATING && item.myRating == null)) ? (
                   <SoloPickBadge who={item.myRating != null ? 'me' : 'partner'} size="sm" />
                 ) : null}
                 {item.tripId != null ? (
@@ -401,7 +522,7 @@ export function PlaceScreen() {
                   </Text>
                 ) : null}
               </View>
-              {item.myRating != null || item.partnerRating != null ? (
+              {item.lovelichelinTier === 0 && (item.myRating != null || item.partnerRating != null) ? (
                 <Text style={styles.pendingHint}>
                   {item.myRating != null && item.partnerRating != null
                     ? '럽슐랭 탈락 — 재평가하면 다시 등급이 매겨져요'
@@ -411,14 +532,14 @@ export function PlaceScreen() {
             </TouchableOpacity>
           )}
           ListEmptyComponent={
-            !loading ? (
-              loadError ? (
+            !placeLoading ? (
+              placeLoadError ? (
                 <EmptyState
                   icon="cloud-off-outline"
                   title="장소를 불러오지 못했어요"
                   description="네트워크 상태를 확인하고 다시 시도해주세요."
                   error
-                  onRetry={() => load()}
+                  onRetry={() => loadPlaces()}
                 />
               ) : allPlaces.length > 0 ? (
                 <EmptyState icon="map-marker-outline" title="조건에 맞는 장소가 없어요" description="검색어나 필터를 바꿔보세요." />
@@ -434,7 +555,7 @@ export function PlaceScreen() {
         />
       ) : null}
 
-      {mode === 'map' ? (
+      {mode === 'browse' && browseView === 'map' ? (
         !isKakaoMapConfigured() ? (
           <View style={styles.mapUnavailable}>
             <EmptyState
@@ -466,7 +587,7 @@ export function PlaceScreen() {
               selectable
               onSelect={(pos) => setPendingPin(pos)}
               onMarkerPress={(id) => {
-                const place = mapPlaces.find((p) => p.id === id);
+                const place = browsePlaces.find((p) => p.id === id);
                 if (place) navigation.navigate('PlaceDetail', { placeId: place.id, name: place.name });
               }}
             />
@@ -481,8 +602,79 @@ export function PlaceScreen() {
         )
       ) : null}
 
+      {mode === 'content' ? (
+        <FlatList
+          data={browseContents}
+          keyExtractor={(c) => String(c.id)}
+          contentContainerStyle={styles.list}
+          refreshing={contentLoading}
+          onRefresh={() => loadContents(true)}
+          ListHeaderComponent={
+            browseContents.length > 0 ? <Text style={styles.deleteHint}>카드를 길게 눌러 삭제할 수 있어요</Text> : null
+          }
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={styles.card}
+              activeOpacity={0.7}
+              onPress={() => navigation.navigate('ContentDetail', { contentId: item.id, title: item.title })}
+              onLongPress={() => onDeleteContent(item)}
+            >
+              <View style={styles.cardHeader}>
+                <Text style={styles.name}>{item.title}</Text>
+                {item.lovelichelinTier > 0 ? <LovelichelinBadge tier={item.lovelichelinTier} size="sm" /> : null}
+                <View style={styles.categoryChip}>
+                  <Text style={styles.categoryText}>{contentTypeLabel(item.type)}</Text>
+                </View>
+                {item.lovelichelinTier === 0 &&
+                ((item.myRating != null && item.myRating >= SOLO_PICK_MIN_RATING && item.partnerRating == null) ||
+                  (item.partnerRating != null && item.partnerRating >= SOLO_PICK_MIN_RATING && item.myRating == null)) ? (
+                  <SoloPickBadge who={item.myRating != null ? 'me' : 'partner'} size="sm" />
+                ) : null}
+              </View>
+              <View style={styles.cardFooter}>
+                <Text style={styles.statusBadge}>{item.status === 'DONE' ? '봤어요' : '보고 싶어요'}</Text>
+                {item.logCount > 0 ? (
+                  <Text style={styles.visitInfo}>
+                    {item.avgRating ? `${item.avgRating.toFixed(1)} · ` : ''}관람 {item.logCount}회
+                    {item.lastWatchedAt ? ` · 최근 ${item.lastWatchedAt}` : ''}
+                  </Text>
+                ) : null}
+              </View>
+              {item.lovelichelinTier === 0 && (item.myRating != null || item.partnerRating != null) ? (
+                <Text style={styles.pendingHint}>
+                  {item.myRating != null && item.partnerRating != null
+                    ? '럽슐랭 탈락 — 재평가하면 다시 등급이 매겨져요'
+                    : `${item.myRating != null ? '내' : '상대'} 평점만 매겨졌어요 — 나머지 한 명의 평가를 기다리는 중`}
+                </Text>
+              ) : null}
+            </TouchableOpacity>
+          )}
+          ListEmptyComponent={
+            !contentLoading ? (
+              contentLoadError ? (
+                <EmptyState
+                  icon="cloud-off-outline"
+                  title="콘텐츠를 불러오지 못했어요"
+                  description="네트워크 상태를 확인하고 다시 시도해주세요."
+                  error
+                  onRetry={() => loadContents()}
+                />
+              ) : allContents.length > 0 ? (
+                <EmptyState icon="movie-open-outline" title="조건에 맞는 콘텐츠가 없어요" description="검색어나 필터를 바꿔보세요." />
+              ) : (
+                <EmptyState
+                  icon="movie-open-outline"
+                  title="아직 저장한 콘텐츠가 없어요"
+                  description="함께 보고 싶은 영화·공연·드라마를 추가해보세요! (카드를 길게 눌러 삭제)"
+                />
+              )
+            ) : null
+          }
+        />
+      ) : null}
+
       <View style={styles.fabWrap}>
-        {mode === 'map' && pendingPin ? (
+        {mode === 'browse' && browseView === 'map' && pendingPin ? (
           <View style={styles.pendingPinBar}>
             <View style={styles.pendingPinInfo}>
               <MaterialCommunityIcons name="map-marker" size={18} color={colors.primary} />
@@ -502,6 +694,8 @@ export function PlaceScreen() {
               />
             </View>
           </View>
+        ) : mode === 'content' ? (
+          <Button title="＋ 콘텐츠 추가하기" onPress={() => navigation.navigate('ContentAdd')} />
         ) : (
           <Button title="＋ 장소 추가하기" onPress={() => navigation.navigate('PlaceAdd')} />
         )}
@@ -522,6 +716,22 @@ const styles = themedStyles((colors) => ({
   screenTitle: { fontSize: fontSize.title, fontWeight: '800', color: colors.textPrimary },
   titleActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   modeRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.md },
+  // 둘러보기 안의 목록↔지도 서브 토글 — 모드 칩보다 한 단 작게, 필터 줄과 같은 위치에 둔다
+  browseViewRow: { flexDirection: 'row', gap: spacing.xs, paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
+  browseViewBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  browseViewBtnActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  browseViewText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary },
+  browseViewTextActive: { color: colors.white },
   searchWrap: { paddingHorizontal: spacing.lg, paddingTop: spacing.md },
   filterRow: {
     flexDirection: 'row',
@@ -557,7 +767,7 @@ const styles = themedStyles((colors) => ({
   soloPickCard: { width: 140, gap: spacing.xs },
   soloPickName: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
   soloPickStars: { fontSize: fontSize.caption, fontWeight: '700' },
-  // 위시리스트 카드
+  // 둘러보기·콘텐츠 목록 카드
   deleteHint: { fontSize: fontSize.caption, color: colors.textSecondary, marginBottom: spacing.sm },
   card: {
     backgroundColor: colors.surface,

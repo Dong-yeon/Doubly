@@ -72,6 +72,13 @@ public class RelationRecordPurger {
                 + "(select p.id from places p where p.couple_id = :rid)", relationId);
         exec("delete from places where couple_id = :rid", relationId);
 
+        // 콘텐츠(영화·공연·드라마) — places 와 같은 모양(V65)
+        exec("delete from content_logs where content_id in "
+                + "(select c.id from contents c where c.couple_id = :rid)", relationId);
+        exec("delete from content_ratings where content_id in "
+                + "(select c.id from contents c where c.couple_id = :rid)", relationId);
+        exec("delete from contents where couple_id = :rid", relationId);
+
         exec("delete from couple_challenges where couple_id = :rid", relationId);
         exec("delete from couple_events where couple_id = :rid", relationId);
         exec("delete from daily_answers where couple_id = :rid", relationId);
@@ -115,6 +122,9 @@ public class RelationRecordPurger {
         urls.addAll(select("select v.image_url from place_visits v "
                 + "where v.image_url is not null and v.place_id in "
                 + "(select p.id from places p where p.couple_id = :rid)", relationId));
+        urls.addAll(select("select l.image_url from content_logs l "
+                + "where l.image_url is not null and l.content_id in "
+                + "(select c.id from contents c where c.couple_id = :rid)", relationId));
         urls.addAll(select("select t.cover_image_url from trips t "
                 + "where t.couple_id = :rid and t.cover_image_url is not null", relationId));
         urls.addAll(select("select m.image_url from chat_messages m "

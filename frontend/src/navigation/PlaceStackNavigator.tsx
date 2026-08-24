@@ -1,5 +1,5 @@
 /**
- * 럽슐랭 탭 내부 스택 — 가이드/위시리스트/지도(한 화면) / 추가 / 상세 (PLACE).
+ * 럽슐랭 탭 내부 스택 — 가이드/둘러보기(목록·지도)/콘텐츠(한 화면) / 추가·상세 2세트 (PLACE + CONTENT).
  * 여행(Trip*)은 HomeStackNavigator 로 이관 — navigation/types.ts 의 Trip* 주석 참고.
  */
 import React from 'react';
@@ -8,6 +8,8 @@ import type { PlaceStackParamList } from './types';
 import { PlaceScreen } from '../screens/place/PlaceScreen';
 import { PlaceAddScreen } from '../screens/place/PlaceAddScreen';
 import { PlaceDetailScreen } from '../screens/place/PlaceDetailScreen';
+import { ContentAddScreen } from '../screens/content/ContentAddScreen';
+import { ContentDetailScreen } from '../screens/content/ContentDetailScreen';
 import { stackScreenOptions, modalOptions } from './headerOptions';
 
 const Stack = createNativeStackNavigator<PlaceStackParamList>();
@@ -31,6 +33,19 @@ export function PlaceStackNavigator() {
         name="PlaceDetail"
         component={PlaceDetailScreen}
         options={({ route }) => ({ title: route.params.name })}
+      />
+      <Stack.Screen
+        name="ContentAdd"
+        component={ContentAddScreen}
+        options={({ route }) => ({
+          title: route.params?.content ? '콘텐츠 수정' : '콘텐츠 추가',
+          ...modalOptions,
+        })}
+      />
+      <Stack.Screen
+        name="ContentDetail"
+        component={ContentDetailScreen}
+        options={({ route }) => ({ title: route.params.title })}
       />
     </Stack.Navigator>
   );

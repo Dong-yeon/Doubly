@@ -24,6 +24,7 @@ public final class PushLinks {
     public static final String WORKOUT_ROUTINES = "workout/routines";
     public static final String DIET = "diet";
     public static final String PLACE = "place";
+    public static final String CONTENT = "content";
     public static final String TRIPS = "trips";
     public static final String TRAINER_DASHBOARD = "trainer";
 
@@ -43,5 +44,10 @@ public final class PushLinks {
     /** 여행 상세. */
     public static String trip(Long tripId) {
         return tripId == null ? TRIPS : "trips/" + tripId;
+    }
+
+    /** 콘텐츠(영화·공연·드라마) 상세. */
+    public static String content(Long contentId) {
+        return contentId == null ? CONTENT : "content/" + contentId;
     }
 }

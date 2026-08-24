@@ -60,6 +60,10 @@ public enum ErrorCode {
     // 맛집 지도 (PLACE)
     PLACE_NOT_FOUND(HttpStatus.NOT_FOUND, "장소를 찾을 수 없습니다."),
 
+    // 콘텐츠 — 영화·공연·드라마 (CONTENT)
+    CONTENT_NOT_FOUND(HttpStatus.NOT_FOUND, "콘텐츠를 찾을 수 없습니다."),
+    CONTENT_LOG_NOT_FOUND(HttpStatus.NOT_FOUND, "관람 기록을 찾을 수 없습니다."),
+
     // 일상 피드 (FEED)
     FEED_POST_NOT_FOUND(HttpStatus.NOT_FOUND, "포스트를 찾을 수 없습니다."),
 

@@ -234,12 +234,18 @@ export const linking: LinkingOptions<RootStackParamList> = {
           Place: {
             initialRouteName: 'PlaceMain',
             screens: {
-              // 가이드/위시리스트/지도가 한 화면(Chip 세그먼트)으로 합쳐져 경로도 하나다
+              // 가이드/둘러보기(목록·지도)/콘텐츠가 한 화면(Chip 세그먼트)으로 합쳐져 경로도 하나다
               PlaceMain: 'place',
               PlaceAdd: 'place/add',
               PlaceDetail: {
                 path: 'place/:placeId',
                 parse: { placeId: Number },
+              },
+              // 콘텐츠(영화·공연·드라마) — Place 와 별개 도메인이지만 같은 탭 안이라 경로도 옆에 둔다
+              ContentAdd: 'place/content/add',
+              ContentDetail: {
+                path: 'place/content/:contentId',
+                parse: { contentId: Number },
               },
             },
           },

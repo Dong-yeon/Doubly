@@ -20,12 +20,17 @@ interface Props {
   /** 1~3 — 0 이면 열리지 않은 것과 같으므로 호출부가 애초에 열지 않는다 */
   tier: number;
   placeName: string;
+  /** 장소/콘텐츠에 따라 다른 한 문장 — 기본은 장소(미식 스팟) 문구, 콘텐츠는 호출부가 넘긴다 */
+  description?: string;
   onClose: () => void;
 }
 
-export function LovelichelinFanfareModal({ visible, tier, placeName, onClose }: Props) {
+const DEFAULT_DESCRIPTION = '둘이 함께 검증한 우리만의 미식 스팟이에요.';
+
+export function LovelichelinFanfareModal({ visible, tier, placeName, description, onClose }: Props) {
   const scale = useRef(new Animated.Value(0.85)).current;
   const opacity = useRef(new Animated.Value(0)).current;
+  const desc = description ?? DEFAULT_DESCRIPTION;
 
   useEffect(() => {
     if (!visible) return;
@@ -36,7 +41,7 @@ export function LovelichelinFanfareModal({ visible, tier, placeName, onClose }: 
   }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onShare = async () => {
-    const result = await shareText(`🎉 럽슐랭 ${tier}스타 등극! — ${placeName}\n둘이 함께 검증한 우리만의 미식 스팟이에요.`);
+    const result = await shareText(`🎉 럽슐랭 ${tier}스타 등극! — ${placeName}\n${desc}`);
     if (result === 'copied') toast.success('클립보드에 복사했어요.');
   };
 
@@ -51,7 +56,7 @@ export function LovelichelinFanfareModal({ visible, tier, placeName, onClose }: 
         <Text style={styles.stars}>{'★'.repeat(tier)}</Text>
         <Text style={styles.title}>럽슐랭 {tier}스타 등극!</Text>
         <Text style={styles.place}>{placeName}</Text>
-        <Text style={styles.desc}>둘이 함께 검증한 우리만의 미식 스팟이에요.</Text>
+        <Text style={styles.desc}>{desc}</Text>
         <View style={styles.actions}>
           <Button title="공유하기" variant="secondary" size="md" onPress={onShare} style={styles.flex} />
           <Button title="닫기" size="md" onPress={onClose} style={styles.flex} />
