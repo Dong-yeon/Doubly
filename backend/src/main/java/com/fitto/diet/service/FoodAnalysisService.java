@@ -18,6 +18,7 @@ import org.springframework.web.client.RestClientResponseException;
 
 import java.io.InputStream;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -37,6 +38,19 @@ public class FoodAnalysisService {
     private static final String ALLOWED_PHOTO_HOST_SUFFIX = "cloudinary.com";
 
     private static final int MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+
+    /**
+     * Cloudinary 변환 파라미터 — 음식 인식에 1024px 이상은 의미가 없으므로 다운로드 자체를
+     * 그 크기로 줄여 받는다({@code c_limit} 이라 더 작은 원본을 <b>키우진</b> 않는다).
+     * {@code q_auto} 는 화질 저하 없이 인코딩만 최적화한다.
+     *
+     * <p>클라이언트가 업로드 전에 이미 1024px 로 줄이지만(imageUpload.ts 의 shrinkImage), 여기서도
+     * 한 번 더 거는 이유는 안전망이다 — 웹처럼 축소가 안 통했거나, 이 변경 이전에 이미 올라간
+     * 사진을 수정 화면에서 재분석하는 경우 등, 원본 그대로일 수 있는 경로가 남아 있다.
+     * <b>포맷은 바꾸지 않는다</b>(f_auto 미사용) — Gemini 미지원 포맷(AVIF 등)으로 나갈 위험을
+     * 피하고, 아래 매직바이트 판별 로직이 실제 업로드 포맷을 그대로 신뢰할 수 있게 한다.
+     */
+    private static final String CLOUDINARY_TRANSFORM = "w_1024,c_limit,q_auto";
 
     private static final String PROMPT = """
             사진 속 음식을 분석해 주세요.
@@ -171,6 +185,9 @@ public class FoodAnalysisService {
                 || !(host.equals(ALLOWED_PHOTO_HOST_SUFFIX) || host.endsWith("." + ALLOWED_PHOTO_HOST_SUFFIX))) {
             throw new BusinessException(ErrorCode.INVALID_PHOTO_URL);
         }
+        // 호스트 검증을 통과한 뒤에만 변환을 건다 — 임의 URL 에 변환 세그먼트를 끼워 넣어봐야
+        // 애초에 cloudinary.com 이 아니면 위에서 이미 막힌 뒤다.
+        uri = withTransform(uri);
 
         try {
             // 전체 버퍼링 대신 스트리밍으로 상한+1 바이트까지만 읽는다 — 초대형 응답의 메모리 스파이크 방지.
@@ -199,6 +216,34 @@ public class FoodAnalysisService {
         } catch (RestClientResponseException | ResourceAccessException e) {
             log.warn("식단 사진 다운로드 실패: {}", e.getMessage());
             throw new BusinessException(ErrorCode.PHOTO_DOWNLOAD_FAILED);
+        }
+    }
+
+    /**
+     * Cloudinary URL 경로의 {@code /upload/} 바로 뒤에 변환 세그먼트를 끼워 넣는다.
+     * <pre>
+     *   .../image/upload/v169.../folder/abc.jpg
+     *   → .../image/upload/w_1024,c_limit,q_auto/v169.../folder/abc.jpg
+     * </pre>
+     * 우리 업로드 흐름(imageUpload.ts)이 만드는 URL 은 항상 이 모양이라 안전하게 걸린다.
+     * 혹시 모양이 다르면({@code /upload/} 이 없으면) <b>원본 URL 그대로</b> 돌려준다 — 변환은
+     * 최적화지 기능이 아니라서, 여기서 실패해도 다운로드 자체는 막지 않는다.
+     *
+     * <p>package-private — 테스트에서 직접 검증한다({@code buildTextPrompt} 와 같은 이유).
+     */
+    URI withTransform(URI uri) {
+        String path = uri.getRawPath();
+        int idx = path.indexOf("/upload/");
+        if (idx < 0) {
+            return uri;
+        }
+        int insertAt = idx + "/upload/".length();
+        String newPath = path.substring(0, insertAt) + CLOUDINARY_TRANSFORM + "/" + path.substring(insertAt);
+        try {
+            return new URI(uri.getScheme(), uri.getAuthority(), newPath, uri.getQuery(), uri.getFragment());
+        } catch (URISyntaxException e) {
+            log.warn("Cloudinary 변환 URL 조립 실패 — 원본으로 다운로드합니다: {}", e.getMessage());
+            return uri;
         }
     }
 
