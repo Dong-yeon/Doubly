@@ -70,4 +70,22 @@ class FoodAnalysisTextPromptTest {
         assertThat(required).contains("isFood", "foods", "totalCalories",
                 "totalCarbs", "totalProtein", "totalFat");
     }
+
+    /**
+     * box(사진 속 위치, box_2d 실측용)는 필드는 있어야 하지만 required 에는 없어야 한다.
+     * required 로 두면 이미지가 없는 텍스트 분석(analyzeText)이 이 스키마를 그대로 공유하다가
+     * 좌표를 지어내거나 스키마 위반으로 파싱이 깨진다.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void box는_필드는_있지만_필수는_아니다() {
+        Map<String, Object> foods = (Map<String, Object>)
+                ((Map<String, Object>) FoodAnalysisService.RESPONSE_SCHEMA.get("properties")).get("foods");
+        Map<String, Object> items = (Map<String, Object>) foods.get("items");
+        Map<String, Object> properties = (Map<String, Object>) items.get("properties");
+        List<String> required = (List<String>) items.get("required");
+
+        assertThat(properties).containsKey("box");
+        assertThat(required).doesNotContain("box");
+    }
 }

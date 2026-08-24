@@ -20,10 +20,18 @@ public record MealAnalysisResponse(
         String comment
 ) {
 
-    /** 사진에서 식별된 음식 1건 — 매크로/추가 영양소는 g 단위(나트륨만 mg) 추정치 */
+    /**
+     * 사진에서 식별된 음식 1건 — 매크로/추가 영양소는 g 단위(나트륨만 mg) 추정치.
+     *
+     * <p>{@code box} — 사진 속 위치, Gemini 의 {@code box_2d} 그대로 [yMin, xMin, yMax, xMax]
+     * (0~1000 정규화 좌표). <b>사진 분석에서만</b> 채워진다 — 텍스트 분석은 스키마를 공유하지만
+     * 이미지가 없어 위치를 알 수 없으므로 null. 아직 프론트에서 쓰지 않는 실측용 필드
+     * (PLAN.md 사진 위 칩 UI 검토 참고) — 좌표 정확도를 먼저 확인한 뒤 오버레이를 붙인다.
+     */
     public record AnalyzedFood(String name, int calories, String portion,
                                int carbs, int protein, int fat,
-                               int sugar, int sodium, int fiber) {
+                               int sugar, int sodium, int fiber,
+                               List<Integer> box) {
     }
 
     public static MealAnalysisResponse notFood() {
