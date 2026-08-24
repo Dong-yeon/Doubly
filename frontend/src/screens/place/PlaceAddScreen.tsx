@@ -19,21 +19,12 @@ import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { useDirtyGuard } from '../../hooks/useDirtyGuard';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
+import { PLACE_CATEGORIES, KAKAO_CATEGORY_AUTO } from '../../constants/placeCategories';
 import type { PlaceStatus } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 
 // 럽슐랭 탭과 홈(여행) 스택 양쪽에 등록되는 화면 — 두 스택이 공유하는 최소 목록으로 타입을 잡는다
 type Props = NativeStackScreenProps<PlaceScreensParamList, 'PlaceAdd'>;
-
-// 맛집뿐 아니라 여행지·전시 같은 데이트 장소 전반을 담는다 — 음식 → 나들이 순
-const CATEGORIES = ['한식', '중식', '일식', '양식', '카페', '디저트', '술집', '여행지', '박물관·전시', '액티비티', '기타'];
-
-// 카카오 카테고리 그룹 코드 → 앱 카테고리 자동 매핑 (CE7 카페 / AT4 관광명소 / CT1 문화시설)
-const KAKAO_CATEGORY_AUTO: Record<string, string> = {
-  CE7: '카페',
-  AT4: '여행지',
-  CT1: '박물관·전시',
-};
 
 const STATUS_OPTIONS: { value: PlaceStatus; label: string }[] = [
   { value: 'WISHLIST', label: '가고 싶어요' },
@@ -239,7 +230,7 @@ export function PlaceAddScreen({ navigation, route }: Props) {
 
           <Text style={styles.label}>카테고리 (선택)</Text>
           <View style={styles.chipRow}>
-            {CATEGORIES.map((c) => (
+            {PLACE_CATEGORIES.map((c) => (
               <Chip
                 key={c}
                 label={c}

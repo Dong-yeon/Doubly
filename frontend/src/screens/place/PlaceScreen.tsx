@@ -24,7 +24,7 @@ import { TextField } from '../../components/TextField';
 import { AiInsightButton } from '../../components/AiInsightButton';
 import { LovelichelinBadge } from '../../components/LovelichelinBadge';
 import { LovelichelinRecommendCards } from './LovelichelinRecommendCards';
-import { STATUS_FILTERS, DIET_FILTERS } from './placeFilters';
+import { STATUS_FILTERS, DIET_FILTERS, CATEGORY_FILTERS } from './placeFilters';
 import { placeApi } from '../../api/place';
 import { usePlaceStore } from '../../store/placeStore';
 import { isKakaoMapConfigured } from '../../constants/config';
@@ -89,10 +89,12 @@ export function PlaceScreen() {
   const load = usePlaceStore((s) => s.load);
   const invalidate = usePlaceStore((s) => s.invalidate);
 
-  // 위시리스트/지도가 공유하는 검색·필터 — 가이드엔 없다(등급순 정렬 하나뿐)
+  // 위시리스트/지도가 공유하는 검색·상태·식단 필터 — 가이드엔 없다(등급순 정렬 하나뿐).
+  // 카테고리 필터는 맛집 외 장소가 늘면서 세 모드 전부에서 필요해져 따로 공유한다.
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<PlaceStatus | 'ALL'>('ALL');
   const [dietFilter, setDietFilter] = useState<PlaceDietTag | 'ALL'>('ALL');
+  const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
 
   // 지도 탭에서 빈 자리를 탭해 고른 좌표 — 확정 전까지는 "여기에 추가" 바만 뜬다
   const [pendingPin, setPendingPin] = useState<{ lat: number; lng: number; address?: string | null } | null>(
@@ -109,11 +111,12 @@ export function PlaceScreen() {
     () =>
       allPlaces
         .filter((p) => p.lovelichelinTier > 0)
+        .filter((p) => categoryFilter === 'ALL' || p.category === categoryFilter)
         .sort((a, b) => {
           if (b.lovelichelinTier !== a.lovelichelinTier) return b.lovelichelinTier - a.lovelichelinTier;
           return (b.lovelichelinCertifiedAt ?? '').localeCompare(a.lovelichelinCertifiedAt ?? '');
         }),
-    [allPlaces],
+    [allPlaces, categoryFilter],
   );
 
   // 위시리스트 = 아직 인증 전(tier===0) 전부. 지도는 인증 여부와 무관하게 전체를 보여준다
@@ -122,13 +125,17 @@ export function PlaceScreen() {
     list
       .filter((p) => !search.trim() || p.name.toLowerCase().includes(search.trim().toLowerCase()))
       .filter((p) => statusFilter === 'ALL' || p.status === statusFilter)
-      .filter((p) => dietFilter === 'ALL' || p.dietTag === dietFilter);
+      .filter((p) => dietFilter === 'ALL' || p.dietTag === dietFilter)
+      .filter((p) => categoryFilter === 'ALL' || p.category === categoryFilter);
 
   const wishlistPlaces = useMemo(
     () => searchFiltered(allPlaces.filter((p) => p.lovelichelinTier === 0)),
-    [allPlaces, search, statusFilter, dietFilter],
+    [allPlaces, search, statusFilter, dietFilter, categoryFilter],
   );
-  const mapPlaces = useMemo(() => searchFiltered(allPlaces), [allPlaces, search, statusFilter, dietFilter]);
+  const mapPlaces = useMemo(
+    () => searchFiltered(allPlaces),
+    [allPlaces, search, statusFilter, dietFilter, categoryFilter],
+  );
   const markers = mapPlaces
     .filter((p) => p.lat != null && p.lng != null)
     .map((p) => ({
@@ -203,6 +210,19 @@ export function PlaceScreen() {
           />
         ))}
       </View>
+
+      {allPlaces.length > 0 ? (
+        <View style={styles.filterRow}>
+          {CATEGORY_FILTERS.map((f) => (
+            <Chip
+              key={f.value}
+              label={f.label}
+              selected={categoryFilter === f.value}
+              onPress={() => setCategoryFilter(f.value)}
+            />
+          ))}
+        </View>
+      ) : null}
 
       {mode !== 'guide' ? (
         <>
@@ -302,6 +322,8 @@ export function PlaceScreen() {
                   error
                   onRetry={() => load()}
                 />
+              ) : allPlaces.some((p) => p.lovelichelinTier > 0) ? (
+                <EmptyState icon="crown" title="조건에 맞는 장소가 없어요" description="카테고리 필터를 바꿔보세요." />
               ) : (
                 <EmptyState
                   icon="crown"
