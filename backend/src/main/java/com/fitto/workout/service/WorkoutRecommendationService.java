@@ -23,8 +23,9 @@ import java.util.stream.Collectors;
  * 이미지 없이 텍스트만 사용하므로 음식 분석과 같은 모델(flash 계열)로 충분하다.
  *
  * <p>두 모드를 지원한다 — {@link #recommend(Long, int)}(순차: "오늘부터 N일간")와
- * {@link #recommend(Long, Set)}(프로그램: "월/수/금마다" 같은 실제 요일 반복 스케줄,
- * 짐워크 스타일 맞춤 프로그램 만들기). 스키마·프롬프트·응답 매핑을 공유하되 요일 유무로 분기한다.
+ * {@link #recommend(Long, Set, Set, String, Set, Integer)}(프로그램: "월/수/금마다" 같은 실제 요일
+ * 반복 스케줄, 집중 부위·통증 부위·세션 시간까지 반영, 짐워크 스타일 맞춤 프로그램 만들기).
+ * 스키마·프롬프트·응답 매핑을 공유하되 요일 유무로 분기한다.
  */
 @Service
 public class WorkoutRecommendationService {
@@ -62,9 +63,12 @@ public class WorkoutRecommendationService {
                                                                     "reps", Map.of("type", "INTEGER"),
                                                                     "comment", Map.of("type", "STRING")),
                                                             "required", List.of("name", "category"))),
-                                            "comment", Map.of("type", "STRING")),
+                                            "comment", Map.of("type", "STRING"),
+                                            "estimatedDurationMin", Map.of("type", "INTEGER")),
                                     "required", List.of("focus", "exercises"))),
-                    "overallComment", Map.of("type", "STRING")),
+                    "overallComment", Map.of("type", "STRING"),
+                    // 프로그램 모드에서만 채워짐(순차 모드 프롬프트는 언급하지 않으므로 비워둔다).
+                    "programTitle", Map.of("type", "STRING")),
             "required", List.of("days"));
 
     private final GeminiClient geminiClient;
@@ -88,12 +92,17 @@ public class WorkoutRecommendationService {
      *
      * @param focusMuscleGroups 더 키우고 싶은 집중 부위(선택) — 허용 목록 밖 값은 무시
      * @param goal              운동 목적(선택) — 허용 목록 밖 값은 무시
+     * @param painAreas         현재 통증이 있는 관절 부위(선택) — 허용 목록 밖 값은 무시, 해당 부위에
+     *                          부담을 주는 동작은 제외하고 구성한다(집중 부위보다 항상 우선)
+     * @param sessionMinutes    세션당 목표 운동 시간(분, 선택) — 이 시간에 맞도록 종목·세트 수를 조절
      */
     public WorkoutRecommendationResponse recommend(Long userId, Set<DayOfWeek> weekdays,
-                                                   Set<String> focusMuscleGroups, String goal) {
+                                                   Set<String> focusMuscleGroups, String goal,
+                                                   Set<String> painAreas, Integer sessionMinutes) {
         List<DayOfWeek> ordered = WEEK_ORDER.stream().filter(weekdays::contains).toList();
         return generate(userId,
-                historyText -> buildProgramPrompt(ordered, focusMuscleGroups, goal, historyText), ordered);
+                historyText -> buildProgramPrompt(ordered, focusMuscleGroups, goal, painAreas, sessionMinutes, historyText),
+                ordered);
     }
 
     private WorkoutRecommendationResponse generate(
@@ -152,19 +161,33 @@ public class WorkoutRecommendationService {
             "체지방 감량", "운동 사이 휴식을 짧게 가져가는 서킷 느낌의 구성에 유산소를 곁들여, 세션 전체 칼로리 소모를 높입니다.",
             "체력·건강 유지", "무리 없는 전신 균형 구성으로, 근력·유산소·유연성을 고루 섞습니다.");
 
+    /** 통증 부위 허용 목록 — 관절 기준(집중 부위의 근육군 축과 다르다). 이 밖의 값은 프롬프트에 넣지 않는다. */
+    private static final Set<String> ALLOWED_PAIN_AREAS =
+            Set.of("무릎", "허리", "어깨", "팔꿈치", "손목", "발목", "목");
+
+    /** 통증 부위 → 회피 지시문. focusMuscleGroups 와 겹치더라도 통증이 항상 우선임을 프롬프트에 못박는다. */
+    private static final Map<String, String> PAIN_DIRECTIVES = Map.of(
+            "무릎", "스쿼트·런지·점프 계열 등 무릎을 크게 굽히는 동작은 제외하고, 레그 익스텐션(가벼운 중량)이나 상체 위주로 대체합니다.",
+            "허리", "데드리프트·굿모닝·허리를 굽히는 윗몸일으키기 등 척추에 축성 하중이나 굴곡이 실리는 동작은 제외하고, 코어는 플랭크류(중립 척추)나 머신 위주 하체로 대체합니다.",
+            "어깨", "오버헤드 프레스·업라이트 로우·딥스 등 어깨를 크게 젖히거나 과가동하는 동작은 제외하고, 가슴·등 위주 또는 가동범위를 좁힌 동작으로 대체합니다.",
+            "팔꿈치", "클로즈그립 프레스·딥스·고중량 컬 등 팔꿈치에 부하가 집중되는 동작은 제외하고, 가벼운 중량이나 머신 위주로 대체합니다.",
+            "손목", "푸시업·프론트 스쿼트처럼 손목을 젖힌 채 버티는 동작은 제외하고, 스트랩이나 머신을 활용한 동작으로 대체합니다.",
+            "발목", "점프·런지·카프레이즈 등 발목을 크게 움직이는 동작은 제외하고, 고정된 하체 머신이나 상체 위주로 대체합니다.",
+            "목", "오버헤드 프레스 고중량이나 목에 긴장이 실리는 자세는 피하고, 목 부담이 적은 자세로 구성합니다.");
+
     /**
      * 프로그램 모드 프롬프트(맞춤 프로그램 만들기) — "월/수/금마다 운동해요" 처럼 실제 반복
-     * 요일을 그대로 주고, 요일마다 다른 하루를 짜게 한다. 집중 부위·운동 목적이 있으면
-     * 그에 맞는 지시문을 덧붙인다. {@link #buildPrompt} 와 마찬가지로 리터럴 %는 %% 로
+     * 요일을 그대로 주고, 요일마다 다른 하루를 짜게 한다. 집중 부위·운동 목적·통증 부위·세션 시간이
+     * 있으면 그에 맞는 지시문을 덧붙인다. {@link #buildPrompt} 와 마찬가지로 리터럴 %는 %% 로
      * 이스케이프해야 한다(package-private, 테스트에서 직접 검증).
      */
     String buildProgramPrompt(List<DayOfWeek> weekdays, Set<String> focusMuscleGroups, String goal,
-                              String historyText) {
+                              Set<String> painAreas, Integer sessionMinutes, String historyText) {
         String weekdayNames = weekdays.stream()
                 .map(d -> KOREAN_WEEKDAY_NAMES.get(WEEK_ORDER.indexOf(d)))
                 .collect(Collectors.joining(", "));
 
-        // 집중 부위·목적은 허용 목록으로 거른 뒤에만 프롬프트에 싣는다 — 자유 문자열이
+        // 집중 부위·목적·통증 부위는 허용 목록으로 거른 뒤에만 프롬프트에 싣는다 — 자유 문자열이
         // 지시문 자리에 그대로 들어가는 걸 막는 안전망(오타·프롬프트 인젝션 방어).
         String focusDirective = "";
         if (focusMuscleGroups != null) {
@@ -180,6 +203,25 @@ public class WorkoutRecommendationService {
                 ? "\n- **운동 목적(%s)**: %s".formatted(goal, GOAL_DIRECTIVES.get(goal))
                 : "";
 
+        // 통증 부위는 집중 부위·목적보다 항상 우선 — 키우고 싶은 부위와 겹쳐도 회피가 먼저다.
+        String painDirective = "";
+        if (painAreas != null) {
+            List<String> filtered = painAreas.stream().filter(ALLOWED_PAIN_AREAS::contains).toList();
+            if (!filtered.isEmpty()) {
+                String areaNames = String.join(", ", filtered);
+                String avoidRules = filtered.stream()
+                        .map(a -> "%s: %s".formatted(a, PAIN_DIRECTIVES.get(a)))
+                        .collect(Collectors.joining(" "));
+                painDirective = "\n- **통증 부위(항상 최우선)**: 사용자가 현재 %s 에 통증이 있습니다. 위 집중 부위·운동 목적과 겹치더라도 이 지시가 항상 우선합니다. %s"
+                        .formatted(areaNames, avoidRules);
+            }
+        }
+
+        String durationDirective = sessionMinutes != null
+                ? "\n- **세션 시간**: 각 날의 세트 간 휴식을 포함한 총 소요 시간이 약 %d분이 되도록 종목 수와 세트 수를 조절합니다(대략 30분≈종목 4~5개, 60분≈종목 6~8개, 90분≈종목 8~10개 기준). 각 하루 항목의 estimatedDurationMin 에 그 예상 소요 시간(분)을 채웁니다."
+                .formatted(sessionMinutes)
+                : "";
+
         return """
                 당신은 커플 운동 앱의 다정한 퍼스널 트레이너입니다. 사용자가 매주 %s 에 운동합니다.
                 아래 사용자의 최근 운동 기록을 참고해, 이 요일들에 각각 다른 하루 계획을 세워
@@ -189,7 +231,7 @@ public class WorkoutRecommendationService {
                 - days 배열은 정확히 %d개(%s) 를 빠짐없이 채우고, 각 항목의 dayOfWeek 는 위 요일 중
                   하나와 정확히 일치해야 하며 중복 없이 서로 달라야 합니다. dayOffset 은 채우지 않아도 됩니다.
                 - 같은 부위를 이틀 연속 요일에 몰아넣지 말고, 요일 순서대로 부위를 분산합니다.
-                  (예: 월=가슴, 수=등, 금=하체 처럼 — 요일 사이 간격이 짧을수록 회복을 더 고려)%s%s
+                  (예: 월=가슴, 수=등, 금=하체 처럼 — 요일 사이 간격이 짧을수록 회복을 더 고려)%s%s%s%s
                 - **점진적 과부하**: 이전에 한 운동을 다시 제안할 땐 지난 기록의 무게·횟수보다
                   살짝(약 5~10%%) 높여서 성장하도록 하되, 절대 무리하지 않는 선으로 합니다.
                 - focus 는 그 날의 핵심 테마입니다. (예: "가슴·삼두", "하체 근력")
@@ -197,13 +239,17 @@ public class WorkoutRecommendationService {
                 - sets/reps 는 근력 운동에만 제안하고, 유산소/유연성은 comment 에 시간·강도를 적습니다.
                 - **comment 에는 그 운동의 올바른 자세 핵심 팁을 한 가지 꼭 포함**하고 다정한 톤으로 씁니다.
                   (예: "무릎이 발끝을 넘지 않게!", "허리는 곧게 편 채로")
+                - **programTitle**: 이 프로그램의 이름을 20자 내외로 지어주세요. 요일 수와 위에서 선택된
+                  조건들(있다면)이 드러나면 좋습니다. (예: 월/수/금+하체 강조+근력 향상 목표 → "주 3일
+                  하체 강화 스트렝스", 화/목+체지방 감량 목표 → "주 2일 전신 서킷 다이어트") 특별한 조건이
+                  없으면 "주 %d일 밸런스 프로그램" 처럼 무난하게 짓습니다.
                 - overallComment 는 이 프로그램 전체를 한 줄로 요약합니다.
                 - 기록이 없거나 적으면 초보자용으로 균형 잡힌 무리 없는 계획을 제안합니다.
 
                 최근 운동 기록(최신순):
                 %s
                 """.formatted(weekdayNames, weekdays.size(), weekdayNames, focusDirective, goalDirective,
-                historyText);
+                painDirective, durationDirective, weekdays.size(), historyText);
     }
 
     private String buildHistoryText(List<WorkoutResponse> history) {
@@ -265,12 +311,14 @@ public class WorkoutRecommendationService {
                     dayOfWeek,
                     day.path("focus").asText(""),
                     exercises,
-                    day.path("comment").asText(null)));
+                    day.path("comment").asText(null),
+                    day.hasNonNull("estimatedDurationMin") ? day.path("estimatedDurationMin").asInt() : null));
         }
         if (days.isEmpty()) {
             throw new BusinessException(ErrorCode.AI_ANALYSIS_FAILED);
         }
-        return new WorkoutRecommendationResponse(days, result.path("overallComment").asText(null));
+        return new WorkoutRecommendationResponse(days, result.path("overallComment").asText(null),
+                result.path("programTitle").asText(null));
     }
 
     private DayOfWeek parseDayOfWeek(String raw) {

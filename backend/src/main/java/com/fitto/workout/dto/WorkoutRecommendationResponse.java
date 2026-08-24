@@ -8,7 +8,12 @@ import java.util.List;
  */
 public record WorkoutRecommendationResponse(
         List<DayPlan> days,
-        String overallComment
+        String overallComment,
+        /**
+         * 프로그램 모드에서만 채워짐 — 요일·집중 부위·운동 목적을 반영해 AI가 지어준 프로그램 이름.
+         * 사용자는 저장 전 자유롭게 수정할 수 있다(프론트 결과 화면의 이름 필드 prefill 용).
+         */
+        String programTitle
 ) {
 
     /**
@@ -23,7 +28,9 @@ public record WorkoutRecommendationResponse(
             DayOfWeek dayOfWeek,
             String focus,
             List<RecommendedExercise> exercises,
-            String comment
+            String comment,
+            /** 세션 시간(sessionMinutes)을 요청했을 때만 채워짐 — 이 하루 계획의 예상 소요 시간(분) */
+            Integer estimatedDurationMin
     ) {
     }
 

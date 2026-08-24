@@ -343,10 +343,14 @@ export interface WorkoutPlanDay {
   focus: string;
   exercises: RecommendedExercise[];
   comment?: string | null;
+  // 세션 시간(sessionMinutes)을 요청했을 때만 채워짐 — 이 하루 계획의 예상 소요 시간(분)
+  estimatedDurationMin?: number | null;
 }
 export interface WorkoutRecommendation {
   days: WorkoutPlanDay[];
   overallComment?: string | null;
+  // 프로그램 모드에서만 채워짐 — AI가 요일·집중 부위·운동 목적을 반영해 지어준 프로그램 이름
+  programTitle?: string | null;
 }
 
 // 데일리 질문 (커플 Q&A)
