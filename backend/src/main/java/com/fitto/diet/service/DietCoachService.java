@@ -1,6 +1,7 @@
 package com.fitto.diet.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fitto.common.ai.AiResultCache;
 import com.fitto.common.ai.GeminiClient;
 import com.fitto.common.plan.Feature;
 import com.fitto.common.time.KstClock;
@@ -45,23 +46,37 @@ public class DietCoachService {
             "required", List.of("headline", "tips", "balanceScore"));
 
     private final GeminiClient geminiClient;
+    private final AiResultCache aiResultCache;
     private final MealRepository mealRepository;
 
-    public DietCoachService(GeminiClient geminiClient, MealRepository mealRepository) {
+    public DietCoachService(GeminiClient geminiClient, AiResultCache aiResultCache,
+                            MealRepository mealRepository) {
         this.geminiClient = geminiClient;
+        this.aiResultCache = aiResultCache;
         this.mealRepository = mealRepository;
     }
 
-    public DietCoachResponse coach(Long userId) {
+    /**
+     * @param refresh 사용자가 "다시 받기"를 눌렀는가 — 캐시를 건너뛰고 새로 생성한다.
+     *                평소에는 식단 기록이 그대로면 {@link AiResultCache} 가 이전 코칭을 즉시 돌려준다
+     *                (기록을 하나라도 새로 적으면 요약 문자열이 달라져 자동으로 다시 생성된다).
+     */
+    public DietCoachResponse coach(Long userId, boolean refresh) {
         LocalDate today = KstClock.today();
         List<Meal> meals = mealRepository.findByUserIdAndMealDateBetween(userId, today.minusDays(6), today);
         if (meals.size() < MIN_MEALS) {
             return DietCoachResponse.empty();
         }
 
+        String input = summarize(meals);
+        return aiResultCache.remember(userId, Feature.AI_DIET_COACH, input, refresh,
+                DietCoachResponse.class, () -> generate(userId, input));
+    }
+
+    private DietCoachResponse generate(Long userId, String input) {
         geminiClient.requireConfiguredAndCountUsage(userId, Feature.AI_DIET_COACH);
         JsonNode result = geminiClient.generateJson(
-                List.of(GeminiClient.textPart(PROMPT.formatted(summarize(meals)))), SCHEMA);
+                List.of(GeminiClient.textPart(PROMPT.formatted(input))), SCHEMA);
 
         List<String> tips = new ArrayList<>();
         for (JsonNode t : result.path("tips")) {

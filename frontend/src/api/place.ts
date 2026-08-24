@@ -52,17 +52,24 @@ export const placeApi = {
   removeVisit: (placeId: number, visitId: number) =>
     unwrap(apiClient.delete<ApiResponse<void>>(`/places/${placeId}/visits/${visitId}`)),
 
-  // AI 데이트 코스 추천 — 저장한 장소로 코스 구성 (생성에 시간 걸려 timeout 상향)
-  dateCourse: () =>
-    unwrap(apiClient.get<ApiResponse<DateCourse>>('/places/date-course', { timeout: 60000 })),
+  // AI 데이트 코스 추천 — 저장한 장소로 코스 구성 (생성에 시간 걸려 timeout 상향).
+  // refresh 를 넘기면 같은 장소로 다른 코스를 새로 짠다 (그때만 한도를 쓴다)
+  dateCourse: (refresh?: boolean) =>
+    unwrap(
+      apiClient.get<ApiResponse<DateCourse>>('/places/date-course', {
+        params: { refresh: refresh || undefined },
+        timeout: 60000,
+      }),
+    ),
 
   // 럽슐랭 대표 평점 등록/수정 — 장소당 1개, 재평가 시 덮어쓰며 등급이 재산정된다
   rate: (placeId: number, payload: RatePlacePayload) =>
     unwrap(apiClient.put<ApiResponse<Place>>(`/places/${placeId}/rating`, payload)),
   // AI 맛집 추천 — 럽슐랭 취향 분석(Gemini) + 카카오 실존 장소 검색 (생성에 시간 걸려 timeout 상향)
-  lovelichelinRecommend: () =>
+  lovelichelinRecommend: (refresh?: boolean) =>
     unwrap(
       apiClient.get<ApiResponse<LovelichelinRecommendation>>('/places/lovelichelin/recommendations', {
+        params: { refresh: refresh || undefined },
         timeout: 60000,
       }),
     ),
