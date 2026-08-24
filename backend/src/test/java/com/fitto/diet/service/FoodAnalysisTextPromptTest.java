@@ -88,4 +88,22 @@ class FoodAnalysisTextPromptTest {
         assertThat(properties).containsKey("box");
         assertThat(required).doesNotContain("box");
     }
+
+    /**
+     * source(사진이 실제 음식/사진 속 글자/영양성분표 중 무엇이었는지)도 box 와 같은 이유로
+     * required 에 없어야 한다 — 텍스트 분석은 세 갈래 분류가 의미 없어 값을 지어낼 수 있다.
+     * 모델이 비워도 {@code resolveSource} 가 호출부 기본값으로 채운다.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void source는_필드는_있지만_필수는_아니고_세_갈래_enum이다() {
+        Map<String, Object> properties = (Map<String, Object>) FoodAnalysisService.RESPONSE_SCHEMA.get("properties");
+        Map<String, Object> source = (Map<String, Object>) properties.get("source");
+        List<String> topLevelRequired = (List<String>) FoodAnalysisService.RESPONSE_SCHEMA.get("required");
+
+        assertThat(source).isNotNull();
+        assertThat((List<String>) source.get("enum"))
+                .containsExactlyInAnyOrder("PHOTO_FOOD", "TEXT_IN_PHOTO", "NUTRITION_LABEL");
+        assertThat(topLevelRequired).doesNotContain("source");
+    }
 }

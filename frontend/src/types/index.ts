@@ -625,12 +625,17 @@ export interface AnalyzedFood {
   sodium: number;
   fiber: number;
   /**
-   * 사진 속 위치 [yMin, xMin, yMax, xMax] (0~1000 정규화 좌표) — 사진 분석에서만 채워짐,
-   * 텍스트 분석은 항상 null. 아직 UI 에서 쓰지 않는 실측용 필드 — 좌표 정확도를 먼저 확인한
-   * 뒤 사진 위 칩 오버레이를 붙인다.
+   * 사진 속 위치 [yMin, xMin, yMax, xMax] (0~1000 정규화 좌표) — source 가 PHOTO_FOOD 일 때만
+   * 채워짐(텍스트 분석·영양성분표는 항상 null). DietRecordScreen 이 사진 위 칩으로 그린다.
    */
   box?: number[] | null;
 }
+/**
+ * 사진이 무엇이었는지 — PHOTO_FOOD(실제 음식 사진, 추정치) / TEXT_IN_PHOTO(메뉴판·영수증·
+ * 손글씨 메모처럼 글자로 적힌 음식, 추정치) / NUTRITION_LABEL(영양성분표, 표기값 그대로).
+ * analyzeText() 결과는 항상 TEXT_IN_PHOTO. isFood 가 false 면 null.
+ */
+export type MealAnalysisSource = 'PHOTO_FOOD' | 'TEXT_IN_PHOTO' | 'NUTRITION_LABEL';
 export interface MealAnalysis {
   isFood: boolean;
   foods: AnalyzedFood[];
@@ -642,6 +647,7 @@ export interface MealAnalysis {
   totalSodium: number;
   totalFiber: number;
   comment?: string | null;
+  source?: MealAnalysisSource | null;
 }
 
 // 최근 먹은 음식 자동완성 (GET /meal/recent-foods) — 즐겨찾기와 달리 저장 없이 자동으로 뽑힌다

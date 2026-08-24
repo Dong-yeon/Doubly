@@ -53,20 +53,29 @@ public class FoodAnalysisService {
     private static final String CLOUDINARY_TRANSFORM = "w_1024,c_limit,q_auto";
 
     private static final String PROMPT = """
-            사진 속 음식을 분석해 주세요.
-            - 음식 사진이 아니면 isFood 를 false 로, foods 는 빈 배열로 응답합니다.
+            사진을 분석해 음식 정보를 알려주세요. 사진은 다음 중 하나입니다 — 해당하는
+            종류를 source 필드에 적습니다.
+            - PHOTO_FOOD: 실제 음식이 담긴 사진입니다. 사진에 보이는 양을 기준으로 추정합니다.
+            - TEXT_IN_PHOTO: 메뉴판·영수증·손글씨 메모처럼 음식 이름이 글자로 적힌 사진입니다
+              (실제 음식은 안 보입니다). 적힌 이름으로 음식을 식별하고, 양이 안 적혀 있으면
+              한국인 기준 일반적인 1인분으로 가정해 추정합니다.
+            - NUTRITION_LABEL: 포장식품 등의 영양성분표가 찍힌 사진입니다. 표에 인쇄된 값을
+              그대로 옮겨 적습니다(추정하지 않습니다).
+            - 음식도 음식 관련 글자도 없으면 isFood 를 false 로, foods 는 빈 배열로 응답합니다
+              (이때는 source 를 생략해도 됩니다).
             - 각 음식의 이름(name)은 한국어로 적습니다. 한국 음식이면 정확한 한국어 명칭을 사용합니다.
-            - calories 는 사진에 보이는 양 기준의 추정 칼로리(kcal), portion 은 대략적인 양(예: "1인분", "밥 반 공기")입니다.
-            - carbs/protein/fat 은 각 음식의 탄수화물/단백질/지방 추정량(그램, g)입니다.
-            - sugar/fiber 는 당류/식이섬유 추정량(그램, g), sodium 은 나트륨 추정량(밀리그램, mg)입니다.
+            - calories 는 (source 에 따라 추정 또는 표기) 칼로리(kcal), portion 은 대략적인 양
+              (예: "1인분", "밥 반 공기")입니다.
+            - carbs/protein/fat 은 각 음식의 탄수화물/단백질/지방(그램, g)입니다.
+            - sugar/fiber 는 당류/식이섬유(그램, g), sodium 은 나트륨(밀리그램, mg)입니다.
             - portion 과 carbs/protein/fat/sugar/sodium/fiber 는 반드시 채웁니다. 정확히 모르면
               일반적인 값으로 추정하되, 실제로 거의 없는 경우가 아니면 0 으로 두지 않습니다.
               (예: 계란은 지방이 0 이 아니고, 흰쌀밥은 나트륨이 거의 0에 가깝습니다)
             - totalCalories, totalCarbs, totalProtein, totalFat, totalSugar, totalSodium, totalFiber
               는 모든 음식의 합계입니다.
             - box 에는 사진에서 그 음식이 있는 위치를 [yMin, xMin, yMax, xMax] 네 정수로 표시합니다.
-              값은 사진 전체를 0~1000 으로 정규화한 좌표입니다(왼쪽 위가 0,0). 위치를 특정하기
-              어려우면 box 를 생략해도 됩니다.
+              값은 사진 전체를 0~1000 으로 정규화한 좌표입니다(왼쪽 위가 0,0). source 가
+              PHOTO_FOOD 일 때만 적고, 위치를 특정하기 어려우면 생략해도 됩니다.
             - comment 에는 이 식단에 대한 짧고 다정한 한 줄 코멘트를 한국어로 작성합니다. (영양 균형 관점에서 칭찬 또는 부드러운 제안)
             """;
 
@@ -101,15 +110,18 @@ public class FoodAnalysisService {
      * 매핑에서 기본값 0 으로 채워져 "계란 지방 0g" 처럼 <b>모름이 0 으로 둔갑</b>한다.
      * 필수로 지정해야 모델이 실제 추정치를 채운다. (사진/텍스트 분석이 이 스키마를 공유)
      *
-     * <p>{@code box} 는 <b>required 에 넣지 않는다</b> — 텍스트 분석(analyzeText)이 이 스키마를
-     * 그대로 공유하는데, 텍스트엔 이미지가 없어 위치를 낼 수 없다. required 로 강제하면
-     * 텍스트 분석이 좌표를 지어내거나(환각) 스키마 위반으로 파싱이 깨진다.
+     * <p>{@code box} 와 {@code source} 는 <b>required 에 넣지 않는다</b> — 텍스트 분석
+     * (analyzeText)이 이 스키마를 그대로 공유하는데, 텍스트엔 이미지가 없어 위치를 낼 수 없고
+     * source 의 세 갈래(사진/사진 속 글자/영양성분표) 분류도 의미가 없다. required 로 강제하면
+     * 텍스트 분석이 값을 지어내거나(환각) 스키마 위반으로 파싱이 깨진다 — 모델이 비워도
+     * {@link #resolveSource} 가 호출부(analyze/analyzeText)별 기본값으로 채운다.
      */
     static final Map<String, Object> RESPONSE_SCHEMA = Map.of(
             "type", "OBJECT",
-            "properties", Map.of(
-                    "isFood", Map.of("type", "BOOLEAN"),
-                    "foods", Map.of(
+            // 최상위 프로퍼티가 10쌍을 넘어(source 추가로) Map.of 한도를 넘겨 ofEntries 로 바꿨다
+            "properties", Map.ofEntries(
+                    Map.entry("isFood", Map.of("type", "BOOLEAN")),
+                    Map.entry("foods", Map.of(
                             "type", "ARRAY",
                             "items", Map.of(
                                     "type", "OBJECT",
@@ -123,22 +135,29 @@ public class FoodAnalysisService {
                                             Map.entry("sugar", Map.of("type", "INTEGER")),
                                             Map.entry("sodium", Map.of("type", "INTEGER")),
                                             Map.entry("fiber", Map.of("type", "INTEGER")),
-                                            // [yMin, xMin, yMax, xMax] — 0~1000 정규화 좌표. 실측용(아직 프론트 미사용)
+                                            // [yMin, xMin, yMax, xMax] — 0~1000 정규화 좌표. source=PHOTO_FOOD 일 때만
                                             Map.entry("box", Map.of(
                                                     "type", "ARRAY",
                                                     "items", Map.of("type", "INTEGER")))),
                                     "required", List.of("name", "calories", "portion",
-                                            "carbs", "protein", "fat", "sugar", "sodium", "fiber"))),
-                    "totalCalories", Map.of("type", "INTEGER"),
-                    "totalCarbs", Map.of("type", "INTEGER"),
-                    "totalProtein", Map.of("type", "INTEGER"),
-                    "totalFat", Map.of("type", "INTEGER"),
-                    "totalSugar", Map.of("type", "INTEGER"),
-                    "totalSodium", Map.of("type", "INTEGER"),
-                    "totalFiber", Map.of("type", "INTEGER"),
-                    "comment", Map.of("type", "STRING")),
+                                            "carbs", "protein", "fat", "sugar", "sodium", "fiber")))),
+                    // 사진의 종류 — 신뢰도 표현(추정치 vs 표기값)과 box 유무를 이걸로 가른다
+                    Map.entry("source", Map.of(
+                            "type", "STRING",
+                            "enum", List.of("PHOTO_FOOD", "TEXT_IN_PHOTO", "NUTRITION_LABEL"))),
+                    Map.entry("totalCalories", Map.of("type", "INTEGER")),
+                    Map.entry("totalCarbs", Map.of("type", "INTEGER")),
+                    Map.entry("totalProtein", Map.of("type", "INTEGER")),
+                    Map.entry("totalFat", Map.of("type", "INTEGER")),
+                    Map.entry("totalSugar", Map.of("type", "INTEGER")),
+                    Map.entry("totalSodium", Map.of("type", "INTEGER")),
+                    Map.entry("totalFiber", Map.of("type", "INTEGER")),
+                    Map.entry("comment", Map.of("type", "STRING"))),
             "required", List.of("isFood", "foods", "totalCalories",
                     "totalCarbs", "totalProtein", "totalFat"));
+
+    private static final java.util.Set<String> VALID_SOURCES =
+            java.util.Set.of("PHOTO_FOOD", "TEXT_IN_PHOTO", "NUTRITION_LABEL");
 
     private final GeminiClient geminiClient;
     private final RestClient restClient;
@@ -162,19 +181,20 @@ public class FoodAnalysisService {
         JsonNode result = geminiClient.generateJson(
                 List.of(GeminiClient.imagePart(image.mimeType(), image.bytes()), GeminiClient.textPart(PROMPT)),
                 RESPONSE_SCHEMA);
-        return toResponse(result);
+        return toResponse(result, "PHOTO_FOOD");
     }
 
     /**
      * 텍스트 음식 분석 — 메모(예: "단백질쉐이크, 계란")로 칼로리·매크로를 추정한다.
-     * 사진 분석과 스키마/매핑을 공유하므로 응답 형태가 같다.
+     * 사진 분석과 스키마/매핑을 공유하므로 응답 형태가 같다. source 는 이미지가 없으니
+     * 항상 TEXT_IN_PHOTO(글자로 알아냄)로 고정한다.
      */
     public MealAnalysisResponse analyzeText(Long userId, String text) {
         geminiClient.requireConfiguredAndCountUsage(userId, Feature.AI_FOOD_TEXT);
 
         JsonNode result = geminiClient.generateJson(
                 List.of(GeminiClient.textPart(buildTextPrompt(text))), RESPONSE_SCHEMA);
-        return toResponse(result);
+        return toResponse(result, "TEXT_IN_PHOTO");
     }
 
     /** 프롬프트 조립 — 테스트에서 직접 검증하려고 package-private 로 둔다. */
@@ -319,7 +339,8 @@ public class FoodAnalysisService {
 
     // ---- 응답 매핑 ----
 
-    private MealAnalysisResponse toResponse(JsonNode result) {
+    /** @param defaultSource 모델이 source 를 비웠거나 알 수 없는 값을 보냈을 때 쓸 호출부별 기본값 */
+    private MealAnalysisResponse toResponse(JsonNode result, String defaultSource) {
         if (!result.path("isFood").asBoolean(false)) {
             return MealAnalysisResponse.notFood();
         }
@@ -328,7 +349,6 @@ public class FoodAnalysisService {
         for (JsonNode food : result.path("foods")) {
             String name = food.path("name").asText("");
             if (name.isBlank()) continue;
-            List<Integer> box = readBox(food.path("box"));
             foods.add(new AnalyzedFood(
                     name,
                     Math.max(0, food.path("calories").asInt(0)),
@@ -339,9 +359,7 @@ public class FoodAnalysisService {
                     Math.max(0, food.path("sugar").asInt(0)),
                     Math.max(0, food.path("sodium").asInt(0)),
                     Math.max(0, food.path("fiber").asInt(0)),
-                    box));
-            // 실측용 — box 정확도를 눈으로 확인하는 동안만 남긴다. 확인 끝나면 지운다.
-            log.info("[box-probe] {} box={}", name, box);
+                    readBox(food.path("box"))));
         }
         if (foods.isEmpty()) {
             return MealAnalysisResponse.notFood();
@@ -355,8 +373,15 @@ public class FoodAnalysisService {
         int totalSodium = positiveOrSum(result, "totalSodium", foods, AnalyzedFood::sodium);
         int totalFiber = positiveOrSum(result, "totalFiber", foods, AnalyzedFood::fiber);
         String comment = result.path("comment").asText(null);
+        String source = resolveSource(result, defaultSource);
         return new MealAnalysisResponse(true, foods, totalCalories, totalCarbs, totalProtein, totalFat,
-                totalSugar, totalSodium, totalFiber, comment);
+                totalSugar, totalSodium, totalFiber, comment, source);
+    }
+
+    /** 모델이 비웠거나 스키마 밖 값을 보내면(환각) 호출부 기본값으로 대체한다. */
+    private String resolveSource(JsonNode result, String defaultSource) {
+        String source = result.path("source").asText(null);
+        return VALID_SOURCES.contains(source) ? source : defaultSource;
     }
 
     /** 합계 필드가 비었으면 개별 음식값을 합산해 보정한다. */
