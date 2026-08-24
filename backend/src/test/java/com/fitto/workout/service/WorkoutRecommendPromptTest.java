@@ -170,4 +170,41 @@ class WorkoutRecommendPromptTest {
 
         assertThat(withNull).doesNotContain("estimatedDurationMin 에");
     }
+
+    // ---- 세트 구성법 추천(setMethod) — 순차·프로그램 모드 모두 항상 포함되는 공통 가이드 ----
+
+    @Test
+    void 세트_구성법_가이드가_순차_모드_프롬프트에_포함된다() {
+        String prompt = service.buildPrompt(3, "(기록 없음)");
+
+        assertThat(prompt).contains("setMethod");
+        assertThat(prompt).contains("드랍 세트");
+        assertThat(prompt).contains("레스트-포즈 세트");
+        assertThat(prompt).contains("클러스터 세트");
+    }
+
+    @Test
+    void 세트_구성법_가이드가_프로그램_모드_프롬프트에_포함된다() {
+        String prompt = service.buildProgramPrompt(List.of(DayOfWeek.MONDAY), null, null, null, null, "(기록 없음)");
+
+        assertThat(prompt).contains("setMethod");
+        assertThat(prompt).contains("탑 세트");
+        assertThat(prompt).contains("피라미드 세트");
+        assertThat(prompt).contains("역피라미드 세트");
+        assertThat(prompt).contains("슈퍼세트");
+        assertThat(prompt).contains("컴파운드 세트");
+    }
+
+    // ---- 정체기 돌파 목적 — 레스트-포즈/클러스터 세트를 다관절 고중량 운동에 우선 배정하도록 지시 ----
+
+    @Test
+    void 정체기_돌파_목적이_프롬프트에_반영된다() {
+        String prompt = service.buildProgramPrompt(
+                List.of(DayOfWeek.MONDAY, DayOfWeek.THURSDAY),
+                null, "정체기 돌파", null, null, "(기록 없음)");
+
+        assertThat(prompt).contains("운동 목적(정체기 돌파)");
+        assertThat(prompt).contains("레스트-포즈 세트와 클러스터 세트");
+        assertThat(prompt).contains("한계 중량 돌파");
+    }
 }

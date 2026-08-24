@@ -61,7 +61,11 @@ public class WorkoutRecommendationService {
                                                                             "enum", List.of("근력", "유산소", "유연성")),
                                                                     "sets", Map.of("type", "INTEGER"),
                                                                     "reps", Map.of("type", "INTEGER"),
-                                                                    "comment", Map.of("type", "STRING")),
+                                                                    "comment", Map.of("type", "STRING"),
+                                                                    "setMethod", Map.of("type", "STRING",
+                                                                            "enum", List.of("표준 세트", "탑 세트", "드랍 세트",
+                                                                                    "피라미드 세트", "역피라미드 세트", "슈퍼세트",
+                                                                                    "컴파운드 세트", "레스트-포즈 세트", "클러스터 세트"))),
                                                             "required", List.of("name", "category"))),
                                             "comment", Map.of("type", "STRING"),
                                             "estimatedDurationMin", Map.of("type", "INTEGER")),
@@ -140,12 +144,13 @@ public class WorkoutRecommendationService {
                 - sets/reps 는 근력 운동에만 제안하고, 유산소/유연성은 comment 에 시간·강도를 적습니다.
                 - **comment 에는 그 운동의 올바른 자세 핵심 팁을 한 가지 꼭 포함**하고 다정한 톤으로 씁니다.
                   (예: "무릎이 발끝을 넘지 않게!", "허리는 곧게 편 채로")
+                %s
                 - overallComment 는 전체 계획 요약 한 줄입니다.
                 - 기록이 없거나 적으면 초보자용으로 균형 잡힌 무리 없는 계획을 제안합니다.
 
                 최근 운동 기록(최신순):
                 %s
-                """.formatted(days, days, historyText);
+                """.formatted(days, days, SET_METHOD_GUIDE, historyText);
     }
 
     /** 집중 부위 허용 목록 — 카탈로그의 muscle_group 값과 동일. 이 밖의 값은 프롬프트에 넣지 않는다. */
@@ -159,7 +164,22 @@ public class WorkoutRecommendationService {
             "근력 향상", "고중량·저반복(3~6회) 위주의 스트렝스 구성으로, 복합 다관절 운동(스쿼트·데드리프트·벤치프레스 등)을 각 날의 중심에 둡니다.",
             "근육 증가", "중간 무게·중간 반복(8~12회) 위주의 근비대 구성으로, 부위별 볼륨을 충분히 확보합니다.",
             "체지방 감량", "운동 사이 휴식을 짧게 가져가는 서킷 느낌의 구성에 유산소를 곁들여, 세션 전체 칼로리 소모를 높입니다.",
-            "체력·건강 유지", "무리 없는 전신 균형 구성으로, 근력·유산소·유연성을 고루 섞습니다.");
+            "체력·건강 유지", "무리 없는 전신 균형 구성으로, 근력·유산소·유연성을 고루 섞습니다.",
+            "정체기 돌파", "레스트-포즈 세트와 클러스터 세트를 스쿼트·데드리프트·벤치프레스 같은 다관절 고중량 운동에 우선 배정해(그 운동의 setMethod 에도 반영) 한계 중량 돌파를 노리고, 세트 사이 휴식은 평소보다 살짝 길게 잡습니다.");
+
+    /**
+     * 세트 구성법 가이드 — setMethod 필드를 채울 때의 기준. 리터럴 %가 없어 별도 인자로
+     * 넘겨도 안전하지만(포맷 문자열 자체가 아니라 치환값이라 %% 이스케이프 불필요), 혹시
+     * 모를 실수를 막기 위해 이 상수 자체에는 % 를 쓰지 않는다.
+     */
+    private static final String SET_METHOD_GUIDE = """
+            - **setMethod**: 각 운동에 그 운동 유형과 그 날의 구성에 맞는 세트 방식을 하나 골라 채웁니다\
+            (표준 세트/탑 세트/드랍 세트/피라미드 세트/역피라미드 세트/슈퍼세트/컴파운드 세트/레스트-포즈 세트/클러스터 세트 중 하나).
+              - 스쿼트·데드리프트·벤치프레스·오버헤드프레스 같은 바벨 다관절 운동: 탑 세트, 피라미드 세트, 역피라미드 세트, 레스트-포즈 세트, 클러스터 세트가 적합합니다.
+              - 머신·케이블·덤벨 위주의 고립 운동(레그 익스텐션, 컬, 크로스오버 등): 드랍 세트가 적합합니다.
+              - 바로 이어지는 두 운동이 서로 반대 부위(길항근, 예: 가슴↔등)면 슈퍼세트로, 같은 부위를 이어서 배치했다면 컴파운드 세트로 표시합니다.
+              - 초보자용이거나 최근 기록이 적으면 대부분 표준 세트로 무리 없게 구성하고, 고급 기법(드랍/레스트-포즈/클러스터 세트)은 하루에 1~2개 운동에만 적용합니다.
+              - 통증이 있는 부위와 관련된 운동에는 실패 지점까지 밀어붙이는 고강도 기법(드랍/레스트-포즈/클러스터 세트)을 적용하지 않고 표준 세트로 둡니다.""";
 
     /** 통증 부위 허용 목록 — 관절 기준(집중 부위의 근육군 축과 다르다). 이 밖의 값은 프롬프트에 넣지 않는다. */
     private static final Set<String> ALLOWED_PAIN_AREAS =
@@ -239,6 +259,7 @@ public class WorkoutRecommendationService {
                 - sets/reps 는 근력 운동에만 제안하고, 유산소/유연성은 comment 에 시간·강도를 적습니다.
                 - **comment 에는 그 운동의 올바른 자세 핵심 팁을 한 가지 꼭 포함**하고 다정한 톤으로 씁니다.
                   (예: "무릎이 발끝을 넘지 않게!", "허리는 곧게 편 채로")
+                %s
                 - **programTitle**: 이 프로그램의 이름을 20자 내외로 지어주세요. 요일 수와 위에서 선택된
                   조건들(있다면)이 드러나면 좋습니다. (예: 월/수/금+하체 강조+근력 향상 목표 → "주 3일
                   하체 강화 스트렝스", 화/목+체지방 감량 목표 → "주 2일 전신 서킷 다이어트") 특별한 조건이
@@ -249,7 +270,7 @@ public class WorkoutRecommendationService {
                 최근 운동 기록(최신순):
                 %s
                 """.formatted(weekdayNames, weekdays.size(), weekdayNames, focusDirective, goalDirective,
-                painDirective, durationDirective, weekdays.size(), historyText);
+                painDirective, durationDirective, SET_METHOD_GUIDE, weekdays.size(), historyText);
     }
 
     private String buildHistoryText(List<WorkoutResponse> history) {
@@ -290,7 +311,8 @@ public class WorkoutRecommendationService {
                         ex.path("category").asText(null),
                         ex.hasNonNull("sets") ? ex.path("sets").asInt() : null,
                         ex.hasNonNull("reps") ? ex.path("reps").asInt() : null,
-                        ex.path("comment").asText(null)));
+                        ex.path("comment").asText(null),
+                        ex.path("setMethod").asText(null)));
             }
             if (exercises.isEmpty()) continue;
 
