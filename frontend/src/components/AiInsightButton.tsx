@@ -22,7 +22,14 @@ import { layout } from '../theme/layout';
 interface Props<T> {
   label: string;
   title: string;
-  fetcher: () => Promise<T>;
+  /**
+   * 결과를 가져온다. {@code refresh} 가 true 면 서버 캐시를 건너뛰고 새로 생성한다.
+   *
+   * <p>서버는 재료(식단 기록·저장한 장소·지난주 결산)가 그대로면 지난번 결과를 그대로
+   * 돌려준다 — 두 번째부터 몇 초씩 기다리지 않고, AI 한도도 쓰지 않는다. 그래서 "다른 답이
+   * 보고 싶다"는 요구는 아래 '다시 받기'로만 받는다.
+   */
+  fetcher: (refresh: boolean) => Promise<T>;
   render: (data: T) => React.ReactNode;
   style?: ViewStyle;
 }
@@ -32,19 +39,30 @@ export function AiInsightButton<T>({ label, title, fetcher, render, style }: Pro
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<T | null>(null);
 
-  const onPress = async () => {
-    haptics.light();
-    setOpen(true);
+  const load = async (refresh: boolean) => {
     setLoading(true);
     setData(null);
     try {
-      setData(await fetcher());
+      setData(await fetcher(refresh));
     } catch (e) {
       toast.error(getErrorMessage(e, 'AI 요청에 실패했어요.'));
-      setOpen(false);
+      // 새로 받다 실패한 경우엔 모달을 닫지 않는다 — 방금까지 보던 결과가 있었는데
+      // 통째로 사라지면 무엇 때문에 닫혔는지 알 수 없다. 다시 눌러볼 수 있게 열어둔다.
+      if (!refresh) setOpen(false);
     } finally {
       setLoading(false);
     }
+  };
+
+  const onPress = () => {
+    haptics.light();
+    setOpen(true);
+    void load(false);
+  };
+
+  const onRefresh = () => {
+    haptics.light();
+    void load(true);
   };
 
   return (
@@ -67,9 +85,18 @@ export function AiInsightButton<T>({ label, title, fetcher, render, style }: Pro
                 {render(data)}
               </ScrollView>
             ) : null}
-            <TouchableOpacity style={styles.close} onPress={() => setOpen(false)}>
-              <Text style={styles.closeText}>닫기</Text>
-            </TouchableOpacity>
+            <View style={styles.actions}>
+              {/* 다시 받기는 결과가 있을 때만 — 로딩 중이거나 아직 아무것도 못 받았으면
+                  누를 이유가 없다. 이걸 눌렀을 때만 AI 한도를 새로 쓴다. */}
+              {data && !loading ? (
+                <TouchableOpacity style={styles.action} onPress={onRefresh}>
+                  <Text style={styles.refreshText}>다시 받기</Text>
+                </TouchableOpacity>
+              ) : null}
+              <TouchableOpacity style={styles.action} onPress={() => setOpen(false)}>
+                <Text style={styles.closeText}>닫기</Text>
+              </TouchableOpacity>
+            </View>
           </Pressable>
         </Pressable>
       </Modal>
@@ -97,6 +124,8 @@ const styles = themedStyles((colors) => ({
   loadingText: { color: colors.textSecondary, fontSize: fontSize.caption },
   body: { flexGrow: 0 },
   bodyContent: { paddingBottom: spacing.sm },
-  close: { alignItems: 'center', paddingVertical: spacing.md, marginTop: spacing.sm },
+  actions: { flexDirection: 'row', marginTop: spacing.sm },
+  action: { flex: 1, alignItems: 'center', paddingVertical: spacing.md },
+  refreshText: { color: colors.primary, fontWeight: '700', fontSize: fontSize.body },
   closeText: { color: colors.textSecondary, fontWeight: '700', fontSize: fontSize.body },
 }));

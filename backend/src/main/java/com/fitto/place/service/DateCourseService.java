@@ -1,6 +1,7 @@
 package com.fitto.place.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fitto.common.ai.AiResultCache;
 import com.fitto.common.ai.GeminiClient;
 import com.fitto.common.plan.Feature;
 import com.fitto.common.exception.BusinessException;
@@ -60,26 +61,42 @@ public class DateCourseService {
             "required", List.of("stops"));
 
     private final GeminiClient geminiClient;
+    private final AiResultCache aiResultCache;
     private final PlaceRepository placeRepository;
     private final RelationRepository relationRepository;
 
-    public DateCourseService(GeminiClient geminiClient, PlaceRepository placeRepository,
+    public DateCourseService(GeminiClient geminiClient, AiResultCache aiResultCache,
+                             PlaceRepository placeRepository,
                              RelationRepository relationRepository) {
         this.geminiClient = geminiClient;
+        this.aiResultCache = aiResultCache;
         this.placeRepository = placeRepository;
         this.relationRepository = relationRepository;
     }
 
-    public DateCourseResponse recommend(Long userId) {
+    /**
+     * @param refresh 사용자가 "다른 코스 추천"을 눌렀는가 — 캐시를 건너뛰고 새로 짠다.
+     *                저장한 장소가 그대로면 {@link AiResultCache} 가 지난번 코스를 즉시 돌려준다.
+     *                장소를 추가·수정하면 목록 문자열이 달라져 자동으로 다시 짠다. 같은 장소로
+     *                <b>다른</b> 코스를 보고 싶은 요구는 새로고침으로 받는다 — 무료는 월 1회라
+     *                화면에 들어갔다는 이유만으로 그 한 번이 소모되면 안 된다.
+     */
+    public DateCourseResponse recommend(Long userId, boolean refresh) {
         Relation couple = activeCouple(userId);
         List<Place> places = placeRepository.findByCoupleIdOrderByIdDesc(couple.getId());
         if (places.size() < MIN_PLACES) {
             return DateCourseResponse.empty();
         }
 
+        String input = describe(places);
+        return aiResultCache.remember(userId, Feature.AI_DATE_COURSE, input, refresh,
+                DateCourseResponse.class, () -> generate(userId, input));
+    }
+
+    private DateCourseResponse generate(Long userId, String input) {
         geminiClient.requireConfiguredAndCountUsage(userId, Feature.AI_DATE_COURSE);
         JsonNode result = geminiClient.generateJson(
-                List.of(GeminiClient.textPart(PROMPT.formatted(describe(places)))), SCHEMA);
+                List.of(GeminiClient.textPart(PROMPT.formatted(input))), SCHEMA);
 
         List<Stop> stops = new ArrayList<>();
         for (JsonNode s : result.path("stops")) {

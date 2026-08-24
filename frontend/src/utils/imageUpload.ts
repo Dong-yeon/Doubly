@@ -2,6 +2,7 @@
 import { Image, Platform } from 'react-native';
 import { File as FsFile } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
+import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { CLOUDINARY, isCloudinaryConfigured } from '../constants/config';
 import { uploadApi } from '../api/upload';
 import { errorCodeOf } from '../api/client';
@@ -75,6 +76,41 @@ export async function takePhotoAsset(): Promise<PickedImage | null> {
   const result = await ImagePicker.launchCameraAsync(PICKER_OPTIONS);
   if (result.canceled || result.assets.length === 0) return null;
   return toPicked(result.assets[0]);
+}
+
+/**
+ * 업로드 전 축소 — 장변을 {@code maxSide} 로 맞추고 JPEG 로 다시 인코딩한다.
+ *
+ * <p><b>왜 필요한가</b>: 피커의 {@code quality: 0.7} 은 <b>압축률만</b> 낮출 뿐 화소 수는
+ * 원본 그대로다. 요즘 폰 12MP 사진은 그래도 1.5~3MB 라, 식단 사진처럼 AI 분석까지 가는
+ * 경로에서는 이 크기가 <b>세 단계에 곱해진다</b> — ① 폰→Cloudinary 업로드,
+ * ② 서버→Cloudinary 다운로드, ③ Base64 인코딩 후 Gemini 전송. 음식 인식에 1024px 이면
+ * 충분하므로, 여기서 한 번 줄이면 세 단계가 같이 짧아진다.
+ *
+ * <p>덤으로 iOS 의 HEIC 가 JPEG 으로 정규화된다 — 서버가 Gemini 지원 포맷만 받으므로
+ * (FoodAnalysisService 의 SUPPORTED_MIME) 실패 한 갈래가 사라진다.
+ *
+ * <p>실패하면 <b>원본 uri 를 그대로</b> 돌려준다. 축소는 최적화지 기능이 아니라서,
+ * 여기서 던지면 멀쩡히 되던 업로드까지 막힌다(= 느려질 뿐 동작은 같다).
+ */
+export async function shrinkImage(image: PickedImage, maxSide = 1024): Promise<string> {
+  const longest = Math.max(image.width, image.height);
+  // 이미 작으면 건드리지 않는다 — 재인코딩해 봐야 화질만 한 번 더 깎인다
+  if (longest <= 0 || longest <= maxSide) return image.uri;
+
+  try {
+    const ratio = maxSide / longest;
+    const context = ImageManipulator.manipulate(image.uri).resize({
+      width: Math.max(1, Math.round(image.width * ratio)),
+      height: Math.max(1, Math.round(image.height * ratio)),
+    });
+    const rendered = await context.renderAsync();
+    const result = await rendered.saveAsync({ compress: 0.8, format: SaveFormat.JPEG });
+    return result.uri;
+  } catch (e) {
+    console.warn('[imageUpload] 사진 축소 실패 — 원본으로 업로드합니다', e);
+    return image.uri;
+  }
 }
 
 /** 갤러리에서 이미지 선택 → uri (취소/권한 거부 시 null) */

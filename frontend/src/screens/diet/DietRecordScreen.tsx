@@ -30,7 +30,7 @@ import { useDirtyGuard } from '../../hooks/useDirtyGuard';
 import { publishEnsuringConnection } from '../../api/chatSocket';
 import { dietApi, SaveMealItemPayload } from '../../api/diet';
 import { foodDbApi } from '../../api/foodDb';
-import { pickImage, takePhoto, uploadImage } from '../../utils/imageUpload';
+import { pickImageAsset, takePhotoAsset, shrinkImage, uploadImage } from '../../utils/imageUpload';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
@@ -162,13 +162,22 @@ export function DietRecordScreen({ navigation, route }: Props) {
   });
 
   /*
-   * 업로드 결과 캐시 — AI 분석과 저장이 같은 사진을 두 번 올리지 않도록.
-   * 수정으로 들어왔으면 이미 올라가 있는 사진이라 그 URL 을 그대로 캐시에 넣어둔다
+   * 업로드 캐시 — AI 분석과 저장이 같은 사진을 두 번 올리지 않도록.
+   * 결과 URL 이 아니라 <b>업로드 Promise</b> 를 담는다. 사진을 고르는 즉시 백그라운드로
+   * 올리기 시작하는데(pickFrom), 그게 끝나기 전에 분석을 눌러도 그 업로드를 같이
+   * 기다리게 하려면 진행 중인 Promise 자체가 캐시에 있어야 한다.
+   *
+   * 수정으로 들어왔으면 이미 올라가 있는 사진이라 그 URL 을 이미 끝난 Promise 로 넣어둔다
    * (photoUri === photoUrl 이므로 ensureUploaded 가 재업로드 없이 통과한다).
    */
-  const uploadedRef = useRef<{ uri: string; url: string } | null>(
-    editing?.photoUrl ? { uri: editing.photoUrl, url: editing.photoUrl } : null,
+  const uploadedRef = useRef<{ uri: string; url: Promise<string> } | null>(
+    editing?.photoUrl ? { uri: editing.photoUrl, url: Promise.resolve(editing.photoUrl) } : null,
   );
+  /**
+   * 선업로드가 <b>이미 끝난</b> uri. 분석·저장에서 화면 잠금을 걸지 말지 판단한다 —
+   * 올릴 게 남지 않았는데 "사진 올리는 중…" 이 한 프레임 번쩍이면 오히려 느려 보인다.
+   */
+  const uploadedDoneRef = useRef<string | null>(editing?.photoUrl ?? null);
 
   // 헤더 제목은 스택 옵션이 "식단 기록"으로 고정돼 있어 수정일 때만 바꿔 단다
   useLayoutEffect(() => {
@@ -399,10 +408,58 @@ export function DietRecordScreen({ navigation, route }: Props) {
     ]);
   };
 
+  /**
+   * 업로드는 uri 당 한 번 — <b>진행 중인 것까지</b> 공유한다.
+   *
+   * <p>결과(url)가 아니라 Promise 를 캐시하는 게 요점이다. 선업로드가 아직 끝나기 전에
+   * "AI로 음식 분석"을 누르면, 결과만 캐시하는 방식에서는 캐시가 비어 있어 <b>같은 사진을
+   * 두 번</b> 올린다. 진행 중인 Promise 를 돌려주면 그냥 그 업로드를 같이 기다린다.
+   */
+  const ensureUploaded = (uri: string): Promise<string> => {
+    if (uploadedRef.current?.uri === uri) return uploadedRef.current.url;
+    const url = uploadImage(uri).then(
+      (uploaded) => {
+        // 그사이 사진이 바뀌었다면 이건 남의 결과다 — 지금 캐시된 uri 일 때만 "끝남"으로 적는다
+        if (uploadedRef.current?.uri === uri) uploadedDoneRef.current = uri;
+        return uploaded;
+      },
+      (e) => {
+        // 실패한 업로드를 캐시에 남겨두면 다시 눌러도 같은 실패만 돌아온다 — 비워서 재시도를 연다.
+        // 그사이 사진이 바뀌었다면 그건 남의 캐시이므로 uri 가 그대로일 때만 건드린다.
+        if (uploadedRef.current?.uri === uri) uploadedRef.current = null;
+        throw e;
+      },
+    );
+    uploadedRef.current = { uri, url };
+    return url;
+  };
+
+  /**
+   * 분석·저장이 쓰는 업로드 — 선업로드가 아직 안 끝났을 때만 화면을 잠근다.
+   * 이미 끝나 있으면 기다릴 게 없으므로 오버레이 없이 곧장 다음 단계로 넘어간다.
+   */
+  const uploadForSubmit = (uri: string): Promise<string> =>
+    uploadedDoneRef.current === uri
+      ? ensureUploaded(uri)
+      : runBusy('사진 올리는 중…', () => ensureUploaded(uri));
+
   const pickFrom = async (source: 'camera' | 'gallery') => {
     try {
-      const uri = source === 'camera' ? await takePhoto() : await pickImage();
-      if (uri) setPhotoUri(uri);
+      const picked = source === 'camera' ? await takePhotoAsset() : await pickImageAsset();
+      if (!picked) return;
+      // 고르자마자 줄인다 — 업로드·서버 다운로드·Gemini 전송이 한꺼번에 가벼워진다
+      const uri = await shrinkImage(picked);
+      setPhotoUri(uri);
+      /*
+       * 선업로드 — 사용자가 "AI로 음식 분석"이나 "저장"을 누를 때쯤이면 이미 끝나 있게 한다.
+       * 업로드는 어차피 두 경로 모두의 앞 단계고, 사진을 고른 직후는 사용자가 화면을 보며
+       * 멈춰 있는 구간이라 여기에 태우면 그만큼의 대기가 통째로 사라진다.
+       *
+       * 실패는 여기서 삼킨다 — ensureUploaded 가 캐시를 비워두므로 분석/저장 때 다시 시도하며
+       * 그때 제대로 알린다. 아직 아무것도 누르지 않은 사용자에게 업로드 오류를 띄우면
+       * 무엇 때문에 뜬 건지 알 수 없다.
+       */
+      void ensureUploaded(uri).catch(() => {});
     } catch (e) {
       toast.error(getErrorMessage(e, '사진 선택에 실패했어요.'));
     }
@@ -421,19 +478,12 @@ export function DietRecordScreen({ navigation, route }: Props) {
     ]);
   };
 
-  const ensureUploaded = async (uri: string): Promise<string> => {
-    if (uploadedRef.current?.uri === uri) return uploadedRef.current.url;
-    const url = await uploadImage(uri);
-    uploadedRef.current = { uri, url };
-    return url;
-  };
-
   // AI 음식 분석 — 결과는 추정치라 항목으로 채워만 주고 확정(저장)은 사용자가 한다
   const onAnalyze = async () => {
     if (!photoUri) return;
     setAnalyzing(true);
     try {
-      const photoUrl = await runBusy('사진 올리는 중…', () => ensureUploaded(photoUri));
+      const photoUrl = await uploadForSubmit(photoUri);
       const result = await runBusy('AI가 음식을 분석하고 있어요', () => dietApi.analyze(photoUrl));
       if (!result.isFood || result.foods.length === 0) {
         toast.error('음식 사진이 아닌 것 같아요');
@@ -541,7 +591,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
     try {
       let photoUrl: string | undefined;
       if (photoUri) {
-        photoUrl = await runBusy('사진 올리는 중…', () => ensureUploaded(photoUri));
+        photoUrl = await uploadForSubmit(photoUri);
       }
       const label = MEAL_TYPES.find((t) => t.value === mealType)?.label ?? '';
       const payloadItems: SaveMealItemPayload[] = filled.map((i) => ({
@@ -701,6 +751,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
                 // 업로드 캐시만 버린다. 분석으로 들어온 음식 항목은 그대로 둔다 —
                 // 사진을 지워도 먹은 건 먹은 것이고, 틀렸으면 항목별로 지울 수 있다.
                 uploadedRef.current = null;
+                uploadedDoneRef.current = null;
               }}
             >
               <Text style={styles.removePhoto}>사진 제거</Text>

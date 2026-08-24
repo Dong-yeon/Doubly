@@ -1,6 +1,7 @@
 package com.fitto.summary.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fitto.common.ai.AiResultCache;
 import com.fitto.common.ai.GeminiClient;
 import com.fitto.common.plan.Feature;
 import com.fitto.summary.dto.WeeklyLetterResponse;
@@ -35,14 +36,23 @@ public class WeeklyLetterService {
             "required", List.of("letter"));
 
     private final GeminiClient geminiClient;
+    private final AiResultCache aiResultCache;
     private final SummaryService summaryService;
 
-    public WeeklyLetterService(GeminiClient geminiClient, SummaryService summaryService) {
+    public WeeklyLetterService(GeminiClient geminiClient, AiResultCache aiResultCache,
+                               SummaryService summaryService) {
         this.geminiClient = geminiClient;
+        this.aiResultCache = aiResultCache;
         this.summaryService = summaryService;
     }
 
-    public WeeklyLetterResponse letter(Long userId) {
+    /**
+     * @param refresh 사용자가 "다시 받기"를 눌렀는가 — 캐시를 건너뛰고 새로 쓴다.
+     *                지난주 결산 수치는 주중에 바뀌지 않으므로, 평소에는 한 주 내내 같은 편지를
+     *                {@link AiResultCache} 가 즉시 돌려준다. 편지는 한 번 받고 다시 열어보는
+     *                성격이라 매번 문장이 달라지는 편이 오히려 어색하다.
+     */
+    public WeeklyLetterResponse letter(Long userId, boolean refresh) {
         WeeklyRecapResponse recap = summaryService.weeklyRecap(userId);
         int totalActivity = recap.myWorkoutDays() + recap.myMealDays()
                 + recap.partnerWorkoutDays() + recap.partnerMealDays();
@@ -50,9 +60,15 @@ public class WeeklyLetterService {
             return WeeklyLetterResponse.empty();
         }
 
+        String input = describe(recap);
+        return aiResultCache.remember(userId, Feature.AI_WEEKLY_LETTER, input, refresh,
+                WeeklyLetterResponse.class, () -> generate(userId, input));
+    }
+
+    private WeeklyLetterResponse generate(Long userId, String input) {
         geminiClient.requireConfiguredAndCountUsage(userId, Feature.AI_WEEKLY_LETTER);
         JsonNode result = geminiClient.generateJson(
-                List.of(GeminiClient.textPart(PROMPT.formatted(describe(recap)))), SCHEMA);
+                List.of(GeminiClient.textPart(PROMPT.formatted(input))), SCHEMA);
         String letter = result.path("letter").asText("");
         return letter.isBlank()
                 ? new WeeklyLetterResponse(true, "이번 주도 함께 애썼어요. 다음 주도 파이팅! 💪")

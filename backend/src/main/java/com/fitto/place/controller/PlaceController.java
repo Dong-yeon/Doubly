@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -55,16 +56,24 @@ public class PlaceController {
         return ApiResponse.success(placeService.list(user.id()));
     }
 
-    /** AI 데이트 코스 추천 — 저장한 장소로 코스 구성 (GET /places/date-course) */
+    /**
+     * AI 데이트 코스 추천 — 저장한 장소로 코스 구성 (GET /places/date-course)
+     *
+     * <p>{@code refresh=true} 는 사용자가 "다른 코스" 를 눌렀을 때만 붙인다. 화면 진입은
+     * 캐시를 태워야 한다 — 무료 한도가 월 1회라 들어갈 때마다 새로 만들면 곧바로 소진된다.
+     */
     @GetMapping("/date-course")
-    public ApiResponse<DateCourseResponse> dateCourse(@AuthenticationPrincipal AuthUser user) {
-        return ApiResponse.success(dateCourseService.recommend(user.id()));
+    public ApiResponse<DateCourseResponse> dateCourse(@AuthenticationPrincipal AuthUser user,
+                                                      @RequestParam(defaultValue = "false") boolean refresh) {
+        return ApiResponse.success(dateCourseService.recommend(user.id(), refresh));
     }
 
     /** AI 맛집 추천 — 럽슐랭 취향 분석(Gemini) + 카카오 실존 장소 검색 (GET /places/lovelichelin/recommendations) */
     @GetMapping("/lovelichelin/recommendations")
-    public ApiResponse<LovelichelinRecommendationResponse> lovelichelinRecommend(@AuthenticationPrincipal AuthUser user) {
-        return ApiResponse.success(lovelichelinRecommendService.recommend(user.id()));
+    public ApiResponse<LovelichelinRecommendationResponse> lovelichelinRecommend(
+            @AuthenticationPrincipal AuthUser user,
+            @RequestParam(defaultValue = "false") boolean refresh) {
+        return ApiResponse.success(lovelichelinRecommendService.recommend(user.id(), refresh));
     }
 
     @GetMapping("/{id}")

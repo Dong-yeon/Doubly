@@ -99,8 +99,15 @@ export const dietApi = {
   partnerToday: () => unwrap(apiClient.get<ApiResponse<PartnerToday>>('/meal/partner/today')),
   stats: () => unwrap(apiClient.get<ApiResponse<MealStats>>('/meal/stats')),
   coupleGoal: () => unwrap(apiClient.get<ApiResponse<CoupleMealGoal>>('/meal/couple/goal')),
-  // 주간 식단 AI 코칭 — 최근 7일 기반, 시간이 걸려 timeout 상향
-  coach: () => unwrap(apiClient.get<ApiResponse<DietCoach>>('/meal/coach', { timeout: 60000 })),
+  // 주간 식단 AI 코칭 — 최근 7일 기반, 시간이 걸려 timeout 상향.
+  // refresh 를 넘기면 서버 캐시를 건너뛴다 (평소에는 식단 기록이 그대로면 즉시 응답)
+  coach: (refresh?: boolean) =>
+    unwrap(
+      apiClient.get<ApiResponse<DietCoach>>('/meal/coach', {
+        params: { refresh: refresh || undefined },
+        timeout: 60000,
+      }),
+    ),
 
   // 오늘 영양 요약 (목표 대비 섭취)
   nutrition: () => unwrap(apiClient.get<ApiResponse<NutritionSummary>>('/meal/nutrition')),

@@ -139,8 +139,9 @@ public class MealController {
 
     /** 주간 식단 AI 코칭 — 최근 7일 기록 기반 영양 균형 피드백 */
     @GetMapping("/coach")
-    public ApiResponse<DietCoachResponse> coach(@AuthenticationPrincipal AuthUser user) {
-        return ApiResponse.success(dietCoachService.coach(user.id()));
+    public ApiResponse<DietCoachResponse> coach(@AuthenticationPrincipal AuthUser user,
+                                                @RequestParam(defaultValue = "false") boolean refresh) {
+        return ApiResponse.success(dietCoachService.coach(user.id(), refresh));
     }
 
     /** 오늘 영양 요약 (목표 대비 섭취) */

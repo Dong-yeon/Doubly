@@ -1,6 +1,7 @@
 package com.fitto.place.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fitto.common.ai.AiResultCache;
 import com.fitto.common.ai.GeminiClient;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
@@ -79,23 +80,32 @@ public class LovelichelinRecommendService {
             "required", List.of("greeting", "searches"));
 
     private final GeminiClient geminiClient;
+    private final AiResultCache aiResultCache;
     private final KakaoLocalClient kakaoLocalClient;
     private final PlaceRepository placeRepository;
     private final PlaceRatingRepository placeRatingRepository;
     private final RelationRepository relationRepository;
 
-    public LovelichelinRecommendService(GeminiClient geminiClient, KakaoLocalClient kakaoLocalClient,
+    public LovelichelinRecommendService(GeminiClient geminiClient, AiResultCache aiResultCache,
+                                        KakaoLocalClient kakaoLocalClient,
                                         PlaceRepository placeRepository,
                                         PlaceRatingRepository placeRatingRepository,
                                         RelationRepository relationRepository) {
         this.geminiClient = geminiClient;
+        this.aiResultCache = aiResultCache;
         this.kakaoLocalClient = kakaoLocalClient;
         this.placeRepository = placeRepository;
         this.placeRatingRepository = placeRatingRepository;
         this.relationRepository = relationRepository;
     }
 
-    public LovelichelinRecommendationResponse recommend(Long userId) {
+    /**
+     * @param refresh 사용자가 "다시 추천받기"를 눌렀는가 — 캐시를 건너뛰고 새로 추천한다.
+     *                평가가 그대로면 {@link AiResultCache} 가 지난번 추천을 즉시 돌려준다.
+     *                네 기능 중 가장 무거운 경로라(Gemini 한 번 + 카카오 검색 여러 번) 캐시가
+     *                맞을 때의 이득도 가장 크다 — 카카오 호출까지 통째로 사라진다.
+     */
+    public LovelichelinRecommendationResponse recommend(Long userId, boolean refresh) {
         Relation couple = activeCouple(userId);
         List<Place> all = placeRepository.findByCoupleIdOrderByIdDesc(couple.getId());
         List<Place> certified = all.stream()
@@ -104,14 +114,22 @@ public class LovelichelinRecommendService {
         if (certified.size() < MIN_CERTIFIED_PLACES) {
             return LovelichelinRecommendationResponse.empty();
         }
-        // 카카오 키가 없으면 실존 장소를 못 구한다 — Gemini 한도를 차감하기 전에 먼저 확인
+
+        String input = describe(certified, userId);
+        return aiResultCache.remember(userId, Feature.AI_RESTAURANT_RECOMMEND, input, refresh,
+                LovelichelinRecommendationResponse.class, () -> generate(userId, all, input));
+    }
+
+    private LovelichelinRecommendationResponse generate(Long userId, List<Place> all, String input) {
+        // 카카오 키가 없으면 실존 장소를 못 구한다 — Gemini 한도를 차감하기 전에 먼저 확인.
+        // (캐시가 맞으면 카카오를 아예 안 쓰므로 이 검사도 생성 경로 안에 있어야 한다)
         if (!kakaoLocalClient.isConfigured()) {
             throw new BusinessException(ErrorCode.AI_NOT_CONFIGURED);
         }
 
         geminiClient.requireConfiguredAndCountUsage(userId, Feature.AI_RESTAURANT_RECOMMEND);
         JsonNode result = geminiClient.generateJson(
-                List.of(GeminiClient.textPart(PROMPT.formatted(describe(certified, userId)))), SCHEMA);
+                List.of(GeminiClient.textPart(PROMPT.formatted(input))), SCHEMA);
 
         String greeting = result.path("greeting").asText("");
         if (greeting.isBlank()) {
