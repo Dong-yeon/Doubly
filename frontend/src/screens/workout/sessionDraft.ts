@@ -43,6 +43,9 @@ export interface SessionExercise {
   restSeconds?: number;
   // 루틴 작성 시 사전 지정해둔 대체 종목(④) — 세션 중 교체 시 먼저 추천된다
   alternatives?: SessionExerciseAlternativeParam[];
+  // "이게 무슨 동작인지" 한 줄 설명 — tip 과 같은 배치 조회로 채워진다. tip 이 자세 교정 큐라면
+  // 이건 그 앞 단계(동작 자체의 설명)라 대상 독자가 다르다.
+  description?: string;
   // 카탈로그의 자세 큐/안내 문구 — 세션 시작 시 이름으로 배치 조회해 채운다. 커스텀 종목이거나
   // 아직 못 불러왔으면 undefined이고, 그때는 TIP 카드를 그냥 숨긴다.
   tip?: string;

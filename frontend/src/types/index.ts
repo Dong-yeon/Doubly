@@ -244,6 +244,9 @@ export interface ExerciseCatalogItem {
   category: string;
   muscleGroup: string;
   equipment?: string | null;
+  // "이게 무슨 동작인지" 한 줄 설명 — tip 과 달리 그 운동을 처음 보는 사람이 대상이다
+  // (풀업의 tip 은 "턱이 바를 넘을 때까지 당기고..."라 이미 아는 사람에게만 의미가 있다)
+  description?: string | null;
   // 자세 큐/안내 문구 — 운동 세션 화면의 TIP 카드에 쓰인다. 커스텀 종목은 없을 수 있다
   tip?: string | null;
   // 이 종목이 뭔지 한눈에 보여주는 이모지 — 세션 카드 종목명 옆에 노출. 커스텀 종목은 없을 수 있다

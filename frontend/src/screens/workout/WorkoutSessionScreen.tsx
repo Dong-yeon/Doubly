@@ -7,6 +7,7 @@ import {
   AppState,
   FlatList,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -92,6 +93,17 @@ function toNum(s: string): number | undefined {
   if (trimmed === '') return undefined;
   const n = Number(trimmed);
   return Number.isNaN(n) ? undefined : n;
+}
+
+/**
+ * 동작 영상 보기 — 유튜브 <b>검색 결과</b>로 보낸다(특정 영상을 지정하지 않는다).
+ * 시범 영상 자체를 앱에 담는 건 저작권·용량 때문에 Non-goal 이고(PLAN.md), 대신 외부 링크로
+ * 대체하기로 돼 있다. 특정 영상을 박아두면 그 영상이 내려갔을 때 죽은 링크가 되므로 검색으로 연다.
+ * 실패해도(브라우저가 없는 환경 등) 세션 진행에는 지장이 없으므로 조용히 무시한다.
+ */
+function openFormVideo(exerciseName: string): void {
+  const q = encodeURIComponent(`${exerciseName} 운동 자세`);
+  Linking.openURL(`https://www.youtube.com/results?search_query=${q}`).catch(() => undefined);
 }
 
 /** Epley 공식 추정 1RM — 1회만 했으면 그 무게 자체가 1RM */
@@ -475,6 +487,7 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
     // 자극 부위 탐색(카탈로그 응답)에서는 바로 오지만, 루틴 사전 지정 대체 종목에는 아직 없다 —
     // 그 경우 undefined 로 넘어와 일단 TIP 카드를 비워두고(아래 배치 조회 effect가 채우진 않음,
     // ⇄ 로 한 번 더 바꾸거나 다음 세션부터 채워짐), 잘못된 이전 종목의 TIP이 남지 않게만 한다.
+    description?: string | null;
     tip?: string | null;
     emoji?: string | null;
     breathingCue?: string | null;
@@ -491,6 +504,7 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
               muscleGroup: candidate.muscleGroup,
               equipment: candidate.equipment ?? undefined,
               exerciseCatalogId: candidate.exerciseCatalogId,
+              description: candidate.description ?? undefined,
               tip: candidate.tip ?? undefined,
               emoji: candidate.emoji ?? undefined,
               breathingCue: candidate.breathingCue ?? undefined,
@@ -524,6 +538,7 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
       muscleGroup: candidate.muscleGroup,
       equipment: candidate.equipment,
       exerciseCatalogId: candidate.id,
+      description: candidate.description,
       tip: candidate.tip,
       emoji: candidate.emoji,
       breathingCue: candidate.breathingCue,
@@ -581,6 +596,7 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
             if (!c) return e;
             return {
               ...e,
+              description: c.description ?? e.description,
               tip: c.tip ?? e.tip,
               emoji: c.emoji ?? e.emoji,
               breathingCue: c.breathingCue ?? e.breathingCue,
@@ -913,6 +929,27 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
           {/* e1RM(추정 1RM) — 완료한 세트가 있어야 계산 가능. 워밍업만 하고 본세트 전이면 아직 안 뜬다 */}
           {e1rm != null ? ` · e1RM ${formatWeight(e1rm)}` : ''}
         </Text>
+
+        {/*
+          동작 설명 — "이게 무슨 운동인지" 모르는 사람을 위한 줄. TIP(자세 교정 큐)은 이미 그
+          운동을 아는 사람이 대상이라, 처음 보는 종목에서는 아무것도 알려주지 못했다.
+          시범 이미지·영상은 저작권·용량 때문에 Non-goal 이라(PLAN.md), 더 보고 싶으면
+          유튜브 검색으로 넘긴다 — PLAN.md 가 "외부 링크로 대체 가능"이라 명시한 경로다.
+          TIP 과 별도 게이트다: 설명만 있고 tip 이 없는 종목도 설명은 보여야 한다.
+        */}
+        {e.description ? (
+          <View style={styles.howToCard}>
+            <Text style={styles.howToText}>{e.description}</Text>
+            <TouchableOpacity
+              onPress={() => openFormVideo(e.name)}
+              hitSlop={8}
+              accessibilityRole="link"
+              accessibilityLabel={`${e.name} 동작 영상 검색`}
+            >
+              <Text style={styles.howToLink}>▶ 동작 영상 보기</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
 
         {/* TIP 카드 — 카탈로그에 있는 종목만(커스텀 종목/아직 못 불러왔으면 안 뜬다).
             호흡 타이밍(breathingCue)은 항상 자세 큐 아래 별도 줄로 붙는다. */}
@@ -1320,6 +1357,11 @@ const styles = themedStyles((colors) => ({
   exSwap: { fontSize: fontSize.body, color: colors.primary, fontWeight: '800' },
   exRemove: { fontSize: fontSize.body, color: colors.textMuted, fontWeight: '700' },
   exMeta: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
+  // 동작 설명 — TIP 카드 바로 위. TIP(회색 보조 카드)보다 먼저 읽혀야 하는 정보라
+  // 배경 없이 본문 톤으로 두고, 영상 링크만 primary 색으로 눈에 띄게 한다.
+  howToCard: { gap: 4, marginTop: spacing.sm },
+  howToText: { fontSize: fontSize.caption, color: colors.textPrimary, lineHeight: 19 },
+  howToLink: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '700' },
   tipCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',

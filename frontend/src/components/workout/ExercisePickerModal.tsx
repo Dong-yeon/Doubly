@@ -138,6 +138,13 @@ export function ExercisePickerModal({ visible, catalog, onClose, excludeName, on
                           <Text style={styles.itemMeta}>
                             {item.muscleGroup} · {item.equipment ?? '맨몸'}
                           </Text>
+                          {/* 동작 설명 — 고르는 시점이야말로 "이게 무슨 운동인지" 가장 모르는 순간이다.
+                              목록이라 두 줄로 자른다(전문은 세션 카드에서 본다). */}
+                          {item.description ? (
+                            <Text style={styles.itemDesc} numberOfLines={2}>
+                              {item.description}
+                            </Text>
+                          ) : null}
                         </View>
                         {selected ? <Text style={styles.itemCheck}>✓</Text> : null}
                       </TouchableOpacity>
@@ -187,6 +194,8 @@ const styles = themedStyles((colors) => ({
   itemEmoji: { fontSize: fontSize.subtitle },
   itemName: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
   itemMeta: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
+  // 부위·기구(itemMeta)보다 한 단계 옅게 — 이름 → 태그 → 설명 순으로 읽히게 한다
+  itemDesc: { fontSize: fontSize.caption, color: colors.textMuted, marginTop: 3, lineHeight: 17 },
   itemCheck: { fontSize: fontSize.body, color: colors.primary, fontWeight: '800' },
   empty: { alignItems: 'center', paddingVertical: spacing.lg, gap: spacing.xs },
   emptyText: { fontSize: fontSize.caption, color: colors.textSecondary },
