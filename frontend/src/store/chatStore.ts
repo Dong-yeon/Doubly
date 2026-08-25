@@ -152,6 +152,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   markRead: async (messageId) => {
     await chatApi.markRead(messageId);
+    // 방 목록의 unreadCount(하단 탭 배지 소스)를 서버 기준으로 다시 맞춘다 —
+    // 낙관적 차감 대신 재조회하는 이유는 부재중 통화 카드처럼 서버가 대신 남긴
+    // 메시지까지 포함해 정확한 값을 보장하기 위함.
+    void get().loadRooms();
   },
 
   teardown: () => {

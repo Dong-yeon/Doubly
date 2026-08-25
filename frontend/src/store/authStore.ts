@@ -73,6 +73,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       void usePlanStore.getState().load();
       // 통화 클라이언트 연결 — 연결돼 있어야 상대의 발신을 받을 수 있다(선택 기능, 실패 무시)
       void useCallStore.getState().init();
+      /*
+       * 안 읽은 배지(부재중 통화 카드 포함) 로드 — 커플 계정은 ChatScreen 이 방을
+       * 열자마자 ChatRoom 으로 replace 하므로(App.tsx 참고) ChatScreen 이 화면에
+       * 그려질 일이 없다. loadRooms 가 그 화면에서만 호출되던 예전 구조에선 배지
+       * 데이터 자체가 커플 사용자에게 영영 로드되지 않았다 — 여기서 부팅 시 채운다.
+       */
+      void useChatStore.getState().loadRooms();
     } catch {
       await clearTokens();
       set({ user: null, isAuthenticated: false, isLoading: false });
@@ -88,6 +95,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     void usePlanStore.getState().load();
     // 통화 클라이언트 연결(선택 기능, 실패 무시)
     void useCallStore.getState().init();
+    // 안 읽은 배지 로드 — bootstrap() 과 같은 이유(위 주석 참고)
+    void useChatStore.getState().loadRooms();
   },
 
   login: async (email, password) => {

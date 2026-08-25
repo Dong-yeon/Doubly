@@ -4,20 +4,21 @@
  *  액션이 전부 각 화면 자체 버튼과 중복이라(운동 기록/식단 기록/맛집 핀/일상 남기기),
  *  홈 CoupleHero 의 오늘 칩(HomeScreen.onPressToday)이 "안 했으면 기록 화면으로 바로"
  *  분기하도록 바꿔 같은 진입 속도를 새 버튼 없이 재현했다. */
-import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect } from 'react';
+import { AppState, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createBottomTabNavigator, BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { getFocusedRouteNameFromRoute, StackActions } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '../components/Icon';
 import type { MainTabParamList } from './types';
-import { colors, shadow, spacing } from '../constants/theme';
+import { colors, radius, shadow, spacing } from '../constants/theme';
 import { HomeStackNavigator } from './HomeStackNavigator';
 import { WorkoutStackNavigator } from './WorkoutStackNavigator';
 import { ChatStackNavigator } from './ChatStackNavigator';
 import { DietStackNavigator } from './DietStackNavigator';
 import { PlaceStackNavigator } from './PlaceStackNavigator';
 import { themedStyles } from '../theme/themedStyles';
+import { useChatStore } from '../store/chatStore';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
@@ -42,12 +43,25 @@ const TAB_META: Record<keyof MainTabParamList, { label: string; icon: IconName }
  */
 const HIDE_TAB_BAR_ON = new Set(['ChatRoom']);
 
+/*
+ * 채팅 탭 안 읽은 배지 — 부재중 통화 카드도 일반 메시지처럼 unreadCount 에 잡힌다
+ * (PLAN.md "통화·영상통화" 참고). 커플 계정은 ChatScreen(원래 배지가 있던 자리)이
+ * 열리자마자 ChatRoom 으로 replace 돼 그 화면을 볼 일이 없어서, 유일하게 항상
+ * 보이는 이 탭 아이콘으로 옮겨 달았다 — 안 그러면 배지 데이터가 있어도 아무도
+ * 못 본다.
+ */
+function useChatUnreadCount() {
+  return useChatStore((s) => s.rooms.reduce((sum, r) => sum + r.unreadCount, 0));
+}
+
 function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
+  const unreadCount = useChatUnreadCount();
 
   const renderTab = (routeName: keyof MainTabParamList, index: number) => {
     const meta = TAB_META[routeName];
     const focused = state.index === index;
+    const showBadge = routeName === 'Chat' && unreadCount > 0;
     return (
       <TouchableOpacity
         key={routeName}
@@ -74,12 +88,19 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
           }
         }}
       >
-        {/* 비활성도 textSecondary — textMuted(#9A98A4)는 흰 탭바 위 2.84:1 로 WCAG 미달 */}
-        <MaterialCommunityIcons
-          name={meta.icon}
-          size={24}
-          color={focused ? colors.primary : colors.textSecondary}
-        />
+        <View>
+          {/* 비활성도 textSecondary — textMuted(#9A98A4)는 흰 탭바 위 2.84:1 로 WCAG 미달 */}
+          <MaterialCommunityIcons
+            name={meta.icon}
+            size={24}
+            color={focused ? colors.primary : colors.textSecondary}
+          />
+          {showBadge ? (
+            <View style={styles.tabBadge}>
+              <Text style={styles.tabBadgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+            </View>
+          ) : null}
+        </View>
         <Text style={[styles.tabLabel, { color: focused ? colors.primary : colors.textSecondary }]}>
           {meta.label}
         </Text>
@@ -101,6 +122,19 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
 }
 
 export function MainTabNavigator() {
+  /*
+   * 앱이 백그라운드/종료 상태였다가 포그라운드로 돌아올 때마다 안 읽은 개수를
+   * 다시 읽는다 — 부재중 통화·채팅 알림을 보고 앱을 여는 경우가 정확히 이 경로다.
+   * 소켓 구독은 채팅방 화면이 열려 있을 때만 살아있으므로(store/chatStore.ts
+   * openRoom), 방 밖에서 온 변화는 이렇게 앱 복귀 시점에 맞춰 잡는다.
+   */
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') void useChatStore.getState().loadRooms();
+    });
+    return () => sub.remove();
+  }, []);
+
   return (
     <Tab.Navigator
       screenOptions={{ headerShown: false }}
@@ -128,4 +162,20 @@ const styles = themedStyles((colors) => ({
   // minHeight 48 — 아이콘+라벨만으론 40px 이라 터치 타깃 권장(44px)에 못 미친다
   tabItem: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2, minHeight: 48 },
   tabLabel: { fontSize: 11, fontWeight: '700', lineHeight: 14 },
+  tabBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -10,
+    minWidth: 16,
+    height: 16,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    // 아이콘 색과 겹쳐도 배지 경계가 또렷하게 — ChatScreen 방 목록 배지와 톤을 맞췄다
+    borderWidth: 1.5,
+    borderColor: colors.surfaceCard,
+  },
+  tabBadgeText: { color: colors.white, fontSize: 9, fontWeight: '800', lineHeight: 11 },
 }));
