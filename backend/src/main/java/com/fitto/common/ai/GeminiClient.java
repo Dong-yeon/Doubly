@@ -66,16 +66,30 @@ public class GeminiClient {
     /**
      * AI 기능 사용 전 공통 관문 — 키 설정 확인 + 플랜 한도 차감 + 총량 안전망.
      *
-     * <p>플랜 한도를 <b>먼저</b> 본다. 무료에서 막힌 기능이 총량 카운터를 갉아먹으면
-     * 쓰지도 못한 기능 때문에 쓸 수 있는 기능의 잔여 횟수가 줄어든다.
+     * <p>양방향으로 서로의 한도를 갉아먹지 않게 <b>확인(peek) → 커밋(increment) 순서</b>를 지킨다.
+     * <ol>
+     *   <li>총량을 먼저 <b>peek</b> 만 한다 — 여기서 막히면 기능별 한도는 건드리지 않는다.
+     *       (반대로 하면, 총량에 막혀 Gemini 를 한 번도 못 부른 요청이 월 1회·주 1회 같은
+     *       희소한 기능 한도를 그냥 날려버린다 — 실제로 있었던 누수)</li>
+     *   <li>기능별 한도는 {@link PlanGuard#consume} 이 커밋한다 — 막힌 기능이면 여기서 던지므로
+     *       아래 총량 커밋까지 가지 않는다(무료에서 막힌 기능이 총량을 갉아먹지 않는다)</li>
+     *   <li>기능 한도까지 통과했을 때만 총량을 <b>커밋</b>한다. peek 과 이 커밋 사이의 짧은 창에서
+     *       동시 요청이 겹치면 드물게 총량이 살짝 넘칠 수 있는데, 이는 카운터 자체의 기존 동시성
+     *       허용 범위와 같은 성격이라 별도 처리하지 않는다.</li>
+     * </ol>
      */
     public void requireConfiguredAndCountUsage(Long userId, Feature feature) {
         if (!properties.isConfigured()) {
             throw new BusinessException(ErrorCode.AI_NOT_CONFIGURED);
         }
-        planGuard.consume(userId, feature);
 
         Quota backstop = Quota.perDay(properties.getDailyLimitPerUser());
+        if (usageCounter.peek(userId, Feature.AI_TOTAL, backstop) >= backstop.limit()) {
+            throw new BusinessException(ErrorCode.AI_DAILY_LIMIT_EXCEEDED);
+        }
+
+        planGuard.consume(userId, feature);
+
         if (usageCounter.increment(userId, Feature.AI_TOTAL, backstop) > backstop.limit()) {
             throw new BusinessException(ErrorCode.AI_DAILY_LIMIT_EXCEEDED);
         }
