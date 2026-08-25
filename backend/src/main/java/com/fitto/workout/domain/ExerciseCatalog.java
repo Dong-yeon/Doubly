@@ -44,6 +44,14 @@ public class ExerciseCatalog {
     @Column(length = 30)
     private String equipment;
 
+    /**
+     * "이게 무슨 동작인지" 한 줄 설명 — 세션 카드에서 TIP 위에 노출한다(nullable).
+     * {@link #tip} 과 대상 독자가 다르다: tip 은 이미 그 운동을 아는 사람에게 주는 <b>자세 교정 큐</b>이고,
+     * 이 필드는 그 앞 단계인 <b>동작 자체의 설명</b>이다(예: 풀업 = "철봉에 매달려 몸을 끌어올린다").
+     */
+    @Column(length = 300)
+    private String description;
+
     /** 자세 큐/안내 문구 — 운동 세션 화면의 TIP 카드로 노출한다. 커스텀 종목은 없을 수 있다(nullable). */
     @Column(length = 200)
     private String tip;
@@ -64,12 +72,13 @@ public class ExerciseCatalog {
     private LocalDateTime createdAt;
 
     @Builder
-    private ExerciseCatalog(String name, String category, String muscleGroup, String equipment, String tip,
-                             String emoji, String breathingCue, Long createdBy) {
+    private ExerciseCatalog(String name, String category, String muscleGroup, String equipment, String description,
+                             String tip, String emoji, String breathingCue, Long createdBy) {
         this.name = name;
         this.category = category;
         this.muscleGroup = muscleGroup;
         this.equipment = equipment;
+        this.description = description;
         this.tip = tip;
         this.emoji = emoji;
         this.breathingCue = breathingCue;

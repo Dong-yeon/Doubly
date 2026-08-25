@@ -9,6 +9,8 @@ public record ExerciseCatalogResponse(
         String category,
         String muscleGroup,
         String equipment,
+        // "이게 무슨 동작인지" 한 줄 설명 — tip(자세 교정 큐)과 달리 그 운동을 처음 보는 사람이 대상
+        String description,
         String tip,
         // 이 종목이 뭔지 한눈에 보여주는 이모지 — 세션 카드 종목명 옆에 노출
         String emoji,
@@ -17,6 +19,7 @@ public record ExerciseCatalogResponse(
 ) {
     public static ExerciseCatalogResponse of(ExerciseCatalog e) {
         return new ExerciseCatalogResponse(e.getId(), e.getName(), e.getCategory(),
-                e.getMuscleGroup(), e.getEquipment(), e.getTip(), e.getEmoji(), e.getBreathingCue());
+                e.getMuscleGroup(), e.getEquipment(), e.getDescription(), e.getTip(), e.getEmoji(),
+                e.getBreathingCue());
     }
 }
