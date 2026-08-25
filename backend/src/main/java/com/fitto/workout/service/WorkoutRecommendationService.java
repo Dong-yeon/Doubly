@@ -15,6 +15,7 @@ import java.time.DayOfWeek;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -209,9 +210,13 @@ public class WorkoutRecommendationService {
 
         // 집중 부위·목적·통증 부위는 허용 목록으로 거른 뒤에만 프롬프트에 싣는다 — 자유 문자열이
         // 지시문 자리에 그대로 들어가는 걸 막는 안전망(오타·프롬프트 인젝션 방어).
+        // null 원소부터 걸러야 한다 — ALLOWED_FOCUS_GROUPS 는 Set.of(...) 불변 집합이라
+        // contains(null) 이 false 대신 NPE 를 던진다("["가슴", null]" 같은 요청 바디가
+        // Set<String> 으로 역직렬화되면 null 원소가 그대로 들어온다).
         String focusDirective = "";
         if (focusMuscleGroups != null) {
             String filtered = focusMuscleGroups.stream()
+                    .filter(Objects::nonNull)
                     .filter(ALLOWED_FOCUS_GROUPS::contains)
                     .collect(Collectors.joining(", "));
             if (!filtered.isEmpty()) {
@@ -226,7 +231,10 @@ public class WorkoutRecommendationService {
         // 통증 부위는 집중 부위·목적보다 항상 우선 — 키우고 싶은 부위와 겹쳐도 회피가 먼저다.
         String painDirective = "";
         if (painAreas != null) {
-            List<String> filtered = painAreas.stream().filter(ALLOWED_PAIN_AREAS::contains).toList();
+            List<String> filtered = painAreas.stream()
+                    .filter(Objects::nonNull)
+                    .filter(ALLOWED_PAIN_AREAS::contains)
+                    .toList();
             if (!filtered.isEmpty()) {
                 String areaNames = String.join(", ", filtered);
                 String avoidRules = filtered.stream()
