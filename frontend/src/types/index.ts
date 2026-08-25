@@ -555,6 +555,8 @@ export interface Content {
   type: ContentType;
   status: ContentStatus;
   addedBy: number;
+  /** 포스터 이미지 — TMDB 검색으로 채워지거나 직접 입력 시 null */
+  posterUrl?: string | null;
   logCount: number;
   avgRating?: number | null;
   lastWatchedAt?: string | null;
@@ -580,6 +582,19 @@ export interface ContentLog {
   memo?: string | null;
   imageUrl?: string | null;
   createdAt: string;
+}
+
+// 콘텐츠 제목 검색 (TMDB) — 영화·드라마만 대상, 공연(PERFORMANCE)은 결과에 없다
+export interface ContentSearchResult {
+  title: string;
+  type: ContentType;
+  posterUrl?: string | null;
+  year?: string | null;
+}
+export interface ContentSearchResponse {
+  /** false 면 TMDB API 키 미설정 — results 는 항상 빈 배열 */
+  available: boolean;
+  results: ContentSearchResult[];
 }
 
 // 식단 (meals) — 끼니별 사진/메모/칼로리
@@ -1076,8 +1091,8 @@ export interface TripRecap {
   travelModeEnabled: boolean;
 }
 
-// 커플 일상 피드 (PLAN.md Couple Feed) — 포스트 + 운동/식단/맛집 방문 통합 타임라인
-export type FeedItemType = 'POST' | 'WORKOUT' | 'MEAL' | 'PLACE_VISIT';
+// 커플 일상 피드 (PLAN.md Couple Feed) — 포스트 + 운동/식단/맛집 방문/콘텐츠 관람 통합 타임라인
+export type FeedItemType = 'POST' | 'WORKOUT' | 'MEAL' | 'PLACE_VISIT' | 'CONTENT_LOG';
 export interface ReactionSummary {
   emoji: string;
   count: number;

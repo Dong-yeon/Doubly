@@ -39,6 +39,7 @@ const typeMeta = (
     WORKOUT: { icon: 'dumbbell' as IconName, color: colors.indigo },
     MEAL: { icon: 'silverware-fork-knife' as IconName, color: colors.violet },
     PLACE_VISIT: { icon: 'map-marker' as IconName, color: colors.coral },
+    CONTENT_LOG: { icon: 'movie-open-outline' as IconName, color: colors.danger },
   })[type];
 
 export interface FeedCardProps {

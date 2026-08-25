@@ -6,6 +6,7 @@ import com.fitto.common.plan.Plan;
 import com.fitto.common.notification.NotificationCategory;
 import com.fitto.common.notification.PushLinks;
 import com.fitto.common.notification.NotificationService;
+import com.fitto.content.repository.ContentLogRepository;
 import com.fitto.feed.repository.FeedPostRepository;
 import com.fitto.place.repository.PlaceVisitRepository;
 import com.fitto.relation.domain.Relation;
@@ -45,6 +46,7 @@ public class MemoriesNotifier {
 
     private final FeedPostRepository feedPostRepository;
     private final PlaceVisitRepository placeVisitRepository;
+    private final ContentLogRepository contentLogRepository;
     private final RelationRepository relationRepository;
     private final NotificationService notificationService;
     private final ZoneId storageZone;
@@ -52,12 +54,14 @@ public class MemoriesNotifier {
 
     public MemoriesNotifier(FeedPostRepository feedPostRepository,
                             PlaceVisitRepository placeVisitRepository,
+                            ContentLogRepository contentLogRepository,
                             RelationRepository relationRepository,
                             NotificationService notificationService,
                             @Value("${fitto.storage-zone:}") String storageZone,
                             PlanResolver planResolver) {
         this.feedPostRepository = feedPostRepository;
         this.placeVisitRepository = placeVisitRepository;
+        this.contentLogRepository = contentLogRepository;
         this.relationRepository = relationRepository;
         this.notificationService = notificationService;
         // MemoriesService 와 반드시 같은 규칙으로 푼다 — 다르면 "푸시는 왔는데 열면 비어 있다"
@@ -137,6 +141,8 @@ public class MemoriesNotifier {
                     .forEach(c -> counts.merge(c.getCoupleId(), c.getItemCount(), Long::sum));
             placeVisitRepository.countByCoupleOnVisitedAt(date)
                     .forEach(c -> counts.merge(c.getCoupleId(), c.getItemCount(), Long::sum));
+            contentLogRepository.countByCoupleOnWatchedAt(date)
+                    .forEach(c -> counts.merge(c.getCoupleId(), c.getItemCount(), Long::sum));
         }
         return counts;
     }
@@ -145,10 +151,14 @@ public class MemoriesNotifier {
     private Integer globalEarliestYear() {
         LocalDateTime firstPost = feedPostRepository.findGlobalEarliestCreatedAt();
         LocalDate firstVisit = placeVisitRepository.findGlobalEarliestVisitedAt();
+        LocalDate firstLog = contentLogRepository.findGlobalEarliestWatchedAt();
 
         Integer earliest = firstPost != null ? firstPost.getYear() : null;
         if (firstVisit != null) {
             earliest = (earliest == null) ? firstVisit.getYear() : Math.min(earliest, firstVisit.getYear());
+        }
+        if (firstLog != null) {
+            earliest = (earliest == null) ? firstLog.getYear() : Math.min(earliest, firstLog.getYear());
         }
         return earliest;
     }

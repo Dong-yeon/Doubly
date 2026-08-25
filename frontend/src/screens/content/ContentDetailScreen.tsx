@@ -213,36 +213,43 @@ export function ContentDetailScreen({ route, navigation }: Props) {
             <View>
               {content ? (
                 <View style={styles.infoCard}>
-                  <View style={styles.infoTop}>
-                    <Text style={styles.infoName}>{content.title}</Text>
-                    <View style={styles.infoActions}>
-                      <IconButton
-                        icon="pencil-outline"
-                        label="콘텐츠 정보 수정"
-                        onPress={() => navigation.navigate('ContentAdd', { content })}
-                      />
-                      <IconButton
-                        icon="delete-outline"
-                        label="콘텐츠 삭제"
-                        color={colors.danger}
-                        onPress={onDeleteContent}
-                      />
-                    </View>
-                  </View>
-                  <View style={styles.infoChipRow}>
-                    <View style={styles.infoChip}>
-                      <Text style={styles.infoChipText}>{content.status === 'DONE' ? '봤어요' : '보고 싶어요'}</Text>
-                    </View>
-                    <View style={styles.infoChip}>
-                      <Text style={styles.infoChipText}>{contentTypeLabel(content.type)}</Text>
-                    </View>
-                    {content.lovelichelinTier === 0 &&
-                    ((content.myRating != null && content.myRating >= SOLO_PICK_MIN_RATING && content.partnerRating == null) ||
-                      (content.partnerRating != null &&
-                        content.partnerRating >= SOLO_PICK_MIN_RATING &&
-                        content.myRating == null)) ? (
-                      <SoloPickBadge who={content.myRating != null ? 'me' : 'partner'} size="sm" />
+                  <View style={styles.infoHeaderRow}>
+                    {content.posterUrl ? (
+                      <Image source={{ uri: content.posterUrl }} style={styles.infoPoster} resizeMode="cover" />
                     ) : null}
+                    <View style={styles.flex}>
+                      <View style={styles.infoTop}>
+                        <Text style={styles.infoName}>{content.title}</Text>
+                        <View style={styles.infoActions}>
+                          <IconButton
+                            icon="pencil-outline"
+                            label="콘텐츠 정보 수정"
+                            onPress={() => navigation.navigate('ContentAdd', { content })}
+                          />
+                          <IconButton
+                            icon="delete-outline"
+                            label="콘텐츠 삭제"
+                            color={colors.danger}
+                            onPress={onDeleteContent}
+                          />
+                        </View>
+                      </View>
+                      <View style={styles.infoChipRow}>
+                        <View style={styles.infoChip}>
+                          <Text style={styles.infoChipText}>{content.status === 'DONE' ? '봤어요' : '보고 싶어요'}</Text>
+                        </View>
+                        <View style={styles.infoChip}>
+                          <Text style={styles.infoChipText}>{contentTypeLabel(content.type)}</Text>
+                        </View>
+                        {content.lovelichelinTier === 0 &&
+                        ((content.myRating != null && content.myRating >= SOLO_PICK_MIN_RATING && content.partnerRating == null) ||
+                          (content.partnerRating != null &&
+                            content.partnerRating >= SOLO_PICK_MIN_RATING &&
+                            content.myRating == null)) ? (
+                          <SoloPickBadge who={content.myRating != null ? 'me' : 'partner'} size="sm" />
+                        ) : null}
+                      </View>
+                    </View>
                   </View>
                   {content.logCount > 0 ? (
                     <Text style={styles.infoStats}>
@@ -425,6 +432,8 @@ const styles = themedStyles((colors) => ({
     padding: spacing.md,
     marginBottom: spacing.lg,
   },
+  infoHeaderRow: { flexDirection: 'row', gap: spacing.md },
+  infoPoster: { width: 64, height: 92, borderRadius: radius.md },
   infoTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   infoName: { flex: 1, fontSize: fontSize.title, fontWeight: '800', color: colors.textPrimary },
   infoActions: { flexDirection: 'row', alignItems: 'center' },

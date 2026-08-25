@@ -139,6 +139,12 @@ fitto:
   kakao:
     rest-api-key: ${KAKAO_REST_API_KEY:}
 
+  # TMDB(The Movie Database) — 콘텐츠(영화·드라마) 제목 검색. themoviedb.org 에서 무료 발급하는
+  # v3 API 키. 미설정 시 콘텐츠 검색만 비활성(제목 직접 입력은 그대로 동작) — KakaoLocalClient
+  # 와 같은 패턴. 공연(PERFORMANCE)은 TMDB 대상이 아니라 이 검색에 걸리지 않는다.
+  tmdb:
+    api-key: ${TMDB_API_KEY:}
+
   # 통화·영상통화 (Stream Video, PLAN.md "통화·영상통화") — 키 미설정 시 통화 기능만 비활성
   stream:
     api-key: ${STREAM_API_KEY:}

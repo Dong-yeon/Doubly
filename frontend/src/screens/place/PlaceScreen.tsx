@@ -192,6 +192,21 @@ export function PlaceScreen() {
     [allContents, contentSearch, contentStatusFilter, contentTypeFilter],
   );
 
+  // 콘텐츠 솔로 픽 — 장소 쪽(soloPicks)과 완전히 같은 규칙. 콘텐츠 모드는 가이드/둘러보기로
+  // 나뉘지 않은 단일 목록이라, 필터·검색에 걸리지 않은 목록 맨 위 가로 스크롤로 얹는다.
+  const contentSoloPicks = useMemo(
+    () =>
+      allContents
+        .filter((c) => c.lovelichelinTier === 0)
+        .filter(
+          (c) =>
+            (c.myRating != null && c.myRating >= SOLO_PICK_MIN_RATING && c.partnerRating == null) ||
+            (c.partnerRating != null && c.partnerRating >= SOLO_PICK_MIN_RATING && c.myRating == null),
+        )
+        .sort((a, b) => (b.myRating ?? b.partnerRating ?? 0) - (a.myRating ?? a.partnerRating ?? 0)),
+    [allContents],
+  );
+
   const onDeletePlace = (place: Place) => {
     Alert.alert('장소 삭제', `"${place.name}"을(를) 삭제할까요?\n방문 기록도 함께 삭제돼요.`, [
       { text: '취소', style: 'cancel' },
@@ -610,43 +625,81 @@ export function PlaceScreen() {
           refreshing={contentLoading}
           onRefresh={() => loadContents(true)}
           ListHeaderComponent={
-            browseContents.length > 0 ? <Text style={styles.deleteHint}>카드를 길게 눌러 삭제할 수 있어요</Text> : null
+            <View>
+              {contentSoloPicks.length > 0 ? (
+                <View style={styles.soloPickSection}>
+                  <Text style={styles.soloPickTitle}>내 픽 · 상대 픽</Text>
+                  <Text style={styles.soloPickSubtitle}>아직 둘 다 안 봤지만, 한 명은 인정한 콘텐츠예요</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.soloPickRow}>
+                    {contentSoloPicks.map((c) => {
+                      const who: 'me' | 'partner' = c.myRating != null ? 'me' : 'partner';
+                      const rating = c.myRating ?? c.partnerRating ?? 0;
+                      return (
+                        <TouchableOpacity
+                          key={c.id}
+                          activeOpacity={0.85}
+                          onPress={() => navigation.navigate('ContentDetail', { contentId: c.id, title: c.title })}
+                        >
+                          <Card elevation="sm" style={styles.soloPickCard}>
+                            <SoloPickBadge who={who} size="sm" />
+                            <Text style={styles.soloPickName} numberOfLines={1}>
+                              {c.title}
+                            </Text>
+                            <Text style={[styles.soloPickStars, { color: who === 'me' ? colors.me : colors.partner }]}>
+                              {stars(rating)}
+                            </Text>
+                          </Card>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              ) : null}
+              {browseContents.length > 0 ? (
+                <Text style={styles.deleteHint}>카드를 길게 눌러 삭제할 수 있어요</Text>
+              ) : null}
+            </View>
           }
           renderItem={({ item }) => (
             <TouchableOpacity
-              style={styles.card}
+              style={[styles.card, styles.contentCard]}
               activeOpacity={0.7}
               onPress={() => navigation.navigate('ContentDetail', { contentId: item.id, title: item.title })}
               onLongPress={() => onDeleteContent(item)}
             >
-              <View style={styles.cardHeader}>
-                <Text style={styles.name}>{item.title}</Text>
-                {item.lovelichelinTier > 0 ? <LovelichelinBadge tier={item.lovelichelinTier} size="sm" /> : null}
-                <View style={styles.categoryChip}>
-                  <Text style={styles.categoryText}>{contentTypeLabel(item.type)}</Text>
+              {item.posterUrl ? (
+                <Image source={{ uri: item.posterUrl }} style={styles.contentPoster} resizeMode="cover" />
+              ) : null}
+              <View style={styles.flex}>
+                <View style={styles.cardHeader}>
+                  <Text style={styles.name}>{item.title}</Text>
+                  {item.lovelichelinTier > 0 ? <LovelichelinBadge tier={item.lovelichelinTier} size="sm" /> : null}
+                  <View style={styles.categoryChip}>
+                    <Text style={styles.categoryText}>{contentTypeLabel(item.type)}</Text>
+                  </View>
+                  {item.lovelichelinTier === 0 &&
+                  ((item.myRating != null && item.myRating >= SOLO_PICK_MIN_RATING && item.partnerRating == null) ||
+                    (item.partnerRating != null && item.partnerRating >= SOLO_PICK_MIN_RATING && item.myRating == null)) ? (
+                    <SoloPickBadge who={item.myRating != null ? 'me' : 'partner'} size="sm" />
+                  ) : null}
                 </View>
-                {item.lovelichelinTier === 0 &&
-                ((item.myRating != null && item.myRating >= SOLO_PICK_MIN_RATING && item.partnerRating == null) ||
-                  (item.partnerRating != null && item.partnerRating >= SOLO_PICK_MIN_RATING && item.myRating == null)) ? (
-                  <SoloPickBadge who={item.myRating != null ? 'me' : 'partner'} size="sm" />
-                ) : null}
-              </View>
-              <View style={styles.cardFooter}>
-                <Text style={styles.statusBadge}>{item.status === 'DONE' ? '봤어요' : '보고 싶어요'}</Text>
-                {item.logCount > 0 ? (
-                  <Text style={styles.visitInfo}>
-                    {item.avgRating ? `${item.avgRating.toFixed(1)} · ` : ''}관람 {item.logCount}회
-                    {item.lastWatchedAt ? ` · 최근 ${item.lastWatchedAt}` : ''}
+                <View style={styles.cardFooter}>
+                  <Text style={styles.statusBadge}>{item.status === 'DONE' ? '봤어요' : '보고 싶어요'}</Text>
+                  {item.logCount > 0 ? (
+                    <Text style={styles.visitInfo}>
+                      {item.avgRating ? `${item.avgRating.toFixed(1)} · ` : ''}관람 {item.logCount}회
+                      {item.lastWatchedAt ? ` · 최근 ${item.lastWatchedAt}` : ''}
+                    </Text>
+                  ) : null}
+                </View>
+                {item.lovelichelinTier === 0 && (item.myRating != null || item.partnerRating != null) ? (
+                  <Text style={styles.pendingHint}>
+                    {item.myRating != null && item.partnerRating != null
+                      ? '럽슐랭 탈락 — 재평가하면 다시 등급이 매겨져요'
+                      : `${item.myRating != null ? '내' : '상대'} 평점만 매겨졌어요 — 나머지 한 명의 평가를 기다리는 중`}
                   </Text>
                 ) : null}
               </View>
-              {item.lovelichelinTier === 0 && (item.myRating != null || item.partnerRating != null) ? (
-                <Text style={styles.pendingHint}>
-                  {item.myRating != null && item.partnerRating != null
-                    ? '럽슐랭 탈락 — 재평가하면 다시 등급이 매겨져요'
-                    : `${item.myRating != null ? '내' : '상대'} 평점만 매겨졌어요 — 나머지 한 명의 평가를 기다리는 중`}
-                </Text>
-              ) : null}
             </TouchableOpacity>
           )}
           ListEmptyComponent={
@@ -777,6 +830,10 @@ const styles = themedStyles((colors) => ({
     padding: spacing.md,
     marginBottom: spacing.sm,
   },
+  // 콘텐츠 카드만 포스터가 왼쪽에 붙는 가로 레이아웃 — 장소 카드는 그대로 세로 하나
+  contentCard: { flexDirection: 'row', gap: spacing.sm },
+  contentPoster: { width: 52, height: 74, borderRadius: radius.sm },
+  flex: { flex: 1 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
   name: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
   categoryChip: {

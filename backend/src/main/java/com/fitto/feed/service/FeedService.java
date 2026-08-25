@@ -7,6 +7,10 @@ import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.notification.NotificationCategory;
 import com.fitto.common.notification.NotificationService;
 import com.fitto.common.notification.PushLinks;
+import com.fitto.content.domain.ContentLog;
+import com.fitto.content.repository.ContentLogRepository;
+import com.fitto.content.repository.ContentLogRepository.LogWithContent;
+import com.fitto.content.repository.ContentRepository;
 import com.fitto.diet.domain.Meal;
 import com.fitto.diet.repository.MealRepository;
 import com.fitto.feed.domain.FeedPost;
@@ -59,6 +63,8 @@ public class FeedService {
     private final MealRepository mealRepository;
     private final PlaceVisitRepository placeVisitRepository;
     private final PlaceRepository placeRepository;
+    private final ContentLogRepository contentLogRepository;
+    private final ContentRepository contentRepository;
     private final NotificationService notificationService;
     private final CoupleEventPublisher coupleEventPublisher;
     private final FeedItemMapper mapper;
@@ -70,6 +76,8 @@ public class FeedService {
                        MealRepository mealRepository,
                        PlaceVisitRepository placeVisitRepository,
                        PlaceRepository placeRepository,
+                       ContentLogRepository contentLogRepository,
+                       ContentRepository contentRepository,
                        NotificationService notificationService,
                        CoupleEventPublisher coupleEventPublisher,
                        FeedItemMapper mapper) {
@@ -80,6 +88,8 @@ public class FeedService {
         this.mealRepository = mealRepository;
         this.placeVisitRepository = placeVisitRepository;
         this.placeRepository = placeRepository;
+        this.contentLogRepository = contentLogRepository;
+        this.contentRepository = contentRepository;
         this.notificationService = notificationService;
         this.coupleEventPublisher = coupleEventPublisher;
         this.mapper = mapper;
@@ -122,6 +132,10 @@ public class FeedService {
         for (VisitWithPlace v : placeVisitRepository.findRecentForFeed(couple.getId(),
                 from.createdAtOf(FeedItemType.PLACE_VISIT), from.idOf(FeedItemType.PLACE_VISIT), page)) {
             merged.add(mapper.toItem(v, names, userId));
+        }
+        for (LogWithContent l : contentLogRepository.findRecentForFeed(couple.getId(),
+                from.createdAtOf(FeedItemType.CONTENT_LOG), from.idOf(FeedItemType.CONTENT_LOG), page)) {
+            merged.add(mapper.toItem(l, names, userId));
         }
 
         // 정렬도 (occurredAt, refId) 복합키 — 같은 시각이면 id 역순으로 안정 정렬한다
@@ -304,6 +318,17 @@ public class FeedService {
                     throw new BusinessException(ErrorCode.FORBIDDEN);
                 }
                 yield new ReactionTarget(v.getVisitedBy(), couple.getId(), "맛집 기록에 반응이 달렸어요 📍");
+            }
+            case CONTENT_LOG -> {
+                ContentLog l = contentLogRepository.findById(refId)
+                        .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "관람 기록을 찾을 수 없습니다."));
+                boolean ours = contentRepository.findById(l.getContentId())
+                        .map(c -> couple.getId().equals(c.getCoupleId()))
+                        .orElse(false);
+                if (!ours) {
+                    throw new BusinessException(ErrorCode.FORBIDDEN);
+                }
+                yield new ReactionTarget(l.getLoggedBy(), couple.getId(), "콘텐츠 기록에 반응이 달렸어요 🎬");
             }
         };
     }

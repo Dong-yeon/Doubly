@@ -1,11 +1,19 @@
-/** 커플 콘텐츠(영화·공연·드라마) API — api/place.ts 와 같은 모양이나 검색·지도·AI 추천은 없다 */
+/** 커플 콘텐츠(영화·공연·드라마) API — api/place.ts 와 같은 모양이나 지도·AI 추천은 없다 */
 import { apiClient, unwrap } from './client';
-import type { ApiResponse, Content, ContentLog, ContentStatus, ContentType } from '../types';
+import type {
+  ApiResponse,
+  Content,
+  ContentLog,
+  ContentSearchResponse,
+  ContentStatus,
+  ContentType,
+} from '../types';
 
 export interface SaveContentPayload {
   title: string;
   type: ContentType;
   status?: ContentStatus;
+  posterUrl?: string;
 }
 
 export interface RecordContentLogPayload {
@@ -24,6 +32,9 @@ export const contentApi = {
   save: (payload: SaveContentPayload) =>
     unwrap(apiClient.post<ApiResponse<Content>>('/contents', payload)),
   list: () => unwrap(apiClient.get<ApiResponse<Content[]>>('/contents')),
+  // 제목 검색 (TMDB, 영화·드라마만) — 결과를 그대로 save 에 넘기면 포스터까지 채워진 콘텐츠가 생긴다
+  search: (query: string, size = 8) =>
+    unwrap(apiClient.get<ApiResponse<ContentSearchResponse>>('/contents/search', { params: { query, size } })),
   get: (id: number) => unwrap(apiClient.get<ApiResponse<Content>>(`/contents/${id}`)),
   update: (id: number, payload: Partial<SaveContentPayload>) =>
     unwrap(apiClient.put<ApiResponse<Content>>(`/contents/${id}`, payload)),

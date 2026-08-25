@@ -5,5 +5,6 @@ public enum FeedItemType {
     POST,
     WORKOUT,
     MEAL,
-    PLACE_VISIT
+    PLACE_VISIT,
+    CONTENT_LOG
 }

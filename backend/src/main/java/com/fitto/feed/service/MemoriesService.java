@@ -4,6 +4,8 @@ import com.fitto.common.plan.Feature;
 import com.fitto.common.plan.PlanGuard;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
+import com.fitto.content.repository.ContentLogRepository;
+import com.fitto.content.repository.ContentLogRepository.LogWithContent;
 import com.fitto.feed.domain.FeedPost;
 import com.fitto.feed.dto.FeedItemResponse;
 import com.fitto.feed.dto.MemoriesResponse;
@@ -33,11 +35,11 @@ import java.util.Map;
  * 추억 리마인드 — "작년 오늘" (PLAN.md Memories).
  *
  * <p>오늘과 같은 월·일의 <b>1년 이상 전</b> 기록을 연도별로 묶어 돌려준다.
- * 신규 테이블 없이 기존 {@code feed_posts} · {@code place_visits} 를 다시 읽는다.
+ * 신규 테이블 없이 기존 {@code feed_posts} · {@code place_visits} · {@code content_logs} 를 다시 읽는다.
  *
- * <p><b>대상은 POST · PLACE_VISIT 둘뿐이다.</b> 운동·식단은 1년 뒤에 회상 가치가 없고
- * 거의 매일 있어 추억을 노이즈로 덮는다. 게다가 그 둘은 커플이 아니라 사용자 스코프라
- * "우리 추억"의 경계도 흐려진다.
+ * <p><b>대상은 POST · PLACE_VISIT · CONTENT_LOG 셋뿐이다.</b> 운동·식단은 1년 뒤에 회상
+ * 가치가 없고 거의 매일 있어 추억을 노이즈로 덮는다. 게다가 그 둘은 커플이 아니라 사용자
+ * 스코프라 "우리 추억"의 경계도 흐려진다.
  */
 @Service
 @Transactional(readOnly = true)
@@ -50,6 +52,7 @@ public class MemoriesService {
 
     private final FeedPostRepository feedPostRepository;
     private final PlaceVisitRepository placeVisitRepository;
+    private final ContentLogRepository contentLogRepository;
     private final RelationRepository relationRepository;
     private final FeedItemMapper mapper;
     private final PlanGuard planGuard;
@@ -62,12 +65,14 @@ public class MemoriesService {
 
     public MemoriesService(FeedPostRepository feedPostRepository,
                            PlaceVisitRepository placeVisitRepository,
+                           ContentLogRepository contentLogRepository,
                            RelationRepository relationRepository,
                            FeedItemMapper mapper,
                            PlanGuard planGuard,
                            @Value("${fitto.storage-zone:}") String storageZone) {
         this.feedPostRepository = feedPostRepository;
         this.placeVisitRepository = placeVisitRepository;
+        this.contentLogRepository = contentLogRepository;
         this.relationRepository = relationRepository;
         this.mapper = mapper;
         this.planGuard = planGuard;
@@ -141,6 +146,10 @@ public class MemoriesService {
                 // 방문은 등록 시각이 아니라 방문일 기준 — 어제 다녀와 오늘 등록해도 어제의 추억이다
                 items.add(mapper.toItem(v, names, viewerId, true));
             }
+            for (LogWithContent l : contentLogRepository.findByCoupleAndWatchedAt(coupleId, date)) {
+                // 관람도 등록 시각이 아니라 관람일 기준 — 방문 기록과 같은 이유
+                items.add(mapper.toItem(l, names, viewerId, true));
+            }
         }
         items.sort(Comparator.comparing(FeedItemResponse::occurredAt)
                 .thenComparing(FeedItemResponse::refId)
@@ -157,10 +166,14 @@ public class MemoriesService {
     private Integer earliestRecordYear(Long coupleId) {
         LocalDateTime firstPost = feedPostRepository.findEarliestCreatedAt(coupleId);
         LocalDate firstVisit = placeVisitRepository.findEarliestVisitedAt(coupleId);
+        LocalDate firstLog = contentLogRepository.findEarliestWatchedAt(coupleId);
 
         Integer earliest = firstPost != null ? firstPost.getYear() : null;
         if (firstVisit != null) {
             earliest = (earliest == null) ? firstVisit.getYear() : Math.min(earliest, firstVisit.getYear());
+        }
+        if (firstLog != null) {
+            earliest = (earliest == null) ? firstLog.getYear() : Math.min(earliest, firstLog.getYear());
         }
         return earliest;
     }

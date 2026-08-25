@@ -55,6 +55,10 @@ public class Content {
     @Column(name = "added_by", nullable = false)
     private Long addedBy;
 
+    /** 포스터 이미지 — TMDB 검색으로 채워지거나(제목 직접 입력 시 null) 비어 있을 수 있다 */
+    @Column(name = "poster_url", length = 500)
+    private String posterUrl;
+
     /** 럽슐랭 등급 — 0=후보/일반, 1~3=럽스타. Place.lovelichelinTier 와 같은 규칙 */
     @Column(name = "lovelichelin_tier", nullable = false)
     private Integer lovelichelinTier = 0;
@@ -68,19 +72,22 @@ public class Content {
     private LocalDateTime createdAt;
 
     @Builder
-    private Content(Long coupleId, String title, ContentType type, ContentStatus status, Long addedBy) {
+    private Content(Long coupleId, String title, ContentType type, ContentStatus status, Long addedBy,
+                    String posterUrl) {
         this.coupleId = coupleId;
         this.title = title;
         this.type = type != null ? type : ContentType.MOVIE;
         this.status = status != null ? status : ContentStatus.WISHLIST;
         this.addedBy = addedBy;
+        this.posterUrl = posterUrl;
     }
 
     /** 부분 수정 — null 이 아닌 값만 반영 (커플 둘 다 수정 가능) */
-    public void update(String title, ContentType type, ContentStatus status) {
+    public void update(String title, ContentType type, ContentStatus status, String posterUrl) {
         if (title != null) this.title = title;
         if (type != null) this.type = type;
         if (status != null) this.status = status;
+        if (posterUrl != null) this.posterUrl = posterUrl;
     }
 
     /** 관람 기록이 생기면 자동으로 완료(봤어요) 전환 */

@@ -11,6 +11,8 @@ public record UpdateContentRequest(
 
         ContentType type,
 
-        ContentStatus status
+        ContentStatus status,
+
+        String posterUrl
 ) {
 }

@@ -4,6 +4,7 @@ import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
 import com.fitto.content.dto.ContentLogResponse;
 import com.fitto.content.dto.ContentResponse;
+import com.fitto.content.dto.ContentSearchResponse;
 import com.fitto.content.dto.RateContentRequest;
 import com.fitto.content.dto.RecordContentLogRequest;
 import com.fitto.content.dto.SaveContentRequest;
@@ -18,13 +19,14 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
 /**
  * 커플 콘텐츠(영화·공연·드라마) API — {@link com.fitto.place.controller.PlaceController} 와
- * 같은 모양이나 검색·지도·AI 추천은 없다(제목 직접 입력 — PLAN.md 참고).
+ * 같은 모양이나 지도·AI 추천은 없다. 검색은 TMDB(영화·드라마 한정, 공연은 제목 직접 입력).
  */
 @RestController
 @RequestMapping("/api/v1/contents")
@@ -40,6 +42,18 @@ public class ContentController {
     public ApiResponse<ContentResponse> save(@AuthenticationPrincipal AuthUser user,
                                              @Valid @RequestBody SaveContentRequest request) {
         return ApiResponse.success(contentService.save(user.id(), request), "콘텐츠가 등록되었습니다.");
+    }
+
+    /**
+     * 제목 검색 — TMDB (GET /contents/search). 결과를 그대로 {@link #save} 에 넘기면
+     * 제목·종류·포스터가 채워진 콘텐츠가 바로 생긴다. 공연(PERFORMANCE)은 TMDB 대상이
+     * 아니라 결과에 나오지 않는다 — 제목 직접 입력으로 등록한다.
+     */
+    @GetMapping("/search")
+    public ApiResponse<ContentSearchResponse> search(@AuthenticationPrincipal AuthUser user,
+                                                      @RequestParam String query,
+                                                      @RequestParam(defaultValue = "8") int size) {
+        return ApiResponse.success(contentService.search(query, size));
     }
 
     @GetMapping

@@ -53,6 +53,9 @@ public class RelationRecordPurger {
         exec("delete from feed_reactions where target_type = 'PLACE_VISIT' and target_id in "
                 + "(select v.id from place_visits v where v.place_id in "
                 + "(select p.id from places p where p.couple_id = :rid))", relationId);
+        exec("delete from feed_reactions where target_type = 'CONTENT_LOG' and target_id in "
+                + "(select l.id from content_logs l where l.content_id in "
+                + "(select c.id from contents c where c.couple_id = :rid))", relationId);
         exec("delete from feed_reactions where target_type = 'WORKOUT' and target_id in "
                 + "(select w.id from workouts w where w.user_id in " + MEMBER_IDS + ")", relationId);
         exec("delete from feed_reactions where target_type = 'MEAL' and target_id in "

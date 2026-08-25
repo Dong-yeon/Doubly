@@ -1,5 +1,7 @@
 package com.fitto.feed.service;
 
+import com.fitto.content.domain.ContentLog;
+import com.fitto.content.repository.ContentLogRepository.LogWithContent;
 import com.fitto.diet.domain.Meal;
 import com.fitto.feed.domain.FeedPost;
 import com.fitto.feed.domain.FeedReaction;
@@ -119,6 +121,31 @@ public class FeedItemMapper {
                 names.getOrDefault(v.getVisitedBy(), "커플"), viewerId.equals(v.getVisitedBy()),
                 vp.getPlaceName() + " 방문 📍", content, v.getImageUrl(),
                 byVisitedAt ? v.getVisitedAt().atStartOfDay() : v.getCreatedAt(), null);
+    }
+
+    /**
+     * 관람 기록 — 피드 타임라인용. {@code occurredAt} 은 {@code created_at}(등록 시각)이다.
+     * {@link #toItem(VisitWithPlace, Map, Long)} 과 완전히 같은 패턴 — 방문 대신 관람.
+     */
+    public FeedItemResponse toItem(LogWithContent lc, Map<Long, String> names, Long viewerId) {
+        return toItem(lc, names, viewerId, false);
+    }
+
+    /**
+     * @param byWatchedAt {@code true} 면 {@code occurredAt} 을 관람일({@code watched_at}) 자정으로 둔다.
+     *                    어제 보고 오늘 등록한 관람은 "어제의 추억"이어야 한다.
+     */
+    public FeedItemResponse toItem(LogWithContent lc, Map<Long, String> names, Long viewerId,
+                                   boolean byWatchedAt) {
+        ContentLog l = lc.getLog();
+        String stars = l.getRating() != null ? "★".repeat(l.getRating()) : null;
+        String content = l.getMemo() != null && !l.getMemo().isBlank()
+                ? (stars != null ? stars + " " + l.getMemo() : l.getMemo())
+                : stars;
+        return new FeedItemResponse(FeedItemType.CONTENT_LOG, l.getId(), l.getLoggedBy(),
+                names.getOrDefault(l.getLoggedBy(), "커플"), viewerId.equals(l.getLoggedBy()),
+                lc.getContentTitle() + " 관람 🎬", content, l.getImageUrl(),
+                byWatchedAt ? l.getWatchedAt().atStartOfDay() : l.getCreatedAt(), null);
     }
 
     // ---- 반응 ----

@@ -21,6 +21,7 @@ const TYPE_ICON: Record<FeedItemType, IconName> = {
   WORKOUT: 'dumbbell',
   MEAL: 'silverware-fork-knife',
   PLACE_VISIT: 'map-marker',
+  CONTENT_LOG: 'movie-open-outline',
 };
 
 interface Props {

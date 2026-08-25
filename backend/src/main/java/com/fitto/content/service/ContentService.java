@@ -12,6 +12,7 @@ import com.fitto.content.domain.ContentLog;
 import com.fitto.content.domain.ContentRating;
 import com.fitto.content.dto.ContentLogResponse;
 import com.fitto.content.dto.ContentResponse;
+import com.fitto.content.dto.ContentSearchResponse;
 import com.fitto.content.dto.RateContentRequest;
 import com.fitto.content.dto.RecordContentLogRequest;
 import com.fitto.content.dto.SaveContentRequest;
@@ -20,6 +21,9 @@ import com.fitto.content.repository.ContentLogRepository;
 import com.fitto.content.repository.ContentLogRepository.LogSummary;
 import com.fitto.content.repository.ContentRatingRepository;
 import com.fitto.content.repository.ContentRepository;
+import com.fitto.content.service.TmdbClient.TmdbResult;
+import com.fitto.feed.dto.FeedItemType;
+import com.fitto.feed.repository.FeedReactionRepository;
 import com.fitto.relation.domain.Relation;
 import com.fitto.relation.domain.RelationStatus;
 import com.fitto.relation.domain.RelationType;
@@ -50,6 +54,8 @@ public class ContentService {
     private final UserRepository userRepository;
     private final NotificationService notificationService;
     private final PlanGuard planGuard;
+    private final FeedReactionRepository feedReactionRepository;
+    private final TmdbClient tmdbClient;
 
     public ContentService(ContentRepository contentRepository,
                           ContentLogRepository contentLogRepository,
@@ -57,7 +63,9 @@ public class ContentService {
                           RelationRepository relationRepository,
                           UserRepository userRepository,
                           NotificationService notificationService,
-                          PlanGuard planGuard) {
+                          PlanGuard planGuard,
+                          FeedReactionRepository feedReactionRepository,
+                          TmdbClient tmdbClient) {
         this.contentRepository = contentRepository;
         this.contentLogRepository = contentLogRepository;
         this.contentRatingRepository = contentRatingRepository;
@@ -65,6 +73,24 @@ public class ContentService {
         this.userRepository = userRepository;
         this.notificationService = notificationService;
         this.planGuard = planGuard;
+        this.feedReactionRepository = feedReactionRepository;
+        this.tmdbClient = tmdbClient;
+    }
+
+    /**
+     * 제목 검색 — TMDB 를 그대로 위임한다(PLACE-01 의 "이름부터 찾기"와 같은 패턴,
+     * PlaceService#search 참고). 저장 개수 상한은 {@link Feature#CONTENT_ITEM} 저장 시점에
+     * 걸리므로 조회인 이 메서드는 게이팅하지 않는다.
+     */
+    public ContentSearchResponse search(String query, int size) {
+        if (!tmdbClient.isConfigured() || query == null || query.isBlank()) {
+            return ContentSearchResponse.unavailable();
+        }
+        List<TmdbResult> found = tmdbClient.search(query, Math.clamp(size, 1, 10));
+        List<ContentSearchResponse.ContentSearchResult> results = found.stream()
+                .map(r -> new ContentSearchResponse.ContentSearchResult(r.title(), r.type(), r.posterUrl(), r.year()))
+                .toList();
+        return new ContentSearchResponse(true, results);
     }
 
     /** 콘텐츠 등록 */
@@ -79,6 +105,7 @@ public class ContentService {
                 .type(request.type())
                 .status(request.status())
                 .addedBy(userId)
+                .posterUrl(request.posterUrl())
                 .build();
         contentRepository.save(content);
         return toResponse(content, null, RatingPair.EMPTY, null);
@@ -119,7 +146,7 @@ public class ContentService {
     @Transactional
     public ContentResponse update(Long userId, Long contentId, UpdateContentRequest request) {
         Content content = getCoupleContent(userId, contentId);
-        content.update(request.title(), request.type(), request.status());
+        content.update(request.title(), request.type(), request.status(), request.posterUrl());
         return withSummary(content, userId);
     }
 
@@ -127,6 +154,11 @@ public class ContentService {
     @Transactional
     public void delete(Long userId, Long contentId) {
         Content content = getCoupleContent(userId, contentId);
+        // 콘텐츠를 지우면 그 콘텐츠의 관람 기록도 사라진다 — 그 카드에 달렸던 반응까지 함께
+        // (PlaceService.delete 와 같은 이유 — feed_reactions 는 대상이 여러 테이블이라 FK 없음)
+        feedReactionRepository.deleteByTargetTypeAndTargetIdIn(FeedItemType.CONTENT_LOG,
+                contentLogRepository.findByContentIdOrderByIdDesc(contentId).stream()
+                        .map(ContentLog::getId).toList());
         contentRepository.delete(content);
     }
 
@@ -174,6 +206,8 @@ public class ContentService {
         if (!userId.equals(log.getLoggedBy())) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "내가 남긴 관람 기록만 삭제할 수 있습니다.");
         }
+        // 피드 카드 응원 반응 — 다형 참조라 FK 가 없어 직접 지운다 (PlaceService.deleteVisit 와 같은 이유)
+        feedReactionRepository.deleteByTargetTypeAndTargetId(FeedItemType.CONTENT_LOG, logId);
         contentLogRepository.delete(log);
     }
 
