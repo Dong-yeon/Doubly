@@ -1080,6 +1080,7 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
         // 순서 바꾸기(길게 눌러 드래그)는 터치 제스처 전제라 웹에서 원래도 아쉬운 기능이니,
         // 웹에서는 평범한 FlatList로 스크롤을 살리고 순서 바꾸기만 뺀다(네이티브는 그대로 유지).
         <FlatList
+          style={styles.listContainer}
           data={exercises}
           keyExtractor={(e) => e.key}
           contentContainerStyle={styles.list}
@@ -1088,6 +1089,7 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
         />
       ) : (
         <DraggableFlatList
+          style={styles.listContainer}
           data={exercises}
           keyExtractor={(e) => e.key}
           onDragEnd={({ data }) => setExercises(data)}
@@ -1294,6 +1296,10 @@ const styles = themedStyles((colors) => ({
   restChipActive: { borderColor: colors.primary, backgroundColor: colors.primaryBg },
   restChipText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
   restChipTextActive: { color: colors.primary },
+  // FlatList/DraggableFlatList 자체(=style)에 flex 가 없으면 종목이 몇 개만 늘어나도
+  // 목록이 화면 높이를 넘는데 자기 안에서 스크롤 영역을 못 잡아, 목록 맨 아래(운동 추가
+  // 버튼)가 하단 액션바 뒤로 밀려 잘린다. contentContainerStyle(list)과는 별개로 필요하다.
+  listContainer: { flex: 1 },
   list: { padding: spacing.lg, paddingBottom: spacing.xxl },
   exCard: {
     backgroundColor: colors.surface,
