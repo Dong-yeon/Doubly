@@ -125,18 +125,70 @@ function buildSet(weightKg?: number | null, reps?: number | null, setType?: stri
   };
 }
 
+/**
+ * 기구별 무게 증가폭(kg) — 규칙 기반 무게 추천의 기준(PLAN.md "중량·세트 추천" 참고).
+ * 바벨은 상체보다 하체가 훨씬 강해 증가폭이 더 크다. 맨몸운동은 무게를 얹는 대상이 아니라
+ * null(추천 안 함) — 맨몸은 횟수로 늘리는 게 자연스러운 진행이다.
+ */
+function weightStep(equipment: string | undefined, muscleGroup: string | undefined): number | null {
+  switch (equipment) {
+    case '바벨':
+      return muscleGroup === '하체' ? 5 : 2.5;
+    case '덤벨':
+      return 2;
+    case '머신':
+    case '케이블':
+      return 2.5;
+    case '맨몸':
+      return null;
+    default:
+      // 기구 정보가 없는 종목(직접 추가 등)은 보수적인 기본값을 쓴다
+      return 2.5;
+  }
+}
+
+/**
+ * 직전 세트의 RPE로 다음 무게를 제안한다 — 규칙 기반 더블 프로그레션, AI 호출 없음
+ * (PLAN.md "중량·세트 추천" 참고. 다만 목표 횟수 미달/2연속 미달 디로드는 이전 세션이 하나만
+ * 있어 판단할 수 없어 이번 범위에서는 뺐다 — 미달 시엔 그냥 같은 무게를 유지한다).
+ *
+ * - RPE ≤ 8(= 여유 2회 이상) → 다음엔 무게를 올린다
+ * - RPE 9~10(거의 실패) → 같은 무게를 유지(횟수부터 채우게)
+ * - RPE를 안 남겼으면 판단 근거가 없어 손대지 않는다(예전처럼 그대로 이어받는다)
+ */
+function suggestNextWeight(
+  lastWeight: number,
+  rpe: number | null | undefined,
+  equipment: string | undefined,
+  muscleGroup: string | undefined,
+): number {
+  if (rpe == null || rpe >= 9) return lastWeight;
+  const step = weightStep(equipment, muscleGroup);
+  if (step == null) return lastWeight;
+  // 0.5kg 단위로 반올림 — 원판 최소 단위와 어긋나는 72.83kg 같은 값을 피한다
+  return Math.round((lastWeight + step) * 2) / 2;
+}
+
 /** 종목의 직전 수행 기록으로 세트 배열을 채운다 — 세트별 실제 기록(entries)이 있으면 그 값을,
  *  없으면 직전 종목 평균값을 기본값으로 쓴다. 이미 체크된 세트는 건드리지 않는다.
+ *  무게는 그대로 복사하지 않고 직전 RPE로 다음 무게를 제안한다(suggestNextWeight).
  *  RPE는 종목 평균값이 따로 없어(주관적 체감치라 평균 낼 이유가 없다) 세트별 기록만 프리필한다. */
-function applyPrefill(sets: SessionSet[], perf: ExerciseLastPerformance): SessionSet[] {
+function applyPrefill(
+  sets: SessionSet[],
+  perf: ExerciseLastPerformance,
+  equipment?: string,
+  muscleGroup?: string,
+): SessionSet[] {
   return sets.map((s, i) => {
     if (s.done) return s;
     const entry = perf.entries[i];
     const weightKg = entry?.weightKg ?? perf.weightKg;
     const reps = entry?.reps ?? perf.reps;
+    const rpe = entry?.rpe;
+    const nextWeight = weightKg != null ? suggestNextWeight(weightKg, rpe, equipment, muscleGroup) : weightKg;
     return {
       ...s,
-      weightKg: weightKg != null ? String(weightKg) : s.weightKg,
+      weightKg: nextWeight != null ? String(nextWeight) : s.weightKg,
       reps: reps != null ? String(reps) : s.reps,
       rpe: entry?.rpe != null ? String(entry.rpe) : s.rpe,
     };
@@ -454,7 +506,9 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
       const found = await workoutApi.lastPerformance([candidate.name]);
       if (found[0]) {
         setExercises((prev) =>
-          prev.map((x) => (x.key === targetKey ? { ...x, sets: applyPrefill(x.sets, found[0]) } : x)),
+          prev.map((x) =>
+            x.key === targetKey ? { ...x, sets: applyPrefill(x.sets, found[0], x.equipment, x.muscleGroup) } : x,
+          ),
         );
       }
     } catch {
@@ -499,7 +553,7 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
         setExercises((prev) =>
           prev.map((e) => {
             const perf = byName.get(e.name);
-            return perf ? { ...e, sets: applyPrefill(e.sets, perf) } : e;
+            return perf ? { ...e, sets: applyPrefill(e.sets, perf, e.equipment, e.muscleGroup) } : e;
           }),
         );
       })
