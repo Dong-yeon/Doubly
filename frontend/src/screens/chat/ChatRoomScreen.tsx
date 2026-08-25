@@ -176,8 +176,17 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           video: callType === 'VIDEO',
           data: {
             members: [{ user_id: String(myId) }, { user_id: String(partnerId) }],
-            // 음성통화는 카메라를 처음부터 꺼둔다 — CallOverlay 가 곧바로 벨 화면을 띄운다
-            settings_override: callType === 'VOICE' ? { video: { camera_default_on: false } } : undefined,
+            /*
+             * 음성통화는 카메라를 처음부터 꺼둔다 — CallOverlay 가 곧바로 벨 화면을 띄운다.
+             * target_resolution 은 타입상 optional 이지만, video 오버라이드를 하나라도
+             * 보내면 Stream 서버가 값 없이는 400(width/height must be 240 or greater)을
+             * 뱉는다 — 카메라가 꺼져 있어 실제로 안 쓰이는 값이라 SDK 기본값(640x480)을
+             * 그대로 채워 스키마만 만족시킨다. 실기기 테스트로 확인된 이슈(PLAN.md 참고).
+             */
+            settings_override:
+              callType === 'VOICE'
+                ? { video: { camera_default_on: false, target_resolution: { width: 640, height: 480 } } }
+                : undefined,
           },
         });
       } catch (e) {
