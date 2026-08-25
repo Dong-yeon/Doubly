@@ -30,7 +30,9 @@ export interface KakaoPlaceResult {
 export type KakaoMapMessage =
   | { source: 'fitto-kakao-map'; type: 'select'; lat: number; lng: number; address?: string | null }
   | { source: 'fitto-kakao-map'; type: 'marker'; id: number }
-  | { source: 'fitto-kakao-map'; type: 'search-results'; keyword: string; results: KakaoPlaceResult[] };
+  | { source: 'fitto-kakao-map'; type: 'search-results'; keyword: string; results: KakaoPlaceResult[] }
+  /** SDK 로드 실패·도메인 미등록 등 — 지도가 정상 동작하지 않는다는 신호 (buildKakaoMapHtml 하단 주석 참고) */
+  | { source: 'fitto-kakao-map'; type: 'failed'; reason?: string };
 
 /** 동선 폴리라인 좌표 (정렬 순서대로 이어 그린다) */
 export interface KakaoLatLng {
@@ -79,14 +81,29 @@ export function buildKakaoMapHtml(options: KakaoMapOptions): string {
 </head>
 <body>
 <div id="map"></div>
-<script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_JS_KEY}&libraries=services&autoload=false"></script>
 <script>
 function post(msg) {
   var s = JSON.stringify(Object.assign({ source: 'fitto-kakao-map' }, msg));
   if (window.ReactNativeWebView) { window.ReactNativeWebView.postMessage(s); }
   else if (window.parent) { window.parent.postMessage(s, '*'); }
 }
+/*
+ * 지도 실패 감지 — 카카오 SDK 는 도메인 미등록/키 오류 시 예외를 던지지 않고
+ * alert() 로 사용자에게 직접 띄우거나(WebView 에선 원인 모를 네이티브 팝업으로 보인다),
+ * 타일 요청만 조용히 막혀 회색 빈 지도로 남는다. 셋 다 여기서 잡아 앱에 알린다.
+ */
+var fittoMapReady = false;
+window.alert = function (msg) { post({ type: 'failed', reason: String(msg) }); };
+window.onerror = function (msg) { post({ type: 'failed', reason: String(msg) }); return true; };
+setTimeout(function () {
+  if (!fittoMapReady) { post({ type: 'failed', reason: 'timeout' }); }
+}, 6000);
+</script>
+<script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_JS_KEY}&libraries=services&autoload=false"
+        onerror="post({ type: 'failed', reason: 'sdk-load-error' })"></script>
+<script>
 kakao.maps.load(function () {
+  fittoMapReady = true;
   var map = new kakao.maps.Map(document.getElementById('map'), {
     center: new kakao.maps.LatLng(${centerLat}, ${centerLng}),
     level: ${level}
