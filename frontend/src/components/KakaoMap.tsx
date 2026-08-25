@@ -74,15 +74,25 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
         originWhitelist={['*']}
         javaScriptEnabled
         domStorageEnabled
-        onError={() => setFailed(true)}
-        onHttpError={() => setFailed(true)}
+        onError={(e) => {
+          console.warn('[KakaoMap] WebView onError:', e.nativeEvent);
+          setFailed(true);
+        }}
+        onHttpError={(e) => {
+          console.warn('[KakaoMap] WebView onHttpError:', e.nativeEvent);
+          setFailed(true);
+        }}
         onMessage={(e) => {
           const msg = parseKakaoMapMessage(e.nativeEvent.data);
           if (!msg) return;
           if (msg.type === 'select') onSelect?.({ lat: msg.lat, lng: msg.lng, address: msg.address });
           if (msg.type === 'marker') onMarkerPress?.(msg.id);
           if (msg.type === 'search-results') onSearchResults?.(msg.keyword, msg.results);
-          if (msg.type === 'failed') setFailed(true);
+          if (msg.type === 'failed') {
+            // WebView 내부 JS 콘솔은 RN 쪽 Metro 로그에 안 잡힌다 — 원인 문자열을 여기서 다시 찍어준다.
+            console.warn('[KakaoMap] 지도 로드 실패:', msg.reason ?? '(원인 미상)');
+            setFailed(true);
+          }
         }}
       />
     </View>
