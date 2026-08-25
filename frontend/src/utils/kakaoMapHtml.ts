@@ -103,11 +103,13 @@ setTimeout(function () {
         onerror="post({ type: 'failed', reason: 'sdk-load-error' })"></script>
 <script>
 kakao.maps.load(function () {
-  fittoMapReady = true;
   var map = new kakao.maps.Map(document.getElementById('map'), {
     center: new kakao.maps.LatLng(${centerLat}, ${centerLng}),
     level: ${level}
   });
+  // SDK 라이브러리 로드(kakao.maps.load 콜백)는 도메인 미등록이어도 그냥 성공한다 —
+  // 실제 거부는 타일 요청 단계에서 조용히 일어나므로, 타일이 실제로 그려졌는지로 판단한다.
+  kakao.maps.event.addListener(map, 'tilesloaded', function () { fittoMapReady = true; });
 
   // ---- 외부 명령 (RN: injectJavaScript / 웹: iframe postMessage) ----
   var selMarker = null;

@@ -85,6 +85,15 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
           level: 5,
         });
         setReady(true);
+        // SDK 스크립트 로드(위 promise)는 도메인 미등록이어도 그냥 성공한다 — 실제 거부는
+        // 타일 요청 단계에서 예외 없이 조용히 일어난다. 타일이 실제로 그려졌는지로 판단한다.
+        let tilesLoaded = false;
+        kakao.maps.event.addListener(mapRef.current, 'tilesloaded', () => {
+          tilesLoaded = true;
+        });
+        setTimeout(() => {
+          if (!disposed && !tilesLoaded) setFailed(true);
+        }, 6000);
       })
       .catch(() => {
         if (!disposed) setFailed(true);
