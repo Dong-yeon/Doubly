@@ -277,11 +277,29 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
     original: route.params?.exercises ?? [],
   }));
 
-  // 세션 경과 시간 — 화면 진입 시부터 1초씩 누적(상단 요약바 "운동 시간 N분"에 쓰인다)
+  /*
+   * 세션 경과 시간 — 상단 요약바 "운동 시간"과 저장되는 totalDurationMin 의 기준이다.
+   *
+   * <b>1초씩 더해나가는 카운터가 아니라 시작 시각 기준으로 매번 다시 계산한다.</b>
+   * setInterval로 누적하면 세트 사이에 폰을 잠그거나 앱이 백그라운드로 밀려날 때(운동 중
+   * 흔한 일이다) JS 타이머가 멈추거나 스로틀돼 실제로 흐른 시간보다 적게 기록된다.
+   * sessionStartRef 는 "elapsedSec = 0" 에 대응하는 벽시계 시각이고, elapsedSec 은 매 틱마다
+   * Date.now() - sessionStartRef 로 다시 구해 항상 실제 경과 시간과 일치시킨다.
+   */
+  const sessionStartRef = useRef<number>(Date.now());
   const [elapsedSec, setElapsedSec] = useState(0);
+  const tickElapsed = () => setElapsedSec(Math.floor((Date.now() - sessionStartRef.current) / 1000));
   useEffect(() => {
-    const id = setInterval(() => setElapsedSec((s) => s + 1), 1000);
-    return () => clearInterval(id);
+    const id = setInterval(tickElapsed, 1000);
+    // 백그라운드에서 돌아온 순간 다음 틱(최대 1초)을 기다리지 않고 바로 맞춘다 —
+    // 오래 잠갔다 켰을 때 "아직 그대로네" 하는 순간이 없게.
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') tickElapsed();
+    });
+    return () => {
+      clearInterval(id);
+      sub.remove();
+    };
   }, []);
 
   /*
@@ -319,6 +337,9 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
               onPress: () => {
                 restoredRef.current = true;
                 setExercises(draft.exercises);
+                // 되살린 경과 시간에 맞춰 기준 시각을 다시 잡는다 — 이걸 안 하면 다음 틱에서
+                // sessionStartRef(화면 진입 시각) 기준으로 재계산돼 되살린 값이 바로 덮인다.
+                sessionStartRef.current = Date.now() - draft.elapsedSec * 1000;
                 setElapsedSec(draft.elapsedSec);
                 setRestSeconds(draft.restSeconds);
                 setRoutineCtx({
@@ -1071,7 +1092,8 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
 
       {/* 상단 요약바 — 운동 중 실시간으로 누적되는 경과 시간·총 볼륨·완료 세트 수 */}
       <View style={styles.summaryBar}>
-        <Text style={styles.summaryTime}>⏱ 운동 시간 {Math.floor(elapsedSec / 60)}분</Text>
+        {/* 분만 보이면 첫 1분 내내 "0분"이라 안 가는 것처럼 보인다 — mm:ss 로 매초 눈에 띄게 */}
+        <Text style={styles.summaryTime}>⏱ 운동 시간 {mmss(elapsedSec)}</Text>
         <View style={styles.summaryStats}>
           <View style={styles.summaryStatItem}>
             <Text style={styles.summaryStatValue}>
