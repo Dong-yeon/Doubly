@@ -65,7 +65,7 @@ export function DoublyWidget({ data }: { data: WidgetData | null }) {
       ) : (
         <FlexWidget style={{ flexDirection: 'column' }}>
           <TextWidget
-            text="Doubly"
+            text="Dubly"
             style={{ fontSize: 16, color: COLORS.ink, fontWeight: '800' }}
           />
           <TextWidget

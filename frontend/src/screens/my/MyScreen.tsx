@@ -599,7 +599,7 @@ export function MyScreen({ navigation }: Props) {
           </Pressable>
         </Card>
 
-        <Text style={styles.footer}>Doubly · 둘이라서, 두 배로</Text>
+        <Text style={styles.footer}>Dubly · 둘이라서, 두 배로</Text>
       </ScrollView>
     </SafeAreaView>
   );

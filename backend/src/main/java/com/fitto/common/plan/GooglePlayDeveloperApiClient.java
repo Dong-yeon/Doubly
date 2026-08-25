@@ -130,7 +130,7 @@ public class GooglePlayDeveloperApiClient {
                     GoogleNetHttpTransport.newTrustedTransport(),
                     GsonFactory.getDefaultInstance(),
                     new HttpCredentialsAdapter(credentials))
-                    .setApplicationName("Doubly")
+                    .setApplicationName("Dubly")
                     .build();
         } catch (Exception e) {
             log.error("Google Play Developer API 클라이언트 초기화 실패 — 웹훅 동기화가 비활성됩니다", e);

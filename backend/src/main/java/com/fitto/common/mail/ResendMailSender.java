@@ -41,7 +41,7 @@ public class ResendMailSender implements PasswordResetMailSender {
         Map<String, Object> body = Map.of(
                 "from", from,
                 "to", toEmail,
-                "subject", "[Doubly] 비밀번호 재설정 인증코드",
+                "subject", "[Dubly] 비밀번호 재설정 인증코드",
                 "text", buildText(name, code, validFor));
         try {
             restClient.post()
@@ -70,7 +70,7 @@ public class ResendMailSender implements PasswordResetMailSender {
                 본인이 요청하지 않았다면 이 메일을 무시하셔도 됩니다.
                 비밀번호는 변경되지 않으며, 코드만으로는 계정에 접근할 수 없습니다.
 
-                — Doubly
+                — Dubly
                 """.formatted(name, code, validFor.toMinutes());
     }
 }

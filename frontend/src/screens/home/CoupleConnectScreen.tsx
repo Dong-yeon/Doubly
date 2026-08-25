@@ -53,7 +53,7 @@ export function CoupleConnectScreen({ navigation }: Props) {
   const onShare = async () => {
     if (!code) return;
     try {
-      await shareText(`Doubly에서 커플로 연결해요! 초대코드: ${code} (24시간 유효)`);
+      await shareText(`Dubly에서 커플로 연결해요! 초대코드: ${code} (24시간 유효)`);
     } catch (e) {
       // 공유 시트를 사용자가 그냥 닫아도 일부 플랫폼은 reject 한다 — 진짜 실패만 알린다
       toast.error(getErrorMessage(e, '공유에 실패했어요.'));

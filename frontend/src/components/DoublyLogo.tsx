@@ -146,7 +146,7 @@ export function DoublyLogo({ size = 40, showWordmark = true, wordmarkColor = col
     <View style={[styles.row, style]}>
       <DoublyMark size={size} />
       {showWordmark ? (
-        <Text style={[styles.word, { fontSize: size * 0.78, color: wordmarkColor }]}>Doubly</Text>
+        <Text style={[styles.word, { fontSize: size * 0.78, color: wordmarkColor }]}>Dubly</Text>
       ) : null}
     </View>
   );

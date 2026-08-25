@@ -44,7 +44,7 @@ export function LoginScreen({ navigation }: Props) {
       <FormKeyboardView contentContainerStyle={styles.container}>
           <View style={styles.hero}>
             <DoublyMark size={56} />
-            <Text style={styles.brand}>Doubly</Text>
+            <Text style={styles.brand}>Dubly</Text>
             <Text style={styles.slogan}>둘이라서, 두 배로</Text>
           </View>
 

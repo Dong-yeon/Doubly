@@ -79,7 +79,7 @@ export function SettingsScreen({ navigation }: Props) {
    * 앱 버전·플랫폼을 본문에 미리 채워 베타 리포트 분류를 돕는다.
    */
   const onContact = async () => {
-    const subject = `[Doubly 문의] `;
+    const subject = `[Dubly 문의] `;
     const body =
       `\n\n----------\n`
       + `아래 정보는 문제 확인용이에요. 지워도 괜찮아요.\n`
@@ -229,7 +229,7 @@ export function SettingsScreen({ navigation }: Props) {
           </Pressable>
         </Card>
 
-        <Text style={styles.appVersion}>Doubly v{APP_VERSION}</Text>
+        <Text style={styles.appVersion}>Dubly v{APP_VERSION}</Text>
       </ScrollView>
     </SafeAreaView>
   );
