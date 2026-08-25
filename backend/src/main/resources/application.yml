@@ -91,7 +91,7 @@ fitto:
   # (env 이름과 프로퍼티 이름이 다르므로 여기서 명시적으로 배선해야 바인딩된다)
   resend:
     api-key: ${RESEND_API_KEY:}
-    from: ${RESEND_FROM:Doubly <onboarding@resend.dev>}
+    from: ${RESEND_FROM:Dubly <onboarding@resend.dev>}
 
   # Cloudinary 서명 업로드 — 미설정 시 프론트가 unsigned preset 으로 폴백
   cloudinary:

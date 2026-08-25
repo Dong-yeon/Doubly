@@ -48,7 +48,7 @@ export function SplashScreen({ navigation }: Props) {
     <View style={styles.container}>
       <Animated.View style={[styles.center, { opacity, transform: [{ scale }] }]}>
         <DoublyMark size={72} />
-        <Text style={styles.brand}>Doubly</Text>
+        <Text style={styles.brand}>Dubly</Text>
         <View style={styles.sloganWrap}>
           <Text style={styles.slogan}>둘이라서, 두 배로</Text>
         </View>

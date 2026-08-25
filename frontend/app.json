@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Doubly",
+    "name": "Dubly",
     "slug": "doubly",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -45,7 +45,7 @@
           "widgets": [
             {
               "name": "Doubly",
-              "label": "Doubly",
+              "label": "Dubly",
               "description": "함께한 D-day와 우리의 스트릭",
               "minWidth": "250dp",
               "minHeight": "60dp",
@@ -108,13 +108,13 @@
     },
     "web": {
       "favicon": "./assets/favicon.png",
-      "name": "Doubly",
-      "shortName": "Doubly",
+      "name": "Dubly",
+      "shortName": "Dubly",
       "lang": "ko",
       "themeColor": "#FFFFFF",
       "backgroundColor": "#FFFFFF",
       "display": "standalone",
-      "description": "Doubly — 둘이라서, 두 배로. 커플 운동·식단·여행·일상 공유"
+      "description": "Dubly — 둘이라서, 두 배로. 커플 운동·식단·여행·일상 공유"
     },
     "extra": {
       "eas": {

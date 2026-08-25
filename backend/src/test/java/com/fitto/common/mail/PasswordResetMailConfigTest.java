@@ -108,7 +108,7 @@ class PasswordResetMailConfigTest {
         @Test
         void 주소에_서비스명을_붙인다() {
             assertThat(SmtpPasswordResetMailSender.displayFrom("noreply@doubly.app"))
-                    .isEqualTo("Doubly <noreply@doubly.app>");
+                    .isEqualTo("Dubly <noreply@doubly.app>");
         }
 
         @Test
@@ -120,7 +120,7 @@ class PasswordResetMailConfigTest {
         @Test
         void 앞뒤_공백은_제거한다() {
             assertThat(SmtpPasswordResetMailSender.displayFrom("  noreply@doubly.app  "))
-                    .isEqualTo("Doubly <noreply@doubly.app>");
+                    .isEqualTo("Dubly <noreply@doubly.app>");
         }
 
         @Test

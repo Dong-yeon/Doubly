@@ -23,7 +23,7 @@ const EFFECTIVE_DATE = '[정식 출시일]';
 export const CONTACT_EMAIL = 'ehddus5712@gmail.com';
 
 export const TERMS_OF_SERVICE = `제1조 (목적)
-이 약관은 Doubly(이하 "서비스")를 이용함에 있어 서비스와 이용자의 권리·의무 및
+이 약관은 Dubly(이하 "서비스")를 이용함에 있어 서비스와 이용자의 권리·의무 및
 책임사항을 규정하는 것을 목적으로 합니다.
 
 제2조 (서비스의 내용)
@@ -65,7 +65,7 @@ export const TERMS_OF_SERVICE = `제1조 (목적)
 문의: ${CONTACT_EMAIL}
 `;
 
-export const PRIVACY_POLICY = `Doubly(이하 "서비스")는 이용자의 개인정보를 중요하게 생각하며,
+export const PRIVACY_POLICY = `Dubly(이하 "서비스")는 이용자의 개인정보를 중요하게 생각하며,
 개인정보 보호법 등 관련 법령을 준수합니다.
 본 서비스는 개인 개발자가 운영합니다.
 

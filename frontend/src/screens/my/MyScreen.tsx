@@ -617,7 +617,7 @@ export function MyScreen({ navigation }: Props) {
           </Pressable>
         </Card>
 
-        <Text style={styles.footer}>Doubly · 둘이라서, 두 배로</Text>
+        <Text style={styles.footer}>Dubly · 둘이라서, 두 배로</Text>
       </ScrollView>
 
       {/* 원형 크롭 — 동그라미 안에 들어갈 부분을 직접 맞춘 뒤에야 업로드로 넘어간다 */}

@@ -20,7 +20,7 @@ public class SmtpPasswordResetMailSender implements PasswordResetMailSender {
      * 이 값이 없으면 발신 계정 주소(예: 개인 Gmail)가 그대로 노출되어
      * 서비스가 보낸 메일로 보이지 않는다.
      */
-    private static final String FROM_NAME = "Doubly";
+    private static final String FROM_NAME = "Dubly";
 
     private final JavaMailSender mailSender;
     private final String from;
@@ -38,7 +38,7 @@ public class SmtpPasswordResetMailSender implements PasswordResetMailSender {
             message.setFrom(sender);
         }
         message.setTo(toEmail);
-        message.setSubject("[Doubly] 비밀번호 재설정 인증코드");
+        message.setSubject("[Dubly] 비밀번호 재설정 인증코드");
         message.setText("""
                 %s님, 안녕하세요.
 
@@ -51,7 +51,7 @@ public class SmtpPasswordResetMailSender implements PasswordResetMailSender {
                 본인이 요청하지 않았다면 이 메일을 무시하셔도 됩니다.
                 비밀번호는 변경되지 않으며, 코드만으로는 계정에 접근할 수 없습니다.
 
-                — Doubly
+                — Dubly
                 """.formatted(name, code, validFor.toMinutes()));
 
         try {
@@ -63,7 +63,7 @@ public class SmtpPasswordResetMailSender implements PasswordResetMailSender {
     }
 
     /**
-     * 발신자를 {@code "Doubly <noreply@example.com>"} 형식으로 만든다 (RFC 5322).
+     * 발신자를 {@code "Dubly <noreply@example.com>"} 형식으로 만든다 (RFC 5322).
      *
      * <p>MAIL_USERNAME 에 이미 표시 이름이 들어 있으면(예: {@code "우리앱 <a@b.com>"})
      * 그대로 쓴다 — 덧씌우면 형식이 깨진다.
