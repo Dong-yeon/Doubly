@@ -381,7 +381,9 @@ public class FoodAnalysisService {
     /** 모델이 비웠거나 스키마 밖 값을 보내면(환각) 호출부 기본값으로 대체한다. */
     private String resolveSource(JsonNode result, String defaultSource) {
         String source = result.path("source").asText(null);
-        return VALID_SOURCES.contains(source) ? source : defaultSource;
+        // VALID_SOURCES 는 Set.of(...) 불변 집합이라 contains(null) 이 false 대신 NPE 를 던진다 —
+        // 모델이 source 를 비우는 흔한 케이스(바로 이 메서드가 처리하려던 그 상황)에서 요청 전체가 500 으로 죽었었다.
+        return source != null && VALID_SOURCES.contains(source) ? source : defaultSource;
     }
 
     /** 합계 필드가 비었으면 개별 음식값을 합산해 보정한다. */
