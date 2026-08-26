@@ -682,6 +682,7 @@ export function DietScreen({ navigation }: Props) {
                   style={[styles.dayChip, goal?.goalDays === d && styles.dayChipActive]}
                   disabled={savingGoal}
                   onPress={() => onPickGoal(d)}
+                  accessibilityState={{ selected: goal?.goalDays === d }}
                 >
                   <Text style={[styles.dayText, goal?.goalDays === d && styles.dayTextActive]}>{d}</Text>
                 </TouchableOpacity>
@@ -772,6 +773,7 @@ export function DietScreen({ navigation }: Props) {
                   key={value}
                   style={[styles.wizardChip, wizActivity === value && styles.wizardChipActive]}
                   onPress={() => setWizActivity(value)}
+                  accessibilityState={{ selected: wizActivity === value }}
                 >
                   <Text style={[styles.wizardChipText, wizActivity === value && styles.wizardChipTextActive]}>
                     {label}
@@ -793,6 +795,7 @@ export function DietScreen({ navigation }: Props) {
                   key={value}
                   style={[styles.wizardChip, wizGoalType === value && styles.wizardChipActive]}
                   onPress={() => setWizGoalType(value)}
+                  accessibilityState={{ selected: wizGoalType === value }}
                 >
                   <Text style={[styles.wizardChipText, wizGoalType === value && styles.wizardChipTextActive]}>
                     {label}
@@ -815,6 +818,7 @@ export function DietScreen({ navigation }: Props) {
                   key={value}
                   style={[styles.wizardChip, wizPreset === value && styles.wizardChipActive]}
                   onPress={() => setWizPreset(value)}
+                  accessibilityState={{ selected: wizPreset === value }}
                 >
                   <Text style={[styles.wizardChipText, wizPreset === value && styles.wizardChipTextActive]}>
                     {label}
@@ -832,6 +836,7 @@ export function DietScreen({ navigation }: Props) {
                       key={rate}
                       style={[styles.wizardChip, wizRate === rate && styles.wizardChipActive]}
                       onPress={() => setWizRate(rate)}
+                      accessibilityState={{ selected: wizRate === rate }}
                     >
                       <Text style={[styles.wizardChipText, wizRate === rate && styles.wizardChipTextActive]}>
                         {rate}kg

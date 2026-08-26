@@ -393,13 +393,24 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
                   <Text style={styles.label}>별점</Text>
                   <View style={styles.starRow}>
                     {[1, 2, 3, 4, 5].map((n) => (
-                      <TouchableOpacity key={n} onPress={() => setRating(rating === n ? 0 : n)}>
+                      <TouchableOpacity
+                        key={n}
+                        onPress={() => setRating(rating === n ? 0 : n)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`별점 ${n}점`}
+                      >
                         <Text style={styles.star}>{n <= rating ? '★' : '☆'}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
 
-                  <TouchableOpacity style={[styles.photoBox, photoUri ? styles.photoBoxFilled : styles.photoBoxEmpty]} onPress={onPickPhoto} activeOpacity={0.8}>
+                  <TouchableOpacity
+                    style={[styles.photoBox, photoUri ? styles.photoBoxFilled : styles.photoBoxEmpty]}
+                    onPress={onPickPhoto}
+                    activeOpacity={0.8}
+                    accessibilityRole="button"
+                    accessibilityLabel={photoUri ? '사진 변경하기' : undefined}
+                  >
                     {photoUri ? (
                       <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />
                     ) : (
@@ -430,6 +441,7 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
                             key={t.value}
                             style={[styles.typeChip, mealType === t.value && styles.typeChipActive]}
                             onPress={() => setMealType(t.value)}
+                            accessibilityState={{ selected: mealType === t.value }}
                           >
                             <Text style={[styles.typeText, mealType === t.value && styles.typeTextActive]}>
                               {t.label}
