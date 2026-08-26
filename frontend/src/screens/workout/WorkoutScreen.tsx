@@ -205,7 +205,9 @@ export function WorkoutScreen({ navigation }: Props) {
       <QuickLinkChips
         links={[
           { icon: 'human', label: '몸 변화', onPress: () => navigation.navigate('BodyMetric') },
-          { icon: 'sword-cross', label: '대결', onPress: () => navigation.navigate('Challenge') },
+          // 2026-08-26: 운동에 "대결"은 톤이 안 맞는다는 판단으로 진입 막음(사용자 결정).
+          // ChallengeScreen·라우트·API는 그대로 둬서 나중에 이 줄만 되살리면 된다.
+          // { icon: 'sword-cross', label: '대결', onPress: () => navigation.navigate('Challenge') },
           { icon: 'microphone-outline', label: '음성 응원', onPress: () => navigation.navigate('VoiceClips') },
           { icon: 'chart-bar', label: '통계', onPress: () => navigation.navigate('WorkoutStats') },
           { icon: 'calendar-blank-outline', label: '캘린더', onPress: () => navigation.navigate('WorkoutCalendar') },

@@ -489,8 +489,10 @@ export function TripDetailScreen({ navigation, route }: Props) {
               </View>
             </TouchableOpacity>
 
-            {/* 경비 · 준비물 · 앨범 · 회고 진입 (2×2) */}
-            <View style={styles.entryRow}>
+            {/*
+              2026-08-26: 여행을 캘린더 기반 "일정 잡기"로 우선 좁히기로 하면서 경비·준비물
+              진입은 막았다(사용자 결정). TripExpense/TripChecklist 화면·라우트·API는 그대로
+              둬서 나중에 다시 켜기만 하면 된다 — 아래 두 TouchableOpacity를 되살리면 끝.
               <TouchableOpacity
                 style={styles.entryCard}
                 activeOpacity={0.8}
@@ -507,6 +509,10 @@ export function TripDetailScreen({ navigation, route }: Props) {
                 <MaterialCommunityIcons name="bag-personal-outline" size={18} color={colors.textSecondary} />
                 <Text style={styles.entryText}>준비물</Text>
               </TouchableOpacity>
+            */}
+
+            {/* 앨범 · 회고 진입 */}
+            <View style={styles.entryRow}>
               <TouchableOpacity
                 style={styles.entryCard}
                 activeOpacity={0.8}
