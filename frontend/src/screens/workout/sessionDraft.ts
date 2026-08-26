@@ -19,6 +19,10 @@ const KEY = 'doubly.workoutSessionDraft';
 
 /** 세트 1개의 입력 상태 — 화면이 들고 있는 문자열 그대로 저장한다(파싱은 저장 시점에만) */
 export interface SessionSet {
+  // React 리스트 key — 배열 인덱스를 key로 쓰면 중간 세트 삭제 시 잘못된 위치로 리마운트될
+  // 수 있다(QA_CHECKLIST.md 패턴 9). optional인 이유: 이 필드가 생기기 전에 저장된 로컬
+  // 초안(sessionDraft, 최대 하루 보관)을 복구할 때는 없을 수 있어 화면에서 인덱스로 보정한다.
+  key?: string;
   weightKg: string;
   reps: string;
   done: boolean;

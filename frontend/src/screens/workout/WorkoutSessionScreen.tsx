@@ -48,6 +48,7 @@ import {
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { useDirtyGuard } from '../../hooks/useDirtyGuard';
+import { useAndroidKeyboardHeight } from '../../hooks/useAndroidKeyboardHeight';
 import { confirmDiscard } from '../../utils/discardGuard';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
@@ -74,6 +75,7 @@ const SNAPSHOT_INTERVAL_MS = 10_000;
 
 let keySeq = 0;
 const nextKey = () => `ex-${keySeq++}`;
+const nextSetKey = () => `set-${keySeq++}`;
 
 /** "32분째 · 5세트 완료" — 이어서 할지 정하려면 얼마나 했는지가 필요하다 */
 function describeDraft(draft: SessionDraft): string {
@@ -130,6 +132,7 @@ function bestE1RM(sets: SessionSet[]): number | null {
 
 function buildSet(weightKg?: number | null, reps?: number | null, setType?: string | null): SessionSet {
   return {
+    key: nextSetKey(),
     weightKg: weightKg != null ? String(weightKg) : '',
     reps: reps != null ? String(reps) : '',
     done: false,
@@ -716,7 +719,7 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
         const last = e.sets[e.sets.length - 1];
         return {
           ...e,
-          sets: [...e.sets, { weightKg: last?.weightKg ?? '', reps: last?.reps ?? '', done: false, rpe: '' }],
+          sets: [...e.sets, { key: nextSetKey(), weightKg: last?.weightKg ?? '', reps: last?.reps ?? '', done: false, rpe: '' }],
         };
       }),
     );
@@ -843,6 +846,11 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
     stayText: '계속하기',
     leaveText: '나가기',
   });
+
+  // 세트별 무게/횟수/RPE 입력이 하단 액션바("종료"/"운동 완료")를 키보드가 가리지 않게
+  // (QA_CHECKLIST.md 패턴 4). 이 화면은 FlatList/DragList를 직접 자식으로 두는 화면이라
+  // useAndroidKeyboardHeight의 실측 패딩 방식을 쓴다 — 자세한 이유는 그 훅의 문서 참고.
+  const androidKeyboardHeight = useAndroidKeyboardHeight();
 
   // 운동 추가 모달 닫기 — 입력이 있으면 확인 후 닫는다 (백드롭·Android 백 공용).
   // "사라져요"라고 안내했으므로 닫을 때 실제로 비운다 (남기면 다음에 또 확인이 뜬다)
@@ -1018,7 +1026,10 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
         </View>
         <View style={styles.setRows}>
           {e.sets.map((s, i) => (
-            <View key={i} style={styles.setRow}>
+            // s.key 가 아니라 i 를 쓰면 중간 세트를 지울 때 뒤쪽 행들이 잘못된 위치로
+            // 리마운트될 수 있다(QA_CHECKLIST.md 패턴 9). ?? i 는 이 필드가 생기기 전에
+            // 저장된 로컬 초안(sessionDraft) 복구용 안전망일 뿐이다.
+            <View key={s.key ?? i} style={styles.setRow}>
               <View style={styles.setRowIndexCol}>
                 <Text style={styles.setRowIndex}>{i + 1}</Text>
                 {/* 루틴에서 이 세트를 웜업으로 지정해뒀으면 배지로 표시 — 무게를 낮춰 가볍게
@@ -1152,6 +1163,10 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
         </View>
       </View>
 
+      <KeyboardAvoidingView
+        style={[styles.flex, Platform.OS === 'android' && { paddingBottom: androidKeyboardHeight }]}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
       {Platform.OS === 'web' ? (
         // 웹은 터치 드래그 제스처 전제인 순서 바꾸기가 원래도 아쉬운 기능이라, 평범한
         // FlatList로 스크롤만 살리고 순서 바꾸기는 뺀다(네이티브는 DragList로 그대로 유지).
@@ -1217,6 +1232,7 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
           <Button title="운동 완료" size="md" onPress={onFinish} loading={saving} style={styles.flex} />
         </View>
       </View>
+      </KeyboardAvoidingView>
 
       {/* 운동 추가 모달 */}
       <Modal visible={addOpen} transparent animationType="fade" onRequestClose={closeAddModal}>

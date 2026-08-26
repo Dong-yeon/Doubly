@@ -18,6 +18,7 @@ import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { confirmDiscard } from '../../utils/discardGuard';
+import { useDirtyGuard } from '../../hooks/useDirtyGuard';
 import { recommendRestSeconds } from '../../utils/restRecommend';
 import { WEEK_DAYS } from '../../utils/date';
 import { sanitizeDecimalInput, sanitizeIntegerInput } from '../../utils/numericInput';
@@ -105,6 +106,13 @@ export function WorkoutRoutineFormScreen({ navigation, route }: Props) {
     })),
   );
   const [saving, setSaving] = useState(false);
+
+  /*
+   * 이탈 가드 — 화면 안 "루틴 저장" 버튼에만 확인이 있으면 헤더 뒤로가기·스와이프백·
+   * 하드웨어백으로는 무방비로 나가진다(QA_CHECKLIST.md 패턴 3). 제목을 적었거나
+   * 요일을 골랐거나 운동을 하나라도 추가했으면 잃을 게 있는 상태로 본다.
+   */
+  const allowLeave = useDirtyGuard(title.trim().length > 0 || scheduledDays.length > 0 || exercises.length > 0);
 
   // 헤더 제목 — AI 추천을 다듬으러 들어온 걸 알려준다 (스택 옵션은 "루틴 만들기"로 고정돼 있음)
   useLayoutEffect(() => {
@@ -339,6 +347,7 @@ export function WorkoutRoutineFormScreen({ navigation, route }: Props) {
       });
       haptics.success();
       toast.success('루틴을 저장했어요 ');
+      allowLeave();
       navigation.goBack();
     } catch (e) {
       Alert.alert('오류', getErrorMessage(e));
@@ -349,8 +358,11 @@ export function WorkoutRoutineFormScreen({ navigation, route }: Props) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <TextField label="루틴 이름" placeholder="예: 등·이두 데이" value={title} onChangeText={setTitle} maxLength={100} />
+      {/* 하단 "루틴 저장" 버튼이 키보드에 가리던 문제(QA_CHECKLIST.md 패턴 4) — 루틴 이름
+          입력 후 바로 저장하려는 흐름이 많아 특히 자주 걸렸다. */}
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+          <TextField label="루틴 이름" placeholder="예: 등·이두 데이" value={title} onChangeText={setTitle} maxLength={100} />
 
         {/*
           요일 배정(짐워크 스타일) — 미리 골라두면 루틴 목록에서 오늘 할 루틴이 앞으로 오고
@@ -412,8 +424,9 @@ export function WorkoutRoutineFormScreen({ navigation, route }: Props) {
           <Text style={styles.addExerciseText}>＋ 운동 추가</Text>
         </TouchableOpacity>
 
-        <Button title="루틴 저장" onPress={onSave} loading={saving} style={styles.saveBtn} />
-      </ScrollView>
+          <Button title="루틴 저장" onPress={onSave} loading={saving} style={styles.saveBtn} />
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       <Modal visible={addOpen} transparent animationType="fade" onRequestClose={closeAddModal}>
         <Pressable style={styles.backdrop} onPress={closeAddModal}>
