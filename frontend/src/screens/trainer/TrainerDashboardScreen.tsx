@@ -24,13 +24,19 @@ export function TrainerDashboardScreen({ navigation }: Props) {
   const [dashboard, setDashboard] = useState<TrainerDashboard | null>(null);
   const [loading, setLoading] = useState(false);
   const [inviting, setInviting] = useState(false);
+  // 로드 실패해도 dashboard 를 비우지 않는다 — "회원이 진짜 0명"과 "네트워크
+  // 오류"를 loadError 로 구분한다(QA_CHECKLIST.md P1-6, 다른 7개 화면은 이미
+  // 적용됐는데 이 화면만 빠져 있었다).
+  const [loadError, setLoadError] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       setDashboard(await trainerApi.dashboard());
     } catch (e) {
       toast.error(getErrorMessage(e, '대시보드를 불러오지 못했어요.'));
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -76,21 +82,25 @@ export function TrainerDashboardScreen({ navigation }: Props) {
         contentContainerStyle={styles.list}
         refreshing={loading}
         onRefresh={load}
+        // 로드 실패 시 헤더(통계 카드)를 숨긴다 — 안 그러면 "총 회원 0" 이 실패로 인한
+        // 값인지 실제 0인지 구분이 안 된 채로 아래 오류 안내와 함께 보인다(P1-7과 같은 이유).
         ListHeaderComponent={
-          <View>
-            <View style={styles.statsRow}>
-              <View style={styles.statCard}>
-                <Text style={styles.statValue}>{dashboard?.totalMembers ?? 0}</Text>
-                <Text style={styles.statLabel}>총 회원</Text>
+          loadError ? null : (
+            <View>
+              <View style={styles.statsRow}>
+                <View style={styles.statCard}>
+                  <Text style={styles.statValue}>{dashboard?.totalMembers ?? 0}</Text>
+                  <Text style={styles.statLabel}>총 회원</Text>
+                </View>
+                <View style={styles.statCard}>
+                  <Text style={styles.statValue}>{dashboard?.completedToday ?? 0}</Text>
+                  <Text style={styles.statLabel}>오늘 운동 완료</Text>
+                </View>
               </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statValue}>{dashboard?.completedToday ?? 0}</Text>
-                <Text style={styles.statLabel}>오늘 운동 완료</Text>
-              </View>
+              <Button title="회원 초대코드 만들기" variant="secondary" onPress={onInvite} loading={inviting} />
+              <Text style={styles.sectionTitle}>회원 목록</Text>
             </View>
-            <Button title="회원 초대코드 만들기" variant="secondary" onPress={onInvite} loading={inviting} />
-            <Text style={styles.sectionTitle}>회원 목록</Text>
-          </View>
+          )
         }
         renderItem={({ item }) => (
           <TouchableOpacity
@@ -115,11 +125,21 @@ export function TrainerDashboardScreen({ navigation }: Props) {
         )}
         ListEmptyComponent={
           !loading ? (
-            <EmptyState
-              icon="account-group-outline"
-              title="아직 연결된 회원이 없어요"
-              description="초대코드를 만들어 회원에게 공유해보세요!"
-            />
+            loadError ? (
+              <EmptyState
+                icon="cloud-off-outline"
+                title="대시보드를 불러오지 못했어요"
+                description="네트워크 상태를 확인하고 다시 시도해주세요."
+                error
+                onRetry={load}
+              />
+            ) : (
+              <EmptyState
+                icon="account-group-outline"
+                title="아직 연결된 회원이 없어요"
+                description="초대코드를 만들어 회원에게 공유해보세요!"
+              />
+            )
           ) : null
         }
       />
