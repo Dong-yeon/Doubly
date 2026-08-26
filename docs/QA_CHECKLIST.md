@@ -46,13 +46,16 @@
 
 ### P0 — 데이터가 사라지거나 잘못 저장됨
 
-| # | 위치 | 내용 |
-| --- | --- | --- |
-| 1 | `WorkoutSessionScreen.tsx:150` | 무게 입력에 숫자 필터가 없어 `"1.2.3"` 같은 값이 `Number()` 에서 `NaN` 이 되고, `NaN != null` 은 `true` 라 **문자열 `"NaN"` 이 그대로 서버로 전송**된다 |
-| 2 | `WorkoutRecordScreen.tsx:206` | 무게 필터가 `[^0-9.]` 라 점을 여러 개 허용 → `Number()` 가 `NaN` → `JSON.stringify(NaN)` 은 `null` → **사용자는 입력했다고 믿는데 서버엔 조용히 누락** |
-| 3 | 전 화면 (`beforeRemove` 사용 0건) | `WorkoutSessionScreen` 의 이탈 경고는 화면 안 "종료" 버튼에만 있다. **헤더 뒤로가기·iOS 스와이프백·안드로이드 하드웨어백은 전부 우회**되어 체크한 세트가 확인 없이 전부 소실된다 |
-| 4 | `DietRecordScreen.tsx:232-235` | 사진으로 AI 분석해 탄단지를 채운 뒤 **사진만 지우고 저장하면** 화면에선 매크로가 사라졌는데 이전 분석 결과가 그대로 전송된다 (`macros` state 가 초기화되지 않음) |
-| 5 | `MyScreen.tsx:466` | **회원 탈퇴** 메뉴에만 `disabled`/로딩이 없다. 같은 화면의 연결끊기(458)·기록삭제(423)·복원(399)은 전부 막는데, 되돌릴 수 없는 가장 위험한 동작만 빠졌다 → 네트워크 지연 시 중복 탈퇴 요청 |
+> **2026-08-26 재확인 — 5건 전부 해소.** 아래 표는 감사 당시(2026-08-10) 기준 기록으로 원문 그대로 남겨둔다.
+> 해소 경위는 각 행의 "해결" 열 참고.
+
+| # | 위치 | 내용 | 해결 |
+| --- | --- | --- | --- |
+| 1 | `WorkoutSessionScreen.tsx:150` | 무게 입력에 숫자 필터가 없어 `"1.2.3"` 같은 값이 `Number()` 에서 `NaN` 이 되고, `NaN != null` 은 `true` 라 **문자열 `"NaN"` 이 그대로 서버로 전송**된다 | ✅ `b6797af`(2026-08-26). 저장 경로(`onFinish`)는 이미 `toNum()` 이 `NaN` 을 걸러 문자열 전송 자체는 없었지만, 입력 시점 필터가 없어 값이 조용히 사라지는 문제는 남아 있었다 — `weightKg`/`reps`/`rpe`(세션 카드)와 `fSets`/`fReps`/`fWeight`("+ 운동 추가" 모달) 전부에 `sanitizeDecimalInput`/`sanitizeIntegerInput`(`utils/numericInput.ts` 신설, BodyMetric·NumberStepper 공용화) 적용 |
+| 2 | `WorkoutRecordScreen.tsx:206` | 무게 필터가 `[^0-9.]` 라 점을 여러 개 허용 → `Number()` 가 `NaN` → `JSON.stringify(NaN)` 은 `null` → **사용자는 입력했다고 믿는데 서버엔 조용히 누락** | ✅ `ef3526f`(2026-08-11). `NumberStepper` 의 sanitize 가 두 번째 점부터 버리도록 수정됨 |
+| 3 | 전 화면 (`beforeRemove` 사용 0건) | `WorkoutSessionScreen` 의 이탈 경고는 화면 안 "종료" 버튼에만 있다. **헤더 뒤로가기·iOS 스와이프백·안드로이드 하드웨어백은 전부 우회**되어 체크한 세트가 확인 없이 전부 소실된다 | ✅ `c74f161`(2026-08-05). `useDirtyGuard` 훅(`usePreventRemove` 기반) 신설, `WorkoutSessionScreen` 에 적용돼 헤더/스와이프/하드웨어백 전부 커버 |
+| 4 | `DietRecordScreen.tsx:232-235` | 사진으로 AI 분석해 탄단지를 채운 뒤 **사진만 지우고 저장하면** 화면에선 매크로가 사라졌는데 이전 분석 결과가 그대로 전송된다 (`macros` state 가 초기화되지 않음) | ✅ `1db4881`(2026-08-18)로 항목 자체가 obsolete. 단일 `macros` state 를 없애고 반찬별 `items` 배열 모델로 리팩터되면서, 사진 삭제 시 항목별 값을 그대로 유지하는 게(잘못된 항목은 개별 삭제) 의도된 동작으로 바뀜(코드 주석에 근거 명시) |
+| 5 | `MyScreen.tsx:466` | **회원 탈퇴** 메뉴에만 `disabled`/로딩이 없다. 같은 화면의 연결끊기(458)·기록삭제(423)·복원(399)은 전부 막는데, 되돌릴 수 없는 가장 위험한 동작만 빠졌다 → 네트워크 지연 시 중복 탈퇴 요청 | ✅ `c74f161`(2026-08-05). `withdrawing` 상태로 `disabled` + `ActivityIndicator` 추가 |
 
 ### P1 — 실패가 사용자에게 안 보임
 
