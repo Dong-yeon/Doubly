@@ -22,6 +22,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { IconButton } from '../../components/IconButton';
+import { EmptyState } from '../../components/EmptyState';
 import { KakaoMap } from '../../components/KakaoMap';
 import { tripApi } from '../../api/trip';
 import { placeApi } from '../../api/place';
@@ -31,6 +32,8 @@ import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
+import { confirmDiscard } from '../../utils/discardGuard';
+import { useDeleteAction } from '../../hooks/useDeleteAction';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { Place, TripDay, TripDetail, TripItem } from '../../types';
 import { tripStatusLabel } from './TripListScreen';
@@ -69,10 +72,17 @@ export function TripDetailScreen({ navigation, route }: Props) {
   const invalidatePlaces = usePlaceStore((s) => s.invalidate);
   const [detail, setDetail] = useState<TripDetail | null>(null);
   const [loading, setLoading] = useState(false);
+  // load() 실패를 "진짜 빈 여행"과 구분한다 — 안 그러면 하루/장소가 0개인
+  // 화면과 네트워크 오류가 똑같이 보인다 (QA_CHECKLIST.md 전역 반복 패턴 1)
+  const [loadError, setLoadError] = useState(false);
   const [tab, setTab] = useState<Tab>('itinerary');
   const [selectedDay, setSelectedDay] = useState(1);
   // moveItem 연타 레이스 방지 가드 (QA_CHECKLIST.md P2-17) — 상세는 moveItem 정의부 참고
   const movingRef = useRef(false);
+  // 일정 삭제 / 장소 빼기는 서로 다른 리소스라 진행 중 표시를 따로 둔다
+  // (QA_CHECKLIST.md 전역 반복 패턴 7)
+  const { deletingId: deletingItemId, runDelete: runDeleteItem } = useDeleteAction<number>();
+  const { deletingId: detachingPlaceId, runDelete: runDetachPlace } = useDeleteAction<number>();
 
   // 장소 담기 모달 (장소 탭)
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -90,6 +100,11 @@ export function TripDetailScreen({ navigation, route }: Props) {
     placeId: null,
     placeName: null,
   });
+  // 모달을 열 때의 form 스냅샷 — 닫을 때 이 값과 달라졌는지로 "입력 있음"을 판단한다.
+  // 수정 모달은 처음부터 필드가 차 있어 단순 빈값 체크로는 항상 dirty 로 뜬다.
+  const initialFormRef = useRef<ItemForm>(form);
+  // saveItem 연타 시 중복 POST/PUT 방지 (QA_CHECKLIST.md 전역 반복 패턴 6)
+  const [savingItem, setSavingItem] = useState(false);
   // 장소 연결 모달 (일정 추가 시)
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkCandidates, setLinkCandidates] = useState<Place[]>([]);
@@ -101,6 +116,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       const d = await tripApi.detail(tripId);
       setDetail(d);
@@ -109,6 +125,9 @@ export function TripDetailScreen({ navigation, route }: Props) {
       setSelectedDay((prev) => Math.min(Math.max(prev, 1), Math.max(d.days.length, 1)));
     } catch (e) {
       toast.error(getErrorMessage(e, '여행을 불러오지 못했어요.'));
+      // detail 을 비우지 않는다 — "일정/장소 0개인 진짜 빈 여행"과 로드 실패를
+      // loadError 로 구분해서 렌더한다 (QA_CHECKLIST.md 전역 반복 패턴 1)
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -183,17 +202,15 @@ export function TripDetailScreen({ navigation, route }: Props) {
       { text: '취소', style: 'cancel' },
       {
         text: '빼기',
-        onPress: async () => {
-          try {
+        // 진행 중 표시 + 연타 방지는 useDeleteAction 이 맡는다 (QA_CHECKLIST.md 전역 반복 패턴 7)
+        onPress: () =>
+          runDetachPlace(place.id, async () => {
             await tripApi.detachPlace(tripId, place.id);
             haptics.light();
             toast.success('장소를 여행에서 뺐어요.');
             invalidatePlaces();
             load();
-          } catch (e) {
-            Alert.alert('오류', getErrorMessage(e));
-          }
-        },
+          }),
       },
     ]);
   };
@@ -201,7 +218,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
   // ---- 일정 추가/수정 ----
   const openAdd = () => {
     setEditingItem(null);
-    setForm({
+    const next: ItemForm = {
       dayNo: currentDay?.dayNo ?? 1,
       title: '',
       startTime: '',
@@ -209,13 +226,15 @@ export function TripDetailScreen({ navigation, route }: Props) {
       memo: '',
       placeId: null,
       placeName: null,
-    });
+    };
+    initialFormRef.current = next;
+    setForm(next);
     setEditorOpen(true);
   };
 
   const openEdit = (item: TripItem) => {
     setEditingItem(item);
-    setForm({
+    const next: ItemForm = {
       dayNo: item.dayNo,
       title: item.title,
       startTime: shortTime(item.startTime),
@@ -223,9 +242,17 @@ export function TripDetailScreen({ navigation, route }: Props) {
       memo: item.memo ?? '',
       placeId: item.placeId ?? null,
       placeName: item.placeName ?? null,
-    });
+    };
+    initialFormRef.current = next;
+    setForm(next);
     setEditorOpen(true);
   };
+
+  // 일정 모달 닫기 — 백드롭 탭/Android 백 공용. 처음 열었을 때 값과 달라졌으면
+  // 확인 후 닫는다(모달 안의 명시적 "취소" 버튼은 의도가 분명하므로 바로 닫는다).
+  // (QA_CHECKLIST.md 전역 반복 패턴 3)
+  const closeEditor = () =>
+    confirmDiscard(JSON.stringify(form) !== JSON.stringify(initialFormRef.current), () => setEditorOpen(false));
 
   const openLink = async () => {
     try {
@@ -260,6 +287,8 @@ export function TripDetailScreen({ navigation, route }: Props) {
       return;
     }
     const time = startTime || null;
+    // 저장 버튼 연타 시 addItem/updateItem 이 중복 전송되던 문제 (QA_CHECKLIST.md 전역 반복 패턴 6)
+    setSavingItem(true);
     try {
       if (editingItem) {
         await tripApi.updateItem(tripId, editingItem.id, {
@@ -307,6 +336,8 @@ export function TripDetailScreen({ navigation, route }: Props) {
       load();
     } catch (e) {
       Alert.alert('오류', getErrorMessage(e));
+    } finally {
+      setSavingItem(false);
     }
   };
 
@@ -316,16 +347,14 @@ export function TripDetailScreen({ navigation, route }: Props) {
       {
         text: '삭제',
         style: 'destructive',
-        onPress: async () => {
-          try {
+        // 진행 중 표시 + 연타 방지는 useDeleteAction 이 맡는다 (QA_CHECKLIST.md 전역 반복 패턴 7)
+        onPress: () =>
+          runDeleteItem(item.id, async () => {
             await tripApi.removeItem(tripId, item.id);
             haptics.light();
             toast.success('일정을 삭제했어요.');
             load();
-          } catch (e) {
-            Alert.alert('오류', getErrorMessage(e));
-          }
-        },
+          }),
       },
     ]);
   };
@@ -408,6 +437,20 @@ export function TripDetailScreen({ navigation, route }: Props) {
         contentContainerStyle={styles.scroll}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={load} />}
       >
+        {/*
+          로드 실패는 "일정/장소 0개인 진짜 빈 여행"과 구분해야 한다 — 안 그러면
+          네트워크 오류가 새로 만든 여행처럼 보인다 (QA_CHECKLIST.md 전역 반복 패턴 1)
+        */}
+        {!loading && loadError && !detail ? (
+          <EmptyState
+            icon="cloud-off-outline"
+            title="여행을 불러오지 못했어요"
+            description="네트워크 상태를 확인하고 다시 시도해주세요."
+            error
+            onRetry={load}
+          />
+        ) : null}
+
         {trip ? (
           <View>
             {trip.coverImageUrl ? (
@@ -544,10 +587,17 @@ export function TripDetailScreen({ navigation, route }: Props) {
 
             {/* 일정 항목 목록 */}
             {dayItems.length === 0 ? (
-              <Text style={styles.empty}>이 날의 일정이 아직 없어요.{'\n'}아래 버튼으로 일정을 추가해보세요!</Text>
+              <EmptyState
+                icon="calendar-blank-outline"
+                title="이 날의 일정이 아직 없어요"
+                description="아래 버튼으로 일정을 추가해보세요!"
+              />
             ) : (
               dayItems.map((item, idx) => (
-                <View key={item.id} style={styles.itemCard}>
+                <View
+                  key={item.id}
+                  style={[styles.itemCard, deletingItemId === item.id && styles.rowDeleting]}
+                >
                   <View style={styles.itemLeft}>
                     <Text style={styles.itemNo}>{idx + 1}</Text>
                     {shortTime(item.startTime) ? (
@@ -575,13 +625,13 @@ export function TripDetailScreen({ navigation, route }: Props) {
                       icon="chevron-up"
                       label="위로 옮기기"
                       onPress={() => moveItem(idx, -1)}
-                      disabled={idx === 0}
+                      disabled={idx === 0 || deletingItemId != null}
                     />
                     <IconButton
                       icon="chevron-down"
                       label="아래로 옮기기"
                       onPress={() => moveItem(idx, 1)}
-                      disabled={idx === dayItems.length - 1}
+                      disabled={idx === dayItems.length - 1 || deletingItemId != null}
                     />
                     <IconButton
                       icon="close"
@@ -589,6 +639,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
                       onPress={() => deleteItem(item)}
                       color={colors.danger}
                       style={styles.deleteBtn}
+                      disabled={deletingItemId === item.id}
                     />
                   </View>
                 </View>
@@ -623,15 +674,19 @@ export function TripDetailScreen({ navigation, route }: Props) {
               <Button title="＋ 장소 담기" variant="secondary" size="md" onPress={openPicker} />
             </View>
             {places.length === 0 ? (
-              <Text style={styles.empty}>아직 담긴 장소가 없어요. 장소 지도의 장소를 담아보세요! (길게 눌러 빼기)</Text>
+              <EmptyState
+                icon="map-marker-outline"
+                title="아직 담긴 장소가 없어요"
+                description="장소 지도의 장소를 담아보세요! (길게 눌러 빼기)"
+              />
             ) : (
               places.map((item) => (
                 <TouchableOpacity
                   key={item.id}
-                  style={styles.placeCard}
+                  style={[styles.placeCard, detachingPlaceId === item.id && styles.rowDeleting]}
                   activeOpacity={0.7}
                   onPress={() => navigation.navigate('PlaceDetail', { placeId: item.id, name: item.name })}
-                  onLongPress={() => onDetach(item)}
+                  onLongPress={() => (detachingPlaceId == null ? onDetach(item) : undefined)}
                 >
                   <View style={styles.placeHeader}>
                     <Text style={styles.placeName}>{item.name}</Text>
@@ -646,8 +701,8 @@ export function TripDetailScreen({ navigation, route }: Props) {
       </ScrollView>
 
       {/* 일정 추가/수정 모달 */}
-      <Modal visible={editorOpen} transparent animationType="slide" onRequestClose={() => setEditorOpen(false)}>
-        <Pressable style={styles.backdrop} onPress={() => setEditorOpen(false)}>
+      <Modal visible={editorOpen} transparent animationType="slide" onRequestClose={closeEditor}>
+        <Pressable style={styles.backdrop} onPress={closeEditor}>
           {/* onPress 로 탭을 흡수한다 — 없으면 시트 빈 곳 터치가 배경으로 새어나가 닫힌다 */}
           <Pressable style={styles.sheet} onPress={() => {}}>
             <Text style={styles.sheetTitle}>{editingItem ? '일정 수정' : '일정 추가'}</Text>
@@ -726,7 +781,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
 
             <View style={styles.sheetActions}>
               <Button title="취소" variant="ghost" size="md" onPress={() => setEditorOpen(false)} />
-              <Button title={editingItem ? '수정' : '추가'} size="md" onPress={saveItem} />
+              <Button title={editingItem ? '수정' : '추가'} size="md" onPress={saveItem} loading={savingItem} />
             </View>
           </Pressable>
         </Pressable>
@@ -794,7 +849,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
                 </TouchableOpacity>
               )}
               ListEmptyComponent={
-                <Text style={styles.empty}>연결할 장소가 없어요. 장소 지도에서 먼저 추가해주세요!</Text>
+                <EmptyState icon="map-marker-outline" title="연결할 장소가 없어요" description="장소 지도에서 먼저 추가해주세요!" />
               }
             />
             <Button title="닫기" variant="ghost" size="md" onPress={() => setLinkOpen(false)} />
@@ -821,7 +876,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
                 </TouchableOpacity>
               )}
               ListEmptyComponent={
-                <Text style={styles.empty}>담을 수 있는 장소가 없어요. 장소 지도에서 먼저 추가해주세요!</Text>
+                <EmptyState icon="map-marker-outline" title="담을 수 있는 장소가 없어요" description="장소 지도에서 먼저 추가해주세요!" />
               }
             />
             <Button title="닫기" variant="ghost" size="md" onPress={() => setPickerOpen(false)} />
@@ -887,7 +942,8 @@ const styles = themedStyles((colors) => ({
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: '#fff',
+    // 하드코딩 색 리터럴 대신 테마 토큰 사용 (QA_CHECKLIST.md 전역 반복 패턴 8)
+    backgroundColor: colors.white,
   },
   travelModeKnobOn: { alignSelf: 'flex-end' },
 
@@ -917,7 +973,8 @@ const styles = themedStyles((colors) => ({
   },
   tabOn: { backgroundColor: colors.primary },
   tabText: { fontSize: fontSize.body, fontWeight: '800', color: colors.textSecondary },
-  tabTextOn: { color: '#fff' },
+  // 하드코딩 색 리터럴 대신 테마 토큰 사용 (QA_CHECKLIST.md 전역 반복 패턴 8)
+  tabTextOn: { color: colors.white },
 
   // Day 선택 바
   dayBar: { gap: spacing.sm, paddingVertical: spacing.md },
@@ -992,6 +1049,8 @@ const styles = themedStyles((colors) => ({
   itemActions: { alignItems: 'center', justifyContent: 'flex-start' },
   /* 삭제는 이동 버튼과 붙여두지 않는다 — 오탭 비용이 되돌릴 수 없는 쪽이라 완충 여백을 준다 */
   deleteBtn: { marginTop: spacing.sm },
+  // 삭제/빼기 진행 중인 행을 시각적으로 표시한다 (QA_CHECKLIST.md 전역 반복 패턴 7)
+  rowDeleting: { opacity: 0.5 },
 
   addWrap: { marginTop: spacing.md },
 
@@ -1017,12 +1076,11 @@ const styles = themedStyles((colors) => ({
   placeStatus: { fontSize: fontSize.body },
   placeAddress: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xs },
 
-  empty: { fontSize: fontSize.caption, color: colors.textSecondary, textAlign: 'center', paddingVertical: spacing.lg, lineHeight: 20 },
-
   // 모달
   // spacing.lg 로 통일 — 앱의 다른 모달 8곳이 전부 이 값이라, xl(32) 만 카드 폭이
   // 16px 더 좁았다(392 vs 376, 440 기준)
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: spacing.lg },
+  // 하드코딩 색 리터럴 대신 테마 토큰 사용 — 라이트/다크에서 불투명도가 다르다 (QA_CHECKLIST.md 전역 반복 패턴 8)
+  backdrop: { flex: 1, backgroundColor: colors.backdrop, justifyContent: 'center', padding: spacing.lg },
   sheet: { backgroundColor: colors.surfaceCard, borderRadius: radius.xl, padding: spacing.lg, maxHeight: '85%' },
   sheetTitle: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary, marginBottom: spacing.md },
   sheetList: { marginBottom: spacing.sm },
