@@ -123,13 +123,23 @@
 
 ### 패턴 2: 숫자 입력에 `NaN` 검증 없음
 
-- **범위**: **20건 / 7개 파일** — `DietRecordScreen:99,232`, `DietScreen:116-119`,
+> **2026-08-26 재확인 — 6개 파일 전부 해소.** `utils/numericInput.ts`(신설)의
+> `sanitizeDecimalInput`/`sanitizeIntegerInput` 을 공용으로 써서 타이핑 시점에 걸러내는
+> 방식으로 통일했다 — 원래 제안이던 저장 시점 `toNumberOrUndefined` 헬퍼보다, 애초에
+> 잘못된 문자가 입력란에 들어가지 못하게 막는 쪽이 사용자 피드백이 즉각적이라 이 방식을
+> 택함. `WorkoutRecordScreen`/`DietRecordScreen`은 이미 `NumberStepper` 정수 전용 구조로
+> 리팩터돼 있어 애초에 위험이 없었다.
+
+- **범위(당시)**: **20건 / 7개 파일** — `DietRecordScreen:99,232`, `DietScreen:116-119`,
   `BodyMetricScreen:111-113`, `WorkoutRoutineFormScreen:54-56`, `WorkoutRecordScreen:90,95-97`,
   `WorkoutSessionScreen:131-132`
 - **증상**: `calories ? Number(calories) : undefined` 는 빈 문자열만 거르고 `"1,2"`·`"abc"` 는 통과.
   `JSON.stringify(NaN)` 이 `null` 이라 **에러 없이 값만 사라진다**
 - **양호 사례**: `TripExpenseScreen:94-98` 은 `!amount || amount <= 0` 로 제대로 거른다. 이걸 표준으로
-- **일괄 수정**: `toNumberOrUndefined(text)` 헬퍼(`Number.isFinite` 검증)를 만들어 20곳 전부 치환
+- **해결**: ✅ `BodyMetricScreen`(`ccae37f`) · `WorkoutSessionScreen`(`b6797af`) ·
+  `DietScreen`/`WorkoutRoutineFormScreen`(`908c2b9`) 신규 수정. `WorkoutRecordScreen`(`ef3526f`,
+  `NumberStepper` sanitize) · `DietRecordScreen`(`1db4881` 리팩터로 전량 `NumberStepper`
+  정수 전용화)는 이미 해결돼 있었음
 
 ### 패턴 3: 이탈 시 입력 소실 (`beforeRemove` 사용 0건)
 
