@@ -33,6 +33,7 @@ import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { confirmDiscard } from '../../utils/discardGuard';
 import { formatKcal, formatKcalOfGoal, formatNumber } from '../../utils/format';
+import { sanitizeIntegerInput } from '../../utils/numericInput';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type {
   ActivityLevel,
@@ -669,18 +670,38 @@ export function DietScreen({ navigation }: Props) {
             <Text style={styles.modalDesc}>비워두면 해당 항목은 목표 없이 섭취량만 표시돼요.</Text>
             <View style={styles.nutFormRow}>
               <View style={styles.nutFormItem}>
-                <TextField label="칼로리" value={tCal} onChangeText={setTCal} keyboardType="number-pad" />
+                <TextField
+                  label="칼로리"
+                  value={tCal}
+                  onChangeText={(v) => setTCal(sanitizeIntegerInput(v))}
+                  keyboardType="number-pad"
+                />
               </View>
               <View style={styles.nutFormItem}>
-                <TextField label="탄수(g)" value={tCarbs} onChangeText={setTCarbs} keyboardType="number-pad" />
+                <TextField
+                  label="탄수(g)"
+                  value={tCarbs}
+                  onChangeText={(v) => setTCarbs(sanitizeIntegerInput(v))}
+                  keyboardType="number-pad"
+                />
               </View>
             </View>
             <View style={styles.nutFormRow}>
               <View style={styles.nutFormItem}>
-                <TextField label="단백(g)" value={tProtein} onChangeText={setTProtein} keyboardType="number-pad" />
+                <TextField
+                  label="단백(g)"
+                  value={tProtein}
+                  onChangeText={(v) => setTProtein(sanitizeIntegerInput(v))}
+                  keyboardType="number-pad"
+                />
               </View>
               <View style={styles.nutFormItem}>
-                <TextField label="지방(g)" value={tFat} onChangeText={setTFat} keyboardType="number-pad" />
+                <TextField
+                  label="지방(g)"
+                  value={tFat}
+                  onChangeText={(v) => setTFat(sanitizeIntegerInput(v))}
+                  keyboardType="number-pad"
+                />
               </View>
             </View>
             <Button title="저장" onPress={onSaveNutGoal} loading={savingNut} style={styles.nutSaveBtn} />

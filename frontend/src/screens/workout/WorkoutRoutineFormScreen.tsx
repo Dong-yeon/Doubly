@@ -20,6 +20,7 @@ import { haptics } from '../../utils/haptics';
 import { confirmDiscard } from '../../utils/discardGuard';
 import { recommendRestSeconds } from '../../utils/restRecommend';
 import { WEEK_DAYS } from '../../utils/date';
+import { sanitizeDecimalInput, sanitizeIntegerInput } from '../../utils/numericInput';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 import type { ExerciseCatalogItem, WeekDay } from '../../types';
@@ -470,13 +471,28 @@ export function WorkoutRoutineFormScreen({ navigation, route }: Props) {
 
                 <View style={styles.formRow}>
                   <View style={styles.flex}>
-                    <TextField label="세트" value={fSets} onChangeText={setFSets} keyboardType="number-pad" />
+                    <TextField
+                      label="세트"
+                      value={fSets}
+                      onChangeText={(v) => setFSets(sanitizeIntegerInput(v))}
+                      keyboardType="number-pad"
+                    />
                   </View>
                   <View style={styles.flex}>
-                    <TextField label="횟수" value={fReps} onChangeText={setFReps} keyboardType="number-pad" />
+                    <TextField
+                      label="횟수"
+                      value={fReps}
+                      onChangeText={(v) => setFReps(sanitizeIntegerInput(v))}
+                      keyboardType="number-pad"
+                    />
                   </View>
                   <View style={styles.flex}>
-                    <TextField label="무게(kg)" value={fWeight} onChangeText={setFWeight} keyboardType="decimal-pad" />
+                    <TextField
+                      label="무게(kg)"
+                      value={fWeight}
+                      onChangeText={(v) => setFWeight(sanitizeDecimalInput(v))}
+                      keyboardType="decimal-pad"
+                    />
                   </View>
                 </View>
 
@@ -497,7 +513,7 @@ export function WorkoutRoutineFormScreen({ navigation, route }: Props) {
                         <TextInput
                           style={styles.setInput}
                           value={row.weightKg}
-                          onChangeText={(v) => updateSetRow(row.key, { weightKg: v.replace(/[^0-9.]/g, '') })}
+                          onChangeText={(v) => updateSetRow(row.key, { weightKg: sanitizeDecimalInput(v) })}
                           keyboardType="decimal-pad"
                           placeholder="kg"
                           placeholderTextColor={colors.textTertiary}
@@ -506,7 +522,7 @@ export function WorkoutRoutineFormScreen({ navigation, route }: Props) {
                         <TextInput
                           style={styles.setInput}
                           value={row.reps}
-                          onChangeText={(v) => updateSetRow(row.key, { reps: v.replace(/[^0-9]/g, '') })}
+                          onChangeText={(v) => updateSetRow(row.key, { reps: sanitizeIntegerInput(v) })}
                           keyboardType="number-pad"
                           placeholder="회"
                           placeholderTextColor={colors.textTertiary}
