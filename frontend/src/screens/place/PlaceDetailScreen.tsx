@@ -29,6 +29,7 @@ import { usePlaceStore } from '../../store/placeStore';
 import { SOLO_PICK_MIN_RATING } from './placeFilters';
 import { isKakaoMapConfigured } from '../../constants/config';
 import { placeApi } from '../../api/place';
+import { useDeleteAction } from '../../hooks/useDeleteAction';
 import { useDietStore } from '../../store/dietStore';
 import { pickImage, uploadImage } from '../../utils/imageUpload';
 import { getErrorMessage } from '../../utils/error';
@@ -98,6 +99,15 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
   const [ratingSaving, setRatingSaving] = useState(false);
   // 재평가로 등급이 유지/하락할 때는 축하 모달을 열지 않는다 — 0→양수로 "새로 등극"할 때만
   const [fanfareTier, setFanfareTier] = useState(0);
+
+  /*
+   * 삭제 in-flight 가드 — 장소 자체 삭제(성공 시 화면을 뜨는 단발성 액션)와 방문 기록
+   * 한 건 삭제(목록 행)는 모양이 서로 달라 인스턴스를 따로 둔다(QA_CHECKLIST.md 전역
+   * 반복 패턴 7). 장소 삭제는 id 가 하나뿐이라 boolean 처럼만 쓰지만, 훅 시그니처를
+   * 맞추기 위해 그대로 number 제네릭을 쓴다.
+   */
+  const { deletingId: deletingPlaceId, runDelete: runDeletePlace } = useDeleteAction<number>();
+  const { deletingId: deletingVisitId, runDelete: runDeleteVisit } = useDeleteAction<number>();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -222,17 +232,14 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
       {
         text: '삭제',
         style: 'destructive',
-        onPress: async () => {
-          try {
+        onPress: () =>
+          runDeletePlace(place.id, async () => {
             await placeApi.remove(place.id);
             haptics.light();
             toast.success('장소를 삭제했어요.');
             usePlaceStore.getState().invalidate();
             navigation.goBack();
-          } catch (e) {
-            Alert.alert('오류', getErrorMessage(e));
-          }
-        },
+          }),
       },
     ]);
   };
@@ -243,17 +250,14 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
       {
         text: '삭제',
         style: 'destructive',
-        onPress: async () => {
-          try {
+        onPress: () =>
+          runDeleteVisit(visit.id, async () => {
             await placeApi.removeVisit(placeId, visit.id);
             haptics.light();
             toast.success('방문 기록을 삭제했어요.');
             load();
             usePlaceStore.getState().invalidate();
-          } catch (e) {
-            Alert.alert('오류', getErrorMessage(e));
-          }
-        },
+          }),
       },
     ]);
   };
@@ -291,6 +295,9 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
                         icon="delete-outline"
                         label="장소 삭제"
                         color={colors.danger}
+                        // 성공하면 곧장 goBack 이라 흐려질 행이 없다 — 응답 대기 중 연타로
+                        // 중복 DELETE 되지 않게 버튼만 잠근다(QA_CHECKLIST.md 전역 반복 패턴 7)
+                        disabled={deletingPlaceId != null}
                         onPress={onDeletePlace}
                       />
                     </View>
@@ -506,8 +513,9 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
           }
           renderItem={({ item }) => (
             <TouchableOpacity
-              style={styles.visitCard}
+              style={[styles.visitCard, deletingVisitId === item.id && styles.visitCardDeleting]}
               activeOpacity={item.imageUrl ? 0.8 : 1}
+              disabled={deletingVisitId === item.id}
               onLongPress={() => onDeleteVisit(item)}
               onPress={
                 item.imageUrl
@@ -679,6 +687,8 @@ const styles = themedStyles((colors) => ({
     padding: spacing.md,
     marginBottom: spacing.sm,
   },
+  // 삭제 진행 중 표시 — useDeleteAction (QA_CHECKLIST.md 전역 반복 패턴 7)
+  visitCardDeleting: { opacity: 0.5 },
   visitHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   visitDate: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
   visitStars: { fontSize: fontSize.body, color: colors.togetherText, fontWeight: '700' },

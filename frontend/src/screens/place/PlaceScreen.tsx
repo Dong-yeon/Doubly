@@ -36,8 +36,8 @@ import { placeApi } from '../../api/place';
 import { contentApi } from '../../api/content';
 import { usePlaceStore } from '../../store/placeStore';
 import { useContentStore } from '../../store/contentStore';
+import { useDeleteAction } from '../../hooks/useDeleteAction';
 import { isKakaoMapConfigured } from '../../constants/config';
-import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { stars } from '../../utils/ratingStars';
@@ -126,6 +126,15 @@ export function PlaceScreen() {
     null,
   );
 
+  /*
+   * 삭제 in-flight 가드 — 이 화면엔 장소(Place)/콘텐츠(Content) 두 개의 서로 다른
+   * 엔티티를 지우는 흐름이 따로 있어(가이드+둘러보기 목록 vs 콘텐츠 목록), 인스턴스를
+   * 하나만 쓰면 한쪽을 지우는 동안 다른 쪽 삭제까지 막혀버린다 — 각자 따로 둔다
+   * (QA_CHECKLIST.md 전역 반복 패턴 7).
+   */
+  const { deletingId: deletingPlaceId, runDelete: runDeletePlace } = useDeleteAction<number>();
+  const { deletingId: deletingContentId, runDelete: runDeleteContent } = useDeleteAction<number>();
+
   useFocusEffect(
     useCallback(() => {
       loadPlaces().catch(() => {}); // 에러는 loadError 로 화면에 이미 반영된다
@@ -213,17 +222,14 @@ export function PlaceScreen() {
       {
         text: '삭제',
         style: 'destructive',
-        onPress: async () => {
-          try {
+        onPress: () =>
+          runDeletePlace(place.id, async () => {
             await placeApi.remove(place.id);
             haptics.light();
             toast.success('장소를 삭제했어요.');
             invalidatePlaces();
             loadPlaces(true);
-          } catch (e) {
-            Alert.alert('오류', getErrorMessage(e));
-          }
-        },
+          }),
       },
     ]);
   };
@@ -234,17 +240,14 @@ export function PlaceScreen() {
       {
         text: '삭제',
         style: 'destructive',
-        onPress: async () => {
-          try {
+        onPress: () =>
+          runDeleteContent(content.id, async () => {
             await contentApi.remove(content.id);
             haptics.light();
             toast.success('콘텐츠를 삭제했어요.');
             invalidateContents();
             loadContents(true);
-          } catch (e) {
-            Alert.alert('오류', getErrorMessage(e));
-          }
-        },
+          }),
       },
     ]);
   };
@@ -503,8 +506,9 @@ export function PlaceScreen() {
           }
           renderItem={({ item }) => (
             <TouchableOpacity
-              style={styles.card}
+              style={[styles.card, deletingPlaceId === item.id && styles.cardDeleting]}
               activeOpacity={0.7}
+              disabled={deletingPlaceId === item.id}
               onPress={() => navigation.navigate('PlaceDetail', { placeId: item.id, name: item.name })}
               onLongPress={() => onDeletePlace(item)}
             >
@@ -662,8 +666,9 @@ export function PlaceScreen() {
           }
           renderItem={({ item }) => (
             <TouchableOpacity
-              style={[styles.card, styles.contentCard]}
+              style={[styles.card, styles.contentCard, deletingContentId === item.id && styles.cardDeleting]}
               activeOpacity={0.7}
+              disabled={deletingContentId === item.id}
               onPress={() => navigation.navigate('ContentDetail', { contentId: item.id, title: item.title })}
               onLongPress={() => onDeleteContent(item)}
             >
@@ -830,6 +835,8 @@ const styles = themedStyles((colors) => ({
     padding: spacing.md,
     marginBottom: spacing.sm,
   },
+  // 삭제 진행 중 표시 — useDeleteAction, 장소·콘텐츠 카드 공용 (QA_CHECKLIST.md 전역 반복 패턴 7)
+  cardDeleting: { opacity: 0.5 },
   // 콘텐츠 카드만 포스터가 왼쪽에 붙는 가로 레이아웃 — 장소 카드는 그대로 세로 하나
   contentCard: { flexDirection: 'row', gap: spacing.sm },
   contentPoster: { width: 52, height: 74, borderRadius: radius.sm },

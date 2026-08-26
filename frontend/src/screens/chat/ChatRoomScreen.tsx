@@ -58,6 +58,7 @@ import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { ChatMessage, TouchGestureCode } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { useAndroidKeyboardHeight } from '../../hooks/useAndroidKeyboardHeight';
+import { EmptyState } from '../../components/EmptyState';
 
 
 // zustand 셀렉터가 매번 새 배열을 만들면 무한 리렌더(하얀 화면)가 나므로 안정 참조 사용
@@ -231,8 +232,15 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     });
   }, [navigation, title, startCall, callStarting]);
 
+  /*
+   * 히스토리 로딩 상태 — openRoom 이 REST 로 첫 페이지를 받아오는 동안에는 messages 가
+   * 빈 배열이라 "메시지 없음"과 "아직 로딩 중"이 구분되지 않았다. TripListScreen 등과
+   * 같은 패턴으로 로딩 중엔 EmptyState 를 숨긴다(QA_CHECKLIST.md 패턴10).
+   */
+  const [loadingHistory, setLoadingHistory] = useState(true);
   useEffect(() => {
-    openRoom(relationId);
+    setLoadingHistory(true);
+    openRoom(relationId).finally(() => setLoadingHistory(false));
     return () => closeRoom(relationId);
   }, [relationId, openRoom, closeRoom]);
 
@@ -707,6 +715,19 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               <ActivityIndicator size="small" color={colors.primary} style={styles.olderSpinner} />
             ) : null
           }
+          /*
+           * 새로 만든 채팅방처럼 대화 이력이 아예 없을 때 안내 — 로딩 중(loadingHistory)
+           * 엔 잠깐 빈 배열로 보이는 순간이 있어 그 사이엔 띄우지 않는다(QA_CHECKLIST.md
+           * 패턴10). inverted 리스트라 컨텐츠 전체가 scaleY:-1 로 뒤집혀 렌더되므로
+           * EmptyState 를 그대로 두면 거꾸로 보인다 — 감싸는 뷰에서 다시 뒤집어 바로 세운다.
+           */
+          ListEmptyComponent={
+            !loadingHistory ? (
+              <View style={styles.emptyMessagesWrap}>
+                <EmptyState icon="chat-outline" title="아직 메시지가 없어요" description="첫 메시지를 보내보세요!" />
+              </View>
+            ) : null
+          }
           // 스크롤 드래그로 키보드를 내릴 수 있게 (iOS 는 손가락을 따라 내려간다)
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         />
@@ -935,6 +956,9 @@ const styles = themedStyles((colors) => ({
   headerCallButton: { minWidth: 40, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   headerCallButtonPressed: { opacity: 0.6 },
   list: { padding: spacing.md },
+  // inverted FlatList 의 콘텐츠는 scaleY:-1 로 뒤집혀 그려진다 — EmptyState 만 다시
+  // 뒤집어 정방향으로 보이게 한다(QA_CHECKLIST.md 패턴10)
+  emptyMessagesWrap: { transform: [{ scaleY: -1 }] },
   // 그룹 간 세로 간격은 msgBlock(정상 메시지)·row(삭제된 메시지)가 각각 spaced/grouped 로 담당한다
   row: { maxWidth: '80%', flexDirection: 'row', alignItems: 'flex-end' },
   rowMine: { alignSelf: 'flex-end', flexDirection: 'row-reverse' },
