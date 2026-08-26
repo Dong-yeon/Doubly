@@ -14,6 +14,8 @@ interface Props {
   onLongPress?: (meal: Meal) => void;
   /** 날짜 라벨 표시 (히스토리에서 유용) */
   showDate?: boolean;
+  /** 삭제 처리 중 — 카드를 흐리게 하고 탭을 막는다 (QA_CHECKLIST.md 패턴 7) */
+  deleting?: boolean;
 }
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -29,16 +31,17 @@ export const MEAL_ICON: Record<MealType, IconName> = {
 const PREVIEW_COUNT = 3;
 
 /** 식단 기록 카드 — 끼니·사진·음식 항목·칼로리·메모 요약 */
-export function MealCard({ meal, onPress, onLongPress, showDate }: Props) {
+export function MealCard({ meal, onPress, onLongPress, showDate, deleting }: Props) {
   const items = meal.items ?? [];
   return (
     <TouchableOpacity
       activeOpacity={onPress || onLongPress ? 0.7 : 1}
-      onPress={onPress ? () => onPress(meal) : undefined}
-      onLongPress={onLongPress ? () => onLongPress(meal) : undefined}
+      onPress={onPress && !deleting ? () => onPress(meal) : undefined}
+      onLongPress={onLongPress && !deleting ? () => onLongPress(meal) : undefined}
+      disabled={deleting}
       accessibilityRole={onPress ? 'button' : undefined}
       accessibilityLabel={onPress ? `${meal.mealTypeLabel} 기록 수정` : undefined}
-      style={styles.card}
+      style={[styles.card, deleting && styles.cardDeleting]}
     >
       <View style={styles.header}>
         <View style={styles.typeWrap}>
@@ -98,6 +101,8 @@ const styles = themedStyles((colors) => ({
     borderColor: colors.border,
     marginBottom: spacing.md,
   },
+  // 삭제 in-flight 표시 — 흐리게만 하고 레이아웃은 그대로 둔다 (QA_CHECKLIST.md 패턴 7)
+  cardDeleting: { opacity: 0.5 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   typeWrap: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },

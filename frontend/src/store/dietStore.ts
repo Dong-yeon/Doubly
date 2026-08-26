@@ -11,6 +11,12 @@ interface DietState {
   loading: boolean;
   loadingMore: boolean;
   hasMore: boolean;
+  /**
+   * 오늘/히스토리 조회 실패 플래그 — 실패해도 기존 목록은 비우지 않고, "진짜 빈 목록"과
+   * 구분해 화면이 재시도 UI를 보여줄 수 있게 한다 (QA_CHECKLIST.md 패턴 1).
+   */
+  todayError: boolean;
+  historyError: boolean;
   fetchToday: () => Promise<void>;
   fetchHistory: () => Promise<void>;
   loadMoreHistory: () => Promise<void>;
@@ -25,17 +31,28 @@ export const useDietStore = create<DietState>((set, get) => ({
   loading: false,
   loadingMore: false,
   hasMore: true,
+  todayError: false,
+  historyError: false,
 
   fetchToday: async () => {
-    const today = await dietApi.today();
-    set({ today });
+    set({ todayError: false });
+    try {
+      const today = await dietApi.today();
+      set({ today });
+    } catch (e) {
+      // 화면에서 개별 안내가 필요하면 todayError 를 읽어 처리한다 — 여기서 다시 던지면
+      // catch 없는 호출부(useFocusEffect 등)에서 unhandled rejection 이 된다 (패턴 1).
+      set({ todayError: true });
+    }
   },
 
   fetchHistory: async () => {
-    set({ loading: true });
+    set({ loading: true, historyError: false });
     try {
       const history = await dietApi.history();
       set({ history, hasMore: history.length === PAGE_SIZE });
+    } catch (e) {
+      set({ historyError: true });
     } finally {
       set({ loading: false });
     }

@@ -2,7 +2,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   FlatList,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -23,6 +25,7 @@ import { AiInsightButton } from '../../components/AiInsightButton';
 import { ProteinRing } from '../../components/ProteinRing';
 import { useDietStore } from '../../store/dietStore';
 import { useRelationStore } from '../../store/relationStore';
+import { useDeleteAction } from '../../hooks/useDeleteAction';
 import { dietApi } from '../../api/diet';
 import { waterApi } from '../../api/water';
 import { fastingApi } from '../../api/fasting';
@@ -107,9 +110,20 @@ function renderLetter(l: WeeklyLetter) {
 type Props = NativeStackScreenProps<DietStackParamList, 'DietMain'>;
 
 export function DietScreen({ navigation }: Props) {
-  const { today, history, loading, loadingMore, fetchToday, fetchHistory, loadMoreHistory, remove } =
-    useDietStore();
+  const {
+    today,
+    history,
+    loading,
+    loadingMore,
+    historyError,
+    fetchToday,
+    fetchHistory,
+    loadMoreHistory,
+    remove,
+  } = useDietStore();
   const setDietGoal = useRelationStore((s) => s.setDietGoal);
+  // 삭제 in-flight 가드 — 연타로 인한 중복 DELETE 방지 + 해당 카드만 흐리게 (QA_CHECKLIST.md 패턴 7)
+  const { deletingId, runDelete } = useDeleteAction<number>();
   const [myStreak, setMyStreak] = useState<Streak | null>(null);
   const [coupleStreak, setCoupleStreak] = useState<Streak | null>(null);
   const [goal, setGoal] = useState<CoupleMealGoal | null>(null);
@@ -321,13 +335,8 @@ export function DietScreen({ navigation }: Props) {
       {
         text: '삭제',
         style: 'destructive',
-        onPress: async () => {
-          try {
-            await remove(m.id);
-          } catch (e) {
-            Alert.alert('오류', getErrorMessage(e));
-          }
-        },
+        // useDeleteAction 이 in-flight 가드 + 기본 에러 토스트를 처리한다 (QA_CHECKLIST.md 패턴 7)
+        onPress: () => runDelete(m.id, () => remove(m.id), '식단 기록을 삭제하지 못했어요.'),
       },
     ]);
   };
@@ -607,7 +616,13 @@ export function DietScreen({ navigation }: Props) {
                 </View>
                 {today.length > 0 ? (
                   today.map((m) => (
-                    <MealCard key={m.id} meal={m} onPress={onEdit} onLongPress={onLongPress} />
+                    <MealCard
+                      key={m.id}
+                      meal={m}
+                      onPress={onEdit}
+                      onLongPress={onLongPress}
+                      deleting={deletingId === m.id}
+                    />
                   ))
                 ) : (
                   <View style={styles.emptyToday}>
@@ -620,11 +635,31 @@ export function DietScreen({ navigation }: Props) {
           </View>
         }
         renderItem={({ item }) => (
-          <MealCard meal={item} onPress={onEdit} onLongPress={onLongPress} showDate />
+          <MealCard
+            meal={item}
+            onPress={onEdit}
+            onLongPress={onLongPress}
+            showDate
+            deleting={deletingId === item.id}
+          />
         )}
         ListEmptyComponent={
           !loading ? (
-            <EmptyState icon="silverware-fork-knife" title="아직 식단 기록이 없어요" description="아래 버튼으로 첫 식단을 기록해보세요!" />
+            // 로드 실패를 "진짜 빈 목록"과 구분해 재시도를 준다 (QA_CHECKLIST.md 패턴 1)
+            historyError ? (
+              <EmptyState
+                icon="cloud-off-outline"
+                title="식단 기록을 불러오지 못했어요"
+                description="네트워크 상태를 확인하고 다시 시도해주세요."
+                error
+                onRetry={() => {
+                  fetchToday();
+                  fetchHistory();
+                }}
+              />
+            ) : (
+              <EmptyState icon="silverware-fork-knife" title="아직 식단 기록이 없어요" description="아래 버튼으로 첫 식단을 기록해보세요!" />
+            )
           ) : null
         }
         ListFooterComponent={loadingMore ? <Text style={styles.footer}>불러오는 중…</Text> : null}
@@ -657,9 +692,11 @@ export function DietScreen({ navigation }: Props) {
         </Pressable>
       </Modal>
 
-      {/* 영양 목표 설정 모달 */}
+      {/* 영양 목표 설정 모달 — 입력 4개 + 저장 버튼이 키보드에 가리지 않게 감싼다
+          (QA_CHECKLIST.md 패턴 4, CoupleCalendarScreen.tsx 모달과 같은 래핑) */}
       <Modal visible={nutModal} transparent animationType="fade" onRequestClose={closeNutModal}>
         <Pressable style={styles.modalBackdrop} onPress={closeNutModal}>
+          <KeyboardAvoidingView style={styles.modalAvoid} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <Pressable style={styles.modalCard} onPress={() => {}}>
             <View style={styles.nutModalHeader}>
               <Text style={styles.modalTitle}>하루 영양 목표</Text>
@@ -706,6 +743,7 @@ export function DietScreen({ navigation }: Props) {
             </View>
             <Button title="저장" onPress={onSaveNutGoal} loading={savingNut} style={styles.nutSaveBtn} />
           </Pressable>
+          </KeyboardAvoidingView>
         </Pressable>
       </Modal>
 
@@ -997,7 +1035,10 @@ const styles = themedStyles((colors) => ({
   emptyText: { color: colors.textSecondary, fontSize: fontSize.body },
   footer: { textAlign: 'center', color: colors.textSecondary, paddingVertical: spacing.md },
   fabWrap: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: spacing.lg },
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: spacing.lg },
+  // colors.backdrop — 하드코딩 rgba 리터럴이 다크모드에서 대비가 안 맞던 문제 (QA_CHECKLIST.md 패턴 8)
+  modalBackdrop: { flex: 1, backgroundColor: colors.backdrop, justifyContent: 'center', padding: spacing.lg },
+  // 키보드 회피 래퍼 — 배경 전체를 덮되(flex:1) 카드는 세로 중앙에 둔다 (패턴 4)
+  modalAvoid: { flex: 1, justifyContent: 'center' },
   modalCard: { backgroundColor: colors.surface, borderRadius: radius.xl, padding: spacing.lg, gap: spacing.md },
   modalTitle: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
   modalDesc: { fontSize: fontSize.body, color: colors.textSecondary },
