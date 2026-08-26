@@ -83,7 +83,12 @@ export function WorkoutCalendarScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => changeMonth(-1)} hitSlop={12}>
+        <TouchableOpacity
+          onPress={() => changeMonth(-1)}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="이전 달"
+        >
           <Text style={styles.nav}>‹</Text>
         </TouchableOpacity>
         {/* 제목을 누르면 이번 달로 — 반년 전을 보다 돌아오려면 ‹ 를 여섯 번 눌러야 했다 */}
@@ -97,7 +102,12 @@ export function WorkoutCalendarScreen({ navigation }: Props) {
             {year}년 {month}월
           </Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => changeMonth(1)} hitSlop={12}>
+        <TouchableOpacity
+          onPress={() => changeMonth(1)}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="다음 달"
+        >
           <Text style={styles.nav}>›</Text>
         </TouchableOpacity>
       </View>

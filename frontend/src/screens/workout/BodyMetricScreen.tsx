@@ -291,7 +291,13 @@ export function BodyMetricScreen(_: Props) {
                     />
                   </View>
                 </View>
-                <TouchableOpacity style={[styles.photoBox, photoUri ? styles.photoBoxFilled : styles.photoBoxEmpty]} onPress={onPickPhoto} activeOpacity={0.8}>
+                <TouchableOpacity
+                  style={[styles.photoBox, photoUri ? styles.photoBoxFilled : styles.photoBoxEmpty]}
+                  onPress={onPickPhoto}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel="진행 사진 선택"
+                >
                   {photoUri ? (
                     <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />
                   ) : (

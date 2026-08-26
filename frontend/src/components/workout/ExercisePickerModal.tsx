@@ -131,6 +131,7 @@ export function ExercisePickerModal({ visible, catalog, onClose, excludeName, on
                         key={item.id}
                         style={[styles.item, selected && styles.itemSelected]}
                         onPress={() => pressItem(item)}
+                        accessibilityState={{ selected }}
                       >
                         <Text style={styles.itemEmoji}>{item.emoji ?? '🏋️'}</Text>
                         <View style={styles.flex}>

@@ -954,6 +954,8 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
             disabled={isActive || !drag}
             hitSlop={8}
             style={styles.dragHandle}
+            accessibilityRole="button"
+            accessibilityLabel="길게 눌러 순서 바꾸기"
           >
             <Text style={styles.dragHandleText}>⠿</Text>
           </Pressable>
@@ -964,10 +966,20 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
               emoji/TIP 과 달리 커스텀 종목도(루틴에 부위가 저장돼 있으면) 뜬다 */}
           {e.muscleGroup ? <MuscleBodyBadge muscleGroup={e.muscleGroup} size={18} /> : null}
           <View style={styles.exHeaderActions}>
-            <TouchableOpacity onPress={() => openSubstitute(e)} hitSlop={8}>
+            <TouchableOpacity
+              onPress={() => openSubstitute(e)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="대체 종목으로 바꾸기"
+            >
               <Text style={styles.exSwap}>⇄</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => removeExercise(e.key)} hitSlop={8}>
+            <TouchableOpacity
+              onPress={() => removeExercise(e.key)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="운동 삭제"
+            >
               <Text style={styles.exRemove}>✕</Text>
             </TouchableOpacity>
           </View>
@@ -1074,6 +1086,9 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
               <TouchableOpacity
                 style={[styles.setCheck, s.done && styles.setCheckDone]}
                 onPress={() => toggleSet(e.key, i)}
+                accessibilityRole="button"
+                accessibilityLabel="세트 완료 체크"
+                accessibilityState={{ selected: s.done }}
               >
                 <Text style={[styles.setCheckText, s.done && styles.setCheckTextDone]}>
                   {s.done ? '✓' : ''}
@@ -1156,6 +1171,7 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
               key={r}
               style={[styles.restChip, restSeconds === r && styles.restChipActive]}
               onPress={() => setRestSeconds(r)}
+              accessibilityState={{ selected: restSeconds === r }}
             >
               <Text style={[styles.restChipText, restSeconds === r && styles.restChipTextActive]}>{r}s</Text>
             </TouchableOpacity>
@@ -1249,6 +1265,7 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
                     key={c}
                     style={[styles.catChip, fCategory === c && styles.catChipActive]}
                     onPress={() => setFCategory(c)}
+                    accessibilityState={{ selected: fCategory === c }}
                   >
                     <Text style={[styles.catText, fCategory === c && styles.catTextActive]}>{c}</Text>
                   </TouchableOpacity>
