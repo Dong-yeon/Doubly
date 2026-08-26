@@ -59,15 +59,19 @@
 
 ### P1 — 실패가 사용자에게 안 보임
 
-| # | 위치 | 내용 |
-| --- | --- | --- |
-| 6 | 리스트형 화면 다수 | 로드 실패 시 데이터를 초기값(`[]`/`null`)으로 두고 toast 만 띄운다 → **"네트워크 오류"와 "진짜 빈 목록"이 화면상 구분 불가**. `TripList`·`TripExpense`·`TripChecklist`·`TripAlbum`·`PlaceMap`·`PlaceDetail`·`TrainerDashboard`·`ChatScreen` 공통 |
-| 7 | `WorkoutStatsScreen.tsx:22-28`, `DietStatsScreen.tsx:16-24` | 통계 조회 실패 시 `stats=null` → `?? 0` 폴백으로 **"0일"이 표시되어 API 실패와 진짜 0을 구분할 수 없다**. `DietStats` 는 EmptyState 조건이 `stats &&` 라 에러일 땐 그것마저 안 뜬다 |
-| 8 | `WorkoutCalendarScreen.tsx:16-29`, `DietCalendarScreen.tsx:16-29` | 캘린더 조회 실패를 조용히 빈 Set 으로 흡수 → 사용자는 "이번 달 운동 안 했나?"로 오해 |
-| 9 | `TripRecapScreen.tsx:55-61` | 로드 실패 시 `loading=false`+`recap=null` 이 되어 **완전히 빈 화면**이 되고, `ScrollView` 라 당겨서 새로고침도 없어 **재시도 수단이 아예 없다** |
-| 10 | `HomeScreen.tsx:88` | `refresh()` 안의 `fetchAll()` 에 `.catch()` 가 없고 `relationStore.fetchAll` 도 catch 없음 → unhandled rejection, 화면엔 아무 알림 없음 |
-| 11 | `CoupleConnectScreen.tsx:40,47` | 복사·공유가 try/catch 없이 실행되어 **실패해도 아무 피드백이 없다** |
-| 12 | `OnboardingScreen.tsx:70` | `finish()` 가 try/catch 없이 fire-and-forget → `storage.setItem` 실패 시 `navigation.replace` 가 실행되지 않아 **온보딩 화면에 갇힐 수 있다** |
+> **2026-08-26 재확인 — 12건 전부 해소.** `ef3526f`(2026-08-11)에서 6~12 중 7개 화면을 한 번에
+> 고쳤는데, P1-6 이 지목한 8개 화면 중 `TrainerDashboard` 만 빠져 있었다(`2a76698`, 2026-08-26).
+> 나머지는 전부 코드로 재검증 완료.
+
+| # | 위치 | 내용 | 해결 |
+| --- | --- | --- | --- |
+| 6 | 리스트형 화면 다수 | 로드 실패 시 데이터를 초기값(`[]`/`null`)으로 두고 toast 만 띄운다 → **"네트워크 오류"와 "진짜 빈 목록"이 화면상 구분 불가**. `TripList`·`TripExpense`·`TripChecklist`·`TripAlbum`·`PlaceMap`·`PlaceDetail`·`TrainerDashboard`·`ChatScreen` 공통 | ✅ `ef3526f`(7개) + `2a76698`(`TrainerDashboard`, 2026-08-26 누락분). `PlaceMap` 은 이후 `PlaceScreen` 으로 통합됐지만(`7ae791f`) `loadError` 처리는 그대로 이관됨 |
+| 7 | `WorkoutStatsScreen.tsx:22-28`, `DietStatsScreen.tsx:16-24` | 통계 조회 실패 시 `stats=null` → `?? 0` 폴백으로 **"0일"이 표시되어 API 실패와 진짜 0을 구분할 수 없다**. `DietStats` 는 EmptyState 조건이 `stats &&` 라 에러일 땐 그것마저 안 뜬다 | ✅ `ef3526f`. `error` 상태 분리 + 실패 시 전체를 재시도 EmptyState 로 교체 |
+| 8 | `WorkoutCalendarScreen.tsx:16-29`, `DietCalendarScreen.tsx:16-29` | 캘린더 조회 실패를 조용히 빈 Set 으로 흡수 → 사용자는 "이번 달 운동 안 했나?"로 오해 | ✅ `ef3526f`. `loadError` + 탭하면 재시도되는 오류 배너 |
+| 9 | `TripRecapScreen.tsx:55-61` | 로드 실패 시 `loading=false`+`recap=null` 이 되어 **완전히 빈 화면**이 되고, `ScrollView` 라 당겨서 새로고침도 없어 **재시도 수단이 아예 없다** | ✅ `ef3526f`. `loadError` + 재시도 EmptyState |
+| 10 | `HomeScreen.tsx:88` | `refresh()` 안의 `fetchAll()` 에 `.catch()` 가 없고 `relationStore.fetchAll` 도 catch 없음 → unhandled rejection, 화면엔 아무 알림 없음 | ✅ `ef3526f`. `fetchAll().catch(noteOffline)` 로 처리 |
+| 11 | `CoupleConnectScreen.tsx:40,47` | 복사·공유가 try/catch 없이 실행되어 **실패해도 아무 피드백이 없다** | ✅ `ef3526f`. 복사·공유 모두 try/catch + 에러 토스트 |
+| 12 | `OnboardingScreen.tsx:70` | `finish()` 가 try/catch 없이 fire-and-forget → `storage.setItem` 실패 시 `navigation.replace` 가 실행되지 않아 **온보딩 화면에 갇힐 수 있다** | ✅ `ef3526f`. 저장 실패해도 화면 전환은 계속 진행 |
 
 ### P2 — 오동작·혼란
 
