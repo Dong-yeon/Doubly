@@ -6,6 +6,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
+import { EmptyState } from '../../components/EmptyState';
 import { TextField } from '../../components/TextField';
 import { questionApi } from '../../api/question';
 import { getErrorMessage } from '../../utils/error';
@@ -24,11 +25,14 @@ export function DailyQuestionScreen(_: Props) {
   const [today, setToday] = useState<DailyQuestion | null>(null);
   const [history, setHistory] = useState<QuestionHistory[]>([]);
   const [loading, setLoading] = useState(false);
+  // 로드 실패가 "질문이 없는 빈 상태"로 위장하지 않도록 별도로 추적한다 (QA_CHECKLIST.md 패턴 1)
+  const [loadError, setLoadError] = useState(false);
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       const [t, h] = await Promise.all([questionApi.today(), questionApi.history()]);
       setToday(t);
@@ -36,6 +40,7 @@ export function DailyQuestionScreen(_: Props) {
       if (t.myAnswer) setDraft(t.myAnswer);
     } catch (e) {
       toast.error(getErrorMessage(e, '질문을 불러오지 못했어요.'));
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -129,6 +134,27 @@ export function DailyQuestionScreen(_: Props) {
               <Text style={styles.histAnswer}>상대: {item.partnerAnswer}</Text>
             </View>
           )}
+          // today 도 history 도 비면 헤더까지 완전히 텅 빈 화면이 되던 문제 (QA_CHECKLIST.md 패턴 10).
+          // today 가 있으면(답변 전이라도) renderToday() 가 이미 카드를 그리므로, 여기서는
+          // today 가 없을 때만 보여준다 — FlatList 는 history 가 비어야만 이 컴포넌트를 그린다
+          ListEmptyComponent={
+            !loading && !today ? (
+              loadError ? (
+                <EmptyState
+                  error
+                  onRetry={load}
+                  title="불러오지 못했어요"
+                  description="네트워크 상태를 확인하고 다시 시도해주세요."
+                />
+              ) : (
+                <EmptyState
+                  icon="comment-question-outline"
+                  title="오늘의 질문이 아직 없어요"
+                  description="곧 새로운 질문이 준비될 거예요."
+                />
+              )
+            ) : null
+          }
         />
       </KeyboardAvoidingView>
     </SafeAreaView>

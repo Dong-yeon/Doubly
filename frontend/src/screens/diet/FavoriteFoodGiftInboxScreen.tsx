@@ -35,10 +35,13 @@ export function FavoriteFoodGiftInboxScreen(_: Props) {
   const [received, setReceived] = useState<FavoriteFoodGift[]>([]);
   const [sent, setSent] = useState<FavoriteFoodGift[]>([]);
   const [loading, setLoading] = useState(false);
+  // 로드 실패와 "진짜 빈 선물함"을 구분한다 (QA_CHECKLIST.md 패턴 1)
+  const [loadError, setLoadError] = useState(false);
   const [respondingId, setRespondingId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       const [receivedGifts, sentGifts] = await Promise.all([
         dietApi.receivedFavoriteFoodGifts(),
@@ -48,6 +51,7 @@ export function FavoriteFoodGiftInboxScreen(_: Props) {
       setSent(sentGifts);
     } catch (e) {
       toast.error(getErrorMessage(e, '선물함을 불러오지 못했어요.'));
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -165,15 +169,24 @@ export function FavoriteFoodGiftInboxScreen(_: Props) {
         }}
         ListEmptyComponent={
           !loading ? (
-            <EmptyState
-              icon="gift-outline"
-              title={tab === 'received' ? '받은 선물이 없어요' : '보낸 선물이 없어요'}
-              description={
-                tab === 'received'
-                  ? '애인이 즐겨찾기를 공유하면 여기에 나타나요.'
-                  : '식단 기록 화면의 즐겨찾기에서 애인에게 공유해보세요.'
-              }
-            />
+            loadError ? (
+              <EmptyState
+                error
+                onRetry={load}
+                title="선물함을 불러오지 못했어요"
+                description="네트워크 상태를 확인하고 다시 시도해주세요."
+              />
+            ) : (
+              <EmptyState
+                icon="gift-outline"
+                title={tab === 'received' ? '받은 선물이 없어요' : '보낸 선물이 없어요'}
+                description={
+                  tab === 'received'
+                    ? '애인이 즐겨찾기를 공유하면 여기에 나타나요.'
+                    : '식단 기록 화면의 즐겨찾기에서 애인에게 공유해보세요.'
+                }
+              />
+            )
           ) : null
         }
       />

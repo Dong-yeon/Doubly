@@ -48,14 +48,18 @@ export function MemoriesScreen({ route }: Props) {
   const [loading, setLoading] = useState(false);
   // 첫 진입에 빈 상태를 먼저 그리지 않도록 — 로드가 끝난 적이 있는지
   const [loaded, setLoaded] = useState(false);
+  // 로드 실패와 "진짜 빈 추억"을 구분한다 (QA_CHECKLIST.md 패턴 1)
+  const [loadError, setLoadError] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       const res = await feedApi.memories(on);
       setSections(toSections(res.groups));
     } catch (e) {
       toast.error(getErrorMessage(e, '추억을 불러오지 못했어요.'));
+      setLoadError(true);
     } finally {
       setLoading(false);
       setLoaded(true);
@@ -107,11 +111,20 @@ export function MemoriesScreen({ route }: Props) {
         )}
         ListEmptyComponent={
           loaded && !loading ? (
-            <EmptyState
-              icon="flower-outline"
-              title="아직 이 날의 추억이 없어요"
-              description={'오늘을 남기면\n내년 오늘 찾아올 거예요.'}
-            />
+            loadError ? (
+              <EmptyState
+                error
+                onRetry={load}
+                title="추억을 불러오지 못했어요"
+                description="네트워크 상태를 확인하고 다시 시도해주세요."
+              />
+            ) : (
+              <EmptyState
+                icon="flower-outline"
+                title="아직 이 날의 추억이 없어요"
+                description={'오늘을 남기면\n내년 오늘 찾아올 거예요.'}
+              />
+            )
           ) : null
         }
         ListFooterComponent={<View style={styles.tail} />}

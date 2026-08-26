@@ -20,14 +20,18 @@ type Props = NativeStackScreenProps<WorkoutStackParamList, 'WorkoutRoutineTempla
 export function WorkoutRoutineTemplatesScreen({ navigation }: Props) {
   const [templates, setTemplates] = useState<WorkoutRoutine[]>([]);
   const [loading, setLoading] = useState(false);
+  // 로드 실패와 "진짜 빈 템플릿 목록"을 구분한다 (QA_CHECKLIST.md 패턴 1)
+  const [loadError, setLoadError] = useState(false);
   const [copyingId, setCopyingId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       setTemplates(await workoutApi.routineTemplates());
     } catch (e) {
       toast.error(getErrorMessage(e, '템플릿을 불러오지 못했어요.'));
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -83,11 +87,20 @@ export function WorkoutRoutineTemplatesScreen({ navigation }: Props) {
         )}
         ListEmptyComponent={
           !loading ? (
-            <EmptyState
-              icon="clipboard-text-outline"
-              title="템플릿을 불러오지 못했어요"
-              description="잠시 후 다시 시도해주세요."
-            />
+            loadError ? (
+              <EmptyState
+                error
+                onRetry={load}
+                title="템플릿을 불러오지 못했어요"
+                description="네트워크 상태를 확인하고 다시 시도해주세요."
+              />
+            ) : (
+              <EmptyState
+                icon="clipboard-text-outline"
+                title="아직 템플릿이 없어요"
+                description="곧 새로운 분할 템플릿이 추가될 거예요."
+              />
+            )
           ) : null
         }
       />
