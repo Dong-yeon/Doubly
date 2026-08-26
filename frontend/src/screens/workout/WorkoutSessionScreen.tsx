@@ -1229,10 +1229,20 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
           <View style={styles.timerOverlay}>
             <Text style={styles.timerText}>휴식 {mmss(rest)}</Text>
             <View style={styles.timerBtns}>
-              <TouchableOpacity style={styles.timerBtn} onPress={() => setRest((r) => Math.max(0, r - 15))}>
+              <TouchableOpacity
+                style={styles.timerBtn}
+                onPress={() => setRest((r) => Math.max(0, r - 15))}
+                accessibilityRole="button"
+                accessibilityLabel="휴식 15초 줄이기"
+              >
                 <Text style={styles.timerBtnText}>-15</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.timerBtn} onPress={() => setRest((r) => r + 15)}>
+              <TouchableOpacity
+                style={styles.timerBtn}
+                onPress={() => setRest((r) => r + 15)}
+                accessibilityRole="button"
+                accessibilityLabel="휴식 15초 늘리기"
+              >
                 <Text style={styles.timerBtnText}>+15</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.timerBtn, styles.timerSkip]} onPress={() => setRest(0)}>
