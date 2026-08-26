@@ -141,6 +141,7 @@ export function EmojiPicker({ visible, onClose, onSelect, title = '이모지 선
                   key={c.key}
                   style={[styles.tab, tab === c.key && styles.tabActive]}
                   onPress={() => setTab(c.key)}
+                  accessibilityState={{ selected: tab === c.key }}
                 >
                   <Text style={[styles.tabText, tab === c.key && styles.tabTextActive]}>
                     {c.label}
