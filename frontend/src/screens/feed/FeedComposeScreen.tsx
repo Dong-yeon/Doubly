@@ -64,7 +64,13 @@ export function FeedComposeScreen({ navigation }: Props) {
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       {/* 키보드가 "남기기" 버튼을 가리지 않도록 회피 (스크롤하면 키보드가 내려간다) */}
       <FormKeyboardView contentContainerStyle={styles.container}>
-          <TouchableOpacity style={[styles.photoBox, photoUri ? styles.photoBoxFilled : styles.photoBoxEmpty]} onPress={onPickPhoto} activeOpacity={0.8}>
+          <TouchableOpacity
+            style={[styles.photoBox, photoUri ? styles.photoBoxFilled : styles.photoBoxEmpty]}
+            onPress={onPickPhoto}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel={photoUri ? '사진 변경' : '사진 추가하기'}
+          >
             {photoUri ? (
               <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />
             ) : (

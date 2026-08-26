@@ -341,11 +341,23 @@ export function CoupleCalendarScreen({ navigation }: Props) {
       <ScrollView contentContainerStyle={styles.scroll}>
         {/* 월 이동 헤더 */}
         <View style={styles.monthBar}>
-          <Pressable style={styles.monthBtn} onPress={() => moveMonth(-1)} hitSlop={8}>
+          <Pressable
+            style={styles.monthBtn}
+            onPress={() => moveMonth(-1)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="이전 달"
+          >
             <Text style={styles.monthBtnText}>‹</Text>
           </Pressable>
           <Text style={styles.monthTitle}>{year}년 {month}월</Text>
-          <Pressable style={styles.monthBtn} onPress={() => moveMonth(1)} hitSlop={8}>
+          <Pressable
+            style={styles.monthBtn}
+            onPress={() => moveMonth(1)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="다음 달"
+          >
             <Text style={styles.monthBtnText}>›</Text>
           </Pressable>
         </View>
@@ -378,6 +390,7 @@ export function CoupleCalendarScreen({ navigation }: Props) {
                   key={dateStr}
                   style={[styles.cell, isSelected && styles.cellSelected]}
                   onPress={() => setSelectedDate(isSelected ? null : dateStr)}
+                  accessibilityState={{ selected: isSelected }}
                 >
                   <View style={[styles.dayWrap, isToday && styles.todayWrap]}>
                     <Text style={[styles.dayText, isToday && styles.todayText]}>{day}</Text>
@@ -597,6 +610,7 @@ export function CoupleCalendarScreen({ navigation }: Props) {
                             active && { borderColor: typeMeta(t).color, backgroundColor: colors.surfaceAlt },
                           ]}
                           onPress={() => setForm((f) => (f ? { ...f, eventType: t } : f))}
+                          accessibilityState={{ selected: active }}
                         >
                           <View style={[styles.dot, { backgroundColor: typeMeta(t).color }]} />
                           <Text style={[styles.typeChipText, active && { color: colors.textPrimary, fontWeight: '700' }]}>

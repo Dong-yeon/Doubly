@@ -307,7 +307,12 @@ export function ContentDetailScreen({ route, navigation }: Props) {
                   <Text style={styles.label}>별점</Text>
                   <View style={styles.starRow}>
                     {[1, 2, 3, 4, 5].map((n) => (
-                      <TouchableOpacity key={n} onPress={() => setRating(rating === n ? 0 : n)}>
+                      <TouchableOpacity
+                        key={n}
+                        onPress={() => setRating(rating === n ? 0 : n)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`평점 ${n}점`}
+                      >
                         <Text style={styles.star}>{n <= rating ? '★' : '☆'}</Text>
                       </TouchableOpacity>
                     ))}
@@ -317,6 +322,8 @@ export function ContentDetailScreen({ route, navigation }: Props) {
                     style={[styles.photoBox, photoUri ? styles.photoBoxFilled : styles.photoBoxEmpty]}
                     onPress={onPickPhoto}
                     activeOpacity={0.8}
+                    accessibilityRole="button"
+                    accessibilityLabel={photoUri ? '사진 변경' : '사진 추가하기'}
                   >
                     {photoUri ? (
                       <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />
