@@ -20,6 +20,7 @@ import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { Challenge, ChallengeType } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { layout } from '../../theme/layout';
+import { useDeleteAction } from '../../hooks/useDeleteAction';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'Challenge'>;
 
@@ -52,6 +53,10 @@ function resultLabel(c: Challenge): string {
 export function ChallengeScreen(_: Props) {
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [loading, setLoading] = useState(false);
+  // 로드 실패를 "대결이 없어요"로 위장하지 않는다 (QA_CHECKLIST.md 전역 반복 패턴 1)
+  const [loadError, setLoadError] = useState(false);
+  // 삭제 in-flight 가드 — 공용 훅으로 중복 DELETE 방지 + 해당 카드 흐리게 (QA_CHECKLIST.md 전역 반복 패턴 7)
+  const { deletingId, runDelete } = useDeleteAction<number>();
 
   const [addOpen, setAddOpen] = useState(false);
   const [type, setType] = useState<ChallengeType>('WORKOUT');
@@ -74,10 +79,12 @@ export function ChallengeScreen(_: Props) {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       setChallenges(await challengeApi.list());
     } catch (e) {
       toast.error(getErrorMessage(e, '대결을 불러오지 못했어요.'));
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -125,15 +132,12 @@ export function ChallengeScreen(_: Props) {
       {
         text: '삭제',
         style: 'destructive',
-        onPress: async () => {
-          try {
+        onPress: () =>
+          runDelete(c.id, async () => {
             await challengeApi.remove(c.id);
             haptics.light();
             load();
-          } catch (e) {
-            toast.error(getErrorMessage(e));
-          }
-        },
+          }),
       },
     ]);
   };
@@ -169,9 +173,11 @@ export function ChallengeScreen(_: Props) {
           return (
             // 탭에 연결된 동작이 없다 — 상세 화면이 따로 없으므로 activeOpacity 를
             // 1로 두어 눌러도 눌린 것처럼 보이지 않게 한다(길게 누르면 삭제는 그대로 동작).
+            // 삭제 중인 카드는 흐리게 + disabled (QA_CHECKLIST.md 전역 반복 패턴 7)
             <TouchableOpacity
-              style={styles.card}
+              style={[styles.card, deletingId === item.id && styles.cardDeleting]}
               activeOpacity={1}
+              disabled={deletingId === item.id}
               onLongPress={() => onDelete(item)}
               accessibilityHint="길게 눌러 삭제"
             >
@@ -202,11 +208,21 @@ export function ChallengeScreen(_: Props) {
         }}
         ListEmptyComponent={
           !loading ? (
-            <EmptyState
-              icon="trophy-outline"
-              title="커플 대결을 시작해보세요"
-              description="이번 주 누가 더 많이 운동/식단을 기록하는지 겨뤄봐요. 벌칙도 걸 수 있어요!"
-            />
+            loadError ? (
+              <EmptyState
+                icon="cloud-off-outline"
+                title="대결을 불러오지 못했어요"
+                description="네트워크 상태를 확인하고 다시 시도해주세요."
+                error
+                onRetry={load}
+              />
+            ) : (
+              <EmptyState
+                icon="trophy-outline"
+                title="커플 대결을 시작해보세요"
+                description="이번 주 누가 더 많이 운동/식단을 기록하는지 겨뤄봐요. 벌칙도 걸 수 있어요!"
+              />
+            )
           ) : null
         }
       />
@@ -282,6 +298,8 @@ const styles = themedStyles((colors) => ({
   tie: { fontSize: fontSize.caption, color: colors.textSecondary, textAlign: 'center', marginTop: spacing.sm, fontWeight: '700' },
   resultText: { fontSize: fontSize.body, color: colors.textPrimary, fontWeight: '800' },
   stake: { fontSize: fontSize.caption, color: colors.togetherText, fontWeight: '700', marginTop: spacing.sm },
+  // 삭제 진행 중인 카드 흐리게 (QA_CHECKLIST.md 전역 반복 패턴 7)
+  cardDeleting: { opacity: 0.4 },
   fabWrap: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: spacing.lg },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: spacing.lg },
   modalCard: { backgroundColor: colors.surface, borderRadius: radius.xl, padding: spacing.lg },

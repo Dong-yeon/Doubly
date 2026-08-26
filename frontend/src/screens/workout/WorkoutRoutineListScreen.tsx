@@ -18,6 +18,7 @@ import { workoutApi } from '../../api/workout';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
+import { useDeleteAction } from '../../hooks/useDeleteAction';
 import { WEEK_DAYS, todayWeekDay } from '../../utils/date';
 import { routineToSessionParams } from '../../utils/routine';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
@@ -37,17 +38,24 @@ export function WorkoutRoutineListScreen({ navigation }: Props) {
   const [routines, setRoutines] = useState<WorkoutRoutine[]>([]);
   const [programs, setPrograms] = useState<WorkoutProgram[]>([]);
   const [loading, setLoading] = useState(false);
+  // 로드 실패를 "아직 루틴이 없어요"로 위장하지 않는다 (QA_CHECKLIST.md 전역 반복 패턴 1)
+  const [loadError, setLoadError] = useState(false);
   const [pendingGiftCount, setPendingGiftCount] = useState(0);
   const [giftingId, setGiftingId] = useState<number | null>(null);
+  // 루틴/프로그램은 별도 id 공간이라 삭제 in-flight 가드도 각각 둔다 (QA_CHECKLIST.md 전역 반복 패턴 7)
+  const { deletingId: deletingRoutineId, runDelete: runDeleteRoutine } = useDeleteAction<number>();
+  const { deletingId: deletingProgramId, runDelete: runDeleteProgram } = useDeleteAction<number>();
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       const [r, p] = await Promise.all([workoutApi.routines(), workoutApi.programs()]);
       setRoutines(r);
       setPrograms(p);
     } catch (e) {
       toast.error(getErrorMessage(e, '루틴을 불러오지 못했어요.'));
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -122,15 +130,12 @@ export function WorkoutRoutineListScreen({ navigation }: Props) {
       {
         text: '삭제',
         style: 'destructive',
-        onPress: async () => {
-          try {
+        onPress: () =>
+          runDeleteRoutine(routine.id, async () => {
             await workoutApi.removeRoutine(routine.id);
             haptics.light();
             setRoutines((prev) => prev.filter((r) => r.id !== routine.id));
-          } catch (e) {
-            toast.error(getErrorMessage(e));
-          }
-        },
+          }),
       },
     ]);
   };
@@ -141,15 +146,12 @@ export function WorkoutRoutineListScreen({ navigation }: Props) {
       {
         text: '삭제',
         style: 'destructive',
-        onPress: async () => {
-          try {
+        onPress: () =>
+          runDeleteProgram(program.id, async () => {
             await workoutApi.removeProgram(program.id);
             haptics.light();
             setPrograms((prev) => prev.filter((p) => p.id !== program.id));
-          } catch (e) {
-            toast.error(getErrorMessage(e));
-          }
-        },
+          }),
       },
     ]);
   };
@@ -166,10 +168,12 @@ export function WorkoutRoutineListScreen({ navigation }: Props) {
           if (item.kind === 'program') {
             const { program } = item;
             const isToday = programIsToday(program);
+            const deleting = deletingProgramId === program.id;
             return (
               <TouchableOpacity
-                style={[styles.card, styles.programCard, isToday && styles.cardToday]}
+                style={[styles.card, styles.programCard, isToday && styles.cardToday, deleting && styles.cardDeleting]}
                 activeOpacity={0.8}
+                disabled={deleting}
                 onPress={() => navigation.navigate('WorkoutProgramDetail', { programId: program.id })}
                 onLongPress={() => onDeleteProgram(program)}
               >
@@ -197,10 +201,12 @@ export function WorkoutRoutineListScreen({ navigation }: Props) {
 
           const routine = item.routine;
           const isToday = routine.scheduledDays.includes(today);
+          const deleting = deletingRoutineId === routine.id;
           return (
             <TouchableOpacity
-              style={[styles.card, isToday && styles.cardToday]}
+              style={[styles.card, isToday && styles.cardToday, deleting && styles.cardDeleting]}
               activeOpacity={0.8}
+              disabled={deleting}
               onPress={() => startSession(routine)}
               onLongPress={() => onDelete(routine)}
             >
@@ -246,11 +252,21 @@ export function WorkoutRoutineListScreen({ navigation }: Props) {
         }}
         ListEmptyComponent={
           !loading ? (
-            <EmptyState
-              icon="clipboard-text-outline"
-              title="아직 루틴이 없어요"
-              description="자주 하는 운동을 루틴으로 만들면 원탭으로 세션을 시작할 수 있어요."
-            />
+            loadError ? (
+              <EmptyState
+                icon="cloud-off-outline"
+                title="루틴을 불러오지 못했어요"
+                description="네트워크 상태를 확인하고 다시 시도해주세요."
+                error
+                onRetry={load}
+              />
+            ) : (
+              <EmptyState
+                icon="clipboard-text-outline"
+                title="아직 루틴이 없어요"
+                description="자주 하는 운동을 루틴으로 만들면 원탭으로 세션을 시작할 수 있어요."
+              />
+            )
           ) : null
         }
         ListFooterComponent={
@@ -295,6 +311,8 @@ const styles = themedStyles((colors) => ({
   },
   // 오늘 요일이 배정된 루틴 — 테두리로만 강조한다(배경을 바꾸면 다크모드에서 항상 도드라져 소음이 된다)
   cardToday: { borderColor: colors.primary, borderWidth: 1.5 },
+  // 삭제 진행 중인 카드 흐리게 (QA_CHECKLIST.md 전역 반복 패턴 7)
+  cardDeleting: { opacity: 0.4 },
   // 프로그램 카드 — 자유 루틴과 구분되도록 은은한 배경을 살짝 얹는다
   programCard: { backgroundColor: colors.accentSoft },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },

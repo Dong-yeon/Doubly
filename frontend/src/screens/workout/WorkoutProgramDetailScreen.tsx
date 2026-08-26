@@ -26,16 +26,21 @@ type Props = NativeStackScreenProps<WorkoutStackParamList, 'WorkoutProgramDetail
 export function WorkoutProgramDetailScreen({ navigation, route }: Props) {
   const { programId } = route.params;
   const [program, setProgram] = useState<WorkoutProgram | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  // 로드 실패(네트워크)와 "진짜 삭제됨"을 구분한다 — WorkoutDetailScreen 과 동일 패턴.
+  // 실패를 "찾을 수 없어요"로 뭉뚱그리면 삭제되지 않은 프로그램인데도 사라졌다고 오인시킨다
+  // (QA_CHECKLIST.md 전역 반복 패턴 1)
+  const [loadError, setLoadError] = useState(false);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    setLoadError(false);
     try {
       setProgram(await workoutApi.programDetail(programId));
     } catch (e) {
       toast.error(getErrorMessage(e, '프로그램을 불러오지 못했어요.'));
+      setLoadError(true);
     } finally {
-      setLoading(false);
+      setLoaded(true);
     }
   }, [programId]);
 
@@ -76,14 +81,24 @@ export function WorkoutProgramDetailScreen({ navigation, route }: Props) {
     ]);
   };
 
-  if (!loading && !program) {
+  if (loaded && !program) {
     return (
       <SafeAreaView style={styles.safe} edges={['bottom']}>
-        <EmptyState
-          icon="calendar-month-outline"
-          title="프로그램을 찾을 수 없어요"
-          description="삭제됐거나 접근할 수 없는 프로그램이에요."
-        />
+        {loadError ? (
+          <EmptyState
+            icon="cloud-off-outline"
+            title="불러오지 못했어요"
+            description="네트워크 상태를 확인하고 다시 시도해주세요."
+            error
+            onRetry={load}
+          />
+        ) : (
+          <EmptyState
+            icon="calendar-month-outline"
+            title="프로그램을 찾을 수 없어요"
+            description="삭제됐거나 접근할 수 없는 프로그램이에요."
+          />
+        )}
       </SafeAreaView>
     );
   }

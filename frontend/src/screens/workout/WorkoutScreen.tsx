@@ -21,6 +21,7 @@ import { streakApi } from '../../api/streak';
 import { workoutApi } from '../../api/workout';
 import { getErrorMessage } from '../../utils/error';
 import { haptics } from '../../utils/haptics';
+import { useDeleteAction } from '../../hooks/useDeleteAction';
 import { todayWeekDay } from '../../utils/date';
 import { routineToSessionParams } from '../../utils/routine';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
@@ -62,8 +63,10 @@ function thisWeekDates(): Date[] {
 }
 
 export function WorkoutScreen({ navigation }: Props) {
-  const { today, history, loading, loadingMore, fetchToday, fetchHistory, loadMoreHistory, remove } =
+  const { today, history, loading, loadingMore, error, fetchToday, fetchHistory, loadMoreHistory, remove } =
     useWorkoutStore();
+  // 삭제 in-flight 가드 — 공용 훅으로 중복 DELETE 방지 + 해당 카드 흐리게 (QA_CHECKLIST.md 전역 반복 패턴 7)
+  const { deletingId, runDelete } = useDeleteAction<number>();
   // 커플 연결 여부 — "함께 N일"은 연결됐을 때만 의미가 있다 (식단 탭과 동일한 기준)
   const couple = useRelationStore((s) => s.couple);
   const connected = !!couple?.partner;
@@ -151,13 +154,7 @@ export function WorkoutScreen({ navigation }: Props) {
       {
         text: '삭제',
         style: 'destructive',
-        onPress: async () => {
-          try {
-            await remove(w.id);
-          } catch (e) {
-            Alert.alert('오류', getErrorMessage(e));
-          }
-        },
+        onPress: () => runDelete(w.id, () => remove(w.id)),
       },
     ]);
   };
@@ -270,12 +267,14 @@ export function WorkoutScreen({ navigation }: Props) {
                 <Text style={styles.sectionTitle}>진행한 운동</Text>
                 {today.length > 0 ? (
                   today.map((w) => (
-                    <WorkoutCard
-                      key={w.id}
-                      workout={w}
-                      onPress={(x) => navigation.navigate('WorkoutDetail', { workoutId: x.id })}
-                      onLongPress={onLongPress}
-                    />
+                    // WorkoutCard 자체엔 dimmed prop 이 없어(패턴 7 대상 밖) View 로 감싸 흐리게 처리
+                    <View key={w.id} style={deletingId === w.id && styles.cardDeleting}>
+                      <WorkoutCard
+                        workout={w}
+                        onPress={(x) => navigation.navigate('WorkoutDetail', { workoutId: x.id })}
+                        onLongPress={onLongPress}
+                      />
+                    </View>
                   ))
                 ) : (
                   <View style={styles.emptyToday}>
@@ -361,15 +360,30 @@ export function WorkoutScreen({ navigation }: Props) {
           </View>
         }
         renderItem={({ item }) => (
-          <WorkoutCard
-            workout={item}
-            onPress={(w) => navigation.navigate('WorkoutDetail', { workoutId: w.id })}
-            onLongPress={onLongPress}
-          />
+          <View style={deletingId === item.id && styles.cardDeleting}>
+            <WorkoutCard
+              workout={item}
+              onPress={(w) => navigation.navigate('WorkoutDetail', { workoutId: w.id })}
+              onLongPress={onLongPress}
+            />
+          </View>
         )}
         ListEmptyComponent={
           !loading ? (
-            <EmptyState icon="dumbbell" title="아직 운동 기록이 없어요" description="아래 버튼으로 첫 운동을 기록해보세요!" />
+            error ? (
+              <EmptyState
+                icon="cloud-off-outline"
+                title="운동 기록을 불러오지 못했어요"
+                description="네트워크 상태를 확인하고 다시 시도해주세요."
+                error
+                onRetry={() => {
+                  fetchToday();
+                  fetchHistory();
+                }}
+              />
+            ) : (
+              <EmptyState icon="dumbbell" title="아직 운동 기록이 없어요" description="아래 버튼으로 첫 운동을 기록해보세요!" />
+            )
           ) : null
         }
         ListFooterComponent={
@@ -517,6 +531,8 @@ const styles = themedStyles((colors) => ({
     marginBottom: spacing.md,
   },
   emptyText: { color: colors.textSecondary, fontSize: fontSize.body },
+  // 삭제 진행 중인 카드 흐리게 (QA_CHECKLIST.md 전역 반복 패턴 7)
+  cardDeleting: { opacity: 0.4 },
   footer: { textAlign: 'center', color: colors.textSecondary, paddingVertical: spacing.md },
   fabWrap: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: spacing.lg },
   fabRow: { flexDirection: 'row', gap: spacing.sm },

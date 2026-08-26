@@ -35,6 +35,7 @@ import type { BodyMetric } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { layout } from '../../theme/layout';
 import { sanitizeDecimalInput } from '../../utils/numericInput';
+import { useDeleteAction } from '../../hooks/useDeleteAction';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'BodyMetric'>;
 
@@ -68,6 +69,8 @@ function WeightChart({ data }: { data: BodyMetric[] }) {
 export function BodyMetricScreen(_: Props) {
   const [metrics, setMetrics] = useState<BodyMetric[]>([]);
   const [loading, setLoading] = useState(false);
+  // 삭제 in-flight 가드 — 공용 훅으로 중복 DELETE 방지 + 해당 행 흐리게 (QA_CHECKLIST.md 전역 반복 패턴 7)
+  const { deletingId, runDelete } = useDeleteAction<number>();
 
   const [addOpen, setAddOpen] = useState(false);
   const [weight, setWeight] = useState('');
@@ -163,15 +166,12 @@ export function BodyMetricScreen(_: Props) {
       {
         text: '삭제',
         style: 'destructive',
-        onPress: async () => {
-          try {
+        onPress: () =>
+          runDelete(m.id, async () => {
             await bodyApi.remove(m.id);
             haptics.light();
             load();
-          } catch (e) {
-            toast.error(getErrorMessage(e));
-          }
-        },
+          }),
       },
     ]);
   };
@@ -213,9 +213,11 @@ export function BodyMetricScreen(_: Props) {
         renderItem={({ item }) => (
           // 탭에 연결된 동작이 없다 — 상세/수정 화면이 따로 없으므로 activeOpacity 를
           // 1로 두어 눌러도 눌린 것처럼 보이지 않게 한다(길게 누르면 삭제는 그대로 동작).
+          // 삭제 중인 행은 흐리게 + disabled (QA_CHECKLIST.md 전역 반복 패턴 7)
           <TouchableOpacity
-            style={styles.card}
+            style={[styles.card, deletingId === item.id && styles.cardDeleting]}
             activeOpacity={1}
+            disabled={deletingId === item.id}
             onLongPress={() => onDelete(item)}
             accessibilityHint="길게 눌러 삭제"
           >
@@ -343,6 +345,8 @@ const styles = themedStyles((colors) => ({
     marginBottom: spacing.sm,
   },
   thumb: { width: 52, height: 52, borderRadius: radius.md },
+  // 삭제 진행 중인 행 흐리게 (QA_CHECKLIST.md 전역 반복 패턴 7)
+  cardDeleting: { opacity: 0.4 },
   cardBody: { flex: 1 },
   cardDate: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
   cardMetrics: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
