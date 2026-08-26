@@ -116,10 +116,29 @@
 
 ### 패턴 1: 로드 실패가 "빈 상태"로 위장 — 최우선
 
-- **범위**: 리스트/상세형 화면 대부분 (P1-6 목록 참고)
-- **증상**: 네트워크 오류인데 "아직 ○○이 없어요"가 뜨고 재시도 버튼도 없다
-- **일괄 수정**: `EmptyState` 에 `error` variant 를 추가하고, 로드 함수가 `error` 상태를 별도로 들도록 통일.
-  `useAsyncList(fetcher)` 훅 하나로 `{data, loading, error, reload}` 를 뽑아 쓰면 화면마다 반복이 사라진다
+> **2026-08-26 해소.** `EmptyState` 에 이미 있던 `error`/`onRetry` variant(P1-6 수정 때 도입)를
+> 표준 레시피로 삼아 P1-6이 지목한 8개 화면 이후로 남아있던 나머지 화면까지 전부 적용했다.
+> 공용 `useAsyncList` 훅은 만들지 않았다 — 화면마다 `load()`의 모양(스토어 함수 호출/여러 API
+> 병렬 조회/커서 페이지네이션 등)이 제각각이라 훅 하나로 뽑기보다 `loadError` state + 분기
+> 렌더 패턴을 화면마다 직접 반복하는 편이 오히려 각 화면의 실제 로드 로직과 어긋나지 않았다.
+> `WorkoutScreen`/`DietScreen`은 근본 원인이 각각 `workoutStore.ts`/`dietStore.ts`의
+> `fetchToday`/`fetchHistory`에 `catch` 자체가 없어 실패가 unhandled rejection이 되던 것이라
+> 스토어 레벨에서 고쳤다.
+>
+> **해소 화면**: `WorkoutScreen`(`a98524c`, 스토어 레벨), `DietScreen`(`1559533`, 스토어 레벨),
+> `TripDetailScreen`(`45429e7`), `WorkoutProgramDetailScreen`(`a98524c`, "찾을 수 없음"과
+> "로드 실패"를 분리 — 전자였는데 네트워크 오류를 삭제됨으로 오인시켰음), `WorkoutRoutineListScreen`·
+> `BodyMetricScreen`(연결 없음, 패턴 7만)·`ChallengeScreen`(`a98524c`), `CoupleCalendarScreen`
+> (기존 월이동 레이스 가드에 맞춰 최신 요청 기준으로만 반영)·`TrainerMemberDetailScreen`·
+> `FeedTimelineScreen`·`PhotoAlbumScreen`(`2f5e308`), `DailyQuestionScreen`·
+> `FavoriteFoodGiftInboxScreen`·`WorkoutRoutineGiftInboxScreen`·`WorkoutRoutineTemplatesScreen`·
+> `MemoriesScreen`(`4821327`). `WorkoutStatsScreen`/`DietStatsScreen`/`WorkoutCalendarScreen`/
+> `DietCalendarScreen`/`TripRecapScreen`/`PlaceScreen`/`HomeScreen`(P1-10 unhandled rejection
+> 부분)은 이미 P1 해소 때 처리돼 있었다.
+>
+> **의도적으로 그대로 둔 것**: `PlaceAddScreen`(로드가 아니라 검색 폼이라 해당 없음),
+> `MyScreen`의 여러 위약 요약 수치(리스트 화면이 아니라 대시보드 위젯이라 이 패턴의
+> 전형적인 형태와 달라 범위에서 제외 — 필요하면 별도로 다룰 것)
 
 ### 패턴 2: 숫자 입력에 `NaN` 검증 없음
 
@@ -143,23 +162,37 @@
 
 ### 패턴 3: 이탈 시 입력 소실 (`beforeRemove` 사용 0건)
 
-- **범위**: 폼·세션 화면 전부. 특히 `WorkoutSessionScreen`, `WorkoutRecordScreen`,
-  `WorkoutRoutineFormScreen`, `TripFormScreen`, `DietRecordScreen`
-- **증상**: 화면 안 버튼으로 나갈 때만 확인하고, **헤더 뒤로가기·스와이프백·하드웨어백은 무방비**
-- **일괄 수정**: `useUnsavedGuard(isDirty)` 훅에서 `navigation.addListener('beforeRemove', ...)` 로
-  한 곳에서 처리. 화면은 `isDirty` 만 넘기면 된다
+> **2026-08-26 해소.** 제안된 `useUnsavedGuard`와 거의 같은 모양의 `frontend/src/hooks/useDirtyGuard.ts`
+> (`usePreventRemove` 기반)가 이미 만들어져 있었다 — `WorkoutSessionScreen`·`WorkoutRecordScreen`·
+> `TripFormScreen`·`DietRecordScreen`은 전부 이미 이 훅으로 처리돼 있었고(재확인 완료),
+> **`WorkoutRoutineFormScreen`만 빠져 있어 이번에 추가**(`f0c828d`). 화면(스크린) 레벨 이탈은
+> `useDirtyGuard`, 화면 안 **모달**의 배드롭/Android 백 이탈은 성격이 달라(내비게이션 전환이
+> 아니라 로컬 상태 토글) 기존에 있던 `confirmDiscard` 유틸로 처리한다 — `TripDetailScreen`·
+> `TripExpenseScreen`의 일정/경비 모달이 아무 확인 없이 닫히던 것도 이번에 이 방식으로
+> 보강했다(`45429e7`, `b9096ee`). `TripChecklistScreen`의 이름 수정 모달은 이미 처리돼 있었음
 
 ### 패턴 4: 키보드 회피 불일치
 
-- **범위**: 입력이 있는 화면 중 **16개**에 `KeyboardAvoidingView` 없음 —
-  `DietScreen`, `PlaceDetailScreen`, `TrainerConnectScreen`, `MyScreen`, `TripDetailScreen`,
-  `TripFormScreen`, `TripExpenseScreen`, `TripChecklistScreen`, `DailyQuestionScreen`,
-  `CoupleConnectScreen`, `CoupleCalendarScreen`, `FeedComposeScreen`, `ChallengeScreen`,
-  `BodyMetricScreen`, `WorkoutRoutineFormScreen`, `WorkoutSessionScreen`
-- **증상**: 하단 입력창·저장 버튼이 키보드에 가림. 특히 **모달 안 폼**이 전부 여기 해당
-- **주의**: 적용된 화면들도 `Platform.OS === 'ios' ? 'padding' : undefined` 라 **안드로이드는 사실상 미대응**.
-  `app.json` 의 `windowSoftInputMode` 에 의존 중
-- **일괄 수정**: `FormScreenLayout` / `FormModal` 공용 컴포넌트로 통일
+> **2026-08-26 재확인 — 16개 중 남은 6개(TripDetailScreen·TripExpenseScreen·TripChecklistScreen·
+> DietScreen 전면 미해결 4곳, WorkoutRoutineFormScreen·WorkoutSessionScreen 핵심 입력부만
+> 부분 미해결 2곳) 전부 해소.** 나머지 10개(`PlaceDetailScreen`, `TrainerConnectScreen`,
+> `MyScreen`(입력 자체가 없어졌음), `TripFormScreen`, `DailyQuestionScreen`, `CoupleConnectScreen`,
+> `CoupleCalendarScreen`, `FeedComposeScreen`, `ChallengeScreen`, `BodyMetricScreen`,
+> `WorkoutRoutineFormScreen`/`WorkoutSessionScreen`의 서브모달 부분)는 이미 처리돼 있었다.
+>
+> 안드로이드 미대응 문제도 이미 해결책이 있었다 — `FormKeyboardView`(ScrollView 기반 폼 전용) /
+> `useAndroidKeyboardHeight`(FlatList를 직접 감싸는 화면 전용, 안드로이드 15+ edge-to-edge에서
+> `KeyboardAvoidingView`의 자동 높이 보정이 안 먹는 걸 실기기로 확인하고 만든 훅 — 실측 키보드
+> 높이만큼 `paddingBottom` 직접 부여) 두 공용 도구가 이미 있어, 제안됐던 `FormScreenLayout`/
+> `FormModal` 신설 대신 이 두 도구로 통일했다. `app.json`의 `windowSoftInputMode`엔 더 이상
+> 단독 의존하지 않음.
+>
+> `TripDetailScreen`/`TripExpenseScreen`/`DietScreen`의 모달들은 `KeyboardAvoidingView`+
+> `ScrollView`로(`45429e7`, `b9096ee`, `1559533`), `TripChecklistScreen`은 이름 수정 모달만
+> (인라인 추가 입력창은 리스트 헤더 안이라 낮은 우선순위로 스킵, `b9096ee`),
+> `WorkoutRoutineFormScreen`은 루틴 이름/저장 버튼 영역(`f0c828d`), `WorkoutSessionScreen`은
+> 세트별 무게/횟수/RPE 입력부(가장 자주 쓰는 핵심 영역이었는데 빠져 있었음, `useAndroidKeyboardHeight`
+> 적용, `f0c828d`)를 해소했다.
 
 ### 패턴 5: 접근성 라벨 4.3%
 
@@ -171,40 +204,62 @@
 
 ### 패턴 6: 모달 저장 버튼에 in-flight 가드 없음
 
-- **범위**: `TripDetailScreen:626`(일정 추가/수정), `TripExpenseScreen:288`(경비),
-  `TripChecklistScreen:107-122`(이름 수정), `WorkoutSessionScreen`·`WorkoutRoutineFormScreen`(운동 추가)
-- **증상**: 화면 본문의 `Button` 은 `loading` 으로 잘 막는데, **모달 안 버튼만 연결이 빠져** 중복 등록 가능
-- **양호 사례**: `TripChecklistScreen:56-59` 의 추가 버튼은 `disabled={!newText.trim() || adding}` 로 제대로 막음
+> **2026-08-26 해소.** `TripDetailScreen` 일정 저장(`savingItem` 신설, `45429e7`), `TripExpenseScreen`
+> 경비 저장(`saving` 신설, `b9096ee`), `TripChecklistScreen` 이름 수정(기존 `adding`은 추가 버튼
+> 전용이라 재사용하지 않고 `renaming` 신설, `b9096ee`)에 각각 `loading` 상태를 연결했다.
+> `WorkoutSessionScreen`의 "+ 운동 추가"는 이미 `adding`/`loading`으로 막혀 있었다.
+> `WorkoutRoutineFormScreen`의 "+ 운동 추가"는 재확인 결과 **애초에 네트워크 호출이 없는
+> 로컬 상태 변경**이라(실제 POST는 뒤의 "루틴 저장" 버튼에서 일어나고 그건 이미 `loading={saving}`)
+> 원 지적이 부정확했음 — 조치 불필요로 판정.
 
 ### 패턴 7: 삭제 흐름에 진행 표시 없음
 
-- **범위**: 롱프레스 → Alert → API 패턴 전부 (`TripList`, `TripDetail`, `TripExpense`,
-  `TripChecklist`, `TripAlbum`, `PlaceMap`, `PlaceDetail`, `WorkoutScreen`, `BodyMetric`,
-  `ChallengeScreen`, `WorkoutRoutineList`, `FeedTimeline`, `DietScreen`)
-- **증상**: 느린 네트워크에서 삭제가 됐는지 알 수 없고, 재차 눌러 중복 DELETE 가능
-- **일괄 수정**: `deletingId` 상태 + 해당 행 흐리게 + `disabled`. 공용 `useDeleteAction` 훅으로
+> **2026-08-26 해소.** 제안된 그대로 공용 `useDeleteAction` 훅(`frontend/src/hooks/useDeleteAction.ts`,
+> `b177b86`)을 신설해 `deletingId` + `runDelete(id, action)`으로 in-flight 가드·행 흐림·실패
+> 토스트를 한 곳에서 처리한다. 원 목록의 13개 화면(`PlaceMap`은 이후 `PlaceScreen`으로 통합)
+> 전부에 적용 완료, 재조사 중 발견된 추가 삭제 흐름(`TripDetailScreen`의 장소 빼기,
+> `WorkoutScreen`/`WorkoutRoutineList`/`PlaceScreen`/`PlaceDetailScreen`의 서로 다른 두 종류
+> 엔티티 삭제 등 총 8곳)도 같이 적용해, 실제로는 원래 범위보다 넓게 해소됐다.
+> `WorkoutCard`/`FeedCard`처럼 카드 컴포넌트 자체가 흐림 표시용 prop이 없는 곳은 감싸는
+> `View`에 조건부 스타일을 얹었고, `MealCard`는 `deleting` prop을 새로 받게 했다(패턴 7만을
+> 위해 컴포넌트를 건드린 유일한 예외). 커밋: `45429e7`(TripDetail) · `b9096ee`(경비/준비물/
+> 목록/앨범) · `a98524c`(운동 메인/프로그램/루틴목록/몸변화/대결) · `1559533`(식단) ·
+> `2f5e308`(피드) · `071263d`(장소, 같은 커밋의 ChatRoomScreen 부분은 패턴 10 전용).
 
 ### 패턴 8: 하드코딩 색상 리터럴
 
-- **범위**: 6개 파일 8건 — `TripDetailScreen:779,796`, `TripExpenseScreen:306,379`,
-  `TripChecklistScreen:305`, `ChatRoomScreen:499`, `WorkoutRecordScreen:274`, `HomeScreen:49`(그라디언트, 의도적)
-- **증상**: **다크모드에서 이 값들만 안 따라가** 대비가 깨진다
-- **일괄 수정**: `'#fff'` 3건은 이미 있는 `colors.white` 로. 나머지는 `colors.warning` 등 토큰 신설
+> **2026-08-26 재확인 — 원 목록 중 실제로 남아있던 2개 파일 해소, 나머지는 이미 정상이었거나
+> 원 지적 자체가 부정확했음.** `TripChecklistScreen`·`ChatRoomScreen`·`WorkoutRecordScreen`은
+> 재확인 결과 리터럴이 없었다(이미 리팩터됐거나 애초에 있던 적이 없었던 것으로 보임 — git
+> 히스토리로도 확인 안 됨). `HomeScreen`의 그라디언트는 원래도 의도적으로 라이트/다크 각각
+> 다른 배열을 쓰고 있어 대상이 아니다. 실제로 남아있던 건 `TripDetailScreen`의 `'#fff'` 2곳
+> (`travelModeKnob`/`tabTextOn`) → `colors.white`로 교체(`45429e7`). 새로 발견된 것으로, 모달
+> `backdrop`의 `rgba(0,0,0,0.4)` 하드코딩이 이미 있던 테마 인지 토큰 `colors.backdrop`을 안 쓰고
+> 앱 전역 10곳에 퍼져 있었다 — `TripDetailScreen`·`TripExpenseScreen`·`DietScreen`은 이번에
+> `colors.backdrop`으로 교체(`45429e7`, `b9096ee`, `1559533`). `colors.warning` 같은 신규
+> 토큰은 필요 없었다(실제로 만난 값은 전부 기존 `colors.white`/`colors.backdrop`으로 대체
+> 가능했음). `BarcodeScanScreen`/`HomeScreen`/`BodyMetricScreen`/`ChallengeScreen`/
+> `WorkoutRoutineFormScreen`/`WorkoutSessionScreen`/`CoupleCalendarScreen`의 나머지 backdrop
+> 하드코딩은 이번 스코프 밖 — 필요하면 후속으로.
 
 ### 패턴 9: 배열 인덱스를 `key` 로 사용
 
-- **범위**: 5개 파일 — `DietCalendarScreen:77`, `DietScreen:61`, `PlaceMapScreen:29`,
-  `WorkoutCalendarScreen:77`, **`WorkoutSessionScreen:221`**
-- **증상**: 앞의 4곳은 정적 배열이라 실질 위험 없음. **`WorkoutSessionScreen` 만 사용자가 추가/삭제하는
-  세트 배열**이라 중간 삭제 시 잘못된 위치로 리마운트될 수 있다 → 여기만 고치면 된다
+> **2026-08-26 해소.** 지적대로 `WorkoutSessionScreen`만 고쳤다(`f0c828d`) — `SessionSet`에
+> optional `key` 필드를 추가하고 세트 생성 지점(`buildSet`/`addSetRow`) 양쪽에서 채운다.
+> 재확인 결과 지금은 세트를 **중간에서 지우는 기능 자체가 없어서**(끝에 추가만 가능) 실제
+> 리마운트 증상은 현재 없지만, 나중에 세트 삭제 기능이 생기면 바로 재발할 수 있어 선제적으로
+> 막아둔 것. 나머지 4곳(정적 배열)은 그대로 둠.
 
 ### 패턴 10: `EmptyState` 미사용 리스트
 
-- **범위**: `FlatList` 사용 20개 화면 중 8개가 아이콘 없는 순수 텍스트로 처리 —
-  `ChatRoomScreen`(아예 없음), `DailyQuestionScreen`(아예 없음), `PlaceDetailScreen`,
-  `TripAlbumScreen`, `TripChecklistScreen`, `TripDetailScreen`, `TripExpenseScreen`
-- **증상**: 앱 전체 빈 상태 룩앤필이 통일되지 않음. 특히 `DailyQuestionScreen` 은
-  `today` 도 `history` 도 비면 **완전히 텅 빈 화면**이 된다
+> **2026-08-26 재확인 — 원 목록 7개 중 실제로 남아있던 3개(`ChatRoomScreen`, `DailyQuestionScreen`,
+> `TripDetailScreen`) 전부 해소.** `PlaceDetailScreen`·`TripAlbumScreen`·`TripChecklistScreen`·
+> `TripExpenseScreen`은 재확인 결과 이미 `EmptyState`를 쓰고 있었다(원 지적이 이미 낡았던
+> 것으로 보임). `ChatRoomScreen`은 메시지 목록에 `EmptyState`를 아예 새로 도입(`inverted`
+> 리스트라 `scaleY(-1)`로 다시 뒤집어 정방향으로 보이게 처리, `071263d`). `DailyQuestionScreen`은
+> `EmptyState` import 자체가 없어 `today`·`history`가 모두 비면 완전히 텅 빈 화면이 되던
+> 문제를 그대로 재현 확인 후 해소(`4821327`). `TripDetailScreen`은 4곳(일정/장소/모달 내
+> 리스트 2곳) 전부 새로 도입(`45429e7`).
 
 ---
 
