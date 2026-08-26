@@ -55,6 +55,8 @@
   "devDependencies": {
     "@types/react": "~19.2.2",
     "babel-preset-expo": "~56.0.15",
+    "eslint": "^9.0.0",
+    "eslint-config-expo": "~56.0.4",
     "typescript": "~6.0.3"
   },
   "scripts": {
@@ -64,7 +66,8 @@
     "web": "expo start --web",
     "build:web": "node scripts/subset-icon-font.cjs && expo export --platform web",
     "subset:icons": "node scripts/subset-icon-font.cjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "expo lint"
   },
   "private": true
 }
