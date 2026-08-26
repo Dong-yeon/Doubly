@@ -37,6 +37,17 @@ import { layout } from '../../theme/layout';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'BodyMetric'>;
 
+/** 체중/체지방/허리 입력 필터 — 숫자와 소수점 하나만 허용한다.
+ *  decimal-pad 키보드도 붙여넣기·일부 기기 IME로는 "70.5.2"처럼 소수점이
+ *  여러 개인 문자열이 그대로 들어올 수 있어(QA_RUN_2026-08-25.md 확정 버그),
+ *  타이핑 시점에 걸러 Number() 가 NaN 이 되는 경우 자체를 없앤다. */
+function sanitizeDecimalInput(v: string): string {
+  const digitsAndDots = v.replace(/[^0-9.]/g, '');
+  const firstDot = digitsAndDots.indexOf('.');
+  if (firstDot === -1) return digitsAndDots;
+  return digitsAndDots.slice(0, firstDot + 1) + digitsAndDots.slice(firstDot + 1).replace(/\./g, '');
+}
+
 /** 체중 막대 그래프 — 최근 N개, min~max 정규화 */
 function WeightChart({ data }: { data: BodyMetric[] }) {
   const points = data.filter((d) => d.weightKg != null).slice(-14);
@@ -123,15 +134,25 @@ export function BodyMetricScreen(_: Props) {
       toast.error('측정값이나 사진을 하나 이상 입력해주세요.');
       return;
     }
+    // sanitizeDecimalInput이 타이핑 단계에서 대부분 걸러주지만, "." 하나만 남는
+    // 경우처럼 여전히 Number()가 NaN이 될 수 있는 값이 있다 — 이 경우 "값을 안 넣었다"는
+    // 엉뚱한 메시지 대신 어느 필드가 문제인지 알 수 있게 안내한다.
+    const weightKg = weight ? Number(weight) : undefined;
+    const bodyFatPct = bodyFat ? Number(bodyFat) : undefined;
+    const waistCm = waist ? Number(waist) : undefined;
+    if ([weightKg, bodyFatPct, waistCm].some((n) => n !== undefined && !Number.isFinite(n))) {
+      toast.error('체중·체지방·허리 값을 확인해주세요.');
+      return;
+    }
     setSaving(true);
     try {
       let photoUrl: string | undefined;
       if (photoUri) photoUrl = await runBusy('사진 올리는 중…', () => uploadImage(photoUri));
       await bodyApi.save({
         measuredDate,
-        weightKg: weight ? Number(weight) : undefined,
-        bodyFatPct: bodyFat ? Number(bodyFat) : undefined,
-        waistCm: waist ? Number(waist) : undefined,
+        weightKg,
+        bodyFatPct,
+        waistCm,
         photoUrl,
       });
       haptics.success();
@@ -254,13 +275,28 @@ export function BodyMetricScreen(_: Props) {
                 />
                 <View style={styles.formRow}>
                   <View style={styles.flex}>
-                    <TextField label="체중(kg)" value={weight} onChangeText={setWeight} keyboardType="decimal-pad" />
+                    <TextField
+                      label="체중(kg)"
+                      value={weight}
+                      onChangeText={(v) => setWeight(sanitizeDecimalInput(v))}
+                      keyboardType="decimal-pad"
+                    />
                   </View>
                   <View style={styles.flex}>
-                    <TextField label="체지방(%)" value={bodyFat} onChangeText={setBodyFat} keyboardType="decimal-pad" />
+                    <TextField
+                      label="체지방(%)"
+                      value={bodyFat}
+                      onChangeText={(v) => setBodyFat(sanitizeDecimalInput(v))}
+                      keyboardType="decimal-pad"
+                    />
                   </View>
                   <View style={styles.flex}>
-                    <TextField label="허리(cm)" value={waist} onChangeText={setWaist} keyboardType="decimal-pad" />
+                    <TextField
+                      label="허리(cm)"
+                      value={waist}
+                      onChangeText={(v) => setWaist(sanitizeDecimalInput(v))}
+                      keyboardType="decimal-pad"
+                    />
                   </View>
                 </View>
                 <TouchableOpacity style={[styles.photoBox, photoUri ? styles.photoBoxFilled : styles.photoBoxEmpty]} onPress={onPickPhoto} activeOpacity={0.8}>
