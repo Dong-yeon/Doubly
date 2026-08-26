@@ -219,6 +219,27 @@
 > 전체를 새로 깔아야 하는 별도 인프라 작업이라, 필요하면 후속으로. 커밋: `872aded`(트레이너/
 > 마이/온보딩) · `14543af`(공용 컴포넌트 2/2) · `6a62fd8`(공용 컴포넌트 1/2) · `2de5b29`(여행) ·
 > `e93f4b8`(채팅/홈/피드) · `64a6269`(식단/장소) · `4f8ed85`(운동), 병합 커밋 `379fab8`.
+>
+> **2026-08-26 후속: ESLint 인프라 신설 + 재발 방지 규칙.** `npx expo lint`로 이 저장소에
+> 처음으로 ESLint를 깔았다(`eslint.config.js`, `eslint-config-expo/flat`, `frontend/package.json`에
+> `lint` 스크립트 추가). 그 위에 로컬 규칙 `frontend/eslint-rules/icon-button-a11y-label.js`를
+> 얹어 `TouchableOpacity`/`Pressable` 서브트리에 "읽을 수 있는 텍스트"(영문 2자 이상 연속 또는
+> 한글 1자 이상 — 단일 한글 음절도 "나"/"예"처럼 온전한 단어일 수 있어 영문과 기준을 다르게
+> 뒀다)가 없으면 `accessibilityLabel`을 요구한다. `{title}`처럼 정적으로 값을 알 수 없는 표현식이
+> 있으면 안전하게 통과시켜(오탐 방지) `Button`/`Chip`류 재사용 컴포넌트의 대량 오탐을 막았다.
+> severity는 `warn`(빌드를 막는 CI·훅이 없는 1인 개발 워크플로우라 error로 막아봐야 우회만 늘어
+> 의미가 없음) — 새 규칙 작성 직후 실제로 `WorkoutSessionScreen`의 휴식 타이머 `-15`/`+15` 버튼
+> 2곳을 놓쳤던 걸 잡아 그 자리에서 고쳤다(라벨을 못 준 이유는 규칙 정의상 아이콘 전용이 아니라
+> "짧은 숫자 텍스트"라 처음 스윕 때 사람이 판단하기 애매해 넘어갔던 케이스).
+>
+> **부수 발견(별도 후속 항목, 이번 스코프 밖)**: ESLint를 처음 돌리자 패턴 5와 무관한 기존
+> 문제가 약 200여 건(에러 60여 건 포함) 드러났다 — 주로 `@typescript-eslint/no-unused-vars`(미사용
+> import, 130건 이상), `react-hooks/refs`(렌더 중 ref 값 접근/수정, `WorkoutSessionScreen` 등에
+> 다수), `react-hooks/set-state-in-effect`, `react/no-unescaped-entities`, `import/no-duplicates`
+> 등. 이번 세션 스코프(ESLint 인프라 + 패턴 5 재발 방지 규칙)와는 무관한 별개의 기존 코드
+> 품질 부채라 손대지 않았다 — `react-hooks/refs`류는 React 19/새 아키텍처에서 실제 렌더링
+> 버그로 이어질 수 있어 다음에 우선순위 있게 다뤄볼 만하다. `cd frontend && npm run lint`로
+> 언제든 확인 가능.
 
 ### 패턴 6: 모달 저장 버튼에 in-flight 가드 없음
 
