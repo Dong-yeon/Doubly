@@ -75,22 +75,27 @@
 
 ### P2 — 오동작·혼란
 
-| # | 위치 | 내용 |
-| --- | --- | --- |
-| 13 | `HomeScreen.tsx:83,100` | `connected` 판정이 store 의 `loading` 을 안 보고 `couple?.partner` 만 본다 → 앱 진입 직후 **연결된 커플에게도 "커플을 연결해보세요"가 순간 노출** |
-| 14 | `CoupleCalendarScreen.tsx:81-90` | `load(y,m)` 완료 시 현재 `year/month` 와 일치하는지 검사 안 함 → 월을 빠르게 넘기면 **헤더와 표시되는 일정이 다른 달**로 어긋난다 (같은 파일의 `DietCalendarScreen:16-29` 는 `active` 플래그로 올바르게 처리 — 이쪽을 참고) |
-| 15 | `ChangePasswordScreen.tsx:101`, `ResetPasswordScreen.tsx:118`, `LoginScreen.tsx:66` | 서버 에러가 **엉뚱한 입력창 아래** 표시된다. "현재 비밀번호 불일치"가 *새 비밀번호 확인* 필드에, "가입되지 않은 이메일"이 *비밀번호* 필드에 |
-| 16 | `TripDetailScreen.tsx:231-265` | Day 이동을 동반한 일정 수정에서 `updateItem` 성공 후 `reorderItems` 가 실패하면 바깥 catch 로 빠져 `load()` 가 안 돌아간다 → **서버엔 반영됐는데 화면은 옛날 상태** |
-| 17 | `TripDetailScreen.tsx:288-309` | `moveItem` 이 렌더 시점 배열을 클로저로 캡처. ▲▼ 연타 시 스왑 전 배열 기준으로 계산된 `sortOrder` 가 경합 상태로 전송된다 (in-flight 가드 없음) |
-| 18 | `TripDetailScreen.tsx:226` | 시간 검증 정규식 `/^\d{1,2}:\d{2}$/` 가 자릿수만 봐서 **`25:99` 도 통과** |
-| 19 | `ChatRoomScreen.tsx:114-130` | 메시지 **수정** 모드에서 응답 대기 중 전송 버튼이 비활성화되지 않아 중복 PUT 가능 |
-| 20 | `ChatRoomScreen.tsx:104-112` | 읽음 처리 실패 시 재시도가 `messages` 변경(=새 메시지 도착) 시에만 트리거 → 조용하면 실패가 방치됨 |
-| 21 | `TrainerMemberDetailScreen.tsx:99-101` | 문구 위치 오류 — `"(길게 눌러 삭제)"` 안내가 **루틴이 0개일 때** 뜬다. 정작 삭제할 게 있는 화면엔 힌트가 없다 |
-| 22 | `TripAlbumScreen.tsx:113`, `PlaceDetailScreen.tsx:174`, `BodyMetricScreen.tsx:182`, `ChallengeScreen.tsx:141` | `activeOpacity` 로 **눌리는 피드백은 주면서 `onPress` 가 없다** → "눌러지는데 아무 일도 안 남" |
-| 23 | `PlaceDetailScreen.tsx:160,167` | 방문 기록 폼을 취소해도 별점·메모·사진이 초기화되지 않아, 다시 열면 이전 입력이 그대로 남아 있다 |
-| 24 | `PlaceAddScreen.tsx:52-68` | 카카오 검색이 6초 타임아웃 후 **스피너만 사라지고 실패 안내가 없다** |
-| 25 | `PhotoAlbumScreen.tsx:33` | `CELL` 크기를 컴포넌트 밖에서 `Dimensions.get()` 로 1회만 계산 → 회전·창 크기 변경 시 그리드가 어긋난다 |
-| 26 | `FeedTimelineScreen.tsx:100` | 본인 글이 아닌 항목을 길게 누르면 **아무 피드백 없이 조용히 종료** |
+> **2026-08-26 재확인 — 14건 전부 해소.** 전부 `9a3c3737`(2026-08-11, "QA_CHECKLIST P2 확정
+> 결함 14건 해소")에서 한 번에 처리됐다. 22번의 TripAlbumScreen 부분만 그보다도 전인
+> `c74f161`(2026-08-05)에서 다른 작업의 부수 효과로 먼저 고쳐져 있었다 — 즉 감사(8/10) 시점에
+> 이미 일부는 낡은 기록이었다.
+
+| # | 위치 | 내용 | 해결 |
+| --- | --- | --- | --- |
+| 13 | `HomeScreen.tsx:83,100` | `connected` 판정이 store 의 `loading` 을 안 보고 `couple?.partner` 만 본다 → 앱 진입 직후 **연결된 커플에게도 "커플을 연결해보세요"가 순간 노출** | ✅ `9a3c3737`. `relationLoading` 인 동안 `connected` 를 강제로 `true` 로 둠 |
+| 14 | `CoupleCalendarScreen.tsx:81-90` | `load(y,m)` 완료 시 현재 `year/month` 와 일치하는지 검사 안 함 → 월을 빠르게 넘기면 **헤더와 표시되는 일정이 다른 달**로 어긋난다 (같은 파일의 `DietCalendarScreen:16-29` 는 `active` 플래그로 올바르게 처리 — 이쪽을 참고) | ✅ `9a3c3737`. `latestRequestRef` 로 최신 요청만 반영 |
+| 15 | `ChangePasswordScreen.tsx:101`, `ResetPasswordScreen.tsx:118`, `LoginScreen.tsx:66` | 서버 에러가 **엉뚱한 입력창 아래** 표시된다. "현재 비밀번호 불일치"가 *새 비밀번호 확인* 필드에, "가입되지 않은 이메일"이 *비밀번호* 필드에 | ✅ `9a3c3737`. 세 화면 모두 올바른 필드(또는 LoginScreen 은 폼 전체 상단)로 이동 |
+| 16 | `TripDetailScreen.tsx:231-265` | Day 이동을 동반한 일정 수정에서 `updateItem` 성공 후 `reorderItems` 가 실패하면 바깥 catch 로 빠져 `load()` 가 안 돌아간다 → **서버엔 반영됐는데 화면은 옛날 상태** | ✅ `9a3c3737`. `reorderItems` 를 내부 try/catch 로 감싸 실패해도 `load()` 로 재동기화 |
+| 17 | `TripDetailScreen.tsx:288-309` | `moveItem` 이 렌더 시점 배열을 클로저로 캡처. ▲▼ 연타 시 스왑 전 배열 기준으로 계산된 `sortOrder` 가 경합 상태로 전송된다 (in-flight 가드 없음) | ✅ `9a3c3737`. `movingRef` in-flight 가드 추가 |
+| 18 | `TripDetailScreen.tsx:226` | 시간 검증 정규식 `/^\d{1,2}:\d{2}$/` 가 자릿수만 봐서 **`25:99` 도 통과** | ✅ `9a3c3737`. `/^([01]?\d\|2[0-3]):[0-5]\d$/` 로 교체 |
+| 19 | `ChatRoomScreen.tsx:114-130` | 메시지 **수정** 모드에서 응답 대기 중 전송 버튼이 비활성화되지 않아 중복 PUT 가능 | ✅ `9a3c3737`. `editSaving` 가드 + 버튼 `disabled` 반영 |
+| 20 | `ChatRoomScreen.tsx:104-112` | 읽음 처리 실패 시 재시도가 `messages` 변경(=새 메시지 도착) 시에만 트리거 → 조용하면 실패가 방치됨 | ✅ `9a3c3737`. 실패 시 5초 뒤 자체 재시도 타이머 추가 |
+| 21 | `TrainerMemberDetailScreen.tsx:99-101` | 문구 위치 오류 — `"(길게 눌러 삭제)"` 안내가 **루틴이 0개일 때** 뜬다. 정작 삭제할 게 있는 화면엔 힌트가 없다 | ✅ `9a3c3737`. `routines.length > 0` 조건으로 이동 |
+| 22 | `TripAlbumScreen.tsx:113`, `PlaceDetailScreen.tsx:174`, `BodyMetricScreen.tsx:182`, `ChallengeScreen.tsx:141` | `activeOpacity` 로 **눌리는 피드백은 주면서 `onPress` 가 없다** → "눌러지는데 아무 일도 안 남" | ✅ 4곳 전부. TripAlbumScreen 은 `c74f161`(8/5, 감사보다 먼저)에서 부수적으로 해결, 나머지 3곳은 `9a3c3737` |
+| 23 | `PlaceDetailScreen.tsx:160,167` | 방문 기록 폼을 취소해도 별점·메모·사진이 초기화되지 않아, 다시 열면 이전 입력이 그대로 남아 있다 | ✅ `9a3c3737`. 취소 시 `resetForm()` 호출 |
+| 24 | `PlaceAddScreen.tsx:52-68` | 카카오 검색이 6초 타임아웃 후 **스피너만 사라지고 실패 안내가 없다** | ✅ `9a3c3737`. 타임아웃 시 에러 토스트 추가 |
+| 25 | `PhotoAlbumScreen.tsx:33` | `CELL` 크기를 컴포넌트 밖에서 `Dimensions.get()` 로 1회만 계산 → 회전·창 크기 변경 시 그리드가 어긋난다 | ✅ `9a3c3737`. `useWindowDimensions` + `useMemo` 로 교체 |
+| 26 | `FeedTimelineScreen.tsx:100` | 본인 글이 아닌 항목을 길게 누르면 **아무 피드백 없이 조용히 종료** | ✅ `9a3c3737`. `toast.info('내가 쓴 글만 삭제할 수 있어요.')` 추가 |
 
 ### 확인해봤더니 문제 아니었던 것
 
