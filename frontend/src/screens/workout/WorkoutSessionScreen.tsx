@@ -18,7 +18,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import DraggableFlatList, { type RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
+import DragList, { type DragListRenderItemInfo } from 'react-native-draglist';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -918,15 +918,26 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
     ]);
   };
 
-  /** 종목 카드 — 네이티브(DraggableFlatList)/웹(FlatList) 둘 다 이 렌더러를 공유한다.
+  /** 종목 카드 — 네이티브(DragList)/웹(FlatList) 둘 다 이 렌더러를 공유한다.
    *  drag 가 undefined 면(웹) 손잡이를 눌러도 아무 일도 없다 — 순서 바꾸기는 네이티브 전용. */
-  const renderExerciseCard = (e: SessionExercise, drag: (() => void) | undefined, isActive: boolean) => {
+  const renderExerciseCard = (
+    e: SessionExercise,
+    drag: (() => void) | undefined,
+    isActive: boolean,
+    dragEnd?: () => void,
+  ) => {
     const done = e.sets.filter((s) => s.done).length;
     const e1rm = bestE1RM(e.sets);
     return (
       <View style={[styles.exCard, isActive && styles.exCardActive]}>
         <View style={styles.exHeader}>
-          <Pressable onLongPress={drag} disabled={isActive || !drag} hitSlop={8} style={styles.dragHandle}>
+          <Pressable
+            onLongPress={drag}
+            onPressOut={dragEnd}
+            disabled={isActive || !drag}
+            hitSlop={8}
+            style={styles.dragHandle}
+          >
             <Text style={styles.dragHandleText}>⠿</Text>
           </Pressable>
           {/* 이 종목이 뭔지 한눈에 보여주는 그림 — 카탈로그에 있는 종목만(커스텀 종목은 안 뜬다) */}
@@ -1133,11 +1144,8 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
       </View>
 
       {Platform.OS === 'web' ? (
-        // 웹에서는 DraggableFlatList(react-native-gesture-handler 기반)의 내부 스크롤
-        // 컨테이너가 overflow:hidden 으로 렌더돼 목록이 아예 스크롤되지 않는 문제가 있다
-        // (마우스 휠/터치 스크롤 둘 다 먹통 — 운동이 2개만 넘어가도 아래쪽을 볼 수 없었다).
-        // 순서 바꾸기(길게 눌러 드래그)는 터치 제스처 전제라 웹에서 원래도 아쉬운 기능이니,
-        // 웹에서는 평범한 FlatList로 스크롤을 살리고 순서 바꾸기만 뺀다(네이티브는 그대로 유지).
+        // 웹은 터치 드래그 제스처 전제인 순서 바꾸기가 원래도 아쉬운 기능이라, 평범한
+        // FlatList로 스크롤만 살리고 순서 바꾸기는 뺀다(네이티브는 DragList로 그대로 유지).
         <FlatList
           style={styles.listContainer}
           data={exercises}
@@ -1147,15 +1155,30 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
           ListFooterComponent={renderListFooter(false)}
         />
       ) : (
-        <DraggableFlatList
-          style={styles.listContainer}
+        // react-native-draglist — react-native-reanimated/gesture-handler에 의존하지 않고
+        // PanResponder만으로 동작한다. 예전에 쓰던 react-native-draggable-flatlist는
+        // Reanimated 4(New Architecture 전용 메이저 버전)와 호환되지 않아 카드가 렌더링되지
+        // 않는 조용한 버그를 냈다(docs/QA_RUN_2026-08-25.md 참고) — 이 라이브러리로 교체해
+        // 그 버전 호환성 문제 자체를 없앤다.
+        <DragList
+          // containerStyle이 실제로 감싸는 바깥 View에 적용되고, style은 그 안쪽 FlatList에
+          // 적용된다(react-native-draglist 내부 구조). flex:1을 style에만 주면 바깥 View가
+          // 높이 0으로 접혀 목록 전체가 안 보인다 — 반드시 containerStyle에 줘야 한다.
+          containerStyle={styles.listContainer}
           data={exercises}
           keyExtractor={(e) => e.key}
-          onDragEnd={({ data }) => setExercises(data)}
+          onReordered={(fromIndex, toIndex) => {
+            setExercises((prev) => {
+              const next = [...prev];
+              const [moved] = next.splice(fromIndex, 1);
+              next.splice(toIndex, 0, moved);
+              return next;
+            });
+          }}
           contentContainerStyle={styles.list}
-          renderItem={({ item: e, drag, isActive }: RenderItemParams<SessionExercise>) => (
-            <ScaleDecorator>{renderExerciseCard(e, drag, isActive)}</ScaleDecorator>
-          )}
+          renderItem={({ item: e, onDragStart, onDragEnd, isActive }: DragListRenderItemInfo<SessionExercise>) =>
+            renderExerciseCard(e, onDragStart, isActive, onDragEnd)
+          }
           ListFooterComponent={renderListFooter(true)}
         />
       )}
@@ -1355,7 +1378,7 @@ const styles = themedStyles((colors) => ({
   restChipActive: { borderColor: colors.primary, backgroundColor: colors.primaryBg },
   restChipText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
   restChipTextActive: { color: colors.primary },
-  // FlatList/DraggableFlatList 자체(=style)에 flex 가 없으면 종목이 몇 개만 늘어나도
+  // FlatList/DragList 자체(=style)에 flex 가 없으면 종목이 몇 개만 늘어나도
   // 목록이 화면 높이를 넘는데 자기 안에서 스크롤 영역을 못 잡아, 목록 맨 아래(운동 추가
   // 버튼)가 하단 액션바 뒤로 밀려 잘린다. contentContainerStyle(list)과는 별개로 필요하다.
   listContainer: { flex: 1 },

@@ -39,7 +39,7 @@
     "react-dom": "19.2.3",
     "react-native": "0.85.3",
     "react-native-android-widget": "^0.21.0",
-    "react-native-draggable-flatlist": "^4.0.3",
+    "react-native-draglist": "^3.11.0",
     "react-native-gesture-handler": "~2.31.1",
     "react-native-iap": "^16.3.1",
     "react-native-nitro-modules": "^0.36.5",
