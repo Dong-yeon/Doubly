@@ -44,7 +44,13 @@ export function TextField({ label, errorText, style, secureTextEntry, onFocus, o
           {...rest}
         />
         {isPassword ? (
-          <Pressable style={styles.eye} onPress={() => setReveal((v) => !v)} hitSlop={8}>
+          <Pressable
+            style={styles.eye}
+            onPress={() => setReveal((v) => !v)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={reveal ? '비밀번호 숨기기' : '비밀번호 보이기'}
+          >
             <MaterialCommunityIcons
               name={reveal ? 'eye-off-outline' : 'eye-outline'}
               size={20}
