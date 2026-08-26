@@ -185,6 +185,7 @@ export function DatePickerSheet() {
                     key={y}
                     style={[styles.yearItem, y === year && styles.yearItemActive]}
                     onPress={() => setYear(y)}
+                    accessibilityState={{ selected: y === year }}
                   >
                     <Text style={[styles.yearText, y === year && styles.yearTextActive]}>{y}년</Text>
                   </Pressable>
@@ -199,6 +200,7 @@ export function DatePickerSheet() {
                       setMonth(m);
                       setMode('day');
                     }}
+                    accessibilityState={{ selected: m === month }}
                   >
                     <Text style={[styles.monthCellText, m === month && styles.monthCellTextActive]}>
                       {m}월
@@ -233,6 +235,7 @@ export function DatePickerSheet() {
                       onPress={() => close(value)}
                       accessibilityRole="button"
                       accessibilityLabel={`${year}년 ${month}월 ${day}일`}
+                      accessibilityState={{ selected }}
                     >
                       <View
                         style={[
