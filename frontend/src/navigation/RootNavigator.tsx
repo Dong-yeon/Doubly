@@ -67,6 +67,18 @@ export function RootNavigator() {
   const themeVersion = useThemeStore((s) => s.version);
   const navStateRef = useRef<NavigationState | undefined>(undefined);
 
+  /*
+   * 이번 세션(앱 실행)에서 한 번이라도 인증된 적이 있는지 — 로그아웃으로
+   * OnboardingNavigator 가 다시 마운트될 때 Splash 를 건너뛰기 위한 표시다.
+   * 최초 부팅에서 로그인 상태로 복원되는 경우도 "인증된 적 있음"이지만,
+   * 그때는 애초에 Splash 를 탈 일이 없으니 문제가 없다 — 이후 로그아웃할
+   * 때만 이 값이 쓰인다.
+   */
+  const everAuthenticatedRef = useRef(false);
+  useEffect(() => {
+    if (isAuthenticated) everAuthenticatedRef.current = true;
+  }, [isAuthenticated]);
+
   useEffect(() => {
     bootstrap();
     void useThemeStore.getState().load();
@@ -94,7 +106,9 @@ export function RootNavigator() {
       >
         <Stack.Navigator screenOptions={{ headerShown: false }}>
           {!isAuthenticated ? (
-            <Stack.Screen name="Onboarding" component={OnboardingNavigator} />
+            <Stack.Screen name="Onboarding">
+              {() => <OnboardingNavigator skipSplash={everAuthenticatedRef.current} />}
+            </Stack.Screen>
           ) : needsConsent ? (
             <Stack.Screen name="ConsentGate" component={ConsentGateScreen} />
           ) : (
