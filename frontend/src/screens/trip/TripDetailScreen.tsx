@@ -474,6 +474,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
               style={[styles.travelModeRow, trip.travelModeEnabled && styles.travelModeRowOn]}
               activeOpacity={0.8}
               onPress={onToggleTravelMode}
+              accessibilityState={{ selected: trip.travelModeEnabled }}
             >
               <View style={styles.travelModeText}>
                 <Text style={[styles.travelModeTitle, trip.travelModeEnabled && styles.travelModeTitleOn]}>
@@ -558,6 +559,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
                     style={[styles.dayChip, on && styles.dayChipOn]}
                     onPress={() => setSelectedDay(d.dayNo)}
                     activeOpacity={0.8}
+                    accessibilityState={{ selected: on }}
                   >
                     <Text style={[styles.dayChipDay, on && styles.dayChipTextOn]}>{d.dayNo}일차</Text>
                     <Text style={[styles.dayChipDate, on && styles.dayChipTextOn]}>{d.date.slice(5)}</Text>
@@ -717,6 +719,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
                     key={d.dayNo}
                     style={[styles.formDayChip, on && styles.formDayChipOn]}
                     onPress={() => setForm((f) => ({ ...f, dayNo: d.dayNo }))}
+                    accessibilityState={{ selected: on }}
                   >
                     <Text style={[styles.formDayText, on && styles.dayChipTextOn]}>{d.dayNo}일차</Text>
                   </TouchableOpacity>
@@ -754,6 +757,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
                     key={c}
                     style={[styles.catSelect, on && styles.catSelectOn]}
                     onPress={() => setForm((f) => ({ ...f, category: on ? null : c }))}
+                    accessibilityState={{ selected: on }}
                   >
                     <Text style={[styles.catSelectText, on && styles.catSelectTextOn]}>{c}</Text>
                   </TouchableOpacity>
@@ -889,7 +893,12 @@ export function TripDetailScreen({ navigation, route }: Props) {
 
 function TabButton({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
   return (
-    <TouchableOpacity style={[styles.tab, active && styles.tabOn]} onPress={onPress} activeOpacity={0.8}>
+    <TouchableOpacity
+      style={[styles.tab, active && styles.tabOn]}
+      onPress={onPress}
+      activeOpacity={0.8}
+      accessibilityState={{ selected: active }}
+    >
       <Text style={[styles.tabText, active && styles.tabTextOn]}>{label}</Text>
     </TouchableOpacity>
   );

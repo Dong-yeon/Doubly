@@ -308,12 +308,14 @@ export function TripExpenseScreen({ route }: Props) {
                   <TouchableOpacity
                     style={[styles.payerBtn, !form.paidByPartner && styles.payerBtnOn]}
                     onPress={() => setForm((f) => ({ ...f, paidByPartner: false }))}
+                    accessibilityState={{ selected: !form.paidByPartner }}
                   >
                     <Text style={[styles.payerText, !form.paidByPartner && styles.payerTextOn]}>나</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.payerBtn, form.paidByPartner && styles.payerBtnOn]}
                     onPress={() => setForm((f) => ({ ...f, paidByPartner: true }))}
+                    accessibilityState={{ selected: form.paidByPartner }}
                   >
                     <Text style={[styles.payerText, form.paidByPartner && styles.payerTextOn]}>{partnerName}</Text>
                   </TouchableOpacity>
@@ -328,6 +330,7 @@ export function TripExpenseScreen({ route }: Props) {
                         key={c}
                         style={[styles.catSelect, on && styles.catSelectOn]}
                         onPress={() => setForm((f) => ({ ...f, category: on ? null : c }))}
+                        accessibilityState={{ selected: on }}
                       >
                         <Text style={[styles.catSelectText, on && styles.catSelectTextOn]}>{c}</Text>
                       </TouchableOpacity>

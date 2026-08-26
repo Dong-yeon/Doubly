@@ -106,7 +106,13 @@ export function TripFormScreen({ navigation, route }: Props) {
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       {/* 키보드가 저장 버튼을 가리지 않도록 회피 (스크롤하면 키보드가 내려간다) */}
       <FormKeyboardView contentContainerStyle={styles.container}>
-          <TouchableOpacity style={styles.photoBox} onPress={onPickPhoto} activeOpacity={0.8}>
+          <TouchableOpacity
+            style={styles.photoBox}
+            onPress={onPickPhoto}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="커버 사진 추가"
+          >
             {coverPreview ? (
               <Image source={{ uri: coverPreview }} style={styles.photo} resizeMode="cover" />
             ) : (
