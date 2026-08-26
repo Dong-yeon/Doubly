@@ -50,7 +50,7 @@ export function TrainerConnectScreen({ navigation }: Props) {
           <TextField
             value={input}
             onChangeText={(t) => setInput(t.toUpperCase())}
-            placeholder="예: ABC123"
+            placeholder="예: ABC234"
             autoCapitalize="characters"
             maxLength={6}
             errorText={error ?? undefined}

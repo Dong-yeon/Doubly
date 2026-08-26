@@ -20,7 +20,7 @@ type Props = NativeStackScreenProps<HomeStackParamList, 'CoupleConnect'>;
 
 /**
  * 초대코드 형식 — 혼동 문자(I,O,0,1) 제외 32문자 알파벳 6자리(백엔드 InviteCodeGenerator와 동일).
- * 공유 문구("Dubly에서 커플로 연결해요! 초대코드: ABC123 (24시간 유효)")를 말풍선째로 길게 눌러
+ * 공유 문구("Dubly에서 커플로 연결해요! 초대코드: ABC234 (24시간 유효)")를 말풍선째로 길게 눌러
  * 통째로 복사·붙여넣는 경우가 많아, 그 안에서 실제 코드만 골라낸다. \b 경계 덕분에 "Dubly"(5자)
  * 처럼 길이가 다른 라틴 문자열은 걸리지 않는다. 매칭 실패 시(짧게 직접 타이핑 중 등)엔 이전처럼
  * 앞 6자만 사용해 폭 넘는 입력을 막는다.
@@ -127,7 +127,7 @@ export function CoupleConnectScreen({ navigation }: Props) {
             <TextField
               value={input}
               onChangeText={(t) => setInput(extractInviteCode(t))}
-              placeholder="예: ABC123"
+              placeholder="예: ABC234"
               autoCapitalize="characters"
               errorText={error ?? undefined}
               style={styles.codeInput}
