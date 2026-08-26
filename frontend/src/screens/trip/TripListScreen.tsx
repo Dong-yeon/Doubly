@@ -10,6 +10,7 @@ import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { tripApi } from '../../api/trip';
 import { usePlaceStore } from '../../store/placeStore';
+import { useDeleteAction } from '../../hooks/useDeleteAction';
 import { getErrorMessage } from '../../utils/error';
 import { toDateString } from '../../utils/date';
 import { toast } from '../../store/toastStore';
@@ -41,6 +42,7 @@ export function TripListScreen({ navigation }: Props) {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
+  const { deletingId, runDelete } = useDeleteAction<number>();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -62,23 +64,22 @@ export function TripListScreen({ navigation }: Props) {
     }, [load]),
   );
 
+  // 삭제 in-flight 가드 — useDeleteAction 이 중복 DELETE 를 막고 실패 시 토스트를 띄운다
+  // (QA_CHECKLIST.md 패턴 7)
   const onDelete = (trip: Trip) => {
     Alert.alert('여행 삭제', `"${trip.title}"을(를) 삭제할까요?\n담긴 장소는 장소 지도에 그대로 남아요.`, [
       { text: '취소', style: 'cancel' },
       {
         text: '삭제',
         style: 'destructive',
-        onPress: async () => {
-          try {
+        onPress: () =>
+          runDelete(trip.id, async () => {
             await tripApi.remove(trip.id);
             haptics.light();
             toast.success('여행을 삭제했어요.');
             invalidatePlaces();
             load();
-          } catch (e) {
-            Alert.alert('오류', getErrorMessage(e));
-          }
-        },
+          }),
       },
     ]);
   };
@@ -93,8 +94,9 @@ export function TripListScreen({ navigation }: Props) {
         onRefresh={load}
         renderItem={({ item }) => (
           <TouchableOpacity
-            style={styles.card}
+            style={[styles.card, deletingId === item.id && styles.cardDeleting]}
             activeOpacity={0.7}
+            disabled={deletingId === item.id}
             onPress={() => navigation.navigate('TripDetail', { tripId: item.id, title: item.title })}
             onLongPress={() => onDelete(item)}
           >
@@ -155,6 +157,8 @@ const styles = themedStyles((colors) => ({
     marginBottom: spacing.sm,
     overflow: 'hidden',
   },
+  // 삭제 진행 중 표시 — useDeleteAction (QA_CHECKLIST.md 패턴 7)
+  cardDeleting: { opacity: 0.5 },
   cover: { width: '100%', height: 140 },
   cardBody: { padding: spacing.md },
   cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },

@@ -21,6 +21,7 @@ import { TripSectionTabs } from './TripSectionTabs';
 import { ImageViewer, type ViewerImage } from '../../components/ImageViewer';
 import { Sheet } from '../../components/Sheet';
 import { tripApi } from '../../api/trip';
+import { useDeleteAction } from '../../hooks/useDeleteAction';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
@@ -42,6 +43,7 @@ export function TripAlbumScreen({ route }: Props) {
   /* 사진을 탭하면 전체화면으로 — 예전엔 onPress 가 없어 눌러도 아무 일이 없었다 */
   const [viewingIndex, setViewingIndex] = useState<number | null>(null);
   const [candidates, setCandidates] = useState<AlbumPost[]>([]);
+  const { deletingId, runDelete } = useDeleteAction<number>();
 
   /*
    * 뷰어에는 사진이 있는 항목만 넣는다. 그래서 그리드 위치와 뷰어 위치가 어긋나므로
@@ -102,21 +104,20 @@ export function TripAlbumScreen({ route }: Props) {
     }
   };
 
+  // 삭제(빼기) in-flight 가드 — useDeleteAction 이 중복 DELETE 를 막고 실패 시 토스트를 띄운다
+  // (QA_CHECKLIST.md 패턴 7)
   const detach = (post: AlbumPost) => {
     Alert.alert('앨범에서 빼기', '이 사진을 여행 앨범에서 뺄까요?\n사진은 우리 기록(피드)에 그대로 남아요.', [
       { text: '취소', style: 'cancel' },
       {
         text: '빼기',
-        onPress: async () => {
-          try {
+        onPress: () =>
+          runDelete(post.id, async () => {
             await tripApi.detachAlbum(tripId, post.id);
             haptics.light();
             toast.success('앨범에서 뺐어요.');
             load();
-          } catch (e) {
-            Alert.alert('오류', getErrorMessage(e));
-          }
-        },
+          }),
       },
     ]);
   };
@@ -141,8 +142,9 @@ export function TripAlbumScreen({ route }: Props) {
         }
         renderItem={({ item }) => (
           <TouchableOpacity
-            style={[styles.cell, { width: cell }]}
+            style={[styles.cell, { width: cell }, deletingId === item.id && styles.cellDeleting]}
             activeOpacity={0.85}
+            disabled={deletingId === item.id}
             onPress={item.imageUrl ? () => setViewingIndex(viewerIndexById.get(item.id) ?? 0) : undefined}
             onLongPress={() => detach(item)}
             accessibilityRole="imagebutton"
@@ -242,6 +244,8 @@ const styles = themedStyles((colors) => ({
   columnWrap: { gap: spacing.sm },
 
   cell: { marginBottom: spacing.md },
+  // 삭제(빼기) 진행 중 표시 — useDeleteAction (QA_CHECKLIST.md 패턴 7)
+  cellDeleting: { opacity: 0.5 },
   photo: { borderRadius: radius.lg, backgroundColor: colors.surfaceAlt },
   photoEmpty: { alignItems: 'center', justifyContent: 'center' },
   caption: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textPrimary, marginTop: spacing.xs },

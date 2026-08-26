@@ -2,6 +2,8 @@
 import React, { useCallback, useState } from 'react';
 import {
   FlatList,
+  KeyboardAvoidingView,
+  Platform,
   StyleSheet,
   Text,
   TextInput,
@@ -18,6 +20,7 @@ import { EmptyState } from '../../components/EmptyState';
 import { TripSectionTabs } from './TripSectionTabs';
 import { Sheet } from '../../components/Sheet';
 import { confirmDiscard } from '../../utils/discardGuard';
+import { useDeleteAction } from '../../hooks/useDeleteAction';
 import { tripApi } from '../../api/trip';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
@@ -36,10 +39,13 @@ export function TripChecklistScreen({ route }: Props) {
   const [loadError, setLoadError] = useState(false);
   const [newText, setNewText] = useState('');
   const [adding, setAdding] = useState(false);
+  const { deletingId, runDelete } = useDeleteAction<number>();
 
   // 이름 수정 모달
   const [renameItem, setRenameItem] = useState<ChecklistItem | null>(null);
   const [renameText, setRenameText] = useState('');
+  // adding(추가 전용)과 분리 — 수정 버튼만의 저장 중 상태 (QA_CHECKLIST.md 패턴 6)
+  const [renaming, setRenaming] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -119,6 +125,8 @@ export function TripChecklistScreen({ route }: Props) {
       toast.error('준비물 이름을 입력해주세요.');
       return;
     }
+    // 저장 중 in-flight 가드 — 느린 네트워크에서 수정 버튼 연타 방지 (QA_CHECKLIST.md 패턴 6)
+    setRenaming(true);
     try {
       await tripApi.renameChecklistItem(tripId, renameItem.id, content);
       setRenameItem(null);
@@ -126,24 +134,25 @@ export function TripChecklistScreen({ route }: Props) {
       load();
     } catch (e) {
       Alert.alert('오류', getErrorMessage(e));
+    } finally {
+      setRenaming(false);
     }
   };
 
+  // 삭제 in-flight 가드 — useDeleteAction 이 중복 DELETE 를 막고 실패 시 토스트를 띄운다
+  // (QA_CHECKLIST.md 패턴 7)
   const remove = (item: ChecklistItem) => {
     Alert.alert('준비물 삭제', `"${item.content}"을(를) 삭제할까요?`, [
       { text: '취소', style: 'cancel' },
       {
         text: '삭제',
         style: 'destructive',
-        onPress: async () => {
-          try {
+        onPress: () =>
+          runDelete(item.id, async () => {
             await tripApi.removeChecklistItem(tripId, item.id);
             haptics.light();
             load();
-          } catch (e) {
-            Alert.alert('오류', getErrorMessage(e));
-          }
-        },
+          }),
       },
     ]);
   };
@@ -198,8 +207,9 @@ export function TripChecklistScreen({ route }: Props) {
         }
         renderItem={({ item }) => (
           <TouchableOpacity
-            style={styles.row}
+            style={[styles.row, deletingId === item.id && styles.rowDeleting]}
             activeOpacity={0.7}
+            disabled={deletingId === item.id}
             onPress={() => toggle(item)}
             onLongPress={() => onLongPress(item)}
           >
@@ -242,20 +252,27 @@ export function TripChecklistScreen({ route }: Props) {
           confirmDiscard(renameText.trim() !== (renameItem?.content ?? ''), () => setRenameItem(null))
         }
       >
-            <Text style={styles.sheetTitle}>준비물 이름 수정</Text>
-            <TextInput
-              style={styles.addInput}
-              value={renameText}
-              onChangeText={setRenameText}
-              placeholder="준비물 이름"
-              placeholderTextColor={colors.textTertiary}
-              maxLength={200}
-              autoFocus
-            />
-            <View style={styles.sheetActions}>
-              <Button title="취소" variant="ghost" size="md" onPress={() => setRenameItem(null)} />
-              <Button title="수정" size="md" onPress={saveRename} />
-            </View>
+        {/*
+          Sheet 자체는 KeyboardAvoidingView 를 갖지 않는다 — 화면 중앙 카드라 키보드가
+          뜨면 "수정" 버튼이 가려졌다. Sheet.tsx 는 여러 화면이 공유하는 껍데기라 건드리지
+          않고, 이 화면의 사용부에서만 감싼다 (QA_CHECKLIST.md 패턴 4).
+        */}
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <Text style={styles.sheetTitle}>준비물 이름 수정</Text>
+          <TextInput
+            style={styles.addInput}
+            value={renameText}
+            onChangeText={setRenameText}
+            placeholder="준비물 이름"
+            placeholderTextColor={colors.textTertiary}
+            maxLength={200}
+            autoFocus
+          />
+          <View style={styles.sheetActions}>
+            <Button title="취소" variant="ghost" size="md" onPress={() => setRenameItem(null)} />
+            <Button title="수정" size="md" onPress={saveRename} loading={renaming} />
+          </View>
+        </KeyboardAvoidingView>
       </Sheet>
     </SafeAreaView>
   );
@@ -329,6 +346,8 @@ const styles = themedStyles((colors) => ({
   rowText: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
   rowTextChecked: { color: colors.textTertiary, textDecorationLine: 'line-through' },
   rowBy: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
+  // 삭제 진행 중 표시 — useDeleteAction (QA_CHECKLIST.md 패턴 7)
+  rowDeleting: { opacity: 0.5 },
 
   empty: { fontSize: fontSize.caption, color: colors.textSecondary, textAlign: 'center', paddingVertical: spacing.xl, lineHeight: 20 },
 

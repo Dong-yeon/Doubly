@@ -1,9 +1,12 @@
 /** 여행 경비 정산 — 합계·정산(누가 누구에게)·항목 목록 + 추가/수정 */
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   FlatList,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -20,6 +23,8 @@ import { EmptyState } from '../../components/EmptyState';
 import { TripSectionTabs } from './TripSectionTabs';
 import { tripApi } from '../../api/trip';
 import { useAuthStore } from '../../store/authStore';
+import { useDeleteAction } from '../../hooks/useDeleteAction';
+import { confirmDiscard } from '../../utils/discardGuard';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { formatMoney } from '../../utils/format';
@@ -61,6 +66,14 @@ export function TripExpenseScreen({ route }: Props) {
     category: '식비',
     memo: '',
   });
+  const [saving, setSaving] = useState(false);
+  const { deletingId, runDelete } = useDeleteAction<number>();
+  /*
+   * 모달을 연 시점의 폼 스냅샷 — 백드롭·Android 백으로 닫을 때 "달라진 게 있는지"를
+   * 판단한다(QA_CHECKLIST.md 패턴 3). 수정 모달은 열자마자 값이 차 있으므로,
+   * 단순히 "비어있지 않음"으로는 편집 여부를 알 수 없다 (CoupleCalendarScreen과 동일 패턴).
+   */
+  const formInitialRef = useRef('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -86,20 +99,28 @@ export function TripExpenseScreen({ route }: Props) {
 
   const openAdd = () => {
     setEditing(null);
-    setForm({ amount: '', paidByPartner: false, category: '식비', memo: '' });
+    const initial: ExpenseForm = { amount: '', paidByPartner: false, category: '식비', memo: '' };
+    formInitialRef.current = JSON.stringify(initial);
+    setForm(initial);
     setModalOpen(true);
   };
 
   const openEdit = (e: TripExpense) => {
     setEditing(e);
-    setForm({
+    const initial: ExpenseForm = {
       amount: String(e.amount),
       paidByPartner: !e.mine,
       category: e.category ?? null,
       memo: e.memo ?? '',
-    });
+    };
+    formInitialRef.current = JSON.stringify(initial);
+    setForm(initial);
     setModalOpen(true);
   };
+
+  // 백드롭 탭·Android 백 공용 — 입력이 달라졌으면 확인 후 닫는다 (취소 버튼은 의도가
+  // 분명하므로 바로 닫힌다, QA_CHECKLIST.md 패턴 3 — CoupleCalendarScreen.closeForm과 동일 패턴)
+  const closeModal = () => confirmDiscard(JSON.stringify(form) !== formInitialRef.current, () => setModalOpen(false));
 
   const save = async () => {
     const amount = Number(form.amount.replace(/,/g, '').trim());
@@ -114,6 +135,9 @@ export function TripExpenseScreen({ route }: Props) {
       category: form.category,
       memo: form.memo.trim() || null,
     };
+    // 저장 중 in-flight 가드 — 느린 네트워크에서 저장 버튼 연타로 중복 등록되던 문제
+    // (QA_CHECKLIST.md 패턴 6)
+    setSaving(true);
     try {
       if (editing) {
         await tripApi.updateExpense(tripId, editing.id, payload);
@@ -127,25 +151,26 @@ export function TripExpenseScreen({ route }: Props) {
       load();
     } catch (e) {
       Alert.alert('오류', getErrorMessage(e));
+    } finally {
+      setSaving(false);
     }
   };
 
+  // 삭제 in-flight 가드 — useDeleteAction 이 중복 DELETE 를 막고 실패 시 토스트를 띄운다
+  // (QA_CHECKLIST.md 패턴 7)
   const remove = (e: TripExpense) => {
     Alert.alert('경비 삭제', `"${money(e.amount)}"${e.memo ? ` (${e.memo})` : ''} 경비를 삭제할까요?`, [
       { text: '취소', style: 'cancel' },
       {
         text: '삭제',
         style: 'destructive',
-        onPress: async () => {
-          try {
+        onPress: () =>
+          runDelete(e.id, async () => {
             await tripApi.removeExpense(tripId, e.id);
             haptics.light();
             toast.success('경비를 삭제했어요.');
             load();
-          } catch (err) {
-            Alert.alert('오류', getErrorMessage(err));
-          }
-        },
+          }),
       },
     ]);
   };
@@ -200,8 +225,9 @@ export function TripExpenseScreen({ route }: Props) {
         }
         renderItem={({ item }) => (
           <TouchableOpacity
-            style={styles.row}
+            style={[styles.row, deletingId === item.id && styles.rowDeleting]}
             activeOpacity={0.7}
+            disabled={deletingId === item.id}
             onPress={() => openEdit(item)}
             onLongPress={() => remove(item)}
           >
@@ -250,77 +276,82 @@ export function TripExpenseScreen({ route }: Props) {
       </View>
 
       {/* 추가/수정 모달 */}
-      <Modal visible={modalOpen} transparent animationType="slide" onRequestClose={() => setModalOpen(false)}>
-        <Pressable style={styles.backdrop} onPress={() => setModalOpen(false)}>
-          {/* onPress 로 탭을 흡수한다 — 없으면 시트 빈 곳 터치가 배경으로 새어나가 닫힌다 */}
-          <Pressable style={styles.sheet} onPress={() => {}}>
-            <Text style={styles.sheetTitle}>{editing ? '경비 수정' : '경비 추가'}</Text>
+      <Modal visible={modalOpen} transparent animationType="slide" onRequestClose={closeModal}>
+        <Pressable style={styles.backdrop} onPress={closeModal}>
+          {/* 키보드가 저장 버튼을 가리지 않도록 카드째로 밀어올린다 (QA_CHECKLIST.md 패턴 4) */}
+          <KeyboardAvoidingView style={styles.modalAvoid} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+            {/* onPress 로 탭을 흡수한다 — 없으면 시트 빈 곳 터치가 배경으로 새어나가 닫힌다 */}
+            <Pressable style={styles.sheet} onPress={() => {}}>
+              <ScrollView keyboardShouldPersistTaps="handled">
+                <Text style={styles.sheetTitle}>{editing ? '경비 수정' : '경비 추가'}</Text>
 
-            <Text style={styles.fieldLabel}>금액 (원)</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="예: 30000"
-              placeholderTextColor={colors.textTertiary}
-              value={form.amount}
-              onChangeText={(t) => setForm((f) => ({ ...f, amount: t.replace(/[^0-9]/g, '') }))}
-              keyboardType="number-pad"
-              maxLength={12}
-            />
-            {/*
-              입력창은 숫자만 담고(커서 위치가 튀지 않게), 읽기용 콤마는 아래에 보조로 보여준다.
-              1250000 을 콤마 없이 읽으며 자릿수를 세야 했던 문제를 이 한 줄이 없앤다.
-            */}
-            {form.amount ? (
-              <Text style={styles.amountPreview}>{formatMoney(Number(form.amount))}</Text>
-            ) : null}
+                <Text style={styles.fieldLabel}>금액 (원)</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="예: 30000"
+                  placeholderTextColor={colors.textTertiary}
+                  value={form.amount}
+                  onChangeText={(t) => setForm((f) => ({ ...f, amount: t.replace(/[^0-9]/g, '') }))}
+                  keyboardType="number-pad"
+                  maxLength={12}
+                />
+                {/*
+                  입력창은 숫자만 담고(커서 위치가 튀지 않게), 읽기용 콤마는 아래에 보조로 보여준다.
+                  1250000 을 콤마 없이 읽으며 자릿수를 세야 했던 문제를 이 한 줄이 없앤다.
+                */}
+                {form.amount ? (
+                  <Text style={styles.amountPreview}>{formatMoney(Number(form.amount))}</Text>
+                ) : null}
 
-            <Text style={styles.fieldLabel}>누가 냈나요</Text>
-            <View style={styles.payerRow}>
-              <TouchableOpacity
-                style={[styles.payerBtn, !form.paidByPartner && styles.payerBtnOn]}
-                onPress={() => setForm((f) => ({ ...f, paidByPartner: false }))}
-              >
-                <Text style={[styles.payerText, !form.paidByPartner && styles.payerTextOn]}>나</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.payerBtn, form.paidByPartner && styles.payerBtnOn]}
-                onPress={() => setForm((f) => ({ ...f, paidByPartner: true }))}
-              >
-                <Text style={[styles.payerText, form.paidByPartner && styles.payerTextOn]}>{partnerName}</Text>
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.fieldLabel}>종류</Text>
-            <View style={styles.catRow}>
-              {CATEGORIES.map((c) => {
-                const on = form.category === c;
-                return (
+                <Text style={styles.fieldLabel}>누가 냈나요</Text>
+                <View style={styles.payerRow}>
                   <TouchableOpacity
-                    key={c}
-                    style={[styles.catSelect, on && styles.catSelectOn]}
-                    onPress={() => setForm((f) => ({ ...f, category: on ? null : c }))}
+                    style={[styles.payerBtn, !form.paidByPartner && styles.payerBtnOn]}
+                    onPress={() => setForm((f) => ({ ...f, paidByPartner: false }))}
                   >
-                    <Text style={[styles.catSelectText, on && styles.catSelectTextOn]}>{c}</Text>
+                    <Text style={[styles.payerText, !form.paidByPartner && styles.payerTextOn]}>나</Text>
                   </TouchableOpacity>
-                );
-              })}
-            </View>
+                  <TouchableOpacity
+                    style={[styles.payerBtn, form.paidByPartner && styles.payerBtnOn]}
+                    onPress={() => setForm((f) => ({ ...f, paidByPartner: true }))}
+                  >
+                    <Text style={[styles.payerText, form.paidByPartner && styles.payerTextOn]}>{partnerName}</Text>
+                  </TouchableOpacity>
+                </View>
 
-            <Text style={styles.fieldLabel}>메모 (선택)</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="예: 흑돼지 저녁"
-              placeholderTextColor={colors.textTertiary}
-              value={form.memo}
-              onChangeText={(t) => setForm((f) => ({ ...f, memo: t }))}
-              maxLength={200}
-            />
+                <Text style={styles.fieldLabel}>종류</Text>
+                <View style={styles.catRow}>
+                  {CATEGORIES.map((c) => {
+                    const on = form.category === c;
+                    return (
+                      <TouchableOpacity
+                        key={c}
+                        style={[styles.catSelect, on && styles.catSelectOn]}
+                        onPress={() => setForm((f) => ({ ...f, category: on ? null : c }))}
+                      >
+                        <Text style={[styles.catSelectText, on && styles.catSelectTextOn]}>{c}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
 
-            <View style={styles.sheetActions}>
-              <Button title="취소" variant="ghost" size="md" onPress={() => setModalOpen(false)} />
-              <Button title={editing ? '수정' : '추가'} size="md" onPress={save} />
-            </View>
-          </Pressable>
+                <Text style={styles.fieldLabel}>메모 (선택)</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="예: 흑돼지 저녁"
+                  placeholderTextColor={colors.textTertiary}
+                  value={form.memo}
+                  onChangeText={(t) => setForm((f) => ({ ...f, memo: t }))}
+                  maxLength={200}
+                />
+
+                <View style={styles.sheetActions}>
+                  <Button title="취소" variant="ghost" size="md" onPress={() => setModalOpen(false)} />
+                  <Button title={editing ? '수정' : '추가'} size="md" onPress={save} loading={saving} />
+                </View>
+              </ScrollView>
+            </Pressable>
+          </KeyboardAvoidingView>
         </Pressable>
       </Modal>
     </SafeAreaView>
@@ -376,13 +407,18 @@ const styles = themedStyles((colors) => ({
   rowMemo: { flexShrink: 1, fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
   rowPayer: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xs },
   rowAmount: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
+  // 삭제 진행 중 표시 — useDeleteAction (QA_CHECKLIST.md 패턴 7)
+  rowDeleting: { opacity: 0.5 },
 
   empty: { fontSize: fontSize.caption, color: colors.textSecondary, textAlign: 'center', paddingVertical: spacing.xl, lineHeight: 20 },
 
   fabWrap: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: spacing.lg },
 
   // spacing.lg 로 통일 — 앱의 다른 모달 8곳과 맞춘다
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: spacing.lg },
+  // colors.backdrop — 테마 인지 토큰 (QA_CHECKLIST.md 패턴 8, rgba 고정값 대신)
+  backdrop: { flex: 1, backgroundColor: colors.backdrop, justifyContent: 'center', padding: spacing.lg },
+  // 카드 maxHeight(%)가 계산되도록 부모(KAV)에 확정 높이를 준다 (BodyMetricScreen과 동일 패턴)
+  modalAvoid: { flex: 1, justifyContent: 'center' },
   sheet: { backgroundColor: colors.surfaceCard, borderRadius: radius.xl, padding: spacing.lg, maxHeight: '85%' },
   sheetTitle: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary, marginBottom: spacing.md },
   sheetActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, marginTop: spacing.lg },
