@@ -242,6 +242,7 @@ export function ChallengeScreen(_: Props) {
                     key={t}
                     style={[styles.typeChip, type === t && styles.typeChipActive]}
                     onPress={() => setType(t)}
+                    accessibilityState={{ selected: type === t }}
                   >
                     <Text style={[styles.typeText, type === t && styles.typeTextActive]}>
                       {t === 'WORKOUT' ? '운동' : '식단'}

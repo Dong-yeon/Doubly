@@ -414,7 +414,12 @@ export function WorkoutRoutineFormScreen({ navigation, route }: Props) {
                 <Text style={styles.exAlt}>대체: {e.alternatives.map((a) => a.name).join(', ')}</Text>
               ) : null}
             </View>
-            <TouchableOpacity onPress={() => setExercises((prev) => prev.filter((x) => x.key !== e.key))} hitSlop={8}>
+            <TouchableOpacity
+              onPress={() => setExercises((prev) => prev.filter((x) => x.key !== e.key))}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="운동 삭제"
+            >
               <Text style={styles.exRemove}>✕</Text>
             </TouchableOpacity>
           </View>
@@ -466,6 +471,7 @@ export function WorkoutRoutineFormScreen({ navigation, route }: Props) {
                       key={c}
                       style={[styles.catChip, fCategory === c && styles.catChipActive]}
                       onPress={() => setFCategory(c)}
+                      accessibilityState={{ selected: fCategory === c }}
                     >
                       <Text style={[styles.catText, fCategory === c && styles.catTextActive]}>{c}</Text>
                     </TouchableOpacity>
@@ -543,7 +549,12 @@ export function WorkoutRoutineFormScreen({ navigation, route }: Props) {
                         <TouchableOpacity style={styles.setTypeChip} onPress={() => cycleSetType(row.key)}>
                           <Text style={styles.setTypeChipText}>{SET_TYPE_LABEL[row.setType]}</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity onPress={() => removeSetRow(row.key)} hitSlop={8}>
+                        <TouchableOpacity
+                          onPress={() => removeSetRow(row.key)}
+                          hitSlop={8}
+                          accessibilityRole="button"
+                          accessibilityLabel="세트 삭제"
+                        >
                           <Text style={styles.setRowRemove}>✕</Text>
                         </TouchableOpacity>
                       </View>
@@ -574,6 +585,7 @@ export function WorkoutRoutineFormScreen({ navigation, route }: Props) {
                       key={r}
                       style={[styles.catChipSmall, fRestSeconds === r && styles.catChipActive]}
                       onPress={() => setFRestSeconds((prev) => (prev === r ? null : r))}
+                      accessibilityState={{ selected: fRestSeconds === r }}
                     >
                       <Text style={[styles.catText, fRestSeconds === r && styles.catTextActive]}>
                         {r}s{restRecommendation?.seconds === r ? ' 💡' : ''}

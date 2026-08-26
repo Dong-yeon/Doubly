@@ -224,6 +224,8 @@ export function WorkoutRoutineListScreen({ navigation }: Props) {
                     style={styles.giftBtn}
                     disabled={giftingId === routine.id}
                     onPress={() => onGift(routine)}
+                    accessibilityRole="button"
+                    accessibilityLabel="루틴 선물하기"
                   >
                     <Text style={styles.giftBtnText}>🎁</Text>
                   </TouchableOpacity>

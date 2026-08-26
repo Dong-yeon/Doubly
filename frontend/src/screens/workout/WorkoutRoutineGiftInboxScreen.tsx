@@ -104,12 +104,14 @@ export function WorkoutRoutineGiftInboxScreen(_: Props) {
         <TouchableOpacity
           style={[styles.tabBtn, tab === 'received' && styles.tabBtnActive]}
           onPress={() => setTab('received')}
+          accessibilityState={{ selected: tab === 'received' }}
         >
           <Text style={[styles.tabText, tab === 'received' && styles.tabTextActive]}>받은 선물</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tabBtn, tab === 'sent' && styles.tabBtnActive]}
           onPress={() => setTab('sent')}
+          accessibilityState={{ selected: tab === 'sent' }}
         >
           <Text style={[styles.tabText, tab === 'sent' && styles.tabTextActive]}>보낸 선물</Text>
         </TouchableOpacity>
