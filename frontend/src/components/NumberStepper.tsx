@@ -14,6 +14,7 @@ import { MaterialCommunityIcons } from './Icon';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 import { themedStyles } from '../theme/themedStyles';
 import { layout } from '../theme/layout';
+import { sanitizeDecimalInput, sanitizeIntegerInput } from '../utils/numericInput';
 
 interface Props {
   label: string;
@@ -44,25 +45,12 @@ export function NumberStepper({
   };
 
   /**
-   * 숫자만 허용 + 소수점은 최대 1개.
+   * 숫자만 허용 + 소수점은 최대 1개(무게처럼 decimal 인 경우만).
    * 예전엔 `[^0-9.]` 로만 걸러 "1.2.3" 같은 값이 그대로 통과했다 — Number("1.2.3") 이
    * NaN 이 되고, JSON.stringify(NaN) 은 null 이라 사용자는 입력했다고 믿는데
-   * 서버엔 조용히 값이 빠지는 문제였다(QA_CHECKLIST.md P0-2). 두 번째부터의 점은
-   * 버리고 나머지 숫자는 그대로 이어붙인다 — 입력이 툭 끊기지 않게.
+   * 서버엔 조용히 값이 빠지는 문제였다(QA_CHECKLIST.md P0-2).
    */
-  const sanitize = (t: string) => {
-    if (!decimal) {
-      onChange(t.replace(/[^0-9]/g, ''));
-      return;
-    }
-    const stripped = t.replace(/[^0-9.]/g, '');
-    const firstDot = stripped.indexOf('.');
-    const cleaned =
-      firstDot === -1
-        ? stripped
-        : stripped.slice(0, firstDot + 1) + stripped.slice(firstDot + 1).replace(/\./g, '');
-    onChange(cleaned);
-  };
+  const sanitize = (t: string) => onChange(decimal ? sanitizeDecimalInput(t) : sanitizeIntegerInput(t));
 
   return (
     <View style={styles.wrap}>

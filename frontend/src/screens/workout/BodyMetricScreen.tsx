@@ -34,19 +34,9 @@ import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { BodyMetric } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { layout } from '../../theme/layout';
+import { sanitizeDecimalInput } from '../../utils/numericInput';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'BodyMetric'>;
-
-/** 체중/체지방/허리 입력 필터 — 숫자와 소수점 하나만 허용한다.
- *  decimal-pad 키보드도 붙여넣기·일부 기기 IME로는 "70.5.2"처럼 소수점이
- *  여러 개인 문자열이 그대로 들어올 수 있어(QA_RUN_2026-08-25.md 확정 버그),
- *  타이핑 시점에 걸러 Number() 가 NaN 이 되는 경우 자체를 없앤다. */
-function sanitizeDecimalInput(v: string): string {
-  const digitsAndDots = v.replace(/[^0-9.]/g, '');
-  const firstDot = digitsAndDots.indexOf('.');
-  if (firstDot === -1) return digitsAndDots;
-  return digitsAndDots.slice(0, firstDot + 1) + digitsAndDots.slice(firstDot + 1).replace(/\./g, '');
-}
 
 /** 체중 막대 그래프 — 최근 N개, min~max 정규화 */
 function WeightChart({ data }: { data: BodyMetric[] }) {

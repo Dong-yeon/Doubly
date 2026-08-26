@@ -52,6 +52,7 @@ import { confirmDiscard } from '../../utils/discardGuard';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 import { formatNumber, formatWeight } from '../../utils/format';
+import { sanitizeDecimalInput, sanitizeIntegerInput } from '../../utils/numericInput';
 import type {
   ExerciseCatalogItem,
   ExerciseLastPerformance,
@@ -689,14 +690,22 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
     );
   };
 
-  const updateSetField = (exKey: string, idx: number, field: 'weightKg' | 'reps' | 'rpe', value: string) =>
+  /*
+   * 타이핑 시점에 숫자만 남긴다 — decimal-pad 키보드로도 붙여넣기 등으로
+   * "1.2.3"처럼 소수점이 여러 개인 값이 들어올 수 있고, 그러면 저장 시 toNum()이
+   * undefined 를 돌려줘 사용자는 입력했다고 믿는데 값이 조용히 빠진다
+   * (QA_CHECKLIST.md P0-1). 횟수는 소수 자체가 무의미해 정수만 허용한다.
+   */
+  const updateSetField = (exKey: string, idx: number, field: 'weightKg' | 'reps' | 'rpe', value: string) => {
+    const sanitized = field === 'reps' ? sanitizeIntegerInput(value) : sanitizeDecimalInput(value);
     setExercises((prev) =>
       prev.map((e) => {
         if (e.key !== exKey) return e;
-        const sets = e.sets.map((s, i) => (i === idx && !s.done ? { ...s, [field]: value } : s));
+        const sets = e.sets.map((s, i) => (i === idx && !s.done ? { ...s, [field]: sanitized } : s));
         return { ...e, sets };
       }),
     );
+  };
 
   const addSetRow = (exKey: string) =>
     setExercises((prev) =>
@@ -1231,13 +1240,28 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
               </View>
               <View style={styles.formRow}>
                 <View style={styles.flex}>
-                  <TextField label="세트" value={fSets} onChangeText={setFSets} keyboardType="number-pad" />
+                  <TextField
+                    label="세트"
+                    value={fSets}
+                    onChangeText={(v) => setFSets(sanitizeIntegerInput(v))}
+                    keyboardType="number-pad"
+                  />
                 </View>
                 <View style={styles.flex}>
-                  <TextField label="횟수" value={fReps} onChangeText={setFReps} keyboardType="number-pad" />
+                  <TextField
+                    label="횟수"
+                    value={fReps}
+                    onChangeText={(v) => setFReps(sanitizeIntegerInput(v))}
+                    keyboardType="number-pad"
+                  />
                 </View>
                 <View style={styles.flex}>
-                  <TextField label="무게(kg)" value={fWeight} onChangeText={setFWeight} keyboardType="decimal-pad" />
+                  <TextField
+                    label="무게(kg)"
+                    value={fWeight}
+                    onChangeText={(v) => setFWeight(sanitizeDecimalInput(v))}
+                    keyboardType="decimal-pad"
+                  />
                 </View>
               </View>
               <Button title="추가" onPress={onAddExercise} loading={adding} style={styles.modalBtn} />
