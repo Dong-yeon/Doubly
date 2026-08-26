@@ -67,6 +67,7 @@ export function TrainerRoutineAssignScreen({ navigation, route }: Props) {
                 key={o.offset}
                 style={[styles.dateChip, dateOffset === o.offset && styles.dateChipActive]}
                 onPress={() => setDateOffset(o.offset)}
+                accessibilityState={{ selected: dateOffset === o.offset }}
               >
                 <Text style={[styles.dateText, dateOffset === o.offset && styles.dateTextActive]}>
                   {o.label} · {dateFromOffset(o.offset).slice(5)}

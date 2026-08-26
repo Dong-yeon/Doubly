@@ -99,6 +99,7 @@ export function RegisterScreen({ navigation }: Props) {
                     pressed && styles.pressed,
                   ]}
                   onPress={() => setGender(gender === g ? undefined : g)}
+                  accessibilityState={{ selected: gender === g }}
                 >
                   <Text style={[styles.genderText, gender === g && styles.genderTextActive]}>
                     {g === 'MALE' ? '남성' : '여성'}

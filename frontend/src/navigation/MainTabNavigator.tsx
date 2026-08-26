@@ -67,6 +67,7 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
         key={routeName}
         style={styles.tabItem}
         activeOpacity={0.7}
+        accessibilityState={{ selected: focused }}
         onPress={() => {
           const route = state.routes[index];
           const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });

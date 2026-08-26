@@ -367,7 +367,13 @@ export function MyScreen({ navigation }: Props) {
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         <Card elevation="md" style={styles.profile}>
-          <Pressable onPress={onChangePhoto} disabled={photoUploading} style={styles.avatarWrap}>
+          <Pressable
+            onPress={onChangePhoto}
+            disabled={photoUploading}
+            style={styles.avatarWrap}
+            accessibilityRole="button"
+            accessibilityLabel="프로필 사진 변경"
+          >
             <Avatar name={user?.name} imageUrl={user?.profileImageUrl} size={80} />
             <View style={styles.cameraBadge}>
               {photoUploading ? (
@@ -424,6 +430,7 @@ export function MyScreen({ navigation }: Props) {
                       pressed && styles.genderChipPressed,
                     ]}
                     onPress={() => setGender(gender === g ? undefined : g)}
+                    accessibilityState={{ selected: gender === g }}
                   >
                     <Text style={[styles.genderText, gender === g && styles.genderTextActive]}>
                       {g === 'MALE' ? '남성' : '여성'}
