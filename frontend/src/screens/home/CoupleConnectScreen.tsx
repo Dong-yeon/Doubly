@@ -18,6 +18,21 @@ import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'CoupleConnect'>;
 
+/**
+ * 초대코드 형식 — 혼동 문자(I,O,0,1) 제외 32문자 알파벳 6자리(백엔드 InviteCodeGenerator와 동일).
+ * 공유 문구("Dubly에서 커플로 연결해요! 초대코드: ABC123 (24시간 유효)")를 말풍선째로 길게 눌러
+ * 통째로 복사·붙여넣는 경우가 많아, 그 안에서 실제 코드만 골라낸다. \b 경계 덕분에 "Dubly"(5자)
+ * 처럼 길이가 다른 라틴 문자열은 걸리지 않는다. 매칭 실패 시(짧게 직접 타이핑 중 등)엔 이전처럼
+ * 앞 6자만 사용해 폭 넘는 입력을 막는다.
+ */
+const INVITE_CODE_PATTERN = /\b[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}\b/i;
+
+function extractInviteCode(text: string): string {
+  const upper = text.toUpperCase();
+  const match = upper.match(INVITE_CODE_PATTERN);
+  return match ? match[0] : upper.trim().slice(0, 6);
+}
+
 export function CoupleConnectScreen({ navigation }: Props) {
   const { createInvite, connectCouple } = useRelationStore();
   const [code, setCode] = useState<string | null>(null);
@@ -111,10 +126,9 @@ export function CoupleConnectScreen({ navigation }: Props) {
             <Text style={styles.desc}>받은 6자리 코드를 입력해 연결하세요.</Text>
             <TextField
               value={input}
-              onChangeText={(t) => setInput(t.toUpperCase())}
+              onChangeText={(t) => setInput(extractInviteCode(t))}
               placeholder="예: ABC123"
               autoCapitalize="characters"
-              maxLength={6}
               errorText={error ?? undefined}
               style={styles.codeInput}
             />
