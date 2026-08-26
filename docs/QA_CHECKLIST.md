@@ -202,6 +202,24 @@
 - **일괄 수정**: 텍스트 없는 터치 요소에 `accessibilityLabel` + `accessibilityRole="button"`,
   선택형 칩엔 `accessibilityState={{ selected }}`. ESLint 규칙으로 강제
 
+> **2026-08-26 해소.** `TouchableOpacity`/`Pressable`이 있는 79개 파일 전체를 7개 클러스터로 나눠
+> 각각 격리된 워크트리에서 병렬 처리(운동·여행·식단/장소·채팅+홈+피드·트레이너+마이+온보딩·
+> 공용 컴포넌트 1/2·공용 컴포넌트 2/2), 순차로 `main`에 병합했다. 규칙은 두 가지만 기계적으로
+> 적용: ① 화면에 읽을 수 있는 텍스트가 전혀 없는(이모지·기호·아이콘/이미지만 렌더링) 터치
+> 요소에 `accessibilityLabel`(실제 동작 기준 한국어) + `accessibilityRole="button"`, ② `selected`/
+> `active` 류 boolean으로 배경·테두리가 바뀌는 선택형 칩/탭에 `accessibilityState={{ selected }}`
+> (텍스트가 있는 칩도 포함 — 선택 여부는 텍스트만으로 안 드러남). 실제로 뒤져보니 `Checkbox`·
+> `Chip`·`IconButton`·`ConfirmDialog`·`DateField`·`ImageViewer`·`PushPermissionPrimer`·
+> `Button`·`TripSectionTabs`·`WorkoutCard`·`WorkoutRecordScreen` 등 다수는 이미 정상이었고
+> (문서의 4.3% 스냅샷이 상당히 낡아 있었음), 실제로 손댄 곳은 30개 파일·약 45건이다. 모달
+> 백드롭/탭-흡수용 투명 `Pressable`, 아이콘 없이 이미 텍스트만 있는 버튼, "완료 여부"처럼
+> 선택이 아닌 다른 의미의 boolean은 규칙 정의에 정확히 안 맞아 스코프 확장을 피하려 스킵했다
+> (각 클러스터 보고서에 파일:라인 기록, 세션 로그 참고). **ESLint 규칙 강제는 이번 스코프에서
+> 제외** — 이 저장소엔 ESLint 인프라 자체가 없어(설정 파일 0개) 새 규칙 하나를 위해 툴체인
+> 전체를 새로 깔아야 하는 별도 인프라 작업이라, 필요하면 후속으로. 커밋: `872aded`(트레이너/
+> 마이/온보딩) · `14543af`(공용 컴포넌트 2/2) · `6a62fd8`(공용 컴포넌트 1/2) · `2de5b29`(여행) ·
+> `e93f4b8`(채팅/홈/피드) · `64a6269`(식단/장소) · `4f8ed85`(운동), 병합 커밋 `379fab8`.
+
 ### 패턴 6: 모달 저장 버튼에 in-flight 가드 없음
 
 > **2026-08-26 해소.** `TripDetailScreen` 일정 저장(`savingItem` 신설, `45429e7`), `TripExpenseScreen`
