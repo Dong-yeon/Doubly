@@ -966,11 +966,18 @@ export function DietRecordScreen({ navigation, route }: Props) {
                       setPlaceRating(0);
                     }}
                     hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel="선택한 장소 지우기"
                   >
                     <MaterialCommunityIcons name="close" size={18} color={colors.textTertiary} />
                   </TouchableOpacity>
                 ) : (
-                  <TouchableOpacity onPress={() => setPlaceSheetOpen(true)} hitSlop={8}>
+                  <TouchableOpacity
+                    onPress={() => setPlaceSheetOpen(true)}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel="장소 고르기"
+                  >
                     <MaterialCommunityIcons name="chevron-right" size={18} color={colors.textTertiary} />
                   </TouchableOpacity>
                 )}
@@ -981,7 +988,12 @@ export function DietRecordScreen({ navigation, route }: Props) {
                   <Text style={styles.label}>같이 별점도 남길까요? (선택)</Text>
                   <View style={styles.starRow}>
                     {[1, 2, 3, 4, 5].map((n) => (
-                      <TouchableOpacity key={n} onPress={() => setPlaceRating(placeRating === n ? 0 : n)}>
+                      <TouchableOpacity
+                        key={n}
+                        onPress={() => setPlaceRating(placeRating === n ? 0 : n)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`별점 ${n}점`}
+                      >
                         <Text style={styles.star}>{n <= placeRating ? '★' : '☆'}</Text>
                       </TouchableOpacity>
                     ))}
@@ -1020,7 +1032,13 @@ export function DietRecordScreen({ navigation, route }: Props) {
                 : styles.photoBoxEmpty,
             ]}
           >
-            <TouchableOpacity style={styles.photoTapArea} onPress={onPickPhoto} activeOpacity={0.8}>
+            <TouchableOpacity
+              style={styles.photoTapArea}
+              onPress={onPickPhoto}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel={photoUri ? '사진 변경하기' : undefined}
+            >
               {photoUri ? (
                 <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />
               ) : (
@@ -1121,6 +1139,8 @@ export function DietRecordScreen({ navigation, route }: Props) {
                     hitSlop={8}
                     disabled={giftingId === f.id}
                     onPress={() => giftFavorite(f)}
+                    accessibilityRole="button"
+                    accessibilityLabel="즐겨찾기 공유하기"
                   >
                     <Text style={styles.favChipGift}>🎁</Text>
                   </TouchableOpacity>
@@ -1195,6 +1215,8 @@ export function DietRecordScreen({ navigation, route }: Props) {
                   onPress={() => onSearchDb(item)}
                   disabled={searchingDbKey === item.key}
                   hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="음식 DB에서 검색하기"
                 >
                   {searchingDbKey === item.key ? (
                     <ActivityIndicator size="small" color={colors.primary} />

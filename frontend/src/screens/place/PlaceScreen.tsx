@@ -304,6 +304,7 @@ export function PlaceScreen() {
                 setBrowseView(v.value);
                 if (v.value !== 'map') setPendingPin(null);
               }}
+              accessibilityState={{ selected: browseView === v.value }}
             >
               <MaterialCommunityIcons
                 name={v.icon}
