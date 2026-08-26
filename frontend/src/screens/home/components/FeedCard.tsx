@@ -181,6 +181,9 @@ function Reactions({
             onPress={() => onPress(emoji)}
             // 높이 30px — 칩 크기는 유지하고 터치 영역만 넓힌다
             hitSlop={7}
+            accessibilityRole="button"
+            accessibilityLabel={`${emoji} 리액션`}
+            accessibilityState={{ selected: !!summary?.mine }}
           >
             <Text style={styles.chipEmoji}>{emoji}</Text>
             {summary && summary.count > 0 ? (

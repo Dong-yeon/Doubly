@@ -662,6 +662,9 @@ export function ChatRoomScreen({ navigation, route }: Props) {
                   key={r.emoji}
                   style={[styles.reactionChip, isMine && styles.reactionChipMine]}
                   onPress={() => onReact(item, r.emoji)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${r.emoji} 리액션`}
+                  accessibilityState={{ selected: isMine }}
                 >
                   <Text style={styles.reactionChipEmoji}>{r.emoji}</Text>
                   {r.count > 1 ? <Text style={styles.reactionChipCount}>{r.count}</Text> : null}

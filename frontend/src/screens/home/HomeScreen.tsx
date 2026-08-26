@@ -455,7 +455,13 @@ export function HomeScreen({ navigation }: Props) {
             <MaterialCommunityIcons name="image-outline" size={20} color={colors.textPrimary} />
           </Pressable>
         ) : null}
-        <Pressable style={styles.profileBtn} onPress={() => navigation.navigate('My')} hitSlop={8}>
+        <Pressable
+          style={styles.profileBtn}
+          onPress={() => navigation.navigate('My')}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="내 프로필"
+        >
           <Avatar name={user?.name} imageUrl={user?.profileImageUrl} size={32} color={colors.primaryDark} />
         </Pressable>
       </View>
