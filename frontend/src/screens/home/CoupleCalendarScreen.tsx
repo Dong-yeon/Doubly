@@ -115,6 +115,9 @@ export function CoupleCalendarScreen({ navigation }: Props) {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
   const [saving, setSaving] = useState(false);
+  // 실패해도 목록은 비우지 않지만(아래 load 참고), "진짜 빈 목록"과는 구분해야 한다
+  // (QA_CHECKLIST.md 전역 반복 패턴 1: 로드 실패가 빈 상태로 위장)
+  const [loadError, setLoadError] = useState(false);
 
   /*
    * 월을 빠르게 넘기면 먼저 보낸 요청이 나중에 응답할 수 있다 — 응답 순서가
@@ -131,6 +134,7 @@ export function CoupleCalendarScreen({ navigation }: Props) {
       const data = await calendarApi.month(y, m);
       if (latestRequestRef.current !== requestId) return;
       setEvents(data);
+      setLoadError(false);
     } catch (e) {
       if (latestRequestRef.current !== requestId) return;
       /*
@@ -138,7 +142,11 @@ export function CoupleCalendarScreen({ navigation }: Props) {
        * 흔들리면 있던 일정이 통째로 사라진 채 "일정이 없어요"가 떠 지워진 것처럼 보였다
        * (바로 아래 여행 로더가 같은 이유로 지키는 규칙). 커플 미연결이면 애초에 받아둔
        * 목록이 없어 빈 상태 그대로다.
+       *
+       * 다만 "정말 빈 목록"과는 구분해야 한다 — loadError 로 EmptyState 에 재시도를
+       * 보여준다(QA_CHECKLIST.md 전역 반복 패턴 1). 가장 최근 요청일 때만 반영한다.
        */
+      setLoadError(true);
     }
   }, []);
 
@@ -453,11 +461,23 @@ export function CoupleCalendarScreen({ navigation }: Props) {
         </View>
 
         {listEvents.length === 0 ? (
-          <EmptyState
-            icon="calendar-heart"
-            title="일정이 없어요"
-            description="생일, 데이트 약속, 기념일을 등록하면 당일 아침에 둘 다 알림을 받아요."
-          />
+          loadError ? (
+            // 진짜 빈 목록이 아니라 로드 실패일 수 있다 — 구분해서 재시도를 준다
+            // (QA_CHECKLIST.md 전역 반복 패턴 1)
+            <EmptyState
+              icon="cloud-off-outline"
+              title="일정을 불러오지 못했어요"
+              description="네트워크 상태를 확인하고 다시 시도해주세요."
+              error
+              onRetry={() => load(year, month)}
+            />
+          ) : (
+            <EmptyState
+              icon="calendar-heart"
+              title="일정이 없어요"
+              description="생일, 데이트 약속, 기념일을 등록하면 당일 아침에 둘 다 알림을 받아요."
+            />
+          )
         ) : (
           listEvents.map((event) => {
             const meta = typeMeta(event.eventType);

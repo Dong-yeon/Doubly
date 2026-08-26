@@ -46,6 +46,10 @@ export function PhotoAlbumScreen(_props: Props) {
   /* 뷰어는 인덱스로 연다 — 좌우 스와이프로 옆 사진까지 이어 보려면 목록 위치가 필요하다 */
   const [viewingIndex, setViewingIndex] = useState<number | null>(null);
   const loadingRef = useRef(false);
+  // 로드 실패가 빈 상태로 위장하지 않게 구분한다 — loadMore 는 이미 토스트로
+  // 실패를 알리는데(아래 참고) load 만 조용히 삼켜 일관성이 어긋났었다
+  // (QA_CHECKLIST.md 전역 반복 패턴 1)
+  const [loadError, setLoadError] = useState(false);
 
   /* 뷰어용 형태로 변환 — 작성자 색(나=coral/상대=indigo)은 목록과 같은 규칙을 따른다 */
   const viewerImages: ViewerImage[] = useMemo(
@@ -64,15 +68,19 @@ export function PhotoAlbumScreen(_props: Props) {
     if (loadingRef.current) return;
     loadingRef.current = true;
     setRefreshing(true);
+    setLoadError(false);
     try {
       const page = await feedApi.photos(null);
       setPhotos(page.items);
       setNextCursor(page.nextCursor);
       setHasMore(page.hasMore);
-    } catch {
-      // 커플 미연결 등 — 빈 상태 안내로 대체
+    } catch (e) {
+      // 커플 미연결 등 — 빈 상태 안내로 대체하되, "진짜 빈 앨범"과는
+      // loadError 로 구분해 재시도를 보여준다 (QA_CHECKLIST.md 전역 반복 패턴 1)
+      toast.error(getErrorMessage(e, '사진을 불러오지 못했어요.'));
       setPhotos([]);
       setHasMore(false);
+      setLoadError(true);
     } finally {
       loadingRef.current = false;
       setRefreshing(false);
@@ -124,7 +132,16 @@ export function PhotoAlbumScreen(_props: Props) {
           </Pressable>
         )}
         ListEmptyComponent={
-          refreshing ? null : (
+          refreshing ? null : loadError ? (
+            // 로드 실패가 빈 상태로 위장하지 않게 구분한다 (QA_CHECKLIST.md 전역 반복 패턴 1)
+            <EmptyState
+              icon="cloud-off-outline"
+              title="사진을 불러오지 못했어요"
+              description="네트워크 상태를 확인하고 다시 시도해주세요."
+              error
+              onRetry={load}
+            />
+          ) : (
             <EmptyState
               icon="image-multiple-outline"
               title="아직 사진이 없어요"

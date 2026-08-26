@@ -19,6 +19,7 @@ import { toast } from '../../store/toastStore';
 import { getErrorMessage } from '../../utils/error';
 import { relativeDateLabel, toDateString } from '../../utils/date';
 import { haptics } from '../../utils/haptics';
+import { useDeleteAction } from '../../hooks/useDeleteAction';
 import { useRelationStore } from '../../store/relationStore';
 import type { FeedItem } from '../../types';
 import { colors, spacing } from '../../constants/theme';
@@ -59,8 +60,14 @@ export function FeedTimelineScreen({ navigation, route }: Props) {
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  // 실패해도 items 는 비우지 않는다(첫 로드 실패 시 아래 참고) — "진짜 빈 기록"과
+  // 구분해 EmptyState 에서 재시도를 보여준다 (QA_CHECKLIST.md 전역 반복 패턴 1)
+  const [loadError, setLoadError] = useState(false);
   // 첫 로드와 더 읽기가 겹쳐 같은 페이지를 두 번 읽지 않도록 하는 잠금
   const busy = useRef(false);
+  // 포스트 삭제 in-flight 가드 — 공용 훅으로 중복 DELETE 방지 + 해당 카드 흐리게
+  // (QA_CHECKLIST.md 전역 반복 패턴 7)
+  const { deletingId, runDelete } = useDeleteAction<number>();
 
   /*
    * who 로 거를 때만 쓰는 필터·기본 개수.
@@ -83,6 +90,7 @@ export function FeedTimelineScreen({ navigation, route }: Props) {
     if (busy.current) return;
     busy.current = true;
     setLoading(true);
+    setLoadError(false);
     try {
       const page = await feedApi.timeline(null, pageLimit);
       setItems(page.items.filter(matches));
@@ -90,6 +98,7 @@ export function FeedTimelineScreen({ navigation, route }: Props) {
       setHasMore(page.hasMore);
     } catch (e) {
       toast.error(getErrorMessage(e, '기록을 불러오지 못했어요.'));
+      setLoadError(true);
     } finally {
       busy.current = false;
       setLoading(false);
@@ -145,15 +154,12 @@ export function FeedTimelineScreen({ navigation, route }: Props) {
       {
         text: '삭제',
         style: 'destructive',
-        onPress: async () => {
-          try {
+        onPress: () =>
+          runDelete(item.refId, async () => {
             await feedApi.removePost(item.refId);
             haptics.light();
             setItems((prev) => prev.filter((i) => feedItemKey(i) !== feedItemKey(item)));
-          } catch (e) {
-            Alert.alert('오류', getErrorMessage(e));
-          }
-        },
+          }),
       },
     ]);
   };
@@ -170,16 +176,28 @@ export function FeedTimelineScreen({ navigation, route }: Props) {
         onEndReached={loadMore}
         onEndReachedThreshold={0.4}
         renderItem={({ item }) => (
-          <FeedCard
-            item={item}
-            timeLabel={feedTimeLabel(item.occurredAt)}
-            quickEmojis={QUICK_EMOJIS}
-            onReact={onReact}
-            onLongPress={onLongPress}
-          />
+          // FeedCard 자체엔 dimmed prop 이 없어(패턴 7 대상 밖) View 로 감싸 흐리게 처리
+          <View style={item.type === 'POST' && deletingId === item.refId ? styles.cardDeleting : undefined}>
+            <FeedCard
+              item={item}
+              timeLabel={feedTimeLabel(item.occurredAt)}
+              quickEmojis={QUICK_EMOJIS}
+              onReact={onReact}
+              onLongPress={onLongPress}
+            />
+          </View>
         )}
         ListEmptyComponent={
-          loading ? null : (
+          loading ? null : loadError ? (
+            // 로드 실패가 빈 상태로 위장하지 않게 구분한다 (QA_CHECKLIST.md 전역 반복 패턴 1)
+            <EmptyState
+              icon="cloud-off-outline"
+              title="기록을 불러오지 못했어요"
+              description="네트워크 상태를 확인하고 다시 시도해주세요."
+              error
+              onRetry={load}
+            />
+          ) : (
             <EmptyState
               icon="timeline-text-outline"
               title="아직 기록이 없어요"
@@ -204,4 +222,5 @@ const styles = themedStyles((colors) => ({
   list: { padding: spacing.lg },
   loadMore: { paddingVertical: spacing.md },
   tail: { height: spacing.lg },
+  cardDeleting: { opacity: 0.4 },
 }));

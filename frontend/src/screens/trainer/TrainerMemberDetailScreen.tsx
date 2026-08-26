@@ -24,9 +24,13 @@ export function TrainerMemberDetailScreen({ navigation, route }: Props) {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [routines, setRoutines] = useState<TrainerRoutine[]>([]);
   const [loading, setLoading] = useState(false);
+  // 토스트는 스쳐 지나가지만 빈 목록은 화면에 그대로 남는다 — "진짜 빈 기록"과
+  // 구분되게 EmptyState 에서 재시도를 보여준다 (QA_CHECKLIST.md 전역 반복 패턴 1)
+  const [loadError, setLoadError] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       const [w, r] = await Promise.all([
         trainerApi.memberWorkouts(memberId),
@@ -36,6 +40,7 @@ export function TrainerMemberDetailScreen({ navigation, route }: Props) {
       setRoutines(r);
     } catch (e) {
       toast.error(getErrorMessage(e, '회원 정보를 불러오지 못했어요.'));
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -119,7 +124,18 @@ export function TrainerMemberDetailScreen({ navigation, route }: Props) {
         renderItem={({ item }) => <WorkoutCard workout={item} />}
         ListEmptyComponent={
           !loading ? (
-            <EmptyState icon="dumbbell" title="아직 운동 기록이 없어요" description="회원이 운동을 기록하면 여기에 표시돼요." />
+            loadError ? (
+              // 로드 실패가 빈 상태로 위장하지 않게 구분한다 (QA_CHECKLIST.md 전역 반복 패턴 1)
+              <EmptyState
+                icon="cloud-off-outline"
+                title="회원 정보를 불러오지 못했어요"
+                description="네트워크 상태를 확인하고 다시 시도해주세요."
+                error
+                onRetry={load}
+              />
+            ) : (
+              <EmptyState icon="dumbbell" title="아직 운동 기록이 없어요" description="회원이 운동을 기록하면 여기에 표시돼요." />
+            )
           ) : null
         }
       />
