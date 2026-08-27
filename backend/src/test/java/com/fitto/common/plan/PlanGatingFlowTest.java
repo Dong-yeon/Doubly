@@ -4,6 +4,9 @@ import com.fitto.auth.dto.RegisterRequest;
 import com.fitto.auth.service.AuthService;
 import com.fitto.calendar.dto.CreateEventRequest;
 import com.fitto.calendar.service.CalendarService;
+import com.fitto.challenge.domain.ChallengeType;
+import com.fitto.challenge.dto.CreateChallengeRequest;
+import com.fitto.challenge.service.CoupleChallengeService;
 import com.fitto.chat.domain.MessageType;
 import com.fitto.chat.dto.SendMessageRequest;
 import com.fitto.chat.service.ChatService;
@@ -24,8 +27,13 @@ import com.fitto.trip.dto.SaveTripExpenseRequest;
 import com.fitto.trip.dto.SaveTripRequest;
 import com.fitto.trip.service.TripExpenseService;
 import com.fitto.trip.service.TripService;
+import com.fitto.workout.dto.MuscleRecoveryResponse;
 import com.fitto.workout.dto.SaveRoutineRequest;
+import com.fitto.workout.dto.SaveWorkoutRequest;
+import com.fitto.workout.dto.WorkoutSetRequest;
+import com.fitto.workout.service.MuscleRecoveryService;
 import com.fitto.workout.service.WorkoutRoutineService;
+import com.fitto.workout.service.WorkoutService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -63,6 +71,9 @@ class PlanGatingFlowTest {
     @Autowired MemoriesService memoriesService;
     @Autowired SummaryService summaryService;
     @Autowired ChatService chatService;
+    @Autowired CoupleChallengeService challengeService;
+    @Autowired WorkoutService workoutService;
+    @Autowired MuscleRecoveryService muscleRecoveryService;
 
     private Long register(String email) {
         return authService.register(
@@ -167,6 +178,21 @@ class PlanGatingFlowTest {
     }
 
     @Test
+    void 무료는_대결을_1개까지만_동시에_진행할_수_있다() {
+        Long user = couple("gate-challenge-a@fitto.com", "gate-challenge-b@fitto.com");
+        LocalDate today = LocalDate.now();
+
+        challengeService.create(user, new CreateChallengeRequest(
+                ChallengeType.WORKOUT, "첫 대결", today, today.plusDays(6), null));
+
+        assertThatThrownBy(() -> challengeService.create(user,
+                new CreateChallengeRequest(ChallengeType.WORKOUT, "둘째 대결", today, today.plusDays(6), null)))
+                .isInstanceOf(BusinessException.class)
+                .extracting(this::errorCodeOf)
+                .isEqualTo(ErrorCode.PLAN_LIMIT_EXCEEDED);
+    }
+
+    @Test
     void 무료_캘린더_월_한도를_넘기면_막힌다() {
         Long user = couple("gate-cal-a@fitto.com", "gate-cal-b@fitto.com");
         int limit = Feature.CALENDAR_EVENT.quotaFor(Plan.FREE).limit();
@@ -261,5 +287,21 @@ class PlanGatingFlowTest {
 
         assertThat(response.locked()).isTrue();
         assertThat(response.weekStart()).isNotNull();   // 기간은 여전히 채워 보낸다
+    }
+
+    @Test
+    void 근육_회복도_전체_카드는_잠기고_홈_요약_한줄은_무료로_내려온다() {
+        // 홈이 실행할 때마다 부르는 조회다 — mostRecent(요약 한 줄)는 무료, muscles(전체 카드)만 잠긴다.
+        Long user = register("gate-recovery@fitto.com");
+        workoutService.save(user, new SaveWorkoutRequest(LocalDate.now(), null, 30, null,
+                List.of(new WorkoutSetRequest("벤치프레스", "근력", 3, 10, new BigDecimal("60"), 1,
+                        null, "가슴", "바벨", null))));
+
+        MuscleRecoveryResponse response = muscleRecoveryService.recovery(user);
+
+        assertThat(response.locked()).isTrue();
+        assertThat(response.muscles()).isEmpty();
+        assertThat(response.mostRecent()).isNotNull();
+        assertThat(response.mostRecent().muscleGroup()).isEqualTo("가슴");
     }
 }
