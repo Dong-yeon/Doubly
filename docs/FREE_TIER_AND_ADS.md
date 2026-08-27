@@ -46,12 +46,24 @@ free-trial: ${PLAN_FREE_TRIAL:true}
 → [CALL_STATUS.md](CALL_STATUS.md)
 
 > **교훈**: `Feature.java`에 항목을 추가하는 것만으로는 아무것도 막히지 않습니다.
-> 서비스 계층에서 `planGuard`를 실제로 호출해야 강제됩니다. 8/21 조사 시점에
-> `PREMIUM_STICKER`, `FULL_STATS`, `MOOD_CALENDAR_FULL`, `WORKOUT_RECOVERY_FULL`,
+> 서비스 계층에서 `planGuard`를 실제로 호출해야 강제됩니다. 8/21 조사 시점에 12개
+> (`PREMIUM_STICKER`, `FULL_STATS`, `MOOD_CALENDAR_FULL`, `WORKOUT_RECOVERY_FULL`,
 > `ANNIVERSARY_RECAP`, `STREAK_REPAIR`, `WORKOUT_BOOSTER`, `CSV_EXPORT`,
 > `PUBLIC_GUIDE_LINK`, `AI_NEXT_MEAL`, `CUSTOM_EXERCISE`, `CHALLENGE_ACTIVE`,
-> `COOP_GOAL_ACTIVE`도 같은 상태(선언만 있고 호출부 없음)로 지목됐습니다.
-> Free 티어를 켜기 전에 이 목록을 다시 훑어야 합니다.
+> `COOP_GOAL_ACTIVE`)가 같은 상태(선언만 있고 호출부 없음)로 지목됐습니다.
+
+**2026-08-27 재조사 — 12개 중 실제로 위험한 건 2개뿐이었습니다.** `Feature.java` 선언 대
+서비스 계층 `planGuard` 호출 여부를 전수 grep 대조한 결과:
+
+| 분류 | 항목 | 근거 |
+| --- | --- | --- |
+| ✅ 이미 고쳐짐 | `PREMIUM_STICKER`, `FULL_STATS`, `STREAK_REPAIR`, `WORKOUT_BOOSTER` | `ChatService`/`MoodService`/`MealService`/`StreakRepairService`/`WorkoutBoosterService`에 실제 `planGuard` 호출 확인 — 8/21 이후 다른 작업 중 함께 반영된 것으로 보이나 이 문서만 갱신이 안 됨 |
+| ⚪ 기능 자체가 아직 없음 | `CSV_EXPORT`, `PUBLIC_GUIDE_LINK`, `AI_NEXT_MEAL`, `CUSTOM_EXERCISE`, `COOP_GOAL_ACTIVE`, `MOOD_CALENDAR_FULL`, `ANNIVERSARY_RECAP` | 백엔드·프론트 어디에도 컨트롤러/서비스가 없다(엔티티 컬럼조차 없는 것도 있음). 호출할 API 자체가 없어 지금은 악용 경로가 없다 — Free 티어 전환의 선행 조건이 아니라 각 기능을 실제로 만들 때 함께 게이팅하면 됨 |
+| 🔴 **살아있던 문제 → 수정 완료** | `WORKOUT_RECOVERY_FULL`, `CHALLENGE_ACTIVE` | `GET /api/v1/workout/recovery`와 챌린지 생성이 완전히 게이팅 없이 열려 있었다 — `VIDEO_CALL`과 동일한 패턴(enum만 선언, 서비스 호출부 누락). 2026-08-27에 `MuscleRecoveryService`(부위별 전체 카드만 잠금, 홈 요약 한 줄은 계속 무료)와 `CoupleChallengeService`(동시 진행 개수 `requireCapacity`)에 `planGuard` 호출을 추가하고 `PlanGatingFlowTest`에 회귀 테스트 2건을 더했다 |
+
+이제 Free 티어를 켜기 전에 다시 훑어야 할 목록은 없습니다 — 다만 위 "기능 자체가 아직
+없음" 7개를 실제로 만들 때는 착수 시점에 `planGuard`를 함께 넣어야 이 표가 다시 늘어나지
+않습니다.
 
 ## 리워드 광고 — 제안만 있고 구현은 0줄
 
