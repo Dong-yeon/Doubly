@@ -327,9 +327,12 @@ export interface MuscleRecovery {
   recoveryPercent: number;
 }
 export interface MuscleRecoveryStatus {
+  // 부위별 전체 카드(WORKOUT_RECOVERY_FULL) — 잠겨 있으면 빈 배열
   muscles: MuscleRecovery[];
-  // 가장 최근에 훈련한 부위 — 홈 화면 요약 카드용. 기록이 하나도 없으면 null
+  // 가장 최근에 훈련한 부위 — 홈 화면 요약 카드용(항상 무료). 기록이 하나도 없으면 null
   mostRecent: MuscleRecovery | null;
+  /** 부위별 전체 카드가 잠겨 있는지 — true 면 muscles 가 비어 있다 */
+  locked?: boolean;
 }
 
 // AI 운동 추천 (POST /workout/recommend) — 최근 기록 기반 제안

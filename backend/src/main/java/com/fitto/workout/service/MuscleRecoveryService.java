@@ -1,5 +1,7 @@
 package com.fitto.workout.service;
 
+import com.fitto.common.plan.Feature;
+import com.fitto.common.plan.PlanGuard;
 import com.fitto.workout.dto.MuscleRecoveryResponse;
 import com.fitto.workout.dto.MuscleRecoveryResponse.MuscleRecovery;
 import com.fitto.workout.repository.WorkoutSetRepository;
@@ -48,9 +50,11 @@ public class MuscleRecoveryService {
     }
 
     private final WorkoutSetRepository workoutSetRepository;
+    private final PlanGuard planGuard;
 
-    public MuscleRecoveryService(WorkoutSetRepository workoutSetRepository) {
+    public MuscleRecoveryService(WorkoutSetRepository workoutSetRepository, PlanGuard planGuard) {
         this.workoutSetRepository = workoutSetRepository;
+        this.planGuard = planGuard;
     }
 
     public MuscleRecoveryResponse recovery(Long userId) {
@@ -70,7 +74,9 @@ public class MuscleRecoveryService {
                 .min(Comparator.comparingLong(MuscleRecovery::hoursAgo))
                 .orElse(null);
 
-        return new MuscleRecoveryResponse(muscles, mostRecent);
+        // mostRecent(홈 요약 한 줄)는 항상 무료. 부위별 전체 카드(muscles)만 PRO 게이트.
+        boolean fullAllowed = planGuard.allows(userId, Feature.WORKOUT_RECOVERY_FULL);
+        return new MuscleRecoveryResponse(fullAllowed ? muscles : List.of(), mostRecent, !fullAllowed);
     }
 
     private MuscleRecovery toRecovery(String group, LocalDateTime lastTrainedAt, LocalDateTime now) {
