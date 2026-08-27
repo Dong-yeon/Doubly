@@ -15,4 +15,7 @@ public interface CoupleChallengeRepository extends JpaRepository<CoupleChallenge
 
     /** 종료 판정 대상 — 기간이 끝났는데 아직 발표되지 않은 대결 (ChallengeSettleNotifier). */
     List<CoupleChallenge> findBySettledAtIsNullAndEndDateBefore(LocalDate date);
+
+    /** 진행 중인(아직 안 끝난) 대결 개수 — {@code Feature.CHALLENGE_ACTIVE} 한도 판정(TripService.TRIP_ACTIVE 와 같은 패턴). */
+    long countByCoupleIdAndEndDateGreaterThanEqual(Long coupleId, LocalDate date);
 }

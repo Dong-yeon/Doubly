@@ -11,6 +11,8 @@ import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.notification.NotificationCategory;
 import com.fitto.common.notification.NotificationService;
 import com.fitto.common.notification.PushLinks;
+import com.fitto.common.plan.Feature;
+import com.fitto.common.plan.PlanGuard;
 import com.fitto.common.time.KstClock;
 import com.fitto.relation.domain.Relation;
 import com.fitto.relation.domain.RelationStatus;
@@ -36,19 +38,22 @@ public class CoupleChallengeService {
     private final ChallengeScorer scorer;
     private final NotificationService notificationService;
     private final CoupleEventPublisher coupleEventPublisher;
+    private final PlanGuard planGuard;
 
     public CoupleChallengeService(CoupleChallengeRepository challengeRepository,
                                   RelationRepository relationRepository,
                                   UserRepository userRepository,
                                   ChallengeScorer scorer,
                                   NotificationService notificationService,
-                                  CoupleEventPublisher coupleEventPublisher) {
+                                  CoupleEventPublisher coupleEventPublisher,
+                                  PlanGuard planGuard) {
         this.challengeRepository = challengeRepository;
         this.relationRepository = relationRepository;
         this.userRepository = userRepository;
         this.scorer = scorer;
         this.notificationService = notificationService;
         this.coupleEventPublisher = coupleEventPublisher;
+        this.planGuard = planGuard;
     }
 
     @Transactional
@@ -57,6 +62,9 @@ public class CoupleChallengeService {
             throw new BusinessException(ErrorCode.INVALID_INPUT, "종료일은 시작일 이후여야 해요.");
         }
         Relation couple = activeCouple(userId);
+        // 진행 중인(아직 안 끝난) 대결 개수 — TripService.TRIP_ACTIVE 와 같은 "동시에 몇 개" 패턴.
+        planGuard.requireCapacity(userId, Feature.CHALLENGE_ACTIVE,
+                challengeRepository.countByCoupleIdAndEndDateGreaterThanEqual(couple.getId(), KstClock.today()));
         CoupleChallenge challenge = CoupleChallenge.builder()
                 .coupleId(couple.getId())
                 .type(req.type())
