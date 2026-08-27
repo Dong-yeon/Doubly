@@ -29,10 +29,41 @@ free-trial: ${PLAN_FREE_TRIAL:true}
 있습니다(주석: "무료 체험 참여자에게 주는 '얼리 커플' 혜택"). `expires_at`을 `NULL`로
 두면 만료 없음으로 해석됩니다(`Subscription.java`).
 
-**전환 시 실행할 일회성 작업**(지금은 불필요 — Free 티어를 켤 때 함께):
-1. 전환 시각 기준 존재하는 전 사용자(또는 가입일 < 전환일 사용자)를 조회
-2. 각자에게 `Subscription.builder().plan(PRO).status(ACTIVE).store(MANUAL).expiresAt(null)...` 행 생성
-3. 이미 Google Play로 결제한 사용자와 중복 부여되지 않게 기존 활성 구독 여부 확인 후 스킵
+**전환 시 실행할 일회성 작업**(지금은 불필요 — `PLAN_FREE_TRIAL=false` 배포와 **같은
+시점에** 운영 DB에 직접 psql로 실행). `PlanResolver`/`SubscriptionRepository`가 실제로
+보는 조건(`status='ACTIVE' and (expires_at is null or expires_at > now)`)에 정확히
+맞춘 값이라 별도 코드 배포가 필요 없습니다.
+
+> ⚠️ **Flyway 마이그레이션으로 만들지 않았습니다** — 마이그레이션은 다음 배포 때(무관한
+> 수정이라도) 자동 실행되므로, "지금 존재하는 사용자"가 의도한 전환 시점이 아니라
+> 엉뚱한 배포 시점의 사용자 스냅샷이 돼버립니다. 반드시 **수동으로, 전환 직전에** 실행할 것.
+>
+> ⚠️ **QA/테스트 계정을 먼저 정리**하세요(`callqa-a/b@doubly.test`,
+> `dubly.qatest1/2.20260825@gmail.com` 등, [QA_RUN_2026-08-25.md](QA_RUN_2026-08-25.md)
+> 참고) — 안 지우면 얘네도 영구 PRO를 받습니다. 해가 되지는 않지만 지저분합니다.
+
+```sql
+-- 1) 실행 전 확인 — 몇 명에게 부여되는지 먼저 본다 (이미 활성 구독 있는 사용자는 제외)
+SELECT count(*) FROM users u
+WHERE NOT EXISTS (
+    SELECT 1 FROM subscriptions s
+    WHERE s.user_id = u.id AND s.status = 'ACTIVE'
+      AND (s.expires_at IS NULL OR s.expires_at > now())
+);
+
+-- 2) 실제 부여 — MANUAL/만료없음, product_id로 나중에 이 배치가 준 것임을 식별 가능
+INSERT INTO subscriptions (user_id, plan, status, store, product_id, purchase_token, started_at, expires_at, auto_renew)
+SELECT u.id, 'PRO', 'ACTIVE', 'MANUAL', 'grandfather.free_trial', 'grandfather-' || u.id, now(), NULL, false
+FROM users u
+WHERE NOT EXISTS (
+    SELECT 1 FROM subscriptions s
+    WHERE s.user_id = u.id AND s.status = 'ACTIVE'
+      AND (s.expires_at IS NULL OR s.expires_at > now())
+);
+```
+
+Railway psql 접속: Railway 대시보드 → Postgres 서비스 → `Connect` 탭의 `DATABASE_URL`로
+`psql "<그 URL>"` (이전 계정 정리 작업 때와 같은 절차).
 
 ## 게이팅 구조 (요약)
 
