@@ -129,14 +129,17 @@ UI가 이 세 개를 각각 다른 자리(칩/별점 셀렉터/방문 카드)에
 
 ## 결정 및 진행 상황 (2026-08-28)
 
-- [x] **카테고리 통합**(한식·중식·일식·양식 → 음식점) — 완료.
-      - 프론트: `constants/placeCategories.ts` (`PLACE_CATEGORIES` 12→9,
-        `KAKAO_CATEGORY_AUTO`에 `FD6: '음식점'` 추가 — 기존엔 카카오 지도에서 직접 검색해
-        추가한 음식점에 자동 카테고리가 아예 안 붙었던 것도 같이 고쳐짐)
+- [x] **카테고리 통합** — 12개 → 7개, 두 차례에 걸쳐 완료.
+      - 1차(V68): 한식/중식/일식/양식 → 음식점
+      - 2차(V69): 카페+디저트 → "카페·디저트"(박물관·전시와 같은 복합 이름 패턴),
+        술집 → 음식점
+      - 최종 목록: 음식점 · 카페·디저트 · 여행지 · 박물관·전시 · 액티비티 · 숙소 · 기타
+      - 프론트: `constants/placeCategories.ts`, `KAKAO_CATEGORY_AUTO`에 `FD6: '음식점'`
+        추가(기존엔 카카오 지도에서 직접 검색해 추가한 음식점에 자동 카테고리가 아예
+        안 붙었던 것도 같이 고쳐짐), `CE7`도 `카페·디저트`로 갱신
       - 백엔드: `KakaoLocalClient.simplifyCategory` — "음식점 > X > Y"는 최상위 단계를
         그대로 씀(AI 맛집 추천 파이프라인의 카카오 검색 결과 매핑)
-      - DB: `V68__place_category_merge_food.sql` — 기존 저장된 한식/중식/일식/양식 값을
-        음식점으로 일괄 정리
+      - DB: `V68__place_category_merge_food.sql`, `V69__place_category_merge_cafe_bar.sql`
       - 테스트: `KakaoLocalClientMappingTest`·`TripFlowTest` 갱신, 백엔드 전체 스위트(87)
         통과 확인
 - [x] **"가고 싶어요/다녀왔어요" 자체를 없애기로 결정** — 절충안(경로 A만 제거)이 아니라
