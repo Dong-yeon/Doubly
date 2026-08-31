@@ -153,4 +153,15 @@ UI가 이 세 개를 각각 다른 자리(칩/별점 셀렉터/방문 카드)에
       - DB: `V70__drop_place_status.sql` — `places.status` 컬럼 DROP
       - 테스트: `SavePlaceRequest` 호출부 전체 갱신, `TripRecapFlowTest`는 실제
         `recordVisit()` 호출로 재작성, 백엔드 전체 스위트(87) 통과 확인
+- [x] **콘텐츠(영화·공연·드라마)도 동일하게 정리** — `ContentStatus`는 애초에 코드
+      주석에서부터 "Place의 WISHLIST/VISITED와 같은 축"으로 설계된 미러 도메인이라,
+      Place와 완전히 같은 문제(수동 선택 vs 관람 기록 저장 시 자동 전환하는
+      `markDone()` 이중 경로)가 그대로 있었다 — 같은 방식으로 제거.
+      - 백엔드: `Content.status`·`ContentStatus` enum·`markDone()` 제거,
+        `V71__drop_content_status.sql`
+      - 프론트: 추가 화면 상태 선택 칩, 상세 화면 상태 칩, 콘텐츠 모드 상태 필터·목록
+        배지 전부 제거
+      - Content는 Trip처럼 status에 의존하는 별도 집계가 없어(Place의 여행 회고
+        "다녀온 장소 수" 같은 것) 백엔드 쪽이 Place보다 단순했고, 기존 테스트도 status를
+        직접 다루지 않아 테스트 갱신이 필요 없었다
 - [ ] 카테고리 필터 UI를 접이식으로 바꿀지 — 보류
