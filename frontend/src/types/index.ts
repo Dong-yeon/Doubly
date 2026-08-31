@@ -829,6 +829,8 @@ export interface LovelichelinRecommendation {
 // 장소 이름 검색 결과 — GET /places/search. 카카오 로컬 키워드 검색 그대로라 좌표까지
 // 채워져 있다(LovelichelinRecommendedPlace 와 같은 필드 모양, reason 만 없음).
 export interface PlaceSearchResult {
+  /** 카카오 장소 고유 id — save() 에 그대로 실어 보내면 중복 등록을 막을 수 있다 */
+  kakaoPlaceId?: string | null;
   name: string;
   address?: string | null;
   category?: string | null;

@@ -50,8 +50,12 @@ public class KakaoLocalClient {
         return properties.isConfigured();
     }
 
-    /** 키워드 검색 결과 1건 — 카카오 문서(documents[]) 필드를 앱에서 쓰는 모양으로 추린 것 */
-    public record KakaoPlace(String name, String address, String category,
+    /**
+     * 키워드 검색 결과 1건 — 카카오 문서(documents[]) 필드를 앱에서 쓰는 모양으로 추린 것.
+     * {@code id} 는 카카오가 매기는 장소 고유 id — 같은 장소를 다시 저장하려 할 때
+     * PlaceService.save() 가 이 값으로 중복 등록을 막는 데 쓴다.
+     */
+    public record KakaoPlace(String id, String name, String address, String category,
                              Double lat, Double lng, String placeUrl) {
     }
 
@@ -91,6 +95,7 @@ public class KakaoLocalClient {
         String address = firstNonBlank(doc.path("road_address_name").asText(""),
                 doc.path("address_name").asText(""));
         return new KakaoPlace(
+                doc.path("id").asText(null),
                 name,
                 address,
                 simplifyCategory(doc.path("category_name").asText("")),

@@ -34,6 +34,7 @@ import com.fitto.user.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -94,28 +95,69 @@ public class PlaceService {
         List<KakaoPlace> found = kakaoLocalClient.searchKeyword(query, Math.clamp(size, 1, 10));
         List<PlaceSearchResponse.PlaceSearchResult> results = found.stream()
                 .map(k -> new PlaceSearchResponse.PlaceSearchResult(
-                        k.name(), k.address(), k.category(), k.lat(), k.lng(), k.placeUrl()))
+                        k.id(), k.name(), k.address(), k.category(), k.lat(), k.lng(), k.placeUrl()))
                 .toList();
         return new PlaceSearchResponse(true, results);
     }
 
-    /** 장소 등록 (PLACE-01) */
+    /**
+     * 장소 등록 (PLACE-01) — 이미 같은 커플이 등록해둔 장소면 새로 만들지 않고 그 장소를
+     * 그대로 돌려준다({@link #findExisting}). 식단 기록 화면처럼 카카오 검색 결과를 그대로
+     * 저장하는 경로에서, 이미 등록된 맛집을 다시 검색해 추가할 때 똑같은 장소가 중복
+     * 생성되던 문제를 막는다. 재사용일 때는 플랜 한도({@link Feature#PLACE_PIN})도
+     * 소모하지 않는다 — 실제로 늘어난 핀이 없으므로.
+     */
     @Transactional
     public PlaceResponse save(Long userId, SavePlaceRequest request) {
         Relation couple = activeCouple(userId);
+        String name = request.name().trim();
+
+        Place existing = findExisting(couple.getId(), request.kakaoPlaceId(), name,
+                request.address(), request.lat(), request.lng());
+        if (existing != null) {
+            return withSummary(existing, userId);
+        }
+
         planGuard.requireCapacity(userId, Feature.PLACE_PIN,
                 placeRepository.countByCoupleId(couple.getId()));
         Place place = Place.builder()
                 .coupleId(couple.getId())
-                .name(request.name().trim())
+                .name(name)
                 .address(request.address())
                 .lat(request.lat())
                 .lng(request.lng())
                 .category(request.category())
+                .kakaoPlaceId(request.kakaoPlaceId())
                 .addedBy(userId)
                 .build();
         placeRepository.save(place);
         return toResponse(place, null, RatingPair.EMPTY, null);
+    }
+
+    /**
+     * kakaoPlaceId 가 있으면 그걸로, 없으면(직접 입력·과거 데이터) 이름+좌표 또는
+     * 이름+주소로 이미 등록된 장소를 찾는다. 우선순위: kakaoPlaceId &gt; 이름+좌표 &gt;
+     * 이름+주소 — 뒤로 갈수록 대조 근거가 약해지므로 앞에서 못 찾았을 때만 진행한다.
+     */
+    private Place findExisting(Long coupleId, String kakaoPlaceId, String name,
+                               String address, BigDecimal lat, BigDecimal lng) {
+        if (kakaoPlaceId != null && !kakaoPlaceId.isBlank()) {
+            Place byKakaoId = placeRepository.findFirstByCoupleIdAndKakaoPlaceId(coupleId, kakaoPlaceId)
+                    .orElse(null);
+            if (byKakaoId != null) {
+                return byKakaoId;
+            }
+        }
+        if (lat != null && lng != null) {
+            Place byCoord = placeRepository
+                    .findFirstByCoupleIdAndNameIgnoreCaseAndLatAndLng(coupleId, name, lat, lng)
+                    .orElse(null);
+            if (byCoord != null) {
+                return byCoord;
+            }
+        }
+        return placeRepository.findFirstByCoupleIdAndNameIgnoreCaseAndAddress(coupleId, name, address)
+                .orElse(null);
     }
 
     /** 커플 공유 장소 목록 — 방문 요약 + 럽슐랭 평가 + 매거진 카드용 커버 포함 (PLACE-02) */

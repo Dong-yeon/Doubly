@@ -25,6 +25,7 @@ class KakaoLocalClientMappingTest {
     void 정상_응답을_매핑한다() throws Exception {
         JsonNode document = doc("""
                 {
+                  "id": "987654321",
                   "place_name": "연남 파스타집",
                   "category_name": "음식점 > 양식 > 이탈리안",
                   "road_address_name": "서울 마포구 동교로 123",
@@ -37,6 +38,7 @@ class KakaoLocalClientMappingTest {
 
         KakaoPlace place = client.mapDocument(document);
 
+        assertThat(place.id()).isEqualTo("987654321");
         assertThat(place.name()).isEqualTo("연남 파스타집");
         assertThat(place.category()).isEqualTo("음식점"); // 최상위 단계 — 국가별 세분류는 더 이상 안 남긴다
         assertThat(place.address()).isEqualTo("서울 마포구 동교로 123"); // 도로명 우선
@@ -73,6 +75,7 @@ class KakaoLocalClientMappingTest {
                 {"place_name": "이름만 있는 곳", "x": "not-a-number", "y": ""}
                 """));
         assertThat(broken.name()).isEqualTo("이름만 있는 곳");
+        assertThat(broken.id()).isNull(); // id 없이 오면 null — 중복 대조는 이름+좌표/주소 폴백으로
         assertThat(broken.lat()).isNull();
         assertThat(broken.lng()).isNull();
         assertThat(broken.address()).isNull();

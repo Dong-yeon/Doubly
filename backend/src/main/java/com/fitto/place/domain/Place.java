@@ -50,6 +50,14 @@ public class Place {
     @Column(length = 30)
     private String category;
 
+    /**
+     * 카카오 로컬 검색 결과의 고유 id — 같은 장소를 다시 저장하려 할 때(식단 기록
+     * 화면 등) PlaceService.save()가 이 값으로 기존 행을 찾아 재사용해 중복 등록을
+     * 막는다. 직접 입력한 장소·이 필드가 생기기 전에 등록된 장소는 null.
+     */
+    @Column(name = "kakao_place_id", length = 50)
+    private String kakaoPlaceId;
+
     @Column(name = "added_by", nullable = false)
     private Long addedBy;
 
@@ -71,13 +79,14 @@ public class Place {
 
     @Builder
     private Place(Long coupleId, String name, String address, BigDecimal lat, BigDecimal lng,
-                  String category, Long addedBy) {
+                  String category, String kakaoPlaceId, Long addedBy) {
         this.coupleId = coupleId;
         this.name = name;
         this.address = address;
         this.lat = lat;
         this.lng = lng;
         this.category = category;
+        this.kakaoPlaceId = kakaoPlaceId;
         this.addedBy = addedBy;
     }
 

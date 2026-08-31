@@ -15,6 +15,8 @@ export interface SavePlacePayload {
   lat?: number;
   lng?: number;
   category?: string;
+  /** 카카오 검색 결과의 고유 id — 실어 보내면 이미 등록된 같은 장소일 때 중복 대신 재사용된다 */
+  kakaoPlaceId?: string;
 }
 
 export interface RecordVisitPayload {

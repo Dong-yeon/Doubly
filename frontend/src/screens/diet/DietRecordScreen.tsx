@@ -406,6 +406,8 @@ export function DietRecordScreen({ navigation, route }: Props) {
         lat: result.lat ?? undefined,
         lng: result.lng ?? undefined,
         category: result.category ?? undefined,
+        // 이미 등록된 같은 장소면(카카오 id로 대조) 새로 만들지 않고 그 장소가 그대로 온다
+        kakaoPlaceId: result.kakaoPlaceId ?? undefined,
       });
       haptics.success();
       toast.success(`${saved.name}을(를) 럽슐랭에 추가했어요`);
