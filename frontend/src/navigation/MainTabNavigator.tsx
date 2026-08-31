@@ -115,8 +115,17 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   const nestedRoute = getFocusedRouteNameFromRoute(state.routes[state.index]);
   if (nestedRoute && HIDE_TAB_BAR_ON.has(nestedRoute)) return null;
 
+  /*
+   * insets.bottom 은 제스처 내비게이션 바가 "그려지는" 높이일 뿐이다 — 실제로 시스템이
+   * 화면 아래쪽에서 "홈으로 나가기/최근 앱 보기" 스와이프를 붙잡는 영역은 이보다 더
+   * 넓을 수 있다(OEM 스킨마다 다름, 특히 삼성 One UI). 탭바를 insets.bottom 높이까지만
+   * 띄우면 시각적으로는 내비게이션 바 위에 떠 있어도, 그 스와이프 인식 영역과는 겹쳐서
+   * 탭을 눌렀는데 시스템 제스처(홈/최근 앱)로 먹히는 경우가 있었다(2026-08-31 리포트).
+   * 여유분을 더 얹어 탭 터치 영역 자체를 그 구역 위로 확실히 밀어올린다 — 비트윈 등
+   * 커플 앱들의 여유 있는 하단 탭바 스타일도 참고해 spacing.md 로 넉넉하게 잡았다.
+   */
   return (
-    <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
+    <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, spacing.md) + spacing.md }]}>
       {routeNames.map((name, i) => renderTab(name, i))}
     </View>
   );
@@ -157,11 +166,13 @@ const styles = themedStyles((colors) => ({
     backgroundColor: colors.surfaceCard,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
-    paddingTop: spacing.sm,
+    // 비트윈 등 커플 앱들의 "여유 있게 낮고 넓은" 탭바 참고(2026-08-31) — 기존
+    // spacing.sm(8) 은 촘촘해서 아이콘이 바 위쪽 경계에 바짝 붙어 보였다.
+    paddingTop: spacing.md,
     ...shadow.md,
   },
-  // minHeight 48 — 아이콘+라벨만으론 40px 이라 터치 타깃 권장(44px)에 못 미친다
-  tabItem: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2, minHeight: 48 },
+  // minHeight 56 — 위 paddingTop 확장과 짝을 맞춘 여유값(터치 타깃 권장 44px는 이미 넘는다)
+  tabItem: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2, minHeight: 56 },
   tabLabel: { fontSize: 11, fontWeight: '700', lineHeight: 14 },
   tabBadge: {
     position: 'absolute',
