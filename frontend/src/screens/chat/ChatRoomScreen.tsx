@@ -864,6 +864,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
                 name={showExtras ? 'close' : 'plus'}
                 size={24}
                 color={showExtras ? colors.primary : colors.textSecondary}
+                style={styles.trayIcon}
               />
             </TouchableOpacity>
           )}
@@ -882,7 +883,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             accessibilityRole="button"
             accessibilityLabel={editing ? '수정 완료' : '전송'}
           >
-            <MaterialCommunityIcons name="send" size={20} color={colors.white} />
+            <MaterialCommunityIcons name="send" size={20} color={colors.white} style={styles.sendIcon} />
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -1192,6 +1193,16 @@ const styles = themedStyles((colors) => ({
     backgroundColor: colors.background,
   },
   imageBtn: { width: 46, height: 46, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  /*
+   * "+"(24)와 전송(20) 아이콘은 크기가 달라 실제 박스는 둘 다 46x46 로 완전히
+   * 같은데도(alignItems/justifyContent: center) 세로 정렬이 어긋나 보였다.
+   * 아이콘 폰트는 lineHeight 를 안 정해주면 브라우저가 폰트 자체의 "normal"
+   * 줄높이를 쓰는데, 이 여백 비율이 fontSize 에 비례해서 커지므로 크기가
+   * 다른 두 아이콘은 같은 상자 안에서도 글리프가 서로 다른 픽셀만큼
+   * 위/아래로 밀린다. lineHeight 를 size 와 같게 못박아 그 여백을 없앤다.
+   */
+  trayIcon: { lineHeight: 24 },
+  sendIcon: { lineHeight: 20 },
   input: {
     flex: 1,
     // 웹 필수 — <textarea> 내재 최소 폭 탓에 flex:1 이어도 안 줄어든다
