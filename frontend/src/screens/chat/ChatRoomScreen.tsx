@@ -1034,8 +1034,18 @@ const styles = themedStyles((colors) => ({
   //
   // flexShrink: 1 이 row·bubble 둘 다에 필요하다 — RN 은 웹 flexbox와 달리 flex 자식의
   // 기본 flexShrink 가 0이라, 이게 없으면 공백 없이 이어지는 긴 텍스트(ㅋㅋㅋㅋ… 등)에서
-  // maxWidth(80%/82%)를 무시하고 말풍선이 화면 밖까지 그대로 늘어난다(줄바꿈이 안 됨).
-  row: { maxWidth: '80%', flexShrink: 1, flexDirection: 'row', alignItems: 'flex-end' },
+  // maxWidth(82%, msgBlock 이 담당)를 무시하고 말풍선이 화면 밖까지 그대로 늘어난다
+  // (줄바꿈이 안 됨, 28c9809).
+  //
+  // row 자신에는 maxWidth 를 안 준다(예전엔 '80%' 를 여기도 줬었다) — msgBlock 은
+  // width 가 없고 maxWidth(82%) 만으로 내용 크기에 맞춰(shrink-to-fit) 그려지는데,
+  // 그 폭이 아직 정해지지 않은 상태에서 자식(row)에 또 퍼센트(msgBlock 의 80%)를
+  // 매기면 Yoga 가 첫 측정 패스에서 사실상 0에 가까운 값으로 잘못 계산해버린다 —
+  // "그렇네유~" 같은 짧은 한 줄짜리 메시지가 화면 폭이 넉넉히 남는데도 3줄로
+  // 쪼개져 나오던 원인이 이 이중 퍼센트였다(2026-08-31 리포트). msgBlock 의
+  // maxWidth 하나만으로 이미 충분히 제약되므로 row 는 flexShrink 만 갖고, 정말
+  // 넘칠 때만 msgBlock 의 실제(px) 박스 안에서 줄어들게 한다.
+  row: { flexShrink: 1, flexDirection: 'row', alignItems: 'flex-end' },
   rowMine: { alignSelf: 'flex-end', flexDirection: 'row-reverse' },
   rowTheirs: { alignSelf: 'flex-start' },
   rowSpaced: { marginTop: spacing.sm },

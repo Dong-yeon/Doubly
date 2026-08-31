@@ -1,1 +1,3 @@
 .idea/
+# EAS 로 받은 배포용 산출물(.aab 등) — 커밋 대상 아님, 로컬 다운로드용
+build-artifacts/
