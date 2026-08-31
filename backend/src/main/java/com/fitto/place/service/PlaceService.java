@@ -112,7 +112,6 @@ public class PlaceService {
                 .lat(request.lat())
                 .lng(request.lng())
                 .category(request.category())
-                .status(request.status())
                 .addedBy(userId)
                 .build();
         placeRepository.save(place);
@@ -155,8 +154,7 @@ public class PlaceService {
     @Transactional
     public PlaceResponse update(Long userId, Long placeId, UpdatePlaceRequest request) {
         Place place = getCouplePlace(userId, placeId);
-        place.update(request.name(), request.address(), request.lat(), request.lng(),
-                request.category(), request.status());
+        place.update(request.name(), request.address(), request.lat(), request.lng(), request.category());
         return withSummary(place, userId);
     }
 
@@ -171,7 +169,7 @@ public class PlaceService {
         placeRepository.delete(place);
     }
 
-    /** 방문 기록 추가 — 위시리스트였다면 방문완료로 전환, 상대에게 푸시 (PLACE-04) */
+    /** 방문 기록 추가 — 상대에게 푸시 (PLACE-04) */
     @Transactional
     public PlaceVisitResponse recordVisit(Long userId, Long placeId, RecordVisitRequest request) {
         Place place = getCouplePlace(userId, placeId);
@@ -194,7 +192,6 @@ public class PlaceService {
                 .mealId(request.mealId())
                 .build();
         placeVisitRepository.save(visit);
-        place.markVisited();
 
         Long partnerId = activeCouple(userId).partnerOf(userId);
         if (partnerId != null) {

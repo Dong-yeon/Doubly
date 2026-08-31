@@ -114,8 +114,7 @@ public class DateCourseService {
         return places.stream()
                 .map(p -> "- " + p.getName()
                         + (p.getCategory() != null ? " [" + p.getCategory() + "]" : "")
-                        + (p.getAddress() != null ? " (" + p.getAddress() + ")" : "")
-                        + " · " + (p.getStatus() == com.fitto.place.domain.PlaceStatus.VISITED ? "방문함" : "가고싶음"))
+                        + (p.getAddress() != null ? " (" + p.getAddress() + ")" : ""))
                 .collect(Collectors.joining("\n"));
     }
 

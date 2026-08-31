@@ -3,8 +3,6 @@ package com.fitto.place.domain;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityListeners;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -52,10 +50,6 @@ public class Place {
     @Column(length = 30)
     private String category;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
-    private PlaceStatus status;
-
     @Column(name = "added_by", nullable = false)
     private Long addedBy;
 
@@ -77,31 +71,23 @@ public class Place {
 
     @Builder
     private Place(Long coupleId, String name, String address, BigDecimal lat, BigDecimal lng,
-                  String category, PlaceStatus status, Long addedBy) {
+                  String category, Long addedBy) {
         this.coupleId = coupleId;
         this.name = name;
         this.address = address;
         this.lat = lat;
         this.lng = lng;
         this.category = category;
-        this.status = status != null ? status : PlaceStatus.WISHLIST;
         this.addedBy = addedBy;
     }
 
     /** 부분 수정 — null 이 아닌 값만 반영 (커플 둘 다 수정 가능) */
-    public void update(String name, String address, BigDecimal lat, BigDecimal lng,
-                       String category, PlaceStatus status) {
+    public void update(String name, String address, BigDecimal lat, BigDecimal lng, String category) {
         if (name != null) this.name = name;
         if (address != null) this.address = address;
         if (lat != null) this.lat = lat;
         if (lng != null) this.lng = lng;
         if (category != null) this.category = category;
-        if (status != null) this.status = status;
-    }
-
-    /** 방문 기록이 생기면 자동으로 방문완료 전환 */
-    public void markVisited() {
-        this.status = PlaceStatus.VISITED;
     }
 
     /** 여행에 담기 / 빼기(null) */

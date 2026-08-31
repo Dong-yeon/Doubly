@@ -4,7 +4,6 @@ import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.time.KstClock;
 import com.fitto.feed.repository.FeedPostRepository;
-import com.fitto.place.domain.PlaceStatus;
 import com.fitto.place.repository.PlaceRepository;
 import com.fitto.relation.domain.Relation;
 import com.fitto.relation.domain.RelationStatus;
@@ -91,7 +90,7 @@ public class TripRecapService {
                 nights, days, status,
                 tripItemRepository.countByTripId(id),
                 placeRepository.countByTripId(id),
-                placeRepository.countByTripIdAndStatus(id, PlaceStatus.VISITED),
+                placeRepository.countVisitedByTripId(id),
                 expenseTotal, currency,
                 feedPostRepository.countByTripId(id),
                 checklistTotal, checklistChecked,
