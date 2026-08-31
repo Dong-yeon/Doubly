@@ -634,16 +634,16 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           <View style={mine ? styles.metaMine : styles.meta}>
             {/*
               읽음은 내가 보낸 메시지에만 — 상대 메시지의 읽음 여부는 알 필요가 없다.
-              "읽음"/"1" 텍스트 대신 하트로 — 채워진 하트=읽음, 테두리만=아직.
-              커플 앱 톤에 맞고(비교 벤치마크 앱도 같은 패턴), 10px 텍스트보다 작게
-              그려도 뜻이 분명하다.
+              하트 아이콘은 리액션(❤️ 등 실제 이모지)과 시각적으로 겹쳐 헷갈린다는
+              피드백으로 점(dot)으로 바꿨다(2026-08-31) — 모양 자체를 리액션과
+              다르게 가고, 채워지는 색은 "상대"의 고유색(colors.partner)을 써서
+              "상대가 읽었다"는 뜻을 이 앱의 나/상대 색 체계 그대로 전달한다
+              (theme/colors.ts 의 Duo 시맨틱 — 다른 앱엔 없는 Dubly만의 관례).
             */}
             {mine ? (
-              <MaterialCommunityIcons
-                name={item.isRead ? 'heart' : 'heart-outline'}
-                size={11}
-                color={item.isRead ? colors.meText : colors.textTertiary}
-                style={styles.readHeart}
+              <View
+                style={[styles.readDot, item.isRead && styles.readDotFilled]}
+                accessibilityLabel={item.isRead ? '상대가 읽었어요' : '아직 안 읽었어요'}
               />
             ) : null}
             {item.edited ? <Text style={styles.editedMark}>수정됨</Text> : null}
@@ -1153,8 +1153,16 @@ const styles = themedStyles((colors) => ({
   composeBannerText: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 1 },
   meta: { marginHorizontal: spacing.xs, justifyContent: 'flex-end' },
   metaMine: { marginHorizontal: spacing.xs, alignItems: 'flex-end', justifyContent: 'flex-end' },
-  // 읽음 표시 — 채워진 하트/테두리 하트로 구분(색은 MaterialCommunityIcons color prop)
-  readHeart: { marginBottom: 1 },
+  // 읽음 표시 — 리액션(하트 이모지)과 헷갈리지 않게 점 모양. 채워지면 상대 고유색(초록).
+  readDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    borderWidth: 1.4,
+    borderColor: colors.textTertiary,
+    marginBottom: 3,
+  },
+  readDotFilled: { borderColor: colors.partner, backgroundColor: colors.partner },
   // 상대 아바타 자리 — 그룹 중간엔 내용 없이 폭만 차지해 말풍선이 계단식으로 안 밀린다
   avatarSlot: { width: 26, marginRight: spacing.xs },
   // 눌림 효과 — 스티커·트레이 버튼 공용(예전엔 "reactionPressed" 로 리액션 바 전용이었다)
