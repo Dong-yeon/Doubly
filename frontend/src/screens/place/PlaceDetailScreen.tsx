@@ -303,11 +303,6 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
                     </View>
                   </View>
                   <View style={styles.infoChipRow}>
-                    <View style={styles.infoChip}>
-                      <Text style={styles.infoChipText}>
-                        {place.status === 'VISITED' ? '다녀왔어요' : '가고 싶어요'}
-                      </Text>
-                    </View>
                     {place.category ? (
                       <View style={styles.infoChip}>
                         <Text style={styles.infoChipText}>{place.category}</Text>

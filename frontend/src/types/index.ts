@@ -511,7 +511,6 @@ export interface TrainerRoutine {
 }
 
 // 커플 맛집 지도 (PLAN.md Place Map) — 장소 핀 + 방문 기록
-export type PlaceStatus = 'WISHLIST' | 'VISITED';
 export interface Place {
   id: number;
   name: string;
@@ -519,7 +518,6 @@ export interface Place {
   lat?: number | null;
   lng?: number | null;
   category?: string | null;
-  status: PlaceStatus;
   addedBy: number;
   /** 담긴 여행 (PLAN.md Trip) — 미연결 시 null */
   tripId?: number | null;

@@ -394,10 +394,8 @@ export function DietRecordScreen({ navigation, route }: Props) {
   };
 
   /*
-   * 카카오 검색 결과를 바로 럽슐랭 장소로 추가 — "다녀온 곳"으로 등록하는 화면이라
-   * status 를 처음부터 VISITED 로 보낸다(위시리스트로 만들었다가 아래 방문 기록에서
-   * markVisited 되길 기다릴 이유가 없다). 추가 즉시 선택 상태로 만들어 별점까지
-   * 이어서 매길 수 있게 한다.
+   * 카카오 검색 결과를 바로 럽슐랭 장소로 추가 — 식단 기록에서 등록하는 흐름이라
+   * 추가 즉시 선택 상태로 만들어 별점까지 이어서 매길 수 있게 한다.
    */
   const onAddFromKakao = async (result: PlaceSearchResult) => {
     setAddingPlaceName(result.name);
@@ -408,7 +406,6 @@ export function DietRecordScreen({ navigation, route }: Props) {
         lat: result.lat ?? undefined,
         lng: result.lng ?? undefined,
         category: result.category ?? undefined,
-        status: 'VISITED',
       });
       haptics.success();
       toast.success(`${saved.name}을(를) 럽슐랭에 추가했어요`);

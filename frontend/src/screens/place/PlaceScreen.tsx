@@ -30,7 +30,7 @@ import { AiInsightButton } from '../../components/AiInsightButton';
 import { LovelichelinBadge } from '../../components/LovelichelinBadge';
 import { SoloPickBadge } from '../../components/SoloPickBadge';
 import { LovelichelinRecommendCards } from './LovelichelinRecommendCards';
-import { STATUS_FILTERS, SOLO_PICK_MIN_RATING, CATEGORY_FILTERS } from './placeFilters';
+import { SOLO_PICK_MIN_RATING, CATEGORY_FILTERS } from './placeFilters';
 import { CONTENT_TYPE_FILTERS, CONTENT_STATUS_FILTERS, contentTypeLabel } from '../../constants/contentTypes';
 import { placeApi } from '../../api/place';
 import { contentApi } from '../../api/content';
@@ -49,7 +49,6 @@ import type {
   DateCourse,
   LovelichelinRecommendation,
   Place,
-  PlaceStatus,
 } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { layout } from '../../theme/layout';
@@ -111,9 +110,8 @@ export function PlaceScreen() {
   const loadContents = useContentStore((s) => s.load);
   const invalidateContents = useContentStore((s) => s.invalidate);
 
-  // 둘러보기(목록·지도)가 공유하는 검색·상태·카테고리 필터 — 가이드엔 없다(등급순 정렬 하나뿐)
+  // 둘러보기(목록·지도)가 공유하는 검색·카테고리 필터 — 가이드엔 없다(등급순 정렬 하나뿐)
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<PlaceStatus | 'ALL'>('ALL');
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
 
   // 콘텐츠 모드가 쓰는 검색·상태·타입 필터 — 장소 쪽과 도메인이 달라 상태도 따로 둔다
@@ -176,9 +174,8 @@ export function PlaceScreen() {
     () =>
       allPlaces
         .filter((p) => !search.trim() || p.name.toLowerCase().includes(search.trim().toLowerCase()))
-        .filter((p) => statusFilter === 'ALL' || p.status === statusFilter)
         .filter((p) => categoryFilter === 'ALL' || p.category === categoryFilter),
-    [allPlaces, search, statusFilter, categoryFilter],
+    [allPlaces, search, categoryFilter],
   );
   const markers = browsePlaces
     .filter((p) => p.lat != null && p.lng != null)
@@ -188,7 +185,6 @@ export function PlaceScreen() {
       lng: p.lng as number,
       title: p.name,
       color: colors.danger,
-      filled: p.status === 'VISITED',
       tier: p.lovelichelinTier,
     }));
 
@@ -332,29 +328,15 @@ export function PlaceScreen() {
         </View>
       ) : null}
 
-      {mode === 'browse' ? (
-        <>
-          {allPlaces.length > 0 ? (
-            <View style={styles.searchWrap}>
-              <TextField
-                placeholder="장소 이름으로 검색"
-                value={search}
-                onChangeText={setSearch}
-                returnKeyType="search"
-              />
-            </View>
-          ) : null}
-          <View style={styles.filterRow}>
-            {STATUS_FILTERS.map((f) => (
-              <Chip
-                key={f.value}
-                label={f.label}
-                selected={statusFilter === f.value}
-                onPress={() => setStatusFilter(f.value)}
-              />
-            ))}
-          </View>
-        </>
+      {mode === 'browse' && allPlaces.length > 0 ? (
+        <View style={styles.searchWrap}>
+          <TextField
+            placeholder="장소 이름으로 검색"
+            value={search}
+            onChangeText={setSearch}
+            returnKeyType="search"
+          />
+        </View>
       ) : null}
 
       {mode === 'content' ? (
@@ -534,7 +516,6 @@ export function PlaceScreen() {
               </View>
               {item.address ? <Text style={styles.address}>{item.address}</Text> : null}
               <View style={styles.cardFooter}>
-                <Text style={styles.statusBadge}>{item.status === 'VISITED' ? '다녀왔어요' : '가고 싶어요'}</Text>
                 {item.visitCount > 0 ? (
                   <Text style={styles.visitInfo}>
                     {item.avgRating ? `${item.avgRating.toFixed(1)} · ` : ''}방문 {item.visitCount}회
@@ -587,14 +568,6 @@ export function PlaceScreen() {
         ) : (
           <View style={styles.mapWrap}>
             <View style={styles.legendRow}>
-              <View style={styles.legendItem}>
-                <View style={[styles.legendDot, styles.legendDotFilled]} />
-                <Text style={styles.legendText}>다녀옴</Text>
-              </View>
-              <View style={styles.legendItem}>
-                <View style={[styles.legendDot, styles.legendDotOutline]} />
-                <Text style={styles.legendText}>가고 싶어요</Text>
-              </View>
               <View style={styles.legendItem}>
                 <Text style={styles.legendCrown}>👑</Text>
                 <Text style={styles.legendText}>럽슐랭 인증</Text>
@@ -881,9 +854,6 @@ const styles = themedStyles((colors) => ({
   mapWrap: { flex: 1, padding: spacing.lg, paddingBottom: layout.listBottomWithFab },
   legendRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, marginBottom: spacing.sm },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  legendDot: { width: 10, height: 10, borderRadius: 5 },
-  legendDotFilled: { backgroundColor: colors.textSecondary },
-  legendDotOutline: { backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.textSecondary },
   legendCrown: { fontSize: 12 },
   legendText: { fontSize: fontSize.caption, color: colors.textSecondary },
   map: { flex: 1 },

@@ -698,7 +698,6 @@ export function TripDetailScreen({ navigation, route }: Props) {
                 >
                   <View style={styles.placeHeader}>
                     <Text style={styles.placeName}>{item.name}</Text>
-                    <Text style={styles.placeStatus}>{item.status === 'VISITED' ? '다녀옴' : '가보고파'}</Text>
                   </View>
                   {item.address ? <Text style={styles.placeAddress}>{item.address}</Text> : null}
                 </TouchableOpacity>
@@ -1088,7 +1087,6 @@ const styles = themedStyles((colors) => ({
   },
   placeHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   placeName: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
-  placeStatus: { fontSize: fontSize.body },
   placeAddress: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xs },
 
   // 모달

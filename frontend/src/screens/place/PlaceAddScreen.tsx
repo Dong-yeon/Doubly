@@ -1,4 +1,4 @@
-/** 장소 추가 — 카카오 플레이스 검색 자동 입력 + 이름·주소·카테고리·상태(위시/방문)·지도 위치 선택 */
+/** 장소 추가 — 카카오 플레이스 검색 자동 입력 + 이름·주소·카테고리·지도 위치 선택 */
 import React, { useRef, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Alert } from '../../utils/alert';
@@ -20,16 +20,10 @@ import { haptics } from '../../utils/haptics';
 import { useDirtyGuard } from '../../hooks/useDirtyGuard';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { PLACE_CATEGORIES, KAKAO_CATEGORY_AUTO } from '../../constants/placeCategories';
-import type { PlaceStatus } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 
 // 럽슐랭 탭과 홈(여행) 스택 양쪽에 등록되는 화면 — 두 스택이 공유하는 최소 목록으로 타입을 잡는다
 type Props = NativeStackScreenProps<PlaceScreensParamList, 'PlaceAdd'>;
-
-const STATUS_OPTIONS: { value: PlaceStatus; label: string }[] = [
-  { value: 'WISHLIST', label: '가고 싶어요' },
-  { value: 'VISITED', label: '다녀왔어요' },
-];
 
 export function PlaceAddScreen({ navigation, route }: Props) {
   // 기존 장소를 들고 들어오면 수정 모드 — 필드를 채워두고 저장 시 update 를 호출한다
@@ -41,7 +35,6 @@ export function PlaceAddScreen({ navigation, route }: Props) {
   const [name, setName] = useState(editingPlace?.name ?? '');
   const [address, setAddress] = useState(editingPlace?.address ?? initialCoords?.address ?? '');
   const [category, setCategory] = useState<string | null>(editingPlace?.category ?? null);
-  const [status, setStatus] = useState<PlaceStatus>(editingPlace?.status ?? 'WISHLIST');
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(
     editingPlace?.lat != null && editingPlace?.lng != null
       ? { lat: editingPlace.lat, lng: editingPlace.lng }
@@ -63,7 +56,6 @@ export function PlaceAddScreen({ navigation, route }: Props) {
     ? name.trim() !== (editingPlace?.name ?? '') ||
       address.trim() !== (editingPlace?.address ?? '') ||
       category !== (editingPlace?.category ?? null) ||
-      status !== (editingPlace?.status ?? 'WISHLIST') ||
       (coords?.lat ?? null) !== (editingPlace?.lat ?? null) ||
       (coords?.lng ?? null) !== (editingPlace?.lng ?? null)
     : name.trim().length > 0 ||
@@ -127,7 +119,6 @@ export function PlaceAddScreen({ navigation, route }: Props) {
         lat: coords?.lat,
         lng: coords?.lng,
         category: category ?? undefined,
-        status,
       };
       if (editingPlace) {
         await placeApi.update(editingPlace.id, payload);
@@ -236,19 +227,6 @@ export function PlaceAddScreen({ navigation, route }: Props) {
                 label={c}
                 selected={category === c}
                 onPress={() => setCategory(category === c ? null : c)}
-              />
-            ))}
-          </View>
-
-          <Text style={styles.label}>상태</Text>
-          <View style={styles.chipRow}>
-            {STATUS_OPTIONS.map((o) => (
-              <Chip
-                key={o.value}
-                label={o.label}
-                selected={status === o.value}
-                onPress={() => setStatus(o.value)}
-                fill
               />
             ))}
           </View>

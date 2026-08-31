@@ -40,11 +40,10 @@ export function LovelichelinRecommendCards({ data }: { data: LovelichelinRecomme
         lat: place.lat ?? undefined,
         lng: place.lng ?? undefined,
         category: place.category ?? undefined,
-        status: 'WISHLIST',
       });
       haptics.success();
-      toast.success('위시리스트에 담았어요!');
-      // 모달을 닫고 돌아간 위시리스트/지도가 새 장소를 반영하게
+      toast.success('럽슐랭에 담았어요!');
+      // 모달을 닫고 돌아간 목록/지도가 새 장소를 반영하게
       usePlaceStore.getState().invalidate();
       setSavedNames((prev) => [...prev, place.name]);
     } catch (e) {
