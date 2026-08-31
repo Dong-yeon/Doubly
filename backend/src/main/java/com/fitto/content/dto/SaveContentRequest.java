@@ -1,6 +1,5 @@
 package com.fitto.content.dto;
 
-import com.fitto.content.domain.ContentStatus;
 import com.fitto.content.domain.ContentType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -18,8 +17,6 @@ public record SaveContentRequest(
 
         @NotNull(message = "종류를 선택해주세요.")
         ContentType type,
-
-        ContentStatus status,
 
         /** TMDB 검색 결과에서 채워짐 — 직접 입력 시 없음(선택) */
         String posterUrl

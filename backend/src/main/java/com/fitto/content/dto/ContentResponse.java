@@ -1,7 +1,6 @@
 package com.fitto.content.dto;
 
 import com.fitto.content.domain.Content;
-import com.fitto.content.domain.ContentStatus;
 import com.fitto.content.domain.ContentType;
 
 import java.time.LocalDate;
@@ -17,7 +16,6 @@ public record ContentResponse(
         Long id,
         String title,
         ContentType type,
-        ContentStatus status,
         Long addedBy,
         String posterUrl,
         long logCount,
@@ -34,7 +32,7 @@ public record ContentResponse(
     public static ContentResponse of(Content c, long logCount, Double avgRating, LocalDate lastWatchedAt,
                                      Integer myRating, Integer partnerRating,
                                      String coverImageUrl, String coverMemo) {
-        return new ContentResponse(c.getId(), c.getTitle(), c.getType(), c.getStatus(), c.getAddedBy(),
+        return new ContentResponse(c.getId(), c.getTitle(), c.getType(), c.getAddedBy(),
                 c.getPosterUrl(), logCount, avgRating, lastWatchedAt, myRating, partnerRating,
                 c.getLovelichelinTier(), c.getLovelichelinCertifiedAt(),
                 coverImageUrl, coverMemo, c.getCreatedAt());

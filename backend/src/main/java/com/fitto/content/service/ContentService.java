@@ -103,7 +103,6 @@ public class ContentService {
                 .coupleId(couple.getId())
                 .title(request.title().trim())
                 .type(request.type())
-                .status(request.status())
                 .addedBy(userId)
                 .posterUrl(request.posterUrl())
                 .build();
@@ -146,7 +145,7 @@ public class ContentService {
     @Transactional
     public ContentResponse update(Long userId, Long contentId, UpdateContentRequest request) {
         Content content = getCoupleContent(userId, contentId);
-        content.update(request.title(), request.type(), request.status(), request.posterUrl());
+        content.update(request.title(), request.type(), request.posterUrl());
         return withSummary(content, userId);
     }
 
@@ -162,7 +161,7 @@ public class ContentService {
         contentRepository.delete(content);
     }
 
-    /** 관람 기록 추가 — 위시리스트였다면 완료(봤어요)로 전환, 상대에게 푸시 */
+    /** 관람 기록 추가 — 상대에게 푸시 */
     @Transactional
     public ContentLogResponse recordLog(Long userId, Long contentId, RecordContentLogRequest request) {
         Content content = getCoupleContent(userId, contentId);
@@ -176,7 +175,6 @@ public class ContentService {
                 .imageUrl(request.imageUrl())
                 .build();
         contentLogRepository.save(log);
-        content.markDone();
 
         Long partnerId = activeCouple(userId).partnerOf(userId);
         if (partnerId != null) {

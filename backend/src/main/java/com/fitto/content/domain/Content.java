@@ -48,10 +48,6 @@ public class Content {
     @Column(nullable = false, length = 20)
     private ContentType type;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
-    private ContentStatus status;
-
     @Column(name = "added_by", nullable = false)
     private Long addedBy;
 
@@ -72,27 +68,19 @@ public class Content {
     private LocalDateTime createdAt;
 
     @Builder
-    private Content(Long coupleId, String title, ContentType type, ContentStatus status, Long addedBy,
-                    String posterUrl) {
+    private Content(Long coupleId, String title, ContentType type, Long addedBy, String posterUrl) {
         this.coupleId = coupleId;
         this.title = title;
         this.type = type != null ? type : ContentType.MOVIE;
-        this.status = status != null ? status : ContentStatus.WISHLIST;
         this.addedBy = addedBy;
         this.posterUrl = posterUrl;
     }
 
     /** 부분 수정 — null 이 아닌 값만 반영 (커플 둘 다 수정 가능) */
-    public void update(String title, ContentType type, ContentStatus status, String posterUrl) {
+    public void update(String title, ContentType type, String posterUrl) {
         if (title != null) this.title = title;
         if (type != null) this.type = type;
-        if (status != null) this.status = status;
         if (posterUrl != null) this.posterUrl = posterUrl;
-    }
-
-    /** 관람 기록이 생기면 자동으로 완료(봤어요) 전환 */
-    public void markDone() {
-        this.status = ContentStatus.DONE;
     }
 
     /** 럽슐랭 등급 갱신 — 나/상대 대표 평점이 바뀔 때마다 재산정되어 호출된다 */

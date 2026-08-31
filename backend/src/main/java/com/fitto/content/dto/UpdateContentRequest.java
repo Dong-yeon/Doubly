@@ -1,6 +1,5 @@
 package com.fitto.content.dto;
 
-import com.fitto.content.domain.ContentStatus;
 import com.fitto.content.domain.ContentType;
 import jakarta.validation.constraints.Size;
 
@@ -10,8 +9,6 @@ public record UpdateContentRequest(
         String title,
 
         ContentType type,
-
-        ContentStatus status,
 
         String posterUrl
 ) {
