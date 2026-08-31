@@ -5,10 +5,11 @@
  * (onRequestClose 를 비워) 삼켜서 작업 중 이탈을 막을 수 있다.
  */
 import React from 'react';
-import { ActivityIndicator, Modal, StyleSheet, Text, View } from 'react-native';
+import { Modal, StyleSheet, Text, View } from 'react-native';
 import { useBusyStore } from '../store/busyStore';
-import { colors, fontSize, radius, spacing } from '../constants/theme';
+import { fontSize, radius, spacing } from '../constants/theme';
 import { themedStyles } from '../theme/themedStyles';
+import { DuoOrbitSpinner } from './DuoOrbitSpinner';
 
 export function BusyOverlay() {
   const message = useBusyStore((s) => s.message);
@@ -24,7 +25,7 @@ export function BusyOverlay() {
     >
       <View style={styles.backdrop}>
         <View style={styles.card}>
-          <ActivityIndicator size="large" color={colors.primary} />
+          <DuoOrbitSpinner />
           <Text style={styles.message}>{message}</Text>
           <Text style={styles.hint}>잠시만 기다려주세요</Text>
         </View>
