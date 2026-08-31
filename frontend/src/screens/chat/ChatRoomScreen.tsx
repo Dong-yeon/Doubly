@@ -629,27 +629,30 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             <Text style={[styles.msgText, mine && styles.msgTextMine]}>{item.content}</Text>
           </View>
         )}
-        {/* 시간·읽음·수정 표시는 그룹의 마지막(가장 최근) 메시지에만 — 카톡처럼 한 번만 */}
-        {isGroupEnd ? (
-          <View style={mine ? styles.metaMine : styles.meta}>
-            {/*
-              읽음은 내가 보낸 메시지에만 — 상대 메시지의 읽음 여부는 알 필요가 없다.
-              하트 아이콘은 리액션(❤️ 등 실제 이모지)과 시각적으로 겹쳐 헷갈린다는
-              피드백으로 점(dot)으로 바꿨다(2026-08-31) — 모양 자체를 리액션과
-              다르게 가고, 채워지는 색은 "상대"의 고유색(colors.partner)을 써서
-              "상대가 읽었다"는 뜻을 이 앱의 나/상대 색 체계 그대로 전달한다
-              (theme/colors.ts 의 Duo 시맨틱 — 다른 앱엔 없는 Dubly만의 관례).
-            */}
-            {mine ? (
-              <View
-                style={[styles.readDot, item.isRead && styles.readDotFilled]}
-                accessibilityLabel={item.isRead ? '상대가 읽었어요' : '아직 안 읽었어요'}
-              />
-            ) : null}
-            {item.edited ? <Text style={styles.editedMark}>수정됨</Text> : null}
-            <Text style={styles.time}>{timeOf(item.createdAt)}</Text>
-          </View>
-        ) : null}
+        {/*
+          시간·읽음·수정 표시는 메시지마다 각각 보여준다(2026-08-31) — 예전엔 그룹의
+          마지막(가장 최근) 메시지에만 카톡처럼 한 번만 보여줬는데, 그러면 한 번에
+          여러 개를 이어 보낸 그룹 안에서 정확히 어디까지 상대가 읽었는지 알 수 없었다.
+          isRead 는 메시지마다 이미 따로 갖고 있는 값이라 그대로 다 보여주면 된다.
+        */}
+        <View style={mine ? styles.metaMine : styles.meta}>
+          {/*
+            읽음은 내가 보낸 메시지에만 — 상대 메시지의 읽음 여부는 알 필요가 없다.
+            하트 아이콘은 리액션(❤️ 등 실제 이모지)과 시각적으로 겹쳐 헷갈린다는
+            피드백으로 점(dot)으로 바꿨다(2026-08-31) — 모양 자체를 리액션과
+            다르게 가고, 채워지는 색은 "상대"의 고유색(colors.partner)을 써서
+            "상대가 읽었다"는 뜻을 이 앱의 나/상대 색 체계 그대로 전달한다
+            (theme/colors.ts 의 Duo 시맨틱 — 다른 앱엔 없는 Dubly만의 관례).
+          */}
+          {mine ? (
+            <View
+              style={[styles.readDot, item.isRead && styles.readDotFilled]}
+              accessibilityLabel={item.isRead ? '상대가 읽었어요' : '아직 안 읽었어요'}
+            />
+          ) : null}
+          {item.edited ? <Text style={styles.editedMark}>수정됨</Text> : null}
+          <Text style={styles.time}>{timeOf(item.createdAt)}</Text>
+        </View>
         </Pressable>
 
         {/* 리액션 칩 — 다시 누르면 해제된다. mine 은 userIds 로 판단(브로드캐스트 공용) */}
