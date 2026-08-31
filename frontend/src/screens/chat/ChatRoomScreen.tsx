@@ -963,12 +963,16 @@ const styles = themedStyles((colors) => ({
   // 뒤집어 정방향으로 보이게 한다(QA_CHECKLIST.md 패턴10)
   emptyMessagesWrap: { transform: [{ scaleY: -1 }] },
   // 그룹 간 세로 간격은 msgBlock(정상 메시지)·row(삭제된 메시지)가 각각 spaced/grouped 로 담당한다
-  row: { maxWidth: '80%', flexDirection: 'row', alignItems: 'flex-end' },
+  //
+  // flexShrink: 1 이 row·bubble 둘 다에 필요하다 — RN 은 웹 flexbox와 달리 flex 자식의
+  // 기본 flexShrink 가 0이라, 이게 없으면 공백 없이 이어지는 긴 텍스트(ㅋㅋㅋㅋ… 등)에서
+  // maxWidth(80%/82%)를 무시하고 말풍선이 화면 밖까지 그대로 늘어난다(줄바꿈이 안 됨).
+  row: { maxWidth: '80%', flexShrink: 1, flexDirection: 'row', alignItems: 'flex-end' },
   rowMine: { alignSelf: 'flex-end', flexDirection: 'row-reverse' },
   rowTheirs: { alignSelf: 'flex-start' },
   rowSpaced: { marginTop: spacing.sm },
   rowGrouped: { marginTop: spacing.xxs },
-  bubble: { paddingVertical: 10, paddingHorizontal: spacing.md, borderRadius: radius.lg },
+  bubble: { flexShrink: 1, paddingVertical: 10, paddingHorizontal: spacing.md, borderRadius: radius.lg },
   bubbleMine: { backgroundColor: colors.primary, borderBottomRightRadius: 6 },
   bubbleTheirs: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderBottomLeftRadius: 6 },
   // 그룹 중간 말풍선(마지막이 아님) — 꼬리 없이 완전히 둥글게 이어붙는다
