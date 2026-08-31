@@ -37,6 +37,7 @@ import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
 import { toDateString } from '../../utils/date';
+import { defaultMealType } from '../../utils/mealType';
 import { stars } from '../../utils/ratingStars';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { MealType, Place, PlaceVisit } from '../../types';
@@ -52,15 +53,6 @@ const MEAL_TYPES: { value: MealType; label: string }[] = [
   { value: 'DINNER', label: '저녁' },
   { value: 'SNACK', label: '간식' },
 ];
-
-// 현재 시간대에 맞는 끼니 기본 선택 (DietRecordScreen 과 동일 규칙)
-function defaultMealType(): MealType {
-  const h = new Date().getHours();
-  if (h < 11) return 'BREAKFAST';
-  if (h < 15) return 'LUNCH';
-  if (h < 21) return 'DINNER';
-  return 'SNACK';
-}
 
 export function PlaceDetailScreen({ route, navigation }: Props) {
   const { placeId, name: placeName } = route.params;

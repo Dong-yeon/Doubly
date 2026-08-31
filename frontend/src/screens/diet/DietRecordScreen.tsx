@@ -41,6 +41,7 @@ import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
 import { toDateString } from '../../utils/date';
 import { buildDietShareCopy } from '../../utils/dietShare';
+import { defaultMealType } from '../../utils/mealType';
 import { colors, fontSize, radius, shadow, spacing } from '../../constants/theme';
 import { onColor } from '../../theme/onColor';
 import type {
@@ -67,15 +68,6 @@ const MEAL_TYPES: { value: MealType; label: string }[] = [
 /** 서버 검증(MealItemRequest)과 맞춘 길이 상한 — 저장 시점에 튕기지 않게 입력에서 막는다 */
 const MAX_NAME = 100;
 const MAX_PORTION = 50;
-
-// 현재 시간대에 맞는 끼니 기본 선택
-function defaultMealType(): MealType {
-  const h = new Date().getHours();
-  if (h < 11) return 'BREAKFAST';
-  if (h < 15) return 'LUNCH';
-  if (h < 21) return 'DINNER';
-  return 'SNACK';
-}
 
 // 즐겨찾기가 없을 때 보여줄 시작용 추천 (탭하면 항목으로 추가)
 const STARTER_SUGGESTIONS = ['닭가슴살', '샐러드', '현미밥', '고구마', '계란', '단백질쉐이크', '아메리카노'];
@@ -812,6 +804,11 @@ export function DietRecordScreen({ navigation, route }: Props) {
        * 실패해도 식단 기록 자체는 이미 저장됐으므로 전체 저장을 실패로 되돌리지 않는다.
        */
       let placeToastSuffix = '';
+      // 장소 연동이 실패해도 식단 기록 자체는 이미 저장됐다 — 하지만 바로 아래서 성공
+      // 토스트를 또 띄우면(둘 다 단일 슬롯 toastStore라 나중 호출이 앞 걸 그냥 덮어써서)
+      // 이 실패 토스트는 화면에 뜰 새도 없이 사라졌다(2026-08-31). 실패 여부를 들고 있다가
+      // 토스트를 딱 한 번만 — 실패했으면 타입도 error 로 — 보낸다.
+      let placeLinkFailed = false;
       if (selectedPlace) {
         try {
           await placeApi.recordVisit(selectedPlace.id, {
@@ -831,15 +828,20 @@ export function DietRecordScreen({ navigation, route }: Props) {
           }
           usePlaceStore.getState().invalidate();
         } catch (e) {
-          toast.error(getErrorMessage(e, '장소 방문 기록 연동에 실패했어요. 럽슐랭에서 다시 시도해주세요.'));
+          placeLinkFailed = true;
+          placeToastSuffix = ` · ${getErrorMessage(e, '장소 방문 기록 연동에 실패했어요. 럽슐랭에서 다시 시도해주세요.')}`;
         }
       }
 
-      toast.success(
+      const saveMessage =
         (payload.sharedWithPartner
           ? `데이트 식단 완료! ${partnerName}님에게도 등록됐어요 💕`
-          : '식단 기록 완료! ') + placeToastSuffix,
-      );
+          : '식단 기록 완료! ') + placeToastSuffix;
+      if (placeLinkFailed) {
+        toast.error(saveMessage);
+      } else {
+        toast.success(saveMessage);
+      }
 
       /*
        * 저장이 끝나면 공유 여부와 무관하게 화면부터 닫는다.
