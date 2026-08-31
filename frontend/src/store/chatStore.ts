@@ -23,6 +23,13 @@ interface ChatState {
   loadingOlder: Record<number, boolean>;
   /** 방별 더 불러올 과거 메시지가 있는지 — 빈 페이지를 받으면 false */
   hasMoreOlder: Record<number, boolean>;
+  /**
+   * 지금 화면에 열려 있는 채팅방 — openRoom/closeRoom 이 관리한다. push.ts 가 이 값을
+   * 읽어서, 지금 보고 있는 방으로 온 알림은 배너·소리를 억누른다(메시지는 소켓으로
+   * 이미 화면에 실시간으로 뜨는데, 알림까지 겹쳐 오면 "방에 들어와 있는데도 알림이
+   * 계속 온다"는 체감이 든다 — 2026-08-31 리포트).
+   */
+  activeRoomId: number | null;
 
   loadRooms: () => Promise<void>;
   openRoom: (relationId: number) => Promise<void>;
@@ -43,6 +50,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   connected: false,
   loadingOlder: {},
   hasMoreOlder: {},
+  activeRoomId: null,
 
   loadRooms: async () => {
     set({ loadingRooms: true });
@@ -56,6 +64,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   // 방 진입: 히스토리 로드 + 소켓 연결/구독
   openRoom: async (relationId) => {
+    set({ activeRoomId: relationId });
     const history = await chatApi.messages(relationId);
     set((s) => ({
       messages: { ...s.messages, [relationId]: history },
@@ -106,6 +115,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   closeRoom: (relationId) => {
     unsubscribeRoom(relationId);
+    // 빠르게 방을 옮기면(A 진입→B 진입→A 의 언마운트 cleanup 순으로) A 의 closeRoom 이
+    // B 가 이미 activeRoomId 로 세워둔 값을 지울 수 있다 — 지금 값이 정말 이 방일 때만 비운다.
+    if (get().activeRoomId === relationId) set({ activeRoomId: null });
   },
 
   /*

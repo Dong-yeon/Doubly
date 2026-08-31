@@ -5,6 +5,7 @@ import {
   FlatList,
   Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -17,6 +18,7 @@ import {
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '../../components/Icon';
+import { Button } from '../../components/Button';
 import { useHeaderHeight } from '@react-navigation/elements';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { ChatStackParamList } from '../../navigation/types';
@@ -28,6 +30,7 @@ import { useRelationStore } from '../../store/relationStore';
 import { useCallStore } from '../../store/callStore';
 import { callApi, CallType } from '../../api/call';
 import { haptics } from '../../utils/haptics';
+import { dismissRoomNotifications } from '../../utils/push';
 import { pickImage, uploadImage } from '../../utils/imageUpload';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
@@ -101,6 +104,9 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const { openRoom, closeRoom, send, markRead, replaceMessage, loadOlder } = useChatStore();
   const [text, setText] = useState('');
   const [uploading, setUploading] = useState(false);
+  // 사진 전송 미리보기 — 고른 사진이 바로 전송돼 "고른 게 원하는 사진이 아니었는데
+  // 이미 보내졌다"는 리포트가 있었다(2026-08-31). 확인 없이는 업로드하지 않는다.
+  const [pendingImage, setPendingImage] = useState<string | null>(null);
   // 입력바 보조 도구는 기본으로 숨겨져 있다가 "+"로 펼친다 — 스티커 패널과는
   // 자리를 공유해서 항상 둘 중 하나만 뜬다(토글 핸들러들이 서로를 닫아준다).
   const [showStickers, setShowStickers] = useState(false);
@@ -248,6 +254,9 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   useEffect(() => {
     setLoadingHistory(true);
     openRoom(relationId).finally(() => setLoadingHistory(false));
+    // 이 방으로 이미 와 있던 알림(트레이에 뜬 것)을 지운다 — 앞으로 올 알림 억제는
+    // chatStore.activeRoomId + push.ts 핸들러가 맡는다.
+    void dismissRoomNotifications(relationId);
     return () => closeRoom(relationId);
   }, [relationId, openRoom, closeRoom]);
 
@@ -421,11 +430,25 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     else Alert.alert('전송 실패', '연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
   };
 
+  // 갤러리에서 고르기만 한다 — 실제 업로드·전송은 미리보기에서 "보내기"를 눌러야 시작된다
   const onPickImage = async () => {
     try {
       const uri = await pickImage();
       if (!uri) return;
-      setUploading(true);
+      setPendingImage(uri);
+    } catch (e) {
+      toast.error(getErrorMessage(e, '사진을 불러오지 못했어요.'));
+    }
+  };
+
+  const onCancelSendImage = () => setPendingImage(null);
+
+  const onConfirmSendImage = async () => {
+    const uri = pendingImage;
+    if (!uri) return;
+    setPendingImage(null);
+    setUploading(true);
+    try {
       const url = await runBusy('사진 보내는 중…', () => uploadImage(uri));
       const ok = send(relationId, { messageType: 'IMAGE', imageUrl: url });
       if (ok) haptics.light();
@@ -905,6 +928,24 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         onClose={() => setViewingImage(null)}
       />
 
+      {/* 사진 전송 미리보기 — 고른 즉시 보내지 않고 확인 후에만 업로드·전송한다 */}
+      <Modal visible={!!pendingImage} transparent animationType="fade" onRequestClose={onCancelSendImage}>
+        <View style={styles.imagePreviewBackdrop}>
+          {pendingImage ? (
+            <Image source={{ uri: pendingImage }} style={styles.imagePreviewImage} resizeMode="contain" />
+          ) : null}
+          <View style={styles.imagePreviewActions}>
+            <Button
+              title="취소"
+              variant="secondary"
+              onPress={onCancelSendImage}
+              style={styles.imagePreviewBtn}
+            />
+            <Button title="보내기" onPress={onConfirmSendImage} style={styles.imagePreviewBtn} />
+          </View>
+        </View>
+      </Modal>
+
       {/* 리액션 선택 — 길게 누른 메시지에 이모지를 붙인다 */}
       <EmojiPicker
         visible={reactingTo !== null}
@@ -976,6 +1017,16 @@ const styles = themedStyles((colors) => ({
   headerCallButton: { minWidth: 40, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   headerCallButtonPressed: { opacity: 0.6 },
   list: { padding: spacing.md },
+  imagePreviewBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  imagePreviewImage: { width: '100%', height: '70%', borderRadius: radius.lg },
+  imagePreviewActions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg, width: '100%' },
+  imagePreviewBtn: { flex: 1 },
   // inverted FlatList 의 콘텐츠는 scaleY:-1 로 뒤집혀 그려진다 — EmptyState 만 다시
   // 뒤집어 정방향으로 보이게 한다(QA_CHECKLIST.md 패턴10)
   emptyMessagesWrap: { transform: [{ scaleY: -1 }] },
@@ -991,7 +1042,11 @@ const styles = themedStyles((colors) => ({
   rowGrouped: { marginTop: spacing.xxs },
   bubble: { flexShrink: 1, paddingVertical: 10, paddingHorizontal: spacing.md, borderRadius: radius.lg },
   bubbleMine: { backgroundColor: colors.primary, borderBottomRightRadius: 6 },
-  bubbleTheirs: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderBottomLeftRadius: 6 },
+  // 예전엔 surface(흰색)+테두리로 배경과 구분했는데, background(#FAFAF9)와 거의
+  // 같은 색이라 테두리 선이 메시지마다 하나씩 더 생겨 화면이 촘촘해 보였다
+  // (Between 비교 피드백, 2026-08-31). surfaceAlt 는 그 자체로 배경과 대비가
+  // 나와(WCAG 계산 주석 참고) 테두리 없이도 말풍선이 구분된다.
+  bubbleTheirs: { backgroundColor: colors.surfaceAlt, borderBottomLeftRadius: 6 },
   // 그룹 중간 말풍선(마지막이 아님) — 꼬리 없이 완전히 둥글게 이어붙는다
   bubbleMineGrouped: { borderBottomRightRadius: radius.lg },
   bubbleTheirsGrouped: { borderBottomLeftRadius: radius.lg },
@@ -1195,10 +1250,15 @@ const styles = themedStyles((colors) => ({
      * 가장자리 전체가 아니라 네 "꼭짓점" 부근이라, 가로(paddingHorizontal)만
      * 늘렸을 때보다 세로(paddingBottom)도 함께 늘리면 버튼이 꼭짓점에서 대각선
      * 으로 더 멀어진다. 위쪽은 꼭짓점과 무관해 기존 값을 유지한다.
+     *
+     * paddingTop/paddingBottom 은 Between 비교 피드백으로 한 단계씩 더 키웠다
+     * (2026-08-31) — 입력 바가 화면 하단에 너무 붙어 촘촘해 보인다는 지적. 아래쪽
+     * safe-area 인셋은 SafeAreaView(edges: bottom)가 이미 더해주므로 여기 값은
+     * 그 위에 얹히는 순수 여백이다.
      */
     paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
     gap: spacing.sm,
     backgroundColor: colors.background,
   },
