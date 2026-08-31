@@ -87,7 +87,7 @@ class TripFlowTest {
         long[] c = couple("tr5@fitto.com", "tr6@fitto.com");
         TripResponse trip = tripService.save(c[0], jeju());
         PlaceResponse place = placeService.save(c[1], new SavePlaceRequest(
-                "흑돼지 맛집", "제주시", null, null, "한식", PlaceStatus.WISHLIST));
+                "흑돼지 맛집", "제주시", null, null, "음식점", PlaceStatus.WISHLIST));
 
         tripService.attachPlace(c[0], trip.id(), place.id()); // 상대가 등록한 장소도 담기 가능
         TripDetailResponse detail = tripService.detail(c[1], trip.id());

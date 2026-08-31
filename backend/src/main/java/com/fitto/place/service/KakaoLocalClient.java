@@ -100,7 +100,11 @@ public class KakaoLocalClient {
     }
 
     /**
-     * "음식점 > 한식 > 국수" → "한식" — 앱의 카테고리 칩(한식/카페 등)과 맞는 두 번째 단계만 남긴다.
+     * "음식점 > 한식 > 국수" → "음식점" — 최상위 단계가 앱의 카테고리 칩과 바로 맞아떨어지는
+     * 유일한 대분류라 그대로 쓴다(한식/중식/일식/양식처럼 국가별 세분류는 2026-08-28에
+     * "음식점" 하나로 통합했다 — docs/LOVELICHELIN_IA_SIMPLIFICATION.md, 프론트
+     * PLACE_CATEGORIES 와 짝을 맞춘다). "음식점"이 아닌 다른 대분류(카페 등)는 카카오의
+     * 두 번째 단계가 이미 앱 카테고리 이름과 맞는 경우가 많아 그대로 둔다.
      * 단계가 하나뿐이면 그대로 쓴다.
      */
     private static String simplifyCategory(String categoryName) {
@@ -108,6 +112,10 @@ public class KakaoLocalClient {
             return null;
         }
         String[] levels = categoryName.split(">");
+        String top = levels[0].trim();
+        if (top.equals("음식점")) {
+            return "음식점";
+        }
         String level = levels.length > 1 ? levels[1] : levels[0];
         String trimmed = level.trim();
         return trimmed.isBlank() ? null : trimmed;

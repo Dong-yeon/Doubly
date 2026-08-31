@@ -38,7 +38,7 @@ class KakaoLocalClientMappingTest {
         KakaoPlace place = client.mapDocument(document);
 
         assertThat(place.name()).isEqualTo("연남 파스타집");
-        assertThat(place.category()).isEqualTo("양식"); // 두 번째 단계만 남긴다
+        assertThat(place.category()).isEqualTo("음식점"); // 최상위 단계 — 국가별 세분류는 더 이상 안 남긴다
         assertThat(place.address()).isEqualTo("서울 마포구 동교로 123"); // 도로명 우선
         assertThat(place.lat()).isEqualTo(37.561234); // 카카오는 y=위도
         assertThat(place.lng()).isEqualTo(126.923456);
