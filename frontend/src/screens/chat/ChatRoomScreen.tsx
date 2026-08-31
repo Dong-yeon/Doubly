@@ -125,6 +125,13 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const markedUpToRef = useRef(0);
   // 이미 진동을 울린 최대 메시지 id — 화면 재마운트·리렌더로 같은 터치가 다시 울리지 않게
   const hapticedUpToRef = useRef(0);
+  /*
+   * 전송 버튼은 입력창 밖의 별개 컴포넌트라, 누르면 포커스가 입력창에서 그쪽으로
+   * 넘어가면서 키보드가 내려간다(안드로이드 기본 동작) — 연속으로 메시지를 보낼 때마다
+   * 매번 입력창을 다시 탭해야 했다(2026-08-31 리포트). 전송 직후 여기로 포커스를
+   * 되돌려 키보드가 안 닫히게 한다(카톡·Between 등이 다 이렇게 동작한다).
+   */
+  const inputRef = useRef<TextInput>(null);
 
   /*
    * 맞춤법 검사는 기기 안에서만 돈다(외부 전송 없음). 규칙 몇 개짜리라
@@ -298,6 +305,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         setEditing(null);
         setText('');
         haptics.light();
+        inputRef.current?.focus();
       } catch (e) {
         toast.error(getErrorMessage(e, '메시지를 수정하지 못했어요.'));
       } finally {
@@ -315,6 +323,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
       setText('');
       setReplyTo(null);
       haptics.light();
+      inputRef.current?.focus();
     } else {
       Alert.alert('전송 실패', '연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
     }
@@ -869,6 +878,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             </TouchableOpacity>
           )}
           <TextInput
+            ref={inputRef}
             style={styles.input}
             value={text}
             onChangeText={setText}
