@@ -638,16 +638,19 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         <View style={mine ? styles.metaMine : styles.meta}>
           {/*
             읽음은 내가 보낸 메시지에만 — 상대 메시지의 읽음 여부는 알 필요가 없다.
-            하트 아이콘은 리액션(❤️ 등 실제 이모지)과 시각적으로 겹쳐 헷갈린다는
-            피드백으로 점(dot)으로 바꿨다(2026-08-31) — 모양 자체를 리액션과
-            다르게 가고, 채워지는 색은 "상대"의 고유색(colors.partner)을 써서
-            "상대가 읽었다"는 뜻을 이 앱의 나/상대 색 체계 그대로 전달한다
-            (theme/colors.ts 의 Duo 시맨틱 — 다른 앱엔 없는 Dubly만의 관례).
+            점(dot)이 채워지는 방식은 "색이 바뀐 걸 알아채야만 안다"는 점에서
+            눈에 잘 안 띈다는 피드백으로, 카톡 "1"처럼 있다가 사라지는 방식으로
+            바꿨다(2026-08-31) — 안 읽었을 때만 하트를 보여주고, 읽으면 그냥
+            없앤다. 색은 "상대"의 고유색(colors.partner)을 그대로 써서 이 앱의
+            나/상대 색 체계(theme/colors.ts 의 Duo 시맨틱)를 유지한다.
           */}
-          {mine ? (
-            <View
-              style={[styles.readDot, item.isRead && styles.readDotFilled]}
-              accessibilityLabel={item.isRead ? '상대가 읽었어요' : '아직 안 읽었어요'}
+          {mine && !item.isRead ? (
+            <MaterialCommunityIcons
+              name="heart"
+              size={10}
+              color={colors.partner}
+              style={styles.readHeart}
+              accessibilityLabel="아직 안 읽었어요"
             />
           ) : null}
           {item.edited ? <Text style={styles.editedMark}>수정됨</Text> : null}
@@ -1156,16 +1159,8 @@ const styles = themedStyles((colors) => ({
   composeBannerText: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 1 },
   meta: { marginHorizontal: spacing.xs, justifyContent: 'flex-end' },
   metaMine: { marginHorizontal: spacing.xs, alignItems: 'flex-end', justifyContent: 'flex-end' },
-  // 읽음 표시 — 리액션(하트 이모지)과 헷갈리지 않게 점 모양. 채워지면 상대 고유색(초록).
-  readDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-    borderWidth: 1.4,
-    borderColor: colors.textTertiary,
-    marginBottom: 3,
-  },
-  readDotFilled: { borderColor: colors.partner, backgroundColor: colors.partner },
+  // 읽음 표시 — 안 읽었을 때만 하트를 띄우고, 읽으면 사라진다(카톡 "1" 방식).
+  readHeart: { marginBottom: 2 },
   // 상대 아바타 자리 — 그룹 중간엔 내용 없이 폭만 차지해 말풍선이 계단식으로 안 밀린다
   avatarSlot: { width: 26, marginRight: spacing.xs },
   // 눌림 효과 — 스티커·트레이 버튼 공용(예전엔 "reactionPressed" 로 리액션 바 전용이었다)
