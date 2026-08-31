@@ -552,12 +552,10 @@ export interface PlaceVisit {
 // 커플 콘텐츠(영화·공연·드라마/OTT) — Place 와 별개 도메인(2026-08-24). 좌표·주소·카테고리가
 // 없다는 점만 빼면 같은 럽슐랭 등급 엔진을 쓴다 — Place 와 나란히 두고 비교해서 보는 게 좋다.
 export type ContentType = 'MOVIE' | 'PERFORMANCE' | 'DRAMA';
-export type ContentStatus = 'WISHLIST' | 'DONE';
 export interface Content {
   id: number;
   title: string;
   type: ContentType;
-  status: ContentStatus;
   addedBy: number;
   /** 포스터 이미지 — TMDB 검색으로 채워지거나 직접 입력 시 null */
   posterUrl?: string | null;

@@ -236,9 +236,6 @@ export function ContentDetailScreen({ route, navigation }: Props) {
                       </View>
                       <View style={styles.infoChipRow}>
                         <View style={styles.infoChip}>
-                          <Text style={styles.infoChipText}>{content.status === 'DONE' ? '봤어요' : '보고 싶어요'}</Text>
-                        </View>
-                        <View style={styles.infoChip}>
                           <Text style={styles.infoChipText}>{contentTypeLabel(content.type)}</Text>
                         </View>
                         {content.lovelichelinTier === 0 &&

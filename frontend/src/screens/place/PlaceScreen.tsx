@@ -31,7 +31,7 @@ import { LovelichelinBadge } from '../../components/LovelichelinBadge';
 import { SoloPickBadge } from '../../components/SoloPickBadge';
 import { LovelichelinRecommendCards } from './LovelichelinRecommendCards';
 import { SOLO_PICK_MIN_RATING, CATEGORY_FILTERS } from './placeFilters';
-import { CONTENT_TYPE_FILTERS, CONTENT_STATUS_FILTERS, contentTypeLabel } from '../../constants/contentTypes';
+import { CONTENT_TYPE_FILTERS, contentTypeLabel } from '../../constants/contentTypes';
 import { placeApi } from '../../api/place';
 import { contentApi } from '../../api/content';
 import { usePlaceStore } from '../../store/placeStore';
@@ -44,7 +44,6 @@ import { stars } from '../../utils/ratingStars';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type {
   Content,
-  ContentStatus,
   ContentType,
   DateCourse,
   LovelichelinRecommendation,
@@ -114,9 +113,8 @@ export function PlaceScreen() {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
 
-  // 콘텐츠 모드가 쓰는 검색·상태·타입 필터 — 장소 쪽과 도메인이 달라 상태도 따로 둔다
+  // 콘텐츠 모드가 쓰는 검색·타입 필터 — 장소 쪽과 도메인이 달라 따로 둔다
   const [contentSearch, setContentSearch] = useState('');
-  const [contentStatusFilter, setContentStatusFilter] = useState<ContentStatus | 'ALL'>('ALL');
   const [contentTypeFilter, setContentTypeFilter] = useState<ContentType | 'ALL'>('ALL');
 
   // 지도 탭에서 빈 자리를 탭해 고른 좌표 — 확정 전까지는 "여기에 추가" 바만 뜬다
@@ -192,9 +190,8 @@ export function PlaceScreen() {
     () =>
       allContents
         .filter((c) => !contentSearch.trim() || c.title.toLowerCase().includes(contentSearch.trim().toLowerCase()))
-        .filter((c) => contentStatusFilter === 'ALL' || c.status === contentStatusFilter)
         .filter((c) => contentTypeFilter === 'ALL' || c.type === contentTypeFilter),
-    [allContents, contentSearch, contentStatusFilter, contentTypeFilter],
+    [allContents, contentSearch, contentTypeFilter],
   );
 
   // 콘텐츠 솔로 픽 — 장소 쪽(soloPicks)과 완전히 같은 규칙. 콘텐츠 모드는 가이드/둘러보기로
@@ -358,16 +355,6 @@ export function PlaceScreen() {
                     label={f.label}
                     selected={contentTypeFilter === f.value}
                     onPress={() => setContentTypeFilter(f.value)}
-                  />
-                ))}
-              </View>
-              <View style={styles.filterRow}>
-                {CONTENT_STATUS_FILTERS.map((f) => (
-                  <Chip
-                    key={f.value}
-                    label={f.label}
-                    selected={contentStatusFilter === f.value}
-                    onPress={() => setContentStatusFilter(f.value)}
                   />
                 ))}
               </View>
@@ -663,7 +650,6 @@ export function PlaceScreen() {
                   ) : null}
                 </View>
                 <View style={styles.cardFooter}>
-                  <Text style={styles.statusBadge}>{item.status === 'DONE' ? '봤어요' : '보고 싶어요'}</Text>
                   {item.logCount > 0 ? (
                     <Text style={styles.visitInfo}>
                       {item.avgRating ? `${item.avgRating.toFixed(1)} · ` : ''}관람 {item.logCount}회
@@ -828,7 +814,6 @@ const styles = themedStyles((colors) => ({
   categoryText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
   address: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xs },
   cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.sm },
-  statusBadge: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textPrimary },
   visitInfo: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '700' },
   pendingHint: { fontSize: fontSize.micro, color: colors.togetherText, fontWeight: '700', marginTop: spacing.xs },
   // AI 인사이트 렌더

@@ -1,6 +1,5 @@
 /**
- * 콘텐츠 추가 — 제목 검색(TMDB, 영화·드라마) 자동 입력 또는 직접 입력 +
- * 종류(영화/공연/드라마)·상태(보고싶어요/봤어요) 선택.
+ * 콘텐츠 추가 — 제목 검색(TMDB, 영화·드라마) 자동 입력 또는 직접 입력 + 종류(영화/공연/드라마) 선택.
  *
  * <p>공연(PERFORMANCE)은 TMDB 대상이 아니라 검색 결과에 나오지 않는다 — 항상 직접 입력.
  */
@@ -22,15 +21,10 @@ import { haptics } from '../../utils/haptics';
 import { useDirtyGuard } from '../../hooks/useDirtyGuard';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { CONTENT_TYPES, contentTypeLabel } from '../../constants/contentTypes';
-import type { ContentSearchResult, ContentStatus, ContentType } from '../../types';
+import type { ContentSearchResult, ContentType } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<PlaceStackParamList, 'ContentAdd'>;
-
-const STATUS_OPTIONS: { value: ContentStatus; label: string }[] = [
-  { value: 'WISHLIST', label: '보고 싶어요' },
-  { value: 'DONE', label: '봤어요' },
-];
 
 export function ContentAddScreen({ navigation, route }: Props) {
   // 기존 콘텐츠를 들고 들어오면 수정 모드 — 필드를 채워두고 저장 시 update 를 호출한다
@@ -39,7 +33,6 @@ export function ContentAddScreen({ navigation, route }: Props) {
 
   const [title, setTitle] = useState(editingContent?.title ?? '');
   const [type, setType] = useState<ContentType>(editingContent?.type ?? 'MOVIE');
-  const [status, setStatus] = useState<ContentStatus>(editingContent?.status ?? 'WISHLIST');
   const [posterUrl, setPosterUrl] = useState<string | null>(editingContent?.posterUrl ?? null);
   const [saving, setSaving] = useState(false);
 
@@ -50,9 +43,7 @@ export function ContentAddScreen({ navigation, route }: Props) {
   const [unavailable, setUnavailable] = useState(false);
 
   const dirty = isEdit
-    ? title.trim() !== (editingContent?.title ?? '') ||
-      type !== (editingContent?.type ?? 'MOVIE') ||
-      status !== (editingContent?.status ?? 'WISHLIST')
+    ? title.trim() !== (editingContent?.title ?? '') || type !== (editingContent?.type ?? 'MOVIE')
     : title.trim().length > 0;
   const allowLeave = useDirtyGuard(dirty);
 
@@ -88,7 +79,7 @@ export function ContentAddScreen({ navigation, route }: Props) {
     if (!title.trim()) return;
     setSaving(true);
     try {
-      const payload = { title: title.trim(), type, status, posterUrl: posterUrl ?? undefined };
+      const payload = { title: title.trim(), type, posterUrl: posterUrl ?? undefined };
       if (editingContent) {
         await contentApi.update(editingContent.id, payload);
         haptics.success();
@@ -172,19 +163,6 @@ export function ContentAddScreen({ navigation, route }: Props) {
         <View style={styles.chipRow}>
           {CONTENT_TYPES.map((t) => (
             <Chip key={t.value} label={t.label} selected={type === t.value} onPress={() => setType(t.value)} fill />
-          ))}
-        </View>
-
-        <Text style={styles.label}>상태</Text>
-        <View style={styles.chipRow}>
-          {STATUS_OPTIONS.map((o) => (
-            <Chip
-              key={o.value}
-              label={o.label}
-              selected={status === o.value}
-              onPress={() => setStatus(o.value)}
-              fill
-            />
           ))}
         </View>
 

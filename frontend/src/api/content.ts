@@ -5,14 +5,12 @@ import type {
   Content,
   ContentLog,
   ContentSearchResponse,
-  ContentStatus,
   ContentType,
 } from '../types';
 
 export interface SaveContentPayload {
   title: string;
   type: ContentType;
-  status?: ContentStatus;
   posterUrl?: string;
 }
 
