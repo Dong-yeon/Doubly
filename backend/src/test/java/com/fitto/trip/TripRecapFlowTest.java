@@ -6,8 +6,8 @@ import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.feed.dto.CreatePostRequest;
 import com.fitto.feed.service.FeedService;
-import com.fitto.place.domain.PlaceStatus;
 import com.fitto.place.dto.PlaceResponse;
+import com.fitto.place.dto.RecordVisitRequest;
 import com.fitto.place.dto.SavePlaceRequest;
 import com.fitto.place.service.PlaceService;
 import com.fitto.relation.dto.InviteCodeResponse;
@@ -101,11 +101,13 @@ class TripRecapFlowTest {
         tripService.addItem(c[0], tripId, new SaveTripItemRequest(1, null, "공항", null, null, null));
         tripService.addItem(c[0], tripId, new SaveTripItemRequest(1, null, "점심", null, null, null));
 
-        // 장소 2곳(1곳 방문완료)
+        // 장소 2곳(1곳 방문 기록 있음 — "다녀온 장소 수"는 방문 기록 존재 여부로 판정한다)
         PlaceResponse visited = placeService.save(c[0], new SavePlaceRequest(
-                "성산일출봉", null, null, null, "관광", PlaceStatus.VISITED));
+                "성산일출봉", null, null, null, "관광"));
         PlaceResponse wish = placeService.save(c[0], new SavePlaceRequest(
-                "흑돼지집", null, null, null, "식당", PlaceStatus.WISHLIST));
+                "흑돼지집", null, null, null, "식당"));
+        placeService.recordVisit(c[0], visited.id(),
+                new RecordVisitRequest(LocalDate.now(), 5, null, null, null));
         tripService.attachPlace(c[0], tripId, visited.id());
         tripService.attachPlace(c[0], tripId, wish.id());
 

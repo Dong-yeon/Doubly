@@ -67,7 +67,7 @@ class RestoreConcurrencyTest {
         Long b = register("race-b@fitto.com");
         Long oldRelationId = connect(a, b);
         placeService.save(a, new SavePlaceRequest(
-                "추억의 맛집", "서울", new BigDecimal("37.5"), new BigDecimal("127.0"), null, null));
+                "추억의 맛집", "서울", new BigDecimal("37.5"), new BigDecimal("127.0"), null));
         relationService.endRelation(a, oldRelationId);
         Long newRelationId = connect(a, b);
 
@@ -112,7 +112,7 @@ class RestoreConcurrencyTest {
         Long b = register("race-seq-b@fitto.com");
         Long oldRelationId = connect(a, b);
         placeService.save(b, new SavePlaceRequest(
-                "맛집", "서울", new BigDecimal("37.5"), new BigDecimal("127.0"), null, null));
+                "맛집", "서울", new BigDecimal("37.5"), new BigDecimal("127.0"), null));
         relationService.endRelation(b, oldRelationId);
         connect(a, b);
 

@@ -88,7 +88,7 @@ class FeedItemReactionTest {
         long[] c = couple("react-m-a@fitto.com", "react-m-b@fitto.com");
         Long mealId = meal(c[0]);
         Long placeId = placeService.save(c[0], new SavePlaceRequest(
-                "성수 브런치", "서울", new BigDecimal("37.5"), new BigDecimal("127.0"), null, null)).id();
+                "성수 브런치", "서울", new BigDecimal("37.5"), new BigDecimal("127.0"), null)).id();
         Long visitId = placeService.recordVisit(c[0], placeId,
                 new RecordVisitRequest(LocalDate.now(), 5, "좋았다", null, null)).id();
 

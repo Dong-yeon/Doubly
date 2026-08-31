@@ -130,11 +130,11 @@ class PlanGatingFlowTest {
         int limit = Feature.PLACE_PIN.quotaFor(Plan.FREE).limit();
 
         for (int i = 0; i < limit; i++) {
-            placeService.save(user, new SavePlaceRequest("맛집" + i, null, null, null, null, null));
+            placeService.save(user, new SavePlaceRequest("맛집" + i, null, null, null, null));
         }
 
         assertThatThrownBy(() -> placeService.save(user,
-                new SavePlaceRequest("한도초과", null, null, null, null, null)))
+                new SavePlaceRequest("한도초과", null, null, null, null)))
                 .isInstanceOf(BusinessException.class)
                 .extracting(this::errorCodeOf)
                 .isEqualTo(ErrorCode.PLAN_LIMIT_EXCEEDED);

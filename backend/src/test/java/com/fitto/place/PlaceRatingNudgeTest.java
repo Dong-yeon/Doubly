@@ -56,7 +56,7 @@ class PlaceRatingNudgeTest {
     }
 
     private Long place(Long userId) {
-        return placeService.save(userId, new SavePlaceRequest("성수 브런치", null, null, null, null, null)).id();
+        return placeService.save(userId, new SavePlaceRequest("성수 브런치", null, null, null, null)).id();
     }
 
     @Test
