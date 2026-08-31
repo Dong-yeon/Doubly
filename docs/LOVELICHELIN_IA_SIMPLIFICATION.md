@@ -142,10 +142,15 @@ UI가 이 세 개를 각각 다른 자리(칩/별점 셀렉터/방문 카드)에
       - DB: `V68__place_category_merge_food.sql`, `V69__place_category_merge_cafe_bar.sql`
       - 테스트: `KakaoLocalClientMappingTest`·`TripFlowTest` 갱신, 백엔드 전체 스위트(87)
         통과 확인
-- [x] **"가고 싶어요/다녀왔어요" 자체를 없애기로 결정** — 절충안(경로 A만 제거)이 아니라
-      상태 개념 자체를 없애고 "그냥 등록만" 하는 방식으로 단순화. **구현은 카테고리
-      통합 다음 순서로 진행 예정**(아직 착수 전) — `status` 필드·필터·배지·범례를 코드
-      전반에서 제거하는 작업이라 별도 세션에서 범위를 다시 훑고 진행한다.
+- [x] **"가고 싶어요/다녀왔어요" 완전 제거** — 절충안(경로 A만 제거)이 아니라 상태 개념
+      자체를 없애고 "그냥 등록만" 하는 방식으로 완료.
+      - 백엔드: `Place.status`·`PlaceStatus` enum·`markVisited()` 전부 제거. 여행 회고의
+        "다녀온 장소 수"는 status 대신 실제 방문 기록(`PlaceVisit`) 존재 여부로 판정
+        (`PlaceRepository.countVisitedByTripId`) — status는 방문 기록 없이도 수동으로
+        켤 수 있어 오히려 부정확했다. AI 데이트 코스 프롬프트의 방문함/가고싶음 구분도 제거
+      - 프론트: 추가 화면 상태 선택 칩, 둘러보기 상태 필터, 목록 카드 배지, 지도 범례의
+        다녀옴/가고싶어요 항목, 여행 상세 화면의 다녀옴/가보고파 라벨 전부 제거
+      - DB: `V70__drop_place_status.sql` — `places.status` 컬럼 DROP
+      - 테스트: `SavePlaceRequest` 호출부 전체 갱신, `TripRecapFlowTest`는 실제
+        `recordVisit()` 호출로 재작성, 백엔드 전체 스위트(87) 통과 확인
 - [ ] 카테고리 필터 UI를 접이식으로 바꿀지 — 보류
-- [ ] 지도 범례 문구 통일 — "가고 싶어요/다녀왔어요" 제거로 이 항목 자체가 없어질 예정이라
-      별도 작업 불필요
