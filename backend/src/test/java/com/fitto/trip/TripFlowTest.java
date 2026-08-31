@@ -104,7 +104,7 @@ class TripFlowTest {
         long[] c = couple("tr7@fitto.com", "tr8@fitto.com");
         TripResponse trip = tripService.save(c[0], jeju());
         PlaceResponse place = placeService.save(c[0], new SavePlaceRequest(
-                "카페", null, null, null, "카페", PlaceStatus.WISHLIST));
+                "카페", null, null, null, "카페·디저트", PlaceStatus.WISHLIST));
         tripService.attachPlace(c[0], trip.id(), place.id());
 
         tripService.delete(c[0], trip.id());
