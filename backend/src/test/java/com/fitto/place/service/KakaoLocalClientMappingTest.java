@@ -67,6 +67,39 @@ class KakaoLocalClientMappingTest {
         assertThat(place.placeUrl()).isNull();
     }
 
+    // 회귀 테스트 — category_group_code 가 있으면 category_name 의 애매한 2차 분류
+    // 문구 대신 앱의 7개 카테고리 중 하나로 정확히 맞춰야 한다(2026-08-31, 없어서
+    // "커피전문점" 같은 문구가 그대로 나가 목록 카테고리 칩에서 안 보이던 문제).
+    @Test
+    void category_group_code가_있으면_앱_카테고리로_정확히_맞춘다() throws Exception {
+        JsonNode cafe = doc("""
+                {
+                  "place_name": "동네 카페",
+                  "category_name": "음식점 > 카페 > 커피전문점",
+                  "category_group_code": "CE7",
+                  "address_name": "서울 마포구"
+                }
+                """);
+
+        assertThat(client.mapDocument(cafe).category()).isEqualTo("카페·디저트");
+    }
+
+    // group code 가 앱이 다루는 5개 밖이면(예: 어린이집) 억지로 끼워맞추지 않고 비워둔다 —
+    // "음식점"이 아닌 이상 텍스트로 추측하지 않는다.
+    @Test
+    void 지원하지_않는_group_code는_카테고리를_비워둔다() throws Exception {
+        JsonNode nursery = doc("""
+                {
+                  "place_name": "어딘가의 어린이집",
+                  "category_name": "교육,학문 > 어린이집",
+                  "category_group_code": "PS3",
+                  "address_name": "서울 마포구"
+                }
+                """);
+
+        assertThat(client.mapDocument(nursery).category()).isNull();
+    }
+
     @Test
     void 이름이_없거나_좌표가_깨져도_안전하다() throws Exception {
         assertThat(client.mapDocument(doc("{\"place_name\": \"\"}"))).isNull();

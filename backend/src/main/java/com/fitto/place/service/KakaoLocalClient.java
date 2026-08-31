@@ -14,6 +14,7 @@ import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 카카오 로컬 키워드 검색 — AI 맛집 추천의 "실존 장소" 공급원.
@@ -98,32 +99,44 @@ public class KakaoLocalClient {
                 doc.path("id").asText(null),
                 name,
                 address,
-                simplifyCategory(doc.path("category_name").asText("")),
+                mapCategory(doc.path("category_group_code").asText(null), doc.path("category_name").asText("")),
                 parseCoord(doc.path("y").asText(null)),  // 카카오는 y=위도, x=경도
                 parseCoord(doc.path("x").asText(null)),
                 doc.path("place_url").asText(null));
     }
 
     /**
-     * "음식점 > 한식 > 국수" → "음식점" — 최상위 단계가 앱의 카테고리 칩과 바로 맞아떨어지는
-     * 유일한 대분류라 그대로 쓴다(한식/중식/일식/양식처럼 국가별 세분류는 2026-08-28에
-     * "음식점" 하나로 통합했다 — docs/LOVELICHELIN_IA_SIMPLIFICATION.md, 프론트
-     * PLACE_CATEGORIES 와 짝을 맞춘다). "음식점"이 아닌 다른 대분류(카페 등)는 카카오의
-     * 두 번째 단계가 이미 앱 카테고리 이름과 맞는 경우가 많아 그대로 둔다.
-     * 단계가 하나뿐이면 그대로 쓴다.
+     * 카카오 category_group_code → 앱 카테고리. 프론트 constants/placeCategories.ts 의
+     * KAKAO_CATEGORY_AUTO(지도 SDK 검색용)와 반드시 같은 값을 써야 한다 — 둘 다
+     * PLACE_CATEGORIES(7개, docs/LOVELICHELIN_IA_SIMPLIFICATION.md) 밖의 값을 내보내면
+     * 그 장소가 목록의 특정 카테고리 칩에서 안 보이고 "전체"에만 뜬다(2026-08-31에
+     * 실제로 이 매핑이 없어서 생긴 문제 — 텍스트(category_name)로 대충 추측하던 예전
+     * 방식은 카카오의 2차 분류 문구가 그대로 나와 7개 중 어디에도 안 맞을 수 있었다).
      */
-    private static String simplifyCategory(String categoryName) {
+    private static final Map<String, String> GROUP_CODE_TO_CATEGORY = Map.of(
+            "FD6", "음식점",
+            "CE7", "카페·디저트",
+            "AT4", "여행지",
+            "CT1", "박물관·전시",
+            "AD5", "숙소");
+
+    /**
+     * group code 가 5개 매핑 밖이거나 없으면(옛 응답, 지원 안 하는 장소 유형 등) 억지로
+     * 7개 카테고리에 끼워맞추지 않고 비워둔다 — 목록엔 "전체"로는 그대로 보이고, 나중에
+     * 장소 수정 화면에서 사람이 직접 고를 수 있다. 딱 하나 예외: "음식점 > 한식 > 국수"
+     * 처럼 최상위 텍스트가 "음식점"이면 group code 없이도 신뢰할 수 있는 유일한 케이스라
+     * 그대로 살린다.
+     */
+    private static String mapCategory(String categoryGroupCode, String categoryName) {
+        String byGroup = categoryGroupCode == null ? null : GROUP_CODE_TO_CATEGORY.get(categoryGroupCode);
+        if (byGroup != null) {
+            return byGroup;
+        }
         if (categoryName.isBlank()) {
             return null;
         }
-        String[] levels = categoryName.split(">");
-        String top = levels[0].trim();
-        if (top.equals("음식점")) {
-            return "음식점";
-        }
-        String level = levels.length > 1 ? levels[1] : levels[0];
-        String trimmed = level.trim();
-        return trimmed.isBlank() ? null : trimmed;
+        String top = categoryName.split(">")[0].trim();
+        return top.equals("음식점") ? "음식점" : null;
     }
 
     private static String firstNonBlank(String a, String b) {
