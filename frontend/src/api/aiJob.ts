@@ -6,7 +6,7 @@
  * 비동기로 바꾼 이유가 "사용자를 덜 기다리게"가 아니라 <b>"서버가 더 오래 버티게"</b> 라서,
  * 화면의 로딩 UI 는 그대로 두는 게 맞다.
  */
-import { apiClient, ApiError, reportPlanGate } from './client';
+import { apiClient, ApiError, errorCodeOf, reportPlanGate } from './client';
 import type { ApiResponse } from '../types';
 
 /** 접수 응답 — 서버가 결과 대신 돌려주는 작업 id. */
@@ -37,6 +37,9 @@ const POLL_INTERVAL_MS = [300, 700, 1200, 2000, 2000, 3000];
  */
 const POLL_TIMEOUT_MS = 2 * 60 * 1000;
 
+/** 연속 폴링 실패를 몇 번까지 눈감아 줄지 — 이걸 넘으면 진짜 연결 문제로 본다. */
+const MAX_POLL_ERRORS = 3;
+
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /**
@@ -46,11 +49,26 @@ const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, 
  */
 export async function awaitAiJob<T>(jobId: string): Promise<T> {
   const startedAt = Date.now();
+  let consecutiveErrors = 0;
   for (let attempt = 0; ; attempt++) {
     await wait(POLL_INTERVAL_MS[Math.min(attempt, POLL_INTERVAL_MS.length - 1)]);
 
-    const { data } = await apiClient.get<ApiResponse<AiJobStatus<T>>>(`/ai/jobs/${jobId}`);
-    const job = data.data;
+    let job: AiJobStatus<T>;
+    try {
+      const { data } = await apiClient.get<ApiResponse<AiJobStatus<T>>>(`/ai/jobs/${jobId}`);
+      job = data.data;
+      consecutiveErrors = 0;
+    } catch (e) {
+      /*
+       * 폴링이 실패했다고 작업이 실패한 건 아니다 — 지하철에서 잠깐 끊긴 것일 수도 있고,
+       * 그동안에도 서버는 계속 만들고 있다. 몇 번은 그냥 다시 물어본다.
+       * 단 "그런 작업 없다"는 답은 다시 물어도 달라지지 않으므로 즉시 포기한다.
+       */
+      if (errorCodeOf(e) === 'AI_JOB_NOT_FOUND' || ++consecutiveErrors >= MAX_POLL_ERRORS) {
+        throw e;
+      }
+      continue;
+    }
 
     if (job.status === 'DONE' && job.result !== null) {
       return job.result;

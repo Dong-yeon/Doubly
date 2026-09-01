@@ -130,7 +130,7 @@ public class LovelichelinRecommendService {
         }
 
         geminiClient.requireConfiguredAndCountUsage(userId, Feature.AI_RESTAURANT_RECOMMEND);
-        JsonNode result = geminiClient.generateJson(userId, Feature.AI_RESTAURANT_RECOMMEND,
+        JsonNode result = geminiClient.generateJsonInBackground(userId, Feature.AI_RESTAURANT_RECOMMEND,
                 List.of(GeminiClient.textPart(PROMPT.formatted(input))), SCHEMA);
 
         String greeting = result.path("greeting").asText("");

@@ -1,6 +1,6 @@
 /** 운동 기록 API — 설계서 v2.0 4.4 */
 import { apiClient, unwrap } from './client';
-import { AI_REQUEST } from './aiRequest';
+import { runAiJob, type AiJobStart } from './aiJob';
 import type {
   ApiResponse,
   CalendarDay,
@@ -82,10 +82,10 @@ export const workoutApi = {
   stats: () => unwrap(apiClient.get<ApiResponse<WorkoutStats>>('/workout/stats')),
   // 근육 회복 현황 — 부위별 마지막 수행 이후 경과 시간·추정 회복률(홈 화면 요약 카드)
   recovery: () => unwrap(apiClient.get<ApiResponse<MuscleRecoveryStatus>>('/workout/recovery')),
-  // AI 운동 추천 — 생성 시간이 길어 기본 timeout(10s)을 늘린다
+  // AI 운동 추천 — 접수증(jobId) -> 폴링 -> 결과 (api/aiJob.ts 참고)
   recommend: (days: number) =>
-    unwrap(
-      apiClient.post<ApiResponse<WorkoutRecommendation>>('/workout/recommend', { days }, AI_REQUEST),
+    runAiJob<WorkoutRecommendation>(
+      unwrap(apiClient.post<ApiResponse<AiJobStart>>('/workout/recommend', { days })),
     ),
   // 맞춤 프로그램 만들기 — 무슨 요일에 운동할지에 더해, 집중 부위·운동 목적·아픈 부위·
   // 운동 시간(모두 선택)까지 넘기면 그에 맞춰 요일마다 다른 하루를 짜서 돌려준다
@@ -96,17 +96,16 @@ export const workoutApi = {
     painAreas?: string[],
     sessionMinutes?: number,
   ) =>
-    unwrap(
-      apiClient.post<ApiResponse<WorkoutRecommendation>>(
-        '/workout/recommend',
-        {
+    runAiJob<WorkoutRecommendation>(
+      unwrap(
+        apiClient.post<ApiResponse<AiJobStart>>('/workout/recommend', {
           weekdays,
-          focusMuscleGroups: focusMuscleGroups && focusMuscleGroups.length > 0 ? focusMuscleGroups : undefined,
+          focusMuscleGroups:
+            focusMuscleGroups && focusMuscleGroups.length > 0 ? focusMuscleGroups : undefined,
           goal: goal || undefined,
           painAreas: painAreas && painAreas.length > 0 ? painAreas : undefined,
           sessionMinutes: sessionMinutes || undefined,
-        },
-        AI_REQUEST,
+        }),
       ),
     ),
 

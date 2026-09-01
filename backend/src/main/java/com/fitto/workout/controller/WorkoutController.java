@@ -1,5 +1,7 @@
 package com.fitto.workout.controller;
 
+import com.fitto.common.ai.AiJobResponse;
+import com.fitto.common.ai.AiJobService;
 import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
 import com.fitto.workout.dto.CalendarDayResponse;
@@ -16,6 +18,7 @@ import com.fitto.workout.service.MuscleRecoveryService;
 import com.fitto.workout.service.WorkoutRecommendationService;
 import com.fitto.workout.service.WorkoutService;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -24,6 +27,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -38,13 +42,16 @@ public class WorkoutController {
     private final WorkoutService workoutService;
     private final WorkoutRecommendationService recommendationService;
     private final MuscleRecoveryService muscleRecoveryService;
+    private final AiJobService aiJobService;
 
     public WorkoutController(WorkoutService workoutService,
                              WorkoutRecommendationService recommendationService,
-                             MuscleRecoveryService muscleRecoveryService) {
+                             MuscleRecoveryService muscleRecoveryService,
+                             AiJobService aiJobService) {
         this.workoutService = workoutService;
         this.recommendationService = recommendationService;
         this.muscleRecoveryService = muscleRecoveryService;
+        this.aiJobService = aiJobService;
     }
 
     @PostMapping
@@ -58,14 +65,17 @@ public class WorkoutController {
      * weekdays 를 보내면(맞춤 프로그램 만들기) 그 요일마다 서로 다른 하루를 짜서 돌려준다.
      */
     @PostMapping("/recommend")
-    public ApiResponse<WorkoutRecommendationResponse> recommend(@AuthenticationPrincipal AuthUser user,
-                                                                @Valid @RequestBody RecommendWorkoutRequest request) {
-        WorkoutRecommendationResponse response = request.isProgramMode()
-                ? recommendationService.recommend(user.id(), request.weekdays(),
-                        request.focusMuscleGroups(), request.goal(),
-                        request.painAreas(), request.sessionMinutes())
-                : recommendationService.recommend(user.id(), request.daysOrDefault());
-        return ApiResponse.success(response, "AI 운동 추천이 완료되었습니다.");
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public ApiResponse<AiJobResponse> recommend(@AuthenticationPrincipal AuthUser user,
+                                                @Valid @RequestBody RecommendWorkoutRequest request) {
+        Long userId = user.id();
+        String jobId = aiJobService.submit(userId, "workout-recommend",
+                () -> request.isProgramMode()
+                        ? recommendationService.recommend(userId, request.weekdays(),
+                                request.focusMuscleGroups(), request.goal(),
+                                request.painAreas(), request.sessionMinutes())
+                        : recommendationService.recommend(userId, request.daysOrDefault()));
+        return ApiResponse.success(new AiJobResponse(jobId), "AI가 운동을 고르고 있어요.");
     }
 
     /** 종목별 직전 수행 기록 배치 조회 — 세션 시작 시 무게/횟수 프리필(④). */

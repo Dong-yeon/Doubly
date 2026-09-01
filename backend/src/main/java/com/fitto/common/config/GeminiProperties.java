@@ -21,6 +21,15 @@ public class GeminiProperties {
     private String model = "gemini-2.5-flash-lite";
 
     /**
+     * 1차 모델이 계속 실패할 때 대신 물어볼 모델. 빈 값이면 폴백하지 않는다.
+     *
+     * <p>운영 로그상 Gemini 오류는 사실상 전부 503(모델 과부하)이다. 그건 <b>같은 모델로
+     * 다시 묻는다고 풀리지 않는다</b> — 다른 모델로 넘어가는 게 유일하게 효과 있는 대응이다.
+     * flash-lite 보다 조금 무겁지만 그만큼 덜 붐비는 모델을 기본값으로 둔다.
+     */
+    private String fallbackModel = "gemini-2.5-flash";
+
+    /**
      * API 베이스 URL. 실사용에서 바꿀 일은 없고, <b>테스트가 실제 구글을 부르지 않게</b>
      * 갈아끼우기 위한 이음매다(호출 실패 시 한도 되돌리기 같은 건 실패를 만들어야 검증된다).
      */

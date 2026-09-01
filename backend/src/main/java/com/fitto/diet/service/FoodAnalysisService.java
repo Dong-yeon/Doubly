@@ -178,7 +178,7 @@ public class FoodAnalysisService {
         geminiClient.requireConfiguredAndCountUsage(userId, Feature.AI_FOOD_PHOTO);
 
         Image image = downloadImage(photoUrl);
-        JsonNode result = geminiClient.generateJson(userId, Feature.AI_FOOD_PHOTO,
+        JsonNode result = geminiClient.generateJsonInBackground(userId, Feature.AI_FOOD_PHOTO,
                 List.of(GeminiClient.imagePart(image.mimeType(), image.bytes()), GeminiClient.textPart(PROMPT)),
                 RESPONSE_SCHEMA);
         return toResponse(result, "PHOTO_FOOD");
@@ -192,7 +192,7 @@ public class FoodAnalysisService {
     public MealAnalysisResponse analyzeText(Long userId, String text) {
         geminiClient.requireConfiguredAndCountUsage(userId, Feature.AI_FOOD_TEXT);
 
-        JsonNode result = geminiClient.generateJson(userId, Feature.AI_FOOD_TEXT,
+        JsonNode result = geminiClient.generateJsonInBackground(userId, Feature.AI_FOOD_TEXT,
                 List.of(GeminiClient.textPart(buildTextPrompt(text))), RESPONSE_SCHEMA);
         return toResponse(result, "TEXT_IN_PHOTO");
     }

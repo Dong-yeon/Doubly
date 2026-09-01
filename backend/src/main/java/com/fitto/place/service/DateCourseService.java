@@ -98,7 +98,7 @@ public class DateCourseService {
 
     private DateCourseResponse generate(Long userId, String input) {
         geminiClient.requireConfiguredAndCountUsage(userId, Feature.AI_DATE_COURSE);
-        JsonNode result = geminiClient.generateJson(userId, Feature.AI_DATE_COURSE,
+        JsonNode result = geminiClient.generateJsonInBackground(userId, Feature.AI_DATE_COURSE,
                 List.of(GeminiClient.textPart(PROMPT.formatted(input))), SCHEMA);
 
         List<Stop> stops = new ArrayList<>();
