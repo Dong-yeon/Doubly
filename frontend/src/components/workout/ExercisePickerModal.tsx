@@ -11,13 +11,13 @@
  * 넘겨받아 여기서 전부 클라이언트 필터링한다 — 모달을 열 때마다 새로 요청하지 않는다.
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Button } from '../Button';
 import { Chip } from '../Chip';
 import { MUSCLE_GROUPS } from '../../constants/workout';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
-import { equipmentOptionsIn } from '../../utils/exerciseCatalog';
+import { equipmentOptionsIn, searchCatalog } from '../../utils/exerciseCatalog';
 import { haptics } from '../../utils/haptics';
 import type { ExerciseCatalogItem } from '../../types';
 
@@ -46,14 +46,25 @@ const ALL_EQUIPMENT = '전체';
 export function ExercisePickerModal({ visible, catalog, onClose, excludeName, onSelect, multiSelect, onFreeInput }: Props) {
   const [group, setGroup] = useState<string | null>(null);
   const [equipment, setEquipment] = useState<string>(ALL_EQUIPMENT);
+  const [query, setQuery] = useState('');
 
   // 열 때마다 처음부터 — 지난번 골랐던 부위가 남아있으면 "부위 먼저 선택" 흐름이 흐트러진다
   useEffect(() => {
     if (visible) {
       setGroup(null);
       setEquipment(ALL_EQUIPMENT);
+      setQuery('');
     }
   }, [visible]);
+
+  /*
+   * 검색 중에는 부위·기구 칩을 접는다.
+   *
+   * 카탈로그가 34개일 땐 부위→기구로 좁히는 것만으로 충분했지만, 245개가 되면 부위 하나에
+   * 30~45개라 스크롤이 길다. 그리고 사람들은 애초에 "벤치"라고 친다 — 그때 부위를 먼저
+   * 고르라고 하면 "풀오버가 등인가 가슴인가"를 사용자가 알아야 한다.
+   */
+  const searching = query.trim().length > 0;
 
   const groupItems = useMemo(() => {
     if (!group) return [];
@@ -64,9 +75,12 @@ export function ExercisePickerModal({ visible, catalog, onClose, excludeName, on
   const equipmentOptions = useMemo(() => equipmentOptionsIn(groupItems), [groupItems]);
 
   const results = useMemo(() => {
+    if (searching) {
+      return searchCatalog(catalog, query).filter((c) => c.name !== excludeName);
+    }
     if (equipment === ALL_EQUIPMENT) return groupItems;
     return groupItems.filter((c) => (c.equipment ?? '맨몸') === equipment);
-  }, [groupItems, equipment]);
+  }, [searching, catalog, query, excludeName, groupItems, equipment]);
 
   const selectGroup = (g: string) => {
     haptics.light();
@@ -94,29 +108,55 @@ export function ExercisePickerModal({ visible, catalog, onClose, excludeName, on
             </Text>
           ) : null}
 
-          <Text style={styles.label}>부위</Text>
-          <View style={styles.chipRow}>
-            {MUSCLE_GROUPS.map((g) => (
-              <Chip key={g} label={g} selected={group === g} onPress={() => selectGroup(g)} />
-            ))}
-          </View>
+          <TextInput
+            style={styles.search}
+            value={query}
+            onChangeText={setQuery}
+            placeholder="운동 검색 (예: 벤치, 턱걸이)"
+            placeholderTextColor={colors.textTertiary}
+            autoCorrect={false}
+            returnKeyType="search"
+            accessibilityLabel="운동 검색"
+          />
 
-          {!group ? (
-            <Text style={styles.hint}>부위를 먼저 골라주세요.</Text>
-          ) : (
+          {searching ? null : (
             <>
-              <Text style={styles.label}>기구</Text>
+              <Text style={styles.label}>부위</Text>
               <View style={styles.chipRow}>
-                <Chip label={ALL_EQUIPMENT} selected={equipment === ALL_EQUIPMENT} onPress={() => setEquipment(ALL_EQUIPMENT)} />
-                {equipmentOptions.map((e) => (
-                  <Chip key={e} label={e} selected={equipment === e} onPress={() => setEquipment(e)} />
+                {MUSCLE_GROUPS.map((g) => (
+                  <Chip key={g} label={g} selected={group === g} onPress={() => selectGroup(g)} />
                 ))}
               </View>
+            </>
+          )}
 
+          {!searching && !group ? (
+            <Text style={styles.hint}>부위를 고르거나 위에서 검색해보세요.</Text>
+          ) : (
+            <>
+              {searching ? null : (
+                <>
+                  <Text style={styles.label}>기구</Text>
+                  <View style={styles.chipRow}>
+                    <Chip label={ALL_EQUIPMENT} selected={equipment === ALL_EQUIPMENT} onPress={() => setEquipment(ALL_EQUIPMENT)} />
+                    {equipmentOptions.map((e) => (
+                      <Chip key={e} label={e} selected={equipment === e} onPress={() => setEquipment(e)} />
+                    ))}
+                  </View>
+                </>
+              )}
+
+              {searching ? (
+                <Text style={styles.searchMeta}>
+                  전체에서 {results.length}개 — 부위와 상관없이 찾아요
+                </Text>
+              ) : null}
               <ScrollView style={styles.list} keyboardShouldPersistTaps="handled">
                 {results.length === 0 ? (
                   <View style={styles.empty}>
-                    <Text style={styles.emptyText}>이 조합엔 등록된 운동이 없어요.</Text>
+                    <Text style={styles.emptyText}>
+                      {searching ? `'${query.trim()}' 로 찾은 운동이 없어요.` : '이 조합엔 등록된 운동이 없어요.'}
+                    </Text>
                     {onFreeInput ? (
                       <TouchableOpacity onPress={onFreeInput}>
                         <Text style={styles.freeInputLink}>직접 입력하기 ›</Text>
@@ -174,6 +214,18 @@ const styles = themedStyles((colors) => ({
   card: { backgroundColor: colors.surface, borderRadius: radius.xl, padding: spacing.lg, maxHeight: '80%' },
   title: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary, marginBottom: spacing.sm },
   multiCount: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700', marginTop: -spacing.xs, marginBottom: spacing.sm },
+  search: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    fontSize: fontSize.body,
+    color: colors.textPrimary,
+    backgroundColor: colors.surfaceAlt,
+  },
+  searchMeta: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xs },
+
   label: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700', marginBottom: spacing.xs, marginTop: spacing.sm },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
   hint: { fontSize: fontSize.caption, color: colors.textTertiary, marginTop: spacing.md, marginBottom: spacing.sm },
