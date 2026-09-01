@@ -2,6 +2,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -24,6 +25,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { ChatStackParamList } from '../../navigation/types';
 import { ImageViewer } from '../../components/ImageViewer';
 import { Avatar } from '../../components/Avatar';
+import { connectSocket } from '../../api/chatSocket';
 import { useChatStore } from '../../store/chatStore';
 import { useAuthStore } from '../../store/authStore';
 import { useRelationStore } from '../../store/relationStore';
@@ -101,7 +103,9 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const partnerAvatarUrl = couple?.partner?.profileImageUrl;
   const messages = useChatStore((s) => s.messages[relationId] ?? EMPTY_MESSAGES);
   const loadingOlder = useChatStore((s) => s.loadingOlder[relationId] ?? false);
-  const { openRoom, closeRoom, send, markRead, replaceMessage, loadOlder } = useChatStore();
+  const { openRoom, closeRoom, send, markRead, replaceMessage, loadOlder, syncMissed } =
+    useChatStore();
+  const socketConnected = useChatStore((s) => s.connected);
   const [text, setText] = useState('');
   const [uploading, setUploading] = useState(false);
   // 사진 전송 미리보기 — 고른 사진이 바로 전송돼 "고른 게 원하는 사진이 아니었는데
@@ -260,6 +264,23 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     return () => closeRoom(relationId);
   }, [relationId, openRoom, closeRoom]);
 
+  /*
+   * 포그라운드 복귀 시 따라잡기.
+   *
+   * 백그라운드에 있는 동안 OS 가 소켓을 끊는 건 정상이고, 돌아오면 stompjs 가 다시 붙이고
+   * chatSocket 이 구독까지 되살린다. 하지만 <b>끊겨 있던 사이에 온 메시지</b>는 소켓으로
+   * 오지 않는다 — 소켓은 붙은 뒤의 것만 준다. 그 공백은 REST 로 메워야 한다.
+   * (이게 없으면 "알림은 왔는데 방을 열어보니 그 메시지가 없다"가 된다.)
+   */
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next !== 'active') return;
+      void connectSocket().catch(() => undefined);
+      void syncMissed(relationId).catch(() => undefined);
+    });
+    return () => sub.remove();
+  }, [relationId, syncMissed]);
+
   // 새 메시지 도착 시 상대방 최신 메시지까지 읽음 처리 (id 게이트로 중복 호출 방지)
   useEffect(() => {
     const latestIncoming = messages.find((m) => m.senderId !== myId); // 최신순이라 첫 항목
@@ -323,7 +344,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
       return;
     }
 
-    const ok = send(relationId, {
+    const ok = await send(relationId, {
       messageType: 'TEXT',
       content,
       replyToId: replyTo?.id,
@@ -410,12 +431,12 @@ export function ChatRoomScreen({ navigation, route }: Props) {
    * STOMP 경로는 REST 처럼 402 를 화면으로 되돌려줄 방법이 없다(서버 검증은 우회 방지용
    * 방어선일 뿐 사용자에게는 조용히 실패로 보인다). TouchGesturePicker 와 같은 규칙.
    */
-  const sendSticker = (sticker: string, locked: boolean, label: string) => {
+  const sendSticker = async (sticker: string, locked: boolean, label: string) => {
     if (locked) {
       showUpgrade(`${label} 스티커는 PRO에서 보낼 수 있어요.`);
       return;
     }
-    const ok = send(relationId, { messageType: 'STICKER', content: sticker });
+    const ok = await send(relationId, { messageType: 'STICKER', content: sticker });
     if (ok) {
       setShowStickers(false);
       haptics.light();
@@ -424,8 +445,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     }
   };
 
-  const sendTouch = (code: TouchGestureCode) => {
-    const ok = send(relationId, { messageType: 'TOUCH', content: code });
+  const sendTouch = async (code: TouchGestureCode) => {
+    const ok = await send(relationId, { messageType: 'TOUCH', content: code });
     if (ok) haptics.light();
     else Alert.alert('전송 실패', '연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
   };
@@ -450,7 +471,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     setUploading(true);
     try {
       const url = await runBusy('사진 보내는 중…', () => uploadImage(uri));
-      const ok = send(relationId, { messageType: 'IMAGE', imageUrl: url });
+      const ok = await send(relationId, { messageType: 'IMAGE', imageUrl: url });
       if (ok) haptics.light();
       else Alert.alert('전송 실패', '연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
     } catch (e) {
@@ -740,6 +761,17 @@ export function ChatRoomScreen({ navigation, route }: Props) {
          */
         keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
       >
+        {/*
+          * 연결이 끊긴 동안에는 그렇다고 말한다. 예전엔 store 의 connected 가 방에 처음
+          * 들어올 때 true 로 고정돼서, 소켓이 죽어도 화면은 멀쩡해 보였다 — 사용자는
+          * "왜 답이 없지"라고 생각하고, 보낸 뒤에야 실패를 알았다.
+          */}
+        {socketConnected ? null : (
+          <View style={styles.offlineBar} accessibilityRole="alert">
+            <ActivityIndicator size="small" color={colors.textSecondary} />
+            <Text style={styles.offlineText}>연결 중이에요… 잠시만요</Text>
+          </View>
+        )}
         <FlatList
           style={styles.flex}
           data={messages}
@@ -1165,6 +1197,17 @@ const styles = themedStyles((colors) => ({
   mealImage: { width: 208, height: 156, borderRadius: radius.md, backgroundColor: colors.surfaceAlt },
   // inverted 목록의 footer = 맨 위(과거 방향) — 과거 페이지 로딩 스피너
   olderSpinner: { paddingVertical: spacing.md },
+
+  // 연결 끊김 배너 — 목록 위에 얇게 한 줄. 실패를 숨기지 않되 대화를 가리지도 않는다
+  offlineBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.surfaceAlt,
+  },
+  offlineText: { fontSize: fontSize.caption, color: colors.textSecondary },
   time: { fontSize: 10, color: colors.textTertiary },
   editedMark: { fontSize: 10, color: colors.textTertiary },
 
