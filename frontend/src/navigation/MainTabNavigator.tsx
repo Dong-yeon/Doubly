@@ -5,7 +5,7 @@
  *  홈 CoupleHero 의 오늘 칩(HomeScreen.onPressToday)이 "안 했으면 기록 화면으로 바로"
  *  분기하도록 바꿔 같은 진입 속도를 새 버튼 없이 재현했다. */
 import React, { useEffect } from 'react';
-import { AppState, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { AppState, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createBottomTabNavigator, BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { getFocusedRouteNameFromRoute, StackActions } from '@react-navigation/native';
@@ -123,9 +123,17 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
    * 탭을 눌렀는데 시스템 제스처(홈/최근 앱)로 먹히는 경우가 있었다(2026-08-31 리포트).
    * 여유분을 더 얹어 탭 터치 영역 자체를 그 구역 위로 확실히 밀어올린다 — 비트윈 등
    * 커플 앱들의 여유 있는 하단 탭바 스타일도 참고해 spacing.md 로 넉넉하게 잡았다.
+   *
+   * 이건 안드로이드 전용 문제다 — iOS 는 홈 인디케이터 제스처 영역이 insets.bottom
+   * 값 그대로 정확해서(OEM 마다 다른 안드로이드와 달리 애플이 직접 규정) 여유분이
+   * 필요 없다. 그대로 다 적용했더니 iOS 실기기에서 탭바 아래 여백이 과하게 떠
+   * 보였다(2026-09-01 리포트) — 안드로이드만 버퍼를 더한다.
    */
+  const bottomPadding =
+    Platform.OS === 'android' ? Math.max(insets.bottom, spacing.md) + spacing.md : insets.bottom;
+
   return (
-    <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, spacing.md) + spacing.md }]}>
+    <View style={[styles.bar, { paddingBottom: bottomPadding }]}>
       {routeNames.map((name, i) => renderTab(name, i))}
     </View>
   );
