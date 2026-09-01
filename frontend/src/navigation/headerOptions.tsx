@@ -11,7 +11,7 @@
  * 웹·안드로이드에서 빠져나갈 방법이 없다 — 그래서 닫기(X) 버튼을 붙인다.
  */
 import React from 'react';
-import { Pressable, StyleSheet } from 'react-native';
+import { Platform, Pressable, StyleSheet } from 'react-native';
 import { MaterialCommunityIcons } from '../components/Icon';
 import { useNavigation } from '@react-navigation/native';
 import { colors, spacing } from '../constants/theme';
@@ -84,12 +84,18 @@ const styles = StyleSheet.create({
     minHeight: 44,
     justifyContent: 'center',
     /*
-     * 왼쪽 여백이 없어 아이콘이 <b>화면 벽에 붙어</b> 있었다(실측 x=0).
+     * 왼쪽 여백이 없어 아이콘이 <b>화면 벽에 붙어</b> 있었다(실측 x=0, 안드로이드·웹).
      * 본문은 screenPadding(20)에서 시작하므로 헤더 아이콘과 본문의 좌측
      * 정렬선이 어긋났다. 아이콘의 시작점을 본문과 맞춘다.
      * (터치 영역은 패딩을 포함하므로 44 아래로 내려가지 않는다)
+     *
+     * iOS 는 이 padding 을 안 준다 — 네이티브 스택이 "뒤로가기" 자리에 자체
+     * 캡슐(알약) 배경을 씌우는데(최근 iOS 디자인), 그 캡슐 자체가 이미 표준
+     * 여백을 갖고 있어서 우리가 또 paddingLeft(20)를 더하면 이중으로 밀려
+     * 아이콘이 캡슐 오른쪽에 쏠려 보였다(실기기 스크린샷 리포트, 2026-09-01).
+     * 안드로이드·웹은 그런 캡슐이 없어 기존 값을 그대로 둔다.
      */
-    paddingLeft: layout.screenPadding,
+    paddingLeft: Platform.OS === 'ios' ? spacing.sm : layout.screenPadding,
     paddingRight: spacing.sm,
   },
   pressed: { opacity: 0.6 },
