@@ -7,7 +7,7 @@
  * UX(굳이 보냈다가 거부당하지 않게).
  */
 import React, { useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, ScrollView, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { MOOD_EMOJIS, PREMIUM_MOOD_EMOJIS } from '../constants/moodEmojis';
 import { usePlanStore } from '../store/planStore';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
@@ -24,6 +24,14 @@ export function MoodPicker({ visible, onClose, onSelect }: Props) {
   const can = usePlanStore((s) => s.can);
   const showUpgrade = usePlanStore((s) => s.showUpgrade);
   const premiumAllowed = can('PREMIUM_STICKER');
+  /*
+   * 격자 스크롤 높이를 320 으로 고정해뒀더니, 화면이 큰 기기(아이폰 프로맥스 등)에서는
+   * 시트가 화면 아래쪽 절반도 못 채우고 그 위로 배경(딤 처리된 화면)만 크게 비어
+   * 보였다(실기기 리포트, 2026-09-01). 화면 높이에 비례하게 키워서 큰 화면에서도
+   * 시트가 그만큼 커지게 한다 — 작은 화면 보호용으로 하한(320)은 그대로 둔다.
+   */
+  const { height: windowHeight } = useWindowDimensions();
+  const gridMaxHeight = Math.max(320, windowHeight * 0.45);
 
   const close = () => {
     setMessage('');
@@ -57,7 +65,7 @@ export function MoodPicker({ visible, onClose, onSelect }: Props) {
           />
 
           {/* 확장팩까지 24종이라 작은 화면에서는 넘친다 — 시트 안에서만 스크롤한다 */}
-          <ScrollView style={styles.scroll} contentContainerStyle={styles.grid}>
+          <ScrollView style={{ maxHeight: gridMaxHeight }} contentContainerStyle={styles.grid}>
             {MOOD_EMOJIS.map((m) => (
               <Pressable
                 key={m.emoji}
@@ -135,8 +143,6 @@ const styles = themedStyles((colors) => ({
     gap: 2,
   },
   cellPressed: { backgroundColor: colors.primarySoft, transform: [{ scale: 0.94 }] },
-  // 시트 전체가 아니라 격자만 스크롤한다 — 메모 입력칸은 위에 고정돼야 쓰기 편하다
-  scroll: { maxHeight: 320 },
   lockBadge: {
     position: 'absolute',
     top: 4,
