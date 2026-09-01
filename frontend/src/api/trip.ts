@@ -1,5 +1,6 @@
 /** 커플 여행 API — PLAN.md Trip */
 import { apiClient, unwrap } from './client';
+import { AI_REQUEST } from './aiRequest';
 import type {
   AlbumPost,
   ApiResponse,
@@ -81,7 +82,7 @@ export const tripApi = {
       apiClient.post<ApiResponse<TripDay[]>>(
         `/trips/${tripId}/items/generate`,
         { preferences },
-        { timeout: 60000 },
+        AI_REQUEST,
       ),
     ),
 

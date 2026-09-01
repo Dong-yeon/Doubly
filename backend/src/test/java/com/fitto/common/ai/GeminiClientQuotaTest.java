@@ -11,6 +11,9 @@ import com.fitto.common.plan.UsageCounter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+import java.util.Map;
+
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -40,6 +43,7 @@ class GeminiClientQuotaTest {
     void setUp() {
         properties.setApiKey("test-key");
         properties.setDailyLimitPerUser(10);
+        properties.setDailyLimitTotal(1000);
     }
 
     @Test
@@ -77,5 +81,46 @@ class GeminiClientQuotaTest {
 
         verify(planGuard).consume(1L, Feature.AI_DATE_COURSE);
         verify(usageCounter).increment(eq(1L), eq(Feature.AI_TOTAL), any(Quota.class));
+        // 서비스 전체 카운터도 함께 오른다 — 이게 구글 프로젝트 쿼터를 지키는 축이다
+        verify(usageCounter).incrementGlobal(eq(Feature.AI_TOTAL), any(Quota.class));
+    }
+
+    /*
+     * 서비스 전체 한도는 개인 한도보다 <b>먼저</b> 본다. 순서가 반대면, 서비스가 이미 막혀
+     * Gemini 를 한 번도 못 부를 요청이 개인 한도(월 1회 같은 희소한 것 포함)를 깎는다 —
+     * 위 두 테스트가 지키는 것과 같은 원칙의 한 겹 위 버전이다.
+     */
+    @Test
+    void 서비스_전체_한도에_걸리면_개인_한도는_건드리지_않는다() {
+        properties.setDailyLimitTotal(1000);
+        when(usageCounter.peekGlobal(eq(Feature.AI_TOTAL), any(Quota.class))).thenReturn(1000);
+
+        assertThatThrownBy(() -> client.requireConfiguredAndCountUsage(1L, Feature.AI_DATE_COURSE))
+                .isInstanceOf(BusinessException.class)
+                // 개인 한도 소진과 다른 코드여야 한다 — 사용자 잘못이 아니라는 걸 앱이 구분해야 한다
+                .extracting("errorCode").isEqualTo(ErrorCode.AI_SERVICE_LIMIT_EXCEEDED);
+
+        verifyNoInteractions(planGuard);
+        verify(usageCounter, never()).increment(any(), eq(Feature.AI_TOTAL), any());
+        verify(usageCounter, never()).incrementGlobal(eq(Feature.AI_TOTAL), any());
+    }
+
+    /*
+     * 호출이 실패하면 개인 한도(기능별 + 사용자 총량)는 되돌리고, 서비스 전체 총량은 두고 온다.
+     * 이 비대칭이 핵심이다 — 되돌림이 남용 우회로가 되지 않는 이유가 여기 있다.
+     * (실제 구글을 부르지 않으려고 baseUrl 을 닿지 않는 주소로 돌린다)
+     */
+    @Test
+    void 호출이_실패하면_개인_한도만_되돌린다() {
+        properties.setBaseUrl("http://127.0.0.1:1/v1beta/models");
+
+        assertThatThrownBy(() -> client.generateJson(1L, Feature.AI_DATE_COURSE,
+                List.of(GeminiClient.textPart("안녕")), Map.of("type", "OBJECT")))
+                .isInstanceOf(BusinessException.class);
+
+        verify(planGuard).refund(1L, Feature.AI_DATE_COURSE);
+        verify(usageCounter).decrement(eq(1L), eq(Feature.AI_TOTAL), any(Quota.class));
+        /* 전역 카운터를 되돌리는 API 는 UsageCounter 에 아예 없다 — 구글이 이미 처리했을 수
+         * 있으므로 되돌리면 안 되고, 없으면 실수로 되돌릴 수도 없다. */
     }
 }

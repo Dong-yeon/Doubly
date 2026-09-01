@@ -90,6 +90,9 @@ public enum ErrorCode {
     // 식단 AI 분석 (DIET AI)
     AI_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "AI 분석 기능이 아직 준비되지 않았어요."),
     AI_DAILY_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "오늘의 AI 분석 횟수를 모두 사용했어요. 내일 다시 시도해주세요."),
+    /* 서비스 전체 한도 — 내 잘못이 아니라는 게 위(개인 한도)와의 차이다. 문구도 그렇게 갈라야
+     * "나는 처음 쓰는데 왜 다 썼다는 거지"가 안 생긴다. 리셋은 자정(KST)이라 "잠시 후"가 아니다. */
+    AI_SERVICE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "오늘은 AI 이용이 많아 잠시 쉬어가요. 내일 다시 시도해주세요."),
     AI_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "지금은 AI 분석 요청이 많아요. 잠시 후 다시 시도해주세요."),
     AI_ANALYSIS_FAILED(HttpStatus.BAD_GATEWAY, "AI 분석에 실패했어요. 잠시 후 다시 시도해주세요."),
     // 사진 관련 — 원인별로 분리해 어떤 문제인지 바로 보이게 한다

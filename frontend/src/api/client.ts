@@ -20,6 +20,15 @@ export interface RequestConfig {
   headers?: Record<string, string>;
   /** 밀리초. 기본 10초, AI 응답처럼 오래 걸리는 호출은 개별로 늘린다. */
   timeout?: number;
+  /**
+   * 타임아웃으로 실패하면 <b>딱 한 번</b> 다시 보낸다.
+   *
+   * <p>같은 요청을 두 번 보내도 안전한 곳에만 켤 것. AI 호출이 대표적인데,
+   * 서버가 결과를 캐시에 넣어두기 때문에(AiResultCache) 재시도가 대개 즉시 끝난다 —
+   * 첫 시도가 시간 초과로 끊겼어도 서버 쪽 생성은 끝났을 가능성이 높다.
+   * 켜는 곳은 {@code api/aiRequest.ts} 한 군데로 모아 뒀다.
+   */
+  retryOnTimeout?: boolean;
 }
 
 /**
@@ -35,12 +44,19 @@ export class ApiError extends Error {
   readonly status: number;
   /** 응답 본문(파싱된 경우). 백엔드 ApiResponse.message 를 여기서 꺼낸다. */
   readonly data: unknown;
+  /**
+   * 서버 응답을 못 받고 <b>우리가</b> 끊었는가(타임아웃). 네트워크 끊김과 구별한다 —
+   * 둘 다 status 0 이지만 사용자에게 할 말이 다르고("기다리다 끊었다" vs "연결이 없다"),
+   * 재시도할 값어치도 다르다.
+   */
+  readonly timedOut: boolean;
 
-  constructor(status: number, data: unknown, message: string) {
+  constructor(status: number, data: unknown, message: string, timedOut = false) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.data = data;
+    this.timedOut = timedOut;
   }
 }
 
@@ -197,7 +213,20 @@ async function request<T>(
   } catch (e) {
     // 네트워크 끊김·타임아웃(abort). 원문이 영문이라 사용자에게 노출하면 안 된다.
     const aborted = e instanceof Error && e.name === 'AbortError';
-    throw new ApiError(0, undefined, aborted ? `요청 시간 초과 (${config?.timeout ?? DEFAULT_TIMEOUT}ms)` : '네트워크 오류');
+    if (aborted && config?.retryOnTimeout) {
+      /*
+       * 한 번만 — 재시도용 config 에서 플래그를 꺼서 잠근다.
+       * isRetry 는 건드리지 않는다. 그건 401 갱신 재시도용 예산이라, 여기서 써버리면
+       * 타임아웃 후 재시도가 마침 401 을 받았을 때 토큰 갱신 기회를 잃는다.
+       */
+      return request<T>(method, url, body, { ...config, retryOnTimeout: false }, isRetry);
+    }
+    throw new ApiError(
+      0,
+      undefined,
+      aborted ? `요청 시간 초과 (${config?.timeout ?? DEFAULT_TIMEOUT}ms)` : '네트워크 오류',
+      aborted,
+    );
   } finally {
     clearTimeout(timeout);
   }

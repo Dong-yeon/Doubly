@@ -73,7 +73,7 @@ public class WeeklyLetterService {
 
     private WeeklyLetterResponse generate(Long userId, String input) {
         geminiClient.requireConfiguredAndCountUsage(userId, Feature.AI_WEEKLY_LETTER);
-        JsonNode result = geminiClient.generateJson(
+        JsonNode result = geminiClient.generateJson(userId, Feature.AI_WEEKLY_LETTER,
                 List.of(GeminiClient.textPart(PROMPT.formatted(input))), SCHEMA);
         String letter = result.path("letter").asText("");
         return letter.isBlank()

@@ -1,5 +1,6 @@
 /** 결산 API — 지난주 운동+식단 요약, 레벨, AI 주간 레터 */
 import { apiClient, unwrap } from './client';
+import { AI_REQUEST } from './aiRequest';
 import type { ApiResponse, UserLevel, WeeklyLetter, WeeklyRecap } from '../types';
 
 export const summaryApi = {
@@ -11,7 +12,7 @@ export const summaryApi = {
     unwrap(
       apiClient.get<ApiResponse<WeeklyLetter>>('/summary/ai-letter', {
         params: { refresh: refresh || undefined },
-        timeout: 60000,
+        ...AI_REQUEST,
       }),
     ),
 };

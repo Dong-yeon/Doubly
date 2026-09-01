@@ -20,8 +20,31 @@ public class GeminiProperties {
     /** 사용할 모델. 무료 티어는 flash / flash-lite 계열만 지원. */
     private String model = "gemini-2.5-flash-lite";
 
-    /** 사용자 1명당 하루 분석 허용 횟수 (무료 티어 RPD 방어) */
-    private int dailyLimitPerUser = 10;
+    /**
+     * API 베이스 URL. 실사용에서 바꿀 일은 없고, <b>테스트가 실제 구글을 부르지 않게</b>
+     * 갈아끼우기 위한 이음매다(호출 실패 시 한도 되돌리기 같은 건 실패를 만들어야 검증된다).
+     */
+    private String baseUrl = "https://generativelanguage.googleapis.com/v1beta/models";
+
+    /**
+     * 서비스 전체가 하루에 쓸 수 있는 AI 호출 수 — <b>프로젝트 쿼터를 지키는 진짜 방어선</b>.
+     *
+     * <p>Google AI Studio 의 일일 한도는 프로젝트 단위다. 그래서 방어도 프로젝트 단위여야
+     * 하고, 이 값이 그 역할을 한다. 실제 티어의 RPD 보다 <b>조금 낮게</b> 잡아야
+     * "구글이 먼저 막아서 원인 불명으로 전원 실패"하는 대신 우리 쪽에서 알아보는 에러로
+     * 떨어진다. 쓰는 모델의 RPD 를 콘솔에서 확인하고 맞출 것.
+     */
+    private int dailyLimitTotal = 1000;
+
+    /**
+     * 사용자 1명당 하루 AI 호출 상한 — <b>남용 방지</b>용이지 쿼터 방어용이 아니다.
+     *
+     * <p>예전엔 10 이었는데, 이게 프로젝트 쿼터 방어를 겸하고 있었다. 그런데 기능별 한도는
+     * PRO 기준 음식사진 30·식단코치 10 처럼 훨씬 큰 값이라, 실제로는 이 10 이 먼저 걸려
+     * <b>기능별 한도가 무의미</b>했다. 앱을 한 바퀴 둘러보기만 해도 9회를 쓴다.
+     * 쿼터 방어는 위 {@code dailyLimitTotal} 로 분리했으니 여기는 넉넉해도 된다.
+     */
+    private int dailyLimitPerUser = 50;
 
     public boolean isConfigured() {
         return apiKey != null && !apiKey.isBlank();
