@@ -5,6 +5,7 @@ import com.fitto.common.ai.AiJobService;
 import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
 import com.fitto.workout.dto.CalendarDayResponse;
+import com.fitto.workout.dto.ExerciseHistoryResponse;
 import com.fitto.workout.dto.ExerciseLastPerformanceRequest;
 import com.fitto.workout.dto.ExerciseLastPerformanceResponse;
 import com.fitto.workout.dto.MuscleRecoveryResponse;
@@ -76,6 +77,21 @@ public class WorkoutController {
                                 request.painAreas(), request.sessionMinutes())
                         : recommendationService.recommend(userId, request.daysOrDefault()));
         return ApiResponse.success(new AiJobResponse(jobId), "AI가 운동을 고르고 있어요.");
+    }
+
+    /**
+     * 종목별 기록 추이 — "이 종목에서 내가 세지고 있나"에 답하는 화면의 데이터.
+     *
+     * <p>종목을 <b>이름으로</b> 받는다. 지금 자유 운동은 종목을 직접 타이핑할 수 있어
+     * 카탈로그 id 가 없는 기록이 많고, 프리필·PR 판정도 전부 이름으로 맞추고 있어서
+     * 여기만 id 를 요구하면 그 기록들이 통째로 조회에서 빠진다.
+     */
+    @GetMapping("/exercises/history")
+    public ApiResponse<ExerciseHistoryResponse> exerciseHistory(
+            @AuthenticationPrincipal AuthUser user,
+            @RequestParam String name,
+            @RequestParam(defaultValue = "30") int limit) {
+        return ApiResponse.success(workoutService.exerciseHistory(user.id(), name, limit));
     }
 
     /** 종목별 직전 수행 기록 배치 조회 — 세션 시작 시 무게/횟수 프리필(④). */
