@@ -30,7 +30,6 @@ import { usePlaceStore } from '../../store/placeStore';
 import { isKakaoMapConfigured } from '../../constants/config';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
-import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
 import { confirmDiscard } from '../../utils/discardGuard';
 import { useDeleteAction } from '../../hooks/useDeleteAction';
@@ -416,8 +415,12 @@ export function TripDetailScreen({ navigation, route }: Props) {
   const runGenerate = async () => {
     setAiLoading(true);
     try {
-      await runBusy('AI가 일정을 짜고 있어요', () =>
-        tripApi.generateItinerary(tripId, aiPreferences.trim() || undefined));
+      /*
+       * 전역 화면 잠금(runBusy)은 쓰지 않는다. 서버가 백그라운드에서 만들고 앱이 폴링하는
+       * 구조로 바뀌면서 대기가 분 단위까지 늘 수 있는데, 그동안 앱 전체를 덮으면 사용자가
+       * 아무것도 못 한다. 이 시트 자체가 이미 진행 표시와 닫기 차단을 하고 있다(aiLoading).
+       */
+      await tripApi.generateItinerary(tripId, aiPreferences.trim() || undefined);
       haptics.light();
       toast.success('AI가 일정을 짰어요.');
       setAiOpen(false);
@@ -801,11 +804,14 @@ export function TripDetailScreen({ navigation, route }: Props) {
         visible={aiOpen}
         transparent
         animationType="slide"
-        onRequestClose={() => {
-          if (!aiLoading) setAiOpen(false);
-        }}
+        /*
+         * 생성 중에도 닫을 수 있다. 예전엔 응답을 기다리는 동안 닫으면 요청이 버려지니
+         * 막아야 했지만, 이제는 서버가 작업으로 들고 있어서 화면을 떠나도 계속 만들어지고
+         * 결과는 저장된다. 못 닫게 막을 이유가 사라졌다.
+         */
+        onRequestClose={() => setAiOpen(false)}
       >
-        <Pressable style={styles.backdrop} onPress={() => !aiLoading && setAiOpen(false)}>
+        <Pressable style={styles.backdrop} onPress={() => setAiOpen(false)}>
           {/* onPress 로 탭을 흡수한다 — 없으면 시트 빈 곳 터치가 배경으로 새어나가 닫힌다 */}
           <Pressable style={styles.sheet} onPress={() => {}}>
             <Text style={styles.sheetTitle}>AI 여행 일정 생성</Text>
@@ -829,7 +835,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
             {aiLoading ? (
               <View style={styles.aiLoading}>
                 <ActivityIndicator color={colors.accent} />
-                <Text style={styles.aiLoadingText}>AI가 일정을 짜는 중이에요… (최대 1분)</Text>
+                <Text style={styles.aiLoadingText}>AI가 일정을 짜는 중이에요… 닫아도 계속 만들어져요</Text>
               </View>
             ) : (
               <View style={styles.sheetActions}>
