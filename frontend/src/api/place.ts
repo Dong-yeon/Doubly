@@ -1,5 +1,6 @@
 /** 커플 맛집 지도 API — PLAN.md Place Map */
 import { apiClient, unwrap } from './client';
+import { AI_REQUEST } from './aiRequest';
 import type {
   ApiResponse,
   DateCourse,
@@ -58,7 +59,7 @@ export const placeApi = {
     unwrap(
       apiClient.get<ApiResponse<DateCourse>>('/places/date-course', {
         params: { refresh: refresh || undefined },
-        timeout: 60000,
+        ...AI_REQUEST,
       }),
     ),
 
@@ -70,7 +71,7 @@ export const placeApi = {
     unwrap(
       apiClient.get<ApiResponse<LovelichelinRecommendation>>('/places/lovelichelin/recommendations', {
         params: { refresh: refresh || undefined },
-        timeout: 60000,
+        ...AI_REQUEST,
       }),
     ),
 };

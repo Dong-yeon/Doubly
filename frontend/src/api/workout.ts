@@ -1,5 +1,6 @@
 /** 운동 기록 API — 설계서 v2.0 4.4 */
 import { apiClient, unwrap } from './client';
+import { AI_REQUEST } from './aiRequest';
 import type {
   ApiResponse,
   CalendarDay,
@@ -84,7 +85,7 @@ export const workoutApi = {
   // AI 운동 추천 — 생성 시간이 길어 기본 timeout(10s)을 늘린다
   recommend: (days: number) =>
     unwrap(
-      apiClient.post<ApiResponse<WorkoutRecommendation>>('/workout/recommend', { days }, { timeout: 60000 }),
+      apiClient.post<ApiResponse<WorkoutRecommendation>>('/workout/recommend', { days }, AI_REQUEST),
     ),
   // 맞춤 프로그램 만들기 — 무슨 요일에 운동할지에 더해, 집중 부위·운동 목적·아픈 부위·
   // 운동 시간(모두 선택)까지 넘기면 그에 맞춰 요일마다 다른 하루를 짜서 돌려준다
@@ -105,7 +106,7 @@ export const workoutApi = {
           painAreas: painAreas && painAreas.length > 0 ? painAreas : undefined,
           sessionMinutes: sessionMinutes || undefined,
         },
-        { timeout: 60000 },
+        AI_REQUEST,
       ),
     ),
 

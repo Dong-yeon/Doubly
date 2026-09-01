@@ -1,5 +1,6 @@
 /** 식단 기록 API — 운동(workout.ts) 구조 미러링 */
 import { apiClient, unwrap } from './client';
+import { AI_REQUEST } from './aiRequest';
 import type {
   ActivityLevel,
   ApiResponse,
@@ -86,10 +87,10 @@ export const dietApi = {
     unwrap(apiClient.post<ApiResponse<Meal[]>>('/meal/copy')),
   // AI 분석은 이미지 처리 시간이 길어 기본 timeout(10s)을 늘린다
   analyze: (photoUrl: string) =>
-    unwrap(apiClient.post<ApiResponse<MealAnalysis>>('/meal/analyze', { photoUrl }, { timeout: 60000 })),
+    unwrap(apiClient.post<ApiResponse<MealAnalysis>>('/meal/analyze', { photoUrl }, AI_REQUEST)),
   // 텍스트로 적은 음식의 칼로리·매크로 추정 (사진 분석과 응답 형태 동일)
   analyzeText: (text: string) =>
-    unwrap(apiClient.post<ApiResponse<MealAnalysis>>('/meal/analyze-text', { text }, { timeout: 60000 })),
+    unwrap(apiClient.post<ApiResponse<MealAnalysis>>('/meal/analyze-text', { text }, AI_REQUEST)),
   today: () => unwrap(apiClient.get<ApiResponse<Meal[]>>('/meal/today')),
   history: (cursor?: number) =>
     unwrap(apiClient.get<ApiResponse<Meal[]>>('/meal/history', { params: { cursor } })),
@@ -105,7 +106,7 @@ export const dietApi = {
     unwrap(
       apiClient.get<ApiResponse<DietCoach>>('/meal/coach', {
         params: { refresh: refresh || undefined },
-        timeout: 60000,
+        ...AI_REQUEST,
       }),
     ),
 
