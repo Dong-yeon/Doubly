@@ -325,7 +325,8 @@ public class TripService {
         List<Place> places = placeRepository.findByCoupleIdOrderByIdDesc(trip.getCoupleId());
 
         geminiClient.requireConfiguredAndCountUsage(userId, Feature.AI_TRIP_ITINERARY);
-        JsonNode result = geminiClient.generateJson(userId, Feature.AI_TRIP_ITINERARY,
+        // 백그라운드 작업(AiJobService)에서만 불린다 — 긴 재시도 예산을 쓴다(GeminiClient 참고)
+        JsonNode result = geminiClient.generateJsonInBackground(userId, Feature.AI_TRIP_ITINERARY,
                 List.of(GeminiClient.textPart(itineraryPrompt(trip, totalDays, places, preferences))),
                 ITINERARY_SCHEMA);
 

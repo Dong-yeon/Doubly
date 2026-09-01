@@ -100,6 +100,19 @@ export function setPlanGateHandler(handler: ((info: PlanGateInfo) => void) | nul
 }
 
 /**
+ * 플랜 게이트를 알린다 — <b>{@link request} 를 거치지 않은 실패</b>용.
+ *
+ * <p>백그라운드 AI 작업(api/aiJob.ts)은 402 를 응답으로 받지 않는다. 한도 판정은 작업 <b>안</b>에서
+ * 일어나고, 앱에는 폴링 응답의 errorCode 로 도착한다. 그대로 두면 업그레이드 안내가 뜨지 않고
+ * 토스트 한 줄로 끝나서, 무료 사용자는 "왜 안 되는지"만 알고 "어떻게 하면 되는지"를 못 본다.
+ */
+export function reportPlanGate(errorCode: string | null, message: string | null) {
+  if (errorCode === 'PLAN_UPGRADE_REQUIRED' || errorCode === 'PLAN_LIMIT_EXCEEDED') {
+    onPlanGate?.({ errorCode, message: message ?? 'PRO에서 이용할 수 있는 기능이에요.' });
+  }
+}
+
+/**
  * refresh 로 되살릴 수 없는 엔드포인트 — 여기서의 401 은 <b>자격증명 오류 그 자체</b>다.
  *
  * <p>이걸 거르지 않으면 로그인 실패(401)가 refresh 를 유발하고, 저장된 refresh token 이

@@ -1,6 +1,6 @@
 /** 커플 여행 API — PLAN.md Trip */
 import { apiClient, unwrap } from './client';
-import { AI_REQUEST } from './aiRequest';
+import { runAiJob, type AiJobStart } from './aiJob';
 import type {
   AlbumPost,
   ApiResponse,
@@ -76,13 +76,19 @@ export const tripApi = {
   reorderItems: (tripId: number, items: ReorderEntry[]) =>
     unwrap(apiClient.put<ApiResponse<void>>(`/trips/${tripId}/items/reorder`, { items })),
 
-  // AI 여행 일정 생성 — 기존 일정을 대체. 생성에 시간이 걸려 timeout 상향
+  /**
+   * AI 여행 일정 생성 — 기존 일정을 대체.
+   *
+   * <p>서버는 접수증(jobId)만 주고 생성은 백그라운드에서 한다(api/aiJob.ts 참고).
+   * AI 기능 중 가장 무거운 경로라, 요청 안에서 기다리면 Gemini 과부하(503)가 몇 분
+   * 이어질 때 넘길 방법이 없었다. 폴링은 여기서 끝내므로 호출부는 그대로다.
+   */
   generateItinerary: (tripId: number, preferences?: string) =>
-    unwrap(
-      apiClient.post<ApiResponse<TripDay[]>>(
-        `/trips/${tripId}/items/generate`,
-        { preferences },
-        AI_REQUEST,
+    runAiJob<TripDay[]>(
+      unwrap(
+        // 접수 응답은 즉시 온다 — 긴 타임아웃도 타임아웃 재시도도 필요 없다.
+        // 재시도가 걸리면 일정 생성 작업이 둘 생겨 기존 일정을 두 번 덮어쓴다.
+        apiClient.post<ApiResponse<AiJobStart>>(`/trips/${tripId}/items/generate`, { preferences }),
       ),
     ),
 

@@ -1,5 +1,7 @@
 package com.fitto.trip.controller;
 
+import com.fitto.common.ai.AiJobResponse;
+import com.fitto.common.ai.AiJobService;
 import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
 import com.fitto.trip.dto.GenerateItineraryRequest;
@@ -19,7 +21,9 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -35,9 +39,11 @@ import java.util.List;
 public class TripController {
 
     private final TripService tripService;
+    private final AiJobService aiJobService;
 
-    public TripController(TripService tripService) {
+    public TripController(TripService tripService, AiJobService aiJobService) {
         this.tripService = tripService;
+        this.aiJobService = aiJobService;
     }
 
     @PostMapping
@@ -110,15 +116,26 @@ public class TripController {
         return ApiResponse.success(tripService.addItem(user.id(), id, request), "일정을 추가했습니다.");
     }
 
-    /** AI 여행 일정 생성 — 기존 일정을 대체한다. 본문(요청사항)은 선택. */
+    /**
+     * AI 여행 일정 생성 — 기존 일정을 대체한다. 본문(요청사항)은 선택.
+     *
+     * <p><b>결과가 아니라 접수증(202 + jobId)을 돌려준다.</b> 일정 생성은 AI 기능 중 가장
+     * 무거운데(며칠치 일정을 한 번에), 실제 실패는 대부분 Gemini 503(모델 과부하)이고 그건
+     * 몇 분씩 이어진다. 요청 안에서 기다리면 프론트 타임아웃 전에 포기할 수밖에 없어
+     * 사용자에게는 그냥 실패다. 작업으로 떼어내면 분 단위로 재시도할 수 있고, 그 사이
+     * 사용자는 화면을 떠나도 된다. 앱은 {@code GET /ai/jobs/{jobId}} 로 결과를 가져간다.
+     */
     @PostMapping("/{id}/items/generate")
-    public ApiResponse<List<TripDayResponse>> generate(@AuthenticationPrincipal AuthUser user,
-                                                       @PathVariable Long id,
-                                                       @Valid @RequestBody(required = false)
-                                                       GenerateItineraryRequest request) {
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public ApiResponse<AiJobResponse> generate(@AuthenticationPrincipal AuthUser user,
+                                               @PathVariable Long id,
+                                               @Valid @RequestBody(required = false)
+                                               GenerateItineraryRequest request) {
         String preferences = request != null ? request.preferences() : null;
-        return ApiResponse.success(tripService.generateItinerary(user.id(), id, preferences),
-                "AI가 여행 일정을 짰어요.");
+        Long userId = user.id();
+        String jobId = aiJobService.submit(userId, "trip-itinerary",
+                () -> tripService.generateItinerary(userId, id, preferences));
+        return ApiResponse.success(new AiJobResponse(jobId), "AI가 여행 일정을 짜고 있어요.");
     }
 
     /** 순서 일괄 변경 — {itemId} 보다 먼저 매칭되도록 리터럴 경로 사용. */
