@@ -31,6 +31,7 @@ import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
 import { MuscleBodyBadge } from '../../components/MuscleBodyBadge';
 import { ExercisePickerModal } from '../../components/workout/ExercisePickerModal';
+import { PlateCalculatorSheet } from '../../components/workout/PlateCalculatorSheet';
 import { useWorkoutStore } from '../../store/workoutStore';
 import { workoutApi } from '../../api/workout';
 import { voiceClipsApi } from '../../api/voiceClips';
@@ -775,9 +776,25 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
     setExercises((prev) =>
       prev.map((e) => {
         if (e.key !== exKey) return e;
-        const sets = e.sets.map((s, i) => (i === idx ? { ...s, done: !s.done } : s));
+        const turningOn = !e.sets[idx].done;
+        const sets = e.sets.map((s, i) => {
+          if (i === idx) return { ...s, done: !s.done };
+          /*
+           * <b>같은 무게로 이어서 하는 게 기본이다.</b> 세트를 체크하면 바로 다음 세트가
+           * 비어 있을 때 방금 값을 물려준다 — 5종목 × 4세트면 한 세션에 20번 덜 친다.
+           * 이미 뭔가 적혀 있으면 건드리지 않는다(루틴이 정해준 램핑 무게를 덮으면 안 된다).
+           * 웜업 다음 본세트는 무게가 달라지는 게 정상이라 웜업에서는 물려주지 않는다.
+           */
+          if (!turningOn || i !== idx + 1 || s.done) return s;
+          if (e.sets[idx].setType === 'WARMUP') return s;
+          return {
+            ...s,
+            weightKg: s.weightKg.trim() ? s.weightKg : e.sets[idx].weightKg,
+            reps: s.reps.trim() ? s.reps : e.sets[idx].reps,
+          };
+        });
         // 방금 '완료'로 바꿨으면 휴식 타이머 시작 — 종목별 휴식 시간이 있으면 그걸, 없으면 전역 기본값(③)
-        if (!e.sets[idx].done) {
+        if (turningOn) {
           setRest(e.restSeconds ?? restSeconds);
           /*
            * 마지막 세트 응원 — 세션 전체에서 <b>한 세트만 남았을 때</b> 한 번.
@@ -801,6 +818,36 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
    * undefined 를 돌려줘 사용자는 입력했다고 믿는데 값이 조용히 빠진다
    * (QA_CHECKLIST.md P0-1). 횟수는 소수 자체가 무의미해 정수만 허용한다.
    */
+  /*
+   * 지금 무게를 만지고 있는 세트 — 여기에만 증감 버튼을 붙인다.
+   *
+   * 모든 행에 상시로 달면 이미 빽빽한 줄(번호·무게·×·횟수·RPE·체크)이 더 좁아져서
+   * 정작 숫자 입력이 어려워진다. 만지는 줄에만 잠깐 나타나는 쪽이 손이 덜 간다.
+   */
+  const [weightFocus, setWeightFocus] = useState<{ exKey: string; idx: number } | null>(null);
+  /** 원판 계산기에 넘길 무게 — 열려 있을 때만 값이 있다 */
+  const [plateTargetKg, setPlateTargetKg] = useState<number | null>(null);
+  const [plateOpen, setPlateOpen] = useState(false);
+
+  /** 무게 ±조정 — 바벨은 원판이 양쪽에 붙으니 2.5kg 단위가 최소 실제 증분이다 */
+  const bumpWeight = (exKey: string, idx: number, delta: number) => {
+    haptics.light();
+    setExercises((prev) =>
+      prev.map((e) => {
+        if (e.key !== exKey) return e;
+        return {
+          ...e,
+          sets: e.sets.map((x, i) => {
+            if (i !== idx || x.done) return x;
+            const next = Math.max(0, (toNum(x.weightKg) ?? 0) + delta);
+            // 0.25 단위 부동소수 오차를 남기지 않는다 — 62.500000000000004 같은 값이 저장되면 곤란하다
+            return { ...x, weightKg: String(Math.round(next * 100) / 100) };
+          }),
+        };
+      }),
+    );
+  };
+
   const updateSetField = (exKey: string, idx: number, field: 'weightKg' | 'reps' | 'rpe', value: string) => {
     const sanitized = field === 'reps' ? sanitizeIntegerInput(value) : sanitizeDecimalInput(value);
     setExercises((prev) =>
@@ -1190,7 +1237,8 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
             // s.key 가 아니라 i 를 쓰면 중간 세트를 지울 때 뒤쪽 행들이 잘못된 위치로
             // 리마운트될 수 있다(QA_CHECKLIST.md 패턴 9). ?? i 는 이 필드가 생기기 전에
             // 저장된 로컬 초안(sessionDraft) 복구용 안전망일 뿐이다.
-            <View key={s.key ?? i} style={styles.setRow}>
+            <React.Fragment key={s.key ?? i}>
+            <View style={styles.setRow}>
               <View style={styles.setRowIndexCol}>
                 <Text style={styles.setRowIndex}>{i + 1}</Text>
                 {/* 루틴에서 이 세트를 웜업으로 지정해뒀으면 배지로 표시 — 무게를 낮춰 가볍게
@@ -1205,6 +1253,7 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
                 style={[styles.setInput, s.done && styles.setInputDone]}
                 value={s.weightKg}
                 onChangeText={(v) => updateSetField(e.key, i, 'weightKg', v)}
+                onFocus={() => setWeightFocus({ exKey: e.key, idx: i })}
                 keyboardType="decimal-pad"
                 placeholder="kg"
                 placeholderTextColor={colors.textTertiary}
@@ -1244,6 +1293,37 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
                 </Text>
               </TouchableOpacity>
             </View>
+            {/*
+              무게 증감·원판 — 지금 만지고 있는 세트에만 붙는다(위 weightFocus 주석 참고).
+              증분이 2.5/5 인 이유: 원판은 양쪽에 붙으므로 한쪽 1.25kg = 총 2.5kg 이 최소 단위다.
+            */}
+            {!s.done && weightFocus?.exKey === e.key && weightFocus.idx === i ? (
+              <View style={styles.weightTools}>
+                {[-5, -2.5, 2.5, 5].map((d) => (
+                  <TouchableOpacity
+                    key={d}
+                    style={styles.weightStep}
+                    onPress={() => bumpWeight(e.key, i, d)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`무게 ${d > 0 ? '+' : ''}${d}킬로그램`}
+                  >
+                    <Text style={styles.weightStepText}>{d > 0 ? `+${d}` : d}</Text>
+                  </TouchableOpacity>
+                ))}
+                <TouchableOpacity
+                  style={styles.plateButton}
+                  onPress={() => {
+                    setPlateTargetKg(toNum(s.weightKg) ?? null);
+                    setPlateOpen(true);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="원판 계산기 열기"
+                >
+                  <Text style={styles.plateButtonText}>원판</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+            </React.Fragment>
           ))}
           <TouchableOpacity style={styles.setAddRow} onPress={() => addSetRow(e.key)}>
             <Text style={styles.setAddText}>＋ 세트 추가</Text>
@@ -1498,6 +1578,12 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
         </Pressable>
       </Modal>
 
+      <PlateCalculatorSheet
+        visible={plateOpen}
+        targetKg={plateTargetKg}
+        onClose={() => setPlateOpen(false)}
+      />
+
       <ExercisePickerModal
         visible={substitutePickerOpen}
         catalog={catalog}
@@ -1725,6 +1811,30 @@ const styles = themedStyles((colors) => ({
   setCheckDone: { backgroundColor: colors.success, borderColor: colors.success },
   setCheckText: { fontSize: fontSize.body, fontWeight: '800', color: colors.textSecondary },
   setCheckTextDone: { color: colors.white },
+  // 무게 증감·원판 — 만지고 있는 세트 아래에만 잠깐 나타난다
+  weightTools: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    paddingLeft: 34,
+    paddingBottom: spacing.xs,
+    alignItems: 'center',
+  },
+  weightStep: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  weightStepText: { fontSize: fontSize.caption, fontWeight: '800', color: colors.textSecondary },
+  plateButton: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primaryBg,
+  },
+  plateButtonText: { fontSize: fontSize.caption, fontWeight: '800', color: colors.primary },
+
   setAddRow: {
     borderRadius: radius.md,
     borderWidth: 1,
