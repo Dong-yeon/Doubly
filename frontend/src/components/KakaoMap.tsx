@@ -69,8 +69,16 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
       ) : null}
       <WebView
         ref={webViewRef}
-        // 카카오 JS 키는 도메인 검증을 하므로 콘솔에 등록한 localhost:8081 을 페이지 origin 으로 사용
-        source={{ html: initialHtml, baseUrl: 'http://localhost:8081' }}
+        /*
+         * 카카오 JS 키는 도메인 검증을 하므로 콘솔에 등록해둔 도메인을 페이지 origin 으로
+         * 써야 한다. localhost:8081 은 Metro 개발 서버용으로 등록해둔 값이라 개발 중(dev
+         * client)에는 통과하지만, 실제 배포 빌드(TestFlight 등)에는 Metro 가 없으니 그
+         * 도메인이 유효할 이유가 없다 — 안드로이드는 WebView 가 이 baseUrl 검증에 관대해
+         * 우연히 넘어갔을 뿐, iOS(WKWebView)는 엄격해서 지도가 아예 안 뜨는 것으로 처음
+         * 드러났다(실기기 리포트, 2026-09-01). 배포 빌드는 카카오 콘솔에 별도로 등록해둔
+         * 실제 도메인(dubly.co.kr)을 쓴다 — 개발 중엔 계속 localhost:8081 을 쓴다.
+         */
+        source={{ html: initialHtml, baseUrl: __DEV__ ? 'http://localhost:8081' : 'https://dubly.co.kr' }}
         originWhitelist={['*']}
         javaScriptEnabled
         domStorageEnabled
