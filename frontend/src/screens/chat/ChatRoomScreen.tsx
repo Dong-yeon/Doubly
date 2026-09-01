@@ -662,32 +662,34 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           </View>
         )}
         {/*
-          시간·읽음·수정 표시는 메시지마다 각각 보여준다(2026-08-31) — 예전엔 그룹의
-          마지막(가장 최근) 메시지에만 카톡처럼 한 번만 보여줬는데, 그러면 한 번에
-          여러 개를 이어 보낸 그룹 안에서 정확히 어디까지 상대가 읽었는지 알 수 없었다.
-          isRead 는 메시지마다 이미 따로 갖고 있는 값이라 그대로 다 보여주면 된다.
+          시간은 그룹의 마지막(가장 최근) 메시지에만 — 카톡처럼 한 번만 보여준다
+          (2026-09-01, 메시지마다 표시하던 걸 다시 되돌림). 읽음(하트)·수정 표시는
+          메시지마다 그대로 유지한다 — isRead 는 메시지마다 따로 갖는 값이라 시간과
+          달리 "몇 번째까지 읽었는지"가 중요한 정보라서 그룹 끝으로 뭉치면 안 된다.
         */}
-        <View style={mine ? styles.metaMine : styles.meta}>
-          {/*
-            읽음은 내가 보낸 메시지에만 — 상대 메시지의 읽음 여부는 알 필요가 없다.
-            점(dot)이 채워지는 방식은 "색이 바뀐 걸 알아채야만 안다"는 점에서
-            눈에 잘 안 띈다는 피드백으로, 카톡 "1"처럼 있다가 사라지는 방식으로
-            바꿨다(2026-08-31) — 안 읽었을 때만 하트를 보여주고, 읽으면 그냥
-            없앤다. 색은 "상대"의 고유색(colors.partner)을 그대로 써서 이 앱의
-            나/상대 색 체계(theme/colors.ts 의 Duo 시맨틱)를 유지한다.
-          */}
-          {mine && !item.isRead ? (
-            <MaterialCommunityIcons
-              name="heart"
-              size={10}
-              color={colors.partner}
-              style={styles.readHeart}
-              accessibilityLabel="아직 안 읽었어요"
-            />
-          ) : null}
-          {item.edited ? <Text style={styles.editedMark}>수정됨</Text> : null}
-          <Text style={styles.time}>{timeOf(item.createdAt)}</Text>
-        </View>
+        {(isGroupEnd || (mine && !item.isRead) || item.edited) ? (
+          <View style={mine ? styles.metaMine : styles.meta}>
+            {/*
+              읽음은 내가 보낸 메시지에만 — 상대 메시지의 읽음 여부는 알 필요가 없다.
+              점(dot)이 채워지는 방식은 "색이 바뀐 걸 알아채야만 안다"는 점에서
+              눈에 잘 안 띈다는 피드백으로, 카톡 "1"처럼 있다가 사라지는 방식으로
+              바꿨다(2026-08-31) — 안 읽었을 때만 하트를 보여주고, 읽으면 그냥
+              없앤다. 색은 "상대"의 고유색(colors.partner)을 그대로 써서 이 앱의
+              나/상대 색 체계(theme/colors.ts 의 Duo 시맨틱)를 유지한다.
+            */}
+            {mine && !item.isRead ? (
+              <MaterialCommunityIcons
+                name="heart"
+                size={10}
+                color={colors.partner}
+                style={styles.readHeart}
+                accessibilityLabel="아직 안 읽었어요"
+              />
+            ) : null}
+            {item.edited ? <Text style={styles.editedMark}>수정됨</Text> : null}
+            {isGroupEnd ? <Text style={styles.time}>{timeOf(item.createdAt)}</Text> : null}
+          </View>
+        ) : null}
         </Pressable>
 
         {/* 리액션 칩 — 다시 누르면 해제된다. mine 은 userIds 로 판단(브로드캐스트 공용) */}
