@@ -87,6 +87,27 @@ public class PlanGuard {
     }
 
     /**
+     * {@link #consume} 로 차감한 1회를 되돌린다 — <b>선차감이 부당해지는 경우에만</b> 쓴다.
+     *
+     * <p>위 {@code consume} 주석대로 기본은 선차감이고, 그 근거는 "실패해도 외부 쿼터는 이미
+     * 먹었을 수 있다"였다. 그 걱정은 <b>외부 쿼터를 따로 지키는 장치가 없을 때</b>만 유효하다.
+     * AI 는 이제 프로젝트 단위 전역 카운터가 따로 막으므로(GeminiClient 참고), 사용자에게
+     * 결과를 하나도 주지 못한 실패까지 개인 한도로 물릴 이유가 없다 — 특히 무료의
+     * "데이트 코스 월 1회"처럼 희소한 한도는 한 번의 장애로 한 달이 날아간다.
+     *
+     * <p>되돌림이 로그를 남기지는 않는다. FEATURE_USED 는 "사용자가 눌렀다"는 사실의 기록이고,
+     * 그건 실패했더라도 일어난 일이다.
+     */
+    public void refund(Long userId, Feature feature) {
+        Plan plan = planResolver.resolveFor(userId, feature);
+        Quota quota = feature.quotaFor(plan);
+        if (quota.isBlocked() || quota.isUnlimited() || !quota.isCounted()) {
+            return; // 애초에 센 적이 없다
+        }
+        usageCounter.decrement(userId, feature, quota);
+    }
+
+    /**
      * 개수 상한 확인 — 이미 {@code currentCount} 개를 가진 상태에서 하나 더 만들 수 있는가.
      *
      * <p>카운터가 아니라 DB 개수로 판정한다. 지우면 다시 만들 수 있어야 하기 때문이다

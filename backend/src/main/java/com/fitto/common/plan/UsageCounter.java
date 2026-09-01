@@ -45,14 +45,45 @@ public class UsageCounter {
 
     /** 1 증가시키고 <b>증가 후</b> 값을 돌려준다. (첫 사용이면 1) */
     public int increment(Long userId, Feature feature, Quota quota) {
-        String key = key(userId, feature, quota);
-        Integer viaRedis = incrementInRedis(key, quota);
-        return viaRedis != null ? viaRedis : incrementInMemory(key);
+        return incrementKey(key(scopeOf(userId), feature, quota), quota);
+    }
+
+    /**
+     * 1 되돌린다 — 선차감한 사용을 <b>취소</b>할 때만 쓴다(0 미만으로는 내려가지 않는다).
+     *
+     * <p>남용 우회로가 되지 않는 자리에서만 불러야 한다. 지금 유일한 사용처는 AI 호출
+     * 실패인데, 안전한 이유는 {@link com.fitto.common.ai.GeminiClient} 주석 참고.
+     */
+    public void decrement(Long userId, Feature feature, Quota quota) {
+        decrementKey(key(scopeOf(userId), feature, quota));
+    }
+
+    /**
+     * 사용자와 무관한 <b>전역</b> 카운터 — "오늘 이 서비스 전체가 몇 번 썼나".
+     *
+     * <p>Google AI Studio 의 일일 한도는 <b>프로젝트 단위</b>라, 방어도 프로젝트 단위여야
+     * 맞는다. 사용자별 상한으로 대신하면 사용자 수가 늘 때 반드시 뚫린다.
+     */
+    public int incrementGlobal(Feature feature, Quota quota) {
+        return incrementKey(key(GLOBAL_SCOPE, feature, quota), quota);
+    }
+
+    /** 전역 카운터 조회 — 증가 없음. */
+    public int peekGlobal(Feature feature, Quota quota) {
+        return peekKey(key(GLOBAL_SCOPE, feature, quota));
     }
 
     /** 증가 없이 현재 사용량만 읽는다 — 잔여 횟수 표시용. */
     public int peek(Long userId, Feature feature, Quota quota) {
-        String key = key(userId, feature, quota);
+        return peekKey(key(scopeOf(userId), feature, quota));
+    }
+
+    private int incrementKey(String key, Quota quota) {
+        Integer viaRedis = incrementInRedis(key, quota);
+        return viaRedis != null ? viaRedis : incrementInMemory(key);
+    }
+
+    private int peekKey(String key) {
         StringRedisTemplate redis = redisProvider.getIfAvailable();
         if (redis != null) {
             try {
@@ -67,8 +98,36 @@ public class UsageCounter {
         return counter == null ? 0 : counter.get();
     }
 
-    private String key(Long userId, Feature feature, Quota quota) {
-        return "fitto:usage:" + feature.name() + ":" + quota.windowKey(today()) + ":" + userId;
+    private void decrementKey(String key) {
+        StringRedisTemplate redis = redisProvider.getIfAvailable();
+        if (redis != null) {
+            try {
+                Long value = redis.opsForValue().decrement(key);
+                // 증가된 적 없는 키를 DECR 하면 -1 이 된다 — 0 으로 되돌린다
+                if (value != null && value < 0) {
+                    redis.opsForValue().set(key, "0");
+                }
+                return;
+            } catch (Exception e) {
+                log.debug("Redis 미가용 — 사용량 되돌리기 인메모리 폴백: {}", e.getMessage());
+            }
+        }
+        sweepFallbackIfDateChanged();
+        AtomicInteger counter = fallback.get(key);
+        if (counter != null) {
+            counter.updateAndGet(v -> Math.max(0, v - 1));
+        }
+    }
+
+    /** 전역 카운터의 스코프 — 숫자인 userId 와 겹치지 않는 값이면 된다. */
+    private static final String GLOBAL_SCOPE = "all";
+
+    private static String scopeOf(Long userId) {
+        return String.valueOf(userId);
+    }
+
+    private String key(String scope, Feature feature, Quota quota) {
+        return "fitto:usage:" + feature.name() + ":" + quota.windowKey(today()) + ":" + scope;
     }
 
     private Integer incrementInRedis(String key, Quota quota) {
