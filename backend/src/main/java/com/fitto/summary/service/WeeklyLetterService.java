@@ -73,7 +73,9 @@ public class WeeklyLetterService {
 
     private WeeklyLetterResponse generate(Long userId, String input) {
         geminiClient.requireConfiguredAndCountUsage(userId, Feature.AI_WEEKLY_LETTER);
-        JsonNode result = geminiClient.generateJson(userId, Feature.AI_WEEKLY_LETTER,
+        // 이 서비스는 백그라운드 작업(AiJobService)에서만 불린다 — 요청 수명에 매이지 않으므로
+        // 503 이 몇 분 이어져도 넘길 수 있는 긴 재시도 예산을 쓴다.
+        JsonNode result = geminiClient.generateJsonInBackground(userId, Feature.AI_WEEKLY_LETTER,
                 List.of(GeminiClient.textPart(PROMPT.formatted(input))), SCHEMA);
         String letter = result.path("letter").asText("");
         return letter.isBlank()
