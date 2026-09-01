@@ -138,7 +138,15 @@ fitto:
   gemini:
     api-key: ${GEMINI_API_KEY:}
     model: ${GEMINI_MODEL:gemini-2.5-flash-lite}
-    daily-limit-per-user: ${GEMINI_DAILY_LIMIT_PER_USER:10}
+    # 한도 두 개는 역할이 다르다 — GeminiClient 클래스 주석 참고.
+    #  · total    = Google 프로젝트 일일 쿼터 방어. 쓰는 모델의 RPD 를 콘솔에서 확인하고
+    #               그보다 조금 낮게 잡아야, 구글이 먼저 막아 원인 불명으로 전원 실패하는
+    #               대신 우리 쪽 에러("오늘은 AI 이용이 많아…")로 떨어진다.
+    #  · per-user = 한 사람의 독식 방지. 기능별 한도(음식사진 PRO 30회 등)보다 크게 잡아야
+    #               기능별 한도가 의미를 갖는다. 예전 값 10 은 이것보다 작아서, 앱을 한 바퀴
+    #               둘러보는 것만으로 전 기능이 잠겼다.
+    daily-limit-total: ${GEMINI_DAILY_LIMIT_TOTAL:1000}
+    daily-limit-per-user: ${GEMINI_DAILY_LIMIT_PER_USER:50}
 
   # 바코드 식품 DB 조회 (식품안전나라 OpenAPI, 무료) — 키 미설정 시 바코드 조회만 비활성
   food-db:

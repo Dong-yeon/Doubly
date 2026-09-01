@@ -310,7 +310,7 @@ public class TripService {
      *
      * <p><b>트랜잭션 밖에서 돈다</b>({@code NOT_SUPPORTED} — 클래스에 걸린 readOnly 트랜잭션도
      * 여기선 적용하지 않는다). 예전엔 이 메서드 전체가 <b>쓰기</b> 트랜잭션이라, 여행·장소를
-     * 조회하며 잡은 DB 커넥션을 <b>Gemini 응답을 기다리는 최대 60초 동안 문 채로</b> 있었다.
+     * 조회하며 잡은 DB 커넥션을 <b>Gemini 응답을 기다리는 수십 초 동안 문 채로</b> 있었다.
      * Hikari 기본 풀이 10개라 AI 요청 10건이면 풀이 비고, 그때부터 로그인·채팅처럼 AI 와
      * 무관한 요청까지 커넥션을 못 얻어 죽는다 — 앱에서 "서버가 끊긴다"로 보이던 것의 정체다.
      * 이 경로는 4개 AI 기능 중 유일하게 <b>쓰기</b> 트랜잭션이라 가장 나빴다.
@@ -325,7 +325,7 @@ public class TripService {
         List<Place> places = placeRepository.findByCoupleIdOrderByIdDesc(trip.getCoupleId());
 
         geminiClient.requireConfiguredAndCountUsage(userId, Feature.AI_TRIP_ITINERARY);
-        JsonNode result = geminiClient.generateJson(
+        JsonNode result = geminiClient.generateJson(userId, Feature.AI_TRIP_ITINERARY,
                 List.of(GeminiClient.textPart(itineraryPrompt(trip, totalDays, places, preferences))),
                 ITINERARY_SCHEMA);
 

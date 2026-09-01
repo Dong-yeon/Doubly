@@ -39,7 +39,7 @@ class FoodAnalysisResponseMappingTest {
                   "totalCalories": 70, "totalCarbs": 1, "totalProtein": 6, "totalFat": 5
                 }
                 """);
-        when(geminiClient.generateJson(any(), any())).thenReturn(result);
+        when(geminiClient.generateJson(any(), any(), any(), any())).thenReturn(result);
 
         MealAnalysisResponse response = service.analyzeText(1L, "계란 하나");
 
@@ -58,7 +58,7 @@ class FoodAnalysisResponseMappingTest {
                   "source": "UNKNOWN_MADE_UP_VALUE"
                 }
                 """);
-        when(geminiClient.generateJson(any(), any())).thenReturn(result);
+        when(geminiClient.generateJson(any(), any(), any(), any())).thenReturn(result);
 
         MealAnalysisResponse response = service.analyzeText(1L, "계란 하나");
 
@@ -76,7 +76,7 @@ class FoodAnalysisResponseMappingTest {
                   "source": "NUTRITION_LABEL"
                 }
                 """);
-        when(geminiClient.generateJson(any(), any())).thenReturn(result);
+        when(geminiClient.generateJson(any(), any(), any(), any())).thenReturn(result);
 
         MealAnalysisResponse response = service.analyzeText(1L, "계란 하나");
 

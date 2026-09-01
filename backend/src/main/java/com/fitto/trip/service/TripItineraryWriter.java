@@ -10,7 +10,7 @@ import java.util.List;
 /**
  * AI 일정 생성의 <b>쓰기 단계만</b> 담는 협력자 — 기존 일정을 지우고 새 일정을 넣는다.
  *
- * <p><b>왜 별도 빈인가</b>: {@link TripService#generateItinerary} 는 Gemini 응답을 최대 60초
+ * <p><b>왜 별도 빈인가</b>: {@link TripService#generateItinerary} 는 Gemini 응답을 수십 초
  * 기다리므로 트랜잭션 없이 돌아야 한다(커넥션을 쥔 채 외부 호출을 기다리면 Hikari 풀이 고갈되고
  * AI 와 무관한 요청까지 죽는다 — {@code DietCoachService} 클래스 주석 참고).
  * 하지만 DELETE + INSERT 두 단계는 <b>반드시 원자적</b>이어야 한다. 중간에 실패하면 사용자의
