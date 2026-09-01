@@ -152,6 +152,13 @@ const styles = themedStyles((colors) => ({
     backgroundColor: colors.togetherBg,
   },
   lockBadgeText: { color: colors.together, fontSize: 8, fontWeight: '800' },
-  emoji: { fontSize: 26, lineHeight: 30 },
+  /*
+   * lineHeight 를 fontSize 보다 크게 주면(예전엔 30) iOS 가 그 여유분을 위아래로
+   * 고르게 안 나눠서, 셀 안에서 emoji 가 정가운데가 아니라 위쪽으로 쏠려 보였다
+   * (실기기 스크린샷 리포트, 2026-09-01 — cell 의 justifyContent:'center' 자체는
+   * 정상 동작, glyph 라인 박스 안의 위치가 문제였다). lineHeight 를 fontSize 와
+   * 똑같이 맞춰 여유분을 없애면 글자가 자기 박스를 꽉 채워 쏠릴 여지가 없다.
+   */
+  emoji: { fontSize: 26, lineHeight: 26 },
   label: { fontSize: 10, fontWeight: '700', color: colors.textSecondary },
 }));
