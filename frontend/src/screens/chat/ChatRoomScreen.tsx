@@ -221,7 +221,17 @@ export function ChatRoomScreen({ navigation, route }: Props) {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      title,
+      /*
+       * route.params.title 만 쓰면(예전 코드) 채팅 목록에서 들어올 땐 문제없지만,
+       * 푸시 알림 탭으로 들어오는 경로(linking.ts 의 'chat/:relationId')는 title
+       * 파라미터 자체가 없다 — 그러면 여기서 title: undefined 로 setOptions 를
+       * 부르게 돼 네비게이터 옵션의 '채팅' 기본값(ChatStackNavigator)까지 덮어써
+       * 버리고, react-navigation 이 최후 수단으로 화면 라우트 이름 "ChatRoom"을
+       * 그대로 헤더에 보여줬다(실기기 스크린샷 리포트, 2026-09-01). couple 스토어의
+       * 실제 상대 이름(partnerName, 아바타에 이미 쓰는 값)을 우선하면 route
+       * 파라미터가 있든 없든 항상 사람이 읽을 수 있는 제목이 나온다.
+       */
+      title: partnerName ?? '채팅',
       headerRight: () => (
         <View style={styles.headerCallActions}>
           <Pressable
@@ -247,7 +257,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         </View>
       ),
     });
-  }, [navigation, title, startCall, callStarting]);
+  }, [navigation, partnerName, startCall, callStarting]);
 
   /*
    * 히스토리 로딩 상태 — openRoom 이 REST 로 첫 페이지를 받아오는 동안에는 messages 가
