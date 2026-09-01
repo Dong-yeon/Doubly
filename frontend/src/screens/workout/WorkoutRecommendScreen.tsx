@@ -23,7 +23,6 @@ import { Chip } from '../../components/Chip';
 import { workoutApi } from '../../api/workout';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
-import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
 import { WEEK_DAYS, weekDayOf } from '../../utils/date';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
@@ -143,7 +142,8 @@ export function WorkoutRecommendScreen({ navigation }: Props) {
   const onRecommend = async (days: number) => {
     setLoadingDays(days);
     try {
-      const res = await runBusy('AI가 운동을 추천하고 있어요', () => workoutApi.recommend(days));
+      // 전역 화면 잠금(runBusy)은 쓰지 않는다 — 아래 onRecommendProgram 주석 참고
+      const res = await workoutApi.recommend(days);
       setResult(res);
       setResultIsProgram(false);
       haptics.success();
@@ -161,14 +161,19 @@ export function WorkoutRecommendScreen({ navigation }: Props) {
     }
     setRecommendingProgram(true);
     try {
-      const res = await runBusy('AI가 프로그램을 짜고 있어요', () =>
-        workoutApi.recommendProgram(
-          programWeekdays,
-          focusGroups,
-          goal ?? undefined,
-          painAreas,
-          sessionMinutes ?? undefined,
-        ),
+      /*
+       * 전역 화면 잠금(runBusy)을 쓰지 않는 이유: AI 호출이 백그라운드 작업 + 폴링으로
+       * 바뀌면서 대기가 분 단위까지 늘 수 있다(api/aiJob.ts). 그동안 앱 전체를 덮으면
+       * 사용자가 아무것도 못 한다. 잠글 필요가 있는 건 화면이 아니라 <b>이 버튼들</b>인데,
+       * 그건 loadingDays·recommendingProgram 이 이미 하고 있다(둘이 서로를 막는다).
+       * 결과는 아래 카드로만 들어가서 중간에 뭘 만져도 덮어쓸 것이 없다.
+       */
+      const res = await workoutApi.recommendProgram(
+        programWeekdays,
+        focusGroups,
+        goal ?? undefined,
+        painAreas,
+        sessionMinutes ?? undefined,
       );
       setResult(res);
       setResultIsProgram(true);
