@@ -75,9 +75,17 @@ export interface SessionDraft {
   exercises: SessionExercise[];
 }
 
-/** 되살릴 값이 있는 초안인지 — 체크한 세트가 하나도 없으면 되살릴 게 없다. */
+/**
+ * 되살릴 값이 있는 초안인지 — <b>종목이 하나라도 담겨 있으면</b> 되살린다.
+ *
+ * <p>예전엔 "체크한 세트가 하나라도 있어야" 였다. 그러면 종목을 담고 무게까지 채워둔 채
+ * 탭을 잘못 눌러 나간 세션이 <b>되살릴 게 없는 것으로 취급돼 그대로 버려졌다</b> —
+ * 실제로 그렇게 사라졌다. 종목을 담았다는 건 이미 운동을 시작했다는 뜻이고, 그때부터는
+ * 사용자가 <b>운동 완료</b>나 <b>버리기</b>로 끝내기 전까지 앱이 들고 있어야 한다
+ * (모델 설명은 {@code store/activeWorkoutStore} 주석 참고).
+ */
 export function hasProgress(draft: SessionDraft): boolean {
-  return draft.exercises.some((e) => e.sets.some((s) => s.done));
+  return draft.exercises.length > 0;
 }
 
 export async function saveSessionDraft(draft: SessionDraft): Promise<void> {

@@ -140,7 +140,16 @@ export type WorkoutStackParamList = {
   // 운동 세션 보조 (세트 체크·휴식 타이머). 루틴 실행 시 exercises 전달
   // routineId/routineTitle 은 루틴에서 시작했을 때만 채워짐 — 스마트 루틴 동기화(Save-on-Finish)의 전제
   WorkoutSession:
-    | { exercises?: SessionExerciseParam[]; routineId?: number; routineTitle?: string }
+    | {
+        exercises?: SessionExerciseParam[];
+        routineId?: number;
+        routineTitle?: string;
+        /**
+         * 하던 운동을 이어서 하러 들어왔다 — 저장된 초안을 <b>묻지 않고</b> 되살린다.
+         * 하단 고정 바(ActiveWorkoutBar)와 운동 홈의 재개 카드가 넘긴다.
+         */
+        resume?: boolean;
+      }
     | undefined;
   // 내 운동 루틴 (짐앱 스타일)
   WorkoutRoutines: undefined;

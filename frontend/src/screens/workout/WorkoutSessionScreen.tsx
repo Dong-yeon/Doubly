@@ -37,6 +37,7 @@ import { voiceClipsApi } from '../../api/voiceClips';
 import { playVoiceClip } from '../../utils/voicePlayback';
 import { getErrorMessage } from '../../utils/error';
 import { toDateString } from '../../utils/date';
+import { useActiveWorkoutStore } from '../../store/activeWorkoutStore';
 import {
   clearSessionDraft,
   loadSessionDraft,
@@ -312,6 +313,8 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
    * 지난주 기록이 덮어써진다.
    */
   const [restoreChecked, setRestoreChecked] = useState(false);
+  /** 하단 고정 바·재개 카드에서 들어왔는가 — 그렇다면 복구 여부를 다시 묻지 않는다 */
+  const resume = route.params?.resume === true;
   // 되살린 세션에는 프리필을 아예 하지 않는다 — 이미 사용자가 입력한 값이 들어 있다
   const restoredRef = useRef(false);
 
@@ -324,36 +327,44 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
       .then((draft) => {
         if (cancelled) return finish();
         if (!draft) return finish();
+
+        const restore = () => {
+          restoredRef.current = true;
+          setExercises(draft.exercises);
+          // 되살린 경과 시간에 맞춰 기준 시각을 다시 잡는다 — 이걸 안 하면 다음 틱에서
+          // sessionStartRef(화면 진입 시각) 기준으로 재계산돼 되살린 값이 바로 덮인다.
+          sessionStartRef.current = Date.now() - draft.elapsedSec * 1000;
+          setElapsedSec(draft.elapsedSec);
+          setRestSeconds(draft.restSeconds);
+          setRoutineCtx({
+            routineId: draft.routineId,
+            routineTitle: draft.routineTitle,
+            original: draft.originalExercises,
+          });
+          finish();
+        };
+
+        /*
+         * "이어서 하기"로 들어온 경우엔 <b>묻지 않는다</b>. 하단 고정 바나 운동 홈의 재개
+         * 카드를 눌렀다는 건 이미 "이어서 하겠다"고 답한 것이라, 같은 질문을 또 하면
+         * 한 번에 될 일이 두 번이 된다.
+         */
+        if (resume) return restore();
+
         Alert.alert(
           '하던 운동이 남아 있어요',
           `${describeDraft(draft)}\n이어서 할까요?`,
           [
             {
-              text: '새로 시작',
-              style: 'cancel',
+              text: '버리고 새로 시작',
+              style: 'destructive',
               onPress: () => {
                 void clearSessionDraft();
+                useActiveWorkoutStore.getState().clear();
                 finish();
               },
             },
-            {
-              text: '이어서 하기',
-              onPress: () => {
-                restoredRef.current = true;
-                setExercises(draft.exercises);
-                // 되살린 경과 시간에 맞춰 기준 시각을 다시 잡는다 — 이걸 안 하면 다음 틱에서
-                // sessionStartRef(화면 진입 시각) 기준으로 재계산돼 되살린 값이 바로 덮인다.
-                sessionStartRef.current = Date.now() - draft.elapsedSec * 1000;
-                setElapsedSec(draft.elapsedSec);
-                setRestSeconds(draft.restSeconds);
-                setRoutineCtx({
-                  routineId: draft.routineId,
-                  routineTitle: draft.routineTitle,
-                  original: draft.originalExercises,
-                });
-                finish();
-              },
-            },
+            { text: '이어서 하기', onPress: restore },
           ],
         );
       })
@@ -361,7 +372,7 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [resume]);
 
   /*
    * 주기 스냅샷 — 화면 상태를 그대로 기기에 남긴다.
@@ -376,8 +387,25 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
 
   /** 서버 저장이 끝났는지 — 끝난 뒤에는 초안을 남기지도, 되살리지도 않는다 */
   const savedRef = useRef(false);
+  /*
+   * 이 운동이 <b>끝났는가</b> — 저장했거나 사용자가 버리기를 택했는가.
+   * 언마운트 때 초안을 지울지 말지를 이 값 하나로 가른다(위 정리 effect 주석 참고).
+   * savedRef 와 나누어 둔 이유: 저장은 "끝남"의 한 가지 경우일 뿐이고, 버리기도 끝남이다.
+   */
+  const endedRef = useRef(false);
 
-  const draftRef = useRef<SessionDraft | null>(null);
+  /*
+   * 매 렌더에서 즉시 채우므로 실제로 null 인 순간이 없다 — 초기값 때문에 nullable 로 잡히면
+   * 스냅샷마다 non-null 단언이 필요해져서, 타입을 SessionDraft 로 두고 초기값도 채운다.
+   */
+  const draftRef = useRef<SessionDraft>({
+    savedAt: new Date().toISOString(),
+    sessionDate: toDateString(),
+    elapsedSec: 0,
+    restSeconds: 90,
+    originalExercises: [],
+    exercises: [],
+  });
   draftRef.current = {
     savedAt: new Date().toISOString(),
     sessionDate: toDateString(),
@@ -395,8 +423,11 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
     const snapshot = () => {
       // 이미 서버에 저장한 세션은 스냅샷하지 않는다 — 저장 후 루틴 동기화 안내가 떠 있는
       // 동안 다시 써버리면, 다음에 앱을 열 때 이미 기록된 세션이 되살아난다.
-      const draft = savedRef.current ? null : draftRef.current;
-      if (draft) void saveSessionDraft({ ...draft, savedAt: new Date().toISOString() });
+      if (savedRef.current || draftRef.current.exercises.length === 0) return;
+      const draft = { ...draftRef.current, savedAt: new Date().toISOString() };
+      void saveSessionDraft(draft);
+      // 하단 고정 바가 읽는 요약도 함께 갱신 — 화면 밖에서도 "운동 중"이 최신으로 보인다
+      useActiveWorkoutStore.getState().publish(draft);
     };
     const id = setInterval(snapshot, SNAPSHOT_INTERVAL_MS);
     const sub = AppState.addEventListener('change', (state) => {
@@ -419,7 +450,32 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
   useEffect(() => {
     if (!restoreChecked) return undefined;
     return () => {
-      void clearSessionDraft();
+      /*
+       * <b>화면을 떠나는 것과 운동을 끝내는 것은 다르다.</b>
+       *
+       * 예전엔 여기서 무조건 초안을 지웠다 — "언마운트 = 사용자가 스스로 나갔다"고 봤기
+       * 때문인데, 하단 탭을 누르면 그 탭 스택이 popToTop 되면서 이 화면도 언마운트된다.
+       * 그래서 채팅 탭 한 번 눌렀다 돌아오면 하던 운동이 경고도 없이 사라졌다.
+       *
+       * 이제 초안은 <b>끝났다고 표시됐을 때만</b> 지운다(운동 완료 저장 / 명시적 버리기).
+       * 그 외의 이탈은 운동을 살려두고, 하단 고정 바와 운동 홈의 "이어서 하기"로 돌아온다.
+       */
+      if (endedRef.current) {
+        void clearSessionDraft();
+        useActiveWorkoutStore.getState().clear();
+        return;
+      }
+      // 종목이 하나도 없으면 되살릴 것도, "운동 중"이라고 알릴 것도 없다 —
+      // 세션 화면을 열었다가 바로 나온 경우가 여기다
+      if (draftRef.current.exercises.length === 0) {
+        void clearSessionDraft();
+        useActiveWorkoutStore.getState().clear();
+        return;
+      }
+      // 떠나기 직전 마지막 스냅샷 — 주기 스냅샷(10초) 사이에 한 입력이 날아가지 않게
+      const draft = { ...draftRef.current, savedAt: new Date().toISOString() };
+      void saveSessionDraft(draft);
+      useActiveWorkoutStore.getState().publish(draft);
     };
   }, [restoreChecked]);
 
@@ -808,7 +864,9 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
         sets: payloadSets as never,
       });
       savedRef.current = true;
+      endedRef.current = true;
       void clearSessionDraft();
+      useActiveWorkoutStore.getState().clear();
       haptics.success();
       toast.success('운동 완료! 기록했어요 ');
       // 커플 음성 응원 — PR 을 세웠으면 그 응원을, 아니면 완료 응원을 재생한다
@@ -836,16 +894,35 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
   };
 
   /*
-   * 이탈 가드 — 예전엔 하단 "종료" 버튼에만 확인이 걸려 있어서
-   * 헤더 뒤로가기·하드웨어 백·스와이프백으로 나가면 체크한 세트가 통째로 사라졌다.
-   * usePreventRemove 기반 훅은 모든 이탈 경로를 가로챈다(goBack() 직접 호출도 포함).
+   * <b>이탈 가드를 걷어냈다.</b> 예전엔 뒤로가기로 나가면 세트가 통째로 사라져서 막아야 했는데,
+   * 이제 나가도 운동은 살아 있다(하단 고정 바로 돌아온다). 잃을 게 없는 곳에 확인창을 띄우면
+   * 그냥 방해다 — 헬스장에서 앱을 들락날락하는 게 정상 사용이기 때문에 더 그렇다.
+   *
+   * 대신 <b>버리기는 명시적</b>으로 만들었다 — 아래 discardWorkout.
    */
-  const allowLeave = useDirtyGuard(doneSets > 0, {
-    title: '세션 종료',
-    message: '기록하지 않고 나갈까요?',
-    stayText: '계속하기',
-    leaveText: '나가기',
-  });
+  const allowLeave = useDirtyGuard(false);
+
+  /**
+   * 이 운동 버리기 — 기록하지 않고 없애는 <b>유일한</b> 경로다.
+   *
+   * <p>화면을 떠나는 것으로는 운동이 끝나지 않으므로, 끝내려면 여기(또는 운동 완료)를 거쳐야
+   * 한다. 담긴 게 있으면 되돌릴 수 없다고 분명히 묻는다.
+   */
+  const discardWorkout = () => {
+    const end = () => {
+      endedRef.current = true;
+      navigation.goBack();
+    };
+    if (exercises.length === 0) return end();
+    Alert.alert(
+      '이 운동을 버릴까요?',
+      '기록하지 않고 없애요. 되돌릴 수 없어요.',
+      [
+        { text: '계속하기', style: 'cancel' },
+        { text: '버리기', style: 'destructive', onPress: end },
+      ],
+    );
+  };
 
   // 세트별 무게/횟수/RPE 입력이 하단 액션바("종료"/"운동 완료")를 키보드가 가리지 않게
   // (QA_CHECKLIST.md 패턴 4). 이 화면은 FlatList/DragList를 직접 자식으로 두는 화면이라
@@ -1254,7 +1331,7 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
 
         {/* 하단 액션 — 세트를 체크했으면 useDirtyGuard 가 확인 다이얼로그를 띄운다 */}
         <View style={styles.footer}>
-          <Button title="종료" variant="ghost" size="md" onPress={() => navigation.goBack()} style={styles.flex} />
+          <Button title="버리기" variant="ghost" size="md" onPress={discardWorkout} style={styles.flex} />
           <Button title="운동 완료" size="md" onPress={onFinish} loading={saving} style={styles.flex} />
         </View>
       </View>
