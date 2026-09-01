@@ -14,11 +14,10 @@
  */
 import React from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import type { NavigationProp } from '@react-navigation/native';
+import { CommonActions } from '@react-navigation/native';
+import type { NavigationHelpers, ParamListBase } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '../Icon';
 import { useActiveWorkoutStore } from '../../store/activeWorkoutStore';
-import type { MainTabParamList } from '../../navigation/types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 import { layout } from '../../theme/layout';
@@ -33,9 +32,16 @@ function sinceLabel(iso: string): string {
   return `${Math.floor(minutes / 60)}시간 전`;
 }
 
-export function ActiveWorkoutBar() {
+/**
+ * 탭바가 자기 navigation 을 넘겨준다.
+ *
+ * <p>여기서 {@code useNavigation()} 을 따로 부르면 안 된다 — 이 컴포넌트는 탭 내비게이터의
+ * {@code tabBar} 렌더 프롭 안에서 그려지는데, 그렇게 얻은 객체로는 탭을 건너뛰는 이동이
+ * 조용히 아무 일도 안 하고 끝난다(눌러도 화면이 그대로였다). 탭바가 받은 navigation 을
+ * 그대로 쓰는 게 확실하다.
+ */
+export function ActiveWorkoutBar({ navigation }: { navigation: NavigationHelpers<ParamListBase> }) {
   const active = useActiveWorkoutStore((s) => s.active);
-  const navigation = useNavigation<NavigationProp<MainTabParamList>>();
 
   if (!active) return null;
 
@@ -55,16 +61,17 @@ export function ActiveWorkoutBar() {
          * 운동 탭의 세션 화면으로 곧장 보낸다. resume 을 넘기면 세션 화면이 "이어서 할까요?"를
          * 다시 묻지 않는다 — 이 바를 누른 것이 이미 그 답이다.
          */
-        navigation.navigate('Workout', {
-          screen: 'WorkoutSession',
-          params: { resume: true },
-          /*
-           * initial:false 가 없으면 세션 화면이 그 탭 스택의 <b>첫 화면</b>이 되어, 거기서
-           * 뒤로 가면 운동 홈이 아니라 탭 밖으로 튕긴다. 운동 홈을 아래에 깔고 그 위에 얹는다
-           * (HomeScreen 의 PlaceAdd 이동이 같은 이유로 쓰는 옵션).
-           */
-          initial: false,
-        } as never);
+        /*
+         * initial:false 가 없으면 세션 화면이 그 탭 스택의 <b>첫 화면</b>이 되어, 거기서
+         * 뒤로 가면 운동 홈이 아니라 탭 밖으로 튕긴다. 운동 홈을 아래에 깔고 그 위에 얹는다
+         * (HomeScreen 의 PlaceAdd 이동이 같은 이유로 쓰는 옵션).
+         */
+        navigation.dispatch(
+          CommonActions.navigate({
+            name: 'Workout',
+            params: { screen: 'WorkoutSession', params: { resume: true }, initial: false },
+          }),
+        );
       }}
     >
       <View style={styles.dot} />
