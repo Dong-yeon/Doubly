@@ -263,6 +263,30 @@ export interface ExerciseLastPerformance {
   reps?: number | null;
   weightKg?: number | null;
   entries: WorkoutSetEntry[];
+  /** 지금까지의 최고 무게(kg) — 세션 중 신기록 판정 기준. 처음 하는 종목이면 없다 */
+  bestWeightKg?: number | null;
+  /** 지금까지의 최고 추정 1RM(kg) */
+  bestE1rmKg?: number | null;
+}
+
+/** 종목별 기록 추이 — "이 종목에서 세지고 있나" (GET /workout/exercises/history) */
+export interface ExerciseHistory {
+  exerciseName: string;
+  /** 오래된 순 — 그래프가 왼쪽에서 오른쪽으로 흐른다 */
+  sessions: ExerciseHistorySession[];
+  best: {
+    maxWeightKg?: number | null;
+    maxVolumeKg?: number | null;
+    maxE1rmKg?: number | null;
+  };
+}
+
+export interface ExerciseHistorySession {
+  workoutDate: string;
+  maxWeightKg?: number | null;
+  totalVolumeKg?: number | null;
+  bestE1rmKg?: number | null;
+  totalSets: number;
 }
 
 // 캘린더 응답 (4.4 GET /workout/calendar)

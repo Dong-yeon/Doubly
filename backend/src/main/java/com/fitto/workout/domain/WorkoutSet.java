@@ -1,5 +1,6 @@
 package com.fitto.workout.domain;
 
+import org.hibernate.annotations.BatchSize;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -64,8 +65,18 @@ public class WorkoutSet {
     @Column(length = 30)
     private String equipment;
 
+    /**
+     * 세트별 실제 입력값.
+     *
+     * <p>{@code @BatchSize} 를 붙인 이유: 종목별 기록 추이(ExerciseHistory)는 한 종목의
+     * 수십 세션을 한 번에 훑는데, 세션마다 entries 를 따로 읽으면 그만큼 쿼리가 나간다
+     * ({@code Meal.items} 와 같은 처방). 위쪽 요약 필드(sets/reps/weightKg)만 봐도 되지 않냐면
+     * — 그 값은 <b>마지막 세트</b> 기준이라 백오프 세트(80→70→60)에서 최고 무게를 놓친다.
+     * 추이·개인 기록은 여기 entries 가 원본이다.
+     */
     @OneToMany(mappedBy = "workoutSet", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("setNo asc")
+    @BatchSize(size = 100)
     private List<WorkoutSetEntry> entries = new ArrayList<>();
 
     @Builder

@@ -147,7 +147,7 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
 
   return (
     <View>
-      {showActiveWorkoutBar ? <ActiveWorkoutBar /> : null}
+      {showActiveWorkoutBar ? <ActiveWorkoutBar navigation={navigation} /> : null}
       <View style={[styles.bar, { paddingBottom: bottomPadding }]}>
         {routeNames.map((name, i) => renderTab(name, i))}
       </View>

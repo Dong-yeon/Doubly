@@ -14,6 +14,7 @@ import { WorkoutProgramDetailScreen } from '../screens/workout/WorkoutProgramDet
 import { WorkoutRoutineGiftInboxScreen } from '../screens/workout/WorkoutRoutineGiftInboxScreen';
 import { WorkoutRoutineFormScreen } from '../screens/workout/WorkoutRoutineFormScreen';
 import { WorkoutRoutineTemplatesScreen } from '../screens/workout/WorkoutRoutineTemplatesScreen';
+import { ExerciseHistoryScreen } from '../screens/workout/ExerciseHistoryScreen';
 import { VoiceClipsScreen } from '../screens/workout/VoiceClipsScreen';
 import { BodyMetricScreen } from '../screens/workout/BodyMetricScreen';
 import { ChallengeScreen } from '../screens/workout/ChallengeScreen';
@@ -86,6 +87,12 @@ export function WorkoutStackNavigator() {
         name="VoiceClips"
         component={VoiceClipsScreen}
         options={{ title: '커플 음성 응원' }}
+      />
+      <Stack.Screen
+        name="ExerciseHistory"
+        component={ExerciseHistoryScreen}
+        // 종목명이 헤더 제목 — 어느 종목의 추이를 보고 있는지가 화면의 전부다
+        options={({ route }) => ({ title: route.params.exerciseName })}
       />
       <Stack.Screen name="BodyMetric" component={BodyMetricScreen} options={{ title: '몸 변화' }} />
       <Stack.Screen name="Challenge" component={ChallengeScreen} options={{ title: '커플 대결' }} />

@@ -116,6 +116,28 @@ function estimate1RM(weightKg: number, reps: number): number {
   return weightKg * (1 + reps / 30);
 }
 
+/**
+ * 이번 세션에서 개인 기록을 갱신했는가 — 완료한 세트 기준.
+ *
+ * <p>세션이 끝난 뒤가 아니라 <b>세트를 체크하는 그 순간</b> 알려주려고 화면에서 판정한다.
+ * 기록을 깼다는 걸 헬스장에서 바로 아는 것과 집에 와서 아는 것은 전혀 다른 경험이다.
+ * 기준값이 없는 종목(처음 하는 운동)은 판정하지 않는다.
+ */
+function prBadgeOf(e: SessionExercise): string | null {
+  const done = e.sets.filter((s) => s.done && s.setType !== 'WARMUP');
+  if (done.length === 0) return null;
+
+  const weights = done.map((s) => Number(s.weightKg)).filter((w) => Number.isFinite(w) && w > 0);
+  if (e.bestWeightKg != null && weights.some((w) => w > e.bestWeightKg!)) {
+    return '최고 무게';
+  }
+  const e1rm = bestE1RM(e.sets);
+  if (e.bestE1rmKg != null && e1rm != null && e1rm > e.bestE1rmKg) {
+    return '최고 1RM';
+  }
+  return null;
+}
+
 /** 종목의 e1RM — 완료된 본세트 중 추정치가 가장 높은 세트 기준. 웜업 세트는 전력이 아니라
  *  1RM 추정에 넣으면 값을 왜곡하므로 제외한다(가벼운 워밍업 세트에 안 낮아지게). */
 function bestE1RM(sets: SessionSet[]): number | null {
@@ -602,7 +624,15 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
       if (found[0]) {
         setExercises((prev) =>
           prev.map((x) =>
-            x.key === targetKey ? { ...x, sets: applyPrefill(x.sets, found[0], x.equipment, x.muscleGroup) } : x,
+            x.key === targetKey
+              ? {
+                  ...x,
+                  sets: applyPrefill(x.sets, found[0], x.equipment, x.muscleGroup),
+                  // 종목이 바뀌었으니 신기록 기준도 새 종목 것으로 갈아끼운다
+                  bestWeightKg: found[0].bestWeightKg ?? undefined,
+                  bestE1rmKg: found[0].bestE1rmKg ?? undefined,
+                }
+              : x,
           ),
         );
       }
@@ -635,11 +665,20 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
       exerciseCatalogId: alt.exerciseCatalogId,
     });
 
-  // 세션 시작 시 루틴/파라미터로 받은 종목들의 직전 기록을 한 번에 불러와 프리필한다.
-  // 되살린 세션에는 하지 않는다 — 사용자가 이미 입력한 값을 지난주 기록으로 덮어쓰게 된다.
+  /*
+   * 세션 시작 시 종목들의 직전 기록·개인 최고 기록을 한 번에 불러온다.
+   *
+   * <p><b>되살린 세션에서는 값을 덮지 않고 기준값만 채운다.</b> 무게·횟수를 다시 채우면
+   * 사용자가 이미 입력한 값이 지난주 기록으로 덮어써진다. 반대로 개인 최고 기록은 초안에
+   * 저장돼 있지 않아서(화면 밖 데이터다), 안 불러오면 되살린 세션에서는 신기록 배지가
+   * 영영 안 뜬다 — 실제로 그렇게 안 뜨는 걸 확인하고 갈라놨다.
+   */
   useEffect(() => {
-    if (!restoreChecked || restoredRef.current) return;
-    const names = Array.from(new Set((route.params?.exercises ?? []).map((e) => e.name)));
+    if (!restoreChecked) return;
+    const restored = restoredRef.current;
+    const names = restored
+      ? Array.from(new Set(exercisesRef.current.map((e) => e.name)))
+      : Array.from(new Set((route.params?.exercises ?? []).map((e) => e.name)));
     if (names.length === 0) return;
     workoutApi
       .lastPerformance(names)
@@ -649,7 +688,14 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
         setExercises((prev) =>
           prev.map((e) => {
             const perf = byName.get(e.name);
-            return perf ? { ...e, sets: applyPrefill(e.sets, perf, e.equipment, e.muscleGroup) } : e;
+            if (!perf) return e;
+            const bests = {
+              bestWeightKg: perf.bestWeightKg ?? undefined,
+              bestE1rmKg: perf.bestE1rmKg ?? undefined,
+            };
+            return restored
+              ? { ...e, ...bests }
+              : { ...e, ...bests, sets: applyPrefill(e.sets, perf, e.equipment, e.muscleGroup) };
           }),
         );
       })
@@ -795,15 +841,26 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
 
     setAdding(true);
     let sets = Array.from({ length: setCount }, () => buildSet(targetWeight, targetReps));
+    // 신기록 기준값 — 프리필과 같은 응답에서 함께 온다(없으면 처음 하는 종목이라 판정 안 함)
+    let bestWeightKg: number | undefined;
+    let bestE1rmKg: number | undefined;
     try {
       const found = await workoutApi.lastPerformance([name]);
-      if (found[0]) sets = applyPrefill(sets, found[0]);
+      if (found[0]) {
+        sets = applyPrefill(sets, found[0]);
+        bestWeightKg = found[0].bestWeightKg ?? undefined;
+        bestE1rmKg = found[0].bestE1rmKg ?? undefined;
+      }
     } catch {
       // 프리필 실패 시 방금 입력한 목표값만으로 진행
     }
     setExercises((prev) => [
       ...prev,
-      { key: nextKey(), name, category: fCategory, reps: targetReps, weightKg: targetWeight, sets },
+      {
+        key: nextKey(), name, category: fCategory,
+        reps: targetReps, weightKg: targetWeight, sets,
+        bestWeightKg, bestE1rmKg,
+      },
     ]);
     setFName('');
     setFWeight('');
@@ -1022,6 +1079,7 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
   ) => {
     const done = e.sets.filter((s) => s.done).length;
     const e1rm = bestE1RM(e.sets);
+    const prBadge = prBadgeOf(e);
     return (
       <View style={[styles.exCard, isActive && styles.exCardActive]}>
         <View style={styles.exHeader}>
@@ -1038,7 +1096,21 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
           </Pressable>
           {/* 이 종목이 뭔지 한눈에 보여주는 그림 — 카탈로그에 있는 종목만(커스텀 종목은 안 뜬다) */}
           {e.emoji ? <Text style={styles.exEmoji}>{e.emoji}</Text> : null}
-          <Text style={styles.exName}>{e.name}</Text>
+          {/* 종목명을 누르면 그 종목의 기록 추이로 — "이거 늘고 있나"를 여기서 바로 확인한다 */}
+          <TouchableOpacity
+            onPress={() => navigation.navigate('ExerciseHistory', { exerciseName: e.name })}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel={`${e.name} 기록 추이 보기`}
+          >
+            <Text style={styles.exName}>{e.name}</Text>
+          </TouchableOpacity>
+          {/* 신기록 배지 — 세트를 체크하는 그 순간 뜬다(prBadgeOf 주석 참고) */}
+          {prBadge ? (
+            <View style={styles.prBadge}>
+              <Text style={styles.prBadgeText}>🏆 {prBadge}</Text>
+            </View>
+          ) : null}
           {/* 자극 부위 배지 — 몸 실루엣에 부위를 색칠. muscleGroup 만 있으면 되므로
               emoji/TIP 과 달리 커스텀 종목도(루틴에 부위가 저장돼 있으면) 뜬다 */}
           {e.muscleGroup ? <MuscleBodyBadge muscleGroup={e.muscleGroup} size={18} /> : null}
@@ -1541,6 +1613,15 @@ const styles = themedStyles((colors) => ({
   dragHandleText: { fontSize: fontSize.subtitle, color: colors.textMuted, fontWeight: '800' },
   // 종목 그림(이모지) — 이름 앞에 살짝 크게 둬서 무슨 운동인지 한눈에 들어오게 한다
   exEmoji: { fontSize: fontSize.subtitle },
+  // 신기록 배지 — 종목명 옆에 작게. 크게 만들면 매번 축하받는 느낌이라 오히려 값이 떨어진다
+  prBadge: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    backgroundColor: colors.couple,
+  },
+  prBadgeText: { fontSize: 10, fontWeight: '800', color: colors.ink },
+
   exName: { flex: 1, fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
   exHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   exSwap: { fontSize: fontSize.body, color: colors.primary, fontWeight: '800' },

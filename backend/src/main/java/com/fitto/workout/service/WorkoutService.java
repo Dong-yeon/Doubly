@@ -19,6 +19,10 @@ import com.fitto.workout.domain.WorkoutSetEntry;
 import com.fitto.workout.dto.CalendarDayResponse;
 import com.fitto.workout.dto.CategoryCount;
 import com.fitto.workout.dto.ExerciseBest;
+import com.fitto.workout.dto.ExerciseHistoryResponse;
+import com.fitto.workout.dto.ExercisePersonalBest;
+import java.math.RoundingMode;
+import java.util.Objects;
 import com.fitto.workout.dto.ExerciseLastPerformanceResponse;
 import com.fitto.workout.dto.PartnerTodayResponse;
 import com.fitto.workout.dto.SaveWorkoutRequest;
@@ -211,13 +215,119 @@ public class WorkoutService {
      * 기록이 없는 종목은 결과에서 빠지므로, 호출부는 exerciseName 기준으로 매칭해야 한다.
      */
     public List<ExerciseLastPerformanceResponse> lastPerformance(Long userId, List<String> exerciseNames) {
+        /*
+         * 개인 최고 기록을 함께 실어 보낸다 — 세션 화면이 세트를 체크하는 <b>그 순간</b>
+         * 신기록인지 판정하려면 기준값이 손에 있어야 한다. 세트마다 서버에 묻는 대신
+         * 세션 시작 때 한 번에 받아 간다(이 호출은 이미 종목 전체를 배치로 조회한다).
+         */
+        Map<String, ExercisePersonalBest> bests = exerciseNames.isEmpty()
+                ? Map.of()
+                : workoutSetRepository.findPersonalBests(userId, exerciseNames).stream()
+                        .collect(Collectors.toMap(ExercisePersonalBest::getExerciseName, b -> b));
+
         List<ExerciseLastPerformanceResponse> result = new ArrayList<>();
         for (String name : exerciseNames) {
             workoutSetRepository.findRecentByExerciseName(userId, name, PageRequest.of(0, 1))
                     .stream().findFirst()
-                    .ifPresent(s -> result.add(ExerciseLastPerformanceResponse.of(s)));
+                    .ifPresent(s -> result.add(ExerciseLastPerformanceResponse.of(s, bests.get(name))));
         }
         return result;
+    }
+
+    /**
+     * 종목별 기록 추이 — 최근 수행분을 세션 단위로 묶어 최고 무게·볼륨·e1RM 을 낸다.
+     *
+     * <p><b>요약 필드가 아니라 entries 를 쓰는 이유</b>: WorkoutSet 의 weightKg 는 그 종목의
+     * <b>마지막 세트</b> 값이라, 백오프 세트(80→70→60)에서는 최고 무게를 놓친다. 추이 그래프가
+     * 실제보다 낮게 그려지면 "늘고 있나"라는 질문에 잘못 답하게 된다.
+     * entries 가 없는 옛 기록은 요약 필드로 대신한다.
+     */
+    public ExerciseHistoryResponse exerciseHistory(Long userId, String exerciseName, int limit) {
+        String name = exerciseName == null ? "" : exerciseName.trim();
+        if (name.isEmpty()) {
+            return ExerciseHistoryResponse.empty(name);
+        }
+        // 세션 하나에 같은 종목이 두 번 담길 수 있어(중간에 다시 추가) 넉넉히 읽고 날짜로 묶는다
+        List<WorkoutSet> sets = workoutSetRepository.findRecentByExerciseName(
+                userId, name, PageRequest.of(0, Math.max(1, limit) * 2));
+        if (sets.isEmpty()) {
+            return ExerciseHistoryResponse.empty(name);
+        }
+
+        // 날짜별로 합친다 — 같은 날 두 번 했으면 그날의 기록으로 한 점에 모은다
+        Map<LocalDate, SessionAccumulator> byDate = new LinkedHashMap<>();
+        for (WorkoutSet set : sets) {
+            byDate.computeIfAbsent(set.getWorkout().getWorkoutDate(), d -> new SessionAccumulator())
+                    .add(set);
+        }
+
+        List<ExerciseHistoryResponse.Session> sessions = byDate.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())          // 오래된 순 — 그래프가 왼→오로 흐른다
+                .limit(Math.max(1, limit))
+                .map(e -> e.getValue().toSession(e.getKey()))
+                .toList();
+
+        return new ExerciseHistoryResponse(name, sessions, bestOf(sessions));
+    }
+
+    /** 창(최근 N회) 안에서의 최고치. 창 밖 기록까지 보려면 findPersonalBests 를 쓴다. */
+    private ExerciseHistoryResponse.Best bestOf(List<ExerciseHistoryResponse.Session> sessions) {
+        return new ExerciseHistoryResponse.Best(
+                sessions.stream().map(ExerciseHistoryResponse.Session::maxWeightKg)
+                        .filter(Objects::nonNull).max(BigDecimal::compareTo).orElse(null),
+                sessions.stream().map(ExerciseHistoryResponse.Session::totalVolumeKg)
+                        .filter(Objects::nonNull).max(BigDecimal::compareTo).orElse(null),
+                sessions.stream().map(ExerciseHistoryResponse.Session::bestE1rmKg)
+                        .filter(Objects::nonNull).max(BigDecimal::compareTo).orElse(null));
+    }
+
+    /** 하루치 누적기 — 같은 날의 여러 WorkoutSet 을 한 점으로 모은다. */
+    private static final class SessionAccumulator {
+        private BigDecimal maxWeight;
+        private BigDecimal volume = BigDecimal.ZERO;
+        private BigDecimal bestE1rm;
+        private int setCount;
+
+        void add(WorkoutSet set) {
+            List<WorkoutSetEntry> entries = set.getEntries().stream()
+                    .filter(e -> e.isCompleted() && e.getWeightKg() != null && e.getReps() != null)
+                    .toList();
+            if (entries.isEmpty()) {
+                // entries 가 없는 옛 기록 — 요약 필드로 대신한다(정확도는 떨어지지만 점이 비는 것보단 낫다)
+                addOne(set.getWeightKg(), set.getReps(), set.getSets() == null ? 1 : set.getSets());
+                return;
+            }
+            for (WorkoutSetEntry e : entries) {
+                addOne(e.getWeightKg(), e.getReps(), 1);
+            }
+        }
+
+        private void addOne(BigDecimal weight, Integer reps, int count) {
+            if (weight == null || reps == null || count <= 0) return;
+            setCount += count;
+            maxWeight = maxWeight == null ? weight : maxWeight.max(weight);
+            volume = volume.add(weight.multiply(BigDecimal.valueOf((long) reps * count)));
+            BigDecimal e1rm = estimate1Rm(weight, reps);
+            bestE1rm = bestE1rm == null ? e1rm : bestE1rm.max(e1rm);
+        }
+
+        ExerciseHistoryResponse.Session toSession(LocalDate date) {
+            return new ExerciseHistoryResponse.Session(
+                    date, maxWeight,
+                    setCount == 0 ? null : volume.setScale(1, RoundingMode.HALF_UP),
+                    bestE1rm, setCount);
+        }
+    }
+
+    /**
+     * Epley 추정 1RM — {@code w × (1 + reps/30)}. 1회면 그 무게가 곧 1RM 이다.
+     * 프론트({@code WorkoutSessionScreen.estimate1RM})와 같은 식을 쓴다 — 화면에 뜬 값과
+     * 추이 그래프의 값이 다르면 둘 중 무엇도 믿을 수 없게 된다.
+     */
+    private static BigDecimal estimate1Rm(BigDecimal weightKg, int reps) {
+        if (reps <= 1) return weightKg;
+        return weightKg.multiply(BigDecimal.valueOf(1 + reps / 30.0))
+                .setScale(1, RoundingMode.HALF_UP);
     }
 
     public List<CalendarDayResponse> calendar(Long userId, int year, int month) {
