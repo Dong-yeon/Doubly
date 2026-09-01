@@ -295,6 +295,32 @@ GET 이던 것(코치·데이트 코스·맛집)은 POST 로 바뀌었다 — �
   배포 때마다 수 초 끊긴다면 이게 원인일 수 있다.
 - **관측 수단이 없다** — 이 분석 전체가 코드 추정인 이유다. Actuator 조차 없어
   Hikari 사용량·Gemini 지연·WS 세션 수를 볼 방법이 없다. 원인 확정을 하려면 이게 먼저다.
+  > **[해결됨 2026-09-01]** Actuator + Micrometer 를 붙였다. 아래 "관측" 절 참고.
+
+---
+
+## 관측 (2026-09-01 추가)
+
+이번 분석에서 순위를 틀린 원인이 관측 부재였다. 콘솔을 보고서야 "503 이 주범"인 걸 알았고,
+커넥션 풀이 말라도 헬스체크는 초록이었다. 다음엔 추측하지 않도록 붙였다.
+
+- `spring-boot-starter-actuator`, **전 경로 ADMIN 전용**(`/actuator/**` → `hasRole("ADMIN")`).
+  Railway 는 포트를 하나만 공개해서 관리 포트를 따로 여는 방법을 못 쓴다.
+- `/actuator/health` 는 DB 까지 확인하는 **깊은** 쪽이다. Railway 헬스체크는 그대로
+  `/api/v1/health`(얕은 것)를 쓴다 — 깊은 쪽을 걸면 의존성이 잠깐 흔들려도 컨테이너가 재시작된다.
+- **Hikari 지표는 공짜로 따라온다** (`hikaricp.connections.active/pending/…`).
+  B 계통(풀 고갈)이 다시 일어나면 여기서 바로 보인다.
+- 직접 심은 것:
+  - `fitto.ai.gemini.call{model,outcome}` — HTTP **시도 하나**의 지연과 결과.
+    모델별로 쪼개 둔 게 핵심이다. 이번에 "어느 모델이 503 을 얼마나 내는지"를 볼 수 없어서
+    콘솔을 열어야 했다. 폴백이 도는지도 여기서 보인다(폴백 모델 이름의 시도가 잡히면 1차가 죽은 것).
+  - `fitto.ai.job.queued` / `fitto.ai.job.active` — 대기열은 사용자가 체감하기 <b>전에</b> 뜨는 신호다.
+  - `fitto.ai.job.finished{job,outcome}` — 기능별 성공/실패 사유 분포.
+
+**붙이자마자 하나 걸렸다.** `/actuator/health` 가 DOWN 이었는데 원인은 SMTP 헬스 인디케이터였다 —
+운영은 Resend(HTTP)로 보내고 Railway 는 SMTP 를 아예 막는데, `spring.mail.host` 가 (빈 값으로)
+선언돼 있어 인디케이터가 붙고 <b>영영 DOWN</b> 이었다. 그대로 뒀으면 지표를 붙여놓고도 못 썼다.
+Redis 와 함께 판정에서 뺐다(둘 다 없어도 앱은 폴백으로 동작한다).
 
 ---
 
@@ -318,7 +344,7 @@ GET 이던 것(코치·데이트 코스·맛집)은 POST 로 바뀌었다 — �
 - ~~Hikari 명시 설정 + `leakDetectionThreshold`~~ ✅ 2026-09-01 (`DB_POOL_SIZE` 로 상향 가능)
 - ~~클라/서버 타임아웃 벌리기, 재시도 조건 확대 + 총 예산 상한~~ ✅ 2026-09-01
 - ~~AI 실패 시 `AI_TOTAL` 환불~~ ✅ 2026-09-01 (기능별 한도까지 함께 환불)
-- Actuator + Hikari/Gemini 메트릭 노출
+- ~~Actuator + Hikari/Gemini 메트릭 노출~~ ✅ 2026-09-01 (위 "관측" 절)
 
 **3단계 (구조)**
 

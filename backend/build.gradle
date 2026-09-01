@@ -52,6 +52,16 @@ dependencies {
     // spring.mail.host 가 없으면 JavaMailSender 빈이 만들어지지 않고 개발용 로그 발송으로 폴백된다.
     implementation 'org.springframework.boot:spring-boot-starter-mail'
 
+    /*
+     * 운영 관측 — Actuator + Micrometer.
+     *
+     * 이걸 안 붙여둔 대가를 한 번 치렀다: "AI가 끊긴다"를 코드만 읽고 분석하느라 원인 순위를
+     * 틀렸고(실제 주범은 Gemini 503 이었는데 우리 쿼터를 지목했다), 커넥션 풀이 말라도
+     * 헬스체크가 초록이라 아무 신호가 없었다. Hikari 사용량·Gemini 지연/실패율은
+     * 추측할 것이 아니라 볼 수 있어야 한다. (docs/STABILITY_ANALYSIS_2026-09-01.md 참고)
+     */
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
     // DB 마이그레이션 — Flyway (DB 구성)
     implementation 'org.flywaydb:flyway-core'
     implementation 'org.flywaydb:flyway-database-postgresql'

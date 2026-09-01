@@ -9,6 +9,8 @@ import com.fitto.common.plan.Feature;
 import com.fitto.common.plan.PlanGuard;
 import com.fitto.common.plan.Quota;
 import com.fitto.common.plan.UsageCounter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
@@ -21,6 +23,7 @@ import org.springframework.web.client.RestClientResponseException;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Gemini API 공용 클라이언트 — 음식 사진 분석/운동 추천 등 AI 기능이 공유한다.
@@ -112,13 +115,16 @@ public class GeminiClient {
     private final RestClient restClient;
     private final PlanGuard planGuard;
     private final UsageCounter usageCounter;
+    private final MeterRegistry meterRegistry;
 
     public GeminiClient(GeminiProperties properties, ObjectMapper objectMapper,
-                        PlanGuard planGuard, UsageCounter usageCounter) {
+                        PlanGuard planGuard, UsageCounter usageCounter,
+                        MeterRegistry meterRegistry) {
         this.properties = properties;
         this.objectMapper = objectMapper;
         this.planGuard = planGuard;
         this.usageCounter = usageCounter;
+        this.meterRegistry = meterRegistry;
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(5_000);
         factory.setReadTimeout(READ_TIMEOUT_MILLIS);
@@ -309,16 +315,19 @@ public class GeminiClient {
         for (int attempt = 1; ; attempt++) {
             long attemptStart = System.currentTimeMillis();
             try {
-                return restClient.post()
+                JsonNode response = restClient.post()
                         .uri(GENERATE_PATH.formatted(properties.getBaseUrl(), model))
                         .header("x-goog-api-key", properties.getApiKey())
                         .contentType(MediaType.APPLICATION_JSON)
                         .body(body)
                         .retrieve()
                         .body(JsonNode.class);
+                record(model, "success", System.currentTimeMillis() - attemptStart);
+                return response;
             } catch (RestClientResponseException e) {
                 lastAttemptMillis = System.currentTimeMillis() - attemptStart;
                 int status = e.getStatusCode().value();
+                record(model, String.valueOf(status), lastAttemptMillis);
                 if (!isTransient(status)) {
                     log.warn("Gemini 호출 실패({}): status={} body={}",
                             model, status, e.getResponseBodyAsString());
@@ -339,6 +348,7 @@ public class GeminiClient {
                         ? ErrorCode.AI_RATE_LIMITED : ErrorCode.AI_ANALYSIS_FAILED);
             } catch (ResourceAccessException e) {
                 lastAttemptMillis = System.currentTimeMillis() - attemptStart;
+                record(model, "network", lastAttemptMillis);
                 /*
                  * 연결 실패(5초)면 예산이 남아 재시도할 값어치가 있고, 읽기 타임아웃(45초)이면
                  * 아래 검사가 걸러낸다 — 직전 시도가 얼마나 걸렸는지로 판단하기 때문이다.
@@ -372,6 +382,23 @@ public class GeminiClient {
         BusinessException toBusinessException() {
             return new BusinessException(errorCode);
         }
+    }
+
+    /**
+     * HTTP 시도 <b>하나</b>의 결과와 소요 시간을 남긴다 — 재시도 묶음이 아니라 시도 단위다.
+     *
+     * <p>모델과 결과(성공/상태코드/network)로 쪼개 두는 게 핵심이다. 이번 장애를 콘솔을 보고서야
+     * 알았던 이유가 정확히 이 구분이 없어서였다 — "AI가 느리다/실패한다"까지는 알아도
+     * <b>어느 모델이 503 을 얼마나 내고 있는지</b>를 볼 방법이 없었다.
+     * 폴백이 도는지도 여기서 보인다(폴백 모델 이름의 시도가 잡히면 1차가 죽고 있다는 뜻).
+     */
+    private void record(String model, String outcome, long elapsedMillis) {
+        Timer.builder("fitto.ai.gemini.call")
+                .description("Gemini 호출 시도 하나의 소요 시간과 결과")
+                .tag("model", model)
+                .tag("outcome", outcome)
+                .register(meterRegistry)
+                .record(elapsedMillis, TimeUnit.MILLISECONDS);
     }
 
     /** 서버가 "지금은 처리 못 했다"고 말한 상태 — 같은 요청을 다시 보내면 될 수 있다. */

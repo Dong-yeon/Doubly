@@ -76,6 +76,13 @@ public class SecurityConfig {
                                 "/api/v1/webhooks/google-play",
                                 "/ws/**")
                         .permitAll()
+                        /*
+                         * 운영 지표는 ADMIN 만 본다. 커넥션 풀 사용량·외부 호출 지연 같은 값은
+                         * 서비스 내부 사정이라 일반 사용자 토큰으로 열리면 안 되고, 반대로
+                         * 완전히 막아두면 정작 볼 사람이 못 본다(Railway 는 포트를 하나만
+                         * 공개해서 관리 포트를 따로 여는 방법도 못 쓴다).
+                         */
+                        .requestMatchers("/actuator/**").hasRole("ADMIN")
                         // /auth/me, /auth/withdraw 등 그 외 모든 요청은 인증 필요
                         .anyRequest().authenticated())
                 /*

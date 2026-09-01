@@ -3,6 +3,9 @@ package com.fitto.common.ai;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -92,9 +95,32 @@ public class AiJobService {
         executor.allowCoreThreadTimeOut(true);
     }
 
-    public AiJobService(ObjectProvider<StringRedisTemplate> redisProvider, ObjectMapper objectMapper) {
+    private final MeterRegistry meterRegistry;
+
+    public AiJobService(ObjectProvider<StringRedisTemplate> redisProvider, ObjectMapper objectMapper,
+                        MeterRegistry meterRegistry) {
         this.redisProvider = redisProvider;
         this.objectMapper = objectMapper;
+        this.meterRegistry = meterRegistry;
+        /*
+         * 대기열이 쌓이는 건 "AI 가 느리다"의 가장 이른 신호다 — 사용자가 체감하기 전에 보인다.
+         * 실행 중 개수와 함께 보면 "풀이 모자란 건지, 작업 하나가 오래 걸리는 건지"가 갈린다.
+         */
+        Gauge.builder("fitto.ai.job.queued", executor, e -> e.getQueue().size())
+                .description("실행을 기다리는 AI 작업 수")
+                .register(meterRegistry);
+        Gauge.builder("fitto.ai.job.active", executor, ThreadPoolExecutor::getActiveCount)
+                .description("지금 돌고 있는 AI 작업 수")
+                .register(meterRegistry);
+    }
+
+    private void countFinished(String label, String outcome) {
+        Counter.builder("fitto.ai.job.finished")
+                .description("끝난 AI 작업 수")
+                .tag("job", label)
+                .tag("outcome", outcome)
+                .register(meterRegistry)
+                .increment();
     }
 
     /**
@@ -113,6 +139,7 @@ public class AiJobService {
             log.warn("AI 작업 큐 포화 — {} 거절 (userId={})", label, userId);
             save(jobId, AiJob.pending(userId).failed(
                     ErrorCode.AI_RATE_LIMITED.name(), ErrorCode.AI_RATE_LIMITED.getMessage()));
+            countFinished(label, "rejected");
         }
         return jobId;
     }
@@ -121,14 +148,17 @@ public class AiJobService {
         try {
             Object result = work.get();
             save(jobId, AiJob.pending(userId).done(objectMapper.writeValueAsString(result)));
+            countFinished(label, "done");
         } catch (BusinessException e) {
             // 사용자에게 보여줄 말이 이미 정해진 실패 — 그대로 전달한다
             log.info("AI 작업 실패({}): {} — {}", label, e.getErrorCode(), e.getMessage());
             save(jobId, AiJob.pending(userId).failed(e.getErrorCode().name(), e.getMessage()));
+            countFinished(label, e.getErrorCode().name());
         } catch (Exception e) {
             log.warn("AI 작업 오류({}): {}", label, e.toString());
             save(jobId, AiJob.pending(userId).failed(
                     ErrorCode.AI_ANALYSIS_FAILED.name(), ErrorCode.AI_ANALYSIS_FAILED.getMessage()));
+            countFinished(label, "error");
         }
     }
 

@@ -170,6 +170,30 @@ fitto:
     api-secret: ${STREAM_API_SECRET:}
     expire-minutes: ${STREAM_TOKEN_EXPIRE_MINUTES:60}
 
+# 운영 관측 (Actuator) — 전 경로가 ADMIN 전용이다(SecurityConfig 참고).
+# Railway 헬스체크는 여전히 /api/v1/health(얕은 것)를 쓴다. 여기 /actuator/health 는
+# DB·Redis 까지 확인하는 깊은 쪽이라, 이걸 헬스체크로 걸면 Redis 가 잠깐 흔들려도
+# 컨테이너가 재시작된다 — 진단용으로만 쓴다.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,info
+  endpoint:
+    health:
+      show-details: always
+  health:
+    # Redis 가 없어도 앱은 인메모리 폴백으로 동작한다(UsageCounter·AiResultCache 주석 참고).
+    # 그래서 Redis 다운이 전체 DOWN 이 되면 안 된다 — 상태는 보여주되 판정에서는 뺀다.
+    redis:
+      enabled: false
+    # 메일은 운영에서 Resend(HTTP)로 나간다 — SMTP 는 Railway 가 아예 막아서 쓰지 않는다.
+    # 그런데 spring.mail.host 가 선언돼 있으면(빈 값이라도) SMTP 헬스 인디케이터가 붙고,
+    # 닿을 수 없으니 <b>항상 DOWN</b> 이라 전체 health 가 영영 DOWN 이 된다 — 지표가 통째로
+    # 쓸모없어진다. 메일 발송 가능 여부는 앱 생존 신호가 아니므로 판정에서 뺀다.
+    mail:
+      enabled: false
+
 logging:
   level:
     com.fitto: DEBUG

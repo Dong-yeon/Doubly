@@ -11,6 +11,7 @@ import com.fitto.common.plan.UsageCounter;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -85,7 +86,7 @@ class GeminiModelFallbackTest {
         properties.setApiKey("test-key");
         properties.setModel(PRIMARY);
         properties.setFallbackModel(FALLBACK);
-        client = new GeminiClient(properties, new ObjectMapper(), planGuard, usageCounter);
+        client = new GeminiClient(properties, new ObjectMapper(), planGuard, usageCounter, new SimpleMeterRegistry());
     }
 
     @AfterEach
