@@ -23,7 +23,8 @@
       "ios": {
         "ascApiKeyPath": "../secrets/AuthKey_5L85YB6A6G.p8",
         "ascApiKeyId": "5L85YB6A6G",
-        "ascApiKeyIssuerId": "398f3259-e229-4657-ab99-d3e12e387fb5"
+        "ascApiKeyIssuerId": "398f3259-e229-4657-ab99-d3e12e387fb5",
+        "ascAppId": "6807249370"
       }
     }
   }
