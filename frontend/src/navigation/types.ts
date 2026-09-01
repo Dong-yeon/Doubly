@@ -163,6 +163,8 @@ export type WorkoutStackParamList = {
   VoiceClips: undefined;
   // 검증된 분할 템플릿(⑤) — 목록에서 골라 내 루틴으로 복사
   WorkoutRoutineTemplates: undefined;
+  /** 종목별 기록 추이 — 종목을 이름으로 넘긴다(자유 입력 기록엔 카탈로그 id 가 없다) */
+  ExerciseHistory: { exerciseName: string };
   // 신체 측정 & 진행 사진
   BodyMetric: undefined;
   // 커플 챌린지/대결

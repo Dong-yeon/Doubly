@@ -3,6 +3,7 @@ import { apiClient, unwrap } from './client';
 import { runAiJob, type AiJobStart } from './aiJob';
 import type {
   ApiResponse,
+  ExerciseHistory,
   CalendarDay,
   ExerciseCatalogItem,
   ExerciseLastPerformance,
@@ -155,6 +156,17 @@ export const workoutApi = {
     unwrap(
       apiClient.get<ApiResponse<ExerciseCatalogItem[]>>('/workout/exercise-catalog', {
         params: { muscleGroup, names: names && names.length > 0 ? names.join(',') : undefined },
+      }),
+    ),
+
+  /**
+   * 종목별 기록 추이 — 최근 수행분의 최고 무게·볼륨·e1RM.
+   * 종목을 이름으로 넘긴다(자유 입력 기록엔 카탈로그 id 가 없다 — 서버 주석 참고).
+   */
+  exerciseHistory: (name: string, limit = 30) =>
+    unwrap(
+      apiClient.get<ApiResponse<ExerciseHistory>>('/workout/exercises/history', {
+        params: { name, limit },
       }),
     ),
 

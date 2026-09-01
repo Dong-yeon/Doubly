@@ -45,6 +45,14 @@ export interface SessionExercise {
   exerciseCatalogId?: number;
   // 이 종목만의 휴식 시간(초) — 없으면 세션 전역 기본값 사용(③)
   restSeconds?: number;
+  /*
+   * 세션 시작 시 받아 온 개인 최고 기록 — "지금 체크한 이 세트가 신기록인가"의 기준값이다.
+   * 세트마다 서버에 물을 수 없으니 한 번에 받아 들고 있는다(프리필과 같은 호출).
+   * 처음 하는 종목이면 없고, 그때는 신기록 판정을 하지 않는다 — 첫 시도를 PR 이라 부르면
+   * 매번 뜨는 흔한 배지가 되어 진짜 갱신의 특별함이 옅어진다.
+   */
+  bestWeightKg?: number;
+  bestE1rmKg?: number;
   // 루틴 작성 시 사전 지정해둔 대체 종목(④) — 세션 중 교체 시 먼저 추천된다
   alternatives?: SessionExerciseAlternativeParam[];
   // "이게 무슨 동작인지" 한 줄 설명 — tip 과 같은 배치 조회로 채워진다. tip 이 자세 교정 큐라면
