@@ -68,13 +68,35 @@ public class GeminiClient {
     private static final int READ_TIMEOUT_MILLIS = 45_000;
 
     /**
-     * 재시도까지 포함한 <b>전체</b> 예산. 이걸 넘길 것 같으면 재시도하지 않는다.
+     * 재시도 정책 — <b>어디서 불리느냐</b>에 따라 쓸 수 있는 시간이 다르다.
+     *
+     * @param maxAttempts         본 호출 포함 최대 시도 횟수
+     * @param initialBackoffMillis 첫 재시도 전 대기
+     * @param maxBackoffMillis    백오프·{@code Retry-After} 상한
+     * @param budgetMillis        재시도까지 포함한 전체 예산. 다음 시도가 이걸 넘길 것 같으면 포기한다
+     */
+    private record RetryPolicy(int maxAttempts, long initialBackoffMillis,
+                               long maxBackoffMillis, long budgetMillis) {
+    }
+
+    /**
+     * 요청 안에서 도는 호출 — 프론트가 75초에 포기하므로 그 안에서 끝나야 한다.
      *
      * <p>예산 개념이 없으면 "503 두 번 + 본 호출"만으로도 프론트 타임아웃을 넘겨,
      * 재시도가 성공률을 올리는 게 아니라 <b>실패를 늦추기만</b> 한다.
      * 읽기 타임아웃(45초)이 한 번 나면 자연히 예산이 없어 재시도하지 않는 것도 이 계산의 일부다.
      */
-    private static final long TOTAL_BUDGET_MILLIS = 60_000;
+    private static final RetryPolicy SYNC = new RetryPolicy(3, 500, 5_000, 60_000);
+
+    /**
+     * 백그라운드 작업({@link AiJobService})에서 도는 호출 — 기다려 줄 사람이 없으니 길게 간다.
+     *
+     * <p><b>이 정책의 근거는 실제 운영 로그다.</b> Gemini 실패는 거의 전부
+     * 503 ServiceUnavailable(모델 과부하)이고, 이건 초 단위가 아니라 <b>분 단위</b>로 지속된다.
+     * 동기 예산(60초) 안의 재시도로는 그 구간을 넘길 수 없어 사용자에게 그대로 실패로 보였다.
+     * 2초 → 6초 → 18초 → 54초 … 로 물러서며 최대 4분까지 버틴다.
+     */
+    private static final RetryPolicy BACKGROUND = new RetryPolicy(6, 2_000, 60_000, 240_000);
 
     private final GeminiProperties properties;
     private final ObjectMapper objectMapper;
@@ -159,8 +181,25 @@ public class GeminiClient {
      */
     public JsonNode generateJson(Long userId, Feature feature,
                                  List<Map<String, Object>> parts, Map<String, Object> responseSchema) {
+        return generateJson(userId, feature, parts, responseSchema, SYNC);
+    }
+
+    /**
+     * 백그라운드 작업용 — 요청 수명에 매이지 않으므로 <b>분 단위로</b> 재시도한다.
+     * 503 이 몇 분씩 이어지는 실제 상황을 넘기려면 이쪽이어야 한다({@link #BACKGROUND} 주석 참고).
+     * {@link AiJobService#submit} 안에서 도는 코드에서만 쓸 것 — 요청 스레드에서 부르면
+     * 프론트가 먼저 포기한 뒤에도 서버가 4분을 붙잡고 있게 된다.
+     */
+    public JsonNode generateJsonInBackground(Long userId, Feature feature,
+                                             List<Map<String, Object>> parts,
+                                             Map<String, Object> responseSchema) {
+        return generateJson(userId, feature, parts, responseSchema, BACKGROUND);
+    }
+
+    private JsonNode generateJson(Long userId, Feature feature, List<Map<String, Object>> parts,
+                                  Map<String, Object> responseSchema, RetryPolicy policy) {
         try {
-            return generateJsonOrThrow(parts, responseSchema);
+            return generateJsonOrThrow(parts, responseSchema, policy);
         } catch (RuntimeException e) {
             refundUsage(userId, feature);
             throw e;
@@ -168,7 +207,8 @@ public class GeminiClient {
     }
 
     private JsonNode generateJsonOrThrow(List<Map<String, Object>> parts,
-                                         Map<String, Object> responseSchema) {
+                                         Map<String, Object> responseSchema,
+                                         RetryPolicy policy) {
         Map<String, Object> body = Map.of(
                 "contents", List.of(Map.of("parts", parts)),
                 "generationConfig", Map.of(
@@ -176,7 +216,7 @@ public class GeminiClient {
                         "responseMimeType", "application/json",
                         "responseSchema", responseSchema));
 
-        JsonNode root = callWithRetry(body);
+        JsonNode root = callWithRetry(body, policy);
 
         String text = root == null ? null
                 : root.path("candidates").path(0).path("content")
@@ -201,13 +241,13 @@ public class GeminiClient {
      * 경우다. 지금은 "서버가 지금은 처리 못 했다"고 말한 상태(429·500·502·503·504)와
      * 네트워크 오류를 함께 재시도한다.
      *
-     * <p>재시도는 {@link #TOTAL_BUDGET_MILLIS} 예산 안에서만 한다. 다음 시도가 예산을 넘길
-     * 것 같으면 그냥 실패시킨다 — 어차피 프론트가 먼저 포기할 응답을 만들어봐야 소용없다.
+     * <p>얼마나 오래 버틸지는 {@link RetryPolicy} 가 정한다 — 요청 안에서 도는 호출과
+     * 백그라운드 작업은 쓸 수 있는 시간이 다르다. 다음 시도가 예산을 넘길 것 같으면 포기한다.
      */
-    private JsonNode callWithRetry(Map<String, Object> body) {
-        long deadline = System.currentTimeMillis() + TOTAL_BUDGET_MILLIS;
-        int maxAttempts = 3;
-        long backoffMillis = 500;
+    private JsonNode callWithRetry(Map<String, Object> body, RetryPolicy policy) {
+        long deadline = System.currentTimeMillis() + policy.budgetMillis();
+        int maxAttempts = policy.maxAttempts();
+        long backoffMillis = policy.initialBackoffMillis();
         for (int attempt = 1; ; attempt++) {
             try {
                 return restClient.post()
@@ -219,12 +259,14 @@ public class GeminiClient {
                         .body(JsonNode.class);
             } catch (RestClientResponseException e) {
                 int status = e.getStatusCode().value();
-                long wait = status == 429 ? retryAfterMillis(e, backoffMillis) : backoffMillis;
+                long wait = status == 429
+                        ? retryAfterMillis(e, backoffMillis, policy.maxBackoffMillis())
+                        : backoffMillis;
                 if (isTransient(status) && canRetry(attempt, maxAttempts, wait, deadline)) {
                     log.info("Gemini 일시 실패({}) — {}ms 후 재시도 ({}/{})",
                             status, wait, attempt, maxAttempts);
                     sleep(wait);
-                    backoffMillis *= 3;
+                    backoffMillis = Math.min(backoffMillis * 3, policy.maxBackoffMillis());
                     continue;
                 }
                 log.warn("Gemini 호출 실패: status={} body={}", status, e.getResponseBodyAsString());
@@ -240,7 +282,7 @@ public class GeminiClient {
                     log.info("Gemini 네트워크 오류 — {}ms 후 재시도 ({}/{}): {}",
                             backoffMillis, attempt, maxAttempts, e.getMessage());
                     sleep(backoffMillis);
-                    backoffMillis *= 3;
+                    backoffMillis = Math.min(backoffMillis * 3, policy.maxBackoffMillis());
                     continue;
                 }
                 log.warn("Gemini 호출 타임아웃/네트워크 오류: {}", e.getMessage());
@@ -260,23 +302,23 @@ public class GeminiClient {
     }
 
     /**
-     * 429 의 {@code Retry-After}(초) 를 존중하되 상한을 둔다 — 구글이 몇 분을 부르면
-     * 그건 기다릴 게 아니라 실패시킬 상황이다. 헤더가 없거나 형식이 어긋나면 백오프를 쓴다.
+     * 429 의 {@code Retry-After}(초) 를 존중하되 정책의 상한을 넘지 않는다 — 구글이 부른 시간이
+     * 우리 예산보다 길면 기다릴 게 아니라 실패시킬 상황이다.
+     * 헤더가 없거나 형식이 어긋나면 백오프를 쓴다.
      */
-    private static long retryAfterMillis(RestClientResponseException e, long fallbackMillis) {
+    private static long retryAfterMillis(RestClientResponseException e,
+                                         long fallbackMillis, long maxMillis) {
         String header = e.getResponseHeaders() == null
                 ? null : e.getResponseHeaders().getFirst("Retry-After");
         if (header == null || header.isBlank()) {
             return fallbackMillis;
         }
         try {
-            return Math.min(Long.parseLong(header.trim()) * 1000L, MAX_RETRY_AFTER_MILLIS);
+            return Math.min(Long.parseLong(header.trim()) * 1000L, maxMillis);
         } catch (NumberFormatException ignored) {
             return fallbackMillis; // HTTP-date 형식 — 이 API 에서는 오지 않는다
         }
     }
-
-    private static final long MAX_RETRY_AFTER_MILLIS = 5_000;
 
     private void sleep(long millis) {
         try {
