@@ -94,6 +94,8 @@ public enum ErrorCode {
      * "나는 처음 쓰는데 왜 다 썼다는 거지"가 안 생긴다. 리셋은 자정(KST)이라 "잠시 후"가 아니다. */
     AI_SERVICE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "오늘은 AI 이용이 많아 잠시 쉬어가요. 내일 다시 시도해주세요."),
     AI_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "지금은 AI 분석 요청이 많아요. 잠시 후 다시 시도해주세요."),
+    /* 백그라운드 AI 작업(AiJobService)의 id 가 만료됐거나 남의 것 — 둘을 구분해 알려주지 않는다. */
+    AI_JOB_NOT_FOUND(HttpStatus.NOT_FOUND, "요청한 AI 작업을 찾을 수 없어요. 다시 시도해주세요."),
     AI_ANALYSIS_FAILED(HttpStatus.BAD_GATEWAY, "AI 분석에 실패했어요. 잠시 후 다시 시도해주세요."),
     // 사진 관련 — 원인별로 분리해 어떤 문제인지 바로 보이게 한다
     INVALID_PHOTO_URL(HttpStatus.BAD_REQUEST, "앱에서 촬영·선택해 올린 사진만 분석할 수 있어요."),
