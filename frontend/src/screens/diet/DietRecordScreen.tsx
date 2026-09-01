@@ -94,6 +94,13 @@ interface ItemForm {
 
 const num = (v: string) => (v.trim() ? Number(v) : undefined);
 const isFilled = (i: ItemForm) => i.name.trim().length > 0;
+
+/** 적어둔 항목을 AI 에 보낼 한 줄로. 응답을 적용할지 판단할 때도 같은 규칙으로 다시 만든다. */
+const describeItems = (items: ItemForm[]) =>
+  items
+    .filter(isFilled)
+    .map((i) => (i.portion.trim() ? `${i.name.trim()} ${i.portion.trim()}` : i.name.trim()))
+    .join(', ');
 // 서버(MealService.half)와 같은 반올림 — 미리보기 숫자가 실제 저장값과 어긋나지 않게
 const halfRound = (v: number) => Math.round(v / 2);
 
@@ -258,6 +265,15 @@ export function DietRecordScreen({ navigation, route }: Props) {
   }, [editing, navigation]);
 
   const filled = useMemo(() => items.filter(isFilled), [items]);
+  /*
+   * AI 응답이 도착한 <b>그 순간</b>의 항목을 읽기 위한 ref. 아래 onAnalyzeText 는 결과로
+   * 목록을 통째로 교체하는데, 기다리는 동안 사용자가 뭔가 더 적었다면 그걸 지워버린다.
+   * (예전엔 전역 화면 잠금이 입력을 막아 이 문제가 없었다 — 잠금을 걷어내면서 필요해졌다)
+   */
+  const itemsRef = useRef(items);
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
   const partnerName = couple?.partner?.name ?? '상대방';
 
   /** 끼니 합계 — 서버도 같은 방식으로 다시 더한다(여기 값은 화면 표시용) */
@@ -636,7 +652,9 @@ export function DietRecordScreen({ navigation, route }: Props) {
     setAnalyzing(true);
     try {
       const photoUrl = await uploadForSubmit(photoUri);
-      const result = await runBusy('AI가 음식을 분석하고 있어요', () => dietApi.analyze(photoUrl));
+      // 전역 화면 잠금은 걷었다(대기가 분 단위까지 늘 수 있다). 이 경로는 결과를
+      // 기존 항목 <b>뒤에 덧붙이므로</b>, 기다리는 동안 뭘 더 적어도 지워지지 않는다.
+      const result = await dietApi.analyze(photoUrl);
       if (!result.isFood || result.foods.length === 0) {
         // 실제 음식·메뉴판·영양성분표 중 아무것도 못 찾았을 때만 여기로 온다(source 세 갈래 모두 실패)
         toast.error('음식 사진이 아닌 것 같아요');
@@ -674,15 +692,21 @@ export function DietRecordScreen({ navigation, route }: Props) {
    * (명시적으로 누르는 버튼이고, 결과가 마음에 안 들면 항목별로 고치면 된다).
    */
   const onAnalyzeText = async () => {
-    const text = filled
-      .map((i) => (i.portion.trim() ? `${i.name.trim()} ${i.portion.trim()}` : i.name.trim()))
-      .join(', ');
+    const text = describeItems(items);
     if (!text) return;
     setAnalyzingText(true);
     try {
-      const result = await runBusy('AI가 칼로리를 계산하고 있어요', () => dietApi.analyzeText(text));
+      const result = await dietApi.analyzeText(text);
       if (!result.isFood || result.foods.length === 0) {
         toast.error('무엇을 먹었는지 알아보지 못했어요. 음식 이름을 적어주세요.');
+        return;
+      }
+      /*
+       * 기다리는 사이에 목록이 바뀌었으면 덮어쓰지 않는다 — 이 응답은 <b>보낼 때의</b>
+       * 목록에 대한 답이라, 지금 목록을 교체하면 방금 적은 것을 지우는 셈이다.
+       */
+      if (describeItems(itemsRef.current) !== text) {
+        toast.info('적어둔 음식이 바뀌어서 결과를 넣지 않았어요. 다시 눌러주세요.');
         return;
       }
       setItems(result.foods.map((f) => newItem(toForm(f))));
@@ -1370,6 +1394,9 @@ export function DietRecordScreen({ navigation, route }: Props) {
             title={editing ? '수정 완료' : '완료!'}
             onPress={onSave}
             loading={saving}
+            /* 분석 중 저장하면 곧 도착할 결과를 못 받은 채 화면을 떠난다 — 잠금을 걷어낸
+               지금은 눌릴 수 있으므로 여기서 막는다 */
+            disabled={analyzing || analyzingText}
             style={styles.save}
           />
       </FormKeyboardView>
