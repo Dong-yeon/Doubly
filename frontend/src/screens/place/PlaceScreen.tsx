@@ -150,19 +150,27 @@ export function PlaceScreen() {
     [allPlaces, categoryFilter],
   );
 
-  // 솔로 픽 — 아직 둘 다 안 매겨(tier 0) 럽슐랭 인증엔 못 미치지만, 한쪽이 강력 추천(4점
-  // 이상)한 곳. "혼자 간 인생 맛집"도 인정받을 방법이 있어야 한다는 결정(2026-08-24).
+  /*
+   * 솔로 픽 — 아직 둘 다 안 매겨(tier 0) 럽슐랭 인증엔 못 미치지만, 한쪽이 강력 추천(4점
+   * 이상)한 곳. "혼자 간 인생 맛집"도 인정받을 방법이 있어야 한다는 결정(2026-08-24).
+   *
+   * categoryFilter 도 같이 건다 — 처음엔 "카테고리와 무관하게 항상 노출"로 만들었는데,
+   * 카페 카테고리만 골랐는데 여행지 픽이 그대로 떠 있어 실사용에서 헷갈린다는 리포트
+   * (2026-09-01). guidePlaces 와 같은 필터를 써서 "지금 보고 있는 카테고리 안에서"라는
+   * 기대에 맞춘다.
+   */
   const soloPicks = useMemo(
     () =>
       allPlaces
         .filter((p) => p.lovelichelinTier === 0)
+        .filter((p) => categoryFilter === 'ALL' || p.category === categoryFilter)
         .filter(
           (p) =>
             (p.myRating != null && p.myRating >= SOLO_PICK_MIN_RATING && p.partnerRating == null) ||
             (p.partnerRating != null && p.partnerRating >= SOLO_PICK_MIN_RATING && p.myRating == null),
         )
         .sort((a, b) => (b.myRating ?? b.partnerRating ?? 0) - (a.myRating ?? a.partnerRating ?? 0)),
-    [allPlaces],
+    [allPlaces, categoryFilter],
   );
 
   // 둘러보기 = 인증 여부와 무관하게 전체 장소. 목록·지도가 이 하나의 필터링 결과를 같이 쓴다
