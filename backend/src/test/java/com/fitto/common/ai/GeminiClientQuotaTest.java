@@ -9,6 +9,7 @@ import com.fitto.common.plan.PlanGuard;
 import com.fitto.common.plan.Quota;
 import com.fitto.common.plan.UsageCounter;
 import org.junit.jupiter.api.BeforeEach;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -37,7 +38,7 @@ class GeminiClientQuotaTest {
     private final UsageCounter usageCounter = mock(UsageCounter.class);
     private final GeminiProperties properties = new GeminiProperties();
     private final GeminiClient client =
-            new GeminiClient(properties, new ObjectMapper(), planGuard, usageCounter);
+            new GeminiClient(properties, new ObjectMapper(), planGuard, usageCounter, new SimpleMeterRegistry());
 
     @BeforeEach
     void setUp() {

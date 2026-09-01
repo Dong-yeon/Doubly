@@ -3,6 +3,7 @@ package com.fitto.common.ai;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -32,7 +33,7 @@ class AiJobServiceTest {
     private static AiJobService newService() {
         ObjectProvider<StringRedisTemplate> provider = mock(ObjectProvider.class);
         when(provider.getIfAvailable()).thenReturn(null); // Redis 없음 → 인메모리 폴백
-        return new AiJobService(provider, new ObjectMapper());
+        return new AiJobService(provider, new ObjectMapper(), new SimpleMeterRegistry());
     }
 
     /** PENDING 을 벗어날 때까지 기다린다 — 못 벗어나면 그 자체가 실패다. */
