@@ -58,6 +58,7 @@
         }
       ],
       "expo-audio",
+      "expo-notifications",
       [
         "@stream-io/video-react-native-sdk",
         {
@@ -90,7 +91,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.doubly.app"
+      "bundleIdentifier": "com.doubly.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.doubly.app",

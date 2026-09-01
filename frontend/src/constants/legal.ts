@@ -2,13 +2,12 @@
  * 약관 본문 (AUTH-09).
  *
  * ⚠️ 운영 주체 정보는 채웠으나, 아래는 **여전히 법률 검토 전 초안**입니다.
- *    - 시행일: 정식 출시일이 정해지면 `[정식 출시일]` 을 실제 날짜로 교체하세요.
  *    - 개인정보 보유기간(특히 접속기록)·필수 고지 항목은 서비스 형태에 따라 달라지므로
  *      출시 전 전문가 검토 또는 KISA 표준 개인정보처리방침 양식으로 확인하세요.
  *
  * 본문을 개정하면 아래 VERSION 과
  * `backend/.../common/policy/PolicyVersion.java` 의 상수를 **함께** 올려야
- * 기존 사용자에게 재동의를 받을 수 있습니다.
+ * 기존 사용자에게 재동의를 받을 수 있습니다. EFFECTIVE_DATE 도 그 개정 시점으로 갱신하세요.
  *
  * 운영 주체: 개인 개발자 / 문의·개인정보 연락처: ehddus5712@gmail.com
  */
@@ -16,8 +15,8 @@
 export const TERMS_VERSION = '1.1';
 export const PRIVACY_VERSION = '1.2';
 
-/** 정식 출시일이 정해지면 교체할 자리 표시자 (약관·방침 시행일) */
-const EFFECTIVE_DATE = '[정식 출시일]';
+/** 현재 버전(TERMS_VERSION/PRIVACY_VERSION)의 시행일 — 애플 출시 준비 시점(2026-09-01) 기준 */
+const EFFECTIVE_DATE = '2026년 9월 1일';
 
 /** 문의·개인정보 연락처 (설정의 문의하기, 약관 문의처 등 단일 출처) */
 export const CONTACT_EMAIL = 'ehddus5712@gmail.com';
