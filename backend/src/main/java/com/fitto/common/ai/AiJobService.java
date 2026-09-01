@@ -54,6 +54,9 @@ public class AiJobService {
     /** 인메모리 폴백 최대 항목 — Redis 없는 개발 환경 전용이라 넉넉할 필요가 없다. */
     private static final int FALLBACK_MAX_ENTRIES = 200;
 
+    /** 동시에 돌릴 AI 작업 수 — 외부 대기라 CPU 수와 무관하고, 늘릴수록 Gemini 한도를 빨리 쓴다. */
+    private static final int AI_JOB_THREADS = 4;
+
     private final ObjectProvider<StringRedisTemplate> redisProvider;
     private final ObjectMapper objectMapper;
 
@@ -70,15 +73,24 @@ public class AiJobService {
     /**
      * AI 생성 전용 풀. 스레드가 적은 이유는 이 작업들이 CPU 가 아니라 <b>외부 응답 대기</b>라
      * 많이 띄워봐야 Gemini 쪽 한도만 더 빨리 건드리기 때문이다.
+     *
+     * <p><b>core 와 max 를 같게 둔 건 의도적이다.</b> ThreadPoolExecutor 는 큐가 <b>가득 찬 뒤에야</b>
+     * core 를 넘겨 스레드를 늘린다. core=2, max=4, 큐 100 으로 두면 큐에 99개가 쌓일 때까지
+     * 실제 동시 실행은 2개뿐이다 — 작업 하나가 몇 분씩 걸리는 여기선 그게 곧 대기열이 된다.
+     * 대신 {@code allowCoreThreadTimeOut} 으로 놀면 스레드를 반납한다.
      */
     private final ThreadPoolExecutor executor = new ThreadPoolExecutor(
-            2, 4, 60, TimeUnit.SECONDS,
+            AI_JOB_THREADS, AI_JOB_THREADS, 60, TimeUnit.SECONDS,
             new LinkedBlockingQueue<>(100),
             r -> {
                 Thread t = new Thread(r, "ai-job");
                 t.setDaemon(true);
                 return t;
             });
+
+    {
+        executor.allowCoreThreadTimeOut(true);
+    }
 
     public AiJobService(ObjectProvider<StringRedisTemplate> redisProvider, ObjectMapper objectMapper) {
         this.redisProvider = redisProvider;
