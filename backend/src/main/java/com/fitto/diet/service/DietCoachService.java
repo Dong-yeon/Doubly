@@ -85,7 +85,7 @@ public class DietCoachService {
 
     private DietCoachResponse generate(Long userId, String input) {
         geminiClient.requireConfiguredAndCountUsage(userId, Feature.AI_DIET_COACH);
-        JsonNode result = geminiClient.generateJson(userId, Feature.AI_DIET_COACH,
+        JsonNode result = geminiClient.generateJsonInBackground(userId, Feature.AI_DIET_COACH,
                 List.of(GeminiClient.textPart(PROMPT.formatted(input))), SCHEMA);
 
         List<String> tips = new ArrayList<>();

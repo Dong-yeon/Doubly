@@ -1,5 +1,7 @@
 package com.fitto.place.controller;
 
+import com.fitto.common.ai.AiJobResponse;
+import com.fitto.common.ai.AiJobService;
 import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
 import com.fitto.place.dto.DateCourseResponse;
@@ -15,6 +17,7 @@ import com.fitto.place.service.DateCourseService;
 import com.fitto.place.service.LovelichelinRecommendService;
 import com.fitto.place.service.PlaceService;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -24,6 +27,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -38,12 +42,15 @@ public class PlaceController {
     private final PlaceService placeService;
     private final DateCourseService dateCourseService;
     private final LovelichelinRecommendService lovelichelinRecommendService;
+    private final AiJobService aiJobService;
 
     public PlaceController(PlaceService placeService, DateCourseService dateCourseService,
-                           LovelichelinRecommendService lovelichelinRecommendService) {
+                           LovelichelinRecommendService lovelichelinRecommendService,
+                           AiJobService aiJobService) {
         this.placeService = placeService;
         this.dateCourseService = dateCourseService;
         this.lovelichelinRecommendService = lovelichelinRecommendService;
+        this.aiJobService = aiJobService;
     }
 
     @PostMapping
@@ -63,18 +70,28 @@ public class PlaceController {
      * <p>{@code refresh=true} 는 사용자가 "다른 코스" 를 눌렀을 때만 붙인다. 화면 진입은
      * 캐시를 태워야 한다 — 무료 한도가 월 1회라 들어갈 때마다 새로 만들면 곧바로 소진된다.
      */
-    @GetMapping("/date-course")
-    public ApiResponse<DateCourseResponse> dateCourse(@AuthenticationPrincipal AuthUser user,
-                                                      @RequestParam(defaultValue = "false") boolean refresh) {
-        return ApiResponse.success(dateCourseService.recommend(user.id(), refresh));
+    @PostMapping("/date-course")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public ApiResponse<AiJobResponse> dateCourse(@AuthenticationPrincipal AuthUser user,
+                                                 @RequestParam(defaultValue = "false") boolean refresh) {
+        Long userId = user.id();
+        return ApiResponse.success(
+                new AiJobResponse(aiJobService.submit(userId, "date-course",
+                        () -> dateCourseService.recommend(userId, refresh))),
+                "코스를 짜고 있어요.");
     }
 
-    /** AI 맛집 추천 — 럽슐랭 취향 분석(Gemini) + 카카오 실존 장소 검색 (GET /places/lovelichelin/recommendations) */
-    @GetMapping("/lovelichelin/recommendations")
-    public ApiResponse<LovelichelinRecommendationResponse> lovelichelinRecommend(
+    /** AI 맛집 추천 — 럽슐랭 취향 분석(Gemini) + 카카오 실존 장소 검색. 접수증은 위 date-course 와 같다. */
+    @PostMapping("/lovelichelin/recommendations")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public ApiResponse<AiJobResponse> lovelichelinRecommend(
             @AuthenticationPrincipal AuthUser user,
             @RequestParam(defaultValue = "false") boolean refresh) {
-        return ApiResponse.success(lovelichelinRecommendService.recommend(user.id(), refresh));
+        Long userId = user.id();
+        return ApiResponse.success(
+                new AiJobResponse(aiJobService.submit(userId, "lovelichelin-recommend",
+                        () -> lovelichelinRecommendService.recommend(userId, refresh))),
+                "맛집을 찾고 있어요.");
     }
 
     /**

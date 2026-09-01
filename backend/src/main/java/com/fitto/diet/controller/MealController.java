@@ -1,5 +1,7 @@
 package com.fitto.diet.controller;
 
+import com.fitto.common.ai.AiJobResponse;
+import com.fitto.common.ai.AiJobService;
 import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
 import com.fitto.diet.dto.AnalyzeMealRequest;
@@ -23,6 +25,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import com.fitto.workout.dto.CalendarDayResponse;
 import com.fitto.workout.dto.PartnerTodayResponse;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -31,6 +34,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
@@ -47,13 +51,16 @@ public class MealController {
     private final FoodAnalysisService foodAnalysisService;
     private final DietCoachService dietCoachService;
     private final NutritionService nutritionService;
+    private final AiJobService aiJobService;
 
     public MealController(MealService mealService, FoodAnalysisService foodAnalysisService,
-                          DietCoachService dietCoachService, NutritionService nutritionService) {
+                          DietCoachService dietCoachService, NutritionService nutritionService,
+                          AiJobService aiJobService) {
         this.mealService = mealService;
         this.foodAnalysisService = foodAnalysisService;
         this.dietCoachService = dietCoachService;
         this.nutritionService = nutritionService;
+        this.aiJobService = aiJobService;
     }
 
     @PostMapping
@@ -73,19 +80,37 @@ public class MealController {
         return ApiResponse.success(mealService.update(user.id(), id, request), "식단이 수정되었습니다.");
     }
 
-    /** 음식 사진 AI 분석 — 결과는 추정치이며 저장은 기존 POST /meal 로 사용자가 확정한다 */
+    /**
+     * 음식 사진 AI 분석 — 결과는 추정치이며 저장은 기존 POST /meal 로 사용자가 확정한다.
+     *
+     * <p>결과가 아니라 접수증(202 + jobId)을 돌려준다 — 모든 AI 기능이 같은 규칙이다.
+     * Gemini 실패는 사실상 전부 503(모델 과부하)이고 몇 분씩 이어지는데, 요청 안에서는
+     * 그 구간을 넘길 방법이 없다. 작업으로 떼어내면 분 단위 재시도와 모델 폴백을 쓸 수 있다.
+     * 앱은 {@code GET /ai/jobs/{jobId}} 로 결과를 가져간다.
+     */
     @PostMapping("/analyze")
-    public ApiResponse<MealAnalysisResponse> analyze(@AuthenticationPrincipal AuthUser user,
-                                                     @Valid @RequestBody AnalyzeMealRequest request) {
-        return ApiResponse.success(foodAnalysisService.analyze(user.id(), request.photoUrl()), "AI 분석이 완료되었습니다.");
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public ApiResponse<AiJobResponse> analyze(@AuthenticationPrincipal AuthUser user,
+                                              @Valid @RequestBody AnalyzeMealRequest request) {
+        Long userId = user.id();
+        String photoUrl = request.photoUrl();
+        return ApiResponse.success(
+                new AiJobResponse(aiJobService.submit(userId, "food-photo",
+                        () -> foodAnalysisService.analyze(userId, photoUrl))),
+                "AI가 사진을 보고 있어요.");
     }
 
-    /** 음식 텍스트 AI 분석 — 메모("단백질쉐이크, 계란")로 칼로리 추정. 사진 분석과 응답 형태가 같다 */
+    /** 음식 텍스트 AI 분석 — 메모("단백질쉐이크, 계란")로 칼로리 추정. 접수증은 위 analyze 와 같다. */
     @PostMapping("/analyze-text")
-    public ApiResponse<MealAnalysisResponse> analyzeText(@AuthenticationPrincipal AuthUser user,
-                                                         @Valid @RequestBody AnalyzeMealTextRequest request) {
-        return ApiResponse.success(foodAnalysisService.analyzeText(user.id(), request.text()),
-                "AI 분석이 완료되었습니다.");
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public ApiResponse<AiJobResponse> analyzeText(@AuthenticationPrincipal AuthUser user,
+                                                  @Valid @RequestBody AnalyzeMealTextRequest request) {
+        Long userId = user.id();
+        String text = request.text();
+        return ApiResponse.success(
+                new AiJobResponse(aiJobService.submit(userId, "food-text",
+                        () -> foodAnalysisService.analyzeText(userId, text))),
+                "AI가 계산하고 있어요.");
     }
 
     /**
@@ -137,11 +162,16 @@ public class MealController {
         return ApiResponse.success(mealService.coupleGoal(user.id()));
     }
 
-    /** 주간 식단 AI 코칭 — 최근 7일 기록 기반 영양 균형 피드백 */
-    @GetMapping("/coach")
-    public ApiResponse<DietCoachResponse> coach(@AuthenticationPrincipal AuthUser user,
-                                                @RequestParam(defaultValue = "false") boolean refresh) {
-        return ApiResponse.success(dietCoachService.coach(user.id(), refresh));
+    /** 주간 식단 AI 코칭 — 최근 7일 기록 기반 영양 균형 피드백. 접수증은 analyze 와 같다. */
+    @PostMapping("/coach")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public ApiResponse<AiJobResponse> coach(@AuthenticationPrincipal AuthUser user,
+                                            @RequestParam(defaultValue = "false") boolean refresh) {
+        Long userId = user.id();
+        return ApiResponse.success(
+                new AiJobResponse(aiJobService.submit(userId, "diet-coach",
+                        () -> dietCoachService.coach(userId, refresh))),
+                "코칭을 준비하고 있어요.");
     }
 
     /** 오늘 영양 요약 (목표 대비 섭취) */

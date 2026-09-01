@@ -116,7 +116,7 @@ public class WorkoutRecommendationService {
 
         // 최근 기록(최신순 1페이지)을 트랜잭션 안에서 DTO 로 받아온 뒤, Gemini 호출은 트랜잭션 밖에서 수행
         List<WorkoutResponse> history = workoutService.findHistory(userId, null);
-        JsonNode result = geminiClient.generateJson(userId, Feature.AI_WORKOUT_RECOMMEND,
+        JsonNode result = geminiClient.generateJsonInBackground(userId, Feature.AI_WORKOUT_RECOMMEND,
                 List.of(GeminiClient.textPart(promptBuilder.apply(buildHistoryText(history)))),
                 RESPONSE_SCHEMA);
         return toResponse(result, programWeekdays);
