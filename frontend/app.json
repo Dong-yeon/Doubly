@@ -90,7 +90,7 @@
       "backgroundColor": "#FFFFFF"
     },
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.doubly.app",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
