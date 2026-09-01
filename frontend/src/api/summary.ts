@@ -19,8 +19,8 @@ export const summaryApi = {
   aiLetter: (refresh?: boolean) =>
     runAiJob<WeeklyLetter>(
       unwrap(
-        // 접수 응답은 즉시 온다 — AI_REQUEST(75초 + 타임아웃 재시도)를 쓰면 안 된다.
-        // 재시도가 걸리면 작업이 하나 더 생기고 AI 한도도 두 번 깎인다.
+        // 접수 응답은 즉시 온다 — 긴 타임아웃도 재시도도 필요 없다.
+        // (재시도가 걸리면 작업이 하나 더 생기고 AI 한도도 두 번 깎인다)
         apiClient.post<ApiResponse<AiJobStart>>('/summary/ai-letter', undefined, {
           params: { refresh: refresh || undefined },
         }),

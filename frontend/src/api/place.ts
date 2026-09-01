@@ -1,6 +1,6 @@
 /** 커플 맛집 지도 API — PLAN.md Place Map */
 import { apiClient, unwrap } from './client';
-import { AI_REQUEST } from './aiRequest';
+import { runAiJob, type AiJobStart } from './aiJob';
 import type {
   ApiResponse,
   DateCourse,
@@ -55,12 +55,14 @@ export const placeApi = {
 
   // AI 데이트 코스 추천 — 저장한 장소로 코스 구성 (생성에 시간 걸려 timeout 상향).
   // refresh 를 넘기면 같은 장소로 다른 코스를 새로 짠다 (그때만 한도를 쓴다)
+  // 접수증(jobId) -> 폴링 -> 결과. 호출부는 그대로다(api/aiJob.ts 참고)
   dateCourse: (refresh?: boolean) =>
-    unwrap(
-      apiClient.get<ApiResponse<DateCourse>>('/places/date-course', {
-        params: { refresh: refresh || undefined },
-        ...AI_REQUEST,
-      }),
+    runAiJob<DateCourse>(
+      unwrap(
+        apiClient.post<ApiResponse<AiJobStart>>('/places/date-course', undefined, {
+          params: { refresh: refresh || undefined },
+        }),
+      ),
     ),
 
   // 럽슐랭 대표 평점 등록/수정 — 장소당 1개, 재평가 시 덮어쓰며 등급이 재산정된다
@@ -68,10 +70,11 @@ export const placeApi = {
     unwrap(apiClient.put<ApiResponse<Place>>(`/places/${placeId}/rating`, payload)),
   // AI 맛집 추천 — 럽슐랭 취향 분석(Gemini) + 카카오 실존 장소 검색 (생성에 시간 걸려 timeout 상향)
   lovelichelinRecommend: (refresh?: boolean) =>
-    unwrap(
-      apiClient.get<ApiResponse<LovelichelinRecommendation>>('/places/lovelichelin/recommendations', {
-        params: { refresh: refresh || undefined },
-        ...AI_REQUEST,
-      }),
+    runAiJob<LovelichelinRecommendation>(
+      unwrap(
+        apiClient.post<ApiResponse<AiJobStart>>('/places/lovelichelin/recommendations', undefined, {
+          params: { refresh: refresh || undefined },
+        }),
+      ),
     ),
 };

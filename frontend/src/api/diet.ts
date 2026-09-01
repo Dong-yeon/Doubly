@@ -1,6 +1,6 @@
 /** 식단 기록 API — 운동(workout.ts) 구조 미러링 */
 import { apiClient, unwrap } from './client';
-import { AI_REQUEST } from './aiRequest';
+import { runAiJob, type AiJobStart } from './aiJob';
 import type {
   ActivityLevel,
   ApiResponse,
@@ -85,12 +85,19 @@ export const dietApi = {
   // 어제(기본) 식단을 오늘 날짜로 통째로 복사 — 3초 퀵 로깅
   copyFromYesterday: () =>
     unwrap(apiClient.post<ApiResponse<Meal[]>>('/meal/copy')),
-  // AI 분석은 이미지 처리 시간이 길어 기본 timeout(10s)을 늘린다
+  /*
+   * AI 분석 — 서버는 접수증(jobId)만 주고 생성은 백그라운드에서 한다(api/aiJob.ts 참고).
+   * 폴링까지 여기서 끝내므로 호출부는 예전처럼 결과 Promise 를 받는다.
+   */
   analyze: (photoUrl: string) =>
-    unwrap(apiClient.post<ApiResponse<MealAnalysis>>('/meal/analyze', { photoUrl }, AI_REQUEST)),
+    runAiJob<MealAnalysis>(
+      unwrap(apiClient.post<ApiResponse<AiJobStart>>('/meal/analyze', { photoUrl })),
+    ),
   // 텍스트로 적은 음식의 칼로리·매크로 추정 (사진 분석과 응답 형태 동일)
   analyzeText: (text: string) =>
-    unwrap(apiClient.post<ApiResponse<MealAnalysis>>('/meal/analyze-text', { text }, AI_REQUEST)),
+    runAiJob<MealAnalysis>(
+      unwrap(apiClient.post<ApiResponse<AiJobStart>>('/meal/analyze-text', { text })),
+    ),
   today: () => unwrap(apiClient.get<ApiResponse<Meal[]>>('/meal/today')),
   history: (cursor?: number) =>
     unwrap(apiClient.get<ApiResponse<Meal[]>>('/meal/history', { params: { cursor } })),
@@ -103,11 +110,12 @@ export const dietApi = {
   // 주간 식단 AI 코칭 — 최근 7일 기반, 시간이 걸려 timeout 상향.
   // refresh 를 넘기면 서버 캐시를 건너뛴다 (평소에는 식단 기록이 그대로면 즉시 응답)
   coach: (refresh?: boolean) =>
-    unwrap(
-      apiClient.get<ApiResponse<DietCoach>>('/meal/coach', {
-        params: { refresh: refresh || undefined },
-        ...AI_REQUEST,
-      }),
+    runAiJob<DietCoach>(
+      unwrap(
+        apiClient.post<ApiResponse<AiJobStart>>('/meal/coach', undefined, {
+          params: { refresh: refresh || undefined },
+        }),
+      ),
     ),
 
   // 오늘 영양 요약 (목표 대비 섭취)
