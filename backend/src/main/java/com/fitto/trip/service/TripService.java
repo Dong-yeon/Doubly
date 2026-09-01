@@ -40,6 +40,7 @@ import com.fitto.trip.repository.TripRepository;
 import com.fitto.user.domain.User;
 import com.fitto.user.repository.UserRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
@@ -99,6 +100,8 @@ public class TripService {
     private final CoupleEventPublisher coupleEventPublisher;
     private final GeminiClient geminiClient;
     private final PlanGuard planGuard;
+    /** AI 일정의 DELETE+INSERT 만 트랜잭션으로 감싸는 협력자 — generateItinerary 주석 참고. */
+    private final TripItineraryWriter tripItineraryWriter;
 
     public TripService(TripRepository tripRepository,
                        TripItemRepository tripItemRepository,
@@ -110,7 +113,8 @@ public class TripService {
                        NotificationService notificationService,
                        CoupleEventPublisher coupleEventPublisher,
                        GeminiClient geminiClient,
-                       PlanGuard planGuard) {
+                       PlanGuard planGuard,
+                       TripItineraryWriter tripItineraryWriter) {
         this.tripRepository = tripRepository;
         this.tripItemRepository = tripItemRepository;
         this.placeRepository = placeRepository;
@@ -122,6 +126,7 @@ public class TripService {
         this.coupleEventPublisher = coupleEventPublisher;
         this.geminiClient = geminiClient;
         this.planGuard = planGuard;
+        this.tripItineraryWriter = tripItineraryWriter;
     }
 
     /** 여행 생성 (TRIP-01) — 상대에게 푸시 + TRIP 이벤트. */
@@ -302,8 +307,18 @@ public class TripService {
     /**
      * AI 여행 일정 생성 (ITEM-04) — 여행 제목(지역)·기간·저장 장소·요청사항을 Gemini 에 보내
      * Day 바이 Day 일정을 받아 trip_items 로 저장한다. 기존 일정은 대체된다.
+     *
+     * <p><b>트랜잭션 밖에서 돈다</b>({@code NOT_SUPPORTED} — 클래스에 걸린 readOnly 트랜잭션도
+     * 여기선 적용하지 않는다). 예전엔 이 메서드 전체가 <b>쓰기</b> 트랜잭션이라, 여행·장소를
+     * 조회하며 잡은 DB 커넥션을 <b>Gemini 응답을 기다리는 최대 60초 동안 문 채로</b> 있었다.
+     * Hikari 기본 풀이 10개라 AI 요청 10건이면 풀이 비고, 그때부터 로그인·채팅처럼 AI 와
+     * 무관한 요청까지 커넥션을 못 얻어 죽는다 — 앱에서 "서버가 끊긴다"로 보이던 것의 정체다.
+     * 이 경로는 4개 AI 기능 중 유일하게 <b>쓰기</b> 트랜잭션이라 가장 나빴다.
+     *
+     * <p>대신 순서를 <b>조회 → (트랜잭션 없음) Gemini → 짧은 쓰기</b> 로 나눈다. 원자성이
+     * 필요한 DELETE+INSERT 만 {@link TripItineraryWriter} 가 별도 트랜잭션으로 처리한다.
      */
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public List<TripDayResponse> generateItinerary(Long userId, Long tripId, String preferences) {
         Trip trip = getCoupleTrip(userId, tripId);
         int totalDays = daysOf(trip);
@@ -349,8 +364,7 @@ public class TripService {
             throw new BusinessException(ErrorCode.AI_ANALYSIS_FAILED);
         }
 
-        tripItemRepository.deleteByTripId(trip.getId()); // 기존 일정 대체 (벌크 DELETE 후 INSERT)
-        tripItemRepository.saveAll(generated);
+        tripItineraryWriter.replaceItems(trip.getId(), generated);
 
         Relation couple = activeCouple(userId);
         Long partnerId = couple.partnerOf(userId);

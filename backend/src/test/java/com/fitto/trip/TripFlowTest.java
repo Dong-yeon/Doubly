@@ -18,6 +18,8 @@ import com.fitto.trip.dto.TripItemResponse;
 import com.fitto.trip.dto.TripResponse;
 import com.fitto.trip.dto.UpdateTripItemRequest;
 import com.fitto.trip.dto.UpdateTripRequest;
+import com.fitto.trip.domain.TripItem;
+import com.fitto.trip.service.TripItineraryWriter;
 import com.fitto.trip.service.TripService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -44,6 +46,8 @@ class TripFlowTest {
     TripService tripService;
     @Autowired
     PlaceService placeService;
+    @Autowired
+    TripItineraryWriter tripItineraryWriter;
 
     private Long register(String email) {
         return authService.register(
@@ -235,5 +239,31 @@ class TripFlowTest {
         assertThatThrownBy(() -> tripService.generateItinerary(c2[0], trip.id(), null))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.FORBIDDEN);
+    }
+
+    /*
+     * generateItinerary 는 Gemini 를 기다리는 동안 커넥션을 쥐지 않으려고 트랜잭션 밖에서 돈다.
+     * 그래서 기존 일정을 지우고 새 일정을 넣는 원자적 구간만 TripItineraryWriter 가 맡는다.
+     * 이 쓰기가 자기 트랜잭션을 갖지 못하면(주입 누락·self-invocation 으로 프록시 우회) 벌크
+     * DELETE 가 TransactionRequiredException 으로 터진다 — 그 회귀를 여기서 잡는다.
+     */
+    @Test
+    void AI_일정_쓰기는_트랜잭션_밖에서_불려도_기존_일정을_대체한다() {
+        long[] c = couple("ai7@fitto.com", "ai8@fitto.com");
+        TripResponse trip = tripService.save(c[0], jeju());
+        tripService.addItem(c[0], trip.id(),
+                new SaveTripItemRequest(1, null, "손으로 넣은 일정", null, null, null));
+
+        tripItineraryWriter.replaceItems(trip.id(), List.of(
+                TripItem.builder().tripId(trip.id()).dayNo(1).sortOrder(0)
+                        .title("AI 1일차").createdBy(c[0]).build(),
+                TripItem.builder().tripId(trip.id()).dayNo(2).sortOrder(0)
+                        .title("AI 2일차").createdBy(c[0]).build()));
+
+        List<TripDayResponse> days = tripService.items(c[0], trip.id());
+        assertThat(days.get(0).items()).extracting(TripItemResponse::title)
+                .containsExactly("AI 1일차"); // 기존 일정은 남지 않는다
+        assertThat(days.get(1).items()).extracting(TripItemResponse::title)
+                .containsExactly("AI 2일차");
     }
 }
