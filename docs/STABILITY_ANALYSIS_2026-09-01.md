@@ -49,6 +49,11 @@ C 항목(타임아웃 경합)과 겹치면 **사용자는 결과를 한 번도 �
 
 ## B. 외부 AI 호출(최대 60초)을 DB 트랜잭션 안에서 기다린다 — 커넥션 풀 고갈
 
+> **[해결됨 2026-09-01]** 4곳 모두 트랜잭션 밖으로 옮기고, Hikari 설정이 실제로 먹도록
+> `DataSourceConfig` 에 `@ConfigurationProperties` 를 붙였다(누수 감지 20초 활성).
+> 아래 본문은 당시 진단 그대로 남긴다. 3번(헬스체크 심화)은 미적용.
+
+
 **커넥션 풀은 Hikari 기본값 10개다.** `common/config/DataSourceConfig.java` 가 `DataSourceBuilder`
 로 직접 DataSource 를 만들면서 `spring.datasource.hikari.*` 바인딩 경로를 벗어나 있어,
 yml 에 풀 설정을 적어도 먹지 않는다. 튜닝 흔적도 없다 → `maximumPoolSize=10`,
@@ -195,14 +200,14 @@ A 항목의 쿼터 소진이 "끊김"으로 오인되는 이유이기도 하다.
 
 **1단계 (작고 확실한 코드 수정)**
 
-- B: AI 호출 4곳을 트랜잭션 밖으로 (`TripService.generateItinerary` 우선)
+- ~~B: AI 호출 4곳을 트랜잭션 밖으로 (`TripService.generateItinerary` 우선)~~ ✅ 2026-09-01
 - D-1, D-2, D-3: 재구독 + 토큰 갱신 + `publishEnsuringConnection`
 - C-1: 프론트 AI 오류 errorCode 분기
 - E: Dockerfile `-XX:MaxRAMPercentage=75`, Redis timeout 2s
 
 **2단계 (튜닝)**
 
-- Hikari 명시 설정 + `leakDetectionThreshold`
+- ~~Hikari 명시 설정 + `leakDetectionThreshold`~~ ✅ 2026-09-01 (`DB_POOL_SIZE` 로 상향 가능)
 - 클라/서버 타임아웃 벌리기, 재시도 조건 확대 + 총 예산 상한
 - AI 실패 시 `AI_TOTAL` 환불
 - Actuator + Hikari/Gemini 메트릭 노출
