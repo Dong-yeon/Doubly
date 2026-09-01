@@ -98,6 +98,15 @@ public class GeminiClient {
      */
     private static final RetryPolicy BACKGROUND = new RetryPolicy(6, 2_000, 60_000, 240_000);
 
+    /**
+     * 폴백 모델이 있을 때 1차 모델에 내주는 예산 비율(%).
+     *
+     * <p>100 을 주면(=전부) 1차 모델이 예산을 다 태우고 폴백은 한 번도 못 돌아본다.
+     * 그러면 폴백을 설정한 의미가 없다. 반대로 너무 적게 주면 잠깐 흔들린 1차 모델을
+     * 성급하게 포기한다.
+     */
+    private static final int PRIMARY_BUDGET_PERCENT = 60;
+
     private final GeminiProperties properties;
     private final ObjectMapper objectMapper;
     private final RestClient restClient;
@@ -234,60 +243,134 @@ public class GeminiClient {
     }
 
     /**
-     * Gemini 호출 — 일시적 실패는 짧은 백오프로 자동 재시도한다.
+     * Gemini 호출 — 일시적 실패는 짧은 백오프로 재시도하고, 그래도 안 되면 <b>모델을 바꿔</b> 본다.
      *
      * <p><b>예전엔 재시도 대상이 503 뿐이었다.</b> 정작 무료 티어에서 가장 흔한 429(분당 요청
-     * 수 초과)는 재시도 없이 바로 실패했는데, 429 야말로 잠깐 기다리면 풀리는 대표적인
-     * 경우다. 지금은 "서버가 지금은 처리 못 했다"고 말한 상태(429·500·502·503·504)와
-     * 네트워크 오류를 함께 재시도한다.
+     * 수 초과)는 재시도 없이 바로 실패했다. 지금은 "서버가 지금은 처리 못 했다"고 말한 상태
+     * (429·500·502·503·504)와 네트워크 오류를 함께 재시도한다.
      *
-     * <p>얼마나 오래 버틸지는 {@link RetryPolicy} 가 정한다 — 요청 안에서 도는 호출과
-     * 백그라운드 작업은 쓸 수 있는 시간이 다르다. 다음 시도가 예산을 넘길 것 같으면 포기한다.
+     * <p><b>모델 폴백이 필요한 이유는 운영 로그다.</b> 실제로 기록된 Gemini 오류는 사실상 전부
+     * 503 ServiceUnavailable — 특정 모델이 과부하라는 뜻이고, 이건 <b>같은 모델로 아무리
+     * 다시 물어도</b> 몇 분씩 풀리지 않는다. 그때 필요한 건 더 기다리는 게 아니라 <b>다른
+     * 모델에게 묻는 것</b>이다.
+     *
+     * <p>얼마나 오래 버틸지는 {@link RetryPolicy} 가 정한다. 폴백이 설정돼 있으면 1차 모델에
+     * 예산을 다 쓰게 두지 않는다 — 남겨두지 않으면 폴백이 한 번도 돌아보지 못하고 끝난다.
      */
     private JsonNode callWithRetry(Map<String, Object> body, RetryPolicy policy) {
-        long deadline = System.currentTimeMillis() + policy.budgetMillis();
-        int maxAttempts = policy.maxAttempts();
+        long start = System.currentTimeMillis();
+        long deadline = start + policy.budgetMillis();
+        String primary = properties.getModel();
+        String fallback = fallbackModelFor(primary);
+
+        long primaryDeadline = fallback == null
+                ? deadline
+                : start + policy.budgetMillis() * PRIMARY_BUDGET_PERCENT / 100;
+
+        try {
+            return callModel(primary, body, policy, primaryDeadline);
+        } catch (ModelUnavailable primaryFailure) {
+            if (fallback == null || System.currentTimeMillis() >= deadline) {
+                throw primaryFailure.toBusinessException();
+            }
+            log.warn("Gemini 1차 모델({}) 계속 실패 — 폴백 모델({})로 다시 시도", primary, fallback);
+            try {
+                return callModel(fallback, body, policy, deadline);
+            } catch (ModelUnavailable fallbackFailure) {
+                log.warn("Gemini 폴백 모델({})도 실패", fallback);
+                throw fallbackFailure.toBusinessException();
+            }
+        }
+    }
+
+    /**
+     * 폴백에 쓸 모델 — 없거나 1차와 같으면 {@code null}(폴백 안 함).
+     * 같은 모델로 폴백하는 건 "한 번 더 재시도"일 뿐이라 예산만 쪼갠다.
+     */
+    private String fallbackModelFor(String primary) {
+        String fallback = properties.getFallbackModel();
+        if (fallback == null || fallback.isBlank() || fallback.equals(primary)) {
+            return null;
+        }
+        return fallback;
+    }
+
+    /**
+     * 한 모델에 대고 {@code deadline} 까지 재시도한다.
+     *
+     * <p>모델을 바꿔서 달라질 수 있는 실패(서버가 처리 못 하겠다고 한 상태)만
+     * {@link ModelUnavailable} 로 올린다. 잘못된 요청(4xx)이나 네트워크 오류는 모델을 바꿔도
+     * 똑같으므로 여기서 바로 실패시킨다 — 폴백에 예산을 낭비할 이유가 없다.
+     */
+    private JsonNode callModel(String model, Map<String, Object> body,
+                               RetryPolicy policy, long deadline) {
         long backoffMillis = policy.initialBackoffMillis();
+        long lastAttemptMillis = 0;
         for (int attempt = 1; ; attempt++) {
+            long attemptStart = System.currentTimeMillis();
             try {
                 return restClient.post()
-                        .uri(GENERATE_PATH.formatted(properties.getBaseUrl(), properties.getModel()))
+                        .uri(GENERATE_PATH.formatted(properties.getBaseUrl(), model))
                         .header("x-goog-api-key", properties.getApiKey())
                         .contentType(MediaType.APPLICATION_JSON)
                         .body(body)
                         .retrieve()
                         .body(JsonNode.class);
             } catch (RestClientResponseException e) {
+                lastAttemptMillis = System.currentTimeMillis() - attemptStart;
                 int status = e.getStatusCode().value();
+                if (!isTransient(status)) {
+                    log.warn("Gemini 호출 실패({}): status={} body={}",
+                            model, status, e.getResponseBodyAsString());
+                    throw new BusinessException(ErrorCode.AI_ANALYSIS_FAILED);
+                }
                 long wait = status == 429
                         ? retryAfterMillis(e, backoffMillis, policy.maxBackoffMillis())
                         : backoffMillis;
-                if (isTransient(status) && canRetry(attempt, maxAttempts, wait, deadline)) {
-                    log.info("Gemini 일시 실패({}) — {}ms 후 재시도 ({}/{})",
-                            status, wait, attempt, maxAttempts);
+                if (canRetry(attempt, policy.maxAttempts(), wait, lastAttemptMillis, deadline)) {
+                    log.info("Gemini 일시 실패({} {}) — {}ms 후 재시도 ({}/{})",
+                            model, status, wait, attempt, policy.maxAttempts());
                     sleep(wait);
                     backoffMillis = Math.min(backoffMillis * 3, policy.maxBackoffMillis());
                     continue;
                 }
-                log.warn("Gemini 호출 실패: status={} body={}", status, e.getResponseBodyAsString());
-                throw new BusinessException(status == 429 || status == 503
+                log.warn("Gemini 재시도 소진({}): status={}", model, status);
+                throw new ModelUnavailable(status == 429 || status == 503
                         ? ErrorCode.AI_RATE_LIMITED : ErrorCode.AI_ANALYSIS_FAILED);
             } catch (ResourceAccessException e) {
+                lastAttemptMillis = System.currentTimeMillis() - attemptStart;
                 /*
-                 * 연결 실패(5초)면 예산이 넉넉히 남아 재시도할 값어치가 있고, 읽기
-                 * 타임아웃(45초)이면 예산이 남지 않아 아래 검사에서 자연히 걸러진다.
-                 * 둘을 예외 메시지로 구분하는 것보다 남은 시간으로 판단하는 쪽이 정확하다.
+                 * 연결 실패(5초)면 예산이 남아 재시도할 값어치가 있고, 읽기 타임아웃(45초)이면
+                 * 아래 검사가 걸러낸다 — 직전 시도가 얼마나 걸렸는지로 판단하기 때문이다.
+                 * 모델을 바꿔도 네트워크는 그대로라 폴백으로 넘기지 않는다.
                  */
-                if (canRetry(attempt, maxAttempts, backoffMillis, deadline)) {
-                    log.info("Gemini 네트워크 오류 — {}ms 후 재시도 ({}/{}): {}",
-                            backoffMillis, attempt, maxAttempts, e.getMessage());
+                if (canRetry(attempt, policy.maxAttempts(), backoffMillis, lastAttemptMillis, deadline)) {
+                    log.info("Gemini 네트워크 오류({}) — {}ms 후 재시도 ({}/{}): {}",
+                            model, backoffMillis, attempt, policy.maxAttempts(), e.getMessage());
                     sleep(backoffMillis);
                     backoffMillis = Math.min(backoffMillis * 3, policy.maxBackoffMillis());
                     continue;
                 }
-                log.warn("Gemini 호출 타임아웃/네트워크 오류: {}", e.getMessage());
+                log.warn("Gemini 호출 타임아웃/네트워크 오류({}): {}", model, e.getMessage());
                 throw new BusinessException(ErrorCode.AI_ANALYSIS_FAILED);
             }
+        }
+    }
+
+    /**
+     * "이 모델로는 안 된다" — 재시도를 다 쓰고도 서버가 처리하지 못한 상태.
+     * 폴백 모델을 시도할지 판단하려고 일반 실패와 구분한다.
+     */
+    private static final class ModelUnavailable extends RuntimeException {
+        private final ErrorCode errorCode;
+
+        ModelUnavailable(ErrorCode errorCode) {
+            super(errorCode.getMessage(), null, false, false); // 스택트레이스 불필요 — 흐름 제어용
+            this.errorCode = errorCode;
+        }
+
+        BusinessException toBusinessException() {
+            return new BusinessException(errorCode);
         }
     }
 
@@ -296,9 +379,18 @@ public class GeminiClient {
         return status == 429 || status == 500 || status == 502 || status == 503 || status == 504;
     }
 
-    /** 대기까지 마친 다음 시도가 예산 안에서 끝날 가망이 있는가. */
-    private static boolean canRetry(int attempt, int maxAttempts, long waitMillis, long deadline) {
-        return attempt < maxAttempts && System.currentTimeMillis() + waitMillis < deadline;
+    /**
+     * 다음 시도를 시작해도 되는가.
+     *
+     * <p>남은 시간과 비교할 "다음 시도에 걸릴 시간"은 <b>직전 시도에 실제로 걸린 시간</b>으로
+     * 잡는다. 이게 없으면 45초짜리 읽기 타임아웃 뒤에도 "0.5초 뒤 재시도"가 예산 안으로
+     * 보여서, 예산 60초짜리 호출이 90초까지 늘어난다 — 프론트는 이미 포기한 뒤다.
+     * 빠르게 떨어지는 503(수백 ms)은 이 추정도 작아서 정상적으로 재시도된다.
+     */
+    private static boolean canRetry(int attempt, int maxAttempts, long waitMillis,
+                                    long lastAttemptMillis, long deadline) {
+        return attempt < maxAttempts
+                && System.currentTimeMillis() + waitMillis + lastAttemptMillis <= deadline;
     }
 
     /**
