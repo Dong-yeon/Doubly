@@ -565,6 +565,14 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
   // ExercisePickerModal 로 부위→기구를 좁혀가며 직접 찾는다
   const [substituteFor, setSubstituteFor] = useState<SessionExercise | null>(null);
   const [substitutePickerOpen, setSubstitutePickerOpen] = useState(false);
+  /*
+   * 종목 추가용 피커 — "＋ 운동 추가"의 <b>기본</b> 경로다.
+   *
+   * 예전엔 이름을 직접 타이핑하는 폼이었다. 카탈로그와 피커가 이미 있는데도 대체 종목에만
+   * 연결돼 있어서, 같은 운동이 "벤치"/"벤치프레스"로 갈라지고 그러면 프리필·추이·PR 이
+   * 전부 따로 논다. 자유 입력은 목록에 없을 때의 폴백으로 내렸다.
+   */
+  const [addPickerOpen, setAddPickerOpen] = useState(false);
 
   // 대체 종목 탐색용 전체 카탈로그 — 종목 수가 적어(수십 개) 한 번만 받아 로컬에서 필터링한다
   const [catalog, setCatalog] = useState<ExerciseCatalogItem[]>([]);
@@ -887,32 +895,74 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
     const targetWeight = fWeight ? Number(fWeight) : undefined;
 
     setAdding(true);
-    let sets = Array.from({ length: setCount }, () => buildSet(targetWeight, targetReps));
-    // 신기록 기준값 — 프리필과 같은 응답에서 함께 온다(없으면 처음 하는 종목이라 판정 안 함)
-    let bestWeightKg: number | undefined;
-    let bestE1rmKg: number | undefined;
-    try {
-      const found = await workoutApi.lastPerformance([name]);
-      if (found[0]) {
-        sets = applyPrefill(sets, found[0]);
-        bestWeightKg = found[0].bestWeightKg ?? undefined;
-        bestE1rmKg = found[0].bestE1rmKg ?? undefined;
-      }
-    } catch {
-      // 프리필 실패 시 방금 입력한 목표값만으로 진행
-    }
-    setExercises((prev) => [
-      ...prev,
-      {
-        key: nextKey(), name, category: fCategory,
-        reps: targetReps, weightKg: targetWeight, sets,
-        bestWeightKg, bestE1rmKg,
-      },
-    ]);
+    await appendExercise({
+      name,
+      category: fCategory,
+      setCount,
+      targetReps,
+      targetWeight,
+    });
     setFName('');
     setFWeight('');
     setAdding(false);
     setAddOpen(false);
+  };
+
+  /**
+   * 종목 하나를 세션에 담는다 — 카탈로그에서 고른 경우와 직접 입력한 경우가 공유한다.
+   *
+   * <p>담자마자 직전 기록으로 프리필하고 신기록 기준값도 함께 받아온다. 두 경로가 갈리면
+   * "카탈로그로 담았을 때만 배지가 안 뜬다" 같은 차이가 조용히 생긴다(실제로 한 번 그랬다).
+   */
+  const appendExercise = async (opts: {
+    name: string;
+    category: string;
+    setCount?: number;
+    targetReps?: number;
+    targetWeight?: number;
+    muscleGroup?: string;
+    equipment?: string;
+    exerciseCatalogId?: number;
+    description?: string;
+    tip?: string;
+    emoji?: string;
+    breathingCue?: string;
+  }) => {
+    const count = Math.max(1, Math.min(20, opts.setCount ?? 3));
+    let sets = Array.from({ length: count }, () => buildSet(opts.targetWeight, opts.targetReps));
+    // 신기록 기준값 — 프리필과 같은 응답에서 함께 온다(없으면 처음 하는 종목이라 판정 안 함)
+    let bestWeightKg: number | undefined;
+    let bestE1rmKg: number | undefined;
+    try {
+      const found = await workoutApi.lastPerformance([opts.name]);
+      if (found[0]) {
+        sets = applyPrefill(sets, found[0], opts.equipment, opts.muscleGroup);
+        bestWeightKg = found[0].bestWeightKg ?? undefined;
+        bestE1rmKg = found[0].bestE1rmKg ?? undefined;
+      }
+    } catch {
+      // 프리필 실패 시 방금 정한 목표값만으로 진행
+    }
+    setExercises((prev) => [
+      ...prev,
+      {
+        key: nextKey(),
+        name: opts.name,
+        category: opts.category,
+        reps: opts.targetReps,
+        weightKg: opts.targetWeight,
+        muscleGroup: opts.muscleGroup,
+        equipment: opts.equipment,
+        exerciseCatalogId: opts.exerciseCatalogId,
+        description: opts.description,
+        tip: opts.tip,
+        emoji: opts.emoji,
+        breathingCue: opts.breathingCue,
+        sets,
+        bestWeightKg,
+        bestE1rmKg,
+      },
+    ]);
   };
 
   const onFinish = async () => {
@@ -1337,7 +1387,7 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
    *  (웹은 드래그 자체가 없으니 안내해봐야 헷갈리기만 한다). */
   const renderListFooter = (canReorder: boolean) => (
     <>
-      <TouchableOpacity style={styles.addExercise} onPress={() => setAddOpen(true)}>
+      <TouchableOpacity style={styles.addExercise} onPress={() => setAddPickerOpen(true)}>
         <Text style={styles.addExerciseText}>＋ 운동 추가</Text>
       </TouchableOpacity>
 
@@ -1577,6 +1627,31 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* 종목 추가 — 카탈로그에서 고르는 게 기본, 없으면 직접 입력으로 넘어간다 */}
+      <ExercisePickerModal
+        visible={addPickerOpen}
+        catalog={catalog}
+        onClose={() => setAddPickerOpen(false)}
+        onSelect={(item) => {
+          setAddPickerOpen(false);
+          void appendExercise({
+            name: item.name,
+            category: item.category ?? '근력',
+            muscleGroup: item.muscleGroup,
+            equipment: item.equipment ?? undefined,
+            exerciseCatalogId: item.id,
+            description: item.description ?? undefined,
+            tip: item.tip ?? undefined,
+            emoji: item.emoji ?? undefined,
+            breathingCue: item.breathingCue ?? undefined,
+          });
+        }}
+        onFreeInput={() => {
+          setAddPickerOpen(false);
+          setAddOpen(true);
+        }}
+      />
 
       <PlateCalculatorSheet
         visible={plateOpen}

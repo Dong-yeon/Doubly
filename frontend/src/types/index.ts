@@ -253,6 +253,8 @@ export interface ExerciseCatalogItem {
   emoji?: string | null;
   // 언제 숨을 내쉬고 마시는지 — TIP 카드에 자세 큐와 함께 항상 붙는다. 커스텀 종목은 없을 수 있다
   breathingCue?: string | null;
+  /** 검색용 별칭(쉼표 구분) — 이름에 안 겹치는 말(턱걸이 → 풀업)을 찾게 해준다 */
+  aliases?: string | null;
 }
 
 // 종목의 직전 수행 기록 — 세션 진입 시 무게/횟수 프리필에 사용

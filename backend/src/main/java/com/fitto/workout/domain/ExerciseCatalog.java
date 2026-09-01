@@ -64,6 +64,16 @@ public class ExerciseCatalog {
     @Column(name = "breathing_cue", length = 100)
     private String breathingCue;
 
+    /**
+     * 검색용 별칭 — 쉼표 구분(예: 풀업 = "턱걸이, pull up").
+     *
+     * <p>이름에 부분 문자열로 들어 있는 말("벤치" → 벤치프레스)은 별칭이 없어도 찾히지만,
+     * "턱걸이 → 풀업"처럼 글자가 겹치지 않는 말은 별칭이 없으면 영영 못 찾는다.
+     * 별도 테이블을 만들 만큼 쓰임이 많지 않아 한 칸에 담는다.
+     */
+    @Column(length = 200)
+    private String aliases;
+
     @Column(name = "created_by")
     private Long createdBy;
 
