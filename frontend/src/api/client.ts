@@ -126,7 +126,30 @@ async function readBody(response: Response): Promise<unknown> {
 // 진행 중인 refresh 를 공유해 동시 401 을 한 번만 갱신
 let refreshPromise: Promise<string> | null = null;
 
-async function refreshAccessToken(): Promise<string> {
+/**
+ * access token 갱신 — <b>진행 중인 갱신이 있으면 그것을 공유한다</b>.
+ *
+ * <p>공유가 선택이 아닌 이유: 서버는 리프레시 토큰을 회전시키고(rotation) 이미 쓴 토큰이
+ * 다시 오면 <b>재사용 공격으로 보고 그 사용자의 세션을 전부 폐기</b>한다
+ * (RefreshTokenStore.consume → REUSED → revokeAll). 두 곳이 각자 갱신하면 늦은 쪽이
+ * 낡은 토큰을 보내게 되고, 결과는 "멀쩡히 쓰다가 갑자기 전체 로그아웃"이다.
+ * HTTP 401 재시도와 소켓 재연결이 동시에 일어나는 건 흔한 조합이라(둘 다 토큰 만료에서
+ * 출발한다) 반드시 한 줄로 모아야 한다.
+ *
+ * <p>실패해도 토큰을 지우거나 로그아웃시키지 <b>않는다</b> — 그 판단은 호출부의 몫이다.
+ * 소켓 재연결은 네트워크가 끊긴 동안에도 계속 시도되는데, 여기서 로그아웃시켜 버리면
+ * 지하철에서 잠깐 끊긴 것만으로 로그인 화면으로 튕긴다.
+ */
+export function refreshAccessToken(): Promise<string> {
+  if (!refreshPromise) {
+    refreshPromise = requestNewTokens().finally(() => {
+      refreshPromise = null;
+    });
+  }
+  return refreshPromise;
+}
+
+async function requestNewTokens(): Promise<string> {
   const refreshToken = await storage.getItem(STORAGE_KEYS.refreshToken);
   if (!refreshToken) throw new Error('refresh token 없음');
 
@@ -186,12 +209,7 @@ async function request<T>(
   // 401 → refresh 후 1회 재시도
   if (response.status === 401 && !isRetry && !skipsRefresh(url)) {
     try {
-      if (!refreshPromise) {
-        refreshPromise = refreshAccessToken().finally(() => {
-          refreshPromise = null;
-        });
-      }
-      await refreshPromise;
+      await refreshAccessToken();
       return request<T>(method, url, body, config, true);
     } catch (refreshError) {
       // refresh 실패 → 세션 종료
