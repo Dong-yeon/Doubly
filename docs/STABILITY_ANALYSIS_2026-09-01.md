@@ -130,6 +130,11 @@ A 항목의 쿼터 소진이 "끊김"으로 오인되는 이유이기도 하다.
 
 ## D. WebSocket: 재연결은 되는데 **구독이 복구되지 않는다**
 
+> **[해결됨 2026-09-01]** 1~5 전부 적용. 구독을 "걸려 있어야 하는 것"으로 들고 있다가
+> 연결될 때마다 재적용하고, `beforeConnect` 에서 매 시도마다 토큰을 다시 읽는다.
+> 전송은 `publishEnsuringConnection`(5초 상한), 포그라운드 복귀 시 REST 로 놓친 메시지를
+> 따라잡고, 끊긴 동안에는 배너로 표시한다. 아래 본문은 당시 진단 그대로 남긴다.
+
 `frontend/src/api/chatSocket.ts` / `frontend/src/store/chatStore.ts`
 
 1. **구독 미복구 (핵심)**
@@ -201,7 +206,7 @@ A 항목의 쿼터 소진이 "끊김"으로 오인되는 이유이기도 하다.
 **1단계 (작고 확실한 코드 수정)**
 
 - ~~B: AI 호출 4곳을 트랜잭션 밖으로 (`TripService.generateItinerary` 우선)~~ ✅ 2026-09-01
-- D-1, D-2, D-3: 재구독 + 토큰 갱신 + `publishEnsuringConnection`
+- ~~D-1, D-2, D-3: 재구독 + 토큰 갱신 + `publishEnsuringConnection`~~ ✅ 2026-09-01 (D-4·5 포함)
 - C-1: 프론트 AI 오류 errorCode 분기
 - E: Dockerfile `-XX:MaxRAMPercentage=75`, Redis timeout 2s
 
