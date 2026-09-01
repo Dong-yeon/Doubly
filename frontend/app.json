@@ -91,7 +91,7 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.doubly.app",
+      "bundleIdentifier": "com.doubly.app.ios",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
