@@ -9,7 +9,6 @@ import com.fitto.diet.domain.Meal;
 import com.fitto.diet.dto.DietCoachResponse;
 import com.fitto.diet.repository.MealRepository;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -19,9 +18,20 @@ import java.util.Map;
 /**
  * 주간 식단 AI 코칭 — 최근 7일 식단 기록을 모아 Gemini 로 영양 균형 피드백을 생성한다.
  * 개별 사진 분석({@link FoodAnalysisService})과 달리 '기간 단위 습관'을 본다.
+ *
+ * <p><b>트랜잭션을 걸지 않는다.</b> 예전엔 클래스에 {@code @Transactional(readOnly = true)} 가
+ * 붙어 있었는데, 그러면 식단 조회로 잡은 DB 커넥션을 <b>Gemini 응답을 기다리는 최대 60초 동안
+ * 문 채로</b> 있게 된다. Hikari 기본 풀이 10개라 AI 요청 10건이면 풀이 비고, 그때부터는
+ * 로그인·채팅 같은 <b>AI 와 무관한 요청까지</b> 커넥션을 못 얻어 죽는다 — "서버가 끊긴다"의 정체다.
+ * ({@code ExpoPushNotificationService} 가 푸시 발송에 대해 지키는 원칙과 같다: 외부 호출은
+ * 커넥션을 쥐고 기다리지 않는다.)
+ *
+ * <p>읽기가 {@code mealRepository} 한 번뿐이라 별도 트랜잭션 경계가 필요 없다 —
+ * Spring Data 리포지토리 메서드가 각자 짧은 트랜잭션으로 처리하고 바로 커넥션을 돌려준다.
+ * 조회 결과는 준영속(detached) 이지만 {@link #summarize}가 스칼라 필드만 읽으므로 문제없다
+ * ({@code Meal.items} 는 이 경로에서 건드리지 않는다).
  */
 @Service
-@Transactional(readOnly = true)
 public class DietCoachService {
 
     private static final int MIN_MEALS = 3; // 이보다 적으면 코칭 무의미

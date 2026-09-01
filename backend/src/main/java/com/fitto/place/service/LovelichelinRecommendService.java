@@ -19,7 +19,6 @@ import com.fitto.relation.domain.RelationStatus;
 import com.fitto.relation.domain.RelationType;
 import com.fitto.relation.repository.RelationRepository;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -37,9 +36,13 @@ import java.util.stream.Collectors;
  * <p><b>왜 두 단계인가</b>: LLM 에게 가게 이름을 직접 물으면 폐업/실존하지 않는 곳을
  * 지어낸다. 이름·주소·좌표는 전부 카카오 응답에서만 오고, AI 는 취향 분석과 이유만 쓴다
  * — {@link DateCourseService} 의 "목록에 없는 장소는 만들지 않습니다"와 같은 원칙의 확장.
+ *
+ * <p><b>트랜잭션을 걸지 않는다</b> — 커넥션을 쥔 채 외부 호출을 기다리면 풀이 고갈된다.
+ * 이유는 {@link com.fitto.diet.service.DietCoachService} 클래스 주석 참고. 네 기능 중
+ * 대기가 가장 긴 경로라(Gemini 한 번 + 카카오 검색 여러 번) 여기가 가장 위험했다.
+ * 조회(관계·장소·평점)는 전부 Gemini 호출 <b>전에</b> 끝난다.
  */
 @Service
-@Transactional(readOnly = true)
 public class LovelichelinRecommendService {
 
     private static final int MIN_CERTIFIED_PLACES = 1;

@@ -15,7 +15,6 @@ import com.fitto.relation.domain.RelationStatus;
 import com.fitto.relation.domain.RelationType;
 import com.fitto.relation.repository.RelationRepository;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -25,9 +24,13 @@ import java.util.stream.Collectors;
 /**
  * AI 데이트 코스 추천 — 커플이 저장한 맛집/장소(places)를 Gemini 에 보내
  * 자연스러운 순서의 데이트 코스를 제안받는다. 최근 만든 place 데이터를 활용한다.
+ *
+ * <p><b>트랜잭션을 걸지 않는다</b> — 커넥션을 쥔 채 Gemini 를 기다리면 풀이 고갈된다.
+ * 이유는 {@link com.fitto.diet.service.DietCoachService} 클래스 주석 참고.
+ * 여기서도 조회(관계·장소)는 전부 Gemini 호출 <b>전에</b> 끝나고, 이후에는 준영속 엔티티의
+ * 스칼라 필드만 읽는다.
  */
 @Service
-@Transactional(readOnly = true)
 public class DateCourseService {
 
     private static final int MIN_PLACES = 2;
