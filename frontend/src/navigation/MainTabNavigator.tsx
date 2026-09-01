@@ -19,6 +19,8 @@ import { DietStackNavigator } from './DietStackNavigator';
 import { PlaceStackNavigator } from './PlaceStackNavigator';
 import { themedStyles } from '../theme/themedStyles';
 import { useChatStore } from '../store/chatStore';
+import { useActiveWorkoutStore } from '../store/activeWorkoutStore';
+import { ActiveWorkoutBar } from '../components/workout/ActiveWorkoutBar';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
@@ -42,6 +44,11 @@ const TAB_META: Record<keyof MainTabParamList, { label: string; icon: IconName }
  * 필요 없으므로(카톡·라인도 대화방에선 하단 내비가 없다) 아예 감춘다.
  */
 const HIDE_TAB_BAR_ON = new Set(['ChatRoom']);
+
+/**
+ * 진행 중 운동 바를 숨길 화면 — 이미 그 운동 안에 있으면 "이어서 하기"는 의미가 없다.
+ */
+const HIDE_ACTIVE_WORKOUT_BAR_ON = new Set(['WorkoutSession']);
 
 /*
  * 채팅 탭 안 읽은 배지 — 부재중 통화 카드도 일반 메시지처럼 unreadCount 에 잡힌다
@@ -132,9 +139,18 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   const bottomPadding =
     Platform.OS === 'android' ? Math.max(insets.bottom, spacing.md) + spacing.md : insets.bottom;
 
+  /*
+   * 진행 중 운동 바는 탭바 <b>바로 위</b>에 붙인다. 탭바와 한 덩어리로 그려야 어느 탭에
+   * 있든 같은 자리에 나오고, 화면마다 자리를 잡아줄 필요도 없다.
+   */
+  const showActiveWorkoutBar = !nestedRoute || !HIDE_ACTIVE_WORKOUT_BAR_ON.has(nestedRoute);
+
   return (
-    <View style={[styles.bar, { paddingBottom: bottomPadding }]}>
-      {routeNames.map((name, i) => renderTab(name, i))}
+    <View>
+      {showActiveWorkoutBar ? <ActiveWorkoutBar /> : null}
+      <View style={[styles.bar, { paddingBottom: bottomPadding }]}>
+        {routeNames.map((name, i) => renderTab(name, i))}
+      </View>
     </View>
   );
 }
@@ -151,6 +167,15 @@ export function MainTabNavigator() {
       if (next === 'active') void useChatStore.getState().loadRooms();
     });
     return () => sub.remove();
+  }, []);
+
+  /*
+   * 진행 중 운동 복원 — 앱을 껐다 켜도 어제 끝내지 못한 운동이 있으면 바로 보여야 한다.
+   * 스토어는 표시용 사본이라 기기에 저장된 초안을 원본으로 삼아 한 번 맞춘다
+   * (초안이 날짜가 지났거나 비었으면 loadSessionDraft 가 스스로 정리한다).
+   */
+  useEffect(() => {
+    void useActiveWorkoutStore.getState().sync();
   }, []);
 
   return (

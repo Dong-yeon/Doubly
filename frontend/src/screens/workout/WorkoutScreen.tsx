@@ -34,6 +34,7 @@ import type {
   WorkoutRoutine,
 } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
+import { useActiveWorkoutStore } from '../../store/activeWorkoutStore';
 import { layout } from '../../theme/layout';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'WorkoutMain'>;
@@ -70,6 +71,8 @@ export function WorkoutScreen({ navigation }: Props) {
   // 커플 연결 여부 — "함께 N일"은 연결됐을 때만 의미가 있다 (식단 탭과 동일한 기준)
   const couple = useRelationStore((s) => s.couple);
   const connected = !!couple?.partner;
+  /* 끝내지 않은 운동 — 하단 고정 바와 같은 원본(기기에 저장된 초안)을 본다 */
+  const activeWorkout = useActiveWorkoutStore((s) => s.active);
   const [myStreak, setMyStreak] = useState<Streak | null>(null);
   const [coupleStreak, setCoupleStreak] = useState<Streak | null>(null);
   // 화면이 떠 있는 동안(자정을 넘기지 않는 한) 매번 다시 계산할 필요 없음
@@ -227,6 +230,34 @@ export function WorkoutScreen({ navigation }: Props) {
         onEndReached={loadMoreHistory}
         ListHeaderComponent={
           <View>
+            {/*
+              끝내지 않은 운동 — 있으면 <b>맨 위, 가장 눈에 띄는 자리</b>에 둔다.
+              하단 고정 바로도 돌아갈 수 있지만, 운동을 하러 이 탭에 들어온 사람이
+              가장 먼저 보게 될 곳은 여기다. "새로 시작"보다 "이어서 하기"가 먼저다.
+            */}
+            {activeWorkout ? (
+              <Pressable
+                style={({ pressed }) => [styles.resumeCard, pressed && styles.resumePressed]}
+                onPress={() =>
+                  navigation.navigate('WorkoutSession', { resume: true })
+                }
+                accessibilityRole="button"
+                accessibilityLabel={`하던 운동 ${activeWorkout.label} 이어서 하기`}
+              >
+                <MaterialCommunityIcons name="play-circle-outline" size={28} color={colors.primary} />
+                <View style={styles.resumeTexts}>
+                  <Text style={styles.resumeTitle}>하던 운동이 남아 있어요</Text>
+                  <Text style={styles.resumeDetail} numberOfLines={1}>
+                    {activeWorkout.label} ·{' '}
+                    {activeWorkout.doneSets > 0
+                      ? `${activeWorkout.doneSets}세트 완료`
+                      : `${activeWorkout.exerciseCount}종목 담김`}
+                  </Text>
+                </View>
+                <Text style={styles.resumeAction}>이어서 하기</Text>
+              </Pressable>
+            ) : null}
+
             {/* 운동 스트릭 — 식단 탭과 같은 표시 형식(연속/함께/최고) */}
             <View style={styles.streakRow}>
               <Text style={styles.streakText}>연속 {myStreak?.currentCount ?? 0}일</Text>
@@ -464,6 +495,24 @@ const styles = themedStyles((colors) => ({
   recoveryLabel: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
   recoveryValue: { fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '800', marginLeft: 'auto' },
   list: { padding: spacing.lg, paddingBottom: layout.listBottomWithFab },
+  // 재개 카드 — 복구권 카드와 같은 형태를 쓰되 색으로 "지금 할 일"임을 구분한다
+  resumeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryBg,
+  },
+  resumePressed: { opacity: 0.85 },
+  resumeTexts: { flex: 1 },
+  resumeTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
+  resumeDetail: { fontSize: fontSize.caption, color: colors.textSecondary },
+  resumeAction: { fontSize: fontSize.caption, fontWeight: '800', color: colors.primary },
+
   streakRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
   streakText: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
   streakMax: { fontSize: fontSize.caption, color: colors.textSecondary, marginLeft: 'auto' },
