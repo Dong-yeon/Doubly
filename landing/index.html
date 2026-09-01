@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Dubly — 둘이서 함께 쓰는 기록</title>
+<meta name="description" content="커플·가족이 운동, 식단, 여행, 일상을 함께 기록하는 앱. Dubly." />
+<link rel="icon" href="/icon.png" />
+<meta property="og:title" content="Dubly — 둘이서 함께 쓰는 기록" />
+<meta property="og:description" content="커플·가족이 운동, 식단, 여행, 일상을 함께 기록하는 앱." />
+<meta property="og:image" content="/icon.png" />
+<meta property="og:type" content="website" />
+<!--
+  dubly.co.kr 루트 소개 페이지.
+  App Store Connect 의 "마케팅 URL" 로 제출하며, 약관·처리방침·지원 페이지로 가는 입구다.
+
+  ⚠️ 스토어 출시 후 아래 .store-btn 의 href 를 실제 스토어 주소로 바꾸고
+     is-pending 클래스를 지울 것 (지금은 "준비 중" 표기).
+-->
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #fafaf9;
+    --surface: #ffffff;
+    --border: #e6e6e3;
+    --text: #1a1d1a;
+    --text-dim: #585e58;
+    --brand: #2a7731;
+    --brand-dark: #1f5a25;
+    --accent: #8a6817;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Pretendard", "Malgun Gothic", sans-serif;
+    line-height: 1.7;
+    color: var(--text);
+    background: var(--bg);
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 720px; margin-inline: auto; padding: 0 20px; }
+
+  /* ── 히어로 ── */
+  header {
+    background: linear-gradient(160deg, var(--brand) 0%, var(--brand-dark) 100%);
+    color: #fff;
+    padding: 64px 20px 56px;
+    text-align: center;
+  }
+  /* 아이콘 자체가 초록 계열이라 초록 히어로 위에 그냥 얹으면 묻힌다 — 흰 타일로 띄운다 */
+  header .badge {
+    width: 100px;
+    height: 100px;
+    border-radius: 24px;
+    background: #fff;
+    padding: 8px;
+    display: block;
+    margin: 0 auto 20px;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, .22);
+  }
+  header .badge img { width: 100%; height: 100%; border-radius: 17px; display: block; }
+  header h1 { font-size: 34px; margin: 0 0 6px; letter-spacing: -.5px; }
+  header .tagline { font-size: 17px; margin: 0 0 6px; opacity: .95; }
+  header .sub { font-size: 14px; margin: 0; opacity: .78; word-break: keep-all; }
+
+  /* ── 스토어 버튼 ── */
+  .stores { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 28px; }
+  .store-btn {
+    display: inline-block;
+    padding: 11px 20px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, .14);
+    border: 1px solid rgba(255, 255, 255, .35);
+    color: #fff;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .store-btn:hover { background: rgba(255, 255, 255, .24); }
+  .store-btn.is-pending { opacity: .6; cursor: default; }
+  .store-btn.is-pending:hover { background: rgba(255, 255, 255, .14); }
+
+  /* ── 기능 ── */
+  section { padding: 52px 0 8px; }
+  h2 { font-size: 19px; margin: 0 0 20px; }
+  .features { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; padding: 0; margin: 0; list-style: none; }
+  .features li {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 18px;
+  }
+  .features strong { display: block; font-size: 15px; margin-bottom: 2px; }
+  .features span { font-size: 14px; color: var(--text-dim); word-break: keep-all; }
+  @media (max-width: 560px) {
+    .features { grid-template-columns: 1fr; }
+    header h1 { font-size: 28px; }
+  }
+
+  /* ── 푸터 ── */
+  footer {
+    margin-top: 56px;
+    border-top: 1px solid var(--border);
+    padding: 28px 20px 56px;
+    font-size: 14px;
+    color: var(--text-dim);
+    text-align: center;
+  }
+  footer nav { margin-bottom: 12px; }
+  footer a { color: var(--brand); text-decoration: none; margin: 0 8px; }
+  footer a:hover { text-decoration: underline; }
+  footer .fine { font-size: 13px; opacity: .85; }
+
+  /* 다크 모드 — 반드시 기본값 뒤에 와야 덮이지 않는다 */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1e201c;
+      --surface: #262823;
+      --border: #31332d;
+      --text: #f1f2f0;
+      --text-dim: #a3a8a1;
+      --brand: #4e9e56;
+    }
+    header { background: linear-gradient(160deg, #256a2b 0%, #17421c 100%); }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="badge"><img src="/icon.png" alt="Dubly 앱 아이콘" /></span>
+  <h1>Dubly</h1>
+  <p class="tagline">둘이서 함께 쓰는 기록</p>
+  <p class="sub">운동도, 식단도, 여행도 — 혼자 적으면 끊기지만 둘이 적으면 이어집니다.</p>
+  <div class="stores">
+    <span class="store-btn is-pending">App Store 준비 중</span>
+    <span class="store-btn is-pending">Google Play 준비 중</span>
+  </div>
+</header>
+
+<div class="wrap">
+  <section>
+    <h2>이런 걸 함께 기록해요</h2>
+    <ul class="features">
+      <li><strong>운동</strong><span>루틴을 만들고 세트를 기록하면 둘의 스트릭이 함께 쌓입니다.</span></li>
+      <li><strong>식단</strong><span>음식 사진을 올리면 AI가 칼로리와 영양을 정리해 줍니다.</span></li>
+      <li><strong>맛집</strong><span>둘이 다녀온 가게에 각자 점수를 매겨 우리만의 등급을 만듭니다.</span></li>
+      <li><strong>여행</strong><span>체크리스트를 나눠 담고 경비를 함께 정산합니다.</span></li>
+      <li><strong>일상</strong><span>D-day, 기념일, 오늘의 질문, 기분 기록을 한 화면에서 봅니다.</span></li>
+      <li><strong>대화</strong><span>채팅과 영상통화로 기록 위에서 바로 이야기합니다.</span></li>
+    </ul>
+  </section>
+</div>
+
+<footer>
+  <nav>
+    <a href="/support">지원 · 문의</a>
+    <a href="/terms">이용약관</a>
+    <a href="/privacy">개인정보처리방침</a>
+  </nav>
+  <p class="fine">Dubly · 개인 개발자 운영<br />문의 <a href="mailto:ehddus5712@gmail.com">ehddus5712@gmail.com</a></p>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,5 @@
+# dubly.co.kr 소개 사이트 — 확장자 없는 주소로 노출한다.
+# 스토어(App Store Connect / Play Console)에 제출하는 URL 이 여기 걸린다.
+/support    /support.html    200
+/terms      /terms.html      200
+/privacy    /privacy.html    200

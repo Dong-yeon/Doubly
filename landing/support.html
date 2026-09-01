@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>지원 — Dubly</title>
+<!--
+  App Store Connect / Play Console 의 "지원 URL" 제출용 정적 페이지.
+  스토어 심사관과 이용자가 로그인 없이 열 수 있어야 하므로 앱 화면이 아니라
+  정적 HTML 로 둔다(privacy.html·terms.html 과 같은 이유).
+
+  ⚠️ 여기 적힌 화면 경로(MY > 회원 탈퇴 등)는 실제 앱 흐름과 일치해야 한다.
+     앱의 메뉴 구조를 바꾸면 이 파일도 함께 고칠 것.
+-->
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    margin: 0;
+    padding: 32px 20px 64px;
+    max-width: 640px;
+    margin-inline: auto;
+    font-family: -apple-system, BlinkMacSystemFont, "Pretendard", "Malgun Gothic", sans-serif;
+    line-height: 1.7;
+    color: #1c1c1e;
+    background: #fafaf9;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { color: #f1f2f0; background: #16171a; }
+  }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  h2 { font-size: 16px; margin-top: 32px; margin-bottom: 8px; }
+  .meta { font-size: 13px; color: #8a8f8a; margin-bottom: 28px; }
+  p, li { font-size: 15px; word-break: keep-all; }
+  ul { padding-left: 20px; }
+  a { color: #2f8f5b; }
+  .card {
+    border: 1px solid #e6e6e3;
+    background: #fff;
+    border-radius: 12px;
+    padding: 16px 18px;
+    margin: 16px 0;
+  }
+  .card p { margin: 0; }
+  /* .card 기본값 뒤에 와야 한다 — 앞에 두면 같은 특이도라 아래 흰 배경에 덮인다 */
+  @media (prefers-color-scheme: dark) {
+    .card { background: #1f2124; border-color: #2c2f33; }
+  }
+  footer { margin-top: 40px; font-size: 13px; color: #8a8f8a; }
+</style>
+</head>
+<body>
+<h1>Dubly 지원</h1>
+<p class="meta">커플·가족이 운동, 식단, 여행, 일상을 함께 기록하는 앱</p>
+
+<h2>문의하기</h2>
+<div class="card">
+  <p>이메일 <a href="mailto:ehddus5712@gmail.com">ehddus5712@gmail.com</a></p>
+  <p>보통 2~3일 안에 답변드립니다.</p>
+</div>
+<p>오류를 신고할 때는 앱의 <strong>MY &gt; 설정 &gt; 문의 · 버그 신고</strong> 를 이용하면
+앱 버전과 빌드 정보가 메일 본문에 자동으로 들어가 원인을 훨씬 빨리 찾을 수 있어요.</p>
+
+<h2>자주 묻는 질문</h2>
+
+<h3>상대방과 어떻게 연결하나요?</h3>
+<p>한 사람이 <strong>홈 &gt; 커플 연결</strong> 에서 6자리 초대코드를 만들어 상대방에게 보내고,
+상대방이 같은 화면에서 그 코드를 입력하면 연결됩니다. 초대코드는 24시간 동안 유효합니다.</p>
+
+<h3>기록이 상대방에게 어디까지 보이나요?</h3>
+<p>연결된 상대방에게는 함께 쓰는 기능(운동·식단·여행·일상 기록, 채팅)에 필요한 범위의 내용이 공유됩니다.
+자세한 내용은 <a href="/privacy">개인정보처리방침</a> 4항을 참고하세요.</p>
+
+<h3>알림이 오지 않아요.</h3>
+<p>먼저 기기 설정에서 Dubly 의 알림이 허용돼 있는지 확인해 주세요.
+앱의 <strong>MY &gt; 설정</strong> 화면 위쪽에 "기기에서 알림이 차단돼 있어요" 안내가 뜬다면
+그 줄을 눌러 기기 알림 설정으로 이동할 수 있습니다.</p>
+
+<h3>계정을 삭제하고 싶어요.</h3>
+<p>앱에서 <strong>MY &gt; 회원 탈퇴</strong> 로 직접 삭제할 수 있습니다.
+탈퇴하면 수집한 개인정보와 기록은 지체 없이 파기되며 되돌릴 수 없습니다.
+앱에 접속할 수 없는 상황이라면 위 이메일로 가입한 이메일 주소와 함께 삭제를 요청해 주세요.</p>
+
+<h3>이 앱은 유료인가요?</h3>
+<p>현재 모든 기능을 무료로 제공합니다.</p>
+
+<h2>약관 · 개인정보</h2>
+<ul>
+  <li><a href="/terms">이용약관</a></li>
+  <li><a href="/privacy">개인정보처리방침</a></li>
+</ul>
+
+<footer>Dubly · 개인 개발자 운영 · 문의 <a href="mailto:ehddus5712@gmail.com">ehddus5712@gmail.com</a></footer>
+</body>
+</html>
