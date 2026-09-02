@@ -12,7 +12,7 @@
  * 지도·카테고리 필터와는 다른 자기만의 목록·타입 필터를 갖는다.
  */
 import React, { useCallback, useMemo, useState } from 'react';
-import { FlatList, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -30,6 +30,7 @@ import { AiInsightButton } from '../../components/AiInsightButton';
 import { LovelichelinBadge } from '../../components/LovelichelinBadge';
 import { SoloPickBadge } from '../../components/SoloPickBadge';
 import { LovelichelinRecommendCards } from './LovelichelinRecommendCards';
+import { SoloPickSection } from './SoloPickSection';
 import { SOLO_PICK_MIN_RATING, CATEGORY_FILTERS } from './placeFilters';
 import { CONTENT_TYPE_FILTERS, contentTypeLabel } from '../../constants/contentTypes';
 import { placeApi } from '../../api/place';
@@ -379,35 +380,32 @@ export function PlaceScreen() {
           refreshing={placeLoading}
           onRefresh={() => loadPlaces(true)}
           ListHeaderComponent={
-            soloPicks.length > 0 ? (
-              <View style={styles.soloPickSection}>
-                <Text style={styles.soloPickTitle}>내 픽 · 상대 픽</Text>
-                <Text style={styles.soloPickSubtitle}>아직 둘 다 안 가봤지만, 한 명은 인정한 곳이에요</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.soloPickRow}>
-                  {soloPicks.map((p) => {
-                    const who: 'me' | 'partner' = p.myRating != null ? 'me' : 'partner';
-                    const rating = p.myRating ?? p.partnerRating ?? 0;
-                    return (
-                      <TouchableOpacity
-                        key={p.id}
-                        activeOpacity={0.85}
-                        onPress={() => navigation.navigate('PlaceDetail', { placeId: p.id, name: p.name })}
-                      >
-                        <Card elevation="sm" style={styles.soloPickCard}>
-                          <SoloPickBadge who={who} size="sm" />
-                          <Text style={styles.soloPickName} numberOfLines={1}>
-                            {p.name}
-                          </Text>
-                          <Text style={[styles.soloPickStars, { color: who === 'me' ? colors.me : colors.partner }]}>
-                            {stars(rating)}
-                          </Text>
-                        </Card>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-            ) : null
+            <SoloPickSection
+              title="내 픽 · 상대 픽"
+              subtitle="아직 둘 다 안 가봤지만, 한 명은 인정한 곳이에요"
+              items={soloPicks}
+              keyExtractor={(p) => String(p.id)}
+              renderCard={(p) => {
+                const who: 'me' | 'partner' = p.myRating != null ? 'me' : 'partner';
+                const rating = p.myRating ?? p.partnerRating ?? 0;
+                return (
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={() => navigation.navigate('PlaceDetail', { placeId: p.id, name: p.name })}
+                  >
+                    <Card elevation="sm" style={styles.soloPickCard}>
+                      <SoloPickBadge who={who} size="sm" />
+                      <Text style={styles.soloPickName} numberOfLines={1}>
+                        {p.name}
+                      </Text>
+                      <Text style={[styles.soloPickStars, { color: who === 'me' ? colors.me : colors.partner }]}>
+                        {stars(rating)}
+                      </Text>
+                    </Card>
+                  </TouchableOpacity>
+                );
+              }}
+            />
           }
           renderItem={({ item }) => (
             <TouchableOpacity
@@ -599,35 +597,32 @@ export function PlaceScreen() {
           onRefresh={() => loadContents(true)}
           ListHeaderComponent={
             <View>
-              {contentSoloPicks.length > 0 ? (
-                <View style={styles.soloPickSection}>
-                  <Text style={styles.soloPickTitle}>내 픽 · 상대 픽</Text>
-                  <Text style={styles.soloPickSubtitle}>아직 둘 다 안 봤지만, 한 명은 인정한 콘텐츠예요</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.soloPickRow}>
-                    {contentSoloPicks.map((c) => {
-                      const who: 'me' | 'partner' = c.myRating != null ? 'me' : 'partner';
-                      const rating = c.myRating ?? c.partnerRating ?? 0;
-                      return (
-                        <TouchableOpacity
-                          key={c.id}
-                          activeOpacity={0.85}
-                          onPress={() => navigation.navigate('ContentDetail', { contentId: c.id, title: c.title })}
-                        >
-                          <Card elevation="sm" style={styles.soloPickCard}>
-                            <SoloPickBadge who={who} size="sm" />
-                            <Text style={styles.soloPickName} numberOfLines={1}>
-                              {c.title}
-                            </Text>
-                            <Text style={[styles.soloPickStars, { color: who === 'me' ? colors.me : colors.partner }]}>
-                              {stars(rating)}
-                            </Text>
-                          </Card>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </ScrollView>
-                </View>
-              ) : null}
+              <SoloPickSection
+                title="내 픽 · 상대 픽"
+                subtitle="아직 둘 다 안 봤지만, 한 명은 인정한 콘텐츠예요"
+                items={contentSoloPicks}
+                keyExtractor={(c) => String(c.id)}
+                renderCard={(c) => {
+                  const who: 'me' | 'partner' = c.myRating != null ? 'me' : 'partner';
+                  const rating = c.myRating ?? c.partnerRating ?? 0;
+                  return (
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      onPress={() => navigation.navigate('ContentDetail', { contentId: c.id, title: c.title })}
+                    >
+                      <Card elevation="sm" style={styles.soloPickCard}>
+                        <SoloPickBadge who={who} size="sm" />
+                        <Text style={styles.soloPickName} numberOfLines={1}>
+                          {c.title}
+                        </Text>
+                        <Text style={[styles.soloPickStars, { color: who === 'me' ? colors.me : colors.partner }]}>
+                          {stars(rating)}
+                        </Text>
+                      </Card>
+                    </TouchableOpacity>
+                  );
+                }}
+              />
               {browseContents.length > 0 ? (
                 <Text style={styles.deleteHint}>카드를 길게 눌러 삭제할 수 있어요</Text>
               ) : null}
@@ -785,11 +780,7 @@ const styles = themedStyles((colors) => ({
   magazineRating: { fontSize: fontSize.caption, fontWeight: '700' },
   magazineMemo: { fontSize: fontSize.body, color: colors.textPrimary, fontStyle: 'italic', marginTop: spacing.xs },
   magazineDate: { fontSize: fontSize.micro, color: colors.textSecondary, marginTop: spacing.xs },
-  // 내 픽 · 상대 픽 (솔로 트랙) — 가이드 상단 가로 스크롤 섹션
-  soloPickSection: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, marginBottom: spacing.sm },
-  soloPickTitle: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
-  soloPickSubtitle: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2, marginBottom: spacing.sm },
-  soloPickRow: { gap: spacing.sm, paddingRight: spacing.lg },
+  // 내 픽 · 상대 픽 (솔로 트랙) 카드 — 섹션 레이아웃 자체는 SoloPickSection 이 맡는다
   soloPickCard: { width: 140, gap: spacing.xs },
   soloPickName: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
   soloPickStars: { fontSize: fontSize.caption, fontWeight: '700' },
