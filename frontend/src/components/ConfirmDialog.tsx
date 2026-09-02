@@ -7,7 +7,7 @@
  * 그래서 한 컴포넌트로 통일한다.
  */
 import React from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useDialogStore, type DialogButton } from '../store/dialogStore';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 import { themedStyles } from '../theme/themedStyles';
@@ -27,7 +27,15 @@ export function ConfirmDialog() {
   const press = (button: DialogButton) => {
     // 콜백 전에 닫는다 — 콜백이 또 다른 다이얼로그를 열 수 있다
     hide();
-    button.onPress?.();
+    // Android는 이 Modal이 별도 네이티브 Window라, hide() 직후 콜백이 곧바로
+    // 카메라·갤러리 같은 외부 Activity를 열면 그 Window가 다 닫히기 전에 전환이
+    // 겹쳐 복귀 후 화면 전체가 먹통이 된다(사진추가 버튼이 반응 없다가 다른
+    // 버튼까지 안 눌리는 증상). Window가 실제로 닫힐 시간을 준 뒤 콜백을 돌린다.
+    if (Platform.OS === 'android') {
+      setTimeout(() => button.onPress?.(), 300);
+    } else {
+      button.onPress?.();
+    }
   };
 
   // 취소는 항상 마지막에 두어 파괴적 액션과 인접하지 않게 한다
