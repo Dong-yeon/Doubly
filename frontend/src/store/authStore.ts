@@ -11,6 +11,8 @@ import { registerPushTokenIfGranted } from '../utils/push';
 import { useChatStore } from './chatStore';
 import { usePlanStore } from './planStore';
 import { useCallStore } from './callStore';
+import { usePlaceStore } from './placeStore';
+import { useContentStore } from './contentStore';
 import type { AuthTokens, Gender, User } from '../types';
 
 interface AuthState {
@@ -44,6 +46,13 @@ async function clearTokens() {
   // 세션 종료 시 채팅 소켓·통화 클라이언트 정리
   useChatStore.getState().teardown();
   void useCallStore.getState().teardown();
+  /*
+   * "한 번 받으면 재사용" 캐시 스토어(럽슐랭 장소·콘텐츠)를 비운다 — 안 비우면 로그아웃 후
+   * 다른 계정으로 로그인해도 loaded 플래그가 그대로 살아있어 load() 가 재조회를 건너뛰고
+   * 이전 계정의 목록이 화면에 그대로 남는다(계정 간 데이터 유출).
+   */
+  usePlaceStore.getState().reset();
+  useContentStore.getState().reset();
 }
 
 async function persistTokens(tokens: AuthTokens) {

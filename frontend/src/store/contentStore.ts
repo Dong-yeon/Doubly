@@ -17,13 +17,14 @@ interface ContentState {
   load: (force?: boolean) => Promise<void>;
   /** 다음 load() 가 캐시를 쓰지 않고 다시 받아오게 표시만 한다(요청은 안 보낸다) */
   invalidate: () => void;
+  /** 로그아웃 시 호출 — placeStore.reset() 과 같은 이유로 목록까지 비운다 */
+  reset: () => void;
 }
 
+const initialState = { contents: [] as Content[], loading: false, loadError: false, loaded: false };
+
 export const useContentStore = create<ContentState>((set, get) => ({
-  contents: [],
-  loading: false,
-  loadError: false,
-  loaded: false,
+  ...initialState,
 
   load: async (force = false) => {
     if (get().loaded && !force) return;
@@ -40,4 +41,6 @@ export const useContentStore = create<ContentState>((set, get) => ({
   },
 
   invalidate: () => set({ loaded: false }),
+
+  reset: () => set(initialState),
 }));
