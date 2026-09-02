@@ -207,7 +207,7 @@ public class WorkoutService {
 
     public List<WorkoutResponse> findHistory(Long userId, Long cursor) {
         return workoutRepository
-                .findHistory(userId, cursor, PageRequest.of(0, HISTORY_PAGE_SIZE))
+                .findHistory(userId, KstClock.today(), cursor, PageRequest.of(0, HISTORY_PAGE_SIZE))
                 .stream().map(WorkoutResponse::from).toList();
     }
 

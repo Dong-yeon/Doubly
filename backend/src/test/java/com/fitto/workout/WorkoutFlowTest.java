@@ -72,6 +72,20 @@ class WorkoutFlowTest {
     }
 
     @Test
+    void 오늘_기록은_히스토리에_안_나온다() {
+        // 운동 홈이 오늘 기록을 "진행한 운동" 섹션에 이미 보여준다 — 히스토리에도 나오면
+        // 같은 세션이 두 번 보인다(2026-09-01 분석 1-4).
+        Long user = register("w2b@fitto.com");
+        workoutService.save(user, sample(LocalDate.now().minusDays(1)));
+        workoutService.save(user, sample(LocalDate.now()));
+
+        List<WorkoutResponse> history = workoutService.findHistory(user, null);
+        assertThat(history).hasSize(1);
+        assertThat(history.get(0).workoutDate()).isEqualTo(LocalDate.now().minusDays(1));
+        assertThat(workoutService.findToday(user)).hasSize(1);
+    }
+
+    @Test
     void 남의_기록은_삭제할_수_없다() {
         Long owner = register("w3@fitto.com");
         Long other = register("w4@fitto.com");
