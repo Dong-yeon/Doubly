@@ -272,14 +272,17 @@ export function SettingsScreen({ navigation }: Props) {
           </View>
           {/*
             TEMP-PROTOTYPE(2026-09-02) — hunspell-asm(WASM) + hunspell-dict-ko 가 실기기에서
-            실제로 로드·동작하는지 확인용. 검증 끝나면 이 행과 onTestHunspell 를 지운다.
+            실제로 로드·동작하는지 확인용. __DEV__ 로 프로덕션 빌드(스토어 제출용)에는
+            안 보이게 가려둔다 — 검증 끝나면 이 행과 onTestHunspell 자체를 지운다.
           */}
-          <Pressable onPress={onTestHunspell} style={styles.row} disabled={hunspellTesting}>
-            <View style={styles.rowText}>
-              <Text style={styles.rowTitle}>{hunspellTesting ? '테스트 중…' : '(개발용) Hunspell 테스트'}</Text>
-              <Text style={styles.rowDesc}>실기기에서 WASM 사전이 로드되는지 확인</Text>
-            </View>
-          </Pressable>
+          {__DEV__ ? (
+            <Pressable onPress={onTestHunspell} style={styles.row} disabled={hunspellTesting}>
+              <View style={styles.rowText}>
+                <Text style={styles.rowTitle}>{hunspellTesting ? '테스트 중…' : '(개발용) Hunspell 테스트'}</Text>
+                <Text style={styles.rowDesc}>실기기에서 WASM 사전이 로드되는지 확인</Text>
+              </View>
+            </Pressable>
+          ) : null}
         </Card>
 
         <Card elevation="sm" style={styles.section}>
