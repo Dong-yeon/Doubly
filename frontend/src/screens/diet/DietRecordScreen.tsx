@@ -981,7 +981,13 @@ export function DietRecordScreen({ navigation, route }: Props) {
                 >
                   <MaterialCommunityIcons name="map-marker-outline" size={18} color={colors.textSecondary} />
                   <Text style={styles.placePickerText} numberOfLines={1}>
-                    {selectedPlace ? selectedPlace.name : '럽슐랭에 저장한 장소에서 고르기'}
+                    {/*
+                      "저장한 장소에서 고르기"라고만 쓰면 이 시트가 새 장소 검색·등록도 겸한다는 걸
+                      아무도 모른다(실제로 사용자가 이 기능 자체를 모르고 있었다 — 2026-09-02
+                      리포트). 시트를 열어야 "카카오에서 찾기"가 보이므로, 닫힌 상태 문구부터
+                      "검색"을 앞세운다.
+                    */}
+                    {selectedPlace ? selectedPlace.name : '장소 검색하기'}
                   </Text>
                 </TouchableOpacity>
                 {selectedPlace ? (
