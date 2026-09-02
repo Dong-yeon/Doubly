@@ -8,6 +8,7 @@ import { DietCalendarScreen } from '../screens/diet/DietCalendarScreen';
 import { DietStatsScreen } from '../screens/diet/DietStatsScreen';
 import { BarcodeScanScreen } from '../screens/diet/BarcodeScanScreen';
 import { FavoriteFoodGiftInboxScreen } from '../screens/diet/FavoriteFoodGiftInboxScreen';
+import { PlaceDetailScreen } from '../screens/place/PlaceDetailScreen';
 import { stackScreenOptions, modalOptions } from './headerOptions';
 
 const Stack = createNativeStackNavigator<DietStackParamList>();
@@ -32,6 +33,12 @@ export function DietStackNavigator() {
         name="FavoriteFoodGiftInbox"
         component={FavoriteFoodGiftInboxScreen}
         options={{ title: '즐겨찾기 선물함' }}
+      />
+      {/* 럽슐랭 탭과 공유하는 장소 상세 — 식단 기록에 붙은 장소를 탭하면 이 스택에 쌓인다 */}
+      <Stack.Screen
+        name="PlaceDetail"
+        component={PlaceDetailScreen}
+        options={({ route }) => ({ title: route.params.name })}
       />
     </Stack.Navigator>
   );

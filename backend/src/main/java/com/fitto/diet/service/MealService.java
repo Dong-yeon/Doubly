@@ -21,6 +21,7 @@ import com.fitto.diet.dto.RecentFoodResponse;
 import com.fitto.diet.dto.SaveMealRequest;
 import com.fitto.diet.repository.MealRepository;
 import com.fitto.diet.repository.NutritionGoalRepository;
+import com.fitto.place.repository.PlaceVisitRepository;
 import com.fitto.relation.domain.Relation;
 import com.fitto.relation.domain.RelationStatus;
 import com.fitto.relation.domain.RelationType;
@@ -71,6 +72,7 @@ public class MealService {
     private final CoupleEventPublisher coupleEventPublisher;
     private final NotificationService notificationService;
     private final PlanGuard planGuard;
+    private final PlaceVisitRepository placeVisitRepository;
 
     public MealService(MealRepository mealRepository,
                        NutritionGoalRepository nutritionGoalRepository,
@@ -80,7 +82,8 @@ public class MealService {
                        FeedReactionRepository feedReactionRepository,
                        CoupleEventPublisher coupleEventPublisher,
                        NotificationService notificationService,
-                       PlanGuard planGuard) {
+                       PlanGuard planGuard,
+                       PlaceVisitRepository placeVisitRepository) {
         this.mealRepository = mealRepository;
         this.nutritionGoalRepository = nutritionGoalRepository;
         this.relationRepository = relationRepository;
@@ -90,6 +93,7 @@ public class MealService {
         this.coupleEventPublisher = coupleEventPublisher;
         this.notificationService = notificationService;
         this.planGuard = planGuard;
+        this.placeVisitRepository = placeVisitRepository;
     }
 
     @Transactional
@@ -478,13 +482,35 @@ public class MealService {
     }
 
     public List<MealResponse> findToday(Long userId) {
-        return mealRepository.findByUserIdAndMealDateOrderByIdAsc(userId, KstClock.today())
-                .stream().map(MealResponse::from).toList();
+        return withPlaces(mealRepository.findByUserIdAndMealDateOrderByIdAsc(userId, KstClock.today()));
     }
 
     public List<MealResponse> findHistory(Long userId, Long cursor) {
-        return mealRepository.findHistory(userId, cursor, PageRequest.of(0, HISTORY_PAGE_SIZE))
-                .stream().map(MealResponse::from).toList();
+        return withPlaces(mealRepository.findHistory(userId, cursor, PageRequest.of(0, HISTORY_PAGE_SIZE)));
+    }
+
+    /**
+     * 식단 목록에 장소 연동 여부를 함께 싣는다 — 식단 탭에서 장소를 붙여도 지금까지
+     * 식단 탭 어디서도(오늘 목록·히스토리) 다시 확인할 방법이 없었다(2026-09-02 분석).
+     *
+     * <p>장소별 개별 조회 대신 이 페이지의 meal id 를 한 번에 in 절로 묻는다 — 목록 하나에
+     * 최대 {@link #HISTORY_PAGE_SIZE} 건뿐이라 배치 조회로 충분하고, {@code PlaceService}
+     * 의 커버 사진 배치 조회({@code findByPlaceIdInOrderByPlaceIdAscIdDesc})와 같은 이유다.
+     */
+    private List<MealResponse> withPlaces(List<Meal> meals) {
+        if (meals.isEmpty()) return List.of();
+        List<Long> mealIds = meals.stream().map(Meal::getId).toList();
+        Map<Long, PlaceVisitRepository.VisitWithPlace> byMealId = placeVisitRepository.findByMealIdIn(mealIds)
+                .stream()
+                .collect(java.util.stream.Collectors.toMap(vp -> vp.getVisit().getMealId(), vp -> vp));
+        return meals.stream()
+                .map(m -> {
+                    PlaceVisitRepository.VisitWithPlace vp = byMealId.get(m.getId());
+                    return vp == null
+                            ? MealResponse.from(m)
+                            : MealResponse.from(m, vp.getVisit().getPlaceId(), vp.getPlaceName());
+                })
+                .toList();
     }
 
     /**

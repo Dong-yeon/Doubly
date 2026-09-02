@@ -329,6 +329,11 @@ export function DietScreen({ navigation }: Props) {
   // 탭하면 그 기록을 채운 수정 화면으로. 길게 누르면 삭제(기존 동작 유지)
   const onEdit = (m: Meal) => navigation.navigate('DietRecord', { meal: m });
 
+  // 카드의 장소 태그 — 럽슐랭 탭과 공유하는 화면이라 이 스택에 그대로 쌓인다(navigation/types.ts 참고)
+  const onPlacePress = (m: Meal) => {
+    if (m.placeId && m.placeName) navigation.navigate('PlaceDetail', { placeId: m.placeId, name: m.placeName });
+  };
+
   const onLongPress = (m: Meal) => {
     Alert.alert('식단 기록 삭제', `${m.mealTypeLabel} 기록을 삭제할까요?`, [
       { text: '취소', style: 'cancel' },
@@ -621,6 +626,7 @@ export function DietScreen({ navigation }: Props) {
                       meal={m}
                       onPress={onEdit}
                       onLongPress={onLongPress}
+                      onPlacePress={onPlacePress}
                       deleting={deletingId === m.id}
                     />
                   ))
@@ -639,6 +645,7 @@ export function DietScreen({ navigation }: Props) {
             meal={item}
             onPress={onEdit}
             onLongPress={onLongPress}
+            onPlacePress={onPlacePress}
             showDate
             deleting={deletingId === item.id}
           />

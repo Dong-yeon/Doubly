@@ -678,6 +678,9 @@ export interface Meal {
   goals?: MealGoalHighlight[];
   /** 데이트 식단(같이 먹기)으로 등록됐는지 — true 면 커플 상대방에게도 짝이 있다 */
   sharedWithPartner?: boolean;
+  /** 이 기록에 연동된 장소 — 둘 다 있을 때만 럽슐랭 상세로 이동할 수 있다(둘 다 없으면 미연동) */
+  placeId?: number | null;
+  placeName?: string | null;
   createdAt: string;
 }
 

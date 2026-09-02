@@ -230,6 +230,13 @@ export const linking: LinkingOptions<RootStackParamList> = {
               DietRecord: 'diet/record',
               DietCalendar: 'diet/calendar',
               DietStats: 'diet/stats',
+              // 식단 기록에서 연 장소 화면 — 럽슐랭 탭에도 같은 화면이 있지만 경로는 나눈다
+              // (같은 'place/:placeId' 를 여러 블록에 쓰면 새로고침 때 어느 탭으로 복원될지
+              // 모호해진다 — Home 블록의 PlaceDetail 주석과 같은 이유).
+              PlaceDetail: {
+                path: 'diet/place/:placeId',
+                parse: { placeId: Number },
+              },
             },
           },
           Place: {

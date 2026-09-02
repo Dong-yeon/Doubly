@@ -16,6 +16,13 @@ interface Props {
   showDate?: boolean;
   /** 삭제 처리 중 — 카드를 흐리게 하고 탭을 막는다 (QA_CHECKLIST.md 패턴 7) */
   deleting?: boolean;
+  /**
+   * 연동된 장소 태그를 탭했을 때 — 이 기록에 장소가 있을 때만(`meal.placeId`) 태그 자체가
+   * 뜬다. 지금까지 식단 탭에서 장소를 붙여도 그 사실을 식단 탭 어디서도 다시 확인할
+   * 방법이 없었다(2026-09-02 분석) — 카드 안 별도 터치 영역이라 카드 전체 탭(onPress,
+   * 보통 수정 화면 이동)과 겹치지 않는다.
+   */
+  onPlacePress?: (meal: Meal) => void;
 }
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -31,7 +38,7 @@ export const MEAL_ICON: Record<MealType, IconName> = {
 const PREVIEW_COUNT = 3;
 
 /** 식단 기록 카드 — 끼니·사진·음식 항목·칼로리·메모 요약 */
-export function MealCard({ meal, onPress, onLongPress, showDate, deleting }: Props) {
+export function MealCard({ meal, onPress, onLongPress, showDate, deleting, onPlacePress }: Props) {
   const items = meal.items ?? [];
   return (
     <TouchableOpacity
@@ -59,6 +66,24 @@ export function MealCard({ meal, onPress, onLongPress, showDate, deleting }: Pro
           {showDate ? <Text style={styles.date}>{relativeDateLabel(meal.mealDate)}</Text> : null}
         </View>
       </View>
+
+      {/* 연동된 장소 — meal.placeId 가 있을 때만(럽슐랭 탭 방문 기록으로 이어져 있다는 뜻).
+          카드 전체 탭(onPress, 보통 수정 화면)과 별개 터치 영역이라 여기만 눌러도 수정
+          화면으로 넘어가지 않는다. */}
+      {meal.placeId && meal.placeName ? (
+        <TouchableOpacity
+          style={styles.placeTag}
+          onPress={onPlacePress ? () => onPlacePress(meal) : undefined}
+          disabled={!onPlacePress}
+          accessibilityRole={onPlacePress ? 'button' : undefined}
+          accessibilityLabel={`${meal.placeName} 장소 상세로 이동`}
+        >
+          <MaterialCommunityIcons name="map-marker-outline" size={14} color={colors.textSecondary} />
+          <Text style={styles.placeTagText} numberOfLines={1}>
+            {meal.placeName}
+          </Text>
+        </TouchableOpacity>
+      ) : null}
 
       {meal.photoUrl ? (
         <Image source={{ uri: meal.photoUrl }} style={styles.photo} resizeMode="cover" />
@@ -116,6 +141,14 @@ const styles = themedStyles((colors) => ({
   dateBadgeText: { fontSize: 10, fontWeight: '800', color: colors.primary },
   cal: { fontSize: fontSize.caption, color: colors.accent, fontWeight: '800' },
   date: { fontSize: fontSize.caption, color: colors.textSecondary },
+  placeTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    alignSelf: 'flex-start',
+    marginTop: spacing.xs,
+  },
+  placeTagText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
   photo: {
     width: '100%',
     height: 180,
