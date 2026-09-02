@@ -51,6 +51,27 @@ export function SettingsScreen({ navigation }: Props) {
   const setUser = useAuthStore((s) => s.setUser);
   const spellCheckEnabled = useSettingsStore((s) => s.spellCheckEnabled);
   const setSpellCheckEnabled = useSettingsStore((s) => s.setSpellCheckEnabled);
+  // TEMP-PROTOTYPE(2026-09-02) — 아래 onTestHunspell 참고, 검증 끝나면 같이 지운다
+  const [hunspellTesting, setHunspellTesting] = useState(false);
+  const onTestHunspell = async () => {
+    setHunspellTesting(true);
+    try {
+      const t0 = Date.now();
+      const { getHunspell } = await import('../../utils/hunspell/hunspellEngine');
+      const hunspell = await getHunspell();
+      const loadMs = Date.now() - t0;
+      const words = ['안되요', '오랫만에', '어의없어', '갈께', '왠일로', '안돼', '특이해'];
+      const lines = words.map((w) => {
+        const ok = hunspell.spell(w);
+        return ok ? `${w} : OK` : `${w} : 오류 → ${hunspell.suggest(w).slice(0, 3).join(', ')}`;
+      });
+      Alert.alert('Hunspell 로드 성공', `로드 ${loadMs}ms\n\n${lines.join('\n')}`);
+    } catch (e) {
+      Alert.alert('Hunspell 로드 실패', getErrorMessage(e, String(e)));
+    } finally {
+      setHunspellTesting(false);
+    }
+  };
   /* 테마 — 고르는 즉시 화면에 반영된다 (RootNavigator 가 트리를 다시 그린다) */
   const themeMode = useThemeStore((s) => s.mode);
   const setThemeMode = useThemeStore((s) => s.setMode);
@@ -249,6 +270,16 @@ export function SettingsScreen({ navigation }: Props) {
               trackColor={{ true: colors.primary }}
             />
           </View>
+          {/*
+            TEMP-PROTOTYPE(2026-09-02) — hunspell-asm(WASM) + hunspell-dict-ko 가 실기기에서
+            실제로 로드·동작하는지 확인용. 검증 끝나면 이 행과 onTestHunspell 를 지운다.
+          */}
+          <Pressable onPress={onTestHunspell} style={styles.row} disabled={hunspellTesting}>
+            <View style={styles.rowText}>
+              <Text style={styles.rowTitle}>{hunspellTesting ? '테스트 중…' : '(개발용) Hunspell 테스트'}</Text>
+              <Text style={styles.rowDesc}>실기기에서 WASM 사전이 로드되는지 확인</Text>
+            </View>
+          </Pressable>
         </Card>
 
         <Card elevation="sm" style={styles.section}>
