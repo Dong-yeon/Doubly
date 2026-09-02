@@ -18,6 +18,7 @@ import com.fitto.workout.domain.WorkoutSet;
 import com.fitto.workout.domain.WorkoutSetEntry;
 import com.fitto.workout.dto.CalendarDayResponse;
 import com.fitto.workout.dto.CategoryCount;
+import com.fitto.workout.dto.CoupleWeekResponse;
 import com.fitto.workout.dto.ExerciseBest;
 import com.fitto.workout.dto.ExerciseHistoryResponse;
 import com.fitto.workout.dto.ExercisePersonalBest;
@@ -395,5 +396,58 @@ public class WorkoutService {
                 .map(u -> u.getName()).orElse(null);
         boolean completed = workoutRepository.existsByUserIdAndWorkoutDate(partnerId, KstClock.today());
         return new PartnerTodayResponse(true, partnerName, completed);
+    }
+
+    /**
+     * 둘의 이번 주(월~일) 완료 날짜 — 운동 홈 상단 요일 스트립에 나란히 그린다.
+     * 이미 있는 {@link #calendar} 와 같은 원본 쿼리({@code findWorkoutDates})를 이번 주
+     * 범위로 좁혀 쓴다 — 새 집계 로직을 만들 필요가 없다.
+     */
+    public CoupleWeekResponse coupleWeek(Long userId) {
+        List<Relation> couples = relationRepository
+                .findByUserAndTypeAndStatus(userId, RelationType.COUPLE, RelationStatus.ACTIVE);
+        if (couples.isEmpty()) {
+            return CoupleWeekResponse.notConnected();
+        }
+        Long partnerId = couples.get(0).partnerOf(userId);
+        if (partnerId == null) {
+            return CoupleWeekResponse.notConnected();
+        }
+        LocalDate monday = KstClock.today().with(java.time.DayOfWeek.MONDAY);
+        LocalDate sunday = monday.plusDays(6);
+        List<LocalDate> myDates = workoutRepository.findWorkoutDates(userId, monday, sunday);
+        List<LocalDate> partnerDates = workoutRepository.findWorkoutDates(partnerId, monday, sunday);
+        String partnerName = userRepository.findById(partnerId).map(u -> u.getName()).orElse(null);
+        return new CoupleWeekResponse(true, partnerName, myDates, partnerDates);
+    }
+
+    /**
+     * "지금 운동 시작했어요" — 커플 실시간 동반감 신호.
+     *
+     * <p>완료 알림({@link #save} 안의 "함께 운동해요!")은 이미 있었지만, 그건 몇 시간
+     * 뒤에나 상대가 알게 된다. 조사에서 커플 운동 앱의 핵심으로 꼽힌 건 "기록 공유"가
+     * 아니라 <b>"같이 나타났다는 증거"</b>였다(docs/WORKOUT_UX_ANALYSIS_2026-09-01.md
+     * 5순위) — 그 증거는 완료가 아니라 시작 시점에 있어야 실시간이 된다.
+     *
+     * <p>커플이 아니면 조용히 넘어간다 — 알릴 상대가 없다. <b>언제 부를지는 호출부(세션
+     * 화면) 책임</b>이다: 재개("이어서 하기")·크래시 복구는 "시작"이 아니므로 진짜 새
+     * 세션을 여는 순간에만 한 번 불러야 한다. 여기서는 그 판단을 하지 않는다 — 서버가
+     * "이게 재개인지"를 판정하려면 클라이언트 초안 상태를 알아야 하는데, 그건 지금
+     * 기기에만 있다(서버에 저장되는 초안이 없다).
+     */
+    public void notifySessionStart(Long userId) {
+        relationRepository.findByUserAndTypeAndStatus(userId, RelationType.COUPLE, RelationStatus.ACTIVE)
+                .stream().findFirst()
+                .ifPresent(c -> {
+                    Long partnerId = c.partnerOf(userId);
+                    if (partnerId == null) {
+                        return;
+                    }
+                    String myName = userRepository.findById(userId).map(u -> u.getName()).orElse("애인");
+                    notificationService.notify(partnerId, NotificationCategory.PARTNER,
+                            "지금 운동 시작했어요 💪",
+                            myName + "님이 방금 운동을 시작했어요. 응원 한마디 남겨볼까요?",
+                            PushLinks.WORKOUT);
+                });
     }
 }

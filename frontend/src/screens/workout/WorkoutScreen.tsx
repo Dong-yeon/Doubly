@@ -23,10 +23,11 @@ import { voiceClipsApi } from '../../api/voiceClips';
 import { getErrorMessage } from '../../utils/error';
 import { haptics } from '../../utils/haptics';
 import { useDeleteAction } from '../../hooks/useDeleteAction';
-import { todayWeekDay } from '../../utils/date';
+import { todayWeekDay, toDateString } from '../../utils/date';
 import { routineToSessionParams } from '../../utils/routine';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type {
+  CoupleWeek,
   MuscleRecoveryStatus,
   Streak,
   StreakRepairInfo,
@@ -166,6 +167,22 @@ export function WorkoutScreen({ navigation }: Props) {
       .catch(() => setVoiceStatus(null));
   }, [connected, couple?.partner?.name]);
 
+  /*
+   * 둘의 이번 주 완료 날짜 — 요일 스트립에 나란히 그린다.
+   *
+   * 조사에서 커플 운동 앱의 핵심으로 꼽힌 건 "기록 공유"가 아니라 "같이 나타났다는
+   * 증거"였다(5순위). 완료 여부를 숫자(스트릭)로만 보여주면 "이번 주에 서로 언제
+   * 빠졌는지"가 안 보인다 — 요일별로 나란히 찍힌 점이라야 <b>빈칸이 서로에게 보인다</b>.
+   */
+  const [coupleWeek, setCoupleWeek] = useState<CoupleWeek | null>(null);
+  const loadCoupleWeek = useCallback(() => {
+    if (!connected) {
+      setCoupleWeek(null);
+      return;
+    }
+    workoutApi.coupleWeek().then(setCoupleWeek).catch(() => setCoupleWeek(null));
+  }, [connected]);
+
   useFocusEffect(
     useCallback(() => {
       fetchToday();
@@ -174,7 +191,8 @@ export function WorkoutScreen({ navigation }: Props) {
       loadRoutines();
       loadRecovery();
       loadVoiceStatus();
-    }, [fetchToday, fetchHistory, refreshStreaks, loadRoutines, loadRecovery, loadVoiceStatus]),
+      loadCoupleWeek();
+    }, [fetchToday, fetchHistory, refreshStreaks, loadRoutines, loadRecovery, loadVoiceStatus, loadCoupleWeek]),
   );
 
   // 루틴 카드를 탭하면 바로 세션 시작 — WorkoutRoutineListScreen 과 동일 로직(공용 헬퍼)
@@ -201,25 +219,57 @@ export function WorkoutScreen({ navigation }: Props) {
           바로 가는 기능까진 아직 없고(캘린더 화면이 그 역할), 지금은 "이번 주 어디쯤인가"를
           보여주는 용도로만 쓴다. */}
       <View style={styles.weekHeader}>
-        <View style={styles.streakBadge}>
-          <MaterialCommunityIcons name="fire" size={16} color={colors.white} />
-          <Text style={styles.streakBadgeText}>{myStreak?.currentCount ?? 0}</Text>
-        </View>
-        <View style={styles.weekStrip}>
-          {weekDates.map((d) => {
-            const isToday = d.toDateString() === todayKey;
-            return (
-              <View key={d.toISOString()} style={styles.weekCell}>
-                <Text style={styles.weekCellLabel}>{WEEKDAY_LETTERS[d.getDay()]}</Text>
-                <View style={[styles.weekCellDateWrap, isToday && styles.weekCellDateWrapToday]}>
-                  <Text style={[styles.weekCellDate, isToday && styles.weekCellDateToday]}>
-                    {d.getDate()}
-                  </Text>
+        <View style={styles.weekHeaderRow}>
+          <View style={styles.streakBadge}>
+            <MaterialCommunityIcons name="fire" size={16} color={colors.white} />
+            <Text style={styles.streakBadgeText}>{myStreak?.currentCount ?? 0}</Text>
+          </View>
+          <View style={styles.weekStrip}>
+            {weekDates.map((d) => {
+              const isToday = d.toDateString() === todayKey;
+              // 서버 날짜(YYYY-MM-DD)와 비교 — 네이티브 toDateString() 은 "Mon Jan 01 2026"
+              // 형식이라 그대로 못 견준다(위 isToday 판정과는 다른 문자열이 필요하다).
+              const key = toDateString(d);
+              const mine = coupleWeek?.myDates.includes(key) ?? false;
+              const partner = coupleWeek?.partnerDates.includes(key) ?? false;
+              // 둘 다 했으면 "함께"(WeeklyRecapCard 와 같은 색 규칙) — 하나만 했으면 그 사람 색
+              const dotColor = mine && partner ? colors.together : mine ? colors.me : partner ? colors.partner : null;
+              return (
+                <View key={d.toISOString()} style={styles.weekCell}>
+                  <Text style={styles.weekCellLabel}>{WEEKDAY_LETTERS[d.getDay()]}</Text>
+                  <View style={[styles.weekCellDateWrap, isToday && styles.weekCellDateWrapToday]}>
+                    <Text style={[styles.weekCellDate, isToday && styles.weekCellDateToday]}>
+                      {d.getDate()}
+                    </Text>
+                  </View>
+                  <View style={styles.weekCellDot}>
+                    {dotColor ? <View style={[styles.weekDot, { backgroundColor: dotColor }]} /> : null}
+                  </View>
                 </View>
-              </View>
-            );
-          })}
+              );
+            })}
+          </View>
         </View>
+        {/* 점 색의 뜻 — WeeklyRecapCard 와 같은 규칙(나/상대/together)이지만 처음 보는
+            자리라 한 번은 풀어 적는다. 연결 안 됐으면 상대 점이 영영 안 뜨니 숨긴다. */}
+        {connected ? (
+          <View style={styles.weekLegend}>
+            {(
+              [
+                { color: colors.me, label: '나' },
+                { color: colors.partner, label: couple?.partner?.name ?? '상대' },
+                { color: colors.together, label: '함께' },
+              ] as const
+            ).map((item) => (
+              <View key={item.label} style={styles.weekLegendItem}>
+                <View style={[styles.weekLegendDot, { backgroundColor: item.color }]} />
+                <Text style={styles.weekLegendLabel} numberOfLines={1}>
+                  {item.label}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
       </View>
 
       {/* 근육 회복 — 가장 최근에 훈련한 부위·경과시간 요약 카드(MVP: 이 한 줄만, 부위별
@@ -498,13 +548,12 @@ export function WorkoutScreen({ navigation }: Props) {
 const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   weekHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
     paddingBottom: spacing.md,
+    gap: 6,
   },
+  weekHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   streakBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -528,6 +577,14 @@ const styles = themedStyles((colors) => ({
   weekCellDateWrapToday: { backgroundColor: colors.primary },
   weekCellDate: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
   weekCellDateToday: { color: colors.white },
+  // 날짜 아래 완료 점 한 칸 — 점이 없는 날에도 높이를 고정해야 있는 날 없는 날 사이에서
+  // 요일 숫자들이 위아래로 들썩이지 않는다.
+  weekCellDot: { height: 6, alignItems: 'center', justifyContent: 'center' },
+  weekDot: { width: 6, height: 6, borderRadius: 3 },
+  weekLegend: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, paddingLeft: 2 },
+  weekLegendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  weekLegendDot: { width: 6, height: 6, borderRadius: 3 },
+  weekLegendLabel: { fontSize: fontSize.micro, color: colors.textTertiary, fontWeight: '600' },
   recoveryCard: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -304,6 +304,18 @@ export interface PartnerToday {
   completed: boolean;
 }
 
+/**
+ * 둘의 이번 주(월~일) 완료 날짜 — 운동 홈 상단 요일 스트립에 나란히 그린다.
+ * 날짜는 "YYYY-MM-DD" 문자열(서버 LocalDate 직렬화 그대로) — 화면의 요일 스트립도
+ * 같은 형식으로 비교한다(toDateString 유틸과 맞춘다).
+ */
+export interface CoupleWeek {
+  connected: boolean;
+  partnerName: string | null;
+  myDates: string[];
+  partnerDates: string[];
+}
+
 // 커플 음성 응원 — 애인 목소리로 녹음한 짧은 응원 문구. 운동 중 정해진 순간에 재생된다
 export type VoicePhrase =
   | 'WORKOUT_START'

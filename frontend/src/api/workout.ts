@@ -5,6 +5,7 @@ import type {
   ApiResponse,
   ExerciseHistory,
   CalendarDay,
+  CoupleWeek,
   ExerciseCatalogItem,
   ExerciseLastPerformance,
   MuscleRecoveryStatus,
@@ -80,6 +81,14 @@ export const workoutApi = {
   remove: (id: number) => unwrap(apiClient.delete<ApiResponse<void>>(`/workout/${id}`)),
   partnerToday: () =>
     unwrap(apiClient.get<ApiResponse<PartnerToday>>('/workout/partner/today')),
+  // 둘의 이번 주 완료 날짜 — 운동 홈 상단 요일 스트립에 나란히 그린다(5순위)
+  coupleWeek: () => unwrap(apiClient.get<ApiResponse<CoupleWeek>>('/workout/couple/week')),
+  /**
+   * "지금 운동 시작했어요" — 커플에게 실시간으로 알린다. 재개·복구가 아니라 진짜 새
+   * 세션을 시작할 때만 불러야 한다(WorkoutSessionScreen 참고). 부가 신호라 실패해도
+   * 세션 진행에는 지장이 없다 — 호출부에서 조용히 무시한다.
+   */
+  notifySessionStart: () => unwrap(apiClient.post<ApiResponse<void>>('/workout/session-start')),
   stats: () => unwrap(apiClient.get<ApiResponse<WorkoutStats>>('/workout/stats')),
   // 근육 회복 현황 — 부위별 마지막 수행 이후 경과 시간·추정 회복률(홈 화면 요약 카드)
   recovery: () => unwrap(apiClient.get<ApiResponse<MuscleRecoveryStatus>>('/workout/recovery')),
