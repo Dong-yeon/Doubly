@@ -525,17 +525,19 @@ export function WorkoutScreen({ navigation }: Props) {
 
       {/* 짐워크 스타일 — "자유 운동"(루틴 없이 바로 세션, 기존 "세션 시작"과 동일 동작)과
           "맞춤 운동"(AI 추천). 직접 기록하기(WorkoutRecord)는 자주 안 쓰는 보조 경로라 여기선
-          빼고 홈의 "운동 기록하기" 진입 카드 등 다른 곳에서 계속 갈 수 있게 남겨둔다. */}
+          빼고 홈의 "운동 기록하기" 진입 카드 등 다른 곳에서 계속 갈 수 있게 남겨둔다.
+          기본(primary)은 "자유 운동" 쪽이다 — 매일 여는 사람에게 필요한 건 한 달에 한 번
+          쓸까 말까 한 AI 추천이 아니라 바로 시작하는 쪽이다(2026-09-01 분석 1-5). */}
       <View style={styles.fabWrap}>
         <View style={styles.fabRow}>
           <Button
             title="자유 운동"
-            variant="secondary"
             onPress={() => navigation.navigate('WorkoutSession')}
             style={styles.fabBtn}
           />
           <Button
             title="✨ 맞춤 운동"
+            variant="secondary"
             onPress={() => navigation.navigate('WorkoutRecommend')}
             style={styles.fabBtn}
           />
