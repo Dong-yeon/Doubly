@@ -5,6 +5,7 @@ import com.fitto.common.ai.AiJobService;
 import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
 import com.fitto.workout.dto.CalendarDayResponse;
+import com.fitto.workout.dto.CoupleWeekResponse;
 import com.fitto.workout.dto.ExerciseHistoryResponse;
 import com.fitto.workout.dto.ExerciseLastPerformanceRequest;
 import com.fitto.workout.dto.ExerciseLastPerformanceResponse;
@@ -141,6 +142,22 @@ public class WorkoutController {
     @GetMapping("/partner/today")
     public ApiResponse<PartnerTodayResponse> partnerToday(@AuthenticationPrincipal AuthUser user) {
         return ApiResponse.success(workoutService.partnerToday(user.id()));
+    }
+
+    /** 둘의 이번 주 완료 날짜 — 운동 홈 상단 요일 스트립에 나란히 그린다(5순위). */
+    @GetMapping("/couple/week")
+    public ApiResponse<CoupleWeekResponse> coupleWeek(@AuthenticationPrincipal AuthUser user) {
+        return ApiResponse.success(workoutService.coupleWeek(user.id()));
+    }
+
+    /**
+     * "지금 운동 시작했어요" — 커플에게 실시간으로 알린다. 재개·복구가 아니라 <b>진짜 새
+     * 세션을 시작할 때만</b> 클라이언트가 호출해야 한다(WorkoutSessionScreen 참고).
+     */
+    @PostMapping("/session-start")
+    public ApiResponse<Void> notifySessionStart(@AuthenticationPrincipal AuthUser user) {
+        workoutService.notifySessionStart(user.id());
+        return ApiResponse.success(null);
     }
 
     /** 근육 회복 현황 — 부위별 마지막 수행 이후 경과 시간·추정 회복률(홈 화면 요약 카드). */
