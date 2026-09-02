@@ -34,6 +34,7 @@ import { MuscleBodyBadge } from '../../components/MuscleBodyBadge';
 import { ExercisePickerModal } from '../../components/workout/ExercisePickerModal';
 import { PlateCalculatorSheet } from '../../components/workout/PlateCalculatorSheet';
 import { useWorkoutStore } from '../../store/workoutStore';
+import { useRelationStore } from '../../store/relationStore';
 import { workoutApi } from '../../api/workout';
 import { voiceClipsApi } from '../../api/voiceClips';
 import { playVoiceClip } from '../../utils/voicePlayback';
@@ -68,6 +69,18 @@ type Props = NativeStackScreenProps<WorkoutStackParamList, 'WorkoutSession'>;
 
 const CATEGORIES = ['근력', '유산소', '유연성'];
 const REST_PRESETS = [60, 90, 120];
+/**
+ * 음성 응원 재생을 화면에도 알릴 때 쓰는 짧은 이름표.
+ *
+ * 재생 자체는 fire-and-forget(voicePlayback.ts)이라, 무음 모드거나 헬스장이 시끄러우면
+ * 재생됐다는 사실을 사용자가 알 방법이 없었다(2026-09-01 분석 진단 3 — 부스터만 화면에
+ * 배너가 남고 나머지 4개 순간은 소리만 나고 사라졌다). WORKOUT_START·PR·WORKOUT_COMPLETE
+ * 는 각자의 호출부에서 따로 문구를 짓는다(다른 토스트와 합치거나 아예 첫 진입 시점이라).
+ */
+const CHEER_LABEL: Partial<Record<VoicePhrase, string>> = {
+  REST_END: '휴식 끝',
+  LAST_SET: '마지막 세트',
+};
 /** 세션 스냅샷 주기(ms) — 최악의 손실이 이 값이다. 더 짧게 하면 디스크 쓰기만 늘어난다 */
 const SNAPSHOT_INTERVAL_MS = 10_000;
 
@@ -514,6 +527,17 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
    * 값을 붙잡으므로 상태 대신 ref 로 최신값을 보장한다(바로 아래 restRef 와 같은 이유).
    */
   const partnerClipsRef = useRef<Partial<Record<VoicePhrase, string>>>({});
+  const partnerName = useRelationStore((s) => s.couple?.partner?.name);
+  /**
+   * 재생 + 화면 알림을 함께 한다 — 클립이 실제로 있을 때만(없으면 지금까지처럼 조용히
+   * 넘어간다). REST_END·LAST_SET 전용이다: WORKOUT_START·PR·WORKOUT_COMPLETE 는 그
+   * 순간 이미 뜨는 다른 토스트와 겹치므로 각 호출부에서 직접 문구를 짓는다.
+   */
+  const cheer = (phrase: keyof typeof CHEER_LABEL) => {
+    const url = partnerClipsRef.current[phrase];
+    playVoiceClip(url);
+    if (url) toast.info(`🎤 ${partnerName ?? '애인'}님의 응원 · ${CHEER_LABEL[phrase]}`);
+  };
   useEffect(() => {
     voiceClipsApi
       .partner()
@@ -524,8 +548,12 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
         // 시작 응원은 화면에 들어오자마자 — "시작"이 가장 힘든 지점이라 여기서 튼다.
         // 클립을 받은 뒤에 재생해야 하므로 로드 콜백 안에 둔다.
         playVoiceClip(byPhrase.WORKOUT_START);
+        if (byPhrase.WORKOUT_START) toast.info(`🎤 ${partnerName ?? '애인'}님의 시작 응원이 도착했어요`);
       })
       .catch(() => undefined);
+    // partnerName 은 화면에 들어올 때의 값으로 충분하다(세션 도중 파트너가 바뀌는 일은
+    // 없다) — 의존성에 넣으면 이 조회 자체가 반응형이 아닌데도 재실행 대상으로 오해된다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /*
@@ -763,7 +791,7 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
         haptics.success();
         // 타이머가 다 돼서 자연스럽게 끝났을 때만 재생한다 — 건너뛰기/시간 조절 버튼으로
         // 직접 끝냈을 때는 안 튼다(haptics.success() 도 이 분기에서만 울리는 것과 같은 이유)
-        playVoiceClip(partnerClipsRef.current.REST_END);
+        cheer('REST_END');
         setRest(0);
       } else {
         setRest(next);
@@ -818,7 +846,7 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
           const remaining = prev.reduce((n, x) => n + x.sets.filter((z) => !z.done).length, 0) - 1;
           if (remaining === 1 && !lastSetCheeredRef.current) {
             lastSetCheeredRef.current = true;
-            playVoiceClip(partnerClipsRef.current.LAST_SET);
+            cheer('LAST_SET');
           }
         }
         return { ...e, sets };
@@ -1028,10 +1056,18 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
       void clearSessionDraft();
       useActiveWorkoutStore.getState().clear();
       haptics.success();
-      toast.success('운동 완료! 기록했어요 ');
-      // 커플 음성 응원 — PR 을 세웠으면 그 응원을, 아니면 완료 응원을 재생한다
+      // 커플 음성 응원 — PR 을 세웠으면 그 응원을, 아니면 완료 응원을 재생한다.
+      // 토스트는 한 번에 하나뿐이라(store/toastStore.ts) "운동 완료!"와 따로 못 띄운다 —
+      // 응원이 있으면 한 토스트에 같이 담는다(REST_END/LAST_SET 의 cheer() 와 다른 이유는
+      // 여기뿐이다: 이 순간엔 이미 뜨는 토스트가 있다).
       const isPrRun = !!saved.prs && saved.prs.length > 0;
-      playVoiceClip(partnerClipsRef.current[isPrRun ? 'PR' : 'WORKOUT_COMPLETE']);
+      const cheerUrl = partnerClipsRef.current[isPrRun ? 'PR' : 'WORKOUT_COMPLETE'];
+      playVoiceClip(cheerUrl);
+      toast.success(
+        cheerUrl
+          ? `운동 완료! 기록했어요 · 🎤 ${partnerName ?? '애인'}님의 응원도 왔어요`
+          : '운동 완료! 기록했어요 ',
+      );
       // 이미 저장이 끝났으므로 이후의 모든 이탈(goBack)은 이탈 가드 확인 없이 통과시킨다
       allowLeave();
       if (routineId != null) {
