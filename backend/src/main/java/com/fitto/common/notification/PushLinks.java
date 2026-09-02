@@ -22,6 +22,7 @@ public final class PushLinks {
     public static final String WORKOUT = "workout";
     public static final String WORKOUT_CHALLENGE = "workout/challenge";
     public static final String WORKOUT_ROUTINES = "workout/routines";
+    public static final String WORKOUT_VOICE_CLIPS = "workout/voice-clips";
     public static final String DIET = "diet";
     public static final String PLACE = "place";
     public static final String CONTENT = "content";

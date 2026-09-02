@@ -210,6 +210,7 @@ export const linking: LinkingOptions<RootStackParamList> = {
               WorkoutRoutineForm: 'workout/routines/new',
               BodyMetric: 'workout/body',
               Challenge: 'workout/challenge',
+              VoiceClips: 'workout/voice-clips',
             },
           },
           Chat: {

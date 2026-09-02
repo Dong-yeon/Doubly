@@ -19,6 +19,7 @@ import { toast } from '../../store/toastStore';
 import { QuickLinkChips } from '../../components/QuickLinkChips';
 import { streakApi } from '../../api/streak';
 import { workoutApi } from '../../api/workout';
+import { voiceClipsApi } from '../../api/voiceClips';
 import { getErrorMessage } from '../../utils/error';
 import { haptics } from '../../utils/haptics';
 import { useDeleteAction } from '../../hooks/useDeleteAction';
@@ -134,6 +135,37 @@ export function WorkoutScreen({ navigation }: Props) {
     workoutApi.recovery().then(setRecovery).catch(() => setRecovery(null));
   }, []);
 
+  /*
+   * 음성 응원 현황 — "얼마나 준비돼 있는지"를 홈에서 바로 보여준다.
+   *
+   * 지금까지 이 기능은 QuickLinkChips 안 아이콘 하나뿐이라 존재감이 없었고
+   * (2026-09-01 분석 진단 1), 녹음을 안 해도 화면이 완전히 조용해서(진단 4) "기능이
+   * 있는지조차" 체감할 기회가 없었다. 상태를 세 가지로 나누는 이유는 상황마다 할 일이
+   * 다르기 때문이다 — 애인이 남겨둔 게 있으면 그 사실 자체가 보상이고, 아무도 안
+   * 남겼으면 "내가 먼저" 가 자연스러운 다음 행동이고, 나만 남겼으면 기다리는 중임을
+   * 알아야 "왜 재생이 안 되지"란 오해가 없다.
+   */
+  const [voiceStatus, setVoiceStatus] = useState<string | null>(null);
+  const loadVoiceStatus = useCallback(() => {
+    if (!connected) {
+      setVoiceStatus(null);
+      return;
+    }
+    Promise.all([voiceClipsApi.mine(), voiceClipsApi.partner()])
+      .then(([mine, partner]) => {
+        const partnerName = couple?.partner?.name ?? '애인';
+        if (partner.clips.length > 0) {
+          setVoiceStatus(`${partnerName}님의 응원 ${partner.clips.length}개 준비됨`);
+        } else if (mine.length === 0) {
+          setVoiceStatus('아직 아무도 안 남겼어요 · 먼저 녹음해볼까요?');
+        } else {
+          // 문구는 5개 고정(VoicePhrase) — VoiceClipsScreen 의 PHRASES 와 같은 수.
+          setVoiceStatus(`내가 남긴 응원 ${mine.length}/5 · ${partnerName}님의 응원을 기다리는 중`);
+        }
+      })
+      .catch(() => setVoiceStatus(null));
+  }, [connected, couple?.partner?.name]);
+
   useFocusEffect(
     useCallback(() => {
       fetchToday();
@@ -141,7 +173,8 @@ export function WorkoutScreen({ navigation }: Props) {
       refreshStreaks();
       loadRoutines();
       loadRecovery();
-    }, [fetchToday, fetchHistory, refreshStreaks, loadRoutines, loadRecovery]),
+      loadVoiceStatus();
+    }, [fetchToday, fetchHistory, refreshStreaks, loadRoutines, loadRecovery, loadVoiceStatus]),
   );
 
   // 루틴 카드를 탭하면 바로 세션 시작 — WorkoutRoutineListScreen 과 동일 로직(공용 헬퍼)
@@ -200,6 +233,22 @@ export function WorkoutScreen({ navigation }: Props) {
             {recovery.mostRecent.muscleGroup} · {hoursAgoLabel(recovery.mostRecent.hoursAgo ?? 0)}
           </Text>
         </View>
+      ) : null}
+
+      {/* 음성 응원 현황 — 커플이 연결돼 있을 때만. QuickLinkChips 의 칩 하나로는 존재감이
+          없어서(2026-09-01 분석) 회복 카드와 같은 자리·같은 톤으로 승격했다. */}
+      {voiceStatus ? (
+        <Pressable
+          style={({ pressed }) => [styles.recoveryCard, pressed && styles.resumePressed]}
+          onPress={() => navigation.navigate('VoiceClips')}
+        >
+          <MaterialCommunityIcons name="microphone-outline" size={20} color={colors.together} />
+          <Text style={styles.recoveryLabel}>음성 응원</Text>
+          <Text style={styles.recoveryValue} numberOfLines={1}>
+            {voiceStatus}
+          </Text>
+          <MaterialCommunityIcons name="chevron-right" size={16} color={colors.textTertiary} />
+        </Pressable>
       ) : null}
 
       {/* 아이콘 칩 — 식단 탭과 같은 QuickLinkChips 를 써서 톤을 맞춘다. "내 루틴"·"AI 추천"은
@@ -493,7 +542,17 @@ const styles = themedStyles((colors) => ({
     paddingVertical: spacing.sm,
   },
   recoveryLabel: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
-  recoveryValue: { fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '800', marginLeft: 'auto' },
+  // flexShrink — 회복 카드는 "부위 · N시간 전"처럼 항상 짧지만, 음성 응원 카드는
+  // "내가 남긴 응원 3/5 · OO님의 응원을 기다리는 중"처럼 길어질 수 있다. 없으면 좁은
+  // 화면에서 챙길 뒤 화살표(chevron)를 밀어내거나 카드 밖으로 넘친다.
+  recoveryValue: {
+    fontSize: fontSize.caption,
+    color: colors.textPrimary,
+    fontWeight: '800',
+    marginLeft: 'auto',
+    flexShrink: 1,
+    textAlign: 'right',
+  },
   list: { padding: spacing.lg, paddingBottom: layout.listBottomWithFab },
   // 재개 카드 — 복구권 카드와 같은 형태를 쓰되 색으로 "지금 할 일"임을 구분한다
   resumeCard: {
