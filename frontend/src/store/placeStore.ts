@@ -22,13 +22,18 @@ interface PlaceState {
   load: (force?: boolean) => Promise<void>;
   /** 다음 load() 가 캐시를 쓰지 않고 다시 받아오게 표시만 한다(요청은 안 보낸다) */
   invalidate: () => void;
+  /**
+   * 로그아웃 시 호출 — 목록까지 비운다. invalidate() 는 loaded 만 내려 다음 load() 전까지
+   * 화면에 이전 계정의 places 가 그대로 남아있지만(계정 전환 시 새 사용자에게 잠깐이라도
+   * 보이면 안 되는 개인정보다), reset() 은 목록 자체를 지워 그 틈을 없앤다.
+   */
+  reset: () => void;
 }
 
+const initialState = { places: [] as Place[], loading: false, loadError: false, loaded: false };
+
 export const usePlaceStore = create<PlaceState>((set, get) => ({
-  places: [],
-  loading: false,
-  loadError: false,
-  loaded: false,
+  ...initialState,
 
   load: async (force = false) => {
     if (get().loaded && !force) return;
@@ -45,4 +50,6 @@ export const usePlaceStore = create<PlaceState>((set, get) => ({
   },
 
   invalidate: () => set({ loaded: false }),
+
+  reset: () => set(initialState),
 }));
