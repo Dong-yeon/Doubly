@@ -19,6 +19,7 @@ import {
   View,
 } from 'react-native';
 import DragList, { type DragListRenderItemInfo } from 'react-native-draglist';
+import { useKeepAwake } from 'expo-keep-awake';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -258,6 +259,11 @@ function suggestRoutineTitle(exercises: SessionExercise[]): string {
 }
 
 export function WorkoutSessionScreen({ navigation, route }: Props) {
+  // 화면이 떠 있는 동안은 자동 잠금을 막는다 — 세트 사이 몇 초 손을 안 대면 꺼져서
+  // 다음 세트를 시작하려면 잠금부터 풀어야 했다(운동 중 가장 자주 겪는 마찰).
+  // 언마운트(세션 종료·화면 이탈) 시 자동으로 해제된다 — 다른 화면까지 안 꺼지게 두지 않는다.
+  useKeepAwake();
+
   const save = useWorkoutStore((s) => s.save);
 
   const [exercises, setExercises] = useState<SessionExercise[]>(() =>
