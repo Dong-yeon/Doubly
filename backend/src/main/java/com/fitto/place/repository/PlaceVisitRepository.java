@@ -12,6 +12,23 @@ public interface PlaceVisitRepository extends JpaRepository<PlaceVisit, Long> {
     List<PlaceVisit> findByPlaceIdOrderByIdDesc(Long placeId);
 
     /**
+     * 식단 기록에 붙은 장소 — Diet 탭 목록에서도 "이 기록에 장소가 연결돼 있다"를 보여주려면
+     * 필요하다(2026-09-02 분석: 지금까지 식단 탭에서 장소를 붙여도 럽슐랭 탭 → 그 장소 상세로
+     * 직접 찾아가야만 확인할 수 있었다).
+     *
+     * <p>{@code Meal} 에 {@code placeId} 를 따로 복제해 들고 있지 않고 매번 역방향으로 찾는
+     * 이유: 방문 기록이 삭제되면({@code PlaceDetailScreen} "방문 기록 삭제") 그 사실이 즉시
+     * 반영돼야 하는데, Meal 쪽에 값을 복제해두면 방문 삭제 시 Meal 도 같이 갱신해야 해서
+     * 두 값이 어긋날 여지가 생긴다. {@code PlaceVisit.mealId} 가 유일한 연결고리로 남는다.
+     */
+    @Query("""
+            select v as visit, p.name as placeName
+            from PlaceVisit v join Place p on p.id = v.placeId
+            where v.mealId in :mealIds
+            """)
+    List<VisitWithPlace> findByMealIdIn(@Param("mealIds") List<Long> mealIds);
+
+    /**
      * 럽슐랭 가이드 매거진 카드의 커버 사진/한줄평용 배치 조회 — 장소별로 최근 방문순.
      * place_id 로 in 절 하나만 날리고 "장소별 최근 방문(사진 있으면 그걸, 없으면 가장 최근
      * 것)" 선택은 서비스 레이어에서 그룹핑해 고른다(장소별 사진 유무가 갈려 SQL 한 줄로

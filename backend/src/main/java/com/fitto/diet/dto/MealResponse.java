@@ -29,6 +29,15 @@ public record MealResponse(
         List<GoalHighlight> goals,
         /** 데이트 식단(같이 먹기)으로 등록됐는지 — 커플 상대방에게도 짝이 있다. */
         boolean sharedWithPartner,
+        /**
+         * 이 기록에 연동된 장소 — 럽슐랭(장소) 탭에서 방문 기록에 이 식단을 붙였거나,
+         * 식단 탭에서 저장할 때 장소를 골랐을 때만 채워진다(둘 다 없으면 null).
+         * 지금까지 이 값이 응답에 없어서, 식단 탭에서 붙인 장소를 식단 탭 어디서도 다시
+         * 확인할 수 없었다(2026-09-02 분석) — 장소 상세로 가려면 럽슐랭 탭에서 그 장소를
+         * 직접 찾아가는 수밖에 없었다.
+         */
+        Long placeId,
+        String placeName,
         LocalDateTime createdAt
 ) {
     /**
@@ -47,19 +56,29 @@ public record MealResponse(
             int target
     ) {}
 
-    /** 저장 시점이 아닌 조회(오늘/히스토리 등)·수정용 — 목표 달성 목록은 항상 비운다. */
+    /** 저장 시점이 아닌 조회(오늘/히스토리 등)·수정용 — 목표 달성 목록은 항상 비우고 장소도 없다. */
     public static MealResponse from(Meal m) {
-        return from(m, List.of());
+        return from(m, List.of(), null, null);
     }
 
-    /** 저장 응답 전용 — 이번 저장에서 감지된 목표 달성 목록을 함께 싣는다. */
+    /** 저장 응답 전용 — 이번 저장에서 감지된 목표 달성 목록을 함께 싣는다. 저장 시점엔 장소
+     *  연동이 아직(있다면) 별도 API 콜로 뒤이어 오므로 이 응답엔 항상 없다. */
     public static MealResponse from(Meal m, List<GoalHighlight> goals) {
+        return from(m, goals, null, null);
+    }
+
+    /** 목록 조회(오늘/히스토리) 전용 — 장소 연동 여부를 배치로 조회해 함께 싣는다. */
+    public static MealResponse from(Meal m, Long placeId, String placeName) {
+        return from(m, List.of(), placeId, placeName);
+    }
+
+    private static MealResponse from(Meal m, List<GoalHighlight> goals, Long placeId, String placeName) {
         return new MealResponse(
                 m.getId(), m.getMealDate(), m.getMealType(), m.getMealType().label(),
                 m.getMemo(), m.getPhotoUrl(), m.getCalories(),
                 m.getCarbs(), m.getProtein(), m.getFat(),
                 m.getSugar(), m.getSodium(), m.getFiber(),
                 m.getItems().stream().map(MealItemResponse::of).toList(),
-                goals, m.isSharedMeal(), m.getCreatedAt());
+                goals, m.isSharedMeal(), placeId, placeName, m.getCreatedAt());
     }
 }
