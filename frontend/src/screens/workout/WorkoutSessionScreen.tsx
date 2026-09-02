@@ -417,6 +417,19 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
   }, [resume]);
 
   /*
+   * "지금 운동 시작했어요" — 커플에게 실시간 신호를 보낸다(5순위 나머지 항목).
+   *
+   * <b>재개·복구는 "시작"이 아니다.</b> restoreChecked 가 true 가 됐는데 restoredRef 가
+   * 여전히 false 라는 건, 위 복구 effect 가 "되살릴 초안이 없었다" 또는 "버리고 새로
+   * 시작을 골랐다"로 끝났다는 뜻이다 — 그때만 진짜 새 세션이다. 부가 신호라 실패해도
+   * (커플 미연결 포함) 세션 진행에는 지장이 없다.
+   */
+  useEffect(() => {
+    if (!restoreChecked || restoredRef.current) return;
+    void workoutApi.notifySessionStart().catch(() => undefined);
+  }, [restoreChecked]);
+
+  /*
    * 주기 스냅샷 — 화면 상태를 그대로 기기에 남긴다.
    *
    * 매 입력마다 쓰면 타이핑 한 글자에 디스크 쓰기가 붙고, 저장을 안 하면 크래시에
