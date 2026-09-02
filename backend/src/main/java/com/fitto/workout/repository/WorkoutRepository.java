@@ -20,13 +20,23 @@ public interface WorkoutRepository extends JpaRepository<Workout, Long> {
     /** 여행 회고(Trip Recap) — 기간 내 두 사람 합산 운동 기록 수. */
     long countByUserIdInAndWorkoutDateBetween(List<Long> userIds, LocalDate start, LocalDate end);
 
-    /** 히스토리 — 커서(id) 기반 페이징. cursor 가 null 이면 최신부터. */
+    /**
+     * 히스토리 — 커서(id) 기반 페이징. cursor 가 null 이면 최신부터.
+     *
+     * <p>오늘 기록은 뺀다({@code workoutDate < :today}). 운동 홈이 오늘 기록을 "진행한
+     * 운동" 섹션에 이미 따로 보여주는데, 이 쿼리가 날짜 구분 없이 전부 내려주던 바람에
+     * 오늘 기록이 그 아래 히스토리 목록에도 한 번 더 나왔다(2026-09-01 분석 1-4).
+     * {@link #findByUserIdAndWorkoutDateOrderByIdDesc}(findToday 가 쓴다)와 겹치지
+     * 않게 딱 그 경계로 나눈다.
+     */
     @Query("""
             select w from Workout w
-            where w.userId = :userId and (cast(:cursor as Long) is null or w.id < :cursor)
+            where w.userId = :userId and w.workoutDate < :today
+              and (cast(:cursor as Long) is null or w.id < :cursor)
             order by w.id desc
             """)
     List<Workout> findHistory(@Param("userId") Long userId,
+                              @Param("today") LocalDate today,
                               @Param("cursor") Long cursor,
                               Pageable pageable);
 
