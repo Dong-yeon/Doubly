@@ -1199,7 +1199,9 @@ export type MessageType =
   | 'TOUCH'
   | 'CALL_CARD'
   /** 스트릭 마일스톤 축하 — content 가 그대로 읽히는 축하 문장이다(서버가 대신 남긴다) */
-  | 'STREAK_CARD';
+  | 'STREAK_CARD'
+  /** 음성 메시지(최대 30초) — content 에 "{audioUrl}|{durationSec}" 형식으로 담는다 */
+  | 'VOICE_MESSAGE';
 /** 메시지 이모지 리액션 — mine 은 userIds 에 내 id 가 있는지로 판단한다(브로드캐스트 공용) */
 export interface ChatReactionSummary {
   emoji: string;

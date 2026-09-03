@@ -9,8 +9,15 @@ import com.fitto.chat.dto.LatestTouchResponse;
 import com.fitto.chat.dto.ReadReceipt;
 import com.fitto.feed.dto.ReactRequest;
 import com.fitto.chat.service.ChatService;
+import com.fitto.common.exception.BusinessException;
+import com.fitto.common.exception.ErrorCode;
+import com.fitto.common.plan.Feature;
+import com.fitto.common.plan.PlanGuard;
 import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
+import com.fitto.common.upload.CloudinaryProperties;
+import com.fitto.common.upload.CloudinarySigner;
+import com.fitto.common.upload.UploadSignatureResponse;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import jakarta.validation.Valid;
@@ -35,10 +42,30 @@ public class ChatController {
 
     private final ChatService chatService;
     private final SimpMessagingTemplate messagingTemplate;
+    private final CloudinaryProperties cloudinaryProperties;
+    private final PlanGuard planGuard;
 
-    public ChatController(ChatService chatService, SimpMessagingTemplate messagingTemplate) {
+    public ChatController(ChatService chatService, SimpMessagingTemplate messagingTemplate,
+                          CloudinaryProperties cloudinaryProperties, PlanGuard planGuard) {
         this.chatService = chatService;
         this.messagingTemplate = messagingTemplate;
+        this.cloudinaryProperties = cloudinaryProperties;
+        this.planGuard = planGuard;
+    }
+
+    /**
+     * 음성 메시지 업로드용 서명 — 사진(UploadController)과 같은 Cloudinary 계정, 별도
+     * 엔드포인트. 한도(Feature.VOICE_MESSAGE, 무료 5/일·PRO 100/일)는 여기서 소비한다 —
+     * 사진과 같은 이유로 발신(send) 시점이 아니라 업로드 시점에 센다(그 시점에만 서버가
+     * 관여하기 때문).
+     */
+    @PostMapping("/voice-upload-signature")
+    public ApiResponse<UploadSignatureResponse> voiceUploadSignature(@AuthenticationPrincipal AuthUser user) {
+        if (!cloudinaryProperties.isConfigured()) {
+            throw new BusinessException(ErrorCode.UPLOAD_NOT_CONFIGURED);
+        }
+        planGuard.consume(user.id(), Feature.VOICE_MESSAGE);
+        return ApiResponse.success(CloudinarySigner.sign(cloudinaryProperties));
     }
 
     @GetMapping("/rooms")

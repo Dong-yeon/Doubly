@@ -23,5 +23,11 @@ public enum MessageType {
      * 기록을 저장한 사람). 코드가 아니라 문장을 담는 이유는, 이 타입을 모르는 구버전 앱에서도
      * 평범한 말풍선으로 읽히게 하기 위해서다.
      */
-    STREAK_CARD
+    STREAK_CARD,
+    /**
+     * 음성 메시지(최대 30초) — content 에 "{audioUrl}|{durationSec}" 형식으로 담는다.
+     * 업로드 한도(Feature.VOICE_MESSAGE)는 발신 시점이 아니라 업로드 서명 발급 시점에
+     * 소비한다(ChatController.voiceUploadSignature) — IMAGE 와 같은 패턴(UploadController).
+     */
+    VOICE_MESSAGE
 }

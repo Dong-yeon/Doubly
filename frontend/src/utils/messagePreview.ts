@@ -9,6 +9,7 @@ import type { MessageType } from '../types';
 import { touchGestureOf } from '../constants/touchGestures';
 import { stickerImageOf } from '../constants/stickerImages';
 import { callCardLabel, parseCallCard } from './callCard';
+import { formatVoiceDuration, parseVoiceContent } from './chatVoice';
 
 export function messagePreview(type: MessageType, content?: string | null): string {
   switch (type) {
@@ -29,6 +30,10 @@ export function messagePreview(type: MessageType, content?: string | null): stri
     case 'CALL_CARD': {
       const info = parseCallCard(content);
       return info ? callCardLabel(info) : '통화';
+    }
+    case 'VOICE_MESSAGE': {
+      const parsed = parseVoiceContent(content);
+      return parsed ? `음성 메시지 ${formatVoiceDuration(parsed.durationSec)}` : '음성 메시지';
     }
     default:
       return content ?? '';
