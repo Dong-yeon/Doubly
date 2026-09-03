@@ -149,6 +149,16 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const inputRef = useRef<TextInput>(null);
 
   /*
+   * 목록은 inverted(offset 0 = 맨 아래 = 최신). "채팅을 치면 자동으로 맨 아래로",
+   * "많이 올려본 뒤 한 번에 내려가기" 두 요청(2026-09-03)을 이 ref 하나로 처리한다.
+   */
+  const listRef = useRef<FlatList<ChatMessage>>(null);
+  const scrollToBottom = (animated = true) => listRef.current?.scrollToOffset({ offset: 0, animated });
+  // 과거 쪽으로 일정 거리 이상 올라갔을 때만 "맨 아래로" FAB 을 보여준다
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const SCROLL_TO_BOTTOM_THRESHOLD = 400;
+
+  /*
    * 맞춤법 검사는 기기 안에서만 돈다(외부 전송 없음). 규칙 몇 개짜리라
    * 입력할 때마다 돌려도 부담이 없지만, 렌더마다 다시 하지 않도록 text 에 묶는다.
    */
@@ -405,6 +415,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
       return;
     }
 
+    // 과거를 읽던 중이었어도 내가 보낸 메시지는 바로 보여야 한다(2026-09-03 요청)
+    scrollToBottom();
     const ok = await send(relationId, {
       messageType: 'TEXT',
       content,
@@ -504,6 +516,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     setShowStickers(false);
     setShowEmoticons(false);
     haptics.light();
+    scrollToBottom();
     const ok = await send(relationId, { messageType: 'STICKER', content: sticker });
     if (!ok) {
       Alert.alert('전송 실패', '연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
@@ -528,6 +541,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     if (!uri) return;
     setPendingImage(null);
     setUploading(true);
+    scrollToBottom();
     try {
       const url = await runBusy('사진 보내는 중…', () => uploadImage(uri));
       const ok = await send(relationId, { messageType: 'IMAGE', imageUrl: url });
@@ -831,7 +845,13 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             <Text style={styles.offlineText}>연결 중이에요… 잠시만요</Text>
           </View>
         )}
+        {/*
+         * FlatList 와 FAB 을 같이 감싼다 — FAB 이 이 뷰 기준으로 bottom-right 에 붙어야
+         * 메시지 목록 위에만 뜨고, 그 아래 입력바·트레이는 가리지 않는다.
+         */}
+        <View style={styles.flex}>
         <FlatList
+          ref={listRef}
           style={styles.flex}
           data={messages}
           inverted
@@ -844,6 +864,15 @@ export function ChatRoomScreen({ navigation, route }: Props) {
            */
           onEndReached={() => loadOlder(relationId)}
           onEndReachedThreshold={0.3}
+          // "맨 아래로" FAB — inverted 라 contentOffset.y 가 클수록 과거(위) 쪽이다
+          onScroll={(e) => {
+            const y = e.nativeEvent.contentOffset.y;
+            setShowScrollToBottom((prev) => {
+              const next = y > SCROLL_TO_BOTTOM_THRESHOLD;
+              return prev === next ? prev : next;
+            });
+          }}
+          scrollEventThrottle={100}
           ListFooterComponent={
             loadingOlder ? (
               <ActivityIndicator size="small" color={colors.primary} style={styles.olderSpinner} />
@@ -865,6 +894,19 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           // 스크롤 드래그로 키보드를 내릴 수 있게 (iOS 는 손가락을 따라 내려간다)
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         />
+        {/* 과거를 한참 올려본 뒤 한 번에 내려가는 FAB (2026-09-03 요청) */}
+        {showScrollToBottom ? (
+          <Pressable
+            style={styles.scrollToBottomFab}
+            onPress={() => scrollToBottom()}
+            accessibilityRole="button"
+            accessibilityLabel="맨 아래로 이동"
+            hitSlop={8}
+          >
+            <MaterialCommunityIcons name="chevron-down" size={22} color={colors.white} />
+          </Pressable>
+        ) : null}
+        </View>
         {/*
          * 보조 도구 트레이 — 예전엔 스티커·터치·무드·카메라 4개 버튼이 입력바에 항상 떠
          * 있어(46px×4) 좁은 기기에서 입력창이 짓눌렸다. "+" 로 펼치는 트레이 하나로
@@ -1131,6 +1173,23 @@ const styles = themedStyles((colors) => ({
   // inverted FlatList 의 콘텐츠는 scaleY:-1 로 뒤집혀 그려진다 — EmptyState 만 다시
   // 뒤집어 정방향으로 보이게 한다(QA_CHECKLIST.md 패턴10)
   emptyMessagesWrap: { transform: [{ scaleY: -1 }] },
+  // 목록 위에 떠 있는 "맨 아래로" FAB — 트레이·입력바 위 오른쪽 모서리
+  scrollToBottomFab: {
+    position: 'absolute',
+    right: spacing.md,
+    bottom: spacing.md,
+    width: 36,
+    height: 36,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
   // 그룹 간 세로 간격은 msgBlock(정상 메시지)·row(삭제된 메시지)가 각각 spaced/grouped 로 담당한다
   //
   // flexShrink: 1 이 row·bubble 둘 다에 필요하다 — RN 은 웹 flexbox와 달리 flex 자식의
