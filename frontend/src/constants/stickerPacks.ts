@@ -25,9 +25,6 @@ export const STICKER_PACKS: StickerPackDef[] = [
       '🤗', '😆', '😂', '🥹',
       '😴', '😤', '🥺', '😭',
       '👍', '💪', '🎉', '❤️‍🔥',
-      // 이미지 스티커 — 값은 이모지가 아니라 StickerImage 코드. 렌더 쪽에서
-      // stickerImageOf() 로 분기해 로컬 번들 이미지로 그린다.
-      'LOVE_BEAR',
     ],
   },
   { key: 'SPRING', label: '봄', premium: true, stickers: ['🌸', '🌷', '🌱', '🦋', '🍡', '☔', '🧺', '🌼'] },

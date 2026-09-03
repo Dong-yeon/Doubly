@@ -144,7 +144,9 @@ export function HomeScreen({ navigation }: Props) {
   const [annModal, setAnnModal] = useState(false);
   const [annInput, setAnnInput] = useState('');
   const [annSaving, setAnnSaving] = useState(false);
-  // 가상 터치 — 채팅방을 열지 않고도 보낼 수 있는 진입점(PLAN.md "가상 터치" 참고)
+  // 가상 터치 — 채팅방을 열지 않고도 보낼 수 있는 진입점(PLAN.md "가상 터치" 참고).
+  // 채팅 트레이에는 2026-09-03 에 스티커와 겹친다는 리포트로 뺐지만(ChatRoomScreen
+  // 주석 참고), 사용률 자체는 낮아도 홈의 "가볍게 안부 찌르기" 용도로는 남긴다.
   const [showTouchPicker, setShowTouchPicker] = useState(false);
   /*
    * 무드 상태 — 나/상대 지금 기분(PLAN.md "무드 상태" 참고). 아바타 배지로 표시하고,
@@ -337,7 +339,7 @@ export function HomeScreen({ navigation }: Props) {
    * <p><b>플랜은 사진을 고르기 전에 본다.</b> 예전에는 곧장 갤러리를 열고 Cloudinary
    * 업로드까지 마친 <b>다음</b>에야 서버가 402 를 던졌다 — 무료 사용자는 사진을 고르고
    * 기다린 끝에 거절당하고, 그 사이 <b>아무도 안 쓸 이미지가 이미 올라가</b> 있었다
-   * (업로드 한도와 비용은 그대로 나간다). TouchGesturePicker 와 같은 패턴이다: 여기는
+   * (업로드 한도와 비용은 그대로 나간다). 스티커·무드 게이팅과 같은 패턴이다: 여기는
    * 우회 방지가 아니라 UX 고, 서버(RelationService)가 최종 판정을 한 번 더 한다.
    *
    * <p>배경이 이미 있으면 바로 갤러리를 열지 않고 먼저 물어본다 — 백엔드는 처음부터

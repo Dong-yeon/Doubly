@@ -25,6 +25,25 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
 
     Optional<ChatMessage> findTopByRelationIdOrderByIdDesc(Long relationId);
 
+    /**
+     * 대화 검색 — 텍스트 메시지 본문에 키워드가 포함된 것만, 최신순 커서 페이징.
+     * STICKER/TOUCH 등은 content 가 사람이 읽는 문장이 아니라 코드값이라 검색 대상에서 뺀다.
+     * keyword 는 호출자(ChatService)가 LIKE 와일드카드를 이스케이프해서 넘긴다.
+     */
+    @Query("""
+            select m from ChatMessage m
+            where m.relationId = :relationId
+              and m.messageType = com.fitto.chat.domain.MessageType.TEXT
+              and m.deletedAt is null
+              and lower(m.content) like lower(concat('%', :keyword, '%')) escape '\\'
+              and (cast(:cursor as Long) is null or m.id < :cursor)
+            order by m.id desc
+            """)
+    List<ChatMessage> searchMessages(@Param("relationId") Long relationId,
+                                     @Param("keyword") String keyword,
+                                     @Param("cursor") Long cursor,
+                                     Pageable pageable);
+
     /** 내가 받은(상대가 보낸) 가장 최근 특정 타입 메시지 — 가상 터치 latest 조회에 쓴다. */
     Optional<ChatMessage> findTopByRelationIdAndMessageTypeAndSenderIdNotOrderByIdDesc(
             Long relationId, MessageType messageType, Long senderId);

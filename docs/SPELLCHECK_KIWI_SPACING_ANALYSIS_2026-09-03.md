@@ -179,7 +179,11 @@ APK 안 `assets/kiwi/` 를 직접 읽는다(§4-1). 나중에 내려받기로 �
 
 ## 6. 남은 것
 
-- **x86_64 라이브러리** — 에뮬레이터용. arm64 만 먼저 넣었다.
+- ~~x86_64 라이브러리~~ → **완료.** 다만 빌드가 두 번 OOM 으로 죽었다 — x86_64 는 arch
+  구현이 6종(sse2·sse4_1·avx2·avx_vnni·avx512bw·avx512vnni)이라 `Knlm.cpp` 의 템플릿
+  인스턴스화가 arm64(none·neon 2종)보다 훨씬 무겁다. `AVX_VNNI_SUPPORTED=OFF` 로 빼서
+  통과시켰다(에뮬레이터용이라 가속 불필요). **그래서 arm64 와 빌드 구성이 다르다.**
+  스트립 후 47.2MB(arm64 는 17.3MB).
 - **iOS** — 공식 `Kiwi.xcframework`(36.8MB)가 배포돼 있어 경로는 있지만 맥이 없어 못 했다.
   현재 iOS 에서는 `loadSpacing` 이 실패하고 기능만 조용히 빠진다.
 - **사용자 사전** — `kiwi_builder_add_word` 를 부를 자리는 만들어 뒀다(builder 흐름).

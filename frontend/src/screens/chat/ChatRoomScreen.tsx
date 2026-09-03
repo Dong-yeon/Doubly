@@ -38,7 +38,7 @@ import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { EmojiPicker } from '../../components/EmojiPicker';
-import { TouchGesturePicker } from '../../components/TouchGesturePicker';
+import { ChatSearchModal } from '../../components/ChatSearchModal';
 import { SpellCheckBar } from '../../components/SpellCheckBar';
 import { MessageActionSheet } from '../../components/MessageActionSheet';
 import { SwipeBackView } from '../../components/SwipeBackView';
@@ -57,13 +57,13 @@ import { isPrShareContent } from '../../utils/workoutShare';
 import { isGoalShareContent } from '../../utils/dietShare';
 import { touchGestureOf } from '../../constants/touchGestures';
 import { callCardLabel, parseCallCard } from '../../utils/callCard';
-import { stickerImageOf } from '../../constants/stickerImages';
+import { STICKER_IMAGES, stickerImageOf } from '../../constants/stickerImages';
 import { STICKER_PACKS } from '../../constants/stickerPacks';
 import { playTouchGesture } from '../../utils/haptics';
 import { messagePreview } from '../../utils/messagePreview';
 import { chatDateDividerLabel, isSameLocalDay } from '../../utils/date';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { ChatMessage, TouchGestureCode } from '../../types';
+import type { ChatMessage } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { useAndroidKeyboardHeight } from '../../hooks/useAndroidKeyboardHeight';
 import { EmptyState } from '../../components/EmptyState';
@@ -121,7 +121,14 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const premiumStickerAllowed = usePlanStore((s) => s.can('PREMIUM_STICKER'));
   const showUpgrade = usePlanStore((s) => s.showUpgrade);
   const [showExtras, setShowExtras] = useState(false);
-  const [showTouchPicker, setShowTouchPicker] = useState(false);
+  // 이미지 스티커(곰돌이 등 캐릭터 일러스트) 전용 패널 — 이모지 스티커와 자리를
+  // 공유한다는 점, 트레이에서 열린다는 점 모두 스티커 패널과 같다(2026-09-03,
+  // "터치"를 대체해 트레이에 들어왔다 — 아래 sendSticker 주석 참고).
+  const [showEmoticons, setShowEmoticons] = useState(false);
+  // 대화 검색 — 헤더 돋보기 버튼으로 연다(2026-09-03, 전체 기간 서버 검색)
+  const [showSearch, setShowSearch] = useState(false);
+  // 검색 결과를 골라 스크롤해 간 메시지 — 잠깐 배경을 강조했다가 스스로 지운다
+  const [highlightedId, setHighlightedId] = useState<number | null>(null);
   // 답장 대상 / 수정 중인 메시지 / 리액션 피커 대상
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const [editing, setEditing] = useState<ChatMessage | null>(null);
@@ -145,6 +152,46 @@ export function ChatRoomScreen({ navigation, route }: Props) {
    * 되돌려 키보드가 안 닫히게 한다(카톡·Between 등이 다 이렇게 동작한다).
    */
   const inputRef = useRef<TextInput>(null);
+
+  /*
+   * 목록은 inverted(offset 0 = 맨 아래 = 최신). "채팅을 치면 자동으로 맨 아래로",
+   * "많이 올려본 뒤 한 번에 내려가기" 두 요청(2026-09-03)을 이 ref 하나로 처리한다.
+   */
+  const listRef = useRef<FlatList<ChatMessage>>(null);
+  const scrollToBottom = (animated = true) => listRef.current?.scrollToOffset({ offset: 0, animated });
+  // 과거 쪽으로 일정 거리 이상 올라갔을 때만 "맨 아래로" FAB 을 보여준다
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const SCROLL_TO_BOTTOM_THRESHOLD = 400;
+
+  /*
+   * 검색 결과로 이동 — 이미 불러온 목록에 있으면 바로 스크롤, 없으면(반년 전
+   * 대화처럼 아직 안 당겨온 페이지) loadOlder 를 필요한 만큼 반복해서 끌어온다.
+   * store.getState() 로 직접 읽는 이유: 이 함수를 useCallback 에 messages 를 넣어
+   * 만들면 매 메시지 수신마다 새로 만들어지고, 반복문 중간에 최신값을 못 따라간다.
+   */
+  const scrollToMessage = useCallback(async (id: number) => {
+    const LOAD_GUARD = 300; // 30개씩 최대 300페이지(9,000건) — 그 이상이면 포기하고 알린다
+    let state = useChatStore.getState();
+    let list = state.messages[relationId] ?? [];
+    let index = list.findIndex((m) => m.id === id);
+    let guard = 0;
+    while (index === -1 && state.hasMoreOlder[relationId] !== false && guard < LOAD_GUARD) {
+      await state.loadOlder(relationId);
+      state = useChatStore.getState();
+      list = state.messages[relationId] ?? [];
+      index = list.findIndex((m) => m.id === id);
+      guard++;
+    }
+    if (index === -1) {
+      toast.error('메시지를 찾지 못했어요.');
+      return;
+    }
+    setHighlightedId(id);
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToIndex({ index, viewPosition: 0.4, animated: true });
+    });
+    setTimeout(() => setHighlightedId((cur) => (cur === id ? null : cur)), 1800);
+  }, [relationId]);
 
   /*
    * 맞춤법 검사는 기기 안에서만 돈다(외부 전송 없음). 규칙 몇 개짜리라
@@ -284,6 +331,15 @@ export function ChatRoomScreen({ navigation, route }: Props) {
       headerRight: () => (
         <View style={styles.headerCallActions}>
           <Pressable
+            onPress={() => setShowSearch(true)}
+            style={({ pressed }) => [styles.headerCallButton, pressed && styles.headerCallButtonPressed]}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="대화 검색"
+          >
+            <MaterialCommunityIcons name="magnify" size={22} color={colors.textPrimary} />
+          </Pressable>
+          <Pressable
             onPress={() => startCall('VOICE')}
             disabled={callStarting}
             style={({ pressed }) => [styles.headerCallButton, pressed && styles.headerCallButtonPressed]}
@@ -403,6 +459,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
       return;
     }
 
+    // 과거를 읽던 중이었어도 내가 보낸 메시지는 바로 보여야 한다(2026-09-03 요청)
+    scrollToBottom();
     const ok = await send(relationId, {
       messageType: 'TEXT',
       content,
@@ -488,26 +546,25 @@ export function ChatRoomScreen({ navigation, route }: Props) {
    * 시즌 스티커는 PRO 전용 — 보내기 전에 막고 이유를 알려준다.
    *
    * STOMP 경로는 REST 처럼 402 를 화면으로 되돌려줄 방법이 없다(서버 검증은 우회 방지용
-   * 방어선일 뿐 사용자에게는 조용히 실패로 보인다). TouchGesturePicker 와 같은 규칙.
+   * 방어선일 뿐 사용자에게는 조용히 실패로 보인다).
+   *
+   * 패널을 닫고 진동부터 준다 — 전송(await send)이 끝나야 반응하면, 서버 왕복이
+   * 끝날 때까지 패널이 그대로 떠 있어 "눌러도 반응이 없다"로 보인다(2026-09-03 리포트).
+   * 실패했을 때만 뒤늦게 알린다(패널이 이미 닫혀 있어도 무방 — text 전송 실패와 같은 패턴).
    */
   const sendSticker = async (sticker: string, locked: boolean, label: string) => {
     if (locked) {
       showUpgrade(`${label} 스티커는 PRO에서 보낼 수 있어요.`);
       return;
     }
+    setShowStickers(false);
+    setShowEmoticons(false);
+    haptics.light();
+    scrollToBottom();
     const ok = await send(relationId, { messageType: 'STICKER', content: sticker });
-    if (ok) {
-      setShowStickers(false);
-      haptics.light();
-    } else {
+    if (!ok) {
       Alert.alert('전송 실패', '연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
     }
-  };
-
-  const sendTouch = async (code: TouchGestureCode) => {
-    const ok = await send(relationId, { messageType: 'TOUCH', content: code });
-    if (ok) haptics.light();
-    else Alert.alert('전송 실패', '연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
   };
 
   // 갤러리에서 고르기만 한다 — 실제 업로드·전송은 미리보기에서 "보내기"를 눌러야 시작된다
@@ -528,6 +585,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     if (!uri) return;
     setPendingImage(null);
     setUploading(true);
+    scrollToBottom();
     try {
       const url = await runBusy('사진 보내는 중…', () => uploadImage(uri));
       const ok = await send(relationId, { messageType: 'IMAGE', imageUrl: url });
@@ -831,12 +889,28 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             <Text style={styles.offlineText}>연결 중이에요… 잠시만요</Text>
           </View>
         )}
+        {/*
+         * FlatList 와 FAB 을 같이 감싼다 — FAB 이 이 뷰 기준으로 bottom-right 에 붙어야
+         * 메시지 목록 위에만 뜨고, 그 아래 입력바·트레이는 가리지 않는다.
+         */}
+        <View style={styles.flex}>
         <FlatList
+          ref={listRef}
           style={styles.flex}
           data={messages}
           inverted
           keyExtractor={(m) => String(m.id)}
-          renderItem={renderItem}
+          // 검색에서 골라 온 메시지를 잠깐 강조한다 — renderItem 분기(삭제됨·카드 등)를
+          // 하나하나 손대지 않고 바깥에서 한 번만 감싼다(highlightedId 주석 참고)
+          renderItem={(info) => (
+            <View style={info.item.id === highlightedId ? styles.highlightRow : undefined}>
+              {renderItem(info)}
+            </View>
+          )}
+          onScrollToIndexFailed={(info) => {
+            listRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
+            setTimeout(() => listRef.current?.scrollToIndex({ index: info.index, animated: true }), 120);
+          }}
           contentContainerStyle={styles.list}
           /*
            * 과거 메시지 페이징 — inverted 목록이라 onEndReached = 위(가장 오래된 쪽) 도달.
@@ -844,6 +918,15 @@ export function ChatRoomScreen({ navigation, route }: Props) {
            */
           onEndReached={() => loadOlder(relationId)}
           onEndReachedThreshold={0.3}
+          // "맨 아래로" FAB — inverted 라 contentOffset.y 가 클수록 과거(위) 쪽이다
+          onScroll={(e) => {
+            const y = e.nativeEvent.contentOffset.y;
+            setShowScrollToBottom((prev) => {
+              const next = y > SCROLL_TO_BOTTOM_THRESHOLD;
+              return prev === next ? prev : next;
+            });
+          }}
+          scrollEventThrottle={100}
           ListFooterComponent={
             loadingOlder ? (
               <ActivityIndicator size="small" color={colors.primary} style={styles.olderSpinner} />
@@ -865,6 +948,19 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           // 스크롤 드래그로 키보드를 내릴 수 있게 (iOS 는 손가락을 따라 내려간다)
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         />
+        {/* 과거를 한참 올려본 뒤 한 번에 내려가는 FAB (2026-09-03 요청) */}
+        {showScrollToBottom ? (
+          <Pressable
+            style={styles.scrollToBottomFab}
+            onPress={() => scrollToBottom()}
+            accessibilityRole="button"
+            accessibilityLabel="맨 아래로 이동"
+            hitSlop={8}
+          >
+            <MaterialCommunityIcons name="chevron-down" size={22} color={colors.white} />
+          </Pressable>
+        ) : null}
+        </View>
         {/*
          * 보조 도구 트레이 — 예전엔 스티커·터치·무드·카메라 4개 버튼이 입력바에 항상 떠
          * 있어(46px×4) 좁은 기기에서 입력창이 짓눌렸다. "+" 로 펼치는 트레이 하나로
@@ -879,12 +975,18 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             <ExtraButton
               icon="sticker-emoji"
               label="스티커"
-              onPress={() => { setShowExtras(false); setShowStickers(true); }}
+              onPress={() => { setShowExtras(false); setShowEmoticons(false); setShowStickers(true); }}
             />
+            {/*
+             * 예전엔 여기가 "터치"(가상 터치 제스처)였다 — 채팅 로그에서 스티커와 거의
+             * 구분이 안 돼(말풍선 없이 크게 그려지는 것도 같다) 기능이 겹친다는 리포트로
+             * 2026-09-03 에 뺐다. 캐릭터 일러스트 스티커(곰돌이 등)를 이모지 스티커와
+             * 분리해 그 자리에 넣는다 — 이모지는 "스티커", 캐릭터는 "이모티콘".
+             */}
             <ExtraButton
-              icon="hand-heart-outline"
-              label="터치"
-              onPress={() => { setShowExtras(false); setShowTouchPicker(true); }}
+              icon="emoticon-outline"
+              label="이모티콘"
+              onPress={() => { setShowExtras(false); setShowStickers(false); setShowEmoticons(true); }}
             />
             <ExtraButton
               icon="camera-outline"
@@ -894,7 +996,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           </View>
         ) : null}
         {showStickers ? (
-          // 팩이 6개(64종)라 한 화면에 안 들어간다 — 패널 안에서만 스크롤한다
+          // 팩이 6개(48종)라 한 화면에 안 들어간다 — 패널 안에서만 스크롤한다
           <ScrollView style={styles.stickerScroll} contentContainerStyle={styles.stickerPanel}>
             <Pressable
               style={({ pressed }) => [styles.stickerBtn, pressed && styles.iconPressed]}
@@ -916,33 +1018,41 @@ export function ChatRoomScreen({ navigation, route }: Props) {
                     {locked ? <Text style={styles.stickerPackBadge}>PRO</Text> : null}
                   </View>
                 ) : null,
-                ...pack.stickers.map((s) => {
-                  const img = stickerImageOf(s);
-                  return (
-                    <Pressable
-                      key={s}
-                      style={({ pressed }) => [
-                        styles.stickerBtn,
-                        locked && styles.stickerLocked,
-                        pressed && styles.iconPressed,
-                      ]}
-                      onPress={() => sendSticker(s, locked, pack.label)}
-                      accessibilityRole="button"
-                      accessibilityLabel={
-                        `스티커 ${img?.label ?? s} 보내기${locked ? ' — PRO 기능' : ''}`
-                      }
-                    >
-                      {img ? (
-                        <Image source={img.source} style={styles.stickerBtnImage} resizeMode="contain" />
-                      ) : (
-                        <Text style={styles.stickerEmoji}>{s}</Text>
-                      )}
-                    </Pressable>
-                  );
-                }),
+                // 이 팩엔 이제 이모지만 있다(캐릭터 일러스트는 아래 이모티콘 패널로 옮김)
+                ...pack.stickers.map((s) => (
+                  <Pressable
+                    key={s}
+                    style={({ pressed }) => [
+                      styles.stickerBtn,
+                      locked && styles.stickerLocked,
+                      pressed && styles.iconPressed,
+                    ]}
+                    onPress={() => sendSticker(s, locked, pack.label)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`스티커 ${s} 보내기${locked ? ' — PRO 기능' : ''}`}
+                  >
+                    <Text style={styles.stickerEmoji}>{s}</Text>
+                  </Pressable>
+                )),
               ];
             })}
           </ScrollView>
+        ) : null}
+        {showEmoticons ? (
+          // 캐릭터 일러스트 스티커 — 지금은 LOVE_BEAR 하나뿐이라 스크롤 없이도 다 보인다
+          <View style={styles.stickerPanel}>
+            {STICKER_IMAGES.map((img) => (
+              <Pressable
+                key={img.code}
+                style={({ pressed }) => [styles.stickerBtn, pressed && styles.iconPressed]}
+                onPress={() => sendSticker(img.code, false, '이모티콘')}
+                accessibilityRole="button"
+                accessibilityLabel={`이모티콘 ${img.label} 보내기`}
+              >
+                <Image source={img.source} style={styles.stickerBtnImage} resizeMode="contain" />
+              </Pressable>
+            ))}
+          </View>
         ) : null}
         {/* 답장·수정 중 배너 — 무엇에 대해 쓰고 있는지 보여주고 취소할 수 있게 */}
         {replyTo || editing ? (
@@ -981,9 +1091,9 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           ) : (
             <TouchableOpacity
               style={[styles.imageBtn, showExtras && styles.stickerToggleActive]}
-              onPress={() => { setShowStickers(false); setShowExtras((v) => !v); }}
+              onPress={() => { setShowStickers(false); setShowEmoticons(false); setShowExtras((v) => !v); }}
               accessibilityRole="button"
-              accessibilityLabel={showExtras ? '보조 도구 닫기' : '스티커·터치·사진 더 보기'}
+              accessibilityLabel={showExtras ? '보조 도구 닫기' : '스티커·이모티콘·사진 더 보기'}
             >
               <MaterialCommunityIcons
                 name={showExtras ? 'close' : 'plus'}
@@ -1057,11 +1167,17 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         // 이모지 시트에서 직접 고른 이모지는 어느 팩에도 없으므로 무료다(stickerPacks 주석)
         onSelect={(emoji) => sendSticker(emoji, false, '이모지')}
       />
-      {/* 가상 터치 — 상대 폰에 즉시 진동. 프리미엄 제스처는 시트 안에서 자체적으로 게이팅한다 */}
-      <TouchGesturePicker
-        visible={showTouchPicker}
-        onClose={() => setShowTouchPicker(false)}
-        onSelect={sendTouch}
+      {/* 대화 검색 — 헤더 돋보기. 고르면 닫고 그 메시지로 스크롤한다 */}
+      <ChatSearchModal
+        visible={showSearch}
+        relationId={relationId}
+        myId={myId}
+        partnerName={partnerName}
+        onClose={() => setShowSearch(false)}
+        onSelect={(msg) => {
+          setShowSearch(false);
+          scrollToMessage(msg.id);
+        }}
       />
       {/* 메시지 길게 누르기 — 리액션/답장/수정/삭제를 한 시트에 모아 보여준다 */}
       <MessageActionSheet
@@ -1123,6 +1239,25 @@ const styles = themedStyles((colors) => ({
   // inverted FlatList 의 콘텐츠는 scaleY:-1 로 뒤집혀 그려진다 — EmptyState 만 다시
   // 뒤집어 정방향으로 보이게 한다(QA_CHECKLIST.md 패턴10)
   emptyMessagesWrap: { transform: [{ scaleY: -1 }] },
+  // 검색에서 골라 온 메시지 강조 — 1.8초 뒤 스스로 지운다(highlightedId 주석 참고)
+  highlightRow: { backgroundColor: colors.primarySoft, borderRadius: radius.md },
+  // 목록 위에 떠 있는 "맨 아래로" FAB — 트레이·입력바 위 오른쪽 모서리
+  scrollToBottomFab: {
+    position: 'absolute',
+    right: spacing.md,
+    bottom: spacing.md,
+    width: 36,
+    height: 36,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
   // 그룹 간 세로 간격은 msgBlock(정상 메시지)·row(삭제된 메시지)가 각각 spaced/grouped 로 담당한다
   //
   // flexShrink: 1 이 row·bubble 둘 다에 필요하다 — RN 은 웹 flexbox와 달리 flex 자식의

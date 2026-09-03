@@ -52,6 +52,15 @@ public class ChatController {
         return ApiResponse.success(chatService.getMessages(user.id(), relationId, cursor));
     }
 
+    /** 대화 검색 — 텍스트 메시지 본문, 전체 기간, 최신순 커서 페이징. */
+    @GetMapping("/rooms/{relationId}/search")
+    public ApiResponse<List<ChatMessageResponse>> search(@AuthenticationPrincipal AuthUser user,
+                                                         @PathVariable Long relationId,
+                                                         @RequestParam String q,
+                                                         @RequestParam(required = false) Long cursor) {
+        return ApiResponse.success(chatService.searchMessages(user.id(), relationId, q, cursor));
+    }
+
     /**
      * 내가 받은 가장 최근 가상 터치 — 홈 화면이 {@code CoupleEvent.TOUCH} 수신 시 호출해
      * 햅틱을 발화한다(채팅방을 열지 않아도 반응하기 위함). 없으면 데이터 없이 200을 돌려준다.
