@@ -96,7 +96,7 @@
    dev-client 빌드에 실제로 켜져 있는지는 별개였다. 네이티브 엔진 기능이라 JS/Metro
    레벨 우회가 불가능하다.
 
-## 3. 남은 선택지 (2026-09-02 재조사로 둘 다 기각 확정)
+## 3. 남은 선택지 — 전부 재조사·기각 확정 (2026-09-02, 같은 날 두 차례 후속 조사)
 
 1. ~~Hermes 를 WASM 활성화 옵션으로 재빌드~~ — **기각**. "안 켜져 있을 뿐"이 아니라
    Hermes 자체에 `WebAssembly` 구현이 없다(§0 참고, facebook/hermes#429). 재빌드로
@@ -104,20 +104,58 @@
 2. ~~WASM 포기, nspell(순수 JS) 로 회귀~~ — **기각**. `hunspell-dict-ko`가 NFD 인코딩이라
    nspell 의 단순 바이트 비교 방식과 근본적으로 안 맞는다(§1-2). 다른 순수 JS 한국어
    hunspell 재구현체가 나오지 않는 한 이 경로 자체가 막혀 있다.
-3. **JSC(JavaScriptCore) 엔진 전환** — 이제 **유일하게 남은, 사전 기반 접근을 계속하기
-   위한 길**이다. WASM 은 되지만 앱 전체 성능·번들 크기·디버깅 도구 호환성에 영향을 주는
-   훨씬 큰 결정이라, 스펠체커 하나만 보고 판단할 사안이 아니다 — 이 결정은 사용자 확인이
-   필요하다.
-4. **사전 기반 접근 자체를 보류**: 지금 있는 정규식 엔진(`koreanSpellRules.ts`, ~90개
-   규칙)을 계속 손으로 넓혀가는 현재 방식을 유지한다. JSC 전환처럼 앱 전체에 영향을 주는
-   결정 없이 바로 실행 가능한 유일한 선택지.
+3. ~~JSC(JavaScriptCore) 엔진 전환~~ — **기각**. "엔진만 바꾸면 WASM 이 된다"고 봤는데,
+   RN 커뮤니티가 안드로이드용으로 빌드하는 `jsc-android` 자체가 **`--no-webassembly`
+   플래그로 WebAssembly 를 명시적으로 끄고 빌드한다**
+   ([jsc-android-buildscripts#113](https://github.com/react-native-community/jsc-android-buildscripts/issues/113),
+   2019년부터 미해결). iOS 의 JSC 는 WASM 을 지원하지만 안드로이드는 엔진을 바꿔도
+   막혀 있다 — 크로스플랫폼 앱에는 의미 없는 전환.
+4. **Polygen(`@callstack/polygen`, wasm2c 로 WASM→C AOT 컴파일 후 JSI 연결) — 실제
+   프로토타입까지 진행, 안드로이드에서 막힘.** JS 엔진의 `WebAssembly` 지원 여부 자체를
+   우회하는 접근이라 앞의 세 가지와 근본적으로 다르고, 핵심 기술 검증은 전부 통과했다:
+   - `wasm2c`(WABT 툴킷)로 hunspell-asm 의 WASM 바이너리(24 imports, 43 exports)를
+     C 코드로 변환 — **성공**. `Hunspell_create/spell/suggest` 등 정확한 API가 깨끗한
+     C 함수로 나옴.
+   - `polygen generate` 로 이 프로젝트(hunspell.wasm)용 JSI 브릿지 C++ 코드 생성 —
+     **성공**(env/wasi_snapshot_preview1 임포트 호스트 구현까지 자동 생성됨).
+   - New Architecture(`newArchEnabled: true`) 이미 켜져 있어 전제조건 충족.
+   - **그런데 실제 안드로이드 로컬 빌드(`expo prebuild` + `expo run:android`, NDK
+     27.1.12297006)에서 `compileDebugKotlin FAILED`** — 원인은 우리 hunspell 코드가
+     아니라 **Polygen 패키지 자체의 안드로이드 네이티브 등록 코드가 미완성 상태로
+     배포돼 있었다**: `android/src/main/java/com/wasm/WasmModule.kt`가 실제 스펙
+     (`src/NativePolygen.ts` — `loadModule`/`createMemory`/`createTable` 등)과 전혀
+     다른 **RN 공식 튜토리얼의 기본 보일러플레이트 그대로**("multiply(a, b, promise)"
+     예제 메서드, 클래스명도 `Wasm`)였고, `NativeWasmSpec` 코드젠 클래스 자체가 어디에도
+     없어 `Unresolved reference 'NativeWasmSpec'`로 컴파일이 죽는다. npm 최신(0.2.1,
+     이 조사 시점 유일한 배포 버전)도 동일 — 우리 쪽 문제가 아니라 **업스트림 패키징
+     버그**(초기 스캐폴딩 코드를 실제 구현으로 교체하는 걸 잊은 것으로 보임).
+   - iOS 쪽(`ios/`, `.podspec`)은 안 열어봤다 — 이 프로젝트가 안드로이드 우선이라
+     막힌 시점에서 조사를 멈췄다.
 
-## 4. 남겨진 프로토타입 코드 상태
+## 4. 결론 — 2026-09-02 기준 사전 기반 접근은 완전히 막혀 있다
+
+시도한 5가지 경로(Kiwi, Hunspell+hunspell-asm/WASM, nspell, JSC 전환, Polygen) **전부
+기각**됐다. 남은 선택지는 둘뿐이다:
+- **Polygen 이 업스트림에서 안드로이드 네이티브 모듈을 고칠 때까지 기다렸다가 재시도**
+  (`android/src/main/java/com/wasm/*.kt`를 직접 고쳐서 PR 을 보내는 것도 방법이지만,
+  `NativePolygen.ts` 스펙에 맞는 전체 JNI↔JSI 브릿지를 새로 작성해야 해서 작지 않은
+  작업이다).
+- **사전 기반 접근 자체를 보류**하고 지금 있는 정규식 엔진(`koreanSpellRules.ts`, ~90개
+  규칙)을 계속 손으로 넓혀가는 현재 방식을 유지한다. 지금 바로 실행 가능한 유일한
+  선택지.
+
+## 5. 남겨진 프로토타입 코드 상태
 
 - `frontend/src/utils/hunspell/hunspellEngine.ts` — `getHunspell()` 하나만 있고
   아직 `checkKoreanSpelling` 에는 연결 안 됨(로드 자체 검증용).
 - `frontend/src/utils/hunspell/koDictionaryData.ts` — hunspell-dict-ko 0.7.94 원본을
   base64 그대로 인라인(비압축 약 14MB) — 실제 반영 전에 gzip 압축 등 용량 최적화 필요.
-- `frontend/src/screens/my/SettingsScreen.tsx` — "(개발용) Hunspell 테스트" 행이
-  `맞춤법 제안` 카드 안에 그대로 노출돼 있다(TEMP-PROTOTYPE 주석 있음) — 실사용자에게
-  보이는 상태이니 다음에 이 작업을 재개하거나 폐기할 때 같이 정리할 것.
+- `frontend/src/screens/my/SettingsScreen.tsx` — "(개발용) Hunspell 테스트" 행은
+  `__DEV__` 로 가려 프로덕션 빌드에는 안 보이게 했다(2026-09-02, 스토어 빌드 전 정리).
+- `frontend/polygen.config.mjs`, `frontend/src/wasm/hunspell.wasm` — Polygen 프로토타입
+  산출물. `hunspell.wasm`은 hunspell-asm 의 임베디드 WASM 을 그대로 추출한 것(4절 참고
+  라이선스는 hunspell-asm 자체와 동일, MIT 계열). **주의**: `@callstack/polygen`
+  0.2.1을 그대로 설치하면 이 문서 §3-4의 안드로이드 코드젠 버그를 그대로 재현한다 —
+  로컬 재현 중에는 `node_modules/@callstack/polygen-project/dist/project.js`의
+  `import(configPath)`를 `pathToFileURL()`로 감싸는 Windows ESM 경로 버그 우회도
+  필요했다(npm 재설치 시 사라짐, 영구 조치 아님).
