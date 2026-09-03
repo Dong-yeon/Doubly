@@ -17,7 +17,7 @@ import { pathToFileURL, fileURLToPath } from 'node:url';
 
 const srcDir = fileURLToPath(new URL('../src/utils', import.meta.url));
 const tmp = mkdtempSync(join(tmpdir(), 'spellcheck-'));
-for (const f of ['koreanSpellCheck.ts', 'koreanSpellRules.ts']) {
+for (const f of ['koreanSpellCheck.ts', 'koreanSpellRules.ts', 'koreanDictionaryRules.ts']) {
   const code = readFileSync(join(srcDir, f), 'utf8').replace(
     "from './koreanSpellRules'",
     "from './koreanSpellRules.ts'",
@@ -26,6 +26,14 @@ for (const f of ['koreanSpellCheck.ts', 'koreanSpellRules.ts']) {
 }
 const { checkKoreanSpelling, applyAllSuggestions } = await import(
   pathToFileURL(join(tmp, 'koreanSpellCheck.ts'))
+);
+/*
+ * 3층(사전 검사 오탐 안전장치)은 네이티브 사전 없이도 검증할 수 있게 순수 함수로
+ * 떼어놨다 — 사전 자체의 판정은 기기에서만 확인 가능하지만, "무엇을 사전에 물어보지
+ * 않을 것인가"와 "어떤 후보만 통과시킬 것인가"는 여기서 다 잡힌다.
+ */
+const { collectTokens, stripNasalEnding, pickSafeSuggestion } = await import(
+  pathToFileURL(join(tmp, 'koreanDictionaryRules.ts'))
 );
 
 /** [문장, 기대하는 고침(부분 문자열)] — 반드시 잡아야 한다 */
@@ -203,9 +211,94 @@ for (const text of MUST_NOT_FLAG) {
   }
 }
 
+/*
+ * 3층 — 사전에 물어보지 말아야 할 어절. 여기서 걸러지지 않으면 사전이 "없는 말"로
+ * 판정해 그대로 오탐이 된다.
+ */
+const MUST_NOT_ASK = [
+  'ㅋㅋ', // 자모
+  'ㅎㅎㅎ',
+  'OK', // 영문
+  '3시', // 숫자 섞임
+  '카페gogo',
+  '나', // 한 글자
+  '좋아아아', // 늘여 쓴 강조
+  '맛있다아아아',
+  '동연아', // 이름 + 호격
+  '지민야',
+];
+for (const text of MUST_NOT_ASK) {
+  const tokens = collectTokens(text);
+  if (tokens.length > 0) {
+    failed++;
+    console.error(`✗ 사전에 물어보면 안 되는 어절이 통과됨: "${text}"`, tokens);
+  }
+}
+
+/** 반대로 이건 반드시 사전에 물어봐야 한다 */
+const MUST_ASK = ['오랫만에', '제작년', '어의없어', '안녕하세요'];
+for (const text of MUST_ASK) {
+  if (collectTokens(text).length !== 1) {
+    failed++;
+    console.error(`✗ 사전에 물어봐야 하는데 걸러짐: "${text}"`);
+  }
+}
+
+/** 애교체 콧소리는 받침만 벗기면 정상 어절이 된다 — 단어 등록 없이 규칙 하나로 */
+const NASAL = [
+  ['뭐했어용', '뭐했어요'],
+  ['사랑행', '사랑해'],
+  ['배고파용', '배고파요'],
+  ['좋아용', '좋아요'],
+  ['맛있겠당', '맛있겠다'],
+];
+for (const [given, want] of NASAL) {
+  const got = stripNasalEnding(given);
+  if (got !== want) {
+    failed++;
+    console.error(`✗ 애교체 정규화가 다름: "${given}" → ${got} (기대: ${want})`);
+  }
+}
+/** 'ㅇ' 받침이 아니면 건드리지 않는다 */
+for (const word of ['먹었어', '사랑해', '오랜만']) {
+  if (stripNasalEnding(word) !== null) {
+    failed++;
+    console.error(`✗ 건드리면 안 되는 말을 정규화함: "${word}"`);
+  }
+}
+
+/** 거리 1 관문 — 한 글자만 다른 후보만 통과시킨다 */
+const SAFE_PICK = [
+  // [틀린말, 후보들, 기대]
+  ['오랫만에', ['오랜만에', '오랫동안'], '오랜만에'],
+  ['안되요', ['안돼요', '안되오'], '안돼요'],
+  ['제작년', ['재작년', '제 작년'], '재작년'],
+  // 두 글자 이상 달라 지적하지 않는다
+  ['홍길동씨', ['홍길동 씨', '흥겹동사'], null],
+  // 띄어쓰기만 다른 후보는 쓰지 않는다
+  ['같이가자', ['같이 가자'], null],
+  // 후보가 아예 없으면 조용히 넘어간다(이름·신조어가 여기로 빠진다)
+  ['둠칫두둠칫', [], null],
+];
+for (const [word, candidates, want] of SAFE_PICK) {
+  const got = pickSafeSuggestion(word, candidates);
+  if (got !== want) {
+    failed++;
+    console.error(`✗ 후보 선택이 다름: "${word}" → ${got} (기대: ${want})`);
+  }
+}
+
 rmSync(tmp, { recursive: true, force: true });
 
-const total = MUST_FLAG.length + MUST_NOT_FLAG.length + 1;
+const total =
+  MUST_FLAG.length +
+  MUST_NOT_FLAG.length +
+  1 +
+  MUST_NOT_ASK.length +
+  MUST_ASK.length +
+  NASAL.length +
+  3 +
+  SAFE_PICK.length;
 if (failed) {
   console.error(`\n${total}건 중 ${failed}건 실패`);
   process.exit(1);

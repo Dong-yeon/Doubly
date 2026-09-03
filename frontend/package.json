@@ -70,7 +70,8 @@
     "build:web": "node scripts/subset-icon-font.cjs && expo export --platform web",
     "subset:icons": "node scripts/subset-icon-font.cjs",
     "typecheck": "tsc --noEmit",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "verify:spellcheck": "node scripts/verify-spellcheck.mjs"
   },
   "private": true
 }
