@@ -38,7 +38,6 @@ import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { EmojiPicker } from '../../components/EmojiPicker';
-import { TouchGesturePicker } from '../../components/TouchGesturePicker';
 import { SpellCheckBar } from '../../components/SpellCheckBar';
 import { MessageActionSheet } from '../../components/MessageActionSheet';
 import { SwipeBackView } from '../../components/SwipeBackView';
@@ -57,13 +56,13 @@ import { isPrShareContent } from '../../utils/workoutShare';
 import { isGoalShareContent } from '../../utils/dietShare';
 import { touchGestureOf } from '../../constants/touchGestures';
 import { callCardLabel, parseCallCard } from '../../utils/callCard';
-import { stickerImageOf } from '../../constants/stickerImages';
+import { STICKER_IMAGES, stickerImageOf } from '../../constants/stickerImages';
 import { STICKER_PACKS } from '../../constants/stickerPacks';
 import { playTouchGesture } from '../../utils/haptics';
 import { messagePreview } from '../../utils/messagePreview';
 import { chatDateDividerLabel, isSameLocalDay } from '../../utils/date';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { ChatMessage, TouchGestureCode } from '../../types';
+import type { ChatMessage } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { useAndroidKeyboardHeight } from '../../hooks/useAndroidKeyboardHeight';
 import { EmptyState } from '../../components/EmptyState';
@@ -121,7 +120,10 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const premiumStickerAllowed = usePlanStore((s) => s.can('PREMIUM_STICKER'));
   const showUpgrade = usePlanStore((s) => s.showUpgrade);
   const [showExtras, setShowExtras] = useState(false);
-  const [showTouchPicker, setShowTouchPicker] = useState(false);
+  // 이미지 스티커(곰돌이 등 캐릭터 일러스트) 전용 패널 — 이모지 스티커와 자리를
+  // 공유한다는 점, 트레이에서 열린다는 점 모두 스티커 패널과 같다(2026-09-03,
+  // "터치"를 대체해 트레이에 들어왔다 — 아래 sendSticker 주석 참고).
+  const [showEmoticons, setShowEmoticons] = useState(false);
   // 답장 대상 / 수정 중인 메시지 / 리액션 피커 대상
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const [editing, setEditing] = useState<ChatMessage | null>(null);
@@ -488,26 +490,24 @@ export function ChatRoomScreen({ navigation, route }: Props) {
    * 시즌 스티커는 PRO 전용 — 보내기 전에 막고 이유를 알려준다.
    *
    * STOMP 경로는 REST 처럼 402 를 화면으로 되돌려줄 방법이 없다(서버 검증은 우회 방지용
-   * 방어선일 뿐 사용자에게는 조용히 실패로 보인다). TouchGesturePicker 와 같은 규칙.
+   * 방어선일 뿐 사용자에게는 조용히 실패로 보인다).
+   *
+   * 패널을 닫고 진동부터 준다 — 전송(await send)이 끝나야 반응하면, 서버 왕복이
+   * 끝날 때까지 패널이 그대로 떠 있어 "눌러도 반응이 없다"로 보인다(2026-09-03 리포트).
+   * 실패했을 때만 뒤늦게 알린다(패널이 이미 닫혀 있어도 무방 — text 전송 실패와 같은 패턴).
    */
   const sendSticker = async (sticker: string, locked: boolean, label: string) => {
     if (locked) {
       showUpgrade(`${label} 스티커는 PRO에서 보낼 수 있어요.`);
       return;
     }
+    setShowStickers(false);
+    setShowEmoticons(false);
+    haptics.light();
     const ok = await send(relationId, { messageType: 'STICKER', content: sticker });
-    if (ok) {
-      setShowStickers(false);
-      haptics.light();
-    } else {
+    if (!ok) {
       Alert.alert('전송 실패', '연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
     }
-  };
-
-  const sendTouch = async (code: TouchGestureCode) => {
-    const ok = await send(relationId, { messageType: 'TOUCH', content: code });
-    if (ok) haptics.light();
-    else Alert.alert('전송 실패', '연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
   };
 
   // 갤러리에서 고르기만 한다 — 실제 업로드·전송은 미리보기에서 "보내기"를 눌러야 시작된다
@@ -879,12 +879,18 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             <ExtraButton
               icon="sticker-emoji"
               label="스티커"
-              onPress={() => { setShowExtras(false); setShowStickers(true); }}
+              onPress={() => { setShowExtras(false); setShowEmoticons(false); setShowStickers(true); }}
             />
+            {/*
+             * 예전엔 여기가 "터치"(가상 터치 제스처)였다 — 채팅 로그에서 스티커와 거의
+             * 구분이 안 돼(말풍선 없이 크게 그려지는 것도 같다) 기능이 겹친다는 리포트로
+             * 2026-09-03 에 뺐다. 캐릭터 일러스트 스티커(곰돌이 등)를 이모지 스티커와
+             * 분리해 그 자리에 넣는다 — 이모지는 "스티커", 캐릭터는 "이모티콘".
+             */}
             <ExtraButton
-              icon="hand-heart-outline"
-              label="터치"
-              onPress={() => { setShowExtras(false); setShowTouchPicker(true); }}
+              icon="emoticon-outline"
+              label="이모티콘"
+              onPress={() => { setShowExtras(false); setShowStickers(false); setShowEmoticons(true); }}
             />
             <ExtraButton
               icon="camera-outline"
@@ -894,7 +900,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           </View>
         ) : null}
         {showStickers ? (
-          // 팩이 6개(64종)라 한 화면에 안 들어간다 — 패널 안에서만 스크롤한다
+          // 팩이 6개(48종)라 한 화면에 안 들어간다 — 패널 안에서만 스크롤한다
           <ScrollView style={styles.stickerScroll} contentContainerStyle={styles.stickerPanel}>
             <Pressable
               style={({ pressed }) => [styles.stickerBtn, pressed && styles.iconPressed]}
@@ -916,33 +922,41 @@ export function ChatRoomScreen({ navigation, route }: Props) {
                     {locked ? <Text style={styles.stickerPackBadge}>PRO</Text> : null}
                   </View>
                 ) : null,
-                ...pack.stickers.map((s) => {
-                  const img = stickerImageOf(s);
-                  return (
-                    <Pressable
-                      key={s}
-                      style={({ pressed }) => [
-                        styles.stickerBtn,
-                        locked && styles.stickerLocked,
-                        pressed && styles.iconPressed,
-                      ]}
-                      onPress={() => sendSticker(s, locked, pack.label)}
-                      accessibilityRole="button"
-                      accessibilityLabel={
-                        `스티커 ${img?.label ?? s} 보내기${locked ? ' — PRO 기능' : ''}`
-                      }
-                    >
-                      {img ? (
-                        <Image source={img.source} style={styles.stickerBtnImage} resizeMode="contain" />
-                      ) : (
-                        <Text style={styles.stickerEmoji}>{s}</Text>
-                      )}
-                    </Pressable>
-                  );
-                }),
+                // 이 팩엔 이제 이모지만 있다(캐릭터 일러스트는 아래 이모티콘 패널로 옮김)
+                ...pack.stickers.map((s) => (
+                  <Pressable
+                    key={s}
+                    style={({ pressed }) => [
+                      styles.stickerBtn,
+                      locked && styles.stickerLocked,
+                      pressed && styles.iconPressed,
+                    ]}
+                    onPress={() => sendSticker(s, locked, pack.label)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`스티커 ${s} 보내기${locked ? ' — PRO 기능' : ''}`}
+                  >
+                    <Text style={styles.stickerEmoji}>{s}</Text>
+                  </Pressable>
+                )),
               ];
             })}
           </ScrollView>
+        ) : null}
+        {showEmoticons ? (
+          // 캐릭터 일러스트 스티커 — 지금은 LOVE_BEAR 하나뿐이라 스크롤 없이도 다 보인다
+          <View style={styles.stickerPanel}>
+            {STICKER_IMAGES.map((img) => (
+              <Pressable
+                key={img.code}
+                style={({ pressed }) => [styles.stickerBtn, pressed && styles.iconPressed]}
+                onPress={() => sendSticker(img.code, false, '이모티콘')}
+                accessibilityRole="button"
+                accessibilityLabel={`이모티콘 ${img.label} 보내기`}
+              >
+                <Image source={img.source} style={styles.stickerBtnImage} resizeMode="contain" />
+              </Pressable>
+            ))}
+          </View>
         ) : null}
         {/* 답장·수정 중 배너 — 무엇에 대해 쓰고 있는지 보여주고 취소할 수 있게 */}
         {replyTo || editing ? (
@@ -981,9 +995,9 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           ) : (
             <TouchableOpacity
               style={[styles.imageBtn, showExtras && styles.stickerToggleActive]}
-              onPress={() => { setShowStickers(false); setShowExtras((v) => !v); }}
+              onPress={() => { setShowStickers(false); setShowEmoticons(false); setShowExtras((v) => !v); }}
               accessibilityRole="button"
-              accessibilityLabel={showExtras ? '보조 도구 닫기' : '스티커·터치·사진 더 보기'}
+              accessibilityLabel={showExtras ? '보조 도구 닫기' : '스티커·이모티콘·사진 더 보기'}
             >
               <MaterialCommunityIcons
                 name={showExtras ? 'close' : 'plus'}
@@ -1056,12 +1070,6 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         onClose={() => setShowEmojiSheet(false)}
         // 이모지 시트에서 직접 고른 이모지는 어느 팩에도 없으므로 무료다(stickerPacks 주석)
         onSelect={(emoji) => sendSticker(emoji, false, '이모지')}
-      />
-      {/* 가상 터치 — 상대 폰에 즉시 진동. 프리미엄 제스처는 시트 안에서 자체적으로 게이팅한다 */}
-      <TouchGesturePicker
-        visible={showTouchPicker}
-        onClose={() => setShowTouchPicker(false)}
-        onSelect={sendTouch}
       />
       {/* 메시지 길게 누르기 — 리액션/답장/수정/삭제를 한 시트에 모아 보여준다 */}
       <MessageActionSheet

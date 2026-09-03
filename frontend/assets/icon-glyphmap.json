@@ -3,6 +3,7 @@
   "account-multiple-plus-outline": 985088,
   "airplane": 983069,
   "album": 983077,
+  "alert": 983078,
   "android": 983090,
   "arrow-left": 983117,
   "auto-fix": 983144,
@@ -37,6 +38,7 @@
   "dots-horizontal": 983512,
   "dumbbell": 983526,
   "email": 983534,
+  "emoticon-outline": 983538,
   "eye-off-outline": 984785,
   "eye-outline": 984784,
   "file": 983572,
@@ -62,6 +64,7 @@
   "label": 983829,
   "leaf": 983850,
   "link": 983863,
+  "loading": 984946,
   "lock-outline": 983873,
   "login": 983874,
   "magnify": 983881,
@@ -116,6 +119,7 @@
   "weather-night": 984468,
   "weather-sunset-up": 984476,
   "web": 984479,
+  "weight": 984481,
   "white-balance-sunny": 984488,
   "wrap": 984502
 }

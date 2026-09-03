@@ -27,7 +27,6 @@ import { QuickActions } from './components/QuickActions';
 import { MemoryPeek } from './components/MemoryPeek';
 import { TripPeek, isTripLive, isTripOngoing, pickHomeTrip } from './components/TripPeek';
 import { LockedCard } from '../../components/LockedCard';
-import { TouchGesturePicker } from '../../components/TouchGesturePicker';
 import { MoodPicker } from '../../components/MoodPicker';
 import { useAuthStore } from '../../store/authStore';
 import { usePlanStore } from '../../store/planStore';
@@ -41,12 +40,7 @@ import { chatApi } from '../../api/chat';
 import { moodApi } from '../../api/mood';
 import { tripApi } from '../../api/trip';
 import { feedTimeLabel } from '../feed/FeedTimelineScreen';
-import {
-  connectSocket,
-  publishEnsuringConnection,
-  subscribeCouple,
-  unsubscribeCouple,
-} from '../../api/chatSocket';
+import { connectSocket, subscribeCouple, unsubscribeCouple } from '../../api/chatSocket';
 import { pickImage, uploadImage } from '../../utils/imageUpload';
 import { daysSince } from '../../utils/date';
 import { haptics } from '../../utils/haptics';
@@ -59,7 +53,7 @@ import { updateHomeWidget } from '../../widget/updateHomeWidget';
 import { loadWidgetData } from '../../widget/widgetData';
 import { touchGestureOf } from '../../constants/touchGestures';
 import { playTouchGesture } from '../../utils/haptics';
-import type { FeedItem, Memories, MoodResponse, PartnerToday, Streak, TouchGestureCode, Trip } from '../../types';
+import type { FeedItem, Memories, MoodResponse, PartnerToday, Streak, Trip } from '../../types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { isDarkMode } from '../../theme';
 import { themedStyles } from '../../theme/themedStyles';
@@ -144,8 +138,6 @@ export function HomeScreen({ navigation }: Props) {
   const [annModal, setAnnModal] = useState(false);
   const [annInput, setAnnInput] = useState('');
   const [annSaving, setAnnSaving] = useState(false);
-  // 가상 터치 — 채팅방을 열지 않고도 보낼 수 있는 진입점(PLAN.md "가상 터치" 참고)
-  const [showTouchPicker, setShowTouchPicker] = useState(false);
   /*
    * 무드 상태 — 나/상대 지금 기분(PLAN.md "무드 상태" 참고). 아바타 배지로 표시하고,
    * 설정하는 진입점도 여기 topBar 에 둔다(아래 topBar 참고).
@@ -315,13 +307,6 @@ export function HomeScreen({ navigation }: Props) {
     }, [relationId, refresh, onIncomingTouch]),
   );
 
-  const sendTouch = (code: TouchGestureCode) => {
-    if (!relationId) return;
-    publishEnsuringConnection(relationId, { messageType: 'TOUCH', content: code }).then((ok) => {
-      if (!ok) toast.error('연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
-    });
-  };
-
   // moodApi.set 이 갱신된 나/상대 무드를 함께 돌려주므로, 소켓 이벤트를 기다리지 않고
   // 응답으로 바로 반영한다(홈을 나가지 않고 연달아 바꿔도 배지가 즉시 따라온다).
   const sendMood = (emoji: string, message?: string) => {
@@ -337,7 +322,7 @@ export function HomeScreen({ navigation }: Props) {
    * <p><b>플랜은 사진을 고르기 전에 본다.</b> 예전에는 곧장 갤러리를 열고 Cloudinary
    * 업로드까지 마친 <b>다음</b>에야 서버가 402 를 던졌다 — 무료 사용자는 사진을 고르고
    * 기다린 끝에 거절당하고, 그 사이 <b>아무도 안 쓸 이미지가 이미 올라가</b> 있었다
-   * (업로드 한도와 비용은 그대로 나간다). TouchGesturePicker 와 같은 패턴이다: 여기는
+   * (업로드 한도와 비용은 그대로 나간다). 스티커·무드 게이팅과 같은 패턴이다: 여기는
    * 우회 방지가 아니라 UX 고, 서버(RelationService)가 최종 판정을 한 번 더 한다.
    *
    * <p>배경이 이미 있으면 바로 갤러리를 열지 않고 먼저 물어본다 — 백엔드는 처음부터
@@ -609,7 +594,6 @@ export function HomeScreen({ navigation }: Props) {
                   { icon: 'comment-question-outline', label: '질문', onPress: () => navigation.navigate('DailyQuestion') },
                   { icon: 'calendar-heart', label: '캘린더', onPress: () => navigation.navigate('CoupleCalendar') },
                   { icon: 'image-multiple-outline', label: '사진첩', onPress: () => navigation.navigate('PhotoAlbum') },
-                  { icon: 'hand-heart-outline', label: '터치', onPress: () => setShowTouchPicker(true) },
                 ]}
               />
             </View>
@@ -691,12 +675,6 @@ export function HomeScreen({ navigation }: Props) {
         </Pressable>
       </Modal>
 
-      {/* 가상 터치 — 채팅방을 열지 않고도 보낼 수 있는 진입점 */}
-      <TouchGesturePicker
-        visible={showTouchPicker}
-        onClose={() => setShowTouchPicker(false)}
-        onSelect={sendTouch}
-      />
       {/* 무드 상태 — topBar 의 진입점에서 연다(위 mood 주석 참고) */}
       <MoodPicker
         visible={showMoodPicker}
