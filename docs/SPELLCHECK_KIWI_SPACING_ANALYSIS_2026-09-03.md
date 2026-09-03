@@ -100,7 +100,73 @@ README 에는 LGPL v3 이라고 적혀 있지만 **실제 LICENSE 파일은 LGPL
 앱스토어 배포에서 문제가 되는 v3 의 anti-tivoization 조항이 없어 조건이 더 낫다.
 `.so` 로 동적 링킹하므로 재링크 요건도 자연히 충족된다 — **정적으로 묶지 말 것.**
 
-## 4. 남은 결정 — 모델 83MB 를 어떻게 줄 것인가
+## 4. 구현 (2026-09-03, 같은 날 완료)
+
+조사 결과대로 **소스 빌드 + 앱 번들**로 구현했다(모델 배포 방식은 사용자 결정).
+
+### 4-1. 모델을 꺼내지 않는다 — APK asset 을 그 자리에서 읽는다
+
+`kiwi_builder_init_stream` 이 "파일명을 주면 읽기/이동/닫기를 제공하는 스트림"을 받으므로
+Android `AAssetManager` 에 그대로 연결했다. 꺼내 썼다면 **APK 83MB + 내부저장소 83MB 로
+사용자 저장소를 두 배** 잡아먹는다(Hunspell 사전 14MB 는 이 방식이 없어 꺼낸다).
+
+대신 `build.gradle` 에 `noCompress` 를 지정해야 한다 — 압축된 asset 은 seek 마다 앞에서부터
+다시 풀어서 로딩이 몇 배로 느려진다. 어차피 모델은 이미 압축된 바이너리라 압축해도
+거의 안 줄어든다(105MB → 88MB).
+
+### 4-2. 구조
+
+```
+modules/korean-spell/
+  android/src/main/jniLibs/arm64-v8a/libkiwi.so   직접 빌드(17.3MB), LGPL 2.1 동적 링킹
+  android/src/main/cpp/kiwi_jni.cpp               AAssetManager 스트림 + JNI
+  android/src/main/java/.../KiwiNative.kt         C++ 진입점
+  cpp/kiwi/{capi.h,Macro.h}                       JNI 컴파일용 헤더만
+  kiwi-model/kiwi/                                최소 모델 83.3MB
+src/utils/koreanSpacing.ts                        JS 쪽 얇은 감싸개
+src/hooks/useSpacingFix.ts                        모델 수명 + 되돌리기
+src/components/SpacingFixBar.tsx                  준비중/정리/되돌리기 세 상태
+```
+
+`options=7` 을 코드에 박았다(§3-1 근거). 64비트 ABI 에만 Kiwi 를 넣고 CMake 가 조건부로
+처리한다 — 없는 ABI 에서는 Kotlin 이 `UnsatisfiedLinkError` 를 받아 조용히 기능만 끄고,
+맞춤법 검사(Hunspell)는 모든 ABI 에서 그대로 동작한다.
+
+### 4-3. 자동 적용하지 않는다
+
+§3-2 에서 본 '천일→천 일'·'챙겨주셔서→챙겨 주셔서' 는 **맞춤법상 Kiwi 가 맞다**(단위명사는
+띄어 쓰는 게 원칙). 문제는 정확성이 아니라 사용자가 원치 않는 변경이라는 점이다. 그래서
+사용자 사전으로 억지로 막는 대신 **눌러야 바뀌고 되돌릴 수 있게** 했다 — 맞춤법 검사줄과
+같은 원칙이다("고쳐주지 않고 물어본다").
+
+모델은 화면에 들어올 때 미리 올리고 **나갈 때 반드시 내린다**(`useFocusEffect`). 안 내리면
+채팅으로 돌아간 뒤에도 240MB 를 붙들고 있다.
+
+### 4-4. 실기기 검증
+
+```
+loadSpacing 4168ms  loaded=true          (standalone 3227ms + asset 스트림 오버헤드)
+오늘여기서파스타를먹었는데정말맛있었다 → 오늘 여기서 파스타를 먹었는데 정말 맛있었다  (7ms)
+비오는날에는뜨끈한국물이최고다         → 비 오는 날에는 뜨끈한 국물이 최고다        (6ms)
+가격대비 만 족스러웠고 직원분들 도     → 가격 대비 만족스러웠고 직원 분들도          (6ms)
+이 집 김치찌개는 진짜 인정             → 그대로                                    (5ms)
+unloaded=true                                                    (메모리 반납 확인)
+```
+
+가는 길에 실기기에서만 드러나는 버그가 하나 있었다: `KiwiNative` 에 `System.loadLibrary`
+가 없었다. Hunspell 쪽이 부른다고 봤는데, **글 쓰는 화면은 맞춤법 검사를 안 쓰므로
+`HunspellNative` 를 한 번도 안 건드린 채 띄어쓰기부터 쓰는 경로가 실제 사용 경로**다.
+빌드도 통과하고 심볼도 다 있고 APK 에도 다 들어갔는데 호출 순서 때문에 죽었다.
+
+## 5. 남은 것
+
+- **x86_64 라이브러리** — 에뮬레이터용. arm64 만 먼저 넣었다.
+- **iOS** — 공식 `Kiwi.xcframework`(36.8MB)가 배포돼 있어 경로는 있지만 맥이 없어 못 했다.
+  현재 iOS 에서는 `loadSpacing` 이 실패하고 기능만 조용히 빠진다.
+- **사용자 사전** — `kiwi_builder_add_word` 를 부를 자리는 만들어 뒀다(builder 흐름).
+  실사용에서 특정 표현이 계속 거슬리면 그때 넣는다.
+
+## 6. 참고 — 모델 배포 방식 (결정: 앱 번들)
 
 Play 는 설치 크기(base APK + config APK)를 **150MB** 로 제한한다. 현재 앱에 83MB 를
 그대로 얹으면 다운로드가 크게 늘고 여유가 줄어든다.
