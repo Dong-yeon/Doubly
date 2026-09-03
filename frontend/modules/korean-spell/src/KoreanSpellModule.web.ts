@@ -18,6 +18,16 @@ class KoreanSpellModule extends NativeModule<{}> {
     return [];
   }
   async unload(): Promise<void> {}
+  async loadSpacing(): Promise<boolean> {
+    return false;
+  }
+  isSpacingLoaded(): boolean {
+    return false;
+  }
+  async correctSpacing(text: string): Promise<string> {
+    return text;
+  }
+  async unloadSpacing(): Promise<void> {}
 }
 
 export default registerWebModule(KoreanSpellModule, 'KoreanSpellModule');

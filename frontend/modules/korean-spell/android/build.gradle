@@ -26,12 +26,24 @@ android {
     }
   }
 
-  // 사전은 플랫폼마다 복사하지 않고 모듈 안 한 곳(dict/)에만 둔다 — 14MB 짜리를
-  // android/ios 에 각각 두면 저장소에 같은 파일이 두 벌 생긴다.
+  // 사전(Hunspell)도 모델(Kiwi)도 모듈 안 한 곳에만 둔다 — android/ios 에 각각
+  // 두면 저장소에 같은 파일이 두 벌 생긴다. Kiwi 모델은 assets/kiwi/ 아래로
+  // 들어간다(사전과 섞이면 어느 게 누구 것인지 알 수 없다).
   sourceSets {
     main {
-      assets.srcDirs += ['../dict']
+      assets.srcDirs += ['../dict', '../kiwi-model']
     }
+  }
+
+  androidResources {
+    /*
+     * Kiwi 모델은 APK 안에서 압축하지 않는다. kiwi_jni.cpp 가 asset 을 꺼내지 않고
+     * 그 자리에서 읽는데(83MB 를 내부저장소에 또 쓰지 않으려고), 압축된 asset 은
+     * seek 할 때마다 앞에서부터 다시 풀어서 로딩이 몇 배로 느려진다.
+     *
+     * 어차피 모델은 이미 압축된 바이너리라 압축해도 거의 안 줄어든다(105MB -> 88MB).
+     */
+    noCompress += ['mdl', 'morph', 'dict', 'txt']
   }
 
   lintOptions {

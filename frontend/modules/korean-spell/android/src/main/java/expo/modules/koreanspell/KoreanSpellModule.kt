@@ -52,6 +52,52 @@ class KoreanSpellModule : Module() {
     AsyncFunction("unload") {
       HunspellNative.nativeUnload()
     }
+
+    /*
+     * 아래는 띄어쓰기 교정(Kiwi) — 위 사전 검사와는 완전히 별개다. 모델도 다르고
+     * 쓰는 화면도 다르다.
+     *
+     * <b>채팅에는 쓰지 않는다.</b> 커플 채팅에서는 "오늘 시간돼?" 처럼 붙여 쓰는 게
+     * 말투라 띄어쓰기를 지적하면 그 자체가 오탐이 된다. 리뷰·일기처럼 문장을 쓰는
+     * 화면에서만 부른다.
+     */
+    AsyncFunction("loadSpacing") {
+      try {
+        if (!KiwiNative.nativeLoad(context.assets, KIWI_ASSET_DIR, KIWI_BUILD_OPTIONS)) {
+          throw SpacingLoadException(KiwiNative.nativeLastError())
+        }
+        true
+      } catch (e: UnsatisfiedLinkError) {
+        // 64비트 ABI 에만 Kiwi 를 넣었다 — 32비트 기기는 여기로 온다
+        throw SpacingLoadException("이 기기에서는 띄어쓰기 교정을 쓸 수 없어요")
+      }
+    }
+
+    Function("isSpacingLoaded") {
+      try {
+        KiwiNative.nativeIsLoaded()
+      } catch (e: UnsatisfiedLinkError) {
+        false
+      }
+    }
+
+    /** 교정 자체는 문장당 1ms 내외다 — 비용은 전부 loadSpacing 에 있다 */
+    AsyncFunction("correctSpacing") { text: String ->
+      try {
+        KiwiNative.nativeCorrect(text)
+      } catch (e: UnsatisfiedLinkError) {
+        text
+      }
+    }
+
+    /** 모델이 240MB 를 쓴다 — 글 쓰는 화면을 벗어나면 반드시 내린다 */
+    AsyncFunction("unloadSpacing") {
+      try {
+        KiwiNative.nativeUnload()
+      } catch (e: UnsatisfiedLinkError) {
+        // 애초에 안 올라갔으니 내릴 것도 없다
+      }
+    }
   }
 
   /**
@@ -94,8 +140,21 @@ class KoreanSpellModule : Module() {
     const val DICT_VERSION = "0.7.94"
     const val AFF_NAME = "ko.aff"
     const val DIC_NAME = "ko.dic"
+
+    /** Kiwi 모델이 들어있는 asset 경로 (build.gradle 의 assets.srcDirs 참고) */
+    const val KIWI_ASSET_DIR = "kiwi"
+
+    /*
+     * KIWI_BUILD_INTEGRATE_ALLOMORPH(1) + LOAD_DEFAULT_DICT(2) + LOAD_TYPO_DICT(4).
+     * 기본값 15 는 multi.dict 까지 읽는데, 그걸 빼면 로딩이 절반으로 줄고 메모리가
+     * 155MB 덜 드는데 띄어쓰기 품질은 같았다(실기기 측정, docs 참고).
+     */
+    const val KIWI_BUILD_OPTIONS = 7
   }
 }
 
 internal class DictionaryLoadException(reason: String) :
   CodedException("한국어 사전을 불러오지 못했습니다: $reason")
+
+internal class SpacingLoadException(reason: String) :
+  CodedException("띄어쓰기 모델을 불러오지 못했습니다: $reason")

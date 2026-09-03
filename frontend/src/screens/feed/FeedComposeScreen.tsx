@@ -15,6 +15,8 @@ import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
 import { useDirtyGuard } from '../../hooks/useDirtyGuard';
+import { useSpacingFix } from '../../hooks/useSpacingFix';
+import { SpacingFixBar } from '../../components/SpacingFixBar';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 
@@ -27,6 +29,25 @@ export function FeedComposeScreen({ navigation }: Props) {
 
   // 글이나 사진이 있으면 이탈(뒤로가기·스와이프) 전에 확인한다
   const allowLeave = useDirtyGuard(content.trim().length > 0 || photoUri != null);
+
+  /*
+   * 띄어쓰기 정리 — 채팅과 달리 여기는 문장을 쓰는 자리라 붙여 쓴 글을 풀어주면 도움이
+   * 된다. 자동으로 고치지 않고 눌렀을 때만 바꾼다(되돌리기 제공).
+   */
+  const spacing_ = useSpacingFix();
+  const onFixSpacing = async () => {
+    const corrected = await spacing_.fix(content);
+    if (corrected === null) {
+      toast.info('고칠 띄어쓰기가 없어요.');
+      return;
+    }
+    haptics.light();
+    setContent(corrected);
+  };
+  const onUndoSpacing = () => {
+    const before = spacing_.undo();
+    if (before !== null) setContent(before);
+  };
 
   const onPickPhoto = async () => {
     try {
@@ -87,9 +108,22 @@ export function FeedComposeScreen({ navigation }: Props) {
             label="오늘의 일상"
             placeholder="예: 퇴근하고 같이 한강 러닝 날씨 최고!"
             value={content}
-            onChangeText={setContent}
+            onChangeText={(next) => {
+              // 사용자가 다시 손대면 되돌리기는 의미가 없어진다
+              spacing_.clearUndo();
+              setContent(next);
+            }}
             multiline
           />
+
+          {content.trim().length > 0 ? (
+            <SpacingFixBar
+              busy={spacing_.busy}
+              canUndo={spacing_.canUndo}
+              onFix={onFixSpacing}
+              onUndo={onUndoSpacing}
+            />
+          ) : null}
 
           <Button title="남기기" onPress={onSave} loading={saving} style={styles.saveBtn} />
       </FormKeyboardView>
