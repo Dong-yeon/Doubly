@@ -13,6 +13,13 @@ export const chatApi = {
         params: { cursor },
       }),
     ),
+  /** 대화 검색 — 텍스트 메시지 본문, 전체 기간, 최신순 커서 페이징 */
+  search: (relationId: number, q: string, cursor?: number) =>
+    unwrap(
+      apiClient.get<ApiResponse<ChatMessage[]>>(`/chat/rooms/${relationId}/search`, {
+        params: { q, cursor },
+      }),
+    ),
   markRead: (messageId: number) =>
     unwrap(apiClient.put<ApiResponse<void>>(`/chat/read/${messageId}`)),
 

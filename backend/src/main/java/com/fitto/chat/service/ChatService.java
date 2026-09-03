@@ -97,6 +97,28 @@ public class ChatService {
         return attachDetails(messages);
     }
 
+    /**
+     * 대화 검색 — 텍스트 메시지 본문 기준, 최신순 커서 페이징(전체 기간).
+     *
+     * <p>영구 보관인데 검색이 없어 반년 전 대화를 못 찾는다는 갭
+     * (docs/CHAT_RETENTION_AND_KAKAO_BENCHMARK_2026-09-03.md §6 1순위)을 메운다.
+     */
+    public List<ChatMessageResponse> searchMessages(Long userId, Long relationId, String keyword, Long cursor) {
+        requireMember(userId, relationId);
+        String trimmed = keyword == null ? "" : keyword.trim();
+        if (trimmed.isEmpty()) {
+            return List.of();
+        }
+        List<ChatMessage> messages = chatMessageRepository.searchMessages(
+                relationId, escapeLike(trimmed), cursor, PageRequest.of(0, PAGE_SIZE));
+        return attachDetails(messages);
+    }
+
+    /** LIKE 와일드카드(%, _)와 이스케이프 문자 자체를 리터럴로 만든다. */
+    private String escapeLike(String keyword) {
+        return keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+    }
+
     /** 메시지 전송(영속 + 알림). 브로드캐스트는 호출자(STOMP 컨트롤러)가 담당. */
     @Transactional
     public ChatMessageResponse send(Long senderId, Long relationId, SendMessageRequest req) {

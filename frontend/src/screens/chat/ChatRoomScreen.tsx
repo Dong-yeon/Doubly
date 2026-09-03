@@ -38,6 +38,7 @@ import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { EmojiPicker } from '../../components/EmojiPicker';
+import { ChatSearchModal } from '../../components/ChatSearchModal';
 import { SpellCheckBar } from '../../components/SpellCheckBar';
 import { MessageActionSheet } from '../../components/MessageActionSheet';
 import { SwipeBackView } from '../../components/SwipeBackView';
@@ -124,6 +125,10 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   // 공유한다는 점, 트레이에서 열린다는 점 모두 스티커 패널과 같다(2026-09-03,
   // "터치"를 대체해 트레이에 들어왔다 — 아래 sendSticker 주석 참고).
   const [showEmoticons, setShowEmoticons] = useState(false);
+  // 대화 검색 — 헤더 돋보기 버튼으로 연다(2026-09-03, 전체 기간 서버 검색)
+  const [showSearch, setShowSearch] = useState(false);
+  // 검색 결과를 골라 스크롤해 간 메시지 — 잠깐 배경을 강조했다가 스스로 지운다
+  const [highlightedId, setHighlightedId] = useState<number | null>(null);
   // 답장 대상 / 수정 중인 메시지 / 리액션 피커 대상
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const [editing, setEditing] = useState<ChatMessage | null>(null);
@@ -157,6 +162,36 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   // 과거 쪽으로 일정 거리 이상 올라갔을 때만 "맨 아래로" FAB 을 보여준다
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const SCROLL_TO_BOTTOM_THRESHOLD = 400;
+
+  /*
+   * 검색 결과로 이동 — 이미 불러온 목록에 있으면 바로 스크롤, 없으면(반년 전
+   * 대화처럼 아직 안 당겨온 페이지) loadOlder 를 필요한 만큼 반복해서 끌어온다.
+   * store.getState() 로 직접 읽는 이유: 이 함수를 useCallback 에 messages 를 넣어
+   * 만들면 매 메시지 수신마다 새로 만들어지고, 반복문 중간에 최신값을 못 따라간다.
+   */
+  const scrollToMessage = useCallback(async (id: number) => {
+    const LOAD_GUARD = 300; // 30개씩 최대 300페이지(9,000건) — 그 이상이면 포기하고 알린다
+    let state = useChatStore.getState();
+    let list = state.messages[relationId] ?? [];
+    let index = list.findIndex((m) => m.id === id);
+    let guard = 0;
+    while (index === -1 && state.hasMoreOlder[relationId] !== false && guard < LOAD_GUARD) {
+      await state.loadOlder(relationId);
+      state = useChatStore.getState();
+      list = state.messages[relationId] ?? [];
+      index = list.findIndex((m) => m.id === id);
+      guard++;
+    }
+    if (index === -1) {
+      toast.error('메시지를 찾지 못했어요.');
+      return;
+    }
+    setHighlightedId(id);
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToIndex({ index, viewPosition: 0.4, animated: true });
+    });
+    setTimeout(() => setHighlightedId((cur) => (cur === id ? null : cur)), 1800);
+  }, [relationId]);
 
   /*
    * 맞춤법 검사는 기기 안에서만 돈다(외부 전송 없음). 규칙 몇 개짜리라
@@ -295,6 +330,15 @@ export function ChatRoomScreen({ navigation, route }: Props) {
       title: partnerName ?? '채팅',
       headerRight: () => (
         <View style={styles.headerCallActions}>
+          <Pressable
+            onPress={() => setShowSearch(true)}
+            style={({ pressed }) => [styles.headerCallButton, pressed && styles.headerCallButtonPressed]}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="대화 검색"
+          >
+            <MaterialCommunityIcons name="magnify" size={22} color={colors.textPrimary} />
+          </Pressable>
           <Pressable
             onPress={() => startCall('VOICE')}
             disabled={callStarting}
@@ -856,7 +900,17 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           data={messages}
           inverted
           keyExtractor={(m) => String(m.id)}
-          renderItem={renderItem}
+          // 검색에서 골라 온 메시지를 잠깐 강조한다 — renderItem 분기(삭제됨·카드 등)를
+          // 하나하나 손대지 않고 바깥에서 한 번만 감싼다(highlightedId 주석 참고)
+          renderItem={(info) => (
+            <View style={info.item.id === highlightedId ? styles.highlightRow : undefined}>
+              {renderItem(info)}
+            </View>
+          )}
+          onScrollToIndexFailed={(info) => {
+            listRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
+            setTimeout(() => listRef.current?.scrollToIndex({ index: info.index, animated: true }), 120);
+          }}
           contentContainerStyle={styles.list}
           /*
            * 과거 메시지 페이징 — inverted 목록이라 onEndReached = 위(가장 오래된 쪽) 도달.
@@ -1113,6 +1167,18 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         // 이모지 시트에서 직접 고른 이모지는 어느 팩에도 없으므로 무료다(stickerPacks 주석)
         onSelect={(emoji) => sendSticker(emoji, false, '이모지')}
       />
+      {/* 대화 검색 — 헤더 돋보기. 고르면 닫고 그 메시지로 스크롤한다 */}
+      <ChatSearchModal
+        visible={showSearch}
+        relationId={relationId}
+        myId={myId}
+        partnerName={partnerName}
+        onClose={() => setShowSearch(false)}
+        onSelect={(msg) => {
+          setShowSearch(false);
+          scrollToMessage(msg.id);
+        }}
+      />
       {/* 메시지 길게 누르기 — 리액션/답장/수정/삭제를 한 시트에 모아 보여준다 */}
       <MessageActionSheet
         message={actionSheetFor}
@@ -1173,6 +1239,8 @@ const styles = themedStyles((colors) => ({
   // inverted FlatList 의 콘텐츠는 scaleY:-1 로 뒤집혀 그려진다 — EmptyState 만 다시
   // 뒤집어 정방향으로 보이게 한다(QA_CHECKLIST.md 패턴10)
   emptyMessagesWrap: { transform: [{ scaleY: -1 }] },
+  // 검색에서 골라 온 메시지 강조 — 1.8초 뒤 스스로 지운다(highlightedId 주석 참고)
+  highlightRow: { backgroundColor: colors.primarySoft, borderRadius: radius.md },
   // 목록 위에 떠 있는 "맨 아래로" FAB — 트레이·입력바 위 오른쪽 모서리
   scrollToBottomFab: {
     position: 'absolute',
