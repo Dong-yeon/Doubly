@@ -1,6 +1,6 @@
 /** 채팅 REST API — 설계서 v2.0 4.5 (실시간 송수신은 chatSocket.ts) */
 import { apiClient, unwrap } from './client';
-import type { ApiResponse, ChatMessage, ChatReactionSummary, ChatRoom, LatestTouch } from '../types';
+import type { ApiResponse, ChatBookmark, ChatMessage, ChatReactionSummary, ChatRoom, LatestTouch } from '../types';
 
 export const chatApi = {
   rooms: () => unwrap(apiClient.get<ApiResponse<ChatRoom[]>>('/chat/rooms')),
@@ -37,4 +37,26 @@ export const chatApi = {
   /** 메시지 삭제 — 내용만 지우고 자리는 남는다 */
   remove: (messageId: number) =>
     unwrap(apiClient.delete<ApiResponse<ChatMessage>>(`/chat/messages/${messageId}`)),
+
+  /** 사진 모아보기 — IMAGE 메시지, 전체 기간, 최신순 커서 페이징. 전면 무료 */
+  photos: (relationId: number, cursor?: number) =>
+    unwrap(
+      apiClient.get<ApiResponse<ChatMessage[]>>(`/chat/rooms/${relationId}/photos`, {
+        params: { cursor },
+      }),
+    ),
+  /** 중요 대화 저장/저장 취소 — 토글, 커플 공용(한쪽이 취소해도 둘 다에서 사라진다) */
+  toggleBookmark: (messageId: number) =>
+    unwrap(apiClient.post<ApiResponse<boolean>>(`/chat/messages/${messageId}/bookmark`)),
+  /**
+   * 저장한 대화 목록 — 저장한 순서 최신순 커서 페이징.
+   * 커서는 메시지 id 가 아니라 bookmarkId 다(목록 순서=저장 순서, 메시지 id=보낸 순서
+   * 라 서로 다른 값 — 백엔드 ChatBookmarkResponse 주석 참고).
+   */
+  bookmarks: (relationId: number, cursor?: number) =>
+    unwrap(
+      apiClient.get<ApiResponse<ChatBookmark[]>>(`/chat/rooms/${relationId}/bookmarks`, {
+        params: { cursor },
+      }),
+    ),
 };

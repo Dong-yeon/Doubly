@@ -25,18 +25,20 @@ public record ChatMessageResponse(
         /** 수정된 메시지면 true — 말풍선에 '수정됨' 표시 */
         boolean edited,
         /** 삭제된 메시지면 true — 본문 대신 '삭제된 메시지'를 표시한다 */
-        boolean deleted
+        boolean deleted,
+        /** 중요 대화 북마크됨 — 커플 공용 판정(누가 저장했든 true, §3 참고) */
+        boolean bookmarked
 ) {
     public static ChatMessageResponse from(ChatMessage m) {
-        return from(m, null, List.of());
+        return from(m, null, List.of(), false);
     }
 
     public static ChatMessageResponse from(ChatMessage m, ReplyPreview replyTo,
-                                           List<ChatReactionSummary> reactions) {
+                                           List<ChatReactionSummary> reactions, boolean bookmarked) {
         return new ChatMessageResponse(m.getId(), m.getRelationId(), m.getSenderId(),
                 m.getMessageType(), m.getContent(), m.getImageUrl(), m.getWorkoutId(),
                 m.getRoutineId(), m.isRead(), m.getCreatedAt(),
                 replyTo, reactions != null ? reactions : List.of(),
-                m.getEditedAt() != null, m.isDeleted());
+                m.getEditedAt() != null, m.isDeleted(), bookmarked);
     }
 }

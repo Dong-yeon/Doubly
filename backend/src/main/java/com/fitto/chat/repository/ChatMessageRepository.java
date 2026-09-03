@@ -26,6 +26,22 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
     Optional<ChatMessage> findTopByRelationIdOrderByIdDesc(Long relationId);
 
     /**
+     * 사진 모아보기 — IMAGE 메시지만 최신순 커서 페이징. PRO_PLAN_DESIGN.md 가 이미
+     * "우리 대화 갤러리"를 전면 무료로 못박아 뒀다(Feature 미등재) — 게이팅 없음.
+     */
+    @Query("""
+            select m from ChatMessage m
+            where m.relationId = :relationId
+              and m.messageType = com.fitto.chat.domain.MessageType.IMAGE
+              and m.deletedAt is null
+              and (cast(:cursor as Long) is null or m.id < :cursor)
+            order by m.id desc
+            """)
+    List<ChatMessage> findImages(@Param("relationId") Long relationId,
+                                 @Param("cursor") Long cursor,
+                                 Pageable pageable);
+
+    /**
      * 대화 검색 — 텍스트 메시지 본문에 키워드가 포함된 것만, 최신순 커서 페이징.
      * STICKER/TOUCH 등은 content 가 사람이 읽는 문장이 아니라 코드값이라 검색 대상에서 뺀다.
      * keyword 는 호출자(ChatService)가 LIKE 와일드카드를 이스케이프해서 넘긴다.

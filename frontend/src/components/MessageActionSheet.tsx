@@ -30,6 +30,7 @@ interface Props {
   onReply: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onBookmark: () => void;
 }
 
 export function MessageActionSheet({
@@ -42,6 +43,7 @@ export function MessageActionSheet({
   onReply,
   onEdit,
   onDelete,
+  onBookmark,
 }: Props) {
   const visible = message !== null;
 
@@ -81,6 +83,14 @@ export function MessageActionSheet({
           <View style={styles.divider} />
 
           <ActionRow icon="reply-outline" label="답장하기" onPress={onReply} />
+          {/* 삭제된 메시지엔 내용이 없어 저장할 게 없다 */}
+          {!message?.deleted ? (
+            <ActionRow
+              icon={message?.bookmarked ? 'bookmark' : 'bookmark-outline'}
+              label={message?.bookmarked ? '저장 취소' : '저장하기'}
+              onPress={onBookmark}
+            />
+          ) : null}
           {canEdit ? <ActionRow icon="pencil-outline" label="수정하기" onPress={onEdit} /> : null}
           {mine ? (
             <ActionRow icon="delete-outline" label="삭제하기" destructive onPress={onDelete} />

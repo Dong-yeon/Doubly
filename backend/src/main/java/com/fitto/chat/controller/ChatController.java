@@ -1,5 +1,6 @@
 package com.fitto.chat.controller;
 
+import com.fitto.chat.dto.ChatBookmarkResponse;
 import com.fitto.chat.dto.ChatMessageResponse;
 import com.fitto.chat.dto.ChatReactionSummary;
 import com.fitto.chat.dto.ChatRoomResponse;
@@ -59,6 +60,30 @@ public class ChatController {
                                                          @RequestParam String q,
                                                          @RequestParam(required = false) Long cursor) {
         return ApiResponse.success(chatService.searchMessages(user.id(), relationId, q, cursor));
+    }
+
+    /** 사진 모아보기 — IMAGE 메시지, 전체 기간, 최신순 커서 페이징. 전면 무료. */
+    @GetMapping("/rooms/{relationId}/photos")
+    public ApiResponse<List<ChatMessageResponse>> photos(@AuthenticationPrincipal AuthUser user,
+                                                         @PathVariable Long relationId,
+                                                         @RequestParam(required = false) Long cursor) {
+        return ApiResponse.success(chatService.getPhotos(user.id(), relationId, cursor));
+    }
+
+    /** 중요 대화 저장/저장 취소 — 토글. 커플 공용이라 한쪽이 취소해도 둘 다에서 사라진다. */
+    @PostMapping("/messages/{messageId}/bookmark")
+    public ApiResponse<Boolean> toggleBookmark(@AuthenticationPrincipal AuthUser user,
+                                               @PathVariable Long messageId) {
+        boolean bookmarked = chatService.toggleBookmark(user.id(), messageId);
+        return ApiResponse.success(bookmarked, bookmarked ? "대화를 저장했어요." : "저장을 취소했어요.");
+    }
+
+    /** 저장한 대화 목록 — 저장한 순서 최신순 커서 페이징(커서 = bookmarkId). */
+    @GetMapping("/rooms/{relationId}/bookmarks")
+    public ApiResponse<List<ChatBookmarkResponse>> bookmarks(@AuthenticationPrincipal AuthUser user,
+                                                            @PathVariable Long relationId,
+                                                            @RequestParam(required = false) Long cursor) {
+        return ApiResponse.success(chatService.getBookmarks(user.id(), relationId, cursor));
     }
 
     /**

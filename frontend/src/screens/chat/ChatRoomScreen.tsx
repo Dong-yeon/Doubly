@@ -39,6 +39,7 @@ import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { EmojiPicker } from '../../components/EmojiPicker';
 import { ChatSearchModal } from '../../components/ChatSearchModal';
+import { ChatMoreMenuSheet } from '../../components/ChatMoreMenuSheet';
 import { SpellCheckBar } from '../../components/SpellCheckBar';
 import { MessageActionSheet } from '../../components/MessageActionSheet';
 import { SwipeBackView } from '../../components/SwipeBackView';
@@ -127,6 +128,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const [showEmoticons, setShowEmoticons] = useState(false);
   // 대화 검색 — 헤더 돋보기 버튼으로 연다(2026-09-03, 전체 기간 서버 검색)
   const [showSearch, setShowSearch] = useState(false);
+  // 헤더 "⋮" — 사진 모아보기·저장한 대화(자주 안 쓰는 항목이라 아이콘을 더 늘리지 않고 묶는다)
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
   // 검색 결과를 골라 스크롤해 간 메시지 — 잠깐 배경을 강조했다가 스스로 지운다
   const [highlightedId, setHighlightedId] = useState<number | null>(null);
   // 답장 대상 / 수정 중인 메시지 / 리액션 피커 대상
@@ -192,6 +195,18 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     });
     setTimeout(() => setHighlightedId((cur) => (cur === id ? null : cur)), 1800);
   }, [relationId]);
+
+  /*
+   * 저장한 대화 목록에서 항목을 눌러 돌아왔을 때만 채워진다(navigation.navigate 로
+   * 이미 떠 있던 이 화면 인스턴스에 파라미터만 갱신되어 들어온다). 한 번 스크롤하면
+   * 파라미터를 스스로 지운다 — 안 지우면 뒤로 갔다 다시 들어올 때도 또 스크롤된다.
+   */
+  useEffect(() => {
+    const target = route.params.scrollToMessageId;
+    if (target == null) return;
+    navigation.setParams({ scrollToMessageId: undefined });
+    scrollToMessage(target);
+  }, [route.params.scrollToMessageId, navigation, scrollToMessage]);
 
   /*
    * 맞춤법 검사는 기기 안에서만 돈다(외부 전송 없음). 규칙 몇 개짜리라
@@ -330,6 +345,15 @@ export function ChatRoomScreen({ navigation, route }: Props) {
       title: partnerName ?? '채팅',
       headerRight: () => (
         <View style={styles.headerCallActions}>
+          <Pressable
+            onPress={() => setShowMoreMenu(true)}
+            style={({ pressed }) => [styles.headerCallButton, pressed && styles.headerCallButtonPressed]}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="더보기"
+          >
+            <MaterialCommunityIcons name="dots-vertical" size={22} color={colors.textPrimary} />
+          </Pressable>
           <Pressable
             onPress={() => setShowSearch(true)}
             style={({ pressed }) => [styles.headerCallButton, pressed && styles.headerCallButtonPressed]}
@@ -513,6 +537,24 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     const msg = actionSheetFor;
     closeActionSheet();
     if (msg) onDelete(msg);
+  };
+
+  /*
+   * 저장/저장 취소 — 서버는 boolean 만 돌려주므로(ChatMessageResponse 전체를 다시
+   * 만들 이유가 없다) store 는 이 필드만 직접 patch 한다. replaceMessage 는 통째로
+   * 바꿔치기라 다른 화면(검색 결과 등)에서 들고 있는 낡은 객체와는 무관하다.
+   */
+  const onBookmarkFromSheet = async () => {
+    const msg = actionSheetFor;
+    closeActionSheet();
+    if (!msg) return;
+    try {
+      const bookmarked = await chatApi.toggleBookmark(msg.id);
+      replaceMessage(relationId, { ...msg, bookmarked });
+      toast.success(bookmarked ? '대화를 저장했어요.' : '저장을 취소했어요.');
+    } catch (e) {
+      toast.error(getErrorMessage(e, '저장하지 못했어요.'));
+    }
   };
 
   const onDelete = (msg: ChatMessage) => {
@@ -1179,6 +1221,13 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           scrollToMessage(msg.id);
         }}
       />
+      {/* 헤더 "⋮" — 사진 모아보기·저장한 대화 */}
+      <ChatMoreMenuSheet
+        visible={showMoreMenu}
+        onClose={() => setShowMoreMenu(false)}
+        onPhotos={() => navigation.navigate('ChatPhotoGallery', { relationId, myId })}
+        onSaved={() => navigation.navigate('SavedMessages', { relationId, title: partnerName, myId })}
+      />
       {/* 메시지 길게 누르기 — 리액션/답장/수정/삭제를 한 시트에 모아 보여준다 */}
       <MessageActionSheet
         message={actionSheetFor}
@@ -1190,6 +1239,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         onReply={onReplyFromSheet}
         onEdit={onEditFromSheet}
         onDelete={onDeleteFromSheet}
+        onBookmark={onBookmarkFromSheet}
       />
     </SafeAreaView>
     </SwipeBackView>

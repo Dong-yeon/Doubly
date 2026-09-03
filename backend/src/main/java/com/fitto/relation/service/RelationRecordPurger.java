@@ -96,9 +96,11 @@ public class RelationRecordPurger {
         // 마찬가지로 favorite_foods 삭제(UserDataPurger)보다 먼저 지운다.
         // favorite_food_gift_items 는 gift_id ON DELETE CASCADE 라 함께 지워진다.
         exec("delete from favorite_food_gifts where relation_id = :rid", relationId);
-        // 리액션·답장이 chat_messages 를 참조하므로 자식부터 지운다
+        // 리액션·북마크·답장이 chat_messages 를 참조하므로 자식부터 지운다
         exec("delete from chat_message_reactions where message_id in "
                 + "(select m.id from chat_messages m where m.relation_id = :rid)", relationId);
+        // relation_id 를 직접 들고 있어 message_id 서브쿼리 없이 바로 지울 수 있다(V75)
+        exec("delete from chat_message_bookmarks where relation_id = :rid", relationId);
         // 같은 방 안에서 서로를 인용(reply_to_id)하므로 참조를 먼저 끊는다
         exec("update chat_messages set reply_to_id = null where relation_id = :rid", relationId);
         exec("delete from chat_messages where relation_id = :rid", relationId);
