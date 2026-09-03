@@ -27,6 +27,7 @@ import { QuickActions } from './components/QuickActions';
 import { MemoryPeek } from './components/MemoryPeek';
 import { TripPeek, isTripLive, isTripOngoing, pickHomeTrip } from './components/TripPeek';
 import { LockedCard } from '../../components/LockedCard';
+import { TouchGesturePicker } from '../../components/TouchGesturePicker';
 import { MoodPicker } from '../../components/MoodPicker';
 import { useAuthStore } from '../../store/authStore';
 import { usePlanStore } from '../../store/planStore';
@@ -40,7 +41,12 @@ import { chatApi } from '../../api/chat';
 import { moodApi } from '../../api/mood';
 import { tripApi } from '../../api/trip';
 import { feedTimeLabel } from '../feed/FeedTimelineScreen';
-import { connectSocket, subscribeCouple, unsubscribeCouple } from '../../api/chatSocket';
+import {
+  connectSocket,
+  publishEnsuringConnection,
+  subscribeCouple,
+  unsubscribeCouple,
+} from '../../api/chatSocket';
 import { pickImage, uploadImage } from '../../utils/imageUpload';
 import { daysSince } from '../../utils/date';
 import { haptics } from '../../utils/haptics';
@@ -53,7 +59,7 @@ import { updateHomeWidget } from '../../widget/updateHomeWidget';
 import { loadWidgetData } from '../../widget/widgetData';
 import { touchGestureOf } from '../../constants/touchGestures';
 import { playTouchGesture } from '../../utils/haptics';
-import type { FeedItem, Memories, MoodResponse, PartnerToday, Streak, Trip } from '../../types';
+import type { FeedItem, Memories, MoodResponse, PartnerToday, Streak, TouchGestureCode, Trip } from '../../types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { isDarkMode } from '../../theme';
 import { themedStyles } from '../../theme/themedStyles';
@@ -138,6 +144,10 @@ export function HomeScreen({ navigation }: Props) {
   const [annModal, setAnnModal] = useState(false);
   const [annInput, setAnnInput] = useState('');
   const [annSaving, setAnnSaving] = useState(false);
+  // 가상 터치 — 채팅방을 열지 않고도 보낼 수 있는 진입점(PLAN.md "가상 터치" 참고).
+  // 채팅 트레이에는 2026-09-03 에 스티커와 겹친다는 리포트로 뺐지만(ChatRoomScreen
+  // 주석 참고), 사용률 자체는 낮아도 홈의 "가볍게 안부 찌르기" 용도로는 남긴다.
+  const [showTouchPicker, setShowTouchPicker] = useState(false);
   /*
    * 무드 상태 — 나/상대 지금 기분(PLAN.md "무드 상태" 참고). 아바타 배지로 표시하고,
    * 설정하는 진입점도 여기 topBar 에 둔다(아래 topBar 참고).
@@ -306,6 +316,13 @@ export function HomeScreen({ navigation }: Props) {
       };
     }, [relationId, refresh, onIncomingTouch]),
   );
+
+  const sendTouch = (code: TouchGestureCode) => {
+    if (!relationId) return;
+    publishEnsuringConnection(relationId, { messageType: 'TOUCH', content: code }).then((ok) => {
+      if (!ok) toast.error('연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
+    });
+  };
 
   // moodApi.set 이 갱신된 나/상대 무드를 함께 돌려주므로, 소켓 이벤트를 기다리지 않고
   // 응답으로 바로 반영한다(홈을 나가지 않고 연달아 바꿔도 배지가 즉시 따라온다).
@@ -594,6 +611,7 @@ export function HomeScreen({ navigation }: Props) {
                   { icon: 'comment-question-outline', label: '질문', onPress: () => navigation.navigate('DailyQuestion') },
                   { icon: 'calendar-heart', label: '캘린더', onPress: () => navigation.navigate('CoupleCalendar') },
                   { icon: 'image-multiple-outline', label: '사진첩', onPress: () => navigation.navigate('PhotoAlbum') },
+                  { icon: 'hand-heart-outline', label: '터치', onPress: () => setShowTouchPicker(true) },
                 ]}
               />
             </View>
@@ -675,6 +693,12 @@ export function HomeScreen({ navigation }: Props) {
         </Pressable>
       </Modal>
 
+      {/* 가상 터치 — 채팅방을 열지 않고도 보낼 수 있는 진입점 */}
+      <TouchGesturePicker
+        visible={showTouchPicker}
+        onClose={() => setShowTouchPicker(false)}
+        onSelect={sendTouch}
+      />
       {/* 무드 상태 — topBar 의 진입점에서 연다(위 mood 주석 참고) */}
       <MoodPicker
         visible={showMoodPicker}
