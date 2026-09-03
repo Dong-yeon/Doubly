@@ -19,6 +19,7 @@ import { isPushPermissionDenied } from '../../utils/push';
 import { useAuthStore } from '../../store/authStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { getErrorMessage } from '../../utils/error';
+import { checkWithDictionary, preloadDictionary } from '../../utils/koreanDictionary';
 import { copyText } from '../../utils/share';
 import { toast } from '../../store/toastStore';
 import { APP_VERSION, BUILD_LABEL, BUILD_STAMP } from '../../constants/config';
@@ -51,25 +52,43 @@ export function SettingsScreen({ navigation }: Props) {
   const setUser = useAuthStore((s) => s.setUser);
   const spellCheckEnabled = useSettingsStore((s) => s.spellCheckEnabled);
   const setSpellCheckEnabled = useSettingsStore((s) => s.setSpellCheckEnabled);
-  // TEMP-PROTOTYPE(2026-09-02) — 아래 onTestHunspell 참고, 검증 끝나면 같이 지운다
-  const [hunspellTesting, setHunspellTesting] = useState(false);
-  const onTestHunspell = async () => {
-    setHunspellTesting(true);
+  /*
+   * 개발용 — 사전 검사(2·3층)가 실기기에서 실제로 도는지 확인한다. 규칙 검증은
+   * npm run verify:spellcheck 가 기기 없이 하지만, 사전 자체의 판정과 로딩 시간은
+   * 기기에서만 볼 수 있다. __DEV__ 로 가려 스토어 빌드에는 안 나간다.
+   */
+  const [dictTesting, setDictTesting] = useState(false);
+  const onTestDictionary = async () => {
+    setDictTesting(true);
     try {
       const t0 = Date.now();
-      const { getHunspell } = await import('../../utils/hunspell/hunspellEngine');
-      const hunspell = await getHunspell();
+      const ok = await preloadDictionary();
       const loadMs = Date.now() - t0;
-      const words = ['안되요', '오랫만에', '어의없어', '갈께', '왠일로', '안돼', '특이해'];
-      const lines = words.map((w) => {
-        const ok = hunspell.spell(w);
-        return ok ? `${w} : OK` : `${w} : 오류 → ${hunspell.suggest(w).slice(0, 3).join(', ')}`;
-      });
-      Alert.alert('Hunspell 로드 성공', `로드 ${loadMs}ms\n\n${lines.join('\n')}`);
+      if (!ok) {
+        Alert.alert('사전 로드 실패', '네이티브 사전을 준비하지 못했어요.');
+        return;
+      }
+      // 잡아야 하는 것 / 애교체(오탐이면 안 됨) / 정상(오탐이면 안 됨)
+      const samples = [
+        '오랫만에 만나서 어의없어',
+        '제작년에 갈께 했잖아',
+        '뭐했어용 사랑행 배고파용',
+        '오랜만이야 진짜 특이해',
+      ];
+      const lines: string[] = [];
+      for (const s of samples) {
+        const found = await checkWithDictionary(s);
+        lines.push(
+          found.length === 0
+            ? `"${s}"\n  → 지적 없음`
+            : `"${s}"\n  → ${found.map((f) => `${f.wrong}→${f.right}`).join(', ')}`,
+        );
+      }
+      Alert.alert('사전 검사 결과', `로드 ${loadMs}ms\n\n${lines.join('\n\n')}`);
     } catch (e) {
-      Alert.alert('Hunspell 로드 실패', getErrorMessage(e, String(e)));
+      Alert.alert('사전 검사 실패', getErrorMessage(e, String(e)));
     } finally {
-      setHunspellTesting(false);
+      setDictTesting(false);
     }
   };
   /* 테마 — 고르는 즉시 화면에 반영된다 (RootNavigator 가 트리를 다시 그린다) */
@@ -270,16 +289,14 @@ export function SettingsScreen({ navigation }: Props) {
               trackColor={{ true: colors.primary }}
             />
           </View>
-          {/*
-            TEMP-PROTOTYPE(2026-09-02) — hunspell-asm(WASM) + hunspell-dict-ko 가 실기기에서
-            실제로 로드·동작하는지 확인용. __DEV__ 로 프로덕션 빌드(스토어 제출용)에는
-            안 보이게 가려둔다 — 검증 끝나면 이 행과 onTestHunspell 자체를 지운다.
-          */}
+          {/* 개발용 — 위 onTestDictionary 참고. 스토어 빌드에는 안 보인다 */}
           {__DEV__ ? (
-            <Pressable onPress={onTestHunspell} style={styles.row} disabled={hunspellTesting}>
+            <Pressable onPress={onTestDictionary} style={styles.row} disabled={dictTesting}>
               <View style={styles.rowText}>
-                <Text style={styles.rowTitle}>{hunspellTesting ? '테스트 중…' : '(개발용) Hunspell 테스트'}</Text>
-                <Text style={styles.rowDesc}>실기기에서 WASM 사전이 로드되는지 확인</Text>
+                <Text style={styles.rowTitle}>
+                  {dictTesting ? '검사 중…' : '(개발용) 사전 검사 테스트'}
+                </Text>
+                <Text style={styles.rowDesc}>네이티브 사전 로드와 오탐 억제를 실기기에서 확인</Text>
               </View>
             </Pressable>
           ) : null}
