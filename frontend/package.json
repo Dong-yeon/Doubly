@@ -55,6 +55,7 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@callstack/polygen": "^0.2.1",
     "@types/react": "~19.2.2",
     "babel-preset-expo": "~56.0.15",
     "eslint": "^9.0.0",
