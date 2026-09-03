@@ -27,14 +27,20 @@ export function ConfirmDialog() {
   const press = (button: DialogButton) => {
     // 콜백 전에 닫는다 — 콜백이 또 다른 다이얼로그를 열 수 있다
     hide();
-    // Android는 이 Modal이 별도 네이티브 Window라, hide() 직후 콜백이 곧바로
-    // 카메라·갤러리 같은 외부 Activity를 열면 그 Window가 다 닫히기 전에 전환이
-    // 겹쳐 복귀 후 화면 전체가 먹통이 된다(사진추가 버튼이 반응 없다가 다른
-    // 버튼까지 안 눌리는 증상). Window가 실제로 닫힐 시간을 준 뒤 콜백을 돌린다.
-    if (Platform.OS === 'android') {
-      setTimeout(() => button.onPress?.(), 300);
-    } else {
+    /*
+     * 네이티브(Android·iOS) 둘 다 이 Modal 이 진짜 네이티브 창/뷰컨트롤러라, hide()
+     * 직후 콜백이 곧바로 카메라·갤러리 같은 외부 프레젠테이션을 열면 그게 다 닫히기
+     * 전에 전환이 겹친다 — 화면 전체가 먹통이 된다(사진추가 버튼이 반응 없다가 다른
+     * 버튼까지 안 눌리는 증상). 처음엔 Android 에서만 봤다고 여기서만 지연을 줬는데
+     * (2026-09-01), 사실 iOS 도 이 Modal 이 UIViewController 모달 프레젠테이션이라
+     * 같은 레이스가 있다 — TestFlight 실기기에서 같은 증상으로 확인됨(2026-09-03).
+     * 웹은 진짜 모달 창이 아니라(오버레이 div) 이 레이스 자체가 없어 그대로 둔다.
+     * 창/뷰컨트롤러가 실제로 닫힐 시간을 준 뒤 콜백을 돌린다.
+     */
+    if (Platform.OS === 'web') {
       button.onPress?.();
+    } else {
+      setTimeout(() => button.onPress?.(), 300);
     }
   };
 
