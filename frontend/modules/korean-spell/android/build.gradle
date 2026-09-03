@@ -1,0 +1,40 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.koreanspell'
+version = '0.1.0'
+
+android {
+  namespace "expo.modules.koreanspell"
+  defaultConfig {
+    versionCode 1
+    versionName "0.1.0"
+
+    externalNativeBuild {
+      cmake {
+        cppFlags "-O2 -frtti -fexceptions"
+      }
+    }
+  }
+
+  externalNativeBuild {
+    cmake {
+      path "CMakeLists.txt"
+      version "3.22.1"
+    }
+  }
+
+  // 사전은 플랫폼마다 복사하지 않고 모듈 안 한 곳(dict/)에만 둔다 — 14MB 짜리를
+  // android/ios 에 각각 두면 저장소에 같은 파일이 두 벌 생긴다.
+  sourceSets {
+    main {
+      assets.srcDirs += ['../dict']
+    }
+  }
+
+  lintOptions {
+    abortOnError false
+  }
+}

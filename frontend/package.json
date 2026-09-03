@@ -36,7 +36,6 @@
     "expo-secure-store": "~56.0.4",
     "expo-status-bar": "~56.0.4",
     "expo-web-browser": "~56.0.5",
-    "hunspell-asm": "^4.0.2",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.85.3",
@@ -55,7 +54,6 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
-    "@callstack/polygen": "^0.2.1",
     "@types/react": "~19.2.2",
     "babel-preset-expo": "~56.0.15",
     "eslint": "^9.0.0",
@@ -70,7 +68,8 @@
     "build:web": "node scripts/subset-icon-font.cjs && expo export --platform web",
     "subset:icons": "node scripts/subset-icon-font.cjs",
     "typecheck": "tsc --noEmit",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "verify:spellcheck": "node scripts/verify-spellcheck.mjs"
   },
   "private": true
 }

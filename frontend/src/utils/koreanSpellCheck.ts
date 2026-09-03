@@ -99,6 +99,24 @@ function findRieulSuggestions(text: string): SpellSuggestion[] {
 }
 
 /**
+ * 위치가 겹치면 앞엣것만 남긴다 — 같은 자리를 두 번 고치라고 하면 적용 결과가 어긋난다.
+ *
+ * <p>규칙 엔진(1층)과 사전 검사(2층)가 같은 자리를 함께 짚을 수 있어서, 두 결과를
+ * 합칠 때도 같은 규칙을 써야 한다({@link ./koreanDictionary} 참고).
+ */
+export function dedupeOverlapping(found: SpellSuggestion[]): SpellSuggestion[] {
+  const sorted = [...found].sort((a, b) => a.index - b.index);
+  const result: SpellSuggestion[] = [];
+  let usedUntil = -1;
+  for (const s of sorted) {
+    if (s.index < usedUntil) continue;
+    result.push(s);
+    usedUntil = s.index + s.wrong.length;
+  }
+  return result;
+}
+
+/**
  * 맞춤법 제안 목록. 위치가 겹치면 앞엣것만 남긴다
  * — 같은 자리를 두 번 고치라고 하면 적용 결과가 어긋난다.
  */
@@ -126,15 +144,7 @@ export function checkKoreanSpelling(text: string): SpellSuggestion[] {
   }
   found.push(...findRieulSuggestions(text));
 
-  found.sort((a, b) => a.index - b.index);
-  const result: SpellSuggestion[] = [];
-  let usedUntil = -1;
-  for (const s of found) {
-    if (s.index < usedUntil) continue;
-    result.push(s);
-    usedUntil = s.index + s.wrong.length;
-  }
-  return result;
+  return dedupeOverlapping(found);
 }
 
 /** 제안 하나를 원문에 적용한 새 문자열 */

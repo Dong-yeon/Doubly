@@ -1,0 +1,10 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["KoreanSpellModule"],
+    "podspecPath": "KoreanSpell.podspec"
+  },
+  "android": {
+    "modules": ["expo.modules.koreanspell.KoreanSpellModule"]
+  }
+}

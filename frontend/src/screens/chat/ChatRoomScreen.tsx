@@ -48,7 +48,10 @@ import {
   applyAllSuggestions,
   applySuggestion,
   checkKoreanSpelling,
+  dedupeOverlapping,
+  type SpellSuggestion,
 } from '../../utils/koreanSpellCheck';
+import { checkWithDictionary, preloadDictionary } from '../../utils/koreanDictionary';
 import { chatApi } from '../../api/chat';
 import { isPrShareContent } from '../../utils/workoutShare';
 import { isGoalShareContent } from '../../utils/dietShare';
@@ -147,10 +150,52 @@ export function ChatRoomScreen({ navigation, route }: Props) {
    * 맞춤법 검사는 기기 안에서만 돈다(외부 전송 없음). 규칙 몇 개짜리라
    * 입력할 때마다 돌려도 부담이 없지만, 렌더마다 다시 하지 않도록 text 에 묶는다.
    */
-  const suggestions = useMemo(
+  const ruleSuggestions = useMemo(
     () => (spellCheckEnabled ? checkKoreanSpelling(text) : []),
     [spellCheckEnabled, text],
   );
+
+  /*
+   * 2층 — 사전 검사. 사전 로딩이 1.5초 걸려서 검사가 필요해진 다음에 시작하면 늦다.
+   * 검사기를 켜둔 사용자에 한해 화면에 들어올 때 미리 준비시킨다(실패해도 무시 —
+   * 사전이 없으면 규칙 엔진만으로 계속 동작한다).
+   */
+  useEffect(() => {
+    if (spellCheckEnabled) void preloadDictionary();
+  }, [spellCheckEnabled]);
+
+  /*
+   * 사전 검사는 네이티브 왕복이라 비동기다. 한 글자 칠 때마다 부르지 않도록 잠깐
+   * 멈췄을 때만 돌린다 — 타이핑 중에 제안이 깜빡이는 것도 같이 막힌다.
+   */
+  /*
+   * 결과에 그때의 문장을 함께 담아둔다. 제안에는 원문 위치(index)가 들어 있어서,
+   * 검사가 끝나기 전에 더 입력하면 이전 문장 기준의 위치가 남아 엉뚱한 자리를
+   * 고치게 된다 — 문장이 그대로일 때만 쓴다.
+   */
+  const [dictResult, setDictResult] = useState<{ text: string; items: SpellSuggestion[] }>({
+    text: '',
+    items: [],
+  });
+  useEffect(() => {
+    if (!spellCheckEnabled || !text) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void checkWithDictionary(text).then((items) => {
+        if (!cancelled) setDictResult({ text, items });
+      });
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [spellCheckEnabled, text]);
+
+  /* 두 층이 같은 자리를 짚을 수 있다 — 규칙 엔진과 같은 겹침 규칙으로 합친다 */
+  const suggestions = useMemo(() => {
+    const dict = dictResult.text === text ? dictResult.items : [];
+    return dedupeOverlapping([...ruleSuggestions, ...dict]);
+  }, [ruleSuggestions, dictResult, text]);
 
   /** 첫 제안을 적용한다. 남은 게 있으면 이어서 뜬다 */
   const applySpelling = () => {
@@ -160,11 +205,15 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     setText((prev) => applySuggestion(prev, first));
   };
 
-  /** 제안 전부를 한 번에 적용한다. prev 기준으로 다시 검사해 위치 어긋남을 막는다 */
+  /**
+   * 제안 전부를 한 번에 적용한다. 사전 제안은 다시 계산할 수 없으므로(비동기)
+   * 지금 화면에 보이는 목록을 그대로 쓴다 — 이 목록은 현재 text 로 만든 것이라
+   * 위치가 어긋나지 않는다.
+   */
   const applyAllSpelling = () => {
     if (!suggestions.length) return;
     haptics.light();
-    setText((prev) => applyAllSuggestions(prev, checkKoreanSpelling(prev)));
+    setText(applyAllSuggestions(text, suggestions));
   };
 
   /*
