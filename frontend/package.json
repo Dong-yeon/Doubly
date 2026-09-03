@@ -69,7 +69,11 @@
     "subset:icons": "node scripts/subset-icon-font.cjs",
     "typecheck": "tsc --noEmit",
     "lint": "expo lint",
-    "verify:spellcheck": "node scripts/verify-spellcheck.mjs"
+    "verify:spellcheck": "node scripts/verify-spellcheck.mjs",
+    "build:android": "eas build --platform android --profile production",
+    "build:ios": "eas build --platform ios --profile production",
+    "build:store": "eas build --platform all --profile production",
+    "submit:ios": "eas submit --platform ios --profile production --latest"
   },
   "private": true
 }
