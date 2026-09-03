@@ -1,5 +1,6 @@
 /** 채팅 REST API — 설계서 v2.0 4.5 (실시간 송수신은 chatSocket.ts) */
 import { apiClient, unwrap } from './client';
+import type { UploadSignature } from './upload';
 import type { ApiResponse, ChatBookmark, ChatMessage, ChatReactionSummary, ChatRoom, LatestTouch } from '../types';
 
 export const chatApi = {
@@ -59,4 +60,11 @@ export const chatApi = {
         params: { cursor },
       }),
     ),
+
+  /**
+   * 음성 메시지 업로드용 서명 — 사진과 같은 Cloudinary 계정, 별도 엔드포인트.
+   * 한도(Feature.VOICE_MESSAGE)는 이 요청 시점에 소비된다(사진과 같은 패턴).
+   */
+  voiceUploadSignature: () =>
+    unwrap(apiClient.post<ApiResponse<UploadSignature>>('/chat/voice-upload-signature')),
 };

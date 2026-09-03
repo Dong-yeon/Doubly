@@ -472,6 +472,7 @@ public class ChatService {
             // 알 수 없는 코드는 이론상 오지 않는다(전송 시점에 검증됨) — 방어적으로만 처리
             case TOUCH -> "[" + TouchGesture.from(message.getContent()).map(TouchGesture::label).orElse("터치") + "]";
             case CALL_CARD -> callCardPreview(message.getContent());
+            case VOICE_MESSAGE -> "[음성 메시지]";
             default -> message.getContent();
         };
     }

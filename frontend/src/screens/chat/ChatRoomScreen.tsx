@@ -34,12 +34,16 @@ import { callApi, CallType } from '../../api/call';
 import { haptics } from '../../utils/haptics';
 import { dismissRoomNotifications } from '../../utils/push';
 import { pickImage, uploadImage } from '../../utils/imageUpload';
+import { uploadChatVoice } from '../../utils/chatVoiceUpload';
+import { parseVoiceContent } from '../../utils/chatVoice';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { EmojiPicker } from '../../components/EmojiPicker';
 import { ChatSearchModal } from '../../components/ChatSearchModal';
 import { ChatMoreMenuSheet } from '../../components/ChatMoreMenuSheet';
+import { VoiceRecordSheet } from '../../components/VoiceRecordSheet';
+import { VoiceMessageBubble } from '../../components/VoiceMessageBubble';
 import { SpellCheckBar } from '../../components/SpellCheckBar';
 import { MessageActionSheet } from '../../components/MessageActionSheet';
 import { SwipeBackView } from '../../components/SwipeBackView';
@@ -130,6 +134,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const [showSearch, setShowSearch] = useState(false);
   // 헤더 "⋮" — 사진 모아보기·저장한 대화(자주 안 쓰는 항목이라 아이콘을 더 늘리지 않고 묶는다)
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  // 음성 메시지 녹음 시트 — 트레이 네 번째 버튼
+  const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
   // 검색 결과를 골라 스크롤해 간 메시지 — 잠깐 배경을 강조했다가 스스로 지운다
   const [highlightedId, setHighlightedId] = useState<number | null>(null);
   // 답장 대상 / 수정 중인 메시지 / 리액션 피커 대상
@@ -640,9 +646,27 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     }
   };
 
+  /**
+   * 음성 메시지 전송 — 사진과 같은 패턴(runBusy 로 업로드 후 STOMP 전송). 한도는 이미
+   * 업로드 서명 발급 시점(uploadChatVoice → chatApi.voiceUploadSignature)에 소비됐다.
+   */
+  const onSendVoice = async (uri: string, durationSec: number) => {
+    setShowVoiceRecorder(false);
+    scrollToBottom();
+    try {
+      const url = await runBusy('음성 메시지 보내는 중…', () => uploadChatVoice(uri));
+      const ok = await send(relationId, { messageType: 'VOICE_MESSAGE', content: `${url}|${durationSec}` });
+      if (ok) haptics.light();
+      else Alert.alert('전송 실패', '연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
+    } catch (e) {
+      toast.error(getErrorMessage(e, '음성 메시지를 보내지 못했어요.'));
+    }
+  };
+
   const renderItem = ({ item, index }: { item: ChatMessage; index: number }) => {
     const mine = item.senderId === myId;
     const isImage = item.messageType === 'IMAGE' && !!item.imageUrl;
+    const voice = item.messageType === 'VOICE_MESSAGE' ? parseVoiceContent(item.content) : null;
     const isSticker = item.messageType === 'STICKER';
     const isTouch = item.messageType === 'TOUCH';
     const isWorkout = item.messageType === 'WORKOUT_CARD';
@@ -812,6 +836,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               <Text style={styles.workoutText}>{item.content}</Text>
             ) : null}
           </View>
+        ) : voice ? (
+          <VoiceMessageBubble url={voice.url} durationSec={voice.durationSec} mine={mine} />
         ) : callCard ? (
           <View style={[styles.callCard, mine ? styles.callCardMine : styles.callCardTheirs]}>
             <MaterialCommunityIcons
@@ -1035,6 +1061,11 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               label="사진"
               onPress={() => { setShowExtras(false); onPickImage(); }}
             />
+            <ExtraButton
+              icon="microphone-outline"
+              label="음성"
+              onPress={() => { setShowExtras(false); setShowVoiceRecorder(true); }}
+            />
           </View>
         ) : null}
         {showStickers ? (
@@ -1227,6 +1258,12 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         onClose={() => setShowMoreMenu(false)}
         onPhotos={() => navigation.navigate('ChatPhotoGallery', { relationId, myId })}
         onSaved={() => navigation.navigate('SavedMessages', { relationId, title: partnerName, myId })}
+      />
+      {/* 음성 메시지 녹음 — 트레이 "음성" */}
+      <VoiceRecordSheet
+        visible={showVoiceRecorder}
+        onClose={() => setShowVoiceRecorder(false)}
+        onSend={onSendVoice}
       />
       {/* 메시지 길게 누르기 — 리액션/답장/수정/삭제를 한 시트에 모아 보여준다 */}
       <MessageActionSheet
