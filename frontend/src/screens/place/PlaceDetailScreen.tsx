@@ -17,6 +17,8 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { PlaceScreensParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
+import { SpacingFixBar } from '../../components/SpacingFixBar';
+import { useSpacingFix } from '../../hooks/useSpacingFix';
 import { Checkbox } from '../../components/Checkbox';
 import { EmptyState } from '../../components/EmptyState';
 import { ImageViewer } from '../../components/ImageViewer';
@@ -71,6 +73,25 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
   const [formOpen, setFormOpen] = useState(false);
   const [rating, setRating] = useState(0);
   const [memo, setMemo] = useState('');
+
+  /*
+   * 띄어쓰기 정리 — 채팅과 달리 여기는 문장을 쓰는 자리다. 자동으로 고치지 않고
+   * 눌렀을 때만 바꾼다(되돌리기 제공) — 맞춤법상 맞아도 원치 않는 변경이 있다.
+   */
+  const spacingFix = useSpacingFix();
+  const onFixMemoSpacing = async () => {
+    const corrected = await spacingFix.fix(memo);
+    if (corrected === null) {
+      toast.info('고칠 띄어쓰기가 없어요.');
+      return;
+    }
+    haptics.light();
+    setMemo(corrected);
+  };
+  const onUndoMemoSpacing = () => {
+    const before = spacingFix.undo();
+    if (before !== null) setMemo(before);
+  };
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -409,9 +430,22 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
                     label="메모 (선택)"
                     placeholder="예: 족발이 진짜 부드러워요. 웨이팅 30분"
                     value={memo}
-                    onChangeText={setMemo}
+                    onChangeText={(next) => {
+                      // 사용자가 다시 손대면 되돌리기는 의미가 없어진다
+                      spacingFix.clearUndo();
+                      setMemo(next);
+                    }}
                     multiline
                   />
+
+                  {memo.trim().length > 0 ? (
+                    <SpacingFixBar
+                      busy={spacingFix.busy}
+                      canUndo={spacingFix.canUndo}
+                      onFix={onFixMemoSpacing}
+                      onUndo={onUndoMemoSpacing}
+                    />
+                  ) : null}
 
                   <Checkbox
                     checked={logMeal}
