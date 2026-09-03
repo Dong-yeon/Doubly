@@ -168,16 +168,21 @@ export function ChatRoomScreen({ navigation, route }: Props) {
    * 사전 검사는 네이티브 왕복이라 비동기다. 한 글자 칠 때마다 부르지 않도록 잠깐
    * 멈췄을 때만 돌린다 — 타이핑 중에 제안이 깜빡이는 것도 같이 막힌다.
    */
-  const [dictSuggestions, setDictSuggestions] = useState<SpellSuggestion[]>([]);
+  /*
+   * 결과에 그때의 문장을 함께 담아둔다. 제안에는 원문 위치(index)가 들어 있어서,
+   * 검사가 끝나기 전에 더 입력하면 이전 문장 기준의 위치가 남아 엉뚱한 자리를
+   * 고치게 된다 — 문장이 그대로일 때만 쓴다.
+   */
+  const [dictResult, setDictResult] = useState<{ text: string; items: SpellSuggestion[] }>({
+    text: '',
+    items: [],
+  });
   useEffect(() => {
-    if (!spellCheckEnabled || !text) {
-      setDictSuggestions([]);
-      return;
-    }
+    if (!spellCheckEnabled || !text) return;
     let cancelled = false;
     const timer = setTimeout(() => {
-      void checkWithDictionary(text).then((found) => {
-        if (!cancelled) setDictSuggestions(found);
+      void checkWithDictionary(text).then((items) => {
+        if (!cancelled) setDictResult({ text, items });
       });
     }, 400);
     return () => {
@@ -187,10 +192,10 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   }, [spellCheckEnabled, text]);
 
   /* 두 층이 같은 자리를 짚을 수 있다 — 규칙 엔진과 같은 겹침 규칙으로 합친다 */
-  const suggestions = useMemo(
-    () => dedupeOverlapping([...ruleSuggestions, ...dictSuggestions]),
-    [ruleSuggestions, dictSuggestions],
-  );
+  const suggestions = useMemo(() => {
+    const dict = dictResult.text === text ? dictResult.items : [];
+    return dedupeOverlapping([...ruleSuggestions, ...dict]);
+  }, [ruleSuggestions, dictResult, text]);
 
   /** 첫 제안을 적용한다. 남은 게 있으면 이어서 뜬다 */
   const applySpelling = () => {
