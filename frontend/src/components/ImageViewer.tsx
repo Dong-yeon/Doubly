@@ -13,6 +13,7 @@
  */
 import React, { useCallback, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   FlatList,
   Image,
   Modal,
@@ -24,8 +25,13 @@ import {
   useWindowDimensions,
   type ListRenderItemInfo,
 } from 'react-native';
+import { File, Paths } from 'expo-file-system';
+import * as MediaLibrary from 'expo-media-library';
+import * as Sharing from 'expo-sharing';
 import { MaterialCommunityIcons } from './Icon';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { toast } from '../store/toastStore';
+import { getErrorMessage } from '../utils/error';
 import { colors, fontSize, spacing } from '../constants/theme';
 import { themedStyles } from '../theme/themedStyles';
 
@@ -53,6 +59,8 @@ export function ImageViewer({ images, initialIndex, onClose }: Props) {
   const insets = useSafeAreaInsets();
   const [index, setIndex] = useState(initialIndex ?? 0);
   const listRef = useRef<FlatList<ViewerImage>>(null);
+  // 저장·공유 둘 다 다운로드부터 하므로 겹치지 않게 하나만 진행한다
+  const [working, setWorking] = useState<'save' | 'share' | null>(null);
 
   const visible = initialIndex !== null && images.length > 0;
 
@@ -87,6 +95,52 @@ export function ImageViewer({ images, initialIndex, onClose }: Props) {
 
   const current = images[index];
 
+  /*
+   * 갤러리 저장·공유 둘 다 로컬 파일이 있어야 한다 — uri 는 Cloudinary 원격 URL이라
+   * MediaLibrary.saveToLibraryAsync·Sharing.shareAsync 모두 file:// 가 아니면 동작하지
+   * 않는다(§7 분석 그대로). 캐시에 받아둔 뒤 두 기능이 그 파일을 같이 쓴다.
+   */
+  const downloadToCache = async (uri: string) => {
+    const file = await File.downloadFileAsync(uri, Paths.cache, { idempotent: true });
+    return file.uri;
+  };
+
+  const onSave = async () => {
+    if (!current || working) return;
+    setWorking('save');
+    try {
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        toast.error('사진을 저장하려면 갤러리 접근 권한이 필요해요.');
+        return;
+      }
+      const localUri = await downloadToCache(current.uri);
+      await MediaLibrary.saveToLibraryAsync(localUri);
+      toast.success('사진을 저장했어요.');
+    } catch (e) {
+      toast.error(getErrorMessage(e, '사진을 저장하지 못했어요.'));
+    } finally {
+      setWorking(null);
+    }
+  };
+
+  const onShare = async () => {
+    if (!current || working) return;
+    setWorking('share');
+    try {
+      if (!(await Sharing.isAvailableAsync())) {
+        toast.error('이 기기에서는 공유하기를 쓸 수 없어요.');
+        return;
+      }
+      const localUri = await downloadToCache(current.uri);
+      await Sharing.shareAsync(localUri);
+    } catch (e) {
+      toast.error(getErrorMessage(e, '공유하지 못했어요.'));
+    } finally {
+      setWorking(null);
+    }
+  };
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.backdrop}>
@@ -114,6 +168,38 @@ export function ImageViewer({ images, initialIndex, onClose }: Props) {
         >
           <MaterialCommunityIcons name="close" size={26} color={colors.white} />
         </Pressable>
+
+        {/* 저장·공유 — §7 분석(사진 다운로드 기능 부재) 대응, 우상단에 닫기와 대칭으로 둔다 */}
+        <View style={[styles.actions, { top: insets.top + spacing.sm }]}>
+          <Pressable
+            style={styles.actionBtn}
+            onPress={onShare}
+            disabled={working !== null}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="공유하기"
+          >
+            {working === 'share' ? (
+              <ActivityIndicator size="small" color={colors.white} />
+            ) : (
+              <MaterialCommunityIcons name="share-variant" size={24} color={colors.white} />
+            )}
+          </Pressable>
+          <Pressable
+            style={styles.actionBtn}
+            onPress={onSave}
+            disabled={working !== null}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="갤러리에 저장"
+          >
+            {working === 'save' ? (
+              <ActivityIndicator size="small" color={colors.white} />
+            ) : (
+              <MaterialCommunityIcons name="download" size={24} color={colors.white} />
+            )}
+          </Pressable>
+        </View>
 
         {images.length > 1 ? (
           <View style={[styles.counter, { top: insets.top + spacing.sm }]}>
@@ -148,6 +234,18 @@ const styles = themedStyles((colors) => ({
   close: {
     position: 'absolute',
     left: spacing.md,
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // 저장·공유 — 닫기와 대칭으로 우상단, 가로로 나란히
+  actions: {
+    position: 'absolute',
+    right: spacing.md,
+    flexDirection: 'row',
+  },
+  actionBtn: {
     width: 44,
     height: 44,
     alignItems: 'center',
