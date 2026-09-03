@@ -200,7 +200,14 @@ export type DietStackParamList = {
 // 채팅 탭 내부 스택 — 방 목록 / 대화 (CHAT-01/02)
 export type ChatStackParamList = {
   ChatRooms: undefined;
-  ChatRoom: { relationId: number; title: string };
+  ChatRoom: {
+    relationId: number;
+    title: string;
+    /** 검색·저장한 대화 목록에서 골라 돌아올 때만 채워진다 — 도착하면 스스로 지운다 */
+    scrollToMessageId?: number;
+  };
+  ChatPhotoGallery: { relationId: number; myId: number | undefined };
+  SavedMessages: { relationId: number; title: string; myId: number | undefined };
 };
 
 /*

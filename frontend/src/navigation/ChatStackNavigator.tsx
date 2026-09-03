@@ -4,6 +4,8 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { ChatStackParamList } from './types';
 import { ChatScreen } from '../screens/chat/ChatScreen';
 import { ChatRoomScreen } from '../screens/chat/ChatRoomScreen';
+import { ChatPhotoGalleryScreen } from '../screens/chat/ChatPhotoGalleryScreen';
+import { SavedMessagesScreen } from '../screens/chat/SavedMessagesScreen';
 import { stackScreenOptions } from './headerOptions';
 
 const Stack = createNativeStackNavigator<ChatStackParamList>();
@@ -40,6 +42,16 @@ export function ChatStackNavigator() {
           gestureEnabled: false,
           fullScreenGestureEnabled: false,
         })}
+      />
+      <Stack.Screen
+        name="ChatPhotoGallery"
+        component={ChatPhotoGalleryScreen}
+        options={{ title: '사진 모아보기' }}
+      />
+      <Stack.Screen
+        name="SavedMessages"
+        component={SavedMessagesScreen}
+        options={{ title: '저장한 대화' }}
       />
     </Stack.Navigator>
   );

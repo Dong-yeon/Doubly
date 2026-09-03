@@ -1230,6 +1230,14 @@ export interface ChatMessage {
   reactions?: ChatReactionSummary[];
   edited?: boolean;
   deleted?: boolean;
+  /** 중요 대화 저장됨 — 커플 공용 판정(누가 저장했든 true) */
+  bookmarked?: boolean;
+}
+
+/** 저장한 대화 목록 항목 — bookmarkId 를 다음 페이지 커서로 쓴다(ChatMessage.id 아님) */
+export interface ChatBookmark {
+  bookmarkId: number;
+  message: ChatMessage;
 }
 
 /** GET/POST /mood 한 사람의 현재 무드 — 아직 설정 안 했으면 자리 자체가 null */

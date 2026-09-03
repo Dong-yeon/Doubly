@@ -7,12 +7,15 @@ import com.fitto.chat.domain.MessageType;
 import com.fitto.chat.domain.StickerPack;
 import com.fitto.chat.domain.StickerImage;
 import com.fitto.chat.domain.TouchGesture;
+import com.fitto.chat.dto.ChatBookmarkResponse;
 import com.fitto.chat.dto.ChatMessageResponse;
 import com.fitto.chat.dto.ChatReactionSummary;
 import com.fitto.chat.dto.ChatRoomResponse;
 import com.fitto.chat.dto.LatestTouchResponse;
 import com.fitto.chat.dto.ReplyPreview;
 import com.fitto.chat.dto.SendMessageRequest;
+import com.fitto.chat.domain.ChatMessageBookmark;
+import com.fitto.chat.repository.ChatMessageBookmarkRepository;
 import com.fitto.chat.repository.ChatMessageReactionRepository;
 import com.fitto.chat.repository.ChatMessageRepository;
 import com.fitto.common.event.CoupleEvent;
@@ -37,6 +40,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 채팅 서비스 — 설계서 3.4 / 4.5. 관계별 채팅방, 메시지 영속/조회/읽음.
@@ -49,6 +54,7 @@ public class ChatService {
 
     private final ChatMessageRepository chatMessageRepository;
     private final ChatMessageReactionRepository reactionRepository;
+    private final ChatMessageBookmarkRepository bookmarkRepository;
     private final RelationRepository relationRepository;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
@@ -57,6 +63,7 @@ public class ChatService {
 
     public ChatService(ChatMessageRepository chatMessageRepository,
                        ChatMessageReactionRepository reactionRepository,
+                       ChatMessageBookmarkRepository bookmarkRepository,
                        RelationRepository relationRepository,
                        UserRepository userRepository,
                        NotificationService notificationService,
@@ -64,6 +71,7 @@ public class ChatService {
                        CoupleEventPublisher coupleEventPublisher) {
         this.chatMessageRepository = chatMessageRepository;
         this.reactionRepository = reactionRepository;
+        this.bookmarkRepository = bookmarkRepository;
         this.relationRepository = relationRepository;
         this.userRepository = userRepository;
         this.notificationService = notificationService;
@@ -119,6 +127,66 @@ public class ChatService {
         return keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     }
 
+    /** 사진 모아보기 — IMAGE 메시지 최신순 커서 페이징. 전면 무료(위 escapeLike 주석과 별개). */
+    public List<ChatMessageResponse> getPhotos(Long userId, Long relationId, Long cursor) {
+        requireMember(userId, relationId);
+        List<ChatMessage> images =
+                chatMessageRepository.findImages(relationId, cursor, PageRequest.of(0, PAGE_SIZE));
+        return attachDetails(images);
+    }
+
+    /**
+     * 중요 대화 저장/저장 취소 — 토글, 커플 공용(§3, UNIQUE(message_id)라 누가 눌러도
+     * 같은 한 건). 게이팅 없음 — Feature 미등재(전면 무료).
+     */
+    @Transactional
+    public boolean toggleBookmark(Long userId, Long messageId) {
+        ChatMessage message = requireRoomMessage(userId, messageId);
+        Optional<ChatMessageBookmark> existing = bookmarkRepository.findByMessageId(messageId);
+        if (existing.isPresent()) {
+            bookmarkRepository.delete(existing.get());
+            return false;
+        }
+        // 삭제된 메시지는 리액션과 같은 규칙 — 이미 저장된 것은 냅두지만 새로 저장은 막는다
+        if (message.isDeleted()) {
+            throw new BusinessException(ErrorCode.NOT_FOUND);
+        }
+        bookmarkRepository.save(ChatMessageBookmark.builder()
+                .relationId(message.getRelationId())
+                .messageId(messageId)
+                .savedBy(userId)
+                .build());
+        return true;
+    }
+
+    /**
+     * 저장한 대화 목록 — 저장한 순서(최신 저장이 위) 커서 페이징.
+     *
+     * <p>커서는 메시지 id 가 아니라 {@code bookmarkId} 다({@link ChatBookmarkResponse} 주석
+     * 참고) — 목록 순서(저장한 순서)와 메시지 id(보낸 순서)가 다른 값이기 때문이다.
+     */
+    public List<ChatBookmarkResponse> getBookmarks(Long userId, Long relationId, Long cursor) {
+        requireMember(userId, relationId);
+        List<ChatMessageBookmark> page =
+                bookmarkRepository.findPage(relationId, cursor, PageRequest.of(0, PAGE_SIZE));
+        if (page.isEmpty()) return List.of();
+        Map<Long, ChatMessage> byId = new LinkedHashMap<>();
+        chatMessageRepository.findAllById(page.stream().map(ChatMessageBookmark::getMessageId).toList())
+                .forEach(m -> byId.put(m.getId(), m));
+
+        // attachDetails 는 입력 순서를 유지한다 — bookmark 목록 순서와 나란히 zip 한다
+        List<ChatMessageBookmark> valid = page.stream()
+                .filter(b -> byId.containsKey(b.getMessageId())).toList();
+        List<ChatMessageResponse> details =
+                attachDetails(valid.stream().map(b -> byId.get(b.getMessageId())).toList());
+
+        List<ChatBookmarkResponse> result = new ArrayList<>(valid.size());
+        for (int i = 0; i < valid.size(); i++) {
+            result.add(new ChatBookmarkResponse(valid.get(i).getId(), details.get(i)));
+        }
+        return result;
+    }
+
     /** 메시지 전송(영속 + 알림). 브로드캐스트는 호출자(STOMP 컨트롤러)가 담당. */
     @Transactional
     public ChatMessageResponse send(Long senderId, Long relationId, SendMessageRequest req) {
@@ -150,7 +218,8 @@ public class ChatService {
             // (수신측은 페이로드 없이 GET .../touch/latest 로 다시 조회 — 다른 CoupleEvent 와 동일 패턴)
             coupleEventPublisher.publish(relationId, CoupleEvent.TOUCH);
         }
-        return ChatMessageResponse.from(message, replyPreview(message.getReplyToId()), List.of());
+        // 방금 만든 메시지라 북마크됐을 수 없다
+        return ChatMessageResponse.from(message, replyPreview(message.getReplyToId()), List.of(), false);
     }
 
     /**
@@ -318,14 +387,15 @@ public class ChatService {
         }
     }
 
-    /** 메시지 한 건에 답장 미리보기·리액션을 붙인다. */
+    /** 메시지 한 건에 답장 미리보기·리액션·북마크 여부를 붙인다. */
     private ChatMessageResponse detailOf(ChatMessage message) {
         return ChatMessageResponse.from(message, replyPreview(message.getReplyToId()),
-                summarize(reactionRepository.findByMessageId(message.getId())));
+                summarize(reactionRepository.findByMessageId(message.getId())),
+                bookmarkRepository.existsByMessageId(message.getId()));
     }
 
     /**
-     * 메시지 목록에 답장 미리보기·리액션을 <b>배치로</b> 붙인다.
+     * 메시지 목록에 답장 미리보기·리액션·북마크 여부를 <b>배치로</b> 붙인다.
      * 메시지마다 개별 조회하면 30건에 60번 쿼리가 나간다.
      */
     private List<ChatMessageResponse> attachDetails(List<ChatMessage> messages) {
@@ -336,6 +406,8 @@ public class ChatService {
         for (ChatMessageReaction r : reactionRepository.findByMessageIdIn(ids)) {
             byMessage.computeIfAbsent(r.getMessageId(), k -> new ArrayList<>()).add(r);
         }
+        Set<Long> bookmarked = bookmarkRepository.findByMessageIdIn(ids).stream()
+                .map(ChatMessageBookmark::getMessageId).collect(Collectors.toSet());
 
         // 인용된 원본들을 한 번에 읽어 맵으로 (같은 원본을 여러 번 인용할 수 있다)
         List<Long> replyIds = messages.stream()
@@ -349,7 +421,7 @@ public class ChatService {
         for (ChatMessage m : messages) {
             ChatMessage original = m.getReplyToId() == null ? null : originals.get(m.getReplyToId());
             result.add(ChatMessageResponse.from(m, toPreview(original),
-                    summarize(byMessage.getOrDefault(m.getId(), List.of()))));
+                    summarize(byMessage.getOrDefault(m.getId(), List.of())), bookmarked.contains(m.getId())));
         }
         return result;
     }
