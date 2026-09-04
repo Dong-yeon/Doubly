@@ -93,6 +93,19 @@ export const chatApi = {
     unwrap(apiClient.delete<ApiResponse<void>>(`/chat/scheduled-messages/${scheduledId}`)),
 
   /**
+   * 공지 고정 토글 — 이미 이 메시지가 고정돼 있으면 해제, 아니면 (다른 메시지가
+   * 고정돼 있었더라도) 이 메시지로 교체한다. 관계당 하나만 고정된다.
+   */
+  togglePin: (messageId: number) =>
+    unwrap(apiClient.post<ApiResponse<ChatMessage | null>>(`/chat/messages/${messageId}/pin`)),
+  /** 현재 고정된 메시지 — 없으면 null */
+  getPinned: (relationId: number) =>
+    unwrap(apiClient.get<ApiResponse<ChatMessage | null>>(`/chat/rooms/${relationId}/pin`)),
+  /** 고정 해제 — 방 배너의 X. 무엇이 고정됐는지 몰라도 방 id만으로 해제 */
+  unpin: (relationId: number) =>
+    unwrap(apiClient.delete<ApiResponse<void>>(`/chat/rooms/${relationId}/pin`)),
+
+  /**
    * 대화 내보내기 — from/to(YYYY-MM-DD, 둘 다 선택) 오래된순 전체. 파일 조립·저장은
    * 프론트 책임(발신자 이름표가 화면 정보라서).
    */

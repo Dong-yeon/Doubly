@@ -114,8 +114,18 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const partnerAvatarUrl = couple?.partner?.profileImageUrl;
   const messages = useChatStore((s) => s.messages[relationId] ?? EMPTY_MESSAGES);
   const loadingOlder = useChatStore((s) => s.loadingOlder[relationId] ?? false);
-  const { openRoom, closeRoom, send, markRead, replaceMessage, loadOlder, syncMissed } =
-    useChatStore();
+  const pinnedMessage = useChatStore((s) => s.pinnedMessages[relationId] ?? null);
+  const {
+    openRoom,
+    closeRoom,
+    send,
+    markRead,
+    replaceMessage,
+    loadOlder,
+    syncMissed,
+    togglePin,
+    unpin,
+  } = useChatStore();
   const socketConnected = useChatStore((s) => s.connected);
   const [text, setText] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -567,6 +577,27 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     }
   };
 
+  /** 액션 시트의 "공지로 고정"/"고정 해제" — 스토어가 REST 응답으로 즉시 반영한다. */
+  const onTogglePinFromSheet = async () => {
+    const msg = actionSheetFor;
+    closeActionSheet();
+    if (!msg) return;
+    try {
+      await togglePin(relationId, msg.id);
+    } catch (e) {
+      toast.error(getErrorMessage(e, '고정하지 못했어요.'));
+    }
+  };
+
+  /** 방 상단 배너의 X — 무엇이 고정됐는지 몰라도 방 id만으로 해제한다. */
+  const onUnpinBanner = async () => {
+    try {
+      await unpin(relationId);
+    } catch (e) {
+      toast.error(getErrorMessage(e, '고정을 해제하지 못했어요.'));
+    }
+  };
+
   const onDelete = (msg: ChatMessage) => {
     Alert.alert('메시지 삭제', '이 메시지를 삭제할까요?', [
       { text: '취소', style: 'cancel' },
@@ -1013,6 +1044,31 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           </View>
         )}
         {/*
+         * 공지 고정 배너 — 방 상단 고정, 하나만 존재한다(§3 "공지 고정" — 짧고 자주
+         * 바뀌는 "지금 필요한 것". 여러 개 쌓이는 북마크와는 성격이 다르다).
+         */}
+        {pinnedMessage && !pinnedMessage.deleted ? (
+          <Pressable
+            style={styles.pinnedBar}
+            onPress={() => scrollToMessage(pinnedMessage.id)}
+            accessibilityRole="button"
+            accessibilityLabel="고정된 공지로 이동"
+          >
+            <MaterialCommunityIcons name="pin" size={16} color={colors.primary} />
+            <Text style={styles.pinnedText} numberOfLines={1}>
+              {messagePreview(pinnedMessage.messageType, pinnedMessage.content)}
+            </Text>
+            <Pressable
+              onPress={onUnpinBanner}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="고정 해제"
+            >
+              <MaterialCommunityIcons name="close" size={16} color={colors.textSecondary} />
+            </Pressable>
+          </Pressable>
+        ) : null}
+        {/*
          * FlatList 와 FAB 을 같이 감싼다 — FAB 이 이 뷰 기준으로 bottom-right 에 붙어야
          * 메시지 목록 위에만 뜨고, 그 아래 입력바·트레이는 가리지 않는다.
          */}
@@ -1345,6 +1401,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         onEdit={onEditFromSheet}
         onDelete={onDeleteFromSheet}
         onBookmark={onBookmarkFromSheet}
+        pinned={!!actionSheetFor && pinnedMessage?.id === actionSheetFor.id}
+        onTogglePin={onTogglePinFromSheet}
       />
     </SafeAreaView>
     </SwipeBackView>
@@ -1557,6 +1615,17 @@ const styles = themedStyles((colors) => ({
     backgroundColor: colors.surfaceAlt,
   },
   offlineText: { fontSize: fontSize.caption, color: colors.textSecondary },
+
+  // 공지 고정 배너 — offlineBar 와 같은 가로 풀폭 바 자리(둘 다 뜰 수 있어 같은 톤으로 통일)
+  pinnedBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.primarySoft,
+  },
+  pinnedText: { flex: 1, fontSize: fontSize.caption, fontWeight: '600', color: colors.textPrimary },
   time: { fontSize: 10, color: colors.textTertiary },
   editedMark: { fontSize: 10, color: colors.textTertiary },
 

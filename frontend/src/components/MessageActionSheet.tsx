@@ -31,6 +31,9 @@ interface Props {
   onEdit: () => void;
   onDelete: () => void;
   onBookmark: () => void;
+  /** 이 메시지가 지금 방의 공지로 고정돼 있는가 — 라벨/아이콘 전환용 */
+  pinned: boolean;
+  onTogglePin: () => void;
 }
 
 export function MessageActionSheet({
@@ -44,6 +47,8 @@ export function MessageActionSheet({
   onEdit,
   onDelete,
   onBookmark,
+  pinned,
+  onTogglePin,
 }: Props) {
   const visible = message !== null;
 
@@ -89,6 +94,14 @@ export function MessageActionSheet({
               icon={message?.bookmarked ? 'bookmark' : 'bookmark-outline'}
               label={message?.bookmarked ? '저장 취소' : '저장하기'}
               onPress={onBookmark}
+            />
+          ) : null}
+          {/* 삭제된 메시지는 새로 고정할 수 없다(저장하기와 같은 규칙 — 백엔드 togglePin 참고) */}
+          {!message?.deleted ? (
+            <ActionRow
+              icon={pinned ? 'pin-off-outline' : 'pin-outline'}
+              label={pinned ? '고정 해제' : '공지로 고정'}
+              onPress={onTogglePin}
             />
           ) : null}
           {canEdit ? <ActionRow icon="pencil-outline" label="수정하기" onPress={onEdit} /> : null}

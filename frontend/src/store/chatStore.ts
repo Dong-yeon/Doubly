@@ -8,6 +8,7 @@ import {
   publishEnsuringConnection,
   socketStatus,
   subscribeRoom,
+  subscribeRoomPin,
   subscribeRoomRead,
   subscribeRoomUpdates,
   subscribeSocketStatus,
@@ -25,6 +26,8 @@ interface ChatState {
   loadingOlder: Record<number, boolean>;
   /** 방별 더 불러올 과거 메시지가 있는지 — 빈 페이지를 받으면 false */
   hasMoreOlder: Record<number, boolean>;
+  /** 방별 현재 고정된 공지 — 없으면 null, 아직 안 불러왔으면 키 자체가 없다 */
+  pinnedMessages: Record<number, ChatMessage | null>;
   /**
    * 지금 화면에 열려 있는 채팅방 — openRoom/closeRoom 이 관리한다. push.ts 가 이 값을
    * 읽어서, 지금 보고 있는 방으로 온 알림은 배너·소리를 억누른다(메시지는 소켓으로
@@ -47,6 +50,10 @@ interface ChatState {
   markRead: (messageId: number) => Promise<void>;
   /** REST 응답으로 받은 메시지를 목록에서 제자리 교체 (리액션·수정·삭제) */
   replaceMessage: (relationId: number, updated: ChatMessage) => void;
+  /** 공지 고정 토글 — 서버 응답(REST)으로 즉시 반영하고, 상대 쪽은 STOMP 구독이 반영한다 */
+  togglePin: (relationId: number, messageId: number) => Promise<void>;
+  /** 명시적 고정 해제(배너 X) */
+  unpin: (relationId: number) => Promise<void>;
   teardown: () => void;
 }
 
@@ -57,6 +64,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   connected: false,
   loadingOlder: {},
   hasMoreOlder: {},
+  pinnedMessages: {},
   activeRoomId: null,
 
   loadRooms: async () => {
@@ -103,6 +111,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
         },
       }));
     });
+    // 공지 고정 상태 — 내가 고정하든 상대가 고정하든 방 전체에 브로드캐스트된다
+    subscribeRoomPin(relationId, ({ pinned }) => {
+      set((s) => ({ pinnedMessages: { ...s.pinnedMessages, [relationId]: pinned } }));
+    });
+    // 방금 등록한 구독보다 먼저 요청해도 무방하다 — 초기값일 뿐, 이후 변경은 위 구독이 반영한다
+    chatApi
+      .getPinned(relationId)
+      .then((pinned) => set((s) => ({ pinnedMessages: { ...s.pinnedMessages, [relationId]: pinned } })))
+      .catch(() => undefined);
     // 상대가 읽으면 내가 보낸 메시지에 "읽음"을 붙인다
     subscribeRoomRead(relationId, ({ lastReadMessageId }) => {
       set((s) => {
@@ -180,6 +197,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ),
       },
     })),
+
+  togglePin: async (relationId, messageId) => {
+    const pinned = await chatApi.togglePin(messageId);
+    set((s) => ({ pinnedMessages: { ...s.pinnedMessages, [relationId]: pinned } }));
+  },
+
+  unpin: async (relationId) => {
+    await chatApi.unpin(relationId);
+    set((s) => ({ pinnedMessages: { ...s.pinnedMessages, [relationId]: null } }));
+  },
 
   syncMissed: async (relationId) => {
     const latest = await chatApi.messages(relationId);

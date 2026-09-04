@@ -17,6 +17,12 @@ import { storage } from '../utils/storage';
 import { refreshAccessToken } from './client';
 import type { ChatMessage, MessageType } from '../types';
 
+/** /sub/rooms/{relationId}/pin 페이로드 — 백엔드 ChatPinResponse 와 짝. */
+export interface PinEvent {
+  relationId: number;
+  pinned: ChatMessage | null;
+}
+
 let client: Client | null = null;
 let connecting: Promise<Client> | null = null;
 
@@ -215,6 +221,7 @@ export function unsubscribeRoom(relationId: number) {
   unregister(`/sub/rooms/${relationId}`);
   unregister(`/sub/rooms/${relationId}/read`);
   unregister(`/sub/rooms/${relationId}/updates`);
+  unregister(`/sub/rooms/${relationId}/pin`);
 }
 
 /**
@@ -236,6 +243,14 @@ export function subscribeRoomRead(
   onRead: (receipt: { readerId: number; lastReadMessageId: number }) => void,
 ) {
   register(`/sub/rooms/${relationId}/read`, jsonHandler(onRead));
+}
+
+/**
+ * 공지 고정 상태 구독 (/sub/rooms/{relationId}/pin). 내가 고정하든 상대가 고정하든
+ * 방 전체에 브로드캐스트되므로 양쪽 화면의 배너가 함께 갱신된다.
+ */
+export function subscribeRoomPin(relationId: number, onPin: (event: PinEvent) => void) {
+  register(`/sub/rooms/${relationId}/pin`, jsonHandler(onPin));
 }
 
 /** 커플 실시간 이벤트 구독 (/sub/couple/{relationId}) — 배경/기념일/운동 변경 알림 */
