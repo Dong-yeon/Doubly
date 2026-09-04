@@ -1242,6 +1242,20 @@ export interface ChatBookmark {
   message: ChatMessage;
 }
 
+/**
+ * 예약 전송 대기 항목 — GET .../scheduled-messages. 발송·취소된 것은 서버 목록에서
+ * 이미 빠지므로 여기 있는 건 전부 "아직 안 보낸" 상태다(백엔드 ScheduledMessageResponse 참고).
+ */
+export interface ScheduledMessage {
+  id: number;
+  relationId: number;
+  messageType: MessageType;
+  content?: string | null;
+  imageUrl?: string | null;
+  scheduledAt: string;
+  createdAt: string;
+}
+
 /** GET/POST /mood 한 사람의 현재 무드 — 아직 설정 안 했으면 자리 자체가 null */
 export interface MoodEntry {
   emoji: string;

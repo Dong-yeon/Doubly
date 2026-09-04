@@ -42,6 +42,7 @@ import { runBusy } from '../../store/busyStore';
 import { EmojiPicker } from '../../components/EmojiPicker';
 import { ChatSearchModal } from '../../components/ChatSearchModal';
 import { ChatMoreMenuSheet } from '../../components/ChatMoreMenuSheet';
+import { ScheduleMessageSheet } from '../../components/ScheduleMessageSheet';
 import { VoiceRecordSheet } from '../../components/VoiceRecordSheet';
 import { VoiceMessageBubble } from '../../components/VoiceMessageBubble';
 import { SpellCheckBar } from '../../components/SpellCheckBar';
@@ -136,6 +137,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   // 음성 메시지 녹음 시트 — 트레이 네 번째 버튼
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
+  const [showScheduleSheet, setShowScheduleSheet] = useState(false);
   // 검색 결과를 골라 스크롤해 간 메시지 — 잠깐 배경을 강조했다가 스스로 지운다
   const [highlightedId, setHighlightedId] = useState<number | null>(null);
   // 답장 대상 / 수정 중인 메시지 / 리액션 피커 대상
@@ -663,6 +665,20 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     }
   };
 
+  /** 예약 전송 등록 — 실제 발송은 서버 스위퍼가 시각이 되면 처리하고, 이 화면엔 그때 STOMP 로 도착한다. */
+  const onScheduleMessage = async (content: string, scheduledAt: Date) => {
+    try {
+      await chatApi.scheduleMessage(relationId, {
+        messageType: 'TEXT',
+        content,
+        scheduledAt: `${scheduledAt.getFullYear()}-${String(scheduledAt.getMonth() + 1).padStart(2, '0')}-${String(scheduledAt.getDate()).padStart(2, '0')}T${String(scheduledAt.getHours()).padStart(2, '0')}:${String(scheduledAt.getMinutes()).padStart(2, '0')}:00`,
+      });
+      toast.success('예약했어요.');
+    } catch (e) {
+      toast.error(getErrorMessage(e, '예약하지 못했어요.'));
+    }
+  };
+
   const renderItem = ({ item, index }: { item: ChatMessage; index: number }) => {
     const mine = item.senderId === myId;
     const isImage = item.messageType === 'IMAGE' && !!item.imageUrl;
@@ -1066,6 +1082,11 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               label="음성"
               onPress={() => { setShowExtras(false); setShowVoiceRecorder(true); }}
             />
+            <ExtraButton
+              icon="clock-outline"
+              label="예약"
+              onPress={() => { setShowExtras(false); setShowScheduleSheet(true); }}
+            />
           </View>
         ) : null}
         {showStickers ? (
@@ -1252,12 +1273,19 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           scrollToMessage(msg.id);
         }}
       />
-      {/* 헤더 "⋮" — 사진 모아보기·저장한 대화 */}
+      {/* 헤더 "⋮" — 사진 모아보기·저장한 대화·예약된 메시지 */}
       <ChatMoreMenuSheet
         visible={showMoreMenu}
         onClose={() => setShowMoreMenu(false)}
         onPhotos={() => navigation.navigate('ChatPhotoGallery', { relationId, myId })}
         onSaved={() => navigation.navigate('SavedMessages', { relationId, title: partnerName, myId })}
+        onScheduled={() => navigation.navigate('ScheduledMessages', { relationId })}
+      />
+      {/* 예약 전송 작성 — 트레이 "예약" */}
+      <ScheduleMessageSheet
+        visible={showScheduleSheet}
+        onClose={() => setShowScheduleSheet(false)}
+        onScheduled={onScheduleMessage}
       />
       {/* 음성 메시지 녹음 — 트레이 "음성" */}
       <VoiceRecordSheet

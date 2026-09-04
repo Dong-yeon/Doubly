@@ -2,7 +2,7 @@
  * 채팅방 "더보기" 시트 — 사진 모아보기 · 저장한 대화.
  *
  * 헤더에 아이콘을 하나씩 늘리면(검색·통화·영상통화가 이미 3개) 좁은 기기에서
- * 겹친다(HomeScreen QuickActions 폭 예산 주석과 같은 문제). 자주 안 쓰는 두 항목을
+ * 겹친다(HomeScreen QuickActions 폭 예산 주석과 같은 문제). 자주 안 쓰는 항목들을
  * "⋮" 하나로 묶는다 — MessageActionSheet 와 같은 바텀시트 구조.
  */
 import React from 'react';
@@ -17,9 +17,10 @@ interface Props {
   onClose: () => void;
   onPhotos: () => void;
   onSaved: () => void;
+  onScheduled: () => void;
 }
 
-export function ChatMoreMenuSheet({ visible, onClose, onPhotos, onSaved }: Props) {
+export function ChatMoreMenuSheet({ visible, onClose, onPhotos, onSaved, onScheduled }: Props) {
   const go = (action: () => void) => {
     onClose();
     action();
@@ -32,6 +33,7 @@ export function ChatMoreMenuSheet({ visible, onClose, onPhotos, onSaved }: Props
           <View style={styles.handle} />
           <Row icon="image-multiple-outline" label="사진 모아보기" onPress={() => go(onPhotos)} />
           <Row icon="bookmark-outline" label="저장한 대화" onPress={() => go(onSaved)} />
+          <Row icon="clock-outline" label="예약된 메시지" onPress={() => go(onScheduled)} />
         </Pressable>
       </Pressable>
     </Modal>

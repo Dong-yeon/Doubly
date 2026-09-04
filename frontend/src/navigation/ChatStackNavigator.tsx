@@ -6,6 +6,7 @@ import { ChatScreen } from '../screens/chat/ChatScreen';
 import { ChatRoomScreen } from '../screens/chat/ChatRoomScreen';
 import { ChatPhotoGalleryScreen } from '../screens/chat/ChatPhotoGalleryScreen';
 import { SavedMessagesScreen } from '../screens/chat/SavedMessagesScreen';
+import { ScheduledMessagesScreen } from '../screens/chat/ScheduledMessagesScreen';
 import { stackScreenOptions } from './headerOptions';
 
 const Stack = createNativeStackNavigator<ChatStackParamList>();
@@ -52,6 +53,11 @@ export function ChatStackNavigator() {
         name="SavedMessages"
         component={SavedMessagesScreen}
         options={{ title: '저장한 대화' }}
+      />
+      <Stack.Screen
+        name="ScheduledMessages"
+        component={ScheduledMessagesScreen}
+        options={{ title: '예약된 메시지' }}
       />
     </Stack.Navigator>
   );

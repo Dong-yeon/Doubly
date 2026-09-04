@@ -208,6 +208,7 @@ export type ChatStackParamList = {
   };
   ChatPhotoGallery: { relationId: number; myId: number | undefined };
   SavedMessages: { relationId: number; title: string; myId: number | undefined };
+  ScheduledMessages: { relationId: number };
 };
 
 /*

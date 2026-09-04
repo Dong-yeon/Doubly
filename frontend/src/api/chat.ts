@@ -1,7 +1,16 @@
 /** 채팅 REST API — 설계서 v2.0 4.5 (실시간 송수신은 chatSocket.ts) */
 import { apiClient, unwrap } from './client';
 import type { UploadSignature } from './upload';
-import type { ApiResponse, ChatBookmark, ChatMessage, ChatReactionSummary, ChatRoom, LatestTouch } from '../types';
+import type {
+  ApiResponse,
+  ChatBookmark,
+  ChatMessage,
+  ChatReactionSummary,
+  ChatRoom,
+  LatestTouch,
+  MessageType,
+  ScheduledMessage,
+} from '../types';
 
 export const chatApi = {
   rooms: () => unwrap(apiClient.get<ApiResponse<ChatRoom[]>>('/chat/rooms')),
@@ -60,6 +69,27 @@ export const chatApi = {
         params: { cursor },
       }),
     ),
+
+  /**
+   * 예약 전송 등록 — TEXT/STICKER/IMAGE 만 지원(카드류는 시점이 지나면 참조가 깨질 수
+   * 있어 백엔드가 거부한다). scheduledAt 은 ISO 문자열(로컬 시각, 초 단위까지).
+   */
+  scheduleMessage: (
+    relationId: number,
+    req: { messageType?: MessageType; content?: string; imageUrl?: string; scheduledAt: string },
+  ) =>
+    unwrap(
+      apiClient.post<ApiResponse<ScheduledMessage>>(
+        `/chat/rooms/${relationId}/scheduled-messages`,
+        req,
+      ),
+    ),
+  /** 대기 중(미발송·미취소)인 예약 메시지 목록 — 예약 시각 순 */
+  scheduledMessages: (relationId: number) =>
+    unwrap(apiClient.get<ApiResponse<ScheduledMessage[]>>(`/chat/rooms/${relationId}/scheduled-messages`)),
+  /** 예약 취소 — 예약한 본인만, 발송 전에만 가능 */
+  cancelScheduled: (scheduledId: number) =>
+    unwrap(apiClient.delete<ApiResponse<void>>(`/chat/scheduled-messages/${scheduledId}`)),
 
   /**
    * 음성 메시지 업로드용 서명 — 사진과 같은 Cloudinary 계정, 별도 엔드포인트.

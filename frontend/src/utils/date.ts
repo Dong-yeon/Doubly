@@ -108,6 +108,29 @@ export function daysSince(baseDate: string | null | undefined): number {
   return Math.max(1, Math.round((today.getTime() - start.getTime()) / 86400000) + 1);
 }
 
+/**
+ * ISO 타임스탬프 → 날짜+시각 라벨 ('오늘 오후 9:00' / '내일 오전 9:00' /
+ * '2026년 9월 10일 오전 9:00'). 예약 전송 작성·목록 화면 공용.
+ */
+export function formatDateTimeLabel(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const target = toDateString(d);
+  let dayPart: string;
+  if (target === toDateString()) {
+    dayPart = '오늘';
+  } else {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    dayPart = target === toDateString(tomorrow) ? '내일' : `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
+  }
+  const hour24 = d.getHours();
+  const period = hour24 < 12 ? '오전' : '오후';
+  const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
+  const minute = String(d.getMinutes()).padStart(2, '0');
+  return `${dayPart} ${period} ${hour12}:${minute}`;
+}
+
 /** ISO 타임스탬프 → 채팅방 날짜 구분선 라벨 ('오늘' / '어제' / '2026년 8월 19일 수요일') */
 export function chatDateDividerLabel(iso: string): string {
   const d = new Date(iso);
