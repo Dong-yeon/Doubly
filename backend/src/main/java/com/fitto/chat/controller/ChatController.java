@@ -7,8 +7,11 @@ import com.fitto.chat.dto.ChatRoomResponse;
 import com.fitto.chat.dto.EditMessageRequest;
 import com.fitto.chat.dto.LatestTouchResponse;
 import com.fitto.chat.dto.ReadReceipt;
+import com.fitto.chat.dto.ScheduleMessageRequest;
+import com.fitto.chat.dto.ScheduledMessageResponse;
 import com.fitto.feed.dto.ReactRequest;
 import com.fitto.chat.service.ChatService;
+import com.fitto.chat.service.ScheduledChatMessageService;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.plan.Feature;
@@ -41,13 +44,16 @@ import java.util.List;
 public class ChatController {
 
     private final ChatService chatService;
+    private final ScheduledChatMessageService scheduledChatMessageService;
     private final SimpMessagingTemplate messagingTemplate;
     private final CloudinaryProperties cloudinaryProperties;
     private final PlanGuard planGuard;
 
-    public ChatController(ChatService chatService, SimpMessagingTemplate messagingTemplate,
+    public ChatController(ChatService chatService, ScheduledChatMessageService scheduledChatMessageService,
+                          SimpMessagingTemplate messagingTemplate,
                           CloudinaryProperties cloudinaryProperties, PlanGuard planGuard) {
         this.chatService = chatService;
+        this.scheduledChatMessageService = scheduledChatMessageService;
         this.messagingTemplate = messagingTemplate;
         this.cloudinaryProperties = cloudinaryProperties;
         this.planGuard = planGuard;
@@ -111,6 +117,30 @@ public class ChatController {
                                                             @PathVariable Long relationId,
                                                             @RequestParam(required = false) Long cursor) {
         return ApiResponse.success(chatService.getBookmarks(user.id(), relationId, cursor));
+    }
+
+    /** 예약 전송 등록 — TEXT/STICKER/IMAGE 만 지원(ScheduleMessageRequest 주석 참고). */
+    @PostMapping("/rooms/{relationId}/scheduled-messages")
+    public ApiResponse<ScheduledMessageResponse> schedule(@AuthenticationPrincipal AuthUser user,
+                                                          @PathVariable Long relationId,
+                                                          @RequestBody ScheduleMessageRequest request) {
+        return ApiResponse.success(
+                scheduledChatMessageService.schedule(user.id(), relationId, request), "예약했어요.");
+    }
+
+    /** 대기 중인 예약 메시지 목록 — 예약 시각 순. */
+    @GetMapping("/rooms/{relationId}/scheduled-messages")
+    public ApiResponse<List<ScheduledMessageResponse>> scheduledMessages(@AuthenticationPrincipal AuthUser user,
+                                                                         @PathVariable Long relationId) {
+        return ApiResponse.success(scheduledChatMessageService.listPending(user.id(), relationId));
+    }
+
+    /** 예약 취소 — 예약한 본인만, 발송 전에만. */
+    @DeleteMapping("/scheduled-messages/{scheduledId}")
+    public ApiResponse<Void> cancelScheduled(@AuthenticationPrincipal AuthUser user,
+                                             @PathVariable Long scheduledId) {
+        scheduledChatMessageService.cancel(user.id(), scheduledId);
+        return ApiResponse.success(null, "예약을 취소했어요.");
     }
 
     /**

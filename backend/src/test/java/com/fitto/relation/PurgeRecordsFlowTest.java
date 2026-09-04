@@ -62,7 +62,7 @@ class PurgeRecordsFlowTest {
 
     private long count(String table, Long relationId) {
         String column = switch (table) {
-            case "chat_messages", "streaks" -> "relation_id";
+            case "chat_messages", "streaks", "scheduled_chat_messages" -> "relation_id";
             default -> "couple_id";
         };
         Number n = (Number) em.createNativeQuery(
@@ -83,10 +83,17 @@ class PurgeRecordsFlowTest {
         feedService.createPost(me, new CreatePostRequest("기록", "https://res.cloudinary.com/x/image/upload/v1/fitto/a.jpg"));
         tripService.save(partner, new SaveTripRequest(
                 "여행", LocalDate.now(), LocalDate.now().plusDays(1), null, null));
+        // 예약 전송(V76) — relation_id 를 직접 들고 있어 chat_messages 와 같은 컬럼으로 센다
+        em.createNativeQuery("insert into scheduled_chat_messages "
+                        + "(relation_id, sender_id, message_type, content, scheduled_at) "
+                        + "values (:rid, :sid, 'TEXT', '예약된 메시지', :when)")
+                .setParameter("rid", relationId).setParameter("sid", me)
+                .setParameter("when", java.time.LocalDateTime.now().plusHours(1)).executeUpdate();
 
         assertThat(count("places", relationId)).isEqualTo(1);
         assertThat(count("feed_posts", relationId)).isEqualTo(1);
         assertThat(count("trips", relationId)).isEqualTo(1);
+        assertThat(count("scheduled_chat_messages", relationId)).isEqualTo(1);
 
         relationService.endRelation(me, relationId);
         relationService.purgeRecords(me, relationId);
@@ -96,6 +103,7 @@ class PurgeRecordsFlowTest {
         assertThat(count("places", relationId)).isZero();
         assertThat(count("feed_posts", relationId)).isZero();
         assertThat(count("trips", relationId)).isZero();
+        assertThat(count("scheduled_chat_messages", relationId)).isZero();
         assertThat(relationRepository.findById(relationId)).isEmpty();
     }
 
