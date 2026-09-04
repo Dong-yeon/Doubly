@@ -634,9 +634,6 @@ export function DietRecordScreen({ navigation, route }: Props) {
   };
 
   const onPickPhoto = () => {
-    // TEMP DEBUG(2026-09-03): iOS 에서 이 버튼이 반응 없다는 리포트 — 핸들러가
-    // 아예 안 불리는지, 불리는데 다이얼로그만 안 뜨는지 구분하려고 임시로 남긴다.
-    toast.info('DEBUG: onPickPhoto called, platform=' + Platform.OS);
     // 웹은 카메라 촬영 UX가 어색하므로 갤러리(파일 선택)만 사용
     if (Platform.OS === 'web') {
       void pickFrom('gallery');

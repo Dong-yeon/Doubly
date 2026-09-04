@@ -9,7 +9,8 @@
  * 완전히 같아야 하고, 새 네이티브 의존성이 늘면 그때마다 EAS 빌드를 다시 돌려야 한다.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { RootOverlayModal } from './RootOverlayModal';
 import { MaterialCommunityIcons } from './Icon';
 import { useDatePickerStore } from '../store/datePickerStore';
 import { parseDateString, toDateString } from '../utils/date';
@@ -131,7 +132,7 @@ export function DatePickerSheet() {
   };
 
   return (
-    <Modal visible transparent animationType="fade" statusBarTranslucent onRequestClose={() => close(null)}>
+    <RootOverlayModal visible transparent animationType="fade" statusBarTranslucent onRequestClose={() => close(null)}>
       <Pressable style={styles.backdrop} onPress={() => close(null)}>
         {/* 카드 안쪽 터치가 배경으로 새어나가 닫히지 않도록 막는다 */}
         <Pressable style={styles.card} onPress={() => undefined}>
@@ -273,7 +274,7 @@ export function DatePickerSheet() {
           </View>
         </Pressable>
       </Pressable>
-    </Modal>
+    </RootOverlayModal>
   );
 }
 

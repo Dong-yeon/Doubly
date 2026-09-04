@@ -5,7 +5,8 @@
  * (onRequestClose 를 비워) 삼켜서 작업 중 이탈을 막을 수 있다.
  */
 import React from 'react';
-import { Modal, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { RootOverlayModal } from './RootOverlayModal';
 import { useBusyStore } from '../store/busyStore';
 import { fontSize, radius, spacing } from '../constants/theme';
 import { themedStyles } from '../theme/themedStyles';
@@ -15,7 +16,7 @@ export function BusyOverlay() {
   const message = useBusyStore((s) => s.message);
 
   return (
-    <Modal
+    <RootOverlayModal
       visible={message !== null}
       transparent
       animationType="fade"
@@ -30,7 +31,7 @@ export function BusyOverlay() {
           <Text style={styles.hint}>잠시만 기다려주세요</Text>
         </View>
       </View>
-    </Modal>
+    </RootOverlayModal>
   );
 }
 

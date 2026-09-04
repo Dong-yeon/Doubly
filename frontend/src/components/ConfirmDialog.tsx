@@ -7,7 +7,8 @@
  * 그래서 한 컴포넌트로 통일한다.
  */
 import React from 'react';
-import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { RootOverlayModal } from './RootOverlayModal';
 import { useDialogStore, type DialogButton } from '../store/dialogStore';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 import { themedStyles } from '../theme/themedStyles';
@@ -50,7 +51,7 @@ export function ConfirmDialog() {
   );
 
   return (
-    <Modal visible transparent animationType="fade" statusBarTranslucent onRequestClose={hide}>
+    <RootOverlayModal visible transparent animationType="fade" statusBarTranslucent onRequestClose={hide}>
       <View style={styles.backdrop}>
         <View style={styles.card}>
           <Text style={styles.title}>{dialog.title}</Text>
@@ -72,7 +73,7 @@ export function ConfirmDialog() {
           </View>
         </View>
       </View>
-    </Modal>
+    </RootOverlayModal>
   );
 }
 

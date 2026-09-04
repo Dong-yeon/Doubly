@@ -13,7 +13,8 @@
  * 작성 중인 내용이 조용히 사라지지 않게 한다.
  */
 import React from 'react';
-import { Modal, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { RootOverlayModal } from './RootOverlayModal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radius, spacing } from '../constants/theme';
 import { themedStyles } from '../theme/themedStyles';
@@ -42,7 +43,7 @@ export function Sheet({
   const bottom = position === 'bottom';
 
   return (
-    <Modal
+    <RootOverlayModal
       visible={visible}
       transparent
       animationType={animationType ?? (bottom ? 'slide' : 'fade')}
@@ -68,7 +69,7 @@ export function Sheet({
           {children}
         </Pressable>
       </Pressable>
-    </Modal>
+    </RootOverlayModal>
   );
 }
 

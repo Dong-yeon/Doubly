@@ -14,7 +14,8 @@
  * 기록·부재중 알림 같은 부가 기능만 어긋날 뿐).
  */
 import React, { useCallback } from 'react';
-import { Modal, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { RootOverlayModal } from './RootOverlayModal';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import {
   Call,
@@ -67,9 +68,10 @@ function CallOverlayInner() {
   if (!call) return null;
 
   return (
-    <Modal visible transparent={false} animationType="slide" onRequestClose={() => undefined}>
-      {/* Modal 은 별도 네이티브 창이라 바깥의 GestureHandlerRootView 컨텍스트가 안 이어진다 —
-          Stream 컨텐츠(참가자 뷰 드래그 등)가 제스처를 쓰므로 여기서 다시 감싼다. */}
+    <RootOverlayModal visible transparent={false} animationType="slide" onRequestClose={() => undefined}>
+      {/* Modal(또는 iOS 의 FullWindowOverlay)은 별도 네이티브 창이라 바깥의
+          GestureHandlerRootView 컨텍스트가 안 이어진다 — Stream 컨텐츠(참가자 뷰
+          드래그 등)가 제스처를 쓰므로 여기서 다시 감싼다. */}
       <GestureHandlerRootView style={styles.flex}>
         <View style={styles.flex}>
           <StreamCall call={call}>
@@ -77,7 +79,7 @@ function CallOverlayInner() {
           </StreamCall>
         </View>
       </GestureHandlerRootView>
-    </Modal>
+    </RootOverlayModal>
   );
 }
 
