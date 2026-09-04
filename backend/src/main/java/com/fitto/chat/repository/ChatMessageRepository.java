@@ -80,16 +80,18 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
                       @Param("readerId") Long readerId);
 
     /**
-     * 대화 내보내기 — 지정 기간(from/to 각각 선택, 없으면 전체 기간) 오래된순. 화면 표시용
-     * 커서 페이징과 반대로 <b>오래된순</b>이다 — 사람이 읽는 대화록은 시간 순서로 읽혀야
-     * 한다. 개수 상한은 ChatService 가 Pageable 로 건다.
+     * 대화 내보내기 — 지정 기간(from/to 각각 선택, 없으면 전체 기간) <b>최신순</b>으로
+     * 상한만큼 가져온다. 화면에 보여줄 땐 사람이 읽는 순서(오래된순)로 뒤집어야 하지만
+     * (ChatService.exportMessages 가 뒤집는다), 여기서 최신순으로 자르는 이유는 상한에
+     * 걸렸을 때 <b>최근 대화가 남아야</b> 하기 때문이다 — 오래된순으로 자르면 정작
+     * 필요한 최근 대화가 통째로 잘려나간다.
      */
     @Query("""
             select m from ChatMessage m
             where m.relationId = :relationId
               and (cast(:from as java.time.LocalDateTime) is null or m.createdAt >= :from)
               and (cast(:to as java.time.LocalDateTime) is null or m.createdAt < :to)
-            order by m.id asc
+            order by m.id desc
             """)
     List<ChatMessage> findForExport(@Param("relationId") Long relationId,
                                     @Param("from") LocalDateTime from,

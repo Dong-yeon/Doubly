@@ -39,6 +39,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -142,19 +143,22 @@ public class ChatService {
 
     /**
      * 대화 내보내기 — from/to(둘 다 선택) 오래된순 전체. 상한(EXPORT_LIMIT)에 걸리면
-     * 잘라서 내려주고 {@link ChatExportResponse#truncated()} 로 알린다(가장 오래된 것부터
-     * 잘리므로, 사용자는 기간을 좁혀 다시 받으면 된다). from 은 그날 00:00, to 는 그날
-     * <b>다음 날</b> 00:00 미만으로 — "9/1~9/10"이 9/10 하루 전체를 포함하게 하기 위함
-     * (LocalDate 를 그대로 쓰면 자정 순간만 포함돼 그날 메시지가 통째로 빠진다).
+     * 잘라서 내려주고 {@link ChatExportResponse#truncated()} 로 알린다 — 저장소 쿼리는
+     * 최신순으로 자른 뒤(그래야 잘릴 때 최근 대화가 남는다) 여기서 사람이 읽는 순서로
+     * 뒤집는다. from 은 그날 00:00, to 는 그날 <b>다음 날</b> 00:00 미만으로 — "9/1~9/10"이
+     * 9/10 하루 전체를 포함하게 하기 위함(LocalDate 를 그대로 쓰면 자정 순간만 포함돼
+     * 그날 메시지가 통째로 빠진다).
      */
     public ChatExportResponse exportMessages(Long userId, Long relationId, LocalDate from, LocalDate to) {
         requireMember(userId, relationId);
         LocalDateTime fromAt = from == null ? null : from.atStartOfDay();
         LocalDateTime toAt = to == null ? null : to.plusDays(1).atStartOfDay();
         long total = chatMessageRepository.countForExport(relationId, fromAt, toAt);
-        List<ChatMessage> messages = chatMessageRepository.findForExport(
+        List<ChatMessage> latestFirst = chatMessageRepository.findForExport(
                 relationId, fromAt, toAt, PageRequest.of(0, EXPORT_LIMIT));
-        return new ChatExportResponse(attachDetails(messages), total, total > messages.size());
+        List<ChatMessage> chronological = new ArrayList<>(latestFirst);
+        Collections.reverse(chronological);
+        return new ChatExportResponse(attachDetails(chronological), total, total > chronological.size());
     }
 
     /**
