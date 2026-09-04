@@ -6,6 +6,7 @@ import com.fitto.chat.dto.ChatMessageResponse;
 import com.fitto.chat.dto.ChatReactionSummary;
 import com.fitto.chat.dto.ChatRoomResponse;
 import com.fitto.chat.dto.EditMessageRequest;
+import com.fitto.chat.dto.ChatPinResponse;
 import com.fitto.chat.dto.LatestTouchResponse;
 import com.fitto.chat.dto.ReadReceipt;
 import com.fitto.chat.dto.ScheduleMessageRequest;
@@ -155,6 +156,39 @@ public class ChatController {
                                              @PathVariable Long scheduledId) {
         scheduledChatMessageService.cancel(user.id(), scheduledId);
         return ApiResponse.success(null, "예약을 취소했어요.");
+    }
+
+    /**
+     * 공지 고정 토글 — 이미 이 메시지가 고정돼 있으면 해제, 아니면 (다른 메시지가
+     * 고정돼 있었더라도) 이 메시지로 교체한다. 방 전체에 새 고정 상태를 브로드캐스트해
+     * 양쪽 화면의 배너가 함께 바뀐다.
+     *
+     * <p>브로드캐스트 페이로드는 {@link ChatMessageResponse} 가 아니라
+     * {@link ChatPinResponse} 통째로다 — 해제된 경우 pinned 가 null 인데, STOMP 페이로드
+     * 자체를 null 로 보내면 메시지 컨버터가 거부한다(래퍼 객체 안의 null 필드는 문제없다).
+     */
+    @PostMapping("/messages/{messageId}/pin")
+    public ApiResponse<ChatMessageResponse> togglePin(@AuthenticationPrincipal AuthUser user,
+                                                      @PathVariable Long messageId) {
+        ChatPinResponse result = chatService.togglePin(user.id(), messageId);
+        messagingTemplate.convertAndSend("/sub/rooms/" + result.relationId() + "/pin", result);
+        return ApiResponse.success(result.pinned(), result.pinned() != null ? "공지로 고정했어요." : "고정을 해제했어요.");
+    }
+
+    /** 현재 고정된 메시지 — 없으면 데이터 없이 200. */
+    @GetMapping("/rooms/{relationId}/pin")
+    public ApiResponse<ChatMessageResponse> pinned(@AuthenticationPrincipal AuthUser user,
+                                                   @PathVariable Long relationId) {
+        return ApiResponse.success(chatService.getPinned(user.id(), relationId));
+    }
+
+    /** 고정 해제 — 방 배너의 X. 무엇이 고정됐는지 몰라도 방 id만으로 해제한다. */
+    @DeleteMapping("/rooms/{relationId}/pin")
+    public ApiResponse<Void> unpin(@AuthenticationPrincipal AuthUser user,
+                                   @PathVariable Long relationId) {
+        chatService.unpin(user.id(), relationId);
+        messagingTemplate.convertAndSend("/sub/rooms/" + relationId + "/pin", new ChatPinResponse(relationId, null));
+        return ApiResponse.success(null, "고정을 해제했어요.");
     }
 
     /**

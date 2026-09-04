@@ -350,4 +350,74 @@ class ChatFlowTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.FORBIDDEN);
     }
+
+    /** 공지 고정 — 처음 고정하면 즉시 조회되고, 다른 메시지로 고정하면 앞선 고정이 조용히 교체된다. */
+    @Test
+    void 공지_고정은_한_번에_하나만_유지되고_교체된다() {
+        Long a = register("pin-a@fitto.com");
+        Long b = register("pin-b@fitto.com");
+        Long relationId = connectCouple(a, b);
+        Long first = chatService.send(a, relationId,
+                new SendMessageRequest(null, "약속 시간 저녁 7시", null, null, null, null)).id();
+        Long second = chatService.send(b, relationId,
+                new SendMessageRequest(null, "장소는 강남역", null, null, null, null)).id();
+
+        assertThat(chatService.getPinned(a, relationId)).isNull();
+
+        com.fitto.chat.dto.ChatPinResponse pinned1 = chatService.togglePin(a, first);
+        assertThat(pinned1.relationId()).isEqualTo(relationId);
+        assertThat(pinned1.pinned().id()).isEqualTo(first);
+        assertThat(chatService.getPinned(b, relationId).id()).isEqualTo(first);
+
+        // 다른 메시지로 교체 — 행이 하나뿐이라(UNIQUE) 앞선 고정은 자연히 사라진다
+        com.fitto.chat.dto.ChatPinResponse pinned2 = chatService.togglePin(b, second);
+        assertThat(pinned2.pinned().id()).isEqualTo(second);
+        assertThat(chatService.getPinned(a, relationId).id()).isEqualTo(second);
+    }
+
+    /** 이미 고정된 메시지를 다시 고정하면 해제된다(토글). */
+    @Test
+    void 같은_메시지를_다시_고정하면_해제된다() {
+        Long a = register("pin-c@fitto.com");
+        Long b = register("pin-d@fitto.com");
+        Long relationId = connectCouple(a, b);
+        Long msgId = chatService.send(a, relationId,
+                new SendMessageRequest(null, "공지", null, null, null, null)).id();
+
+        chatService.togglePin(a, msgId);
+        assertThat(chatService.getPinned(a, relationId)).isNotNull();
+
+        com.fitto.chat.dto.ChatPinResponse toggled = chatService.togglePin(b, msgId);
+        assertThat(toggled.pinned()).isNull();
+        assertThat(chatService.getPinned(a, relationId)).isNull();
+    }
+
+    /** 명시적 해제(배너 X) — 어떤 메시지가 고정됐는지 몰라도 방 id만으로 해제된다. */
+    @Test
+    void 명시적_고정_해제는_방_id만으로_가능하다() {
+        Long a = register("pin-e@fitto.com");
+        Long b = register("pin-f@fitto.com");
+        Long relationId = connectCouple(a, b);
+        Long msgId = chatService.send(a, relationId,
+                new SendMessageRequest(null, "공지", null, null, null, null)).id();
+        chatService.togglePin(a, msgId);
+
+        chatService.unpin(b, relationId);
+        assertThat(chatService.getPinned(a, relationId)).isNull();
+    }
+
+    /** 삭제된 메시지는 새로 고정할 수 없다(북마크와 같은 규칙). */
+    @Test
+    void 삭제된_메시지는_고정할_수_없다() {
+        Long a = register("pin-g@fitto.com");
+        Long b = register("pin-h@fitto.com");
+        Long relationId = connectCouple(a, b);
+        Long msgId = chatService.send(a, relationId,
+                new SendMessageRequest(null, "지울 메시지", null, null, null, null)).id();
+        chatService.delete(a, msgId);
+
+        assertThatThrownBy(() -> chatService.togglePin(a, msgId))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.NOT_FOUND);
+    }
 }

@@ -103,6 +103,8 @@ public class RelationRecordPurger {
         exec("delete from chat_message_bookmarks where relation_id = :rid", relationId);
         // 예약 전송(V76) — sent_message_id 가 chat_messages 를 참조하므로 그보다 먼저 지운다
         exec("delete from scheduled_chat_messages where relation_id = :rid", relationId);
+        // 공지 고정(V77) — message_id 가 chat_messages 를 참조하므로 그보다 먼저 지운다
+        exec("delete from chat_pinned_messages where relation_id = :rid", relationId);
         // 같은 방 안에서 서로를 인용(reply_to_id)하므로 참조를 먼저 끊는다
         exec("update chat_messages set reply_to_id = null where relation_id = :rid", relationId);
         exec("delete from chat_messages where relation_id = :rid", relationId);

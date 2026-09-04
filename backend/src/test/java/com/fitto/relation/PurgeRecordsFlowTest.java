@@ -62,7 +62,7 @@ class PurgeRecordsFlowTest {
 
     private long count(String table, Long relationId) {
         String column = switch (table) {
-            case "chat_messages", "streaks", "scheduled_chat_messages" -> "relation_id";
+            case "chat_messages", "streaks", "scheduled_chat_messages", "chat_pinned_messages" -> "relation_id";
             default -> "couple_id";
         };
         Number n = (Number) em.createNativeQuery(
@@ -89,11 +89,23 @@ class PurgeRecordsFlowTest {
                         + "values (:rid, :sid, 'TEXT', '예약된 메시지', :when)")
                 .setParameter("rid", relationId).setParameter("sid", me)
                 .setParameter("when", java.time.LocalDateTime.now().plusHours(1)).executeUpdate();
+        // 공지 고정(V77) — message_id 가 chat_messages 를 참조하므로 먼저 메시지 하나를 심는다
+        em.createNativeQuery("insert into chat_messages (relation_id, sender_id, message_type, content) "
+                        + "values (:rid, :sid, 'TEXT', '고정할 메시지')")
+                .setParameter("rid", relationId).setParameter("sid", me).executeUpdate();
+        Number pinnedMsgId = (Number) em.createNativeQuery(
+                        "select max(id) from chat_messages where relation_id = :rid")
+                .setParameter("rid", relationId).getSingleResult();
+        em.createNativeQuery("insert into chat_pinned_messages (relation_id, message_id, pinned_by, pinned_at) "
+                        + "values (:rid, :mid, :sid, current_timestamp)")
+                .setParameter("rid", relationId).setParameter("mid", pinnedMsgId.longValue())
+                .setParameter("sid", me).executeUpdate();
 
         assertThat(count("places", relationId)).isEqualTo(1);
         assertThat(count("feed_posts", relationId)).isEqualTo(1);
         assertThat(count("trips", relationId)).isEqualTo(1);
         assertThat(count("scheduled_chat_messages", relationId)).isEqualTo(1);
+        assertThat(count("chat_pinned_messages", relationId)).isEqualTo(1);
 
         relationService.endRelation(me, relationId);
         relationService.purgeRecords(me, relationId);
@@ -104,6 +116,7 @@ class PurgeRecordsFlowTest {
         assertThat(count("feed_posts", relationId)).isZero();
         assertThat(count("trips", relationId)).isZero();
         assertThat(count("scheduled_chat_messages", relationId)).isZero();
+        assertThat(count("chat_pinned_messages", relationId)).isZero();
         assertThat(relationRepository.findById(relationId)).isEmpty();
     }
 

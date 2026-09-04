@@ -3,6 +3,7 @@ package com.fitto.chat.service;
 import com.fitto.auth.dto.UserResponse;
 import com.fitto.chat.domain.ChatMessage;
 import com.fitto.chat.domain.ChatMessageReaction;
+import com.fitto.chat.domain.ChatPinnedMessage;
 import com.fitto.chat.domain.MessageType;
 import com.fitto.chat.domain.StickerPack;
 import com.fitto.chat.domain.StickerImage;
@@ -10,6 +11,7 @@ import com.fitto.chat.domain.TouchGesture;
 import com.fitto.chat.dto.ChatBookmarkResponse;
 import com.fitto.chat.dto.ChatExportResponse;
 import com.fitto.chat.dto.ChatMessageResponse;
+import com.fitto.chat.dto.ChatPinResponse;
 import com.fitto.chat.dto.ChatReactionSummary;
 import com.fitto.chat.dto.ChatRoomResponse;
 import com.fitto.chat.dto.LatestTouchResponse;
@@ -19,6 +21,7 @@ import com.fitto.chat.domain.ChatMessageBookmark;
 import com.fitto.chat.repository.ChatMessageBookmarkRepository;
 import com.fitto.chat.repository.ChatMessageReactionRepository;
 import com.fitto.chat.repository.ChatMessageRepository;
+import com.fitto.chat.repository.ChatPinnedMessageRepository;
 import com.fitto.common.event.CoupleEvent;
 import com.fitto.common.event.CoupleEventPublisher;
 import com.fitto.common.exception.BusinessException;
@@ -61,6 +64,7 @@ public class ChatService {
     private final ChatMessageRepository chatMessageRepository;
     private final ChatMessageReactionRepository reactionRepository;
     private final ChatMessageBookmarkRepository bookmarkRepository;
+    private final ChatPinnedMessageRepository pinnedMessageRepository;
     private final RelationRepository relationRepository;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
@@ -70,6 +74,7 @@ public class ChatService {
     public ChatService(ChatMessageRepository chatMessageRepository,
                        ChatMessageReactionRepository reactionRepository,
                        ChatMessageBookmarkRepository bookmarkRepository,
+                       ChatPinnedMessageRepository pinnedMessageRepository,
                        RelationRepository relationRepository,
                        UserRepository userRepository,
                        NotificationService notificationService,
@@ -78,6 +83,7 @@ public class ChatService {
         this.chatMessageRepository = chatMessageRepository;
         this.reactionRepository = reactionRepository;
         this.bookmarkRepository = bookmarkRepository;
+        this.pinnedMessageRepository = pinnedMessageRepository;
         this.relationRepository = relationRepository;
         this.userRepository = userRepository;
         this.notificationService = notificationService;
@@ -159,6 +165,49 @@ public class ChatService {
         List<ChatMessage> chronological = new ArrayList<>(latestFirst);
         Collections.reverse(chronological);
         return new ChatExportResponse(attachDetails(chronological), total, total > chronological.size());
+    }
+
+    /**
+     * 공지 고정 토글 — 이 메시지가 이미 고정돼 있으면 해제하고, 아니면 (다른 메시지가
+     * 고정돼 있었더라도) 이 메시지로 <b>교체</b>한다. 관계당 하나만 고정된다(§3 —
+     * 공지는 "지금 필요한 것"이라 북마크와 달리 여러 개 쌓이지 않는다).
+     *
+     * @return 갱신된 고정 상태 — relationId 는 항상 채워지고(호출자가 브로드캐스트 대상을
+     *         알 수 있도록), pinned 는 해제됐으면 null.
+     */
+    @Transactional
+    public ChatPinResponse togglePin(Long userId, Long messageId) {
+        ChatMessage message = requireRoomMessage(userId, messageId);
+        if (message.isDeleted()) {
+            throw new BusinessException(ErrorCode.NOT_FOUND);
+        }
+        Long relationId = message.getRelationId();
+        Optional<ChatPinnedMessage> existing = pinnedMessageRepository.findByRelationId(relationId);
+        if (existing.isPresent() && existing.get().getMessageId().equals(messageId)) {
+            pinnedMessageRepository.delete(existing.get());
+            return new ChatPinResponse(relationId, null);
+        }
+        existing.ifPresentOrElse(
+                p -> p.replace(messageId, userId),
+                () -> pinnedMessageRepository.save(ChatPinnedMessage.builder()
+                        .relationId(relationId).messageId(messageId).pinnedBy(userId).build()));
+        return new ChatPinResponse(relationId, detailOf(message));
+    }
+
+    /** 명시적 고정 해제(방 배너의 X) — 어떤 메시지가 고정됐는지 몰라도 방 id만으로 해제한다. */
+    @Transactional
+    public void unpin(Long userId, Long relationId) {
+        requireMember(userId, relationId);
+        pinnedMessageRepository.deleteByRelationId(relationId);
+    }
+
+    /** 현재 고정된 메시지 — 없으면 null. */
+    public ChatMessageResponse getPinned(Long userId, Long relationId) {
+        requireMember(userId, relationId);
+        return pinnedMessageRepository.findByRelationId(relationId)
+                .flatMap(p -> chatMessageRepository.findById(p.getMessageId()))
+                .map(this::detailOf)
+                .orElse(null);
     }
 
     /**
