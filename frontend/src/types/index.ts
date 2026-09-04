@@ -1243,6 +1243,17 @@ export interface ChatBookmark {
 }
 
 /**
+ * 대화 내보내기 응답 — GET .../export. messages 는 오래된순(화면 표시용 최신순
+ * 커서 페이징과 반대 방향)이다. truncated 면 totalCount 가 messages.length 보다
+ * 많다는 뜻 — 상한(서버 2만 건)에 걸려 오래된 일부가 잘렸다(최근 대화는 항상 남는다).
+ */
+export interface ChatExport {
+  messages: ChatMessage[];
+  totalCount: number;
+  truncated: boolean;
+}
+
+/**
  * 예약 전송 대기 항목 — GET .../scheduled-messages. 발송·취소된 것은 서버 목록에서
  * 이미 빠지므로 여기 있는 건 전부 "아직 안 보낸" 상태다(백엔드 ScheduledMessageResponse 참고).
  */

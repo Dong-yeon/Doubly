@@ -4,6 +4,7 @@ import type { UploadSignature } from './upload';
 import type {
   ApiResponse,
   ChatBookmark,
+  ChatExport,
   ChatMessage,
   ChatReactionSummary,
   ChatRoom,
@@ -90,6 +91,17 @@ export const chatApi = {
   /** 예약 취소 — 예약한 본인만, 발송 전에만 가능 */
   cancelScheduled: (scheduledId: number) =>
     unwrap(apiClient.delete<ApiResponse<void>>(`/chat/scheduled-messages/${scheduledId}`)),
+
+  /**
+   * 대화 내보내기 — from/to(YYYY-MM-DD, 둘 다 선택) 오래된순 전체. 파일 조립·저장은
+   * 프론트 책임(발신자 이름표가 화면 정보라서).
+   */
+  exportMessages: (relationId: number, from?: string, to?: string) =>
+    unwrap(
+      apiClient.get<ApiResponse<ChatExport>>(`/chat/rooms/${relationId}/export`, {
+        params: { from, to },
+      }),
+    ),
 
   /**
    * 음성 메시지 업로드용 서명 — 사진과 같은 Cloudinary 계정, 별도 엔드포인트.

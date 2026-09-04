@@ -67,7 +67,9 @@ import { STICKER_IMAGES, stickerImageOf } from '../../constants/stickerImages';
 import { STICKER_PACKS } from '../../constants/stickerPacks';
 import { playTouchGesture } from '../../utils/haptics';
 import { messagePreview } from '../../utils/messagePreview';
-import { chatDateDividerLabel, isSameLocalDay } from '../../utils/date';
+import { chatDateDividerLabel, isSameLocalDay, toDateString } from '../../utils/date';
+import { buildChatTranscript, shareTranscript } from '../../utils/chatExport';
+import * as Sharing from 'expo-sharing';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { ChatMessage } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
@@ -679,6 +681,43 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     }
   };
 
+  /** 대화 내보내기 — 기간을 고르면 서버에서 받아 텍스트로 조립하고 공유 시트를 연다. */
+  const onExportChat = () => {
+    Alert.alert('대화 내보내기', '어느 기간을 내보낼까요?', [
+      { text: '최근 1개월', onPress: () => runExportChat(1) },
+      { text: '최근 3개월', onPress: () => runExportChat(3) },
+      { text: '전체 기간', onPress: () => runExportChat(null) },
+      { text: '취소', style: 'cancel' },
+    ]);
+  };
+
+  const runExportChat = async (months: number | null) => {
+    try {
+      if (!(await Sharing.isAvailableAsync())) {
+        toast.error('이 기기에서는 공유하기를 쓸 수 없어요.');
+        return;
+      }
+      let from: string | undefined;
+      if (months) {
+        const d = new Date();
+        d.setMonth(d.getMonth() - months);
+        from = toDateString(d);
+      }
+      const data = await runBusy('대화 불러오는 중…', () => chatApi.exportMessages(relationId, from));
+      if (data.messages.length === 0) {
+        toast.info('내보낼 대화가 없어요.');
+        return;
+      }
+      const text = buildChatTranscript(data.messages, myId, '나', partnerName);
+      await shareTranscript(text, relationId);
+      if (data.truncated) {
+        toast.info(`메시지가 많아 최근 ${data.messages.length.toLocaleString()}건만 내보냈어요.`);
+      }
+    } catch (e) {
+      toast.error(getErrorMessage(e, '대화를 내보내지 못했어요.'));
+    }
+  };
+
   const renderItem = ({ item, index }: { item: ChatMessage; index: number }) => {
     const mine = item.senderId === myId;
     const isImage = item.messageType === 'IMAGE' && !!item.imageUrl;
@@ -1280,6 +1319,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         onPhotos={() => navigation.navigate('ChatPhotoGallery', { relationId, myId })}
         onSaved={() => navigation.navigate('SavedMessages', { relationId, title: partnerName, myId })}
         onScheduled={() => navigation.navigate('ScheduledMessages', { relationId })}
+        onExport={onExportChat}
       />
       {/* 예약 전송 작성 — 트레이 "예약" */}
       <ScheduleMessageSheet

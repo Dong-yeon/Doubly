@@ -18,9 +18,10 @@ interface Props {
   onPhotos: () => void;
   onSaved: () => void;
   onScheduled: () => void;
+  onExport: () => void;
 }
 
-export function ChatMoreMenuSheet({ visible, onClose, onPhotos, onSaved, onScheduled }: Props) {
+export function ChatMoreMenuSheet({ visible, onClose, onPhotos, onSaved, onScheduled, onExport }: Props) {
   const go = (action: () => void) => {
     onClose();
     action();
@@ -34,6 +35,7 @@ export function ChatMoreMenuSheet({ visible, onClose, onPhotos, onSaved, onSched
           <Row icon="image-multiple-outline" label="사진 모아보기" onPress={() => go(onPhotos)} />
           <Row icon="bookmark-outline" label="저장한 대화" onPress={() => go(onSaved)} />
           <Row icon="clock-outline" label="예약된 메시지" onPress={() => go(onScheduled)} />
+          <Row icon="export-variant" label="대화 내보내기" onPress={() => go(onExport)} />
         </Pressable>
       </Pressable>
     </Modal>
