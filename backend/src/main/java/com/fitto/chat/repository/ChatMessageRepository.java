@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -77,6 +78,34 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
     void markReadUpTo(@Param("relationId") Long relationId,
                       @Param("messageId") Long messageId,
                       @Param("readerId") Long readerId);
+
+    /**
+     * 대화 내보내기 — 지정 기간(from/to 각각 선택, 없으면 전체 기간) 오래된순. 화면 표시용
+     * 커서 페이징과 반대로 <b>오래된순</b>이다 — 사람이 읽는 대화록은 시간 순서로 읽혀야
+     * 한다. 개수 상한은 ChatService 가 Pageable 로 건다.
+     */
+    @Query("""
+            select m from ChatMessage m
+            where m.relationId = :relationId
+              and (cast(:from as java.time.LocalDateTime) is null or m.createdAt >= :from)
+              and (cast(:to as java.time.LocalDateTime) is null or m.createdAt < :to)
+            order by m.id asc
+            """)
+    List<ChatMessage> findForExport(@Param("relationId") Long relationId,
+                                    @Param("from") LocalDateTime from,
+                                    @Param("to") LocalDateTime to,
+                                    Pageable pageable);
+
+    /** 위와 같은 조건의 전체 개수 — 상한에 걸려 잘렸는지(truncated) 판단하는 데 쓴다. */
+    @Query("""
+            select count(m) from ChatMessage m
+            where m.relationId = :relationId
+              and (cast(:from as java.time.LocalDateTime) is null or m.createdAt >= :from)
+              and (cast(:to as java.time.LocalDateTime) is null or m.createdAt < :to)
+            """)
+    long countForExport(@Param("relationId") Long relationId,
+                        @Param("from") LocalDateTime from,
+                        @Param("to") LocalDateTime to);
 
     /** 회원 탈퇴 시 본인이 속한 관계의 모든 메시지 삭제 */
     @Modifying

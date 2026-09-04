@@ -2,6 +2,7 @@ package com.fitto.chat;
 
 import com.fitto.auth.dto.RegisterRequest;
 import com.fitto.auth.service.AuthService;
+import com.fitto.chat.dto.ChatExportResponse;
 import com.fitto.chat.dto.ChatMessageResponse;
 import com.fitto.chat.dto.ChatReactionSummary;
 import com.fitto.chat.dto.ChatRoomResponse;
@@ -12,11 +13,16 @@ import com.fitto.common.exception.ErrorCode;
 import com.fitto.relation.dto.InviteCodeResponse;
 import com.fitto.relation.dto.RelationResponse;
 import com.fitto.relation.service.RelationService;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -33,6 +39,10 @@ class ChatFlowTest {
     RelationService relationService;
     @Autowired
     ChatService chatService;
+    @Autowired
+    PlatformTransactionManager transactionManager;
+    @PersistenceContext
+    EntityManager em;
 
     private Long register(String email) {
         return authService.register(
@@ -268,5 +278,76 @@ class ChatFlowTest {
                 .filter(m -> "괜찮아".equals(m.content())).findFirst().orElseThrow();
         assertThat(reply.replyTo()).isNotNull();
         assertThat(reply.replyTo().content()).isNull();
+    }
+
+    /**
+     * createdAt 은 @CreatedDate 라 저장 시점에 고정된다 — 기간 필터를 테스트하려면 뒤로
+     * 옮긴다. {@code @Transactional} 을 이 메서드에 붙여도 소용없다 — 테스트가 이 메서드를
+     * 직접(self-invocation) 호출해 AOP 프록시를 안 타므로, TransactionTemplate 으로
+     * 명시적인 프로그래매틱 트랜잭션을 연다(ScheduledChatMessageFlowTest.backdate 와 동일).
+     */
+    private void backdate(Long messageId, java.time.LocalDateTime when) {
+        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
+                em.createNativeQuery("update chat_messages set created_at = :when where id = :id")
+                        .setParameter("when", when).setParameter("id", messageId).executeUpdate());
+        em.clear();
+    }
+
+    /** 대화 내보내기 — 오래된순으로 전체가 내려오고, 잘리지 않았다고 표시된다. */
+    @Test
+    void 대화_내보내기는_오래된순_전체를_내려준다() {
+        Long a = register("ex-a@fitto.com");
+        Long b = register("ex-b@fitto.com");
+        Long relationId = connectCouple(a, b);
+
+        chatService.send(a, relationId, new SendMessageRequest(null, "첫 메시지", null, null, null, null));
+        chatService.send(b, relationId, new SendMessageRequest(null, "두번째 메시지", null, null, null, null));
+        chatService.send(a, relationId, new SendMessageRequest(null, "세번째 메시지", null, null, null, null));
+
+        ChatExportResponse export = chatService.exportMessages(a, relationId, null, null);
+        assertThat(export.truncated()).isFalse();
+        assertThat(export.totalCount()).isEqualTo(3);
+        assertThat(export.messages()).extracting(ChatMessageResponse::content)
+                .containsExactly("첫 메시지", "두번째 메시지", "세번째 메시지");
+    }
+
+    /**
+     * from/to 기간 필터 — from 은 그날 00:00 부터, to 는 그날까지 <b>포함</b>해야 한다
+     * (ChatService.exportMessages 의 "to+1일 미만" 처리 참고).
+     */
+    @Test
+    void 대화_내보내기는_지정한_기간만_포함한다() {
+        Long a = register("ex-c@fitto.com");
+        Long b = register("ex-d@fitto.com");
+        Long relationId = connectCouple(a, b);
+
+        Long old = chatService.send(a, relationId,
+                new SendMessageRequest(null, "옛날 메시지", null, null, null, null)).id();
+        backdate(old, java.time.LocalDateTime.of(2020, 1, 1, 12, 0));
+        Long inRange = chatService.send(a, relationId,
+                new SendMessageRequest(null, "범위 안 메시지", null, null, null, null)).id();
+        backdate(inRange, java.time.LocalDateTime.of(2026, 6, 15, 23, 59));
+        Long tooLate = chatService.send(a, relationId,
+                new SendMessageRequest(null, "범위 밖 메시지", null, null, null, null)).id();
+        backdate(tooLate, java.time.LocalDateTime.of(2026, 7, 1, 0, 0));
+
+        ChatExportResponse export = chatService.exportMessages(
+                a, relationId, LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 30));
+        assertThat(export.totalCount()).isEqualTo(1);
+        assertThat(export.messages()).extracting(ChatMessageResponse::content)
+                .containsExactly("범위 안 메시지");
+    }
+
+    /** 관계에 속하지 않은 사람은 대화를 내보낼 수 없다. */
+    @Test
+    void 관계에_속하지_않은_사람은_대화를_내보낼_수_없다() {
+        Long a = register("ex-e@fitto.com");
+        Long b = register("ex-f@fitto.com");
+        Long outsider = register("ex-g@fitto.com");
+        Long relationId = connectCouple(a, b);
+
+        assertThatThrownBy(() -> chatService.exportMessages(outsider, relationId, null, null))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.FORBIDDEN);
     }
 }

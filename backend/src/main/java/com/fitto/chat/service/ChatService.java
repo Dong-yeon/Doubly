@@ -8,6 +8,7 @@ import com.fitto.chat.domain.StickerPack;
 import com.fitto.chat.domain.StickerImage;
 import com.fitto.chat.domain.TouchGesture;
 import com.fitto.chat.dto.ChatBookmarkResponse;
+import com.fitto.chat.dto.ChatExportResponse;
 import com.fitto.chat.dto.ChatMessageResponse;
 import com.fitto.chat.dto.ChatReactionSummary;
 import com.fitto.chat.dto.ChatRoomResponse;
@@ -35,6 +36,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -51,6 +54,8 @@ import java.util.stream.Collectors;
 public class ChatService {
 
     private static final int PAGE_SIZE = 30;
+    /** 대화 내보내기 상한 — 이보다 많으면 잘라서 내려주고 truncated=true 로 알린다. */
+    private static final int EXPORT_LIMIT = 20_000;
 
     private final ChatMessageRepository chatMessageRepository;
     private final ChatMessageReactionRepository reactionRepository;
@@ -133,6 +138,23 @@ public class ChatService {
         List<ChatMessage> images =
                 chatMessageRepository.findImages(relationId, cursor, PageRequest.of(0, PAGE_SIZE));
         return attachDetails(images);
+    }
+
+    /**
+     * 대화 내보내기 — from/to(둘 다 선택) 오래된순 전체. 상한(EXPORT_LIMIT)에 걸리면
+     * 잘라서 내려주고 {@link ChatExportResponse#truncated()} 로 알린다(가장 오래된 것부터
+     * 잘리므로, 사용자는 기간을 좁혀 다시 받으면 된다). from 은 그날 00:00, to 는 그날
+     * <b>다음 날</b> 00:00 미만으로 — "9/1~9/10"이 9/10 하루 전체를 포함하게 하기 위함
+     * (LocalDate 를 그대로 쓰면 자정 순간만 포함돼 그날 메시지가 통째로 빠진다).
+     */
+    public ChatExportResponse exportMessages(Long userId, Long relationId, LocalDate from, LocalDate to) {
+        requireMember(userId, relationId);
+        LocalDateTime fromAt = from == null ? null : from.atStartOfDay();
+        LocalDateTime toAt = to == null ? null : to.plusDays(1).atStartOfDay();
+        long total = chatMessageRepository.countForExport(relationId, fromAt, toAt);
+        List<ChatMessage> messages = chatMessageRepository.findForExport(
+                relationId, fromAt, toAt, PageRequest.of(0, EXPORT_LIMIT));
+        return new ChatExportResponse(attachDetails(messages), total, total > messages.size());
     }
 
     /**

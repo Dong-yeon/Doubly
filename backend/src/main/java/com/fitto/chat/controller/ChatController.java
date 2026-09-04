@@ -1,6 +1,7 @@
 package com.fitto.chat.controller;
 
 import com.fitto.chat.dto.ChatBookmarkResponse;
+import com.fitto.chat.dto.ChatExportResponse;
 import com.fitto.chat.dto.ChatMessageResponse;
 import com.fitto.chat.dto.ChatReactionSummary;
 import com.fitto.chat.dto.ChatRoomResponse;
@@ -34,6 +35,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -101,6 +103,18 @@ public class ChatController {
                                                          @PathVariable Long relationId,
                                                          @RequestParam(required = false) Long cursor) {
         return ApiResponse.success(chatService.getPhotos(user.id(), relationId, cursor));
+    }
+
+    /**
+     * 대화 내보내기 — from/to(둘 다 선택, YYYY-MM-DD) 오래된순 전체. 원가형이 아니라
+     * (텍스트 위주) 게이팅 없음 — docs/CHAT_RETENTION_AND_KAKAO_BENCHMARK_2026-09-03.md §6.
+     */
+    @GetMapping("/rooms/{relationId}/export")
+    public ApiResponse<ChatExportResponse> export(@AuthenticationPrincipal AuthUser user,
+                                                  @PathVariable Long relationId,
+                                                  @RequestParam(required = false) LocalDate from,
+                                                  @RequestParam(required = false) LocalDate to) {
+        return ApiResponse.success(chatService.exportMessages(user.id(), relationId, from, to));
     }
 
     /** 중요 대화 저장/저장 취소 — 토글. 커플 공용이라 한쪽이 취소해도 둘 다에서 사라진다. */
