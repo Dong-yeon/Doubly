@@ -381,12 +381,20 @@ public class ChatService {
         return detailOf(message);
     }
 
-    /** 메시지 삭제 — 작성자 본인만. 행은 남기고 표시만 바꾼다(답장·리액션 참조 유지). */
+    /**
+     * 메시지 삭제 — 작성자 본인만. 행은 남기고 표시만 바꾼다(답장·리액션 참조 유지).
+     * 지운 메시지가 고정된 공지였다면 고정도 함께 해제한다 — 안 지우면 배너가 빈
+     * 내용(soft delete 로 content 가 null 이 된 메시지)을 계속 가리키게 된다. 컨트롤러가
+     * 삭제 후 항상 {@link #getPinned} 를 다시 조회해 방에 브로드캐스트한다(호출부 참고).
+     */
     @Transactional
     public ChatMessageResponse delete(Long userId, Long messageId) {
         ChatMessage message = requireRoomMessage(userId, messageId);
         requireAuthor(message, userId);
         message.softDelete();
+        pinnedMessageRepository.findByRelationId(message.getRelationId())
+                .filter(p -> p.getMessageId().equals(messageId))
+                .ifPresent(pinnedMessageRepository::delete);
         return detailOf(message);
     }
 

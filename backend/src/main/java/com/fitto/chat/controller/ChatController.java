@@ -235,12 +235,19 @@ public class ChatController {
         return ApiResponse.success(updated, "메시지를 수정했어요.");
     }
 
-    /** 메시지 삭제 — 작성자 본인만. 내용만 지우고 자리는 남는다. */
+    /**
+     * 메시지 삭제 — 작성자 본인만. 내용만 지우고 자리는 남는다.
+     * 지운 메시지가 고정된 공지였을 수 있어(ChatService.delete 가 그 경우 고정을 해제한다)
+     * 매번 현재 고정 상태를 다시 조회해 브로드캐스트한다 — 관련 없는 삭제에도 도는
+     * 여분의 쿼리 한 번이지만, 조건을 따로 추적하는 것보다 항상 맞는 값을 보내는 쪽이 단순하다.
+     */
     @DeleteMapping("/messages/{messageId}")
     public ApiResponse<ChatMessageResponse> delete(@AuthenticationPrincipal AuthUser user,
                                                    @PathVariable Long messageId) {
         ChatMessageResponse deleted = chatService.delete(user.id(), messageId);
         messagingTemplate.convertAndSend("/sub/rooms/" + deleted.relationId() + "/updates", deleted);
+        messagingTemplate.convertAndSend("/sub/rooms/" + deleted.relationId() + "/pin",
+                new ChatPinResponse(deleted.relationId(), chatService.getPinned(user.id(), deleted.relationId())));
         return ApiResponse.success(deleted, "메시지를 삭제했어요.");
     }
 

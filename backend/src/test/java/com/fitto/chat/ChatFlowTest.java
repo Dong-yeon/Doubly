@@ -420,4 +420,23 @@ class ChatFlowTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.NOT_FOUND);
     }
+
+    /**
+     * 이미 고정된 메시지를 작성자가 삭제하면 고정도 함께 풀려야 한다 — 안 그러면
+     * 배너가 내용이 사라진(soft delete) 메시지를 계속 가리킨다.
+     */
+    @Test
+    void 고정된_메시지를_삭제하면_고정도_함께_풀린다() {
+        Long a = register("pin-i@fitto.com");
+        Long b = register("pin-j@fitto.com");
+        Long relationId = connectCouple(a, b);
+        Long msgId = chatService.send(a, relationId,
+                new SendMessageRequest(null, "고정했다가 지울 메시지", null, null, null, null)).id();
+        chatService.togglePin(a, msgId);
+        assertThat(chatService.getPinned(a, relationId)).isNotNull();
+
+        chatService.delete(a, msgId);
+
+        assertThat(chatService.getPinned(a, relationId)).isNull();
+    }
 }
