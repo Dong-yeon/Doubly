@@ -51,17 +51,45 @@
 (`README.md` 기능 로드맵 참고). 필요해지면(예: 응답률 데이터가 부재중 카드만으로는
 부족하다고 판단될 때) 다시 꺼내면 되고, 지금 당장 착수할 이유는 없습니다.
 
-## iOS는 지금 불가
+## iOS 통화 지원 (2026-09-07 갱신 — 아래 8/24 판정은 낡았음)
 
-8/24 세션의 판정이며, 위 검증과 무관하게 여전히 유효합니다.
+**이 절의 8/24 판정("iOS는 지금 불가")은 더 이상 유효하지 않습니다.** 근거였던 두 가지가
+그 사이에 다 해소됐습니다 — iOS 빌드·TestFlight 제출은 9/3부터 매일 쓰고 있고
+(`npm run build:ios`/`submit:ios`), Apple Developer Program(Individual, D9F8L9VS2S)도
+이미 활성 상태입니다. 낡은 문서를 그대로 믿고 "불가 확정"으로 재판정할 뻔했다가
+사용자가 "Apple Developer 계정까지 했잖아"로 정정 — 이 문서가 stale 정보의 실제
+사례라 교훈 삼아 남겨둔다.
 
-1. **빌드 자체가 없음** — `eas.json`의 `preview` 프로필에 iOS 옵션이 없고, 지금까지 만든 건 Android APK뿐입니다.
-2. **사이드로드 불가** — 링크로 설치하는 방식이 안 되고, ad-hoc 배포를 하려면 Apple Developer Program(연 $99) + 대상 아이폰 UDID 등록(`eas device:create`) + iOS 빌드가 필요합니다. 또는 TestFlight 경유.
-3. **네이티브 통합 격차** — `PLAN.md`가 iOS의 **PushKit VoIP + CallKit 네이티브 통합**을 "가장 위험한 지점"으로 지목하고 있는데, 현재 안드로이드 쪽도 2단계(네이티브 벨 웨이크업)는 보류 상태라 iOS 쪽은 아예 손대지 않았습니다.
+**2단계(네이티브 벨 웨이크업 — PushKit VoIP + CallKit)를 iOS 한정으로 구현 완료**
+(안드로이드는 그대로 미착수, 이 배치의 범위 밖):
 
-**타깃 커플 중 한쪽이라도 아이폰이면 지금은 통화 기능 자체가 무의미합니다**(안드-안드
-전용 설계). v1은 "안드-안드만 지원, 아이폰 쪽은 앱을 켜둬야 벨이 울림"으로 명시적으로
-고지하고 넘어가는 것도 합리적인 선택지입니다 — 지금 당장 결정할 필요는 없습니다.
+- Apple Developer Portal에 APNs Auth Key(.p8, Key ID `HW2FRFZB9N`, Team Scoped·
+  Sandbox & Production) 발급 — `secrets/AuthKey_HW2FRFZB9N.p8`(gitignore).
+  기존에 EAS가 자동 생성해둔 Expo Push용 키(`NB37ZH9N75`)와는 별개로 새로 만들었다
+  (EAS 저장 키는 다시 다운로드할 수 없고, 잘못 건드리면 기존 일반 푸시가 깨질 위험이 있어서).
+- Stream 대시보드(Chat/Video 공용 Push 설정 — "Push Notifications are used for both
+  Chat Messaging and Video & Audio")에 위 키를 Push Provider로 등록,
+  이름 `production-apn-video`, Remote Notifications + VoIP Notifications 둘 다 활성화.
+- `frontend/package.json`에 `@stream-io/react-native-callingx`(Stream 의 CallKit/
+  PushKit 네이티브 브릿지) 추가 — 별도 Expo config plugin 없이 순수 오토링킹.
+- `frontend/index.ts`: `registerRootComponent` **이전**(공식 요구사항 — VoIP push 는
+  앱이 완전 종료된 상태에서도 엔트리 파일 자체를 재실행시켜 깨우므로, 앱 생명주기
+  안에서 걸면 그 순간을 놓친다)에 `StreamVideoRN.setPushConfig({ ios: { pushProviderName:
+  'production-apn-video', callsHistory: true }, createStreamVideoClient })` 호출.
+- `frontend/src/store/callStore.ts`: 클라이언트 생성 로직을 `createVideoClient()`로
+  분리해 `init()`과 위 `createStreamVideoClient` 콜백이 공유. 후자는 JS 런타임이
+  방금 막 뜬 콜드 스타트 상황에서 불릴 수 있는데, `callApi.token()` 이 타는
+  `apiClient` 는 인메모리 authStore 가 아니라 SecureStore 에서 직접 토큰을 읽으므로
+  (`utils/storage.ts`) 별도 토큰 영속화 설계 없이 그대로 재사용 가능했다.
+- `app.json` 의 기존 `ringing: true`(Stream Video 플러그인)가 `UIBackgroundModes`에
+  `voip` 를 이미 자동으로 넣어주고, AppDelegate 에 `StreamVideoReactNative
+  .voipRegistration()` 도 자동 삽입한다 — 이 두 가지는 이번 작업 전부터 이미 돼
+  있었다(9/3 채팅 세션에서 `ringing:true` 를 켤 때 같이 들어간 것으로 추정, 당시엔
+  안 쓰였을 뿐). 앱 쪽 추가 네이티브 설정은 필요 없었다.
+
+**남은 것**: 네이티브 설정이라 EAS 리빌드해야 반영되고, **VoIP push 는 시뮬레이터에서
+동작하지 않아 실기기 테스트가 필수**다. 종료 상태 벨 수신·CallKit 응답 UI·앱 재기동 후
+통화 연결까지 실기기로 검증 전이면 이 문서를 갱신할 것.
 
 ## 통화 시간 한도 (`CallMinuteGuard`)
 

@@ -890,29 +890,35 @@ CALL_VIDEO("영상 통화", Quota.blocked(), Quota.unlimited()),
 | — | 실기기 검증 — Stream API 키를 `fitto-production` Railway 서비스에 등록 후 EAS 빌드로 두 계정 실통화 확인 | 코드는 타입체크만 통과한 상태라 실제 벨·오디오·영상 송수신은 미검증 | 🚧 예정(동연님 확인 필요) |
 | 3 | 채팅 통화 카드(`MessageType.CALL_CARD` — 정상종료/부재중/거절 + "다시 걸기") + 30초 무응답 판정(`CallSessionSweeper`) | 네이티브 벨 웨이크업 없이 "전화 왔었어요"를 전달하는 대체 경로 — 기존 채팅 알림 인프라 재사용 | ✅ 완료 — `CallService.recordOutcome`, `CallSessionSweeperTest` 3건. 안 읽은 배지의 "부재중 통화 n건" 세분화는 남음 |
 | 4 | Plan 게이팅(`CALL_VOICE`/`CALL_VIDEO`, `Quota` 분 단위 확장) | Maker Account 무료 한도(월 333,000 참가자-분) 안에서는 급하지 않음 | 🚧 예정 |
-| (선택) | **네이티브 벨 웨이크업**(VoIP push + CallKit/ConnectionService) | 위 3단계가 같은 목적을 달성해 우선순위 하향. 실기기 검증 후 "진짜 벨이 안 울려 불편하다"는 신호가 뚜렷해지면 재검토 | ⏸ 보류 — 아래 [네이티브 벨 웨이크업](#feature-네이티브-벨-웨이크업-callkitpushkit--선택적-고급화) 참고 |
+| (선택) | **네이티브 벨 웨이크업**(VoIP push + CallKit/ConnectionService) | 위 3단계가 같은 목적을 달성해 우선순위 하향 — **iOS 는 2026-09-07 구현 완료, Android 는 여전히 보류** | 🚧 iOS 실기기 검증 대기, Android는 ⏸ 보류 — 아래 [네이티브 벨 웨이크업](#feature-네이티브-벨-웨이크업-callkitpushkit--선택적-고급화) 참고 |
 
 ---
 
 ## Feature: 네이티브 벨 웨이크업 (CallKit/PushKit) — 선택적 고급화
 
-> **상태: 보류(선택).** 원래 통화 스펙의 3단계였으나, [부재중 통화
-> 카드](#부재중-통화-카드--네이티브-벨-대신-택한-경로-)가 같은 목적("전화 왔었어요, 다시
-> 걸어주세요")을 EAS 커스텀 네이티브 빌드·OS별 코드 없이 달성해 우선순위가 낮아졌다.
-> 실기기 검증 후 사용자 피드백에서 "진짜 벨이 안 울려서 불편하다"는 신호가 뚜렷해지면
-> 그때 재검토한다. 아래는 착수할 때를 위해 남겨둔 요구사항이다.
+> **상태: iOS 구현 완료(실기기 검증 대기), Android 는 여전히 보류.** 원래 통화 스펙의
+> 3단계였고, [부재중 통화 카드](#부재중-통화-카드--네이티브-벨-대신-택한-경로-)가 같은
+> 목적을 대체 경로로 이미 달성해뒀던 터라 우선순위가 낮았다. 2026-09-07, 사용자가
+> "Apple Developer 계정까지 했잖아"로 정정하면서 iOS 쪽만 재개 — 아래 "가장 위험한
+> 지점"으로 지목했던 PushKit/CallKit 네이티브 통합은 **Stream Video SDK 가 이미
+> `@stream-io/react-native-callingx` 로 대신 해준다**는 게 실제로 붙여보고 나서
+> 확인된 사실이라, 우려했던 것보다 훨씬 가벼웠다(직접 native 코드를 짤 필요 없이
+> `StreamVideoRN.setPushConfig()` JS 호출 + Apple/Stream 대시보드 설정만으로 끝났다).
+> 자세한 구현 내용은 [docs/CALL_STATUS.md](docs/CALL_STATUS.md#ios-통화-지원-2026-09-07-갱신--아래-824-판정은-낡았음) 참고.
+> Android(고우선순위 FCM)는 이번 배치 범위 밖 — 아래 요구사항 그대로 유효하다.
 
 ### 네이티브 통합 — SDK가 대신 안 해주는 부분 (가장 위험한 지점)
 
-- **iOS**: PushKit VoIP 등록 + CallKit 연동. Expo 관리형 워크플로우만으로는 불가 — prebuild/config
-  plugin 필요. 다만 이미 `expo-dev-client` + 커스텀 네이티브 플러그인 2종(`@sentry/react-native`,
-  `react-native-android-widget`)을 쓰고 있어 EAS 커스텀 빌드 체계 자체는 선례가 있음
+- ~~**iOS**: PushKit VoIP 등록 + CallKit 연동. Expo 관리형 워크플로우만으로는 불가~~ —
+  **틀렸다.** `@stream-io/react-native-callingx`(순수 오토링킹, config plugin 불필요)
+  + 기존에 이미 켜져 있던 `ringing:true`(AppDelegate 자동 삽입)로 커스텀 네이티브 코드
+  없이 됐다. 아래 Android 항목은 아직 검증 전이라 그대로 남겨둔다.
 - **Android**: 고우선순위 FCM 등록 — 현재 `expo-notifications`/Expo Push 경로는 우선순위를
   세밀하게 제어하지 못할 가능성이 있어([ExpoPushNotificationService.java](backend/src/main/java/com/fitto/notification/service/ExpoPushNotificationService.java)는 애초에 "유실돼도 되는" 설계),
   통화 벨은 별도의 네이티브 FCM 등록 경로가 필요할 수 있음 — **착수 전 확인 필요 항목**
 - 이 항목을 과소평가하면 "통화 연결은 되는데 앱이 꺼져 있으면 상대가 전화 온 걸 모른다"는
   상태로 반쯤 완성된 채 멈추기 쉽다. 부재중 카드로 최악의 상황(영영 모름)은 이미 막았지만,
-  "폰이 직접 울리는" 경험 자체는 여전히 이 단계 없이는 없다.
+  "폰이 직접 울리는" 경험 자체는 Android 쪽엔 여전히 이 단계 없이는 없다.
 
 ---
 
