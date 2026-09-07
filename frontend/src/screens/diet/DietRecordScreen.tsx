@@ -25,6 +25,7 @@ import { FormKeyboardView } from '../../components/FormKeyboardView';
 import { DateField } from '../../components/DateField';
 import { Chip } from '../../components/Chip';
 import { Sheet } from '../../components/Sheet';
+import { ImageViewer } from '../../components/ImageViewer';
 import { useDietStore } from '../../store/dietStore';
 import { useRelationStore } from '../../store/relationStore';
 import { usePlaceStore } from '../../store/placeStore';
@@ -122,6 +123,13 @@ export function DietRecordScreen({ navigation, route }: Props) {
     editing && !editing.items?.length && editing.calories ? String(editing.calories) : '',
   );
   const [photoUri, setPhotoUri] = useState<string | null>(editing?.photoUrl ?? null);
+  /**
+   * 크게 보기·저장(다운로드)·공유 — 원격(Cloudinary) 사진에만 의미가 있다. 방금 고른
+   * 로컬 사진(file://)은 이미 기기 안에 있어 "다운로드"할 대상이 아니다. 데이트 식단으로
+   * 상대가 등록한 사진처럼, 내 기기에는 없던 사진을 볼 때를 위한 진입점이다.
+   */
+  const [photoViewerOpen, setPhotoViewerOpen] = useState(false);
+  const isRemotePhoto = !!photoUri && /^https?:\/\//.test(photoUri);
   /**
    * 사진 원본 크기 — 사진 위 칩(음식 위치 표시)을 정확히 앉히려고 필요하다. 사진 컨테이너가
    * 이 비율(aspectRatio)을 그대로 쓰면 cover/contain 이 같아져(잘리는 부분이 없어) box 의
@@ -1093,6 +1101,18 @@ export function DietRecordScreen({ navigation, route }: Props) {
                   ) : null,
                 )
               : null}
+            {/* 크게 보기(저장·공유) — 방금 고른 로컬 사진은 대상이 아니라 원격 사진일 때만 노출 */}
+            {isRemotePhoto ? (
+              <TouchableOpacity
+                style={styles.photoViewBtn}
+                onPress={() => setPhotoViewerOpen(true)}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="사진 크게 보기 · 저장"
+              >
+                <MaterialCommunityIcons name="download" size={18} color={colors.white} />
+              </TouchableOpacity>
+            ) : null}
           </View>
           {photoUri ? (
             <TouchableOpacity
@@ -1492,6 +1512,12 @@ export function DietRecordScreen({ navigation, route }: Props) {
 
         <Button title="닫기" variant="ghost" size="md" onPress={closePlaceSheet} />
       </Sheet>
+
+      <ImageViewer
+        images={photoUri ? [{ key: 'meal-photo', uri: photoUri }] : []}
+        initialIndex={photoViewerOpen ? 0 : null}
+        onClose={() => setPhotoViewerOpen(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -1555,6 +1581,17 @@ const styles = themedStyles((colors) => ({
     ...shadow.sm,
   },
   photoChipText: { color: onColor(colors.primary), fontSize: fontSize.caption, fontWeight: '800' },
+  photoViewBtn: {
+    position: 'absolute',
+    right: spacing.sm,
+    bottom: spacing.sm,
+    width: 32,
+    height: 32,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   removePhoto: { color: colors.danger, fontSize: fontSize.caption, marginTop: spacing.xs, alignSelf: 'flex-end' },
   analyzeButton: { marginTop: spacing.sm },
   analyzeHint: { color: colors.textSecondary, fontSize: fontSize.caption, marginTop: spacing.xs, textAlign: 'center' },
