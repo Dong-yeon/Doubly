@@ -135,14 +135,21 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   // 입력바 보조 도구는 기본으로 숨겨져 있다가 "+"로 펼친다 — 스티커 패널과는
   // 자리를 공유해서 항상 둘 중 하나만 뜬다(토글 핸들러들이 서로를 닫아준다).
   const [showStickers, setShowStickers] = useState(false);
+  /*
+   * 패널 안 탭 — 이모티콘(캐릭터 그림)과 이모지(유니코드)를 한 패널에서 나눈다.
+   *
+   * 2026-09-07 이전엔 트레이 버튼이 둘("스티커"·"이모티콘")로 나뉘어 있었는데,
+   * "이모티콘"을 누르면 곰돌이 한 마리만 뜨는 패널이 열려 기능이 아니라 고장처럼
+   * 보였다. 탭으로 합치면 항목이 적은 쪽도 "빈 패널"이 되지 않는다.
+   *
+   * 기본이 이모지 탭인 것도 같은 이유다 — 패널을 열면 일단 꽉 찬 격자가 보인다.
+   * 캐릭터 이모티콘이 늘어나면 기본을 'image' 로 뒤집는다.
+   */
+  const [stickerTab, setStickerTab] = useState<'emoji' | 'image'>('emoji');
   /* 시즌 스티커 게이팅 — 표시용 판정이다(최종 판정은 서버). planStore 주석 참고 */
   const premiumStickerAllowed = usePlanStore((s) => s.can('PREMIUM_STICKER'));
   const showUpgrade = usePlanStore((s) => s.showUpgrade);
   const [showExtras, setShowExtras] = useState(false);
-  // 이미지 스티커(곰돌이 등 캐릭터 일러스트) 전용 패널 — 이모지 스티커와 자리를
-  // 공유한다는 점, 트레이에서 열린다는 점 모두 스티커 패널과 같다(2026-09-03,
-  // "터치"를 대체해 트레이에 들어왔다 — 아래 sendSticker 주석 참고).
-  const [showEmoticons, setShowEmoticons] = useState(false);
   // 대화 검색 — 헤더 돋보기 버튼으로 연다(2026-09-03, 전체 기간 서버 검색)
   const [showSearch, setShowSearch] = useState(false);
   // 헤더 "⋮" — 사진 모아보기·저장한 대화(자주 안 쓰는 항목이라 아이콘을 더 늘리지 않고 묶는다)
@@ -641,7 +648,6 @@ export function ChatRoomScreen({ navigation, route }: Props) {
       return;
     }
     setShowStickers(false);
-    setShowEmoticons(false);
     haptics.light();
     scrollToBottom();
     const ok = await send(relationId, { messageType: 'STICKER', content: sticker });
@@ -1151,21 +1157,19 @@ export function ChatRoomScreen({ navigation, route }: Props) {
          */}
         {showExtras ? (
           <View style={styles.extrasPanel}>
-            <ExtraButton
-              icon="sticker-emoji"
-              label="스티커"
-              onPress={() => { setShowExtras(false); setShowEmoticons(false); setShowStickers(true); }}
-            />
             {/*
-             * 예전엔 여기가 "터치"(가상 터치 제스처)였다 — 채팅 로그에서 스티커와 거의
-             * 구분이 안 돼(말풍선 없이 크게 그려지는 것도 같다) 기능이 겹친다는 리포트로
-             * 2026-09-03 에 뺐다. 캐릭터 일러스트 스티커(곰돌이 등)를 이모지 스티커와
-             * 분리해 그 자리에 넣는다 — 이모지는 "스티커", 캐릭터는 "이모티콘".
+             * 2026-09-03 엔 "스티커"(유니코드 이모지)와 "이모티콘"(캐릭터 그림)이 트레이
+             * 버튼 두 개로 나뉘어 있었다. 2026-09-07 에 하나로 합친다 — 이유가 둘이다.
+             *
+             * ①"이모티콘" 패널에 항목이 하나(곰돌이)뿐이라 고장처럼 보였다.
+             * ②이름이 사용자 기대와 반대였다 — 카톡 기준으로 "이모티콘"은 캐릭터 그림,
+             *   "이모지"는 유니코드다. 유니코드를 "스티커"라 부르면 눌렀을 때 기대가
+             *   어긋난다. 이제 패널 안 탭이 각각 제 이름을 갖는다.
              */}
             <ExtraButton
               icon="emoticon-outline"
               label="이모티콘"
-              onPress={() => { setShowExtras(false); setShowStickers(false); setShowEmoticons(true); }}
+              onPress={() => { setShowExtras(false); setShowStickers(true); }}
             />
             <ExtraButton
               icon="camera-outline"
@@ -1185,62 +1189,91 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           </View>
         ) : null}
         {showStickers ? (
-          // 팩이 6개(48종)라 한 화면에 안 들어간다 — 패널 안에서만 스크롤한다
-          <ScrollView style={styles.stickerScroll} contentContainerStyle={styles.stickerPanel}>
-            <Pressable
-              style={({ pressed }) => [styles.stickerBtn, pressed && styles.iconPressed]}
-              onPress={() => { setShowStickers(false); setShowEmojiSheet(true); }}
-              accessibilityRole="button"
-              accessibilityLabel="이모지 더 보기"
-              // 격자라 크기를 키우면 열 수가 바뀐다 — 터치 영역만 넓힌다
-              hitSlop={4}
-            >
-              <MaterialCommunityIcons name="dots-horizontal" size={24} color={colors.textSecondary} />
-            </Pressable>
-            {STICKER_PACKS.flatMap((pack) => {
-              const locked = pack.premium && !premiumStickerAllowed;
-              return [
-                // 팩 구분선 겸 이름표 — 기본 세트는 이름 없이 바로 시작한다(예전 그대로)
-                pack.premium ? (
-                  <View key={`${pack.key}-label`} style={styles.stickerPackLabel}>
-                    <Text style={styles.stickerPackLabelText}>{pack.label}</Text>
-                    {locked ? <Text style={styles.stickerPackBadge}>PRO</Text> : null}
-                  </View>
-                ) : null,
-                // 이 팩엔 이제 이모지만 있다(캐릭터 일러스트는 아래 이모티콘 패널로 옮김)
-                ...pack.stickers.map((s) => (
+          <View>
+            {/* 탭 — 각자 제 이름을 갖는다(위 트레이 주석 참고) */}
+            <View style={styles.stickerTabs}>
+              {([
+                { key: 'emoji', label: '이모지' },
+                { key: 'image', label: '이모티콘' },
+              ] as const).map((t) => (
+                <Pressable
+                  key={t.key}
+                  style={[styles.stickerTab, stickerTab === t.key && styles.stickerTabActive]}
+                  onPress={() => setStickerTab(t.key)}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: stickerTab === t.key }}
+                >
+                  <Text style={[styles.stickerTabText, stickerTab === t.key && styles.stickerTabTextActive]}>
+                    {t.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
+            {stickerTab === 'emoji' ? (
+              <>
+                {/* 팩이 6개(56종)라 한 화면에 안 들어간다 — 패널 안에서만 스크롤한다 */}
+                <ScrollView style={styles.stickerScroll} contentContainerStyle={styles.stickerPanel}>
+                  {STICKER_PACKS.flatMap((pack) => {
+                    const locked = pack.premium && !premiumStickerAllowed;
+                    return [
+                      // 팩 구분선 겸 이름표 — 기본 세트는 이름 없이 바로 시작한다(예전 그대로)
+                      pack.premium ? (
+                        <View key={`${pack.key}-label`} style={styles.stickerPackLabel}>
+                          <Text style={styles.stickerPackLabelText}>{pack.label}</Text>
+                          {locked ? <Text style={styles.stickerPackBadge}>PRO</Text> : null}
+                        </View>
+                      ) : null,
+                      ...pack.stickers.map((s) => (
+                        <Pressable
+                          key={s}
+                          style={({ pressed }) => [
+                            styles.stickerBtn,
+                            locked && styles.stickerLocked,
+                            pressed && styles.iconPressed,
+                          ]}
+                          onPress={() => sendSticker(s, locked, pack.label)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`이모지 ${s} 보내기${locked ? ' — PRO 기능' : ''}`}
+                        >
+                          <Text style={styles.stickerEmoji}>{s}</Text>
+                        </Pressable>
+                      )),
+                    ];
+                  })}
+                </ScrollView>
+                {/*
+                 * 96종짜리 이모지 피커(카테고리 6개 + 한글 검색) 진입점.
+                 *
+                 * 예전엔 격자 안 "⋯" 아이콘 한 칸이었다 — 앱에서 이모지가 가장 많은 곳인데
+                 * 스티커 한 칸처럼 생겨서 발견이 안 됐다(2026-09-07 분석). 글자를 붙인
+                 * 줄로 빼면 격자 열 수도 안 흔들리고 무엇인지도 읽힌다.
+                 */}
+                <Pressable
+                  style={({ pressed }) => [styles.moreEmojiRow, pressed && styles.iconPressed]}
+                  onPress={() => { setShowStickers(false); setShowEmojiSheet(true); }}
+                  accessibilityRole="button"
+                  accessibilityLabel="이모지 더 보기 — 검색으로 찾기"
+                >
+                  <MaterialCommunityIcons name="magnify" size={18} color={colors.textSecondary} />
+                  <Text style={styles.moreEmojiText}>이모지 더 보기 · 검색</Text>
+                </Pressable>
+              </>
+            ) : (
+              <ScrollView style={styles.stickerScroll} contentContainerStyle={styles.stickerPanel}>
+                {STICKER_IMAGES.map((img) => (
                   <Pressable
-                    key={s}
-                    style={({ pressed }) => [
-                      styles.stickerBtn,
-                      locked && styles.stickerLocked,
-                      pressed && styles.iconPressed,
-                    ]}
-                    onPress={() => sendSticker(s, locked, pack.label)}
+                    key={img.code}
+                    style={({ pressed }) => [styles.stickerBtn, pressed && styles.iconPressed]}
+                    onPress={() => sendSticker(img.code, false, '이모티콘')}
                     accessibilityRole="button"
-                    accessibilityLabel={`스티커 ${s} 보내기${locked ? ' — PRO 기능' : ''}`}
+                    accessibilityLabel={`이모티콘 ${img.label} 보내기`}
                   >
-                    <Text style={styles.stickerEmoji}>{s}</Text>
+                    <Image source={img.source} style={styles.stickerBtnImage} resizeMode="contain" />
                   </Pressable>
-                )),
-              ];
-            })}
-          </ScrollView>
-        ) : null}
-        {showEmoticons ? (
-          // 캐릭터 일러스트 스티커 — 지금은 LOVE_BEAR 하나뿐이라 스크롤 없이도 다 보인다
-          <View style={styles.stickerPanel}>
-            {STICKER_IMAGES.map((img) => (
-              <Pressable
-                key={img.code}
-                style={({ pressed }) => [styles.stickerBtn, pressed && styles.iconPressed]}
-                onPress={() => sendSticker(img.code, false, '이모티콘')}
-                accessibilityRole="button"
-                accessibilityLabel={`이모티콘 ${img.label} 보내기`}
-              >
-                <Image source={img.source} style={styles.stickerBtnImage} resizeMode="contain" />
-              </Pressable>
-            ))}
+                ))}
+              </ScrollView>
+            )}
           </View>
         ) : null}
         {/* 답장·수정 중 배너 — 무엇에 대해 쓰고 있는지 보여주고 취소할 수 있게 */}
@@ -1280,9 +1313,9 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           ) : (
             <TouchableOpacity
               style={[styles.imageBtn, showExtras && styles.stickerToggleActive]}
-              onPress={() => { setShowStickers(false); setShowEmoticons(false); setShowExtras((v) => !v); }}
+              onPress={() => { setShowStickers(false); setShowExtras((v) => !v); }}
               accessibilityRole="button"
-              accessibilityLabel={showExtras ? '보조 도구 닫기' : '스티커·이모티콘·사진 더 보기'}
+              accessibilityLabel={showExtras ? '보조 도구 닫기' : '이모티콘·사진 더 보기'}
             >
               <MaterialCommunityIcons
                 name={showExtras ? 'close' : 'plus'}
@@ -1537,6 +1570,36 @@ const styles = themedStyles((colors) => ({
   stickerBtnImage: { width: 32, height: 32 },
   // 팩이 늘어 한 화면을 넘긴다 — 입력바를 밀어내지 않도록 높이를 묶는다
   stickerScroll: { maxHeight: 220 },
+  // 이모지 / 이모티콘 탭 — 패널 맨 위 한 줄
+  stickerTabs: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingTop: spacing.sm,
+  },
+  stickerTab: {
+    paddingHorizontal: spacing.md,
+    minHeight: 36,
+    justifyContent: 'center',
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceAlt,
+  },
+  stickerTabActive: { backgroundColor: colors.primary },
+  stickerTabText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary },
+  stickerTabTextActive: { color: colors.white },
+  // "이모지 더 보기" — 격자 밖 한 줄이라 열 수를 흔들지 않는다
+  moreEmojiRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    minHeight: 44,
+    marginHorizontal: spacing.sm,
+    marginTop: spacing.xs,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceAlt,
+  },
+  moreEmojiText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary },
   // 줄 전체를 차지하는 이름표 — space-between 격자 안에서 폭 100%로 줄을 끊는다
   stickerPackLabel: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.xs },
   stickerPackLabelText: { fontSize: fontSize.caption, fontWeight: '800', color: colors.textSecondary },
