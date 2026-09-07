@@ -41,3 +41,18 @@ export function formatMoney(value: number): string {
 export function formatWeight(value: number): string {
   return `${Number(value.toFixed(1))}kg`;
 }
+
+/**
+ * 받침에 맞는 조사를 붙인다 — "봄 스티커는" / "움직이는 이모티콘은".
+ *
+ * <p>안내 문구를 템플릿으로 조립하면 조사가 어긋난다("이모티콘는"). 한글 음절은
+ * (코드 - 0xAC00) % 28 이 0 이 아니면 받침이 있으므로 그것만 보면 된다. 한글이 아닌
+ * 글자로 끝나면 받침 없음으로 본다(영문·숫자 혼용 라벨은 지금 없다).
+ */
+export function withJosa(word: string, withBatchim: string, withoutBatchim: string): string {
+  const last = word.trim().slice(-1);
+  const code = last.charCodeAt(0);
+  const isHangul = code >= 0xac00 && code <= 0xd7a3;
+  const hasBatchim = isHangul && (code - 0xac00) % 28 !== 0;
+  return word + (hasBatchim ? withBatchim : withoutBatchim);
+}

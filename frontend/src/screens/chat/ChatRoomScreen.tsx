@@ -17,6 +17,8 @@ import {
   View,
 } from 'react-native';
 import { Alert } from '../../utils/alert';
+import { withJosa } from '../../utils/format';
+import LottieView from 'lottie-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { Button } from '../../components/Button';
@@ -63,6 +65,7 @@ import { isPrShareContent } from '../../utils/workoutShare';
 import { isGoalShareContent } from '../../utils/dietShare';
 import { touchGestureOf } from '../../constants/touchGestures';
 import { callCardLabel, parseCallCard } from '../../utils/callCard';
+import { ANIMATED_STICKERS, animatedStickerOf } from '../../constants/animatedStickers';
 import { STICKER_IMAGES, stickerImageOf } from '../../constants/stickerImages';
 import { STICKER_PACKS } from '../../constants/stickerPacks';
 import { playTouchGesture } from '../../utils/haptics';
@@ -142,10 +145,10 @@ export function ChatRoomScreen({ navigation, route }: Props) {
    * "이모티콘"을 누르면 곰돌이 한 마리만 뜨는 패널이 열려 기능이 아니라 고장처럼
    * 보였다. 탭으로 합치면 항목이 적은 쪽도 "빈 패널"이 되지 않는다.
    *
-   * 기본이 이모지 탭인 것도 같은 이유다 — 패널을 열면 일단 꽉 찬 격자가 보인다.
-   * 캐릭터 이모티콘이 늘어나면 기본을 'image' 로 뒤집는다.
+   * 기본 탭은 이모티콘이다 — 2026-09-07 에 움직이는 이모티콘 30종이 들어오면서
+   * 이쪽이 더 풍성해졌고, 이 앱에서 파는 것도 이쪽이다(AnimatedSticker 주석).
    */
-  const [stickerTab, setStickerTab] = useState<'emoji' | 'image'>('emoji');
+  const [stickerTab, setStickerTab] = useState<'emoji' | 'image'>('image');
   /* 시즌 스티커 게이팅 — 표시용 판정이다(최종 판정은 서버). planStore 주석 참고 */
   const premiumStickerAllowed = usePlanStore((s) => s.can('PREMIUM_STICKER'));
   const showUpgrade = usePlanStore((s) => s.showUpgrade);
@@ -644,7 +647,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
    */
   const sendSticker = async (sticker: string, locked: boolean, label: string) => {
     if (locked) {
-      showUpgrade(`${label} 스티커는 PRO에서 보낼 수 있어요.`);
+      showUpgrade(`${withJosa(label, '은', '는')} PRO에서 보낼 수 있어요.`);
       return;
     }
     setShowStickers(false);
@@ -875,7 +878,19 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           </View>
         ) : null}
         {isSticker ? (
-          stickerImageOf(item.content) ? (
+          animatedStickerOf(item.content) ? (
+            /*
+             * 한 번만 재생하고 멈춘다(loop 없음). 대화 로그에 스티커가 여러 개 쌓이면
+             * 무한 반복은 시선을 뺏고 배터리를 먹는다 — Noto 애니메이션은 마지막
+             * 프레임이 처음과 같은 정지 자세라 멈춰도 어색하지 않다.
+             */
+            <LottieView
+              source={animatedStickerOf(item.content)!.source}
+              style={styles.stickerImage}
+              autoPlay
+              loop={false}
+            />
+          ) : stickerImageOf(item.content) ? (
             <Image source={stickerImageOf(item.content)!.source} style={styles.stickerImage} resizeMode="contain" />
           ) : (
             <Text style={styles.sticker}>{item.content}</Text>
@@ -1232,7 +1247,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
                             locked && styles.stickerLocked,
                             pressed && styles.iconPressed,
                           ]}
-                          onPress={() => sendSticker(s, locked, pack.label)}
+                          onPress={() => sendSticker(s, locked, `${pack.label} 스티커`)}
                           accessibilityRole="button"
                           accessibilityLabel={`이모지 ${s} 보내기${locked ? ' — PRO 기능' : ''}`}
                         >
@@ -1261,6 +1276,41 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               </>
             ) : (
               <ScrollView style={styles.stickerScroll} contentContainerStyle={styles.stickerPanel}>
+                {/*
+                 * 격자에는 정적 썸네일만 쓴다 — 30개를 한꺼번에 재생시키면 저사양 기기에서
+                 * 프레임이 떨어진다. 움직이는 건 보낸 뒤 말풍선 하나뿐이다
+                 * (animatedStickers.ts 주석).
+                 */}
+                {ANIMATED_STICKERS.map((a, i) => {
+                  const locked = a.premium && !premiumStickerAllowed;
+                  // 무료 6종이 끝나고 PRO 구간이 시작되는 자리에 이름표를 끼운다
+                  const startsPro = a.premium && !ANIMATED_STICKERS[i - 1]?.premium;
+                  return (
+                    <React.Fragment key={a.code}>
+                      {startsPro ? (
+                        <View style={styles.stickerPackLabel}>
+                          <Text style={styles.stickerPackLabelText}>움직이는 이모티콘</Text>
+                          {locked ? <Text style={styles.stickerPackBadge}>PRO</Text> : null}
+                        </View>
+                      ) : null}
+                      <Pressable
+                        style={({ pressed }) => [
+                          styles.stickerBtn,
+                          locked && styles.stickerLocked,
+                          pressed && styles.iconPressed,
+                        ]}
+                        onPress={() => sendSticker(a.code, locked, '움직이는 이모티콘')}
+                        accessibilityRole="button"
+                        accessibilityLabel={`이모티콘 ${a.label} 보내기${locked ? ' — PRO 기능' : ''}`}
+                      >
+                        <Image source={a.thumb} style={styles.stickerBtnImage} resizeMode="contain" />
+                      </Pressable>
+                    </React.Fragment>
+                  );
+                })}
+                <View style={styles.stickerPackLabel}>
+                  <Text style={styles.stickerPackLabelText}>캐릭터</Text>
+                </View>
                 {STICKER_IMAGES.map((img) => (
                   <Pressable
                     key={img.code}

@@ -7,6 +7,7 @@
  */
 import type { MessageType } from '../types';
 import { touchGestureOf } from '../constants/touchGestures';
+import { animatedStickerOf } from '../constants/animatedStickers';
 import { stickerImageOf } from '../constants/stickerImages';
 import { callCardLabel, parseCallCard } from './callCard';
 import { formatVoiceDuration, parseVoiceContent } from './chatVoice';
@@ -18,7 +19,9 @@ export function messagePreview(type: MessageType, content?: string | null): stri
     // 이모지 스티커는 이모지 자체가 가장 좋은 미리보기다. 이미지 스티커는 content 가
     // 'LOVE_BEAR' 같은 코드라 라벨로 바꿔야 한다(TOUCH 와 같은 이유).
     case 'STICKER':
-      return stickerImageOf(content)?.label ?? content ?? '스티커';
+      return (
+        animatedStickerOf(content)?.label ?? stickerImageOf(content)?.label ?? content ?? '스티커'
+      );
     case 'WORKOUT_CARD':
       return '운동 기록';
     case 'MEAL_CARD':
