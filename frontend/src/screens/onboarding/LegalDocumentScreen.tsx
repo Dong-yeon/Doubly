@@ -1,4 +1,4 @@
-/** 약관·개인정보처리방침 전문 보기 (AUTH-09) */
+/** 약관·개인정보처리방침·오픈소스 고지 전문 보기 (AUTH-09) */
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,6 +8,7 @@ import {
   TERMS_OF_SERVICE,
   TERMS_VERSION,
 } from '../../constants/legal';
+import { OPEN_SOURCE_NOTICE } from '../../constants/openSourceLicenses';
 import { colors, fontSize, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 
@@ -17,14 +18,21 @@ import { themedStyles } from '../../theme/themedStyles';
  */
 type Props = {
   navigation: { goBack: () => void };
-  route: { params: { doc: 'terms' | 'privacy' } };
+  route: { params: { doc: 'terms' | 'privacy' | 'oss' } };
 };
 
+/*
+ * 오픈소스 고지는 개정 이력을 따로 관리하지 않는다 — 약관·방침과 달리 재동의 대상이
+ * 아니고, 의존성이 바뀔 때마다 갱신되는 목록이라 버전을 붙여도 의미가 없다.
+ */
+const DOCS = {
+  terms: { title: '이용약관', body: TERMS_OF_SERVICE, version: TERMS_VERSION },
+  privacy: { title: '개인정보처리방침', body: PRIVACY_POLICY, version: PRIVACY_VERSION },
+  oss: { title: '오픈소스 라이선스', body: OPEN_SOURCE_NOTICE, version: null },
+} as const;
+
 export function LegalDocumentScreen({ navigation, route }: Props) {
-  const isTerms = route.params.doc === 'terms';
-  const title = isTerms ? '이용약관' : '개인정보처리방침';
-  const body = isTerms ? TERMS_OF_SERVICE : PRIVACY_POLICY;
-  const version = isTerms ? TERMS_VERSION : PRIVACY_VERSION;
+  const { title, body, version } = DOCS[route.params.doc];
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
@@ -38,7 +46,7 @@ export function LegalDocumentScreen({ navigation, route }: Props) {
           <Text style={styles.backText}>닫기</Text>
         </Pressable>
         <Text style={styles.title}>{title}</Text>
-        <Text style={styles.version}>v{version}</Text>
+        {version ? <Text style={styles.version}>v{version}</Text> : null}
       </View>
 
       <ScrollView contentContainerStyle={styles.container}>

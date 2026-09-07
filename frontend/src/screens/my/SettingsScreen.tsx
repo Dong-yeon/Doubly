@@ -360,6 +360,19 @@ export function SettingsScreen({ navigation }: Props) {
             <Text style={styles.rowTitle}>개인정보처리방침</Text>
             <Text style={styles.version}>v{PRIVACY_VERSION}</Text>
           </Pressable>
+          <View style={styles.divider} />
+          {/*
+           * 오픈소스 고지 — 선택이 아니라 의무다. 맞춤법·띄어쓰기 기능이 Hunspell(LGPL)·
+           * 한국어 사전(GPL-3.0)·Kiwi(LGPL)를 네이티브 바이너리로 번들하고 있어서,
+           * 이 화면이 없으면 스토어에 올리는 것 자체가 라이선스 위반이다(2026-09-07).
+           */}
+          <Pressable
+            style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
+            onPress={() => navigation.navigate('LegalDocument', { doc: 'oss' })}
+          >
+            <Text style={styles.rowTitle}>오픈소스 라이선스</Text>
+            <Text style={styles.chevron}>›</Text>
+          </Pressable>
         </Card>
 
         <Card elevation="sm" style={styles.section}>

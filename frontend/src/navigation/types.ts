@@ -13,7 +13,7 @@ export type OnboardingStackParamList = {
   ForgotPassword: undefined;
   ResetPassword: { email: string };
   // 약관 전문 보기
-  LegalDocument: { doc: 'terms' | 'privacy' };
+  LegalDocument: { doc: 'terms' | 'privacy' | 'oss' };
 };
 
 // 홈 탭 내부 스택 — 홈 / 커플 연결 / 우리 기록(피드) / MY(프로필·트레이너) / 여행(TRIP)
@@ -41,7 +41,7 @@ export type HomeStackParamList = PlaceScreensParamList & {
   Settings: undefined;
   ChangePassword: undefined;
   // 약관 전문 (온보딩 스택과 동일 화면을 재사용)
-  LegalDocument: { doc: 'terms' | 'privacy' };
+  LegalDocument: { doc: 'terms' | 'privacy' | 'oss' };
   TrainerRegister: undefined;
   TrainerDashboard: undefined;
   TrainerMemberDetail: { memberId: number; name: string };
