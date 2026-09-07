@@ -157,10 +157,17 @@ CC BY 에셋을 들이면 여기에 한 줄 더 붙을 뿐이다. 지금 만들�
 
 **(A) 오픈 에셋 + (B) 자체 캐릭터 둘 다 간다.** §5 정리 4건을 먼저 처리했고, 다음은:
 
-1. **(A)** Noto Animated Emoji 30~40종 선별 → `lottie-react-native` 도입 →
-   "움직이는 이모티콘" 팩을 `Feature.PREMIUM_STICKER` 에 붙인다.
-   고지 화면이 생겼으므로 CC BY 4.0 표시 의무는 이제 충족 가능하다
-   (`constants/openSourceLicenses.ts` 에 항목 추가할 것).
+1. **(A) ✅ 완료** (`44312b8`·`f5e7073`·`ba6185e`) — Noto Animated Emoji **30종**
+   (무료 6 / PRO 24), `lottie-react-native ~7.3.4`, `Feature.PREMIUM_STICKER` 에 연결.
+   CC BY 4.0 표시는 오픈소스 고지에 반영했다.
+
+   **형식 선택은 실측이 갈랐다** — 같은 30종이 512px 애니메이션 WebP 로는 15MB
+   (평균 500KB)인데 Lottie 는 **1.7MB**(평균 60KB)다. 벡터라 말풍선에서 132px 로
+   키워도 깨지지 않는다. 격자에는 정적 PNG 썸네일(72px, 30장 176KB)을 쓴다 —
+   30개를 한꺼번에 재생시키면 저사양 기기에서 프레임이 떨어지고, 움직이는 건
+   말풍선 하나면 충분하다.
+
+   항목이 31개가 되면서 패널 **기본 탭을 이모티콘으로 뒤집었다**(§5-1 주석의 조건).
 2. **(B)** 동연님이 캐릭터 PNG 를 제공 → `stickerImages.ts` + `StickerImage.java`
    두 곳에 추가(1종당 5분). 이모티콘이 이모지보다 많아지면
    `ChatRoomScreen` 의 기본 탭을 `'image'` 로 뒤집는다.
