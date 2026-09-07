@@ -13,6 +13,7 @@ import type {
   MacroPreset,
   Meal,
   MealAnalysis,
+  MealReminder,
   MealStats,
   MealType,
   NutritionGoalSuggestion,
@@ -149,4 +150,14 @@ export const dietApi = {
     unwrap(apiClient.post<ApiResponse<FavoriteFoodGift>>(`/meal/favorite-gifts/${giftId}/accept`)),
   declineFavoriteFoodGift: (giftId: number) =>
     unwrap(apiClient.post<ApiResponse<void>>(`/meal/favorite-gifts/${giftId}/decline`)),
+
+  // 끼니 알림 — 등록해둔 시간마다 "기록했나요?" 를 받는다 (아침/점심/저녁만 지원)
+  reminders: () => unwrap(apiClient.get<ApiResponse<MealReminder[]>>('/meal/reminders')),
+  // reminderTime 은 "HH:mm" 문자열로 보낸다 (LocalTime 파싱은 초 생략 허용)
+  setReminder: (mealType: MealType, reminderTime: string) =>
+    unwrap(
+      apiClient.put<ApiResponse<MealReminder>>(`/meal/reminders/${mealType}`, { reminderTime }),
+    ),
+  removeReminder: (mealType: MealType) =>
+    unwrap(apiClient.delete<ApiResponse<void>>(`/meal/reminders/${mealType}`)),
 };

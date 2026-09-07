@@ -15,10 +15,12 @@ import { Chip } from '../../components/Chip';
 import { useThemeStore } from '../../store/themeStore';
 import type { ThemeMode } from '../../theme/themePreference';
 import { authApi } from '../../api/auth';
+import { dietApi } from '../../api/diet';
 import { isPushPermissionDenied } from '../../utils/push';
 import { useAuthStore } from '../../store/authStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { getErrorMessage } from '../../utils/error';
+import type { MealType } from '../../types';
 import { checkWithDictionary, preloadDictionary } from '../../utils/koreanDictionary';
 import { copyText } from '../../utils/share';
 import { toast } from '../../store/toastStore';
@@ -46,6 +48,16 @@ const NOTIFICATION_CATEGORIES = [
   { key: 'partner', field: 'notifyPartner', title: '상대 활동', desc: '운동·식단·맛집·선물처럼 상대가 남긴 기록.' },
   { key: 'reminder', field: 'notifyReminder', title: '리마인드', desc: '스트릭·오늘의 질문·추억처럼 앱이 먼저 부르는 알림.' },
 ] as const;
+
+/**
+ * 끼니 알림 시간 프리셋 — 아직 시간 입력 UI(피커) 없이 흔한 시간대만 칩으로 고르게 한다.
+ * 서버는 어떤 시각이든 받지만, 목록을 좁혀야 "몇 시로 할까" 고민 없이 바로 켤 수 있다.
+ */
+const MEAL_REMINDER_TYPES: { type: MealType; title: string; times: string[] }[] = [
+  { type: 'BREAKFAST', title: '아침', times: ['07:00', '07:30', '08:00', '08:30', '09:00'] },
+  { type: 'LUNCH', title: '점심', times: ['11:30', '12:00', '12:30', '13:00'] },
+  { type: 'DINNER', title: '저녁', times: ['18:00', '18:30', '19:00', '19:30', '20:00'] },
+];
 
 export function SettingsScreen({ navigation }: Props) {
   const user = useAuthStore((s) => s.user);
@@ -109,6 +121,56 @@ export function SettingsScreen({ navigation }: Props) {
   // 서버가 값을 안 내려주는 구버전 응답에서도 안전하게 동작하도록 기본값을 둔다
   const notificationsEnabled = user?.notificationsEnabled ?? true;
   const marketingConsent = user?.marketingConsent ?? false;
+
+  /** 끼니 알림 — 등록해둔 것만 서버가 내려준다("HH:mm" 만 잘라서 칩 비교에 쓴다). */
+  const [mealReminders, setMealReminders] = useState<Partial<Record<MealType, string>>>({});
+  const [savingMealReminder, setSavingMealReminder] = useState<MealType | null>(null);
+
+  useEffect(() => {
+    dietApi
+      .reminders()
+      .then((list) => {
+        const map: Partial<Record<MealType, string>> = {};
+        list.forEach((r) => {
+          map[r.mealType] = r.reminderTime.slice(0, 5);
+        });
+        setMealReminders(map);
+      })
+      .catch(() => {});
+  }, []);
+
+  const onToggleMealReminder = async (type: MealType, defaultTime: string, next: boolean) => {
+    setSavingMealReminder(type);
+    try {
+      if (next) {
+        await dietApi.setReminder(type, defaultTime);
+        setMealReminders((prev) => ({ ...prev, [type]: defaultTime }));
+      } else {
+        await dietApi.removeReminder(type);
+        setMealReminders((prev) => {
+          const copy = { ...prev };
+          delete copy[type];
+          return copy;
+        });
+      }
+    } catch (e) {
+      Alert.alert('오류', getErrorMessage(e));
+    } finally {
+      setSavingMealReminder(null);
+    }
+  };
+
+  const onPickMealReminderTime = async (type: MealType, time: string) => {
+    setSavingMealReminder(type);
+    try {
+      await dietApi.setReminder(type, time);
+      setMealReminders((prev) => ({ ...prev, [type]: time }));
+    } catch (e) {
+      Alert.alert('오류', getErrorMessage(e));
+    } finally {
+      setSavingMealReminder(null);
+    }
+  };
 
   const onToggleNotification = async (next: boolean) => {
     setSavingNotification(true);
@@ -270,6 +332,53 @@ export function SettingsScreen({ navigation }: Props) {
               </View>
             </View>
           ))}
+        </Card>
+
+        <Card elevation="sm" style={styles.section}>
+          <Text style={styles.sectionLabel}>식사 알림</Text>
+          <View style={[styles.rowText, styles.themeIntro]}>
+            <Text style={styles.rowDesc}>
+              정한 시간에 아직 기록 안 한 끼니만 물어봐요. 이미 기록했으면 오지 않아요.
+            </Text>
+          </View>
+          {MEAL_REMINDER_TYPES.map((m, i) => {
+            const current = mealReminders[m.type];
+            const defaultTime = m.times[Math.floor(m.times.length / 2)];
+            const saving = savingMealReminder === m.type;
+            return (
+              <View key={m.type}>
+                {i > 0 ? <View style={styles.divider} /> : null}
+                <View style={styles.row}>
+                  <View style={styles.rowText}>
+                    <Text style={notificationsEnabled ? styles.rowTitle : styles.rowTitleMuted}>
+                      {m.title} 식사
+                    </Text>
+                    <Text style={styles.rowDesc}>
+                      {current ? `${current}에 알려요` : '꺼져 있어요'}
+                    </Text>
+                  </View>
+                  <Switch
+                    value={!!current}
+                    onValueChange={(next) => onToggleMealReminder(m.type, defaultTime, next)}
+                    disabled={!notificationsEnabled || saving}
+                    trackColor={{ true: colors.primary }}
+                  />
+                </View>
+                {current ? (
+                  <View style={styles.themeRow}>
+                    {m.times.map((t) => (
+                      <Chip
+                        key={t}
+                        label={t}
+                        selected={current === t}
+                        onPress={() => onPickMealReminderTime(m.type, t)}
+                      />
+                    ))}
+                  </View>
+                ) : null}
+              </View>
+            );
+          })}
         </Card>
 
         <Card elevation="sm" style={styles.section}>

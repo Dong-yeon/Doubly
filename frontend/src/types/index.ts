@@ -639,6 +639,12 @@ export interface ContentSearchResponse {
 
 // 식단 (meals) — 끼니별 사진/메모/칼로리
 export type MealType = 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK';
+
+/** 끼니 알림 — 아침/점심/저녁 중 등록해둔 것만 내려온다(SNACK 은 지원 안 함). */
+export interface MealReminder {
+  mealType: MealType;
+  reminderTime: string; // "HH:mm:ss"
+}
 // 저장 시점에만 채워지는 영양 목표 달성 — 오늘/히스토리 등 재조회 시엔 항상 빈 배열
 export interface MealGoalHighlight {
   nutrient: 'protein';
