@@ -82,10 +82,12 @@
   "private": true,
   "expo": {
     "autolinking": {
-      "exclude": [
-        "@react-native-firebase/app",
-        "@react-native-firebase/messaging"
-      ]
+      "ios": {
+        "exclude": [
+          "@react-native-firebase/app",
+          "@react-native-firebase/messaging"
+        ]
+      }
     }
   }
 }
