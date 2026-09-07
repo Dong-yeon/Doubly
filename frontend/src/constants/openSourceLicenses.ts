@@ -11,7 +11,8 @@
  * 가져왔다(패치 내역은 docs/SPELLCHECK_KIWI_SPACING_ANALYSIS_2026-09-03.md).
  *
  * <p>새 서드파티 에셋·라이브러리를 번들하면 <b>여기에 반드시 한 항목을 추가</b>할 것.
- * 특히 CC BY 계열 이모티콘 에셋은 저작자 표시가 라이선스 조건 자체다.
+ * 특히 <b>Noto Animated Emoji 는 CC BY 4.0</b> 이라 저작자 표시가 라이선스 조건
+ * 자체다 — 이 항목을 지우면 그 순간 라이선스 위반이 된다.
  */
 
 export interface OssEntry {
@@ -44,6 +45,27 @@ export const OSS_ENTRIES: OssEntry[] = [
     license: 'LGPL 2.1 또는 그 이후 버전',
     url: 'https://github.com/bab2min/Kiwi',
     usedFor: '띄어쓰기 교정 (형태소 분석)',
+  },
+  {
+    name: 'Noto Animated Emoji',
+    copyright: 'Copyright (c) Google LLC',
+    license: 'Creative Commons Attribution 4.0 International (CC BY 4.0)',
+    url: 'https://googlefonts.github.io/noto-emoji-animation/',
+    usedFor: '채팅 "움직이는 이모티콘" 30종 (Lottie 애니메이션)',
+  },
+  {
+    name: 'Noto Emoji',
+    copyright: 'Copyright (c) Google LLC',
+    license: 'Apache License 2.0',
+    url: 'https://github.com/googlefonts/noto-emoji',
+    usedFor: '움직이는 이모티콘의 정적 썸네일',
+  },
+  {
+    name: 'lottie-react-native · Lottie',
+    copyright: 'Copyright (c) Airbnb, Inc. 외',
+    license: 'Apache License 2.0',
+    url: 'https://github.com/lottie-react-native/lottie-react-native',
+    usedFor: '움직이는 이모티콘 재생',
   },
   {
     name: 'React Native · Expo',
