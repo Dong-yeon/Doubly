@@ -1,6 +1,7 @@
 package com.fitto.chat.service;
 
 import com.fitto.auth.dto.UserResponse;
+import com.fitto.chat.domain.AnimatedSticker;
 import com.fitto.chat.domain.ChatMessage;
 import com.fitto.chat.domain.ChatMessageReaction;
 import com.fitto.chat.domain.ChatPinnedMessage;
@@ -270,8 +271,10 @@ public class ChatService {
         if (messageType == MessageType.TOUCH) {
             requireValidTouch(senderId, req.content());
         }
-        if (messageType == MessageType.STICKER && StickerPack.isPremium(req.content())) {
-            // 시즌 스티커는 PRO 전용 — 터치 프리미엄 제스처와 같은 방어선이다(아래 주석 참고)
+        if (messageType == MessageType.STICKER
+                && (StickerPack.isPremium(req.content()) || AnimatedSticker.isPremiumContent(req.content()))) {
+            // 시즌 스티커·움직이는 이모티콘은 PRO 전용 — 터치 프리미엄 제스처와 같은 방어선이다
+            // (아래 주석 참고). 둘 다 같은 Feature 로 판정한다(AnimatedSticker 주석).
             planGuard.require(senderId, Feature.PREMIUM_STICKER);
         }
 
@@ -541,14 +544,23 @@ public class ChatService {
         return userRepository.findById(userId).map(User::getName).orElse("상대방");
     }
 
+    /**
+     * 스티커 미리보기 — content 가 이모지면 그대로가 최선이고, 코드면 라벨로 바꿔야 한다.
+     * 코드 종류가 둘(이미지 스티커·움직이는 이모티콘)이라 분기를 따로 뺐다.
+     */
+    private String stickerPreview(String content) {
+        return AnimatedSticker.from(content)
+                .map(s -> "[이모티콘] " + s.label())
+                .or(() -> StickerImage.from(content).map(s -> "[스티커] " + s.label()))
+                .orElse(content != null ? content : "[스티커]");
+    }
+
     private String preview(ChatMessage message) {
         return switch (message.getMessageType()) {
             case IMAGE -> "[이미지]";
             // 이모지 스티커는 이모지 자체가 가장 좋은 미리보기다. 이미지 스티커(StickerImage)는
             // content 가 "LOVE_BEAR" 같은 코드라 그대로 보여주면 안 되고 라벨로 바꿔야 한다.
-            case STICKER -> StickerImage.from(message.getContent())
-                    .map(s -> "[스티커] " + s.label())
-                    .orElse(message.getContent() != null ? message.getContent() : "[스티커]");
+            case STICKER -> stickerPreview(message.getContent());
             case WORKOUT_CARD -> "[운동 기록]";
             case MEAL_CARD -> "[식단]";
             case ROUTINE_CARD -> "[루틴]";
