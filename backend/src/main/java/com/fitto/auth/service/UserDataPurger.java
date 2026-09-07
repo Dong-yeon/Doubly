@@ -73,6 +73,7 @@ public class UserDataPurger {
 
         exec("delete from streaks where user_id = :uid", userId);
         exec("delete from meals where user_id = :uid", userId);
+        exec("delete from meal_reminders where user_id = :uid", userId);
         exec("delete from water_logs where user_id = :uid", userId);
         exec("delete from fasting_sessions where user_id = :uid", userId);
         exec("delete from favorite_foods where user_id = :uid", userId);

@@ -1,6 +1,7 @@
 package com.fitto.diet.repository;
 
 import com.fitto.diet.domain.Meal;
+import com.fitto.diet.domain.MealType;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -15,6 +16,9 @@ public interface MealRepository extends JpaRepository<Meal, Long> {
     List<Meal> findByUserIdAndMealDateOrderByIdAsc(Long userId, LocalDate mealDate);
 
     boolean existsByUserIdAndMealDate(Long userId, LocalDate mealDate);
+
+    /** 끼니 알림(MealReminderNotifier) — 이 끼니를 이미 기록했으면 알림을 건너뛴다. */
+    boolean existsByUserIdAndMealDateAndMealType(Long userId, LocalDate mealDate, MealType mealType);
 
     /** 특정 기간의 기록 — 통계(끼니 완료/칼로리 집계)용. */
     List<Meal> findByUserIdAndMealDateBetween(Long userId, LocalDate start, LocalDate end);
