@@ -6,8 +6,15 @@
 
 ## Feature: 운동 기록 고도화 (Workout Log v2 — 짐워크형 세트 로그)
 
-> 🚧 **상태: 착수 예정.** 현재 운동 기록은 "종목 1개 = 1행 요약"이라
-> 짐워크·Strong·Hevy 류의 **세트 단위 로그**를 표현할 수 없다. 이 스펙은 그 구조 전환을 정의한다.
+> 🚧 **상태: 부분 구현 (2026-09-07 재확인).** MVP 9개 중 4개는 이미 됐다 — 종목 마스터
+> (`ExerciseCatalog`, V28 `exercise_catalog`), 세트 단위 실기록(`WorkoutSetEntry` —
+> weight/reps/completed/rpe), 볼륨·추정1RM 계산(`WorkoutService.bestOf`), 직전 기록 조회
+> (`ExerciseLastPerformanceResponse`). 안 된 것: **라이브 세션**(`notifySessionStart` 는 "운동
+> 중" 알림만 보낼 뿐, 세트마다 즉시 저장하는 구조가 아니라 여전히 `POST /workout` 사후 저장 —
+> 이 문서가 스스로 지적한 문제가 코드상 그대로다), **결정론적 중량·세트 추천**(있는 건
+> `WorkoutRecommendationService` 인데 이건 Gemini AI 기반 "요일별 프로그램 추천"이라 다른
+> 기능), **세트 유형**(워밍업/드롭/실패세트 구분 컬럼 없음), **PR 감지+상대 푸시**(PersonalBest
+> 는 조회 시점 계산만, 갱신 감지·푸시 로직 없음). 아래 스펙은 남은 5개 항목 기준으로 다시 읽을 것.
 
 ### 왜 방향이 갈렸나 — 현재 구조의 한계
 
@@ -924,6 +931,11 @@ CALL_VIDEO("영상 통화", Quota.blocked(), Quota.unlimited()),
 
 ## Feature: 커플 일상 피드 (Couple Feed — "우리 기록")
 
+> ✅ **상태: 완료 (2026-09-07 문서 갱신 — 실제로는 예전에 끝나 있었음).** 백엔드 `feed`
+> 패키지(`FeedController`/`FeedService`/`FeedPost`/`FeedReaction`) + 프론트
+> `FeedTimelineScreen`/`FeedComposeScreen`/홈 `FeedCard` 로 완전히 구현돼 있다. 아래 스펙은
+> 설계 기록으로 남긴다.
+
 ### 목표
 커플의 하루가 자동으로 쌓이는 공유 타임라인. 이미 기록 중인 운동·식단·맛집 방문에
 "일상 포스트(사진+글)"를 더해 하나의 피드로 보여준다. 비트윈류 앱의 핵심 리텐션 기능.
@@ -982,6 +994,12 @@ CREATE INDEX idx_feed_posts_couple ON feed_posts (couple_id, created_at DESC);
 ---
 
 ## Feature: 커플 여행 (Trip)
+
+> ✅ **상태: 완료 (2026-09-07 문서 갱신 — 실제로는 예전에 끝나 있었음).** 최상위 CRUD
+> (`TripController`: 생성/조회/수정/삭제, 장소 연결/해제, 여행모드 토글) + 프론트
+> `TripListScreen`/`TripDetailScreen`/`TripFormScreen` 전부 구현됨 — 아래 하위 기능들
+> (일정표·경비 정산·체크리스트·앨범·회고 카드·여행 모드)도 이미 각자 ✅ 표시돼 있는데
+> 정작 이 최상위 섹션만 표시가 빠져 있던 문서 오기였다. 아래 스펙은 설계 기록으로 남긴다.
 
 ### 목표
 커플이 함께 갈/다녀온 여행을 계획하고 기록하는 기능. 맛집 지도(places)의 확장 —
@@ -1348,6 +1366,14 @@ ALTER TABLE trips ADD COLUMN travel_mode_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 ---
 
 ## Feature: 커플 맛집 지도 (Place Map)
+
+> ✅ **상태: 완료 — 이후 "럽슐랭"으로 리브랜딩·확장됨 (2026-09-07 문서 갱신).** 아래
+> MVP(장소 핀·공유·방문 기록·별점·식단 연동)는 `place` 패키지(`Place`/`PlaceVisit`/
+> `PlaceController`/`KakaoLocalClient`)로 구현된 뒤 사라진 게 아니라, 등급 산정·AI 맛집
+> 추천이 얹혀 `PlaceScreen`(목록↔지도 토글) 하나로 흡수됐다 — 별도의 "지도 화면"이라는
+> 이름만 없을 뿐 지도 기능 자체는 그대로 있다. 리브랜딩 경위는
+> [docs/LOVELICHELIN_IA_SIMPLIFICATION.md](docs/LOVELICHELIN_IA_SIMPLIFICATION.md) 참고.
+> 아래 스펙은 설계 기록으로 남긴다.
 
 ### 목표
 커플이 함께 방문한 맛집과 가고 싶은 장소를 공유 지도에 기록하는 기능.
@@ -1775,3 +1801,35 @@ FAB 돌출·Android 터치 클리핑 대응 코드(`barWrap` paddingTop, `fabOve
 - **"건강" 우산에 있던 `BodyMetric`/`Challenge`/루틴 3화면 재배치** — 운동도 식단도 아닌
   종합 건강 성격이지만, 이번 스펙은 운동/식단 분리만 다룬다. 당장은 `Workout` 탭에 그대로 둔다
 - **백엔드·DB 변경** — 없음. 프론트 네비게이션·화면 구성만 바뀐다
+
+---
+
+## Feature: 끼니 알림 (Meal Reminder)
+
+> ✅ **상태: 완료 (2026-09-07).** 사용자 제안 — "아침·점심·저녁 시간에 식단 기록하라고
+> 알림 보내는 거 어때?" → "본인이 등록해놓은 시간쯤에 오늘 식사하셨나요 물어보는 거지"로
+> 구체화됐다. 기존 [`ReengagementNotifier`](#feature-통화--영상통화-관리형-sdk--stream-video)
+> 의 스트릭 위기 알림(하루 1통 원칙)과는 목적이 다른 별도 기능 — 스트릭과 무관하게
+> **사용자가 정한 시간**마다(최대 3통) 온다.
+
+### 핵심 기능
+1. 끼니(아침/점심/저녁)별 알림 시간 등록 — 행이 있으면 켜짐, 없으면 꺼짐(별도 enabled
+   컬럼 없음). 간식(SNACK)은 정해진 시간이 없어 제외
+2. 매분 스케줄러가 그 시각에 아직 기록 안 한 끼니만 골라 "OO 식사하셨나요?" 발송 —
+   이미 기록했으면 건너뛴다
+3. 기존 `NotificationCategory.REMINDER` 재사용 — 설정 화면 카테고리 토글로 이미 끌 수 있음
+
+### 구현
+- 백엔드: `V78__meal_reminders.sql`, `MealReminder`/`MealReminderRepository`/
+  `MealReminderService`(등록·해제)/`MealReminderNotifier`(매분 스케줄러)/
+  `MealReminderController`(`/api/v1/meal/reminders`). `UserDataPurger` 탈퇴 정리 포함.
+  테스트 `MealReminderNotifierTest` 6건.
+- 프론트: `dietApi.reminders`/`setReminder`/`removeReminder`(`api/diet.ts`) +
+  `SettingsScreen` "식사 알림" 섹션(끼니별 스위치 + 프리셋 시간 칩).
+
+### Non-goals (이번 구현 제외)
+- **자유 시간 입력(시간 피커)** — 방금 스토어 제출 직후라 새 네이티브 의존성
+  (`@react-native-community/datetimepicker` 등) 추가를 피하고, 흔한 시간대 5개 중
+  고르는 칩 방식으로 시작했다. 필요해지면 다음 빌드 사이클에 붙인다
+- **커플 연동** — 상대의 끼니 기록 여부와는 무관하게 개인별로만 동작한다(기존 식단
+  기록 자체가 개인 단위)
