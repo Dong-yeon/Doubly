@@ -30,6 +30,7 @@ import { LockedCard } from '../../components/LockedCard';
 import { TouchGesturePicker } from '../../components/TouchGesturePicker';
 import { MoodPicker } from '../../components/MoodPicker';
 import { useAuthStore } from '../../store/authStore';
+import { useCoupleEmojiStore } from '../../store/coupleEmojiStore';
 import { usePlanStore } from '../../store/planStore';
 import { useRelationStore } from '../../store/relationStore';
 import { workoutApi } from '../../api/workout';
@@ -308,6 +309,12 @@ export function HomeScreen({ navigation }: Props) {
             refresh();
             // 가상 터치는 새로고침 대상이 아니라 즉시 반응(진동) 대상이다
             if (type === 'TOUCH') onIncomingTouch();
+            /*
+             * 우리 이모지는 커플 공용이라 상대가 만들거나 지우면 내 무드 피커의 선택지도 달라진다.
+             * refresh() 는 무드 응답(imageUrl)만 새로 읽으므로 이모지 목록 캐시는 따로 비운다 —
+             * 채팅방이 하는 것과 같은 규칙(2026-09-08 점검 #14).
+             */
+            if (type === 'COUPLE_EMOJI') void useCoupleEmojiStore.getState().load(true).catch(() => undefined);
           });
         })
         .catch(() => undefined);

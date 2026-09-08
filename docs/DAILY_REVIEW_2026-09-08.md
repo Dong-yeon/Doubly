@@ -75,3 +75,22 @@
 ```bash
 JAVA_HOME="D:/DataGrip 2025.3.5/jbr" ./gradlew --stop && JAVA_HOME="D:/DataGrip 2025.3.5/jbr" ./gradlew test
 ```
+
+## 5. 수정 기록 — P2 11건 (2026-09-08, 사용자 지시)
+
+| # | 수정 | 테스트 |
+|---|---|---|
+| 7 | `FeedService.deletePost` 가 행을 지우기 전에 대표 URL + `feed_post_photos` URL 을 모아 `deleteAllAfterCommit` 에 넘긴다 | `FeedFlowTest.포스트를_지우면_사진_URL_전부를_이미지_삭제에_넘긴다` (deleter 스파이) |
+| 8 | #2 에서 함께 처리(루프 catch 를 `RuntimeException` 으로) | §4 |
+| 9 | `AiJobService.submit` 에 `onRejected` 콜백 오버로드. `CoupleEmojiService.abandon(ticket)` = 환불 + 원본 삭제, 컨트롤러가 거절 콜백으로 넘긴다 | `AiJobServiceTest.큐가_가득_차면_…`(104건 채운 뒤 105번째 거절·콜백 1회), `CoupleEmojiFlowTest.접수가_거절되면_…` |
+| 10 | 생성 직전 `load(true)` 를 **성공시킨 뒤** 기준선 스냅샷. 못 읽으면 시작하지 않는다 | typecheck |
+| 11 | 결과 화면에서 `failedEmotions` 가 있으면 "다른 사진으로 다시 만들기"(secondary) 를 "채팅에서 쓰기" 옆에 둔다 | typecheck |
+| 12 | `COUPLE_EMOJI` 인데 `imageUrl` 이 없으면 텍스트 말풍선에 숫자 id 대신 `[우리 이모지]` | typecheck |
+| 13 | `MoodPicker` 의 `loadCoupleEmojis()` 에 `.catch` | typecheck |
+| 14 | 홈의 커플 채널 핸들러가 `COUPLE_EMOJI` 를 받으면 `coupleEmojiStore.load(true)` | typecheck |
+| 15 | `pickImagesAssets` 가 결과를 `selectionLimit` 으로 자른다(웹은 피커가 무시) — 호출자 전부에 적용 | typecheck |
+| 16 | **V82** `idx_mood_statuses_couple_emoji` | H2 마이그레이션 적용(전체 스위트) |
+| 17 | `isSourceUrl` 이 `..`·`?`·`#` 포함 URL 을 거절 | 준비 테스트에 traversal·쿼리 2건 추가, 그 URL 은 삭제도 안 함 |
+
+남은 것: **#6(운영성 P1, 이미지 재시도 예산 vs 작업 보존 15분)** 만 미수정 — 재시도 정책을 바꾸는 일이라
+Gemini 503 이력(STABILITY_ANALYSIS)과 같이 봐야 해서 별도로 둔다.

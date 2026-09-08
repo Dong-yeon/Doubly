@@ -104,6 +104,20 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
       setFresh([]);
       setDone(null);
 
+      /*
+       * "이번에 생긴 것"을 가려내는 기준선은 방금 서버에서 받은 목록이어야 한다. 마운트 때의
+       * 조회가 실패했거나(오프라인 진입) 아직 안 끝났으면 스토어가 비어 있어, 기존 세트 전부가
+       * 새로 만든 것으로 분류돼 6칸이 이전 얼굴로 즉시 채워진다(2026-09-08 점검 #10). 생성은
+       * 어차피 네트워크가 필요하므로 여기서 못 읽으면 시작하지 않는다.
+       */
+      try {
+        await useCoupleEmojiStore.getState().load(true);
+      } catch (e) {
+        if (!mounted.current) return;
+        toast.error(getErrorMessage(e, '연결을 확인하고 다시 시도해주세요.'));
+        setGenerating(false);
+        return;
+      }
       const before = new Set(useCoupleEmojiStore.getState().emojis.map((e) => e.id));
       const collectFresh = () =>
         useCoupleEmojiStore.getState().emojis.filter((e) => !before.has(e.id));
@@ -268,7 +282,21 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
 
       <View style={styles.actions}>
         {done ? (
-          <Button title="채팅에서 쓰기" onPress={() => navigation.goBack()} />
+          <>
+            <Button title="채팅에서 쓰기" onPress={() => navigation.goBack()} />
+            {/*
+              부분 실패 안내가 "다른 사진으로 다시 만들면 채워져요" 라고 말하는데 그 버튼이 없었다
+              (2026-09-08 점검 #11) — 실패한 칸이 있을 때만 재시도 진입점을 같이 둔다.
+            */}
+            {done.failedEmotions.length > 0 ? (
+              <Button
+                title="다른 사진으로 다시 만들기"
+                variant="secondary"
+                onPress={() => pick('library')}
+                disabled={!allowed}
+              />
+            ) : null}
+          </>
         ) : (
           <>
             <Button

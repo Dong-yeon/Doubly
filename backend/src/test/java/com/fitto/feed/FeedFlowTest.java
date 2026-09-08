@@ -3,6 +3,7 @@ package com.fitto.feed;
 import com.fitto.auth.dto.RegisterRequest;
 import com.fitto.auth.service.AuthService;
 import com.fitto.common.exception.BusinessException;
+import com.fitto.common.upload.CloudinaryImageDeleter;
 import com.fitto.diet.domain.MealType;
 import com.fitto.diet.dto.MealItemRequest;
 import com.fitto.diet.dto.SaveMealRequest;
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -29,6 +31,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.verify;
 
 /** 커플 일상 피드 통합 플로우 (PLAN.md Couple Feed) — H2 기반. */
 @SpringBootTest
@@ -45,6 +48,9 @@ class FeedFlowTest {
     WorkoutService workoutService;
     @Autowired
     MealService mealService;
+    /** 스파이 — 테스트 프로필은 Cloudinary 미설정이라 실제 삭제는 no-op, 어떤 URL 을 넘기는지만 본다 */
+    @MockitoSpyBean
+    CloudinaryImageDeleter imageDeleter;
 
     private Long register(String email) {
         return authService.register(
@@ -175,5 +181,24 @@ class FeedFlowTest {
         feedService.deletePost(c[0], post.refId());
         assertThat(feedService.timeline(c[0], null, 20).items())
                 .noneMatch(i -> i.type() == FeedItemType.POST);
+    }
+
+    /**
+     * 사진 여러 장인 글을 지우면 feed_post_photos 는 CASCADE 로 사라진다 — 그 전에 URL 을 모아
+     * Cloudinary 삭제에 넘겨야 자산이 고아로 남지 않는다(2026-09-08 점검 #7).
+     */
+    @Test
+    void 포스트를_지우면_사진_URL_전부를_이미지_삭제에_넘긴다() {
+        long[] c = couple("fp-del-a@fitto.com", "fp-del-b@fitto.com");
+        List<String> photos = List.of(
+                "https://img.example.com/d1.jpg", "https://img.example.com/d2.jpg", "https://img.example.com/d3.jpg");
+        FeedItemResponse post = feedService.createPost(c[0], new CreatePostRequest("사진 셋", null, photos));
+
+        feedService.deletePost(c[0], post.refId());
+
+        // 대표(image_url = photos[0])가 한 번 더 들어간다 — 삭제는 멱등이라 걸러내지 않는다
+        verify(imageDeleter).deleteAllAfterCommit(List.of(
+                "https://img.example.com/d1.jpg",
+                "https://img.example.com/d1.jpg", "https://img.example.com/d2.jpg", "https://img.example.com/d3.jpg"));
     }
 }

@@ -95,7 +95,12 @@ export async function pickImagesAssets(selectionLimit: number): Promise<PickedIm
     selectionLimit,
   });
   if (result.canceled || result.assets.length === 0) return [];
-  return Promise.all(result.assets.map(toPicked));
+  /*
+   * selectionLimit 은 Android·iOS 14+ 에서만 강제된다 — 웹의 expo-image-picker 는 `multiple` 만 켜고
+   * 고른 파일을 전부 돌려준다. 그대로 두면 8장을 골라 8장 업로드(한도 8 소모) 뒤 서버가 "최대 5장" 으로
+   * 거절한다(2026-09-08 점검 #15). 여기서 자르면 모든 호출자가 같은 상한을 얻는다.
+   */
+  return Promise.all(result.assets.slice(0, selectionLimit).map(toPicked));
 }
 
 /** 갤러리에서 여러 장 선택 → uri 목록 (취소/권한 거부 시 빈 배열) */

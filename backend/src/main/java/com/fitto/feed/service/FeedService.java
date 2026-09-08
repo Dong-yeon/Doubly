@@ -7,6 +7,7 @@ import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.notification.NotificationCategory;
 import com.fitto.common.notification.NotificationService;
 import com.fitto.common.notification.PushLinks;
+import com.fitto.common.upload.CloudinaryImageDeleter;
 import com.fitto.content.domain.ContentLog;
 import com.fitto.content.repository.ContentLogRepository;
 import com.fitto.content.repository.ContentLogRepository.LogWithContent;
@@ -74,6 +75,7 @@ public class FeedService {
     private final NotificationService notificationService;
     private final CoupleEventPublisher coupleEventPublisher;
     private final FeedItemMapper mapper;
+    private final CloudinaryImageDeleter imageDeleter;
 
     public FeedService(FeedPostRepository feedPostRepository,
                        FeedPostPhotoRepository feedPostPhotoRepository,
@@ -87,7 +89,9 @@ public class FeedService {
                        ContentRepository contentRepository,
                        NotificationService notificationService,
                        CoupleEventPublisher coupleEventPublisher,
-                       FeedItemMapper mapper) {
+                       FeedItemMapper mapper,
+                       CloudinaryImageDeleter imageDeleter) {
+        this.imageDeleter = imageDeleter;
         this.feedPostRepository = feedPostRepository;
         this.feedPostPhotoRepository = feedPostPhotoRepository;
         this.feedReactionRepository = feedReactionRepository;
@@ -267,10 +271,24 @@ public class FeedService {
         if (!userId.equals(post.getAuthorId())) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "내가 쓴 포스트만 삭제할 수 있습니다.");
         }
+        /*
+         * 사진 URL 은 행을 지우기 전에 모아 둔다 — feed_post_photos 는 CASCADE(V79)로 함께 사라지므로
+         * 나중엔 알 길이 없고, 탈퇴 때의 Purger 도 행이 없으면 거두지 못한다(2026-09-08 점검 #7).
+         * image_url(대표)과 photos[0] 은 같은 값이지만 Cloudinary 삭제는 멱등이라 걸러내지 않는다.
+         */
+        List<String> imageUrls = new ArrayList<>();
+        if (post.getImageUrl() != null) {
+            imageUrls.add(post.getImageUrl());
+        }
+        feedPostPhotoRepository.findByPostIdOrderByOrderNoAsc(postId)
+                .forEach(photo -> imageUrls.add(photo.getUrl()));
+
         // 반응은 더 이상 FK CASCADE 로 지워지지 않는다 (V60 — 대상이 4개 테이블이라 FK 불가)
         feedReactionRepository.deleteByTargetTypeAndTargetId(FeedItemType.POST, postId);
         feedPostRepository.delete(post);
         coupleEventPublisher.publish(post.getCoupleId(), CoupleEvent.FEED);
+        // 외부 삭제는 커밋 뒤 — 실패해도 DB 삭제를 되돌리지 않는다(RelationService 와 같은 규칙)
+        imageDeleter.deleteAllAfterCommit(imageUrls);
     }
 
     /**

@@ -51,9 +51,11 @@ public class CoupleEmojiController {
     public ApiResponse<AiJobResponse> generate(@AuthenticationPrincipal AuthUser user,
                                                @Valid @RequestBody GenerateCoupleEmojiRequest request) {
         CoupleEmojiService.GenerationTicket ticket = coupleEmojiService.prepare(user.id(), request);
+        // 큐 포화로 거절되면 이미 차감한 세트 한도와 올라간 원본을 되돌린다(서비스 abandon 주석)
         return ApiResponse.success(
                 new AiJobResponse(aiJobService.submit(user.id(), "couple-emoji",
-                        () -> coupleEmojiService.generate(ticket))),
+                        () -> coupleEmojiService.generate(ticket),
+                        () -> coupleEmojiService.abandon(ticket))),
                 "AI가 우리 이모지를 그리고 있어요.");
     }
 
