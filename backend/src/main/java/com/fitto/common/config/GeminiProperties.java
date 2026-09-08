@@ -55,7 +55,37 @@ public class GeminiProperties {
      */
     private int dailyLimitPerUser = 50;
 
+    /**
+     * 이미지 생성 전용 키 — 텍스트 키와 <b>다른 Google 프로젝트</b>의 키다.
+     *
+     * <p>이미지 생성 모델은 무료 등급 쿼터가 0이라(실측: {@code limit: 0} 429) 결제가 붙은 프로젝트가
+     * 필요하다. 그런데 기존 텍스트 프로젝트에 결제를 붙이면 지금 무료로 도는 텍스트 호출까지 전부
+     * 과금된다. 그래서 이미지 전용 프로젝트를 따로 두고 거기에만 결제를 붙인다 —
+     * docs/COUPLE_EMOJI_AI_DESIGN_2026-09-08.md §12-2. 비어 있으면 텍스트 키로 폴백하되, 그 키가
+     * 무료 등급이면 이미지 호출은 429 로 떨어진다(기능만 실패, 앱은 정상).
+     */
+    private String imageApiKey = "";
+
+    /**
+     * 이미지 생성 모델. 텍스트 모델로는 이미지가 안 나오므로 따로 둔다. 폴백 모델은 없다 —
+     * 이미지 모델끼리 바꾸면 세트 안에서 그림체가 갈린다(GeminiClient.generateImageInBackground 주석).
+     * 실측 채택은 Nano Banana 2 (§12-3·§12-4) — 단가 확인 후 확정된 값.
+     */
+    private String imageModel = "gemini-3.1-flash-image";
+
     public boolean isConfigured() {
         return apiKey != null && !apiKey.isBlank();
+    }
+
+    public boolean isImageConfigured() {
+        return !imageApiKeyOrFallback().isBlank();
+    }
+
+    /** 이미지 키가 비어 있으면 텍스트 키 — 위 {@code imageApiKey} 주석 참고. */
+    public String imageApiKeyOrFallback() {
+        if (imageApiKey != null && !imageApiKey.isBlank()) {
+            return imageApiKey;
+        }
+        return apiKey == null ? "" : apiKey;
     }
 }

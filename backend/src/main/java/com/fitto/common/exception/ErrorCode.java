@@ -97,6 +97,12 @@ public enum ErrorCode {
     /* 백그라운드 AI 작업(AiJobService)의 id 가 만료됐거나 남의 것 — 둘을 구분해 알려주지 않는다. */
     AI_JOB_NOT_FOUND(HttpStatus.NOT_FOUND, "요청한 AI 작업을 찾을 수 없어요. 다시 시도해주세요."),
     AI_ANALYSIS_FAILED(HttpStatus.BAD_GATEWAY, "AI 분석에 실패했어요. 잠시 후 다시 시도해주세요."),
+    /* 이미지 생성이 안전 필터에 걸림(우리 이모지) — 같은 사진을 다시 보내도 같은 답이라 재시도가 아니라
+     * "다른 사진"을 권해야 한다. AI_ANALYSIS_FAILED 의 "잠시 후" 문구는 여기 맞지 않는다. */
+    AI_IMAGE_REJECTED(HttpStatus.UNPROCESSABLE_ENTITY, "이 사진으로는 만들 수 없어요. 얼굴이 잘 보이는 다른 사진을 골라주세요."),
+    /* 서버가 생성물을 Cloudinary 에 올리는 데 실패(우리 이모지) — 클라 직접 업로드가 아닌 유일한 경로 */
+    IMAGE_UPLOAD_FAILED(HttpStatus.BAD_GATEWAY, "이미지를 저장하지 못했어요. 잠시 후 다시 시도해주세요."),
+    COUPLE_EMOJI_NOT_FOUND(HttpStatus.NOT_FOUND, "우리 이모지를 찾을 수 없어요."),
     // 사진 관련 — 원인별로 분리해 어떤 문제인지 바로 보이게 한다
     INVALID_PHOTO_URL(HttpStatus.BAD_REQUEST, "앱에서 촬영·선택해 올린 사진만 분석할 수 있어요."),
     PHOTO_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "사진 용량이 너무 커요 (최대 10MB). 더 작은 사진으로 시도해주세요."),

@@ -138,6 +138,10 @@ fitto:
   gemini:
     api-key: ${GEMINI_API_KEY:}
     model: ${GEMINI_MODEL:gemini-2.5-flash-lite}
+    # 이미지 생성(우리 이모지)은 결제가 붙은 별도 프로젝트 키 — 텍스트 키와 섞지 않는다(GeminiProperties 주석).
+    # 미설정 시 텍스트 키로 폴백하지만 그 키가 무료 등급이면 이미지 호출만 실패한다.
+    image-api-key: ${GEMINI_IMAGE_API_KEY:}
+    image-model: ${GEMINI_IMAGE_MODEL:gemini-3.1-flash-image}
     # 한도 두 개는 역할이 다르다 — GeminiClient 클래스 주석 참고.
     #  · total    = Google 프로젝트 일일 쿼터 방어. 쓰는 모델의 RPD 를 콘솔에서 확인하고
     #               그보다 조금 낮게 잡아야, 구글이 먼저 막아 원인 불명으로 전원 실패하는
