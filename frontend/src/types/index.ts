@@ -1158,6 +1158,8 @@ export interface FeedItem {
   title?: string | null;
   content?: string | null;
   imageUrl?: string | null;
+  /** POST 타입만 여러 장 — imageUrl은 그 중 첫 장과 같은 값(대표 사진). 그 외 타입은 빈 배열. */
+  imageUrls?: string[] | null;
   occurredAt: string;
   /** 모든 타입에 붙는다 — 반응이 없으면 빈 배열 */
   reactions?: ReactionSummary[] | null;

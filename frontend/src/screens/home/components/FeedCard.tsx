@@ -17,8 +17,8 @@
  * 다만 자동 기록은 카드가 작으므로 <b>상대의 기록</b>이거나 이미 반응이 달린 경우에만
  * 이모지 줄을 편다 — 내 기록 밑에 응원 버튼이 줄줄이 뜨는 건 소음이다.
  */
-import React from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '../../../components/Icon';
 import type { FeedItem, FeedItemType, ReactionSummary } from '../../../types';
 import { colors, fontSize, radius, spacing } from '../../../constants/theme';
@@ -117,18 +117,61 @@ function RecordCard({
   );
 }
 
+/**
+ * 여러 장 사진 — 좌우 스와이프로 넘기고 아래에 현재 위치를 점으로 보여준다.
+ * 한 장뿐이면 기존처럼 단순 Image 하나만(스크롤뷰·점 오버헤드가 없다).
+ */
+function PostPhotos({ uris }: { uris: string[] }) {
+  const [width, setWidth] = useState(0);
+  const [index, setIndex] = useState(0);
+
+  if (uris.length <= 1) {
+    return <Image source={{ uri: uris[0] }} style={styles.photo} resizeMode="cover" />;
+  }
+
+  return (
+    <View onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
+      <ScrollView
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onMomentumScrollEnd={(e) => {
+          if (width > 0) setIndex(Math.round(e.nativeEvent.contentOffset.x / width));
+        }}
+      >
+        {uris.map((uri, i) => (
+          <Image
+            key={i}
+            source={{ uri }}
+            style={[styles.photo, width > 0 ? { width } : null]}
+            resizeMode="cover"
+          />
+        ))}
+      </ScrollView>
+      {width > 0 ? (
+        <View style={styles.dotsRow} pointerEvents="none">
+          {uris.map((_, i) => (
+            <View key={i} style={[styles.dot, i === index && styles.dotActive]} />
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 /** 직접 남긴 일상 — 사진이 있으면 사진이 주인공 */
 function PostCard({ item, timeLabel, quickEmojis, onReact, onLongPress }: FeedCardProps) {
-  const hasPhoto = !!item.imageUrl;
+  const photos = item.imageUrls && item.imageUrls.length > 0
+    ? item.imageUrls
+    : item.imageUrl ? [item.imageUrl] : [];
+  const hasPhoto = photos.length > 0;
   return (
     <Pressable
       style={[styles.post, hasPhoto && styles.postPhoto]}
       onLongPress={() => onLongPress(item)}
       delayLongPress={400}
     >
-      {hasPhoto ? (
-        <Image source={{ uri: item.imageUrl! }} style={styles.photo} resizeMode="cover" />
-      ) : null}
+      {hasPhoto ? <PostPhotos uris={photos} /> : null}
 
       <View style={[styles.postBody, hasPhoto && styles.postBodyOnPhoto]}>
         <View style={styles.postHeader}>
@@ -225,6 +268,17 @@ const styles = themedStyles((colors) => ({
   // 사진 카드는 패딩 없이 — 사진이 카드 모서리까지 꽉 찬다
   postPhoto: { padding: 0, overflow: 'hidden' },
   photo: { width: '100%', aspectRatio: 4 / 5, backgroundColor: colors.surfaceAlt },
+  dotsRow: {
+    position: 'absolute',
+    bottom: spacing.sm,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 5,
+  },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.5)' },
+  dotActive: { backgroundColor: colors.white },
   postBody: {},
   postBodyOnPhoto: { padding: spacing.md },
 

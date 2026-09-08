@@ -79,6 +79,31 @@ export async function takePhotoAsset(): Promise<PickedImage | null> {
 }
 
 /**
+ * 갤러리에서 여러 장 선택 → 원본 크기 포함 (취소/권한 거부 시 빈 배열).
+ *
+ * <p>{@code selectionLimit} 을 남은 자리 수로 넘기면(예: 최대 5장 중 2장 이미 골랐으면 3),
+ * 시스템 피커가 그 이상 못 고르게 막아준다 — 다 고른 뒤에 이쪽에서 잘라내는 것보다
+ * 사용자 입장에서 훨씬 명확하다.
+ */
+export async function pickImagesAssets(selectionLimit: number): Promise<PickedImage[]> {
+  if (selectionLimit <= 0) return [];
+  if (!(await ensurePermission('mediaLibrary'))) return [];
+
+  const result = await ImagePicker.launchImageLibraryAsync({
+    ...PICKER_OPTIONS,
+    allowsMultipleSelection: true,
+    selectionLimit,
+  });
+  if (result.canceled || result.assets.length === 0) return [];
+  return Promise.all(result.assets.map(toPicked));
+}
+
+/** 갤러리에서 여러 장 선택 → uri 목록 (취소/권한 거부 시 빈 배열) */
+export async function pickImages(selectionLimit: number): Promise<string[]> {
+  return (await pickImagesAssets(selectionLimit)).map((a) => a.uri);
+}
+
+/**
  * 업로드 전 축소 — 장변을 {@code maxSide} 로 맞추고 JPEG 로 다시 인코딩한다.
  *
  * <p><b>왜 필요한가</b>: 피커의 {@code quality: 0.7} 은 <b>압축률만</b> 낮출 뿐 화소 수는

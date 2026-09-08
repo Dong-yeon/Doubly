@@ -12,7 +12,8 @@ import type {
 
 export interface CreatePostPayload {
   content?: string;
-  imageUrl?: string;
+  /** 최대 5장 — 서버가 photosOrEmpty()로 검사한다(FeedService.MAX_PHOTOS_PER_POST). */
+  imageUrls?: string[];
 }
 
 export const feedApi = {
