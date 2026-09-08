@@ -140,9 +140,21 @@ class CoupleEmojiFlowTest {
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.INVALID_PHOTO_URL);
 
+        // 전용 폴더로 시작해도 상위 경로·쿼리가 섞이면 거절 — 접두사 검사를 우회하는 경로(점검 #17)
+        String traversal = "https://res.cloudinary.com/demo/image/upload/v1/fitto/emoji-source/../feed-photo.jpg";
+        assertThatThrownBy(() -> service.prepare(a, new GenerateCoupleEmojiRequest(traversal, null)))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_PHOTO_URL);
+        assertThatThrownBy(() -> service.prepare(a, new GenerateCoupleEmojiRequest(SOURCE_URL + "?x=1", null)))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_PHOTO_URL);
+
         // 거절된 두 건(관계 없음·대상 오류)은 이미 올라간 원본을 함께 지운다 — 남의 폴더 URL 은 건드리지 않는다
         verify(imageDeleter, times(2)).deleteAll(List.of(SOURCE_URL));
         verify(imageDeleter, never()).deleteAll(List.of(foreignUrl));
+        verify(imageDeleter, never()).deleteAll(List.of(traversal));
 
         // 대상을 비우면 상대 얼굴이 기본
         CoupleEmojiService.GenerationTicket ticket = service.prepare(a, new GenerateCoupleEmojiRequest(SOURCE_URL, null));
@@ -152,6 +164,21 @@ class CoupleEmojiFlowTest {
         verify(geminiClient).requireImageConfiguredAndCountUsage(a, Feature.AI_COUPLE_EMOJI);
         // 접수가 됐으면 원본은 백그라운드 작업이 지운다 — 여기서는 안 지운다
         verify(imageDeleter, times(2)).deleteAll(List.of(SOURCE_URL));
+    }
+
+    /** 접수가 큐 포화로 거절되면 prepare 가 차감한 한도와 올라간 원본을 둘 다 되돌린다(점검 #9). */
+    @Test
+    void 접수가_거절되면_한도를_환불하고_원본을_지운다() {
+        Long a = register("ce-abandon-a@fitto.com");
+        Long b = register("ce-abandon-b@fitto.com");
+        connectCouple(a, b);
+        CoupleEmojiService.GenerationTicket ticket =
+                service.prepare(a, new GenerateCoupleEmojiRequest(SOURCE_URL, null));
+
+        service.abandon(ticket);
+
+        verify(geminiClient).refund(a, Feature.AI_COUPLE_EMOJI);
+        verify(imageDeleter).deleteAll(List.of(SOURCE_URL));
     }
 
     @Test

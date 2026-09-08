@@ -130,6 +130,15 @@ public class AiJobService {
      *             사용자에게 보여줄 메시지가 된다(한도 초과·AI 실패 등)
      */
     public String submit(Long userId, String label, Supplier<?> work) {
+        return submit(userId, label, work, null);
+    }
+
+    /**
+     * @param onRejected 큐 포화로 작업이 실행조차 못 할 때 부른다(null 허용). 접수 전에 한도를 차감하거나
+     *                   자원을 올려 둔 호출자가 그것을 되돌리는 자리다 — 작업 안의 실패와 달리 여기서는
+     *                   작업 코드가 한 줄도 돌지 않으므로 호출자만 되돌릴 수 있다(2026-09-08 점검 #9).
+     */
+    public String submit(Long userId, String label, Supplier<?> work, Runnable onRejected) {
         String jobId = UUID.randomUUID().toString();
         save(jobId, AiJob.pending(userId));
         try {
@@ -140,6 +149,14 @@ public class AiJobService {
             save(jobId, AiJob.pending(userId).failed(
                     ErrorCode.AI_RATE_LIMITED.name(), ErrorCode.AI_RATE_LIMITED.getMessage()));
             countFinished(label, "rejected");
+            if (onRejected != null) {
+                try {
+                    onRejected.run();
+                } catch (RuntimeException e) {
+                    // 되돌리기 실패가 접수 응답까지 깨면 안 된다 — 작업은 이미 실패로 기록됐다
+                    log.warn("AI 작업 거절 후 되돌리기 실패({}): {}", label, e.toString());
+                }
+            }
         }
         return jobId;
     }

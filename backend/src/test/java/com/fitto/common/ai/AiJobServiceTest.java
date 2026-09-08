@@ -97,6 +97,42 @@ class AiJobServiceTest {
         assertThat(failed.message()).doesNotContain("어딘가 깨짐");
     }
 
+    /**
+     * 풀 4 + 큐 100 이 다 차면 그다음 접수는 거절된다. 접수 전에 한도를 차감한 호출자가 되돌릴 수 있게
+     * onRejected 가 불려야 하고, 작업은 실패로 기록돼야 한다(정상 접수에서는 불리면 안 된다).
+     */
+    @Test
+    void 큐가_가득_차면_거절_콜백을_부르고_작업은_실패로_남긴다() throws Exception {
+        AiJobService crowded = newService();
+        CountDownLatch release = new CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicInteger rejected = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.function.Supplier<Object> blocking = () -> {
+            try {
+                release.await(10, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return "ok";
+        };
+        try {
+            // 실행 중 4 + 대기 100 = 104 건까지는 받는다
+            for (int i = 0; i < 104; i++) {
+                crowded.submit(1L, "fill", blocking, rejected::incrementAndGet);
+            }
+            assertThat(rejected.get()).isZero();
+
+            String jobId = crowded.submit(1L, "overflow", blocking, rejected::incrementAndGet);
+
+            assertThat(rejected.get()).isEqualTo(1);
+            AiJob job = crowded.poll(1L, jobId);
+            assertThat(job.status()).isEqualTo(AiJob.Status.FAILED);
+            assertThat(job.errorCode()).isEqualTo(ErrorCode.AI_RATE_LIMITED.name());
+        } finally {
+            release.countDown();
+            crowded.shutdown();
+        }
+    }
+
     @Test
     void 남의_작업은_존재_여부조차_알려주지_않는다() {
         String jobId = service.submit(1L, "test", () -> "비밀");

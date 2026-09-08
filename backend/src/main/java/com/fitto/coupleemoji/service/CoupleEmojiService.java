@@ -301,8 +301,26 @@ public class CoupleEmojiService {
 
     /** 전용 폴더에 올라간 Cloudinary URL 인가 — 클래스 상수 주석 참고 */
     boolean isSourceUrl(String url) {
+        /*
+         * public_id 는 정규화 없이 접두사만 보므로 "emoji-source/../<다른 폴더>/x.jpg" 가 게이트를 지날 수
+         * 있다(2026-09-08 점검 #17). 우리가 서명해 올린 URL 에는 상위 경로·쿼리·프래그먼트가 없으니 그런
+         * 문자가 보이면 그냥 거절한다 — CDN 이 ".." 를 어떻게 해석하든 상관없어진다.
+         */
+        if (url == null || url.contains("..") || url.contains("?") || url.contains("#")) {
+            return false;
+        }
         String publicId = imageDeleter.extractPublicId(url);
         return publicId != null && publicId.startsWith(sourceFolder() + "/");
+    }
+
+    /**
+     * 접수 실패(AI 큐 포화) — {@link #prepare} 가 이미 한도를 차감했고 원본은 올라가 있는데 이제
+     * {@link #generate} 는 돌지 않는다. 둘 다 되돌린다(2026-09-08 점검 #9). 컨트롤러가
+     * {@code AiJobService.submit} 의 거절 콜백으로 부른다.
+     */
+    public void abandon(GenerationTicket ticket) {
+        geminiClient.refund(ticket.userId(), FEATURE);
+        imageDeleter.deleteAll(List.of(ticket.sourceImageUrl()));
     }
 
     private Relation activeCouple(Long userId) {
