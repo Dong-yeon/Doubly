@@ -14,6 +14,7 @@ import com.fitto.content.repository.ContentRepository;
 import com.fitto.diet.domain.Meal;
 import com.fitto.diet.repository.MealRepository;
 import com.fitto.feed.domain.FeedPost;
+import com.fitto.feed.domain.FeedPostPhoto;
 import com.fitto.feed.domain.FeedReaction;
 import com.fitto.feed.dto.CreatePostRequest;
 import com.fitto.feed.dto.FeedCursor;
@@ -23,6 +24,7 @@ import com.fitto.feed.dto.FeedPhotoResponse;
 import com.fitto.feed.dto.FeedPhotosResponse;
 import com.fitto.feed.dto.FeedTimelineResponse;
 import com.fitto.feed.dto.ReactionSummary;
+import com.fitto.feed.repository.FeedPostPhotoRepository;
 import com.fitto.feed.repository.FeedPostRepository;
 import com.fitto.feed.repository.FeedReactionRepository;
 import com.fitto.place.domain.PlaceVisit;
@@ -56,7 +58,11 @@ public class FeedService {
 
     private static final int MAX_LIMIT = 50;
 
+    /** 한 포스트에 담을 수 있는 사진 장수 상한 — Instagram 류 앱을 넘길 이유가 없다. */
+    private static final int MAX_PHOTOS_PER_POST = 5;
+
     private final FeedPostRepository feedPostRepository;
+    private final FeedPostPhotoRepository feedPostPhotoRepository;
     private final FeedReactionRepository feedReactionRepository;
     private final RelationRepository relationRepository;
     private final WorkoutRepository workoutRepository;
@@ -70,6 +76,7 @@ public class FeedService {
     private final FeedItemMapper mapper;
 
     public FeedService(FeedPostRepository feedPostRepository,
+                       FeedPostPhotoRepository feedPostPhotoRepository,
                        FeedReactionRepository feedReactionRepository,
                        RelationRepository relationRepository,
                        WorkoutRepository workoutRepository,
@@ -82,6 +89,7 @@ public class FeedService {
                        CoupleEventPublisher coupleEventPublisher,
                        FeedItemMapper mapper) {
         this.feedPostRepository = feedPostRepository;
+        this.feedPostPhotoRepository = feedPostPhotoRepository;
         this.feedReactionRepository = feedReactionRepository;
         this.relationRepository = relationRepository;
         this.workoutRepository = workoutRepository;
@@ -117,9 +125,11 @@ public class FeedService {
         Map<Long, String> names = mapper.userNames(userIds);
 
         List<FeedItemResponse> merged = new ArrayList<>();
-        for (FeedPost p : feedPostRepository.findTimeline(couple.getId(),
-                from.createdAtOf(FeedItemType.POST), from.idOf(FeedItemType.POST), page)) {
-            merged.add(mapper.toItem(p, names, userId, null));
+        List<FeedPost> posts = feedPostRepository.findTimeline(couple.getId(),
+                from.createdAtOf(FeedItemType.POST), from.idOf(FeedItemType.POST), page);
+        Map<Long, List<String>> photosByPost = mapper.photosByPostId(posts);
+        for (FeedPost p : posts) {
+            merged.add(mapper.toItem(p, names, userId, null, photosByPost.getOrDefault(p.getId(), List.of())));
         }
         for (Workout w : workoutRepository.findRecentForFeed(userIds,
                 from.createdAtOf(FeedItemType.WORKOUT), from.idOf(FeedItemType.WORKOUT), page)) {
@@ -206,13 +216,18 @@ public class FeedService {
         return new FeedCursor(next);
     }
 
-    /** 포스트 작성 (FEED-02) — 글/사진 중 하나는 필수. 상대에게 푸시 + FEED 이벤트. */
+    /** 포스트 작성 (FEED-02) — 글/사진(최대 5장) 중 하나는 필수. 상대에게 푸시 + FEED 이벤트. */
     @Transactional
     public FeedItemResponse createPost(Long userId, CreatePostRequest request) {
         String content = request.content() != null ? request.content().trim() : null;
-        String imageUrl = request.imageUrl() != null ? request.imageUrl().trim() : null;
-        if ((content == null || content.isEmpty()) && (imageUrl == null || imageUrl.isEmpty())) {
+        List<String> photos = request.photosOrEmpty().stream()
+                .map(String::trim).filter(s -> !s.isEmpty()).toList();
+        if ((content == null || content.isEmpty()) && photos.isEmpty()) {
             throw new BusinessException(ErrorCode.INVALID_INPUT, "글이나 사진 중 하나는 남겨주세요.");
+        }
+        if (photos.size() > MAX_PHOTOS_PER_POST) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT,
+                    "사진은 최대 " + MAX_PHOTOS_PER_POST + "장까지 올릴 수 있어요.");
         }
 
         Relation couple = activeCouple(userId);
@@ -220,9 +235,14 @@ public class FeedService {
                 .coupleId(couple.getId())
                 .authorId(userId)
                 .content(content)
-                .imageUrl(imageUrl)
+                // 대표 사진 — 기존 쿼리(findPhotos/findAlbumCandidates 등)가 계속 이 값을 쓴다
+                .imageUrl(photos.isEmpty() ? null : photos.get(0))
                 .build();
         feedPostRepository.save(post);
+        for (int i = 0; i < photos.size(); i++) {
+            feedPostPhotoRepository.save(
+                    FeedPostPhoto.builder().postId(post.getId()).url(photos.get(i)).orderNo(i).build());
+        }
 
         Long partnerId = couple.partnerOf(userId);
         String authorName = mapper.userName(userId);
@@ -235,7 +255,7 @@ public class FeedService {
         }
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.FEED);
 
-        return mapper.toItem(post, Map.of(userId, authorName), userId, List.of());
+        return mapper.toItem(post, Map.of(userId, authorName), userId, List.of(), photos);
     }
 
     /** 포스트 삭제 — 작성자 본인만. */

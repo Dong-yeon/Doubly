@@ -130,6 +130,41 @@ class FeedFlowTest {
     }
 
     @Test
+    void 사진_여러_장을_올리면_대표_사진과_전체_목록이_모두_채워진다() {
+        long[] c = couple("fp1@fitto.com", "fp2@fitto.com");
+        List<String> photos = List.of(
+                "https://img.example.com/1.jpg", "https://img.example.com/2.jpg", "https://img.example.com/3.jpg");
+
+        FeedItemResponse created = feedService.createPost(c[0], new CreatePostRequest(null, null, photos));
+        assertThat(created.imageUrl()).isEqualTo(photos.get(0));
+        assertThat(created.imageUrls()).containsExactlyElementsOf(photos);
+
+        // 타임라인 재조회에서도(배치 조회 경로) 순서가 그대로 유지된다
+        FeedItemResponse fromTimeline = feedService.timeline(c[0], null, 20).items().stream()
+                .filter(i -> i.type() == FeedItemType.POST).findFirst().orElseThrow();
+        assertThat(fromTimeline.imageUrls()).containsExactlyElementsOf(photos);
+    }
+
+    @Test
+    void 사진은_최대_5장까지만_허용된다() {
+        long[] c = couple("fp3@fitto.com", "fp4@fitto.com");
+        List<String> tooMany = List.of("1", "2", "3", "4", "5", "6").stream()
+                .map(n -> "https://img.example.com/" + n + ".jpg").toList();
+
+        assertThatThrownBy(() -> feedService.createPost(c[0], new CreatePostRequest(null, null, tooMany)))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void 옛_클라이언트의_단일_imageUrl도_그대로_동작한다() {
+        long[] c = couple("fp5@fitto.com", "fp6@fitto.com");
+        FeedItemResponse created = feedService.createPost(c[0], new CreatePostRequest("옛 버전", "https://img.example.com/old.jpg"));
+
+        assertThat(created.imageUrl()).isEqualTo("https://img.example.com/old.jpg");
+        assertThat(created.imageUrls()).containsExactly("https://img.example.com/old.jpg");
+    }
+
+    @Test
     void 포스트는_작성자만_삭제할_수_있다() {
         long[] c = couple("f8@fitto.com", "f9@fitto.com");
         FeedItemResponse post = feedService.createPost(c[0], new CreatePostRequest("삭제 테스트", null));

@@ -128,6 +128,11 @@ public class RelationRecordPurger {
         List<String> urls = new ArrayList<>();
         urls.addAll(select("select p.image_url from feed_posts p "
                 + "where p.couple_id = :rid and p.image_url is not null", relationId));
+        // 여러 장 사진(V79) — image_url(대표)은 위에서 이미 모았고, 여기는 나머지까지 전부.
+        // photos[0]과 image_url이 같은 값이라 첫 장은 중복 수집되지만, 지운 자산을 다시
+        // 지우는 호출은 그냥 무시되므로(멱등) 굳이 걸러내지 않는다.
+        urls.addAll(select("select ph.url from feed_post_photos ph "
+                + "where ph.post_id in (select p.id from feed_posts p where p.couple_id = :rid)", relationId));
         urls.addAll(select("select v.image_url from place_visits v "
                 + "where v.image_url is not null and v.place_id in "
                 + "(select p.id from places p where p.couple_id = :rid)", relationId));

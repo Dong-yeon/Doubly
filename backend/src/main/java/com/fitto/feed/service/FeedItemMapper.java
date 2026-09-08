@@ -4,10 +4,12 @@ import com.fitto.content.domain.ContentLog;
 import com.fitto.content.repository.ContentLogRepository.LogWithContent;
 import com.fitto.diet.domain.Meal;
 import com.fitto.feed.domain.FeedPost;
+import com.fitto.feed.domain.FeedPostPhoto;
 import com.fitto.feed.domain.FeedReaction;
 import com.fitto.feed.dto.FeedItemResponse;
 import com.fitto.feed.dto.FeedItemType;
 import com.fitto.feed.dto.ReactionSummary;
+import com.fitto.feed.repository.FeedPostPhotoRepository;
 import com.fitto.feed.repository.FeedReactionRepository;
 import com.fitto.place.repository.PlaceVisitRepository.VisitWithPlace;
 import com.fitto.place.domain.PlaceVisit;
@@ -33,21 +35,40 @@ import java.util.Map;
 public class FeedItemMapper {
 
     private final FeedReactionRepository feedReactionRepository;
+    private final FeedPostPhotoRepository feedPostPhotoRepository;
     private final UserRepository userRepository;
 
     public FeedItemMapper(FeedReactionRepository feedReactionRepository,
+                          FeedPostPhotoRepository feedPostPhotoRepository,
                           UserRepository userRepository) {
         this.feedReactionRepository = feedReactionRepository;
+        this.feedPostPhotoRepository = feedPostPhotoRepository;
         this.userRepository = userRepository;
+    }
+
+    /**
+     * 포스트 여러 건의 사진을 한 번에 배치 조회한다(N+1 방지) — {@link FeedService}(타임라인)와
+     * {@link MemoriesService}(추억)가 똑같이 필요로 해서 여기 한 곳에 둔다.
+     */
+    public Map<Long, List<String>> photosByPostId(List<FeedPost> posts) {
+        if (posts.isEmpty()) {
+            return Map.of();
+        }
+        List<Long> postIds = posts.stream().map(FeedPost::getId).toList();
+        Map<Long, List<String>> byPostId = new LinkedHashMap<>();
+        for (FeedPostPhoto photo : feedPostPhotoRepository.findByPostIdInOrderByPostIdAscOrderNoAsc(postIds)) {
+            byPostId.computeIfAbsent(photo.getPostId(), k -> new ArrayList<>()).add(photo.getUrl());
+        }
+        return byPostId;
     }
 
     // ---- 아이템 변환 ----
 
     public FeedItemResponse toItem(FeedPost p, Map<Long, String> names, Long viewerId,
-                                   List<ReactionSummary> reactions) {
+                                   List<ReactionSummary> reactions, List<String> imageUrls) {
         return new FeedItemResponse(FeedItemType.POST, p.getId(), p.getAuthorId(),
                 names.getOrDefault(p.getAuthorId(), "커플"), viewerId.equals(p.getAuthorId()),
-                null, p.getContent(), p.getImageUrl(), p.getCreatedAt(), reactions);
+                null, p.getContent(), p.getImageUrl(), p.getCreatedAt(), reactions, imageUrls);
     }
 
     public FeedItemResponse toItem(Workout w, Map<Long, String> names, Long viewerId) {
@@ -65,7 +86,7 @@ public class FeedItemMapper {
         return new FeedItemResponse(FeedItemType.WORKOUT, w.getId(), w.getUserId(),
                 names.getOrDefault(w.getUserId(), "커플"), viewerId.equals(w.getUserId()),
                 "운동 완료 💪", summary.length() > 0 ? summary.toString() : null,
-                null, w.getCreatedAt(), null);
+                null, w.getCreatedAt(), null, List.of());
     }
 
     /**
@@ -93,7 +114,7 @@ public class FeedItemMapper {
         return new FeedItemResponse(FeedItemType.MEAL, m.getId(), m.getUserId(),
                 names.getOrDefault(m.getUserId(), "커플"), viewerId.equals(m.getUserId()),
                 m.getMealType().label() + " 식단 🍽️", content, m.getPhotoUrl(),
-                m.getCreatedAt(), null);
+                m.getCreatedAt(), null, List.of());
     }
 
     /**
@@ -120,7 +141,7 @@ public class FeedItemMapper {
         return new FeedItemResponse(FeedItemType.PLACE_VISIT, v.getId(), v.getVisitedBy(),
                 names.getOrDefault(v.getVisitedBy(), "커플"), viewerId.equals(v.getVisitedBy()),
                 vp.getPlaceName() + " 방문 📍", content, v.getImageUrl(),
-                byVisitedAt ? v.getVisitedAt().atStartOfDay() : v.getCreatedAt(), null);
+                byVisitedAt ? v.getVisitedAt().atStartOfDay() : v.getCreatedAt(), null, List.of());
     }
 
     /**
@@ -145,7 +166,7 @@ public class FeedItemMapper {
         return new FeedItemResponse(FeedItemType.CONTENT_LOG, l.getId(), l.getLoggedBy(),
                 names.getOrDefault(l.getLoggedBy(), "커플"), viewerId.equals(l.getLoggedBy()),
                 lc.getContentTitle() + " 관람 🎬", content, l.getImageUrl(),
-                byWatchedAt ? l.getWatchedAt().atStartOfDay() : l.getCreatedAt(), null);
+                byWatchedAt ? l.getWatchedAt().atStartOfDay() : l.getCreatedAt(), null, List.of());
     }
 
     // ---- 반응 ----
@@ -181,7 +202,8 @@ public class FeedItemMapper {
                         i.title(), i.content(), i.imageUrl(), i.occurredAt(),
                         summarize(byTypeAndId
                                 .getOrDefault(i.type(), Map.of())
-                                .getOrDefault(i.refId(), List.of()), viewerId)))
+                                .getOrDefault(i.refId(), List.of()), viewerId),
+                        i.imageUrls()))
                 .toList();
     }
 

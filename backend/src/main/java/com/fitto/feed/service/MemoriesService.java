@@ -139,8 +139,10 @@ public class MemoriesService {
         for (LocalDate date : MemoryDates.occurrencesIn(year, today)) {
             LocalDateTime from = MemoryDates.storageStartOfDay(date, storageZone);
             LocalDateTime to = MemoryDates.storageStartOfDay(date.plusDays(1), storageZone);
-            for (FeedPost p : feedPostRepository.findInPeriod(coupleId, from, to)) {
-                items.add(mapper.toItem(p, names, viewerId, null));
+            List<FeedPost> posts = feedPostRepository.findInPeriod(coupleId, from, to);
+            Map<Long, List<String>> photosByPost = mapper.photosByPostId(posts);
+            for (FeedPost p : posts) {
+                items.add(mapper.toItem(p, names, viewerId, null, photosByPost.getOrDefault(p.getId(), List.of())));
             }
             for (VisitWithPlace v : placeVisitRepository.findByCoupleAndVisitedAt(coupleId, date)) {
                 // 방문은 등록 시각이 아니라 방문일 기준 — 어제 다녀와 오늘 등록해도 어제의 추억이다
