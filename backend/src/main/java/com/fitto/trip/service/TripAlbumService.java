@@ -6,6 +6,7 @@ import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.feed.domain.FeedPost;
 import com.fitto.feed.repository.FeedPostRepository;
+import com.fitto.feed.service.FeedItemMapper;
 import com.fitto.relation.domain.Relation;
 import com.fitto.relation.domain.RelationStatus;
 import com.fitto.relation.domain.RelationType;
@@ -39,17 +40,20 @@ public class TripAlbumService {
     private final RelationRepository relationRepository;
     private final UserRepository userRepository;
     private final CoupleEventPublisher coupleEventPublisher;
+    private final FeedItemMapper feedItemMapper;
 
     public TripAlbumService(TripRepository tripRepository,
                             FeedPostRepository feedPostRepository,
                             RelationRepository relationRepository,
                             UserRepository userRepository,
-                            CoupleEventPublisher coupleEventPublisher) {
+                            CoupleEventPublisher coupleEventPublisher,
+                            FeedItemMapper feedItemMapper) {
         this.tripRepository = tripRepository;
         this.feedPostRepository = feedPostRepository;
         this.relationRepository = relationRepository;
         this.userRepository = userRepository;
         this.coupleEventPublisher = coupleEventPublisher;
+        this.feedItemMapper = feedItemMapper;
     }
 
     /** 앨범 사진 목록 — 여행에 담긴 포스트, 최신순. */
@@ -97,10 +101,12 @@ public class TripAlbumService {
             return List.of();
         }
         Map<Long, String> names = new HashMap<>();
+        Map<Long, List<String>> photosByPost = feedItemMapper.photosByPostId(posts);
         return posts.stream()
                 .map(p -> AlbumPostResponse.of(p,
                         names.computeIfAbsent(p.getAuthorId(), this::userName),
-                        p.getAuthorId().equals(userId)))
+                        p.getAuthorId().equals(userId),
+                        photosByPost.getOrDefault(p.getId(), List.of())))
                 .toList();
     }
 

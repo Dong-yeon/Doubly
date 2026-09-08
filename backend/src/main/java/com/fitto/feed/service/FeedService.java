@@ -181,11 +181,13 @@ public class FeedService {
         Long partnerId = couple.partnerOf(userId);
         Map<Long, String> names = mapper.userNames(
                 partnerId != null ? List.of(userId, partnerId) : List.of(userId));
+        Map<Long, List<String>> photosByPost = mapper.photosByPostId(posts);
 
         List<FeedPhotoResponse> items = posts.stream()
                 .map(p -> new FeedPhotoResponse(
                         p.getId(),
                         p.getImageUrl(),
+                        photosByPost.getOrDefault(p.getId(), List.of()),
                         p.getContent(),
                         names.getOrDefault(p.getAuthorId(), "상대방"),
                         p.getAuthorId().equals(userId),

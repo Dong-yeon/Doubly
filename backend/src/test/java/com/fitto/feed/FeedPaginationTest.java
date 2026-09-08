@@ -6,6 +6,7 @@ import com.fitto.feed.dto.CreatePostRequest;
 import com.fitto.feed.dto.FeedCursor;
 import com.fitto.feed.dto.FeedItemResponse;
 import com.fitto.feed.dto.FeedItemType;
+import com.fitto.feed.dto.FeedPhotoResponse;
 import com.fitto.feed.dto.FeedPhotosResponse;
 import com.fitto.feed.dto.FeedTimelineResponse;
 import com.fitto.feed.service.FeedService;
@@ -194,8 +195,23 @@ class FeedPaginationTest {
         second.items().forEach(p -> ids.add(p.postId()));
         assertThat(ids).hasSize(5);   // 글만 있는 포스트 제외, 중복·누락 없음
         assertThat(first.items()).allSatisfy(p -> assertThat(p.imageUrl()).isNotNull());
+        // imageUrls(전체 목록)도 대표 사진과 함께 채워진다 — 여기선 모두 한 장짜리 포스트
+        assertThat(first.items()).allSatisfy(p -> assertThat(p.imageUrls()).containsExactly(p.imageUrl()));
         // 상대가 올린 사진은 mine=false 로 구분된다
         assertThat(first.items()).anySatisfy(p -> assertThat(p.mine()).isFalse());
+    }
+
+    @Test
+    void 사진첩_항목은_포스트의_사진_전체_목록도_함께_내려준다() {
+        long[] c = couple("pg-multi-a@fitto.com", "pg-multi-b@fitto.com");
+        List<String> photos = List.of(
+                "https://img.example.com/m1.jpg", "https://img.example.com/m2.jpg");
+        feedService.createPost(c[0], new CreatePostRequest(null, null, photos));
+
+        FeedPhotoResponse item = feedService.photos(c[0], null, 20).items().get(0);
+
+        assertThat(item.imageUrl()).isEqualTo(photos.get(0));
+        assertThat(item.imageUrls()).containsExactlyElementsOf(photos);
     }
 
     @Test

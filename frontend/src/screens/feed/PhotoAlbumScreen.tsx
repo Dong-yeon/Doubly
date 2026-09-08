@@ -17,6 +17,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../navigation/types';
 import { EmptyState } from '../../components/EmptyState';
+import { MaterialCommunityIcons } from '../../components/Icon';
 import { ImageViewer, type ViewerImage } from '../../components/ImageViewer';
 import { feedApi } from '../../api/feed';
 import { toast } from '../../store/toastStore';
@@ -51,18 +52,30 @@ export function PhotoAlbumScreen(_props: Props) {
   // (QA_CHECKLIST.md 전역 반복 패턴 1)
   const [loadError, setLoadError] = useState(false);
 
-  /* 뷰어용 형태로 변환 — 작성자 색(나=coral/상대=indigo)은 목록과 같은 규칙을 따른다 */
-  const viewerImages: ViewerImage[] = useMemo(
-    () =>
-      photos.map((p) => ({
-        key: String(p.postId),
-        uri: p.imageUrl,
-        title: `${p.mine ? '나' : p.authorName}  ·  ${relativeDateLabel(p.createdAt.slice(0, 10))}`,
-        titleColor: p.mine ? colors.coral : colors.indigo,
-        caption: p.content ?? undefined,
-      })),
-    [photos],
-  );
+  /*
+   * 뷰어용 형태로 변환 — 그리드 칸은 포스트당 하나(대표 사진)지만, 뷰어는 포스트의
+   * 사진을 전부 편다. 그래서 한 칸을 탭해도 여러 장이면 그 자리에서 이어서 넘겨볼 수
+   * 있고, 계속 스와이프하면 다음 포스트의 사진으로 자연스럽게 넘어간다.
+   * firstIndexByPostId 는 "이 칸을 탭하면 뷰어의 몇 번째부터 열지"를 알려준다.
+   */
+  const { viewerImages, firstIndexByPostId } = useMemo(() => {
+    const images: ViewerImage[] = [];
+    const firstIndexByPostId = new Map<number, number>();
+    for (const p of photos) {
+      const uris = p.imageUrls && p.imageUrls.length > 0 ? p.imageUrls : [p.imageUrl];
+      firstIndexByPostId.set(p.postId, images.length);
+      uris.forEach((uri, i) => {
+        images.push({
+          key: `${p.postId}-${i}`,
+          uri,
+          title: `${p.mine ? '나' : p.authorName}  ·  ${relativeDateLabel(p.createdAt.slice(0, 10))}`,
+          titleColor: p.mine ? colors.coral : colors.indigo,
+          caption: p.content ?? undefined,
+        });
+      });
+    }
+    return { viewerImages: images, firstIndexByPostId };
+  }, [photos]);
 
   const load = useCallback(async () => {
     if (loadingRef.current) return;
@@ -122,13 +135,23 @@ export function PhotoAlbumScreen(_props: Props) {
         }
         onEndReached={loadMore}
         onEndReachedThreshold={0.4}
-        renderItem={({ item, index }) => (
+        renderItem={({ item }) => (
           <Pressable
-            onPress={() => setViewingIndex(index)}
+            onPress={() => setViewingIndex(firstIndexByPostId.get(item.postId) ?? 0)}
             accessibilityRole="imagebutton"
-            accessibilityLabel={`${item.mine ? '내' : item.authorName} 사진 크게 보기`}
+            accessibilityLabel={
+              item.imageUrls && item.imageUrls.length > 1
+                ? `${item.mine ? '내' : item.authorName} 사진 ${item.imageUrls.length}장 크게 보기`
+                : `${item.mine ? '내' : item.authorName} 사진 크게 보기`
+            }
           >
             <Image source={{ uri: item.imageUrl }} style={[styles.cell, { width: CELL, height: CELL }]} />
+            {/* 여러 장 표시 — Instagram류 앱과 같은 자리(우상단)의 스택 아이콘 */}
+            {item.imageUrls && item.imageUrls.length > 1 ? (
+              <View style={styles.multiBadge}>
+                <MaterialCommunityIcons name="image-multiple-outline" size={14} color={colors.white} />
+              </View>
+            ) : null}
           </Pressable>
         )}
         ListEmptyComponent={
@@ -176,6 +199,17 @@ const styles = themedStyles((colors) => ({
   row: { gap: GAP, marginBottom: GAP },
   // width/height 는 렌더 시점의 useWindowDimensions 값으로 인라인 적용한다 (아래 참고)
   cell: { backgroundColor: colors.surfaceAlt },
+  multiBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   footer: { paddingVertical: spacing.lg },
   /* 큰 보기 스타일은 ImageViewer 로 옮겼다 */
 }));

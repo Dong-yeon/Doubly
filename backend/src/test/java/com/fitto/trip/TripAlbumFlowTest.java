@@ -19,6 +19,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.time.LocalDate;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -101,6 +102,21 @@ class TripAlbumFlowTest {
 
         assertThat(albumService.candidates(c[0], tripId))
                 .extracting(AlbumPostResponse::id).containsExactly(photo);
+    }
+
+    @Test
+    void 여러_장_사진_포스트도_전체_목록이_함께_내려온다() {
+        long[] c = couple("al11@fitto.com", "al12@fitto.com");
+        Long tripId = trip(c[0]);
+        List<String> photos = List.of("https://img/multi1.jpg", "https://img/multi2.jpg", "https://img/multi3.jpg");
+        Long postId = feedService.createPost(c[0], new CreatePostRequest(null, null, photos)).refId();
+        albumService.attach(c[0], tripId, postId);
+
+        AlbumPostResponse item = albumService.list(c[0], tripId).get(0);
+
+        // 그리드 칸(대표 사진)은 여전히 하나 — imageUrl 은 첫 장, imageUrls 는 전체
+        assertThat(item.imageUrl()).isEqualTo(photos.get(0));
+        assertThat(item.imageUrls()).containsExactlyElementsOf(photos);
     }
 
     @Test
