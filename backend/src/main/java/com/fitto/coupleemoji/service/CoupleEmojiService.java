@@ -34,6 +34,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -107,6 +109,8 @@ public class CoupleEmojiService {
         this.notificationService = notificationService;
         this.coupleEventPublisher = coupleEventPublisher;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
+        // 장마다 독립 커밋 — 혹시 바깥에 트랜잭션이 있어도 합류하지 않는다(generate 주석).
+        this.transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
     /** 요청 스레드 → 백그라운드 작업으로 넘기는 것 — 검증이 끝난 값만 담는다 */
@@ -149,7 +153,14 @@ public class CoupleEmojiService {
      * 마지막 실패의 사유를 그대로 사용자에게 보여준다(거절이면 "다른 사진", 그 밖엔 "잠시 후").
      * 원본 다운로드 실패는 우리가 직접 되돌리고, 텍스트 모델 실패는 {@code GeminiClient} 가 스스로 되돌린다
      * — 두 번 되돌리지 않도록 나눠 잡는다.
+     *
+     * <p><b>트랜잭션 밖에서 돈다</b>({@code NOT_SUPPORTED}). 클래스 기본값이 읽기 전용 트랜잭션인데, 그 안에서
+     * 장마다 여는 {@link TransactionTemplate} 가 바깥 트랜잭션에 <b>합류</b>해 읽기 전용을 물려받는다 —
+     * PostgreSQL 은 "cannot execute INSERT in a read-only transaction" 으로 거절한다(H2 는 강제하지 않아
+     * 테스트에서 안 보였다. CLAUDE.md 6절 "PostgreSQL 로도 한 번"의 실제 사례). 1분 넘게 외부를 기다리는
+     * 메서드가 커넥션을 붙잡고 있어서도 안 된다.
      */
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public CoupleEmojiBatchResponse generate(GenerationTicket ticket) {
         CloudinaryImageFetcher.Image source;
         try {
