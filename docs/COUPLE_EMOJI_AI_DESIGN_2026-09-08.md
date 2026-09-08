@@ -455,9 +455,37 @@ white collared shirt` 를 뽑았고, 이걸 `IDENTITY FACTS (copy these exactly)
 
 **검증**: H2 전체 584건 통과(`CoupleEmojiFlowTest` 7건 포함 — 검증·한도 시점, 6종 저장, 부분 실패, 전부 실패
 환불, 커플 공용 숨김, 채팅 전송·URL 복사, Purger). 프론트 `typecheck` 통과(FeatureKey·MessageType 동기화).
-**PostgreSQL 로는 아직 안 돌렸다** — Docker 데몬이 꺼져 있었다. 쿼리(JPQL 파생 3개, Purger 원시 SQL 2개,
-V80)를 추가했으므로 배포 전에 CLAUDE.md 6절 절차로 한 번 돌릴 것.
+**PostgreSQL 검증(같은 날, 이후)** — CLAUDE.md 6절이 말한 "H2 에서 통과한 게 운영에서만 터지는" 사례를 정확히
+하나 잡았다. `CoupleEmojiService` 가 클래스 단위 `@Transactional(readOnly = true)` 인데 백그라운드 `generate` 에
+어노테이션이 없어 읽기 전용 트랜잭션을 물려받았고, 그 안에서 장마다 여는 `TransactionTemplate` 가 바깥에
+합류해 INSERT 가 `cannot execute INSERT in a read-only transaction` 으로 거절됐다. H2 는 읽기 전용을 강제하지
+않아 584건이 다 통과했었다. 수정: `generate` 를 `NOT_SUPPORTED`(트랜잭션 밖, 1분간 커넥션 안 잡음) +
+템플릿 `REQUIRES_NEW`. 수정 후 PostgreSQL 전체 스위트 통과.
+
+PostgreSQL 로 돌릴 때 두 가지를 더 알아냈다(RUNNING.md 의 명령 그대로면 안 된다):
+- 컨테이너 기본 `max_connections=100` 으로는 테스트 컨텍스트가 여럿 떠서 `too many clients` 로 33건이
+  컨텍스트 로드부터 실패한다 → `postgres:16 -c max_connections=400` + `-Dspring.datasource.hikari.maximum-pool-size=3`.
+- 컨테이너를 재사용하면 테스트가 고정 이메일로 가입하므로 "이미 가입된 이메일" 로 전부 실패한다 → 매 실행마다 새 컨테이너.
 
 **2단계(프론트)에서 붙일 것**: `api/coupleEmoji.ts`(`upload-signature` → 크롭 업로드 → `generate` → `awaitAiJob`,
 폴링 중 `GET /` 재조회) · 트레이 탭 · `COUPLE_EMOJI` 말풍선(원형 마스크 132px) · `COUPLE_EMOJI` CoupleEvent 수신 ·
 `AI_COUPLE_EMOJI` 잠금 배지. 알림 미리보기는 서버가 `[우리 이모지]` 로 내려준다.
+
+## 15. 부수 실험 — 손그림 "비개구리" → 기본 이모티콘 (2026-09-08)
+
+사용자가 그린 비개구리(하트형 머리·짧은 다리) 스케치 4장(첫 장에 7종이 겹쳐 있어 낱장으로 잘라 총 10장)을
+같은 이미지 모델로 스티커화했다. `scripts/couple-emoji-experiment/sketch.mjs`(프롬프트: "스케치의 캐릭터
+디자인을 그대로, 종이·줄·낙서 제거, 흰 테두리 스티커") + `crop_frog.py`.
+
+**결과: 10/10 성공, 디자인 보존·그림체 일관성 모두 좋음.** 하트형 머리·눈 모양·막대 다리·소품(편지·이불·
+잎사귀)이 그대로 살았고, 연두색·흰 테두리로 10장이 한 세트처럼 나왔다. 장당 약 10초.
+`CHAT_EMOTICON_EXPANSION_ANALYSIS_2026-09-07.md` §7 (B) "자체 캐릭터 PNG 제공 → 두 곳에 추가" 경로에
+바로 태울 수 있는 재료다 — 우리 이모지와 달리 **런타임 생성이 아니라 번들 에셋**이므로 원가 0, 게이팅은
+기존 `PREMIUM_STICKER`/무료 분배만 정하면 된다.
+
+사용자 아이디어(같은 날): 감정 외에 **커플 상호작용** — 꽃단장, 안기, 이뻐해주기. 두 마리가 등장하는
+장면은 기존 가상 터치(손잡기·토닥임·포옹·뽀뽀)의 결과 화면과 짝을 이룰 수 있다. 다음 스케치 때 두 마리
+구도로 그리면 같은 스크립트로 바로 뽑아볼 수 있다.
+
+남은 결정: 세트 구성(감정 7 + 상호작용 N), 무료/PRO 배분, 스케치 → 최종본 사이의 손질(배경 순백 통일,
+크기 정규화)은 PNG 를 `frontend/assets/stickers/` 에 넣기 전에 한 번.
