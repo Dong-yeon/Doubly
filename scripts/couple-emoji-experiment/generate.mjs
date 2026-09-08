@@ -79,6 +79,26 @@ const STYLES = {
     'soft pastel shading, plain solid white background, square composition.',
     'No text, no letters, no watermark, no speech bubbles.',
   ].join(' '),
+  /**
+   * v3 실물 피드백(2026-09-08): "눈이 너무 정직하다, 더 대두여도 된다, 더 캐릭터화하자."
+   * v3 의 IDENTITY/OUTFIT/FRAMING 은 유지하고 STYLE 만 바꾼다 — 눈을 크게, 머리 비율을 더 키우고,
+   * 이목구비를 과장하되 '닮음' 은 특징 문장 주입(--describe)이 붙잡는다.
+   */
+  vector4: [
+    'Turn the MAIN person in this photo (the largest, centered face) into a cute chibi emoticon character.',
+    'Ignore any other people partially visible at the edges of the photo.',
+    'IDENTITY (most important): this must be recognizably the same person. Copy from the photo exactly:',
+    'face shape, gender presentation, hairstyle and hair length (do NOT make the hair longer or shorter than in the photo),',
+    'hair color, skin tone, eyebrows, glasses if any, facial hair if any,',
+    'and every small distinctive mark such as moles or freckles at the same position.',
+    'OUTFIT: draw the exact same clothing as in the photo (same garment type and color) in every image.',
+    'FRAMING: upper body only (head and shoulders to chest), head centered, same size in every image.',
+    'STYLE: strongly exaggerated chibi (super-deformed) proportions: the head is about half of the total height,',
+    'very large expressive eyes with big shiny highlights (about twice the size of realistic eyes), tiny nose, small mouth,',
+    'round soft cheeks. Simplified, playful cartoon like a Korean messenger emoticon, not a realistic portrait.',
+    'Thick white sticker outline, clean bold dark lines, soft pastel shading, plain solid white background, square composition.',
+    'No text, no letters, no watermark, no speech bubbles.',
+  ].join(' '),
   kakao: [
     'Draw the person in this photo as a Korean messenger-style emoticon character (like popular chat stickers).',
     'The character must clearly look like this specific person: same face shape, hairstyle and hair color,',
