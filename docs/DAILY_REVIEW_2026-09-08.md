@@ -55,6 +55,23 @@
 
 ## 3. 권고
 
-**배포 전에 #1~#5.** #1 은 "재연결 후 복원"이 이미 깨져 있는 상태라 가장 급하고, #2·#3 은 얼굴 사진 관련 약속(§9)이라
+**배포 전에 #1~#5.** → **같은 날 #1~#5 수정 완료**(브랜치 `fix/daily-review-p1`). 무엇을 어떻게 고쳤는지는 §4. #1 은 "재연결 후 복원"이 이미 깨져 있는 상태라 가장 급하고, #2·#3 은 얼굴 사진 관련 약속(§9)이라
 기능 출시 전에 닫아야 한다. #4 는 FREE 티어가 켜지면 바로 체감된다. #5 는 한 줄 수정으로 AI 기능 전체의 오안내가 사라진다.
 #6~#17 은 반응 보고 묶어서.
+
+## 4. 수정 기록 — P1 5건 (2026-09-08, 사용자 지시)
+
+| # | 수정 | 테스트 |
+|---|---|---|
+| 1 | `RelationRecordRestorer` 에 `mood_statuses`(couple_id)·`couple_emojis`(relation_id) 이동 추가. 무드가 이모지를 참조(V81)하므로 둘을 같이 옮긴다 | `RestoreRecordsFlowTest.무드와_우리_이모지도_복원된다` — 옛 관계에 이모지 1 + 그것을 참조하는 무드 1을 심고 복원 → 새 관계로 옮겨지고 옛 관계 행이 사라지는지 |
+| 2 | `CoupleEmojiService.generate` 를 `try { generateFrom } finally { 원본 삭제 }` 로. 루프 catch 를 `RuntimeException` 으로 넓혀 base64·DB 예외도 "이 장 실패"로 분류(사용자에게는 BusinessException 문구만) | `원본_다운로드가_거절돼도_환불하고_원본을_지운다`, `비즈니스_예외가_아닌_실패도_한_장_실패로_흡수한다`, 기존 전부 실패 테스트에 삭제 검증 추가 |
+| 3 | `prepare` 에서 폴더 검사를 맨 앞으로 옮기고, 그 뒤 실패(관계 없음·대상 오류·402/429)는 원본을 지우고 다시 던진다. 남의 폴더 URL 은 건드리지 않는다 | `한도에_막히면_올라간_원본을_지운다` + 준비 테스트에 `times(2)`/`never` 검증. `CloudinaryImageDeleter` 를 `@MockitoSpyBean` 으로(폴더 게이트는 진짜 `extractPublicId` 가 필요) |
+| 4 | `FeedComposeScreen`: 업로드 전 `planStore.load()` → `remainingOf('PHOTO_UPLOAD')` 프리체크(부족하면 한 장도 안 올림, 0이면 업그레이드 시트·그 외 토스트). 업로드는 순차(fail-fast)로 바꾸고 올라간 URL 을 `uri → url` 캐시에 남겨 재시도 때 재업로드하지 않는다. PRO 는 remaining null 이라 그대로 통과 | 프론트는 테스트 러너가 없다 — `typecheck` 통과. 실기기: FREE 잔여 < 선택 장수에서 저장 → 업로드 0건인지 |
+| 5 | `api/aiJob.ts` 2분 포기 예외를 `ApiError(0, {success:false, message}, message)` 로 — `getErrorMessage` 가 `data.message` 를 꺼내 쓰는 FAILED 분기와 같은 모양. 화면 fallback 으로 뭉개지지 않는다. **AI 기능 전체에 적용**(식단·데이트코스·주간 레터·우리 이모지) | `typecheck` 통과. 실기기: 우리 이모지 생성을 2분 넘기면 "아직 만들고 있어요" 가 뜨는지 |
+
+**로컬 백엔드 테스트 실행 요령**: PATH·`.jdks`·IntelliJ JBR 은 전부 JDK 25 라 Gradle 8.14 가 뜨지 않지만(§0),
+**DataGrip·Rider 의 JBR 이 JDK 21** 이다. 아래처럼 지정하면 돈다(Gradle 데몬이 25 로 이미 떠 있으면 `--stop` 먼저).
+
+```bash
+JAVA_HOME="D:/DataGrip 2025.3.5/jbr" ./gradlew --stop && JAVA_HOME="D:/DataGrip 2025.3.5/jbr" ./gradlew test
+```
