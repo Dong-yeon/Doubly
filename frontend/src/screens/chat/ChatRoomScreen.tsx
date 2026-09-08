@@ -440,12 +440,19 @@ export function ChatRoomScreen({ navigation, route }: Props) {
    * chatSocket 이 구독까지 되살린다. 하지만 <b>끊겨 있던 사이에 온 메시지</b>는 소켓으로
    * 오지 않는다 — 소켓은 붙은 뒤의 것만 준다. 그 공백은 REST 로 메워야 한다.
    * (이게 없으면 "알림은 왔는데 방을 열어보니 그 메시지가 없다"가 된다.)
+   *
+   * <p>알림 정리도 여기서 같이 한다. 배너 억제(push.ts 핸들러)는 <b>앱이 떠 있을 때</b>만
+   * 도는데, 방을 열어둔 채 백그라운드로 나가 있는 동안 온 메시지는 OS 가 그대로 트레이에
+   * 띄운다. 그 상태로 돌아오면 화면은 이미 마운트돼 있어서 마운트 시 정리(위 openRoom
+   * 옆)가 다시 돌지 않는다 — "읽고 있는데도 알림이 안 사라진다"는 리포트의 실제 경로다
+   * (2026-09-08, 안드로이드에서 관측. iOS 는 그 시점에 푸시 자체가 안 오고 있었다).
    */
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {
       if (next !== 'active') return;
       void connectSocket().catch(() => undefined);
       void syncMissed(relationId).catch(() => undefined);
+      void dismissRoomNotifications(relationId);
     });
     return () => sub.remove();
   }, [relationId, syncMissed]);
