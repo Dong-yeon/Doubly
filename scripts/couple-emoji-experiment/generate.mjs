@@ -4,7 +4,7 @@
  *
  * 코드 없이 "닮는가 · 세트가 일관된가"만 본다. 백엔드와 무관한 독립 스크립트이며 앱에 번들되지 않는다.
  *
- *   GEMINI_API_KEY=... node scripts/couple-emoji-experiment/generate.mjs <photo> [옵션]
+ *   GEMINI_IMAGE_API_KEY=... node scripts/couple-emoji-experiment/generate.mjs <photo> [옵션]
  *
  * 옵션
  *   --out <dir>            결과 폴더 (기본 scripts/couple-emoji-experiment/out/<타임스탬프>)
@@ -74,9 +74,10 @@ function parseArgs(argv) {
 }
 
 function requireKey() {
-  const key = process.env.GEMINI_API_KEY;
+  // 이미지 전용 프로젝트 키(유료)를 먼저 찾고, 없으면 텍스트용 키로 폴백 — 문서 §12-1.
+  const key = process.env.GEMINI_IMAGE_API_KEY ?? process.env.GEMINI_API_KEY;
   if (!key) {
-    console.error('GEMINI_API_KEY 환경변수가 필요합니다 (Railway 변수와 같은 키).');
+    console.error('GEMINI_IMAGE_API_KEY(또는 GEMINI_API_KEY) 환경변수가 필요합니다 — Railway 변수와 같은 이름.');
     process.exit(2);
   }
   return key;

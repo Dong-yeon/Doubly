@@ -3,7 +3,7 @@
  * 실험용 합성 얼굴 사진 생성 — 실제 인물 사진이 없을 때 파이프라인·스타일 일관성만 먼저 보기 위한 대역.
  * "닮음" 판정은 이걸로 할 수 없다(원본이 가짜라 기준이 없다). 실제 사진으로 다시 돌릴 것.
  *
- *   GEMINI_API_KEY=... node scripts/couple-emoji-experiment/make-face.mjs [--out photos/synthetic-1.png] [--model id]
+ *   GEMINI_IMAGE_API_KEY=... node scripts/couple-emoji-experiment/make-face.mjs [--out photos/synthetic-1.png] [--model id]
  */
 import { writeFile, mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -20,8 +20,8 @@ const args = process.argv.slice(2);
 const opt = (name, def) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : def; };
 const out = opt('--out', join('scripts', 'couple-emoji-experiment', 'photos', 'synthetic-1.png'));
 const model = opt('--model', process.env.GEMINI_IMAGE_MODEL ?? 'gemini-2.5-flash-image');
-const key = process.env.GEMINI_API_KEY;
-if (!key) { console.error('GEMINI_API_KEY 필요'); process.exit(2); }
+const key = process.env.GEMINI_IMAGE_API_KEY ?? process.env.GEMINI_API_KEY;
+if (!key) { console.error('GEMINI_IMAGE_API_KEY(또는 GEMINI_API_KEY) 필요'); process.exit(2); }
 
 const res = await fetch(`${BASE_URL}/models/${model}:generateContent?key=${key}`, {
   method: 'POST',
