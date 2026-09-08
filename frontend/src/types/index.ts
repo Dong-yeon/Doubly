@@ -33,6 +33,8 @@ export type FeatureKey =
   | 'AI_TRIP_ITINERARY'
   | 'AI_WORKOUT_RECOMMEND'
   | 'AI_NEXT_MEAL'
+  /** 우리 이모지(애인 얼굴 AI 감정 이모지) 세트 생성 — 세트 단위 1회, 커플 단위 판정 */
+  | 'AI_COUPLE_EMOJI'
   | 'PHOTO_UPLOAD'
   | 'TRIP_ACTIVE'
   | 'PLACE_PIN'
@@ -1213,7 +1215,9 @@ export type MessageType =
   /** 스트릭 마일스톤 축하 — content 가 그대로 읽히는 축하 문장이다(서버가 대신 남긴다) */
   | 'STREAK_CARD'
   /** 음성 메시지(최대 30초) — content 에 "{audioUrl}|{durationSec}" 형식으로 담는다 */
-  | 'VOICE_MESSAGE';
+  | 'VOICE_MESSAGE'
+  /** 우리 이모지 — content 에 couple_emojis.id, imageUrl 에 그 행의 URL(서버가 복사). PRO 판정 없음 */
+  | 'COUPLE_EMOJI';
 /** 메시지 이모지 리액션 — mine 은 userIds 에 내 id 가 있는지로 판단한다(브로드캐스트 공용) */
 export interface ChatReactionSummary {
   emoji: string;
