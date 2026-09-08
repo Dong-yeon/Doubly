@@ -87,6 +87,11 @@
           "@react-native-firebase/app",
           "@react-native-firebase/messaging"
         ]
+      },
+      "android": {
+        "exclude": [
+          "@stream-io/react-native-callingx"
+        ]
       }
     }
   }
