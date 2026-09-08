@@ -18,7 +18,7 @@ import {
 } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { withJosa } from '../../utils/format';
-import LottieView from 'lottie-react-native';
+import { AnimatedSticker } from '../../components/AnimatedSticker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { Button } from '../../components/Button';
@@ -886,17 +886,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         ) : null}
         {isSticker ? (
           animatedStickerOf(item.content) ? (
-            /*
-             * 한 번만 재생하고 멈춘다(loop 없음). 대화 로그에 스티커가 여러 개 쌓이면
-             * 무한 반복은 시선을 뺏고 배터리를 먹는다 — Noto 애니메이션은 마지막
-             * 프레임이 처음과 같은 정지 자세라 멈춰도 어색하지 않다.
-             */
-            <LottieView
-              source={animatedStickerOf(item.content)!.source}
-              style={styles.stickerImage}
-              autoPlay
-              loop={false}
-            />
+            // 재생 정책·웹 대체는 AnimatedSticker 안에 있다(플랫폼별 파일로 분리)
+            <AnimatedSticker sticker={animatedStickerOf(item.content)!} style={styles.stickerImage} />
           ) : stickerImageOf(item.content) ? (
             <Image source={stickerImageOf(item.content)!.source} style={styles.stickerImage} resizeMode="contain" />
           ) : (
