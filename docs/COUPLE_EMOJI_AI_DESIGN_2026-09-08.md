@@ -436,3 +436,27 @@ white collared shirt` 를 뽑았고, 이걸 `IDENTITY FACTS (copy these exactly)
 그림에 그려 넣는데, 앱이 효과를 얹을 거면 그림에는 표정·자세만 남기고 효과는 비운다. 이건 1단계 출시 뒤
 2단계(무드 연동)와 같은 시기에 결정하면 된다 — 지금 그림에 넣어둔 효과는 정지 상태에서도 감정을 읽게
 해주므로 1단계에서는 그대로 둔다.
+
+## 14. 구현 기록 — 1단계 백엔드 (2026-09-08)
+
+11절 1단계를 세 커밋으로 끝냈다(`4ea9892` 인프라 → `5b3900b` 도메인 → `ffbc593` 채팅). 설계에서 달라진 것만 적는다.
+
+| 설계(§) | 구현에서 바뀐 것 | 이유 |
+|---|---|---|
+| §4 원본 사진 업로드 = 기존 서명 경로 | **전용 서명 엔드포인트** `POST /couple-emojis/upload-signature` → 폴더 `fitto/emoji-source/`. `generate` 는 이 폴더의 URL 만 받는다 | 생성 뒤 서버가 원본을 지우는데(§9), 아무 URL 이나 받으면 상대 피드 사진 URL 을 넣어 지워버리는 경로가 된다. "이 폴더의 것만 지운다"는 경계가 필요했다 |
+| §6 판정 위치 "진입 시 consume" | `prepare`(요청 스레드: 검증+차감) / `generate`(백그라운드) 로 서비스를 둘로 쪼갬 | 기존 AI 기능(MealController)은 작업 안에서 차감해 402 가 폴링 한 바퀴 뒤에 온다. 이 기능은 즉시 돌려준다 — 컨트롤러가 `prepare` 의 티켓을 `AiJobService` 에 넘긴다 |
+| §5-1 환불 | `GeminiClient.generateImageInBackground` 는 환불하지 않고 `refund()` 를 공개. 서비스가 "한 장도 못 살렸을 때만" 환불 | 클라이언트 안에서 장마다 환불하면 세트당 여러 번 환불된다 |
+| §7 "감정별 즉시 insert" | 장마다 `TransactionTemplate` 로 개별 커밋 | 앱이 폴링 사이에 `GET /` 을 다시 부르면 칸이 하나씩 채워진다. 한 트랜잭션이면 1분간 아무것도 안 보이고 커넥션을 붙잡는다 |
+| §5-2 프롬프트 | `CoupleEmojiPrompts` = 실험 스크립트의 `vector4` + `--describe` 그대로, `prompt_version="v4"`. describe 는 기존 `generateJsonInBackground` + JSON 스키마(자유 형식이 아니라 필드별) | 스키마로 받으면 빈 값·문장형이 안 생긴다. 사실 문장은 `factsOf` 가 실험 때와 같은 콤마 형태로 조립 |
+| §5-4 DB | 설계 그대로 + `identity_facts VARCHAR(500)`. 번호는 **V80** | V79 를 다른 세션이 썼다(§5-4 주석대로 착수 시 재확인) |
+| 원본 다운로드 | `FoodAnalysisService` 의 다운로드·SSRF 방지·매직바이트 판별을 `CloudinaryImageFetcher` 로 추출해 공유 | 같은 코드를 두 번 두지 않는다. `FoodAnalysisService` 생성자 시그니처는 기존 테스트 때문에 유지 |
+| 키 | `GEMINI_IMAGE_API_KEY` / `GEMINI_IMAGE_MODEL`(기본 `gemini-3.1-flash-image`). 이미지 키가 비면 텍스트 키로 폴백 | Railway 에 이미 넣어둔 변수 이름과 맞춤(§12-2) |
+
+**검증**: H2 전체 584건 통과(`CoupleEmojiFlowTest` 7건 포함 — 검증·한도 시점, 6종 저장, 부분 실패, 전부 실패
+환불, 커플 공용 숨김, 채팅 전송·URL 복사, Purger). 프론트 `typecheck` 통과(FeatureKey·MessageType 동기화).
+**PostgreSQL 로는 아직 안 돌렸다** — Docker 데몬이 꺼져 있었다. 쿼리(JPQL 파생 3개, Purger 원시 SQL 2개,
+V80)를 추가했으므로 배포 전에 CLAUDE.md 6절 절차로 한 번 돌릴 것.
+
+**2단계(프론트)에서 붙일 것**: `api/coupleEmoji.ts`(`upload-signature` → 크롭 업로드 → `generate` → `awaitAiJob`,
+폴링 중 `GET /` 재조회) · 트레이 탭 · `COUPLE_EMOJI` 말풍선(원형 마스크 132px) · `COUPLE_EMOJI` CoupleEvent 수신 ·
+`AI_COUPLE_EMOJI` 잠금 배지. 알림 미리보기는 서버가 `[우리 이모지]` 로 내려준다.
