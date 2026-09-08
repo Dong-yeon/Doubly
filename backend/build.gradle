@@ -93,6 +93,16 @@ tasks.named('test') {
     // H2 에서 통과한 쿼리가 운영에서만 500 을 내는 일이 실제로 있었다(피드 타임라인).
     // 실행법은 docs/RUNNING.md 참고.
     systemProperties System.getProperties().findAll { k, v -> k.toString().startsWith('spring.') }
+
+    // 동기화 테스트(PlanFeatureSyncTest·PolicyVersionSyncTest·StickerImageSyncTest)는 프론트 소스를
+    // 읽어 백엔드 enum 과 대조한다. Gradle 이 그 파일을 입력으로 모르면 프론트만 고쳤을 때 test 태스크가
+    // UP-TO-DATE 로 건너뛰고, 어긋난 채 로컬에서 조용히 통과한다(CI 는 새 체크아웃이라 늘 돈다).
+    // 여기 적힌 파일이 바뀌면 테스트를 다시 돌린다 — 새 동기화 테스트를 추가하면 경로도 같이 추가할 것.
+    inputs.files(
+            ['src/types/index.ts', 'src/constants/legal.ts', 'src/constants/stickerImages.ts']
+                    .collect { file("../frontend/$it") }
+                    .findAll { it.exists() }
+    ).withPropertyName('frontendSyncSources').optional()
 }
 
 // Spring Boot 실행형 jar 만 생성 (plain jar 비활성화 → 산출물 단일화)
