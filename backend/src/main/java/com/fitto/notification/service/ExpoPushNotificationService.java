@@ -15,6 +15,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.client.RestClient;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -40,6 +41,7 @@ public class ExpoPushNotificationService implements NotificationService {
     private static final String EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 
     private final DeviceTokenRepository deviceTokenRepository;
+    private final DeviceTokenService deviceTokenService;
     private final UserRepository userRepository;
     private final RestClient restClient;
 
@@ -59,8 +61,10 @@ public class ExpoPushNotificationService implements NotificationService {
             (r, pool) -> log.warn("Expo push 대기열 포화 — 발송 1건 폐기"));
 
     public ExpoPushNotificationService(DeviceTokenRepository deviceTokenRepository,
+                                       DeviceTokenService deviceTokenService,
                                        UserRepository userRepository) {
         this.deviceTokenRepository = deviceTokenRepository;
+        this.deviceTokenService = deviceTokenService;
         this.userRepository = userRepository;
         // 타임아웃 없는 기본 RestClient 는 exp.host 무응답 시 무한 대기한다 (Resend 와 동일 원칙)
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
@@ -111,16 +115,71 @@ public class ExpoPushNotificationService implements NotificationService {
             List<Map<String, Object>> messages = tokens.stream()
                     .map(t -> message(t.getToken(), title, body, link))
                     .toList();
-            restClient.post()
+            ExpoPushResponse response = restClient.post()
                     .uri(EXPO_PUSH_URL)
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(messages)
                     .retrieve()
-                    .toBodilessEntity();
+                    .body(ExpoPushResponse.class);
+            handleTickets(recipientUserId, tokens, response);
         } catch (Exception e) {
             log.warn("Expo push 발송 실패 recipient={}: {}", recipientUserId, e.getMessage());
         }
     }
+
+    /**
+     * 발송 결과(티켓) 처리 — <b>여기가 없으면 푸시는 관측 불가능한 기능이 된다.</b>
+     *
+     * <p>Expo 는 개별 메시지가 실패해도 <b>HTTP 200</b> 을 준다. 실패 사유는 본문
+     * {@code data[i].details.error} 에만 들어 있어서, 응답을 버리면 "토큰이 죽었다"·
+     * "APNs 인증서가 틀렸다" 같은 결정적인 정보가 통째로 사라진다. 실제로 "알림이 갑자기
+     * 안 온다"를 조사할 때 서버 로그에 아무 단서도 남아 있지 않았다(2026-09-08).
+     *
+     * <p>티켓은 보낸 순서대로 돌아오므로 인덱스로 토큰과 짝짓는다. 주요 사유:
+     * <ul>
+     *   <li>{@code DeviceNotRegistered} — 앱 삭제·재설치·기기 교체. 토큰을 지운다.
+     *   <li>{@code InvalidCredentials} — APNs 키/FCM 설정 문제. <b>그 플랫폼 전체가 죽는다.</b>
+     *       토큰 잘못이 아니므로 지우지 않고 error 로 남긴다.
+     *   <li>{@code MessageTooBig}·{@code MessageRateExceeded} — 우리 쪽 발송 문제.
+     * </ul>
+     */
+    private void handleTickets(Long recipientUserId, List<DeviceToken> tokens, ExpoPushResponse response) {
+        if (response == null || response.data() == null) return;
+
+        List<String> dead = new ArrayList<>();
+        List<Ticket> tickets = response.data();
+        for (int i = 0; i < tickets.size() && i < tokens.size(); i++) {
+            Ticket ticket = tickets.get(i);
+            if (ticket == null || !"error".equals(ticket.status())) continue;
+
+            DeviceToken token = tokens.get(i);
+            String reason = ticket.details() != null ? ticket.details().error() : null;
+            if ("DeviceNotRegistered".equals(reason)) {
+                dead.add(token.getToken());
+                log.info("Expo push 토큰 폐기 recipient={} platform={}: 기기에 앱이 없음",
+                        recipientUserId, token.getPlatform());
+            } else {
+                // 토큰을 지워선 안 되는 실패 — 설정 문제일 수 있으므로 눈에 띄게 남긴다
+                log.error("Expo push 거절 recipient={} platform={} reason={}: {}",
+                        recipientUserId, token.getPlatform(), reason, ticket.message());
+            }
+        }
+
+        if (!dead.isEmpty()) {
+            try {
+                deviceTokenService.removeDeadTokens(dead);
+            } catch (Exception e) {
+                log.warn("죽은 푸시 토큰 정리 실패 recipient={}: {}", recipientUserId, e.getMessage());
+            }
+        }
+    }
+
+    /** Expo Push API 응답 — 우리가 보는 필드만. 나머지는 무시한다. */
+    record ExpoPushResponse(List<Ticket> data) {}
+
+    record Ticket(String status, String message, TicketDetails details) {}
+
+    record TicketDetails(String error) {}
 
     /**
      * Expo 메시지 한 건.
