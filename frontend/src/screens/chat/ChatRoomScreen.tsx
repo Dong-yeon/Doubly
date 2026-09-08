@@ -1468,12 +1468,12 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         />
         <View style={styles.inputBar}>
           {uploading ? (
-            <View style={styles.imageBtn}>
+            <View style={styles.trayBtn}>
               <ActivityIndicator size="small" color={colors.primary} />
             </View>
           ) : (
             <TouchableOpacity
-              style={[styles.imageBtn, showExtras && styles.stickerToggleActive]}
+              style={[styles.trayBtn, showExtras && styles.trayBtnActive]}
               onPress={() => { setShowStickers(false); setShowExtras((v) => !v); }}
               accessibilityRole="button"
               accessibilityLabel={showExtras ? '보조 도구 닫기' : '이모티콘·사진 더 보기'}
@@ -1495,15 +1495,43 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             placeholderTextColor={colors.textSecondary}
             multiline
           />
-          <TouchableOpacity
-            style={[styles.sendBtn, (!text.trim() || editSaving) && styles.sendDisabled]}
-            onPress={onSend}
-            disabled={!text.trim() || editSaving}
-            accessibilityRole="button"
-            accessibilityLabel={editing ? '수정 완료' : '전송'}
-          >
-            <MaterialCommunityIcons name="send" size={20} color={colors.white} style={styles.sendIcon} />
-          </TouchableOpacity>
+          {/*
+            오른쪽 슬롯 — 보낼 게 있을 때만 전송 버튼이다.
+
+            예전엔 채워진 녹색 원이 빈 입력창 옆에 opacity 0.4 로 <b>상주</b>했다. 누를 수도
+            없는 버튼이 화면에서 가장 채도 높은 물체로 계속 떠 있었고, 주요 동작(전송)과
+            부수 도구("+")가 똑같이 46px 이라 입력바 안에 위계가 없었다.
+
+            글자가 있을 때만 나타나게 하면 (1) 상주하는 녹색 덩어리가 사라지고 (2) 버튼이
+            뜨는 순간 자체가 "보낼 수 있다"는 피드백이 된다. 빈 자리는 이모티콘이 대신
+            받는다 — 버튼 총량이 느는 게 아니라 어차피 비어 있던 슬롯을 쓰는 것이라,
+            "+" 로 4개를 모았던 결정(extrasPanel 주석)과 어긋나지 않는다.
+          */}
+          {text.trim() ? (
+            <TouchableOpacity
+              style={[styles.sendBtn, editSaving && styles.sendDisabled]}
+              onPress={onSend}
+              disabled={editSaving}
+              accessibilityRole="button"
+              accessibilityLabel={editing ? '수정 완료' : '전송'}
+            >
+              <MaterialCommunityIcons name="arrow-up" size={22} color={colors.white} style={styles.sendIcon} />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[styles.trayBtn, showStickers && styles.trayBtnActive]}
+              onPress={() => { setShowExtras(false); setShowStickers((v) => !v); }}
+              accessibilityRole="button"
+              accessibilityLabel={showStickers ? '이모티콘 닫기' : '이모티콘'}
+            >
+              <MaterialCommunityIcons
+                name="emoticon-outline"
+                size={24}
+                color={showStickers ? colors.primary : colors.textSecondary}
+                style={styles.trayIcon}
+              />
+            </TouchableOpacity>
+          )}
         </View>
       </KeyboardAvoidingView>
 
@@ -1793,7 +1821,6 @@ const styles = themedStyles((colors) => ({
   stickerPackLabelText: { fontSize: fontSize.caption, fontWeight: '800', color: colors.textSecondary },
   stickerPackBadge: { fontSize: 9, fontWeight: '800', color: colors.together },
   stickerLocked: { opacity: 0.45 },
-  stickerToggleActive: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
   workoutCard: { paddingVertical: 10, paddingHorizontal: spacing.md, borderRadius: radius.lg, borderWidth: 1.5, maxWidth: 240 },
   workoutCardMine: { backgroundColor: colors.secondarySoft, borderColor: colors.secondary },
   workoutCardTheirs: { backgroundColor: colors.surface, borderColor: colors.secondary },
@@ -1986,7 +2013,15 @@ const styles = themedStyles((colors) => ({
     gap: spacing.sm,
     backgroundColor: colors.background,
   },
-  imageBtn: { width: 46, height: 46, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  /*
+   * 트레이 버튼("+" · 이모티콘) — 테두리도 채움도 없다.
+   *
+   * 예전엔 46px 원 + 1px 테두리라 입력바에 "활성 객체"가 셋이었고(버튼·입력창·전송),
+   * 그만큼 메시지 목록과 시각적으로 경쟁했다. 입력바는 콘텐츠가 아니라 도구라
+   * 물러나 있어야 한다 — 터치 영역(46)은 그대로 두고 그림만 지운다.
+   */
+  trayBtn: { width: 46, height: 46, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  trayBtnActive: { backgroundColor: colors.primarySoft },
   /*
    * "+"(24)와 전송(20) 아이콘은 크기가 달라 실제 박스는 둘 다 46x46 로 완전히
    * 같은데도(alignItems/justifyContent: center) 세로 정렬이 어긋나 보였다.
@@ -1996,7 +2031,7 @@ const styles = themedStyles((colors) => ({
    * 위/아래로 밀린다. lineHeight 를 size 와 같게 못박아 그 여백을 없앤다.
    */
   trayIcon: { lineHeight: 24 },
-  sendIcon: { lineHeight: 20 },
+  sendIcon: { lineHeight: 22 },
   input: {
     flex: 1,
     // 웹 필수 — <textarea> 내재 최소 폭 탓에 flex:1 이어도 안 줄어든다
@@ -2009,15 +2044,19 @@ const styles = themedStyles((colors) => ({
     paddingBottom: 12,
     fontSize: fontSize.subtitle,
     color: colors.textPrimary,
-    backgroundColor: colors.surface,
+    // 테두리 대신 살짝 눌린 채움 — 폼 필드가 아니라 "쓰는 자리"로 읽힌다.
+    // 테두리를 지운 만큼 입력바 전체가 메시지 목록 뒤로 물러난다(trayBtn 주석).
+    backgroundColor: colors.surfaceAlt,
     borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
-  // 텍스트 "전송" 대신 아이콘 하나 — 폭을 아껴 입력창에 더 준다("+" 트레이 통합과 같은 목적)
+  /*
+   * 전송 — 입력창과 <b>같은 곡률</b>(radius.lg)을 쓴다. 완전한 원(radius.pill)이면
+   * 바로 옆 입력창(16)과 곡률이 따로 놀아 나중에 얹은 물건처럼 보였다.
+   * 글자가 있을 때만 뜨므로(렌더 주석) 상주하던 녹색 원은 이제 없다.
+   */
   sendBtn: {
     backgroundColor: colors.primary,
-    borderRadius: radius.pill,
+    borderRadius: radius.lg,
     width: 46,
     height: 46,
     alignItems: 'center',
