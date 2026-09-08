@@ -1,0 +1,275 @@
+package com.fitto.coupleemoji.service;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fitto.common.ai.GeminiClient;
+import com.fitto.common.ai.GeneratedImage;
+import com.fitto.common.event.CoupleEvent;
+import com.fitto.common.event.CoupleEventPublisher;
+import com.fitto.common.exception.BusinessException;
+import com.fitto.common.exception.ErrorCode;
+import com.fitto.common.notification.NotificationCategory;
+import com.fitto.common.notification.NotificationService;
+import com.fitto.common.notification.PushLinks;
+import com.fitto.common.plan.Feature;
+import com.fitto.common.plan.PlanGuard;
+import com.fitto.common.upload.CloudinaryImageDeleter;
+import com.fitto.common.upload.CloudinaryImageFetcher;
+import com.fitto.common.upload.CloudinaryImageUploader;
+import com.fitto.common.upload.CloudinaryProperties;
+import com.fitto.common.upload.CloudinarySigner;
+import com.fitto.common.upload.UploadSignatureResponse;
+import com.fitto.coupleemoji.domain.CoupleEmoji;
+import com.fitto.coupleemoji.domain.CoupleEmojiEmotion;
+import com.fitto.coupleemoji.dto.CoupleEmojiBatchResponse;
+import com.fitto.coupleemoji.dto.CoupleEmojiResponse;
+import com.fitto.coupleemoji.dto.GenerateCoupleEmojiRequest;
+import com.fitto.coupleemoji.repository.CoupleEmojiRepository;
+import com.fitto.relation.domain.Relation;
+import com.fitto.relation.domain.RelationStatus;
+import com.fitto.relation.domain.RelationType;
+import com.fitto.relation.repository.RelationRepository;
+import com.fitto.user.domain.User;
+import com.fitto.user.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * 우리 이모지 — 상대(또는 내) 사진 한 장으로 감정 6종 캐릭터 세트를 AI 가 그리고, 커플이 함께 쓴다.
+ * 설계와 실측은 docs/COUPLE_EMOJI_AI_DESIGN_2026-09-08.md.
+ *
+ * <p><b>흐름은 두 스레드에 걸쳐 있다.</b> 요청 스레드에서 {@link #prepare} 가 검증·한도 차감을 끝내고
+ * 티켓을 돌려주면, 컨트롤러가 그 티켓으로 {@code AiJobService} 에 {@link #generate} 를 넘긴다.
+ * 차감을 요청 시점에 하는 이유는 비싼 준비(원본 다운로드·텍스트 모델 호출)를 시작하기 전에
+ * 막아야 해서다 — 그리고 402 를 폴링 한 바퀴 뒤가 아니라 즉시 돌려주기 위해서다.
+ *
+ * <p><b>감정 한 장마다 트랜잭션을 따로 연다.</b> 6장이 순차로 약 1분 걸리는데(장당 8~15초), 한 트랜잭션에
+ * 묶으면 그동안 아무것도 안 보이고 커넥션 하나를 1분간 붙잡는다. 장마다 커밋하면 앱이 목록을 다시 조회할
+ * 때마다 칸이 하나씩 채워진다(§7 "칸이 채워지는 UI" 의 서버 쪽 전제).
+ */
+@Service
+@Transactional(readOnly = true)
+public class CoupleEmojiService {
+
+    private static final Logger log = LoggerFactory.getLogger(CoupleEmojiService.class);
+
+    private static final Feature FEATURE = Feature.AI_COUPLE_EMOJI;
+
+    /**
+     * Cloudinary 하위 폴더 두 개. 원본({@code SOURCE_SUBFOLDER})은 생성이 끝나면 서버가 지운다(§9) —
+     * 그래서 <b>이 폴더의 URL 만</b> 원본으로 받고, 이 폴더의 것만 지운다. 아무 URL 이나 받아 지우면
+     * 상대 피드 사진 URL 을 넣어 지워버리는 경로가 된다.
+     */
+    static final String SOURCE_SUBFOLDER = "emoji-source";
+    static final String RESULT_SUBFOLDER = "couple-emoji";
+
+    private final CoupleEmojiRepository repository;
+    private final RelationRepository relationRepository;
+    private final UserRepository userRepository;
+    private final GeminiClient geminiClient;
+    private final PlanGuard planGuard;
+    private final CloudinaryProperties cloudinaryProperties;
+    private final CloudinaryImageFetcher imageFetcher;
+    private final CloudinaryImageUploader imageUploader;
+    private final CloudinaryImageDeleter imageDeleter;
+    private final NotificationService notificationService;
+    private final CoupleEventPublisher coupleEventPublisher;
+    private final TransactionTemplate transactionTemplate;
+
+    public CoupleEmojiService(CoupleEmojiRepository repository,
+                              RelationRepository relationRepository,
+                              UserRepository userRepository,
+                              GeminiClient geminiClient,
+                              PlanGuard planGuard,
+                              CloudinaryProperties cloudinaryProperties,
+                              CloudinaryImageFetcher imageFetcher,
+                              CloudinaryImageUploader imageUploader,
+                              CloudinaryImageDeleter imageDeleter,
+                              NotificationService notificationService,
+                              CoupleEventPublisher coupleEventPublisher,
+                              PlatformTransactionManager transactionManager) {
+        this.repository = repository;
+        this.relationRepository = relationRepository;
+        this.userRepository = userRepository;
+        this.geminiClient = geminiClient;
+        this.planGuard = planGuard;
+        this.cloudinaryProperties = cloudinaryProperties;
+        this.imageFetcher = imageFetcher;
+        this.imageUploader = imageUploader;
+        this.imageDeleter = imageDeleter;
+        this.notificationService = notificationService;
+        this.coupleEventPublisher = coupleEventPublisher;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
+    }
+
+    /** 요청 스레드 → 백그라운드 작업으로 넘기는 것 — 검증이 끝난 값만 담는다 */
+    public record GenerationTicket(Long relationId, Long userId, Long subjectUserId, String sourceImageUrl) {
+    }
+
+    /**
+     * 원본 사진 업로드 서명 — 전용 폴더({@link #SOURCE_SUBFOLDER})로. 사진 한도({@code PHOTO_UPLOAD})는
+     * 일반 사진과 같이 센다(별도 예외 없음, §6).
+     */
+    public UploadSignatureResponse sourceUploadSignature(Long userId) {
+        activeCouple(userId);
+        if (!cloudinaryProperties.isConfigured()) {
+            throw new BusinessException(ErrorCode.UPLOAD_NOT_CONFIGURED);
+        }
+        planGuard.consume(userId, Feature.PHOTO_UPLOAD);
+        return CloudinarySigner.sign(cloudinaryProperties, sourceFolder());
+    }
+
+    /**
+     * 요청 스레드: 관계·대상 검증 + 한도 차감. 여기서 던지는 402/429 는 그대로 HTTP 응답이 된다.
+     */
+    public GenerationTicket prepare(Long userId, GenerateCoupleEmojiRequest request) {
+        Relation couple = activeCouple(userId);
+        Long subject = request.subjectUserId() != null ? request.subjectUserId() : couple.partnerOf(userId);
+        if (subject == null || !couple.involves(subject)) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "우리 둘 중 한 사람의 사진이어야 해요.");
+        }
+        if (!isSourceUrl(request.sourceImageUrl())) {
+            throw new BusinessException(ErrorCode.INVALID_PHOTO_URL);
+        }
+        geminiClient.requireImageConfiguredAndCountUsage(userId, FEATURE);
+        return new GenerationTicket(couple.getId(), userId, subject, request.sourceImageUrl());
+    }
+
+    /**
+     * 백그라운드 작업: 원본 → 외형 사실(텍스트 모델) → 감정 6종(이미지 모델) → 장마다 업로드·저장.
+     *
+     * <p>환불 규칙(§5-1): 한 장이라도 살렸으면 환불하지 않는다. 하나도 못 살렸을 때만 되돌리고,
+     * 마지막 실패의 사유를 그대로 사용자에게 보여준다(거절이면 "다른 사진", 그 밖엔 "잠시 후").
+     * 원본 다운로드 실패는 우리가 직접 되돌리고, 텍스트 모델 실패는 {@code GeminiClient} 가 스스로 되돌린다
+     * — 두 번 되돌리지 않도록 나눠 잡는다.
+     */
+    public CoupleEmojiBatchResponse generate(GenerationTicket ticket) {
+        CloudinaryImageFetcher.Image source;
+        try {
+            source = imageFetcher.fetch(ticket.sourceImageUrl());
+        } catch (RuntimeException e) {
+            geminiClient.refund(ticket.userId(), FEATURE);
+            throw e;
+        }
+        String facts = describe(ticket.userId(), source);
+
+        String batchId = UUID.randomUUID().toString();
+        List<CoupleEmoji> saved = new ArrayList<>();
+        List<String> failed = new ArrayList<>();
+        BusinessException lastFailure = null;
+        for (CoupleEmojiEmotion emotion : CoupleEmojiEmotion.values()) {
+            try {
+                GeneratedImage image = geminiClient.generateImageInBackground(List.of(
+                        GeminiClient.imagePart(source.mimeType(), source.bytes()),
+                        GeminiClient.textPart(CoupleEmojiPrompts.imagePrompt(facts, emotion))));
+                String url = imageUploader.upload(image.bytes(), image.mimeType(), RESULT_SUBFOLDER);
+                CoupleEmoji row = transactionTemplate.execute(status -> repository.save(CoupleEmoji.builder()
+                        .relationId(ticket.relationId())
+                        .createdBy(ticket.userId())
+                        .subjectUserId(ticket.subjectUserId())
+                        .batchId(batchId)
+                        .emotion(emotion)
+                        .imageUrl(url)
+                        .promptVersion(CoupleEmojiPrompts.VERSION)
+                        .identityFacts(facts)
+                        .build()));
+                saved.add(row);
+            } catch (BusinessException e) {
+                lastFailure = e;
+                failed.add(emotion.name());
+                log.warn("우리 이모지 {} 생성 실패(relation={}): {}", emotion, ticket.relationId(), e.getErrorCode());
+            }
+        }
+
+        // 원본은 저장하지 않는다(§9) — 성공·실패와 무관하게 지운다. 전용 폴더의 것만 받았으므로 안전하다.
+        imageDeleter.deleteAll(List.of(ticket.sourceImageUrl()));
+
+        if (saved.isEmpty()) {
+            geminiClient.refund(ticket.userId(), FEATURE);
+            throw lastFailure != null ? lastFailure : new BusinessException(ErrorCode.AI_ANALYSIS_FAILED);
+        }
+
+        coupleEventPublisher.publish(ticket.relationId(), CoupleEvent.COUPLE_EMOJI);
+        notifyPartner(ticket);
+        return new CoupleEmojiBatchResponse(batchId,
+                saved.stream().map(CoupleEmojiResponse::from).toList(), failed);
+    }
+
+    /** 트레이 — 관계의 살아 있는 이모지 전부(최근 세트가 위). 둘 다 같은 목록을 본다. */
+    public List<CoupleEmojiResponse> list(Long userId) {
+        Relation couple = activeCouple(userId);
+        return repository.findAllByRelationIdAndDeletedAtIsNullOrderByIdDesc(couple.getId()).stream()
+                .map(CoupleEmojiResponse::from)
+                .toList();
+    }
+
+    /** 한 장 숨기기 — 만든 사람이 아니어도 관계 멤버면 누구나(§9 "상대가 언제든 지울 수 있다") */
+    @Transactional
+    public void delete(Long userId, Long emojiId) {
+        Relation couple = activeCouple(userId);
+        CoupleEmoji emoji = repository.findByIdAndRelationIdAndDeletedAtIsNull(emojiId, couple.getId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.COUPLE_EMOJI_NOT_FOUND));
+        emoji.hide();
+        coupleEventPublisher.publish(couple.getId(), CoupleEvent.COUPLE_EMOJI);
+    }
+
+    /** 세트 통째로 숨기기 */
+    @Transactional
+    public void deleteBatch(Long userId, String batchId) {
+        Relation couple = activeCouple(userId);
+        List<CoupleEmoji> rows = repository.findAllByRelationIdAndBatchIdAndDeletedAtIsNull(couple.getId(), batchId);
+        if (rows.isEmpty()) {
+            throw new BusinessException(ErrorCode.COUPLE_EMOJI_NOT_FOUND);
+        }
+        rows.forEach(CoupleEmoji::hide);
+        coupleEventPublisher.publish(couple.getId(), CoupleEvent.COUPLE_EMOJI);
+    }
+
+    // ---- 내부 ----
+
+    /** 1단계 — 외형 사실 추출. 실패하면 GeminiClient 가 한도를 되돌리고 던진다(클래스 주석). */
+    private String describe(Long userId, CloudinaryImageFetcher.Image source) {
+        JsonNode facts = geminiClient.generateJsonInBackground(userId, FEATURE,
+                List.of(GeminiClient.imagePart(source.mimeType(), source.bytes()),
+                        GeminiClient.textPart(CoupleEmojiPrompts.DESCRIBE)),
+                CoupleEmojiPrompts.DESCRIBE_SCHEMA);
+        return CoupleEmojiPrompts.factsOf(facts);
+    }
+
+    private void notifyPartner(GenerationTicket ticket) {
+        Relation couple = relationRepository.findById(ticket.relationId()).orElse(null);
+        Long partnerId = couple == null ? null : couple.partnerOf(ticket.userId());
+        if (partnerId == null) {
+            return;
+        }
+        String name = userRepository.findById(ticket.userId()).map(User::getName).orElse("상대방");
+        // 몰래 만들 수 없다(§9 3번) — 상대 얼굴이 쓰였든 아니든 세트가 생기면 상대에게 알린다.
+        notificationService.notify(partnerId, NotificationCategory.PARTNER, "우리 이모지",
+                name + "님이 우리 이모지를 만들었어요 👀", PushLinks.chat(ticket.relationId()));
+    }
+
+    private String sourceFolder() {
+        return cloudinaryProperties.getFolder() + "/" + SOURCE_SUBFOLDER;
+    }
+
+    /** 전용 폴더에 올라간 Cloudinary URL 인가 — 클래스 상수 주석 참고 */
+    boolean isSourceUrl(String url) {
+        String publicId = imageDeleter.extractPublicId(url);
+        return publicId != null && publicId.startsWith(sourceFolder() + "/");
+    }
+
+    private Relation activeCouple(Long userId) {
+        return relationRepository
+                .findByUserAndTypeAndStatus(userId, RelationType.COUPLE, RelationStatus.ACTIVE)
+                .stream().findFirst()
+                .orElseThrow(() -> new BusinessException(ErrorCode.RELATION_NOT_FOUND,
+                        "커플 연결 후 사용할 수 있는 기능이에요."));
+    }
+}

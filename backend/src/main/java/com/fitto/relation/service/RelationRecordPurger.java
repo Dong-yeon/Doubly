@@ -86,6 +86,9 @@ public class RelationRecordPurger {
         exec("delete from couple_events where couple_id = :rid", relationId);
         exec("delete from daily_answers where couple_id = :rid", relationId);
         exec("delete from mood_statuses where couple_id = :rid", relationId);
+        // 우리 이모지(V80) — relations/users 를 참조. 채팅 메시지가 content 로 id 를 들고 있지만
+        // FK 는 아니다(트레이에서 숨겨도 지난 메시지는 보여야 해서). 숨긴 행(deleted_at)도 여기서 같이 지운다.
+        exec("delete from couple_emojis where relation_id = :rid", relationId);
         exec("delete from call_sessions where couple_id = :rid", relationId);
         // 운동 부스터(V61) — relations/users 를 함께 참조하므로 관계와 함께 지운다
         exec("delete from workout_boosters where relation_id = :rid", relationId);
@@ -143,6 +146,10 @@ public class RelationRecordPurger {
                 + "where t.couple_id = :rid and t.cover_image_url is not null", relationId));
         urls.addAll(select("select m.image_url from chat_messages m "
                 + "where m.relation_id = :rid and m.image_url is not null", relationId));
+        // 우리 이모지(V80) — 트레이에서 숨긴 것(deleted_at)도 파일은 아직 있으므로 조건 없이 전부 모은다.
+        // 채팅 메시지가 같은 URL 을 image_url 로 복사해 두므로 위 chat_messages 와 중복될 수 있지만,
+        // 지운 자산을 다시 지우는 호출은 무시되므로(멱등) 걸러내지 않는다(feed_post_photos 와 같은 이유).
+        urls.addAll(select("select e.image_url from couple_emojis e where e.relation_id = :rid", relationId));
         urls.addAll(select("select r.background_image_url from relations r "
                 + "where r.id = :rid and r.background_image_url is not null", relationId));
         return urls;
