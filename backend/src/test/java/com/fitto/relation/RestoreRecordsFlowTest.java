@@ -153,6 +153,54 @@ class RestoreRecordsFlowTest {
         assertThat(streaks.longValue()).isZero();
     }
 
+    /**
+     * 무드·우리 이모지는 relations FK 를 가진다 — 안 옮기면 옛 관계 삭제가 FK 위반으로 실패해
+     * 복원 전체가 되돌아간다(2026-09-08 점검 #1). 무드가 이모지를 참조(V81)하므로 둘을 함께 심는다.
+     */
+    @Test
+    @Transactional
+    void 무드와_우리_이모지도_복원된다() {
+        Long me = register("restore-mood-a@fitto.com");
+        Long partner = register("restore-mood-b@fitto.com");
+        Long oldRelationId = connect(me, partner);
+
+        em.createNativeQuery("insert into couple_emojis "
+                        + "(relation_id, created_by, subject_user_id, batch_id, emotion, image_url, prompt_version) "
+                        + "values (:rid, :me, :partner, 'batch-1', 'HAPPY', "
+                        + "'https://res.cloudinary.com/demo/image/upload/v1/fitto/couple-emoji/1.jpg', 'v4')")
+                .setParameter("rid", oldRelationId).setParameter("me", me).setParameter("partner", partner)
+                .executeUpdate();
+        Number emojiId = (Number) em.createNativeQuery(
+                        "select id from couple_emojis where relation_id = :rid")
+                .setParameter("rid", oldRelationId).getSingleResult();
+        em.createNativeQuery("insert into mood_statuses (couple_id, user_id, emoji, couple_emoji_id) "
+                        + "values (:rid, :me, '😊', :eid)")
+                .setParameter("rid", oldRelationId).setParameter("me", me).setParameter("eid", emojiId.longValue())
+                .executeUpdate();
+
+        relationService.endRelation(me, oldRelationId);
+        Long newRelationId = connect(me, partner);
+        em.flush();
+        em.clear();
+
+        relationService.requestRestore(me);
+        RestoreRecordsResponse result = relationService.requestRestore(partner);
+        em.flush();
+        em.clear();
+
+        assertThat(result.status()).isEqualTo(RestoreRecordsResponse.Status.RESTORED);
+        assertThat(count("mood_statuses", "couple_id", newRelationId)).isEqualTo(1);
+        assertThat(count("couple_emojis", "relation_id", newRelationId)).isEqualTo(1);
+        assertThat(count("relations", "id", oldRelationId)).isZero();
+    }
+
+    private long count(String table, String column, Long id) {
+        Number n = (Number) em.createNativeQuery(
+                        "select count(*) from " + table + " where " + column + " = :id")
+                .setParameter("id", id).getSingleResult();
+        return n.longValue();
+    }
+
     /** 기념일은 옛 관계에 있다 — 복원 시 승계되어야 한다. */
     @Test
     @Transactional
