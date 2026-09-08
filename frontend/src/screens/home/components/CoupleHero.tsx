@@ -15,7 +15,7 @@
  * <p>순수 표현 컴포넌트다 — 스토어를 직접 읽지 않고 전부 props 로 받는다.
  */
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '../../../components/Icon';
 import { Avatar } from '../../../components/Avatar';
 import { DoublyMark } from '../../../components/DoublyLogo';
@@ -42,6 +42,11 @@ export interface PersonToday {
    * 참고) 줄을 하나 늘리면 작은 기기에서 레이아웃이 깨진다.
    */
   moodEmoji?: string | null;
+  /**
+   * 우리 이모지로 무드를 걸었으면 그 이미지 — 있으면 {@link moodEmoji} 대신 그린다(설계 메모 §18).
+   * 상대가 그 이모지를 지우면 서버가 null 로 내려주므로 저절로 유니코드로 돌아간다.
+   */
+  moodImageUrl?: string | null;
 }
 
 export interface CoupleHeroProps {
@@ -147,7 +152,15 @@ function Column({
           {/* 무드 배지 — 절대 위치 오버레이라 열 높이에 영향이 없다 */}
           {person.moodEmoji ? (
             <View style={styles.moodBadge}>
-              <Text style={styles.moodBadgeEmoji}>{person.moodEmoji}</Text>
+              {person.moodImageUrl ? (
+                <Image
+                  source={{ uri: person.moodImageUrl }}
+                  style={styles.moodBadgeImage}
+                  resizeMode="contain"
+                />
+              ) : (
+                <Text style={styles.moodBadgeEmoji}>{person.moodEmoji}</Text>
+              )}
             </View>
           ) : null}
         </View>
@@ -292,6 +305,11 @@ const styles = themedStyles((colors) => ({
     justifyContent: 'center',
   },
   moodBadgeEmoji: { fontSize: 12, lineHeight: 14 },
+  /*
+   * 우리 이모지 배지 — 배지 원(22px)을 꽉 채운다. 유니코드 glyph 와 달리 그림에는
+   * 자체 여백(스티커 흰 테두리)이 있어서, 안쪽으로 더 줄이면 얼굴이 안 보인다.
+   */
+  moodBadgeImage: { width: 20, height: 20, borderRadius: 10 },
   name: { color: colors.textPrimary, fontSize: fontSize.body, fontWeight: '800', marginTop: spacing.xs },
   // 높이를 고정해 좌우 칩의 시작 높이를 맞춘다 (streak 유무와 무관)
   streakSlot: { height: 18, justifyContent: 'center' },

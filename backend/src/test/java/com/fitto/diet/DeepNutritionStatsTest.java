@@ -134,15 +134,15 @@ class DeepNutritionStatsTest {
         long[] free = couple("mood-free-a@fitto.com", "mood-free-b@fitto.com");
         String premiumMood = MoodPack.PREMIUM.get(0);
 
-        assertThatThrownBy(() -> moodService.set(free[0], new MoodRequest(premiumMood, null)))
+        assertThatThrownBy(() -> moodService.set(free[0], new MoodRequest(premiumMood, null, null)))
                 .isInstanceOf(BusinessException.class);
         // 기본 무드는 그대로 무료
-        assertThatCode(() -> moodService.set(free[0], new MoodRequest("😊", null)))
+        assertThatCode(() -> moodService.set(free[0], new MoodRequest("😊", null, null)))
                 .doesNotThrowAnyException();
 
         long[] pro = couple("mood-pro-a@fitto.com", "mood-pro-b@fitto.com");
         goPro(pro[0]);
-        assertThatCode(() -> moodService.set(pro[1], new MoodRequest(premiumMood, null)))
+        assertThatCode(() -> moodService.set(pro[1], new MoodRequest(premiumMood, null, null)))
                 .doesNotThrowAnyException();   // 커플 단위 판정 — 한쪽만 PRO 여도 둘 다 쓴다
     }
 }
