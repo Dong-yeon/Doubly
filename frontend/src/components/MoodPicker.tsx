@@ -5,18 +5,28 @@
  * 확장 무드팩만 PRO 다(`Feature.PREMIUM_STICKER` — 스티커와 같은 게이트로 판정한다).
  * 서버(MoodService)도 같은 규칙으로 한 번 더 막는다 — 여기는 우회 방지가 아니라
  * UX(굳이 보냈다가 거부당하지 않게).
+ *
+ * <p><b>우리 이모지는 "내 얼굴 최신 한 벌"만 올린다</b>(설계 메모 §7·§18). 커플이 여러 벌을
+ * 만들 수 있어서(PRO 월 5세트) 전부 올리면 최대 30장이 되는데, 이 파일의 12종 원칙 자체가
+ * "처음부터 다 만들면 선택 마비만 생긴다"(`moodEmojis.ts`)에서 나왔다. 두 가지로 줄인다 —
+ * ① 무드는 "내 기분"이므로 <b>내 얼굴</b>(subjectUserId === 나)만, ② 그중 <b>최신 한 벌</b>만.
+ * 그래야 세트를 몇 벌 만들어도 여기 개수는 6장으로 고정된다.
  */
-import React, { useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Image, Modal, Pressable, ScrollView, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { MOOD_EMOJIS, PREMIUM_MOOD_EMOJIS } from '../constants/moodEmojis';
+import { COUPLE_EMOJI_EMOTIONS } from '../constants/coupleEmojiEmotions';
 import { usePlanStore } from '../store/planStore';
+import { useCoupleEmojiStore } from '../store/coupleEmojiStore';
+import { useAuthStore } from '../store/authStore';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 import { themedStyles } from '../theme/themedStyles';
+import type { MoodChoice } from '../api/mood';
 
 interface Props {
   visible: boolean;
   onClose: () => void;
-  onSelect: (emoji: string, message?: string) => void;
+  onSelect: (choice: MoodChoice, message?: string) => void;
 }
 
 export function MoodPicker({ visible, onClose, onSelect }: Props) {
@@ -24,6 +34,29 @@ export function MoodPicker({ visible, onClose, onSelect }: Props) {
   const can = usePlanStore((s) => s.can);
   const showUpgrade = usePlanStore((s) => s.showUpgrade);
   const premiumAllowed = can('PREMIUM_STICKER');
+
+  const myId = useAuthStore((s) => s.user?.id);
+  const coupleEmojis = useCoupleEmojiStore((s) => s.emojis);
+  const loadCoupleEmojis = useCoupleEmojiStore((s) => s.load);
+
+  // 시트를 열 때 목록을 확인한다(캐시가 있으면 요청은 안 나간다 — 스토어의 load 규칙).
+  useEffect(() => {
+    if (visible) loadCoupleEmojis();
+  }, [visible, loadCoupleEmojis]);
+
+  /** 내 얼굴 최신 한 벌 — 파일 상단 주석의 두 가지 축소 규칙 */
+  const myLatestSet = useMemo(() => {
+    if (!myId) return [];
+    // 목록은 서버가 최신순(id desc)으로 준다 → 처음 만나는 내 얼굴의 batchId 가 최신 세트다
+    const mine = coupleEmojis.filter((e) => e.subjectUserId === myId);
+    const latestBatchId = mine[0]?.batchId;
+    if (!latestBatchId) return [];
+    const set = mine.filter((e) => e.batchId === latestBatchId);
+    // 감정 정해진 순서로 — 목록 순서(id desc)는 생성 역순이라 사람이 읽는 순서와 다르다
+    return COUPLE_EMOJI_EMOTIONS.map((def) => set.find((e) => e.emotion === def.key)).filter(
+      (e): e is (typeof set)[number] => !!e,
+    );
+  }, [coupleEmojis, myId]);
   /*
    * 격자 스크롤 높이를 320 으로 고정해뒀더니, 화면이 큰 기기(아이폰 프로맥스 등)에서는
    * 시트가 화면 아래쪽 절반도 못 채우고 그 위로 배경(딤 처리된 화면)만 크게 비어
@@ -38,12 +71,12 @@ export function MoodPicker({ visible, onClose, onSelect }: Props) {
     onClose();
   };
 
-  const onPress = (emoji: string, locked: boolean, label: string) => {
+  const onPress = (choice: MoodChoice, locked: boolean, label: string) => {
     if (locked) {
       showUpgrade(`${label} 무드는 PRO에서 쓸 수 있어요.`);
       return;
     }
-    onSelect(emoji, message.trim() || undefined);
+    onSelect(choice, message.trim() || undefined);
     close();
   };
 
@@ -65,36 +98,63 @@ export function MoodPicker({ visible, onClose, onSelect }: Props) {
           />
 
           {/* 확장팩까지 24종이라 작은 화면에서는 넘친다 — 시트 안에서만 스크롤한다 */}
-          <ScrollView style={{ maxHeight: gridMaxHeight }} contentContainerStyle={styles.grid}>
-            {MOOD_EMOJIS.map((m) => (
-              <Pressable
-                key={m.emoji}
-                style={({ pressed }) => [styles.cell, pressed && styles.cellPressed]}
-                onPress={() => onPress(m.emoji, false, m.label)}
-                accessibilityRole="button"
-                accessibilityLabel={`${m.label} 무드로 남기기`}
-              >
-                <Text style={styles.emoji}>{m.emoji}</Text>
-                <Text style={styles.label}>{m.label}</Text>
-              </Pressable>
-            ))}
-            {PREMIUM_MOOD_EMOJIS.map((m) => (
-              <Pressable
-                key={m.emoji}
-                style={({ pressed }) => [styles.cell, pressed && styles.cellPressed]}
-                onPress={() => onPress(m.emoji, !premiumAllowed, m.label)}
-                accessibilityRole="button"
-                accessibilityLabel={`${m.label} 무드로 남기기${premiumAllowed ? '' : ' — PRO 기능'}`}
-              >
-                {!premiumAllowed ? (
-                  <View style={styles.lockBadge}>
-                    <Text style={styles.lockBadgeText}>PRO</Text>
-                  </View>
-                ) : null}
-                <Text style={styles.emoji}>{m.emoji}</Text>
-                <Text style={styles.label}>{m.label}</Text>
-              </Pressable>
-            ))}
+          <ScrollView style={{ maxHeight: gridMaxHeight }}>
+            {/*
+              우리 이모지가 있을 때만 섹션이 나타난다. 없을 때 "만들기" 안내를 넣지 않은 건
+              생성 진입점이 채팅 트레이 한 곳이어서다 — 여기에 또 두면 같은 기능의 입구가
+              둘로 갈린다(§18 "남은 것"에 후속으로 적어 뒀다).
+            */}
+            {myLatestSet.length > 0 ? (
+              <>
+                <Text style={styles.sectionTitle}>우리 이모지</Text>
+                <View style={styles.grid}>
+                  {myLatestSet.map((e) => (
+                    <Pressable
+                      key={e.id}
+                      style={({ pressed }) => [styles.cell, pressed && styles.cellPressed]}
+                      onPress={() => onPress({ coupleEmojiId: e.id }, false, e.label)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`내 얼굴 ${e.label} 무드로 남기기`}
+                    >
+                      <Image source={{ uri: e.imageUrl }} style={styles.cellImage} resizeMode="contain" />
+                      <Text style={styles.label}>{e.label}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+                <Text style={styles.sectionTitle}>기본</Text>
+              </>
+            ) : null}
+            <View style={styles.grid}>
+              {MOOD_EMOJIS.map((m) => (
+                <Pressable
+                  key={m.emoji}
+                  style={({ pressed }) => [styles.cell, pressed && styles.cellPressed]}
+                  onPress={() => onPress({ emoji: m.emoji }, false, m.label)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${m.label} 무드로 남기기`}
+                >
+                  <Text style={styles.emoji}>{m.emoji}</Text>
+                  <Text style={styles.label}>{m.label}</Text>
+                </Pressable>
+              ))}
+              {PREMIUM_MOOD_EMOJIS.map((m) => (
+                <Pressable
+                  key={m.emoji}
+                  style={({ pressed }) => [styles.cell, pressed && styles.cellPressed]}
+                  onPress={() => onPress({ emoji: m.emoji }, !premiumAllowed, m.label)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${m.label} 무드로 남기기${premiumAllowed ? '' : ' — PRO 기능'}`}
+                >
+                  {!premiumAllowed ? (
+                    <View style={styles.lockBadge}>
+                      <Text style={styles.lockBadgeText}>PRO</Text>
+                    </View>
+                  ) : null}
+                  <Text style={styles.emoji}>{m.emoji}</Text>
+                  <Text style={styles.label}>{m.label}</Text>
+                </Pressable>
+              ))}
+            </View>
           </ScrollView>
         </Pressable>
       </Pressable>
@@ -131,6 +191,13 @@ const styles = themedStyles((colors) => ({
     color: colors.textPrimary,
     marginBottom: spacing.md,
   },
+  sectionTitle: {
+    fontSize: fontSize.caption,
+    fontWeight: '800',
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
+  },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   cell: {
     width: '22%',
@@ -160,5 +227,7 @@ const styles = themedStyles((colors) => ({
    * 똑같이 맞춰 여유분을 없애면 글자가 자기 박스를 꽉 채워 쏠릴 여지가 없다.
    */
   emoji: { fontSize: 26, lineHeight: 26 },
+  /** 우리 이모지 — 유니코드 셀의 glyph(26px)보다 키운다. 얼굴이 알아보여야 고를 수 있다 */
+  cellImage: { width: 38, height: 38 },
   label: { fontSize: 10, fontWeight: '700', color: colors.textSecondary },
 }));

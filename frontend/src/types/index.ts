@@ -1285,7 +1285,15 @@ export interface ScheduledMessage {
 
 /** GET/POST /mood 한 사람의 현재 무드 — 아직 설정 안 했으면 자리 자체가 null */
 export interface MoodEntry {
+  /** 유니코드 무드. 우리 이모지를 걸었을 때도 감정 대역이 들어 있다(서버 V81) */
   emoji: string;
+  /** 우리 이모지로 걸었으면 그 id */
+  coupleEmojiId?: number | null;
+  /**
+   * 우리 이모지 이미지 — 있으면 {@link emoji} 대신 이걸 그린다.
+   * 상대가 그 이모지를 지우면 서버가 다시 null 로 내려주므로 저절로 유니코드로 돌아간다.
+   */
+  imageUrl?: string | null;
   message?: string | null;
   createdAt: string;
 }
