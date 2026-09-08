@@ -36,6 +36,8 @@ const POLL_INTERVAL_MS = [300, 700, 1200, 2000, 2000, 3000];
  * "아직 만들고 있으니 이따 다시 열어보라"가 맞다.
  */
 const POLL_TIMEOUT_MS = 2 * 60 * 1000;
+/** 2분 포기 안내 — "실패"가 아니라 "계속 만드는 중"이라는 뜻이어야 한다 */
+const STILL_WORKING_MESSAGE = '아직 만들고 있어요. 잠시 후 다시 열어보면 결과가 있을 거예요.';
 
 /** 연속 폴링 실패를 몇 번까지 눈감아 줄지 — 이걸 넘으면 진짜 연결 문제로 본다. */
 const MAX_POLL_ERRORS = 3;
@@ -86,8 +88,17 @@ export async function awaitAiJob<T>(jobId: string): Promise<T> {
       );
     }
     if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
-      // 실패가 아니라 "기다리기를 그만둔다" — 작업은 서버에서 계속된다(위 상수 주석 참고)
-      throw new ApiError(0, undefined, '아직 만들고 있어요. 잠시 후 다시 열어보면 결과가 있을 거예요.');
+      /*
+       * 실패가 아니라 "기다리기를 그만둔다" — 작업은 서버에서 계속된다(위 상수 주석 참고).
+       * 문구는 data.message 에 싣는다: getErrorMessage 는 status 0 의 message 를 네트워크 원문으로
+       * 보고 버리므로(utils/error.ts), 예전처럼 message 인자에만 두면 화면 fallback("만들지 못했어요")
+       * 으로 뭉개졌다 — 위 FAILED 분기와 같은 ApiResponse 모양으로(2026-09-08 점검 #5).
+       */
+      throw new ApiError(
+        0,
+        { success: false, data: null, message: STILL_WORKING_MESSAGE },
+        STILL_WORKING_MESSAGE,
+      );
     }
   }
 }
