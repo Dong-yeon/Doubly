@@ -27,7 +27,8 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { ChatStackParamList } from '../../navigation/types';
 import { ImageViewer } from '../../components/ImageViewer';
 import { Avatar } from '../../components/Avatar';
-import { connectSocket } from '../../api/chatSocket';
+import { useFocusEffect } from '@react-navigation/native';
+import { connectSocket, subscribeCouple, unsubscribeCouple } from '../../api/chatSocket';
 import { useChatStore } from '../../store/chatStore';
 import { useAuthStore } from '../../store/authStore';
 import { useRelationStore } from '../../store/relationStore';
@@ -68,6 +69,7 @@ import { callCardLabel, parseCallCard } from '../../utils/callCard';
 import { ANIMATED_STICKERS, animatedStickerOf } from '../../constants/animatedStickers';
 import { STICKER_IMAGES, stickerImageOf } from '../../constants/stickerImages';
 import { STICKER_PACKS } from '../../constants/stickerPacks';
+import { useCoupleEmojiStore } from '../../store/coupleEmojiStore';
 import { playTouchGesture } from '../../utils/haptics';
 import { messagePreview } from '../../utils/messagePreview';
 import { chatDateDividerLabel, isSameLocalDay, toDateString } from '../../utils/date';
@@ -148,7 +150,13 @@ export function ChatRoomScreen({ navigation, route }: Props) {
    * 기본 탭은 이모티콘이다 — 2026-09-07 에 움직이는 이모티콘 30종이 들어오면서
    * 이쪽이 더 풍성해졌고, 이 앱에서 파는 것도 이쪽이다(AnimatedSticker 주석).
    */
-  const [stickerTab, setStickerTab] = useState<'emoji' | 'image'>('image');
+  const [stickerTab, setStickerTab] = useState<'emoji' | 'image' | 'couple'>('image');
+  /*
+   * 우리 이모지 — 커플 공용이라 상대가 만들어도 내 트레이가 달라진다. 탭을 열 때 한 번
+   * 받아오고(캐시), 상대의 생성·삭제는 CoupleEvent 로 알림받아 다시 받는다.
+   */
+  const coupleEmojis = useCoupleEmojiStore((s) => s.emojis);
+  const loadCoupleEmojis = useCoupleEmojiStore((s) => s.load);
   /* 시즌 스티커 게이팅 — 표시용 판정이다(최종 판정은 서버). planStore 주석 참고 */
   const premiumStickerAllowed = usePlanStore((s) => s.can('PREMIUM_STICKER'));
   const showUpgrade = usePlanStore((s) => s.showUpgrade);
@@ -457,6 +465,31 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     return () => sub.remove();
   }, [relationId, syncMissed]);
 
+  /*
+   * 우리 이모지 트레이 갱신 — 상대가 세트를 만들거나 한 장 지우면 내 트레이도 달라진다.
+   *
+   * <p>커플 채널은 <b>목적지당 핸들러가 하나</b>다(chatSocket.register). 홈 화면도 같은
+   * 채널을 쓰지만 그쪽은 focus 동안만 구독하고 떠날 때 해제하므로, 여기서도 focus 로
+   * 범위를 묶으면 둘이 겹치지 않는다. CoupleEvent 는 페이로드가 없어 받으면 재조회한다.
+   */
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      connectSocket()
+        .then(() => {
+          if (!active) return;
+          subscribeCouple(relationId, (type) => {
+            if (type === 'COUPLE_EMOJI') void loadCoupleEmojis(true).catch(() => undefined);
+          });
+        })
+        .catch(() => undefined);
+      return () => {
+        active = false;
+        unsubscribeCouple(relationId);
+      };
+    }, [relationId, loadCoupleEmojis]),
+  );
+
   // 새 메시지 도착 시 상대방 최신 메시지까지 읽음 처리 (id 게이트로 중복 호출 방지)
   useEffect(() => {
     const latestIncoming = messages.find((m) => m.senderId !== myId); // 최신순이라 첫 항목
@@ -666,6 +699,23 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     }
   };
 
+  /**
+   * 우리 이모지 전송 — content 에 <b>id 만</b> 싣는다. 서버가 그 행에서 imageUrl 을 복사해
+   * 넣으므로(ChatService.requireCoupleEmoji) 클라이언트가 URL 을 보낼 필요도, 보낼 수도 없다.
+   *
+   * <p>PRO 판정이 없다 — 만드는 것만 PRO 고, 만들어진 세트는 커플 공용이라 무료인 상대도
+   * 보낸다(MessageType.COUPLE_EMOJI 주석). 그래서 sendSticker 와 달리 locked 인자가 없다.
+   */
+  const sendCoupleEmoji = async (emojiId: number) => {
+    setShowStickers(false);
+    haptics.light();
+    scrollToBottom();
+    const ok = await send(relationId, { messageType: 'COUPLE_EMOJI', content: String(emojiId) });
+    if (!ok) {
+      Alert.alert('전송 실패', '연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
+    }
+  };
+
   // 갤러리에서 고르기만 한다 — 실제 업로드·전송은 미리보기에서 "보내기"를 눌러야 시작된다
   const onPickImage = async () => {
     try {
@@ -770,6 +820,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     const isImage = item.messageType === 'IMAGE' && !!item.imageUrl;
     const voice = item.messageType === 'VOICE_MESSAGE' ? parseVoiceContent(item.content) : null;
     const isSticker = item.messageType === 'STICKER';
+    // 우리 이모지 — 스티커와 같은 자리·크기지만 흰 배경이 있어 원형으로 감싼다(§5-2)
+    const coupleEmojiUrl = item.messageType === 'COUPLE_EMOJI' ? item.imageUrl : null;
     const isTouch = item.messageType === 'TOUCH';
     const isWorkout = item.messageType === 'WORKOUT_CARD';
     const isMeal = item.messageType === 'MEAL_CARD';
@@ -893,6 +945,17 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           ) : (
             <Text style={styles.sticker}>{item.content}</Text>
           )
+        ) : coupleEmojiUrl ? (
+          /*
+           * 생성 모델 출력에 알파가 없어 흰 배경이 딸려 온다(§5-2) — 그대로 그리면
+           * 다크 모드에서 흰 사각형이 뜬다. 원형 마스크로 감싸 스티커처럼 보이게 한다.
+           */
+          <Image
+            source={{ uri: coupleEmojiUrl }}
+            style={[styles.stickerImage, styles.coupleEmojiImage]}
+            resizeMode="cover"
+            accessibilityLabel="우리 이모지"
+          />
         ) : isTouch ? (
           // 스티커처럼 말풍선 없이 크게 — 이모지 아래 제스처 라벨을 붙인다
           <View style={styles.touchBlock}>
@@ -1208,11 +1271,16 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               {([
                 { key: 'emoji', label: '이모지' },
                 { key: 'image', label: '이모티콘' },
+                { key: 'couple', label: '우리 이모지' },
               ] as const).map((t) => (
                 <Pressable
                   key={t.key}
                   style={[styles.stickerTab, stickerTab === t.key && styles.stickerTabActive]}
-                  onPress={() => setStickerTab(t.key)}
+                  onPress={() => {
+                    setStickerTab(t.key);
+                    // 탭을 열 때만 받아온다 — 안 쓰는 사람에게 방마다 조회를 붙일 이유가 없다
+                    if (t.key === 'couple') void loadCoupleEmojis().catch(() => undefined);
+                  }}
                   accessibilityRole="tab"
                   accessibilityState={{ selected: stickerTab === t.key }}
                 >
@@ -1272,6 +1340,51 @@ export function ChatRoomScreen({ navigation, route }: Props) {
                   <Text style={styles.moreEmojiText}>이모지 더 보기 · 검색</Text>
                 </Pressable>
               </>
+            ) : stickerTab === 'couple' ? (
+              <ScrollView style={styles.stickerScroll} contentContainerStyle={styles.coupleEmojiPanel}>
+                {coupleEmojis.length === 0 ? (
+                  /*
+                   * 빈 패널을 그대로 두지 않는다 — "이모티콘" 탭이 곰돌이 한 마리만 띄워
+                   * 고장처럼 보였던 것과 같은 실수다(위 stickerTab 주석). 아직 없을 때는
+                   * 이게 무엇인지 설명하는 카드 하나가 패널 전체를 대신한다.
+                   */
+                  <Pressable
+                    style={({ pressed }) => [styles.coupleEmojiEmpty, pressed && styles.iconPressed]}
+                    onPress={() => { setShowStickers(false); navigation.navigate('CoupleEmojiCreate'); }}
+                    accessibilityRole="button"
+                    accessibilityLabel="우리 이모지 만들기"
+                  >
+                    <MaterialCommunityIcons name="face-woman-shimmer-outline" size={28} color={colors.primary} />
+                    <Text style={styles.coupleEmojiEmptyTitle}>우리 이모지 만들기</Text>
+                    <Text style={styles.coupleEmojiEmptyText}>
+                      사진 한 장으로 감정 6종 이모지를 만들어요. 둘 다 쓸 수 있어요.
+                    </Text>
+                  </Pressable>
+                ) : (
+                  <>
+                    {coupleEmojis.map((e) => (
+                      <Pressable
+                        key={e.id}
+                        style={({ pressed }) => [styles.coupleEmojiBtn, pressed && styles.iconPressed]}
+                        onPress={() => sendCoupleEmoji(e.id)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`우리 이모지 ${e.label} 보내기`}
+                      >
+                        <Image source={{ uri: e.imageUrl }} style={styles.coupleEmojiThumb} resizeMode="cover" />
+                      </Pressable>
+                    ))}
+                    {/* 격자 마지막 칸 = 추가 버튼. 세트를 여러 벌 만들 수 있다 */}
+                    <Pressable
+                      style={({ pressed }) => [styles.coupleEmojiBtn, styles.coupleEmojiAdd, pressed && styles.iconPressed]}
+                      onPress={() => { setShowStickers(false); navigation.navigate('CoupleEmojiCreate'); }}
+                      accessibilityRole="button"
+                      accessibilityLabel="우리 이모지 더 만들기"
+                    >
+                      <MaterialCommunityIcons name="plus" size={22} color={colors.textSecondary} />
+                    </Pressable>
+                  </>
+                )}
+              </ScrollView>
             ) : (
               <ScrollView style={styles.stickerScroll} contentContainerStyle={styles.stickerPanel}>
                 {/*
@@ -1592,6 +1705,8 @@ const styles = themedStyles((colors) => ({
   sticker: { fontSize: 56, lineHeight: 68 },
   // 이미지 스티커 — 이모지 스티커와 비슷한 존재감을 갖도록 정사각형으로
   stickerImage: { width: 132, height: 132 },
+  // 우리 이모지 — 생성물에 흰 배경이 딸려 오므로 원형으로 잘라 낸다(렌더 주석)
+  coupleEmojiImage: { borderRadius: 66, backgroundColor: colors.surfaceAlt },
   // 가상 터치 — 스티커와 같은 크기 + 아래 제스처 라벨 한 줄
   touchBlock: { alignItems: 'center' },
   touchLabel: { fontSize: 11, fontWeight: '700', color: colors.textSecondary, marginTop: -4 },
@@ -1616,6 +1731,31 @@ const styles = themedStyles((colors) => ({
   },
   stickerEmoji: { fontSize: 28 },
   stickerBtnImage: { width: 32, height: 32 },
+  /*
+   * 우리 이모지 격자 — 유니코드 이모지(11.5%, 한 줄 8개)보다 큼직하게 4열로 둔다.
+   * 얼굴이 그려진 그림이라 40px 로는 누구 얼굴인지 구분이 안 된다.
+   */
+  coupleEmojiPanel: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-start',
+    paddingHorizontal: spacing.sm,
+    paddingTop: spacing.sm,
+    gap: spacing.sm,
+  },
+  coupleEmojiBtn: { width: 64, height: 64, borderRadius: 32, overflow: 'hidden', backgroundColor: colors.surfaceAlt },
+  coupleEmojiThumb: { width: '100%', height: '100%' },
+  coupleEmojiAdd: { alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border },
+  coupleEmojiEmpty: {
+    width: '100%',
+    alignItems: 'center',
+    gap: spacing.xs,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceAlt,
+  },
+  coupleEmojiEmptyTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
+  coupleEmojiEmptyText: { fontSize: fontSize.caption, color: colors.textSecondary, textAlign: 'center' },
   // 팩이 늘어 한 화면을 넘긴다 — 입력바를 밀어내지 않도록 높이를 묶는다
   stickerScroll: { maxHeight: 220 },
   // 이모지 / 이모티콘 탭 — 패널 맨 위 한 줄
