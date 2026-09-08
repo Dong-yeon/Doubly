@@ -7,6 +7,7 @@ import { ChatRoomScreen } from '../screens/chat/ChatRoomScreen';
 import { ChatPhotoGalleryScreen } from '../screens/chat/ChatPhotoGalleryScreen';
 import { SavedMessagesScreen } from '../screens/chat/SavedMessagesScreen';
 import { ScheduledMessagesScreen } from '../screens/chat/ScheduledMessagesScreen';
+import { CoupleEmojiCreateScreen } from '../screens/chat/CoupleEmojiCreateScreen';
 import { stackScreenOptions } from './headerOptions';
 
 const Stack = createNativeStackNavigator<ChatStackParamList>();
@@ -58,6 +59,11 @@ export function ChatStackNavigator() {
         name="ScheduledMessages"
         component={ScheduledMessagesScreen}
         options={{ title: '예약된 메시지' }}
+      />
+      <Stack.Screen
+        name="CoupleEmojiCreate"
+        component={CoupleEmojiCreateScreen}
+        options={{ title: '우리 이모지 만들기' }}
       />
     </Stack.Navigator>
   );

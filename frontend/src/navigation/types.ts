@@ -209,6 +209,8 @@ export type ChatStackParamList = {
   ChatPhotoGallery: { relationId: number; myId: number | undefined };
   SavedMessages: { relationId: number; title: string; myId: number | undefined };
   ScheduledMessages: { relationId: number };
+  /** 우리 이모지 만들기 — 사진 선택 → 크롭 → 생성 대기 → 미리보기 */
+  CoupleEmojiCreate: undefined;
 };
 
 /*
