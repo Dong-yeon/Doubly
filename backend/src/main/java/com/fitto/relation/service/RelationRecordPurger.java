@@ -85,6 +85,8 @@ public class RelationRecordPurger {
         exec("delete from couple_challenges where couple_id = :rid", relationId);
         exec("delete from couple_events where couple_id = :rid", relationId);
         exec("delete from daily_answers where couple_id = :rid", relationId);
+        // mood_statuses.couple_emoji_id 가 couple_emojis 를 참조하므로(V81) 무드를 먼저 지운다 —
+        // 아래 couple_emojis 삭제보다 뒤로 옮기면 FK 위반으로 관계 삭제가 실패한다.
         exec("delete from mood_statuses where couple_id = :rid", relationId);
         // 우리 이모지(V80) — relations/users 를 참조. 채팅 메시지가 content 로 id 를 들고 있지만
         // FK 는 아니다(트레이에서 숨겨도 지난 메시지는 보여야 해서). 숨긴 행(deleted_at)도 여기서 같이 지운다.
