@@ -26,7 +26,7 @@ import {
   type ListRenderItemInfo,
 } from 'react-native';
 import { File, Paths } from 'expo-file-system';
-import * as MediaLibrary from 'expo-media-library';
+import { Asset as MediaAsset, requestPermissionsAsync as requestMediaPermissionsAsync } from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
 import { MaterialCommunityIcons } from './Icon';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -97,8 +97,11 @@ export function ImageViewer({ images, initialIndex, onClose }: Props) {
 
   /*
    * 갤러리 저장·공유 둘 다 로컬 파일이 있어야 한다 — uri 는 Cloudinary 원격 URL이라
-   * MediaLibrary.saveToLibraryAsync·Sharing.shareAsync 모두 file:// 가 아니면 동작하지
+   * MediaAsset.create·Sharing.shareAsync 모두 file:// 가 아니면 동작하지
    * 않는다(§7 분석 그대로). 캐시에 받아둔 뒤 두 기능이 그 파일을 같이 쓴다.
+   *
+   * expo-media-library 56부터 saveToLibraryAsync 등 함수형 API는 deprecated 이면서
+   * 런타임에 throw 한다(legacyWarnings). 클래스 API(Asset.create)를 쓴다.
    */
   const downloadToCache = async (uri: string) => {
     const file = await File.downloadFileAsync(uri, Paths.cache, { idempotent: true });
@@ -109,13 +112,14 @@ export function ImageViewer({ images, initialIndex, onClose }: Props) {
     if (!current || working) return;
     setWorking('save');
     try {
-      const { status } = await MediaLibrary.requestPermissionsAsync();
+      // 저장만 하므로 write-only 권한 — iOS는 "추가만 허용", Android 13+는 별도 권한 없이 통과
+      const { status } = await requestMediaPermissionsAsync(true);
       if (status !== 'granted') {
         toast.error('사진을 저장하려면 갤러리 접근 권한이 필요해요.');
         return;
       }
       const localUri = await downloadToCache(current.uri);
-      await MediaLibrary.saveToLibraryAsync(localUri);
+      await MediaAsset.create(localUri);
       toast.success('사진을 저장했어요.');
     } catch (e) {
       toast.error(getErrorMessage(e, '사진을 저장하지 못했어요.'));
