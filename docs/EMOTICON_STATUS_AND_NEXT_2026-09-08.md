@@ -42,7 +42,7 @@ PostgreSQL 591건 · typecheck · build:web)를 통과한 상태**다. 따라서
 
 | # | 항목 | 출처 | 상태 |
 |---|---|---|---|
-| 6 | 생성 화면 안내에 **"이 옷차림으로 그려져요"** 가 없다 | §12-2 "설계에 반영할 것" | ✅ 누락. `CoupleEmojiCreateScreen` 에는 "사진은 저장하지 않아요" 한 줄만 있다. v2 이후 앵커가 사진 속 옷을 그대로 캐릭터 옷으로 쓰므로, 잠옷 사진을 고른 사용자가 놀라지 않게 한 줄 필요 |
+| 6 | 생성 화면 안내에 **"이 옷차림으로 그려져요"** 가 없다 | §12-2 "설계에 반영할 것" | ✂ **같은 날 반영.** 사진 힌트 줄에 "사진 속 옷차림 그대로 그려져요"를 붙였다(`CoupleEmojiCreateScreen`). v2 이후 앵커가 사진 속 옷을 그대로 캐릭터 옷으로 쓰므로 고르기 전에 알려 준다 |
 | 7 | happy 변주 — 눈 감은 웃음 → 뜬 웃음으로 바꿀지 | §12-4 | ✅ 미결. `CoupleEmojiEmotion.HAPPY` 는 아직 `closed-eye smile`. 둘 다 뽑아 비교하면 약 12장(≈0.5 USD). `prompt_version` 을 v5 로 올려야 한다 |
 | 8 | excited 배경 연회색 → 프롬프트에 `#FFFFFF` 명시 | §12-4 | ✂ **이미 반영됨** (`CoupleEmojiPrompts` 89행 "pure white (#FFFFFF) background") |
 | 9 | 무드 피커에 우리 이모지가 없을 때 "만들기" 안내 | §18 | ✅ 의도적 보류 — 진입점을 채팅 한 곳으로 유지. 1단계 반응 보고 결정 |
@@ -53,9 +53,9 @@ PostgreSQL 591건 · typecheck · build:web)를 통과한 상태**다. 따라서
 | # | 파일 | 문제 |
 |---|---|---|
 | 11 | `docs/SESSION_DIGEST.md` 8행 | "남은 것: 2단계 프론트" — 프론트(§16)·무드 연동(§18)이 이미 끝났다. **이 분석에서 수정함** |
-| 12 | `README.md` 진행 현황 표 | 움직이는 이모티콘 행만 있고 **비개구리 10종·우리 이모지·무드 연동** 행이 없다 |
-| 13 | `docs/QA_CHECKLIST.md` 채팅 절 | "스티커 16종" 만 있다. 움직이는 이모티콘(PRO 잠금 포함)·비개구리·우리 이모지(생성 대기·부분 실패·삭제)·무드 우리 이모지 행이 없다. 2-1 의 실기기 한 바퀴를 여기 행으로 두면 체크리스트가 곧 시나리오가 된다 |
-| 14 | `docs/PRO_PLAN_DESIGN.md` · `docs/FREE_TIER_AND_ADS.md` | `AI_COUPLE_EMOJI` 언급이 전혀 없다. **원가가 0 이 아닌 첫 PRO 상품**이라 플랜 문서에 있어야 한다(월 5세트 상한 = 사용자당 월 ≈1.2~1.5 USD 원가) |
+| 12 | `README.md` 진행 현황 표 | 움직이는 이모티콘 행만 있고 비개구리 10종·우리 이모지·무드 연동 행이 없었다. **같은 날 3행 추가** |
+| 13 | `docs/QA_CHECKLIST.md` 채팅 절 | "스티커 16종" 만 있었다. **같은 날 반영** — ChatRoomScreen 표를 탭 3개 기준 8행으로 바꾸고, `CoupleEmojiCreateScreen` 절(12행 + 무드 연동 시나리오)을 새로 넣었다. 2-1 의 실기기 한 바퀴는 이 절의 ☐ 를 순서대로 밟으면 된다 |
+| 14 | `docs/PRO_PLAN_DESIGN.md` · `docs/FREE_TIER_AND_ADS.md` | `AI_COUPLE_EMOJI` 언급이 없었다. **같은 날 반영** — PRO 설계에 "원가가 0이 아닌 첫 PRO 상품" 절(FREE 맛보기 없음·판정은 생성 때 한 번), FREE 티어 문서에 `AI_TOTAL` 이 쿼터 방어가 아니라 비용 상한 역할만 한다는 것과 리워드 광고 부적합 판단을 적었다 |
 
 ### 2-4. 다음 기능 후보 — 사용자 결정 필요
 
@@ -89,4 +89,7 @@ PostgreSQL 591건 · typecheck · build:web)를 통과한 상태**다. 따라서
 
 ## 4. 이 분석에서 바꾼 것
 
-- `docs/SESSION_DIGEST.md` 8행 갱신(#11). 코드는 건드리지 않았다.
+- 1차(분석): `docs/SESSION_DIGEST.md` 8행 갱신(#11). 코드는 건드리지 않았다.
+- 2차(사용자 지시 "3번째 단계"): 옷차림 안내 1줄(#6, `CoupleEmojiCreateScreen`) + 문서 3곳(#12 README ·
+  #13 QA_CHECKLIST · #14 PRO_PLAN_DESIGN/FREE_TIER_AND_ADS). 권고 순서 ③ 완료 — 남은 것은 ①(단가)·②(실기기)이고
+  둘 다 사용자 손이 필요하다.
