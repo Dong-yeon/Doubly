@@ -26,6 +26,12 @@ import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { toDateString } from '../../utils/date';
 import { buildWorkoutShareCopy } from '../../utils/workoutShare';
+import {
+  formatCardioSummary,
+  isCardio,
+  minutesToSec,
+  secToMinutesInput,
+} from '../../utils/cardio';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 import type { ExerciseCatalogItem } from '../../types';
@@ -40,13 +46,26 @@ interface SetForm {
   sets: string;
   reps: string;
   weightKg: string;
+  /*
+   * 유산소 전용 입력 — 러닝·트레드밀은 세트 × 횟수 × 무게가 아니라 시간·거리로 기록한다.
+   * 근력 칸과 나눠 두면 카테고리를 바꿔도 서로의 값을 덮어쓰지 않는다(잘못 골랐다 되돌릴 때).
+   */
+  durationMin: string;
+  distanceKm: string;
   // 카탈로그에서 골랐을 때만 채워짐 — 자유 입력이면 전부 undefined
   exerciseCatalogId?: number;
   muscleGroup?: string;
   equipment?: string;
 }
 
-const emptySet = (): SetForm => ({ exerciseName: '', sets: '', reps: '', weightKg: '' });
+const emptySet = (): SetForm => ({
+  exerciseName: '',
+  sets: '',
+  reps: '',
+  weightKg: '',
+  durationMin: '',
+  distanceKm: '',
+});
 
 // 자주 하는 운동 — 빠른 선택
 const PRESETS: { name: string; category: string }[] = [
@@ -111,7 +130,10 @@ export function WorkoutRecordScreen({ navigation, route }: Props) {
   const dirty =
     duration.trim().length > 0 ||
     memo.trim().length > 0 ||
-    sets.some((s) => s.exerciseName.trim() || s.sets || s.reps || s.weightKg);
+    sets.some(
+      (s) =>
+        s.exerciseName.trim() || s.sets || s.reps || s.weightKg || s.durationMin || s.distanceKm,
+    );
   const allowLeave = useDirtyGuard(dirty);
 
   const updateSet = (idx: number, patch: Partial<SetForm>) => {
@@ -175,6 +197,10 @@ export function WorkoutRecordScreen({ navigation, route }: Props) {
       sets: last.sets != null ? String(last.sets) : '',
       reps: last.reps != null ? String(last.reps) : '',
       weightKg: last.weightKg != null ? String(last.weightKg) : '',
+      // 유산소면 시간·거리가 지난 기록의 알맹이다 — 근력 칸과 함께 채워도 화면에는
+      // 카테고리에 맞는 쪽만 보인다(둘 중 하나는 어차피 비어 있다)
+      durationMin: secToMinutesInput(last.durationSec),
+      distanceKm: last.distanceKm != null ? String(last.distanceKm) : '',
       category: last.category ?? undefined,
     });
     haptics.light();
@@ -213,9 +239,13 @@ export function WorkoutRecordScreen({ navigation, route }: Props) {
         sets: filled.map((s, i) => ({
           exerciseName: s.exerciseName.trim(),
           category: s.category ?? null,
-          sets: s.sets ? Number(s.sets) : null,
-          reps: s.reps ? Number(s.reps) : null,
-          weightKg: s.weightKg ? Number(s.weightKg) : null,
+          // 유산소는 세트·횟수·무게를 아예 보내지 않는다 — 칸이 화면에 없었으므로
+          // 남아 있던 값이 있더라도 그건 카테고리를 바꾸기 전의 흔적이다
+          sets: isCardio(s.category) ? null : s.sets ? Number(s.sets) : null,
+          reps: isCardio(s.category) ? null : s.reps ? Number(s.reps) : null,
+          weightKg: isCardio(s.category) ? null : s.weightKg ? Number(s.weightKg) : null,
+          durationSec: isCardio(s.category) ? minutesToSec(s.durationMin) ?? null : null,
+          distanceKm: isCardio(s.category) && s.distanceKm ? Number(s.distanceKm) : null,
           orderNo: i + 1,
           exerciseCatalogId: s.exerciseCatalogId ?? undefined,
           muscleGroup: s.muscleGroup ?? undefined,
@@ -339,13 +369,16 @@ export function WorkoutRecordScreen({ navigation, route }: Props) {
               {(() => {
                 const last = lastSetOf(s.exerciseName);
                 if (!last) return null;
-                const summary = [
-                  last.sets != null ? `${last.sets}세트` : null,
-                  last.reps != null ? `${last.reps}회` : null,
-                  last.weightKg != null ? `${last.weightKg}kg` : null,
-                ]
-                  .filter(Boolean)
-                  .join(' · ');
+                const summary = isCardio(last.category)
+                  ? formatCardioSummary(last.durationSec, last.distanceKm)
+                  : [
+                      last.sets != null ? `${last.sets}세트` : null,
+                      last.reps != null ? `${last.reps}회` : null,
+                      last.weightKg != null ? `${last.weightKg}kg` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ');
+                if (!summary) return null;
                 return (
                   <TouchableOpacity
                     style={styles.lastHint}
@@ -373,29 +406,66 @@ export function WorkoutRecordScreen({ navigation, route }: Props) {
               {/*
                 +/- 로 조정한다 — 회차 간 변화폭이 작아 타이핑보다 훨씬 빠르다.
                 무게는 원판 단위(2.5kg)로 움직인다.
+
+                유산소(러닝·트레드밀…)는 칸 자체가 다르다 — 세트·횟수·무게 대신 시간·거리다.
+                "3세트 10회 러닝"은 아무 정보도 아니라, 칸을 바꾸지 않으면 기록할 방법이 없었다.
               */}
-              <View style={styles.row}>
-                <NumberStepper
-                  label="세트"
-                  placeholder="3"
-                  value={s.sets}
-                  onChange={(v) => updateSet(idx, { sets: v })}
-                />
-                <NumberStepper
-                  label="횟수"
-                  placeholder="10"
-                  value={s.reps}
-                  onChange={(v) => updateSet(idx, { reps: v })}
-                />
-                <NumberStepper
-                  label="무게(kg)"
-                  placeholder="40"
-                  value={s.weightKg}
-                  onChange={(v) => updateSet(idx, { weightKg: v })}
-                  step={2.5}
-                  decimal
-                />
-              </View>
+              {isCardio(s.category) ? (
+                <>
+                  <View style={styles.row}>
+                    <NumberStepper
+                      label="시간(분)"
+                      placeholder="30"
+                      value={s.durationMin}
+                      onChange={(v) => updateSet(idx, { durationMin: v })}
+                      step={5}
+                    />
+                    <NumberStepper
+                      label="거리(km)"
+                      placeholder="5"
+                      value={s.distanceKm}
+                      onChange={(v) => updateSet(idx, { distanceKm: v })}
+                      step={0.5}
+                      decimal
+                    />
+                  </View>
+                  {/* 페이스는 입력받지 않고 두 값에서 계산해 보여준다 — 러너가 실제로 보는 숫자 */}
+                  {formatCardioSummary(
+                    minutesToSec(s.durationMin),
+                    s.distanceKm ? Number(s.distanceKm) : null,
+                  ) ? (
+                    <Text style={styles.cardioSummary}>
+                      {formatCardioSummary(
+                        minutesToSec(s.durationMin),
+                        s.distanceKm ? Number(s.distanceKm) : null,
+                      )}
+                    </Text>
+                  ) : null}
+                </>
+              ) : (
+                <View style={styles.row}>
+                  <NumberStepper
+                    label="세트"
+                    placeholder="3"
+                    value={s.sets}
+                    onChange={(v) => updateSet(idx, { sets: v })}
+                  />
+                  <NumberStepper
+                    label="횟수"
+                    placeholder="10"
+                    value={s.reps}
+                    onChange={(v) => updateSet(idx, { reps: v })}
+                  />
+                  <NumberStepper
+                    label="무게(kg)"
+                    placeholder="40"
+                    value={s.weightKg}
+                    onChange={(v) => updateSet(idx, { weightKg: v })}
+                    step={2.5}
+                    decimal
+                  />
+                </View>
+              )}
             </View>
           ))}
 
@@ -485,6 +555,12 @@ const styles = themedStyles((colors) => ({
   catText: { color: colors.textSecondary, fontSize: fontSize.caption },
   catTextActive: { color: colors.primary, fontWeight: '700' },
   row: { flexDirection: 'row', gap: spacing.sm },
+  cardioSummary: {
+    marginTop: spacing.xs,
+    fontSize: fontSize.caption,
+    color: colors.primary,
+    fontWeight: '700',
+  },
   lastHint: {
     flexDirection: 'row',
     alignItems: 'center',

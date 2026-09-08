@@ -61,6 +61,17 @@ public class WorkoutRoutineExercise {
     @Column(name = "weight_kg", precision = 6, scale = 2)
     private BigDecimal weightKg;
 
+    /**
+     * 유산소 목표 시간(분) — 러닝·트레드밀 같은 종목의 목표는 세트가 아니라 시간·거리다.
+     * 근력 종목에서는 null 이고, 그때는 지금까지처럼 targetSets/reps/weightKg 가 목표다.
+     */
+    @Column(name = "target_duration_min")
+    private Integer targetDurationMin;
+
+    /** 유산소 목표 거리(km) — 시간만 정하고 거리는 안 정하는 경우가 흔해 각각 null 가능. */
+    @Column(name = "target_distance_km", precision = 6, scale = 2)
+    private BigDecimal targetDistanceKm;
+
     @Column(name = "order_no", nullable = false)
     private Integer orderNo;
 
@@ -96,7 +107,8 @@ public class WorkoutRoutineExercise {
 
     @Builder
     private WorkoutRoutineExercise(String exerciseName, String category, Integer targetSets,
-                                   Integer reps, BigDecimal weightKg, Integer orderNo,
+                                   Integer reps, BigDecimal weightKg,
+                                   Integer targetDurationMin, BigDecimal targetDistanceKm, Integer orderNo,
                                    Long exerciseCatalogId, String muscleGroup, String equipment,
                                    Integer restSeconds) {
         this.exerciseName = exerciseName;
@@ -104,6 +116,8 @@ public class WorkoutRoutineExercise {
         this.targetSets = targetSets;
         this.reps = reps;
         this.weightKg = weightKg;
+        this.targetDurationMin = targetDurationMin;
+        this.targetDistanceKm = targetDistanceKm;
         this.orderNo = orderNo != null ? orderNo : 0;
         this.exerciseCatalogId = exerciseCatalogId;
         this.muscleGroup = muscleGroup;

@@ -27,6 +27,10 @@ public record WorkoutResponse(
             Integer sets,
             Integer reps,
             BigDecimal weightKg,
+            /** 유산소 수행 시간(초) — 근력 종목은 null */
+            Integer durationSec,
+            /** 유산소 이동 거리(km) — 근력 종목은 null */
+            BigDecimal distanceKm,
             Integer orderNo,
             Long exerciseCatalogId,
             String muscleGroup,
@@ -35,7 +39,8 @@ public record WorkoutResponse(
     ) {
         static SetResponse from(WorkoutSet s) {
             return new SetResponse(s.getId(), s.getExerciseName(), s.getCategory(),
-                    s.getSets(), s.getReps(), s.getWeightKg(), s.getOrderNo(),
+                    s.getSets(), s.getReps(), s.getWeightKg(),
+                    s.getDurationSec(), s.getDistanceKm(), s.getOrderNo(),
                     s.getExerciseCatalogId(), s.getMuscleGroup(), s.getEquipment(),
                     s.getEntries().stream().map(WorkoutSetEntryResponse::of).toList());
         }

@@ -193,12 +193,19 @@ export interface TrainerProfile {
 }
 
 // 5.5 / 5.6 workouts
-/** 세트 1회 실제 수행 기록 — 무게/횟수/완료 여부. 종목당 여러 개(세트 수만큼) 존재 */
+/**
+ * 세트 1회 실제 수행 기록 — 완료 여부와 함께, 근력은 무게·횟수를, 유산소는 시간·거리를 담는다.
+ * 근력은 종목당 여러 개(세트 수만큼), 유산소는 보통 한 개(setNo=1)다.
+ */
 export interface WorkoutSetEntry {
   id?: number;
   setNo: number;
   weightKg?: number | null;
   reps?: number | null;
+  /** 유산소 수행 시간(초) — 러닝·트레드밀은 세트가 아니라 시간·거리로 기록한다 */
+  durationSec?: number | null;
+  /** 유산소 이동 거리(km) */
+  distanceKm?: number | null;
   // 자각 강도(RPE) — 1.0~10.0, 보통 0.5 단위. 세트를 몇 회 더 할 수 있었는지의 체감치
   rpe?: number | null;
   completed: boolean;
@@ -211,6 +218,10 @@ export interface WorkoutSet {
   sets?: number | null;
   reps?: number | null;
   weightKg?: number | null;
+  /** 유산소 수행 시간(초) — 근력 종목은 없음 */
+  durationSec?: number | null;
+  /** 유산소 이동 거리(km) — 근력 종목은 없음 */
+  distanceKm?: number | null;
   orderNo: number;
   /** 종목 카탈로그에서 골랐다면 그 id — 자유 입력 시 없음 */
   exerciseCatalogId?: number | null;
@@ -268,6 +279,10 @@ export interface ExerciseLastPerformance {
   sets?: number | null;
   reps?: number | null;
   weightKg?: number | null;
+  /** 유산소 수행 시간(초) — 러닝·트레드밀 프리필의 기준 */
+  durationSec?: number | null;
+  /** 유산소 이동 거리(km) */
+  distanceKm?: number | null;
   entries: WorkoutSetEntry[];
   /** 지금까지의 최고 무게(kg) — 세션 중 신기록 판정 기준. 처음 하는 종목이면 없다 */
   bestWeightKg?: number | null;
@@ -284,6 +299,9 @@ export interface ExerciseHistory {
     maxWeightKg?: number | null;
     maxVolumeKg?: number | null;
     maxE1rmKg?: number | null;
+    /** 유산소 종목의 최고 기록 — 한 번에 가장 오래 / 가장 멀리 */
+    maxDurationSec?: number | null;
+    maxDistanceKm?: number | null;
   };
 }
 
@@ -293,6 +311,9 @@ export interface ExerciseHistorySession {
   totalVolumeKg?: number | null;
   bestE1rmKg?: number | null;
   totalSets: number;
+  /** 그날 유산소로 움직인 시간(초)·거리(km) — 근력 종목은 없음 */
+  totalDurationSec?: number | null;
+  totalDistanceKm?: number | null;
 }
 
 // 캘린더 응답 (4.4 GET /workout/calendar)
@@ -484,6 +505,10 @@ export interface RoutineExercise {
   targetSets?: number | null;
   reps?: number | null;
   weightKg?: number | null;
+  /** 유산소 목표 시간(분) — 있으면 세션이 세트 대신 시간·거리로 기록한다 */
+  targetDurationMin?: number | null;
+  /** 유산소 목표 거리(km) */
+  targetDistanceKm?: number | null;
   exerciseCatalogId?: number | null;
   muscleGroup?: string | null;
   equipment?: string | null;

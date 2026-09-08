@@ -29,23 +29,32 @@ public record ExerciseHistoryResponse(
      * @param bestE1rmKg      그날의 최고 추정 1RM — 무게와 횟수를 한 숫자로 합친 값이라
      *                        무게만 보는 것보다 컨디션 변화를 덜 타고 추세가 잘 보인다
      * @param totalSets       완료한 세트 수
+     * @param totalDurationSec 그날 유산소로 움직인 시간(초) — 근력 종목은 null
+     * @param totalDistanceKm  그날 이동한 거리(km) — 근력 종목은 null
      */
     public record Session(
             LocalDate workoutDate,
             BigDecimal maxWeightKg,
             BigDecimal totalVolumeKg,
             BigDecimal bestE1rmKg,
-            int totalSets
+            int totalSets,
+            Integer totalDurationSec,
+            BigDecimal totalDistanceKm
     ) {}
 
-    /** 전 기간 최고 기록 — 각각 다른 날일 수 있다. */
+    /**
+     * 전 기간 최고 기록 — 각각 다른 날일 수 있다.
+     * 유산소 종목은 무게·볼륨·1RM 이 전부 null 이고 시간·거리만 채워진다.
+     */
     public record Best(
             BigDecimal maxWeightKg,
             BigDecimal maxVolumeKg,
-            BigDecimal maxE1rmKg
+            BigDecimal maxE1rmKg,
+            Integer maxDurationSec,
+            BigDecimal maxDistanceKm
     ) {}
 
     public static ExerciseHistoryResponse empty(String exerciseName) {
-        return new ExerciseHistoryResponse(exerciseName, List.of(), new Best(null, null, null));
+        return new ExerciseHistoryResponse(exerciseName, List.of(), new Best(null, null, null, null, null));
     }
 }

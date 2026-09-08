@@ -41,6 +41,13 @@ public record SaveRoutineRequest(
             Integer targetSets,
             Integer reps,
             BigDecimal weightKg,
+            /**
+             * 유산소 목표 시간(분) — 러닝·트레드밀의 목표는 세트가 아니라 시간·거리다.
+             * 채워 보내면 세션 화면이 세트 표 대신 시간·거리 입력을 그린다.
+             */
+            Integer targetDurationMin,
+            /** 유산소 목표 거리(km) */
+            BigDecimal targetDistanceKm,
             /** 종목 카탈로그에서 골랐다면 그 id — 자유 입력 시 null */
             Long exerciseCatalogId,
             /** 자극 부위 — 카탈로그 선택 시 함께 채워짐, 자유 입력 시 null 가능 */
@@ -63,15 +70,16 @@ public record SaveRoutineRequest(
         /** restSeconds/대체 종목/세트별 목표 없이 넘기던 이전 호출부와의 호환용 */
         public Exercise(String exerciseName, String category, Integer targetSets, Integer reps,
                         BigDecimal weightKg, Long exerciseCatalogId, String muscleGroup, String equipment) {
-            this(exerciseName, category, targetSets, reps, weightKg, exerciseCatalogId, muscleGroup, equipment,
-                    null, null, null);
+            this(exerciseName, category, targetSets, reps, weightKg, null, null,
+                    exerciseCatalogId, muscleGroup, equipment, null, null, null);
         }
 
         /** 세트별 목표 없이 넘기던 호출부와의 호환용 (restSeconds/대체 종목까지) */
         public Exercise(String exerciseName, String category, Integer targetSets, Integer reps,
                         BigDecimal weightKg, Long exerciseCatalogId, String muscleGroup, String equipment,
                         Integer restSeconds, List<Long> alternativeExerciseCatalogIds) {
-            this(exerciseName, category, targetSets, reps, weightKg, exerciseCatalogId, muscleGroup, equipment,
+            this(exerciseName, category, targetSets, reps, weightKg, null, null,
+                    exerciseCatalogId, muscleGroup, equipment,
                     restSeconds, alternativeExerciseCatalogIds, null);
         }
 
