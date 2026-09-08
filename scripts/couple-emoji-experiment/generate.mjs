@@ -43,6 +43,22 @@ const STYLES = {
     'soft pastel shading, plain solid white background. Square composition, character centered.',
     'No text, no letters, no watermark, no speech bubbles.',
   ].join(' '),
+  /**
+   * v1(vector) 실측(합성 얼굴, 2026-09-08): 얼굴·안경·앞머리·선 굵기는 6장이 일치했지만
+   * 옷이 장마다 바뀌고(파랑 니트→노랑 티→…), 머리 길이가 단발↔장발로 흔들리고, 구도가 전신↔흉상으로
+   * 오갔다. 눈 밑 점은 6장 모두 빠졌다. → 옷·머리 길이·구도를 앵커에서 못 박고, 특징 보존을 더 세게 쓴다.
+   */
+  vector2: [
+    'Turn the person in this photo into a cute 2D flat vector sticker character.',
+    'IDENTITY (most important): this must be recognizably the same person. Copy from the photo exactly:',
+    'face shape, hairstyle, hair length and hair color, skin tone, eye shape, eyebrows, glasses shape,',
+    'and every small distinctive mark such as moles or freckles at the same position.',
+    'OUTFIT: draw the exact same clothing as in the photo (same garment type and color) in every image.',
+    'FRAMING: upper body only (head and shoulders to chest), head centered, same size in every image.',
+    'STYLE: chibi proportions (big head, small body), thick white sticker outline, clean bold dark lines,',
+    'soft pastel shading, plain solid white background, square composition.',
+    'No text, no letters, no watermark, no speech bubbles.',
+  ].join(' '),
   kakao: [
     'Draw the person in this photo as a Korean messenger-style emoticon character (like popular chat stickers).',
     'The character must clearly look like this specific person: same face shape, hairstyle and hair color,',
