@@ -81,6 +81,12 @@ Railway psql 접속: Railway 대시보드 → Postgres 서비스 → `Connect` �
 전 기능 공통 안전망으로 `AI_TOTAL(perDay 10)`이 `GeminiClient`에 걸려 있습니다 — Gemini
 프로젝트 전체 쿼터 방어용이라 `PlanController` 노출 목록에서는 제외됩니다.
 
+**원가가 0 이 아닌 AI 기능이 하나 생겼습니다 (2026-09-08)**: `AI_COUPLE_EMOJI`(우리 이모지, 세트당 약 0.23 USD
+실비). 이미지 생성은 별도 결제 프로젝트의 키(`GEMINI_IMAGE_API_KEY`)로 나가고 무료 티어 쿼터가 0 이라 `AI_TOTAL` 이
+쿼터 방어 역할을 하지 못합니다 — 여기서는 **비용 상한** 역할만 합니다(PRO 월 5세트 × 세트당 실비). FREE 는 차단이며
+맛보기를 둘지는 단가 확정 뒤 정합니다. 아래 리워드 광고 대상으로는 **부적합**합니다 — 광고 1회 수익보다 세트 원가가
+큽니다. 자세한 것은 [PRO_PLAN_DESIGN.md](PRO_PLAN_DESIGN.md) "원가가 0이 아닌 첫 PRO 상품" 절.
+
 ## 8/21에 고친 것 — 영상통화 게이트 누락
 
 8/21 조사에서 **`VIDEO_CALL`이 `Feature.java`에는 PRO 전용으로 선언돼 있는데 실제

@@ -837,8 +837,14 @@
 | └ 삭제 → 확인 | `chatApi.remove` | ❌ | ✅ toast | ❌ | ☐ |
 | 리액션 칩 토글 | `chatApi.react` | ❌ | ✅ toast | ❌ **연타 시 상태 꼬임** | ☐ |
 | 빠른 리액션 5종 | `send(TEXT, emoji)` | — | ⚠️ `ok=false` 만 Alert | — | ☐ |
-| 스티커 토글 / 이모지 더 보기 | 패널 · 피커 | — | — | — | ☐ |
-| 스티커 16종 | `send(STICKER)` | — | ⚠️ | — | ☐ |
+| 이모티콘 토글 (트레이 +) | 패널 — 기본 탭 **이모티콘**, 탭 3개(이모지·이모티콘·우리 이모지) | — | — | — | ☐ |
+| 이모지 탭 — 기본 16 + PRO 5팩 | `send(STICKER)` · PRO 팩은 잠금 배지 → 업셀 | — | ⚠️ | — | ☐ |
+| 이모지 탭 — "이모지 더 보기 · 검색" 줄 | 96종 피커(6카테고리 + 한글 검색) | — | — | — | ☐ |
+| 이모티콘 탭 — 비개구리 10종 + 곰 1종 | `send(STICKER)` 코드 → 로컬 PNG 말풍선, 알림 미리보기 `[스티커] 라벨` | — | ⚠️ | — | ☐ |
+| 이모티콘 탭 — 움직이는 이모티콘 30종 (무료 6 / PRO 24) | `send(STICKER)` → Lottie 말풍선(웹은 정지 썸네일). PRO 장은 잠금 배지, 서버도 `PREMIUM_STICKER` 로 거절 | — | ⚠️ | — | ☐ |
+| 우리 이모지 탭 — 빈 상태 카드 → 만들기 | `navigate('CoupleEmojiCreate')` · FREE 는 `LockedCard` | — | — | — | ☐ |
+| 우리 이모지 탭 — 전송 | `send(COUPLE_EMOJI, id)` → 원형 마스크 132px, 답장 인용 미리보기, 알림 `[우리 이모지]` | — | ⚠️ | — | ☐ |
+| 우리 이모지 — 상대가 만들거나 지우면 내 트레이 갱신 | `CoupleEvent.COUPLE_EMOJI` → `loadCoupleEmojis(true)` (화면 포커스 중에만 구독) | — | — | — | ☐ |
 | 답장/수정 배너 X | 상태 초기화 | — | — | — | ☐ |
 | 맞춤법 제안 적용 / 닫기 | 로컬 | — | — | — | ☐ |
 | 카메라 (이미지 전송) | `pickImage`→`upload`→`send(IMAGE)` | ✅ | ✅ toast | ✅ `disabled={uploading}` | ☐ |
@@ -856,6 +862,32 @@
 - `:330-337` — `onEndReached` 가 없다. 과거 메시지 페이징이 store 에 있는지 확인 필요
 - `:105` — `messages.find(m => m.senderId !== myId)` 가 "배열이 항상 최신순"을 전제. 정렬이 깨지면 읽음 처리가 오래된 id 에 고정 (추정)
 - **WebSocket 생명주기** — 구독/해제/재연결이 전부 `chatStore` 안에 있다. **중복 구독·백그라운드 복귀 재연결은 store 를 따로 감사해야 한다** ← 다음 라운드 과제
+
+---
+
+### CoupleEmojiCreateScreen — 우리 이모지 만들기 (2026-09-08 추가, 실기기 미검증)
+`frontend/src/screens/chat/CoupleEmojiCreateScreen.tsx` · 진입: 채팅 트레이 우리 이모지 탭
+호출 API: `coupleEmojiApi.uploadSignature/generate/list/remove` + `awaitAiJob` + 4초 주기 `list()` 폴링
+설계: [COUPLE_EMOJI_AI_DESIGN_2026-09-08.md](COUPLE_EMOJI_AI_DESIGN_2026-09-08.md) §7·§9·§16
+
+| 요소 | 동작 | 로딩 | 에러 | 중복탭 방어 | 확인 |
+| --- | --- | --- | --- | --- | --- |
+| 상단 안내 | "사진은 저장하지 않아요 · 둘 다 지울 수 있어요" 문구 노출 | — | — | — | ☐ |
+| 사진 힌트 | "얼굴이 크고 또렷한 정면 사진 · 사진 속 옷차림 그대로 그려져요" | — | — | — | ☐ |
+| FREE 진입 | `LockedCard` → 업셀, 생성 버튼 없음 | — | — | — | ☐ |
+| 대상 선택 (상대/나) | `SubjectChip` 토글, 기본값 상대 | — | — | — | ☐ |
+| 사진 선택 → 크롭 | `AvatarCropSheet` 재사용, 정사각 512 | ✅ | ✅ toast | ⚠️ | ☐ |
+| 생성 시작 | 서명 → `fitto/emoji-source/` 업로드 → `generate` → 즉시 402/429 면 여기서 끝 | ✅ | ✅ toast | ✅ `generating` | ☐ |
+| 6칸 대기 | 감정별 즉시 커밋이라 칸이 하나씩 채워짐(약 80초). 화면 이탈 후 트레이에 들어와 있는가 | ✅ 칸별 스피너 | — | — | ☐ |
+| 부분 실패 | `failedEmotions` 안내, 나머지는 저장·한도 미환불 | — | ✅ | — | ☐ |
+| 전부 실패 | `AI_IMAGE_REJECTED` 문구("얼굴이 잘 보이는 다른 사진"), 한도 환불 | — | ✅ | — | ☐ |
+| 개별 지우기 (X 배지) | 확인 Alert → `remove` → 내 트레이·상대 트레이·무드 폴백 반영 | ❌ | ✅ toast | ❌ | ☐ |
+| 상대 화면 | 푸시 "OO님이 우리 이모지를 만들었어요 👀" → 채팅 링크 · 상대(FREE 여도)가 전송·삭제 가능 | — | — | — | ☐ |
+| 관계 삭제 / 탈퇴 | `RelationRecordPurger` — DB 행 + Cloudinary `fitto/couple-emoji/` 잔존 여부 확인 | — | — | — | ☐ |
+
+**무드 연동(HomeScreen 쪽, 설계 §18)**: 무드 피커에 "우리 이모지" 섹션(내 얼굴 최신 세트 6장만) → 홈 배지 이미지 →
+상대 화면 배지 → 이모지 삭제 후 배지가 유니코드로 되돌아가는가. FREE 사용자가 자기 얼굴 세트를 무드로 걸 때 402 가
+나면 안 된다(대역 이모지가 기본 12종 안에 있어야 함 — `MoodFlowTest` 로 고정).
 
 ---
 
