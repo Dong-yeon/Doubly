@@ -39,6 +39,7 @@ import { streakApi } from '../../api/streak';
 import { feedApi } from '../../api/feed';
 import { chatApi } from '../../api/chat';
 import { moodApi } from '../../api/mood';
+import type { MoodChoice } from '../../api/mood';
 import { tripApi } from '../../api/trip';
 import { feedTimeLabel } from '../feed/FeedTimelineScreen';
 import {
@@ -326,9 +327,9 @@ export function HomeScreen({ navigation }: Props) {
 
   // moodApi.set 이 갱신된 나/상대 무드를 함께 돌려주므로, 소켓 이벤트를 기다리지 않고
   // 응답으로 바로 반영한다(홈을 나가지 않고 연달아 바꿔도 배지가 즉시 따라온다).
-  const sendMood = (emoji: string, message?: string) => {
+  const sendMood = (choice: MoodChoice, message?: string) => {
     moodApi
-      .set(emoji, message)
+      .set(choice, message)
       .then((res) => { setMood(res); haptics.light(); toast.success('무드를 남겼어요'); })
       .catch((e) => toast.error(getErrorMessage(e, '무드를 남기지 못했어요.')));
   };
@@ -441,7 +442,11 @@ export function HomeScreen({ navigation }: Props) {
         accessibilityRole="button"
         accessibilityLabel={mood?.mine ? `지금 기분 ${mood.mine.emoji} — 눌러서 바꾸기` : '지금 기분 남기기'}
       >
-        <Text style={styles.moodBtnEmoji}>{mood?.mine?.emoji ?? '🙂'}</Text>
+        {mood?.mine?.imageUrl ? (
+          <Image source={{ uri: mood.mine.imageUrl }} style={styles.moodBtnImage} resizeMode="contain" />
+        ) : (
+          <Text style={styles.moodBtnEmoji}>{mood?.mine?.emoji ?? '🙂'}</Text>
+        )}
         <Text style={styles.moodBtnText}>{mood?.mine ? '기분 바꾸기' : '기분 남기기'}</Text>
       </Pressable>
       <View style={styles.topBarRight}>
@@ -540,6 +545,7 @@ export function HomeScreen({ navigation }: Props) {
                     latestLabel: recordLabel(myLatest),
                     latestTime: myLatest ? feedTimeLabel(myLatest.occurredAt) : null,
                     moodEmoji: mood?.mine?.emoji,
+                    moodImageUrl: mood?.mine?.imageUrl,
                   }}
                   partner={{
                     name: partner?.partnerName ?? couple?.partner?.name ?? '상대방',
@@ -550,6 +556,7 @@ export function HomeScreen({ navigation }: Props) {
                     latestLabel: recordLabel(partnerLatest),
                     latestTime: partnerLatest ? feedTimeLabel(partnerLatest.occurredAt) : null,
                     moodEmoji: mood?.partner?.emoji,
+                    moodImageUrl: mood?.partner?.imageUrl,
                   }}
                   dday={dday}
                   anniversaryDate={couple?.anniversaryDate ?? null}
@@ -757,6 +764,8 @@ const styles = themedStyles((colors) => ({
     minHeight: layout.touchTarget,
   },
   moodBtnEmoji: { fontSize: 15, lineHeight: 18 },
+  /** 우리 이모지 무드 — 옆 글자(15px)와 시각 무게를 맞춘다 */
+  moodBtnImage: { width: 18, height: 18 },
   moodBtnText: { color: colors.textPrimary, fontSize: fontSize.caption, fontWeight: '700' },
 
   body: { flex: 1, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, gap: spacing.md },
