@@ -134,16 +134,27 @@ public class CoupleEmojiService {
      * 요청 스레드: 관계·대상 검증 + 한도 차감. 여기서 던지는 402/429 는 그대로 HTTP 응답이 된다.
      */
     public GenerationTicket prepare(Long userId, GenerateCoupleEmojiRequest request) {
-        Relation couple = activeCouple(userId);
-        Long subject = request.subjectUserId() != null ? request.subjectUserId() : couple.partnerOf(userId);
-        if (subject == null || !couple.involves(subject)) {
-            throw new BusinessException(ErrorCode.INVALID_INPUT, "우리 둘 중 한 사람의 사진이어야 해요.");
-        }
+        // 폴더 검사가 먼저다 — 아래 실패 경로에서 이 URL 을 지우는데, 우리 폴더의 것만 지워야 한다.
         if (!isSourceUrl(request.sourceImageUrl())) {
             throw new BusinessException(ErrorCode.INVALID_PHOTO_URL);
         }
-        geminiClient.requireImageConfiguredAndCountUsage(userId, FEATURE);
-        return new GenerationTicket(couple.getId(), userId, subject, request.sourceImageUrl());
+        try {
+            Relation couple = activeCouple(userId);
+            Long subject = request.subjectUserId() != null ? request.subjectUserId() : couple.partnerOf(userId);
+            if (subject == null || !couple.involves(subject)) {
+                throw new BusinessException(ErrorCode.INVALID_INPUT, "우리 둘 중 한 사람의 사진이어야 해요.");
+            }
+            geminiClient.requireImageConfiguredAndCountUsage(userId, FEATURE);
+            return new GenerationTicket(couple.getId(), userId, subject, request.sourceImageUrl());
+        } catch (RuntimeException e) {
+            /*
+             * 앱은 업로드 → 접수 순서라, 여기서 거절(402·429·관계 없음·대상 오류)해도 원본은 이미
+             * emoji-source/ 에 올라가 있다. 백그라운드 작업이 안 뜨니 지울 사람도 없다 — 거절과 함께
+             * 지운다. "사진은 저장하지 않아요"(§9)는 거절 경로에서도 지켜져야 한다(2026-09-08 점검 #3).
+             */
+            imageDeleter.deleteAll(List.of(request.sourceImageUrl()));
+            throw e;
+        }
     }
 
     /**
@@ -162,6 +173,20 @@ public class CoupleEmojiService {
      */
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public CoupleEmojiBatchResponse generate(GenerationTicket ticket) {
+        try {
+            return generateFrom(ticket);
+        } finally {
+            /*
+             * 원본은 저장하지 않는다(§9) — 성공·실패·예외 어느 경로든 지운다. finally 인 이유: 예전엔 감정
+             * 루프 뒤에서만 지워서, 다운로드 거절(PHOTO_TOO_LARGE 처럼 파일은 있는 실패)·외형 추출 실패·
+             * 루프 밖으로 새는 예외에서 상대 얼굴이 emoji-source/ 에 남았다(2026-09-08 점검 #2).
+             * 전용 폴더의 것만 받았으므로(prepare) 안전하다.
+             */
+            imageDeleter.deleteAll(List.of(ticket.sourceImageUrl()));
+        }
+    }
+
+    private CoupleEmojiBatchResponse generateFrom(GenerationTicket ticket) {
         CloudinaryImageFetcher.Image source;
         try {
             source = imageFetcher.fetch(ticket.sourceImageUrl());
@@ -174,7 +199,7 @@ public class CoupleEmojiService {
         String batchId = UUID.randomUUID().toString();
         List<CoupleEmoji> saved = new ArrayList<>();
         List<String> failed = new ArrayList<>();
-        BusinessException lastFailure = null;
+        RuntimeException lastFailure = null;
         for (CoupleEmojiEmotion emotion : CoupleEmojiEmotion.values()) {
             try {
                 GeneratedImage image = geminiClient.generateImageInBackground(List.of(
@@ -192,19 +217,23 @@ public class CoupleEmojiService {
                         .identityFacts(facts)
                         .build()));
                 saved.add(row);
-            } catch (BusinessException e) {
+            } catch (RuntimeException e) {
+                /*
+                 * BusinessException 만 잡으면 base64 디코드(IllegalArgumentException)·DB 예외가 루프를
+                 * 탈출한다 — 그러면 방금 업로드한 장은 고아가 되고, 이미 커밋된 장들은 이벤트·푸시 없는
+                 * 반쪽 세트로 남으며, 한 장도 못 살렸어도 환불이 없다. 어떤 예외든 "이 장 실패"로 분류한다.
+                 */
                 lastFailure = e;
                 failed.add(emotion.name());
-                log.warn("우리 이모지 {} 생성 실패(relation={}): {}", emotion, ticket.relationId(), e.getErrorCode());
+                log.warn("우리 이모지 {} 생성 실패(relation={}): {}", emotion, ticket.relationId(),
+                        e instanceof BusinessException be ? be.getErrorCode() : e.toString());
             }
         }
 
-        // 원본은 저장하지 않는다(§9) — 성공·실패와 무관하게 지운다. 전용 폴더의 것만 받았으므로 안전하다.
-        imageDeleter.deleteAll(List.of(ticket.sourceImageUrl()));
-
         if (saved.isEmpty()) {
             geminiClient.refund(ticket.userId(), FEATURE);
-            throw lastFailure != null ? lastFailure : new BusinessException(ErrorCode.AI_ANALYSIS_FAILED);
+            // 사용자에게는 BusinessException 의 한국어만 보여준다 — 그 밖의 예외는 일반 실패 문구로 감싼다
+            throw lastFailure instanceof BusinessException be ? be : new BusinessException(ErrorCode.AI_ANALYSIS_FAILED);
         }
 
         coupleEventPublisher.publish(ticket.relationId(), CoupleEvent.COUPLE_EMOJI);
