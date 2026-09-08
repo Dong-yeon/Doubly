@@ -1,5 +1,5 @@
 /** 일상 남기기 — 사진(선택, 최대 5장) + 글 작성. 글/사진 중 하나는 필수 */
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -14,6 +14,7 @@ import { pickImages, uploadImage } from '../../utils/imageUpload';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
+import { usePlanStore } from '../../store/planStore';
 import { haptics } from '../../utils/haptics';
 import { useDirtyGuard } from '../../hooks/useDirtyGuard';
 import { useSpacingFix } from '../../hooks/useSpacingFix';
@@ -30,6 +31,12 @@ export function FeedComposeScreen({ navigation }: Props) {
   const [content, setContent] = useState('');
   const [photoUris, setPhotoUris] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  /*
+   * 올라간 사진의 URL 캐시(로컬 uri → Cloudinary url). 서명 발급마다 PHOTO_UPLOAD 가 선차감되고
+   * 환불이 없어서, 5장 중 3장이 올라간 뒤 실패했을 때 재시도에서 그 3장을 다시 올리면 한도만
+   * 두 번 나간다. 화면이 살아 있는 동안 한 번 올라간 사진은 다시 올리지 않는다.
+   */
+  const uploadedRef = useRef<Map<string, string>>(new Map());
 
   // 글이나 사진이 있으면 이탈(뒤로가기·스와이프) 전에 확인한다
   const allowLeave = useDirtyGuard(content.trim().length > 0 || photoUris.length > 0);
@@ -77,9 +84,40 @@ export function FeedComposeScreen({ navigation }: Props) {
     try {
       let imageUrls: string[] | undefined;
       if (photoUris.length > 0) {
+        const pending = photoUris.filter((uri) => !uploadedRef.current.has(uri));
+        /*
+         * 한도 프리체크 — 예전엔 Promise.all 로 동시에 올려서, 잔여 3장인 FREE 사용자가 5장을 고르면
+         * 3장 차감 + 2장 402 + 글 없음이 됐다(한도는 환불되지 않는다. 2026-09-08 점검 #4).
+         * 잔여치는 표시용이라 최종 판정은 여전히 서버가 하지만, 여기서 걸러지면 한 장도 안 나간다.
+         * PRO(무제한)는 remaining 이 null 이라 그대로 지나간다.
+         */
+        if (pending.length > 0) {
+          await usePlanStore.getState().load();
+          const remaining = usePlanStore.getState().remainingOf('PHOTO_UPLOAD');
+          if (remaining !== null && remaining < pending.length) {
+            if (remaining <= 0) {
+              usePlanStore.getState().showUpgrade('이번 달 사진 한도를 다 썼어요. PRO에서는 제한 없이 올릴 수 있어요.');
+            } else {
+              toast.error(`이번 달 사진 한도가 ${remaining}장 남았어요. 사진을 ${remaining}장까지 줄여주세요.`);
+            }
+            return;
+          }
+        }
         imageUrls = await runBusy(
           photoUris.length > 1 ? `사진 ${photoUris.length}장 올리는 중…` : '사진 올리는 중…',
-          () => Promise.all(photoUris.map((uri) => uploadImage(uri))),
+          async () => {
+            // 순차 업로드 — 한 장이 실패하면 거기서 멈춘다. 올라간 장은 캐시에 남아 재시도 때 건너뛴다.
+            const urls: string[] = [];
+            for (const uri of photoUris) {
+              let url = uploadedRef.current.get(uri);
+              if (!url) {
+                url = await uploadImage(uri);
+                uploadedRef.current.set(uri, url);
+              }
+              urls.push(url);
+            }
+            return urls;
+          },
         );
       }
       await feedApi.createPost({ content: content.trim() || undefined, imageUrls });

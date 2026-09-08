@@ -54,6 +54,15 @@ public class RelationRecordRestorer {
                 .executeUpdate();
         moved += move("daily_answers", "couple_id", oldRelationId, newRelationId);
         moved += move("chat_messages", "relation_id", oldRelationId, newRelationId);
+        /*
+         * 무드(V44)·우리 이모지(V80)도 relations FK 를 가진다 — 옮기지 않으면 아래 "옛 관계 삭제"가
+         * FK 위반으로 실패해 복원 전체가 되돌아간다(2026-09-08 점검 #1: 무드를 한 번이라도 남긴 커플은
+         * 재회 후 복원이 500 이었다). 우리 이모지는 커플 공용 자산(설계 §9)이라 되살리는 게 맞고,
+         * 무드는 캘린더 원장이라 함께 따라간다. mood_statuses.couple_emoji_id 가 couple_emojis 를
+         * 가리키므로(V81) 둘은 반드시 같이 옮긴다.
+         */
+        moved += move("mood_statuses", "couple_id", oldRelationId, newRelationId);
+        moved += move("couple_emojis", "relation_id", oldRelationId, newRelationId);
         // 운동 기록은 개인 소유지만 관계 참조는 되살려준다 (커플 통계에 다시 잡히도록)
         move("workouts", "relation_id", oldRelationId, newRelationId);
 

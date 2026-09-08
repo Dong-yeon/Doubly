@@ -12,6 +12,7 @@ import com.fitto.common.ai.GeneratedImage;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.plan.Feature;
+import com.fitto.common.upload.CloudinaryImageDeleter;
 import com.fitto.common.upload.CloudinaryImageFetcher;
 import com.fitto.common.upload.CloudinaryImageUploader;
 import com.fitto.coupleemoji.domain.CoupleEmojiEmotion;
@@ -31,6 +32,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -45,6 +47,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -72,6 +75,8 @@ class CoupleEmojiFlowTest {
     @MockitoBean GeminiClient geminiClient;
     @MockitoBean CloudinaryImageFetcher imageFetcher;
     @MockitoBean CloudinaryImageUploader imageUploader;
+    /** 스파이 — extractPublicId(폴더 게이트)는 진짜가 필요하고, deleteAll 호출 여부만 본다(미설정이라 no-op) */
+    @MockitoSpyBean CloudinaryImageDeleter imageDeleter;
 
     private final AtomicInteger uploads = new AtomicInteger();
 
@@ -129,11 +134,15 @@ class CoupleEmojiFlowTest {
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.INVALID_INPUT);
         // 전용 폴더가 아닌 URL 은 안 받는다 — 생성 뒤 원본을 지우므로 남의 사진 URL 을 넣는 경로를 막는다
-        assertThatThrownBy(() -> service.prepare(a, new GenerateCoupleEmojiRequest(
-                "https://res.cloudinary.com/demo/image/upload/v1/fitto/feed-photo.jpg", null)))
+        String foreignUrl = "https://res.cloudinary.com/demo/image/upload/v1/fitto/feed-photo.jpg";
+        assertThatThrownBy(() -> service.prepare(a, new GenerateCoupleEmojiRequest(foreignUrl, null)))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.INVALID_PHOTO_URL);
+
+        // 거절된 두 건(관계 없음·대상 오류)은 이미 올라간 원본을 함께 지운다 — 남의 폴더 URL 은 건드리지 않는다
+        verify(imageDeleter, times(2)).deleteAll(List.of(SOURCE_URL));
+        verify(imageDeleter, never()).deleteAll(List.of(foreignUrl));
 
         // 대상을 비우면 상대 얼굴이 기본
         CoupleEmojiService.GenerationTicket ticket = service.prepare(a, new GenerateCoupleEmojiRequest(SOURCE_URL, null));
@@ -141,6 +150,24 @@ class CoupleEmojiFlowTest {
         assertThat(ticket.subjectUserId()).isEqualTo(b);
         // 한도 차감은 요청 스레드(prepare)에서 — 비싼 준비 전에 402 를 즉시 돌려주기 위해
         verify(geminiClient).requireImageConfiguredAndCountUsage(a, Feature.AI_COUPLE_EMOJI);
+        // 접수가 됐으면 원본은 백그라운드 작업이 지운다 — 여기서는 안 지운다
+        verify(imageDeleter, times(2)).deleteAll(List.of(SOURCE_URL));
+    }
+
+    @Test
+    void 한도에_막히면_올라간_원본을_지운다() {
+        Long a = register("ce-limit-a@fitto.com");
+        Long b = register("ce-limit-b@fitto.com");
+        connectCouple(a, b);
+        doThrow(new BusinessException(ErrorCode.PLAN_LIMIT_EXCEEDED))
+                .when(geminiClient).requireImageConfiguredAndCountUsage(a, Feature.AI_COUPLE_EMOJI);
+
+        assertThatThrownBy(() -> service.prepare(a, new GenerateCoupleEmojiRequest(SOURCE_URL, null)))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PLAN_LIMIT_EXCEEDED);
+
+        verify(imageDeleter).deleteAll(List.of(SOURCE_URL));
     }
 
     @Test
@@ -210,6 +237,43 @@ class CoupleEmojiFlowTest {
 
         assertThat(service.list(a)).isEmpty();
         verify(geminiClient).refund(a, Feature.AI_COUPLE_EMOJI);
+        // 실패해도 원본은 지운다(§9)
+        verify(imageDeleter).deleteAll(List.of(SOURCE_URL));
+    }
+
+    /** 다운로드가 거절돼도(파일은 있는 실패) 원본은 지워야 한다 — 예전엔 루프 뒤에서만 지워 남았다. */
+    @Test
+    void 원본_다운로드가_거절돼도_환불하고_원본을_지운다() {
+        Long a = register("ce-fetch-a@fitto.com");
+        Long b = register("ce-fetch-b@fitto.com");
+        connectCouple(a, b);
+        when(imageFetcher.fetch(anyString())).thenThrow(new BusinessException(ErrorCode.PHOTO_TOO_LARGE));
+
+        assertThatThrownBy(() -> generateFor(a, null))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PHOTO_TOO_LARGE);
+
+        verify(geminiClient).refund(a, Feature.AI_COUPLE_EMOJI);
+        verify(imageDeleter).deleteAll(List.of(SOURCE_URL));
+    }
+
+    /** 업로드 뒤 DB 예외처럼 BusinessException 이 아닌 것이 새도 "이 장 실패"로 분류하고 세트는 이어진다. */
+    @Test
+    void 비즈니스_예외가_아닌_실패도_한_장_실패로_흡수한다() {
+        Long a = register("ce-rt-a@fitto.com");
+        Long b = register("ce-rt-b@fitto.com");
+        connectCouple(a, b);
+        when(geminiClient.generateImageInBackground(anyList()))
+                .thenThrow(new IllegalArgumentException("Illegal base64 character"))
+                .thenReturn(new GeneratedImage(new byte[] {1}, "image/png"));
+
+        CoupleEmojiBatchResponse batch = generateFor(a, null);
+
+        assertThat(batch.emojis()).hasSize(5);
+        assertThat(batch.failedEmotions()).containsExactly("ANGRY");
+        verify(geminiClient, never()).refund(any(), any());
+        verify(imageDeleter).deleteAll(List.of(SOURCE_URL));
     }
 
     @Test
