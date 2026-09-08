@@ -1032,7 +1032,13 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             mine ? styles.bubbleMine : styles.bubbleTheirs,
             !isGroupEnd && (mine ? styles.bubbleMineGrouped : styles.bubbleTheirsGrouped),
           ]}>
-            <Text style={[styles.msgText, mine && styles.msgTextMine]}>{item.content}</Text>
+            <Text style={[styles.msgText, mine && styles.msgTextMine]}>
+              {/*
+                우리 이모지인데 이미지가 없는 행(실패·레거시)은 content 가 숫자 id 라 그대로 보이면
+                안 된다 — 알림 미리보기와 같은 표기로 대신한다(2026-09-08 점검 #12).
+              */}
+              {item.messageType === 'COUPLE_EMOJI' && !item.imageUrl ? '[우리 이모지]' : item.content}
+            </Text>
           </View>
         )}
         {/*

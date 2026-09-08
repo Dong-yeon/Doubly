@@ -41,7 +41,8 @@ export function MoodPicker({ visible, onClose, onSelect }: Props) {
 
   // 시트를 열 때 목록을 확인한다(캐시가 있으면 요청은 안 나간다 — 스토어의 load 규칙).
   useEffect(() => {
-    if (visible) loadCoupleEmojis();
+    // 실패해도 시트는 유니코드 무드로 그대로 쓸 수 있다 — 오프라인에서 unhandled rejection 을 내지 않는다
+    if (visible) loadCoupleEmojis().catch(() => undefined);
   }, [visible, loadCoupleEmojis]);
 
   /** 내 얼굴 최신 한 벌 — 파일 상단 주석의 두 가지 축소 규칙 */
