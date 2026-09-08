@@ -128,7 +128,10 @@ public GeneratedImage generateImageInBackground(Long userId, Feature feature,
 가 서명 삭제에 쓴다) 서명 업로드는 같은 재료로 된다. `CloudinaryImageDeleter` 옆에 `CloudinaryImageUploader`
 를 둔다. 폴더는 `fitto/couple-emoji/` — 나중에 R2 로 갈 때 이 폴더만 따로 옮길 수 있게.
 
-### 5-4. DB — `V{n}__couple_emojis.sql` (번호는 착수 시 다시 확인, 2026-09-08 기준 다음은 V79)
+### 5-4. DB — `V{n}__couple_emojis.sql` (번호는 착수 시 **반드시** 다시 확인)
+
+이 문서를 쓰는 동안에도 다른 세션이 `V79__feed_post_photos.sql` 을 만들었다(2026-09-08, 미커밋 상태로
+주 워크트리에 있었다). 문서에 번호를 박아두면 이렇게 바로 낡는다 — CLAUDE.md 7절의 명령으로 확인하고 붙인다.
 
 ```sql
 -- 우리 이모지 — 커플 소유. 한 번의 생성(batch)이 감정별로 여러 행을 남긴다.
