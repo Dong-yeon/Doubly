@@ -1316,6 +1316,39 @@ export interface ChatRoom {
   unreadCount: number;
 }
 
+// 5.8b couple_emojis — 애인 얼굴로 만든 감정 이모지 세트
+/**
+ * 감정 6종 — 서버 {@code CoupleEmojiEmotion} 과 순서·이름이 같다. 사용자가 고르지 않는다
+ * (사진 한 장 → 세트 한 벌). 생성 대기 화면의 "칸이 채워지는" 순서가 이 순서다.
+ */
+export type CoupleEmojiEmotion = 'ANGRY' | 'HAPPY' | 'EXCITED' | 'SAD' | 'SLEEPY' | 'LOVE';
+
+/** 우리 이모지 한 장 — 트레이·미리보기 공용 (GET /couple-emojis) */
+export interface CoupleEmoji {
+  id: number;
+  /** 한 번의 생성으로 나온 묶음 — 세트 단위 삭제의 키 */
+  batchId: string;
+  emotion: CoupleEmojiEmotion;
+  /** 감정 한국어 라벨(화남·기쁨·…) — 서버가 내려준다. 접근성 라벨에 그대로 쓴다 */
+  label: string;
+  imageUrl: string;
+  /** 누구 얼굴인가 */
+  subjectUserId: number;
+  createdBy: number;
+  createdAt: string;
+}
+
+/**
+ * 생성 결과 — 6장 중 일부만 성공할 수 있다(안전필터). 실패한 감정이 있어도
+ * 나머지는 이미 저장됐고 한도는 환불되지 않는다.
+ */
+export interface CoupleEmojiBatch {
+  batchId: string;
+  emojis: CoupleEmoji[];
+  /** 못 만든 감정들 — 비어 있으면 6/6 */
+  failedEmotions: CoupleEmojiEmotion[];
+}
+
 // 5.9 streaks (운동: PERSONAL/COUPLE, 식단: *_MEAL)
 export type StreakType = 'PERSONAL' | 'COUPLE' | 'PERSONAL_MEAL' | 'COUPLE_MEAL';
 export interface Streak {

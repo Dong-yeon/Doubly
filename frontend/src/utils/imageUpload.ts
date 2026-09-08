@@ -4,7 +4,7 @@ import { File as FsFile } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { CLOUDINARY, isCloudinaryConfigured } from '../constants/config';
-import { uploadApi } from '../api/upload';
+import { uploadApi, type UploadSignature } from '../api/upload';
 import { errorCodeOf } from '../api/client';
 import { toast } from '../store/toastStore';
 
@@ -174,6 +174,22 @@ async function postToCloudinary(cloudName: string, form: FormData): Promise<stri
 }
 
 /**
+ * 이미 발급받은 서명으로 업로드 → secure_url.
+ *
+ * <p>기능 전용 폴더로 올려야 하는 자리(우리 이모지 원본 등)를 위해 분리했다. 그런 기능은
+ * 서버가 <b>폴더로 URL 을 검증</b>하므로(CoupleEmojiService.isSourceUrl) 아래 {@link uploadImage}
+ * 의 unsigned 폴백을 타면 안 된다 — 폴더가 달라 어차피 거절된다. 그래서 폴백이 없다.
+ */
+export async function uploadImageWithSignature(uri: string, sig: UploadSignature): Promise<string> {
+  const form = await buildFileForm(uri);
+  form.append('api_key', sig.apiKey);
+  form.append('timestamp', String(sig.timestamp));
+  form.append('folder', sig.folder);
+  form.append('signature', sig.signature);
+  return postToCloudinary(sig.cloudName, form);
+}
+
+/**
  * Cloudinary 업로드 → secure_url.
  *
  * <p>백엔드 서명(signed)을 우선 사용하고, <b>서명 기능이 꺼져 있을 때만</b>
@@ -195,12 +211,7 @@ export async function uploadImage(uri: string): Promise<string> {
   }
 
   if (sig) {
-    const form = await buildFileForm(uri);
-    form.append('api_key', sig.apiKey);
-    form.append('timestamp', String(sig.timestamp));
-    form.append('folder', sig.folder);
-    form.append('signature', sig.signature);
-    return postToCloudinary(sig.cloudName, form);
+    return uploadImageWithSignature(uri, sig);
   }
 
   // 폴백: unsigned preset (서명 백엔드 미설정 시 — 개발 환경 전용 경로)

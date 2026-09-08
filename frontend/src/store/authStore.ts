@@ -13,6 +13,7 @@ import { usePlanStore } from './planStore';
 import { useCallStore } from './callStore';
 import { usePlaceStore } from './placeStore';
 import { useContentStore } from './contentStore';
+import { useCoupleEmojiStore } from './coupleEmojiStore';
 import type { AuthTokens, Gender, User } from '../types';
 
 interface AuthState {
@@ -47,12 +48,14 @@ async function clearTokens() {
   useChatStore.getState().teardown();
   void useCallStore.getState().teardown();
   /*
-   * "한 번 받으면 재사용" 캐시 스토어(럽슐랭 장소·콘텐츠)를 비운다 — 안 비우면 로그아웃 후
-   * 다른 계정으로 로그인해도 loaded 플래그가 그대로 살아있어 load() 가 재조회를 건너뛰고
-   * 이전 계정의 목록이 화면에 그대로 남는다(계정 간 데이터 유출).
+   * "한 번 받으면 재사용" 캐시 스토어(럽슐랭 장소·콘텐츠·우리 이모지)를 비운다 — 안 비우면
+   * 로그아웃 후 다른 계정으로 로그인해도 loaded 플래그가 그대로 살아있어 load() 가 재조회를
+   * 건너뛰고 이전 계정의 목록이 화면에 그대로 남는다(계정 간 데이터 유출). 우리 이모지는
+   * 남의 얼굴이 그려진 이미지라 특히 남으면 안 된다.
    */
   usePlaceStore.getState().reset();
   useContentStore.getState().reset();
+  useCoupleEmojiStore.getState().reset();
 }
 
 async function persistTokens(tokens: AuthTokens) {

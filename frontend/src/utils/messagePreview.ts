@@ -34,6 +34,11 @@ export function messagePreview(type: MessageType, content?: string | null): stri
       const info = parseCallCard(content);
       return info ? callCardLabel(info) : '통화';
     }
+    // content 가 couple_emojis.id 라 그대로 쓰면 "12" 가 노출된다(TOUCH 와 같은 이유).
+    // 감정 라벨을 붙이려면 트레이 목록을 조회해야 하는데, 방 목록 미리보기는 그 목록을
+    // 들고 있지 않다 — 서버 preview() 도 같은 이유로 "[우리 이모지]" 한 문구다.
+    case 'COUPLE_EMOJI':
+      return '우리 이모지';
     case 'VOICE_MESSAGE': {
       const parsed = parseVoiceContent(content);
       return parsed ? `음성 메시지 ${formatVoiceDuration(parsed.durationSec)}` : '음성 메시지';
