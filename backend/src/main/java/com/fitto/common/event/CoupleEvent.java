@@ -28,4 +28,6 @@ public record CoupleEvent(String type) {
     public static final String CALL_INCOMING = "CALL_INCOMING";
     /** 통화 상태 변화(수락/거절/종료) — 양쪽이 GET /api/v1/calls/{id} 로 다시 조회한다 */
     public static final String CALL_UPDATED = "CALL_UPDATED";
+    /** 우리 이모지 세트 생성 완료/삭제 — 수신측은 GET /api/v1/couple-emojis 로 트레이를 다시 조회한다 */
+    public static final String COUPLE_EMOJI = "COUPLE_EMOJI";
 }

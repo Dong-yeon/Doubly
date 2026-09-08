@@ -3,3 +3,7 @@
 build-artifacts/
 # App Store Connect API 키(.p8) 등 절대 커밋되면 안 되는 비밀키 — 로컬 전용
 secrets/
+
+# 우리 이모지 프롬프트 실험 산출물(생성 이미지·run.json) — 실제 얼굴 사진이 섞이므로 커밋 금지
+scripts/couple-emoji-experiment/out/
+scripts/couple-emoji-experiment/photos/

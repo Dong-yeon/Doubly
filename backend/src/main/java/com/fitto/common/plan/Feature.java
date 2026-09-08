@@ -41,6 +41,14 @@ public enum Feature {
      * AI_DIET_COACH 처럼 개인 판정 — 커플 모드 제안은 화면에서 선택적으로 연다.
      */
     AI_NEXT_MEAL("다음 끼니 AI 제안", Quota.perWeek(1), Quota.perDay(5)),
+    /**
+     * 우리 이모지 — 상대(또는 내) 사진 한 장으로 감정 6종 캐릭터 세트를 그린다. <b>세트 단위로 1회</b> 차감.
+     *
+     * <p>위 텍스트 AI 와 달리 <b>원가가 0이 아니다</b>. 이미지 생성은 무료 등급 쿼터가 0이라 결제가 붙은
+     * 키로만 돌고, 세트(6장)당 약 0.2~0.3 USD 가 나간다. 그래서 무료는 맛보기 없이 막고, PRO 도 월 상한을
+     * 둔다. 숫자는 임시값 — 원가 실측 뒤 조정. docs/COUPLE_EMOJI_AI_DESIGN_2026-09-08.md §6·§8.
+     */
+    AI_COUPLE_EMOJI("우리 이모지 만들기", Quota.blocked(), Quota.perMonth(5)),
 
     /**
      * 플랜과 무관한 <b>전 기능 합산 안전망</b>.
@@ -194,7 +202,10 @@ public enum Feature {
                  // 보내는/만드는 사람은 한 명이어도 "선물하는 결제" 프레임 — 한쪽만 PRO 여도 함께 쓴다.
                  WORKOUT_BOOSTER, CUSTOM_QUESTION, VOICE_MESSAGE,
                  // 매거진(럽슐랭)은 이미 커플 소유 콘텐츠 — PLACE_PIN 과 같은 판정.
-                 PUBLIC_GUIDE_LINK -> true;
+                 PUBLIC_GUIDE_LINK,
+                 // 우리 이모지는 만든 사람이 아니라 관계가 소유한다(둘 다 쓰고 둘 다 지운다) —
+                 // PREMIUM_STICKER 와 같은 "내가 결제하면 우리 둘 다" 프레임.
+                 AI_COUPLE_EMOJI -> true;
             default -> false;
         };
     }

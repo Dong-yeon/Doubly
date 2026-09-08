@@ -153,7 +153,22 @@ public class GeminiClient {
         if (!properties.isConfigured()) {
             throw new BusinessException(ErrorCode.AI_NOT_CONFIGURED);
         }
+        countUsage(userId, feature);
+    }
 
+    /**
+     * 이미지 생성 기능의 관문 — 텍스트와 <b>키가 다르다</b>(GeminiProperties.imageApiKey 주석).
+     * 한도 계산은 텍스트와 같은 세 겹을 그대로 탄다: 이미지도 결국 "AI 호출 1회"이고,
+     * 프로젝트 쿼터 방어(AI_TOTAL)를 따로 두면 두 카운터가 어긋난다.
+     */
+    public void requireImageConfiguredAndCountUsage(Long userId, Feature feature) {
+        if (!properties.isImageConfigured()) {
+            throw new BusinessException(ErrorCode.AI_NOT_CONFIGURED);
+        }
+        countUsage(userId, feature);
+    }
+
+    private void countUsage(Long userId, Feature feature) {
         Quota serviceWide = Quota.perDay(properties.getDailyLimitTotal());
         if (usageCounter.peekGlobal(Feature.AI_TOTAL, serviceWide) >= serviceWide.limit()) {
             log.warn("AI 서비스 전체 일일 한도 도달 — limit={}", serviceWide.limit());
@@ -180,6 +195,14 @@ public class GeminiClient {
      * 이미 처리했을 수 있고, 그러면 프로젝트 쿼터는 실제로 줄어 있다. 되돌리면 그 방어선이
      * 실패 횟수만큼 헐거워진다.
      */
+    /**
+     * 되돌리기를 밖에서 부르는 경우 — 세트 단위로 한 번 차감하고 여러 장을 만드는 기능
+     * ({@link #generateImageInBackground} 주석 2번)이 "한 장도 못 살렸다"고 판단했을 때.
+     */
+    public void refund(Long userId, Feature feature) {
+        refundUsage(userId, feature);
+    }
+
     private void refundUsage(Long userId, Feature feature) {
         planGuard.refund(userId, feature);
         usageCounter.decrement(userId, Feature.AI_TOTAL,
@@ -209,6 +232,71 @@ public class GeminiClient {
                                              List<Map<String, Object>> parts,
                                              Map<String, Object> responseSchema) {
         return generateJson(userId, feature, parts, responseSchema, BACKGROUND);
+    }
+
+    /**
+     * 이미지 생성(백그라운드 전용) — 응답 parts 의 {@code inlineData} 를 바이트로 돌려준다.
+     *
+     * <p>텍스트 경로({@link #generateJsonInBackground})와 다른 점 세 가지.
+     * <ol>
+     *   <li><b>키와 모델이 다르다.</b> 이미지 생성은 무료 등급 쿼터가 0이라 결제가 붙은 별도 프로젝트
+     *       키를 쓴다({@code GeminiProperties.imageApiKey}). <b>모델 폴백은 없다</b> — 텍스트 폴백
+     *       모델로 떨어지면 이미지가 안 나오고, 이미지 모델끼리 바꾸면 단가·그림체가 달라 한 세트
+     *       안에서 캐릭터가 갈린다. 재시도(분 단위 백오프)만 한다.</li>
+     *   <li><b>한도를 되돌리지 않는다.</b> 세트(여러 장) 단위로 한 번 차감하는 기능이 부르므로, 장 하나가
+     *       실패했다고 여기서 되돌리면 세트당 여러 번 환불된다. 몇 장을 살렸는지는 호출자만 알므로
+     *       환불 판단도 호출자가 {@link #refund} 로 한다.</li>
+     *   <li><b>안전 필터 거절은 재시도하지 않는다.</b> 같은 사진을 다시 보내도 같은 답이다.
+     *       {@link ErrorCode#AI_IMAGE_REJECTED} 로 구분해 사용자에게 "다른 사진"을 권한다.</li>
+     * </ol>
+     *
+     * <p>{@code responseModalities} 는 JSON 모드와 같이 쓸 수 없어 본문을 따로 만든다.
+     * 온도 0.4 는 실험값(docs/COUPLE_EMOJI_AI_DESIGN_2026-09-08.md §12) — 낮추면 표정이 밋밋해지고
+     * 높이면 세트 일관성이 떨어졌다.
+     */
+    public GeneratedImage generateImageInBackground(List<Map<String, Object>> parts) {
+        Map<String, Object> body = Map.of(
+                "contents", List.of(Map.of("parts", parts)),
+                "generationConfig", Map.of(
+                        "responseModalities", List.of("IMAGE"),
+                        "temperature", 0.4));
+        long deadline = System.currentTimeMillis() + BACKGROUND.budgetMillis();
+        JsonNode root;
+        try {
+            root = callModel(properties.getImageModel(), properties.imageApiKeyOrFallback(),
+                    body, BACKGROUND, deadline);
+        } catch (ModelUnavailable unavailable) {
+            throw unavailable.toBusinessException();
+        }
+        return parseImage(root);
+    }
+
+    /**
+     * 이미지 파트 추출. 없으면 <b>왜</b> 없는지로 갈라 던진다 — 거절(사용자가 사진을 바꿔야 함)과
+     * 그 밖의 실패(잠시 후 재시도)는 사용자에게 다른 말을 해야 한다.
+     */
+    private GeneratedImage parseImage(JsonNode root) {
+        if (root == null) {
+            throw new BusinessException(ErrorCode.AI_ANALYSIS_FAILED);
+        }
+        JsonNode candidate = root.path("candidates").path(0);
+        for (JsonNode part : candidate.path("content").path("parts")) {
+            JsonNode inline = part.path("inlineData");
+            String data = inline.path("data").asText(null);
+            if (data != null && !data.isBlank()) {
+                String mimeType = inline.path("mimeType").asText("image/png");
+                return new GeneratedImage(Base64.getDecoder().decode(data), mimeType);
+            }
+        }
+        String finishReason = candidate.path("finishReason").asText("");
+        String blockReason = root.path("promptFeedback").path("blockReason").asText("");
+        if (!blockReason.isBlank() || finishReason.contains("SAFETY")
+                || finishReason.contains("PROHIBITED") || finishReason.contains("BLOCKLIST")) {
+            log.info("Gemini 이미지 생성 거절: finishReason={} blockReason={}", finishReason, blockReason);
+            throw new BusinessException(ErrorCode.AI_IMAGE_REJECTED);
+        }
+        log.warn("Gemini 이미지 응답에 이미지 없음: finishReason={}", finishReason);
+        throw new BusinessException(ErrorCode.AI_ANALYSIS_FAILED);
     }
 
     private JsonNode generateJson(Long userId, Feature feature, List<Map<String, Object>> parts,
@@ -274,14 +362,14 @@ public class GeminiClient {
                 : start + policy.budgetMillis() * PRIMARY_BUDGET_PERCENT / 100;
 
         try {
-            return callModel(primary, body, policy, primaryDeadline);
+            return callModel(primary, properties.getApiKey(), body, policy, primaryDeadline);
         } catch (ModelUnavailable primaryFailure) {
             if (fallback == null || System.currentTimeMillis() >= deadline) {
                 throw primaryFailure.toBusinessException();
             }
             log.warn("Gemini 1차 모델({}) 계속 실패 — 폴백 모델({})로 다시 시도", primary, fallback);
             try {
-                return callModel(fallback, body, policy, deadline);
+                return callModel(fallback, properties.getApiKey(), body, policy, deadline);
             } catch (ModelUnavailable fallbackFailure) {
                 log.warn("Gemini 폴백 모델({})도 실패", fallback);
                 throw fallbackFailure.toBusinessException();
@@ -308,7 +396,7 @@ public class GeminiClient {
      * {@link ModelUnavailable} 로 올린다. 잘못된 요청(4xx)이나 네트워크 오류는 모델을 바꿔도
      * 똑같으므로 여기서 바로 실패시킨다 — 폴백에 예산을 낭비할 이유가 없다.
      */
-    private JsonNode callModel(String model, Map<String, Object> body,
+    private JsonNode callModel(String model, String apiKey, Map<String, Object> body,
                                RetryPolicy policy, long deadline) {
         long backoffMillis = policy.initialBackoffMillis();
         long lastAttemptMillis = 0;
@@ -317,7 +405,7 @@ public class GeminiClient {
             try {
                 JsonNode response = restClient.post()
                         .uri(GENERATE_PATH.formatted(properties.getBaseUrl(), model))
-                        .header("x-goog-api-key", properties.getApiKey())
+                        .header("x-goog-api-key", apiKey)
                         .contentType(MediaType.APPLICATION_JSON)
                         .body(body)
                         .retrieve()
