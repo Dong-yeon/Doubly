@@ -40,7 +40,8 @@ export const type = themedStyles((colors) => ({
     fontSize: fontSize.subtitle,
     fontWeight: '700',
     color: colors.textPrimary,
-    lineHeight: 22,
+    // subtitle 이 16 → 17 로 오르면서 같이 올린다. 22 로 두면 1.29 배라 빽빽하다
+    lineHeight: 24,
   },
   /** 섹션 라벨 — 목록 위 작은 구분 라벨 (설정·MY 메뉴 등) */
   overline: {
