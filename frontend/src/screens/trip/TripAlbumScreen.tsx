@@ -46,21 +46,29 @@ export function TripAlbumScreen({ route }: Props) {
   const { deletingId, runDelete } = useDeleteAction<number>();
 
   /*
-   * 뷰어에는 사진이 있는 항목만 넣는다. 그래서 그리드 위치와 뷰어 위치가 어긋나므로
-   * id → 뷰어 인덱스 맵을 함께 만들어 탭한 사진이 정확히 열리게 한다.
+   * 뷰어에는 사진이 있는 항목만 넣는다. 그리드 칸은 포스트당 하나(대표 사진)지만,
+   * 뷰어는 포스트의 사진을 전부 편다 — 한 칸을 탭해도 여러 장이면 그 자리에서 이어서
+   * 넘겨볼 수 있고, 계속 스와이프하면 다음 포스트의 사진으로 자연스럽게 넘어간다.
+   * viewerIndexById 는 "이 칸을 탭하면 뷰어의 몇 번째부터 열지"를 알려준다.
    */
   const { viewerImages, viewerIndexById } = useMemo(() => {
-    const withPhoto = photos.filter((p) => p.imageUrl);
-    return {
-      viewerImages: withPhoto.map<ViewerImage>((p) => ({
-        key: String(p.id),
-        uri: p.imageUrl as string,
-        title: `${p.mine ? '내가' : `${p.authorName}님이`}  ·  ${p.createdAt.slice(5, 10)}`,
-        titleColor: p.mine ? colors.coral : colors.indigo,
-        caption: p.content ?? undefined,
-      })),
-      viewerIndexById: new Map(withPhoto.map((p, i) => [p.id, i])),
-    };
+    const images: ViewerImage[] = [];
+    const viewerIndexById = new Map<number, number>();
+    for (const p of photos) {
+      if (!p.imageUrl) continue;
+      const uris = p.imageUrls && p.imageUrls.length > 0 ? p.imageUrls : [p.imageUrl];
+      viewerIndexById.set(p.id, images.length);
+      uris.forEach((uri, i) => {
+        images.push({
+          key: `${p.id}-${i}`,
+          uri,
+          title: `${p.mine ? '내가' : `${p.authorName}님이`}  ·  ${p.createdAt.slice(5, 10)}`,
+          titleColor: p.mine ? colors.coral : colors.indigo,
+          caption: p.content ?? undefined,
+        });
+      });
+    }
+    return { viewerImages: images, viewerIndexById };
   }, [photos]);
 
   const load = useCallback(async () => {
@@ -157,6 +165,12 @@ export function TripAlbumScreen({ route }: Props) {
                 <MaterialCommunityIcons name="image-off-outline" size={28} color={colors.textMuted} />
               </View>
             )}
+            {/* 여러 장 표시 — Instagram류 앱과 같은 자리(우상단)의 스택 아이콘 */}
+            {item.imageUrls && item.imageUrls.length > 1 ? (
+              <View style={styles.multiBadge}>
+                <MaterialCommunityIcons name="image-multiple-outline" size={14} color={colors.white} />
+              </View>
+            ) : null}
             {item.content ? (
               <Text style={styles.caption} numberOfLines={1}>
                 {item.content}
@@ -248,6 +262,17 @@ const styles = themedStyles((colors) => ({
   cellDeleting: { opacity: 0.5 },
   photo: { borderRadius: radius.lg, backgroundColor: colors.surfaceAlt },
   photoEmpty: { alignItems: 'center', justifyContent: 'center' },
+  multiBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   caption: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textPrimary, marginTop: spacing.xs },
   by: { fontSize: 11, color: colors.textSecondary, marginTop: 2 },
 

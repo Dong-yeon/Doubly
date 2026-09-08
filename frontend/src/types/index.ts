@@ -114,6 +114,8 @@ export interface User {
 export interface FeedPhoto {
   postId: number;
   imageUrl: string;
+  /** 이 포스트의 사진 전체 목록([0]이 imageUrl과 같은 값). 그리드 칸은 여전히 대표 사진 하나만 쓴다 */
+  imageUrls?: string[] | null;
   content?: string | null;
   authorName: string;
   mine: boolean;
@@ -1117,6 +1119,8 @@ export interface AlbumPost {
   mine: boolean;
   content?: string | null;
   imageUrl?: string | null;
+  /** 이 포스트의 사진 전체 목록([0]이 imageUrl과 같은 값). 그리드 칸은 여전히 대표 사진 하나만 쓴다 */
+  imageUrls?: string[] | null;
   createdAt: string;
 }
 
