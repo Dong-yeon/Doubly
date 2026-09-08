@@ -29,5 +29,14 @@ public enum MessageType {
      * 업로드 한도(Feature.VOICE_MESSAGE)는 발신 시점이 아니라 업로드 서명 발급 시점에
      * 소비한다(ChatController.voiceUploadSignature) — IMAGE 와 같은 패턴(UploadController).
      */
-    VOICE_MESSAGE
+    VOICE_MESSAGE,
+    /**
+     * 우리 이모지(AI 가 애인 얼굴로 그린 감정 이모지, V80) — content 에 {@code couple_emojis.id},
+     * image_url 에 그 행의 URL 을 <b>복사</b>해 담는다. 트레이에서 숨긴 뒤에도 지난 메시지가 조인 없이
+     * 그려져야 해서다. STICKER 에 얹지 않은 이유: STICKER 의 content 는 로컬 번들 코드이고 서버가
+     * StickerPack/AnimatedSticker 로 프리미엄 판정을 하는데, 원격 URL 을 섞으면 그 판정·알림 미리보기·
+     * 검색 제외·예약 전송 검증이 전부 분기해야 한다. 전송 시 PRO 판정은 하지 않는다 — 만들 때 이미
+     * 게이팅했고 커플 공용이라 상대(무료일 수도)도 쓴다. docs/COUPLE_EMOJI_AI_DESIGN_2026-09-08.md §5-6.
+     */
+    COUPLE_EMOJI
 }

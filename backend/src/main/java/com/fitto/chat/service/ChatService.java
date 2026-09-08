@@ -32,6 +32,8 @@ import com.fitto.common.notification.NotificationService;
 import com.fitto.common.notification.PushLinks;
 import com.fitto.common.plan.Feature;
 import com.fitto.common.plan.PlanGuard;
+import com.fitto.coupleemoji.domain.CoupleEmoji;
+import com.fitto.coupleemoji.repository.CoupleEmojiRepository;
 import com.fitto.relation.domain.Relation;
 import com.fitto.relation.repository.RelationRepository;
 import com.fitto.user.domain.User;
@@ -71,6 +73,7 @@ public class ChatService {
     private final NotificationService notificationService;
     private final PlanGuard planGuard;
     private final CoupleEventPublisher coupleEventPublisher;
+    private final CoupleEmojiRepository coupleEmojiRepository;
 
     public ChatService(ChatMessageRepository chatMessageRepository,
                        ChatMessageReactionRepository reactionRepository,
@@ -80,7 +83,8 @@ public class ChatService {
                        UserRepository userRepository,
                        NotificationService notificationService,
                        PlanGuard planGuard,
-                       CoupleEventPublisher coupleEventPublisher) {
+                       CoupleEventPublisher coupleEventPublisher,
+                       CoupleEmojiRepository coupleEmojiRepository) {
         this.chatMessageRepository = chatMessageRepository;
         this.reactionRepository = reactionRepository;
         this.bookmarkRepository = bookmarkRepository;
@@ -90,6 +94,7 @@ public class ChatService {
         this.notificationService = notificationService;
         this.planGuard = planGuard;
         this.coupleEventPublisher = coupleEventPublisher;
+        this.coupleEmojiRepository = coupleEmojiRepository;
     }
 
     /** 내 채팅방 목록 (활성 관계별 1개). */
@@ -277,13 +282,20 @@ public class ChatService {
             // (아래 주석 참고). 둘 다 같은 Feature 로 판정한다(AnimatedSticker 주석).
             planGuard.require(senderId, Feature.PREMIUM_STICKER);
         }
+        String imageUrl = req.imageUrl();
+        if (messageType == MessageType.COUPLE_EMOJI) {
+            // 이 관계의, 아직 숨기지 않은 이모지만. URL 은 클라이언트 값이 아니라 행에서 복사한다 —
+            // 남의 URL 을 붙여 보내는 경로를 막고, 트레이에서 숨긴 뒤에도 메시지가 조인 없이 그려지게.
+            // PRO 판정은 없다(MessageType.COUPLE_EMOJI 주석).
+            imageUrl = requireCoupleEmoji(relationId, req.content()).getImageUrl();
+        }
 
         ChatMessage message = ChatMessage.builder()
                 .relationId(relationId)
                 .senderId(senderId)
                 .messageType(messageType)
                 .content(req.content())
-                .imageUrl(req.imageUrl())
+                .imageUrl(imageUrl)
                 .workoutId(req.workoutId())
                 .routineId(req.routineId())
                 .replyToId(resolveReplyTarget(req.replyToId(), relationId))
@@ -317,6 +329,18 @@ public class ChatService {
                 .build();
         chatMessageRepository.save(message);
         return ChatMessageResponse.from(message);
+    }
+
+    /** 우리 이모지 전송 검증 — content(id)가 이 관계의 살아 있는 이모지인지. */
+    private CoupleEmoji requireCoupleEmoji(Long relationId, String content) {
+        long emojiId;
+        try {
+            emojiId = Long.parseLong(content == null ? "" : content.trim());
+        } catch (NumberFormatException e) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "알 수 없는 우리 이모지예요.");
+        }
+        return coupleEmojiRepository.findByIdAndRelationIdAndDeletedAtIsNull(emojiId, relationId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.COUPLE_EMOJI_NOT_FOUND));
     }
 
     /**
@@ -568,6 +592,8 @@ public class ChatService {
             case TOUCH -> "[" + TouchGesture.from(message.getContent()).map(TouchGesture::label).orElse("터치") + "]";
             case CALL_CARD -> callCardPreview(message.getContent());
             case VOICE_MESSAGE -> "[음성 메시지]";
+            // content 가 id 라 그대로 보여주면 안 된다. 감정 라벨까지 붙이려면 조회가 필요해 고정 문구로 둔다.
+            case COUPLE_EMOJI -> "[우리 이모지]";
             default -> message.getContent();
         };
     }
