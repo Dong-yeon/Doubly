@@ -281,6 +281,34 @@ AI_COUPLE_EMOJI("우리 이모지 만들기", Quota.blocked(), Quota.perMonth(5)
 4. 실기기: 생성 → 트레이 → 전송 → 상대 화면 갱신 → 삭제 → 관계 삭제 후 Cloudinary 잔존 확인.
 5. 2단계 무드 연동은 1단계 배포 후 반응 보고.
 
-## 12. 실험 결과 (착수 시 채운다)
+## 12. 실험 결과
 
-_(0단계 프롬프트 실험 결과 — 사용 모델, 닮음 판정, 최종 앵커 문구, 감정별 변주 문구, 거절 사례)_
+### 12-1. 2026-09-08 — 착수, 결제 벽에서 멈춤
+
+스크립트: `scripts/couple-emoji-experiment/generate.mjs`(사진 1장 → 감정 6종, 스타일 앵커 3종 비교) ·
+`make-face.mjs`(실물 사진이 없을 때 쓰는 합성 얼굴 대역). 키는 로컬에 두지 않고 `railway run` 으로
+운영 변수를 주입해 돌린다(키가 셸 이력·파일에 남지 않는다). 산출물 폴더는 `.gitignore` 처리 — 실제
+얼굴 사진이 섞이므로 커밋하지 않는다.
+
+**확인된 것**
+
+| 항목 | 결과 |
+|---|---|
+| 운영 키로 보이는 이미지 모델 | `gemini-2.5-flash-image`(Nano Banana), `gemini-3.1-flash-image` / `-lite-image`(Nano Banana 2), `gemini-3-pro-image`(Pro) |
+| 같은 키로 텍스트 모델(`gemini-2.5-flash-lite`) 호출 | 200 — 키 자체는 정상 |
+| 이미지 모델 호출(2.5-flash-image · 3.1-flash-image · 3.1-flash-lite-image 전부) | **429** `generate_content_free_tier_input_token_count, limit: 0` |
+
+**결론: 무료 티어에는 이미지 생성 쿼터가 0이다** (§8 의 "무료 쿼터가 없거나 매우 작을 수 있다"가
+"없다"로 확정). 지금 운영 키는 무료 티어이므로 **실험도, 운영도 결제 활성화 없이는 한 장도 못 만든다.**
+이건 프롬프트 이전의 전제 조건이라, 0단계는 여기서 멈췄다.
+
+**다음에 할 것 (사용자 결정 필요)**
+
+1. Google AI Studio / Cloud 프로젝트에 결제를 붙인다. 운영 키와 실험 키를 나눌지도 이때 정한다 —
+   실험은 로컬에서 `GEMINI_API_KEY` 를 환경변수로 넘기면 되고, 운영 키는 그대로 둔다.
+2. 실제 얼굴 사진 1~3장을 `scripts/couple-emoji-experiment/photos/` 에 넣는다(폴더째 gitignore).
+3. 감정 1종(`--emotions ANGRY`)으로 먼저 파이프라인 확인 → 스타일 3종(`vector`·`kakao`·`threeD`) 각각
+   6종 세트 → 닮음·일관성 판정을 12-2 에 적는다.
+
+이 전제가 게이팅 설계(§6)에 미치는 영향: FREE 맛보기 세트는 더 어렵다. 텍스트 AI 와 달리 무료 쿼터로
+흡수할 원가가 아예 없다.
