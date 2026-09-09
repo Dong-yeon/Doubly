@@ -11,7 +11,9 @@ import { LegalDocumentScreen } from '../screens/onboarding/LegalDocumentScreen';
 import { FeedComposeScreen } from '../screens/feed/FeedComposeScreen';
 import { FeedTimelineScreen } from '../screens/feed/FeedTimelineScreen';
 import { DailyQuestionScreen } from '../screens/home/DailyQuestionScreen';
+import { MiniGamesScreen } from '../screens/home/MiniGamesScreen';
 import { SudokuScreen } from '../screens/home/SudokuScreen';
+import { OmokScreen } from '../screens/home/OmokScreen';
 import { CoupleCalendarScreen } from '../screens/home/CoupleCalendarScreen';
 import { PhotoAlbumScreen } from '../screens/feed/PhotoAlbumScreen';
 import { MemoriesScreen } from '../screens/feed/MemoriesScreen';
@@ -59,7 +61,9 @@ export function HomeStackNavigator() {
         options={{ title: '일상 남기기', ...modalOptions }}
       />
       <Stack.Screen name="DailyQuestion" component={DailyQuestionScreen} options={{ title: '오늘의 질문' }} />
+      <Stack.Screen name="MiniGames" component={MiniGamesScreen} options={{ title: '미니게임' }} />
       <Stack.Screen name="Sudoku" component={SudokuScreen} options={{ title: '협동 스도쿠' }} />
+      <Stack.Screen name="Omok" component={OmokScreen} options={{ title: '오목' }} />
       <Stack.Screen name="CoupleCalendar" component={CoupleCalendarScreen} options={{ title: '커플 캘린더' }} />
       <Stack.Screen name="PhotoAlbum" component={PhotoAlbumScreen} options={{ title: '우리 사진첩' }} />
       <Stack.Screen name="Memories" component={MemoriesScreen} options={{ title: '추억' }} />

@@ -108,6 +108,8 @@ public enum ErrorCode {
     GAME_NOT_FOUND(HttpStatus.NOT_FOUND, "게임 판을 찾을 수 없어요."),
     GAME_NOT_IN_PROGRESS(HttpStatus.CONFLICT, "이미 끝난 판이에요."),
     GAME_CELL_FIXED(HttpStatus.BAD_REQUEST, "처음부터 주어진 숫자는 바꿀 수 없어요."),
+    GAME_NOT_YOUR_TURN(HttpStatus.CONFLICT, "지금은 상대 차례예요."),
+    GAME_CELL_OCCUPIED(HttpStatus.BAD_REQUEST, "이미 돌이 놓인 자리예요."),
     // 사진 관련 — 원인별로 분리해 어떤 문제인지 바로 보이게 한다
     INVALID_PHOTO_URL(HttpStatus.BAD_REQUEST, "앱에서 촬영·선택해 올린 사진만 분석할 수 있어요."),
     PHOTO_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "사진 용량이 너무 커요 (최대 10MB). 더 작은 사진으로 시도해주세요."),

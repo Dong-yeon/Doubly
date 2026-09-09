@@ -7,12 +7,12 @@ import com.fitto.chat.domain.MessageType;
 import com.fitto.chat.repository.ChatMessageRepository;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
-import com.fitto.game.domain.CoupleGame;
+import com.fitto.game.domain.SudokuGame;
 import com.fitto.game.domain.GameDifficulty;
 import com.fitto.game.domain.GameStatus;
 import com.fitto.game.dto.StartSudokuRequest;
 import com.fitto.game.dto.SudokuGameResponse;
-import com.fitto.game.repository.CoupleGameRepository;
+import com.fitto.game.repository.SudokuGameRepository;
 import com.fitto.game.service.SudokuService;
 import com.fitto.relation.dto.InviteCodeResponse;
 import com.fitto.relation.service.RelationService;
@@ -35,7 +35,7 @@ class SudokuFlowTest {
     @Autowired AuthService authService;
     @Autowired RelationService relationService;
     @Autowired SudokuService sudokuService;
-    @Autowired CoupleGameRepository gameRepository;
+    @Autowired SudokuGameRepository gameRepository;
     @Autowired ChatMessageRepository chatMessageRepository;
 
     private Long register(String prefix) {
@@ -75,7 +75,7 @@ class SudokuFlowTest {
         Long b = register("mb");
         connectCouple(a, b);
         SudokuGameResponse game = sudokuService.start(a, new StartSudokuRequest(GameDifficulty.EASY));
-        CoupleGame entity = gameRepository.findById(game.id()).orElseThrow();
+        SudokuGame entity = gameRepository.findById(game.id()).orElseThrow();
 
         int first = game.puzzle().indexOf('0');
         int second = game.puzzle().indexOf('0', first + 1);

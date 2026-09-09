@@ -475,6 +475,26 @@ export interface SudokuGame {
   completedAt?: string | null;
 }
 
+// 오목 — docs/COUPLE_GAMES_DESIGN_2026-09-09.md 5절. 15×15, 판을 연 사람이 WHITE(후공)
+export type OmokColor = 'BLACK' | 'WHITE';
+export type OmokWinner = 'ME' | 'PARTNER' | 'DRAW';
+export interface OmokGame {
+  id: number;
+  status: SudokuStatus;
+  size: number;
+  /** 225자. '0' 빈칸 · 'M' 내 돌 · 'P' 상대 돌 */
+  stones: string;
+  myColor: OmokColor;
+  myTurn: boolean;
+  lastMove?: number | null;
+  moveCount: number;
+  winner?: OmokWinner | null;
+  winningLine: number[];
+  partnerName?: string | null;
+  createdAt: string;
+  completedAt?: string | null;
+}
+
 // 커플 챌린지/대결 — 기간 내 운동/식단 기록일로 겨루기
 export type ChallengeType = 'WORKOUT' | 'MEAL';
 export interface Challenge {
