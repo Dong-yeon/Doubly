@@ -29,6 +29,8 @@ export type HomeStackParamList = PlaceScreensParamList & {
   FeedCompose: undefined;
   // 데일리 질문 (커플 Q&A)
   DailyQuestion: undefined;
+  // 협동 스도쿠 — 둘이 같은 판을 채운다 (docs/COUPLE_GAMES_DESIGN_2026-09-09.md)
+  Sudoku: undefined;
   // 커플 캘린더 — 기념일 외 일정·생일·데이트 약속 + D-day 푸시
   CoupleCalendar: undefined;
   // 우리 사진첩 — 피드 사진 전체 모아보기

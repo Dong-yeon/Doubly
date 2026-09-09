@@ -103,6 +103,11 @@ public enum ErrorCode {
     /* 서버가 생성물을 Cloudinary 에 올리는 데 실패(우리 이모지) — 클라 직접 업로드가 아닌 유일한 경로 */
     IMAGE_UPLOAD_FAILED(HttpStatus.BAD_GATEWAY, "이미지를 저장하지 못했어요. 잠시 후 다시 시도해주세요."),
     COUPLE_EMOJI_NOT_FOUND(HttpStatus.NOT_FOUND, "우리 이모지를 찾을 수 없어요."),
+
+    // 커플 게임 (GAME) — 협동 스도쿠
+    GAME_NOT_FOUND(HttpStatus.NOT_FOUND, "게임 판을 찾을 수 없어요."),
+    GAME_NOT_IN_PROGRESS(HttpStatus.CONFLICT, "이미 끝난 판이에요."),
+    GAME_CELL_FIXED(HttpStatus.BAD_REQUEST, "처음부터 주어진 숫자는 바꿀 수 없어요."),
     // 사진 관련 — 원인별로 분리해 어떤 문제인지 바로 보이게 한다
     INVALID_PHOTO_URL(HttpStatus.BAD_REQUEST, "앱에서 촬영·선택해 올린 사진만 분석할 수 있어요."),
     PHOTO_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "사진 용량이 너무 커요 (최대 10MB). 더 작은 사진으로 시도해주세요."),

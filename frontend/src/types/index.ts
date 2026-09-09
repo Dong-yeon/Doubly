@@ -64,7 +64,9 @@ export type FeatureKey =
   | 'CUSTOM_QUESTION'
   | 'VOICE_MESSAGE'
   | 'PUBLIC_GUIDE_LINK'
-  | 'CSV_EXPORT';
+  | 'CSV_EXPORT'
+  // 협동 게임(스도쿠) — 게이팅 없음, 계측용. docs/COUPLE_GAMES_DESIGN_2026-09-09.md 3-5
+  | 'COUPLE_GAME';
 
 /** 한도 주기 — TOTAL 은 리셋되지 않는 보유 개수 상한 */
 export type QuotaPeriod = 'DAY' | 'WEEK' | 'MONTH' | 'TOTAL' | 'NONE';
@@ -447,6 +449,30 @@ export interface QuestionHistory {
   question: string;
   myAnswer: string;
   partnerAnswer: string;
+}
+
+// 협동 스도쿠 — docs/COUPLE_GAMES_DESIGN_2026-09-09.md 3-4절
+export type SudokuDifficulty = 'EASY' | 'NORMAL' | 'HARD';
+export type SudokuStatus = 'IN_PROGRESS' | 'COMPLETED' | 'ABANDONED';
+export interface SudokuGame {
+  id: number;
+  difficulty: SudokuDifficulty;
+  difficultyLabel: string;
+  status: SudokuStatus;
+  /** 81자. 주어진 숫자, 빈칸 '0' */
+  puzzle: string;
+  /** 81자. 현재 판(given 포함) */
+  board: string;
+  /** 81자. 요청자 기준 '0'(없음/given) · 'M'(나) · 'P'(상대) */
+  owners: string;
+  /** 정답과 다른 칸의 인덱스 — 정답 자체는 내려오지 않는다 */
+  wrongCells: number[];
+  filled: number;
+  myCells: number;
+  partnerCells: number;
+  partnerName?: string | null;
+  createdAt: string;
+  completedAt?: string | null;
 }
 
 // 커플 챌린지/대결 — 기간 내 운동/식단 기록일로 겨루기
@@ -1290,7 +1316,9 @@ export type MessageType =
   /** 음성 메시지(최대 30초) — content 에 "{audioUrl}|{durationSec}" 형식으로 담는다 */
   | 'VOICE_MESSAGE'
   /** 우리 이모지 — content 에 couple_emojis.id, imageUrl 에 그 행의 URL(서버가 복사). PRO 판정 없음 */
-  | 'COUPLE_EMOJI';
+  | 'COUPLE_EMOJI'
+  /** 커플 게임 결과 카드(협동 스도쿠 완성) — STREAK_CARD 처럼 content 가 그대로 읽히는 문장이다 */
+  | 'GAME_CARD';
 /** 메시지 이모지 리액션 — mine 은 userIds 에 내 id 가 있는지로 판단한다(브로드캐스트 공용) */
 export interface ChatReactionSummary {
   emoji: string;

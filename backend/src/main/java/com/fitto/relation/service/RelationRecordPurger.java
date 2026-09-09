@@ -85,6 +85,8 @@ public class RelationRecordPurger {
         exec("delete from couple_challenges where couple_id = :rid", relationId);
         exec("delete from couple_events where couple_id = :rid", relationId);
         exec("delete from daily_answers where couple_id = :rid", relationId);
+        // 커플 게임(V86, 협동 스도쿠) — relations/users 만 참조하고 자식이 없다
+        exec("delete from couple_games where couple_id = :rid", relationId);
         // mood_statuses.couple_emoji_id 가 couple_emojis 를 참조하므로(V81) 무드를 먼저 지운다 —
         // 아래 couple_emojis 삭제보다 뒤로 옮기면 FK 위반으로 관계 삭제가 실패한다.
         exec("delete from mood_statuses where couple_id = :rid", relationId);

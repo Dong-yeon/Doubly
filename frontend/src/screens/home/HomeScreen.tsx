@@ -706,6 +706,7 @@ export function HomeScreen({ navigation }: Props) {
                   { icon: 'timeline-text-outline', label: '우리 기록', onPress: () => navigation.navigate('FeedTimeline') },
                   { icon: 'image-plus', label: '일상', onPress: () => navigation.navigate('FeedCompose') },
                   { icon: 'comment-question-outline', label: '질문', onPress: () => navigation.navigate('DailyQuestion') },
+                  { icon: 'grid', label: '스도쿠', onPress: () => navigation.navigate('Sudoku') },
                   { icon: 'calendar-heart', label: '캘린더', onPress: () => navigation.navigate('CoupleCalendar') },
                   { icon: 'image-multiple-outline', label: '사진첩', onPress: () => navigation.navigate('PhotoAlbum') },
                   { icon: 'hand-heart-outline', label: '터치', onPress: () => setShowTouchPicker(true) },

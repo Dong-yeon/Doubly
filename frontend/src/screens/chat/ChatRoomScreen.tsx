@@ -883,12 +883,18 @@ export function ChatRoomScreen({ navigation, route }: Props) {
      * 말풍선이 어색하다(누가 보낸 게 아니다). 날짜 구분선처럼 가운데 배너로 그린다.
      * content 는 그대로 읽히는 문장이라 파싱이 필요 없다.
      */
-    if (item.messageType === 'STREAK_CARD') {
+    if (item.messageType === 'STREAK_CARD' || item.messageType === 'GAME_CARD') {
+      // GAME_CARD(협동 스도쿠 완성)도 서버가 대신 남기는 문장이라 같은 배너로 그린다
+      const banner = item.messageType === 'GAME_CARD';
       return (
         <View>
           {divider}
           <View style={styles.streakBanner}>
-            <MaterialCommunityIcons name="fire" size={16} color={colors.coral} />
+            <MaterialCommunityIcons
+              name={banner ? 'puzzle' : 'fire'}
+              size={16}
+              color={banner ? colors.primary : colors.coral}
+            />
             <Text style={styles.streakBannerText}>{item.content}</Text>
           </View>
         </View>

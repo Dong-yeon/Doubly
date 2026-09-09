@@ -38,5 +38,11 @@ public enum MessageType {
      * 검색 제외·예약 전송 검증이 전부 분기해야 한다. 전송 시 PRO 판정은 하지 않는다 — 만들 때 이미
      * 게이팅했고 커플 공용이라 상대(무료일 수도)도 쓴다. docs/COUPLE_EMOJI_AI_DESIGN_2026-09-08.md §5-6.
      */
-    COUPLE_EMOJI
+    COUPLE_EMOJI,
+    /**
+     * 커플 게임 결과 카드(협동 스도쿠 완성 등, V86) — STREAK_CARD 와 같은 규칙으로 content 에
+     * <b>그대로 읽히는 문장</b>을 담는다. 구버전 앱에서도 평범한 말풍선으로 읽힌다.
+     * {@code SudokuService} 가 완성 시점에 대신 남긴다(발신자=마지막 칸을 채운 사람).
+     */
+    GAME_CARD
 }

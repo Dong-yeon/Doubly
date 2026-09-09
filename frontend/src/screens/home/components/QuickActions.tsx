@@ -30,7 +30,7 @@ export function QuickActions({ actions }: { actions: QuickAction[] }) {
           accessibilityRole="button"
         >
           <View style={styles.iconBox}>
-            <MaterialCommunityIcons name={a.icon} size={21} color={colors.primary} />
+            <MaterialCommunityIcons name={a.icon} size={20} color={colors.primary} />
           </View>
           <Text style={styles.label} numberOfLines={1}>
             {a.label}
@@ -46,10 +46,11 @@ const styles = themedStyles((colors) => ({
   row: { flexDirection: 'row', marginBottom: spacing.md },
   item: { flex: 1, alignItems: 'center', gap: spacing.xs, paddingVertical: spacing.xs },
   pressed: { opacity: 0.6 },
+  // 7칸(스도쿠 추가, 2026-09-09) — 320px 폭에서도 칸(40px)이 아이콘보다 좁아지지 않는 크기
   iconBox: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
     // 크림 스크림 위 — 표면 틴트로 눌러 담는다
