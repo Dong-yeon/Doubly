@@ -8,6 +8,8 @@ import com.fitto.diet.dto.AnalyzeMealRequest;
 import com.fitto.diet.dto.AnalyzeMealTextRequest;
 import com.fitto.diet.dto.CoupleMealGoalResponse;
 import com.fitto.diet.dto.DietCoachResponse;
+import com.fitto.diet.dto.FoodLookupRequest;
+import com.fitto.diet.dto.FoodLookupResponse;
 import com.fitto.diet.dto.MealAnalysisResponse;
 import com.fitto.diet.dto.MealResponse;
 import com.fitto.diet.dto.MealStatsResponse;
@@ -202,5 +204,15 @@ public class MealController {
     @GetMapping("/recent-foods")
     public ApiResponse<List<RecentFoodResponse>> recentFoods(@AuthenticationPrincipal AuthUser user) {
         return ApiResponse.success(mealService.recentFoods(user.id()));
+    }
+
+    /**
+     * 내 기록에서 음식 영양 정보 찾기 — 즐겨찾기·추천 칩처럼 칼로리 없이 들어온 음식을 과거에
+     * 계산해 둔 값으로 채운다. AI 를 다시 돌리지 않는다. 이름 목록이라 GET 쿼리 대신 본문으로 받는다.
+     */
+    @PostMapping("/food-lookup")
+    public ApiResponse<List<FoodLookupResponse>> lookupFoods(@AuthenticationPrincipal AuthUser user,
+                                                             @Valid @RequestBody FoodLookupRequest request) {
+        return ApiResponse.success(mealService.lookupFoods(user.id(), request));
     }
 }

@@ -806,13 +806,27 @@ export interface WorkoutPhotoAnalysis {
 
 // 최근 먹은 음식 자동완성 (GET /meal/recent-foods) — 즐겨찾기와 달리 저장 없이 자동으로 뽑힌다
 export interface RecentFood {
-  memo: string;
-  mealType: MealType;
+  /** 음식 이름 — 최근 기록의 음식 항목(meal_items)에서 뽑힌다. 끼니 메모가 아니다 */
+  name: string;
+  portion?: string | null;
   calories?: number | null;
   carbs?: number | null;
   protein?: number | null;
   fat?: number | null;
   count: number;
+}
+
+/**
+ * 내 기록에서 찾은 음식 영양 정보 — POST /meal/food-lookup. 즐겨찾기·추천 칩처럼 칼로리 없이
+ * 들어온 음식을 과거에 계산해 둔 값으로 채운다. name 은 요청에 보낸 이름 그대로 돌아온다.
+ */
+export interface FoodLookupResult {
+  name: string;
+  portion?: string | null;
+  calories?: number | null;
+  carbs?: number | null;
+  protein?: number | null;
+  fat?: number | null;
 }
 
 // 목표 칼로리 자동 계산(TDEE 마법사) — POST /meal/nutrition/goal/suggest
