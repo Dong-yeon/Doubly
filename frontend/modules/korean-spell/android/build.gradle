@@ -15,6 +15,10 @@ android {
     externalNativeBuild {
       cmake {
         cppFlags "-O2 -frtti -fexceptions"
+        // 16KB 페이지 크기 지원 — Play 콘솔이 64비트 .so 전부에 요구한다(Android 15+).
+        // NDK 27 은 이 인자가 없으면 4KB 정렬로 링크한다. RN·expo-modules-core 도
+        // 같은 인자를 넘긴다(ReactAndroid/build.gradle.kts, expo-modules-core/android/build.gradle).
+        arguments "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"
       }
     }
   }
