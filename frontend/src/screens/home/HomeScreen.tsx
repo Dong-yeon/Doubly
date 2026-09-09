@@ -29,6 +29,7 @@ import { TripPeek, isTripLive, isTripOngoing, pickHomeTrip } from './components/
 import { LockedCard } from '../../components/LockedCard';
 import { TouchGesturePicker } from '../../components/TouchGesturePicker';
 import { MoodPicker } from '../../components/MoodPicker';
+import { QuickMealSheet } from './components/QuickMealSheet';
 import { useAuthStore } from '../../store/authStore';
 import { useCoupleEmojiStore } from '../../store/coupleEmojiStore';
 import { usePlanStore } from '../../store/planStore';
@@ -49,8 +50,9 @@ import {
   subscribeCouple,
   unsubscribeCouple,
 } from '../../api/chatSocket';
-import { pickImage, uploadImage } from '../../utils/imageUpload';
-import { daysSince } from '../../utils/date';
+import { pickImage, takePhoto, uploadImage } from '../../utils/imageUpload';
+import { daysSince, toDateString } from '../../utils/date';
+import { mealTypeForNow, mealTypeLabel } from '../../utils/mealTimeSlot';
 import { haptics } from '../../utils/haptics';
 import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
@@ -61,7 +63,7 @@ import { updateHomeWidget } from '../../widget/updateHomeWidget';
 import { loadWidgetData } from '../../widget/widgetData';
 import { touchGestureOf } from '../../constants/touchGestures';
 import { playTouchGesture } from '../../utils/haptics';
-import type { FeedItem, Memories, MoodResponse, PartnerToday, Streak, TouchGestureCode, Trip } from '../../types';
+import type { FeedItem, Meal, Memories, MoodResponse, PartnerToday, Streak, TouchGestureCode, Trip } from '../../types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { isDarkMode } from '../../theme';
 import { themedStyles } from '../../theme/themedStyles';
@@ -129,7 +131,9 @@ export function HomeScreen({ navigation }: Props) {
   const [partnerStreak, setPartnerStreak] = useState<Streak | null>(null);
   // 오늘의 운동·식단 — 나/상대 각각. 히어로의 두 사람 아래에 나란히 표시된다
   const [myWorkoutDone, setMyWorkoutDone] = useState(false);
-  const [myMealDone, setMyMealDone] = useState(false);
+  /* 목록으로 들고 있는 이유는 식단 시트가 "오늘 몇 끼 · 몇 kcal"를 헤더에 쓰기 때문 */
+  const [myMeals, setMyMeals] = useState<Meal[]>([]);
+  const myMealDone = myMeals.length > 0;
   const [partnerMeal, setPartnerMeal] = useState<PartnerToday | null>(null);
   /*
    * 최근 기록 — 좌우 열이 <b>각자의</b> 마지막 기록을 보여주므로 두 건이 필요하다.
@@ -163,6 +167,9 @@ export function HomeScreen({ navigation }: Props) {
    */
   const [mood, setMood] = useState<MoodResponse | null>(null);
   const [showMoodPicker, setShowMoodPicker] = useState(false);
+  /* 오늘 식단 시트 — 히어로의 내 식단 칩에서 연다(아래 onPressToday 참고) */
+  const [mealSheet, setMealSheet] = useState(false);
+  const [mealSaving, setMealSaving] = useState(false);
 
   // relationStore 의 fetchAll 이 아직 안 끝났으면 couple 이 null 이어도 "미연결"이
   // 아니라 "아직 모름"이다 — 로딩 중엔 연결된 것으로 간주해 연결 안내 화면이
@@ -188,7 +195,7 @@ export function HomeScreen({ navigation }: Props) {
     fetchAll().catch(noteOffline);
     workoutApi.today().then((l) => setMyWorkoutDone(l.length > 0)).catch(() => setMyWorkoutDone(false));
     workoutApi.partnerToday().then(setPartner).catch(() => setPartner(null));
-    dietApi.today().then((l) => setMyMealDone(l.length > 0)).catch(() => setMyMealDone(false));
+    dietApi.today().then(setMyMeals).catch(() => setMyMeals([]));
     dietApi.partnerToday().then(setPartnerMeal).catch(() => setPartnerMeal(null));
     /*
      * 실패해도 스트릭 상태는 건드리지 않는다 — null 로 덮으면 화면이 0일로 보이고
@@ -229,6 +236,36 @@ export function HomeScreen({ navigation }: Props) {
       .then((trips) => setHomeTrip(pickHomeTrip(trips)))
       .catch(() => setHomeTrip(null));
   }, [fetchAll, noteOffline]);
+
+  /**
+   * 사진 한 장으로 한 끼 남기기 — 홈의 식단 칩에서만 쓰는 경로.
+   *
+   * <p>기록 화면을 거치지 않는다. 끼니는 시각으로 정하고(mealTimeSlot), 칼로리는 저장 뒤
+   * 서버가 알아서 채우므로(MealPhotoAutoAnalysisService) 확인할 화면 자체가 필요 없다.
+   * 운동 탭의 "📷 사진으로"가 기록 화면으로 넘어가는 것과 갈리는 지점이다 — 거기서는
+   * 읽어낸 시간·거리를 확인할 자리가 필요했다.
+   *
+   * <p>시트를 닫는 건 저장이 <b>끝난 뒤</b>다. 사진을 고르자마자 닫으면 업로드가 도는 동안
+   * 아무 일도 안 일어나는 것처럼 보이고, 실패했을 때 되돌아갈 자리도 사라진다.
+   */
+  const saveMealFromPhoto = async (source: 'camera' | 'library') => {
+    setMealSaving(true);
+    try {
+      const picked = source === 'camera' ? await takePhoto() : await pickImage();
+      if (!picked) return;
+      const photoUrl = await uploadImage(picked);
+      const mealType = mealTypeForNow();
+      await dietApi.save({ mealDate: toDateString(), mealType, photoUrl });
+      haptics.success();
+      setMealSheet(false);
+      toast.success(`${mealTypeLabel(mealType)} 기록했어요! 칼로리는 곧 채워져요.`);
+      refresh();
+    } catch (e) {
+      toast.error(getErrorMessage(e, '기록하지 못했어요.'));
+    } finally {
+      setMealSaving(false);
+    }
+  };
 
   useFocusEffect(useCallback(() => {
     // 다시 들어올 때는 안내를 한 번 더 받을 수 있어야 한다(계속 오프라인인데 조용하면
@@ -574,18 +611,29 @@ export function HomeScreen({ navigation }: Props) {
                   onPressPerson={(who) => navigation.navigate('FeedTimeline', { who })}
                   /*
                    * 운동/식단 칩 — 예전엔 중앙 FAB 로 "탭 안 옮기고 바로 기록"이 가능했다.
-                   * FAB 를 없앤 대신, 이 칩이 그 역할을 대신하도록 목적지를 완료 여부로 가른다:
-                   * 오늘 안 했으면 기록 화면으로 바로(FAB 와 동급 속도), 이미 했으면 그 탭의
-                   * 메인 화면으로(확인·수정). 어느 열(나/상대)을 눌렀는지는 지금처럼 무시한다 —
-                   * 두 화면 모두 로그인한 나의 기록만 보여준다(상대 것을 보는 화면은 앱에 따로
-                   * 없다). 그래서 분기 기준도 항상 "나"의 완료 여부(myWorkoutDone/myMealDone)지,
-                   * 눌린 열의 done 이 아니다.
+                   * FAB 를 없앤 대신 이 칩이 그 역할을 물려받았고, 아래 분기가 그 약속을 지킨다.
                    */
-                  onPressToday={(_who, kind) =>
-                    kind === 'workout'
-                      ? navigation.navigate('Workout', { screen: myWorkoutDone ? 'WorkoutMain' : 'WorkoutRecord' })
-                      : navigation.navigate('Diet', { screen: myMealDone ? 'DietMain' : 'DietRecord' })
-                  }
+                  onPressToday={(who, kind) => {
+                    if (kind === 'workout') {
+                      navigation.navigate('Workout', { screen: myWorkoutDone ? 'WorkoutMain' : 'WorkoutRecord' });
+                      return;
+                    }
+                    /*
+                     * 식단만 시트를 연다 — 끼니는 하루 세 번이라 "오늘 했다/안 했다"로 목적지를
+                     * 가르면 아침 이후로는 빠른 경로가 사라진다. 시트는 기록 여부와 무관하게
+                     * 같은 모양이고(사진 두 갈래 + 직접 적기 + 오늘 기록 보기) ✓ 는 잠금이
+                     * 아니라 상태 표시로 남는다. 운동은 하루 한 번에 가깝고 운동 탭 자체에
+                     * 원탭·사진 버튼이 이미 있어 여기서 겹칠 이유가 없다.
+                     *
+                     * 다만 상대 열에서는 열지 않는다 — 내 사진을 상대 이름으로 남길 수는 없다.
+                     * (기존 주석대로 두 화면 모두 내 기록만 보여주므로 목적지는 그대로 DietMain)
+                     */
+                    if (who === 'partner') {
+                      navigation.navigate('Diet', { screen: 'DietMain' });
+                      return;
+                    }
+                    setMealSheet(true);
+                  }}
                 />
               </View>
 
@@ -718,6 +766,23 @@ export function HomeScreen({ navigation }: Props) {
         visible={showMoodPicker}
         onClose={() => setShowMoodPicker(false)}
         onSelect={sendMood}
+      />
+      {/* 오늘 식단 — 히어로의 내 식단 칩에서 연다(위 onPressToday 주석 참고) */}
+      <QuickMealSheet
+        visible={mealSheet}
+        onClose={() => setMealSheet(false)}
+        todayMeals={myMeals}
+        busy={mealSaving}
+        onTakePhoto={() => void saveMealFromPhoto('camera')}
+        onPickPhoto={() => void saveMealFromPhoto('library')}
+        onWriteManually={() => {
+          setMealSheet(false);
+          navigation.navigate('Diet', { screen: 'DietRecord' });
+        }}
+        onViewToday={() => {
+          setMealSheet(false);
+          navigation.navigate('Diet', { screen: 'DietMain' });
+        }}
       />
     </View>
   );
