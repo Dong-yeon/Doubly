@@ -81,6 +81,11 @@ export interface NutritionGoalSuggestionPayload {
 export const dietApi = {
   save: (payload: SaveMealPayload) =>
     unwrap(apiClient.post<ApiResponse<Meal>>('/meal', payload)),
+  /**
+   * 이미 저장한 기록을 "같이 먹기"로 전환 — 홈에서 사진으로 남긴 뒤 되묻는 경로.
+   * 저장 시점의 sharedWithPartner 와 결과가 같다(내 몫 절반 + 상대에게 짝 생성).
+   */
+  share: (id: number) => unwrap(apiClient.post<ApiResponse<Meal>>(`/meal/${id}/share`, {})),
   // 기록 수정 — items 는 전량 교체(보낸 목록이 곧 최종 상태)
   update: (id: number, payload: SaveMealPayload) =>
     unwrap(apiClient.put<ApiResponse<Meal>>(`/meal/${id}`, payload)),

@@ -240,6 +240,21 @@ export function HomeScreen({ navigation }: Props) {
   }, [fetchAll, noteOffline]);
 
   /**
+   * "같이 드셨나요?"에 답한 결과 — 내 몫이 절반이 되고 상대에게도 같은 끼니가 생긴다.
+   * 서버가 상대 스트릭·알림까지 맡으므로 여기서는 화면만 새로 고친다.
+   */
+  const shareMeal = async (mealId: number) => {
+    try {
+      await dietApi.share(mealId);
+      haptics.success();
+      toast.success(`${couple?.partner?.name ?? '상대'}님에게도 등록했어요 💕`);
+      refresh();
+    } catch (e) {
+      toast.error(getErrorMessage(e, '같이 먹기로 바꾸지 못했어요.'));
+    }
+  };
+
+  /**
    * 사진 한 장으로 한 끼 남기기 — 홈의 식단 칩에서만 쓰는 경로.
    *
    * <p>기록 화면을 거치지 않는다. 끼니는 시각으로 정하고(mealTimeSlot), 칼로리는 저장 뒤
@@ -257,17 +272,28 @@ export function HomeScreen({ navigation }: Props) {
       if (!picked) return;
       const photoUrl = await uploadImage(picked);
       const mealType = mealTypeForNow();
-      await dietApi.save({ mealDate: toDateString(), mealType, photoUrl });
+      const saved = await dietApi.save({ mealDate: toDateString(), mealType, photoUrl });
       haptics.success();
       setMealSheet(false);
       /*
        * 칼로리를 약속하는 건 설정이 켜져 있을 때뿐이다 — 꺼둔 사람에게 "곧 채워져요"는
        * 지키지 못할 말이고, 안 채워진 카드를 보고 고장으로 읽는다. 서버 판정과 같은 조건.
        */
-      toast.success(
-        `${mealTypeLabel(mealType)} 기록했어요!` +
-          (autoAnalyzeMealPhoto ? ' 칼로리는 곧 채워져요.' : ''),
-      );
+      const filling = autoAnalyzeMealPhoto ? ' 칼로리는 곧 채워져요.' : '';
+      /*
+       * 둘이 먹었는지는 저장하고 <b>나서</b> 묻는다. 사진을 고르기 전에 물으면 시트가 두 단이
+       * 되는데, 이 경로의 존재 이유가 탭을 줄이는 것이라 그 순간 의미가 없어진다. 안 누르고
+       * 지나가도 그냥 혼자 기록이라 잃는 게 없다 — 그래서 덤으로 얹을 수 있다.
+       * 외식이야말로 음식 사진을 찍는 순간이고, "같이 먹기"는 상대 몫까지 같이 남겨준다.
+       */
+      if (couple?.id) {
+        toast.success(`${mealTypeLabel(mealType)} 기록했어요!${filling} 같이 드셨나요?`, {
+          label: '같이 먹었어요',
+          onPress: () => void shareMeal(saved.id),
+        });
+      } else {
+        toast.success(`${mealTypeLabel(mealType)} 기록했어요!${filling}`);
+      }
       refresh();
     } catch (e) {
       toast.error(getErrorMessage(e, '기록하지 못했어요.'));

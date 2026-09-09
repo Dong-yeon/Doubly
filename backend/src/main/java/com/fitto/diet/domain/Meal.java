@@ -113,7 +113,9 @@ public class Meal {
                 String memo, String photoUrl, Integer calories,
                 Integer carbs, Integer protein, Integer fat,
                 Integer sugar, Integer sodium, Integer fiber,
+                NutritionSource nutritionSource,
                 String sharedGroupId, Long createdBy) {
+        this.nutritionSource = nutritionSource;
         this.userId = userId;
         this.mealDate = mealDate;
         this.mealType = mealType;
@@ -133,6 +135,35 @@ public class Meal {
     /** 데이트 식단(같이 먹기)으로 등록된 기록인지 — 커플 양쪽에 짝이 있다. */
     public boolean isSharedMeal() {
         return sharedGroupId != null;
+    }
+
+    /**
+     * 반올림 절반 — "같이 먹기"의 유일한 나눗셈 규칙. {@code null} 은 그대로 둔다
+     * (입력 안 한 값은 나눠도 여전히 안 한 값이다).
+     *
+     * <p>저장 시점 분할({@code MealService.save})과 뒤늦은 전환({@link #convertToShared})이
+     * <b>같은 규칙</b>을 써야 해서 여기 한 곳에 둔다.
+     */
+    public static Integer half(Integer v) {
+        return v == null ? null : Math.round(v / 2f);
+    }
+
+    /**
+     * 이미 저장된 혼자 기록을 "같이 먹기"로 전환한다 — 내 몫을 절반으로 줄이고 묶음 키를 붙인다.
+     * 파트너 쪽 복제본은 호출부가 이 메서드 <b>이후에</b> 만든다(이미 절반이 된 값을 그대로 복사).
+     *
+     * <p>홈에서 사진 한 장으로 저장한 뒤 "같이 드셨나요?"에 답하는 경로가 여기로 온다 —
+     * 가장 빠른 기록 경로에 데이트 칩을 넣으면 탭이 늘어나므로, 묻는 시점을 저장 뒤로 미뤘다.
+     */
+    public void convertToShared(String sharedGroupId) {
+        items.forEach(MealItem::halve);
+        if (items.isEmpty()) {
+            applyTotals(half(calories), half(carbs), half(protein), half(fat));
+        } else {
+            recalcTotals();
+        }
+        applyExtraNutrients(half(sugar), half(sodium), half(fiber));
+        this.sharedGroupId = sharedGroupId;
     }
 
     /** 끼니 자체(날짜·끼니·메모·사진) 수정 — 칼로리/매크로는 항목 교체 후 재합산으로 정해진다. */

@@ -247,6 +247,49 @@ public class MealService {
         return MealResponse.from(meal);
     }
 
+    /**
+     * 이미 저장한 기록을 뒤늦게 "같이 먹기"로 바꾼다 — 홈에서 사진 한 장으로 남긴 뒤
+     * "같이 드셨나요?"에 답하는 경로.
+     *
+     * <p><b>왜 저장 시점에 안 묻나.</b> 홈의 빠른 경로는 존재 이유가 "탭을 최대한 줄이는 것"
+     * 이라, 사진을 고르기 전에 데이트 여부를 묻는 순간 시트가 두 단이 된다. 대신 저장하고
+     * <b>나서</b> 한 번 물어본다 — 안 누르면 그냥 혼자 기록이고 잃는 게 없다.
+     *
+     * <p>저장(save)의 데이트 경로와 결과가 같아야 한다: 내 몫은 절반이 되고, 파트너 명의로
+     * 짝이 생기고, 파트너 스트릭·알림·커플 이벤트가 뒤따른다.
+     */
+    @Transactional
+    public MealResponse share(Long userId, Long mealId) {
+        Meal meal = mealRepository.findById(mealId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        if (!meal.getUserId().equals(userId)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+        if (meal.isSharedMeal()) {
+            // 이미 나눈 기록을 또 나누면 내 몫이 1/4 이 된다 — 두 번 눌렀을 때의 방어.
+            return MealResponse.from(meal);
+        }
+        Relation couple = relationRepository
+                .findByUserAndTypeAndStatus(userId, RelationType.COUPLE, RelationStatus.ACTIVE)
+                .stream().findFirst()
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_INPUT, "연결된 커플이 없어요."));
+        Long partnerId = couple.partnerOf(userId);
+
+        /*
+         * 커플 주간 목표 판정용 — 파트너가 그날 <b>아직</b> 기록이 없었는지를 복제 전에 본다.
+         * 이 전환으로 "그날 둘 다 기록"이 새로 성립하는 경우에만 축하가 나가야 한다
+         * (justAchievedGoal 이 이 값을 그런 뜻으로 쓴다).
+         */
+        boolean newlyQualifiesDate = !mealRepository.existsByUserIdAndMealDate(partnerId, meal.getMealDate());
+
+        meal.convertToShared(UUID.randomUUID().toString());
+        mealRepository.save(meal);
+        mealRepository.save(copyForPartner(meal, partnerId, userId));
+
+        afterSharedMealAdded(couple, userId, partnerId, meal.getMealDate(), newlyQualifiesDate);
+        return MealResponse.from(meal);
+    }
+
     /** 데이트 식단 짝 동기화 — 자기 자신을 뺀 나머지(파트너 몫)에 내용만 반영한다. */
     private void syncSharedPair(Meal source) {
         if (!source.isSharedMeal()) {
@@ -332,9 +375,9 @@ public class MealService {
                 .build();
     }
 
-    /** 반올림 — 항목/합계 절반화 공통. null 은 null 그대로(입력 안 한 값은 계속 안 한 값). */
+    /** 절반화 규칙은 {@link Meal#half} 한 곳에만 둔다 — 저장 시점 분할과 뒤늦은 전환이 같아야 한다. */
     private Integer half(Integer v) {
-        return v == null ? null : Math.round(v / 2f);
+        return Meal.half(v);
     }
 
     /**
@@ -355,6 +398,10 @@ public class MealService {
                 .sugar(source.getSugar())
                 .sodium(source.getSodium())
                 .fiber(source.getFiber())
+                // 출처도 복사한다 — 저장 시점엔 늘 null 이지만, 사진 분석이 먼저 끝난 뒤
+                // "같이 먹기"로 전환하면 원본이 AI_ESTIMATED 다. 안 옮기면 같은 끼니인데
+                // 한쪽만 "약 400"으로, 다른 쪽은 "400"으로 보인다.
+                .nutritionSource(source.getNutritionSource())
                 .sharedGroupId(source.getSharedGroupId())
                 .createdBy(createdBy)
                 .build();

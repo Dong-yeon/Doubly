@@ -72,6 +72,16 @@ public class MealController {
     }
 
     /**
+     * 이미 저장한 기록을 "같이 먹기"로 전환 — 홈에서 사진으로 남긴 뒤 되묻는 경로.
+     * 저장 시점의 {@code sharedWithPartner} 와 결과가 같다(내 몫 절반 + 파트너 짝 생성).
+     */
+    @PostMapping("/{id}/share")
+    public ApiResponse<MealResponse> share(@AuthenticationPrincipal AuthUser user,
+                                           @PathVariable Long id) {
+        return ApiResponse.success(mealService.share(user.id(), id), "같이 먹은 걸로 기록했어요.");
+    }
+
+    /**
      * 기록 수정 — 반찬(항목) 하나만 고치거나 빼는 경로. 항목 목록은 전량 교체다
      * (요청에 담긴 것이 곧 최종 상태). {@link SaveMealRequest} 를 그대로 쓴다.
      */
