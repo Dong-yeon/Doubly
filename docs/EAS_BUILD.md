@@ -58,8 +58,7 @@ npx eas-cli build --platform android --profile preview
 ```
 
 작은 JS/UI 변경만 있고 네이티브 설정(권한, 아이콘 등) 변경이 없다면, 매번 새로 빌드하는 대신
-[EAS Update](https://docs.expo.dev/eas-update/introduction/)로 앱을 재설치하지 않고 갱신할 수도
-있습니다(다음 단계에서 필요 시 별도 가이드 추가).
+**EAS Update 로 빌드 없이 배포합니다** — §8 (2026-09-09 도입).
 
 ## 6-1. 폰에 깔린 게 어느 빌드인지 확인하기
 
@@ -119,6 +118,61 @@ npx eas-cli env:create --scope project --name SENTRY_AUTH_TOKEN --value <토큰>
 다음 빌드(`npx eas-cli build ...`)의 로그에 `sentry-cli ... sourcemaps upload` 류 문구가 보이고,
 이후 Sentry 이슈의 스택트레이스가 원본 TypeScript 파일·줄 번호로 표시되면 성공입니다.
 업로드가 생략되면 빌드 로그에 "SENTRY_AUTH_TOKEN environment variable" 안내가 남습니다.
+
+## 8. EAS Update — 빌드 없이 JS 배포 (2026-09-09 도입)
+
+빌드는 건당 과금이고 15~20분 걸립니다. 그런데 커밋 대부분은 화면·로직·문구처럼 **JS 만 바뀌는
+변경**이라 네이티브 빌드가 필요 없습니다. `expo-updates` 를 넣어 그런 변경은 스토어 제출 없이
+설치된 앱에 바로 내려보냅니다(앱이 켜질 때 받아 다음 실행부터 적용).
+
+### 8-1. 빌드인가 업데이트인가
+
+| 변경 | 방법 |
+| --- | --- |
+| 화면·로직·문구·이미지·폰트(JS 번들과 에셋) | `npm run update:production` |
+| 의존성 추가·삭제·버전 변경 (`package.json`) | 빌드 |
+| `app.json` 의 plugins / permissions / 아이콘 / 스플래시 | 빌드 |
+| `modules/` 안 Kotlin·C++·`.so`, 사전·모델 파일 | 빌드 |
+| Expo SDK 업그레이드 | 빌드 |
+
+헷갈리면 핑거프린트를 비교하면 됩니다 — `npx @expo/fingerprint .` 의 해시가 마지막 빌드 때와
+같으면 업데이트로 충분합니다.
+
+### 8-2. 명령
+
+```bash
+npm run update:production     # 스토어 배포본(production 채널)에 배포
+npm run update:preview        # preview APK 에 배포
+```
+
+`--auto` 라 메시지는 현재 커밋 제목, 브랜치는 현재 git 브랜치에서 가져옵니다. 올리기 전에
+`npm run typecheck` 는 꼭 돌립니다 — 업데이트는 심사가 없어서 깨진 번들이 곧바로 사용자에게 갑니다.
+
+되돌리기: `npx eas-cli update:rollback` (이전 업데이트 또는 빌드 내장 번들로).
+
+### 8-3. 어떻게 맞물리나
+
+- **채널** — `eas.json` 의 각 프로필에 `channel` 이 있습니다(development / preview / production).
+  그 프로필로 만든 빌드는 같은 이름의 채널만 봅니다.
+- **런타임 버전 = fingerprint** — 네이티브에 영향을 주는 파일들의 해시입니다. 업데이트는 같은
+  핑거프린트로 만든 빌드에만 배달됩니다. 네이티브가 바뀐 커밋에서 실수로 업데이트를 올려도
+  기존 빌드에는 **안 가는 것**이지 깨지는 게 아닙니다. 대신 그 커밋은 빌드해야 사용자가 받습니다.
+- **빌드 지문** — 설정 화면 맨 아래의 커밋 해시(§6-1)는 `eas update` 시점에도 새로 찍히므로,
+  폰에 깔린 앱이 어느 업데이트를 받았는지 그대로 알 수 있습니다.
+- **Sentry 소스맵** — 빌드 때는 §7 로 자동 업로드되지만 업데이트는 별도입니다. 토큰이 로컬에
+  있으면 업데이트 뒤에 한 줄 더 실행합니다:
+
+  ```bash
+  SENTRY_AUTH_TOKEN=<토큰> npx sentry-expo-upload-sourcemaps dist
+  ```
+
+  안 하면 그 업데이트의 스택트레이스만 난독화된 채로 보입니다(오류 수집 자체는 됩니다).
+
+### 8-4. 처음 한 번은 빌드가 필요하다
+
+`expo-updates` 는 네이티브 모듈이라 **이 설정이 들어간 빌드부터** 업데이트를 받습니다.
+버전코드 25 이하 빌드는 업데이트를 모릅니다. 도입 커밋 이후 첫 스토어 빌드(버전코드 26)를 한 번
+올리고 나면 그 뒤로는 JS 변경마다 빌드하지 않아도 됩니다.
 
 ## 트러블슈팅
 
