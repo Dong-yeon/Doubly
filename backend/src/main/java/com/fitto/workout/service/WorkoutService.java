@@ -11,6 +11,7 @@ import com.fitto.relation.domain.RelationType;
 import com.fitto.relation.repository.RelationRepository;
 import com.fitto.feed.dto.FeedItemType;
 import com.fitto.feed.repository.FeedReactionRepository;
+import com.fitto.common.upload.CloudinaryImageDeleter;
 import com.fitto.streak.service.StreakService;
 import com.fitto.user.repository.UserRepository;
 import com.fitto.workout.domain.Workout;
@@ -64,6 +65,8 @@ public class WorkoutService {
     private final com.fitto.common.event.CoupleEventPublisher coupleEventPublisher;
     private final com.fitto.common.notification.NotificationService notificationService;
     private final FeedReactionRepository feedReactionRepository;
+    /** 기록 삭제 시 인증샷까지 지운다 — DB 행만 지우면 이미지는 URL 로 계속 접근 가능하다 */
+    private final CloudinaryImageDeleter imageDeleter;
 
     public WorkoutService(WorkoutRepository workoutRepository,
                           WorkoutSetRepository workoutSetRepository,
@@ -72,7 +75,8 @@ public class WorkoutService {
                           StreakService streakService,
                           com.fitto.common.event.CoupleEventPublisher coupleEventPublisher,
                           com.fitto.common.notification.NotificationService notificationService,
-                          FeedReactionRepository feedReactionRepository) {
+                          FeedReactionRepository feedReactionRepository,
+                          CloudinaryImageDeleter imageDeleter) {
         this.workoutRepository = workoutRepository;
         this.workoutSetRepository = workoutSetRepository;
         this.relationRepository = relationRepository;
@@ -81,6 +85,7 @@ public class WorkoutService {
         this.coupleEventPublisher = coupleEventPublisher;
         this.notificationService = notificationService;
         this.feedReactionRepository = feedReactionRepository;
+        this.imageDeleter = imageDeleter;
     }
 
     @Transactional
@@ -412,7 +417,16 @@ public class WorkoutService {
         }
         // 피드 카드에 달린 응원 반응 — 다형 참조라 FK 가 없어 직접 지운다 (V60 주석 참고)
         feedReactionRepository.deleteByTargetTypeAndTargetId(FeedItemType.WORKOUT, workoutId);
+        /*
+         * 인증샷도 함께 지운다 — 행만 지우면 이미지는 URL 로 계속 접근 가능하다.
+         * 운동 인증샷은 지도(달린 경로)가 찍혀 있을 수 있어 더더욱 남겨둘 이유가 없다.
+         * 커밋 이후에 지운다(deleteAllAfterCommit): 외부 호출 실패가 DB 삭제를 되돌리면 안 된다.
+         */
+        String imageUrl = workout.getImageUrl();
         workoutRepository.delete(workout);
+        if (imageUrl != null) {
+            imageDeleter.deleteAllAfterCommit(List.of(imageUrl));
+        }
     }
 
     /** 커플 상대방의 오늘 운동 여부 — 홈 커플 카드용. */

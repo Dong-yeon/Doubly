@@ -26,6 +26,7 @@ import { useDeleteAction } from '../../hooks/useDeleteAction';
 import { todayWeekDay, toDateString } from '../../utils/date';
 import { routineToSessionParams } from '../../utils/routine';
 import { pickImage, uploadImage } from '../../utils/imageUpload';
+import { confirmPhotoPrivacy } from '../../utils/photoPrivacy';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type {
   CoupleWeek,
@@ -237,7 +238,14 @@ export function WorkoutScreen({ navigation }: Props) {
    * 걸릴 수 있는데 그동안 이 화면을 잡아두면 다른 것도 못 하고, 무엇보다 <b>읽은 값을 확인할
    * 자리</b>가 기록 화면이기 때문이다. 분석에 실패해도 사진이 붙은 기록은 그대로 남길 수 있다.
    */
-  const onPhotoRecord = async () => {
+  /*
+   * 올리기 전에 한 번 알린다 — 러닝 앱 화면에는 <b>달린 경로 지도</b>가 함께 찍혀 있고,
+   * 그건 대개 집 근처다. 사진이 어디까지 가는지(내 기록에만, 애인에게는 안 감) 모른 채
+   * 위치가 담긴 이미지를 올리게 두면 안 된다. 확인한 뒤에야 갤러리가 열린다(안내는 첫 1회).
+   */
+  const onPhotoRecord = () => void confirmPhotoPrivacy(() => void startPhotoRecord());
+
+  const startPhotoRecord = async () => {
     setPhotoBusy(true);
     try {
       const picked = await pickImage();

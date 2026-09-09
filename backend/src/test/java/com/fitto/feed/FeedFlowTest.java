@@ -95,6 +95,32 @@ class FeedFlowTest {
         assertThat(timeline.items()).anyMatch(i -> i.type() == FeedItemType.WORKOUT && !i.mine());
     }
 
+    /**
+     * 운동 인증샷은 <b>애인에게도 보이지 않는다</b> — 커플 피드에 이미지가 실리지 않는다.
+     *
+     * <p>인증샷은 대개 다른 앱의 완료 화면 캡처이고, 러닝 앱 화면에는 <b>달린 경로 지도</b>가
+     * 함께 찍혀 있다. 즉 집 근처 동선이 그대로 담긴 사진이다. 이걸 "커플 콘텐츠니까"라며
+     * 자동으로 피드에 흘리면, 사용자는 자기가 무엇을 공개했는지 모른 채 위치를 공유하게 된다.
+     * 공유하고 싶으면 사진을 직접 피드 포스트로 올리면 된다 — 그건 명시적인 행동이다.
+     *
+     * <p>이 테스트는 나중에 "운동 카드에도 사진을 붙이자"는 개선이 들어올 때 <b>실패해서</b>
+     * 그 결정을 의식적으로 하게 만드는 것이 목적이다.
+     */
+    @Test
+    void 운동_인증샷은_커플_피드에_노출되지_않는다() {
+        long[] c = couple("fwphoto1@fitto.com", "fwphoto2@fitto.com");
+        String screenshot = "https://res.cloudinary.com/demo/image/upload/strava-map.jpg";
+
+        workoutService.save(c[1], new SaveWorkoutRequest(LocalDate.now(), null, 32, null, null,
+                screenshot, List.of()));
+
+        FeedItemResponse workout = feedService.timeline(c[0], null, 20).items().stream()
+                .filter(i -> i.type() == FeedItemType.WORKOUT)
+                .findFirst().orElseThrow();
+        assertThat(workout.imageUrl()).isNull();
+        assertThat(workout.imageUrls()).isEmpty();
+    }
+
     @Test
     void 식단_카드는_음식_항목을_요약해_보여준다() {
         long[] c = couple("fm1@fitto.com", "fm2@fitto.com");
