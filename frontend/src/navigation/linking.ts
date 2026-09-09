@@ -131,6 +131,8 @@ export const linking: LinkingOptions<RootStackParamList> = {
               FeedTimeline: 'feed',
               FeedCompose: 'feed/new',
               DailyQuestion: 'question',
+              // 푸시 data.link = PushLinks.GAME_SUDOKU
+              Sudoku: 'game/sudoku',
               CoupleCalendar: 'calendar',
               PhotoAlbum: 'album',
               My: 'my',

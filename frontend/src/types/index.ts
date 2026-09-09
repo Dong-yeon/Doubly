@@ -451,6 +451,30 @@ export interface QuestionHistory {
   partnerAnswer: string;
 }
 
+// 협동 스도쿠 — docs/COUPLE_GAMES_DESIGN_2026-09-09.md 3-4절
+export type SudokuDifficulty = 'EASY' | 'NORMAL' | 'HARD';
+export type SudokuStatus = 'IN_PROGRESS' | 'COMPLETED' | 'ABANDONED';
+export interface SudokuGame {
+  id: number;
+  difficulty: SudokuDifficulty;
+  difficultyLabel: string;
+  status: SudokuStatus;
+  /** 81자. 주어진 숫자, 빈칸 '0' */
+  puzzle: string;
+  /** 81자. 현재 판(given 포함) */
+  board: string;
+  /** 81자. 요청자 기준 '0'(없음/given) · 'M'(나) · 'P'(상대) */
+  owners: string;
+  /** 정답과 다른 칸의 인덱스 — 정답 자체는 내려오지 않는다 */
+  wrongCells: number[];
+  filled: number;
+  myCells: number;
+  partnerCells: number;
+  partnerName?: string | null;
+  createdAt: string;
+  completedAt?: string | null;
+}
+
 // 커플 챌린지/대결 — 기간 내 운동/식단 기록일로 겨루기
 export type ChallengeType = 'WORKOUT' | 'MEAL';
 export interface Challenge {
