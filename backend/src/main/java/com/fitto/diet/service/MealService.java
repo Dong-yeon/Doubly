@@ -77,6 +77,7 @@ public class MealService {
     private final NotificationService notificationService;
     private final PlanGuard planGuard;
     private final PlaceVisitRepository placeVisitRepository;
+    private final MealPhotoAutoAnalysisService autoAnalysisService;
 
     public MealService(MealRepository mealRepository,
                        MealItemRepository mealItemRepository,
@@ -88,7 +89,8 @@ public class MealService {
                        CoupleEventPublisher coupleEventPublisher,
                        NotificationService notificationService,
                        PlanGuard planGuard,
-                       PlaceVisitRepository placeVisitRepository) {
+                       PlaceVisitRepository placeVisitRepository,
+                       MealPhotoAutoAnalysisService autoAnalysisService) {
         this.mealRepository = mealRepository;
         this.mealItemRepository = mealItemRepository;
         this.nutritionGoalRepository = nutritionGoalRepository;
@@ -100,6 +102,7 @@ public class MealService {
         this.notificationService = notificationService;
         this.planGuard = planGuard;
         this.placeVisitRepository = placeVisitRepository;
+        this.autoAnalysisService = autoAnalysisService;
     }
 
     @Transactional
@@ -172,6 +175,14 @@ public class MealService {
         } else {
             afterMealsAdded(userId, meal.getMealDate(), firstMealOfDay, false);
         }
+
+        /*
+         * 사진만 올리고 영양 정보를 비워둔 기록이면 커밋 이후 백그라운드로 분석을 건다.
+         * 여기서는 조건 판정도 하지 않는다 — 대상 여부와 반영 규칙을 한 곳에 모아둬야
+         * 어긋나지 않는다(MealPhotoAutoAnalysisService 참고). 데이트 식단이면 파트너 몫까지
+         * 그쪽에서 함께 채우므로 이 호출 하나로 끝난다.
+         */
+        autoAnalysisService.scheduleIfEligible(userId, meal);
         return MealResponse.from(meal, goals);
     }
 
@@ -226,6 +237,8 @@ public class MealService {
         // 당·나트륨·식이섬유는 항목 단위가 없어 끼니 레벨 요청값이 그대로 진실이다
         // (MealResponse 가 세 값을 내려주므로 수정 화면이 기존 값을 그대로 되돌려 보낸다).
         meal.applyExtraNutrients(req.sugar(), req.sodium(), req.fiber());
+        // 수정 화면을 열어 저장했다는 건 화면에 뜬 값을 본인이 확인했다는 뜻 — "AI 추정" 배지를 걷는다.
+        meal.markNutritionUserOwned();
 
         // 데이트 식단은 커플 양쪽에 짝이 있다 — 한쪽만 고치면 두 기록이 어긋난다.
         syncSharedPair(meal);

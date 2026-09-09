@@ -67,6 +67,14 @@ public class Meal {
     private Integer protein;
     private Integer fat;
 
+    /**
+     * 칼로리·매크로의 출처 — {@code null} 이면 사용자 입력이다({@link NutritionSource} 참고).
+     * 사진 저장 후 백그라운드 분석이 채운 값만 {@code AI_ESTIMATED} 로 표시된다.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "nutrition_source", length = 20)
+    private NutritionSource nutritionSource;
+
     /** 추가 영양소 — AI 분석/수동 입력. 목표(target)는 없고 오늘 합계만 표시하는 정보성 지표 */
     private Integer sugar;
     /** 나트륨(mg) — g 단위인 다른 필드와 달리 mg */
@@ -164,6 +172,8 @@ public class Meal {
         replaceItems(copiedItems);
         applyTotals(source.getCalories(), source.getCarbs(), source.getProtein(), source.getFat());
         applyExtraNutrients(source.getSugar(), source.getSodium(), source.getFiber());
+        // 출처도 함께 따라간다 — 한쪽만 "AI 추정"이면 같은 끼니인데 배지가 짝짝이가 된다.
+        this.nutritionSource = source.getNutritionSource();
     }
 
     public void addItem(MealItem item) {
@@ -178,6 +188,29 @@ public class Meal {
     public void replaceItems(List<MealItem> newItems) {
         items.clear();
         newItems.forEach(this::addItem);
+    }
+
+    /**
+     * 백그라운드 사진 분석 결과를 반영한다 — 항목·합계·추가영양소를 통째로 채우고
+     * 출처를 {@link NutritionSource#AI_ESTIMATED} 로 남긴다.
+     *
+     * <p>호출부({@code MealPhotoAutoAnalysisService})가 "아직 아무것도 안 적힌 기록"만
+     * 골라 부르므로 여기서 덮어쓰기를 다시 방어하지 않는다 — 판정과 반영을 두 곳에 두면
+     * 어긋난다.
+     */
+    public void applyAiEstimate(List<MealItem> analyzed, Integer sugar, Integer sodium, Integer fiber) {
+        replaceItems(analyzed);
+        recalcTotals();
+        applyExtraNutrients(sugar, sodium, fiber);
+        this.nutritionSource = NutritionSource.AI_ESTIMATED;
+    }
+
+    /**
+     * 사용자가 이 기록을 직접 저장/수정했다 — AI 추정 배지를 걷어낸다.
+     * 수정 화면을 열어 저장했다는 건 화면에 뜬 값을 <b>본인이 확인했다</b>는 뜻이다.
+     */
+    public void markNutritionUserOwned() {
+        this.nutritionSource = NutritionSource.USER;
     }
 
     /** 항목 합계를 칼로리/매크로에 반영. 항목이 없으면 아무것도 하지 않는다(입력값 유지). */
