@@ -26,6 +26,8 @@ export type Plan = 'FREE' | 'PRO';
 export type FeatureKey =
   | 'AI_FOOD_PHOTO'
   | 'AI_FOOD_TEXT'
+  /** 운동 인증샷 분석 — 다른 앱의 완료 화면을 읽어 기록을 채운다 */
+  | 'AI_WORKOUT_PHOTO'
   | 'AI_DIET_COACH'
   | 'AI_DATE_COURSE'
   | 'AI_RESTAURANT_RECOMMEND'
@@ -248,6 +250,9 @@ export interface Workout {
   memo?: string | null;
   /** 이 기록이 시작된 내 루틴 템플릿 id — 스마트 루틴 동기화(Save-on-Finish)의 전제 */
   sourceRoutineId?: number | null;
+  /** 운동 인증샷 — 다른 앱 완료 화면·트레드밀 사진. 사진만 있는 기록도 유효하다 */
+  imageUrl?: string | null;
+  /** 종목 목록 — 비어 있을 수 있다("오늘 운동 완료"만 남긴 기록) */
   sets: WorkoutSet[];
   prs?: WorkoutPrHighlight[];
 }
@@ -779,6 +784,24 @@ export interface MealAnalysis {
   totalFiber: number;
   comment?: string | null;
   source?: MealAnalysisSource | null;
+}
+
+/**
+ * 운동 인증샷 분석 결과 (POST /workout/analyze-photo) — 전부 추정치다.
+ * 기록 화면의 칸을 채워줄 뿐이고 저장은 사용자가 확인한 뒤 한다.
+ */
+export interface WorkoutPhotoAnalysis {
+  isWorkout: boolean;
+  exerciseName?: string | null;
+  /** 근력 / 유산소 / 유연성 — 앱의 카테고리 칩과 같은 값 */
+  category?: string | null;
+  durationMin?: number | null;
+  distanceKm?: number | null;
+  /** 참고용 — 앱마다 추정 공식이 달라 기록에는 저장하지 않는다 */
+  calories?: number | null;
+  /** 무엇을 읽었는지("스트라바", "트레드밀 계기판") — 사용자에게 그대로 보여준다 */
+  sourceApp?: string | null;
+  comment?: string | null;
 }
 
 // 최근 먹은 음식 자동완성 (GET /meal/recent-foods) — 즐겨찾기와 달리 저장 없이 자동으로 뽑힌다

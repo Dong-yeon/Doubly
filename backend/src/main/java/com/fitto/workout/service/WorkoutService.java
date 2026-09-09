@@ -95,10 +95,11 @@ public class WorkoutService {
                 .totalDurationMin(req.totalDurationMin())
                 .memo(req.memo())
                 .sourceRoutineId(req.sourceRoutineId())
+                .imageUrl(req.imageUrl())
                 .build();
 
         int order = 1;
-        for (var s : req.sets()) {
+        for (var s : req.setsOrEmpty()) {
             WorkoutSet set = WorkoutSet.builder()
                     .exerciseName(s.exerciseName())
                     .category(s.category())

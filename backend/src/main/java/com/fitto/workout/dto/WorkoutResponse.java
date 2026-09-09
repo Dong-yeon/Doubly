@@ -16,6 +16,8 @@ public record WorkoutResponse(
         Integer totalDurationMin,
         String memo,
         Long sourceRoutineId,
+        /** 운동 인증샷 — 없으면 null. 상세·카드·피드가 같은 값을 쓴다 */
+        String imageUrl,
         List<SetResponse> sets,
         List<PrHighlight> prs,
         LocalDateTime createdAt
@@ -67,6 +69,7 @@ public record WorkoutResponse(
     public static WorkoutResponse from(Workout w, List<PrHighlight> prs) {
         List<SetResponse> sets = w.getSets().stream().map(SetResponse::from).toList();
         return new WorkoutResponse(w.getId(), w.getRelationId(), w.getWorkoutDate(),
-                w.getTotalDurationMin(), w.getMemo(), w.getSourceRoutineId(), sets, prs, w.getCreatedAt());
+                w.getTotalDurationMin(), w.getMemo(), w.getSourceRoutineId(), w.getImageUrl(),
+                sets, prs, w.getCreatedAt());
     }
 }

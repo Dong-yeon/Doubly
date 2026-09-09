@@ -1,6 +1,6 @@
 /** 운동 기록 입력 — 설계서 2.4 / WORKOUT-01 (운동 선택·세트·시간) */
 import React, { useCallback, useEffect, useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -126,6 +126,65 @@ export function WorkoutRecordScreen({ navigation, route }: Props) {
   const [memo, setMemo] = useState('');
   const [saving, setSaving] = useState(false);
 
+  /*
+   * 운동 인증샷 — 운동 홈의 "📷 사진으로"가 업로드까지 마치고 URL 로 넘겨준다.
+   * 이 화면은 (1) 사진을 AI 로 읽어 칸을 채우고 (2) 저장 시 사진을 기록에 붙인다.
+   * 둘은 독립이다 — 읽기에 실패해도 사진이 붙은 기록은 그대로 남길 수 있어야 한다.
+   */
+  const imageUrl = route.params?.imageUrl;
+  /*
+   * 사진을 들고 들어왔으면 <b>처음부터</b> 분석 중 상태로 시작한다 — effect 안에서 동기로
+   * 켜면 렌더가 한 번 더 돌고(cascading render), 그 한 프레임 동안 "이 사진이 저장돼요"가
+   * 잠깐 떴다가 "읽고 있어요"로 바뀌어 깜빡인다. (ExerciseHistoryScreen 의 loading 과 같은 규칙)
+   */
+  const [analyzing, setAnalyzing] = useState(!!route.params?.imageUrl);
+  /** 사진에서 무엇을 읽었는지 — 사용자가 "이 값이 어디서 왔는지" 알 수 있게 남긴다 */
+  const [photoSource, setPhotoSource] = useState<string | null>(null);
+
+  /*
+   * 사진 분석은 화면에 들어오자마자 <b>자동으로</b> 한 번 돈다 — 사용자는 이미 "사진으로
+   * 기록하겠다"고 눌러서 들어왔으므로 여기서 버튼을 한 번 더 누르게 할 이유가 없다.
+   * 읽은 값은 칸을 채우기만 하고 저장하지 않는다(확정은 아래 "완료!" 버튼).
+   */
+  useEffect(() => {
+    if (!imageUrl) return;
+    let cancelled = false;
+    workoutApi
+      .analyzePhoto(imageUrl)
+      .then((result) => {
+        if (cancelled) return;
+        if (!result.isWorkout) {
+          toast.info('사진에서 운동 기록을 못 찾았어요. 사진만 남기거나 직접 입력해주세요.');
+          return;
+        }
+        setPhotoSource(result.sourceApp ?? null);
+        if (result.durationMin) setDuration(String(result.durationMin));
+        setSets((prev) => {
+          const next = [...prev];
+          const target = next[0] ?? emptySet();
+          next[0] = {
+            ...target,
+            exerciseName: result.exerciseName ?? target.exerciseName,
+            category: result.category ?? target.category,
+            durationMin: result.durationMin != null ? String(result.durationMin) : target.durationMin,
+            distanceKm: result.distanceKm != null ? String(result.distanceKm) : target.distanceKm,
+          };
+          return next;
+        });
+        haptics.success();
+        toast.success(result.comment?.trim() || '사진을 읽었어요! 확인하고 저장해주세요.');
+      })
+      .catch((e) => {
+        if (!cancelled) toast.error(getErrorMessage(e, '사진을 읽지 못했어요. 직접 입력해주세요.'));
+      })
+      .finally(() => {
+        if (!cancelled) setAnalyzing(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [imageUrl]);
+
   // 입력이 하나라도 있으면 이탈(뒤로가기·스와이프) 전에 확인한다
   const dirty =
     duration.trim().length > 0 ||
@@ -226,7 +285,12 @@ export function WorkoutRecordScreen({ navigation, route }: Props) {
 
   const onSave = async () => {
     const filled = sets.filter((s) => s.exerciseName.trim().length > 0);
-    if (filled.length === 0) {
+    /*
+     * 사진이 있으면 종목이 비어도 저장한다 — 사진 자체가 "오늘 운동했다"는 증거이고,
+     * AI 가 종목을 못 읽었다는 이유로 기록을 통째로 막으면 사진을 올린 의미가 없어진다.
+     * (사진도 종목도 없으면 남길 게 정말 아무것도 없으므로 그때만 붙잡는다.)
+     */
+    if (filled.length === 0 && !imageUrl) {
       Alert.alert('알림', '운동명을 최소 1개 입력해주세요.');
       return;
     }
@@ -236,6 +300,7 @@ export function WorkoutRecordScreen({ navigation, route }: Props) {
         workoutDate,
         totalDurationMin: duration ? Number(duration) : undefined,
         memo: memo.trim() || undefined,
+        imageUrl,
         sets: filled.map((s, i) => ({
           exerciseName: s.exerciseName.trim(),
           category: s.category ?? null,
@@ -314,6 +379,23 @@ export function WorkoutRecordScreen({ navigation, route }: Props) {
             max={toDateString()}
             pickerTitle="언제 한 운동인가요?"
           />
+
+          {/*
+            인증샷 — 올린 사진을 그대로 보여준다. AI 가 읽는 동안에도 사진은 이미 붙어 있어서,
+            분석이 실패하거나 오래 걸려도 "저장하면 이 사진이 남는다"는 게 눈에 보인다.
+          */}
+          {imageUrl ? (
+            <View style={styles.photoCard}>
+              <Image source={{ uri: imageUrl }} style={styles.photo} resizeMode="cover" />
+              <Text style={styles.photoHint}>
+                {analyzing
+                  ? 'AI가 사진을 읽고 있어요…'
+                  : photoSource
+                    ? `${photoSource} 화면에서 읽었어요 · 값을 확인하고 저장해주세요`
+                    : '이 사진이 기록에 함께 저장돼요'}
+              </Text>
+            </View>
+          ) : null}
 
           <Text style={styles.presetLabel}>자주 하는 운동</Text>
           <View style={styles.presetRow}>
@@ -508,6 +590,21 @@ const styles = themedStyles((colors) => ({
   container: { padding: spacing.lg, paddingBottom: spacing.xl },
   date: { fontSize: fontSize.subtitle, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.md },
   presetLabel: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700', marginBottom: spacing.sm },
+  photoCard: {
+    marginBottom: spacing.lg,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+    backgroundColor: colors.surface,
+  },
+  photo: { width: '100%', height: 200, backgroundColor: colors.surfaceAlt },
+  photoHint: {
+    fontSize: fontSize.caption,
+    color: colors.textSecondary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
   presetRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.lg },
   presetChip: {
     paddingHorizontal: spacing.md,

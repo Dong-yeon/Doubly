@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { Workout } from '../types';
 import { relativeDateLabel } from '../utils/date';
 import { formatNumber } from '../utils/format';
@@ -96,14 +96,24 @@ export function WorkoutCard({ workout, onPress, onLongPress }: Props) {
             <Text style={styles.exerciseSummary}>
               {setCount}개{firstExercise ? ` | ${firstExercise}${setCount > 1 ? ' 외' : ''}` : ''}
             </Text>
-          ) : null}
+          ) : (
+            /* 종목 없이 "오늘 운동 완료"만 남긴 기록 — 빈 줄로 두면 카드가 고장 난 것처럼 보인다 */
+            <Text style={styles.exerciseSummary}>
+              {workout.imageUrl ? '사진으로 남긴 기록' : '운동 완료만 체크했어요'}
+            </Text>
+          )}
 
           {workout.memo ? <Text style={styles.memo}>"{workout.memo}"</Text> : null}
         </View>
 
-        <View style={styles.thumb}>
-          <MaterialCommunityIcons name="dumbbell" size={22} color={colors.textMuted} />
-        </View>
+        {/* 인증샷이 있으면 아령 아이콘 대신 그 사진이 썸네일이 된다 — 목록에서 그날이 바로 떠오른다 */}
+        {workout.imageUrl ? (
+          <Image source={{ uri: workout.imageUrl }} style={styles.thumb} resizeMode="cover" />
+        ) : (
+          <View style={styles.thumb}>
+            <MaterialCommunityIcons name="dumbbell" size={22} color={colors.textMuted} />
+          </View>
+        )}
       </View>
     </TouchableOpacity>
   );

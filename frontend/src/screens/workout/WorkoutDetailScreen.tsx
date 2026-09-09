@@ -10,7 +10,7 @@
  * 나 새로고침으로 직접 열려도 같은 화면이 나와야 한다.
  */
 import React, { useCallback, useState } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { Image, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -134,6 +134,20 @@ export function WorkoutDetailScreen({ route }: Props) {
           {workout.memo ? <Text style={styles.memo}>"{workout.memo}"</Text> : null}
         </Card>
 
+        {/* 인증샷 — 다른 앱 완료 화면이나 트레드밀 사진. 그날의 증거라 크게 보여준다 */}
+        {workout.imageUrl ? (
+          <Card elevation="sm" style={styles.photoCard}>
+            <Image source={{ uri: workout.imageUrl }} style={styles.photo} resizeMode="cover" />
+          </Card>
+        ) : null}
+
+        {/* 종목이 하나도 없는 기록 — "오늘 운동했다"만 남긴 경우다. 빈 화면 대신 그 사실을 적는다 */}
+        {(workout.sets ?? []).length === 0 ? (
+          <Text style={styles.noSets}>
+            종목 기록 없이 완료만 남긴 날이에요. 그것도 충분한 기록이에요 💪
+          </Text>
+        ) : null}
+
         {(workout.sets ?? []).map((set, i) => {
           const cardio = isCardio(set.category);
           return (
@@ -219,6 +233,15 @@ const styles = themedStyles((colors) => ({
   statLabel: { fontSize: fontSize.caption, color: colors.textSecondary },
   muscleGroups: { fontSize: fontSize.caption, color: colors.textSecondary },
   memo: { fontSize: fontSize.caption, color: colors.textSecondary, fontStyle: 'italic' },
+
+  photoCard: { padding: 0, overflow: 'hidden' },
+  photo: { width: '100%', height: 220, backgroundColor: colors.surfaceAlt },
+  noSets: {
+    fontSize: fontSize.caption,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    paddingVertical: spacing.md,
+  },
 
   exercise: { gap: spacing.xs },
   exerciseHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

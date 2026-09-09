@@ -165,6 +165,43 @@ class WorkoutFlowTest {
         assertThat(reloaded.sets().get(0).distanceKm()).isEqualByComparingTo("5.20");
     }
 
+    /**
+     * "오늘 운동했다"만 남기는 원탭 기록 — 종목이 하나도 없어도 저장된다.
+     *
+     * <p>예전엔 세트가 1개 이상이어야 저장돼서, 자세히 적을 생각이 없는 사람은 아무것도
+     * 남길 수 없었다. 스트릭·캘린더·커플 카드가 보는 건 세트가 아니라 기록의 존재이므로
+     * 빈 기록으로도 그 목적은 전부 충족된다.
+     */
+    @Test
+    void 종목_없이_운동_완료만_기록할_수_있다() {
+        Long user = register("checkin1@fitto.com");
+        LocalDate today = LocalDate.now();
+
+        WorkoutResponse saved = workoutService.save(user,
+                new SaveWorkoutRequest(today, null, null, null, List.of()));
+
+        assertThat(saved.id()).isNotNull();
+        assertThat(saved.sets()).isEmpty();
+        // 오늘 기록·캘린더에는 그대로 잡힌다 — 이게 이 기록의 존재 이유다
+        assertThat(workoutService.findToday(user)).hasSize(1);
+        assertThat(workoutService.calendar(user, today.getYear(), today.getMonthValue()))
+                .anyMatch(d -> d.date().equals(today) && d.completed());
+    }
+
+    /** 인증샷만 붙인 기록 — 사진이 곧 "오늘 운동했다"의 증거다. */
+    @Test
+    void 사진만_붙인_기록도_저장되고_다시_읽힌다() {
+        Long user = register("checkin2@fitto.com");
+        String url = "https://res.cloudinary.com/demo/image/upload/run.jpg";
+
+        WorkoutResponse saved = workoutService.save(user,
+                new SaveWorkoutRequest(LocalDate.now(), null, 32, null, null, url, List.of()));
+
+        assertThat(saved.imageUrl()).isEqualTo(url);
+        assertThat(saved.sets()).isEmpty();
+        assertThat(workoutService.findOne(user, saved.id()).imageUrl()).isEqualTo(url);
+    }
+
     @Test
     void 커플_상대방의_오늘_운동_여부를_조회한다() {
         Long a = register("wc1@fitto.com");

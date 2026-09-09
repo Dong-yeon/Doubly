@@ -135,7 +135,11 @@ export interface RoutineFormDraft {
 export type WorkoutStackParamList = {
   WorkoutMain: undefined;
   // date: 캘린더에서 특정 날짜를 골라 들어올 때 그 날짜로 시작한다 (없으면 오늘)
-  WorkoutRecord: { date?: string } | undefined;
+  /**
+   * 직접 기록 화면. `imageUrl` 이 있으면 운동 인증샷을 붙인 채로 열리고, 화면이 그 사진을
+   * AI 로 읽어 시간·거리를 채운다(읽지 못해도 사진만 붙은 기록으로 저장할 수 있다).
+   */
+  WorkoutRecord: { date?: string; imageUrl?: string } | undefined;
   WorkoutCalendar: undefined;
   // 운동 기록 상세 — 세트별 실기록·RPE. id 만 넘기고 화면이 다시 불러온다(딥링크로도 열린다)
   WorkoutDetail: { workoutId: number };
