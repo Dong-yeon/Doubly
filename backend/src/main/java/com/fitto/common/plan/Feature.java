@@ -171,7 +171,14 @@ public enum Feature {
     /** 럽슐랭 매거진의 읽기 전용 공개 웹페이지 — 바이럴 자산이라 무료도 1개는 준다. */
     PUBLIC_GUIDE_LINK("럽슐랭 공개 가이드", Quota.upTo(1), Quota.unlimited()),
     /** 운동·식단·체중·럽슐랭 기록 CSV 내보내기 — "데이터 인질 금지" 원칙상 무료도 반드시 제공. */
-    CSV_EXPORT("기록 내보내기", Quota.perMonth(1), Quota.perWeek(1));
+    CSV_EXPORT("기록 내보내기", Quota.perMonth(1), Quota.perWeek(1)),
+
+    /*
+     * 협동 게임(스도쿠) — 게이팅 없음(둘 다 무제한). 그래도 Feature 로 두는 이유는 새 판 생성이
+     * PlanGuard.require 를 지나 FEATURE_USED 가 남게 하기 위해서다 — 육성을 접을 때의
+     * "효과를 측정할 방법이 없다"를 반복하지 않는다. docs/COUPLE_GAMES_DESIGN_2026-09-09.md 3-5.
+     */
+    COUPLE_GAME("협동 게임", Quota.unlimited(), Quota.unlimited());
 
     private final String displayName;
     private final Quota free;
@@ -220,7 +227,9 @@ public enum Feature {
                  PUBLIC_GUIDE_LINK,
                  // 우리 이모지는 만든 사람이 아니라 관계가 소유한다(둘 다 쓰고 둘 다 지운다) —
                  // PREMIUM_STICKER 와 같은 "내가 결제하면 우리 둘 다" 프레임.
-                 AI_COUPLE_EMOJI -> true;
+                 AI_COUPLE_EMOJI,
+                 // 게임 판은 커플이 같이 채운다 — 판정도 관계 단위.
+                 COUPLE_GAME -> true;
             default -> false;
         };
     }

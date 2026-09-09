@@ -30,4 +30,6 @@ public record CoupleEvent(String type) {
     public static final String CALL_UPDATED = "CALL_UPDATED";
     /** 우리 이모지 세트 생성 완료/삭제 — 수신측은 GET /api/v1/couple-emojis 로 트레이를 다시 조회한다 */
     public static final String COUPLE_EMOJI = "COUPLE_EMOJI";
+    /** 커플 게임 판 변경(새 판·칸 입력·완성·포기) — 수신측은 GET /api/v1/games/sudoku/current 로 다시 조회한다 */
+    public static final String GAME = "GAME";
 }

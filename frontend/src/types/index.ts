@@ -64,7 +64,9 @@ export type FeatureKey =
   | 'CUSTOM_QUESTION'
   | 'VOICE_MESSAGE'
   | 'PUBLIC_GUIDE_LINK'
-  | 'CSV_EXPORT';
+  | 'CSV_EXPORT'
+  // 협동 게임(스도쿠) — 게이팅 없음, 계측용. docs/COUPLE_GAMES_DESIGN_2026-09-09.md 3-5
+  | 'COUPLE_GAME';
 
 /** 한도 주기 — TOTAL 은 리셋되지 않는 보유 개수 상한 */
 export type QuotaPeriod = 'DAY' | 'WEEK' | 'MONTH' | 'TOTAL' | 'NONE';
@@ -1290,7 +1292,9 @@ export type MessageType =
   /** 음성 메시지(최대 30초) — content 에 "{audioUrl}|{durationSec}" 형식으로 담는다 */
   | 'VOICE_MESSAGE'
   /** 우리 이모지 — content 에 couple_emojis.id, imageUrl 에 그 행의 URL(서버가 복사). PRO 판정 없음 */
-  | 'COUPLE_EMOJI';
+  | 'COUPLE_EMOJI'
+  /** 커플 게임 결과 카드(협동 스도쿠 완성) — STREAK_CARD 처럼 content 가 그대로 읽히는 문장이다 */
+  | 'GAME_CARD';
 /** 메시지 이모지 리액션 — mine 은 userIds 에 내 id 가 있는지로 판단한다(브로드캐스트 공용) */
 export interface ChatReactionSummary {
   emoji: string;
