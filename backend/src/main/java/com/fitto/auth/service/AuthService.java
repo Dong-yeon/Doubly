@@ -253,6 +253,20 @@ public class AuthService {
         return UserResponse.from(user);
     }
 
+    /**
+     * 음식 사진 자동 분석 설정 (2026-09-09).
+     *
+     * <p>푸시 설정과 달리 이건 "알림을 받을지"가 아니라 <b>"내 AI 한도를 버튼 없이 쓸지"</b>다 —
+     * 그래서 기본은 켬이되 끌 수 있어야 한다({@code MealPhotoAutoAnalysisService} 참고).
+     */
+    @Transactional
+    public UserResponse updateMealPhotoAnalysisSetting(Long userId, boolean enabled) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
+        user.setAutoAnalyzeMealPhoto(enabled);
+        return UserResponse.from(user);
+    }
+
     /** 회원 탈퇴 — 연결된 관계를 종료한 뒤 계정 삭제 (AUTH-06). */
     @Transactional
     public void withdraw(Long userId) {

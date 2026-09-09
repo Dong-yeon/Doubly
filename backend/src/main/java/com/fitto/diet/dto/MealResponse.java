@@ -2,6 +2,7 @@ package com.fitto.diet.dto;
 
 import com.fitto.diet.domain.Meal;
 import com.fitto.diet.domain.MealType;
+import com.fitto.diet.domain.NutritionSource;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -24,6 +25,12 @@ public record MealResponse(
         /** 나트륨(mg) — g 단위인 다른 필드와 달리 mg */
         Integer sodium,
         Integer fiber,
+        /**
+         * 칼로리·매크로의 출처 — {@code AI_ESTIMATED} 면 사진 저장 후 백그라운드 분석이 채운
+         * 값이고 사용자가 아직 확인하지 않았다(카드에 "AI 추정" 배지). 사용자가 적었거나
+         * 한 번이라도 수정했으면 {@code USER}, 이 값이 생기기 전의 기록은 {@code null} 이다.
+         */
+        NutritionSource nutritionSource,
         /** 음식 항목(반찬 단위). 항목 없이 합계만 기록한 건(레거시 포함)은 빈 목록이다. */
         List<MealItemResponse> items,
         List<GoalHighlight> goals,
@@ -77,7 +84,7 @@ public record MealResponse(
                 m.getId(), m.getMealDate(), m.getMealType(), m.getMealType().label(),
                 m.getMemo(), m.getPhotoUrl(), m.getCalories(),
                 m.getCarbs(), m.getProtein(), m.getFat(),
-                m.getSugar(), m.getSodium(), m.getFiber(),
+                m.getSugar(), m.getSodium(), m.getFiber(), m.getNutritionSource(),
                 m.getItems().stream().map(MealItemResponse::of).toList(),
                 goals, m.isSharedMeal(), placeId, placeName, m.getCreatedAt());
     }

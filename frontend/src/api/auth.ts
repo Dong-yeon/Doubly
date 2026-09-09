@@ -74,6 +74,12 @@ export const authApi = {
     partner?: boolean;
     reminder?: boolean;
   }) => unwrap(apiClient.put<ApiResponse<User>>('/auth/me/notification-categories', patch)),
+  /**
+   * 음식 사진 자동 분석 — 켜져 있으면 사진을 붙여 저장하는 것만으로 백그라운드에서
+   * 칼로리가 채워진다. 버튼을 누르지 않아도 AI 한도를 쓰므로 끌 수 있어야 한다.
+   */
+  updateMealPhotoAnalysis: (enabled: boolean) =>
+    unwrap(apiClient.put<ApiResponse<User>>('/auth/me/meal-photo-analysis', { enabled })),
 
   /**
    * 비밀번호 재설정 코드 발송.

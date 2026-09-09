@@ -28,6 +28,7 @@ import { Sheet } from '../../components/Sheet';
 import { ImageViewer } from '../../components/ImageViewer';
 import { useDietStore } from '../../store/dietStore';
 import { useRelationStore } from '../../store/relationStore';
+import { useAuthStore } from '../../store/authStore';
 import { usePlaceStore } from '../../store/placeStore';
 import { useDirtyGuard } from '../../hooks/useDirtyGuard';
 import { publishEnsuringConnection } from '../../api/chatSocket';
@@ -114,6 +115,8 @@ export function DietRecordScreen({ navigation, route }: Props) {
   const save = useDietStore((s) => s.save);
   const update = useDietStore((s) => s.update);
   const couple = useRelationStore((s) => s.couple);
+  /* 설정이 생기기 전 세션(값 undefined)은 서버 기본값과 맞춰 켜진 것으로 본다 */
+  const autoAnalyzeMealPhoto = useAuthStore((s) => s.user?.autoAnalyzeMealPhoto) !== false;
   /** 수정할 기록 — 없으면 새 기록 작성 */
   const editing = route.params?.meal;
   const [mealType, setMealType] = useState<MealType>(editing?.mealType ?? defaultMealType());
@@ -972,10 +975,21 @@ export function DietRecordScreen({ navigation, route }: Props) {
         }
       }
 
+      /*
+       * 사진만 올리고 영양 정보를 비워두면 서버가 백그라운드로 분석해 채운다
+       * (MealPhotoAutoAnalysisService). 결과를 따로 알리지 않기로 했으므로, 최소한
+       * "곧 채워진다"는 것만 이 자리에서 말해준다 — 아무 말이 없으면 0kcal 로 남은
+       * 카드를 보고 저장이 반쪽 났다고 오해한다. 조건은 서버의 판정과 같게 맞춘다.
+       */
+      const willAutoAnalyze =
+        !!photoUrl && payloadItems.length === 0 && !num(totalCalories) && autoAnalyzeMealPhoto;
+
       const saveMessage =
         (payload.sharedWithPartner
           ? `데이트 식단 완료! ${partnerName}님에게도 등록됐어요 💕`
-          : '식단 기록 완료! ') + placeToastSuffix;
+          : '식단 기록 완료! ') +
+        (willAutoAnalyze ? 'AI가 칼로리를 채우는 중이에요.' : '') +
+        placeToastSuffix;
       if (placeLinkFailed) {
         toast.error(saveMessage);
       } else {
