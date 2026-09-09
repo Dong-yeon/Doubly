@@ -83,6 +83,15 @@ public record SaveRoutineRequest(
                     restSeconds, alternativeExerciseCatalogIds, null);
         }
 
+        /** 유산소 목표(시간·거리)가 생기기 전 호출부 — 세트별 목표까지 넘기던 전체 인자 형태 */
+        public Exercise(String exerciseName, String category, Integer targetSets, Integer reps,
+                        BigDecimal weightKg, Long exerciseCatalogId, String muscleGroup, String equipment,
+                        Integer restSeconds, List<Long> alternativeExerciseCatalogIds, List<SetRequest> sets) {
+            this(exerciseName, category, targetSets, reps, weightKg, null, null,
+                    exerciseCatalogId, muscleGroup, equipment,
+                    restSeconds, alternativeExerciseCatalogIds, sets);
+        }
+
         public List<SetRequest> setsOrEmpty() {
             return sets != null ? sets : List.of();
         }

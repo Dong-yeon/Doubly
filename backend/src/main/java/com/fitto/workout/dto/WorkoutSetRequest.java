@@ -32,4 +32,12 @@ public record WorkoutSetRequest(
                              BigDecimal weightKg, Integer orderNo) {
         this(exerciseName, category, sets, reps, weightKg, null, null, orderNo, null, null, null, null);
     }
+
+    /** 유산소 축(시간·거리)이 생기기 전 호출부 — 근력 종목만 다루던 시절의 전체 인자 형태 */
+    public WorkoutSetRequest(String exerciseName, String category, Integer sets, Integer reps,
+                             BigDecimal weightKg, Integer orderNo, Long exerciseCatalogId,
+                             String muscleGroup, String equipment, List<WorkoutSetEntryRequest> entries) {
+        this(exerciseName, category, sets, reps, weightKg, null, null, orderNo,
+                exerciseCatalogId, muscleGroup, equipment, entries);
+    }
 }

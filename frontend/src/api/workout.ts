@@ -30,6 +30,9 @@ export interface SaveRoutinePayload {
     targetSets?: number;
     reps?: number;
     weightKg?: number;
+    // 유산소 목표 — 러닝·트레드밀은 세트가 아니라 시간·거리가 목표다(세트 칸과 배타적)
+    targetDurationMin?: number;
+    targetDistanceKm?: number;
     exerciseCatalogId?: number;
     muscleGroup?: string;
     equipment?: string;

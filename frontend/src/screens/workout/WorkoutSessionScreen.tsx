@@ -58,6 +58,14 @@ import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 import { formatNumber, formatWeight } from '../../utils/format';
 import { sanitizeDecimalInput, sanitizeIntegerInput } from '../../utils/numericInput';
+import {
+  formatCardioSummary,
+  formatDistanceKm,
+  formatDurationSec,
+  isCardio,
+  minutesToSec,
+  secToMinutesInput,
+} from '../../utils/cardio';
 import type {
   ExerciseCatalogItem,
   ExerciseLastPerformance,
@@ -180,6 +188,45 @@ function buildSet(weightKg?: number | null, reps?: number | null, setType?: stri
 }
 
 /**
+ * 유산소 종목의 기록 한 줄 — 무게·횟수 대신 시간(분)·거리(km)를 든다.
+ *
+ * <p>기본은 <b>한 줄</b>이다: 러닝을 "3세트"로 쪼개 기록하는 사람은 없다. 인터벌처럼
+ * 나눠 뛴 경우에만 사용자가 '구간 추가'로 늘린다(그때는 줄마다 시간·거리가 따로 남는다).
+ */
+function buildCardioSet(durationMin?: number | null, distanceKm?: number | null): SessionSet {
+  return {
+    key: nextSetKey(),
+    weightKg: '',
+    reps: '',
+    durationMin: durationMin != null ? String(durationMin) : '',
+    distanceKm: distanceKm != null ? String(distanceKm) : '',
+    done: false,
+    rpe: '',
+  };
+}
+
+/** 세션 시작 시 이 종목에 깔아둘 줄 수 — 유산소는 목표 세트 수와 무관하게 한 줄이다 */
+function initialSetCount(e: SessionExerciseParam): number {
+  if (isCardio(e.category)) return 1;
+  if (e.sets && e.sets.length > 0) return e.sets.length;
+  return Math.max(1, e.targetSets ?? 3);
+}
+
+/** 완료 체크된 줄의 시간·거리 합계 — 유산소 종목의 "얼마나 했나" */
+function cardioTotals(sets: SessionSet[], onlyDone = true) {
+  let durationSec = 0;
+  let distanceKm = 0;
+  for (const s of sets) {
+    if (onlyDone && !s.done) continue;
+    durationSec += minutesToSec(s.durationMin ?? '') ?? 0;
+    const km = toNum(s.distanceKm ?? '');
+    if (km != null && km > 0) distanceKm += km;
+  }
+  // 0.1 + 0.2 같은 부동소수 찌꺼기를 남기지 않는다 — 거리는 10m 단위면 충분하다
+  return { durationSec, distanceKm: Math.round(distanceKm * 100) / 100 };
+}
+
+/**
  * 기구별 무게 증가폭(kg) — 규칙 기반 무게 추천의 기준(PLAN.md "중량·세트 추천" 참고).
  * 바벨은 상체보다 하체가 훨씬 강해 증가폭이 더 크다. 맨몸운동은 무게를 얹는 대상이 아니라
  * null(추천 안 함) — 맨몸은 횟수로 늘리는 게 자연스러운 진행이다.
@@ -232,7 +279,26 @@ function applyPrefill(
   perf: ExerciseLastPerformance,
   equipment?: string,
   muscleGroup?: string,
+  category?: string,
 ): SessionSet[] {
+  /*
+   * 유산소는 지난 시간·거리를 그대로 채운다 — 무게처럼 "다음엔 더"를 자동 제안하지 않는다.
+   * 러닝의 진행은 무게 증량과 달리 거리·페이스·컨디션이 얽혀 있어, 앱이 임의로 올려두면
+   * 그날의 계획을 덮어쓰는 참견이 된다(지난 기록을 보여주는 것까지가 여기 역할이다).
+   */
+  if (isCardio(category)) {
+    return sets.map((s, i) => {
+      if (s.done) return s;
+      const entry = perf.entries[i];
+      const durationSec = entry?.durationSec ?? (i === 0 ? perf.durationSec : null);
+      const distanceKm = entry?.distanceKm ?? (i === 0 ? perf.distanceKm : null);
+      return {
+        ...s,
+        durationMin: durationSec != null ? secToMinutesInput(durationSec) : s.durationMin,
+        distanceKm: distanceKm != null ? String(distanceKm) : s.distanceKm,
+      };
+    });
+  }
   return sets.map((s, i) => {
     if (s.done) return s;
     const entry = perf.entries[i];
@@ -259,9 +325,23 @@ function hasCompositionChanged(original: SessionExerciseParam[], current: Sessio
   return original.some((o, i) => {
     const c = current[i];
     if (!c || o.name !== c.name) return true;
-    const originalSetCount = Math.max(1, o.targetSets ?? 3);
-    return originalSetCount !== c.sets.length;
+    // 유산소는 세션이 목표 세트 수와 무관하게 한 줄로 시작하므로, 그 한 줄을 "구성 변경"
+    // 으로 오해하면 루틴 반영 확인창이 매번 뜬다(initialSetCount 가 같은 기준을 쓴다).
+    return initialSetCount(o) !== c.sets.length;
   });
+}
+
+/**
+ * 세션 → 루틴 템플릿의 유산소 목표 — 오늘 실제로 한 시간·거리를 그대로 목표로 담는다.
+ * 근력 종목이면 빈 객체라, 펼쳐도 아무 필드도 붙지 않는다.
+ */
+function routineCardioTarget(e: SessionExercise): { targetDurationMin?: number; targetDistanceKm?: number } {
+  if (!isCardio(e.category)) return {};
+  const { durationSec, distanceKm } = cardioTotals(e.sets);
+  return {
+    targetDurationMin: durationSec > 0 ? Math.round(durationSec / 60) : undefined,
+    targetDistanceKm: distanceKm > 0 ? distanceKm : undefined,
+  };
 }
 
 /** ② 자유 세션을 새 루틴으로 저장할 때의 기본 이름 제안 — 피드 카드("스쿼트 외 1개")와 같은 문구 */
@@ -293,8 +373,11 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
       alternatives: e.alternatives,
       // 세트별 목표(램프업/백오프 등)가 있으면 세트마다 다른 무게·횟수로 시작한다.
       // 없으면 지금처럼 종목 단위 값으로 목표 세트수만큼 균등 분배한다.
-      sets:
-        e.sets && e.sets.length > 0
+      // 유산소는 세트 자체가 없다 — 목표 시간·거리를 담은 한 줄로 시작한다(옛 루틴에
+      // "러닝 3세트"가 저장돼 있어도 여기서 한 줄로 접힌다).
+      sets: isCardio(e.category)
+        ? [buildCardioSet(e.targetDurationMin, e.targetDistanceKm)]
+        : e.sets && e.sets.length > 0
           ? e.sets.map((s) => buildSet(s.weightKg, s.reps, s.setType))
           : Array.from({ length: Math.max(1, e.targetSets ?? 3) }, () => buildSet(e.weightKg, e.reps)),
     })),
@@ -601,6 +684,10 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
   const [fSets, setFSets] = useState('3');
   const [fReps, setFReps] = useState('10');
   const [fWeight, setFWeight] = useState('');
+  // 유산소 목표 — 세트/횟수/무게 칸과 따로 둔다. 같은 칸을 뜻만 바꿔 쓰면 카테고리를
+  // 되돌렸을 때 값이 서로 섞인다("30분"이 "30세트"로 남는 식).
+  const [fDurationMin, setFDurationMin] = useState('30');
+  const [fDistanceKm, setFDistanceKm] = useState('');
   const [adding, setAdding] = useState(false);
 
   // ② 역방향 루틴 저장 — 루틴 없이 시작한 자유 세션을 종료할 때 "새 루틴으로 저장?" 제안
@@ -683,7 +770,7 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
             x.key === targetKey
               ? {
                   ...x,
-                  sets: applyPrefill(x.sets, found[0], x.equipment, x.muscleGroup),
+                  sets: applyPrefill(x.sets, found[0], x.equipment, x.muscleGroup, x.category),
                   // 종목이 바뀌었으니 신기록 기준도 새 종목 것으로 갈아끼운다
                   bestWeightKg: found[0].bestWeightKg ?? undefined,
                   bestE1rmKg: found[0].bestE1rmKg ?? undefined,
@@ -751,7 +838,11 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
             };
             return restored
               ? { ...e, ...bests }
-              : { ...e, ...bests, sets: applyPrefill(e.sets, perf, e.equipment, e.muscleGroup) };
+              : {
+                  ...e,
+                  ...bests,
+                  sets: applyPrefill(e.sets, perf, e.equipment, e.muscleGroup, e.category),
+                };
           }),
         );
       })
@@ -813,8 +904,20 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
     return () => clearInterval(id);
   }, [rest > 0]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const totalSets = exercises.reduce((n, e) => n + e.sets.length, 0);
-  const doneSets = exercises.reduce((n, e) => n + e.sets.filter((s) => s.done).length, 0);
+  // 진행률(세트 N/M)은 근력 종목만 센다 — 유산소의 한 줄을 "1세트"로 섞으면
+  // "러닝만 남았는데 세트 5/6" 처럼 숫자가 실제 남은 일과 어긋난다.
+  const strengthExercises = exercises.filter((e) => !isCardio(e.category));
+  const cardioExercises = exercises.filter((e) => isCardio(e.category));
+  const totalSets = strengthExercises.reduce((n, e) => n + e.sets.length, 0);
+  const doneSets = strengthExercises.reduce((n, e) => n + e.sets.filter((s) => s.done).length, 0);
+  // 유산소 합계 — 완료 체크한 줄만. 상단 요약바가 총 볼륨 옆에 나란히 보여준다.
+  const cardioTotal = cardioExercises.reduce(
+    (acc, e) => {
+      const t = cardioTotals(e.sets);
+      return { durationSec: acc.durationSec + t.durationSec, distanceKm: acc.distanceKm + t.distanceKm };
+    },
+    { durationSec: 0, distanceKm: 0 },
+  );
   // 총 볼륨(kg) — 완료된 세트만 합산(무게 × 횟수). 체크 전 세트는 아직 실제로 든 게 아니라 제외.
   const totalVolumeKg = exercises.reduce(
     (sum, e) =>
@@ -842,6 +945,9 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
            */
           if (!turningOn || i !== idx + 1 || s.done) return s;
           if (e.sets[idx].setType === 'WARMUP') return s;
+          // 유산소 구간은 물려주지 않는다 — 인터벌은 구간마다 시간·거리가 다른 게 정상이라,
+          // 앞 구간 값을 미리 채우면 지우고 다시 쓰는 일이 더 많아진다.
+          if (isCardio(e.category)) return s;
           return {
             ...s,
             weightKg: s.weightKg.trim() ? s.weightKg : e.sets[idx].weightKg,
@@ -903,7 +1009,13 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
     );
   };
 
-  const updateSetField = (exKey: string, idx: number, field: 'weightKg' | 'reps' | 'rpe', value: string) => {
+  const updateSetField = (
+    exKey: string,
+    idx: number,
+    field: 'weightKg' | 'reps' | 'rpe' | 'durationMin' | 'distanceKm',
+    value: string,
+  ) => {
+    // 시간(분)·거리(km)는 소수를 쓴다(7.5분 / 5.25km) — 정수만 허용하는 건 횟수뿐이다
     const sanitized = field === 'reps' ? sanitizeIntegerInput(value) : sanitizeDecimalInput(value);
     setExercises((prev) =>
       prev.map((e) => {
@@ -918,6 +1030,10 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
     setExercises((prev) =>
       prev.map((e) => {
         if (e.key !== exKey) return e;
+        // 유산소는 인터벌 구간을 빈 줄로 추가한다 — 구간마다 시간·거리가 다른 게 정상이다
+        if (isCardio(e.category)) {
+          return { ...e, sets: [...e.sets, buildCardioSet()] };
+        }
         // 새 세트는 직전 세트 무게·횟수를 기본으로 이어받는다 — 매번 다시 입력할 필요 없게.
         // RPE는 세트마다 체감이 다른 주관적 값이라 이어받지 않고 비워둔다.
         const last = e.sets[e.sets.length - 1];
@@ -937,6 +1053,7 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
       return;
     }
     const name = fName.trim();
+    const cardio = isCardio(fCategory);
     const setCount = Math.max(1, Math.min(20, Number(fSets) || 3));
     const targetReps = fReps ? Number(fReps) : undefined;
     const targetWeight = fWeight ? Number(fWeight) : undefined;
@@ -945,12 +1062,16 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
     await appendExercise({
       name,
       category: fCategory,
-      setCount,
-      targetReps,
-      targetWeight,
+      // 유산소는 세트가 아니라 시간·거리다 — 한 줄로 담고 목표는 시간·거리로 넘긴다
+      setCount: cardio ? 1 : setCount,
+      targetReps: cardio ? undefined : targetReps,
+      targetWeight: cardio ? undefined : targetWeight,
+      targetDurationMin: cardio && fDurationMin ? Number(fDurationMin) : undefined,
+      targetDistanceKm: cardio && fDistanceKm ? Number(fDistanceKm) : undefined,
     });
     setFName('');
     setFWeight('');
+    setFDistanceKm('');
     setAdding(false);
     setAddOpen(false);
   };
@@ -967,6 +1088,9 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
     setCount?: number;
     targetReps?: number;
     targetWeight?: number;
+    /** 유산소 목표 — 있으면 세트 대신 시간·거리 한 줄로 담긴다 */
+    targetDurationMin?: number;
+    targetDistanceKm?: number;
     muscleGroup?: string;
     equipment?: string;
     exerciseCatalogId?: number;
@@ -975,15 +1099,18 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
     emoji?: string;
     breathingCue?: string;
   }) => {
+    const cardio = isCardio(opts.category);
     const count = Math.max(1, Math.min(20, opts.setCount ?? 3));
-    let sets = Array.from({ length: count }, () => buildSet(opts.targetWeight, opts.targetReps));
+    let sets = cardio
+      ? [buildCardioSet(opts.targetDurationMin, opts.targetDistanceKm)]
+      : Array.from({ length: count }, () => buildSet(opts.targetWeight, opts.targetReps));
     // 신기록 기준값 — 프리필과 같은 응답에서 함께 온다(없으면 처음 하는 종목이라 판정 안 함)
     let bestWeightKg: number | undefined;
     let bestE1rmKg: number | undefined;
     try {
       const found = await workoutApi.lastPerformance([opts.name]);
       if (found[0]) {
-        sets = applyPrefill(sets, found[0], opts.equipment, opts.muscleGroup);
+        sets = applyPrefill(sets, found[0], opts.equipment, opts.muscleGroup, opts.category);
         bestWeightKg = found[0].bestWeightKg ?? undefined;
         bestE1rmKg = found[0].bestE1rmKg ?? undefined;
       }
@@ -1020,24 +1147,37 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
         const last = doneList[doneList.length - 1];
         const repsVal = toNum(last.reps) ?? e.reps ?? null;
         const weightVal = toNum(last.weightKg) ?? e.weightKg ?? null;
+        const cardio = isCardio(e.category);
+        /*
+         * 유산소의 종목 단위 값은 <b>합계</b>다 — 근력의 요약값(마지막 세트 기준)과 다르다.
+         * 인터벌로 세 구간을 뛰었다면 "얼마나 했나"의 답은 마지막 구간이 아니라 셋을 더한 값이다.
+         */
+        const totals = cardio ? cardioTotals(e.sets) : null;
         return {
           exerciseName: e.name,
           category: e.category,
-          sets: doneList.length,
-          reps: repsVal,
-          weightKg: weightVal != null ? String(weightVal) : null,
+          sets: cardio ? null : doneList.length,
+          reps: cardio ? null : repsVal,
+          weightKg: cardio ? null : weightVal != null ? String(weightVal) : null,
+          durationSec: totals && totals.durationSec > 0 ? totals.durationSec : null,
+          distanceKm: totals && totals.distanceKm > 0 ? String(totals.distanceKm) : null,
           orderNo: i + 1,
           exerciseCatalogId: e.exerciseCatalogId ?? null,
           muscleGroup: e.muscleGroup ?? null,
           equipment: e.equipment ?? null,
           // 세트별 실제 입력값 — 프리필 그대로면 지난 기록과 같은 값, 수정했으면 그 값이 그대로 남는다.
+          // 유산소는 구간별 시간·거리가 여기 남아, 나중에 상세 화면에서 구간을 그대로 되짚을 수 있다.
           entries: e.sets.map((s, idx) => {
             const w = toNum(s.weightKg);
             const r = toNum(s.rpe);
+            const durationSec = minutesToSec(s.durationMin ?? '');
+            const km = toNum(s.distanceKm ?? '');
             return {
               setNo: idx + 1,
-              weightKg: w != null ? String(w) : null,
-              reps: toNum(s.reps) ?? null,
+              weightKg: cardio ? null : w != null ? String(w) : null,
+              reps: cardio ? null : toNum(s.reps) ?? null,
+              durationSec: cardio ? durationSec ?? null : null,
+              distanceKm: cardio && km != null && km > 0 ? String(km) : null,
               rpe: r != null ? String(r) : null,
               completed: s.done,
             };
@@ -1141,11 +1281,15 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
   // 운동 추가 모달 닫기 — 입력이 있으면 확인 후 닫는다 (백드롭·Android 백 공용).
   // "사라져요"라고 안내했으므로 닫을 때 실제로 비운다 (남기면 다음에 또 확인이 뜬다)
   const closeAddModal = () =>
-    confirmDiscard(fName.trim().length > 0 || fWeight.trim().length > 0, () => {
-      setAddOpen(false);
-      setFName('');
-      setFWeight('');
-    });
+    confirmDiscard(
+      fName.trim().length > 0 || fWeight.trim().length > 0 || fDistanceKm.trim().length > 0,
+      () => {
+        setAddOpen(false);
+        setFName('');
+        setFWeight('');
+        setFDistanceKm('');
+      },
+    );
 
   /** ② 방금 마친 자유 세션을 새 루틴 템플릿으로 저장 — 건너뛰어도 기록은 이미 저장된 상태. */
   const onSaveAsRoutine = async () => {
@@ -1160,9 +1304,11 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
         exercises: exercises.map((e) => ({
           exerciseName: e.name,
           category: e.category,
-          targetSets: e.sets.length,
-          reps: e.reps,
-          weightKg: e.weightKg,
+          // 유산소는 세트 수가 목표가 아니다 — 오늘 실제로 한 시간·거리를 목표로 담는다
+          targetSets: isCardio(e.category) ? undefined : e.sets.length,
+          reps: isCardio(e.category) ? undefined : e.reps,
+          weightKg: isCardio(e.category) ? undefined : e.weightKg,
+          ...routineCardioTarget(e),
           exerciseCatalogId: e.exerciseCatalogId,
           muscleGroup: e.muscleGroup,
           equipment: e.equipment,
@@ -1200,9 +1346,10 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
               exercises: exercises.map((e) => ({
                 exerciseName: e.name,
                 category: e.category,
-                targetSets: e.sets.length,
-                reps: e.reps,
-                weightKg: e.weightKg,
+                targetSets: isCardio(e.category) ? undefined : e.sets.length,
+                reps: isCardio(e.category) ? undefined : e.reps,
+                weightKg: isCardio(e.category) ? undefined : e.weightKg,
+                ...routineCardioTarget(e),
                 exerciseCatalogId: e.exerciseCatalogId,
                 muscleGroup: e.muscleGroup,
                 equipment: e.equipment,
@@ -1232,6 +1379,9 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
     const done = e.sets.filter((s) => s.done).length;
     const e1rm = bestE1RM(e.sets);
     const prBadge = prBadgeOf(e);
+    const cardio = isCardio(e.category);
+    // 유산소는 지금까지 체크한 구간의 합계를 종목 줄에 바로 보여준다(페이스까지 계산됨)
+    const cardioDone = cardio ? cardioTotals(e.sets) : null;
     return (
       <View style={[styles.exCard, isActive && styles.exCardActive]}>
         <View style={styles.exHeader}>
@@ -1287,7 +1437,13 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
         </View>
         <Text style={styles.exMeta}>
           {e.category}
-          {e.muscleGroup ? ` · ${e.muscleGroup}` : ''} · {done}/{e.sets.length} 세트
+          {e.muscleGroup ? ` · ${e.muscleGroup}` : ''}
+          {/* 유산소는 세트 수가 아니라 지금까지의 시간·거리·페이스가 진행 상황이다 */}
+          {cardio
+            ? cardioDone && (cardioDone.durationSec > 0 || cardioDone.distanceKm > 0)
+              ? ` · ${formatCardioSummary(cardioDone.durationSec, cardioDone.distanceKm)}`
+              : ' · 아직 기록 전'
+            : ` · ${done}/${e.sets.length} 세트`}
           {/* e1RM(추정 1RM) — 완료한 세트가 있어야 계산 가능. 워밍업만 하고 본세트 전이면 아직 안 뜬다 */}
           {e1rm != null ? ` · e1RM ${formatWeight(e1rm)}` : ''}
         </Text>
@@ -1329,11 +1485,12 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
           </View>
         ) : null}
 
+        {/* 유산소는 칸 자체가 다르다 — 무게 × 횟수 대신 시간(분) · 거리(km) */}
         <View style={styles.setColHeader}>
           <Text style={styles.setColHeaderIndex} />
-          <Text style={styles.setColHeaderText}>무게(kg)</Text>
+          <Text style={styles.setColHeaderText}>{cardio ? '시간(분)' : '무게(kg)'}</Text>
           <Text style={styles.setColHeaderX} />
-          <Text style={styles.setColHeaderText}>횟수</Text>
+          <Text style={styles.setColHeaderText}>{cardio ? '거리(km)' : '횟수'}</Text>
           <Text style={styles.setColHeaderRpe}>RPE</Text>
           <Text style={styles.setColHeaderCheck} />
         </View>
@@ -1356,21 +1513,22 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
               </View>
               <TextInput
                 style={[styles.setInput, s.done && styles.setInputDone]}
-                value={s.weightKg}
-                onChangeText={(v) => updateSetField(e.key, i, 'weightKg', v)}
-                onFocus={() => setWeightFocus({ exKey: e.key, idx: i })}
+                value={cardio ? s.durationMin ?? '' : s.weightKg}
+                onChangeText={(v) => updateSetField(e.key, i, cardio ? 'durationMin' : 'weightKg', v)}
+                // 무게 증감 버튼(±2.5/5·원판)은 유산소에 의미가 없어 포커스를 잡지 않는다
+                onFocus={cardio ? undefined : () => setWeightFocus({ exKey: e.key, idx: i })}
                 keyboardType="decimal-pad"
-                placeholder="kg"
+                placeholder={cardio ? '분' : 'kg'}
                 placeholderTextColor={colors.textTertiary}
                 editable={!s.done}
               />
-              <Text style={styles.setRowX}>×</Text>
+              <Text style={styles.setRowX}>{cardio ? '·' : '×'}</Text>
               <TextInput
                 style={[styles.setInput, s.done && styles.setInputDone]}
-                value={s.reps}
-                onChangeText={(v) => updateSetField(e.key, i, 'reps', v)}
-                keyboardType="number-pad"
-                placeholder="회"
+                value={cardio ? s.distanceKm ?? '' : s.reps}
+                onChangeText={(v) => updateSetField(e.key, i, cardio ? 'distanceKm' : 'reps', v)}
+                keyboardType={cardio ? 'decimal-pad' : 'number-pad'}
+                placeholder={cardio ? 'km' : '회'}
                 placeholderTextColor={colors.textTertiary}
                 editable={!s.done}
               />
@@ -1402,7 +1560,7 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
               무게 증감·원판 — 지금 만지고 있는 세트에만 붙는다(위 weightFocus 주석 참고).
               증분이 2.5/5 인 이유: 원판은 양쪽에 붙으므로 한쪽 1.25kg = 총 2.5kg 이 최소 단위다.
             */}
-            {!s.done && weightFocus?.exKey === e.key && weightFocus.idx === i ? (
+            {!cardio && !s.done && weightFocus?.exKey === e.key && weightFocus.idx === i ? (
               <View style={styles.weightTools}>
                 {[-5, -2.5, 2.5, 5].map((d) => (
                   <TouchableOpacity
@@ -1430,8 +1588,10 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
             ) : null}
             </React.Fragment>
           ))}
+          {/* 유산소는 '세트'가 아니라 인터벌 구간이다 — 한 줄로 끝내는 게 기본이고, 나눠
+              뛴 경우에만 구간을 늘린다 */}
           <TouchableOpacity style={styles.setAddRow} onPress={() => addSetRow(e.key)}>
-            <Text style={styles.setAddText}>＋ 세트 추가</Text>
+            <Text style={styles.setAddText}>{cardio ? '＋ 구간 추가' : '＋ 세트 추가'}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -1475,28 +1635,54 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
         {/* 분만 보이면 첫 1분 내내 "0분"이라 안 가는 것처럼 보인다 — mm:ss 로 매초 눈에 띄게 */}
         <Text style={styles.summaryTime}>⏱ 운동 시간 {mmss(elapsedSec)}</Text>
         <View style={styles.summaryStats}>
-          <View style={styles.summaryStatItem}>
-            <Text style={styles.summaryStatValue}>
-              {formatNumber(Math.round(totalVolumeKg))}
-              <Text style={styles.summaryStatUnit}> kg</Text>
-            </Text>
-            <Text style={styles.summaryStatLabel}>총 볼륨</Text>
-          </View>
-          <View style={styles.summaryStatDivider} />
-          <View style={styles.summaryStatItem}>
-            <Text style={styles.summaryStatValue}>
-              {doneSets}
-              <Text style={styles.summaryStatUnit}> 세트</Text>
-            </Text>
-            <Text style={styles.summaryStatLabel}>완료</Text>
-          </View>
+          {/*
+            총 볼륨은 근력이 있을 때만 — 유산소만 하는 날 "0 kg"이 크게 떠 있으면
+            아무것도 안 한 것처럼 보인다. 그 자리를 거리·시간이 대신한다.
+          */}
+          {strengthExercises.length > 0 ? (
+            <>
+              <View style={styles.summaryStatItem}>
+                <Text style={styles.summaryStatValue}>
+                  {formatNumber(Math.round(totalVolumeKg))}
+                  <Text style={styles.summaryStatUnit}> kg</Text>
+                </Text>
+                <Text style={styles.summaryStatLabel}>총 볼륨</Text>
+              </View>
+              <View style={styles.summaryStatDivider} />
+              <View style={styles.summaryStatItem}>
+                <Text style={styles.summaryStatValue}>
+                  {doneSets}
+                  <Text style={styles.summaryStatUnit}> 세트</Text>
+                </Text>
+                <Text style={styles.summaryStatLabel}>완료</Text>
+              </View>
+            </>
+          ) : null}
+          {cardioExercises.length > 0 ? (
+            <>
+              {strengthExercises.length > 0 ? <View style={styles.summaryStatDivider} /> : null}
+              <View style={styles.summaryStatItem}>
+                <Text style={styles.summaryStatValue}>
+                  {cardioTotal.distanceKm > 0
+                    ? formatDistanceKm(cardioTotal.distanceKm)
+                    : formatDurationSec(cardioTotal.durationSec) || '-'}
+                </Text>
+                <Text style={styles.summaryStatLabel}>
+                  {cardioTotal.distanceKm > 0 ? '총 거리' : '유산소'}
+                </Text>
+              </View>
+            </>
+          ) : null}
         </View>
       </View>
 
       {/* 진행 헤더 */}
       <View style={styles.progressBar}>
+        {/* 유산소만 담은 세션은 셀 세트가 없다 — 그때는 시간·거리를 진행 상황으로 보여준다 */}
         <Text style={styles.progressText}>
-          세트 {doneSets}/{totalSets}
+          {totalSets > 0
+            ? `세트 ${doneSets}/${totalSets}`
+            : formatCardioSummary(cardioTotal.durationSec, cardioTotal.distanceKm) || '기록 전'}
         </Text>
         <View style={styles.restPresets}>
           <Text style={styles.restLabel}>휴식</Text>
@@ -1615,32 +1801,55 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
                   </TouchableOpacity>
                 ))}
               </View>
-              <View style={styles.formRow}>
-                <View style={styles.flex}>
-                  <TextField
-                    label="세트"
-                    value={fSets}
-                    onChangeText={(v) => setFSets(sanitizeIntegerInput(v))}
-                    keyboardType="number-pad"
-                  />
+              {/* 유산소를 고르면 목표 칸이 시간·거리로 바뀐다 — 러닝에 "세트/횟수/무게"를
+                  물어보는 것 자체가 잘못된 질문이다 */}
+              {isCardio(fCategory) ? (
+                <View style={styles.formRow}>
+                  <View style={styles.flex}>
+                    <TextField
+                      label="시간(분)"
+                      value={fDurationMin}
+                      onChangeText={(v) => setFDurationMin(sanitizeDecimalInput(v))}
+                      keyboardType="decimal-pad"
+                    />
+                  </View>
+                  <View style={styles.flex}>
+                    <TextField
+                      label="거리(km)"
+                      value={fDistanceKm}
+                      onChangeText={(v) => setFDistanceKm(sanitizeDecimalInput(v))}
+                      keyboardType="decimal-pad"
+                    />
+                  </View>
                 </View>
-                <View style={styles.flex}>
-                  <TextField
-                    label="횟수"
-                    value={fReps}
-                    onChangeText={(v) => setFReps(sanitizeIntegerInput(v))}
-                    keyboardType="number-pad"
-                  />
+              ) : (
+                <View style={styles.formRow}>
+                  <View style={styles.flex}>
+                    <TextField
+                      label="세트"
+                      value={fSets}
+                      onChangeText={(v) => setFSets(sanitizeIntegerInput(v))}
+                      keyboardType="number-pad"
+                    />
+                  </View>
+                  <View style={styles.flex}>
+                    <TextField
+                      label="횟수"
+                      value={fReps}
+                      onChangeText={(v) => setFReps(sanitizeIntegerInput(v))}
+                      keyboardType="number-pad"
+                    />
+                  </View>
+                  <View style={styles.flex}>
+                    <TextField
+                      label="무게(kg)"
+                      value={fWeight}
+                      onChangeText={(v) => setFWeight(sanitizeDecimalInput(v))}
+                      keyboardType="decimal-pad"
+                    />
+                  </View>
                 </View>
-                <View style={styles.flex}>
-                  <TextField
-                    label="무게(kg)"
-                    value={fWeight}
-                    onChangeText={(v) => setFWeight(sanitizeDecimalInput(v))}
-                    keyboardType="decimal-pad"
-                  />
-                </View>
-              </View>
+              )}
               <Button title="추가" onPress={onAddExercise} loading={adding} style={styles.modalBtn} />
             </Pressable>
           </KeyboardAvoidingView>

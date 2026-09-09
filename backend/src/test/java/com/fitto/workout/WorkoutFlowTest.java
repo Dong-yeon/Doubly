@@ -142,6 +142,29 @@ class WorkoutFlowTest {
         assertThat(saved.prs()).isEmpty();
     }
 
+    /**
+     * 유산소는 세트가 아니라 시간·거리로 저장된다 — 트레드밀에 "3세트 10회"를 넣게 하던
+     * 예전 입력의 대체 경로다. 세트 칸은 비어 있는 채로 남는 게 정상이다.
+     */
+    @Test
+    void 유산소는_시간과_거리로_저장된다() {
+        Long user = register("cardio1@fitto.com");
+        WorkoutResponse saved = workoutService.save(user, new SaveWorkoutRequest(LocalDate.now(), null, 32, null,
+                List.of(new WorkoutSetRequest("트레드밀", "유산소", null, null, null,
+                        32 * 60, new BigDecimal("5.20"), 1, null, "전신", "머신", null))));
+
+        WorkoutResponse.SetResponse set = saved.sets().get(0);
+        assertThat(set.durationSec()).isEqualTo(32 * 60);
+        assertThat(set.distanceKm()).isEqualByComparingTo("5.20");
+        assertThat(set.sets()).isNull();
+        assertThat(set.reps()).isNull();
+        assertThat(set.weightKg()).isNull();
+
+        // 다시 읽어도 같은 값 — 상세 화면이 이 응답으로 시간·거리·페이스를 그린다
+        WorkoutResponse reloaded = workoutService.findOne(user, saved.id());
+        assertThat(reloaded.sets().get(0).distanceKm()).isEqualByComparingTo("5.20");
+    }
+
     @Test
     void 커플_상대방의_오늘_운동_여부를_조회한다() {
         Long a = register("wc1@fitto.com");

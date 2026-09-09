@@ -95,6 +95,10 @@ export interface SessionExerciseParam {
   targetSets?: number;
   reps?: number;
   weightKg?: number;
+  // 유산소 목표 시간(분)·거리(km) — 러닝·트레드밀은 세트가 아니라 이 둘로 기록한다.
+  // 카테고리가 '유산소'면 세션 화면이 세트 표 대신 시간·거리 입력을 그린다.
+  targetDurationMin?: number;
+  targetDistanceKm?: number;
   // 자극 부위/기구/카탈로그 참조 — 대체 종목 추천(②)에 사용. 루틴에 저장돼 있을 때만 채워짐
   muscleGroup?: string;
   equipment?: string;

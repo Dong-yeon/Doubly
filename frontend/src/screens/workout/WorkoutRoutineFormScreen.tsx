@@ -25,6 +25,7 @@ import { sanitizeDecimalInput, sanitizeIntegerInput } from '../../utils/numericI
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 import type { ExerciseCatalogItem, WeekDay } from '../../types';
+import { isCardio } from '../../utils/cardio';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'WorkoutRoutineForm'>;
 
@@ -74,6 +75,9 @@ interface DraftExercise {
   targetSets?: number;
   reps?: number;
   weightKg?: number;
+  // 유산소 목표 — 러닝·트레드밀은 세트가 아니라 시간·거리가 목표다(둘 다 없을 수도 있다)
+  targetDurationMin?: number;
+  targetDistanceKm?: number;
   restSeconds?: number;
   alternatives: DraftAlternative[];
   // 카탈로그에서 골랐을 때만 채워짐 — 자유 입력이면 전부 undefined(지금까지의 동작)
@@ -125,6 +129,9 @@ export function WorkoutRoutineFormScreen({ navigation, route }: Props) {
   const [fSets, setFSets] = useState('3');
   const [fReps, setFReps] = useState('10');
   const [fWeight, setFWeight] = useState('');
+  // 유산소 목표 — 세트/횟수/무게와 칸을 나눠 둔다(카테고리를 되돌려도 값이 안 섞이게)
+  const [fDurationMin, setFDurationMin] = useState('30');
+  const [fDistanceKm, setFDistanceKm] = useState('');
   const [fRestSeconds, setFRestSeconds] = useState<number | null>(null);
   const [fPresetHint, setFPresetHint] = useState<string | null>(null);
   const [fAlternatives, setFAlternatives] = useState<DraftAlternative[]>([]);
@@ -266,6 +273,8 @@ export function WorkoutRoutineFormScreen({ navigation, route }: Props) {
     setFSets('3');
     setFReps('10');
     setFWeight('');
+    setFDurationMin('30');
+    setFDistanceKm('');
     setFRestSeconds(null);
     setFPresetHint(null);
     setFAlternatives([]);
@@ -288,21 +297,26 @@ export function WorkoutRoutineFormScreen({ navigation, route }: Props) {
       toast.error('운동 이름을 입력해주세요.');
       return;
     }
+    const cardio = isCardio(fCategory);
     setExercises((prev) => [
       ...prev,
       {
         key: `d-${seq++}`,
         name: fName.trim(),
         category: fCategory,
-        targetSets: fSets ? Number(fSets) : undefined,
-        reps: fReps ? Number(fReps) : undefined,
-        weightKg: fWeight ? Number(fWeight) : undefined,
+        // 유산소는 세트·횟수·무게를 담지 않는다 — 목표는 시간·거리다
+        targetSets: cardio ? undefined : fSets ? Number(fSets) : undefined,
+        reps: cardio ? undefined : fReps ? Number(fReps) : undefined,
+        weightKg: cardio ? undefined : fWeight ? Number(fWeight) : undefined,
+        targetDurationMin: cardio && fDurationMin ? Number(fDurationMin) : undefined,
+        targetDistanceKm: cardio && fDistanceKm ? Number(fDistanceKm) : undefined,
         restSeconds: fRestSeconds ?? undefined,
         alternatives: fAlternatives,
         muscleGroup: fCatalog?.muscleGroup,
         equipment: fCatalog?.equipment ?? undefined,
         exerciseCatalogId: fCatalog?.id,
-        sets: fSetRows,
+        // 세트별 목표(램프업·백오프)는 근력만의 개념이라 유산소에는 담지 않는다
+        sets: cardio ? [] : fSetRows,
       },
     ]);
     resetAddForm();
@@ -329,6 +343,8 @@ export function WorkoutRoutineFormScreen({ navigation, route }: Props) {
           targetSets: e.targetSets,
           reps: e.reps,
           weightKg: e.weightKg,
+          targetDurationMin: e.targetDurationMin,
+          targetDistanceKm: e.targetDistanceKm,
           restSeconds: e.restSeconds,
           alternativeExerciseCatalogIds: e.alternatives.map((a) => a.exerciseCatalogId),
           exerciseCatalogId: e.exerciseCatalogId,
@@ -398,6 +414,9 @@ export function WorkoutRoutineFormScreen({ navigation, route }: Props) {
                 {e.targetSets ? ` · ${e.targetSets}세트` : ''}
                 {e.reps ? ` · ${e.reps}회` : ''}
                 {e.weightKg ? ` · ${e.weightKg}kg` : ''}
+                {/* 유산소 목표 — 세트가 아니라 시간·거리로 적힌다 */}
+                {e.targetDurationMin ? ` · ${e.targetDurationMin}분` : ''}
+                {e.targetDistanceKm ? ` · ${e.targetDistanceKm}km` : ''}
                 {e.restSeconds ? ` · 휴식 ${e.restSeconds}s` : ''}
               </Text>
               {e.sets.length > 0 ? (
@@ -478,6 +497,31 @@ export function WorkoutRoutineFormScreen({ navigation, route }: Props) {
                   ))}
                 </View>
 
+                {/*
+                  유산소(러닝·트레드밀…)는 목표 자체가 다르다 — 세트 프리셋·세트별 목표·
+                  무게 칸이 통째로 의미가 없고, 시간·거리 두 칸만 남는다.
+                */}
+                {isCardio(fCategory) ? (
+                  <View style={styles.formRow}>
+                    <View style={styles.flex}>
+                      <TextField
+                        label="시간(분)"
+                        value={fDurationMin}
+                        onChangeText={(v) => setFDurationMin(sanitizeDecimalInput(v))}
+                        keyboardType="decimal-pad"
+                      />
+                    </View>
+                    <View style={styles.flex}>
+                      <TextField
+                        label="거리(km)"
+                        value={fDistanceKm}
+                        onChangeText={(v) => setFDistanceKm(sanitizeDecimalInput(v))}
+                        keyboardType="decimal-pad"
+                      />
+                    </View>
+                  </View>
+                ) : (
+                <>
                 <Text style={styles.modalLabel}>세트 프리셋</Text>
                 <View style={styles.groupRow}>
                   {SET_PRESETS.map((p) => (
@@ -568,6 +612,8 @@ export function WorkoutRoutineFormScreen({ navigation, route }: Props) {
                       </TouchableOpacity>
                     </View>
                   </View>
+                )}
+                </>
                 )}
 
                 <Text style={styles.modalLabel}>휴식 시간 (종목별 지정, 생략 시 세션 기본값)</Text>
