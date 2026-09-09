@@ -976,7 +976,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
       }
 
       /*
-       * 사진만 올리고 영양 정보를 비워두면 서버가 백그라운드로 분석해 채운다
+       * 사진만 올리고 영양 정보를 비워두면 서버가 뒤이어 칼로리를 채운다
        * (MealPhotoAutoAnalysisService). 결과를 따로 알리지 않기로 했으므로, 최소한
        * "곧 채워진다"는 것만 이 자리에서 말해준다 — 아무 말이 없으면 0kcal 로 남은
        * 카드를 보고 저장이 반쪽 났다고 오해한다. 조건은 서버의 판정과 같게 맞춘다.
@@ -988,7 +988,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
         (payload.sharedWithPartner
           ? `데이트 식단 완료! ${partnerName}님에게도 등록됐어요 💕`
           : '식단 기록 완료! ') +
-        (willAutoAnalyze ? 'AI가 칼로리를 채우는 중이에요.' : '') +
+        (willAutoAnalyze ? '칼로리는 곧 채워져요.' : '') +
         placeToastSuffix;
       if (placeLinkFailed) {
         toast.error(saveMessage);

@@ -200,7 +200,7 @@ export function SettingsScreen({ navigation }: Props) {
     setSavingMealPhotoAnalysis(true);
     try {
       setUser(await authApi.updateMealPhotoAnalysis(next));
-      toast.success(next ? '사진을 올리면 AI가 칼로리를 채워드릴게요.' : '자동 분석을 껐어요.');
+      toast.success(next ? '사진을 올리면 칼로리를 채워드릴게요.' : '이제 칼로리는 직접 적어요.');
     } catch (e) {
       Alert.alert('오류', getErrorMessage(e));
     } finally {
@@ -399,9 +399,9 @@ export function SettingsScreen({ navigation }: Props) {
 
           <View style={styles.row}>
             <View style={styles.rowText}>
-              <Text style={styles.rowTitle}>사진 자동 분석</Text>
+              <Text style={styles.rowTitle}>사진으로 칼로리 채우기</Text>
               <Text style={styles.rowDesc}>
-                음식 사진을 올려 저장하면 버튼을 누르지 않아도 AI가 칼로리를 채워드려요.
+                음식 사진을 올려 저장하면 칼로리를 알아서 계산해요.
                 직접 적은 값이 있으면 건드리지 않아요.
               </Text>
             </View>
