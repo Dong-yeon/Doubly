@@ -170,6 +170,8 @@ export function HomeScreen({ navigation }: Props) {
   /* 오늘 식단 시트 — 히어로의 내 식단 칩에서 연다(아래 onPressToday 참고) */
   const [mealSheet, setMealSheet] = useState(false);
   const [mealSaving, setMealSaving] = useState(false);
+  /* 설정이 생기기 전 세션(값 undefined)은 서버 기본값과 맞춰 켜진 것으로 본다 */
+  const autoAnalyzeMealPhoto = user?.autoAnalyzeMealPhoto !== false;
 
   // relationStore 의 fetchAll 이 아직 안 끝났으면 couple 이 null 이어도 "미연결"이
   // 아니라 "아직 모름"이다 — 로딩 중엔 연결된 것으로 간주해 연결 안내 화면이
@@ -258,7 +260,14 @@ export function HomeScreen({ navigation }: Props) {
       await dietApi.save({ mealDate: toDateString(), mealType, photoUrl });
       haptics.success();
       setMealSheet(false);
-      toast.success(`${mealTypeLabel(mealType)} 기록했어요! 칼로리는 곧 채워져요.`);
+      /*
+       * 칼로리를 약속하는 건 설정이 켜져 있을 때뿐이다 — 꺼둔 사람에게 "곧 채워져요"는
+       * 지키지 못할 말이고, 안 채워진 카드를 보고 고장으로 읽는다. 서버 판정과 같은 조건.
+       */
+      toast.success(
+        `${mealTypeLabel(mealType)} 기록했어요!` +
+          (autoAnalyzeMealPhoto ? ' 칼로리는 곧 채워져요.' : ''),
+      );
       refresh();
     } catch (e) {
       toast.error(getErrorMessage(e, '기록하지 못했어요.'));
