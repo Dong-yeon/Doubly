@@ -29,6 +29,11 @@ public record UserResponse(
         boolean notifyPartner,
         boolean notifyReminder,
         /**
+         * 음식 사진 자동 분석 여부 (2026-09-09) — 켜져 있으면 사진을 붙여 저장하는 것만으로
+         * 백그라운드에서 칼로리가 채워진다. 사용자의 AI 한도를 버튼 없이 소모하므로 끌 수 있다.
+         */
+        boolean autoAnalyzeMealPhoto,
+        /**
          * 필수 약관 재동의 필요 여부 (AUTH-09) — 약관이 개정됐거나(버전 불일치)
          * 동의 이력이 없는 기존 가입자면 true. 앱은 이 값이 true 인 동안 재동의 게이트를 띄운다.
          */
@@ -51,6 +56,7 @@ public record UserResponse(
                 user.isNotifyAnniversary(),
                 user.isNotifyPartner(),
                 user.isNotifyReminder(),
+                user.isAutoAnalyzeMealPhoto(),
                 !user.hasAgreedTo(PolicyVersion.TERMS, PolicyVersion.PRIVACY));
     }
 }

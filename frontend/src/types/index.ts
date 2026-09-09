@@ -110,6 +110,8 @@ export interface User {
   notifyAnniversary?: boolean;
   notifyPartner?: boolean;
   notifyReminder?: boolean;
+  /** 음식 사진 자동 분석 — 켜져 있으면 사진을 붙여 저장하는 것만으로 칼로리가 채워진다 */
+  autoAnalyzeMealPhoto?: boolean;
   /** 필수 약관 재동의 필요 여부 — 약관 개정 또는 동의 이력 없는 기존 가입자면 true */
   requiresConsent?: boolean;
 }
@@ -697,6 +699,9 @@ export interface MealItem {
   fat?: number | null;
 }
 
+/** 끼니의 칼로리·매크로가 어디서 왔는지 — 백엔드 NutritionSource 와 1:1 */
+export type NutritionSource = 'USER' | 'AI_ESTIMATED';
+
 export interface Meal {
   id: number;
   mealDate: string;
@@ -713,6 +718,12 @@ export interface Meal {
   sugar?: number | null;
   sodium?: number | null;
   fiber?: number | null;
+  /**
+   * 칼로리·매크로의 출처. 'AI_ESTIMATED' 면 사진만 올려 저장한 뒤 백그라운드 AI 가 채운 값이고
+   * 사용자가 아직 확인하지 않았다(카드에 "AI 추정" 배지). 직접 적었거나 한 번이라도 수정하면
+   * 'USER' 가 되고, 이 필드가 생기기 전의 기록은 없다(undefined).
+   */
+  nutritionSource?: NutritionSource | null;
   /** 항목 없이 합계만 기록한 건(레거시 포함)은 빈 배열 — 그때는 memo 로 보여준다 */
   items?: MealItem[];
   goals?: MealGoalHighlight[];
