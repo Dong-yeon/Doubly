@@ -29,8 +29,11 @@ set -euo pipefail
 MODULE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 JNILIBS="$MODULE_DIR/android/src/main/jniLibs"
 
-# 벤더링한 헤더(cpp/kiwi/Macro.h)와 같은 버전을 받는다 — 헤더와 .so 가 어긋나면 ABI 가 깨진다.
-KIWI_VERSION="$(sed -nE 's/#define KIWI_VERSION_(MAJOR|MINOR|PATCH) ([0-9]+)/\2/p' "$MODULE_DIR/cpp/kiwi/Macro.h" | paste -sd. -)"
+# 소스 기준점은 태그가 아니라 main 의 커밋이다(CRITICAL). 우리가 쓰는 kiwi_space / kiwi_glue /
+# kiwi_free_string 은 v0.23.2 태그에 없고 미출시 main 에만 있다(분석 문서 §1). 태그로 빌드하면
+# 링크는 되지만 심볼이 빠져 실기기에서 UnsatisfiedLinkError 로 조용히 기능이 꺼진다 — 2026-09-09
+# 재빌드 때 실제로 겪었다. 벤더링한 cpp/kiwi/capi.h 가 이 커밋의 것과 같아야 한다(올릴 때 같이 갱신).
+KIWI_REF="${KIWI_REF:-f06a54db4748e4eb5b8ced127c281fc8fac73ea1}"   # main, 2026-08-21 (Macro.h 는 0.23.2)
 
 ABIS=("$@")
 [ ${#ABIS[@]} -eq 0 ] && ABIS=(arm64-v8a x86_64)
@@ -47,9 +50,14 @@ STRIP="$(ls -d "$ANDROID_NDK"/toolchains/llvm/prebuilt/*/bin | head -1)/llvm-str
 
 KIWI_SRC="${KIWI_SRC:-$WORK/kiwi-src}"
 if [ ! -f "$KIWI_SRC/CMakeLists.txt" ]; then
-  echo "== Kiwi v$KIWI_VERSION 소스 받기 → $KIWI_SRC"
+  echo "== Kiwi $KIWI_REF 소스 받기 → $KIWI_SRC"
   # 모델(git-lfs, 수백 MB)은 필요 없다 — 앱은 kiwi-model/ 에 이미 갖고 있다.
-  GIT_LFS_SKIP_SMUDGE=1 git clone -q --depth 1 --branch "v$KIWI_VERSION" https://github.com/bab2min/Kiwi "$KIWI_SRC"
+  # 커밋 하나만 얕게 받는다(GitHub 은 SHA 직접 fetch 를 허용한다).
+  mkdir -p "$KIWI_SRC"
+  git -C "$KIWI_SRC" init -q
+  git -C "$KIWI_SRC" remote add origin https://github.com/bab2min/Kiwi
+  GIT_LFS_SKIP_SMUDGE=1 git -C "$KIWI_SRC" fetch -q --depth 1 origin "$KIWI_REF"
+  GIT_LFS_SKIP_SMUDGE=1 git -C "$KIWI_SRC" checkout -q FETCH_HEAD
   # 서브모듈 8개 중 빌드에 필요한 5개만 (mimalloc 은 끄고, tclap·googletest 는 CLI·테스트용).
   # core.longpaths: json 서브모듈의 벤치마크 리포트 파일명이 Windows MAX_PATH 를 넘어
   # 체크아웃이 실패한다(Git Bash 에서 재현됨).
@@ -95,4 +103,23 @@ for ABI in "${ABIS[@]}"; do
 done
 
 echo "== 16KB 정렬 검사"
-node "$MODULE_DIR/scripts/check-elf-align.mjs" "${ABIS[@]/#/$JNILIBS/}"
+OUTS=()
+for ABI in "${ABIS[@]}"; do OUTS+=("$JNILIBS/$ABI/libkiwi.so"); done
+node "$MODULE_DIR/scripts/check-elf-align.mjs" "${OUTS[@]}"
+
+# kiwi_jni.cpp 가 부르는 C API 가 실제로 내보내졌는지 — 태그(v0.23.2)로 빌드하면 여기서 걸린다.
+# 빠진 심볼은 링크·정렬을 다 통과하고 실기기에서 UnsatisfiedLinkError 로만 드러나기 때문에
+# 빌드 단계에서 잡아야 한다.
+echo "== 심볼 검사"
+NM="$(dirname "$STRIP")/llvm-nm"
+REQUIRED=(kiwi_init kiwi_close kiwi_space kiwi_glue kiwi_free_string kiwi_builder_init_stream kiwi_builder_build kiwi_error)
+for OUT in "${OUTS[@]}"; do
+  EXPORTED="$("$NM" -D --defined-only "$OUT" | awk '$2 == "T" { print $3 }')"
+  MISSING=()
+  for SYM in "${REQUIRED[@]}"; do grep -qx "$SYM" <<<"$EXPORTED" || MISSING+=("$SYM"); done
+  if [ ${#MISSING[@]} -gt 0 ]; then
+    echo "BAD   심볼 없음: ${MISSING[*]}  $OUT" >&2
+    exit 1
+  fi
+  echo "OK    kiwi_* $(grep -c '^kiwi_' <<<"$EXPORTED")개 내보냄  $OUT"
+done
