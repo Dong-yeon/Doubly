@@ -14,11 +14,14 @@ import com.fitto.diet.domain.Meal;
 import com.fitto.diet.domain.MealItem;
 import com.fitto.diet.domain.NutritionGoal;
 import com.fitto.diet.dto.CoupleMealGoalResponse;
+import com.fitto.diet.dto.FoodLookupRequest;
+import com.fitto.diet.dto.FoodLookupResponse;
 import com.fitto.diet.dto.MealItemRequest;
 import com.fitto.diet.dto.MealResponse;
 import com.fitto.diet.dto.MealStatsResponse;
 import com.fitto.diet.dto.RecentFoodResponse;
 import com.fitto.diet.dto.SaveMealRequest;
+import com.fitto.diet.repository.MealItemRepository;
 import com.fitto.diet.repository.MealRepository;
 import com.fitto.diet.repository.NutritionGoalRepository;
 import com.fitto.place.repository.PlaceVisitRepository;
@@ -64,6 +67,7 @@ public class MealService {
     private static final int[] EMPTY_NUTRITION = new int[6];
 
     private final MealRepository mealRepository;
+    private final MealItemRepository mealItemRepository;
     private final NutritionGoalRepository nutritionGoalRepository;
     private final RelationRepository relationRepository;
     private final UserRepository userRepository;
@@ -75,6 +79,7 @@ public class MealService {
     private final PlaceVisitRepository placeVisitRepository;
 
     public MealService(MealRepository mealRepository,
+                       MealItemRepository mealItemRepository,
                        NutritionGoalRepository nutritionGoalRepository,
                        RelationRepository relationRepository,
                        UserRepository userRepository,
@@ -85,6 +90,7 @@ public class MealService {
                        PlanGuard planGuard,
                        PlaceVisitRepository placeVisitRepository) {
         this.mealRepository = mealRepository;
+        this.mealItemRepository = mealItemRepository;
         this.nutritionGoalRepository = nutritionGoalRepository;
         this.relationRepository = relationRepository;
         this.userRepository = userRepository;
@@ -515,28 +521,63 @@ public class MealService {
 
     /**
      * 최근 먹은 음식 자동완성 — 즐겨찾기와 달리 <b>따로 저장하지 않아도</b> 최근 기록에서 자동으로
-     * 뽑힌다. 최신 200건을 memo 기준으로 묶어(가장 최근 값을 대표로) 빈도 → 최근순으로 상위 N개.
+     * 뽑힌다. 최근 음식 항목(meal_items) 300건을 이름 기준으로 묶어 빈도 → 최근순으로 상위 N개.
+     *
+     * <p>예전엔 끼니 memo 를 음식 이름으로 썼는데, 항목 구조(V39) 이후 memo 는 "오늘 좀 짰음" 같은
+     * 한마디로 쓰이는 자리라 그게 "최근 먹은 음식"으로 뜨는 게 어색했다. 이제 memo 는 보지 않는다.
+     * 대표값은 같은 이름 중 <b>칼로리가 있는 가장 최근 항목</b> — 탭하면 칼로리가 바로 채워지게.
      */
     public List<RecentFoodResponse> recentFoods(Long userId) {
-        List<Meal> recent = mealRepository.findTop200ByUserIdOrderByCreatedAtDesc(userId);
-        // LinkedHashMap 순회 순서 = 최초 삽입 순서 = createdAt desc 이므로,
-        // 각 memo 의 첫 등장이 가장 최근 기록이다 → 대표값으로 그대로 쓴다.
-        Map<String, Meal> representative = new LinkedHashMap<>();
+        List<MealItem> recent = mealItemRepository.findRecentByUser(userId, PageRequest.of(0, 300));
+        // LinkedHashMap 순회 순서 = 최초 삽입 순서 = 최근순이므로, 이름별 첫 등장이 가장 최근 항목이다
+        Map<String, MealItem> representative = new LinkedHashMap<>();
         Map<String, Integer> counts = new HashMap<>();
-        for (Meal m : recent) {
-            String memo = m.getMemo();
-            if (memo == null || memo.isBlank()) continue;
-            String key = memo.trim();
-            representative.putIfAbsent(key, m);
+        for (MealItem i : recent) {
+            String key = normalizeFoodName(i.getName());
+            if (key.isEmpty()) continue;
             counts.merge(key, 1, Integer::sum);
+            MealItem current = representative.get(key);
+            if (current == null || (current.getCalories() == null && i.getCalories() != null)) {
+                representative.put(key, i);
+            }
         }
         return representative.entrySet().stream()
                 .sorted(Comparator
-                        .<Map.Entry<String, Meal>>comparingInt(e -> counts.get(e.getKey())).reversed()
-                        .thenComparing(e -> e.getValue().getCreatedAt(), Comparator.reverseOrder()))
+                        .<Map.Entry<String, MealItem>>comparingInt(e -> counts.get(e.getKey())).reversed()
+                        .thenComparing(e -> e.getValue().getMeal().getCreatedAt(), Comparator.reverseOrder()))
                 .limit(RECENT_FOODS_LIMIT)
                 .map(e -> RecentFoodResponse.of(e.getValue(), counts.get(e.getKey())))
                 .toList();
+    }
+
+    /**
+     * 내 기록에서 음식 영양 정보 찾기 — 즐겨찾기·추천 칩처럼 칼로리 없이 들어온 음식을, 과거에
+     * 이미 계산해 기록한 값으로 채운다. 이름별로 <b>칼로리가 있는 가장 최근 항목</b> 하나를 돌려주고,
+     * 기록이 없는 이름은 응답에서 빠진다(클라이언트가 그 항목만 AI 로 넘긴다).
+     */
+    public List<FoodLookupResponse> lookupFoods(Long userId, FoodLookupRequest request) {
+        // 요청 이름 → 정규화 키. 같은 키로 여러 이름이 오면(예: "계란"/"계란 ") 각각 돌려준다
+        Map<String, String> keyByRequested = new LinkedHashMap<>();
+        for (String name : request.names()) {
+            if (name == null) continue;
+            String key = normalizeFoodName(name);
+            if (!key.isEmpty()) keyByRequested.putIfAbsent(name, key);
+        }
+        if (keyByRequested.isEmpty()) return List.of();
+
+        Map<String, MealItem> latestByKey = new HashMap<>();
+        for (MealItem i : mealItemRepository.findRecentWithCalories(userId, new HashSet<>(keyByRequested.values()))) {
+            latestByKey.putIfAbsent(normalizeFoodName(i.getName()), i); // 최근순 정렬이라 첫 건이 최신
+        }
+        return keyByRequested.entrySet().stream()
+                .filter(e -> latestByKey.containsKey(e.getValue()))
+                .map(e -> FoodLookupResponse.of(e.getKey(), latestByKey.get(e.getValue())))
+                .toList();
+    }
+
+    /** 음식 이름 비교 키 — trim + 소문자. 저장소 쿼리(lower(name))와 같은 규칙이어야 한다. */
+    static String normalizeFoodName(String name) {
+        return name == null ? "" : name.trim().toLowerCase();
     }
 
     public List<CalendarDayResponse> calendar(Long userId, int year, int month) {
