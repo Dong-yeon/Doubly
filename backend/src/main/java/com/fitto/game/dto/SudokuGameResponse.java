@@ -1,6 +1,7 @@
 package com.fitto.game.dto;
 
 import com.fitto.game.domain.CoupleGame;
+import com.fitto.game.domain.SudokuGame;
 import com.fitto.game.domain.GameDifficulty;
 import com.fitto.game.domain.GameStatus;
 
@@ -29,18 +30,18 @@ public record SudokuGameResponse(
         LocalDateTime createdAt,
         LocalDateTime completedAt
 ) {
-    public static SudokuGameResponse of(CoupleGame game, Long viewerId, String partnerName) {
-        boolean viewerIsCreator = game.getCreatedBy().equals(viewerId);
+    public static SudokuGameResponse of(SudokuGame game, Long viewerId, String partnerName) {
+        boolean viewerIsCreator = game.isCreator(viewerId);
         char mine = viewerIsCreator ? CoupleGame.OWNER_CREATOR : CoupleGame.OWNER_PARTNER;
         char theirs = viewerIsCreator ? CoupleGame.OWNER_PARTNER : CoupleGame.OWNER_CREATOR;
 
-        StringBuilder owners = new StringBuilder(CoupleGame.CELLS);
+        StringBuilder owners = new StringBuilder(SudokuGame.CELLS);
         List<Integer> wrong = new ArrayList<>();
         int filled = 0;
         String board = game.getBoard();
         String solution = game.getSolution();
         String ownerMap = game.getOwnerMap();
-        for (int i = 0; i < CoupleGame.CELLS; i++) {
+        for (int i = 0; i < SudokuGame.CELLS; i++) {
             char o = ownerMap.charAt(i);
             owners.append(o == mine ? 'M' : o == theirs ? 'P' : '0');
             char b = board.charAt(i);

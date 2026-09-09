@@ -18,6 +18,7 @@ public final class PushLinks {
     public static final String FEED = "feed";
     public static final String QUESTION = "question";
     public static final String GAME_SUDOKU = "game/sudoku";
+    public static final String GAME_OMOK = "game/omok";
     public static final String CALENDAR = "calendar";
     public static final String COUPLE_CONNECT = "couple/connect";
     public static final String WORKOUT = "workout";

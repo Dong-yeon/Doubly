@@ -12,13 +12,10 @@ import com.fitto.common.notification.NotificationService;
 import com.fitto.common.notification.PushLinks;
 import com.fitto.common.plan.Feature;
 import com.fitto.common.plan.PlanGuard;
-import com.fitto.game.domain.CoupleGame;
-import com.fitto.game.domain.SudokuGame;
 import com.fitto.game.domain.GameStatus;
-import com.fitto.game.dto.StartSudokuRequest;
-import com.fitto.game.dto.SudokuGameResponse;
-import com.fitto.game.repository.SudokuGameRepository;
-import com.fitto.game.sudoku.SudokuGenerator;
+import com.fitto.game.domain.OmokGame;
+import com.fitto.game.dto.OmokGameResponse;
+import com.fitto.game.repository.OmokGameRepository;
 import com.fitto.relation.domain.Relation;
 import com.fitto.relation.domain.RelationStatus;
 import com.fitto.relation.domain.RelationType;
@@ -31,23 +28,26 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.security.SecureRandom;
+import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Random;
 
 /**
- * 협동 스도쿠 — docs/COUPLE_GAMES_DESIGN_2026-09-09.md 3절.
+ * 오목 — docs/COUPLE_GAMES_DESIGN_2026-09-09.md 5절.
  *
- * <p>커플당 진행 중인 판은 하나. 차례 없이 둘이 자유롭게 채우고, 칸마다 누가 채웠는지만 남긴다.
- * 틀린 숫자도 그대로 들어가며(응답이 틀린 칸 인덱스를 알려준다), 81칸이 전부 정답이면 완성이다.
+ * <p>커플당 진행 중인 판 하나. 판을 연 사람이 백(후공), 상대가 흑(선공). 차례가 아니면 거절한다.
+ * "네 차례야" 푸시는 <b>상대가 2분 넘게 조용했을 때만</b> 보낸다 — 같이 접속해 두는 중에
+ * 수마다 푸시가 오면 소음이고, 떨어져 있을 때는 이 푸시가 곧 게임의 리듬이다.
  */
 @Service
 @Transactional(readOnly = true)
-public class SudokuService {
+public class OmokService {
 
-    private static final Logger log = LoggerFactory.getLogger(SudokuService.class);
+    private static final Logger log = LoggerFactory.getLogger(OmokService.class);
+    /** 이 시간 넘게 수가 없었으면 상대는 화면을 보고 있지 않다고 본다 */
+    static final Duration QUIET_BEFORE_TURN_PUSH = Duration.ofMinutes(2);
 
-    private final SudokuGameRepository gameRepository;
+    private final OmokGameRepository gameRepository;
     private final RelationRepository relationRepository;
     private final UserRepository userRepository;
     private final PlanGuard planGuard;
@@ -55,16 +55,15 @@ public class SudokuService {
     private final CoupleEventPublisher coupleEventPublisher;
     private final ChatService chatService;
     private final SimpMessagingTemplate messagingTemplate;
-    private final Random random = new SecureRandom();
 
-    public SudokuService(SudokuGameRepository gameRepository,
-                         RelationRepository relationRepository,
-                         UserRepository userRepository,
-                         PlanGuard planGuard,
-                         NotificationService notificationService,
-                         CoupleEventPublisher coupleEventPublisher,
-                         ChatService chatService,
-                         SimpMessagingTemplate messagingTemplate) {
+    public OmokService(OmokGameRepository gameRepository,
+                       RelationRepository relationRepository,
+                       UserRepository userRepository,
+                       PlanGuard planGuard,
+                       NotificationService notificationService,
+                       CoupleEventPublisher coupleEventPublisher,
+                       ChatService chatService,
+                       SimpMessagingTemplate messagingTemplate) {
         this.gameRepository = gameRepository;
         this.relationRepository = relationRepository;
         this.userRepository = userRepository;
@@ -75,8 +74,8 @@ public class SudokuService {
         this.messagingTemplate = messagingTemplate;
     }
 
-    /** 진행 중인 판 — 없으면 null (응답의 data 가 null) */
-    public SudokuGameResponse current(Long userId) {
+    /** 진행 중인 판 — 없으면 null */
+    public OmokGameResponse current(Long userId) {
         Relation couple = activeCouple(userId);
         return gameRepository
                 .findFirstByCoupleIdAndStatusOrderByCreatedAtDesc(couple.getId(), GameStatus.IN_PROGRESS)
@@ -84,17 +83,13 @@ public class SudokuService {
                 .orElse(null);
     }
 
-    /**
-     * 새 판 — 진행 중인 판이 있으면 <b>그걸 돌려준다</b>. 둘이 동시에 "새 판"을 누르면 판이 두 개
-     * 생기고 서로 다른 판을 푸는 상황이 되므로, 생성은 관계 행 잠금 아래에서 한 번만 일어난다.
-     */
+    /** 새 판 — 진행 중인 판이 있으면 그걸 돌려준다(둘이 동시에 눌러도 판은 하나). */
     @Transactional
-    public SudokuGameResponse start(Long userId, StartSudokuRequest req) {
+    public OmokGameResponse start(Long userId) {
         Relation couple = activeCouple(userId);
-        // 관계 행을 잠가 "진행 중 판 확인 → 생성"을 직렬화한다
         Relation locked = relationRepository.findByIdForUpdate(couple.getId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.RELATION_NOT_FOUND));
-        SudokuGame existing = gameRepository
+        OmokGame existing = gameRepository
                 .findFirstByCoupleIdAndStatusOrderByCreatedAtDesc(locked.getId(), GameStatus.IN_PROGRESS)
                 .orElse(null);
         if (existing != null) {
@@ -103,58 +98,59 @@ public class SudokuService {
 
         planGuard.require(userId, Feature.COUPLE_GAME);
 
-        SudokuGenerator.Puzzle puzzle = SudokuGenerator.generate(random, req.difficulty().givens());
-        SudokuGame game = gameRepository.save(SudokuGame.builder()
+        OmokGame game = gameRepository.save(OmokGame.builder()
                 .coupleId(locked.getId())
-                .difficulty(req.difficulty())
-                .puzzle(puzzle.puzzle())
-                .solution(puzzle.solution())
                 .createdBy(userId)
                 .build());
 
         Long partnerId = locked.partnerOf(userId);
         if (partnerId != null) {
-            notificationService.notify(partnerId, NotificationCategory.PARTNER, "협동 스도쿠 🧩",
-                    userName(userId) + "님이 같이 풀 판을 열었어요 (" + req.difficulty().label() + ")",
-                    PushLinks.GAME_SUDOKU);
+            notificationService.notify(partnerId, NotificationCategory.PARTNER, "오목 한 판 ⚫",
+                    userName(userId) + "님이 오목판을 열었어요. 선공은 당신!", PushLinks.GAME_OMOK);
         }
         coupleEventPublisher.publish(locked.getId(), CoupleEvent.GAME);
         return toResponse(game, userId, locked);
     }
 
-    /**
-     * 칸 입력 — value 0 은 지우기. 행 잠금 아래에서 문자열을 갱신한다(동시 입력 시 lost update 방지).
-     * 완성되면 채팅에 결과 카드를 남기고 상대에게 푸시한다.
-     */
+    /** 착수 — 행 잠금 아래에서 차례·빈칸을 검사하고 돌을 놓는다. */
     @Transactional
-    public SudokuGameResponse move(Long userId, Long gameId, int index, int value) {
-        if (index < 0 || index >= SudokuGame.CELLS) {
-            throw new BusinessException(ErrorCode.INVALID_INPUT, "칸 위치가 잘못됐어요.");
+    public OmokGameResponse place(Long userId, Long gameId, int index) {
+        if (index < 0 || index >= OmokGame.CELLS) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "자리가 잘못됐어요.");
         }
         Relation couple = activeCouple(userId);
-        SudokuGame game = gameRepository.findByIdForUpdate(gameId)
+        OmokGame game = gameRepository.findByIdForUpdate(gameId)
                 .filter(g -> g.getCoupleId().equals(couple.getId()))
                 .orElseThrow(() -> new BusinessException(ErrorCode.GAME_NOT_FOUND));
         if (!game.isInProgress()) {
             throw new BusinessException(ErrorCode.GAME_NOT_IN_PROGRESS);
         }
-        if (game.isGiven(index)) {
-            throw new BusinessException(ErrorCode.GAME_CELL_FIXED);
+        if (!game.isTurnOf(userId)) {
+            throw new BusinessException(ErrorCode.GAME_NOT_YOUR_TURN);
+        }
+        if (!game.isEmpty(index)) {
+            throw new BusinessException(ErrorCode.GAME_CELL_OCCUPIED);
         }
 
-        boolean completed = game.fill(index, value, game.isCreator(userId));
-        if (completed) {
-            onCompleted(userId, game, couple);
+        LocalDateTime previousMoveAt = game.getLastMovedAt();
+        boolean finished = game.place(index, game.sideOf(userId));
+        Long partnerId = couple.partnerOf(userId);
+
+        if (finished) {
+            onFinished(userId, partnerId, game, couple);
+        } else if (partnerId != null && quietLongEnough(previousMoveAt, game.getCreatedAt())) {
+            notificationService.notify(partnerId, NotificationCategory.PARTNER, "오목 — 네 차례야",
+                    userName(userId) + "님이 " + game.moveCount() + "수째를 뒀어요.", PushLinks.GAME_OMOK);
         }
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.GAME);
         return toResponse(game, userId, couple);
     }
 
-    /** 포기 — 기록에 남지 않는다. 진행 중이 아니면 그대로 둔다(둘이 동시에 눌러도 오류 없음). */
+    /** 포기 — 기록에 남지 않는다. */
     @Transactional
     public void giveUp(Long userId, Long gameId) {
         Relation couple = activeCouple(userId);
-        SudokuGame game = gameRepository.findByIdForUpdate(gameId)
+        OmokGame game = gameRepository.findByIdForUpdate(gameId)
                 .filter(g -> g.getCoupleId().equals(couple.getId()))
                 .orElseThrow(() -> new BusinessException(ErrorCode.GAME_NOT_FOUND));
         if (!game.isInProgress()) return;
@@ -162,48 +158,53 @@ public class SudokuService {
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.GAME);
     }
 
-    /** 완성한 판 최근 20개 */
-    public List<SudokuGameResponse> history(Long userId) {
+    /** 끝난 판 최근 20개(승패 포함) */
+    public List<OmokGameResponse> history(Long userId) {
         Relation couple = activeCouple(userId);
         String partnerName = partnerName(couple, userId);
         return gameRepository
                 .findTop20ByCoupleIdAndStatusOrderByCompletedAtDesc(couple.getId(), GameStatus.COMPLETED)
                 .stream()
-                .map(g -> SudokuGameResponse.of(g, userId, partnerName))
+                .map(g -> OmokGameResponse.of(g, userId, partnerName))
                 .toList();
     }
 
     // ── 내부 ─────────────────────────────────────────────────────────────
 
-    private void onCompleted(Long finisherId, SudokuGame game, Relation couple) {
-        String creatorName = userName(game.getCreatedBy());
-        Long partnerId = couple.partnerOf(game.getCreatedBy());
-        String partnerName = partnerId == null ? "상대" : userName(partnerId);
-        String body = creatorName + " " + game.countOwned(CoupleGame.OWNER_CREATOR) + "칸 · "
-                + partnerName + " " + game.countOwned(CoupleGame.OWNER_PARTNER) + "칸 ("
-                + game.getDifficulty().label() + ")";
-        String title = "협동 스도쿠 완성! 🧩";
+    /**
+     * 직전 수가 2분 넘게 전이면(또는 첫 수면) 상대는 화면 밖에 있다고 보고 푸시한다.
+     * 첫 수는 판이 열린 시각을 기준으로 잰다 — 열자마자 선공이 두면 상대(판을 연 사람)는 아직 보고 있다.
+     */
+    private boolean quietLongEnough(LocalDateTime previousMoveAt, LocalDateTime createdAt) {
+        LocalDateTime since = previousMoveAt != null ? previousMoveAt : createdAt;
+        if (since == null) return true;
+        return Duration.between(since, LocalDateTime.now()).compareTo(QUIET_BEFORE_TURN_PUSH) >= 0;
+    }
 
-        Long other = couple.partnerOf(finisherId);
-        if (other != null) {
-            notificationService.notify(other, NotificationCategory.PARTNER, title, body, PushLinks.GAME_SUDOKU);
+    private void onFinished(Long moverId, Long partnerId, OmokGame game, Relation couple) {
+        String moverName = userName(moverId);
+        String partnerName = partnerId == null ? "상대" : userName(partnerId);
+        boolean draw = OmokGame.WINNER_DRAW.equals(game.getWinner());
+        String title = draw ? "오목 무승부" : "오목 승리 ⚫";
+        String body = draw
+                ? moverName + " · " + partnerName + " (" + game.moveCount() + "수, 판이 가득 찼어요)"
+                : moverName + " 승 (" + game.moveCount() + "수)";
+
+        if (partnerId != null) {
+            notificationService.notify(partnerId, NotificationCategory.PARTNER, title,
+                    draw ? body : moverName + "님이 오목을 이겼어요. 한 판 더?", PushLinks.GAME_OMOK);
         }
-        /*
-         * content 는 화면에 그대로 띄워도 말이 되는 문장이다(STREAK_CARD 와 같은 규칙) —
-         * GAME_CARD 를 모르는 구버전 앱에서도 평범한 말풍선으로 읽힌다.
-         * 카드 실패가 완성 자체를 되돌리면 안 되므로 로그만 남긴다.
-         */
         try {
             ChatMessageResponse saved = chatService.postSystemCard(
-                    finisherId, couple.getId(), MessageType.GAME_CARD, title + " " + body);
+                    moverId, couple.getId(), MessageType.GAME_CARD, title + " " + body);
             messagingTemplate.convertAndSend("/sub/rooms/" + couple.getId(), saved);
         } catch (Exception e) {
-            log.warn("스도쿠 완성 채팅 카드 실패 couple={}: {}", couple.getId(), e.getMessage());
+            log.warn("오목 결과 채팅 카드 실패 couple={}: {}", couple.getId(), e.getMessage());
         }
     }
 
-    private SudokuGameResponse toResponse(SudokuGame game, Long viewerId, Relation couple) {
-        return SudokuGameResponse.of(game, viewerId, partnerName(couple, viewerId));
+    private OmokGameResponse toResponse(OmokGame game, Long viewerId, Relation couple) {
+        return OmokGameResponse.of(game, viewerId, partnerName(couple, viewerId));
     }
 
     private String partnerName(Relation couple, Long viewerId) {
