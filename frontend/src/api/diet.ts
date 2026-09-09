@@ -10,6 +10,7 @@ import type {
   DietGoalType,
   FavoriteFood,
   FavoriteFoodGift,
+  FoodLookupResult,
   MacroPreset,
   Meal,
   MealAnalysis,
@@ -129,6 +130,10 @@ export const dietApi = {
 
   // 최근 먹은 음식 자동완성 — 즐겨찾기와 달리 저장 없이 최근 기록에서 자동으로 뽑힌다
   recentFoods: () => unwrap(apiClient.get<ApiResponse<RecentFood[]>>('/meal/recent-foods')),
+  // 내 기록에서 음식 영양 정보 찾기 — 칼로리 없이 들어온 음식(즐겨찾기·추천 칩)을 과거 기록값으로 채운다.
+  // AI 를 돌리지 않으므로 쿼터를 쓰지 않는다. 기록이 없는 이름은 응답에서 빠진다.
+  lookupFoods: (names: string[]) =>
+    unwrap(apiClient.post<ApiResponse<FoodLookupResult[]>>('/meal/food-lookup', { names })),
 
   // 즐겨찾는 음식 — 원탭 추가용
   favorites: () => unwrap(apiClient.get<ApiResponse<FavoriteFood[]>>('/meal/favorites')),

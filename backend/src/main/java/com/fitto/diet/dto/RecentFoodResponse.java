@@ -1,23 +1,22 @@
 package com.fitto.diet.dto;
 
-import com.fitto.diet.domain.Meal;
-import com.fitto.diet.domain.MealType;
+import com.fitto.diet.domain.MealItem;
 
 /**
  * 최근 먹은 음식 자동완성 항목 — 즐겨찾기(FavoriteFood)와 달리 <b>따로 저장할 필요 없이</b>
- * 최근 기록에서 자동으로 뽑힌다. memo(음식 메모) 기준으로 묶은 대표값 + 최근 기록 횟수.
+ * 최근 기록의 음식 항목(meal_items)에서 자동으로 뽑힌다. 이름 기준으로 묶은 대표값 + 최근 기록 횟수.
  */
 public record RecentFoodResponse(
-        String memo,
-        MealType mealType,
+        String name,
+        String portion,
         Integer calories,
         Integer carbs,
         Integer protein,
         Integer fat,
         int count
 ) {
-    public static RecentFoodResponse of(Meal m, int count) {
-        return new RecentFoodResponse(m.getMemo(), m.getMealType(), m.getCalories(),
-                m.getCarbs(), m.getProtein(), m.getFat(), count);
+    public static RecentFoodResponse of(MealItem i, int count) {
+        return new RecentFoodResponse(i.getName(), i.getPortion(), i.getCalories(),
+                i.getCarbs(), i.getProtein(), i.getFat(), count);
     }
 }

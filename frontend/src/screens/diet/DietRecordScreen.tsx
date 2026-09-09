@@ -49,6 +49,7 @@ import type {
   AnalyzedFood,
   BarcodeLookup,
   FavoriteFood,
+  FoodLookupResult,
   MealAnalysisSource,
   MealType,
   Place,
@@ -95,6 +96,10 @@ interface ItemForm {
 
 const num = (v: string) => (v.trim() ? Number(v) : undefined);
 const isFilled = (i: ItemForm) => i.name.trim().length > 0;
+/** 이름은 적었는데 칼로리가 빈 항목 — "0" 을 직접 적은 건 의도한 값이므로 빈 것으로 보지 않는다 */
+const lacksCalories = (i: ItemForm) => isFilled(i) && i.calories.trim() === '';
+/** 음식 이름 비교 키 — 서버(MealService.normalizeFoodName)와 같은 규칙 */
+const foodKey = (name: string) => name.trim().toLowerCase();
 
 /** 적어둔 항목을 AI 에 보낼 한 줄로. 응답을 적용할지 판단할 때도 같은 규칙으로 다시 만든다. */
 const describeItems = (items: ItemForm[]) =>
@@ -458,14 +463,62 @@ export function DietRecordScreen({ navigation, route }: Props) {
    * 음식 여러 개를 항목으로 붙인다 — 이름이 비어 있는 카드는 버리고 뒤에 이어붙인다.
    * (운동 기록의 프리셋 적용과 같은 방식: 빈 칸부터 채워지는 것처럼 보인다)
    */
+  /** 항목을 뒤에 붙이고, 만들어진 항목들을 돌려준다(뒤이어 칼로리를 채워 넣을 때 key 가 필요하다) */
   const appendFoods = useCallback(
     (foods: Partial<ItemForm>[]) => {
-      setItems((prev) => [...prev.filter(isFilled), ...foods.map((f) => newItem(f))]);
+      const created = foods.map((f) => newItem(f));
+      setItems((prev) => [...prev.filter(isFilled), ...created]);
+      return created;
     },
     [newItem],
   );
 
-  const addName = (name: string) => appendFoods([{ name }]);
+  /**
+   * 칼로리가 빈 항목을 <b>내 과거 기록</b>으로 채운다 — 즐겨찾기·추천 칩·최근 음식처럼 이름만
+   * 들고 들어온 음식이 대상이다. 전에 한 번 계산해 기록한 음식이면 AI 를 다시 돌릴 이유가 없고
+   * (쿼터도 안 쓰고), 값도 "그때 내가 기록한 그 값"이라 일관된다.
+   *
+   * <p>응답이 올 때까지 사용자가 이름을 고치거나 칼로리를 직접 적었을 수 있으므로, 같은 key 이면서
+   * 아직 칼로리가 비어 있고 이름 키가 그대로인 항목에만 넣는다. 실패는 조용히 넘어간다 — 비어 있던
+   * 칸이 그대로 비어 있을 뿐이고, 사용자는 AI 계산이나 직접 입력으로 이어갈 수 있다.
+   *
+   * @returns targets 에 찾은 값을 반영한 목록(상태와 별개로 호출자가 바로 쓸 수 있게)
+   */
+  const backfillFromHistory = async (targets: ItemForm[]): Promise<ItemForm[]> => {
+    const missing = targets.filter(lacksCalories);
+    if (missing.length === 0) return targets;
+    const names = [...new Set(missing.map((i) => i.name.trim()))];
+    let hits: Map<string, FoodLookupResult>;
+    try {
+      const found = await dietApi.lookupFoods(names);
+      hits = new Map(found.filter((f) => f.calories != null).map((f) => [foodKey(f.name), f]));
+    } catch {
+      return targets;
+    }
+    if (hits.size === 0) return targets;
+    const targetKeys = new Set(missing.map((i) => i.key));
+    const patch = (it: ItemForm): ItemForm => {
+      const hit = targetKeys.has(it.key) && lacksCalories(it) ? hits.get(foodKey(it.name)) : undefined;
+      if (!hit) return it;
+      return {
+        ...it,
+        portion: it.portion || (hit.portion ?? ''),
+        calories: String(hit.calories),
+        carbs: it.carbs || (hit.carbs != null ? String(hit.carbs) : ''),
+        protein: it.protein || (hit.protein != null ? String(hit.protein) : ''),
+        fat: it.fat || (hit.fat != null ? String(hit.fat) : ''),
+      };
+    };
+    setItems((prev) => prev.map(patch));
+    const next = targets.map(patch);
+    const filledCount = next.filter((it, idx) => it !== targets[idx]).length;
+    if (filledCount > 0) toast.info(`내 기록에서 음식 ${filledCount}개의 칼로리를 채웠어요`);
+    return next;
+  };
+
+  const addName = (name: string) => {
+    void backfillFromHistory(appendFoods([{ name }]));
+  };
 
   // 바코드 스캔 결과 — BarcodeScanScreen 이 같은 DietRecord 인스턴스로 돌아오며 채운다.
   // 실제 표기값이라 항목 하나로 그대로 들어온다. 소비 후 파라미터를 지워야
@@ -501,15 +554,17 @@ export function DietRecordScreen({ navigation, route }: Props) {
   // 최근 항목 탭 — 즐겨찾기(addFavorite)와 같은 방식으로 항목 하나로 들어온다
   const addRecent = (food: RecentFood) => {
     haptics.light();
-    appendFoods([
+    const created = appendFoods([
       {
-        name: food.memo.slice(0, MAX_NAME),
+        name: food.name.slice(0, MAX_NAME),
+        portion: (food.portion ?? '').slice(0, MAX_PORTION),
         calories: food.calories ? String(food.calories) : '',
         carbs: food.carbs ? String(food.carbs) : '',
         protein: food.protein ? String(food.protein) : '',
         fat: food.fat ? String(food.fat) : '',
       },
     ]);
+    void backfillFromHistory(created);
   };
 
   /** AI 분석 결과(사진/텍스트 공통) → 항목 폼 */
@@ -526,9 +581,10 @@ export function DietRecordScreen({ navigation, route }: Props) {
 
   // 즐겨찾기 세트 탭 — 세트에 담긴 음식이 각각 항목으로 들어온다.
   // 예전엔 이름만 메모에 붙고 칼로리는 합산돼 섞여서, 잘못 누르면 되돌릴 방법이 없었다.
+  // 칼로리 없이 저장된 옛 즐겨찾기는 내 기록에서 찾아 채운다(backfillFromHistory).
   const addFavorite = (fav: FavoriteFood) => {
     haptics.light();
-    appendFoods(
+    const created = appendFoods(
       fav.items.map((i) => ({
         name: i.name,
         calories: i.calories ? String(i.calories) : '',
@@ -537,17 +593,13 @@ export function DietRecordScreen({ navigation, route }: Props) {
         fat: i.fat ? String(i.fat) : '',
       })),
     );
+    void backfillFromHistory(created);
   };
 
-  /** 현재 입력한 음식들을 즐겨찾기 세트로 저장 — 항목이 1:1 로 그대로 옮겨간다 */
-  const saveCurrentAsFavorite = async () => {
-    if (filled.length === 0) {
-      toast.error('음식을 먼저 입력해주세요.');
-      return;
-    }
+  const saveFavoriteItems = async (toSave: ItemForm[]) => {
     try {
       const fav = await dietApi.saveFavorite({
-        items: filled.map((i) => ({
+        items: toSave.map((i) => ({
           name: i.name.trim(),
           calories: num(i.calories),
           carbs: num(i.carbs),
@@ -560,6 +612,47 @@ export function DietRecordScreen({ navigation, route }: Props) {
       setFavorites((prev) => [fav, ...prev]);
     } catch (e) {
       toast.error(getErrorMessage(e, '즐겨찾기 저장에 실패했어요.'));
+    }
+  };
+
+  const [savingFavorite, setSavingFavorite] = useState(false);
+  /**
+   * 현재 입력한 음식들을 즐겨찾기 세트로 저장 — 항목이 1:1 로 그대로 옮겨간다.
+   *
+   * <p>칼로리가 빈 항목이 있으면 <b>먼저 채우고</b> 저장한다. 즐겨찾기는 "이미 계산된 음식"을
+   * 원탭으로 다시 쓰는 자리라, 이름만 저장되면 탭할 때마다 다시 계산해야 해서 의미가 없다.
+   * 순서는 ① 내 기록에서 찾기(무료, 내 값 그대로) → ② 그래도 비면 AI 계산(쿼터 사용) →
+   * ③ AI 도 못 채우면 칼로리 없이 저장할지 묻는다.
+   */
+  const saveCurrentAsFavorite = async () => {
+    if (filled.length === 0) {
+      toast.error('음식을 먼저 입력해주세요.');
+      return;
+    }
+    if (savingFavorite || analyzingText) return;
+    setSavingFavorite(true);
+    try {
+      let toSave = filled;
+      if (toSave.some(lacksCalories)) toSave = await backfillFromHistory(toSave);
+      if (toSave.some(lacksCalories)) {
+        const analyzed = await analyzeItemsWithAi(toSave);
+        if (!analyzed) {
+          const fallback = toSave;
+          Alert.alert(
+            '칼로리 없이 저장할까요?',
+            '칼로리를 계산하지 못한 음식이 있어요. 이대로 저장하면 나중에 탭할 때 칼로리가 비어 있어요.',
+            [
+              { text: '취소', style: 'cancel' },
+              { text: '그대로 저장', onPress: () => void saveFavoriteItems(fallback) },
+            ],
+          );
+          return;
+        }
+        toSave = analyzed.filter(isFilled);
+      }
+      await saveFavoriteItems(toSave);
+    } finally {
+      setSavingFavorite(false);
     }
   };
 
@@ -699,15 +792,26 @@ export function DietRecordScreen({ navigation, route }: Props) {
    * 이름만 적어둔 항목들을 통째로 보내 칼로리·매크로가 채워진 목록으로 <b>교체</b>한다
    * (명시적으로 누르는 버튼이고, 결과가 마음에 안 들면 항목별로 고치면 된다).
    */
-  const onAnalyzeText = async () => {
-    const text = describeItems(items);
-    if (!text) return;
+  const onAnalyzeText = () => {
+    void analyzeItemsWithAi(items);
+  };
+
+  /**
+   * 적어둔 항목(source)을 AI 에 보내 칼로리·매크로를 채운 새 목록으로 교체한다.
+   * "AI로 칼로리 계산" 버튼과 즐겨찾기 저장(saveCurrentAsFavorite)이 함께 쓴다.
+   *
+   * @returns 적용된 새 목록. 못 알아봤거나·기다리는 사이 목록이 바뀌었거나·실패했으면 null
+   *          (사용자 안내 토스트는 여기서 이미 띄웠다)
+   */
+  const analyzeItemsWithAi = async (source: ItemForm[]): Promise<ItemForm[] | null> => {
+    const text = describeItems(source);
+    if (!text) return null;
     setAnalyzingText(true);
     try {
       const result = await dietApi.analyzeText(text);
       if (!result.isFood || result.foods.length === 0) {
         toast.error('무엇을 먹었는지 알아보지 못했어요. 음식 이름을 적어주세요.');
-        return;
+        return null;
       }
       /*
        * 기다리는 사이에 목록이 바뀌었으면 덮어쓰지 않는다 — 이 응답은 <b>보낼 때의</b>
@@ -715,17 +819,20 @@ export function DietRecordScreen({ navigation, route }: Props) {
        */
       if (describeItems(itemsRef.current) !== text) {
         toast.info('적어둔 음식이 바뀌어서 결과를 넣지 않았어요. 다시 눌러주세요.');
-        return;
+        return null;
       }
-      setItems(result.foods.map((f) => newItem(toForm(f))));
+      const next = result.foods.map((f) => newItem(toForm(f)));
+      setItems(next);
       if (result.foods.every((f) => !f.calories)) {
         toast.info('칼로리는 추정하지 못했어요. 직접 입력해주세요.');
       }
       setExtras({ sugar: result.totalSugar, sodium: result.totalSodium, fiber: result.totalFiber });
       haptics.success();
       toast.success(result.comment?.trim() || 'AI 칼로리 계산 완료!');
+      return next;
     } catch (e) {
       toast.error(getErrorMessage(e, 'AI 계산에 실패했어요.'));
+      return null;
     } finally {
       setAnalyzingText(false);
     }
@@ -1170,8 +1277,8 @@ export function DietRecordScreen({ navigation, route }: Props) {
                   </View>
                 ) : null}
               </TouchableOpacity>
-              <TouchableOpacity onPress={saveCurrentAsFavorite}>
-                <Text style={styles.favSave}>＋ 현재 저장</Text>
+              <TouchableOpacity onPress={saveCurrentAsFavorite} disabled={savingFavorite}>
+                <Text style={styles.favSave}>{savingFavorite ? '저장 중…' : '＋ 현재 저장'}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1211,19 +1318,19 @@ export function DietRecordScreen({ navigation, route }: Props) {
             </>
           )}
 
-          {/* 최근 먹은 음식 — 즐겨찾기와 달리 따로 저장하지 않아도 최근 기록에서 자동으로 뽑힌다.
-              탭하면 음식 항목으로 들어온다 */}
+          {/* 최근 먹은 음식 — 즐겨찾기와 달리 따로 저장하지 않아도 최근 기록의 음식 항목에서
+              자동으로 뽑힌다(끼니 메모가 아니다). 탭하면 음식 항목으로 들어온다 */}
           {recentFoods.length > 0 ? (
             <>
               <Text style={styles.label}>최근 먹은 음식</Text>
               <View style={styles.presetRow}>
                 {recentFoods.map((f) => (
                   <TouchableOpacity
-                    key={f.memo}
+                    key={f.name}
                     style={styles.recentChip}
                     onPress={() => addRecent(f)}
                   >
-                    <Text style={styles.recentChipText} numberOfLines={1}>{f.memo}</Text>
+                    <Text style={styles.recentChipText} numberOfLines={1}>{f.name}</Text>
                     {f.calories ? <Text style={styles.favChipCal}>{f.calories}kcal</Text> : null}
                   </TouchableOpacity>
                 ))}
