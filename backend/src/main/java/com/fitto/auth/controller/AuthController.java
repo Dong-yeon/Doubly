@@ -6,6 +6,7 @@ import com.fitto.auth.dto.ForgotPasswordRequest;
 import com.fitto.auth.dto.GoogleLoginRequest;
 import com.fitto.auth.dto.LoginRequest;
 import com.fitto.auth.dto.MarketingConsentRequest;
+import com.fitto.auth.dto.MealPhotoAnalysisSettingRequest;
 import com.fitto.auth.dto.NotificationCategorySettingRequest;
 import com.fitto.auth.dto.NotificationSettingRequest;
 import com.fitto.auth.dto.RegisterRequest;
@@ -111,6 +112,18 @@ public class AuthController {
             @AuthenticationPrincipal AuthUser user,
             @Valid @RequestBody NotificationCategorySettingRequest request) {
         return ApiResponse.success(authService.updateNotificationCategories(user.id(), request));
+    }
+
+    /** 음식 사진 자동 분석 설정 — 끄면 사진을 올려도 백그라운드 분석이 돌지 않는다. */
+    @PutMapping("/me/meal-photo-analysis")
+    public ApiResponse<UserResponse> updateMealPhotoAnalysisSetting(
+            @AuthenticationPrincipal AuthUser user,
+            @Valid @RequestBody MealPhotoAnalysisSettingRequest request) {
+        UserResponse updated = authService.updateMealPhotoAnalysisSetting(user.id(), request.enabled());
+        return ApiResponse.success(updated,
+                request.enabled()
+                        ? "사진을 올리면 칼로리를 채워드릴게요."
+                        : "이제 칼로리는 직접 적어요.");
     }
 
     /** 필수 약관 재동의 — AUTH-09. 개정된 약관에 다시 동의한다(재동의 게이트). */

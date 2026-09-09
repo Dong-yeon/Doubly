@@ -40,18 +40,24 @@ import com.fitto.workout.dto.SaveRoutineRequest.Exercise;
 import com.fitto.workout.service.RoutineGiftService;
 import com.fitto.workout.service.WorkoutRoutineService;
 import com.fitto.workout.service.WorkoutService;
+import com.fitto.common.upload.CloudinaryImageDeleter;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
 import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.verify;
 
 /**
  * 회원 탈퇴 — AUTH-06.
@@ -84,6 +90,8 @@ class WithdrawFlowTest {
     @Autowired FavoriteFoodGiftService favoriteFoodGiftService;
     @Autowired WorkoutService workoutService;
     @Autowired MealService mealService;
+    /** 스파이 — 테스트 프로필은 Cloudinary 미설정이라 실제 삭제는 no-op, 어떤 URL 을 넘기는지만 본다 */
+    @MockitoSpyBean CloudinaryImageDeleter imageDeleter;
 
     private Long register(String email) {
         return authService.register(
@@ -120,6 +128,28 @@ class WithdrawFlowTest {
 
         assertThatCode(() -> authService.withdraw(me)).doesNotThrowAnyException();
         assertThat(userRepository.findById(me)).isEmpty();
+    }
+
+    /**
+     * 탈퇴하면 운동 인증샷 파일까지 지운다 — DB 행만 지우면 이미지는 URL 로 영구히 남는다.
+     *
+     * <p>운동 인증샷은 러닝 앱 화면 캡처가 대부분이라 <b>달린 경로 지도</b>가 함께 찍혀 있다.
+     * 탈퇴한 사람의 집 근처 동선이 Cloudinary 에 그대로 남아 있으면 "완전 삭제"라고 부를 수 없다.
+     * (체중 사진·음식 사진과 같은 처방 — UserDataPurger 의 개인 데이터 이미지 수집 참고)
+     */
+    @Test
+    void 탈퇴하면_운동_인증샷도_함께_지운다() {
+        Long me = register("withdraw-photo@fitto.com");
+        String screenshot = "https://res.cloudinary.com/demo/image/upload/v1/fitto/strava-map.jpg";
+        workoutService.save(me, new SaveWorkoutRequest(
+                LocalDate.now(), null, 30, null, null, screenshot, List.of()));
+
+        authService.withdraw(me);
+
+        // 커밋 이후 삭제라 목록에 담겨 넘어갔는지로 확인한다(테스트 프로필은 실제 호출 no-op)
+        ArgumentCaptor<Collection<String>> captor = ArgumentCaptor.forClass(Collection.class);
+        verify(imageDeleter, atLeastOnce()).deleteAllAfterCommit(captor.capture());
+        assertThat(captor.getAllValues().stream().flatMap(Collection::stream)).contains(screenshot);
     }
 
     /**

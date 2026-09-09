@@ -109,6 +109,7 @@ export function SettingsScreen({ navigation }: Props) {
 
   const [savingNotification, setSavingNotification] = useState(false);
   const [savingMarketing, setSavingMarketing] = useState(false);
+  const [savingMealPhotoAnalysis, setSavingMealPhotoAnalysis] = useState(false);
   /** 저장 중인 카테고리 키 — 카테고리마다 상태를 두면 네 개가 되므로 하나로 관리한다 */
   const [savingCategory, setSavingCategory] = useState<string | null>(null);
   /** OS 권한이 거부된 상태 — 앱 안 설정으로는 되돌릴 수 없어 시스템 설정으로 보내야 한다 */
@@ -192,6 +193,18 @@ export function SettingsScreen({ navigation }: Props) {
       Alert.alert('오류', getErrorMessage(e));
     } finally {
       setSavingCategory(null);
+    }
+  };
+
+  const onToggleMealPhotoAnalysis = async (next: boolean) => {
+    setSavingMealPhotoAnalysis(true);
+    try {
+      setUser(await authApi.updateMealPhotoAnalysis(next));
+      toast.success(next ? '사진을 올리면 칼로리를 채워드릴게요.' : '이제 칼로리는 직접 적어요.');
+    } catch (e) {
+      Alert.alert('오류', getErrorMessage(e));
+    } finally {
+      setSavingMealPhotoAnalysis(false);
     }
   };
 
@@ -379,6 +392,26 @@ export function SettingsScreen({ navigation }: Props) {
               </View>
             );
           })}
+        </Card>
+
+        <Card elevation="sm" style={styles.section}>
+          <Text style={styles.sectionLabel}>식단</Text>
+
+          <View style={styles.row}>
+            <View style={styles.rowText}>
+              <Text style={styles.rowTitle}>사진으로 칼로리 채우기</Text>
+              <Text style={styles.rowDesc}>
+                음식 사진을 올려 저장하면 칼로리를 알아서 계산해요.
+                직접 적은 값이 있으면 건드리지 않아요.
+              </Text>
+            </View>
+            <Switch
+              value={user?.autoAnalyzeMealPhoto !== false}
+              onValueChange={onToggleMealPhotoAnalysis}
+              disabled={savingMealPhotoAnalysis}
+              trackColor={{ true: colors.primary }}
+            />
+          </View>
         </Card>
 
         <Card elevation="sm" style={styles.section}>

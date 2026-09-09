@@ -15,6 +15,9 @@ export function routineToSessionParams(
       targetSets: e.targetSets ?? undefined,
       reps: e.reps ?? undefined,
       weightKg: e.weightKg ?? undefined,
+      // 유산소 목표 — 세션 화면이 세트 표 대신 시간·거리 입력을 그리는 근거
+      targetDurationMin: e.targetDurationMin ?? undefined,
+      targetDistanceKm: e.targetDistanceKm ?? undefined,
       muscleGroup: e.muscleGroup ?? undefined,
       equipment: e.equipment ?? undefined,
       exerciseCatalogId: e.exerciseCatalogId ?? undefined,

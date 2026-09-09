@@ -25,6 +25,8 @@ import { haptics } from '../../utils/haptics';
 import { useDeleteAction } from '../../hooks/useDeleteAction';
 import { todayWeekDay, toDateString } from '../../utils/date';
 import { routineToSessionParams } from '../../utils/routine';
+import { pickImage, uploadImage } from '../../utils/imageUpload';
+import { confirmPhotoPrivacy } from '../../utils/photoPrivacy';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type {
   CoupleWeek,
@@ -66,7 +68,7 @@ function thisWeekDates(): Date[] {
 }
 
 export function WorkoutScreen({ navigation }: Props) {
-  const { today, history, loading, loadingMore, error, fetchToday, fetchHistory, loadMoreHistory, remove } =
+  const { today, history, loading, loadingMore, error, fetchToday, fetchHistory, loadMoreHistory, remove, save } =
     useWorkoutStore();
   // 삭제 in-flight 가드 — 공용 훅으로 중복 DELETE 방지 + 해당 카드 흐리게 (QA_CHECKLIST.md 전역 반복 패턴 7)
   const { deletingId, runDelete } = useDeleteAction<number>();
@@ -202,6 +204,61 @@ export function WorkoutScreen({ navigation }: Props) {
     navigation.navigate('WorkoutSession', routineToSessionParams(routine));
   };
 
+  /** 오늘 이미 기록이 있는가 — 체크인 카드의 상태를 가른다(중복 기록 방지도 겸한다) */
+  const doneToday = today.length > 0;
+  const [checkingIn, setCheckingIn] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
+
+  /**
+   * 원탭 체크인 — 종목 없이 "오늘 운동했다"만 남긴다.
+   *
+   * <p>서버가 세트를 필수로 두지 않으므로 빈 배열로 저장하면 끝이다. 스트릭 갱신·커플 알림·
+   * 캘린더는 전부 이 저장 하나로 지금까지와 똑같이 동작한다(WorkoutService.save 참고).
+   */
+  const onQuickCheckIn = async () => {
+    setCheckingIn(true);
+    try {
+      await save({ workoutDate: toDateString(), sets: [] });
+      haptics.success();
+      toast.success('오늘 운동 완료! 💪');
+      fetchToday();
+      fetchHistory();
+      refreshStreaks();
+    } catch (e) {
+      toast.error(getErrorMessage(e, '기록에 실패했어요.'));
+    } finally {
+      setCheckingIn(false);
+    }
+  };
+
+  /**
+   * 사진으로 기록 — 다른 앱의 운동 완료 화면이나 트레드밀 사진을 그대로 올린다.
+   *
+   * <p>업로드까지만 여기서 하고, AI 분석과 확인·저장은 기록 화면에 맡긴다. 분석은 몇십 초가
+   * 걸릴 수 있는데 그동안 이 화면을 잡아두면 다른 것도 못 하고, 무엇보다 <b>읽은 값을 확인할
+   * 자리</b>가 기록 화면이기 때문이다. 분석에 실패해도 사진이 붙은 기록은 그대로 남길 수 있다.
+   */
+  /*
+   * 올리기 전에 한 번 알린다 — 러닝 앱 화면에는 <b>달린 경로 지도</b>가 함께 찍혀 있고,
+   * 그건 대개 집 근처다. 사진이 어디까지 가는지(내 기록에만, 애인에게는 안 감) 모른 채
+   * 위치가 담긴 이미지를 올리게 두면 안 된다. 확인한 뒤에야 갤러리가 열린다(안내는 첫 1회).
+   */
+  const onPhotoRecord = () => void confirmPhotoPrivacy(() => void startPhotoRecord());
+
+  const startPhotoRecord = async () => {
+    setPhotoBusy(true);
+    try {
+      const picked = await pickImage();
+      if (!picked) return;
+      const imageUrl = await uploadImage(picked);
+      navigation.navigate('WorkoutRecord', { imageUrl });
+    } catch (e) {
+      toast.error(getErrorMessage(e, '사진을 올리지 못했어요.'));
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
+
   const onLongPress = (w: Workout) => {
     Alert.alert('운동 기록 삭제', `${w.workoutDate} 기록을 삭제할까요?`, [
       { text: '취소', style: 'cancel' },
@@ -271,6 +328,49 @@ export function WorkoutScreen({ navigation }: Props) {
           </View>
         ) : null}
       </View>
+
+      {/*
+        오늘 운동 체크 — <b>가장 느슨한 기록 경로</b>.
+
+        세트·횟수·무게를 요구하면 "오늘 운동했다"는 사실 하나만 남기고 싶은 사람은 아무것도
+        남길 수 없다. 그런데 스트릭·캘린더·커플 카드가 보는 건 세트가 아니라 <b>기록의 존재</b>라,
+        빈 기록만으로도 그 목적은 전부 충족된다. 자세히 남기고 싶으면 아래 버튼들이 그대로 있다.
+
+        이미 오늘 기록이 있으면 버튼 대신 완료 상태를 보여준다 — 같은 날 두 번 눌러 기록이
+        중복되는 걸 막는 가장 단순한 방법이고, 확인 자체가 이 카드의 목적이기도 하다.
+      */}
+      {doneToday ? (
+        <View style={[styles.recoveryCard, styles.checkinDone]}>
+          {/* 서브셋 글리프맵에 있는 아이콘만 쓴다(Icon.tsx 주석) — check-circle 은 목록에 없다 */}
+          <MaterialCommunityIcons name="calendar-check-outline" size={20} color={colors.success} />
+          <Text style={styles.recoveryLabel}>오늘 운동</Text>
+          <Text style={styles.checkinDoneValue}>완료했어요 💪</Text>
+        </View>
+      ) : (
+        <View style={styles.checkinCard}>
+          <Text style={styles.checkinTitle}>오늘 운동했나요?</Text>
+          <View style={styles.checkinRow}>
+            <Button
+              title={checkingIn ? '기록 중…' : '✓ 운동 완료'}
+              size="md"
+              onPress={onQuickCheckIn}
+              loading={checkingIn}
+              style={styles.checkinBtn}
+            />
+            <Button
+              title="📷 사진으로"
+              variant="secondary"
+              size="md"
+              onPress={onPhotoRecord}
+              loading={photoBusy}
+              style={styles.checkinBtn}
+            />
+          </View>
+          <Text style={styles.checkinHint}>
+            자세한 기록 없이 눌러도 돼요. 다른 앱 운동 화면을 찍어 올리면 시간·거리도 채워드려요.
+          </Text>
+        </View>
+      )}
 
       {/* 근육 회복 — 가장 최근에 훈련한 부위·경과시간 요약 카드(MVP: 이 한 줄만, 부위별
           상세 회복률 화면은 다음 단계). 기록이 하나도 없으면(mostRecent=null) 아예 숨긴다 —
@@ -600,6 +700,24 @@ const styles = themedStyles((colors) => ({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
+
+  // 오늘 운동 체크 — 회복/음성 카드와 같은 자리·같은 톤이되, 누르는 카드라 조금 더 큼직하게
+  checkinCard: {
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  checkinTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
+  checkinRow: { flexDirection: 'row', gap: spacing.sm },
+  checkinBtn: { flex: 1 },
+  checkinHint: { fontSize: fontSize.caption, color: colors.textSecondary, lineHeight: 18 },
+  checkinDone: { borderColor: colors.success },
+  checkinDoneValue: { fontSize: fontSize.caption, fontWeight: '800', color: colors.success },
   recoveryLabel: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
   // flexShrink — 회복 카드는 "부위 · N시간 전"처럼 항상 짧지만, 음성 응원 카드는
   // "내가 남긴 응원 3/5 · OO님의 응원을 기다리는 중"처럼 길어질 수 있다. 없으면 좁은

@@ -109,6 +109,16 @@ public class User extends BaseTimeEntity {
     @Column(name = "notify_reminder", nullable = false)
     private boolean notifyReminder = true;
 
+    /**
+     * 음식 사진을 올려 저장하면 백그라운드 AI 가 칼로리를 채울지 (2026-09-09).
+     *
+     * <p><b>기본 켬</b>이다. 이 경로의 존재 이유가 "버튼을 한 번 더 누르지 않는 것"이라
+     * 꺼진 상태가 기본이면 기능 자체가 무의미하다. 대신 끌 수 있게 두는 이유는 이 설정이
+     * 사용자 몫의 AI 한도를 <b>버튼을 누르지 않아도</b> 소모하기 때문이다.
+     */
+    @Column(name = "auto_analyze_meal_photo", nullable = false)
+    private boolean autoAnalyzeMealPhoto = true;
+
     @Builder
     private User(String email, String password, String name, LocalDate birthDate, Gender gender,
                  String profileImageUrl, Role role, SocialType socialType, String socialId) {
@@ -165,6 +175,11 @@ public class User extends BaseTimeEntity {
     /** 푸시 알림 수신 설정 변경 (SET-01). */
     public void setNotificationsEnabled(boolean enabled) {
         this.notificationsEnabled = enabled;
+    }
+
+    /** 음식 사진 자동 분석 켜기/끄기. */
+    public void setAutoAnalyzeMealPhoto(boolean enabled) {
+        this.autoAnalyzeMealPhoto = enabled;
     }
 
     /** 카테고리별 수신 설정 변경 — {@code null} 인 항목은 건드리지 않는다(부분 수정). */

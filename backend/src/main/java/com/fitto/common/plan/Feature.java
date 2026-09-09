@@ -21,10 +21,25 @@ public enum Feature {
      * 체감가치 판매다. 그래서 음식 사진 분석처럼 "이 앱을 왜 쓰는지"를 보여주는 훅은
      * 무료에도 남긴다 — 완전히 막으면 PRO 의 가치를 체험할 길이 없어진다. */
 
-    /** 음식 사진 칼로리 분석 — 신규 유입의 대표 훅. 무료에도 반드시 남긴다. */
-    AI_FOOD_PHOTO("AI 음식 사진 분석", Quota.perDay(2), Quota.perDay(30)),
+    /**
+     * 음식 사진 칼로리 분석 — 신규 유입의 대표 훅. 무료에도 반드시 남긴다.
+     *
+     * <p><b>무료 한도가 텍스트 분석보다 넉넉한 이유</b>(2026-09-09): 사진을 붙여 저장하면
+     * 사용자가 버튼을 누르지 않아도 백그라운드 분석이 돌아간다
+     * ({@code MealPhotoAutoAnalysisService}). 끼니는 하루 3번인데 한도가 2회면 무료
+     * 사용자는 매일 저녁마다 막히고, 그건 "사진만 올리면 기록된다"는 이 앱의 이유를
+     * 하루도 온전히 못 겪는다는 뜻이다. 끼니 수보다 여유 있게 5회를 준다 —
+     * 원가는 flash-lite 라 여전히 무시할 수준이다.
+     */
+    AI_FOOD_PHOTO("AI 음식 사진 분석", Quota.perDay(5), Quota.perDay(30)),
     /** 음식 이름 텍스트 분석 — 사진보다 가벼워 한도도 같이 준다. */
     AI_FOOD_TEXT("AI 음식 분석", Quota.perDay(2), Quota.perDay(30)),
+    /**
+     * 운동 인증샷 분석 — 다른 앱(스트라바·삼성헬스·애플워치)의 완료 화면이나 트레드밀
+     * 사진에서 시간·거리를 읽어 기록을 채운다. 음식 사진과 같은 성격의 훅이라 한도도 같게 둔다:
+     * 막아버리면 "사진만 올리면 기록된다"는 이 앱의 이유를 무료 사용자가 체험할 수 없다.
+     */
+    AI_WORKOUT_PHOTO("AI 운동 사진 분석", Quota.perDay(2), Quota.perDay(30)),
     AI_DIET_COACH("AI 식단 코치", Quota.blocked(), Quota.perDay(10)),
     AI_DATE_COURSE("AI 데이트 코스 추천", Quota.perMonth(1), Quota.perDay(10)),
     /**

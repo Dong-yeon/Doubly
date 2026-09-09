@@ -1,8 +1,9 @@
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { Workout } from '../types';
 import { relativeDateLabel } from '../utils/date';
 import { formatNumber } from '../utils/format';
+import { formatDistanceKm } from '../utils/cardio';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 import { themedStyles } from '../theme/themedStyles';
 import { MaterialCommunityIcons } from './Icon';
@@ -39,6 +40,14 @@ function totalVolumeKg(workout: Workout): number {
   }, 0);
 }
 
+/**
+ * 그날 유산소로 움직인 거리(km) — 볼륨과 같은 자리에 선다.
+ * 유산소만 한 날은 볼륨이 0이라 카드에 숫자가 하나도 없었다("완료" 배지뿐).
+ */
+function totalDistanceKm(workout: Workout): number {
+  return (workout.sets ?? []).reduce((sum, s) => sum + (s.distanceKm ?? 0), 0);
+}
+
 /** 이 기록에 등장한 자극 부위 — 중복 제거, 최대 3개("등, 하체, 어깨" 처럼) */
 function muscleGroupSummary(workout: Workout): string {
   const groups = Array.from(
@@ -51,6 +60,7 @@ function muscleGroupSummary(workout: Workout): string {
 export function WorkoutCard({ workout, onPress, onLongPress }: Props) {
   const setCount = workout.sets?.length ?? 0;
   const volume = totalVolumeKg(workout);
+  const distance = totalDistanceKm(workout);
   const muscleGroups = muscleGroupSummary(workout);
   const firstExercise = workout.sets?.[0]?.exerciseName;
 
@@ -77,6 +87,7 @@ export function WorkoutCard({ workout, onPress, onLongPress }: Props) {
             {volume > 0 ? (
               <Text style={styles.metaText}>· {formatNumber(Math.round(volume))}kg</Text>
             ) : null}
+            {distance > 0 ? <Text style={styles.metaText}>· {formatDistanceKm(distance)}</Text> : null}
           </View>
 
           {muscleGroups ? <Text style={styles.muscleGroups}>{muscleGroups}</Text> : null}
@@ -85,14 +96,24 @@ export function WorkoutCard({ workout, onPress, onLongPress }: Props) {
             <Text style={styles.exerciseSummary}>
               {setCount}개{firstExercise ? ` | ${firstExercise}${setCount > 1 ? ' 외' : ''}` : ''}
             </Text>
-          ) : null}
+          ) : (
+            /* 종목 없이 "오늘 운동 완료"만 남긴 기록 — 빈 줄로 두면 카드가 고장 난 것처럼 보인다 */
+            <Text style={styles.exerciseSummary}>
+              {workout.imageUrl ? '사진으로 남긴 기록' : '운동 완료만 체크했어요'}
+            </Text>
+          )}
 
           {workout.memo ? <Text style={styles.memo}>"{workout.memo}"</Text> : null}
         </View>
 
-        <View style={styles.thumb}>
-          <MaterialCommunityIcons name="dumbbell" size={22} color={colors.textMuted} />
-        </View>
+        {/* 인증샷이 있으면 아령 아이콘 대신 그 사진이 썸네일이 된다 — 목록에서 그날이 바로 떠오른다 */}
+        {workout.imageUrl ? (
+          <Image source={{ uri: workout.imageUrl }} style={styles.thumb} resizeMode="cover" />
+        ) : (
+          <View style={styles.thumb}>
+            <MaterialCommunityIcons name="dumbbell" size={22} color={colors.textMuted} />
+          </View>
+        )}
       </View>
     </TouchableOpacity>
   );

@@ -1,6 +1,6 @@
 /** 화면 상단에 잠깐 떴다 사라지는 토스트 */
 import React, { useEffect, useRef } from 'react';
-import { Animated, Platform, StyleSheet, Text } from 'react-native';
+import { Animated, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useToastStore } from '../store/toastStore';
 import { colors, fontSize, radius, shadow, spacing } from '../constants/theme';
@@ -26,9 +26,13 @@ export function Toast() {
     if (!toast) return;
     anim.setValue(0);
     Animated.spring(anim, { toValue: 1, friction: 7, useNativeDriver: true }).start();
+    /*
+     * 되묻는 토스트는 오래 띄운다 — 2.2초는 읽고 판단해서 손가락을 올리기에 짧다.
+     * 그냥 알리기만 하는 토스트를 같이 늘리면 화면을 가리는 시간만 길어지므로 갈라 둔다.
+     */
     const t = setTimeout(() => {
       Animated.timing(anim, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => hide());
-    }, 2200);
+    }, toast.action ? 5000 : 2200);
     return () => clearTimeout(t);
   }, [toast?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -36,7 +40,12 @@ export function Toast() {
 
   return (
     <Animated.View
-      pointerEvents="none"
+      /*
+       * 되묻기 버튼이 있을 때만 터치를 받는다. box-none 이라 토스트 몸통은 여전히
+       * 통과시키고 버튼만 잡는다 — 알림용 토스트가 화면 상단 터치를 먹던 문제가
+       * 생기지 않는다(원래 none 이었던 이유).
+       */
+      pointerEvents={toast.action ? 'box-none' : 'none'}
       style={[
         styles.wrap,
         /*
@@ -53,7 +62,24 @@ export function Toast() {
         },
       ]}
     >
-      <Text style={styles.text}>{toast.message}</Text>
+      <View style={styles.row}>
+        <Text style={styles.text}>{toast.message}</Text>
+        {toast.action ? (
+          <Pressable
+            onPress={() => {
+              // 먼저 닫는다 — 핸들러가 또 토스트를 띄우는 경우(대부분)에 새 토스트가
+              // 곧바로 덮이지 않도록. 스토어는 슬롯이 하나뿐이다.
+              hide();
+              toast.action?.onPress();
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={toast.action.label}
+            style={({ pressed }) => [styles.action, pressed && styles.actionPressed]}
+          >
+            <Text style={styles.actionText}>{toast.action.label}</Text>
+          </Pressable>
+        ) : null}
+      </View>
     </Animated.View>
   );
 }
@@ -68,5 +94,15 @@ const styles = themedStyles((colors) => ({
     borderRadius: radius.pill,
     zIndex: 999,
   },
-  text: { color: colors.white, fontSize: fontSize.body, fontWeight: '700', textAlign: 'center' },
+  text: { color: colors.white, fontSize: fontSize.body, fontWeight: '700', textAlign: 'center', flexShrink: 1 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  /* 같은 알약 안의 버튼 — 배경이 기능색이라 흰 반투명으로 얹어야 어느 색 위에서도 읽힌다 */
+  action: {
+    paddingVertical: 4,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+  },
+  actionPressed: { backgroundColor: 'rgba(255,255,255,0.38)' },
+  actionText: { color: colors.white, fontSize: fontSize.caption, fontWeight: '800' },
 }));

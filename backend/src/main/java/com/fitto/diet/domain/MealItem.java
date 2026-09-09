@@ -62,4 +62,16 @@ public class MealItem {
     void assignTo(Meal meal) {
         this.meal = meal;
     }
+
+    /**
+     * 내 몫을 절반으로 — 이미 저장된 기록을 뒤늦게 "같이 먹기"로 바꿀 때 쓴다
+     * ({@link Meal#convertToShared}). 저장 시점에 나누는 경로는 요청에서 만든 새 항목을
+     * 나누므로 이 메서드를 쓰지 않는다.
+     */
+    void halve() {
+        this.calories = Meal.half(this.calories);
+        this.carbs = Meal.half(this.carbs);
+        this.protein = Meal.half(this.protein);
+        this.fat = Meal.half(this.fat);
+    }
 }

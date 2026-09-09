@@ -4,6 +4,7 @@ import com.fitto.common.ai.AiJobResponse;
 import com.fitto.common.ai.AiJobService;
 import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
+import com.fitto.workout.dto.AnalyzeWorkoutPhotoRequest;
 import com.fitto.workout.dto.CalendarDayResponse;
 import com.fitto.workout.dto.CoupleWeekResponse;
 import com.fitto.workout.dto.ExerciseHistoryResponse;
@@ -17,6 +18,7 @@ import com.fitto.workout.dto.WorkoutRecommendationResponse;
 import com.fitto.workout.dto.WorkoutResponse;
 import com.fitto.workout.dto.WorkoutStatsResponse;
 import com.fitto.workout.service.MuscleRecoveryService;
+import com.fitto.workout.service.WorkoutPhotoAnalysisService;
 import com.fitto.workout.service.WorkoutRecommendationService;
 import com.fitto.workout.service.WorkoutService;
 import jakarta.validation.Valid;
@@ -44,15 +46,18 @@ public class WorkoutController {
     private final WorkoutService workoutService;
     private final WorkoutRecommendationService recommendationService;
     private final MuscleRecoveryService muscleRecoveryService;
+    private final WorkoutPhotoAnalysisService photoAnalysisService;
     private final AiJobService aiJobService;
 
     public WorkoutController(WorkoutService workoutService,
                              WorkoutRecommendationService recommendationService,
                              MuscleRecoveryService muscleRecoveryService,
+                             WorkoutPhotoAnalysisService photoAnalysisService,
                              AiJobService aiJobService) {
         this.workoutService = workoutService;
         this.recommendationService = recommendationService;
         this.muscleRecoveryService = muscleRecoveryService;
+        this.photoAnalysisService = photoAnalysisService;
         this.aiJobService = aiJobService;
     }
 
@@ -60,6 +65,25 @@ public class WorkoutController {
     public ApiResponse<WorkoutResponse> save(@AuthenticationPrincipal AuthUser user,
                                              @Valid @RequestBody SaveWorkoutRequest request) {
         return ApiResponse.success(workoutService.save(user.id(), request), "운동 기록이 저장되었습니다.");
+    }
+
+    /**
+     * 운동 인증샷 AI 분석 — 다른 앱의 완료 화면·트레드밀 사진에서 시간·거리를 읽는다.
+     *
+     * <p>결과가 아니라 접수증(202 + jobId)을 돌려준다 — 모든 AI 기능이 같은 규칙이다
+     * (음식 사진 분석 주석 참고). 읽은 값은 <b>기록 화면을 채워줄 뿐</b>이고, 저장은
+     * 사용자가 확인한 뒤 기존 POST /workout 으로 한다. 읽지 못해도 사진만 붙여 저장할 수 있다.
+     */
+    @PostMapping("/analyze-photo")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public ApiResponse<AiJobResponse> analyzePhoto(@AuthenticationPrincipal AuthUser user,
+                                                   @Valid @RequestBody AnalyzeWorkoutPhotoRequest request) {
+        Long userId = user.id();
+        String photoUrl = request.photoUrl();
+        return ApiResponse.success(
+                new AiJobResponse(aiJobService.submit(userId, "workout-photo",
+                        () -> photoAnalysisService.analyze(userId, photoUrl))),
+                "AI가 사진을 보고 있어요.");
     }
 
     /**

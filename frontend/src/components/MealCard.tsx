@@ -62,7 +62,17 @@ export function MealCard({ meal, onPress, onLongPress, showDate, deleting, onPla
           ) : null}
         </View>
         <View style={styles.headerRight}>
-          {meal.calories ? <Text style={styles.cal}>{formatKcal(meal.calories)}</Text> : null}
+          {/*
+            사진만 올려 저장해 칼로리가 자동으로 채워진 건은 "약"을 붙인다 — 본인이 적은
+            값이 아니라 추정이라는 걸 배지 같은 별도 장치 없이 숫자 자체로 말한다.
+            수정 화면에서 저장하면 서버가 USER 로 바꾸므로 "약"이 사라진다.
+          */}
+          {meal.calories ? (
+            <Text style={styles.cal}>
+              {meal.nutritionSource === 'AI_ESTIMATED' ? '약 ' : ''}
+              {formatKcal(meal.calories)}
+            </Text>
+          ) : null}
           {showDate ? <Text style={styles.date}>{relativeDateLabel(meal.mealDate)}</Text> : null}
         </View>
       </View>

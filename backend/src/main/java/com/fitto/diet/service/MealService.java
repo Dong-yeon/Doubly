@@ -14,11 +14,14 @@ import com.fitto.diet.domain.Meal;
 import com.fitto.diet.domain.MealItem;
 import com.fitto.diet.domain.NutritionGoal;
 import com.fitto.diet.dto.CoupleMealGoalResponse;
+import com.fitto.diet.dto.FoodLookupRequest;
+import com.fitto.diet.dto.FoodLookupResponse;
 import com.fitto.diet.dto.MealItemRequest;
 import com.fitto.diet.dto.MealResponse;
 import com.fitto.diet.dto.MealStatsResponse;
 import com.fitto.diet.dto.RecentFoodResponse;
 import com.fitto.diet.dto.SaveMealRequest;
+import com.fitto.diet.repository.MealItemRepository;
 import com.fitto.diet.repository.MealRepository;
 import com.fitto.diet.repository.NutritionGoalRepository;
 import com.fitto.place.repository.PlaceVisitRepository;
@@ -64,6 +67,7 @@ public class MealService {
     private static final int[] EMPTY_NUTRITION = new int[6];
 
     private final MealRepository mealRepository;
+    private final MealItemRepository mealItemRepository;
     private final NutritionGoalRepository nutritionGoalRepository;
     private final RelationRepository relationRepository;
     private final UserRepository userRepository;
@@ -73,8 +77,10 @@ public class MealService {
     private final NotificationService notificationService;
     private final PlanGuard planGuard;
     private final PlaceVisitRepository placeVisitRepository;
+    private final MealPhotoAutoAnalysisService autoAnalysisService;
 
     public MealService(MealRepository mealRepository,
+                       MealItemRepository mealItemRepository,
                        NutritionGoalRepository nutritionGoalRepository,
                        RelationRepository relationRepository,
                        UserRepository userRepository,
@@ -83,8 +89,10 @@ public class MealService {
                        CoupleEventPublisher coupleEventPublisher,
                        NotificationService notificationService,
                        PlanGuard planGuard,
-                       PlaceVisitRepository placeVisitRepository) {
+                       PlaceVisitRepository placeVisitRepository,
+                       MealPhotoAutoAnalysisService autoAnalysisService) {
         this.mealRepository = mealRepository;
+        this.mealItemRepository = mealItemRepository;
         this.nutritionGoalRepository = nutritionGoalRepository;
         this.relationRepository = relationRepository;
         this.userRepository = userRepository;
@@ -94,6 +102,7 @@ public class MealService {
         this.notificationService = notificationService;
         this.planGuard = planGuard;
         this.placeVisitRepository = placeVisitRepository;
+        this.autoAnalysisService = autoAnalysisService;
     }
 
     @Transactional
@@ -166,6 +175,14 @@ public class MealService {
         } else {
             afterMealsAdded(userId, meal.getMealDate(), firstMealOfDay, false);
         }
+
+        /*
+         * 사진만 올리고 영양 정보를 비워둔 기록이면 커밋 이후 백그라운드로 분석을 건다.
+         * 여기서는 조건 판정도 하지 않는다 — 대상 여부와 반영 규칙을 한 곳에 모아둬야
+         * 어긋나지 않는다(MealPhotoAutoAnalysisService 참고). 데이트 식단이면 파트너 몫까지
+         * 그쪽에서 함께 채우므로 이 호출 하나로 끝난다.
+         */
+        autoAnalysisService.scheduleIfEligible(userId, meal);
         return MealResponse.from(meal, goals);
     }
 
@@ -220,11 +237,56 @@ public class MealService {
         // 당·나트륨·식이섬유는 항목 단위가 없어 끼니 레벨 요청값이 그대로 진실이다
         // (MealResponse 가 세 값을 내려주므로 수정 화면이 기존 값을 그대로 되돌려 보낸다).
         meal.applyExtraNutrients(req.sugar(), req.sodium(), req.fiber());
+        // 수정 화면을 열어 저장했다는 건 화면에 뜬 값을 본인이 확인했다는 뜻 — "AI 추정" 배지를 걷는다.
+        meal.markNutritionUserOwned();
 
         // 데이트 식단은 커플 양쪽에 짝이 있다 — 한쪽만 고치면 두 기록이 어긋난다.
         syncSharedPair(meal);
 
         publishDietEvent(userId);
+        return MealResponse.from(meal);
+    }
+
+    /**
+     * 이미 저장한 기록을 뒤늦게 "같이 먹기"로 바꾼다 — 홈에서 사진 한 장으로 남긴 뒤
+     * "같이 드셨나요?"에 답하는 경로.
+     *
+     * <p><b>왜 저장 시점에 안 묻나.</b> 홈의 빠른 경로는 존재 이유가 "탭을 최대한 줄이는 것"
+     * 이라, 사진을 고르기 전에 데이트 여부를 묻는 순간 시트가 두 단이 된다. 대신 저장하고
+     * <b>나서</b> 한 번 물어본다 — 안 누르면 그냥 혼자 기록이고 잃는 게 없다.
+     *
+     * <p>저장(save)의 데이트 경로와 결과가 같아야 한다: 내 몫은 절반이 되고, 파트너 명의로
+     * 짝이 생기고, 파트너 스트릭·알림·커플 이벤트가 뒤따른다.
+     */
+    @Transactional
+    public MealResponse share(Long userId, Long mealId) {
+        Meal meal = mealRepository.findById(mealId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        if (!meal.getUserId().equals(userId)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+        if (meal.isSharedMeal()) {
+            // 이미 나눈 기록을 또 나누면 내 몫이 1/4 이 된다 — 두 번 눌렀을 때의 방어.
+            return MealResponse.from(meal);
+        }
+        Relation couple = relationRepository
+                .findByUserAndTypeAndStatus(userId, RelationType.COUPLE, RelationStatus.ACTIVE)
+                .stream().findFirst()
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_INPUT, "연결된 커플이 없어요."));
+        Long partnerId = couple.partnerOf(userId);
+
+        /*
+         * 커플 주간 목표 판정용 — 파트너가 그날 <b>아직</b> 기록이 없었는지를 복제 전에 본다.
+         * 이 전환으로 "그날 둘 다 기록"이 새로 성립하는 경우에만 축하가 나가야 한다
+         * (justAchievedGoal 이 이 값을 그런 뜻으로 쓴다).
+         */
+        boolean newlyQualifiesDate = !mealRepository.existsByUserIdAndMealDate(partnerId, meal.getMealDate());
+
+        meal.convertToShared(UUID.randomUUID().toString());
+        mealRepository.save(meal);
+        mealRepository.save(copyForPartner(meal, partnerId, userId));
+
+        afterSharedMealAdded(couple, userId, partnerId, meal.getMealDate(), newlyQualifiesDate);
         return MealResponse.from(meal);
     }
 
@@ -313,9 +375,9 @@ public class MealService {
                 .build();
     }
 
-    /** 반올림 — 항목/합계 절반화 공통. null 은 null 그대로(입력 안 한 값은 계속 안 한 값). */
+    /** 절반화 규칙은 {@link Meal#half} 한 곳에만 둔다 — 저장 시점 분할과 뒤늦은 전환이 같아야 한다. */
     private Integer half(Integer v) {
-        return v == null ? null : Math.round(v / 2f);
+        return Meal.half(v);
     }
 
     /**
@@ -336,6 +398,10 @@ public class MealService {
                 .sugar(source.getSugar())
                 .sodium(source.getSodium())
                 .fiber(source.getFiber())
+                // 출처도 복사한다 — 저장 시점엔 늘 null 이지만, 사진 분석이 먼저 끝난 뒤
+                // "같이 먹기"로 전환하면 원본이 AI_ESTIMATED 다. 안 옮기면 같은 끼니인데
+                // 한쪽만 "약 400"으로, 다른 쪽은 "400"으로 보인다.
+                .nutritionSource(source.getNutritionSource())
                 .sharedGroupId(source.getSharedGroupId())
                 .createdBy(createdBy)
                 .build();
@@ -515,28 +581,63 @@ public class MealService {
 
     /**
      * 최근 먹은 음식 자동완성 — 즐겨찾기와 달리 <b>따로 저장하지 않아도</b> 최근 기록에서 자동으로
-     * 뽑힌다. 최신 200건을 memo 기준으로 묶어(가장 최근 값을 대표로) 빈도 → 최근순으로 상위 N개.
+     * 뽑힌다. 최근 음식 항목(meal_items) 300건을 이름 기준으로 묶어 빈도 → 최근순으로 상위 N개.
+     *
+     * <p>예전엔 끼니 memo 를 음식 이름으로 썼는데, 항목 구조(V39) 이후 memo 는 "오늘 좀 짰음" 같은
+     * 한마디로 쓰이는 자리라 그게 "최근 먹은 음식"으로 뜨는 게 어색했다. 이제 memo 는 보지 않는다.
+     * 대표값은 같은 이름 중 <b>칼로리가 있는 가장 최근 항목</b> — 탭하면 칼로리가 바로 채워지게.
      */
     public List<RecentFoodResponse> recentFoods(Long userId) {
-        List<Meal> recent = mealRepository.findTop200ByUserIdOrderByCreatedAtDesc(userId);
-        // LinkedHashMap 순회 순서 = 최초 삽입 순서 = createdAt desc 이므로,
-        // 각 memo 의 첫 등장이 가장 최근 기록이다 → 대표값으로 그대로 쓴다.
-        Map<String, Meal> representative = new LinkedHashMap<>();
+        List<MealItem> recent = mealItemRepository.findRecentByUser(userId, PageRequest.of(0, 300));
+        // LinkedHashMap 순회 순서 = 최초 삽입 순서 = 최근순이므로, 이름별 첫 등장이 가장 최근 항목이다
+        Map<String, MealItem> representative = new LinkedHashMap<>();
         Map<String, Integer> counts = new HashMap<>();
-        for (Meal m : recent) {
-            String memo = m.getMemo();
-            if (memo == null || memo.isBlank()) continue;
-            String key = memo.trim();
-            representative.putIfAbsent(key, m);
+        for (MealItem i : recent) {
+            String key = normalizeFoodName(i.getName());
+            if (key.isEmpty()) continue;
             counts.merge(key, 1, Integer::sum);
+            MealItem current = representative.get(key);
+            if (current == null || (current.getCalories() == null && i.getCalories() != null)) {
+                representative.put(key, i);
+            }
         }
         return representative.entrySet().stream()
                 .sorted(Comparator
-                        .<Map.Entry<String, Meal>>comparingInt(e -> counts.get(e.getKey())).reversed()
-                        .thenComparing(e -> e.getValue().getCreatedAt(), Comparator.reverseOrder()))
+                        .<Map.Entry<String, MealItem>>comparingInt(e -> counts.get(e.getKey())).reversed()
+                        .thenComparing(e -> e.getValue().getMeal().getCreatedAt(), Comparator.reverseOrder()))
                 .limit(RECENT_FOODS_LIMIT)
                 .map(e -> RecentFoodResponse.of(e.getValue(), counts.get(e.getKey())))
                 .toList();
+    }
+
+    /**
+     * 내 기록에서 음식 영양 정보 찾기 — 즐겨찾기·추천 칩처럼 칼로리 없이 들어온 음식을, 과거에
+     * 이미 계산해 기록한 값으로 채운다. 이름별로 <b>칼로리가 있는 가장 최근 항목</b> 하나를 돌려주고,
+     * 기록이 없는 이름은 응답에서 빠진다(클라이언트가 그 항목만 AI 로 넘긴다).
+     */
+    public List<FoodLookupResponse> lookupFoods(Long userId, FoodLookupRequest request) {
+        // 요청 이름 → 정규화 키. 같은 키로 여러 이름이 오면(예: "계란"/"계란 ") 각각 돌려준다
+        Map<String, String> keyByRequested = new LinkedHashMap<>();
+        for (String name : request.names()) {
+            if (name == null) continue;
+            String key = normalizeFoodName(name);
+            if (!key.isEmpty()) keyByRequested.putIfAbsent(name, key);
+        }
+        if (keyByRequested.isEmpty()) return List.of();
+
+        Map<String, MealItem> latestByKey = new HashMap<>();
+        for (MealItem i : mealItemRepository.findRecentWithCalories(userId, new HashSet<>(keyByRequested.values()))) {
+            latestByKey.putIfAbsent(normalizeFoodName(i.getName()), i); // 최근순 정렬이라 첫 건이 최신
+        }
+        return keyByRequested.entrySet().stream()
+                .filter(e -> latestByKey.containsKey(e.getValue()))
+                .map(e -> FoodLookupResponse.of(e.getKey(), latestByKey.get(e.getValue())))
+                .toList();
+    }
+
+    /** 음식 이름 비교 키 — trim + 소문자. 저장소 쿼리(lower(name))와 같은 규칙이어야 한다. */
+    static String normalizeFoodName(String name) {
+        return name == null ? "" : name.trim().toLowerCase();
     }
 
     public List<CalendarDayResponse> calendar(Long userId, int year, int month) {

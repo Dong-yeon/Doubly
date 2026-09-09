@@ -25,6 +25,13 @@ export interface SessionSet {
   key?: string;
   weightKg: string;
   reps: string;
+  /*
+   * 유산소 기록 축 — 러닝·트레드밀은 무게·횟수가 아니라 시간(분)·거리(km)로 남긴다.
+   * optional 인 이유는 key 와 같다: 이 필드가 생기기 전에 저장된 초안(최대 하루)을
+   * 되살릴 때는 없을 수 있고, 그때는 빈 문자열로 다룬다.
+   */
+  durationMin?: string;
+  distanceKm?: string;
   done: boolean;
   // 세트 성격 — WARMUP/NORMAL/TOP/BACKOFF/DROP. 루틴에서 지정한 값을 그대로 들고 와 배지로만
   // 보여준다(합계·볼륨 계산에는 안 쓴다 — 백엔드 WorkoutRoutineExerciseSet.setType 주석과 동일 원칙).

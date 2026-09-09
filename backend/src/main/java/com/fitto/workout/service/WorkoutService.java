@@ -11,6 +11,7 @@ import com.fitto.relation.domain.RelationType;
 import com.fitto.relation.repository.RelationRepository;
 import com.fitto.feed.dto.FeedItemType;
 import com.fitto.feed.repository.FeedReactionRepository;
+import com.fitto.common.upload.CloudinaryImageDeleter;
 import com.fitto.streak.service.StreakService;
 import com.fitto.user.repository.UserRepository;
 import com.fitto.workout.domain.Workout;
@@ -64,6 +65,8 @@ public class WorkoutService {
     private final com.fitto.common.event.CoupleEventPublisher coupleEventPublisher;
     private final com.fitto.common.notification.NotificationService notificationService;
     private final FeedReactionRepository feedReactionRepository;
+    /** 기록 삭제 시 인증샷까지 지운다 — DB 행만 지우면 이미지는 URL 로 계속 접근 가능하다 */
+    private final CloudinaryImageDeleter imageDeleter;
 
     public WorkoutService(WorkoutRepository workoutRepository,
                           WorkoutSetRepository workoutSetRepository,
@@ -72,7 +75,8 @@ public class WorkoutService {
                           StreakService streakService,
                           com.fitto.common.event.CoupleEventPublisher coupleEventPublisher,
                           com.fitto.common.notification.NotificationService notificationService,
-                          FeedReactionRepository feedReactionRepository) {
+                          FeedReactionRepository feedReactionRepository,
+                          CloudinaryImageDeleter imageDeleter) {
         this.workoutRepository = workoutRepository;
         this.workoutSetRepository = workoutSetRepository;
         this.relationRepository = relationRepository;
@@ -81,6 +85,7 @@ public class WorkoutService {
         this.coupleEventPublisher = coupleEventPublisher;
         this.notificationService = notificationService;
         this.feedReactionRepository = feedReactionRepository;
+        this.imageDeleter = imageDeleter;
     }
 
     @Transactional
@@ -95,16 +100,19 @@ public class WorkoutService {
                 .totalDurationMin(req.totalDurationMin())
                 .memo(req.memo())
                 .sourceRoutineId(req.sourceRoutineId())
+                .imageUrl(req.imageUrl())
                 .build();
 
         int order = 1;
-        for (var s : req.sets()) {
+        for (var s : req.setsOrEmpty()) {
             WorkoutSet set = WorkoutSet.builder()
                     .exerciseName(s.exerciseName())
                     .category(s.category())
                     .sets(s.sets())
                     .reps(s.reps())
                     .weightKg(s.weightKg())
+                    .durationSec(s.durationSec())
+                    .distanceKm(s.distanceKm())
                     .orderNo(s.orderNo() != null ? s.orderNo() : order)
                     .exerciseCatalogId(s.exerciseCatalogId())
                     .muscleGroup(s.muscleGroup())
@@ -116,6 +124,8 @@ public class WorkoutService {
                             .setNo(entry.setNo())
                             .weightKg(entry.weightKg())
                             .reps(entry.reps())
+                            .durationSec(entry.durationSec())
+                            .distanceKm(entry.distanceKm())
                             .rpe(entry.rpe())
                             .completed(entry.completed())
                             .build());
@@ -279,27 +289,54 @@ public class WorkoutService {
                 sessions.stream().map(ExerciseHistoryResponse.Session::totalVolumeKg)
                         .filter(Objects::nonNull).max(BigDecimal::compareTo).orElse(null),
                 sessions.stream().map(ExerciseHistoryResponse.Session::bestE1rmKg)
+                        .filter(Objects::nonNull).max(BigDecimal::compareTo).orElse(null),
+                sessions.stream().map(ExerciseHistoryResponse.Session::totalDurationSec)
+                        .filter(Objects::nonNull).max(Integer::compareTo).orElse(null),
+                sessions.stream().map(ExerciseHistoryResponse.Session::totalDistanceKm)
                         .filter(Objects::nonNull).max(BigDecimal::compareTo).orElse(null));
     }
 
-    /** 하루치 누적기 — 같은 날의 여러 WorkoutSet 을 한 점으로 모은다. */
+    /**
+     * 하루치 누적기 — 같은 날의 여러 WorkoutSet 을 한 점으로 모은다.
+     *
+     * <p>근력(무게 × 횟수)과 유산소(시간 · 거리)를 <b>같은 누적기에서 각자 모은다</b>.
+     * 종목 하나가 두 축을 동시에 쓰는 일은 없으므로 결과적으로 한쪽만 채워지지만,
+     * 축을 분리해 두면 "러닝은 추이 그래프가 아예 비어 있다"는 문제가 생기지 않는다.
+     */
     private static final class SessionAccumulator {
         private BigDecimal maxWeight;
         private BigDecimal volume = BigDecimal.ZERO;
         private BigDecimal bestE1rm;
         private int setCount;
+        private int durationSec;
+        private BigDecimal distanceKm = BigDecimal.ZERO;
+        private boolean hasCardio;
 
         void add(WorkoutSet set) {
             List<WorkoutSetEntry> entries = set.getEntries().stream()
-                    .filter(e -> e.isCompleted() && e.getWeightKg() != null && e.getReps() != null)
+                    .filter(WorkoutSetEntry::isCompleted)
                     .toList();
             if (entries.isEmpty()) {
-                // entries 가 없는 옛 기록 — 요약 필드로 대신한다(정확도는 떨어지지만 점이 비는 것보단 낫다)
+                // entries 가 없는 옛 기록·직접 입력 — 요약 필드로 대신한다(정확도는 떨어지지만 점이 비는 것보단 낫다)
                 addOne(set.getWeightKg(), set.getReps(), set.getSets() == null ? 1 : set.getSets());
+                addCardio(set.getDurationSec(), set.getDistanceKm());
                 return;
             }
             for (WorkoutSetEntry e : entries) {
                 addOne(e.getWeightKg(), e.getReps(), 1);
+                addCardio(e.getDurationSec(), e.getDistanceKm());
+            }
+        }
+
+        /** 유산소 축 — 시간과 거리는 각각 없을 수 있다(실내 사이클은 거리를 안 재기도 한다) */
+        private void addCardio(Integer sec, BigDecimal km) {
+            if (sec != null && sec > 0) {
+                durationSec += sec;
+                hasCardio = true;
+            }
+            if (km != null && km.signum() > 0) {
+                distanceKm = distanceKm.add(km);
+                hasCardio = true;
             }
         }
 
@@ -316,7 +353,9 @@ public class WorkoutService {
             return new ExerciseHistoryResponse.Session(
                     date, maxWeight,
                     setCount == 0 ? null : volume.setScale(1, RoundingMode.HALF_UP),
-                    bestE1rm, setCount);
+                    bestE1rm, setCount,
+                    hasCardio && durationSec > 0 ? durationSec : null,
+                    hasCardio && distanceKm.signum() > 0 ? distanceKm.setScale(2, RoundingMode.HALF_UP) : null);
         }
     }
 
@@ -378,7 +417,16 @@ public class WorkoutService {
         }
         // 피드 카드에 달린 응원 반응 — 다형 참조라 FK 가 없어 직접 지운다 (V60 주석 참고)
         feedReactionRepository.deleteByTargetTypeAndTargetId(FeedItemType.WORKOUT, workoutId);
+        /*
+         * 인증샷도 함께 지운다 — 행만 지우면 이미지는 URL 로 계속 접근 가능하다.
+         * 운동 인증샷은 지도(달린 경로)가 찍혀 있을 수 있어 더더욱 남겨둘 이유가 없다.
+         * 커밋 이후에 지운다(deleteAllAfterCommit): 외부 호출 실패가 DB 삭제를 되돌리면 안 된다.
+         */
+        String imageUrl = workout.getImageUrl();
         workoutRepository.delete(workout);
+        if (imageUrl != null) {
+            imageDeleter.deleteAllAfterCommit(List.of(imageUrl));
+        }
     }
 
     /** 커플 상대방의 오늘 운동 여부 — 홈 커플 카드용. */

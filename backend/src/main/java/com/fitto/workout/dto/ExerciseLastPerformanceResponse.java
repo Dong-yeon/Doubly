@@ -20,6 +20,10 @@ public record ExerciseLastPerformanceResponse(
         Integer sets,
         Integer reps,
         BigDecimal weightKg,
+        /** 유산소 수행 시간(초) — 러닝·트레드밀은 이 값과 거리로 프리필한다 */
+        Integer durationSec,
+        /** 유산소 이동 거리(km) */
+        BigDecimal distanceKm,
         List<WorkoutSetEntryResponse> entries,
         /** 지금까지의 최고 무게(kg) */
         BigDecimal bestWeightKg,
@@ -28,7 +32,7 @@ public record ExerciseLastPerformanceResponse(
 ) {
     public static ExerciseLastPerformanceResponse of(WorkoutSet s, ExercisePersonalBest best) {
         return new ExerciseLastPerformanceResponse(s.getExerciseName(), s.getWorkout().getWorkoutDate(),
-                s.getSets(), s.getReps(), s.getWeightKg(),
+                s.getSets(), s.getReps(), s.getWeightKg(), s.getDurationSec(), s.getDistanceKm(),
                 s.getEntries().stream().map(WorkoutSetEntryResponse::of).toList(),
                 best == null ? null : best.getMaxWeightKg(),
                 best == null ? null : best.getMaxE1rmKg());

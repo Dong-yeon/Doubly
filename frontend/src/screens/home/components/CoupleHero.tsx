@@ -92,6 +92,7 @@ export function CoupleHero({
         <Column
           person={me}
           color={colors.me}
+          mine
           onPress={() => onPressPerson?.('me')}
           onPressToday={(kind) => onPressToday?.('me', kind)}
         />
@@ -129,11 +130,14 @@ export function CoupleHero({
 function Column({
   person,
   color,
+  mine,
   onPress,
   onPressToday,
 }: {
   person: PersonToday;
   color: string;
+  /** 내 열인지 — 식단 줄이 하는 일이 갈려서(내 열만 기록 시트가 열린다) 안내 문구가 달라진다 */
+  mine?: boolean;
   onPress: () => void;
   onPressToday: (kind: 'workout' | 'meal') => void;
 }) {
@@ -196,6 +200,9 @@ function Column({
           label="식단"
           done={person.mealDone}
           color={color}
+          // 내 열에서는 기록을 남기는 시트가 열린다 — 이미 기록한 날도 마찬가지다
+          // (끼니는 하루 세 번이라 ✓ 가 잠금이 아니다. HomeScreen onPressToday 참고)
+          actionHint={mine ? '한 끼 기록하기' : undefined}
           onPress={() => onPressToday('meal')}
         />
       </View>
@@ -221,12 +228,15 @@ function TodayRow({
   label,
   done,
   color,
+  actionHint,
   onPress,
 }: {
   icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
   label: string;
   done: boolean;
   color: string;
+  /** 누르면 무슨 일이 일어나는지 — 기본은 "그 종류 기록 보기" */
+  actionHint?: string;
   onPress: () => void;
 }) {
   return (
@@ -234,7 +244,7 @@ function TodayRow({
       style={({ pressed }) => [styles.todayRow, done && { backgroundColor: color, borderColor: color }, pressed && styles.todayRowPressed]}
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`오늘 ${label} ${done ? '기록함' : '기록 없음'} — ${label} 기록 보기`}
+      accessibilityLabel={`오늘 ${label} ${done ? '기록함' : '기록 없음'} — ${actionHint ?? `${label} 기록 보기`}`}
     >
       <MaterialCommunityIcons
         name={icon}
