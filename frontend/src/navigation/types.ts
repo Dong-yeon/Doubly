@@ -29,8 +29,12 @@ export type HomeStackParamList = PlaceScreensParamList & {
   FeedCompose: undefined;
   // 데일리 질문 (커플 Q&A)
   DailyQuestion: undefined;
+  // 미니게임 허브 — 협동 스도쿠·오목 선택 (docs/COUPLE_GAMES_DESIGN_2026-09-09.md 5절)
+  MiniGames: undefined;
   // 협동 스도쿠 — 둘이 같은 판을 채운다 (docs/COUPLE_GAMES_DESIGN_2026-09-09.md)
   Sudoku: undefined;
+  // 오목 — 번갈아 두는 5목. 판을 연 사람이 백(후공)
+  Omok: undefined;
   // 커플 캘린더 — 기념일 외 일정·생일·데이트 약속 + D-day 푸시
   CoupleCalendar: undefined;
   // 우리 사진첩 — 피드 사진 전체 모아보기
