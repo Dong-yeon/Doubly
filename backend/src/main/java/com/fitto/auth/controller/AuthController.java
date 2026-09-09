@@ -122,8 +122,8 @@ public class AuthController {
         UserResponse updated = authService.updateMealPhotoAnalysisSetting(user.id(), request.enabled());
         return ApiResponse.success(updated,
                 request.enabled()
-                        ? "사진을 올리면 AI가 칼로리를 채워드릴게요."
-                        : "자동 분석을 껐어요.");
+                        ? "사진을 올리면 칼로리를 채워드릴게요."
+                        : "이제 칼로리는 직접 적어요.");
     }
 
     /** 필수 약관 재동의 — AUTH-09. 개정된 약관에 다시 동의한다(재동의 게이트). */

@@ -60,19 +60,19 @@ export function MealCard({ meal, onPress, onLongPress, showDate, deleting, onPla
               <Text style={styles.dateBadgeText}>🍽️ 데이트</Text>
             </View>
           ) : null}
-          {/*
-            사진만 올려 저장한 뒤 백그라운드 AI 가 채운 값 — 아직 본인이 확인하지 않았다.
-            확인을 강요하지 않는 게 이 경로의 요점이라(2026-09-09) 배지로만 알리고,
-            카드를 눌러 수정 화면에서 저장하면 서버가 USER 로 승격해 배지가 사라진다.
-          */}
-          {meal.nutritionSource === 'AI_ESTIMATED' ? (
-            <View style={styles.aiBadge}>
-              <Text style={styles.aiBadgeText}>AI 추정</Text>
-            </View>
-          ) : null}
         </View>
         <View style={styles.headerRight}>
-          {meal.calories ? <Text style={styles.cal}>{formatKcal(meal.calories)}</Text> : null}
+          {/*
+            사진만 올려 저장해 칼로리가 자동으로 채워진 건은 "약"을 붙인다 — 본인이 적은
+            값이 아니라 추정이라는 걸 배지 같은 별도 장치 없이 숫자 자체로 말한다.
+            수정 화면에서 저장하면 서버가 USER 로 바꾸므로 "약"이 사라진다.
+          */}
+          {meal.calories ? (
+            <Text style={styles.cal}>
+              {meal.nutritionSource === 'AI_ESTIMATED' ? '약 ' : ''}
+              {formatKcal(meal.calories)}
+            </Text>
+          ) : null}
           {showDate ? <Text style={styles.date}>{relativeDateLabel(meal.mealDate)}</Text> : null}
         </View>
       </View>
@@ -149,15 +149,6 @@ const styles = themedStyles((colors) => ({
     backgroundColor: colors.primaryBg,
   },
   dateBadgeText: { fontSize: 10, fontWeight: '800', color: colors.primary },
-  /* 데이트 배지와 나란히 서므로 같은 형태를 쓰되, 강조가 아니라 단서라 색을 낮춘다 */
-  aiBadge: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    borderRadius: radius.pill,
-    // textSecondary 의 대비가 검증된 배경이다(theme/colors.ts 주석 — surfaceAlt 5.92:1)
-    backgroundColor: colors.surfaceAlt,
-  },
-  aiBadgeText: { fontSize: 10, fontWeight: '700', color: colors.textSecondary },
   cal: { fontSize: fontSize.caption, color: colors.accent, fontWeight: '800' },
   date: { fontSize: fontSize.caption, color: colors.textSecondary },
   placeTag: {
