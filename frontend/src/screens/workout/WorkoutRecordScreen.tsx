@@ -1,6 +1,6 @@
 /** 운동 기록 입력 — 설계서 2.4 / WORKOUT-01 (운동 선택·세트·시간) */
 import React, { useCallback, useEffect, useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -26,6 +26,12 @@ import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { toDateString } from '../../utils/date';
 import { buildWorkoutShareCopy } from '../../utils/workoutShare';
+import {
+  formatCardioSummary,
+  isCardio,
+  minutesToSec,
+  secToMinutesInput,
+} from '../../utils/cardio';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 import type { ExerciseCatalogItem } from '../../types';
@@ -40,13 +46,26 @@ interface SetForm {
   sets: string;
   reps: string;
   weightKg: string;
+  /*
+   * 유산소 전용 입력 — 러닝·트레드밀은 세트 × 횟수 × 무게가 아니라 시간·거리로 기록한다.
+   * 근력 칸과 나눠 두면 카테고리를 바꿔도 서로의 값을 덮어쓰지 않는다(잘못 골랐다 되돌릴 때).
+   */
+  durationMin: string;
+  distanceKm: string;
   // 카탈로그에서 골랐을 때만 채워짐 — 자유 입력이면 전부 undefined
   exerciseCatalogId?: number;
   muscleGroup?: string;
   equipment?: string;
 }
 
-const emptySet = (): SetForm => ({ exerciseName: '', sets: '', reps: '', weightKg: '' });
+const emptySet = (): SetForm => ({
+  exerciseName: '',
+  sets: '',
+  reps: '',
+  weightKg: '',
+  durationMin: '',
+  distanceKm: '',
+});
 
 // 자주 하는 운동 — 빠른 선택
 const PRESETS: { name: string; category: string }[] = [
@@ -107,11 +126,73 @@ export function WorkoutRecordScreen({ navigation, route }: Props) {
   const [memo, setMemo] = useState('');
   const [saving, setSaving] = useState(false);
 
+  /*
+   * 운동 인증샷 — 운동 홈의 "📷 사진으로"가 업로드까지 마치고 URL 로 넘겨준다.
+   * 이 화면은 (1) 사진을 AI 로 읽어 칸을 채우고 (2) 저장 시 사진을 기록에 붙인다.
+   * 둘은 독립이다 — 읽기에 실패해도 사진이 붙은 기록은 그대로 남길 수 있어야 한다.
+   */
+  const imageUrl = route.params?.imageUrl;
+  /*
+   * 사진을 들고 들어왔으면 <b>처음부터</b> 분석 중 상태로 시작한다 — effect 안에서 동기로
+   * 켜면 렌더가 한 번 더 돌고(cascading render), 그 한 프레임 동안 "이 사진이 저장돼요"가
+   * 잠깐 떴다가 "읽고 있어요"로 바뀌어 깜빡인다. (ExerciseHistoryScreen 의 loading 과 같은 규칙)
+   */
+  const [analyzing, setAnalyzing] = useState(!!route.params?.imageUrl);
+  /** 사진에서 무엇을 읽었는지 — 사용자가 "이 값이 어디서 왔는지" 알 수 있게 남긴다 */
+  const [photoSource, setPhotoSource] = useState<string | null>(null);
+
+  /*
+   * 사진 분석은 화면에 들어오자마자 <b>자동으로</b> 한 번 돈다 — 사용자는 이미 "사진으로
+   * 기록하겠다"고 눌러서 들어왔으므로 여기서 버튼을 한 번 더 누르게 할 이유가 없다.
+   * 읽은 값은 칸을 채우기만 하고 저장하지 않는다(확정은 아래 "완료!" 버튼).
+   */
+  useEffect(() => {
+    if (!imageUrl) return;
+    let cancelled = false;
+    workoutApi
+      .analyzePhoto(imageUrl)
+      .then((result) => {
+        if (cancelled) return;
+        if (!result.isWorkout) {
+          toast.info('사진에서 운동 기록을 못 찾았어요. 사진만 남기거나 직접 입력해주세요.');
+          return;
+        }
+        setPhotoSource(result.sourceApp ?? null);
+        if (result.durationMin) setDuration(String(result.durationMin));
+        setSets((prev) => {
+          const next = [...prev];
+          const target = next[0] ?? emptySet();
+          next[0] = {
+            ...target,
+            exerciseName: result.exerciseName ?? target.exerciseName,
+            category: result.category ?? target.category,
+            durationMin: result.durationMin != null ? String(result.durationMin) : target.durationMin,
+            distanceKm: result.distanceKm != null ? String(result.distanceKm) : target.distanceKm,
+          };
+          return next;
+        });
+        haptics.success();
+        toast.success(result.comment?.trim() || '사진을 읽었어요! 확인하고 저장해주세요.');
+      })
+      .catch((e) => {
+        if (!cancelled) toast.error(getErrorMessage(e, '사진을 읽지 못했어요. 직접 입력해주세요.'));
+      })
+      .finally(() => {
+        if (!cancelled) setAnalyzing(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [imageUrl]);
+
   // 입력이 하나라도 있으면 이탈(뒤로가기·스와이프) 전에 확인한다
   const dirty =
     duration.trim().length > 0 ||
     memo.trim().length > 0 ||
-    sets.some((s) => s.exerciseName.trim() || s.sets || s.reps || s.weightKg);
+    sets.some(
+      (s) =>
+        s.exerciseName.trim() || s.sets || s.reps || s.weightKg || s.durationMin || s.distanceKm,
+    );
   const allowLeave = useDirtyGuard(dirty);
 
   const updateSet = (idx: number, patch: Partial<SetForm>) => {
@@ -175,6 +256,10 @@ export function WorkoutRecordScreen({ navigation, route }: Props) {
       sets: last.sets != null ? String(last.sets) : '',
       reps: last.reps != null ? String(last.reps) : '',
       weightKg: last.weightKg != null ? String(last.weightKg) : '',
+      // 유산소면 시간·거리가 지난 기록의 알맹이다 — 근력 칸과 함께 채워도 화면에는
+      // 카테고리에 맞는 쪽만 보인다(둘 중 하나는 어차피 비어 있다)
+      durationMin: secToMinutesInput(last.durationSec),
+      distanceKm: last.distanceKm != null ? String(last.distanceKm) : '',
       category: last.category ?? undefined,
     });
     haptics.light();
@@ -200,7 +285,12 @@ export function WorkoutRecordScreen({ navigation, route }: Props) {
 
   const onSave = async () => {
     const filled = sets.filter((s) => s.exerciseName.trim().length > 0);
-    if (filled.length === 0) {
+    /*
+     * 사진이 있으면 종목이 비어도 저장한다 — 사진 자체가 "오늘 운동했다"는 증거이고,
+     * AI 가 종목을 못 읽었다는 이유로 기록을 통째로 막으면 사진을 올린 의미가 없어진다.
+     * (사진도 종목도 없으면 남길 게 정말 아무것도 없으므로 그때만 붙잡는다.)
+     */
+    if (filled.length === 0 && !imageUrl) {
       Alert.alert('알림', '운동명을 최소 1개 입력해주세요.');
       return;
     }
@@ -210,12 +300,17 @@ export function WorkoutRecordScreen({ navigation, route }: Props) {
         workoutDate,
         totalDurationMin: duration ? Number(duration) : undefined,
         memo: memo.trim() || undefined,
+        imageUrl,
         sets: filled.map((s, i) => ({
           exerciseName: s.exerciseName.trim(),
           category: s.category ?? null,
-          sets: s.sets ? Number(s.sets) : null,
-          reps: s.reps ? Number(s.reps) : null,
-          weightKg: s.weightKg ? Number(s.weightKg) : null,
+          // 유산소는 세트·횟수·무게를 아예 보내지 않는다 — 칸이 화면에 없었으므로
+          // 남아 있던 값이 있더라도 그건 카테고리를 바꾸기 전의 흔적이다
+          sets: isCardio(s.category) ? null : s.sets ? Number(s.sets) : null,
+          reps: isCardio(s.category) ? null : s.reps ? Number(s.reps) : null,
+          weightKg: isCardio(s.category) ? null : s.weightKg ? Number(s.weightKg) : null,
+          durationSec: isCardio(s.category) ? minutesToSec(s.durationMin) ?? null : null,
+          distanceKm: isCardio(s.category) && s.distanceKm ? Number(s.distanceKm) : null,
           orderNo: i + 1,
           exerciseCatalogId: s.exerciseCatalogId ?? undefined,
           muscleGroup: s.muscleGroup ?? undefined,
@@ -285,6 +380,23 @@ export function WorkoutRecordScreen({ navigation, route }: Props) {
             pickerTitle="언제 한 운동인가요?"
           />
 
+          {/*
+            인증샷 — 올린 사진을 그대로 보여준다. AI 가 읽는 동안에도 사진은 이미 붙어 있어서,
+            분석이 실패하거나 오래 걸려도 "저장하면 이 사진이 남는다"는 게 눈에 보인다.
+          */}
+          {imageUrl ? (
+            <View style={styles.photoCard}>
+              <Image source={{ uri: imageUrl }} style={styles.photo} resizeMode="cover" />
+              <Text style={styles.photoHint}>
+                {analyzing
+                  ? 'AI가 사진을 읽고 있어요…'
+                  : photoSource
+                    ? `${photoSource} 화면에서 읽었어요 · 값을 확인하고 저장해주세요`
+                    : '이 사진이 기록에 함께 저장돼요'}
+              </Text>
+            </View>
+          ) : null}
+
           <Text style={styles.presetLabel}>자주 하는 운동</Text>
           <View style={styles.presetRow}>
             {PRESETS.map((p) => (
@@ -339,13 +451,16 @@ export function WorkoutRecordScreen({ navigation, route }: Props) {
               {(() => {
                 const last = lastSetOf(s.exerciseName);
                 if (!last) return null;
-                const summary = [
-                  last.sets != null ? `${last.sets}세트` : null,
-                  last.reps != null ? `${last.reps}회` : null,
-                  last.weightKg != null ? `${last.weightKg}kg` : null,
-                ]
-                  .filter(Boolean)
-                  .join(' · ');
+                const summary = isCardio(last.category)
+                  ? formatCardioSummary(last.durationSec, last.distanceKm)
+                  : [
+                      last.sets != null ? `${last.sets}세트` : null,
+                      last.reps != null ? `${last.reps}회` : null,
+                      last.weightKg != null ? `${last.weightKg}kg` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ');
+                if (!summary) return null;
                 return (
                   <TouchableOpacity
                     style={styles.lastHint}
@@ -373,29 +488,66 @@ export function WorkoutRecordScreen({ navigation, route }: Props) {
               {/*
                 +/- 로 조정한다 — 회차 간 변화폭이 작아 타이핑보다 훨씬 빠르다.
                 무게는 원판 단위(2.5kg)로 움직인다.
+
+                유산소(러닝·트레드밀…)는 칸 자체가 다르다 — 세트·횟수·무게 대신 시간·거리다.
+                "3세트 10회 러닝"은 아무 정보도 아니라, 칸을 바꾸지 않으면 기록할 방법이 없었다.
               */}
-              <View style={styles.row}>
-                <NumberStepper
-                  label="세트"
-                  placeholder="3"
-                  value={s.sets}
-                  onChange={(v) => updateSet(idx, { sets: v })}
-                />
-                <NumberStepper
-                  label="횟수"
-                  placeholder="10"
-                  value={s.reps}
-                  onChange={(v) => updateSet(idx, { reps: v })}
-                />
-                <NumberStepper
-                  label="무게(kg)"
-                  placeholder="40"
-                  value={s.weightKg}
-                  onChange={(v) => updateSet(idx, { weightKg: v })}
-                  step={2.5}
-                  decimal
-                />
-              </View>
+              {isCardio(s.category) ? (
+                <>
+                  <View style={styles.row}>
+                    <NumberStepper
+                      label="시간(분)"
+                      placeholder="30"
+                      value={s.durationMin}
+                      onChange={(v) => updateSet(idx, { durationMin: v })}
+                      step={5}
+                    />
+                    <NumberStepper
+                      label="거리(km)"
+                      placeholder="5"
+                      value={s.distanceKm}
+                      onChange={(v) => updateSet(idx, { distanceKm: v })}
+                      step={0.5}
+                      decimal
+                    />
+                  </View>
+                  {/* 페이스는 입력받지 않고 두 값에서 계산해 보여준다 — 러너가 실제로 보는 숫자 */}
+                  {formatCardioSummary(
+                    minutesToSec(s.durationMin),
+                    s.distanceKm ? Number(s.distanceKm) : null,
+                  ) ? (
+                    <Text style={styles.cardioSummary}>
+                      {formatCardioSummary(
+                        minutesToSec(s.durationMin),
+                        s.distanceKm ? Number(s.distanceKm) : null,
+                      )}
+                    </Text>
+                  ) : null}
+                </>
+              ) : (
+                <View style={styles.row}>
+                  <NumberStepper
+                    label="세트"
+                    placeholder="3"
+                    value={s.sets}
+                    onChange={(v) => updateSet(idx, { sets: v })}
+                  />
+                  <NumberStepper
+                    label="횟수"
+                    placeholder="10"
+                    value={s.reps}
+                    onChange={(v) => updateSet(idx, { reps: v })}
+                  />
+                  <NumberStepper
+                    label="무게(kg)"
+                    placeholder="40"
+                    value={s.weightKg}
+                    onChange={(v) => updateSet(idx, { weightKg: v })}
+                    step={2.5}
+                    decimal
+                  />
+                </View>
+              )}
             </View>
           ))}
 
@@ -438,6 +590,21 @@ const styles = themedStyles((colors) => ({
   container: { padding: spacing.lg, paddingBottom: spacing.xl },
   date: { fontSize: fontSize.subtitle, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.md },
   presetLabel: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700', marginBottom: spacing.sm },
+  photoCard: {
+    marginBottom: spacing.lg,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+    backgroundColor: colors.surface,
+  },
+  photo: { width: '100%', height: 200, backgroundColor: colors.surfaceAlt },
+  photoHint: {
+    fontSize: fontSize.caption,
+    color: colors.textSecondary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
   presetRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.lg },
   presetChip: {
     paddingHorizontal: spacing.md,
@@ -485,6 +652,12 @@ const styles = themedStyles((colors) => ({
   catText: { color: colors.textSecondary, fontSize: fontSize.caption },
   catTextActive: { color: colors.primary, fontWeight: '700' },
   row: { flexDirection: 'row', gap: spacing.sm },
+  cardioSummary: {
+    marginTop: spacing.xs,
+    fontSize: fontSize.caption,
+    color: colors.primary,
+    fontWeight: '700',
+  },
   lastHint: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -52,6 +52,14 @@ public class UserDataPurger {
         imageUrls.addAll(selectStrings(
                 "select m.photo_url from meals m "
                         + "where m.user_id = :uid and m.photo_url is not null", userId));
+        /*
+         * 운동 인증샷(V84) — 다른 앱의 완료 화면 캡처가 대부분이라 <b>지도(달린 경로)가 함께
+         * 찍혀 있을 수 있다</b>. 즉 집 근처 경로가 그대로 담긴 이미지다. DB 행만 지우고 파일을
+         * 남기면 URL 을 아는 사람은 탈퇴 후에도 계속 볼 수 있으므로, 여기서 반드시 거둔다.
+         */
+        imageUrls.addAll(selectStrings(
+                "select w.image_url from workouts w "
+                        + "where w.user_id = :uid and w.image_url is not null", userId));
 
         /*
          * 내가 남긴 피드 반응 — feed_reactions.user_id 가 users 를 참조한다.

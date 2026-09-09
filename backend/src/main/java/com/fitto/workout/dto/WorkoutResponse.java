@@ -16,6 +16,8 @@ public record WorkoutResponse(
         Integer totalDurationMin,
         String memo,
         Long sourceRoutineId,
+        /** 운동 인증샷 — 없으면 null. 상세·카드·피드가 같은 값을 쓴다 */
+        String imageUrl,
         List<SetResponse> sets,
         List<PrHighlight> prs,
         LocalDateTime createdAt
@@ -27,6 +29,10 @@ public record WorkoutResponse(
             Integer sets,
             Integer reps,
             BigDecimal weightKg,
+            /** 유산소 수행 시간(초) — 근력 종목은 null */
+            Integer durationSec,
+            /** 유산소 이동 거리(km) — 근력 종목은 null */
+            BigDecimal distanceKm,
             Integer orderNo,
             Long exerciseCatalogId,
             String muscleGroup,
@@ -35,7 +41,8 @@ public record WorkoutResponse(
     ) {
         static SetResponse from(WorkoutSet s) {
             return new SetResponse(s.getId(), s.getExerciseName(), s.getCategory(),
-                    s.getSets(), s.getReps(), s.getWeightKg(), s.getOrderNo(),
+                    s.getSets(), s.getReps(), s.getWeightKg(),
+                    s.getDurationSec(), s.getDistanceKm(), s.getOrderNo(),
                     s.getExerciseCatalogId(), s.getMuscleGroup(), s.getEquipment(),
                     s.getEntries().stream().map(WorkoutSetEntryResponse::of).toList());
         }
@@ -62,6 +69,7 @@ public record WorkoutResponse(
     public static WorkoutResponse from(Workout w, List<PrHighlight> prs) {
         List<SetResponse> sets = w.getSets().stream().map(SetResponse::from).toList();
         return new WorkoutResponse(w.getId(), w.getRelationId(), w.getWorkoutDate(),
-                w.getTotalDurationMin(), w.getMemo(), w.getSourceRoutineId(), sets, prs, w.getCreatedAt());
+                w.getTotalDurationMin(), w.getMemo(), w.getSourceRoutineId(), w.getImageUrl(),
+                sets, prs, w.getCreatedAt());
     }
 }

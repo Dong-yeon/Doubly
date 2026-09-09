@@ -14,6 +14,10 @@ public record WorkoutSetRequest(
         Integer sets,
         Integer reps,
         BigDecimal weightKg,
+        /** 유산소 수행 시간(초) — 러닝·트레드밀은 세트가 아니라 시간·거리로 기록한다 */
+        Integer durationSec,
+        /** 유산소 이동 거리(km) */
+        BigDecimal distanceKm,
         Integer orderNo,
         /** 종목 카탈로그에서 골랐다면 그 id — 자유 입력 시 null */
         Long exerciseCatalogId,
@@ -26,6 +30,14 @@ public record WorkoutSetRequest(
     /** 카탈로그/세트별 기록 없이 종목 단위 값만 넘기던 이전 호출부와의 호환용 */
     public WorkoutSetRequest(String exerciseName, String category, Integer sets, Integer reps,
                              BigDecimal weightKg, Integer orderNo) {
-        this(exerciseName, category, sets, reps, weightKg, orderNo, null, null, null, null);
+        this(exerciseName, category, sets, reps, weightKg, null, null, orderNo, null, null, null, null);
+    }
+
+    /** 유산소 축(시간·거리)이 생기기 전 호출부 — 근력 종목만 다루던 시절의 전체 인자 형태 */
+    public WorkoutSetRequest(String exerciseName, String category, Integer sets, Integer reps,
+                             BigDecimal weightKg, Integer orderNo, Long exerciseCatalogId,
+                             String muscleGroup, String equipment, List<WorkoutSetEntryRequest> entries) {
+        this(exerciseName, category, sets, reps, weightKg, null, null, orderNo,
+                exerciseCatalogId, muscleGroup, equipment, entries);
     }
 }

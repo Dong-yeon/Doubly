@@ -59,6 +59,15 @@ public class Workout {
     @Column(name = "source_routine_id")
     private Long sourceRoutineId;
 
+    /**
+     * 운동 인증샷 — 다른 앱(스트라바·삼성헬스·애플워치)의 완료 화면이나 트레드밀 사진.
+     *
+     * <p>AI 가 이 사진에서 시간·거리를 읽어 기록을 채워주지만, <b>읽지 못해도 사진은 남는다</b> —
+     * "오늘 운동했다"는 증거로는 그것으로 충분하고, 세트가 하나도 없는 기록도 유효하다.
+     */
+    @Column(name = "image_url", length = 500)
+    private String imageUrl;
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -69,13 +78,14 @@ public class Workout {
 
     @Builder
     private Workout(Long userId, Long relationId, LocalDate workoutDate,
-                    Integer totalDurationMin, String memo, Long sourceRoutineId) {
+                    Integer totalDurationMin, String memo, Long sourceRoutineId, String imageUrl) {
         this.userId = userId;
         this.relationId = relationId;
         this.workoutDate = workoutDate;
         this.totalDurationMin = totalDurationMin;
         this.memo = memo;
         this.sourceRoutineId = sourceRoutineId;
+        this.imageUrl = imageUrl;
     }
 
     public void addSet(WorkoutSet set) {

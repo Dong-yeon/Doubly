@@ -50,6 +50,10 @@ public record RoutineResponse(
             Integer targetSets,
             Integer reps,
             BigDecimal weightKg,
+            /** 유산소 목표 시간(분) — 채워져 있으면 세션이 세트 대신 시간·거리로 기록한다 */
+            Integer targetDurationMin,
+            /** 유산소 목표 거리(km) */
+            BigDecimal targetDistanceKm,
             Long exerciseCatalogId,
             String muscleGroup,
             String equipment,
@@ -60,7 +64,8 @@ public record RoutineResponse(
     ) {
         static Exercise of(WorkoutRoutineExercise e) {
             return new Exercise(e.getExerciseName(), e.getCategory(), e.getTargetSets(),
-                    e.getReps(), e.getWeightKg(), e.getExerciseCatalogId(),
+                    e.getReps(), e.getWeightKg(),
+                    e.getTargetDurationMin(), e.getTargetDistanceKm(), e.getExerciseCatalogId(),
                     e.getMuscleGroup(), e.getEquipment(), e.getRestSeconds(),
                     e.getAlternatives().stream().map(Alternative::of).toList(),
                     e.getSets().stream().map(SetSummary::of).toList());

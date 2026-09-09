@@ -26,6 +26,8 @@ export type Plan = 'FREE' | 'PRO';
 export type FeatureKey =
   | 'AI_FOOD_PHOTO'
   | 'AI_FOOD_TEXT'
+  /** 운동 인증샷 분석 — 다른 앱의 완료 화면을 읽어 기록을 채운다 */
+  | 'AI_WORKOUT_PHOTO'
   | 'AI_DIET_COACH'
   | 'AI_DATE_COURSE'
   | 'AI_RESTAURANT_RECOMMEND'
@@ -193,12 +195,19 @@ export interface TrainerProfile {
 }
 
 // 5.5 / 5.6 workouts
-/** 세트 1회 실제 수행 기록 — 무게/횟수/완료 여부. 종목당 여러 개(세트 수만큼) 존재 */
+/**
+ * 세트 1회 실제 수행 기록 — 완료 여부와 함께, 근력은 무게·횟수를, 유산소는 시간·거리를 담는다.
+ * 근력은 종목당 여러 개(세트 수만큼), 유산소는 보통 한 개(setNo=1)다.
+ */
 export interface WorkoutSetEntry {
   id?: number;
   setNo: number;
   weightKg?: number | null;
   reps?: number | null;
+  /** 유산소 수행 시간(초) — 러닝·트레드밀은 세트가 아니라 시간·거리로 기록한다 */
+  durationSec?: number | null;
+  /** 유산소 이동 거리(km) */
+  distanceKm?: number | null;
   // 자각 강도(RPE) — 1.0~10.0, 보통 0.5 단위. 세트를 몇 회 더 할 수 있었는지의 체감치
   rpe?: number | null;
   completed: boolean;
@@ -211,6 +220,10 @@ export interface WorkoutSet {
   sets?: number | null;
   reps?: number | null;
   weightKg?: number | null;
+  /** 유산소 수행 시간(초) — 근력 종목은 없음 */
+  durationSec?: number | null;
+  /** 유산소 이동 거리(km) — 근력 종목은 없음 */
+  distanceKm?: number | null;
   orderNo: number;
   /** 종목 카탈로그에서 골랐다면 그 id — 자유 입력 시 없음 */
   exerciseCatalogId?: number | null;
@@ -237,6 +250,9 @@ export interface Workout {
   memo?: string | null;
   /** 이 기록이 시작된 내 루틴 템플릿 id — 스마트 루틴 동기화(Save-on-Finish)의 전제 */
   sourceRoutineId?: number | null;
+  /** 운동 인증샷 — 다른 앱 완료 화면·트레드밀 사진. 사진만 있는 기록도 유효하다 */
+  imageUrl?: string | null;
+  /** 종목 목록 — 비어 있을 수 있다("오늘 운동 완료"만 남긴 기록) */
   sets: WorkoutSet[];
   prs?: WorkoutPrHighlight[];
 }
@@ -268,6 +284,10 @@ export interface ExerciseLastPerformance {
   sets?: number | null;
   reps?: number | null;
   weightKg?: number | null;
+  /** 유산소 수행 시간(초) — 러닝·트레드밀 프리필의 기준 */
+  durationSec?: number | null;
+  /** 유산소 이동 거리(km) */
+  distanceKm?: number | null;
   entries: WorkoutSetEntry[];
   /** 지금까지의 최고 무게(kg) — 세션 중 신기록 판정 기준. 처음 하는 종목이면 없다 */
   bestWeightKg?: number | null;
@@ -284,6 +304,9 @@ export interface ExerciseHistory {
     maxWeightKg?: number | null;
     maxVolumeKg?: number | null;
     maxE1rmKg?: number | null;
+    /** 유산소 종목의 최고 기록 — 한 번에 가장 오래 / 가장 멀리 */
+    maxDurationSec?: number | null;
+    maxDistanceKm?: number | null;
   };
 }
 
@@ -293,6 +316,9 @@ export interface ExerciseHistorySession {
   totalVolumeKg?: number | null;
   bestE1rmKg?: number | null;
   totalSets: number;
+  /** 그날 유산소로 움직인 시간(초)·거리(km) — 근력 종목은 없음 */
+  totalDurationSec?: number | null;
+  totalDistanceKm?: number | null;
 }
 
 // 캘린더 응답 (4.4 GET /workout/calendar)
@@ -484,6 +510,10 @@ export interface RoutineExercise {
   targetSets?: number | null;
   reps?: number | null;
   weightKg?: number | null;
+  /** 유산소 목표 시간(분) — 있으면 세션이 세트 대신 시간·거리로 기록한다 */
+  targetDurationMin?: number | null;
+  /** 유산소 목표 거리(km) */
+  targetDistanceKm?: number | null;
   exerciseCatalogId?: number | null;
   muscleGroup?: string | null;
   equipment?: string | null;
@@ -754,6 +784,24 @@ export interface MealAnalysis {
   totalFiber: number;
   comment?: string | null;
   source?: MealAnalysisSource | null;
+}
+
+/**
+ * 운동 인증샷 분석 결과 (POST /workout/analyze-photo) — 전부 추정치다.
+ * 기록 화면의 칸을 채워줄 뿐이고 저장은 사용자가 확인한 뒤 한다.
+ */
+export interface WorkoutPhotoAnalysis {
+  isWorkout: boolean;
+  exerciseName?: string | null;
+  /** 근력 / 유산소 / 유연성 — 앱의 카테고리 칩과 같은 값 */
+  category?: string | null;
+  durationMin?: number | null;
+  distanceKm?: number | null;
+  /** 참고용 — 앱마다 추정 공식이 달라 기록에는 저장하지 않는다 */
+  calories?: number | null;
+  /** 무엇을 읽었는지("스트라바", "트레드밀 계기판") — 사용자에게 그대로 보여준다 */
+  sourceApp?: string | null;
+  comment?: string | null;
 }
 
 // 최근 먹은 음식 자동완성 (GET /meal/recent-foods) — 즐겨찾기와 달리 저장 없이 자동으로 뽑힌다

@@ -203,6 +203,10 @@ public class WorkoutRoutineService {
                     .targetSets(e.getTargetSets())
                     .reps(e.getReps())
                     .weightKg(null)
+                    // 유산소 목표(시간·거리)는 그대로 복사한다 — 무게와 달리 "30분 러닝"은
+                    // 개인차보다 루틴의 성격 자체라, 빼면 그 종목이 무엇을 하라는 건지 사라진다.
+                    .targetDurationMin(e.getTargetDurationMin())
+                    .targetDistanceKm(e.getTargetDistanceKm())
                     .orderNo(e.getOrderNo())
                     .exerciseCatalogId(e.getExerciseCatalogId())
                     .muscleGroup(e.getMuscleGroup())
@@ -301,6 +305,8 @@ public class WorkoutRoutineService {
                 .targetSets(e.targetSets())
                 .reps(e.reps())
                 .weightKg(e.weightKg())
+                .targetDurationMin(e.targetDurationMin())
+                .targetDistanceKm(e.targetDistanceKm())
                 .orderNo(order)
                 .exerciseCatalogId(resolved != null ? resolved.getId() : e.exerciseCatalogId())
                 .muscleGroup(resolved != null ? resolved.getMuscleGroup() : e.muscleGroup())

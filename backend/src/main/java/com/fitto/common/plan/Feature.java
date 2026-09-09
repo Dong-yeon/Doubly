@@ -25,6 +25,12 @@ public enum Feature {
     AI_FOOD_PHOTO("AI 음식 사진 분석", Quota.perDay(2), Quota.perDay(30)),
     /** 음식 이름 텍스트 분석 — 사진보다 가벼워 한도도 같이 준다. */
     AI_FOOD_TEXT("AI 음식 분석", Quota.perDay(2), Quota.perDay(30)),
+    /**
+     * 운동 인증샷 분석 — 다른 앱(스트라바·삼성헬스·애플워치)의 완료 화면이나 트레드밀
+     * 사진에서 시간·거리를 읽어 기록을 채운다. 음식 사진과 같은 성격의 훅이라 한도도 같게 둔다:
+     * 막아버리면 "사진만 올리면 기록된다"는 이 앱의 이유를 무료 사용자가 체험할 수 없다.
+     */
+    AI_WORKOUT_PHOTO("AI 운동 사진 분석", Quota.perDay(2), Quota.perDay(30)),
     AI_DIET_COACH("AI 식단 코치", Quota.blocked(), Quota.perDay(10)),
     AI_DATE_COURSE("AI 데이트 코스 추천", Quota.perMonth(1), Quota.perDay(10)),
     /**

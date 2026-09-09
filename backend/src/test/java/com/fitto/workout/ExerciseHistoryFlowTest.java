@@ -31,6 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ExerciseHistoryFlowTest {
 
     private static final String BENCH = "벤치프레스";
+    private static final String RUN = "러닝";
 
     @Autowired
     AuthService authService;
@@ -54,6 +55,26 @@ class ExerciseHistoryFlowTest {
         workoutService.save(userId, new SaveWorkoutRequest(date, null, 40, null,
                 List.of(new WorkoutSetRequest(BENCH, "근력", weightAndReps.length, last[1],
                         BigDecimal.valueOf(last[0]), 1, null, "가슴", null, entries))));
+    }
+
+    /**
+     * 유산소 한 번을 구간별로 저장한다 — {@code secondsAndMeters} 한 줄이 한 구간(초, m).
+     * 종목 단위 값은 구간 <b>합계</b>다(세션 화면이 저장하는 모양 그대로).
+     */
+    private void logRun(Long userId, LocalDate date, int[][] secondsAndMeters) {
+        List<WorkoutSetEntryRequest> entries = new java.util.ArrayList<>();
+        int totalSec = 0;
+        BigDecimal totalKm = BigDecimal.ZERO;
+        for (int i = 0; i < secondsAndMeters.length; i++) {
+            int sec = secondsAndMeters[i][0];
+            BigDecimal km = BigDecimal.valueOf(secondsAndMeters[i][1], 2); // m → km (소수 둘째 자리)
+            entries.add(new WorkoutSetEntryRequest(i + 1, null, null, sec, km, null, true));
+            totalSec += sec;
+            totalKm = totalKm.add(km);
+        }
+        workoutService.save(userId, new SaveWorkoutRequest(date, null, totalSec / 60, null,
+                List.of(new WorkoutSetRequest(RUN, "유산소", null, null, null, totalSec, totalKm,
+                        1, null, "전신", "맨몸", entries))));
     }
 
     @Test
@@ -138,6 +159,45 @@ class ExerciseHistoryFlowTest {
         // 80 × (1 + 5/30) ≈ 93.33 — 소수 자리는 DB 산술에 맡기므로 근사로 본다
         assertThat(result.get(0).bestE1rmKg()).isNotNull();
         assertThat(result.get(0).bestE1rmKg().doubleValue()).isBetween(93.0, 93.7);
+    }
+
+    /*
+     * 유산소는 무게가 없어 근력 축(무게·볼륨·1RM)이 전부 null 이다. 축을 나누기 전에는
+     * 그래서 러닝의 추이가 <b>영영 빈 그래프</b>였다 — 시간·거리로는 분명히 늘고 있는데도.
+     */
+    @Test
+    void 유산소는_시간_거리로_추이가_잡힌다() {
+        Long user = register("eh9@fitto.com");
+        LocalDate today = LocalDate.now();
+        // 30분 5km 를 두 구간(20분 3.5km + 10분 1.5km)으로 나눠 뛴 날
+        logRun(user, today, new int[][] {{20 * 60, 350}, {10 * 60, 150}});
+
+        ExerciseHistoryResponse history = workoutService.exerciseHistory(user, RUN, 30);
+
+        assertThat(history.sessions()).hasSize(1);
+        ExerciseHistoryResponse.Session s = history.sessions().get(0);
+        assertThat(s.totalDurationSec()).isEqualTo(30 * 60);
+        assertThat(s.totalDistanceKm()).isEqualByComparingTo("5.00");
+        // 무게 축은 손대지 않는다 — 유산소에 1RM·볼륨을 만들어내면 그게 더 이상하다
+        assertThat(s.maxWeightKg()).isNull();
+        assertThat(s.totalVolumeKg()).isNull();
+        assertThat(history.best().maxDistanceKm()).isEqualByComparingTo("5.00");
+        assertThat(history.best().maxDurationSec()).isEqualTo(30 * 60);
+    }
+
+    /** 세션 프리필 — 유산소는 무게·횟수가 아니라 지난 시간·거리를 돌려줘야 한다. */
+    @Test
+    void 유산소_프리필에는_지난_시간과_거리가_실린다() {
+        Long user = register("eh10@fitto.com");
+        logRun(user, LocalDate.now().minusDays(2), new int[][] {{25 * 60, 420}});
+
+        List<ExerciseLastPerformanceResponse> result = workoutService.lastPerformance(user, List.of(RUN));
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).durationSec()).isEqualTo(25 * 60);
+        assertThat(result.get(0).distanceKm()).isEqualByComparingTo("4.20");
+        assertThat(result.get(0).entries()).hasSize(1);
+        assertThat(result.get(0).entries().get(0).durationSec()).isEqualTo(25 * 60);
     }
 
     @Test

@@ -42,6 +42,17 @@ public class WorkoutSetEntry {
 
     private Integer reps;
 
+    /**
+     * 수행 시간(초) — 유산소 종목의 기록 축. 근력 세트에서는 null.
+     * 유산소는 한 종목당 한 줄(setNo=1)이 기본이지만, 인터벌처럼 나눠 뛴 경우 여러 줄이 될 수 있다.
+     */
+    @Column(name = "duration_sec")
+    private Integer durationSec;
+
+    /** 이동 거리(km) — 유산소 종목의 기록 축. */
+    @Column(name = "distance_km", precision = 6, scale = 2)
+    private BigDecimal distanceKm;
+
     /** 자각 강도(RPE) — 1.0~10.0, 보통 0.5 단위로 기록. 세트를 몇 회 더 할 수 있었는지의 체감치. */
     @Column(precision = 3, scale = 1)
     private BigDecimal rpe;
@@ -50,10 +61,13 @@ public class WorkoutSetEntry {
     private boolean completed;
 
     @Builder
-    private WorkoutSetEntry(Integer setNo, BigDecimal weightKg, Integer reps, BigDecimal rpe, boolean completed) {
+    private WorkoutSetEntry(Integer setNo, BigDecimal weightKg, Integer reps,
+                            Integer durationSec, BigDecimal distanceKm, BigDecimal rpe, boolean completed) {
         this.setNo = setNo;
         this.weightKg = weightKg;
         this.reps = reps;
+        this.durationSec = durationSec;
+        this.distanceKm = distanceKm;
         this.rpe = rpe;
         this.completed = completed;
     }

@@ -10,7 +10,7 @@
  * 나 새로고침으로 직접 열려도 같은 화면이 나와야 한다.
  */
 import React, { useCallback, useState } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { Image, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -21,6 +21,7 @@ import { workoutApi } from '../../api/workout';
 import type { Workout, WorkoutSet, WorkoutSetEntry } from '../../types';
 import { relativeDateLabel } from '../../utils/date';
 import { formatNumber } from '../../utils/format';
+import { formatCardioSummary, formatDistanceKm, isCardio } from '../../utils/cardio';
 import { fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 
@@ -49,8 +50,19 @@ function totalVolume(workout: Workout): number {
   return (workout.sets ?? []).reduce((sum, s) => sum + exerciseVolume(s), 0);
 }
 
-/** "60kg × 10회" — 값이 없는 자리는 통째로 비운다(0kg 으로 쓰면 실제 맨몸 세트와 구분이 안 된다) */
-function entryLabel(entry: WorkoutSetEntry): string {
+/** 그날 유산소로 움직인 거리(km) 합계 — 종목 단위 값이 기준(구간 합계는 저장 시 이미 더해져 있다) */
+function totalDistance(workout: Workout): number {
+  return (workout.sets ?? []).reduce((sum, s) => sum + (s.distanceKm ?? 0), 0);
+}
+
+/**
+ * "60kg × 10회" (근력) / "30분 · 5.2km · 6'00"/km" (유산소).
+ * 값이 없는 자리는 통째로 비운다(0kg 으로 쓰면 실제 맨몸 세트와 구분이 안 된다).
+ */
+function entryLabel(entry: WorkoutSetEntry, cardio: boolean): string {
+  if (cardio) {
+    return formatCardioSummary(entry.durationSec, entry.distanceKm) || '기록 없음';
+  }
   const parts: string[] = [];
   if (entry.weightKg != null) parts.push(`${formatNumber(entry.weightKg)}kg`);
   if (entry.reps != null) parts.push(`${entry.reps}회`);
@@ -95,6 +107,7 @@ export function WorkoutDetailScreen({ route }: Props) {
   }
 
   const volume = totalVolume(workout);
+  const distance = totalDistance(workout);
   const muscleGroups = Array.from(
     new Set((workout.sets ?? []).map((s) => s.muscleGroup).filter((g): g is string => !!g)),
   );
@@ -112,6 +125,8 @@ export function WorkoutDetailScreen({ route }: Props) {
             {volume > 0 ? (
               <Stat label="총 볼륨" value={`${formatNumber(Math.round(volume))}kg`} />
             ) : null}
+            {/* 유산소를 한 날은 거리가 그날의 "얼마나 했나"다 — 볼륨과 나란히 둔다 */}
+            {distance > 0 ? <Stat label="총 거리" value={formatDistanceKm(distance)} /> : null}
           </View>
           {muscleGroups.length > 0 ? (
             <Text style={styles.muscleGroups}>{muscleGroups.join(' · ')}</Text>
@@ -119,11 +134,34 @@ export function WorkoutDetailScreen({ route }: Props) {
           {workout.memo ? <Text style={styles.memo}>"{workout.memo}"</Text> : null}
         </Card>
 
-        {(workout.sets ?? []).map((set, i) => (
+        {/* 인증샷 — 다른 앱 완료 화면이나 트레드밀 사진. 그날의 증거라 크게 보여준다 */}
+        {workout.imageUrl ? (
+          <Card elevation="sm" style={styles.photoCard}>
+            <Image source={{ uri: workout.imageUrl }} style={styles.photo} resizeMode="cover" />
+          </Card>
+        ) : null}
+
+        {/* 종목이 하나도 없는 기록 — "오늘 운동했다"만 남긴 경우다. 빈 화면 대신 그 사실을 적는다 */}
+        {(workout.sets ?? []).length === 0 ? (
+          <Text style={styles.noSets}>
+            종목 기록 없이 완료만 남긴 날이에요. 그것도 충분한 기록이에요 💪
+          </Text>
+        ) : null}
+
+        {(workout.sets ?? []).map((set, i) => {
+          const cardio = isCardio(set.category);
+          return (
           <Card key={set.id ?? `${set.exerciseName}-${i}`} elevation="sm" style={styles.exercise}>
             <View style={styles.exerciseHeader}>
               <Text style={styles.exerciseName}>{set.exerciseName}</Text>
-              {exerciseVolume(set) > 0 ? (
+              {/* 종목 오른쪽 숫자 — 근력은 볼륨, 유산소는 시간·거리·페이스 */}
+              {cardio ? (
+                formatCardioSummary(set.durationSec, set.distanceKm) ? (
+                  <Text style={styles.exerciseVolume}>
+                    {formatCardioSummary(set.durationSec, set.distanceKm)}
+                  </Text>
+                ) : null
+              ) : exerciseVolume(set) > 0 ? (
                 <Text style={styles.exerciseVolume}>
                   {formatNumber(Math.round(exerciseVolume(set)))}kg
                 </Text>
@@ -136,11 +174,13 @@ export function WorkoutDetailScreen({ route }: Props) {
             ) : null}
 
             {set.entries && set.entries.length > 0 ? (
+              /* 유산소는 구간이 하나뿐인 게 보통이라, 한 줄이면 위 요약과 같은 값이 반복된다 */
+              cardio && set.entries.length === 1 ? null :
               set.entries.map((entry) => (
                 <View key={entry.id ?? entry.setNo} style={styles.entryRow}>
                   <Text style={[styles.setNo, !entry.completed && styles.dim]}>{entry.setNo}</Text>
                   <Text style={[styles.entryValue, !entry.completed && styles.dim]}>
-                    {entryLabel(entry)}
+                    {entryLabel(entry, cardio)}
                   </Text>
                   {entry.rpe != null ? (
                     <Text style={styles.rpe}>RPE {formatNumber(entry.rpe)}</Text>
@@ -150,19 +190,23 @@ export function WorkoutDetailScreen({ route }: Props) {
                 </View>
               ))
             ) : (
-              /* 직접 기록 화면으로 남긴 기록 — 세트별 실기록 없이 종목 단위 값만 있다 */
-              <Text style={styles.plainSet}>
-                {[
-                  set.sets != null ? `${set.sets}세트` : null,
-                  set.reps != null ? `${set.reps}회` : null,
-                  set.weightKg != null ? `${formatNumber(set.weightKg)}kg` : null,
-                ]
-                  .filter(Boolean)
-                  .join(' · ') || '세부 기록 없음'}
-              </Text>
+              /* 직접 기록 화면으로 남긴 기록 — 세트별 실기록 없이 종목 단위 값만 있다.
+                 유산소는 위 헤더에 이미 시간·거리가 떠 있어 여기서 반복하지 않는다. */
+              cardio ? null : (
+                <Text style={styles.plainSet}>
+                  {[
+                    set.sets != null ? `${set.sets}세트` : null,
+                    set.reps != null ? `${set.reps}회` : null,
+                    set.weightKg != null ? `${formatNumber(set.weightKg)}kg` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ') || '세부 기록 없음'}
+                </Text>
+              )
             )}
           </Card>
-        ))}
+          );
+        })}
       </ScrollView>
     </SafeAreaView>
   );
@@ -189,6 +233,15 @@ const styles = themedStyles((colors) => ({
   statLabel: { fontSize: fontSize.caption, color: colors.textSecondary },
   muscleGroups: { fontSize: fontSize.caption, color: colors.textSecondary },
   memo: { fontSize: fontSize.caption, color: colors.textSecondary, fontStyle: 'italic' },
+
+  photoCard: { padding: 0, overflow: 'hidden' },
+  photo: { width: '100%', height: 220, backgroundColor: colors.surfaceAlt },
+  noSets: {
+    fontSize: fontSize.caption,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    paddingVertical: spacing.md,
+  },
 
   exercise: { gap: spacing.xs },
   exerciseHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

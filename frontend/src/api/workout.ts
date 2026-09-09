@@ -17,6 +17,7 @@ import type {
   WorkoutRecommendation,
   WorkoutRoutine,
   WorkoutSet,
+  WorkoutPhotoAnalysis,
   WorkoutStats,
 } from '../types';
 
@@ -30,6 +31,9 @@ export interface SaveRoutinePayload {
     targetSets?: number;
     reps?: number;
     weightKg?: number;
+    // 유산소 목표 — 러닝·트레드밀은 세트가 아니라 시간·거리가 목표다(세트 칸과 배타적)
+    targetDurationMin?: number;
+    targetDistanceKm?: number;
     exerciseCatalogId?: number;
     muscleGroup?: string;
     equipment?: string;
@@ -63,6 +67,12 @@ export interface SaveWorkoutPayload {
   memo?: string;
   /** 이 세션이 시작된 내 루틴 템플릿 id — 스마트 루틴 동기화의 전제. 자유 운동은 생략 */
   sourceRoutineId?: number;
+  /** 운동 인증샷(선택) — 다른 앱의 완료 화면이나 트레드밀 사진 */
+  imageUrl?: string;
+  /**
+   * 종목 목록 — <b>빈 배열도 된다</b>. "오늘 운동했다"만 남기는 원탭 기록이 그 경우다
+   * (서버도 세트를 필수로 두지 않는다 — SaveWorkoutRequest.sets 주석 참고).
+   */
   sets: Omit<WorkoutSet, 'id'>[];
 }
 
@@ -92,6 +102,14 @@ export const workoutApi = {
   stats: () => unwrap(apiClient.get<ApiResponse<WorkoutStats>>('/workout/stats')),
   // 근육 회복 현황 — 부위별 마지막 수행 이후 경과 시간·추정 회복률(홈 화면 요약 카드)
   recovery: () => unwrap(apiClient.get<ApiResponse<MuscleRecoveryStatus>>('/workout/recovery')),
+  /**
+   * 운동 인증샷 AI 분석 — 다른 앱의 완료 화면·트레드밀 사진에서 시간·거리를 읽는다.
+   * 결과는 기록 화면의 칸을 채워줄 뿐이고, 저장은 사용자가 확인한 뒤 save 로 한다.
+   */
+  analyzePhoto: (photoUrl: string) =>
+    runAiJob<WorkoutPhotoAnalysis>(
+      unwrap(apiClient.post<ApiResponse<AiJobStart>>('/workout/analyze-photo', { photoUrl })),
+    ),
   // AI 운동 추천 — 접수증(jobId) -> 폴링 -> 결과 (api/aiJob.ts 참고)
   recommend: (days: number) =>
     runAiJob<WorkoutRecommendation>(
