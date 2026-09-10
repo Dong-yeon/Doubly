@@ -30,8 +30,19 @@ const PICKER_OPTIONS = {
  * 사용자는 버튼을 눌러도 <b>아무 일도 일어나지 않는</b> 것처럼 보였다
  * ({@code docs/UX_UI_AUDIT.md} "아바타: 권한 거부 시 무피드백 종료").
  * 여기 한 곳에서 알리면 이 함수를 쓰는 화면 전부가 같이 고쳐진다.
+ *
+ * <p><b>Android 갤러리는 권한을 묻지 않는다.</b> expo-image-picker 는 Android 에서 시스템
+ * 사진 선택 도구(Photo Picker, {@code PickVisualMedia})를 띄우는데, 이건 앱 밖에서 돌고
+ * 사용자가 고른 사진만 넘겨주므로 저장소 권한이 필요 없다. 게다가 Google Play 가
+ * READ_MEDIA_IMAGES/VIDEO 를 "사진 선택 도구를 쓰라"며 거부해 app.json 의
+ * {@code blockedPermissions} 로 READ_EXTERNAL_STORAGE 까지 매니페스트에서 뺐다 —
+ * 그 상태에서 {@code requestMediaLibraryPermissionsAsync} 를 부르면 Android 12 이하는
+ * 선언 안 된 권한을 요청하는 셈이라 <b>자동 거부</b>돼 멀쩡한 사용자에게 "권한이 필요해요"
+ * 만 띄우고 끝난다({@code docs/EAS_BUILD.md} "Play 정책: 사진 선택 도구").
  */
 async function ensurePermission(kind: 'mediaLibrary' | 'camera'): Promise<boolean> {
+  if (kind === 'mediaLibrary' && Platform.OS === 'android') return true;
+
   const perm =
     kind === 'mediaLibrary'
       ? await ImagePicker.requestMediaLibraryPermissionsAsync()
