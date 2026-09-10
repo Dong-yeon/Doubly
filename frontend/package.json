@@ -79,6 +79,8 @@
     "build:ios": "npx eas-cli build --platform ios --profile production",
     "build:store": "npx eas-cli build --platform all --profile production",
     "submit:ios": "npx eas-cli submit --platform ios --profile production --latest",
+    "submit:android": "npx eas-cli submit --platform android --profile production --latest",
+    "submit:store": "npx eas-cli submit --platform all --profile production --latest",
     "update:production": "npx eas-cli update --channel production --auto",
     "update:preview": "npx eas-cli update --channel preview --auto"
   },

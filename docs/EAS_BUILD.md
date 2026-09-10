@@ -319,7 +319,8 @@ androidpublisher 에 붙어 트랙별 versionCode 를 읽고 흔적 없이 정�
 ### 10-3. 제출
 
 ```bash
-npx eas-cli submit --platform android --profile production --latest
+npm run submit:android        # 안드로이드만 (npx eas-cli submit --platform android --profile production --latest)
+npm run submit:store          # iOS + 안드로이드 한 번에
 ```
 
 `--latest` 는 가장 최근 성공 빌드를 올린다. 특정 빌드를 지정하려면 `--id <build-id>`.
