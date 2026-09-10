@@ -52,13 +52,15 @@ const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
 const EMOTIONS = [
   { code: 'LOVE_BEAR', label: '사랑해', pose: 'hugging each other happily, eyes closed in a warm smile, small hearts floating around' },
   { code: 'BEAR_EXCITED', label: '신났어', pose: 'both jumping with arms raised in celebration, big open smiles, motion lines' },
-  { code: 'BEAR_LAUGH', label: '하하하', pose: 'both laughing hard, eyes squeezed shut, heads tilted back, mouths wide open' },
+  // 참조가 "껴안은 구도"라 가만 두면 무엇을 시켜도 그 자세로 그린다. 감정이 얼굴에만
+  // 드러나는 장은 트레이 크기에서 LOVE_BEAR 와 구분이 안 돼, 자세를 명시로 떼어놓는다.
+  { code: 'BEAR_LAUGH', label: '하하하', pose: 'standing apart from each other (NOT hugging), both laughing hard with heads tilted back and paws holding their bellies, eyes squeezed shut, mouths wide open, motion lines, no hearts' },
   { code: 'BEAR_SHY', label: '부끄러워', pose: 'both blushing deeply, paws covering their cheeks, looking away shyly' },
   { code: 'BEAR_SULKY', label: '시무룩', pose: 'both pouting with puffed cheeks, arms crossed, looking away from each other' },
   { code: 'BEAR_ANGRY', label: '화났어', pose: 'both frowning angrily, eyebrows down, small anger puff marks above their heads' },
   { code: 'BEAR_SORRY', label: '미안해', pose: 'one bowing its head apologetically with paws pressed together, the other watching softly' },
   { code: 'BEAR_CRYING', label: '엉엉', pose: 'both crying with big teardrops, wide watery eyes, mouths open in a wail' },
-  { code: 'BEAR_TIRED', label: '지쳤어', pose: 'both slumped and drooping with tired half-closed eyes, shoulders down' },
+  { code: 'BEAR_TIRED', label: '지쳤어', pose: 'sitting apart on the ground (NOT hugging), both exhausted and slumped with shoulders drooping, arms hanging limp, weary half-closed eyes, a single sweat drop by the temple, no hearts' },
   { code: 'BEAR_SLEEPY', label: '잘자', pose: 'both asleep under a blanket, eyes closed peacefully, small zzz marks' },
 ];
 
