@@ -208,12 +208,14 @@ npm run update:preview        # preview APK 에 배포
 cd frontend && npx expo config --type introspect --json > /tmp/i.json
 ```
 
-### 9-2. Android 개발자 인증 (마감 2026-09-30)
+### 9-2. Android 개발자 인증 (마감 2026-09-30) — 조치 불필요
 
-Play 가 "Android 개발자 인증 요구사항: 앱과 서명 키 등록" 최종 알림을 보냈다. 코드 작업이
-아니라 Play Console 에서 계정 소유자가 직접 해야 한다 — **2026-09-30 까지** Play Console →
-개발자 인증(Android Developer Verification) 에서 `com.doubly.app` 과 업로드 서명 키를
-등록한다. 넘기면 신규 설치·업데이트 배포가 막힌다.
+Play 가 "Android 개발자 인증 요구사항: 앱과 서명 키 등록" 최종 알림(2026-09-04)을 보냈지만,
+**우리는 이미 끝나 있다.** Play Console → Android 개발자 인증 → 패키지 이름 탭에서
+`com.doubly.app` 이 "등록됨"(키 3개, 2026-08-05 갱신)으로 확인됐다(2026-09-10). Play 앱은
+Play 앱 서명 키로 자동 등록되며, "패키지 이름 등록" 버튼은 Play 밖에서 배포하는 앱이나
+Play 밖에서 서명하는 추가 키를 넣을 때만 쓴다. 상태가 "등록됨"이면 아무것도 누르지 않는다.
+알림은 계정 전체에 일괄 발송된 것이라 매 분기 다시 올 수 있다 — 그때마다 이 탭만 확인한다.
 
 ## 트러블슈팅
 
