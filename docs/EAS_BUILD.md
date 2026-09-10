@@ -191,7 +191,15 @@ during build` 로 실패했다. 같은 커밋에서 `npx expo-updates fingerprin
 - **조치**: `frontend/fingerprint.config.js` — `sourceSkips` 에 `ExpoConfigExtraSection`(기본값
   `PackageJsonAndroidAndIosScriptsIfNotContainRun` 유지), `ignorePaths` 에 `android/**/*`·`ios/**/*`.
   EAS 서버도 같은 파일을 읽으므로 로컬·서버·`eas update` 가 같은 값을 낸다.
-- **검증**: 두 번 돌려 같은 해시가 나오면 된다. android/ 폴더가 있어도 없어도 같아야 한다.
+- **세 번째 원인(둘 다)**: 위를 고친 뒤에도 같은 오류가 났다. 이번엔 로그에 diff 가 찍혔다 —
+  EAS 에만 `node_modules/expo-updates`·`expo-eas-client`·`expo-structured-headers` 가 있었다.
+  origin 에서 받은 EAS Update 커밋이 package-lock 에 넣은 의존성을 **로컬 node_modules 가 아직
+  설치하지 않은** 상태였고(`npx expo-updates …` 는 없으면 그때그때 받아와서 티가 안 난다),
+  fingerprint 는 node_modules 의 네이티브 모듈 목록을 해시하므로 로컬과 서버가 달랐다.
+  `npm install` 로 lock 과 맞춘 뒤 로컬 해시가 EAS 로그의 "Resolved runtime version" 과
+  정확히 일치했다. **pull 뒤에는 빌드 전에 `npm install`** — 이 규칙이 없으면 재발한다.
+- **검증**: 두 번 돌려 같은 해시가 나오면 된다. android/ 폴더가 있어도 없어도 같아야 하고,
+  실패 로그가 있다면 그 안의 "Resolved runtime version" 과 같아야 한다.
 
 ```bash
 cd frontend && npx expo-updates fingerprint:generate --platform android
@@ -247,7 +255,7 @@ Play 밖에서 서명하는 추가 키를 넣을 때만 쓴다. 상태가 "등�
 | `eas.json` 관련 스키마 오류 | `npx eas-cli --version` 으로 최신 CLI인지 확인 후 재시도 |
 | 빌드 실패 (네이티브 모듈 오류) | Expo 대시보드의 빌드 로그 확인 — 대부분 `app.json` plugin 설정 누락이 원인 |
 | 설치 후 앱이 흰 화면 | 최신 코드로 다시 빌드했는지 확인 (오래된 APK 캐시일 수 있음) — 설정 화면 하단의 커밋 해시로 판별, 6-1 참고 |
-| Configure expo-updates 단계에서 `Runtime version calculated on local machine not equal…` | 로컬·서버 fingerprint 불일치 — 8-5 참고. `fingerprint.config.js` 가 있는지, 두 번 돌려 같은 해시가 나오는지 확인 |
+| Configure expo-updates 단계에서 `Runtime version calculated on local machine not equal…` | 로컬·서버 fingerprint 불일치 — 8-5 참고. ① `npm install` 로 node_modules 를 lock 과 맞추고 ② `fingerprint.config.js` 가 있는지, ③ 두 번 돌려 같은 해시가 나오는지 확인. 빌드 로그의 "Difference between local and EAS fingerprints" 가 정확한 범인을 알려준다 |
 | "출처를 알 수 없는 앱" 이 계속 막힘 | 설정 → 보안 → 해당 브라우저/파일관리자 앱의 "알 수 없는 앱 설치" 권한 허용 |
 
 ## 다음 단계
