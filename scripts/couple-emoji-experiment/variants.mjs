@@ -29,7 +29,16 @@
  * 그래서 기존 한 장도 이 스크립트로 다시 뽑아 세트에 맞추는 것을 권한다 —
  * {@code LOVE_BEAR} 라는 <b>코드는 그대로 두고 PNG 만 갈아끼우면</b> 과거 말풍선은 안 깨진다.
  *
- * <p>후처리는 sketch.mjs 와 같다: {@code normalize_stickers.py} 로 360 RGBA 투명 배경까지
+ * <p><b>결과는 PNG 가 아니라 JPEG 다</b>(모델이 그렇게 돌려준다 — 확장자도 그에 맞춰 붙는다).
+ * {@code normalize-stickers.mjs} 는 노드 내장에 JPEG 디코더가 없어 PNG 만 읽으므로, 후처리
+ * 전에 한 번 변환해야 한다. 윈도우면 추가 설치 없이 내장 GDI+ 로 된다:
+ *
+ *   powershell -c "Add-Type -AssemblyName System.Drawing; \
+ *     Get-ChildItem out\<폴더>\*.jpg | ForEach-Object { \
+ *       $i=[System.Drawing.Image]::FromFile($_.FullName); \
+ *       $i.Save(($_.FullName -replace '\.jpg$','.png'), [System.Drawing.Imaging.ImageFormat]::Png); $i.Dispose() }"
+ *
+ * <p>후처리는 sketch.mjs 와 같다: {@code normalize-stickers.mjs} 로 360 RGBA 투명 배경까지
  * 맞춘 뒤 {@code frontend/assets/stickers/} 에 넣는다. 그 다음 프론트
  * {@code stickerImages.ts} 와 백엔드 {@code StickerImage} 에 <b>같이</b> 추가해야 한다
  * (안 그러면 {@code StickerImageSyncTest} 가 잡는다).
@@ -138,7 +147,14 @@ async function main() {
     process.stdout.write(`${`${e.code} (${e.label})`.padEnd(30)} … `);
     const r = await generate({ key, model, parts: [refPart, { text: prompt }] });
     if (r.ok) {
-      const file = join(out, `${String(i + 1).padStart(2, '0')}-${e.code}.png`);
+      /*
+       * <b>확장자는 응답의 mime 을 따른다.</b> 이 모델은 실제로 JPEG 를 돌려주는데
+       * 예전엔 무조건 .png 로 저장해서, 파일 이름만 보고 PNG 인 줄 알고 넘긴
+       * normalize-stickers.mjs 가 "PNG 이 아니다"로 죽었다. 이름이 내용을 속이면
+       * 다음 단계에서 반드시 한 번 터진다.
+       */
+      const ext = r.mime === 'image/png' ? 'png' : 'jpg';
+      const file = join(out, `${String(i + 1).padStart(2, '0')}-${e.code}.${ext}`);
       await writeFile(file, r.bytes);
       console.log(`OK  ${(r.elapsedMs / 1000).toFixed(1)}s  ${(r.bytes.length / 1024).toFixed(0)}KB`);
       run.results.push({ code: e.code, label: e.label, file: basename(file), ok: true, elapsedMs: r.elapsedMs, prompt });
