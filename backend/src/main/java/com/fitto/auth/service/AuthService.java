@@ -156,7 +156,8 @@ public class AuthService {
     /**
      * Refresh Token 회전 재발급 — 설계서 4.2 POST /auth/refresh.
      * 사용된 리프레시 토큰은 즉시 폐기되고 새 토큰으로 교체된다(1회용).
-     * 이미 소비된 토큰이 다시 오면 탈취 재사용으로 간주해 해당 사용자의 모든 세션을 폐기한다.
+     * 이미 소비된 토큰이 다시 오면 탈취 재사용으로 간주해 해당 사용자의 모든 세션을 폐기한다 —
+     * 단, 새 토큰이 아직 안 쓰인 "응답 유실"은 예외로 받아준다({@link RefreshTokenStore} 주석).
      */
     public TokenResponse refresh(String refreshToken, String clientIp) {
         rateLimiter.checkRefresh(clientIp);
@@ -178,7 +179,13 @@ public class AuthService {
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_TOKEN));
-        return issueTokens(user);
+        TokenResponse tokens = issueTokens(user);
+        if (jti != null) {
+            // 옛 → 새 계보를 남겨야 응답이 유실됐을 때 옛 토큰을 재사용 공격과 구분할 수 있다
+            String newJti = tokenProvider.parse(tokens.refreshToken()).getId();
+            refreshTokenStore.markRotated(jti, newJti, tokenProvider.refreshTokenTtl());
+        }
+        return tokens;
     }
 
     /** 로그아웃 — 제시된 리프레시 토큰을 폐기한다(만료 전이라도 재사용 불가). */

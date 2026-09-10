@@ -10,7 +10,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -27,6 +29,7 @@ class ExpoPushTicketTest {
 
     @Autowired DeviceTokenService deviceTokenService;
     @Autowired DeviceTokenRepository deviceTokenRepository;
+    @Autowired ExpoPushNotificationService pushService;
     @Autowired AuthService authService;
     @Autowired ObjectMapper objectMapper;
 
@@ -59,6 +62,55 @@ class ExpoPushTicketTest {
                 ExpoPushNotificationService.ExpoPushResponse.class);
 
         assertThat(response.data().get(0).details()).isNull();
+    }
+
+    /**
+     * 영수증 응답 계약 — 티켓과 달리 배열이 아니라 <b>티켓 id 를 키로 하는 map</b> 이고, 아직 처리
+     * 안 된 id 는 빠져서 온다. 티켓 {@code ok} 뒤의 APNs 실패(InvalidCredentials 등)는 여기서만
+     * 보이므로(2026-09-10) 이 경로가 어긋나면 iOS 키 문제를 영영 못 본다.
+     */
+    @Test
+    void 영수증은_티켓_id_를_키로_하는_map_이다() throws Exception {
+        String body = """
+                {"data":{
+                  "AAAA":{"status":"ok"},
+                  "BBBB":{"status":"error","message":"The Apple Push Notification service key is invalid",
+                          "details":{"error":"InvalidCredentials"}}
+                }}""";
+
+        var response = objectMapper.readValue(body, ExpoPushNotificationService.ExpoReceiptResponse.class);
+
+        assertThat(response.data()).containsOnlyKeys("AAAA", "BBBB");
+        assertThat(response.data().get("AAAA").status()).isEqualTo("ok");
+        assertThat(response.data().get("BBBB").details().error()).isEqualTo("InvalidCredentials");
+    }
+
+    /** 영수증에서 DeviceNotRegistered 로 판정된 토큰만 지운다. 설정 문제(InvalidCredentials)는 지우지 않는다. */
+    @Test
+    void 영수증의_기기_미등록_토큰만_지운다() throws Exception {
+        Long userId = authService.register(
+                        new RegisterRequest("push-receipt@fitto.com", "password123", "테스터",
+                                null, null, true, true, false), "127.0.0.1")
+                .user().id();
+        deviceTokenService.register(userId, "ExponentPushToken[receipt-alive]", "ios");
+        deviceTokenService.register(userId, "ExponentPushToken[receipt-dead]", "android");
+        deviceTokenService.register(userId, "ExponentPushToken[receipt-badkey]", "ios");
+        Map<String, DeviceToken> accepted = new LinkedHashMap<>();
+        for (DeviceToken t : deviceTokenRepository.findByUserId(userId)) {
+            accepted.put("ticket-" + t.getToken(), t);
+        }
+        var response = objectMapper.readValue("""
+                {"data":{
+                  "ticket-ExponentPushToken[receipt-alive]":{"status":"ok"},
+                  "ticket-ExponentPushToken[receipt-dead]":{"status":"error","details":{"error":"DeviceNotRegistered"}},
+                  "ticket-ExponentPushToken[receipt-badkey]":{"status":"error","details":{"error":"InvalidCredentials"}}
+                }}""", ExpoPushNotificationService.ExpoReceiptResponse.class);
+
+        pushService.handleReceipts(userId, accepted, response);
+
+        assertThat(deviceTokenRepository.findByUserId(userId))
+                .extracting(DeviceToken::getToken)
+                .containsExactlyInAnyOrder("ExponentPushToken[receipt-alive]", "ExponentPushToken[receipt-badkey]");
     }
 
     /** DeviceNotRegistered 로 판정된 토큰만 지우고, 같은 사용자의 살아있는 토큰은 남긴다. */
