@@ -38,6 +38,7 @@
     "expo-secure-store": "~56.0.4",
     "expo-sharing": "~56.0.26",
     "expo-status-bar": "~56.0.4",
+    "expo-updates": "~56.0.26",
     "expo-web-browser": "~56.0.5",
     "lottie-react-native": "~7.3.4",
     "react": "19.2.3",
@@ -77,7 +78,9 @@
     "build:android": "npx eas-cli build --platform android --profile production",
     "build:ios": "npx eas-cli build --platform ios --profile production",
     "build:store": "npx eas-cli build --platform all --profile production",
-    "submit:ios": "npx eas-cli submit --platform ios --profile production --latest"
+    "submit:ios": "npx eas-cli submit --platform ios --profile production --latest",
+    "update:production": "npx eas-cli update --channel production --auto",
+    "update:preview": "npx eas-cli update --channel preview --auto"
   },
   "private": true,
   "expo": {

@@ -57,8 +57,14 @@ npm run typecheck                          # tsc --noEmit  ← 테스트 러너�
 npm run lint                               # expo lint
 npm run verify:spellcheck                  # 한국어 맞춤법 규칙 검증 — 규칙/사전 수정 시 필수
 npm run build:web                          # 아이콘 폰트 서브셋 + 웹 export
-npm run build:android / build:ios          # EAS production 빌드
+npm run build:android / build:ios          # EAS production 빌드 (건당 과금 — 네이티브가 바뀔 때만)
+npm run update:production                  # EAS Update — JS/에셋만 바뀐 변경을 빌드 없이 배포
 ```
+
+- **빌드 vs 업데이트**: 의존성 추가·삭제, `app.json`의 plugins/permissions, `modules/` 네이티브 코드·`.so`,
+  Expo SDK 업그레이드는 **빌드**. 화면·로직·문구·이미지 변경은 **업데이트**로 충분합니다.
+  런타임 버전이 `fingerprint` 정책이라 네이티브가 바뀐 커밋에서 업데이트를 올려도 기존 빌드에는
+  배달되지 않을 뿐 깨지지 않습니다. 상세는 `docs/EAS_BUILD.md` §8.
 
 - 프론트에는 테스트 러너가 없습니다. `scripts/verify-spellcheck.mjs`가 맞춤법 모듈의 테스트 역할을
   대신하며, 정탐과 **오탐 방지** 문장을 함께 검증합니다.
