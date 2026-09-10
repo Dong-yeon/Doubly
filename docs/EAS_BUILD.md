@@ -174,6 +174,29 @@ npm run update:preview        # preview APK 에 배포
 버전코드 25 이하 빌드는 업데이트를 모릅니다. 도입 커밋 이후 첫 스토어 빌드(버전코드 26)를 한 번
 올리고 나면 그 뒤로는 JS 변경마다 빌드하지 않아도 됩니다.
 
+### 8-5. fingerprint 가 매번 달라지던 문제 (2026-09-10) — fingerprint.config.js
+
+EAS Update 도입 뒤 첫 production 빌드(Android 26 · iOS 18)가 둘 다 **Configure expo-updates**
+단계에서 `Runtime version calculated on local machine not equal to runtime version calculated
+during build` 로 실패했다. 같은 커밋에서 `npx expo-updates fingerprint:generate` 를 두 번 돌리면
+해시가 매번 달랐다.
+
+- **원인**: `app.config.js` 가 `extra.build` 에 커밋 해시와 빌드 시각을 넣는데, @expo/fingerprint 는
+  기본적으로 expo config 의 `extra` 까지 해시한다(`SourceSkips.ExpoConfigExtraSection` 을 줘야
+  뺀다). 시각 때문에 실행마다, 해시 때문에 커밋마다 런타임 버전이 바뀌었다. 빌드 실패가 아니었어도
+  **커밋마다 런타임 버전이 달라져 EAS Update 가 어떤 빌드에도 배달되지 않았을** 구조였다.
+- **부수 원인(Android 만)**: 로컬에서 `expo run:android` 로 생긴 `frontend/android/` 는 gitignore 라
+  서버에는 없는데 로컬 fingerprint 에는 들어간다. 그래서 `eas build` 가 "android directory was
+  detected" 를 찍는 PC 에서는 extra 를 고쳐도 Android 만 또 어긋난다.
+- **조치**: `frontend/fingerprint.config.js` — `sourceSkips` 에 `ExpoConfigExtraSection`(기본값
+  `PackageJsonAndroidAndIosScriptsIfNotContainRun` 유지), `ignorePaths` 에 `android/**/*`·`ios/**/*`.
+  EAS 서버도 같은 파일을 읽으므로 로컬·서버·`eas update` 가 같은 값을 낸다.
+- **검증**: 두 번 돌려 같은 해시가 나오면 된다. android/ 폴더가 있어도 없어도 같아야 한다.
+
+```bash
+cd frontend && npx expo-updates fingerprint:generate --platform android
+```
+
 ## 9. Google Play 정책·계정 요구사항
 
 ### 9-1. Play 정책: 사진 선택 도구 (2026-09)
@@ -224,6 +247,7 @@ Play 밖에서 서명하는 추가 키를 넣을 때만 쓴다. 상태가 "등�
 | `eas.json` 관련 스키마 오류 | `npx eas-cli --version` 으로 최신 CLI인지 확인 후 재시도 |
 | 빌드 실패 (네이티브 모듈 오류) | Expo 대시보드의 빌드 로그 확인 — 대부분 `app.json` plugin 설정 누락이 원인 |
 | 설치 후 앱이 흰 화면 | 최신 코드로 다시 빌드했는지 확인 (오래된 APK 캐시일 수 있음) — 설정 화면 하단의 커밋 해시로 판별, 6-1 참고 |
+| Configure expo-updates 단계에서 `Runtime version calculated on local machine not equal…` | 로컬·서버 fingerprint 불일치 — 8-5 참고. `fingerprint.config.js` 가 있는지, 두 번 돌려 같은 해시가 나오는지 확인 |
 | "출처를 알 수 없는 앱" 이 계속 막힘 | 설정 → 보안 → 해당 브라우저/파일관리자 앱의 "알 수 없는 앱 설치" 권한 허용 |
 
 ## 다음 단계
