@@ -259,6 +259,77 @@ Play 앱 서명 키로 자동 등록되며, "패키지 이름 등록" 버튼은 
 Play 밖에서 서명하는 추가 키를 넣을 때만 쓴다. 상태가 "등록됨"이면 아무것도 누르지 않는다.
 알림은 계정 전체에 일괄 발송된 것이라 매 분기 다시 올 수 있다 — 그때마다 이 탭만 확인한다.
 
+## 10. Play 스토어 제출 (Android) — 2026-09-10 배선
+
+iOS 는 `submit-ios.yaml` 워크플로로 자동 제출되지만 **안드로이드는 EAS 제출 이력이 0건**이었다
+(최근 제출 20건이 전부 iOS). `eas.json` 의 `submit.production` 에 `ios` 블록만 있었기 때문이다.
+아래는 그 구멍을 메운 설정과, 한 번만 하면 되는 키 발급 절차다.
+
+### 10-1. Play 서비스 계정 키 발급 (최초 1회, 사람이 직접)
+
+Google 계정 자격증명이라 자동화하지 않는다.
+
+**Play Console 의 "API 액세스" 에서 시작하지 않는다.** 개발자 계정 → 기본설정에는 그런 항목이 없다
+(2026-09-10 확인). 현재 Expo 공식 절차는 **Google Cloud 에서 서비스 계정을 먼저 만들고, Play Console
+에서는 그 계정을 "사용자 및 권한" 으로 초대**하는 순서다(https://expo.fyi/creating-google-service-account).
+
+Google Cloud Console (console.cloud.google.com):
+
+1. 프로젝트 선택(없으면 새로 만들기)
+2. **IAM 및 관리자 → 서비스 계정 → 서비스 계정 만들기**
+   (이름 예: `eas-submit`. GCP 역할(Role)은 부여하지 않아도 된다 — 권한은 Play Console 에서 준다)
+3. 만든 서비스 계정 클릭 → **키 → 키 추가 → 새 키 만들기 → JSON** → 다운로드
+4. **Google Play Android Developer API 사용 설정** — 이걸 빼먹으면 제출이 403 으로 막힌다
+   https://console.cloud.google.com/apis/library/androidpublisher.googleapis.com
+
+Play Console:
+
+5. **사용자 및 권한 → 새 사용자 초대**
+6. 이메일에 서비스 계정 주소(`eas-submit@<프로젝트>.iam.gserviceaccount.com`)를 붙여넣는다
+7. 권한 — 앱 액세스에서 **Dubly(`com.doubly.app`) 만** 선택하고, 계정 전체 권한은 주지 않는다.
+   개별 권한을 고른다면 앱 정보 보기(읽기 전용) / 임시 앱 수정·삭제 / 출시(Releases) 섹션의
+   출시 관련 권한 3개 / 스토어 등록정보 관리. 앱 단위 **릴리스 관리자** 역할을 주면 한 번에 덮인다
+8. **사용자 초대** 로 마무리
+9. 받은 JSON 을 **`secrets/play-service-account.json`** 으로 저장한다
+   (저장소 루트의 `secrets/` 는 `.gitignore`·`.easignore` 양쪽에서 제외돼 있다. 절대 커밋 금지)
+
+### 10-2. eas.json 배선
+
+```jsonc
+"submit": {
+  "production": {
+    "android": {
+      "serviceAccountKeyPath": "../secrets/play-service-account.json",
+      "track": "production",            // 실사용자 트랙. 내부 테스트로 먼저 보려면 "internal"
+      "releaseStatus": "completed",
+      "changesNotSentForReview": false
+    }
+  }
+}
+```
+
+**`track` 이 `production` 인 이유**: 이 저장소의 안드로이드 제출은 실사용자 트랙에 올리는 것이
+목적이다(2026-09-10 결정). 되돌릴 일이 생기면 Play Console 에서 이전 버전을 다시 출시해야 하므로,
+제출 전에 어떤 versionCode 가 올라가는지 확인한다. 내부 테스트로 먼저 보고 싶으면 이 값을
+`internal` 로 바꿔 제출한 뒤 콘솔에서 프로덕션으로 승격한다.
+
+**제출 전 현재 트랙 상태 확인**은 `scripts/check-play-track.mjs` 로 한다(서비스 계정 키로
+androidpublisher 에 붙어 트랙별 versionCode 를 읽고 흔적 없이 정리한다).
+
+### 10-3. 제출
+
+```bash
+npx eas-cli submit --platform android --profile production --latest
+```
+
+`--latest` 는 가장 최근 성공 빌드를 올린다. 특정 빌드를 지정하려면 `--id <build-id>`.
+`eas build --auto-submit` 으로 빌드 직후 제출도 가능하지만, 빌드가 자주 깨지는 동안에는
+빌드와 제출을 분리해 두는 편이 낫다.
+
+- **첫 제출 시 앱이 Play Console 에 이미 등록돼 있어야 한다.** 최초 1개 AAB 업로드는 콘솔에서
+  수동으로 해야 하며, 그 이후부터 API 제출이 열린다.
+- 제출 이력은 `npx eas-cli status` 의 Submissions 항목에서 확인한다.
+
 ## 트러블슈팅
 
 | 증상 | 원인 / 해결 |
