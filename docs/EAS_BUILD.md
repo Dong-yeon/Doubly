@@ -267,18 +267,30 @@ iOS 는 `submit-ios.yaml` 워크플로로 자동 제출되지만 **안드로이�
 
 ### 10-1. Play 서비스 계정 키 발급 (최초 1회, 사람이 직접)
 
-Google 계정 자격증명이라 자동화하지 않는다. Play Console 에서 직접 받는다.
+Google 계정 자격증명이라 자동화하지 않는다.
 
-1. Play Console → **설정 → API 액세스**
-2. Google Cloud 프로젝트가 연결돼 있지 않으면 **새 프로젝트 만들어 연결**
-3. **서비스 계정 만들기** → Google Cloud Console 로 이동 → 서비스 계정 생성
-   (이름 예: `eas-submit`. GCP 쪽 역할(Role)은 부여하지 않아도 된다 — 권한은 Play Console 에서 준다)
-4. 만든 서비스 계정 → **키 → 키 추가 → 새 키 만들기 → JSON** → 다운로드
-5. Play Console → API 액세스로 돌아와 그 서비스 계정에 **액세스 권한 부여**
-   - 앱 액세스: `com.doubly.app` (Dubly) 만 선택
-   - 권한: **릴리스 관리자**(또는 최소한 "프로덕션·테스트 트랙에 릴리스", "앱 정보 보기")
-   - 계정 전체 권한은 주지 않는다
-6. 받은 JSON 을 **`secrets/play-service-account.json`** 으로 저장한다
+**Play Console 의 "API 액세스" 에서 시작하지 않는다.** 개발자 계정 → 기본설정에는 그런 항목이 없다
+(2026-09-10 확인). 현재 Expo 공식 절차는 **Google Cloud 에서 서비스 계정을 먼저 만들고, Play Console
+에서는 그 계정을 "사용자 및 권한" 으로 초대**하는 순서다(https://expo.fyi/creating-google-service-account).
+
+Google Cloud Console (console.cloud.google.com):
+
+1. 프로젝트 선택(없으면 새로 만들기)
+2. **IAM 및 관리자 → 서비스 계정 → 서비스 계정 만들기**
+   (이름 예: `eas-submit`. GCP 역할(Role)은 부여하지 않아도 된다 — 권한은 Play Console 에서 준다)
+3. 만든 서비스 계정 클릭 → **키 → 키 추가 → 새 키 만들기 → JSON** → 다운로드
+4. **Google Play Android Developer API 사용 설정** — 이걸 빼먹으면 제출이 403 으로 막힌다
+   https://console.cloud.google.com/apis/library/androidpublisher.googleapis.com
+
+Play Console:
+
+5. **사용자 및 권한 → 새 사용자 초대**
+6. 이메일에 서비스 계정 주소(`eas-submit@<프로젝트>.iam.gserviceaccount.com`)를 붙여넣는다
+7. 권한 — 앱 액세스에서 **Dubly(`com.doubly.app`) 만** 선택하고, 계정 전체 권한은 주지 않는다.
+   개별 권한을 고른다면 앱 정보 보기(읽기 전용) / 임시 앱 수정·삭제 / 출시(Releases) 섹션의
+   출시 관련 권한 3개 / 스토어 등록정보 관리. 앱 단위 **릴리스 관리자** 역할을 주면 한 번에 덮인다
+8. **사용자 초대** 로 마무리
+9. 받은 JSON 을 **`secrets/play-service-account.json`** 으로 저장한다
    (저장소 루트의 `secrets/` 는 `.gitignore`·`.easignore` 양쪽에서 제외돼 있다. 절대 커밋 금지)
 
 ### 10-2. eas.json 배선
