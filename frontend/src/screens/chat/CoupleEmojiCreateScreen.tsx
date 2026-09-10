@@ -30,10 +30,14 @@ import { Alert } from '../../utils/alert';
 import { getErrorMessage } from '../../utils/error';
 import { haptics } from '../../utils/haptics';
 import { pickImageAsset, takePhotoAsset, type PickedImage } from '../../utils/imageUpload';
-import { COUPLE_EMOJI_EMOTIONS, coupleEmojiEmotionOf } from '../../constants/coupleEmojiEmotions';
+import {
+  COUPLE_EMOJI_EMOTIONS,
+  coupleEmojiEmotionOf,
+  type CoupleEmojiEmotionDef,
+} from '../../constants/coupleEmojiEmotions';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
-import type { CoupleEmoji, CoupleEmojiBatch } from '../../types';
+import type { CoupleEmoji, CoupleEmojiBatch, CoupleEmojiEmotion } from '../../types';
 
 type Props = NativeStackScreenProps<ChatStackParamList, 'CoupleEmojiCreate'>;
 
@@ -52,6 +56,7 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
   const allowed = usePlanStore((s) => s.can('AI_COUPLE_EMOJI'));
 
   const loadEmojis = useCoupleEmojiStore((s) => s.load);
+  const allEmojis = useCoupleEmojiStore((s) => s.emojis);
   const removeEmoji = useCoupleEmojiStore((s) => s.remove);
 
   /*
@@ -83,10 +88,53 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
     loadEmojis().catch(() => undefined);
   }, [loadEmojis]);
 
-  /** 감정 순서대로 6칸 — 아직 안 온 칸은 null */
+  /**
+   * 이 얼굴로 이미 가지고 있는 감정 — 다시 만들 필요가 없는 것들.
+   *
+   * <p>감정이 17종이 되면서 "몇 장 때문에 전체를 다시 뽑는" 것이 그대로 실비가 됐다
+   * (장당 약 0.04 USD). 이미 있는 감정을 알려주고 기본으로 빼 두면, 고르지 않아도 가장
+   * 싼 선택이 기본값이 된다.
+   */
+  const existingEmotions = useMemo(() => {
+    const mine = allEmojis.filter((e) => e.subjectUserId === subjectUserId);
+    return new Set(mine.map((e) => e.emotion));
+  }, [allEmojis, subjectUserId]);
+
+  /**
+   * 이번에 그릴 감정. 기본값은 <b>아직 없는 것만</b>이고, 하나도 없으면 전부다.
+   *
+   * <p>손으로 고른 것은 <b>어느 얼굴에 대한 선택인지와 함께</b> 들고 있는다. 얼굴을 바꾸면
+   * 그 얼굴이 이미 가진 감정이 달라져 선택도 뜻을 잃기 때문이다. 효과로 초기화하지 않는
+   * 이유는 subjectPick 과 같다(위 주석) — 렌더 중 계산으로 끝나는 일이다.
+   */
+  const [selection, setSelection] = useState<{
+    subject: number | undefined;
+    keys: Set<CoupleEmojiEmotion>;
+  } | null>(null);
+  const effectiveSelected = useMemo(() => {
+    if (selection && selection.subject === subjectUserId) return selection.keys;
+    const missing = COUPLE_EMOJI_EMOTIONS.filter((e) => !existingEmotions.has(e.key)).map((e) => e.key);
+    return new Set<CoupleEmojiEmotion>(missing.length > 0 ? missing : COUPLE_EMOJI_EMOTIONS.map((e) => e.key));
+  }, [selection, subjectUserId, existingEmotions]);
+
+  const setSelectedKeys = (keys: Set<CoupleEmojiEmotion>) => {
+    haptics.light();
+    setSelection({ subject: subjectUserId, keys });
+  };
+  const toggleEmotion = (key: CoupleEmojiEmotion) => {
+    const next = new Set(effectiveSelected);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    setSelectedKeys(next);
+  };
+
+  /** 생성이 시작되면 그때 고른 감정으로 고정한다 — 진행 중에 토글해도 칸이 흔들리지 않게 */
+  const [drawing, setDrawing] = useState<CoupleEmojiEmotionDef[]>([]);
+
+  /** 이번에 그리는 감정 순서대로 칸 — 아직 안 온 칸은 null */
   const slots = useMemo(
-    () => COUPLE_EMOJI_EMOTIONS.map((e) => fresh.find((f) => f.emotion === e.key) ?? null),
-    [fresh],
+    () => drawing.map((e) => fresh.find((f) => f.emotion === e.key) ?? null),
+    [drawing, fresh],
   );
 
   const pick = async (from: 'library' | 'camera') => {
@@ -103,6 +151,9 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
       setGenerating(true);
       setFresh([]);
       setDone(null);
+      // 이번에 그릴 감정을 여기서 고정한다 — 진행 중에 토글해도 칸이 흔들리지 않는다
+      const targets = COUPLE_EMOJI_EMOTIONS.filter((e) => effectiveSelected.has(e.key));
+      setDrawing(targets);
 
       /*
        * "이번에 생긴 것"을 가려내는 기준선은 방금 서버에서 받은 목록이어야 한다. 마운트 때의
@@ -137,7 +188,11 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
       };
 
       try {
-        const jobId = await startCoupleEmojiGeneration(croppedUri, subjectUserId);
+        const jobId = await startCoupleEmojiGeneration(
+          croppedUri,
+          subjectUserId,
+          targets.map((e) => e.key),
+        );
         void pollProgress();
         const batch = await awaitAiJob<CoupleEmojiBatch>(jobId);
         // 결과가 확정됐으니 트레이 캐시도 이번 세트를 포함하게 맞춘다
@@ -155,7 +210,7 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
         if (mounted.current) setGenerating(false);
       }
     },
-    [subjectUserId],
+    [subjectUserId, effectiveSelected],
   );
 
   const confirmRemove = (emoji: CoupleEmoji) => {
@@ -224,6 +279,64 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
           <Text style={styles.hint}>
             얼굴이 크고 또렷하게 나온 정면 사진일수록 잘 닮게 나와요. 사진 속 옷차림 그대로 그려져요.
           </Text>
+
+          {/*
+            어떤 감정을 그릴지 고른다. 감정이 17종이라 전부 다시 뽑으면 그만큼 시간과 실비가
+            든다 — 이미 있는 감정은 기본으로 빠져 있고, 고르지 않아도 가장 싼 선택이 기본값이다.
+          */}
+          <View style={styles.emotionHeader}>
+            <Text style={styles.sectionTitle}>어떤 감정을 만들까요?</Text>
+            <Pressable
+              onPress={() =>
+                setSelectedKeys(
+                  effectiveSelected.size === COUPLE_EMOJI_EMOTIONS.length
+                    ? new Set()
+                    : new Set(COUPLE_EMOJI_EMOTIONS.map((e) => e.key)),
+                )
+              }
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={
+                effectiveSelected.size === COUPLE_EMOJI_EMOTIONS.length ? '전체 해제' : '전체 선택'
+              }
+            >
+              <Text style={styles.emotionSelectAll}>
+                {effectiveSelected.size === COUPLE_EMOJI_EMOTIONS.length ? '전체 해제' : '전체 선택'}
+              </Text>
+            </Pressable>
+          </View>
+          <View style={styles.emotionWrap}>
+            {COUPLE_EMOJI_EMOTIONS.map((emotion) => {
+              const on = effectiveSelected.has(emotion.key);
+              const have = existingEmotions.has(emotion.key);
+              return (
+                <Pressable
+                  key={emotion.key}
+                  onPress={() => toggleEmotion(emotion.key)}
+                  style={({ pressed }) => [
+                    styles.emotionChip,
+                    on && styles.emotionChipOn,
+                    pressed && styles.cellPressed,
+                  ]}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: on }}
+                  accessibilityLabel={`${emotion.label}${have ? ' — 이미 있음' : ''}`}
+                >
+                  <Text style={styles.emotionChipEmoji}>{emotion.placeholder}</Text>
+                  <Text style={[styles.emotionChipText, on && styles.emotionChipTextOn]}>
+                    {emotion.label}
+                  </Text>
+                  {/* 이미 가진 감정 — 다시 그리면 덮어쓰는 게 아니라 한 장이 더 생긴다 */}
+                  {have ? <View style={styles.emotionHaveDot} /> : null}
+                </Pressable>
+              );
+            })}
+          </View>
+          <Text style={styles.hint}>
+            {existingEmotions.size > 0
+              ? `점이 붙은 건 이미 만들어 둔 감정이에요. 빼 두면 그대로 남고, 고른 ${effectiveSelected.size}장만 새로 그려요.`
+              : `고른 ${effectiveSelected.size}장을 그려요.`}
+          </Text>
         </>
       ) : (
         <Text style={styles.sectionTitle}>
@@ -267,7 +380,8 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
 
           {generating ? (
             <Text style={styles.hint}>
-              1분쯤 걸려요. 화면을 나가도 계속 만들어지고, 다 되면 채팅 트레이에 들어와 있어요.
+              {drawing.length}장을 그리고 있어요. 화면을 나가도 계속 만들어지고, 다 되면 채팅
+              트레이에 들어와 있어요.
             </Text>
           ) : null}
 
@@ -303,7 +417,8 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
               title={fresh.length > 0 ? '다른 사진으로 다시 만들기' : '사진 고르기'}
               onPress={() => pick('library')}
               loading={generating}
-              disabled={generating || !allowed}
+              // 감정을 하나도 안 고르면 그릴 것이 없다
+              disabled={generating || !allowed || effectiveSelected.size === 0}
             />
             <Button
               title="촬영하기"
@@ -399,6 +514,27 @@ const styles = themedStyles((colors) => ({
     backgroundColor: colors.surfaceAlt,
   },
   cellPressed: { opacity: 0.7 },
+  /* 감정 고르기 — 칩 격자 */
+  emotionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  emotionSelectAll: { fontSize: fontSize.caption, fontWeight: '700', color: colors.primary },
+  emotionWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.xs },
+  emotionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 6,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  emotionChipOn: { borderColor: colors.primary, backgroundColor: colors.surfaceAlt },
+  emotionChipEmoji: { fontSize: 14 },
+  emotionChipText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary },
+  emotionChipTextOn: { color: colors.primary },
+  /* 이미 가진 감정 표시 — 다시 그리면 덮어쓰는 게 아니라 한 장이 더 생긴다 */
+  emotionHaveDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.textTertiary },
   cellEmpty: { alignItems: 'center', justifyContent: 'center' },
   cellPlaceholder: { fontSize: fontSize.title },
   cellImage: { width: '100%', height: '100%' },

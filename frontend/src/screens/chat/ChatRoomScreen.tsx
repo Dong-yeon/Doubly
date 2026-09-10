@@ -363,23 +363,40 @@ export function ChatRoomScreen({ navigation, route }: Props) {
    * 어느 화면에서든 뜨므로, 여기서는 세션 생성(callApi.start)과 Stream 콜 오브젝트 생성
    * (client.call().getOrCreate({ring:true}))까지만 하면 나머지는 오버레이가 이어받는다.
    */
-  const callClient = useCallStore((s) => s.client);
+  /*
+   * 클라이언트를 여기서 구독하지 않는다 — 통화 버튼을 누를 때 ensure() 로 가져온다.
+   * 구독해서 "없으면 버튼을 막는" 구조였다면 부팅 때 한 번 실패한 사람은 재시도할 길조차
+   * 없다(docs/CALL_BROKEN_ANALYSIS_2026-09-10.md §4-1).
+   */
   const [callStarting, setCallStarting] = useState(false);
   const partnerId = couple?.partner?.id;
 
   const startCall = useCallback(
     async (callType: CallType) => {
-      if (!callClient) {
-        toast.error('통화 기능을 준비하지 못했어요. 잠시 후 다시 시도해주세요.');
+      if (callStarting) return;
+      /*
+       * 상대를 아직 못 읽었으면 알려준다. 예전엔 조용히 return 이라 버튼이 고장 난 것처럼
+       * 보였다(docs/CALL_BROKEN_ANALYSIS_2026-09-10.md §7-3).
+       */
+      if (!myId || !partnerId) {
+        toast.error('상대 정보를 아직 불러오지 못했어요. 잠시 후 다시 시도해주세요.');
         return;
       }
-      if (!myId || !partnerId || callStarting) return;
       setCallStarting(true);
       let joinedCallId: string | null = null;
       try {
+        /*
+         * 부팅 때 연결에 실패했으면 여기서 <b>한 번 더</b> 시도한다 — 예전엔 그 한 번의 실패로
+         * 앱을 껐다 켜기 전까지 통화가 죽었다(§4-1).
+         */
+        const client = await useCallStore.getState().ensure();
+        if (!client) {
+          toast.error('통화 기능을 준비하지 못했어요. 잠시 후 다시 시도해주세요.');
+          return;
+        }
         const joined = await callApi.start(callType);
         joinedCallId = joined.callId;
-        const call = callClient.call('default', joined.callId);
+        const call = client.call('default', joined.callId);
         await call.getOrCreate({
           ring: true,
           video: callType === 'VIDEO',
@@ -407,7 +424,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         setCallStarting(false);
       }
     },
-    [callClient, myId, partnerId, callStarting],
+    [myId, partnerId, callStarting],
   );
 
   useLayoutEffect(() => {

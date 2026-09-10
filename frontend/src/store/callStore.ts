@@ -9,6 +9,10 @@
 import { create } from 'zustand';
 import { StreamVideoClient } from '@stream-io/video-react-native-sdk';
 import { callApi } from '../api/call';
+import { reportError } from '../utils/errorReporter';
+
+/** 진행 중인 연결 시도 — 여러 곳에서 동시에 불러도 한 번만 돈다(init 주석) */
+let inflight: Promise<void> | null = null;
 
 /**
  * 자격 발급 + 클라이언트 생성 — init() 과 index.ts 의
@@ -27,8 +31,14 @@ export async function createVideoClient(): Promise<StreamVideoClient | undefined
       user: { id: credentials.userId },
       token: credentials.token,
     });
-  } catch {
-    // Stream 미설정(STREAM_NOT_CONFIGURED)·비로그인·네트워크 오류 — 통화 없이 앱은 정상 동작
+  } catch (e) {
+    /*
+     * 통화 없이도 앱은 정상 동작하므로 여기서 화면에 띄우지는 않는다. 다만 <b>이유는 남긴다</b> —
+     * 예전엔 빈 catch 라 Stream 미설정(503)·네트워크 끊김·토큰 갱신 실패가 전부 같은 것이 됐고,
+     * "통화가 안 된다"에서 어느 층이 문제인지 코드를 읽어야만 알 수 있었다
+     * (docs/CALL_BROKEN_ANALYSIS_2026-09-10.md §7-2).
+     */
+    reportError(e, { source: 'global', boundary: 'callStore.createVideoClient' });
     return undefined;
   }
 }
@@ -36,29 +46,60 @@ export async function createVideoClient(): Promise<StreamVideoClient | undefined
 interface CallState {
   client: StreamVideoClient | null;
   initializing: boolean;
-  /** 로그인/부팅 후 1회 — Stream 미설정(503) 이면 조용히 포기한다(통화는 선택 기능). */
+  /**
+   * 마지막 연결 시도가 실패했는가 — 다시 시도할 값어치가 있는지 판단하는 데 쓴다.
+   * 성공하면 다시 false 가 된다.
+   */
+  failed: boolean;
+  /** 로그인/부팅 후 — 실패해도 앱은 그대로 동작한다(통화는 선택 기능). */
   init: () => Promise<void>;
+  /**
+   * 통화 직전에 부른다 — client 가 없으면 <b>한 번 더 시도하고</b> 결과를 돌려준다.
+   *
+   * <p>예전엔 부팅 때 한 번 실패하면 그 앱 실행 내내 통화가 죽었다. Railway 콜드스타트처럼
+   * 잠깐의 문제로도 그렇게 되는데, 회복 경로가 "앱을 껐다 켜기"뿐이었다
+   * (docs/CALL_BROKEN_ANALYSIS_2026-09-10.md §4-1).
+   */
+  ensure: () => Promise<StreamVideoClient | null>;
   teardown: () => Promise<void>;
 }
 
 export const useCallStore = create<CallState>((set, get) => ({
   client: null,
   initializing: false,
+  failed: false,
 
   init: async () => {
-    if (get().client || get().initializing) return;
+    if (get().client) return;
+    /*
+     * 진행 중이면 그 시도에 <b>합류</b>한다. 예전엔 initializing 을 보고 그냥 돌아왔는데,
+     * 그러면 ensure() 가 "아직 안 끝난 시도" 옆에서 곧바로 null 을 돌려준다 — 부팅 직후
+     * 통화 버튼을 누른 사람에게는 실패로 보인다.
+     */
+    if (inflight) return inflight;
     set({ initializing: true });
-    try {
-      const client = await createVideoClient();
-      if (client) set({ client });
-    } finally {
-      set({ initializing: false });
-    }
+    inflight = (async () => {
+      try {
+        const client = await createVideoClient();
+        set(client ? { client, failed: false } : { failed: true });
+      } finally {
+        set({ initializing: false });
+        inflight = null;
+      }
+    })();
+    return inflight;
+  },
+
+  ensure: async () => {
+    const existing = get().client;
+    if (existing) return existing;
+    await get().init();
+    return get().client;
   },
 
   teardown: async () => {
     const client = get().client;
-    set({ client: null });
+    set({ client: null, failed: false });
     if (client) await client.disconnectUser().catch(() => undefined);
   },
 }));
