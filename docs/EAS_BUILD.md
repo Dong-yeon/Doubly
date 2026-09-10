@@ -198,6 +198,17 @@ during build` 로 실패했다. 같은 커밋에서 `npx expo-updates fingerprin
   fingerprint 는 node_modules 의 네이티브 모듈 목록을 해시하므로 로컬과 서버가 달랐다.
   `npm install` 로 lock 과 맞춘 뒤 로컬 해시가 EAS 로그의 "Resolved runtime version" 과
   정확히 일치했다. **pull 뒤에는 빌드 전에 `npm install`** — 이 규칙이 없으면 재발한다.
+- **네 번째 원인(Android 만, 더 위험)**: fingerprint 가 맞아 통과한 빌드(26·27·28) 로그에 `PREBUILD:
+  skipped` 가 찍혀 있었다. 루트 `.easignore` 가 있으면 EAS CLI 는 **.gitignore 를 보지 않는다**. 그래서
+  gitignore 된 `frontend/android/`(로컬 `expo run:android` 산출물, 9/9 생성)가 아카이브에 그대로 올라갔고,
+  CLI 는 `android/app/build.gradle` 이 "무시되지 않은 채 존재"하니 프로젝트를 bare 로 판정해 서버가
+  prebuild 를 건너뛰었다. 그 빌드는 **app.json 을 읽지 않는다** — blockedPermissions 를 넣고도
+  READ_MEDIA_IMAGES 가 든 옛 매니페스트로 빌드될 뻔했다(28 은 취소). 같은 이유로 node_modules 까지
+  올라가 아카이브가 1.0 GB 였다. 조치: `.easignore` 에 `frontend/android/`·`frontend/ios/`·
+  `frontend/node_modules/` 추가. eas-cli 의 `resolveWorkflowAsync` 를 직접 돌려 android/ 가 있어도
+  `managed` 로 나오는 것을 확인했다. 그날의 로컬 android/ 는
+  `D:\happyeon\99.Happyeon\_backup\Doubly-frontend-android-2026-09-10` 로 옮겨 뒀다(다음 `npm run android`
+  가 새로 만든다). 빌드 로그에서 `PREBUILD:success` 를 확인하는 습관이 이 사고를 막는다.
 - **검증**: 두 번 돌려 같은 해시가 나오면 된다. android/ 폴더가 있어도 없어도 같아야 하고,
   실패 로그가 있다면 그 안의 "Resolved runtime version" 과 같아야 한다.
 
