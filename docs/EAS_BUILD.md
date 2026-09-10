@@ -120,6 +120,47 @@ npx eas-cli env:create --scope project --name SENTRY_AUTH_TOKEN --value <토큰>
 이후 Sentry 이슈의 스택트레이스가 원본 TypeScript 파일·줄 번호로 표시되면 성공입니다.
 업로드가 생략되면 빌드 로그에 "SENTRY_AUTH_TOKEN environment variable" 안내가 남습니다.
 
+## 8. Google Play 정책·계정 요구사항
+
+### 8-1. Play 정책: 사진 선택 도구 (2026-09)
+
+버전 코드 25 가 **"사진/동영상에 대체 시스템 선택 도구 사용"** 정책 위반으로 4회 거부됐다
+(2026-09-08 ~ 09-10). Play 는 사진을 가끔 한 장씩 고르는 앱(채팅·식단·프로필·피드가 전부
+이 경우)에 `READ_MEDIA_IMAGES` / `READ_MEDIA_VIDEO` 를 허용하지 않고 Android **사진 선택
+도구(Photo Picker)** 를 쓰라고 요구한다.
+
+- **권한이 어디서 들어왔나**: 우리 코드가 아니라 `expo-media-library` config plugin 의
+  기본값(`granularPermissions: ['photo','video','audio']`)이 세 권한을 매니페스트에 넣고
+  있었다. 이 라이브러리는 받은 사진을 갤러리에 **저장**할 때만 쓰므로 읽기 권한은
+  처음부터 필요 없었다. `READ_EXTERNAL_STORAGE`(maxSdk 32)는 `expo-file-system` /
+  `expo-image-picker` 의 라이브러리 매니페스트가 넣는다.
+- **조치** (`frontend/app.json`): ① media-library 플러그인에 `granularPermissions: []`,
+  ② `android.blockedPermissions` 에 `READ_MEDIA_IMAGES`·`READ_MEDIA_VIDEO`·`READ_MEDIA_AUDIO`·
+  `READ_MEDIA_VISUAL_USER_SELECTED`·`READ_EXTERNAL_STORAGE`. blockedPermissions 는 메인
+  매니페스트에 `tools:node="remove"` 를 붙이므로 **라이브러리 AAR 이 선언한 것까지** 병합
+  시점에 빠진다 — 플러그인 옵션만 바꾸면 라이브러리 매니페스트 쪽은 남는다.
+- **동작은 그대로다**: `expo-image-picker` 는 Android 에서 이미 Photo Picker
+  (`PickVisualMedia`)를 띄우고(`legacy: true` 를 주지 않는 한), 이건 앱 밖에서 돌아
+  저장소 권한이 없어도 된다. 다만 `utils/imageUpload.ts` 의 `ensurePermission` 이
+  Android 에서 `requestMediaLibraryPermissionsAsync` 를 부르던 것을 건너뛰게 했다 —
+  권한을 매니페스트에서 뺀 뒤에도 요청하면 Android 12 이하에서 자동 거부돼 "권한이
+  필요해요" 토스트만 뜨기 때문이다. 갤러리 저장(`ImageViewer`)은 write-only 요청이라
+  `WRITE_EXTERNAL_STORAGE`(maxSdk 32)만 쓰며 영향 없다. 카메라(`CAMERA`)는 정책 대상이
+  아니라 유지.
+- **확인 방법**: 네이티브 폴더 없이도 아래로 병합 결과를 볼 수 있다. `[remove]` 로 표시된
+  다섯 권한 외에 `READ_MEDIA_*` 가 없어야 한다.
+
+```bash
+cd frontend && npx expo config --type introspect --json > /tmp/i.json
+```
+
+### 8-2. Android 개발자 인증 (마감 2026-09-30)
+
+Play 가 "Android 개발자 인증 요구사항: 앱과 서명 키 등록" 최종 알림을 보냈다. 코드 작업이
+아니라 Play Console 에서 계정 소유자가 직접 해야 한다 — **2026-09-30 까지** Play Console →
+개발자 인증(Android Developer Verification) 에서 `com.doubly.app` 과 업로드 서명 키를
+등록한다. 넘기면 신규 설치·업데이트 배포가 막힌다.
+
 ## 트러블슈팅
 
 | 증상 | 원인 / 해결 |
