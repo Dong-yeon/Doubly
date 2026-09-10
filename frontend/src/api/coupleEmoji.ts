@@ -15,7 +15,7 @@ import { apiClient, unwrap } from './client';
 import { uploadImageWithSignature } from '../utils/imageUpload';
 import type { AiJobStart } from './aiJob';
 import type { UploadSignature } from './upload';
-import type { ApiResponse, CoupleEmoji } from '../types';
+import type { ApiResponse, CoupleEmoji, CoupleEmojiEmotion } from '../types';
 
 export const coupleEmojiApi = {
   /** 원본 사진 업로드 서명 — 전용 폴더. 사진 한도(PHOTO_UPLOAD)를 한 번 쓴다 */
@@ -23,7 +23,12 @@ export const coupleEmojiApi = {
     unwrap(apiClient.post<ApiResponse<UploadSignature>>('/couple-emojis/upload-signature')),
 
   /** 생성 접수 — 202 + jobId. 결과는 화면이 폴링한다(파일 주석) */
-  generate: (payload: { sourceImageUrl: string; subjectUserId?: number }) =>
+  /** emotions 를 비우면 전체 — 일부만 보내면 그 감정만 그린다(부분 재생성) */
+  generate: (payload: {
+    sourceImageUrl: string;
+    subjectUserId?: number;
+    emotions?: CoupleEmojiEmotion[];
+  }) =>
     unwrap(apiClient.post<ApiResponse<AiJobStart>>('/couple-emojis/generate', payload)),
 
   /** 트레이 목록 — 관계의 살아 있는 이모지 전부(최근 세트가 위). 둘 다 같은 목록을 본다 */
@@ -47,9 +52,10 @@ export const coupleEmojiApi = {
 export async function startCoupleEmojiGeneration(
   croppedUri: string,
   subjectUserId?: number,
+  emotions?: CoupleEmojiEmotion[],
 ): Promise<string> {
   const signature = await coupleEmojiApi.uploadSignature();
   const sourceImageUrl = await uploadImageWithSignature(croppedUri, signature);
-  const { jobId } = await coupleEmojiApi.generate({ sourceImageUrl, subjectUserId });
+  const { jobId } = await coupleEmojiApi.generate({ sourceImageUrl, subjectUserId, emotions });
   return jobId;
 }

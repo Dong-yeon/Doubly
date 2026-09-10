@@ -40,8 +40,13 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 /**
  * 우리 이모지 — 상대(또는 내) 사진 한 장으로 감정 6종 캐릭터 세트를 AI 가 그리고, 커플이 함께 쓴다.
@@ -71,6 +76,13 @@ public class CoupleEmojiService {
      */
     static final String SOURCE_SUBFOLDER = "emoji-source";
     static final String RESULT_SUBFOLDER = "couple-emoji";
+
+    /**
+     * 한 세트 안에서 동시에 그릴 장 수. {@code AiJobService} 풀을 4로 둔 것과 같은 이유 —
+     * 이 작업은 CPU 가 아니라 외부 응답 대기라 많이 띄워봐야 Gemini 이미지 한도만 더 빨리
+     * 건드린다. 세트가 동시에 여러 개 돌면 그 배수가 된다는 점도 같이 봐야 한다.
+     */
+    private static final int IMAGE_CONCURRENCY = 4;
 
     private final CoupleEmojiRepository repository;
     private final RelationRepository relationRepository;
@@ -114,7 +126,8 @@ public class CoupleEmojiService {
     }
 
     /** 요청 스레드 → 백그라운드 작업으로 넘기는 것 — 검증이 끝난 값만 담는다 */
-    public record GenerationTicket(Long relationId, Long userId, Long subjectUserId, String sourceImageUrl) {
+    public record GenerationTicket(Long relationId, Long userId, Long subjectUserId, String sourceImageUrl,
+                                   List<CoupleEmojiEmotion> emotions) {
     }
 
     /**
@@ -145,7 +158,8 @@ public class CoupleEmojiService {
                 throw new BusinessException(ErrorCode.INVALID_INPUT, "우리 둘 중 한 사람의 사진이어야 해요.");
             }
             geminiClient.requireImageConfiguredAndCountUsage(userId, FEATURE);
-            return new GenerationTicket(couple.getId(), userId, subject, request.sourceImageUrl());
+            return new GenerationTicket(couple.getId(), userId, subject, request.sourceImageUrl(),
+                    resolveEmotions(request.emotions()));
         } catch (RuntimeException e) {
             /*
              * 앱은 업로드 → 접수 순서라, 여기서 거절(402·429·관계 없음·대상 오류)해도 원본은 이미
@@ -186,6 +200,38 @@ public class CoupleEmojiService {
         }
     }
 
+    /**
+     * 이번에 그릴 감정 — 비어 있으면 전체.
+     *
+     * <p>중복을 걷어내고 {@link CoupleEmojiEmotion#values()} 순서로 되돌린다. 앱이 보낸 순서를
+     * 그대로 믿으면 트레이·대기 화면의 칸 순서가 요청마다 달라진다(coupleEmojiEmotions.ts 주석).
+     * 모르는 값은 역직렬화 단계에서 이미 걸리므로 여기서는 순서·중복만 본다.
+     */
+    private static List<CoupleEmojiEmotion> resolveEmotions(List<CoupleEmojiEmotion> requested) {
+        if (requested == null || requested.isEmpty()) return List.of(CoupleEmojiEmotion.values());
+        var wanted = new LinkedHashSet<>(requested);
+        return java.util.Arrays.stream(CoupleEmojiEmotion.values()).filter(wanted::contains).toList();
+    }
+
+    /** 한 장 — 생성·업로드·저장. 스레드마다 따로 돌고 서로를 참조하지 않는다. */
+    private CoupleEmoji generateOne(GenerationTicket ticket, CloudinaryImageFetcher.Image source,
+                                    String facts, String batchId, CoupleEmojiEmotion emotion) {
+        GeneratedImage image = geminiClient.generateImageInBackground(List.of(
+                GeminiClient.imagePart(source.mimeType(), source.bytes()),
+                GeminiClient.textPart(CoupleEmojiPrompts.imagePrompt(facts, emotion))));
+        String url = imageUploader.upload(image.bytes(), image.mimeType(), RESULT_SUBFOLDER);
+        return transactionTemplate.execute(status -> repository.save(CoupleEmoji.builder()
+                .relationId(ticket.relationId())
+                .createdBy(ticket.userId())
+                .subjectUserId(ticket.subjectUserId())
+                .batchId(batchId)
+                .emotion(emotion)
+                .imageUrl(url)
+                .promptVersion(CoupleEmojiPrompts.VERSION)
+                .identityFacts(facts)
+                .build()));
+    }
+
     private CoupleEmojiBatchResponse generateFrom(GenerationTicket ticket) {
         CloudinaryImageFetcher.Image source;
         try {
@@ -197,37 +243,56 @@ public class CoupleEmojiService {
         String facts = describe(ticket.userId(), source);
 
         String batchId = UUID.randomUUID().toString();
+        List<CoupleEmojiEmotion> targets = ticket.emotions();
+
+        /*
+         * 감정별 생성을 <b>동시에</b> 돌린다. 장당 약 13초라 순차로는 감정 수에 그대로 비례해
+         * 늘어난다 — 6종 80초는 견뎠지만 17종이면 약 220초로, 대기 화면으로 버틸 길이가 아니다.
+         * 각 장은 서로를 전혀 참조하지 않고(같은 source·facts 를 읽기만 한다) 대부분 외부 응답
+         * 대기라, 동시에 돌리는 것이 자연스럽다.
+         *
+         * <p>동시 실행 수는 {@link #IMAGE_CONCURRENCY} 로 묶는다. 전부 한꺼번에 던지면 Gemini
+         * 이미지 한도를 그만큼 빨리 건드리고(AiJobService 풀을 4로 둔 것과 같은 이유), 여러 커플이
+         * 동시에 만들면 그 배수가 된다. 세트 안에서 4장씩이면 17종 기준 약 60초다.
+         *
+         * <p>결과 순서는 {@code targets} 순서 그대로 유지한다 — 트레이·대기 화면이 감정 순서를
+         * 전제로 칸을 그린다(coupleEmojiEmotions.ts 주석).
+         */
         List<CoupleEmoji> saved = new ArrayList<>();
         List<String> failed = new ArrayList<>();
         RuntimeException lastFailure = null;
-        for (CoupleEmojiEmotion emotion : CoupleEmojiEmotion.values()) {
-            try {
-                GeneratedImage image = geminiClient.generateImageInBackground(List.of(
-                        GeminiClient.imagePart(source.mimeType(), source.bytes()),
-                        GeminiClient.textPart(CoupleEmojiPrompts.imagePrompt(facts, emotion))));
-                String url = imageUploader.upload(image.bytes(), image.mimeType(), RESULT_SUBFOLDER);
-                CoupleEmoji row = transactionTemplate.execute(status -> repository.save(CoupleEmoji.builder()
-                        .relationId(ticket.relationId())
-                        .createdBy(ticket.userId())
-                        .subjectUserId(ticket.subjectUserId())
-                        .batchId(batchId)
-                        .emotion(emotion)
-                        .imageUrl(url)
-                        .promptVersion(CoupleEmojiPrompts.VERSION)
-                        .identityFacts(facts)
-                        .build()));
-                saved.add(row);
-            } catch (RuntimeException e) {
-                /*
-                 * BusinessException 만 잡으면 base64 디코드(IllegalArgumentException)·DB 예외가 루프를
-                 * 탈출한다 — 그러면 방금 업로드한 장은 고아가 되고, 이미 커밋된 장들은 이벤트·푸시 없는
-                 * 반쪽 세트로 남으며, 한 장도 못 살렸어도 환불이 없다. 어떤 예외든 "이 장 실패"로 분류한다.
-                 */
-                lastFailure = e;
-                failed.add(emotion.name());
-                log.warn("우리 이모지 {} 생성 실패(relation={}): {}", emotion, ticket.relationId(),
-                        e instanceof BusinessException be ? be.getErrorCode() : e.toString());
+        ExecutorService pool = Executors.newFixedThreadPool(
+                Math.min(IMAGE_CONCURRENCY, Math.max(1, targets.size())),
+                r -> {
+                    Thread t = new Thread(r, "couple-emoji");
+                    t.setDaemon(true);
+                    return t;
+                });
+        try {
+            List<Future<CoupleEmoji>> futures = targets.stream()
+                    .map(emotion -> pool.submit(() -> generateOne(ticket, source, facts, batchId, emotion)))
+                    .toList();
+            for (int i = 0; i < targets.size(); i++) {
+                try {
+                    saved.add(futures.get(i).get());
+                } catch (ExecutionException | InterruptedException e) {
+                    /*
+                     * BusinessException 만 잡으면 base64 디코드(IllegalArgumentException)·DB 예외가
+                     * 새어 나간다 — 그러면 이미 커밋된 장들은 이벤트·푸시 없는 반쪽 세트로 남고,
+                     * 한 장도 못 살렸어도 환불이 없다. 어떤 예외든 "이 장 실패"로 분류한다.
+                     */
+                    if (e instanceof InterruptedException) Thread.currentThread().interrupt();
+                    Throwable cause = e instanceof ExecutionException ee && ee.getCause() != null ? ee.getCause() : e;
+                    lastFailure = cause instanceof RuntimeException re ? re
+                            : new BusinessException(ErrorCode.AI_ANALYSIS_FAILED);
+                    CoupleEmojiEmotion emotion = targets.get(i);
+                    failed.add(emotion.name());
+                    log.warn("우리 이모지 {} 생성 실패(relation={}): {}", emotion, ticket.relationId(),
+                            cause instanceof BusinessException be ? be.getErrorCode() : cause.toString());
+                }
             }
+        } finally {
+            pool.shutdown();
         }
 
         if (saved.isEmpty()) {
