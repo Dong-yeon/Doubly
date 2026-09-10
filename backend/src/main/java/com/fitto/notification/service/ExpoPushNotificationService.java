@@ -8,6 +8,7 @@ import com.fitto.user.repository.UserRepository;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
@@ -15,11 +16,15 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.client.RestClient;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
@@ -39,11 +44,20 @@ public class ExpoPushNotificationService implements NotificationService {
 
     private static final Logger log = LoggerFactory.getLogger(ExpoPushNotificationService.class);
     private static final String EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
+    private static final String EXPO_RECEIPTS_URL = "https://exp.host/--/api/v2/push/getReceipts";
 
     private final DeviceTokenRepository deviceTokenRepository;
     private final DeviceTokenService deviceTokenService;
     private final UserRepository userRepository;
     private final RestClient restClient;
+    /** 티켓을 받고 나서 영수증을 조회하기까지 기다리는 시간 — Expo 권장은 15분(테스트에서만 줄인다). */
+    private final Duration receiptDelay;
+    /** 영수증 조회 예약 — 발송 풀과 분리해 발송이 밀려도 조회가, 조회가 밀려도 발송이 막히지 않게 한다. */
+    private final ScheduledExecutorService receiptScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "expo-push-receipt");
+        t.setDaemon(true);
+        return t;
+    });
 
     /**
      * 발송 전용 소형 풀 — 푸시는 유실돼도 앱이 깨지지 않는 부가 기능이므로,
@@ -62,10 +76,12 @@ public class ExpoPushNotificationService implements NotificationService {
 
     public ExpoPushNotificationService(DeviceTokenRepository deviceTokenRepository,
                                        DeviceTokenService deviceTokenService,
-                                       UserRepository userRepository) {
+                                       UserRepository userRepository,
+                                       @Value("${fitto.push.receipt-delay:PT15M}") Duration receiptDelay) {
         this.deviceTokenRepository = deviceTokenRepository;
         this.deviceTokenService = deviceTokenService;
         this.userRepository = userRepository;
+        this.receiptDelay = receiptDelay;
         // 타임아웃 없는 기본 RestClient 는 exp.host 무응답 시 무한 대기한다 (Resend 와 동일 원칙)
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(5_000);
@@ -142,17 +158,26 @@ public class ExpoPushNotificationService implements NotificationService {
      *       토큰 잘못이 아니므로 지우지 않고 error 로 남긴다.
      *   <li>{@code MessageTooBig}·{@code MessageRateExceeded} — 우리 쪽 발송 문제.
      * </ul>
+     *
+     * <p>성공도 한 줄 남긴다. 성공이 조용하면 "토큰이 없어 안 보냄"과 "보냈음"이 로그에서
+     * 구분되지 않아, 2026-09-10 조사 때 DB 를 직접 열어야 했다. 그리고 티켓 {@code ok} 는
+     * "Expo 가 받았다"일 뿐이라 APNs/FCM 단계의 실패는 {@link #handleReceipts 영수증}에서만 보인다.
      */
     private void handleTickets(Long recipientUserId, List<DeviceToken> tokens, ExpoPushResponse response) {
         if (response == null || response.data() == null) return;
 
         List<String> dead = new ArrayList<>();
+        Map<String, DeviceToken> accepted = new LinkedHashMap<>();
         List<Ticket> tickets = response.data();
         for (int i = 0; i < tickets.size() && i < tokens.size(); i++) {
             Ticket ticket = tickets.get(i);
-            if (ticket == null || !"error".equals(ticket.status())) continue;
-
+            if (ticket == null) continue;
             DeviceToken token = tokens.get(i);
+            if (!"error".equals(ticket.status())) {
+                if (ticket.id() != null) accepted.put(ticket.id(), token);
+                continue;
+            }
+
             String reason = ticket.details() != null ? ticket.details().error() : null;
             if ("DeviceNotRegistered".equals(reason)) {
                 dead.add(token.getToken());
@@ -165,21 +190,89 @@ public class ExpoPushNotificationService implements NotificationService {
             }
         }
 
-        if (!dead.isEmpty()) {
-            try {
-                deviceTokenService.removeDeadTokens(dead);
-            } catch (Exception e) {
-                log.warn("죽은 푸시 토큰 정리 실패 recipient={}: {}", recipientUserId, e.getMessage());
-            }
+        if (!accepted.isEmpty()) {
+            log.info("Expo push 접수 recipient={} platforms={} — 영수증은 {} 뒤 확인",
+                    recipientUserId, accepted.values().stream().map(DeviceToken::getPlatform).toList(),
+                    receiptDelay);
+            scheduleReceiptCheck(recipientUserId, accepted);
         }
+        removeDead(recipientUserId, dead);
+    }
+
+    private void removeDead(Long recipientUserId, List<String> dead) {
+        if (dead.isEmpty()) return;
+        try {
+            deviceTokenService.removeDeadTokens(dead);
+        } catch (Exception e) {
+            log.warn("죽은 푸시 토큰 정리 실패 recipient={}: {}", recipientUserId, e.getMessage());
+        }
+    }
+
+    /**
+     * 영수증 조회 예약 — 티켓 {@code ok} 뒤에 APNs/FCM 이 실제로 어떻게 처리했는지는
+     * 영수증에만 있다. iOS 키가 틀렸을 때의 {@code InvalidCredentials} 가 대표적으로 여기서만
+     * 나온다. 서버가 그 사이 재시작되면 조회는 사라지는데, 영수증은 부가 진단이라 감수한다.
+     */
+    private void scheduleReceiptCheck(Long recipientUserId, Map<String, DeviceToken> accepted) {
+        try {
+            receiptScheduler.schedule(() -> fetchReceipts(recipientUserId, accepted),
+                    receiptDelay.toMillis(), TimeUnit.MILLISECONDS);
+        } catch (Exception e) {
+            log.warn("Expo push 영수증 조회 예약 실패 recipient={}: {}", recipientUserId, e.getMessage());
+        }
+    }
+
+    private void fetchReceipts(Long recipientUserId, Map<String, DeviceToken> accepted) {
+        try {
+            ExpoReceiptResponse response = restClient.post()
+                    .uri(EXPO_RECEIPTS_URL)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(Map.of("ids", new ArrayList<>(accepted.keySet())))
+                    .retrieve()
+                    .body(ExpoReceiptResponse.class);
+            handleReceipts(recipientUserId, accepted, response);
+        } catch (Exception e) {
+            log.warn("Expo push 영수증 조회 실패 recipient={}: {}", recipientUserId, e.getMessage());
+        }
+    }
+
+    /**
+     * 영수증 처리 — 티켓과 같은 규칙이다. 기기 미등록이면 토큰을 지우고, 그 밖의 실패는 error 로
+     * 남긴다. 영수증은 조회 시점에 아직 없을 수 있는데(Expo 가 처리 중), 그 경우 응답 map 에
+     * 그 id 가 빠져 있다 — 없는 것은 실패가 아니므로 건드리지 않는다.
+     */
+    void handleReceipts(Long recipientUserId, Map<String, DeviceToken> accepted, ExpoReceiptResponse response) {
+        if (response == null || response.data() == null) return;
+
+        List<String> dead = new ArrayList<>();
+        response.data().forEach((ticketId, receipt) -> {
+            DeviceToken token = accepted.get(ticketId);
+            if (token == null || receipt == null || !"error".equals(receipt.status())) return;
+
+            String reason = receipt.details() != null ? receipt.details().error() : null;
+            if ("DeviceNotRegistered".equals(reason)) {
+                dead.add(token.getToken());
+                log.info("Expo push 토큰 폐기(영수증) recipient={} platform={}: 기기에 앱이 없음",
+                        recipientUserId, token.getPlatform());
+            } else {
+                log.error("Expo push 전달 실패(영수증) recipient={} platform={} reason={}: {}",
+                        recipientUserId, token.getPlatform(), reason, receipt.message());
+            }
+        });
+        removeDead(recipientUserId, dead);
     }
 
     /** Expo Push API 응답 — 우리가 보는 필드만. 나머지는 무시한다. */
     record ExpoPushResponse(List<Ticket> data) {}
 
-    record Ticket(String status, String message, TicketDetails details) {}
+    record Ticket(String id, String status, String message, TicketDetails details) {}
 
     record TicketDetails(String error) {}
+
+    /** 영수증 응답 — 티켓 id 를 키로 하는 map. 아직 처리 안 된 id 는 빠져서 온다. */
+    record ExpoReceiptResponse(Map<String, Receipt> data) {}
+
+    record Receipt(String status, String message, TicketDetails details) {}
 
     /**
      * Expo 메시지 한 건.
@@ -203,5 +296,6 @@ public class ExpoPushNotificationService implements NotificationService {
     @PreDestroy
     void shutdown() {
         executor.shutdown();
+        receiptScheduler.shutdownNow();
     }
 }

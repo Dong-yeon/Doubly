@@ -16,7 +16,11 @@ import { useThemeStore } from '../../store/themeStore';
 import type { ThemeMode } from '../../theme/themePreference';
 import { authApi } from '../../api/auth';
 import { dietApi } from '../../api/diet';
-import { isPushPermissionDenied } from '../../utils/push';
+import {
+  canAskPushPermission,
+  isPushPermissionDenied,
+  requestPushPermission,
+} from '../../utils/push';
 import { useAuthStore } from '../../store/authStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { getErrorMessage } from '../../utils/error';
@@ -114,10 +118,32 @@ export function SettingsScreen({ navigation }: Props) {
   const [savingCategory, setSavingCategory] = useState<string | null>(null);
   /** OS 권한이 거부된 상태 — 앱 안 설정으로는 되돌릴 수 없어 시스템 설정으로 보내야 한다 */
   const [permissionDenied, setPermissionDenied] = useState(false);
+  /**
+   * OS 권한을 아직 한 번도 안 물어본 상태(undetermined) — 거부와 달리 앱 안에서 바로 요청할 수 있다.
+   * 첫 안내에서 "나중에"를 눌렀거나 iOS 에서 앱을 지웠다 다시 깐 경우가 여기 해당한다.
+   * 이 상태를 정상처럼 보여주면 서버·APNs 가 멀쩡해도 알림이 오지 않는 이유를 사용자가 알 길이 없다.
+   */
+  const [permissionUnasked, setPermissionUnasked] = useState(false);
+  const [requestingPermission, setRequestingPermission] = useState(false);
 
-  useEffect(() => {
+  const refreshPermissionState = () => {
     void isPushPermissionDenied().then(setPermissionDenied);
-  }, []);
+    void canAskPushPermission().then(setPermissionUnasked);
+  };
+
+  useEffect(refreshPermissionState, []);
+
+  /** 권한창을 띄우고(허용되면 토큰 등록까지) 결과에 맞춰 안내 행을 갈아 끼운다. */
+  const onRequestPermission = async () => {
+    setRequestingPermission(true);
+    try {
+      const granted = await requestPushPermission();
+      if (granted) toast.success('이제 알림을 받을 수 있어요.');
+    } finally {
+      setRequestingPermission(false);
+      refreshPermissionState();
+    }
+  };
 
   // 서버가 값을 안 내려주는 구버전 응답에서도 안전하게 동작하도록 기본값을 둔다
   const notificationsEnabled = user?.notificationsEnabled ?? true;
@@ -296,6 +322,25 @@ export function SettingsScreen({ navigation }: Props) {
                 <Text style={styles.rowTitleWarn}>기기에서 알림이 차단돼 있어요</Text>
                 <Text style={styles.rowDesc}>
                   아래 설정을 켜도 알림이 오지 않아요. 눌러서 시스템 설정에서 허용해주세요.
+                </Text>
+              </View>
+              <Text style={styles.chevron}>›</Text>
+            </Pressable>
+          ) : null}
+
+          {/* 아직 안 물어본 상태 — 여기서는 시스템 설정이 아니라 권한창을 바로 띄울 수 있다 */}
+          {!permissionDenied && permissionUnasked ? (
+            <Pressable
+              style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+              onPress={() => void onRequestPermission()}
+              disabled={requestingPermission}
+              accessibilityRole="button"
+              accessibilityLabel="기기 알림 허용하기"
+            >
+              <View style={styles.rowText}>
+                <Text style={styles.rowTitleWarn}>기기 알림 허용이 아직 안 됐어요</Text>
+                <Text style={styles.rowDesc}>
+                  위 설정을 켜도 기기가 알림을 보여주지 않아요. 눌러서 허용해주세요.
                 </Text>
               </View>
               <Text style={styles.chevron}>›</Text>
