@@ -191,7 +191,17 @@ APK 안 `assets/kiwi/` 를 직접 읽는다(§4-1). 나중에 내려받기로 �
 
 ## 7. 재현 방법
 
-조사에 쓴 산출물은 저장소에 남기지 않았다(모델 105MB, 빌드 트리 수 GB). 재현하려면:
+**2026-09-09 부터는 스크립트가 있다** — `frontend/modules/korean-spell/scripts/build-kiwi-android.sh`.
+Kiwi 소스 clone·서브모듈·CMake 옵션·strip·16KB 정렬 검사까지 한 번에 한다(§8 참고).
+
+```bash
+# frontend/modules/korean-spell 에서. NDK 는 r27 이상(r28 권장)
+ANDROID_NDK=/path/to/ndk scripts/build-kiwi-android.sh            # arm64-v8a + x86_64
+ANDROID_NDK=/path/to/ndk scripts/build-kiwi-android.sh arm64-v8a  # 하나만
+```
+
+아래는 처음 조사 때(2026-09-03) 손으로 했던 절차다. 조사에 쓴 산출물은 저장소에 남기지
+않았다(모델 105MB, 빌드 트리 수 GB).
 
 1. `git clone https://github.com/bab2min/Kiwi` 후 `third_party/{cpp-btree,eigen,streamvbyte,json,cpuinfo}` 서브모듈 init
    (모델은 저장소에 git-lfs 로 들어있어 clone 시 같이 받아진다 — `models/cong/base`)
@@ -202,3 +212,32 @@ APK 안 `assets/kiwi/` 를 직접 읽는다(§4-1). 나중에 내려받기로 �
 RN·JSI 를 끼우지 않고 C API 만 standalone 바이너리로 재는 방식이 여기서도 유효했다
 (Hunspell 때와 같은 방법). 앱 빌드 없이 "빌드되는가 / 품질이 쓸 만한가 / 비용이
 얼마인가"를 전부 답할 수 있다.
+
+## 8. 16KB 페이지 크기 — Play 콘솔 반려 (2026-09-09 추가)
+
+버전코드 24 를 프로덕션에 올리자 Play 콘솔이 **"앱이 16KB 메모리 페이지 크기를 지원하지
+않습니다"** 로 거절했다. 이 모듈이 처음 들어간 뒤의 첫 스토어 제출이었다.
+
+원인은 두 .so 모두였다(ELF `PT_LOAD` 세그먼트 `p_align` 이 4096):
+
+- `libkiwi.so` — §2 의 손 빌드가 링커 정렬 옵션 없이 만들어졌다(NDK 27 이하는 4KB 가 기본값).
+- `libkoreanspell.so` — 앱 빌드 시 NDK 27.1 로 컴파일되는데 CMake 에 정렬 플래그가 없었다.
+  RN(`ReactAndroid`)과 `expo-modules-core` 는 `-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON` 을
+  넘기지만 그건 각자의 CMake 호출에만 걸리고 우리 모듈에는 전파되지 않는다.
+
+Maven 에서 오는 나머지 네이티브 라이브러리(WebRTC 145.9.0, libyuv 0.36.0, sentry-native 0.12.3)
+는 64비트 ABI 가 모두 16KB 정렬이었다(32비트는 아니지만 Play 는 64비트만 본다).
+
+고친 것:
+
+- `android/build.gradle` — cmake `arguments "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"`
+- `android/CMakeLists.txt` — `target_link_options(... "-Wl,-z,max-page-size=16384")` (이중 안전장치)
+- `libkiwi.so` 두 ABI 재빌드 — `scripts/build-kiwi-android.sh` 가 같은 두 플래그로 링크하고
+  끝에 `scripts/check-elf-align.mjs` 로 검사한다. NDK r28c 로 빌드했다.
+  소스는 **main 커밋 `f06a54d`(2026-08-21) 고정** — §1 대로 `kiwi_space` 는 `v0.23.2` 태그에
+  없어서, 태그로 빌드하면 정렬은 통과해도 심볼이 빠진다(재빌드 첫 시도에서 실제로 그랬다).
+  스크립트가 마지막에 심볼 존재도 검사한다.
+- `scripts/check-elf-align.mjs` — readelf 없이 Node 만으로 `.so` 의 정렬을 판정한다.
+  다른 네이티브 의존성이 의심될 때 AAR 을 풀어 `jni/arm64-v8a/*.so` 에 돌리면 된다.
+
+상세 기록: `docs/ANDROID_16KB_PAGE_SIZE_2026-09-09.md`.

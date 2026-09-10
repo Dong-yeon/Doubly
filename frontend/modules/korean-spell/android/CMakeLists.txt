@@ -49,3 +49,9 @@ target_compile_options(koreanspell PRIVATE -Wno-deprecated-declarations)
 
 # android(asset manager) 는 Kiwi 모델을 APK 에서 바로 읽기 위해 필요하다
 target_link_libraries(koreanspell log android ${KIWI_LIB})
+
+# 16KB 페이지 정렬 — Play 콘솔이 64비트 .so 전부에 요구한다(Android 15+ 기기).
+# build.gradle 의 ANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON 과 같은 효과지만, NDK 버전이나
+# 호출 경로에 관계없이 걸리도록 링커에도 직접 지정한다. 미리 빌드한 libkiwi.so 는
+# 여기 영향을 받지 않는다 — scripts/build-kiwi-android.sh 가 같은 정렬로 만든다.
+target_link_options(koreanspell PRIVATE "-Wl,-z,max-page-size=16384")
