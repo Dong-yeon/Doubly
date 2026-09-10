@@ -1045,8 +1045,13 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         ) : null}
         {isSticker ? (
           animatedStickerOf(item.content) ? (
-            // 재생 정책·웹 대체는 AnimatedSticker 안에 있다(플랫폼별 파일로 분리)
-            <AnimatedSticker sticker={animatedStickerOf(item.content)!} style={styles.stickerImage} />
+            // 재생 정책(탭하면 다시 재생)·웹 대체는 AnimatedSticker 안에 있다(플랫폼별 파일로 분리).
+            // 스티커가 터치를 가로채므로 말풍선 길게 누르기는 명시적으로 넘겨준다.
+            <AnimatedSticker
+              sticker={animatedStickerOf(item.content)!}
+              style={styles.stickerImage}
+              onLongPress={() => onLongPressMessage(item)}
+            />
           ) : stickerImageOf(item.content) ? (
             <Image source={stickerImageOf(item.content)!.source} style={styles.stickerImage} resizeMode="contain" />
           ) : (
