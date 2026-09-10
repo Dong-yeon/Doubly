@@ -31,6 +31,7 @@ import * as Sharing from 'expo-sharing';
 import { MaterialCommunityIcons } from './Icon';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { toast } from '../store/toastStore';
+import { Toast } from './Toast';
 import { getErrorMessage } from '../utils/error';
 import { colors, fontSize, spacing } from '../constants/theme';
 import { themedStyles } from '../theme/themedStyles';
@@ -227,6 +228,20 @@ export function ImageViewer({ images, initialIndex, onClose }: Props) {
             ) : null}
           </View>
         ) : null}
+
+        {/*
+         * 토스트를 모달 <b>안에</b> 한 번 더 그린다.
+         *
+         * <p>App.tsx 루트의 {@code <Toast />} 는 RN {@link Modal} 이 별도 네이티브
+         * 윈도우에 그려지는 탓에 뷰어 뒤에 깔린다 — 갤러리 저장을 눌러도 "저장했어요"가
+         * 사진 위에 안 뜨고, 뷰어를 닫은 뒤 <b>다른 화면</b>에서 남은 시간만큼 보였다.
+         * "저장됐는지 알 수 없다"는 리포트(2026-09-10)의 원인이 이것이다.
+         *
+         * <p>두 인스턴스는 같은 스토어 슬롯을 읽으므로 내용·시간이 어긋나지 않는다.
+         * 뒤에 깔린 쪽은 어차피 안 보이고, 모달이 닫혀 있으면 RN Modal 이 children 을
+         * 렌더하지 않으므로 이 사본은 뷰어가 열려 있는 동안에만 존재한다.
+         */}
+        <Toast />
       </View>
     </Modal>
   );
