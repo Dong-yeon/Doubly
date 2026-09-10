@@ -6,12 +6,18 @@
  *
  * 인증된 사용자에게 한 번만 노출한다(doubly.pushPrimed 플래그).
  * 이미 허용/거부한 사용자(undetermined 아님)에게는 나타나지 않는다.
+ *
+ * <p><b>플래그는 SecureStore 가 아니라 AsyncStorage 에 둔다.</b> iOS 의 SecureStore 는
+ * Keychain 이라 앱을 지워도 남는데, 알림 권한은 앱을 지우면 "아직 안 물어봄"으로 돌아간다.
+ * 그래서 Keychain 에 두면 재설치 뒤 권한은 없는데 안내는 다시 안 뜨고, 토큰 등록도 조용히
+ * 건너뛰어 "iPhone 에서만 알림이 안 온다"가 됐다(2026-09-10 — 서버·APNs 는 전부 정상이었다).
+ * AsyncStorage 는 앱과 함께 지워지므로 재설치하면 권한 상태와 같이 처음으로 돌아간다.
  */
 import React, { useEffect, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialCommunityIcons } from './Icon';
 import { Button } from './Button';
-import { storage } from '../utils/storage';
 import { STORAGE_KEYS } from '../constants/config';
 import { canAskPushPermission, requestPushPermission } from '../utils/push';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
@@ -24,7 +30,7 @@ export function PushPermissionPrimer() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const primed = await storage.getItem(STORAGE_KEYS.pushPrimed).catch(() => null);
+      const primed = await AsyncStorage.getItem(STORAGE_KEYS.pushPrimed).catch(() => null);
       if (primed) return;
       const canAsk = await canAskPushPermission();
       if (!cancelled && canAsk) {
@@ -40,8 +46,8 @@ export function PushPermissionPrimer() {
   }, []);
 
   const dismiss = async () => {
-    // 허용/나중에 어느 쪽이든 다시 묻지 않는다
-    await storage.setItem(STORAGE_KEYS.pushPrimed, 'true');
+    // 허용/나중에 어느 쪽이든 다시 묻지 않는다 (설정 화면에서는 언제든 다시 켤 수 있다)
+    await AsyncStorage.setItem(STORAGE_KEYS.pushPrimed, 'true').catch(() => undefined);
     setVisible(false);
   };
 
