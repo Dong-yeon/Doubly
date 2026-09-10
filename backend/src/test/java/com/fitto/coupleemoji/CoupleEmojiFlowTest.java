@@ -60,6 +60,12 @@ import static org.mockito.Mockito.when;
 class CoupleEmojiFlowTest {
 
     /** 전용 폴더에 올라간 원본 URL 모양 — 이 폴더가 아니면 서버가 받지 않는다(서비스 주석). */
+    /**
+     * 한 세트에 들어가는 장 수 = 감정 종류 수. 숫자를 박아 두면 감정을 하나 늘릴 때마다
+     * 이 테스트가 관계없이 깨진다(2026-09-10 상황 11종 추가 때 실제로 4건이 깨졌다).
+     */
+    private static final int ALL_EMOTIONS = CoupleEmojiEmotion.values().length;
+
     private static final String SOURCE_URL =
             "https://res.cloudinary.com/demo/image/upload/v1712345678/fitto/emoji-source/abc123.jpg";
 
@@ -205,7 +211,7 @@ class CoupleEmojiFlowTest {
 
         CoupleEmojiBatchResponse batch = generateFor(a, b);
 
-        assertThat(batch.emojis()).hasSize(6);
+        assertThat(batch.emojis()).hasSize(ALL_EMOTIONS);
         assertThat(batch.failedEmotions()).isEmpty();
         assertThat(batch.emojis()).extracting(CoupleEmojiResponse::emotion)
                 .containsExactly(CoupleEmojiEmotion.values());
@@ -218,8 +224,8 @@ class CoupleEmojiFlowTest {
         });
 
         // 커플 공용 — 만든 사람이 아닌 상대도 같은 목록을 본다
-        assertThat(service.list(a)).hasSize(6);
-        assertThat(service.list(b)).hasSize(6);
+        assertThat(service.list(a)).hasSize(ALL_EMOTIONS);
+        assertThat(service.list(b)).hasSize(ALL_EMOTIONS);
 
         // 2단계 생성의 흔적 — 텍스트 모델이 뽑은 사실이 행에 남는다
         String facts = (String) em.createNativeQuery(
@@ -243,9 +249,9 @@ class CoupleEmojiFlowTest {
 
         CoupleEmojiBatchResponse batch = generateFor(a, null);
 
-        assertThat(batch.emojis()).hasSize(5);
+        assertThat(batch.emojis()).hasSize(ALL_EMOTIONS - 1);
         assertThat(batch.failedEmotions()).containsExactly("HAPPY");
-        assertThat(service.list(b)).hasSize(5);
+        assertThat(service.list(b)).hasSize(ALL_EMOTIONS - 1);
         verify(geminiClient, never()).refund(any(), any());
     }
 
@@ -297,7 +303,7 @@ class CoupleEmojiFlowTest {
 
         CoupleEmojiBatchResponse batch = generateFor(a, null);
 
-        assertThat(batch.emojis()).hasSize(5);
+        assertThat(batch.emojis()).hasSize(ALL_EMOTIONS - 1);
         assertThat(batch.failedEmotions()).containsExactly("ANGRY");
         verify(geminiClient, never()).refund(any(), any());
         verify(imageDeleter).deleteAll(List.of(SOURCE_URL));
@@ -314,7 +320,7 @@ class CoupleEmojiFlowTest {
 
         // 만든 사람이 아닌 상대(b)가 한 장 지운다 — 상대 얼굴을 쓰는 기능이라 상대의 삭제권이 곧 동의 장치
         service.delete(b, first);
-        assertThat(service.list(a)).extracting(CoupleEmojiResponse::id).doesNotContain(first).hasSize(5);
+        assertThat(service.list(a)).extracting(CoupleEmojiResponse::id).doesNotContain(first).hasSize(ALL_EMOTIONS - 1);
         // 다시 지우면 없는 것
         assertThatThrownBy(() -> service.delete(a, first))
                 .isInstanceOf(BusinessException.class)
@@ -328,7 +334,7 @@ class CoupleEmojiFlowTest {
         Number remaining = (Number) em.createNativeQuery(
                 "select count(*) from couple_emojis where batch_id = :b").setParameter("b", batch.batchId())
                 .getSingleResult();
-        assertThat(remaining.longValue()).isEqualTo(6);
+        assertThat(remaining.longValue()).isEqualTo(ALL_EMOTIONS);
 
         // 세트 통째로
         service.deleteBatch(a, batch.batchId());

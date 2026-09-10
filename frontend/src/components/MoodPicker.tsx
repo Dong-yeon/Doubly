@@ -10,7 +10,7 @@
  * 만들 수 있어서(PRO 월 5세트) 전부 올리면 최대 30장이 되는데, 이 파일의 12종 원칙 자체가
  * "처음부터 다 만들면 선택 마비만 생긴다"(`moodEmojis.ts`)에서 나왔다. 두 가지로 줄인다 —
  * ① 무드는 "내 기분"이므로 <b>내 얼굴</b>(subjectUserId === 나)만, ② 그중 <b>최신 한 벌</b>만.
- * 그래야 세트를 몇 벌 만들어도 여기 개수는 6장으로 고정된다.
+ * 그래야 세트를 몇 벌 만들어도 여기 개수는 한 벌치(감정 종류 수)로 고정된다.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { Image, Modal, Pressable, ScrollView, Text, TextInput, useWindowDimensions, View } from 'react-native';
