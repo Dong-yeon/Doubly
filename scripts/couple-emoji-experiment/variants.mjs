@@ -7,8 +7,14 @@
  * 여기는 스케치가 없다 — <b>이미 완성된 스티커 한 장</b>을 참조로 주고 포즈·표정만 바꿔
  * 새로 그린다. 곰돌이(love_bear.png)처럼 스케치는 없는데 결과물만 있는 캐릭터용이다.
  *
- *   railway run node scripts/couple-emoji-experiment/variants.mjs \
+ *   GEMINI_API_KEY=... node scripts/couple-emoji-experiment/variants.mjs \
  *     --ref frontend/assets/stickers/love_bear.png
+ *
+ * <p><b>키는 환경변수 하나면 된다</b> — Railway CLI 는 필요 없다(개발 PC 에 설치돼 있지도
+ * 않다). 운영 키는 Railway 백엔드 서비스의 Variables 에 있지만, 그걸 로컬로 꺼내 오는 것보다
+ * <b>AI Studio 에서 이 용도의 키를 따로 발급</b>하는 편이 낫다 — 운영 키가 개발 PC 에
+ * 남지 않고, 실험 비용도 따로 볼 수 있다. 이미지 생성은 무료 티어가 없으므로 결제가 연결된
+ * 프로젝트의 키여야 한다.
  *
  * 옵션
  *   --ref <image>     참조 스티커 (필수) — 이 그림의 캐릭터·화풍·색을 그대로 따라간다
