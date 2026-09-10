@@ -300,7 +300,7 @@ Play Console:
   "production": {
     "android": {
       "serviceAccountKeyPath": "../secrets/play-service-account.json",
-      "track": "internal",              // 내부 테스트로 먼저 올린다
+      "track": "production",            // 실사용자 트랙. 내부 테스트로 먼저 보려면 "internal"
       "releaseStatus": "completed",
       "changesNotSentForReview": false
     }
@@ -308,9 +308,13 @@ Play Console:
 }
 ```
 
-**`track` 을 `internal` 로 둔 이유**: 첫 제출이 곧바로 프로덕션 출시로 이어지면 되돌리기 어렵다.
-내부 테스트 트랙에 올려 설치·동작을 확인한 뒤, Play Console 에서 프로덕션으로 승격하거나
-이 값을 `production` 으로 바꾼다.
+**`track` 이 `production` 인 이유**: 이 저장소의 안드로이드 제출은 실사용자 트랙에 올리는 것이
+목적이다(2026-09-10 결정). 되돌릴 일이 생기면 Play Console 에서 이전 버전을 다시 출시해야 하므로,
+제출 전에 어떤 versionCode 가 올라가는지 확인한다. 내부 테스트로 먼저 보고 싶으면 이 값을
+`internal` 로 바꿔 제출한 뒤 콘솔에서 프로덕션으로 승격한다.
+
+**제출 전 현재 트랙 상태 확인**은 `scripts/check-play-track.mjs` 로 한다(서비스 계정 키로
+androidpublisher 에 붙어 트랙별 versionCode 를 읽고 흔적 없이 정리한다).
 
 ### 10-3. 제출
 
