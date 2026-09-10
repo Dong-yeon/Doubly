@@ -67,6 +67,13 @@ public class CoupleEmoji {
     @Column(name = "identity_facts", length = 500)
     private String identityFacts;
 
+    /**
+     * 무드 피커에 올릴 것인가 — 초기값은 감정이 정한다({@link CoupleEmojiEmotion#defaultMoodVisible}).
+     * 삭제(deletedAt)와 별개다: 트레이에는 그대로 있고 무드 선택지에서만 빠진다.
+     */
+    @Column(name = "mood_visible", nullable = false)
+    private boolean moodVisible;
+
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
@@ -86,10 +93,16 @@ public class CoupleEmoji {
         this.imageUrl = imageUrl;
         this.promptVersion = promptVersion;
         this.identityFacts = identityFacts;
+        this.moodVisible = emotion != null && emotion.defaultMoodVisible();
     }
 
     public boolean isDeleted() {
         return deletedAt != null;
+    }
+
+    /** 무드 선택지에 올릴지 바꾼다 — 트레이 노출·삭제와는 무관하다 */
+    public void setMoodVisible(boolean visible) {
+        this.moodVisible = visible;
     }
 
     /** 트레이에서 숨긴다 — 클래스 주석 "삭제는 숨김이다" 참고 */

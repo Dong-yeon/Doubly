@@ -25,7 +25,7 @@ import { Button } from '../../components/Button';
 import { useHeaderHeight } from '@react-navigation/elements';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { ChatStackParamList } from '../../navigation/types';
-import { ImageViewer } from '../../components/ImageViewer';
+import { ImageViewer, type ViewerImage } from '../../components/ImageViewer';
 import { Avatar } from '../../components/Avatar';
 import { useFocusEffect } from '@react-navigation/native';
 import { connectSocket, subscribeCouple, unsubscribeCouple } from '../../api/chatSocket';
@@ -40,6 +40,7 @@ import { pickImage, uploadImage } from '../../utils/imageUpload';
 import { uploadChatVoice } from '../../utils/chatVoiceUpload';
 import { parseVoiceContent } from '../../utils/chatVoice';
 import { getErrorMessage } from '../../utils/error';
+import { coupleEmojiApi } from '../../api/coupleEmoji';
 import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { EmojiPicker } from '../../components/EmojiPicker';
@@ -76,7 +77,7 @@ import { chatDateDividerLabel, isSameLocalDay, toDateString } from '../../utils/
 import { buildChatTranscript, shareTranscript } from '../../utils/chatExport';
 import * as Sharing from 'expo-sharing';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { ChatMessage } from '../../types';
+import type { ChatMessage, CoupleEmoji } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { useAndroidKeyboardHeight } from '../../hooks/useAndroidKeyboardHeight';
 import { EmptyState } from '../../components/EmptyState';
@@ -101,7 +102,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const { relationId, title } = route.params;
   const headerHeight = useHeaderHeight();
   const androidKeyboardHeight = useAndroidKeyboardHeight();
-  /* 탭한 사진 하나만 전체화면으로 — 대화 전체를 훑는 갤러리는 아니라 단건으로 연다 */
+  /* 전체화면으로 연 사진 — 목록에서 이 uri 를 찾아 그 자리에서 시작한다(아래 viewing) */
   const [viewingImage, setViewingImage] = useState<string | null>(null);
   const openImage = (uri: string) => setViewingImage(uri);
   const myId = useAuthStore((s) => s.user?.id);
@@ -120,6 +121,42 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const messages = useChatStore((s) => s.messages[relationId] ?? EMPTY_MESSAGES);
   const loadingOlder = useChatStore((s) => s.loadingOlder[relationId] ?? false);
   const pinnedMessage = useChatStore((s) => s.pinnedMessages[relationId] ?? null);
+  /*
+   * 전체화면에서 좌우로 넘겨볼 사진 목록 — 이 방에서 주고받은 사진 전부.
+   *
+   * <p>예전엔 탭한 한 장만 넘겼다. {@link ImageViewer} 는 원래 좌우 스와이프를 지원하는데
+   * 목록이 한 장이라 넘길 것이 없었고, 그래서 기능이 있는 줄도 몰랐다.
+   *
+   * <p>{@code messages} 는 최신순(inverted 목록)이라 뒤집어 시간순으로 만든다 — 오른쪽으로
+   * 넘길수록 나중 사진이 나오는 편이 사진첩(ChatPhotoGalleryScreen)과 방향이 같다.
+   *
+   * <p>식단 사진은 넣지 않는다. 기록 카드에 딸린 그림이라 "주고받은 사진"과 성격이 다르고,
+   * 섞이면 장수 표시가 무엇을 세는지 알 수 없어진다 — 그건 아래 viewing 에서 단건으로 연다.
+   */
+  const viewerImages = useMemo<ViewerImage[]>(
+    () =>
+      messages
+        .filter((m) => m.messageType === 'IMAGE' && !!m.imageUrl)
+        .reverse()
+        .map((m) => ({
+          key: String(m.id),
+          uri: m.imageUrl!,
+          title: `${m.senderId === myId ? '나' : partnerName}  ·  ${chatDateDividerLabel(m.createdAt)}`,
+          titleColor: m.senderId === myId ? colors.coral : colors.indigo,
+        })),
+    [messages, myId, partnerName],
+  );
+  /*
+   * 목록에 있는 사진이면 그 자리에서 열어 좌우로 넘길 수 있게 하고, 목록에 없는 사진
+   * (식단 카드의 그림)은 예전처럼 단건으로 연다. 호출부는 uri 만 넘기면 된다.
+   */
+  const viewing = useMemo(() => {
+    if (!viewingImage) return { images: [] as ViewerImage[], index: null as number | null };
+    const i = viewerImages.findIndex((v) => v.uri === viewingImage);
+    return i >= 0
+      ? { images: viewerImages, index: i }
+      : { images: [{ key: viewingImage, uri: viewingImage }], index: 0 };
+  }, [viewingImage, viewerImages]);
   const {
     openRoom,
     closeRoom,
@@ -161,6 +198,11 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const premiumStickerAllowed = usePlanStore((s) => s.can('PREMIUM_STICKER'));
   const showUpgrade = usePlanStore((s) => s.showUpgrade);
   const [showExtras, setShowExtras] = useState(false);
+  /* 대화 영역을 건드렸을 때 — 이미 닫혀 있으면 상태를 그대로 둬 헛된 재렌더를 만들지 않는다 */
+  const dismissPanels = useCallback(() => {
+    setShowStickers((v) => (v ? false : v));
+    setShowExtras((v) => (v ? false : v));
+  }, []);
   // 대화 검색 — 헤더 돋보기 버튼으로 연다(2026-09-03, 전체 기간 서버 검색)
   const [showSearch, setShowSearch] = useState(false);
   // 헤더 "⋮" — 사진 모아보기·저장한 대화(자주 안 쓰는 항목이라 아이콘을 더 늘리지 않고 묶는다)
@@ -321,23 +363,40 @@ export function ChatRoomScreen({ navigation, route }: Props) {
    * 어느 화면에서든 뜨므로, 여기서는 세션 생성(callApi.start)과 Stream 콜 오브젝트 생성
    * (client.call().getOrCreate({ring:true}))까지만 하면 나머지는 오버레이가 이어받는다.
    */
-  const callClient = useCallStore((s) => s.client);
+  /*
+   * 클라이언트를 여기서 구독하지 않는다 — 통화 버튼을 누를 때 ensure() 로 가져온다.
+   * 구독해서 "없으면 버튼을 막는" 구조였다면 부팅 때 한 번 실패한 사람은 재시도할 길조차
+   * 없다(docs/CALL_BROKEN_ANALYSIS_2026-09-10.md §4-1).
+   */
   const [callStarting, setCallStarting] = useState(false);
   const partnerId = couple?.partner?.id;
 
   const startCall = useCallback(
     async (callType: CallType) => {
-      if (!callClient) {
-        toast.error('통화 기능을 준비하지 못했어요. 잠시 후 다시 시도해주세요.');
+      if (callStarting) return;
+      /*
+       * 상대를 아직 못 읽었으면 알려준다. 예전엔 조용히 return 이라 버튼이 고장 난 것처럼
+       * 보였다(docs/CALL_BROKEN_ANALYSIS_2026-09-10.md §7-3).
+       */
+      if (!myId || !partnerId) {
+        toast.error('상대 정보를 아직 불러오지 못했어요. 잠시 후 다시 시도해주세요.');
         return;
       }
-      if (!myId || !partnerId || callStarting) return;
       setCallStarting(true);
       let joinedCallId: string | null = null;
       try {
+        /*
+         * 부팅 때 연결에 실패했으면 여기서 <b>한 번 더</b> 시도한다 — 예전엔 그 한 번의 실패로
+         * 앱을 껐다 켜기 전까지 통화가 죽었다(§4-1).
+         */
+        const client = await useCallStore.getState().ensure();
+        if (!client) {
+          toast.error('통화 기능을 준비하지 못했어요. 잠시 후 다시 시도해주세요.');
+          return;
+        }
         const joined = await callApi.start(callType);
         joinedCallId = joined.callId;
-        const call = callClient.call('default', joined.callId);
+        const call = client.call('default', joined.callId);
         await call.getOrCreate({
           ring: true,
           video: callType === 'VIDEO',
@@ -365,7 +424,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         setCallStarting(false);
       }
     },
-    [callClient, myId, partnerId, callStarting],
+    [myId, partnerId, callStarting],
   );
 
   useLayoutEffect(() => {
@@ -714,6 +773,48 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     if (!ok) {
       Alert.alert('전송 실패', '연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
     }
+  };
+
+  /*
+   * 우리 이모지 관리 — 길게 눌러 무드 노출을 토글하거나 지운다.
+   *
+   * <p>삭제 API 는 처음부터 있었지만 <b>앱에서 부르는 곳이 없었다</b> — 만든 이모지를 지울 방법이
+   * 없었다는 뜻이다. 무드 토글을 넣으면서 같은 자리에 함께 둔다. 트레이는 이미 눌러서 보내는
+   * 곳이라 별도 관리 화면을 만드는 대신 길게 누르기를 쓴다.
+   *
+   * <p>무드 노출은 감정이 17종이 되면서 생겼다 — 전부 올리면 무드 선택지가 29개가 된다.
+   * 표정 6종은 켜진 채로, 상황 11종은 꺼진 채로 만들어진다(서버 defaultMoodVisible).
+   */
+  const manageCoupleEmoji = (emoji: CoupleEmoji) => {
+    haptics.light();
+    Alert.alert(
+      `우리 이모지 · ${emoji.label}`,
+      emoji.moodVisible ? '지금 무드 선택지에 올라가 있어요.' : '무드 선택지에는 올라가 있지 않아요.',
+      [
+        {
+          text: emoji.moodVisible ? '무드에서 내리기' : '무드에 올리기',
+          onPress: () => {
+            void coupleEmojiApi
+              .setMoodVisible(emoji.id, !emoji.moodVisible)
+              .then(() => loadCoupleEmojis(true))
+              .then(() => toast.success(emoji.moodVisible ? '무드에서 내렸어요.' : '무드에 올렸어요.'))
+              .catch((e) => toast.error(getErrorMessage(e, '바꾸지 못했어요.')));
+          },
+        },
+        {
+          text: '삭제',
+          style: 'destructive',
+          onPress: () => {
+            void coupleEmojiApi
+              .remove(emoji.id)
+              .then(() => loadCoupleEmojis(true))
+              .then(() => toast.success('이모지를 지웠어요.'))
+              .catch((e) => toast.error(getErrorMessage(e, '지우지 못했어요.')));
+          },
+        },
+        { text: '취소', style: 'cancel' },
+      ],
+    );
   };
 
   // 갤러리에서 고르기만 한다 — 실제 업로드·전송은 미리보기에서 "보내기"를 눌러야 시작된다
@@ -1166,7 +1267,19 @@ export function ChatRoomScreen({ navigation, route }: Props) {
          * FlatList 와 FAB 을 같이 감싼다 — FAB 이 이 뷰 기준으로 bottom-right 에 붙어야
          * 메시지 목록 위에만 뜨고, 그 아래 입력바·트레이는 가리지 않는다.
          */}
-        <View style={styles.flex}>
+        <View
+          style={styles.flex}
+          /*
+           * 대화 영역을 건드리면 열려 있는 패널을 닫는다(스티커·보조 도구 둘 다).
+           * 패널은 화면 아래 절반을 차지하는데 닫는 길이 같은 트레이 버튼을 다시 누르는
+           * 것뿐이라, 대화를 보려면 항상 시선을 되돌려야 했다.
+           *
+           * onTouchStart 는 응답자(responder) 경쟁에 끼지 않아 목록 스크롤도 말풍선 탭도
+           * 그대로 통과시킨다 — 투명 오버레이로 막는 흔한 방법은 첫 탭을 삼켜서, 닫으려던
+           * 것뿐인데 눌렀던 말풍선이 반응하지 않는 것처럼 보인다.
+           */
+          onTouchStart={dismissPanels}
+        >
         <FlatList
           ref={listRef}
           style={styles.flex}
@@ -1369,7 +1482,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
                     <MaterialCommunityIcons name="face-woman-shimmer-outline" size={28} color={colors.primary} />
                     <Text style={styles.coupleEmojiEmptyTitle}>우리 이모지 만들기</Text>
                     <Text style={styles.coupleEmojiEmptyText}>
-                      사진 한 장으로 감정 6종 이모지를 만들어요. 둘 다 쓸 수 있어요.
+                      사진 한 장으로 감정 17종 이모지를 만들어요. 둘 다 쓸 수 있어요.
                     </Text>
                   </Pressable>
                 ) : (
@@ -1379,10 +1492,16 @@ export function ChatRoomScreen({ navigation, route }: Props) {
                         key={e.id}
                         style={({ pressed }) => [styles.coupleEmojiBtn, pressed && styles.iconPressed]}
                         onPress={() => sendCoupleEmoji(e.id)}
+                        onLongPress={() => manageCoupleEmoji(e)}
                         accessibilityRole="button"
-                        accessibilityLabel={`우리 이모지 ${e.label} 보내기`}
+                        accessibilityLabel={`우리 이모지 ${e.label} 보내기. 길게 누르면 무드 올리기·삭제`}
                       >
                         <Image source={{ uri: e.imageUrl }} style={styles.coupleEmojiThumb} resizeMode="cover" />
+                        {/*
+                          무드에 올라간 장은 점 하나로 표시한다 — 토글이 눌렸는지 격자에서 바로
+                          보이지 않으면 "길게 눌러 바꾼다"는 것을 알 방법이 없다.
+                        */}
+                        {e.moodVisible ? <View style={styles.coupleEmojiMoodDot} /> : null}
                       </Pressable>
                     ))}
                     {/* 격자 마지막 칸 = 추가 버튼. 세트를 여러 벌 만들 수 있다 */}
@@ -1548,11 +1667,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
       </KeyboardAvoidingView>
 
       {/* 사진 전체화면 보기 */}
-      <ImageViewer
-        images={viewingImage ? [{ key: viewingImage, uri: viewingImage }] : []}
-        initialIndex={viewingImage ? 0 : null}
-        onClose={() => setViewingImage(null)}
-      />
+      <ImageViewer images={viewing.images} initialIndex={viewing.index} onClose={() => setViewingImage(null)} />
 
       {/* 사진 전송 미리보기 — 고른 즉시 보내지 않고 확인 후에만 업로드·전송한다 */}
       <Modal visible={!!pendingImage} transparent animationType="fade" onRequestClose={onCancelSendImage}>
@@ -1786,6 +1901,18 @@ const styles = themedStyles((colors) => ({
   coupleEmojiBtn: { width: 64, height: 64, borderRadius: 32, overflow: 'hidden', backgroundColor: colors.surfaceAlt },
   coupleEmojiThumb: { width: '100%', height: '100%' },
   coupleEmojiAdd: { alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border },
+  /* 무드 선택지에 올라간 장 표시 — 원형 썸네일 위 오른쪽 아래 모서리 */
+  coupleEmojiMoodDot: {
+    position: 'absolute',
+    right: 2,
+    bottom: 2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: colors.surface,
+    backgroundColor: colors.primary,
+  },
   coupleEmojiEmpty: {
     width: '100%',
     alignItems: 'center',

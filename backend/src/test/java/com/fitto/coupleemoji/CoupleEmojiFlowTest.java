@@ -37,6 +37,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -60,6 +61,12 @@ import static org.mockito.Mockito.when;
 class CoupleEmojiFlowTest {
 
     /** 전용 폴더에 올라간 원본 URL 모양 — 이 폴더가 아니면 서버가 받지 않는다(서비스 주석). */
+    /**
+     * 한 세트에 들어가는 장 수 = 감정 종류 수. 숫자를 박아 두면 감정을 하나 늘릴 때마다
+     * 이 테스트가 관계없이 깨진다(2026-09-10 상황 11종 추가 때 실제로 4건이 깨졌다).
+     */
+    private static final int ALL_EMOTIONS = CoupleEmojiEmotion.values().length;
+
     private static final String SOURCE_URL =
             "https://res.cloudinary.com/demo/image/upload/v1712345678/fitto/emoji-source/abc123.jpg";
 
@@ -112,8 +119,26 @@ class CoupleEmojiFlowTest {
 
     private CoupleEmojiBatchResponse generateFor(Long userId, Long subjectId) {
         CoupleEmojiService.GenerationTicket ticket =
-                service.prepare(userId, new GenerateCoupleEmojiRequest(SOURCE_URL, subjectId));
+                service.prepare(userId, new GenerateCoupleEmojiRequest(SOURCE_URL, subjectId, null));
         return service.generate(ticket);
+    }
+
+    /**
+     * 감정 하나만 실패시키는 스텁 — <b>호출 순서가 아니라 인자로</b> 고른다.
+     *
+     * <p>세트는 여러 장을 동시에 그리므로(CoupleEmojiService.IMAGE_CONCURRENCY) thenReturn/thenThrow 를
+     * 이어 붙이는 순서 기반 스텁은 <b>어느 감정이 실패할지 정할 수 없다</b> — 실제로 2026-09-10 병렬화 때
+     * "HAPPY 가 실패해야 하는데 SAD 가 실패했다"로 깨졌다. 프롬프트에 감정별 문구가 들어가므로 그걸 본다.
+     */
+    private void failOnly(CoupleEmojiEmotion emotion, RuntimeException failure) {
+        when(geminiClient.generateImageInBackground(anyList())).thenAnswer(invocation -> {
+            List<Map<String, Object>> parts = invocation.getArgument(0);
+            boolean target = parts.stream()
+                    .map(part -> String.valueOf(part.get("text")))
+                    .anyMatch(text -> text.contains(emotion.expressionPrompt()));
+            if (target) throw failure;
+            return new GeneratedImage(new byte[] {1}, "image/png");
+        });
     }
 
     @Test
@@ -124,29 +149,29 @@ class CoupleEmojiFlowTest {
         Long relationId = connectCouple(a, b);
 
         // 커플이 아니면 못 만든다
-        assertThatThrownBy(() -> service.prepare(outsider, new GenerateCoupleEmojiRequest(SOURCE_URL, null)))
+        assertThatThrownBy(() -> service.prepare(outsider, new GenerateCoupleEmojiRequest(SOURCE_URL, null, null)))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.RELATION_NOT_FOUND);
         // 우리 둘이 아닌 사람 얼굴은 안 된다
-        assertThatThrownBy(() -> service.prepare(a, new GenerateCoupleEmojiRequest(SOURCE_URL, outsider)))
+        assertThatThrownBy(() -> service.prepare(a, new GenerateCoupleEmojiRequest(SOURCE_URL, outsider, null)))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.INVALID_INPUT);
         // 전용 폴더가 아닌 URL 은 안 받는다 — 생성 뒤 원본을 지우므로 남의 사진 URL 을 넣는 경로를 막는다
         String foreignUrl = "https://res.cloudinary.com/demo/image/upload/v1/fitto/feed-photo.jpg";
-        assertThatThrownBy(() -> service.prepare(a, new GenerateCoupleEmojiRequest(foreignUrl, null)))
+        assertThatThrownBy(() -> service.prepare(a, new GenerateCoupleEmojiRequest(foreignUrl, null, null)))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.INVALID_PHOTO_URL);
 
         // 전용 폴더로 시작해도 상위 경로·쿼리가 섞이면 거절 — 접두사 검사를 우회하는 경로(점검 #17)
         String traversal = "https://res.cloudinary.com/demo/image/upload/v1/fitto/emoji-source/../feed-photo.jpg";
-        assertThatThrownBy(() -> service.prepare(a, new GenerateCoupleEmojiRequest(traversal, null)))
+        assertThatThrownBy(() -> service.prepare(a, new GenerateCoupleEmojiRequest(traversal, null, null)))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.INVALID_PHOTO_URL);
-        assertThatThrownBy(() -> service.prepare(a, new GenerateCoupleEmojiRequest(SOURCE_URL + "?x=1", null)))
+        assertThatThrownBy(() -> service.prepare(a, new GenerateCoupleEmojiRequest(SOURCE_URL + "?x=1", null, null)))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.INVALID_PHOTO_URL);
@@ -157,7 +182,7 @@ class CoupleEmojiFlowTest {
         verify(imageDeleter, never()).deleteAll(List.of(traversal));
 
         // 대상을 비우면 상대 얼굴이 기본
-        CoupleEmojiService.GenerationTicket ticket = service.prepare(a, new GenerateCoupleEmojiRequest(SOURCE_URL, null));
+        CoupleEmojiService.GenerationTicket ticket = service.prepare(a, new GenerateCoupleEmojiRequest(SOURCE_URL, null, null));
         assertThat(ticket.relationId()).isEqualTo(relationId);
         assertThat(ticket.subjectUserId()).isEqualTo(b);
         // 한도 차감은 요청 스레드(prepare)에서 — 비싼 준비 전에 402 를 즉시 돌려주기 위해
@@ -173,7 +198,7 @@ class CoupleEmojiFlowTest {
         Long b = register("ce-abandon-b@fitto.com");
         connectCouple(a, b);
         CoupleEmojiService.GenerationTicket ticket =
-                service.prepare(a, new GenerateCoupleEmojiRequest(SOURCE_URL, null));
+                service.prepare(a, new GenerateCoupleEmojiRequest(SOURCE_URL, null, null));
 
         service.abandon(ticket);
 
@@ -189,7 +214,7 @@ class CoupleEmojiFlowTest {
         doThrow(new BusinessException(ErrorCode.PLAN_LIMIT_EXCEEDED))
                 .when(geminiClient).requireImageConfiguredAndCountUsage(a, Feature.AI_COUPLE_EMOJI);
 
-        assertThatThrownBy(() -> service.prepare(a, new GenerateCoupleEmojiRequest(SOURCE_URL, null)))
+        assertThatThrownBy(() -> service.prepare(a, new GenerateCoupleEmojiRequest(SOURCE_URL, null, null)))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.PLAN_LIMIT_EXCEEDED);
@@ -205,7 +230,7 @@ class CoupleEmojiFlowTest {
 
         CoupleEmojiBatchResponse batch = generateFor(a, b);
 
-        assertThat(batch.emojis()).hasSize(6);
+        assertThat(batch.emojis()).hasSize(ALL_EMOTIONS);
         assertThat(batch.failedEmotions()).isEmpty();
         assertThat(batch.emojis()).extracting(CoupleEmojiResponse::emotion)
                 .containsExactly(CoupleEmojiEmotion.values());
@@ -218,8 +243,8 @@ class CoupleEmojiFlowTest {
         });
 
         // 커플 공용 — 만든 사람이 아닌 상대도 같은 목록을 본다
-        assertThat(service.list(a)).hasSize(6);
-        assertThat(service.list(b)).hasSize(6);
+        assertThat(service.list(a)).hasSize(ALL_EMOTIONS);
+        assertThat(service.list(b)).hasSize(ALL_EMOTIONS);
 
         // 2단계 생성의 흔적 — 텍스트 모델이 뽑은 사실이 행에 남는다
         String facts = (String) em.createNativeQuery(
@@ -230,22 +255,69 @@ class CoupleEmojiFlowTest {
         verify(geminiClient, never()).refund(any(), any());
     }
 
+    /**
+     * 무드 노출 — 표정 6종만 켜진 채로 만들어지고, 상황 11종은 꺼진 채로 만들어진다.
+     * 전부 올리면 무드 선택지가 기본 12 + 17 = 29개가 되기 때문이다(CoupleEmojiEmotion 주석).
+     */
+    @Test
+    void 표정만_무드에_올라간_채로_만들어지고_토글로_바꿀_수_있다() {
+        Long a = register("ce-mood-a@fitto.com");
+        Long b = register("ce-mood-b@fitto.com");
+        connectCouple(a, b);
+        generateFor(a, null);
+
+        var list = service.list(a);
+        assertThat(list).filteredOn(CoupleEmojiResponse::moodVisible)
+                .extracting(CoupleEmojiResponse::emotion)
+                .containsExactlyInAnyOrder(CoupleEmojiEmotion.ANGRY, CoupleEmojiEmotion.HAPPY,
+                        CoupleEmojiEmotion.EXCITED, CoupleEmojiEmotion.SAD, CoupleEmojiEmotion.SLEEPY,
+                        CoupleEmojiEmotion.LOVE);
+
+        // 상황 하나를 무드에 올린다 — 커플 공용이라 만든 사람이 아닌 상대(b)도 바꿀 수 있다
+        Long kissId = list.stream().filter(e -> e.emotion() == CoupleEmojiEmotion.KISS)
+                .findFirst().orElseThrow().id();
+        assertThat(service.setMoodVisible(b, kissId, true).moodVisible()).isTrue();
+        assertThat(service.list(a)).filteredOn(CoupleEmojiResponse::moodVisible).hasSize(7);
+
+        // 다시 내린다
+        assertThat(service.setMoodVisible(a, kissId, false).moodVisible()).isFalse();
+        assertThat(service.list(a)).filteredOn(CoupleEmojiResponse::moodVisible).hasSize(6);
+    }
+    /**
+     * 부분 재생성 — 감정을 지정하면 그것만 그린다. 마음에 드는 장을 두고 나머지만 다시 뽑는 경로라,
+     * 장 수가 곧 실비다(감정 17종 기준 전체 재생성은 세트당 약 0.68 USD).
+     */
+    @Test
+    void 감정을_지정하면_그것만_그리고_순서는_enum_순서를_따른다() {
+        Long a = register("ce-partial-a@fitto.com");
+        Long b = register("ce-partial-b@fitto.com");
+        connectCouple(a, b);
+
+        // 앱이 뒤죽박죽·중복으로 보내도 트레이 칸 순서(enum 순서)로 정리돼야 한다
+        CoupleEmojiService.GenerationTicket ticket = service.prepare(a, new GenerateCoupleEmojiRequest(
+                SOURCE_URL, null, List.of(CoupleEmojiEmotion.LOVE, CoupleEmojiEmotion.ANGRY, CoupleEmojiEmotion.LOVE)));
+        CoupleEmojiBatchResponse batch = service.generate(ticket);
+
+        assertThat(batch.emojis()).hasSize(2);
+        assertThat(batch.emojis()).extracting(CoupleEmojiResponse::emotion)
+                .containsExactly(CoupleEmojiEmotion.ANGRY, CoupleEmojiEmotion.LOVE);
+        // 지정하지 않은 감정은 아예 호출되지 않는다 — 그게 곧 절약이다
+        verify(geminiClient, times(2)).generateImageInBackground(anyList());
+    }
+
     @Test
     void 한_장이_거절돼도_나머지는_저장하고_환불하지_않는다() {
         Long a = register("ce6@fitto.com");
         Long b = register("ce7@fitto.com");
         connectCouple(a, b);
-        // 두 번째 장(HAPPY)만 안전필터 거절
-        when(geminiClient.generateImageInBackground(anyList()))
-                .thenReturn(new GeneratedImage(new byte[] {1}, "image/png"))
-                .thenThrow(new BusinessException(ErrorCode.AI_IMAGE_REJECTED))
-                .thenReturn(new GeneratedImage(new byte[] {1}, "image/png"));
+        // HAPPY 한 장만 안전필터 거절
+        failOnly(CoupleEmojiEmotion.HAPPY, new BusinessException(ErrorCode.AI_IMAGE_REJECTED));
 
         CoupleEmojiBatchResponse batch = generateFor(a, null);
 
-        assertThat(batch.emojis()).hasSize(5);
+        assertThat(batch.emojis()).hasSize(ALL_EMOTIONS - 1);
         assertThat(batch.failedEmotions()).containsExactly("HAPPY");
-        assertThat(service.list(b)).hasSize(5);
+        assertThat(service.list(b)).hasSize(ALL_EMOTIONS - 1);
         verify(geminiClient, never()).refund(any(), any());
     }
 
@@ -291,13 +363,11 @@ class CoupleEmojiFlowTest {
         Long a = register("ce-rt-a@fitto.com");
         Long b = register("ce-rt-b@fitto.com");
         connectCouple(a, b);
-        when(geminiClient.generateImageInBackground(anyList()))
-                .thenThrow(new IllegalArgumentException("Illegal base64 character"))
-                .thenReturn(new GeneratedImage(new byte[] {1}, "image/png"));
+        failOnly(CoupleEmojiEmotion.ANGRY, new IllegalArgumentException("Illegal base64 character"));
 
         CoupleEmojiBatchResponse batch = generateFor(a, null);
 
-        assertThat(batch.emojis()).hasSize(5);
+        assertThat(batch.emojis()).hasSize(ALL_EMOTIONS - 1);
         assertThat(batch.failedEmotions()).containsExactly("ANGRY");
         verify(geminiClient, never()).refund(any(), any());
         verify(imageDeleter).deleteAll(List.of(SOURCE_URL));
@@ -314,7 +384,7 @@ class CoupleEmojiFlowTest {
 
         // 만든 사람이 아닌 상대(b)가 한 장 지운다 — 상대 얼굴을 쓰는 기능이라 상대의 삭제권이 곧 동의 장치
         service.delete(b, first);
-        assertThat(service.list(a)).extracting(CoupleEmojiResponse::id).doesNotContain(first).hasSize(5);
+        assertThat(service.list(a)).extracting(CoupleEmojiResponse::id).doesNotContain(first).hasSize(ALL_EMOTIONS - 1);
         // 다시 지우면 없는 것
         assertThatThrownBy(() -> service.delete(a, first))
                 .isInstanceOf(BusinessException.class)
@@ -328,7 +398,7 @@ class CoupleEmojiFlowTest {
         Number remaining = (Number) em.createNativeQuery(
                 "select count(*) from couple_emojis where batch_id = :b").setParameter("b", batch.batchId())
                 .getSingleResult();
-        assertThat(remaining.longValue()).isEqualTo(6);
+        assertThat(remaining.longValue()).isEqualTo(ALL_EMOTIONS);
 
         // 세트 통째로
         service.deleteBatch(a, batch.batchId());

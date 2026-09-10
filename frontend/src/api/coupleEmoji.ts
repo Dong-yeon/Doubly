@@ -1,5 +1,5 @@
 /**
- * 우리 이모지 API — 사진 한 장으로 감정 6종 캐릭터 세트를 만든다.
+ * 우리 이모지 API — 사진 한 장으로 감정 17종 캐릭터 세트를 만든다.
  * 설계·실측은 docs/COUPLE_EMOJI_AI_DESIGN_2026-09-08.md (프론트는 §7).
  *
  * <p><b>원본 업로드가 공용 경로와 다르다.</b> 서버는 전용 폴더(`fitto/emoji-source`)에 올라간
@@ -7,7 +7,7 @@
  * 남의 사진을 지우는 경로가 된다. 그래서 서명도 전용 엔드포인트에서 받아야 한다.
  *
  * <p><b>{@link generate} 는 결과를 기다리지 않는다.</b> 다른 AI 기능은 `runAiJob` 으로 감싸
- * 평범한 Promise 처럼 쓰지만, 이건 60초짜리라 대기 화면이 "감정 6칸이 하나씩 채워지는"
+ * 평범한 Promise 처럼 쓰지만, 이건 몇 분짜리라 대기 화면이 "감정 칸이 하나씩 채워지는"
  * 형태여야 한다(§7). 그러려면 화면이 폴링 주기를 직접 쥐고 사이사이 {@link list} 를 다시
  * 불러야 해서, 여기서는 접수증(jobId)만 돌려준다.
  */
@@ -15,21 +15,38 @@ import { apiClient, unwrap } from './client';
 import { uploadImageWithSignature } from '../utils/imageUpload';
 import type { AiJobStart } from './aiJob';
 import type { UploadSignature } from './upload';
-import type { ApiResponse, CoupleEmoji } from '../types';
+import type { ApiResponse, CoupleEmoji, CoupleEmojiEmotion } from '../types';
 
 export const coupleEmojiApi = {
   /** 원본 사진 업로드 서명 — 전용 폴더. 사진 한도(PHOTO_UPLOAD)를 한 번 쓴다 */
   uploadSignature: () =>
     unwrap(apiClient.post<ApiResponse<UploadSignature>>('/couple-emojis/upload-signature')),
 
-  /** 생성 접수 — 202 + jobId. 결과는 화면이 폴링한다(파일 주석) */
-  generate: (payload: { sourceImageUrl: string; subjectUserId?: number }) =>
+  /**
+   * 생성 접수 — 202 + jobId. 결과는 화면이 폴링한다(파일 주석).
+   *
+   * <p>emotions 를 비우면 전체, 일부만 보내면 그 감정만 그린다(부분 재생성). 마음에 드는 장은
+   * 트레이에 두고 나머지만 다시 뽑으면 그만큼만 돈과 시간이 든다 — 한도는 그대로 세트 1회다.
+   */
+  generate: (payload: {
+    sourceImageUrl: string;
+    subjectUserId?: number;
+    emotions?: CoupleEmojiEmotion[];
+  }) =>
     unwrap(apiClient.post<ApiResponse<AiJobStart>>('/couple-emojis/generate', payload)),
 
   /** 트레이 목록 — 관계의 살아 있는 이모지 전부(최근 세트가 위). 둘 다 같은 목록을 본다 */
   list: () => unwrap(apiClient.get<ApiResponse<CoupleEmoji[]>>('/couple-emojis')),
 
   /** 한 장 숨기기 — 만든 사람이 아니어도 커플이면 누구나(§9-2) */
+  /** 무드 선택지에 올릴지 — 트레이에서 길게 눌러 토글한다. 갱신된 한 장을 돌려준다 */
+  setMoodVisible: (emojiId: number, visible: boolean) =>
+    unwrap(
+      apiClient.patch<ApiResponse<CoupleEmoji>>(
+        `/couple-emojis/${emojiId}/mood-visible?visible=${visible}`,
+      ),
+    ),
+
   remove: (emojiId: number) =>
     unwrap(apiClient.delete<ApiResponse<void>>(`/couple-emojis/${emojiId}`)),
 
@@ -47,9 +64,10 @@ export const coupleEmojiApi = {
 export async function startCoupleEmojiGeneration(
   croppedUri: string,
   subjectUserId?: number,
+  emotions?: CoupleEmojiEmotion[],
 ): Promise<string> {
   const signature = await coupleEmojiApi.uploadSignature();
   const sourceImageUrl = await uploadImageWithSignature(croppedUri, signature);
-  const { jobId } = await coupleEmojiApi.generate({ sourceImageUrl, subjectUserId });
+  const { jobId } = await coupleEmojiApi.generate({ sourceImageUrl, subjectUserId, emotions });
   return jobId;
 }

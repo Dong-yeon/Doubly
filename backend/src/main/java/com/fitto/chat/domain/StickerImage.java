@@ -23,7 +23,18 @@ import java.util.Optional;
  * 두 enum 만 보므로, 필드만 추가하면 서버가 막지 않는다.
  */
 public enum StickerImage {
+    // 곰돌이 10종 — LOVE_BEAR 한 장뿐이던 것을 variants.mjs 로 감정 변주를 뽑아 세트로 만들었다.
+    // LOVE_BEAR 도 같이 다시 그렸지만(글자 제거·테두리 통일) 코드는 그대로라 과거 메시지는 그대로 읽힌다.
     LOVE_BEAR("사랑해"),
+    BEAR_EXCITED("신났어"),
+    BEAR_LAUGH("하하하"),
+    BEAR_SHY("부끄러워"),
+    BEAR_SULKY("시무룩"),
+    BEAR_ANGRY("화났어"),
+    BEAR_SORRY("미안해"),
+    BEAR_CRYING("엉엉"),
+    BEAR_TIRED("지쳤어"),
+    BEAR_SLEEPY("잘자"),
 
     // 비개구리 10종 — 사용자 손그림 스케치를 스티커화한 자체 캐릭터(설계 메모 §15·§17)
     BIGAE_LOVE("좋아좋아"),

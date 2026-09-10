@@ -15,10 +15,12 @@ public record CoupleEmojiResponse(
         String imageUrl,
         Long subjectUserId,
         Long createdBy,
+        /** 무드 피커에 올라가는가 — 앱이 토글 상태를 그린다 */
+        boolean moodVisible,
         LocalDateTime createdAt
 ) {
     public static CoupleEmojiResponse from(CoupleEmoji e) {
         return new CoupleEmojiResponse(e.getId(), e.getBatchId(), e.getEmotion(), e.getEmotion().label(),
-                e.getImageUrl(), e.getSubjectUserId(), e.getCreatedBy(), e.getCreatedAt());
+                e.getImageUrl(), e.getSubjectUserId(), e.getCreatedBy(), e.isMoodVisible(), e.getCreatedAt());
     }
 }

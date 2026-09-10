@@ -10,7 +10,7 @@
  * 만들 수 있어서(PRO 월 5세트) 전부 올리면 최대 30장이 되는데, 이 파일의 12종 원칙 자체가
  * "처음부터 다 만들면 선택 마비만 생긴다"(`moodEmojis.ts`)에서 나왔다. 두 가지로 줄인다 —
  * ① 무드는 "내 기분"이므로 <b>내 얼굴</b>(subjectUserId === 나)만, ② 그중 <b>최신 한 벌</b>만.
- * 그래야 세트를 몇 벌 만들어도 여기 개수는 6장으로 고정된다.
+ * 그래야 세트를 몇 벌 만들어도 여기 개수는 한 벌치(감정 종류 수)로 고정된다.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { Image, Modal, Pressable, ScrollView, Text, TextInput, useWindowDimensions, View } from 'react-native';
@@ -52,7 +52,12 @@ export function MoodPicker({ visible, onClose, onSelect }: Props) {
     const mine = coupleEmojis.filter((e) => e.subjectUserId === myId);
     const latestBatchId = mine[0]?.batchId;
     if (!latestBatchId) return [];
-    const set = mine.filter((e) => e.batchId === latestBatchId);
+    /*
+     * moodVisible 만 올린다 — 감정이 17종이 되면서 전부 올리면 선택지가 기본 12 + 17 = 29개가
+     * 된다. 표정 6종은 켜진 채로, 상황 11종(출근·마스크팩 등)은 꺼진 채로 만들어지고
+     * (CoupleEmojiEmotion.defaultMoodVisible), 트레이에서 길게 눌러 바꾼다.
+     */
+    const set = mine.filter((e) => e.batchId === latestBatchId && e.moodVisible);
     // 감정 정해진 순서로 — 목록 순서(id desc)는 생성 역순이라 사람이 읽는 순서와 다르다
     return COUPLE_EMOJI_EMOTIONS.map((def) => set.find((e) => e.emotion === def.key)).filter(
       (e): e is (typeof set)[number] => !!e,

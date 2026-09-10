@@ -21,17 +21,22 @@ import type { StreamVideoClient } from '@stream-io/video-react-native-sdk';
 interface CallState {
   client: StreamVideoClient | null;
   initializing: boolean;
+  failed: boolean;
   init: () => Promise<void>;
+  ensure: () => Promise<StreamVideoClient | null>;
   teardown: () => Promise<void>;
 }
 
 export const useCallStore = create<CallState>(() => ({
   client: null,
   initializing: false,
+  failed: false,
 
   init: async () => {
     // no-op — 웹은 통화를 지원하지 않는다
   },
+
+  ensure: async () => null,
 
   teardown: async () => {
     // no-op
