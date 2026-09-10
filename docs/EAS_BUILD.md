@@ -267,6 +267,7 @@ Play 밖에서 서명하는 추가 키를 넣을 때만 쓴다. 상태가 "등�
 | 빌드 실패 (네이티브 모듈 오류) | Expo 대시보드의 빌드 로그 확인 — 대부분 `app.json` plugin 설정 누락이 원인 |
 | 설치 후 앱이 흰 화면 | 최신 코드로 다시 빌드했는지 확인 (오래된 APK 캐시일 수 있음) — 설정 화면 하단의 커밋 해시로 판별, 6-1 참고 |
 | Configure expo-updates 단계에서 `Runtime version calculated on local machine not equal…` | 로컬·서버 fingerprint 불일치 — 8-5 참고. ① `npm install` 로 node_modules 를 lock 과 맞추고 ② `fingerprint.config.js` 가 있는지, ③ 두 번 돌려 같은 해시가 나오는지 확인. 빌드 로그의 "Difference between local and EAS fingerprints" 가 정확한 범인을 알려준다 |
+| `eas update` 가 기존 빌드에 배달되지 않음 / `eas fingerprint:compare --build-id <id>` 가 `modules/korean-spell` 만 다르다고 함 | **줄바꿈 차이**(2026-09-10). EAS 는 git 이 아니라 로컬 파일을 그대로 올리므로 fingerprint 는 워크트리의 CRLF/LF 상태를 따른다. 주 워크트리는 `*.sh eol=lf` 규칙(9/9) 이전에 체크아웃된 파일이 CRLF 로 남아 있고, 새로 만든 워크트리는 LF 라 같은 커밋인데도 iOS 해시가 달랐다(`scripts/check-elf-align.mjs` 한 파일). 업데이트는 **빌드를 올린 워크트리와 같은 줄바꿈 상태**에서 올려야 한다 — `git ls-files --eol frontend/modules/korean-spell` 로 두 워크트리를 비교하면 범인이 나온다. 다음 빌드부터는 어느 쪽이든 그 상태가 기준이 된다 |
 | "출처를 알 수 없는 앱" 이 계속 막힘 | 설정 → 보안 → 해당 브라우저/파일관리자 앱의 "알 수 없는 앱 설치" 권한 허용 |
 
 ## 다음 단계
