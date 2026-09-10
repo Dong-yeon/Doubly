@@ -49,7 +49,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 /**
- * 우리 이모지 — 상대(또는 내) 사진 한 장으로 감정 6종 캐릭터 세트를 AI 가 그리고, 커플이 함께 쓴다.
+ * 우리 이모지 — 상대(또는 내) 사진 한 장으로 감정 17종 캐릭터 세트를 AI 가 그리고, 커플이 함께 쓴다.
  * 설계와 실측은 docs/COUPLE_EMOJI_AI_DESIGN_2026-09-08.md.
  *
  * <p><b>흐름은 두 스레드에 걸쳐 있다.</b> 요청 스레드에서 {@link #prepare} 가 검증·한도 차감을 끝내고
@@ -57,9 +57,10 @@ import java.util.concurrent.Future;
  * 차감을 요청 시점에 하는 이유는 비싼 준비(원본 다운로드·텍스트 모델 호출)를 시작하기 전에
  * 막아야 해서다 — 그리고 402 를 폴링 한 바퀴 뒤가 아니라 즉시 돌려주기 위해서다.
  *
- * <p><b>감정 한 장마다 트랜잭션을 따로 연다.</b> 6장이 순차로 약 1분 걸리는데(장당 8~15초), 한 트랜잭션에
- * 묶으면 그동안 아무것도 안 보이고 커넥션 하나를 1분간 붙잡는다. 장마다 커밋하면 앱이 목록을 다시 조회할
- * 때마다 칸이 하나씩 채워진다(§7 "칸이 채워지는 UI" 의 서버 쪽 전제).
+ * <p><b>감정 한 장마다 트랜잭션을 따로 연다.</b> 장당 8~15초라 한 트랜잭션에 묶으면 그동안 아무것도
+ * 안 보이고 커넥션 하나를 그만큼 붙잡는다. 장마다 커밋하면 앱이 목록을 다시 조회할 때마다 칸이 하나씩
+ * 채워진다(§7 "칸이 채워지는 UI" 의 서버 쪽 전제). 여러 장을 동시에 그리므로({@link #IMAGE_CONCURRENCY})
+ * 커밋도 동시에 들어온다 — 장마다 독립 트랜잭션이라 서로를 기다리지 않는다.
  */
 @Service
 @Transactional(readOnly = true)
@@ -323,6 +324,23 @@ public class CoupleEmojiService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.COUPLE_EMOJI_NOT_FOUND));
         emoji.hide();
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.COUPLE_EMOJI);
+    }
+
+    /**
+     * 무드 선택지에 올릴지 바꾼다 — 트레이 노출·삭제와는 무관하다.
+     *
+     * <p>커플 공용 소유라 상대도 바꿀 수 있다(삭제와 같은 규칙). 무드는 "내 기분"이지만 이 값은
+     * 이모지 한 장의 성질이고, 어차피 무드 피커는 <b>내 얼굴</b>만 올린다(MoodPicker 주석) —
+     * 상대가 켜 둔다고 내 무드 선택지가 상대 얼굴로 채워지지 않는다.
+     */
+    @Transactional
+    public CoupleEmojiResponse setMoodVisible(Long userId, Long emojiId, boolean visible) {
+        Relation couple = activeCouple(userId);
+        CoupleEmoji emoji = repository.findByIdAndRelationIdAndDeletedAtIsNull(emojiId, couple.getId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.COUPLE_EMOJI_NOT_FOUND));
+        emoji.setMoodVisible(visible);
+        coupleEventPublisher.publish(couple.getId(), CoupleEvent.COUPLE_EMOJI);
+        return CoupleEmojiResponse.from(emoji);
     }
 
     /** 세트 통째로 숨기기 */

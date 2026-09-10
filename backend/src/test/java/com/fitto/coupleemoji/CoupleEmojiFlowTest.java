@@ -256,6 +256,34 @@ class CoupleEmojiFlowTest {
     }
 
     /**
+     * 무드 노출 — 표정 6종만 켜진 채로 만들어지고, 상황 11종은 꺼진 채로 만들어진다.
+     * 전부 올리면 무드 선택지가 기본 12 + 17 = 29개가 되기 때문이다(CoupleEmojiEmotion 주석).
+     */
+    @Test
+    void 표정만_무드에_올라간_채로_만들어지고_토글로_바꿀_수_있다() {
+        Long a = register("ce-mood-a@fitto.com");
+        Long b = register("ce-mood-b@fitto.com");
+        connectCouple(a, b);
+        generateFor(a, null);
+
+        var list = service.list(a);
+        assertThat(list).filteredOn(CoupleEmojiResponse::moodVisible)
+                .extracting(CoupleEmojiResponse::emotion)
+                .containsExactlyInAnyOrder(CoupleEmojiEmotion.ANGRY, CoupleEmojiEmotion.HAPPY,
+                        CoupleEmojiEmotion.EXCITED, CoupleEmojiEmotion.SAD, CoupleEmojiEmotion.SLEEPY,
+                        CoupleEmojiEmotion.LOVE);
+
+        // 상황 하나를 무드에 올린다 — 커플 공용이라 만든 사람이 아닌 상대(b)도 바꿀 수 있다
+        Long kissId = list.stream().filter(e -> e.emotion() == CoupleEmojiEmotion.KISS)
+                .findFirst().orElseThrow().id();
+        assertThat(service.setMoodVisible(b, kissId, true).moodVisible()).isTrue();
+        assertThat(service.list(a)).filteredOn(CoupleEmojiResponse::moodVisible).hasSize(7);
+
+        // 다시 내린다
+        assertThat(service.setMoodVisible(a, kissId, false).moodVisible()).isFalse();
+        assertThat(service.list(a)).filteredOn(CoupleEmojiResponse::moodVisible).hasSize(6);
+    }
+    /**
      * 부분 재생성 — 감정을 지정하면 그것만 그린다. 마음에 드는 장을 두고 나머지만 다시 뽑는 경로라,
      * 장 수가 곧 실비다(감정 17종 기준 전체 재생성은 세트당 약 0.68 USD).
      */

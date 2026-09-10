@@ -1469,6 +1469,8 @@ export interface CoupleEmoji {
   /** 누구 얼굴인가 */
   subjectUserId: number;
   createdBy: number;
+  /** 무드 선택지에 올라가는가 — 트레이에서 길게 눌러 토글한다 */
+  moodVisible: boolean;
   createdAt: string;
 }
 

@@ -14,7 +14,9 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -62,6 +64,15 @@ public class CoupleEmojiController {
     @GetMapping
     public ApiResponse<List<CoupleEmojiResponse>> list(@AuthenticationPrincipal AuthUser user) {
         return ApiResponse.success(coupleEmojiService.list(user.id()));
+    }
+
+    /** 무드 선택지에 올릴지 — 트레이에서 길게 눌러 토글한다 */
+    @PatchMapping("/{emojiId}/mood-visible")
+    public ApiResponse<CoupleEmojiResponse> setMoodVisible(@AuthenticationPrincipal AuthUser user,
+                                                          @PathVariable Long emojiId,
+                                                          @RequestParam boolean visible) {
+        CoupleEmojiResponse updated = coupleEmojiService.setMoodVisible(user.id(), emojiId, visible);
+        return ApiResponse.success(updated, visible ? "무드 선택지에 올렸어요." : "무드 선택지에서 내렸어요.");
     }
 
     @DeleteMapping("/{emojiId}")

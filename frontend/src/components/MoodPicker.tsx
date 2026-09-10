@@ -52,7 +52,12 @@ export function MoodPicker({ visible, onClose, onSelect }: Props) {
     const mine = coupleEmojis.filter((e) => e.subjectUserId === myId);
     const latestBatchId = mine[0]?.batchId;
     if (!latestBatchId) return [];
-    const set = mine.filter((e) => e.batchId === latestBatchId);
+    /*
+     * moodVisible 만 올린다 — 감정이 17종이 되면서 전부 올리면 선택지가 기본 12 + 17 = 29개가
+     * 된다. 표정 6종은 켜진 채로, 상황 11종(출근·마스크팩 등)은 꺼진 채로 만들어지고
+     * (CoupleEmojiEmotion.defaultMoodVisible), 트레이에서 길게 눌러 바꾼다.
+     */
+    const set = mine.filter((e) => e.batchId === latestBatchId && e.moodVisible);
     // 감정 정해진 순서로 — 목록 순서(id desc)는 생성 역순이라 사람이 읽는 순서와 다르다
     return COUPLE_EMOJI_EMOTIONS.map((def) => set.find((e) => e.emotion === def.key)).filter(
       (e): e is (typeof set)[number] => !!e,

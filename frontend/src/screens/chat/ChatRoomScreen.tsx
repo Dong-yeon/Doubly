@@ -40,6 +40,7 @@ import { pickImage, uploadImage } from '../../utils/imageUpload';
 import { uploadChatVoice } from '../../utils/chatVoiceUpload';
 import { parseVoiceContent } from '../../utils/chatVoice';
 import { getErrorMessage } from '../../utils/error';
+import { coupleEmojiApi } from '../../api/coupleEmoji';
 import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { EmojiPicker } from '../../components/EmojiPicker';
@@ -76,7 +77,7 @@ import { chatDateDividerLabel, isSameLocalDay, toDateString } from '../../utils/
 import { buildChatTranscript, shareTranscript } from '../../utils/chatExport';
 import * as Sharing from 'expo-sharing';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { ChatMessage } from '../../types';
+import type { ChatMessage, CoupleEmoji } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { useAndroidKeyboardHeight } from '../../hooks/useAndroidKeyboardHeight';
 import { EmptyState } from '../../components/EmptyState';
@@ -757,6 +758,48 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     }
   };
 
+  /*
+   * 우리 이모지 관리 — 길게 눌러 무드 노출을 토글하거나 지운다.
+   *
+   * <p>삭제 API 는 처음부터 있었지만 <b>앱에서 부르는 곳이 없었다</b> — 만든 이모지를 지울 방법이
+   * 없었다는 뜻이다. 무드 토글을 넣으면서 같은 자리에 함께 둔다. 트레이는 이미 눌러서 보내는
+   * 곳이라 별도 관리 화면을 만드는 대신 길게 누르기를 쓴다.
+   *
+   * <p>무드 노출은 감정이 17종이 되면서 생겼다 — 전부 올리면 무드 선택지가 29개가 된다.
+   * 표정 6종은 켜진 채로, 상황 11종은 꺼진 채로 만들어진다(서버 defaultMoodVisible).
+   */
+  const manageCoupleEmoji = (emoji: CoupleEmoji) => {
+    haptics.light();
+    Alert.alert(
+      `우리 이모지 · ${emoji.label}`,
+      emoji.moodVisible ? '지금 무드 선택지에 올라가 있어요.' : '무드 선택지에는 올라가 있지 않아요.',
+      [
+        {
+          text: emoji.moodVisible ? '무드에서 내리기' : '무드에 올리기',
+          onPress: () => {
+            void coupleEmojiApi
+              .setMoodVisible(emoji.id, !emoji.moodVisible)
+              .then(() => loadCoupleEmojis(true))
+              .then(() => toast.success(emoji.moodVisible ? '무드에서 내렸어요.' : '무드에 올렸어요.'))
+              .catch((e) => toast.error(getErrorMessage(e, '바꾸지 못했어요.')));
+          },
+        },
+        {
+          text: '삭제',
+          style: 'destructive',
+          onPress: () => {
+            void coupleEmojiApi
+              .remove(emoji.id)
+              .then(() => loadCoupleEmojis(true))
+              .then(() => toast.success('이모지를 지웠어요.'))
+              .catch((e) => toast.error(getErrorMessage(e, '지우지 못했어요.')));
+          },
+        },
+        { text: '취소', style: 'cancel' },
+      ],
+    );
+  };
+
   // 갤러리에서 고르기만 한다 — 실제 업로드·전송은 미리보기에서 "보내기"를 눌러야 시작된다
   const onPickImage = async () => {
     try {
@@ -1432,10 +1475,16 @@ export function ChatRoomScreen({ navigation, route }: Props) {
                         key={e.id}
                         style={({ pressed }) => [styles.coupleEmojiBtn, pressed && styles.iconPressed]}
                         onPress={() => sendCoupleEmoji(e.id)}
+                        onLongPress={() => manageCoupleEmoji(e)}
                         accessibilityRole="button"
-                        accessibilityLabel={`우리 이모지 ${e.label} 보내기`}
+                        accessibilityLabel={`우리 이모지 ${e.label} 보내기. 길게 누르면 무드 올리기·삭제`}
                       >
                         <Image source={{ uri: e.imageUrl }} style={styles.coupleEmojiThumb} resizeMode="cover" />
+                        {/*
+                          무드에 올라간 장은 점 하나로 표시한다 — 토글이 눌렸는지 격자에서 바로
+                          보이지 않으면 "길게 눌러 바꾼다"는 것을 알 방법이 없다.
+                        */}
+                        {e.moodVisible ? <View style={styles.coupleEmojiMoodDot} /> : null}
                       </Pressable>
                     ))}
                     {/* 격자 마지막 칸 = 추가 버튼. 세트를 여러 벌 만들 수 있다 */}
@@ -1835,6 +1884,18 @@ const styles = themedStyles((colors) => ({
   coupleEmojiBtn: { width: 64, height: 64, borderRadius: 32, overflow: 'hidden', backgroundColor: colors.surfaceAlt },
   coupleEmojiThumb: { width: '100%', height: '100%' },
   coupleEmojiAdd: { alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border },
+  /* 무드 선택지에 올라간 장 표시 — 원형 썸네일 위 오른쪽 아래 모서리 */
+  coupleEmojiMoodDot: {
+    position: 'absolute',
+    right: 2,
+    bottom: 2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: colors.surface,
+    backgroundColor: colors.primary,
+  },
   coupleEmojiEmpty: {
     width: '100%',
     alignItems: 'center',

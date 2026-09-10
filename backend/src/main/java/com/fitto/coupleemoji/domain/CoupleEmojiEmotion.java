@@ -94,4 +94,19 @@ public enum CoupleEmojiEmotion {
     public String expressionPrompt() {
         return expressionPrompt;
     }
+
+    /**
+     * 새로 만든 장을 무드 피커에 바로 올릴 것인가 — {@code couple_emojis.mood_visible} 의 초기값.
+     *
+     * <p><b>표정 6종만 켜고 상황 11종은 끈다.</b> 무드는 "지금 내 기분"인데 출근·마스크팩·화장은
+     * 기분이 아니라 활동이고, 전부 올리면 무드 선택지가 기본 12 + 17 = 29개가 된다 —
+     * {@code moodEmojis.ts} 의 12종 원칙이 "처음부터 다 만들면 선택 마비만 생긴다"에서 나왔다.
+     * 쓰고 싶으면 켜서 올린다(트레이에서 길게 눌러 토글).
+     */
+    public boolean defaultMoodVisible() {
+        return switch (this) {
+            case ANGRY, HAPPY, EXCITED, SAD, SLEEPY, LOVE -> true;
+            default -> false;
+        };
+    }
 }

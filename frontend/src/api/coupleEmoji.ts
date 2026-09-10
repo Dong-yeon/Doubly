@@ -22,8 +22,12 @@ export const coupleEmojiApi = {
   uploadSignature: () =>
     unwrap(apiClient.post<ApiResponse<UploadSignature>>('/couple-emojis/upload-signature')),
 
-  /** 생성 접수 — 202 + jobId. 결과는 화면이 폴링한다(파일 주석) */
-  /** emotions 를 비우면 전체 — 일부만 보내면 그 감정만 그린다(부분 재생성) */
+  /**
+   * 생성 접수 — 202 + jobId. 결과는 화면이 폴링한다(파일 주석).
+   *
+   * <p>emotions 를 비우면 전체, 일부만 보내면 그 감정만 그린다(부분 재생성). 마음에 드는 장은
+   * 트레이에 두고 나머지만 다시 뽑으면 그만큼만 돈과 시간이 든다 — 한도는 그대로 세트 1회다.
+   */
   generate: (payload: {
     sourceImageUrl: string;
     subjectUserId?: number;
@@ -35,6 +39,14 @@ export const coupleEmojiApi = {
   list: () => unwrap(apiClient.get<ApiResponse<CoupleEmoji[]>>('/couple-emojis')),
 
   /** 한 장 숨기기 — 만든 사람이 아니어도 커플이면 누구나(§9-2) */
+  /** 무드 선택지에 올릴지 — 트레이에서 길게 눌러 토글한다. 갱신된 한 장을 돌려준다 */
+  setMoodVisible: (emojiId: number, visible: boolean) =>
+    unwrap(
+      apiClient.patch<ApiResponse<CoupleEmoji>>(
+        `/couple-emojis/${emojiId}/mood-visible?visible=${visible}`,
+      ),
+    ),
+
   remove: (emojiId: number) =>
     unwrap(apiClient.delete<ApiResponse<void>>(`/couple-emojis/${emojiId}`)),
 
