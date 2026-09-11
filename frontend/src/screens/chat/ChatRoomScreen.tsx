@@ -1628,11 +1628,23 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               />
             </TouchableOpacity>
           )}
+          {/*
+            입력창을 건드려도 열린 패널을 닫는다 — 안 닫으면 키보드가 올라오면서 패널과
+            겹친다. 대화 영역의 onTouchStart 와 같은 규칙이고(위 flex View 주석), 같은
+            이유로 탭을 삼키지 않는다 — 닫히면서 커서도 그대로 들어간다.
+
+            onPressIn 과 onFocus 를 같이 건다. 패널을 여는 순간 입력창이 포커스를
+            잃는다는 보장이 없어서, 포커스가 남아 있는 채로 다시 탭하면 onFocus 는
+            아예 발생하지 않는다 — 그 경우를 onPressIn 이 받는다. dismissPanels 는
+            이미 닫혀 있으면 아무 것도 안 하므로 두 번 불려도 무해하다.
+          */}
           <TextInput
             ref={inputRef}
             style={styles.input}
             value={text}
             onChangeText={setText}
+            onPressIn={dismissPanels}
+            onFocus={dismissPanels}
             placeholder="메시지를 입력하세요"
             placeholderTextColor={colors.textSecondary}
             multiline
