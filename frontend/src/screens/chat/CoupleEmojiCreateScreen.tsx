@@ -32,6 +32,7 @@ import { haptics } from '../../utils/haptics';
 import { pickImageAsset, takePhotoAsset, type PickedImage } from '../../utils/imageUpload';
 import {
   COUPLE_EMOJI_EMOTIONS,
+  MAX_EMOJI_PER_REQUEST,
   coupleEmojiEmotionOf,
   type CoupleEmojiEmotionDef,
 } from '../../constants/coupleEmojiEmotions';
@@ -113,8 +114,10 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
   } | null>(null);
   const effectiveSelected = useMemo(() => {
     if (selection && selection.subject === subjectUserId) return selection.keys;
+    // 한 번에 MAX_EMOJI_PER_REQUEST 장까지라, 기본값도 그만큼만 고른다 — 아직 없는 것 우선
     const missing = COUPLE_EMOJI_EMOTIONS.filter((e) => !existingEmotions.has(e.key)).map((e) => e.key);
-    return new Set<CoupleEmojiEmotion>(missing.length > 0 ? missing : COUPLE_EMOJI_EMOTIONS.map((e) => e.key));
+    const pool = missing.length > 0 ? missing : COUPLE_EMOJI_EMOTIONS.map((e) => e.key);
+    return new Set<CoupleEmojiEmotion>(pool.slice(0, MAX_EMOJI_PER_REQUEST));
   }, [selection, subjectUserId, existingEmotions]);
 
   const setSelectedKeys = (keys: Set<CoupleEmojiEmotion>) => {
@@ -123,8 +126,16 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
   };
   const toggleEmotion = (key: CoupleEmojiEmotion) => {
     const next = new Set(effectiveSelected);
-    if (next.has(key)) next.delete(key);
-    else next.add(key);
+    if (next.has(key)) {
+      next.delete(key);
+    } else {
+      // 서버도 막지만(400), 누른 뒤에 거절당하는 것보다 못 눌리는 편이 낫다
+      if (next.size >= MAX_EMOJI_PER_REQUEST) {
+        toast.info(`한 번에 ${MAX_EMOJI_PER_REQUEST}장까지 만들 수 있어요.`);
+        return;
+      }
+      next.add(key);
+    }
     setSelectedKeys(next);
   };
 
@@ -285,23 +296,30 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
             든다 — 이미 있는 감정은 기본으로 빠져 있고, 고르지 않아도 가장 싼 선택이 기본값이다.
           */}
           <View style={styles.emotionHeader}>
-            <Text style={styles.sectionTitle}>어떤 감정을 만들까요?</Text>
+            <Text style={styles.sectionTitle}>
+              어떤 감정을 만들까요? ({effectiveSelected.size}/{MAX_EMOJI_PER_REQUEST})
+            </Text>
+            {/*
+              전체 선택은 없앴다 — 한 번에 MAX_EMOJI_PER_REQUEST 장까지라 누를 수 없는 버튼이 된다.
+              대신 "아직 없는 것부터 5개"를 채워 준다: 가장 자주 쓰는 선택이고, 이미 가진 감정을
+              또 그리는 것이 가장 아까운 지출이다.
+            */}
             <Pressable
-              onPress={() =>
+              onPress={() => {
+                const missing = COUPLE_EMOJI_EMOTIONS.filter((e) => !existingEmotions.has(e.key)).map((e) => e.key);
+                const pool = missing.length > 0 ? missing : COUPLE_EMOJI_EMOTIONS.map((e) => e.key);
                 setSelectedKeys(
-                  effectiveSelected.size === COUPLE_EMOJI_EMOTIONS.length
-                    ? new Set()
-                    : new Set(COUPLE_EMOJI_EMOTIONS.map((e) => e.key)),
-                )
-              }
+                  effectiveSelected.size > 0
+                    ? new Set<CoupleEmojiEmotion>()
+                    : new Set<CoupleEmojiEmotion>(pool.slice(0, MAX_EMOJI_PER_REQUEST)),
+                );
+              }}
               hitSlop={8}
               accessibilityRole="button"
-              accessibilityLabel={
-                effectiveSelected.size === COUPLE_EMOJI_EMOTIONS.length ? '전체 해제' : '전체 선택'
-              }
+              accessibilityLabel={effectiveSelected.size > 0 ? '선택 해제' : `${MAX_EMOJI_PER_REQUEST}개 고르기`}
             >
               <Text style={styles.emotionSelectAll}>
-                {effectiveSelected.size === COUPLE_EMOJI_EMOTIONS.length ? '전체 해제' : '전체 선택'}
+                {effectiveSelected.size > 0 ? '선택 해제' : `${MAX_EMOJI_PER_REQUEST}개 고르기`}
               </Text>
             </Pressable>
           </View>
@@ -336,6 +354,7 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
             {existingEmotions.size > 0
               ? `점이 붙은 건 이미 만들어 둔 감정이에요. 빼 두면 그대로 남고, 고른 ${effectiveSelected.size}장만 새로 그려요.`
               : `고른 ${effectiveSelected.size}장을 그려요.`}
+            {` 한 번에 ${MAX_EMOJI_PER_REQUEST}장까지 만들 수 있어요 — 나머지는 다음에 이어서 만들면 돼요.`}
           </Text>
         </>
       ) : (
@@ -424,7 +443,8 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
               title="촬영하기"
               variant="secondary"
               onPress={() => pick('camera')}
-              disabled={generating || !allowed}
+              // 사진 고르기와 같은 조건 — 감정을 하나도 안 고르면 그릴 것이 없다
+              disabled={generating || !allowed || effectiveSelected.size === 0}
             />
           </>
         )}

@@ -45,22 +45,27 @@ export function MoodPicker({ visible, onClose, onSelect }: Props) {
     if (visible) loadCoupleEmojis().catch(() => undefined);
   }, [visible, loadCoupleEmojis]);
 
-  /** 내 얼굴 최신 한 벌 — 파일 상단 주석의 두 가지 축소 규칙 */
+  /** 내 얼굴 — 감정마다 최신 한 장. 파일 상단 주석의 두 가지 축소 규칙 */
   const myLatestSet = useMemo(() => {
     if (!myId) return [];
-    // 목록은 서버가 최신순(id desc)으로 준다 → 처음 만나는 내 얼굴의 batchId 가 최신 세트다
-    const mine = coupleEmojis.filter((e) => e.subjectUserId === myId);
-    const latestBatchId = mine[0]?.batchId;
-    if (!latestBatchId) return [];
     /*
+     * 감정마다 "가장 최근에 만든 한 장"을 고른다. 목록이 최신순(id desc)이라 감정별로 처음
+     * 만나는 것이 최신이다.
+     *
+     * <b>예전엔 최신 batchId 하나만 봤다.</b> 한 요청 = 한 벌 = 전체 감정이던 때는 같은
+     * 결과였지만, 한 요청 5장 상한(MAX_EMOJI_PER_REQUEST)이 생기면서 한 벌이 여러 배치로
+     * 쪼개진다 — 그러면 마지막 배치에 표정이 하나도 없을 때(상황 감정만 골랐을 때) 앞 배치에
+     * 멀쩡히 있는데도 무드가 통째로 비어 버린다. 감정 단위로 묶으면 몇 번에 나눠 만들든
+     * 개수가 감정 종류 수로 고정된다 — 이 파일 상단 주석이 말하는 원래 의도가 그것이다.
+     *
      * moodVisible 만 올린다 — 감정이 17종이 되면서 전부 올리면 선택지가 기본 12 + 17 = 29개가
      * 된다. 표정 6종은 켜진 채로, 상황 11종(출근·마스크팩 등)은 꺼진 채로 만들어지고
      * (CoupleEmojiEmotion.defaultMoodVisible), 트레이에서 길게 눌러 바꾼다.
      */
-    const set = mine.filter((e) => e.batchId === latestBatchId && e.moodVisible);
+    const mine = coupleEmojis.filter((e) => e.subjectUserId === myId && e.moodVisible);
     // 감정 정해진 순서로 — 목록 순서(id desc)는 생성 역순이라 사람이 읽는 순서와 다르다
-    return COUPLE_EMOJI_EMOTIONS.map((def) => set.find((e) => e.emotion === def.key)).filter(
-      (e): e is (typeof set)[number] => !!e,
+    return COUPLE_EMOJI_EMOTIONS.map((def) => mine.find((e) => e.emotion === def.key)).filter(
+      (e): e is (typeof mine)[number] => !!e,
     );
   }, [coupleEmojis, myId]);
   /*
