@@ -250,6 +250,14 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const [spellDismissedFor, setSpellDismissedFor] = useState<string | null>(null);
   // 수정 모드에서 응답 대기 중 전송 버튼이 안 막혀 중복 PUT 이 가능했다(QA_CHECKLIST.md P2-19)
   const [editSaving, setEditSaving] = useState(false);
+  /*
+   * 전송 왕복 동안의 상태 — 버튼을 자리에 붙잡아 두고 비활성으로 만드는 데 쓴다.
+   *
+   * <p>소켓이 끊겨 있으면 send 는 재연결을 최대 5초 기다린다(chatSocket.CONNECT_WAIT_MS).
+   * 예전엔 그 5초 동안 입력창도 버튼도 그대로여서 "눌러도 아무 일이 없다"로 읽혔고,
+   * 다시 누르면 텍스트가 남아 있으니 같은 메시지가 두 번 나갔다(2026-09-11 리포트).
+   */
+  const [sending, setSending] = useState(false);
   const spellCheckEnabled = useSettingsStore((s) => s.spellCheckEnabled);
   // 이미 읽음 처리한 최대 메시지 id — 중복 PUT 방지
   const markedUpToRef = useRef(0);
@@ -639,20 +647,38 @@ export function ChatRoomScreen({ navigation, route }: Props) {
       return;
     }
 
+    if (sending) return; // 응답 대기 중 중복 탭 — 예전엔 같은 메시지가 두 번 나갔다
+
+    /*
+     * 입력창을 먼저 비운다. 전송은 서버 왕복이고 끊겨 있으면 5초까지 가는데, 그동안
+     * 글자가 그대로 남아 있으면 탭이 먹힌 건지 알 수 없다. 실패하면 아래에서 돌려준다.
+     */
+    const pending = replyTo;
+    setText('');
+    setReplyTo(null);
+    setSending(true);
+    haptics.light();
     // 과거를 읽던 중이었어도 내가 보낸 메시지는 바로 보여야 한다(2026-09-03 요청)
     scrollToBottom();
-    const ok = await send(relationId, {
-      messageType: 'TEXT',
-      content,
-      replyToId: replyTo?.id,
-    });
-    if (ok) {
-      setText('');
-      setReplyTo(null);
-      haptics.light();
-      inputRef.current?.focus();
-    } else {
-      Alert.alert('전송 실패', '연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
+    try {
+      const ok = await send(relationId, {
+        messageType: 'TEXT',
+        content,
+        replyToId: pending?.id,
+      });
+      if (ok) {
+        inputRef.current?.focus();
+      } else {
+        /*
+         * 쓰던 글을 돌려준다 — 날리면 처음부터 다시 써야 한다. 기다리는 동안 새로 치기
+         * 시작했다면 그건 건드리지 않는다(사용자가 방금 친 것이 우선).
+         */
+        setText((cur) => (cur.trim() ? cur : content));
+        setReplyTo((cur) => cur ?? pending);
+        Alert.alert('전송 실패', '연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
+      }
+    } finally {
+      setSending(false);
     }
   };
 
@@ -1690,15 +1716,27 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             받는다 — 버튼 총량이 느는 게 아니라 어차피 비어 있던 슬롯을 쓰는 것이라,
             "+" 로 4개를 모았던 결정(extrasPanel 주석)과 어긋나지 않는다.
           */}
-          {text.trim() ? (
+          {/*
+            전송 중에도 이 자리를 지킨다. 입력창을 먼저 비우므로 text 만 보면 버튼이
+            곧바로 이모티콘 버튼으로 교체되는데, 그러면 연달아 누른 탭이 이모티콘 패널을
+            열어 버린다(게다가 패널은 열릴 때 키보드를 내린다 — togglePanel 주석).
+          */}
+          {text.trim() || sending ? (
             <TouchableOpacity
-              style={[styles.sendBtn, editSaving && styles.sendDisabled]}
+              style={[styles.sendBtn, (editSaving || sending) && styles.sendDisabled]}
               onPress={onSend}
-              disabled={editSaving}
+              disabled={editSaving || sending}
+              // 46px 이지만 화면 맨 끝이라 엄지가 가장자리를 빗나가기 쉽다
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               accessibilityRole="button"
+              accessibilityState={{ disabled: editSaving || sending, busy: sending }}
               accessibilityLabel={editing ? '수정 완료' : '전송'}
             >
-              <MaterialCommunityIcons name="arrow-up" size={22} color={colors.white} style={styles.sendIcon} />
+              {sending ? (
+                <ActivityIndicator size="small" color={colors.white} />
+              ) : (
+                <MaterialCommunityIcons name="arrow-up" size={22} color={colors.white} style={styles.sendIcon} />
+              )}
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
