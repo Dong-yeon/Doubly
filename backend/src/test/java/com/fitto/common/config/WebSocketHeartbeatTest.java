@@ -6,6 +6,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
 import org.springframework.messaging.simp.broker.SimpleBrokerMessageHandler;
 import org.springframework.scheduling.TaskScheduler;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.test.context.ActiveProfiles;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -43,18 +44,36 @@ class WebSocketHeartbeatTest {
      * 스케줄러를 빈으로 올리면 후보가 둘이 되어 배치 작업이 하트비트용 1스레드 풀로 밀려가거나
      * 기동이 모호해진다. 그래서 빈으로 만들지 않는다 — 이 테스트가 그 결정을 지킨다.
      *
-     * <p><b>덤으로 드러난 사실</b>: {@code @EnableWebSocketMessageBroker} 가 등록하는
-     * {@code messageBrokerTaskScheduler} 때문에 Boot 의 {@code TaskSchedulingAutoConfiguration}
-     * ({@code @ConditionalOnMissingBean(TaskScheduler.class)})이 <b>이 변경 전부터</b> 물러나
-     * 있었다. 그래서 {@code application.yml} 의 {@code spring.task.scheduling.pool.size: 4} 는
-     * 지금 아무 효과가 없고, 모든 {@code @Scheduled} 가 브로커 스케줄러를 함께 쓴다.
-     * 이 테스트는 그 사실을 <b>고정</b>할 뿐 옳다고 말하지 않는다 — 분리하려면 이름이
-     * {@code taskScheduler} 인 빈을 따로 두어야 하고, 그건 이 변경의 범위가 아니다.
+     * <p>{@code TaskScheduler} 빈은 둘이어야 한다 — 브로커 것과 {@code @Scheduled} 것
+     * ({@link SchedulingConfig}). 하트비트 것이 여기 끼면 셋이 되고, 이름이 맞는 후보가
+     * 없을 때의 선택이 흔들린다.
      */
     @Test
     void 하트비트_스케줄러를_빈으로_올리지_않는다() {
-        assertThat(context.getBeanNamesForType(TaskScheduler.class))
+        // 빈 이름 목록을 통째로 고정하면 스프링 내부 빈이 늘 때마다 깨진다 — 의도만 못 박는다.
+        assertThat(context.getBeansOfType(TaskScheduler.class).values())
+                .filteredOn(ThreadPoolTaskScheduler.class::isInstance)
+                .extracting(scheduler -> ((ThreadPoolTaskScheduler) scheduler).getThreadNamePrefix())
                 .as("하트비트 스케줄러가 빈이 되면 @Scheduled 의 스케줄러 선택이 흔들린다")
-                .containsExactly("messageBrokerTaskScheduler");
+                .doesNotContain("stomp-heartbeat-");
+    }
+
+    /**
+     * {@code @Scheduled} 가 브로커 스케줄러를 함께 쓰지 않는다.
+     *
+     * <p>{@code @EnableWebSocketMessageBroker} 가 {@code messageBrokerTaskScheduler} 를 등록하는
+     * 탓에 Boot 의 {@code TaskSchedulingAutoConfiguration} 이 늘 물러난다. {@link SchedulingConfig}
+     * 가 없으면 {@code spring.task.scheduling.pool.size} 가 조용히 무시되고, 통화 세션 스위퍼
+     * (5초마다) 같은 배치가 하트비트와 같은 풀을 다툰다.
+     */
+    @Test
+    void 스케줄러가_브로커와_분리돼_설정한_풀을_쓴다() {
+        assertThat(context.containsBean("taskScheduler"))
+                .as("이름이 taskScheduler 인 빈이 있어야 @Scheduled 가 그걸 고른다")
+                .isTrue();
+        ThreadPoolTaskScheduler scheduler = context.getBean("taskScheduler", ThreadPoolTaskScheduler.class);
+        assertThat(scheduler.getScheduledThreadPoolExecutor().getCorePoolSize())
+                .as("spring.task.scheduling.pool.size 가 실제로 반영돼야 한다")
+                .isEqualTo(4);
     }
 }
