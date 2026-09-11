@@ -394,6 +394,38 @@ export function normalizeImage(img) {
     }
   }
 
+  /*
+   * 2-1. 캐릭터 안쪽에 갇힌 구멍을 메운다.
+   *
+   * 1번은 "가장자리에서 닿는 흰색"을 배경으로 본다. 흰 캐릭터(토끼)의 몸통이 배경과 가는 틈으로
+   * 이어져 있으면 그 몸통까지 한 덩어리로 지워진다 — 선화만 남고 채움이 사라진다. 흰 배경에서
+   * 보면 종이색과 구분이 안 되지만, <b>다크 모드에서는 배경이 그대로 비쳐 캐릭터가 검게 보인다</b>
+   * (bear_sulky 의 토끼가 검게 나온 실제 사례, 2026-09-11).
+   *
+   * 테두리를 그리고 나면 그 틈은 이미 닫혀 있다. 그래서 바깥에서 도달하지 못하는 투명 영역은
+   * 캐릭터 안쪽으로 보고 흰색으로 채운다.
+   */
+  const outside = new Uint8Array(px);
+  const stack = [];
+  for (let x = 0; x < w; x++) stack.push(x, (h - 1) * w + x);
+  for (let y = 0; y < h; y++) stack.push(y * w, y * w + w - 1);
+  while (stack.length) {
+    const i = stack.pop();
+    if (outside[i] || out[i * 4 + 3] !== 0) continue;
+    outside[i] = 1;
+    const x = i % w;
+    const y = (i / w) | 0;
+    if (x > 0) stack.push(i - 1);
+    if (x < w - 1) stack.push(i + 1);
+    if (y > 0) stack.push(i - w);
+    if (y < h - 1) stack.push(i + w);
+  }
+  for (let i = 0; i < px; i++) {
+    if (out[i * 4 + 3] === 0 && !outside[i]) {
+      out[i * 4] = out[i * 4 + 1] = out[i * 4 + 2] = out[i * 4 + 3] = 255;
+    }
+  }
+
   // 3. 내용에 맞춰 자르고, 정사각 여백을 준 뒤 규격으로 줄인다
   let top = h, bottom = -1, left = w, right = -1;
   for (let y = 0; y < h; y++) {
