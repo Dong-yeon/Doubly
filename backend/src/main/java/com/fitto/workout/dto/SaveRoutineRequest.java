@@ -1,6 +1,8 @@
 package com.fitto.workout.dto;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
@@ -40,6 +42,8 @@ public record SaveRoutineRequest(
             String category,
             Integer targetSets,
             Integer reps,
+            @DecimalMin(value = "0", message = "무게는 0보다 작을 수 없어요.")
+            @DecimalMax(value = "999.99", message = "무게는 999.99kg까지 입력할 수 있어요.")
             BigDecimal weightKg,
             /**
              * 유산소 목표 시간(분) — 러닝·트레드밀의 목표는 세트가 아니라 시간·거리다.
@@ -47,6 +51,8 @@ public record SaveRoutineRequest(
              */
             Integer targetDurationMin,
             /** 유산소 목표 거리(km) */
+            @DecimalMin(value = "0", message = "거리는 0보다 작을 수 없어요.")
+            @DecimalMax(value = "9999.99", message = "거리는 9999.99km까지 입력할 수 있어요. km 단위로 입력해주세요.")
             BigDecimal targetDistanceKm,
             /** 종목 카탈로그에서 골랐다면 그 id — 자유 입력 시 null */
             Long exerciseCatalogId,
@@ -100,6 +106,8 @@ public record SaveRoutineRequest(
     /** 종목에 담긴 세트 한 줄 */
     public record SetRequest(
             Integer reps,
+            @DecimalMin(value = "0", message = "무게는 0보다 작을 수 없어요.")
+            @DecimalMax(value = "999.99", message = "무게는 999.99kg까지 입력할 수 있어요.")
             BigDecimal weightKg,
             /** 세트 성격 — WARMUP/NORMAL/TOP/BACKOFF/DROP 등. UI 배지 표시용, 계산에는 안 쓴다 */
             @Size(max = 10) String setType

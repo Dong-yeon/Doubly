@@ -1,6 +1,9 @@
 package com.fitto.workout.dto;
 
+
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 
 import java.math.BigDecimal;
@@ -13,10 +16,14 @@ public record WorkoutSetRequest(
         String category,
         Integer sets,
         Integer reps,
+        @DecimalMin(value = "0", message = "무게는 0보다 작을 수 없어요.")
+        @DecimalMax(value = "999.99", message = "무게는 999.99kg까지 입력할 수 있어요.")
         BigDecimal weightKg,
         /** 유산소 수행 시간(초) — 러닝·트레드밀은 세트가 아니라 시간·거리로 기록한다 */
         Integer durationSec,
         /** 유산소 이동 거리(km) */
+        @DecimalMin(value = "0", message = "거리는 0보다 작을 수 없어요.")
+        @DecimalMax(value = "9999.99", message = "거리는 9999.99km까지 입력할 수 있어요. km 단위로 입력해주세요.")
         BigDecimal distanceKm,
         Integer orderNo,
         /** 종목 카탈로그에서 골랐다면 그 id — 자유 입력 시 null */
