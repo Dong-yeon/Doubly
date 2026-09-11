@@ -14,16 +14,27 @@ import { createVideoClient } from './src/store/callStore';
  *
  * <p>pushProviderName("production-apn-video")은 Stream 대시보드에 등록한 APNs Auth
  * Key(.p8) 기반 Push Provider 별칭이다(docs/CALL_STATUS.md 2026-09-07 참고) — 이름이
- * 다르면 앱이 벨을 못 받는다. android 는 아직 안 건드린다(기존 동작 그대로 — 전달 안
- * 하면 undefined 와 같다, 타입 주석 참고).
+ * 다르면 앱이 벨을 못 받는다.
+ *
+ * <p><b>iOS 에서만 부른다.</b> 5ca2a85 가 Play 의 USE_FULL_SCREEN_INTENT 반려를 풀려고
+ * `@stream-io/react-native-callingx` 를 package.json 의 autolinking.android.exclude 로
+ * 옮겼는데, Stream SDK 1.32+ 의 setPushConfig 는 플랫폼과 무관하게 그 네이티브 모듈을
+ * 요구한다. 그래서 Android 빌드에서 이 줄이 곧바로
+ *   "react-native-callingx library is not installed"
+ * 를 던졌고, registerRootComponent 에 닿기도 전이라 <b>앱이 스플래시 직후 죽었다</b>
+ * (2026-09-11, 스토어 배포본). iOS 는 exclude 대상이 아니라 그대로 동작한다.
+ * Android 벨 웨이크업은 여전히 미착수다 — 착수하려면 callingx 의 매니페스트 권한
+ * 문제(5ca2a85)부터 다시 풀어야 한다.
  */
-StreamVideoRN.setPushConfig({
-  ios: {
-    pushProviderName: 'production-apn-video',
-    callsHistory: true,
-  },
-  createStreamVideoClient: createVideoClient,
-});
+if (Platform.OS === 'ios') {
+  StreamVideoRN.setPushConfig({
+    ios: {
+      pushProviderName: 'production-apn-video',
+      callsHistory: true,
+    },
+    createStreamVideoClient: createVideoClient,
+  });
+}
 
 // registerRootComponent calls AppRegistry.registerComponent('main', () => App);
 // It also ensures that whether you load the app in Expo Go or in a native build,
