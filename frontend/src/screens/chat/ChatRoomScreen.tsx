@@ -5,6 +5,7 @@ import {
   AppState,
   FlatList,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -80,6 +81,7 @@ import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { ChatMessage, CoupleEmoji } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { useAndroidKeyboardHeight } from '../../hooks/useAndroidKeyboardHeight';
+import { useKeyboardPanelHeight } from '../../hooks/useKeyboardPanelHeight';
 import { EmptyState } from '../../components/EmptyState';
 
 
@@ -102,6 +104,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const { relationId, title } = route.params;
   const headerHeight = useHeaderHeight();
   const androidKeyboardHeight = useAndroidKeyboardHeight();
+  /* 이모티콘·보조 도구 패널 높이 — 키보드가 있던 자리를 그대로 이어받는다(훅 주석 참고) */
+  const panelHeight = useKeyboardPanelHeight();
   /* 전체화면으로 연 사진 — 목록에서 이 uri 를 찾아 그 자리에서 시작한다(아래 viewing) */
   const [viewingImage, setViewingImage] = useState<string | null>(null);
   const openImage = (uri: string) => setViewingImage(uri);
@@ -203,6 +207,29 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     setShowStickers((v) => (v ? false : v));
     setShowExtras((v) => (v ? false : v));
   }, []);
+  /*
+   * 트레이 버튼(이모티콘 · "+")의 단일 규칙 — 카톡 기준.
+   *
+   * <p><b>열 때는 키보드를 내린다.</b> 패널은 키보드가 있던 자리를 이어받는 물건이라
+   * 둘이 동시에 떠 있으면 안 된다. 예전에는 setShow* 만 불러서, 키보드가 올라온 채로
+   * 패널을 열면 입력바가 패널+키보드 높이만큼 밀려 올라갔다(2026-09-11).
+   *
+   * <p><b>닫을 때는 키보드를 올리지 않는다.</b> 패널만 접히고 입력창은 포커스를 얻지
+   * 않는다 — 키보드를 부르려면 입력창을 직접 눌러야 한다(카톡과 같다).
+   *
+   * <p>두 패널은 자리를 공유하므로 하나를 열면 다른 하나는 반드시 닫힌다.
+   */
+  const togglePanel = useCallback((which: 'stickers' | 'extras') => {
+    const isOpen = which === 'stickers' ? showStickers : showExtras;
+    if (isOpen) {
+      setShowStickers(false);
+      setShowExtras(false);
+      return;
+    }
+    Keyboard.dismiss();
+    setShowStickers(which === 'stickers');
+    setShowExtras(which === 'extras');
+  }, [showStickers, showExtras]);
   // 대화 검색 — 헤더 돋보기 버튼으로 연다(2026-09-03, 전체 기간 서버 검색)
   const [showSearch, setShowSearch] = useState(false);
   // 헤더 "⋮" — 사진 모아보기·저장한 대화(자주 안 쓰는 항목이라 아이콘을 더 늘리지 않고 묶는다)
@@ -1368,7 +1395,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
          * 상단바에서 설정한다(그 파일 topBar 주석 참고).
          */}
         {showExtras ? (
-          <View style={styles.extrasPanel}>
+          <View style={[styles.extrasPanel, { height: panelHeight }]}>
             {/*
              * 2026-09-03 엔 "스티커"(유니코드 이모지)와 "이모티콘"(캐릭터 그림)이 트레이
              * 버튼 두 개로 나뉘어 있었다. 2026-09-07 에 하나로 합친다 — 이유가 둘이다.
@@ -1381,7 +1408,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             <ExtraButton
               icon="emoticon-outline"
               label="이모티콘"
-              onPress={() => { setShowExtras(false); setShowStickers(true); }}
+              onPress={() => togglePanel('stickers')}
             />
             <ExtraButton
               icon="camera-outline"
@@ -1401,7 +1428,9 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           </View>
         ) : null}
         {showStickers ? (
-          <View>
+          /* 탭 한 줄 + 스크롤 영역을 합쳐 키보드와 같은 높이로 둔다 — 탭을 바꿔도 높이가
+             변하지 않아야 화면이 흔들리지 않는다(useKeyboardPanelHeight 주석) */
+          <View style={{ height: panelHeight }}>
             {/* 탭 — 각자 제 이름을 갖는다(위 트레이 주석 참고) */}
             <View style={styles.stickerTabs}>
               {([
@@ -1616,7 +1645,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           ) : (
             <TouchableOpacity
               style={[styles.trayBtn, showExtras && styles.trayBtnActive]}
-              onPress={() => { setShowStickers(false); setShowExtras((v) => !v); }}
+              onPress={() => togglePanel('extras')}
               accessibilityRole="button"
               accessibilityLabel={showExtras ? '보조 도구 닫기' : '이모티콘·사진 더 보기'}
             >
@@ -1674,7 +1703,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           ) : (
             <TouchableOpacity
               style={[styles.trayBtn, showStickers && styles.trayBtnActive]}
-              onPress={() => { setShowExtras(false); setShowStickers((v) => !v); }}
+              onPress={() => togglePanel('stickers')}
               accessibilityRole="button"
               accessibilityLabel={showStickers ? '이모티콘 닫기' : '이모티콘'}
             >
@@ -1947,7 +1976,12 @@ const styles = themedStyles((colors) => ({
   coupleEmojiEmptyTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
   coupleEmojiEmptyText: { fontSize: fontSize.caption, color: colors.textSecondary, textAlign: 'center' },
   // 팩이 늘어 한 화면을 넘긴다 — 입력바를 밀어내지 않도록 높이를 묶는다
-  stickerScroll: { maxHeight: 220 },
+  /*
+   * 부모(패널)가 키보드 높이로 고정돼 있으므로 남는 자리를 그대로 채운다. 2026-09-11
+   * 이전에는 maxHeight: 220 고정이라 실제 키보드(260~320)보다 늘 작았고, 탭마다 내용
+   * 높이가 달라 패널이 들쭉날쭉했다.
+   */
+  stickerScroll: { flex: 1 },
   // 이모지 / 이모티콘 탭 — 패널 맨 위 한 줄
   stickerTabs: {
     flexDirection: 'row',
@@ -2148,6 +2182,8 @@ const styles = themedStyles((colors) => ({
   extrasPanel: {
     flexDirection: 'row',
     justifyContent: 'space-around',
+    /* 높이가 키보드만큼 커졌으므로 버튼을 위에 붙인다 — 기본 stretch 면 세로로 늘어난다 */
+    alignItems: 'flex-start',
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
   },
