@@ -216,6 +216,14 @@ during build` 로 실패했다. 같은 커밋에서 `npx expo-updates fingerprin
 cd frontend && npx expo-updates fingerprint:generate --platform android
 ```
 
+### 8-6. 업데이트가 "성공했는데 0명에게 갔다" (2026-09-11)
+
+fingerprint 가 정확해도, **그 fingerprint 로 만든 빌드가 스토어에 없으면** 업데이트는 조용히
+아무에게도 안 간다(에러 없음). 실제로 production 업데이트 4건 중 3건이 취소된 빌드·미제출 빌드를
+대상으로 올라가 iOS 사용자는 이틀치를 하나도 못 받았다. **업데이트 전에 "지금 출시돼 있는 빌드의
+Fingerprint" 를 먼저 확인한다** — 최신 빌드 줄이 아니라 *제출이 `finished` 인* 빌드 줄을 본다.
+전말과 확인 명령은 `docs/RELEASE_OTA_MISDELIVERY_2026-09-11.md`.
+
 ## 9. Google Play 정책·계정 요구사항
 
 ### 9-1. Play 정책: 사진 선택 도구 (2026-09)
