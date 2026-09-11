@@ -22,7 +22,9 @@ import org.springframework.web.client.RestClientResponseException;
 
 import java.util.Base64;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -109,6 +111,29 @@ public class GeminiClient {
      * 성급하게 포기한다.
      */
     private static final int PRIMARY_BUDGET_PERCENT = 60;
+
+    /** 429 본문을 로그에 남길 때의 길이 상한 — 원인 판별에 필요한 앞부분만 남긴다. */
+    private static final int ERROR_BODY_LOG_LIMIT = 500;
+
+    /**
+     * 429 를 맞고 재시도까지 소진한 모델이 쉬는 시간의 상한.
+     *
+     * <p>서버가 {@code retryDelay} 로 더 긴 시간을 알려주면 그쪽을 따르되 여기서 자른다 —
+     * 하루치 한도를 그대로 믿고 24시간을 막아버리면 충전·한도 회복을 앱이 알아채지 못한다.
+     */
+    private static final long MAX_RATE_LIMIT_COOLDOWN_MILLIS = 10 * 60_000L;
+
+    /**
+     * 모델별 "지금은 부르지 않는다" 시각(epoch millis).
+     *
+     * <p><b>이게 없으면 한도 소진이 호출 수만큼 곱해진다.</b> 2026-09-11 우리 이모지 17장이
+     * 크레딧 소진(429)에 걸렸을 때, 장마다 재시도 예산 4분을 따로 태워 한 세트가 30분을
+     * 돌았다. 한 장이 "이 모델은 지금 안 된다"를 확인했으면 나머지는 즉시 실패해야 한다.
+     *
+     * <p>키가 모델 이름이라 이미지 모델이 막혀도 텍스트 모델은 그대로 돈다(이미지는 키·모델이
+     * 따로다 — {@link #generateImageInBackground} 주석 1번).
+     */
+    private final Map<String, Long> rateLimitedUntil = new ConcurrentHashMap<>();
 
     private final GeminiProperties properties;
     private final ObjectMapper objectMapper;
@@ -343,6 +368,12 @@ public class GeminiClient {
      * 수 초과)는 재시도 없이 바로 실패했다. 지금은 "서버가 지금은 처리 못 했다"고 말한 상태
      * (429·500·502·503·504)와 네트워크 오류를 함께 재시도한다.
      *
+     * <p><b>단, 모든 429 를 기다리지는 않는다.</b> 일일 한도와 크레딧 소진은 같은 429 로 오지만
+     * 예산(최대 4분) 안에 풀리지 않는다. 이걸 구분하지 않아 우리 이모지 한 세트(17장)가
+     * 장마다 4분씩 태우며 30분을 돈 적이 있다(2026-09-11). 지금은 일일 한도면 즉시 포기하고,
+     * 예산을 소진한 모델은 {@link #rateLimitedUntil} 로 잠시 쉬게 해 남은 장들이 같은 벽에
+     * 각자 부딪히지 않게 한다.
+     *
      * <p><b>모델 폴백이 필요한 이유는 운영 로그다.</b> 실제로 기록된 Gemini 오류는 사실상 전부
      * 503 ServiceUnavailable — 특정 모델이 과부하라는 뜻이고, 이건 <b>같은 모델로 아무리
      * 다시 물어도</b> 몇 분씩 풀리지 않는다. 그때 필요한 건 더 기다리는 게 아니라 <b>다른
@@ -398,6 +429,11 @@ public class GeminiClient {
      */
     private JsonNode callModel(String model, String apiKey, Map<String, Object> body,
                                RetryPolicy policy, long deadline) {
+        long cooldown = cooldownRemaining(model);
+        if (cooldown > 0) {
+            log.info("Gemini {} 쿨다운 중 — {}ms 남아 호출하지 않는다", model, cooldown);
+            throw new ModelUnavailable(ErrorCode.AI_RATE_LIMITED);
+        }
         long backoffMillis = policy.initialBackoffMillis();
         long lastAttemptMillis = 0;
         for (int attempt = 1; ; attempt++) {
@@ -421,9 +457,31 @@ public class GeminiClient {
                             model, status, e.getResponseBodyAsString());
                     throw new BusinessException(ErrorCode.AI_ANALYSIS_FAILED);
                 }
-                long wait = status == 429
-                        ? retryAfterMillis(e, backoffMillis, policy.maxBackoffMillis())
-                        : backoffMillis;
+                long wait;
+                if (status == 429) {
+                    /*
+                     * 429 는 세 가지가 같은 코드로 온다 — 분당 한도(곧 풀림), 일일 한도, 크레딧
+                     * 소진(충전 전엔 안 풀림). 셋을 구분하지 않으면 뒤의 둘에도 재시도 예산을
+                     * 통째로 태운다. 본문을 남기는 것도 그래서다: 예전엔 429 본문을 안 찍어
+                     * 어느 쪽인지 사후에 알 길이 없었다.
+                     */
+                    String errorBody = e.getResponseBodyAsString();
+                    if (attempt == 1) {
+                        log.warn("Gemini 429({}): {}", model, truncateBody(errorBody));
+                    }
+                    Long serverDelay = retryDelayMillis(errorBody);
+                    long remaining = deadline - System.currentTimeMillis();
+                    if (isDailyQuota(errorBody) || (serverDelay != null && serverDelay > remaining)) {
+                        markRateLimited(model, serverDelay, policy);
+                        log.warn("Gemini 한도 소진({}) — 예산 안에 안 풀린다. 재시도하지 않는다", model);
+                        throw new ModelUnavailable(ErrorCode.AI_RATE_LIMITED);
+                    }
+                    wait = serverDelay != null
+                            ? Math.min(serverDelay, policy.maxBackoffMillis())
+                            : retryAfterMillis(e, backoffMillis, policy.maxBackoffMillis());
+                } else {
+                    wait = backoffMillis;
+                }
                 if (canRetry(attempt, policy.maxAttempts(), wait, lastAttemptMillis, deadline)) {
                     log.info("Gemini 일시 실패({} {}) — {}ms 후 재시도 ({}/{})",
                             model, status, wait, attempt, policy.maxAttempts());
@@ -432,6 +490,13 @@ public class GeminiClient {
                     continue;
                 }
                 log.warn("Gemini 재시도 소진({}): status={}", model, status);
+                if (status == 429) {
+                    /*
+                     * 예산을 다 쓰고도 429 라면 이 모델은 지금 우리를 받아주지 않는다.
+                     * 같은 배치의 남은 호출들이 각자 같은 예산을 또 태우지 않도록 쉬게 한다.
+                     */
+                    markRateLimited(model, null, policy);
+                }
                 throw new ModelUnavailable(status == 429 || status == 503
                         ? ErrorCode.AI_RATE_LIMITED : ErrorCode.AI_ANALYSIS_FAILED);
             } catch (ResourceAccessException e) {
@@ -525,6 +590,70 @@ public class GeminiClient {
         } catch (NumberFormatException ignored) {
             return fallbackMillis; // HTTP-date 형식 — 이 API 에서는 오지 않는다
         }
+    }
+
+    /**
+     * 429 본문의 {@code RetryInfo.retryDelay}("38s", "1.5s") — 없거나 못 읽으면 {@code null}.
+     *
+     * <p>Gemini 는 대기 시간을 {@code Retry-After} 헤더가 아니라 <b>본문</b>에 담아 준다.
+     * 헤더만 보던 {@link #retryAfterMillis} 가 늘 고정 사다리(2·6·18·54초)로 떨어진 이유다.
+     */
+    private Long retryDelayMillis(String body) {
+        if (body == null || body.isBlank()) {
+            return null;
+        }
+        try {
+            for (JsonNode detail : objectMapper.readTree(body).path("error").path("details")) {
+                String delay = detail.path("retryDelay").asText("");
+                if (delay.length() > 1 && delay.endsWith("s")) {
+                    return (long) (Double.parseDouble(delay.substring(0, delay.length() - 1)) * 1000);
+                }
+            }
+        } catch (Exception ignored) {
+            // 본문 형식이 바뀐 것뿐이다 — 기존 백오프로 간다
+        }
+        return null;
+    }
+
+    /**
+     * <b>일일</b> 한도로 인한 429 인가 — {@code quotaId} 에 {@code PerDay} 가 들어간다.
+     *
+     * <p>분당 한도는 몇십 초면 풀리지만 일일 한도는 우리 예산(최대 4분) 안에 절대 안 풀린다.
+     *
+     * <p><b>메시지 본문으로 판별하지 않는 이유</b>: 평범한 분당 한도 429 도 메시지에
+     * "check your plan and billing details" 가 들어간다. {@code billing}·{@code credit} 같은
+     * 낱말로 매칭하면 모든 429 가 재시도 불가가 되어, 429 재시도를 넣은 이유가 사라진다.
+     * 크레딧 소진처럼 여기서 못 걸러내는 경우는 위쪽 쿨다운이 배치 단위로 막는다.
+     */
+    private static boolean isDailyQuota(String body) {
+        return body != null && body.toLowerCase(Locale.ROOT).contains("perday");
+    }
+
+    /** 남은 쿨다운(ms) — 0 이면 불러도 된다. */
+    private long cooldownRemaining(String model) {
+        Long until = rateLimitedUntil.get(model);
+        return until == null ? 0 : Math.max(0, until - System.currentTimeMillis());
+    }
+
+    /**
+     * 이 모델을 잠시 쉬게 한다. 서버가 알려준 {@code retryDelay} 가 있으면 그만큼,
+     * 없으면 <b>이 호출이 쓴 예산만큼</b> — 그 시간 안에 못 해냈다는 걸 방금 확인했으므로.
+     */
+    private void markRateLimited(String model, Long serverDelayMillis, RetryPolicy policy) {
+        long cooldown = Math.min(
+                serverDelayMillis != null ? serverDelayMillis : policy.budgetMillis(),
+                MAX_RATE_LIMIT_COOLDOWN_MILLIS);
+        rateLimitedUntil.put(model, System.currentTimeMillis() + cooldown);
+        log.warn("Gemini {} 를 {}ms 쉬게 한다 — 같은 한도에 남은 호출까지 태우지 않는다", model, cooldown);
+    }
+
+    private static String truncateBody(String body) {
+        if (body == null || body.isBlank()) {
+            return "(본문 없음)";
+        }
+        return body.length() <= ERROR_BODY_LOG_LIMIT
+                ? body
+                : body.substring(0, ERROR_BODY_LOG_LIMIT) + "…(생략)";
     }
 
     private void sleep(long millis) {
