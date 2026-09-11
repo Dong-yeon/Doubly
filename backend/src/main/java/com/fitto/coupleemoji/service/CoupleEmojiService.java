@@ -85,6 +85,22 @@ public class CoupleEmojiService {
      */
     private static final int IMAGE_CONCURRENCY = 4;
 
+    /**
+     * 한 요청에 그릴 수 있는 최대 장 수.
+     *
+     * <p><b>17종을 한 번에 받지 않는다.</b> 감정이 6종에서 17종이 되면서 한 요청이 세 가지를
+     * 한꺼번에 키웠다 — 세트당 실비(장당 약 0.04 USD 라 17장이면 약 0.68 USD), 대기 시간
+     * (4장씩 동시에 그려도 약 60초), 그리고 실패 시 손실 폭이다. 2026-09-11 크레딧이 떨어졌을 때
+     * 한 요청이 30분을 돌고 아무것도 남기지 못한 것이 그 셋이 겹친 결과다.
+     *
+     * <p>5장이면 한 요청이 약 15~20초에 끝나고 실비도 0.2 USD 선이다. 17종을 다 갖고 싶으면
+     * 여러 번 나눠 만들면 된다 — 부분 재생성(이번에 그릴 감정만 보내기)이 이미 그 경로다.
+     *
+     * <p>상한은 <b>요청 경계</b>({@link #prepare})에서만 본다. 그 아래 생성 로직은 장 수에
+     * 제한이 없다 — 정책이 바뀌면 여기 숫자만 바꾼다.
+     */
+    static final int MAX_EMOTIONS_PER_REQUEST = 5;
+
     private final CoupleEmojiRepository repository;
     private final RelationRepository relationRepository;
     private final UserRepository userRepository;
@@ -158,9 +174,13 @@ public class CoupleEmojiService {
             if (subject == null || !couple.involves(subject)) {
                 throw new BusinessException(ErrorCode.INVALID_INPUT, "우리 둘 중 한 사람의 사진이어야 해요.");
             }
+            /*
+             * 감정 검증이 한도 차감보다 먼저다 — 거절할 요청에 세트를 소진시키면 사용자는
+             * 아무것도 못 받고 한도만 잃는다.
+             */
+            List<CoupleEmojiEmotion> emotions = resolveEmotions(request.emotions());
             geminiClient.requireImageConfiguredAndCountUsage(userId, FEATURE);
-            return new GenerationTicket(couple.getId(), userId, subject, request.sourceImageUrl(),
-                    resolveEmotions(request.emotions()));
+            return new GenerationTicket(couple.getId(), userId, subject, request.sourceImageUrl(), emotions);
         } catch (RuntimeException e) {
             /*
              * 앱은 업로드 → 접수 순서라, 여기서 거절(402·429·관계 없음·대상 오류)해도 원본은 이미
@@ -202,15 +222,25 @@ public class CoupleEmojiService {
     }
 
     /**
-     * 이번에 그릴 감정 — 비어 있으면 전체.
+     * 이번에 그릴 감정 — <b>1개 이상 {@link #MAX_EMOTIONS_PER_REQUEST}개 이하</b>.
+     *
+     * <p>예전엔 비어 있으면 전체(17종)였다. 상한이 생긴 지금 그 기본값은 상한을 그냥 우회하는
+     * 구멍이라 없앴다 — 무엇을 그릴지는 앱이 명시한다.
      *
      * <p>중복을 걷어내고 {@link CoupleEmojiEmotion#values()} 순서로 되돌린다. 앱이 보낸 순서를
      * 그대로 믿으면 트레이·대기 화면의 칸 순서가 요청마다 달라진다(coupleEmojiEmotions.ts 주석).
-     * 모르는 값은 역직렬화 단계에서 이미 걸리므로 여기서는 순서·중복만 본다.
+     * 모르는 값은 역직렬화 단계에서 이미 걸리므로 여기서는 순서·중복·개수만 본다.
+     * 개수는 <b>중복을 걷어낸 뒤</b> 센다 — 같은 감정을 열 번 보낸 건 한 장이다.
      */
     private static List<CoupleEmojiEmotion> resolveEmotions(List<CoupleEmojiEmotion> requested) {
-        if (requested == null || requested.isEmpty()) return List.of(CoupleEmojiEmotion.values());
+        if (requested == null || requested.isEmpty()) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "그릴 감정을 골라주세요.");
+        }
         var wanted = new LinkedHashSet<>(requested);
+        if (wanted.size() > MAX_EMOTIONS_PER_REQUEST) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT,
+                    "한 번에 " + MAX_EMOTIONS_PER_REQUEST + "장까지 만들 수 있어요. 나눠서 만들어주세요.");
+        }
         return java.util.Arrays.stream(CoupleEmojiEmotion.values()).filter(wanted::contains).toList();
     }
 
