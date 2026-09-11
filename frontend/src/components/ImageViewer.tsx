@@ -65,6 +65,24 @@ export function ImageViewer({ images, initialIndex, onClose }: Props) {
 
   const visible = initialIndex !== null && images.length > 0;
 
+  /*
+   * 뷰어를 열 때마다 위치를 initialIndex 로 되돌린다.
+   *
+   * <p>이 컴포넌트는 화면에 계속 붙어 있고 {@link Modal} 의 children 만 여닫힌다 —
+   * FlatList 는 매번 새로 마운트돼 initialScrollIndex 로 옳은 사진을 보여주지만,
+   * 여기 {@code index} 는 <b>직전에 스와이프해둔 값</b>이 그대로 남는다. 그러면 열자마자
+   * 한 프레임 동안 다른 사진의 제목·매수가 보였다가 viewability 콜백으로 교정된다.
+   *
+   * <p>effect 가 아니라 렌더 중에 맞춘다 — effect 는 커밋 뒤에 돌아 어긋난 프레임이
+   * 그대로 그려지고, 그게 고치려는 증상 자체다. 같은 사진을 다시 여는 경우
+   * (initialIndex 가 안 바뀌는 경우)까지 잡으려면 값이 아니라 <b>열림 전이</b>를 봐야 한다.
+   */
+  const [wasOpen, setWasOpen] = useState(visible);
+  if (visible !== wasOpen) {
+    setWasOpen(visible);
+    if (visible) setIndex(initialIndex ?? 0);
+  }
+
   const onViewableChanged = useRef(
     ({ viewableItems }: { viewableItems: { index: number | null }[] }) => {
       const first = viewableItems[0]?.index;
