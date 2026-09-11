@@ -15,6 +15,11 @@ import { AnimatedStickerDef } from '../constants/animatedStickers';
 interface Props {
   sticker: AnimatedStickerDef;
   style?: StyleProp<ImageStyle>;
+  /**
+   * 네이티브 쪽 시그니처와 맞추기 위한 자리. 웹은 정지 이미지를 그대로 두므로
+   * Pressable 로 감싸지 않고, 길게 누르기는 부모 말풍선 Pressable 이 그대로 받는다.
+   */
+  onLongPress?: () => void;
 }
 
 export function AnimatedSticker({ sticker, style }: Props) {

@@ -740,16 +740,20 @@ export function ChatRoomScreen({ navigation, route }: Props) {
    * STOMP 경로는 REST 처럼 402 를 화면으로 되돌려줄 방법이 없다(서버 검증은 우회 방지용
    * 방어선일 뿐 사용자에게는 조용히 실패로 보인다).
    *
-   * 패널을 닫고 진동부터 준다 — 전송(await send)이 끝나야 반응하면, 서버 왕복이
-   * 끝날 때까지 패널이 그대로 떠 있어 "눌러도 반응이 없다"로 보인다(2026-09-03 리포트).
-   * 실패했을 때만 뒤늦게 알린다(패널이 이미 닫혀 있어도 무방 — text 전송 실패와 같은 패턴).
+   * await send 를 기다리지 않고 진동부터 준다 — 서버 왕복이 끝나야 반응하면
+   * "눌러도 반응이 없다"로 보인다(2026-09-03 리포트). 실패했을 때만 뒤늦게 알린다.
+   *
+   * <p><b>패널은 닫지 않는다</b>(2026-09-11 에 뒤집은 결정). 예전엔 전송 즉시 닫는 것이
+   * 위의 "반응 없음"에 대한 답이었는데, 대신 한 장 보낼 때마다 트레이를 다시 열어야 했다 —
+   * 스티커는 원래 두세 장을 연달아 보내는 물건이라 그 왕복이 매번 걸린다. 지금은 진동과,
+   * 패널 위로 올라오는 말풍선(scrollToBottom)이 그 역할을 대신한다. 패널을 닫는 길도
+   * 이제 트레이 버튼 말고 하나 더 있다 — 대화 영역을 건드리면 닫힌다(dismissPanels).
    */
   const sendSticker = async (sticker: string, locked: boolean, label: string) => {
     if (locked) {
       showUpgrade(`${withJosa(label, '은', '는')} PRO에서 보낼 수 있어요.`);
       return;
     }
-    setShowStickers(false);
     haptics.light();
     scrollToBottom();
     const ok = await send(relationId, { messageType: 'STICKER', content: sticker });
@@ -764,9 +768,11 @@ export function ChatRoomScreen({ navigation, route }: Props) {
    *
    * <p>PRO 판정이 없다 — 만드는 것만 PRO 고, 만들어진 세트는 커플 공용이라 무료인 상대도
    * 보낸다(MessageType.COUPLE_EMOJI 주석). 그래서 sendSticker 와 달리 locked 인자가 없다.
+   *
+   * <p>패널을 열어두는 것도 sendSticker 와 같다 — 세 탭이 서로 다르게 움직이면 어느
+   * 탭에서 보냈느냐에 따라 다음 동작이 달라진다.
    */
   const sendCoupleEmoji = async (emojiId: number) => {
-    setShowStickers(false);
     haptics.light();
     scrollToBottom();
     const ok = await send(relationId, { messageType: 'COUPLE_EMOJI', content: String(emojiId) });
@@ -1045,8 +1051,13 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         ) : null}
         {isSticker ? (
           animatedStickerOf(item.content) ? (
-            // 재생 정책·웹 대체는 AnimatedSticker 안에 있다(플랫폼별 파일로 분리)
-            <AnimatedSticker sticker={animatedStickerOf(item.content)!} style={styles.stickerImage} />
+            // 재생 정책(탭하면 다시 재생)·웹 대체는 AnimatedSticker 안에 있다(플랫폼별 파일로 분리).
+            // 스티커가 터치를 가로채므로 말풍선 길게 누르기는 명시적으로 넘겨준다.
+            <AnimatedSticker
+              sticker={animatedStickerOf(item.content)!}
+              style={styles.stickerImage}
+              onLongPress={() => onLongPressMessage(item)}
+            />
           ) : stickerImageOf(item.content) ? (
             <Image source={stickerImageOf(item.content)!.source} style={styles.stickerImage} resizeMode="contain" />
           ) : (
@@ -1617,11 +1628,23 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               />
             </TouchableOpacity>
           )}
+          {/*
+            입력창을 건드려도 열린 패널을 닫는다 — 안 닫으면 키보드가 올라오면서 패널과
+            겹친다. 대화 영역의 onTouchStart 와 같은 규칙이고(위 flex View 주석), 같은
+            이유로 탭을 삼키지 않는다 — 닫히면서 커서도 그대로 들어간다.
+
+            onPressIn 과 onFocus 를 같이 건다. 패널을 여는 순간 입력창이 포커스를
+            잃는다는 보장이 없어서, 포커스가 남아 있는 채로 다시 탭하면 onFocus 는
+            아예 발생하지 않는다 — 그 경우를 onPressIn 이 받는다. dismissPanels 는
+            이미 닫혀 있으면 아무 것도 안 하므로 두 번 불려도 무해하다.
+          */}
           <TextInput
             ref={inputRef}
             style={styles.input}
             value={text}
             onChangeText={setText}
+            onPressIn={dismissPanels}
+            onFocus={dismissPanels}
             placeholder="메시지를 입력하세요"
             placeholderTextColor={colors.textSecondary}
             multiline
