@@ -124,14 +124,24 @@ export function PlaceAddScreen({ navigation, route }: Props) {
         await placeApi.update(editingPlace.id, payload);
         haptics.success();
         toast.success('장소를 수정했어요 ');
+        allowLeave();
+        usePlaceStore.getState().invalidate();
+        navigation.goBack();
       } else {
-        await placeApi.save(payload);
+        const saved = await placeApi.save(payload);
         haptics.success();
         toast.success('장소를 추가했어요 ');
+        allowLeave();
+        usePlaceStore.getState().invalidate();
+        /*
+         * 저장 직후 상세로 간다 — 예전엔 goBack() 으로 목록에 돌아왔는데, 방금 만든 장소는
+         * tier 0 이라 기본 모드(가이드)에 안 보여 "저장했는데 사라진" 것처럼 보였고, 별점을
+         * 매기려면 둘러보기로 칩을 바꿔 다시 찾아 들어가야 했다(화면 전환 3회 —
+         * docs/LOVELICHELIN_REGISTRATION_FLOW_2026-09-13.md). replace 라 뒤로가기는 이 폼이
+         * 아니라 목록으로 돌아간다. 서버가 중복으로 판정해 기존 장소를 돌려줘도 그 상세다.
+         */
+        navigation.replace('PlaceDetail', { placeId: saved.id, name: saved.name });
       }
-      allowLeave();
-      usePlaceStore.getState().invalidate();
-      navigation.goBack();
     } catch (e) {
       Alert.alert('오류', getErrorMessage(e));
     } finally {
