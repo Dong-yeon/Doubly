@@ -26,7 +26,7 @@ public final class AnalyticsEvent {
     public static final String HOME_VIEWED = "HOME_VIEWED";
     /**
      * 운동 탭 진입 — 운동 자동 공유(WorkoutService.postWorkoutCard) 실험의 지표.
-     * "운동 탭 2회 이상 진입 유저 비율"이 도입 전후로 움직이는지를 본다(docs/AUTO_SHARE_WORKOUT.md).
+     * "운동 탭 2회 이상 진입 유저 비율"이 도입 전후로 움직이는지를 본다(docs/AUTO_SHARE_WORKOUT_2026-09-13.md).
      */
     public static final String WORKOUT_VIEWED = "WORKOUT_VIEWED";
     /** PlanGuard 게이팅을 통과 — detail 에 Feature.name(). */
