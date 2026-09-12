@@ -17,7 +17,6 @@ import { ExercisePickerModal } from '../../components/workout/ExercisePickerModa
 import { useWorkoutStore } from '../../store/workoutStore';
 import { useRelationStore } from '../../store/relationStore';
 import { useDirtyGuard } from '../../hooks/useDirtyGuard';
-import { publishEnsuringConnection } from '../../api/chatSocket';
 import { voiceClipsApi } from '../../api/voiceClips';
 import { workoutApi } from '../../api/workout';
 import { playVoiceClip } from '../../utils/voicePlayback';
@@ -25,7 +24,6 @@ import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { toDateString } from '../../utils/date';
-import { buildWorkoutShareCopy } from '../../utils/workoutShare';
 import {
   formatCardioSummary,
   isCardio,
@@ -318,45 +316,25 @@ export function WorkoutRecordScreen({ navigation, route }: Props) {
         })),
       });
       haptics.success();
-      toast.success('운동 기록 완료! ');
+      /*
+       * 커플이 연결돼 있으면 서버가 저장과 동시에 채팅에 WORKOUT_CARD 를 남긴다
+       * (WorkoutService.postWorkoutCard). 예전의 "채팅에 공유할까요?" 확인창은 없앴다 —
+       * 기록까지 한 사용자에게 공유 여부를 한 번 더 묻는 단계가 곧 이탈 지점이었다.
+       * 토스트로 카드가 갔다는 사실만 알린다. PR(자기 최고 기록)은 저장 응답에만 실리는
+       * 일회성 정보라(WorkoutService.detectPrs) 여기서 문구를 가른다.
+       */
+      const isPrRun = !!saved.prs && saved.prs.length > 0;
+      if (couple?.id) {
+        toast.success(isPrRun ? '🔥 PR 갱신! 채팅에 자랑했어요 ' : '운동 기록 완료! 채팅에 공유했어요 ');
+      } else {
+        toast.success(isPrRun ? '🔥 PR 갱신! 운동 기록 완료 ' : '운동 기록 완료! ');
+      }
       // 커플 음성 응원 — PR 을 세웠으면 그 응원을, 아니면 완료 응원을 재생한다.
       // 클립을 안 녹음해뒀으면(partnerClips 에 없음) playVoiceClip 이 조용히 넘어간다.
-      const isPrRun = !!saved.prs && saved.prs.length > 0;
       playVoiceClip(partnerClips[isPrRun ? 'PR' : 'WORKOUT_COMPLETE']);
 
-      /*
-       * 저장이 끝나면 공유 여부와 무관하게 화면부터 닫는다.
-       * goBack 을 공유 Alert 의 버튼 안에만 두면, Android 에서 바깥 탭·뒤로가기로
-       * Alert 를 닫았을 때 입력이 채워진 화면이 스택에 남아 "완료!" 재탭으로
-       * 같은 기록이 중복 등록된다 (식단 기록과 동일 패턴).
-       */
       allowLeave();
       navigation.goBack();
-
-      // 커플이 연결돼 있으면 채팅 공유 제안 (CHAT-04)
-      // PR(자기 최고 기록) 종목이 있으면 확인창·카드 문구를 다르게 만든다 (saved.prs 는
-      // 저장 응답에만 실리는 일회성 정보 — WorkoutService.detectPrs 참고)
-      if (couple?.id) {
-        const summary = `${filled.map((s) => s.exerciseName.trim()).join(', ')}${
-          duration ? ` · ${duration}분` : ''
-        }`;
-        const { alertTitle, alertMessage, cardContent } = buildWorkoutShareCopy(summary, saved.prs);
-
-        Alert.alert(alertTitle, alertMessage, [
-          { text: '다음에', style: 'cancel' },
-          {
-            text: '공유하기',
-            onPress: async () => {
-              await publishEnsuringConnection(couple.id, {
-                messageType: 'WORKOUT_CARD',
-                content: cardContent,
-                workoutId: saved.id,
-              });
-              toast.success(isPrRun ? '🔥 PR 소식을 공유했어요 ' : '채팅에 공유했어요 ');
-            },
-          },
-        ]);
-      }
     } catch (e) {
       Alert.alert('오류', getErrorMessage(e));
     } finally {
