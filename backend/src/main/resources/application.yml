@@ -152,10 +152,11 @@ fitto:
     daily-limit-total: ${GEMINI_DAILY_LIMIT_TOTAL:1000}
     daily-limit-per-user: ${GEMINI_DAILY_LIMIT_PER_USER:50}
 
-  # 바코드 식품 DB 조회 (식품안전나라 OpenAPI, 무료) — 키 미설정 시 바코드 조회만 비활성
+  # 식품 DB 조회 (공공데이터포털 "식품의약품안전처_식품영양성분DB정보", 무료) — 미설정 시 조회만 비활성.
+  # 옛 식품안전나라 I2790 은 종료됐다(FoodDbClient 주석 참고). 키는 쿼리 파라미터라 Encoding/Decoding 무관.
   food-db:
     api-key: ${FOOD_DB_API_KEY:}
-    base-url: ${FOOD_DB_BASE_URL:http://openapi.foodsafetykorea.go.kr/api}
+    base-url: ${FOOD_DB_BASE_URL:https://apis.data.go.kr/1471000/FoodNtrCpntDbInfo02}
 
   # 카카오 로컬 REST API (AI 맛집 추천의 실존 장소 검색) — 프론트 지도용 JS 키와 별개.
   # 카카오 개발자 콘솔의 같은 앱에서 "REST API 키"를 복사한다. 미설정 시 맛집 추천만 비활성.

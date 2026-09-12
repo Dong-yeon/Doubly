@@ -118,6 +118,8 @@ public enum ErrorCode {
 
     // 바코드 식품 DB 조회 (FOOD-DB)
     FOOD_DB_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "바코드 조회 기능이 아직 준비되지 않았어요."),
+    // 현재는 쓰이지 않는다 — 바코드 조회 자체가 비활성이다(FoodDbClient.lookup 주석 참고).
+    // 바코드 경로를 되살리면 다시 쓰인다. 그때까지 이 문구가 뜨면 잘못 쓴 것이다.
     FOOD_DB_NOT_FOUND(HttpStatus.NOT_FOUND, "등록되지 않은 바코드예요. 직접 입력해주세요."),
     FOOD_DB_LOOKUP_FAILED(HttpStatus.BAD_GATEWAY, "바코드 조회에 실패했어요. 잠시 후 다시 시도해주세요."),
 

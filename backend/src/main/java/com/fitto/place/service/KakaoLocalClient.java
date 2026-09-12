@@ -87,7 +87,7 @@ public class KakaoLocalClient {
         return results;
     }
 
-    /** package-private — HTTP 없이 매핑 로직만 단위 테스트하기 위해 (FoodDbClient.mapRow 와 같은 패턴) */
+    /** package-private — HTTP 없이 매핑 로직만 단위 테스트하기 위해 (FoodDbClient.map 과 같은 패턴) */
     KakaoPlace mapDocument(JsonNode doc) {
         String name = doc.path("place_name").asText("");
         if (name.isBlank()) {
