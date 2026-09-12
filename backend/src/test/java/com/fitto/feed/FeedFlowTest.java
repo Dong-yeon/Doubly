@@ -133,8 +133,9 @@ class FeedFlowTest {
         FeedItemResponse meal = feedService.timeline(c[0], null, 20).items().stream()
                 .filter(i -> i.type() == FeedItemType.MEAL).findFirst().orElseThrow();
 
-        // 운동 카드("러닝 외 3개 · 40분")와 같은 요약 형태
-        assertThat(meal.content()).isEqualTo("삼겹살 외 2개 · 820kcal");
+        // 운동 카드("러닝 외 3개 · 40분")와 같은 요약 형태 — 단, 칼로리는 싣지 않는다
+        // (MEAL_CARD 와 같은 "수치는 본인 화면에만" 규칙, FeedItemMapper.toItem(Meal) 주석)
+        assertThat(meal.content()).isEqualTo("삼겹살 외 2개");
     }
 
     @Test
@@ -146,7 +147,7 @@ class FeedFlowTest {
         FeedItemResponse meal = feedService.timeline(c[0], null, 20).items().stream()
                 .filter(i -> i.type() == FeedItemType.MEAL).findFirst().orElseThrow();
 
-        assertThat(meal.content()).isEqualTo("회식 · 800kcal");
+        assertThat(meal.content()).isEqualTo("회식");
     }
 
     @Test

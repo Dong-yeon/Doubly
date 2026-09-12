@@ -41,6 +41,7 @@ import { useDeleteAction } from '../../hooks/useDeleteAction';
 import { isKakaoMapConfigured } from '../../constants/config';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
+import { localDateOf } from '../../utils/date';
 import { stars } from '../../utils/ratingStars';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type {
@@ -440,7 +441,7 @@ export function PlaceScreen() {
                     </Text>
                   ) : null}
                   {item.lovelichelinCertifiedAt ? (
-                    <Text style={styles.magazineDate}>{item.lovelichelinCertifiedAt.slice(0, 10)} 등극</Text>
+                    <Text style={styles.magazineDate}>{localDateOf(item.lovelichelinCertifiedAt)} 등극</Text>
                   ) : null}
                 </View>
               </Card>

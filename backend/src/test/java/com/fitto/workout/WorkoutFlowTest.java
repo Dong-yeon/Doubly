@@ -9,6 +9,7 @@ import com.fitto.workout.dto.CalendarDayResponse;
 import com.fitto.workout.dto.PartnerTodayResponse;
 import com.fitto.workout.dto.SaveWorkoutRequest;
 import com.fitto.workout.dto.WorkoutResponse;
+import com.fitto.workout.dto.WorkoutSetEntryRequest;
 import com.fitto.workout.dto.WorkoutSetRequest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -108,6 +109,52 @@ class WorkoutFlowTest {
         assertThat(second.prs().get(0).exerciseName()).isEqualTo("벤치프레스");
         assertThat(second.prs().get(0).weightKg()).isEqualByComparingTo("45.00");
         assertThat(second.prs().get(0).previousBestKg()).isEqualByComparingTo("40.00");
+    }
+
+    /**
+     * 백오프 세트(80→70→60)는 요약 weightKg 가 마지막 세트 60 이라, 요약만 보면 75 를 "60→75 PR" 로
+     * 잘못 알렸다. 세션 화면 뱃지(entries 기준)와 같은 답을 내려면 이전 최고 80 을 봐야 한다.
+     */
+    @Test
+    void 백오프_세트의_최고_무게를_기준으로_PR을_판정한다() {
+        Long user = register("pr-backoff@fitto.com");
+        workoutService.save(user, new SaveWorkoutRequest(LocalDate.now().minusDays(1), null, 40, null,
+                List.of(new WorkoutSetRequest("벤치프레스", "근력", 3, 8, new BigDecimal("60.00"), 1,
+                        null, null, null,
+                        List.of(new WorkoutSetEntryRequest(1, new BigDecimal("80.00"), 5, null, true),
+                                new WorkoutSetEntryRequest(2, new BigDecimal("70.00"), 8, null, true),
+                                new WorkoutSetEntryRequest(3, new BigDecimal("60.00"), 8, null, true))))));
+
+        // 75 는 요약(60)보다 무겁지만 실제 최고(80)보다 가볍다 — PR 아님
+        WorkoutResponse below = workoutService.save(user, new SaveWorkoutRequest(LocalDate.now(), null, 40, null,
+                List.of(new WorkoutSetRequest("벤치프레스", "근력", 3, 8, new BigDecimal("75.00"), 1))));
+        assertThat(below.prs()).isEmpty();
+
+        // 이번 기록도 백오프(85→70): 요약은 70 이지만 entries 최고 85 가 이전 최고 80 을 넘는다 — PR
+        WorkoutResponse above = workoutService.save(user, new SaveWorkoutRequest(LocalDate.now(), null, 40, null,
+                List.of(new WorkoutSetRequest("벤치프레스", "근력", 2, 5, new BigDecimal("70.00"), 1,
+                        null, null, null,
+                        List.of(new WorkoutSetEntryRequest(1, new BigDecimal("85.00"), 3, null, true),
+                                new WorkoutSetEntryRequest(2, new BigDecimal("70.00"), 5, null, true))))));
+        assertThat(above.prs()).hasSize(1);
+        assertThat(above.prs().get(0).weightKg()).isEqualByComparingTo("85.00");
+        assertThat(above.prs().get(0).previousBestKg()).isEqualByComparingTo("80.00");
+    }
+
+    /** 체크하지 않은(건너뛴) 세트에 적힌 무게는 실제로 든 게 아니다 — PR 기준에서 뺀다. */
+    @Test
+    void 완료하지_않은_세트의_무게는_PR_기준이_아니다() {
+        Long user = register("pr-skip@fitto.com");
+        workoutService.save(user, new SaveWorkoutRequest(LocalDate.now().minusDays(1), null, 40, null,
+                List.of(new WorkoutSetRequest("스쿼트", "근력", 1, 5, new BigDecimal("100.00"), 1,
+                        null, null, null,
+                        List.of(new WorkoutSetEntryRequest(1, new BigDecimal("100.00"), 5, null, true),
+                                new WorkoutSetEntryRequest(2, new BigDecimal("140.00"), 1, null, false))))));
+
+        WorkoutResponse saved = workoutService.save(user, new SaveWorkoutRequest(LocalDate.now(), null, 40, null,
+                List.of(new WorkoutSetRequest("스쿼트", "근력", 1, 5, new BigDecimal("110.00"), 1))));
+        assertThat(saved.prs()).hasSize(1);
+        assertThat(saved.prs().get(0).previousBestKg()).isEqualByComparingTo("100.00");
     }
 
     @Test

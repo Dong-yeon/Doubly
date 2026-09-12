@@ -18,8 +18,12 @@ public record WorkoutSetEntryRequest(
         @DecimalMin(value = "0", message = "거리는 0보다 작을 수 없어요.")
         @DecimalMax(value = "9999.99", message = "거리는 9999.99km까지 입력할 수 있어요. km 단위로 입력해주세요.")
         BigDecimal distanceKm,
-        @DecimalMin(value = "0", message = "RPE는 0~10 사이로 입력해주세요.")
-        @DecimalMax(value = "10", message = "RPE는 0~10 사이로 입력해주세요.")
+        /*
+         * 하한은 DB CHECK(V47: rpe >= 1)와 같아야 한다 — 예전엔 0 을 허용해서 검증은 통과하고
+         * INSERT 에서 터졌고, 그러면 운동 기록 한 건이 통째로 저장 실패했다.
+         */
+        @DecimalMin(value = "1", message = "RPE는 1~10 사이로 입력해주세요.")
+        @DecimalMax(value = "10", message = "RPE는 1~10 사이로 입력해주세요.")
         BigDecimal rpe,
         boolean completed
 ) {

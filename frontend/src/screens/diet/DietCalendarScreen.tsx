@@ -1,7 +1,8 @@
 /** 식단 캘린더 — 월별 기록 캘린더. 운동(WorkoutCalendarScreen) 미러링 */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { DietStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
@@ -39,25 +40,32 @@ export function DietCalendarScreen({ navigation }: Props) {
     setSelectedDay(null);
   };
 
-  useEffect(() => {
-    let active = true;
-    setLoadError(false);
-    dietApi
-      .calendar(year, month)
-      .then((days) => {
-        if (!active) return;
-        const set = new Set(days.filter((d) => d.completed).map((d) => Number(d.date.slice(8, 10))));
-        setCompletedDays(set);
-      })
-      .catch(() => {
-        if (!active) return;
-        setCompletedDays(new Set());
-        setLoadError(true);
-      });
-    return () => {
-      active = false;
-    };
-  }, [year, month, reloadKey]);
+  /*
+   * focus 마다 다시 받는다 — 예전엔 useEffect([year, month, reloadKey]) 라 "이 날 기록하기"로
+   * 기록 화면에 갔다가 goBack 으로 돌아와도 방금 기록한 날에 점이 안 찍혔다
+   * (WorkoutCalendarScreen 과 같은 수정 — docs/WORKOUT_COMPLEXITY_ANALYSIS_2026-09-13.md (a)).
+   */
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      setLoadError(false);
+      dietApi
+        .calendar(year, month)
+        .then((days) => {
+          if (!active) return;
+          const set = new Set(days.filter((d) => d.completed).map((d) => Number(d.date.slice(8, 10))));
+          setCompletedDays(set);
+        })
+        .catch(() => {
+          if (!active) return;
+          setCompletedDays(new Set());
+          setLoadError(true);
+        });
+      return () => {
+        active = false;
+      };
+    }, [year, month, reloadKey]),
+  );
 
   const cells = useMemo(() => {
     const firstDay = new Date(year, month - 1, 1).getDay();
