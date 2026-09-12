@@ -1,5 +1,8 @@
 package com.fitto.workout.service;
 
+import com.fitto.chat.domain.MessageType;
+import com.fitto.chat.dto.ChatMessageResponse;
+import com.fitto.chat.service.ChatService;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.notification.NotificationCategory;
@@ -35,6 +38,7 @@ import com.fitto.workout.repository.WorkoutSetRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -67,6 +71,15 @@ public class WorkoutService {
     private final FeedReactionRepository feedReactionRepository;
     /** 기록 삭제 시 인증샷까지 지운다 — DB 행만 지우면 이미지는 URL 로 계속 접근 가능하다 */
     private final CloudinaryImageDeleter imageDeleter;
+    /** 저장 즉시 커플 채팅에 WORKOUT_CARD 를 남긴다(자동 공유) — {@link #postWorkoutCard} */
+    private final ChatService chatService;
+    private final SimpMessagingTemplate messagingTemplate;
+
+    /**
+     * 채팅 카드 본문의 PR 표시 접두어 — 프론트 채팅 렌더러(workoutShare.ts 의 PR_SHARE_PREFIX)가
+     * 같은 문자열로 PR 카드를 구분하므로 바꾸면 양쪽을 함께 바꿔야 한다.
+     */
+    static final String PR_CARD_PREFIX = "🔥 PR 갱신!";
 
     public WorkoutService(WorkoutRepository workoutRepository,
                           WorkoutSetRepository workoutSetRepository,
@@ -76,7 +89,9 @@ public class WorkoutService {
                           com.fitto.common.event.CoupleEventPublisher coupleEventPublisher,
                           com.fitto.common.notification.NotificationService notificationService,
                           FeedReactionRepository feedReactionRepository,
-                          CloudinaryImageDeleter imageDeleter) {
+                          CloudinaryImageDeleter imageDeleter,
+                          ChatService chatService,
+                          SimpMessagingTemplate messagingTemplate) {
         this.workoutRepository = workoutRepository;
         this.workoutSetRepository = workoutSetRepository;
         this.relationRepository = relationRepository;
@@ -86,6 +101,8 @@ public class WorkoutService {
         this.notificationService = notificationService;
         this.feedReactionRepository = feedReactionRepository;
         this.imageDeleter = imageDeleter;
+        this.chatService = chatService;
+        this.messagingTemplate = messagingTemplate;
     }
 
     @Transactional
@@ -149,18 +166,75 @@ public class WorkoutService {
                     userId, workout.getWorkoutDate(), e.getMessage());
         }
 
-        // 커플 실시간 반영 + 응원 푸시
+        // 커플 실시간 반영 + 채팅 카드 자동 공유 + 응원 푸시
         relationRepository.findByUserAndTypeAndStatus(userId, RelationType.COUPLE, RelationStatus.ACTIVE)
                 .stream().findFirst()
                 .ifPresent(c -> {
                     coupleEventPublisher.publish(c.getId(), com.fitto.common.event.CoupleEvent.WORKOUT);
+                    postWorkoutCard(userId, c.getId(), workout, prs);
                     Long partnerId = c.partnerOf(userId);
                     String myName = userRepository.findById(userId).map(u -> u.getName()).orElse("상대방");
+                    /*
+                     * 푸시는 채팅방으로 보낸다 — 카드에 이모지 한 탭으로 반응하는 게 "기록 → 카드 →
+                     * 반응 → 작성자에게 푸시"로 도는 루프의 입구이고, 운동 탭에 내리면 그 탭이 없다.
+                     */
                     notificationService.notify(partnerId, NotificationCategory.PARTNER, "함께 운동해요!",
-                            myName + "님이 오늘 운동을 완료했어요!", PushLinks.WORKOUT);
+                            myName + "님이 오늘 운동을 완료했어요!", PushLinks.chat(c.getId()));
                 });
 
         return WorkoutResponse.from(workout, prs);
+    }
+
+    /**
+     * 저장한 운동을 커플 채팅에 WORKOUT_CARD 로 남긴다 — <b>자동 공유</b>. 예전엔 앱이 저장 뒤
+     * "채팅에 공유할까요?" 확인창을 띄우고 소켓으로 카드를 쐈는데, 기록까지 한 사용자에게
+     * 공유 여부를 한 번 더 묻는 단계가 곧 이탈 지점이었고, 소켓이 안 붙어 있으면 카드가
+     * 조용히 사라졌다. 서버가 남기면 어디서 기록하든(웹·백그라운드 포함) 카드가 보장된다.
+     *
+     * <p>문구는 프론트가 쓰던 workoutShare.ts 의 조립 규칙을 그대로 옮긴 것이다 — PR 이 있으면
+     * {@link #PR_CARD_PREFIX} 로 시작해 채팅 렌더러가 PR 배지를 붙인다. 카드 자체는 별도 알림이
+     * 없고(postSystemCard 원칙), 호출자가 보내는 "함께 운동해요!" 푸시가 그 역할을 한다.
+     *
+     * <p>카드 INSERT 는 운동 저장과 같은 트랜잭션이다(운동 없는 카드가 남지 않게). 같은 트랜잭션에
+     * 참여한 호출의 예외를 여기서 삼키면 커밋 시점에 UnexpectedRollbackException 이 나므로
+     * 잡지 않는다 — 브로드캐스트만 실패해도 운동을 되돌리지 않도록 그쪽만 감싼다.
+     */
+    private void postWorkoutCard(Long userId, Long relationId, Workout workout,
+                                 List<WorkoutResponse.PrHighlight> prs) {
+        ChatMessageResponse card = chatService.postSystemCard(userId, relationId, MessageType.WORKOUT_CARD,
+                workoutCardContent(workout, prs), workout.getId());
+        try {
+            messagingTemplate.convertAndSend("/sub/rooms/" + relationId, card);
+        } catch (RuntimeException e) {
+            log.warn("운동 카드 브로드캐스트 실패 (카드는 저장됨) relationId={}, messageId={}: {}",
+                    relationId, card.id(), e.getMessage());
+        }
+    }
+
+    /** 카드 본문 — "종목1, 종목2 · 40분", PR 이면 "🔥 PR 갱신! 벤치프레스 40kg → 45kg · 종목 · 40분". */
+    static String workoutCardContent(Workout workout, List<WorkoutResponse.PrHighlight> prs) {
+        List<String> parts = new ArrayList<>();
+        String names = workout.getSets().stream()
+                .map(WorkoutSet::getExerciseName)
+                .filter(n -> n != null && !n.isBlank())
+                .map(String::trim)
+                .collect(Collectors.joining(", "));
+        if (!names.isEmpty()) parts.add(names);
+        if (workout.getTotalDurationMin() != null) parts.add(workout.getTotalDurationMin() + "분");
+        // 사진만 올리고 종목·시간이 없는 기록 — 카드가 빈 문자열로 남지 않게
+        String summary = parts.isEmpty() ? "운동 완료" : String.join(" · ", parts);
+        if (prs == null || prs.isEmpty()) return summary;
+
+        String prLine = prs.size() == 1
+                ? prs.get(0).exerciseName() + " " + kg(prs.get(0).previousBestKg()) + "kg → " + kg(prs.get(0).weightKg()) + "kg"
+                : prs.stream().map(WorkoutResponse.PrHighlight::exerciseName).collect(Collectors.joining(", "))
+                        + " 등 " + prs.size() + "개 종목";
+        return PR_CARD_PREFIX + " " + prLine + " · " + summary;
+    }
+
+    /** "40.00" → "40", "42.50" → "42.5" — 프론트가 JSON 숫자로 받아 찍던 모양과 맞춘다. */
+    private static String kg(BigDecimal v) {
+        return v.stripTrailingZeros().toPlainString();
     }
 
     /**

@@ -363,12 +363,20 @@ public class ChatService {
      */
     @Transactional
     public ChatMessageResponse postSystemCard(Long senderId, Long relationId, MessageType type, String content) {
+        return postSystemCard(senderId, relationId, type, content, null);
+    }
+
+    /** {@link #postSystemCard(Long, Long, MessageType, String)} + 원본 기록 참조(WORKOUT_CARD 의 workoutId). */
+    @Transactional
+    public ChatMessageResponse postSystemCard(Long senderId, Long relationId, MessageType type, String content,
+                                              Long workoutId) {
         requireMember(senderId, relationId);
         ChatMessage message = ChatMessage.builder()
                 .relationId(relationId)
                 .senderId(senderId)
                 .messageType(type)
                 .content(content)
+                .workoutId(workoutId)
                 .build();
         chatMessageRepository.save(message);
         return ChatMessageResponse.from(message);
