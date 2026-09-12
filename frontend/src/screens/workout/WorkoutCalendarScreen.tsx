@@ -1,7 +1,8 @@
 /** 운동 캘린더 — 설계서 2.4 / WORKOUT-04 (월별 완료 캘린더) */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { WorkoutStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
@@ -38,25 +39,33 @@ export function WorkoutCalendarScreen({ navigation }: Props) {
     setSelectedDay(null);
   };
 
-  useEffect(() => {
-    let active = true;
-    setLoadError(false);
-    workoutApi
-      .calendar(year, month)
-      .then((days) => {
-        if (!active) return;
-        const set = new Set(days.filter((d) => d.completed).map((d) => Number(d.date.slice(8, 10))));
-        setCompletedDays(set);
-      })
-      .catch(() => {
-        if (!active) return;
-        setCompletedDays(new Set());
-        setLoadError(true);
-      });
-    return () => {
-      active = false;
-    };
-  }, [year, month, reloadKey]);
+  /*
+   * focus 마다 다시 받는다 — 예전엔 useEffect([year, month, reloadKey]) 라 "이 날 기록하기"로
+   * 기록 화면에 갔다가 goBack 으로 돌아와도 방금 기록한 날에 점이 안 찍혔다(저장이 됐는지
+   * 사용자가 확신 못 하는 상태 — docs/WORKOUT_COMPLEXITY_ANALYSIS_2026-09-13.md (a)).
+   * useFocusEffect 는 첫 진입·월 이동·재시도·복귀를 한 경로로 덮는다. DietCalendarScreen 과 미러.
+   */
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      setLoadError(false);
+      workoutApi
+        .calendar(year, month)
+        .then((days) => {
+          if (!active) return;
+          const set = new Set(days.filter((d) => d.completed).map((d) => Number(d.date.slice(8, 10))));
+          setCompletedDays(set);
+        })
+        .catch(() => {
+          if (!active) return;
+          setCompletedDays(new Set());
+          setLoadError(true);
+        });
+      return () => {
+        active = false;
+      };
+    }, [year, month, reloadKey]),
+  );
 
   const cells = useMemo(() => {
     const firstDay = new Date(year, month - 1, 1).getDay(); // 0=일

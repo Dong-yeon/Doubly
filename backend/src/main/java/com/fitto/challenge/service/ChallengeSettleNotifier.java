@@ -14,7 +14,7 @@ import com.fitto.user.domain.User;
 import com.fitto.user.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.Scheduled;
+// import org.springframework.scheduling.annotation.Scheduled; — 스케줄 비활성화(아래 settleEndedChallenges 주석)
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -64,14 +64,20 @@ public class ChallengeSettleNotifier {
     }
 
     /**
-     * 매일 09:30 KST.
+     * 매일 09:30 KST 에 돌던 진입점 — <b>2026-09-13 스케줄을 껐다.</b>
+     *
+     * <p>2026-08-26 "운동에 대결은 톤이 안 맞는다"로 운동 홈의 진입 칩을 주석 처리한 뒤
+     * (WorkoutScreen.tsx) ChallengeScreen 은 앱 안에서 도달할 수 없어졌고, 대결을 만들 화면이
+     * 곧 그 화면이라 새 대결도 생기지 않는다. 처리 대상이 생길 수 없는 스케줄러를 매일 돌리는
+     * 대신 접어 둔다(사용자 결정 — docs/WORKOUT_COMPLEXITY_ANALYSIS_2026-09-13.md §3).
+     * 되살리려면 아래 {@code @Scheduled} 한 줄과 칩만 복구하면 된다 — 라우트·API·정산 로직은 그대로다.
      *
      * <p>{@code @Transactional} 이 <b>여기에도</b> 필요하다. 아래 메서드를 같은 객체에서
      * 직접 부르면 프록시를 타지 않아 트랜잭션이 열리지 않고, 그러면 {@code settle()} 로
      * 바꾼 엔티티가 아무 데도 반영되지 않는다 — 매일 아침 같은 대결을 다시 알리게 된다.
      * (테스트는 프록시를 통해 아래 메서드를 부르므로 이 결함을 재현하지 못한다)
      */
-    @Scheduled(cron = "0 30 9 * * *", zone = "Asia/Seoul")
+    // @Scheduled(cron = "0 30 9 * * *", zone = "Asia/Seoul")
     @Transactional
     public void settleEndedChallenges() {
         settleEndedChallenges(LocalDate.now(KST));

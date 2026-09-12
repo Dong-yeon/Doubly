@@ -77,6 +77,9 @@ type Props = NativeStackScreenProps<WorkoutStackParamList, 'WorkoutSession'>;
 
 const CATEGORIES = ['근력', '유산소', '유연성'];
 const REST_PRESETS = [60, 90, 120];
+/** RPE 허용 범위 — 서버 DTO(WorkoutSetEntryRequest)·DB CHECK(V47)와 같은 값 */
+const RPE_MIN = 1;
+const RPE_MAX = 10;
 /**
  * 음성 응원 재생을 화면에도 알릴 때 쓰는 짧은 이름표.
  *
@@ -1140,6 +1143,22 @@ export function WorkoutSessionScreen({ navigation, route }: Props) {
   };
 
   const onFinish = async () => {
+    /*
+     * RPE 범위 가드 — 입력 칸은 소수만 걸러서(sanitizeDecimalInput) 0 이나 12 도 들어온다.
+     * 서버 DTO·DB CHECK(V47)는 1~10 이라, 범위 밖 값 하나가 있으면 운동 기록 한 건이 통째로
+     * 저장에 실패했다. 서버 검증 문구를 그대로 쓴다(WorkoutSetEntryRequest).
+     */
+    const badRpe = exercises.find((e) =>
+      e.sets.some((s) => {
+        const r = toNum(s.rpe);
+        return r != null && (r < RPE_MIN || r > RPE_MAX);
+      }),
+    );
+    if (badRpe) {
+      toast.error(`RPE는 ${RPE_MIN}~${RPE_MAX} 사이로 입력해주세요. (${badRpe.name})`);
+      return;
+    }
+
     const payloadSets = exercises
       .map((e, i) => {
         const doneList = e.sets.filter((s) => s.done);

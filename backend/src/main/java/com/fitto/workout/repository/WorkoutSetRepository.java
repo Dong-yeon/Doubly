@@ -37,6 +37,29 @@ public interface WorkoutSetRepository extends JpaRepository<WorkoutSet, Long> {
                                                 @Param("excludeWorkoutId") Long excludeWorkoutId);
 
     /**
+     * 위와 같은 "이전 최고 무게"를 <b>세트별 실기록(entries)</b>에서 본다 — 완료한 세트만.
+     *
+     * <p>PR 판정이 요약 {@code weightKg} 만 보면 백오프 세트(80→70→60, 요약=60)가 있는 과거
+     * 기록의 최고 무게 80 을 놓쳐, 오늘 75 를 들어도 "60→75 PR" 로 잘못 알린다. 세션 화면의
+     * 실시간 PR 뱃지는 이미 {@link #findPersonalBests}(entries)로 판정하므로 서버도 같은
+     * 원본을 봐야 화면과 채팅 카드가 같은 답을 낸다(docs/WORKOUT_COMPLEXITY_ANALYSIS_2026-09-13.md §5).
+     * entries 가 없는 옛 기록·직접 입력은 {@link #findPreviousBestWeights} 가 요약값으로 보완한다.
+     */
+    @Query("""
+            select s.exerciseName as exerciseName, max(e.weightKg) as maxWeightKg
+            from WorkoutSet s join s.entries e
+            where s.workout.userId = :userId
+              and s.exerciseName in :exerciseNames
+              and s.workout.id <> :excludeWorkoutId
+              and e.completed = true
+              and e.weightKg is not null
+            group by s.exerciseName
+            """)
+    List<ExerciseBest> findPreviousBestEntryWeights(@Param("userId") Long userId,
+                                                     @Param("exerciseNames") List<String> exerciseNames,
+                                                     @Param("excludeWorkoutId") Long excludeWorkoutId);
+
+    /**
      * 종목별 <b>개인 최고 기록</b> — 세트별 실제 입력(entries)이 기준이다.
      *
      * <p>위 {@code findPreviousBestWeights} 와 달리 요약 필드가 아니라 entries 를 본다.
