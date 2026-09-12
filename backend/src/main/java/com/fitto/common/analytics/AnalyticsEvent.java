@@ -24,6 +24,11 @@ public final class AnalyticsEvent {
     public static final String COUPLE_CONNECTED = "COUPLE_CONNECTED";
     /** 홈 화면 진입 — 프론트가 AnalyticsController 로 직접 보낸다(서버 자체 발생 지점이 없음). */
     public static final String HOME_VIEWED = "HOME_VIEWED";
+    /**
+     * 운동 탭 진입 — 운동 자동 공유(WorkoutService.postWorkoutCard) 실험의 지표.
+     * "운동 탭 2회 이상 진입 유저 비율"이 도입 전후로 움직이는지를 본다(docs/AUTO_SHARE_WORKOUT.md).
+     */
+    public static final String WORKOUT_VIEWED = "WORKOUT_VIEWED";
     /** PlanGuard 게이팅을 통과 — detail 에 Feature.name(). */
     public static final String FEATURE_USED = "FEATURE_USED";
     /** PlanGuard 게이팅에 막힘(업그레이드 유도) — detail 에 Feature.name(). */
