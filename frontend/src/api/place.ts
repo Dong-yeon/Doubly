@@ -28,9 +28,10 @@ export interface RecordVisitPayload {
   mealId?: number;
 }
 
+// revisitIntent 는 보내지 않는다(2026-09-13) — 서버 컬럼은 남아 있지만 읽는 곳이 없어 입력을 걷어냈다
+// (docs/LOVELICHELIN_REGISTRATION_FLOW_2026-09-13.md §4). 콘텐츠(api/content.ts)는 아직 쓴다.
 export interface RatePlacePayload {
   rating: number; // 1~5
-  revisitIntent?: boolean;
 }
 
 export const placeApi = {

@@ -104,11 +104,10 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
   const [fat, setFat] = useState('');
 
   // 럽슐랭 대표 평점 — 방문기록 별점(위)과 별개로, 장소당 한 사람당 1개만 유지된다.
-  // revisitIntent 는 API가 되돌려주지 않는 선택 응답이라, 사용자가 이번에 직접 건드리지
-  // 않으면 undefined 로 두고 저장 요청에서도 생략한다 — 그래야 별점만 다시 매기려고
-  // 재평가할 때 이전에 남긴 "다시 안 올래요" 응답을 조용히 true 로 덮어쓰지 않는다.
+  // "다시 올래요?" 체크박스는 뺐다(2026-09-13) — place_ratings.revisit_intent 는 저장만 되고
+  // 어디서도 읽지 않는 값이라 사용자에게 물을 이유가 없었다
+  // (docs/LOVELICHELIN_REGISTRATION_FLOW_2026-09-13.md §4).
   const [myRatingInput, setMyRatingInput] = useState(0);
-  const [revisitIntent, setRevisitIntent] = useState<boolean | undefined>(undefined);
   const [ratingSaving, setRatingSaving] = useState(false);
   // 재평가로 등급이 유지/하락할 때는 축하 모달을 열지 않는다 — 0→양수로 "새로 등극"할 때만
   const [fanfareTier, setFanfareTier] = useState(0);
@@ -219,7 +218,7 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
     setRatingSaving(true);
     try {
       const previousTier = place.lovelichelinTier;
-      const updated = await placeApi.rate(placeId, { rating: myRatingInput, revisitIntent });
+      const updated = await placeApi.rate(placeId, { rating: myRatingInput });
       setPlace(updated);
       haptics.success();
       // 등급이 바뀌면 가이드↔위시리스트 사이를 오갈 수 있다 — 캐시를 무효화한다
@@ -379,11 +378,6 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
                         </Text>
                       </View>
                     </View>
-                    <Checkbox
-                      checked={revisitIntent ?? true}
-                      onChange={setRevisitIntent}
-                      label="다시 올래요?"
-                    />
                     <Button
                       title="럽슐랭 평가 저장"
                       variant="secondary"
