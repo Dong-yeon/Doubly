@@ -103,4 +103,22 @@ class WorkoutAutoShareFlowTest {
         assertThat(messages).hasSize(1);
         assertThat(messages.get(0).content()).isEqualTo("운동 완료");
     }
+
+    @Test
+    void 운동을_지우면_자동_카드는_삭제_표시되고_기록_삭제가_막히지_않는다() {
+        Long a = register("as8@fitto.com");
+        Long b = register("as9@fitto.com");
+        InviteCodeResponse invite = relationService.createCoupleInvite(a);
+        RelationResponse couple = relationService.connectCouple(b, invite.code());
+
+        WorkoutResponse saved = workoutService.save(a, bench(LocalDate.now(), "40.00"));
+        // chat_messages.workout_id → workouts FK — 카드를 정리하지 않으면 여기서 위반이 난다
+        workoutService.delete(a, saved.id());
+
+        assertThat(workoutService.findToday(a)).isEmpty();
+        List<ChatMessageResponse> messages = chatService.getMessages(b, couple.id(), null);
+        assertThat(messages).hasSize(1);
+        assertThat(messages.get(0).deleted()).isTrue();
+        assertThat(messages.get(0).workoutId()).isNull();
+    }
 }

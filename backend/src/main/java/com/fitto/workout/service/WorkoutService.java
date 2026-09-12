@@ -491,6 +491,8 @@ public class WorkoutService {
         }
         // 피드 카드에 달린 응원 반응 — 다형 참조라 FK 가 없어 직접 지운다 (V60 주석 참고)
         feedReactionRepository.deleteByTargetTypeAndTargetId(FeedItemType.WORKOUT, workoutId);
+        // 채팅에 자동으로 남은 WORKOUT_CARD — workout_id FK 를 끊지 않으면 아래 delete 가 실패한다
+        chatService.detachWorkoutCards(workoutId);
         /*
          * 인증샷도 함께 지운다 — 행만 지우면 이미지는 URL 로 계속 접근 가능하다.
          * 운동 인증샷은 지도(달린 경로)가 찍혀 있을 수 있어 더더욱 남겨둘 이유가 없다.

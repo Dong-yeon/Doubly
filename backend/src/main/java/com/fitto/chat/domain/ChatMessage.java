@@ -123,4 +123,13 @@ public class ChatMessage {
         this.content = null;
         this.imageUrl = null;
     }
+
+    /**
+     * 원본 운동 기록이 지워졌을 때 — workout_id 가 workouts 를 FK 로 참조하므로 끊어야 기록을
+     * 지울 수 있고, 카드 문구는 이제 없는 기록을 말하므로 삭제 표시까지 한다(WorkoutService.delete).
+     */
+    public void detachDeletedWorkout() {
+        this.workoutId = null;
+        softDelete();
+    }
 }
