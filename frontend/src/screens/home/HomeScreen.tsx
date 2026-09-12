@@ -30,6 +30,7 @@ import { LockedCard } from '../../components/LockedCard';
 import { TouchGesturePicker } from '../../components/TouchGesturePicker';
 import { MoodPicker } from '../../components/MoodPicker';
 import { QuickMealSheet } from './components/QuickMealSheet';
+import { HomeMoreSheet } from './components/HomeMoreSheet';
 import { useAuthStore } from '../../store/authStore';
 import { useCoupleEmojiStore } from '../../store/coupleEmojiStore';
 import { usePlanStore } from '../../store/planStore';
@@ -154,6 +155,7 @@ export function HomeScreen({ navigation }: Props) {
   // 채팅 트레이에는 2026-09-03 에 스티커와 겹친다는 리포트로 뺐지만(ChatRoomScreen
   // 주석 참고), 사용률 자체는 낮아도 홈의 "가볍게 안부 찌르기" 용도로는 남긴다.
   const [showTouchPicker, setShowTouchPicker] = useState(false);
+  const [showMore, setShowMore] = useState(false);
   /*
    * 무드 상태 — 나/상대 지금 기분(PLAN.md "무드 상태" 참고). 아바타 배지로 표시하고,
    * 설정하는 진입점도 여기 topBar 에 둔다(아래 topBar 참고).
@@ -701,15 +703,23 @@ export function HomeScreen({ navigation }: Props) {
                 />
               ) : null}
 
+              {/*
+                칸 3개 + 더보기. 7칸까지 늘었던 줄을 줄인 것이다 — 홈은 스크롤이 없어
+                새 기능이 전부 이 줄에 가로로 쌓였고 320px 에서 칸당 45px 까지 내려왔다.
+                다음 기능은 칸이 아니라 더보기 목록에 한 줄로 들어온다(HomeMoreSheet 주석).
+
+                남긴 셋의 근거: '우리 기록'은 히어로의 좌우 열이 각자 필터를 걸고 가는
+                짝이고(onPressPerson), '일상'은 <b>피드 쓰기의 유일한 진입점</b>이며
+                (푸시 링크도 없다), '캘린더'는 인앱 경로가 없는 데다 여행 목록으로 가는
+                유일한 길이다(CoupleCalendarScreen). 내린 것들은 전용 푸시 링크가 있거나
+                (질문·게임) 같은 데이터의 다른 뷰다(사진첩).
+              */}
               <QuickActions
                 actions={[
                   { icon: 'timeline-text-outline', label: '우리 기록', onPress: () => navigation.navigate('FeedTimeline') },
                   { icon: 'image-plus', label: '일상', onPress: () => navigation.navigate('FeedCompose') },
-                  { icon: 'comment-question-outline', label: '질문', onPress: () => navigation.navigate('DailyQuestion') },
-                  { icon: 'gamepad-variant-outline', label: '게임', onPress: () => navigation.navigate('MiniGames') },
                   { icon: 'calendar-heart', label: '캘린더', onPress: () => navigation.navigate('CoupleCalendar') },
-                  { icon: 'image-multiple-outline', label: '사진첩', onPress: () => navigation.navigate('PhotoAlbum') },
-                  { icon: 'hand-heart-outline', label: '터치', onPress: () => setShowTouchPicker(true) },
+                  { icon: 'dots-horizontal', label: '더보기', onPress: () => setShowMore(true) },
                 ]}
               />
             </View>
@@ -791,6 +801,19 @@ export function HomeScreen({ navigation }: Props) {
         </Pressable>
       </Modal>
 
+      {/*
+        더보기 — 바로가기에서 내린 것들이 여기 모인다. 터치는 이 목록에서 열되
+        채팅으로 옮기지 않는다(HomeMoreSheet 주석: "채팅방을 열지 않고도" 가 존재 이유다).
+      */}
+      <HomeMoreSheet
+        visible={showMore}
+        onClose={() => setShowMore(false)}
+        onQuestion={() => navigation.navigate('DailyQuestion')}
+        onGames={() => navigation.navigate('MiniGames')}
+        onPhotoAlbum={() => navigation.navigate('PhotoAlbum')}
+        onTrips={() => navigation.navigate('TripList')}
+        onTouch={() => setShowTouchPicker(true)}
+      />
       {/* 가상 터치 — 채팅방을 열지 않고도 보낼 수 있는 진입점 */}
       <TouchGesturePicker
         visible={showTouchPicker}
