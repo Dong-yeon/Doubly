@@ -87,6 +87,23 @@ class FoodDbClientMappingTest {
         assertThat(res.calories()).isEqualTo(180);
     }
 
+    /**
+     * 필드명이 전부 어긋난 응답 — 예외 없이 null 로 떨어지고, 그때 {@code warnIfUnmapped} 가
+     * 실제 키를 WARN 으로 남긴다. 이 경로가 깨지면 매핑 불일치를 알아낼 방법이 없어진다.
+     */
+    @Test
+    void 필드명이_전부_다른_응답도_예외없이_빈_결과가_된다() throws Exception {
+        JsonNode row = row("""
+                { "FOOD_NM_KR": "개정된 데이터셋", "AMT_NUM1": "150" }
+                """);
+
+        BarcodeLookupResponse res = client.mapRow("333", row);
+
+        assertThat(res.foodName()).isNull();
+        assertThat(res.calories()).isNull();
+        assertThat(res.barcode()).isEqualTo("333");
+    }
+
     @Test
     void 이름_검색_결과에_BAR_CD가_없으면_빈_문자열이_된다() throws Exception {
         JsonNode row = row("""

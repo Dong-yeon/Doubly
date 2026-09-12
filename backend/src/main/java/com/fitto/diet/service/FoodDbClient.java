@@ -19,14 +19,17 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 바코드/이름 → 식품영양정보 조회 — 식품안전나라 OpenAPI 식품영양성분DB정보(서비스ID: I2790).
  *
- * <p>⚠️ <b>필드 매핑은 실제 인증키 발급 전 검증되지 않았다.</b> {@code NUTR_CONT1}~{@code 8} 순서는
- * 공개 문서 기준 최선의 추정치이고, 데이터셋 개정으로 순서가 바뀌었을 수 있다. 실제 키를 붙인 뒤
- * {@link #lookup} 이 남기는 {@code log.debug} 원본 응답으로 대조해 {@link #mapRow} 를 보정할 것.
- * (AI 분석과 달리 이 API 는 무료 회원가입만으로 즉시 키 발급 — 미설정 시엔 기능만 조용히 비활성.)
+ * <p>⚠️ <b>필드 매핑은 실제 응답으로 대조되지 않았다.</b> {@code NUTR_CONT1}~{@code 8} 순서는
+ * 공개 문서 기준 최선의 추정치이고, 데이터셋 개정으로 순서가 바뀌었을 수 있다. 인증키는 운영에
+ * 설정돼 있으므로(2026-09-12 확인) 남은 확인은 응답 키 대조뿐이다 — 어긋나면 예외가 아니라
+ * "조회는 되는데 값이 전부 null" 로만 드러나므로 {@link #warnIfUnmapped} 가 실제 응답 키를
+ * <b>WARN 으로</b> 한 번 남긴다({@code log.debug} 는 운영 로그 레벨에서 보이지 않는다).
+ * 그 로그를 보고 {@link #map} 만 고치면 된다 — 호출부는 영향이 없다.
  *
  * <p>{@link #search}는 바코드 없이 음식 이름만 입력했을 때(예: "단백질쉐이크") AI 추정 대신
  * 공공 DB의 실제 표기값을 우선 찾게 해준다 — AI 텍스트 분석({@code AI_FOOD_TEXT})은 비용이 들고
@@ -48,6 +51,11 @@ public class FoodDbClient {
 
     private final FoodDbProperties properties;
     private final RestClient restClient;
+
+    /**
+     * 필드명 불일치 경고를 한 번만 남기기 위한 플래그 — 조회마다 같은 경고를 쌓을 이유가 없다.
+     */
+    private final AtomicBoolean fieldMismatchLogged = new AtomicBoolean(false);
 
     public FoodDbClient(FoodDbProperties properties) {
         this.properties = properties;
@@ -134,11 +142,16 @@ public class FoodDbClient {
     }
 
     /**
-     * ⚠️ 검증 필요 — {@code NUTR_CONT1}~{@code 8} 필드명은 문서 기준 추정치다.
-     * 실제 응답에서 어긋나면 이 메서드만 고치면 된다(호출부는 영향 없음).
-     * package-private — HTTP 없이 매핑 로직만 단위 테스트하기 위해.
+     * 매핑 + 불일치 진단. package-private — HTTP 없이 매핑 로직만 단위 테스트하기 위해.
+     * 필드명을 고칠 자리는 {@link #map} 이다.
      */
     BarcodeLookupResponse mapRow(String barcode, JsonNode row) {
+        BarcodeLookupResponse mapped = map(barcode, row);
+        warnIfUnmapped(row, mapped);
+        return mapped;
+    }
+
+    private BarcodeLookupResponse map(String barcode, JsonNode row) {
         return new BarcodeLookupResponse(
                 barcode,
                 textOrNull(row, "DESC_KOR"),
@@ -151,6 +164,23 @@ public class FoodDbClient {
                 intOrNull(row, "NUTR_CONT6"),  // 나트륨(mg)
                 intOrNull(row, "NUTR_CONT8")   // 식이섬유(g) — 데이터셋에 없으면 항상 null
         );
+    }
+
+    /**
+     * 매핑 결과가 비면 응답의 <b>실제 키</b>를 한 번 남긴다.
+     *
+     * <p>위 경고대로 {@code DESC_KOR}·{@code NUTR_CONT1}~{@code 8}·{@code BAR_CD} 는 문서 기준
+     * 추정치다. 데이터셋 개정으로 이름이 바뀌면 예외가 아니라 <b>"조회는 되는데 값이 전부 null"</b>
+     * 로만 드러나는데, 그때 단서가 되던 {@code log.debug} 는 운영(INFO)에서 보이지 않는다.
+     * 그래서 이 경고가 매핑을 보정할 유일한 실마리다 — 로그에 찍힌 키에 맞춰 {@link #map} 만 고치면 된다.
+     */
+    private void warnIfUnmapped(JsonNode row, BarcodeLookupResponse mapped) {
+        if (mapped.foodName() != null && mapped.calories() != null) return;
+        if (!fieldMismatchLogged.compareAndSet(false, true)) return;
+        List<String> keys = new ArrayList<>();
+        row.fieldNames().forEachRemaining(keys::add);
+        log.warn("식품 DB 응답 필드가 예상과 다르다 — 매핑 결과 name={} kcal={}, 실제 응답 키={}"
+                + " (FoodDbClient.map 을 이 키에 맞춰 보정할 것)", mapped.foodName(), mapped.calories(), keys);
     }
 
     private String textOrNull(JsonNode row, String field) {
