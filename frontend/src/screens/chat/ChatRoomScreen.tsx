@@ -114,6 +114,17 @@ function withCallTimeout<T>(promise: Promise<T>): Promise<T> {
   });
 }
 
+/**
+ * 전송 멱등키 — 서버가 {@code (relation_id, client_message_id)} 로 중복을 거른다(V89).
+ *
+ * <p>UUID 라이브러리를 쓰지 않는 이유: 이 값이 유일해야 하는 범위는 <b>한 관계의 몇 초</b>
+ * 뿐이고, 그 안에서 시각(ms)과 난수 8자가 겹칠 일은 없다. 의존성을 하나 더 들이는 대신
+ * 필요한 만큼만 만든다. 컬럼 길이는 64 — 이 형식은 20자 안쪽이다.
+ */
+function newClientMessageId(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 export function ChatRoomScreen({ navigation, route }: Props) {
   const { relationId, title } = route.params;
   const headerHeight = useHeaderHeight();
@@ -272,6 +283,11 @@ export function ChatRoomScreen({ navigation, route }: Props) {
    * 다시 누르면 텍스트가 남아 있으니 같은 메시지가 두 번 나갔다(2026-09-11 리포트).
    */
   const [sending, setSending] = useState(false);
+  /**
+   * 같은 프레임 안의 연타 차단 — state 는 리렌더 전까지 stale 해서 두 번째 탭이 가드를
+   * 그냥 지나간다. 실제 잠금은 이 ref 가 하고, {@code sending} 은 화면 표시용이다.
+   */
+  const sendingRef = useRef(false);
   const [showTouchPicker, setShowTouchPicker] = useState(false);
   const spellCheckEnabled = useSettingsStore((s) => s.spellCheckEnabled);
   // 이미 읽음 처리한 최대 메시지 id — 중복 PUT 방지
@@ -668,7 +684,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
       return;
     }
 
-    if (sending) return; // 응답 대기 중 중복 탭 — 예전엔 같은 메시지가 두 번 나갔다
+    if (sendingRef.current) return; // 같은 프레임 연타 — state 가드는 여기서 stale 하다
+    sendingRef.current = true;
 
     /*
      * 입력창을 먼저 비운다. 전송은 서버 왕복이고 끊겨 있으면 5초까지 가는데, 그동안
@@ -681,12 +698,38 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     haptics.light();
     // 과거를 읽던 중이었어도 내가 보낸 메시지는 바로 보여야 한다(2026-09-03 요청)
     scrollToBottom();
+    const clientMessageId = newClientMessageId();
     try {
-      const ok = await send(relationId, {
-        messageType: 'TEXT',
-        content,
-        replyToId: pending?.id,
-      });
+      const ok = await send(
+        relationId,
+        { messageType: 'TEXT', content, replyToId: pending?.id, clientMessageId },
+        /*
+         * 낙관적 말풍선 — 누른 즉시 서는 "보내는 중" 버블. 이게 없으면 서버가 밀리는 동안
+         * 화면에 아무 변화가 없어서(표시 경로가 서버 에코뿐) 사용자가 다시 누르게 된다.
+         * 서버 에코가 오면 clientMessageId 로 짝지어 제자리에서 진짜 메시지로 바뀐다.
+         */
+        myId
+          ? {
+              id: -Date.now(),
+              relationId,
+              senderId: myId,
+              messageType: 'TEXT',
+              content,
+              isRead: false,
+              createdAt: new Date().toISOString(),
+              replyTo: pending
+                ? {
+                    id: pending.id,
+                    senderId: pending.senderId,
+                    messageType: pending.messageType,
+                    content: pending.content,
+                  }
+                : null,
+              clientMessageId,
+              pending: true,
+            }
+          : undefined,
+      );
       if (ok) {
         inputRef.current?.focus();
       } else {
@@ -699,6 +742,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         Alert.alert('전송 실패', '연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
       }
     } finally {
+      sendingRef.current = false;
       setSending(false);
     }
   };
@@ -706,6 +750,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   /** 메시지 길게 누르기 — MessageActionSheet 로 리액션/답장/수정/삭제를 한 시트에 모은다 */
   const onLongPressMessage = (msg: ChatMessage) => {
     if (msg.deleted) return;
+    if (msg.pending) return; // 서버에 아직 없는 말풍선 — 리액션·수정·삭제 대상이 될 수 없다
     haptics.light();
     setActionSheetFor(msg);
   };
@@ -1259,7 +1304,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           메시지마다 그대로 유지한다 — isRead 는 메시지마다 따로 갖는 값이라 시간과
           달리 "몇 번째까지 읽었는지"가 중요한 정보라서 그룹 끝으로 뭉치면 안 된다.
         */}
-        {(isGroupEnd || (mine && !item.isRead) || item.edited) ? (
+        {(isGroupEnd || (mine && !item.isRead) || item.edited || item.pending) ? (
           <View style={mine ? styles.metaMine : styles.meta}>
             {/*
               읽음은 내가 보낸 메시지에만 — 상대 메시지의 읽음 여부는 알 필요가 없다.
@@ -1269,7 +1314,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               없앤다. 색은 "상대"의 고유색(colors.partner)을 그대로 써서 이 앱의
               나/상대 색 체계(theme/colors.ts 의 Duo 시맨틱)를 유지한다.
             */}
-            {mine && !item.isRead ? (
+            {mine && !item.isRead && !item.pending ? (
               <MaterialCommunityIcons
                 name="heart"
                 size={10}
@@ -1279,7 +1324,12 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               />
             ) : null}
             {item.edited ? <Text style={styles.editedMark}>수정됨</Text> : null}
-            {isGroupEnd ? <Text style={styles.time}>{timeOf(item.createdAt)}</Text> : null}
+            {/* 아직 서버 에코가 안 온 말풍선 — 시간 대신 상태를 보여준다(다시 누를 이유를 없앤다) */}
+            {item.pending ? (
+              <Text style={styles.sendingMark}>보내는 중</Text>
+            ) : isGroupEnd ? (
+              <Text style={styles.time}>{timeOf(item.createdAt)}</Text>
+            ) : null}
           </View>
         ) : null}
         </Pressable>
@@ -2190,6 +2240,8 @@ const styles = themedStyles((colors) => ({
   },
   pinnedText: { flex: 1, fontSize: fontSize.caption, fontWeight: '600', color: colors.textPrimary },
   time: { fontSize: 10, color: colors.textTertiary },
+  // "보내는 중" — 시간 자리에 들어가므로 같은 크기·색 체계를 따른다
+  sendingMark: { fontSize: 10, color: colors.textTertiary },
   editedMark: { fontSize: 10, color: colors.textTertiary },
 
   // 날짜 구분선 — 가운데 라벨 + 양옆 선

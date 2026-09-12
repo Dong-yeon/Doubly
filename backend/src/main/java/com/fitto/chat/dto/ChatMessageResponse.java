@@ -27,7 +27,12 @@ public record ChatMessageResponse(
         /** 삭제된 메시지면 true — 본문 대신 '삭제된 메시지'를 표시한다 */
         boolean deleted,
         /** 중요 대화 북마크됨 — 커플 공용 판정(누가 저장했든 true, §3 참고) */
-        boolean bookmarked
+        boolean bookmarked,
+        /**
+         * 보낸 앱이 붙인 멱등키 — 그 앱이 낙관적 말풍선을 이 에코와 짝짓는 데 쓴다.
+         * 옛 메시지·시스템 카드는 null(ChatMessage.clientMessageId 주석).
+         */
+        String clientMessageId
 ) {
     public static ChatMessageResponse from(ChatMessage m) {
         return from(m, null, List.of(), false);
@@ -39,6 +44,6 @@ public record ChatMessageResponse(
                 m.getMessageType(), m.getContent(), m.getImageUrl(), m.getWorkoutId(),
                 m.getRoutineId(), m.isRead(), m.getCreatedAt(),
                 replyTo, reactions != null ? reactions : List.of(),
-                m.getEditedAt() != null, m.isDeleted(), bookmarked);
+                m.getEditedAt() != null, m.isDeleted(), bookmarked, m.getClientMessageId());
     }
 }
