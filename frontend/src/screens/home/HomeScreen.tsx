@@ -49,7 +49,7 @@ import {
   unsubscribeCouple,
 } from '../../api/chatSocket';
 import { pickImage, takePhoto, uploadImage } from '../../utils/imageUpload';
-import { daysSince, toDateString } from '../../utils/date';
+import { daysSince, localDateOf, toDateString } from '../../utils/date';
 import { mealTypeForNow, mealTypeLabel } from '../../utils/mealTimeSlot';
 import { haptics } from '../../utils/haptics';
 import { toast } from '../../store/toastStore';
@@ -474,7 +474,7 @@ export function HomeScreen({ navigation }: Props) {
   };
 
   const openAnnModal = () => {
-    setAnnInput((couple?.anniversaryDate ?? couple?.connectedAt ?? '').slice(0, 10));
+    setAnnInput(couple?.anniversaryDate ?? (couple?.connectedAt ? localDateOf(couple.connectedAt) : ''));
     setAnnModal(true);
   };
 
