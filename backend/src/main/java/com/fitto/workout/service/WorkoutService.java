@@ -244,19 +244,36 @@ public class WorkoutService {
      * 이전 기록이 아예 없는 종목(처음 해보는 운동)은 <b>PR로 치지 않는다</b> —
      * "갱신"은 기준이 있어야 성립하고, 첫 시도를 PR이라 부르면 매번 뜨는 흔한 알림이 되어
      * 정말 기록을 깼을 때의 특별함이 옅어진다.
+     *
+     * <p><b>원본은 세트별 실기록(entries)이고 요약 {@code weightKg} 는 보완값이다.</b> 요약값은
+     * 세션 저장 시 "마지막 완료 세트"라 백오프(80→70→60)에서 최고 무게를 놓친다 — 예전엔
+     * 이 값만 봐서, 과거에 80 을 들었던 종목에 오늘 75 를 기록하면 "60→75 PR" 로 채팅 카드가
+     * 나갔고 세션 화면의 뱃지(entries 기준)와는 답이 달랐다. 이제 이번 기록·이전 기록 모두
+     * entries 와 요약 중 더 큰 쪽을 쓴다 — entries 가 없는 직접 입력·옛 기록은 요약값이 그대로
+     * 기준이 되고, 둘 다 있으면 요약(마지막 세트) ≤ entries 최고라 entries 가 이긴다.
      */
     private List<WorkoutResponse.PrHighlight> detectPrs(Long userId, Workout workout) {
         Map<String, BigDecimal> currentBest = new LinkedHashMap<>();
         for (WorkoutSet s : workout.getSets()) {
-            if (s.getWeightKg() == null) continue;
-            currentBest.merge(s.getExerciseName(), s.getWeightKg(), BigDecimal::max);
+            if (s.getWeightKg() != null) {
+                currentBest.merge(s.getExerciseName(), s.getWeightKg(), BigDecimal::max);
+            }
+            for (WorkoutSetEntry e : s.getEntries()) {
+                if (e.isCompleted() && e.getWeightKg() != null) {
+                    currentBest.merge(s.getExerciseName(), e.getWeightKg(), BigDecimal::max);
+                }
+            }
         }
         if (currentBest.isEmpty()) return List.of();
 
-        Map<String, BigDecimal> previousBest = workoutSetRepository
-                .findPreviousBestWeights(userId, List.copyOf(currentBest.keySet()), workout.getId())
-                .stream()
-                .collect(Collectors.toMap(ExerciseBest::getExerciseName, ExerciseBest::getMaxWeightKg));
+        List<String> names = List.copyOf(currentBest.keySet());
+        Map<String, BigDecimal> previousBest = new LinkedHashMap<>();
+        for (ExerciseBest b : workoutSetRepository.findPreviousBestWeights(userId, names, workout.getId())) {
+            previousBest.merge(b.getExerciseName(), b.getMaxWeightKg(), BigDecimal::max);
+        }
+        for (ExerciseBest b : workoutSetRepository.findPreviousBestEntryWeights(userId, names, workout.getId())) {
+            previousBest.merge(b.getExerciseName(), b.getMaxWeightKg(), BigDecimal::max);
+        }
 
         List<WorkoutResponse.PrHighlight> prs = new ArrayList<>();
         currentBest.forEach((name, weight) -> {
