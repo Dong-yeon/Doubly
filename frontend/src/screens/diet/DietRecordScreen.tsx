@@ -1033,7 +1033,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
           });
           if (placeRating > 0) {
             const previousTier = selectedPlace.lovelichelinTier;
-            const updated = await placeApi.rate(selectedPlace.id, { rating: placeRating, revisitIntent: true });
+            const updated = await placeApi.rate(selectedPlace.id, { rating: placeRating });
             placeToastSuffix =
               previousTier === 0 && updated.lovelichelinTier > 0
                 ? ` · 럽슐랭 ${updated.lovelichelinTier}스타 등극! 🎉`
