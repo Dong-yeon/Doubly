@@ -1,11 +1,17 @@
 /**
  * 협동 스도쿠 — 둘이 같은 판을 차례 없이 채운다. docs/COUPLE_GAMES_DESIGN_2026-09-09.md 3-7절.
  *
- * <p>칸마다 누가 채웠는지 색으로 남고(나=primary, 상대=accent), 틀린 칸은 서버가 알려준
- * 인덱스로 빨갛게 표시한다. 상대의 입력은 커플 소켓 이벤트(GAME)로 즉시 따라온다.
- * 순수 View/Text 로 그린다 — SVG·Skia 없음.
+ * <p>칸마다 누가 채웠는지 색으로 남고(나=primary, 상대=accent), 상대의 입력은 커플 소켓
+ * 이벤트(GAME)로 즉시 따라온다. 순수 View/Text 로 그린다 — SVG·Skia 없음.
+ *
+ * <p><b>틀린 칸은 기본적으로 보여주지 않는다.</b> 서버는 늘 {@code wrongCells} 를 내려주지만,
+ * 그걸 바로 칠하면 아무 숫자나 넣어보고 색만 보는 게 최적 전략이 돼 퍼즐이 사라진다.
+ * "확인"을 눌렀을 때만 그 시점의 판에 대해 보여주고, 한 칸이라도 고치면 다시 감춘다 —
+ * 검사를 <b>의도적인 행동</b>으로 만든다.
+ *
+ * <p>메모(연필 표시)는 서버에 올리지 않는다 — {@code sudokuMemo} 주석 참고.
  */
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -15,6 +21,7 @@ import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { sudokuApi } from '../../api/game';
+import { clearMemos, loadMemos, pruneMemos, saveMemos, type SudokuMemos } from './sudokuMemo';
 import { connectSocket, subscribeCouple, unsubscribeCouple } from '../../api/chatSocket';
 import { useRelationStore } from '../../store/relationStore';
 import { getErrorMessage } from '../../utils/error';
@@ -58,6 +65,18 @@ export function SudokuScreen(_: Props) {
   // 선택 칸은 판 id 와 함께 든다 — 판이 바뀌면(새 판·완성) 다른 판의 칸을 가리키지 않도록
   // effect 로 초기화하는 대신 파생값으로 푼다.
   const [selection, setSelection] = useState<{ gameId: number; index: number } | null>(null);
+  /** 연필 표시 — 숫자 패드가 값 입력 대신 메모를 토글한다 */
+  const [memoMode, setMemoMode] = useState(false);
+  /**
+   * 메모는 판 id 와 함께 든다 — selection 과 같은 이유다. 판이 바뀌면 effect 로 비우는 대신
+   * 파생값이 저절로 빈 메모가 되게 한다(같은 칸 번호가 다른 판에서 전혀 다른 뜻이 된다).
+   */
+  const [memoState, setMemoState] = useState<{ gameId: number; memos: SudokuMemos } | null>(null);
+  /**
+   * "확인"을 누른 시점의 판. 지금 판과 같을 때만 틀린 칸을 보여준다 — 한 칸이라도 바뀌면
+   * 저절로 감춰져, 색을 보고 숫자를 갈아 끼우는 식으로는 풀 수 없다.
+   */
+  const [checkedBoard, setCheckedBoard] = useState<string | null>(null);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -97,6 +116,44 @@ export function SudokuScreen(_: Props) {
     }, [relationId, load]),
   );
 
+  const gameId = game?.id;
+  const board = game?.board;
+
+  /*
+   * 판이 바뀌면 그 판의 메모를 읽는다(다른 판 것은 sudokuMemo 가 버린다). 판이 없어지면
+   * (완성·접기) 저장소만 비운다 — 화면 쪽은 아래 파생값이 알아서 빈 메모가 된다.
+   */
+  useEffect(() => {
+    if (!gameId) {
+      void clearMemos();
+      return;
+    }
+    let active = true;
+    void loadMemos(gameId).then((loaded) => {
+      if (active) setMemoState({ gameId, memos: loaded });
+    });
+    return () => {
+      active = false;
+    };
+  }, [gameId]);
+
+  /**
+   * 화면에 쓰는 메모 — <b>판 상태에 맞게 정리한 결과를 파생으로 얻는다.</b> 내 입력뿐 아니라
+   * 상대 입력(소켓 → load)에도 똑같이 걸려야 하는데, 그걸 effect + setState 로 맞추면 board
+   * 가 바뀔 때마다 렌더가 한 번 더 돌고 동기화 버그의 자리가 생긴다. 정리는 순수 함수이므로
+   * 계산해 쓰는 편이 맞다.
+   */
+  const memos = useMemo(() => {
+    const raw = memoState && memoState.gameId === gameId ? memoState.memos : {};
+    return board ? pruneMemos(raw, board) : raw;
+  }, [memoState, gameId, board]);
+
+  // 정리된 결과를 기기에 쓴다 — 읽은 직후에도 한 번 쓰이는데, 그게 저장소의 묵은 메모를 씻는다
+  useEffect(() => {
+    if (!gameId || memoState?.gameId !== gameId) return;
+    void saveMemos(gameId, memos);
+  }, [gameId, memoState, memos]);
+
   const selected = game && selection && selection.gameId === game.id ? selection.index : null;
   const setSelected = (index: number | null) =>
     setSelection(index === null || !game ? null : { gameId: game.id, index });
@@ -113,6 +170,29 @@ export function SudokuScreen(_: Props) {
     } finally {
       setStarting(false);
     }
+  };
+
+  /** 메모 토글 — 값은 건드리지 않는다. 이미 값이 찬 칸에는 적지 않는다(클래식 규칙). */
+  const toggleMemo = (digit: number) => {
+    if (!game || selected === null) return;
+    if (game.board[selected] !== '0') return;
+    haptics.light();
+    const current = memos[selected] ?? [];
+    const next = current.includes(digit)
+      ? current.filter((d) => d !== digit)
+      : [...current, digit].sort((a, b) => a - b);
+    const copy = { ...memos };
+    if (next.length > 0) copy[selected] = next;
+    else delete copy[selected];
+    setMemoState({ gameId: game.id, memos: copy });
+  };
+
+  /** 메모 지우기 — 패드의 지우개가 메모 모드에서 하는 일 */
+  const clearCellMemo = () => {
+    if (!game || selected === null || !memos[selected]) return;
+    const copy = { ...memos };
+    delete copy[selected];
+    setMemoState({ gameId: game.id, memos: copy });
   };
 
   const applyValue = async (value: number) => {
@@ -170,6 +250,8 @@ export function SudokuScreen(_: Props) {
   const boardSize = Math.min(width - spacing.lg * 2, 420);
   const cell = boardSize / 9;
   const wrongSet = useMemo(() => new Set(game?.wrongCells ?? []), [game?.wrongCells]);
+  /** 지금 판이 "확인"을 누른 그 판인가 — 한 칸이라도 바뀌면 false 가 되어 표시가 사라진다 */
+  const showWrong = !!game && checkedBoard === game.board;
   /** 숫자별 놓인 개수 — 9개가 다 놓인 숫자는 패드에서 흐리게 */
   const digitCounts = useMemo(() => {
     const counts = new Array<number>(10).fill(0);
@@ -186,7 +268,8 @@ export function SudokuScreen(_: Props) {
     const value = game.board[index];
     const given = game.puzzle[index] !== '0';
     const owner = game.owners[index];
-    const wrong = wrongSet.has(index);
+    const wrong = showWrong && wrongSet.has(index);
+    const cellMemo = value === '0' ? memos[index] : undefined;
     const isSelected = selected === index;
     const related =
       selected !== null &&
@@ -215,18 +298,32 @@ export function SudokuScreen(_: Props) {
           isSelected && styles.cellSelected,
         ]}
       >
-        <Text
-          style={[
-            styles.cellText,
-            { fontSize: Math.max(14, cell * 0.5) },
-            given && styles.cellGiven,
-            owner === 'M' && styles.cellMine,
-            owner === 'P' && styles.cellPartner,
-            wrong && styles.cellWrong,
-          ]}
-        >
-          {value === '0' ? '' : value}
-        </Text>
+        {cellMemo && cellMemo.length > 0 ? (
+          /* 메모 — 3×3 배치로 숫자 자리를 고정한다. 개수에 따라 위치가 흔들리면 읽기 어렵다 */
+          <View style={styles.memoGrid}>
+            {DIGITS.map((d) => (
+              <Text
+                key={d}
+                style={[styles.memoText, { fontSize: Math.max(7, cell * 0.24) }]}
+              >
+                {cellMemo.includes(d) ? d : ''}
+              </Text>
+            ))}
+          </View>
+        ) : (
+          <Text
+            style={[
+              styles.cellText,
+              { fontSize: Math.max(14, cell * 0.5) },
+              given && styles.cellGiven,
+              owner === 'M' && styles.cellMine,
+              owner === 'P' && styles.cellPartner,
+              wrong && styles.cellWrong,
+            ]}
+          >
+            {value === '0' ? '' : value}
+          </Text>
+        )}
       </Pressable>
     );
   };
@@ -301,28 +398,31 @@ export function SudokuScreen(_: Props) {
             return (
               <Pressable
                 key={d}
-                onPress={() => applyValue(d)}
+                onPress={() => (memoMode ? toggleMemo(d) : applyValue(d))}
                 disabled={selected === null}
                 accessibilityRole="button"
                 accessibilityLabel={`${d} 입력`}
                 style={({ pressed }) => [
                   styles.padKey,
+                  memoMode && styles.padKeyMemo,
                   selected === null && styles.padKeyDisabled,
                   pressed && styles.pressed,
                 ]}
               >
-                <Text style={[styles.padKeyText, exhausted && styles.padKeyExhausted]}>{d}</Text>
+                <Text style={[styles.padKeyText, !memoMode && exhausted && styles.padKeyExhausted]}>{d}</Text>
               </Pressable>
             );
           })}
           <Pressable
-            onPress={() => applyValue(0)}
-            disabled={selected === null || selectedValue === '0'}
+            onPress={() => (memoMode ? clearCellMemo() : applyValue(0))}
+            disabled={selected === null || (memoMode ? !memos[selected] : selectedValue === '0')}
             accessibilityRole="button"
-            accessibilityLabel="지우기"
+            accessibilityLabel={memoMode ? '메모 지우기' : '지우기'}
             style={({ pressed }) => [
               styles.padKey,
-              (selected === null || selectedValue === '0') && styles.padKeyDisabled,
+              memoMode && styles.padKeyMemo,
+              (selected === null || (memoMode ? !memos[selected] : selectedValue === '0')) &&
+                styles.padKeyDisabled,
               pressed && styles.pressed,
             ]}
           >
@@ -330,8 +430,54 @@ export function SudokuScreen(_: Props) {
           </Pressable>
         </View>
 
+        {/*
+          메모 · 확인 — 둘 다 "지금 무엇을 하는 중인가"를 바꾸는 버튼이라 패드 바로 아래 둔다.
+          확인은 누른 시점의 판에 대해서만 답하고(showWrong), 한 칸이라도 고치면 다시 감춰진다.
+        */}
+        <View style={styles.toolRow}>
+          <Pressable
+            onPress={() => { haptics.light(); setMemoMode((v) => !v); }}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: memoMode }}
+            accessibilityLabel="메모 모드"
+            style={({ pressed }) => [styles.tool, memoMode && styles.toolOn, pressed && styles.pressed]}
+          >
+            <MaterialCommunityIcons
+              name="pencil-outline"
+              size={18}
+              color={memoMode ? colors.surface : colors.textSecondary}
+            />
+            <Text style={[styles.toolText, memoMode && styles.toolTextOn]}>메모</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => {
+              const wrongCount = g.wrongCells.length;
+              setCheckedBoard(g.board);
+              if (wrongCount === 0) {
+                haptics.success();
+                toast.success('여기까지 다 맞아요!');
+              } else {
+                haptics.light();
+                toast.info(`틀린 칸 ${wrongCount}개를 빨갛게 표시했어요.`);
+              }
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="지금까지 채운 칸 확인하기"
+            style={({ pressed }) => [styles.tool, pressed && styles.pressed]}
+          >
+            <MaterialCommunityIcons name="check-circle" size={18} color={colors.textSecondary} />
+            <Text style={styles.toolText}>확인</Text>
+          </Pressable>
+        </View>
+
         <Text style={styles.hint}>
-          {selected === null ? '빈칸을 누르고 숫자를 고르세요. 차례 없이 아무 칸이나 괜찮아요.' : '틀린 숫자는 빨갛게 보여요. 상대가 고쳐줄 수도 있어요.'}
+          {memoMode
+            ? '메모는 내 기기에만 남아요. 숫자를 눌러 여러 개 적어두세요.'
+            : showWrong
+              ? '확인한 시점의 결과예요. 한 칸이라도 고치면 다시 감춰져요.'
+              : selected === null
+                ? '빈칸을 누르고 숫자를 고르세요. 차례 없이 아무 칸이나 괜찮아요.'
+                : '맞았는지 궁금하면 "확인"을 눌러요. 상대가 고쳐줄 수도 있어요.'}
         </Text>
         <Button title="이 판 접기" variant="ghost" size="sm" onPress={confirmGiveUp} style={styles.giveUp} />
       </View>
@@ -466,6 +612,19 @@ const styles = themedStyles((colors) => ({
   cellBottomThick: { borderBottomWidth: 2, borderBottomColor: colors.textPrimary },
   cellRelated: { backgroundColor: colors.surfaceAlt },
   cellSameNumber: { backgroundColor: colors.primaryBg },
+  /*
+   * 메모 — 9칸 자리를 늘 차지하게 둔다(있는 숫자만 글자, 없으면 빈 문자열). 개수에 따라
+   * 위치가 움직이면 "3이 왼쪽 위"라는 기억이 깨져 메모를 읽는 속도가 떨어진다.
+   */
+  memoGrid: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, flexDirection: 'row', flexWrap: 'wrap' },
+  memoText: {
+    width: '33.33%',
+    height: '33.33%',
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    color: colors.textTertiary,
+    fontWeight: '700',
+  },
   cellSelected: { backgroundColor: colors.primaryBg, borderColor: colors.primary },
   cellText: { fontWeight: '600', color: colors.textSecondary },
   cellGiven: { fontWeight: '800', color: colors.textPrimary },
@@ -474,6 +633,8 @@ const styles = themedStyles((colors) => ({
   cellWrong: { color: colors.danger },
 
   pad: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, justifyContent: 'center', marginTop: spacing.md },
+  /** 메모 모드 — 패드 전체가 다른 일을 하므로 키 자체의 테두리를 바꿔 모드를 드러낸다 */
+  padKeyMemo: { borderColor: colors.primary, backgroundColor: colors.primaryBg },
   padKey: {
     width: 44,
     height: 44,
@@ -487,6 +648,22 @@ const styles = themedStyles((colors) => ({
   padKeyDisabled: { opacity: 0.4 },
   padKeyText: { fontSize: fontSize.title, fontWeight: '800', color: colors.textPrimary },
   padKeyExhausted: { color: colors.textMuted, fontWeight: '600' },
+  toolRow: { flexDirection: 'row', gap: spacing.sm, justifyContent: 'center', marginTop: spacing.sm },
+  tool: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    minHeight: 44,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  toolOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+  toolText: { fontSize: fontSize.caption, fontWeight: '800', color: colors.textSecondary },
+  toolTextOn: { color: colors.surface },
+
   hint: { fontSize: fontSize.caption, color: colors.textSecondary, textAlign: 'center', marginTop: spacing.md, lineHeight: 18 },
   giveUp: { alignSelf: 'center', marginTop: spacing.xs },
 
