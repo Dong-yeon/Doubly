@@ -10,5 +10,7 @@ package com.fitto.common.analytics;
  */
 public enum ClientAnalyticsEvent {
     /** 홈 화면 진입 — README "최소한의 이벤트 로깅(기록 버튼 클릭·홈 진입 등)"의 그 예시. */
-    HOME_VIEWED;
+    HOME_VIEWED,
+    /** 운동 탭 진입 — 운동 자동 공유 실험 지표(AnalyticsEvent.WORKOUT_VIEWED). */
+    WORKOUT_VIEWED;
 }

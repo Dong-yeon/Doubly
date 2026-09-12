@@ -363,15 +363,33 @@ public class ChatService {
      */
     @Transactional
     public ChatMessageResponse postSystemCard(Long senderId, Long relationId, MessageType type, String content) {
+        return postSystemCard(senderId, relationId, type, content, null);
+    }
+
+    /** {@link #postSystemCard(Long, Long, MessageType, String)} + 원본 기록 참조(WORKOUT_CARD 의 workoutId). */
+    @Transactional
+    public ChatMessageResponse postSystemCard(Long senderId, Long relationId, MessageType type, String content,
+                                              Long workoutId) {
         requireMember(senderId, relationId);
         ChatMessage message = ChatMessage.builder()
                 .relationId(relationId)
                 .senderId(senderId)
                 .messageType(type)
                 .content(content)
+                .workoutId(workoutId)
                 .build();
         chatMessageRepository.save(message);
         return ChatMessageResponse.from(message);
+    }
+
+    /**
+     * 운동 기록이 지워질 때 그 기록을 가리키던 카드를 정리한다 — FK(chat_messages.workout_id →
+     * workouts) 를 끊고 삭제 표시. 카드는 저장 시 자동으로 남으므로(WorkoutService.postWorkoutCard)
+     * 기록을 지우면 거의 항상 카드가 하나 있다. 리액션·답장은 삭제된 메시지에도 남는다(delete 와 동일).
+     */
+    @Transactional
+    public void detachWorkoutCards(Long workoutId) {
+        chatMessageRepository.findByWorkoutId(workoutId).forEach(ChatMessage::detachDeletedWorkout);
     }
 
     /** 우리 이모지 전송 검증 — content(id)가 이 관계의 살아 있는 이모지인지. */

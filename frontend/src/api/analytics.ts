@@ -6,7 +6,7 @@
 import { apiClient } from './client';
 import type { ApiResponse } from '../types';
 
-export type ClientAnalyticsEvent = 'HOME_VIEWED';
+export type ClientAnalyticsEvent = 'HOME_VIEWED' | 'WORKOUT_VIEWED';
 
 export const analyticsApi = {
   log: (eventType: ClientAnalyticsEvent) =>

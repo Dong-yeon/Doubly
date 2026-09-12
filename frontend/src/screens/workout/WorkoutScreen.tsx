@@ -20,6 +20,7 @@ import { QuickLinkChips } from '../../components/QuickLinkChips';
 import { streakApi } from '../../api/streak';
 import { workoutApi } from '../../api/workout';
 import { voiceClipsApi } from '../../api/voiceClips';
+import { analyticsApi } from '../../api/analytics';
 import { getErrorMessage } from '../../utils/error';
 import { haptics } from '../../utils/haptics';
 import { useDeleteAction } from '../../hooks/useDeleteAction';
@@ -187,6 +188,8 @@ export function WorkoutScreen({ navigation }: Props) {
 
   useFocusEffect(
     useCallback(() => {
+      // 운동 자동 공유 실험 지표 — "운동 탭 2회 이상 진입 유저 비율"(HomeScreen 의 HOME_VIEWED 와 동일 규칙)
+      analyticsApi.log('WORKOUT_VIEWED').catch(() => {});
       fetchToday();
       fetchHistory();
       refreshStreaks();
