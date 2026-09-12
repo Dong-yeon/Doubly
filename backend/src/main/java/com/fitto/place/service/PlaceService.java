@@ -1,5 +1,7 @@
 package com.fitto.place.service;
 
+import com.fitto.chat.dto.ChatMessageResponse;
+import com.fitto.chat.service.ChatService;
 import com.fitto.common.plan.Feature;
 import com.fitto.common.plan.PlanGuard;
 import com.fitto.common.exception.BusinessException;
@@ -31,6 +33,9 @@ import com.fitto.relation.domain.RelationType;
 import com.fitto.relation.repository.RelationRepository;
 import com.fitto.user.domain.User;
 import com.fitto.user.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -59,6 +64,17 @@ public class PlaceService {
     private final PlanGuard planGuard;
     private final FeedReactionRepository feedReactionRepository;
     private final KakaoLocalClient kakaoLocalClient;
+    /** 찜·방문·첫 평점·등극을 커플 채팅에 PLACE_CARD 로 남긴다(자동 공유) — {@link #postPlaceCard} */
+    private final ChatService chatService;
+    private final SimpMessagingTemplate messagingTemplate;
+
+    private static final Logger log = LoggerFactory.getLogger(PlaceService.class);
+
+    /**
+     * 등극 카드 접두어 — 프론트 채팅 렌더러(placeShare.ts 의 TIER_SHARE_PREFIX)가 같은 문자열로
+     * 배지를 판정하므로 바꾸면 양쪽을 함께 바꿔야 한다. 등급 숫자는 접두어 뒤에 온다.
+     */
+    static final String TIER_CARD_PREFIX = "👑 럽슐랭";
 
     public PlaceService(PlaceRepository placeRepository,
                         PlaceVisitRepository placeVisitRepository,
@@ -69,7 +85,9 @@ public class PlaceService {
                         NotificationService notificationService,
                         PlanGuard planGuard,
                         FeedReactionRepository feedReactionRepository,
-                        KakaoLocalClient kakaoLocalClient) {
+                        KakaoLocalClient kakaoLocalClient,
+                        ChatService chatService,
+                        SimpMessagingTemplate messagingTemplate) {
         this.placeRepository = placeRepository;
         this.placeVisitRepository = placeVisitRepository;
         this.placeRatingRepository = placeRatingRepository;
@@ -80,6 +98,8 @@ public class PlaceService {
         this.planGuard = planGuard;
         this.feedReactionRepository = feedReactionRepository;
         this.kakaoLocalClient = kakaoLocalClient;
+        this.chatService = chatService;
+        this.messagingTemplate = messagingTemplate;
     }
 
     /**
@@ -131,7 +151,43 @@ public class PlaceService {
                 .addedBy(userId)
                 .build();
         placeRepository.save(place);
+        // 찜은 "여기 가볼래?"라는 제안이다 — 상대의 ❤️ 한 탭이 "가자"가 된다. 재사용(existing)은 찜이
+        // 아니고, 방문 기록의 일부로 추가하는 경우(visiting)도 찜이 아니다(SavePlaceRequest.visiting).
+        if (!request.visitingOrDefault()) {
+            postPlaceCard(userId, couple.getId(), place, "📍 " + place.getName() + " 찜! 여기 가볼래?", null, null, false);
+        }
         return toResponse(place, null, RatingPair.EMPTY, null);
+    }
+
+    /**
+     * 럽슐랭 카드 자동 공유 — 운동(WorkoutService.postWorkoutCard)·식단(MealService.postMealCard)과
+     * 같은 결정을 럽슐랭의 이벤트 넷(찜·방문·첫 평점·등극)에 적용한다. 럽슐랭은 처음부터 관계 단위라
+     * "상대에게 보이게 하는" 관문이 없었고, 카드의 역할은 채팅에 놓고 한 탭 반응 루프에 태우는 것이다.
+     * 근거와 접기 규칙: docs/AUTO_SHARE_LOVELICHELIN_ANALYSIS_2026-09-13.md.
+     *
+     * <p>접힌 카드({@code folded})는 새 메시지가 아니라 제자리 교체이므로 {@code /updates} 토픽으로
+     * 보낸다(수정·리액션과 같은 경로). 카드 INSERT 는 원래 트랜잭션과 같다 — 브로드캐스트만 감싼다.
+     */
+    private void postPlaceCard(Long userId, Long relationId, Place place, String content, String mealFragment,
+                               String imageUrl,
+                               boolean alwaysNew) {
+        ChatService.CardPost post = chatService.foldOrPostPlaceCard(
+                userId, relationId, place.getId(), content, mealFragment, imageUrl, alwaysNew);
+        broadcast(relationId, post.message(), post.folded());
+    }
+
+    private void broadcast(Long relationId, ChatMessageResponse message, boolean inPlace) {
+        try {
+            messagingTemplate.convertAndSend("/sub/rooms/" + relationId + (inPlace ? "/updates" : ""), message);
+        } catch (RuntimeException e) {
+            log.warn("럽슐랭 카드 브로드캐스트 실패 (카드는 저장됨) relationId={}, messageId={}: {}",
+                    relationId, message.id(), e.getMessage());
+        }
+    }
+
+    /** "★4" — 별점이 없으면 빈 문자열. 카드 문구 조각. */
+    private static String stars(Integer rating) {
+        return rating != null ? " ★" + rating : "";
     }
 
     /**
@@ -208,6 +264,9 @@ public class PlaceService {
         feedReactionRepository.deleteByTargetTypeAndTargetIdIn(FeedItemType.PLACE_VISIT,
                 placeVisitRepository.findByPlaceIdOrderByIdDesc(placeId).stream()
                         .map(PlaceVisit::getId).toList());
+        // 채팅에 자동으로 남은 럽슐랭 카드 — place_id FK(V91) 를 끊지 않으면 아래 delete 가 실패한다.
+        // 장소가 덧붙은 식단 카드는 place_id 만 달렸을 뿐 식단 카드이므로 여기서 지우지 않는다.
+        chatService.detachPlaceCards(placeId);
         placeRepository.delete(place);
     }
 
@@ -235,7 +294,22 @@ public class PlaceService {
                 .build();
         placeVisitRepository.save(visit);
 
-        Long partnerId = activeCouple(userId).partnerOf(userId);
+        Relation couple = activeCouple(userId);
+        Long partnerId = couple.partnerOf(userId);
+        /*
+         * 방문 카드. 식단 경로(mealId 연동)는 식단 카드가 방금 남아 있으므로 거기에 장소를 덧붙이고
+         * 끝낸다 — 한 끼가 카드 두 장이 되지 않게. 덧붙일 식단 카드가 없으면(그 뒤로 대화가 이어졌거나
+         * 커플 미연결 시절의 식단) 별도 카드도 만들지 않는다. 그 외 경로는 찜 카드 위에 접히거나 새 카드.
+         */
+        String visitLine = "📍 " + place.getName() + stars(visit.getRating());
+        if (request.mealId() != null) {
+            chatService.appendPlaceToLastMealCard(userId, couple.getId(), request.mealId(), place.getId(), visitLine)
+                    .ifPresent(m -> broadcast(couple.getId(), m, true));
+        } else {
+            String memo = visit.getMemo() != null && !visit.getMemo().isBlank() ? " · " + visit.getMemo().trim() : "";
+            postPlaceCard(userId, couple.getId(), place, visitLine + memo, null, visit.getImageUrl(), false);
+        }
+
         if (partnerId != null) {
             notificationService.notify(partnerId, NotificationCategory.PARTNER, "새 맛집 방문 기록!",
                     userName(userId) + " — " + place.getName()
@@ -306,7 +380,12 @@ public class PlaceService {
             // 오늘로 밀린다.
             if (previousTier == 0 && newTier > 0) {
                 place.applyLovelichelinTier(newTier, LocalDateTime.now());
-                Long partnerId = activeCouple(userId).partnerOf(userId);
+                Relation couple = activeCouple(userId);
+                // 등극 카드는 접지 않는다 — 둘이 만든 결과라 항상 제 카드로 남는다. 첫 평가자는
+                // 지금까지 이 순간을 푸시 한 줄로만 봤다(팡파레는 두 번째 평가자 화면에만 뜬다).
+                postPlaceCard(userId, couple.getId(), place,
+                        TIER_CARD_PREFIX + " " + newTier + "스타 등극! · " + place.getName(), null, null, true);
+                Long partnerId = couple.partnerOf(userId);
                 if (partnerId != null) {
                     notificationService.notify(partnerId, NotificationCategory.PARTNER,
                             "럽슐랭 " + newTier + "스타 등극! 🎉",
@@ -324,7 +403,13 @@ public class PlaceService {
         // ("상대 평가 대기 중" 문구는 내 화면에만 보인다) — 첫 평가 시 상대에게 차례를 알린다.
         // 등극 알림과는 상호배타적이다: 등극은 상대 평점이 있어야, 재촉은 없어야 나간다.
         if (firstRating && pair.partner() == null) {
-            Long partnerId = activeCouple(userId).partnerOf(userId);
+            Relation couple = activeCouple(userId);
+            // 첫 평점 카드 — 반응이 아니라 상대의 행동(평점)을 요구하는 CTA. 탭하면 장소 상세로 간다.
+            // 찜·방문 직후의 평점이면 그 카드 위에 접힌다(장소 추가 → 바로 별점이 주 경로다).
+            postPlaceCard(userId, couple.getId(), place,
+                    "📍 " + place.getName() + stars(request.rating()) + " · 당신의 평점이 등급을 결정해요",
+                    "당신의 평점이 등급을 결정해요", null, false);
+            Long partnerId = couple.partnerOf(userId);
             if (partnerId != null) {
                 notificationService.notify(partnerId, NotificationCategory.PARTNER, "럽슐랭 평가를 기다려요 ⭐",
                         userName(userId) + "이(가) " + place.getName()

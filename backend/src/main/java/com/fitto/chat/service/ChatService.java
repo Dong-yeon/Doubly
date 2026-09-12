@@ -420,6 +420,86 @@ public class ChatService {
         chatMessageRepository.findByMealIdIn(mealIds).forEach(ChatMessage::detachDeletedMeal);
     }
 
+    /**
+     * 시스템 카드 게시 결과 — 호출자가 어느 토픽으로 브로드캐스트할지 갈라야 해서 접혔는지를 함께 돌려준다
+     * (새 카드는 {@code /sub/rooms/{id}}, 접힌 카드는 제자리 교체용 {@code /sub/rooms/{id}/updates}).
+     */
+    public record CardPost(ChatMessageResponse message, boolean folded) {}
+
+    /**
+     * 럽슐랭 카드 — <b>접기(fold) 규칙</b>이 있다. 방의 마지막 메시지가 같은 사람이 같은 장소로 남긴
+     * 살아 있는 카드면 새 카드를 만들지 않고 그 카드에 반영한다. 럽슐랭은 한 행동이 이벤트 여럿을
+     * 연쇄로 낸다(장소 추가 → 바로 별점, 방문 기록 → 별점) — 그때마다 카드를 쌓으면 몇 초 사이 카드
+     * 두세 장이 된다. 마지막 메시지만 건드리므로 채팅의 순서·읽음 의미는 흔들리지 않는다.
+     *
+     * <ul>
+     *   <li>마지막이 PLACE_CARD(찜·방문) → 본문을 {@code content} 로 바꾼다(사진은 새로 온 것만).</li>
+     *   <li>마지막이 이 장소가 덧붙은 MEAL_CARD(식단 경로) → {@code mealFragment} 를 뒤에 이어 붙인다.
+     *       식단 카드 본문에 장소·별점이 이미 있으므로 전체 문장이 아니라 조각만 붙는다.</li>
+     *   <li>{@code alwaysNew} — 등극처럼 접지 않고 항상 새로 남겨야 하는 카드.</li>
+     * </ul>
+     */
+    @Transactional
+    public CardPost foldOrPostPlaceCard(Long senderId, Long relationId, Long placeId, String content,
+                                        String mealFragment, String imageUrl, boolean alwaysNew) {
+        requireMember(senderId, relationId);
+        if (!alwaysNew) {
+            ChatMessage last = chatMessageRepository.findTopByRelationIdOrderByIdDesc(relationId).orElse(null);
+            if (last != null && !last.isDeleted()
+                    && senderId.equals(last.getSenderId()) && placeId.equals(last.getPlaceId())) {
+                if (last.getMessageType() == MessageType.PLACE_CARD) {
+                    last.foldCard(content, imageUrl);
+                    return new CardPost(detailOf(last), true);
+                }
+                if (last.getMessageType() == MessageType.MEAL_CARD && mealFragment != null) {
+                    last.appendPlaceFragment(mealFragment, placeId);
+                    return new CardPost(detailOf(last), true);
+                }
+            }
+        }
+        ChatMessage message = ChatMessage.builder()
+                .relationId(relationId)
+                .senderId(senderId)
+                .messageType(MessageType.PLACE_CARD)
+                .content(content)
+                .imageUrl(imageUrl)
+                .placeId(placeId)
+                .build();
+        chatMessageRepository.save(message);
+        return new CardPost(ChatMessageResponse.from(message), false);
+    }
+
+    /**
+     * 식단 경로의 방문 기록 — 식단 카드가 방금 남았으면(방의 마지막 메시지, 같은 사람, 같은 mealId)
+     * 거기에 장소를 덧붙인다("점심 · 파스타 · 📍 이태리식당 ★4"). 한 끼가 카드 두 장이 되지 않게.
+     * 접을 카드가 없으면 비어 있는 Optional — 호출자는 그때 별도 카드를 만들지 않는다(식단 카드가
+     * 이미 그 자리를 대신하고 있거나, 그 뒤로 대화가 이어졌다는 뜻이다).
+     */
+    @Transactional
+    public Optional<ChatMessageResponse> appendPlaceToLastMealCard(Long senderId, Long relationId, Long mealId,
+                                                                   Long placeId, String fragment) {
+        ChatMessage last = chatMessageRepository.findTopByRelationIdOrderByIdDesc(relationId).orElse(null);
+        if (last == null || last.isDeleted() || last.getMessageType() != MessageType.MEAL_CARD
+                || !senderId.equals(last.getSenderId()) || !mealId.equals(last.getMealId())) {
+            return Optional.empty();
+        }
+        last.appendPlaceFragment(fragment, placeId);
+        return Optional.of(detailOf(last));
+    }
+
+    /** {@link #detachWorkoutCards} 의 장소판 — 장소를 지우면 그 장소의 카드가 전부 삭제 표시된다. */
+    @Transactional
+    public void detachPlaceCards(Long placeId) {
+        for (ChatMessage m : chatMessageRepository.findByPlaceId(placeId)) {
+            // 장소가 덧붙은 식단 카드(MEAL_CARD + place_id)는 식단 기록이므로 참조만 끊고 남긴다
+            if (m.getMessageType() == MessageType.PLACE_CARD) {
+                m.detachDeletedPlace();
+            } else {
+                m.unlinkPlace();
+            }
+        }
+    }
+
     /** 우리 이모지 전송 검증 — content(id)가 이 관계의 살아 있는 이모지인지. */
     private CoupleEmoji requireCoupleEmoji(Long relationId, String content) {
         long emojiId;
