@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -16,6 +17,9 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
 
     /** 운동 기록을 참조하는 카드(WORKOUT_CARD) — 기록 삭제 시 함께 정리한다(WorkoutService.delete). */
     List<ChatMessage> findByWorkoutId(Long workoutId);
+
+    /** 식단 기록을 참조하는 카드(MEAL_CARD) — 기록 삭제 시 함께 정리한다(MealService.delete). */
+    List<ChatMessage> findByMealIdIn(Collection<Long> mealIds);
 
     /** 방 메시지 — 커서(id) 기반 최신순 페이징. */
     @Query("""

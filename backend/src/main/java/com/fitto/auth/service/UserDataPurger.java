@@ -80,6 +80,8 @@ public class UserDataPurger {
         exec("delete from workout_programs where user_id = :uid", userId);
 
         exec("delete from streaks where user_id = :uid", userId);
+        // chat_messages.meal_id(V90)·workout_id 가 여길 참조하지만, 카드가 놓이는 관계 채팅은
+        // 1단계(RelationRecordPurger)에서 이미 지워졌으므로 FK 위반이 나지 않는다.
         exec("delete from meals where user_id = :uid", userId);
         exec("delete from meal_reminders where user_id = :uid", userId);
         exec("delete from water_logs where user_id = :uid", userId);
