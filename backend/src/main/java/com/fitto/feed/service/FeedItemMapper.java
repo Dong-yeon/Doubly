@@ -91,8 +91,15 @@ public class FeedItemMapper {
 
     /**
      * 식단 — 무엇을 먹었는지가 요약의 핵심이라 음식 항목 이름을 앞세운다
-     * ("삼겹살 외 2개 · 820kcal"). 바로 위 운동 카드와 같은 타임라인에 나란히 서므로
+     * ("삼겹살 외 2개"). 바로 위 운동 카드와 같은 타임라인에 나란히 서므로
      * 요약 형태를 맞춘다("러닝 외 3개 · 40분").
+     *
+     * <p><b>칼로리 등 수치는 싣지 않는다.</b> 채팅 MEAL_CARD 가 "수치는 본인 화면에만"
+     * 으로 정한 결정(MealService.postMealCard — 상대가 내 칼로리를 다 보는 순간 감시로
+     * 느껴진다)과 같은 규칙이다. 예전엔 여기만 " · 820kcal" 을 붙여 카드에서 뺀 수치가
+     * 피드로 그대로 새고 있었다(docs/FEATURE_DUPLICATION_AUDIT_2026-09-13.md §5-C).
+     * 피드는 커플 공용 화면이라 본인 카드(mine)라고 예외를 두지 않는다 — 뷰어별로
+     * 갈라 두면 같은 카드가 두 사람에게 다르게 보여 이 규칙이 다시 흐려진다.
      *
      * <p>항목이 없는 기록(합계만 적었거나 항목 도입 이전)은 예전처럼 memo 로 보여준다.
      */
@@ -105,10 +112,6 @@ public class FeedItemMapper {
             }
         } else if (m.getMemo() != null && !m.getMemo().isBlank()) {
             summary.append(m.getMemo());
-        }
-        if (m.getCalories() != null) {
-            if (summary.length() > 0) summary.append(" · ");
-            summary.append(m.getCalories()).append("kcal");
         }
         String content = summary.length() > 0 ? summary.toString() : null;
         return new FeedItemResponse(FeedItemType.MEAL, m.getId(), m.getUserId(),
