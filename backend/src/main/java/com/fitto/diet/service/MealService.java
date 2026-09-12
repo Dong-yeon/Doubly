@@ -1,5 +1,7 @@
 package com.fitto.diet.service;
 
+import com.fitto.chat.dto.ChatMessageResponse;
+import com.fitto.chat.service.ChatService;
 import com.fitto.common.event.CoupleEvent;
 import com.fitto.common.event.CoupleEventPublisher;
 import com.fitto.common.exception.BusinessException;
@@ -38,6 +40,7 @@ import com.fitto.workout.dto.PartnerTodayResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -51,6 +54,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * 식단 기록 서비스 — 저장·오늘 조회·히스토리·캘린더·통계·삭제, 커플 상대방 오늘 여부.
@@ -78,6 +82,15 @@ public class MealService {
     private final PlanGuard planGuard;
     private final PlaceVisitRepository placeVisitRepository;
     private final MealPhotoAutoAnalysisService autoAnalysisService;
+    /** 저장 즉시 커플 채팅에 MEAL_CARD 를 남긴다(자동 공유) — {@link #postMealCard} */
+    private final ChatService chatService;
+    private final SimpMessagingTemplate messagingTemplate;
+
+    /**
+     * 채팅 카드 본문의 목표 달성 접두어 — 프론트 채팅 렌더러(dietShare.ts 의 GOAL_SHARE_PREFIX)가
+     * 같은 문자열로 배지를 판정하므로 바꾸면 양쪽을 함께 바꿔야 한다.
+     */
+    static final String GOAL_CARD_PREFIX = "🎯 단백질 목표 달성!";
 
     public MealService(MealRepository mealRepository,
                        MealItemRepository mealItemRepository,
@@ -90,7 +103,9 @@ public class MealService {
                        NotificationService notificationService,
                        PlanGuard planGuard,
                        PlaceVisitRepository placeVisitRepository,
-                       MealPhotoAutoAnalysisService autoAnalysisService) {
+                       MealPhotoAutoAnalysisService autoAnalysisService,
+                       ChatService chatService,
+                       SimpMessagingTemplate messagingTemplate) {
         this.mealRepository = mealRepository;
         this.mealItemRepository = mealItemRepository;
         this.nutritionGoalRepository = nutritionGoalRepository;
@@ -103,6 +118,8 @@ public class MealService {
         this.planGuard = planGuard;
         this.placeVisitRepository = placeVisitRepository;
         this.autoAnalysisService = autoAnalysisService;
+        this.chatService = chatService;
+        this.messagingTemplate = messagingTemplate;
     }
 
     @Transactional
@@ -172,8 +189,13 @@ public class MealService {
             Meal partnerMeal = copyForPartner(meal, partnerId, userId);
             mealRepository.save(partnerMeal);
             afterSharedMealAdded(couple, userId, partnerId, meal.getMealDate(), firstMealOfDay);
+            // 데이트 식단은 두 사람 기록에 각각 insert 되지만 카드는 기록한 쪽 명의로 한 장만
+            postMealCard(userId, couple.getId(), meal, goals, true);
         } else {
             afterMealsAdded(userId, meal.getMealDate(), firstMealOfDay, false);
+            relationRepository.findByUserAndTypeAndStatus(userId, RelationType.COUPLE, RelationStatus.ACTIVE)
+                    .stream().findFirst()
+                    .ifPresent(c -> postMealCard(userId, c.getId(), meal, goals, false));
         }
 
         /*
@@ -184,6 +206,53 @@ public class MealService {
          */
         autoAnalysisService.scheduleIfEligible(userId, meal);
         return MealResponse.from(meal, goals);
+    }
+
+    /**
+     * 저장한 식단을 커플 채팅에 MEAL_CARD 로 남긴다 — <b>자동 공유</b>(운동의
+     * WorkoutService.postWorkoutCard 와 같은 결정, docs/AUTO_SHARE_WORKOUT_2026-09-13.md).
+     *
+     * <p>운동과 다른 점은 <b>수치를 싣지 않는다</b>는 것이다. 카드에는 사진·끼니·음식명만 들어가고
+     * 칼로리·단백질 g 은 본인 화면에만 남는다 — "상대가 내 칼로리를 다 본다"는 커플 앱에서 감시로
+     * 느껴지는 순간 삭제 사유가 된다. 단백질 목표 달성도 배지 문구만 붙이고 g 은 뺀다.
+     *
+     * <p>새 기록(save)에만 남긴다. 어제 식단 복사(copyFrom)는 한 번에 여러 끼니가 들어와 카드가
+     * 그만큼 쏟아지고 내용도 반복이라 남기지 않고, 수정(update)은 이미 기록한 끼니를 손보는
+     * 것이라 카드를 다시 만들지 않는다. 카드 INSERT 는 식단 저장과 같은 트랜잭션이다(예외를
+     * 삼키면 커밋 시점에 UnexpectedRollbackException — 브로드캐스트만 감싼다).
+     */
+    private void postMealCard(Long userId, Long relationId, Meal meal,
+                              List<MealResponse.GoalHighlight> goals, boolean dateMeal) {
+        ChatMessageResponse card = chatService.postMealCard(userId, relationId,
+                mealCardContent(meal, goals, dateMeal), meal.getPhotoUrl(), meal.getId());
+        try {
+            messagingTemplate.convertAndSend("/sub/rooms/" + relationId, card);
+        } catch (RuntimeException e) {
+            log.warn("식단 카드 브로드캐스트 실패 (카드는 저장됨) relationId={}, messageId={}: {}",
+                    relationId, card.id(), e.getMessage());
+        }
+    }
+
+    /**
+     * 카드 본문 — "점심 · 파스타, 샐러드", 데이트면 "점심 (데이트) · …", 목표 달성이면
+     * "🎯 단백질 목표 달성! · 점심 · …". 음식명이 없으면 메모, 그것도 없으면 끼니만(사진이 본문이다).
+     */
+    static String mealCardContent(Meal meal, List<MealResponse.GoalHighlight> goals, boolean dateMeal) {
+        List<String> parts = new ArrayList<>();
+        parts.add(meal.getMealType().label() + (dateMeal ? " (데이트)" : ""));
+        String names = meal.getItems().stream()
+                .map(MealItem::getName)
+                .filter(n -> n != null && !n.isBlank())
+                .map(String::trim)
+                .collect(Collectors.joining(", "));
+        if (!names.isEmpty()) {
+            parts.add(names);
+        } else if (meal.getMemo() != null && !meal.getMemo().isBlank()) {
+            parts.add(meal.getMemo().trim());
+        }
+        boolean proteinGoal = goals != null && goals.stream().anyMatch(g -> "protein".equals(g.nutrient()));
+        String summary = String.join(" · ", parts);
+        return proteinGoal ? GOAL_CARD_PREFIX + " · " + summary : summary;
     }
 
     /**
@@ -736,13 +805,16 @@ public class MealService {
             // 데이트 식단은 커플 양쪽에 짝이 있다 — 한쪽만 지우면 남은 쪽이 존재하지 않는
             // 짝을 계속 가리켜(sharedGroupId 가 그대로 남아) "같이 먹기" 배지가 잘못 뜬다.
             List<Meal> pair = mealRepository.findBySharedGroupId(meal.getSharedGroupId());
+            List<Long> pairIds = pair.stream().map(Meal::getId).toList();
             // 피드 카드 응원 반응 — 다형 참조라 FK 가 없어 직접 지운다 (V60 주석 참고)
-            feedReactionRepository.deleteByTargetTypeAndTargetIdIn(FeedItemType.MEAL,
-                    pair.stream().map(Meal::getId).toList());
+            feedReactionRepository.deleteByTargetTypeAndTargetIdIn(FeedItemType.MEAL, pairIds);
+            // 채팅에 자동으로 남은 MEAL_CARD — meal_id FK(V90) 를 끊지 않으면 아래 delete 가 실패한다
+            chatService.detachMealCards(pairIds);
             mealRepository.deleteAll(pair);
             publishDietEvent(userId);
         } else {
             feedReactionRepository.deleteByTargetTypeAndTargetId(FeedItemType.MEAL, mealId);
+            chatService.detachMealCards(List.of(mealId));
             mealRepository.delete(meal);
         }
     }

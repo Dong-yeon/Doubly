@@ -31,7 +31,6 @@ import { useRelationStore } from '../../store/relationStore';
 import { useAuthStore } from '../../store/authStore';
 import { usePlaceStore } from '../../store/placeStore';
 import { useDirtyGuard } from '../../hooks/useDirtyGuard';
-import { publishEnsuringConnection } from '../../api/chatSocket';
 import { dietApi, SaveMealItemPayload } from '../../api/diet';
 import { foodDbApi } from '../../api/foodDb';
 import { placeApi } from '../../api/place';
@@ -42,7 +41,6 @@ import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
 import { toDateString } from '../../utils/date';
-import { buildDietShareCopy } from '../../utils/dietShare';
 import { defaultMealType } from '../../utils/mealType';
 import { colors, fontSize, radius, shadow, spacing } from '../../constants/theme';
 import { onColor } from '../../theme/onColor';
@@ -974,7 +972,6 @@ export function DietRecordScreen({ navigation, route }: Props) {
       if (photoUri) {
         photoUrl = await uploadForSubmit(photoUri);
       }
-      const label = MEAL_TYPES.find((t) => t.value === mealType)?.label ?? '';
       const payloadItems: SaveMealItemPayload[] = filled.map((i) => ({
         name: i.name.trim(),
         portion: i.portion.trim() || undefined,
@@ -1060,10 +1057,20 @@ export function DietRecordScreen({ navigation, route }: Props) {
       const willAutoAnalyze =
         !!photoUrl && payloadItems.length === 0 && !num(totalCalories) && autoAnalyzeMealPhoto;
 
+      /*
+       * 커플이 연결돼 있으면 서버가 저장과 동시에 채팅에 MEAL_CARD 를 남긴다(MealService.postMealCard —
+       * 사진·끼니·음식명만, 칼로리 수치는 본인 화면에만). 예전의 "채팅에 공유할까요?" 확인창은
+       * 없앴다 — 기록까지 한 사용자에게 공유 여부를 한 번 더 묻는 단계가 곧 이탈 지점이었다.
+       * 단백질 목표 달성(saved.goals)은 저장 응답에만 실리는 일회성 정보라 여기서 문구를 가른다.
+       */
+      const isGoalAchieved = !!saved.goals && saved.goals.length > 0;
       const saveMessage =
         (payload.sharedWithPartner
           ? `데이트 식단 완료! ${partnerName}님에게도 등록됐어요 💕`
-          : '식단 기록 완료! ') +
+          : isGoalAchieved
+            ? '🎯 단백질 목표 달성! '
+            : '식단 기록 완료! ') +
+        (couple?.id && !payload.sharedWithPartner ? '채팅에 공유했어요. ' : '') +
         (willAutoAnalyze ? '칼로리는 곧 채워져요.' : '') +
         placeToastSuffix;
       if (placeLinkFailed) {
@@ -1072,42 +1079,8 @@ export function DietRecordScreen({ navigation, route }: Props) {
         toast.success(saveMessage);
       }
 
-      /*
-       * 저장이 끝나면 공유 여부와 무관하게 화면부터 닫는다.
-       * goBack 을 공유 Alert 의 버튼 안에만 두면, Android 에서 바깥 탭·뒤로가기로
-       * Alert 를 닫았을 때 입력이 채워진 화면이 스택에 남는다 — 이후 건강 탭으로
-       * 재진입해 "완료!"를 다시 누르면 같은 기록이 중복 등록된다.
-       * Alert 는 전역이라 화면이 닫힌 뒤에도 정상 표시되고, 공유 핸들러도
-       * 클로저에 잡힌 값만 쓰므로 화면 상태에 의존하지 않는다.
-       */
       allowLeave();
       navigation.goBack();
-
-      // 커플이 연결돼 있으면 채팅 공유 제안
-      // 단백질 목표를 이번 기록으로 막 채웠으면 확인창·카드 문구를 다르게 만든다 (saved.goals 는
-      // 저장 응답에만 실리는 일회성 정보 — MealService.detectGoalsAchieved 참고)
-      if (couple?.id) {
-        const foodNames = filled.map((i) => i.name.trim()).join(', ') || memo.trim();
-        const kcal = saved.calories ?? undefined;
-        const summary = `${label}${foodNames ? ` · ${foodNames}` : ''}${kcal ? ` (${kcal}kcal)` : ''}`;
-        const { alertTitle, alertMessage, cardContent } = buildDietShareCopy(summary, saved.goals);
-        const isGoalAchieved = !!saved.goals && saved.goals.length > 0;
-
-        Alert.alert(alertTitle, alertMessage, [
-          { text: '다음에', style: 'cancel' },
-          {
-            text: '공유하기',
-            onPress: async () => {
-              await publishEnsuringConnection(couple.id, {
-                messageType: 'MEAL_CARD',
-                content: cardContent,
-                imageUrl: saved.photoUrl ?? undefined,
-              });
-              toast.success(isGoalAchieved ? '🎯 목표 달성 소식을 공유했어요 ' : '채팅에 공유했어요 ');
-            },
-          },
-        ]);
-      }
     } catch (e) {
       Alert.alert('오류', getErrorMessage(e));
     } finally {

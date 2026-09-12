@@ -48,6 +48,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -390,6 +391,33 @@ public class ChatService {
     @Transactional
     public void detachWorkoutCards(Long workoutId) {
         chatMessageRepository.findByWorkoutId(workoutId).forEach(ChatMessage::detachDeletedWorkout);
+    }
+
+    /**
+     * 식단 카드 — {@link #postSystemCard} 와 같은 원칙(자동 알림 없음, 브로드캐스트는 호출자)이며
+     * 사진(imageUrl)과 원본 기록 참조(mealId, V90)를 함께 싣는다. MealService.postMealCard 참고.
+     */
+    @Transactional
+    public ChatMessageResponse postMealCard(Long senderId, Long relationId, String content, String imageUrl,
+                                            Long mealId) {
+        requireMember(senderId, relationId);
+        ChatMessage message = ChatMessage.builder()
+                .relationId(relationId)
+                .senderId(senderId)
+                .messageType(MessageType.MEAL_CARD)
+                .content(content)
+                .imageUrl(imageUrl)
+                .mealId(mealId)
+                .build();
+        chatMessageRepository.save(message);
+        return ChatMessageResponse.from(message);
+    }
+
+    /** {@link #detachWorkoutCards} 의 식단판 — 데이트 식단은 짝이 둘이라 id 목록을 받는다. */
+    @Transactional
+    public void detachMealCards(Collection<Long> mealIds) {
+        if (mealIds.isEmpty()) return;
+        chatMessageRepository.findByMealIdIn(mealIds).forEach(ChatMessage::detachDeletedMeal);
     }
 
     /** 우리 이모지 전송 검증 — content(id)가 이 관계의 살아 있는 이모지인지. */

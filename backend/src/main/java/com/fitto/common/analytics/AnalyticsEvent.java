@@ -29,6 +29,8 @@ public final class AnalyticsEvent {
      * "운동 탭 2회 이상 진입 유저 비율"이 도입 전후로 움직이는지를 본다(docs/AUTO_SHARE_WORKOUT_2026-09-13.md).
      */
     public static final String WORKOUT_VIEWED = "WORKOUT_VIEWED";
+    /** 식단 탭 진입 — 식단 자동 공유 실험 지표(WORKOUT_VIEWED 와 같은 규칙). */
+    public static final String DIET_VIEWED = "DIET_VIEWED";
     /** PlanGuard 게이팅을 통과 — detail 에 Feature.name(). */
     public static final String FEATURE_USED = "FEATURE_USED";
     /** PlanGuard 게이팅에 막힘(업그레이드 유도) — detail 에 Feature.name(). */

@@ -51,6 +51,10 @@ public class ChatMessage {
     @Column(name = "workout_id")
     private Long workoutId;
 
+    /** 식단 카드(MEAL_CARD)의 원본 기록 — 기록 삭제 시 카드를 정리하기 위한 참조(V90) */
+    @Column(name = "meal_id")
+    private Long mealId;
+
     @Column(name = "routine_id")
     private Long routineId;
 
@@ -89,7 +93,7 @@ public class ChatMessage {
 
     @Builder
     private ChatMessage(Long relationId, Long senderId, MessageType messageType,
-                        String content, String imageUrl, Long workoutId, Long routineId,
+                        String content, String imageUrl, Long workoutId, Long mealId, Long routineId,
                         Long replyToId, String clientMessageId) {
         this.clientMessageId = clientMessageId;
         this.relationId = relationId;
@@ -98,6 +102,7 @@ public class ChatMessage {
         this.content = content;
         this.imageUrl = imageUrl;
         this.workoutId = workoutId;
+        this.mealId = mealId;
         this.routineId = routineId;
         this.replyToId = replyToId;
         this.isRead = false;
@@ -130,6 +135,12 @@ public class ChatMessage {
      */
     public void detachDeletedWorkout() {
         this.workoutId = null;
+        softDelete();
+    }
+
+    /** 원본 식단 기록이 지워졌을 때 — {@link #detachDeletedWorkout} 와 같은 규칙(MealService.delete). */
+    public void detachDeletedMeal() {
+        this.mealId = null;
         softDelete();
     }
 }
