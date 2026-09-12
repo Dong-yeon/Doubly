@@ -9,7 +9,9 @@ Claude Code 세션 136개가 아카이브 없이 쌓여 있어, 같은 주제가
 
 > **이후 세션은 날짜별 문서로 남깁니다** — 이 문서는 8/25 시점의 통합 기록이고, 그 뒤로는
 > 세션이 끝날 때마다 `docs/DAILY_REVIEW_<날짜>.md` 또는 주제별 문서를 새로 둡니다.
-> 최근: [DAILY_REVIEW_2026-09-11.md](DAILY_REVIEW_2026-09-11.md)(이모지 30분 사고 → 소켓
+> 최근: [HOME_SCREEN_ANALYSIS_2026-09-12.md](HOME_SCREEN_ANALYSIS_2026-09-12.md)(홈 칩 축소),
+> [DIET_FOOD_SEARCH_2026-09-12.md](DIET_FOOD_SEARCH_2026-09-12.md)(식단 돋보기 제거),
+> [DAILY_REVIEW_2026-09-11.md](DAILY_REVIEW_2026-09-11.md)(이모지 30분 사고 → 소켓
 > 하트비트까지), [DAILY_REVIEW_2026-09-08.md](DAILY_REVIEW_2026-09-08.md).
 
 ## 이 문서를 만들게 된 관찰
