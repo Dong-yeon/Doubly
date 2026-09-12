@@ -55,6 +55,10 @@ public class ChatMessage {
     @Column(name = "meal_id")
     private Long mealId;
 
+    /** 럽슐랭 카드(PLACE_CARD)의 원본 장소 — 탭 이동·삭제 정리·접기 판정용 참조(V91) */
+    @Column(name = "place_id")
+    private Long placeId;
+
     @Column(name = "routine_id")
     private Long routineId;
 
@@ -93,7 +97,7 @@ public class ChatMessage {
 
     @Builder
     private ChatMessage(Long relationId, Long senderId, MessageType messageType,
-                        String content, String imageUrl, Long workoutId, Long mealId, Long routineId,
+                        String content, String imageUrl, Long workoutId, Long mealId, Long placeId, Long routineId,
                         Long replyToId, String clientMessageId) {
         this.clientMessageId = clientMessageId;
         this.relationId = relationId;
@@ -103,6 +107,7 @@ public class ChatMessage {
         this.imageUrl = imageUrl;
         this.workoutId = workoutId;
         this.mealId = mealId;
+        this.placeId = placeId;
         this.routineId = routineId;
         this.replyToId = replyToId;
         this.isRead = false;
@@ -142,5 +147,37 @@ public class ChatMessage {
     public void detachDeletedMeal() {
         this.mealId = null;
         softDelete();
+    }
+
+    /** 원본 장소가 지워졌을 때 — {@link #detachDeletedWorkout} 와 같은 규칙(PlaceService.delete). */
+    public void detachDeletedPlace() {
+        this.placeId = null;
+        softDelete();
+    }
+
+    /** 장소가 덧붙은 식단 카드에서 장소 참조만 끊는다 — 식단 카드는 장소가 지워져도 식단 기록으로 남는다. */
+    public void unlinkPlace() {
+        this.placeId = null;
+    }
+
+    /**
+     * 시스템 카드 접기(fold) — 같은 사람이 같은 원본으로 연달아 낸 이벤트를 새 카드 대신 이 카드에
+     * 반영한다. 사용자의 {@link #edit} 와 달리 editedAt 을 남기지 않는다("수정됨" 표시는 사람이
+     * 고쳤을 때의 것). 사진은 새로 온 것이 있을 때만 바꾼다(찜 카드에 방문 사진이 얹히는 경우).
+     */
+    public void foldCard(String newContent, String newImageUrl) {
+        this.content = newContent;
+        if (newImageUrl != null) {
+            this.imageUrl = newImageUrl;
+        }
+    }
+
+    /**
+     * 식단 카드에 장소가 덧붙을 때 — 본문 뒤에 조각을 이어 붙이고 place_id 를 단다. 그러면 이 카드도
+     * 럽슐랭 카드처럼 탭하면 장소 상세로 가고, 그 뒤에 오는 첫 평점 이벤트가 여기에 접힌다.
+     */
+    public void appendPlaceFragment(String fragment, Long placeId) {
+        this.content = (this.content == null || this.content.isBlank() ? "" : this.content + " · ") + fragment;
+        this.placeId = placeId;
     }
 }

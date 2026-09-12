@@ -28,6 +28,9 @@ export function messagePreview(type: MessageType, content?: string | null): stri
       return '식단';
     case 'ROUTINE_CARD':
       return '루틴';
+    // 럽슐랭 카드는 문장 자체가 미리보기다("📍 이태리식당 찜! 여기 가볼래?")
+    case 'PLACE_CARD':
+      return content ?? '럽슐랭';
     case 'TOUCH':
       return touchGestureOf(content)?.label ?? '터치';
     case 'CALL_CARD': {

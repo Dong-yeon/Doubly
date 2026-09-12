@@ -67,6 +67,7 @@ import { checkWithDictionary, preloadDictionary } from '../../utils/koreanDictio
 import { chatApi } from '../../api/chat';
 import { isPrShareContent } from '../../utils/workoutShare';
 import { isGoalShareContent } from '../../utils/dietShare';
+import { isTierShareContent, openPlaceFromCard } from '../../utils/placeShare';
 import { touchGestureOf } from '../../constants/touchGestures';
 import { callCardLabel, parseCallCard } from '../../utils/callCard';
 import { ANIMATED_STICKERS, animatedStickerOf } from '../../constants/animatedStickers';
@@ -1078,6 +1079,9 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     const isPr = isWorkout && isPrShareContent(item.content);
     // 영양 목표 달성 공유 카드 — 문구 접두어로 구분한다(dietShare.ts, 단일 출처)
     const isGoal = isMeal && isGoalShareContent(item.content);
+    // 럽슐랭 카드 — 등극은 문구 접두어로 구분한다(placeShare.ts, 단일 출처). 탭하면 장소 상세로.
+    const isPlace = item.messageType === 'PLACE_CARD';
+    const isTier = isPlace && isTierShareContent(item.content);
 
     /*
      * 메시지 그룹핑 — 카카오톡처럼 같은 사람이 짧은 간격으로 연달아 보내면
@@ -1240,11 +1244,22 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             <Text style={[styles.workoutText, mine && styles.workoutTextMine]}>{item.content}</Text>
           </View>
         ) : isMeal ? (
-          <View style={[
-            styles.mealCard,
-            mine ? styles.mealCardMine : styles.mealCardTheirs,
-            isGoal && styles.mealCardGoal,
-          ]}>
+          /*
+           * 장소가 덧붙은 식단 카드(placeId 있음)는 럽슐랭 카드처럼 탭하면 장소 상세로 간다 —
+           * 식단 경로에서 방문 기록·첫 평점이 이 카드에 접히므로(서버 foldOrPostPlaceCard)
+           * "당신의 평점이 등급을 결정해요"에 답할 자리가 여기여야 한다.
+           */
+          <Pressable
+            style={[
+              styles.mealCard,
+              mine ? styles.mealCardMine : styles.mealCardTheirs,
+              isGoal && styles.mealCardGoal,
+            ]}
+            disabled={!item.placeId}
+            onPress={() => item.placeId && openPlaceFromCard(item.placeId)}
+            accessibilityRole={item.placeId ? 'button' : undefined}
+            accessibilityLabel={item.placeId ? '장소 상세 보기' : undefined}
+          >
             <Text style={[styles.mealBadge, isGoal && styles.mealBadgeGoal]}>
               {isGoal ? '목표 달성 🎯' : '식단'}
             </Text>
@@ -1260,7 +1275,40 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             {item.content ? (
               <Text style={styles.workoutText}>{item.content}</Text>
             ) : null}
-          </View>
+          </Pressable>
+        ) : isPlace ? (
+          /*
+           * 럽슐랭 카드 — 찜·방문·첫 평점·등극. 문장은 서버가 만든 그대로(PlaceService.postPlaceCard),
+           * 탭하면 장소 상세(첫 평점 카드의 "당신의 평점이 등급을 결정해요"가 곧 CTA 다).
+           * 등극은 PR·목표 달성과 같은 골드 강조.
+           */
+          <Pressable
+            style={[
+              styles.placeCard,
+              mine ? styles.placeCardMine : styles.placeCardTheirs,
+              isTier && styles.placeCardTier,
+            ]}
+            disabled={!item.placeId}
+            onPress={() => item.placeId && openPlaceFromCard(item.placeId)}
+            accessibilityRole="button"
+            accessibilityLabel="장소 상세 보기"
+          >
+            <Text style={[styles.placeBadge, isTier && styles.placeBadgeTier]}>
+              {isTier ? '등극 👑' : '럽슐랭'}
+            </Text>
+            {item.imageUrl ? (
+              <Pressable
+                onPress={() => openImage(item.imageUrl!)}
+                accessibilityRole="imagebutton"
+                accessibilityLabel="방문 사진 크게 보기"
+              >
+                <Image source={{ uri: item.imageUrl }} style={styles.mealImage} resizeMode="cover" />
+              </Pressable>
+            ) : null}
+            {item.content ? (
+              <Text style={styles.workoutText}>{item.content}</Text>
+            ) : null}
+          </Pressable>
         ) : voice ? (
           <VoiceMessageBubble url={voice.url} durationSec={voice.durationSec} mine={mine} />
         ) : callCard ? (
@@ -2215,6 +2263,14 @@ const styles = themedStyles((colors) => ({
   mealCardGoal: { borderColor: colors.couple, backgroundColor: colors.mePastelBg },
   mealBadgeGoal: { color: colors.ink },
   mealImage: { width: 208, height: 156, borderRadius: radius.md, backgroundColor: colors.surfaceAlt },
+  // 럽슐랭 카드 — 식단 카드와 같은 레이아웃, 색만 "함께" 계열(럽슐랭 배지 LovelichelinBadge 와 같은 톤)
+  placeCard: { paddingVertical: 10, paddingHorizontal: spacing.md, borderRadius: radius.lg, borderWidth: 1.5, maxWidth: 240, gap: 6 },
+  placeCardMine: { backgroundColor: colors.togetherBg, borderColor: colors.togetherText },
+  placeCardTheirs: { backgroundColor: colors.surface, borderColor: colors.togetherText },
+  placeBadge: { fontSize: fontSize.caption, fontWeight: '800', color: colors.togetherText },
+  // 등극 카드 — PR·목표 달성과 같은 골드 강조
+  placeCardTier: { borderColor: colors.couple, backgroundColor: colors.mePastelBg },
+  placeBadgeTier: { color: colors.ink },
   // inverted 목록의 footer = 맨 위(과거 방향) — 과거 페이지 로딩 스피너
   olderSpinner: { paddingVertical: spacing.md },
 

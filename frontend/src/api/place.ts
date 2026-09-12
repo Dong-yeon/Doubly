@@ -18,6 +18,8 @@ export interface SavePlacePayload {
   category?: string;
   /** 카카오 검색 결과의 고유 id — 실어 보내면 이미 등록된 같은 장소일 때 중복 대신 재사용된다 */
   kakaoPlaceId?: string;
+  /** 방문 기록의 일부로 추가(식단 기록 화면) — 서버가 찜 카드("여기 가볼래?")를 남기지 않는다 */
+  visiting?: boolean;
 }
 
 export interface RecordVisitPayload {

@@ -433,6 +433,8 @@ export function DietRecordScreen({ navigation, route }: Props) {
         category: result.category ?? undefined,
         // 이미 등록된 같은 장소면(카카오 id로 대조) 새로 만들지 않고 그 장소가 그대로 온다
         kakaoPlaceId: result.kakaoPlaceId ?? undefined,
+        // 방문 기록의 일부로 추가하는 것 — 서버가 "여기 가볼래?" 찜 카드를 남기지 않는다(식단 카드에 장소가 덧붙는다)
+        visiting: true,
       });
       haptics.success();
       toast.success(`${saved.name}을(를) 럽슐랭에 추가했어요`);

@@ -44,5 +44,14 @@ public enum MessageType {
      * <b>그대로 읽히는 문장</b>을 담는다. 구버전 앱에서도 평범한 말풍선으로 읽힌다.
      * {@code SudokuService} 가 완성 시점에 대신 남긴다(발신자=마지막 칸을 채운 사람).
      */
-    GAME_CARD
+    GAME_CARD,
+    /**
+     * 럽슐랭 카드(V91) — 장소 찜·방문·첫 평점·등극을 서버가 자동으로 남긴다(PlaceService, 자동 공유).
+     * STREAK_CARD 와 같은 규칙으로 content 에 <b>그대로 읽히는 문장</b>을 담고, 접두어로 종류를
+     * 가른다(등극은 "👑 럽슐랭 N스타 등극!"). place_id 로 원본을 가리켜 탭하면 장소 상세로 가고,
+     * 장소 삭제 시 함께 정리한다. 같은 사람이 같은 장소로 연달아 남기는 카드는 방의 마지막 메시지일 때
+     * 새로 만들지 않고 본문을 갱신한다(ChatService.foldOrPostPlaceCard) — 한 행동이 찜→평점처럼
+     * 이벤트 여럿을 연쇄로 내기 때문이다. docs/AUTO_SHARE_LOVELICHELIN_ANALYSIS_2026-09-13.md.
+     */
+    PLACE_CARD
 }

@@ -1331,6 +1331,8 @@ export type MessageType =
   | 'ROUTINE_CARD'
   | 'TOUCH'
   | 'CALL_CARD'
+  /** 럽슐랭 카드(찜·방문·첫 평점·등극) — content 가 그대로 읽히는 문장, placeId 로 장소 상세 이동(서버가 대신 남긴다) */
+  | 'PLACE_CARD'
   /** 스트릭 마일스톤 축하 — content 가 그대로 읽히는 축하 문장이다(서버가 대신 남긴다) */
   | 'STREAK_CARD'
   /** 음성 메시지(최대 30초) — content 에 "{audioUrl}|{durationSec}" 형식으로 담는다 */
@@ -1362,6 +1364,8 @@ export interface ChatMessage {
   content?: string | null;
   imageUrl?: string | null;
   workoutId?: number | null;
+  /** 럽슐랭 카드, 또는 장소가 덧붙은 식단 카드의 원본 장소 — 탭하면 장소 상세로 */
+  placeId?: number | null;
   routineId?: number | null;
   isRead: boolean;
   createdAt: string;

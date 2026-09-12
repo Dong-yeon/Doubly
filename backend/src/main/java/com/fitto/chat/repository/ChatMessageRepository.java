@@ -21,6 +21,9 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
     /** 식단 기록을 참조하는 카드(MEAL_CARD) — 기록 삭제 시 함께 정리한다(MealService.delete). */
     List<ChatMessage> findByMealIdIn(Collection<Long> mealIds);
 
+    /** 장소를 참조하는 럽슐랭 카드(PLACE_CARD) — 장소 삭제 시 함께 정리한다(PlaceService.delete). */
+    List<ChatMessage> findByPlaceId(Long placeId);
+
     /** 방 메시지 — 커서(id) 기반 최신순 페이징. */
     @Query("""
             select m from ChatMessage m

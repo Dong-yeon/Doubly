@@ -73,6 +73,9 @@ public class RelationRecordPurger {
 
         exec("delete from place_visits where place_id in "
                 + "(select p.id from places p where p.couple_id = :rid)", relationId);
+        // 럽슐랭 카드(chat_messages.place_id, V91)가 places 를 참조한다 — 채팅은 아래에서 통째로
+        // 지워지지만 places 가 먼저이므로 여기서 참조를 끊어 둔다.
+        exec("update chat_messages set place_id = null where relation_id = :rid", relationId);
         exec("delete from places where couple_id = :rid", relationId);
 
         // 콘텐츠(영화·공연·드라마) — places 와 같은 모양(V65)

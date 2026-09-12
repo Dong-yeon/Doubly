@@ -15,6 +15,8 @@ public record ChatMessageResponse(
         String content,
         String imageUrl,
         Long workoutId,
+        /** 럽슐랭 카드의 원본 장소 — 탭하면 장소 상세로(V91). 다른 타입은 null */
+        Long placeId,
         Long routineId,
         boolean isRead,
         LocalDateTime createdAt,
@@ -41,7 +43,7 @@ public record ChatMessageResponse(
     public static ChatMessageResponse from(ChatMessage m, ReplyPreview replyTo,
                                            List<ChatReactionSummary> reactions, boolean bookmarked) {
         return new ChatMessageResponse(m.getId(), m.getRelationId(), m.getSenderId(),
-                m.getMessageType(), m.getContent(), m.getImageUrl(), m.getWorkoutId(),
+                m.getMessageType(), m.getContent(), m.getImageUrl(), m.getWorkoutId(), m.getPlaceId(),
                 m.getRoutineId(), m.isRead(), m.getCreatedAt(),
                 replyTo, reactions != null ? reactions : List.of(),
                 m.getEditedAt() != null, m.isDeleted(), bookmarked, m.getClientMessageId());
