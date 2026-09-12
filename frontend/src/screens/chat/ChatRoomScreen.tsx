@@ -46,6 +46,7 @@ import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { EmojiPicker } from '../../components/EmojiPicker';
 import { ChatSearchModal } from '../../components/ChatSearchModal';
+import { TouchGesturePicker } from '../../components/TouchGesturePicker';
 import { ChatMoreMenuSheet } from '../../components/ChatMoreMenuSheet';
 import { ScheduleMessageSheet } from '../../components/ScheduleMessageSheet';
 import { VoiceRecordSheet } from '../../components/VoiceRecordSheet';
@@ -78,7 +79,7 @@ import { chatDateDividerLabel, isSameLocalDay, toDateString } from '../../utils/
 import { buildChatTranscript, shareTranscript } from '../../utils/chatExport';
 import * as Sharing from 'expo-sharing';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { ChatMessage, CoupleEmoji } from '../../types';
+import type { ChatMessage, CoupleEmoji, TouchGestureCode } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { useAndroidKeyboardHeight } from '../../hooks/useAndroidKeyboardHeight';
 import { useKeyboardPanelHeight } from '../../hooks/useKeyboardPanelHeight';
@@ -271,6 +272,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
    * 다시 누르면 텍스트가 남아 있으니 같은 메시지가 두 번 나갔다(2026-09-11 리포트).
    */
   const [sending, setSending] = useState(false);
+  const [showTouchPicker, setShowTouchPicker] = useState(false);
   const spellCheckEnabled = useSettingsStore((s) => s.spellCheckEnabled);
   // 이미 읽음 처리한 최대 메시지 id — 중복 PUT 방지
   const markedUpToRef = useRef(0);
@@ -821,6 +823,26 @@ export function ChatRoomScreen({ navigation, route }: Props) {
    * 패널 위로 올라오는 말풍선(scrollToBottom)이 그 역할을 대신한다. 패널을 닫는 길도
    * 이제 트레이 버튼 말고 하나 더 있다 — 대화 영역을 건드리면 닫힌다(dismissPanels).
    */
+  /**
+   * 가상 터치 — 홈에서 옮겨왔다(2026-09-12).
+   *
+   * <p>원래 홈 바로가기에 있었고 "채팅방을 열지 않고도 보낸다"가 그 자리의 이유였다.
+   * 다만 위 트레이 주석이 터치를 이미 <b>"대화창에 보내는 액션(스티커·터치·사진)"</b> 으로
+   * 분류해 두었다 — 카테고리가 맞는 자리는 여기다. 홈은 보내는 곳이 아니라 <b>받는 곳</b>으로
+   * 남는다(HomeScreen 의 onIncomingTouch — 채팅방을 안 열어도 진동·토스트로 반응한다).
+   *
+   * <p>스티커와 같은 경로로 보낸다(messageType 만 다르다). 패널은 닫는다 — 터치는 스티커처럼
+   * 연달아 보내는 물건이 아니고, 피커가 모달로 뜨므로 뒤에 패널이 남으면 닫을 것이 둘이 된다.
+   */
+  const sendTouch = async (code: TouchGestureCode) => {
+    haptics.light();
+    scrollToBottom();
+    const ok = await send(relationId, { messageType: 'TOUCH', content: code });
+    if (!ok) {
+      Alert.alert('전송 실패', '연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
+    }
+  };
+
   const sendSticker = async (sticker: string, locked: boolean, label: string) => {
     if (locked) {
       showUpgrade(`${withJosa(label, '은', '는')} PRO에서 보낼 수 있어요.`);
@@ -1470,6 +1492,11 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               label="예약"
               onPress={() => { setShowExtras(false); setShowScheduleSheet(true); }}
             />
+            <ExtraButton
+              icon="hand-heart-outline"
+              label="터치"
+              onPress={() => { setShowExtras(false); setShowTouchPicker(true); }}
+            />
           </View>
         ) : null}
         {showStickers ? (
@@ -1815,6 +1842,11 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         onSelect={(emoji) => sendSticker(emoji, false, '이모지')}
       />
       {/* 대화 검색 — 헤더 돋보기. 고르면 닫고 그 메시지로 스크롤한다 */}
+      <TouchGesturePicker
+        visible={showTouchPicker}
+        onClose={() => setShowTouchPicker(false)}
+        onSelect={sendTouch}
+      />
       <ChatSearchModal
         visible={showSearch}
         relationId={relationId}
