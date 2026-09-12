@@ -27,6 +27,7 @@ import { useDietStore } from '../../store/dietStore';
 import { useRelationStore } from '../../store/relationStore';
 import { useDeleteAction } from '../../hooks/useDeleteAction';
 import { dietApi } from '../../api/diet';
+import { analyticsApi } from '../../api/analytics';
 import { waterApi } from '../../api/water';
 import { fastingApi } from '../../api/fasting';
 import { summaryApi } from '../../api/summary';
@@ -305,6 +306,8 @@ export function DietScreen({ navigation }: Props) {
 
   useFocusEffect(
     useCallback(() => {
+      // 식단 자동 공유 실험 지표 — "식단 탭 2회 이상 진입 유저 비율"(WorkoutScreen 의 WORKOUT_VIEWED 와 동일 규칙)
+      analyticsApi.log('DIET_VIEWED').catch(() => {});
       fetchToday();
       fetchHistory();
       refreshExtras();
