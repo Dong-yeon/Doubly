@@ -3,10 +3,13 @@ package com.fitto.diet.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fitto.common.config.FoodDbProperties;
+import com.fitto.common.exception.BusinessException;
+import com.fitto.common.exception.ErrorCode;
 import com.fitto.diet.dto.BarcodeLookupResponse;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * 바코드 조회 응답 매핑 — HTTP 없는 순수 단위 테스트. {@code NUTR_CONT1}~{@code 8} 의 정확한
@@ -20,6 +23,54 @@ class FoodDbClientMappingTest {
 
     private JsonNode row(String json) throws Exception {
         return objectMapper.readTree(json);
+    }
+
+    /**
+     * 인증키가 경로 세그먼트에 들어가므로, {@code /} 를 품은 키(공공데이터포털 base64 서비스키)는
+     * 원본이든 {@code %2F} 인코딩이든 쓸 수 없다 — 부팅 경고가 이 판정을 쓴다.
+     */
+    @Test
+    void 경로에_넣을_수_없는_키_모양을_알아낸다() {
+        assertThat(FoodDbClient.looksPathIncompatible("JL9aMaP/1Grqpl0VTVhfvEmoNrGW49U9bfcx==")).isTrue();
+        assertThat(FoodDbClient.looksPathIncompatible("JL9aMaP%2F1Grqpl0VTVhfvEmoNrGW49U9%3D%3D")).isTrue();
+        assertThat(FoodDbClient.looksPathIncompatible("abcdef0123456789abcdef0123456789abcdef01")).isFalse();
+        assertThat(FoodDbClient.looksPathIncompatible(null)).isFalse();
+    }
+
+    /**
+     * 이 API 는 오류도 HTTP 200 + {@code RESULT.CODE} 로 준다. 코드를 안 보면 "서비스 없음"이
+     * "데이터 없음"으로 번역돼 조용히 묻힌다 — 2026-09-12 에 실제로 그렇게 묻혀 있었다.
+     */
+    @Test
+    void 서비스_없음_오류를_데이터_없음으로_넘기지_않는다() throws Exception {
+        JsonNode root = row("""
+                {"I2790":{"total_count":"","RESULT":{"MSG":"해당하는 서비스를 찾을 수 없습니다.","CODE":"ERROR-310"}}}
+                """);
+
+        assertThatThrownBy(() -> client.extractRows(root, "http://example/api/<KEY>/I2790/json/1/1"))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.FOOD_DB_LOOKUP_FAILED);
+    }
+
+    @Test
+    void 데이터_없음은_오류가_아니라_빈_행이다() throws Exception {
+        JsonNode root = row("""
+                {"I2790":{"RESULT":{"MSG":"해당하는 데이터가 없습니다.","CODE":"INFO-200"}}}
+                """);
+
+        assertThat(client.extractRows(root, "req").isArray()).isFalse();
+    }
+
+    @Test
+    void 정상_코드면_행을_그대로_돌려준다() throws Exception {
+        JsonNode root = row("""
+                {"I2790":{"RESULT":{"CODE":"INFO-000"},"row":[{"DESC_KOR":"밥"}]}}
+                """);
+
+        JsonNode rows = client.extractRows(root, "req");
+
+        assertThat(rows.isArray()).isTrue();
+        assertThat(rows.get(0).path("DESC_KOR").asText()).isEqualTo("밥");
     }
 
     @Test
