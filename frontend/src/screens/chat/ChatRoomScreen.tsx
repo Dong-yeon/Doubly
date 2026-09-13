@@ -25,7 +25,9 @@ import { MaterialCommunityIcons } from '../../components/Icon';
 import { Button } from '../../components/Button';
 import { useHeaderHeight } from '@react-navigation/elements';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { ChatStackParamList } from '../../navigation/types';
+import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
+import type { CompositeScreenProps } from '@react-navigation/native';
+import type { ChatStackParamList, MainTabParamList } from '../../navigation/types';
 import { ImageViewer, type ViewerImage } from '../../components/ImageViewer';
 import { Avatar } from '../../components/Avatar';
 import { useFocusEffect } from '@react-navigation/native';
@@ -89,7 +91,14 @@ import { EmptyState } from '../../components/EmptyState';
 // zustand 셀렉터가 매번 새 배열을 만들면 무한 리렌더(하얀 화면)가 나므로 안정 참조 사용
 const EMPTY_MESSAGES: ChatMessage[] = [];
 
-type Props = NativeStackScreenProps<ChatStackParamList, 'ChatRoom'>;
+/**
+ * 채팅방은 탭 부모까지 본다 — 트레이의 "질문"·"게임"이 홈 스택 화면으로 건너가기 때문이다
+ * (HomeScreen 이 운동·식단 탭으로 건너갈 때 쓰는 것과 같은 조합).
+ */
+type Props = CompositeScreenProps<
+  NativeStackScreenProps<ChatStackParamList, 'ChatRoom'>,
+  BottomTabScreenProps<MainTabParamList>
+>;
 
 const timeOf = (iso: string): string => {
   const d = new Date(iso);
@@ -1547,6 +1556,31 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               label="터치"
               onPress={() => { setShowExtras(false); setShowTouchPicker(true); }}
             />
+            {/*
+             * 질문·게임 — 위 다섯과 달리 <b>대화창에 보내는 액션이 아니라 화면 이동</b>이다.
+             * 트레이 주석이 세운 규칙("보내는 액션만")의 예외이고, 그 예외를 받아들인 이유를
+             * 남긴다.
+             *
+             * <p>둘은 2026-09-12 에 홈 바로가기 칩에서 더보기 시트로 내려갔다가, 같은 날 그
+             * 시트가 사라지면서 <b>인앱 진입점이 0이 됐다</b>(f0d9b71). 게임은 더 나빴다 —
+             * 스도쿠·오목의 유일한 진입점이 그 고아 화면 안이라 <b>화면 셋이 통째로</b>
+             * 닿을 수 없었다. 푸시 링크는 있지만(PushLinks.QUESTION·GAME_*) 전부 "상대가
+             * 먼저 행동했을 때" 발생하므로, 둘 다 시작하지 못하면 영영 오지 않는다.
+             *
+             * <p>홈으로 되돌리지 않는 이유는 그 줄이 칸을 늘리는 자리가 아니기 때문이고
+             * (QuickActions 주석), 여기로 오는 이유는 <b>둘 다 상대와 주고받는 것</b>이라서다 —
+             * 오목은 차례를 주고받고, 질문은 서로 답해야 열린다. 알림도 이 방의 대화처럼 온다.
+             */}
+            <ExtraButton
+              icon="comment-question-outline"
+              label="질문"
+              onPress={() => { setShowExtras(false); navigation.navigate('Home', { screen: 'DailyQuestion' }); }}
+            />
+            <ExtraButton
+              icon="gamepad-variant-outline"
+              label="게임"
+              onPress={() => { setShowExtras(false); navigation.navigate('Home', { screen: 'MiniGames' }); }}
+            />
           </View>
         ) : null}
         {showStickers ? (
@@ -2322,9 +2356,15 @@ const styles = themedStyles((colors) => ({
   // 보조 도구 트레이 — "+" 로 펼치는 스티커/터치/사진 3개
   extrasPanel: {
     flexDirection: 'row',
+    /*
+     * 줄바꿈 — 버튼이 64px 고정이라 일곱 개(448px)는 360dp 한 줄에 안 들어간다. 패널 높이가
+     * 키보드만큼이라 두 줄은 넉넉히 들어간다. wrap 이 없으면 넘친 버튼이 잘려 나간다.
+     */
+    flexWrap: 'wrap',
     justifyContent: 'space-around',
     /* 높이가 키보드만큼 커졌으므로 버튼을 위에 붙인다 — 기본 stretch 면 세로로 늘어난다 */
     alignItems: 'flex-start',
+    alignContent: 'flex-start',
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
   },
