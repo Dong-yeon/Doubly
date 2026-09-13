@@ -133,8 +133,10 @@ class FeedFlowTest {
         FeedItemResponse meal = feedService.timeline(c[0], null, 20).items().stream()
                 .filter(i -> i.type() == FeedItemType.MEAL).findFirst().orElseThrow();
 
-        // 운동 카드("러닝 외 3개 · 40분")와 같은 요약 형태
-        assertThat(meal.content()).isEqualTo("삼겹살 외 2개 · 820kcal");
+        // 운동 카드("러닝 외 3개 · 40분")와 같은 요약 형태.
+        // 칼로리는 빠진다 — 피드는 자동 노출이라 매 끼니 감시가 된다(FeedItemMapper 주석).
+        assertThat(meal.content()).isEqualTo("삼겹살 외 2개");
+        assertThat(meal.content()).doesNotContain("kcal");
     }
 
     @Test
@@ -146,7 +148,8 @@ class FeedFlowTest {
         FeedItemResponse meal = feedService.timeline(c[0], null, 20).items().stream()
                 .filter(i -> i.type() == FeedItemType.MEAL).findFirst().orElseThrow();
 
-        assertThat(meal.content()).isEqualTo("회식 · 800kcal");
+        // 메모만 남고 칼로리는 빠진다(위 테스트와 같은 이유)
+        assertThat(meal.content()).isEqualTo("회식");
     }
 
     @Test

@@ -90,11 +90,13 @@ public class FeedItemMapper {
     }
 
     /**
-     * 식단 — 무엇을 먹었는지가 요약의 핵심이라 음식 항목 이름을 앞세운다
-     * ("삼겹살 외 2개 · 820kcal"). 바로 위 운동 카드와 같은 타임라인에 나란히 서므로
-     * 요약 형태를 맞춘다("러닝 외 3개 · 40분").
+     * 식단 — 무엇을 먹었는지가 요약의 핵심이라 음식 항목 이름을 앞세운다("삼겹살 외 2개").
+     * 바로 위 운동 카드와 같은 타임라인에 나란히 서므로 요약 형태를 맞춘다("러닝 외 3개 · 40분").
      *
      * <p>항목이 없는 기록(합계만 적었거나 항목 도입 이전)은 예전처럼 memo 로 보여준다.
+     * 항목도 메모도 없으면 {@code content} 는 null 이고 제목("아침 식단 🍽️")만 남는다.
+     *
+     * <p><b>칼로리는 뺀다</b> — 아래 본문 주석 참고.
      */
     public FeedItemResponse toItem(Meal m, Map<Long, String> names, Long viewerId) {
         StringBuilder summary = new StringBuilder();
@@ -106,10 +108,17 @@ public class FeedItemMapper {
         } else if (m.getMemo() != null && !m.getMemo().isBlank()) {
             summary.append(m.getMemo());
         }
-        if (m.getCalories() != null) {
-            if (summary.length() > 0) summary.append(" · ");
-            summary.append(m.getCalories()).append("kcal");
-        }
+        /*
+         * <b>칼로리는 싣지 않는다.</b> 피드는 기록하면 <b>자동으로</b> 커플 타임라인에 뜨는
+         * 자리다 — 사용자가 공유를 고르는 순간이 없다. 그런데 먹은 칼로리는 상대가 매 끼니
+         * 지켜보게 되면 응원이 아니라 감시로 읽히고, 그때 잃는 건 식단 기록 자체다.
+         *
+         * <p>상대에게 칼로리를 보내는 경로가 없어진 건 아니다 — 채팅 공유(MEAL_CARD)는 남는다.
+         * 거기는 "공유하기"를 눌러야 나가므로 <b>사용자가 알고 고른다</b>. 홈의 상대 식단 칩도
+         * 같은 원칙이다(PartnerTodayResponse 는 completed 불리언뿐).
+         *
+         * <p>2026-09-13 결정. 무엇을 먹었는지는 남기고 얼마나 먹었는지만 뺀다.
+         */
         String content = summary.length() > 0 ? summary.toString() : null;
         return new FeedItemResponse(FeedItemType.MEAL, m.getId(), m.getUserId(),
                 names.getOrDefault(m.getUserId(), "커플"), viewerId.equals(m.getUserId()),
