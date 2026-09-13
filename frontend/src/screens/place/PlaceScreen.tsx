@@ -52,6 +52,7 @@ import type {
 } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { layout } from '../../theme/layout';
+import { localDateOf } from '../../utils/date';
 
 type Nav = NativeStackNavigationProp<PlaceStackParamList>;
 type Mode = 'guide' | 'browse' | 'content';
@@ -440,7 +441,7 @@ export function PlaceScreen() {
                     </Text>
                   ) : null}
                   {item.lovelichelinCertifiedAt ? (
-                    <Text style={styles.magazineDate}>{item.lovelichelinCertifiedAt.slice(0, 10)} 등극</Text>
+                    <Text style={styles.magazineDate}>{localDateOf(item.lovelichelinCertifiedAt)} 등극</Text>
                   ) : null}
                 </View>
               </Card>

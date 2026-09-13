@@ -22,7 +22,7 @@ import { ImageViewer, type ViewerImage } from '../../components/ImageViewer';
 import { feedApi } from '../../api/feed';
 import { toast } from '../../store/toastStore';
 import { getErrorMessage } from '../../utils/error';
-import { relativeDateLabel } from '../../utils/date';
+import { relativeTimestampLabel } from '../../utils/date';
 import type { FeedPhoto } from '../../types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
@@ -68,7 +68,7 @@ export function PhotoAlbumScreen(_props: Props) {
         images.push({
           key: `${p.postId}-${i}`,
           uri,
-          title: `${p.mine ? '나' : p.authorName}  ·  ${relativeDateLabel(p.createdAt.slice(0, 10))}`,
+          title: `${p.mine ? '나' : p.authorName}  ·  ${relativeTimestampLabel(p.createdAt)}`,
           titleColor: p.mine ? colors.coral : colors.indigo,
           caption: p.content ?? undefined,
         });

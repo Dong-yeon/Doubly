@@ -17,7 +17,7 @@ import { omokApi } from '../../api/game';
 import { connectSocket, subscribeCouple, unsubscribeCouple } from '../../api/chatSocket';
 import { useRelationStore } from '../../store/relationStore';
 import { getErrorMessage } from '../../utils/error';
-import { relativeDateLabel } from '../../utils/date';
+import { relativeTimestampLabel } from '../../utils/date';
 import { Alert } from '../../utils/alert';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
@@ -322,7 +322,7 @@ export function OmokScreen(_: Props) {
         renderItem={({ item }) => (
           <View style={styles.histCard}>
             <View style={styles.histRow}>
-              <Text style={styles.histDate}>{item.completedAt ? relativeDateLabel(item.completedAt.slice(0, 10)) : ''}</Text>
+              <Text style={styles.histDate}>{item.completedAt ? relativeTimestampLabel(item.completedAt) : ''}</Text>
               <Text style={[styles.histResult, item.winner === 'ME' && styles.histWin]}>
                 {item.winner === 'ME' ? '승' : item.winner === 'PARTNER' ? '패' : '무'}
               </Text>
