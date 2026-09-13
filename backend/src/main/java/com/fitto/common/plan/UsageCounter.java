@@ -49,6 +49,32 @@ public class UsageCounter {
     }
 
     /**
+     * 관계(커플) 단위로 1 증가 — 두 사람이 <b>한 주머니</b>를 쓴다.
+     *
+     * <p>사진 업로드처럼 결과물이 커플 공간에 쌓이는 기능은 누가 올렸는지가 중요하지 않다.
+     * 사람마다 따로 세면 한 명이 주로 찍는 실제 사용 패턴에서 한쪽만 먼저 막힌다
+     * ({@link PlanGuard#scopeOf} 참고). 스코프 문자열만 다를 뿐 저장 구조는 같다.
+     */
+    public int incrementForRelation(Long relationId, Feature feature, Quota quota) {
+        return incrementKey(key(relationScopeOf(relationId), feature, quota), quota);
+    }
+
+    /** 관계 단위 조회 — 증가 없음. {@link #incrementForRelation} 과 같은 키를 본다. */
+    public int peekForRelation(Long relationId, Feature feature, Quota quota) {
+        return peekKey(key(relationScopeOf(relationId), feature, quota));
+    }
+
+    /**
+     * 관계 단위 되돌리기 — {@link #incrementForRelation} 로 올린 것을 취소한다.
+     *
+     * <p>올린 주머니와 깎는 주머니가 <b>반드시 같아야 한다.</b> 커플 주머니에서 올리고 개인
+     * 주머니에서 깎으면 커플 한도는 영영 안 줄고 개인 카운터만 음수로 눌린다.
+     */
+    public void decrementForRelation(Long relationId, Feature feature, Quota quota) {
+        decrementKey(key(relationScopeOf(relationId), feature, quota));
+    }
+
+    /**
      * 1 되돌린다 — 선차감한 사용을 <b>취소</b>할 때만 쓴다(0 미만으로는 내려가지 않는다).
      *
      * <p>남용 우회로가 되지 않는 자리에서만 불러야 한다. 지금 유일한 사용처는 AI 호출
@@ -124,6 +150,14 @@ public class UsageCounter {
 
     private static String scopeOf(Long userId) {
         return String.valueOf(userId);
+    }
+
+    /**
+     * 관계 스코프 — {@code "c"} 접두어로 사용자 스코프와 겹치지 않게 한다
+     * ({@link #GLOBAL_SCOPE} 가 {@code "all"} 인 것과 같은 방식: 숫자와 안 겹치면 된다).
+     */
+    private static String relationScopeOf(Long relationId) {
+        return "c" + relationId;
     }
 
     private String key(String scope, Feature feature, Quota quota) {

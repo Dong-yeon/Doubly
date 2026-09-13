@@ -89,7 +89,14 @@ public class PlanResolver {
                 .orElseGet(() -> highestOf(List.of(userId)));
     }
 
-    private java.util.Optional<Long> activeCoupleIdOf(Long userId) {
+    /**
+     * 이 사용자의 활성 커플 관계 id — 없으면 비어 있다(혼자 쓰는 중).
+     *
+     * <p>{@link PlanGuard} 가 <b>사용량을 어느 주머니에서 셀지</b> 정할 때 쓴다. 판정과
+     * 계측이 같은 관계를 봐야 "둘 다 PRO 인데 한 명만 막힌다" 같은 어긋남이 안 생긴다.
+     */
+    @Transactional(readOnly = true)
+    public java.util.Optional<Long> activeCoupleIdOf(Long userId) {
         return relationRepository
                 .findByUserAndTypeAndStatus(userId, RelationType.COUPLE, RelationStatus.ACTIVE)
                 .stream()
