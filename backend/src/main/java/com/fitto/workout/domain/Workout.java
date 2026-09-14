@@ -68,6 +68,18 @@ public class Workout {
     @Column(name = "image_url", length = 500)
     private String imageUrl;
 
+    /**
+     * 이 사진을 커플 피드에 실을지 — 오운완 인증샷이면 true.
+     *
+     * <p>사진마다 갈리는 이유는 <b>성격이 도중에 바뀌었기</b> 때문이다. 예전 운동 사진은
+     * "다른 앱의 완료 화면을 AI 로 읽는" 용도였고, 그때 안내가 "애인에게는 공유되지 않아요"
+     * 라고 약속했다(러닝 앱 화면에는 집 근처 경로 지도가 함께 찍힌다). 그 약속을 보고 올린
+     * 사진을 뒤늦게 피드에 띄울 수는 없어서, 기본값을 false 로 두고 새 오운완 기록만 true 로
+     * 저장한다(V94). 지우려면 이 값을 false 로 되돌리면 된다 — 사진 자체는 남는다.
+     */
+    @Column(name = "image_shared", nullable = false)
+    private boolean imageShared;
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -78,7 +90,8 @@ public class Workout {
 
     @Builder
     private Workout(Long userId, Long relationId, LocalDate workoutDate,
-                    Integer totalDurationMin, String memo, Long sourceRoutineId, String imageUrl) {
+                    Integer totalDurationMin, String memo, Long sourceRoutineId, String imageUrl,
+                    boolean imageShared) {
         this.userId = userId;
         this.relationId = relationId;
         this.workoutDate = workoutDate;
@@ -86,6 +99,7 @@ public class Workout {
         this.memo = memo;
         this.sourceRoutineId = sourceRoutineId;
         this.imageUrl = imageUrl;
+        this.imageShared = imageShared;
     }
 
     public void addSet(WorkoutSet set) {

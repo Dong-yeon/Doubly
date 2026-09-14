@@ -25,7 +25,7 @@ import { haptics } from '../../utils/haptics';
 import { useDeleteAction } from '../../hooks/useDeleteAction';
 import { todayWeekDay, toDateString } from '../../utils/date';
 import { routineToSessionParams } from '../../utils/routine';
-import { pickImage, uploadImage } from '../../utils/imageUpload';
+import { pickImage, takePhoto, uploadImage } from '../../utils/imageUpload';
 import { confirmPhotoPrivacy } from '../../utils/photoPrivacy';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type {
@@ -232,23 +232,31 @@ export function WorkoutScreen({ navigation }: Props) {
   };
 
   /**
-   * 사진으로 기록 — 다른 앱의 운동 완료 화면이나 트레드밀 사진을 그대로 올린다.
+   * 오운완 인증샷 — 운동 끝난 나를 찍어 남긴다.
    *
-   * <p>업로드까지만 여기서 하고, AI 분석과 확인·저장은 기록 화면에 맡긴다. 분석은 몇십 초가
-   * 걸릴 수 있는데 그동안 이 화면을 잡아두면 다른 것도 못 하고, 무엇보다 <b>읽은 값을 확인할
-   * 자리</b>가 기록 화면이기 때문이다. 분석에 실패해도 사진이 붙은 기록은 그대로 남길 수 있다.
+   * <p><b>2026-09-14 에 성격이 바뀌었다.</b> 예전에는 다른 앱의 완료 화면·트레드밀 계기판을
+   * 올려 AI 가 시간·거리를 읽는 기능이었다. 읽어낸 값은 어차피 사용자가 확인해야 했고,
+   * 정작 사람들이 남기고 싶어 한 건 "오늘 했다"는 인증샷이었다. 그래서 판독을 걷어내고
+   * (백엔드 analyze-photo 엔드포인트까지) 사진 자체가 기록이 되게 했다.
+   *
+   * <p>업로드까지만 여기서 하고 저장은 기록 화면에 맡긴다 — 메모·세트를 덧붙일 자리가 거기다.
+   *
+   * <p>올리기 전에 한 번 알린다(첫 1회) — 이 사진은 <b>애인의 우리 기록에도 올라가고</b>,
+   * 배경이나 메타데이터로 위치가 딸려 갈 수 있다. 확인한 뒤에야 카메라·앨범이 열린다.
    */
-  /*
-   * 올리기 전에 한 번 알린다 — 러닝 앱 화면에는 <b>달린 경로 지도</b>가 함께 찍혀 있고,
-   * 그건 대개 집 근처다. 사진이 어디까지 가는지(내 기록에만, 애인에게는 안 감) 모른 채
-   * 위치가 담긴 이미지를 올리게 두면 안 된다. 확인한 뒤에야 갤러리가 열린다(안내는 첫 1회).
-   */
-  const onPhotoRecord = () => void confirmPhotoPrivacy(() => void startPhotoRecord());
+  const onPhotoRecord = () =>
+    void confirmPhotoPrivacy(() =>
+      Alert.alert('오운완 사진', '어떻게 남길까요?', [
+        { text: '취소', style: 'cancel' },
+        { text: '앨범에서 고르기', onPress: () => void startPhotoRecord('library') },
+        { text: '찍기', onPress: () => void startPhotoRecord('camera') },
+      ]),
+    );
 
-  const startPhotoRecord = async () => {
+  const startPhotoRecord = async (source: 'camera' | 'library') => {
     setPhotoBusy(true);
     try {
-      const picked = await pickImage();
+      const picked = source === 'camera' ? await takePhoto() : await pickImage();
       if (!picked) return;
       const imageUrl = await uploadImage(picked);
       navigation.navigate('WorkoutRecord', { imageUrl });
@@ -358,7 +366,7 @@ export function WorkoutScreen({ navigation }: Props) {
               style={styles.checkinBtn}
             />
             <Button
-              title="📷 사진으로"
+              title="📷 오운완"
               variant="secondary"
               size="md"
               onPress={onPhotoRecord}
@@ -367,7 +375,7 @@ export function WorkoutScreen({ navigation }: Props) {
             />
           </View>
           <Text style={styles.checkinHint}>
-            자세한 기록 없이 눌러도 돼요. 다른 앱 운동 화면을 찍어 올리면 시간·거리도 채워드려요.
+            자세한 기록 없이 눌러도 돼요. 오운완 사진은 애인의 우리 기록에도 올라가요.
           </Text>
         </View>
       )}

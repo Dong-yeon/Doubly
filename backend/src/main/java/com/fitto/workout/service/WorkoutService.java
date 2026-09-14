@@ -101,6 +101,8 @@ public class WorkoutService {
                 .memo(req.memo())
                 .sourceRoutineId(req.sourceRoutineId())
                 .imageUrl(req.imageUrl())
+                // 안 보내면 안 싣는다 — 구 앱은 이 필드를 모른다
+                .imageShared(Boolean.TRUE.equals(req.imageShared()))
                 .build();
 
         int order = 1;

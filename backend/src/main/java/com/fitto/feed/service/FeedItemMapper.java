@@ -86,9 +86,16 @@ public class FeedItemMapper {
                 ? "운동 완료"
                 : w.getSets().get(0).getExerciseName()
                   + (w.getSets().size() > 1 ? " 외 " + (w.getSets().size() - 1) + "개" : "");
+        /*
+         * 오운완 인증샷만 싣는다(2026-09-14). 예전 운동 사진은 "다른 앱의 완료 화면을 AI 로
+         * 읽는" 용도였고 안내가 "애인에게는 공유되지 않아요" 라고 약속했다 — 러닝 앱 화면에는
+         * 집 근처 경로 지도가 함께 찍힌다. 그래서 여기는 오래도록 null 이었다. 사진의 성격이
+         * 바뀌었어도 <b>그때 올라온 사진에는 소급하지 않는다</b>(Workout.imageShared · V94).
+         */
         return new FeedItemResponse(FeedItemType.WORKOUT, w.getId(), w.getUserId(),
                 names.getOrDefault(w.getUserId(), "커플"), viewerId.equals(w.getUserId()),
-                title, workoutSummary(w), null, w.getCreatedAt(), null, List.of(), false);
+                title, workoutSummary(w), w.isImageShared() ? w.getImageUrl() : null,
+                w.getCreatedAt(), null, List.of(), false);
     }
 
     /**
