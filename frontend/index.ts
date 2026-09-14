@@ -1,9 +1,7 @@
 import { registerRootComponent } from 'expo';
 import { Platform } from 'react-native';
-import { StreamVideoRN } from '@stream-io/video-react-native-sdk';
 
 import App from './App';
-import { createVideoClient } from './src/store/callStore';
 
 /*
  * iOS CallKit/PushKit 벨 웨이크업 — PLAN.md "네이티브 벨 웨이크업(CallKit/PushKit)".
@@ -25,8 +23,19 @@ import { createVideoClient } from './src/store/callStore';
  * (2026-09-11, 스토어 배포본). iOS 는 exclude 대상이 아니라 그대로 동작한다.
  * Android 벨 웨이크업은 여전히 미착수다 — 착수하려면 callingx 의 매니페스트 권한
  * 문제(5ca2a85)부터 다시 풀어야 한다.
+ *
+ * <p><b>import 도 iOS 분기 안에서 한다.</b> 파일 최상단 `import` 는 플랫폼 분기와 무관하게
+ * 웹 번들에도 실리는데, Stream SDK 는 import 되는 순간 `requireNativeComponent` 를 호출해
+ * 웹이 부팅 직후 "requireNativeComponent is not a function" 으로 죽었다(2026-09-14 확인,
+ * f221b13 이후 웹 빌드가 전부 흰 화면). `callStore.web.ts` 가 파일 분리로 막아 둔 것을
+ * 이 엔트리 파일이 정면으로 다시 끌어들인 셈이다 — 그 파일 주석의 "런타임 분기로는 못
+ * 막는다"가 그대로 적용된다. 웹 스토어에는 `createVideoClient` 도 없다.
  */
 if (Platform.OS === 'ios') {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { StreamVideoRN } = require('@stream-io/video-react-native-sdk');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { createVideoClient } = require('./src/store/callStore');
   StreamVideoRN.setPushConfig({
     ios: {
       pushProviderName: 'production-apn-video',
