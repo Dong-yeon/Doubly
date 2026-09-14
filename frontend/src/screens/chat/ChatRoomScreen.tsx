@@ -75,8 +75,7 @@ import { useCoupleEmojiStore } from '../../store/coupleEmojiStore';
 import { playTouchGesture } from '../../utils/haptics';
 import { messagePreview } from '../../utils/messagePreview';
 import { chatDateDividerLabel, isSameLocalDay, toDateString } from '../../utils/date';
-import { buildChatTranscript, shareTranscript } from '../../utils/chatExport';
-import * as Sharing from 'expo-sharing';
+import { buildChatTranscript, canExportTranscript, shareTranscript } from '../../utils/chatExport';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { ChatMessage, CoupleEmoji } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
@@ -924,8 +923,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
 
   const runExportChat = async (months: number | null) => {
     try {
-      if (!(await Sharing.isAvailableAsync())) {
-        toast.error('이 기기에서는 공유하기를 쓸 수 없어요.');
+      if (!(await canExportTranscript())) {
+        toast.error('이 기기에서는 내보내기를 쓸 수 없어요.');
         return;
       }
       let from: string | undefined;
