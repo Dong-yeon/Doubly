@@ -82,6 +82,13 @@ export interface FeatureState {
   /** 무제한·차단·개수형이면 null */
   remaining: number | null;
   period: QuotaPeriod;
+  /**
+   * 이 잠금이 결제로 풀리는가 — false 면 업그레이드를 권하지 않는다.
+   *
+   * allowed=false 에는 "플랜이 낮아서 막힘"과 "이미 PRO인데 이번 기간 한도 소진"이
+   * 섞여 있다. 후자에 PRO 유도 문구를 띄우면 돈 낸 사람에게 결제를 또 권하는 꼴이다.
+   */
+  upgradable: boolean;
 }
 
 export interface PlanInfo {

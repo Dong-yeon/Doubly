@@ -257,6 +257,8 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
           title="우리 이모지"
           description="애인 얼굴로 감정 이모지 6종을 만들어 채팅에서 써요."
           upgradeMessage="우리 이모지는 PRO에서 만들 수 있어요."
+          // PRO 도 월 4회라, 같은 잠금이 "결제하세요"가 아니라 "다 썼어요"여야 할 때가 있다
+          feature="AI_COUPLE_EMOJI"
         />
       ) : null}
 

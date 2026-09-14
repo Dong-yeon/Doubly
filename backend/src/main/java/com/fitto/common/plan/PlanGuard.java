@@ -220,7 +220,9 @@ public class PlanGuard {
                 : Math.max(0, quota.limit() - used);
         return new FeatureState(
                 feature.name(), feature.displayName(), allowed,
-                quota.limit(), used, remaining, quota.window().name());
+                quota.limit(), used, remaining, quota.window().name(),
+                // limitExceeded 와 같은 근거 — 최상위 플랜이면 팔 것이 없다.
+                !plan.isAtLeast(Plan.PRO));
     }
 
     public Plan planOf(Long userId) {
