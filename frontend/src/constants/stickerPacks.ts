@@ -39,7 +39,12 @@ export const STICKER_PACKS: StickerPackDef[] = [
  *
  * <p>STOMP 로 보내는 메시지는 REST 처럼 402 를 화면으로 되돌려줄 방법이 없다.
  * 서버 검증은 우회 방지용 방어선이고, <b>사용자에게 이유를 알려주는 건 여기</b>다.
- * 어느 팩에도 없는 이모지(이모지 시트에서 직접 고른 것)는 예전처럼 무료다.
+ *
+ * <p><b>"이모지 시트에서 직접 고른 건 어느 팩에도 없으니 무료"는 사실이 아니다.</b>
+ * 시트 96종과 아래 시즌 팩 40종이 12종 겹친다. 서버는 <b>어디서 골랐는지가 아니라 글자로</b>
+ * 판정하므로({@code ChatService.send} → {@code StickerPack.isPremium}), 고른 자리에 따라
+ * 무료로 취급하면 서버만 402 를 내고 말풍선이 "전송 중"에서 멈춘다 — 부르는 자리마다
+ * 이 함수를 통과시켜야 한다(2026-09-14, docs/STICKER_PACK_OVERLAP_2026-09-14.md).
  */
 export function isPremiumSticker(sticker: string): boolean {
   return STICKER_PACKS.some((p) => p.premium && p.stickers.includes(sticker));

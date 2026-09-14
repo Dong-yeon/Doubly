@@ -74,6 +74,7 @@ import { isGoalShareContent } from '../../utils/dietShare';
 import { touchGestureOf } from '../../constants/touchGestures';
 import { callCardLabel, parseCallCard } from '../../utils/callCard';
 import { animatedStickerOf } from '../../constants/animatedStickers';
+import { isPremiumSticker } from '../../constants/stickerPacks';
 import { stickerImageOf } from '../../constants/stickerImages';
 import { StickerPanel } from '../../components/chat/StickerPanel';
 import { useCoupleEmojiStore } from '../../store/coupleEmojiStore';
@@ -1794,8 +1795,20 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         visible={showEmojiSheet}
         title="스티커 보내기"
         onClose={() => setShowEmojiSheet(false)}
-        // 이모지 시트에서 직접 고른 이모지는 어느 팩에도 없으므로 무료다(stickerPacks 주석)
-        onSelect={(emoji) => sendSticker(emoji, false, '이모지')}
+        /*
+         * 여기서도 팩 판정을 한다 — <b>"시트에서 고른 건 어느 팩에도 없으니 무료"가 사실이
+         * 아니었다.</b> 시트 96종과 시즌 PRO 팩 40종이 12종 겹친다(🌸 ☔ 🌊 🏖️ 🍦 🍁 ☕ ❄️
+         * 🎄 🔥 🎂 💐). 서버는 어디서 골랐는지가 아니라 <b>글자</b>로 판정하므로
+         * (ChatService.send → StickerPack.isPremium) 무료 사용자가 시트에서 벚꽃을 고르면
+         * 402 가 났다. STOMP 는 402 를 화면으로 되돌릴 수 없어(stickerPacks.ts 주석) 낙관적
+         * 말풍선이 "전송 중"에서 그대로 멈췄다 — 2026-09-14 발견.
+         *
+         * <p>여기 판정을 서버와 같게 맞추면 최소한 <b>이유가 보인다</b>. 무료 시트에 유료
+         * 이모지가 섞여 있는 것 자체는 남은 문제다(docs/STICKER_PACK_OVERLAP_2026-09-14.md).
+         */
+        onSelect={(emoji) =>
+          sendSticker(emoji, isPremiumSticker(emoji) && !premiumStickerAllowed, '이 이모지')
+        }
       />
       {/* 대화 검색 — 헤더 돋보기. 고르면 닫고 그 메시지로 스크롤한다 */}
       <TouchGesturePicker
