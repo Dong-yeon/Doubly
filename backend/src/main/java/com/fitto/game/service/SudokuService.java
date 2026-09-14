@@ -20,11 +20,7 @@ import com.fitto.game.dto.SudokuGameResponse;
 import com.fitto.game.repository.SudokuGameRepository;
 import com.fitto.game.sudoku.SudokuGenerator;
 import com.fitto.relation.domain.Relation;
-import com.fitto.relation.domain.RelationStatus;
-import com.fitto.relation.domain.RelationType;
 import com.fitto.relation.repository.RelationRepository;
-import com.fitto.user.domain.User;
-import com.fitto.user.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -49,7 +45,7 @@ public class SudokuService {
 
     private final SudokuGameRepository gameRepository;
     private final RelationRepository relationRepository;
-    private final UserRepository userRepository;
+    private final GameCouples couples;
     private final PlanGuard planGuard;
     private final NotificationService notificationService;
     private final CoupleEventPublisher coupleEventPublisher;
@@ -59,7 +55,7 @@ public class SudokuService {
 
     public SudokuService(SudokuGameRepository gameRepository,
                          RelationRepository relationRepository,
-                         UserRepository userRepository,
+                         GameCouples couples,
                          PlanGuard planGuard,
                          NotificationService notificationService,
                          CoupleEventPublisher coupleEventPublisher,
@@ -67,7 +63,7 @@ public class SudokuService {
                          SimpMessagingTemplate messagingTemplate) {
         this.gameRepository = gameRepository;
         this.relationRepository = relationRepository;
-        this.userRepository = userRepository;
+        this.couples = couples;
         this.planGuard = planGuard;
         this.notificationService = notificationService;
         this.coupleEventPublisher = coupleEventPublisher;
@@ -165,7 +161,7 @@ public class SudokuService {
     /** 완성한 판 최근 20개 */
     public List<SudokuGameResponse> history(Long userId) {
         Relation couple = activeCouple(userId);
-        String partnerName = partnerName(couple, userId);
+        String partnerName = couples.partnerName(couple, userId);
         return gameRepository
                 .findTop20ByCoupleIdAndStatusOrderByCompletedAtDesc(couple.getId(), GameStatus.COMPLETED)
                 .stream()
@@ -203,23 +199,14 @@ public class SudokuService {
     }
 
     private SudokuGameResponse toResponse(SudokuGame game, Long viewerId, Relation couple) {
-        return SudokuGameResponse.of(game, viewerId, partnerName(couple, viewerId));
-    }
-
-    private String partnerName(Relation couple, Long viewerId) {
-        Long partnerId = couple.partnerOf(viewerId);
-        return partnerId == null ? null : userName(partnerId);
+        return SudokuGameResponse.of(game, viewerId, couples.partnerName(couple, viewerId));
     }
 
     private Relation activeCouple(Long userId) {
-        return relationRepository
-                .findByUserAndTypeAndStatus(userId, RelationType.COUPLE, RelationStatus.ACTIVE)
-                .stream().findFirst()
-                .orElseThrow(() -> new BusinessException(ErrorCode.RELATION_NOT_FOUND,
-                        "커플 연결 후 사용할 수 있는 기능이에요."));
+        return couples.active(userId);
     }
 
     private String userName(Long userId) {
-        return userRepository.findById(userId).map(User::getName).orElse("커플");
+        return couples.userName(userId);
     }
 }
