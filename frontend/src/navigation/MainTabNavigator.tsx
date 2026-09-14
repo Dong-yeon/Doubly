@@ -5,7 +5,7 @@
  *  홈 CoupleHero 의 오늘 칩(HomeScreen.onPressToday)이 "안 했으면 기록 화면으로 바로"
  *  분기하도록 바꿔 같은 진입 속도를 새 버튼 없이 재현했다. */
 import React, { useEffect } from 'react';
-import { AppState, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { AppState, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createBottomTabNavigator, BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { getFocusedRouteNameFromRoute, StackActions } from '@react-navigation/native';
@@ -23,6 +23,7 @@ import { useActiveWorkoutStore } from '../store/activeWorkoutStore';
 import { ActiveWorkoutBar } from '../components/workout/ActiveWorkoutBar';
 import { useDesktopRail } from '../hooks/useDesktopRail';
 import { useReportShellRail } from '../components/shellRail';
+import { isHovered } from '../utils/pointer';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
@@ -73,11 +74,20 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
     const meta = TAB_META[routeName];
     const focused = state.index === index;
     const showBadge = routeName === 'Chat' && unreadCount > 0;
+    /*
+     * Pressable 인 이유는 <b>hovered</b> 하나다 — 마우스에는 "누를 수 있는 것"이라는
+     * 신호가 커서 모양 말고는 없어서, 레일 아이콘 위에 마우스를 올려도 아무 반응이 없으면
+     * 장식처럼 읽힌다. TouchableOpacity 는 hovered 를 주지 않는다.
+     * pressed 투명도는 기존 activeOpacity(0.7) 를 그대로 옮긴 것이다.
+     */
     return (
-      <TouchableOpacity
+      <Pressable
         key={routeName}
-        style={rail ? styles.railItem : styles.tabItem}
-        activeOpacity={0.7}
+        style={(state) => [
+          rail ? styles.railItem : styles.tabItem,
+          isHovered(state) && !focused ? styles.tabItemHovered : null,
+          state.pressed ? styles.tabItemPressed : null,
+        ]}
         accessibilityState={{ selected: focused }}
         onPress={() => {
           const route = state.routes[index];
@@ -116,7 +126,7 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
         <Text style={[styles.tabLabel, { color: focused ? colors.primary : colors.textSecondary }]}>
           {meta.label}
         </Text>
-      </TouchableOpacity>
+      </Pressable>
     );
   };
 
@@ -238,6 +248,9 @@ const styles = themedStyles((colors) => ({
   },
   // minHeight 56 — 위 paddingTop 확장과 짝을 맞춘 여유값(터치 타깃 권장 44px는 이미 넘는다)
   tabItem: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2, minHeight: 56 },
+  // 마우스를 올렸을 때 — 선택된 탭은 이미 색으로 구분되므로 비선택에만 준다
+  tabItemHovered: { backgroundColor: colors.surfaceAlt },
+  tabItemPressed: { opacity: 0.7 },
 
   /*
    * PC 창의 왼쪽 세로 레일. 하단 바를 90도 돌린 것이라 아이콘·라벨·배지는 그대로 쓰고

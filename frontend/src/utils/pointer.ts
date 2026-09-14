@@ -7,7 +7,18 @@
  *
  * <p>docs/PC_APP_ANALYSIS_2026-09-14.md 4절 1단계 "SwipeBackView".
  */
-import { Platform } from 'react-native';
+import { Platform, type PressableStateCallbackType } from 'react-native';
+
+/**
+ * `Pressable` 스타일 콜백의 hovered.
+ *
+ * <p>react-native-web 은 이 값을 주지만 react-native 의 타입 정의에는 없다(터치 기기에는
+ * hover 가 없으니 당연하다). 캐스팅을 호출부마다 흩뿌리지 않으려고 여기 한 곳에 둔다 —
+ * 네이티브에서는 항상 false 다.
+ */
+export function isHovered(state: PressableStateCallbackType): boolean {
+  return (state as { hovered?: boolean }).hovered === true;
+}
 
 export function isCoarsePointer(): boolean {
   if (Platform.OS !== 'web') return true;
