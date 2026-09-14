@@ -12,14 +12,22 @@
  * <p>작은 창(≤ shellMaxWidth)에서는 래퍼를 아예 만들지 않는다 — 기본 사용 형태인
  * 420~480px 세로 창에서는 폰 레이아웃이 그대로 맞기 때문이다.
  */
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useWindowDimensions, View } from 'react-native';
 import { colors, layout, shadow } from '../constants/theme';
 import { themedStyles } from '../theme/themedStyles';
+import { ShellRailContext } from './shellRail';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { width } = useWindowDimensions();
   const wide = width > layout.shellMaxWidth;
+  /*
+   * 레일이 <b>실제로 붙어 있을 때만</b> 셸을 레일 폭만큼 넓힌다 — 그래야 화면 몫이 레일
+   * 유무와 무관하게 늘 640 이다(shellRail.ts 의 불변식). 창이 넓다는 것만으로 넓히면
+   * 레일이 없는 온보딩·로그인이 728px 로 그려져 useContentWidth() 와 어긋난다.
+   */
+  const [railMounted, setRailMounted] = useState(false);
+  const maxWidth = layout.shellMaxWidth + (railMounted ? layout.railWidth : 0);
 
   /*
    * 셸 바깥 색을 <html>/<body> 에도 칠한다. 스크롤 바운스 구간과 셸 위아래로 남는
@@ -35,12 +43,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     };
   }, [wide]);
 
-  if (!wide) return <>{children}</>;
+  if (!wide) {
+    return <ShellRailContext.Provider value={setRailMounted}>{children}</ShellRailContext.Provider>;
+  }
 
   return (
-    <View style={styles.backdrop}>
-      <View style={styles.shell}>{children}</View>
-    </View>
+    <ShellRailContext.Provider value={setRailMounted}>
+      <View style={styles.backdrop}>
+        <View style={[styles.shell, { maxWidth }]}>{children}</View>
+      </View>
+    </ShellRailContext.Provider>
   );
 }
 
@@ -53,7 +65,6 @@ const styles = themedStyles((colors) => ({
   shell: {
     flex: 1,
     width: '100%',
-    maxWidth: layout.shellMaxWidth,
     backgroundColor: colors.background,
     /*
      * 경계는 <b>그림자와 바탕색 차이</b>로만 만든다 — 좌우 테두리를 그으면 콘텐츠 박스가

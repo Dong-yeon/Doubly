@@ -11,7 +11,7 @@ import { createBottomTabNavigator, BottomTabBarProps } from '@react-navigation/b
 import { getFocusedRouteNameFromRoute, StackActions } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '../components/Icon';
 import type { MainTabParamList } from './types';
-import { colors, radius, shadow, spacing } from '../constants/theme';
+import { colors, layout, radius, shadow, spacing } from '../constants/theme';
 import { HomeStackNavigator } from './HomeStackNavigator';
 import { WorkoutStackNavigator } from './WorkoutStackNavigator';
 import { ChatStackNavigator } from './ChatStackNavigator';
@@ -21,6 +21,8 @@ import { themedStyles } from '../theme/themedStyles';
 import { useChatStore } from '../store/chatStore';
 import { useActiveWorkoutStore } from '../store/activeWorkoutStore';
 import { ActiveWorkoutBar } from '../components/workout/ActiveWorkoutBar';
+import { useDesktopRail } from '../hooks/useDesktopRail';
+import { useReportShellRail } from '../components/shellRail';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
@@ -64,6 +66,8 @@ function useChatUnreadCount() {
 function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const unreadCount = useChatUnreadCount();
+  // PC 창에서는 하단 탭 대신 왼쪽 세로 레일 — 폭 판단은 useDesktopRail 한 곳에서만 한다
+  const rail = useDesktopRail();
 
   const renderTab = (routeName: keyof MainTabParamList, index: number) => {
     const meta = TAB_META[routeName];
@@ -72,7 +76,7 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
     return (
       <TouchableOpacity
         key={routeName}
-        style={styles.tabItem}
+        style={rail ? styles.railItem : styles.tabItem}
         activeOpacity={0.7}
         accessibilityState={{ selected: focused }}
         onPress={() => {
@@ -120,7 +124,12 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
 
   // 훅 호출이 끝난 뒤에 판단한다 — 조기 return 이 앞에 오면 훅 순서가 깨진다
   const nestedRoute = getFocusedRouteNameFromRoute(state.routes[state.index]);
-  if (nestedRoute && HIDE_TAB_BAR_ON.has(nestedRoute)) return null;
+  /*
+   * 채팅방에서 탭바를 감추는 건 "키보드가 올라올 때 탭바까지 밀려 올라온다"는 폰 사정이다
+   * (HIDE_TAB_BAR_ON 주석). 레일은 옆에 세로로 서 있어 키보드와 겹칠 일이 없고, PC 메신저는
+   * 대화 중에도 좌측 내비를 그대로 둔다 — 레일일 때는 감추지 않는다.
+   */
+  if (!rail && nestedRoute && HIDE_TAB_BAR_ON.has(nestedRoute)) return null;
 
   /*
    * insets.bottom 은 제스처 내비게이션 바가 "그려지는" 높이일 뿐이다 — 실제로 시스템이
@@ -145,6 +154,16 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
    */
   const showActiveWorkoutBar = !nestedRoute || !HIDE_ACTIVE_WORKOUT_BAR_ON.has(nestedRoute);
 
+  if (rail) {
+    return (
+      <View style={styles.rail}>
+        <View style={styles.railTabs}>{routeNames.map((name, i) => renderTab(name, i))}</View>
+        {/* 88px 안에 가로 바가 들어갈 수 없어 축약형으로 — 하는 일("있다는 사실 + 돌아가는 길")은 같다 */}
+        {showActiveWorkoutBar ? <ActiveWorkoutBar navigation={navigation} compact /> : null}
+      </View>
+    );
+  }
+
   return (
     <View>
       {showActiveWorkoutBar ? <ActiveWorkoutBar navigation={navigation} /> : null}
@@ -156,6 +175,18 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
 }
 
 export function MainTabNavigator() {
+  const rail = useDesktopRail();
+
+  /*
+   * 레일이 붙었다는 사실을 셸에 알린다 — 셸이 그만큼 넓어져야 화면 몫이 640 으로 유지된다
+   * (components/shellRail.ts). 탭 밖으로 나가면(로그아웃 등) 언마운트 시 되돌린다.
+   */
+  const reportRail = useReportShellRail();
+  useEffect(() => {
+    reportRail(rail);
+    return () => reportRail(false);
+  }, [rail, reportRail]);
+
   /*
    * 앱이 백그라운드/종료 상태였다가 포그라운드로 돌아올 때마다 안 읽은 개수를
    * 다시 읽는다 — 부재중 통화·채팅 알림을 보고 앱을 여는 경우가 정확히 이 경로다.
@@ -180,7 +211,8 @@ export function MainTabNavigator() {
 
   return (
     <Tab.Navigator
-      screenOptions={{ headerShown: false }}
+      // tabBarPosition 이 'left' 면 내비게이터가 [탭바 | 화면] 가로 배치로 바꿔준다
+      screenOptions={{ headerShown: false, tabBarPosition: rail ? 'left' : 'bottom' }}
       tabBar={(props) => <CustomTabBar {...props} />}
     >
       <Tab.Screen name="Home" component={HomeStackNavigator} />
@@ -206,6 +238,27 @@ const styles = themedStyles((colors) => ({
   },
   // minHeight 56 — 위 paddingTop 확장과 짝을 맞춘 여유값(터치 타깃 권장 44px는 이미 넘는다)
   tabItem: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2, minHeight: 56 },
+
+  /*
+   * PC 창의 왼쪽 세로 레일. 하단 바를 90도 돌린 것이라 아이콘·라벨·배지는 그대로 쓰고
+   * 방향과 경계선만 바꾼다 — 같은 renderTab 이 두 모양을 다 그린다.
+   */
+  rail: {
+    width: layout.railWidth,
+    height: '100%',
+    backgroundColor: colors.surfaceCard,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderRightColor: colors.border,
+  },
+  // 탭은 위에서부터 쌓고, 남는 아래 공간은 진행 중 운동 축약 바가 쓴다
+  railTabs: { flex: 1, paddingTop: spacing.md },
+  railItem: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+    minHeight: 64,
+    paddingVertical: spacing.sm,
+  },
   tabLabel: { fontSize: 11, fontWeight: '700', lineHeight: 14 },
   tabBadge: {
     position: 'absolute',
