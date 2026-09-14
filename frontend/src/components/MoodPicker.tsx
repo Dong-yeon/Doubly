@@ -237,8 +237,14 @@ const styles = themedStyles((colors) => ({
    * 정상 동작, glyph 라인 박스 안의 위치가 문제였다). lineHeight 를 fontSize 와
    * 똑같이 맞춰 여유분을 없애면 글자가 자기 박스를 꽉 채워 쏠릴 여지가 없다.
    */
-  emoji: { fontSize: 26, lineHeight: 26 },
-  /** 우리 이모지 — 유니코드 셀의 glyph(26px)보다 키운다. 얼굴이 알아보여야 고를 수 있다 */
-  cellImage: { width: 38, height: 38 },
+  /*
+   * 크기는 셀을 기준으로 잡는다. 셀은 정사각형(aspectRatio:1)이라 390px 화면에서 약 79px 인데,
+   * 예전 26px 글리프로는 내용이 41px(26 + gap 2 + 라벨 13)뿐이라 <b>38px 가 비었다</b>
+   * — 위아래로 19px 씩이라 "이모지 위에 공간이 많이 남는" 것으로 보였다(2026-09-14 리포트).
+   * 셀을 줄이는 대신 글리프를 키웠다: 고르는 화면에서는 큰 편이 알아보기도 누르기도 낫다.
+   */
+  emoji: { fontSize: 36, lineHeight: 36 },
+  /** 우리 이모지 — 유니코드 글리프보다 키운다. 얼굴이 알아보여야 고를 수 있다 */
+  cellImage: { width: 48, height: 48 },
   label: { fontSize: 10, fontWeight: '700', color: colors.textSecondary },
 }));
