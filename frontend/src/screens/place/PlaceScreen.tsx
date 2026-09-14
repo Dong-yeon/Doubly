@@ -717,7 +717,7 @@ export function PlaceScreen() {
                 <EmptyState
                   icon="movie-open-outline"
                   title="아직 저장한 콘텐츠가 없어요"
-                  description="함께 보고 싶은 영화·공연·드라마를 추가해보세요! (카드를 길게 눌러 삭제)"
+                  description="둘이 함께 보고 싶은 영화·공연·드라마를 담아보세요."
                 />
               )
             ) : null
