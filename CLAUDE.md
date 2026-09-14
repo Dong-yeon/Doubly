@@ -5,6 +5,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 1. 개발 워크플로우 (1인 개발)
 - PR(Pull Request)을 생성하지 않습니다 (`gh pr create` 절대 금지)[cite: 4, 8].
 - 완료된 작업은 `main`에 직접 병합(`git merge --no-ff`) 후 브랜치를 즉시 삭제합니다[cite: 4, 8].
+- **병합은 `git push origin main` 까지가 한 동작입니다.** 푸시를 미루면 다른 세션이 낡은
+  `main` 위에서 작업을 이어가고, 같은 Flyway 번호를 다시 집습니다. 2026-09-14 하루에만 발산이
+  두 번 쌓였고(26+16 커밋, 24 커밋), 그중 한 번은 V89 중복으로 **백엔드 테스트 671건 중 503건이
+  컨텍스트 로드 단계에서 통째로** 죽었습니다. 되돌리는 비용이 푸시 한 줄보다 훨씬 큽니다.
+- **병합 전에 갈라졌는지 먼저 봅니다** — 특히 병렬 세션이 도는 중이라면.
+  ```bash
+  git fetch origin && git log --oneline origin/main..main   # 비어 있어야 정상
+  ```
+- 이미 운영에 적용된 마이그레이션은 번호를 바꿀 수 없습니다(`flyway_schema_history` 가 깨집니다).
+  번호가 충돌하면 **아직 푸시되지 않은 쪽**을 옮깁니다.
 
 ## 2. 에이전트(AI) 작업 및 보고 규칙
 - **Git Clean State**: 에이전트 실행 전 워킹 디렉토리는 항상 커밋되어 비워져 있어야 합니다[cite: 4].
@@ -118,8 +128,23 @@ question, challenge, body, voice, content, calendar, summary, notification, reen
 `backend/src/main/resources/db/migration/V{n}__*.sql`. **번호는 매번 직접 확인하고 붙입니다** —
 병렬 세션이 같은 번호를 동시에 쓰는 충돌이 반복적으로 발생했습니다.
 
+**세는 기준이 최신 `main` 이어야 합니다.** 갈라진 로컬에서 세면 원격이 이미 쓴 번호를 그대로
+다시 집습니다(1절 참고). 먼저 `git fetch origin` 하고, 미병합 브랜치가 선점한 번호도 함께 봅니다.
+
 ```bash
-ls backend/src/main/resources/db/migration | sed 's/^V//; s/__.*//' | sort -n | tail -1
+git fetch origin
+
+# ① 지금까지 쓰인 최대 번호 — 원격 기준으로 센다
+MIG=backend/src/main/resources/db/migration
+git ls-tree --name-only origin/main $MIG/ | sed 's#.*/##; s/^V//; s/__.*//' | sort -n | tail -1
+
+# ② 미병합 브랜치가 선점한 번호 — 여기 나오는 것보다 큰 번호를 쓴다
+for b in $(git for-each-ref --format='%(refname:short)' refs/heads); do
+  git diff --name-only --diff-filter=A origin/main..$b -- $MIG
+done | sed 's#.*/##' | sort -u
+
+# ③ 중복 검사 — 병합한 뒤에도 한 번 더
+ls $MIG | sed 's/^V//; s/__.*//' | sort -n | uniq -d
 ```
 
 4절의 H2/PostgreSQL 양립 규칙(`JSONB`·`ON CONFLICT` 금지)이 여기 걸립니다. CI가 H2로 Flyway를 돌리므로
