@@ -3,7 +3,6 @@ package com.fitto.chat.service;
 import com.fitto.chat.domain.AnimatedSticker;
 import com.fitto.chat.domain.MessageType;
 import com.fitto.chat.domain.ScheduledChatMessage;
-import com.fitto.chat.domain.StickerPack;
 import com.fitto.chat.dto.ScheduleMessageRequest;
 import com.fitto.chat.dto.ScheduledMessageResponse;
 import com.fitto.chat.repository.ScheduledChatMessageRepository;
@@ -63,7 +62,7 @@ public class ScheduledChatMessageService {
             throw new BusinessException(ErrorCode.INVALID_INPUT, "예약 시각은 지금보다 뒤여야 해요.");
         }
         if (type == MessageType.STICKER
-                && (StickerPack.isPremium(req.content()) || AnimatedSticker.isPremiumContent(req.content()))) {
+                && AnimatedSticker.isPremiumContent(req.content())) {
             // 발송 시점(ChatService.send)에서도 다시 검사한다 — 예약 뒤 강등되는 경우 대비.
             planGuard.require(userId, Feature.PREMIUM_STICKER);
         }

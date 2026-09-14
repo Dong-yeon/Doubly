@@ -319,10 +319,18 @@ export function HomeScreen({ navigation }: Props) {
    *
    * 서버 값이 도착하면 그쪽이 이긴다 — 여기서는 아직 null 일 때만 채운다.
    */
+  /**
+   * 마지막으로 캐시에 남아 있던 스트릭 숫자 — 위젯을 다시 구울 때 <b>모르는 쪽의 폴백</b>이다.
+   * state 와 따로 드는 이유: state 는 서버 값이 오면 덮이지만, 여기 필요한 건 "직전에
+   * 위젯에 쓰여 있던 값"이라서다(아래 위젯 갱신 effect 참고).
+   */
+  const cachedStreakRef = useRef<{ my: number; partner: number } | null>(null);
+
   useEffect(() => {
     let cancelled = false;
     void loadWidgetData().then((cached) => {
       if (cancelled || !cached) return;
+      cachedStreakRef.current = { my: cached.myStreak, partner: cached.partnerStreak };
       setMyStreak((prev) => prev ?? cachedStreak(cached.myStreak));
       setPartnerStreak((prev) => prev ?? cachedStreak(cached.partnerStreak));
     });
@@ -337,17 +345,34 @@ export function HomeScreen({ navigation }: Props) {
     analyticsApi.log('HOME_VIEWED').catch(() => {});
   }, []));
 
-  // 홈 위젯 갱신 (Android) — 홈 데이터가 바뀔 때마다 위젯 캐시를 남기고 다시 그린다
+  /*
+   * 홈 위젯 갱신 (Android) — 홈 데이터가 바뀔 때마다 위젯 캐시를 남기고 다시 그린다.
+   *
+   * <p><b>모르는 값을 0으로 굽지 않는다. 두 사람 각각에 대해 그렇다.</b> 예전 가드는
+   * {@code myStreak === null && partnerStreak === null} 이었는데, AND 라서 내 값만 도착하면
+   * 통과해 버렸다 — 그 아래 {@code ?? 0} 이 <b>상대 스트릭을 0으로 캐시</b>했고, 위젯은
+   * 앱을 닫은 동안 그 0을 계속 보여줬다. 위 refresh 의 주석이 경계한 상황(숫자가 갑자기
+   * 0이 되는 건 "끊겼다"로 읽힌다)이 상대 쪽에만 그대로 남아 있던 셈이다.
+   *
+   * <p>커플 앱에서 이건 표시 오류로 끝나지 않는다 — <b>상대가 오늘 안 했다고 잘못
+   * 알려주는 것</b>이라, 상대의 기록을 보러 다시 여는 이유 자체를 없앤다.
+   *
+   * <p>그래서 모르는 쪽은 마지막으로 캐시에 있던 값으로 메우고, 그것도 없으면(첫 설치 +
+   * 조회 실패) 아예 쓰지 않는다. 미연결일 때 상대 값이 0인 것은 오류가 아니라 사실이다.
+   */
   useEffect(() => {
-    // 아직 한 번도 못 불러온 상태(null)를 0으로 캐시하면, 앱을 안 열어둔 동안
-    // 위젯이 계속 "스트릭 0"을 보여준다 — 값을 실제로 알기 전까진 캐시를 건드리지 않는다.
-    if (myStreak === null && partnerStreak === null) return;
+    const myCount = myStreak?.currentCount ?? cachedStreakRef.current?.my ?? null;
+    const partnerCount = !connected
+      ? 0
+      : partnerStreak?.currentCount ?? cachedStreakRef.current?.partner ?? null;
+    if (myCount === null || partnerCount === null) return;
+    cachedStreakRef.current = { my: myCount, partner: partnerCount };
     updateHomeWidget({
       connected,
       anniversaryDate: couple?.anniversaryDate ?? couple?.connectedAt ?? null,
       partnerName: couple?.partner?.name ?? null,
-      myStreak: myStreak?.currentCount ?? 0,
-      partnerStreak: partnerStreak?.currentCount ?? 0,
+      myStreak: myCount,
+      partnerStreak: partnerCount,
       updatedAt: new Date().toISOString(),
     });
   }, [connected, couple, myStreak, partnerStreak]);

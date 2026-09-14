@@ -27,7 +27,7 @@ import { clearMemos, loadMemos, pruneMemos, saveMemos, type SudokuMemos } from '
 import { connectSocket, subscribeCouple, unsubscribeCouple } from '../../api/chatSocket';
 import { useRelationStore } from '../../store/relationStore';
 import { getErrorMessage } from '../../utils/error';
-import { relativeDateLabel } from '../../utils/date';
+import { relativeTimestampLabel } from '../../utils/date';
 import { Alert } from '../../utils/alert';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
@@ -558,7 +558,7 @@ export function SudokuScreen(_: Props) {
           <View style={styles.histCard}>
             <View style={styles.histRow}>
               <Text style={styles.histDate}>
-                {item.completedAt ? relativeDateLabel(item.completedAt.slice(0, 10)) : ''}
+                {item.completedAt ? relativeTimestampLabel(item.completedAt) : ''}
               </Text>
               <Text style={styles.histDifficulty}>{item.difficultyLabel}</Text>
             </View>
