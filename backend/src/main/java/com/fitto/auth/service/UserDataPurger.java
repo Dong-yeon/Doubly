@@ -102,6 +102,12 @@ public class UserDataPurger {
         // 구독 이력 — users FK 를 물고 있어서 빠뜨리면 탈퇴 전체가 FK 위반으로 실패한다.
         // (환불·정산 근거는 스토어 콘솔에 남으므로 여기서 지워도 된다)
         exec("delete from subscriptions where user_id = :uid", userId);
+        /*
+         * AI 토큰 사용량(V89) — user_id 에 FK 가 없어서 탈퇴를 막지는 않지만, 그래서 오히려
+         * 여기서 빠뜨리면 조용히 남는다. 탈퇴한 사람의 사용 이력을 들고 있을 이유가 없다
+         * (원가 집계는 이미 지나간 달의 합계로 남고, 개인 행이 필요하지 않다).
+         */
+        exec("delete from ai_usage_logs where user_id = :uid", userId);
 
         em.flush();
         em.clear();
