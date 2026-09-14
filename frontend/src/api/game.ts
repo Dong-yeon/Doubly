@@ -2,6 +2,9 @@
 import { apiClient, unwrap } from './client';
 import type {
   ApiResponse,
+  CatchMindGame,
+  CatchMindGuessResult,
+  CatchMindWordCandidate,
   DailySudoku,
   GameReactionOption,
   GameStreak,
@@ -29,7 +32,33 @@ export const sudokuApi = {
   startDaily: () => unwrap(apiClient.post<ApiResponse<SudokuGame>>('/games/sudoku/daily')),
 };
 
-/** 같이 게임한 날의 연속 기록 — 스도쿠·오목을 가리지 않는다 */
+/**
+ * 캐치마인드 — 비동기다. 그리는 동안은 서버에 아무것도 없고, 다 그린 그림을 한 번에 보낸다.
+ * docs/CATCH_MIND_2026-09-14.md
+ */
+export const catchMindApi = {
+  /** 진행 중인 판 — 없으면 null */
+  current: () => unwrap(apiClient.get<ApiResponse<CatchMindGame | null>>('/games/catch-mind/current')),
+  /** 제시어 후보 셋 — 직접 입력해도 된다 */
+  words: () =>
+    unwrap(
+      apiClient.get<ApiResponse<{ candidates: CatchMindWordCandidate[] }>>('/games/catch-mind/words'),
+    ).then((r) => r.candidates),
+  /** 그림 제출 = 판 시작. 진행 중인 판이 있으면 409 */
+  start: (word: string, strokes: string) =>
+    unwrap(apiClient.post<ApiResponse<CatchMindGame>>('/games/catch-mind', { word, strokes })),
+  /** 정답 시도 — 횟수 제한 없음 */
+  guess: (id: number, answer: string) =>
+    unwrap(apiClient.post<ApiResponse<CatchMindGuessResult>>(`/games/catch-mind/${id}/guess`, { answer })),
+  /** 초성 힌트 — 열어도 실패로 치지 않는다 */
+  hint: (id: number) =>
+    unwrap(apiClient.post<ApiResponse<CatchMindGame>>(`/games/catch-mind/${id}/hint`)),
+  giveUp: (id: number) => unwrap(apiClient.post<ApiResponse<void>>(`/games/catch-mind/${id}/give-up`)),
+  /** 맞힌 판 최근 20개 */
+  history: () => unwrap(apiClient.get<ApiResponse<CatchMindGame[]>>('/games/catch-mind/history')),
+};
+
+/** 같이 게임한 날의 연속 기록 — 스도쿠·오목·캐치마인드를 가리지 않는다 */
 export const gameStreakApi = {
   get: () => unwrap(apiClient.get<ApiResponse<GameStreak>>('/games/streak')),
 };

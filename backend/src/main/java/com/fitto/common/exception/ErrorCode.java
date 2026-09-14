@@ -114,6 +114,10 @@ public enum ErrorCode {
     GAME_UNDO_NOT_REQUESTED(HttpStatus.CONFLICT, "무르기 요청이 없어요."),
     GAME_UNDO_NOT_YOURS(HttpStatus.CONFLICT, "내가 건 무르기는 내가 받을 수 없어요."),
     GAME_DAILY_ALREADY_DONE(HttpStatus.CONFLICT, "오늘의 판은 이미 마쳤어요. 내일 새 판이 열려요."),
+    GAME_DRAWING_INVALID(HttpStatus.BAD_REQUEST, "그림을 보내지 못했어요. 다시 그려볼까요?"),
+    /* 그린 사람이 자기 문제를 맞히는 것 — 앱에서는 버튼이 아예 없지만 API 로는 올 수 있다 */
+    GAME_NOT_GUESSER(HttpStatus.CONFLICT, "내가 낸 문제는 내가 맞힐 수 없어요."),
+    GAME_ALREADY_DRAWING(HttpStatus.CONFLICT, "상대가 아직 맞히는 중이에요. 이 판이 끝나면 새로 낼 수 있어요."),
     // 사진 관련 — 원인별로 분리해 어떤 문제인지 바로 보이게 한다
     INVALID_PHOTO_URL(HttpStatus.BAD_REQUEST, "앱에서 촬영·선택해 올린 사진만 분석할 수 있어요."),
     PHOTO_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "사진 용량이 너무 커요 (최대 10MB). 더 작은 사진으로 시도해주세요."),

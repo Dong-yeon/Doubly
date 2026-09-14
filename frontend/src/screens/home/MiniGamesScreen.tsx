@@ -1,8 +1,12 @@
 /**
- * 미니게임 허브 — 협동 스도쿠·오목 중 고른다. docs/COUPLE_GAMES_DESIGN_2026-09-09.md 5절.
+ * 미니게임 허브 — 협동 스도쿠·오목·캐치마인드 중 고른다.
+ * docs/COUPLE_GAMES_DESIGN_2026-09-09.md 5절 · COUPLE_GAMES_EXPANSION_2026-09-14.md · CATCH_MIND_2026-09-14.md.
  *
  * <p>카드 하나가 게임 하나. 진행 중인 판이 있으면 그 상태(채운 칸 수·누구 차례)를 카드에 띄워
- * "이어서" 들어가게 한다. 두 게임의 진행 상태는 같은 커플 소켓 이벤트(GAME)로 갱신된다.
+ * "이어서" 들어가게 한다. 세 게임의 진행 상태는 같은 커플 소켓 이벤트(GAME)로 갱신된다.
+ *
+ * <p>맨 위의 스트릭과 오늘의 판은 종목에 걸리지 않는다 — 스트릭은 어느 게임이든 하나 끝내면
+ * 이어지고, 오늘의 판은 스도쿠지만 "오늘 할 것"이라 게임 카드보다 위에 둔다.
  */
 import React, { useCallback, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
@@ -12,13 +16,13 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../navigation/types';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { EmptyState } from '../../components/EmptyState';
-import { gameStreakApi, omokApi, sudokuApi } from '../../api/game';
+import { catchMindApi, gameStreakApi, omokApi, sudokuApi } from '../../api/game';
 import { connectSocket, subscribeCouple, unsubscribeCouple } from '../../api/chatSocket';
 import { useRelationStore } from '../../store/relationStore';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { DailySudoku, GameStreak, OmokGame, SudokuGame } from '../../types';
+import type { CatchMindGame, DailySudoku, GameStreak, OmokGame, SudokuGame } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'MiniGames'>;
@@ -28,6 +32,7 @@ export function MiniGamesScreen({ navigation }: Props) {
   const [sudoku, setSudoku] = useState<SudokuGame | null>(null);
   const [omok, setOmok] = useState<OmokGame | null>(null);
   const [omokRecord, setOmokRecord] = useState<{ me: number; partner: number } | null>(null);
+  const [catchMind, setCatchMind] = useState<CatchMindGame | null>(null);
   const [daily, setDaily] = useState<DailySudoku | null>(null);
   const [streak, setStreak] = useState<GameStreak | null>(null);
   const [openingDaily, setOpeningDaily] = useState(false);
@@ -35,15 +40,17 @@ export function MiniGamesScreen({ navigation }: Props) {
 
   const load = useCallback(async () => {
     try {
-      const [s, o, h, d, st] = await Promise.all([
+      const [s, o, h, d, st, cm] = await Promise.all([
         sudokuApi.current(),
         omokApi.current(),
         omokApi.history(),
         sudokuApi.daily(),
         gameStreakApi.get(),
+        catchMindApi.current(),
       ]);
       setSudoku(s);
       setOmok(o);
+      setCatchMind(cm);
       setOmokRecord({
         me: h.filter((g) => g.winner === 'ME').length,
         partner: h.filter((g) => g.winner === 'PARTNER').length,
@@ -88,6 +95,16 @@ export function MiniGamesScreen({ navigation }: Props) {
     : omokRecord && omokRecord.me + omokRecord.partner > 0
       ? `전적 ${omokRecord.me}승 ${omokRecord.partner}패`
       : '번갈아 두는 5목';
+
+  /* 내 차례인가 = 상대가 낸 문제를 내가 아직 못 맞혔는가 */
+  const catchMindMine = catchMind?.role === 'GUESSER';
+  const catchMindStatus = catchMind
+    ? catchMindMine
+      ? `맞힐 차례 · ${catchMind.wordLength}글자`
+      : catchMind.guessCount > 0
+        ? `${catchMind.partnerName ?? '상대'}가 ${catchMind.guessCount}번 시도했어요`
+        : `${catchMind.partnerName ?? '상대'}가 아직 안 봤어요`
+    : '그려서 보내면 아무 때나 맞혀요';
 
   const dailyStatus = !daily
     ? ''
@@ -193,6 +210,15 @@ export function MiniGamesScreen({ navigation }: Props) {
           badge={omok ? (omok.myTurn ? '내 차례' : '기다리는 중') : undefined}
           highlight={!!omok?.myTurn}
           onPress={() => navigation.navigate('Omok')}
+        />
+
+        <GameCard
+          icon="draw"
+          title="캐치마인드"
+          subtitle={catchMindStatus}
+          badge={catchMind ? (catchMindMine ? '맞힐 차례' : '기다리는 중') : undefined}
+          highlight={catchMindMine}
+          onPress={() => navigation.navigate('CatchMind')}
         />
 
         <Text style={styles.footnote}>

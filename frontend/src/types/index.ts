@@ -528,8 +528,38 @@ export interface OmokGame {
 }
 export type OmokUndoRequest = 'MINE' | 'PARTNER';
 
+// 캐치마인드 — 한 명이 그리고 한 명이 맞힌다(비동기). docs/CATCH_MIND_2026-09-14.md
+export type CatchMindRole = 'DRAWER' | 'GUESSER';
+export interface CatchMindGame {
+  id: number;
+  status: SudokuStatus;
+  role: CatchMindRole;
+  /** "색,굵기,x1,y1,x2,y2;..." — 좌표는 0~1000 정규화 정수 */
+  strokes: string;
+  /** 맞히는 사람에게는 끝나기 전까지 null */
+  word?: string | null;
+  wordLength: number;
+  /** 초성 — 열었을 때만. 그린 사람에게는 항상 온다 */
+  hint?: string | null;
+  hintUsed: boolean;
+  /** 틀린 시도(최신 순) */
+  wrongGuesses: string[];
+  guessCount: number;
+  partnerName?: string | null;
+  createdAt: string;
+  completedAt?: string | null;
+}
+export interface CatchMindWordCandidate {
+  category: string;
+  word: string;
+}
+export interface CatchMindGuessResult {
+  correct: boolean;
+  game: CatchMindGame;
+}
+
 // 게임 판 위 즉석 반응 — docs/COUPLE_GAMES_EXPANSION_2026-09-14.md 1절. 저장되지 않는 신호다
-export type GameTypeKey = 'SUDOKU' | 'OMOK';
+export type GameTypeKey = 'SUDOKU' | 'OMOK' | 'CATCH_MIND';
 export interface GameReactionOption {
   key: string;
   emoji: string;
