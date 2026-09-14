@@ -2,7 +2,9 @@
 import { apiClient, unwrap } from './client';
 import type {
   ApiResponse,
+  DailySudoku,
   GameReactionOption,
+  GameStreak,
   GameTypeKey,
   OmokGame,
   SudokuDifficulty,
@@ -21,6 +23,15 @@ export const sudokuApi = {
   giveUp: (id: number) => unwrap(apiClient.post<ApiResponse<void>>(`/games/sudoku/${id}/give-up`)),
   /** 완성한 판 최근 20개 */
   history: () => unwrap(apiClient.get<ApiResponse<SudokuGame[]>>('/games/sudoku/history')),
+  /** 오늘의 판 현황 — 열지 않고 상태만 본다 */
+  daily: () => unwrap(apiClient.get<ApiResponse<DailySudoku>>('/games/sudoku/daily')),
+  /** 오늘의 판 열기 — 이미 마쳤으면 409(GAME_DAILY_ALREADY_DONE) */
+  startDaily: () => unwrap(apiClient.post<ApiResponse<SudokuGame>>('/games/sudoku/daily')),
+};
+
+/** 같이 게임한 날의 연속 기록 — 스도쿠·오목을 가리지 않는다 */
+export const gameStreakApi = {
+  get: () => unwrap(apiClient.get<ApiResponse<GameStreak>>('/games/streak')),
 };
 
 export const omokApi = {

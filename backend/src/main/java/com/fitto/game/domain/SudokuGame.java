@@ -10,6 +10,8 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDate;
+
 /**
  * 협동 스도쿠 한 판 — 판 전체를 81자 문자열 넷(puzzle·solution·board·ownerMap)으로 든다.
  * docs/COUPLE_GAMES_DESIGN_2026-09-09.md 3-2절.
@@ -42,14 +44,27 @@ public class SudokuGame extends CoupleGame {
     @Column(name = "owner_map", length = CELLS)
     private String ownerMap;
 
+    /**
+     * 오늘의 판이면 그 날짜 — 자유 대국은 null.
+     * 시드는 저장하지 않는다. 날짜만 있으면 {@code DailyPuzzles} 가 같은 판을 다시 만든다.
+     */
+    @Column(name = "daily_date")
+    private LocalDate dailyDate;
+
     @Builder
-    private SudokuGame(Long coupleId, GameDifficulty difficulty, String puzzle, String solution, Long createdBy) {
+    private SudokuGame(Long coupleId, GameDifficulty difficulty, String puzzle, String solution,
+                       Long createdBy, LocalDate dailyDate) {
         super(coupleId, createdBy);
         this.difficulty = difficulty;
         this.puzzle = puzzle;
         this.solution = solution;
         this.board = puzzle;
         this.ownerMap = String.valueOf(OWNER_NONE).repeat(CELLS);
+        this.dailyDate = dailyDate;
+    }
+
+    public boolean isDaily() {
+        return dailyDate != null;
     }
 
     @Override

@@ -12,12 +12,16 @@ import com.fitto.common.notification.NotificationService;
 import com.fitto.common.notification.PushLinks;
 import com.fitto.common.plan.Feature;
 import com.fitto.common.plan.PlanGuard;
+import com.fitto.common.time.KstClock;
 import com.fitto.game.domain.CoupleGame;
+import com.fitto.game.domain.GameDifficulty;
 import com.fitto.game.domain.SudokuGame;
 import com.fitto.game.domain.GameStatus;
+import com.fitto.game.dto.DailySudokuResponse;
 import com.fitto.game.dto.StartSudokuRequest;
 import com.fitto.game.dto.SudokuGameResponse;
 import com.fitto.game.repository.SudokuGameRepository;
+import com.fitto.game.sudoku.DailyPuzzles;
 import com.fitto.game.sudoku.SudokuGenerator;
 import com.fitto.relation.domain.Relation;
 import com.fitto.relation.repository.RelationRepository;
@@ -28,6 +32,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Random;
 
@@ -116,6 +121,89 @@ public class SudokuService {
         }
         coupleEventPublisher.publish(locked.getId(), CoupleEvent.GAME);
         return toResponse(game, userId, locked);
+    }
+
+    /** 오늘의 판 현황 — 열지 않고 상태만 본다(허브 카드가 이걸 그린다). */
+    public DailySudokuResponse daily(Long userId) {
+        Relation couple = activeCouple(userId);
+        LocalDate today = KstClock.today();
+        List<SudokuGame> todays = gameRepository
+                .findByCoupleIdAndDailyDateOrderByCreatedAtDesc(couple.getId(), today);
+
+        SudokuGame done = first(todays, GameStatus.COMPLETED);
+        SudokuGame running = first(todays, GameStatus.IN_PROGRESS);
+        String state = done != null ? "COMPLETED" : running != null ? "IN_PROGRESS" : "NOT_STARTED";
+        SudokuGame shown = done != null ? done : running;
+
+        /*
+         * 오늘의 판을 아직 안 열었는데 자유 대국이 진행 중이면, 지금 눌러도 그 판이 열린다
+         * ("진행 중인 판은 하나" 규칙). 눌러보고 나서 알게 하지 말고 카드에 미리 적는다.
+         */
+        boolean blocked = shown == null && gameRepository
+                .findFirstByCoupleIdAndStatusOrderByCreatedAtDesc(couple.getId(), GameStatus.IN_PROGRESS)
+                .isPresent();
+
+        GameDifficulty difficulty = DailyPuzzles.difficultyOf(today);
+        return new DailySudokuResponse(today, difficulty, difficulty.label(), state,
+                shown == null ? null : shown.getId(), blocked);
+    }
+
+    /**
+     * 오늘의 판 열기 — 날짜가 시드라 그날은 모든 커플이 같은 문제를 푼다.
+     *
+     * <p>진행 중인 판이 하나라는 규칙은 그대로다. 자유 대국이 돌고 있으면 <b>그 판을 돌려준다</b>
+     * ({@link #start} 와 같은 동작). 이미 오늘 것을 마쳤으면 409 — 내일 새 판이 열린다.
+     */
+    @Transactional
+    public SudokuGameResponse startDaily(Long userId) {
+        Relation couple = activeCouple(userId);
+        Relation locked = relationRepository.findByIdForUpdate(couple.getId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.RELATION_NOT_FOUND));
+        LocalDate today = KstClock.today();
+
+        List<SudokuGame> todays = gameRepository
+                .findByCoupleIdAndDailyDateOrderByCreatedAtDesc(locked.getId(), today);
+        if (first(todays, GameStatus.COMPLETED) != null) {
+            throw new BusinessException(ErrorCode.GAME_DAILY_ALREADY_DONE);
+        }
+        SudokuGame running = first(todays, GameStatus.IN_PROGRESS);
+        if (running != null) {
+            return toResponse(running, userId, locked);
+        }
+        // 접은 오늘의 판은 다시 열 수 있다 — 문제는 그대로이므로 "다시 도전"이 된다
+
+        SudokuGame otherRunning = gameRepository
+                .findFirstByCoupleIdAndStatusOrderByCreatedAtDesc(locked.getId(), GameStatus.IN_PROGRESS)
+                .orElse(null);
+        if (otherRunning != null) {
+            return toResponse(otherRunning, userId, locked);
+        }
+
+        planGuard.require(userId, Feature.COUPLE_GAME);
+
+        GameDifficulty difficulty = DailyPuzzles.difficultyOf(today);
+        SudokuGenerator.Puzzle puzzle = DailyPuzzles.of(today);
+        SudokuGame game = gameRepository.save(SudokuGame.builder()
+                .coupleId(locked.getId())
+                .difficulty(difficulty)
+                .puzzle(puzzle.puzzle())
+                .solution(puzzle.solution())
+                .createdBy(userId)
+                .dailyDate(today)
+                .build());
+
+        Long partnerId = locked.partnerOf(userId);
+        if (partnerId != null) {
+            notificationService.notify(partnerId, NotificationCategory.PARTNER, "오늘의 판 🧩",
+                    userName(userId) + "님이 오늘의 판을 열었어요 (" + difficulty.label() + ")",
+                    PushLinks.GAME_SUDOKU);
+        }
+        coupleEventPublisher.publish(locked.getId(), CoupleEvent.GAME);
+        return toResponse(game, userId, locked);
+    }
+
+    private static SudokuGame first(List<SudokuGame> games, GameStatus status) {
+        return games.stream().filter(g -> g.getStatus() == status).findFirst().orElse(null);
     }
 
     /**

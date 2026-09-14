@@ -5,6 +5,7 @@ import com.fitto.game.domain.SudokuGame;
 import com.fitto.game.domain.GameDifficulty;
 import com.fitto.game.domain.GameStatus;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -26,6 +27,8 @@ public record SudokuGameResponse(
         int filled,
         int myCells,
         int partnerCells,
+        /** 오늘의 판이면 그 날짜 — 자유 대국은 null */
+        LocalDate dailyDate,
         String partnerName,
         LocalDateTime createdAt,
         LocalDateTime completedAt
@@ -62,6 +65,7 @@ public record SudokuGameResponse(
                 filled,
                 game.countOwned(mine),
                 game.countOwned(theirs),
+                game.getDailyDate(),
                 partnerName,
                 game.getCreatedAt(),
                 game.getCompletedAt()

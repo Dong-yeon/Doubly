@@ -470,9 +470,31 @@ export interface SudokuGame {
   filled: number;
   myCells: number;
   partnerCells: number;
+  /** 오늘의 판이면 그 날짜(YYYY-MM-DD) — 자유 대국은 null */
+  dailyDate?: string | null;
   partnerName?: string | null;
   createdAt: string;
   completedAt?: string | null;
+}
+
+// 오늘의 판 / 게임 스트릭 — docs/COUPLE_GAMES_EXPANSION_2026-09-14.md 3절
+export type DailySudokuState = 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED';
+export interface DailySudoku {
+  date: string;
+  difficulty: SudokuDifficulty;
+  difficultyLabel: string;
+  state: DailySudokuState;
+  gameId?: number | null;
+  /** 자유 대국이 진행 중이라, 지금 열면 그 판이 열린다("진행 중인 판은 하나") */
+  blockedByOtherGame: boolean;
+}
+
+/** 같이 게임한 날의 연속 기록 — 스도쿠·오목을 가리지 않는다 */
+export interface GameStreak {
+  current: number;
+  best: number;
+  playedToday: boolean;
+  lastPlayedDate?: string | null;
 }
 
 // 오목 — docs/COUPLE_GAMES_DESIGN_2026-09-09.md 5절. 15×15, 판을 연 사람이 WHITE(후공)
