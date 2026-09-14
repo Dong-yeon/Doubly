@@ -21,6 +21,7 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
 import java.util.Base64;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -266,6 +267,11 @@ public class GeminiClient {
      * 온도 0.4 는 실험값(docs/COUPLE_EMOJI_AI_DESIGN_2026-09-08.md §12) — 낮추면 표정이 밋밋해지고
      * 높이면 세트 일관성이 떨어졌다.
      *
+     * <p><b>해상도를 명시한다.</b> 빼면 기본 1K 로 나가고 그게 곧 장당 단가 1.5배다
+     * ({@code GeminiProperties.imageSize}). {@code aspectRatio} 는 <b>일부러 두지 않는다</b> —
+     * 지금 그림체는 비율을 지정하지 않은 상태로 실험해 확정한 것이라, 여기서 끼워 넣으면
+     * 원가가 아니라 결과물이 바뀐다.
+     *
      * <p>{@code userId}·{@code feature} 는 한도가 아니라 <b>토큰 기록</b>용이다 — 차감은 호출 전에
      * {@link #requireImageConfiguredAndCountUsage} 가 이미 했고, 되돌리기는 세트 단위라
      * 호출자가 {@link #refund} 로 한다(위 2번). 이미지 생성이 유일하게 원가가 0이 아닌 경로라
@@ -273,11 +279,16 @@ public class GeminiClient {
      */
     public GeneratedImage generateImageInBackground(Long userId, Feature feature,
                                                     List<Map<String, Object>> parts) {
+        Map<String, Object> generationConfig = new LinkedHashMap<>();
+        generationConfig.put("responseModalities", List.of("IMAGE"));
+        generationConfig.put("temperature", 0.4);
+        String imageSize = properties.getImageSize();
+        if (imageSize != null && !imageSize.isBlank()) {
+            generationConfig.put("imageConfig", Map.of("imageSize", imageSize));
+        }
         Map<String, Object> body = Map.of(
                 "contents", List.of(Map.of("parts", parts)),
-                "generationConfig", Map.of(
-                        "responseModalities", List.of("IMAGE"),
-                        "temperature", 0.4));
+                "generationConfig", generationConfig);
         long deadline = System.currentTimeMillis() + BACKGROUND.budgetMillis();
         JsonNode root;
         try {
