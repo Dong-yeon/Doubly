@@ -671,7 +671,10 @@ export function HomeScreen({ navigation }: Props) {
                    */
                   onPressToday={(who, kind) => {
                     if (kind === 'workout') {
-                      navigation.navigate('Workout', { screen: myWorkoutDone ? 'WorkoutMain' : 'WorkoutRecord' });
+                      // returnTo — 닫을 때 운동 탭에 남지 않고 홈으로 돌아온다(위 "탭 안 옮기고" 약속)
+                      navigation.navigate('Workout', myWorkoutDone
+                        ? { screen: 'WorkoutMain' }
+                        : { screen: 'WorkoutRecord', params: { returnTo: 'Home' } });
                       return;
                     }
                     /*
@@ -770,7 +773,7 @@ export function HomeScreen({ navigation }: Props) {
                 */}
                 {(
                   [
-                    { icon: 'dumbbell', label: '운동 기록하기', desc: '오늘 운동을 남기면 스트릭이 시작돼요', go: () => navigation.navigate('Workout', { screen: 'WorkoutRecord' }) },
+                    { icon: 'dumbbell', label: '운동 기록하기', desc: '오늘 운동을 남기면 스트릭이 시작돼요', go: () => navigation.navigate('Workout', { screen: 'WorkoutRecord', params: { returnTo: 'Home' } }) },
                     { icon: 'silverware-fork-knife', label: '식단 기록하기', desc: '사진이나 글로 적으면 AI가 칼로리를 계산해요', go: () => navigation.navigate('Diet', { screen: 'DietRecord' }) },
                     { icon: 'map-marker-plus-outline', label: '가고 싶은 장소 저장', desc: '맛집, 여행지, 전시… 둘이 함께 갈 곳을 미리 담아두세요', go: () => navigation.navigate('Place', { screen: 'PlaceAdd', initial: false }) },
                   ] as const

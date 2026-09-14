@@ -147,7 +147,20 @@ export type WorkoutStackParamList = {
    * 직접 기록 화면. `imageUrl` 이 있으면 운동 인증샷을 붙인 채로 열리고, 화면이 그 사진을
    * AI 로 읽어 시간·거리를 채운다(읽지 못해도 사진만 붙은 기록으로 저장할 수 있다).
    */
-  WorkoutRecord: { date?: string; imageUrl?: string } | undefined;
+  WorkoutRecord:
+    | {
+        date?: string;
+        imageUrl?: string;
+        /**
+         * 다른 탭에서 들어왔으면 그 탭 이름 — 닫을 때 거기로 돌려보낸다.
+         *
+         * <p>홈의 운동 칩은 `navigate('Workout', { screen: 'WorkoutRecord' })` 로 오는데,
+         * 운동 스택의 첫 화면이 `WorkoutMain` 이라 이 이동은 그 위에 이 화면을 얹는다.
+         * 그래서 그냥 닫으면 홈이 아니라 <b>운동 탭 메인</b>으로 떨어진다.
+         */
+        returnTo?: keyof MainTabParamList;
+      }
+    | undefined;
   WorkoutCalendar: undefined;
   // 운동 기록 상세 — 세트별 실기록·RPE. id 만 넘기고 화면이 다시 불러온다(딥링크로도 열린다)
   WorkoutDetail: { workoutId: number };
@@ -263,12 +276,19 @@ export type PlaceStackParamList = PlaceScreensParamList & ContentScreensParamLis
 };
 
 // 2.2 메인 탭 (홈 / 운동 / 채팅 / 식단 / 장소) — FAB 없음
+/**
+ * 탭 파라미터 — 전부 <b>선택</b>이다.
+ *
+ * <p>필수로 두면 "탭만 바꾸고 그 탭이 보던 자리는 그대로" 가 타입상 불가능해진다
+ * (`jumpTo('Home')` 이 params 두 번째 인자를 요구한다). 안쪽 화면을 지정하지 않는 탭 이동은
+ * 정상적인 사용이고, 그때 스택은 이전 상태를 유지한다.
+ */
 export type MainTabParamList = {
-  Home: NavigatorScreenParams<HomeStackParamList>;
-  Workout: NavigatorScreenParams<WorkoutStackParamList>;
-  Chat: NavigatorScreenParams<ChatStackParamList>;
-  Diet: NavigatorScreenParams<DietStackParamList>;
-  Place: NavigatorScreenParams<PlaceStackParamList>;
+  Home: NavigatorScreenParams<HomeStackParamList> | undefined;
+  Workout: NavigatorScreenParams<WorkoutStackParamList> | undefined;
+  Chat: NavigatorScreenParams<ChatStackParamList> | undefined;
+  Diet: NavigatorScreenParams<DietStackParamList> | undefined;
+  Place: NavigatorScreenParams<PlaceStackParamList> | undefined;
 };
 
 export type RootStackParamList = {
