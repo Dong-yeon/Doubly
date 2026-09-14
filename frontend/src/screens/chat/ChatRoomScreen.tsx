@@ -38,7 +38,6 @@ import { useRelationStore } from '../../store/relationStore';
 import { useCallStore } from '../../store/callStore';
 import { callApi, CallType } from '../../api/call';
 import { haptics } from '../../utils/haptics';
-import { dismissRoomNotifications } from '../../utils/push';
 import { pickImage, uploadImage } from '../../utils/imageUpload';
 import { uploadChatVoice } from '../../utils/chatVoiceUpload';
 import { parseVoiceContent } from '../../utils/chatVoice';
@@ -575,9 +574,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   useEffect(() => {
     setLoadingHistory(true);
     openRoom(relationId).finally(() => setLoadingHistory(false));
-    // 이 방으로 이미 와 있던 알림(트레이에 뜬 것)을 지운다 — 앞으로 올 알림 억제는
-    // chatStore.activeRoomId + push.ts 핸들러가 맡는다.
-    void dismissRoomNotifications(relationId);
+    // 이 방으로 이미 와 있던 알림(트레이에 뜬 것)을 지우는 일은 RootNavigator 가 경로
+    // 변화로 한다 — 앞으로 올 알림 억제만 chatStore.activeRoomId + push.ts 핸들러가 맡는다.
     return () => closeRoom(relationId);
   }, [relationId, openRoom, closeRoom]);
 
@@ -589,18 +587,15 @@ export function ChatRoomScreen({ navigation, route }: Props) {
    * 오지 않는다 — 소켓은 붙은 뒤의 것만 준다. 그 공백은 REST 로 메워야 한다.
    * (이게 없으면 "알림은 왔는데 방을 열어보니 그 메시지가 없다"가 된다.)
    *
-   * <p>알림 정리도 여기서 같이 한다. 배너 억제(push.ts 핸들러)는 <b>앱이 떠 있을 때</b>만
-   * 도는데, 방을 열어둔 채 백그라운드로 나가 있는 동안 온 메시지는 OS 가 그대로 트레이에
-   * 띄운다. 그 상태로 돌아오면 화면은 이미 마운트돼 있어서 마운트 시 정리(위 openRoom
-   * 옆)가 다시 돌지 않는다 — "읽고 있는데도 알림이 안 사라진다"는 리포트의 실제 경로다
-   * (2026-09-08, 안드로이드에서 관측. iOS 는 그 시점에 푸시 자체가 안 오고 있었다).
+   * <p>알림 정리는 여기서 하지 않는다 — RootNavigator 가 포그라운드 복귀 때 지금 화면
+   * 경로로 한 번 훑는다. 방을 열어둔 채 백그라운드로 나가 있는 동안 온 메시지가 트레이에
+   * 남던 경로(2026-09-08, 안드로이드)는 거기서 화면 종류를 가리지 않고 처리된다.
    */
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {
       if (next !== 'active') return;
       void connectSocket().catch(() => undefined);
       void syncMissed(relationId).catch(() => undefined);
-      void dismissRoomNotifications(relationId);
     });
     return () => sub.remove();
   }, [relationId, syncMissed]);

@@ -1,12 +1,14 @@
 /**
  * 루트 네비게이터 — 인증 상태에 따라 온보딩 / 메인 분기
  */
-import React, { useEffect, useRef } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import React, { useCallback, useEffect, useRef } from 'react';
+import { ActivityIndicator, AppState, View } from 'react-native';
 import {
   DarkTheme,
   DefaultTheme,
   NavigationContainer,
+  getPathFromState,
+  useNavigationContainerRef,
   type NavigationState,
 } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -15,6 +17,7 @@ import { linking } from './linking';
 import { OnboardingNavigator } from './OnboardingNavigator';
 import { MainTabNavigator } from './MainTabNavigator';
 import { PushPermissionPrimer } from '../components/PushPermissionPrimer';
+import { dismissNotificationsForPath, setCurrentPath } from '../utils/push';
 import { ConsentGateScreen } from '../screens/onboarding/ConsentGateScreen';
 import { useAuthStore } from '../store/authStore';
 import { useThemeStore } from '../store/themeStore';
@@ -84,6 +87,46 @@ export function RootNavigator() {
     void useThemeStore.getState().load();
   }, [bootstrap]);
 
+  /*
+   * 상단바에 떠 있는 알림 치우기 — <b>앱 전체에서 여기 한 곳</b>이다.
+   *
+   * <p>예전엔 ChatRoomScreen 만 자기 방 알림을 지웠고, 피드·질문·기념일·무드·게임
+   * 알림에는 지우는 경로가 아예 없었다. 탭해서 들어간 한 건만 OS 가 치워 주고 나머지는
+   * 읽어도 영영 남았다("알림 읽어도 안 사라짐", 2026-09-14).
+   *
+   * <p>서버가 보내는 링크(PushLinks)와 화면 경로(linking.ts config)가 같은 문자열이라,
+   * 지금 경로를 그대로 견주면 종류를 나열하지 않아도 전부 걸린다. 경로가 <b>바뀔 때만</b>
+   * 물어보는 이유는 onStateChange 가 같은 화면에서도 자주 불리기 때문이다 —
+   * 네이티브 호출을 매 프레임 하지 않는다.
+   */
+  const containerRef = useNavigationContainerRef<RootStackParamList>();
+  const dismissedPathRef = useRef<string | null>(null);
+  const pathOf = useCallback((state: NavigationState | undefined): string | null => {
+    if (!state) return null;
+    try {
+      return getPathFromState(state, linking.config);
+    } catch {
+      // 경로 맵에 없는 화면 — 지울 알림도 없다
+      return null;
+    }
+  }, []);
+
+  /*
+   * 포그라운드 복귀는 경로가 <b>안 바뀐다</b> — 백그라운드에 있는 동안 쌓인 알림은
+   * 위 경로 변화 훅으로는 안 걸린다. 돌아올 때 지금 화면 기준으로 한 번 더 훑는다.
+   * (ChatRoomScreen 에 있던 AppState 정리가 하던 일을, 화면 종류를 가리지 않고 한다.)
+   */
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next !== 'active') return;
+      const path = pathOf(navStateRef.current);
+      if (path == null) return;
+      dismissedPathRef.current = path;
+      void dismissNotificationsForPath(path);
+    });
+    return () => sub.remove();
+  }, [pathOf]);
+
   if (isLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', backgroundColor: colors.background }}>
@@ -97,11 +140,32 @@ export function RootNavigator() {
       {/* linking — 웹 히스토리(pushState) 연동. 없으면 PWA 에서 스와이프백이 앱 이탈이 된다 */}
       <NavigationContainer
         key={themeVersion}
+        ref={containerRef}
         theme={navTheme()}
+        /*
+         * onStateChange 는 <b>첫 상태에는 안 불린다</b>. 알림을 탭해 앱이 콜드 스타트로
+         * 그 화면에 바로 뜨는 경우가 정확히 그 경로라, 같은 화면으로 온 나머지 알림이
+         * 트레이에 남는다. 준비된 시점에 한 번 훑는다.
+         */
+        onReady={() => {
+          const path = pathOf(containerRef.getRootState());
+          if (path == null) return;
+          setCurrentPath(path);
+          dismissedPathRef.current = path;
+          void dismissNotificationsForPath(path);
+        }}
         linking={linking}
         initialState={navStateRef.current}
         onStateChange={(state) => {
           navStateRef.current = state;
+          const path = pathOf(state);
+          if (path == null) return;
+          // 이 화면으로 <b>앞으로</b> 올 알림은 아예 트레이에 안 올린다(push.ts 핸들러)
+          setCurrentPath(path);
+          // 이미 떠 있던 것은 지운다 — 같은 경로로 다시 불려도 네이티브를 또 찌르지 않는다
+          if (path === dismissedPathRef.current) return;
+          dismissedPathRef.current = path;
+          void dismissNotificationsForPath(path);
         }}
       >
         <Stack.Navigator screenOptions={{ headerShown: false }}>
