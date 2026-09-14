@@ -158,6 +158,25 @@ export interface CoupleCalendarEvent {
   createdBy: number;
 }
 
+/**
+ * 캘린더에 겹쳐 그리는 데이트 기록 — 장소가 연결된 데이트 식단.
+ *
+ * 일정(CoupleCalendarEvent)과 달리 캘린더에서 만들거나 지우지 않는다. 원본은 식단 기록이고
+ * 캘린더는 읽어서 겹쳐 그리기만 한다(여행 기간 띠와 같은 방식) — 그래서 D-day 도 없다.
+ */
+export interface CalendarDateMeal {
+  /** YYYY-MM-DD */
+  date: string;
+  mealId: number;
+  /** 무엇을 먹었는지 — 음식 항목이 없으면 메모, 그마저 없으면 끼니 이름 */
+  title: string;
+  placeId: number;
+  placeName: string;
+  /** 럽슐랭 등급 — 0=일반, 1~3=럽스타 */
+  lovelichelinTier?: number | null;
+  photoUrl?: string | null;
+}
+
 /** 지난 기록 불러오기 결과 — 양쪽이 모두 요청해야 RESTORED 가 된다 */
 export interface RestoreRecords {
   status: 'WAITING_PARTNER' | 'RESTORED';

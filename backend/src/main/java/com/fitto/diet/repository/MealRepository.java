@@ -26,6 +26,25 @@ public interface MealRepository extends JpaRepository<Meal, Long> {
     /** 데이트 식단 짝 — 같은 shared_group_id 를 가진 커플 양쪽 레코드(자기 자신 포함). */
     List<Meal> findBySharedGroupId(String sharedGroupId);
 
+    /**
+     * 커플 캘린더의 데이트 식단 오버레이 — 두 사람의 "같이 먹기" 기록 중 그 기간 것.
+     *
+     * <p>{@link #findRecentForFeed} 와 같은 이유로 파트너 복제본을 뺀다(원본만 created_by 가
+     * null 이거나 user_id 와 같다). 캘린더는 하루에 한 줄을 그리므로 짝이 둘 다 실리면
+     * 같은 한 끼가 두 번 찍힌다.
+     */
+    @Query("""
+            select m from Meal m
+            where m.userId in :userIds
+              and m.sharedGroupId is not null
+              and (m.createdBy is null or m.createdBy = m.userId)
+              and m.mealDate between :start and :end
+            order by m.mealDate asc, m.id asc
+            """)
+    List<Meal> findSharedInPeriod(@Param("userIds") List<Long> userIds,
+                                  @Param("start") LocalDate start,
+                                  @Param("end") LocalDate end);
+
     /** 최근 먹은 음식 자동완성 원본 — 최신순 최대 200건을 가져와 서비스에서 memo 기준으로 집계한다.
      * DB 마다 다른 DISTINCT ON 류 문법을 안 쓰려고(H2 호환) Java 에서 그룹핑한다. */
     List<Meal> findTop200ByUserIdOrderByCreatedAtDesc(Long userId);
