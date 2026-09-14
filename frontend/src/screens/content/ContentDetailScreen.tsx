@@ -471,7 +471,7 @@ export function ContentDetailScreen({ route, navigation }: Props) {
                   onRetry={load}
                 />
               ) : (
-                <EmptyState icon="movie-open-outline" title="아직 관람 기록이 없어요" description="다 보셨다면 남겨보세요! (길게 눌러 삭제)" />
+                <EmptyState icon="movie-open-outline" title="아직 관람 기록이 없어요" description="다 보셨다면 별점과 함께 남겨보세요!" />
               )
             ) : null
           }
