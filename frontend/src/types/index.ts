@@ -1288,6 +1288,11 @@ export interface FeedItem {
   occurredAt: string;
   /** 모든 타입에 붙는다 — 반응이 없으면 빈 배열 */
   reactions?: ReactionSummary[] | null;
+  /**
+   * 데이트 식단(같이 먹기)으로 남긴 끼니 — MEAL 타입만 true 가 될 수 있다.
+   * 서버가 커플 양쪽 짝 중 원본 한 장만 내려주므로, 카드는 "누가"가 아니라 "함께"로 읽힌다.
+   */
+  shared?: boolean;
 }
 export interface FeedTimeline {
   items: FeedItem[];
