@@ -109,14 +109,37 @@ JS 그대로, Windows 알림·트레이·자동 시작·키체인 플러그인�
 목표 이미지: **PC 카카오톡처럼 작은 창으로 화면 구석에 띄워 두고, 채팅과 오늘의 질문·피드를
 짬짬이 보는 클라이언트.** 전체 화면 대시보드가 아니다.
 
-### 0단계 — 웹을 다시 "지켜지는 타깃"으로 (0.5일)
+### 0단계 — 웹을 다시 "지켜지는 타깃"으로 (0.5일) — **완료**
 
 - [x] 부팅 크래시 2건 수정 (`a29459f`).
-- [ ] CI 에 `npm run build:web`(또는 `expo export --platform web`) 잡 추가. 번들만 만들어도
-  import 시점 크래시의 절반(모듈 해석 실패)은 잡힌다. 런타임 크래시까지 잡으려면 Playwright 로
-  `index.html` 열어 콘솔 에러 0 확인 — 이건 선택.
-- [ ] `chatExport.ts` 웹 분기(Blob 다운로드) — 유일하게 남은 미가드 네이티브 호출.
-- [ ] 웹 번들 6.4MB 의 구성 확인(`npx expo export --platform web --dump-sourcemap` 후 source-map-explorer).
+- [x] CI 에 `frontend-web-build` 잡 추가(`npm run build:web`). 번들만 만들어도 import 시점
+  크래시의 절반(모듈 해석 실패)은 잡힌다. 런타임 크래시까지 잡는 Playwright 검사는 선택으로
+  남겨 둔다 — 지금은 번들 크기도 로그에 찍는다.
+- [x] `chatExport.ts` 웹 분기 — `chatExport.web.ts`(Blob 다운로드) 신설, 순수 조립 로직은
+  `chatTranscript.ts` 로 분리. 호출자(`ChatRoomScreen`)의 `Sharing.isAvailableAsync()` 직접
+  호출을 `canExportTranscript()` 로 바꿔, **웹에서 내보내기가 막히지 않고 .txt 로 떨어진다**
+  (윈도우 메모장 한글 깨짐 방지로 BOM 을 붙인다).
+- [x] 웹 번들 구성 확인 — 아래 표.
+
+#### 번들 구성 (`--dump-sourcemap` + source-map-explorer, 2026-09-14)
+
+메인 청크 **5.1MB**. 0절의 6.4MB 는 크래시 수정 *전* 수치이고, `a29459f` 로 Stream SDK·WebRTC 가
+빠지면서 1.3MB 가 줄었다 — **웹에서 안 쓰는 네이티브 SDK 가 번들에 실려 있었다는 뜻이기도 하다.**
+
+| 구성 | 크기 | 비중 |
+| --- | --- | --- |
+| (소스맵 미매핑 — metro 런타임·polyfill 등) | 1982KB | 39.9% |
+| `react-native-reanimated` | 665KB | 13.4% |
+| **`src/screens`** (앱 화면 77개) | 635KB | 12.8% |
+| `react-native-web` | 265KB | 5.3% |
+| `react-native-gesture-handler` | 204KB | 4.1% |
+| `react-dom` | 175KB | 3.5% |
+| `src/components` | 135KB | 2.7% |
+| 나머지(내비게이션·svg·expo-*) | 각 50KB 미만 | — |
+
+확인된 것: `@stream-io/*`·`react-native-webrtc`·`react-native-iap`·`lottie`·Sentry 는 웹 번들에
+**0바이트**다(파일 분리가 실제로 먹고 있다). 줄일 여지는 화면 코드 분할(`src/screens` 635KB)과
+reanimated 인데, 둘 다 0단계 범위가 아니라 필요해지면 따로 다룬다.
 
 ### 1단계 — 큰 화면 셸 (3~5일, 본체)
 
