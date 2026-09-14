@@ -67,7 +67,6 @@ export const STICKER_CHARACTERS: StickerCharacter[] = [
       { code: 'BIGAE_GIFT', label: '선물이야', source: require('../../assets/stickers/bigae_gift.png') },
       { code: 'BIGAE_EXCITED', label: '신났어', source: require('../../assets/stickers/bigae_excited.png') },
       { code: 'BIGAE_DANCE', label: '룰루랄라', source: require('../../assets/stickers/bigae_dance.png') },
-      { code: 'BIGAE_WIGGLE', label: '씰룩씰룩', source: require('../../assets/stickers/bigae_wiggle.png') },
       { code: 'BIGAE_SULKY', label: '시무룩', source: require('../../assets/stickers/bigae_sulky.png') },
       { code: 'BIGAE_GRUMPY', label: '짜증나', source: require('../../assets/stickers/bigae_grumpy.png') },
       { code: 'BIGAE_ANGRY', label: '화났어', source: require('../../assets/stickers/bigae_angry.png') },

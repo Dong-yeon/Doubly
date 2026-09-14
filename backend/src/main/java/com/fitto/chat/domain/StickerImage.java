@@ -38,8 +38,10 @@ public enum StickerImage {
     BEAR_TIRED("지쳤어"),
     BEAR_SLEEPY("잘자"),
 
-    // 비개구리 18종 — 사용자 손그림 스케치를 스티커화한 자체 캐릭터(설계 메모 §15·§17·§20).
-    // 1차 10종 + 2차 스케치 8종(LIKE·HEHE·KISS·GIFT·DANCE·GRUMPY·DIZZY·OFFWORK).
+    // 비개구리 17종 — 사용자 손그림 스케치를 스티커화한 자체 캐릭터(설계 메모 §15·§17·§20).
+    // 1차 10종 + 2차 스케치 8종(LIKE·HEHE·KISS·GIFT·DANCE·GRUMPY·DIZZY·OFFWORK) − BIGAE_WIGGLE.
+    // WIGGLE(뒷모습 엉덩이)은 DANCE(뒷모습 + 음표)와 실루엣이 같아 뺐다(§20). 배포 전이라
+    // 그 코드로 보낸 메시지는 없다 — 있었다면 말풍선에 코드 문자열이 그대로 뜬다.
     BIGAE_LOVE("좋아좋아"),
     BIGAE_LIKE("좋아"),
     BIGAE_HEHE("히히"),
@@ -48,7 +50,6 @@ public enum StickerImage {
     BIGAE_GIFT("선물이야"),
     BIGAE_EXCITED("신났어"),
     BIGAE_DANCE("룰루랄라"),
-    BIGAE_WIGGLE("씰룩씰룩"),
     BIGAE_SULKY("시무룩"),
     BIGAE_GRUMPY("짜증나"),
     BIGAE_ANGRY("화났어"),
