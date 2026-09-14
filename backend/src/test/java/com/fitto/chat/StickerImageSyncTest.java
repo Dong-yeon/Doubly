@@ -39,13 +39,25 @@ class StickerImageSyncTest {
     // 테스트는 backend 모듈 디렉터리에서 실행된다 — 후보 경로로 찾는다(PlanFeatureSyncTest 와 동일).
     private static final List<String> FRONTEND_SRC_CANDIDATES = List.of("../frontend/src", "frontend/src");
 
-    /** {@code { code: 'X', label: 'Y', source: require('...') }} 한 줄에서 세 값을 뽑는다. */
+    /**
+     * {@code { code: 'X', label: 'Y', pack: 'P', source: require('...') }} 한 줄에서 code·label·경로를 뽑는다.
+     *
+     * <p>label 과 source 사이의 다른 필드는 건너뛴다 — 2026-09-14 에 트레이 팩 구분용
+     * {@code pack} 이 그 자리에 들어오면서 붙어 있기를 전제한 정규식이 한 건도 못 찾았다.
+     * 이 테스트는 <b>0건이면 통과</b>하는 모양이라(빈 집합끼리 비교) 조용히 무력화될 뻔했다 —
+     * 아래 최소 개수 검사가 그 재발을 막는다.
+     */
     private static final Pattern ENTRY = Pattern.compile(
-            "\\{\\s*code:\\s*'([A-Z0-9_]+)'\\s*,\\s*label:\\s*'([^']*)'\\s*,\\s*source:\\s*require\\('([^']+)'\\)");
+            "\\{\\s*code:\\s*'([A-Z0-9_]+)'\\s*,\\s*label:\\s*'([^']*)'\\s*,(?:[^{}]*?,)?\\s*source:\\s*require\\('([^']+)'\\)");
 
     @Test
     void 프론트_STICKER_IMAGES_와_백엔드_StickerImage_가_일치한다() throws IOException {
         Map<String, String> frontend = parseFrontend();
+
+        // 정규식이 한 건도 못 찾으면 빈 집합끼리 비교해 통과한다 — 파싱 자체가 살아 있는지 먼저 본다
+        assertThat(frontend)
+                .as("stickerImages.ts 파싱 실패 — ENTRY 정규식이 카탈로그 모양과 안 맞는다")
+                .isNotEmpty();
 
         Map<String, String> backend = new LinkedHashMap<>();
         Arrays.stream(StickerImage.values()).forEach(s -> backend.put(s.name(), s.label()));

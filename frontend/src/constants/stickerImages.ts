@@ -18,9 +18,19 @@
  */
 import type { ImageSourcePropType } from 'react-native';
 
+/**
+ * 트레이에서 어느 팩 칸에 들어가는가 — 캐릭터별로 스트립 썸네일이 하나씩 선다.
+ *
+ * <p>코드 접두사(BEAR_/BIGAE_)로 가르지 않는 이유: 곰돌이 첫 장만 {@code LOVE_BEAR}
+ * 라 규칙이 한 군데서 깨진다. 새 캐릭터가 들어올 때도 접두사 규칙을 기억할 필요 없이
+ * 이 값만 적으면 된다.
+ */
+export type StickerImagePack = 'BEAR' | 'BIGAE';
+
 export interface StickerImageDef {
   code: string;
   label: string;
+  pack: StickerImagePack;
   source: ImageSourcePropType;
 }
 
@@ -34,27 +44,27 @@ export const STICKER_IMAGES: StickerImageDef[] = [
    * 글자를 두지 않기로 했고, 테두리를 비개구리와 맞추려면 같은 normalize 를 거쳐야 했다.
    * <b>코드는 그대로라 과거 말풍선은 영향받지 않는다</b>(PNG 만 갈아끼웠다).
    */
-  { code: 'LOVE_BEAR', label: '사랑해', source: require('../../assets/stickers/love_bear.png') },
-  { code: 'BEAR_EXCITED', label: '신났어', source: require('../../assets/stickers/bear_excited.png') },
-  { code: 'BEAR_LAUGH', label: '하하하', source: require('../../assets/stickers/bear_laugh.png') },
-  { code: 'BEAR_SHY', label: '부끄러워', source: require('../../assets/stickers/bear_shy.png') },
-  { code: 'BEAR_SULKY', label: '시무룩', source: require('../../assets/stickers/bear_sulky.png') },
-  { code: 'BEAR_ANGRY', label: '화났어', source: require('../../assets/stickers/bear_angry.png') },
-  { code: 'BEAR_SORRY', label: '미안해', source: require('../../assets/stickers/bear_sorry.png') },
-  { code: 'BEAR_CRYING', label: '엉엉', source: require('../../assets/stickers/bear_crying.png') },
-  { code: 'BEAR_TIRED', label: '지쳤어', source: require('../../assets/stickers/bear_tired.png') },
-  { code: 'BEAR_SLEEPY', label: '잘자', source: require('../../assets/stickers/bear_sleepy.png') },
+  { code: 'LOVE_BEAR', label: '사랑해', pack: 'BEAR', source: require('../../assets/stickers/love_bear.png') },
+  { code: 'BEAR_EXCITED', label: '신났어', pack: 'BEAR', source: require('../../assets/stickers/bear_excited.png') },
+  { code: 'BEAR_LAUGH', label: '하하하', pack: 'BEAR', source: require('../../assets/stickers/bear_laugh.png') },
+  { code: 'BEAR_SHY', label: '부끄러워', pack: 'BEAR', source: require('../../assets/stickers/bear_shy.png') },
+  { code: 'BEAR_SULKY', label: '시무룩', pack: 'BEAR', source: require('../../assets/stickers/bear_sulky.png') },
+  { code: 'BEAR_ANGRY', label: '화났어', pack: 'BEAR', source: require('../../assets/stickers/bear_angry.png') },
+  { code: 'BEAR_SORRY', label: '미안해', pack: 'BEAR', source: require('../../assets/stickers/bear_sorry.png') },
+  { code: 'BEAR_CRYING', label: '엉엉', pack: 'BEAR', source: require('../../assets/stickers/bear_crying.png') },
+  { code: 'BEAR_TIRED', label: '지쳤어', pack: 'BEAR', source: require('../../assets/stickers/bear_tired.png') },
+  { code: 'BEAR_SLEEPY', label: '잘자', pack: 'BEAR', source: require('../../assets/stickers/bear_sleepy.png') },
   // 비개구리 10종 — 트레이 노출 순서는 쓰임새가 많은 것부터
-  { code: 'BIGAE_LOVE', label: '좋아좋아', source: require('../../assets/stickers/bigae_love.png') },
-  { code: 'BIGAE_EXCITED', label: '신났어', source: require('../../assets/stickers/bigae_excited.png') },
-  { code: 'BIGAE_LAUGH', label: '하하하', source: require('../../assets/stickers/bigae_laugh.png') },
-  { code: 'BIGAE_WIGGLE', label: '씰룩씰룩', source: require('../../assets/stickers/bigae_wiggle.png') },
-  { code: 'BIGAE_SULKY', label: '시무룩', source: require('../../assets/stickers/bigae_sulky.png') },
-  { code: 'BIGAE_ANGRY', label: '화났어', source: require('../../assets/stickers/bigae_angry.png') },
-  { code: 'BIGAE_DASH', label: '흥, 간다', source: require('../../assets/stickers/bigae_dash.png') },
-  { code: 'BIGAE_CRYING', label: '엉엉', source: require('../../assets/stickers/bigae_crying.png') },
-  { code: 'BIGAE_GLOOMY', label: '축 처짐', source: require('../../assets/stickers/bigae_gloomy.png') },
-  { code: 'BIGAE_SLEEPY', label: '잘자', source: require('../../assets/stickers/bigae_sleepy.png') },
+  { code: 'BIGAE_LOVE', label: '좋아좋아', pack: 'BIGAE', source: require('../../assets/stickers/bigae_love.png') },
+  { code: 'BIGAE_EXCITED', label: '신났어', pack: 'BIGAE', source: require('../../assets/stickers/bigae_excited.png') },
+  { code: 'BIGAE_LAUGH', label: '하하하', pack: 'BIGAE', source: require('../../assets/stickers/bigae_laugh.png') },
+  { code: 'BIGAE_WIGGLE', label: '씰룩씰룩', pack: 'BIGAE', source: require('../../assets/stickers/bigae_wiggle.png') },
+  { code: 'BIGAE_SULKY', label: '시무룩', pack: 'BIGAE', source: require('../../assets/stickers/bigae_sulky.png') },
+  { code: 'BIGAE_ANGRY', label: '화났어', pack: 'BIGAE', source: require('../../assets/stickers/bigae_angry.png') },
+  { code: 'BIGAE_DASH', label: '흥, 간다', pack: 'BIGAE', source: require('../../assets/stickers/bigae_dash.png') },
+  { code: 'BIGAE_CRYING', label: '엉엉', pack: 'BIGAE', source: require('../../assets/stickers/bigae_crying.png') },
+  { code: 'BIGAE_GLOOMY', label: '축 처짐', pack: 'BIGAE', source: require('../../assets/stickers/bigae_gloomy.png') },
+  { code: 'BIGAE_SLEEPY', label: '잘자', pack: 'BIGAE', source: require('../../assets/stickers/bigae_sleepy.png') },
 ];
 
 export function stickerImageOf(code: string | null | undefined): StickerImageDef | undefined {
