@@ -43,6 +43,7 @@ import { placeApi } from '../../api/place';
 import { contentApi } from '../../api/content';
 import { usePlaceStore } from '../../store/placeStore';
 import { useContentStore } from '../../store/contentStore';
+import { useRelationStore } from '../../store/relationStore';
 import { useDeleteAction } from '../../hooks/useDeleteAction';
 import { isKakaoMapConfigured } from '../../constants/config';
 import { toast } from '../../store/toastStore';
@@ -109,10 +110,34 @@ function renderRecommendation(data: LovelichelinRecommendation) {
   return <LovelichelinRecommendCards data={data} />;
 }
 
+/**
+ * 아직 등급이 없는 카드의 한 줄 설명 — 장소·콘텐츠가 같은 문구를 쓴다.
+ *
+ * <p>예전 문구는 "럽슐랭 탈락 — 재평가하면 다시 등급이 매겨져요" 였다. 내가 ★★★★, 상대가
+ * ★★ 를 준 우리 단골집에 앱이 "탈락"이라고 쓰는 셈이라 커플 앱의 어휘가 아니었다. 미슐랭
+ * 패러디의 재미는 성공 쪽 어휘(등극·인증)에만 남기고, 실패 쪽은 <b>판정 대신 사실</b>을 쓴다 —
+ * 둘의 별점이 갈렸다는 것, 혹은 누구 차례인지.
+ */
+function ratingHint(
+  item: { myRating?: number | null; partnerRating?: number | null },
+  partnerName: string | null,
+): string {
+  const partner = partnerName ?? '상대';
+  if (item.myRating != null && item.partnerRating != null) {
+    return `의견이 갈렸어요 · 나 ${stars(item.myRating)} / ${partner} ${stars(item.partnerRating)}`;
+  }
+  return item.myRating != null
+    ? `${partner}님 별점을 기다리고 있어요`
+    : `${partner}님이 별점을 남겼어요 · 내 차례예요`;
+}
+
 export function PlaceScreen() {
   const navigation = useNavigation<Nav>();
   const [mode, setMode] = useState<Mode>('places');
   const [placeView, setPlaceView] = useState<PlaceView>('list');
+
+  // 대기·의견 갈림 문구에 상대 이름을 쓴다 — "나머지 한 명" 보다 짧고 누구 차례인지가 분명하다
+  const partnerName = useRelationStore((s) => s.couple?.partner?.name ?? null);
 
   const allPlaces = usePlaceStore((s) => s.places);
   const placeLoading = usePlaceStore((s) => s.loading);
@@ -529,11 +554,7 @@ export function PlaceScreen() {
                 ) : null}
               </View>
               {item.myRating != null || item.partnerRating != null ? (
-                <Text style={styles.pendingHint}>
-                  {item.myRating != null && item.partnerRating != null
-                    ? '럽슐랭 탈락 — 재평가하면 다시 등급이 매겨져요'
-                    : `${item.myRating != null ? '내' : '상대'} 평점만 매겨졌어요 — 나머지 한 명의 평가를 기다리는 중`}
-                </Text>
+                <Text style={styles.pendingHint}>{ratingHint(item, partnerName)}</Text>
               ) : null}
             </TouchableOpacity>
             )
@@ -675,11 +696,7 @@ export function PlaceScreen() {
                   ) : null}
                 </View>
                 {item.lovelichelinTier === 0 && (item.myRating != null || item.partnerRating != null) ? (
-                  <Text style={styles.pendingHint}>
-                    {item.myRating != null && item.partnerRating != null
-                      ? '럽슐랭 탈락 — 재평가하면 다시 등급이 매겨져요'
-                      : `${item.myRating != null ? '내' : '상대'} 평점만 매겨졌어요 — 나머지 한 명의 평가를 기다리는 중`}
-                  </Text>
+                  <Text style={styles.pendingHint}>{ratingHint(item, partnerName)}</Text>
                 ) : null}
               </View>
             </TouchableOpacity>

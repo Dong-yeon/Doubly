@@ -43,6 +43,7 @@ import { IconButton } from '../../components/IconButton';
 import { KakaoMap } from '../../components/KakaoMap';
 import { LovelichelinBadge } from '../../components/LovelichelinBadge';
 import { LovelichelinFanfareModal } from '../../components/LovelichelinFanfareModal';
+import { LovelichelinRuleSheet } from '../../components/LovelichelinRuleSheet';
 import { SoloPickBadge } from '../../components/SoloPickBadge';
 import { usePlaceStore } from '../../store/placeStore';
 import { SOLO_PICK_MIN_RATING } from './placeFilters';
@@ -135,6 +136,7 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
   const [myRatingInput, setMyRatingInput] = useState(0);
   const [ratingEditing, setRatingEditing] = useState(false);
   const [ratingSaving, setRatingSaving] = useState(false);
+  const [ruleOpen, setRuleOpen] = useState(false);
   // 재평가로 등급이 유지/하락할 때는 축하 모달을 열지 않는다 — 0→양수로 "새로 등극"할 때만
   const [fanfareTier, setFanfareTier] = useState(0);
 
@@ -413,7 +415,15 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
                   */}
                   <View style={styles.lovelichelinSection}>
                     <View style={styles.lovelichelinHeader}>
-                      <Text style={styles.label}>럽슐랭 평가</Text>
+                      <View style={styles.lovelichelinLabelRow}>
+                        <Text style={styles.label}>럽슐랭 평가</Text>
+                        {/* 앱이 판정만 보여주고 규칙은 말하지 않던 자리 — 기준을 여기서 편다 */}
+                        <IconButton
+                          icon="comment-question-outline"
+                          label="럽슐랭 등급 기준 보기"
+                          onPress={() => setRuleOpen(true)}
+                        />
+                      </View>
                       <LovelichelinBadge tier={place.lovelichelinTier} size="sm" />
                     </View>
 
@@ -662,6 +672,7 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
         placeName={place?.name ?? ''}
         onClose={() => setFanfareTier(0)}
       />
+      <LovelichelinRuleSheet visible={ruleOpen} onClose={() => setRuleOpen(false)} />
     </SafeAreaView>
   );
 }
@@ -701,6 +712,8 @@ const styles = themedStyles((colors) => ({
     gap: spacing.sm,
   },
   lovelichelinHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  // label 에 marginBottom 이 있어 ⓘ 와 밑줄이 어긋난다 — 줄 자체를 가운데로 맞춘다
+  lovelichelinLabelRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xxs },
   // 접힌 상태의 한 줄 요약 — "나 ★★★★ / 상대 ★★★" 과 수정 버튼
   ratingSummaryRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   ratingSummaryTexts: { flex: 1, gap: 2 },
