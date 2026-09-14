@@ -17,6 +17,7 @@ import { ExercisePickerModal } from '../../components/workout/ExercisePickerModa
 import { useWorkoutStore } from '../../store/workoutStore';
 import { useRelationStore } from '../../store/relationStore';
 import { useDirtyGuard } from '../../hooks/useDirtyGuard';
+import { useReturnToTab } from '../../hooks/useReturnToTab';
 import { publishEnsuringConnection } from '../../api/chatSocket';
 import { voiceClipsApi } from '../../api/voiceClips';
 import { workoutApi } from '../../api/workout';
@@ -194,6 +195,9 @@ export function WorkoutRecordScreen({ navigation, route }: Props) {
         s.exerciseName.trim() || s.sets || s.reps || s.weightKg || s.durationMin || s.distanceKm,
     );
   const allowLeave = useDirtyGuard(dirty);
+
+  // 홈처럼 다른 탭에서 열렸으면 닫을 때 그 탭으로 돌려보낸다(훅 주석에 경위)
+  useReturnToTab(route.params?.returnTo);
 
   const updateSet = (idx: number, patch: Partial<SetForm>) => {
     setSets((prev) => prev.map((s, i) => (i === idx ? { ...s, ...patch } : s)));
