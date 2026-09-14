@@ -52,17 +52,30 @@ export const STICKER_CHARACTERS: StickerCharacter[] = [
      */
     key: 'bigae',
     label: '비개구리',
-    // 구획 안 순서는 쓰임새가 많은 것부터
+    /*
+     * 18종 — 1차 10종(2026-09-08)에 2차 스케치 8종(2026-09-14)을 섞었다. 새 것을 뒤에 붙이지
+     * 않고 감정 흐름대로 다시 늘어놨다(기쁨 → 애정 → 신남 → 삐짐·화 → 슬픔 → 지침 → 잘자).
+     * 뒤에 붙이면 "좋아"가 17번째에 앉아 스크롤을 내려야 나오는데, 이 세트는 아직 실사용
+     * 이력이 없어 자리를 외운 사람이 없다 — 지금이 아니면 못 고친다.
+     */
     stickers: [
       { code: 'BIGAE_LOVE', label: '좋아좋아', source: require('../../assets/stickers/bigae_love.png') },
-      { code: 'BIGAE_EXCITED', label: '신났어', source: require('../../assets/stickers/bigae_excited.png') },
+      { code: 'BIGAE_LIKE', label: '좋아', source: require('../../assets/stickers/bigae_like.png') },
+      { code: 'BIGAE_HEHE', label: '히히', source: require('../../assets/stickers/bigae_hehe.png') },
       { code: 'BIGAE_LAUGH', label: '하하하', source: require('../../assets/stickers/bigae_laugh.png') },
+      { code: 'BIGAE_KISS', label: '뽀뽀', source: require('../../assets/stickers/bigae_kiss.png') },
+      { code: 'BIGAE_GIFT', label: '선물이야', source: require('../../assets/stickers/bigae_gift.png') },
+      { code: 'BIGAE_EXCITED', label: '신났어', source: require('../../assets/stickers/bigae_excited.png') },
+      { code: 'BIGAE_DANCE', label: '룰루랄라', source: require('../../assets/stickers/bigae_dance.png') },
       { code: 'BIGAE_WIGGLE', label: '씰룩씰룩', source: require('../../assets/stickers/bigae_wiggle.png') },
       { code: 'BIGAE_SULKY', label: '시무룩', source: require('../../assets/stickers/bigae_sulky.png') },
+      { code: 'BIGAE_GRUMPY', label: '짜증나', source: require('../../assets/stickers/bigae_grumpy.png') },
       { code: 'BIGAE_ANGRY', label: '화났어', source: require('../../assets/stickers/bigae_angry.png') },
       { code: 'BIGAE_DASH', label: '흥, 간다', source: require('../../assets/stickers/bigae_dash.png') },
       { code: 'BIGAE_CRYING', label: '엉엉', source: require('../../assets/stickers/bigae_crying.png') },
       { code: 'BIGAE_GLOOMY', label: '축 처짐', source: require('../../assets/stickers/bigae_gloomy.png') },
+      { code: 'BIGAE_DIZZY', label: '어질~', source: require('../../assets/stickers/bigae_dizzy.png') },
+      { code: 'BIGAE_OFFWORK', label: '퇴근', source: require('../../assets/stickers/bigae_offwork.png') },
       { code: 'BIGAE_SLEEPY', label: '잘자', source: require('../../assets/stickers/bigae_sleepy.png') },
     ],
   },
