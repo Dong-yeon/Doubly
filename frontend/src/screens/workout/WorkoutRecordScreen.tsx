@@ -5,8 +5,7 @@ import { MaterialCommunityIcons } from '../../components/Icon';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import type { MainTabParamList, WorkoutStackParamList } from '../../navigation/types';
+import type { WorkoutStackParamList } from '../../navigation/types';
 import type { VoicePhrase, WorkoutSet } from '../../types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
@@ -18,6 +17,7 @@ import { ExercisePickerModal } from '../../components/workout/ExercisePickerModa
 import { useWorkoutStore } from '../../store/workoutStore';
 import { useRelationStore } from '../../store/relationStore';
 import { useDirtyGuard } from '../../hooks/useDirtyGuard';
+import { useReturnToTab } from '../../hooks/useReturnToTab';
 import { publishEnsuringConnection } from '../../api/chatSocket';
 import { voiceClipsApi } from '../../api/voiceClips';
 import { workoutApi } from '../../api/workout';
@@ -196,28 +196,8 @@ export function WorkoutRecordScreen({ navigation, route }: Props) {
     );
   const allowLeave = useDirtyGuard(dirty);
 
-  /*
-   * 다른 탭에서 들어왔으면 닫을 때 그 탭으로 돌려보낸다.
-   *
-   * <p>홈의 운동 칩은 {@code navigate('Workout', { screen: 'WorkoutRecord' })} 로 오는데,
-   * 운동 스택의 첫 화면이 {@code WorkoutMain} 이라 이 이동은 그것을 깔고 이 화면을 얹는다.
-   * 그래서 X 를 눌러 닫으면 홈이 아니라 <b>운동 탭 메인</b>으로 떨어졌다 — 홈에서 온 사람에게는
-   * "취소"가 아니라 "한 칸 뒤로"로 읽힌다(2026-09-14 리포트). 홈 칩 주석이 약속한
-   * "탭 안 옮기고 바로 기록"이 깨지는 자리이기도 하다.
-   *
-   * <p><b>언마운트에 거는 이유</b>: 닫는 길이 넷이다 — X · 하드웨어 백 · 모달 스와이프 ·
-   * 저장 후 자동 닫기. 화면이 스택에서 빠지는 순간은 그 넷 모두에 공통이고, 이탈 가드에서
-   * "계속 쓰기"를 고른 경우에는 애초에 언마운트되지 않는다. X 핸들러에만 붙이면 나머지
-   * 셋이 빠지고, 확인창을 한 벌 더 쓰게 된다.
-   */
-  const returnTo = route.params?.returnTo;
-  useEffect(() => {
-    if (!returnTo) return;
-    return () => {
-      // jumpTo — 탭만 바꾸고 그 탭의 스택은 보던 자리 그대로 둔다(navigate 는 params 가 필수다)
-      navigation.getParent<BottomTabNavigationProp<MainTabParamList>>()?.jumpTo(returnTo);
-    };
-  }, [navigation, returnTo]);
+  // 홈처럼 다른 탭에서 열렸으면 닫을 때 그 탭으로 돌려보낸다(훅 주석에 경위)
+  useReturnToTab(route.params?.returnTo);
 
   const updateSet = (idx: number, patch: Partial<SetForm>) => {
     setSets((prev) => prev.map((s, i) => (i === idx ? { ...s, ...patch } : s)));
