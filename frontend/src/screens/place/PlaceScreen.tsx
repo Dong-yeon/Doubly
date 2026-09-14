@@ -8,9 +8,10 @@
  * 둘러보기에만 걸려 정작 결과물인 가이드는 이름으로 찾을 수 없었고, 카테고리 필터는 두 모드가
  * 한 state 를 공유해 모드를 넘어 조용히 따라왔다.
  *
- * <p>이제 목록은 하나다. 정렬이 그 역할을 대신한다 — <b>인증 등급 → 최근 방문 → 등록</b> 순이라
- * 등급 있는 곳이 자연히 위에 매거진 카드로 서고 그 아래 나머지가 이어진다. 지도는 모드가 아니라
- * 제목 줄의 아이콘 토글이다. 분석: docs/LOVELICHELIN_UX_REANALYSIS_2026-09-14.md 3-2 · 5-4.
+ * <p>이제 목록은 하나다. 정렬이 그 역할을 대신한다 — <b>인증 등급 → 솔로 픽 → 최근 방문 → 등록</b>
+ * 순이라 등급 있는 곳이 자연히 위에 매거진 카드로 서고 그 아래 나머지가 이어진다. 별도 섹션이던
+ * "내 픽 · 상대 픽"도 순서 안으로 들어왔다 — 섹션으로 두면 같은 장소가 섹션과 본문에 두 번
+ * 나온다(실기기 확인 2026-09-14). 지도는 모드가 아니라 제목 줄의 아이콘 토글이다. 분석: docs/LOVELICHELIN_UX_REANALYSIS_2026-09-14.md 3-2 · 5-4.
  *
  * <p><b>왜 "콘텐츠"가 별개 모드인가</b>: 영화·공연·드라마는 좌표가 없는 게 정상이라
  * Place 도메인에 안 섞는다(constants/contentTypes.ts, api/content.ts 참고) — 그래서 장소 쪽의
@@ -36,8 +37,7 @@ import { AiInsightButton } from '../../components/AiInsightButton';
 import { LovelichelinBadge } from '../../components/LovelichelinBadge';
 import { SoloPickBadge } from '../../components/SoloPickBadge';
 import { LovelichelinRecommendCards } from './LovelichelinRecommendCards';
-import { SoloPickSection } from './SoloPickSection';
-import { SOLO_PICK_MIN_RATING, CATEGORY_FILTERS } from './placeFilters';
+import { isSoloPick, CATEGORY_FILTERS } from './placeFilters';
 import { CONTENT_TYPE_FILTERS, contentTypeLabel } from '../../constants/contentTypes';
 import { placeApi } from '../../api/place';
 import { contentApi } from '../../api/content';
@@ -203,34 +203,17 @@ export function PlaceScreen() {
         .filter((p) => categoryFilter === 'ALL' || p.category === categoryFilter)
         .sort((a, b) => {
           if (b.lovelichelinTier !== a.lovelichelinTier) return b.lovelichelinTier - a.lovelichelinTier;
+          // 솔로 픽은 인증 바로 다음 — 예전엔 목록 위에 별도 섹션("내 픽 · 상대 픽")으로
+          // 얹혀 있었는데, 한 목록이 되면서 같은 장소가 섹션과 본문에 두 번 나왔다
+          // (실기기 확인 2026-09-14). 섹션을 걷어내고 순서로 올린다 — 배지가 이미
+          // 카드에 붙어 있어 무엇이 픽인지는 그대로 보인다.
+          const pick = Number(isSoloPick(b)) - Number(isSoloPick(a));
+          if (pick !== 0) return pick;
           const visited = (b.lastVisitedAt ?? '').localeCompare(a.lastVisitedAt ?? '');
           if (visited !== 0) return visited;
           return b.id - a.id;
         }),
     [allPlaces, search, categoryFilter],
-  );
-
-  /*
-   * 솔로 픽 — 아직 둘 다 안 매겨(tier 0) 럽슐랭 인증엔 못 미치지만, 한쪽이 강력 추천(4점
-   * 이상)한 곳. "혼자 간 인생 맛집"도 인정받을 방법이 있어야 한다는 결정(2026-08-24).
-   *
-   * categoryFilter 도 같이 건다 — 처음엔 "카테고리와 무관하게 항상 노출"로 만들었는데,
-   * 카페 카테고리만 골랐는데 여행지 픽이 그대로 떠 있어 실사용에서 헷갈린다는 리포트
-   * (2026-09-01). guidePlaces 와 같은 필터를 써서 "지금 보고 있는 카테고리 안에서"라는
-   * 기대에 맞춘다.
-   */
-  const soloPicks = useMemo(
-    () =>
-      allPlaces
-        .filter((p) => p.lovelichelinTier === 0)
-        .filter((p) => categoryFilter === 'ALL' || p.category === categoryFilter)
-        .filter(
-          (p) =>
-            (p.myRating != null && p.myRating >= SOLO_PICK_MIN_RATING && p.partnerRating == null) ||
-            (p.partnerRating != null && p.partnerRating >= SOLO_PICK_MIN_RATING && p.myRating == null),
-        )
-        .sort((a, b) => (b.myRating ?? b.partnerRating ?? 0) - (a.myRating ?? a.partnerRating ?? 0)),
-    [allPlaces, categoryFilter],
   );
 
   // 지도도 같은 필터링 결과를 쓴다 — 목록에서 '카페'만 보다가 지도로 넘기면 카페만 찍힌다
@@ -245,27 +228,21 @@ export function PlaceScreen() {
       tier: p.lovelichelinTier,
     }));
 
+  // 콘텐츠도 장소와 같은 순서 규칙을 쓴다 — 인증 → 솔로 픽 → 최근 관람 → 등록
   const browseContents = useMemo(
     () =>
       allContents
         .filter((c) => !contentSearch.trim() || c.title.toLowerCase().includes(contentSearch.trim().toLowerCase()))
-        .filter((c) => contentTypeFilter === 'ALL' || c.type === contentTypeFilter),
+        .filter((c) => contentTypeFilter === 'ALL' || c.type === contentTypeFilter)
+        .sort((a, b) => {
+          if (b.lovelichelinTier !== a.lovelichelinTier) return b.lovelichelinTier - a.lovelichelinTier;
+          const pick = Number(isSoloPick(b)) - Number(isSoloPick(a));
+          if (pick !== 0) return pick;
+          const watched = (b.lastWatchedAt ?? '').localeCompare(a.lastWatchedAt ?? '');
+          if (watched !== 0) return watched;
+          return b.id - a.id;
+        }),
     [allContents, contentSearch, contentTypeFilter],
-  );
-
-  // 콘텐츠 솔로 픽 — 장소 쪽(soloPicks)과 완전히 같은 규칙. 콘텐츠 모드는 가이드/둘러보기로
-  // 나뉘지 않은 단일 목록이라, 필터·검색에 걸리지 않은 목록 맨 위 가로 스크롤로 얹는다.
-  const contentSoloPicks = useMemo(
-    () =>
-      allContents
-        .filter((c) => c.lovelichelinTier === 0)
-        .filter(
-          (c) =>
-            (c.myRating != null && c.myRating >= SOLO_PICK_MIN_RATING && c.partnerRating == null) ||
-            (c.partnerRating != null && c.partnerRating >= SOLO_PICK_MIN_RATING && c.myRating == null),
-        )
-        .sort((a, b) => (b.myRating ?? b.partnerRating ?? 0) - (a.myRating ?? a.partnerRating ?? 0)),
-    [allContents],
   );
 
   const onDeletePlace = (place: Place) => {
@@ -441,34 +418,6 @@ export function PlaceScreen() {
           contentContainerStyle={styles.list}
           refreshing={placeLoading}
           onRefresh={() => loadPlaces(true)}
-          ListHeaderComponent={
-            <SoloPickSection
-              title="내 픽 · 상대 픽"
-              subtitle="아직 둘 다 안 가봤지만, 한 명은 인정한 곳이에요"
-              items={soloPicks}
-              keyExtractor={(p) => String(p.id)}
-              renderCard={(p) => {
-                const who: 'me' | 'partner' = p.myRating != null ? 'me' : 'partner';
-                const rating = p.myRating ?? p.partnerRating ?? 0;
-                return (
-                  <TouchableOpacity
-                    activeOpacity={0.85}
-                    onPress={() => navigation.navigate('PlaceDetail', { placeId: p.id, name: p.name })}
-                  >
-                    <Card elevation="sm" style={styles.soloPickCard}>
-                      <SoloPickBadge who={who} size="sm" />
-                      <Text style={styles.soloPickName} numberOfLines={1}>
-                        {p.name}
-                      </Text>
-                      <Text style={[styles.soloPickStars, { color: who === 'me' ? colors.me : colors.partner }]}>
-                        {stars(rating)}
-                      </Text>
-                    </Card>
-                  </TouchableOpacity>
-                );
-              }}
-            />
-          }
           /*
            * 카드 두 종류가 한 목록에 섞인다 — 인증된 곳은 커버 사진이 있는 매거진 카드,
            * 나머지는 한 줄짜리 일반 카드. 정렬이 등급 우선이라 매거진 카드가 위에 모이고
@@ -534,8 +483,7 @@ export function PlaceScreen() {
                     <Text style={styles.categoryText}>{item.category}</Text>
                   </View>
                 ) : null}
-                {(item.myRating != null && item.myRating >= SOLO_PICK_MIN_RATING && item.partnerRating == null) ||
-                (item.partnerRating != null && item.partnerRating >= SOLO_PICK_MIN_RATING && item.myRating == null) ? (
+                {isSoloPick(item) ? (
                   <SoloPickBadge who={item.myRating != null ? 'me' : 'partner'} size="sm" />
                 ) : null}
                 {item.tripId != null ? (
@@ -633,36 +581,6 @@ export function PlaceScreen() {
           contentContainerStyle={styles.list}
           refreshing={contentLoading}
           onRefresh={() => loadContents(true)}
-          ListHeaderComponent={
-            <View>
-              <SoloPickSection
-                title="내 픽 · 상대 픽"
-                subtitle="아직 둘 다 안 봤지만, 한 명은 인정한 콘텐츠예요"
-                items={contentSoloPicks}
-                keyExtractor={(c) => String(c.id)}
-                renderCard={(c) => {
-                  const who: 'me' | 'partner' = c.myRating != null ? 'me' : 'partner';
-                  const rating = c.myRating ?? c.partnerRating ?? 0;
-                  return (
-                    <TouchableOpacity
-                      activeOpacity={0.85}
-                      onPress={() => navigation.navigate('ContentDetail', { contentId: c.id, title: c.title })}
-                    >
-                      <Card elevation="sm" style={styles.soloPickCard}>
-                        <SoloPickBadge who={who} size="sm" />
-                        <Text style={styles.soloPickName} numberOfLines={1}>
-                          {c.title}
-                        </Text>
-                        <Text style={[styles.soloPickStars, { color: who === 'me' ? colors.me : colors.partner }]}>
-                          {stars(rating)}
-                        </Text>
-                      </Card>
-                    </TouchableOpacity>
-                  );
-                }}
-              />
-            </View>
-          }
           renderItem={({ item }) => (
             <TouchableOpacity
               style={[styles.card, styles.contentCard, deletingContentId === item.id && styles.cardDeleting]}
@@ -681,9 +599,7 @@ export function PlaceScreen() {
                   <View style={styles.categoryChip}>
                     <Text style={styles.categoryText}>{contentTypeLabel(item.type)}</Text>
                   </View>
-                  {item.lovelichelinTier === 0 &&
-                  ((item.myRating != null && item.myRating >= SOLO_PICK_MIN_RATING && item.partnerRating == null) ||
-                    (item.partnerRating != null && item.partnerRating >= SOLO_PICK_MIN_RATING && item.myRating == null)) ? (
+                  {item.lovelichelinTier === 0 && isSoloPick(item) ? (
                     <SoloPickBadge who={item.myRating != null ? 'me' : 'partner'} size="sm" />
                   ) : null}
                 </View>
@@ -809,10 +725,6 @@ const styles = themedStyles((colors) => ({
   magazineRating: { fontSize: fontSize.caption, fontWeight: '700' },
   magazineMemo: { fontSize: fontSize.body, color: colors.textPrimary, fontStyle: 'italic', marginTop: spacing.xs },
   magazineDate: { fontSize: fontSize.micro, color: colors.textSecondary, marginTop: spacing.xs },
-  // 내 픽 · 상대 픽 (솔로 트랙) 카드 — 섹션 레이아웃 자체는 SoloPickSection 이 맡는다
-  soloPickCard: { width: 140, gap: spacing.xs },
-  soloPickName: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
-  soloPickStars: { fontSize: fontSize.caption, fontWeight: '700' },
   // 장소·콘텐츠 목록 카드
   card: {
     backgroundColor: colors.surface,
