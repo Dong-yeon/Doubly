@@ -110,6 +110,10 @@ public enum ErrorCode {
     GAME_CELL_FIXED(HttpStatus.BAD_REQUEST, "처음부터 주어진 숫자는 바꿀 수 없어요."),
     GAME_NOT_YOUR_TURN(HttpStatus.CONFLICT, "지금은 상대 차례예요."),
     GAME_CELL_OCCUPIED(HttpStatus.BAD_REQUEST, "이미 돌이 놓인 자리예요."),
+    GAME_UNDO_NOT_ALLOWED(HttpStatus.CONFLICT, "지금은 무르기를 부탁할 수 없어요."),
+    GAME_UNDO_NOT_REQUESTED(HttpStatus.CONFLICT, "무르기 요청이 없어요."),
+    GAME_UNDO_NOT_YOURS(HttpStatus.CONFLICT, "내가 건 무르기는 내가 받을 수 없어요."),
+    GAME_DAILY_ALREADY_DONE(HttpStatus.CONFLICT, "오늘의 판은 이미 마쳤어요. 내일 새 판이 열려요."),
     // 사진 관련 — 원인별로 분리해 어떤 문제인지 바로 보이게 한다
     INVALID_PHOTO_URL(HttpStatus.BAD_REQUEST, "앱에서 촬영·선택해 올린 사진만 분석할 수 있어요."),
     PHOTO_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "사진 용량이 너무 커요 (최대 10MB). 더 작은 사진으로 시도해주세요."),

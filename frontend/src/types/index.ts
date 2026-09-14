@@ -490,10 +490,21 @@ export interface OmokGame {
   moveCount: number;
   winner?: OmokWinner | null;
   winningLine: number[];
+  /**
+   * 둔 순서대로의 인덱스 — 복기 재생과 "최근 몇 수" 표시가 쓴다.
+   * 색은 순번의 홀짝으로 정해진다: 0번째(첫 수)가 흑, 다음이 백.
+   * V90 이전에 시작된 판은 비어 있다.
+   */
+  moves: number[];
+  /** MINE(내가 걸어둠) · PARTNER(상대가 걸어옴) · null(없음) */
+  undoRequest?: OmokUndoRequest | null;
+  /** 지금 내가 무르기를 걸 수 있는가 — 직전에 둔 쪽만 걸 수 있다 */
+  canUndo: boolean;
   partnerName?: string | null;
   createdAt: string;
   completedAt?: string | null;
 }
+export type OmokUndoRequest = 'MINE' | 'PARTNER';
 
 // 게임 판 위 즉석 반응 — docs/COUPLE_GAMES_EXPANSION_2026-09-14.md 1절. 저장되지 않는 신호다
 export type GameTypeKey = 'SUDOKU' | 'OMOK';

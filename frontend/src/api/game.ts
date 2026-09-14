@@ -31,6 +31,12 @@ export const omokApi = {
   /** 착수 — 내 차례가 아니거나 돌이 있으면 409/400 */
   place: (id: number, index: number) =>
     unwrap(apiClient.put<ApiResponse<OmokGame>>(`/games/omok/${id}/cells/${index}`)),
+  /** 무르기 요청 — 직전에 둔 사람만. 되돌리는 건 상대가 받아준 뒤 */
+  requestUndo: (id: number) =>
+    unwrap(apiClient.post<ApiResponse<OmokGame>>(`/games/omok/${id}/undo-request`)),
+  /** 무르기 응답 — accept=false 는 "그냥 두자" */
+  respondUndo: (id: number, accept: boolean) =>
+    unwrap(apiClient.post<ApiResponse<OmokGame>>(`/games/omok/${id}/undo-response`, { accept })),
   giveUp: (id: number) => unwrap(apiClient.post<ApiResponse<void>>(`/games/omok/${id}/give-up`)),
   /** 끝난 판 최근 20개(승패 포함) */
   history: () => unwrap(apiClient.get<ApiResponse<OmokGame[]>>('/games/omok/history')),
