@@ -13,6 +13,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
+import { GameReactionBar } from '../../components/GameReactionBar';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { sudokuApi } from '../../api/game';
 import { connectSocket, subscribeCouple, unsubscribeCouple } from '../../api/chatSocket';
@@ -333,6 +334,7 @@ export function SudokuScreen(_: Props) {
         <Text style={styles.hint}>
           {selected === null ? '빈칸을 누르고 숫자를 고르세요. 차례 없이 아무 칸이나 괜찮아요.' : '틀린 숫자는 빨갛게 보여요. 상대가 고쳐줄 수도 있어요.'}
         </Text>
+        <GameReactionBar gameType="SUDOKU" />
         <Button title="이 판 접기" variant="ghost" size="sm" onPress={confirmGiveUp} style={styles.giveUp} />
       </View>
     );

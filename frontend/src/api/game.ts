@@ -1,6 +1,13 @@
 /** 커플 게임 — 협동 스도쿠·오목 API. docs/COUPLE_GAMES_DESIGN_2026-09-09.md 3-4·5절 */
 import { apiClient, unwrap } from './client';
-import type { ApiResponse, OmokGame, SudokuDifficulty, SudokuGame } from '../types';
+import type {
+  ApiResponse,
+  GameReactionOption,
+  GameTypeKey,
+  OmokGame,
+  SudokuDifficulty,
+  SudokuGame,
+} from '../types';
 
 export const sudokuApi = {
   /** 진행 중인 판 — 없으면 null */
@@ -27,4 +34,14 @@ export const omokApi = {
   giveUp: (id: number) => unwrap(apiClient.post<ApiResponse<void>>(`/games/omok/${id}/give-up`)),
   /** 끝난 판 최근 20개(승패 포함) */
   history: () => unwrap(apiClient.get<ApiResponse<OmokGame[]>>('/games/omok/history')),
+};
+
+/**
+ * 판 위 즉석 반응 — 저장되지 않고 상대 화면에만 잠깐 뜬다.
+ * 목록을 서버에서 받는 이유는 앱마다 이모지가 갈리지 않게 하기 위해서다.
+ */
+export const gameReactionApi = {
+  options: () => unwrap(apiClient.get<ApiResponse<GameReactionOption[]>>('/games/reactions')),
+  send: (gameType: GameTypeKey, reaction: string) =>
+    unwrap(apiClient.post<ApiResponse<void>>('/games/reactions', { gameType, reaction })),
 };

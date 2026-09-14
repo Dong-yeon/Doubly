@@ -495,6 +495,22 @@ export interface OmokGame {
   completedAt?: string | null;
 }
 
+// 게임 판 위 즉석 반응 — docs/COUPLE_GAMES_EXPANSION_2026-09-14.md 1절. 저장되지 않는 신호다
+export type GameTypeKey = 'SUDOKU' | 'OMOK';
+export interface GameReactionOption {
+  key: string;
+  emoji: string;
+  label: string;
+}
+/** /sub/couple/{relationId}/game-reaction 페이로드 — 백엔드 GameReactionEvent 와 짝 */
+export interface GameReactionEvent {
+  gameType: GameTypeKey;
+  reaction: string;
+  emoji: string;
+  senderId: number;
+  senderName: string;
+}
+
 // 커플 챌린지/대결 — 기간 내 운동/식단 기록일로 겨루기
 export type ChallengeType = 'WORKOUT' | 'MEAL';
 export interface Challenge {

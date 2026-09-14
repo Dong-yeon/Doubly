@@ -12,6 +12,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
+import { GameReactionBar } from '../../components/GameReactionBar';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { omokApi } from '../../api/game';
 import { connectSocket, subscribeCouple, unsubscribeCouple } from '../../api/chatSocket';
@@ -296,6 +297,7 @@ export function OmokScreen(_: Props) {
           <Text style={styles.hint}>
             {game.myTurn ? '교차점을 누르면 돌이 놓여요.' : '상대가 두면 바로 보여요. 2분 넘게 조용하면 상대에게 알림이 가요.'}
           </Text>
+          <GameReactionBar gameType="OMOK" />
           <Button title="이 판 접기" variant="ghost" size="sm" onPress={confirmGiveUp} style={styles.giveUp} />
         </View>
       ) : justFinished ? (

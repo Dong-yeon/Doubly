@@ -15,7 +15,7 @@ import { Client, IMessage, StompSubscription } from '@stomp/stompjs';
 import { STORAGE_KEYS, WS_BASE_URL } from '../constants/config';
 import { storage } from '../utils/storage';
 import { refreshAccessToken } from './client';
-import type { ChatMessage, MessageType } from '../types';
+import type { ChatMessage, GameReactionEvent, MessageType } from '../types';
 
 /** /sub/rooms/{relationId}/pin 페이로드 — 백엔드 ChatPinResponse 와 짝. */
 export interface PinEvent {
@@ -266,6 +266,20 @@ export function subscribeCouple(relationId: number, onEvent: (type: string) => v
 
 export function unsubscribeCouple(relationId: number) {
   unregister(`/sub/couple/${relationId}`);
+}
+
+/**
+ * 게임 판 위 즉석 반응 구독 (/sub/couple/{relationId}/game-reaction).
+ *
+ * <p>커플 공용 채널과 목적지를 나눈 이유는 서버 {@code GameReactionEvent} 주석 참고 —
+ * 저장하지 않는 신호라 "타입만 보내고 다시 조회한다"는 공용 채널 규칙을 쓸 수 없다.
+ */
+export function subscribeGameReaction(relationId: number, onReaction: (e: GameReactionEvent) => void) {
+  register(`/sub/couple/${relationId}/game-reaction`, jsonHandler(onReaction));
+}
+
+export function unsubscribeGameReaction(relationId: number) {
+  unregister(`/sub/couple/${relationId}/game-reaction`);
 }
 
 /** 저수준 발행 — 연결이 없으면 false. 화면은 아래 publishEnsuringConnection 을 쓴다. */
