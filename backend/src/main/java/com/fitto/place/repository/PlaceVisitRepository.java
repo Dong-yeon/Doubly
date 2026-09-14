@@ -75,6 +75,29 @@ public interface PlaceVisitRepository extends JpaRepository<PlaceVisit, Long> {
                                            org.springframework.data.domain.Pageable pageable);
 
     /**
+     * 우리 탭(사진첩) — 사진이 붙은 방문만, <b>식단에서 파생된 방문은 제외</b>.
+     *
+     * <p>식단 기록에 장소를 붙이면 방문이 함께 만들어지고({@code meal_id} 가 그 끼니를 가리킨다)
+     * 사진도 같은 파일이 실린다. 그대로 두면 한 장의 사진이 식단·맛집 두 칸으로 뜨므로
+     * 식단 쪽만 남긴다 (docs/ALBUM_TAB_IA_2026-09-14.md 5-4 중복 제거 규칙).
+     */
+    @Query("""
+            select v as visit, p.name as placeName
+            from PlaceVisit v join Place p on p.id = v.placeId
+            where p.coupleId = :coupleId
+              and v.imageUrl is not null
+              and v.mealId is null
+              and (cast(:cursorAt as LocalDateTime) is null
+                   or v.createdAt < :cursorAt
+                   or (v.createdAt = :cursorAt and v.id < :cursorId))
+            order by v.createdAt desc, v.id desc
+            """)
+    List<VisitWithPlace> findPhotosForFeed(@Param("coupleId") Long coupleId,
+                                           @Param("cursorAt") java.time.LocalDateTime cursorAt,
+                                           @Param("cursorId") Long cursorId,
+                                           org.springframework.data.domain.Pageable pageable);
+
+    /**
      * 추억 리마인드 — 그 날 방문한 기록 (PLAN.md Memories).
      *
      * <p>{@code visited_at} 은 {@code DATE} 라 시간대 보정이 필요 없고, "방문한 날"이라는
