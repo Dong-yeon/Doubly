@@ -1,6 +1,11 @@
 /** 커플 캘린더 API — 일정 CRUD + 월/다가오는 조회 */
 import { apiClient, unwrap } from './client';
-import type { ApiResponse, CalendarEventType, CoupleCalendarEvent } from '../types';
+import type {
+  ApiResponse,
+  CalendarDateMeal,
+  CalendarEventType,
+  CoupleCalendarEvent,
+} from '../types';
 
 export interface SaveEventPayload {
   title: string;
@@ -23,6 +28,16 @@ export const calendarApi = {
     unwrap(
       apiClient.get<ApiResponse<CoupleCalendarEvent[]>>(
         `/calendar/events?year=${year}&month=${month}`,
+      ),
+    ),
+  /**
+   * 데이트 기록 — 장소가 연결된 데이트 식단(캘린더 오버레이).
+   * 일정과 달리 조회만 있다 — 고치려면 원본 식단 기록을 고친다.
+   */
+  dateMeals: (year: number, month: number) =>
+    unwrap(
+      apiClient.get<ApiResponse<CalendarDateMeal[]>>(
+        `/calendar/date-meals?year=${year}&month=${month}`,
       ),
     ),
   /** 다가오는 일정 — D-day 오름차순 */

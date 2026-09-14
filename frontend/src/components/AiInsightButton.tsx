@@ -32,9 +32,19 @@ interface Props<T> {
   fetcher: (refresh: boolean) => Promise<T>;
   render: (data: T) => React.ReactNode;
   style?: ViewStyle;
+  /**
+   * 재료가 아직 모자라 서버가 빈 결과를 돌려줄 것이 <b>화면에서 이미 보이는</b> 경우의 안내.
+   * 주면 버튼이 흐려지고, 눌러도 모달·요청 없이 이 문구만 토스트로 보여준다.
+   *
+   * <p>서버도 같은 조건을 알고 빈 응답에 이유를 담아 보내지만, 그걸 들으려면 모달을 열고
+   * AI 작업 폴링이 한 바퀴 돌아야 한다 — 프론트가 이미 아는 사실(저장한 장소 수, 인증 장소 수)로
+   * 판정할 수 있으면 누르기 전에 말해주는 편이 낫다. 판정 근거가 서버와 어긋나면 안 되므로
+   * 호출부에 조건을 적을 때 서버 상수를 함께 적어둔다.
+   */
+  disabledReason?: string;
 }
 
-export function AiInsightButton<T>({ label, title, fetcher, render, style }: Props<T>) {
+export function AiInsightButton<T>({ label, title, fetcher, render, style, disabledReason }: Props<T>) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<T | null>(null);
@@ -55,6 +65,13 @@ export function AiInsightButton<T>({ label, title, fetcher, render, style }: Pro
   };
 
   const onPress = () => {
+    if (disabledReason) {
+      // 완전히 못 누르게 막지 않는다 — 회색 버튼은 이유를 말해주지 않아서, 왜 안 되는지
+      // 알아내려면 결국 눌러봐야 한다. 누르면 이유를 말하고 요청은 보내지 않는다.
+      haptics.light();
+      toast.info(disabledReason);
+      return;
+    }
     haptics.light();
     setOpen(true);
     void load(false);
@@ -67,8 +84,14 @@ export function AiInsightButton<T>({ label, title, fetcher, render, style }: Pro
 
   return (
     <>
-      <TouchableOpacity style={[styles.button, style]} activeOpacity={0.8} onPress={onPress}>
-        <Text style={styles.buttonText}>{label}</Text>
+      <TouchableOpacity
+        style={[styles.button, !!disabledReason && styles.buttonMuted, style]}
+        activeOpacity={0.8}
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityHint={disabledReason}
+      >
+        <Text style={[styles.buttonText, !!disabledReason && styles.buttonTextMuted]}>{label}</Text>
       </TouchableOpacity>
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
@@ -116,7 +139,10 @@ const styles = themedStyles((colors) => ({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  // 아직 재료가 모자란 상태 — 눌리긴 하지만(이유를 말해준다) 지금 할 일은 아니라는 표시
+  buttonMuted: { backgroundColor: colors.surfaceAlt, borderColor: colors.border },
   buttonText: { color: colors.primary, fontWeight: '800', fontSize: fontSize.caption },
+  buttonTextMuted: { color: colors.textTertiary },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: spacing.lg },
   card: { backgroundColor: colors.surface, borderRadius: radius.xl, padding: spacing.lg, maxHeight: '75%' },
   title: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary, marginBottom: spacing.md },
