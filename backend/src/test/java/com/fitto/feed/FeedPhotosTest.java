@@ -184,16 +184,25 @@ class FeedPhotosTest {
                 .containsExactly(FeedItemType.MEAL);
     }
 
+    /**
+     * 캡션을 타임라인 매퍼로 만드는 이유가 여기 있다 — 문구 규칙이 한 벌이어야 한다.
+     *
+     * <p>특히 <b>칼로리는 실리지 않아야 한다</b>. 피드·앨범은 기록하면 자동으로 상대에게
+     * 보이는 자리라, 먹은 칼로리가 매 끼니 노출되면 응원이 아니라 감시로 읽힌다
+     * (2026-09-13 결정, {@code FeedItemMapper.toItem(Meal, ...)} 주석). 사진첩이 캡션을
+     * 따로 만들면 그 결정이 조용히 뚫리므로, 이 테스트가 그 경로를 막아 둔다.
+     */
     @Test
-    void 캡션은_기록_종류마다_타임라인과_같은_문구로_채워진다() {
+    void 캡션은_타임라인과_같은_문구_규칙을_따른다_칼로리는_싣지_않는다() {
         long[] c = couple("ph-caption-a@fitto.com", "ph-caption-b@fitto.com");
         mealWithPhoto(c[0], "https://img.example.com/cap-meal.jpg", false);
 
         FeedPhotoResponse item = feedService.photos(c[0], null, 20, List.of(FeedItemType.MEAL))
                 .items().get(0);
 
-        // 식단 캡션 = "음식(또는 메모) · 끼니 · 칼로리"
-        assertThat(item.caption()).contains("점심").contains("600kcal");
+        // 식단 캡션 = "음식(또는 메모) · 끼니" — 무엇을 먹었는지는 남기고 얼마나는 뺀다
+        assertThat(item.caption()).contains("점심");
+        assertThat(item.caption()).doesNotContain("kcal");
         assertThat(item.authorName()).isEqualTo("나");
     }
 }

@@ -145,7 +145,9 @@ class FeedFlowTest {
                 .filter(i -> i.type() == FeedItemType.MEAL).findFirst().orElseThrow();
 
         assertThat(meal.title()).isEqualTo("삼겹살 외 2개");
-        assertThat(meal.content()).isEqualTo("저녁 · 820kcal");
+        // 칼로리는 부제에서 빠진다 — 피드는 자동 노출이라 매 끼니 감시가 된다(FeedItemMapper 주석)
+        assertThat(meal.content()).isEqualTo("저녁");
+        assertThat(meal.content()).doesNotContain("kcal");
         assertThat(meal.shared()).isFalse();
     }
 
@@ -159,7 +161,7 @@ class FeedFlowTest {
                 .filter(i -> i.type() == FeedItemType.MEAL).findFirst().orElseThrow();
 
         assertThat(meal.title()).isEqualTo("회식");
-        assertThat(meal.content()).isEqualTo("점심 · 800kcal");
+        assertThat(meal.content()).isEqualTo("점심");
     }
 
     /**
@@ -234,7 +236,7 @@ class FeedFlowTest {
         FeedItemResponse meal = feedService.timeline(c[0], null, 20).items().stream()
                 .filter(i -> i.type() == FeedItemType.MEAL).findFirst().orElseThrow();
 
-        assertThat(meal.content()).isEqualTo("점심 · 700kcal · 📍트라토리아");
+        assertThat(meal.content()).isEqualTo("점심 · 📍트라토리아");
     }
 
     @Test

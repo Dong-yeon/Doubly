@@ -98,6 +98,48 @@ class UploadQuotaTest {
                 .isEqualTo(ErrorCode.PLAN_LIMIT_EXCEEDED);
     }
 
+    /**
+     * 한도는 커플이 한 주머니로 쓴다 — 한 명이 다 쓰면 상대도 막힌다.
+     *
+     * <p>사진은 커플 공간에 쌓이고 보통 한 명이 주로 찍는다. 사람마다 따로 세면 같은 앨범을
+     * 보면서 한쪽만 먼저 막히는데, 그 상태를 사용자는 이해할 수 없다(PlanGuard.scopeOf).
+     */
+    @Test
+    void 사진_한도는_커플이_함께_쓴다() {
+        Long a = register("upload-pool-a@fitto.com");
+        Long b = register("upload-pool-b@fitto.com");
+        InviteCodeResponse invite = relationService.createCoupleInvite(a);
+        relationService.connectCouple(b, invite.code());
+
+        int limit = Feature.PHOTO_UPLOAD.quotaFor(Plan.FREE).limit();
+        // A 가 한도를 통째로 쓴다
+        for (int i = 0; i < limit; i++) {
+            uploadController.signature(principal(a));
+        }
+
+        // B 는 한 장도 안 올렸지만 주머니가 비었다
+        assertThatThrownBy(() -> uploadController.signature(principal(b)))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PLAN_LIMIT_EXCEEDED);
+    }
+
+    /** 커플이 없으면 본인 주머니로 떨어진다 — 판정과 같은 폴백이다. */
+    @Test
+    void 커플이_없으면_각자_주머니를_쓴다() {
+        Long solo1 = register("upload-solo1@fitto.com");
+        Long solo2 = register("upload-solo2@fitto.com");
+        int limit = Feature.PHOTO_UPLOAD.quotaFor(Plan.FREE).limit();
+
+        for (int i = 0; i < limit; i++) {
+            uploadController.signature(principal(solo1));
+        }
+
+        // 남남이라 solo1 이 다 써도 solo2 는 멀쩡하다
+        assertThatCode(() -> uploadController.signature(principal(solo2)))
+                .doesNotThrowAnyException();
+    }
+
     @Test
     void 상대가_PRO면_무료_한도를_넘어도_올릴_수_있다() {
         // 사진은 대부분 커플 콘텐츠(피드·앨범)라 커플 단위로 판정한다.

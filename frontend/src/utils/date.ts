@@ -81,6 +81,38 @@ export function relativeDateLabel(dateStr: string): string {
 }
 
 /**
+ * 서버 타임스탬프(UTC + 'Z') → <b>기기 로컬</b> 'YYYY-MM-DD'.
+ *
+ * <p><b>{@code iso.slice(0, 10)} 을 쓰면 안 된다.</b> 백엔드는 모든 {@code LocalDateTime} 을
+ * {@code Z} 를 붙여 UTC 인스턴트로 내보낸다(JacksonConfig). 그래서 앞 10자는 <b>UTC 날짜</b>이고,
+ * KST 00:00~09:00 에 남긴 기록은 <b>전날로 표시된다</b> — 새벽에 올린 사진이 어제 날짜로 묶인다.
+ *
+ * <p>{@code new Date(iso)} 로 파싱하면 기기가 로컬로 변환해준다({@link isSameLocalDay} ·
+ * {@code FeedTimelineScreen.feedTimeLabel} 과 같은 규칙). 날짜만 필요한 자리는 이 함수를 쓴다.
+ *
+ * <p>파싱에 실패하면 앞 10자를 그대로 돌려준다.
+ *
+ * <p><b>{@code LocalDate}('YYYY-MM-DD') 필드에는 쓰지 말 것.</b> 그 문자열은 UTC 자정으로
+ * 파싱되므로 KST(UTC+9)에서는 같은 날짜가 나오지만, UTC 서쪽 기기에서는 하루 밀린다.
+ * 날짜만 담은 필드(mealDate·workoutDate 등)는 변환 없이 그대로 쓰면 된다 — 이 함수는
+ * <b>시각까지 담긴 타임스탬프</b> 전용이다.
+ */
+export function localDateOf(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso.slice(0, 10) : toDateString(d);
+}
+
+/**
+ * 서버 타임스탬프 → '오늘/어제/…' 라벨. {@link localDateOf} + {@link relativeDateLabel} 이다.
+ * 앨범·기록 목록이 {@code relativeDateLabel(iso.slice(0, 10))} 으로 쓰던 자리를 대신한다.
+ */
+export function relativeTimestampLabel(iso: string | null | undefined): string {
+  const date = localDateOf(iso);
+  return date ? relativeDateLabel(date) : '';
+}
+
+/**
  * 두 ISO 타임스탬프가 로컬 기준 같은 날짜인지 — 채팅 날짜 구분선/메시지 그룹핑에 쓴다.
  * `new Date(iso)` 의 getFullYear/getMonth/getDate 는 이미 로컬 기준이라(UTC 메서드가
  * 아님) 별도 타임존 보정이 필요 없다 — V27 "오늘 판정 UTC/KST 버그" 와 같은 함정을

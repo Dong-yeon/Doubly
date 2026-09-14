@@ -28,6 +28,7 @@ import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { AlbumPost } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
+import { localDateOf } from '../../utils/date';
 
 /*
  * 홈 스택과 "우리" 탭 스택 <b>양쪽에</b> 등록되는 화면이라 어느 쪽으로 열릴지 모른다
@@ -67,7 +68,7 @@ export function TripAlbumScreen({ route }: Props) {
         images.push({
           key: `${p.id}-${i}`,
           uri,
-          title: `${p.mine ? '내가' : `${p.authorName}님이`}  ·  ${p.createdAt.slice(5, 10)}`,
+          title: `${p.mine ? '내가' : `${p.authorName}님이`}  ·  ${localDateOf(p.createdAt).slice(5)}`,
           titleColor: p.mine ? colors.coral : colors.indigo,
           caption: p.content ?? undefined,
         });
@@ -182,7 +183,7 @@ export function TripAlbumScreen({ route }: Props) {
               </Text>
             ) : null}
             <Text style={styles.by}>
-              {item.mine ? '내가' : `${item.authorName}님이`} · {item.createdAt.slice(5, 10)}
+              {item.mine ? '내가' : `${item.authorName}님이`} · {localDateOf(item.createdAt).slice(5)}
             </Text>
           </TouchableOpacity>
         )}
@@ -228,7 +229,7 @@ export function TripAlbumScreen({ route }: Props) {
                       {item.content || '사진'}
                     </Text>
                     <Text style={styles.by}>
-                      {item.mine ? '내가' : `${item.authorName}님`} · {item.createdAt.slice(5, 10)}
+                      {item.mine ? '내가' : `${item.authorName}님`} · {localDateOf(item.createdAt).slice(5)}
                     </Text>
                   </View>
                 </TouchableOpacity>

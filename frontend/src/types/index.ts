@@ -82,6 +82,13 @@ export interface FeatureState {
   /** 무제한·차단·개수형이면 null */
   remaining: number | null;
   period: QuotaPeriod;
+  /**
+   * 이 잠금이 결제로 풀리는가 — false 면 업그레이드를 권하지 않는다.
+   *
+   * allowed=false 에는 "플랜이 낮아서 막힘"과 "이미 PRO인데 이번 기간 한도 소진"이
+   * 섞여 있다. 후자에 PRO 유도 문구를 띄우면 돈 낸 사람에게 결제를 또 권하는 꼴이다.
+   */
+  upgradable: boolean;
 }
 
 export interface PlanInfo {
@@ -1594,6 +1601,11 @@ export interface CoupleEmoji {
   createdBy: number;
   /** 무드 선택지에 올라가는가 — 트레이에서 길게 눌러 토글한다 */
   moodVisible: boolean;
+  /**
+   * 이 감정이 대신하는 기본 무드 유니코드 — 무드 피커가 어느 칸을 덮을지 정한다.
+   * 매핑은 서버(CoupleEmojiEmotion)가 갖고 우리는 받기만 한다. 여러 감정이 같은 값을 가질 수 있다.
+   */
+  moodEmoji: string;
   createdAt: string;
 }
 

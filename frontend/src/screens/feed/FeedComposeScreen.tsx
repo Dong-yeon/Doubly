@@ -101,9 +101,13 @@ export function FeedComposeScreen({ navigation }: Props) {
           const remaining = usePlanStore.getState().remainingOf('PHOTO_UPLOAD');
           if (remaining !== null && remaining < pending.length) {
             if (remaining <= 0) {
-              usePlanStore.getState().showUpgrade('이번 달 사진 한도를 다 썼어요. PRO에서는 제한 없이 올릴 수 있어요.');
+              /*
+               * "둘이 함께 쓰는"을 붙인다 — 한도는 커플 한 주머니라(PlanGuard.scopeOf) 내가
+               * 한 장도 안 올렸는데 0이 될 수 있다. 이유를 안 적으면 고장으로 읽힌다.
+               */
+              usePlanStore.getState().showUpgrade('이번 달 사진 한도를 다 썼어요. 둘이 함께 쓰는 한도예요. PRO에서는 넉넉하게 올릴 수 있어요.');
             } else {
-              toast.error(`이번 달 사진 한도가 ${remaining}장 남았어요. 사진을 ${remaining}장까지 줄여주세요.`);
+              toast.error(`이번 달 사진 한도가 ${remaining}장 남았어요(둘이 함께 쓰는 한도). 사진을 ${remaining}장까지 줄여주세요.`);
             }
             return;
           }

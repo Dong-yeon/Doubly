@@ -148,7 +148,14 @@ export type WorkoutStackParamList = {
    * 직접 기록 화면. `imageUrl` 이 있으면 운동 인증샷을 붙인 채로 열리고, 화면이 그 사진을
    * AI 로 읽어 시간·거리를 채운다(읽지 못해도 사진만 붙은 기록으로 저장할 수 있다).
    */
-  WorkoutRecord: { date?: string; imageUrl?: string } | undefined;
+  WorkoutRecord:
+    | {
+        date?: string;
+        imageUrl?: string;
+        /** 다른 탭에서 열렸으면 그 탭 이름 — 닫을 때 거기로 돌아간다(useReturnToTab) */
+        returnTo?: keyof MainTabParamList;
+      }
+    | undefined;
   WorkoutCalendar: undefined;
   // 운동 기록 상세 — 세트별 실기록·RPE. id 만 넘기고 화면이 다시 불러온다(딥링크로도 열린다)
   WorkoutDetail: { workoutId: number };
@@ -205,7 +212,15 @@ export type DietStackParamList = {
    *   다시 받아올 게 없기 때문이다 — 로딩·실패 상태가 통째로 사라진다.
    * barcodeResult: BarcodeScan 에서 스캔·조회를 마치고 돌아올 때만 채워짐(같은 화면 인스턴스로 복귀)
    */
-  DietRecord: { date?: string; meal?: Meal; barcodeResult?: BarcodeLookup } | undefined;
+  DietRecord:
+    | {
+        date?: string;
+        meal?: Meal;
+        barcodeResult?: BarcodeLookup;
+        /** 다른 탭에서 열렸으면 그 탭 이름 — 닫을 때 거기로 돌아간다(useReturnToTab) */
+        returnTo?: keyof MainTabParamList;
+      }
+    | undefined;
   DietCalendar: undefined;
   // 바코드로 포장식품 조회 — 결과를 들고 DietRecord 로 돌아간다
   BarcodeScan: undefined;
@@ -279,7 +294,14 @@ export type ChatStackParamList = {
 export type PlaceScreensParamList = {
   // place: 기존 장소를 수정하러 들어올 때만 채워짐 (없으면 새 장소 추가)
   // initialCoords: 지도 탭에서 빈 곳을 탭해 "여기에 추가"로 들어올 때만 채워짐 (좌표·주소 미리 채움)
-  PlaceAdd: { place?: Place; initialCoords?: { lat: number; lng: number; address?: string | null } } | undefined;
+  PlaceAdd:
+    | {
+        place?: Place;
+        initialCoords?: { lat: number; lng: number; address?: string | null };
+        /** 다른 탭에서 열렸으면 그 탭 이름 — 닫을 때 거기로 돌아간다(useReturnToTab) */
+        returnTo?: keyof MainTabParamList;
+      }
+    | undefined;
   PlaceDetail: { placeId: number; name: string };
 };
 
@@ -305,13 +327,17 @@ export type PlaceStackParamList = PlaceScreensParamList & ContentScreensParamLis
  * <p>운동·식단 두 탭이 럽바디(Health) 하나로 합쳐지고, 비운 자리에 "우리"(Album)가 왔다.
  * 럽바디가 <b>식단이 있던 4번</b>을 물려받는 이유는 그 탭의 첫 화면이 식단 메인이기
  * 때문이다(손버릇이 걸린 자리) — 같은 문서 5-1 "탭 순서".
+ *
+ * <p>파라미터는 전부 <b>선택</b>이다. 필수로 두면 "탭만 바꾸고 그 탭이 보던 자리는 그대로"가
+ * 타입상 불가능해진다(`jumpTo('Home')` 이 두 번째 인자를 요구한다). 안쪽 화면을 지정하지
+ * 않는 탭 이동은 정상적인 사용이고, 그때 스택은 이전 상태를 유지한다.
  */
 export type MainTabParamList = {
-  Home: NavigatorScreenParams<HomeStackParamList>;
-  Album: NavigatorScreenParams<AlbumStackParamList>;
-  Chat: NavigatorScreenParams<ChatStackParamList>;
-  Health: NavigatorScreenParams<HealthStackParamList>;
-  Place: NavigatorScreenParams<PlaceStackParamList>;
+  Home: NavigatorScreenParams<HomeStackParamList> | undefined;
+  Album: NavigatorScreenParams<AlbumStackParamList> | undefined;
+  Chat: NavigatorScreenParams<ChatStackParamList> | undefined;
+  Health: NavigatorScreenParams<HealthStackParamList> | undefined;
+  Place: NavigatorScreenParams<PlaceStackParamList> | undefined;
 };
 
 export type RootStackParamList = {

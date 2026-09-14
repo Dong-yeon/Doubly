@@ -251,13 +251,23 @@ const styles = themedStyles((colors) => ({
     backgroundColor: colors.surfaceCard,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
-    // 비트윈 등 커플 앱들의 "여유 있게 낮고 넓은" 탭바 참고(2026-08-31) — 기존
-    // spacing.sm(8) 은 촘촘해서 아이콘이 바 위쪽 경계에 바짝 붙어 보였다.
-    paddingTop: spacing.md,
+    /*
+     * 세로 여백은 <b>두 겹</b>이었다 — 여기 paddingTop(16)과 tabItem 의 minHeight(56)가
+     * 각각 여유를 주는데, 칸 안의 실제 내용은 아이콘 24 + gap 2 + 라벨 14 = 40 뿐이라
+     * minHeight 만으로도 위아래 8씩이 이미 있었다. 안드로이드에서 제스처 버퍼까지
+     * 더하면 탭바 한 덩어리가 112dp 로, iOS 기본 탭바(49+34=83)보다 30 넘게 높았다
+     * ("탭쪽이 너무 넓다", 2026-09-14).
+     *
+     * 8 로 줄여도 2026-08-31 에 고친 "아이콘이 위쪽 경계에 붙어 보인다"는 안 돌아온다 —
+     * 그때는 minHeight 가 없어 8 이 전부였지만, 지금은 minHeight 가 위아래를 한 번 더
+     * 벌린다. 아래 제스처 충돌 버퍼(bottomPadding)는 그대로 둔다 — 그건 시각이 아니라
+     * 터치가 시스템 제스처에 먹히던 문제라 줄이면 그 버그가 돌아온다.
+     */
+    paddingTop: spacing.sm,
     ...shadow.md,
   },
-  // minHeight 56 — 위 paddingTop 확장과 짝을 맞춘 여유값(터치 타깃 권장 44px는 이미 넘는다)
-  tabItem: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2, minHeight: 56 },
+  // minHeight 50 — 내용 40 + 위아래 5씩. 터치 타깃 권장 44 는 여전히 넘는다
+  tabItem: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2, minHeight: 50 },
   // 마우스를 올렸을 때 — 선택된 탭은 이미 색으로 구분되므로 비선택에만 준다
   tabItemHovered: { backgroundColor: colors.surfaceAlt },
   tabItemPressed: { opacity: 0.7 },

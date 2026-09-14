@@ -120,7 +120,9 @@ public class FeedItemMapper {
     }
 
     /**
-     * 식단 — <b>제목에 음식</b>, 부제에 끼니·칼로리·장소를 둔다(운동 카드와 같은 규칙).
+     * 식단 — <b>제목에 음식</b>, 부제에 끼니·장소를 둔다(운동 카드와 같은 규칙).
+     *
+     * <p><b>칼로리는 부제에 넣지 않는다</b> — 본문 주석 참고.
      *
      * <p>항목이 없는 기록(합계만 적었거나 항목 도입 이전)은 memo 를, 그마저 없으면
      * "아침 식단" 처럼 끼니를 제목으로 쓴다 — 제목이 빈 카드는 만들지 않는다.
@@ -141,7 +143,19 @@ public class FeedItemMapper {
         List<String> parts = new ArrayList<>();
         // 제목이 음식 이름을 가져갔으므로 끼니는 부제가 받는다 — 어느 끼니인지가 사라지면 안 된다
         if (food != null) parts.add(m.getMealType().label());
-        if (m.getCalories() != null) parts.add(m.getCalories() + "kcal");
+        /*
+         * <b>칼로리는 싣지 않는다.</b> 피드는 기록하면 <b>자동으로</b> 커플 타임라인에 뜨는
+         * 자리다 — 사용자가 공유를 고르는 순간이 없다. 그런데 먹은 칼로리는 상대가 매 끼니
+         * 지켜보게 되면 응원이 아니라 감시로 읽히고, 그때 잃는 건 식단 기록 자체다.
+         *
+         * <p>상대에게 칼로리를 보내는 경로가 없어진 건 아니다 — 채팅 공유(MEAL_CARD)는 남는다.
+         * 거기는 "공유하기"를 눌러야 나가므로 <b>사용자가 알고 고른다</b>. 홈의 상대 식단 칩도
+         * 같은 원칙이다(PartnerTodayResponse 는 completed 불리언뿐).
+         *
+         * <p>2026-09-13 결정. 무엇을 먹었는지는 남기고 얼마나 먹었는지만 뺀다. 2026-09-14 의
+         * 카드 재구성(제목=음식, 부제=끼니·칼로리·장소)은 이 결정을 모르는 채로 칼로리를
+         * 부제에 다시 넣었고, 병합하면서 그 한 줄만 뺐다 — 나머지 구조는 그대로 쓴다.
+         */
         if (placeName != null) parts.add("📍" + placeName);
 
         return new FeedItemResponse(FeedItemType.MEAL, m.getId(), m.getUserId(),

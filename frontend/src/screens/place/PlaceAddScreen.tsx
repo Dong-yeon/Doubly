@@ -18,6 +18,7 @@ import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { useDirtyGuard } from '../../hooks/useDirtyGuard';
+import { useReturnToTab } from '../../hooks/useReturnToTab';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { PLACE_CATEGORIES, KAKAO_CATEGORY_AUTO } from '../../constants/placeCategories';
 import { themedStyles } from '../../theme/themedStyles';
@@ -64,6 +65,9 @@ export function PlaceAddScreen({ navigation, route }: Props) {
       coords != null ||
       keyword.trim().length > 0;
   const allowLeave = useDirtyGuard(dirty);
+
+  // 홈처럼 다른 탭에서 열렸으면 닫을 때 그 탭으로 돌려보낸다(훅 주석에 경위)
+  useReturnToTab(route.params?.returnTo);
 
   const onSearch = () => {
     const q = keyword.trim();

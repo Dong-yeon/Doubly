@@ -31,6 +31,7 @@ import { useRelationStore } from '../../store/relationStore';
 import { useAuthStore } from '../../store/authStore';
 import { usePlaceStore } from '../../store/placeStore';
 import { useDirtyGuard } from '../../hooks/useDirtyGuard';
+import { useReturnToTab } from '../../hooks/useReturnToTab';
 import { publishEnsuringConnection } from '../../api/chatSocket';
 import { dietApi, SaveMealItemPayload } from '../../api/diet';
 import { foodDbApi } from '../../api/foodDb';
@@ -328,6 +329,9 @@ export function DietRecordScreen({ navigation, route }: Props) {
   const initialSnapshot = useRef<string | null>(null);
   if (initialSnapshot.current === null) initialSnapshot.current = snapshot;
   const allowLeave = useDirtyGuard(snapshot !== initialSnapshot.current);
+
+  // 홈처럼 다른 탭에서 열렸으면 닫을 때 그 탭으로 돌려보낸다(훅 주석에 경위)
+  useReturnToTab(route.params?.returnTo);
 
   // 즐겨찾는 음식
   const [favorites, setFavorites] = useState<FavoriteFood[]>([]);

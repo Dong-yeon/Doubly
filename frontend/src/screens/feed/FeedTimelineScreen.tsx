@@ -6,7 +6,7 @@
  * 홈은 스크롤 없는 고정 화면으로 두고, 쌓이는 목록은 이 화면으로 분리했다.
  */
 import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, FlatList, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -84,6 +84,13 @@ export function FeedTimelineScreen({ navigation, route }: Props) {
     if (who === 'me') navigation.setOptions({ title: '내 기록' });
     else if (who === 'partner') navigation.setOptions({ title: `${partnerName}님의 기록` });
     // who 가 없으면(전체) 네비게이터에 정의된 기본 타이틀('우리 기록')을 그대로 둔다
+
+    /*
+     * 사진첩 진입 버튼은 <b>없다</b>. 2026-09-14 까지는 이 헤더가 유일한 진입점이었는데
+     * (홈 칩을 셋으로 줄일 때 인앱 경로가 0이 된 적이 있어 여기 달았다), 사진 그리드가
+     * "우리" 탭의 <b>첫 화면</b>이 되면서 이 목록의 부모가 됐다 — 뒤로가기가 곧 사진첩이다.
+     * 탭 안에서 부모로 가는 버튼을 또 두면 같은 자리를 두 번 말하게 된다.
+     */
   }, [navigation, who, partnerName]);
 
   const load = useCallback(async () => {
@@ -223,4 +230,5 @@ const styles = themedStyles((colors) => ({
   loadMore: { paddingVertical: spacing.md },
   tail: { height: spacing.lg },
   cardDeleting: { opacity: 0.4 },
+  // 헤더 우측 사진첩 버튼 — 최소 터치 타깃을 헤더 안에서도 보장한다
 }));
