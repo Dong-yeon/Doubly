@@ -29,6 +29,7 @@ import {
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { MaterialCommunityIcons } from './Icon';
+import { useContentWidth } from '../hooks/useContentWidth';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { toast } from '../store/toastStore';
 import { Toast } from './Toast';
@@ -56,7 +57,9 @@ interface Props {
 }
 
 export function ImageViewer({ images, initialIndex, onClose }: Props) {
-  const { width, height } = useWindowDimensions();
+  // 가로는 셸 폭(웹) — 뷰어 자체가 셸 안에서 열린다. 세로는 셸이 건드리지 않으므로 창 높이 그대로.
+  const width = useContentWidth();
+  const { height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const [index, setIndex] = useState(initialIndex ?? 0);
   const listRef = useRef<FlatList<ViewerImage>>(null);
