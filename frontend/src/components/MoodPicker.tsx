@@ -68,6 +68,33 @@ export function MoodPicker({ visible, onClose, onSelect }: Props) {
       (e): e is (typeof mine)[number] => !!e,
     );
   }, [coupleEmojis, myId]);
+  /**
+   * 기본 12칸을 우리 이모지로 <b>덮은</b> 목록 + 칸을 못 얻은 나머지.
+   *
+   * <p>예전에는 "우리 이모지" 섹션과 "기본" 섹션이 위아래로 나뉘어 있었다. 같은 것을 고르는
+   * 자리가 둘로 갈려서, 이모지를 만들어도 기본 12종이 그대로 남아 "무엇이 내 무드인가"가
+   * 흐렸다. 이제 한 격자이고, 대응되는 칸은 내 얼굴이 차지한다.
+   *
+   * <p><b>어느 칸을 덮을지는 서버가 준 {@code moodEmoji} 가 정한다</b>(CoupleEmojiEmotion 의
+   * 매핑). 앱이 같은 표를 또 들지 않는다 — 감정을 하나 더할 때 두 곳을 고쳐야 하는 걸 막는다.
+   *
+   * <p><b>여러 감정이 같은 칸을 노린다</b>(😊 = 기쁨·씻고왔다·퇴근·마스크팩). 먼저 오는 것이
+   * 가져가고, {@code myLatestSet} 이 이미 감정 정의 순서(표정 6종이 앞)라 <b>표정이 우선</b>한다 —
+   * "좋음" 칸에는 상황 그림이 아니라 웃는 얼굴이 들어가는 편이 자연스럽다.
+   *
+   * <p>칸을 못 얻은 것은 <b>버리지 않고 뒤에 잇는다.</b> 상황 11종은 사용자가 트레이에서
+   * 일부러 켠 것이라(moodVisible), 덮어쓰기를 도입하면서 조용히 사라지면 기능이 줄어든다.
+   */
+  const { slots, extras } = useMemo(() => {
+    const taken = new Set<number>();
+    const filled = MOOD_EMOJIS.map((mood) => {
+      const hit = myLatestSet.find((e) => e.moodEmoji === mood.emoji && !taken.has(e.id));
+      if (hit) taken.add(hit.id);
+      return { mood, emoji: hit };
+    });
+    return { slots: filled, extras: myLatestSet.filter((e) => !taken.has(e.id)) };
+  }, [myLatestSet]);
+
   /*
    * 격자 스크롤 높이를 320 으로 고정해뒀더니, 화면이 큰 기기(아이폰 프로맥스 등)에서는
    * 시트가 화면 아래쪽 절반도 못 채우고 그 위로 배경(딤 처리된 화면)만 크게 비어
@@ -115,37 +142,40 @@ export function MoodPicker({ visible, onClose, onSelect }: Props) {
               생성 진입점이 채팅 트레이 한 곳이어서다 — 여기에 또 두면 같은 기능의 입구가
               둘로 갈린다(§18 "남은 것"에 후속으로 적어 뒀다).
             */}
-            {myLatestSet.length > 0 ? (
-              <>
-                <Text style={styles.sectionTitle}>우리 이모지</Text>
-                <View style={styles.grid}>
-                  {myLatestSet.map((e) => (
-                    <Pressable
-                      key={e.id}
-                      style={({ pressed }) => [styles.cell, pressed && styles.cellPressed]}
-                      onPress={() => onPress({ coupleEmojiId: e.id }, false, e.label)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`내 얼굴 ${e.label} 무드로 남기기`}
-                    >
-                      <Image source={{ uri: e.imageUrl }} style={styles.cellImage} resizeMode="contain" />
-                      <Text style={styles.label}>{e.label}</Text>
-                    </Pressable>
-                  ))}
-                </View>
-                <Text style={styles.sectionTitle}>기본</Text>
-              </>
-            ) : null}
             <View style={styles.grid}>
-              {MOOD_EMOJIS.map((m) => (
+              {/* 기본 12칸 — 대응되는 우리 이모지가 있으면 그림이 그 자리를 차지한다 */}
+              {slots.map(({ mood, emoji }) => (
                 <Pressable
-                  key={m.emoji}
+                  key={mood.emoji}
                   style={({ pressed }) => [styles.cell, pressed && styles.cellPressed]}
-                  onPress={() => onPress({ emoji: m.emoji }, false, m.label)}
+                  onPress={() =>
+                    onPress(emoji ? { coupleEmojiId: emoji.id } : { emoji: mood.emoji }, false, mood.label)
+                  }
                   accessibilityRole="button"
-                  accessibilityLabel={`${m.label} 무드로 남기기`}
+                  accessibilityLabel={
+                    emoji ? `내 얼굴로 ${mood.label} 무드 남기기` : `${mood.label} 무드로 남기기`
+                  }
                 >
-                  <Text style={styles.emoji}>{m.emoji}</Text>
-                  <Text style={styles.label}>{m.label}</Text>
+                  {emoji ? (
+                    <Image source={{ uri: emoji.imageUrl }} style={styles.cellImage} resizeMode="contain" />
+                  ) : (
+                    <Text style={styles.emoji}>{mood.emoji}</Text>
+                  )}
+                  {/* 라벨은 <b>칸의 뜻</b>(좋음)을 유지한다 — 그림이 바뀌어도 12칸의 의미는 그대로다 */}
+                  <Text style={styles.label}>{mood.label}</Text>
+                </Pressable>
+              ))}
+              {/* 칸을 못 얻은 우리 이모지(주로 상황 11종) — 뒤에 잇는다 */}
+              {extras.map((e) => (
+                <Pressable
+                  key={e.id}
+                  style={({ pressed }) => [styles.cell, pressed && styles.cellPressed]}
+                  onPress={() => onPress({ coupleEmojiId: e.id }, false, e.label)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`내 얼굴 ${e.label} 무드로 남기기`}
+                >
+                  <Image source={{ uri: e.imageUrl }} style={styles.cellImage} resizeMode="contain" />
+                  <Text style={styles.label}>{e.label}</Text>
                 </Pressable>
               ))}
               {PREMIUM_MOOD_EMOJIS.map((m) => (
@@ -201,13 +231,6 @@ const styles = themedStyles((colors) => ({
     fontSize: fontSize.caption,
     color: colors.textPrimary,
     marginBottom: spacing.md,
-  },
-  sectionTitle: {
-    fontSize: fontSize.caption,
-    fontWeight: '800',
-    color: colors.textSecondary,
-    marginTop: spacing.sm,
-    marginBottom: spacing.xs,
   },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   cell: {

@@ -1481,6 +1481,11 @@ export interface CoupleEmoji {
   createdBy: number;
   /** 무드 선택지에 올라가는가 — 트레이에서 길게 눌러 토글한다 */
   moodVisible: boolean;
+  /**
+   * 이 감정이 대신하는 기본 무드 유니코드 — 무드 피커가 어느 칸을 덮을지 정한다.
+   * 매핑은 서버(CoupleEmojiEmotion)가 갖고 우리는 받기만 한다. 여러 감정이 같은 값을 가질 수 있다.
+   */
+  moodEmoji: string;
   createdAt: string;
 }
 
