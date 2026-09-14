@@ -21,6 +21,7 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
 import java.util.Base64;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -116,15 +117,27 @@ public class GeminiClient {
     private final PlanGuard planGuard;
     private final UsageCounter usageCounter;
     private final MeterRegistry meterRegistry;
+    private final AiUsageRecorder usageRecorder;
+
+    /**
+     * 토큰 사용량을 남기려면 "누가·어느 기능으로" 부른 호출인지가 HTTP 를 실제로 보내는
+     * 자리까지 따라와야 한다 — 한도 차감은 이미 {@link #requireConfiguredAndCountUsage} 에서
+     * 끝난 뒤라 그 정보가 아래로 내려오지 않고 있었다.
+     *
+     * @param imageCount 이번 요청에 <b>보낸</b> 이미지 파트 수(입력 토큰이 튀는 경로를 찾는 단서)
+     */
+    private record CallContext(Long userId, Feature feature, int imageCount) {
+    }
 
     public GeminiClient(GeminiProperties properties, ObjectMapper objectMapper,
                         PlanGuard planGuard, UsageCounter usageCounter,
-                        MeterRegistry meterRegistry) {
+                        MeterRegistry meterRegistry, AiUsageRecorder usageRecorder) {
         this.properties = properties;
         this.objectMapper = objectMapper;
         this.planGuard = planGuard;
         this.usageCounter = usageCounter;
         this.meterRegistry = meterRegistry;
+        this.usageRecorder = usageRecorder;
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(5_000);
         factory.setReadTimeout(READ_TIMEOUT_MILLIS);
@@ -253,18 +266,35 @@ public class GeminiClient {
      * <p>{@code responseModalities} 는 JSON 모드와 같이 쓸 수 없어 본문을 따로 만든다.
      * 온도 0.4 는 실험값(docs/COUPLE_EMOJI_AI_DESIGN_2026-09-08.md §12) — 낮추면 표정이 밋밋해지고
      * 높이면 세트 일관성이 떨어졌다.
+     *
+     * <p><b>해상도를 명시한다.</b> 빼면 기본 1K 로 나가고 그게 곧 장당 단가 1.5배다
+     * ({@code GeminiProperties.imageSize}). {@code aspectRatio} 는 <b>일부러 두지 않는다</b> —
+     * 지금 그림체는 비율을 지정하지 않은 상태로 실험해 확정한 것이라, 여기서 끼워 넣으면
+     * 원가가 아니라 결과물이 바뀐다.
+     *
+     * <p>{@code userId}·{@code feature} 는 한도가 아니라 <b>토큰 기록</b>용이다 — 차감은 호출 전에
+     * {@link #requireImageConfiguredAndCountUsage} 가 이미 했고, 되돌리기는 세트 단위라
+     * 호출자가 {@link #refund} 로 한다(위 2번). 이미지 생성이 유일하게 원가가 0이 아닌 경로라
+     * 여기를 못 남기면 계측의 의미가 없다.
      */
-    public GeneratedImage generateImageInBackground(List<Map<String, Object>> parts) {
+    public GeneratedImage generateImageInBackground(Long userId, Feature feature,
+                                                    List<Map<String, Object>> parts) {
+        Map<String, Object> generationConfig = new LinkedHashMap<>();
+        generationConfig.put("responseModalities", List.of("IMAGE"));
+        generationConfig.put("temperature", 0.4);
+        String imageSize = properties.getImageSize();
+        if (imageSize != null && !imageSize.isBlank()) {
+            generationConfig.put("imageConfig", Map.of("imageSize", imageSize));
+        }
         Map<String, Object> body = Map.of(
                 "contents", List.of(Map.of("parts", parts)),
-                "generationConfig", Map.of(
-                        "responseModalities", List.of("IMAGE"),
-                        "temperature", 0.4));
+                "generationConfig", generationConfig);
         long deadline = System.currentTimeMillis() + BACKGROUND.budgetMillis();
         JsonNode root;
         try {
             root = callModel(properties.getImageModel(), properties.imageApiKeyOrFallback(),
-                    body, BACKGROUND, deadline);
+                    body, BACKGROUND, deadline,
+                    new CallContext(userId, feature, imagePartCount(parts)));
         } catch (ModelUnavailable unavailable) {
             throw unavailable.toBusinessException();
         }
@@ -302,16 +332,22 @@ public class GeminiClient {
     private JsonNode generateJson(Long userId, Feature feature, List<Map<String, Object>> parts,
                                   Map<String, Object> responseSchema, RetryPolicy policy) {
         try {
-            return generateJsonOrThrow(parts, responseSchema, policy);
+            return generateJsonOrThrow(parts, responseSchema, policy,
+                    new CallContext(userId, feature, imagePartCount(parts)));
         } catch (RuntimeException e) {
             refundUsage(userId, feature);
             throw e;
         }
     }
 
+    /** 이번 요청에 실어 보내는 이미지 파트 수 — {@link #imagePart} 가 만든 모양만 센다. */
+    private static int imagePartCount(List<Map<String, Object>> parts) {
+        return (int) parts.stream().filter(p -> p.containsKey("inlineData")).count();
+    }
+
     private JsonNode generateJsonOrThrow(List<Map<String, Object>> parts,
                                          Map<String, Object> responseSchema,
-                                         RetryPolicy policy) {
+                                         RetryPolicy policy, CallContext context) {
         Map<String, Object> body = Map.of(
                 "contents", List.of(Map.of("parts", parts)),
                 "generationConfig", Map.of(
@@ -319,7 +355,7 @@ public class GeminiClient {
                         "responseMimeType", "application/json",
                         "responseSchema", responseSchema));
 
-        JsonNode root = callWithRetry(body, policy);
+        JsonNode root = callWithRetry(body, policy, context);
 
         String text = root == null ? null
                 : root.path("candidates").path(0).path("content")
@@ -351,7 +387,7 @@ public class GeminiClient {
      * <p>얼마나 오래 버틸지는 {@link RetryPolicy} 가 정한다. 폴백이 설정돼 있으면 1차 모델에
      * 예산을 다 쓰게 두지 않는다 — 남겨두지 않으면 폴백이 한 번도 돌아보지 못하고 끝난다.
      */
-    private JsonNode callWithRetry(Map<String, Object> body, RetryPolicy policy) {
+    private JsonNode callWithRetry(Map<String, Object> body, RetryPolicy policy, CallContext context) {
         long start = System.currentTimeMillis();
         long deadline = start + policy.budgetMillis();
         String primary = properties.getModel();
@@ -362,14 +398,14 @@ public class GeminiClient {
                 : start + policy.budgetMillis() * PRIMARY_BUDGET_PERCENT / 100;
 
         try {
-            return callModel(primary, properties.getApiKey(), body, policy, primaryDeadline);
+            return callModel(primary, properties.getApiKey(), body, policy, primaryDeadline, context);
         } catch (ModelUnavailable primaryFailure) {
             if (fallback == null || System.currentTimeMillis() >= deadline) {
                 throw primaryFailure.toBusinessException();
             }
             log.warn("Gemini 1차 모델({}) 계속 실패 — 폴백 모델({})로 다시 시도", primary, fallback);
             try {
-                return callModel(fallback, properties.getApiKey(), body, policy, deadline);
+                return callModel(fallback, properties.getApiKey(), body, policy, deadline, context);
             } catch (ModelUnavailable fallbackFailure) {
                 log.warn("Gemini 폴백 모델({})도 실패", fallback);
                 throw fallbackFailure.toBusinessException();
@@ -397,7 +433,7 @@ public class GeminiClient {
      * 똑같으므로 여기서 바로 실패시킨다 — 폴백에 예산을 낭비할 이유가 없다.
      */
     private JsonNode callModel(String model, String apiKey, Map<String, Object> body,
-                               RetryPolicy policy, long deadline) {
+                               RetryPolicy policy, long deadline, CallContext context) {
         long backoffMillis = policy.initialBackoffMillis();
         long lastAttemptMillis = 0;
         for (int attempt = 1; ; attempt++) {
@@ -411,6 +447,9 @@ public class GeminiClient {
                         .retrieve()
                         .body(JsonNode.class);
                 record(model, "success", System.currentTimeMillis() - attemptStart);
+                // 과금되는 건 성공한 응답뿐이다 — 실패 응답에는 usageMetadata 자체가 없다.
+                usageRecorder.recordUsage(context.userId(), context.feature(), model, response,
+                        context.imageCount(), attempt);
                 return response;
             } catch (RestClientResponseException e) {
                 lastAttemptMillis = System.currentTimeMillis() - attemptStart;
