@@ -46,6 +46,7 @@ import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { EmojiPicker } from '../../components/EmojiPicker';
 import { ChatSearchModal } from '../../components/ChatSearchModal';
+import { TouchGesturePicker } from '../../components/TouchGesturePicker';
 import { ChatMoreMenuSheet } from '../../components/ChatMoreMenuSheet';
 import { ScheduleMessageSheet } from '../../components/ScheduleMessageSheet';
 import { VoiceRecordSheet } from '../../components/VoiceRecordSheet';
@@ -78,7 +79,7 @@ import { chatDateDividerLabel, isSameLocalDay, toDateString } from '../../utils/
 import { buildChatTranscript, shareTranscript } from '../../utils/chatExport';
 import * as Sharing from 'expo-sharing';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { ChatMessage, CoupleEmoji } from '../../types';
+import type { ChatMessage, CoupleEmoji, TouchGestureCode } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { useAndroidKeyboardHeight } from '../../hooks/useAndroidKeyboardHeight';
 import { useKeyboardPanelHeight } from '../../hooks/useKeyboardPanelHeight';
@@ -99,6 +100,30 @@ const timeOf = (iso: string): string => {
 
 /** 같은 사람이 이 시간 안에 연달아 보내면 한 그룹(카톡처럼 시간 표시를 마지막에만) */
 const GROUP_GAP_MS = 5 * 60 * 1000;
+
+/** 통화 요청이 응답 없이 멈추는 것을 막는 시간 제한 — 걸면 사용자에게 알린다. */
+const CALL_REQUEST_TIMEOUT_MS = 15_000;
+
+function withCallTimeout<T>(promise: Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error('통화를 연결하지 못했어요. 잠시 후 다시 시도해주세요.')),
+      CALL_REQUEST_TIMEOUT_MS,
+    );
+    promise.then(resolve, reject).finally(() => clearTimeout(timer));
+  });
+}
+
+/**
+ * 전송 멱등키 — 서버가 {@code (relation_id, client_message_id)} 로 중복을 거른다(V89).
+ *
+ * <p>UUID 라이브러리를 쓰지 않는 이유: 이 값이 유일해야 하는 범위는 <b>한 관계의 몇 초</b>
+ * 뿐이고, 그 안에서 시각(ms)과 난수 8자가 겹칠 일은 없다. 의존성을 하나 더 들이는 대신
+ * 필요한 만큼만 만든다. 컬럼 길이는 64 — 이 형식은 20자 안쪽이다.
+ */
+function newClientMessageId(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
 
 export function ChatRoomScreen({ navigation, route }: Props) {
   const { relationId, title } = route.params;
@@ -250,6 +275,20 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const [spellDismissedFor, setSpellDismissedFor] = useState<string | null>(null);
   // 수정 모드에서 응답 대기 중 전송 버튼이 안 막혀 중복 PUT 이 가능했다(QA_CHECKLIST.md P2-19)
   const [editSaving, setEditSaving] = useState(false);
+  /*
+   * 전송 왕복 동안의 상태 — 버튼을 자리에 붙잡아 두고 비활성으로 만드는 데 쓴다.
+   *
+   * <p>소켓이 끊겨 있으면 send 는 재연결을 최대 5초 기다린다(chatSocket.CONNECT_WAIT_MS).
+   * 예전엔 그 5초 동안 입력창도 버튼도 그대로여서 "눌러도 아무 일이 없다"로 읽혔고,
+   * 다시 누르면 텍스트가 남아 있으니 같은 메시지가 두 번 나갔다(2026-09-11 리포트).
+   */
+  const [sending, setSending] = useState(false);
+  /**
+   * 같은 프레임 안의 연타 차단 — state 는 리렌더 전까지 stale 해서 두 번째 탭이 가드를
+   * 그냥 지나간다. 실제 잠금은 이 ref 가 하고, {@code sending} 은 화면 표시용이다.
+   */
+  const sendingRef = useRef(false);
+  const [showTouchPicker, setShowTouchPicker] = useState(false);
   const spellCheckEnabled = useSettingsStore((s) => s.spellCheckEnabled);
   // 이미 읽음 처리한 최대 메시지 id — 중복 PUT 방지
   const markedUpToRef = useRef(0);
@@ -424,7 +463,13 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         const joined = await callApi.start(callType);
         joinedCallId = joined.callId;
         const call = client.call('default', joined.callId);
-        await call.getOrCreate({
+        /*
+         * ring 요청에 시간 제한을 둔다. 연결이 온전치 않으면 SDK 가 요청을 큐에 쌓아 두는데,
+         * 그러면 예외도 응답도 없이 멈춰 finally 에 닿지 못하고 callStarting 이 true 로 굳는다 —
+         * 그 뒤로는 버튼을 눌러도 맨 위 `if (callStarting) return` 에 걸려 아무 일도 안 일어난다.
+         * "통화가 조용히 죽는" 경로를 남기지 않는다(2026-09-11).
+         */
+        await withCallTimeout(call.getOrCreate({
           ring: true,
           video: callType === 'VIDEO',
           data: {
@@ -441,7 +486,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
                 ? { video: { camera_default_on: false, target_resolution: { width: 640, height: 480 } } }
                 : undefined,
           },
-        });
+        }));
       } catch (e) {
         // Stream 쪽 콜 생성이 실패해도 우리 세션은 이미 RINGING 으로 남아있다 —
         // 24시간 안전장치를 기다리지 않고 바로 정리한다(상대에게 헛벨이 안 뜬 상태이므로 무해).
@@ -639,26 +684,73 @@ export function ChatRoomScreen({ navigation, route }: Props) {
       return;
     }
 
+    if (sendingRef.current) return; // 같은 프레임 연타 — state 가드는 여기서 stale 하다
+    sendingRef.current = true;
+
+    /*
+     * 입력창을 먼저 비운다. 전송은 서버 왕복이고 끊겨 있으면 5초까지 가는데, 그동안
+     * 글자가 그대로 남아 있으면 탭이 먹힌 건지 알 수 없다. 실패하면 아래에서 돌려준다.
+     */
+    const pending = replyTo;
+    setText('');
+    setReplyTo(null);
+    setSending(true);
+    haptics.light();
     // 과거를 읽던 중이었어도 내가 보낸 메시지는 바로 보여야 한다(2026-09-03 요청)
     scrollToBottom();
-    const ok = await send(relationId, {
-      messageType: 'TEXT',
-      content,
-      replyToId: replyTo?.id,
-    });
-    if (ok) {
-      setText('');
-      setReplyTo(null);
-      haptics.light();
-      inputRef.current?.focus();
-    } else {
-      Alert.alert('전송 실패', '연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
+    const clientMessageId = newClientMessageId();
+    try {
+      const ok = await send(
+        relationId,
+        { messageType: 'TEXT', content, replyToId: pending?.id, clientMessageId },
+        /*
+         * 낙관적 말풍선 — 누른 즉시 서는 "보내는 중" 버블. 이게 없으면 서버가 밀리는 동안
+         * 화면에 아무 변화가 없어서(표시 경로가 서버 에코뿐) 사용자가 다시 누르게 된다.
+         * 서버 에코가 오면 clientMessageId 로 짝지어 제자리에서 진짜 메시지로 바뀐다.
+         */
+        myId
+          ? {
+              id: -Date.now(),
+              relationId,
+              senderId: myId,
+              messageType: 'TEXT',
+              content,
+              isRead: false,
+              createdAt: new Date().toISOString(),
+              replyTo: pending
+                ? {
+                    id: pending.id,
+                    senderId: pending.senderId,
+                    messageType: pending.messageType,
+                    content: pending.content,
+                  }
+                : null,
+              clientMessageId,
+              pending: true,
+            }
+          : undefined,
+      );
+      if (ok) {
+        inputRef.current?.focus();
+      } else {
+        /*
+         * 쓰던 글을 돌려준다 — 날리면 처음부터 다시 써야 한다. 기다리는 동안 새로 치기
+         * 시작했다면 그건 건드리지 않는다(사용자가 방금 친 것이 우선).
+         */
+        setText((cur) => (cur.trim() ? cur : content));
+        setReplyTo((cur) => cur ?? pending);
+        Alert.alert('전송 실패', '연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
+      }
+    } finally {
+      sendingRef.current = false;
+      setSending(false);
     }
   };
 
   /** 메시지 길게 누르기 — MessageActionSheet 로 리액션/답장/수정/삭제를 한 시트에 모은다 */
   const onLongPressMessage = (msg: ChatMessage) => {
     if (msg.deleted) return;
+    if (msg.pending) return; // 서버에 아직 없는 말풍선 — 리액션·수정·삭제 대상이 될 수 없다
     haptics.light();
     setActionSheetFor(msg);
   };
@@ -776,6 +868,26 @@ export function ChatRoomScreen({ navigation, route }: Props) {
    * 패널 위로 올라오는 말풍선(scrollToBottom)이 그 역할을 대신한다. 패널을 닫는 길도
    * 이제 트레이 버튼 말고 하나 더 있다 — 대화 영역을 건드리면 닫힌다(dismissPanels).
    */
+  /**
+   * 가상 터치 — 홈에서 옮겨왔다(2026-09-12).
+   *
+   * <p>원래 홈 바로가기에 있었고 "채팅방을 열지 않고도 보낸다"가 그 자리의 이유였다.
+   * 다만 위 트레이 주석이 터치를 이미 <b>"대화창에 보내는 액션(스티커·터치·사진)"</b> 으로
+   * 분류해 두었다 — 카테고리가 맞는 자리는 여기다. 홈은 보내는 곳이 아니라 <b>받는 곳</b>으로
+   * 남는다(HomeScreen 의 onIncomingTouch — 채팅방을 안 열어도 진동·토스트로 반응한다).
+   *
+   * <p>스티커와 같은 경로로 보낸다(messageType 만 다르다). 패널은 닫는다 — 터치는 스티커처럼
+   * 연달아 보내는 물건이 아니고, 피커가 모달로 뜨므로 뒤에 패널이 남으면 닫을 것이 둘이 된다.
+   */
+  const sendTouch = async (code: TouchGestureCode) => {
+    haptics.light();
+    scrollToBottom();
+    const ok = await send(relationId, { messageType: 'TOUCH', content: code });
+    if (!ok) {
+      Alert.alert('전송 실패', '연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
+    }
+  };
+
   const sendSticker = async (sticker: string, locked: boolean, label: string) => {
     if (locked) {
       showUpgrade(`${withJosa(label, '은', '는')} PRO에서 보낼 수 있어요.`);
@@ -1192,7 +1304,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           메시지마다 그대로 유지한다 — isRead 는 메시지마다 따로 갖는 값이라 시간과
           달리 "몇 번째까지 읽었는지"가 중요한 정보라서 그룹 끝으로 뭉치면 안 된다.
         */}
-        {(isGroupEnd || (mine && !item.isRead) || item.edited) ? (
+        {(isGroupEnd || (mine && !item.isRead) || item.edited || item.pending) ? (
           <View style={mine ? styles.metaMine : styles.meta}>
             {/*
               읽음은 내가 보낸 메시지에만 — 상대 메시지의 읽음 여부는 알 필요가 없다.
@@ -1202,7 +1314,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               없앤다. 색은 "상대"의 고유색(colors.partner)을 그대로 써서 이 앱의
               나/상대 색 체계(theme/colors.ts 의 Duo 시맨틱)를 유지한다.
             */}
-            {mine && !item.isRead ? (
+            {mine && !item.isRead && !item.pending ? (
               <MaterialCommunityIcons
                 name="heart"
                 size={10}
@@ -1212,7 +1324,12 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               />
             ) : null}
             {item.edited ? <Text style={styles.editedMark}>수정됨</Text> : null}
-            {isGroupEnd ? <Text style={styles.time}>{timeOf(item.createdAt)}</Text> : null}
+            {/* 아직 서버 에코가 안 온 말풍선 — 시간 대신 상태를 보여준다(다시 누를 이유를 없앤다) */}
+            {item.pending ? (
+              <Text style={styles.sendingMark}>보내는 중</Text>
+            ) : isGroupEnd ? (
+              <Text style={styles.time}>{timeOf(item.createdAt)}</Text>
+            ) : null}
           </View>
         ) : null}
         </Pressable>
@@ -1424,6 +1541,11 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               icon="clock-outline"
               label="예약"
               onPress={() => { setShowExtras(false); setShowScheduleSheet(true); }}
+            />
+            <ExtraButton
+              icon="hand-heart-outline"
+              label="터치"
+              onPress={() => { setShowExtras(false); setShowTouchPicker(true); }}
             />
           </View>
         ) : null}
@@ -1690,15 +1812,27 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             받는다 — 버튼 총량이 느는 게 아니라 어차피 비어 있던 슬롯을 쓰는 것이라,
             "+" 로 4개를 모았던 결정(extrasPanel 주석)과 어긋나지 않는다.
           */}
-          {text.trim() ? (
+          {/*
+            전송 중에도 이 자리를 지킨다. 입력창을 먼저 비우므로 text 만 보면 버튼이
+            곧바로 이모티콘 버튼으로 교체되는데, 그러면 연달아 누른 탭이 이모티콘 패널을
+            열어 버린다(게다가 패널은 열릴 때 키보드를 내린다 — togglePanel 주석).
+          */}
+          {text.trim() || sending ? (
             <TouchableOpacity
-              style={[styles.sendBtn, editSaving && styles.sendDisabled]}
+              style={[styles.sendBtn, (editSaving || sending) && styles.sendDisabled]}
               onPress={onSend}
-              disabled={editSaving}
+              disabled={editSaving || sending}
+              // 46px 이지만 화면 맨 끝이라 엄지가 가장자리를 빗나가기 쉽다
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               accessibilityRole="button"
+              accessibilityState={{ disabled: editSaving || sending, busy: sending }}
               accessibilityLabel={editing ? '수정 완료' : '전송'}
             >
-              <MaterialCommunityIcons name="arrow-up" size={22} color={colors.white} style={styles.sendIcon} />
+              {sending ? (
+                <ActivityIndicator size="small" color={colors.white} />
+              ) : (
+                <MaterialCommunityIcons name="arrow-up" size={22} color={colors.white} style={styles.sendIcon} />
+              )}
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
@@ -1758,6 +1892,11 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         onSelect={(emoji) => sendSticker(emoji, false, '이모지')}
       />
       {/* 대화 검색 — 헤더 돋보기. 고르면 닫고 그 메시지로 스크롤한다 */}
+      <TouchGesturePicker
+        visible={showTouchPicker}
+        onClose={() => setShowTouchPicker(false)}
+        onSelect={sendTouch}
+      />
       <ChatSearchModal
         visible={showSearch}
         relationId={relationId}
@@ -2101,6 +2240,8 @@ const styles = themedStyles((colors) => ({
   },
   pinnedText: { flex: 1, fontSize: fontSize.caption, fontWeight: '600', color: colors.textPrimary },
   time: { fontSize: 10, color: colors.textTertiary },
+  // "보내는 중" — 시간 자리에 들어가므로 같은 크기·색 체계를 따른다
+  sendingMark: { fontSize: 10, color: colors.textTertiary },
   editedMark: { fontSize: 10, color: colors.textTertiary },
 
   // 날짜 구분선 — 가운데 라벨 + 양옆 선

@@ -16,6 +16,17 @@ export interface CoupleEmojiEmotionDef {
   placeholder: string;
 }
 
+/**
+ * 한 번에 만들 수 있는 장 수 — 백엔드 {@code CoupleEmojiService.MAX_EMOTIONS_PER_REQUEST} 와 같아야 한다.
+ *
+ * <p>17종을 한 요청에 담으면 실비(장당 약 0.04 USD)·대기 시간·실패 시 손실이 한꺼번에 커진다.
+ * 2026-09-11 크레딧이 떨어졌을 때 한 요청이 30분을 돌고 아무것도 남기지 못했다. 나눠 만들면
+ * 한 번이 15~20초에 끝나고, 마음에 든 장은 트레이에 그대로 남는다.
+ *
+ * <p>여기서 막는 건 사용자 경험용이다 — 진짜 상한은 서버가 본다(넘겨 보내면 400).
+ */
+export const MAX_EMOJI_PER_REQUEST = 5;
+
 export const COUPLE_EMOJI_EMOTIONS: CoupleEmojiEmotionDef[] = [
   { key: 'ANGRY', label: '화남', placeholder: '😠' },
   { key: 'HAPPY', label: '기쁨', placeholder: '😊' },

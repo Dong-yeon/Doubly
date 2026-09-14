@@ -1371,6 +1371,16 @@ export interface ChatMessage {
   deleted?: boolean;
   /** 중요 대화 저장됨 — 커플 공용 판정(누가 저장했든 true) */
   bookmarked?: boolean;
+  /**
+   * 보낸 앱이 붙인 멱등키 — 서버가 그대로 돌려준다. 낙관적 말풍선을 서버 에코와 짝짓는 열쇠다
+   * (내용으로 짝지으면 같은 말을 두 번 보낼 때 깨진다). 옛 메시지·시스템 카드는 없다.
+   */
+  clientMessageId?: string | null;
+  /**
+   * 아직 서버 에코가 오지 않은 <b>내 화면에만 있는</b> 말풍선. id 는 임시 음수다.
+   * 서버가 준 메시지에는 절대 붙지 않는다 — 읽음 처리·리액션·수정 같은 경로가 이 값을 보고 비켜난다.
+   */
+  pending?: boolean;
 }
 
 /** 저장한 대화 목록 항목 — bookmarkId 를 다음 페이지 커서로 쓴다(ChatMessage.id 아님) */

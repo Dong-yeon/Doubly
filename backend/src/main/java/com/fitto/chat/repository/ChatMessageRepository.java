@@ -116,4 +116,10 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
               (select r.id from Relation r where r.userAId = :userId or r.userBId = :userId)
             """)
     void deleteAllByUserRelations(@Param("userId") Long userId);
+
+    /**
+     * 멱등키로 이미 저장된 메시지를 찾는다 — 같은 키로 두 번 들어온 프레임을 걸러낸다.
+     * {@code (relation_id, client_message_id)} unique 인덱스가 이 조회를 받쳐 준다(V89).
+     */
+    Optional<ChatMessage> findByRelationIdAndClientMessageId(Long relationId, String clientMessageId);
 }
