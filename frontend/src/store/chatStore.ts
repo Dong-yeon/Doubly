@@ -46,7 +46,17 @@ interface ChatState {
   closeRoom: (relationId: number) => void;
   /** 위로 스크롤 시 과거 메시지 한 페이지 추가 로드 (커서 = 가장 오래된 메시지 id) */
   loadOlder: (relationId: number) => Promise<void>;
-  send: (relationId: number, payload: OutgoingMessage) => Promise<boolean>;
+  /**
+   * 전송 — <b>낙관적 말풍선을 먼저 넣고</b> 발행한다.
+   *
+   * <p>STOMP 발행은 fire-and-forget 이라 서버 저장을 기다리지 않는다. 예전에는 메시지가
+   * 화면에 뜨는 유일한 경로가 서버 에코여서, 서버가 밀리면 화면에 아무것도 안 뜨고 사용자는
+   * 다시 눌렀다 — 누른 만큼 저장됐다(2026-09-12 리포트). 이제 누르는 즉시 "보내는 중"
+   * 말풍선이 서고, 서버 에코가 오면 {@code clientMessageId} 로 짝지어 제자리에서 바뀐다.
+   *
+   * @returns 발행 성공 여부. false 면 낙관적 말풍선은 이미 걷어냈다(화면이 글을 되돌린다)
+   */
+  send: (relationId: number, payload: OutgoingMessage, optimistic?: ChatMessage) => Promise<boolean>;
   markRead: (messageId: number) => Promise<void>;
   /** REST 응답으로 받은 메시지를 목록에서 제자리 교체 (리액션·수정·삭제) */
   replaceMessage: (relationId: number, updated: ChatMessage) => void;
@@ -97,6 +107,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set((s) => {
         const existing = s.messages[relationId] ?? [];
         if (existing.some((m) => m.id === msg.id)) return s;
+        /*
+         * 내 낙관적 말풍선의 에코라면 새로 쌓지 않고 그 자리에서 바꾼다 — 짝짓는 열쇠는
+         * clientMessageId 다. 내용으로 짝지으면 같은 말을 두 번 보낼 때 엉뚱한 말풍선이
+         * 사라진다. 서버가 같은 키로 두 번 브로드캐스트해도(동시 도착 경합) 두 번째는
+         * 위의 id 검사에서 걸린다.
+         */
+        const key = msg.clientMessageId;
+        if (key) {
+          const at = existing.findIndex((m) => m.pending && m.clientMessageId === key);
+          if (at >= 0) {
+            const next = [...existing];
+            next[at] = msg;
+            return { messages: { ...s.messages, [relationId]: next } };
+          }
+        }
         return { messages: { ...s.messages, [relationId]: [msg, ...existing] } };
       });
     });
@@ -124,12 +149,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     subscribeRoomRead(relationId, ({ lastReadMessageId }) => {
       set((s) => {
         const existing = s.messages[relationId] ?? [];
-        if (!existing.some((m) => !m.isRead && m.id <= lastReadMessageId)) return s;
+        // pending 은 임시 음수 id 라 어떤 lastReadMessageId 보다도 작다 — 빼지 않으면 "읽음"이 붙는다
+        if (!existing.some((m) => !m.isRead && !m.pending && m.id <= lastReadMessageId)) return s;
         return {
           messages: {
             ...s.messages,
             [relationId]: existing.map((m) =>
-              m.isRead || m.id > lastReadMessageId ? m : { ...m, isRead: true },
+              m.isRead || m.pending || m.id > lastReadMessageId ? m : { ...m, isRead: true },
             ),
           },
         };
@@ -186,7 +212,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
    * 재연결이 3초마다 도는 중이라 "잠시 후 다시"가 아니라 <b>지금 기다렸다 보내면 되는</b>
    * 상황이 대부분이었다 — 사용자에겐 "연결이 끊겼어요"만 반복해서 보였다.
    */
-  send: (relationId, payload) => publishEnsuringConnection(relationId, payload),
+  send: async (relationId, payload, optimistic) => {
+    if (optimistic) {
+      set((s) => ({
+        messages: { ...s.messages, [relationId]: [optimistic, ...(s.messages[relationId] ?? [])] },
+      }));
+    }
+    const ok = await publishEnsuringConnection(relationId, payload);
+    if (!ok && optimistic) {
+      // 발행 자체가 실패했다 — 서버에 갈 일이 없으므로 말풍선을 걷는다(화면이 글을 되돌린다)
+      set((s) => ({
+        messages: {
+          ...s.messages,
+          [relationId]: (s.messages[relationId] ?? []).filter((m) => m.id !== optimistic.id),
+        },
+      }));
+    }
+    return ok;
+  },
 
   replaceMessage: (relationId, updated) =>
     set((s) => ({
@@ -211,13 +254,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
   syncMissed: async (relationId) => {
     const latest = await chatApi.messages(relationId);
     set((s) => {
-      const cur = s.messages[relationId] ?? [];
+      const all = s.messages[relationId] ?? [];
+      /*
+       * 낙관적 말풍선은 에코로만 사라지는데, 끊긴 사이에 저장된 메시지는 에코 없이 이
+       * 재조회로 들어온다. 그대로 두면 같은 말이 화면에 두 번 보이므로(DB 중복이 아니라
+       * 화면 중복) 서버가 돌려준 멱등키로 짝을 찾아 걷어낸다.
+       */
+      const echoed = new Set(latest.map((m) => m.clientMessageId).filter(Boolean));
+      const cur = all.filter((m) => !(m.pending && m.clientMessageId && echoed.has(m.clientMessageId)));
       const seen = new Set(cur.map((m) => m.id));
       const fresh = latest.filter((m) => !seen.has(m.id));
       // 놓친 게 없으면 상태를 그대로 둔다 — 불필요한 리렌더·스크롤 튐 방지.
       // 읽음 표시 갱신도 같이 반영해야 하므로 기존 항목은 최신본으로 덮어쓴다.
       const byId = new Map(latest.map((m) => [m.id, m]));
-      if (fresh.length === 0 && cur.every((m) => !byId.has(m.id) || byId.get(m.id)!.isRead === m.isRead)) {
+      if (
+        fresh.length === 0 &&
+        cur.length === all.length &&
+        cur.every((m) => !byId.has(m.id) || byId.get(m.id)!.isRead === m.isRead)
+      ) {
         return s;
       }
       return {

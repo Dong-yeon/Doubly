@@ -27,7 +27,6 @@ import { QuickActions } from './components/QuickActions';
 import { MemoryPeek } from './components/MemoryPeek';
 import { TripPeek, isTripLive, isTripOngoing, pickHomeTrip } from './components/TripPeek';
 import { LockedCard } from '../../components/LockedCard';
-import { TouchGesturePicker } from '../../components/TouchGesturePicker';
 import { MoodPicker } from '../../components/MoodPicker';
 import { QuickMealSheet } from './components/QuickMealSheet';
 import { useAuthStore } from '../../store/authStore';
@@ -46,7 +45,6 @@ import { tripApi } from '../../api/trip';
 import { feedTimeLabel } from '../feed/FeedTimelineScreen';
 import {
   connectSocket,
-  publishEnsuringConnection,
   subscribeCouple,
   unsubscribeCouple,
 } from '../../api/chatSocket';
@@ -63,7 +61,7 @@ import { updateHomeWidget } from '../../widget/updateHomeWidget';
 import { loadWidgetData } from '../../widget/widgetData';
 import { touchGestureOf } from '../../constants/touchGestures';
 import { playTouchGesture } from '../../utils/haptics';
-import type { FeedItem, Meal, Memories, MoodResponse, PartnerToday, Streak, TouchGestureCode, Trip } from '../../types';
+import type { FeedItem, Meal, Memories, MoodResponse, PartnerToday, Streak, Trip } from '../../types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { isDarkMode } from '../../theme';
 import { themedStyles } from '../../theme/themedStyles';
@@ -150,20 +148,25 @@ export function HomeScreen({ navigation }: Props) {
   const [annModal, setAnnModal] = useState(false);
   const [annInput, setAnnInput] = useState('');
   const [annSaving, setAnnSaving] = useState(false);
-  // 가상 터치 — 채팅방을 열지 않고도 보낼 수 있는 진입점(PLAN.md "가상 터치" 참고).
-  // 채팅 트레이에는 2026-09-03 에 스티커와 겹친다는 리포트로 뺐지만(ChatRoomScreen
-  // 주석 참고), 사용률 자체는 낮아도 홈의 "가볍게 안부 찌르기" 용도로는 남긴다.
-  const [showTouchPicker, setShowTouchPicker] = useState(false);
+  /*
+   * 가상 터치의 <b>발신</b>은 여기 없다 — 2026-09-12 에 채팅 트레이로 옮겼다
+   * (ChatRoomScreen 의 sendTouch 주석). 홈은 <b>받는 곳</b>으로 남는다(아래 onIncomingTouch —
+   * 채팅방을 안 열어도 진동·토스트로 반응한다).
+   *
+   * <p>이력을 남겨 둔다: 터치는 2026-09-03 에 "스티커와 겹친다"는 리포트로 채팅에서
+   * 빠져 홈으로 왔었다. 그때 트레이는 <b>입력바에 항상 떠 있는 버튼 넷</b>이라 자리
+   * 다툼이 실제 문제였지만(ChatRoomScreen 트레이 주석의 46px×4), 지금은 "+" 로 펼치는
+   * 패널이라 항목이 하나 늘어도 입력바 폭을 먹지 않는다 — 되돌린 근거가 그것이다.
+   */
   /*
    * 무드 상태 — 나/상대 지금 기분(PLAN.md "무드 상태" 참고). 아바타 배지로 표시하고,
    * 설정하는 진입점도 여기 topBar 에 둔다(아래 topBar 참고).
    *
    * 예전엔 설정 진입점이 ChatRoomScreen 에 있었다 — "대화창에 보내는" 액션(스티커·
    * 터치·사진)도 아니고 대화 로그에 남지도 않는데 그 트레이에 같이 있어 카테고리가
-   * 안 맞았다. 그렇다고 QuickActions 에 넣기도 어렵다: 이 화면은 세로 여백이
-   * 빠듯하고(파일 상단 주석) QuickActions 는 이미 6개라 항목을 더 넣으면 360dp 에서
-   * 46px 고정폭 아이콘이 겹친다(312px÷7≈44.6px < 46px). topBar 좌측은 예전 "배경"
-   * 버튼이 빠지고 비어 있던 자리라 폭 예산 걱정 없이 새 진입점을 넣을 수 있었다.
+   * 안 맞았다. 그렇다고 QuickActions 에 넣지도 않는다: 그 줄은 칸을 늘리는 자리가
+   * 아니고(아래 QuickActions 주석) topBar 좌측이 예전 "배경" 버튼이 빠져 비어 있던
+   * 자리라 폭 예산 걱정 없이 새 진입점을 넣을 수 있었다.
    */
   const [mood, setMood] = useState<MoodResponse | null>(null);
   const [showMoodPicker, setShowMoodPicker] = useState(false);
@@ -396,13 +399,6 @@ export function HomeScreen({ navigation }: Props) {
       };
     }, [relationId, refresh, onIncomingTouch]),
   );
-
-  const sendTouch = (code: TouchGestureCode) => {
-    if (!relationId) return;
-    publishEnsuringConnection(relationId, { messageType: 'TOUCH', content: code }).then((ok) => {
-      if (!ok) toast.error('연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
-    });
-  };
 
   // moodApi.set 이 갱신된 나/상대 무드를 함께 돌려주므로, 소켓 이벤트를 기다리지 않고
   // 응답으로 바로 반영한다(홈을 나가지 않고 연달아 바꿔도 배지가 즉시 따라온다).
@@ -701,15 +697,27 @@ export function HomeScreen({ navigation }: Props) {
                 />
               ) : null}
 
+              {/*
+                칸 셋. 한때 7칸까지 늘어 320px 에서 칸당 45px·라벨 11px 까지 내려갔다 —
+                홈은 스크롤이 없어(위 주석) 새 기능이 전부 이 줄에 가로로 쌓인 결과다.
+                <b>여기는 칸을 늘리는 자리가 아니다</b>: 새 기능은 각자의 탭이나 딥링크·
+                푸시로 닿게 하고, 홈은 "우리"를 보여주는 화면으로 남긴다.
+
+                남긴 셋의 근거: '우리 기록'은 히어로의 좌우 열이 각자 필터를 걸고 가는
+                짝이고(onPressPerson), '일상'은 <b>피드 쓰기의 유일한 진입점</b>이며
+                (푸시 링크도 없다), '캘린더'는 인앱 경로가 없는 데다 여행 목록으로 가는
+                유일한 길이다(CoupleCalendarScreen).
+
+                내린 것들이 닿는 길: 질문·게임은 전용 푸시 링크(PushLinks.QUESTION·
+                GAME_SUDOKU·GAME_OMOK)와 딥링크, 사진첩은 딥링크('album'), 여행은 캘린더
+                안의 링크, 터치는 <b>채팅 트레이</b>(2026-09-12 이동 — ChatRoomScreen 의
+                sendTouch 주석). 홈은 터치를 <b>받는 곳</b>으로는 남는다(onIncomingTouch).
+              */}
               <QuickActions
                 actions={[
                   { icon: 'timeline-text-outline', label: '우리 기록', onPress: () => navigation.navigate('FeedTimeline') },
                   { icon: 'image-plus', label: '일상', onPress: () => navigation.navigate('FeedCompose') },
-                  { icon: 'comment-question-outline', label: '질문', onPress: () => navigation.navigate('DailyQuestion') },
-                  { icon: 'gamepad-variant-outline', label: '게임', onPress: () => navigation.navigate('MiniGames') },
                   { icon: 'calendar-heart', label: '캘린더', onPress: () => navigation.navigate('CoupleCalendar') },
-                  { icon: 'image-multiple-outline', label: '사진첩', onPress: () => navigation.navigate('PhotoAlbum') },
-                  { icon: 'hand-heart-outline', label: '터치', onPress: () => setShowTouchPicker(true) },
                 ]}
               />
             </View>
@@ -791,12 +799,6 @@ export function HomeScreen({ navigation }: Props) {
         </Pressable>
       </Modal>
 
-      {/* 가상 터치 — 채팅방을 열지 않고도 보낼 수 있는 진입점 */}
-      <TouchGesturePicker
-        visible={showTouchPicker}
-        onClose={() => setShowTouchPicker(false)}
-        onSelect={sendTouch}
-      />
       {/* 무드 상태 — topBar 의 진입점에서 연다(위 mood 주석 참고) */}
       <MoodPicker
         visible={showMoodPicker}
