@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["--prefix", "frontend", "run", "web", "--", "--port", "19006"],
       "port": 19006
+    },
+    {
+      "name": "doubly-metro",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "frontend", "run", "start", "--", "--dev-client", "--port", "8081"],
+      "port": 8081
     }
   ]
 }

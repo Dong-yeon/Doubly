@@ -8,9 +8,10 @@
  * 썸네일 한 줄로 늘어놓고, 고른 팩만 큼직한 5열 격자로</b> 보여준다 — 세로 스크롤이
  * 줄고, 어떤 캐릭터가 있는지가 첫 화면에서 끝난다.
  *
- * <p>팩 경계는 카탈로그가 이미 갖고 있다 — {@code STICKER_IMAGES} 의 {@code pack},
+ * <p>팩 경계는 카탈로그가 이미 갖고 있다 — {@code STICKER_CHARACTERS}(캐릭터별 묶음),
  * {@code STICKER_PACKS} 의 시즌 구분, 움직이는 이모티콘 한 묶음. 여기서 새로 나누지
- * 않고 그대로 가져와 스트립 칸으로 편다.
+ * 않고 그대로 가져와 스트립 칸으로 편다. 캐릭터가 늘면 스트립 칸이 저절로 하나 더 생긴다
+ * (stickerImages.ts 의 {@code StickerCharacter} 주석과 같은 약속).
  *
  * <p><b>화면에서 떼어낸 이유</b>: ChatRoomScreen 이 이미 2200줄이다. 패널은 자기
  * 상태(고른 팩)만 갖고 나머지는 콜백으로 올려 보내므로, 말풍선 렌더와 얽히지 않는다.
@@ -19,7 +20,7 @@ import React, { useMemo, useState } from 'react';
 import { Image, Pressable, ScrollView, Text, View, type ImageSourcePropType } from 'react-native';
 import { MaterialCommunityIcons } from '../Icon';
 import { ANIMATED_STICKERS } from '../../constants/animatedStickers';
-import { STICKER_IMAGES } from '../../constants/stickerImages';
+import { STICKER_CHARACTERS } from '../../constants/stickerImages';
 import { STICKER_PACKS } from '../../constants/stickerPacks';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
@@ -97,19 +98,6 @@ export function StickerPanel({
   const packs = useMemo<PanelPack[]>(() => {
     const basic = STICKER_PACKS.find((p) => p.key === EMOJI_PACK);
     const seasonal = STICKER_PACKS.filter((p) => p.key !== EMOJI_PACK);
-    const bear = STICKER_IMAGES.filter((i) => i.pack === 'BEAR');
-    const bigae = STICKER_IMAGES.filter((i) => i.pack === 'BIGAE');
-
-    const imagePack = (key: string, label: string, list: typeof STICKER_IMAGES): PanelPack => ({
-      key,
-      label,
-      thumb: { type: 'image', source: list[0].source },
-      premium: false,
-      animated: false,
-      items: list.map((i) => ({
-        type: 'image', key: i.code, code: i.code, label: i.label, source: i.source, premium: false,
-      })),
-    });
 
     /*
      * 순서 = 손이 가는 순서다. 무료 그림 팩이 앞, PRO 시즌 팩이 뒤.
@@ -127,8 +115,17 @@ export function StickerPanel({
           type: 'image', key: a.code, code: a.code, label: a.label, source: a.thumb, premium: a.premium,
         })),
       },
-      imagePack('BEAR', '곰돌이', bear),
-      imagePack('BIGAE', '비개구리', bigae),
+      // 캐릭터 구획을 그대로 스트립 칸으로 — 카탈로그 순서가 곧 스트립 순서다
+      ...STICKER_CHARACTERS.map<PanelPack>((c) => ({
+        key: c.key,
+        label: c.label,
+        thumb: { type: 'image', source: c.stickers[0].source },
+        premium: false,
+        animated: false,
+        items: c.stickers.map((i) => ({
+          type: 'image', key: i.code, code: i.code, label: i.label, source: i.source, premium: false,
+        })),
+      })),
       {
         key: COUPLE_PACK,
         label: '우리 이모지',

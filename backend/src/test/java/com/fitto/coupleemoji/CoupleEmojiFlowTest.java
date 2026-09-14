@@ -103,7 +103,7 @@ class CoupleEmojiFlowTest {
                          "faceShape":"round","eyes":"almond","eyebrows":"thin","glasses":"no glasses",
                          "facialHair":"none","marks":"none","outfit":"white collared shirt"}
                         """));
-        when(geminiClient.generateImageInBackground(anyList()))
+        when(geminiClient.generateImageInBackground(any(), eq(Feature.AI_COUPLE_EMOJI), anyList()))
                 .thenReturn(new GeneratedImage(new byte[] {9, 9}, "image/jpeg"));
         when(imageUploader.upload(any(), anyString(), anyString()))
                 .thenAnswer(inv -> "https://res.cloudinary.com/demo/image/upload/v1/fitto/couple-emoji/"
@@ -147,8 +147,8 @@ class CoupleEmojiFlowTest {
      * "HAPPY 가 실패해야 하는데 SAD 가 실패했다"로 깨졌다. 프롬프트에 감정별 문구가 들어가므로 그걸 본다.
      */
     private void failOnly(CoupleEmojiEmotion emotion, RuntimeException failure) {
-        when(geminiClient.generateImageInBackground(anyList())).thenAnswer(invocation -> {
-            List<Map<String, Object>> parts = invocation.getArgument(0);
+        when(geminiClient.generateImageInBackground(any(), eq(Feature.AI_COUPLE_EMOJI), anyList())).thenAnswer(invocation -> {
+            List<Map<String, Object>> parts = invocation.getArgument(2);
             boolean target = parts.stream()
                     .map(part -> String.valueOf(part.get("text")))
                     .anyMatch(text -> text.contains(emotion.expressionPrompt()));
@@ -388,7 +388,7 @@ class CoupleEmojiFlowTest {
         assertThat(batch.emojis()).extracting(CoupleEmojiResponse::emotion)
                 .containsExactly(CoupleEmojiEmotion.ANGRY, CoupleEmojiEmotion.LOVE);
         // 지정하지 않은 감정은 아예 호출되지 않는다 — 그게 곧 절약이다
-        verify(geminiClient, times(2)).generateImageInBackground(anyList());
+        verify(geminiClient, times(2)).generateImageInBackground(any(), eq(Feature.AI_COUPLE_EMOJI), anyList());
     }
 
     @Test
@@ -413,7 +413,7 @@ class CoupleEmojiFlowTest {
         Long b = register("ce9@fitto.com");
         connectCouple(a, b);
         doThrow(new BusinessException(ErrorCode.AI_IMAGE_REJECTED))
-                .when(geminiClient).generateImageInBackground(anyList());
+                .when(geminiClient).generateImageInBackground(any(), eq(Feature.AI_COUPLE_EMOJI), anyList());
 
         assertThatThrownBy(() -> generateFor(a, null))
                 .isInstanceOf(BusinessException.class)

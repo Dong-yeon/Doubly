@@ -10,7 +10,9 @@ import java.util.Optional;
  *
  * <p>프론트 {@code frontend/src/constants/stickerImages.ts} 와 코드가 정확히 짝을
  * 맞춰야 한다 — 여기서 추가하면 거기도 같이 추가할 것. 어긋나면
- * {@code StickerImageSyncTest} 가 잡는다.
+ * {@code StickerImageSyncTest} 가 잡는다. 다만 <b>캐릭터 구분과 트레이 순서는 프론트에만
+ * 있다</b>({@code STICKER_CHARACTERS}) — 서버는 코드로 라벨 하나만 찾으면 되고, 여기 선언
+ * 순서는 화면에 영향을 주지 않는다.
  *
  * <p>일반 이모지 스티커(예: "💕")는 이 enum 에 없으므로 {@link #from(String)} 이
  * empty 를 반환하고, 알림 미리보기는 기존처럼 이모지 자체를 보여준다.
@@ -36,16 +38,26 @@ public enum StickerImage {
     BEAR_TIRED("지쳤어"),
     BEAR_SLEEPY("잘자"),
 
-    // 비개구리 10종 — 사용자 손그림 스케치를 스티커화한 자체 캐릭터(설계 메모 §15·§17)
+    // 비개구리 17종 — 사용자 손그림 스케치를 스티커화한 자체 캐릭터(설계 메모 §15·§17·§20).
+    // 1차 10종 + 2차 스케치 8종(LIKE·HEHE·KISS·GIFT·DANCE·GRUMPY·DIZZY·OFFWORK) − BIGAE_WIGGLE.
+    // WIGGLE(뒷모습 엉덩이)은 DANCE(뒷모습 + 음표)와 실루엣이 같아 뺐다(§20). 배포 전이라
+    // 그 코드로 보낸 메시지는 없다 — 있었다면 말풍선에 코드 문자열이 그대로 뜬다.
     BIGAE_LOVE("좋아좋아"),
-    BIGAE_EXCITED("신났어"),
+    BIGAE_LIKE("좋아"),
+    BIGAE_HEHE("히히"),
     BIGAE_LAUGH("하하하"),
-    BIGAE_WIGGLE("씰룩씰룩"),
+    BIGAE_KISS("뽀뽀"),
+    BIGAE_GIFT("선물이야"),
+    BIGAE_EXCITED("신났어"),
+    BIGAE_DANCE("룰루랄라"),
     BIGAE_SULKY("시무룩"),
+    BIGAE_GRUMPY("짜증나"),
     BIGAE_ANGRY("화났어"),
     BIGAE_DASH("흥, 간다"),
     BIGAE_CRYING("엉엉"),
     BIGAE_GLOOMY("축 처짐"),
+    BIGAE_DIZZY("어질~"),
+    BIGAE_OFFWORK("퇴근"),
     BIGAE_SLEEPY("잘자");
 
     private final String label;

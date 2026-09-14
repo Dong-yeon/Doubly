@@ -6,9 +6,9 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  useWindowDimensions,
   View,
 } from 'react-native';
+import { useContentWidth } from '../../hooks/useContentWidth';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '../../components/Icon';
@@ -34,7 +34,7 @@ type Props = NativeStackScreenProps<HomeStackParamList, 'TripAlbum'>;
 
 export function TripAlbumScreen({ route }: Props) {
   const { tripId, title } = route.params;
-  const { width } = useWindowDimensions();
+  const width = useContentWidth();
   const cell = (width - spacing.lg * 2 - spacing.sm) / 2; // 2열 정사각형 셀
 
   const [photos, setPhotos] = useState<AlbumPost[]>([]);

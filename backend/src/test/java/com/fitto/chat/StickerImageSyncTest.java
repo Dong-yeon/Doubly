@@ -40,12 +40,12 @@ class StickerImageSyncTest {
     private static final List<String> FRONTEND_SRC_CANDIDATES = List.of("../frontend/src", "frontend/src");
 
     /**
-     * {@code { code: 'X', label: 'Y', pack: 'P', source: require('...') }} 한 줄에서 code·label·경로를 뽑는다.
+     * {@code { code: 'X', label: 'Y', source: require('...') }} 한 줄에서 code·label·경로를 뽑는다.
      *
-     * <p>label 과 source 사이의 다른 필드는 건너뛴다 — 2026-09-14 에 트레이 팩 구분용
-     * {@code pack} 이 그 자리에 들어오면서 붙어 있기를 전제한 정규식이 한 건도 못 찾았다.
-     * 이 테스트는 <b>0건이면 통과</b>하는 모양이라(빈 집합끼리 비교) 조용히 무력화될 뻔했다 —
-     * 아래 최소 개수 검사가 그 재발을 막는다.
+     * <p>label 과 source 사이에 다른 필드가 끼어도 건너뛴다. 카탈로그가 캐릭터별로 묶이거나
+     * 항목에 필드가 붙는 일이 실제로 있었고, 그때 이 정규식은 한 건도 못 찾는다.
+     * 그런데 이 테스트는 <b>0건이면 통과</b>한다(빈 집합끼리 비교) — 조용히 무력화되는 모양이라
+     * 아래 파싱 결과 검사를 함께 세웠다.
      */
     private static final Pattern ENTRY = Pattern.compile(
             "\\{\\s*code:\\s*'([A-Z0-9_]+)'\\s*,\\s*label:\\s*'([^']*)'\\s*,(?:[^{}]*?,)?\\s*source:\\s*require\\('([^']+)'\\)");

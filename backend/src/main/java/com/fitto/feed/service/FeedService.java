@@ -46,6 +46,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -139,9 +140,11 @@ public class FeedService {
                 from.createdAtOf(FeedItemType.WORKOUT), from.idOf(FeedItemType.WORKOUT), page)) {
             merged.add(mapper.toItem(w, names, userId));
         }
-        for (Meal m : mealRepository.findRecentForFeed(userIds,
-                from.createdAtOf(FeedItemType.MEAL), from.idOf(FeedItemType.MEAL), page)) {
-            merged.add(mapper.toItem(m, names, userId));
+        List<Meal> meals = mealRepository.findRecentForFeed(userIds,
+                from.createdAtOf(FeedItemType.MEAL), from.idOf(FeedItemType.MEAL), page);
+        Map<Long, String> placeNameByMealId = placeNamesOf(meals);
+        for (Meal m : meals) {
+            merged.add(mapper.toItem(m, names, userId, placeNameByMealId.get(m.getId())));
         }
         for (VisitWithPlace v : placeVisitRepository.findRecentForFeed(couple.getId(),
                 from.createdAtOf(FeedItemType.PLACE_VISIT), from.idOf(FeedItemType.PLACE_VISIT), page)) {
@@ -163,6 +166,27 @@ public class FeedService {
         String nextCursor = items.isEmpty() ? null : nextCursorOf(from, items).encode();
         items = mapper.attachReactions(items, userId);
         return new FeedTimelineResponse(items, nextCursor, hasMore);
+    }
+
+    /**
+     * 이 끼니들에 연결된 장소 이름 — {@code meal_id → placeName}, 없으면 키 자체가 없다.
+     *
+     * <p>{@code PlaceVisit.mealId} 가 유일한 연결고리라 역방향으로 찾아야 한다
+     * ({@code PlaceVisitRepository.findByMealIdIn} 주석 참고). 카드마다 부르면 N+1 이므로
+     * 페이지 단위로 한 번만 조회한다.
+     *
+     * <p>한 끼니에 방문이 여러 건 붙는 일은 없지만, 있더라도 먼저 온 것을 쓴다 —
+     * 부제에 들어갈 자리는 한 곳뿐이다.
+     */
+    private Map<Long, String> placeNamesOf(List<Meal> meals) {
+        if (meals.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, String> byMealId = new LinkedHashMap<>();
+        for (VisitWithPlace vp : placeVisitRepository.findByMealIdIn(meals.stream().map(Meal::getId).toList())) {
+            byMealId.putIfAbsent(vp.getVisit().getMealId(), vp.getPlaceName());
+        }
+        return byMealId;
     }
 
     /**

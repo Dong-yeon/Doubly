@@ -247,7 +247,7 @@ public class CoupleEmojiService {
     /** 한 장 — 생성·업로드·저장. 스레드마다 따로 돌고 서로를 참조하지 않는다. */
     private CoupleEmoji generateOne(GenerationTicket ticket, CloudinaryImageFetcher.Image source,
                                     String facts, String batchId, CoupleEmojiEmotion emotion) {
-        GeneratedImage image = geminiClient.generateImageInBackground(List.of(
+        GeneratedImage image = geminiClient.generateImageInBackground(ticket.userId(), FEATURE, List.of(
                 GeminiClient.imagePart(source.mimeType(), source.bytes()),
                 GeminiClient.textPart(CoupleEmojiPrompts.imagePrompt(facts, emotion))));
         String url = imageUploader.upload(image.bytes(), image.mimeType(), RESULT_SUBFOLDER);

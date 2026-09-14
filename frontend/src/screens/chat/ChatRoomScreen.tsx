@@ -15,6 +15,8 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  type NativeSyntheticEvent,
+  type TextInputKeyPressEventData,
 } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { withJosa } from '../../utils/format';
@@ -37,7 +39,9 @@ import { useRelationStore } from '../../store/relationStore';
 import { useCallStore } from '../../store/callStore';
 import { callApi, CallType } from '../../api/call';
 import { haptics } from '../../utils/haptics';
-import { pickImage, uploadImage } from '../../utils/imageUpload';
+import { pickImage, releaseObjectUrl, shrinkUnknownImage, uploadImage } from '../../utils/imageUpload';
+import { isCoarsePointer } from '../../utils/pointer';
+import { useImageDrop } from '../../hooks/useImageDrop';
 import { uploadChatVoice } from '../../utils/chatVoiceUpload';
 import { parseVoiceContent } from '../../utils/chatVoice';
 import { getErrorMessage } from '../../utils/error';
@@ -76,11 +80,11 @@ import { useCoupleEmojiStore } from '../../store/coupleEmojiStore';
 import { playTouchGesture } from '../../utils/haptics';
 import { messagePreview } from '../../utils/messagePreview';
 import { chatDateDividerLabel, isSameLocalDay, toDateString } from '../../utils/date';
-import { buildChatTranscript, shareTranscript } from '../../utils/chatExport';
-import * as Sharing from 'expo-sharing';
+import { buildChatTranscript, canExportTranscript, shareTranscript } from '../../utils/chatExport';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { ChatMessage, CoupleEmoji, TouchGestureCode } from '../../types';
-import { themedStyles } from '../../theme/themedStyles';
+import { themedStyles, chatThemedStyles } from '../../theme/themedStyles';
+import { useChatThemeStore } from '../../store/chatThemeStore';
 import { useAndroidKeyboardHeight } from '../../hooks/useAndroidKeyboardHeight';
 import { useKeyboardPanelHeight } from '../../hooks/useKeyboardPanelHeight';
 import { EmptyState } from '../../components/EmptyState';
@@ -297,6 +301,13 @@ export function ChatRoomScreen({ navigation, route }: Props) {
    * 되돌려 키보드가 안 닫히게 한다(카톡·Between 등이 다 이렇게 동작한다).
    */
   const inputRef = useRef<TextInput>(null);
+
+  /*
+   * 채팅 배경 테마 — 값 자체는 chatStyles(아래)가 접근 시점에 읽으므로 여기서는 쓰지
+   * 않는다. 구독만 걸어 두는 이유는 <b>선택이 바뀐 걸 React 에 알리기 위해서</b>다.
+   * 앱 테마(themeStore)와 달리 이 화면 하나만 영향을 받아 루트 재마운트가 필요 없다.
+   */
+  useChatThemeStore((s) => s.id);
 
   /*
    * 목록은 inverted(offset 0 = 맨 아래 = 최신). "채팅을 치면 자동으로 맨 아래로",
@@ -739,6 +750,33 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     }
   };
 
+  /*
+   * PC 관습: Enter 전송, Shift+Enter 줄바꿈. 마우스일 때만 켠다 — 모바일 브라우저에서
+   * 켜면 화면 키보드의 줄바꿈 키가 전송으로 바뀐다.
+   *
+   * <p><b>한글 조합 중 Enter 는 무시해야 한다.</b> "안녕"을 치는 도중 Enter 는 조합을
+   * 확정하는 키라, 그걸 전송으로 받으면 마지막 글자가 잘린 채 나간다. react-native-web 이
+   * 내부적으로 보는 것과 같은 신호(isComposing / keyCode 229)를 여기서도 본다.
+   *
+   * <p>preventDefault 를 부르면 줄바꿈이 안 들어갈 뿐 아니라 RNW 의 뒤따르는 기본 처리
+   * (onSubmitEditing + blur)도 건너뛴다 — 전송 후 입력창 포커스가 그대로 남는다.
+   */
+  const sendOnEnter = Platform.OS === 'web' && !isCoarsePointer();
+  const onInputKeyPress = (e: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
+    if (!sendOnEnter) return;
+    // RNW 는 DOM 키보드 이벤트를 그대로 넘긴다(TextInput/index.js handleKeyDown)
+    const ke = e as unknown as {
+      key?: string;
+      shiftKey?: boolean;
+      preventDefault?: () => void;
+      nativeEvent?: { isComposing?: boolean; keyCode?: number };
+    };
+    if (ke.key !== 'Enter' || ke.shiftKey) return;
+    if (ke.nativeEvent?.isComposing || ke.nativeEvent?.keyCode === 229) return;
+    ke.preventDefault?.();
+    void onSend();
+  };
+
   /** 메시지 길게 누르기 — MessageActionSheet 로 리액션/답장/수정/삭제를 한 시트에 모은다 */
   const onLongPressMessage = (msg: ChatMessage) => {
     if (msg.deleted) return;
@@ -965,7 +1003,24 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     }
   };
 
-  const onCancelSendImage = () => setPendingImage(null);
+  /*
+   * PC 의 붙여넣기(Ctrl+V)·드래그앤드롭 — 피커로 고른 것과 <b>같은 미리보기</b>로 들어온다.
+   * 바로 보내지 않는 이유는 onPickImage 와 같다: 잘못 붙여넣은 스크린샷이 그대로 나가면
+   * 되돌릴 수 없다. 웹에서 들어온 uri 는 blob: 이라 다 쓰고 나면 풀어줘야 한다.
+   */
+  const onDroppedImage = useCallback(async (uri: string) => {
+    const prepared = await shrinkUnknownImage(uri);
+    // 축소본이 <b>새로 생겼을 때만</b> 원본을 놓는다 — 작아서 그대로 돌려받은 경우
+    // 여기서 풀면 방금 띄운 미리보기가 깨진다.
+    if (prepared !== uri) releaseObjectUrl(uri);
+    setPendingImage(prepared);
+  }, []);
+  const dragging = useImageDrop(onDroppedImage);
+
+  const onCancelSendImage = () => {
+    if (pendingImage) releaseObjectUrl(pendingImage);
+    setPendingImage(null);
+  };
 
   const onConfirmSendImage = async () => {
     const uri = pendingImage;
@@ -982,6 +1037,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
       toast.error(getErrorMessage(e, '이미지 전송에 실패했어요.'));
     } finally {
       setUploading(false);
+      releaseObjectUrl(uri);
     }
   };
 
@@ -1028,8 +1084,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
 
   const runExportChat = async (months: number | null) => {
     try {
-      if (!(await Sharing.isAvailableAsync())) {
-        toast.error('이 기기에서는 공유하기를 쓸 수 없어요.');
+      if (!(await canExportTranscript())) {
+        toast.error('이 기기에서는 내보내기를 쓸 수 없어요.');
         return;
       }
       let from: string | undefined;
@@ -1089,9 +1145,9 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     const showDateDivider = !older || !isSameLocalDay(item.createdAt, older.createdAt);
     const divider = showDateDivider ? (
       <View style={styles.dateDivider}>
-        <View style={styles.dateDividerLine} />
-        <Text style={styles.dateDividerText}>{chatDateDividerLabel(item.createdAt)}</Text>
-        <View style={styles.dateDividerLine} />
+        <View style={chatStyles.dateDividerLine} />
+        <Text style={chatStyles.dateDividerText}>{chatDateDividerLabel(item.createdAt)}</Text>
+        <View style={chatStyles.dateDividerLine} />
       </View>
     ) : null;
 
@@ -1110,7 +1166,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             <View style={[styles.bubble, styles.bubbleDeleted]}>
               <Text style={styles.deletedText}>삭제된 메시지예요</Text>
             </View>
-            <Text style={styles.time}>{timeOf(item.createdAt)}</Text>
+            <Text style={chatStyles.time}>{timeOf(item.createdAt)}</Text>
           </View>
         </View>
       );
@@ -1201,7 +1257,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
            */
           <Image
             source={{ uri: coupleEmojiUrl }}
-            style={[styles.stickerImage, styles.coupleEmojiImage]}
+            style={[styles.stickerImage, chatStyles.coupleEmojiImage]}
             resizeMode="cover"
             accessibilityLabel="우리 이모지"
           />
@@ -1218,7 +1274,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             accessibilityRole="imagebutton"
             accessibilityLabel="사진 크게 보기"
           >
-            <Image source={{ uri: item.imageUrl! }} style={styles.msgImage} resizeMode="cover" />
+            <Image source={{ uri: item.imageUrl! }} style={chatStyles.msgImage} resizeMode="cover" />
           </Pressable>
         ) : isWorkout || isRoutine ? (
           <View style={[
@@ -1278,10 +1334,10 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           // 꼬리(뾰족한 모서리)는 그룹의 마지막 말풍선에만 — 나머지는 완전히 둥글게 이어붙는다
           <View style={[
             styles.bubble,
-            mine ? styles.bubbleMine : styles.bubbleTheirs,
+            mine ? chatStyles.bubbleMine : chatStyles.bubbleTheirs,
             !isGroupEnd && (mine ? styles.bubbleMineGrouped : styles.bubbleTheirsGrouped),
           ]}>
-            <Text style={[styles.msgText, mine && styles.msgTextMine]}>
+            <Text style={[chatStyles.msgText, mine && chatStyles.msgTextMine]}>
               {/*
                 우리 이모지인데 이미지가 없는 행(실패·레거시)은 content 가 숫자 id 라 그대로 보이면
                 안 된다 — 알림 미리보기와 같은 표기로 대신한다(2026-09-08 점검 #12).
@@ -1315,12 +1371,12 @@ export function ChatRoomScreen({ navigation, route }: Props) {
                 accessibilityLabel="아직 안 읽었어요"
               />
             ) : null}
-            {item.edited ? <Text style={styles.editedMark}>수정됨</Text> : null}
+            {item.edited ? <Text style={chatStyles.editedMark}>수정됨</Text> : null}
             {/* 아직 서버 에코가 안 온 말풍선 — 시간 대신 상태를 보여준다(다시 누를 이유를 없앤다) */}
             {item.pending ? (
-              <Text style={styles.sendingMark}>보내는 중</Text>
+              <Text style={chatStyles.sendingMark}>보내는 중</Text>
             ) : isGroupEnd ? (
-              <Text style={styles.time}>{timeOf(item.createdAt)}</Text>
+              <Text style={chatStyles.time}>{timeOf(item.createdAt)}</Text>
             ) : null}
           </View>
         ) : null}
@@ -1361,7 +1417,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
      * 으론 안 잡히는 "동그란 버튼이 모서리 곡률에 살짝 잘려 보이는" 문제라 안전
      * 영역과는 무관하다(inputBar 스타일 주석 참고).
      */}
-    <SafeAreaView style={styles.safe} edges={['bottom', 'left', 'right']}>
+    <SafeAreaView style={chatStyles.safe} edges={['bottom', 'left', 'right']}>
       <KeyboardAvoidingView
         // Android 는 FlatList 를 직접 감싸면 KeyboardAvoidingView 의 자동 높이 보정이
         // edge-to-edge 아래에서 먹지 않아(실기기 확인) behavior 를 아예 안 쓰고
@@ -1436,7 +1492,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           // 검색에서 골라 온 메시지를 잠깐 강조한다 — renderItem 분기(삭제됨·카드 등)를
           // 하나하나 손대지 않고 바깥에서 한 번만 감싼다(highlightedId 주석 참고)
           renderItem={(info) => (
-            <View style={info.item.id === highlightedId ? styles.highlightRow : undefined}>
+            <View style={info.item.id === highlightedId ? chatStyles.highlightRow : undefined}>
               {renderItem(info)}
             </View>
           )}
@@ -1645,7 +1701,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             onChangeText={setText}
             onPressIn={dismissPanels}
             onFocus={dismissPanels}
-            placeholder="메시지를 입력하세요"
+            onKeyPress={onInputKeyPress}
+            placeholder={sendOnEnter ? '메시지를 입력하세요 (Shift+Enter 줄바꿈)' : '메시지를 입력하세요'}
             placeholderTextColor={colors.textSecondary}
             multiline
           />
@@ -1793,6 +1850,17 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         pinned={!!actionSheetFor && pinnedMessage?.id === actionSheetFor.id}
         onTogglePin={onTogglePinFromSheet}
       />
+      {/*
+        파일을 끌고 들어왔을 때의 안내. 드래그앤드롭은 눌러볼 버튼이 없어서, 끄는 동안
+        받아준다는 표시가 없으면 사용자가 손을 놓기 전에 포기한다.
+        pointerEvents="none" — 이 판이 drop 이벤트를 가로채면 안 된다.
+      */}
+      {dragging ? (
+        <View style={styles.dropHint} pointerEvents="none">
+          <MaterialCommunityIcons name="image-plus" size={40} color={colors.primary} />
+          <Text style={styles.dropHintText}>여기에 놓으면 사진을 보낼 수 있어요</Text>
+        </View>
+      ) : null}
     </SafeAreaView>
     </SwipeBackView>
   );
@@ -1822,7 +1890,6 @@ function ExtraButton({
 }
 
 const styles = themedStyles((colors) => ({
-  safe: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
   headerCallActions: { flexDirection: 'row', alignItems: 'center', paddingRight: spacing.xs },
   headerCallButton: { minWidth: 40, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
@@ -1841,8 +1908,6 @@ const styles = themedStyles((colors) => ({
   // inverted FlatList 의 콘텐츠는 scaleY:-1 로 뒤집혀 그려진다 — EmptyState 만 다시
   // 뒤집어 정방향으로 보이게 한다(QA_CHECKLIST.md 패턴10)
   emptyMessagesWrap: { transform: [{ scaleY: -1 }] },
-  // 검색에서 골라 온 메시지 강조 — 1.8초 뒤 스스로 지운다(highlightedId 주석 참고)
-  highlightRow: { backgroundColor: colors.primarySoft, borderRadius: radius.md },
   // 목록 위에 떠 있는 "맨 아래로" FAB — 트레이·입력바 위 오른쪽 모서리
   scrollToBottomFab: {
     position: 'absolute',
@@ -1881,27 +1946,16 @@ const styles = themedStyles((colors) => ({
   rowSpaced: { marginTop: spacing.sm },
   rowGrouped: { marginTop: spacing.xxs },
   bubble: { flexShrink: 1, paddingVertical: 10, paddingHorizontal: spacing.md, borderRadius: radius.lg },
-  bubbleMine: { backgroundColor: colors.primary, borderBottomRightRadius: 6 },
-  // 예전엔 surface(흰색)+테두리로 배경과 구분했는데, background(#FAFAF9)와 거의
-  // 같은 색이라 테두리 선이 메시지마다 하나씩 더 생겨 화면이 촘촘해 보였다
-  // (Between 비교 피드백, 2026-08-31). surfaceAlt 는 그 자체로 배경과 대비가
-  // 나와(WCAG 계산 주석 참고) 테두리 없이도 말풍선이 구분된다.
-  bubbleTheirs: { backgroundColor: colors.surfaceAlt, borderBottomLeftRadius: 6 },
   // 그룹 중간 말풍선(마지막이 아님) — 꼬리 없이 완전히 둥글게 이어붙는다
   bubbleMineGrouped: { borderBottomRightRadius: radius.lg },
   bubbleTheirsGrouped: { borderBottomLeftRadius: radius.lg },
   // subtitle(16)이던 걸 한 단계 내렸다 — 그룹핑·아바타로 밀도가 오른 목록에서
   // 상대적으로 더 커 보였다(비교 화면 피드백). lineHeight 는 body(14)의 기존
   // 1.5배 관행(typography.ts cardBody)과 같은 21을 그대로 쓴다.
-  msgText: { fontSize: fontSize.body, color: colors.textPrimary, lineHeight: 21 },
-  msgTextMine: { color: colors.white },
-  msgImage: { width: 200, height: 200, borderRadius: radius.lg, backgroundColor: colors.surfaceAlt },
   // 스티커 — 말풍선 없이 크게. lineHeight 를 주지 않으면 안드로이드에서 이모지가 잘린다
   sticker: { fontSize: 56, lineHeight: 68 },
   // 이미지 스티커 — 이모지 스티커와 비슷한 존재감을 갖도록 정사각형으로
   stickerImage: { width: 132, height: 132 },
-  // 우리 이모지 — 생성물에 흰 배경이 딸려 오므로 원형으로 잘라 낸다(렌더 주석)
-  coupleEmojiImage: { borderRadius: 66, backgroundColor: colors.surfaceAlt },
   // 가상 터치 — 스티커와 같은 크기 + 아래 제스처 라벨 한 줄
   touchBlock: { alignItems: 'center' },
   touchLabel: { fontSize: 11, fontWeight: '700', color: colors.textSecondary, marginTop: -4 },
@@ -1988,15 +2042,22 @@ const styles = themedStyles((colors) => ({
     backgroundColor: colors.primarySoft,
   },
   pinnedText: { flex: 1, fontSize: fontSize.caption, fontWeight: '600', color: colors.textPrimary },
-  time: { fontSize: 10, color: colors.textTertiary },
-  // "보내는 중" — 시간 자리에 들어가므로 같은 크기·색 체계를 따른다
-  sendingMark: { fontSize: 10, color: colors.textTertiary },
-  editedMark: { fontSize: 10, color: colors.textTertiary },
-
   // 날짜 구분선 — 가운데 라벨 + 양옆 선
   dateDivider: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginVertical: spacing.md },
-  dateDividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
-  dateDividerText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textTertiary },
+
+  // 드래그앤드롭 안내 — 화면 전체를 덮되 입력바 위쪽 여백은 남기지 않는다(끌고 있는 동안만)
+  dropHint: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.backdrop,
+  },
+  dropHintText: { fontSize: fontSize.body, fontWeight: '800', color: colors.white },
 
   // 메시지 블록 — 인용/말풍선/리액션을 한 덩어리로 묶는다.
   // 그룹 첫 메시지는 넉넉하게(spaced), 같은 사람이 이어 보낸 메시지는 바짝(grouped) 붙인다
@@ -2157,4 +2218,42 @@ const styles = themedStyles((colors) => ({
     justifyContent: 'center',
   },
   sendDisabled: { opacity: 0.4 },
+}));
+
+/**
+ * 채팅 배경 테마를 따라가는 것들 — <b>대화 목록 바탕과 그 위에 놓이는 것들</b>만이다.
+ * 입력바·트레이·헤더는 앱 팔레트를 그대로 쓰므로 위 styles 에 남아 있다.
+ * 값의 근거와 대비 실측은 theme/chatTheme.ts 주석 참고.
+ */
+const chatStyles = chatThemedStyles((chat) => ({
+  safe: { flex: 1, backgroundColor: chat.background },
+
+  bubbleMine: { backgroundColor: chat.bubbleMine, borderBottomRightRadius: 6 },
+  // 예전엔 surface(흰색)+테두리로 배경과 구분했는데, background 와 거의 같은 색이라
+  // 테두리 선이 메시지마다 하나씩 더 생겨 화면이 촘촘해 보였다(Between 비교 피드백,
+  // 2026-08-31). 테마마다 배경과 분리되는 값을 골라 뒀으므로 테두리 없이도 구분된다.
+  bubbleTheirs: { backgroundColor: chat.bubbleTheirs, borderBottomLeftRadius: 6 },
+
+  // subtitle(16)이던 걸 한 단계 내렸다 — 그룹핑·아바타로 밀도가 오른 목록에서
+  // 상대적으로 더 커 보였다(비교 화면 피드백). lineHeight 는 body(14)의 기존
+  // 1.5배 관행(typography.ts cardBody)과 같은 21을 그대로 쓴다.
+  msgText: { fontSize: fontSize.body, color: chat.bubbleTheirsText, lineHeight: 21 },
+  msgTextMine: { color: chat.bubbleMineText },
+
+  // 로딩 중 빈 자리가 배경에 뚫린 구멍처럼 보이지 않도록 상대 말풍선 색을 깐다
+  msgImage: { width: 200, height: 200, borderRadius: radius.lg, backgroundColor: chat.bubbleTheirs },
+  // 우리 이모지 — 생성물에 흰 배경이 딸려 오므로 원형으로 잘라 낸다(렌더 주석)
+  coupleEmojiImage: { borderRadius: 66, backgroundColor: chat.bubbleTheirs },
+
+  // 말풍선 없이 배경 위에 바로 놓이는 10px 글자들 — 테마별 meta 색이 여기서 쓰인다
+  time: { fontSize: 10, color: chat.meta },
+  // "보내는 중" — 시간 자리에 들어가므로 같은 크기·색 체계를 따른다
+  sendingMark: { fontSize: 10, color: chat.meta },
+  editedMark: { fontSize: 10, color: chat.meta },
+
+  dateDividerLine: { flex: 1, height: 1, backgroundColor: chat.dividerLine },
+  dateDividerText: { fontSize: fontSize.caption, fontWeight: '700', color: chat.meta },
+
+  // 검색에서 골라 온 메시지 강조 — 1.8초 뒤 스스로 지운다(highlightedId 주석 참고)
+  highlightRow: { backgroundColor: chat.highlight, borderRadius: radius.md },
 }));

@@ -12,13 +12,15 @@
  * <p>메모(연필 표시)는 서버에 올리지 않는다 — {@code sudokuMemo} 주석 참고.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { FlatList, Pressable, Text, View, useWindowDimensions } from 'react-native';
+import { FlatList, Pressable, Text, View } from 'react-native';
+import { useContentWidth } from '../../hooks/useContentWidth';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
+import { GameReactionBar } from '../../components/GameReactionBar';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { sudokuApi } from '../../api/game';
 import { clearMemos, loadMemos, pruneMemos, saveMemos, type SudokuMemos } from './sudokuMemo';
@@ -30,7 +32,7 @@ import { Alert } from '../../utils/alert';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { SudokuDifficulty, SudokuGame } from '../../types';
+import type { DailySudoku, SudokuDifficulty, SudokuGame } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'Sudoku'>;
@@ -51,13 +53,14 @@ const DIGITS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 let moveSeq = 0;
 
 export function SudokuScreen(_: Props) {
-  const { width } = useWindowDimensions();
+  const width = useContentWidth();
   const relationId = useRelationStore((s) => s.couple?.id);
 
   const [game, setGame] = useState<SudokuGame | null>(null);
   /** 방금 완성한 판 — current 가 null 이 된 뒤에도 축하 카드를 보여주기 위해 따로 든다 */
   const [justCompleted, setJustCompleted] = useState<SudokuGame | null>(null);
   const [history, setHistory] = useState<SudokuGame[]>([]);
+  const [daily, setDaily] = useState<DailySudoku | null>(null);
   const [loading, setLoading] = useState(false);
   // 로드 실패가 "판이 없는 빈 상태"로 위장하지 않도록 별도로 추적한다 (QA_CHECKLIST.md 패턴 1)
   const [loadError, setLoadError] = useState(false);
@@ -82,9 +85,10 @@ export function SudokuScreen(_: Props) {
     if (!silent) setLoading(true);
     setLoadError(false);
     try {
-      const [g, h] = await Promise.all([sudokuApi.current(), sudokuApi.history()]);
+      const [g, h, d] = await Promise.all([sudokuApi.current(), sudokuApi.history(), sudokuApi.daily()]);
       setGame(g);
       setHistory(h);
+      setDaily(d);
       if (g) setJustCompleted(null);
     } catch (e) {
       if (!silent) toast.error(getErrorMessage(e, '판을 불러오지 못했어요.'));
@@ -167,6 +171,22 @@ export function SudokuScreen(_: Props) {
       haptics.light();
     } catch (e) {
       toast.error(getErrorMessage(e, '새 판을 열지 못했어요.'));
+    } finally {
+      setStarting(false);
+    }
+  };
+
+  const startDaily = async () => {
+    setStarting(true);
+    try {
+      const g = await sudokuApi.startDaily();
+      setGame(g);
+      setJustCompleted(null);
+      haptics.light();
+      sudokuApi.daily().then(setDaily).catch(() => undefined);
+    } catch (e) {
+      toast.error(getErrorMessage(e, '오늘의 판을 열지 못했어요.'));
+      sudokuApi.daily().then(setDaily).catch(() => undefined);
     } finally {
       setStarting(false);
     }
@@ -335,6 +355,26 @@ export function SudokuScreen(_: Props) {
       <Text style={styles.cardLabel}>협동 스도쿠</Text>
       <Text style={styles.cardTitle}>{title}</Text>
       <Text style={styles.cardDesc}>{subtitle}</Text>
+      {/* 오늘의 판은 난이도 버튼과 나란히 두지 않는다 — 고르는 게 아니라 정해져 있는 판이다 */}
+      {daily && daily.state !== 'COMPLETED' && !daily.blockedByOtherGame ? (
+        <Pressable
+          onPress={startDaily}
+          disabled={starting}
+          accessibilityRole="button"
+          accessibilityLabel={`오늘의 판 열기. ${daily.difficultyLabel}`}
+          style={({ pressed }) => [styles.dailyRow, pressed && styles.pressed]}
+        >
+          <MaterialCommunityIcons name="calendar-today" size={20} color={colors.primary} />
+          <View style={styles.dailyBody}>
+            <Text style={styles.dailyTitle}>오늘의 판 · {daily.difficultyLabel}</Text>
+            <Text style={styles.dailyDesc}>오늘은 모든 커플이 같은 문제를 풀어요</Text>
+          </View>
+          <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textMuted} />
+        </Pressable>
+      ) : null}
+      {daily?.state === 'COMPLETED' ? (
+        <Text style={styles.dailyDone}>오늘의 판은 마쳤어요 ✓ 내일 새 판이 열려요.</Text>
+      ) : null}
       <View style={styles.pickerRow}>
         {DIFFICULTIES.map((d) => (
           <Pressable
@@ -370,7 +410,9 @@ export function SudokuScreen(_: Props) {
       <View>
         <View style={styles.statusRow}>
           <View style={styles.statusLeft}>
-            <Text style={styles.statusDifficulty}>{g.difficultyLabel}</Text>
+            <Text style={styles.statusDifficulty}>
+              {g.dailyDate ? `오늘의 판 · ${g.difficultyLabel}` : g.difficultyLabel}
+            </Text>
             <Text style={styles.statusCount}>
               {done}/{total}칸
             </Text>
@@ -479,6 +521,7 @@ export function SudokuScreen(_: Props) {
                 ? '빈칸을 누르고 숫자를 고르세요. 차례 없이 아무 칸이나 괜찮아요.'
                 : '맞았는지 궁금하면 "확인"을 눌러요. 상대가 고쳐줄 수도 있어요.'}
         </Text>
+        <GameReactionBar gameType="SUDOKU" />
         <Button title="이 판 접기" variant="ghost" size="sm" onPress={confirmGiveUp} style={styles.giveUp} />
       </View>
     );
@@ -559,6 +602,22 @@ const styles = themedStyles((colors) => ({
   cardLabel: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '800' },
   cardTitle: { fontSize: fontSize.title, fontWeight: '800', color: colors.textPrimary, marginTop: spacing.xs },
   cardDesc: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xs, lineHeight: 18 },
+  dailyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    backgroundColor: colors.surface,
+  },
+  dailyBody: { flex: 1 },
+  dailyTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
+  dailyDesc: { fontSize: 10, color: colors.textMuted, fontWeight: '600', marginTop: 2 },
+  dailyDone: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700', marginTop: spacing.sm },
+
   pickerRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
   pickerItem: {
     flex: 1,

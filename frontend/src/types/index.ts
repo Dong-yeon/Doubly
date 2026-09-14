@@ -158,6 +158,25 @@ export interface CoupleCalendarEvent {
   createdBy: number;
 }
 
+/**
+ * 캘린더에 겹쳐 그리는 데이트 기록 — 장소가 연결된 데이트 식단.
+ *
+ * 일정(CoupleCalendarEvent)과 달리 캘린더에서 만들거나 지우지 않는다. 원본은 식단 기록이고
+ * 캘린더는 읽어서 겹쳐 그리기만 한다(여행 기간 띠와 같은 방식) — 그래서 D-day 도 없다.
+ */
+export interface CalendarDateMeal {
+  /** YYYY-MM-DD */
+  date: string;
+  mealId: number;
+  /** 무엇을 먹었는지 — 음식 항목이 없으면 메모, 그마저 없으면 끼니 이름 */
+  title: string;
+  placeId: number;
+  placeName: string;
+  /** 럽슐랭 등급 — 0=일반, 1~3=럽스타 */
+  lovelichelinTier?: number | null;
+  photoUrl?: string | null;
+}
+
 /** 지난 기록 불러오기 결과 — 양쪽이 모두 요청해야 RESTORED 가 된다 */
 export interface RestoreRecords {
   status: 'WAITING_PARTNER' | 'RESTORED';
@@ -470,9 +489,31 @@ export interface SudokuGame {
   filled: number;
   myCells: number;
   partnerCells: number;
+  /** 오늘의 판이면 그 날짜(YYYY-MM-DD) — 자유 대국은 null */
+  dailyDate?: string | null;
   partnerName?: string | null;
   createdAt: string;
   completedAt?: string | null;
+}
+
+// 오늘의 판 / 게임 스트릭 — docs/COUPLE_GAMES_EXPANSION_2026-09-14.md 3절
+export type DailySudokuState = 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED';
+export interface DailySudoku {
+  date: string;
+  difficulty: SudokuDifficulty;
+  difficultyLabel: string;
+  state: DailySudokuState;
+  gameId?: number | null;
+  /** 자유 대국이 진행 중이라, 지금 열면 그 판이 열린다("진행 중인 판은 하나") */
+  blockedByOtherGame: boolean;
+}
+
+/** 같이 게임한 날의 연속 기록 — 스도쿠·오목을 가리지 않는다 */
+export interface GameStreak {
+  current: number;
+  best: number;
+  playedToday: boolean;
+  lastPlayedDate?: string | null;
 }
 
 // 오목 — docs/COUPLE_GAMES_DESIGN_2026-09-09.md 5절. 15×15, 판을 연 사람이 WHITE(후공)
@@ -490,9 +531,66 @@ export interface OmokGame {
   moveCount: number;
   winner?: OmokWinner | null;
   winningLine: number[];
+  /**
+   * 둔 순서대로의 인덱스 — 복기 재생과 "최근 몇 수" 표시가 쓴다.
+   * 색은 순번의 홀짝으로 정해진다: 0번째(첫 수)가 흑, 다음이 백.
+   * V91 이전에 시작된 판은 비어 있다.
+   */
+  moves: number[];
+  /** MINE(내가 걸어둠) · PARTNER(상대가 걸어옴) · null(없음) */
+  undoRequest?: OmokUndoRequest | null;
+  /** 지금 내가 무르기를 걸 수 있는가 — 직전에 둔 쪽만 걸 수 있다 */
+  canUndo: boolean;
   partnerName?: string | null;
   createdAt: string;
   completedAt?: string | null;
+}
+export type OmokUndoRequest = 'MINE' | 'PARTNER';
+
+// 캐치마인드 — 한 명이 그리고 한 명이 맞힌다(비동기). docs/CATCH_MIND_2026-09-14.md
+export type CatchMindRole = 'DRAWER' | 'GUESSER';
+export interface CatchMindGame {
+  id: number;
+  status: SudokuStatus;
+  role: CatchMindRole;
+  /** "색,굵기,x1,y1,x2,y2;..." — 좌표는 0~1000 정규화 정수 */
+  strokes: string;
+  /** 맞히는 사람에게는 끝나기 전까지 null */
+  word?: string | null;
+  wordLength: number;
+  /** 초성 — 열었을 때만. 그린 사람에게는 항상 온다 */
+  hint?: string | null;
+  hintUsed: boolean;
+  /** 틀린 시도(최신 순) */
+  wrongGuesses: string[];
+  guessCount: number;
+  partnerName?: string | null;
+  createdAt: string;
+  completedAt?: string | null;
+}
+export interface CatchMindWordCandidate {
+  category: string;
+  word: string;
+}
+export interface CatchMindGuessResult {
+  correct: boolean;
+  game: CatchMindGame;
+}
+
+// 게임 판 위 즉석 반응 — docs/COUPLE_GAMES_EXPANSION_2026-09-14.md 1절. 저장되지 않는 신호다
+export type GameTypeKey = 'SUDOKU' | 'OMOK' | 'CATCH_MIND';
+export interface GameReactionOption {
+  key: string;
+  emoji: string;
+  label: string;
+}
+/** /sub/couple/{relationId}/game-reaction 페이로드 — 백엔드 GameReactionEvent 와 짝 */
+export interface GameReactionEvent {
+  gameType: GameTypeKey;
+  reaction: string;
+  emoji: string;
+  senderId: number;
+  senderName: string;
 }
 
 // 커플 챌린지/대결 — 기간 내 운동/식단 기록일로 겨루기
@@ -1288,6 +1386,11 @@ export interface FeedItem {
   occurredAt: string;
   /** 모든 타입에 붙는다 — 반응이 없으면 빈 배열 */
   reactions?: ReactionSummary[] | null;
+  /**
+   * 데이트 식단(같이 먹기)으로 남긴 끼니 — MEAL 타입만 true 가 될 수 있다.
+   * 서버가 커플 양쪽 짝 중 원본 한 장만 내려주므로, 카드는 "누가"가 아니라 "함께"로 읽힌다.
+   */
+  shared?: boolean;
 }
 export interface FeedTimeline {
   items: FeedItem[];

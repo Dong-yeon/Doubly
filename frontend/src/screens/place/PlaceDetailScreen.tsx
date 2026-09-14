@@ -1,5 +1,21 @@
-/** 장소 상세 — 방문 기록 목록 + 기록 추가 (별점·사진·메모) */
-import React, { useCallback, useMemo, useState } from 'react';
+/**
+ * 장소 상세 — 방문 기록 목록 + 기록 추가 (별점·날짜·사진·메모).
+ *
+ * <p><b>왜 별점이 하나인가(2026-09-14)</b>: 예전엔 이 화면에 별 위젯이 둘이었다 —
+ * 위쪽 "럽슐랭 평가"(place_ratings, 등급을 정하는 대표 평점)와 아래쪽 방문 기록 별점
+ * (place_visits.rating). 설계상으로는 다른 값이지만 사용자에겐 같은 별 다섯 개였고,
+ * 무엇보다 <b>방문 기록 쪽 별점은 등급에 아무 영향이 없었다</b>: PlaceService.recordVisit()
+ * 은 place_ratings 를 건드리지 않아 tier·재촉 푸시·가이드 노출·솔로 픽 어디에도 반영되지
+ * 않는다(바뀌는 건 avgRating 숫자뿐). 즉 "다녀왔으니 별 다섯 개"라는 가장 자연스러운 동선을
+ * 밟은 사람은 럽슐랭을 한 곳도 만들지 못했다.
+ *
+ * <p>그래서 <b>"다녀왔어요" 하나</b>로 합친다 — 폼의 별점을 저장하면 방문 기록을 남기고
+ * 그 별점을 대표 평점으로 upsert 한다(rate() 는 원래 upsert 라 재방문에도 안전). 이미
+ * 식단 탭이 쓰던 방식이고(DietRecordScreen), 이제 두 탭의 규칙이 같다. 대표 평점만 따로
+ * 고치고 싶을 때(오늘은 별로였지만 가게 평가는 유지)를 위해 위쪽은 한 줄 요약 + "수정"으로
+ * 접어둔다. 분석: docs/LOVELICHELIN_UX_REANALYSIS_2026-09-14.md 3-1 · 5-1.
+ */
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
   Image,
@@ -20,12 +36,14 @@ import { TextField } from '../../components/TextField';
 import { SpacingFixBar } from '../../components/SpacingFixBar';
 import { useSpacingFix } from '../../hooks/useSpacingFix';
 import { Checkbox } from '../../components/Checkbox';
+import { DateField } from '../../components/DateField';
 import { EmptyState } from '../../components/EmptyState';
 import { ImageViewer } from '../../components/ImageViewer';
 import { IconButton } from '../../components/IconButton';
 import { KakaoMap } from '../../components/KakaoMap';
 import { LovelichelinBadge } from '../../components/LovelichelinBadge';
 import { LovelichelinFanfareModal } from '../../components/LovelichelinFanfareModal';
+import { LovelichelinRuleSheet } from '../../components/LovelichelinRuleSheet';
 import { SoloPickBadge } from '../../components/SoloPickBadge';
 import { usePlaceStore } from '../../store/placeStore';
 import { SOLO_PICK_MIN_RATING } from './placeFilters';
@@ -72,6 +90,9 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
   // 방문 기록 입력 폼
   const [formOpen, setFormOpen] = useState(false);
   const [rating, setRating] = useState(0);
+  // 기록은 대개 사후에 남긴다 — "지난 주말 갔던 곳"이 오늘로 저장되지 않게 날짜를 고를 수 있다
+  // (API는 원래 visitedAt 을 받고 있었는데 화면에만 없었다)
+  const [visitedAt, setVisitedAt] = useState(toDateString());
   const [memo, setMemo] = useState('');
 
   /*
@@ -95,21 +116,27 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // 오늘 식단으로도 등록 — 방문 기록 저장 시 meals 에도 즉시 기록하고 place_visits.meal_id 로 연결
+  /*
+   * 식단으로도 등록 — 방문 기록 저장 시 meals 에도 기록하고 place_visits.meal_id 로 연결한다.
+   * 끼니만 고르고 칼로리·탄단지 입력은 받지 않는다: 식단 탭이 2026-09-09 에 버린 정밀 입력이
+   * 여기서만 되살아나 있었다. 사진만 있으면 서버가 뒤이어 칼로리를 채우고(MealPhotoAutoAnalysisService),
+   * 고치고 싶으면 식단 탭에서 고친다.
+   */
   const [logMeal, setLogMeal] = useState(false);
   const [mealType, setMealType] = useState<MealType>(defaultMealType());
-  const [calories, setCalories] = useState('');
-  const [protein, setProtein] = useState('');
-  const [carbs, setCarbs] = useState('');
-  const [fat, setFat] = useState('');
+  /*
+   * 식단을 먼저 저장하고 방문 기록을 남기는 2단 저장이라, 뒤가 실패하면 식단만 떠 있는
+   * 상태가 된다. 그대로 재시도하면 식단이 두 번 쌓이므로 발급받은 id 를 들고 있다가
+   * 재시도 때 재사용한다 — 폼을 닫을 때만 비운다.
+   */
+  const savedMealId = useRef<number | undefined>(undefined);
 
-  // 럽슐랭 대표 평점 — 방문기록 별점(위)과 별개로, 장소당 한 사람당 1개만 유지된다.
-  // revisitIntent 는 API가 되돌려주지 않는 선택 응답이라, 사용자가 이번에 직접 건드리지
-  // 않으면 undefined 로 두고 저장 요청에서도 생략한다 — 그래야 별점만 다시 매기려고
-  // 재평가할 때 이전에 남긴 "다시 안 올래요" 응답을 조용히 true 로 덮어쓰지 않는다.
+  // 럽슐랭 대표 평점 — 기본 동선("다녀왔어요")이 이 값을 함께 쓰므로 평소엔 한 줄 요약으로
+  // 접어두고, 방문과 무관하게 가게 평가만 고칠 때만 펼친다.
   const [myRatingInput, setMyRatingInput] = useState(0);
-  const [revisitIntent, setRevisitIntent] = useState<boolean | undefined>(undefined);
+  const [ratingEditing, setRatingEditing] = useState(false);
   const [ratingSaving, setRatingSaving] = useState(false);
+  const [ruleOpen, setRuleOpen] = useState(false);
   // 재평가로 등급이 유지/하락할 때는 축하 모달을 열지 않는다 — 0→양수로 "새로 등극"할 때만
   const [fanfareTier, setFanfareTier] = useState(0);
 
@@ -158,16 +185,22 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
 
   const resetForm = () => {
     setRating(0);
+    setVisitedAt(toDateString());
     setMemo('');
     setPhotoUri(null);
     setLogMeal(false);
     setMealType(defaultMealType());
-    setCalories('');
-    setProtein('');
-    setCarbs('');
-    setFat('');
+    savedMealId.current = undefined;
   };
 
+  /*
+   * "다녀왔어요" 저장 — 방문 기록을 남기고, 별점을 매겼으면 그 별점을 럽슐랭 대표 평점으로
+   * 함께 올린다(파일 상단 주석). 실패 지점마다 남는 것이 달라 처리도 다르다:
+   *   ① 사진 업로드 / ② 식단 저장  — 아직 방문 기록이 없다. 폼을 열어둔 채 알리고 재시도.
+   *   ③ 방문 기록                  — 식단만 떠 있을 수 있다. savedMealId 로 중복을 막고 재시도.
+   *   ④ 대표 평점                  — 방문 기록은 이미 남았다. 재시도하면 방문이 두 번 쌓이므로
+   *                                 폼을 닫고 "평가만 실패"를 알린다(위 '수정'에서 다시 할 수 있다).
+   */
   const onSaveVisit = async () => {
     setSaving(true);
     try {
@@ -177,37 +210,62 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
       }
 
       // 식단으로도 등록 체크 시 meals 를 먼저 저장하고, 발급된 id 를 방문 기록에 연동한다
-      let mealId: number | undefined;
-      if (logMeal) {
+      if (logMeal && savedMealId.current == null) {
         const savedMeal = await saveMeal({
-          mealDate: toDateString(),
+          // 다녀온 날 = 먹은 날. 예전엔 방문 날짜와 무관하게 항상 오늘로 저장했다
+          mealDate: visitedAt,
           mealType,
           memo: memo.trim() ? `${placeName} · ${memo.trim()}` : placeName,
           photoUrl: imageUrl,
-          calories: calories ? Number(calories) : undefined,
-          carbs: carbs ? Number(carbs) : undefined,
-          protein: protein ? Number(protein) : undefined,
-          fat: fat ? Number(fat) : undefined,
         });
-        mealId = savedMeal.id;
+        savedMealId.current = savedMeal.id;
       }
 
       await placeApi.recordVisit(placeId, {
+        visitedAt,
         rating: rating > 0 ? rating : undefined,
         memo: memo.trim() || undefined,
         imageUrl,
-        mealId,
+        mealId: savedMealId.current,
       });
-      haptics.success();
-      toast.success(logMeal ? '방문 기록과 식단을 함께 남겼어요! ' : '방문 기록 완료! ');
+
+      // 여기부터는 방문 기록이 이미 남았다 — 재시도로 되돌아오면 안 된다
       setFormOpen(false);
+      const mealSuffix = logMeal ? '방문 기록과 식단을 함께 남겼어요!' : '방문 기록 완료!';
       resetForm();
+
+      if (rating > 0) {
+        try {
+          const previousTier = place?.lovelichelinTier ?? 0;
+          const updated = await placeApi.rate(placeId, { rating });
+          setMyRatingInput(rating);
+          if (previousTier === 0 && updated.lovelichelinTier > 0) {
+            setFanfareTier(updated.lovelichelinTier);
+          } else {
+            toast.success(`${mealSuffix} 내 럽슐랭 평가도 ${stars(rating)} 로 저장했어요.`);
+          }
+        } catch (e) {
+          // 방문 기록은 살아 있으므로 실패로 되돌리지 않는다 — 무엇이 안 됐는지만 알린다
+          toast.error(getErrorMessage(e, '방문 기록은 남겼지만 럽슐랭 평가 저장에 실패했어요. 위 "수정"에서 다시 시도해주세요.'));
+        }
+      } else {
+        toast.success(mealSuffix);
+      }
+
+      haptics.success();
       load();
-      // 방문 기록이 상태·평균 별점·커버 사진을 바꿀 수 있다 — 가이드/위시리스트/지도가
+      // 방문 기록이 상태·평균 별점·커버 사진을 바꿀 수 있다 — 가이드/둘러보기/지도가
       // 다음에 focus 될 때 캐시된 목록 대신 다시 받아오게 한다
       usePlaceStore.getState().invalidate();
     } catch (e) {
-      Alert.alert('오류', getErrorMessage(e));
+      // 식단이 이미 저장된 뒤 방문 기록에서 실패했다면 그 사실을 알려준다 — 아무 말이 없으면
+      // 전부 실패한 줄 알고 폼을 닫아버리고, 식단 탭에서 뒤늦게 발견하게 된다
+      Alert.alert(
+        '오류',
+        savedMealId.current != null
+          ? `${getErrorMessage(e)}\n\n식단 기록은 이미 저장됐어요. 다시 저장해도 식단이 중복되지는 않아요.`
+          : getErrorMessage(e),
+      );
     } finally {
       setSaving(false);
     }
@@ -219,8 +277,9 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
     setRatingSaving(true);
     try {
       const previousTier = place.lovelichelinTier;
-      const updated = await placeApi.rate(placeId, { rating: myRatingInput, revisitIntent });
+      const updated = await placeApi.rate(placeId, { rating: myRatingInput });
       setPlace(updated);
+      setRatingEditing(false);
       haptics.success();
       // 등급이 바뀌면 가이드↔위시리스트 사이를 오갈 수 있다 — 캐시를 무효화한다
       usePlaceStore.getState().invalidate();
@@ -349,20 +408,57 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
                     />
                   ) : null}
 
-                  {/* 럽슐랭 평가 — 방문기록 별점(아래)과 별개로, 장소당 나/상대 대표 평점이 각 1개씩 유지된다 */}
+                  {/*
+                    럽슐랭 평가 — 평소엔 "나 ★★★★ · 상대 ★★★" 한 줄 요약이다. 별점을 매기는
+                    자리는 아래 "다녀왔어요" 폼 하나로 모았고(파일 상단 주석), 여기는 방문과
+                    무관하게 가게 평가만 고칠 때 펼친다.
+                  */}
                   <View style={styles.lovelichelinSection}>
                     <View style={styles.lovelichelinHeader}>
-                      <Text style={styles.label}>럽슐랭 평가</Text>
+                      <View style={styles.lovelichelinLabelRow}>
+                        <Text style={styles.label}>럽슐랭 평가</Text>
+                        {/* 앱이 판정만 보여주고 규칙은 말하지 않던 자리 — 기준을 여기서 편다 */}
+                        <IconButton
+                          icon="comment-question-outline"
+                          label="럽슐랭 등급 기준 보기"
+                          onPress={() => setRuleOpen(true)}
+                        />
+                      </View>
                       <LovelichelinBadge tier={place.lovelichelinTier} size="sm" />
                     </View>
-                    <View style={styles.ratingRow}>
-                      <View style={styles.ratingCol}>
-                        <Text style={styles.ratingColLabel}>나</Text>
+
+                    <View style={styles.ratingSummaryRow}>
+                      <View style={styles.ratingSummaryTexts}>
+                        <Text style={[styles.ratingSummary, { color: colors.me }]}>
+                          나 {place.myRating ? stars(place.myRating) : '아직 평가 전'}
+                        </Text>
+                        <Text style={[styles.ratingSummary, { color: colors.partner }]}>
+                          상대 {place.partnerRating ? stars(place.partnerRating) : '아직 평가 전'}
+                        </Text>
+                      </View>
+                      <Button
+                        title={ratingEditing ? '닫기' : place.myRating ? '수정' : '평가하기'}
+                        variant="ghost"
+                        size="sm"
+                        onPress={() => {
+                          // 펼칠 때마다 저장된 값에서 다시 시작한다 — 고치다 만 값이 남아 있으면
+                          // 다음에 열었을 때 실제 평점과 다른 별이 켜져 있다
+                          setMyRatingInput(place.myRating ?? 0);
+                          setRatingEditing((v) => !v);
+                        }}
+                      />
+                    </View>
+
+                    {ratingEditing ? (
+                      <>
                         <View style={styles.starRowSm}>
                           {[1, 2, 3, 4, 5].map((n) => (
                             <TouchableOpacity
                               key={n}
-                              onPress={() => setMyRatingInput(myRatingInput === n ? 0 : n)}
+                              // 같은 별을 다시 눌러 0으로 푸는 토글이 있었는데, 별점 위젯에서
+                              // 같은 별 재탭은 흔한 실수라 저장 버튼만 이유 없이 죽어 보였다.
+                              // 평점 삭제 경로는 원래 API 에도 없다 — 고르면 고른 값으로 둔다.
+                              onPress={() => setMyRatingInput(n)}
                               accessibilityLabel={`나의 럽슐랭 평점 ${n}점`}
                             >
                               <Text style={[styles.starSm, { color: colors.me }]}>
@@ -371,27 +467,16 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
                             </TouchableOpacity>
                           ))}
                         </View>
-                      </View>
-                      <View style={styles.ratingCol}>
-                        <Text style={styles.ratingColLabel}>상대</Text>
-                        <Text style={[styles.starSmReadonly, { color: colors.partner }]}>
-                          {place.partnerRating ? stars(place.partnerRating) : '아직 평가 전'}
-                        </Text>
-                      </View>
-                    </View>
-                    <Checkbox
-                      checked={revisitIntent ?? true}
-                      onChange={setRevisitIntent}
-                      label="다시 올래요?"
-                    />
-                    <Button
-                      title="럽슐랭 평가 저장"
-                      variant="secondary"
-                      size="sm"
-                      onPress={onSaveRating}
-                      loading={ratingSaving}
-                      disabled={myRatingInput === 0}
-                    />
+                        <Button
+                          title="평가 저장"
+                          variant="secondary"
+                          size="sm"
+                          onPress={onSaveRating}
+                          loading={ratingSaving}
+                          disabled={myRatingInput === 0}
+                        />
+                      </>
+                    ) : null}
                   </View>
                 </View>
               ) : null}
@@ -403,6 +488,7 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
                     {[1, 2, 3, 4, 5].map((n) => (
                       <TouchableOpacity
                         key={n}
+                        // 여기선 0(별점 없이 기록만)이 의미 있는 값이라 토글을 남긴다
                         onPress={() => setRating(rating === n ? 0 : n)}
                         accessibilityRole="button"
                         accessibilityLabel={`별점 ${n}점`}
@@ -411,6 +497,21 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
                       </TouchableOpacity>
                     ))}
                   </View>
+                  <Text style={styles.starHint}>
+                    {rating > 0
+                      ? place?.myRating
+                        ? '내 럽슐랭 평가도 이 별점으로 바뀌어요'
+                        : '이 별점이 내 럽슐랭 평가가 돼요 — 둘 다 매기면 등급이 붙어요'
+                      : '별점 없이 기록만 남길 수도 있어요'}
+                  </Text>
+
+                  <DateField
+                    label="다녀온 날"
+                    value={visitedAt}
+                    onChange={setVisitedAt}
+                    max={toDateString()}
+                    pickerTitle="언제 다녀오셨나요?"
+                  />
 
                   <TouchableOpacity
                     style={[styles.photoBox, photoUri ? styles.photoBoxFilled : styles.photoBoxEmpty]}
@@ -450,7 +551,7 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
                   <Checkbox
                     checked={logMeal}
                     onChange={setLogMeal}
-                    label="오늘 식단으로도 기록할까요?"
+                    label="식단으로도 기록할까요?"
                   />
 
                   {logMeal ? (
@@ -470,45 +571,9 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
                           </TouchableOpacity>
                         ))}
                       </View>
-
-                      <TextField
-                        label="칼로리 (kcal, 선택)"
-                        placeholder="650"
-                        keyboardType="number-pad"
-                        value={calories}
-                        onChangeText={(t) => setCalories(t.replace(/[^0-9]/g, ''))}
-                      />
-
-                      <Text style={styles.label}>매크로 (g, 선택)</Text>
-                      <View style={styles.macroInputRow}>
-                        <View style={styles.macroInput}>
-                          <TextField
-                            label="탄수화물"
-                            placeholder="0"
-                            keyboardType="number-pad"
-                            value={carbs}
-                            onChangeText={(t) => setCarbs(t.replace(/[^0-9]/g, ''))}
-                          />
-                        </View>
-                        <View style={styles.macroInput}>
-                          <TextField
-                            label="단백질"
-                            placeholder="0"
-                            keyboardType="number-pad"
-                            value={protein}
-                            onChangeText={(t) => setProtein(t.replace(/[^0-9]/g, ''))}
-                          />
-                        </View>
-                        <View style={styles.macroInput}>
-                          <TextField
-                            label="지방"
-                            placeholder="0"
-                            keyboardType="number-pad"
-                            value={fat}
-                            onChangeText={(t) => setFat(t.replace(/[^0-9]/g, ''))}
-                          />
-                        </View>
-                      </View>
+                      <Text style={styles.mealHint}>
+                        칼로리는 사진이 있으면 자동으로 채워져요. 식단 탭에서 고칠 수 있어요.
+                      </Text>
                     </View>
                   ) : null}
 
@@ -530,10 +595,10 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
                 </View>
               ) : (
                 <Button
-                  title="방문 기록 남기기"
-                  variant="secondary"
+                  title="다녀왔어요"
                   onPress={() => {
                     resetForm();
+                    setRatingEditing(false);
                     setFormOpen(true);
                   }}
                 />
@@ -584,7 +649,7 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
                 <EmptyState
                   icon="map-marker-outline"
                   title="아직 방문 기록이 없어요"
-                  description="다녀오셨다면 남겨보세요! (길게 눌러 삭제)"
+                  description="다녀오셨다면 별점과 함께 남겨보세요!"
                 />
               )
             ) : null
@@ -607,6 +672,7 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
         placeName={place?.name ?? ''}
         onClose={() => setFanfareTier(0)}
       />
+      <LovelichelinRuleSheet visible={ruleOpen} onClose={() => setRuleOpen(false)} />
     </SafeAreaView>
   );
 }
@@ -646,12 +712,14 @@ const styles = themedStyles((colors) => ({
     gap: spacing.sm,
   },
   lovelichelinHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  ratingRow: { flexDirection: 'row', gap: spacing.lg },
-  ratingCol: { flex: 1 },
-  ratingColLabel: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700', marginBottom: 2 },
+  // label 에 marginBottom 이 있어 ⓘ 와 밑줄이 어긋난다 — 줄 자체를 가운데로 맞춘다
+  lovelichelinLabelRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xxs },
+  // 접힌 상태의 한 줄 요약 — "나 ★★★★ / 상대 ★★★" 과 수정 버튼
+  ratingSummaryRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  ratingSummaryTexts: { flex: 1, gap: 2 },
+  ratingSummary: { fontSize: fontSize.caption, fontWeight: '700' },
   starRowSm: { flexDirection: 'row', gap: 2 },
   starSm: { fontSize: 22 },
-  starSmReadonly: { fontSize: fontSize.body, fontWeight: '700' },
   form: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -660,8 +728,11 @@ const styles = themedStyles((colors) => ({
     padding: spacing.md,
   },
   label: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700', marginBottom: spacing.sm },
-  starRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
+  starRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.xs },
   star: { fontSize: 32, color: colors.accent },
+  // 별점이 대표 평점으로도 간다는 사실을 그 자리에서 알려준다 — 별 위젯을 하나로 합친 뒤
+  // 이게 없으면 "등급은 어디서 매기지?" 가 된다
+  starHint: { fontSize: fontSize.caption, color: colors.textSecondary, marginBottom: spacing.md },
   photoBox: {
     borderRadius: radius.md,
     borderWidth: 1,
@@ -700,8 +771,7 @@ const styles = themedStyles((colors) => ({
   typeChipActive: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
   typeText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
   typeTextActive: { color: colors.textPrimary, fontWeight: '800' },
-  macroInputRow: { flexDirection: 'row', gap: spacing.sm },
-  macroInput: { flex: 1 },
+  mealHint: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.sm },
   formActions: { flexDirection: 'row', gap: spacing.sm },
   flex: { flex: 1 },
   sectionTitle: {

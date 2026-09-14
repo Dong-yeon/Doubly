@@ -1,4 +1,12 @@
-/** 콘텐츠 상세 — 관람 기록 목록 + 기록 추가 (별점·사진·메모) */
+/**
+ * 콘텐츠 상세 — 관람 기록 목록 + 기록 추가 (별점·날짜·사진·메모).
+ *
+ * <p>장소 쪽(PlaceDetailScreen)과 같은 구조이며, 2026-09-14 에 같은 이유로 함께 정리했다:
+ * 관람 기록 별점이 <b>등급에 아무 영향이 없었다</b>(ContentService.recordLog 는
+ * content_ratings 를 건드리지 않는다 — PlaceService.recordVisit 과 같은 구멍). 그래서
+ * "봤어요" 하나로 합쳐 기록과 대표 평점을 함께 올린다. 자세한 배경은 장소 쪽 파일 상단 주석과
+ * docs/LOVELICHELIN_UX_REANALYSIS_2026-09-14.md 3-1 · 5-1.
+ */
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   FlatList,
@@ -17,12 +25,13 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { PlaceStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
-import { Checkbox } from '../../components/Checkbox';
+import { DateField } from '../../components/DateField';
 import { EmptyState } from '../../components/EmptyState';
 import { ImageViewer } from '../../components/ImageViewer';
 import { IconButton } from '../../components/IconButton';
 import { LovelichelinBadge } from '../../components/LovelichelinBadge';
 import { LovelichelinFanfareModal } from '../../components/LovelichelinFanfareModal';
+import { LovelichelinRuleSheet } from '../../components/LovelichelinRuleSheet';
 import { SoloPickBadge } from '../../components/SoloPickBadge';
 import { useContentStore } from '../../store/contentStore';
 import { SOLO_PICK_MIN_RATING } from '../place/placeFilters';
@@ -33,6 +42,7 @@ import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
+import { toDateString } from '../../utils/date';
 import { stars } from '../../utils/ratingStars';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { Content, ContentLog } from '../../types';
@@ -55,16 +65,18 @@ export function ContentDetailScreen({ route, navigation }: Props) {
   // 관람 기록 입력 폼
   const [formOpen, setFormOpen] = useState(false);
   const [rating, setRating] = useState(0);
+  // 본 날짜 — API는 원래 watchedAt 을 받고 있었는데 화면에만 없어 늘 오늘로 저장됐다
+  const [watchedAt, setWatchedAt] = useState(toDateString());
   const [memo, setMemo] = useState('');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // 럽슐랭 대표 평점 — 관람기록 별점(위)과 별개로, 콘텐츠당 한 사람당 1개만 유지된다.
-  // revisitIntent 는 API가 되돌려주지 않는 선택 응답이라, 이번에 직접 건드리지 않으면
-  // undefined 로 두고 저장 요청에서도 생략한다(PlaceDetailScreen과 같은 이유).
+  // 럽슐랭 대표 평점 — 기본 동선("봤어요")이 이 값을 함께 쓰므로 평소엔 한 줄 요약으로 접어두고,
+  // 이번 관람과 무관하게 작품 평가만 고칠 때만 펼친다(장소 쪽과 같은 구조).
   const [myRatingInput, setMyRatingInput] = useState(0);
-  const [revisitIntent, setRevisitIntent] = useState<boolean | undefined>(undefined);
+  const [ratingEditing, setRatingEditing] = useState(false);
   const [ratingSaving, setRatingSaving] = useState(false);
+  const [ruleOpen, setRuleOpen] = useState(false);
   const [fanfareTier, setFanfareTier] = useState(0);
 
   const load = useCallback(async () => {
@@ -101,10 +113,16 @@ export function ContentDetailScreen({ route, navigation }: Props) {
 
   const resetForm = () => {
     setRating(0);
+    setWatchedAt(toDateString());
     setMemo('');
     setPhotoUri(null);
   };
 
+  /*
+   * "봤어요" 저장 — 관람 기록을 남기고, 별점을 매겼으면 그 별점을 럽슐랭 대표 평점으로 함께
+   * 올린다(파일 상단 주석). 기록이 저장된 뒤 평점에서 실패하면 재시도가 관람 기록을 두 번
+   * 쌓으므로 폼을 닫고 알리기만 한다 — 장소 쪽 onSaveVisit 과 같은 처리.
+   */
   const onSaveLog = async () => {
     setSaving(true);
     try {
@@ -114,14 +132,33 @@ export function ContentDetailScreen({ route, navigation }: Props) {
       }
 
       await contentApi.recordLog(contentId, {
+        watchedAt,
         rating: rating > 0 ? rating : undefined,
         memo: memo.trim() || undefined,
         imageUrl,
       });
-      haptics.success();
-      toast.success('관람 기록 완료! ');
+
       setFormOpen(false);
       resetForm();
+
+      if (rating > 0) {
+        try {
+          const previousTier = content?.lovelichelinTier ?? 0;
+          const updated = await contentApi.rate(contentId, { rating });
+          setMyRatingInput(rating);
+          if (previousTier === 0 && updated.lovelichelinTier > 0) {
+            setFanfareTier(updated.lovelichelinTier);
+          } else {
+            toast.success(`관람 기록 완료! 내 럽슐랭 평가도 ${stars(rating)} 로 저장했어요.`);
+          }
+        } catch (e) {
+          toast.error(getErrorMessage(e, '관람 기록은 남겼지만 럽슐랭 평가 저장에 실패했어요. 위 "수정"에서 다시 시도해주세요.'));
+        }
+      } else {
+        toast.success('관람 기록 완료! ');
+      }
+
+      haptics.success();
       load();
       useContentStore.getState().invalidate();
     } catch (e) {
@@ -137,8 +174,9 @@ export function ContentDetailScreen({ route, navigation }: Props) {
     setRatingSaving(true);
     try {
       const previousTier = content.lovelichelinTier;
-      const updated = await contentApi.rate(contentId, { rating: myRatingInput, revisitIntent });
+      const updated = await contentApi.rate(contentId, { rating: myRatingInput });
       setContent(updated);
+      setRatingEditing(false);
       haptics.success();
       useContentStore.getState().invalidate();
       if (previousTier === 0 && updated.lovelichelinTier > 0) {
@@ -256,20 +294,48 @@ export function ContentDetailScreen({ route, navigation }: Props) {
                     </Text>
                   ) : null}
 
-                  {/* 럽슐랭 평가 — 관람기록 별점(아래)과 별개로, 콘텐츠당 나/상대 대표 평점이 각 1개씩 유지된다 */}
+                  {/* 럽슐랭 평가 — 평소엔 한 줄 요약. 별점을 매기는 자리는 아래 "봤어요" 하나다 */}
                   <View style={styles.lovelichelinSection}>
                     <View style={styles.lovelichelinHeader}>
-                      <Text style={styles.label}>럽슐랭 평가</Text>
+                      <View style={styles.lovelichelinLabelRow}>
+                        <Text style={styles.label}>럽슐랭 평가</Text>
+                        <IconButton
+                          icon="comment-question-outline"
+                          label="럽슐랭 등급 기준 보기"
+                          onPress={() => setRuleOpen(true)}
+                        />
+                      </View>
                       <LovelichelinBadge tier={content.lovelichelinTier} size="sm" />
                     </View>
-                    <View style={styles.ratingRow}>
-                      <View style={styles.ratingCol}>
-                        <Text style={styles.ratingColLabel}>나</Text>
+
+                    <View style={styles.ratingSummaryRow}>
+                      <View style={styles.ratingSummaryTexts}>
+                        <Text style={[styles.ratingSummary, { color: colors.me }]}>
+                          나 {content.myRating ? stars(content.myRating) : '아직 평가 전'}
+                        </Text>
+                        <Text style={[styles.ratingSummary, { color: colors.partner }]}>
+                          상대 {content.partnerRating ? stars(content.partnerRating) : '아직 평가 전'}
+                        </Text>
+                      </View>
+                      <Button
+                        title={ratingEditing ? '닫기' : content.myRating ? '수정' : '평가하기'}
+                        variant="ghost"
+                        size="sm"
+                        onPress={() => {
+                          setMyRatingInput(content.myRating ?? 0);
+                          setRatingEditing((v) => !v);
+                        }}
+                      />
+                    </View>
+
+                    {ratingEditing ? (
+                      <>
                         <View style={styles.starRowSm}>
                           {[1, 2, 3, 4, 5].map((n) => (
                             <TouchableOpacity
                               key={n}
-                              onPress={() => setMyRatingInput(myRatingInput === n ? 0 : n)}
+                              // 같은 별 재탭으로 0이 되면 저장 버튼만 이유 없이 죽어 보인다
+                              onPress={() => setMyRatingInput(n)}
                               accessibilityLabel={`나의 럽슐랭 평점 ${n}점`}
                             >
                               <Text style={[styles.starSm, { color: colors.me }]}>
@@ -278,23 +344,16 @@ export function ContentDetailScreen({ route, navigation }: Props) {
                             </TouchableOpacity>
                           ))}
                         </View>
-                      </View>
-                      <View style={styles.ratingCol}>
-                        <Text style={styles.ratingColLabel}>상대</Text>
-                        <Text style={[styles.starSmReadonly, { color: colors.partner }]}>
-                          {content.partnerRating ? stars(content.partnerRating) : '아직 평가 전'}
-                        </Text>
-                      </View>
-                    </View>
-                    <Checkbox checked={revisitIntent ?? true} onChange={setRevisitIntent} label="다시 볼래요?" />
-                    <Button
-                      title="럽슐랭 평가 저장"
-                      variant="secondary"
-                      size="sm"
-                      onPress={onSaveRating}
-                      loading={ratingSaving}
-                      disabled={myRatingInput === 0}
-                    />
+                        <Button
+                          title="평가 저장"
+                          variant="secondary"
+                          size="sm"
+                          onPress={onSaveRating}
+                          loading={ratingSaving}
+                          disabled={myRatingInput === 0}
+                        />
+                      </>
+                    ) : null}
                   </View>
                 </View>
               ) : null}
@@ -314,6 +373,21 @@ export function ContentDetailScreen({ route, navigation }: Props) {
                       </TouchableOpacity>
                     ))}
                   </View>
+                  <Text style={styles.starHint}>
+                    {rating > 0
+                      ? content?.myRating
+                        ? '내 럽슐랭 평가도 이 별점으로 바뀌어요'
+                        : '이 별점이 내 럽슐랭 평가가 돼요 — 둘 다 매기면 등급이 붙어요'
+                      : '별점 없이 기록만 남길 수도 있어요'}
+                  </Text>
+
+                  <DateField
+                    label="본 날"
+                    value={watchedAt}
+                    onChange={setWatchedAt}
+                    max={toDateString()}
+                    pickerTitle="언제 보셨나요?"
+                  />
 
                   <TouchableOpacity
                     style={[styles.photoBox, photoUri ? styles.photoBoxFilled : styles.photoBoxEmpty]}
@@ -353,10 +427,10 @@ export function ContentDetailScreen({ route, navigation }: Props) {
                 </View>
               ) : (
                 <Button
-                  title="관람 기록 남기기"
-                  variant="secondary"
+                  title="봤어요"
                   onPress={() => {
                     resetForm();
+                    setRatingEditing(false);
                     setFormOpen(true);
                   }}
                 />
@@ -397,7 +471,7 @@ export function ContentDetailScreen({ route, navigation }: Props) {
                   onRetry={load}
                 />
               ) : (
-                <EmptyState icon="movie-open-outline" title="아직 관람 기록이 없어요" description="다 보셨다면 남겨보세요! (길게 눌러 삭제)" />
+                <EmptyState icon="movie-open-outline" title="아직 관람 기록이 없어요" description="다 보셨다면 별점과 함께 남겨보세요!" />
               )
             ) : null
           }
@@ -420,6 +494,7 @@ export function ContentDetailScreen({ route, navigation }: Props) {
         description="둘이 함께 검증한 우리만의 인생 콘텐츠예요."
         onClose={() => setFanfareTier(0)}
       />
+      <LovelichelinRuleSheet visible={ruleOpen} onClose={() => setRuleOpen(false)} />
     </SafeAreaView>
   );
 }
@@ -460,7 +535,10 @@ const styles = themedStyles((colors) => ({
     gap: spacing.sm,
   },
   lovelichelinHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  ratingRow: { flexDirection: 'row', gap: spacing.lg },
+  lovelichelinLabelRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xxs },
+  ratingSummaryRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  ratingSummaryTexts: { flex: 1, gap: 2 },
+  ratingSummary: { fontSize: fontSize.caption, fontWeight: '700' },
   ratingCol: { flex: 1 },
   ratingColLabel: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700', marginBottom: 2 },
   starRowSm: { flexDirection: 'row', gap: 2 },
@@ -476,6 +554,8 @@ const styles = themedStyles((colors) => ({
   label: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700', marginBottom: spacing.sm },
   starRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
   star: { fontSize: 32, color: colors.accent },
+  // 별점이 대표 평점으로도 간다는 사실을 그 자리에서 알려준다 (PlaceDetailScreen 과 같은 문구)
+  starHint: { fontSize: fontSize.caption, color: colors.textSecondary, marginBottom: spacing.md },
   photoBox: {
     borderRadius: radius.md,
     borderWidth: 1,

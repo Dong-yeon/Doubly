@@ -17,6 +17,7 @@ import {
   FlatList,
   Image,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -26,9 +27,9 @@ import {
   type ListRenderItemInfo,
 } from 'react-native';
 import { File, Paths } from 'expo-file-system';
-import { Asset as MediaAsset, requestPermissionsAsync as requestMediaPermissionsAsync } from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
 import { MaterialCommunityIcons } from './Icon';
+import { useContentWidth } from '../hooks/useContentWidth';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { toast } from '../store/toastStore';
 import { Toast } from './Toast';
@@ -56,7 +57,9 @@ interface Props {
 }
 
 export function ImageViewer({ images, initialIndex, onClose }: Props) {
-  const { width, height } = useWindowDimensions();
+  // 가로는 셸 폭(웹) — 뷰어 자체가 셸 안에서 열린다. 세로는 셸이 건드리지 않으므로 창 높이 그대로.
+  const width = useContentWidth();
+  const { height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const [index, setIndex] = useState(initialIndex ?? 0);
   const listRef = useRef<FlatList<ViewerImage>>(null);
@@ -121,6 +124,12 @@ export function ImageViewer({ images, initialIndex, onClose }: Props) {
    *
    * expo-media-library 56부터 saveToLibraryAsync 등 함수형 API는 deprecated 이면서
    * 런타임에 throw 한다(legacyWarnings). 클래스 API(Asset.create)를 쓴다.
+   *
+   * expo-media-library 는 파일 최상단에서 import 하지 않는다 — 56 의 `Asset` 클래스는
+   * import 되는 순간 네이티브 모듈(`ExpoMediaLibraryNext`)을 찾고, 웹에는 그게 없어
+   * 앱 전체가 부팅 직후 죽었다(2026-09-14 확인, 5eaeed9 이후). 저장 버튼을 누를 때
+   * 네이티브에서만 require 한다. 웹은 갤러리가 없으니 원본을 새 탭으로 열어 브라우저의
+   * "이미지 저장"에 맡긴다.
    */
   const downloadToCache = async (uri: string) => {
     const file = await File.downloadFileAsync(uri, Paths.cache, { idempotent: true });
@@ -129,16 +138,22 @@ export function ImageViewer({ images, initialIndex, onClose }: Props) {
 
   const onSave = async () => {
     if (!current || working) return;
+    if (Platform.OS === 'web') {
+      window.open(current.uri, '_blank', 'noopener');
+      return;
+    }
     setWorking('save');
     try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const MediaLibrary = require('expo-media-library') as typeof import('expo-media-library');
       // 저장만 하므로 write-only 권한 — iOS는 "추가만 허용", Android 13+는 별도 권한 없이 통과
-      const { status } = await requestMediaPermissionsAsync(true);
+      const { status } = await MediaLibrary.requestPermissionsAsync(true);
       if (status !== 'granted') {
         toast.error('사진을 저장하려면 갤러리 접근 권한이 필요해요.');
         return;
       }
       const localUri = await downloadToCache(current.uri);
-      await MediaAsset.create(localUri);
+      await MediaLibrary.Asset.create(localUri);
       toast.success('사진을 저장했어요.');
     } catch (e) {
       toast.error(getErrorMessage(e, '사진을 저장하지 못했어요.'));

@@ -13,6 +13,7 @@ import { DatePickerSheet } from './src/components/DatePickerSheet';
 import { UpgradeSheet } from './src/components/UpgradeSheet';
 import { CallOverlay } from './src/components/CallOverlay';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
+import { AppShell } from './src/components/AppShell';
 import { installGlobalErrorHandlers } from './src/utils/globalErrorHandler';
 import { initSentry } from './src/utils/sentry';
 import { initIap, endIap } from './src/utils/iap';
@@ -97,29 +98,35 @@ export default function App() {
       <SafeAreaProvider>
         {/* 시스템 테마를 따라 아이콘 색 반전 (다크모드에서 style="dark" 는 아이콘이 안 보인다) */}
         <StatusBar style="auto" />
-        <ErrorBoundary label="root">
-          <RootNavigator />
-        </ErrorBoundary>
-        <Toast />
-        {/* 업로드·AI 작업 중 화면 잠금 — 네비게이터 밖이라 탭바까지 덮는다 */}
-        <BusyOverlay />
-        {/* 확인 다이얼로그 — utils/alert 의 Alert.alert 이 여기로 들어온다 */}
-        <ConfirmDialog />
         {/*
-          날짜 선택 달력 — pickDate() 가 여기로 들어온다.
-          화면 쪽 Modal(일정 추가·대결 만들기 등) 안에서 열려도 가려지지 않도록 최상단에 둔다.
+          PC(웹)에서 넓은 창을 "창 하나"로 묶는다 — 네이티브에서는 아무 것도 하지 않는다.
+          토스트·다이얼로그까지 안에 넣어야 1920px 바탕이 아니라 셸 기준으로 뜬다.
         */}
-        <DatePickerSheet />
-        {/*
-          플랜 한도 안내 — api/client 가 402 를 가로채 planStore 에 담으면 여기서 뜬다.
-          어느 화면에서 걸렸든 한 곳에서만 그린다.
-        */}
-        <UpgradeSheet />
-        {/*
-          통화 수신 벨/통화 중 화면 — Stream 클라이언트가 연결돼 있는 한 어느 화면에서든
-          뜬다. callStore.client 가 없으면(미로그인·미설정) 아무것도 렌더하지 않는다.
-        */}
-        <CallOverlay />
+        <AppShell>
+          <ErrorBoundary label="root">
+            <RootNavigator />
+          </ErrorBoundary>
+          <Toast />
+          {/* 업로드·AI 작업 중 화면 잠금 — 네비게이터 밖이라 탭바까지 덮는다 */}
+          <BusyOverlay />
+          {/* 확인 다이얼로그 — utils/alert 의 Alert.alert 이 여기로 들어온다 */}
+          <ConfirmDialog />
+          {/*
+            날짜 선택 달력 — pickDate() 가 여기로 들어온다.
+            화면 쪽 Modal(일정 추가·대결 만들기 등) 안에서 열려도 가려지지 않도록 최상단에 둔다.
+          */}
+          <DatePickerSheet />
+          {/*
+            플랜 한도 안내 — api/client 가 402 를 가로채 planStore 에 담으면 여기서 뜬다.
+            어느 화면에서 걸렸든 한 곳에서만 그린다.
+          */}
+          <UpgradeSheet />
+          {/*
+            통화 수신 벨/통화 중 화면 — Stream 클라이언트가 연결돼 있는 한 어느 화면에서든
+            뜬다. callStore.client 가 없으면(미로그인·미설정) 아무것도 렌더하지 않는다.
+          */}
+          <CallOverlay />
+        </AppShell>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

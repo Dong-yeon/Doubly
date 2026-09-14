@@ -14,6 +14,9 @@ import com.fitto.feed.dto.FeedItemType;
 import com.fitto.feed.dto.FeedTimelineResponse;
 import com.fitto.feed.dto.ReactionSummary;
 import com.fitto.feed.service.FeedService;
+import com.fitto.place.dto.RecordVisitRequest;
+import com.fitto.place.dto.SavePlaceRequest;
+import com.fitto.place.service.PlaceService;
 import com.fitto.relation.dto.InviteCodeResponse;
 import com.fitto.relation.service.RelationService;
 import com.fitto.workout.dto.SaveWorkoutRequest;
@@ -48,6 +51,8 @@ class FeedFlowTest {
     WorkoutService workoutService;
     @Autowired
     MealService mealService;
+    @Autowired
+    PlaceService placeService;
     /** 스파이 — 테스트 프로필은 Cloudinary 미설정이라 실제 삭제는 no-op, 어떤 URL 을 넘기는지만 본다 */
     @MockitoSpyBean
     CloudinaryImageDeleter imageDeleter;
@@ -121,8 +126,14 @@ class FeedFlowTest {
         assertThat(workout.imageUrls()).isEmpty();
     }
 
+    /**
+     * 제목이 <b>음식</b>을, 부제가 끼니·칼로리를 받는다.
+     *
+     * <p>예전에는 반대였다 — 제목이 늘 "저녁 식단 🍽️" 고정이고 음식은 회색 부제로 밀려 있어,
+     * 타임라인을 내리면 같은 글자만 반복해 읽혔다. 굵게 읽히는 자리에 실제 기록을 둔다.
+     */
     @Test
-    void 식단_카드는_음식_항목을_요약해_보여준다() {
+    void 식단_카드는_음식을_제목으로_끼니와_칼로리를_부제로_보여준다() {
         long[] c = couple("fm1@fitto.com", "fm2@fitto.com");
         mealService.save(c[0], new SaveMealRequest(
                 LocalDate.now(), MealType.DINNER, null, null, null, null, null, null, null, null, null, List.of(
@@ -133,14 +144,15 @@ class FeedFlowTest {
         FeedItemResponse meal = feedService.timeline(c[0], null, 20).items().stream()
                 .filter(i -> i.type() == FeedItemType.MEAL).findFirst().orElseThrow();
 
-        // 운동 카드("러닝 외 3개 · 40분")와 같은 요약 형태.
-        // 칼로리는 빠진다 — 피드는 자동 노출이라 매 끼니 감시가 된다(FeedItemMapper 주석).
-        assertThat(meal.content()).isEqualTo("삼겹살 외 2개");
+        assertThat(meal.title()).isEqualTo("삼겹살 외 2개");
+        // 칼로리는 부제에서 빠진다 — 피드는 자동 노출이라 매 끼니 감시가 된다(FeedItemMapper 주석)
+        assertThat(meal.content()).isEqualTo("저녁");
         assertThat(meal.content()).doesNotContain("kcal");
+        assertThat(meal.shared()).isFalse();
     }
 
     @Test
-    void 항목이_없는_식단_카드는_메모로_보여준다() {
+    void 항목이_없는_식단_카드는_메모를_제목으로_쓴다() {
         long[] c = couple("fm3@fitto.com", "fm4@fitto.com");
         mealService.save(c[0], new SaveMealRequest(
                 LocalDate.now(), MealType.LUNCH, "회식", null, 800, null, null, null, null, null, null, null));
@@ -148,8 +160,83 @@ class FeedFlowTest {
         FeedItemResponse meal = feedService.timeline(c[0], null, 20).items().stream()
                 .filter(i -> i.type() == FeedItemType.MEAL).findFirst().orElseThrow();
 
-        // 메모만 남고 칼로리는 빠진다(위 테스트와 같은 이유)
-        assertThat(meal.content()).isEqualTo("회식");
+        assertThat(meal.title()).isEqualTo("회식");
+        assertThat(meal.content()).isEqualTo("점심");
+    }
+
+    /**
+     * 운동도 식단과 같은 규칙 — 제목에 종목, 부제에 분량.
+     *
+     * <p>분량은 세트 수와 총 볼륨(무게 × 횟수 × 세트)이다. 예전 부제는 종목 수와 시간뿐이라
+     * "얼마나 했는지"가 빠져 있었다.
+     */
+    @Test
+    void 운동_카드는_종목을_제목으로_세트와_볼륨을_부제로_보여준다() {
+        long[] c = couple("fwv1@fitto.com", "fwv2@fitto.com");
+        workoutService.save(c[0], new SaveWorkoutRequest(LocalDate.now(), null, 40, null,
+                List.of(new WorkoutSetRequest("벤치프레스", "가슴", 4, 10, new BigDecimal("60"), 1),
+                        new WorkoutSetRequest("스쿼트", "하체", 3, 10, new BigDecimal("80"), 2))));
+
+        FeedItemResponse workout = feedService.timeline(c[0], null, 20).items().stream()
+                .filter(i -> i.type() == FeedItemType.WORKOUT).findFirst().orElseThrow();
+
+        assertThat(workout.title()).isEqualTo("벤치프레스 외 1개");
+        // 4×10×60 + 3×10×80 = 4,800
+        assertThat(workout.content()).isEqualTo("7세트 · 4,800kg · 40분");
+    }
+
+    /** 유산소만 한 날은 볼륨이 0 이다 — "0kg" 을 적으면 안 한 게 아니라 못 한 것처럼 읽힌다. */
+    @Test
+    void 유산소만_한_운동_카드에는_볼륨을_적지_않는다() {
+        long[] c = couple("fwc1@fitto.com", "fwc2@fitto.com");
+        workoutService.save(c[0], new SaveWorkoutRequest(LocalDate.now(), null, 30, null,
+                List.of(new WorkoutSetRequest("러닝", "유산소", 1, null, null, 1))));
+
+        FeedItemResponse workout = feedService.timeline(c[0], null, 20).items().stream()
+                .filter(i -> i.type() == FeedItemType.WORKOUT).findFirst().orElseThrow();
+
+        assertThat(workout.content()).isEqualTo("1세트 · 30분");
+    }
+
+    /**
+     * 데이트 식단(같이 먹기)은 커플 양쪽에 짝으로 저장되지만, 타임라인은 두 사람의 기록을
+     * 함께 읽으므로 그대로 두면 같은 한 끼가 카드 두 장으로 나온다 — 원본 한 장만 싣는다.
+     */
+    @Test
+    void 데이트_식단은_카드_한_장으로만_나온다() {
+        long[] c = couple("fshare1@fitto.com", "fshare2@fitto.com");
+        mealService.save(c[0], new SaveMealRequest(
+                LocalDate.now(), MealType.DINNER, "파스타", null, 900, null, null, null,
+                null, null, null, null, true));
+
+        // 등록한 쪽과 상대 쪽 어느 화면에서 봐도 한 장이다
+        for (long viewer : c) {
+            List<FeedItemResponse> meals = feedService.timeline(viewer, null, 20).items().stream()
+                    .filter(i -> i.type() == FeedItemType.MEAL).toList();
+            assertThat(meals).hasSize(1);
+            assertThat(meals.get(0).shared()).isTrue();
+        }
+    }
+
+    /**
+     * 어디서 먹었는지는 "무엇을 먹었는지" 다음으로 궁금한 값인데, 지금까지 럽슐랭 탭으로
+     * 따로 찾아가야만 볼 수 있었다 — 식단 카드 부제에 함께 싣는다.
+     */
+    @Test
+    void 식단_카드는_연결된_장소를_부제에_보여준다() {
+        long[] c = couple("fmp1@fitto.com", "fmp2@fitto.com");
+        Long mealId = mealService.save(c[0], new SaveMealRequest(
+                LocalDate.now(), MealType.LUNCH, "파스타", null, 700, null, null, null,
+                null, null, null, null)).id();
+        Long placeId = placeService.save(c[0], new SavePlaceRequest(
+                "트라토리아", "연남동", null, null, "양식")).id();
+        placeService.recordVisit(c[0], placeId,
+                new RecordVisitRequest(LocalDate.now(), 5, null, null, mealId));
+
+        FeedItemResponse meal = feedService.timeline(c[0], null, 20).items().stream()
+                .filter(i -> i.type() == FeedItemType.MEAL).findFirst().orElseThrow();
+
+        assertThat(meal.content()).isEqualTo("점심 · 📍트라토리아");
     }
 
     @Test
