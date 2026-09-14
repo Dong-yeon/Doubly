@@ -151,13 +151,7 @@ export type WorkoutStackParamList = {
     | {
         date?: string;
         imageUrl?: string;
-        /**
-         * 다른 탭에서 들어왔으면 그 탭 이름 — 닫을 때 거기로 돌려보낸다.
-         *
-         * <p>홈의 운동 칩은 `navigate('Workout', { screen: 'WorkoutRecord' })` 로 오는데,
-         * 운동 스택의 첫 화면이 `WorkoutMain` 이라 이 이동은 그 위에 이 화면을 얹는다.
-         * 그래서 그냥 닫으면 홈이 아니라 <b>운동 탭 메인</b>으로 떨어진다.
-         */
+        /** 다른 탭에서 열렸으면 그 탭 이름 — 닫을 때 거기로 돌아간다(useReturnToTab) */
         returnTo?: keyof MainTabParamList;
       }
     | undefined;
@@ -217,7 +211,15 @@ export type DietStackParamList = {
    *   다시 받아올 게 없기 때문이다 — 로딩·실패 상태가 통째로 사라진다.
    * barcodeResult: BarcodeScan 에서 스캔·조회를 마치고 돌아올 때만 채워짐(같은 화면 인스턴스로 복귀)
    */
-  DietRecord: { date?: string; meal?: Meal; barcodeResult?: BarcodeLookup } | undefined;
+  DietRecord:
+    | {
+        date?: string;
+        meal?: Meal;
+        barcodeResult?: BarcodeLookup;
+        /** 다른 탭에서 열렸으면 그 탭 이름 — 닫을 때 거기로 돌아간다(useReturnToTab) */
+        returnTo?: keyof MainTabParamList;
+      }
+    | undefined;
   DietCalendar: undefined;
   // 바코드로 포장식품 조회 — 결과를 들고 DietRecord 로 돌아간다
   BarcodeScan: undefined;
@@ -256,7 +258,14 @@ export type ChatStackParamList = {
 export type PlaceScreensParamList = {
   // place: 기존 장소를 수정하러 들어올 때만 채워짐 (없으면 새 장소 추가)
   // initialCoords: 지도 탭에서 빈 곳을 탭해 "여기에 추가"로 들어올 때만 채워짐 (좌표·주소 미리 채움)
-  PlaceAdd: { place?: Place; initialCoords?: { lat: number; lng: number; address?: string | null } } | undefined;
+  PlaceAdd:
+    | {
+        place?: Place;
+        initialCoords?: { lat: number; lng: number; address?: string | null };
+        /** 다른 탭에서 열렸으면 그 탭 이름 — 닫을 때 거기로 돌아간다(useReturnToTab) */
+        returnTo?: keyof MainTabParamList;
+      }
+    | undefined;
   PlaceDetail: { placeId: number; name: string };
 };
 
