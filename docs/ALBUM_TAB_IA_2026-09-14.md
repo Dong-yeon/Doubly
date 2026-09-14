@@ -1,10 +1,11 @@
-# 하단 탭 재구성 2차 — 홈 · 럽바디 · 채팅 · 우리 · 럽슐랭 (2026-09-14)
+# 하단 탭 재구성 2차 — 홈 · 우리 · 채팅 · 럽바디 · 럽슐랭 (2026-09-14)
 
 > **한 줄**: 운동·식단 탭을 합치는 것 자체는 이득이 없다. 대신 **운동을 식단 탭 안 체크인 카드로
 > 흡수해 그 탭을 "럽바디"로 묶고, 비운 한 칸에 모든 사진 소스와 타임라인·여행·작년 오늘을 모은
 > "우리" 탭(앨범)을 넣는다.** 지금의 사진첩(피드 사진만 보이는 3열 그리드)을 그대로 승격하는 것은 아니다.
 >
-> 확정 탭바: **홈 · 럽바디 · 채팅 · 우리 · 럽슐랭** (사용자 확정 2026-09-14).
+> 확정 탭바: **홈 · 우리 · 채팅 · 럽바디 · 럽슐랭** (사용자 확정 2026-09-14, 순서 재확정 같은 날 —
+> 5-1 "탭 순서" 참고).
 >
 > 이 문서는 **왜 그렇게 정했는지**와 **구현 순서**를 남긴다(CLAUDE.md 5절).
 > 2026-08의 1차 재구성(`PLAN.md` "하단 탭 재구성 — 운동/식단 분리 + FAB 제거")을 뒤집는
@@ -21,7 +22,9 @@
 5. → 합쳐진 탭 이름: "건강"은 트래커 어휘라 럽슐랭과 톤이 어긋남. 챙김·습관·몸챙김·같이를 거쳐
    사용자 제안 **"럽바디"** 채택 — 럽슐랭과 같은 접두어라 조어 둘이 하나의 계열로 읽힌다.
 6. → 앨범 탭 이름은 **"우리"**. 사진 그리드만이 아니라 타임라인·여행·작년 오늘까지 담는 우산이라
-   "앨범"이 내용을 좁힌다. 순서는 빈도순으로 **홈 · 럽바디 · 채팅 · 우리 · 럽슐랭**. 확정.
+   "앨범"이 내용을 좁힌다.
+7. → 순서: 처음엔 빈도순(홈 · 럽바디 · 채팅 · 우리 · 럽슐랭)으로 적었으나, **합친 탭이 어느 자리를
+   물려받아야 하는가**로 다시 보고 **홈 · 우리 · 채팅 · 럽바디 · 럽슐랭**으로 확정. 근거는 5-1 "탭 순서".
 
 ## 2. 왜 "합치기"만으로는 이득이 없나
 
@@ -88,9 +91,9 @@
 | 순서 | 탭 | 라벨 | 아이콘 | 스택 |
 | --- | --- | --- | --- | --- |
 | 1 | Home | 홈 | `heart-multiple-outline` | `HomeStackNavigator` — FeedTimeline·PhotoAlbum·Memories 이관으로 가벼워짐 |
-| 2 | **Health** | **럽바디** | `heart-pulse` | **`HealthStackNavigator`** — 기존 Diet 스택 + Workout 스택 전체 |
+| 2 | **Album** | **우리** | `image-multiple-outline` | **`AlbumStackNavigator`** — 신규 (없어지는 운동 탭 자리) |
 | 3 | Chat | 채팅 | `chat-outline` | 변경 없음 |
-| 4 | **Album** | **우리** | `image-multiple-outline` | **`AlbumStackNavigator`** — 신규 |
+| 4 | **Health** | **럽바디** | `heart-pulse` | **`HealthStackNavigator`** — 기존 Diet 스택 + Workout 스택 전체 (식단 탭 자리 유지) |
 | 5 | Place | 럽슐랭 | `crown` | 변경 없음 |
 
 코드 식별자(`Health`, `Album`, 경로 `workout/`·`diet/`·`album`)는 라벨과 다르게 **서술적인 영어로 둔다** —
@@ -102,8 +105,7 @@
   습관(커플 요소 없음)·몸챙김(명확하지만 브랜드 결 없음)·같이(가장 Dubly답지만 부사라 모호)를 거쳐
   **럽바디**로. 결정적 이유는 **같은 접두어로 묶이면 조어 둘이 장난이 아니라 계열이 된다**는 것 —
   럽슐랭·럽바디는 "둘이 함께 쌓는 기록"이라는 한 시리즈로 읽힌다. "바디"의 몸매 관리 연상은 이름이 아니라
-  안의 문구로 잡는다(아래 5-2). 순서는 빈도순 — 매일 여는 체크인을 홈 옆 2번(운동 탭이 있던 자리라 손버릇도
-  유지)에, 채팅을 엄지가 닿는 가운데에.
+  안의 문구로 잡는다(아래 5-2).
 - **우리** — "앨범"은 사진 그리드만 기대하게 하는데 이 탭은 타임라인·여행·작년 오늘까지 담는다. "우리"는
   그 전부를 덮고 Dubly의 축(둘)과 곧장 이어진다. 홈이 "오늘의 우리", 이 탭은 "지금까지의 우리". 추상적인
   만큼 **아이콘이 뜻을 붙잡아야 하므로 사진 계열을 유지**한다(홈이 이미 하트라 하트 계열은 피함).
@@ -112,6 +114,26 @@
 - **"우리" 접두어 정리** — 탭이 "우리"가 되면 그 안의 "우리 기록"·"우리 사진첩"은 "우리 > 우리 기록"으로
   겹친다. 우리 탭 **안의** 화면 제목은 접두어를 뗀다: 기록 · 사진첩 · 여행 · 작년 오늘. 다른 탭의
   "우리 주간 레터" 등은 그대로.
+
+**탭 순서 — 왜 럽바디가 2번이 아니라 4번인가**
+
+처음 안은 빈도순(홈 · 럽바디 · 채팅 · 우리 · 럽슐랭)이었다. "매일 여는 체크인을 홈 옆에, 운동 탭이 있던
+자리라 손버릇도 유지된다"는 근거였는데, 그 손버릇 논리를 사용량으로 가중하면 결론이 뒤집힌다.
+현재 순서는 **홈(1) 운동(2) 채팅(3) 식단(4) 럽슐랭(5)** 이고, 합친 탭의 첫 화면은 `DietMain`이다.
+
+- **물려받아야 하는 자리는 식단 자리다.** 럽바디는 사실상 "식단 메인 + 운동 카드"이므로 그 화면을 찾는
+  손버릇은 4번에 있다. 2번에 놓으면 하루 세 번 4번을 누르던 식단 사용자가 낯선 사진 그리드에 떨어지고,
+  4번에 두면 **문서가 "구조적 저사용"으로 판정한 운동 탭 사용자만** 새 탭을 만난다. 어느 쪽이든 한 번은
+  헤매지만, 깨지는 집단이 작은 쪽을 고른다(운동 사용자는 4번의 체크인 카드·"운동 홈 ›"으로 한 번에 회복).
+- **럽 시리즈는 붙어 있을 때만 계열로 읽힌다.** 위 럽바디 작명 근거가 "같은 접두어로 묶이면 계열이 된다"인데,
+  2번에 두면 럽바디·럽슐랭이 탭바 양끝으로 갈려 그 근거가 UI에서 작동하지 않는다. 4·5 인접이 맞다.
+- **홈·우리가 시간축 짝을 만든다.** "홈 = 오늘의 우리, 우리 = 지금까지의 우리"(위 우리 라벨 근거)가
+  1·2로 붙으면 탭바가 세 덩어리로 읽힌다 — 관계 기록(홈·우리) · 채팅 · 럽 시리즈(럽바디·럽슐랭).
+- **빈도순 전제 자체가 약하다.** 5탭 바에서 오른손 한 손 조작이면 4·5번이 엄지에 더 가깝고 먼 쪽은 1·2번이다.
+  체크인을 4번에 두는 것은 리치 손해가 아니며, 덤으로 신설 탭이 2번에 앉아 발견성을 얻는다(4절의 "탭을
+  열 이유가 매일 생겨야 한다"는 조건에 유리).
+- 구현 비용은 동일하다 — `Tab.Screen` 등록 순서 한 줄이고, `ActiveWorkoutBar`·딥링크는 자리가 아니라
+  라우트 이름(`Health`)으로 이동한다.
 
 ### 5-2. 럽바디 탭 — 운동을 어떻게 흡수하나
 
@@ -194,7 +216,7 @@ AlbumMain (헤더 없음, 탭 라벨 "우리")
 | `navigation/types.ts` | `HealthStackParamList = WorkoutStackParamList & DietStackParamList`; `MainTabParamList`에서 `Workout`·`Diet` → `Health` |
 | `navigation/DietStackNavigator.tsx` → `HealthStackNavigator.tsx` | Diet 6화면 + Workout 15화면을 한 스택에 등록. 화면 컴포넌트의 Props 타입은 그대로 둔다(각자 자기 ParamList로 좁게 타이핑돼 있어도 등록에 문제 없음 — 타입 이름 일괄 교체는 하지 않는다) |
 | `navigation/WorkoutStackNavigator.tsx` | 삭제 |
-| `navigation/MainTabNavigator.tsx` | `TAB_META` Health(라벨 럽바디, `heart-pulse`) 추가, Workout·Diet 제거, `HIDE_ACTIVE_WORKOUT_BAR_ON` 유지 |
+| `navigation/MainTabNavigator.tsx` | `TAB_META` Health(라벨 럽바디, `heart-pulse`) 추가, Workout·Diet 제거, `HIDE_ACTIVE_WORKOUT_BAR_ON` 유지. 중간 상태 순서는 **홈 · 채팅 · 럽바디 · 럽슐랭**(최종에서 Album만 빠진 형태 — 3단계에서 2번 자리에 끼워 넣는다) |
 | `navigation/linking.ts` | Workout·Diet 블록을 Health 블록으로 합친다. **경로 문자열(`workout/...`, `diet/...`)은 유지** — 외부에 나간 링크·웹 북마크가 깨지지 않게 |
 | `components/workout/WorkoutCheckinCard.tsx` | `WorkoutScreen`의 체크인 카드(완료/사진/재개) 추출 |
 | `screens/diet/DietScreen.tsx` | 상단에 `WorkoutCheckinCard` + "운동 홈 ›" |
@@ -211,7 +233,7 @@ AlbumMain (헤더 없음, 탭 라벨 "우리")
 | `navigation/types.ts` | `AlbumStackParamList { AlbumMain, FeedTimeline, FeedCompose, Memories, TripAlbum }`; `MainTabParamList`에 `Album` |
 | `navigation/AlbumStackNavigator.tsx` | 신규 |
 | `navigation/HomeStackNavigator.tsx` | `FeedTimeline`·`PhotoAlbum`·`Memories` 등록 제거(`FeedCompose`는 홈 "일상" 진입을 위해 양쪽에 둔다) |
-| `navigation/MainTabNavigator.tsx` | 4번째에 Album(라벨 우리, `image-multiple-outline`) — 최종 순서 Home·Health·Chat·Album·Place |
+| `navigation/MainTabNavigator.tsx` | **2번째**에 Album(라벨 우리, `image-multiple-outline`) — 최종 순서 Home·Album·Chat·Health·Place (5-1 "탭 순서") |
 | `navigation/linking.ts` | `album`·`feed`·`memories` 경로를 Album 블록으로 이동(문자열 유지) |
 | `api/feed.ts` | `photos(cursor, sources?)` 시그니처 확장, `AlbumPhoto` 타입 |
 | `screens/album/AlbumScreen.tsx` | `PhotoAlbumScreen` 을 옮겨 확장 — 소스 칩, 작년 오늘 카드, 여행 앨범 가로줄, 목록/추가 버튼. 마지막 행 탭바 가림(`UX_UI_AUDIT.md` 지적) 함께 해결 |
@@ -227,7 +249,7 @@ AlbumMain (헤더 없음, 탭 라벨 "우리")
 
 1. `npm run typecheck`, `./gradlew test`(H2) → 1단계 쿼리는 PostgreSQL로 재실행.
 2. 웹 프리뷰(Metro launch 설정 `e19c77b`)에서 탭 5개·딥링크(`/workout`, `/diet`, `/album`, `/feed`) 확인.
-3. `PLAN.md` 하단 탭 재구성 절에 상태 갱신, `README.md` 탭 설명(홈·럽바디·채팅·우리·럽슐랭), `docs/QA_CHECKLIST.md`에 우리 탭 항목.
+3. `PLAN.md` 하단 탭 재구성 절에 상태 갱신, `README.md` 탭 설명(홈·우리·채팅·럽바디·럽슐랭), `docs/QA_CHECKLIST.md`에 우리 탭 항목.
 4. `git merge --no-ff` → main, 브랜치 삭제. JS·에셋만 바뀌므로 **EAS Update**로 배포(빌드 불필요).
 
 ## 7. 리스크·주의
