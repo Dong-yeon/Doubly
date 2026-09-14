@@ -1697,6 +1697,13 @@ memories: (on?: string) =>
 > 신설 우리 탭이 없어지는 운동 탭 자리(2번)에 들어간다(합친 탭의 첫 화면이 `DietMain`이므로 손버릇이
 > 걸린 자리는 4번이고, 럽바디·럽슐랭이 인접해야 럽 시리즈가 계열로 읽힌다). 세그먼트 토글로는
 > 돌아가지 않는다. 근거·설계·구현 순서는 `docs/ALBUM_TAB_IA_2026-09-14.md`.
+>
+> **[2026-09-15] 재구성 2차 구현 완료.** 1~3단계 전부 반영됐다 —
+> `GET /feed/photos` 4소스 확장(`FeedPhotosTest` 7건), 운동 스택을 식단에 합친
+> `HealthStackNavigator` + 공용 `WorkoutCheckinCard`, `AlbumStackNavigator`("우리" 탭:
+> 소스 칩·작년 오늘·여행 가로줄·목록 보기). 딥링크 경로 문자열(`workout/*`·`diet/*`·
+> `album`·`feed`·`memories`)은 그대로 유지했다. 남은 것은 실기기 확인과 스토어
+> 스크린샷 재촬영(`docs/SESSION_DIGEST.md` 미완 인덱스 참고).
 
 ### 왜 — 현재 구조의 문제
 

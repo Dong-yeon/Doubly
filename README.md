@@ -54,7 +54,7 @@ src/
 ├── components/   # 공용 UI (Button, Card, TextField, KakaoMap, …)
 ├── constants/    # theme(컬러/스페이싱), config(API URL·Cloudinary·카카오맵 키)
 ├── hooks/        # 커스텀 훅
-├── navigation/   # Root / Onboarding / MainTab(홈·운동+식단·FAB·채팅·맛집) 네비게이터
+├── navigation/   # Root / Onboarding / MainTab(홈·우리·채팅·럽바디·럽슐랭) 네비게이터
 ├── screens/      # onboarding, home, workout, diet, chat, place, trip, feed, trainer, my
 ├── store/        # Zustand 스토어 (auth, relation, chat, diet, toast)
 ├── types/        # 공용 도메인 타입
