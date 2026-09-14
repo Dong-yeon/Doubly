@@ -61,6 +61,16 @@ public class ChatMessage {
     @Column(name = "reply_to_id")
     private Long replyToId;
 
+    /**
+     * 클라이언트가 만든 멱등키 — {@code (relation_id, client_message_id)} 에 unique 인덱스가 있다.
+     *
+     * <p>STOMP 발행은 fire-and-forget 이라 앱은 서버 저장을 기다리지 않는다. 서버가 밀리면
+     * 사용자는 "안 갔다"고 보고 다시 누르는데, 이 키가 없으면 누른 만큼 저장된다(V89 주석).
+     * 옛 메시지와 시스템 카드는 NULL 이다 — NULL 끼리는 unique 에 걸리지 않는다.
+     */
+    @Column(name = "client_message_id", length = 64)
+    private String clientMessageId;
+
     /** 수정 시각 — null 이면 수정된 적 없음 */
     @Column(name = "edited_at")
     private LocalDateTime editedAt;
@@ -80,7 +90,8 @@ public class ChatMessage {
     @Builder
     private ChatMessage(Long relationId, Long senderId, MessageType messageType,
                         String content, String imageUrl, Long workoutId, Long routineId,
-                        Long replyToId) {
+                        Long replyToId, String clientMessageId) {
+        this.clientMessageId = clientMessageId;
         this.relationId = relationId;
         this.senderId = senderId;
         this.messageType = messageType != null ? messageType : MessageType.TEXT;

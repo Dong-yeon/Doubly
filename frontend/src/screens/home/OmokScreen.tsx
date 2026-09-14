@@ -496,7 +496,7 @@ export function OmokScreen(_: Props) {
         onRefresh={() => load()}
         ListHeaderComponent={header}
         renderItem={({ item }) => {
-          // V90 이전 판은 수 이력이 없어 복기할 수 없다 — 눌러도 빈 판이 뜨지 않게 막는다
+          // V91 이전 판은 수 이력이 없어 복기할 수 없다 — 눌러도 빈 판이 뜨지 않게 막는다
           const replayable = item.moves.length > 0;
           return (
             <Pressable

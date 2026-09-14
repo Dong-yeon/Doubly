@@ -75,6 +75,14 @@ export interface OutgoingMessage {
   routineId?: number;
   /** 답장 — 인용할 메시지 id (같은 방이어야 한다) */
   replyToId?: number;
+  /**
+   * 멱등키 — 서버가 {@code (relation_id, client_message_id)} 로 중복을 거른다(V89).
+   *
+   * <p>STOMP 발행은 fire-and-forget 이라 이 함수가 true 를 돌려줘도 서버가 저장했다는 뜻이
+   * 아니다. 서버가 밀리는 동안 사용자가 다시 누르면 프레임이 쌓이는데, 이 키가 있으면
+   * 서버가 두 번째를 저장하지 않고 먼저 저장한 메시지를 다시 브로드캐스트한다.
+   */
+  clientMessageId?: string;
 }
 
 /** 연결돼 있으면 즉시 구독하고, 아니면 다음 연결 때 {@link applyDesiredSubscriptions} 가 건다. */

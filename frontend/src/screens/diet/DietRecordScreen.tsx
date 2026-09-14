@@ -11,7 +11,7 @@
  * 저장 시 PUT 으로 보낸다. 폼이 완전히 같아서 화면을 나누면 두 벌을 같이 고쳐야 한다.
  */
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Image, Platform, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, Image, Platform, Text, TouchableOpacity, View } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -99,6 +99,11 @@ const num = (v: string) => (v.trim() ? Number(v) : undefined);
 const isFilled = (i: ItemForm) => i.name.trim().length > 0;
 /** 이름은 적었는데 칼로리가 빈 항목 — "0" 을 직접 적은 건 의도한 값이므로 빈 것으로 보지 않는다 */
 const lacksCalories = (i: ItemForm) => isFilled(i) && i.calories.trim() === '';
+/**
+ * 한 번의 "칼로리 계산"에서 공공 DB(식품안전나라)를 부를 이름 개수 상한 — 배치 엔드포인트가
+ * 없어 이름마다 한 번씩 부른다. 넘는 항목은 AI 가 함께 받으므로 빠지는 값은 없다.
+ */
+const MAX_FOOD_DB_LOOKUPS = 4;
 /** 음식 이름 비교 키 — 서버(MealService.normalizeFoodName)와 같은 규칙 */
 const foodKey = (name: string) => name.trim().toLowerCase();
 
@@ -210,8 +215,6 @@ export function DietRecordScreen({ navigation, route }: Props) {
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzingText, setAnalyzingText] = useState(false);
   /** DB 이름 검색 — 어느 항목에 대한 결과인지(key)와 후보 목록. 한 번에 한 항목만 연다. */
-  const [dbSearch, setDbSearch] = useState<{ key: string; results: BarcodeLookup[] } | null>(null);
-  const [searchingDbKey, setSearchingDbKey] = useState<string | null>(null);
   /*
    * 추가 영양소(당류/나트륨/식이섬유) — 항목(MealItem)에는 없는 끼니 레벨 값이라
    * AI 분석·바코드 조회에서만 채워진다. 탄단지는 항목이 들고 있으므로 여기엔 없다.
@@ -791,15 +794,6 @@ export function DietRecordScreen({ navigation, route }: Props) {
   };
 
   /**
-   * 적어둔 음식 이름으로 칼로리 추정 — 사진 없이도 쓰는 경로.
-   * 이름만 적어둔 항목들을 통째로 보내 칼로리·매크로가 채워진 목록으로 <b>교체</b>한다
-   * (명시적으로 누르는 버튼이고, 결과가 마음에 안 들면 항목별로 고치면 된다).
-   */
-  const onAnalyzeText = () => {
-    void analyzeItemsWithAi(items);
-  };
-
-  /**
    * 적어둔 항목(source)을 AI 에 보내 칼로리·매크로를 채운 새 목록으로 교체한다.
    * "AI로 칼로리 계산" 버튼과 즐겨찾기 저장(saveCurrentAsFavorite)이 함께 쓴다.
    *
@@ -842,49 +836,131 @@ export function DietRecordScreen({ navigation, route }: Props) {
   };
 
   /**
-   * 음식 이름으로 공공 DB(식품안전나라) 검색 — AI 계산과 달리 무료에 실제 표기값이다.
-   * 바코드처럼 정확히 일치하는 게 있을 때만 의미가 있어서, 못 찾으면(빈 배열) 조용히
-   * AI 계산으로 넘어가라고 안내만 한다(에러로 취급하지 않는다).
+   * 칼로리가 빈 항목의 이름으로 <b>공공 DB(식품안전나라) 표기값</b>을 찾는다 — AI 앞단의 무료 경로.
+   *
+   * <p>AI 텍스트 분석은 쿼터({@code AI_FOOD_TEXT})를 쓰고 결과가 추정치인데, 이 조회는 무료이고
+   * 값이 실제 표기값이다. 그래서 "DB 먼저, 못 찾은 게 있으면 AI" 순서다({@link fillCalories}).
+   *
+   * <p><b>이름이 정확히 일치하는 것만 받는다.</b> 예전 돋보기 버튼은 후보를 사용자가 직접 골랐지만
+   * 지금은 자동이라, 근사 매칭을 넣으면 "신라면"에 엉뚱한 라면 값이 조용히 들어간다.
+   *
+   * <p>실패는 조용히 넘어간다 — 키 미설정(503)·네트워크 오류 모두 그냥 AI 로 이어가면 되고,
+   * 검색을 눌러 "바코드 조회 기능이 준비되지 않았어요"를 보던 예전 동작이 애매함의 원인이었다.
+   *
+   * @returns 이름 키 → 표기값. 못 찾았으면 빈 Map
    */
-  const onSearchDb = async (item: ItemForm) => {
-    const name = item.name.trim();
-    if (!name) {
-      toast.error('음식 이름을 먼저 적어주세요.');
-      return;
-    }
-    setDbSearch(null);
-    setSearchingDbKey(item.key);
-    try {
-      const results = await foodDbApi.search(name);
-      if (results.length === 0) {
-        toast.info('DB에 없는 음식이에요. "AI로 칼로리 계산"을 이용해보세요.');
-        return;
-      }
-      haptics.light();
-      setDbSearch({ key: item.key, results });
-    } catch (e) {
-      toast.error(getErrorMessage(e, '검색에 실패했어요.'));
-    } finally {
-      setSearchingDbKey(null);
-    }
+  const lookupFoodDb = async (targets: ItemForm[]): Promise<Map<string, BarcodeLookup>> => {
+    const missing = targets.filter(lacksCalories);
+    if (missing.length === 0) return new Map();
+    /*
+     * 이름마다 한 번씩 외부 API 를 부른다(배치 엔드포인트가 없다). 한 끼에 반찬이 많으면
+     * 공공 API 에 부담이라 앞쪽 몇 개만 시도한다 — 못 부른 항목은 AI 가 어차피 함께 받는다.
+     */
+    const names = [...new Set(missing.map((i) => i.name.trim()))].slice(0, MAX_FOOD_DB_LOOKUPS);
+    const found = await Promise.all(
+      names.map(async (name) => {
+        try {
+          const results = await foodDbApi.search(name);
+          return results.find(
+            (r) => r.foodName && foodKey(r.foodName) === foodKey(name) && r.calories != null,
+          );
+        } catch {
+          return undefined;
+        }
+      }),
+    );
+    const hits = new Map<string, BarcodeLookup>();
+    found.forEach((r, idx) => {
+      if (r) hits.set(foodKey(names[idx]), r);
+    });
+    return hits;
   };
 
-  /** DB 검색 결과 중 하나를 골라 해당 항목에 채운다 — 실제 표기값이라 그대로 신뢰한다 */
-  const pickDbResult = (item: ItemForm, r: BarcodeLookup) => {
-    haptics.success();
-    updateItem(item.key, {
-      name: (r.foodName || item.name).slice(0, MAX_NAME),
-      portion: (r.servingSize ?? '').slice(0, MAX_PORTION),
-      calories: r.calories ? String(r.calories) : '',
-      carbs: r.carbs ? String(r.carbs) : '',
-      protein: r.protein ? String(r.protein) : '',
-      fat: r.fat ? String(r.fat) : '',
+  /**
+   * 찾은 표기값을 항목에 얹는다.
+   *
+   * <p>{@code 'fillEmpty'} — 칼로리가 빈 항목만 채운다(사용자가 적어둔 값은 건드리지 않는다).
+   * <p>{@code 'override'} — AI 가 채운 뒤 같은 이름을 표기값으로 덮는다. 추정치보다 표기값이 낫다.
+   */
+  const applyFoodDbHits = (
+    list: ItemForm[],
+    hits: Map<string, BarcodeLookup>,
+    mode: 'fillEmpty' | 'override',
+  ): ItemForm[] =>
+    list.map((it) => {
+      const hit = hits.get(foodKey(it.name));
+      if (!hit || hit.calories == null) return it;
+      if (mode === 'fillEmpty' && !lacksCalories(it)) return it;
+      const prefer = (dbValue: number | null | undefined, current: string) =>
+        dbValue != null && (mode === 'override' || !current.trim()) ? String(dbValue) : current;
+      return {
+        ...it,
+        portion: mode === 'override' ? hit.servingSize || it.portion : it.portion || (hit.servingSize ?? ''),
+        calories: String(hit.calories),
+        carbs: prefer(hit.carbs, it.carbs),
+        protein: prefer(hit.protein, it.protein),
+        fat: prefer(hit.fat, it.fat),
+      };
     });
-    if (r.sugar != null || r.sodium != null || r.fiber != null) {
-      setExtras({ sugar: r.sugar ?? undefined, sodium: r.sodium ?? undefined, fiber: r.fiber ?? undefined });
+
+  /**
+   * 추가 영양소(당·나트륨·식이섬유) 합계 — <b>모든</b> 항목이 표기값으로 채워졌을 때만 쓴다.
+   * 일부만 더한 값은 "합계"가 아니라 오해를 부르는 숫자다(AI 경로는 서버가 총량을 준다).
+   */
+  const sumFoodDbExtras = (list: ItemForm[], hits: Map<string, BarcodeLookup>) => {
+    const pick = (of: (h: BarcodeLookup) => number | null | undefined) => {
+      let total = 0;
+      for (const it of list.filter(isFilled)) {
+        const hit = hits.get(foodKey(it.name));
+        const v = hit ? of(hit) : null;
+        if (v == null) return undefined;
+        total += v;
+      }
+      return total;
+    };
+    return { sugar: pick((h) => h.sugar), sodium: pick((h) => h.sodium), fiber: pick((h) => h.fiber) };
+  };
+
+  /**
+   * "칼로리 계산" 버튼 — 표기값을 먼저 찾고, 그래도 빈 항목이 있을 때만 AI 를 부른다.
+   *
+   * <p>예전에는 이 둘이 별개 버튼이었다(항목별 돋보기 + 맨 아래 "AI로 칼로리 계산"). 같은 일을
+   * 하는 두 진입점 중 성공률이 낮은 쪽이 더 눈에 띄어서, 하나로 합쳤다.
+   */
+  const onAnalyzeText = () => {
+    void fillCalories();
+  };
+
+  const fillCalories = async () => {
+    setAnalyzingText(true);
+    let hits: Map<string, BarcodeLookup>;
+    try {
+      hits = await lookupFoodDb(items);
+    } finally {
+      setAnalyzingText(false);
     }
-    setDbSearch(null);
-    toast.success('실제 표기값으로 채웠어요');
+
+    const afterDb = applyFoodDbHits(items, hits, 'fillEmpty');
+    /*
+     * hits 가 비어 있으면 표기값으로 채운 게 없으니 AI 로 간다 — 값이 이미 다 차 있어도
+     * 사용자가 버튼을 눌렀으면 다시 계산해주던 기존 동작을 그대로 남긴다.
+     */
+    if (hits.size > 0 && !afterDb.some(lacksCalories)) {
+      // 전부 표기값으로 채웠다 — AI 를 부르지 않는다(쿼터·원가 0)
+      setItems((prev) => applyFoodDbHits(prev, hits, 'fillEmpty'));
+      setExtras(sumFoodDbExtras(afterDb, hits));
+      haptics.success();
+      toast.success('표기값으로 채웠어요 — AI 추정이 아니에요');
+      return;
+    }
+
+    /*
+     * 일부만 찾았다 — 텍스트는 건드리지 않은 채로 AI 를 부른다(analyzeItemsWithAi 가 "보낼 때의
+     * 목록"과 대조하므로, 먼저 setItems 하면 그 대조가 어긋난다). AI 가 목록을 교체한 뒤 같은
+     * 이름을 표기값으로 덮어, 찾아둔 실측값이 추정치에 묻히지 않게 한다.
+     */
+    const aiNext = await analyzeItemsWithAi(items);
+    if (aiNext && hits.size > 0) setItems((prev) => applyFoodDbHits(prev, hits, 'override'));
   };
 
   const onSave = async () => {
@@ -1373,50 +1449,18 @@ export function DietRecordScreen({ navigation, route }: Props) {
                 </View>
               </View>
 
-              <View style={styles.nameRow}>
-                <View style={styles.nameField}>
-                  <TextField
-                    placeholder="음식명 (예: 공기밥)"
-                    value={item.name}
-                    maxLength={MAX_NAME}
-                    onChangeText={(t) => updateItem(item.key, { name: t })}
-                  />
-                </View>
-                <TouchableOpacity
-                  style={styles.dbSearchBtn}
-                  onPress={() => onSearchDb(item)}
-                  disabled={searchingDbKey === item.key}
-                  hitSlop={8}
-                  accessibilityRole="button"
-                  accessibilityLabel="음식 DB에서 검색하기"
-                >
-                  {searchingDbKey === item.key ? (
-                    <ActivityIndicator size="small" color={colors.primary} />
-                  ) : (
-                    <MaterialCommunityIcons name="magnify" size={22} color={colors.primary} />
-                  )}
-                </TouchableOpacity>
-              </View>
-              {dbSearch?.key === item.key ? (
-                <View style={styles.dbResultBox}>
-                  <Text style={styles.dbResultHint}>공공 DB 검색 결과 — 실제 표기값이에요</Text>
-                  {dbSearch.results.map((r, i) => (
-                    <TouchableOpacity
-                      key={`${r.barcode || r.foodName || i}-${i}`}
-                      style={styles.dbResultRow}
-                      onPress={() => pickDbResult(item, r)}
-                    >
-                      <Text style={styles.dbResultName} numberOfLines={1}>{r.foodName || '이름 없음'}</Text>
-                      <Text style={styles.dbResultMeta} numberOfLines={1}>
-                        {[r.servingSize, r.calories != null ? `${r.calories}kcal` : null].filter(Boolean).join(' · ')}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                  <TouchableOpacity onPress={() => setDbSearch(null)}>
-                    <Text style={styles.dbResultClose}>닫기</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : null}
+              {/*
+                음식명 — 예전엔 오른쪽에 돋보기(공공 DB 이름 검색) 버튼이 붙어 있었다. 라벨 없는
+                아이콘인데 하는 일은 "검색"이 아니라 "이미 적은 이름의 표기값 채우기"였고,
+                집밥 이름은 거의 못 맞혀 누를 때마다 실패하는 버튼이 됐다. 지금은 같은 조회를
+                "칼로리 계산" 버튼이 AI 앞단에서 자동으로 한다(backfillFromFoodDb).
+              */}
+              <TextField
+                placeholder="음식명 (예: 공기밥)"
+                value={item.name}
+                maxLength={MAX_NAME}
+                onChangeText={(t) => updateItem(item.key, { name: t })}
+              />
               <TextField
                 placeholder="양 (예: 1인분, 반 공기)"
                 value={item.portion}
@@ -1477,18 +1521,23 @@ export function DietRecordScreen({ navigation, route }: Props) {
 
           <Button title="＋ 음식 추가" variant="ghost" onPress={addItem} />
 
-          {/* 적어둔 음식으로 칼로리 추정 — 사진이 없을 때의 경로 (사진이 있으면 위 사진 분석을 쓴다) */}
+          {/*
+            적어둔 음식으로 칼로리 채우기 — 사진이 없을 때의 경로 (사진이 있으면 위 사진 분석을 쓴다).
+            "AI로"를 뗀 이유: 이제 공공 DB 표기값을 먼저 찾고 못 찾은 것만 AI 가 추정한다(fillCalories).
+          */}
           {!photoUri && filled.length > 0 ? (
             <>
               <Button
-                title="AI로 칼로리 계산"
+                title="칼로리 계산"
                 variant="soft"
                 size="md"
                 onPress={onAnalyzeText}
                 loading={analyzingText}
                 style={styles.analyzeButton}
               />
-              <Text style={styles.analyzeHint}>적어둔 음식으로 계산해요. 결과는 추정치이고 항목별로 수정할 수 있어요.</Text>
+              <Text style={styles.analyzeHint}>
+                표기값이 있는 음식은 그 값으로, 없으면 AI가 추정해요. 항목별로 수정할 수 있어요.
+              </Text>
             </>
           ) : null}
 
@@ -1790,34 +1839,6 @@ const styles = themedStyles((colors) => ({
   itemNo: { fontSize: fontSize.body, fontWeight: '700', color: colors.primary },
   itemKcal: { fontSize: fontSize.caption, fontWeight: '800', color: colors.accent },
   remove: { color: colors.danger, fontSize: fontSize.caption },
-  // 음식명 + DB 검색 버튼 — TextField 는 자체 marginBottom 을 갖고 있어 행 안에서도 간격이 맞는다
-  nameRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
-  nameField: { flex: 1 },
-  dbSearchBtn: {
-    width: 54,
-    height: 54,
-    borderRadius: radius.md,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceAlt,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  // DB 이름 검색 결과 — 항목당 하나만 열리고, 실제 표기값이라 눈에 띄게 강조한다
-  dbResultBox: {
-    marginTop: -spacing.sm,
-    marginBottom: spacing.md,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    backgroundColor: colors.primaryBg,
-    padding: spacing.sm,
-  },
-  dbResultHint: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '700', marginBottom: spacing.xs },
-  dbResultRow: { paddingVertical: spacing.xs },
-  dbResultName: { fontSize: fontSize.body, color: colors.textPrimary, fontWeight: '700' },
-  dbResultMeta: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
-  dbResultClose: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700', marginTop: spacing.xs, textAlign: 'right' },
   macroToggle: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, minHeight: 44 },
   macroToggleText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
   macroInputRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },

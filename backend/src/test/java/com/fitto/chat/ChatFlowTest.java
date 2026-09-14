@@ -55,6 +55,61 @@ class ChatFlowTest {
         return rel.id();
     }
 
+    /**
+     * 멱등키 — 서버가 밀릴 때 사용자가 여러 번 눌러 같은 프레임이 여러 개 도착해도 한 번만 저장된다.
+     *
+     * <p>STOMP 발행은 fire-and-forget 이라 앱의 중복 탭 가드만으로는 구조적으로 못 막는다
+     * (2026-09-12 리포트). 이 테스트가 그 방어선이다.
+     */
+    @Test
+    void 같은_멱등키로_다시_보내면_저장하지_않고_먼저_보낸_메시지를_돌려준다() {
+        Long a = register("cidem-a@fitto.com");
+        Long b = register("cidem-b@fitto.com");
+        Long relationId = connectCouple(a, b);
+
+        ChatMessageResponse first = chatService.send(a, relationId,
+                new SendMessageRequest(null, "밀릴 때 여러 번 누른 메시지", null, null, null, null, "key-1"));
+        ChatMessageResponse again = chatService.send(a, relationId,
+                new SendMessageRequest(null, "밀릴 때 여러 번 누른 메시지", null, null, null, null, "key-1"));
+        ChatMessageResponse third = chatService.send(a, relationId,
+                new SendMessageRequest(null, "밀릴 때 여러 번 누른 메시지", null, null, null, null, "key-1"));
+
+        // 같은 메시지가 그대로 돌아온다 — 호출자가 이걸 다시 브로드캐스트해 보낸 쪽 말풍선을 맞춘다
+        assertThat(again.id()).isEqualTo(first.id());
+        assertThat(third.id()).isEqualTo(first.id());
+        assertThat(again.clientMessageId()).isEqualTo("key-1");
+
+        // 방에는 한 건만 남는다
+        assertThat(chatService.getMessages(a, relationId, null)).hasSize(1);
+    }
+
+    /** 키가 다르면 같은 내용이어도 별개 메시지다 — "같은 말 두 번" 을 막아선 안 된다. */
+    @Test
+    void 멱등키가_다르면_같은_내용도_따로_저장한다() {
+        Long a = register("cidem2-a@fitto.com");
+        Long b = register("cidem2-b@fitto.com");
+        Long relationId = connectCouple(a, b);
+
+        chatService.send(a, relationId, new SendMessageRequest(null, "ㅋㅋ", null, null, null, null, "k1"));
+        chatService.send(a, relationId, new SendMessageRequest(null, "ㅋㅋ", null, null, null, null, "k2"));
+
+        assertThat(chatService.getMessages(a, relationId, null)).hasSize(2);
+    }
+
+    /** 키가 없으면(구버전 앱·시스템 카드) 예전대로 매번 저장된다 — NULL 은 unique 에 걸리지 않는다. */
+    @Test
+    void 멱등키가_없으면_예전처럼_매번_저장한다() {
+        Long a = register("cidem3-a@fitto.com");
+        Long b = register("cidem3-b@fitto.com");
+        Long relationId = connectCouple(a, b);
+
+        chatService.send(a, relationId, new SendMessageRequest(null, "키 없음", null, null, null, null));
+        chatService.send(a, relationId, new SendMessageRequest(null, "키 없음", null, null, null, null));
+
+        assertThat(chatService.getMessages(a, relationId, null)).hasSize(2);
+        assertThat(chatService.getMessages(a, relationId, null).get(0).clientMessageId()).isNull();
+    }
+
     @Test
     void 커플_채팅방에서_메시지를_주고받고_읽음처리한다() {
         Long a = register("ca@fitto.com");

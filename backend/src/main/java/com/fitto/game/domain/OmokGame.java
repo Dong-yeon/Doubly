@@ -55,7 +55,7 @@ public class OmokGame extends CoupleGame {
 
     /**
      * 착수 인덱스를 순서대로 쉼표로 이은 것 — 무르기·복기가 전부 여기서 나온다.
-     * V90 이전에 시작된 판은 비어 있다({@link #lastMove} 만 있다).
+     * V91 이전에 시작된 판은 비어 있다({@link #lastMove} 만 있다).
      */
     @Column(length = 1024)
     private String moves;
@@ -118,7 +118,7 @@ public class OmokGame extends CoupleGame {
     }
 
     /**
-     * 무를 수 있는 수가 있는가 — {@link #moves} 가 빈 V90 이전 판도 마지막 수 하나는 무를 수 있다.
+     * 무를 수 있는 수가 있는가 — {@link #moves} 가 빈 V91 이전 판도 마지막 수 하나는 무를 수 있다.
      * (배포 시점에 진행 중이던 판에서 버튼만 죽어 보이지 않도록.)
      */
     public boolean hasUndoableMove() {
@@ -153,7 +153,7 @@ public class OmokGame extends CoupleGame {
         if (!list.isEmpty()) {
             target = list.remove(list.size() - 1);
         } else {
-            target = lastMove; // V90 이전 판 — 이력은 없어도 마지막 수는 안다
+            target = lastMove; // V91 이전 판 — 이력은 없어도 마지막 수는 안다
             if (target == null) return;
         }
 

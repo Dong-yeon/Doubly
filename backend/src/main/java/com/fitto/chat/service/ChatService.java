@@ -44,6 +44,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -60,7 +63,11 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class ChatService {
 
+    private static final Logger log = LoggerFactory.getLogger(ChatService.class);
+
     private static final int PAGE_SIZE = 30;
+    /** 멱등키 컬럼 길이(V89) — 넘치면 잘라 쓴다(normalizeClientMessageId 주석) */
+    private static final int CLIENT_MESSAGE_ID_MAX = 64;
     /** 대화 내보내기 상한 — 이보다 많으면 잘라서 내려주고 truncated=true 로 알린다. */
     private static final int EXPORT_LIMIT = 20_000;
 
@@ -272,6 +279,27 @@ public class ChatService {
     @Transactional
     public ChatMessageResponse send(Long senderId, Long relationId, SendMessageRequest req) {
         Relation relation = requireMember(senderId, relationId);
+
+        /*
+         * 멱등 검사 — 플랜 판정보다 먼저 본다. 같은 키로 다시 온 프레임은 "새 전송"이 아니므로
+         * 게이팅·사용량 계측·알림을 다시 태울 이유가 없고, 먼저 저장된 메시지를 그대로
+         * 돌려주면 호출자가 그걸 다시 브로드캐스트해 보낸 쪽의 낙관적 말풍선이 맞춰진다.
+         *
+         * 여기서 못 걸러지는 동시 도착은 (relation_id, client_message_id) unique 인덱스가
+         * 막는다 — 두 번째 INSERT 가 터지고, 컨트롤러가 그걸 삼킨다(중복 행은 생기지 않는다).
+         */
+        String clientMessageId = normalizeClientMessageId(req.clientMessageId());
+        if (clientMessageId != null) {
+            Optional<ChatMessage> already =
+                    chatMessageRepository.findByRelationIdAndClientMessageId(relationId, clientMessageId);
+            if (already.isPresent()) {
+                ChatMessage m = already.get();
+                log.debug("같은 멱등키로 다시 들어온 전송 — 재저장하지 않는다 (messageId={})", m.getId());
+                // 몇 초 안에 다시 온 프레임이라 리액션·북마크가 붙었을 수 없다(아래 save 경로와 같은 가정)
+                return ChatMessageResponse.from(m, replyPreview(m.getReplyToId()), List.of(), false);
+            }
+        }
+
         MessageType messageType = req.messageType() != null ? req.messageType() : MessageType.TEXT;
         if (messageType == MessageType.TOUCH) {
             requireValidTouch(senderId, req.content());
@@ -299,6 +327,7 @@ public class ChatService {
                 .workoutId(req.workoutId())
                 .routineId(req.routineId())
                 .replyToId(resolveReplyTarget(req.replyToId(), relationId))
+                .clientMessageId(clientMessageId)
                 .build();
         chatMessageRepository.save(message);
 
@@ -310,6 +339,20 @@ public class ChatService {
         }
         // 방금 만든 메시지라 북마크됐을 수 없다
         return ChatMessageResponse.from(message, replyPreview(message.getReplyToId()), List.of(), false);
+    }
+
+    /**
+     * 멱등키 정리 — 공백은 없는 것으로 보고, 컬럼 길이(64)를 넘으면 <b>자른다.</b>
+     *
+     * <p>자르는 이유: 키는 불투명한 값이고 같은 입력은 같은 결과로 잘리므로 멱등성이 유지된다.
+     * 거절하면(INVALID_INPUT) 길이만 초과한 클라이언트가 멱등성을 통째로 잃는다 — 우리가
+     * 막으려던 중복이 바로 그 경로로 돌아온다.
+     */
+    private String normalizeClientMessageId(String raw) {
+        if (raw == null) return null;
+        String trimmed = raw.trim();
+        if (trimmed.isEmpty()) return null;
+        return trimmed.length() > CLIENT_MESSAGE_ID_MAX ? trimmed.substring(0, CLIENT_MESSAGE_ID_MAX) : trimmed;
     }
 
     /**

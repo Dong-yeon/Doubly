@@ -86,7 +86,7 @@
   접으면 정답이 상대에게 푸시로 공개된다.
 - 맞히면 채팅 `GAME_CARD` + 그린 사람에게 푸시. 접은 판은 기록에 남지 않는다(두 게임과 같은 규칙).
 
-## 5. 데이터 (V92)
+## 5. 데이터 (V93)
 
 `couple_games` 단일 테이블 상속에 얹는다(`game_type = 'CATCH_MIND'`). 테이블을 안 만들었으니
 Purger 는 손대지 않는다 — 기존 `delete from couple_games where couple_id = :rid` 한 줄이

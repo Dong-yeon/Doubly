@@ -23,14 +23,58 @@ let inflight: Promise<void> | null = null;
  * 타는 {@code apiClient} 는 (인메모리 authStore 가 아니라) SecureStore 에서 직접
  * 액세스 토큰을 읽으므로(utils/storage.ts) 이 함수는 어느 시점에 불려도 동작한다.
  */
+/** 연결을 기다려 줄 최대 시간 — 넘으면 "연결 안 됨"으로 보고 실패시킨다. */
+const CONNECT_TIMEOUT_MS = 10_000;
+
+/**
+ * 웹소켓이 붙어 {@code connectedUser} 가 채워질 때까지 기다린다.
+ *
+ * <p>{@code connectedUser$} 는 BehaviorSubject 라 구독 즉시 <b>현재 값</b>을 한 번 흘린다.
+ * 아직 연결 전이면 그 값이 undefined 라 아래 가드에 걸러지고, 이미 연결돼 있으면 위의
+ * 조기 반환이 먼저 잡는다 — 그래서 timer 가 만들어지기 전에 콜백이 timer 를 건드리는 일은 없다.
+ */
+function waitForConnection(client: StreamVideoClient, ms: number): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    if (client.state.connectedUser) {
+      resolve(true);
+      return;
+    }
+    const sub = client.state.connectedUser$.subscribe((user) => {
+      if (!user) return;
+      clearTimeout(timer);
+      sub.unsubscribe();
+      resolve(true);
+    });
+    const timer = setTimeout(() => {
+      sub.unsubscribe();
+      resolve(false);
+    }, ms);
+  });
+}
+
 export async function createVideoClient(): Promise<StreamVideoClient | undefined> {
   try {
     const credentials = await callApi.token();
-    return StreamVideoClient.getOrCreateInstance({
+    const client = StreamVideoClient.getOrCreateInstance({
       apiKey: credentials.apiKey,
       user: { id: credentials.userId },
       token: credentials.token,
     });
+    /*
+     * <b>연결될 때까지 기다린다.</b> getOrCreateInstance 는 Promise 가 아니라 객체를 즉시
+     * 돌려주고 웹소켓 연결은 뒤에서 붙는다(SDK 타입: `static getOrCreateInstance(...): StreamVideoClient`).
+     * 그래서 토큰이 틀렸거나 네트워크가 막혀 연결이 끝내 안 붙어도 client 는 null 이 아니었고,
+     * 그 결과 실패가 <b>어디에서도 드러나지 않았다</b> — 발신은 "준비하지 못했어요" 토스트를
+     * 건너뛰고, ring 요청은 끊긴 클라이언트에 쌓여 예외도 응답도 없이 멈췄으며(그래서 걸어도
+     * 조용했다), 수신측 useCalls() 는 영원히 빈 배열이라 벨도 안 떴다(2026-09-11 리포트
+     * "둘 다 조용", docs/CALL_BROKEN_ANALYSIS_2026-09-10.md §4-1 의 나머지 절반).
+     *
+     * 연결까지 확인해야 client 가 "통화할 수 있는 상태"를 뜻하게 된다.
+     */
+    if (!(await waitForConnection(client, CONNECT_TIMEOUT_MS))) {
+      throw new Error('통화 서버에 연결하지 못했어요. 잠시 후 다시 시도해주세요.');
+    }
+    return client;
   } catch (e) {
     /*
      * 통화 없이도 앱은 정상 동작하므로 여기서 화면에 띄우지는 않는다. 다만 <b>이유는 남긴다</b> —
