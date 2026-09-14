@@ -20,7 +20,7 @@ import java.util.Optional;
  * <p><b>여기엔 premium 필드가 없다.</b> 이미지 스티커는 번들 에셋이라 원가가 0이고
  * 전부 무료다 — 비개구리 세트(BIGAE_*)도 같은 이유로 무료다
  * (docs/COUPLE_EMOJI_AI_DESIGN_2026-09-08.md §17). PRO 로 돌릴 장이 생기면
- * {@link StickerPack}·{@link AnimatedSticker} 처럼 premium 을 만들고
+ * {@link AnimatedSticker} 처럼 premium 을 만들고
  * {@code ChatService.send} 의 판정 조건에도 이 enum 을 넣어야 한다 — 현재 그 조건은
  * 두 enum 만 보므로, 필드만 추가하면 서버가 막지 않는다.
  */

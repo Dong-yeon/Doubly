@@ -6,7 +6,6 @@ import com.fitto.chat.domain.ChatMessage;
 import com.fitto.chat.domain.ChatMessageReaction;
 import com.fitto.chat.domain.ChatPinnedMessage;
 import com.fitto.chat.domain.MessageType;
-import com.fitto.chat.domain.StickerPack;
 import com.fitto.chat.domain.StickerImage;
 import com.fitto.chat.domain.TouchGesture;
 import com.fitto.chat.dto.ChatBookmarkResponse;
@@ -304,10 +303,17 @@ public class ChatService {
         if (messageType == MessageType.TOUCH) {
             requireValidTouch(senderId, req.content());
         }
-        if (messageType == MessageType.STICKER
-                && (StickerPack.isPremium(req.content()) || AnimatedSticker.isPremiumContent(req.content()))) {
-            // 시즌 스티커·움직이는 이모티콘은 PRO 전용 — 터치 프리미엄 제스처와 같은 방어선이다
-            // (아래 주석 참고). 둘 다 같은 Feature 로 판정한다(AnimatedSticker 주석).
+        if (messageType == MessageType.STICKER && AnimatedSticker.isPremiumContent(req.content())) {
+            /*
+             * 움직이는 이모티콘만 PRO 전용이다 — 터치 프리미엄 제스처와 같은 방어선이다(아래 주석).
+             *
+             * <p><b>유니코드 이모지는 무엇이든 무료다</b>(2026-09-14). 예전엔 시즌 팩 40종을
+             * 유료로 잠갔는데, 파는 것이 폰 키보드에 이미 있는 글자라 상품으로서 근거가 약했고
+             * (AnimatedSticker 주석이 이미 그렇게 적고 있었다), 실제로 무료 이모지 시트 96종과
+             * 12종이 겹쳐 "무료라고 보여 준 것을 서버가 막는" 상태였다. STOMP 는 402 를 화면으로
+             * 되돌릴 수 없어 말풍선이 "전송 중"에서 멈췄다 —
+             * docs/STICKER_PACK_OVERLAP_2026-09-14.md.
+             */
             planGuard.require(senderId, Feature.PREMIUM_STICKER);
         }
         String imageUrl = req.imageUrl();

@@ -8,10 +8,16 @@
  * 썸네일 한 줄로 늘어놓고, 고른 팩만 큼직한 5열 격자로</b> 보여준다 — 세로 스크롤이
  * 줄고, 어떤 캐릭터가 있는지가 첫 화면에서 끝난다.
  *
- * <p>팩 경계는 카탈로그가 이미 갖고 있다 — {@code STICKER_CHARACTERS}(캐릭터별 묶음),
- * {@code STICKER_PACKS} 의 시즌 구분, 움직이는 이모티콘 한 묶음. 여기서 새로 나누지
- * 않고 그대로 가져와 스트립 칸으로 편다. 캐릭터가 늘면 스트립 칸이 저절로 하나 더 생긴다
- * (stickerImages.ts 의 {@code StickerCharacter} 주석과 같은 약속).
+ * <p>팩 경계는 카탈로그가 이미 갖고 있다 — {@code STICKER_CHARACTERS}(캐릭터별 묶음)와
+ * 움직이는 이모티콘 한 묶음. 여기서 새로 나누지 않고 그대로 가져와 스트립 칸으로 편다.
+ * 캐릭터가 늘면 스트립 칸이 저절로 하나 더 생긴다(stickerImages.ts 의
+ * {@code StickerCharacter} 주석과 같은 약속).
+ *
+ * <p><b>유니코드 이모지 팩은 스트립에 없다</b>(2026-09-14). 기본 16종 + 시즌 40종을 팩으로
+ * 두던 것을 폐지했다 — 폰 키보드에 이미 있는 글자라 팩으로 묶을 이유가 약했고, 시즌 팩은
+ * PRO 로 팔기까지 해서 무료 이모지 시트와 12종이 겹치는 사고를 냈다
+ * (docs/STICKER_PACK_OVERLAP_2026-09-14.md). 이모지가 필요하면 스트립 맨 끝 버튼으로
+ * 96종 검색 시트를 연다 — 팩 여섯 칸보다 넓고, 한글로 찾을 수 있다.
  *
  * <p><b>화면에서 떼어낸 이유</b>: ChatRoomScreen 이 이미 2200줄이다. 패널은 자기
  * 상태(고른 팩)만 갖고 나머지는 콜백으로 올려 보내므로, 말풍선 렌더와 얽히지 않는다.
@@ -21,7 +27,6 @@ import { Image, Pressable, ScrollView, Text, View, type ImageSourcePropType } fr
 import { MaterialCommunityIcons } from '../Icon';
 import { ANIMATED_STICKERS } from '../../constants/animatedStickers';
 import { STICKER_CHARACTERS } from '../../constants/stickerImages';
-import { STICKER_PACKS } from '../../constants/stickerPacks';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 import type { CoupleEmoji } from '../../types';
@@ -30,14 +35,12 @@ type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 /** 스트립 칸에 그릴 그림 — 팩 종류마다 갖고 있는 게 다르다(유니코드 · 번들 PNG · 원격 URL) */
 type PackThumb =
-  | { type: 'emoji'; value: string }
   | { type: 'image'; source: ImageSourcePropType }
   | { type: 'uri'; uri: string }
   | { type: 'icon'; name: IconName };
 
 /** 격자 한 칸 */
 type PackItem =
-  | { type: 'emoji'; key: string; value: string; label: string }
   /** premium 은 움직이는 이모티콘처럼 <b>한 팩 안에서 칸마다</b> 갈리는 경우에만 true 다 */
   | { type: 'image'; key: string; code: string; label: string; source: ImageSourcePropType; premium: boolean }
   | { type: 'couple'; key: string; emoji: CoupleEmoji };
@@ -46,8 +49,6 @@ interface PanelPack {
   key: string;
   label: string;
   thumb: PackThumb;
-  /** 팩 전체가 PRO 전용인가 — 스트립에 자물쇠, 격자는 흐리게 */
-  premium: boolean;
   /** 움직이는 이모티콘 — 스트립에 재생 배지 */
   animated: boolean;
   items: PackItem[];
@@ -55,8 +56,6 @@ interface PanelPack {
 
 /** 우리 이모지 팩의 키 — 이 팩을 처음 열 때만 서버에서 받아온다 */
 const COUPLE_PACK = 'COUPLE';
-/** 기본 이모지 팩의 키 — 이 팩에서만 "더 보기·검색" 줄이 붙는다 */
-const EMOJI_PACK = 'BASIC';
 
 /**
  * 기본으로 열리는 팩 — 움직이는 이모티콘.
@@ -96,20 +95,17 @@ export function StickerPanel({
   const [activeKey, setActiveKey] = useState<string>(DEFAULT_PACK);
 
   const packs = useMemo<PanelPack[]>(() => {
-    const basic = STICKER_PACKS.find((p) => p.key === EMOJI_PACK);
-    const seasonal = STICKER_PACKS.filter((p) => p.key !== EMOJI_PACK);
 
     /*
-     * 순서 = 손이 가는 순서다. 무료 그림 팩이 앞, PRO 시즌 팩이 뒤.
-     * 우리 이모지는 "내 얼굴"이라 그림 팩 바로 뒤에 둔다 — 있는 사람에겐 가장 자주 쓰는 팩이다.
+     * 순서 = 손이 가는 순서다. 우리 이모지는 "내 얼굴"이라 그림 팩 바로 뒤에 둔다 —
+     * 있는 사람에겐 가장 자주 쓰는 팩이다.
      */
-    const list: PanelPack[] = [
+    return [
       {
         key: 'ANIMATED',
         label: '움직이는 이모티콘',
         thumb: { type: 'image', source: ANIMATED_STICKERS[0].thumb },
-        // 무료 6 + PRO 24 가 한 팩 안에 섞여 있다 — 팩 단위 잠금이 아니라 칸 단위다
-        premium: false,
+        // 무료 6 + PRO 24 가 한 팩 안에 섞여 있다 — 잠금은 팩이 아니라 칸 단위다
         animated: true,
         items: ANIMATED_STICKERS.map((a) => ({
           type: 'image', key: a.code, code: a.code, label: a.label, source: a.thumb, premium: a.premium,
@@ -120,7 +116,6 @@ export function StickerPanel({
         key: c.key,
         label: c.label,
         thumb: { type: 'image', source: c.stickers[0].source },
-        premium: false,
         animated: false,
         items: c.stickers.map((i) => ({
           type: 'image', key: i.code, code: i.code, label: i.label, source: i.source, premium: false,
@@ -133,37 +128,13 @@ export function StickerPanel({
         thumb: coupleEmojis[0]
           ? { type: 'uri', uri: coupleEmojis[0].imageUrl }
           : { type: 'icon', name: 'face-woman-shimmer-outline' },
-        premium: false,
         animated: false,
         items: coupleEmojis.map((e) => ({ type: 'couple', key: `couple-${e.id}`, emoji: e })),
       },
     ];
-
-    if (basic) {
-      list.push({
-        key: basic.key,
-        label: basic.label,
-        thumb: { type: 'emoji', value: basic.stickers[0] },
-        premium: false,
-        animated: false,
-        items: basic.stickers.map((s) => ({ type: 'emoji', key: s, value: s, label: `${basic.label} 스티커` })),
-      });
-    }
-    seasonal.forEach((p) => {
-      list.push({
-        key: p.key,
-        label: p.label,
-        thumb: { type: 'emoji', value: p.stickers[0] },
-        premium: p.premium,
-        animated: false,
-        items: p.stickers.map((s) => ({ type: 'emoji', key: s, value: s, label: `${p.label} 스티커` })),
-      });
-    });
-    return list;
   }, [coupleEmojis]);
 
   const active = packs.find((p) => p.key === activeKey) ?? packs[0];
-  const packLocked = active.premium && !premiumAllowed;
 
   const selectPack = (key: string) => {
     setActiveKey(key);
@@ -172,8 +143,6 @@ export function StickerPanel({
 
   const renderThumb = (thumb: PackThumb, selected: boolean) => {
     switch (thumb.type) {
-      case 'emoji':
-        return <Text style={styles.stripEmoji}>{thumb.value}</Text>;
       case 'image':
         return <Image source={thumb.source} style={styles.stripImage} resizeMode="contain" />;
       case 'uri':
@@ -207,9 +176,9 @@ export function StickerPanel({
         </Pressable>
       );
     }
-    if (item.type === 'image') {
-      // 움직이는 이모티콘은 칸마다 PRO 가 갈린다 — 팩 잠금과 칸 잠금을 함께 본다
-      const locked = packLocked || (item.premium && !premiumAllowed);
+    // 남은 갈래는 그림뿐이다 — 움직이는 이모티콘만 칸마다 PRO 가 갈린다
+    {
+      const locked = item.premium && !premiumAllowed;
       return (
         <Pressable
           key={item.key}
@@ -222,17 +191,6 @@ export function StickerPanel({
         </Pressable>
       );
     }
-    return (
-      <Pressable
-        key={item.key}
-        style={({ pressed }) => [styles.cell, packLocked && styles.locked, pressed && styles.pressed]}
-        onPress={() => onSendSticker(item.value, packLocked, item.label)}
-        accessibilityRole="button"
-        accessibilityLabel={`이모지 ${item.value} 보내기${packLocked ? ' — PRO 기능' : ''}`}
-      >
-        <Text style={styles.cellEmoji}>{item.value}</Text>
-      </Pressable>
-    );
   };
 
   return (
@@ -253,39 +211,42 @@ export function StickerPanel({
                 onPress={() => selectPack(p.key)}
                 accessibilityRole="tab"
                 accessibilityState={{ selected }}
-                accessibilityLabel={`${p.label} 팩${p.premium ? ' — PRO 전용' : ''}`}
+                accessibilityLabel={`${p.label} 팩`}
               >
                 {renderThumb(p.thumb, selected)}
                 {/*
-                  재생 배지 · 자물쇠 — 열기 전에 성격을 알 수 있게. 아이콘 자체가 원형이라
-                  받침은 흰 원 하나면 된다(썸네일이 밝으면 아이콘이 묻힌다).
+                  재생 배지 — 열기 전에 성격을 알 수 있게. 아이콘 자체가 원형이라 받침은
+                  흰 원 하나면 된다(썸네일이 밝으면 아이콘이 묻힌다).
                 */}
                 {p.animated ? (
                   <View style={styles.stripBadge}>
                     <MaterialCommunityIcons name="play-circle" size={12} color={colors.textSecondary} />
                   </View>
                 ) : null}
-                {p.premium && !premiumAllowed ? (
-                  <View style={styles.stripBadge}>
-                    <MaterialCommunityIcons name="lock-outline" size={11} color={colors.together} />
-                  </View>
-                ) : null}
               </Pressable>
             );
           })}
+
+          {/*
+           * 스트립 맨 끝 = 유니코드 이모지 진입점. <b>팩이 아니다</b> — 누르면 격자가 바뀌는 게
+           * 아니라 96종 검색 시트가 열린다. 그래서 선택 상태를 갖지 않고, 앞과 줄로 끊는다.
+           *
+           * <p>예전엔 기본 16종 + 시즌 40종을 팩 여섯 칸으로 늘어놨다. 폰 키보드에 이미 있는
+           * 글자를 굳이 팩으로 묶은 것이라 자리만 먹었고, 시즌 팩은 PRO 로 팔기까지 해서
+           * 무료 시트와 12종이 겹치는 사고를 냈다(docs/STICKER_PACK_OVERLAP_2026-09-14.md).
+           * 여섯 칸을 한 칸으로 줄이고, 그 한 칸이 96종 + 한글 검색으로 이어진다.
+           */}
+          <View style={styles.stripDivider} />
+          <Pressable
+            style={styles.stripBtn}
+            onPress={onOpenEmojiSheet}
+            accessibilityRole="button"
+            accessibilityLabel="이모지 — 96종에서 검색으로 찾기"
+          >
+            <MaterialCommunityIcons name="emoticon-outline" size={22} color={colors.textSecondary} />
+          </Pressable>
         </ScrollView>
       </View>
-
-      {/*
-        팩이 통째로 잠겼을 때만 이유를 한 줄 적는다. 스트립 자물쇠만으로는 격자가
-        왜 흐린지 설명이 안 되고, 안 잠긴 팩에까지 이름표를 두면 예전처럼 격자가 밀린다.
-      */}
-      {packLocked ? (
-        <View style={styles.lockedNote}>
-          <MaterialCommunityIcons name="lock-outline" size={12} color={colors.together} />
-          <Text style={styles.lockedNoteText}>{active.label} · PRO 전용</Text>
-        </View>
-      ) : null}
 
       {active.key === COUPLE_PACK && active.items.length === 0 ? (
         /*
@@ -323,21 +284,6 @@ export function StickerPanel({
         </ScrollView>
       )}
 
-      {/*
-       * 96종짜리 이모지 피커(카테고리 6개 + 한글 검색) 진입점 — 기본 이모지 팩에서만.
-       * 예전엔 격자 안 "⋯" 한 칸이라 스티커처럼 생겨서 발견이 안 됐다(2026-09-07 분석).
-       */}
-      {active.key === EMOJI_PACK ? (
-        <Pressable
-          style={({ pressed }) => [styles.moreRow, pressed && styles.pressed]}
-          onPress={onOpenEmojiSheet}
-          accessibilityRole="button"
-          accessibilityLabel="이모지 더 보기 — 검색으로 찾기"
-        >
-          <MaterialCommunityIcons name="magnify" size={18} color={colors.textSecondary} />
-          <Text style={styles.moreText}>이모지 더 보기 · 검색</Text>
-        </Pressable>
-      ) : null}
     </View>
   );
 }
@@ -358,10 +304,15 @@ const styles = themedStyles((colors) => ({
   },
   // 고른 팩만 카드 색으로 떠오른다 — 스트립 바닥(surfaceAlt)과 대비가 나는 유일한 신호다
   stripBtnActive: { backgroundColor: colors.surfaceCard },
-  // lineHeight 를 fontSize 보다 크게 주면 iOS 가 그 여유분을 글리프 위에 몰아 준다(MoodPicker 주석)
-  stripEmoji: { fontSize: 22, lineHeight: 22 },
   stripImage: { width: 28, height: 28 },
   stripAvatar: { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.surfaceCard },
+  // 팩과 "이모지 열기"를 가르는 줄 — 누르면 격자가 바뀌는 것과 시트가 열리는 것은 다른 일이다
+  stripDivider: {
+    width: 1,
+    height: 24,
+    marginHorizontal: spacing.xs,
+    backgroundColor: colors.border,
+  },
   stripBadge: {
     position: 'absolute',
     right: 1,
@@ -373,14 +324,6 @@ const styles = themedStyles((colors) => ({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  lockedNote: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
-  },
-  lockedNoteText: { fontSize: fontSize.caption, fontWeight: '800', color: colors.together },
   scroll: { flex: 1 },
   /*
    * 한 줄 5칸 — 예전엔 8칸(11.5%)이라 그림 이모티콘이 32px 였고 표정이 안 보였다.
@@ -403,7 +346,6 @@ const styles = themedStyles((colors) => ({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cellEmoji: { fontSize: 36, lineHeight: 36 },
   cellImage: { width: '86%', height: '86%' },
   // 우리 이모지는 생성물에 흰 배경이 딸려 오므로 원형으로 잘라 낸다
   coupleCell: { borderRadius: radius.full, overflow: 'hidden', backgroundColor: colors.surfaceAlt },
@@ -432,16 +374,4 @@ const styles = themedStyles((colors) => ({
   },
   emptyTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
   emptyText: { fontSize: fontSize.caption, color: colors.textSecondary, textAlign: 'center' },
-  moreRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xs,
-    minHeight: 44,
-    marginHorizontal: spacing.sm,
-    marginBottom: spacing.xs,
-    borderRadius: radius.md,
-    backgroundColor: colors.surfaceAlt,
-  },
-  moreText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary },
 }));
