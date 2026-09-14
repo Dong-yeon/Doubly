@@ -128,7 +128,6 @@ export const linking: LinkingOptions<RootStackParamList> = {
             screens: {
               HomeMain: '',
               CoupleConnect: 'couple/connect',
-              FeedTimeline: 'feed',
               FeedCompose: 'feed/new',
               DailyQuestion: 'question',
               MiniGames: 'games',
@@ -137,7 +136,6 @@ export const linking: LinkingOptions<RootStackParamList> = {
               Omok: 'game/omok',
               CatchMind: 'game/catch-mind',
               CoupleCalendar: 'calendar',
-              PhotoAlbum: 'album',
               My: 'my',
               Settings: 'settings',
               ChangePassword: 'settings/password',
@@ -192,6 +190,27 @@ export const linking: LinkingOptions<RootStackParamList> = {
                 parse: { placeId: Number },
               },
               PlaceAdd: 'trips/place/edit',
+            },
+          },
+          /*
+           * "우리" 탭 — 홈 스택에 있던 feed·album 경로를 그대로 물려받는다.
+           * 문자열을 유지하는 이유는 배포된 딥링크·푸시 링크(PushLinks)가 계속 열려야 하기
+           * 때문이다(럽바디 블록과 같은 규칙).
+           *
+           * <b>FeedCompose·TripAlbum 은 홈 블록에도 있어 경로를 나눈다.</b> 같은 경로를 두
+           * 블록에 쓰면 새로고침 때 어느 탭으로 복원될지 모호해진다(Home 블록 PlaceDetail 주석).
+           */
+          Album: {
+            initialRouteName: 'AlbumMain',
+            screens: {
+              AlbumMain: 'album',
+              FeedTimeline: 'feed',
+              FeedCompose: 'album/new',
+              Memories: 'memories',
+              TripAlbum: {
+                path: 'album/trips/:tripId',
+                parse: { tripId: Number },
+              },
             },
           },
           Chat: {

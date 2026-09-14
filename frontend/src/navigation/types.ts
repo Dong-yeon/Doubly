@@ -20,12 +20,12 @@ export type OnboardingStackParamList = {
 export type HomeStackParamList = PlaceScreensParamList & {
   HomeMain: undefined;
   CoupleConnect: undefined;
-  // 우리 기록 — 포스트·운동·식단·맛집 통합 타임라인.
-  // 홈에 붙어 있었으나, 기록이 쌓일수록 배경 사진을 덮어서 별도 화면으로 분리했다.
-  // who 를 주면 그 사람 기록만 거른다 — 홈 히어로의 좌/우 열을 누르면 각자의 기록으로 간다
-  // (없으면 기존처럼 둘 다 섞인 전체 타임라인).
-  FeedTimeline: { who?: 'me' | 'partner' } | undefined;
-  // 커플 일상 피드 작성
+  /*
+   * 기록(타임라인)·사진첩·작년 오늘은 <b>"우리" 탭으로 이관됐다</b>
+   * (AlbumStackParamList). 홈에서 갈 때는 탭을 건너뛴다 — 예: 히어로의 좌/우 열은
+   * navigate('Album', { screen: 'FeedTimeline', params: { who }, initial: false }).
+   */
+  // 커플 일상 피드 작성 — 홈의 "일상 남기기"가 여기서 바로 열어야 해서 양쪽 스택에 둔다
   FeedCompose: undefined;
   // 데일리 질문 (커플 Q&A)
   DailyQuestion: undefined;
@@ -39,10 +39,6 @@ export type HomeStackParamList = PlaceScreensParamList & {
   CatchMind: undefined;
   // 커플 캘린더 — 기념일 외 일정·생일·데이트 약속 + D-day 푸시
   CoupleCalendar: undefined;
-  // 우리 사진첩 — 피드 사진 전체 모아보기
-  PhotoAlbum: undefined;
-  // 추억 — 작년 오늘. on 을 주면 그 날짜 기준(생략 시 오늘)
-  Memories: { on?: string } | undefined;
   // MY (구 MY 탭에서 이전) — 홈 헤더 프로필 아이콘으로 진입
   My: undefined;
   // 설정 — 알림·마케팅 수신, 비밀번호 변경, 약관 열람
@@ -232,6 +228,27 @@ export type DietStackParamList = {
  */
 export type HealthStackParamList = DietStackParamList & WorkoutStackParamList;
 
+/*
+ * "우리" 탭 내부 스택 — 지금까지의 우리(docs/ALBUM_TAB_IA_2026-09-14.md 5-3).
+ *
+ * <p>없어진 운동 탭 자리에 들어간다. 사진 그리드가 첫 화면이고, 같은 데이터의 다른 모양인
+ * 타임라인(기록)·여행 앨범·작년 오늘이 그 안에 있다. 홈 스택에 흩어져 있던 세 화면
+ * (FeedTimeline·PhotoAlbum·Memories)을 여기로 모은 것 — 홈은 "오늘의 우리"만 남는다.
+ *
+ * <p>화면 제목에서 '우리' 접두어를 뗀다: 탭이 이미 "우리"라 "우리 > 우리 기록"이 겹친다.
+ */
+export type AlbumStackParamList = {
+  AlbumMain: undefined;
+  /** 기록(구 '우리 기록') — 같은 4소스를 시간순 목록으로. who 로 한 사람만 거를 수 있다 */
+  FeedTimeline: { who?: 'me' | 'partner' } | undefined;
+  /** 일상 남기기 — 홈에서도 열 수 있어 양쪽 스택에 등록된다(HomeStackParamList 참고) */
+  FeedCompose: undefined;
+  /** 작년 오늘 — 홈의 MemoryPeek 카드가 탭을 건너 이 화면으로 보낸다 */
+  Memories: { on?: string } | undefined;
+  /** 여행 앨범 — 홈 스택(여행 상세)에도 같은 화면이 등록돼 있다 */
+  TripAlbum: { tripId: number; title: string };
+};
+
 // 채팅 탭 내부 스택 — 방 목록 / 대화 (CHAT-01/02)
 export type ChatStackParamList = {
   ChatRooms: undefined;
@@ -282,14 +299,16 @@ export type PlaceStackParamList = PlaceScreensParamList & ContentScreensParamLis
 };
 
 /*
- * 2.2 메인 탭 — FAB 없음. 홈 / 채팅 / 럽바디 / 럽슐랭.
+ * 2.2 메인 탭 — FAB 없음. <b>홈 · 우리 · 채팅 · 럽바디 · 럽슐랭</b>
+ * (docs/ALBUM_TAB_IA_2026-09-14.md 5-1).
  *
- * <p>운동·식단 두 탭이 럽바디(Health) 하나로 합쳐진 중간 상태다. 비운 자리에는 "우리"
- * 탭(Album)이 들어와 최종 순서가 <b>홈 · 우리 · 채팅 · 럽바디 · 럽슐랭</b>이 된다
- * (docs/ALBUM_TAB_IA_2026-09-14.md 6절 3단계 — 4탭 상태가 배포되지 않게 함께 병합한다).
+ * <p>운동·식단 두 탭이 럽바디(Health) 하나로 합쳐지고, 비운 자리에 "우리"(Album)가 왔다.
+ * 럽바디가 <b>식단이 있던 4번</b>을 물려받는 이유는 그 탭의 첫 화면이 식단 메인이기
+ * 때문이다(손버릇이 걸린 자리) — 같은 문서 5-1 "탭 순서".
  */
 export type MainTabParamList = {
   Home: NavigatorScreenParams<HomeStackParamList>;
+  Album: NavigatorScreenParams<AlbumStackParamList>;
   Chat: NavigatorScreenParams<ChatStackParamList>;
   Health: NavigatorScreenParams<HealthStackParamList>;
   Place: NavigatorScreenParams<PlaceStackParamList>;

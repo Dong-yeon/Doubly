@@ -6,8 +6,8 @@
  *  운동·식단 탭의 이력: "건강" 한 탭(세그먼트 토글) → 2026-08 두 탭으로 분리
  *  (WorkoutDietSegment 삭제) → 2026-09-14 운동의 조회 빈도가 낮다는 분석으로 다시 한 탭
  *  "럽바디"로 합침. 이번엔 토글이 아니라 <b>식단 메인 + 운동 체크인 카드</b>다.
- *  비운 자리에는 "우리" 탭(Album)이 들어온다 — 그 단계까지 합쳐 병합하므로 이 4탭
- *  상태는 배포되지 않는다(같은 문서 6절). */
+ *  비운 자리에는 "우리" 탭(Album)이 들어왔다 — 일상·식단·운동·맛집 4소스 사진과
+ *  타임라인·여행·작년 오늘을 모은 탭이다. */
 import React, { useEffect } from 'react';
 import { AppState, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,6 +17,7 @@ import { MaterialCommunityIcons } from '../components/Icon';
 import type { MainTabParamList } from './types';
 import { colors, layout, radius, shadow, spacing } from '../constants/theme';
 import { HomeStackNavigator } from './HomeStackNavigator';
+import { AlbumStackNavigator } from './AlbumStackNavigator';
 import { ChatStackNavigator } from './ChatStackNavigator';
 import { HealthStackNavigator } from './HealthStackNavigator';
 import { PlaceStackNavigator } from './PlaceStackNavigator';
@@ -34,6 +35,10 @@ type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 const TAB_META: Record<keyof MainTabParamList, { label: string; icon: IconName }> = {
   Home: { label: '홈', icon: 'heart-multiple-outline' },
+  // 일상·식단·운동·맛집 사진 + 타임라인·여행·작년 오늘. "앨범"은 사진 그리드만
+  // 기대하게 해서 내용을 좁힌다 — 홈이 "오늘의 우리", 이 탭이 "지금까지의 우리"다.
+  // 라벨이 추상적인 만큼 아이콘이 뜻을 붙잡아야 해서 사진 계열을 유지한다.
+  Album: { label: '우리', icon: 'image-multiple-outline' },
   Chat: { label: '채팅', icon: 'chat-outline' },
   // 식단 + 운동. "건강"은 정확하지만 트래커 어휘라 럽슐랭 옆에서 톤이 어긋났다 —
   // 같은 접두어로 묶어 둘을 하나의 계열로 읽히게 했다(ALBUM_TAB_IA_2026-09-14.md 5-1).
@@ -229,8 +234,9 @@ export function MainTabNavigator() {
       screenOptions={{ headerShown: false, tabBarPosition: rail ? 'left' : 'bottom' }}
       tabBar={(props) => <CustomTabBar {...props} />}
     >
-      {/* 순서: 최종 형태에서 Home 다음에 Album("우리")이 들어온다 — 3단계 참고 */}
+      {/* 홈 · 우리 · 채팅 · 럽바디 · 럽슐랭 (ALBUM_TAB_IA_2026-09-14.md 5-1 "탭 순서") */}
       <Tab.Screen name="Home" component={HomeStackNavigator} />
+      <Tab.Screen name="Album" component={AlbumStackNavigator} />
       <Tab.Screen name="Chat" component={ChatStackNavigator} />
       <Tab.Screen name="Health" component={HealthStackNavigator} />
       <Tab.Screen name="Place" component={PlaceStackNavigator} />

@@ -10,7 +10,7 @@ import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { HomeStackParamList } from '../../navigation/types';
+import type { AlbumStackParamList } from '../../navigation/types';
 import { Alert } from '../../utils/alert';
 import { EmptyState } from '../../components/EmptyState';
 import { FeedCard } from '../home/components/FeedCard';
@@ -25,7 +25,7 @@ import type { FeedItem } from '../../types';
 import { colors, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 
-type Props = NativeStackScreenProps<HomeStackParamList, 'FeedTimeline'>;
+type Props = NativeStackScreenProps<AlbumStackParamList, 'FeedTimeline'>;
 
 export const QUICK_EMOJIS = ['❤️', '🥰', '😆', '👍', '💪'];
 

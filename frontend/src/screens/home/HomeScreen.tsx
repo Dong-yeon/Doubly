@@ -639,7 +639,13 @@ export function HomeScreen({ navigation }: Props) {
                   // 예전엔 어느 열을 눌러도 똑같이 전체 '우리 기록'으로 갔다 —
                   // 그 화면은 바로 아래 바로가기에도 있어 버튼 기능이 겹쳤다.
                   // 열을 누르면 그 사람 기록만 거른 화면으로 간다.
-                  onPressPerson={(who) => navigation.navigate('FeedTimeline', { who })}
+                  /*
+                   * 기록은 "우리" 탭으로 이관됐다 — 탭을 건너뛰되 initial:false 로 그 탭의
+                   * 첫 화면(AlbumMain)을 아래에 깔아 뒤로가기가 탭 안에 남게 한다.
+                   */
+                  onPressPerson={(who) =>
+                    navigation.navigate('Album', { screen: 'FeedTimeline', params: { who }, initial: false })
+                  }
                   /*
                    * 운동/식단 칩 — 예전엔 중앙 FAB 로 "탭 안 옮기고 바로 기록"이 가능했다.
                    * FAB 를 없앤 대신 이 칩이 그 역할을 물려받았고, 아래 분기가 그 약속을 지킨다.
@@ -696,7 +702,14 @@ export function HomeScreen({ navigation }: Props) {
                     upgradeMessage="작년 오늘의 추억은 PRO에서 볼 수 있어요."
                   />
                 ) : (
-                  <MemoryPeek memories={memories} onPress={() => navigation.navigate('Memories')} />
+                  /* 카드는 홈에 그대로 둔다(희소 콘텐츠라 홈 노출이 발견성에 유리) —
+                     화면만 "우리" 탭으로 옮겨가 탭을 건너뛴다 */
+                  <MemoryPeek
+                    memories={memories}
+                    onPress={() =>
+                      navigation.navigate('Album', { screen: 'Memories', initial: false })
+                    }
+                  />
                 )
               ) : homeTrip && isTripLive(homeTrip) ? (
                 <TripPeek
@@ -717,13 +730,16 @@ export function HomeScreen({ navigation }: Props) {
                 유일한 길이다(CoupleCalendarScreen).
 
                 내린 것들이 닿는 길: 질문·게임은 전용 푸시 링크(PushLinks.QUESTION·
-                GAME_SUDOKU·GAME_OMOK)와 딥링크, 사진첩은 딥링크('album'), 여행은 캘린더
-                안의 링크, 터치는 <b>채팅 트레이</b>(2026-09-12 이동 — ChatRoomScreen 의
-                sendTouch 주석). 홈은 터치를 <b>받는 곳</b>으로는 남는다(onIncomingTouch).
+                GAME_SUDOKU·GAME_OMOK)와 딥링크, 여행은 캘린더 안의 링크, 터치는
+                <b>채팅 트레이</b>(2026-09-12 이동 — ChatRoomScreen 의 sendTouch 주석).
+                홈은 터치를 <b>받는 곳</b>으로는 남는다(onIncomingTouch).
+
+                '우리 기록'·'사진첩'은 2026-09-14 에 <b>"우리" 탭</b>이 생겨 여기서 뺐다 —
+                탭바에 상시 자리가 있으니 바로가기로 중복시킬 이유가 없다. 남은 '일상'은
+                피드 쓰기의 유일한 진입점이라 그대로 둔다(우리 탭 헤더의 + 와 두 곳).
               */}
               <QuickActions
                 actions={[
-                  { icon: 'timeline-text-outline', label: '우리 기록', onPress: () => navigation.navigate('FeedTimeline') },
                   { icon: 'image-plus', label: '일상', onPress: () => navigation.navigate('FeedCompose') },
                   { icon: 'calendar-heart', label: '캘린더', onPress: () => navigation.navigate('CoupleCalendar') },
                 ]}

@@ -12,7 +12,7 @@ import { SectionList, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { HomeStackParamList } from '../../navigation/types';
+import type { AlbumStackParamList } from '../../navigation/types';
 import { EmptyState } from '../../components/EmptyState';
 import { FeedCard } from '../home/components/FeedCard';
 import { QUICK_EMOJIS, feedItemKey, feedTimeLabel } from './FeedTimelineScreen';
@@ -24,7 +24,7 @@ import type { FeedItem, MemoryGroup } from '../../types';
 import { colors, fontSize, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 
-type Props = NativeStackScreenProps<HomeStackParamList, 'Memories'>;
+type Props = NativeStackScreenProps<AlbumStackParamList, 'Memories'>;
 
 interface Section {
   title: string;

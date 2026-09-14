@@ -119,12 +119,22 @@ export interface User {
 }
 
 // 전체 사진첩 — 사진 있는 피드 포스트 모아보기
+/**
+ * 사진첩이 모으는 소스 — 타임라인의 FeedItemType 중 "우리가 찍은 사진"이 달리는 넷.
+ * 관람 기록(CONTENT_LOG)은 이미지가 포스터라 제외한다(서버 PHOTO_SOURCES 와 같은 목록).
+ */
+export type FeedPhotoSource = 'POST' | 'MEAL' | 'WORKOUT' | 'PLACE_VISIT';
+
 export interface FeedPhoto {
-  postId: number;
+  /** 어느 기록에서 온 사진인지 — 상단 필터 칩과 뷰어 캡션의 성격을 가른다 */
+  type: FeedPhotoSource;
+  /** 원본 기록의 id. 같은 type 안에서만 유일하다 — 키는 `${type}:${refId}` 로 만든다 */
+  refId: number;
   imageUrl: string;
-  /** 이 포스트의 사진 전체 목록([0]이 imageUrl과 같은 값). 그리드 칸은 여전히 대표 사진 하나만 쓴다 */
+  /** 이 기록의 사진 전체 목록([0]이 imageUrl과 같은 값). 여러 장은 일상 포스트만 가능 */
   imageUrls?: string[] | null;
-  content?: string | null;
+  /** 뷰어 하단 한 줄 설명 — 서버가 타임라인 카드의 제목·부제로 만든다 */
+  caption?: string | null;
   authorName: string;
   mine: boolean;
   /** 여행 앨범에 담긴 사진이면 그 여행 id */
