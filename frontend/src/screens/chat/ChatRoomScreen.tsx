@@ -74,7 +74,7 @@ import { isGoalShareContent } from '../../utils/dietShare';
 import { touchGestureOf } from '../../constants/touchGestures';
 import { callCardLabel, parseCallCard } from '../../utils/callCard';
 import { ANIMATED_STICKERS, animatedStickerOf } from '../../constants/animatedStickers';
-import { STICKER_IMAGES, stickerImageOf } from '../../constants/stickerImages';
+import { STICKER_CHARACTERS, stickerImageOf } from '../../constants/stickerImages';
 import { STICKER_PACKS } from '../../constants/stickerPacks';
 import { useCoupleEmojiStore } from '../../store/coupleEmojiStore';
 import { playTouchGesture } from '../../utils/haptics';
@@ -1768,19 +1768,30 @@ export function ChatRoomScreen({ navigation, route }: Props) {
                     </React.Fragment>
                   );
                 })}
-                <View style={styles.stickerPackLabel}>
-                  <Text style={styles.stickerPackLabelText}>캐릭터</Text>
-                </View>
-                {STICKER_IMAGES.map((img) => (
-                  <Pressable
-                    key={img.code}
-                    style={({ pressed }) => [styles.stickerBtn, pressed && styles.iconPressed]}
-                    onPress={() => sendSticker(img.code, false, '이모티콘')}
-                    accessibilityRole="button"
-                    accessibilityLabel={`이모티콘 ${img.label} 보내기`}
-                  >
-                    <Image source={img.source} style={styles.stickerBtnImage} resizeMode="contain" />
-                  </Pressable>
+                {/*
+                 * 캐릭터마다 제 이름표를 단다 — "캐릭터" 하나로 묶어 두면 곰돌이와 비개구리가
+                 * 이어 붙어, 같은 감정(신났어·하하하·시무룩·화났어·엉엉·잘자)이 그림만 바뀐 채
+                 * 두 번씩 나오는 것으로 보인다. 구획을 만드는 건 카탈로그 쪽이다
+                 * (constants/stickerImages.ts 의 STICKER_CHARACTERS) — 캐릭터가 늘어도 여기는
+                 * 그대로 둔다.
+                 */}
+                {STICKER_CHARACTERS.map((ch) => (
+                  <React.Fragment key={ch.key}>
+                    <View style={styles.stickerPackLabel}>
+                      <Text style={styles.stickerPackLabelText}>{ch.label}</Text>
+                    </View>
+                    {ch.stickers.map((img) => (
+                      <Pressable
+                        key={img.code}
+                        style={({ pressed }) => [styles.stickerBtn, pressed && styles.iconPressed]}
+                        onPress={() => sendSticker(img.code, false, '이모티콘')}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${ch.label} 이모티콘 ${img.label} 보내기`}
+                      >
+                        <Image source={img.source} style={styles.stickerBtnImage} resizeMode="contain" />
+                      </Pressable>
+                    ))}
+                  </React.Fragment>
                 ))}
               </ScrollView>
             )}
