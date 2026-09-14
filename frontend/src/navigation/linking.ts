@@ -135,6 +135,7 @@ export const linking: LinkingOptions<RootStackParamList> = {
               // 푸시 data.link = PushLinks.GAME_SUDOKU / GAME_OMOK
               Sudoku: 'game/sudoku',
               Omok: 'game/omok',
+              CatchMind: 'game/catch-mind',
               CoupleCalendar: 'calendar',
               PhotoAlbum: 'album',
               My: 'my',
