@@ -6,7 +6,8 @@
  * 순수 View/Text 로 그린다 — SVG·Skia 없음.
  */
 import React, { useCallback, useMemo, useState } from 'react';
-import { FlatList, Pressable, Text, View, useWindowDimensions } from 'react-native';
+import { FlatList, Pressable, Text, View } from 'react-native';
+import { useContentWidth } from '../../hooks/useContentWidth';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -44,7 +45,7 @@ const DIGITS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 let moveSeq = 0;
 
 export function SudokuScreen(_: Props) {
-  const { width } = useWindowDimensions();
+  const width = useContentWidth();
   const relationId = useRelationStore((s) => s.couple?.id);
 
   const [game, setGame] = useState<SudokuGame | null>(null);

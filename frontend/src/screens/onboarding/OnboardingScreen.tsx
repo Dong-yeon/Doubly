@@ -12,9 +12,9 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  useWindowDimensions,
   View,
 } from 'react-native';
+import { useContentWidth } from '../../hooks/useContentWidth';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -63,7 +63,7 @@ const SLIDES: Slide[] = [
 ];
 
 export function OnboardingScreen({ navigation }: Props) {
-  const { width } = useWindowDimensions();
+  const width = useContentWidth();
   const listRef = useRef<FlatList<Slide>>(null);
   const [index, setIndex] = useState(0);
   const isLast = index === SLIDES.length - 1;
