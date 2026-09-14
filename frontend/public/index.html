@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<!--
+  Expo 웹 HTML 템플릿.
+
+  @expo/cli 의 기본 템플릿(static/template/index.html)을 그대로 옮기고 <head> 에
+  manifest 링크만 더했다 — Expo 는 public/index.html 이 있으면 그것을 템플릿으로 쓴다
+  (start/server/webTemplate.js getTemplateIndexHtmlAsync). 아래 퍼센트 표시 자리(언어
+  코드·제목) 치환과 script/theme-color/description 주입은 CLI 가 하므로 건드리지 않는다.
+
+  주의: CLI 는 String.replace 로 <b>첫 번째 한 곳만</b> 바꾼다. 이 주석에 그 표시를
+  그대로 적었더니 주석이 치환되고 정작 html/title 은 자리표시자인 채로 나갔다.
+
+  Metro 웹 export 는 manifest.json 을 만들어 주지 않는다(구 webpack 시절 기능). 그래서
+  manifest 는 public/manifest.json 에 손으로 두고 여기서 링크한다 — 이게 있어야 크롬
+  "앱 설치"로 주소창 없는 별도 창이 열린다(설치 파일은 필요 없다).
+  docs/PC_APP_ANALYSIS_2026-09-14.md 7절.
+
+  Expo SDK 를 올릴 때 기본 템플릿이 바뀌면 이 파일도 맞춰야 한다.
+-->
+<html lang="%LANG_ISO_CODE%">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <title>%WEB_TITLE%</title>
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
+    <style id="expo-reset">
+      /* These styles make the body full-height */
+      html,
+      body {
+        height: 100%;
+      }
+      /* These styles disable body scrolling if you are using <ScrollView> */
+      body {
+        overflow: hidden;
+      }
+      /* These styles make the root element full-height */
+      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+      }
+    </style>
+  </head>
+
+  <body>
+    <!-- Use static rendering with Expo Router to support running without JavaScript. -->
+    <noscript>
+      You need to enable JavaScript to run this app.
+    </noscript>
+    <!-- The root element for your Expo app. -->
+    <div id="root"></div>
+  </body>
+</html>

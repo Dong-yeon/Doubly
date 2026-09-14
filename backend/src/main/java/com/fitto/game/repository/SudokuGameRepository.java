@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -17,6 +18,12 @@ public interface SudokuGameRepository extends JpaRepository<SudokuGame, Long> {
     Optional<SudokuGame> findFirstByCoupleIdAndStatusOrderByCreatedAtDesc(Long coupleId, GameStatus status);
 
     List<SudokuGame> findTop20ByCoupleIdAndStatusOrderByCompletedAtDesc(Long coupleId, GameStatus status);
+
+    /**
+     * 그 날의 "오늘의 판" — 접고 다시 여는 것을 허용하므로 하루에 여러 행이 나올 수 있다.
+     * 최신순이라 호출자는 완료 여부만 보면 된다.
+     */
+    List<SudokuGame> findByCoupleIdAndDailyDateOrderByCreatedAtDesc(Long coupleId, LocalDate dailyDate);
 
     /**
      * 행 잠금 재조회 (SELECT ... FOR UPDATE) — 칸 입력 직렬화용.

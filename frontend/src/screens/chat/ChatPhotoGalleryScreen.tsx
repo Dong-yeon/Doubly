@@ -11,8 +11,8 @@ import {
   Pressable,
   RefreshControl,
   View,
-  useWindowDimensions,
 } from 'react-native';
+import { useContentWidth } from '../../hooks/useContentWidth';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { ChatStackParamList } from '../../navigation/types';
@@ -34,7 +34,7 @@ const GAP = 2;
 
 export function ChatPhotoGalleryScreen({ route }: Props) {
   const { relationId, myId } = route.params;
-  const { width: windowWidth } = useWindowDimensions();
+  const windowWidth = useContentWidth();
   const CELL = useMemo(() => (windowWidth - GAP * (COLUMNS - 1)) / COLUMNS, [windowWidth]);
 
   const [photos, setPhotos] = useState<ChatMessage[]>([]);

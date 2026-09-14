@@ -24,6 +24,12 @@ public record FeedItemResponse(
         String imageUrl,
         LocalDateTime occurredAt,
         List<ReactionSummary> reactions,
-        List<String> imageUrls
+        List<String> imageUrls,
+        /**
+         * 데이트 식단(같이 먹기)으로 남긴 기록인지 — MEAL 타입에서만 참이 될 수 있다.
+         * 타임라인은 이런 끼니를 커플 한쪽 카드로 합쳐 내리므로({@code FeedService.timeline}),
+         * 화면은 "누가" 대신 "둘이 함께"로 읽어야 한다.
+         */
+        boolean shared
 ) {
 }

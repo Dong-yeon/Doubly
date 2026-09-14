@@ -18,6 +18,7 @@ import { PushPermissionPrimer } from '../components/PushPermissionPrimer';
 import { ConsentGateScreen } from '../screens/onboarding/ConsentGateScreen';
 import { useAuthStore } from '../store/authStore';
 import { useThemeStore } from '../store/themeStore';
+import { useChatThemeStore } from '../store/chatThemeStore';
 import { colors } from '../constants/theme';
 import { isDarkMode } from '../theme';
 
@@ -82,6 +83,9 @@ export function RootNavigator() {
   useEffect(() => {
     bootstrap();
     void useThemeStore.getState().load();
+    // 채팅 배경은 ChatRoomScreen 만 쓰지만, 그 화면이 열리기 전(스플래시 단계)에
+    // 미리 읽어 둬야 처음 들어갔을 때 기본색이 한 번 스쳤다 바뀌지 않는다
+    void useChatThemeStore.getState().load();
   }, [bootstrap]);
 
   if (isLoading) {

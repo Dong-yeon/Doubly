@@ -136,6 +136,84 @@ class OmokFlowTest {
     }
 
     @Test
+    void 수_이력이_둔_순서대로_쌓인다() {
+        Long a = register("ma");
+        Long b = register("mb");
+        connectCouple(a, b);
+        OmokGameResponse game = omokService.start(a);
+
+        omokService.place(b, game.id(), at(7, 7));
+        OmokGameResponse after = omokService.place(a, game.id(), at(8, 8));
+
+        assertThat(after.moves()).containsExactly(at(7, 7), at(8, 8));
+        // 복기는 순번의 홀짝으로 색을 정한다 — 0번째(첫 수)가 흑(b), 1번째가 백(a)
+        assertThat(omokService.current(b).moves()).containsExactly(at(7, 7), at(8, 8));
+    }
+
+    @Test
+    void 무르기는_직전에_둔_사람만_걸_수_있고_상대가_받아야_되돌아간다() {
+        Long a = register("ua");
+        Long b = register("ub");
+        connectCouple(a, b);
+        OmokGameResponse game = omokService.start(a);
+
+        // 아직 아무도 두지 않았으면 무를 것이 없다
+        assertThatThrownBy(() -> omokService.requestUndo(b, game.id()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.GAME_UNDO_NOT_ALLOWED);
+
+        omokService.place(b, game.id(), at(7, 7));
+        // 이제 차례인 a 는 자기가 둔 수가 없으므로 걸 수 없다
+        assertThat(omokService.current(a).canUndo()).isFalse();
+        assertThatThrownBy(() -> omokService.requestUndo(a, game.id()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.GAME_UNDO_NOT_ALLOWED);
+
+        OmokGameResponse asked = omokService.requestUndo(b, game.id());
+        assertThat(asked.undoRequest()).isEqualTo("MINE");
+        assertThat(omokService.current(a).undoRequest()).isEqualTo("PARTNER");
+        // 내가 건 무르기는 내가 받을 수 없다
+        assertThatThrownBy(() -> omokService.respondUndo(b, game.id(), true))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.GAME_UNDO_NOT_YOURS);
+
+        OmokGameResponse undone = omokService.respondUndo(a, game.id(), true);
+        assertThat(undone.stones()).matches("0{225}");
+        assertThat(undone.moves()).isEmpty();
+        assertThat(undone.lastMove()).isNull();
+        assertThat(undone.undoRequest()).isNull();
+        assertThat(undone.myTurn()).isFalse();                  // 무른 b 에게 차례가 돌아갔다
+        assertThat(omokService.current(b).myTurn()).isTrue();
+    }
+
+    @Test
+    void 무르기를_거절하면_판은_그대로고_그냥_두면_요청이_사라진다() {
+        Long a = register("na");
+        Long b = register("nb");
+        connectCouple(a, b);
+        OmokGameResponse game = omokService.start(a);
+
+        omokService.place(b, game.id(), at(7, 7));
+        omokService.requestUndo(b, game.id());
+        OmokGameResponse refused = omokService.respondUndo(a, game.id(), false);
+        assertThat(refused.undoRequest()).isNull();
+        assertThat(refused.stones().charAt(at(7, 7))).isEqualTo('P');
+        assertThat(refused.myTurn()).isTrue();
+
+        assertThatThrownBy(() -> omokService.respondUndo(a, game.id(), true))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.GAME_UNDO_NOT_REQUESTED);
+
+        // 상대가 걸어둔 무르기를 두고 그냥 두면 그것도 거절이다
+        omokService.place(a, game.id(), at(8, 8));
+        omokService.requestUndo(a, game.id());
+        assertThat(omokService.current(b).undoRequest()).isEqualTo("PARTNER");
+        OmokGameResponse played = omokService.place(b, game.id(), at(9, 9));
+        assertThat(played.undoRequest()).isNull();
+        assertThat(played.stones().charAt(at(8, 8))).isEqualTo('P');   // a 의 수는 그대로 남는다
+    }
+
+    @Test
     void 스도쿠와_오목은_같은_테이블에서_서로_섞이지_않는다() {
         Long a = register("xa");
         Long b = register("xb");

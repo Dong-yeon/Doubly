@@ -35,7 +35,12 @@ import { tripApi } from '../../api/trip';
 import { tripStatusLabel } from '../trip/TripListScreen';
 import { toast } from '../../store/toastStore';
 import { getErrorMessage } from '../../utils/error';
-import type { CalendarEventType, CoupleCalendarEvent, Trip } from '../../types';
+import type {
+  CalendarDateMeal,
+  CalendarEventType,
+  CoupleCalendarEvent,
+  Trip,
+} from '../../types';
 import { confirmDiscard } from '../../utils/discardGuard';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
@@ -112,6 +117,12 @@ export function CoupleCalendarScreen({ navigation }: Props) {
    * TripListScreen 이 같은 이유로 "실패해도 목록은 비우지 않는다"를 지킨다.
    */
   const [tripsLoaded, setTripsLoaded] = useState(false);
+  /*
+   * 데이트 기록 — 장소가 연결된 데이트 식단. 일정과 달리 여기서 만들거나 지우지 않는다
+   * (원본은 식단 기록이고 이 화면은 겹쳐 그리기만 한다 — 여행 띠와 같은 방식).
+   * 여행과 달리 월 단위로 받는다: 식단은 여행보다 훨씬 자주 쌓여 전체를 들고 있을 이유가 없다.
+   */
+  const [dateMeals, setDateMeals] = useState<CalendarDateMeal[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
   const [saving, setSaving] = useState(false);
@@ -150,7 +161,27 @@ export function CoupleCalendarScreen({ navigation }: Props) {
     }
   }, []);
 
+  /*
+   * 데이트 기록은 일정과 따로 받는다 — 소스가 다르고(식단+장소), 실패해도 일정 표시를
+   * 막으면 안 된다. 같은 요청 토큰을 쓰면 둘 중 하나의 지연이 다른 쪽을 버리게 되므로
+   * 토큰도 따로 둔다. 실패 시 조용히 비운다: 이 화면의 주인공은 일정이고, 오버레이가
+   * 없다고 재시도를 권하면 정작 보러 온 일정 위에 에러가 얹힌다.
+   */
+  const latestMealRequestRef = useRef(0);
+  const loadDateMeals = useCallback(async (y: number, m: number) => {
+    const requestId = ++latestMealRequestRef.current;
+    try {
+      const data = await calendarApi.dateMeals(y, m);
+      if (latestMealRequestRef.current !== requestId) return;
+      setDateMeals(data);
+    } catch {
+      if (latestMealRequestRef.current !== requestId) return;
+      setDateMeals([]);
+    }
+  }, []);
+
   useFocusEffect(useCallback(() => void load(year, month), [load, year, month]));
+  useFocusEffect(useCallback(() => void loadDateMeals(year, month), [loadDateMeals, year, month]));
 
   // 여행은 월 이동과 무관하게 전체를 받는다.
   // 성공했을 때만 목록을 갈아끼운다 — 실패(일시적 네트워크 오류 등)면 직전 목록을 그대로 둔다.
@@ -241,6 +272,17 @@ export function CoupleCalendarScreen({ navigation }: Props) {
   const listTrips = selectedDate
     ? monthTrips.filter((t) => t.startDate <= selectedDate && selectedDate <= t.endDate)
     : monthTrips;
+
+  /** 데이트 기록이 있는 날짜 집합 — 셀마다 배열을 훑지 않게 미리 편다(tripDays 와 같은 이유) */
+  const dateMealDays = useMemo(
+    () => new Set(dateMeals.map((m) => m.date)),
+    [dateMeals],
+  );
+
+  // 날짜를 고르면 그 날 기록만, 아니면 이번 달 전부
+  const listDateMeals = selectedDate
+    ? dateMeals.filter((m) => m.date === selectedDate)
+    : dateMeals;
 
   /*
    * 모달을 연 시점의 폼 스냅샷 — 백드롭으로 닫을 때 "달라진 게 있는지"를 판단한다.
@@ -402,6 +444,11 @@ export function CoupleCalendarScreen({ navigation }: Props) {
                         style={[styles.dot, { backgroundColor: typeMeta(e.eventType).color }]}
                       />
                     ))}
+                    {/*
+                      데이트 기록은 <b>속이 빈 점</b>으로 그린다 — 채워진 점(앞으로 있을 일정)과
+                      한눈에 갈라져야 한다. 색까지 달리하면 일정 종류 색과 섞여 범례가 늘어난다.
+                    */}
+                    {dateMealDays.has(dateStr) ? <View style={styles.dotRecord} /> : null}
                   </View>
                   {/* 여행 기간 띠 — 셀 폭을 꽉 채워 연속된 날끼리 이어져 보인다 */}
                   <View style={[styles.tripBar, inTrip && styles.tripBarOn]} />
@@ -460,6 +507,50 @@ export function CoupleCalendarScreen({ navigation }: Props) {
             </TouchableOpacity>
           ))
         )}
+
+        {/*
+          데이트 기록 — 장소가 연결된 데이트 식단. 없으면 섹션째 숨긴다: 여행처럼 여기서
+          만들 수 있는 게 아니라(식단 탭에서 "같이 먹기"로 남긴다) 빈 상태를 보여줘도
+          할 일이 없고, 화면만 길어진다.
+        */}
+        {listDateMeals.length > 0 ? (
+          <>
+            <View style={styles.listHeader}>
+              <Text style={styles.listTitle}>
+                {selectedDate ? `${Number(selectedDate.slice(8, 10))}일 데이트` : '이번 달 데이트'}
+              </Text>
+            </View>
+            {listDateMeals.map((meal) => (
+              <TouchableOpacity
+                key={meal.mealId}
+                activeOpacity={0.8}
+                onPress={() =>
+                  navigation.navigate('PlaceDetail', { placeId: meal.placeId, name: meal.placeName })
+                }
+              >
+                <Card elevation="sm" style={styles.eventCard}>
+                  <View style={[styles.typeBar, { backgroundColor: colors.violet }]} />
+                  <View style={styles.eventBody}>
+                    <View style={styles.eventTitleRow}>
+                      <Text style={styles.eventTitle} numberOfLines={1}>
+                        🍽 {meal.placeName}
+                      </Text>
+                      {meal.lovelichelinTier ? (
+                        <View style={styles.ddayBadge}>
+                          <Text style={styles.ddayText}>{'★'.repeat(meal.lovelichelinTier)}</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    <Text style={styles.eventMeta}>
+                      {/* 날짜를 고른 상태면 헤더가 이미 그 날을 말하고 있다 */}
+                      {selectedDate ? meal.title : `${Number(meal.date.slice(8, 10))}일 · ${meal.title}`}
+                    </Text>
+                  </View>
+                </Card>
+              </TouchableOpacity>
+            ))}
+          </>
+        ) : null}
 
         {/* 일정 목록 */}
         <View style={styles.listHeader}>
@@ -719,6 +810,14 @@ const styles = themedStyles((colors) => ({
   todayText: { color: colors.white, fontWeight: '800' },
   dotRow: { flexDirection: 'row', gap: 3, height: 6, marginTop: 2 },
   dot: { width: 6, height: 6, borderRadius: 3 },
+  // 지난 기록 — 속이 빈 점. 앞으로 있을 일정(채워진 점)과 갈라 읽힌다
+  dotRecord: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    borderWidth: 1.5,
+    borderColor: colors.violet,
+  },
 
   listHeader: {
     flexDirection: 'row',

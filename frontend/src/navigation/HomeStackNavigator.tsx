@@ -14,6 +14,7 @@ import { DailyQuestionScreen } from '../screens/home/DailyQuestionScreen';
 import { MiniGamesScreen } from '../screens/home/MiniGamesScreen';
 import { SudokuScreen } from '../screens/home/SudokuScreen';
 import { OmokScreen } from '../screens/home/OmokScreen';
+import { CatchMindScreen } from '../screens/home/CatchMindScreen';
 import { CoupleCalendarScreen } from '../screens/home/CoupleCalendarScreen';
 import { PhotoAlbumScreen } from '../screens/feed/PhotoAlbumScreen';
 import { MemoriesScreen } from '../screens/feed/MemoriesScreen';
@@ -64,6 +65,7 @@ export function HomeStackNavigator() {
       <Stack.Screen name="MiniGames" component={MiniGamesScreen} options={{ title: '미니게임' }} />
       <Stack.Screen name="Sudoku" component={SudokuScreen} options={{ title: '협동 스도쿠' }} />
       <Stack.Screen name="Omok" component={OmokScreen} options={{ title: '오목' }} />
+      <Stack.Screen name="CatchMind" component={CatchMindScreen} options={{ title: '캐치마인드' }} />
       <Stack.Screen name="CoupleCalendar" component={CoupleCalendarScreen} options={{ title: '커플 캘린더' }} />
       <Stack.Screen name="PhotoAlbum" component={PhotoAlbumScreen} options={{ title: '우리 사진첩' }} />
       <Stack.Screen name="Memories" component={MemoriesScreen} options={{ title: '추억' }} />

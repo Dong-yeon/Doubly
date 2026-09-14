@@ -35,6 +35,8 @@ export type HomeStackParamList = PlaceScreensParamList & {
   Sudoku: undefined;
   // 오목 — 번갈아 두는 5목. 판을 연 사람이 백(후공)
   Omok: undefined;
+  // 캐치마인드 — 한 명이 그리고 한 명이 맞힌다(비동기). docs/CATCH_MIND_2026-09-14.md
+  CatchMind: undefined;
   // 커플 캘린더 — 기념일 외 일정·생일·데이트 약속 + D-day 푸시
   CoupleCalendar: undefined;
   // 우리 사진첩 — 피드 사진 전체 모아보기

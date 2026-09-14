@@ -110,6 +110,14 @@ public enum ErrorCode {
     GAME_CELL_FIXED(HttpStatus.BAD_REQUEST, "처음부터 주어진 숫자는 바꿀 수 없어요."),
     GAME_NOT_YOUR_TURN(HttpStatus.CONFLICT, "지금은 상대 차례예요."),
     GAME_CELL_OCCUPIED(HttpStatus.BAD_REQUEST, "이미 돌이 놓인 자리예요."),
+    GAME_UNDO_NOT_ALLOWED(HttpStatus.CONFLICT, "지금은 무르기를 부탁할 수 없어요."),
+    GAME_UNDO_NOT_REQUESTED(HttpStatus.CONFLICT, "무르기 요청이 없어요."),
+    GAME_UNDO_NOT_YOURS(HttpStatus.CONFLICT, "내가 건 무르기는 내가 받을 수 없어요."),
+    GAME_DAILY_ALREADY_DONE(HttpStatus.CONFLICT, "오늘의 판은 이미 마쳤어요. 내일 새 판이 열려요."),
+    GAME_DRAWING_INVALID(HttpStatus.BAD_REQUEST, "그림을 보내지 못했어요. 다시 그려볼까요?"),
+    /* 그린 사람이 자기 문제를 맞히는 것 — 앱에서는 버튼이 아예 없지만 API 로는 올 수 있다 */
+    GAME_NOT_GUESSER(HttpStatus.CONFLICT, "내가 낸 문제는 내가 맞힐 수 없어요."),
+    GAME_ALREADY_DRAWING(HttpStatus.CONFLICT, "상대가 아직 맞히는 중이에요. 이 판이 끝나면 새로 낼 수 있어요."),
     // 사진 관련 — 원인별로 분리해 어떤 문제인지 바로 보이게 한다
     INVALID_PHOTO_URL(HttpStatus.BAD_REQUEST, "앱에서 촬영·선택해 올린 사진만 분석할 수 있어요."),
     PHOTO_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "사진 용량이 너무 커요 (최대 10MB). 더 작은 사진으로 시도해주세요."),
@@ -118,6 +126,8 @@ public enum ErrorCode {
 
     // 바코드 식품 DB 조회 (FOOD-DB)
     FOOD_DB_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "바코드 조회 기능이 아직 준비되지 않았어요."),
+    // 현재는 쓰이지 않는다 — 바코드 조회 자체가 비활성이다(FoodDbClient.lookup 주석 참고).
+    // 바코드 경로를 되살리면 다시 쓰인다. 그때까지 이 문구가 뜨면 잘못 쓴 것이다.
     FOOD_DB_NOT_FOUND(HttpStatus.NOT_FOUND, "등록되지 않은 바코드예요. 직접 입력해주세요."),
     FOOD_DB_LOOKUP_FAILED(HttpStatus.BAD_GATEWAY, "바코드 조회에 실패했어요. 잠시 후 다시 시도해주세요."),
 

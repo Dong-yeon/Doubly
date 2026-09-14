@@ -10,9 +10,9 @@ import {
   Pressable,
   RefreshControl,
   StyleSheet,
-  useWindowDimensions,
   View,
 } from 'react-native';
+import { useContentWidth } from '../../hooks/useContentWidth';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../navigation/types';
@@ -35,8 +35,8 @@ const GAP = 2;
 
 export function PhotoAlbumScreen(_props: Props) {
   // Dimensions.get() 은 정적 스냅샷이라 회전·창 크기 변경에 반응하지 않았다.
-  // useWindowDimensions 는 매 렌더마다 최신 width 를 주므로 그 값으로 다시 계산한다.
-  const { width: windowWidth } = useWindowDimensions();
+  // useContentWidth 는 매 렌더마다 최신 폭(웹은 셸 폭)을 주므로 그 값으로 다시 계산한다.
+  const windowWidth = useContentWidth();
   const CELL = useMemo(() => (windowWidth - GAP * (COLUMNS - 1)) / COLUMNS, [windowWidth]);
 
   const [photos, setPhotos] = useState<FeedPhoto[]>([]);
@@ -197,7 +197,7 @@ const styles = themedStyles((colors) => ({
   list: { paddingBottom: layout.listBottomWithFab },
   emptyWrap: { flexGrow: 1, justifyContent: 'center' },
   row: { gap: GAP, marginBottom: GAP },
-  // width/height 는 렌더 시점의 useWindowDimensions 값으로 인라인 적용한다 (아래 참고)
+  // width/height 는 렌더 시점의 useContentWidth 값으로 인라인 적용한다 (아래 참고)
   cell: { backgroundColor: colors.surfaceAlt },
   multiBadge: {
     position: 'absolute',

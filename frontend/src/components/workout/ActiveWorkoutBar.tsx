@@ -40,7 +40,20 @@ function sinceLabel(iso: string): string {
  * 조용히 아무 일도 안 하고 끝난다(눌러도 화면이 그대로였다). 탭바가 받은 navigation 을
  * 그대로 쓰는 게 확실하다.
  */
-export function ActiveWorkoutBar({ navigation }: { navigation: NavigationHelpers<ParamListBase> }) {
+export function ActiveWorkoutBar({
+  navigation,
+  compact = false,
+}: {
+  navigation: NavigationHelpers<ParamListBase>;
+  /**
+   * PC 창의 세로 레일(88px)용 축약형.
+   *
+   * <p>가로 바는 레일에 들어갈 수 없다. 그렇다고 빼면 데스크톱에서 "안 끝낸 운동이 있다"는
+   * 신호가 통째로 사라지는데, 이 컴포넌트 설명대로 그게 이 바의 존재 이유다. 세부 문구
+   * ("N세트 완료 · N분 전")만 접고 표식·라벨·이동은 그대로 남긴다.
+   */
+  compact?: boolean;
+}) {
   const active = useActiveWorkoutStore((s) => s.active);
 
   if (!active) return null;
@@ -49,30 +62,48 @@ export function ActiveWorkoutBar({ navigation }: { navigation: NavigationHelpers
     ? `${active.doneSets}세트 완료 · ${sinceLabel(active.savedAt)}`
     : `${active.exerciseCount}종목 담김 · ${sinceLabel(active.savedAt)}`;
 
+  /*
+   * 럽바디 탭의 세션 화면으로 곧장 보낸다. resume 을 넘기면 세션 화면이 "이어서 할까요?"를
+   * 다시 묻지 않는다 — 이 바를 누른 것이 이미 그 답이다.
+   *
+   * initial:false 가 없으면 세션 화면이 그 탭 스택의 <b>첫 화면</b>이 되어, 거기서
+   * 뒤로 가면 럽바디 메인이 아니라 탭 밖으로 튕긴다. 탭의 첫 화면을 아래에 깔고 그 위에
+   * 얹는다 (HomeScreen 의 PlaceAdd 이동이 같은 이유로 쓰는 옵션).
+   */
+  const goToSession = () => {
+    haptics.light();
+    navigation.dispatch(
+      CommonActions.navigate({
+        name: 'Health',
+        params: { screen: 'WorkoutSession', params: { resume: true }, initial: false },
+      }),
+    );
+  };
+
+  if (compact) {
+    return (
+      <TouchableOpacity
+        style={styles.compact}
+        activeOpacity={0.85}
+        accessibilityRole="button"
+        accessibilityLabel={`진행 중인 운동 ${active.label}, ${detail}. 이어서 하기`}
+        onPress={goToSession}
+      >
+        <View style={styles.dot} />
+        <Text style={styles.compactText} numberOfLines={1}>
+          운동 중
+        </Text>
+      </TouchableOpacity>
+    );
+  }
+
   return (
     <TouchableOpacity
       style={styles.bar}
       activeOpacity={0.85}
       accessibilityRole="button"
       accessibilityLabel={`진행 중인 운동 ${active.label}, ${detail}. 이어서 하기`}
-      onPress={() => {
-        haptics.light();
-        /*
-         * 럽바디 탭의 세션 화면으로 곧장 보낸다. resume 을 넘기면 세션 화면이 "이어서 할까요?"를
-         * 다시 묻지 않는다 — 이 바를 누른 것이 이미 그 답이다.
-         */
-        /*
-         * initial:false 가 없으면 세션 화면이 그 탭 스택의 <b>첫 화면</b>이 되어, 거기서
-         * 뒤로 가면 럽바디 메인이 아니라 탭 밖으로 튕긴다. 탭의 첫 화면을 아래에 깔고
-         * 그 위에 얹는다 (HomeScreen 의 PlaceAdd 이동이 같은 이유로 쓰는 옵션).
-         */
-        navigation.dispatch(
-          CommonActions.navigate({
-            name: 'Health',
-            params: { screen: 'WorkoutSession', params: { resume: true }, initial: false },
-          }),
-        );
-      }}
+      onPress={goToSession}
     >
       <View style={styles.dot} />
       <View style={styles.texts}>
@@ -101,6 +132,19 @@ const styles = themedStyles((colors) => ({
     borderTopWidth: 1,
     borderTopColor: colors.primary,
   },
+  // 레일 축약형 — 세로로 얇게, 위쪽에 경계선(가로 바의 borderTop 과 같은 역할)
+  compact: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xxs,
+    minHeight: layout.touchTarget,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.xs,
+    backgroundColor: colors.primaryBg,
+    borderTopWidth: 1,
+    borderTopColor: colors.primary,
+  },
+  compactText: { fontSize: fontSize.caption, fontWeight: '800', color: colors.primary },
   // 진행 중이라는 신호 — 텍스트를 읽기 전에 눈에 먼저 걸리게 하는 작은 표식
   dot: { width: 8, height: 8, borderRadius: radius.pill, backgroundColor: colors.primary },
   texts: { flex: 1 },

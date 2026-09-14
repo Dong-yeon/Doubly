@@ -154,6 +154,38 @@ export async function shrinkImage(image: PickedImage, maxSide = 1024): Promise<s
   }
 }
 
+/**
+ * `URL.createObjectURL` 로 만든 uri 를 풀어준다 — 그 외(파일 경로·http)는 그냥 넘긴다.
+ *
+ * <p>붙여넣기·드래그앤드롭으로 들어온 사진은 브라우저 메모리에 blob 으로 남아 있고,
+ * 놓아주지 않으면 탭을 닫을 때까지 쌓인다. PC 앱은 탭을 며칠씩 켜 두는 물건이라
+ * (분석 문서 1절) 이게 실제로 문제가 된다.
+ */
+export function releaseObjectUrl(uri: string | null | undefined): void {
+  if (Platform.OS !== 'web' || !uri?.startsWith('blob:')) return;
+  URL.revokeObjectURL(uri);
+}
+
+/**
+ * 크기를 모르는 uri(붙여넣기·드래그앤드롭으로 들어온 blob)를 보낼 준비.
+ *
+ * <p>피커로 고른 사진은 expo-image-picker 가 quality 0.7 로 이미 압축해서 준다. 반면
+ * 클립보드의 스크린샷은 <b>무압축 PNG</b>에 화면 해상도 그대로(2560px 이상)라, 그냥 올리면
+ * 같은 "사진 한 장"인데 용량이 한 자릿수 배 차이가 난다. 재서 필요할 때만 줄인다.
+ *
+ * <p>1600 은 스크린샷의 글자가 뭉개지지 않는 선이다 — 채팅 사진은 1024 로도 충분하지만
+ * PC 에서 공유하는 사진의 상당수가 글자가 든 화면 캡처다(분석 문서 4절 2단계).
+ */
+export async function shrinkUnknownImage(uri: string, maxSide = 1600): Promise<string> {
+  try {
+    const size = await measure(uri);
+    return await shrinkImage({ uri, ...size }, maxSide);
+  } catch {
+    // 재기에 실패해도 업로드까지 막을 이유는 없다 — shrinkImage 주석과 같은 판단
+    return uri;
+  }
+}
+
 /** 갤러리에서 이미지 선택 → uri (취소/권한 거부 시 null) */
 export async function pickImage(): Promise<string | null> {
   return (await pickImageAsset())?.uri ?? null;

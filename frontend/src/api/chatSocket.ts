@@ -15,7 +15,7 @@ import { Client, IMessage, StompSubscription } from '@stomp/stompjs';
 import { STORAGE_KEYS, WS_BASE_URL } from '../constants/config';
 import { storage } from '../utils/storage';
 import { refreshAccessToken } from './client';
-import type { ChatMessage, MessageType } from '../types';
+import type { ChatMessage, GameReactionEvent, MessageType } from '../types';
 
 /** /sub/rooms/{relationId}/pin 페이로드 — 백엔드 ChatPinResponse 와 짝. */
 export interface PinEvent {
@@ -75,6 +75,14 @@ export interface OutgoingMessage {
   routineId?: number;
   /** 답장 — 인용할 메시지 id (같은 방이어야 한다) */
   replyToId?: number;
+  /**
+   * 멱등키 — 서버가 {@code (relation_id, client_message_id)} 로 중복을 거른다(V89).
+   *
+   * <p>STOMP 발행은 fire-and-forget 이라 이 함수가 true 를 돌려줘도 서버가 저장했다는 뜻이
+   * 아니다. 서버가 밀리는 동안 사용자가 다시 누르면 프레임이 쌓이는데, 이 키가 있으면
+   * 서버가 두 번째를 저장하지 않고 먼저 저장한 메시지를 다시 브로드캐스트한다.
+   */
+  clientMessageId?: string;
 }
 
 /** 연결돼 있으면 즉시 구독하고, 아니면 다음 연결 때 {@link applyDesiredSubscriptions} 가 건다. */
@@ -266,6 +274,20 @@ export function subscribeCouple(relationId: number, onEvent: (type: string) => v
 
 export function unsubscribeCouple(relationId: number) {
   unregister(`/sub/couple/${relationId}`);
+}
+
+/**
+ * 게임 판 위 즉석 반응 구독 (/sub/couple/{relationId}/game-reaction).
+ *
+ * <p>커플 공용 채널과 목적지를 나눈 이유는 서버 {@code GameReactionEvent} 주석 참고 —
+ * 저장하지 않는 신호라 "타입만 보내고 다시 조회한다"는 공용 채널 규칙을 쓸 수 없다.
+ */
+export function subscribeGameReaction(relationId: number, onReaction: (e: GameReactionEvent) => void) {
+  register(`/sub/couple/${relationId}/game-reaction`, jsonHandler(onReaction));
+}
+
+export function unsubscribeGameReaction(relationId: number) {
+  unregister(`/sub/couple/${relationId}/game-reaction`);
 }
 
 /** 저수준 발행 — 연결이 없으면 false. 화면은 아래 publishEnsuringConnection 을 쓴다. */
