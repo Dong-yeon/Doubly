@@ -256,7 +256,14 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
       // 다음에 focus 될 때 캐시된 목록 대신 다시 받아오게 한다
       usePlaceStore.getState().invalidate();
     } catch (e) {
-      Alert.alert('오류', getErrorMessage(e));
+      // 식단이 이미 저장된 뒤 방문 기록에서 실패했다면 그 사실을 알려준다 — 아무 말이 없으면
+      // 전부 실패한 줄 알고 폼을 닫아버리고, 식단 탭에서 뒤늦게 발견하게 된다
+      Alert.alert(
+        '오류',
+        savedMealId.current != null
+          ? `${getErrorMessage(e)}\n\n식단 기록은 이미 저장됐어요. 다시 저장해도 식단이 중복되지는 않아요.`
+          : getErrorMessage(e),
+      );
     } finally {
       setSaving(false);
     }
