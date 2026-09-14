@@ -16,6 +16,8 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  type NativeSyntheticEvent,
+  type TextInputKeyPressEventData,
 } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { withJosa } from '../../utils/format';
@@ -37,7 +39,9 @@ import { useCallStore } from '../../store/callStore';
 import { callApi, CallType } from '../../api/call';
 import { haptics } from '../../utils/haptics';
 import { dismissRoomNotifications } from '../../utils/push';
-import { pickImage, uploadImage } from '../../utils/imageUpload';
+import { pickImage, releaseObjectUrl, shrinkUnknownImage, uploadImage } from '../../utils/imageUpload';
+import { isCoarsePointer } from '../../utils/pointer';
+import { useImageDrop } from '../../hooks/useImageDrop';
 import { uploadChatVoice } from '../../utils/chatVoiceUpload';
 import { parseVoiceContent } from '../../utils/chatVoice';
 import { getErrorMessage } from '../../utils/error';
@@ -655,6 +659,33 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     }
   };
 
+  /*
+   * PC 관습: Enter 전송, Shift+Enter 줄바꿈. 마우스일 때만 켠다 — 모바일 브라우저에서
+   * 켜면 화면 키보드의 줄바꿈 키가 전송으로 바뀐다.
+   *
+   * <p><b>한글 조합 중 Enter 는 무시해야 한다.</b> "안녕"을 치는 도중 Enter 는 조합을
+   * 확정하는 키라, 그걸 전송으로 받으면 마지막 글자가 잘린 채 나간다. react-native-web 이
+   * 내부적으로 보는 것과 같은 신호(isComposing / keyCode 229)를 여기서도 본다.
+   *
+   * <p>preventDefault 를 부르면 줄바꿈이 안 들어갈 뿐 아니라 RNW 의 뒤따르는 기본 처리
+   * (onSubmitEditing + blur)도 건너뛴다 — 전송 후 입력창 포커스가 그대로 남는다.
+   */
+  const sendOnEnter = Platform.OS === 'web' && !isCoarsePointer();
+  const onInputKeyPress = (e: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
+    if (!sendOnEnter) return;
+    // RNW 는 DOM 키보드 이벤트를 그대로 넘긴다(TextInput/index.js handleKeyDown)
+    const ke = e as unknown as {
+      key?: string;
+      shiftKey?: boolean;
+      preventDefault?: () => void;
+      nativeEvent?: { isComposing?: boolean; keyCode?: number };
+    };
+    if (ke.key !== 'Enter' || ke.shiftKey) return;
+    if (ke.nativeEvent?.isComposing || ke.nativeEvent?.keyCode === 229) return;
+    ke.preventDefault?.();
+    void onSend();
+  };
+
   /** 메시지 길게 누르기 — MessageActionSheet 로 리액션/답장/수정/삭제를 한 시트에 모은다 */
   const onLongPressMessage = (msg: ChatMessage) => {
     if (msg.deleted) return;
@@ -860,7 +891,24 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     }
   };
 
-  const onCancelSendImage = () => setPendingImage(null);
+  /*
+   * PC 의 붙여넣기(Ctrl+V)·드래그앤드롭 — 피커로 고른 것과 <b>같은 미리보기</b>로 들어온다.
+   * 바로 보내지 않는 이유는 onPickImage 와 같다: 잘못 붙여넣은 스크린샷이 그대로 나가면
+   * 되돌릴 수 없다. 웹에서 들어온 uri 는 blob: 이라 다 쓰고 나면 풀어줘야 한다.
+   */
+  const onDroppedImage = useCallback(async (uri: string) => {
+    const prepared = await shrinkUnknownImage(uri);
+    // 축소본이 <b>새로 생겼을 때만</b> 원본을 놓는다 — 작아서 그대로 돌려받은 경우
+    // 여기서 풀면 방금 띄운 미리보기가 깨진다.
+    if (prepared !== uri) releaseObjectUrl(uri);
+    setPendingImage(prepared);
+  }, []);
+  const dragging = useImageDrop(onDroppedImage);
+
+  const onCancelSendImage = () => {
+    if (pendingImage) releaseObjectUrl(pendingImage);
+    setPendingImage(null);
+  };
 
   const onConfirmSendImage = async () => {
     const uri = pendingImage;
@@ -877,6 +925,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
       toast.error(getErrorMessage(e, '이미지 전송에 실패했어요.'));
     } finally {
       setUploading(false);
+      releaseObjectUrl(uri);
     }
   };
 
@@ -1673,7 +1722,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             onChangeText={setText}
             onPressIn={dismissPanels}
             onFocus={dismissPanels}
-            placeholder="메시지를 입력하세요"
+            onKeyPress={onInputKeyPress}
+            placeholder={sendOnEnter ? '메시지를 입력하세요 (Shift+Enter 줄바꿈)' : '메시지를 입력하세요'}
             placeholderTextColor={colors.textSecondary}
             multiline
           />
@@ -1804,6 +1854,17 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         pinned={!!actionSheetFor && pinnedMessage?.id === actionSheetFor.id}
         onTogglePin={onTogglePinFromSheet}
       />
+      {/*
+        파일을 끌고 들어왔을 때의 안내. 드래그앤드롭은 눌러볼 버튼이 없어서, 끄는 동안
+        받아준다는 표시가 없으면 사용자가 손을 놓기 전에 포기한다.
+        pointerEvents="none" — 이 판이 drop 이벤트를 가로채면 안 된다.
+      */}
+      {dragging ? (
+        <View style={styles.dropHint} pointerEvents="none">
+          <MaterialCommunityIcons name="image-plus" size={40} color={colors.primary} />
+          <Text style={styles.dropHintText}>여기에 놓으면 사진을 보낼 수 있어요</Text>
+        </View>
+      ) : null}
     </SafeAreaView>
     </SwipeBackView>
   );
@@ -2106,6 +2167,20 @@ const styles = themedStyles((colors) => ({
   dateDivider: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginVertical: spacing.md },
   dateDividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
   dateDividerText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textTertiary },
+
+  // 드래그앤드롭 안내 — 화면 전체를 덮되 입력바 위쪽 여백은 남기지 않는다(끌고 있는 동안만)
+  dropHint: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.backdrop,
+  },
+  dropHintText: { fontSize: fontSize.body, fontWeight: '800', color: colors.white },
 
   // 메시지 블록 — 인용/말풍선/리액션을 한 덩어리로 묶는다.
   // 그룹 첫 메시지는 넉넉하게(spaced), 같은 사람이 이어 보낸 메시지는 바짝(grouped) 붙인다
