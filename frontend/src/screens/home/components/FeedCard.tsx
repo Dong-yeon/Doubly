@@ -23,6 +23,7 @@ import { MaterialCommunityIcons } from '../../../components/Icon';
 import type { FeedItem, FeedItemType, ReactionSummary } from '../../../types';
 import { colors, fontSize, radius, spacing } from '../../../constants/theme';
 import { themedStyles } from '../../../theme/themedStyles';
+import { isHovered } from '../../../utils/pointer';
 import { layout } from '../../../theme/layout';
 import { onColor } from '../../../theme/onColor';
 
@@ -216,10 +217,12 @@ function Reactions({
         return (
           <Pressable
             key={emoji}
-            style={({ pressed }) => [
+            style={(state) => [
               styles.chip,
               summary?.mine && styles.chipMine,
-              pressed && styles.chipPressed,
+              // 마우스에는 "누를 수 있다"는 신호가 커서 말고 없다 — 칩이 라벨처럼 읽힌다
+              isHovered(state) && !summary?.mine && styles.chipHovered,
+              state.pressed && styles.chipPressed,
             ]}
             onPress={() => onPress(emoji)}
             // 높이 30px — 칩 크기는 유지하고 터치 영역만 넓힌다
@@ -303,6 +306,8 @@ const styles = themedStyles((colors) => ({
     minHeight: layout.touchTarget,
   },
   chipMine: { backgroundColor: colors.primary },
+  // 내가 이미 누른 칩은 primary 로 채워져 있어 hover 를 덧대면 오히려 흐려진다 — 비선택에만
+  chipHovered: { backgroundColor: colors.border },
   chipPressed: { opacity: 0.6 },
   chipEmoji: { fontSize: fontSize.body },
   chipCount: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '800' },

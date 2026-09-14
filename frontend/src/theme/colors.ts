@@ -101,6 +101,11 @@ const light = {
   // 시트와 배경이 분리돼 보인다(아래 dark 참고).
   backdrop: 'rgba(0,0,0,0.42)',
 
+  // PC(웹)에서 앱 셸 <b>바깥</b>에 깔리는 바탕. 셸(background #FAFAF9)이 그 위에 떠
+  // 보여야 하므로 한 단계 어둡게 둔다 — surfaceAlt 를 그대로 쓰면 다크에서
+  // 바깥이 오히려 밝아져 관계가 뒤집힌다(dark 쪽 값 참고). components/AppShell.web.tsx.
+  shellBackdrop: '#EDEEEB',
+
   // ── 호환 별칭 (기존 키 → Doubly 팔레트) ───────────────────────
   couple: '#8A6817', // 커플 대표 → gold
   food: '#59772D', // (구 amber) → olive
@@ -183,6 +188,10 @@ const dark: typeof light = {
 
   // 라이트보다 진하게 — 어두운 배경 위 검은 덮개는 분리감이 약하다
   backdrop: 'rgba(0,0,0,0.62)',
+
+  // background(#1E201C)보다 어둡다 — 라이트와 같은 "셸이 바탕 위에 떠 있다"는 관계를
+  // 유지하려면 다크에서는 바깥을 더 낮춰야 한다.
+  shellBackdrop: '#141613',
 
   couple: '#F1C999',
   food: '#C9DA97',
