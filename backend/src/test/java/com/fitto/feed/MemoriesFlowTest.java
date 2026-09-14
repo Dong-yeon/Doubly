@@ -220,7 +220,8 @@ class MemoriesFlowTest {
         assertThat(res.totalCount()).isEqualTo(1);
         FeedItemResponse item = res.groups().get(0).items().get(0);
         assertThat(item.type()).isEqualTo(FeedItemType.PLACE_VISIT);
-        assertThat(item.title()).isEqualTo("성산일출봉 방문 📍");
+        // 카드 왼쪽 아이콘이 이미 '장소'를 말하므로 제목에 📍을 다시 붙이지 않는다
+        assertThat(item.title()).isEqualTo("성산일출봉 방문");
         assertThat(item.content()).isEqualTo("★★★★★ 최고였다");
         // occurredAt 이 등록 시각(오늘)이 아니라 방문일이어야 한다
         assertThat(item.occurredAt().toLocalDate()).isEqualTo(LocalDate.of(2025, 7, 30));

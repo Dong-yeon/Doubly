@@ -158,6 +158,25 @@ export interface CoupleCalendarEvent {
   createdBy: number;
 }
 
+/**
+ * 캘린더에 겹쳐 그리는 데이트 기록 — 장소가 연결된 데이트 식단.
+ *
+ * 일정(CoupleCalendarEvent)과 달리 캘린더에서 만들거나 지우지 않는다. 원본은 식단 기록이고
+ * 캘린더는 읽어서 겹쳐 그리기만 한다(여행 기간 띠와 같은 방식) — 그래서 D-day 도 없다.
+ */
+export interface CalendarDateMeal {
+  /** YYYY-MM-DD */
+  date: string;
+  mealId: number;
+  /** 무엇을 먹었는지 — 음식 항목이 없으면 메모, 그마저 없으면 끼니 이름 */
+  title: string;
+  placeId: number;
+  placeName: string;
+  /** 럽슐랭 등급 — 0=일반, 1~3=럽스타 */
+  lovelichelinTier?: number | null;
+  photoUrl?: string | null;
+}
+
 /** 지난 기록 불러오기 결과 — 양쪽이 모두 요청해야 RESTORED 가 된다 */
 export interface RestoreRecords {
   status: 'WAITING_PARTNER' | 'RESTORED';
@@ -1367,6 +1386,11 @@ export interface FeedItem {
   occurredAt: string;
   /** 모든 타입에 붙는다 — 반응이 없으면 빈 배열 */
   reactions?: ReactionSummary[] | null;
+  /**
+   * 데이트 식단(같이 먹기)으로 남긴 끼니 — MEAL 타입만 true 가 될 수 있다.
+   * 서버가 커플 양쪽 짝 중 원본 한 장만 내려주므로, 카드는 "누가"가 아니라 "함께"로 읽힌다.
+   */
+  shared?: boolean;
 }
 export interface FeedTimeline {
   items: FeedItem[];
