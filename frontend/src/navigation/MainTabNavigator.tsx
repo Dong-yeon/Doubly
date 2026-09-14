@@ -1,9 +1,13 @@
-/** 메인 하단 탭 — 홈 / 운동 / 채팅 / 식단 / 장소 (PLAN.md "하단 탭 재구성" 참고)
- *  운동·식단은 원래 "건강" 한 탭에 세그먼트로 묶여 있었으나, 각자 독립 조회 빈도가 높아
- *  탭으로 분리했다(WorkoutDietSegment 는 삭제됨). 중앙 FAB 도 함께 없앴다 — FAB 의 4개
- *  액션이 전부 각 화면 자체 버튼과 중복이라(운동 기록/식단 기록/맛집 핀/일상 남기기),
- *  홈 CoupleHero 의 오늘 칩(HomeScreen.onPressToday)이 "안 했으면 기록 화면으로 바로"
- *  분기하도록 바꿔 같은 진입 속도를 새 버튼 없이 재현했다. */
+/** 메인 하단 탭 — 홈 / 채팅 / 럽바디 / 럽슐랭 (docs/ALBUM_TAB_IA_2026-09-14.md)
+ *  중앙 FAB 는 없다 — FAB 의 4개 액션이 전부 각 화면 자체 버튼과 중복이라(운동 기록/식단
+ *  기록/맛집 핀/일상 남기기), 홈 CoupleHero 의 오늘 칩(HomeScreen.onPressToday)이
+ *  "안 했으면 기록 화면으로 바로" 분기하도록 바꿔 같은 진입 속도를 새 버튼 없이 재현했다.
+ *
+ *  운동·식단 탭의 이력: "건강" 한 탭(세그먼트 토글) → 2026-08 두 탭으로 분리
+ *  (WorkoutDietSegment 삭제) → 2026-09-14 운동의 조회 빈도가 낮다는 분석으로 다시 한 탭
+ *  "럽바디"로 합침. 이번엔 토글이 아니라 <b>식단 메인 + 운동 체크인 카드</b>다.
+ *  비운 자리에는 "우리" 탭(Album)이 들어온다 — 그 단계까지 합쳐 병합하므로 이 4탭
+ *  상태는 배포되지 않는다(같은 문서 6절). */
 import React, { useEffect } from 'react';
 import { AppState, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,9 +17,8 @@ import { MaterialCommunityIcons } from '../components/Icon';
 import type { MainTabParamList } from './types';
 import { colors, radius, shadow, spacing } from '../constants/theme';
 import { HomeStackNavigator } from './HomeStackNavigator';
-import { WorkoutStackNavigator } from './WorkoutStackNavigator';
 import { ChatStackNavigator } from './ChatStackNavigator';
-import { DietStackNavigator } from './DietStackNavigator';
+import { HealthStackNavigator } from './HealthStackNavigator';
 import { PlaceStackNavigator } from './PlaceStackNavigator';
 import { themedStyles } from '../theme/themedStyles';
 import { useChatStore } from '../store/chatStore';
@@ -28,9 +31,10 @@ type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 const TAB_META: Record<keyof MainTabParamList, { label: string; icon: IconName }> = {
   Home: { label: '홈', icon: 'heart-multiple-outline' },
-  Workout: { label: '운동', icon: 'dumbbell' },
   Chat: { label: '채팅', icon: 'chat-outline' },
-  Diet: { label: '식단', icon: 'silverware-fork-knife' },
+  // 식단 + 운동. "건강"은 정확하지만 트래커 어휘라 럽슐랭 옆에서 톤이 어긋났다 —
+  // 같은 접두어로 묶어 둘을 하나의 계열로 읽히게 했다(ALBUM_TAB_IA_2026-09-14.md 5-1).
+  Health: { label: '럽바디', icon: 'heart-pulse' },
   // 맛집 지도 + 여행(Trip) 을 함께 담는다. "장소"(단순 저장)에서 "럽슐랭"(둘이 함께
   // 검증한 미식 가이드북)으로 리브랜딩 — PLAN.md Lovelichelin 참고.
   Place: { label: '럽슐랭', icon: 'crown' },
@@ -183,10 +187,10 @@ export function MainTabNavigator() {
       screenOptions={{ headerShown: false }}
       tabBar={(props) => <CustomTabBar {...props} />}
     >
+      {/* 순서: 최종 형태에서 Home 다음에 Album("우리")이 들어온다 — 3단계 참고 */}
       <Tab.Screen name="Home" component={HomeStackNavigator} />
-      <Tab.Screen name="Workout" component={WorkoutStackNavigator} />
       <Tab.Screen name="Chat" component={ChatStackNavigator} />
-      <Tab.Screen name="Diet" component={DietStackNavigator} />
+      <Tab.Screen name="Health" component={HealthStackNavigator} />
       <Tab.Screen name="Place" component={PlaceStackNavigator} />
     </Tab.Navigator>
   );

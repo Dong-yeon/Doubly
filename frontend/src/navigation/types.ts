@@ -137,7 +137,12 @@ export interface RoutineFormDraft {
   scheduledDays?: WeekDay[];
 }
 
-// 운동 탭 내부 스택 — 운동 전용 (식단은 별도 탭인 DietStackParamList 로 분리)
+/*
+ * 운동 화면들 — 2026-09-14 부터 <b>독립 탭이 아니다</b>. 식단과 함께 "럽바디"(Health) 탭
+ * 하나에 올라간다(docs/ALBUM_TAB_IA_2026-09-14.md). 이 타입은 지우지 않고 남긴다:
+ * 운동 화면들이 각자 이 좁은 파람리스트로 자기 Props 를 타이핑하고 있고, 아래
+ * HealthStackParamList 가 이 둘의 교집합이라 넓은 쪽으로 등록해도 그대로 맞는다.
+ */
 export type WorkoutStackParamList = {
   WorkoutMain: undefined;
   // date: 캘린더에서 특정 날짜를 골라 들어올 때 그 날짜로 시작한다 (없으면 오늘)
@@ -185,7 +190,7 @@ export type WorkoutStackParamList = {
   Challenge: undefined;
 };
 
-// 식단 탭 내부 스택 — 구 "건강" 탭에서 운동과 세그먼트로 묶여 있던 걸 별도 탭으로 분리
+// 식단 화면들 — 운동과 함께 럽바디(Health) 탭에 올라간다(위 WorkoutStackParamList 주석)
 export type DietStackParamList = {
   DietMain: undefined;
   /*
@@ -210,6 +215,20 @@ export type DietStackParamList = {
   // 즐겨찾기 음식 선물함 — 받은/보낸 즐겨찾기 선물
   FavoriteFoodGiftInbox: undefined;
 };
+
+/*
+ * 럽바디 탭 내부 스택 — 식단 + 운동 (docs/ALBUM_TAB_IA_2026-09-14.md 5-2).
+ *
+ * <p>운동은 조회 빈도가 낮아 탭 하나를 유지할 이유가 없었고(9/9 사용성 분석), 식단 메인
+ * 상단의 <b>체크인 카드</b>로 흡수됐다. 첫 화면은 `DietMain` 이고 운동 홈(`WorkoutMain`)은
+ * 그 위에 쌓이는 2차 화면이다 — 구 "건강" 탭의 세그먼트 토글로 돌아간 것이 <b>아니다</b>.
+ *
+ * <p>교집합으로 만드는 이유: 각 화면이 자기 도메인 파람리스트로 좁게
+ * 타이핑돼 있어도 넓은 쪽으로 등록하면 그대로 맞는다(navigate 의 인자 반공변성). 덕분에
+ * 화면 20여 개의 Props 타입을 일괄 교체하지 않아도 된다 — 두 도메인을 넘나드는 화면
+ * (식단 메인의 운동 카드)만 이 타입으로 타이핑한다.
+ */
+export type HealthStackParamList = DietStackParamList & WorkoutStackParamList;
 
 // 채팅 탭 내부 스택 — 방 목록 / 대화 (CHAT-01/02)
 export type ChatStackParamList = {
@@ -260,12 +279,17 @@ export type PlaceStackParamList = PlaceScreensParamList & ContentScreensParamLis
   PlaceMain: undefined;
 };
 
-// 2.2 메인 탭 (홈 / 운동 / 채팅 / 식단 / 장소) — FAB 없음
+/*
+ * 2.2 메인 탭 — FAB 없음. 홈 / 채팅 / 럽바디 / 럽슐랭.
+ *
+ * <p>운동·식단 두 탭이 럽바디(Health) 하나로 합쳐진 중간 상태다. 비운 자리에는 "우리"
+ * 탭(Album)이 들어와 최종 순서가 <b>홈 · 우리 · 채팅 · 럽바디 · 럽슐랭</b>이 된다
+ * (docs/ALBUM_TAB_IA_2026-09-14.md 6절 3단계 — 4탭 상태가 배포되지 않게 함께 병합한다).
+ */
 export type MainTabParamList = {
   Home: NavigatorScreenParams<HomeStackParamList>;
-  Workout: NavigatorScreenParams<WorkoutStackParamList>;
   Chat: NavigatorScreenParams<ChatStackParamList>;
-  Diet: NavigatorScreenParams<DietStackParamList>;
+  Health: NavigatorScreenParams<HealthStackParamList>;
   Place: NavigatorScreenParams<PlaceStackParamList>;
 };
 

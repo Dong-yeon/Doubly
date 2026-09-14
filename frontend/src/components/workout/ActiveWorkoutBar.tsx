@@ -58,17 +58,17 @@ export function ActiveWorkoutBar({ navigation }: { navigation: NavigationHelpers
       onPress={() => {
         haptics.light();
         /*
-         * 운동 탭의 세션 화면으로 곧장 보낸다. resume 을 넘기면 세션 화면이 "이어서 할까요?"를
+         * 럽바디 탭의 세션 화면으로 곧장 보낸다. resume 을 넘기면 세션 화면이 "이어서 할까요?"를
          * 다시 묻지 않는다 — 이 바를 누른 것이 이미 그 답이다.
          */
         /*
          * initial:false 가 없으면 세션 화면이 그 탭 스택의 <b>첫 화면</b>이 되어, 거기서
-         * 뒤로 가면 운동 홈이 아니라 탭 밖으로 튕긴다. 운동 홈을 아래에 깔고 그 위에 얹는다
-         * (HomeScreen 의 PlaceAdd 이동이 같은 이유로 쓰는 옵션).
+         * 뒤로 가면 럽바디 메인이 아니라 탭 밖으로 튕긴다. 탭의 첫 화면을 아래에 깔고
+         * 그 위에 얹는다 (HomeScreen 의 PlaceAdd 이동이 같은 이유로 쓰는 옵션).
          */
         navigation.dispatch(
           CommonActions.navigate({
-            name: 'Workout',
+            name: 'Health',
             params: { screen: 'WorkoutSession', params: { resume: true }, initial: false },
           }),
         );

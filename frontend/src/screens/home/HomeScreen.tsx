@@ -259,7 +259,7 @@ export function HomeScreen({ navigation }: Props) {
    *
    * <p>기록 화면을 거치지 않는다. 끼니는 시각으로 정하고(mealTimeSlot), 칼로리는 저장 뒤
    * 서버가 알아서 채우므로(MealPhotoAutoAnalysisService) 확인할 화면 자체가 필요 없다.
-   * 운동 탭의 "📷 사진으로"가 기록 화면으로 넘어가는 것과 갈리는 지점이다 — 거기서는
+   * 운동 체크인 카드의 "📷 사진으로"가 기록 화면으로 넘어가는 것과 갈리는 지점이다 — 거기서는
    * 읽어낸 시간·거리를 확인할 자리가 필요했다.
    *
    * <p>시트를 닫는 건 저장이 <b>끝난 뒤</b>다. 사진을 고르자마자 닫으면 업로드가 도는 동안
@@ -650,21 +650,29 @@ export function HomeScreen({ navigation }: Props) {
                    */
                   onPressToday={(who, kind) => {
                     if (kind === 'workout') {
-                      navigation.navigate('Workout', { screen: myWorkoutDone ? 'WorkoutMain' : 'WorkoutRecord' });
+                      /*
+                       * 운동 화면들은 이제 럽바디 탭 <b>안쪽</b>이라 initial:false 로
+                       * 럽바디 메인을 아래에 깔아준다 — 없으면 그 화면이 탭 스택의 첫
+                       * 화면이 되어 뒤로 가기가 탭 밖으로 튕긴다(ActiveWorkoutBar 와 같은 이유).
+                       */
+                      navigation.navigate('Health', {
+                        screen: myWorkoutDone ? 'WorkoutMain' : 'WorkoutRecord',
+                        initial: false,
+                      });
                       return;
                     }
                     /*
                      * 식단만 시트를 연다 — 끼니는 하루 세 번이라 "오늘 했다/안 했다"로 목적지를
                      * 가르면 아침 이후로는 빠른 경로가 사라진다. 시트는 기록 여부와 무관하게
                      * 같은 모양이고(사진 두 갈래 + 직접 적기 + 오늘 기록 보기) ✓ 는 잠금이
-                     * 아니라 상태 표시로 남는다. 운동은 하루 한 번에 가깝고 운동 탭 자체에
+                     * 아니라 상태 표시로 남는다. 운동은 하루 한 번에 가깝고 럽바디 메인의 체크인 카드에
                      * 원탭·사진 버튼이 이미 있어 여기서 겹칠 이유가 없다.
                      *
                      * 다만 상대 열에서는 열지 않는다 — 내 사진을 상대 이름으로 남길 수는 없다.
                      * (기존 주석대로 두 화면 모두 내 기록만 보여주므로 목적지는 그대로 DietMain)
                      */
                     if (who === 'partner') {
-                      navigation.navigate('Diet', { screen: 'DietMain' });
+                      navigation.navigate('Health', { screen: 'DietMain' });
                       return;
                     }
                     setMealSheet(true);
@@ -737,8 +745,8 @@ export function HomeScreen({ navigation }: Props) {
                 */}
                 {(
                   [
-                    { icon: 'dumbbell', label: '운동 기록하기', desc: '오늘 운동을 남기면 스트릭이 시작돼요', go: () => navigation.navigate('Workout', { screen: 'WorkoutRecord' }) },
-                    { icon: 'silverware-fork-knife', label: '식단 기록하기', desc: '사진이나 글로 적으면 AI가 칼로리를 계산해요', go: () => navigation.navigate('Diet', { screen: 'DietRecord' }) },
+                    { icon: 'dumbbell', label: '운동 기록하기', desc: '오늘 운동을 남기면 스트릭이 시작돼요', go: () => navigation.navigate('Health', { screen: 'WorkoutRecord', initial: false }) },
+                    { icon: 'silverware-fork-knife', label: '식단 기록하기', desc: '사진이나 글로 적으면 AI가 칼로리를 계산해요', go: () => navigation.navigate('Health', { screen: 'DietRecord', initial: false }) },
                     { icon: 'map-marker-plus-outline', label: '가고 싶은 장소 저장', desc: '맛집, 여행지, 전시… 둘이 함께 갈 곳을 미리 담아두세요', go: () => navigation.navigate('Place', { screen: 'PlaceAdd', initial: false }) },
                   ] as const
                 ).map((a, i, arr) => (
@@ -813,11 +821,11 @@ export function HomeScreen({ navigation }: Props) {
         onPickPhoto={() => void saveMealFromPhoto('library')}
         onWriteManually={() => {
           setMealSheet(false);
-          navigation.navigate('Diet', { screen: 'DietRecord' });
+          navigation.navigate('Health', { screen: 'DietRecord', initial: false });
         }}
         onViewToday={() => {
           setMealSheet(false);
-          navigation.navigate('Diet', { screen: 'DietMain' });
+          navigation.navigate('Health', { screen: 'DietMain' });
         }}
       />
     </View>
