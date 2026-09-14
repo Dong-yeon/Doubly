@@ -13,6 +13,8 @@ import type { HomeStackParamList } from '../../navigation/types';
 import { Card } from '../../components/Card';
 import { Chip } from '../../components/Chip';
 import { useThemeStore } from '../../store/themeStore';
+import { useChatThemeStore } from '../../store/chatThemeStore';
+import { CHAT_THEMES } from '../../theme/chatTheme';
 import type { ThemeMode } from '../../theme/themePreference';
 import { authApi } from '../../api/auth';
 import { dietApi } from '../../api/diet';
@@ -110,6 +112,14 @@ export function SettingsScreen({ navigation }: Props) {
   /* 테마 — 고르는 즉시 화면에 반영된다 (RootNavigator 가 트리를 다시 그린다) */
   const themeMode = useThemeStore((s) => s.mode);
   const setThemeMode = useThemeStore((s) => s.setMode);
+
+  /*
+   * 채팅 배경 — 앱 테마와 달리 채팅 화면에만 적용된다. 견본은 <b>지금 보고 있는
+   * 스킴</b>의 팔레트로 그려야 한다(다크모드에서 라이트 견본을 보여주면 실제와 다르다).
+   */
+  const scheme = useThemeStore((s) => s.scheme);
+  const chatThemeId = useChatThemeStore((s) => s.id);
+  const setChatTheme = useChatThemeStore((s) => s.setTheme);
 
   const [savingNotification, setSavingNotification] = useState(false);
   const [savingMarketing, setSavingMarketing] = useState(false);
@@ -508,6 +518,44 @@ export function SettingsScreen({ navigation }: Props) {
               />
             ))}
           </View>
+
+          <View style={[styles.rowText, styles.themeIntro, styles.chatThemeIntro]}>
+            <Text style={styles.rowTitle}>채팅 배경</Text>
+            <Text style={styles.rowDesc}>이 기기에서만 바뀌어요. 상대 화면은 그대로예요.</Text>
+          </View>
+          <View style={styles.chatThemeRow}>
+            {CHAT_THEMES.map((t) => {
+              const preview = t[scheme];
+              const selected = chatThemeId === t.id;
+              return (
+                <Pressable
+                  key={t.id}
+                  style={({ pressed }) => [styles.chatThemeItem, pressed && styles.pressed]}
+                  onPress={() => void setChatTheme(t.id)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected }}
+                  accessibilityLabel={`채팅 배경 ${t.label}`}
+                >
+                  {/* 실제 화면의 축소판 — 배경 위에 상대(왼쪽)·나(오른쪽) 말풍선 */}
+                  <View
+                    style={[
+                      styles.chatSwatch,
+                      {
+                        backgroundColor: preview.background,
+                        borderColor: selected ? colors.primary : colors.border,
+                      },
+                    ]}
+                  >
+                    <View style={[styles.chatSwatchTheirs, { backgroundColor: preview.bubbleTheirs }]} />
+                    <View style={[styles.chatSwatchMine, { backgroundColor: preview.bubbleMine }]} />
+                  </View>
+                  <Text style={[styles.chatThemeLabel, selected && styles.chatThemeLabelOn]}>
+                    {t.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
         </Card>
 
         <Card elevation="sm" style={styles.section}>
@@ -607,6 +655,34 @@ const styles = themedStyles((colors) => ({
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.xs,
   },
+
+  // 채팅 배경 견본 — 테마 칩 바로 아래에 붙으므로 위쪽 간격을 한 번 벌려 준다
+  chatThemeIntro: { marginTop: spacing.md },
+  chatThemeRow: {
+    flexDirection: 'row',
+    // 좁은 기기(360dp)에서는 6개가 한 줄에 안 들어가 두 줄로 접힌다
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.xs,
+  },
+  chatThemeItem: { alignItems: 'center', gap: 4 },
+  // borderWidth 를 선택 여부와 무관하게 2로 고정한다 — 1↔2 로 바꾸면 고를 때마다
+  // 안쪽 말풍선이 1px 씩 움직여 보인다. 색만 바꾼다.
+  chatSwatch: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 2,
+    padding: 6,
+    justifyContent: 'center',
+    gap: 4,
+  },
+  chatSwatchTheirs: { width: 22, height: 8, borderRadius: 4, alignSelf: 'flex-start' },
+  chatSwatchMine: { width: 26, height: 8, borderRadius: 4, alignSelf: 'flex-end' },
+  chatThemeLabel: { fontSize: 11, color: colors.textSecondary },
+  chatThemeLabelOn: { color: colors.primary, fontWeight: '700' },
   sectionLabel: {
     fontSize: fontSize.caption,
     fontWeight: '800',
