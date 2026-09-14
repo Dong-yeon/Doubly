@@ -10,7 +10,9 @@ import java.util.Optional;
  *
  * <p>프론트 {@code frontend/src/constants/stickerImages.ts} 와 코드가 정확히 짝을
  * 맞춰야 한다 — 여기서 추가하면 거기도 같이 추가할 것. 어긋나면
- * {@code StickerImageSyncTest} 가 잡는다.
+ * {@code StickerImageSyncTest} 가 잡는다. 다만 <b>캐릭터 구분과 트레이 순서는 프론트에만
+ * 있다</b>({@code STICKER_CHARACTERS}) — 서버는 코드로 라벨 하나만 찾으면 되고, 여기 선언
+ * 순서는 화면에 영향을 주지 않는다.
  *
  * <p>일반 이모지 스티커(예: "💕")는 이 enum 에 없으므로 {@link #from(String)} 이
  * empty 를 반환하고, 알림 미리보기는 기존처럼 이모지 자체를 보여준다.
