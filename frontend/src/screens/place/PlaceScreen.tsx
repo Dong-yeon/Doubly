@@ -63,6 +63,15 @@ const MODES: { value: Mode; label: string }[] = [
   { value: 'content', label: '콘텐츠' },
 ];
 
+/*
+ * AI 두 기능이 결과를 낼 수 있는 최소 재료 — 서버 판정과 같은 값이어야 한다
+ * (LovelichelinRecommendService.MIN_CERTIFIED_PLACES, DateCourseService.MIN_PLACES).
+ * 서버도 모자라면 이유를 담은 빈 응답을 주지만, 그걸 들으려면 모달을 열고 AI 작업
+ * 폴링이 한 바퀴 돌아야 한다 — 화면이 이미 아는 숫자라 누르기 전에 말해준다.
+ */
+const MIN_CERTIFIED_FOR_RECOMMEND = 1;
+const MIN_PLACES_FOR_DATE_COURSE = 2;
+
 const BROWSE_VIEWS: { value: BrowseView; label: string; icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'] }[] = [
   { value: 'list', label: '목록', icon: 'format-list-bulleted' },
   { value: 'map', label: '지도', icon: 'map-outline' },
@@ -137,6 +146,13 @@ export function PlaceScreen() {
       loadPlaces().catch(() => {}); // 에러는 loadError 로 화면에 이미 반영된다
       loadContents().catch(() => {});
     }, [loadPlaces, loadContents]),
+  );
+
+  // 인증(tier>0) 장소 수 — AI 맛집 추천이 결과를 낼 수 있는지 판정에 쓴다. 카테고리 필터와
+  // 무관하게 전체에서 센다(필터를 바꿨다고 추천 가능 여부가 달라지면 안 된다).
+  const certifiedCount = useMemo(
+    () => allPlaces.filter((p) => p.lovelichelinTier > 0).length,
+    [allPlaces],
   );
 
   const guidePlaces = useMemo(
@@ -258,25 +274,39 @@ export function PlaceScreen() {
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <View style={styles.titleRow}>
         <Text style={styles.screenTitle}>럽슐랭</Text>
-        <View style={styles.titleActions}>
-          {mode === 'guide' ? (
+        {/*
+          AI 버튼 둘은 모드에 묶여 있었다 — 맛집 추천은 가이드에서만, 데이트 코스는
+          "둘러보기 → 지도"까지 두 번 들어가야 보였다. 둘 다 지금 어느 목록을 보고 있든
+          의미가 같으므로 장소 모드(가이드·둘러보기)에서는 항상 같은 자리에 둔다.
+          콘텐츠 모드에서만 감춘다 — 영화·드라마를 보다가 "맛집 추천"이 뜨면 어긋난다.
+        */}
+        {mode !== 'content' ? (
+          <View style={styles.titleActions}>
             <AiInsightButton
               label="AI 맛집 추천"
               title="럽슐랭 취향 맞춤 추천"
               fetcher={placeApi.lovelichelinRecommend}
               render={renderRecommendation}
+              disabledReason={
+                certifiedCount < MIN_CERTIFIED_FOR_RECOMMEND
+                  ? '둘 다 평점을 매긴 곳이 한 곳이라도 있어야 취향을 읽을 수 있어요. 다녀온 곳에 별점을 남겨보세요!'
+                  : undefined
+              }
             />
-          ) : null}
-          {mode === 'browse' && browseView === 'map' ? (
             <AiInsightButton
               label="AI 데이트 코스"
               title="AI 데이트 코스"
               fetcher={placeApi.dateCourse}
               render={renderDateCourse}
+              disabledReason={
+                allPlaces.length < MIN_PLACES_FOR_DATE_COURSE
+                  ? `코스를 짜려면 저장한 장소가 ${MIN_PLACES_FOR_DATE_COURSE}곳 이상이어야 해요. 가고 싶은 곳을 먼저 담아보세요!`
+                  : undefined
+              }
             />
-          ) : null}
-          {/* 여행(Trip)은 홈 스택으로 이관 — 진입은 홈 D-day 카드·커플 캘린더 (navigation/types.ts 참고) */}
-        </View>
+            {/* 여행(Trip)은 홈 스택으로 이관 — 진입은 홈 D-day 카드·커플 캘린더 (navigation/types.ts 참고) */}
+          </View>
+        ) : null}
       </View>
 
       <View style={styles.modeRow}>
@@ -731,11 +761,14 @@ const styles = themedStyles((colors) => ({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    // AI 버튼이 둘로 늘어 좁은 기기·큰 글꼴에서는 한 줄에 다 못 들어간다 — 넘치면 접는다
+    flexWrap: 'wrap',
+    gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
   },
   screenTitle: { fontSize: fontSize.title, fontWeight: '800', color: colors.textPrimary },
-  titleActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  titleActions: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
   modeRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.md },
   // 둘러보기 안의 목록↔지도 서브 토글 — 모드 칩보다 한 단 작게, 필터 줄과 같은 위치에 둔다
   browseViewRow: { flexDirection: 'row', gap: spacing.xs, paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
