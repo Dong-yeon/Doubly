@@ -53,29 +53,51 @@ export const STICKER_CHARACTERS: StickerCharacter[] = [
     key: 'bigae',
     label: '비개구리',
     /*
-     * 18종 — 1차 10종(2026-09-08)에 2차 스케치 8종(2026-09-14)을 섞었다. 새 것을 뒤에 붙이지
-     * 않고 감정 흐름대로 다시 늘어놨다(기쁨 → 애정 → 신남 → 삐짐·화 → 슬픔 → 지침 → 잘자).
-     * 뒤에 붙이면 "좋아"가 17번째에 앉아 스크롤을 내려야 나오는데, 이 세트는 아직 실사용
-     * 이력이 없어 자리를 외운 사람이 없다 — 지금이 아니면 못 고친다.
+     * 14종. 공용 4종(윙크·시무룩·짜증나·축 처짐)은 아래 비개구리(여)에도 같은 그림이 색만
+     * 바뀐 채로 들어간다 — 둘 다 쓰는 표정이라 한쪽에만 두면 나머지 한 사람이 못 쓴다.
      */
     stickers: [
-      { code: 'BIGAE_LOVE', label: '좋아좋아', source: require('../../assets/stickers/bigae_love.png') },
       { code: 'BIGAE_LIKE', label: '좋아', source: require('../../assets/stickers/bigae_like.png') },
       { code: 'BIGAE_HEHE', label: '히히', source: require('../../assets/stickers/bigae_hehe.png') },
       { code: 'BIGAE_LAUGH', label: '하하하', source: require('../../assets/stickers/bigae_laugh.png') },
-      { code: 'BIGAE_KISS', label: '뽀뽀', source: require('../../assets/stickers/bigae_kiss.png') },
-      { code: 'BIGAE_GIFT', label: '선물이야', source: require('../../assets/stickers/bigae_gift.png') },
       { code: 'BIGAE_EXCITED', label: '신났어', source: require('../../assets/stickers/bigae_excited.png') },
       { code: 'BIGAE_DANCE', label: '룰루랄라', source: require('../../assets/stickers/bigae_dance.png') },
+      { code: 'BIGAE_GIFT', label: '선물이야', source: require('../../assets/stickers/bigae_gift.png') },
+      { code: 'BIGAE_WINK', label: '윙크', source: require('../../assets/stickers/bigae_wink.png') },
       { code: 'BIGAE_SULKY', label: '시무룩', source: require('../../assets/stickers/bigae_sulky.png') },
       { code: 'BIGAE_GRUMPY', label: '짜증나', source: require('../../assets/stickers/bigae_grumpy.png') },
       { code: 'BIGAE_ANGRY', label: '화났어', source: require('../../assets/stickers/bigae_angry.png') },
       { code: 'BIGAE_DASH', label: '흥, 간다', source: require('../../assets/stickers/bigae_dash.png') },
-      { code: 'BIGAE_CRYING', label: '엉엉', source: require('../../assets/stickers/bigae_crying.png') },
       { code: 'BIGAE_GLOOMY', label: '축 처짐', source: require('../../assets/stickers/bigae_gloomy.png') },
       { code: 'BIGAE_DIZZY', label: '어질~', source: require('../../assets/stickers/bigae_dizzy.png') },
       { code: 'BIGAE_OFFWORK', label: '퇴근', source: require('../../assets/stickers/bigae_offwork.png') },
-      { code: 'BIGAE_SLEEPY', label: '잘자', source: require('../../assets/stickers/bigae_sleepy.png') },
+    ],
+  },
+  {
+    /*
+     * 같은 캐릭터의 분홍 판. 그림은 초록 쪽과 같은 원본에서 <b>색상만 돌려</b> 만든다
+     * (`unify_body_color.py`) — 다시 그리면 실루엣이 어긋나기 때문이다.
+     *
+     * 색만 다른 게 아니라 <b>구성이 다르다</b> — 이쪽에만 꽃단장·예뻐졌지?·뽀뽀·잘자가 있고
+     * 저쪽에만 퇴근·흥 간다·선물이야가 있다. 공용 4종은 양쪽에 같은 이름으로 들어간다.
+     */
+    key: 'bigae-f',
+    label: '비개구리(여)',
+    stickers: [
+      { code: 'BIGAEF_LOVE', label: '좋아좋아', source: require('../../assets/stickers/bigaef_love.png') },
+      { code: 'BIGAEF_KISS', label: '뽀뽀', source: require('../../assets/stickers/bigaef_kiss.png') },
+      { code: 'BIGAEF_BEAM', label: '방긋', source: require('../../assets/stickers/bigaef_beam.png') },
+      { code: 'BIGAEF_CONTENT', label: '흐뭇', source: require('../../assets/stickers/bigaef_content.png') },
+      { code: 'BIGAEF_FLOWER', label: '기분 좋아', source: require('../../assets/stickers/bigaef_flower.png') },
+      { code: 'BIGAEF_MAKEUP', label: '꽃단장', source: require('../../assets/stickers/bigaef_makeup.png') },
+      { code: 'BIGAEF_RIBBON', label: '예뻐졌지?', source: require('../../assets/stickers/bigaef_ribbon.png') },
+      { code: 'BIGAEF_WINK', label: '윙크', source: require('../../assets/stickers/bigaef_wink.png') },
+      { code: 'BIGAEF_OH', label: '어머', source: require('../../assets/stickers/bigaef_oh.png') },
+      { code: 'BIGAEF_SULKY', label: '시무룩', source: require('../../assets/stickers/bigaef_sulky.png') },
+      { code: 'BIGAEF_GRUMPY', label: '짜증나', source: require('../../assets/stickers/bigaef_grumpy.png') },
+      { code: 'BIGAEF_CRYING', label: '엉엉', source: require('../../assets/stickers/bigaef_crying.png') },
+      { code: 'BIGAEF_GLOOMY', label: '축 처짐', source: require('../../assets/stickers/bigaef_gloomy.png') },
+      { code: 'BIGAEF_SLEEPY', label: '잘자', source: require('../../assets/stickers/bigaef_sleepy.png') },
     ],
   },
   {
