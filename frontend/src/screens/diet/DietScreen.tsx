@@ -510,8 +510,8 @@ export function DietScreen({ navigation }: Props) {
                     </>
                   ) : (
                     <Text style={styles.energyHint}>
-                      MY 탭 → 신체 정보에서 키·생년월일·성별을 등록하면 오늘 운동한 만큼 실시간으로 섭취
-                      가능 칼로리를 계산해줘요.
+                      홈 오른쪽 위 프로필 → 신체 정보에서 키·생년월일·성별을 등록하면 오늘 운동한 만큼
+                      실시간으로 섭취 가능 칼로리를 계산해줘요.
                     </Text>
                   )}
                 </View>

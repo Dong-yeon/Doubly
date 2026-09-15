@@ -12,7 +12,7 @@ import {
   RefreshControl,
   View,
 } from 'react-native';
-import { useContentWidth } from '../../hooks/useContentWidth';
+import { usePhotoGrid } from '../../hooks/usePhotoGrid';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { ChatStackParamList } from '../../navigation/types';
@@ -22,6 +22,7 @@ import { chatApi } from '../../api/chat';
 import { toast } from '../../store/toastStore';
 import { getErrorMessage } from '../../utils/error';
 import { chatDateDividerLabel } from '../../utils/date';
+import { thumbnailUrl } from '../../utils/imageUrl';
 import type { ChatMessage } from '../../types';
 import { colors } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
@@ -29,13 +30,13 @@ import { layout } from '../../theme/layout';
 
 type Props = NativeStackScreenProps<ChatStackParamList, 'ChatPhotoGallery'>;
 
-const COLUMNS = 3;
+/** 폰에서의 열 수 — 태블릿·폴더블에서는 usePhotoGrid 가 칸 크기를 보고 늘린다 */
+const PHONE_COLUMNS = 3;
 const GAP = 2;
 
 export function ChatPhotoGalleryScreen({ route }: Props) {
   const { relationId, myId } = route.params;
-  const windowWidth = useContentWidth();
-  const CELL = useMemo(() => (windowWidth - GAP * (COLUMNS - 1)) / COLUMNS, [windowWidth]);
+  const { columns, cell: CELL } = usePhotoGrid({ gap: GAP, phoneColumns: PHONE_COLUMNS });
 
   const [photos, setPhotos] = useState<ChatMessage[]>([]);
   const [hasMore, setHasMore] = useState(false);
@@ -105,7 +106,9 @@ export function ChatPhotoGalleryScreen({ route }: Props) {
       <FlatList
         data={photos}
         keyExtractor={(p) => String(p.id)}
-        numColumns={COLUMNS}
+        /* numColumns 런타임 변경은 지원되지 않는다 — 열이 바뀌면 목록을 새로 그린다 */
+        key={columns}
+        numColumns={columns}
         columnWrapperStyle={styles.row}
         contentContainerStyle={photos.length === 0 ? styles.emptyWrap : styles.list}
         refreshControl={
@@ -119,7 +122,11 @@ export function ChatPhotoGalleryScreen({ route }: Props) {
             accessibilityRole="imagebutton"
             accessibilityLabel={`${item.senderId === myId ? '내' : '상대'} 사진 크게 보기`}
           >
-            <Image source={{ uri: item.imageUrl ?? undefined }} style={[styles.cell, { width: CELL, height: CELL }]} />
+            {/* 격자는 썸네일 — 원본을 깔면 한 화면에 수 MB 를 받는다(AlbumScreen 과 같은 규칙) */}
+            <Image
+              source={{ uri: item.imageUrl ? thumbnailUrl(item.imageUrl, Math.round(CELL)) : undefined }}
+              style={[styles.cell, { width: CELL, height: CELL }]}
+            />
           </Pressable>
         )}
         ListEmptyComponent={

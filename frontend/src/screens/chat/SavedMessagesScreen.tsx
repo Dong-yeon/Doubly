@@ -97,18 +97,20 @@ export function SavedMessagesScreen({ route, navigation }: Props) {
         onEndReachedThreshold={0.4}
         contentContainerStyle={items.length === 0 ? styles.emptyWrap : undefined}
         renderItem={({ item }) => (
-          <Pressable
-            style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-            onPress={() => openInRoom(item)}
-            accessibilityRole="button"
-          >
-            <View style={styles.rowBody}>
+          /* 줄 자체는 누를 수 없는 View 다 — 열기와 저장 취소가 형제여야 한다
+             (버튼 안 버튼은 웹에서 잘못된 마크업이다, MealCard.tsx 주석 참고) */
+          <View style={styles.row}>
+            <Pressable
+              style={({ pressed }) => [styles.rowBody, pressed && styles.rowPressed]}
+              onPress={() => openInRoom(item)}
+              accessibilityRole="button"
+            >
               <Text style={styles.sender}>{item.message.senderId === myId ? '나' : title}</Text>
               <Text style={styles.preview} numberOfLines={2}>
                 {messagePreview(item.message.messageType, item.message.content)}
               </Text>
               <Text style={styles.date}>{chatDateDividerLabel(item.message.createdAt)}</Text>
-            </View>
+            </Pressable>
             <Pressable
               onPress={() => unsave(item)}
               hitSlop={8}
@@ -117,7 +119,7 @@ export function SavedMessagesScreen({ route, navigation }: Props) {
             >
               <MaterialCommunityIcons name="bookmark" size={22} color={colors.primary} />
             </Pressable>
-          </Pressable>
+          </View>
         )}
         ListEmptyComponent={
           refreshing ? null : loadError ? (

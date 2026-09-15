@@ -572,7 +572,7 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
                         ))}
                       </View>
                       <Text style={styles.mealHint}>
-                        칼로리는 사진이 있으면 자동으로 채워져요. 식단 탭에서 고칠 수 있어요.
+                        칼로리는 사진이 있으면 자동으로 채워져요. 럽바디 탭에서 고칠 수 있어요.
                       </Text>
                     </View>
                   ) : null}

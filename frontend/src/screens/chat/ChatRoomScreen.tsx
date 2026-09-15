@@ -873,14 +873,45 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     ]);
   };
 
-  const onReact = async (msg: ChatMessage, emoji: string) => {
-    try {
-      const reactions = await chatApi.react(msg.id, emoji);
-      replaceMessage(relationId, { ...msg, reactions });
-      haptics.light();
-    } catch (e) {
-      toast.error(getErrorMessage(e, '리액션을 남기지 못했어요.'));
-    }
+  /**
+   * 리액션 — 한 메시지의 요청은 <b>줄을 세워</b> 순서대로 보낸다.
+   *
+   * <p><b>왜</b>: 칩은 토글이라 같은 칩을 연타하면 "달기 → 떼기 → 달기"가 연달아 나간다.
+   * 동시에 던지면 응답이 역전될 수 있고(먼저 보낸 요청이 나중에 도착), 각 응답은 그
+   * 시점의 <b>전체 리액션 목록</b>이라 늦게 도착한 낡은 목록이 최신 상태를 덮어쓴다.
+   * 서버 DB 와 화면이 어긋난 채로 남는다(QA_CHECKLIST.md 채팅 "연타 시 상태 꼬임", 확정).
+   *
+   * <p><b>왜 탭을 버리지 않는가</b>: in-flight 동안 무시하는 편이 더 짧지만, 리액션은
+   * 원래 톡톡 누르는 물건이라 씹으면 "눌러도 반응이 없다"가 된다(2026-09-03 리포트와 같은
+   * 함정). 메시지마다 약속 사슬 하나를 두면 모든 탭이 반영되고 <b>마지막 응답 = 마지막 탭</b>
+   * 이 보장된다.
+   */
+  const reactChainRef = useRef(new Map<number, Promise<void>>());
+
+  const onReact = (msg: ChatMessage, emoji: string) => {
+    // 진동은 기다리지 않고 지금 준다 — 사슬 뒤에 서면 반응이 한 박자 늦게 온다
+    haptics.light();
+    const chain = reactChainRef.current;
+    const run = async () => {
+      try {
+        const reactions = await chatApi.react(msg.id, emoji);
+        /* 줄을 서는 동안 그 메시지가 수정·읽음 처리됐을 수 있다 — 캡처한 msg 가 아니라
+           스토어의 최신 값 위에 리액션만 얹는다(안 그러면 편집이 되돌아간다) */
+        const latest =
+          useChatStore.getState().messages[relationId]?.find((m) => m.id === msg.id) ?? msg;
+        replaceMessage(relationId, { ...latest, reactions });
+      } catch (e) {
+        toast.error(getErrorMessage(e, '리액션을 남기지 못했어요.'));
+      }
+    };
+    const next = (chain.get(msg.id) ?? Promise.resolve()).then(run);
+    chain.set(msg.id, next);
+    // 사슬이 다 풀리면 지운다 — 방을 오래 열어 두어도 Map 이 자라지 않는다
+    void next.finally(() => {
+      if (chain.get(msg.id) === next) {
+        chain.delete(msg.id);
+      }
+    });
   };
 
   /**
@@ -1464,16 +1495,20 @@ export function ChatRoomScreen({ navigation, route }: Props) {
          * 바뀌는 "지금 필요한 것". 여러 개 쌓이는 북마크와는 성격이 다르다).
          */}
         {pinnedMessage && !pinnedMessage.deleted ? (
-          <Pressable
-            style={styles.pinnedBar}
-            onPress={() => scrollToMessage(pinnedMessage.id)}
-            accessibilityRole="button"
-            accessibilityLabel="고정된 공지로 이동"
-          >
-            <MaterialCommunityIcons name="pin" size={16} color={colors.primary} />
-            <Text style={styles.pinnedText} numberOfLines={1}>
-              {messagePreview(pinnedMessage.messageType, pinnedMessage.content)}
-            </Text>
+          /* 배너 자체는 누를 수 없는 View 다 — 이동과 고정 해제가 형제여야 한다
+             (버튼 안 버튼은 웹에서 잘못된 마크업이다, MealCard.tsx 주석 참고) */
+          <View style={styles.pinnedBar}>
+            <Pressable
+              style={styles.pinnedMain}
+              onPress={() => scrollToMessage(pinnedMessage.id)}
+              accessibilityRole="button"
+              accessibilityLabel="고정된 공지로 이동"
+            >
+              <MaterialCommunityIcons name="pin" size={16} color={colors.primary} />
+              <Text style={styles.pinnedText} numberOfLines={1}>
+                {messagePreview(pinnedMessage.messageType, pinnedMessage.content)}
+              </Text>
+            </Pressable>
             <Pressable
               onPress={onUnpinBanner}
               hitSlop={8}
@@ -1482,7 +1517,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             >
               <MaterialCommunityIcons name="close" size={16} color={colors.textSecondary} />
             </Pressable>
-          </Pressable>
+          </View>
         ) : null}
         {/*
          * FlatList 와 FAB 을 같이 감싼다 — FAB 이 이 뷰 기준으로 bottom-right 에 붙어야
@@ -2058,6 +2093,8 @@ const styles = themedStyles((colors) => ({
     paddingVertical: spacing.sm,
     backgroundColor: colors.primarySoft,
   },
+  // 배너에서 "공지로 이동"이 차지하는 몫 — 닫기 버튼만 남기고 전부
+  pinnedMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   pinnedText: { flex: 1, fontSize: fontSize.caption, fontWeight: '600', color: colors.textPrimary },
   // 날짜 구분선 — 가운데 라벨 + 양옆 선
   dateDivider: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginVertical: spacing.md },
