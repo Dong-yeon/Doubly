@@ -144,8 +144,8 @@ export type WorkoutStackParamList = {
   WorkoutMain: undefined;
   // date: 캘린더에서 특정 날짜를 골라 들어올 때 그 날짜로 시작한다 (없으면 오늘)
   /**
-   * 직접 기록 화면. `imageUrl` 이 있으면 운동 인증샷을 붙인 채로 열리고, 화면이 그 사진을
-   * AI 로 읽어 시간·거리를 채운다(읽지 못해도 사진만 붙은 기록으로 저장할 수 있다).
+   * 직접 기록 화면. `imageUrl` 이 있으면 오운완 인증샷을 붙인 채로 열린다 — 세트나 메모는
+   * 안 적어도 되고, 사진만 있는 기록도 그대로 저장된다.
    */
   WorkoutRecord:
     | {
