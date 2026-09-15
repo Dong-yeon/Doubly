@@ -4,6 +4,7 @@ import com.fitto.calendar.dto.DateMealResponse;
 import com.fitto.calendar.service.DateMealCalendarService;
 import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
+import com.fitto.common.time.KstClock;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -35,7 +36,8 @@ public class DateMealCalendarController {
     public ApiResponse<List<DateMealResponse>> month(@AuthenticationPrincipal AuthUser user,
                                                      @RequestParam(required = false) Integer year,
                                                      @RequestParam(required = false) Integer month) {
-        LocalDate now = LocalDate.now();
+        // 기본값은 KST 기준 이번 달 — 존 없는 now() 면 매월 1일 한국 새벽에 지난달을 준다
+        LocalDate now = KstClock.today();
         return ApiResponse.success(dateMealCalendarService.month(
                 user.id(),
                 year != null ? year : now.getYear(),

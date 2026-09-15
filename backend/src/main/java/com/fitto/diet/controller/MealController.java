@@ -4,6 +4,7 @@ import com.fitto.common.ai.AiJobResponse;
 import com.fitto.common.ai.AiJobService;
 import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
+import com.fitto.common.time.KstClock;
 import com.fitto.diet.dto.AnalyzeMealRequest;
 import com.fitto.diet.dto.AnalyzeMealTextRequest;
 import com.fitto.diet.dto.CoupleMealGoalResponse;
@@ -131,7 +132,12 @@ public class MealController {
     @PostMapping("/copy")
     public ApiResponse<List<MealResponse>> copyFrom(@AuthenticationPrincipal AuthUser user,
                                                      @RequestParam(required = false) LocalDate sourceDate) {
-        LocalDate from = sourceDate != null ? sourceDate : LocalDate.now().minusDays(1);
+        /*
+         * 기본값의 "어제"는 KST 기준이다. 프런트는 sourceDate 를 보내지 않으므로(diet.ts
+         * copyFromYesterday) 이 기본값이 실사용 경로다 — 존 없는 now() 였을 때는 서버가
+         * UTC 라 한국 00:00~09:00 에 누르면 어제가 아니라 그저께 식단을 복사했다.
+         */
+        LocalDate from = sourceDate != null ? sourceDate : KstClock.today().minusDays(1);
         return ApiResponse.success(mealService.copyFrom(user.id(), from), "어제 식단을 불러왔어요.");
     }
 

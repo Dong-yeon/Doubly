@@ -6,6 +6,7 @@ import com.fitto.calendar.dto.UpdateEventRequest;
 import com.fitto.calendar.service.CalendarService;
 import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
+import com.fitto.common.time.KstClock;
 import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -37,7 +38,8 @@ public class CalendarController {
     public ApiResponse<List<EventResponse>> month(@AuthenticationPrincipal AuthUser user,
                                                   @RequestParam(required = false) Integer year,
                                                   @RequestParam(required = false) Integer month) {
-        LocalDate now = LocalDate.now();
+        // 기본값은 KST 기준 이번 달 — 존 없는 now() 면 매월 1일 한국 새벽에 지난달을 준다
+        LocalDate now = KstClock.today();
         return ApiResponse.success(calendarService.monthEvents(
                 user.id(),
                 year != null ? year : now.getYear(),
