@@ -26,8 +26,6 @@ export type Plan = 'FREE' | 'PRO';
 export type FeatureKey =
   | 'AI_FOOD_PHOTO'
   | 'AI_FOOD_TEXT'
-  /** 운동 인증샷 분석 — 다른 앱의 완료 화면을 읽어 기록을 채운다 */
-  | 'AI_WORKOUT_PHOTO'
   | 'AI_DIET_COACH'
   | 'AI_DATE_COURSE'
   | 'AI_RESTAURANT_RECOMMEND'
@@ -82,6 +80,13 @@ export interface FeatureState {
   /** 무제한·차단·개수형이면 null */
   remaining: number | null;
   period: QuotaPeriod;
+  /**
+   * 이 잠금이 결제로 풀리는가 — false 면 업그레이드를 권하지 않는다.
+   *
+   * allowed=false 에는 "플랜이 낮아서 막힘"과 "이미 PRO인데 이번 기간 한도 소진"이
+   * 섞여 있다. 후자에 PRO 유도 문구를 띄우면 돈 낸 사람에게 결제를 또 권하는 꼴이다.
+   */
+  upgradable: boolean;
 }
 
 export interface PlanInfo {
@@ -119,12 +124,22 @@ export interface User {
 }
 
 // 전체 사진첩 — 사진 있는 피드 포스트 모아보기
+/**
+ * 사진첩이 모으는 소스 — 타임라인의 FeedItemType 중 "우리가 찍은 사진"이 달리는 넷.
+ * 관람 기록(CONTENT_LOG)은 이미지가 포스터라 제외한다(서버 PHOTO_SOURCES 와 같은 목록).
+ */
+export type FeedPhotoSource = 'POST' | 'MEAL' | 'WORKOUT' | 'PLACE_VISIT';
+
 export interface FeedPhoto {
-  postId: number;
+  /** 어느 기록에서 온 사진인지 — 상단 필터 칩과 뷰어 캡션의 성격을 가른다 */
+  type: FeedPhotoSource;
+  /** 원본 기록의 id. 같은 type 안에서만 유일하다 — 키는 `${type}:${refId}` 로 만든다 */
+  refId: number;
   imageUrl: string;
-  /** 이 포스트의 사진 전체 목록([0]이 imageUrl과 같은 값). 그리드 칸은 여전히 대표 사진 하나만 쓴다 */
+  /** 이 기록의 사진 전체 목록([0]이 imageUrl과 같은 값). 여러 장은 일상 포스트만 가능 */
   imageUrls?: string[] | null;
-  content?: string | null;
+  /** 뷰어 하단 한 줄 설명 — 서버가 타임라인 카드의 제목·부제로 만든다 */
+  caption?: string | null;
   authorName: string;
   mine: boolean;
   /** 여행 앨범에 담긴 사진이면 그 여행 id */
@@ -273,7 +288,7 @@ export interface Workout {
   memo?: string | null;
   /** 이 기록이 시작된 내 루틴 템플릿 id — 스마트 루틴 동기화(Save-on-Finish)의 전제 */
   sourceRoutineId?: number | null;
-  /** 운동 인증샷 — 다른 앱 완료 화면·트레드밀 사진. 사진만 있는 기록도 유효하다 */
+  /** 오운완 인증샷 — 사진만 있는 기록도 유효하다. 커플 피드 노출은 imageShared 가 가른다 */
   imageUrl?: string | null;
   /** 종목 목록 — 비어 있을 수 있다("오늘 운동 완료"만 남긴 기록) */
   sets: WorkoutSet[];
@@ -941,24 +956,6 @@ export interface MealAnalysis {
   source?: MealAnalysisSource | null;
 }
 
-/**
- * 운동 인증샷 분석 결과 (POST /workout/analyze-photo) — 전부 추정치다.
- * 기록 화면의 칸을 채워줄 뿐이고 저장은 사용자가 확인한 뒤 한다.
- */
-export interface WorkoutPhotoAnalysis {
-  isWorkout: boolean;
-  exerciseName?: string | null;
-  /** 근력 / 유산소 / 유연성 — 앱의 카테고리 칩과 같은 값 */
-  category?: string | null;
-  durationMin?: number | null;
-  distanceKm?: number | null;
-  /** 참고용 — 앱마다 추정 공식이 달라 기록에는 저장하지 않는다 */
-  calories?: number | null;
-  /** 무엇을 읽었는지("스트라바", "트레드밀 계기판") — 사용자에게 그대로 보여준다 */
-  sourceApp?: string | null;
-  comment?: string | null;
-}
-
 // 최근 먹은 음식 자동완성 (GET /meal/recent-foods) — 즐겨찾기와 달리 저장 없이 자동으로 뽑힌다
 export interface RecentFood {
   /** 음식 이름 — 최근 기록의 음식 항목(meal_items)에서 뽑힌다. 끼니 메모가 아니다 */
@@ -1584,6 +1581,11 @@ export interface CoupleEmoji {
   createdBy: number;
   /** 무드 선택지에 올라가는가 — 트레이에서 길게 눌러 토글한다 */
   moodVisible: boolean;
+  /**
+   * 이 감정이 대신하는 기본 무드 유니코드 — 무드 피커가 어느 칸을 덮을지 정한다.
+   * 매핑은 서버(CoupleEmojiEmotion)가 갖고 우리는 받기만 한다. 여러 감정이 같은 값을 가질 수 있다.
+   */
+  moodEmoji: string;
   createdAt: string;
 }
 

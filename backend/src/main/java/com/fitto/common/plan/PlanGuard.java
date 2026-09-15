@@ -43,6 +43,50 @@ public class PlanGuard {
         this.eventLogService = eventLogService;
     }
 
+    /**
+     * 이 기능의 사용량을 <b>어느 주머니에서</b> 셀지 — 사람인가 커플인가.
+     *
+     * <p>{@link Feature#isCoupleScoped()} 인 기능은 결과물이 커플 공간에 쌓이므로 누가
+     * 올렸는지가 중요하지 않다. 사람마다 따로 세면 한 명이 주로 찍는 실제 사용 패턴에서
+     * <b>한쪽만 먼저 막힌다</b> — 같은 앨범을 같이 보는데 한 사람만 못 올리는 상태다.
+     *
+     * <p>판정({@link PlanResolver#resolveFor})이 이미 관계 단위인 기능들이라, 계측도 같은
+     * 관계를 봐야 한다. 둘이 어긋나면 "둘 다 PRO 인데 한 명만 한도에 걸린다"가 된다.
+     *
+     * <p>커플이 없으면 본인 주머니로 떨어진다 — 판정과 같은 폴백이다.
+     */
+    private UsageScope scopeOf(Long userId, Feature feature) {
+        if (!feature.isCoupleScoped()) {
+            return UsageScope.user(userId);
+        }
+        return planResolver.activeCoupleIdOf(userId)
+                .map(UsageScope::relation)
+                .orElseGet(() -> UsageScope.user(userId));
+    }
+
+    /** 사용량을 셀 주머니 — 사람이거나 관계이거나. */
+    private record UsageScope(Long userId, Long relationId) {
+        static UsageScope user(Long userId) {
+            return new UsageScope(userId, null);
+        }
+
+        static UsageScope relation(Long relationId) {
+            return new UsageScope(null, relationId);
+        }
+    }
+
+    private int peekUsage(UsageScope scope, Feature feature, Quota quota) {
+        return scope.relationId() != null
+                ? usageCounter.peekForRelation(scope.relationId(), feature, quota)
+                : usageCounter.peek(scope.userId(), feature, quota);
+    }
+
+    private int incrementUsage(UsageScope scope, Feature feature, Quota quota) {
+        return scope.relationId() != null
+                ? usageCounter.incrementForRelation(scope.relationId(), feature, quota)
+                : usageCounter.increment(scope.userId(), feature, quota);
+    }
+
     /** 기능이 이 사용자에게 열려 있는지만 확인한다 (사용량은 건드리지 않음). */
     public void require(Long userId, Feature feature) {
         Plan plan = planResolver.resolveFor(userId, feature);
@@ -52,7 +96,7 @@ public class PlanGuard {
             throw upgradeRequired(feature);
         }
         if (quota.isCounted()) {
-            int used = usageCounter.peek(userId, feature, quota);
+            int used = peekUsage(scopeOf(userId, feature), feature, quota);
             if (used >= quota.limit()) {
                 logBlocked(userId, feature);
                 throw limitExceeded(feature, plan, quota);
@@ -78,7 +122,7 @@ public class PlanGuard {
             logUsed(userId, feature);
             return;
         }
-        int used = usageCounter.increment(userId, feature, quota);
+        int used = incrementUsage(scopeOf(userId, feature), feature, quota);
         if (used > quota.limit()) {
             logBlocked(userId, feature);
             throw limitExceeded(feature, plan, quota);
@@ -104,7 +148,13 @@ public class PlanGuard {
         if (quota.isBlocked() || quota.isUnlimited() || !quota.isCounted()) {
             return; // 애초에 센 적이 없다
         }
-        usageCounter.decrement(userId, feature, quota);
+        // 올린 주머니에서 깎는다 — consume 과 같은 scopeOf 를 쓴다(다르면 한도가 안 줄어든다)
+        UsageScope scope = scopeOf(userId, feature);
+        if (scope.relationId() != null) {
+            usageCounter.decrementForRelation(scope.relationId(), feature, quota);
+        } else {
+            usageCounter.decrement(scope.userId(), feature, quota);
+        }
     }
 
     /**
@@ -155,14 +205,14 @@ public class PlanGuard {
         if (!quota.isCounted()) {
             return true;
         }
-        return usageCounter.peek(userId, feature, quota) < quota.limit();
+        return peekUsage(scopeOf(userId, feature), feature, quota) < quota.limit();
     }
 
     /** 표시용 — 앱의 잔여 횟수·잠금 배지에 쓴다. */
     public FeatureState state(Long userId, Feature feature) {
         Plan plan = planResolver.resolveFor(userId, feature);
         Quota quota = feature.quotaFor(plan);
-        int used = quota.isCounted() ? usageCounter.peek(userId, feature, quota) : 0;
+        int used = quota.isCounted() ? peekUsage(scopeOf(userId, feature), feature, quota) : 0;
         boolean allowed = !quota.isBlocked()
                 && (quota.isUnlimited() || !quota.isCounted() || used < quota.limit());
         Integer remaining = quota.isUnlimited() || quota.isBlocked() || !quota.isCounted()
@@ -170,7 +220,9 @@ public class PlanGuard {
                 : Math.max(0, quota.limit() - used);
         return new FeatureState(
                 feature.name(), feature.displayName(), allowed,
-                quota.limit(), used, remaining, quota.window().name());
+                quota.limit(), used, remaining, quota.window().name(),
+                // limitExceeded 와 같은 근거 — 최상위 플랜이면 팔 것이 없다.
+                !plan.isAtLeast(Plan.PRO));
     }
 
     public Plan planOf(Long userId) {

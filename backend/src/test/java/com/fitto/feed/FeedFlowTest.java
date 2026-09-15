@@ -101,21 +101,45 @@ class FeedFlowTest {
     }
 
     /**
-     * 운동 인증샷은 <b>애인에게도 보이지 않는다</b> — 커플 피드에 이미지가 실리지 않는다.
+     * 운동 사진은 <b>오운완으로 올린 것만</b> 커플 피드에 실린다.
      *
-     * <p>인증샷은 대개 다른 앱의 완료 화면 캡처이고, 러닝 앱 화면에는 <b>달린 경로 지도</b>가
-     * 함께 찍혀 있다. 즉 집 근처 동선이 그대로 담긴 사진이다. 이걸 "커플 콘텐츠니까"라며
-     * 자동으로 피드에 흘리면, 사용자는 자기가 무엇을 공개했는지 모른 채 위치를 공유하게 된다.
-     * 공유하고 싶으면 사진을 직접 피드 포스트로 올리면 된다 — 그건 명시적인 행동이다.
+     * <p>예전 이 자리에는 "운동 인증샷은 애인에게도 보이지 않는다" 가 있었다. 그때 사진은
+     * 다른 앱의 완료 화면 캡처였고, 러닝 앱 화면에는 <b>달린 경로 지도</b>(대개 집 근처)가
+     * 함께 찍혀 있었기 때문이다. 그 테스트의 주석은 "나중에 운동 카드에도 사진을 붙이자는
+     * 개선이 들어올 때 실패해서 그 결정을 의식적으로 하게 만드는 것이 목적"이라고 적었고,
+     * 2026-09-14 에 실제로 그렇게 걸렸다 — 사진 기능이 오운완 인증샷으로 바뀌면서다.
      *
-     * <p>이 테스트는 나중에 "운동 카드에도 사진을 붙이자"는 개선이 들어올 때 <b>실패해서</b>
-     * 그 결정을 의식적으로 하게 만드는 것이 목적이다.
+     * <p>바뀐 규칙은 <b>사진마다 다르다</b>. 옛 사진은 "애인에게는 공유되지 않아요" 안내를
+     * 보고 올라왔으므로 소급해서 공개하지 않는다({@code Workout.imageShared} 기본값 false,
+     * V94). 구버전 앱은 이 필드를 보내지 않으므로 자동으로 안전한 쪽에 선다.
      */
     @Test
-    void 운동_인증샷은_커플_피드에_노출되지_않는다() {
+    void 오운완으로_올린_사진만_커플_피드에_실린다() {
         long[] c = couple("fwphoto1@fitto.com", "fwphoto2@fitto.com");
+        String selfie = "https://res.cloudinary.com/demo/image/upload/owoonwan.jpg";
+
+        workoutService.save(c[1], new SaveWorkoutRequest(LocalDate.now(), null, 32, null, null,
+                selfie, true, List.of()));
+
+        FeedItemResponse workout = feedService.timeline(c[0], null, 20).items().stream()
+                .filter(i -> i.type() == FeedItemType.WORKOUT)
+                .findFirst().orElseThrow();
+        assertThat(workout.imageUrl()).isEqualTo(selfie);
+    }
+
+    /**
+     * 공유 표시가 없는 사진은 안 실린다 — 옛 기록과 <b>구버전 앱</b>이 여기 걸린다.
+     *
+     * <p>구 앱은 {@code imageShared} 를 아예 보내지 않는다. 그 요청이 그대로 "공유"로 읽히면
+     * 스토어 앱을 쓰는 사람이 러닝 앱 화면을 올리는 순간 집 근처 경로가 애인에게 간다 —
+     * 백엔드가 앱보다 먼저 배포되는 동안 실제로 열리는 창이다.
+     */
+    @Test
+    void 공유_표시가_없는_운동_사진은_피드에_안_실린다() {
+        long[] c = couple("fwphoto3@fitto.com", "fwphoto4@fitto.com");
         String screenshot = "https://res.cloudinary.com/demo/image/upload/strava-map.jpg";
 
+        // imageShared 를 안 보내는 옛 호출부와 같은 모양
         workoutService.save(c[1], new SaveWorkoutRequest(LocalDate.now(), null, 32, null, null,
                 screenshot, List.of()));
 
@@ -145,7 +169,9 @@ class FeedFlowTest {
                 .filter(i -> i.type() == FeedItemType.MEAL).findFirst().orElseThrow();
 
         assertThat(meal.title()).isEqualTo("삼겹살 외 2개");
-        assertThat(meal.content()).isEqualTo("저녁 · 820kcal");
+        // 칼로리는 부제에서 빠진다 — 피드는 자동 노출이라 매 끼니 감시가 된다(FeedItemMapper 주석)
+        assertThat(meal.content()).isEqualTo("저녁");
+        assertThat(meal.content()).doesNotContain("kcal");
         assertThat(meal.shared()).isFalse();
     }
 
@@ -159,7 +185,7 @@ class FeedFlowTest {
                 .filter(i -> i.type() == FeedItemType.MEAL).findFirst().orElseThrow();
 
         assertThat(meal.title()).isEqualTo("회식");
-        assertThat(meal.content()).isEqualTo("점심 · 800kcal");
+        assertThat(meal.content()).isEqualTo("점심");
     }
 
     /**
@@ -234,7 +260,7 @@ class FeedFlowTest {
         FeedItemResponse meal = feedService.timeline(c[0], null, 20).items().stream()
                 .filter(i -> i.type() == FeedItemType.MEAL).findFirst().orElseThrow();
 
-        assertThat(meal.content()).isEqualTo("점심 · 700kcal · 📍트라토리아");
+        assertThat(meal.content()).isEqualTo("점심 · 📍트라토리아");
     }
 
     @Test

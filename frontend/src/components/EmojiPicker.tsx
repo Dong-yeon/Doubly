@@ -134,6 +134,8 @@ export function EmojiPicker({ visible, onClose, onSelect, title = '이모지 선
             placeholderTextColor={colors.textTertiary}
           />
 
+          {/* 검색 중에는 카테고리를 숨긴다 — 전체에서 찾으므로 의미가 없다. 시트 높이가
+              고정이라(sheet 주석) 이 줄이 빠져도 바깥 크기는 그대로고 격자만 넓어진다 */}
           {query.trim() ? null : (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabs}>
               {CATEGORIES.map((c) => (
@@ -185,7 +187,14 @@ const styles = themedStyles((colors) => ({
     borderTopRightRadius: radius.xl,
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.xl,
-    maxHeight: '70%',
+    /*
+     * 높이를 <b>고정</b>한다(maxHeight 아님). 내용에 맞춰 잡으면 시트가 쓰는 중에 갑자기
+     * 작아진다 — 검색을 입력하는 순간 카테고리 탭 줄이 사라지고(아래 query 분기) 결과가
+     * 한두 개면 격자까지 줄어, 방금 누르려던 자리가 아래로 내려앉는다. 키보드 높이의
+     * 이모티콘 패널에서 이 시트로 넘어올 때도 크기가 튀어 보였다(2026-09-15 리포트).
+     * 격자는 안에서 스크롤하면 되므로 바깥 크기는 늘 같아야 한다.
+     */
+    height: '70%',
   },
   handle: {
     width: 40,

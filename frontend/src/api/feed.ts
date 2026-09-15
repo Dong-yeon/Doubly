@@ -4,6 +4,7 @@ import type {
   ApiResponse,
   FeedItem,
   FeedItemType,
+  FeedPhotoSource,
   FeedPhotosPage,
   FeedTimeline,
   Memories,
@@ -28,11 +29,20 @@ export const feedApi = {
       }),
     ),
 
-  /** 전체 사진첩 — 사진 있는 커플 포스트만. cursor 규칙은 timeline 과 동일 */
-  photos: (cursor?: string | null, limit = 30) =>
+  /**
+   * 사진첩("우리" 탭) — 일상·식단·운동·맛집 중 사진 있는 기록. cursor 규칙은 timeline 과 동일.
+   *
+   * <p>`sources` 를 주면 그 소스만 받는다(상단 필터 칩). 생략하면 4소스 전부 —
+   * 서버 기본값과 같으므로 "전체" 칩은 파라미터를 아예 보내지 않는다.
+   */
+  photos: (cursor?: string | null, limit = 30, sources?: FeedPhotoSource[]) =>
     unwrap(
       apiClient.get<ApiResponse<FeedPhotosPage>>('/feed/photos', {
-        params: { cursor: cursor ?? undefined, limit },
+        params: {
+          cursor: cursor ?? undefined,
+          limit,
+          sources: sources && sources.length > 0 ? sources.join(',') : undefined,
+        },
       }),
     ),
 

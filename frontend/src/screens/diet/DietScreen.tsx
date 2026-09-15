@@ -1,4 +1,11 @@
-/** 식단 메인 — 오늘 기록 + 히스토리 + 스트릭/커플 목표 + 캘린더/통계 진입 */
+/**
+ * 럽바디 메인 — 식단 기록(오늘 + 히스토리 + 스트릭/커플 목표 + 캘린더/통계) + 운동 체크인.
+ *
+ * <p>운동 탭이 없어지면서 이 화면이 <b>탭의 첫 화면</b>이 됐다
+ * (docs/ALBUM_TAB_IA_2026-09-14.md 5-2). 운동은 상단 체크인 카드 하나로 들어오고,
+ * 루틴·회복·히스토리 같은 정밀 경로는 그 카드의 "운동 홈 ›"에 그대로 있다.
+ * 세그먼트 토글은 만들지 않는다 — 식단 메인이 곧 럽바디 메인이다.
+ */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   FlatList,
@@ -15,7 +22,7 @@ import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { DietStackParamList } from '../../navigation/types';
+import type { HealthStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
 import { MealCard } from '../../components/MealCard';
@@ -23,7 +30,9 @@ import { QuickLinkChips } from '../../components/QuickLinkChips';
 import { EmptyState } from '../../components/EmptyState';
 import { AiInsightButton } from '../../components/AiInsightButton';
 import { ProteinRing } from '../../components/ProteinRing';
+import { WorkoutCheckinCard } from '../../components/workout/WorkoutCheckinCard';
 import { useDietStore } from '../../store/dietStore';
+import { useWorkoutStore } from '../../store/workoutStore';
 import { useRelationStore } from '../../store/relationStore';
 import { useDeleteAction } from '../../hooks/useDeleteAction';
 import { dietApi } from '../../api/diet';
@@ -107,7 +116,12 @@ function renderLetter(l: WeeklyLetter) {
   return <Text style={styles.aiLetter}>{l.letter}</Text>;
 }
 
-type Props = NativeStackScreenProps<DietStackParamList, 'DietMain'>;
+/*
+ * 이 화면만 넓은 쪽(HealthStackParamList)으로 타이핑한다 — 운동 체크인 카드에서
+ * WorkoutMain·WorkoutRecord·WorkoutSession 으로 가야 하기 때문이다. 나머지 식단·운동
+ * 화면은 각자 좁은 파람리스트를 그대로 쓴다(navigation/types.ts 주석).
+ */
+type Props = NativeStackScreenProps<HealthStackParamList, 'DietMain'>;
 
 export function DietScreen({ navigation }: Props) {
   const {
@@ -178,14 +192,22 @@ export function DietScreen({ navigation }: Props) {
       ? Math.max(0, Math.floor((Date.now() - new Date(fasting.startedAt).getTime()) / 60000))
       : (fasting?.elapsedMin ?? 0);
 
+  /*
+   * 오늘 운동 기록 — 상단 체크인 카드가 "챙겼는지"를 이 값으로 가른다. 카드가 스스로
+   * 부르지 않고 화면이 부른다: 운동 홈도 같은 카드를 쓰는데 양쪽이 다 조회하면 그 화면에서
+   * 같은 요청이 두 번 나간다(WorkoutCheckinCard 주석).
+   */
+  const fetchWorkoutToday = useWorkoutStore((s) => s.fetchToday);
+
   const refreshExtras = useCallback(() => {
+    fetchWorkoutToday();
     streakApi.mealMe().then(setMyStreak).catch(() => setMyStreak(null));
     streakApi.mealCouple().then(setCoupleStreak).catch(() => setCoupleStreak(null));
     dietApi.coupleGoal().then(setGoal).catch(() => setGoal(null));
     dietApi.nutrition().then(setNutrition).catch(() => setNutrition(null));
     refreshWater();
     refreshFasting();
-  }, [refreshWater, refreshFasting]);
+  }, [refreshWater, refreshFasting, fetchWorkoutToday]);
 
   // 모달을 연 시점의 목표 스냅샷 — 백드롭으로 닫을 때 "달라진 게 있는지"를 판단한다
   const nutInitialRef = useRef('');
@@ -366,8 +388,22 @@ export function DietScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      {/* 운동 탭과 같은 QuickLinkChips — 항목이 2개뿐이라도 같은 컴포넌트를 써서
-          정렬·톤이 탭을 넘나들며 흔들리지 않게 한다. */}
+      {/*
+        운동 체크인 — 운동 탭이 이 탭으로 흡수된 자리(ALBUM_TAB_IA_2026-09-14.md 5-2).
+        맨 위에 두는 이유: 하루 한 번의 "챙겼다"가 운동에서 가장 자주 하는 동작이고,
+        식단은 아래 목록·기록 버튼이 이미 화면 전체를 차지하고 있다. 자세한 기록은
+        카드의 "운동 홈 ›"으로.
+      */}
+      <View style={styles.workoutCheckin}>
+        <WorkoutCheckinCard
+          onOpenRecord={(params) => navigation.navigate('WorkoutRecord', params)}
+          onResume={() => navigation.navigate('WorkoutSession', { resume: true })}
+          onOpenWorkoutHome={() => navigation.navigate('WorkoutMain')}
+        />
+      </View>
+
+      {/* 운동 홈과 같은 QuickLinkChips — 항목이 2개뿐이라도 같은 컴포넌트를 써서
+          정렬·톤이 화면을 넘나들며 흔들리지 않게 한다. */}
       <QuickLinkChips
         links={[
           { icon: 'chart-bar', label: '통계', onPress: () => navigation.navigate('DietStats') },
@@ -407,7 +443,7 @@ export function DietScreen({ navigation }: Props) {
         onEndReached={loadMoreHistory}
         ListHeaderComponent={
           <View>
-            {/* 식단 스트릭 — 운동 탭과 같은 표시 형식(연속/함께/최고), 같은 위치(최상단) */}
+            {/* 식단 스트릭 — 운동 홈과 같은 표시 형식(연속/함께/최고) */}
             <View style={styles.streakRow}>
               <Text style={styles.streakText}>연속 {myStreak?.currentCount ?? 0}일</Text>
               {goal?.connected ? (
@@ -910,6 +946,8 @@ export function DietScreen({ navigation }: Props) {
 
 const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
+  // 체크인 카드 자체가 아래 여백(marginBottom)을 갖고 있어 위쪽만 띄운다
+  workoutCheckin: { paddingTop: spacing.md },
   nutCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,

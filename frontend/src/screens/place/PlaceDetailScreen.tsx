@@ -649,7 +649,7 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
                 <EmptyState
                   icon="map-marker-outline"
                   title="아직 방문 기록이 없어요"
-                  description="다녀오셨다면 남겨보세요! (길게 눌러 삭제)"
+                  description="다녀오셨다면 별점과 함께 남겨보세요!"
                 />
               )
             ) : null

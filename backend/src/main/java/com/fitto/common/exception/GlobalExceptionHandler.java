@@ -9,6 +9,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -44,6 +45,22 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ApiResponse<Void>> handleNotReadable(HttpMessageNotReadableException e) {
         return badRequest("요청 본문을 해석할 수 없습니다.");
+    }
+
+    /**
+     * 쿼리·경로 파라미터의 타입이 안 맞을 때 → 400.
+     *
+     * <p>예: {@code /feed/photos?sources=NOPE}(enum 이름이 아님),
+     * {@code /workout/records/abc}(숫자 아님), 날짜 형식이 깨진 {@code ?on=어제}.
+     *
+     * <p><b>없으면 500 이 된다.</b> 이 핸들러가 붙기 전까지 이런 요청은 아래
+     * {@code Exception} 핸들러로 떨어져 스택트레이스까지 남겼다 — 서버가 잘못한 게 아니라
+     * 요청이 잘못된 경우인데 운영 로그가 오염되고, 클라이언트도 "재시도하면 되는 오류"인지
+     * "요청을 고쳐야 하는 오류"인지 구분할 수 없었다.
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiResponse<Void>> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
+        return badRequest("요청 값이 올바르지 않습니다: " + e.getName());
     }
 
     /** 필수 헤더 누락 (예: Authorization) → 400 */

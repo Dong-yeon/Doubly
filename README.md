@@ -54,7 +54,7 @@ src/
 ├── components/   # 공용 UI (Button, Card, TextField, KakaoMap, …)
 ├── constants/    # theme(컬러/스페이싱), config(API URL·Cloudinary·카카오맵 키)
 ├── hooks/        # 커스텀 훅
-├── navigation/   # Root / Onboarding / MainTab(홈·운동+식단·FAB·채팅·맛집) 네비게이터
+├── navigation/   # Root / Onboarding / MainTab(홈·우리·채팅·럽바디·럽슐랭) 네비게이터
 ├── screens/      # onboarding, home, workout, diet, chat, place, trip, feed, trainer, my
 ├── store/        # Zustand 스토어 (auth, relation, chat, diet, toast)
 ├── types/        # 공용 도메인 타입
@@ -770,7 +770,7 @@ point_ledger              -- 포인트 적립·사용 내역 (잔액을 컬럼�
 | 기능 | 왜 |
 | --- | --- |
 | `FULL_STATS` | 지금 "전체 기간" 값은 `totalDays` 하나뿐이다. 총 운동 일수를 가리는 건 값어치도 없고 쩨쩨하다. 이 게이트의 실제 대상은 **운동 v2 의 볼륨·1RM·부위별 밸런스**이고, 그건 아직 없다 |
-| `PREMIUM_STICKER` | 프리미엄 스티커 팩이 아직 없다. 현재 16종은 전부 무료 |
+| `PREMIUM_STICKER` | 유니코드 이모지는 전부 무료다(2026-09-14 시즌 팩 폐지). 이 게이트가 실제로 막는 건 움직이는 이모티콘 24종과 확장 무드팩 |
 
 > ⚠️ **`imageUpload.ts` 의 폴백 조건을 넓히지 말 것.** 예전에는 서명 발급이 실패하면
 > 무조건 unsigned preset 으로 넘어갔는데, 그러면 한도 초과(402)를 받아도 조용히 우회해서
@@ -912,7 +912,7 @@ point_ledger              -- 포인트 적립·사용 내역 (잔액을 컬럼�
 | 확장 | 오프라인 홈 안정화 (첫 진입 위젯 캐시 시드 + 실패 시 기존 값 유지·안내 1회) | ✅ 완료 |
 | 요금제 | 스트릭 복구권 (`STREAK_REPAIR` 실동작 — 어제 하루만 비었을 때 이어붙이기, PRO 월 2회) | ✅ 완료 |
 | 요금제 | 심화 영양 통계 (`FULL_STATS` 실동작 — 30일 매크로 달성률·나트륨·당 추이. 7일 요약은 무료) | ✅ 완료 |
-| 요금제 | 시즌 스티커 5팩 + 확장 무드팩 (`PREMIUM_STICKER` 실동작 — 원가 0, 커플 단위 판정) | ✅ 완료 |
+| 요금제 | 움직이는 이모티콘 24종 + 확장 무드팩 (`PREMIUM_STICKER` 실동작 — 원가 0, 커플 단위 판정). 시즌 스티커 5팩은 2026-09-14 폐지 | ✅ 완료 |
 | 요금제 | 운동 부스터 (`WORKOUT_BOOSTER` 실동작 — 일회성 응원, V61 · 음성 응원 문구 3→5종) | ✅ 완료 |
 | 확장 | 채팅 예약 전송(scheduled send) — 시각 지정, 발송 전 취소 가능 | ✅ 완료 |
 | 확장 | 채팅 대화 내보내기 — 텍스트로 저장/공유, 상한 초과 시 최근 대화가 남도록 자름 | ✅ 완료 |

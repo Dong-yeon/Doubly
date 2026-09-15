@@ -51,13 +51,20 @@ public class FeedController {
         return ApiResponse.success(feedService.timeline(user.id(), cursor, limit));
     }
 
-    /** 전체 사진첩 — 사진 있는 커플 포스트만 keyset 페이징으로 모아본다. */
+    /**
+     * 사진첩("우리" 탭) — 일상·식단·운동·맛집 중 사진 있는 기록을 keyset 페이징으로 모아본다.
+     *
+     * <p>{@code sources} 는 상단 필터 칩용이며 생략하면 4소스 전부다
+     * (예: {@code ?sources=MEAL,WORKOUT}). 값이 잘못되면 400 — 화면의 칩이 보내는
+     * 고정 목록이라 조용히 무시하기보다 드러나는 편이 낫다.
+     */
     @GetMapping("/photos")
     public ApiResponse<FeedPhotosResponse> photos(
             @AuthenticationPrincipal AuthUser user,
             @RequestParam(required = false) String cursor,
-            @RequestParam(defaultValue = "30") int limit) {
-        return ApiResponse.success(feedService.photos(user.id(), cursor, limit));
+            @RequestParam(defaultValue = "30") int limit,
+            @RequestParam(required = false) List<FeedItemType> sources) {
+        return ApiResponse.success(feedService.photos(user.id(), cursor, limit, sources));
     }
 
     /**

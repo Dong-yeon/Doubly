@@ -1,6 +1,6 @@
 /**
  * 채팅 사진 모아보기 — docs/CHAT_RETENTION_AND_KAKAO_BENCHMARK_2026-09-03.md §6 2순위.
- * PhotoAlbumScreen(피드 사진)과 같은 3열 그리드 패턴이지만, 대상은 이 방의 IMAGE
+ * AlbumScreen("우리" 탭)과 같은 3열 그리드 패턴이지만, 대상은 이 방의 IMAGE
  * 메시지다. 전면 무료(PRO_PLAN_DESIGN.md "우리 대화 갤러리") — 게이팅 없음.
  */
 import React, { useCallback, useMemo, useRef, useState } from 'react';

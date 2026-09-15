@@ -209,6 +209,32 @@ class PlanFlowTest {
         assertThat(state.allowed()).isTrue();
     }
 
+    @Test
+    void 무료가_막힌_기능은_상태조회도_업셀을_권한다() {
+        Long user = register("plan-state-free-blocked@fitto.com");
+
+        FeatureState state = planGuard.state(user, Feature.AI_COUPLE_EMOJI);
+        assertThat(state.allowed()).isFalse();
+        assertThat(state.upgradable()).isTrue();
+    }
+
+    @Test
+    void 유료가_한도를_다_쓰면_상태조회는_업셀을_권하지_않는다() {
+        // 실행 시점(429)과 같은 근거를 표시에도 준다. 이게 없어서 영구 PRO 계정이
+        // 우리 이모지 월 4회를 다 쓰면 "PRO에서 만들 수 있어요"가 떴다.
+        Long user = register("plan-state-pro-exhausted@fitto.com");
+        givePro(user, LocalDateTime.now().plusDays(30));
+        int limit = Feature.AI_COUPLE_EMOJI.quotaFor(Plan.PRO).limit();
+
+        for (int i = 0; i < limit; i++) {
+            planGuard.consume(user, Feature.AI_COUPLE_EMOJI);
+        }
+
+        FeatureState state = planGuard.state(user, Feature.AI_COUPLE_EMOJI);
+        assertThat(state.allowed()).isFalse();
+        assertThat(state.upgradable()).isFalse();
+    }
+
     /* ── 탈퇴 (FK) ────────────────────────────────────────────────────────── */
 
     @Test

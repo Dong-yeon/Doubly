@@ -1,7 +1,20 @@
-/** 운동 탭 내부 스택 — 운동 전용 (식단은 DietStackNavigator 로 분리됨) */
+/**
+ * 럽바디 탭 내부 스택 — 식단 + 운동 (docs/ALBUM_TAB_IA_2026-09-14.md 5-2).
+ *
+ * <p>구 "건강" 탭처럼 세그먼트 토글로 두 도메인을 전환하는 구조가 <b>아니다</b>.
+ * 첫 화면은 식단 메인 하나이고, 운동은 그 화면 상단의 체크인 카드(WorkoutCheckinCard)로
+ * 흡수됐다. 운동 홈은 그 카드의 "운동 홈 ›"으로 들어가는 2차 화면이라 헤더를 가진다 —
+ * 루틴·회복·음성 응원·히스토리는 원하는 사람이 계속 쓴다.
+ */
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import type { WorkoutStackParamList } from './types';
+import type { HealthStackParamList } from './types';
+import { DietScreen } from '../screens/diet/DietScreen';
+import { DietRecordScreen } from '../screens/diet/DietRecordScreen';
+import { DietCalendarScreen } from '../screens/diet/DietCalendarScreen';
+import { DietStatsScreen } from '../screens/diet/DietStatsScreen';
+import { BarcodeScanScreen } from '../screens/diet/BarcodeScanScreen';
+import { FavoriteFoodGiftInboxScreen } from '../screens/diet/FavoriteFoodGiftInboxScreen';
 import { WorkoutScreen } from '../screens/workout/WorkoutScreen';
 import { WorkoutRecordScreen } from '../screens/workout/WorkoutRecordScreen';
 import { WorkoutCalendarScreen } from '../screens/workout/WorkoutCalendarScreen';
@@ -18,16 +31,36 @@ import { ExerciseHistoryScreen } from '../screens/workout/ExerciseHistoryScreen'
 import { VoiceClipsScreen } from '../screens/workout/VoiceClipsScreen';
 import { BodyMetricScreen } from '../screens/workout/BodyMetricScreen';
 import { ChallengeScreen } from '../screens/workout/ChallengeScreen';
+import { PlaceDetailScreen } from '../screens/place/PlaceDetailScreen';
 import { stackScreenOptions, modalOptions } from './headerOptions';
 
-const Stack = createNativeStackNavigator<WorkoutStackParamList>();
+const Stack = createNativeStackNavigator<HealthStackParamList>();
 
-export function WorkoutStackNavigator() {
+export function HealthStackNavigator() {
   return (
-    <Stack.Navigator
-      screenOptions={stackScreenOptions}
-    >
-      <Stack.Screen name="WorkoutMain" component={WorkoutScreen} options={{ headerShown: false }} />
+    <Stack.Navigator screenOptions={stackScreenOptions}>
+      {/* 식단 — 이 탭의 첫 화면(= 럽바디 메인) */}
+      <Stack.Screen name="DietMain" component={DietScreen} options={{ headerShown: false }} />
+      <Stack.Screen
+        name="DietRecord"
+        component={DietRecordScreen}
+        options={{ title: '식단 기록', ...modalOptions }}
+      />
+      <Stack.Screen name="DietCalendar" component={DietCalendarScreen} options={{ title: '식단 캘린더' }} />
+      <Stack.Screen name="DietStats" component={DietStatsScreen} options={{ title: '식단 통계' }} />
+      <Stack.Screen
+        name="BarcodeScan"
+        component={BarcodeScanScreen}
+        options={{ title: '바코드 스캔', ...modalOptions }}
+      />
+      <Stack.Screen
+        name="FavoriteFoodGiftInbox"
+        component={FavoriteFoodGiftInboxScreen}
+        options={{ title: '즐겨찾기 선물함' }}
+      />
+
+      {/* 운동 — 홈은 2차 화면이라 헤더를 켠다(식단 메인의 "운동 홈 ›"으로 진입) */}
+      <Stack.Screen name="WorkoutMain" component={WorkoutScreen} options={{ title: '운동' }} />
       <Stack.Screen
         name="WorkoutRecord"
         component={WorkoutRecordScreen}
@@ -96,6 +129,13 @@ export function WorkoutStackNavigator() {
       />
       <Stack.Screen name="BodyMetric" component={BodyMetricScreen} options={{ title: '몸 변화' }} />
       <Stack.Screen name="Challenge" component={ChallengeScreen} options={{ title: '커플 대결' }} />
+
+      {/* 럽슐랭 탭과 공유하는 장소 상세 — 식단 기록에 붙은 장소를 탭하면 이 스택에 쌓인다 */}
+      <Stack.Screen
+        name="PlaceDetail"
+        component={PlaceDetailScreen}
+        options={({ route }) => ({ title: route.params.name })}
+      />
     </Stack.Navigator>
   );
 }

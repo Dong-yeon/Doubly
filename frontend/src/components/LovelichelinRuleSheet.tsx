@@ -44,7 +44,7 @@ export function LovelichelinRuleSheet({ visible, onClose }: { visible: boolean; 
         ))}
       </View>
       <Text style={styles.example}>
-        예를 들어 나 ★★★★ · 상대 ★★★★★ 면 평균 4.5 라서 <Text style={styles.exampleStrong}>2 럽스타</Text> 예요.
+        예를 들어 나 ★★★★ · 상대 ★★★★★ 면 평균 4.5 라서 <Text style={styles.exampleStrong}>2 럽스타</Text>예요.
       </Text>
       <Button title="알겠어요" variant="secondary" onPress={onClose} style={styles.close} />
     </Sheet>

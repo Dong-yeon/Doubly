@@ -312,6 +312,15 @@ class CoupleEmojiFlowTest {
         assertThat(batch.emojis()).extracting(CoupleEmojiResponse::emotion)
                 .containsExactly(CoupleEmojiEmotion.values());
         assertThat(batch.emojis()).extracting(CoupleEmojiResponse::label).contains("화남", "사랑");
+        /*
+         * 무드 피커가 "어느 기본 칸을 덮을지" 정하는 열쇠 — 앱이 같은 매핑표를 또 들지 않도록
+         * 서버가 실어 보낸다. 비면 덮어쓰기가 통째로 조용히 멈춘다(MoodPicker.slots).
+         */
+        assertThat(batch.emojis()).allSatisfy(e -> assertThat(e.moodEmoji()).isNotBlank());
+        assertThat(batch.emojis())
+                .filteredOn(e -> e.emotion() == CoupleEmojiEmotion.ANGRY)
+                .extracting(CoupleEmojiResponse::moodEmoji)
+                .containsExactly(CoupleEmojiEmotion.ANGRY.moodEmoji());
         assertThat(batch.emojis()).allSatisfy(e -> {
             assertThat(e.batchId()).isEqualTo(batch.batchId());
             assertThat(e.subjectUserId()).isEqualTo(b);

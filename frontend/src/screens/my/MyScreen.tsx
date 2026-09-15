@@ -405,10 +405,10 @@ export function MyScreen({ navigation }: Props) {
         </Card>
 
         {/* 신체 정보 — 실시간 에너지 밸런스(기초대사량 + 오늘 운동 소모 - 섭취) 계산에 쓰인다.
-            식단 탭 홈에서 이 정보가 없으면 계산을 못 하고 CTA 로 여기로 안내한다. */}
+            럽바디 탭 홈에서 이 정보가 없으면 계산을 못 하고 CTA 로 여기로 안내한다. */}
         <Card elevation="sm" style={styles.bodyCard}>
           <Text style={styles.bodyLabel}>신체 정보</Text>
-          <Text style={styles.bodyDesc}>키·생년월일·성별을 등록하면 식단 탭에서 실시간 칼로리 잔여량을 계산해줘요.</Text>
+          <Text style={styles.bodyDesc}>키·생년월일·성별을 등록하면 럽바디 탭에서 실시간 칼로리 잔여량을 계산해줘요.</Text>
           {bodyEditing ? (
             <View style={styles.editBox}>
               <TextField

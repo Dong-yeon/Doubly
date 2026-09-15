@@ -4,7 +4,7 @@ import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'rea
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { HomeStackParamList } from '../../navigation/types';
+import type { AlbumStackParamList, HomeStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
 import { FormKeyboardView } from '../../components/FormKeyboardView';
@@ -22,7 +22,12 @@ import { SpacingFixBar } from '../../components/SpacingFixBar';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 
-type Props = NativeStackScreenProps<HomeStackParamList, 'FeedCompose'>;
+/*
+ * 홈 스택과 "우리" 탭 스택 <b>양쪽에</b> 등록되는 화면이라 어느 쪽으로 열릴지 모른다
+ * (navigation/types.ts AlbumStackParamList 주석). 두 파람리스트를 합쳐 두면 어느 쪽에서
+ * 열려도 같은 타입으로 동작한다 — 경로 문자열만 블록마다 다르다.
+ */
+type Props = NativeStackScreenProps<HomeStackParamList & AlbumStackParamList, 'FeedCompose'>;
 
 /** 인스타그램류 앱을 넘길 이유가 없다 — 서버 상한(FeedService.MAX_PHOTOS_PER_POST)과 맞춘다 */
 const MAX_PHOTOS = 5;
@@ -96,9 +101,13 @@ export function FeedComposeScreen({ navigation }: Props) {
           const remaining = usePlanStore.getState().remainingOf('PHOTO_UPLOAD');
           if (remaining !== null && remaining < pending.length) {
             if (remaining <= 0) {
-              usePlanStore.getState().showUpgrade('이번 달 사진 한도를 다 썼어요. PRO에서는 제한 없이 올릴 수 있어요.');
+              /*
+               * "둘이 함께 쓰는"을 붙인다 — 한도는 커플 한 주머니라(PlanGuard.scopeOf) 내가
+               * 한 장도 안 올렸는데 0이 될 수 있다. 이유를 안 적으면 고장으로 읽힌다.
+               */
+              usePlanStore.getState().showUpgrade('이번 달 사진 한도를 다 썼어요. 둘이 함께 쓰는 한도예요. PRO에서는 넉넉하게 올릴 수 있어요.');
             } else {
-              toast.error(`이번 달 사진 한도가 ${remaining}장 남았어요. 사진을 ${remaining}장까지 줄여주세요.`);
+              toast.error(`이번 달 사진 한도가 ${remaining}장 남았어요(둘이 함께 쓰는 한도). 사진을 ${remaining}장까지 줄여주세요.`);
             }
             return;
           }

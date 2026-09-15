@@ -10,6 +10,7 @@ import com.fitto.common.plan.PlanGuard;
 import com.fitto.common.notification.NotificationService;
 import com.fitto.common.notification.PushLinks;
 import com.fitto.common.time.KstClock;
+import com.fitto.common.upload.CloudinaryImageDeleter;
 import com.fitto.diet.domain.Meal;
 import com.fitto.diet.domain.MealItem;
 import com.fitto.diet.domain.NutritionGoal;
@@ -49,6 +50,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Objects;
 import java.util.Map;
 import java.util.UUID;
 
@@ -78,6 +80,8 @@ public class MealService {
     private final PlanGuard planGuard;
     private final PlaceVisitRepository placeVisitRepository;
     private final MealPhotoAutoAnalysisService autoAnalysisService;
+    /** 기록 삭제 시 사진까지 지운다 — DB 행만 지우면 이미지는 URL 로 계속 접근 가능하다 */
+    private final CloudinaryImageDeleter imageDeleter;
 
     public MealService(MealRepository mealRepository,
                        MealItemRepository mealItemRepository,
@@ -90,7 +94,8 @@ public class MealService {
                        NotificationService notificationService,
                        PlanGuard planGuard,
                        PlaceVisitRepository placeVisitRepository,
-                       MealPhotoAutoAnalysisService autoAnalysisService) {
+                       MealPhotoAutoAnalysisService autoAnalysisService,
+                       CloudinaryImageDeleter imageDeleter) {
         this.mealRepository = mealRepository;
         this.mealItemRepository = mealItemRepository;
         this.nutritionGoalRepository = nutritionGoalRepository;
@@ -103,6 +108,7 @@ public class MealService {
         this.planGuard = planGuard;
         this.placeVisitRepository = placeVisitRepository;
         this.autoAnalysisService = autoAnalysisService;
+        this.imageDeleter = imageDeleter;
     }
 
     @Transactional
@@ -732,6 +738,19 @@ public class MealService {
         if (!meal.getUserId().equals(userId)) {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
+        /*
+         * 사진도 함께 지운다 — 행만 지우면 이미지는 URL 로 계속 접근 가능하다
+         * (WorkoutService.delete 와 같은 처방). 식단은 가장 자주 찍는 사진이라 여기가
+         * 비어 있으면 고아 파일이 제일 빠르게 쌓인다.
+         *
+         * <p>탈퇴는 이미 거두고 있었다({@code UserDataPurger} 가 meals.photo_url 을 모은다).
+         * 비어 있던 건 <b>기록 한 건을 지우는 이 경로</b>뿐이다 — 관계 종료
+         * ({@code RelationRecordPurger})는 식단 <b>행 자체를 지우지 않으므로</b>(개인 데이터라
+         * 관계가 끝나도 남는다) 사진을 남기는 것이 맞다.
+         *
+         * 커밋 이후에 지운다(deleteAllAfterCommit): 외부 호출 실패가 DB 삭제를 되돌리면 안 된다.
+         */
+        List<String> photoUrls;
         if (meal.isSharedMeal()) {
             // 데이트 식단은 커플 양쪽에 짝이 있다 — 한쪽만 지우면 남은 쪽이 존재하지 않는
             // 짝을 계속 가리켜(sharedGroupId 가 그대로 남아) "같이 먹기" 배지가 잘못 뜬다.
@@ -739,11 +758,20 @@ public class MealService {
             // 피드 카드 응원 반응 — 다형 참조라 FK 가 없어 직접 지운다 (V60 주석 참고)
             feedReactionRepository.deleteByTargetTypeAndTargetIdIn(FeedItemType.MEAL,
                     pair.stream().map(Meal::getId).toList());
+            /*
+             * 나눠 담은 짝은 같은 사진 URL 을 복사해 갖는다 — 한 번만 지우면 되지만 중복이
+             * 있어도 무방하다(지운 자산을 다시 지우는 호출은 멱등이다. Purger 주석과 같은 근거).
+             */
+            photoUrls = pair.stream().map(Meal::getPhotoUrl).filter(Objects::nonNull).distinct().toList();
             mealRepository.deleteAll(pair);
             publishDietEvent(userId);
         } else {
             feedReactionRepository.deleteByTargetTypeAndTargetId(FeedItemType.MEAL, mealId);
+            photoUrls = meal.getPhotoUrl() != null ? List.of(meal.getPhotoUrl()) : List.of();
             mealRepository.delete(meal);
+        }
+        if (!photoUrls.isEmpty()) {
+            imageDeleter.deleteAllAfterCommit(photoUrls);
         }
     }
 
