@@ -66,6 +66,7 @@ npm start                                  # Metro 개발 서버 (a=Android, i=i
 npm run typecheck                          # tsc --noEmit  ← 테스트 러너가 없으므로 이게 사실상의 검증 게이트
 npm run lint                               # expo lint
 npm run verify:spellcheck                  # 한국어 맞춤법 규칙 검증 — 규칙/사전 수정 시 필수
+npm run verify:nested-buttons              # 버튼 안 버튼 검사 (웹에서만 드러나는 마크업 오류)
 npm run build:web                          # 아이콘 폰트 서브셋 + 웹 export
 npm run build:android / build:ios          # EAS production 빌드 (건당 과금 — 네이티브가 바뀔 때만)
 npm run update:production                  # EAS Update — JS/에셋만 바뀐 변경을 빌드 없이 배포

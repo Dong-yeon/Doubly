@@ -1495,16 +1495,20 @@ export function ChatRoomScreen({ navigation, route }: Props) {
          * 바뀌는 "지금 필요한 것". 여러 개 쌓이는 북마크와는 성격이 다르다).
          */}
         {pinnedMessage && !pinnedMessage.deleted ? (
-          <Pressable
-            style={styles.pinnedBar}
-            onPress={() => scrollToMessage(pinnedMessage.id)}
-            accessibilityRole="button"
-            accessibilityLabel="고정된 공지로 이동"
-          >
-            <MaterialCommunityIcons name="pin" size={16} color={colors.primary} />
-            <Text style={styles.pinnedText} numberOfLines={1}>
-              {messagePreview(pinnedMessage.messageType, pinnedMessage.content)}
-            </Text>
+          /* 배너 자체는 누를 수 없는 View 다 — 이동과 고정 해제가 형제여야 한다
+             (버튼 안 버튼은 웹에서 잘못된 마크업이다, MealCard.tsx 주석 참고) */
+          <View style={styles.pinnedBar}>
+            <Pressable
+              style={styles.pinnedMain}
+              onPress={() => scrollToMessage(pinnedMessage.id)}
+              accessibilityRole="button"
+              accessibilityLabel="고정된 공지로 이동"
+            >
+              <MaterialCommunityIcons name="pin" size={16} color={colors.primary} />
+              <Text style={styles.pinnedText} numberOfLines={1}>
+                {messagePreview(pinnedMessage.messageType, pinnedMessage.content)}
+              </Text>
+            </Pressable>
             <Pressable
               onPress={onUnpinBanner}
               hitSlop={8}
@@ -1513,7 +1517,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             >
               <MaterialCommunityIcons name="close" size={16} color={colors.textSecondary} />
             </Pressable>
-          </Pressable>
+          </View>
         ) : null}
         {/*
          * FlatList 와 FAB 을 같이 감싼다 — FAB 이 이 뷰 기준으로 bottom-right 에 붙어야
@@ -2089,6 +2093,8 @@ const styles = themedStyles((colors) => ({
     paddingVertical: spacing.sm,
     backgroundColor: colors.primarySoft,
   },
+  // 배너에서 "공지로 이동"이 차지하는 몫 — 닫기 버튼만 남기고 전부
+  pinnedMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   pinnedText: { flex: 1, fontSize: fontSize.caption, fontWeight: '600', color: colors.textPrimary },
   // 날짜 구분선 — 가운데 라벨 + 양옆 선
   dateDivider: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginVertical: spacing.md },
