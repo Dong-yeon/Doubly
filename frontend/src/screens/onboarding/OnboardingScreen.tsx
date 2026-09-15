@@ -14,6 +14,7 @@ import {
   FlatList,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
+  Platform,
   Pressable,
   Text,
   View,
@@ -54,6 +55,12 @@ interface Slide {
  * 나=Gold / 상대=Green / 함께=Olive 순서로 Duo 팔레트를 따라가고, 마지막 한 장만
  * 크롬 색(primary)을 쓴다 — 럽슐랭은 소유자 구분이 아니라 브랜드 면이라서다.
  *
+ * <p><b>이 문구는 기능보다 먼저 낡는다</b> — 2026-09-15 에 하루 만에 두 곳이 어긋났다.
+ * ①운동 사진은 AI 판독을 <b>걷어내고</b> 오운완 인증샷이 됐는데(사진 자체가 기록) 문구는
+ * 여전히 "운동도 식단도 AI가 채워준다"고 약속했다 — 첫 화면이 하는 거짓말은 첫인상을
+ * 정확히 깎는다. ②게임이 셋(스도쿠·오목·캐치마인드)인데 둘만 적혀 있었다.
+ * 기능을 넣고 빼면 <b>이 배열을 같이 본다</b>. 문구만 바뀌면 OTA 로 나간다.
+ *
  * 문구는 "지금 이 앱에 있는 것"만 적는다. 2026-08 판 3장(기록·응원·계획)은 그 뒤 한 달간
  * 붙은 것(우리 이모지·협동 게임·사진 한 장 기록·AI 자동 분석)을 하나도 담지 못했다.
  */
@@ -61,8 +68,8 @@ const SLIDES: Slide[] = [
   {
     icon: 'camera-outline',
     accent: 'me',
-    title: '사진 한 장이면 끝',
-    desc: '운동도 식단도 사진만 올리면\nAI가 알아서 기록을 채워줘요.',
+    title: '사진 한 장이 기록이 돼요',
+    desc: '식단은 AI가 칼로리를 채우고,\n운동은 오운완 한 장이면 끝.\n그 사진들은 둘의 앨범에 쌓여요.',
   },
   {
     icon: 'emoticon-outline',
@@ -74,7 +81,7 @@ const SLIDES: Slide[] = [
     icon: 'gamepad-variant-outline',
     accent: 'together',
     title: '같이 놀고, 서로 응원해요',
-    desc: '스도쿠·오목을 한 판에서 같이 풀고,\n서로의 기록에 반응하며 스트릭을 이어가요.',
+    desc: '스도쿠·오목·캐치마인드를 같이 하고,\n서로의 기록에 반응하며 스트릭을 이어가요.',
   },
   {
     icon: 'crown',
@@ -111,6 +118,37 @@ export function OnboardingScreen({ navigation }: Props) {
     navigation.replace('Login');
   };
 
+  /**
+   * 해당 장으로 스크롤한다.
+   *
+   * <p><b>웹에서는 RN 의 명령형 스크롤이 먹지 않았다</b> — 2026-09-15 실측: 다음을 세 번
+   * 누르면 버튼은 '시작하기'로 바뀌는데(=index 는 전진) 스크롤 위치는 0 에 붙어 있었다.
+   * 사용자는 첫 장만 보다가 갑자기 로그인 화면을 만나는 셈이었다. {@code scrollToIndex} 도
+   * {@code scrollToOffset} 도 같았다.
+   *
+   * <p>그래서 웹에서는 <b>스크롤 노드를 직접</b> 움직인다({@code getScrollableNode} 는
+   * react-native-web 에서 실제 DOM 요소를 준다). 네이티브는 기존 경로를 그대로 쓴다 —
+   * 그쪽은 정상 동작하고, DOM API 도 없다.
+   */
+  const goTo = (page: number) => {
+    const list = listRef.current;
+    list?.scrollToOffset({ offset: page * width, animated: true });
+    if (Platform.OS !== 'web') {
+      return;
+    }
+    /*
+     * 웹에서는 <b>scrollLeft 를 직접 대입</b>한다. 같은 노드에 대고
+     * {@code scrollTo({ behavior: 'smooth' })} 도 {@code scrollToOffset} 도 아무 일도
+     * 하지 않았다(2026-09-15 실측: 노드는 제대로 잡히고 scrollWidth 1500·clientWidth 375
+     * 인데 호출 뒤에도 scrollLeft 가 0). 대입 경로만 확실히 움직인다.
+     * 웹에선 애니메이션 없이 즉시 넘어가지만, 점·버튼과 어긋나지 않는 게 먼저다.
+     */
+    const node = list?.getScrollableNode?.() as unknown as HTMLElement | undefined;
+    if (node) {
+      node.scrollLeft = page * width;
+    }
+  };
+
   const onNext = () => {
     if (isLast) {
       finish();
@@ -123,7 +161,7 @@ export function OnboardingScreen({ navigation }: Props) {
      */
     const next = index + 1;
     setIndex(next);
-    listRef.current?.scrollToIndex({ index: next, animated: true });
+    goTo(next);
   };
 
   /**
