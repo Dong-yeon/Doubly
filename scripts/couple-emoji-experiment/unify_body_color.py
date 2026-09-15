@@ -25,9 +25,22 @@ from PIL import Image
 
 # 목표 몸통색. green 은 24장 중앙값 근처, pink 는 같은 채도·명도에서 색상만 돌린 값.
 TARGETS = {
-    'green': '#86CB7F',
-    'pink': '#E58FA9',
+    'green': '#86CB7F',   # 더비
+    'yellow': '#F2D06B',  # 블리
 }
+
+# 볼 홍조(와 하트 같은 따뜻한 색 소품). 생성물의 홍조는 #D3A18A 같은 탁한 살구색이라
+# 노란 몸통 위에 얹으면 베이지처럼 묻힌다. 블리(노랑)만 진한 산호색으로 눌러 대비를 만든다.
+# 더비(초록)는 원래 대비가 충분해서 건드리지 않는다(None).
+BLUSH_TARGETS = {
+    'green': None,
+    'yellow': '#E8896F',
+}
+
+# 홍조로 볼 색상 범위 — 자홍~주황 직전. 초록 소품·회색 거울·파란 이불은 걸리지 않는다.
+BLUSH_H = (0.88, 0.08)
+# 이 명도 미만은 갈색 윤곽선이라 뺀다. 안 빼면 얼굴선이 장미색으로 물든다.
+BLUSH_MIN_VALUE = 0.55
 
 # 이 채도 이상이면 "몸통 안쪽" 으로 보고 평면으로 누른다. 미만은 가장자리라 색상만 돌린다.
 FLAT_CHROMA = 0.12
@@ -40,10 +53,16 @@ MIN_VALUE = 0.55
 GREEN_H = (0.20, 0.47)
 
 
-def unify(src: Path, dst: Path, target: str = 'green') -> None:
-    hexstr = TARGETS[target].lstrip('#')
-    tr, tg, tb = (int(hexstr[i:i + 2], 16) / 255 for i in (0, 2, 4))
-    th, ts, tv = colorsys.rgb_to_hsv(tr, tg, tb)
+def _hsv_of(hexstr: str) -> tuple[float, float, float]:
+    h = hexstr.lstrip('#')
+    return colorsys.rgb_to_hsv(*(int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)))
+
+
+def unify(src: Path, dst: Path, target: str = 'green', body_hex: str | None = None,
+          blush_hex: str | None = None) -> None:
+    th, ts, tv = _hsv_of(body_hex or TARGETS[target])
+    blush = blush_hex if blush_hex is not None else BLUSH_TARGETS[target]
+    bh, bs, bv = _hsv_of(blush) if blush else (0.0, 0.0, 0.0)
 
     im = Image.open(src).convert('RGBA')
     rgba = np.asarray(im).astype(np.float32) / 255.0
@@ -65,8 +84,17 @@ def unify(src: Path, dst: Path, target: str = 'green') -> None:
         hsv[both, 1] = ts
         hsv[both, 2] = tv
 
+        if blush:
+            # 홍조는 채도·명도까지 목표값으로 눌러 장마다 다른 탁한 살구색을 한 색으로 모은다
+            is_blush = ((hsv[:, 0] >= BLUSH_H[0]) | (hsv[:, 0] <= BLUSH_H[1]))                 & (hsv[:, 2] >= BLUSH_MIN_VALUE)
+            hsv[is_blush, 0] = bh
+            hsv[is_blush, 1] = bs
+            hsv[is_blush, 2] = bv
+        else:
+            is_blush = np.zeros(len(hsv), dtype=bool)
+
         changed = np.array([colorsys.hsv_to_rgb(*h) for h in hsv])
-        out[idx] = np.where(is_green[:, None], changed, rgb[idx])
+        out[idx] = np.where((is_green | is_blush)[:, None], changed, rgb[idx])
 
     merged = np.concatenate([out, alpha[..., None]], axis=-1)
     dst.parent.mkdir(parents=True, exist_ok=True)
