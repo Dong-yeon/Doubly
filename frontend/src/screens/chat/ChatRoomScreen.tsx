@@ -79,6 +79,7 @@ import { StickerPanel } from '../../components/chat/StickerPanel';
 import { useCoupleEmojiStore } from '../../store/coupleEmojiStore';
 import { playTouchGesture } from '../../utils/haptics';
 import { messagePreview } from '../../utils/messagePreview';
+import { emojiOnlyCount } from '../../utils/emojiOnly';
 import { chatDateDividerLabel, isSameLocalDay, toDateString } from '../../utils/date';
 import { buildChatTranscript, canExportTranscript, shareTranscript } from '../../utils/chatExport';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
@@ -270,7 +271,6 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const [reactingTo, setReactingTo] = useState<ChatMessage | null>(null);
   // 길게 누른 메시지 — MessageActionSheet 가 이 값의 존재 여부로 노출된다
   const [actionSheetFor, setActionSheetFor] = useState<ChatMessage | null>(null);
-  const [showEmojiSheet, setShowEmojiSheet] = useState(false);
   // 맞춤법 제안을 닫은 시점의 입력값 — 글을 더 치면(값이 달라지면) 다시 뜬다
   const [spellDismissedFor, setSpellDismissedFor] = useState<string | null>(null);
   // 수정 모드에서 응답 대기 중 전송 버튼이 안 막혀 중복 PUT 이 가능했다(QA_CHECKLIST.md P2-19)
@@ -1114,7 +1114,21 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     const mine = item.senderId === myId;
     const isImage = item.messageType === 'IMAGE' && !!item.imageUrl;
     const voice = item.messageType === 'VOICE_MESSAGE' ? parseVoiceContent(item.content) : null;
-    const isSticker = item.messageType === 'STICKER';
+    /*
+     * 스티커처럼 그리는 것 둘 — 보낸 경로는 달라도 "말풍선 없이 크게"는 같다.
+     *
+     * <p>① STICKER 메시지(이모티콘 팩·움직이는 이모티콘). ② <b>이모지만 있는 일반
+     * 메시지</b> — 키보드로 "❤️" 만 보낸 경우다. ②를 여기서 처리하는 이유는
+     * 2026-09-15 에 유니코드 이모지 시트를 없앴기 때문이다: 그 시트에만 있던 값이
+     * "큰 이모지" 하나였고, 판정을 렌더로 옮기면 입력창 타이핑만으로 같은 결과가 된다
+     * (utils/emojiOnly.ts).
+     *
+     * <p>상한 셋 — 넷 이상이면 큰 글자가 화면을 덮어 말풍선이 낫다. 메시지 타입은
+     * 그대로 TEXT 라 답장·수정·리액션·읽음 처리는 하나도 달라지지 않는다.
+     */
+    const bigEmojiCount = item.messageType === 'TEXT' ? emojiOnlyCount(item.content) : 0;
+    const isBigEmoji = bigEmojiCount > 0 && bigEmojiCount <= 3;
+    const isSticker = item.messageType === 'STICKER' || isBigEmoji;
     // 우리 이모지 — 스티커와 같은 자리·크기지만 흰 배경이 있어 원형으로 감싼다(§5-2)
     const coupleEmojiUrl = item.messageType === 'COUPLE_EMOJI' ? item.imageUrl : null;
     const isTouch = item.messageType === 'TOUCH';
@@ -1238,7 +1252,10 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           </View>
         ) : null}
         {isSticker ? (
-          animatedStickerOf(item.content) ? (
+          isBigEmoji ? (
+            // 개수에 따라 크기를 줄인다 — 셋이 나란히 56px 이면 좁은 기기에서 줄을 넘긴다
+            <Text style={[styles.sticker, bigEmojiCount > 1 && styles.stickerSmall]}>{item.content}</Text>
+          ) : animatedStickerOf(item.content) ? (
             // 재생 정책(탭하면 다시 재생)·웹 대체는 AnimatedSticker 안에 있다(플랫폼별 파일로 분리).
             // 스티커가 터치를 가로채므로 말풍선 길게 누르기는 명시적으로 넘겨준다.
             <AnimatedSticker
@@ -1632,7 +1649,6 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             onSendCoupleEmoji={sendCoupleEmoji}
             onManageCoupleEmoji={manageCoupleEmoji}
             onCreateCoupleEmoji={() => { setShowStickers(false); navigation.navigate('CoupleEmojiCreate'); }}
-            onOpenEmojiSheet={() => { setShowStickers(false); setShowEmojiSheet(true); }}
             onOpenCouplePack={() => { void loadCoupleEmojis().catch(() => undefined); }}
           />
         ) : null}
@@ -1790,22 +1806,12 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           setReactingTo(null);
         }}
       />
-      {/* 스티커 전송 — 말풍선 없이 크게 그려진다 */}
-      <EmojiPicker
-        visible={showEmojiSheet}
-        title="스티커 보내기"
-        onClose={() => setShowEmojiSheet(false)}
-        /*
-         * 이모지 시트에서 고른 것은 <b>무엇이든 무료다</b>(2026-09-14).
-         *
-         * <p>예전엔 시즌 PRO 팩 40종과 이 시트 96종이 12종 겹쳤는데(🌸 ☔ 🌊 …), 서버는
-         * 어디서 골랐는지가 아니라 <b>글자</b>로 판정해서 무료라고 보여 준 이모지를 막았다.
-         * STOMP 는 402 를 화면으로 되돌릴 수 없어 말풍선이 "전송 중"에서 멈췄다. 유니코드
-         * 이모지를 파는 것 자체를 접으면서(docs/STICKER_PACK_OVERLAP_2026-09-14.md) 겹침도
-         * 게이팅도 함께 사라졌다 — PRO 스티커는 이제 움직이는 이모티콘뿐이다.
-         */
-        onSelect={(emoji) => sendSticker(emoji, false, '이모지')}
-      />
+      {/*
+       * 유니코드 이모지 시트는 없앴다(2026-09-15). 폰 키보드가 이미 하는 일을 앱 안에 한 벌
+       * 더 둔 것이었고(이모지 팩 6칸을 폐지한 것과 같은 논리 — 0d80de9), 그 시트에만 있던
+       * 값인 "큰 이모지"는 렌더 쪽으로 옮겼다(renderItem 의 isBigEmoji).
+       * 리액션 선택 시트는 남는다 — 반응은 이모지여야 한다.
+       */}
       {/* 대화 검색 — 헤더 돋보기. 고르면 닫고 그 메시지로 스크롤한다 */}
       <TouchGesturePicker
         visible={showTouchPicker}
@@ -1963,6 +1969,8 @@ const styles = themedStyles((colors) => ({
   // 1.5배 관행(typography.ts cardBody)과 같은 21을 그대로 쓴다.
   // 스티커 — 말풍선 없이 크게. lineHeight 를 주지 않으면 안드로이드에서 이모지가 잘린다
   sticker: { fontSize: 56, lineHeight: 68 },
+  // 이모지 둘·셋일 때 — 56px 씩 나란히 두면 360dp 폭을 넘긴다
+  stickerSmall: { fontSize: 40, lineHeight: 50 },
   // 이미지 스티커 — 이모지 스티커와 비슷한 존재감을 갖도록 정사각형으로
   stickerImage: { width: 132, height: 132 },
   // 가상 터치 — 스티커와 같은 크기 + 아래 제스처 라벨 한 줄

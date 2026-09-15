@@ -76,7 +76,6 @@ interface Props {
   onManageCoupleEmoji: (emoji: CoupleEmoji) => void;
   onCreateCoupleEmoji: () => void;
   /** 96종 이모지 피커(카테고리 + 한글 검색) 열기 */
-  onOpenEmojiSheet: () => void;
   /** 우리 이모지 팩을 처음 열 때 — 안 쓰는 사람에게 방마다 조회를 붙이지 않는다 */
   onOpenCouplePack: () => void;
 }
@@ -89,7 +88,6 @@ export function StickerPanel({
   onSendCoupleEmoji,
   onManageCoupleEmoji,
   onCreateCoupleEmoji,
-  onOpenEmojiSheet,
   onOpenCouplePack,
 }: Props) {
   const [activeKey, setActiveKey] = useState<string>(DEFAULT_PACK);
@@ -228,23 +226,17 @@ export function StickerPanel({
           })}
 
           {/*
-           * 스트립 맨 끝 = 유니코드 이모지 진입점. <b>팩이 아니다</b> — 누르면 격자가 바뀌는 게
-           * 아니라 96종 검색 시트가 열린다. 그래서 선택 상태를 갖지 않고, 앞과 줄로 끊는다.
+           * 유니코드 이모지 진입점은 <b>없다</b>(2026-09-15).
            *
-           * <p>예전엔 기본 16종 + 시즌 40종을 팩 여섯 칸으로 늘어놨다. 폰 키보드에 이미 있는
-           * 글자를 굳이 팩으로 묶은 것이라 자리만 먹었고, 시즌 팩은 PRO 로 팔기까지 해서
-           * 무료 시트와 12종이 겹치는 사고를 냈다(docs/STICKER_PACK_OVERLAP_2026-09-14.md).
-           * 여섯 칸을 한 칸으로 줄이고, 그 한 칸이 96종 + 한글 검색으로 이어진다.
+           * <p>이력: 기본 16종 + 시즌 40종을 팩 여섯 칸으로 늘어놨다가, 폰 키보드에 이미
+           * 있는 글자를 팩으로 묶은 것이라 자리만 먹고 PRO 판매까지 겹쳐(무료 시트와 12종
+           * 중복 — docs/STICKER_PACK_OVERLAP_2026-09-14.md) 한 칸짜리 검색 시트로 줄였고,
+           * 이제 그 한 칸마저 없앴다 — 같은 논리를 끝까지 적용한 것이다.
+           *
+           * <p>시트에만 있던 값인 "큰 이모지"는 <b>이모지만 있는 메시지를 크게 그리는</b>
+           * 쪽으로 옮겼다(ChatRoomScreen 의 isBigEmoji · utils/emojiOnly.ts) — 키보드로
+           * 보내면 같은 결과다. 팩 스트립은 이제 이모티콘 팩과 우리 이모지만 담는다.
            */}
-          <View style={styles.stripDivider} />
-          <Pressable
-            style={styles.stripBtn}
-            onPress={onOpenEmojiSheet}
-            accessibilityRole="button"
-            accessibilityLabel="이모지 — 96종에서 검색으로 찾기"
-          >
-            <MaterialCommunityIcons name="emoticon-outline" size={22} color={colors.textSecondary} />
-          </Pressable>
         </ScrollView>
       </View>
 
@@ -306,13 +298,6 @@ const styles = themedStyles((colors) => ({
   stripBtnActive: { backgroundColor: colors.surfaceCard },
   stripImage: { width: 28, height: 28 },
   stripAvatar: { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.surfaceCard },
-  // 팩과 "이모지 열기"를 가르는 줄 — 누르면 격자가 바뀌는 것과 시트가 열리는 것은 다른 일이다
-  stripDivider: {
-    width: 1,
-    height: 24,
-    marginHorizontal: spacing.xs,
-    backgroundColor: colors.border,
-  },
   stripBadge: {
     position: 'absolute',
     right: 1,
