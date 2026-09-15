@@ -25,6 +25,11 @@ spring:
 
 # Redis 자동연결 비활성화를 위해 lettuce는 lazy — 테스트에서 미사용
 fitto:
+  # @Scheduled 자동 실행을 끈다 — 테스트는 스위퍼/노티파이어를 직접 호출해 검증한다.
+  # 켜두면 백그라운드 사이클이 테스트가 만든 데이터를 같이 집어 중복 발송이 난다
+  # (SchedulingConfig.ScheduledTriggers 주석 참고). 스케줄러 빈은 그대로 살아 있다.
+  scheduling:
+    enabled: false
   jwt:
     secret: test-secret-test-secret-test-secret-32b
     access-token-expire-minutes: 30
