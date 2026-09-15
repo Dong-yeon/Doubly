@@ -128,7 +128,6 @@ export const linking: LinkingOptions<RootStackParamList> = {
             screens: {
               HomeMain: '',
               CoupleConnect: 'couple/connect',
-              FeedTimeline: 'feed',
               FeedCompose: 'feed/new',
               DailyQuestion: 'question',
               MiniGames: 'games',
@@ -137,7 +136,6 @@ export const linking: LinkingOptions<RootStackParamList> = {
               Omok: 'game/omok',
               CatchMind: 'game/catch-mind',
               CoupleCalendar: 'calendar',
-              PhotoAlbum: 'album',
               My: 'my',
               Settings: 'settings',
               ChangePassword: 'settings/password',
@@ -194,9 +192,60 @@ export const linking: LinkingOptions<RootStackParamList> = {
               PlaceAdd: 'trips/place/edit',
             },
           },
-          Workout: {
-            initialRouteName: 'WorkoutMain',
+          /*
+           * "우리" 탭 — 홈 스택에 있던 feed·album 경로를 그대로 물려받는다.
+           * 문자열을 유지하는 이유는 배포된 딥링크·푸시 링크(PushLinks)가 계속 열려야 하기
+           * 때문이다(럽바디 블록과 같은 규칙).
+           *
+           * <b>FeedCompose·TripAlbum 은 홈 블록에도 있어 경로를 나눈다.</b> 같은 경로를 두
+           * 블록에 쓰면 새로고침 때 어느 탭으로 복원될지 모호해진다(Home 블록 PlaceDetail 주석).
+           */
+          Album: {
+            initialRouteName: 'AlbumMain',
             screens: {
+              AlbumMain: 'album',
+              FeedTimeline: 'feed',
+              FeedCompose: 'album/new',
+              Memories: 'memories',
+              TripAlbum: {
+                path: 'album/trips/:tripId',
+                parse: { tripId: Number },
+              },
+            },
+          },
+          Chat: {
+            initialRouteName: 'ChatRooms',
+            screens: {
+              ChatRooms: 'chat',
+              ChatRoom: {
+                path: 'chat/:relationId',
+                parse: { relationId: Number },
+              },
+            },
+          },
+          /*
+           * 럽바디(식단 + 운동) — 두 탭이 하나로 합쳐졌지만 <b>경로 문자열은 그대로 둔다</b>:
+           * 이미 배포된 딥링크·브라우저 북마크(doubly://workout/*, doubly://diet/*)와
+           * 서버가 푸시에 싣는 경로(PushLinks)가 계속 열려야 한다.
+           *
+           * initialRouteName 은 탭의 첫 화면인 `DietMain` 이다 — workout/session 같은
+           * 깊은 링크로 들어와도 그 아래에 럽바디 메인이 깔려서 뒤로가기가 탭 밖으로
+           * 튕기지 않는다(ActiveWorkoutBar 의 initial:false 와 같은 이유).
+           */
+          Health: {
+            initialRouteName: 'DietMain',
+            screens: {
+              DietMain: 'diet',
+              DietRecord: 'diet/record',
+              DietCalendar: 'diet/calendar',
+              DietStats: 'diet/stats',
+              // 식단 기록에서 연 장소 화면 — 럽슐랭 탭에도 같은 화면이 있지만 경로는 나눈다
+              // (같은 'place/:placeId' 를 여러 블록에 쓰면 새로고침 때 어느 탭으로 복원될지
+              // 모호해진다 — Home 블록의 PlaceDetail 주석과 같은 이유).
+              PlaceDetail: {
+                path: 'diet/place/:placeId',
+                parse: { placeId: Number },
+              },
               WorkoutMain: 'workout',
               WorkoutRecord: 'workout/record',
               WorkoutCalendar: 'workout/calendar',
@@ -216,32 +265,6 @@ export const linking: LinkingOptions<RootStackParamList> = {
               BodyMetric: 'workout/body',
               Challenge: 'workout/challenge',
               VoiceClips: 'workout/voice-clips',
-            },
-          },
-          Chat: {
-            initialRouteName: 'ChatRooms',
-            screens: {
-              ChatRooms: 'chat',
-              ChatRoom: {
-                path: 'chat/:relationId',
-                parse: { relationId: Number },
-              },
-            },
-          },
-          Diet: {
-            initialRouteName: 'DietMain',
-            screens: {
-              DietMain: 'diet',
-              DietRecord: 'diet/record',
-              DietCalendar: 'diet/calendar',
-              DietStats: 'diet/stats',
-              // 식단 기록에서 연 장소 화면 — 럽슐랭 탭에도 같은 화면이 있지만 경로는 나눈다
-              // (같은 'place/:placeId' 를 여러 블록에 쓰면 새로고침 때 어느 탭으로 복원될지
-              // 모호해진다 — Home 블록의 PlaceDetail 주석과 같은 이유).
-              PlaceDetail: {
-                path: 'diet/place/:placeId',
-                parse: { placeId: Number },
-              },
             },
           },
           Place: {

@@ -14,7 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { HomeStackParamList } from '../../navigation/types';
+import type { AlbumStackParamList, HomeStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { TripSectionTabs } from './TripSectionTabs';
@@ -30,7 +30,12 @@ import type { AlbumPost } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { localDateOf } from '../../utils/date';
 
-type Props = NativeStackScreenProps<HomeStackParamList, 'TripAlbum'>;
+/*
+ * 홈 스택과 "우리" 탭 스택 <b>양쪽에</b> 등록되는 화면이라 어느 쪽으로 열릴지 모른다
+ * (navigation/types.ts AlbumStackParamList 주석). 두 파람리스트를 합쳐 두면 어느 쪽에서
+ * 열려도 같은 타입으로 동작한다 — 경로 문자열만 블록마다 다르다.
+ */
+type Props = NativeStackScreenProps<HomeStackParamList & AlbumStackParamList, 'TripAlbum'>;
 
 export function TripAlbumScreen({ route }: Props) {
   const { tripId, title } = route.params;

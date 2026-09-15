@@ -182,17 +182,17 @@ class FeedPaginationTest {
                     new CreatePostRequest("사진 " + i, "https://img.example.com/" + i + ".jpg"));
         }
 
-        FeedPhotosResponse first = feedService.photos(c[0], null, 3);
+        FeedPhotosResponse first = feedService.photos(c[0], null, 3, null);
         assertThat(first.items()).hasSize(3);
         assertThat(first.hasMore()).isTrue();
 
-        FeedPhotosResponse second = feedService.photos(c[0], first.nextCursor(), 3);
+        FeedPhotosResponse second = feedService.photos(c[0], first.nextCursor(), 3, null);
         assertThat(second.items()).hasSize(2);
         assertThat(second.hasMore()).isFalse();
 
         Set<Long> ids = new HashSet<>();
-        first.items().forEach(p -> ids.add(p.postId()));
-        second.items().forEach(p -> ids.add(p.postId()));
+        first.items().forEach(p -> ids.add(p.refId()));
+        second.items().forEach(p -> ids.add(p.refId()));
         assertThat(ids).hasSize(5);   // 글만 있는 포스트 제외, 중복·누락 없음
         assertThat(first.items()).allSatisfy(p -> assertThat(p.imageUrl()).isNotNull());
         // imageUrls(전체 목록)도 대표 사진과 함께 채워진다 — 여기선 모두 한 장짜리 포스트
@@ -208,7 +208,7 @@ class FeedPaginationTest {
                 "https://img.example.com/m1.jpg", "https://img.example.com/m2.jpg");
         feedService.createPost(c[0], new CreatePostRequest(null, null, photos));
 
-        FeedPhotoResponse item = feedService.photos(c[0], null, 20).items().get(0);
+        FeedPhotoResponse item = feedService.photos(c[0], null, 20, null).items().get(0);
 
         assertThat(item.imageUrl()).isEqualTo(photos.get(0));
         assertThat(item.imageUrls()).containsExactlyElementsOf(photos);

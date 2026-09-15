@@ -87,6 +87,29 @@ public interface WorkoutRepository extends JpaRepository<Workout, Long> {
                                     @Param("cursorId") Long cursorId,
                                     Pageable pageable);
 
+    /**
+     * 우리 탭(사진첩) — 인증샷이 붙은 운동만. {@link #findRecentForFeed} 와 같은 keyset 에
+     * {@code image_url is not null} 만 더한다 (docs/ALBUM_TAB_IA_2026-09-14.md 5-4).
+     *
+     * <p><b>진행 중 상태를 걸러낼 조건이 없다</b>(CLAUDE.md 4절의 {@code status='COMPLETED'}).
+     * {@code workouts} 테이블에는 status 컬럼이 없고, 끝내지 않은 운동은 행으로 저장되지 않는다
+     * — 기기에만 남는 초안(프론트 {@code activeWorkoutStore})이고 저장 시점에 비로소 행이 된다.
+     * 즉 이 테이블의 행은 전부 완료분이라 필터가 필요 없다. status 컬럼이 생기면 여기도 함께 고칠 것.
+     */
+    @Query("""
+            select w from Workout w
+            where w.userId in :userIds
+              and w.imageUrl is not null
+              and (cast(:cursorAt as LocalDateTime) is null
+                   or w.createdAt < :cursorAt
+                   or (w.createdAt = :cursorAt and w.id < :cursorId))
+            order by w.createdAt desc, w.id desc
+            """)
+    List<Workout> findPhotosForFeed(@Param("userIds") List<Long> userIds,
+                                    @Param("cursorAt") java.time.LocalDateTime cursorAt,
+                                    @Param("cursorId") Long cursorId,
+                                    Pageable pageable);
+
     /** 회원 탈퇴 시 본인 운동 기록 삭제 (workout_sets 는 DB ON DELETE CASCADE). */
     @Modifying
     @Query("delete from Workout w where w.userId = :userId")

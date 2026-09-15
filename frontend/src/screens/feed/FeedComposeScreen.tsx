@@ -4,7 +4,7 @@ import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'rea
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { HomeStackParamList } from '../../navigation/types';
+import type { AlbumStackParamList, HomeStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
 import { FormKeyboardView } from '../../components/FormKeyboardView';
@@ -22,7 +22,12 @@ import { SpacingFixBar } from '../../components/SpacingFixBar';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 
-type Props = NativeStackScreenProps<HomeStackParamList, 'FeedCompose'>;
+/*
+ * 홈 스택과 "우리" 탭 스택 <b>양쪽에</b> 등록되는 화면이라 어느 쪽으로 열릴지 모른다
+ * (navigation/types.ts AlbumStackParamList 주석). 두 파람리스트를 합쳐 두면 어느 쪽에서
+ * 열려도 같은 타입으로 동작한다 — 경로 문자열만 블록마다 다르다.
+ */
+type Props = NativeStackScreenProps<HomeStackParamList & AlbumStackParamList, 'FeedCompose'>;
 
 /** 인스타그램류 앱을 넘길 이유가 없다 — 서버 상한(FeedService.MAX_PHOTOS_PER_POST)과 맞춘다 */
 const MAX_PHOTOS = 5;

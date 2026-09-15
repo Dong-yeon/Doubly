@@ -12,7 +12,7 @@
  *
  * <p><b>사진은 폼을 안 거친다.</b> 끼니는 시각으로 정하고(mealTimeSlot) 그 자리에서 저장한다.
  * 칼로리는 저장 뒤 서버가 백그라운드로 채우므로(MealPhotoAutoAnalysisService) 확인할 화면이
- * 필요 없다 — 운동 탭의 "📷 사진으로"가 기록 화면으로 넘어가는 것과 갈리는 지점이다.
+ * 필요 없다 — 운동 체크인 카드의 "📷 사진으로"가 기록 화면으로 넘어가는 것과 갈리는 지점이다.
  */
 import React from 'react';
 import { ActivityIndicator, Modal, Pressable, Text, View } from 'react-native';

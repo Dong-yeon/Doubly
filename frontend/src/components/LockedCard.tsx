@@ -7,11 +7,17 @@
  * (`MemoriesService` · `SummaryService`), 화면은 원래 카드 자리에 이걸 끼운다.
  *
  * <p>탭하면 그때 업그레이드 시트가 열린다 — 사용자가 관심을 보인 뒤에만.
+ *
+ * <p><b>다 쓴 것과 못 쓰는 것은 다른 카드다</b>: {@code feature} 를 넘기면 "이미 PRO 인데
+ * 이번 기간 한도를 다 쓴" 경우를 알아보고 PRO 배지도 업그레이드 시트도 띄우지 않는다
+ * (`utils/planNotice`). 기다리면 풀리는 상태라 팔 것이 없다.
  */
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from './Icon';
 import { usePlanStore } from '../store/planStore';
+import { isQuotaExhausted, quotaExhaustedNotice } from '../utils/planNotice';
+import type { FeatureKey } from '../types';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 import { themedStyles } from '../theme/themedStyles';
 
@@ -22,10 +28,38 @@ interface Props {
   description: string;
   /** 시트에 띄울 문구 — 생략하면 제목으로 만든다 */
   upgradeMessage?: string;
+  /**
+   * PRO 에도 한도가 있는 기능이면 넘긴다 — 한도 소진일 때 유도 문구 대신 안내로 바뀐다.
+   * 완전 차단형(추억·주간 결산처럼 PRO 는 무제한)이면 넘길 필요가 없다.
+   */
+  feature?: FeatureKey;
 }
 
-export function LockedCard({ title, description, upgradeMessage }: Props) {
+export function LockedCard({ title, description, upgradeMessage, feature }: Props) {
   const showUpgrade = usePlanStore((s) => s.showUpgrade);
+  const state = usePlanStore((s) => (feature ? s.stateOf(feature) : undefined));
+
+  // 기다리면 풀리는 잠금 — 누를 곳도 없고 팔 것도 없다.
+  if (isQuotaExhausted(state)) {
+    return (
+      <View style={styles.card} accessibilityRole="text">
+        <View style={styles.iconBox}>
+          {/* 자물쇠가 아니라 시계 — 기다리면 풀린다는 게 이 상태의 전부다.
+              (이미 서브셋에 있는 글리프를 쓴다. 아이콘 폰트는 fingerprint 입력이라
+               새 이름을 넣으면 OTA 로 못 나간다 — docs/EAS_BUILD.md §8) */}
+          <MaterialCommunityIcons name="clock-outline" size={19} color={colors.textSecondary} />
+        </View>
+        <View style={styles.body}>
+          <Text style={styles.title} numberOfLines={1}>
+            {title}
+          </Text>
+          <Text style={styles.description} numberOfLines={1}>
+            {quotaExhaustedNotice(state)}
+          </Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <Pressable
