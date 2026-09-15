@@ -18,6 +18,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useContentWidth } from '../../hooks/useContentWidth';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -163,32 +164,6 @@ export function AlbumScreen({ navigation }: Props) {
     }, [load, filter, loadHeader]),
   );
 
-  /* 헤더 버튼 — 목록 보기(같은 데이터의 다른 모양)와 일상 남기기 */
-  React.useLayoutEffect(() => {
-    navigation.setOptions({
-      headerRight: () => (
-        <View style={styles.headerButtons}>
-          <Pressable
-            onPress={() => navigation.navigate('FeedTimeline')}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="목록으로 보기"
-          >
-            <MaterialCommunityIcons name="format-list-bulleted" size={22} color={colors.textPrimary} />
-          </Pressable>
-          <Pressable
-            onPress={() => navigation.navigate('FeedCompose')}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="일상 남기기"
-          >
-            <MaterialCommunityIcons name="plus" size={24} color={colors.textPrimary} />
-          </Pressable>
-        </View>
-      ),
-    });
-  }, [navigation]);
-
   const onPickFilter = (key: string) => {
     if (key === filter) return;
     setFilter(key);
@@ -197,30 +172,8 @@ export function AlbumScreen({ navigation }: Props) {
     void load(key);
   };
 
-  const header = (
+  const listHeader = (
     <View>
-      {/* 소스 필터 — 칩 하나가 곧 한 소스다. 스크롤과 함께 올라간다(항목이 다섯뿐) */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.chipRow}
-      >
-        {FILTERS.map((f) => {
-          const active = f.key === filter;
-          return (
-            <Pressable
-              key={f.key}
-              onPress={() => onPickFilter(f.key)}
-              style={[styles.chip, active && styles.chipActive]}
-              accessibilityRole="button"
-              accessibilityState={{ selected: active }}
-            >
-              <Text style={[styles.chipText, active && styles.chipTextActive]}>{f.label}</Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-
       {/*
         작년 오늘 — 있는 날만. 홈의 MemoryPeek 과 같은 카드를 쓴다(같은 것이 두 모양이면
         같은 카드여야 한다). PRO 잠금은 서버 응답의 locked 를 그대로 따른다.
@@ -258,14 +211,71 @@ export function AlbumScreen({ navigation }: Props) {
   );
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {/*
+        화면 안 헤더 — native 헤더를 쓰지 않는다. 탭의 첫 화면이라 뒤로가기 버튼이 없어
+        제목이 화면 벽에 붙고(headerLeft 가 null 이면 native 헤더는 여백을 주지 않는다),
+        다른 탭 첫 화면들도 전부 headerShown:false 라 이 화면만 헤더를 달면 탭을 옮길 때
+        상단 높이가 들썩인다. 제목·버튼을 본문과 같은 좌우 여백(screenPadding)에 맞춘다.
+      */}
+      <View style={styles.topBar}>
+        <Text style={styles.topTitle}>우리</Text>
+        <View style={styles.topButtons}>
+          <Pressable
+            onPress={() => navigation.navigate('FeedTimeline')}
+            hitSlop={8}
+            style={({ pressed }) => [styles.topBtn, pressed && styles.topBtnPressed]}
+            accessibilityRole="button"
+            accessibilityLabel="목록으로 보기"
+          >
+            <MaterialCommunityIcons name="format-list-bulleted" size={22} color={colors.textPrimary} />
+          </Pressable>
+          <Pressable
+            onPress={() => navigation.navigate('FeedCompose')}
+            hitSlop={8}
+            style={({ pressed }) => [styles.topBtn, pressed && styles.topBtnPressed]}
+            accessibilityRole="button"
+            accessibilityLabel="일상 남기기"
+          >
+            <MaterialCommunityIcons name="plus" size={24} color={colors.textPrimary} />
+          </Pressable>
+        </View>
+      </View>
+
+      {/*
+        소스 필터 — <b>고정</b>이다. 리스트 머리글에 넣었더니 빈 앨범에서 리스트가 내용을
+        세로 가운데로 모으면서 칩까지 화면 중앙으로 내려갔다(2026-09-15 리포트).
+        필터는 목록의 일부가 아니라 목록을 고르는 장치라 위에 붙여 둔다.
+      */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.chipScroll}
+        contentContainerStyle={styles.chipRow}
+      >
+        {FILTERS.map((f) => {
+          const active = f.key === filter;
+          return (
+            <Pressable
+              key={f.key}
+              onPress={() => onPickFilter(f.key)}
+              style={[styles.chip, active && styles.chipActive]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+            >
+              <Text style={[styles.chipText, active && styles.chipTextActive]}>{f.label}</Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+
       <FlatList
         data={photos}
         keyExtractor={keyOf}
         numColumns={COLUMNS}
         columnWrapperStyle={styles.row}
-        ListHeaderComponent={header}
-        contentContainerStyle={photos.length === 0 ? styles.emptyWrap : styles.list}
+        ListHeaderComponent={listHeader}
+        contentContainerStyle={styles.list}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={() => void load(filter)} tintColor={colors.primary} />
         }
@@ -326,7 +336,7 @@ export function AlbumScreen({ navigation }: Props) {
         initialIndex={viewingIndex}
         onClose={() => setViewingIndex(null)}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -337,7 +347,9 @@ const styles = themedStyles((colors) => ({
    * 탭바에 가렸다(UX_UI_AUDIT.md 지적). 탭바 높이만큼만 남긴다.
    */
   list: { paddingBottom: layout.listBottom + layout.touchTarget },
-  emptyWrap: { flexGrow: 1, justifyContent: 'center' },
+  // 빈 상태는 위에서 조금 내려온 자리에 둔다 — flexGrow+center 로 감싸면 위의 섹션까지
+  // 함께 가운데로 끌려간다(2026-09-15 리포트: 칩이 화면 중앙으로 내려갔다)
+  emptyPad: { paddingTop: spacing.xxl },
   row: { gap: GAP, marginBottom: GAP },
   // width/height 는 렌더 시점의 useContentWidth 값으로 인라인 적용한다
   cell: { backgroundColor: colors.surfaceAlt },
@@ -353,8 +365,24 @@ const styles = themedStyles((colors) => ({
     justifyContent: 'center',
   },
   footer: { paddingVertical: spacing.lg },
-  headerButtons: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingRight: spacing.xs },
-  chipRow: { gap: spacing.xs, paddingHorizontal: layout.screenPadding, paddingVertical: spacing.sm },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xs,
+  },
+  topTitle: { fontSize: fontSize.title, fontWeight: '800', color: colors.textPrimary },
+  topButtons: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  topBtn: { minWidth: layout.touchTarget, minHeight: layout.touchTarget, alignItems: 'center', justifyContent: 'center' },
+  topBtnPressed: { opacity: 0.6 },
+  /*
+   * flexGrow:0 — 세로 flex 컨테이너 안의 ScrollView 는 남은 높이를 전부 먹는다. 없으면
+   * 칩이 화면 높이만큼 늘어난 알약이 됐다(2026-09-15 리포트). 내용 높이만 쓰게 한다.
+   */
+  chipScroll: { flexGrow: 0, flexShrink: 0 },
+  chipRow: { gap: spacing.xs, paddingHorizontal: layout.screenPadding, paddingBottom: spacing.sm },
   chip: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,

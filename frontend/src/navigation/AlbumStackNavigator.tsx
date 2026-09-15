@@ -19,8 +19,12 @@ const Stack = createNativeStackNavigator<AlbumStackParamList>();
 export function AlbumStackNavigator() {
   return (
     <Stack.Navigator screenOptions={stackScreenOptions}>
-      {/* 헤더는 켠다 — 목록 보기·일상 남기기 버튼이 headerRight 에 붙는다(AlbumScreen) */}
-      <Stack.Screen name="AlbumMain" component={AlbumScreen} options={{ title: '우리' }} />
+      {/*
+        native 헤더를 끈다 — 탭 첫 화면이라 뒤로가기 버튼이 없어 제목이 화면 벽에 붙고,
+        다른 탭 첫 화면들도 전부 headerShown:false 라 이 화면만 헤더를 달면 탭을 옮길 때
+        상단 높이가 들썩인다. 제목·버튼은 화면 안에서 본문과 같은 여백으로 그린다(AlbumScreen).
+      */}
+      <Stack.Screen name="AlbumMain" component={AlbumScreen} options={{ headerShown: false }} />
       <Stack.Screen name="FeedTimeline" component={FeedTimelineScreen} options={{ title: '기록' }} />
       <Stack.Screen
         name="FeedCompose"
