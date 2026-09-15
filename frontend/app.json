@@ -13,8 +13,16 @@
     "icon": "./assets/icon.png",
     "scheme": "doubly",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "imageWidth": 220,
+          "backgroundColor": "#FFFFFF"
+        }
+      ],
       [
         "expo-image-picker",
         {
@@ -99,12 +107,6 @@
         }
       ]
     ],
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "imageWidth": 220,
-      "backgroundColor": "#FFFFFF"
-    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.doubly.app.ios",
