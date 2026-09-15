@@ -97,6 +97,29 @@ class ScheduledChatMessageFlowTest {
         assertThat(scheduledChatMessageService.listPending(a, relationId)).isEmpty();
     }
 
+    /**
+     * 스위퍼가 겹쳐 돌아도 한 번만 발송한다.
+     *
+     * <p>2026-09-15 전체 suite 에서만 깨진 원인 — 백그라운드 {@code @Scheduled} 사이클이 수동
+     * 호출과 겹쳐 같은 행을 둘이 집었다. 트리거는 테스트 프로파일에서 껐고(SchedulingTriggerTest),
+     * 발송 자체도 선점(claim)으로 막았다. 여기서는 그 선점을 순차 재실행으로 지킨다.
+     */
+    @Test
+    void 스위퍼가_다시_돌아도_같은_예약을_두_번_발송하지_않는다() {
+        Long a = register("sched-k@fitto.com");
+        Long b = register("sched-l@fitto.com");
+        Long relationId = connectCouple(a, b);
+
+        ScheduledMessageResponse scheduled = scheduledChatMessageService.schedule(a, relationId,
+                new ScheduleMessageRequest(MessageType.TEXT, "한 번만", null, LocalDateTime.now().plusMinutes(10)));
+
+        backdate(scheduled.id(), LocalDateTime.now().minusSeconds(1));
+        sweeper.sweep();
+        sweeper.sweep();
+
+        assertThat(chatService.getMessages(b, relationId, null)).hasSize(1);
+    }
+
     @Test
     void 발송_전에만_취소할_수_있고_본인만_취소할_수_있다() {
         Long a = register("sched-c@fitto.com");
