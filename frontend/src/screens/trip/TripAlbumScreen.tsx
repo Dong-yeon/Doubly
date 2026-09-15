@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useContentWidth } from '../../hooks/useContentWidth';
+import { usePhotoGrid } from '../../hooks/usePhotoGrid';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '../../components/Icon';
@@ -39,8 +39,13 @@ type Props = NativeStackScreenProps<HomeStackParamList & AlbumStackParamList, 'T
 
 export function TripAlbumScreen({ route }: Props) {
   const { tripId, title } = route.params;
-  const width = useContentWidth();
-  const cell = (width - spacing.lg * 2 - spacing.sm) / 2; // 2열 정사각형 셀
+  // 폰 2열 정사각형 셀. 태블릿·폴더블에서는 열을 늘려 칸이 판처럼 커지는 것을 막는다
+  // (폭 1200dp 에서 한 변 580dp 였다 — hooks/usePhotoGrid.ts 주석)
+  const { columns, cell } = usePhotoGrid({
+    gap: spacing.sm,
+    padding: spacing.lg,
+    phoneColumns: 2,
+  });
 
   const [photos, setPhotos] = useState<AlbumPost[]>([]);
   const [loading, setLoading] = useState(false);
@@ -143,7 +148,9 @@ export function TripAlbumScreen({ route }: Props) {
       <FlatList
         data={photos}
         keyExtractor={(p) => String(p.id)}
-        numColumns={2}
+        /* numColumns 런타임 변경은 지원되지 않는다 — 열이 바뀌면 목록을 새로 그린다 */
+        key={columns}
+        numColumns={columns}
         columnWrapperStyle={styles.columnWrap}
         contentContainerStyle={styles.list}
         refreshing={loading}

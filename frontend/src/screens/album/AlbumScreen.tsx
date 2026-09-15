@@ -19,7 +19,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useContentWidth } from '../../hooks/useContentWidth';
+import { usePhotoGrid } from '../../hooks/usePhotoGrid';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { AlbumStackParamList } from '../../navigation/types';
@@ -40,7 +40,8 @@ import { layout } from '../../theme/layout';
 
 type Props = NativeStackScreenProps<AlbumStackParamList, 'AlbumMain'>;
 
-const COLUMNS = 3;
+/** 폰에서의 열 수 — 태블릿·폴더블에서는 usePhotoGrid 가 칸 크기를 보고 늘린다 */
+const PHONE_COLUMNS = 3;
 const GAP = 2;
 
 /** 소스 필터 칩 — 값이 없는 '전체'는 서버 기본값(4소스)과 같아 파라미터를 안 보낸다 */
@@ -57,9 +58,8 @@ const keyOf = (p: FeedPhoto) => `${p.type}:${p.refId}`;
 
 export function AlbumScreen({ navigation }: Props) {
   // Dimensions.get() 은 정적 스냅샷이라 회전·창 크기 변경에 반응하지 않았다.
-  // useContentWidth 는 매 렌더마다 최신 폭(웹은 셸 폭)을 주므로 그 값으로 다시 계산한다.
-  const windowWidth = useContentWidth();
-  const CELL = useMemo(() => (windowWidth - GAP * (COLUMNS - 1)) / COLUMNS, [windowWidth]);
+  // usePhotoGrid 는 매 렌더마다 최신 폭(웹은 셸 폭)으로 열 수와 칸을 다시 계산한다.
+  const { columns, cell: CELL } = usePhotoGrid({ gap: GAP, phoneColumns: PHONE_COLUMNS });
 
   const [filter, setFilter] = useState('all');
   const [photos, setPhotos] = useState<FeedPhoto[]>([]);
@@ -272,7 +272,10 @@ export function AlbumScreen({ navigation }: Props) {
       <FlatList
         data={photos}
         keyExtractor={keyOf}
-        numColumns={COLUMNS}
+        /* numColumns 는 런타임 변경이 지원되지 않는다(RN 경고) — 회전·창 크기로 열이
+           바뀌면 key 를 갈아 목록을 새로 그린다 */
+        key={columns}
+        numColumns={columns}
         columnWrapperStyle={styles.row}
         ListHeaderComponent={listHeader}
         contentContainerStyle={styles.list}
