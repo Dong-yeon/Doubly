@@ -873,14 +873,45 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     ]);
   };
 
-  const onReact = async (msg: ChatMessage, emoji: string) => {
-    try {
-      const reactions = await chatApi.react(msg.id, emoji);
-      replaceMessage(relationId, { ...msg, reactions });
-      haptics.light();
-    } catch (e) {
-      toast.error(getErrorMessage(e, '리액션을 남기지 못했어요.'));
-    }
+  /**
+   * 리액션 — 한 메시지의 요청은 <b>줄을 세워</b> 순서대로 보낸다.
+   *
+   * <p><b>왜</b>: 칩은 토글이라 같은 칩을 연타하면 "달기 → 떼기 → 달기"가 연달아 나간다.
+   * 동시에 던지면 응답이 역전될 수 있고(먼저 보낸 요청이 나중에 도착), 각 응답은 그
+   * 시점의 <b>전체 리액션 목록</b>이라 늦게 도착한 낡은 목록이 최신 상태를 덮어쓴다.
+   * 서버 DB 와 화면이 어긋난 채로 남는다(QA_CHECKLIST.md 채팅 "연타 시 상태 꼬임", 확정).
+   *
+   * <p><b>왜 탭을 버리지 않는가</b>: in-flight 동안 무시하는 편이 더 짧지만, 리액션은
+   * 원래 톡톡 누르는 물건이라 씹으면 "눌러도 반응이 없다"가 된다(2026-09-03 리포트와 같은
+   * 함정). 메시지마다 약속 사슬 하나를 두면 모든 탭이 반영되고 <b>마지막 응답 = 마지막 탭</b>
+   * 이 보장된다.
+   */
+  const reactChainRef = useRef(new Map<number, Promise<void>>());
+
+  const onReact = (msg: ChatMessage, emoji: string) => {
+    // 진동은 기다리지 않고 지금 준다 — 사슬 뒤에 서면 반응이 한 박자 늦게 온다
+    haptics.light();
+    const chain = reactChainRef.current;
+    const run = async () => {
+      try {
+        const reactions = await chatApi.react(msg.id, emoji);
+        /* 줄을 서는 동안 그 메시지가 수정·읽음 처리됐을 수 있다 — 캡처한 msg 가 아니라
+           스토어의 최신 값 위에 리액션만 얹는다(안 그러면 편집이 되돌아간다) */
+        const latest =
+          useChatStore.getState().messages[relationId]?.find((m) => m.id === msg.id) ?? msg;
+        replaceMessage(relationId, { ...latest, reactions });
+      } catch (e) {
+        toast.error(getErrorMessage(e, '리액션을 남기지 못했어요.'));
+      }
+    };
+    const next = (chain.get(msg.id) ?? Promise.resolve()).then(run);
+    chain.set(msg.id, next);
+    // 사슬이 다 풀리면 지운다 — 방을 오래 열어 두어도 Map 이 자라지 않는다
+    void next.finally(() => {
+      if (chain.get(msg.id) === next) {
+        chain.delete(msg.id);
+      }
+    });
   };
 
   /**
