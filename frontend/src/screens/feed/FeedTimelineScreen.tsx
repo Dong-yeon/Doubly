@@ -6,14 +6,13 @@
  * 홈은 스크롤 없는 고정 화면으로 두고, 쌓이는 목록은 이 화면으로 분리했다.
  */
 import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, FlatList, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { HomeStackParamList } from '../../navigation/types';
+import type { AlbumStackParamList } from '../../navigation/types';
 import { Alert } from '../../utils/alert';
 import { EmptyState } from '../../components/EmptyState';
-import { MaterialCommunityIcons } from '../../components/Icon';
 import { FeedCard } from '../home/components/FeedCard';
 import { feedApi } from '../../api/feed';
 import { toast } from '../../store/toastStore';
@@ -26,7 +25,7 @@ import type { FeedItem } from '../../types';
 import { colors, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 
-type Props = NativeStackScreenProps<HomeStackParamList, 'FeedTimeline'>;
+type Props = NativeStackScreenProps<AlbumStackParamList, 'FeedTimeline'>;
 
 export const QUICK_EMOJIS = ['❤️', '🥰', '😆', '👍', '💪'];
 
@@ -87,28 +86,11 @@ export function FeedTimelineScreen({ navigation, route }: Props) {
     // who 가 없으면(전체) 네비게이터에 정의된 기본 타이틀('우리 기록')을 그대로 둔다
 
     /*
-     * 사진첩 — 이 목록의 <b>사진만 모아 보는 화면</b>이라 여기가 제 자리다.
-     *
-     * <p>원래 진입점은 홈 바로가기 칩이었는데, 2026-09-12 에 칩을 셋으로 줄이면서 더보기
-     * 시트로 옮겼고 같은 날 그 시트마저 없애면서 <b>인앱 진입점이 0이 됐다</b>(f0d9b71).
-     * 딥링크만 남아 앱 안에서는 닿을 수 없는 화면이었다.
-     *
-     * <p>홈으로 되돌리지 않는 이유: 그 줄은 칸을 늘리는 자리가 아니다(QuickActions 주석).
-     * 사진첩은 "우리 기록"의 다른 보기이므로 홈이 아니라 이 화면에 속한다.
+     * 사진첩 진입 버튼은 <b>없다</b>. 2026-09-14 까지는 이 헤더가 유일한 진입점이었는데
+     * (홈 칩을 셋으로 줄일 때 인앱 경로가 0이 된 적이 있어 여기 달았다), 사진 그리드가
+     * "우리" 탭의 <b>첫 화면</b>이 되면서 이 목록의 부모가 됐다 — 뒤로가기가 곧 사진첩이다.
+     * 탭 안에서 부모로 가는 버튼을 또 두면 같은 자리를 두 번 말하게 된다.
      */
-    navigation.setOptions({
-      headerRight: () => (
-        <Pressable
-          onPress={() => navigation.navigate('PhotoAlbum')}
-          hitSlop={8}
-          style={({ pressed }) => [styles.headerBtn, pressed && styles.headerBtnPressed]}
-          accessibilityRole="button"
-          accessibilityLabel="우리 사진첩"
-        >
-          <MaterialCommunityIcons name="image-multiple-outline" size={22} color={colors.textPrimary} />
-        </Pressable>
-      ),
-    });
   }, [navigation, who, partnerName]);
 
   const load = useCallback(async () => {
@@ -249,6 +231,4 @@ const styles = themedStyles((colors) => ({
   tail: { height: spacing.lg },
   cardDeleting: { opacity: 0.4 },
   // 헤더 우측 사진첩 버튼 — 최소 터치 타깃을 헤더 안에서도 보장한다
-  headerBtn: { minWidth: 40, minHeight: 40, alignItems: 'center', justifyContent: 'center' },
-  headerBtnPressed: { opacity: 0.6 },
 }));

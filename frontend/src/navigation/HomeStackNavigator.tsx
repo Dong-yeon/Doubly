@@ -9,15 +9,12 @@ import { SettingsScreen } from '../screens/my/SettingsScreen';
 import { ChangePasswordScreen } from '../screens/my/ChangePasswordScreen';
 import { LegalDocumentScreen } from '../screens/onboarding/LegalDocumentScreen';
 import { FeedComposeScreen } from '../screens/feed/FeedComposeScreen';
-import { FeedTimelineScreen } from '../screens/feed/FeedTimelineScreen';
 import { DailyQuestionScreen } from '../screens/home/DailyQuestionScreen';
 import { MiniGamesScreen } from '../screens/home/MiniGamesScreen';
 import { SudokuScreen } from '../screens/home/SudokuScreen';
 import { OmokScreen } from '../screens/home/OmokScreen';
 import { CatchMindScreen } from '../screens/home/CatchMindScreen';
 import { CoupleCalendarScreen } from '../screens/home/CoupleCalendarScreen';
-import { PhotoAlbumScreen } from '../screens/feed/PhotoAlbumScreen';
-import { MemoriesScreen } from '../screens/feed/MemoriesScreen';
 // 커플 여행 — 장소(럽슐랭) 스택에서 이관 (navigation/types.ts 의 Trip* 주석 참고)
 import { TripListScreen } from '../screens/trip/TripListScreen';
 import { TripFormScreen } from '../screens/trip/TripFormScreen';
@@ -55,7 +52,6 @@ export function HomeStackNavigator() {
         component={CoupleConnectScreen}
         options={{ title: '커플 연결' }}
       />
-      <Stack.Screen name="FeedTimeline" component={FeedTimelineScreen} options={{ title: '우리 기록' }} />
       <Stack.Screen
         name="FeedCompose"
         component={FeedComposeScreen}
@@ -67,8 +63,6 @@ export function HomeStackNavigator() {
       <Stack.Screen name="Omok" component={OmokScreen} options={{ title: '오목' }} />
       <Stack.Screen name="CatchMind" component={CatchMindScreen} options={{ title: '캐치마인드' }} />
       <Stack.Screen name="CoupleCalendar" component={CoupleCalendarScreen} options={{ title: '커플 캘린더' }} />
-      <Stack.Screen name="PhotoAlbum" component={PhotoAlbumScreen} options={{ title: '우리 사진첩' }} />
-      <Stack.Screen name="Memories" component={MemoriesScreen} options={{ title: '추억' }} />
       <Stack.Screen name="My" component={MyScreen} options={{ title: 'MY' }} />
       <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: '설정' }} />
       <Stack.Screen

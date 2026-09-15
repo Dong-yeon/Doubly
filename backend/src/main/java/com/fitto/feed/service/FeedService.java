@@ -45,10 +45,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 커플 일상 피드 — PLAN.md Couple Feed. 포스트 + 운동/식단/맛집 방문을
@@ -62,6 +64,13 @@ public class FeedService {
 
     /** 한 포스트에 담을 수 있는 사진 장수 상한 — Instagram 류 앱을 넘길 이유가 없다. */
     private static final int MAX_PHOTOS_PER_POST = 5;
+
+    /**
+     * 사진첩이 훑는 소스 — 사진이 달릴 수 있는 기록 전부.
+     * {@code CONTENT_LOG}(영화·공연 관람)는 뺀다: 이미지가 포스터라 "우리가 찍은 사진"이 아니다.
+     */
+    private static final Set<FeedItemType> PHOTO_SOURCES = EnumSet.of(
+            FeedItemType.POST, FeedItemType.MEAL, FeedItemType.WORKOUT, FeedItemType.PLACE_VISIT);
 
     private final FeedPostRepository feedPostRepository;
     private final FeedPostPhotoRepository feedPostPhotoRepository;
@@ -190,47 +199,127 @@ public class FeedService {
     }
 
     /**
-     * 전체 사진첩 — 사진이 있는 커플 포스트만 모아본다.
-     * 타임라인과 동일한 (createdAt, id) keyset 이지만 소스가 포스트 하나라 커서도 POST 위치만 담는다.
+     * 사진첩("우리" 탭) — 일상·식단·운동·맛집 중 <b>사진이 있는</b> 기록을 합쳐 최신순으로 준다.
+     *
+     * <p>새 컨트롤러를 만들지 않는 이유: 앨범은 피드의 다른 보기다(같은 4소스, 같은 커서,
+     * 사진만 남긴 것). {@link #timeline} 과 같은 소스별 keyset·Java 병합을 그대로 쓴다 —
+     * SQL {@code UNION} 은 H2/PostgreSQL 양립 규칙 때문에 쓰지 않는다(CLAUDE.md 4절).
+     *
+     * <p>{@code sources} 로 소스를 골라낼 수 있다(상단 필터 칩). 비었으면 4소스 전부.
+     * 중복 제거 규칙은 각 리포지토리 쿼리에 박혀 있다 — 데이트 식단 복제본 제외,
+     * 식단에서 파생된 방문 제외(docs/ALBUM_TAB_IA_2026-09-14.md 5-4).
      */
-    public FeedPhotosResponse photos(Long userId, String cursor, int limit) {
+    public FeedPhotosResponse photos(Long userId, String cursor, int limit, List<FeedItemType> sources) {
         Relation couple = activeCouple(userId);
         int size = Math.min(Math.max(limit, 1), MAX_LIMIT);
         FeedCursor from = FeedCursor.decode(cursor);
+        // 다음 페이지 존재 여부를 알려면 소스마다 한 건 더 읽어야 한다(타임라인과 같은 이유)
         Pageable page = PageRequest.of(0, size + 1);
 
-        List<FeedPost> posts = feedPostRepository.findPhotos(couple.getId(),
-                from.createdAtOf(FeedItemType.POST), from.idOf(FeedItemType.POST), page);
-        boolean hasMore = posts.size() > size;
-        if (hasMore) {
-            posts = posts.subList(0, size);
-        }
+        Set<FeedItemType> wanted = (sources == null || sources.isEmpty())
+                ? PHOTO_SOURCES
+                : EnumSet.copyOf(sources);
 
         Long partnerId = couple.partnerOf(userId);
-        Map<Long, String> names = mapper.userNames(
-                partnerId != null ? List.of(userId, partnerId) : List.of(userId));
-        Map<Long, List<String>> photosByPost = mapper.photosByPostId(posts);
+        List<Long> userIds = partnerId != null ? List.of(userId, partnerId) : List.of(userId);
+        Map<Long, String> names = mapper.userNames(userIds);
 
-        List<FeedPhotoResponse> items = posts.stream()
-                .map(p -> new FeedPhotoResponse(
-                        p.getId(),
-                        p.getImageUrl(),
-                        photosByPost.getOrDefault(p.getId(), List.of()),
-                        p.getContent(),
-                        names.getOrDefault(p.getAuthorId(), "상대방"),
-                        p.getAuthorId().equals(userId),
-                        p.getTripId(),
-                        p.getCreatedAt()))
-                .toList();
-
-        String nextCursor = null;
-        if (!posts.isEmpty()) {
-            FeedPost last = posts.get(posts.size() - 1);
-            Map<FeedItemType, FeedCursor.Position> positions = new EnumMap<>(FeedItemType.class);
-            positions.put(FeedItemType.POST, new FeedCursor.Position(last.getCreatedAt(), last.getId()));
-            nextCursor = new FeedCursor(positions).encode();
+        /*
+         * 타임라인 아이템으로 한 번 변환한 뒤 사진 항목으로 옮긴다. 캡션 문구와 커서 계산을
+         * 타임라인과 <b>같은 코드</b>로 처리하려는 것 — 따로 만들면 같은 기록이 화면마다
+         * 다르게 읽히고(제목 규칙이 두 벌), 커서 누락 버그도 두 곳에서 따로 나야 한다.
+         */
+        List<PhotoCandidate> merged = new ArrayList<>();
+        if (wanted.contains(FeedItemType.POST)) {
+            List<FeedPost> posts = feedPostRepository.findPhotos(couple.getId(),
+                    from.createdAtOf(FeedItemType.POST), from.idOf(FeedItemType.POST), page);
+            Map<Long, List<String>> photosByPost = mapper.photosByPostId(posts);
+            for (FeedPost p : posts) {
+                List<String> urls = photosByPost.getOrDefault(p.getId(), List.of());
+                merged.add(new PhotoCandidate(mapper.toItem(p, names, userId, null, urls),
+                        p.getImageUrl(), urls, p.getTripId()));
+            }
         }
+        if (wanted.contains(FeedItemType.MEAL)) {
+            List<Meal> meals = mealRepository.findPhotosForFeed(userIds,
+                    from.createdAtOf(FeedItemType.MEAL), from.idOf(FeedItemType.MEAL), page);
+            Map<Long, String> placeNameByMealId = placeNamesOf(meals);
+            for (Meal m : meals) {
+                merged.add(new PhotoCandidate(
+                        mapper.toItem(m, names, userId, placeNameByMealId.get(m.getId())),
+                        m.getPhotoUrl(), List.of(), null));
+            }
+        }
+        if (wanted.contains(FeedItemType.WORKOUT)) {
+            for (Workout w : workoutRepository.findPhotosForFeed(userIds,
+                    from.createdAtOf(FeedItemType.WORKOUT), from.idOf(FeedItemType.WORKOUT), page)) {
+                merged.add(new PhotoCandidate(mapper.toItem(w, names, userId),
+                        w.getImageUrl(), List.of(), null));
+            }
+        }
+        if (wanted.contains(FeedItemType.PLACE_VISIT)) {
+            for (VisitWithPlace v : placeVisitRepository.findPhotosForFeed(couple.getId(),
+                    from.createdAtOf(FeedItemType.PLACE_VISIT), from.idOf(FeedItemType.PLACE_VISIT), page)) {
+                merged.add(new PhotoCandidate(mapper.toItem(v, names, userId),
+                        v.getVisit().getImageUrl(), List.of(), null));
+            }
+        }
+
+        // 정렬도 (occurredAt, refId) 복합키 — 같은 시각이면 id 역순으로 안정 정렬한다
+        merged.sort(Comparator.<PhotoCandidate, java.time.LocalDateTime>comparing(c -> c.item().occurredAt())
+                .thenComparing(c -> c.item().refId())
+                .reversed());
+
+        boolean hasMore = merged.size() > size;
+        List<PhotoCandidate> picked = hasMore ? merged.subList(0, size) : merged;
+
+        String nextCursor = picked.isEmpty()
+                ? null
+                : nextCursorOf(from, picked.stream().map(PhotoCandidate::item).toList()).encode();
+
+        List<FeedPhotoResponse> items = picked.stream().map(c -> {
+            FeedItemResponse item = c.item();
+            return new FeedPhotoResponse(
+                    item.type(),
+                    item.refId(),
+                    c.imageUrl(),
+                    c.imageUrls(),
+                    captionOf(item),
+                    item.mine() ? "나" : item.userName(),
+                    item.mine(),
+                    c.tripId(),
+                    item.occurredAt());
+        }).toList();
+
         return new FeedPhotosResponse(items, nextCursor, hasMore);
+    }
+
+    /**
+     * 병합·정렬 중간 표현 — 타임라인 아이템에 사진첩만 쓰는 값을 얹는다.
+     *
+     * <p>{@code imageUrl} 을 <b>원본에서 직접</b> 받는 이유: 타임라인 아이템의 imageUrl 은
+     * 운동일 때 늘 null 이다(카드가 운동 사진을 안 그려서 매퍼가 채우지 않는다 —
+     * {@code FeedItemMapper.toItem(Workout, ...)}). 사진첩은 그 사진이 본문이므로
+     * 아이템에 의존하지 않고 소스 필드를 그대로 쓴다.
+     *
+     * <p>{@code imageUrls} 는 포스트만 여러 장이고, {@code tripId} 도 포스트에만 있다.
+     */
+    private record PhotoCandidate(FeedItemResponse item, String imageUrl,
+                                  List<String> imageUrls, Long tripId) {
+    }
+
+    /**
+     * 뷰어 캡션 — 카드의 제목·부제를 " · " 로 이어 한 줄로 만든다.
+     * 일상 포스트는 제목이 없고 글만 있어 그 글이 그대로 캡션이 된다.
+     */
+    private static String captionOf(FeedItemResponse item) {
+        if (item.title() == null || item.title().isBlank()) {
+            return item.content();
+        }
+        if (item.content() == null || item.content().isBlank()) {
+            return item.title();
+        }
+        return item.title() + " · " + item.content();
     }
 
     /**

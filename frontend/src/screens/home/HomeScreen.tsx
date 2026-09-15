@@ -262,7 +262,7 @@ export function HomeScreen({ navigation }: Props) {
    *
    * <p>기록 화면을 거치지 않는다. 끼니는 시각으로 정하고(mealTimeSlot), 칼로리는 저장 뒤
    * 서버가 알아서 채우므로(MealPhotoAutoAnalysisService) 확인할 화면 자체가 필요 없다.
-   * 운동 탭의 "📷 사진으로"가 기록 화면으로 넘어가는 것과 갈리는 지점이다 — 거기서는
+   * 운동 체크인 카드의 "📷 사진으로"가 기록 화면으로 넘어가는 것과 갈리는 지점이다 — 거기서는
    * 읽어낸 시간·거리를 확인할 자리가 필요했다.
    *
    * <p>시트를 닫는 건 저장이 <b>끝난 뒤</b>다. 사진을 고르자마자 닫으면 업로드가 도는 동안
@@ -664,31 +664,42 @@ export function HomeScreen({ navigation }: Props) {
                   // 예전엔 어느 열을 눌러도 똑같이 전체 '우리 기록'으로 갔다 —
                   // 그 화면은 바로 아래 바로가기에도 있어 버튼 기능이 겹쳤다.
                   // 열을 누르면 그 사람 기록만 거른 화면으로 간다.
-                  onPressPerson={(who) => navigation.navigate('FeedTimeline', { who })}
+                  /*
+                   * 기록은 "우리" 탭으로 이관됐다 — 탭을 건너뛰되 initial:false 로 그 탭의
+                   * 첫 화면(AlbumMain)을 아래에 깔아 뒤로가기가 탭 안에 남게 한다.
+                   */
+                  onPressPerson={(who) =>
+                    navigation.navigate('Album', { screen: 'FeedTimeline', params: { who }, initial: false })
+                  }
                   /*
                    * 운동/식단 칩 — 예전엔 중앙 FAB 로 "탭 안 옮기고 바로 기록"이 가능했다.
                    * FAB 를 없앤 대신 이 칩이 그 역할을 물려받았고, 아래 분기가 그 약속을 지킨다.
                    */
                   onPressToday={(who, kind) => {
                     if (kind === 'workout') {
-                      // returnTo — 닫을 때 운동 탭에 남지 않고 홈으로 돌아온다(위 "탭 안 옮기고" 약속)
-                      navigation.navigate('Workout', myWorkoutDone
-                        ? { screen: 'WorkoutMain' }
-                        : { screen: 'WorkoutRecord', params: { returnTo: 'Home' } });
+                      /*
+                       * returnTo — 닫을 때 럽바디 탭에 남지 않고 홈으로 돌아온다(위 "탭 안 옮기고" 약속).
+                       * initial:false 를 함께 주는 이유는 운동 화면들이 이제 럽바디 탭 <b>안쪽</b>이라
+                       * 그것만으로는 탭 스택의 첫 화면이 되어 뒤로가기가 탭 밖으로 튕기기 때문이다
+                       * (ActiveWorkoutBar 와 같은 이유) — 닫기는 returnTo, 뒤로가기는 initial:false 가 받는다.
+                       */
+                      navigation.navigate('Health', myWorkoutDone
+                        ? { screen: 'WorkoutMain', initial: false }
+                        : { screen: 'WorkoutRecord', params: { returnTo: 'Home' }, initial: false });
                       return;
                     }
                     /*
                      * 식단만 시트를 연다 — 끼니는 하루 세 번이라 "오늘 했다/안 했다"로 목적지를
                      * 가르면 아침 이후로는 빠른 경로가 사라진다. 시트는 기록 여부와 무관하게
                      * 같은 모양이고(사진 두 갈래 + 직접 적기 + 오늘 기록 보기) ✓ 는 잠금이
-                     * 아니라 상태 표시로 남는다. 운동은 하루 한 번에 가깝고 운동 탭 자체에
+                     * 아니라 상태 표시로 남는다. 운동은 하루 한 번에 가깝고 럽바디 메인의 체크인 카드에
                      * 원탭·사진 버튼이 이미 있어 여기서 겹칠 이유가 없다.
                      *
                      * 다만 상대 열에서는 열지 않는다 — 내 사진을 상대 이름으로 남길 수는 없다.
                      * (기존 주석대로 두 화면 모두 내 기록만 보여주므로 목적지는 그대로 DietMain)
                      */
                     if (who === 'partner') {
-                      navigation.navigate('Diet', { screen: 'DietMain' });
+                      navigation.navigate('Health', { screen: 'DietMain' });
                       return;
                     }
                     setMealSheet(true);
@@ -716,7 +727,14 @@ export function HomeScreen({ navigation }: Props) {
                     upgradeMessage="작년 오늘의 추억은 PRO에서 볼 수 있어요."
                   />
                 ) : (
-                  <MemoryPeek memories={memories} onPress={() => navigation.navigate('Memories')} />
+                  /* 카드는 홈에 그대로 둔다(희소 콘텐츠라 홈 노출이 발견성에 유리) —
+                     화면만 "우리" 탭으로 옮겨가 탭을 건너뛴다 */
+                  <MemoryPeek
+                    memories={memories}
+                    onPress={() =>
+                      navigation.navigate('Album', { screen: 'Memories', initial: false })
+                    }
+                  />
                 )
               ) : homeTrip && isTripLive(homeTrip) ? (
                 <TripPeek
@@ -737,13 +755,16 @@ export function HomeScreen({ navigation }: Props) {
                 유일한 길이다(CoupleCalendarScreen).
 
                 내린 것들이 닿는 길: 질문·게임은 전용 푸시 링크(PushLinks.QUESTION·
-                GAME_SUDOKU·GAME_OMOK)와 딥링크, 사진첩은 딥링크('album'), 여행은 캘린더
-                안의 링크, 터치는 <b>채팅 트레이</b>(2026-09-12 이동 — ChatRoomScreen 의
-                sendTouch 주석). 홈은 터치를 <b>받는 곳</b>으로는 남는다(onIncomingTouch).
+                GAME_SUDOKU·GAME_OMOK)와 딥링크, 여행은 캘린더 안의 링크, 터치는
+                <b>채팅 트레이</b>(2026-09-12 이동 — ChatRoomScreen 의 sendTouch 주석).
+                홈은 터치를 <b>받는 곳</b>으로는 남는다(onIncomingTouch).
+
+                '우리 기록'·'사진첩'은 2026-09-14 에 <b>"우리" 탭</b>이 생겨 여기서 뺐다 —
+                탭바에 상시 자리가 있으니 바로가기로 중복시킬 이유가 없다. 남은 '일상'은
+                피드 쓰기의 유일한 진입점이라 그대로 둔다(우리 탭 헤더의 + 와 두 곳).
               */}
               <QuickActions
                 actions={[
-                  { icon: 'timeline-text-outline', label: '우리 기록', onPress: () => navigation.navigate('FeedTimeline') },
                   { icon: 'image-plus', label: '일상', onPress: () => navigation.navigate('FeedCompose') },
                   { icon: 'calendar-heart', label: '캘린더', onPress: () => navigation.navigate('CoupleCalendar') },
                 ]}
@@ -773,8 +794,8 @@ export function HomeScreen({ navigation }: Props) {
                 */}
                 {(
                   [
-                    { icon: 'dumbbell', label: '운동 기록하기', desc: '오늘 운동을 남기면 스트릭이 시작돼요', go: () => navigation.navigate('Workout', { screen: 'WorkoutRecord', params: { returnTo: 'Home' } }) },
-                    { icon: 'silverware-fork-knife', label: '식단 기록하기', desc: '사진이나 글로 적으면 AI가 칼로리를 계산해요', go: () => navigation.navigate('Diet', { screen: 'DietRecord', params: { returnTo: 'Home' } }) },
+                    { icon: 'dumbbell', label: '운동 기록하기', desc: '오늘 운동을 남기면 스트릭이 시작돼요', go: () => navigation.navigate('Health', { screen: 'WorkoutRecord', params: { returnTo: 'Home' }, initial: false }) },
+                    { icon: 'silverware-fork-knife', label: '식단 기록하기', desc: '사진이나 글로 적으면 AI가 칼로리를 계산해요', go: () => navigation.navigate('Health', { screen: 'DietRecord', params: { returnTo: 'Home' }, initial: false }) },
                     { icon: 'map-marker-plus-outline', label: '가고 싶은 장소 저장', desc: '맛집, 여행지, 전시… 둘이 함께 갈 곳을 미리 담아두세요', go: () => navigation.navigate('Place', { screen: 'PlaceAdd', params: { returnTo: 'Home' }, initial: false }) },
                   ] as const
                 ).map((a, i, arr) => (
@@ -843,12 +864,12 @@ export function HomeScreen({ navigation }: Props) {
         onPickPhoto={() => void saveMealFromPhoto('library')}
         onWriteManually={() => {
           setMealSheet(false);
-          // returnTo — 닫으면 식단 탭에 남지 않고 홈으로 돌아온다(위 바로가기와 같은 규칙)
-          navigation.navigate('Diet', { screen: 'DietRecord', params: { returnTo: 'Home' } });
+          // returnTo — 닫으면 럽바디 탭에 남지 않고 홈으로 돌아온다(위 바로가기와 같은 규칙)
+          navigation.navigate('Health', { screen: 'DietRecord', params: { returnTo: 'Home' }, initial: false });
         }}
         onViewToday={() => {
           setMealSheet(false);
-          navigation.navigate('Diet', { screen: 'DietMain' });
+          navigation.navigate('Health', { screen: 'DietMain' });
         }}
       />
     </View>

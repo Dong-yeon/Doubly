@@ -472,8 +472,9 @@
 | 배경 변경 (연결 시) | `pickImage`→`upload`→`setBackground` | ⚠️ `runBusy` 오버레이만 | ✅ toast | ❌ | ☐ |
 | 프로필 아이콘 | `navigate('My')` | — | — | — | ☐ |
 | D-day 히어로 탭 | 기념일 모달 | — | — | — | ☐ |
-| 최근 기록 카드 | `navigate('FeedTimeline')` | — | — | — | ☐ |
-| 바로가기 5종 (우리기록/일상/질문/캘린더/사진첩) | 각 `navigate` | — | — | — | ☐ |
+| 히어로 좌/우 열 | `navigate('Album', {screen:'FeedTimeline', initial:false})` — **탭 건너뜀, 뒤로가기가 우리 탭에 남아야 한다** | — | — | — | ☐ |
+| 작년 오늘 카드 | `navigate('Album', {screen:'Memories', initial:false})` | — | — | — | ☐ |
+| 바로가기 2종 (일상/캘린더) | 각 `navigate` — 우리 기록·사진첩은 우리 탭으로 이관됨 | — | — | — | ☐ |
 | 커플 연결하기 (미연결) | `navigate('CoupleConnect')` | — | — | — | ☐ |
 | 혼자 시작 3종 (운동/식단/맛집) | nested `navigate` | — | — | — | ☐ |
 | 기념일 모달 배경/취소 | 닫기 | — | — | ⚠️ 저장 중에도 닫힘 | ☐ |
@@ -774,8 +775,28 @@
 
 ---
 
-### FeedTimelineScreen — 우리 기록
-`frontend/src/screens/feed/FeedTimelineScreen.tsx` · 진입: Home "우리 기록"
+### AlbumScreen — 우리 탭 (2026-09-15 신설)
+`frontend/src/screens/album/AlbumScreen.tsx` · 진입: 탭바 2번째
+
+| 요소 | 동작 | 로딩 | 에러 | 중복탭 방어 | 확인 |
+| --- | --- | --- | --- | --- | --- |
+| 소스 칩 5종 (전체/일상/식단/운동/맛집) | `load(key)` — 목록을 비우고 다시 받는다 | ✅ refreshing | ✅ toast + 빈 상태 구분 | ✅ `loadingRef` 락 | ☐ |
+| 그리드 칸 탭 | `ImageViewer` 를 그 기록의 첫 장에서 연다(이어서 스와이프) | — | — | — | ☐ |
+| 무한스크롤 | `loadMore()` — `${type}:${refId}` 키로 중복 제거 | ✅ | ✅ toast | ✅ 락 + 키 Set | ☐ |
+| 당겨서 새로고침 | `load(filter)` | ✅ | ✅ | ✅ | ☐ |
+| 작년 오늘 카드 | `navigate('Memories')` — 잠김(PRO)은 서버 `locked` 를 따른다 | — | 조용히 섹션 숨김 | — | ☐ |
+| 여행 가로줄 | `navigate('TripAlbum')` | — | 조용히 섹션 숨김 | — | ☐ |
+| 헤더 ≡ / + | `FeedTimeline` / `FeedCompose` | — | — | — | ☐ |
+| 마지막 줄 | **탭바에 가리지 않아야 한다**(구 사진첩의 지적 사항) | — | — | — | ☐ |
+
+**확인해야 하는 것들**: 4소스가 섞인 순서(최신순) · 데이트 식단이 한 칸인지 ·
+식단에서 파생된 맛집 방문이 중복으로 안 뜨는지 · 썸네일 변환 URL 이 실제로 줄어든 이미지를
+받는지(Cloudinary 가 아닌 URL 은 원본 그대로).
+
+---
+
+### FeedTimelineScreen — 기록 (우리 탭)
+`frontend/src/screens/feed/FeedTimelineScreen.tsx` · 진입: 우리 탭 헤더 ≡, 홈 히어로 좌/우 열
 
 | 요소 | 동작 | 로딩 | 에러 | 중복탭 방어 | 확인 |
 | --- | --- | --- | --- | --- | --- |
