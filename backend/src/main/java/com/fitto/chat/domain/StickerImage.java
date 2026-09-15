@@ -18,7 +18,7 @@ import java.util.Optional;
  * empty 를 반환하고, 알림 미리보기는 기존처럼 이모지 자체를 보여준다.
  *
  * <p><b>여기엔 premium 필드가 없다.</b> 이미지 스티커는 번들 에셋이라 원가가 0이고
- * 전부 무료다 — 비개구리 세트(BIGAE_*)도 같은 이유로 무료다
+ * 전부 무료다 — 비개구리 두 마리(DUBI_*·BLI_*)도 같은 이유로 무료다
  * (docs/COUPLE_EMOJI_AI_DESIGN_2026-09-08.md §17). PRO 로 돌릴 장이 생기면
  * {@link AnimatedSticker} 처럼 premium 을 만들고
  * {@code ChatService.send} 의 판정 조건에도 이 enum 을 넣어야 한다 — 현재 그 조건은
@@ -38,38 +38,39 @@ public enum StickerImage {
     BEAR_TIRED("지쳤어"),
     BEAR_SLEEPY("잘자"),
 
-    // 비개구리(남) 14종 — 초록. 사용자 손그림을 스티커화한 자체 캐릭터(설계 메모 §15·§17·§20·§21).
-    // 공용 4종(WINK·SULKY·GRUMPY·GLOOMY)은 아래 BIGAEF_ 쪽에도 같은 그림이 색만 바뀌어 들어간다.
-    BIGAE_LIKE("좋아"),
-    BIGAE_HEHE("히히"),
-    BIGAE_LAUGH("하하하"),
-    BIGAE_EXCITED("신났어"),
-    BIGAE_DANCE("룰루랄라"),
-    BIGAE_GIFT("선물이야"),
-    BIGAE_WINK("윙크"),
-    BIGAE_SULKY("시무룩"),
-    BIGAE_GRUMPY("짜증나"),
-    BIGAE_ANGRY("화났어"),
-    BIGAE_DASH("흥, 간다"),
-    BIGAE_GLOOMY("축 처짐"),
-    BIGAE_DIZZY("어질~"),
-    BIGAE_OFFWORK("퇴근"),
+    // 더비(초록) 14종 — 사용자 손그림을 스티커화한 자체 캐릭터 "비개구리"(설계 메모 §15·§17·§20·§21).
+    // 이름은 앱 이름 더블리를 둘로 쪼갠 것이다 — 더비(초록) · 블리(노랑).
+    // 공용 4종(WINK·SULKY·GRUMPY·GLOOMY)은 아래 BLI_ 쪽에도 같은 그림이 색만 바뀌어 들어간다.
+    DUBI_LIKE("좋아"),
+    DUBI_HEHE("히히"),
+    DUBI_LAUGH("하하하"),
+    DUBI_EXCITED("신났어"),
+    DUBI_DANCE("룰루랄라"),
+    DUBI_GIFT("선물이야"),
+    DUBI_WINK("윙크"),
+    DUBI_SULKY("시무룩"),
+    DUBI_GRUMPY("짜증나"),
+    DUBI_ANGRY("화났어"),
+    DUBI_DASH("흥, 간다"),
+    DUBI_GLOOMY("축 처짐"),
+    DUBI_DIZZY("어질~"),
+    DUBI_OFFWORK("퇴근"),
 
-    // 비개구리(여) 14종 — 분홍. 같은 원본에서 색상만 돌린 판이라 실루엣이 초록과 동일하다.
-    BIGAEF_LOVE("좋아좋아"),
-    BIGAEF_KISS("뽀뽀"),
-    BIGAEF_BEAM("방긋"),
-    BIGAEF_CONTENT("흐뭇"),
-    BIGAEF_FLOWER("기분 좋아"),
-    BIGAEF_MAKEUP("꽃단장"),
-    BIGAEF_RIBBON("예뻐졌지?"),
-    BIGAEF_WINK("윙크"),
-    BIGAEF_OH("어머"),
-    BIGAEF_SULKY("시무룩"),
-    BIGAEF_GRUMPY("짜증나"),
-    BIGAEF_CRYING("엉엉"),
-    BIGAEF_GLOOMY("축 처짐"),
-    BIGAEF_SLEEPY("잘자");
+    // 블리(노랑) 14종 — 같은 원본에서 색상만 돌린 판이라 실루엣이 더비와 동일하다.
+    BLI_LOVE("좋아좋아"),
+    BLI_KISS("뽀뽀"),
+    BLI_BEAM("방긋"),
+    BLI_CONTENT("흐뭇"),
+    BLI_FLOWER("기분 좋아"),
+    BLI_MAKEUP("꽃단장"),
+    BLI_RIBBON("예뻐졌지?"),
+    BLI_WINK("윙크"),
+    BLI_OH("어머"),
+    BLI_SULKY("시무룩"),
+    BLI_GRUMPY("짜증나"),
+    BLI_CRYING("엉엉"),
+    BLI_GLOOMY("축 처짐"),
+    BLI_SLEEPY("잘자");
 
     private final String label;
 
