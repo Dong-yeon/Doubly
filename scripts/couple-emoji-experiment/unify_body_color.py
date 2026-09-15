@@ -4,7 +4,7 @@
 프롬프트로 지정해도 장마다 미묘하게 달라진다 — 2026-09-15 의 24장은 몸통 중앙값이
 `#71BA68` 부터 `#99D490` 까지 벌어졌다. 색은 완성본 위에서 픽셀로 맞춰야 한다.
 
-**초록(남)/핑크(여) 두 캐릭터도 여기서 갈린다.** 같은 그림을 색상만 돌려 두 벌로 만든다.
+**더비(초록)/블리(노랑) 두 캐릭터도 여기서 갈린다.** 같은 그림을 색상만 돌려 두 벌로 만든다.
 
 방식 — 초록 계열 픽셀의 **색상(H)을 목표 색으로 돌리고**, 몸통처럼 진한 픽셀은 채도·명도까지
 목표값으로 눌러 평면으로 만든다. 가장자리 안티앨리어싱 픽셀(채도가 낮다)은 색상만 돌리고
@@ -12,7 +12,7 @@
 
 얼굴선(검정)·흰 테두리는 무채색이라 걸리지 않는다. 볼 홍조는 분홍이라 초록 범위 밖이다.
 
-    python scripts/couple-emoji-experiment/unify_body_color.py <입력> <출력> [green|pink]
+    python scripts/couple-emoji-experiment/unify_body_color.py <입력> <출력> [green|yellow]
 """
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-# 목표 몸통색. green 은 24장 중앙값 근처, pink 는 같은 채도·명도에서 색상만 돌린 값.
+# 목표 몸통색. green 은 전량 교체한 24장의 중앙값 근처, yellow 는 거기서 색상만 돌린 값.
 TARGETS = {
     'green': '#86CB7F',   # 더비
     'yellow': '#F2D06B',  # 블리
@@ -86,7 +86,8 @@ def unify(src: Path, dst: Path, target: str = 'green', body_hex: str | None = No
 
         if blush:
             # 홍조는 채도·명도까지 목표값으로 눌러 장마다 다른 탁한 살구색을 한 색으로 모은다
-            is_blush = ((hsv[:, 0] >= BLUSH_H[0]) | (hsv[:, 0] <= BLUSH_H[1]))                 & (hsv[:, 2] >= BLUSH_MIN_VALUE)
+            is_pinkish = (hsv[:, 0] >= BLUSH_H[0]) | (hsv[:, 0] <= BLUSH_H[1])
+            is_blush = is_pinkish & (hsv[:, 2] >= BLUSH_MIN_VALUE)
             hsv[is_blush, 0] = bh
             hsv[is_blush, 1] = bs
             hsv[is_blush, 2] = bv
