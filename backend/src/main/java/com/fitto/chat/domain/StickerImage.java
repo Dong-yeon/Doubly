@@ -38,27 +38,38 @@ public enum StickerImage {
     BEAR_TIRED("지쳤어"),
     BEAR_SLEEPY("잘자"),
 
-    // 비개구리 17종 — 사용자 손그림 스케치를 스티커화한 자체 캐릭터(설계 메모 §15·§17·§20).
-    // 1차 10종 + 2차 스케치 8종(LIKE·HEHE·KISS·GIFT·DANCE·GRUMPY·DIZZY·OFFWORK) − BIGAE_WIGGLE.
-    // WIGGLE(뒷모습 엉덩이)은 DANCE(뒷모습 + 음표)와 실루엣이 같아 뺐다(§20). 배포 전이라
-    // 그 코드로 보낸 메시지는 없다 — 있었다면 말풍선에 코드 문자열이 그대로 뜬다.
-    BIGAE_LOVE("좋아좋아"),
+    // 비개구리(남) 14종 — 초록. 사용자 손그림을 스티커화한 자체 캐릭터(설계 메모 §15·§17·§20·§21).
+    // 공용 4종(WINK·SULKY·GRUMPY·GLOOMY)은 아래 BIGAEF_ 쪽에도 같은 그림이 색만 바뀌어 들어간다.
     BIGAE_LIKE("좋아"),
     BIGAE_HEHE("히히"),
     BIGAE_LAUGH("하하하"),
-    BIGAE_KISS("뽀뽀"),
-    BIGAE_GIFT("선물이야"),
     BIGAE_EXCITED("신났어"),
     BIGAE_DANCE("룰루랄라"),
+    BIGAE_GIFT("선물이야"),
+    BIGAE_WINK("윙크"),
     BIGAE_SULKY("시무룩"),
     BIGAE_GRUMPY("짜증나"),
     BIGAE_ANGRY("화났어"),
     BIGAE_DASH("흥, 간다"),
-    BIGAE_CRYING("엉엉"),
     BIGAE_GLOOMY("축 처짐"),
     BIGAE_DIZZY("어질~"),
     BIGAE_OFFWORK("퇴근"),
-    BIGAE_SLEEPY("잘자");
+
+    // 비개구리(여) 14종 — 분홍. 같은 원본에서 색상만 돌린 판이라 실루엣이 초록과 동일하다.
+    BIGAEF_LOVE("좋아좋아"),
+    BIGAEF_KISS("뽀뽀"),
+    BIGAEF_BEAM("방긋"),
+    BIGAEF_CONTENT("흐뭇"),
+    BIGAEF_FLOWER("기분 좋아"),
+    BIGAEF_MAKEUP("꽃단장"),
+    BIGAEF_RIBBON("예뻐졌지?"),
+    BIGAEF_WINK("윙크"),
+    BIGAEF_OH("어머"),
+    BIGAEF_SULKY("시무룩"),
+    BIGAEF_GRUMPY("짜증나"),
+    BIGAEF_CRYING("엉엉"),
+    BIGAEF_GLOOMY("축 처짐"),
+    BIGAEF_SLEEPY("잘자");
 
     private final String label;
 
