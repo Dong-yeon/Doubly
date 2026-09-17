@@ -14,6 +14,7 @@
 | --- | --- |
 | `feature_graphic.png` | Play 피처 그래픽 **1024×500**. 2026-09-15 에 A 안으로 확정 |
 | `plates/<크기>_<번호>.png` | 캡션 배경판 — 캡처 자리가 **투명하게 뚫려** 있다 |
+| `shots/<번호>.png` | 폰에서 찍어둔 원본 캡처. `compose.py` 에 그대로 먹인다 |
 | `make_plates.py` | 배경판·피처 그래픽 생성기 (문구·크기를 여기서 고친다) |
 | `compose.py` | 캡처 + 배경판 → 올릴 이미지 |
 | `mascot.png` | 앱 아이콘에서 흰 배경을 지운 마스코트 |
@@ -38,9 +39,13 @@
 2. 합성한다.
 
 ```bash
-python3 store/compose.py ~/shots                    # 네 크기 전부
-python3 store/compose.py ~/shots --size play-phone  # 하나만
+python3 store/compose.py store/shots                    # 네 크기 전부
+python3 store/compose.py store/shots --size play-phone  # 하나만
 ```
+
+`store/shots/` 에 02~05 가 이미 들어 있다. **01 만 찍어 `store/shots/01.png` 로 넣고 위 명령을
+다시 돌리면 다섯 장이 완성된다** — 나머지를 다시 찍을 필요가 없다. 결과물(`out/`)과 달리
+원본 캡처를 커밋해 두는 이유가 이것이다.
 
 결과는 `store/out/<크기>/` 에 떨어진다(이 폴더는 커밋하지 않는다 — 캡처는 사람마다 다르다).
 
