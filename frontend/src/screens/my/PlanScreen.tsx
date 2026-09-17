@@ -14,7 +14,7 @@
  * 국가·통화·프로모션에 따라 달라지고, Play Console 에서 가격을 바꾸면 앱은 그대로 따라간다.
  */
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../navigation/types';
@@ -32,6 +32,25 @@ import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'Plan'>;
+
+/**
+ * 구독 고지 문구 — <b>애플 심사 지침 3.1.2 가 앱 <u>화면 안</u>에 요구하는 것</b>이다.
+ * 제목 · 기간 · 가격 · 자동 갱신 · 해지 방법 · 이용약관/개인정보처리방침 링크.
+ *
+ * <p>2026-09-17 반려로 확인했다. 그때 걸린 것은 스토어 <b>메타데이터</b>(앱 설명에 EULA
+ * 링크가 없다)였지만, 같은 지침이 앱 안에도 같은 항목을 요구한다 — 메타데이터를 고쳐
+ * 재심사에 넣으면 다음 차례로 이게 걸린다. docs/APP_STORE_BILLING.md 참고.
+ *
+ * <p>해지 경로는 스토어마다 다르므로 갈라 적는다. "앱에서 해지"라고 쓰면 거짓말이 된다 —
+ * 자동 갱신 구독의 해지는 <b>스토어 계정 설정</b>에서만 된다.
+ */
+const CANCEL_PATH =
+  Platform.OS === 'ios'
+    ? '설정 → 내 이름 → 구독'
+    : 'Play 스토어 → 프로필 → 결제 및 구독 → 구독';
+
+/** 기간 — 스토어에 등록된 base plan 이 monthly 한 종류다(constants/config.ts PRO_BASE_PLAN_ID) */
+const SUBSCRIPTION_PERIOD = '1개월';
 
 /**
  * 맨 위에 세울 넷 — 기능 40개를 다 나열하면 아무것도 전달되지 않는다.
@@ -90,7 +109,7 @@ function limitLabel(limit: number, period: QuotaPeriod): string {
   }
 }
 
-export function PlanScreen(_props: Props) {
+export function PlanScreen({ navigation }: Props) {
   const plan = usePlanStore((s) => s.plan);
   const freeTrial = usePlanStore((s) => s.freeTrial);
   const trialEndsAt = usePlanStore((s) => s.trialEndsAt);
@@ -221,6 +240,43 @@ export function PlanScreen(_props: Props) {
               <Text style={styles.noticeText}>PRO는 준비 중이에요. 곧 만나요!</Text>
             </View>
           )}
+
+          {/*
+            구독 고지 — 위 CANCEL_PATH 주석 참고. 구매 버튼이 없는 경우(웹)에도 그대로 둔다.
+            상품 설명이지 구매 흐름의 일부가 아니고, 링크는 어디서든 닿아야 한다.
+          */}
+          <View style={styles.terms}>
+            <Text style={styles.termsText}>
+              <Text style={styles.strong}>Dubly PRO</Text> · {SUBSCRIPTION_PERIOD} 자동 갱신 구독
+              {price ? ` · ${price}` : ''}
+            </Text>
+            <Text style={styles.termsText}>
+              결제는 구매 확인 시점에 스토어 계정으로 청구돼요. 기간이 끝나기 24시간 전까지
+              해지하지 않으면 같은 금액으로 자동 갱신되고, 갱신 요금은 기간 만료 24시간 이내에
+              청구돼요.
+            </Text>
+            <Text style={styles.termsText}>
+              해지는 <Text style={styles.strong}>{CANCEL_PATH}</Text>에서 언제든 할 수 있어요.
+              해지해도 남은 기간 동안은 PRO가 유지돼요.
+            </Text>
+            <View style={styles.termsLinks}>
+              <Pressable
+                onPress={() => navigation.navigate('LegalDocument', { doc: 'terms' })}
+                hitSlop={8}
+                accessibilityRole="link"
+              >
+                <Text style={styles.termsLink}>이용약관</Text>
+              </Pressable>
+              <Text style={styles.termsDot}>·</Text>
+              <Pressable
+                onPress={() => navigation.navigate('LegalDocument', { doc: 'privacy' })}
+                hitSlop={8}
+                accessibilityRole="link"
+              >
+                <Text style={styles.termsLink}>개인정보처리방침</Text>
+              </Pressable>
+            </View>
+          </View>
         </Card>
 
         {/* 전체 비교 */}
@@ -322,6 +378,18 @@ const styles = themedStyles((colors) => ({
     marginTop: spacing.xs,
   },
   noticeText: { fontSize: fontSize.body, fontWeight: '700', color: colors.textSecondary },
+
+  // 구독 고지 — 읽히되 소개를 가리지 않게 한 단계 작고 흐리게
+  terms: { gap: spacing.xs, marginTop: spacing.xs },
+  termsText: { fontSize: fontSize.caption, color: colors.textSecondary, lineHeight: 18 },
+  termsLinks: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.xxs },
+  termsLink: {
+    fontSize: fontSize.caption,
+    fontWeight: '700',
+    color: colors.together,
+    textDecorationLine: 'underline',
+  },
+  termsDot: { fontSize: fontSize.caption, color: colors.textSecondary },
 
   loading: { marginTop: spacing.lg },
   group: { gap: spacing.xs },
