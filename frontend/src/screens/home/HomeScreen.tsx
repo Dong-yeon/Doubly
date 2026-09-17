@@ -56,7 +56,8 @@ import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { getErrorMessage } from '../../utils/error';
 import { Alert } from '../../utils/alert';
-import { errorCodeOf } from '../../api/client';
+import { errorCodeOf, isApiError } from '../../api/client';
+import { reportError } from '../../utils/errorReporter';
 import { updateHomeWidget } from '../../widget/updateHomeWidget';
 import { loadWidgetData } from '../../widget/widgetData';
 import { touchGestureOf } from '../../constants/touchGestures';
@@ -186,12 +187,37 @@ export function HomeScreen({ navigation }: Props) {
   /*
    * 오프라인 안내는 한 번만 — 홈은 포커스마다 refresh 가 돌고 그 안에서 여러 요청이
    * 각각 실패하므로, 안내를 그대로 흘리면 지하철 한 정거장에 토스트가 열 번 뜬다.
+   *
+   * <p><b>원인별로 문구를 가른다.</b> 예전엔 인자 없는 콜백이라 서버 500 도
+   * "연결이 불안정해요"로 나갔다 — 사용자는 멀쩡한 자기 네트워크를 의심하고,
+   * 제보를 받아도 어느 쪽인지 가릴 수 없었다. 이 실패는 리포터로도 안 갔으므로
+   * 앱에도 서버에도 흔적이 남지 않았다.
+   *
+   * <p>구분은 새로 만들 것이 없다 — {@link ApiError} 가 이미 담고 있다
+   * (api/client.ts: 네트워크 끊김·타임아웃은 status 0, 타임아웃만 timedOut).
    */
   const offlineNoticeShown = useRef(false);
-  const noteOffline = useCallback(() => {
+  const noteOffline = useCallback((error: unknown) => {
     if (offlineNoticeShown.current) return;
     offlineNoticeShown.current = true;
-    toast.info('연결이 불안정해요. 마지막으로 본 기록을 보여주고 있어요.');
+
+    const status = isApiError(error) ? error.status : 0;
+    if (status === 0) {
+      // 서버 응답이 아예 없다. 우리가 기다리다 끊은 것과 연결이 없는 것은 할 말이 다르다.
+      toast.info(
+        isApiError(error) && error.timedOut
+          ? '서버 응답이 느려요. 마지막으로 본 기록을 보여주고 있어요.'
+          : '연결이 불안정해요. 마지막으로 본 기록을 보여주고 있어요.',
+      );
+      return;
+    }
+
+    /*
+     * 서버가 응답은 했다 — 네트워크 탓으로 돌리면 안 된다. 5xx 는 우리 쪽 결함이므로
+     * 문구만 바꾸고 끝내지 않고 기록까지 남긴다(4xx 는 토큰 만료·플랜 한도라 소음이 된다).
+     */
+    if (status >= 500) reportError(error, { source: 'global', boundary: 'HomeScreen.refresh' });
+    toast.info(`기록을 불러오지 못했어요 (${status}). 마지막으로 본 기록을 보여주고 있어요.`);
   }, []);
 
   const refresh = useCallback(() => {
