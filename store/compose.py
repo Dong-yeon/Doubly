@@ -76,8 +76,14 @@ def main(argv: list[str]) -> int:
         return 1
 
     pairs = pair_up(shots)
+    # 안내문에 줄표(—)를 쓰지 않는다: 윈도우 기본 콘솔(cp949)이 이 글자에서 UnicodeEncodeError
+    # 로 죽는다. 같은 줄의 화살표·따옴표는 cp949 에 있어서 괜찮다.
     if len(pairs) < len(shots):
-        print(f"캡처 {len(shots)}장 — 문구가 {len(CAPTIONS)}개뿐이라 앞 {len(pairs)}장만 씁니다.")
+        print(f"캡처 {len(shots)}장, 문구가 {len(CAPTIONS)}개뿐이라 앞 {len(pairs)}장만 씁니다.")
+    if len(pairs) < len(CAPTIONS):
+        done = {cap[0] for _, cap in pairs}
+        missing = [key for key, _, _ in CAPTIONS if key not in done]
+        print(f"아직 캡처가 없는 자리: {', '.join(missing)}")
     for shot, cap in pairs:
         print(f"  {shot.name} → {cap[0]}  “{cap[1]} {cap[2]}”")
 
