@@ -6,10 +6,12 @@
  * 그걸 알아채는 건 심사자가 먼저다. 특히 흔한 실수가 <b>제출용 키</b>(eas.json 의
  * ascApiKeyPath)를 넣는 것인데, 그건 여기서 401 로 바로 드러난다.
  *
- * 판정법: 없는 거래 id 를 하나 물어본다.
- *   - 401  -> 키/발급자 ID/키 ID 가 틀렸다 (또는 제출용 키를 넣었다)
- *   - 404 + errorCode 4040010 -> 인증은 통과, 거래만 없다 = <b>키 정상</b>
- *   - 200  -> 실제 거래 id 를 넘겼고 구독 상태까지 읽혔다
+ * 판정법: 없는 거래 id 를 하나 물어본다. <b>401 이 아니면 인증은 통과한 것이다</b> —
+ * 애플은 JWT 를 먼저 검사하고, 그게 통과해야 거래 id 를 본다.
+ *   - 401                     -> 키/발급자 ID/키 ID/번들 ID 중 하나가 틀렸다
+ *   - 404 + errorCode 4040010 -> 인증 통과, 그런 거래가 없다  = <b>키 정상</b>
+ *   - 400 + errorCode 4000006 -> 인증 통과, 거래 id 형식이 아니다 = <b>키 정상</b>
+ *   - 200                     -> 실제 거래 id 를 넘겼고 구독 상태까지 읽혔다
  *
  *   node scripts/check-app-store-key.mjs [transactionId]
  *
@@ -106,8 +108,12 @@ const signature = crypto
   .toString('base64url');
 const token = `${signingInput}.${signature}`;
 
-// 없을 게 확실한 id — 인증만 확인하고 싶을 때 쓴다.
-const transactionId = process.argv[2] || '0000000000000000';
+/*
+ * 인증만 확인할 때 쓰는 더미. 애플 거래 id 는 2 로 시작하는 16자리라, 그 모양을 지키되
+ * 실제로는 없을 값을 쓴다 — 형식이 아예 틀리면(예: 0 으로 시작) 4000006 이 돌아오는데
+ * 그것도 인증 통과이긴 하지만 "없는 거래"라는 더 명확한 4040010 을 받는 편이 낫다.
+ */
+const transactionId = process.argv[2] || '2000000000000000';
 const hosts = [
   ['프로덕션', 'https://api.storekit.itunes.apple.com'],
   ['샌드박스', 'https://api.storekit-sandbox.itunes.apple.com'],
@@ -139,8 +145,10 @@ for (const [label, host] of hosts) {
     console.log('   ③ 키를 만든 직후라면 몇 분 뒤에 다시 시도한다.');
     break;
   }
-  if (res.status === 404 && json.errorCode === 4040010) {
-    console.log(`${label}: 인증 통과 (거래 없음 — 더미 id 라 정상)`);
+  // 401 이 아니라 거래 id 를 문제 삼았다는 것 자체가 JWT 가 검증을 통과했다는 뜻이다.
+  if ((res.status === 404 && json.errorCode === 4040010)
+      || (res.status === 400 && json.errorCode === 4000006)) {
+    console.log(`${label}: 인증 통과 (${json.errorMessage ?? '거래 없음'} — 더미 id 라 정상)`);
     authOk = true;
     continue;
   }
