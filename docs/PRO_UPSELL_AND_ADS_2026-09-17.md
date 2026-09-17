@@ -143,7 +143,7 @@ SELECT detail AS feature, count(*) AS blocked, count(DISTINCT user_id) AS users
 | 1 | `pro_monthly` SKU 를 Play Console 에 등록 | 이게 없으면 나머지가 전부 무의미 |
 | 2 | 가격 확정 (월 4,900원 / 연 39,000원 권장) | 9/11 §3. 경쟁가 확인은 아직 미완 |
 | 3 | **플랜 화면 신설 + `PURCHASE_ENABLED=true`** | ↓ |
-| 4 | `PLAN_FREE_TRIAL=false` + 기존 사용자 영구 PRO SQL 수동 실행 | Flyway 금지 — [FREE_TIER_AND_ADS.md](FREE_TIER_AND_ADS.md) 경고 참고 |
+| 4 | `PLAN_FREE_TRIAL=false` + [`scripts/free-tier-cutover.sql`](../scripts/free-tier-cutover.sql) 수동 실행 | Flyway 금지 — [FREE_TIER_AND_ADS.md](FREE_TIER_AND_ADS.md) 경고 참고 |
 | 5 | 한도 실측 (§3 쿼리) → `Feature.java` 확정 | 자리표시자를 벗어나는 단계 |
 | 6 | 그 다음에 광고 검토 | 3~5 를 건너뛴 광고는 동작하지 않는다 |
 | 7 | iOS 결제 (별도 트랙) | App Store 백엔드 대응이 통째로 없음 |
@@ -216,6 +216,7 @@ false 분기) 라면 **기능만 사라지고 살 방법은 없는** 최악의 �
 
 | 입력 | 상태 | 구하는 법 |
 | --- | --- | --- |
+| ~~PRO 월 가격~~ | **확정 (2026-09-17)** — Play Console `pro_monthly` / `monthly` 기본 요금제에 **월 4,900원** 입력 완료. 앱은 스토어의 `displayPrice` 를 그대로 읽으므로 코드 변경 없음 | — |
 | 경쟁 커플 앱 구독가 | **모름** (2026-09-17 웹 검색·스토어 조회 실패 — 프록시가 `play.google.com`·`namu.wiki` 차단) | 폰에서 해당 앱 구독 화면을 직접 볼 것. 5분이면 끝난다 |
 | 실사용 분포 | 미측정 | §3 쿼리를 운영 DB 에 실행 |
 | 결제 전환율 | 측정 불가 | 결제가 안 붙어 있다(`PURCHASE_ENABLED=false`) |
@@ -226,3 +227,23 @@ false 분기) 라면 **기능만 사라지고 살 방법은 없는** 최악의 �
 `PlanResolver` 가 **한 명만 결제해도 둘 다 PRO** 로 봅니다. 같은 사용자 수로 비교하면
 4,900원은 **1인당 2,450원** 이고, 개인용 구독 앱이 흉내낼 수 없는 가격표입니다. 이건 §6 의
 플랜 화면과 스토어 설명에 그대로 쓸 수 있는 구조적 장점입니다.
+
+
+---
+
+## 9. 전환 스크립트 (2026-09-17 추가)
+
+[`scripts/free-tier-cutover.sql`](../scripts/free-tier-cutover.sql) — `PLAN_FREE_TRIAL=false`
+배포와 같은 시점에 psql 로 직접 돌린다. FREE_TIER_AND_ADS.md 의 "전원 영구 PRO" 전제가
+바뀌어서(두 계정 외 전부 테스트 계정) 부여 대상이 2행뿐이다.
+
+확인 쿼리 → 트랜잭션 부여 → 검증 → 롤백 순으로 되어 있고, 놓치기 쉬운 것 둘을 주석에 박아 뒀다:
+
+- **부여받은 계정으로는 결제 흐름을 테스트할 수 없다.** 플랜 화면 버튼이 "이미 PRO예요"로
+  잠긴다. 라이선스 테스터 검증은 이 스크립트보다 **먼저** 하거나 전용 계정으로 한다.
+- **테스트 계정은 SQL 로 못 지운다.** `users` 직접 삭제는 FK 로 막힌다 — 삭제 순서는
+  `UserDataPurger`/`RelationRecordPurger` 가 들고 있고 이미지는 커밋 이후 Cloudinary 에서
+  따로 지운다. 앱의 회원 탈퇴 흐름이 유일하게 안전한 경로다.
+
+검증 상태: 컬럼·타입을 `V1__init_schema.sql`(users) 과 `V36__subscriptions.sql` 에 대조했다.
+**실제 DB 에서 실행해 보지는 않았다** — 이 컨테이너에 PostgreSQL 이 없다(도커 데몬 없음).

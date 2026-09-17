@@ -109,6 +109,15 @@ export function PlanScreen(_props: Props) {
   }, [userId, purchasing]);
 
   const isPro = plan === 'PRO';
+  /*
+   * <b>"PRO 다"와 "결제했다"는 다르다.</b> 무료 체험 기간에는 전원 PRO 로 판정되므로
+   * (`PlanResolver` — fitto.plan.free-trial), isPro 만 보고 버튼을 잠그면 <b>아무도 결제할
+   * 수 없다</b>. 결제 흐름을 테스트할 방법도 같이 사라진다.
+   *
+   * 체험이 끝난 뒤의 PRO 는 누군가 돈을 낸 것이거나(본인 또는 상대) 수동 부여다 —
+   * 그때는 결제를 다시 권하지 않는다.
+   */
+  const alreadySubscribed = isPro && !freeTrial;
   const byFeature = new Map((catalog ?? []).map((entry) => [entry.feature, entry]));
   const hasCoupleScoped = (catalog ?? []).some((entry) => entry.coupleScoped);
 
@@ -163,13 +172,15 @@ export function PlanScreen(_props: Props) {
             <Pressable
               style={({ pressed }) => [styles.primary, (pressed || purchasing) && styles.pressed]}
               onPress={onPurchase}
-              disabled={purchasing || isPro}
+              disabled={purchasing || alreadySubscribed}
               accessibilityRole="button"
             >
               {purchasing ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
-                <Text style={styles.primaryText}>{isPro ? '이미 PRO예요' : 'PRO 시작하기'}</Text>
+                <Text style={styles.primaryText}>
+                  {alreadySubscribed ? '이미 PRO예요' : 'PRO 시작하기'}
+                </Text>
               )}
             </Pressable>
           ) : (
