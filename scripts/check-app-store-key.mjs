@@ -117,7 +117,10 @@ for (const [label, host] of hosts) {
 
   if (res.status === 401) {
     console.log(`${label}: 401 — 키·발급자 ID·키 ID 중 하나가 틀렸다.`);
-    console.log('   흔한 원인: 제출용 키(eas.json ascApiKeyPath)를 넣었다. 인앱 구입 키를 따로 발급한다.');
+    console.log('   ① 발급자 ID 가 다르다 — 인앱 구입 키는 App Store Connect API 와 발급자 ID 가 별개다.');
+    console.log('      ASC > 사용자 및 액세스 > 통합 > 인앱 구입 페이지 상단의 UUID 를 쓴다');
+    console.log('      (eas.json 의 ascApiKeyIssuerId 는 제출용이라 여기서는 통하지 않는다).');
+    console.log('   ② 제출용 키(AuthKey_*.p8)를 넣었다 — 인앱 구입 키는 SubscriptionKey_*.p8 이다.');
     break;
   }
   if (res.status === 404 && json.errorCode === 4040010) {
@@ -135,4 +138,9 @@ for (const [label, host] of hosts) {
 }
 
 console.log(authOk ? '\n✓ 키가 동작한다. Railway 에 넣어도 된다.' : '\n✗ 아직 아니다. 위 메시지를 보고 고친다.');
-process.exit(authOk ? 0 : 1);
+/*
+ * process.exit() 로 끝내지 않는다 — fetch 가 쓴 libuv 핸들이 아직 닫히는 중이면
+ * Windows 의 Node 24 가 "Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)" 으로
+ * 죽는다. 출력은 이미 다 나온 뒤라 무해하지만, 스크립트가 터진 것처럼 보인다.
+ */
+process.exitCode = authOk ? 0 : 1;
