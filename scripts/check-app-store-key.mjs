@@ -28,20 +28,29 @@ const BUNDLE = process.env.APP_STORE_BUNDLE_ID || 'com.doubly.app';
 let keyPath = process.env.APP_STORE_KEY_PATH;
 let keyId = process.env.APP_STORE_KEY_ID;
 
-// secrets/ 에 AuthKey_XXXXXXXXXX.p8 하나만 있으면 경로와 키 ID 를 거기서 읽는다.
-if (!keyPath && fs.existsSync('secrets')) {
-  const found = fs.readdirSync('secrets').filter((f) => /^AuthKey_\w{10}\.p8$/.test(f));
-  if (found.length === 1) keyPath = path.join('secrets', found[0]);
-  else if (found.length > 1) {
-    console.error(`secrets/ 에 .p8 이 ${found.length} 개다 — APP_STORE_KEY_PATH 로 지정한다:\n  ${found.join('\n  ')}`);
+/*
+ * 파일 이름에서 키 ID 를 읽는다. 애플이 주는 이름이 두 가지다 —
+ * App Store Connect API 키는 AuthKey_XXXXXXXXXX.p8, 인앱 구입 키는
+ * SubscriptionKey_XXXXXXXXXX.p8 로 받은 사례가 있다. 둘 다 받아준다.
+ */
+const KEY_FILE = /^(?:AuthKey|SubscriptionKey)_(\w{10})\.p8$/;
+const p8sIn = (dir) => (fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith('.p8')) : []);
+
+if (!keyPath) {
+  const named = p8sIn('secrets').filter((f) => KEY_FILE.test(f));
+  if (named.length === 1) keyPath = path.join('secrets', named[0]);
+  else if (named.length > 1) {
+    console.error(`secrets/ 에 키가 ${named.length} 개다 — APP_STORE_KEY_PATH 로 지정한다:\n  ${named.join('\n  ')}`);
     process.exit(1);
   }
 }
-if (!keyId && keyPath) keyId = path.basename(keyPath).replace(/^AuthKey_|\.p8$/g, '');
+if (!keyId && keyPath) {
+  keyId = KEY_FILE.exec(path.basename(keyPath))?.[1];
+}
 
+// 키 ID 는 아래에서 파일 이름으로 채워질 수 있으므로 여기서 요구하지 않는다.
 const missing = [
-  !keyPath && 'APP_STORE_KEY_PATH (또는 secrets/AuthKey_*.p8)',
-  !keyId && 'APP_STORE_KEY_ID',
+  !keyPath && 'APP_STORE_KEY_PATH (또는 secrets/AuthKey_*.p8 · SubscriptionKey_*.p8)',
   !ISSUER && 'APP_STORE_ISSUER_ID',
 ].filter(Boolean);
 if (missing.length) {
@@ -49,7 +58,17 @@ if (missing.length) {
   process.exit(1);
 }
 if (!fs.existsSync(keyPath)) {
+  // 이름을 잘못 짚은 경우가 대부분이라, 있는 것을 보여주고 끝낸다.
+  const here = p8sIn('secrets');
   console.error(`키 파일이 없다: ${keyPath}`);
+  console.error(here.length
+    ? `\nsecrets/ 에 있는 .p8:\n  ${here.join('\n  ')}\n\n위 이름으로 APP_STORE_KEY_PATH 를 다시 지정한다.`
+    : '\nsecrets/ 에 .p8 이 하나도 없다. 다운로드한 파일을 그 폴더로 옮긴다.');
+  process.exit(1);
+}
+if (!keyId) {
+  console.error(`키 ID 를 파일 이름에서 읽지 못했다: ${path.basename(keyPath)}`);
+  console.error('APP_STORE_KEY_ID 로 직접 지정한다(App Store Connect 의 키 목록에 있는 10자리).');
   process.exit(1);
 }
 
