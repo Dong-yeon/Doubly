@@ -3,11 +3,12 @@
 
     python3 store/compose.py <캡처_폴더> [--size play-phone]
 
-파일 이름이 <b>01~05 로 시작하면 그 번호의 문구</b>에 맞춘다(`03.png` → 3번 문구). 번호가
-없으면 예전처럼 이름순으로 앞에서부터 채운다. 결과는 store/out/<size>/ 에 떨어진다.
+캡처 폴더의 파일을 <b>이름순</b>으로 배경판 문구 순서(01~05)에 맞춘다. 파일이 5개보다
+적으면 있는 만큼만 만든다. 결과는 store/out/<size>/ 에 떨어진다.
 
-번호를 보는 이유: 한두 장이 아직 안 찍혔을 때 이름순으로만 맞추면 <b>나머지 문구가 통째로
-한 칸씩 밀린다</b>. 실제로 01(사진 기록)만 남겨두고 02~05 를 먼저 찍는 일이 생긴다.
+문구를 <b>골라 쓰고 싶으면 파일 이름을 문구 키로 지으면 된다</b> — `04-place.png` 처럼.
+찍은 화면이 5개 축을 다 덮지 못할 때(예: 럽슐랭이 아직 빈 상태) 순서대로 밀어 넣어
+엉뚱한 문구가 붙는 걸 막는다. 키가 아닌 이름은 남은 문구에 순서대로 배정된다.
 
 캡처는 비율이 달라도 된다 — 자리에 맞춰 <b>가운데를 채우도록</b> 잘라 넣는다(cover).
 상·하단 상태바까지 그대로 찍혀 있어도 되고, 그게 오히려 실제 화면이라는 근거가 된다.
@@ -34,23 +35,26 @@ def cover(img: Image.Image, w: int, h: int) -> Image.Image:
     return resized.crop((left, top, left + w, top + h))
 
 
-def pair_shots(shots: list[pathlib.Path]) -> list[tuple[pathlib.Path, tuple]]:
-    """캡처를 문구에 짝지어 준다.
+def pair_up(shots: list[pathlib.Path]) -> list[tuple[pathlib.Path, tuple[str, str, str]]]:
+    """캡처 ↔ 문구 짝짓기.
 
-    파일 이름이 전부 01~05 로 시작하면 <b>그 번호</b>의 문구에 붙인다. 하나라도 번호가
-    없으면 옛 방식대로 이름순으로 앞에서부터 채운다 — 이름 규칙을 모르고 쓰던 사람이
-    갑자기 빈손이 되지 않게.
+    파일 이름(확장자 뺀 것)이 문구 키와 같으면 그 문구를 쓴다. 나머지는 남은 문구에
+    이름순으로 배정한다 — 5장을 순서대로 주던 기존 사용법이 그대로 돌아간다.
     """
-    numbered = {}
+    by_key = {key: (key, l1, l2) for key, l1, l2 in CAPTIONS}
+    taken: dict[pathlib.Path, tuple[str, str, str]] = {}
     for shot in shots:
-        head = shot.stem[:2]
-        if not head.isdigit():
-            return list(zip(shots, CAPTIONS))
-        idx = int(head) - 1
-        if not 0 <= idx < len(CAPTIONS) or idx in numbered:
-            return list(zip(shots, CAPTIONS))
-        numbered[idx] = shot
-    return [(numbered[i], CAPTIONS[i]) for i in sorted(numbered)]
+        cap = by_key.get(shot.stem)
+        if cap and cap not in taken.values():
+            taken[shot] = cap
+    rest = [c for c in CAPTIONS if c not in taken.values()]
+    pairs = []
+    for shot in shots:
+        if shot in taken:
+            pairs.append((shot, taken[shot]))
+        elif rest:
+            pairs.append((shot, rest.pop(0)))
+    return pairs
 
 
 def main(argv: list[str]) -> int:
@@ -71,12 +75,17 @@ def main(argv: list[str]) -> int:
         print(f"이미지가 없어요: {shots_dir}", file=sys.stderr)
         return 1
 
-    pairs = pair_shots(shots)
+    pairs = pair_up(shots)
+    # 안내문에 줄표(—)를 쓰지 않는다: 윈도우 기본 콘솔(cp949)이 이 글자에서 UnicodeEncodeError
+    # 로 죽는다. 같은 줄의 화살표·따옴표는 cp949 에 있어서 괜찮다.
+    if len(pairs) < len(shots):
+        print(f"캡처 {len(shots)}장, 문구가 {len(CAPTIONS)}개뿐이라 앞 {len(pairs)}장만 씁니다.")
     if len(pairs) < len(CAPTIONS):
         done = {cap[0] for _, cap in pairs}
         missing = [key for key, _, _ in CAPTIONS if key not in done]
-        # 줄표(—)를 쓰지 않는다: 윈도우 콘솔 기본 인코딩(cp949)이 못 찍고 죽는다.
-        print(f"캡처 {len(pairs)}장, 아직 없는 자리: {', '.join(missing)}")
+        print(f"아직 캡처가 없는 자리: {', '.join(missing)}")
+    for shot, cap in pairs:
+        print(f"  {shot.name} → {cap[0]}  “{cap[1]} {cap[2]}”")
 
     made = 0
     for size_key, w, h in SIZES:

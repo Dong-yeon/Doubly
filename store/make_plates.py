@@ -35,6 +35,8 @@ GRAD = ((239, 244, 228), (218, 230, 193), (198, 225, 200))  # togetherBg → tog
 SIZES = [
     ("play-phone", 1080, 1920),    # Google Play 휴대전화
     ("play-tablet7", 1200, 1920),  # Google Play 7인치 태블릿
+    ("ios-6.5", 1284, 2778),       # App Store 6.5형 (iPhone 12~14 Pro Max)
+    ("ios-6.5-alt", 1242, 2688),   # App Store 6.5형 — 같은 칸이 받는 다른 크기 (11 Pro Max)
     ("ios-6.7", 1290, 2796),       # App Store iPhone 6.7"
     ("ios-6.9", 1320, 2868),       # App Store iPhone 6.9"
 ]
