@@ -371,6 +371,7 @@ export function PlaceScreen() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
+          style={styles.filterScroll}
           contentContainerStyle={styles.filterRow}
           keyboardShouldPersistTaps="handled"
         >
@@ -694,6 +695,15 @@ const styles = themedStyles((colors) => ({
    * 줄바꿈 2줄이 첫 카드를 화면 절반 아래로 밀어내던 자리다. 콘텐츠 타입 칩은 4개뿐이라
    * 한 줄에 들어가므로 그대로 View + wrap 을 쓴다(아래 contentFilterRow).
    */
+  /*
+   * flexGrow/flexShrink 를 직접 끈다. RN 의 horizontal ScrollView 기본 스타일이
+   * `{ flexGrow: 1, flexShrink: 1 }` 이라, 이 칩 줄은 SafeAreaView(flex:1) 안에서
+   * 아래 FlatList 와 세로 공간을 나눠 갖는 형제가 된다. 목록이 화면을 넘치는 순간
+   * 칩 줄까지 함께 줄어들어 44pt 칩의 아래쪽 테두리와 글자가 잘렸다(iOS 실기기).
+   * 가로 스크롤이므로 세로로는 내용 높이를 그대로 유지해야 한다.
+   * 같은 처방이 AlbumScreen.chipScroll / QuickLinkChips.scroll 에도 이미 있다.
+   */
+  filterScroll: { flexGrow: 0, flexShrink: 0 },
   filterRow: {
     flexDirection: 'row',
     gap: spacing.sm,
