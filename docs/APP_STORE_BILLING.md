@@ -133,6 +133,20 @@ APP_STORE_ISSUER_ID=<발급자 ID> node scripts/check-app-store-key.mjs
    프로덕션·샌드박스 URL을 따로 넣는 칸이 있습니다. **둘 다 같은 값**을 넣으면 됩니다.
 3. 저장 후 **테스트 알림 보내기**로 확인 — 200이 돌아와야 합니다.
 
+> **ASC에 넣기 전에 PC에서 먼저 찔러 보세요.** 오타 하나면 애플 쪽에서 403만 보고
+> 원인을 못 찾습니다. 두 번 부르는 이유는 403 하나로는 "토큰 불일치"와 "아직 배포 안 됨"을
+> 가릴 수 없기 때문입니다.
+>
+> ```powershell
+> $u = "https://fitto-production.up.railway.app/api/v1/webhooks/app-store"
+> $t = "<APP_STORE_NOTIFICATION_TOKEN>"
+> curl.exe -s -o NUL -w "correct: %{http_code}`n" -X POST "$u`?token=$t" -H "Content-Type: application/json" -d "{}"
+> curl.exe -s -o NUL -w "wrong:   %{http_code}`n" -X POST "$u`?token=nope" -H "Content-Type: application/json" -d "{}"
+> ```
+>
+> `correct: 200` / `wrong: 403` 이면 URL·토큰·배포가 모두 맞습니다.
+> **2026-09-17 에 이 조합으로 확인 완료** — 서버 쪽 설정은 여기까지가 끝입니다.
+
 > 알림 본문의 JWS 서명은 **검증하지 않습니다.** 대신 거래 id 하나만 꺼내
 > App Store Server API에 되물어 상태를 확정합니다([`AppStoreJws`](../backend/src/main/java/com/fitto/common/plan/AppStoreJws.java)
 > 주석). 가짜 알림이 와도 애플이 "그런 거래 없음"이라고 답하므로 DB가 바뀌지 않습니다 —
