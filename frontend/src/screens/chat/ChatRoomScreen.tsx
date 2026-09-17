@@ -10,6 +10,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -40,7 +41,7 @@ import { useRelationStore } from '../../store/relationStore';
 import { useCallStore } from '../../store/callStore';
 import { callApi, CallType } from '../../api/call';
 import { haptics } from '../../utils/haptics';
-import { pickImage, releaseObjectUrl, shrinkUnknownImage, uploadImage } from '../../utils/imageUpload';
+import { pickImages, releaseObjectUrl, shrinkUnknownImage, uploadImage } from '../../utils/imageUpload';
 import { isCoarsePointer } from '../../utils/pointer';
 import { useImageDrop } from '../../hooks/useImageDrop';
 import { uploadChatVoice } from '../../utils/chatVoiceUpload';
@@ -113,6 +114,16 @@ const timeOf = (iso: string): string => {
 
 /** 같은 사람이 이 시간 안에 연달아 보내면 한 그룹(카톡처럼 시간 표시를 마지막에만) */
 const GROUP_GAP_MS = 5 * 60 * 1000;
+
+/**
+ * 한 번에 고를 수 있는 사진 장수.
+ *
+ * <p>피드(`FeedComposeScreen.MAX_PHOTOS`)와 같은 5장이다. 채팅은 서버 상한이 없지만
+ * (한 장이 메시지 하나라 묶음 제한이 없다) 한도가 상한 역할을 한다 — 업로드 서명을 받는
+ * 시점에 PHOTO_UPLOAD 가 한 장씩 소비되고 FREE 는 <b>월 60장</b>이다. 30장을 한 번에
+ * 보내게 두면 한 번의 손짓으로 월 한도의 절반이 사라진다.
+ */
+const MAX_CHAT_IMAGES = 5;
 
 /** 통화 요청이 응답 없이 멈추는 것을 막는 시간 제한 — 걸면 사용자에게 알린다. */
 const CALL_REQUEST_TIMEOUT_MS = 15_000;
@@ -215,7 +226,11 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const [uploading, setUploading] = useState(false);
   // 사진 전송 미리보기 — 고른 사진이 바로 전송돼 "고른 게 원하는 사진이 아니었는데
   // 이미 보내졌다"는 리포트가 있었다(2026-08-31). 확인 없이는 업로드하지 않는다.
-  const [pendingImage, setPendingImage] = useState<string | null>(null);
+  /*
+   * 보내기 전 미리보기에 올려둔 사진들. 한 장이든 여러 장이든 같은 배열로 다룬다 —
+   * 예전엔 {@code string | null} 이라 "여러 장"이 들어올 자리가 아예 없었다.
+   */
+  const [pendingImages, setPendingImages] = useState<string[]>([]);
   // 입력바 보조 도구는 기본으로 숨겨져 있다가 "+"로 펼친다 — 스티커 패널과는
   // 자리를 공유해서 항상 둘 중 하나만 뜬다(토글 핸들러들이 서로를 닫아준다).
   const [showStickers, setShowStickers] = useState(false);
@@ -1028,9 +1043,9 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   // 갤러리에서 고르기만 한다 — 실제 업로드·전송은 미리보기에서 "보내기"를 눌러야 시작된다
   const onPickImage = async () => {
     try {
-      const uri = await pickImage();
-      if (!uri) return;
-      setPendingImage(uri);
+      const uris = await pickImages(MAX_CHAT_IMAGES);
+      if (uris.length === 0) return;
+      setPendingImages(uris);
     } catch (e) {
       toast.error(getErrorMessage(e, '사진을 불러오지 못했어요.'));
     }
@@ -1046,31 +1061,62 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     // 축소본이 <b>새로 생겼을 때만</b> 원본을 놓는다 — 작아서 그대로 돌려받은 경우
     // 여기서 풀면 방금 띄운 미리보기가 깨진다.
     if (prepared !== uri) releaseObjectUrl(uri);
-    setPendingImage(prepared);
+    /*
+     * 여러 파일을 한 번에 떨구면 이 콜백이 <b>파일마다</b> 불린다. 덮어쓰면 마지막 한 장만
+     * 남으므로 쌓는다. 상한을 넘은 것은 여기서 버리고 blob 도 함께 놓아준다.
+     */
+    setPendingImages((prev) => {
+      if (prev.length >= MAX_CHAT_IMAGES) {
+        releaseObjectUrl(prepared);
+        return prev;
+      }
+      return [...prev, prepared];
+    });
   }, []);
   const dragging = useImageDrop(onDroppedImage);
 
   const onCancelSendImage = () => {
-    if (pendingImage) releaseObjectUrl(pendingImage);
-    setPendingImage(null);
+    pendingImages.forEach(releaseObjectUrl);
+    setPendingImages([]);
   };
 
+  /*
+   * 여러 장을 <b>한 장씩 차례로</b> 올리고 보낸다. 동시에 올리지 않는 이유가 둘이다.
+   *
+   * <p>① <b>순서</b>. 메시지는 서버 도착 순으로 줄을 서므로, 병렬로 올리면 업로드가 빨리
+   * 끝난 사진이 먼저 도착해 고른 순서가 뒤집힌다.
+   * <p>② <b>한도</b>. 업로드 서명을 받는 시점에 PHOTO_UPLOAD 가 한 장씩 소비된다
+   * (FREE 월 60장). 병렬로 던지면 한도를 넘는 순간 어느 것이 나갔는지 알기 어렵다.
+   *
+   * <p>중간에 실패하면 <b>거기서 멈추고</b> 몇 장이 나갔는지 말해 준다. 남은 것을 계속
+   * 밀어붙이면 한도 초과나 연결 끊김 같은 원인일 때 같은 실패를 N번 반복하게 된다.
+   */
   const onConfirmSendImage = async () => {
-    const uri = pendingImage;
-    if (!uri) return;
-    setPendingImage(null);
+    const uris = pendingImages;
+    if (uris.length === 0) return;
+    setPendingImages([]);
     setUploading(true);
     scrollToBottom();
+    let sent = 0;
     try {
-      const url = await runBusy('사진 보내는 중…', () => uploadImage(uri));
-      const ok = await send(relationId, { messageType: 'IMAGE', imageUrl: url });
-      if (ok) haptics.light();
-      else Alert.alert('전송 실패', '연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
+      for (const uri of uris) {
+        const label =
+          uris.length > 1 ? `사진 보내는 중… (${sent + 1}/${uris.length})` : '사진 보내는 중…';
+        const url = await runBusy(label, () => uploadImage(uri));
+        const ok = await send(relationId, { messageType: 'IMAGE', imageUrl: url });
+        if (!ok) {
+          Alert.alert('전송 실패', '연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
+          break;
+        }
+        sent += 1;
+      }
+      if (sent > 0) haptics.light();
     } catch (e) {
-      toast.error(getErrorMessage(e, '이미지 전송에 실패했어요.'));
+      const base = getErrorMessage(e, '이미지 전송에 실패했어요.');
+      toast.error(sent > 0 ? `${sent}장까지 보냈어요. ${base}` : base);
     } finally {
       setUploading(false);
-      releaseObjectUrl(uri);
+      uris.forEach(releaseObjectUrl);
     }
   };
 
@@ -1823,10 +1869,40 @@ export function ChatRoomScreen({ navigation, route }: Props) {
       <ImageViewer images={viewing.images} initialIndex={viewing.index} onClose={() => setViewingImage(null)} />
 
       {/* 사진 전송 미리보기 — 고른 즉시 보내지 않고 확인 후에만 업로드·전송한다 */}
-      <Modal visible={!!pendingImage} transparent animationType="fade" onRequestClose={onCancelSendImage}>
+      <Modal
+        visible={pendingImages.length > 0}
+        transparent
+        animationType="fade"
+        onRequestClose={onCancelSendImage}
+      >
         <View style={styles.imagePreviewBackdrop}>
-          {pendingImage ? (
-            <Image source={{ uri: pendingImage }} style={styles.imagePreviewImage} resizeMode="contain" />
+          {/*
+            한 장이면 크게 한 장, 여러 장이면 첫 장을 크게 보여주고 나머지는 아래 줄에 깐다.
+            "무엇이 나가는지" 는 첫 장으로 대부분 판별되고, 장수는 보내기 버튼이 말한다.
+          */}
+          {pendingImages[0] ? (
+            <Image
+              source={{ uri: pendingImages[0] }}
+              style={styles.imagePreviewImage}
+              resizeMode="contain"
+            />
+          ) : null}
+          {pendingImages.length > 1 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.imagePreviewStrip}
+              contentContainerStyle={styles.imagePreviewStripRow}
+            >
+              {pendingImages.map((uri, i) => (
+                <Image
+                  key={`${uri}-${i}`}
+                  source={{ uri }}
+                  style={[styles.imagePreviewThumb, i === 0 && styles.imagePreviewThumbActive]}
+                  resizeMode="cover"
+                />
+              ))}
+            </ScrollView>
           ) : null}
           <View style={styles.imagePreviewActions}>
             <Button
@@ -1835,7 +1911,11 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               onPress={onCancelSendImage}
               style={styles.imagePreviewBtn}
             />
-            <Button title="보내기" onPress={onConfirmSendImage} style={styles.imagePreviewBtn} />
+            <Button
+              title={pendingImages.length > 1 ? `${pendingImages.length}장 보내기` : '보내기'}
+              onPress={onConfirmSendImage}
+              style={styles.imagePreviewBtn}
+            />
           </View>
         </View>
       </Modal>
@@ -1963,6 +2043,16 @@ const styles = themedStyles((colors) => ({
     padding: spacing.lg,
   },
   imagePreviewImage: { width: '100%', height: '70%', borderRadius: radius.lg },
+  /*
+   * 여러 장일 때만 뜨는 아래 줄. flexGrow/flexShrink 를 끈다 — RN 의 horizontal ScrollView
+   * 기본값이 { flexGrow: 1, flexShrink: 1 } 이라 세로로 눌려 썸네일이 잘린다
+   * (PlaceScreen.filterScroll 과 같은 처방).
+   */
+  imagePreviewStrip: { flexGrow: 0, flexShrink: 0, marginTop: spacing.md, width: '100%' },
+  imagePreviewStripRow: { gap: spacing.xs, paddingHorizontal: spacing.xs },
+  imagePreviewThumb: { width: 56, height: 56, borderRadius: radius.sm, opacity: 0.6 },
+  /* 위에 크게 떠 있는 것이 어느 장인지 표시한다 */
+  imagePreviewThumbActive: { opacity: 1, borderWidth: 2, borderColor: colors.white },
   imagePreviewActions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg, width: '100%' },
   imagePreviewBtn: { flex: 1 },
   // inverted FlatList 의 콘텐츠는 scaleY:-1 로 뒤집혀 그려진다 — EmptyState 만 다시
