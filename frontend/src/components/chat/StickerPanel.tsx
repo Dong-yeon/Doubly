@@ -55,6 +55,22 @@ interface PanelPack {
   items: PackItem[];
 }
 
+/**
+ * 패널 높이의 상한.
+ *
+ * <p>호출부는 키보드 높이를 넘겨준다 — 패널이 키보드 자리를 이어받는 물건이라 그게 기본이다.
+ * 그런데 기기에 따라 키보드가 320px 를 넘고, 그러면 팩 대부분이(10~14장) 다 차고도 아래가
+ * 남아 빈 칸이 크게 보인다(2026-09-17 제보).
+ *
+ * <p>240px 인 근거: 스트립 40 + 여백 16 을 빼면 184px 이고, 6칸 격자의 한 줄이 약 59px 이라
+ * <b>3줄 = 18장</b>이 온전히 들어간다. 가장 큰 캐릭터 팩이 14장이므로 스크롤 없이 다 보인다.
+ * 더 줄이면 3줄째가 잘려 "아래에 뭔가 더 있다"가 안 읽힌다.
+ *
+ * <p>고정값이지 내용 높이가 아니다 — 팩마다 높이가 달라지면 팩을 넘길 때마다 입력바가
+ * 위아래로 튄다(`useKeyboardPanelHeight` 주석이 2026-09-11 에 없앤 증상).
+ */
+const MAX_PANEL_HEIGHT = 240;
+
 /** 우리 이모지 팩의 키 — 이 팩을 처음 열 때만 서버에서 받아온다 */
 const COUPLE_PACK = 'COUPLE';
 
@@ -194,7 +210,7 @@ export function StickerPanel({
   };
 
   return (
-    <View style={{ height }}>
+    <View style={{ height: Math.min(height, MAX_PANEL_HEIGHT) }}>
       {/* 팩 스트립 — 무엇이 들어 있는지가 여기서 끝난다 */}
       <View style={styles.strip}>
         <ScrollView
@@ -313,9 +329,13 @@ const styles = themedStyles((colors) => ({
   },
   scroll: { flex: 1 },
   /*
-   * 한 줄 5칸 — 예전엔 8칸(11.5%)이라 그림 이모티콘이 32px 였고 표정이 안 보였다.
-   * 18.5% × 5 = 92.5%, 남는 7.5% 를 space-between 이 칸 사이로 고르게 흩는다
+   * 한 줄 6칸 — 15.5% × 6 = 93%, 남는 7% 를 space-between 이 칸 사이로 고르게 흩는다
    * (고정 width 로 두면 좁은 기기에서 남는 폭이 전부 오른쪽에 몰린다 — 예전 실측 40px).
+   *
+   * <p><b>칸 수 변천</b>: 8칸(11.5%) → 그림이 32px 라 표정이 안 보였다 → 5칸(18.5%, 67px)
+   * → 지금 6칸(15.5%, 약 56px). 6칸으로 되돌린 이유는 <b>패널 높이를 줄이기 위해서</b>다
+   * (아래 MAX_PANEL_HEIGHT 주석). 한 줄이 71px 에서 59px 로 낮아져, 같은 높이에 한 줄이 더
+   * 들어간다. 48px 로 그려지는 그림은 32px 와 달리 표정이 읽힌다.
    */
   grid: {
     flexDirection: 'row',
@@ -327,7 +347,7 @@ const styles = themedStyles((colors) => ({
   },
   gridPad: { padding: spacing.sm },
   cell: {
-    width: '18.5%',
+    width: '15.5%',
     aspectRatio: 1,
     borderRadius: radius.md,
     alignItems: 'center',
