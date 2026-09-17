@@ -99,8 +99,12 @@ APP_STORE_ISSUER_ID=<발급자 ID> node scripts/check-app-store-key.mjs
    base64 -w0 AuthKey_XXXXXXXXXX.p8      # macOS: base64 -i AuthKey_XXXXXXXXXX.p8
    ```
    ```powershell
-   [Convert]::ToBase64String([IO.File]::ReadAllBytes("AuthKey_XXXXXXXXXX.p8"))
+   [Convert]::ToBase64String([IO.File]::ReadAllBytes((Resolve-Path "secrets\SubscriptionKey_XXXXXXXXXX.p8")))
    ```
+   > PowerShell 에서 **상대 경로를 쓰면 안 됩니다.** `[IO.File]` 은 프롬프트 위치가 아니라
+   > .NET 프로세스의 시작 디렉터리(보통 `C:\WINDOWS\system32`)를 기준으로 잡아
+   > "경로의 일부를 찾을 수 없습니다" 가 납니다. `Resolve-Path` 로 감싸면 됩니다.
+
 7. Railway 백엔드 서비스 → **Variables**:
 
    | 변수 | 값 |
