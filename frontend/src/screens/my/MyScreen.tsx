@@ -581,6 +581,18 @@ export function MyScreen({ navigation }: Props) {
         ) : null}
 
         <Card elevation="sm" style={styles.menu}>
+          {/*
+            자발적으로 PRO 를 보러 갈 수 있는 유일한 자리다 — 나머지 업셀은 전부 한도에
+            부딪혔을 때만 뜬다(docs/PRO_UPSELL_AND_ADS_2026-09-17.md §2).
+          */}
+          <Pressable
+            style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
+            onPress={() => navigation.navigate('Plan')}
+          >
+            <Text style={styles.menuText}>플랜</Text>
+            <Text style={styles.chevron}>›</Text>
+          </Pressable>
+          <View style={styles.divider} />
           <Pressable
             style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
             onPress={() => navigation.navigate('Settings')}

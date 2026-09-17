@@ -36,7 +36,7 @@ import {
 import { planApi } from '../api/plan';
 import { usePlanStore } from '../store/planStore';
 import { toast } from '../store/toastStore';
-import { PRO_SUBSCRIPTION_SKU } from '../constants/config';
+import { PRO_BASE_PLAN_ID, PRO_SUBSCRIPTION_SKU } from '../constants/config';
 
 let purchaseUpdateSub: EventSubscription | null = null;
 let purchaseErrorSub: EventSubscription | null = null;
@@ -107,7 +107,15 @@ export async function requestProPurchase(userId: number): Promise<void> {
   }
 
   const product = await fetchProSubscription();
-  const offerToken = product?.subscriptionOffers?.[0]?.offerTokenAndroid ?? undefined;
+  /*
+   * 기본 요금제를 <b>id 로 골라야 한다</b> — 예전엔 subscriptionOffers[0] 을 그냥 집었는데,
+   * 한 상품 아래 기본 요금제가 여럿이면(현재 monthly/base 둘) 청구 주기가 Play 가 주는
+   * 순서에 달리게 된다. 월 구독을 누른 사람이 주 단위로 빠져나가는 건 되돌리기 어렵다.
+   * 못 찾으면 결제를 시작하지 않는다 — 다른 요금제를 조용히 파느니 실패하는 게 낫다.
+   */
+  const offerToken =
+    product?.subscriptionOffers?.find((offer) => offer.basePlanIdAndroid === PRO_BASE_PLAN_ID)
+      ?.offerTokenAndroid ?? undefined;
   if (Platform.OS === 'android' && !offerToken) {
     throw new Error('구독 상품 정보를 불러오지 못했어요. 잠시 후 다시 시도해주세요.');
   }

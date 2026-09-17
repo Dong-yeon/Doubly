@@ -219,6 +219,50 @@ public enum Feature {
         return plan == Plan.PRO ? pro : free;
     }
 
+    /** FREE 한도 — 플랜 비교 화면이 두 값을 나란히 보여줘야 해서 따로 연다. */
+    public Quota free() {
+        return free;
+    }
+
+    /** PRO 한도 — {@link #free()} 와 짝. */
+    public Quota pro() {
+        return pro;
+    }
+
+    /**
+     * 플랜 비교 화면에 보여줄 기능인가.
+     *
+     * <p>두 플랜의 한도가 같으면 비교할 게 없다 — 지금은 {@code AI_TOTAL}(플랜과 무관한
+     * 안전망)과 {@code COUPLE_GAME}(게이팅 없음)이 여기 걸린다. <b>이름을 나열하지 않고
+     * 값으로 판정</b>하므로, 나중에 한도가 갈라지면 저절로 화면에 나타난다.
+     */
+    public boolean isComparable() {
+        return !free.equals(pro);
+    }
+
+    /**
+     * 비교 화면에서 묶이는 단위 — 이 파일의 주석 섹션과 같다.
+     *
+     * <p>{@link #isCoupleScoped()} 와 같은 모양(상수 선언은 건드리지 않고 switch 로 분류)을
+     * 따른다. 40개 선언마다 인자를 하나씩 더 받으면 정작 중요한 한도 숫자가 파묻힌다.
+     */
+    public FeatureGroup group() {
+        return switch (this) {
+            case AI_FOOD_PHOTO, AI_FOOD_TEXT, AI_DIET_COACH, AI_DATE_COURSE, AI_RESTAURANT_RECOMMEND,
+                 AI_WEEKLY_LETTER, AI_TRIP_ITINERARY, AI_WORKOUT_RECOMMEND, AI_NEXT_MEAL,
+                 AI_COUPLE_EMOJI, AI_TOTAL -> FeatureGroup.AI;
+            case MEMORIES, FULL_STATS, WEEKLY_RECAP, TRIP_EXPENSE, TRIP_CHECKLIST,
+                 MOOD_CALENDAR_FULL, WORKOUT_RECOVERY_FULL, ANNIVERSARY_RECAP,
+                 VIDEO_CALL, STREAK_REPAIR -> FeatureGroup.DEPTH;
+            case PHOTO_UPLOAD, TRIP_ACTIVE, PLACE_PIN, CONTENT_ITEM, WORKOUT_ROUTINE,
+                 CALENDAR_EVENT, FAVORITE_FOOD, CUSTOM_EXERCISE, CHALLENGE_ACTIVE,
+                 COOP_GOAL_ACTIVE -> FeatureGroup.STORAGE;
+            case WORKOUT_BOOSTER, CUSTOM_QUESTION, VOICE_MESSAGE, PUBLIC_GUIDE_LINK,
+                 CSV_EXPORT, COUPLE_GAME -> FeatureGroup.ENGAGEMENT;
+            case CUSTOM_BACKGROUND, PREMIUM_STICKER, TOUCH_GESTURE_PREMIUM -> FeatureGroup.DECORATION;
+        };
+    }
+
     /**
      * 커플 공간의 기능인가 — 판정을 관계 단위(둘 중 높은 플랜)로 해야 하는 것들.
      *

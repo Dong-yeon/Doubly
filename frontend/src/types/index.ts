@@ -69,6 +69,30 @@ export type FeatureKey =
 /** 한도 주기 — TOTAL 은 리셋되지 않는 보유 개수 상한 */
 export type QuotaPeriod = 'DAY' | 'WEEK' | 'MONTH' | 'TOTAL' | 'NONE';
 
+/** 플랜 비교 화면의 묶음 — 서버 FeatureGroup 과 같다 */
+export type FeatureGroupKey = 'AI' | 'DEPTH' | 'STORAGE' | 'ENGAGEMENT' | 'DECORATION';
+
+/**
+ * 플랜 비교 한 줄 — {@code GET /plan/catalog}.
+ *
+ * FeatureState 와 나눈 이유: 저건 "지금 내 상태"(요청마다 달라짐)고 이건 "상품 설명"이다.
+ * 숫자는 여기서도 서버가 준다 — 앱에 박으면 한도를 바꿀 때마다 스토어 심사를 기다린다.
+ */
+export interface PlanCatalogEntry {
+  feature: FeatureKey;
+  name: string;
+  group: FeatureGroupKey;
+  /** 섹션 제목으로 그대로 쓴다 */
+  groupName: string;
+  /** -1 무제한, 0 차단 */
+  freeLimit: number;
+  freePeriod: QuotaPeriod;
+  proLimit: number;
+  proPeriod: QuotaPeriod;
+  /** 커플이 함께 쓰는 한도 — "둘이 합쳐"라고 써야 오해가 없다 */
+  coupleScoped: boolean;
+}
+
 export interface FeatureState {
   feature: FeatureKey;
   /** 사용자에게 보여줄 기능 이름 */

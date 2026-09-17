@@ -6,11 +6,15 @@
  * 플랜만 다시 받으면 되므로 프로필 전체를 재조회할 이유가 없다.
  */
 import { apiClient, unwrap } from './client';
-import type { ApiResponse, PlanInfo } from '../types';
+import type { ApiResponse, PlanCatalogEntry, PlanInfo } from '../types';
 
 export const planApi = {
   /** 내 플랜 + 기능별 한도·사용량 */
   me: () => unwrap(apiClient.get<ApiResponse<PlanInfo>>('/plan/me')),
+  /**
+   * FREE / PRO 한도 비교 — 플랜 화면이 쓴다. 내 상태와 무관한 상품 설명이라 캐시해도 된다.
+   */
+  catalog: () => unwrap(apiClient.get<ApiResponse<PlanCatalogEntry[]>>('/plan/catalog')),
   /**
    * 인앱결제 완료 직후 즉시 검증 — 스토어 웹훅(RTDN)이 오기 전에 서버가 먼저 확인해
    * PRO를 반영한다. 반영된 최신 플랜을 그대로 돌려준다({@code planStore.load()}와 동일 형태).

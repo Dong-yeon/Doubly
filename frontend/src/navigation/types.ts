@@ -41,6 +41,8 @@ export type HomeStackParamList = PlaceScreensParamList & {
   CoupleCalendar: undefined;
   // MY (구 MY 탭에서 이전) — 홈 헤더 프로필 아이콘으로 진입
   My: undefined;
+  // 플랜 — FREE/PRO 비교와 구독 (docs/PRO_UPSELL_AND_ADS_2026-09-17.md §6)
+  Plan: undefined;
   // 설정 — 알림·마케팅 수신, 비밀번호 변경, 약관 열람
   Settings: undefined;
   ChangePassword: undefined;

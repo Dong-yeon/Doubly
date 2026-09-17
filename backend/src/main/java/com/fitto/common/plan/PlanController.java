@@ -40,6 +40,24 @@ public class PlanController {
     }
 
     /**
+     * 플랜 비교 — FREE 와 PRO 의 한도를 나란히. 로그인만 하면 누구나 본다.
+     *
+     * <p>{@link #me} 와 나눈 이유는 {@link PlanCatalogEntry} 주석에 있다. 요약하면 저쪽은
+     * "지금 내 상태"고 이쪽은 "상품 설명"이라, 한 응답에 섞으면 게이팅에 쓰이는 값이
+     * 카탈로그까지 짊어지게 된다.
+     *
+     * <p>두 플랜의 한도가 같은 기능은 빼고 준다({@code Feature.isComparable}) — 비교 화면에
+     * "무제한 / 무제한" 줄이 섞이면 무엇이 다른지가 묻힌다.
+     */
+    @GetMapping("/catalog")
+    public ApiResponse<List<PlanCatalogEntry>> catalog() {
+        return ApiResponse.success(Arrays.stream(Feature.values())
+                .filter(Feature::isComparable)
+                .map(PlanCatalogEntry::of)
+                .toList());
+    }
+
+    /**
      * 인앱결제 완료 직후 클라이언트가 부른다.
      *
      * <p>같은 상태 판정을 스토어 웹훅(RTDN)도 결국 하게 되지만, 그건 몇 초~몇 분 지연될 수

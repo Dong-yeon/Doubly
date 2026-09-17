@@ -160,3 +160,16 @@ export const PURCHASE_ENABLED = false;
  * "제품 ID"와 정확히 같아야 한다. Apple도 동일 id로 등록해 플랫폼 분기를 없앤다.
  */
 export const PRO_SUBSCRIPTION_SKU = 'pro_monthly';
+
+/**
+ * 결제할 기본 요금제(base plan)의 id — Play Console 의 "기본 요금제 및 혜택" 표에 보이는 ID.
+ *
+ * <p><b>왜 지정해야 하나</b>: 한 구독 상품 아래에 기본 요금제가 여러 개 달릴 수 있다
+ * (2026-09-17 현재 `monthly`(매월, 활성) 와 `base`(매주, 비활성) 둘). 예전 코드는
+ * `subscriptionOffers[0]` 를 그냥 집었는데, 그러면 <b>어떤 주기로 청구될지가 Play 가
+ * 돌려주는 순서에 달리게 된다</b> — 비활성 요금제를 켜는 순간 월 구독을 누른 사람이
+ * 주 단위로 청구될 수 있다. 돈이 걸린 자리라 순서에 맡기지 않는다.
+ *
+ * <p>여기 적힌 id 를 못 찾으면 결제를 시작하지 않는다(조용히 다른 걸 팔지 않는다).
+ */
+export const PRO_BASE_PLAN_ID = 'monthly';
