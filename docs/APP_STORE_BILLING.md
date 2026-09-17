@@ -55,23 +55,51 @@ Railway에서 직접 해야 하는 설정**입니다. [GOOGLE_PLAY_BILLING.md](G
 > **제출**용(App Store Connect API)입니다. 여기 필요한 건 **인앱 구입** 키로, 발급 화면도
 > 권한도 다릅니다. 제출용 키로는 App Store Server API가 401을 돌려줍니다.
 
-1. App Store Connect → **사용자 및 액세스 → 통합 → 인앱 구입**
-2. **활성 키 생성** → 이름 입력 → **.p8 다운로드** (한 번만 받을 수 있습니다)
-3. 같은 화면의 **발급자 ID**와 방금 만든 키의 **키 ID**를 적어 둡니다
-4. .p8을 base64로 인코딩:
+1. [App Store Connect](https://appstoreconnect.apple.com) → 상단 **사용자 및 액세스**
+2. **통합**(Integrations) 탭 → 왼쪽 목록에서 **인앱 구입**(In-App Purchase)
+   - 같은 페이지에 **App Store Connect API** 항목이 따로 있습니다. 제출용 키
+     (`AuthKey_5L85YB6A6G.p8`)를 만든 곳이 그쪽이고, **우리가 쓸 건 "인앱 구입" 쪽**입니다.
+   - 메뉴가 안 보이면 권한 문제입니다 — **Admin 또는 계정 소유자**로 로그인하세요.
+3. **활성 키 생성**(Generate In-App Purchase Key) → 이름 입력(예: `doubly-server`) → 생성
+4. **.p8 다운로드** — ⚠️ **한 번만 받을 수 있습니다.** 받자마자 `secrets/` 에 둡니다
+   (`.gitignore` 에 이미 들어 있어 커밋되지 않습니다).
+   파일 이름이 `AuthKey_XXXXXXXXXX.p8` 인데 그 **10자리가 키 ID** 입니다.
+5. 같은 화면 상단의 **발급자 ID**(Issuer ID, UUID 꼴)를 복사합니다 — 키마다 다른 값이 아니라
+   계정 하나에 하나입니다.
+
+### 3-1. 넣기 전에 키가 진짜 되는지 확인
+
+이 키는 틀려도 조용합니다. 잘못 넣으면 증상이 "결제는 됐는데 PRO가 안 열림" 하나뿐이고,
+그걸 먼저 알아채는 건 **심사자**입니다. 그래서 Railway 에 넣기 전에 한 번 찔러 봅니다.
+
+```bash
+APP_STORE_ISSUER_ID=<발급자 ID> node scripts/check-app-store-key.mjs
+```
+
+`secrets/AuthKey_*.p8` 이 하나면 경로와 키 ID 는 알아서 찾습니다. 판정은 이렇습니다:
+
+| 결과 | 뜻 |
+| --- | --- |
+| `401` | 키·발급자 ID·키 ID 중 하나가 틀림. **제출용 키를 넣은 경우가 가장 흔합니다** |
+| `인증 통과 (거래 없음)` | ✅ 키 정상 — 없는 거래를 물었으니 이 응답이 맞습니다 |
+| `200` | 실제 거래 id 를 인자로 넘긴 경우. 구독 상태까지 읽힌 것 |
+
+실제 거래를 보려면 id 를 붙입니다: `node scripts/check-app-store-key.mjs 2000000123456789`
+
+6. .p8을 base64로 인코딩:
    ```bash
    base64 -w0 AuthKey_XXXXXXXXXX.p8      # macOS: base64 -i AuthKey_XXXXXXXXXX.p8
    ```
    ```powershell
    [Convert]::ToBase64String([IO.File]::ReadAllBytes("AuthKey_XXXXXXXXXX.p8"))
    ```
-5. Railway 백엔드 서비스 → **Variables**:
+7. Railway 백엔드 서비스 → **Variables**:
 
    | 변수 | 값 |
    | --- | --- |
-   | `APP_STORE_ISSUER_ID` | 3번의 발급자 ID (UUID 꼴) |
-   | `APP_STORE_KEY_ID` | 3번의 키 ID (10자리) |
-   | `APP_STORE_PRIVATE_KEY_BASE64` | 4번의 base64 문자열 |
+   | `APP_STORE_ISSUER_ID` | 5번의 발급자 ID (UUID 꼴) |
+   | `APP_STORE_KEY_ID` | 4번의 키 ID (파일 이름의 10자리) |
+   | `APP_STORE_PRIVATE_KEY_BASE64` | 6번의 base64 문자열 |
    | `APP_STORE_BUNDLE_ID` | `com.doubly.app` |
    | `APP_STORE_NOTIFICATION_TOKEN` | 무작위 값 (`openssl rand -hex 24`) — 4절 URL에 씀 |
    | `APP_STORE_ENVIRONMENT` | 생략 가능(기본 `auto`) |
@@ -134,7 +162,7 @@ PRO가 안 열림" 하나뿐입니다 — 런타임에 알아채기 어려워 `A
 | 증상 | 원인 / 해결 |
 | --- | --- |
 | 결제는 되는데 PRO가 안 열림 | ① 3절 변수 넷 중 하나가 빔 ② 제출용 키를 넣음(401) ③ `appAccountToken` 규칙 불일치 |
-| App Store Server API가 401 | 인앱 구입 키가 아닌 다른 키. 3절 경고 참고 |
+| App Store Server API가 401 | 인앱 구입 키가 아닌 다른 키. `scripts/check-app-store-key.mjs` 로 바로 판별됩니다(3-1) |
 | 조회가 "거래 없음"으로만 끝남 | 샌드박스 거래인데 `APP_STORE_ENVIRONMENT=production`으로 고정됨 → `auto`로 |
 | 해지했는데 계속 PRO | 4절 알림 URL 미설정 또는 토큰 불일치(403). ASC의 "테스트 알림 보내기"로 확인 |
 | 구독을 심사에 못 올림 | 2절 네 항목 확인. 그리고 **앱 새 버전과 함께** 제출해야 함(0절) |
