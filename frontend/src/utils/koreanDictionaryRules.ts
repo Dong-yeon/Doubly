@@ -14,6 +14,11 @@ const HANGUL_LAST = 0xd7a3;
 /** 종성 목록에서 'ㅇ'의 위치 */
 const JONGSEONG_IEUNG = 21;
 const JONGSEONG_COUNT = 28;
+const JUNGSEONG_COUNT = 21;
+/** 첫 초성(ᄀ)·중성(ᅡ)·종성(ᆨ)의 코드포인트 — 음절을 자모로 풀 때 쓴다 */
+const CHOSEONG_BASE = 0x1100;
+const JUNGSEONG_BASE = 0x1161;
+const JONGSEONG_BASE = 0x11a7;
 
 /** 사전 검사로 잡은 것들에 공통으로 붙는 설명 — 규칙표처럼 개별 사유를 알 수 없다 */
 export const DICTIONARY_REASON = '사전에 없는 말이에요';
@@ -95,18 +100,76 @@ export function collectTokens(text: string): Token[] {
 }
 
 /**
+ * 음절을 초성·중성·종성으로 푼 문자열. 한글 음절이 아닌 글자는 그대로 둔다.
+ *
+ * <p>글자 단위 거리로는 순서를 못 가리는 후보들을 갈라내려고 쓴다 — {@link
+ * pickSafeSuggestion} 참고.
+ */
+export function toJamo(word: string): string {
+  let out = '';
+  for (const ch of word) {
+    if (!isHangulSyllable(ch)) {
+      out += ch;
+      continue;
+    }
+    const offset = ch.charCodeAt(0) - HANGUL_BASE;
+    const jong = offset % JONGSEONG_COUNT;
+    out += String.fromCharCode(
+      CHOSEONG_BASE + Math.floor(offset / (JUNGSEONG_COUNT * JONGSEONG_COUNT)),
+      JUNGSEONG_BASE + (Math.floor(offset / JONGSEONG_COUNT) % JUNGSEONG_COUNT),
+    );
+    if (jong > 0) out += String.fromCharCode(JONGSEONG_BASE + jong);
+  }
+  return out;
+}
+
+/** 자모 거리를 비교할 때의 상한 — 순위만 알면 되므로 넉넉히 두고 끊는다 */
+const JAMO_DISTANCE_LIMIT = 8;
+
+/** 띄어쓰기만 다른 후보인가 — 공백을 지우면 원래 말이 되는 것 */
+function isSpacingVariant(word: string, candidate: string): boolean {
+  return candidate.includes(' ') && candidate.replace(/ /g, '') === word;
+}
+
+/**
  * 고침 후보들 중 지적해도 되는 것 하나. 없으면 null.
  *
  * <p><b>딱 한 글자만 다른 후보</b>만 통과시킨다. 이름·신조어는 대개 가까운 후보가
  * 없어서 여기서 조용히 걸러진다 — 오탐 제로를 지키는 마지막이자 가장 중요한 장치다.
+ *
+ * <p><b>남은 후보가 여럿이면 자모로 내려가 고른다.</b> 예전엔 먼저 걸리는 것을 그냥
+ * 집었는데(Hunspell 이 주는 순서는 그럴듯한 순이 아니다) '귀찬아'가 '귀찮아' 대신
+ * '귀잖아'로 고쳐졌다. 글자 단위로는 둘 다 거리 1 이지만, 자모로 보면 '귀찮아'는
+ * 종성 하나(ᆫ→ᆭ)고 '귀잖아'는 초성까지 바뀐다.
+ *
+ * <p><b>띄어쓰기 변형이 후보에 있는데 나머지가 여럿이면 포기한다.</b> 사전이
+ * 쪼개서도 읽힌다고 말하는 마당에 후보까지 갈리면 확신이 없는 것이다. '이번거'가
+ * 그 경우로, 정답 '이번 거'는 공백 때문에 아래에서 걸러지고 '이번과'·'이번서'만
+ * 남아 엉뚱한 낱말이 나갔다. 채팅에서 띄어쓰기는 어차피 지적하지 않으므로
+ * (utils/koreanSpacing 참고) 아무 말도 안 하는 게 맞다. 후보가 하나뿐이면
+ * ('제작년' → '재작년') 그건 확신이라 그대로 쓴다.
  */
 export function pickSafeSuggestion(word: string, candidates: string[]): string | null {
-  const best = candidates.find(
+  const safe = candidates.filter(
     (candidate) =>
       // 띄어쓰기만 다른 후보('제작 년')는 사전 검사로 판단하기 위험해 뺀다
       !candidate.includes(' ') &&
       candidate !== word &&
       editDistanceWithin(word, candidate, 1) === 1,
   );
-  return best ?? null;
+  if (safe.length === 0) return null;
+  if (safe.length > 1 && candidates.some((c) => isSpacingVariant(word, c))) return null;
+
+  const wordJamo = toJamo(word);
+  let best = safe[0];
+  let bestScore = editDistanceWithin(wordJamo, toJamo(best), JAMO_DISTANCE_LIMIT);
+  for (let i = 1; i < safe.length; i++) {
+    // 동점이면 앞엣것을 남긴다 — 사전이 준 순서가 그나마의 근거다
+    const score = editDistanceWithin(wordJamo, toJamo(safe[i]), JAMO_DISTANCE_LIMIT);
+    if (score < bestScore) {
+      best = safe[i];
+      bestScore = score;
+    }
+  }
+  return best;
 }

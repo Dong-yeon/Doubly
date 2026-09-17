@@ -32,7 +32,7 @@ const { checkKoreanSpelling, applyAllSuggestions } = await import(
  * 떼어놨다 — 사전 자체의 판정은 기기에서만 확인 가능하지만, "무엇을 사전에 물어보지
  * 않을 것인가"와 "어떤 후보만 통과시킬 것인가"는 여기서 다 잡힌다.
  */
-const { collectTokens, stripNasalEnding, pickSafeSuggestion } = await import(
+const { collectTokens, stripNasalEnding, pickSafeSuggestion, toJamo } = await import(
   pathToFileURL(join(tmp, 'koreanDictionaryRules.ts'))
 );
 
@@ -311,7 +311,39 @@ const SAFE_PICK = [
   ['같이가자', ['같이 가자'], null],
   // 후보가 아예 없으면 조용히 넘어간다(이름·신조어가 여기로 빠진다)
   ['둠칫두둠칫', [], null],
+  /*
+   * 글자 단위로는 전부 거리 1 이라 순서를 못 가린다 — 자모로 내려가야 갈린다.
+   * 아래 셋은 실기기 사전(ko.dic)이 실제로 준 후보를 그대로 옮긴 것이다.
+   */
+  ['귀찬아', ['귀잖아', '귀찮아', '귀찮나', '뀌잖아'], '귀찮아'], // 초성까지 바뀌는 '귀잖아'보다 종성만 바뀌는 쪽
+  ['괜찬아', ['괜찮아', '괜찮나'], '괜찮아'],
+  ['맜있어', ['맛있어'], '맛있어'],
+  /*
+   * 띄어쓰기 변형이 있는데 나머지가 여럿 — 사전도 확신이 없다. 아무 말도 안 한다.
+   * ('이번 거'가 정답이지만 채팅 띄어쓰기는 지적하지 않는다)
+   */
+  ['이번거', ['이번과', '이번서', '이번 거', '이번'], null],
+  // 반대로 후보가 하나뿐이면 띄어쓰기 변형이 있어도 그대로 쓴다
+  ['어렵던대', ['어렵던데', '어렵던 대'], '어렵던데'],
 ];
+
+/*
+ * 자모 분해 — 위 순위 매기기의 근거라 따로 확인한다. 기대값은 결합 자모
+ * (U+1100 초성 / U+1161 중성 / U+11A8~ 종성)라 눈으로는 원래 글자와 같아 보인다.
+ */
+const JAMO = [
+  ['감', '감'],
+  ['가', '가'],
+  ['귀찮아', '귀찮아'],
+  ['ㅋㅋ3!', 'ㅋㅋ3!'], // 음절이 아닌 글자는 그대로
+];
+for (const [given, want] of JAMO) {
+  const got = toJamo(given);
+  if (got !== want) {
+    failed++;
+    console.error(`✗ 자모 분해가 다름: "${given}" → ${got} (기대: ${want})`);
+  }
+}
 for (const [word, candidates, want] of SAFE_PICK) {
   const got = pickSafeSuggestion(word, candidates);
   if (got !== want) {
@@ -330,7 +362,8 @@ const total =
   MUST_ASK.length +
   NASAL.length +
   3 +
-  SAFE_PICK.length;
+  SAFE_PICK.length +
+  JAMO.length;
 if (failed) {
   console.error(`\n${total}건 중 ${failed}건 실패`);
   process.exit(1);
