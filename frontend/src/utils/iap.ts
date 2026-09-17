@@ -123,13 +123,20 @@ export async function requestProPurchase(userId: number): Promise<void> {
 
   const product = await fetchProSubscription();
   /*
+   * 상품을 못 읽으면 여기서 멈춘다 — 스토어에 상품이 없거나(등록 전) 연결이 안 된 상태다.
+   * 그대로 결제창을 열면 스토어가 던지는 영문 오류가 그대로 올라온다.
+   */
+  if (!product) {
+    throw new Error('구독 상품 정보를 불러오지 못했어요. 잠시 후 다시 시도해주세요.');
+  }
+  /*
    * 기본 요금제를 <b>id 로 골라야 한다</b> — 예전엔 subscriptionOffers[0] 을 그냥 집었는데,
    * 한 상품 아래 기본 요금제가 여럿이면(현재 monthly/base 둘) 청구 주기가 Play 가 주는
    * 순서에 달리게 된다. 월 구독을 누른 사람이 주 단위로 빠져나가는 건 되돌리기 어렵다.
    * 못 찾으면 결제를 시작하지 않는다 — 다른 요금제를 조용히 파느니 실패하는 게 낫다.
    */
   const offerToken =
-    product?.subscriptionOffers?.find((offer) => offer.basePlanIdAndroid === PRO_BASE_PLAN_ID)
+    product.subscriptionOffers?.find((offer) => offer.basePlanIdAndroid === PRO_BASE_PLAN_ID)
       ?.offerTokenAndroid ?? undefined;
   if (Platform.OS === 'android' && !offerToken) {
     throw new Error('구독 상품 정보를 불러오지 못했어요. 잠시 후 다시 시도해주세요.');
@@ -177,7 +184,15 @@ async function verifyAndFinish(purchase: Purchase): Promise<void> {
     await usePlanStore.getState().load();
     toast.success('PRO가 시작됐어요!');
   } catch {
-    // 검증 실패 — 트랜잭션을 닫지 않는다. 다음 앱 실행/재시도에서 다시 처리된다
-    // (안드로이드 3일 자동환불 유예 안에서는 안전하다).
+    /*
+     * 결제는 스토어에서 성사됐는데 우리 쪽 반영이 실패했다(네트워크·서버 문제).
+     * 트랜잭션을 닫지 않으므로 다음 앱 실행에서 initIap 의 getAvailablePurchases 가
+     * 다시 처리한다 — 대개 자가 복구된다.
+     *
+     * <b>그래도 말은 해야 한다.</b> 돈이 빠져나간 직후인데 화면에 아무 일도 안 일어나면
+     * 사용자는 결제가 실패한 줄 알고 한 번 더 누른다. 실패했다고 단정하지도 않는다 —
+     * 실제로는 성사됐고 반영만 늦은 상태다.
+     */
+    toast.info('결제는 확인했어요. 반영이 조금 늦어지고 있어요 — 앱을 다시 열면 이어집니다.');
   }
 }
