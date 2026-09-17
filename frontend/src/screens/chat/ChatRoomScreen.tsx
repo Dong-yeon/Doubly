@@ -1614,7 +1614,15 @@ export function ChatRoomScreen({ navigation, route }: Props) {
          * 상단바에서 설정한다(그 파일 topBar 주석 참고).
          */}
         {showExtras ? (
-          <View style={[styles.extrasPanel, { height: panelHeight }]}>
+          /*
+            높이를 키보드만큼 잡지 않는다. 이모티콘 패널과 달리 여기는 <b>버튼 일곱 개가
+            전부</b>라, 280px 를 잡으면 아래 절반 이상이 빈 채로 남아 고장난 화면처럼
+            보였다(2026-09-17 제보). 이모티콘 패널은 격자를 훑는 물건이라 키보드 자리를
+            그대로 이어받는 게 맞지만, 이쪽은 하나 눌러 바로 닫히는 메뉴다.
+            키보드 높이는 <b>상한</b>으로만 쓴다 — 작은 기기에서 세 줄이 되어도 입력바를
+            화면 밖으로 밀지 않게.
+          */
+          <View style={[styles.extrasPanel, { maxHeight: panelHeight }]}>
             {/*
              * 2026-09-03 엔 "스티커"(유니코드 이모지)와 "이모티콘"(캐릭터 그림)이 트레이
              * 버튼 두 개로 나뉘어 있었다. 2026-09-07 에 하나로 합친다 — 이유가 둘이다.
@@ -1934,7 +1942,8 @@ function ExtraButton({
       accessibilityRole="button"
       accessibilityLabel={label}
     >
-      <MaterialCommunityIcons name={icon} size={22} color={colors.textSecondary} />
+      {/* 칸이 25% 로 넓어졌으므로 아이콘도 한 단계 키운다 — 22 는 빈 칸에서 작아 보인다 */}
+      <MaterialCommunityIcons name={icon} size={26} color={colors.textSecondary} />
       <Text style={styles.extraLabel}>{label}</Text>
     </Pressable>
   );
@@ -2185,22 +2194,35 @@ const styles = themedStyles((colors) => ({
   // 눌림 효과 — 스티커·트레이 버튼 공용(예전엔 "reactionPressed" 로 리액션 바 전용이었다)
   iconPressed: { transform: [{ scale: 0.88 }], backgroundColor: colors.primarySoft },
   // 보조 도구 트레이 — "+" 로 펼치는 스티커/터치/사진 3개
+  /*
+   * <b>4열 고정 격자.</b> 버튼 폭이 64px 고정이던 때는 기기 폭에 따라 한 줄에 다섯 개가
+   * 끼어 들어가 빽빽했고(360dp 기준), 남은 둘이 아래에 덩그러니 놓여 줄이 들쭉날쭉했다.
+   * 폭을 비율로 주면 어느 기기에서나 <b>넷 + 셋</b>으로 떨어진다 — 칸이 넓어져 라벨도
+   * 안 눌리고, 격자로 읽힌다(카톡 "+" 패널과 같은 배열).
+   *
+   * <p>{@code space-around} 를 쓰지 않는다. 폭이 비율이라 이미 한 줄을 꽉 채우고, 마지막
+   * 줄(셋)은 <b>왼쪽부터</b> 채워져야 위 줄과 세로로 맞는다. space-around 면 마지막 줄만
+   * 가운데로 퍼져 열이 어긋난다.
+   */
   extrasPanel: {
     flexDirection: 'row',
-    /*
-     * 줄바꿈 — 버튼이 64px 고정이라 일곱 개(448px)는 360dp 한 줄에 안 들어간다. 패널 높이가
-     * 키보드만큼이라 두 줄은 넉넉히 들어간다. wrap 이 없으면 넘친 버튼이 잘려 나간다.
-     */
     flexWrap: 'wrap',
-    justifyContent: 'space-around',
-    /* 높이가 키보드만큼 커졌으므로 버튼을 위에 붙인다 — 기본 stretch 면 세로로 늘어난다 */
+    justifyContent: 'flex-start',
+    /* 버튼을 위에 붙인다 — 기본 stretch 면 세로로 늘어난다 */
     alignItems: 'flex-start',
     alignContent: 'flex-start',
-    paddingHorizontal: spacing.sm,
+    paddingHorizontal: spacing.xs,
     paddingVertical: spacing.sm,
   },
-  extraBtn: { width: 64, alignItems: 'center', justifyContent: 'center', gap: 2, paddingVertical: spacing.xs, borderRadius: radius.md },
-  extraLabel: { fontSize: 11, fontWeight: '600', color: colors.textSecondary },
+  extraBtn: {
+    width: '25%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xxs,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+  },
+  extraLabel: { fontSize: fontSize.caption, fontWeight: '600', color: colors.textSecondary },
   inputBar: {
     flexDirection: 'row',
     alignItems: 'flex-end',
