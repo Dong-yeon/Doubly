@@ -52,6 +52,25 @@ const HIGHLIGHTS: { feature: FeatureKey; line: string }[] = [
 /** 묶음 표시 순서 — 서버 enum 순서와 같게 둔다(응답 순서에 의존하지 않기 위해 명시한다) */
 const GROUP_ORDER: FeatureGroupKey[] = ['AI', 'DEPTH', 'STORAGE', 'ENGAGEMENT', 'DECORATION'];
 
+/** 하루를 밀리초로 — 남은 체험 일수 계산에 쓴다 */
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * 체험 종료까지 남은 일수(올림). 끝이 정해져 있지 않거나 이미 지났으면 null.
+ *
+ * <p><b>올림인 이유</b>: 30분 남았는데 "0일"이라고 하면 이미 끝난 것처럼 읽힌다.
+ *
+ * <p>서버는 모든 {@code LocalDateTime} 에 {@code Z} 를 붙여 내보내므로
+ * (`JacksonConfig`) {@code new Date(iso)} 가 기기 로컬로 정확히 변환한다 —
+ * 문자열을 잘라 쓰면 KST 새벽에 하루가 어긋난다(`utils/date.localDateOf` 주석 참고).
+ */
+function trialDaysLeft(endsAt: string | null): number | null {
+  if (!endsAt) return null;
+  const ms = new Date(endsAt).getTime() - Date.now();
+  if (Number.isNaN(ms) || ms <= 0) return null;
+  return Math.ceil(ms / DAY_MS);
+}
+
 /** 한도 한 칸의 문구. -1 무제한, 0 은 "못 씀"이라 숫자를 쓰지 않는다. */
 function limitLabel(limit: number, period: QuotaPeriod): string {
   if (limit < 0) return '무제한';
@@ -74,6 +93,7 @@ function limitLabel(limit: number, period: QuotaPeriod): string {
 export function PlanScreen(_props: Props) {
   const plan = usePlanStore((s) => s.plan);
   const freeTrial = usePlanStore((s) => s.freeTrial);
+  const trialEndsAt = usePlanStore((s) => s.trialEndsAt);
   const userId = useAuthStore((s) => s.user?.id);
 
   const [catalog, setCatalog] = useState<PlanCatalogEntry[] | null>(null);
@@ -118,6 +138,8 @@ export function PlanScreen(_props: Props) {
    * 그때는 결제를 다시 권하지 않는다.
    */
   const alreadySubscribed = isPro && !freeTrial;
+  // 끝이 정해진 체험(가입 후 N일)이면 남은 날을 말해 준다. 전역 체험이면 끝이 없어 null 이다.
+  const daysLeft = trialDaysLeft(trialEndsAt);
   const byFeature = new Map((catalog ?? []).map((entry) => [entry.feature, entry]));
   const hasCoupleScoped = (catalog ?? []).some((entry) => entry.coupleScoped);
 
@@ -136,7 +158,17 @@ export function PlanScreen(_props: Props) {
           </View>
           {freeTrial ? (
             <Text style={styles.statusNote}>
-              지금은 <Text style={styles.strong}>모두 체험 기간</Text>이라 PRO 기능이 전부 열려 있어요.
+              {daysLeft === null ? (
+                <>
+                  지금은 <Text style={styles.strong}>모두 체험 기간</Text>이라 PRO 기능이 전부
+                  열려 있어요.
+                </>
+              ) : (
+                <>
+                  체험이 <Text style={styles.strong}>{daysLeft}일</Text> 남았어요. 그동안 아래
+                  기능이 전부 열려 있어요.
+                </>
+              )}
             </Text>
           ) : null}
         </Card>

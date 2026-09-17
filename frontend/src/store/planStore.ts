@@ -12,8 +12,10 @@ import type { FeatureKey, FeatureState, Plan, PlanInfo } from '../types';
 
 interface PlanState {
   plan: Plan;
-  /** 무료 체험 기간 — "체험 중" 배지 노출 여부 */
+  /** 체험 중 — "체험 중" 배지 노출 여부 */
   freeTrial: boolean;
+  /** 체험 종료 시각(ISO). 끝이 정해져 있지 않으면 null */
+  trialEndsAt: string | null;
   features: Partial<Record<FeatureKey, FeatureState>>;
   isLoaded: boolean;
   /** 한도에 걸린 직후의 안내 — 업그레이드 시트를 띄우고 dismissGate 로 닫는다 */
@@ -45,6 +47,7 @@ export const usePlanStore = create<PlanState>((set, get) => ({
   plan: 'FREE',
   // 체험 기간이 기본값이라 초기값도 true 로 둔다 — 로드 전에 배지가 깜빡이지 않는다.
   freeTrial: true,
+  trialEndsAt: null,
   features: {},
   isLoaded: false,
   gate: null,
@@ -55,6 +58,7 @@ export const usePlanStore = create<PlanState>((set, get) => ({
       set({
         plan: info.plan,
         freeTrial: info.freeTrial,
+        trialEndsAt: info.trialEndsAt ?? null,
         features: indexByFeature(info),
         isLoaded: true,
       });

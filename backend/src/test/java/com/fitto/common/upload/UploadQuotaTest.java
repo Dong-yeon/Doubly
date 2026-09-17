@@ -34,6 +34,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 @SpringBootTest(properties = {
         "fitto.plan.free-trial=false",
+        // 가입 직후 N일 체험을 끈다 — 여기서 검증하는 건 사진 한도이지 체험이 아니다.
+        "fitto.plan.trial-days=0",
         "fitto.cloudinary.cloud-name=test-cloud",
         "fitto.cloudinary.api-key=test-key",
         "fitto.cloudinary.api-secret=test-secret"

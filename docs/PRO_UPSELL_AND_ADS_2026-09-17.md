@@ -143,7 +143,7 @@ SELECT detail AS feature, count(*) AS blocked, count(DISTINCT user_id) AS users
 | 1 | `pro_monthly` SKU 를 Play Console 에 등록 | 이게 없으면 나머지가 전부 무의미 |
 | 2 | 가격 확정 (월 4,900원 / 연 39,000원 권장) | 9/11 §3. 경쟁가 확인은 아직 미완 |
 | 3 | **플랜 화면 신설 + `PURCHASE_ENABLED=true`** | ↓ |
-| 4 | `PLAN_FREE_TRIAL=false` + [`scripts/free-tier-cutover.sql`](../scripts/free-tier-cutover.sql) 수동 실행 | Flyway 금지 — [FREE_TIER_AND_ADS.md](FREE_TIER_AND_ADS.md) 경고 참고 |
+| 4 | `PLAN_FREE_TRIAL=false` (환경변수 하나) | DB 작업 없음 — §9 참고. 되돌림도 같은 자리에서 `true` |
 | 5 | 한도 실측 (§3 쿼리) → `Feature.java` 확정 | 자리표시자를 벗어나는 단계 |
 | 6 | 그 다음에 광고 검토 | 3~5 를 건너뛴 광고는 동작하지 않는다 |
 | 7 | iOS 결제 (별도 트랙) | App Store 백엔드 대응이 통째로 없음 |
@@ -231,19 +231,43 @@ false 분기) 라면 **기능만 사라지고 살 방법은 없는** 최악의 �
 
 ---
 
-## 9. 전환 스크립트 (2026-09-17 추가)
+## 9. 전환 방식 확정 (2026-09-17)
 
-[`scripts/free-tier-cutover.sql`](../scripts/free-tier-cutover.sql) — `PLAN_FREE_TRIAL=false`
-배포와 같은 시점에 psql 로 직접 돌린다. FREE_TIER_AND_ADS.md 의 "전원 영구 PRO" 전제가
-바뀌어서(두 계정 외 전부 테스트 계정) 부여 대상이 2행뿐이다.
+**영구 PRO 부여를 없앴다.** `ehddus5712@gmail.com` · `tndls4520@naver.com` 외에는 전부 테스트
+계정이라 지켜줄 대상이 없다. [FREE_TIER_AND_ADS.md](FREE_TIER_AND_ADS.md) 의 "전원 영구 PRO
+INSERT" 는 폐기한다.
 
-확인 쿼리 → 트랜잭션 부여 → 검증 → 롤백 순으로 되어 있고, 놓치기 쉬운 것 둘을 주석에 박아 뒀다:
+그래서 **전환은 환경변수 하나**가 됐다 — `PLAN_FREE_TRIAL=false`. DB 를 안 바꾸므로
+되돌림도 같은 자리에서 `true` 로 돌리면 끝이고, 무손실이다.
 
-- **부여받은 계정으로는 결제 흐름을 테스트할 수 없다.** 플랜 화면 버튼이 "이미 PRO예요"로
-  잠긴다. 라이선스 테스터 검증은 이 스크립트보다 **먼저** 하거나 전용 계정으로 한다.
+### 9-1. 대신 가입 후 3일 체험을 넣었다
+
+`PLAN_TRIAL_DAYS`(기본 3). 전역 체험을 끈 뒤부터 적용된다.
+
+- 기준은 `users.created_at`. 가입한 지 3일이 지난 계정은 전환 즉시 FREE 가 된다.
+- **커플은 나중에 가입한 사람** 의 체험이 끝날 때까지 커플 기능이 함께 열려 있다
+  (`PlanResolver.trialEndOf`) — "둘 중 높은 등급" 규칙과 같은 방향이다. 한 명의 체험이
+  끝났다고 같은 여행·피드가 반쪽만 잠기면 안 된다.
+- `0` 이면 체험 없음. 등급 게이팅 테스트들은 이 값으로 돈다.
+- `GET /plan/me` 가 `trialEndsAt` 을 함께 내려주고, 플랜 화면이 "체험이 2일 남았어요"를 그린다.
+
+**왜 두는가**: 전역 체험을 끄는 순간 모두가 한꺼번에 벽에 부딪히면 "기능을 뺏겼다"로 읽힌다.
+가입 시점 기준 짧은 체험을 주면 새로 들어온 사람은 **PRO 를 겪어 본 뒤** 결제를 판단한다 —
+§2 에서 없다고 지적한 "상품을 보여줄 기회"가 여기서도 생긴다.
+
+### 9-2. 점검 스크립트
+
+[`scripts/free-tier-cutover.sql`](../scripts/free-tier-cutover.sql) — **DB 를 바꾸지 않는다.**
+전환 전후에 "누가 어떤 플랜이 되는지"를 눈으로 확인하는 쿼리 모음이고, 특정 계정에만 수동으로
+PRO 를 줘야 할 때(CS 보상)를 위한 INSERT 를 주석으로 남겨 뒀다.
+
+놓치기 쉬운 것 둘을 주석에 박아 뒀다:
+
 - **테스트 계정은 SQL 로 못 지운다.** `users` 직접 삭제는 FK 로 막힌다 — 삭제 순서는
   `UserDataPurger`/`RelationRecordPurger` 가 들고 있고 이미지는 커밋 이후 Cloudinary 에서
   따로 지운다. 앱의 회원 탈퇴 흐름이 유일하게 안전한 경로다.
+- **결제 테스트를 먼저 끝내는 게 낫다.** 전환 후 PRO 가 된 계정은 플랜 화면 버튼이
+  "이미 PRO예요"로 잠긴다.
 
-검증 상태: 컬럼·타입을 `V1__init_schema.sql`(users) 과 `V36__subscriptions.sql` 에 대조했다.
-**실제 DB 에서 실행해 보지는 않았다** — 이 컨테이너에 PostgreSQL 이 없다(도커 데몬 없음).
+검증: 백엔드 737건 통과(`PlanTrialDaysTest` 4건 신규). 스크립트는 읽기 전용이라 실행해도
+데이터가 안 바뀌지만, **실제 DB 에서 돌려보지는 않았다** — 이 컨테이너에 PostgreSQL 이 없다.

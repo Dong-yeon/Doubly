@@ -54,7 +54,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * 막아 업그레이드를 안내하고, 화면이 자동으로 부르는 조회(홈의 추억, MY 탭의 주간 결산)는
  * 잠김 표시로 내린다 — 그러지 않으면 앱을 열 때마다 업그레이드 시트가 뜬다.
  */
-@SpringBootTest(properties = "fitto.plan.free-trial=false")
+@SpringBootTest(properties = {
+        "fitto.plan.free-trial=false",
+        // 가입 직후 N일 체험을 끈다 — 여기서 검증하는 건 등급 게이팅이지 체험이 아니다.
+        // 켜 두면 방금 register() 한 사용자가 전부 PRO 로 판정돼 FREE 분기가 실행되지 않는다.
+        "fitto.plan.trial-days=0"})
 @ActiveProfiles("test")
 class PlanGatingFlowTest {
 

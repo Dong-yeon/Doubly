@@ -38,7 +38,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * <p>무료 체험 플래그를 <b>끄고</b> 돈다 — 켜진 채(운영 기본값)로는 전원 PRO 라 게이팅
  * 분기 자체가 실행되지 않는다({@code CallPlanGatingTest} 와 같은 이유).
  */
-@SpringBootTest(properties = "fitto.plan.free-trial=false")
+@SpringBootTest(properties = {
+        "fitto.plan.free-trial=false",
+        // 가입 직후 N일 체험을 끈다 — 여기서 검증하는 건 등급 게이팅이지 체험이 아니다.
+        // 켜 두면 방금 register() 한 사용자가 전부 PRO 로 판정돼 FREE 분기가 실행되지 않는다.
+        "fitto.plan.trial-days=0"})
 @ActiveProfiles("test")
 class DeepNutritionStatsTest {
 

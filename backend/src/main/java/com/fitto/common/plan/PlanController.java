@@ -85,6 +85,7 @@ public class PlanController {
                 .filter(feature -> feature != Feature.AI_TOTAL)   // 내부 안전망 — 표시하지 않는다
                 .map(feature -> planGuard.state(user.id(), feature))
                 .toList();
-        return new PlanResponse(planGuard.planOf(user.id()), planGuard.isFreeTrial(), features);
+        return new PlanResponse(planGuard.planOf(user.id()), planGuard.isInTrial(user.id()),
+                planGuard.trialEndsAt(user.id()), features);
     }
 }

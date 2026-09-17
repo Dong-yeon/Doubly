@@ -229,8 +229,14 @@ public class PlanGuard {
         return planResolver.resolve(userId);
     }
 
-    public boolean isFreeTrial() {
-        return planResolver.isFreeTrial();
+    /** 이 사람이 체험 중인가 — 전역 플래그 또는 가입 후 N일. */
+    public boolean isInTrial(Long userId) {
+        return planResolver.isInTrial(userId);
+    }
+
+    /** 이 사람의 체험 종료 시각. 전역 체험 중이면 null(끝이 정해져 있지 않다). */
+    public java.time.LocalDateTime trialEndsAt(Long userId) {
+        return planResolver.trialEndsAt(userId);
     }
 
     private BusinessException upgradeRequired(Feature feature) {

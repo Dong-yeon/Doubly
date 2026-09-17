@@ -24,7 +24,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * 등급 분기 자체가 실행되지 않아 아무것도 검증하지 못한다.
  * 켜진 경우의 동작은 {@link PlanFreeTrialTest} 에서 따로 본다.
  */
-@SpringBootTest(properties = "fitto.plan.free-trial=false")
+@SpringBootTest(properties = {
+        "fitto.plan.free-trial=false",
+        // 가입 직후 N일 체험을 끈다 — 여기서 검증하는 건 등급 게이팅이지 체험이 아니다.
+        // 켜 두면 방금 register() 한 사용자가 전부 PRO 로 판정돼 FREE 분기가 실행되지 않는다.
+        "fitto.plan.trial-days=0"})
 @ActiveProfiles("test")
 class PlanFlowTest {
 

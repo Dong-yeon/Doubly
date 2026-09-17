@@ -125,6 +125,10 @@ fitto:
     # 이 플래그가 켜져 있는 동안 PlanResolver 는 DB 조회 없이 즉시 PRO 를 돌려주므로
     # 성능 부담도 없다.
     free-trial: ${PLAN_FREE_TRIAL:true}
+    # free-trial 을 끈 뒤부터 적용되는 <b>가입 후 N일</b> 체험. 0 이면 체험 없음.
+    # 전역 체험을 끄는 순간 모두가 한꺼번에 벽에 부딪히는 것을 막는 완충재다 —
+    # 새로 들어온 사람은 PRO 를 겪어 본 뒤에 결제를 판단하게 된다.
+    trial-days: ${PLAN_TRIAL_DAYS:3}
 
   # Google Play 구독 웹훅(RTDN) — 서비스 계정 키(base64) 미설정 시 기능 전체 비활성,
   # 웹훅 요청은 전부 403(GooglePlayProperties 참고). 패키지명·서비스 계정 키는 스토어

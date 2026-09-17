@@ -115,8 +115,13 @@ export interface FeatureState {
 
 export interface PlanInfo {
   plan: Plan;
-  /** 무료 체험 기간 — true 면 "체험 중" 배지를 띄운다(나중에 "뺏겼다"로 읽히지 않게) */
+  /** 체험 중 — true 면 "체험 중" 배지를 띄운다(나중에 "뺏겼다"로 읽히지 않게) */
   freeTrial: boolean;
+  /**
+   * 체험이 끝나는 시각(ISO). 끝이 정해져 있지 않으면 null —
+   * 출시 초기의 전역 체험이 그렇다. null 을 "곧 끝남"으로 그리면 없는 마감을 안내하게 된다.
+   */
+  trialEndsAt: string | null;
   features: FeatureState[];
 }
 
