@@ -339,6 +339,115 @@ npm run submit:store          # iOS + 안드로이드 한 번에
   수동으로 해야 하며, 그 이후부터 API 제출이 열린다.
 - 제출 이력은 `npx eas-cli status` 의 Submissions 항목에서 확인한다.
 
+## 11. 업로드 아카이브 줄이기 — `.easignore` (2026-09-17)
+
+빌드마다 CLI 가 이런 경고를 냈다.
+
+> Your project archive is 1.3 GB. You can reduce its size … in `.easignore` file.
+
+업로드에만 48초가 걸렸고, 이 계정은 이미 포함 크레딧을 44 빌드 초과해 **빌드 건당 과금** 중이라
+아카이브를 줄이는 게 실질 이득이었다. 정리 후 **1.3 GB → 108 MB** (원본 2367 MB → 182 MB,
+여기에 `.git` 113 MB 제거). 경고 임계값(150 MiB) 아래라 경고 자체가 사라진다.
+
+### 11-1. 아카이브에 실제로 뭐가 들어가는가
+
+eas-cli 24.7.0 의 `vcs/clients/git.js` · `vcs/local.js` 를 읽고 확인한 순서다. 추측하지 말 것 —
+문서에 안 적힌 동작이 세 개나 있다.
+
+1. **아카이브 루트는 `git rev-parse --show-toplevel`**, 즉 `frontend/` 가 아니라 **저장소 루트**다.
+   모노레포 전체가 올라간다. 따라서 `.easignore` 도 저장소 루트에만 둔다 —
+   **`frontend/.easignore` 는 아예 읽히지 않는다.**
+2. `git clone --depth 1 --no-checkout file:///<루트>` 로 껍데기를 만든다. 여기서 생긴
+   **`.git` 이 113 MB** 이고 그대로 아카이브에 들어간다.
+3. 그다음 `git ls-files --exclude-from .easignore --ignored --cached` 로 지울 파일을 고르는데,
+   `--no-checkout` 이라 **인덱스가 비어 있어 이 단계는 아무것도 지우지 않는다**
+   (`git -C <clone> ls-files --cached | wc -l` → 0). 즉 `.easignore` 가 실제로 일하는 곳은 4번뿐이다.
+4. `fs.cp(루트, 클론, { filter })` 로 **워킹 디렉터리를 통째로** 덮어쓴다. 커밋 여부와 무관하게
+   지금 디스크에 있는 파일이 올라간다는 뜻이다. 필터는
+   기본 규칙(`.git`, `node_modules` — 둘 다 모든 깊이) + `.easignore` 뿐이고,
+   **`.gitignore` 도 `.git/info/exclude` 도 읽지 않는다.**
+5. `.git` 은 예외적으로 "`.easignore` 에 `.git` 이 적혀 있을 때만" 지운다.
+6. tar.gz 로 압축. 150 MiB 초과 시 경고, **2 GiB 초과 시 빌드 실패**.
+
+4번이 이 작업의 핵심이다. `.easignore` 가 생긴 순간 `.gitignore` 의 보호가 전부 사라지므로,
+**`.gitignore`·`.git/info/exclude` 로 가려 두었던 것을 `.easignore` 에 다시 적어야 한다.**
+안 적으면 아카이브가 오히려 커진다.
+
+### 11-2. 2367 MB 의 내역 (정리 전)
+
+| 크기 | 경로 | 왜 들어갔나 |
+| --- | --- | --- |
+| 1012 MB | `frontend/modules/korean-spell/android/{build,.cxx}` | `frontend/.gitignore` 가 막고 있었지만 `.easignore` 모드에선 무효 |
+| 627 MB | `.claude/worktrees/` | `.git/info/exclude` 로만 가려져 있었다. 다른 세션 워크트리마다 `frontend/android/`·`modules/` 산출물이 통째로 딸려 온다 |
+| 385 MB | `frontend/doubly-main.apk`, `doubly-main2.apk` | `*.apk` 는 `.gitignore` 에만 있었다 |
+| 185 MB | `frontend/build/` (내려받은 AAB) | 〃 |
+| 93 MB | `frontend/dist/` (웹 export) | 〃 |
+| 44 MB | `scripts/couple-emoji-experiment/{out,photos}` | 〃 — **실제 얼굴 사진이 외부로 업로드되고 있었다** |
+| 113 MB | 얕은 클론의 `.git` | `.easignore` 에 `.git` 이 없으면 항상 포함 |
+
+### 11-3. 앵커(`/`)를 빼먹으면 빌드가 깨진다
+
+`.easignore` 는 gitignore 문법이라 **슬래시가 안 들어간 패턴은 모든 깊이에서 걸린다.**
+
+| 패턴 | `scripts/a.mjs` | `frontend/scripts/build.mjs` |
+| --- | --- | --- |
+| `scripts/` | 제외 | **제외 (빌드에 필요한데 사라진다)** |
+| `/scripts/` | 제외 | 포함 |
+
+`store/` 도 마찬가지로 `frontend/src/store/`(Zustand 스토어 전부)를 지운다. 루트 전용으로 뺄
+디렉터리는 반드시 `/store/` 처럼 앵커를 붙인다. 반대로 `.claude/`·`*.apk`·`.git` 은 모든 깊이에서
+걸려야 하므로 앵커를 붙이지 않는다.
+
+### 11-4. 런타임 버전(fingerprint)은 바뀌지 않는다
+
+`modules/korean-spell` 은 fingerprint 소스다(8-5, 트러블슈팅의 줄바꿈 항목 참고). 여기서 뭘 빼면
+서버 해시가 로컬과 어긋나 `Runtime version calculated on local machine not equal…` 로 빌드가
+죽는다. 그런데 `@expo/fingerprint` 의 `DEFAULT_IGNORE_PATHS`(build/Options.js)가
+`**/android/build/**/*` · `**/android/.cxx/**/*` · `**/android/.gradle/**/*` 을 이미 무시하므로
+이번에 뺀 것들은 애초에 해시에 안 들어간다. 실제로 확인했다 — 제외 후보를 `ignorePaths` 에
+추가해도 해시가 `ce811a6e…` 로 동일했다.
+
+**절대 빼면 안 되는 것** (전부 fingerprint 소스이거나 빌드 입력이다):
+`frontend/.gitignore`(!), `frontend/eas.json`, `app.json`·`app.config.js`, `google-services.json`,
+`frontend/assets/`(폰트·아이콘), `frontend/package-lock.json`,
+`modules/korean-spell/` 의 `cpp/`·`dict/`·`kiwi-model/`·`android/src/`(jniLibs 의 `libkiwi.so` 71 MB 포함).
+남은 182 MB 중 168 MB 가 이 네이티브 모듈 소스다 — 더 줄이려면 여기를 손대야 하는데,
+그건 빌드 입력이라 아카이브 문제가 아니다.
+
+### 11-5. 다시 재는 법 — 빌드를 돌리지 않고
+
+`eas build` 에 `--dry-run` 은 **없다**(`--local`, `--clear-cache` 등만 있다). 확인하려고 빌드를
+돌리면 그대로 과금된다. 대신 CLI 와 같은 규칙으로 로컬에서 재현한다.
+
+```bash
+# eas-cli 의 ignore/tar 를 그대로 빌려 쓴다 (npx 캐시 경로는 환경마다 다르다)
+EAS=$(ls -d "$LOCALAPPDATA"/npm-cache/_npx/*/node_modules/eas-cli | tail -1)
+```
+
+```js
+// sim.js — 아카이브에 들어갈 파일과 크기를 계산한다. node sim.js <저장소루트> <.easignore 경로>
+const fs = require('fs'), path = require('path');
+const ignore = require('<EAS>/../ignore');           // eas-cli 옆의 ignore 패키지
+const [root, easignore] = process.argv.slice(2);
+const rules = [ignore().add('\n.git\nnode_modules\n'), ignore().add(fs.readFileSync(easignore, 'utf-8'))];
+const ignores = (rel) => rules.some((r) => r.ignores(rel));
+let total = 0;
+(function walk(dir) {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, e.name), rel = path.relative(root, full);
+    if (ignores(rel) || e.isSymbolicLink()) continue;   // fs.cp 필터와 같다 — 디렉터리면 하위까지 통째로
+    if (e.isDirectory()) walk(full); else total += fs.statSync(full).size;
+  }
+})(root);
+console.log((total / 1024 / 1024).toFixed(1), 'MB');
+```
+
+압축 후 크기까지 보려면 같은 필터로 `fs.cp` 한 뒤 `tar.create({ gzip: true, portable: true, prefix: 'project' })`
+를 돌린다 — 이게 CLI 가 "Compressed project files" 로 출력하는 값이다. 이 절차로 잰 값이 108.2 MB 였다.
+
+추적 파일 중 빠지는 게 없는지는 `git ls-files` 결과를 같은 필터에 통과시켜 대조한다.
+정리 후 `frontend/` 아래 추적 파일은 **하나도 빠지지 않았다**(빠진 것은 backend·docs·store·scripts·.claude 뿐).
+
 ## 트러블슈팅
 
 | 증상 | 원인 / 해결 |
@@ -348,6 +457,7 @@ npm run submit:store          # iOS + 안드로이드 한 번에
 | 설치 후 앱이 흰 화면 | 최신 코드로 다시 빌드했는지 확인 (오래된 APK 캐시일 수 있음) — 설정 화면 하단의 커밋 해시로 판별, 6-1 참고 |
 | Configure expo-updates 단계에서 `Runtime version calculated on local machine not equal…` | 로컬·서버 fingerprint 불일치 — 8-5 참고. ① `npm install` 로 node_modules 를 lock 과 맞추고 ② `fingerprint.config.js` 가 있는지, ③ 두 번 돌려 같은 해시가 나오는지 확인. 빌드 로그의 "Difference between local and EAS fingerprints" 가 정확한 범인을 알려준다 |
 | `eas update` 가 기존 빌드에 배달되지 않음 / `eas fingerprint:compare --build-id <id>` 가 `modules/korean-spell` 만 다르다고 함 | **줄바꿈 차이**(2026-09-10). EAS 는 git 이 아니라 로컬 파일을 그대로 올리므로 fingerprint 는 워크트리의 CRLF/LF 상태를 따른다. 주 워크트리는 `*.sh eol=lf` 규칙(9/9) 이전에 체크아웃된 파일이 CRLF 로 남아 있고, 새로 만든 워크트리는 LF 라 같은 커밋인데도 iOS 해시가 달랐다(`scripts/check-elf-align.mjs` 한 파일). 업데이트는 **빌드를 올린 워크트리와 같은 줄바꿈 상태**에서 올려야 한다 — `git ls-files --eol frontend/modules/korean-spell` 로 두 워크트리를 비교하면 범인이 나온다. 다음 빌드부터는 어느 쪽이든 그 상태가 기준이 된다 |
+| 빌드 로그에 로컬엔 있는 파일이 "없다"고 나옴 / 아카이브가 갑자기 커지거나 작아짐 | 루트 `.easignore` 를 본다. `.easignore` 가 있으면 `.gitignore` 는 전혀 안 읽히고, 슬래시 없는 패턴은 모든 깊이에서 걸린다(`scripts/` 가 `frontend/scripts/` 까지 지운다). 11절 참고 — 크기는 빌드를 돌리지 않고 11-5 로 잰다 |
 | "출처를 알 수 없는 앱" 이 계속 막힘 | 설정 → 보안 → 해당 브라우저/파일관리자 앱의 "알 수 없는 앱 설치" 권한 허용 |
 
 ## 다음 단계
