@@ -138,6 +138,19 @@ fitto:
     service-account-json-base64: ${GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_BASE64:}
     webhook-token: ${GOOGLE_PLAY_WEBHOOK_TOKEN:}
 
+  # App Store 구독(Server API + Server Notifications V2) — 구글 쪽과 같은 구조.
+  # 키는 App Store Connect > 사용자 및 액세스 > 통합 > "인앱 구입" 에서 발급한다
+  # (앱 제출용 키와 다르다 — AppStoreProperties 주석 참고). 미설정이면 기능 전체가 꺼지고
+  # 알림 요청은 전부 403 이다.
+  app-store:
+    issuer-id: ${APP_STORE_ISSUER_ID:}
+    key-id: ${APP_STORE_KEY_ID:}
+    private-key-base64: ${APP_STORE_PRIVATE_KEY_BASE64:}
+    bundle-id: ${APP_STORE_BUNDLE_ID:}
+    notification-token: ${APP_STORE_NOTIFICATION_TOKEN:}
+    # auto | production | sandbox — auto 는 프로덕션 먼저, 없으면 샌드박스로 한 번 더.
+    environment: ${APP_STORE_ENVIRONMENT:auto}
+
   # 음식 사진 AI 분석 (Google AI Studio 무료 티어) — 키 미설정 시 기능만 비활성, 앱은 정상 동작
   gemini:
     api-key: ${GEMINI_API_KEY:}

@@ -28,10 +28,13 @@ public class PlanController {
 
     private final PlanGuard planGuard;
     private final GooglePlaySubscriptionSyncService googlePlaySyncService;
+    private final AppStoreSubscriptionSyncService appStoreSyncService;
 
-    public PlanController(PlanGuard planGuard, GooglePlaySubscriptionSyncService googlePlaySyncService) {
+    public PlanController(PlanGuard planGuard, GooglePlaySubscriptionSyncService googlePlaySyncService,
+                          AppStoreSubscriptionSyncService appStoreSyncService) {
         this.planGuard = planGuard;
         this.googlePlaySyncService = googlePlaySyncService;
+        this.appStoreSyncService = appStoreSyncService;
     }
 
     @GetMapping("/me")
@@ -77,6 +80,24 @@ public class PlanController {
             throw new BusinessException(ErrorCode.INVALID_INPUT);
         }
         googlePlaySyncService.sync(request.purchaseToken());
+        return ApiResponse.success(currentPlanOf(user));
+    }
+
+    /**
+     * 애플 결제 완료 직후 클라이언트가 부른다 — {@link #verifyGooglePurchase} 의 짝.
+     *
+     * <p>영수증이 아니라 거래 id 하나만 받는다. 서버가 그 id 로 App Store Server API 에
+     * 되묻기 때문에 앱이 보낸 내용을 믿을 필요가 없고, 귀속도 앱 말이 아니라 애플이 돌려주는
+     * {@code appAccountToken} 으로만 정해진다({@link AppAccountTokens}) — 남의 거래 id 를
+     * 보내도 자기 계정에 PRO 가 붙지 않는다.
+     */
+    @PostMapping("/purchases/apple")
+    public ApiResponse<PlanResponse> verifyApplePurchase(@AuthenticationPrincipal AuthUser user,
+                                                          @RequestBody ApplePurchaseVerifyRequest request) {
+        if (request == null || request.transactionId() == null || request.transactionId().isBlank()) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT);
+        }
+        appStoreSyncService.sync(request.transactionId());
         return ApiResponse.success(currentPlanOf(user));
     }
 

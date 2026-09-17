@@ -85,6 +85,21 @@ function attachPurchaseListeners(): void {
   });
 }
 
+/**
+ * userId → 애플 {@code appAccountToken}(UUID).
+ *
+ * <p>애플은 구매에 실을 수 있는 사용자 식별자로 <b>UUID 하나만</b> 받는다(구글의
+ * {@code obfuscatedAccountId} 는 임의 문자열이라 userId 를 그대로 넣었다). 그래서 숫자 id 를
+ * UUID 하위 비트에 넣고 상위는 0 으로 둔다 — 서버가 되읽어 사용자에 연결한다.
+ *
+ * <p><b>서버의 {@code AppAccountTokens} 와 규칙이 같아야 한다.</b> 어긋나면 결제가 아무
+ * 계정에도 붙지 않고, 증상은 "결제는 됐는데 PRO 가 안 열림" 하나뿐이다.
+ * (Java 쪽은 {@code new UUID(0L, userId)} 이고, 그 toString 이 아래와 같은 모양이다.)
+ */
+function appAccountTokenOf(userId: number): string {
+  return `00000000-0000-0000-0000-${userId.toString(16).padStart(12, '0')}`;
+}
+
 /** PRO 구독 상품 정보 — 가격 표시, 안드로이드 결제 요청에 필요한 offerToken 조회용. */
 export async function fetchProSubscription(): Promise<ProductSubscription | null> {
   if (Platform.OS === 'web') return null;
@@ -129,7 +144,8 @@ export async function requestProPurchase(userId: number): Promise<void> {
         // 서버가 이 값으로 구매를 사용자에 연결한다 — 없으면 웹훅이 아무도 못 찾는다.
         obfuscatedAccountId: String(userId),
       },
-      apple: { sku: PRO_SUBSCRIPTION_SKU },
+      // 서버가 이 값으로 구매를 사용자에 연결한다 — 구글의 obfuscatedAccountId 와 같은 역할.
+      apple: { sku: PRO_SUBSCRIPTION_SKU, appAccountToken: appAccountTokenOf(userId) },
     },
   });
 }
@@ -137,16 +153,26 @@ export async function requestProPurchase(userId: number): Promise<void> {
 /** 서버에 구매를 검증시키고, 반영된 뒤에만 스토어 트랜잭션을 닫는다. */
 async function verifyAndFinish(purchase: Purchase): Promise<void> {
   /*
-   * 서버에는 Google 검증 경로밖에 없다(PlanController: /plan/purchases/google).
-   * 애플 거래를 그리로 보내면 매번 실패하고, 실패하면 finishTransaction 을 안 하므로
-   * StoreKit 이 같은 거래를 앱 실행마다 다시 내려보낸다 — 조용한 무한 재시도가 된다.
-   * App Store 검증이 붙기 전까지는 아예 손대지 않는다.
+   * 스토어마다 서버에 보내는 것이 다르다.
+   *  - 안드로이드: purchaseToken (Play Developer API 의 키)
+   *  - iOS: 거래 id (App Store Server API 의 키). purchase.purchaseToken 은 JWS 라
+   *    그대로 보내면 서버가 쓰지 않는 값이다.
+   * 웹은 애초에 여기까지 오지 않는다(리스너를 안 건다).
    */
-  if (Platform.OS !== 'android') return;
-  const token = purchase.purchaseToken;
-  if (!token) return;
+  const verify = async (): Promise<void> => {
+    if (Platform.OS === 'android') {
+      const token = purchase.purchaseToken;
+      if (!token) return Promise.reject(new Error('purchaseToken 없음'));
+      await planApi.verifyGooglePurchase(token);
+      return;
+    }
+    // StoreKit 의 거래 id. 갱신 거래여도 애플이 같은 구독의 최신 상태를 돌려준다.
+    if (!purchase.id) return Promise.reject(new Error('transactionId 없음'));
+    await planApi.verifyApplePurchase(purchase.id);
+  };
+
   try {
-    await planApi.verifyGooglePurchase(token);
+    await verify();
     await finishTransaction({ purchase, isConsumable: false });
     await usePlanStore.getState().load();
     toast.success('PRO가 시작됐어요!');

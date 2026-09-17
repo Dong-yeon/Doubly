@@ -74,6 +74,8 @@ public class SecurityConfig {
                                 // 발신자 확인은 GooglePlayWebhookController 내부의 공유 비밀
                                 // 토큰(?token=)이 담당한다.
                                 "/api/v1/webhooks/google-play",
+                                // 애플 알림 — 발신자 확인은 컨트롤러의 ?token= 으로 한다
+                                "/api/v1/webhooks/app-store",
                                 "/ws/**")
                         .permitAll()
                         /*

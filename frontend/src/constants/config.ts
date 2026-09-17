@@ -148,18 +148,14 @@ export const BUILD_LABEL = `v${APP_VERSION} · ${BUILD_STAMP}`;
  * <p>2026-09-17 에 Play Console 구독 상품(`pro_monthly` / 기본 요금제 `monthly`, 월 4,900원)
  * 등록과 백엔드 `GOOGLE_PLAY_*` 설정이 끝나 안드로이드는 열었다.
  *
- * <p><b>iOS 는 아직 닫아 둔다.</b> 스토어 등록만의 문제가 아니라 <b>서버에 검증 경로가
- * 통째로 없다</b>: `PlanController` 에는 `POST /plan/purchases/google` 하나뿐이고
- * `Store.APP_STORE` 는 enum 값만 있다. 그래서 iOS 에서 결제가 성사돼도
- * ① 서버가 구독을 못 만들어 PRO 가 안 열리고
- * ② `utils/iap.verifyAndFinish` 가 검증 실패로 `finishTransaction` 을 못 해
- *    StoreKit 이 그 거래를 앱 실행마다 다시 내려보낸다.
- * 버튼만 먼저 켜면 사용자는 <b>돈을 내고 아무것도 못 받는</b> 막다른 길을 만난다.
+ * <p><b>iOS 도 함께 연다(2026-09-17).</b> 서버에 App Store Server API 검증
+ * (`POST /plan/purchases/apple`)과 Server Notifications V2 수신이 들어가면서 구글과 같은
+ * 수준이 됐다. 애플은 <b>첫 자동 갱신 구독을 앱 바이너리와 묶어 심사</b>하므로, 결제가
+ * 동작하지 않는 빌드로는 구독을 심사에 올릴 수조차 없다 — 켜는 것 말고 선택지가 없다.
  *
- * <p>iOS 를 열려면 App Store Connect 구독 상품 등록 + 서버의 App Store 영수증 검증이
- * 함께 필요하다 — 별도 트랙이다(docs/PRO_UPSELL_AND_ADS_2026-09-17.md §5 7번).
+ * <p>웹은 결제 SDK 가 없어 계속 닫아 둔다(`utils/iap` 가 전부 no-op).
  */
-export const PURCHASE_ENABLED = Platform.OS === 'android';
+export const PURCHASE_ENABLED = Platform.OS !== 'web';
 
 /**
  * PRO 정기결제 상품 id. Google Play Console(수익 창출 → 구독)에서 만드는 상품의

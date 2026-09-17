@@ -21,4 +21,10 @@ export const planApi = {
    */
   verifyGooglePurchase: (purchaseToken: string) =>
     unwrap(apiClient.post<ApiResponse<PlanInfo>>('/plan/purchases/google', { purchaseToken })),
+  /**
+   * 애플 쪽 짝 — 영수증이 아니라 거래 id 하나만 보낸다. 서버가 그 id 로 App Store Server API
+   * 에 되묻기 때문에 앱이 보낸 내용을 믿을 필요가 없다.
+   */
+  verifyApplePurchase: (transactionId: string) =>
+    unwrap(apiClient.post<ApiResponse<PlanInfo>>('/plan/purchases/apple', { transactionId })),
 };
