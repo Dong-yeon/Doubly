@@ -1,7 +1,11 @@
 # App Store 구독(PRO) 결제 설정
 
 코드(구매 검증·알림 수신·클라이언트 IAP)는 준비돼 있습니다. 아래는 **App Store Connect와
-Railway에서 직접 해야 하는 설정**입니다. [GOOGLE_PLAY_BILLING.md](GOOGLE_PLAY_BILLING.md)의
+Railway에서 직접 해야 하는 설정**입니다.
+
+> **App Store Connect**(줄여서 **ASC**, `appstoreconnect.apple.com`)는 애플 쪽의 Play Console
+> 입니다 — 앱 등록·구독 상품·심사 제출·키 발급이 전부 여기서 이뤄집니다. 아래에서 ASC 는
+> 전부 이걸 가리킵니다. [GOOGLE_PLAY_BILLING.md](GOOGLE_PLAY_BILLING.md)의
 애플 판이고, 서버 구조도 그쪽을 그대로 미러링했습니다.
 
 > 관련 코드: [`AppStoreServerApiClient`](../backend/src/main/java/com/fitto/common/plan/AppStoreServerApiClient.java)
@@ -152,21 +156,38 @@ APP_STORE_ISSUER_ID=<발급자 ID> node scripts/check-app-store-key.mjs
 > 주석). 가짜 알림이 와도 애플이 "그런 거래 없음"이라고 답하므로 DB가 바뀌지 않습니다 —
 > 검증을 생략한 게 아니라 **검증이 필요한 경로를 만들지 않은** 것입니다.
 
-## 5. 샌드박스 테스트
+## 5. 결제 테스트
 
-1. App Store Connect → **사용자 및 액세스 → Sandbox → 테스터** 에 계정 추가
-   (실제 Apple ID와 달라야 합니다)
+### 5-1. TestFlight 로 하는 경우 (권장 — 샌드박스 계정이 필요 없습니다)
+
+TestFlight 로 설치한 빌드는 StoreKit 이 **자동으로 샌드박스 환경**으로 돕니다.
+**본인 Apple ID 그대로**, 청구 없이 구매됩니다 — 가짜 계정을 따로 만들 필요가 없습니다.
+
+1. `npm run submit:ios` → TestFlight 에 올라가면 기기에 설치
+2. MY → 플랜 → **PRO 시작하기**
+3. 아래 5-3 으로 확인
+
+### 5-2. Xcode 로 직접 설치한 개발 빌드인 경우
+
+이때만 샌드박스 테스터 계정이 필요합니다.
+
+1. ASC → **사용자 및 액세스 → Sandbox → 테스터** 에 계정 추가
+   (실제 Apple ID 로 쓰인 적 없는 이메일 주소여야 합니다 — 진짜 메일함일 필요는 없습니다)
 2. 기기에서 **설정 → App Store → 샌드박스 계정**에 로그인
-3. TestFlight 또는 개발 빌드로 앱 설치 후 구매 — **실제 청구 없음**
-4. 확인:
+   (주 Apple ID 는 그대로 둡니다)
+3. 앱에서 구매 — **실제 청구 없음**
+
+### 5-3. 확인:
    ```sql
    SELECT u.email, s.store, s.status, s.product_id, s.expires_at
      FROM subscriptions s JOIN users u ON u.id = s.user_id
     WHERE s.store = 'APP_STORE' ORDER BY s.id DESC;
    ```
 
-> 샌드박스 구독은 **갱신이 가속**됩니다(1개월 → 5분). 해지·만료 알림이 실제로 도착하는지
-> 짧은 시간에 확인할 수 있어 오히려 편합니다.
+> 샌드박스 구독은 **갱신이 가속**됩니다(1개월 → 5분). 그래서 **해지까지 꼭 확인하세요** —
+> 설정 → Apple ID → 구독에서 해지하고 몇 분 뒤 PRO 가 꺼지는지 봅니다. 해지 반영은 4절의
+> 알림 경로로만 들어오므로, 여기서 안 되면 실제 환경에서도 "해지했는데 계속 PRO" 가 됩니다.
+> 실제 환경이라면 한 달을 기다려야 알 수 있는 것을 몇 분에 확인하는 셈입니다.
 
 ## 6. 사용자 귀속 — `appAccountToken`
 
