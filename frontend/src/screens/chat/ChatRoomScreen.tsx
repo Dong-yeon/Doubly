@@ -29,6 +29,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import type { ChatStackParamList, MainTabParamList } from '../../navigation/types';
+import { CachedImage } from '../../components/CachedImage';
 import { ImageViewer, type ViewerImage } from '../../components/ImageViewer';
 import { Avatar } from '../../components/Avatar';
 import { useFocusEffect } from '@react-navigation/native';
@@ -1304,10 +1305,10 @@ export function ChatRoomScreen({ navigation, route }: Props) {
            * 생성 모델 출력에 알파가 없어 흰 배경이 딸려 온다(§5-2) — 그대로 그리면
            * 다크 모드에서 흰 사각형이 뜬다. 원형 마스크로 감싸 스티커처럼 보이게 한다.
            */
-          <Image
-            source={{ uri: coupleEmojiUrl }}
+          <CachedImage
+            uri={coupleEmojiUrl}
             style={[styles.stickerImage, chatStyles.coupleEmojiImage]}
-            resizeMode="cover"
+            contentFit="cover"
             accessibilityLabel="우리 이모지"
           />
         ) : isTouch ? (

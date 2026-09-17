@@ -24,6 +24,7 @@
  */
 import React, { useMemo, useState } from 'react';
 import { Image, Pressable, ScrollView, Text, View, type ImageSourcePropType } from 'react-native';
+import { CachedImage } from '../CachedImage';
 import { MaterialCommunityIcons } from '../Icon';
 import { ANIMATED_STICKERS } from '../../constants/animatedStickers';
 import { STICKER_CHARACTERS } from '../../constants/stickerImages';
@@ -144,7 +145,8 @@ export function StickerPanel({
       case 'image':
         return <Image source={thumb.source} style={styles.stripImage} resizeMode="contain" />;
       case 'uri':
-        return <Image source={{ uri: thumb.uri }} style={styles.stripAvatar} resizeMode="cover" />;
+        // 우리 이모지 팩 썸네일 — 원격이라 디스크 캐시를 타야 한다(CachedImage 주석 참고)
+        return <CachedImage uri={thumb.uri} style={styles.stripAvatar} contentFit="cover" />;
       case 'icon':
         return (
           <MaterialCommunityIcons
@@ -168,7 +170,7 @@ export function StickerPanel({
           accessibilityRole="button"
           accessibilityLabel={`우리 이모지 ${e.label} 보내기. 길게 누르면 무드 올리기·삭제`}
         >
-          <Image source={{ uri: e.imageUrl }} style={styles.coupleThumb} resizeMode="cover" />
+          <CachedImage uri={e.imageUrl} style={styles.coupleThumb} contentFit="cover" />
           {/* 무드에 올라간 장은 점 하나로 — 안 보이면 "길게 눌러 바꾼다"를 알 방법이 없다 */}
           {e.moodVisible ? <View style={styles.moodDot} /> : null}
         </Pressable>
