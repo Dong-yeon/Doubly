@@ -136,6 +136,13 @@ export async function requestProPurchase(userId: number): Promise<void> {
 
 /** 서버에 구매를 검증시키고, 반영된 뒤에만 스토어 트랜잭션을 닫는다. */
 async function verifyAndFinish(purchase: Purchase): Promise<void> {
+  /*
+   * 서버에는 Google 검증 경로밖에 없다(PlanController: /plan/purchases/google).
+   * 애플 거래를 그리로 보내면 매번 실패하고, 실패하면 finishTransaction 을 안 하므로
+   * StoreKit 이 같은 거래를 앱 실행마다 다시 내려보낸다 — 조용한 무한 재시도가 된다.
+   * App Store 검증이 붙기 전까지는 아예 손대지 않는다.
+   */
+  if (Platform.OS !== 'android') return;
   const token = purchase.purchaseToken;
   if (!token) return;
   try {

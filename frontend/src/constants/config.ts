@@ -143,17 +143,23 @@ export const BUILD_STAMP = [
 export const BUILD_LABEL = `v${APP_VERSION} · ${BUILD_STAMP}`;
 
 /**
- * 인앱결제가 붙었는가.
+ * 인앱결제를 열 수 있는가 — <b>안드로이드만</b>.
  *
- * <p>`react-native-iap` 연동(구매 흐름, 서버 검증)은 되어 있다({@code utils/iap.ts} 참고).
- * 그런데도 기본값이 여전히 `false`인 이유는 <b>Google Play Console에 구독 상품
- * ({@link PRO_SUBSCRIPTION_SKU})이 아직 등록되지 않았기 때문</b>이다 — 스토어에 없는
- * SKU로 결제창을 열면 "상품을 찾을 수 없음" 에러만 난다.
+ * <p>2026-09-17 에 Play Console 구독 상품(`pro_monthly` / 기본 요금제 `monthly`, 월 4,900원)
+ * 등록과 백엔드 `GOOGLE_PLAY_*` 설정이 끝나 안드로이드는 열었다.
  *
- * <p>Play Console에서 구독 상품을 만들고(id가 {@link PRO_SUBSCRIPTION_SKU}와 일치해야
- * 함) 라이선스 테스터를 등록한 뒤 이 값을 켠다.
+ * <p><b>iOS 는 아직 닫아 둔다.</b> 스토어 등록만의 문제가 아니라 <b>서버에 검증 경로가
+ * 통째로 없다</b>: `PlanController` 에는 `POST /plan/purchases/google` 하나뿐이고
+ * `Store.APP_STORE` 는 enum 값만 있다. 그래서 iOS 에서 결제가 성사돼도
+ * ① 서버가 구독을 못 만들어 PRO 가 안 열리고
+ * ② `utils/iap.verifyAndFinish` 가 검증 실패로 `finishTransaction` 을 못 해
+ *    StoreKit 이 그 거래를 앱 실행마다 다시 내려보낸다.
+ * 버튼만 먼저 켜면 사용자는 <b>돈을 내고 아무것도 못 받는</b> 막다른 길을 만난다.
+ *
+ * <p>iOS 를 열려면 App Store Connect 구독 상품 등록 + 서버의 App Store 영수증 검증이
+ * 함께 필요하다 — 별도 트랙이다(docs/PRO_UPSELL_AND_ADS_2026-09-17.md §5 7번).
  */
-export const PURCHASE_ENABLED = false;
+export const PURCHASE_ENABLED = Platform.OS === 'android';
 
 /**
  * PRO 정기결제 상품 id. Google Play Console(수익 창출 → 구독)에서 만드는 상품의
