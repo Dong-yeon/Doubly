@@ -51,6 +51,10 @@ Railway에서 직접 해야 하는 설정**입니다. [GOOGLE_PLAY_BILLING.md](G
 
 ## 3. In-App Purchase 키 발급 (서버가 구매 상태를 조회하려면 필요)
 
+> ⚠️ **iOS 번들 ID 는 `com.doubly.app.ios` 입니다.** 안드로이드 패키지명(`com.doubly.app`)과
+> 다릅니다(`app.json` 의 `ios.bundleIdentifier`). JWT 의 `bid` 클레임이 안 맞으면 애플은
+> **401** 만 돌려주고 무엇이 틀렸는지는 말해주지 않습니다.
+
 > ⚠️ **앱 제출용 키와 다릅니다.** `eas.json`의 `ascApiKeyPath`(`AuthKey_5L85YB6A6G.p8`)는
 > **제출**용(App Store Connect API)입니다. 여기 필요한 건 **인앱 구입** 키로, 발급 화면도
 > 권한도 다릅니다. 제출용 키로는 App Store Server API가 401을 돌려줍니다.
@@ -64,11 +68,9 @@ Railway에서 직접 해야 하는 설정**입니다. [GOOGLE_PLAY_BILLING.md](G
 4. **.p8 다운로드** — ⚠️ **한 번만 받을 수 있습니다.** 받자마자 `secrets/` 에 둡니다
    (`.gitignore` 에 이미 들어 있어 커밋되지 않습니다).
    파일 이름이 `AuthKey_XXXXXXXXXX.p8` 인데 그 **10자리가 키 ID** 입니다.
-5. **인앱 구입 페이지 상단의 발급자 ID**(Issuer ID, UUID 꼴)를 복사합니다.
-
-   > ⚠️ **App Store Connect API 의 발급자 ID 와 다른 값입니다.** 같은 계정인데도 통합 종류마다
-   > 따로입니다 — `eas.json` 의 `ascApiKeyIssuerId`(제출용)를 여기에 넣으면 **401** 이 납니다.
-   > 2026-09-17 에 실제로 이걸로 한 번 틀렸습니다. 반드시 **인앱 구입** 페이지에서 복사하세요.
+5. **앱 내 구입** 페이지의 **Issuer ID**(UUID 꼴)를 복사합니다 — 계정에 하나뿐이라
+   `eas.json` 의 `ascApiKeyIssuerId`(제출용)와 **같은 값**입니다
+   (`398f3259-e229-4657-ab99-d3e12e387fb5`).
 
 ### 3-1. 넣기 전에 키가 진짜 되는지 확인
 
@@ -103,7 +105,7 @@ APP_STORE_ISSUER_ID=<발급자 ID> node scripts/check-app-store-key.mjs
    | `APP_STORE_ISSUER_ID` | 5번의 발급자 ID (UUID 꼴) |
    | `APP_STORE_KEY_ID` | 4번의 키 ID (파일 이름의 10자리) |
    | `APP_STORE_PRIVATE_KEY_BASE64` | 6번의 base64 문자열 |
-   | `APP_STORE_BUNDLE_ID` | `com.doubly.app` |
+   | `APP_STORE_BUNDLE_ID` | **`com.doubly.app.ios`** |
    | `APP_STORE_NOTIFICATION_TOKEN` | 무작위 값 (`openssl rand -hex 24`) — 4절 URL에 씀 |
    | `APP_STORE_ENVIRONMENT` | 생략 가능(기본 `auto`) |
 
@@ -165,7 +167,7 @@ PRO가 안 열림" 하나뿐입니다 — 런타임에 알아채기 어려워 `A
 | 증상 | 원인 / 해결 |
 | --- | --- |
 | 결제는 되는데 PRO가 안 열림 | ① 3절 변수 넷 중 하나가 빔 ② 제출용 키를 넣음(401) ③ `appAccountToken` 규칙 불일치 |
-| App Store Server API가 401 | 인앱 구입 키가 아닌 다른 키. `scripts/check-app-store-key.mjs` 로 바로 판별됩니다(3-1) |
+| App Store Server API가 401 | ① **번들 ID 오타** — iOS는 `com.doubly.app.ios`이지 `com.doubly.app`이 아닙니다(2026-09-17에 이걸로 헤맸습니다) ② 인앱 구입 키가 아닌 다른 키 ③ 키 생성 직후. `scripts/check-app-store-key.mjs` 로 판별합니다(3-1) |
 | 조회가 "거래 없음"으로만 끝남 | 샌드박스 거래인데 `APP_STORE_ENVIRONMENT=production`으로 고정됨 → `auto`로 |
 | 해지했는데 계속 PRO | 4절 알림 URL 미설정 또는 토큰 불일치(403). ASC의 "테스트 알림 보내기"로 확인 |
 | 구독을 심사에 못 올림 | 2절 네 항목 확인. 그리고 **앱 새 버전과 함께** 제출해야 함(0절) |

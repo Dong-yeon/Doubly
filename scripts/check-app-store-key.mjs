@@ -24,7 +24,9 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 
 const ISSUER = process.env.APP_STORE_ISSUER_ID;
-const BUNDLE = process.env.APP_STORE_BUNDLE_ID || 'com.doubly.app';
+// iOS 번들 ID 는 안드로이드 패키지명과 다르다 — app.json 의 ios.bundleIdentifier 다.
+// JWT 의 bid 가 안 맞으면 애플은 401 을 준다(무엇이 틀렸는지는 말해주지 않는다).
+const BUNDLE = process.env.APP_STORE_BUNDLE_ID || 'com.doubly.app.ios';
 let keyPath = process.env.APP_STORE_KEY_PATH;
 let keyId = process.env.APP_STORE_KEY_ID;
 
@@ -69,6 +71,20 @@ if (!fs.existsSync(keyPath)) {
 if (!keyId) {
   console.error(`키 ID 를 파일 이름에서 읽지 못했다: ${path.basename(keyPath)}`);
   console.error('APP_STORE_KEY_ID 로 직접 지정한다(App Store Connect 의 키 목록에 있는 10자리).');
+  process.exit(1);
+}
+
+/*
+ * 발급자 ID 는 UUID 다. 키 ID(10자)를 여기 넣는 실수가 잦아서 — 두 값이 같은 화면에
+ * 나란히 있다 — 애플에 물어보기 전에 형식부터 막는다. 401 만 보고는 무엇이 틀렸는지
+ * 알 수 없으므로, 알 수 있는 것은 여기서 먼저 걸러 준다.
+ */
+if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ISSUER)) {
+  console.error(`발급자 ID 형식이 아니다: ${ISSUER}`);
+  console.error('  발급자 ID 는 UUID 다 — 예: 69a6de70-1234-5678-9abc-def012345678 (36자)');
+  console.error(`  10자짜리(${keyId ?? 'XXXXXXXXXX'})는 키 ID 다. 두 값은 다르다.`);
+  console.error('\n  App Store Connect > 사용자 및 액세스 > 통합 > 앱 내 구입 페이지의');
+  console.error('  "Issuer ID" 를 복사한다(계정에 하나뿐이라 제출용과 같은 값이다).');
   process.exit(1);
 }
 
@@ -117,10 +133,10 @@ for (const [label, host] of hosts) {
 
   if (res.status === 401) {
     console.log(`${label}: 401 — 키·발급자 ID·키 ID 중 하나가 틀렸다.`);
-    console.log('   ① 발급자 ID 가 다르다 — 인앱 구입 키는 App Store Connect API 와 발급자 ID 가 별개다.');
-    console.log('      ASC > 사용자 및 액세스 > 통합 > 인앱 구입 페이지 상단의 UUID 를 쓴다');
-    console.log('      (eas.json 의 ascApiKeyIssuerId 는 제출용이라 여기서는 통하지 않는다).');
+    console.log(`   ① 번들 ID 가 다르다 — 지금 보낸 값은 ${BUNDLE} 이다.`);
+    console.log('      iOS 번들 ID 는 안드로이드 패키지명과 다르다(app.json 의 ios.bundleIdentifier).');
     console.log('   ② 제출용 키(AuthKey_*.p8)를 넣었다 — 인앱 구입 키는 SubscriptionKey_*.p8 이다.');
+    console.log('   ③ 키를 만든 직후라면 몇 분 뒤에 다시 시도한다.');
     break;
   }
   if (res.status === 404 && json.errorCode === 4040010) {
