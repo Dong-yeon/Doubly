@@ -29,7 +29,6 @@ import {
   Modal,
   Platform,
   Pressable,
-  ScrollView,
   Text,
   View,
   useWindowDimensions,
@@ -37,7 +36,17 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
-import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
+/*
+ * ScrollView 를 react-native 가 아니라 여기서 가져온다 — RNGH 의 래퍼만 ref 에
+ * {@code handlerTag} 를 붙여주고, 그게 있어야 아래 {@code blocksExternalGesture} 가
+ * 실제로 연결된다(react-native 의 ScrollView ref 로는 조용히 무시된다).
+ */
+import {
+  Gesture,
+  GestureDetector,
+  GestureHandlerRootView,
+  ScrollView,
+} from 'react-native-gesture-handler';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { MaterialCommunityIcons } from './Icon';
@@ -171,6 +180,17 @@ export function ImageViewer({ images, initialIndex, onClose }: Props) {
   }, []);
 
   /*
+   * 페이지(확대용 ScrollView)마다 ref 를 하나씩 미리 만들어 둔다 — 아래
+   * {@code blocksExternalGesture} 가 "이 스크롤들은 닫기 제스처가 실패한 뒤에 움직여라"를
+   * 걸 대상이다. 장수가 그대로면 같은 배열을 유지해 제스처가 매 렌더 새로 만들어지지 않게
+   * {@code images.length} 로만 기억한다(호출부가 배열을 매번 새로 만드는 화면도 있다).
+   */
+  const pageRefs = useMemo(
+    () => Array.from({ length: images.length }, () => React.createRef<ScrollView>()),
+    [images.length],
+  );
+
+  /*
    * 셋이 겹치는 자리다 — 가로 넘김(FlatList) · 확대(ScrollView) · 세로 닫기(여기).
    *
    * <p>{@code activeOffsetY} 는 세로로 충분히 움직여야 시작하게 하고, {@code failOffsetX} 는
@@ -185,6 +205,12 @@ export function ImageViewer({ images, initialIndex, onClose }: Props) {
         .enabled(!zoomed)
         .activeOffsetY([-DRAG_ACTIVATE, DRAG_ACTIVATE])
         .failOffsetX([-DRAG_FAIL_X, DRAG_FAIL_X])
+        /*
+         * iOS 에서 확대용 ScrollView 가 세로 팬을 먼저 가져가던 것을 막는다(renderItem 주석 참고).
+         * RNGH 의 GestureRef 타입이 ComponentType 기준이라 ScrollView ref 와 어긋나는데,
+         * 런타임은 {@code ref.current.handlerTag} 만 읽으므로 캐스팅으로 넘긴다.
+         */
+        .blocksExternalGesture(...(pageRefs as unknown as React.RefObject<React.ComponentType>[]))
         /*
          * 시작점 기준 누적값을 그대로 쓴다. AvatarCropSheet 는 증분(onChange)을 골랐는데
          * 그건 이동·확대를 <b>동시에</b> 받아 서로 덮어쓰는 경우였다. 여기는 단독 제스처라
@@ -212,7 +238,7 @@ export function ImageViewer({ images, initialIndex, onClose }: Props) {
             speed: 18,
           }).start();
         }),
-    [zoomed, height, dragY, resetDrag, onClose],
+    [zoomed, height, dragY, resetDrag, onClose, pageRefs],
   );
 
   /** 끌수록 배경이 옅어진다 — 뒤 화면이 비쳐야 "닫히는 중"으로 읽힌다 */
@@ -222,14 +248,37 @@ export function ImageViewer({ images, initialIndex, onClose }: Props) {
     extrapolate: 'clamp',
   });
 
+  /*
+   * 확대용 {@link ScrollView} 가 iOS 에서 <b>세로 끌기를 먼저 먹던</b> 자리다(2026-09-17 제보).
+   *
+   * <p>안드로이드는 RNGH 가 루트에서 터치를 가로채고 활성화되는 순간 네이티브 자식에게
+   * ACTION_CANCEL 을 보내므로 위의 {@code dismissGesture} 가 이긴다. iOS 는 UIKit 의
+   * 인식기 경쟁이라 사정이 다르다 — {@code UIScrollView.panGestureRecognizer} 가 먼저
+   * 시작해버리면 RNGH 의 Pan 은 활성화되지 못한다. RN 은 세로 ScrollView 에
+   * {@code alwaysBounceVertical} 을 기본 <b>참</b>으로 준다(= {@code !horizontal}). 그래서
+   * 내용이 화면에 딱 맞아 스크롤할 것이 없어도 고무줄 반동 때문에 세로 팬이 인식되고,
+   * 끌어 닫기가 <b>iOS 에서만</b> 통째로 먹히지 않았다.
+   *
+   * <p>두 겹으로 막는다. 확대 기능은 그대로 둔다 — 핀치를 막는 처방(예:
+   * {@code scrollEnabled={zoomed}})은 핀치가 안 먹히면 {@code zoomed} 가 영영 켜지지 않는
+   * 외길이라 쓰지 않았다.
+   * <p>· 반동을 끈다 — 내용이 화면에 딱 맞고 튕김도 없으면 UIScrollView 의 팬 인식기는
+   *   스크롤할 여지가 없다고 보고 스스로 실패한다. 확대 중에는 여지가 생기므로 정상 동작한다.
+   * <p>· {@code blocksExternalGesture} 로 못을 박는다 — 각 페이지 ScrollView 에게
+   *   "닫기 제스처가 실패한 뒤에 움직여라"고 알린다. 세로로 끌면 16px 에서 닫기가 잡혀
+   *   스크롤은 시작조차 못 하고, 가로로 끌면 12px 에서 닫기가 포기해 그대로 넘겨준다.
+   */
   const renderItem = useCallback(
-    ({ item }: ListRenderItemInfo<ViewerImage>) => (
+    ({ item, index: i }: ListRenderItemInfo<ViewerImage>) => (
       <ScrollView
         style={{ width }}
         contentContainerStyle={[styles.page, { width, height }]}
         maximumZoomScale={3}
         minimumZoomScale={1}
         centerContent
+        ref={pageRefs[i]}
+        bounces={false}
+        alwaysBounceVertical={false}
         showsVerticalScrollIndicator={false}
         showsHorizontalScrollIndicator={false}
         onScroll={onPageScroll}
@@ -243,7 +292,7 @@ export function ImageViewer({ images, initialIndex, onClose }: Props) {
         />
       </ScrollView>
     ),
-    [width, height, onPageScroll],
+    [width, height, pageRefs, onPageScroll],
   );
 
   const current = images[index];
