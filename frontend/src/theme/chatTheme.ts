@@ -33,9 +33,12 @@
  *       colors.ts 의 primary 는 "버튼 배경"과 "링크 글자"를 겸해 밝기를 낮출 수 없지만
  *       (그 파일 primary 주석 참고), 말풍선은 버튼 역할만 하므로 여기서는 낮출 수 있다.</li>
  * </ul>
- * 'default' 의 "상대 말풍선 vs 배경" 1.08 만 기준(1.10) 아래인데, 이건 <b>현재 출시된
- * 값 그대로</b>다 — 나머지 5종은 전부 그보다 낫다. 기본값을 바꾸면 기존 사용자 화면이
- * 예고 없이 달라지므로 남겨 둔다.
+ * <p>'default' 의 상대 말풍선은 원래 앱 팔레트의 {@code surfaceAlt}(#F1F2F0) 였고, 배경
+ * #FAFAF9 위에서 대비가 <b>1.08</b> 이라 말풍선 경계가 거의 사라졌다. 기존 출시값이라
+ * 면제로 두고 있었는데(2026-09-18 까지), 기본 테마라 <b>대부분이 보는 화면</b>이어서
+ * 고쳤다 — #E9EAE7 로 1.16. 흰색으로 올리는 방향은 오히려 나빠진다(1.04): 배경이 이미
+ * 흰색에 가까우므로 말풍선은 <b>어두워져야</b> 갈린다(iMessage 의 회색 말풍선과 같은 방향).
+ * 이제 면제 항목은 하나도 없다.
  */
 import type { Scheme } from './colors';
 
@@ -92,7 +95,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       background: '#FAFAF9',
       bubbleMine: '#2A7731',
       bubbleMineText: '#FFFFFF',
-      bubbleTheirs: '#F1F2F0',
+      bubbleTheirs: '#E9EAE7',
       bubbleTheirsText: '#1A1D1A',
       meta: '#6A706A',
       dividerLine: '#E1E3E0',

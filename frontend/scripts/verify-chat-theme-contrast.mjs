@@ -34,13 +34,12 @@ const RULES = [
 ];
 
 /*
- * 면제는 한 건뿐이다. 기본 테마의 라이트는 앱 팔레트를 그대로 옮긴 값이라
- * "상대 말풍선 vs 배경"이 1.08 인데, 이건 현재 출시돼 있는 값 그대로다. 기본값을
- * 바꾸면 기존 사용자 화면이 예고 없이 달라지므로 남겨 두고 여기서만 면제한다
- * (chatTheme.ts 주석 참고). 나머지 11벌은 면제 없이 통과해야 한다 — 면제를 넉넉히
- * 잡아 두면 나중에 진짜 회귀가 들어와도 조용히 지나간다.
+ * <b>면제는 비어 있다.</b> 2026-09-18 까지 한 건(기본/라이트의 "상대 말풍선 vs 배경" 1.08)이
+ * 있었는데, 기본 테마라 대부분이 보는 화면이어서 값을 고쳐 없앴다(chatTheme.ts 주석 참고).
+ * 비워 두는 것이 기본값이다 — 면제를 넉넉히 잡아 두면 나중에 진짜 회귀가 들어와도 조용히
+ * 지나간다. 새로 넣기 전에 "고칠 수 없는 이유"를 여기 적을 수 있는지 먼저 따진다.
  */
-const EXEMPT = new Set(['default/light:상대 말풍선 vs 배경']);
+const EXEMPT = new Set();
 
 const luminance = (hex) => {
   const ch = [1, 3, 5]
@@ -108,7 +107,7 @@ const line = (cells) => cells.map((c, i) => c.padEnd(widths[i])).join('');
 console.log(line(header));
 rows.forEach((r) => console.log(line(r)));
 console.log(`\n테마 ${themes.length}종 × 라이트/다크 = ${themes.length * 2}벌, 검사 ${themes.length * 2 * RULES.length}건`);
-console.log('~ 는 면제 항목 (기본 테마의 기존 출시값)');
+if (EXEMPT.size > 0) console.log('~ 는 면제 항목');
 
 if (failures.length > 0) {
   console.error(`\n대비 미달 ${failures.length}건:`);
