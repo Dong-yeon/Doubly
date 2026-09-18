@@ -257,12 +257,21 @@ export function CatchMindScreen(_: Props) {
           </>
         ) : (
           <>
+            {/*
+              * 키보드 확인키로 바로 보낸다 — 아래 보내기 버튼과 같은 조건일 때만이다.
+              * 그림이 비었는데 보내면 되돌릴 수 없는 빈 판이 상대에게 간다("보내고 나면
+              * 고칠 수 없어요"). 조건이 안 맞으면 키보드만 닫힌다.
+              */}
             <TextInput
               value={word}
               onChangeText={setWord}
+              onSubmitEditing={() => {
+                if (!empty && word.trim() && !sending) void send();
+              }}
               placeholder="둘만 아는 단어도 좋아요"
               placeholderTextColor={colors.textMuted}
               maxLength={40}
+              returnKeyType="send"
               style={styles.wordInput}
               accessibilityLabel="제시어 직접 입력"
             />
