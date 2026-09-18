@@ -5,5 +5,7 @@ public enum GameType {
     SUDOKU,
     OMOK,
     /** 캐치마인드 — 한 명이 그리고 한 명이 맞힌다(비동기) */
-    CATCH_MIND
+    CATCH_MIND,
+    /** 연쇄 퍼즐 대전 — 각자 판에서 연쇄로 방해를 주고받는다(라이브·고스트) */
+    PUZZLE_BATTLE
 }

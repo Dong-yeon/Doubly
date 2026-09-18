@@ -34,11 +34,12 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
 
     /**
      * 관계 소속을 강제해야 하는 구독 destination 접두어.
-     * 두 채널 모두 relationId 로 스코프되므로 동일한 인가(구성원 + 활성)를 적용한다.
+     * 세 채널 모두 relationId 로 스코프되므로 동일한 인가(구성원 + 활성)를 적용한다.
+     * {@code /sub/games/} 는 연쇄 퍼즐 대전의 수(手) 중계 — 채팅처럼 페이로드를 싣는다.
      * 여기 없는 destination(예: 개인 알림)은 이 인터셉터의 관심사가 아니다.
      */
     private static final List<String> RELATION_SCOPED_PREFIXES =
-            List.of("/sub/rooms/", "/sub/couple/");
+            List.of("/sub/rooms/", "/sub/couple/", "/sub/games/");
 
     private final JwtTokenProvider tokenProvider;
     private final RelationRepository relationRepository;
