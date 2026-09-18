@@ -1846,7 +1846,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               style={[styles.sendBtn, (editSaving || sending) && styles.sendDisabled]}
               onPress={onSend}
               disabled={editSaving || sending}
-              // 46px 이지만 화면 맨 끝이라 엄지가 가장자리를 빗나가기 쉽다
+              // 44px 이지만 화면 맨 끝이라 엄지가 가장자리를 빗나가기 쉽다
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               accessibilityRole="button"
               accessibilityState={{ disabled: editSaving || sending, busy: sending }}
@@ -2335,14 +2335,18 @@ const styles = themedStyles((colors) => ({
      * 늘렸을 때보다 세로(paddingBottom)도 함께 늘리면 버튼이 꼭짓점에서 대각선
      * 으로 더 멀어진다. 위쪽은 꼭짓점과 무관해 기존 값을 유지한다.
      *
-     * paddingTop/paddingBottom 은 Between 비교 피드백으로 한 단계씩 더 키웠다
-     * (2026-08-31) — 입력 바가 화면 하단에 너무 붙어 촘촘해 보인다는 지적. 아래쪽
-     * safe-area 인셋은 SafeAreaView(edges: bottom)가 이미 더해주므로 여기 값은
-     * 그 위에 얹히는 순수 여백이다.
+     * paddingTop/paddingBottom 은 2026-08-31 에 Between 비교로 한 단계씩 키웠다가
+     * (하단에 너무 붙어 촘촘하다는 지적) 2026-09-18 에 다시 줄였다 — 늘린 쪽이 지나쳐서
+     * 빈 바가 86px + safe-area 인셋이 됐다(16+46+24). 지금은 8+44+8 = 60px 이다.
+     *
+     * <b>아래쪽 safe-area 인셋은 SafeAreaView(edges: bottom)가 이미 더해준다</b> — 여기
+     * 값은 그 위에 얹히는 순수 여백이라, 24 는 노치 기기에서 사실상 이중 여백이었다.
+     * 가로(paddingHorizontal)는 건드리지 않는다: 위 주석대로 둥근 모서리 잘림을 막는
+     * 값이고, 세로를 줄인 만큼 버튼이 꼭짓점에 다시 가까워지므로 여기서 더 줄이면 안 된다.
      */
     paddingHorizontal: spacing.md,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
     gap: spacing.sm,
     backgroundColor: colors.background,
   },
@@ -2351,12 +2355,13 @@ const styles = themedStyles((colors) => ({
    *
    * 예전엔 46px 원 + 1px 테두리라 입력바에 "활성 객체"가 셋이었고(버튼·입력창·전송),
    * 그만큼 메시지 목록과 시각적으로 경쟁했다. 입력바는 콘텐츠가 아니라 도구라
-   * 물러나 있어야 한다 — 터치 영역(46)은 그대로 두고 그림만 지운다.
+   * 물러나 있어야 한다 — 터치 영역(44)은 남겨 두고 그림만 지운다.
    */
-  trayBtn: { width: 46, height: 46, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  // 44 는 iOS HIG 최소 터치 영역이다 — 바를 더 줄이고 싶어도 이 아래로는 내리지 않는다
+  trayBtn: { width: 44, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   trayBtnActive: { backgroundColor: colors.primarySoft },
   /*
-   * "+"(24)와 전송(20) 아이콘은 크기가 달라 실제 박스는 둘 다 46x46 로 완전히
+   * "+"(24)와 전송(20) 아이콘은 크기가 달라 실제 박스는 둘 다 44x44 로 완전히
    * 같은데도(alignItems/justifyContent: center) 세로 정렬이 어긋나 보였다.
    * 아이콘 폰트는 lineHeight 를 안 정해주면 브라우저가 폰트 자체의 "normal"
    * 줄높이를 쓰는데, 이 여백 비율이 fontSize 에 비례해서 커지므로 크기가
@@ -2371,10 +2376,12 @@ const styles = themedStyles((colors) => ({
     // (WorkoutSessionScreen.setInput 과 같은 문제). 네이티브에는 영향 없다.
     minWidth: 0,
     maxHeight: 110,
-    minHeight: 46,
+    // 좌우 버튼(44)과 높이를 맞춘다 — 어긋나면 flex-end 정렬에서 바닥선이 틀어진다
+    minHeight: 44,
     paddingHorizontal: spacing.md,
-    paddingTop: 12,
-    paddingBottom: 12,
+    // 12 였을 때 내부 여백만으로 46 을 넘겨 minHeight 가 무의미했다. 10 이면 44 가 산다
+    paddingTop: 10,
+    paddingBottom: 10,
     fontSize: fontSize.subtitle,
     color: colors.textPrimary,
     // 테두리 대신 살짝 눌린 채움 — 폼 필드가 아니라 "쓰는 자리"로 읽힌다.
@@ -2390,8 +2397,8 @@ const styles = themedStyles((colors) => ({
   sendBtn: {
     backgroundColor: colors.primary,
     borderRadius: radius.lg,
-    width: 46,
-    height: 46,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },
