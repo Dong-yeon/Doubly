@@ -459,6 +459,7 @@ console.log((total / 1024 / 1024).toFixed(1), 'MB');
 | `eas update` 가 기존 빌드에 배달되지 않음 / `eas fingerprint:compare --build-id <id>` 가 `modules/korean-spell` 만 다르다고 함 | **줄바꿈 차이**(2026-09-10). EAS 는 git 이 아니라 로컬 파일을 그대로 올리므로 fingerprint 는 워크트리의 CRLF/LF 상태를 따른다. 주 워크트리는 `*.sh eol=lf` 규칙(9/9) 이전에 체크아웃된 파일이 CRLF 로 남아 있고, 새로 만든 워크트리는 LF 라 같은 커밋인데도 iOS 해시가 달랐다(`scripts/check-elf-align.mjs` 한 파일). 업데이트는 **빌드를 올린 워크트리와 같은 줄바꿈 상태**에서 올려야 한다 — `git ls-files --eol frontend/modules/korean-spell` 로 두 워크트리를 비교하면 범인이 나온다. 다음 빌드부터는 어느 쪽이든 그 상태가 기준이 된다 |
 | 빌드 로그에 로컬엔 있는 파일이 "없다"고 나옴 / 아카이브가 갑자기 커지거나 작아짐 | 루트 `.easignore` 를 본다. `.easignore` 가 있으면 `.gitignore` 는 전혀 안 읽히고, 슬래시 없는 패턴은 모든 깊이에서 걸린다(`scripts/` 가 `frontend/scripts/` 까지 지운다). 11절 참고 — 크기는 빌드를 돌리지 않고 11-5 로 잰다 |
 | "출처를 알 수 없는 앱" 이 계속 막힘 | 설정 → 보안 → 해당 브라우저/파일관리자 앱의 "알 수 없는 앱 설치" 권한 허용 |
+| `eas update` 가 `Asset processing timed out for assets:` 목록과 `Error: update command failed.` 로 죽음 | **서버측 에셋 처리 타임아웃 — 그냥 재시도하면 된다**(2026-09-18 확인). 코드·에셋 문제가 아니다: `번들 export ✔` → `assetmap.json 업로드 ✔` 까지 지나고 그다음 단계에서 죽으며, 목록에 iOS·안드로이드 `.hbc` 가 **둘 다** 들어 있다(특정 에셋이 큰 게 아니라 처리 단계 전체가 못 끝난 것). `frontend/assets` 는 113개·12MB(폰트 4개가 6MB)로 타임아웃을 낼 규모가 아니다. **중요: 이때 업데이트는 발행되지 않는다** — EAS 는 에셋 처리가 끝난 뒤에 업데이트 레코드를 만들므로 채널은 이전 업데이트를 그대로 가리킨다(앱이 깨지지 않고, 수정도 반영되지 않는다). `npx eas-cli channel:view production` 으로 먼저 확인하고 재시도한다. 에셋은 해시로 중복 제거되므로 두 번째가 더 빠르다. 계속 실패하면 `rm -rf dist .expo` 후 재시도 → <https://status.expo.dev> 확인 → 불안정한 네트워크(테더링 등)면 다른 회선에서 시도 |
 
 ## 다음 단계
 - iOS는 Apple 개발자 계정($99/년)이 있어야 ad-hoc/TestFlight 배포가 가능합니다. 준비되면
