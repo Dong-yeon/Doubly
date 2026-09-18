@@ -1364,14 +1364,25 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             <Text style={styles.touchLabel}>{touchGestureOf(item.content)?.label ?? '터치'}</Text>
           </View>
         ) : isImage ? (
-          /* 탭하면 전체화면 — 예전엔 200×200 으로 잘린 썸네일이 전부라 원본을 볼 수 없었다 */
-          <Pressable
-            onPress={() => openImage(item.imageUrl!)}
-            accessibilityRole="imagebutton"
-            accessibilityLabel="사진 크게 보기"
-          >
-            <Image source={{ uri: item.imageUrl! }} style={chatStyles.msgImage} resizeMode="cover" />
-          </Pressable>
+          <View>
+            {/* 탭하면 전체화면 — 예전엔 200×200 으로 잘린 썸네일이 전부라 원본을 볼 수 없었다 */}
+            <Pressable
+              onPress={() => openImage(item.imageUrl!)}
+              accessibilityRole="imagebutton"
+              accessibilityLabel="사진 크게 보기"
+            >
+              <Image source={{ uri: item.imageUrl! }} style={chatStyles.msgImage} resizeMode="cover" />
+            </Pressable>
+            {/*
+              * 캡션 — 사용자가 보내는 사진에는 본문이 없고(ChatService.send), 지금은 캐치마인드
+              * 그림 공유만 실어 보낸다. 말풍선 없이 배경 위에 놓으므로 chat.meta 를 쓴다
+              * (배경 대비 4.5:1 이 20개 팔레트 전부 검증돼 있다 — verify-chat-theme-contrast).
+              * Pressable 밖에 두어 캡션 탭이 전체화면을 열지 않게 한다.
+              */}
+            {item.content ? (
+              <Text style={chatStyles.imageCaption}>{item.content}</Text>
+            ) : null}
+          </View>
         ) : isWorkout || isRoutine ? (
           <View style={[
             styles.workoutCard,
@@ -2409,6 +2420,14 @@ const chatStyles = chatThemedStyles((chat) => ({
 
   // 로딩 중 빈 자리가 배경에 뚫린 구멍처럼 보이지 않도록 상대 말풍선 색을 깐다
   msgImage: { width: 200, height: 200, borderRadius: radius.lg, backgroundColor: chat.bubbleTheirs },
+  // 사진 아래 한 줄 — 사진 폭(200)에 맞춘다. 색은 렌더 쪽 주석 참고
+  imageCaption: {
+    width: 200,
+    marginTop: spacing.xxs,
+    fontSize: fontSize.caption,
+    color: chat.meta,
+    lineHeight: 17,
+  },
   // 우리 이모지 — 생성물에 흰 배경이 딸려 오므로 원형으로 잘라 낸다(렌더 주석)
   coupleEmojiImage: { borderRadius: 66, backgroundColor: chat.bubbleTheirs },
 

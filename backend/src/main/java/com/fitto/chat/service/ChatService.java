@@ -644,7 +644,14 @@ public class ChatService {
 
     private String preview(ChatMessage message) {
         return switch (message.getMessageType()) {
-            case IMAGE -> "[이미지]";
+            /*
+             * 사진은 보통 본문이 없어 "[이미지]" 가 최선인데, 캐치마인드 그림 공유처럼
+             * 캡션을 실어 보내는 경우가 있다. 그때 인용 미리보기가 "[이미지]" 로 나오면
+             * 본문이 멀쩡히 있는 메시지가 빈 것처럼 보인다.
+             */
+            case IMAGE -> message.getContent() != null && !message.getContent().isBlank()
+                    ? message.getContent()
+                    : "[이미지]";
             // 이모지 스티커는 이모지 자체가 가장 좋은 미리보기다. 이미지 스티커(StickerImage)는
             // content 가 "LOVE_BEAR" 같은 코드라 그대로 보여주면 안 되고 라벨로 바꿔야 한다.
             case STICKER -> stickerPreview(message.getContent());

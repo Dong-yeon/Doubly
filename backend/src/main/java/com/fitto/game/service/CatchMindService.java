@@ -69,6 +69,15 @@ public class CatchMindService {
      * 남기고 그 뒤는 게임 화면의 "이렇게 찍었어요" 칩에만 쌓인다(그쪽은 원래 전부 보인다).
      */
     private static final int WRONG_GUESS_CARD_LIMIT = 5;
+    /**
+     * 채팅에 남는 그림에 붙는 한 줄.
+     *
+     * <p>사진만 덜렁 올라가면 받는 쪽은 이게 게임인지 그냥 사진인지 모른다. 푸시 알림
+     * ("이게 뭘까? 🎨")은 알림을 끈 사람에게 닿지 않으므로, 채팅 자체에 초대말이 있어야 한다.
+     *
+     * <p>제시어는 당연히 넣지 않는다 — 같은 방에서 둘이 같이 읽는다(§onWrongGuess 주석).
+     */
+    private static final String SHARE_CAPTION = "🎨 캐치마인드예요! 시작해보세요";
 
     private final CatchMindGameRepository gameRepository;
     private final RelationRepository relationRepository;
@@ -317,7 +326,7 @@ public class CatchMindService {
             log.warn("캐치마인드 공유 URL 거절 couple={}", couple.getId());
             return;
         }
-        postCard(drawerId, couple.getId(), MessageType.IMAGE, null, imageUrl, "그림 공유");
+        postCard(drawerId, couple.getId(), MessageType.IMAGE, SHARE_CAPTION, imageUrl, "그림 공유");
     }
 
     /**

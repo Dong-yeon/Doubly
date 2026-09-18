@@ -238,6 +238,8 @@ class CatchMindFlowTest {
         assertThat(card.getMessageType()).isEqualTo(MessageType.IMAGE);
         assertThat(card.getImageUrl()).isEqualTo(ours);
         assertThat(card.getSenderId()).isEqualTo(a);
+        // 사진만 덜렁 올라가면 게임인지 모른다. 초대말은 붙이고 제시어는 넣지 않는다
+        assertThat(card.getContent()).contains("캐치마인드").doesNotContain("우산");
     }
 
     @Test
