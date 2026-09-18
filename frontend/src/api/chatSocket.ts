@@ -15,7 +15,7 @@ import { Client, IMessage, StompSubscription } from '@stomp/stompjs';
 import { STORAGE_KEYS, WS_BASE_URL } from '../constants/config';
 import { storage } from '../utils/storage';
 import { refreshAccessToken } from './client';
-import type { ChatMessage, GameReactionEvent, MessageType } from '../types';
+import type { ChatMessage, GameReactionEvent, MessageType, PuzzleBattleEvent } from '../types';
 
 /** /sub/rooms/{relationId}/pin 페이로드 — 백엔드 ChatPinResponse 와 짝. */
 export interface PinEvent {
@@ -288,6 +288,35 @@ export function subscribeGameReaction(relationId: number, onReaction: (e: GameRe
 
 export function unsubscribeGameReaction(relationId: number) {
   unregister(`/sub/couple/${relationId}/game-reaction`);
+}
+
+/**
+ * 연쇄 퍼즐 대전 수(手) 중계 구독 (/sub/games/{relationId}) — docs/COUPLE_PUZZLE_BATTLE §3-2.
+ *
+ * <p>커플 공용 채널의 "타입만 보내고 REST 로 재조회" 규칙을 쓰지 않는다 — 수마다 재조회하면
+ * 그 왕복이 곧 게임의 지연이다. 채팅처럼 페이로드(결과 판)를 그대로 싣는다. 내가 보낸 것도
+ * 되돌아오므로 화면이 senderId 로 거른다.
+ */
+export function subscribeGames(relationId: number, onEvent: (e: PuzzleBattleEvent) => void) {
+  register(`/sub/games/${relationId}`, jsonHandler(onEvent));
+}
+
+export function unsubscribeGames(relationId: number) {
+  unregister(`/sub/games/${relationId}`);
+}
+
+/**
+ * 수(手) 하나를 흘린다 — 연결이 없으면 <b>그냥 버린다</b>(false). 채팅과 달리 재연결을
+ * 기다리지 않는다: 프레임마다 결과 판 전체가 실리므로 놓친 프레임은 다음 프레임이 덮고,
+ * 상대가 아예 없으면(고스트 대전) 어차피 받을 사람이 없다. 기다리면 게임 루프가 멈춘다.
+ */
+export function publishGameEvent(relationId: number, payload: Omit<PuzzleBattleEvent, 'senderId'>): boolean {
+  if (!client?.connected) return false;
+  client.publish({
+    destination: `/pub/games/${relationId}`,
+    body: JSON.stringify(payload),
+  });
+  return true;
 }
 
 /** 저수준 발행 — 연결이 없으면 false. 화면은 아래 publishEnsuringConnection 을 쓴다. */

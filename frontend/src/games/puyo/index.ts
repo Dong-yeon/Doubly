@@ -5,6 +5,14 @@ export { spawnPiece, pieceCells, fits, movePiece, rotatePiece, canFall, fallOne,
 export { chainScore, garbageFromScore, offsetGarbage, TARGET_POINTS, MAX_GARBAGE_PER_DROP } from './scoring';
 export { seedRng, nextRandom, nextInt } from './rng';
 export {
+  encodeTimeline,
+  decodeTimeline,
+  applyHandicap,
+  ghostSchedule,
+  type TimelineMove,
+  type GhostGarbage,
+} from './battle';
+export {
   createPlayer,
   moveLeft,
   moveRight,

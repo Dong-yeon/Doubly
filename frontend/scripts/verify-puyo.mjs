@@ -357,6 +357,28 @@ console.log('8. 결정론·인코딩');
   eq('생성 직후 자식은 숨은 줄(row 0)', E.pieceCells(hidden)[1][1], HIDDEN_ROWS - 1);
 }
 
+/* ─── 대전 보조 — 기보·핸디캡·고스트 ─── */
+console.log('9. 대전 보조(기보·핸디캡·고스트)');
+{
+  const moves = [
+    { ms: 800, col: 2, rot: 0, axis: 1, child: 2, sent: 0, received: 0 },
+    { ms: 1700, col: 3, rot: 1, axis: 3, child: 3, sent: 2, received: 0 },
+    { ms: 2900, col: 0, rot: 3, axis: 2, child: 1, sent: 0, received: 2 },
+  ];
+  const text = E.encodeTimeline(moves);
+  eq('기보 인코딩 — 서버 Timeline 형식', text, '800,2,0,1,2,0,0;1700,3,1,3,3,2,0;2900,0,3,2,1,0,2');
+  eq('encode → decode 왕복', JSON.stringify(E.decodeTimeline(text)), JSON.stringify(moves));
+  eq('빈 기보', E.decodeTimeline('').length, 0);
+  eq('깨진 수는 건너뛴다', E.decodeTimeline('800,2,0,1,2,0,0;bad;1700,3,1,3,3,2,0').length, 2);
+  eq('소수·음수는 반올림·0 으로', E.encodeTimeline([{ ms: 12.6, col: -1, rot: 0, axis: 1, child: 2, sent: 0, received: 0 }]), '13,0,0,1,2,0,0');
+  eq('고스트 일정은 방해가 나간 수만', JSON.stringify(E.ghostSchedule(text)), JSON.stringify([{ ms: 1700, amount: 2 }]));
+  eq('핸디캡 70%: 10 → 7', E.applyHandicap(10, 70), 7);
+  eq('핸디캡 70%: 1 → 1 (반올림, 통째로 안 사라진다)', E.applyHandicap(1, 70), 1);
+  eq('핸디캡 100%: 그대로', E.applyHandicap(5, 100), 5);
+  eq('핸디캡 값이 이상하면 100% 로', E.applyHandicap(5, 0), 5);
+  eq('0 은 0', E.applyHandicap(0, 70), 0);
+}
+
 rmSync(tmp, { recursive: true, force: true });
 
 console.log(`\n${passes} passed, ${failures} failed`);
