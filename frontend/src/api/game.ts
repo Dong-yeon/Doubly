@@ -1,5 +1,6 @@
 /** 커플 게임 — 협동 스도쿠·오목 API. docs/COUPLE_GAMES_DESIGN_2026-09-09.md 3-4·5절 */
 import { apiClient, unwrap } from './client';
+import type { UploadSignature } from './upload';
 import type {
   ApiResponse,
   CatchMindGame,
@@ -44,9 +45,28 @@ export const catchMindApi = {
     unwrap(
       apiClient.get<ApiResponse<{ candidates: CatchMindWordCandidate[] }>>('/games/catch-mind/words'),
     ).then((r) => r.candidates),
-  /** 그림 제출 = 판 시작. 진행 중인 판이 있으면 409 */
-  start: (word: string, strokes: string) =>
-    unwrap(apiClient.post<ApiResponse<CatchMindGame>>('/games/catch-mind', { word, strokes })),
+  /**
+   * 채팅 공유용 그림 PNG 업로드 서명.
+   *
+   * <p>사진 업로드 한도({@code PHOTO_UPLOAD})를 소비하지 않는 전용 경로다 — 판당 한 장이고
+   * 진행 중인 판은 커플당 하나라 게임 흐름이 이미 상한이다(서버 주석 참고).
+   */
+  uploadSignature: () =>
+    unwrap(apiClient.post<ApiResponse<UploadSignature>>('/games/catch-mind/upload-signature')),
+  /**
+   * 그림 제출 = 판 시작. 진행 중인 판이 있으면 409.
+   *
+   * <p>{@code shareImageUrl} 은 채팅에 남길 그림 PNG 의 URL — <b>선택</b>이다. 렌더·업로드가
+   * 실패하면 빼고 보낸다. 공유는 곁가지이고 그림 제출이 본 기능이다.
+   */
+  start: (word: string, strokes: string, shareImageUrl?: string) =>
+    unwrap(
+      apiClient.post<ApiResponse<CatchMindGame>>('/games/catch-mind', {
+        word,
+        strokes,
+        shareImageUrl,
+      }),
+    ),
   /** 정답 시도 — 횟수 제한 없음 */
   guess: (id: number, answer: string) =>
     unwrap(apiClient.post<ApiResponse<CatchMindGuessResult>>(`/games/catch-mind/${id}/guess`, { answer })),

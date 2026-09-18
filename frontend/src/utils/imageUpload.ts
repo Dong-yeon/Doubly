@@ -238,6 +238,30 @@ export async function uploadImageWithSignature(uri: string, sig: UploadSignature
 }
 
 /**
+ * base64 data URI 를 업로드 → secure_url. 캐치마인드 그림 공유가 쓴다.
+ *
+ * <p><b>파일 경로가 없는 이미지 전용 경로다.</b> 위 {@link uploadImageWithSignature} 는
+ * {@code expo-file-system} 의 {@code File} 로 파트를 만들어 <b>실제 파일 URI</b>가 있어야
+ * 하는데, SVG 를 렌더한 PNG 는 메모리의 base64 로만 존재한다. Cloudinary 는 {@code file}
+ * 파라미터로 data URI 문자열을 그대로 받으므로 임시 파일을 만들 필요가 없다.
+ *
+ * <p>폴더는 서명에 박혀 있어 클라이언트가 바꿀 수 없다 — 서버가 URL 을 폴더로 검증한다
+ * (CatchMindService.isShareUrl). 그래서 unsigned 폴백이 없다.
+ */
+export async function uploadDataUriWithSignature(
+  dataUri: string,
+  sig: UploadSignature,
+): Promise<string> {
+  const form = new FormData();
+  form.append('file', dataUri);
+  form.append('api_key', sig.apiKey);
+  form.append('timestamp', String(sig.timestamp));
+  form.append('folder', sig.folder);
+  form.append('signature', sig.signature);
+  return postToCloudinary(sig.cloudName, form);
+}
+
+/**
  * Cloudinary 업로드 → secure_url.
  *
  * <p>백엔드 서명(signed)을 우선 사용하고, <b>서명 기능이 꺼져 있을 때만</b>

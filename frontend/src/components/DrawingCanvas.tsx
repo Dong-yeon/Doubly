@@ -9,9 +9,9 @@
  * 크기가 달라도 같은 그림이 되어야 하기 때문이다 — 저장값이 px 이면 태블릿에서 그린 그림이
  * 폰에서 잘린다.
  */
-import React, { useCallback, useEffect, useImperativeHandle, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { LayoutChangeEvent, PanResponder, Pressable, Text, View } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Path, Rect } from 'react-native-svg';
 import { MaterialCommunityIcons } from './Icon';
 import { haptics } from '../utils/haptics';
 import { fontSize, radius, spacing } from '../constants/theme';
@@ -33,6 +33,8 @@ const INK_WIDTHS = [6, 14, 28];
 const MAX_STROKES = 120;
 /** 이만큼 안 움직이면 점을 버린다 — 손떨림까지 저장하면 용량만 커지고 그림은 그대로다 */
 const MIN_STEP = 6;
+/** PNG 변환 대기 상한 — 넘으면 공유를 포기한다(그림 전송 자체는 막지 않는다) */
+const TO_PNG_TIMEOUT_MS = 4000;
 
 interface Stroke {
   color: number;
@@ -44,6 +46,14 @@ interface Stroke {
 export interface DrawingCanvasHandle {
   /** 서버 형식 문자열 — 빈 그림이면 null */
   serialize: () => string | null;
+  /**
+   * 지금 그림을 PNG data URI 로 — 채팅 공유용. 못 뽑으면 null.
+   *
+   * <p>새 의존성 없이 되는 길이다({@code react-native-view-shot} 불필요) —
+   * {@code react-native-svg} 의 {@code Svg.toDataURL} 이 Fabric 에서도 지원된다.
+   * 실패를 예외로 올리지 않고 null 로 돌려주는 이유는 호출부 주석에 있다.
+   */
+  toPng: () => Promise<string | null>;
 }
 
 /** 획 목록 → 서버 형식 "색,굵기,x1,y1,...;..." */
@@ -149,9 +159,35 @@ export const DrawingCanvas = React.forwardRef<DrawingCanvasHandle, DrawingCanvas
     }));
     const { strokes, draft } = board;
 
+    const svgRef = useRef<Svg>(null);
+
     useImperativeHandle(
       ref,
-      () => ({ serialize: () => serializeStrokes(draft ? [...strokes, draft] : strokes) }),
+      () => ({
+        serialize: () => serializeStrokes(draft ? [...strokes, draft] : strokes),
+        toPng: () =>
+          new Promise<string | null>((resolve) => {
+            const svg = svgRef.current;
+            if (!svg?.toDataURL) {
+              resolve(null);
+              return;
+            }
+            /*
+             * 콜백이 안 오는 경우(네이티브 뷰가 그 사이 사라짐)에 영원히 매달리지 않게
+             * 타임아웃을 둔다 — 이 프로미스를 기다리는 건 "그림 보내기" 버튼이다.
+             */
+            const timer = setTimeout(() => resolve(null), TO_PNG_TIMEOUT_MS);
+            try {
+              svg.toDataURL((base64) => {
+                clearTimeout(timer);
+                resolve(base64 ? `data:image/png;base64,${base64}` : null);
+              });
+            } catch {
+              clearTimeout(timer);
+              resolve(null);
+            }
+          }),
+      }),
       [strokes, draft],
     );
 
@@ -240,7 +276,13 @@ export const DrawingCanvas = React.forwardRef<DrawingCanvasHandle, DrawingCanvas
       <View>
         <View style={styles.surface} onLayout={onLayout} {...panResponder.panHandlers}>
           {size > 0 ? (
-            <Svg width={size} height={size} pointerEvents="none">
+            <Svg ref={svgRef} width={size} height={size} pointerEvents="none">
+              {/*
+                * 흰 배경을 SVG 안에 둔다. 종이색은 바깥 View 가 칠하고 있어서 화면상 차이는
+                * 없지만, toDataURL 은 <b>SVG 만</b> 그린다 — 이 사각형이 없으면 배경이 투명한
+                * PNG 가 나와서 어두운 채팅 테마에서 검은 선이 보이지 않는다.
+                */}
+              <Rect x={0} y={0} width={size} height={size} fill="#FFFFFF" />
               {visible.map((s, i) => (
                 <Path
                   key={i}

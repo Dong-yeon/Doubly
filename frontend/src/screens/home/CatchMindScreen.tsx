@@ -27,6 +27,7 @@ import {
   type DrawingCanvasHandle,
 } from '../../components/DrawingCanvas';
 import { catchMindApi } from '../../api/game';
+import { uploadDataUriWithSignature } from '../../utils/imageUpload';
 import { connectSocket, subscribeCouple, unsubscribeCouple } from '../../api/chatSocket';
 import { useRelationStore } from '../../store/relationStore';
 import { getErrorMessage } from '../../utils/error';
@@ -144,6 +145,26 @@ export function CatchMindScreen(_: Props) {
     }, [game, loading, candidates.length, customWord, loadWords]),
   );
 
+  /**
+   * 그림을 PNG 로 렌더해 올리고 URL 을 돌려준다 — 채팅에 사진으로 남기기 위한 것.
+   *
+   * <p><b>어떤 실패도 그림 전송을 막지 않는다.</b> 실패하면 undefined 를 돌려주고 서버는
+   * 공유만 생략한다. 여기서 예외를 올리면 채팅 공유 하나 때문에 게임이 안 되는데, 그건
+   * 본 기능과 곁가지의 우선순위를 뒤집는 것이다. 웹은 네이티브 렌더가 없어 그대로 지나간다.
+   *
+   * <p>토스트도 띄우지 않는다 — 사용자가 요청한 건 "그림 보내기"이고 그건 성공한다.
+   */
+  const shareToChat = async (): Promise<string | undefined> => {
+    try {
+      const dataUri = await canvasRef.current?.toPng();
+      if (!dataUri) return undefined;
+      const sig = await catchMindApi.uploadSignature();
+      return await uploadDataUriWithSignature(dataUri, sig);
+    } catch {
+      return undefined;
+    }
+  };
+
   const send = async () => {
     const trimmed = word.trim();
     if (!trimmed) {
@@ -157,7 +178,9 @@ export function CatchMindScreen(_: Props) {
     }
     setSending(true);
     try {
-      const sent = await catchMindApi.start(trimmed, strokes);
+      // 캔버스가 아직 마운트된 지금 뽑아야 한다 — setGame 이 돌면 언마운트된다
+      const shareImageUrl = await shareToChat();
+      const sent = await catchMindApi.start(trimmed, strokes, shareImageUrl);
       setGame(sent);
       setJustFinished(null);
       setWord('');
