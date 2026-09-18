@@ -221,6 +221,14 @@ export function MiniGamesScreen({ navigation }: Props) {
           onPress={() => navigation.navigate('CatchMind')}
         />
 
+        {/* 연쇄 퍼즐 — 아직 혼자 하는 판. 대전(방해 전송)은 docs/COUPLE_PUZZLE_BATTLE 단계 3·4 */}
+        <GameCard
+          icon="puzzle"
+          title="연쇄 퍼즐"
+          subtitle="같은 색 4개를 붙여 연쇄를 만들어요 · 지금은 혼자 연습"
+          onPress={() => navigation.navigate('Puyo')}
+        />
+
         <Text style={styles.footnote}>
           둘 다 승패보다 “같이 한 판”이 남는 게임이에요. 접은 판은 기록에 남지 않아요.
         </Text>
