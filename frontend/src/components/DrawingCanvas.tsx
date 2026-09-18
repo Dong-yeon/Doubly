@@ -106,6 +106,18 @@ export function DrawingView({ strokes, size }: { strokes: string | null | undefi
 interface DrawingCanvasProps {
   onChange?: (empty: boolean) => void;
   /**
+   * 마운트 시 되살릴 획 — 서버 형식 문자열({@link serializeStrokes} 출력).
+   *
+   * <p>미전송 그림은 이 컴포넌트 안의 state 뿐이라 언마운트되면 복구 경로가 없다. 캐치마인드는
+   * 상대가 먼저 그림을 보내면 화면이 맞히기로 바뀌면서 캔버스가 언마운트되는데, 그때 그리던
+   * 그림이 통째로 날아갔다. 부모가 떠날 때 {@code serialize()} 로 받아 두고 돌아올 때 이걸로
+   * 넘겨준다.
+   *
+   * <p><b>마운트 시점에만 읽는다</b>(초기값). 그리는 중에 값이 바뀌어도 화면을 덮지 않는다 —
+   * 되살리기가 사용자의 획을 지우는 건 고치려던 문제를 반대 방향으로 되풀이하는 것이다.
+   */
+  initialStrokes?: string | null;
+  /**
    * 획을 긋는 동안 {@code true} — <b>부모가 세로 스크롤을 잠그는 데 쓴다</b>.
    *
    * <p>아래 PanResponder 의 {@code onShouldBlockNativeResponder} 는 안드로이드 전용이고,
@@ -120,7 +132,7 @@ interface DrawingCanvasProps {
 }
 
 export const DrawingCanvas = React.forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
-  function DrawingCanvas({ onChange, onDrawingChange }, ref) {
+  function DrawingCanvas({ onChange, onDrawingChange, initialStrokes }, ref) {
     const [size, setSize] = useState(0);
     const [color, setColor] = useState(0);
     const [width, setWidth] = useState(1);
@@ -131,10 +143,10 @@ export const DrawingCanvas = React.forwardRef<DrawingCanvasHandle, DrawingCanvas
      * 핸들러가 최신 값을 보려면 ref 를 렌더 중에 읽어야 한다. 하나로 묶으면 전부 함수형
      * 갱신으로 끝나서 클로저가 낡을 일이 없다.
      */
-    const [board, setBoard] = useState<{ strokes: Stroke[]; draft: Stroke | null }>({
-      strokes: [],
+    const [board, setBoard] = useState<{ strokes: Stroke[]; draft: Stroke | null }>(() => ({
+      strokes: parseStrokes(initialStrokes),
       draft: null,
-    });
+    }));
     const { strokes, draft } = board;
 
     useImperativeHandle(

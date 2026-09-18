@@ -58,6 +58,13 @@ export function CatchMindScreen(_: Props) {
    * iOS 에서 위아래로 긋는 획마다 화면이 같이 내려간다(DrawingCanvas.onDrawingChange 주석).
    */
   const [drawing, setDrawing] = useState(false);
+  /*
+   * 아직 못 보낸 그림 — 상대가 먼저 그림을 보내면 화면이 맞히기로 바뀌면서 캔버스가
+   * 언마운트되고, 그리던 그림이 통째로 날아갔다. 떠나기 직전에 여기 담아 두고 다시 그리기
+   * 화면으로 돌아올 때 캔버스에 되살린다. 판이 하나뿐이라 지금 보낼 수는 없지만, 그렇다고
+   * 말없이 지워도 되는 건 아니다.
+   */
+  const [rescued, setRescued] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<CatchMindWordCandidate[]>([]);
   const [word, setWord] = useState('');
   const [customWord, setCustomWord] = useState(false);
@@ -73,6 +80,22 @@ export function CatchMindScreen(_: Props) {
     setLoadError(false);
     try {
       const [g, h] = await Promise.all([catchMindApi.current(), catchMindApi.history()]);
+      /*
+       * 상대가 먼저 보낸 판이 들어오는 순간 — setGame 이 캔버스를 언마운트시키기 전에
+       * 그리던 그림을 꺼내 둔다. 내가 방금 보낸 판(DRAWER)이면 캔버스는 이미 비었고,
+       * 맞히기 화면이면 canvasRef 가 null 이라 둘 다 자동으로 걸러진다.
+       */
+      if (g?.role === 'GUESSER' && canvasRef.current) {
+        /*
+         * 비어 있으면 null 로 <b>덮어써야</b> 한다. 담긴 값만 갱신하면, 되살린 그림을
+         * 사용자가 지운 뒤 다음 판에서 그게 다시 살아난다.
+         */
+        const pending = canvasRef.current.serialize();
+        setRescued(pending);
+        if (pending) {
+          toast.info('그리던 그림은 저장했어요. 이 판이 끝나면 이어서 그릴 수 있어요.');
+        }
+      }
       setGame(g);
       setHistory(h);
       if (g) setJustFinished(null);
@@ -141,6 +164,7 @@ export function CatchMindScreen(_: Props) {
       setCustomWord(false);
       setCandidates([]);
       setEmpty(true);
+      setRescued(null);
       haptics.success();
     } catch (e) {
       toast.error(getErrorMessage(e, '그림을 보내지 못했어요.'));
@@ -286,7 +310,12 @@ export function CatchMindScreen(_: Props) {
         )}
       </View>
 
-      <DrawingCanvas ref={canvasRef} onChange={setEmpty} onDrawingChange={setDrawing} />
+      <DrawingCanvas
+        ref={canvasRef}
+        onChange={setEmpty}
+        onDrawingChange={setDrawing}
+        initialStrokes={rescued}
+      />
       <Button
         title="이 그림 보내기"
         onPress={send}
