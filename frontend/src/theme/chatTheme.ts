@@ -18,7 +18,12 @@
  * ── 대비 검증 (scripts/verify-chat-theme-contrast.mjs 로 재현) ─────────────
  * 10종 × 라이트/다크 모두 아래 기준을 통과한다.
  *   내 말풍선 위 흰 글자 ≥ 4.5 · 상대 말풍선 글자 ≥ 4.5 · 배경 위 meta ≥ 4.5
- *   상대 말풍선 vs 배경 ≥ 1.10 · 구분선 vs 배경 ≥ 1.18
+ *   상대 말풍선 vs 배경 ≥ 1.10 · 구분선 vs 배경 ≥ 1.18 · 강조 행 vs 배경 ≥ 1.20
+ *
+ * <p><b>강조 행(highlight) 은 2026-09-18 까지 검증 대상이 아니었다</b> — 그래서 20벌 중
+ * 절반이 기준 미달이었고, 기본/다크는 1.02 로 <b>사실상 보이지 않았다</b>(게다가 혼자만
+ * 배경보다 어두운 방향이었다). 검색에서 골라 온 메시지를 짚어 주는 것이 이 색의 유일한
+ * 일이라, 안 보이면 기능이 없는 것과 같다. 열두 벌의 값을 올리고 규칙을 추가했다.
  *
  * <p>앱 기본 팔레트를 그대로 옮긴 'default' 는 두 군데가 기준 미달이라
  * <b>채팅에서만</b> 값을 고쳤다(앱 전체 primary/textTertiary 는 안 건드린다).
@@ -91,7 +96,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       bubbleTheirsText: '#1A1D1A',
       meta: '#6A706A',
       dividerLine: '#E1E3E0',
-      highlight: '#E9F2EA',
+      highlight: '#D8E7DB',
     },
     dark: {
       background: '#1E201C',
@@ -101,7 +106,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       bubbleTheirsText: '#ECEEEA',
       meta: '#868C84',
       dividerLine: '#3A3D36',
-      highlight: '#12211A',
+      highlight: '#2A3A2E',
     },
   },
   {
@@ -115,7 +120,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       bubbleTheirsText: '#1A1D1A',
       meta: '#7A5C62',
       dividerLine: '#F0D0D8',
-      highlight: '#F8DDE4',
+      highlight: '#F4D2DC',
     },
     dark: {
       background: '#221A1D',
@@ -139,7 +144,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       bubbleTheirsText: '#1A1D1A',
       meta: '#556B80',
       dividerLine: '#C9DCEF',
-      highlight: '#DCEAF8',
+      highlight: '#C8DCF2',
     },
     dark: {
       background: '#171B21',
@@ -163,7 +168,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       bubbleTheirsText: '#1A1D1A',
       meta: '#67607F',
       dividerLine: '#DAD1F0',
-      highlight: '#E6DEF7',
+      highlight: '#DED3F3',
     },
     dark: {
       background: '#1C1A23',
@@ -173,7 +178,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       bubbleTheirsText: '#ECEEEA',
       meta: '#958DA8',
       dividerLine: '#383345',
-      highlight: '#2C2540',
+      highlight: '#302847',
     },
   },
   {
@@ -187,7 +192,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       bubbleTheirsText: '#1A1D1A',
       meta: '#7C6550',
       dividerLine: '#EFD9BE',
-      highlight: '#F8E3CC',
+      highlight: '#F2D4B4',
     },
     dark: {
       background: '#221D18',
@@ -211,7 +216,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       bubbleTheirsText: '#1A1D1A',
       meta: '#556B63',
       dividerLine: '#C4DED2',
-      highlight: '#D6EBE1',
+      highlight: '#C2DFD1',
     },
     dark: {
       background: '#171F1C',
@@ -282,7 +287,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       bubbleTheirsText: '#1A1D1A',
       meta: '#94A898',
       dividerLine: '#23332A',
-      highlight: '#1F2E25',
+      highlight: '#213228',
     },
   },
   {
@@ -306,7 +311,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       bubbleTheirsText: '#1A1D2A',
       meta: '#97A2BE',
       dividerLine: '#232C47',
-      highlight: '#1E2740',
+      highlight: '#212C49',
     },
   },
   {
@@ -320,7 +325,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       bubbleTheirsText: '#201A22',
       meta: '#B7A4BB',
       dividerLine: '#3E2E44',
-      highlight: '#3A2A40',
+      highlight: '#3E2D45',
     },
     dark: {
       background: '#1D1420',
@@ -330,7 +335,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       bubbleTheirsText: '#201A22',
       meta: '#A992AD',
       dividerLine: '#332438',
-      highlight: '#2C1F31',
+      highlight: '#33243B',
     },
   },
 ];

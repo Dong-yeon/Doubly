@@ -24,6 +24,13 @@ const RULES = [
   { name: '배경 위 시간·날짜', pick: (p) => [p.background, p.meta], min: 4.5 },
   { name: '상대 말풍선 vs 배경', pick: (p) => [p.background, p.bubbleTheirs], min: 1.1 },
   { name: '구분선 vs 배경', pick: (p) => [p.background, p.dividerLine], min: 1.18 },
+  /*
+   * 검색에서 골라 온 메시지를 짚어 주는 행 배경. 2026-09-18 에 추가했다 — 그전까지
+   * 검사하지 않아 20벌 중 절반이 미달이었고 기본/다크는 1.02 였다. 구분선(1.18)보다
+   * 조금 높게 잡는다: 줄 하나가 아니라 행 전체를 칠하는 색이라 흐리면 "왜 여기가
+   * 밝지" 로도 안 읽힌다.
+   */
+  { name: '강조 행 vs 배경', pick: (p) => [p.background, p.highlight], min: 1.2 },
 ];
 
 /*
