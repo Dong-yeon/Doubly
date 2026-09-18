@@ -53,6 +53,11 @@ export function CatchMindScreen(_: Props) {
 
   // 그리기
   const canvasRef = useRef<DrawingCanvasHandle>(null);
+  /*
+   * 획을 긋는 동안 목록 스크롤을 잠근다 — 캔버스가 FlatList 헤더 안에 있어서, 잠그지 않으면
+   * iOS 에서 위아래로 긋는 획마다 화면이 같이 내려간다(DrawingCanvas.onDrawingChange 주석).
+   */
+  const [drawing, setDrawing] = useState(false);
   const [candidates, setCandidates] = useState<CatchMindWordCandidate[]>([]);
   const [word, setWord] = useState('');
   const [customWord, setCustomWord] = useState(false);
@@ -272,7 +277,7 @@ export function CatchMindScreen(_: Props) {
         )}
       </View>
 
-      <DrawingCanvas ref={canvasRef} onChange={setEmpty} />
+      <DrawingCanvas ref={canvasRef} onChange={setEmpty} onDrawingChange={setDrawing} />
       <Button
         title="이 그림 보내기"
         onPress={send}
@@ -417,6 +422,7 @@ export function CatchMindScreen(_: Props) {
         data={history}
         keyExtractor={(g) => String(g.id)}
         contentContainerStyle={styles.list}
+        scrollEnabled={!drawing}
         refreshing={loading}
         onRefresh={() => load()}
         ListHeaderComponent={header}

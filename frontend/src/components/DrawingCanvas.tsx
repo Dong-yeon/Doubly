@@ -103,8 +103,24 @@ export function DrawingView({ strokes, size }: { strokes: string | null | undefi
   );
 }
 
-export const DrawingCanvas = React.forwardRef<DrawingCanvasHandle, { onChange?: (empty: boolean) => void }>(
-  function DrawingCanvas({ onChange }, ref) {
+interface DrawingCanvasProps {
+  onChange?: (empty: boolean) => void;
+  /**
+   * 획을 긋는 동안 {@code true} — <b>부모가 세로 스크롤을 잠그는 데 쓴다</b>.
+   *
+   * <p>아래 PanResponder 의 {@code onShouldBlockNativeResponder} 는 안드로이드 전용이고,
+   * iOS 의 {@code UIScrollView.panGestureRecognizer} 는 JS 리스폰더 시스템과 경쟁하지 않는다
+   * — 그래서 iOS 에서는 그리는 동안 화면이 같이 내려갔다. RNGH 로 막는 길도 없다:
+   * RNGH 의 {@code FlatList} 는 ref 를 내부 {@code RNFlatList} 에 넘기고 제스처 래퍼는
+   * {@code renderScrollComponent} 안에만 있어서({@code GestureComponents.js}),
+   * {@code blocksExternalGesture(ref)} 가 {@code handlerTag} 를 못 찾고 조용히 무시된다.
+   * 남은 방법은 부모가 {@code scrollEnabled} 를 끄는 것뿐이다.
+   */
+  onDrawingChange?: (drawing: boolean) => void;
+}
+
+export const DrawingCanvas = React.forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
+  function DrawingCanvas({ onChange, onDrawingChange }, ref) {
     const [size, setSize] = useState(0);
     const [color, setColor] = useState(0);
     const [width, setWidth] = useState(1);
@@ -153,6 +169,12 @@ export const DrawingCanvas = React.forwardRef<DrawingCanvasHandle, { onChange?: 
           onShouldBlockNativeResponder: () => true,
 
           onPanResponderGrant: (e) => {
+            /*
+             * 손이 닿는 순간(움직이기 전) 부모 스크롤을 잠근다 — iOS 스크롤은 몇 px 움직인
+             * 뒤에야 시작하므로 그 사이에 prop 이 내려간다. 늦더라도 시작된 스크롤이 즉시
+             * 멈추므로 최악이 "몇 px 흔들림"이다.
+             */
+            onDrawingChange?.(true);
             const point = [toCoord(e.nativeEvent.locationX), toCoord(e.nativeEvent.locationY)];
             setBoard((b) =>
               b.strokes.length >= MAX_STROKES ? b : { ...b, draft: { color, width, points: point } },
@@ -171,12 +193,20 @@ export const DrawingCanvas = React.forwardRef<DrawingCanvasHandle, { onChange?: 
               return { ...b, draft: { ...b.draft, points: [...points, x, y] } };
             });
           },
-          onPanResponderRelease: () =>
-            setBoard((b) =>
-              b.draft ? { strokes: [...b.strokes, b.draft], draft: null } : b,
-            ),
+          onPanResponderRelease: () => {
+            onDrawingChange?.(false);
+            setBoard((b) => (b.draft ? { strokes: [...b.strokes, b.draft], draft: null } : b));
+          },
+          /*
+           * terminationRequest 를 거절해도 네이티브가 강제로 빼앗는 경로가 남아 있다.
+           * 여기서 풀지 않으면 스크롤이 영구히 잠긴 화면이 된다 — 획 하나보다 큰 사고다.
+           */
+          onPanResponderTerminate: () => {
+            onDrawingChange?.(false);
+            setBoard((b) => (b.draft ? { strokes: [...b.strokes, b.draft], draft: null } : b));
+          },
         }),
-      [toCoord, color, width],
+      [toCoord, color, width, onDrawingChange],
     );
 
     const undo = () => {
