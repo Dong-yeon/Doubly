@@ -369,12 +369,26 @@ public class ChatService {
      */
     @Transactional
     public ChatMessageResponse postSystemCard(Long senderId, Long relationId, MessageType type, String content) {
+        return postSystemCard(senderId, relationId, type, content, null);
+    }
+
+    /**
+     * 이미지를 함께 싣는 시스템 카드 — 캐치마인드 그림 공유가 쓴다.
+     *
+     * <p>사진 한도({@code PHOTO_UPLOAD})를 여기서 세지 않는다. 한도는 <b>업로드 서명 발급
+     * 시점</b>에 소비하는 것이 이 코드베이스의 규칙이고(UploadController·ChatController),
+     * 캐치마인드는 그 서명을 한도 없이 내준다(CatchMindService.shareUploadSignature).
+     * 여기서 또 세면 같은 사진을 두 번 세게 된다.
+     */
+    public ChatMessageResponse postSystemCard(Long senderId, Long relationId, MessageType type,
+                                              String content, String imageUrl) {
         requireMember(senderId, relationId);
         ChatMessage message = ChatMessage.builder()
                 .relationId(relationId)
                 .senderId(senderId)
                 .messageType(type)
                 .content(content)
+                .imageUrl(imageUrl)
                 .build();
         chatMessageRepository.save(message);
         return ChatMessageResponse.from(message);

@@ -2,6 +2,7 @@ package com.fitto.game.controller;
 
 import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
+import com.fitto.common.upload.UploadSignatureResponse;
 import com.fitto.game.dto.CatchMindResponse;
 import com.fitto.game.dto.CatchMindWordsResponse;
 import com.fitto.game.dto.GuessRequest;
@@ -43,6 +44,15 @@ public class CatchMindController {
     @GetMapping("/words")
     public ApiResponse<CatchMindWordsResponse> words(@AuthenticationPrincipal AuthUser user) {
         return ApiResponse.success(catchMindService.words(user.id()));
+    }
+
+    /**
+     * 채팅 공유용 그림 PNG 업로드 서명 — 사진 한도를 소비하지 않는다
+     * (이유는 {@code CatchMindService.shareUploadSignature} 주석).
+     */
+    @PostMapping("/upload-signature")
+    public ApiResponse<UploadSignatureResponse> uploadSignature(@AuthenticationPrincipal AuthUser user) {
+        return ApiResponse.success(catchMindService.shareUploadSignature(user.id()));
     }
 
     /** 그림 제출 = 판 시작 */

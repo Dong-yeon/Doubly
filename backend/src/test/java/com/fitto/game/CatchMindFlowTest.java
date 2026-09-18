@@ -21,6 +21,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -59,7 +60,7 @@ class CatchMindFlowTest {
         connectCouple(a, b);
 
         assertThat(catchMindService.current(a)).isNull();
-        CatchMindResponse drawn = catchMindService.start(a, new StartCatchMindRequest("고양이", DRAWING));
+        CatchMindResponse drawn = catchMindService.start(a, new StartCatchMindRequest("고양이", DRAWING, null));
 
         assertThat(drawn.role()).isEqualTo("DRAWER");
         assertThat(drawn.word()).isEqualTo("고양이");           // 그린 사람은 당연히 안다
@@ -78,7 +79,7 @@ class CatchMindFlowTest {
         Long a = register("sa");
         Long b = register("sb");
         Long relationId = connectCouple(a, b);
-        CatchMindResponse game = catchMindService.start(a, new StartCatchMindRequest("떡볶이", DRAWING));
+        CatchMindResponse game = catchMindService.start(a, new StartCatchMindRequest("떡볶이", DRAWING, null));
 
         GuessResultResponse wrong = catchMindService.guess(b, game.id(), "김밥");
         assertThat(wrong.correct()).isFalse();
@@ -106,7 +107,7 @@ class CatchMindFlowTest {
         Long a = register("da");
         Long b = register("db");
         connectCouple(a, b);
-        CatchMindResponse game = catchMindService.start(a, new StartCatchMindRequest("우산", DRAWING));
+        CatchMindResponse game = catchMindService.start(a, new StartCatchMindRequest("우산", DRAWING, null));
 
         assertThatThrownBy(() -> catchMindService.guess(a, game.id(), "우산"))
                 .isInstanceOf(BusinessException.class)
@@ -121,7 +122,7 @@ class CatchMindFlowTest {
         Long a = register("ha");
         Long b = register("hb");
         connectCouple(a, b);
-        CatchMindResponse game = catchMindService.start(a, new StartCatchMindRequest("눈사람", DRAWING));
+        CatchMindResponse game = catchMindService.start(a, new StartCatchMindRequest("눈사람", DRAWING, null));
 
         assertThat(catchMindService.current(b).hint()).isNull();
         CatchMindResponse opened = catchMindService.revealHint(b, game.id());
@@ -136,13 +137,13 @@ class CatchMindFlowTest {
         Long a = register("qa");
         Long b = register("qb");
         connectCouple(a, b);
-        catchMindService.start(a, new StartCatchMindRequest("시계", DRAWING));
+        catchMindService.start(a, new StartCatchMindRequest("시계", DRAWING, null));
 
         // 스도쿠·오목과 달리 "그 판을 돌려주지" 않는다 — 방금 그린 그림이 사라진 것처럼 보인다
-        assertThatThrownBy(() -> catchMindService.start(a, new StartCatchMindRequest("가위", DRAWING)))
+        assertThatThrownBy(() -> catchMindService.start(a, new StartCatchMindRequest("가위", DRAWING, null)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.GAME_ALREADY_DRAWING);
-        assertThatThrownBy(() -> catchMindService.start(b, new StartCatchMindRequest("가위", DRAWING)))
+        assertThatThrownBy(() -> catchMindService.start(b, new StartCatchMindRequest("가위", DRAWING, null)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.GAME_ALREADY_DRAWING);
     }
@@ -153,7 +154,7 @@ class CatchMindFlowTest {
         Long b = register("ib");
         connectCouple(a, b);
 
-        assertThatThrownBy(() -> catchMindService.start(a, new StartCatchMindRequest("우산", "0,1,10")))
+        assertThatThrownBy(() -> catchMindService.start(a, new StartCatchMindRequest("우산", "0,1,10", null)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.GAME_DRAWING_INVALID);
         assertThat(catchMindService.current(a)).isNull();
@@ -164,14 +165,14 @@ class CatchMindFlowTest {
         Long a = register("ga");
         Long b = register("gb");
         connectCouple(a, b);
-        CatchMindResponse first = catchMindService.start(a, new StartCatchMindRequest("바다", DRAWING));
+        CatchMindResponse first = catchMindService.start(a, new StartCatchMindRequest("바다", DRAWING, null));
 
         catchMindService.giveUp(b, first.id());
         catchMindService.giveUp(a, first.id());                 // 둘이 동시에 눌러도 오류 없음
         assertThat(catchMindService.current(a)).isNull();
         assertThat(catchMindService.history(a)).isEmpty();
 
-        CatchMindResponse second = catchMindService.start(b, new StartCatchMindRequest("산", DRAWING));
+        CatchMindResponse second = catchMindService.start(b, new StartCatchMindRequest("산", DRAWING, null));
         assertThat(second.id()).isNotEqualTo(first.id());
         assertThat(second.role()).isEqualTo("DRAWER");
     }
@@ -181,7 +182,7 @@ class CatchMindFlowTest {
         Long a = register("ra");
         Long b = register("rb");
         connectCouple(a, b);
-        CatchMindResponse game = catchMindService.start(a, new StartCatchMindRequest("기린", DRAWING));
+        CatchMindResponse game = catchMindService.start(a, new StartCatchMindRequest("기린", DRAWING, null));
 
         catchMindService.guess(b, game.id(), "사슴");
         catchMindService.guess(b, game.id(), "말");
@@ -191,13 +192,89 @@ class CatchMindFlowTest {
         assertThat(last.game().guessCount()).isEqualTo(3);                     // 횟수는 그대로 센다
     }
 
+    // ── 채팅 공유 ────────────────────────────────────────────────────────
+
+    @Test
+    void 틀린_시도가_채팅에_남고_제시어는_새지_않는다() {
+        Long a = register("wca");
+        Long b = register("wcb");
+        Long relationId = connectCouple(a, b);
+        CatchMindResponse game = catchMindService.start(a, new StartCatchMindRequest("떡볶이", DRAWING, null));
+
+        catchMindService.guess(b, game.id(), "김밥");
+
+        ChatMessage card = chatMessageRepository.findTopByRelationIdOrderByIdDesc(relationId).orElseThrow();
+        assertThat(card.getMessageType()).isEqualTo(MessageType.GAME_CARD);
+        // 그린 사람과 맞히는 사람이 같은 방에서 읽는다 — 정답이 새면 게임이 그 자리에서 끝난다
+        assertThat(card.getContent()).contains("김밥").doesNotContain("떡볶이");
+    }
+
+    @Test
+    void 틀린_시도_카드는_상한을_넘기면_더_안_남는다() {
+        Long a = register("wla");
+        Long b = register("wlb");
+        Long relationId = connectCouple(a, b);
+        CatchMindResponse game = catchMindService.start(a, new StartCatchMindRequest("고래", DRAWING, null));
+
+        // 시도 횟수에는 제한이 없으므로(설계), 카드만 앞쪽 5번으로 끊는다
+        for (String wrong : List.of("상어", "돌고래", "물개", "바다", "물고기", "참치")) {
+            catchMindService.guess(b, game.id(), wrong);
+        }
+
+        ChatMessage last = chatMessageRepository.findTopByRelationIdOrderByIdDesc(relationId).orElseThrow();
+        assertThat(last.getContent()).contains("물고기").doesNotContain("참치");
+    }
+
+    @Test
+    void 우리_폴더의_공유_URL_은_채팅에_사진으로_남는다() {
+        Long a = register("sha");
+        Long b = register("shb");
+        Long relationId = connectCouple(a, b);
+        String ours = "https://res.cloudinary.com/demo/image/upload/v1/fitto/catch-mind/abc.png";
+
+        catchMindService.start(a, new StartCatchMindRequest("우산", DRAWING, ours));
+
+        ChatMessage card = chatMessageRepository.findTopByRelationIdOrderByIdDesc(relationId).orElseThrow();
+        assertThat(card.getMessageType()).isEqualTo(MessageType.IMAGE);
+        assertThat(card.getImageUrl()).isEqualTo(ours);
+        assertThat(card.getSenderId()).isEqualTo(a);
+    }
+
+    @Test
+    void 폴더_밖_공유_URL_은_채팅에_실리지_않는다() {
+        Long a = register("soa");
+        Long b = register("sob");
+        Long relationId = connectCouple(a, b);
+        // 우리가 서명해 준 폴더가 아니다 — 임의 URL 을 말풍선에 박는 경로가 된다
+        String outside = "https://res.cloudinary.com/demo/image/upload/v1/fitto/other/abc.png";
+
+        CatchMindResponse game = catchMindService.start(a, new StartCatchMindRequest("우산", DRAWING, outside));
+
+        assertThat(game.id()).isNotNull();   // 판은 정상으로 선다 — 공유만 생략된다
+        assertThat(chatMessageRepository.findTopByRelationIdOrderByIdDesc(relationId)
+                .map(ChatMessage::getMessageType)).isNotPresent();
+    }
+
+    @Test
+    void 상위_경로가_섞인_공유_URL_은_거절된다() {
+        Long a = register("spa");
+        Long b = register("spb");
+        Long relationId = connectCouple(a, b);
+        String traversal = "https://res.cloudinary.com/demo/image/upload/v1/fitto/catch-mind/../other/abc.png";
+
+        catchMindService.start(a, new StartCatchMindRequest("우산", DRAWING, traversal));
+
+        assertThat(chatMessageRepository.findTopByRelationIdOrderByIdDesc(relationId)
+                .map(ChatMessage::getMessageType)).isNotPresent();
+    }
+
     @Test
     @Transactional
     void 관계_기록_삭제에_캐치마인드_판이_포함된다() {
         Long a = register("pa");
         Long b = register("pb");
         Long relationId = connectCouple(a, b);
-        CatchMindResponse game = catchMindService.start(a, new StartCatchMindRequest("우산", DRAWING));
+        CatchMindResponse game = catchMindService.start(a, new StartCatchMindRequest("우산", DRAWING, null));
 
         relationService.endRelation(a, relationId);
         relationService.purgeRecords(a, relationId);
