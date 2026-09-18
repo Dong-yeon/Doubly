@@ -11,8 +11,12 @@
  * 상대 말풍선(기존 surfaceAlt #F1F2F0 은 거의 흰색이라 연한 틴트 배경에 묻힌다).
  * 그래서 테마 하나가 {배경, 내 말풍선, 상대 말풍선, 글자, 구분선}을 통째로 갖는다.
  *
+ * <p><b>두 계열이 있다</b>: 연한 배경 + 색 있는 내 말풍선(기본·로즈·스카이·라벤더·피치·민트)과,
+ * <b>진한 배경 + 연한 말풍선</b>(차콜·포레스트·인디고·플럼). 뒤쪽은 말풍선 글자가 흰색이
+ * 아니라 어두운 색이라 대비 계산의 방향이 반대다 — 검증 규칙은 색 쌍만 보므로 그대로 통과한다.
+ *
  * ── 대비 검증 (scripts/verify-chat-theme-contrast.mjs 로 재현) ─────────────
- * 6종 × 라이트/다크 모두 아래 기준을 통과한다.
+ * 10종 × 라이트/다크 모두 아래 기준을 통과한다.
  *   내 말풍선 위 흰 글자 ≥ 4.5 · 상대 말풍선 글자 ≥ 4.5 · 배경 위 meta ≥ 4.5
  *   상대 말풍선 vs 배경 ≥ 1.10 · 구분선 vs 배경 ≥ 1.18
  *
@@ -30,7 +34,26 @@
  */
 import type { Scheme } from './colors';
 
-export type ChatThemeId = 'default' | 'rose' | 'sky' | 'lavender' | 'peach' | 'mint';
+export type ChatThemeId =
+  | 'default'
+  | 'rose'
+  | 'sky'
+  | 'lavender'
+  | 'peach'
+  | 'mint'
+  /*
+   * 아래 넷은 <b>진한 배경 + 연한 말풍선</b> 계열이다(2026-09-18). 위 여섯은 전부 연한
+   * 배경에 색 있는 내 말풍선인데, "배경을 진하게 하고 말풍선을 연하게" 쓰고 싶다는
+   * 요청이 들어왔다. 기존 여섯의 값을 바꾸면 이미 고른 사람 화면이 예고 없이 변하므로
+   * (파일 상단 주석의 같은 이유) 갈아끼우지 않고 새로 넣는다.
+   *
+   * <p>id 는 <b>소문자 한 단어</b>여야 한다 — 대비 검증 스크립트가
+   * {@code id:\s*'([a-z]+)'} 로 읽는다(scripts/verify-chat-theme-contrast.mjs).
+   */
+  | 'charcoal'
+  | 'forest'
+  | 'indigo'
+  | 'plum';
 
 export interface ChatPalette {
   /** 대화 목록 바탕 */
@@ -199,6 +222,115 @@ export const CHAT_THEMES: ChatTheme[] = [
       meta: '#8A9B94',
       dividerLine: '#333E39',
       highlight: '#1E322B',
+    },
+  },
+
+/*
+ * ── 진한 배경 계열 ────────────────────────────────────────────────────────
+ * 관계가 위 여섯과 <b>뒤집혀</b> 있다. 배경이 가장 어둡고 말풍선 둘이 모두 밝으며,
+ * 말풍선 글자는 흰색이 아니라 <b>어두운 색</b>이다.
+ *
+ * <p>둘 다 밝은 말풍선이라 나/상대가 안 갈릴까 싶지만, 좌우 정렬이 이미 갈라 주고
+ * 있고 내 말풍선에만 색을 준다(상대는 무채에 가깝게) — 카톡의 진한 테마와 같은 방식이다.
+ *
+ * <p>라이트/다크 차이는 크지 않다. 테마 자체가 어두운 쪽이라 배경만 한 단계 더
+ * 내리고 말풍선 채도를 조금 낮춘다. 여기서 라이트를 밝게 만들면 "진한 배경"이라는
+ * 고른 이유가 시스템 설정에 따라 사라진다.
+ */
+  {
+    id: 'charcoal',
+    label: '차콜',
+    light: {
+      background: '#23262B',
+      bubbleMine: '#FFE9A8',
+      bubbleMineText: '#1F1B0E',
+      bubbleTheirs: '#F2F4F7',
+      bubbleTheirsText: '#1A1D22',
+      meta: '#A9AEB6',
+      dividerLine: '#3A3F47',
+      highlight: '#343A42',
+    },
+    dark: {
+      background: '#17191D',
+      bubbleMine: '#F2DC9E',
+      bubbleMineText: '#1F1B0E',
+      bubbleTheirs: '#E6E9ED',
+      bubbleTheirsText: '#1A1D22',
+      meta: '#9BA0A8',
+      dividerLine: '#2C2F35',
+      highlight: '#282C32',
+    },
+  },
+  {
+    id: 'forest',
+    label: '포레스트',
+    light: {
+      background: '#1C2A20',
+      bubbleMine: '#CDEBD6',
+      bubbleMineText: '#10251A',
+      bubbleTheirs: '#F1F4F0',
+      bubbleTheirsText: '#1A1D1A',
+      meta: '#9FB3A4',
+      dividerLine: '#2E4235',
+      highlight: '#2A3C31',
+    },
+    dark: {
+      background: '#131E17',
+      bubbleMine: '#BFE0C9',
+      bubbleMineText: '#10251A',
+      bubbleTheirs: '#E4E9E3',
+      bubbleTheirsText: '#1A1D1A',
+      meta: '#94A898',
+      dividerLine: '#23332A',
+      highlight: '#1F2E25',
+    },
+  },
+  {
+    id: 'indigo',
+    label: '인디고',
+    light: {
+      background: '#1B2440',
+      bubbleMine: '#D8E2FF',
+      bubbleMineText: '#131A2E',
+      bubbleTheirs: '#F2F4FA',
+      bubbleTheirsText: '#1A1D2A',
+      meta: '#A3AECB',
+      dividerLine: '#2E3A5C',
+      highlight: '#293354',
+    },
+    dark: {
+      background: '#131A2E',
+      bubbleMine: '#C9D6F7',
+      bubbleMineText: '#131A2E',
+      bubbleTheirs: '#E5E9F2',
+      bubbleTheirsText: '#1A1D2A',
+      meta: '#97A2BE',
+      dividerLine: '#232C47',
+      highlight: '#1E2740',
+    },
+  },
+  {
+    id: 'plum',
+    label: '플럼',
+    light: {
+      background: '#2A1E2E',
+      bubbleMine: '#F5DCEC',
+      bubbleMineText: '#2A1226',
+      bubbleTheirs: '#F5F2F6',
+      bubbleTheirsText: '#201A22',
+      meta: '#B7A4BB',
+      dividerLine: '#3E2E44',
+      highlight: '#3A2A40',
+    },
+    dark: {
+      background: '#1D1420',
+      bubbleMine: '#E9CFE0',
+      bubbleMineText: '#2A1226',
+      bubbleTheirs: '#E9E4EB',
+      bubbleTheirsText: '#201A22',
+      meta: '#A992AD',
+      dividerLine: '#332438',
+      highlight: '#2C1F31',
     },
   },
 ];
