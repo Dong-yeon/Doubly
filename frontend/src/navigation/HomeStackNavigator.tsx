@@ -62,7 +62,31 @@ export function HomeStackNavigator() {
       <Stack.Screen name="MiniGames" component={MiniGamesScreen} options={{ title: '미니게임' }} />
       <Stack.Screen name="Sudoku" component={SudokuScreen} options={{ title: '협동 스도쿠' }} />
       <Stack.Screen name="Omok" component={OmokScreen} options={{ title: '오목' }} />
-      <Stack.Screen name="CatchMind" component={CatchMindScreen} options={{ title: '캐치마인드' }} />
+      <Stack.Screen
+        name="CatchMind"
+        component={CatchMindScreen}
+        options={{
+          title: '캐치마인드',
+          /*
+           * 스와이프백을 이 화면만 완전히 끈다(ChatStackNavigator 의 ChatRoom 과 같은 조치).
+           *
+           * <p>이유가 채팅방보다 단순하고 심각하다 — stackScreenOptions 가
+           * fullScreenGestureEnabled 를 전역으로 켜 두어 <b>화면 어디서든 오른쪽으로 긋기만
+           * 하면 pop</b> 되는데, 이 화면의 절반은 그림 캔버스다. 오른쪽으로 긋는 획마다
+           * 화면이 닫히고, 그 순간 미전송 그림이 사라진다(DrawingCanvas 의 state 뿐이다).
+           *
+           * <p>"그리는 중에만" 끄는 방식은 쓰지 않는다. 제스처 인식이 PanResponder 의 grant
+           * 보다 먼저 붙으면 경쟁에서 지는데, 지는 대가가 <b>화면 이탈 + 그림 소실</b>이라
+           * 스크롤 잠금(그래도 몇 px 흔들림에서 끝난다)과 위험의 크기가 다르다.
+           *
+           * <p>SwipeBackView 도 붙이지 않는다. 그건 화면 전체에서 오른쪽 스와이프를 받는
+           * 커스텀 제스처라, 방금 끈 문제를 JS 로 다시 만드는 셈이다. 뒤로가기는
+           * 커스텀 headerLeft 버튼(headerOptions.tsx)과 안드로이드 시스템 백으로 충분하다.
+           */
+          gestureEnabled: false,
+          fullScreenGestureEnabled: false,
+        }}
+      />
       <Stack.Screen name="CoupleCalendar" component={CoupleCalendarScreen} options={{ title: '커플 캘린더' }} />
       <Stack.Screen name="My" component={MyScreen} options={{ title: 'MY' }} />
       <Stack.Screen name="Plan" component={PlanScreen} options={{ title: '플랜' }} />
