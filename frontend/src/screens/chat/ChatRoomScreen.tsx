@@ -57,6 +57,7 @@ import { ChatMoreMenuSheet } from '../../components/ChatMoreMenuSheet';
 import { ScheduleMessageSheet } from '../../components/ScheduleMessageSheet';
 import { VoiceRecordSheet } from '../../components/VoiceRecordSheet';
 import { VoiceMessageBubble } from '../../components/VoiceMessageBubble';
+import { LinkedText } from '../../components/LinkedText';
 import { SpellCheckBar } from '../../components/SpellCheckBar';
 import { MessageActionSheet } from '../../components/MessageActionSheet';
 import { SwipeBackView } from '../../components/SwipeBackView';
@@ -1444,13 +1445,16 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             mine ? chatStyles.bubbleMine : chatStyles.bubbleTheirs,
             !isGroupEnd && (mine ? styles.bubbleMineGrouped : styles.bubbleTheirsGrouped),
           ]}>
-            <Text style={[chatStyles.msgText, mine && chatStyles.msgTextMine]}>
-              {/*
-                우리 이모지인데 이미지가 없는 행(실패·레거시)은 content 가 숫자 id 라 그대로 보이면
-                안 된다 — 알림 미리보기와 같은 표기로 대신한다(2026-09-08 점검 #12).
-              */}
-              {item.messageType === 'COUPLE_EMOJI' && !item.imageUrl ? '[우리 이모지]' : item.content}
-            </Text>
+            {/*
+              우리 이모지인데 이미지가 없는 행(실패·레거시)은 content 가 숫자 id 라 그대로 보이면
+              안 된다 — 알림 미리보기와 같은 표기로 대신한다(2026-09-08 점검 #12).
+              붙여넣은 링크는 탭하면 열린다(LinkedText) — 링크 조각의 길게 누르기도 메뉴로 이어진다.
+            */}
+            <LinkedText
+              text={item.messageType === 'COUPLE_EMOJI' && !item.imageUrl ? '[우리 이모지]' : item.content ?? ''}
+              style={[chatStyles.msgText, mine && chatStyles.msgTextMine]}
+              onLongPress={() => onLongPressMessage(item)}
+            />
           </View>
         )}
         {/*
