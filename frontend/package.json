@@ -82,6 +82,7 @@
     "verify:nested-buttons": "node scripts/verify-nested-pressable.mjs",
     "verify:puyo": "node scripts/verify-puyo.mjs",
     "verify:linkify": "node scripts/verify-linkify.mjs",
+    "verify:sticker-codes": "node scripts/verify-sticker-codes.mjs",
     "build:android": "npx eas-cli build --platform android --profile production",
     "build:ios": "npx eas-cli build --platform ios --profile production",
     "build:store": "npx eas-cli build --platform all --profile production",

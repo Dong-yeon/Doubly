@@ -59,6 +59,7 @@ import { VoiceRecordSheet } from '../../components/VoiceRecordSheet';
 import { VoiceMessageBubble } from '../../components/VoiceMessageBubble';
 import { LinkedText } from '../../components/LinkedText';
 import { SpellCheckBar } from '../../components/SpellCheckBar';
+import { StickerSuggestBar } from '../../components/StickerSuggestBar';
 import { MessageActionSheet } from '../../components/MessageActionSheet';
 import { SwipeBackView } from '../../components/SwipeBackView';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -77,7 +78,8 @@ import { isGoalShareContent } from '../../utils/dietShare';
 import { touchGestureOf } from '../../constants/touchGestures';
 import { callCardLabel, parseCallCard } from '../../utils/callCard';
 import { animatedStickerOf } from '../../constants/animatedStickers';
-import { stickerImageOf } from '../../constants/stickerImages';
+import { STICKER_CODE_INDEX, stickerImageOf } from '../../constants/stickerImages';
+import { parseStickerCode, suggestStickers } from '../../utils/stickerCodes';
 import { StickerPanel } from '../../components/chat/StickerPanel';
 import { useCoupleEmojiStore } from '../../store/coupleEmojiStore';
 import { playTouchGesture } from '../../utils/haptics';
@@ -429,6 +431,15 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     return dedupeOverlapping([...ruleSuggestions, ...dict]);
   }, [ruleSuggestions, dictResult, text]);
 
+  /*
+   * 스티커 추천 — 짧은 입력("사랑해"·"ㅠㅠ"·"(더비")에만 뜬다(utils/stickerCodes.ts).
+   * 카톡 키워드 이모티콘처럼 바꿔주지 않고 보여준다. 수정 중에는 끈다 — 고치는 글에 그림을 권할 자리가 아니다.
+   */
+  const stickerSuggestions = useMemo(
+    () => (editing ? [] : suggestStickers(STICKER_CODE_INDEX, text)),
+    [text, editing],
+  );
+
   /** 첫 제안을 적용한다. 남은 게 있으면 이어서 뜬다 */
   const applySpelling = () => {
     const first = suggestions[0];
@@ -705,6 +716,21 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     }
 
     if (sendingRef.current) return; // 같은 프레임 연타 — state 가드는 여기서 stale 하다
+
+    /*
+     * 텍스트 코드 "(더비_좋아)" 는 스티커로 나간다(utils/stickerCodes.ts). 입력 <b>전체</b>가
+     * 코드일 때만이다 — 문장 속 코드까지 바꾸면 말풍선 하나가 글과 그림으로 쪼개진다.
+     * 답장은 붙지 않는다(sendSticker 가 replyTo 를 모른다) — 스티커 트레이에서 보낼 때와 같다.
+     */
+    const coded = parseStickerCode(STICKER_CODE_INDEX, content);
+    if (coded) {
+      setText('');
+      setReplyTo(null);
+      await sendSticker(coded.code, false, coded.label);
+      inputRef.current?.focus();
+      return;
+    }
+
     sendingRef.current = true;
 
     /*
@@ -1779,6 +1805,13 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             </Pressable>
           </View>
         ) : null}
+        <StickerSuggestBar
+          items={stickerSuggestions}
+          onPick={(e) => {
+            setText('');
+            void sendSticker(e.code, false, e.label);
+          }}
+        />
         <SpellCheckBar
           suggestion={spellDismissedFor === text ? null : (suggestions[0] ?? null)}
           total={suggestions.length}
