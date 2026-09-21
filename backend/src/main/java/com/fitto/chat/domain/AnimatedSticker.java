@@ -22,46 +22,59 @@ import java.util.Optional;
  * <p>프론트 {@code frontend/src/constants/animatedStickers.ts} 와 code·premium 이
  * 정확히 짝을 맞춰야 한다 — 두 파일 모두 같은 원본에서 생성했다. 여기서 추가하면
  * 거기도 같이 추가할 것.
+ *
+ * <p><b>packId 는 상품 단위다</b>(2026-09-21). premium 이 "PRO 인가"만 답할 수 있는 것과
+ * 달리, 낱개 구매는 "무엇을 샀나"를 답해야 해서 판매 단위가 필요하다. PRO 24종을 주제별
+ * 5팩으로 나눴고 — <b>누가 무엇을 쓸 수 있는지는 하나도 바뀌지 않는다</b>. 무료 6종은
+ * 그대로 무료 팩이고, PRO 는 전과 같이 24종 전부가 열린다. 달라진 건 무료 사용자가
+ * "전부 아니면 전무" 대신 한 팩만 살 수 있다는 것뿐이다({@link StickerPacks}).
  */
 public enum AnimatedSticker {
 
-    ANIM_TWO_HEARTS("두근두근", false),
-    ANIM_KISS("뽀뽀", false),
-    ANIM_LOVE_FACE("사랑스러워", false),
-    ANIM_JOY("빵터짐", false),
-    ANIM_THUMBS_UP("좋아", false),
-    ANIM_PLEADING("제발", false),
-    ANIM_HEART("하트", true),
-    ANIM_SPARKLING_HEART("반짝하트", true),
-    ANIM_HEART_EYES("반함", true),
-    ANIM_STAR_STRUCK("감탄", true),
-    ANIM_HUG("안아줘", true),
-    ANIM_SOB("엉엉", true),
-    ANIM_HOLDING_TEARS("울컥", true),
-    ANIM_RAGE("화남", true),
-    ANIM_HUFF("씩씩", true),
-    ANIM_SLEEPING("잘게", true),
-    ANIM_ZANY("장난", true),
-    ANIM_COOL("여유", true),
-    ANIM_PARTY_FACE("신남", true),
-    ANIM_PARTY_POPPER("축하", true),
-    ANIM_BIRTHDAY_CAKE("생일", true),
-    ANIM_GIFT("선물", true),
-    ANIM_ROSE("장미", true),
-    ANIM_BOUQUET("꽃다발", true),
-    ANIM_FIRE("불타오르네", true),
-    ANIM_MUSCLE("힘내", true),
-    ANIM_PRAY("부탁해", true),
-    ANIM_EYES("봐봐", true),
-    ANIM_YAWN("졸려", true),
-    ANIM_SMILE("흐뭇", true);
+    ANIM_TWO_HEARTS("두근두근", false, StickerPacks.ANIM_BASIC),
+    ANIM_KISS("뽀뽀", false, StickerPacks.ANIM_BASIC),
+    ANIM_LOVE_FACE("사랑스러워", false, StickerPacks.ANIM_BASIC),
+    ANIM_JOY("빵터짐", false, StickerPacks.ANIM_BASIC),
+    ANIM_THUMBS_UP("좋아", false, StickerPacks.ANIM_BASIC),
+    ANIM_PLEADING("제발", false, StickerPacks.ANIM_BASIC),
+
+    ANIM_HEART("하트", true, StickerPacks.ANIM_LOVE),
+    ANIM_SPARKLING_HEART("반짝하트", true, StickerPacks.ANIM_LOVE),
+    ANIM_HEART_EYES("반함", true, StickerPacks.ANIM_LOVE),
+    ANIM_STAR_STRUCK("감탄", true, StickerPacks.ANIM_LOVE),
+    ANIM_HUG("안아줘", true, StickerPacks.ANIM_LOVE),
+
+    ANIM_SOB("엉엉", true, StickerPacks.ANIM_UPSET),
+    ANIM_HOLDING_TEARS("울컥", true, StickerPacks.ANIM_UPSET),
+    ANIM_RAGE("화남", true, StickerPacks.ANIM_UPSET),
+    ANIM_HUFF("씩씩", true, StickerPacks.ANIM_UPSET),
+
+    ANIM_SLEEPING("잘게", true, StickerPacks.ANIM_CHILL),
+    ANIM_ZANY("장난", true, StickerPacks.ANIM_CHILL),
+    ANIM_COOL("여유", true, StickerPacks.ANIM_CHILL),
+    ANIM_YAWN("졸려", true, StickerPacks.ANIM_CHILL),
+    ANIM_SMILE("흐뭇", true, StickerPacks.ANIM_CHILL),
+
+    ANIM_PARTY_FACE("신남", true, StickerPacks.ANIM_CELEBRATE),
+    ANIM_PARTY_POPPER("축하", true, StickerPacks.ANIM_CELEBRATE),
+    ANIM_BIRTHDAY_CAKE("생일", true, StickerPacks.ANIM_CELEBRATE),
+    ANIM_GIFT("선물", true, StickerPacks.ANIM_CELEBRATE),
+    ANIM_ROSE("장미", true, StickerPacks.ANIM_CELEBRATE),
+    ANIM_BOUQUET("꽃다발", true, StickerPacks.ANIM_CELEBRATE),
+
+    ANIM_FIRE("불타오르네", true, StickerPacks.ANIM_CHEER),
+    ANIM_MUSCLE("힘내", true, StickerPacks.ANIM_CHEER),
+    ANIM_PRAY("부탁해", true, StickerPacks.ANIM_CHEER),
+    ANIM_EYES("봐봐", true, StickerPacks.ANIM_CHEER);
 
     private final String label;
     private final boolean premium;
+    private final String packId;
 
-    AnimatedSticker(String label, boolean premium) {
+    AnimatedSticker(String label, boolean premium, String packId) {
         this.label = label;
         this.premium = premium;
+        this.packId = packId;
     }
 
     public String label() {
@@ -70,6 +83,11 @@ public enum AnimatedSticker {
 
     public boolean isPremium() {
         return premium;
+    }
+
+    /** 이 이모티콘이 속한 판매 단위 — {@code sticker_packs.id}. */
+    public String packId() {
+        return packId;
     }
 
     public static Optional<AnimatedSticker> from(String code) {

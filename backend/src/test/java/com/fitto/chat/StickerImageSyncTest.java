@@ -33,6 +33,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  *   <li>에셋 파일 존재 — {@code require()} 경로가 실제로 있어야 한다. tsc 는 이걸 잡지 못하고
  *       번들 시점에 터진다</li>
  * </ol>
+ *
+ * <p><b>내린 코드는 백엔드에만 남는다</b>(2026-09-21). 더비·블리를 피커에서 뺐지만 enum 에는
+ * 남겼다 — 지난 말풍선의 content 에 그 코드가 저장돼 있어서 지우면 알림 미리보기가 라벨을
+ * 못 찾는다. 그래서 이 테스트는 "양쪽이 같다"가 아니라 <b>"프론트 = 백엔드에서 내리지 않은
+ * 것"</b>을 본다({@link StickerImage#isRetired()}). 내린 코드가 프론트에 다시 나타나는 것도
+ * 함께 막는다 — 그림이 없는 코드를 트레이에 띄우면 빈 칸이 된다.
  */
 class StickerImageSyncTest {
 
@@ -59,16 +65,34 @@ class StickerImageSyncTest {
                 .as("stickerImages.ts 파싱 실패 — ENTRY 정규식이 카탈로그 모양과 안 맞는다")
                 .isNotEmpty();
 
-        Map<String, String> backend = new LinkedHashMap<>();
-        Arrays.stream(StickerImage.values()).forEach(s -> backend.put(s.name(), s.label()));
+        Map<String, String> active = new LinkedHashMap<>();
+        Arrays.stream(StickerImage.values())
+                .filter(s -> !s.isRetired())
+                .forEach(s -> active.put(s.name(), s.label()));
 
         assertThat(frontend.keySet())
-                .as("프론트 stickerImages.ts 의 code 와 백엔드 StickerImage enum 불일치")
-                .containsExactlyInAnyOrderElementsOf(backend.keySet());
+                .as("프론트 stickerImages.ts 의 code 와 백엔드 StickerImage enum(내리지 않은 것) 불일치")
+                .containsExactlyInAnyOrderElementsOf(active.keySet());
 
         assertThat(frontend)
                 .as("같은 스티커의 한국어 라벨이 프론트와 백엔드에서 다르다 (알림 미리보기 ≠ 트레이 툴팁)")
-                .containsExactlyInAnyOrderEntriesOf(backend);
+                .containsExactlyInAnyOrderEntriesOf(active);
+    }
+
+    @Test
+    void 내린_스티커는_프론트_카탈로그에_없다() throws IOException {
+        // 그림을 지운 코드가 트레이에 되살아나면 빈 칸이 된다 — 라벨만 남아 있어서 tsc 는 못 잡는다
+        List<String> retired = Arrays.stream(StickerImage.values())
+                .filter(StickerImage::isRetired)
+                .map(StickerImage::name)
+                .toList();
+        assertThat(retired)
+                .as("내린 코드 목록이 비었다 — isRetired 가 무력화됐는지 확인할 것")
+                .isNotEmpty();
+
+        assertThat(parseFrontend().keySet())
+                .as("피커에서 내린 스티커가 프론트 카탈로그에 다시 들어왔다 (그림이 없어 빈 칸이 된다)")
+                .doesNotContainAnyElementsOf(retired);
     }
 
     @Test

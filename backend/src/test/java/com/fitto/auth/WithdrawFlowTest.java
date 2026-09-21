@@ -26,6 +26,9 @@ import com.fitto.relation.dto.InviteCodeResponse;
 import com.fitto.relation.service.RelationService;
 import com.fitto.trip.dto.SaveTripRequest;
 import com.fitto.trip.service.TripService;
+import com.fitto.chat.domain.StickerPacks;
+import com.fitto.sticker.domain.UserStickerPurchase;
+import com.fitto.sticker.repository.UserStickerPurchaseRepository;
 import com.fitto.user.repository.UserRepository;
 import com.fitto.voice.domain.VoicePhrase;
 import com.fitto.voice.dto.SaveVoiceClipRequest;
@@ -82,6 +85,7 @@ class WithdrawFlowTest {
     @Autowired DailyQuestionService dailyQuestionService;
     @Autowired BodyMetricService bodyMetricService;
     @Autowired UserRepository userRepository;
+    @Autowired UserStickerPurchaseRepository stickerPurchaseRepository;
     @Autowired VoiceClipService voiceClipService;
     @Autowired WorkoutBoosterService boosterService;
     @Autowired WorkoutRoutineService workoutRoutineService;
@@ -251,6 +255,54 @@ class WithdrawFlowTest {
         assertThatCode(() -> authService.withdraw(me)).doesNotThrowAnyException();
         assertThat(userRepository.findById(me)).isEmpty();
         assertThatCode(() -> authService.withdraw(partner)).doesNotThrowAnyException();
+    }
+
+    /**
+     * 스티커 팩 낱개 구매(V95) — {@code user_id} 에 FK 가 없어서 탈퇴를 막지는 <b>않지만</b>,
+     * 그래서 오히려 빠뜨리면 조용히 남는다. 탈퇴한 사람의 구매 이력을 들고 있을 이유가 없다
+     * (환불·정산 근거는 스토어 콘솔에 남는다 — subscriptions·ai_usage_logs 와 같은 판단).
+     *
+     * <p>FK 가 없으니 "탈퇴가 성공했다"만으로는 아무것도 증명되지 않는다 — 행이 실제로
+     * 사라졌는지를 본다.
+     */
+    @Test
+    void 스티커_팩을_산_계정은_구매_이력까지_지워진다() {
+        Long me = register("withdraw-sticker@fitto.com");
+        stickerPurchaseRepository.save(UserStickerPurchase.builder()
+                .userId(me)
+                .stickerPackId(StickerPacks.ANIM_LOVE)
+                .transactionId("txn-withdraw")
+                .build());
+
+        assertThatCode(() -> authService.withdraw(me)).doesNotThrowAnyException();
+        assertThat(stickerPurchaseRepository.findByUserIdAndStickerPackId(me, StickerPacks.ANIM_LOVE))
+                .as("탈퇴했는데 스티커 팩 구매 이력이 남아 있다")
+                .isEmpty();
+    }
+
+    /**
+     * 산 팩은 <b>헤어져도 남는다</b> — 일회성 상품이라 산 사람에게 영구 귀속되고,
+     * 관계가 끝났다고 회수하면 환불 없는 몰수가 된다. RelationRecordPurger 가
+     * user_sticker_purchases 를 일부러 건드리지 않는 것이 여기서 확인된다.
+     */
+    @Test
+    void 상대가_탈퇴해도_내가_산_팩은_남는다() {
+        Long me = register("withdraw-keep-a@fitto.com");
+        Long partner = register("withdraw-keep-b@fitto.com");
+        InviteCodeResponse invite = relationService.createCoupleInvite(me);
+        relationService.connectCouple(partner, invite.code());
+
+        stickerPurchaseRepository.save(UserStickerPurchase.builder()
+                .userId(me)
+                .stickerPackId(StickerPacks.ANIM_CHEER)
+                .transactionId("txn-keep")
+                .build());
+
+        authService.withdraw(partner);
+
+        assertThat(stickerPurchaseRepository.findByUserIdAndStickerPackId(me, StickerPacks.ANIM_CHEER))
+                .as("상대가 탈퇴했다고 내가 산 팩이 사라졌다")
+                .isPresent();
     }
 
     @Test

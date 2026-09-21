@@ -108,6 +108,15 @@ public class UserDataPurger {
          * (원가 집계는 이미 지나간 달의 합계로 남고, 개인 행이 필요하지 않다).
          */
         exec("delete from ai_usage_logs where user_id = :uid", userId);
+        /*
+         * 스티커 팩 낱개 구매(V95) — ai_usage_logs 와 같은 이유로 user_id 에 FK 가 없다.
+         * 탈퇴를 막지는 않지만 그래서 오히려 빠뜨리면 조용히 남는다. 환불·정산 근거는
+         * 스토어 콘솔에 남으므로(subscriptions 와 같은 판단) 여기서 지워도 된다.
+         *
+         * 다만 sticker_pack_id 는 sticker_packs 를 참조한다 — 팩 행은 시드라 사라지지
+         * 않으므로 순서를 신경 쓸 필요가 없다.
+         */
+        exec("delete from user_sticker_purchases where user_id = :uid", userId);
 
         em.flush();
         em.clear();
