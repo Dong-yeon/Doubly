@@ -82,6 +82,10 @@ public class WallRaceGame extends CoupleGame {
     @Column(name = "race_moves", length = 1024)
     private String raceMoves;
 
+    /** 무르기를 요청한 쪽 '1'/'2' — 대기 중일 때만 값이 있다 */
+    @Column(name = "race_undo_by", length = 1)
+    private String raceUndoBy;
+
     @Builder
     private WallRaceGame(Long coupleId, Long createdBy, int wallsStartA, int wallsStartB) {
         super(coupleId, createdBy);
@@ -165,6 +169,8 @@ public class WallRaceGame extends CoupleGame {
             this.pawnB = target;
         }
         record("P" + target);
+        // 상대가 무르기를 걸어둔 채로 내가 그냥 두면, 그건 "됐고 계속 두자"는 뜻이다(오목과 같다)
+        this.raceUndoBy = null;
 
         if (WallRaceRules.row(target) == goalRowOf(side)) {
             this.raceWinner = String.valueOf(side);
@@ -199,14 +205,132 @@ public class WallRaceGame extends CoupleGame {
             this.wallsLeftB = wallsLeftB - 1;
         }
         record("W" + slot + kind);
+        this.raceUndoBy = null;
         passTurn(side);
+    }
+
+    // ── 무르기 ────────────────────────────────────────────────────────
+
+    public char undoRequestedSide() {
+        return raceUndoBy == null ? OWNER_NONE : raceUndoBy.charAt(0);
+    }
+
+    public boolean hasUndoRequest() {
+        return raceUndoBy != null;
+    }
+
+    /**
+     * 무르기를 걸 수 있는가 — <b>직전에 둔 사람</b>만이다(즉 지금 자기 차례가 아닌 쪽).
+     * 이긴 수는 판이 이미 끝나므로 여기 오지 않는다.
+     */
+    public boolean canRequestUndo(Long userId) {
+        return isInProgress()
+                && !hasUndoRequest()
+                && moveCount() > 0
+                && !isTurnOf(userId)
+                && logMatchesState();
+    }
+
+    public void requestUndo(char side) {
+        this.raceUndoBy = String.valueOf(side);
+    }
+
+    public void clearUndoRequest() {
+        this.raceUndoBy = null;
+    }
+
+    /**
+     * 마지막 수 하나를 되돌린다 — 말이 제자리로 가거나 벽이 손으로 돌아오고, 차례가
+     * 무른 사람에게 넘어간다.
+     *
+     * <p>오목과 달리 "이전 위치"를 따로 적어 두지 않는다. 한 턴에 할 수 있는 일이 둘(이동·벽)
+     * 이라 되돌릴 대상도 둘인데, 기보를 <b>처음부터 다시 재생</b>하면 두 경우가 한 함수로 풀린다.
+     * 81칸 판에 수는 많아야 수백이라 비용도 문제가 되지 않는다.
+     *
+     * <p>한 수(1 ply)만 무른다 — 오목과 같은 이유로 다단 무르기는 두지 않는다.
+     */
+    public void undoLastMove() {
+        int n = moveCount();
+        if (n == 0) return;
+        if (!logMatchesState()) {
+            throw new BusinessException(ErrorCode.GAME_UNDO_NOT_ALLOWED);
+        }
+
+        Replayed before = replay(n - 1);
+        this.pawnA = before.pawnA();
+        this.pawnB = before.pawnB();
+        this.walls = before.walls();
+        this.wallsLeftA = before.wallsLeftA();
+        this.wallsLeftB = before.wallsLeftB();
+
+        List<String> list = new ArrayList<>(moveList());
+        list.remove(n - 1);
+        this.raceMoves = String.join(",", list);
+        // 무른 사람이 다시 둔다
+        this.raceTurn = String.valueOf(sideAt(n - 1));
+        this.raceUndoBy = null;
+    }
+
+    /**
+     * 기보가 지금 판을 그대로 설명하는가 — 무르기의 <b>전제</b>다.
+     *
+     * <p>기보가 잘렸거나(길이 한계) 어긋나 있으면 재생 결과가 실제 판과 달라지고, 그 상태로
+     * 되돌리면 판이 조용히 틀어진다. 되돌리기 전에 한 번 맞춰 보고 다르면 아예 잠근다.
+     */
+    private boolean logMatchesState() {
+        try {
+            Replayed now = replay(moveCount());
+            return now.pawnA() == pawnA
+                    && now.pawnB() == pawnB
+                    && now.walls().equals(walls)
+                    && now.wallsLeftA() == wallsLeftA
+                    && now.wallsLeftB() == wallsLeftB;
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    /** 기보를 {@code upTo} 수까지 재생한 판 — 무르기가 쓰고, 나중에 복기도 같은 것을 쓴다 */
+    private Replayed replay(int upTo) {
+        int a = WallRaceRules.startCell(GOAL_ROW_CREATOR);
+        int b = WallRaceRules.startCell(GOAL_ROW_PARTNER);
+        String w = WallRaceRules.emptyWalls();
+        int leftA = wallsStartA;
+        int leftB = wallsStartB;
+
+        List<String> list = moveList();
+        for (int i = 0; i < upTo; i++) {
+            String move = list.get(i);
+            boolean creator = sideAt(i) == OWNER_CREATOR;
+            if (move.charAt(0) == 'P') {
+                int target = Integer.parseInt(move.substring(1));
+                if (creator) a = target; else b = target;
+            } else {
+                int slot = Integer.parseInt(move.substring(1, move.length() - 1));
+                w = WallRaceRules.place(w, slot, move.charAt(move.length() - 1));
+                if (creator) leftA--; else leftB--;
+            }
+        }
+        return new Replayed(a, b, w, leftA, leftB);
+    }
+
+    /** {@code i}번째 수를 둔 쪽 — 선공이 상대다(0번째가 OWNER_PARTNER) */
+    private static char sideAt(int i) {
+        return i % 2 == 0 ? OWNER_PARTNER : OWNER_CREATOR;
+    }
+
+    private record Replayed(int pawnA, int pawnB, String walls, int wallsLeftA, int wallsLeftB) {
     }
 
     private void passTurn(char side) {
         this.raceTurn = String.valueOf(opponentOf(side));
     }
 
-    /** 기보 칸이 꽉 차는 지경이 오면 <b>기록을 멈춘다</b> — 복기 한 줄 때문에 수가 거절되면 안 된다 */
+    /**
+     * 기보 칸이 꽉 차는 지경이 오면 <b>기록을 멈춘다</b> — 기록 한 줄 때문에 수가 거절되면 안 된다.
+     * 그렇게 멈춘 기보는 더 이상 판을 설명하지 못하므로 {@link #logMatchesState} 가 이를 알아채고
+     * 무르기를 잠근다(잘못된 상태로 되돌리는 것보다 버튼이 없는 편이 낫다).
+     */
     private void record(String move) {
         List<String> list = new ArrayList<>(moveList());
         list.add(move);

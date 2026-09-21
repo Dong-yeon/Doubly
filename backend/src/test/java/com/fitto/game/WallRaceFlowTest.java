@@ -243,6 +243,145 @@ class WallRaceFlowTest {
                 .isEqualTo(GameStatus.ABANDONED);
     }
 
+    // ── 무르기 ─────────────────────────────────────────────────────
+
+    @Test
+    void 말을_무르면_제자리로_돌아오고_차례도_돌아온다() {
+        long[] users = couple("ua", "ub");
+        WallRaceGameResponse game = wallRaceService.start(users[0]);
+        wallRaceService.movePawn(users[1], game.id(), at(7, 4));
+
+        // 건 사람은 직전에 둔 쪽, 받는 사람은 지금 차례인 쪽
+        assertThat(wallRaceService.current(users[1]).canUndo()).isTrue();
+        assertThat(wallRaceService.current(users[0]).canUndo()).isFalse();
+
+        wallRaceService.requestUndo(users[1], game.id());
+        assertThat(wallRaceService.current(users[0]).undoRequest()).isEqualTo("PARTNER");
+        assertThat(wallRaceService.current(users[1]).undoRequest()).isEqualTo("MINE");
+
+        WallRaceGameResponse after = wallRaceService.respondUndo(users[0], game.id(), true);
+
+        assertThat(after.partnerPawn()).isEqualTo(at(8, 4));   // 시작 칸으로
+        assertThat(after.myTurn()).isFalse();                  // 무른 사람이 다시 둔다
+        assertThat(after.moves()).isEmpty();
+        assertThat(after.undoRequest()).isNull();
+        assertThat(wallRaceService.current(users[1]).myTurn()).isTrue();
+    }
+
+    @Test
+    void 벽을_무르면_손으로_돌아온다() {
+        long[] users = couple("uw1", "uw2");
+        WallRaceGameResponse game = wallRaceService.start(users[0]);
+        wallRaceService.placeWall(users[1], game.id(), slot(4, 3), "H");
+
+        wallRaceService.requestUndo(users[1], game.id());
+        WallRaceGameResponse after = wallRaceService.respondUndo(users[0], game.id(), true);
+
+        assertThat(after.walls()).isEqualTo("0".repeat(WallRaceGame.WALL_SLOTS));
+        assertThat(after.partnerWallsLeft())
+                .as("쓴 벽이 그대로 돌아와야 한다 — 이게 이 게임에서 무르기가 무거운 이유다")
+                .isEqualTo(WallRaceGame.WALLS_DEFAULT);
+        assertThat(after.moves()).isEmpty();
+    }
+
+    @Test
+    void 여러_수_뒤에_무르면_마지막_한_수만_사라진다() {
+        long[] users = couple("um1", "um2");
+        WallRaceGameResponse game = wallRaceService.start(users[0]);
+        wallRaceService.movePawn(users[1], game.id(), at(7, 4));
+        wallRaceService.movePawn(users[0], game.id(), at(1, 4));
+        wallRaceService.placeWall(users[1], game.id(), slot(2, 2), "V");
+
+        wallRaceService.requestUndo(users[1], game.id());
+        WallRaceGameResponse after = wallRaceService.respondUndo(users[0], game.id(), true);
+
+        assertThat(after.moves()).containsExactly("P" + at(7, 4), "P" + at(1, 4));
+        assertThat(after.myPawn()).isEqualTo(at(1, 4));        // 내 수는 그대로
+        assertThat(after.partnerPawn()).isEqualTo(at(7, 4));   // 상대 말도 그대로
+        assertThat(after.walls().charAt(slot(2, 2))).isEqualTo('0');
+        assertThat(after.partnerWallsLeft()).isEqualTo(WallRaceGame.WALLS_DEFAULT);
+    }
+
+    @Test
+    void 무르기를_거절하면_판은_그대로다() {
+        long[] users = couple("ur1", "ur2");
+        WallRaceGameResponse game = wallRaceService.start(users[0]);
+        wallRaceService.movePawn(users[1], game.id(), at(7, 4));
+        wallRaceService.requestUndo(users[1], game.id());
+
+        WallRaceGameResponse after = wallRaceService.respondUndo(users[0], game.id(), false);
+
+        assertThat(after.partnerPawn()).isEqualTo(at(7, 4));
+        assertThat(after.myTurn()).isTrue();
+        assertThat(after.undoRequest()).isNull();
+        assertThat(after.moves()).hasSize(1);
+    }
+
+    @Test
+    void 내가_건_무르기는_내가_받을_수_없다() {
+        long[] users = couple("us1", "us2");
+        WallRaceGameResponse game = wallRaceService.start(users[0]);
+        wallRaceService.movePawn(users[1], game.id(), at(7, 4));
+        wallRaceService.requestUndo(users[1], game.id());
+
+        assertThatThrownBy(() -> wallRaceService.respondUndo(users[1], game.id(), true))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.GAME_UNDO_NOT_YOURS);
+    }
+
+    @Test
+    void 아직_한_수도_없거나_내_차례면_무르기를_걸_수_없다() {
+        long[] users = couple("un1", "un2");
+        WallRaceGameResponse game = wallRaceService.start(users[0]);
+
+        // 첫 수 전 — 무를 것이 없다
+        assertThatThrownBy(() -> wallRaceService.requestUndo(users[1], game.id()))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.GAME_UNDO_NOT_ALLOWED);
+
+        // 한 수 뒤 — 지금 둘 차례인 쪽은 남의 수를 무를 수 없다
+        wallRaceService.movePawn(users[1], game.id(), at(7, 4));
+        assertThatThrownBy(() -> wallRaceService.requestUndo(users[0], game.id()))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.GAME_UNDO_NOT_ALLOWED);
+    }
+
+    @Test
+    void 요청이_없는데_답하면_거절한다() {
+        long[] users = couple("uq1", "uq2");
+        WallRaceGameResponse game = wallRaceService.start(users[0]);
+        wallRaceService.movePawn(users[1], game.id(), at(7, 4));
+
+        assertThatThrownBy(() -> wallRaceService.respondUndo(users[0], game.id(), true))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.GAME_UNDO_NOT_REQUESTED);
+    }
+
+    @Test
+    void 걸어둔_무르기는_상대가_그냥_두면_사라진다() {
+        long[] users = couple("uc1", "uc2");
+        WallRaceGameResponse game = wallRaceService.start(users[0]);
+        wallRaceService.movePawn(users[1], game.id(), at(7, 4));
+        wallRaceService.requestUndo(users[1], game.id());
+
+        // 답하지 않고 그냥 두면 "됐고 계속 두자"로 읽는다(오목과 같다)
+        WallRaceGameResponse after = wallRaceService.movePawn(users[0], game.id(), at(1, 4));
+
+        assertThat(after.undoRequest()).isNull();
+        assertThat(after.moves()).hasSize(2);
+    }
+
+    @Test
+    void 이긴_수는_무를_수_없다() {
+        long[] users = couple("uv1", "uv2");
+        Long gameId = wallRaceService.start(users[0]).id();
+        walkCreatorToGoal(users[0], users[1], gameId);
+
+        assertThatThrownBy(() -> wallRaceService.requestUndo(users[0], gameId))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.GAME_UNDO_NOT_ALLOWED);
+    }
+
     // ── 핸디캡 ─────────────────────────────────────────────────────
 
     @Test

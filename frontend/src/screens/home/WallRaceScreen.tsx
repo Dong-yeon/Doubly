@@ -63,6 +63,7 @@ export function WallRaceScreen(_: Props) {
   const [loadError, setLoadError] = useState(false);
   const [starting, setStarting] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [undoBusy, setUndoBusy] = useState(false);
   /** 벽 모드에서 고른 자리 — 확정 전이라 아직 서버에 가지 않았다 */
   const [pending, setPending] = useState<Pending | null>(null);
   const [wallMode, setWallMode] = useState(false);
@@ -179,6 +180,39 @@ export function WallRaceScreen(_: Props) {
       void load(true);
     } finally {
       if (seq === moveSeq) setBusy(false);
+    }
+  };
+
+  const askUndo = async () => {
+    if (!game || undoBusy) return;
+    setUndoBusy(true);
+    try {
+      setGame(await wallRaceApi.requestUndo(game.id));
+      setPending(null);
+      setWallMode(false);
+      toast.success('무르기를 부탁했어요. 상대가 받아주면 다시 둘 수 있어요.');
+    } catch (e) {
+      toast.error(getErrorMessage(e, '무르기를 부탁하지 못했어요.'));
+      void load(true);
+    } finally {
+      setUndoBusy(false);
+    }
+  };
+
+  const answerUndo = async (accept: boolean) => {
+    if (!game || undoBusy) return;
+    setUndoBusy(true);
+    try {
+      setGame(await wallRaceApi.respondUndo(game.id, accept));
+      setPending(null);
+      setWallMode(false);
+      if (accept) haptics.light();
+      toast.success(accept ? '한 수 물러줬어요.' : '그냥 두기로 했어요.');
+    } catch (e) {
+      toast.error(getErrorMessage(e, '응답하지 못했어요.'));
+      void load(true);
+    } finally {
+      setUndoBusy(false);
     }
   };
 
@@ -449,6 +483,55 @@ export function WallRaceScreen(_: Props) {
     );
   };
 
+  /**
+   * 무르기 줄 — 상대가 걸어왔으면 답할 버튼 둘, 내가 걸었으면 기다리는 문구,
+   * 아무것도 없고 내가 직전에 뒀으면 "한 수 무르기".
+   *
+   * <p>벽까지 손으로 돌아오므로 이 게임의 한 수는 오목보다 무겁다 — 그래서 무엇이 돌아오는지
+   * 문구에 적는다.
+   */
+  const renderUndoBar = (g: WallRaceGame) => {
+    if (g.undoRequest === 'PARTNER') {
+      return (
+        <View style={styles.undoAsk}>
+          <Text style={styles.undoAskText}>
+            {g.partnerName ?? '상대'}님이 방금 둔 수를 무르고 싶대요.
+          </Text>
+          <View style={styles.actionRow}>
+            <Button title="물러주기" size="sm" onPress={() => answerUndo(true)} loading={undoBusy} />
+            <Button
+              title="그냥 두기"
+              size="sm"
+              variant="ghost"
+              onPress={() => answerUndo(false)}
+              disabled={undoBusy}
+            />
+          </View>
+        </View>
+      );
+    }
+    if (g.undoRequest === 'MINE') {
+      return (
+        <Text style={styles.undoWaiting}>
+          무르기를 부탁했어요. {g.partnerName ?? '상대'}의 답을 기다리는 중…
+        </Text>
+      );
+    }
+    if (g.canUndo) {
+      return (
+        <Button
+          title="한 수 무르기"
+          variant="ghost"
+          size="sm"
+          onPress={askUndo}
+          loading={undoBusy}
+          style={styles.giveUp}
+        />
+      );
+    }
+    return null;
+  };
+
   const renderResult = (g: WallRaceGame) => (
     <View style={[styles.card, styles.resultCard]}>
       <MaterialCommunityIcons name="trophy-outline" size={26} color="#7A5C3A" />
@@ -482,8 +565,9 @@ export function WallRaceScreen(_: Props) {
         <View>
           {renderTurnBar(game)}
           {renderHandicap(game)}
-          {renderBoard(game, game.myTurn && !busy)}
-          {renderActionBar(game)}
+          {renderBoard(game, game.myTurn && !busy && !game.undoRequest)}
+          {game.undoRequest ? null : renderActionBar(game)}
+          {renderUndoBar(game)}
           <GameReactionBar gameType="WALL_RACE" />
           <Button title="이 판 접기" variant="ghost" size="sm" onPress={confirmGiveUp} style={styles.giveUp} />
         </View>
@@ -611,6 +695,21 @@ const styles = themedStyles((colors) => ({
   wallPanel: { marginTop: spacing.md },
   hint: { flex: 1, fontSize: fontSize.caption, color: colors.textSecondary, lineHeight: 18 },
   giveUp: { alignSelf: 'center', marginTop: spacing.xs },
+  undoAsk: {
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryBg,
+  },
+  undoAskText: { fontSize: fontSize.caption, color: colors.textPrimary, lineHeight: 18 },
+  undoWaiting: {
+    fontSize: fontSize.caption,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: spacing.md,
+  },
 
   sectionTitle: {
     fontSize: fontSize.body,
