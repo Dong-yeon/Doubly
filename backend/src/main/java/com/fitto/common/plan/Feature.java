@@ -149,6 +149,24 @@ public enum Feature {
     MOOD_CALENDAR_FULL("무드 캘린더 전체 기간", Quota.blocked(), Quota.unlimited()),
     /** 회복 완료 부위 전체 카드 + 파트너 회복 상태 비교(현재는 "최근 부위 한 줄"만 무료로 노출). */
     WORKOUT_RECOVERY_FULL("회복 부위 전체 보기", Quota.blocked(), Quota.unlimited()),
+    /**
+     * 운동 심화 통계 — 볼륨 추이 · 추정 1RM · 부위 밸런스. <b>PRO 대표 기능 세 개 중 하나</b>
+     * ({@link #isHero()}).
+     *
+     * <p><b>왜 {@link #FULL_STATS} 와 따로 두나</b>: 저쪽은 "무료는 최근 구간만"이라는 <b>기간</b>
+     * 게이트이고 실제 적용도 식단 통계 한 곳뿐이다. 이쪽은 기간이 아니라 <b>지표 자체</b>를
+     * 연다 — 무료도 전체 기간의 "며칠 운동했나"는 계속 본다. 한 게이트로 합치면 식단 통계의
+     * 기간 제한을 풀 때 운동 지표까지 같이 열리거나 그 반대가 된다.
+     *
+     * <p><b>무료에서 무엇도 회수하지 않는다.</b> 지금 무료로 보이는 주·월 운동일수, 최근 7일
+     * 그래프, 30일 부위별 세트 수는 그대로다. 잠그는 건 <b>새로 계산해서 얹는</b> 볼륨·1RM·
+     * 밸런스뿐이다 — 쓰던 것을 뺏으면 새 상품이 아니라 기능 회수로 체감된다
+     * (docs/STICKER_PACK_OVERLAP_2026-09-14.md 가 그 실패를 기록하고 있다).
+     *
+     * <p>개인 판정이다(커플 아님) — 볼륨·1RM 은 내 몸의 기록이고, 상대 데이터가 있어야
+     * 성립하는 {@link #WORKOUT_RECOVERY_FULL}(파트너 회복 비교)과 다르다.
+     */
+    WORKOUT_V2_STATS("운동 심화 통계", Quota.blocked(), Quota.unlimited()),
     /** 사귄 지 1년·연말 자동 생성 연간 결산 — WEEKLY_RECAP·AI_WEEKLY_LETTER 의 연 단위 확장. */
     ANNIVERSARY_RECAP("우리의 1년 리캡", Quota.blocked(), Quota.unlimited()),
     /**
@@ -241,6 +259,32 @@ public enum Feature {
     }
 
     /**
+     * PRO 를 대표하는 세 기능인가 — 결제 화면이 <b>맨 위에 크게</b> 보여줄 것들.
+     *
+     * <p>비교 화면은 {@link #isComparable()} 로 30줄 가까이 나열되는데, 30줄을 다 읽고
+     * 결제를 결정하는 사람은 없다. "무엇을 사는가"는 세 문장으로 끝나야 한다.
+     * <ol>
+     *   <li>{@link #AI_COUPLE_EMOJI} — 사진 한 장으로 우리 얼굴 이모지를 만든다.
+     *       <b>기획 문서의 {@code AI_EMOJI_CREATOR} 가 이것이다</b> — 이름을 바꾸지 않은 것은
+     *       {@code usage_counters}·{@code ai_usage_logs}·분석 이벤트가 전부 이 enum 이름을
+     *       문자열로 들고 있어서다. 상수만 갈면 과거 사용량과 원가 집계가 통째로 끊긴다</li>
+     *   <li>{@link #AI_FOOD_PHOTO} — 음식 사진을 찍으면 칼로리·매크로가 붙는다.
+     *       <b>이것만 무료에도 한도를 준다</b>(하루 5회). 대표 기능이 전부 잠겨 있으면
+     *       PRO 의 가치를 체험할 길이 없다 — 이 파일 맨 위 "체감가치 훅" 원칙</li>
+     *   <li>{@link #WORKOUT_V2_STATS} — 볼륨·1RM·부위 밸런스</li>
+     * </ol>
+     *
+     * <p>{@link #isCoupleScoped()} 와 같은 모양으로 switch 에 둔다 — 상수 선언에 인자를
+     * 하나 더 받으면 정작 중요한 한도 숫자가 파묻힌다.
+     */
+    public boolean isHero() {
+        return switch (this) {
+            case AI_COUPLE_EMOJI, AI_FOOD_PHOTO, WORKOUT_V2_STATS -> true;
+            default -> false;
+        };
+    }
+
+    /**
      * 비교 화면에서 묶이는 단위 — 이 파일의 주석 섹션과 같다.
      *
      * <p>{@link #isCoupleScoped()} 와 같은 모양(상수 선언은 건드리지 않고 switch 로 분류)을
@@ -252,7 +296,7 @@ public enum Feature {
                  AI_WEEKLY_LETTER, AI_TRIP_ITINERARY, AI_WORKOUT_RECOMMEND, AI_NEXT_MEAL,
                  AI_COUPLE_EMOJI, AI_TOTAL -> FeatureGroup.AI;
             case MEMORIES, FULL_STATS, WEEKLY_RECAP, TRIP_EXPENSE, TRIP_CHECKLIST,
-                 MOOD_CALENDAR_FULL, WORKOUT_RECOVERY_FULL, ANNIVERSARY_RECAP,
+                 MOOD_CALENDAR_FULL, WORKOUT_RECOVERY_FULL, WORKOUT_V2_STATS, ANNIVERSARY_RECAP,
                  VIDEO_CALL, STREAK_REPAIR -> FeatureGroup.DEPTH;
             case PHOTO_UPLOAD, TRIP_ACTIVE, PLACE_PIN, CONTENT_ITEM, WORKOUT_ROUTINE,
                  CALENDAR_EVENT, FAVORITE_FOOD, CUSTOM_EXERCISE, CHALLENGE_ACTIVE,

@@ -19,6 +19,8 @@ package com.fitto.common.plan;
  * @param proLimit    PRO 한도
  * @param proPeriod   PRO 한도 주기
  * @param coupleScoped 커플이 함께 쓰는 한도인가 — "둘이 합쳐"라고 써야 오해가 없다
+ * @param hero        PRO 대표 기능 세 개 중 하나인가({@link Feature#isHero()}) — 앱이 비교표
+ *                    맨 위로 끌어올린다. 30줄을 다 읽고 결제하는 사람은 없다
  */
 public record PlanCatalogEntry(
         String feature,
@@ -29,7 +31,8 @@ public record PlanCatalogEntry(
         String freePeriod,
         int proLimit,
         String proPeriod,
-        boolean coupleScoped
+        boolean coupleScoped,
+        boolean hero
 ) {
 
     static PlanCatalogEntry of(Feature feature) {
@@ -44,7 +47,8 @@ public record PlanCatalogEntry(
                 free.window().name(),
                 pro.limit(),
                 pro.window().name(),
-                feature.isCoupleScoped()
+                feature.isCoupleScoped(),
+                feature.isHero()
         );
     }
 }

@@ -18,6 +18,7 @@ import com.fitto.workout.domain.Workout;
 import com.fitto.workout.domain.WorkoutSet;
 import com.fitto.workout.domain.WorkoutSetEntry;
 import com.fitto.workout.dto.CalendarDayResponse;
+import com.fitto.workout.dto.DeepStatRow;
 import com.fitto.workout.dto.CategoryCount;
 import com.fitto.workout.dto.CoupleWeekResponse;
 import com.fitto.workout.dto.ExerciseBest;
@@ -68,6 +69,8 @@ public class WorkoutService {
     /** 기록 삭제 시 인증샷까지 지운다 — DB 행만 지우면 이미지는 URL 로 계속 접근 가능하다 */
     private final CloudinaryImageDeleter imageDeleter;
 
+    private final com.fitto.common.plan.PlanGuard planGuard;
+
     public WorkoutService(WorkoutRepository workoutRepository,
                           WorkoutSetRepository workoutSetRepository,
                           RelationRepository relationRepository,
@@ -76,7 +79,8 @@ public class WorkoutService {
                           com.fitto.common.event.CoupleEventPublisher coupleEventPublisher,
                           com.fitto.common.notification.NotificationService notificationService,
                           FeedReactionRepository feedReactionRepository,
-                          CloudinaryImageDeleter imageDeleter) {
+                          CloudinaryImageDeleter imageDeleter,
+                          com.fitto.common.plan.PlanGuard planGuard) {
         this.workoutRepository = workoutRepository;
         this.workoutSetRepository = workoutSetRepository;
         this.relationRepository = relationRepository;
@@ -86,6 +90,7 @@ public class WorkoutService {
         this.notificationService = notificationService;
         this.feedReactionRepository = feedReactionRepository;
         this.imageDeleter = imageDeleter;
+        this.planGuard = planGuard;
     }
 
     @Transactional
@@ -407,7 +412,91 @@ public class WorkoutService {
                 .map(r -> new WorkoutStatsResponse.CategoryStat(r.getCategory(), r.getCount()))
                 .toList();
 
-        return new WorkoutStatsResponse(weeklyDays, monthlyDays, totalDays, last7, categories);
+        // 심화 구간은 잠겨 있으면 null 로 내린다 — 402 를 던지면 화면이 통째로 못 뜬다
+        // (자동 조회라 사용자가 누른 동작이 아니다. PlanGuard.allows 주석 참고).
+        WorkoutStatsResponse.Deep deep = planGuard.allows(userId, com.fitto.common.plan.Feature.WORKOUT_V2_STATS)
+                ? deepStats(userId, today)
+                : null;
+
+        return new WorkoutStatsResponse(weeklyDays, monthlyDays, totalDays, last7, categories, deep);
+    }
+
+    /** 심화 통계 창 — 볼륨 추이를 8주로 본다(4주는 추세가 안 보이고 12주는 막대가 뭉갠다). */
+    private static final int DEEP_WEEKS = 8;
+    /** 1RM 표에 올릴 종목 수 — 더 늘리면 "내 주력 종목"이 아니라 전체 목록이 된다. */
+    private static final int TOP_LIFT_LIMIT = 5;
+
+    /**
+     * 볼륨 · 추정 1RM · 부위 밸런스 — 한 번 긁어 자바에서 세 번 접는다.
+     *
+     * <p>SQL 집계를 쓰지 않는 이유는 {@code DeepStatRow} 주석에 있다(주 단위 묶기가
+     * DB 전용 함수를 부른다). 범위가 8주라 행 수가 수백이고, 질의 세 번보다 싸다.
+     */
+    private WorkoutStatsResponse.Deep deepStats(Long userId, LocalDate today) {
+        LocalDate since = today.with(java.time.DayOfWeek.MONDAY).minusWeeks(DEEP_WEEKS - 1L);
+        List<DeepStatRow> rows = workoutRepository.findDeepStatRows(userId, since);
+
+        // ① 주별 볼륨 — 기록이 없는 주도 0 으로 채운다(빠진 주가 그래프에서 붙어 버리면 추세가 거짓말을 한다)
+        Map<LocalDate, BigDecimal> volumeByWeek = new java.util.LinkedHashMap<>();
+        for (int i = 0; i < DEEP_WEEKS; i++) {
+            volumeByWeek.put(since.plusWeeks(i), BigDecimal.ZERO);
+        }
+        // ② 종목별 최고 무게·최고 e1RM
+        Map<String, BigDecimal> bestWeight = new java.util.HashMap<>();
+        Map<String, BigDecimal> bestE1rm = new java.util.HashMap<>();
+        // ③ 부위별 세트 수 — 최근 30일만 본다(위 무료 categoryBreakdown 과 같은 창)
+        LocalDate balanceSince = today.minusDays(30);
+        Map<String, Long> setsByMuscle = new java.util.LinkedHashMap<>();
+        long balanceTotal = 0;
+
+        for (DeepStatRow row : rows) {
+            BigDecimal weight = row.getWeightKg();
+            Integer reps = row.getReps();
+
+            if (weight != null && reps != null && reps > 0) {
+                LocalDate week = row.getWorkoutDate().with(java.time.DayOfWeek.MONDAY);
+                volumeByWeek.computeIfPresent(week,
+                        (k, sum) -> sum.add(weight.multiply(BigDecimal.valueOf(reps))));
+
+                String name = row.getExerciseName();
+                bestWeight.merge(name, weight, (a, b) -> a.max(b));
+                bestE1rm.merge(name, estimate1Rm(weight, reps), (a, b) -> a.max(b));
+            }
+
+            if (!row.getWorkoutDate().isBefore(balanceSince)) {
+                // 카탈로그를 안 거친 수기 입력은 muscleGroup 이 비어 있다 — 큰 분류로 떨어뜨린다
+                String muscle = row.getMuscleGroup() != null ? row.getMuscleGroup() : row.getCategory();
+                if (muscle != null) {
+                    setsByMuscle.merge(muscle, 1L, Long::sum);
+                    balanceTotal++;
+                }
+            }
+        }
+
+        List<WorkoutStatsResponse.WeekVolume> weekly = volumeByWeek.entrySet().stream()
+                .map(e -> new WorkoutStatsResponse.WeekVolume(
+                        e.getKey().toString(), e.getValue().setScale(1, RoundingMode.HALF_UP)))
+                .toList();
+
+        List<WorkoutStatsResponse.TopLift> topLifts = bestE1rm.entrySet().stream()
+                .sorted(java.util.Map.Entry.<String, BigDecimal>comparingByValue().reversed())
+                .limit(TOP_LIFT_LIMIT)
+                .map(e -> new WorkoutStatsResponse.TopLift(
+                        e.getKey(),
+                        bestWeight.get(e.getKey()).setScale(1, RoundingMode.HALF_UP),
+                        e.getValue().setScale(1, RoundingMode.HALF_UP)))
+                .toList();
+
+        long total = balanceTotal;
+        List<WorkoutStatsResponse.MuscleShare> balance = setsByMuscle.entrySet().stream()
+                .sorted(java.util.Map.Entry.<String, Long>comparingByValue().reversed())
+                .map(e -> new WorkoutStatsResponse.MuscleShare(
+                        e.getKey(), e.getValue(),
+                        total == 0 ? BigDecimal.ZERO
+                                : BigDecimal.valueOf(e.getValue() * 100.0 / total).setScale(1, RoundingMode.HALF_UP)))
+                .toList();
+
+        return new WorkoutStatsResponse.Deep(weekly, topLifts, balance);
     }
 
     @Transactional
