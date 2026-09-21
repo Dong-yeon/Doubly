@@ -51,6 +51,56 @@ let moveSeq = 0;
 
 type Pending = { slot: number; kind: 'H' | 'V' };
 
+const PAD = 4;
+/** 홈(벽이 놓이는 칸 사이 틈)의 폭 — 칸 한 변에 대한 비율 */
+const GROOVE_RATIO = 0.24;
+
+/**
+ * 판 한 변에서 칸·홈 치수를 뽑는다. 대국판과 지난 판의 작은 판이 <b>같은 식</b>을 쓰도록
+ * 컴포넌트 밖에 둔다 — 벽 위치를 두 벌로 계산하면 작은 판에서만 어긋난다.
+ */
+function geometry(boardSize: number) {
+  const cell = (boardSize - PAD * 2) / (SIZE + WALL_SIZE * GROOVE_RATIO);
+  const gap = cell * GROOVE_RATIO;
+  const pitch = cell + gap;
+  return {
+    cell,
+    gap,
+    pitch,
+    cellX: (col: number) => PAD + col * pitch,
+    cellY: (row: number) => PAD + row * pitch,
+    /** 교차점 (r,c) 의 홈 중심 */
+    jointX: (c: number) => PAD + (c + 1) * pitch - gap / 2,
+    jointY: (r: number) => PAD + (r + 1) * pitch - gap / 2,
+  };
+}
+
+/**
+ * 기보의 마지막 수 — 'P12' 면 그 칸, 'W35H' 면 그 벽 자리.
+ *
+ * <p>비동기 게임이라 며칠 만에 들어오는데, <b>돌은 개수가 늘어 보이지만 벽은 어디 생겼는지
+ * 보이지 않는다.</b> 64자리 중에서 눈으로 찾게 두지 않으려고 마지막 수를 표시한다.
+ * 차례가 번갈아 오므로 "내가 마지막으로 본 뒤 바뀐 것"이 정확히 이 한 수다.
+ */
+function lastMoveOf(moves: string[]): { cell: number | null; slot: number | null } {
+  const last = moves.length > 0 ? moves[moves.length - 1] : undefined;
+  if (!last) return { cell: null, slot: null };
+  // 범위를 벗어난 값이 오면 조용히 표시를 접는다 — 표시 하나 때문에 판이 깨지면 안 된다
+  if (last.startsWith('P') && last.length > 1) {
+    const cell = Number(last.slice(1));
+    return { cell: inRange(cell, SIZE * SIZE) ? cell : null, slot: null };
+  }
+  if (last.startsWith('W') && last.length > 2) {
+    const slot = Number(last.slice(1, -1));
+    return { cell: null, slot: inRange(slot, WALL_SIZE * WALL_SIZE) ? slot : null };
+  }
+  return { cell: null, slot: null };
+}
+
+function inRange(value: number, limit: number): boolean {
+  return Number.isInteger(value) && value >= 0 && value < limit;
+}
+
 export function WallRaceScreen(_: Props) {
   const width = useContentWidth();
   const relationId = useRelationStore((s) => s.couple?.id);
@@ -239,16 +289,8 @@ export function WallRaceScreen(_: Props) {
    * 중심이다. 칸 9개 + 홈 8개 + 양쪽 여백이 판 한 변이다.
    */
   const boardSize = Math.min(width - spacing.lg * 2, 380);
-  const pad = 4;
-  const grooveRatio = 0.24;
-  const cell = (boardSize - pad * 2) / (SIZE + WALL_SIZE * grooveRatio);
-  const gap = cell * grooveRatio;
-  const pitch = cell + gap;
-  const cellX = (col: number) => pad + col * pitch;
-  const cellY = (row: number) => pad + row * pitch;
-  /** 교차점 (r,c) 의 홈 중심 */
-  const jointX = (c: number) => pad + (c + 1) * pitch - gap / 2;
-  const jointY = (r: number) => pad + (r + 1) * pitch - gap / 2;
+  /** 지난 판 카드에 들어가는 작은 판 — 훑어보는 용도라 조작은 없다 */
+  const historyBoardSize = Math.min(boardSize * 0.55, 200);
 
   const record = useMemo(
     () => ({
@@ -258,10 +300,14 @@ export function WallRaceScreen(_: Props) {
     [history],
   );
 
-  const renderBoard = (g: WallRaceGame, interactive: boolean) => {
+  const renderBoard = (g: WallRaceGame, interactive: boolean, size = boardSize) => {
+    const { cell, gap, pitch, cellX, cellY, jointX, jointY } = geometry(size);
     const legal = new Set(interactive && !wallMode ? g.legalMoves : []);
     const pawnSize = cell * 0.62;
     const dotSize = cell * 0.3;
+    const last = lastMoveOf(g.moves);
+    // 말보다 충분히 커야 테가 남는다. 칸을 넘지 않는 선(0.62 × 1.45 ≈ 0.9칸)에서 잡았다
+    const ringSize = pawnSize * 1.45;
     /*
      * 교차점 탭 영역은 서로 닿을 만큼 크게 잡는다 — 벽은 칸이 아니라 칸 사이에 놓여서
      * 홈(gap)만큼만 주면 손가락으로 집을 수가 없다(분석 §4-2 4번이 지목한 자리).
@@ -270,7 +316,7 @@ export function WallRaceScreen(_: Props) {
     const jointHit = pitch;
 
     return (
-      <View style={[styles.board, { width: boardSize, height: boardSize }]}>
+      <View style={[styles.board, { width: size, height: size }]}>
         {/* 칸 — 목표 줄은 옅게 칠해 "어디로 가야 하는지"가 판에서 바로 읽히게 한다 */}
         {Array.from({ length: SIZE * SIZE }, (_, index) => {
           const row = Math.floor(index / SIZE);
@@ -318,6 +364,23 @@ export function WallRaceScreen(_: Props) {
           );
         })}
 
+        {/* 마지막 수가 말이었으면 그 자리에 테두리 — 말보다 먼저 그려 밖으로 테가 남는다 */}
+        {last.cell !== null ? (
+          <View
+            pointerEvents="none"
+            style={[
+              styles.lastRing,
+              {
+                width: ringSize,
+                height: ringSize,
+                borderRadius: ringSize / 2,
+                left: cellX(last.cell % SIZE) + (cell - ringSize) / 2,
+                top: cellY(Math.floor(last.cell / SIZE)) + (cell - ringSize) / 2,
+              },
+            ]}
+          />
+        ) : null}
+
         {/* 말 — 색은 내/상대로 나눈다(오목의 흑백과 달리 이 게임엔 관행 색이 없다) */}
         {([[g.myPawn, PAWN_ME, '내 말'], [g.partnerPawn, PAWN_PARTNER, '상대 말']] as const).map(
           ([pos, color, label]) => (
@@ -340,6 +403,14 @@ export function WallRaceScreen(_: Props) {
           ),
         )}
 
+        {/* 마지막 수가 벽이었으면 그 벽 뒤에 후광 — 벽 위에 테두리를 두면 홈이 얇아 안 읽힌다 */}
+        {last.slot !== null && (g.walls[last.slot] === 'H' || g.walls[last.slot] === 'V') ? (
+          <View
+            pointerEvents="none"
+            style={[styles.lastWall, wallRect(last.slot, g.walls[last.slot] as 'H' | 'V', 3)]}
+          />
+        ) : null}
+
         {/* 놓인 벽 */}
         {Array.from({ length: WALL_SIZE * WALL_SIZE }, (_, slot) => {
           const kind = g.walls[slot];
@@ -348,7 +419,7 @@ export function WallRaceScreen(_: Props) {
         })}
 
         {/* 미리보기 — 아직 서버에 가지 않은 벽. 확정 버튼을 눌러야 놓인다 */}
-        {pending ? (
+        {interactive && pending ? (
           <View
             pointerEvents="none"
             style={[styles.wall, styles.wallPreview, wallRect(pending.slot, pending.kind)]}
@@ -398,14 +469,24 @@ export function WallRaceScreen(_: Props) {
       </View>
     );
 
-    /** 벽 하나의 사각형 — 두 칸 길이로 홈을 덮는다 */
-    function wallRect(slot: number, kind: 'H' | 'V') {
+    /** 벽 하나의 사각형 — 두 칸 길이로 홈을 덮는다. {@code grow} 는 사방으로 넓히는 여백(후광) */
+    function wallRect(slot: number, kind: 'H' | 'V', grow = 0) {
       const r = Math.floor(slot / WALL_SIZE);
       const c = slot % WALL_SIZE;
       const long = cell * 2 + gap;
       return kind === 'H'
-        ? { left: cellX(c), top: jointY(r) - gap / 2, width: long, height: gap }
-        : { left: jointX(c) - gap / 2, top: cellY(r), width: gap, height: long };
+        ? {
+            left: cellX(c) - grow,
+            top: jointY(r) - gap / 2 - grow,
+            width: long + grow * 2,
+            height: gap + grow * 2,
+          }
+        : {
+            left: jointX(c) - gap / 2 - grow,
+            top: cellY(r) - grow,
+            width: gap + grow * 2,
+            height: long + grow * 2,
+          };
     }
   };
 
@@ -589,10 +670,18 @@ export function WallRaceScreen(_: Props) {
         data={history}
         keyExtractor={(g) => String(g.id)}
         contentContainerStyle={styles.list}
+        /* 카드마다 9×9 판이 들어가 View 가 90개씩이다 — 처음에 다 그리지 않게 줄인다 */
+        initialNumToRender={3}
+        windowSize={5}
         refreshing={loading}
         onRefresh={() => load()}
         ListHeaderComponent={header}
         renderItem={({ item }) => (
+          /*
+           * 이 게임의 결과물은 수순이 아니라 <b>끝났을 때의 벽 배치</b>다. 숫자만 적어두면
+           * "어떻게 막혔더라"가 남지 않아서, 지난 판마다 최종 판을 작게 그려 둔다.
+           * 대국판과 같은 renderBoard 를 크기만 줄여 쓴다.
+           */
           <View style={styles.histCard}>
             <View style={styles.histRow}>
               <Text style={styles.histDate}>
@@ -603,8 +692,10 @@ export function WallRaceScreen(_: Props) {
               </Text>
             </View>
             <Text style={styles.histText}>
-              {item.moveCount}수 · 남은 벽 나 {item.myWallsLeft} · 상대 {item.partnerWallsLeft}
+              {item.moveCount}수 · 쓴 벽 나 {item.myWallsStart - item.myWallsLeft} · 상대{' '}
+              {item.partnerWallsStart - item.partnerWallsLeft}
             </Text>
+            <View style={styles.histBoard}>{renderBoard(item, false, historyBoardSize)}</View>
           </View>
         )}
         ListEmptyComponent={
@@ -681,6 +772,9 @@ const styles = themedStyles((colors) => ({
   pawn: { position: 'absolute', borderWidth: 2, borderColor: '#FFFFFF' },
   wall: { position: 'absolute', backgroundColor: WALL_COLOR, borderRadius: 2 },
   wallPreview: { opacity: 0.45 },
+  /* 마지막 수 표시 — 말에는 테두리, 벽에는 후광. 둘 다 판 색과 다른 쪽으로 튀어야 눈에 걸린다 */
+  lastRing: { position: 'absolute', borderWidth: 2, borderColor: '#F5A524' },
+  lastWall: { position: 'absolute', backgroundColor: '#F5A524', borderRadius: 3 },
   joint: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
   jointDot: { position: 'absolute', width: 6, height: 6, borderRadius: 3, backgroundColor: GROOVE },
   jointDotOn: { backgroundColor: WALL_COLOR },
@@ -731,4 +825,5 @@ const styles = themedStyles((colors) => ({
   histResult: { fontSize: fontSize.caption, fontWeight: '800', color: colors.textSecondary },
   histWin: { color: colors.primary },
   histText: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
+  histBoard: { marginTop: spacing.sm },
 }));
