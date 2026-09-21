@@ -51,7 +51,7 @@ export const OSS_ENTRIES: OssEntry[] = [
     copyright: 'Copyright (c) Google LLC',
     license: 'Creative Commons Attribution 4.0 International (CC BY 4.0)',
     url: 'https://googlefonts.github.io/noto-emoji-animation/',
-    usedFor: '채팅 "움직이는 이모티콘" 30종 (Lottie 애니메이션)',
+    usedFor: '채팅 "움직이는 이모티콘" 110종 (Lottie 애니메이션)',
   },
   {
     name: 'Noto Emoji',

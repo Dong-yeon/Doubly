@@ -2,6 +2,7 @@ package com.fitto.workout.repository;
 
 import com.fitto.workout.domain.Workout;
 import com.fitto.workout.dto.CategoryCount;
+import com.fitto.workout.dto.DeepStatRow;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -65,6 +66,30 @@ public interface WorkoutRepository extends JpaRepository<Workout, Long> {
             """)
     List<CategoryCount> categoryBreakdown(@Param("userId") Long userId,
                                           @Param("since") LocalDate since);
+
+    /**
+     * 심화 통계의 원본 — 최근 기간의 <b>완료된</b> 세트 하나하나.
+     *
+     * <p>요약 필드({@code WorkoutSet.weightKg}·{@code reps})가 아니라 entries 를 본다.
+     * 요약은 마지막 세트 값이라 백오프 세트에서 최고 무게와 총 볼륨을 둘 다 놓친다
+     * ({@code WorkoutSetRepository.findPersonalBests} 가 같은 이유로 같은 선택을 했다).
+     *
+     * <p>{@code completed = true} 만 센다 — 진행 중인 세션의 체크 안 된 세트가 볼륨에
+     * 섞이면 오늘 숫자가 실제보다 커진다(CLAUDE.md 4절 "상태 필터링"과 같은 취지).
+     */
+    @Query("""
+            select s.workout.workoutDate as workoutDate,
+                   s.exerciseName as exerciseName,
+                   s.muscleGroup as muscleGroup,
+                   s.category as category,
+                   e.weightKg as weightKg,
+                   e.reps as reps
+            from WorkoutSet s join s.entries e
+            where s.workout.userId = :userId
+              and s.workout.workoutDate >= :since
+              and e.completed = true
+            """)
+    List<DeepStatRow> findDeepStatRows(@Param("userId") Long userId, @Param("since") LocalDate since);
 
     /** 마지막 운동 날짜 (기록 없으면 null) — 트레이너 대시보드용. */
     @Query("select max(w.workoutDate) from Workout w where w.userId = :userId")

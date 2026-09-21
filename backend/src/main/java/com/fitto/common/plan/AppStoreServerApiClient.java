@@ -69,7 +69,7 @@ public class AppStoreServerApiClient {
             return null;
         }
         for (String host : hosts()) {
-            JsonNode body = call(host, transactionId);
+            JsonNode body = call(host, "/inApps/v1/subscriptions/" + transactionId);
             if (body == null) {
                 continue;
             }
@@ -111,10 +111,42 @@ public class AppStoreServerApiClient {
         return token.substring(0, 4) + "…" + token.substring(token.length() - 4);
     }
 
-    private JsonNode call(String host, String transactionId) {
+    /**
+     * 일회성 상품(스티커 팩) 거래 한 건 — 구독의 {@link #fetch} 와 같은 자리.
+     *
+     * <p>{@code /inApps/v1/transactions/{id}} 는 거래 정보 JWS 하나만 돌려준다. 구독처럼
+     * 상태 코드가 없고 <b>환불되면 {@code revocationDate} 가 붙는다</b> — 일회성 상품에서
+     * "유효한가"는 그 한 필드가 답이다.
+     *
+     * <p>운영/샌드박스 두 호스트를 차례로 본다(구독과 같은 이유 — 어느 환경의 거래인지
+     * 앱이 알려주지 않는다).
+     */
+    public StoreProductPurchase fetchTransaction(String transactionId) {
+        if (!properties.isConfigured() || transactionId == null || transactionId.isBlank()) {
+            return null;
+        }
+        for (String host : hosts()) {
+            JsonNode body = call(host, "/inApps/v1/transactions/" + transactionId);
+            if (body == null) {
+                continue;
+            }
+            JsonNode transaction = AppStoreJws.payload(objectMapper, body.path("signedTransactionInfo").asText(null));
+            if (transaction == null) {
+                continue;
+            }
+            log.info("App Store 일회성 상품 조회 성공 — env={} transactionId={}", envOf(host), mask(transactionId));
+            return new StoreProductPurchase(
+                    transaction.path("productId").asText(null),
+                    AppAccountTokens.userIdOf(transaction.path("appAccountToken").asText(null)),
+                    !transaction.hasNonNull("revocationDate"));
+        }
+        return null;
+    }
+
+    private JsonNode call(String host, String path) {
         try {
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(host + "/inApps/v1/subscriptions/" + transactionId))
+                    .uri(URI.create(host + path))
                     .header("Authorization", "Bearer " + token())
                     .timeout(Duration.ofSeconds(15))
                     .GET()
