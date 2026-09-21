@@ -75,6 +75,11 @@ public class AppStoreServerApiClient {
             }
             AppStoreSubscriptionState state = toState(body);
             if (state != null) {
+                /*
+                 * 어느 환경의 거래였는지 남긴다. auto 는 조용히 샌드박스로 넘어가므로
+                 * 성공한 뒤에는 실결제였는지 테스트였는지 사후에 알 길이 없었다.
+                 */
+                log.info("App Store 구독 조회 성공 — env={} transactionId={}", envOf(host), mask(transactionId));
                 return state;
             }
         }
@@ -91,6 +96,19 @@ public class AppStoreServerApiClient {
             case "sandbox" -> List.of(SANDBOX_HOST);
             default -> List.of(PRODUCTION_HOST, SANDBOX_HOST);
         };
+    }
+
+    /** 로그용 환경 이름 — 호스트 URL 을 그대로 흘리지 않는다. */
+    private String envOf(String host) {
+        return SANDBOX_HOST.equals(host) ? "sandbox" : "production";
+    }
+
+    /** 로그에 거래 id 전체를 남기지 않는다 — 앞뒤 일부만 보여 추적은 되게 한다. */
+    private String mask(String token) {
+        if (token == null || token.length() < 8) {
+            return "***";
+        }
+        return token.substring(0, 4) + "…" + token.substring(token.length() - 4);
     }
 
     private JsonNode call(String host, String transactionId) {

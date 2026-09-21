@@ -184,6 +184,14 @@ TestFlight 로 설치한 빌드는 StoreKit 이 **자동으로 샌드박스 환�
     WHERE s.store = 'APP_STORE' ORDER BY s.id DESC;
    ```
 
+> `expires_at` 은 **UTC** 입니다(`AppStoreServerApiClient.millisToLocal`). KST 로 읽으면 9시간 어긋납니다.
+> `started_at` 은 애플의 구매 시각이 아니라 **서버가 행을 만든 시각**입니다 — 동기화 서비스가
+> `startedAt` 을 넘기지 않아 `Subscription` 빌더의 `LocalDateTime.now()` 가 채웁니다.
+>
+> 샌드박스 거래였는지 실결제였는지는 서버 로그로 봅니다 — 조회에 성공하면
+> `App Store 구독 조회 성공 — env=sandbox|production` 한 줄이 남습니다. `auto` 는 프로덕션이
+> "거래 없음"이면 조용히 샌드박스로 넘어가므로, 이 줄이 없으면 사후에 구분할 방법이 없습니다.
+
 > 샌드박스 구독은 **갱신이 가속**됩니다(1개월 → 5분). 그래서 **해지까지 꼭 확인하세요** —
 > 설정 → Apple ID → 구독에서 해지하고 몇 분 뒤 PRO 가 꺼지는지 봅니다. 해지 반영은 4절의
 > 알림 경로로만 들어오므로, 여기서 안 되면 실제 환경에서도 "해지했는데 계속 PRO" 가 됩니다.
