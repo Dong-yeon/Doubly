@@ -74,6 +74,7 @@ import {
 import { checkWithDictionary, preloadDictionary } from '../../utils/koreanDictionary';
 import { chatApi } from '../../api/chat';
 import { isPrShareContent } from '../../utils/workoutShare';
+import { isCatchMindShareContent } from '../../utils/catchMindShare';
 import { isGoalShareContent } from '../../utils/dietShare';
 import { touchGestureOf } from '../../constants/touchGestures';
 import { callCardLabel, parseCallCard } from '../../utils/callCard';
@@ -1218,6 +1219,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const renderItem = ({ item, index }: { item: ChatMessage; index: number }) => {
     const mine = item.senderId === myId;
     const isImage = item.messageType === 'IMAGE' && !!item.imageUrl;
+    /* 캐치마인드 그림 공유 — 사진이지만 누르면 게임으로 간다(utils/catchMindShare.ts) */
+    const isCatchMindShare = isImage && isCatchMindShareContent(item.content);
     const voice = item.messageType === 'VOICE_MESSAGE' ? parseVoiceContent(item.content) : null;
     /*
      * 스티커처럼 그리는 것 둘 — 보낸 경로는 달라도 "말풍선 없이 크게"는 같다.
@@ -1391,6 +1394,33 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             <Text style={styles.touchLabel}>{touchGestureOf(item.content)?.label ?? '터치'}</Text>
           </View>
         ) : isImage ? (
+          isCatchMindShare ? (
+            /*
+             * 캐치마인드 그림 — 누르면 전체화면이 아니라 <b>게임으로</b> 간다. 이 카드를 보는
+             * 사람이 하고 싶은 것은 사진 확대가 아니라 "맞히러 가기"이고, 그림은 게임 화면이
+             * 어차피 더 크게 보여준다. 초대말("시작해보세요")이 약속하는 동작이기도 하다.
+             *
+             * 사진 메시지 전체가 하나의 버튼이라 안쪽에 또 누를 것을 두지 않는다
+             * (verify:nested-buttons). 길게 누르기는 바깥 말풍선이 받지 못하므로 여기서
+             * 넘겨준다 — 스티커가 같은 이유로 onLongPress 를 받는다.
+             */
+            <Pressable
+              onPress={() => navigation.navigate('Home', { screen: 'CatchMind' })}
+              onLongPress={() => onLongPressMessage(item)}
+              delayLongPress={300}
+              accessibilityRole="button"
+              accessibilityLabel="캐치마인드 열기"
+              style={({ pressed }) => (pressed ? styles.imagePressed : undefined)}
+            >
+              <Image source={{ uri: item.imageUrl! }} style={chatStyles.msgImage} resizeMode="cover" />
+              {/*
+                캡션이 그대로 안내가 된다("…시작해보세요") — 새 배지나 색을 들이지 않는다.
+                말풍선 배경 위 글자색은 20개 팔레트 전부 검증된 chat.meta 뿐이다
+                (verify-chat-theme-contrast). 여기서는 캡션도 버튼 안이라 같이 눌린다.
+              */}
+              {item.content ? <Text style={chatStyles.imageCaption}>{item.content}</Text> : null}
+            </Pressable>
+          ) : (
           <View>
             {/* 탭하면 전체화면 — 예전엔 200×200 으로 잘린 썸네일이 전부라 원본을 볼 수 없었다 */}
             <Pressable
@@ -1410,6 +1440,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               <Text style={chatStyles.imageCaption}>{item.content}</Text>
             ) : null}
           </View>
+          )
         ) : isWorkout || isRoutine ? (
           <View style={[
             styles.workoutCard,
@@ -2082,6 +2113,8 @@ const styles = themedStyles((colors) => ({
   headerCallActions: { flexDirection: 'row', alignItems: 'center', paddingRight: spacing.xs },
   headerCallButton: { minWidth: 40, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   headerCallButtonPressed: { opacity: 0.6 },
+  /* 캐치마인드 그림 카드 — 누르면 게임으로 간다. 눌린 티를 내 버튼인 걸 알게 한다 */
+  imagePressed: { opacity: 0.7 },
   list: { padding: spacing.md },
   imagePreviewBackdrop: {
     flex: 1,
