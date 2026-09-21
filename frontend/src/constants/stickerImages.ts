@@ -20,6 +20,7 @@
  * (현재 그 조건은 StickerPack·AnimatedSticker 만 본다).
  */
 import type { ImageSourcePropType } from 'react-native';
+import { buildStickerCodeIndex } from '../utils/stickerCodes';
 
 export interface StickerImageDef {
   code: string;
@@ -137,3 +138,6 @@ export const STICKER_IMAGES: StickerImageDef[] = STICKER_CHARACTERS.flatMap((c) 
 export function stickerImageOf(code: string | null | undefined): StickerImageDef | undefined {
   return STICKER_IMAGES.find((s) => s.code === code);
 }
+
+/** 텍스트 코드 "(더비_좋아)" ↔ 스티커, 키워드 추천용 색인 — utils/stickerCodes.ts */
+export const STICKER_CODE_INDEX = buildStickerCodeIndex(STICKER_CHARACTERS);
