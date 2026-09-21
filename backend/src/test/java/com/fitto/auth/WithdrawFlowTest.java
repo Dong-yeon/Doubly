@@ -258,7 +258,7 @@ class WithdrawFlowTest {
     }
 
     /**
-     * 스티커 팩 낱개 구매(V95) — {@code user_id} 에 FK 가 없어서 탈퇴를 막지는 <b>않지만</b>,
+     * 스티커 팩 낱개 구매(V96) — {@code user_id} 에 FK 가 없어서 탈퇴를 막지는 <b>않지만</b>,
      * 그래서 오히려 빠뜨리면 조용히 남는다. 탈퇴한 사람의 구매 이력을 들고 있을 이유가 없다
      * (환불·정산 근거는 스토어 콘솔에 남는다 — subscriptions·ai_usage_logs 와 같은 판단).
      *

@@ -242,7 +242,7 @@ content 에 코드가 저장돼 있어서 지난 말풍선이 그대로 읽힌�
 
 ## 12. 검증
 
-- `./gradlew test` — **767건 전부 통과**(H2 + Flyway V95).
+- `./gradlew test` — **767건 전부 통과**(H2 + Flyway V96).
 - `npm run typecheck` 통과, `npm run verify:nested-buttons` 통과.
 - **PostgreSQL 로는 못 돌렸다** — Docker Desktop 이 안 떠 있었다. 새 JPQL
   (`findDeepStatRows`)은 DB 전용 함수도 `:param is null` 패턴도 없고 마이그레이션도

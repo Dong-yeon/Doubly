@@ -109,7 +109,7 @@ public class UserDataPurger {
          */
         exec("delete from ai_usage_logs where user_id = :uid", userId);
         /*
-         * 스티커 팩 낱개 구매(V95) — ai_usage_logs 와 같은 이유로 user_id 에 FK 가 없다.
+         * 스티커 팩 낱개 구매(V96) — ai_usage_logs 와 같은 이유로 user_id 에 FK 가 없다.
          * 탈퇴를 막지는 않지만 그래서 오히려 빠뜨리면 조용히 남는다. 환불·정산 근거는
          * 스토어 콘솔에 남으므로(subscriptions 와 같은 판단) 여기서 지워도 된다.
          *

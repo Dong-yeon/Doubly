@@ -35,8 +35,8 @@ class StickerPackSyncTest {
 
     private static final List<String> FRONTEND_SRC_CANDIDATES = List.of("../frontend/src", "frontend/src");
     private static final List<String> MIGRATION_CANDIDATES = List.of(
-            "src/main/resources/db/migration/V95__sticker_packs_and_purchases.sql",
-            "backend/src/main/resources/db/migration/V95__sticker_packs_and_purchases.sql");
+            "src/main/resources/db/migration/V96__sticker_packs_and_purchases.sql",
+            "backend/src/main/resources/db/migration/V96__sticker_packs_and_purchases.sql");
 
     /** {@code ('ANIM_LOVE', '두근두근', 'ANIMATED', TRUE,  1200)} 한 줄. */
     private static final Pattern SEED_ROW = Pattern.compile(
@@ -71,7 +71,7 @@ class StickerPackSyncTest {
         referenced.add(StickerPacks.MOOD_PREMIUM);
 
         assertThat(seeded.keySet())
-                .as("enum 이 가리키는 팩이 V95 시드에 없다 — 서버가 팩을 못 찾으면 무료로 통과시킨다")
+                .as("enum 이 가리키는 팩이 V96 시드에 없다 — 서버가 팩을 못 찾으면 무료로 통과시킨다")
                 .containsAll(referenced);
     }
 
@@ -179,7 +179,7 @@ class StickerPackSyncTest {
             packs.put(m.group(1),
                     new SeededPack(m.group(2), "TRUE".equals(m.group(3)), Integer.parseInt(m.group(4))));
         }
-        assertThat(packs).as("V95 시드에서 팩 행을 하나도 파싱하지 못했다").isNotEmpty();
+        assertThat(packs).as("V96 시드에서 팩 행을 하나도 파싱하지 못했다").isNotEmpty();
         return packs;
     }
 

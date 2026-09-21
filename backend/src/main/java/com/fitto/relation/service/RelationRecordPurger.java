@@ -122,7 +122,7 @@ public class RelationRecordPurger {
         exec("update workouts set relation_id = null where relation_id = :rid", relationId);
 
         /*
-         * 스티커 팩 낱개 구매(V95, user_sticker_purchases)는 <b>여기서 지우지 않는다</b> —
+         * 스티커 팩 낱개 구매(V96, user_sticker_purchases)는 <b>여기서 지우지 않는다</b> —
          * 일부러 그렇다. 일회성 상품이라 산 사람에게 영구 귀속되고, 관계가 끝났다고 자기가
          * 낸 돈으로 산 팩을 회수하면 그건 환불 없는 몰수다. 관계 참조도 없어서 FK 위반이
          * 날 일도 없다(테이블에 relation_id 컬럼 자체가 없다).
