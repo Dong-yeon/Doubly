@@ -49,10 +49,13 @@ import { themedStyles } from '../../theme/themedStyles';
 import type { PuzzleBattleEvent, PuzzleBattleGame, PuzzleBattleRun } from '../../types';
 import {
   type Board,
+  type ItemCode,
   type LockOutcome,
   type Move,
   type PlayerState,
   type TimelineMove,
+  ITEM_NONE,
+  MAX_ITEMS,
   VISIBLE_HEIGHT,
   WIDTH,
   applyHandicap,
@@ -62,13 +65,16 @@ import {
   dropToBottom,
   encodeBoard,
   encodeTimeline,
+  ghostItems,
   ghostSchedule,
   hardDrop,
+  itemOf,
   moveLeft,
   moveRight,
   receiveGarbage,
   rotate,
   softDrop,
+  applyItem,
 } from '../../games/puyo';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'Puyo'>;
@@ -82,6 +88,8 @@ const GRAVITY_FRAME_MS = 160;
 const DRAG_DEAD_ZONE = 8;
 /** 아래로 쓸기 — 바로 떨어뜨리기 */
 const SWIPE_DOWN_DY = 56;
+/** 아이템 알림이 떠 있는 시간 */
+const ITEM_TOAST_MS = 1400;
 /** 상대 미니 판의 칸 크기 */
 const MINI_CELL = 9;
 
@@ -138,6 +146,11 @@ interface BattleSession {
   ghostTimers: ReturnType<typeof setTimeout>[];
   /** 결과를 냈거나 내는 중 — 두 번 내지 않는다 */
   finished: boolean;
+  /**
+   * 다음 착지 때 기보에 적을 아이템(§13). 아이템은 착지 사이에 쓰이므로 쓴 즉시 여기 담아
+   * 두었다가 그 수에 실어 보낸다 — 기보가 수 단위라 칸이 그때 생긴다.
+   */
+  pendingItem: ItemCode;
 }
 
 /**
@@ -179,6 +192,8 @@ export function PuyoScreen({ navigation }: Props) {
   const [shownBoard, setShownBoard] = useState<Board | null>(null);
   const [flashing, setFlashing] = useState<Set<number>>(() => new Set());
   const [chainLabel, setChainLabel] = useState<string | null>(null);
+  /** 방금 얻은 아이템 · 상대가 쓴 아이템 — 잠깐 떴다 사라지는 알림 */
+  const [itemToast, setItemToast] = useState<string | null>(null);
   /** 서버가 아는 대전 판 — 허브 카드와 같은 값. 시작 전 안내와 끝난 뒤 결과가 여기서 나온다 */
   const [battle, setBattle] = useState<PuzzleBattleGame | null>(null);
   const [battleBusy, setBattleBusy] = useState(false);
@@ -320,6 +335,46 @@ export function PuyoScreen({ navigation }: Props) {
     [commit],
   );
 
+  /** 잠깐 뜨는 알림 한 줄 — 아이템 획득·상대의 아이템 사용이 같은 자리를 쓴다 */
+  const flashItemToast = useCallback((message: string) => {
+    setItemToast(message);
+    animationTimers.push(setTimeout(() => setItemToast((cur) => (cur === message ? null : cur)), ITEM_TOAST_MS));
+  }, []);
+
+  /** 상대가 아이템을 썼다 — 라이브 이벤트와 고스트 재생이 같은 길로 들어온다(§13-3) */
+  const showOpponentItem = useCallback(
+    (item: ItemCode) => {
+      const def = itemOf(item);
+      if (!def) return;
+      const s = session;
+      if (!s || s.finished) return;
+      flashItemToast(`${def.emoji} 상대가 ${def.label}을 썼어요`);
+      haptics.medium();
+    },
+    [flashItemToast],
+  );
+
+  /** 내 아이템 사용 — 효과는 엔진이 내고, 화면은 연출과 기보 기록만 한다 */
+  const onUseItem = useCallback(
+    (index: number) => {
+      if (livePhase !== 'PLAYING' || !live) return;
+      const { state: next, used, cleared } = applyItem(live, index);
+      if (used === ITEM_NONE) return;
+      commit(next);
+      haptics.medium();
+      const def = itemOf(used);
+      if (def) flashItemToast(`${def.emoji} ${def.label}!`);
+      // 지우개는 즉시 판이 바뀐다 — 지워진 칸을 한 번 번쩍이고 엔진 판으로 돌아간다
+      if (cleared.length > 0) {
+        setFlashing(new Set(cleared));
+        animationTimers.push(setTimeout(() => setFlashing(new Set()), CLEAR_FLASH_MS));
+      }
+      // 기보·중계는 수 단위라 다음 착지에 실어 보낸다
+      if (session) session.pendingItem = used;
+    },
+    [commit, flashItemToast],
+  );
+
   /**
    * 착지 결과 재생 — 착지 판 → (터짐 → 낙하)* → 방해 투입 → 다음 조각.
    * 연쇄가 없으면 바로 다음 조각으로 간다(연출 없이). 대전이면 기보에 적고 상대에게 흘린다 —
@@ -339,6 +394,7 @@ export function PuyoScreen({ navigation }: Props) {
           child: lastLocked.child,
           sent: outcome.garbageSent,
           received: outcome.garbageDropped.length,
+          item: s.pendingItem,
         });
         s.seq += 1;
         publishGameEvent(s.relationId, {
@@ -351,13 +407,19 @@ export function PuyoScreen({ navigation }: Props) {
           score: outcome.state.score,
           maxChain: outcome.state.maxChain,
           lost: outcome.lost,
+          item: s.pendingItem,
         });
+        s.pendingItem = ITEM_NONE;
       }
 
       const after = () => {
         setShownBoard(null);
         setFlashing(new Set());
         setChainLabel(null);
+        if (outcome.gainedItem !== ITEM_NONE) {
+          const def = itemOf(outcome.gainedItem);
+          if (def) flashItemToast(`${def.emoji} ${def.label} 획득!`);
+        }
         if (outcome.lost) finish(outcome.state);
         else if (livePhase === 'ANIMATING') setPhaseBoth('PLAYING');
       };
@@ -396,7 +458,7 @@ export function PuyoScreen({ navigation }: Props) {
       }
       schedule(after, t + 80);
     },
-    [finish, setPhaseBoth],
+    [finish, setPhaseBoth, flashItemToast],
   );
 
   const resetView = useCallback(() => {
@@ -441,6 +503,7 @@ export function PuyoScreen({ navigation }: Props) {
         handicap: g.myHandicap,
         ghostTimers: [],
         finished: false,
+        pendingItem: ITEM_NONE,
       };
       session = s;
       const partnerName = g.partnerName ?? '상대';
@@ -448,6 +511,10 @@ export function PuyoScreen({ navigation }: Props) {
         // 고스트 — 상대 기보의 방해를 같은 시각에 흘리고, 상대가 죽은 시각에 내가 살아 있으면 끝난다
         for (const { ms, amount } of ghostSchedule(g.partner.timeline)) {
           s.ghostTimers.push(setTimeout(() => receive(amount), ms));
+        }
+        // 상대가 아이템을 쓴 순간도 같은 방식으로 재생한다 — 고스트에서도 "쏘는" 게 보인다(§13-3)
+        for (const { ms, item } of ghostItems(g.partner.timeline)) {
+          s.ghostTimers.push(setTimeout(() => showOpponentItem(item), ms));
         }
         if (g.partner.lost) {
           const at = g.partner.survivedMs;
@@ -474,7 +541,7 @@ export function PuyoScreen({ navigation }: Props) {
     } finally {
       setBattleBusy(false);
     }
-  }, [relationId, battleBusy, battle, resetView, commit, setPhaseBoth, receive, onOpponentEnded]);
+  }, [relationId, battleBusy, battle, resetView, commit, setPhaseBoth, receive, onOpponentEnded, showOpponentItem]);
 
   const giveUpBattle = useCallback(() => {
     const id = battle?.id;
@@ -528,6 +595,7 @@ export function PuyoScreen({ navigation }: Props) {
               ghost: false,
             }));
             if (e.garbageSent > 0) receive(e.garbageSent);
+            if (e.item > 0) showOpponentItem(e.item as ItemCode);
             if (e.lost) onOpponentEnded(e.elapsedMs);
           });
           subscribeCouple(relationId, (type) => {
@@ -540,7 +608,7 @@ export function PuyoScreen({ navigation }: Props) {
         unsubscribeGames(relationId);
         unsubscribeCouple(relationId);
       };
-    }, [relationId, myId, receive, onOpponentEnded, loadBattle]),
+    }, [relationId, myId, receive, onOpponentEnded, showOpponentItem, loadBattle]),
   );
 
   /* ─── 입력 ─── */
@@ -680,6 +748,47 @@ export function PuyoScreen({ navigation }: Props) {
         <View style={[styles.nextDot, { backgroundColor: PIECE_COLORS[pair[0]] }]} />
       </View>
     ));
+
+  /**
+   * 아이템 슬롯(§13) — 폭탄은 지금 조각을 바꾸므로 조각이 없으면(연출 중) 눌러도 안 먹는다.
+   * 빈 칸도 자리를 잡아 둔다 — 아이템이 생길 때마다 판이 위아래로 흔들리지 않게.
+   */
+  const renderItems = () => {
+    if (!state) return null;
+    const slots: React.ReactNode[] = [];
+    for (let i = 0; i < MAX_ITEMS; i++) {
+      const code = state.items[i];
+      const def = code === undefined ? undefined : itemOf(code);
+      slots.push(
+        <Pressable
+          key={i}
+          onPress={() => onUseItem(i)}
+          disabled={!def || phase !== 'PLAYING'}
+          accessibilityRole="button"
+          accessibilityLabel={def ? `${def.label} 쓰기. ${def.effect}` : '빈 아이템 칸'}
+          style={({ pressed }) => [
+            styles.itemSlot,
+            def && styles.itemSlotFilled,
+            pressed && def && styles.pressed,
+          ]}
+        >
+          <Text style={[styles.itemEmoji, !def && styles.itemEmojiEmpty]}>{def ? def.emoji : '·'}</Text>
+        </Pressable>,
+      );
+    }
+    return (
+      <View style={[styles.itemRow, { width: boardW }]}>
+        {slots}
+        <View style={styles.itemHintBox}>
+          {state.doubleNext ? (
+            <Text style={styles.itemHintOn}>⚡ 다음 공격 2배</Text>
+          ) : (
+            <Text style={styles.itemHint}>연쇄·상쇄로 아이템을 모아요</Text>
+          )}
+        </View>
+      </View>
+    );
+  };
 
   const renderOpponent = () => {
     if (!inBattle || !opponent) return null;
@@ -867,8 +976,15 @@ export function PuyoScreen({ navigation }: Props) {
               <Text style={styles.chainText}>{chainLabel}</Text>
             </View>
           ) : null}
+          {itemToast ? (
+            <View style={styles.itemToast} pointerEvents="none">
+              <Text style={styles.itemToastText}>{itemToast}</Text>
+            </View>
+          ) : null}
           {renderOverlay()}
         </PuyoBoard>
+
+        {renderItems()}
 
         <View style={[styles.controls, { width: boardW }]}>
           <ControlButton icon="chevron-left" label="왼쪽" onPress={onLeft} disabled={phase !== 'PLAYING'} />
@@ -966,6 +1082,37 @@ const styles = themedStyles((colors) => ({
     borderRadius: radius.pill,
   },
   chainText: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.white },
+
+  itemToast: {
+    position: 'absolute',
+    top: '12%',
+    alignSelf: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.pill,
+  },
+  itemToastText: { fontSize: fontSize.caption, fontWeight: '800', color: colors.textPrimary },
+
+  itemRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.sm },
+  itemSlot: {
+    width: 42,
+    height: 42,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  itemSlotFilled: { borderColor: colors.primary, backgroundColor: colors.surface },
+  itemEmoji: { fontSize: fontSize.subtitle },
+  itemEmojiEmpty: { color: colors.textMuted, fontSize: fontSize.body },
+  itemHintBox: { flex: 1, alignItems: 'flex-end' },
+  itemHint: { fontSize: fontSize.caption, color: colors.textMuted },
+  itemHintOn: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '800' },
 
   overlay: {
     ...({ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 } as const),

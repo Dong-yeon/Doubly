@@ -4,9 +4,9 @@
  *
  * <p>엔진은 시간을 모른다. 경과 ms 는 화면이 재고 여기서 기보에 붙인다.
  */
-import type { Cell, Rotation } from './types';
+import type { Cell, ItemCode, Rotation } from './types';
 
-/** 기보 한 수 — 서버 Timeline.java 와 같은 7개 값 */
+/** 기보 한 수 — 서버 Timeline.java 와 같은 필드. item 은 8번째(없으면 0) */
 export interface TimelineMove {
   ms: number;
   col: number;
@@ -17,28 +17,44 @@ export interface TimelineMove {
   sent: number;
   /** 이 수로 내 판에 들어온 방해 */
   received: number;
+  /** 이 수에 쓴 아이템(§13) — 상대 화면 연출용. 0 이면 안 썼다 */
+  item: ItemCode;
 }
 
-/** 고스트 재생 항목 — 상대 기보 중 방해가 나간 수만 */
+/** 고스트 재생 항목 — 상대 기보 중 방해가 나갔거나 아이템을 쓴 수 */
 export interface GhostGarbage {
   ms: number;
   amount: number;
 }
 
-/** "ms,열,회전,축색,자식색,보낸방해,받은방해;..." — 서버는 형식만 검증한다 */
+/** 상대가 아이템을 쓴 시점 — 고스트에서도 "쏘는" 순간이 보이게 한다(§13-3) */
+export interface GhostItem {
+  ms: number;
+  item: ItemCode;
+}
+
+/** "ms,열,회전,축색,자식색,보낸방해,받은방해,아이템;..." — 서버는 형식만 검증한다 */
 export function encodeTimeline(moves: TimelineMove[]): string {
   return moves
-    .map((m) => [m.ms, m.col, m.rot, m.axis, m.child, m.sent, m.received].map((v) => Math.max(0, Math.round(v))).join(','))
+    .map((m) =>
+      [m.ms, m.col, m.rot, m.axis, m.child, m.sent, m.received, m.item ?? 0]
+        .map((v) => Math.max(0, Math.round(v)))
+        .join(','),
+    )
     .join(';');
 }
 
-/** 깨진 수는 건너뛴다 — 상대 기보 한 줄 때문에 판이 안 열리면 안 된다 */
+/**
+ * 깨진 수는 건너뛴다 — 상대 기보 한 줄 때문에 판이 안 열리면 안 된다.
+ * 아이템 칸이 없는 7필드 기보(§13 이전 판)도 그대로 읽는다.
+ */
 export function decodeTimeline(text: string): TimelineMove[] {
   if (!text) return [];
   const moves: TimelineMove[] = [];
   for (const part of text.split(';')) {
     const v = part.split(',').map((s) => Number(s));
-    if (v.length !== 7 || v.some((n) => !Number.isInteger(n) || n < 0)) continue;
+    if (v.length !== 7 && v.length !== 8) continue;
+    if (v.some((n) => !Number.isInteger(n) || n < 0)) continue;
     moves.push({
       ms: v[0],
       col: v[1],
@@ -47,6 +63,7 @@ export function decodeTimeline(text: string): TimelineMove[] {
       child: clampCell(v[4]),
       sent: v[5],
       received: v[6],
+      item: (Math.min(3, v[7] ?? 0) as ItemCode),
     });
   }
   return moves;
@@ -71,4 +88,11 @@ export function ghostSchedule(timeline: string): GhostGarbage[] {
   return decodeTimeline(timeline)
     .filter((m) => m.sent > 0)
     .map((m) => ({ ms: m.ms, amount: m.sent }));
+}
+
+/** 상대가 아이템을 쓴 시점 — 방해와 같은 방식으로 재생한다 */
+export function ghostItems(timeline: string): GhostItem[] {
+  return decodeTimeline(timeline)
+    .filter((m) => m.item > 0)
+    .map((m) => ({ ms: m.ms, item: m.item }));
 }

@@ -361,22 +361,183 @@ console.log('8. 결정론·인코딩');
 console.log('9. 대전 보조(기보·핸디캡·고스트)');
 {
   const moves = [
-    { ms: 800, col: 2, rot: 0, axis: 1, child: 2, sent: 0, received: 0 },
-    { ms: 1700, col: 3, rot: 1, axis: 3, child: 3, sent: 2, received: 0 },
-    { ms: 2900, col: 0, rot: 3, axis: 2, child: 1, sent: 0, received: 2 },
+    { ms: 800, col: 2, rot: 0, axis: 1, child: 2, sent: 0, received: 0, item: 0 },
+    { ms: 1700, col: 3, rot: 1, axis: 3, child: 3, sent: 2, received: 0, item: 0 },
+    { ms: 2900, col: 0, rot: 3, axis: 2, child: 1, sent: 0, received: 2, item: 0 },
   ];
   const text = E.encodeTimeline(moves);
-  eq('기보 인코딩 — 서버 Timeline 형식', text, '800,2,0,1,2,0,0;1700,3,1,3,3,2,0;2900,0,3,2,1,0,2');
+  eq('기보 인코딩 — 서버 Timeline 형식', text, '800,2,0,1,2,0,0,0;1700,3,1,3,3,2,0,0;2900,0,3,2,1,0,2,0');
   eq('encode → decode 왕복', JSON.stringify(E.decodeTimeline(text)), JSON.stringify(moves));
   eq('빈 기보', E.decodeTimeline('').length, 0);
-  eq('깨진 수는 건너뛴다', E.decodeTimeline('800,2,0,1,2,0,0;bad;1700,3,1,3,3,2,0').length, 2);
-  eq('소수·음수는 반올림·0 으로', E.encodeTimeline([{ ms: 12.6, col: -1, rot: 0, axis: 1, child: 2, sent: 0, received: 0 }]), '13,0,0,1,2,0,0');
+  eq('깨진 수는 건너뛴다', E.decodeTimeline('800,2,0,1,2,0,0,0;bad;1700,3,1,3,3,2,0,0').length, 2);
+  eq('아이템 칸 없는 옛 기보(7필드)도 읽는다', E.decodeTimeline('800,2,0,1,2,0,0')[0].item, 0);
+  eq('소수·음수는 반올림·0 으로', E.encodeTimeline([{ ms: 12.6, col: -1, rot: 0, axis: 1, child: 2, sent: 0, received: 0, item: 0 }]), '13,0,0,1,2,0,0,0');
   eq('고스트 일정은 방해가 나간 수만', JSON.stringify(E.ghostSchedule(text)), JSON.stringify([{ ms: 1700, amount: 2 }]));
+  eq('고스트 아이템은 쓴 수만', JSON.stringify(E.ghostItems('800,2,0,1,2,0,0,0;1700,3,1,3,3,0,0,1')), JSON.stringify([{ ms: 1700, item: 1 }]));
   eq('핸디캡 70%: 10 → 7', E.applyHandicap(10, 70), 7);
   eq('핸디캡 70%: 1 → 1 (반올림, 통째로 안 사라진다)', E.applyHandicap(1, 70), 1);
   eq('핸디캡 100%: 그대로', E.applyHandicap(5, 100), 5);
   eq('핸디캡 값이 이상하면 100% 로', E.applyHandicap(5, 0), 5);
   eq('0 은 0', E.applyHandicap(0, 70), 0);
+}
+
+/* ─── 아이템(§13) ─── */
+console.log('10. 아이템 — 획득·효과');
+{
+  // 획득 조건 — 한 수에 하나, 폭탄 > 2배 > 지우개
+  eq('3연쇄면 폭탄', E.itemFromMove(3, 0, 0, 0), E.ITEM_BOMB);
+  eq('2연쇄로는 못 받는다', E.itemFromMove(2, 0, 0, 0), E.ITEM_NONE);
+  eq('상쇄로 대기를 0 까지 깎으면 2배', E.itemFromMove(1, 4, 0, 0), E.ITEM_DOUBLE);
+  eq('상쇄했어도 잔량이 남으면 없다', E.itemFromMove(1, 4, 2, 0), E.ITEM_NONE);
+  eq('10수 무연쇄면 지우개', E.itemFromMove(0, 0, 0, E.DRY_MOVES_FOR_ERASER), E.ITEM_ERASER);
+  eq('9수까지는 없다', E.itemFromMove(0, 0, 0, 9), E.ITEM_NONE);
+  eq('큰 연쇄 + 상쇄가 겹치면 폭탄만', E.itemFromMove(4, 4, 0, 20), E.ITEM_BOMB);
+}
+{
+  // 슬롯 — 최대 3개, 넘으면 새 것을 버린다
+  eq('빈 슬롯에 추가', JSON.stringify(E.addItem([], E.ITEM_BOMB)), JSON.stringify([E.ITEM_BOMB]));
+  eq('ITEM_NONE 은 안 들어간다', JSON.stringify(E.addItem([], E.ITEM_NONE)), '[]');
+  const full = [E.ITEM_BOMB, E.ITEM_DOUBLE, E.ITEM_ERASER];
+  eq('꽉 차면 그대로', JSON.stringify(E.addItem(full, E.ITEM_BOMB)), JSON.stringify(full));
+  eq('상한', E.MAX_ITEMS, 3);
+  eq('정의 셋', E.ITEMS.length, 3);
+  eq('코드로 찾기', E.itemOf(E.ITEM_ERASER).label, '지우개');
+}
+{
+  // 폭탄 — 3×3 제거. 숨은 줄도 지운다(거기 막혀서 지므로 구제가 닿아야 한다)
+  const b = board(
+    '111...',
+    '222...',
+    '333...',
+  );
+  const { board: after, cleared } = E.explode(b, 1, HEIGHT - 2);
+  eq('9칸 중 채워진 것만', cleared.length, 9);
+  same('가운데 3×3 이 비었다', after, E.emptyBoard());
+  const edge = E.explode(board('11....', '22....'), 0, HEIGHT - 1);
+  eq('판 밖은 세지 않는다', edge.cleared.length, 4);
+  // 숨은 줄(row 0)도 지운다 — 거기 막혀서 지는 것이 패배 조건이라 구제가 닿아야 한다
+  const hidden = E.emptyBoard();
+  hidden[E.cellIndex(0, 0)] = 1;
+  hidden[E.cellIndex(1, 0)] = 2;
+  eq('숨은 줄에서도 터진다', E.explode(hidden, 0, 0).cleared.length, 2);
+}
+{
+  // 지우개 — 방해만, 아래부터
+  const b = board(
+    'G1G...',
+    'GGG...',
+    '111...',
+  );
+  const { board: after, cleared } = E.eraseGarbage(b, 6);
+  eq('방해 5개가 전부 지워진다', cleared.length, 5);
+  for (const i of cleared) check('지운 것은 전부 방해였다', b[i] === GARBAGE);
+  check('색 조각은 그대로', E.encodeBoard(after).split('').filter((c) => c === '1').length === 4);
+  const two = E.eraseGarbage(b, 2);
+  eq('상한만큼만', two.cleared.length, 2);
+  const bottom = two.cleared.every((i) => Math.floor(i / WIDTH) >= HEIGHT - 2);
+  check('아래부터 지운다', bottom);
+  eq('방해가 없으면 아무것도 안 한다', E.eraseGarbage(board('111...'), 6).cleared.length, 0);
+}
+{
+  // 폭탄 사용 → 착지 시 터진다
+  const s0 = E.createPlayer(4);
+  const b = board('111...', '222...', '333...');
+  const s = { ...s0, board: b, items: [E.ITEM_BOMB], piece: { ...s0.piece, col: 1 } };
+  const used = E.applyItem(s, 0);
+  eq('폭탄을 썼다', used.used, E.ITEM_BOMB);
+  eq('슬롯이 비었다', used.state.items.length, 0);
+  check('조각이 폭탄이 됐다', used.state.piece.bomb === true);
+  const out = E.hardDrop(used.state);
+  check('터진 칸이 있다', out.exploded.length > 0);
+  check('조각은 판에 남지 않는다', E.encodeBoard(out.boardAfterLock).indexOf(String(used.state.piece.axis)) === -1 || out.exploded.length > 0);
+  eq('폭탄이 아닌 판에서는 exploded 가 비어 있다', E.hardDrop(E.createPlayer(4)).exploded.length, 0);
+}
+{
+  // 방해 2배 — 상쇄 뒤의 전송량에만 곱한다
+  const s0 = E.createPlayer(3);
+  const b = board('..1...', '..1...', '..1...');
+  const base = { ...s0, board: b, piece: { ...s0.piece, axis: 1, child: 2, rot: 0 }, carry: 340 };
+  const plain = E.hardDrop(base);
+  eq('그냥 두면 방해 5', plain.garbageSent, 5);
+  eq('2배가 안 걸렸다', plain.doubled, false);
+
+  const withItem = E.applyItem({ ...base, items: [E.ITEM_DOUBLE] }, 0);
+  eq('2배를 썼다', withItem.used, E.ITEM_DOUBLE);
+  check('플래그가 섰다', withItem.state.doubleNext === true);
+  const doubled = E.hardDrop(withItem.state);
+  eq('전송이 2배', doubled.garbageSent, 10);
+  eq('doubled 플래그', doubled.doubled, true);
+  eq('쓰고 나면 꺼진다', doubled.state.doubleNext, false);
+
+  // 상쇄가 먼저다 — 내 대기 큐까지 2배로 깎이지 않는다
+  const both = E.hardDrop({ ...withItem.state, pendingGarbage: 3 });
+  eq('상쇄는 그대로 3', both.garbageOffset, 3);
+  eq('남은 2 만 2배 = 4', both.garbageSent, 4);
+}
+{
+  // 2배는 전송이 있을 때만 쓰인다 — 연쇄 없는 수에 헛되이 사라지지 않는다
+  const s = E.applyItem({ ...E.createPlayer(6), items: [E.ITEM_DOUBLE] }, 0).state;
+  const out = E.hardDrop(s);
+  eq('전송이 없었다', out.garbageSent, 0);
+  eq('플래그가 유지된다', out.state.doubleNext, true);
+}
+{
+  // 지우개 — 즉시 발동. 대기 큐를 먼저 깎는다
+  const s0 = E.createPlayer(8);
+  const withQueue = { ...s0, board: board('GGG...'), pendingGarbage: 10, items: [E.ITEM_ERASER] };
+  const r = E.applyItem(withQueue, 0);
+  eq('지우개를 썼다', r.used, E.ITEM_ERASER);
+  eq('대기 큐에서 6 을 깎는다', r.state.pendingGarbage, 4);
+  eq('큐로 다 채웠으면 판은 그대로', r.cleared.length, 0);
+
+  const noQueue = { ...s0, board: board('GGG...'), pendingGarbage: 0, items: [E.ITEM_ERASER] };
+  const r2 = E.applyItem(noQueue, 0);
+  eq('큐가 없으면 판에서 지운다', r2.cleared.length, 3);
+  same('판이 비었다', r2.state.board, E.emptyBoard());
+
+  const partial = { ...s0, board: board('GGGGGG'), pendingGarbage: 2, items: [E.ITEM_ERASER] };
+  const r3 = E.applyItem(partial, 0);
+  eq('큐 2 + 판 4 = 6', (2 - r3.state.pendingGarbage) + r3.cleared.length, 6);
+}
+{
+  // 못 쓰는 경우 — 상태가 그대로여야 한다
+  const s = E.createPlayer(9);
+  eq('빈 슬롯', E.applyItem(s, 0).used, E.ITEM_NONE);
+  eq('없는 index', E.applyItem({ ...s, items: [E.ITEM_BOMB] }, 5).used, E.ITEM_NONE);
+  const bombed = E.applyItem({ ...s, items: [E.ITEM_BOMB, E.ITEM_BOMB] }, 0);
+  eq('이미 폭탄이면 또 못 건다', E.applyItem(bombed.state, 0).used, E.ITEM_NONE);
+  const doubled = E.applyItem({ ...s, items: [E.ITEM_DOUBLE, E.ITEM_DOUBLE] }, 0);
+  eq('이미 2배면 또 못 건다', E.applyItem(doubled.state, 0).used, E.ITEM_NONE);
+  eq('LOST 면 못 쓴다', E.applyItem({ ...s, status: 'LOST', items: [E.ITEM_ERASER] }, 0).used, E.ITEM_NONE);
+}
+{
+  // 착지로 실제 슬롯이 찬다 + 무연쇄 카운터
+  const s0 = E.createPlayer(3);
+  const b = board('..1...', '..1...', '..1...');
+  const out = E.hardDrop({ ...s0, board: b, piece: { ...s0.piece, axis: 1, child: 1, rot: 0 } });
+  eq('1연쇄로는 폭탄이 없다', out.gainedItem, E.ITEM_NONE);
+  eq('연쇄가 났으니 무연쇄 카운터는 0', out.state.dryMoves, 0);
+
+  let dry = E.hardDrop({ ...E.createPlayer(21), dryMoves: E.DRY_MOVES_FOR_ERASER - 1 });
+  eq('무연쇄가 쌓이면 지우개를 받는다', dry.gainedItem, E.ITEM_ERASER);
+  eq('슬롯에 들어갔다', JSON.stringify(dry.state.items), JSON.stringify([E.ITEM_ERASER]));
+  eq('받은 수에서 카운터가 0 으로', dry.state.dryMoves, 0);
+}
+{
+  // 아이템이 결정론을 깨지 않는다 — 같은 시드·같은 조작이면 같은 판(고스트 대전의 전제)
+  const run = (seed) => {
+    let s = E.createPlayer(seed);
+    for (let i = 0; i < 12 && s.status === 'PLAYING'; i++) {
+      if (s.items.length > 0) s = E.applyItem(s, 0).state;
+      let cur = s;
+      for (let k = 0; k < WIDTH; k++) cur = E.moveLeft(cur);
+      for (let k = 0; k < i % WIDTH; k++) cur = E.moveRight(cur);
+      s = E.hardDrop(cur).state;
+    }
+    return E.encodeBoard(s.board);
+  };
+  eq('같은 시드 = 같은 판', run(777), run(777));
+  check('판에 폭탄 값(6 이상)이 남지 않는다', !/[6-9]/.test(run(777)));
 }
 
 rmSync(tmp, { recursive: true, force: true });

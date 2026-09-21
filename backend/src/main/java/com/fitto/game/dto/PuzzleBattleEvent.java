@@ -15,6 +15,7 @@ package com.fitto.game.dto;
  * @param garbageSent   상쇄 후 상대에게 나가는 방해 — 받는 쪽이 자기 핸디캡을 곱해 대기 큐에 넣는다
  * @param pendingGarbage 보낸 쪽에 남은 대기 방해(상대 패널 표시용)
  * @param lost          이 수로 판이 가득 찼다
+ * @param item          이 수에 쓴 아이템(§13) — 상대 화면에 "쏜" 순간을 띄우는 용도. 0 이면 안 썼다
  */
 public record PuzzleBattleEvent(
         Long senderId,
@@ -26,16 +27,19 @@ public record PuzzleBattleEvent(
         int pendingGarbage,
         int score,
         int maxChain,
-        boolean lost
+        boolean lost,
+        int item
 ) {
     /** 판 문자열 길이 상한 — 6×13. 프론트 엔진의 WIDTH*HEIGHT 와 같다 */
     public static final int BOARD_LENGTH = 78;
+    /** 아이템 코드 상한 — 프론트 items.ts 의 ITEM_ERASER */
+    public static final int MAX_ITEM = 3;
     private static final int MAX_GARBAGE = 10_000;
 
     /** 서버가 발신자를 덮어쓴 사본 */
     public PuzzleBattleEvent from(Long userId) {
         return new PuzzleBattleEvent(userId, gameId, seq, elapsedMs, board, garbageSent,
-                pendingGarbage, score, maxChain, lost);
+                pendingGarbage, score, maxChain, lost, item);
     }
 
     /** 중계해도 되는 모양인가 — 상대 화면을 깨뜨릴 값만 거른다 */
@@ -46,6 +50,7 @@ public record PuzzleBattleEvent(
             char c = board.charAt(i);
             if (c < '0' || c > '5') return false;
         }
+        if (item < 0 || item > MAX_ITEM) return false;
         return garbageSent >= 0 && garbageSent <= MAX_GARBAGE
                 && pendingGarbage >= 0 && pendingGarbage <= MAX_GARBAGE
                 && score >= 0 && maxChain >= 0;

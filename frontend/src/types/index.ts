@@ -661,6 +661,8 @@ export interface PuzzleBattleEvent {
   score: number;
   maxChain: number;
   lost: boolean;
+  /** 이 수에 쓴 아이템(§13) — 상대 화면에 "쏜" 순간을 띄운다. 0 이면 안 썼다 */
+  item: number;
 }
 
 // 게임 판 위 즉석 반응 — docs/COUPLE_GAMES_EXPANSION_2026-09-14.md 1절. 저장되지 않는 신호다

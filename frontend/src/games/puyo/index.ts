@@ -9,8 +9,10 @@ export {
   decodeTimeline,
   applyHandicap,
   ghostSchedule,
+  ghostItems,
   type TimelineMove,
   type GhostGarbage,
+  type GhostItem,
 } from './battle';
 export {
   createPlayer,
@@ -23,6 +25,26 @@ export {
   receiveGarbage,
   describeMove,
   dropGarbage,
+  applyItem,
   PREVIEW_COUNT,
   type Move,
+  type ApplyItemResult,
 } from './engine';
+export {
+  ITEMS,
+  ITEM_NONE,
+  ITEM_BOMB,
+  ITEM_DOUBLE,
+  ITEM_ERASER,
+  MAX_ITEMS,
+  CHAIN_FOR_BOMB,
+  DRY_MOVES_FOR_ERASER,
+  ERASER_AMOUNT,
+  DOUBLE_FACTOR,
+  itemOf,
+  itemFromMove,
+  addItem,
+  explode,
+  eraseGarbage,
+  type ItemDef,
+} from './items';

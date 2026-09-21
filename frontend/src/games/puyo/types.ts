@@ -43,6 +43,12 @@ export interface Piece {
   col: number;
   row: number;
   rot: Rotation;
+  /**
+   * 폭탄 조각인가(아이템 §13) — 축이 폭탄이다. 착지하면 조각을 놓는 대신 축을 가운데로
+   * 3×3 을 지운다. 판에는 남지 않으므로 {@link Cell} 에 값을 더하지 않았고, 따라서 판
+   * 문자열(78자리)과 서버의 모양 검사도 그대로다.
+   */
+  bomb?: boolean;
 }
 
 /** 연쇄 한 단계 — 화면이 순서대로 재생한다 */
@@ -63,6 +69,9 @@ export interface ChainStep {
 
 export type PlayerStatus = 'PLAYING' | 'LOST';
 
+/** 아이템 코드 — 정의는 {@code items.ts}. 여기 두는 것은 순환 import 를 피하기 위해서다 */
+export type ItemCode = 0 | 1 | 2 | 3;
+
 /** 한 사람의 판 전체 상태. 불변으로 다룬다 — 모든 함수가 새 객체를 돌려준다 */
 export interface PlayerState {
   board: Board;
@@ -80,6 +89,12 @@ export interface PlayerState {
   maxChain: number;
   /** 착지한 조각 수 = 수(手). 중력·방해 투입은 시간이 아니라 이 단위로 진행된다(§4-2 4번) */
   moves: number;
+  /** 손에 든 아이템(§13). 먼저 얻은 것이 앞이고 MAX_ITEMS 를 넘으면 새 것을 버린다 */
+  items: ItemCode[];
+  /** 방해 2배가 걸려 있는가 — 다음 착지에서 쓰이고 꺼진다 */
+  doubleNext: boolean;
+  /** 연쇄 없이 지나간 연속 수 — 지우개 획득 조건 */
+  dryMoves: number;
   status: PlayerStatus;
 }
 
@@ -97,5 +112,11 @@ export interface LockOutcome {
   garbageDropped: number[];
   /** 방해가 들어온 뒤의 판(없으면 마지막 중력 판과 같다) */
   boardAfterGarbage: Board;
+  /** 이 수로 얻은 아이템 — 없으면 ITEM_NONE */
+  gainedItem: ItemCode;
+  /** 폭탄이 지운 칸 — 연출용. 폭탄 조각이 아니면 빈 배열 */
+  exploded: number[];
+  /** 방해 2배가 적용됐는가 — 연출과 상대 표시용 */
+  doubled: boolean;
   lost: boolean;
 }

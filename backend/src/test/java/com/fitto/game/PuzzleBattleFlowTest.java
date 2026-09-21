@@ -29,7 +29,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @ActiveProfiles("test")
 class PuzzleBattleFlowTest {
 
-    private static final String TIMELINE = "800,2,0,1,2,0,0;1700,3,1,3,3,2,0;2900,0,3,2,1,0,2";
+    private static final String TIMELINE = "800,2,0,1,2,0,0,0;1700,3,1,3,3,2,0,1;2900,0,3,2,1,0,2,0";
 
     @Autowired AuthService authService;
     @Autowired RelationService relationService;

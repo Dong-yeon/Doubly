@@ -9,6 +9,7 @@
 import {
   type Board,
   type Cell,
+  type ItemCode,
   type LockOutcome,
   type Piece,
   type PlayerState,
@@ -23,6 +24,18 @@ import { applyGravity, cellIndex, emptyBoard, resolveChains } from './board';
 import { dropToBottom, fallOne, fits, lockPiece, movePiece, rotatePiece, spawnPiece } from './piece';
 import { MAX_GARBAGE_PER_DROP, garbageFromScore, offsetGarbage } from './scoring';
 import { nextInt, seedRng } from './rng';
+import {
+  DOUBLE_FACTOR,
+  ERASER_AMOUNT,
+  ITEM_BOMB,
+  ITEM_DOUBLE,
+  ITEM_ERASER,
+  ITEM_NONE,
+  addItem,
+  eraseGarbage,
+  explode,
+  itemFromMove,
+} from './items';
 
 /** 미리보기 조각 수 */
 export const PREVIEW_COUNT = 2;
@@ -61,6 +74,9 @@ export function createPlayer(seed: number): PlayerState {
     pendingGarbage: 0,
     maxChain: 0,
     moves: 0,
+    items: [],
+    doubleNext: false,
+    dryMoves: 0,
     status: 'PLAYING',
   };
 }
@@ -112,6 +128,59 @@ export function describeMove(piece: Piece): Move {
   return { col: piece.col, rot: piece.rot, axis: piece.axis, child: piece.child };
 }
 
+/** 아이템 사용 결과 — {@code used} 가 ITEM_NONE 이면 쓰지 못한 것이다(상태가 그대로) */
+export interface ApplyItemResult {
+  state: PlayerState;
+  used: ItemCode;
+  /** 지우개가 없앤 칸 — 연출용 */
+  cleared: number[];
+}
+
+/**
+ * 슬롯의 아이템을 쓴다(§13-2).
+ * <ul>
+ *   <li><b>폭탄</b>: 지금 조각의 축을 폭탄으로 바꾼다. 효과는 착지할 때 난다.</li>
+ *   <li><b>2배</b>: 다음 착지의 전송 방해에 계수를 건다. 쓰자마자 보이는 변화는 없다.</li>
+ *   <li><b>지우개</b>: <b>즉시</b> 발동한다 — 대기 방해를 먼저 깎고, 남으면 판의 방해를 지운다.</li>
+ * </ul>
+ * 이미 폭탄인 조각에 폭탄을 또 걸거나, 2배가 걸린 채 2배를 또 걸지는 못한다(슬롯을 버리게 된다).
+ */
+export function applyItem(state: PlayerState, index: number): ApplyItemResult {
+  const item = state.items[index];
+  if (state.status !== 'PLAYING' || item === undefined || item === ITEM_NONE) {
+    return { state, used: ITEM_NONE, cleared: [] };
+  }
+  const rest = [...state.items.slice(0, index), ...state.items.slice(index + 1)];
+
+  if (item === ITEM_BOMB) {
+    if (!state.piece || state.piece.bomb) return { state, used: ITEM_NONE, cleared: [] };
+    return {
+      state: { ...state, items: rest, piece: { ...state.piece, bomb: true } },
+      used: ITEM_BOMB,
+      cleared: [],
+    };
+  }
+  if (item === ITEM_DOUBLE) {
+    if (state.doubleNext) return { state, used: ITEM_NONE, cleared: [] };
+    return { state: { ...state, items: rest, doubleNext: true }, used: ITEM_DOUBLE, cleared: [] };
+  }
+
+  // 지우개 — 대기 큐를 먼저 깎는다. 판에 방해가 없어도 쓸모가 있어야 구제 아이템이다
+  const fromQueue = Math.min(state.pendingGarbage, ERASER_AMOUNT);
+  const { board, cleared } = eraseGarbage(state.board, ERASER_AMOUNT - fromQueue);
+  return {
+    state: {
+      ...state,
+      items: rest,
+      pendingGarbage: state.pendingGarbage - fromQueue,
+      // 판에서 빼면 위가 떠 있다 — 중력으로 내려앉혀야 다음 착지 계산이 맞는다
+      board: cleared.length > 0 ? applyGravity(board) : board,
+    },
+    used: ITEM_ERASER,
+    cleared,
+  };
+}
+
 /**
  * 착지 — 이 게임의 한 수 전체.
  * <ol>
@@ -123,15 +192,33 @@ export function describeMove(piece: Piece): Move {
  * </ol>
  * 연쇄가 났을 때 방해가 같은 수에 들어오지 않는 것도 뿌요뿌요 규칙이다 — 연쇄 중에는
  * 상쇄만 하고, 투입은 연쇄가 없던 수의 착지 뒤에만 일어난다.
+ *
+ * <p>아이템(§13)이 끼어드는 자리는 셋이다 — 폭탄이면 조각을 놓는 대신 3×3 을 지우고(1),
+ * 2배가 걸려 있으면 전송량에 계수를 곱하고(3), 마지막에 이 수로 얻은 아이템을 슬롯에 넣는다.
  */
 export function lock(state: PlayerState): LockOutcome {
   if (!state.piece) throw new Error('no piece to lock');
-  const boardAfterLock = applyGravity(lockPiece(state.board, state.piece));
+
+  /*
+   * 폭탄 조각은 판에 놓이지 않는다 — 축 자리를 가운데로 3×3 을 지우고 사라진다(자식도 같이).
+   * 지운 뒤 중력까지 적용해야 그다음 연쇄 판정이 실제 모양 위에서 일어난다.
+   */
+  const exploding = state.piece.bomb === true;
+  const { board: blasted, cleared: exploded } = exploding
+    ? explode(state.board, state.piece.col, state.piece.row)
+    : { board: state.board, cleared: [] as number[] };
+  const boardAfterLock = applyGravity(exploding ? blasted : lockPiece(state.board, state.piece));
   const { board: settled, steps } = resolveChains(boardAfterLock);
 
   const gained = steps.reduce((n, s) => n + s.score, 0);
   const { garbage: produced, carry } = garbageFromScore(gained, state.carry);
-  const { pending, sent, offset } = offsetGarbage(state.pendingGarbage, produced);
+  const { pending, sent: baseSent, offset } = offsetGarbage(state.pendingGarbage, produced);
+  /*
+   * 방해 2배는 <b>상쇄한 뒤</b>의 전송량에만 곱한다. 상쇄 전에 곱하면 내 대기 큐까지 두 배로
+   * 깎여 "공격 아이템"이 방어까지 겸하게 된다 — 이름이 약속한 것보다 세진다.
+   */
+  const doubled = state.doubleNext && baseSent > 0;
+  const sent = doubled ? baseSent * DOUBLE_FACTOR : baseSent;
 
   let board = settled;
   let rng = state.rng;
@@ -153,6 +240,8 @@ export function lock(state: PlayerState): LockOutcome {
   const lost = !fits(board, piece);
 
   const chain = steps.length;
+  const dryMoves = chain > 0 ? 0 : state.dryMoves + 1;
+  const gainedItem = itemFromMove(chain, offset, pending, dryMoves);
   const next: PlayerState = {
     board,
     piece: lost ? null : piece,
@@ -163,6 +252,11 @@ export function lock(state: PlayerState): LockOutcome {
     pendingGarbage: pendingAfter,
     maxChain: Math.max(state.maxChain, chain),
     moves: state.moves + 1,
+    items: addItem(state.items, gainedItem),
+    // 2배는 전송이 있었을 때만 쓰인다 — 연쇄가 안 난 수에 헛되이 사라지지 않는다
+    doubleNext: state.doubleNext && !doubled,
+    // 지우개를 받은 수에서 다시 0부터 센다(같은 조건으로 연달아 받지 않게)
+    dryMoves: gainedItem === ITEM_ERASER ? 0 : dryMoves,
     status: lost ? 'LOST' : 'PLAYING',
   };
   return {
@@ -173,6 +267,9 @@ export function lock(state: PlayerState): LockOutcome {
     garbageSent: sent,
     garbageDropped,
     boardAfterGarbage: board,
+    gainedItem,
+    exploded,
+    doubled,
     lost,
   };
 }
