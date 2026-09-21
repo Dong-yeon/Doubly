@@ -34,11 +34,14 @@ import static org.assertj.core.api.Assertions.assertThat;
  *       번들 시점에 터진다</li>
  * </ol>
  *
- * <p><b>내린 코드는 백엔드에만 남는다</b>(2026-09-21). 더비·블리를 피커에서 뺐지만 enum 에는
- * 남겼다 — 지난 말풍선의 content 에 그 코드가 저장돼 있어서 지우면 알림 미리보기가 라벨을
- * 못 찾는다. 그래서 이 테스트는 "양쪽이 같다"가 아니라 <b>"프론트 = 백엔드에서 내리지 않은
- * 것"</b>을 본다({@link StickerImage#isRetired()}). 내린 코드가 프론트에 다시 나타나는 것도
- * 함께 막는다 — 그림이 없는 코드를 트레이에 띄우면 빈 칸이 된다.
+ * <p><b>내린 코드도 그려지기는 해야 한다</b>(2026-09-21). 지난 말풍선의 content 에 그 코드가
+ * 저장돼 있어서, 카탈로그에서 통째로 빼면 말풍선이 빈 칸이 되고 알림 미리보기가 코드를
+ * 날것으로 노출한다. 그래서 프론트는 <b>두 목록</b>으로 나뉜다 —
+ * {@code STICKER_CHARACTERS}(피커에 뜨는 것) 과 {@code RETIRED_STICKER_IMAGES}(그릴 줄만
+ * 아는 것). 백엔드에서는 후자가 {@code packId == null} 이다({@link StickerImage#isRetired()}).
+ *
+ * <p>그래서 이 테스트는 <b>두 집합을 각각</b> 대조한다. 한 쪽만 보면 "피커에서 내렸는데
+ * 말풍선도 같이 깨진" 상태를 놓친다 — 실제로 그렇게 한 번 깼다.
  */
 class StickerImageSyncTest {
 
@@ -57,42 +60,38 @@ class StickerImageSyncTest {
             "\\{\\s*code:\\s*'([A-Z0-9_]+)'\\s*,\\s*label:\\s*'([^']*)'\\s*,(?:[^{}]*?,)?\\s*source:\\s*require\\('([^']+)'\\)");
 
     @Test
-    void 프론트_STICKER_IMAGES_와_백엔드_StickerImage_가_일치한다() throws IOException {
-        Map<String, String> frontend = parseFrontend();
-
-        // 정규식이 한 건도 못 찾으면 빈 집합끼리 비교해 통과한다 — 파싱 자체가 살아 있는지 먼저 본다
-        assertThat(frontend)
-                .as("stickerImages.ts 파싱 실패 — ENTRY 정규식이 카탈로그 모양과 안 맞는다")
-                .isNotEmpty();
-
-        Map<String, String> active = new LinkedHashMap<>();
-        Arrays.stream(StickerImage.values())
-                .filter(s -> !s.isRetired())
-                .forEach(s -> active.put(s.name(), s.label()));
-
-        assertThat(frontend.keySet())
-                .as("프론트 stickerImages.ts 의 code 와 백엔드 StickerImage enum(내리지 않은 것) 불일치")
-                .containsExactlyInAnyOrderElementsOf(active.keySet());
-
-        assertThat(frontend)
-                .as("같은 스티커의 한국어 라벨이 프론트와 백엔드에서 다르다 (알림 미리보기 ≠ 트레이 툴팁)")
-                .containsExactlyInAnyOrderEntriesOf(active);
+    void 피커에_뜨는_스티커가_프론트와_백엔드에서_같다() throws IOException {
+        assertThat(parseSection(ACTIVE_SECTION, RETIRED_SECTION))
+                .as("STICKER_CHARACTERS 와 백엔드 StickerImage(내리지 않은 것) 불일치")
+                .containsExactlyInAnyOrderEntriesOf(backendBy(s -> !s.isRetired()));
     }
 
+    /**
+     * 내린 스티커는 <b>피커에는 없고 조회 목록에는 있어야</b> 한다.
+     *
+     * <p>이 둘을 한 배열이 겸하던 시절에는 "피커에서 내린다"가 곧 "지난 말풍선이 깨진다"였다.
+     * 라벨만 사라지는 거라 tsc 도 못 잡고, 앱을 열어 옛 대화를 스크롤해야 보인다.
+     */
     @Test
-    void 내린_스티커는_프론트_카탈로그에_없다() throws IOException {
-        // 그림을 지운 코드가 트레이에 되살아나면 빈 칸이 된다 — 라벨만 남아 있어서 tsc 는 못 잡는다
-        List<String> retired = Arrays.stream(StickerImage.values())
-                .filter(StickerImage::isRetired)
-                .map(StickerImage::name)
-                .toList();
+    void 내린_스티커는_피커에_없고_조회_목록에는_남는다() throws IOException {
+        Map<String, String> retired = backendBy(StickerImage::isRetired);
         assertThat(retired)
                 .as("내린 코드 목록이 비었다 — isRetired 가 무력화됐는지 확인할 것")
                 .isNotEmpty();
 
-        assertThat(parseFrontend().keySet())
-                .as("피커에서 내린 스티커가 프론트 카탈로그에 다시 들어왔다 (그림이 없어 빈 칸이 된다)")
-                .doesNotContainAnyElementsOf(retired);
+        assertThat(parseSection(RETIRED_SECTION, null))
+                .as("내린 스티커가 RETIRED_STICKER_IMAGES 에서 빠졌다 — 지난 말풍선이 빈 칸이 된다")
+                .containsExactlyInAnyOrderEntriesOf(retired);
+
+        assertThat(parseSection(ACTIVE_SECTION, RETIRED_SECTION).keySet())
+                .as("내린 스티커가 피커에 다시 들어왔다")
+                .doesNotContainAnyElementsOf(retired.keySet());
+    }
+
+    private Map<String, String> backendBy(java.util.function.Predicate<StickerImage> filter) {
+        Map<String, String> map = new LinkedHashMap<>();
+        Arrays.stream(StickerImage.values()).filter(filter).forEach(s -> map.put(s.name(), s.label()));
+        return map;
     }
 
     @Test
@@ -115,16 +114,29 @@ class StickerImageSyncTest {
                 .isEmpty();
     }
 
-    private Map<String, String> parseFrontend() throws IOException {
+    private static final String ACTIVE_SECTION = "export const STICKER_CHARACTERS";
+    private static final String RETIRED_SECTION = "export const RETIRED_STICKER_IMAGES";
+
+    /**
+     * 파일의 한 구획만 파싱한다 — {@code from} 부터 {@code until} 직전까지.
+     *
+     * <p>구획 경계가 사라지면(이름을 바꾸거나 합치면) 여기서 바로 실패한다. 전체를
+     * 훑으면 두 목록이 섞여 "피커에 있다"와 "그릴 줄 안다"를 구분할 수 없다.
+     */
+    private Map<String, String> parseSection(String from, String until) throws IOException {
         String source = Files.readString(
                 frontendSrc().resolve("constants/stickerImages.ts"), StandardCharsets.UTF_8);
 
+        int start = source.indexOf(from);
+        assertThat(start).as("stickerImages.ts 에 %s 가 없다", from).isNotNegative();
+        int end = until == null ? source.length() : source.indexOf(until, start);
+        assertThat(end).as("stickerImages.ts 에 %s 가 없다", until).isNotNegative();
+
         Map<String, String> entries = new LinkedHashMap<>();
-        Matcher m = ENTRY.matcher(source);
+        Matcher m = ENTRY.matcher(source.substring(start, end));
         while (m.find()) {
             entries.put(m.group(1), m.group(2));
         }
-        assertThat(entries).as("stickerImages.ts 에서 STICKER_IMAGES 항목을 파싱하지 못함").isNotEmpty();
         return entries;
     }
 

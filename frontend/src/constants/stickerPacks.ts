@@ -15,7 +15,6 @@
 
 /** 무료 팩 — 누구나 쓴다 */
 export const PACK_ANIM_BASIC = 'ANIM_BASIC';
-export const PACK_BEAR = 'BEAR';
 export const PACK_MOOD_BASIC = 'MOOD_BASIC';
 export const PACK_TOUCH_BASIC = 'TOUCH_BASIC';
 
@@ -73,10 +72,14 @@ export const ANIMATED_STICKER_PACKS: Record<string, string> = {
   ANIM_EYES: PACK_ANIM_CHEER,
 };
 
-/** 이미지 스티커 캐릭터 키 → 팩. 캐릭터 한 마리가 곧 한 팩이다. */
-export const CHARACTER_PACKS: Record<string, string> = {
-  bear: PACK_BEAR,
-};
+/**
+ * 이미지 스티커 캐릭터 키 → 팩. 캐릭터 한 마리가 곧 한 팩이다.
+ *
+ * <p>지금은 비어 있다(2026-09-21) — 그림 출처를 정리하는 동안 이미지 스티커를 전부
+ * 내렸다(`stickerImages.ts` 의 `STICKER_CHARACTERS`). 캐릭터를 되살리거나 새로 붙이면
+ * 여기에 한 줄, 유료면 마이그레이션 시드에 한 줄이면 끝이다.
+ */
+export const CHARACTER_PACKS: Record<string, string> = {};
 
 /** 이 스티커 코드가 속한 팩. 팩이 없으면 undefined(= 무료). */
 export function packIdOfSticker(code: string): string | undefined {

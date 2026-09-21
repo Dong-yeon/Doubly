@@ -96,7 +96,6 @@ class StickerEntitlementTest {
         Long user = register("sticker-free@fitto.com");
 
         assertThat(stickerService.canUse(user, StickerPacks.ANIM_BASIC)).isTrue();
-        assertThat(stickerService.canUse(user, StickerPacks.BEAR)).isTrue();
         assertThat(stickerService.canUse(user, StickerPacks.TOUCH_BASIC)).isTrue();
         assertThatCode(() -> stickerService.requireUsable(user, StickerPacks.ANIM_BASIC))
                 .doesNotThrowAnyException();
@@ -118,11 +117,14 @@ class StickerEntitlementTest {
     void 내린_캐릭터의_지난_코드도_막히지_않는다() {
         long[] ids = couple("sticker-retired-a@fitto.com", "sticker-retired-b@fitto.com");
 
-        // 더비·블리는 피커에서 내렸지만 지난 말풍선의 content 에 코드가 남아 있다.
+        // 곰돌이·더비·블리를 피커에서 내렸지만 지난 말풍선의 content 에 코드가 남아 있다.
         // 팩이 없으므로 판정을 지나지 않는다 — 다시 보내도 402 가 나지 않아야 한다.
-        assertThatCode(() -> chatService.send(ids[0], ids[2],
-                new SendMessageRequest(MessageType.STICKER, "DUBI_LIKE", null, null, null, null)))
-                .doesNotThrowAnyException();
+        for (String retired : new String[]{"DUBI_LIKE", "BLI_LOVE", "LOVE_BEAR"}) {
+            assertThatCode(() -> chatService.send(ids[0], ids[2],
+                    new SendMessageRequest(MessageType.STICKER, retired, null, null, null, null)))
+                    .as(retired)
+                    .doesNotThrowAnyException();
+        }
     }
 
     @Test

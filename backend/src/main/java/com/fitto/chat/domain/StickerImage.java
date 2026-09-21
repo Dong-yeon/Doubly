@@ -22,28 +22,35 @@ import java.util.Optional;
  * (docs/COUPLE_EMOJI_AI_DESIGN_2026-09-08.md §17). 유료로 돌릴 장이 생기면 그 코드에
  * 유료 {@link StickerPacks} 를 달면 된다 — 판정은 팩이 하고, 이 enum 은 팩 이름만 들고 있다.
  *
- * <p><b>DUBI_*·BLI_* 는 피커에서 내렸다</b>(2026-09-21). 그림을 새로 교체하기로 해서
- * 앱 카탈로그({@code stickerImages.ts})에서 뺐지만, <b>여기서는 지우지 않는다</b> —
- * 지난 말풍선의 content 에 이 코드가 그대로 저장돼 있어서 enum 이 사라지면 알림
- * 미리보기가 라벨을 못 찾는다. 팩을 주지 않으므로({@code null}) 무료로 통과한다.
+ * <p><b>지금은 전부 내려가 있다</b>(2026-09-21). 그림 출처를 정리하는 동안 이미지 스티커를
+ * 피커에서 통째로 뺐다 — 패널에는 움직이는 이모티콘(Noto, 라이선스 확실)과 우리 이모지
+ * (사용자 본인 사진)만 남는다. <b>여기서 지우지는 않는다</b>: 지난 말풍선의 content 에 이
+ * 코드가 그대로 저장돼 있어서 enum 이 사라지면 알림 미리보기가 라벨을 못 찾는다.
+ * 팩을 주지 않으므로({@code null}) 판정을 지나지 않고 무료로 통과한다.
+ *
+ * <p>되살릴 때는 {@link StickerPacks} 상수를 다시 달고 {@code stickerImages.ts} 의
+ * {@code RETIRED_STICKER_IMAGES} 에서 {@code STICKER_CHARACTERS} 로 옮기면 된다.
+ * <b>더비·블리는 출처 문제가 없다</b> — 동연님 손그림 스케치에서 나온 자체 캐릭터다.
  */
 public enum StickerImage {
-    // 곰돌이 10종 — LOVE_BEAR 한 장뿐이던 것을 variants.mjs 로 감정 변주를 뽑아 세트로 만들었다.
-    // LOVE_BEAR 도 같이 다시 그렸지만(글자 제거·테두리 통일) 코드는 그대로라 과거 메시지는 그대로 읽힌다.
-    LOVE_BEAR("사랑해", StickerPacks.BEAR),
-    BEAR_EXCITED("신났어", StickerPacks.BEAR),
-    BEAR_LAUGH("하하하", StickerPacks.BEAR),
-    BEAR_SHY("부끄러워", StickerPacks.BEAR),
-    BEAR_SULKY("시무룩", StickerPacks.BEAR),
-    BEAR_ANGRY("화났어", StickerPacks.BEAR),
-    BEAR_SORRY("미안해", StickerPacks.BEAR),
-    BEAR_CRYING("엉엉", StickerPacks.BEAR),
-    BEAR_TIRED("지쳤어", StickerPacks.BEAR),
-    BEAR_SLEEPY("잘자", StickerPacks.BEAR),
+    /*
+     * ── 아래는 전부 내린 코드다(2026-09-21). 지난 말풍선을 위해서만 남는다 ──
+     *
+     * 곰돌이 10종 — 완성본 한 장을 참조 삼아 variants.mjs 로 감정 변주를 뽑은 세트다.
+     * 그 참조 그림의 출처가 확인되지 않아 함께 내렸다.
+     */
+    LOVE_BEAR("사랑해", null),
+    BEAR_EXCITED("신났어", null),
+    BEAR_LAUGH("하하하", null),
+    BEAR_SHY("부끄러워", null),
+    BEAR_SULKY("시무룩", null),
+    BEAR_ANGRY("화났어", null),
+    BEAR_SORRY("미안해", null),
+    BEAR_CRYING("엉엉", null),
+    BEAR_TIRED("지쳤어", null),
+    BEAR_SLEEPY("잘자", null),
 
     /*
-     * ── 아래는 내린 코드다(2026-09-21). 지난 말풍선을 위해서만 남는다 ──
-     *
      * 더비(초록)·블리(노랑) 각 14종 — 사용자 손그림을 스티커화한 자체 캐릭터 "비개구리"
      * (설계 메모 §15·§17·§20·§21). 이름은 앱 이름 더블리를 둘로 쪼갠 것이다.
      * 팩이 null 이라 판정에 걸리지 않는다 — 새 그림이 들어오면 새 코드로 추가할 것.

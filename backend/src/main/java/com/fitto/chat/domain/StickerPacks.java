@@ -13,14 +13,13 @@ package com.fitto.chat.domain;
  * 무료라고 보여 준 것을 서버가 막으면 STOMP 에서는 402 를 화면으로 돌려줄 방법이 없어
  * 말풍선이 "전송 중"에 멈춘다(docs/STICKER_PACK_OVERLAP_2026-09-14.md). 그래서
  * <b>팩에 없으면 통과</b>시킨다. 유니코드 이모지, 우리 이모지, 그리고 피커에서 내린
- * 더비·블리(DUBI_*·BLI_*)가 전부 이 경로로 지난다 — {@link MoodPack} 이 "목록에 없는
+ * 내린 이미지 스티커(곰돌이·더비·블리)가 전부 이 경로로 지난다 — {@link MoodPack} 이 "목록에 없는
  * 이모지는 무료다"로 이미 쓰고 있던 규칙과 같다.
  */
 public final class StickerPacks {
 
     /* ── 무료 ─────────────────────────────────────────────────────────────── */
     public static final String ANIM_BASIC = "ANIM_BASIC";
-    public static final String BEAR = "BEAR";
     public static final String MOOD_BASIC = "MOOD_BASIC";
     public static final String TOUCH_BASIC = "TOUCH_BASIC";
 

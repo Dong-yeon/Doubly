@@ -58,13 +58,13 @@ CREATE UNIQUE INDEX uq_user_sticker_purchase ON user_sticker_purchases (user_id,
 -- PRO 사용자에게는 전과 똑같이 24종 전부가 열린다. 달라지는 건 무료 사용자가 이제
 -- "전부 아니면 전무" 대신 원하는 한 팩만 살 수 있다는 것뿐이다.
 --
--- 더비(DUBI_*)·블리(BLI_*) 28종은 <b>일부러 시드하지 않는다</b>. 2026-09-21 에 피커에서
--- 내렸고(새 그림으로 교체 예정), 팩에 없는 코드는 무료로 통과하므로 지난 말풍선이 그대로
--- 그려진다 — MoodPack 의 "목록에 없는 이모지는 무료다"와 같은 규칙이다.
+-- <b>이미지 스티커(IMAGE)는 한 팩도 시드하지 않는다.</b> 2026-09-21 에 그림 출처를 정리하며
+-- 곰돌이 10 · 더비 14 · 블리 14 를 전부 피커에서 내렸다. 팩에 없는 코드는 무료로 통과하므로
+-- 지난 말풍선은 그대로 그려진다 — MoodPack 의 "목록에 없는 이모지는 무료다"와 같은 규칙이다.
+-- 되살리거나 새 캐릭터를 붙일 때 IMAGE 카테고리 행을 여기에 더하면 된다.
 
 INSERT INTO sticker_packs (id, title, category, is_pro_only, price) VALUES
     ('ANIM_BASIC',     '움직이는 이모티콘', 'ANIMATED', FALSE, 0),
-    ('BEAR',           '곰돌이',           'IMAGE',    FALSE, 0),
     ('MOOD_BASIC',     '기본 무드',         'MOOD',     FALSE, 0),
     ('TOUCH_BASIC',    '기본 터치',         'TOUCH',    FALSE, 0),
     ('ANIM_LOVE',      '두근두근',          'ANIMATED', TRUE,  1200),

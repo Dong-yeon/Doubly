@@ -135,13 +135,17 @@ class StickerPackSyncTest {
                     .isEqualTo(!s.isPremium());
         }
 
-        // 이미지 스티커는 전부 무료였고 지금도 전부 무료다(2026-09-14 결정)
+        /*
+         * 이미지 스티커는 전부 무료였다(2026-09-14 결정). 지금은 그림 출처를 정리하느라
+         * 한 장도 피커에 없지만, 되살릴 때 <b>잠긴 채로 돌아오면 안 된다</b> — 무료로
+         * 보여 주던 것을 유료로 되살리는 건 신규 상품이 아니라 기능 회수다.
+         */
         for (StickerImage s : StickerImage.values()) {
             if (s.isRetired()) {
                 continue;
             }
             assertThat(seeded.get(s.packId()).isFreeForEveryone())
-                    .as("%s 가 잠겼다 — 이미지 스티커는 번들 에셋이라 전부 무료다", s.name())
+                    .as("%s 가 잠겼다 — 이미지 스티커는 번들 에셋이라 전부 무료였다", s.name())
                     .isTrue();
         }
 
