@@ -11,6 +11,8 @@ import type {
   GameStreak,
   GameTypeKey,
   OmokGame,
+  PuzzleBattleGame,
+  PuzzleBattleRun,
   SudokuDifficulty,
   SudokuGame,
 } from '../types';
@@ -100,6 +102,23 @@ export const omokApi = {
   giveUp: (id: number) => unwrap(apiClient.post<ApiResponse<void>>(`/games/omok/${id}/give-up`)),
   /** 끝난 판 최근 20개(승패 포함) */
   history: () => unwrap(apiClient.get<ApiResponse<OmokGame[]>>('/games/omok/history')),
+};
+
+/**
+ * 연쇄 퍼즐 대전 — 수(手)는 여기로 가지 않는다(chatSocket 의 publishGameEvent). 판을 열고,
+ * 내 판이 끝났을 때 결과를 한 번 내고, 접는다. docs/COUPLE_PUZZLE_BATTLE_2026-09-18.md §11.
+ */
+export const puzzleApi = {
+  /** 진행 중인 판 — 없으면 null */
+  current: () => unwrap(apiClient.get<ApiResponse<PuzzleBattleGame | null>>('/games/puzzle/current')),
+  /** 새 판 — 진행 중인 판이 있으면 그걸 돌려준다. 시드·핸디캡은 서버가 정한다 */
+  start: () => unwrap(apiClient.post<ApiResponse<PuzzleBattleGame>>('/games/puzzle')),
+  /** 내 결과 제출 — 한 판에 한 번(두 번째는 409) */
+  finish: (id: number, run: PuzzleBattleRun) =>
+    unwrap(apiClient.post<ApiResponse<PuzzleBattleGame>>(`/games/puzzle/${id}/finish`, run)),
+  giveUp: (id: number) => unwrap(apiClient.post<ApiResponse<void>>(`/games/puzzle/${id}/give-up`)),
+  /** 끝난 판 최근 20개 */
+  history: () => unwrap(apiClient.get<ApiResponse<PuzzleBattleGame[]>>('/games/puzzle/history')),
 };
 
 /**

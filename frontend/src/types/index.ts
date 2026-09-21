@@ -677,8 +677,52 @@ export interface CatchMindGuessResult {
   game: CatchMindGame;
 }
 
+// 연쇄 퍼즐 대전 — docs/COUPLE_PUZZLE_BATTLE_2026-09-18.md §11. 서버는 심판이 아니라 보관자다
+export interface PuzzleBattleRun {
+  score: number;
+  maxChain: number;
+  /** 버틴 시간(ms). 살아남은 제출이면 상대가 끝난 시점 */
+  survivedMs: number;
+  lost: boolean;
+  /** 기보 "ms,열,회전,축색,자식색,보낸방해,받은방해;..." — 상대 것이 고스트 대전의 재료 */
+  timeline: string;
+}
+export interface PuzzleBattleGame {
+  id: number;
+  status: SudokuStatus;
+  /** 조각 순서 시드 — 둘 다 같은 값 */
+  seed: number;
+  /** 내 결과 — 아직 안 냈으면 null */
+  me: PuzzleBattleRun | null;
+  /** 상대 결과 — 아직 안 냈으면 null */
+  partner: PuzzleBattleRun | null;
+  /** 내가 받는 방해의 백분율(100 = 그대로). 숨기지 않는다 */
+  myHandicap: number;
+  partnerHandicap: number;
+  winner?: 'ME' | 'PARTNER' | 'DRAW' | null;
+  partnerName?: string | null;
+  createdAt: string;
+  completedAt?: string | null;
+}
+/** /sub/games/{relationId} 페이로드 — 백엔드 PuzzleBattleEvent 와 짝. senderId 는 서버가 채운다 */
+export interface PuzzleBattleEvent {
+  senderId: number;
+  gameId: number;
+  seq: number;
+  elapsedMs: number;
+  /** 78자리 숫자열 — 받는 쪽은 이걸 신뢰한다 */
+  board: string;
+  garbageSent: number;
+  pendingGarbage: number;
+  score: number;
+  maxChain: number;
+  lost: boolean;
+  /** 이 수에 쓴 아이템(§13) — 상대 화면에 "쏜" 순간을 띄운다. 0 이면 안 썼다 */
+  item: number;
+}
+
 // 게임 판 위 즉석 반응 — docs/COUPLE_GAMES_EXPANSION_2026-09-14.md 1절. 저장되지 않는 신호다
-export type GameTypeKey = 'SUDOKU' | 'OMOK' | 'CATCH_MIND';
+export type GameTypeKey = 'SUDOKU' | 'OMOK' | 'CATCH_MIND' | 'PUZZLE_BATTLE';
 export interface GameReactionOption {
   key: string;
   emoji: string;

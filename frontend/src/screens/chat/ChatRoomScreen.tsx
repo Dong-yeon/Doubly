@@ -57,7 +57,9 @@ import { ChatMoreMenuSheet } from '../../components/ChatMoreMenuSheet';
 import { ScheduleMessageSheet } from '../../components/ScheduleMessageSheet';
 import { VoiceRecordSheet } from '../../components/VoiceRecordSheet';
 import { VoiceMessageBubble } from '../../components/VoiceMessageBubble';
+import { LinkedText } from '../../components/LinkedText';
 import { SpellCheckBar } from '../../components/SpellCheckBar';
+import { StickerSuggestBar } from '../../components/StickerSuggestBar';
 import { MessageActionSheet } from '../../components/MessageActionSheet';
 import { SwipeBackView } from '../../components/SwipeBackView';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -72,11 +74,13 @@ import {
 import { checkWithDictionary, preloadDictionary } from '../../utils/koreanDictionary';
 import { chatApi } from '../../api/chat';
 import { isPrShareContent } from '../../utils/workoutShare';
+import { isCatchMindShareContent } from '../../utils/catchMindShare';
 import { isGoalShareContent } from '../../utils/dietShare';
 import { touchGestureOf } from '../../constants/touchGestures';
 import { callCardLabel, parseCallCard } from '../../utils/callCard';
 import { animatedStickerOf } from '../../constants/animatedStickers';
-import { stickerImageOf } from '../../constants/stickerImages';
+import { STICKER_CODE_INDEX, stickerImageOf } from '../../constants/stickerImages';
+import { parseStickerCode, suggestStickers } from '../../utils/stickerCodes';
 import { StickerPanel } from '../../components/chat/StickerPanel';
 import { useCoupleEmojiStore } from '../../store/coupleEmojiStore';
 import { playTouchGesture } from '../../utils/haptics';
@@ -426,6 +430,15 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     return dedupeOverlapping([...ruleSuggestions, ...dict]);
   }, [ruleSuggestions, dictResult, text]);
 
+  /*
+   * 스티커 추천 — 짧은 입력("사랑해"·"ㅠㅠ"·"(더비")에만 뜬다(utils/stickerCodes.ts).
+   * 카톡 키워드 이모티콘처럼 바꿔주지 않고 보여준다. 수정 중에는 끈다 — 고치는 글에 그림을 권할 자리가 아니다.
+   */
+  const stickerSuggestions = useMemo(
+    () => (editing ? [] : suggestStickers(STICKER_CODE_INDEX, text)),
+    [text, editing],
+  );
+
   /** 첫 제안을 적용한다. 남은 게 있으면 이어서 뜬다 */
   const applySpelling = () => {
     const first = suggestions[0];
@@ -702,6 +715,21 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     }
 
     if (sendingRef.current) return; // 같은 프레임 연타 — state 가드는 여기서 stale 하다
+
+    /*
+     * 텍스트 코드 "(더비_좋아)" 는 스티커로 나간다(utils/stickerCodes.ts). 입력 <b>전체</b>가
+     * 코드일 때만이다 — 문장 속 코드까지 바꾸면 말풍선 하나가 글과 그림으로 쪼개진다.
+     * 답장은 붙지 않는다(sendSticker 가 replyTo 를 모른다) — 스티커 트레이에서 보낼 때와 같다.
+     */
+    const coded = parseStickerCode(STICKER_CODE_INDEX, content);
+    if (coded) {
+      setText('');
+      setReplyTo(null);
+      await sendSticker(coded.code, false, coded.label);
+      inputRef.current?.focus();
+      return;
+    }
+
     sendingRef.current = true;
 
     /*
@@ -1206,6 +1234,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const renderItem = ({ item, index }: { item: ChatMessage; index: number }) => {
     const mine = item.senderId === myId;
     const isImage = item.messageType === 'IMAGE' && !!item.imageUrl;
+    /* 캐치마인드 그림 공유 — 사진이지만 누르면 게임으로 간다(utils/catchMindShare.ts) */
+    const isCatchMindShare = isImage && isCatchMindShareContent(item.content);
     const voice = item.messageType === 'VOICE_MESSAGE' ? parseVoiceContent(item.content) : null;
     /*
      * 스티커처럼 그리는 것 둘 — 보낸 경로는 달라도 "말풍선 없이 크게"는 같다.
@@ -1379,6 +1409,33 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             <Text style={styles.touchLabel}>{touchGestureOf(item.content)?.label ?? '터치'}</Text>
           </View>
         ) : isImage ? (
+          isCatchMindShare ? (
+            /*
+             * 캐치마인드 그림 — 누르면 전체화면이 아니라 <b>게임으로</b> 간다. 이 카드를 보는
+             * 사람이 하고 싶은 것은 사진 확대가 아니라 "맞히러 가기"이고, 그림은 게임 화면이
+             * 어차피 더 크게 보여준다. 초대말("시작해보세요")이 약속하는 동작이기도 하다.
+             *
+             * 사진 메시지 전체가 하나의 버튼이라 안쪽에 또 누를 것을 두지 않는다
+             * (verify:nested-buttons). 길게 누르기는 바깥 말풍선이 받지 못하므로 여기서
+             * 넘겨준다 — 스티커가 같은 이유로 onLongPress 를 받는다.
+             */
+            <Pressable
+              onPress={() => navigation.navigate('Home', { screen: 'CatchMind' })}
+              onLongPress={() => onLongPressMessage(item)}
+              delayLongPress={300}
+              accessibilityRole="button"
+              accessibilityLabel="캐치마인드 열기"
+              style={({ pressed }) => (pressed ? styles.imagePressed : undefined)}
+            >
+              <Image source={{ uri: item.imageUrl! }} style={chatStyles.msgImage} resizeMode="cover" />
+              {/*
+                캡션이 그대로 안내가 된다("…시작해보세요") — 새 배지나 색을 들이지 않는다.
+                말풍선 배경 위 글자색은 20개 팔레트 전부 검증된 chat.meta 뿐이다
+                (verify-chat-theme-contrast). 여기서는 캡션도 버튼 안이라 같이 눌린다.
+              */}
+              {item.content ? <Text style={chatStyles.imageCaption}>{item.content}</Text> : null}
+            </Pressable>
+          ) : (
           <View>
             {/* 탭하면 전체화면 — 예전엔 200×200 으로 잘린 썸네일이 전부라 원본을 볼 수 없었다 */}
             <Pressable
@@ -1398,6 +1455,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               <Text style={chatStyles.imageCaption}>{item.content}</Text>
             ) : null}
           </View>
+          )
         ) : isWorkout || isRoutine ? (
           <View style={[
             styles.workoutCard,
@@ -1459,13 +1517,16 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             mine ? chatStyles.bubbleMine : chatStyles.bubbleTheirs,
             !isGroupEnd && (mine ? styles.bubbleMineGrouped : styles.bubbleTheirsGrouped),
           ]}>
-            <Text style={[chatStyles.msgText, mine && chatStyles.msgTextMine]}>
-              {/*
-                우리 이모지인데 이미지가 없는 행(실패·레거시)은 content 가 숫자 id 라 그대로 보이면
-                안 된다 — 알림 미리보기와 같은 표기로 대신한다(2026-09-08 점검 #12).
-              */}
-              {item.messageType === 'COUPLE_EMOJI' && !item.imageUrl ? '[우리 이모지]' : item.content}
-            </Text>
+            {/*
+              우리 이모지인데 이미지가 없는 행(실패·레거시)은 content 가 숫자 id 라 그대로 보이면
+              안 된다 — 알림 미리보기와 같은 표기로 대신한다(2026-09-08 점검 #12).
+              붙여넣은 링크는 탭하면 열린다(LinkedText) — 링크 조각의 길게 누르기도 메뉴로 이어진다.
+            */}
+            <LinkedText
+              text={item.messageType === 'COUPLE_EMOJI' && !item.imageUrl ? '[우리 이모지]' : item.content ?? ''}
+              style={[chatStyles.msgText, mine && chatStyles.msgTextMine]}
+              onLongPress={() => onLongPressMessage(item)}
+            />
           </View>
         )}
         {/*
@@ -1792,6 +1853,13 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             </Pressable>
           </View>
         ) : null}
+        <StickerSuggestBar
+          items={stickerSuggestions}
+          onPick={(e) => {
+            setText('');
+            void sendSticker(e.code, false, e.label);
+          }}
+        />
         <SpellCheckBar
           suggestion={spellDismissedFor === text ? null : (suggestions[0] ?? null)}
           total={suggestions.length}
@@ -2062,6 +2130,8 @@ const styles = themedStyles((colors) => ({
   headerCallActions: { flexDirection: 'row', alignItems: 'center', paddingRight: spacing.xs },
   headerCallButton: { minWidth: 40, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   headerCallButtonPressed: { opacity: 0.6 },
+  /* 캐치마인드 그림 카드 — 누르면 게임으로 간다. 눌린 티를 내 버튼인 걸 알게 한다 */
+  imagePressed: { opacity: 0.7 },
   list: { padding: spacing.md },
   imagePreviewBackdrop: {
     flex: 1,

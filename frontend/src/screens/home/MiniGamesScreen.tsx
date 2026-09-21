@@ -16,13 +16,13 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../navigation/types';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { EmptyState } from '../../components/EmptyState';
-import { catchMindApi, gameStreakApi, omokApi, sudokuApi } from '../../api/game';
+import { catchMindApi, gameStreakApi, omokApi, puzzleApi, sudokuApi } from '../../api/game';
 import { connectSocket, subscribeCouple, unsubscribeCouple } from '../../api/chatSocket';
 import { useRelationStore } from '../../store/relationStore';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { CatchMindGame, DailySudoku, GameStreak, OmokGame, SudokuGame } from '../../types';
+import type { CatchMindGame, DailySudoku, GameStreak, OmokGame, PuzzleBattleGame, SudokuGame } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'MiniGames'>;
@@ -33,6 +33,7 @@ export function MiniGamesScreen({ navigation }: Props) {
   const [omok, setOmok] = useState<OmokGame | null>(null);
   const [omokRecord, setOmokRecord] = useState<{ me: number; partner: number } | null>(null);
   const [catchMind, setCatchMind] = useState<CatchMindGame | null>(null);
+  const [puzzle, setPuzzle] = useState<PuzzleBattleGame | null>(null);
   const [daily, setDaily] = useState<DailySudoku | null>(null);
   const [streak, setStreak] = useState<GameStreak | null>(null);
   const [openingDaily, setOpeningDaily] = useState(false);
@@ -40,17 +41,19 @@ export function MiniGamesScreen({ navigation }: Props) {
 
   const load = useCallback(async () => {
     try {
-      const [s, o, h, d, st, cm] = await Promise.all([
+      const [s, o, h, d, st, cm, pz] = await Promise.all([
         sudokuApi.current(),
         omokApi.current(),
         omokApi.history(),
         sudokuApi.daily(),
         gameStreakApi.get(),
         catchMindApi.current(),
+        puzzleApi.current(),
       ]);
       setSudoku(s);
       setOmok(o);
       setCatchMind(cm);
+      setPuzzle(pz);
       setOmokRecord({
         me: h.filter((g) => g.winner === 'ME').length,
         partner: h.filter((g) => g.winner === 'PARTNER').length,
@@ -105,6 +108,16 @@ export function MiniGamesScreen({ navigation }: Props) {
         ? `${catchMind.partnerName ?? '상대'}가 ${catchMind.guessCount}번 시도했어요`
         : `${catchMind.partnerName ?? '상대'}가 아직 안 봤어요`
     : '그려서 보내면 아무 때나 맞혀요';
+
+  /* 대전은 둘 다 결과를 내야 끝난다 — 상대가 냈고 내가 아직이면 "내 차례"다 */
+  const puzzleMine = !!puzzle && !puzzle.me;
+  const puzzleStatus = puzzle
+    ? puzzle.me
+      ? `${puzzle.partnerName ?? '상대'}를 기다리는 중 · 내 ${puzzle.me.maxChain}연쇄`
+      : puzzle.partner
+        ? `${puzzle.partnerName ?? '상대'}의 ${puzzle.partner.maxChain}연쇄 기록에 도전`
+        : `${puzzle.partnerName ?? '상대'}가 대전 판을 열었어요`
+    : '연쇄로 방해를 주고받는 대전 · 혼자 연습도';
 
   const dailyStatus = !daily
     ? ''
@@ -219,6 +232,16 @@ export function MiniGamesScreen({ navigation }: Props) {
           badge={catchMind ? (catchMindMine ? '맞힐 차례' : '기다리는 중') : undefined}
           highlight={catchMindMine}
           onPress={() => navigation.navigate('CatchMind')}
+        />
+
+        {/* 연쇄 퍼즐 — 혼자 연습 + 커플 대전(라이브·고스트). docs/COUPLE_PUZZLE_BATTLE_2026-09-18.md §11 */}
+        <GameCard
+          icon="puzzle"
+          title="연쇄 퍼즐"
+          subtitle={puzzleStatus}
+          badge={puzzle ? (puzzleMine ? '내 차례' : '기다리는 중') : undefined}
+          highlight={puzzleMine}
+          onPress={() => navigation.navigate('Puyo')}
         />
 
         <Text style={styles.footnote}>

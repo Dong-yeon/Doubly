@@ -15,6 +15,7 @@ import { MiniGamesScreen } from '../screens/home/MiniGamesScreen';
 import { SudokuScreen } from '../screens/home/SudokuScreen';
 import { OmokScreen } from '../screens/home/OmokScreen';
 import { CatchMindScreen } from '../screens/home/CatchMindScreen';
+import { PuyoScreen } from '../screens/home/PuyoScreen';
 import { CoupleCalendarScreen } from '../screens/home/CoupleCalendarScreen';
 // 커플 여행 — 장소(럽슐랭) 스택에서 이관 (navigation/types.ts 의 Trip* 주석 참고)
 import { TripListScreen } from '../screens/trip/TripListScreen';
@@ -83,6 +84,16 @@ export function HomeStackNavigator() {
            * 커스텀 제스처라, 방금 끈 문제를 JS 로 다시 만드는 셈이다. 뒤로가기는
            * 커스텀 headerLeft 버튼(headerOptions.tsx)과 안드로이드 시스템 백으로 충분하다.
            */
+          gestureEnabled: false,
+          fullScreenGestureEnabled: false,
+        }}
+      />
+      <Stack.Screen
+        name="Puyo"
+        component={PuyoScreen}
+        options={{
+          title: '연쇄 퍼즐',
+          // 캐치마인드와 같은 이유 — 판 위에서 좌우로 끄는 것이 조작이라 전역 스와이프백과 충돌한다
           gestureEnabled: false,
           fullScreenGestureEnabled: false,
         }}
