@@ -1437,9 +1437,16 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             </Pressable>
           ) : (
           <View>
-            {/* 탭하면 전체화면 — 예전엔 200×200 으로 잘린 썸네일이 전부라 원본을 볼 수 없었다 */}
+            {/*
+              탭하면 전체화면 — 예전엔 200×200 으로 잘린 썸네일이 전부라 원본을 볼 수 없었다.
+              길게 누르기는 <b>여기서 넘겨준다</b> — 안쪽 Pressable 이 터치를 가져가면 바깥
+              말풍선의 onLongPress 가 오지 않아 답장·삭제 메뉴를 열 길이 없었다(스티커가
+              같은 이유로 onLongPress 를 받는다).
+            */}
             <Pressable
               onPress={() => openImage(item.imageUrl!)}
+              onLongPress={() => onLongPressMessage(item)}
+              delayLongPress={300}
               accessibilityRole="imagebutton"
               accessibilityLabel="사진 크게 보기"
             >
@@ -1479,6 +1486,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             {item.imageUrl ? (
               <Pressable
                 onPress={() => openImage(item.imageUrl!)}
+                onLongPress={() => onLongPressMessage(item)}
+                delayLongPress={300}
                 accessibilityRole="imagebutton"
                 accessibilityLabel="식단 사진 크게 보기"
               >
