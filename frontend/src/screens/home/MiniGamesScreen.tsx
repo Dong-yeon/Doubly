@@ -16,13 +16,21 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../navigation/types';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { EmptyState } from '../../components/EmptyState';
-import { catchMindApi, gameStreakApi, omokApi, puzzleApi, sudokuApi } from '../../api/game';
+import { catchMindApi, gameStreakApi, omokApi, puzzleApi, sudokuApi, wallRaceApi } from '../../api/game';
 import { connectSocket, subscribeCouple, unsubscribeCouple } from '../../api/chatSocket';
 import { useRelationStore } from '../../store/relationStore';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { CatchMindGame, DailySudoku, GameStreak, OmokGame, PuzzleBattleGame, SudokuGame } from '../../types';
+import type {
+  CatchMindGame,
+  DailySudoku,
+  GameStreak,
+  OmokGame,
+  PuzzleBattleGame,
+  SudokuGame,
+  WallRaceGame,
+} from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'MiniGames'>;
@@ -34,6 +42,7 @@ export function MiniGamesScreen({ navigation }: Props) {
   const [omokRecord, setOmokRecord] = useState<{ me: number; partner: number } | null>(null);
   const [catchMind, setCatchMind] = useState<CatchMindGame | null>(null);
   const [puzzle, setPuzzle] = useState<PuzzleBattleGame | null>(null);
+  const [wallRace, setWallRace] = useState<WallRaceGame | null>(null);
   const [daily, setDaily] = useState<DailySudoku | null>(null);
   const [streak, setStreak] = useState<GameStreak | null>(null);
   const [openingDaily, setOpeningDaily] = useState(false);
@@ -41,7 +50,7 @@ export function MiniGamesScreen({ navigation }: Props) {
 
   const load = useCallback(async () => {
     try {
-      const [s, o, h, d, st, cm, pz] = await Promise.all([
+      const [s, o, h, d, st, cm, pz, wr] = await Promise.all([
         sudokuApi.current(),
         omokApi.current(),
         omokApi.history(),
@@ -49,11 +58,13 @@ export function MiniGamesScreen({ navigation }: Props) {
         gameStreakApi.get(),
         catchMindApi.current(),
         puzzleApi.current(),
+        wallRaceApi.current(),
       ]);
       setSudoku(s);
       setOmok(o);
       setCatchMind(cm);
       setPuzzle(pz);
+      setWallRace(wr);
       setOmokRecord({
         me: h.filter((g) => g.winner === 'ME').length,
         partner: h.filter((g) => g.winner === 'PARTNER').length,
@@ -98,6 +109,12 @@ export function MiniGamesScreen({ navigation }: Props) {
     : omokRecord && omokRecord.me + omokRecord.partner > 0
       ? `전적 ${omokRecord.me}승 ${omokRecord.partner}패`
       : '번갈아 두는 5목';
+
+  const wallRaceStatus = wallRace
+    ? wallRace.myTurn
+      ? `내 차례 · ${wallRace.moveCount}수`
+      : `${wallRace.partnerName ?? '상대'} 차례 · ${wallRace.moveCount}수`
+    : '벽으로 길을 돌리는 9×9 대결';
 
   /* 내 차례인가 = 상대가 낸 문제를 내가 아직 못 맞혔는가 */
   const catchMindMine = catchMind?.role === 'GUESSER';
@@ -223,6 +240,16 @@ export function MiniGamesScreen({ navigation }: Props) {
           badge={omok ? (omok.myTurn ? '내 차례' : '기다리는 중') : undefined}
           highlight={!!omok?.myTurn}
           onPress={() => navigation.navigate('Omok')}
+        />
+
+        {/* 길막기 — 오목의 대체가 아니라 한 수 깊은 쪽으로 둔다(분석 §7-1) */}
+        <GameCard
+          icon="contain"
+          title="길막기"
+          subtitle={wallRaceStatus}
+          badge={wallRace ? (wallRace.myTurn ? '내 차례' : '기다리는 중') : undefined}
+          highlight={!!wallRace?.myTurn}
+          onPress={() => navigation.navigate('WallRace')}
         />
 
         <GameCard

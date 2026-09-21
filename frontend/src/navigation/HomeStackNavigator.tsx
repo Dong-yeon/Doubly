@@ -16,6 +16,7 @@ import { SudokuScreen } from '../screens/home/SudokuScreen';
 import { OmokScreen } from '../screens/home/OmokScreen';
 import { CatchMindScreen } from '../screens/home/CatchMindScreen';
 import { PuyoScreen } from '../screens/home/PuyoScreen';
+import { WallRaceScreen } from '../screens/home/WallRaceScreen';
 import { CoupleCalendarScreen } from '../screens/home/CoupleCalendarScreen';
 // 커플 여행 — 장소(럽슐랭) 스택에서 이관 (navigation/types.ts 의 Trip* 주석 참고)
 import { TripListScreen } from '../screens/trip/TripListScreen';
@@ -63,6 +64,7 @@ export function HomeStackNavigator() {
       <Stack.Screen name="MiniGames" component={MiniGamesScreen} options={{ title: '미니게임' }} />
       <Stack.Screen name="Sudoku" component={SudokuScreen} options={{ title: '협동 스도쿠' }} />
       <Stack.Screen name="Omok" component={OmokScreen} options={{ title: '오목' }} />
+      <Stack.Screen name="WallRace" component={WallRaceScreen} options={{ title: '길막기' }} />
       <Stack.Screen
         name="CatchMind"
         component={CatchMindScreen}

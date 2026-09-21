@@ -39,6 +39,8 @@ export type HomeStackParamList = PlaceScreensParamList & {
   CatchMind: undefined;
   // 연쇄 퍼즐(뿌요뿌요형) — 지금은 로컬 1인 플레이. docs/COUPLE_PUZZLE_BATTLE_2026-09-18.md
   Puyo: undefined;
+  /** 길막기 — 9×9 벽쌓기 턴제 */
+  WallRace: undefined;
   // 커플 캘린더 — 기념일 외 일정·생일·데이트 약속 + D-day 푸시
   CoupleCalendar: undefined;
   // MY (구 MY 탭에서 이전) — 홈 헤더 프로필 아이콘으로 진입

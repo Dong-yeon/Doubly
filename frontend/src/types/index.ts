@@ -722,7 +722,49 @@ export interface PuzzleBattleEvent {
 }
 
 // 게임 판 위 즉석 반응 — docs/COUPLE_GAMES_EXPANSION_2026-09-14.md 1절. 저장되지 않는 신호다
-export type GameTypeKey = 'SUDOKU' | 'OMOK' | 'CATCH_MIND' | 'PUZZLE_BATTLE';
+/** 길막기 승패 — 이 게임에 무승부는 없다(길이 언제나 남아 있으므로) */
+export type WallRaceWinner = 'ME' | 'PARTNER';
+
+/**
+ * 길막기 한 판 — 9×9, 반대편 끝줄에 먼저 닿으면 승리. 매 턴 한 칸 이동 또는 벽 하나.
+ * 백엔드 WallRaceGameResponse 와 짝. docs/PATH_LOCK_ANALYSIS_2026-09-21.md.
+ *
+ * 판은 돌리지 않는다 — 둘이 같은 좌표를 보고 "3행 4열"이라고 말할 수 있어야 한다.
+ * 대신 myPawn/myGoalRow 가 내가 어느 쪽인지 알려준다.
+ */
+export interface WallRaceGame {
+  id: number;
+  status: SudokuStatus;
+  /** 9 */
+  size: number;
+  /** 칸 인덱스 0~80 (row * 9 + col, row 0 이 위) */
+  myPawn: number;
+  partnerPawn: number;
+  /** 내가 닿아야 하는 줄 — 0 또는 8 */
+  myGoalRow: number;
+  /** 64자. '0' 없음 · 'H' 가로 · 'V' 세로. 벽 하나가 두 통로를 막는다 */
+  walls: string;
+  myWallsLeft: number;
+  partnerWallsLeft: number;
+  /** 시작 벽 개수 — 핸디캡으로 접어준 만큼이 여기 드러난다 */
+  myWallsStart: number;
+  partnerWallsStart: number;
+  myTurn: boolean;
+  /**
+   * 지금 내가 갈 수 있는 칸 — 서버가 점프·대각선까지 계산해 내려준다.
+   * 내 차례가 아니면 빈 배열. 규칙이 Java·TS 두 벌이 되지 않게 하는 절충이다.
+   */
+  legalMoves: number[];
+  moveCount: number;
+  winner?: WallRaceWinner | null;
+  /** 'P12'(이동) · 'W35H'(벽) 순서대로 */
+  moves: string[];
+  partnerName?: string | null;
+  createdAt: string;
+  completedAt?: string | null;
+}
+
+export type GameTypeKey = 'SUDOKU' | 'OMOK' | 'CATCH_MIND' | 'PUZZLE_BATTLE' | 'WALL_RACE';
 export interface GameReactionOption {
   key: string;
   emoji: string;
