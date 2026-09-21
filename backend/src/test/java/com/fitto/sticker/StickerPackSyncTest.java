@@ -28,8 +28,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 막거나</b>. 두 번째가 실제로 일어났고(docs/STICKER_PACK_OVERLAP_2026-09-14.md) STOMP 는
  * 402 를 화면으로 돌려줄 수 없어 말풍선이 "전송 중"에 멈췄다. 그 사고의 자리가 여기다.
  *
- * <p>특히 마지막 테스트({@code 누가_무엇을_쓸_수_있는지는_그대로다})가 이번 변경의 안전망이다 —
- * 팩으로 쪼개면서 <b>잠기는 대상이 하나도 안 바뀌었다</b>는 것을 값으로 고정한다.
+ * <p>특히 {@code 누가_무엇을_쓸_수_있는지는_그대로다} 가 이번 변경의 안전망이다 —
+ * <b>무료로 준 것이 다시 잠기지 않는다</b>는 것을 값으로 고정한다.
  */
 class StickerPackSyncTest {
 
@@ -121,18 +121,16 @@ class StickerPackSyncTest {
         Map<String, SeededPack> seeded = parseSeed();
 
         /*
-         * 이번 변경의 핵심 안전망. 팩으로 쪼개기 전의 규칙은 딱 하나였다 —
-         * "AnimatedSticker.premium 이면 PRO, 아니면 무료". 쪼갠 뒤에도 그 결과가 같아야 한다.
-         * 여기가 깨지면 둘 중 하나다: 무료였던 이모티콘이 잠겼거나(= 기능 회수, 2026-09-14 의
-         * 사고), 유료였던 것이 공짜로 샜거나.
+         * 이번 변경의 핵심 안전망. 움직이는 이모티콘은 <b>한 장도 빠짐없이 무료</b>여야 한다
+         * (2026-09-21 결정 — 파는 것은 캐릭터 스티커와 우리 이모지뿐). 여기가 깨지면
+         * 무료로 주던 것을 다시 잠근 것이고, 그건 새 상품이 아니라 기능 회수로 체감된다.
          */
         for (AnimatedSticker s : AnimatedSticker.values()) {
             SeededPack pack = seeded.get(s.packId());
             assertThat(pack).as("%s 의 팩 %s 가 시드에 없다", s.name(), s.packId()).isNotNull();
             assertThat(pack.isFreeForEveryone())
-                    .as("%s 의 잠금 여부가 premium 플래그와 어긋난다 (premium=%s, 팩=%s)",
-                            s.name(), s.isPremium(), s.packId())
-                    .isEqualTo(!s.isPremium());
+                    .as("%s 가 잠겼다 — 움직이는 이모티콘은 전부 무료다 (팩=%s)", s.name(), s.packId())
+                    .isTrue();
         }
 
         /*

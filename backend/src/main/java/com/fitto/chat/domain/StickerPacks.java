@@ -18,17 +18,19 @@ package com.fitto.chat.domain;
  */
 public final class StickerPacks {
 
-    /* ── 무료 ─────────────────────────────────────────────────────────────── */
-    public static final String ANIM_BASIC = "ANIM_BASIC";
+    /* ── 무료 — 움직이는 이모티콘 8팩은 전부 여기 있다 ────────────────────── */
+    public static final String ANIM_LOVE = "ANIM_LOVE";
+    public static final String ANIM_FUN = "ANIM_FUN";
+    public static final String ANIM_UPSET = "ANIM_UPSET";
+    public static final String ANIM_CELEBRATE = "ANIM_CELEBRATE";
+    public static final String ANIM_CHEER = "ANIM_CHEER";
+    public static final String ANIM_ANIMAL = "ANIM_ANIMAL";
+    public static final String ANIM_FOOD = "ANIM_FOOD";
+    public static final String ANIM_WEATHER = "ANIM_WEATHER";
     public static final String MOOD_BASIC = "MOOD_BASIC";
     public static final String TOUCH_BASIC = "TOUCH_BASIC";
 
     /* ── 유료 (PRO 구독이면 전부 / 낱개로도 산다) ──────────────────────────── */
-    public static final String ANIM_LOVE = "ANIM_LOVE";
-    public static final String ANIM_UPSET = "ANIM_UPSET";
-    public static final String ANIM_CHILL = "ANIM_CHILL";
-    public static final String ANIM_CELEBRATE = "ANIM_CELEBRATE";
-    public static final String ANIM_CHEER = "ANIM_CHEER";
     public static final String MOOD_PREMIUM = "MOOD_PREMIUM";
     public static final String TOUCH_PREMIUM = "TOUCH_PREMIUM";
 

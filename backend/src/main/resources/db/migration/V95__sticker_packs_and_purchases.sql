@@ -52,11 +52,10 @@ CREATE UNIQUE INDEX uq_user_sticker_purchase ON user_sticker_purchases (user_id,
 
 -- ── 시드 ────────────────────────────────────────────────────────────────────
 --
--- <b>무료 팩은 지금 무료인 것을 그대로 옮긴 것이다.</b> 새로 잠그는 코드는 하나도 없다 —
--- 2026-09-14 의 교훈("무료라고 보여 준 것을 서버가 막는다")을 반복하지 않는다.
--- 유료 팩 5개는 기존 AnimatedSticker.premium = true 24종을 <b>주제별로 쪼갠 것</b>이고,
--- PRO 사용자에게는 전과 똑같이 24종 전부가 열린다. 달라지는 건 무료 사용자가 이제
--- "전부 아니면 전무" 대신 원하는 한 팩만 살 수 있다는 것뿐이다.
+-- <b>움직이는 이모티콘 8팩은 전부 무료다.</b> 예전엔 30종 중 24종이 PRO 였는데, 수익화를
+-- 세 갈래로 다시 나누면서 통째로 열었다 — 파는 것은 캐릭터 스티커(낱개)와 우리 이모지
+-- (구독)이고, 유니코드에 이미 있는 그림은 팔지 않는다(AnimatedSticker 주석).
+-- 잠그는 방향이 아니라 여는 방향이라 기능 회수가 아니다.
 --
 -- <b>이미지 스티커(IMAGE)는 한 팩도 시드하지 않는다.</b> 2026-09-21 에 그림 출처를 정리하며
 -- 곰돌이 10 · 더비 14 · 블리 14 를 전부 피커에서 내렸다. 팩에 없는 코드는 무료로 통과하므로
@@ -64,13 +63,15 @@ CREATE UNIQUE INDEX uq_user_sticker_purchase ON user_sticker_purchases (user_id,
 -- 되살리거나 새 캐릭터를 붙일 때 IMAGE 카테고리 행을 여기에 더하면 된다.
 
 INSERT INTO sticker_packs (id, title, category, is_pro_only, price) VALUES
-    ('ANIM_BASIC',     '움직이는 이모티콘', 'ANIMATED', FALSE, 0),
+    ('ANIM_LOVE',      '사랑',        'ANIMATED', FALSE, 0),
+    ('ANIM_FUN',       '웃음·장난',  'ANIMATED', FALSE, 0),
+    ('ANIM_UPSET',     '속상해',      'ANIMATED', FALSE, 0),
+    ('ANIM_CELEBRATE', '축하해',      'ANIMATED', FALSE, 0),
+    ('ANIM_CHEER',     '응원해',      'ANIMATED', FALSE, 0),
+    ('ANIM_ANIMAL',    '동물',        'ANIMATED', FALSE, 0),
+    ('ANIM_FOOD',      '먹을 것',    'ANIMATED', FALSE, 0),
+    ('ANIM_WEATHER',   '날씨',        'ANIMATED', FALSE, 0),
     ('MOOD_BASIC',     '기본 무드',         'MOOD',     FALSE, 0),
     ('TOUCH_BASIC',    '기본 터치',         'TOUCH',    FALSE, 0),
-    ('ANIM_LOVE',      '두근두근',          'ANIMATED', TRUE,  1200),
-    ('ANIM_UPSET',     '속상해',            'ANIMATED', TRUE,  1200),
-    ('ANIM_CHILL',     '여유롭게',          'ANIMATED', TRUE,  1200),
-    ('ANIM_CELEBRATE', '축하해',            'ANIMATED', TRUE,  1200),
-    ('ANIM_CHEER',     '응원해',            'ANIMATED', TRUE,  1200),
     ('MOOD_PREMIUM',   '확장 무드',         'MOOD',     TRUE,  1200),
     ('TOUCH_PREMIUM',  '프리미엄 터치',      'TOUCH',    TRUE,  1200);

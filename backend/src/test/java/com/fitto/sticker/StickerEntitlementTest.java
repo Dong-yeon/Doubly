@@ -95,10 +95,15 @@ class StickerEntitlementTest {
     void 무료_이모티콘은_그대로_무료다() {
         Long user = register("sticker-free@fitto.com");
 
-        assertThat(stickerService.canUse(user, StickerPacks.ANIM_BASIC)).isTrue();
+        // 움직이는 이모티콘 8팩은 전부 무료다(2026-09-21) — 한 팩이라도 잠기면 기능 회수다
+        for (String pack : new String[]{StickerPacks.ANIM_LOVE, StickerPacks.ANIM_FUN,
+                StickerPacks.ANIM_UPSET, StickerPacks.ANIM_CELEBRATE, StickerPacks.ANIM_CHEER,
+                StickerPacks.ANIM_ANIMAL, StickerPacks.ANIM_FOOD, StickerPacks.ANIM_WEATHER}) {
+            assertThat(stickerService.canUse(user, pack)).as(pack).isTrue();
+            assertThatCode(() -> stickerService.requireUsable(user, pack)).as(pack)
+                    .doesNotThrowAnyException();
+        }
         assertThat(stickerService.canUse(user, StickerPacks.TOUCH_BASIC)).isTrue();
-        assertThatCode(() -> stickerService.requireUsable(user, StickerPacks.ANIM_BASIC))
-                .doesNotThrowAnyException();
     }
 
     @Test
@@ -131,8 +136,8 @@ class StickerEntitlementTest {
     void 유료팩은_무료_사용자에게_잠긴다() {
         Long user = register("sticker-locked@fitto.com");
 
-        assertThat(stickerService.canUse(user, StickerPacks.ANIM_LOVE)).isFalse();
-        assertThatThrownBy(() -> stickerService.requireUsable(user, StickerPacks.ANIM_LOVE))
+        assertThat(stickerService.canUse(user, StickerPacks.MOOD_PREMIUM)).isFalse();
+        assertThatThrownBy(() -> stickerService.requireUsable(user, StickerPacks.MOOD_PREMIUM))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.PLAN_UPGRADE_REQUIRED);
@@ -141,11 +146,11 @@ class StickerEntitlementTest {
     @Test
     void 낱개로_산_팩만_열린다() {
         Long user = register("sticker-bought@fitto.com");
-        buy(user, StickerPacks.ANIM_LOVE);
+        buy(user, StickerPacks.MOOD_PREMIUM);
 
-        assertThat(stickerService.canUse(user, StickerPacks.ANIM_LOVE)).isTrue();
+        assertThat(stickerService.canUse(user, StickerPacks.MOOD_PREMIUM)).isTrue();
         // 산 것만 열린다 — 한 팩을 샀다고 나머지가 따라 열리면 구독을 팔 이유가 없다
-        assertThat(stickerService.canUse(user, StickerPacks.ANIM_CHEER)).isFalse();
+        assertThat(stickerService.canUse(user, StickerPacks.TOUCH_PREMIUM)).isFalse();
     }
 
     @Test
@@ -153,8 +158,6 @@ class StickerEntitlementTest {
         Long user = register("sticker-pro@fitto.com");
         goPro(user);
 
-        assertThat(stickerService.canUse(user, StickerPacks.ANIM_LOVE)).isTrue();
-        assertThat(stickerService.canUse(user, StickerPacks.ANIM_CHEER)).isTrue();
         assertThat(stickerService.canUse(user, StickerPacks.MOOD_PREMIUM)).isTrue();
         assertThat(stickerService.canUse(user, StickerPacks.TOUCH_PREMIUM)).isTrue();
     }
@@ -162,19 +165,19 @@ class StickerEntitlementTest {
     @Test
     void 한쪽이_산_팩은_커플_둘_다_쓴다() {
         long[] ids = couple("sticker-couple-a@fitto.com", "sticker-couple-b@fitto.com");
-        buy(ids[0], StickerPacks.ANIM_CELEBRATE);
+        buy(ids[0], StickerPacks.MOOD_PREMIUM);
 
         // 소유는 산 사람에게 붙지만 사용은 관계 단위다 — Feature.PREMIUM_STICKER 가 이미
         // 커플 판정이라, 낱개만 개인 판정으로 두면 "구독으로 열면 둘 다 쓰는데 낱개로 사면
         // 나만 쓴다"는 설명할 수 없는 차이가 생긴다.
-        assertThat(stickerService.canUse(ids[1], StickerPacks.ANIM_CELEBRATE)).isTrue();
-        assertThat(stickerService.ownedPackIds(ids[1])).contains(StickerPacks.ANIM_CELEBRATE);
+        assertThat(stickerService.canUse(ids[1], StickerPacks.MOOD_PREMIUM)).isTrue();
+        assertThat(stickerService.ownedPackIds(ids[1])).contains(StickerPacks.MOOD_PREMIUM);
     }
 
     @Test
     void 팩_목록은_무료가_먼저_오고_소유_여부를_함께_준다() {
         Long user = register("sticker-list@fitto.com");
-        buy(user, StickerPacks.ANIM_CHILL);
+        buy(user, StickerPacks.MOOD_PREMIUM);
 
         var entitlements = stickerService.entitlements(user);
         assertThat(entitlements).isNotEmpty();
@@ -189,14 +192,14 @@ class StickerEntitlementTest {
                 .allMatch(e -> !e.pack().isFreeForEveryone());
 
         var bought = entitlements.stream()
-                .filter(e -> e.pack().getId().equals(StickerPacks.ANIM_CHILL))
+                .filter(e -> e.pack().getId().equals(StickerPacks.MOOD_PREMIUM))
                 .findFirst().orElseThrow();
         assertThat(bought.usable()).isTrue();
         assertThat(bought.purchased()).isTrue();
 
         // 구독으로 열린 게 아니라 산 것이다 — 구독이 끊겼을 때 화면이 달라져야 해서 나눠 둔다
         var notBought = entitlements.stream()
-                .filter(e -> e.pack().getId().equals(StickerPacks.ANIM_CHEER))
+                .filter(e -> e.pack().getId().equals(StickerPacks.TOUCH_PREMIUM))
                 .findFirst().orElseThrow();
         assertThat(notBought.usable()).isFalse();
         assertThat(notBought.purchased()).isFalse();
@@ -204,10 +207,10 @@ class StickerEntitlementTest {
 
     @Test
     void 스토어_상품_id_는_팩_id_를_소문자로_눕힌_것이다() {
-        var love = stickerService.entitlements(register("sticker-product@fitto.com")).stream()
-                .filter(e -> e.pack().getId().equals(StickerPacks.ANIM_LOVE))
+        var mood = stickerService.entitlements(register("sticker-product@fitto.com")).stream()
+                .filter(e -> e.pack().getId().equals(StickerPacks.MOOD_PREMIUM))
                 .findFirst().orElseThrow();
         // 스토어 콘솔에 등록할 때 이 규칙을 따라야 한다 — 어긋나면 산 사람이 못 쓴다
-        assertThat(love.pack().productId()).isEqualTo("sticker_pack_anim_love");
+        assertThat(mood.pack().productId()).isEqualTo("sticker_pack_mood_premium");
     }
 }

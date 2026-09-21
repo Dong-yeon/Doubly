@@ -2,6 +2,7 @@ package com.fitto.plan;
 
 import com.fitto.chat.domain.AnimatedSticker;
 import com.fitto.chat.domain.MoodPack;
+import com.fitto.chat.domain.StickerPacks;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -9,7 +10,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 움직이는 이모티콘·확장 무드팩의 게이팅 판정 — {@code Feature.PREMIUM_STICKER}.
+ * 무료로 준 것을 서버가 막지 않는가 — 유니코드 이모지 · 움직이는 이모티콘 · 기본 무드.
  *
  * <p>서버가 "이 문자열이 유료 콘텐츠인가"를 정확히 가려야 두 가지 사고를 막는다:
  * ① 유료 세트가 공짜로 새어나가는 것, ② <b>원래 자유롭게 쓰던 이모지가 갑자기 막히는 것</b>.
@@ -34,21 +35,32 @@ class PremiumContentGateTest {
                 "🌸", "☔", "🌊", "🏖️", "🍦", "🍁", "☕", "❄️", "🎄", "🔥", "🎂", "💐",
                 "🌷", "🦋", "🍉", "🎃", "⛄", "🎁", "💍", "👑");
         for (String emoji : onceBlocked) {
-            assertThat(AnimatedSticker.isPremiumContent(emoji)).as(emoji).isFalse();
+            assertThat(StickerPacks.ofStickerContent(emoji)).as(emoji).isNull();
         }
-        assertThat(AnimatedSticker.isPremiumContent("🦖")).isFalse();
-        assertThat(AnimatedSticker.isPremiumContent("💕")).isFalse();
-        assertThat(AnimatedSticker.isPremiumContent(null)).isFalse();
+        assertThat(StickerPacks.ofStickerContent("🦖")).isNull();
+        assertThat(StickerPacks.ofStickerContent("💕")).isNull();
+        assertThat(StickerPacks.ofStickerContent(null)).isNull();
     }
 
-    /** 움직이는 이모티콘이 PRO 스티커 상품의 전부다 — 무료 6종은 맛보기로 남는다. */
+    /**
+     * <b>움직이는 이모티콘도 전부 무료가 됐다</b>(2026-09-21).
+     *
+     * <p>2026-09-14 에는 "유니코드 이모지는 팔 수 없다"까지만 갔고 움직이는 이모티콘 24종은
+     * PRO 로 남겼다. 같은 논리를 끝까지 적용하면 그쪽도 결국 키보드에 있는 글자다 —
+     * 움직인다는 것만으로는 상품 근거가 얇았다. 이제 파는 것은 유니코드에 <b>없는</b>
+     * 것뿐이다: 캐릭터 스티커(낱개 구매)와 우리 이모지(PRO 구독).
+     *
+     * <p>이 테스트가 깨지면 그 회귀다 — 무료로 주던 이모티콘을 다시 잠근 것이고,
+     * 그건 새 상품이 아니라 기능 회수로 체감된다.
+     */
     @Test
-    void 움직이는_이모티콘은_premium_플래그대로_판정된다() {
+    void 움직이는_이모티콘은_전부_무료다() {
         for (AnimatedSticker s : AnimatedSticker.values()) {
-            assertThat(AnimatedSticker.isPremiumContent(s.name())).as(s.name()).isEqualTo(s.isPremium());
+            assertThat(s.packId()).as(s.name()).startsWith("ANIM_");
         }
-        assertThat(AnimatedSticker.values()).anyMatch(s -> !s.isPremium());
-        assertThat(AnimatedSticker.values()).anyMatch(AnimatedSticker::isPremium);
+        // 팩이 잡히기는 해야 한다 — null 이면 판정을 지나지 않아 "무료"가 우연이 된다
+        assertThat(StickerPacks.ofStickerContent("ANIM_HEART")).isEqualTo(StickerPacks.ANIM_LOVE);
+        assertThat(StickerPacks.ofStickerContent("ANIM_PARTY_POPPER")).isEqualTo(StickerPacks.ANIM_CELEBRATE);
     }
 
     @Test
