@@ -4,10 +4,9 @@ import com.fitto.common.event.CoupleEvent;
 import com.fitto.common.event.CoupleEventPublisher;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
-import com.fitto.chat.domain.MoodPack;
+import com.fitto.chat.domain.StickerPacks;
 import com.fitto.common.notification.NotificationCategory;
-import com.fitto.common.plan.Feature;
-import com.fitto.common.plan.PlanGuard;
+import com.fitto.sticker.service.StickerService;
 import com.fitto.common.notification.NotificationService;
 import com.fitto.common.notification.PushLinks;
 import com.fitto.coupleemoji.domain.CoupleEmoji;
@@ -43,7 +42,7 @@ public class MoodService {
     private final UserRepository userRepository;
     private final NotificationService notificationService;
     private final CoupleEventPublisher coupleEventPublisher;
-    private final PlanGuard planGuard;
+    private final StickerService stickerService;
 
     public MoodService(MoodStatusRepository moodStatusRepository,
                        CoupleEmojiRepository coupleEmojiRepository,
@@ -51,14 +50,14 @@ public class MoodService {
                        UserRepository userRepository,
                        NotificationService notificationService,
                        CoupleEventPublisher coupleEventPublisher,
-                       PlanGuard planGuard) {
+                       StickerService stickerService) {
         this.moodStatusRepository = moodStatusRepository;
         this.coupleEmojiRepository = coupleEmojiRepository;
         this.relationRepository = relationRepository;
         this.userRepository = userRepository;
         this.notificationService = notificationService;
         this.coupleEventPublisher = coupleEventPublisher;
-        this.planGuard = planGuard;
+        this.stickerService = stickerService;
     }
 
     /** 나/상대 현재 무드 — 각각 관계 내 최신 1건. 아직 없으면 null. */
@@ -114,11 +113,10 @@ public class MoodService {
                 throw new BusinessException(ErrorCode.INVALID_INPUT, "무드를 선택해주세요.");
             }
             emoji = req.emoji();
-            if (MoodPack.isPremium(emoji)) {
-                // 확장 무드팩은 PRO 전용 — 스티커와 같은 Feature 로 판정한다(둘 다 원가 0의 꾸미기).
-                // 목록에 없는 이모지는 예전처럼 자유롭게 쓸 수 있다(MoodPack 주석 참고).
-                planGuard.require(userId, Feature.PREMIUM_STICKER);
-            }
+            // 확장 무드팩은 유료 팩(MOOD_PREMIUM) — 스티커와 같은 경로로 판정한다(둘 다 원가 0의
+            // 꾸미기라 Feature.PREMIUM_STICKER 를 공유하고, 이제 낱개로도 살 수 있다).
+            // 목록에 없는 이모지는 예전처럼 자유롭게 쓸 수 있다(StickerPacks.ofMoodEmoji 주석).
+            stickerService.requireUsable(userId, StickerPacks.ofMoodEmoji(emoji));
         }
 
         moodStatusRepository.save(MoodStatus.builder()

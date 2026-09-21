@@ -1,12 +1,22 @@
-/** 운동 통계 — 설계서 WORKOUT-07 (주간/월간 · 최근 7일 · 부위별) */
+/**
+ * 운동 통계 — 설계서 WORKOUT-07 (주간/월간 · 최근 7일 · 부위별).
+ *
+ * <p>아래 절반은 <b>심화 통계(PRO — `WORKOUT_V2_STATS`)</b>다: 8주 볼륨 추이 · 추정 1RM
+ * 상위 종목 · 부위 밸런스. `DietStatsScreen` 이 `FULL_STATS` 로 쓰는 모양 그대로다.
+ *
+ * <p><b>위 절반에서 아무것도 빼지 않았다.</b> 무료로 보이던 주·월 운동일수, 최근 7일 그래프,
+ * 30일 부위별 세트 수는 그대로다. 잠기는 건 새로 얹은 세 가지뿐이다 — 쓰던 것을 뺏으면
+ * 새 상품이 아니라 기능 회수로 체감된다(docs/STICKER_PACK_OVERLAP_2026-09-14.md).
+ */
 import React, { useCallback, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Card } from '../../components/Card';
 import { EmptyState } from '../../components/EmptyState';
+import { LockedCard } from '../../components/LockedCard';
 import { workoutApi } from '../../api/workout';
-import type { WorkoutStats } from '../../types';
+import type { WorkoutDeepStats, WorkoutStats } from '../../types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 
@@ -106,11 +116,94 @@ export function WorkoutStatsScreen() {
           )}
         </Card>
 
+        {/*
+          심화 통계 — 서버가 잠김을 값으로 내려준다(deep === null). 화면이 자동으로 부르는
+          조회라 402 를 띄우면 통계 화면이 통째로 못 뜬다(LockedCard 주석과 같은 이유).
+          기록이 하나도 없는 사람에게는 잠금 카드도 안 띄운다 — 팔기 전에 쓸 것이 있어야 한다.
+        */}
+        {loaded && stats && stats.totalDays > 0 ? (
+          stats.deep ? (
+            <DeepStatsSection deep={stats.deep} />
+          ) : (
+            <LockedCard
+              title="심화 통계"
+              description="주간 볼륨 추이, 종목별 추정 1RM, 부위 밸런스를 볼 수 있어요."
+            />
+          )
+        ) : null}
+
         {loaded && stats && stats.totalDays === 0 ? (
           <EmptyState icon="chart-box-outline" title="아직 통계가 없어요" description="운동을 기록하면 여기에 모여요!" />
         ) : null}
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+/**
+ * 볼륨 · 1RM · 밸런스 세 카드.
+ *
+ * <p>막대 하나하나에 숫자를 붙이지 않는다 — 여기서 읽어야 할 것은 절대값이 아니라
+ * <b>모양</b>(늘고 있나, 한쪽으로 쏠렸나)이다. 정확한 값이 필요하면 종목별 기록 화면이 있다.
+ */
+function DeepStatsSection({ deep }: { deep: WorkoutDeepStats }) {
+  // 0 으로 나누지 않게 하한을 둔다 — 기록이 없는 주가 섞이면 최댓값이 0 일 수 있다
+  const maxVolume = Math.max(1, ...deep.weeklyVolume.map((w) => w.volumeKg));
+  const maxShare = Math.max(1, ...deep.muscleBalance.map((m) => m.sharePercent));
+
+  return (
+    <>
+      <Card elevation="sm" style={styles.section}>
+        <Text style={styles.sectionTitle}>주간 볼륨 (최근 8주)</Text>
+        {deep.weeklyVolume.some((w) => w.volumeKg > 0) ? (
+          <View style={styles.volumeRow}>
+            {deep.weeklyVolume.map((w) => (
+              <View key={w.weekStart} style={styles.volumeCol}>
+                <View style={styles.volumeTrack}>
+                  {/* 최소 높이 2% — 0 인 주도 막대 자리가 보여야 "빠진 주"가 읽힌다 */}
+                  <View style={[styles.volumeFill, { height: `${Math.max(2, (w.volumeKg / maxVolume) * 100)}%` }]} />
+                </View>
+                <Text style={styles.volumeLabel}>{w.weekStart.slice(5).replace('-', '/')}</Text>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.empty}>무게를 기록한 세트가 아직 없어요.</Text>
+        )}
+      </Card>
+
+      <Card elevation="sm" style={styles.section}>
+        <Text style={styles.sectionTitle}>추정 1RM</Text>
+        {deep.topLifts.length > 0 ? (
+          deep.topLifts.map((l) => (
+            <View key={l.exerciseName} style={styles.catRow}>
+              <Text style={styles.liftName} numberOfLines={1}>{l.exerciseName}</Text>
+              <Text style={styles.liftValue}>{l.bestE1rmKg}kg</Text>
+              <Text style={styles.liftSub}>최고 {l.bestWeightKg}kg</Text>
+            </View>
+          ))
+        ) : (
+          <Text style={styles.empty}>무게와 횟수를 기록하면 여기에 쌓여요.</Text>
+        )}
+      </Card>
+
+      <Card elevation="sm" style={styles.section}>
+        <Text style={styles.sectionTitle}>부위 밸런스 (최근 30일)</Text>
+        {deep.muscleBalance.length > 0 ? (
+          deep.muscleBalance.map((m) => (
+            <View key={m.muscleGroup} style={styles.catRow}>
+              <Text style={styles.catName} numberOfLines={1}>{m.muscleGroup}</Text>
+              <View style={styles.barTrack}>
+                <View style={[styles.barFill, { width: `${(m.sharePercent / maxShare) * 100}%`, backgroundColor: colors.secondary }]} />
+              </View>
+              <Text style={styles.catCount}>{m.sharePercent}%</Text>
+            </View>
+          ))
+        ) : (
+          <Text style={styles.empty}>아직 부위 데이터가 없어요.</Text>
+        )}
+      </Card>
+    </>
   );
 }
 
@@ -158,4 +251,12 @@ const styles = themedStyles((colors) => ({
   barFill: { height: '100%', borderRadius: radius.pill },
   catCount: { width: 56, textAlign: 'right', fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
   empty: { color: colors.textSecondary, fontSize: fontSize.body },
+  volumeRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', height: 96 },
+  volumeCol: { flex: 1, alignItems: 'center', gap: spacing.xs },
+  volumeTrack: { width: '60%', height: 72, justifyContent: 'flex-end' },
+  volumeFill: { width: '100%', borderRadius: radius.sm, backgroundColor: colors.primary },
+  volumeLabel: { fontSize: 10, color: colors.textSecondary },
+  liftName: { flex: 1, fontSize: fontSize.body, color: colors.textPrimary, fontWeight: '700' },
+  liftValue: { fontSize: fontSize.body, color: colors.textPrimary, fontWeight: '800' },
+  liftSub: { width: 76, textAlign: 'right', fontSize: fontSize.caption, color: colors.textSecondary },
 }));

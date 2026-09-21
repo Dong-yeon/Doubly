@@ -52,6 +52,7 @@ export type FeatureKey =
   | 'TRIP_CHECKLIST'
   | 'MOOD_CALENDAR_FULL'
   | 'WORKOUT_RECOVERY_FULL'
+  | 'WORKOUT_V2_STATS'
   | 'ANNIVERSARY_RECAP'
   | 'VIDEO_CALL'
   | 'STREAK_REPAIR'
@@ -91,6 +92,41 @@ export interface PlanCatalogEntry {
   proPeriod: QuotaPeriod;
   /** 커플이 함께 쓰는 한도 — "둘이 합쳐"라고 써야 오해가 없다 */
   coupleScoped: boolean;
+  /**
+   * PRO 대표 기능 세 개 중 하나인가 — 비교표 맨 위로 끌어올린다.
+   *
+   * 30줄을 다 읽고 결제를 결정하는 사람은 없다. "무엇을 사는가"는 세 문장이어야 한다:
+   * 우리 이모지(AI_COUPLE_EMOJI) · 음식 사진 분석(AI_FOOD_PHOTO) · 운동 심화 통계
+   * (WORKOUT_V2_STATS). 목록은 서버 `Feature.isHero()` 가 갖는다.
+   */
+  hero: boolean;
+}
+
+/** 스티커 팩 카테고리 — 서버 StickerPackCategory 와 같다 */
+export type StickerPackCategory = 'ANIMATED' | 'IMAGE' | 'MOOD' | 'TOUCH';
+
+/**
+ * 스티커 팩 한 개 + 내 잠금 상태 — `GET /stickers/packs`.
+ *
+ * 어느 그림이 이 팩에 속하는지는 오지 않는다. 앱이 번들로 들고 있고
+ * (`constants/stickerPacks.ts`) 서버가 또 내리면 같은 표가 두 곳에 생긴다.
+ */
+export interface StickerPack {
+  id: string;
+  title: string;
+  category: StickerPackCategory;
+  proOnly: boolean;
+  /** 낱개 구매가(KRW). 0 이면 낱개로 팔지 않는다 */
+  price: number;
+  /** 스토어 상품 id — 낱개로 살 수 없으면 null */
+  productId: string | null;
+  /** 지금 쓸 수 있는가 — 무료이거나, 샀거나, PRO 이거나 */
+  usable: boolean;
+  /**
+   * 낱개로 샀는가. usable 과 나눠 두는 이유는 구독이 끊겼을 때 화면이 달라져야 하기
+   * 때문이다 — 산 팩은 그대로 열려 있고, 구독으로만 열려 있던 팩은 잠긴다.
+   */
+  purchased: boolean;
 }
 
 export interface FeatureState {
@@ -450,6 +486,26 @@ export interface WorkoutStats {
   totalDays: number;
   last7Days: { date: string; weekday: string; completed: boolean }[];
   categoryBreakdown: { category: string; count: number }[];
+  /**
+   * 심화 통계(PRO — `WORKOUT_V2_STATS`). 잠겨 있으면 null 이다.
+   *
+   * 402 가 아니라 null 로 오는 이유: 화면이 자동으로 부르는 조회라 던지면 통계 화면이
+   * 통째로 못 뜬다. 잠김은 값으로 내려오고 화면이 그 자리에 안내를 그린다
+   * (`MuscleRecoveryStatus.locked` 와 같은 패턴).
+   *
+   * 위의 무료 구간에서는 <b>아무것도 빠지지 않았다</b> — 여기 있는 건 전부 새로 얹은 값이다.
+   */
+  deep?: WorkoutDeepStats | null;
+}
+
+/** 볼륨 · 추정 1RM · 부위 밸런스 — PRO 대표 기능 셋 중 하나 */
+export interface WorkoutDeepStats {
+  /** 최근 8주 주별 총 볼륨(kg) — 오래된 주가 먼저. 기록 없는 주도 0 으로 온다 */
+  weeklyVolume: { weekStart: string; volumeKg: number }[];
+  /** 추정 1RM(Epley) 상위 종목 — 많아야 5개 */
+  topLifts: { exerciseName: string; bestWeightKg: number; bestE1rmKg: number }[];
+  /** 최근 30일 부위별 비중 — 많이 한 순 */
+  muscleBalance: { muscleGroup: string; setCount: number; sharePercent: number }[];
 }
 
 // 근육 회복 현황 (GET /workout/recovery) — 부위별 마지막 수행 이후 경과 시간·추정 회복률

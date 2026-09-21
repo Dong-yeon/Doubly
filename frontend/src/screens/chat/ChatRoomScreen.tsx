@@ -89,7 +89,7 @@ import { emojiOnlyCount } from '../../utils/emojiOnly';
 import { chatDateDividerLabel, isSameLocalDay, toDateString } from '../../utils/date';
 import { buildChatTranscript, canExportTranscript, shareTranscript } from '../../utils/chatExport';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { ChatMessage, CoupleEmoji, TouchGestureCode } from '../../types';
+import type { ChatMessage, CoupleEmoji, StickerPack, TouchGestureCode } from '../../types';
 import { themedStyles, chatThemedStyles } from '../../theme/themedStyles';
 import { useChatThemeStore } from '../../store/chatThemeStore';
 import { useAndroidKeyboardHeight } from '../../hooks/useAndroidKeyboardHeight';
@@ -244,8 +244,6 @@ export function ChatRoomScreen({ navigation, route }: Props) {
    */
   const coupleEmojis = useCoupleEmojiStore((s) => s.emojis);
   const loadCoupleEmojis = useCoupleEmojiStore((s) => s.load);
-  /* 움직이는 이모티콘 게이팅 — 표시용 판정이다(최종 판정은 서버). planStore 주석 참고 */
-  const premiumStickerAllowed = usePlanStore((s) => s.can('PREMIUM_STICKER'));
   const showUpgrade = usePlanStore((s) => s.showUpgrade);
   const [showExtras, setShowExtras] = useState(false);
   /* 대화 영역을 건드렸을 때 — 이미 닫혀 있으면 상태를 그대로 둬 헛된 재렌더를 만들지 않는다 */
@@ -994,9 +992,26 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     }
   };
 
+  /**
+   * 잠긴 팩을 열려고 할 때 — 낱개 구매가 있으면 그것부터 권하고, 없으면 PRO 안내로 간다.
+   *
+   * <p><b>낱개를 먼저 말하는 이유</b>: 이모티콘 하나 보내려던 사람에게 월 구독부터 들이밀면
+   * 대부분은 아무것도 사지 않는다. 팩 하나는 한 번 내고 끝이라 결정이 가볍고, 그 다음에
+   * "PRO면 전부"가 비교 대상으로 읽힌다.
+   *
+   * <p>실제 결제 호출(스토어 상품 등록·`stickerApi.verifyGoogle/verifyApple`)은 아직
+   * 붙지 않았다 — 콘솔에 일회성 상품을 올린 뒤에 이 자리에서 잇는다.
+   */
+  const unlockStickerPack = (pack: StickerPack) => {
+    showUpgrade(pack.price > 0
+      ? `${withJosa(pack.title, '은', '는')} ${pack.price.toLocaleString()}원에 따로 살 수 있어요. PRO를 쓰면 모든 이모티콘 팩이 함께 열려요.`
+      : `${withJosa(pack.title, '은', '는')} PRO에서 쓸 수 있어요.`);
+  };
+
   const sendSticker = async (sticker: string, locked: boolean, label: string) => {
     if (locked) {
-      showUpgrade(`${withJosa(label, '은', '는')} PRO에서 보낼 수 있어요.`);
+      // 팩 단위 잠금이라 label 은 팩 이름이다 — 칸 이름("하트")보다 무엇이 잠겼는지가 분명하다
+      showUpgrade(`${withJosa(label, '은', '는')} 아직 잠겨 있어요.`);
       return;
     }
     haptics.light();
@@ -1805,12 +1820,14 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         {showStickers ? (
           <StickerPanel
             height={panelHeight}
-            premiumAllowed={premiumStickerAllowed}
+            myUserId={myId}
+            partnerName={partnerName}
             coupleEmojis={coupleEmojis}
             onSendSticker={sendSticker}
             onSendCoupleEmoji={sendCoupleEmoji}
             onManageCoupleEmoji={manageCoupleEmoji}
             onCreateCoupleEmoji={() => { setShowStickers(false); navigation.navigate('CoupleEmojiCreate'); }}
+            onUnlockPack={unlockStickerPack}
             onOpenCouplePack={() => { void loadCoupleEmojis().catch(() => undefined); }}
           />
         ) : null}
