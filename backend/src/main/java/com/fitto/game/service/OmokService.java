@@ -24,7 +24,6 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -32,16 +31,13 @@ import java.util.List;
  * 오목 — docs/COUPLE_GAMES_DESIGN_2026-09-09.md 5절.
  *
  * <p>커플당 진행 중인 판 하나. 판을 연 사람이 백(후공), 상대가 흑(선공). 차례가 아니면 거절한다.
- * "네 차례야" 푸시는 <b>상대가 2분 넘게 조용했을 때만</b> 보낸다 — 같이 접속해 두는 중에
- * 수마다 푸시가 오면 소음이고, 떨어져 있을 때는 이 푸시가 곧 게임의 리듬이다.
+ * "네 차례야" 푸시는 판이 {@link GameQuiet#TURN} 만큼 조용했을 때만 보낸다 — 판단 기준은 {@link GameQuiet}.
  */
 @Service
 @Transactional(readOnly = true)
 public class OmokService {
 
     private static final Logger log = LoggerFactory.getLogger(OmokService.class);
-    /** 이 시간 넘게 수가 없었으면 상대는 화면을 보고 있지 않다고 본다 */
-    static final Duration QUIET_BEFORE_TURN_PUSH = Duration.ofMinutes(2);
 
     private final OmokGameRepository gameRepository;
     private final RelationRepository relationRepository;
@@ -132,7 +128,7 @@ public class OmokService {
 
         if (finished) {
             onFinished(userId, partnerId, game, couple);
-        } else if (partnerId != null && quietLongEnough(previousMoveAt, game.getCreatedAt())) {
+        } else if (partnerId != null && GameQuiet.longEnough(previousMoveAt, game.getCreatedAt(), GameQuiet.TURN)) {
             notificationService.notify(partnerId, NotificationCategory.PARTNER, "오목 — 네 차례야",
                     userName(userId) + "님이 " + game.moveCount() + "수째를 뒀어요.", PushLinks.GAME_OMOK);
         }
@@ -235,12 +231,6 @@ public class OmokService {
      * 직전 수가 2분 넘게 전이면(또는 첫 수면) 상대는 화면 밖에 있다고 보고 푸시한다.
      * 첫 수는 판이 열린 시각을 기준으로 잰다 — 열자마자 선공이 두면 상대(판을 연 사람)는 아직 보고 있다.
      */
-    private boolean quietLongEnough(LocalDateTime previousMoveAt, LocalDateTime createdAt) {
-        LocalDateTime since = previousMoveAt != null ? previousMoveAt : createdAt;
-        if (since == null) return true;
-        return Duration.between(since, LocalDateTime.now()).compareTo(QUIET_BEFORE_TURN_PUSH) >= 0;
-    }
-
     private void onFinished(Long moverId, Long partnerId, OmokGame game, Relation couple) {
         String moverName = userName(moverId);
         String partnerName = partnerId == null ? "상대" : userName(partnerId);
