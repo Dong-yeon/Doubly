@@ -136,6 +136,7 @@ export const linking: LinkingOptions<RootStackParamList> = {
               Omok: 'game/omok',
               CatchMind: 'game/catch-mind',
               Puyo: 'game/puzzle',
+              WallRace: 'game/wall-race',
               CoupleCalendar: 'calendar',
               My: 'my',
               Settings: 'settings',
