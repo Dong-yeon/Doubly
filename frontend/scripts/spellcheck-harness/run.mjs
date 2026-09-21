@@ -17,12 +17,13 @@ import { execFileSync } from 'node:child_process';
 
 const srcDir = fileURLToPath(new URL('../../src/utils', import.meta.url));
 const tmp = mkdtempSync(join(tmpdir(), 'spell-harness-'));
-for (const f of ['koreanSpellCheck.ts', 'koreanSpellRules.ts', 'koreanDictionaryRules.ts']) {
+for (const f of ['koreanSpellCheck.ts', 'koreanSpellRules.ts', 'koreanDictionaryRules.ts', 'koreanAllowlist.ts']) {
   const code = readFileSync(join(srcDir, f), 'utf8').replace("from './koreanSpellRules'", "from './koreanSpellRules.ts'");
   writeFileSync(join(tmp, f), code);
 }
 const { checkKoreanSpelling, applyAllSuggestions, dedupeOverlapping } = await import(pathToFileURL(join(tmp, 'koreanSpellCheck.ts')));
 const { collectTokens, stripNasalEnding, pickSafeSuggestion, toJamo } = await import(pathToFileURL(join(tmp, 'koreanDictionaryRules.ts')));
+const { DICTIONARY_ALLOWLIST } = await import(pathToFileURL(join(tmp, 'koreanAllowlist.ts')));
 
 
 /**
@@ -43,9 +44,11 @@ function pickProposed(word, candidates) {
  * stdin: JSON 문장 배열. 출력: [{text, rule, dict, merged, applied}]
  */
 function e2e(sentences) {
-  const perSentence = sentences.map((t) => ({ text: t, rule: checkKoreanSpelling(t), tokens: collectTokens(t) }));
+  // koreanDictionary.checkWithDictionary 와 같게: 허용 목록은 묻지 않고, 애교체 벗김 + 안/못 뗀 형태로 면제한다
+  const negationOf = (w) => (/^[안못]/.test(w) && w.length >= 3 ? w.slice(1) : null);
+  const perSentence = sentences.map((t) => ({ text: t, rule: checkKoreanSpelling(t), tokens: collectTokens(t).filter((tk) => !DICTIONARY_ALLOWLIST.has(tk.text)) }));
   const words = new Set();
-  for (const s of perSentence) for (const tk of s.tokens) { words.add(tk.text); const n = stripNasalEnding(tk.text); if (n) words.add(n); }
+  for (const s of perSentence) for (const tk of s.tokens) { words.add(tk.text); const n = stripNasalEnding(tk.text); if (n) words.add(n); const g = negationOf(tk.text); if (g) words.add(g); }
   const list = [...words];
   const dictOut = list.length
     ? JSON.parse(execFileSync('python3', [fileURLToPath(new URL('./dict.py', import.meta.url)), 'suggest-json'], { input: JSON.stringify(list), encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }))
@@ -58,6 +61,8 @@ function e2e(sentences) {
       if (!d || d.known) continue;
       const n = stripNasalEnding(tk.text);
       if (n && byWord.get(n) && byWord.get(n).known) continue; // 애교체 면제
+      const g = negationOf(tk.text);
+      if (g && byWord.get(g) && byWord.get(g).known) continue; // 안/못 붙여쓰기 면제
       const best = pickSafeSuggestion(tk.text, d.candidates);
       if (best === null) continue;
       dict.push({ index: tk.index, wrong: tk.text, right: best, reason: '사전에 없는 말이에요' });

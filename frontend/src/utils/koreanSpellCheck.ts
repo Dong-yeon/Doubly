@@ -54,8 +54,17 @@ function endsWithRieul(ch: string): boolean {
 /** '들께' 중 '들'이 동사 어간인 경우 — 이 글자 뒤의 '들께'만 지적한다 (만들께, 거들께) */
 const DEUL_VERB_HEADS = ['만', '거', '떠', '흔'];
 
-/** '꺼' 뒤에 이 글자가 와야 '-ㄹ 거야'류로 본다 — '꺼내(다)'·'불 꺼!'와 구분 */
-const KKEO_TAILS = ['야', '얌', '니', '냐', '면', '라', '지', '고', '든', '예', '에', '잖', '래'];
+/**
+ * '꺼' 뒤에 이 글자가 와야 '-ㄹ 거야'류로 본다 — '꺼내(다)'·'불 꺼!'와 구분.
+ * '같·임·죠·구'는 2026-09-20 감사에서 추가(늦을꺼같아·할꺼임·갈꺼죠·할꺼구). 공백·문장부호는
+ * 넣지 않는다 — '불을꺼 줘'(끄다 명령형)를 잡게 된다.
+ */
+const KKEO_TAILS = ['야', '얌', '니', '냐', '면', '라', '지', '고', '든', '예', '에', '잖', '래', '같', '임', '죠', '구'];
+/**
+ * 무렵·근처를 뜻하는 접미사 '-께'가 붙는 말 — 이달 말께, 15일께, 설께, 발께.
+ * 'ㄹ' 받침 뒤라 어미 '-ㄹ게'의 오타로 보였지만 표준어다(2026-09-20 감사 오탐).
+ */
+const KKE_SUFFIX_HEADS = ['말', '일', '설', '발'];
 
 function findRieulSuggestions(text: string): SpellSuggestion[] {
   const found: SpellSuggestion[] = [];
@@ -66,8 +75,8 @@ function findRieulSuggestions(text: string): SpellSuggestion[] {
     if (!endsWithRieul(prev)) continue;
 
     if (ch === '께') {
-      // '딸께'는 높임 조사, '들께'는 앞이 동사 어간(만들-)일 때만 어미다
-      if (prev === '딸') continue;
+      // '딸께'는 높임 조사, '말께·일께·설께·발께'는 무렵 접미사, '들께'는 앞이 동사 어간(만들-)일 때만 어미다
+      if (prev === '딸' || KKE_SUFFIX_HEADS.includes(prev)) continue;
       if (prev === '들' && !(i >= 2 && DEUL_VERB_HEADS.includes(text[i - 2]))) continue;
       found.push({
         index: i,
@@ -76,6 +85,8 @@ function findRieulSuggestions(text: string): SpellSuggestion[] {
         reason: "약속을 나타내는 어미는 '-ㄹ게'로 적어요 (할게, 갈게)",
       });
     } else if (ch === '껄') {
+      // '껄껄'(웃음소리)·'껄끄럽다'는 어미가 아니다
+      if (prev === '껄' || text[i + 1] === '끄') continue;
       found.push({
         index: i,
         wrong: '껄',
