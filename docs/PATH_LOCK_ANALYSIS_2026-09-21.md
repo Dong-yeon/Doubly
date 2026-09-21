@@ -71,7 +71,7 @@ Google Play 의 PathLock 은 **쿼리도(Quoridor, 1997, Mirko Marchesi)** 구�
 | 핸디캡 | ✅ 연쇄 퍼즐 것과 같은 모양(§3) |
 | 9×9 격자 렌더 | ✅ `OmokScreen` 이 15×15 를 Pressable 로 그린다 |
 
-**다음 Flyway 번호는 V96 이다**(2026-09-21 확인: `origin/main` 최대 95). 착수 시 다시 센다.
+**다음 Flyway 번호는 V97 이다**(2026-09-21 재확인: 같은 날 스티커 팩이 V96 을 가져갔다 — 처음 셌을 때의 V96 은 이미 유효하지 않다). 착수 직전에 `git fetch origin` 후 다시 센다.
 
 스키마 초안 — 전부 nullable, V93·V95 와 같은 방식:
 

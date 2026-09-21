@@ -1,17 +1,16 @@
 package com.fitto.chat.service;
 
-import com.fitto.chat.domain.AnimatedSticker;
 import com.fitto.chat.domain.MessageType;
 import com.fitto.chat.domain.ScheduledChatMessage;
+import com.fitto.chat.domain.StickerPacks;
 import com.fitto.chat.dto.ScheduleMessageRequest;
 import com.fitto.chat.dto.ScheduledMessageResponse;
 import com.fitto.chat.repository.ScheduledChatMessageRepository;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
-import com.fitto.common.plan.Feature;
-import com.fitto.common.plan.PlanGuard;
 import com.fitto.relation.domain.Relation;
 import com.fitto.relation.repository.RelationRepository;
+import com.fitto.sticker.service.StickerService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,14 +39,14 @@ public class ScheduledChatMessageService {
 
     private final ScheduledChatMessageRepository scheduledRepository;
     private final RelationRepository relationRepository;
-    private final PlanGuard planGuard;
+    private final StickerService stickerService;
 
     public ScheduledChatMessageService(ScheduledChatMessageRepository scheduledRepository,
                                         RelationRepository relationRepository,
-                                        PlanGuard planGuard) {
+                                        StickerService stickerService) {
         this.scheduledRepository = scheduledRepository;
         this.relationRepository = relationRepository;
-        this.planGuard = planGuard;
+        this.stickerService = stickerService;
     }
 
     @Transactional
@@ -61,10 +60,10 @@ public class ScheduledChatMessageService {
         if (req.scheduledAt() == null || !req.scheduledAt().isAfter(LocalDateTime.now())) {
             throw new BusinessException(ErrorCode.INVALID_INPUT, "예약 시각은 지금보다 뒤여야 해요.");
         }
-        if (type == MessageType.STICKER
-                && AnimatedSticker.isPremiumContent(req.content())) {
+        if (type == MessageType.STICKER) {
             // 발송 시점(ChatService.send)에서도 다시 검사한다 — 예약 뒤 강등되는 경우 대비.
-            planGuard.require(userId, Feature.PREMIUM_STICKER);
+            // 구독이 끊겨도 낱개로 산 팩은 그대로 열려 있으므로, 그 경우엔 발송이 막히지 않는다.
+            stickerService.requireUsable(userId, StickerPacks.ofStickerContent(req.content()));
         }
         if (scheduledRepository.countByRelationIdAndSentAtIsNullAndCanceledAtIsNull(relationId)
                 >= MAX_PENDING_PER_RELATION) {

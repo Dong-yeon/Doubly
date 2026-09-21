@@ -4,6 +4,7 @@ import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
 import com.google.api.client.json.gson.GsonFactory;
 import com.google.api.services.androidpublisher.AndroidPublisher;
 import com.google.api.services.androidpublisher.AndroidPublisherScopes;
+import com.google.api.services.androidpublisher.model.ProductPurchase;
 import com.google.api.services.androidpublisher.model.SubscriptionPurchaseLineItem;
 import com.google.api.services.androidpublisher.model.SubscriptionPurchaseV2;
 import com.google.auth.http.HttpCredentialsAdapter;
@@ -58,6 +59,40 @@ public class GooglePlayDeveloperApiClient {
         }
     }
 
+    /**
+     * 일회성 상품(스티커 팩) 한 건의 상태 — 구독의 {@link #fetch} 와 같은 자리.
+     *
+     * <p>구독은 {@code purchaseToken} 하나로 조회되지만 일회성 상품은 <b>상품 id 도 함께</b>
+     * 필요하다(Play API 의 엔드포인트가 그렇게 생겼다). 그래서 앱이 두 값을 다 보낸다 —
+     * 다만 <b>상품 id 를 믿지는 않는다</b>: 토큰과 짝이 안 맞으면 Play 가 404 로 답하므로,
+     * 남의 팩 id 를 적어 보내도 그 팩이 열리지 않는다.
+     *
+     * <p>키가 없으면(스토어 등록 전) {@code null} — 호출부가 조용히 건너뛴다.
+     */
+    public StoreProductPurchase fetchProduct(String productId, String purchaseToken) {
+        AndroidPublisher publisher = clientOrNull();
+        if (publisher == null || productId == null || purchaseToken == null) {
+            return null;
+        }
+        try {
+            ProductPurchase purchase = publisher.purchases()
+                    .products()
+                    .get(properties.getPackageName(), productId, purchaseToken)
+                    .execute();
+            /*
+             * purchaseState: 0 구매완료 · 1 취소 · 2 보류(pending).
+             * 보류를 유효로 보면 "결제 승인 대기 중"인 사람에게 팩을 먼저 열어주고, 승인이
+             * 끝내 안 나도 회수할 경로가 없다 — 일회성 상품은 만료가 없기 때문이다.
+             */
+            Integer state = purchase.getPurchaseState();
+            boolean valid = state != null && state == 0;
+            return new StoreProductPurchase(productId, parseUserId(purchase.getObfuscatedExternalAccountId()), valid);
+        } catch (IOException e) {
+            log.warn("Play Developer API 일회성 상품 조회 실패({}): {}", productId, e.getMessage());
+            return null;
+        }
+    }
+
     private GooglePlaySubscriptionState toState(SubscriptionPurchaseV2 purchase) {
         String rawState = purchase.getSubscriptionState();
         SubscriptionStatus status = switch (rawState == null ? "" : rawState) {
@@ -92,7 +127,11 @@ public class GooglePlayDeveloperApiClient {
         if (purchase.getExternalAccountIdentifiers() == null) {
             return null;
         }
-        String obfuscatedId = purchase.getExternalAccountIdentifiers().getObfuscatedExternalAccountId();
+        return parseUserId(purchase.getExternalAccountIdentifiers().getObfuscatedExternalAccountId());
+    }
+
+    /** 일회성 상품은 식별자가 최상위에 평평하게 있다 — 파싱 규칙은 구독과 같다. */
+    private Long parseUserId(String obfuscatedId) {
         if (obfuscatedId == null || obfuscatedId.isBlank()) {
             return null;
         }

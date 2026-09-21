@@ -7,6 +7,7 @@ import com.fitto.chat.domain.ChatMessageReaction;
 import com.fitto.chat.domain.ChatPinnedMessage;
 import com.fitto.chat.domain.MessageType;
 import com.fitto.chat.domain.StickerImage;
+import com.fitto.chat.domain.StickerPacks;
 import com.fitto.chat.domain.TouchGesture;
 import com.fitto.chat.dto.ChatBookmarkResponse;
 import com.fitto.chat.dto.ChatExportResponse;
@@ -29,12 +30,11 @@ import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.notification.NotificationCategory;
 import com.fitto.common.notification.NotificationService;
 import com.fitto.common.notification.PushLinks;
-import com.fitto.common.plan.Feature;
-import com.fitto.common.plan.PlanGuard;
 import com.fitto.coupleemoji.domain.CoupleEmoji;
 import com.fitto.coupleemoji.repository.CoupleEmojiRepository;
 import com.fitto.relation.domain.Relation;
 import com.fitto.relation.repository.RelationRepository;
+import com.fitto.sticker.service.StickerService;
 import com.fitto.user.domain.User;
 import com.fitto.user.repository.UserRepository;
 import org.springframework.data.domain.PageRequest;
@@ -77,7 +77,7 @@ public class ChatService {
     private final RelationRepository relationRepository;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
-    private final PlanGuard planGuard;
+    private final StickerService stickerService;
     private final CoupleEventPublisher coupleEventPublisher;
     private final CoupleEmojiRepository coupleEmojiRepository;
 
@@ -88,7 +88,7 @@ public class ChatService {
                        RelationRepository relationRepository,
                        UserRepository userRepository,
                        NotificationService notificationService,
-                       PlanGuard planGuard,
+                       StickerService stickerService,
                        CoupleEventPublisher coupleEventPublisher,
                        CoupleEmojiRepository coupleEmojiRepository) {
         this.chatMessageRepository = chatMessageRepository;
@@ -98,7 +98,7 @@ public class ChatService {
         this.relationRepository = relationRepository;
         this.userRepository = userRepository;
         this.notificationService = notificationService;
-        this.planGuard = planGuard;
+        this.stickerService = stickerService;
         this.coupleEventPublisher = coupleEventPublisher;
         this.coupleEmojiRepository = coupleEmojiRepository;
     }
@@ -303,18 +303,22 @@ public class ChatService {
         if (messageType == MessageType.TOUCH) {
             requireValidTouch(senderId, req.content());
         }
-        if (messageType == MessageType.STICKER && AnimatedSticker.isPremiumContent(req.content())) {
+        if (messageType == MessageType.STICKER) {
             /*
-             * 움직이는 이모티콘만 PRO 전용이다 — 터치 프리미엄 제스처와 같은 방어선이다(아래 주석).
+             * 팩 단위로 판정한다(2026-09-21). 예전에는 AnimatedSticker.premium 한 칸만 봤는데,
+             * 낱개 구매가 붙으면서 "PRO 인가"로는 답이 모자라게 됐다 — 산 팩 하나만 열어야 한다.
+             * 움직이는 이모티콘은 이제 8팩 전부 무료라 여기서 걸리지 않는다. 걸리는 건
+             * 캐릭터 스티커(상점에서 산 것)와 확장 무드뿐이다(StickerService 주석).
              *
              * <p><b>유니코드 이모지는 무엇이든 무료다</b>(2026-09-14). 예전엔 시즌 팩 40종을
              * 유료로 잠갔는데, 파는 것이 폰 키보드에 이미 있는 글자라 상품으로서 근거가 약했고
              * (AnimatedSticker 주석이 이미 그렇게 적고 있었다), 실제로 무료 이모지 시트 96종과
              * 12종이 겹쳐 "무료라고 보여 준 것을 서버가 막는" 상태였다. STOMP 는 402 를 화면으로
              * 되돌릴 수 없어 말풍선이 "전송 중"에서 멈췄다 —
-             * docs/STICKER_PACK_OVERLAP_2026-09-14.md.
+             * docs/STICKER_PACK_OVERLAP_2026-09-14.md. 팩에 없는 코드가 통과하는 규칙
+             * (StickerPacks 주석)이 그 재발을 막는 자리다.
              */
-            planGuard.require(senderId, Feature.PREMIUM_STICKER);
+            stickerService.requireUsable(senderId, StickerPacks.ofStickerContent(req.content()));
         }
         String imageUrl = req.imageUrl();
         if (messageType == MessageType.COUPLE_EMOJI) {
@@ -414,11 +418,12 @@ public class ChatService {
      * 여기 검증은 그 우회 방지용 방어선이다.
      */
     private void requireValidTouch(Long senderId, String content) {
-        TouchGesture gesture = TouchGesture.from(content)
+        // 코드 자체가 유효한지는 여전히 여기서 본다 — 팩 판정은 "쓸 수 있나"만 답하고
+        // 없는 제스처를 400 으로 거절하지 않는다(팩 없는 코드는 통과가 기본값이다).
+        TouchGesture.from(content)
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_INPUT, "알 수 없는 터치 제스처예요."));
-        if (gesture.isPremium()) {
-            planGuard.require(senderId, Feature.TOUCH_GESTURE_PREMIUM);
-        }
+        // 프리미엄 제스처도 팩으로 판정한다 — 스티커와 같은 "구독이거나 낱개이거나" 경로를 탄다.
+        stickerService.requireUsable(senderId, StickerPacks.ofTouchGesture(content));
     }
 
     /** 내가 받은(상대가 보낸) 가장 최근 터치 — 홈 화면이 CoupleEvent.TOUCH 수신 시 조회한다. */

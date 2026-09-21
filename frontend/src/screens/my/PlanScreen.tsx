@@ -8,7 +8,8 @@
  *
  * <p><b>숫자는 전부 서버가 준다</b>(`GET /plan/catalog`). 여기에 "사진 60장"을 박아두면
  * 한도를 조정할 때마다 스토어 심사를 기다려야 한다 — `FeatureState` 주석과 같은 이유다.
- * 앱이 가진 건 <b>무엇을 앞세울지</b>(아래 HIGHLIGHTS)뿐이고, 그건 한도가 아니라 편집 판단이다.
+ * 앱이 가진 건 대표 기능의 <b>한 줄 문구</b>(아래 HIGHLIGHT_LINES)뿐이고, 무엇을 앞세울지조차
+ * 서버가 정한다(`Feature.isHero()`).
  *
  * <p><b>가격도 박지 않는다.</b> 스토어가 돌려주는 표시 가격(`displayPrice`)을 그대로 쓴다.
  * 국가·통화·프로모션에 따라 달라지고, Play Console 에서 가격을 바꾸면 앱은 그대로 따라간다.
@@ -61,12 +62,32 @@ const SUBSCRIPTION_PERIOD = '1개월';
  *
  * <p>이름(`name`)은 여기 적지 않는다 — 서버 카탈로그에서 가져온다. 두 군데에 적으면 갈라진다.
  */
-const HIGHLIGHTS: { feature: FeatureKey; line: string }[] = [
-  { feature: 'VIDEO_CALL', line: '목소리 말고 얼굴 보면서' },
-  { feature: 'AI_COUPLE_EMOJI', line: '사진 한 장으로 우리 둘만의 이모지를' },
-  { feature: 'MEMORIES', line: '작년 오늘 우리가 뭘 했는지' },
-  { feature: 'FULL_STATS', line: '처음부터 지금까지 전부' },
-];
+const HIGHLIGHT_LINES: Partial<Record<FeatureKey, string>> = {
+  AI_COUPLE_EMOJI: '사진 한 장으로 우리 둘만의 이모지를',
+  AI_FOOD_PHOTO: '찍기만 하면 칼로리와 영양소가 붙어요',
+  WORKOUT_V2_STATS: '볼륨·1RM·부위 밸런스까지',
+  VIDEO_CALL: '목소리 말고 얼굴 보면서',
+  MEMORIES: '작년 오늘 우리가 뭘 했는지',
+  FULL_STATS: '처음부터 지금까지 전부',
+};
+
+/**
+ * 대표 기능을 <b>서버가 정한다</b>(`Feature.isHero()` → 카탈로그의 `hero`).
+ *
+ * <p>예전엔 여기 네 개를 박아 뒀는데, 무엇이 대표인지는 가격 정책과 함께 바뀌는 값이라
+ * 앱에 박으면 바꿀 때마다 스토어 심사를 기다려야 한다 — 한도 숫자를 서버가 주는 것과
+ * 같은 이유다(이 파일 맨 위 주석). 문구(`HIGHLIGHT_LINES`)만 앱에 남는다. 그건 한도가
+ * 아니라 편집 판단이고, 문구가 없으면 기능 이름만으로도 줄이 성립한다.
+ *
+ * <p>카탈로그가 아직 안 왔거나 `hero` 를 모르는 구버전 서버면 빈 배열이 되므로,
+ * 그때는 아래 폴백을 쓴다 — 결제 화면에서 혜택 목록이 통째로 비면 안 된다.
+ */
+const HERO_FALLBACK: FeatureKey[] = ['AI_COUPLE_EMOJI', 'AI_FOOD_PHOTO', 'WORKOUT_V2_STATS'];
+
+function highlightsOf(catalog: PlanCatalogEntry[]): FeatureKey[] {
+  const heroes = catalog.filter((e) => e.hero).map((e) => e.feature);
+  return heroes.length > 0 ? heroes : HERO_FALLBACK;
+}
 
 /** 묶음 표시 순서 — 서버 enum 순서와 같게 둔다(응답 순서에 의존하지 않기 위해 명시한다) */
 const GROUP_ORDER: FeatureGroupKey[] = ['AI', 'DEPTH', 'STORAGE', 'ENGAGEMENT', 'DECORATION'];
@@ -200,9 +221,10 @@ export function PlanScreen({ navigation }: Props) {
           </Text>
 
           <View style={styles.highlights}>
-            {HIGHLIGHTS.map(({ feature, line }) => {
+            {highlightsOf(catalog ?? []).map((feature) => {
               const entry = byFeature.get(feature);
               if (!entry) return null;
+              const line = HIGHLIGHT_LINES[feature];
               return (
                 <View key={feature} style={styles.highlightRow}>
                   {/* 서브셋에 있는 글리프만 쓴다 — 새 이름은 fingerprint 입력이라 OTA 로 못 나간다
@@ -210,7 +232,7 @@ export function PlanScreen({ navigation }: Props) {
                   <MaterialCommunityIcons name="check-circle" size={17} color={colors.together} />
                   <View style={styles.highlightBody}>
                     <Text style={styles.highlightName}>{entry.name}</Text>
-                    <Text style={styles.highlightLine}>{line}</Text>
+                    {line ? <Text style={styles.highlightLine}>{line}</Text> : null}
                   </View>
                 </View>
               );
