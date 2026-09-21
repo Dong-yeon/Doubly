@@ -645,7 +645,9 @@ export interface OmokGame {
   createdAt: string;
   completedAt?: string | null;
 }
-export type OmokUndoRequest = 'MINE' | 'PARTNER';
+/** 무르기 표시 — MINE(내가 걸어둠) · PARTNER(상대가 걸어옴). 오목·길막기 공용 */
+export type GameUndoRequest = 'MINE' | 'PARTNER';
+export type OmokUndoRequest = GameUndoRequest;
 
 // 캐치마인드 — 한 명이 그리고 한 명이 맞힌다(비동기). docs/CATCH_MIND_2026-09-14.md
 export type CatchMindRole = 'DRAWER' | 'GUESSER';
@@ -757,8 +759,12 @@ export interface WallRaceGame {
   legalMoves: number[];
   moveCount: number;
   winner?: WallRaceWinner | null;
-  /** 'P12'(이동) · 'W35H'(벽) 순서대로 */
+  /** 'P12'(이동) · 'W35H'(벽) 순서대로. 무르기가 이걸 재생해 한 수 전으로 돌아간다 */
   moves: string[];
+  /** MINE(내가 걸어둠) · PARTNER(상대가 걸어옴) · null(없음) */
+  undoRequest?: GameUndoRequest | null;
+  /** 지금 내가 무르기를 걸 수 있는가 — 직전에 둔 쪽만 걸 수 있다 */
+  canUndo: boolean;
   partnerName?: string | null;
   createdAt: string;
   completedAt?: string | null;

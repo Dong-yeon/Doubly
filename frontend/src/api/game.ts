@@ -120,6 +120,12 @@ export const wallRaceApi = {
   /** 벽 설치 — 겹치거나 길을 완전히 막으면 400 */
   placeWall: (id: number, slot: number, kind: 'H' | 'V') =>
     unwrap(apiClient.post<ApiResponse<WallRaceGame>>(`/games/wall-race/${id}/walls`, { slot, kind })),
+  /** 무르기 요청 — 직전에 둔 사람만. 되돌리는 건 상대가 받아준 뒤 */
+  requestUndo: (id: number) =>
+    unwrap(apiClient.post<ApiResponse<WallRaceGame>>(`/games/wall-race/${id}/undo-request`)),
+  /** 무르기 응답 — accept=false 는 "그냥 두자" */
+  respondUndo: (id: number, accept: boolean) =>
+    unwrap(apiClient.post<ApiResponse<WallRaceGame>>(`/games/wall-race/${id}/undo-response`, { accept })),
   giveUp: (id: number) => unwrap(apiClient.post<ApiResponse<void>>(`/games/wall-race/${id}/give-up`)),
   /** 끝난 판 최근 20개(승패 포함) */
   history: () => unwrap(apiClient.get<ApiResponse<WallRaceGame[]>>('/games/wall-race/history')),

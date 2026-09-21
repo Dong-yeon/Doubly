@@ -19,7 +19,9 @@ import java.util.List;
  *                     서버가 규칙의 주인이라 앱은 이 목록만 믿으면 된다
  * @param myWallsStart 핸디캡으로 접어준 만큼이 여기 드러난다 — 숨기지 않는다
  * @param winner       ME / PARTNER / null(진행 중). 이 게임에 무승부는 없다
- * @param moves        'P12' / 'W35H' 순서대로. 복기 재생이 이걸 그대로 쓴다
+ * @param moves        'P12' / 'W35H' 순서대로. 무르기가 이걸 재생해 한 수 전으로 돌아간다
+ * @param undoRequest  MINE(내가 걸어둠) / PARTNER(상대가 걸어옴) / null(없음)
+ * @param canUndo      지금 내가 무르기를 걸 수 있는가 — 직전에 둔 쪽만 걸 수 있다
  */
 public record WallRaceGameResponse(
         Long id,
@@ -38,6 +40,8 @@ public record WallRaceGameResponse(
         int moveCount,
         String winner,
         List<String> moves,
+        String undoRequest,
+        boolean canUndo,
         String partnerName,
         LocalDateTime createdAt,
         LocalDateTime completedAt
@@ -47,6 +51,8 @@ public record WallRaceGameResponse(
         char theirs = WallRaceGame.opponentOf(mine);
         boolean myTurn = game.isInProgress() && game.isTurnOf(viewerId);
         String winner = game.getRaceWinner() == null ? null : game.isWinner(mine) ? "ME" : "PARTNER";
+        String undoRequest = !game.hasUndoRequest() ? null
+                : game.undoRequestedSide() == mine ? "MINE" : "PARTNER";
 
         return new WallRaceGameResponse(
                 game.getId(),
@@ -65,6 +71,8 @@ public record WallRaceGameResponse(
                 game.moveCount(),
                 winner,
                 game.moveList(),
+                undoRequest,
+                game.canRequestUndo(viewerId),
                 partnerName,
                 game.getCreatedAt(),
                 game.getCompletedAt()

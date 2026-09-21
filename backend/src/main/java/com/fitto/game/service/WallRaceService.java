@@ -155,6 +155,68 @@ public class WallRaceService {
         return toResponse(game, userId, couple);
     }
 
+    /**
+     * 무르기 요청 — 직전에 둔 사람이 "한 수만 무르자"를 건다. 되돌리는 건 상대가 받아준 뒤다.
+     *
+     * <p>서버가 바로 무르지 않는 이유는 오목과 같다 — 무르기는 규칙이 아니라 <b>부탁</b>이고,
+     * 상대 동의 없이 판이 바뀌면 둔 사람이 "내가 뭘 본 거지"가 된다. 여기서는 벽까지 손으로
+     * 돌아오므로 한 수의 무게가 오목보다 무겁다.
+     */
+    @Transactional
+    public WallRaceGameResponse requestUndo(Long userId, Long gameId) {
+        Relation couple = activeCouple(userId);
+        WallRaceGame game = lockedGame(gameId, couple);
+        if (!game.canRequestUndo(userId)) {
+            throw new BusinessException(ErrorCode.GAME_UNDO_NOT_ALLOWED);
+        }
+        game.requestUndo(game.sideOf(userId));
+
+        Long partnerId = couple.partnerOf(userId);
+        if (partnerId != null) {
+            notificationService.notify(partnerId, NotificationCategory.PARTNER, "길막기 — 한 수만 무르자 🙏",
+                    userName(userId) + "님이 방금 둔 수를 무르고 싶대요.", PushLinks.GAME_WALL_RACE);
+        }
+        coupleEventPublisher.publish(couple.getId(), CoupleEvent.GAME);
+        return toResponse(game, userId, couple);
+    }
+
+    /**
+     * 무르기 응답 — 받아주면 마지막 수 하나가 사라진다(말은 제자리로, 벽은 손으로).
+     * 거절하면 요청만 지운다. 어느 쪽이든 판이 다시 흐르므로 상대에게 결과를 알린다.
+     */
+    @Transactional
+    public WallRaceGameResponse respondUndo(Long userId, Long gameId, boolean accept) {
+        Relation couple = activeCouple(userId);
+        WallRaceGame game = lockedGame(gameId, couple);
+        if (!game.isInProgress()) {
+            throw new BusinessException(ErrorCode.GAME_NOT_IN_PROGRESS);
+        }
+        if (!game.hasUndoRequest()) {
+            throw new BusinessException(ErrorCode.GAME_UNDO_NOT_REQUESTED);
+        }
+        if (game.undoRequestedSide() == game.sideOf(userId)) {
+            throw new BusinessException(ErrorCode.GAME_UNDO_NOT_YOURS);
+        }
+
+        if (accept) {
+            game.undoLastMove();
+        } else {
+            game.clearUndoRequest();
+        }
+
+        Long partnerId = couple.partnerOf(userId);
+        if (partnerId != null) {
+            notificationService.notify(partnerId, NotificationCategory.PARTNER,
+                    accept ? "길막기 — 무르기 OK 👌" : "길막기 — 무르기는 안 된대요",
+                    accept
+                            ? userName(userId) + "님이 무르기를 받아줬어요. 다시 두세요."
+                            : userName(userId) + "님이 그냥 두자고 해요.",
+                    PushLinks.GAME_WALL_RACE);
+        }
+        coupleEventPublisher.publish(couple.getId(), CoupleEvent.GAME);
+        return toResponse(game, userId, couple);
+    }
+
     /** 포기 — 기록에 남지 않는다. */
     @Transactional
     public void giveUp(Long userId, Long gameId) {

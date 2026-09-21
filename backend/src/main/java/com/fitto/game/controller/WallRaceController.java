@@ -3,6 +3,7 @@ package com.fitto.game.controller;
 import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
 import com.fitto.game.dto.PlaceWallRequest;
+import com.fitto.game.dto.UndoResponseRequest;
 import com.fitto.game.dto.WallRaceGameResponse;
 import com.fitto.game.service.WallRaceService;
 import jakarta.validation.Valid;
@@ -58,6 +59,22 @@ public class WallRaceController {
                                                        @PathVariable Long id,
                                                        @Valid @RequestBody PlaceWallRequest req) {
         return ApiResponse.success(wallRaceService.placeWall(user.id(), id, req.slot(), req.kind()));
+    }
+
+    /** 무르기 요청 — 직전에 둔 사람만 걸 수 있다. 되돌리는 건 상대가 받아준 뒤. */
+    @PostMapping("/{id}/undo-request")
+    public ApiResponse<WallRaceGameResponse> requestUndo(@AuthenticationPrincipal AuthUser user,
+                                                         @PathVariable Long id) {
+        return ApiResponse.success(wallRaceService.requestUndo(user.id(), id), "무르기를 부탁했어요.");
+    }
+
+    /** 무르기 응답 — 받아주면 말은 제자리로, 벽은 손으로 돌아온다. */
+    @PostMapping("/{id}/undo-response")
+    public ApiResponse<WallRaceGameResponse> respondUndo(@AuthenticationPrincipal AuthUser user,
+                                                         @PathVariable Long id,
+                                                         @RequestBody UndoResponseRequest req) {
+        WallRaceGameResponse game = wallRaceService.respondUndo(user.id(), id, req.accept());
+        return ApiResponse.success(game, req.accept() ? "한 수 물렀어요." : "그냥 두기로 했어요.");
     }
 
     @PostMapping("/{id}/give-up")
