@@ -21,6 +21,7 @@ public final class PushLinks {
     public static final String GAME_OMOK = "game/omok";
     public static final String GAME_CATCH_MIND = "game/catch-mind";
     public static final String GAME_PUZZLE = "game/puzzle";
+    public static final String GAME_WALL_RACE = "game/wall-race";
     public static final String CALENDAR = "calendar";
     public static final String COUPLE_CONNECT = "couple/connect";
     public static final String WORKOUT = "workout";
