@@ -2,6 +2,8 @@ package com.fitto.feed;
 
 import com.fitto.auth.dto.RegisterRequest;
 import com.fitto.auth.service.AuthService;
+import com.fitto.common.plan.SubscriptionRepository;
+import com.fitto.common.plan.TestPro;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.diet.domain.MealType;
 import com.fitto.diet.dto.SaveMealRequest;
@@ -55,6 +57,7 @@ class MemoriesFlowTest {
 
     @Autowired AuthService authService;
     @Autowired RelationService relationService;
+    @Autowired SubscriptionRepository subscriptionRepository;
     @Autowired FeedService feedService;
     @Autowired MemoriesService memoriesService;
     @Autowired PlaceService placeService;
@@ -85,6 +88,8 @@ class MemoriesFlowTest {
         Long idb = register(b);
         InviteCodeResponse invite = relationService.createCoupleInvite(ida);
         relationService.connectCouple(idb, invite.code());
+        // 추억은 PRO 기능이다 — 전역 무료 체험을 끈 뒤로는 구독이 있어야 열린다(TestPro 주석)
+        TestPro.grant(subscriptionRepository, ida, idb);
         return new long[]{ida, idb};
     }
 

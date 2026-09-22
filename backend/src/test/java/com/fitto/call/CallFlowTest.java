@@ -2,6 +2,8 @@ package com.fitto.call;
 
 import com.fitto.auth.dto.RegisterRequest;
 import com.fitto.auth.service.AuthService;
+import com.fitto.common.plan.SubscriptionRepository;
+import com.fitto.common.plan.TestPro;
 import com.fitto.call.domain.CallStatus;
 import com.fitto.call.domain.CallType;
 import com.fitto.call.dto.CallJoinResponse;
@@ -34,6 +36,7 @@ class CallFlowTest {
 
     @Autowired AuthService authService;
     @Autowired RelationService relationService;
+    @Autowired SubscriptionRepository subscriptionRepository;
     @Autowired CallService callService;
     @Autowired ChatService chatService;
 
@@ -50,6 +53,8 @@ class CallFlowTest {
     private Long connectCouple(Long a, Long b) {
         InviteCodeResponse invite = relationService.createCoupleInvite(a);
         RelationResponse rel = relationService.connectCouple(b, invite.code());
+        // 영상통화는 PRO 전용이다 — 무료 체험을 끈 뒤로는 구독이 있어야 걸린다(TestPro 주석)
+        TestPro.grant(subscriptionRepository, a, b);
         return rel.id();
     }
 

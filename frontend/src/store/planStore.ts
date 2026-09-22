@@ -45,8 +45,12 @@ function indexByFeature(info: PlanInfo): Partial<Record<FeatureKey, FeatureState
 
 export const usePlanStore = create<PlanState>((set, get) => ({
   plan: 'FREE',
-  // 체험 기간이 기본값이라 초기값도 true 로 둔다 — 로드 전에 배지가 깜빡이지 않는다.
-  freeTrial: true,
+  /*
+   * 2026-09-22 에 전역 체험을 껐다(PLAN_FREE_TRIAL=false) — 이제 기본 상태는 "체험 중이
+   * 아님"이다. true 로 두면 로드 전 한 프레임 동안 있지도 않은 "체험 중" 배지가 스친다.
+   * 잠금 표시와 달리 이건 안전한 쪽이 false 다: 없는 혜택을 알리는 실수가 더 나쁘다.
+   */
+  freeTrial: false,
   trialEndsAt: null,
   features: {},
   isLoaded: false,

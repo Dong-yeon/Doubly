@@ -2,6 +2,8 @@ package com.fitto.voice;
 
 import com.fitto.auth.dto.RegisterRequest;
 import com.fitto.auth.service.AuthService;
+import com.fitto.common.plan.SubscriptionRepository;
+import com.fitto.common.plan.TestPro;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.notification.NotificationCategory;
 import com.fitto.common.notification.NotificationService;
@@ -35,6 +37,7 @@ class WorkoutBoosterTest {
 
     @Autowired AuthService authService;
     @Autowired RelationService relationService;
+    @Autowired SubscriptionRepository subscriptionRepository;
     @Autowired WorkoutBoosterService boosterService;
 
     @MockitoBean NotificationService notificationService;
@@ -50,6 +53,8 @@ class WorkoutBoosterTest {
         Long b = register(emailB);
         InviteCodeResponse invite = relationService.createCoupleInvite(a);
         relationService.connectCouple(b, invite.code());
+        // PRO 기능을 쓰는 테스트다 — 전역 무료 체험을 끈 뒤로는 구독이 있어야 열린다(TestPro 주석)
+        TestPro.grant(subscriptionRepository, a, b);
         return new long[]{a, b};
     }
 
