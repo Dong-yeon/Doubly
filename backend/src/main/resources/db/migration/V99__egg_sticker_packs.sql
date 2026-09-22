@@ -15,6 +15,10 @@
 -- V96 을 고치지 않고 새 번호를 쓰는 이유: 이미 푸시된 마이그레이션의 내용을 바꾸면
 -- flyway_schema_history 의 체크섬이 깨진다(CLAUDE.md 1절).
 --
+-- V97·V98 이 아니라 V99 인 이유: 병렬 세션이 길막기(wall_race)로 그 둘을 먼저 푸시했다.
+-- 이 파일은 아직 안 푸시됐으니 옮기는 건 이쪽이다(CLAUDE.md 1절 — 번호가 충돌하면
+-- 아직 푸시되지 않은 쪽을 옮긴다).
+--
 -- H2/PostgreSQL 양립: 평범한 INSERT 뿐이다.
 
 INSERT INTO sticker_packs (id, title, category, is_pro_only, price) VALUES
