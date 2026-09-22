@@ -653,10 +653,15 @@ point_ledger              -- 포인트 적립·사용 내역 (잔액을 컬럼�
 
 ## 요금제 — FREE / PRO
 
-> **상태: 판정 경로 + 인앱결제 연동 코드 완료. 지금은 전원 PRO 다** (`PLAN_FREE_TRIAL=true`).
-> Google Play 구독 결제(`react-native-iap` 클라이언트 + 서버 즉시 검증 +
-> RTDN 웹훅)는 코드상 준비됐지만 `PURCHASE_ENABLED=false`로 꺼져 있다 — 남은 건
-> Play Console에서 사람이 직접 해야 하는 설정(구독 상품 생성·서비스 계정 발급 등)뿐이다.
+> **상태: 2026-09-22 부터 결제한 사람만 PRO 다** (`PLAN_FREE_TRIAL=false`, `PLAN_TRIAL_DAYS=0`).
+> 가입하면 FREE 로 시작하고, `Feature.java` 의 FREE 한도가 실제로 강제된다.
+> 기존 사용자에게 영구 PRO 를 주는 안(`docs/FREE_TIER_AND_ADS.md`)은 보류했다 — 전원 FREE 다.
+>
+> Google Play 구독 결제(`react-native-iap` 클라이언트 + 서버 즉시 검증 + RTDN 웹훅)는
+> 코드가 준비돼 있고 앱에서도 열려 있다(`PURCHASE_ENABLED = Platform.OS !== 'web'`).
+> **다만 Play Console 에 구독 상품(`pro_monthly`)이 실제로 등록·활성화돼 있어야 결제가
+> 시작된다** — 없으면 가격도 안 뜨고 구매 버튼이 실패한다. 즉 상품 등록 전까지는
+> "PRO 가 될 방법이 없는 상태"이므로 전환과 상품 등록은 같이 가야 한다.
 > 절차는 [docs/GOOGLE_PLAY_BILLING.md](docs/GOOGLE_PLAY_BILLING.md) 참고.
 
 ### 왜 지금 넣었나
@@ -794,15 +799,20 @@ point_ledger              -- 포인트 적립·사용 내역 (잔액을 컬럼�
 한도의 "오늘"은 **KST 기준**이다. 서버가 UTC 라 `LocalDate.now()` 를 쓰면 일일 한도가
 한국 시간 **오전 9시**에 리셋된다.
 
-### 켤 때 해야 할 일
+### 켤 때 해야 할 일 — 5번을 먼저 했다(2026-09-22)
 
-1. 이벤트 로깅으로 실사용 분포(p60~p75) 측정 → `Feature.java` 의 FREE 숫자 확정
-2. 약관에 **유료 서비스·환불 조항** 추가 — 사용자가 적은 지금이 `PolicyVersion` 상향
+순서를 뒤집었다. 1번(실사용 분포 측정)은 **무료 사용자가 존재해야** 잴 수 있는데, 전원
+PRO 인 동안은 그런 사용자가 만들어지지 않는다. 그래서 자리표시자 숫자인 채로 먼저 켜고,
+막히는 자리가 나오면 그때 `Feature.java` 를 고친다.
+
+1. ~~이벤트 로깅으로 실사용 분포(p60~p75) 측정~~ → **켠 뒤에 잰다**(위 문단)
+2. 약관에 **유료 서비스·환불 조항** 추가 — ⚠️ **아직 없다**(`legal.ts` 에 '환불' 0건).
+   유료 상품을 실제로 팔기 전에 필요하다. 사용자가 적은 지금이 `PolicyVersion` 상향
    비용이 가장 싸다 (아래 "약관 본문" 절 참고. 버전을 올리면 전원 재동의 게이트가 뜬다)
-3. ~~`react-native-iap` + 서버 영수증 검증 + 스토어 웹훅 → `subscriptions` 갱신~~ →
-   **완료**: 코드는 준비됐고, 남은 건 [Play Console 수동 설정](docs/GOOGLE_PLAY_BILLING.md)뿐이다
-4. Play Console 설정을 마친 뒤 `PURCHASE_ENABLED=true` (`GOOGLE_PLAY_BILLING.md` 5번) + EAS 재빌드
-5. `PLAN_FREE_TRIAL=false`
+3. ~~`react-native-iap` + 서버 영수증 검증 + 스토어 웹훅 → `subscriptions` 갱신~~ → **완료**
+4. ⚠️ **Play Console 구독 상품(`pro_monthly` / base plan `monthly`) 등록·활성화** —
+   이게 없으면 아무도 PRO 가 될 수 없다([GOOGLE_PLAY_BILLING.md](docs/GOOGLE_PLAY_BILLING.md))
+5. ~~`PLAN_FREE_TRIAL=false`~~ → **완료(2026-09-22)**. `PLAN_TRIAL_DAYS=0` 도 함께.
 
 > **만료 시 원칙: 읽기는 남기고 쓰기만 막는다.** PRO 때 만든 여행 5개를 만료 후
 > 숨기거나 지우면 안 된다. 조회는 유지하고 신규 생성만 차단한다.

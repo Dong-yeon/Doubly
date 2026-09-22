@@ -2,6 +2,8 @@ package com.fitto.feed;
 
 import com.fitto.auth.dto.RegisterRequest;
 import com.fitto.auth.service.AuthService;
+import com.fitto.common.plan.SubscriptionRepository;
+import com.fitto.common.plan.TestPro;
 import com.fitto.common.notification.NotificationService;
 import com.fitto.feed.dto.CreatePostRequest;
 import com.fitto.feed.dto.FeedItemResponse;
@@ -52,6 +54,7 @@ class MemoriesNotifierTest {
     private static final AtomicInteger IP_SEQ = new AtomicInteger();
 
     @Autowired AuthService authService;
+    @Autowired SubscriptionRepository subscriptionRepository;
     @Autowired RelationService relationService;
     @Autowired FeedService feedService;
     @Autowired MemoriesNotifier notifier;
@@ -74,6 +77,8 @@ class MemoriesNotifierTest {
         Long idb = register(b);
         InviteCodeResponse invite = relationService.createCoupleInvite(ida);
         relationService.connectCouple(idb, invite.code());
+        // 알림 대상은 PRO 커플뿐이다(MemoriesNotifier) — 구독이 없으면 아예 건너뛴다
+        TestPro.grant(subscriptionRepository, ida, idb);
         return new long[]{ida, idb};
     }
 

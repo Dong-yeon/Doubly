@@ -2,6 +2,8 @@ package com.fitto.auth;
 
 import com.fitto.auth.dto.RegisterRequest;
 import com.fitto.auth.service.AuthService;
+import com.fitto.common.plan.SubscriptionRepository;
+import com.fitto.common.plan.TestPro;
 import com.fitto.body.dto.SaveBodyMetricRequest;
 import com.fitto.body.service.BodyMetricService;
 import com.fitto.challenge.domain.ChallengeType;
@@ -78,6 +80,7 @@ class WithdrawFlowTest {
 
     @Autowired AuthService authService;
     @Autowired RelationService relationService;
+    @Autowired SubscriptionRepository subscriptionRepository;
     @Autowired PlaceService placeService;
     @Autowired FeedService feedService;
     @Autowired TripService tripService;
@@ -190,6 +193,8 @@ class WithdrawFlowTest {
         Long partner = register("withdraw-new-tables-b@fitto.com");
         InviteCodeResponse invite = relationService.createCoupleInvite(me);
         relationService.connectCouple(partner, invite.code());
+        // 운동 부스터는 PRO 전용이다 — 여기서 보는 건 탈퇴 시 FK 정리지 게이팅이 아니다
+        TestPro.grant(subscriptionRepository, me, partner);
 
         // voice_clips — users FK
         voiceClipService.save(me, new SaveVoiceClipRequest(VoicePhrase.REST_END, "https://res.cloudinary.com/x/rest.m4a"));

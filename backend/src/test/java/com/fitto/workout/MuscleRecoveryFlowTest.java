@@ -2,6 +2,8 @@ package com.fitto.workout;
 
 import com.fitto.auth.dto.RegisterRequest;
 import com.fitto.auth.service.AuthService;
+import com.fitto.common.plan.SubscriptionRepository;
+import com.fitto.common.plan.TestPro;
 import com.fitto.workout.dto.MuscleRecoveryResponse;
 import com.fitto.workout.dto.SaveWorkoutRequest;
 import com.fitto.workout.dto.WorkoutSetRequest;
@@ -30,13 +32,22 @@ class MuscleRecoveryFlowTest {
     @Autowired
     AuthService authService;
     @Autowired
+    SubscriptionRepository subscriptionRepository;
+    @Autowired
     WorkoutService workoutService;
     @Autowired
     MuscleRecoveryService muscleRecoveryService;
 
     private Long register(String email) {
-        return authService.register(
+        Long id = authService.register(
                 new RegisterRequest(email, "password123", "U", null, null, true, true, false), "127.0.0.1").user().id();
+        /*
+         * 부위별 전체 회복 카드는 PRO 전용이다(WORKOUT_RECOVERY_FULL) — FREE 는 홈 요약
+         * 한 줄만 받는다. 이 클래스가 보는 건 회복률 계산이지 잠금이 아니므로 PRO 로 둔다
+         * (잠금 자체는 PlanGatingFlowTest 가 본다).
+         */
+        TestPro.grant(subscriptionRepository, id);
+        return id;
     }
 
     private void workoutOn(Long userId, LocalDate date, String muscleGroup) {
