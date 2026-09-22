@@ -6,6 +6,11 @@
 > **영구권을 뺐다** — 폐기 근거는 §5. 그리고 축이 나란한 넷이 아니라 **등급 × 소유권의
 > 곱**이라는 구조를 §0-1 에 새로 적었다.
 >
+> 같은 날 사실 정정 셋: `Feature` 가 **40 → 41**(`WORKOUT_V2_STATS` 추가),
+> **PRO 대표 기능은 이제 `Feature.isHero()` 가 정하고 9/17 §6 의 제안과 셋이 다르다**(§1),
+> **플랜 화면은 이미 구현돼 있다**(§7-1). 초판을 쓴 지 하루 만에 어긋난 것들이라,
+> 이 문서를 읽을 때도 코드를 한 번 대조하는 편이 안전하다.
+>
 > 선행 문서: [PRO_UPSELL_AND_ADS_2026-09-17.md](PRO_UPSELL_AND_ADS_2026-09-17.md)(순서·블로커),
 > [PRICING_AND_ADS_2026-09-11.md](PRICING_AND_ADS_2026-09-11.md)(가격·원가),
 > [AI_COST_ANALYSIS_2026-09-14.md](AI_COST_ANALYSIS_2026-09-14.md)(AI 실원가),
@@ -83,10 +88,18 @@ planGuard.require(userId, pack.getCategory().feature());  // ← 구독으로 �
 
 > **원가가 0 이어도 PRO 의 대표 기능은 구독에 남긴다.**
 
-`PRO_UPSELL_AND_ADS_2026-09-17.md` §6 이 플랜 화면에서 앞세우라고 꼽은 넷 —
-**영상통화 · 우리 이모지 · 추억 리마인드 · 전체 기간 통계** — 이 그 목록이다.
-`MEMORIES`·`FULL_STATS`·`ANNIVERSARY_RECAP` 은 원가가 0 이지만 여기 속한다.
-**"리소스를 적게 먹는다"와 "가치가 낮다"는 다른 축이다.**
+**대표 기능은 이제 코드가 정한다** — `Feature.isHero()` 가 셋을 고른다.
+
+```java
+case AI_COUPLE_EMOJI, AI_FOOD_PHOTO, WORKOUT_V2_STATS -> true;
+```
+
+`PlanCatalogEntry.hero` 로 앱에 내려가고 비교표 맨 위로 올라간다. 9/17 §6 이 제안했던
+넷(영상통화 · 우리 이모지 · 추억 리마인드 · 전체 기간 통계)과 **셋이 다르다** — 그 문서는
+제안이었고 이쪽이 구현이다. 규칙을 적용할 때는 `isHero()` 를 본다.
+
+대표가 아니어도 `MEMORIES`·`FULL_STATS`·`ANNIVERSARY_RECAP` 처럼 원가 0 인 깊이형은
+구독에 남는다. **"리소스를 적게 먹는다"와 "가치가 낮다"는 다른 축이다.**
 
 광고에만 걸리는 규칙이 하나 더 있다.
 
@@ -161,7 +174,7 @@ StickerPackSyncTest.누가_무엇을_쓸_수_있는지는_그대로다   ← "�
 **상점의 주력 상품이 캐릭터 결정에 걸려 있다.**
 [APP_ICON_DIRECTION_2026-09-21.md](APP_ICON_DIRECTION_2026-09-21.md) §9 와 같은 병목이다.
 
-## 4. `Feature` 40개 배정
+## 4. `Feature` 41개 배정
 
 | 그룹 | 기능 | 축 | 왜 |
 | --- | --- | --- | --- |
@@ -171,7 +184,7 @@ StickerPackSyncTest.누가_무엇을_쓸_수_있는지는_그대로다   ← "�
 | | `AI_TOTAL` | 안전망 | 플랜 무관. 실제 상한은 `fitto.gemini.daily-limit-per-user` |
 | **저장·원가형** (1) | `PHOTO_UPLOAD` | PRO(한도형) | Cloudinary 실비 |
 | **저장·개수형** (9) | `TRIP_ACTIVE` · `PLACE_PIN` · `CONTENT_ITEM` · `WORKOUT_ROUTINE` · `CALENDAR_EVENT` · `FAVORITE_FOOD` · `CUSTOM_EXERCISE` · `CHALLENGE_ACTIVE` · `COOP_GOAL_ACTIVE` | PRO(개수 상향) | 저장 상한 |
-| **깊이형** (10) | `MEMORIES` · `FULL_STATS` · `ANNIVERSARY_RECAP` · `WEEKLY_RECAP` · `VIDEO_CALL` · `TRIP_EXPENSE` · `TRIP_CHECKLIST` · `MOOD_CALENDAR_FULL` · `WORKOUT_RECOVERY_FULL` · `STREAK_REPAIR` | PRO 전용 | 원가 0 이나 **PRO 대표 기능**(§1 두 번째 규칙). `VIDEO_CALL` 은 Stream 무료 티어 절벽 위라 원가 0 도 아니다 |
+| **깊이형** (11) | `MEMORIES` · `FULL_STATS` · `ANNIVERSARY_RECAP` · `WEEKLY_RECAP` · `VIDEO_CALL` · `TRIP_EXPENSE` · `TRIP_CHECKLIST` · `MOOD_CALENDAR_FULL` · `WORKOUT_RECOVERY_FULL` · `WORKOUT_V2_STATS` · `STREAK_REPAIR` | PRO 전용 | 원가 0 이나 **PRO 대표 기능**(§1 두 번째 규칙). `VIDEO_CALL` 은 Stream 무료 티어 절벽 위라 원가 0 도 아니다 |
 | **꾸미기** (3) | `CUSTOM_BACKGROUND` | PRO 전용 | 영구권을 뺐으므로 구독에 남는다(§5) |
 | | `PREMIUM_STICKER` · `TOUCH_GESTURE_PREMIUM` | **상점으로 이미 이관** | `MOOD_PREMIUM`·`TOUCH_PREMIUM` 팩이 그것 |
 | **인게이지먼트** (5) | `WORKOUT_BOOSTER` · `VOICE_MESSAGE` · `CUSTOM_QUESTION` · `CSV_EXPORT` · `PUBLIC_GUIDE_LINK` | PRO(한도형) | `WORKOUT_BOOSTER`·`VOICE_MESSAGE` 는 Cloudinary 원가 있음 |
@@ -265,16 +278,37 @@ PRO 구독자까지 영구권을 사므로 매출 축이 둘 다 산다. **논�
 
 ## 7. 순서
 
-| # | 할 일 | 왜 이 순서인가 |
+| # | 할 일 | 상태 · 왜 이 순서인가 |
 | --- | --- | --- |
-| 1 | **플랜 화면 신설** | 9/17 §5 3번. 벽을 세우기 전에 문을 먼저 단다 |
-| 2 | `PLAN_FREE_TRIAL=false` | 환경변수 하나. **이게 되어야 아래 전부의 대상이 생긴다** |
-| 3 | 한도 실측(9/17 §3 쿼리) → `Feature.java` FREE 확정 | 지금 FREE 숫자는 **자리표시자**다 |
-| 4 | 캐릭터 확정 → 스티커 재작도 | 상점 매대가 빈다(§3-1) |
-| 5 | 환불 웹훅 | 9/21 문서 §13-5 — 지금은 환불해도 팩이 계속 열린다 |
-| 6 | 광고 도입 | §6 선행 조건 |
+| ~~1~~ | ~~플랜 화면 신설~~ | **완료** — §7-1 |
+| 2 | **실기기 결제 테스트** | 3번의 선행. 결제가 실기기에서 **한 번도 돈 적이 없다**(9/21 문서 §13-4) |
+| 3 | `PLAN_FREE_TRIAL=false` | 환경변수 하나. **이게 되어야 아래 전부의 대상이 생긴다.** 9/17 §9-2 의 순서(결제 테스트 → 전환 → 운영자 수동 PRO)를 지킨다 |
+| 4 | 한도 실측(9/17 §3 쿼리) → `Feature.java` FREE 확정 | 지금 FREE 숫자는 **자리표시자**다 |
+| 5 | 캐릭터 확정 → 스티커 재작도 | 상점 매대가 빈다(§3-1) |
+| 6 | 환불 웹훅 | 9/21 문서 §13-5 — 지금은 환불해도 팩이 계속 열린다 |
+| 7 | 광고 도입 | §6 선행 조건 |
 
-**1·2 를 건너뛴 3~6 은 전부 대상 0명 위의 작업이다.**
+**3 을 건너뛴 4~7 은 전부 대상 0명 위의 작업이다.** 그리고 2 없이 3 을 켜면 "기능은
+사라졌는데 살 수 있는지는 확인 안 된" 상태가 된다.
+
+### 7-1. 플랜 화면은 이미 있다 (2026-09-22 확인)
+
+9/17 §6 이 설계만 남기고 "미착수"로 둔 것이 그 사이 구현됐다.
+
+```
+frontend/src/screens/my/PlanScreen.tsx        435줄 — 비교표 · 구매 · Apple 3.1.2 구독 고지
+frontend/src/navigation/HomeStackNavigator.tsx:105   'Plan' 등록
+frontend/src/screens/my/MyScreen.tsx:590      MY 탭 진입점
+frontend/src/screens/my/SettingsScreen.tsx    설정 진입점 (2026-09-22 추가)
+backend/.../PlanController.java:58            GET /plan/catalog
+backend/.../PlanCatalogEntry.java             freeLimit/proLimit 나란히 + hero 플래그
+```
+
+9/17 §6 의 원칙이 그대로 지켜졌다 — **숫자도 무엇을 앞세울지도 서버가 정하고**
+(`/plan/catalog` · `Feature.isHero()`), 가격은 스토어의 `displayPrice` 를 그대로 쓴다.
+
+**빠진 것이 하나 있다: 광고 제거가 PRO 판매 문구에 없다**(`PlanScreen.tsx` 의 "광고"
+언급 0건). 광고를 붙일 때(7번) 같이 넣어야 한다 — §6 참고.
 
 ## 8. 미결
 
