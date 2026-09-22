@@ -89,6 +89,23 @@ tasks.named('test') {
     useJUnitPlatform()
 
     /*
+     * 테스트 JVM 힙 — Gradle 기본값(512MB)으로는 모자란다.
+     *
+     * 왜: 이 스위트는 @SpringBootTest 가 대부분이고, properties·@MockitoBean 조합이 다르면
+     * 스프링이 <b>컨텍스트를 새로 만들어 캐시에 쌓아둔다</b>(같은 JVM 에서 끝까지 살아 있다).
+     * 테스트가 늘수록 캐시된 컨텍스트가 늘고, 그 안의 Hikari 풀·EntityManagerFactory·
+     * HttpClient 셀렉터 스레드가 함께 산다. 2026-09-22 에 컨텍스트가 하나 더 생기자
+     * (StickerPurchaseIdempotencyTest) 512MB 를 넘겨 <b>CI 가 OutOfMemoryError 로 빨개졌다</b> —
+     * 터진 테스트가 원인이 아니라 그 시점에 마지막 한 칸을 넘긴 것뿐이라, 테스트를 지우는
+     * 것은 답이 아니다(다음에 추가되는 테스트가 같은 자리에서 또 터진다).
+     *
+     * 2g 인 근거: GitHub Actions 러너가 16GB 이고 로컬 개발 PC 도 그 언저리다. 넉넉히 주되
+     * 러너 메모리를 다 물지는 않는 값이다. 여기가 다시 모자라면 힙을 더 키우기 전에
+     * <b>컨텍스트 가짓수</b>를 먼저 본다 — properties 를 조금씩 다르게 준 테스트가 범인이다.
+     */
+    maxHeapSize = '2g'
+
+    /*
      * 테스트 JVM 의 기본 시간대를 KST 로 고정한다.
      *
      * 왜: 운영 코드는 "오늘"을 KstClock(Asia/Seoul)으로 판단하는데, 테스트는 존 없는
