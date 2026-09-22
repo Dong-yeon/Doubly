@@ -205,8 +205,12 @@ function PackCard({ pack, onBuy }: { pack: StickerPack; onBuy: (pack: StickerPac
       {/*
         미리보기 — 대표 그림 다음 장들을 작게 한 줄로. 넘치면 잘린다(nowrap + hidden):
         몇 장이 보이는지는 화면 폭이 정하고, 전부 보여주는 것이 목적이 아니다.
+
+        <p><b>이미 가진 팩에는 그리지 않는다</b>(2026-09-22). 미리보기는 "무엇을 사는가"에
+        답하는 그림인데, 이미 가진 팩에는 그 질문이 없다 — 내용이 궁금하면 채팅 패널에서
+        바로 열어 본다. 가진 팩까지 펼치면 <b>살 수 있는 팩이 목록에 파묻힌다</b>.
       */}
-      {thumbs.length > 1 ? (
+      {!pack.usable && thumbs.length > 1 ? (
         <View style={styles.tiles}>
           {thumbs.slice(1).map((src, i) => (
             <View key={i} style={styles.tile}>
@@ -257,7 +261,7 @@ function StatusChip({ pack }: { pack: StickerPack }) {
       <View style={[styles.chip, styles.chipOwned]}>
         <MaterialCommunityIcons name="check-circle" size={12} color={colors.together} />
         <Text style={[styles.chipText, styles.chipOwnedText]}>
-          {pack.purchased ? '구매함' : '보유'}
+          {pack.purchased ? '구매완료' : '보유'}
         </Text>
       </View>
     );

@@ -588,24 +588,6 @@ export function HomeScreen({ navigation }: Props) {
             <MaterialCommunityIcons name="image-outline" size={20} color={colors.textPrimary} />
           </Pressable>
         ) : null}
-        {/*
-          스티커 상점 — <b>바로가기 칩 줄에 넣지 않았다</b>. 그 줄은 "칸을 늘리는 자리가
-          아니다"가 컴포넌트 주석에 박혀 있고(7칸까지 갔다가 둘로 줄인 이력), 기능이 늘
-          때마다 칩을 더하면 홈이 다시 런처가 된다.
-
-          <p>그런데 상점은 <b>찾지 못하면 아무것도 안 팔린다</b>. MY 메뉴에만 두면
-          홈 → 프로필 → MY → 상점으로 세 번 눌러야 닿는다. 헤더 아이콘은 칩 한 칸을
-          쓰지 않고도 홈에서 한 번에 닿게 해준다 — 배경 버튼이 이미 쓰는 자리다.
-        */}
-        <Pressable
-          style={styles.bgBtn}
-          onPress={() => navigation.navigate('StickerShop')}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel="스티커 상점"
-        >
-          <MaterialCommunityIcons name="emoticon-outline" size={20} color={colors.textPrimary} />
-        </Pressable>
         <Pressable
           style={styles.profileBtn}
           onPress={() => navigation.navigate('My')}
@@ -806,11 +788,20 @@ export function HomeScreen({ navigation }: Props) {
                 '우리 기록'·'사진첩'은 2026-09-14 에 <b>"우리" 탭</b>이 생겨 여기서 뺐다 —
                 탭바에 상시 자리가 있으니 바로가기로 중복시킬 이유가 없다. 남은 '일상'은
                 피드 쓰기의 유일한 진입점이라 그대로 둔다(우리 탭 헤더의 + 와 두 곳).
+
+                <b>'스티커'는 2026-09-22 에 헤더 아이콘에서 여기로 옮겼다.</b> 그때는 "칩 줄에
+                넣지 않았다"고 적었는데, 그 판단의 근거였던 "칸이 7개까지 불어난다"가 지금은
+                맞지 않는다 — 둘까지 줄어든 줄에 하나 더는 <b>칸이 좁아지지도 않는다</b>
+                (QuickActions 가 셋까지는 라벨을 줄이지 않는다). 그리고 헤더 아이콘은 배경
+                버튼과 같은 모양이라 <b>무엇인지 눌러봐야 알았다</b>. 라벨이 붙은 칩이
+                "스티커 상점이 있다"를 먼저 알린다 — 찾지 못하면 아무것도 안 팔린다는
+                원래 문제의식에는 이쪽이 더 맞는다.
               */}
               <QuickActions
                 actions={[
                   { icon: 'image-plus', label: '일상', onPress: () => navigation.navigate('FeedCompose') },
                   { icon: 'calendar-heart', label: '캘린더', onPress: () => navigation.navigate('CoupleCalendar') },
+                  { icon: 'emoticon-outline', label: '스티커', onPress: () => navigation.navigate('StickerShop') },
                 ]}
               />
             </View>
