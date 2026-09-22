@@ -88,6 +88,7 @@ import { messagePreview } from '../../utils/messagePreview';
 import { emojiOnlyCount } from '../../utils/emojiOnly';
 import { chatDateDividerLabel, isSameLocalDay, toDateString } from '../../utils/date';
 import { buildChatTranscript, canExportTranscript, shareTranscript } from '../../utils/chatExport';
+import { STICKER_PURCHASE_ENABLED } from '../../constants/config';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { ChatMessage, CoupleEmoji, StickerPack, TouchGestureCode } from '../../types';
 import { themedStyles, chatThemedStyles } from '../../theme/themedStyles';
@@ -993,17 +994,26 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   };
 
   /**
-   * 잠긴 팩을 열려고 할 때 — 상점으로 보낸다.
+   * 잠긴 팩을 열려고 할 때 — <b>지금 실제로 갈 수 있는 곳</b>으로 보낸다.
    *
    * <p><b>여기서 결제를 띄우지 않는다.</b> 이모티콘 하나 보내려던 사람에게 결제창을
    * 바로 들이밀면 대부분은 닫는다. 상점에서 <b>무엇이 더 있는지 보고</b> 정하게 하는 편이
    * 낫고, 그 자리가 이미 있다(`StickerShopScreen`).
    *
-   * <p>PRO 로만 열리는 팩(확장 무드·프리미엄 터치)은 상점에도 살 것이 없으므로 기존
-   * 업그레이드 시트로 보낸다 — 상점에 보내 놓고 살 수 없게 하면 헛걸음이다.
+   * <p>갈래가 셋이다. 예전 주석은 "확장 무드·프리미엄 터치는 상점에 살 것이 없으니
+   * 업그레이드 시트로"라고 적었는데 <b>시드와 어긋나 있었다</b> — 그 둘은 V96 에서
+   * `price = 1200` 이라 첫 분기를 타고 상점으로 갔다. 실제 갈래는 이렇다.
+   * <ol>
+   *   <li>값이 붙었고 낱개 결제가 열렸다 → 상점. 원래 의도한 길이다</li>
+   *   <li>값은 붙었는데 <b>아직 못 산다</b>(`STICKER_PURCHASE_ENABLED = false`) → 구독으로
+   *       여는 길을 안내한다. 상점으로 보내면 가격만 보여주고 눌러도 안 되므로,
+   *       <b>두 번 눌러서야 못 산다는 걸 알게 된다</b></li>
+   *   <li>값이 없는 잠긴 팩(`proOnly` 인데 `price = 0`) → 구독으로만 열린다. 지금 시드에는
+   *       없지만 스키마가 허용하므로 남겨 둔다</li>
+   * </ol>
    */
   const unlockStickerPack = (pack: StickerPack) => {
-    if (pack.price > 0) {
+    if (pack.price > 0 && STICKER_PURCHASE_ENABLED) {
       setShowStickers(false);
       navigation.navigate('Home', { screen: 'StickerShop' });
       return;

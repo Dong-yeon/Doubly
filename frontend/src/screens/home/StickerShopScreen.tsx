@@ -16,9 +16,11 @@
  * "48px 로 그려지는 그림은 32px 와 달리 표정이 읽힌다"). 그래서 카드 하나가 한 줄을
  * 온전히 쓰고, 미리보기 타일이 그 안에서 가장 큰 요소다.
  *
- * <p><b>결제는 아직 안 붙었다.</b> 스토어 콘솔에 일회성 상품을 등록해야 이을 수 있다.
- * 지금 유료 팩을 누르면 안내만 뜬다 — 그 자리가 `onBuy` 이고, 콘솔 등록 뒤
- * `stickerApi.verifyGoogle/verifyApple` 로 이으면 된다.
+ * <p><b>결제는 아직 안 붙었다.</b> 스토어 콘솔에 일회성 상품을 등록해야 이을 수 있고,
+ * 그 상태를 `STICKER_PURCHASE_ENABLED` 한 줄이 들고 있다. 닫혀 있는 동안에는
+ * <b>가격 버튼을 그리지 않는다</b> — 값을 붙여 놓고 누르면 "연결되지 않았어요"를 띄우는 건
+ * 상점이 아니라 미끼다. 대신 "준비 중"으로 적고 값은 글자로만 보여준다. 콘솔 등록 뒤
+ * 플래그를 켜고 `onBuy` 에서 `stickerApi.verifyGoogle/verifyApple` 로 이으면 된다.
  */
 import React, { useCallback, useState } from 'react';
 import { Alert, Image, Pressable, ScrollView, Text, View } from 'react-native';
@@ -27,6 +29,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { EmptyState } from '../../components/EmptyState';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { stickerApi } from '../../api/stickers';
+import { STICKER_PURCHASE_ENABLED } from '../../constants/config';
 import { previewOf } from '../../constants/stickerPackPreview';
 import { useStickerStore } from '../../store/stickerStore';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
@@ -151,7 +154,8 @@ function Section({
 function PackCard({ pack, onBuy }: { pack: StickerPack; onBuy: (pack: StickerPack) => void }) {
   const { thumbs, count } = previewOf(pack.id);
   const meta = CATEGORY[pack.category];
-  const buyable = !pack.usable && pack.price > 0;
+  // 낱개 결제가 닫혀 있으면 카드를 누르게 두지 않는다 — 눌러서 "못 산다"를 알게 되면 늦다
+  const buyable = !pack.usable && pack.price > 0 && STICKER_PURCHASE_ENABLED;
 
   /*
    * 카드 전체가 눌린다 — 살 수 있는 팩만. 오른쪽 버튼만 누르게 하면 표적이 작고,
@@ -230,13 +234,20 @@ function StatusChip({ pack }: { pack: StickerPack }) {
     );
   }
   if (pack.price > 0) {
+    /*
+     * 값은 보여주되, 아직 못 사면 그것도 같이 적는다(`STICKER_PURCHASE_ENABLED`).
+     * 값만 붙여 두면 살 수 있다는 약속이 되고, 눌렀을 때 못 사면 그게 곧 배신이다.
+     */
     return (
       <View style={[styles.chip, styles.chipPrice]}>
-        <Text style={[styles.chipText, styles.chipPriceText]}>{pack.price.toLocaleString()}원</Text>
+        <Text style={[styles.chipText, styles.chipPriceText]}>
+          {pack.price.toLocaleString()}원{STICKER_PURCHASE_ENABLED ? '' : ' · 준비 중'}
+        </Text>
       </View>
     );
   }
-  // 가격이 없는 잠긴 팩 = 구독으로만 열린다(확장 무드·프리미엄 터치)
+  // 가격이 없는 잠긴 팩 = 구독으로만 열린다. 지금 시드에는 없지만 스키마가 허용한다
+  // (확장 무드·프리미엄 터치는 price = 1200 이라 위 갈래로 간다 — V96 시드)
   return (
     <View style={[styles.chip, styles.chipPro]}>
       <MaterialCommunityIcons name="crown" size={12} color={colors.primaryDark} />

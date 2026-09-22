@@ -158,6 +158,23 @@ export const BUILD_LABEL = `v${APP_VERSION} · ${BUILD_STAMP}`;
 export const PURCHASE_ENABLED = Platform.OS !== 'web';
 
 /**
+ * 스티커 팩 <b>낱개</b> 구매를 열 수 있는가 — 구독({@link PURCHASE_ENABLED})과 따로 둔다.
+ *
+ * <p><b>지금은 닫혀 있다.</b> 서버 검증(`POST /stickers/purchases/google|apple`)과 앱의
+ * 잠금 UI 는 다 붙었지만 <b>스토어 콘솔에 일회성 상품이 등록되지 않았다</b>
+ * (`sticker_pack_mood_premium` · `sticker_pack_touch_premium`).
+ *
+ * <p><b>왜 플래그가 필요한가</b>: 이 값이 없으면 "아직 못 산다"가 코드 여러 곳에 흩어진다.
+ * 실제로 채팅 패널은 잠금 해제 줄을 상점으로 보내고, 상점은 가격 버튼을 그렸다가 누르면
+ * "연결되지 않았어요"를 띄웠다 — <b>두 번 눌러야 못 산다는 걸 아는 구조</b>였다. 살 수 없는
+ * 것에 값을 붙여 놓는 건 상점이 아니라 미끼다.
+ *
+ * <p>콘솔에 상품을 올리면 이 한 줄을 `PURCHASE_ENABLED` 로 바꾸고
+ * `StickerShopScreen.onBuy` 에서 결제 SDK 를 부르면 된다. 그 외에는 고칠 곳이 없다.
+ */
+export const STICKER_PURCHASE_ENABLED = false;
+
+/**
  * PRO 정기결제 상품 id. Google Play Console(수익 창출 → 구독)에서 만드는 상품의
  * "제품 ID"와 정확히 같아야 한다. Apple도 동일 id로 등록해 플랫폼 분기를 없앤다.
  */
