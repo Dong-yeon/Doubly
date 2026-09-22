@@ -588,6 +588,24 @@ export function HomeScreen({ navigation }: Props) {
             <MaterialCommunityIcons name="image-outline" size={20} color={colors.textPrimary} />
           </Pressable>
         ) : null}
+        {/*
+          스티커 상점 — <b>바로가기 칩 줄에 넣지 않았다</b>. 그 줄은 "칸을 늘리는 자리가
+          아니다"가 컴포넌트 주석에 박혀 있고(7칸까지 갔다가 둘로 줄인 이력), 기능이 늘
+          때마다 칩을 더하면 홈이 다시 런처가 된다.
+
+          <p>그런데 상점은 <b>찾지 못하면 아무것도 안 팔린다</b>. MY 메뉴에만 두면
+          홈 → 프로필 → MY → 상점으로 세 번 눌러야 닿는다. 헤더 아이콘은 칩 한 칸을
+          쓰지 않고도 홈에서 한 번에 닿게 해준다 — 배경 버튼이 이미 쓰는 자리다.
+        */}
+        <Pressable
+          style={styles.bgBtn}
+          onPress={() => navigation.navigate('StickerShop')}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="스티커 상점"
+        >
+          <MaterialCommunityIcons name="emoticon-outline" size={20} color={colors.textPrimary} />
+        </Pressable>
         <Pressable
           style={styles.profileBtn}
           onPress={() => navigation.navigate('My')}
