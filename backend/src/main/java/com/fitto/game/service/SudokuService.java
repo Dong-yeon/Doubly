@@ -33,6 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Random;
 
@@ -41,6 +42,9 @@ import java.util.Random;
  *
  * <p>커플당 진행 중인 판은 하나. 차례 없이 둘이 자유롭게 채우고, 칸마다 누가 채웠는지만 남긴다.
  * 틀린 숫자도 그대로 들어가며(응답이 틀린 칸 인덱스를 알려준다), 81칸이 전부 정답이면 완성이다.
+ *
+ * <p>푸시는 세 번 — 판을 열 때, 조용하던 판을 <b>누가 다시 잡을 때</b>, 그리고 완성될 때다.
+ * 가운데 것이 "상대가 지금 풀고 있어요"이고, 소음이 되지 않게 {@link GameQuiet} 가 가른다.
  */
 @Service
 @Transactional(readOnly = true)
@@ -226,9 +230,17 @@ public class SudokuService {
             throw new BusinessException(ErrorCode.GAME_CELL_FIXED);
         }
 
+        /*
+         * 판이 마지막으로 움직인 시각은 이 입력이 반영되기 전에 읽어야 한다 — fill 뒤에는
+         * @LastModifiedDate 가 지금으로 덮어써서 "얼마나 조용했는가"를 물을 수 없다.
+         */
+        LocalDateTime quietSince = game.getUpdatedAt();
+
         boolean completed = game.fill(index, value, game.isCreator(userId));
         if (completed) {
             onCompleted(userId, game, couple);
+        } else {
+            notifyPlaying(userId, game, couple, quietSince);
         }
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.GAME);
         return toResponse(game, userId, couple);
@@ -258,6 +270,22 @@ public class SudokuService {
     }
 
     // ── 내부 ─────────────────────────────────────────────────────────────
+
+    /**
+     * "상대가 판을 잡았다" 알림 — 협동이라 차례가 없으므로 <b>수마다 보내면 소음</b>이다.
+     * 판이 {@link GameQuiet#SESSION} 만큼 조용했다가 다시 움직인 순간에만 한 번 나간다.
+     *
+     * <p>그래서 같이 풀고 있는 동안은 판이 계속 움직여 조건에 걸리지 않고, 판을 열어둔 채
+     * 잊고 있다가 한쪽이 다시 잡으면 그때 상대가 부름을 받는다. 판을 만든 직후의 첫 입력도
+     * 조용하지 않으므로 {@link #start} 의 "판을 열었어요"와 겹쳐 두 번 울리지 않는다.
+     */
+    private void notifyPlaying(Long moverId, SudokuGame game, Relation couple, LocalDateTime quietSince) {
+        Long partnerId = couple.partnerOf(moverId);
+        if (partnerId == null) return;
+        if (!GameQuiet.longEnough(quietSince, game.getCreatedAt(), GameQuiet.SESSION)) return;
+        notificationService.notify(partnerId, NotificationCategory.PARTNER, "협동 스도쿠 🧩",
+                userName(moverId) + "님이 판을 풀고 있어요. 같이 채워요!", PushLinks.GAME_SUDOKU);
+    }
 
     private void onCompleted(Long finisherId, SudokuGame game, Relation couple) {
         String creatorName = userName(game.getCreatedBy());

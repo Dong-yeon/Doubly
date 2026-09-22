@@ -25,6 +25,7 @@ import {
 } from '../../utils/push';
 import { useAuthStore } from '../../store/authStore';
 import { useSettingsStore } from '../../store/settingsStore';
+import { usePlanStore } from '../../store/planStore';
 import { getErrorMessage } from '../../utils/error';
 import type { MealType } from '../../types';
 import { checkWithDictionary, preloadDictionary } from '../../utils/koreanDictionary';
@@ -66,6 +67,7 @@ const MEAL_REMINDER_TYPES: { type: MealType; title: string; times: string[] }[] 
 ];
 
 export function SettingsScreen({ navigation }: Props) {
+  const isPro = usePlanStore((s) => s.plan) === 'PRO';
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
   const spellCheckEnabled = useSettingsStore((s) => s.spellCheckEnabled);
@@ -558,6 +560,32 @@ export function SettingsScreen({ navigation }: Props) {
           </View>
         </Card>
 
+        {/*
+          MY 탭 메뉴에도 같은 자리가 있지만(`MyScreen`), 구독을 찾는 사람은 설정부터 연다.
+          docs/PRO_UPSELL_AND_ADS_2026-09-17.md §6 — 한도에 부딪혔을 때만 뜨는 반응형
+          업셀 8곳은 그대로 두고 <b>자발적으로 들어올 자리만</b> 늘린다.
+        */}
+        <Card elevation="sm" style={styles.section}>
+          <Text style={styles.sectionLabel}>구독</Text>
+          <Pressable
+            style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
+            onPress={() => navigation.navigate('Plan')}
+            accessibilityRole="button"
+            accessibilityLabel="플랜 보기"
+          >
+            <Text style={styles.rowTitle}>플랜</Text>
+            <View style={styles.menuValue}>
+              {/*
+                `PlanScreen` 의 배지와 같은 어휘를 쓴다 — 두 화면이 서로 다른 말로 같은
+                상태를 부르면 안 된다. 체험 중인지까지는 여기서 말하지 않는다(전역 체험이면
+                끝이 정해져 있지 않아 한 단어로 정확히 옮길 수 없다). 그 설명은 플랜 화면에 있다.
+              */}
+              <Text style={styles.version}>{isPro ? 'PRO' : 'FREE'}</Text>
+              <Text style={styles.chevron}>›</Text>
+            </View>
+          </Pressable>
+        </Card>
+
         <Card elevation="sm" style={styles.section}>
           <Text style={styles.sectionLabel}>계정</Text>
           {isSocialAccount ? (
@@ -711,6 +739,7 @@ const styles = themedStyles((colors) => ({
     paddingHorizontal: spacing.lg,
     minHeight: 56,
   },
+  menuValue: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   pressed: { opacity: 0.6 },
   chevron: { fontSize: fontSize.title, color: colors.textSecondary },
   version: { fontSize: fontSize.caption, color: colors.textSecondary },

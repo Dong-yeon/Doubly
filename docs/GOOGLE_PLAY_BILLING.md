@@ -7,11 +7,24 @@
 > (웹훅 수신), [`GooglePlaySubscriptionSyncService`](../backend/src/main/java/com/fitto/common/plan/GooglePlaySubscriptionSyncService.java)
 > (Play Developer API로 상태 확정), [`utils/iap.ts`](../frontend/src/utils/iap.ts) (클라이언트 결제 흐름).
 
-## 0. 지금 상태
+## 0. 지금 상태 (2026-09-22)
 
-`PURCHASE_ENABLED`([`config.ts`](../frontend/src/constants/config.ts))가 `false`라
-버튼을 눌러도 "PRO는 준비 중이에요"만 뜹니다. 아래 순서를 마치고 마지막에 이 값을
-`true`로 바꾸면 실제 결제창이 열립니다.
+**클라이언트 결제는 이미 켜져 있습니다.**
+`PURCHASE_ENABLED`([`config.ts`](../frontend/src/constants/config.ts))가
+`Platform.OS !== 'web'` 이라 앱에서는 실제 결제창이 열립니다(웹만 막힙니다).
+아래 §5 의 1번은 이미 끝난 일입니다.
+
+| | 상태 |
+| --- | --- |
+| 클라이언트 결제 플래그 | **켜짐** |
+| `pro_monthly` 상품 등록 | **완료** — 월 4,900원 (2026-09-17) |
+| iOS 결제 경로 | **있음** — `PlanController` 의 `POST /purchases/apple` |
+| 플랜 화면 | **있음** — `screens/my/PlanScreen.tsx`. MY 탭·설정 양쪽에서 들어간다 |
+| **실기기 결제 테스트** | **미실시** ← 지금 남은 것 |
+
+전원이 PRO 로 판정되는 전역 체험(`PLAN_FREE_TRIAL=true`)은 아직 켜져 있지만, **결제
+테스트에는 지금이 오히려 쉽습니다** — 체험 중에도 결제 버튼이 살아 있고 검증·웹훅
+경로는 플래그와 무관하게 전부 돕니다([`PRO_UPSELL_AND_ADS_2026-09-17.md`](PRO_UPSELL_AND_ADS_2026-09-17.md) §9-2).
 
 ## 1. 구독 상품 만들기
 
@@ -123,16 +136,33 @@
 
 ## 5. 클라이언트 켜기
 
-1. [`frontend/src/constants/config.ts`](../frontend/src/constants/config.ts)의
-   `PURCHASE_ENABLED`를 `true`로
+1. ~~`PURCHASE_ENABLED`를 `true`로~~ — **완료.** `Platform.OS !== 'web'` 입니다(§0).
 2. 네이티브 모듈(`react-native-iap`)이 추가돼 있어 **Expo Go로는 테스트 불가** —
-   EAS로 새로 빌드해야 합니다 ([`docs/EAS_BUILD.md`](EAS_BUILD.md) 참고):
+   EAS로 새로 빌드해야 합니다 ([`docs/EAS_BUILD.md`](EAS_BUILD.md) 참고).
+   **OTA 업데이트로는 못 나갑니다**: `app.json` 의 `runtimeVersion` 이 `fingerprint`
+   정책이라 네이티브가 바뀐 커밋의 업데이트는 기존 빌드에 배달되지 않습니다
+   (`CLAUDE.md` §6 "빌드 vs 업데이트").
    ```bash
    cd frontend
    npx eas-cli build --platform android --profile preview
    ```
-3. 2번의 라이선스 테스터 계정으로 로그인한 기기/에뮬레이터에 설치 후 PRO 업그레이드 시트에서
-   구매 진행 → 결제 수단이 "테스트 카드, 항상 승인"으로 뜨면 정상.
+3. 2번의 라이선스 테스터 계정으로 로그인한 기기/에뮬레이터에 설치 후 **MY 탭 → 플랜**
+   (또는 설정 → 구독 → 플랜)에서 구매 진행 → 결제 수단이 "테스트 카드, 항상 승인"으로
+   뜨면 정상. 한도에 부딪혔을 때 뜨는 업그레이드 시트에서도 같은 흐름이 돕니다.
+
+### 5-1. 확인 순서
+
+| 단계 | 정상 신호 |
+| --- | --- |
+| 플랜 화면 열기 | 비교표 숫자가 뜬다 — **서버가 준 값**이다(`GET /plan/catalog`). 안 뜨면 백엔드 배포를 먼저 본다 |
+| 가격 표시 | 스토어의 `displayPrice` 그대로. 앱에 박힌 값이 아니다 |
+| 결제창 | 결제 수단이 "테스트 카드, 항상 승인" |
+| 결제 직후 | `POST /plan/purchases/google` 응답의 `plan` 이 `PRO`. 화면 배지가 바로 바뀐다 |
+| 앱 재시작 | `initIap()` 의 `getAvailablePurchases()` 가 잔여 트랜잭션을 마저 처리 → PRO 유지 |
+
+**귀속은 앱이 싣는 값으로만 정해진다**([`utils/iap.ts`](../frontend/src/utils/iap.ts)) —
+구글은 `obfuscatedAccountId`(우리 userId), 애플은 `appAccountToken`(UUID). 결제는 됐는데
+아무 계정에도 PRO 가 안 붙는다면 여기부터 본다.
 
 ## 트러블슈팅
 

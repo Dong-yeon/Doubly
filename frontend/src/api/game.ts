@@ -15,6 +15,7 @@ import type {
   PuzzleBattleRun,
   SudokuDifficulty,
   SudokuGame,
+  WallRaceGame,
 } from '../types';
 
 export const sudokuApi = {
@@ -102,6 +103,32 @@ export const omokApi = {
   giveUp: (id: number) => unwrap(apiClient.post<ApiResponse<void>>(`/games/omok/${id}/give-up`)),
   /** 끝난 판 최근 20개(승패 포함) */
   history: () => unwrap(apiClient.get<ApiResponse<OmokGame[]>>('/games/omok/history')),
+};
+
+/**
+ * 길막기 — 턴제라 <b>서버가 규칙의 주인</b>이다. 놓을 수 없는 벽은 400 으로 돌아오고
+ * 화면은 그 메시지를 토스트로 띄운다. docs/PATH_LOCK_ANALYSIS_2026-09-21.md §4-2.
+ */
+export const wallRaceApi = {
+  /** 진행 중인 판 — 없으면 null */
+  current: () => unwrap(apiClient.get<ApiResponse<WallRaceGame | null>>('/games/wall-race/current')),
+  /** 새 판 — 판을 연 사람이 후공. 진행 중인 판이 있으면 그걸 돌려준다 */
+  start: () => unwrap(apiClient.post<ApiResponse<WallRaceGame>>('/games/wall-race')),
+  /** 말 이동 — 갈 수 있는 자리는 응답의 legalMoves 가 알려준다 */
+  movePawn: (id: number, target: number) =>
+    unwrap(apiClient.put<ApiResponse<WallRaceGame>>(`/games/wall-race/${id}/pawn/${target}`)),
+  /** 벽 설치 — 겹치거나 길을 완전히 막으면 400 */
+  placeWall: (id: number, slot: number, kind: 'H' | 'V') =>
+    unwrap(apiClient.post<ApiResponse<WallRaceGame>>(`/games/wall-race/${id}/walls`, { slot, kind })),
+  /** 무르기 요청 — 직전에 둔 사람만. 되돌리는 건 상대가 받아준 뒤 */
+  requestUndo: (id: number) =>
+    unwrap(apiClient.post<ApiResponse<WallRaceGame>>(`/games/wall-race/${id}/undo-request`)),
+  /** 무르기 응답 — accept=false 는 "그냥 두자" */
+  respondUndo: (id: number, accept: boolean) =>
+    unwrap(apiClient.post<ApiResponse<WallRaceGame>>(`/games/wall-race/${id}/undo-response`, { accept })),
+  giveUp: (id: number) => unwrap(apiClient.post<ApiResponse<void>>(`/games/wall-race/${id}/give-up`)),
+  /** 끝난 판 최근 20개(승패 포함) */
+  history: () => unwrap(apiClient.get<ApiResponse<WallRaceGame[]>>('/games/wall-race/history')),
 };
 
 /**
