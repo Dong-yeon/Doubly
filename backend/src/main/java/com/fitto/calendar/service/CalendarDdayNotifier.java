@@ -78,7 +78,10 @@ public class CalendarDdayNotifier {
     private int notifyOnDay(LocalDate today) {
         int sent = 0;
         for (CalendarEvent event : eventsOccurringOn(today)) {
-            sent += notifyCouple(event, "오늘은 '" + event.getTitle() + "' 날이에요 💕");
+            // 내 회식에 "오늘은 ○○ 날이에요 💕"는 어울리지 않는다 — 둘의 일정에만 쓴다
+            sent += notifyCouple(event, event.getVisibility().isShared()
+                    ? "오늘은 '" + event.getTitle() + "' 날이에요 💕"
+                    : "오늘 '" + event.getTitle() + "' 있어요");
         }
         return sent;
     }
@@ -92,7 +95,8 @@ public class CalendarDdayNotifier {
         for (CalendarEvent event : eventsOccurringOn(today.plusDays(daysAhead))) {
             if (daysAhead >= 7 && !needsPreparation(event)) continue;
             sent += notifyCouple(event, "D-" + daysAhead + " · '" + event.getTitle() + "' 이(가) "
-                    + (daysAhead == 1 ? "내일" : daysAhead + "일 뒤") + "이에요 🎁");
+                    + (daysAhead == 1 ? "내일" : daysAhead + "일 뒤") + "이에요"
+                    + (event.getVisibility().isShared() ? " 🎁" : ""));
         }
         return sent;
     }
@@ -101,17 +105,29 @@ public class CalendarDdayNotifier {
         return event.getEventType() == EventType.ANNIVERSARY || event.getEventType() == EventType.BIRTHDAY;
     }
 
-    /** 양쪽에 같은 문구로 발송 — 관계가 끊겼으면 보내지 않는다. @return 발송했으면 1 */
+    /**
+     * 발송 — 관계가 끊겼으면 보내지 않는다. @return 발송했으면 1
+     *
+     * <p><b>각자의 일정은 주인에게만 간다.</b> 상대가 회식을 잡을 때마다 내 폰이 아침
+     * 아홉 시에 울리면 그건 소음이고, "나만 보기"는 제목이 통째로 새어 나간다. 달력에
+     * 보이는 것(PERSONAL)과 알림을 받는 것은 다른 문제다.
+     */
     private int notifyCouple(CalendarEvent event, String body) {
         Relation couple = relationRepository.findById(event.getCoupleId()).orElse(null);
         // 연결이 끊긴 관계의 일정은 보이지 않는 상태 — 알림도 보내지 않는다
         if (couple == null || couple.getStatus() != RelationStatus.ACTIVE) return 0;
 
-        notificationService.notify(couple.getUserAId(), NotificationCategory.ANNIVERSARY,
-                "커플 캘린더", body, PushLinks.CALENDAR);
-        notificationService.notify(couple.getUserBId(), NotificationCategory.ANNIVERSARY,
-                "커플 캘린더", body, PushLinks.CALENDAR);
+        if (event.getVisibility().isShared()) {
+            notify(couple.getUserAId(), "커플 캘린더", body);
+            notify(couple.getUserBId(), "커플 캘린더", body);
+        } else {
+            notify(event.getCreatedBy(), "내 일정", body);
+        }
         return 1;
+    }
+
+    private void notify(Long userId, String title, String body) {
+        notificationService.notify(userId, NotificationCategory.ANNIVERSARY, title, body, PushLinks.CALENDAR);
     }
 
     /** 그 날 발생하는 일정 — 테스트에서 직접 검증할 수 있게 분리. */
