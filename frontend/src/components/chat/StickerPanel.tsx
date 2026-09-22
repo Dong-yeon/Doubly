@@ -124,13 +124,13 @@ const COUPLE_PACK_MINE = `${COUPLE_PACK_PREFIX}MINE`;
 const COUPLE_PACK_PARTNER = `${COUPLE_PACK_PREFIX}PARTNER`;
 
 /**
- * 기본으로 열리는 팩 — 사랑.
+ * 기본으로 열리는 팩 — 움직이는 이모티콘(2026-09-22 부터 한 팩이다).
  *
  * <p>2026-09-07 에 기본 탭을 이모티콘으로 돌렸던 판단을 그대로 잇는다. 패널을 여는 사람
  * 대부분이 찾는 게 그림이다. 커플 앱이라 가장 많이 쓰는 결이 여기고, 무엇보다
  * <b>무료 팩</b>이다 — 패널을 열자마자 자물쇠를 마주하면 기능 전체가 유료처럼 보인다.
  */
-const DEFAULT_PACK = 'ANIM_LOVE';
+const DEFAULT_PACK = 'ANIM_ALL';
 
 interface Props {
   /** 키보드가 있던 자리를 그대로 이어받는 높이 — 탭을 바꿔도 흔들리지 않아야 한다 */

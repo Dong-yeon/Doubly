@@ -270,12 +270,12 @@ class WithdrawFlowTest {
         Long me = register("withdraw-sticker@fitto.com");
         stickerPurchaseRepository.save(UserStickerPurchase.builder()
                 .userId(me)
-                .stickerPackId(StickerPacks.ANIM_LOVE)
+                .stickerPackId(StickerPacks.MOOD_PREMIUM)
                 .transactionId("txn-withdraw")
                 .build());
 
         assertThatCode(() -> authService.withdraw(me)).doesNotThrowAnyException();
-        assertThat(stickerPurchaseRepository.findByUserIdAndStickerPackId(me, StickerPacks.ANIM_LOVE))
+        assertThat(stickerPurchaseRepository.findByUserIdAndStickerPackId(me, StickerPacks.MOOD_PREMIUM))
                 .as("탈퇴했는데 스티커 팩 구매 이력이 남아 있다")
                 .isEmpty();
     }
@@ -294,13 +294,13 @@ class WithdrawFlowTest {
 
         stickerPurchaseRepository.save(UserStickerPurchase.builder()
                 .userId(me)
-                .stickerPackId(StickerPacks.ANIM_CHEER)
+                .stickerPackId(StickerPacks.TOUCH_PREMIUM)
                 .transactionId("txn-keep")
                 .build());
 
         authService.withdraw(partner);
 
-        assertThat(stickerPurchaseRepository.findByUserIdAndStickerPackId(me, StickerPacks.ANIM_CHEER))
+        assertThat(stickerPurchaseRepository.findByUserIdAndStickerPackId(me, StickerPacks.TOUCH_PREMIUM))
                 .as("상대가 탈퇴했다고 내가 산 팩이 사라졌다")
                 .isPresent();
     }

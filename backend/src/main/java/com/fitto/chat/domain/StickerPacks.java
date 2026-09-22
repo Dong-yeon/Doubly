@@ -19,20 +19,19 @@ package com.fitto.chat.domain;
 public final class StickerPacks {
 
     /*
-     * ── 무료 — 움직이는 이모티콘 4팩 ──────────────────────────────────────
+     * ── 무료 ─────────────────────────────────────────────────────────────
      *
-     * 2026-09-22 에 8팩에서 4팩으로 합쳤다(V100). 110종을 8칸으로 쪼개니 한 팩이 7~18장이라
-     * <b>고르는 것보다 팩을 넘기는 데 손이 더 갔다</b> — 찾는 그림이 어느 칸에 있는지도 기억이
-     * 안 된다. 같은 날 격자를 6칸에서 7칸으로 줄이고 패널을 높여 한 번에 28장이 보이게 했으므로,
-     * 팩 하나가 30장쯤 되어도 스크롤 한 번이면 끝난다.
+     * <b>움직이는 이모티콘 110종은 팩 하나다</b>(2026-09-22, V102). 하루 사이에 8팩 →
+     * 4팩(V100) → 1팩으로 줄였다. 8팩은 한 팩이 7~18장이라 고르는 것보다 팩을 넘기는 데
+     * 손이 더 갔고, 4팩으로 줄이고 나니 남은 경계도 자의적이었다 — 🔥가 "응원"인지
+     * "일상"인지는 보내는 사람마다 다르다. 칸을 고정 크기로 바꿔 한 줄에 많이 들어가게 된
+     * 뒤로는(StickerPanel.CELL_SIZE) 분류 없이 훑는 편이 빠르다.
+     *
+     * <p>지운 팩 id 는 되살리지 않는다 — 지난 말풍선은 팩이 아니라 <b>스티커 코드</b>로
+     * 저장되므로 영향이 없고, 팩이 없으면 무료로 통과한다는 규칙(클래스 주석)이 나머지를
+     * 덮는다.
      */
-    public static final String ANIM_LOVE = "ANIM_LOVE";
-    /** 웃음·장난 + 축하 (옛 ANIM_CELEBRATE 흡수) */
-    public static final String ANIM_FUN = "ANIM_FUN";
-    /** 위로·응원 — 속상할 때와 힘내라는 말은 같은 순간에 오간다 (옛 ANIM_UPSET 흡수) */
-    public static final String ANIM_CHEER = "ANIM_CHEER";
-    /** 일상 — 동물·먹을 것·날씨. 셋 다 한 자릿수라 따로 둘 이유가 없었다 */
-    public static final String ANIM_DAILY = "ANIM_DAILY";
+    public static final String ANIM_ALL = "ANIM_ALL";
     public static final String MOOD_BASIC = "MOOD_BASIC";
     public static final String TOUCH_BASIC = "TOUCH_BASIC";
     /* 캐릭터 스티커 — 상점에 올라가지만 첫 두 팩은 0원이다(V97) */

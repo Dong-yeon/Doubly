@@ -10,11 +10,18 @@
  * (`constants/stickerPackPreview.ts`), 얼마인지·열려 있는지는 서버가 내려준다
  * (`GET /stickers/packs`). 가격을 앱에 박으면 바꿀 때마다 스토어 심사를 기다려야 한다.
  *
- * <p><b>그림이 주인공인 화면이다.</b> 목록형 한 줄짜리로 만들었다가 고쳤다 — 스티커를
- * 44px 썸네일로 늘어놓으면 표정이 안 보여서 <b>무엇을 사는지가 안 읽힌다</b>. 이모티콘
- * 패널이 칸 수를 8 → 5 → 6 으로 옮겨 다니며 배운 것과 같다(`StickerPanel` 주석:
- * "48px 로 그려지는 그림은 32px 와 달리 표정이 읽힌다"). 그래서 카드 하나가 한 줄을
- * 온전히 쓰고, 미리보기 타일이 그 안에서 가장 큰 요소다.
+ * <p><b>카카오톡 이모티콘샵 목록의 모양이다</b>(2026-09-22). 왼쪽 대표 그림 하나 · 가운데
+ * 이름과 설명 · 오른쪽 상태. 한 줄이 한 팩이라 눈이 세로로만 움직인다.
+ *
+ * <p>그 전에는 미리보기 다섯 칸이 카드에서 가장 큰 요소였다. 근거는 "44px 썸네일로는
+ * 표정이 안 보여 무엇을 사는지가 안 읽힌다"였는데, 칸이 {@code flex: 1} 이라
+ * <b>화면이 넓을수록 커지기만 했다</b> — 태블릿에서 한 칸이 150dp 가 되어 카드 하나가
+ * 화면 절반을 먹었고, 목록이 아니라 광고판이 됐다.
+ *
+ * <p>지금은 <b>표정을 읽는 자리와 훑는 자리를 나눈다</b>: 대표 그림 하나는 56dp 로 크게
+ * 두고(그 한 장이면 어떤 팩인지 안다), 나머지는 36dp 로 줄여 "안에 이런 것들이 있다"만
+ * 알린다. 둘 다 고정 크기라 넓은 화면은 더 크게가 아니라 <b>더 많이</b> 보여준다
+ * (`StickerPanel.CELL_SIZE` 와 같은 판단).
  *
  * <p><b>결제는 아직 안 붙었다.</b> 스토어 콘솔에 일회성 상품을 등록해야 이을 수 있고,
  * 그 상태를 `STICKER_PURCHASE_ENABLED` 한 줄이 들고 있다. 닫혀 있는 동안에는
@@ -158,17 +165,35 @@ function PackCard({ pack, onBuy }: { pack: StickerPack; onBuy: (pack: StickerPac
   const buyable = !pack.usable && pack.price > 0 && STICKER_PURCHASE_ENABLED;
 
   /*
-   * 카드 전체가 눌린다 — 살 수 있는 팩만. 오른쪽 버튼만 누르게 하면 표적이 작고,
-   * 카드를 눌러도 아무 일이 없으면 "고장"으로 읽힌다. 이미 가진 팩은 누를 일이 없으므로
-   * Pressable 로 감싸지 않는다(눌리는 것처럼 보이는 게 더 나쁘다).
+   * <b>카카오톡 이모티콘샵 목록의 모양</b>을 따른다(2026-09-22) — 왼쪽에 대표 그림 하나,
+   * 가운데 이름과 설명, 오른쪽에 상태/값. 한 줄이 한 팩이고 눈은 세로로만 움직인다.
+   *
+   * <p>예전엔 미리보기 다섯 칸이 {@code flex: 1} 이라 <b>화면이 넓을수록 그림이 커졌다</b> —
+   * 태블릿에서 한 칸이 150dp 가 되어 카드 하나가 화면 절반을 먹었다. 지금은 대표 그림도
+   * 미리보기도 <b>고정 크기</b>라, 넓은 화면은 더 크게가 아니라 <b>더 많이</b> 보여준다
+   * (StickerPanel.CELL_SIZE 와 같은 판단).
+   *
+   * <p>카드 전체가 눌린다 — 살 수 있는 팩만. 오른쪽 칩만 누르게 하면 표적이 작고, 카드를
+   * 눌러도 아무 일이 없으면 "고장"으로 읽힌다. 이미 가진 팩은 Pressable 로 감싸지 않는다.
    */
   const body = (
     <>
       <View style={styles.cardHead}>
+        {/* 대표 그림 — 첫 장. 팩을 알아보는 건 이름이 아니라 그림이다 */}
+        {thumbs.length > 0 ? (
+          <View style={styles.lead}>
+            <Image source={thumbs[0]} style={styles.leadImage} resizeMode="contain" />
+          </View>
+        ) : (
+          <View style={[styles.lead, styles.leadEmpty]}>
+            <MaterialCommunityIcons name={meta.icon} size={22} color={colors.textTertiary} />
+          </View>
+        )}
+
         <View style={styles.cardTitleBox}>
           <Text style={styles.cardTitle} numberOfLines={1}>{pack.title}</Text>
           <View style={styles.metaRow}>
-            <MaterialCommunityIcons name={meta.icon} size={13} color={colors.textTertiary} />
+            <MaterialCommunityIcons name={meta.icon} size={12} color={colors.textTertiary} />
             <Text style={styles.metaText}>
               {meta.label}{count > 0 ? ` · ${count}개` : ''}
             </Text>
@@ -177,9 +202,13 @@ function PackCard({ pack, onBuy }: { pack: StickerPack; onBuy: (pack: StickerPac
         <StatusChip pack={pack} />
       </View>
 
-      {thumbs.length > 0 ? (
+      {/*
+        미리보기 — 대표 그림 다음 장들을 작게 한 줄로. 넘치면 잘린다(nowrap + hidden):
+        몇 장이 보이는지는 화면 폭이 정하고, 전부 보여주는 것이 목적이 아니다.
+      */}
+      {thumbs.length > 1 ? (
         <View style={styles.tiles}>
-          {thumbs.map((src, i) => (
+          {thumbs.slice(1).map((src, i) => (
             <View key={i} style={styles.tile}>
               <Image source={src} style={styles.tileImage} resizeMode="contain" />
             </View>
@@ -280,16 +309,29 @@ const styles = themedStyles((colors) => ({
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surfaceCard,
-    padding: spacing.md,
-    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    gap: spacing.xs,
   },
   // 잠긴 팩은 카드 바닥을 한 톤 눌러 "아직 내 것이 아니다"를 준다 — 그림은 가리지 않는다
   cardLocked: { backgroundColor: colors.surfaceAlt },
   pressed: { opacity: 0.7 },
 
-  cardHead: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  cardHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  /* 대표 그림 — 고정 56dp. 넓은 화면에서 커지지 않는다 */
+  lead: {
+    width: 56,
+    height: 56,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  leadEmpty: { backgroundColor: colors.surfaceAlt },
+  leadImage: { width: '86%', height: '86%' },
   cardTitleBox: { flex: 1, gap: spacing.xxs },
-  cardTitle: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
+  cardTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xxs },
   metaText: { fontSize: fontSize.caption, color: colors.textTertiary, fontWeight: '600' },
 
@@ -312,16 +354,15 @@ const styles = themedStyles((colors) => ({
   chipProText: { color: colors.primaryDark },
 
   /*
-   * 미리보기 타일 — 카드에서 가장 큰 요소다. 한 줄 6칸이 아니라 <b>5칸 + 더보기</b>로
-   * 두는 이유는 칸을 키워 표정이 읽히게 하기 위해서다(`StickerPanel` 이 같은 이유로
-   * 48px 를 지킨다). 짝 스티커는 가로가 넓어 contain 이 세로를 덜 채우므로, 타일에
-   * 옅은 배경을 깔아 줄이 흔들리지 않게 한다.
+   * 미리보기 타일 — <b>고정 36dp</b>다. 예전엔 {@code flex: 1} 이라 폭이 넓을수록 칸이
+   * 커져(태블릿 150dp) 카드 하나가 화면 절반을 먹었다. 고정으로 두면 넓은 화면은
+   * 더 많이 보여주고, 넘치는 건 잘린다(nowrap + overflow hidden).
    */
-  tiles: { flexDirection: 'row', gap: spacing.xs },
+  tiles: { flexDirection: 'row', flexWrap: 'nowrap', gap: spacing.xxs, overflow: 'hidden' },
   tile: {
-    flex: 1,
-    aspectRatio: 1,
-    borderRadius: radius.md,
+    width: 36,
+    height: 36,
+    borderRadius: radius.sm,
     backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',

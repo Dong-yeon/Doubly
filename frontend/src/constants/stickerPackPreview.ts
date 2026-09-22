@@ -31,7 +31,14 @@ export interface PackPreview {
   count: number;
 }
 
-const PREVIEW_LIMIT = 5;
+/**
+ * 미리보기 장수 — 대표 1 + 작은 칸들.
+ *
+ * <p>2026-09-22 에 5 → 10 으로 늘렸다. 칸이 {@code flex: 1} 이던 시절에는 5장이 상한이었지만
+ * (더 넣으면 칸이 쪼그라들었다) 지금은 36dp 고정이라 몇 장이 보이는지는 화면 폭이 정한다.
+ * 넘치면 잘리므로(상점의 {@code tiles} 주석) 넉넉히 주는 쪽이 낫다.
+ */
+const PREVIEW_LIMIT = 10;
 
 export function previewOf(packId: string): PackPreview {
   const animated = ANIMATED_STICKERS.filter((a) => a.packId === packId);

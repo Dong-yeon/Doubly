@@ -59,8 +59,8 @@ class PremiumContentGateTest {
             assertThat(s.packId()).as(s.name()).startsWith("ANIM_");
         }
         // 팩이 잡히기는 해야 한다 — null 이면 판정을 지나지 않아 "무료"가 우연이 된다
-        assertThat(StickerPacks.ofStickerContent("ANIM_HEART")).isEqualTo(StickerPacks.ANIM_LOVE);
-        assertThat(StickerPacks.ofStickerContent("ANIM_PARTY_POPPER")).isEqualTo(StickerPacks.ANIM_FUN);
+        assertThat(StickerPacks.ofStickerContent("ANIM_HEART")).isEqualTo(StickerPacks.ANIM_ALL);
+        assertThat(StickerPacks.ofStickerContent("ANIM_PARTY_POPPER")).isEqualTo(StickerPacks.ANIM_ALL);
     }
 
     @Test

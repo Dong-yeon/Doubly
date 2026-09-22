@@ -19,17 +19,15 @@ import org.junit.jupiter.api.Test;
  */
 class AnimatedStickerTest {
 
-    /** 무료 4팩 — 유료 팩이 섞이면 이 목록에서 빠져 아래 테스트가 잡는다(2026-09-22, V100). */
-    private static final Set<String> FREE_PACKS = Set.of(
-            StickerPacks.ANIM_LOVE, StickerPacks.ANIM_FUN,
-            StickerPacks.ANIM_CHEER, StickerPacks.ANIM_DAILY);
+    /** 무료 팩 하나 — 유료 팩이 섞이면 이 목록에서 빠져 아래 테스트가 잡는다(2026-09-22, V102). */
+    private static final Set<String> FREE_PACKS = Set.of(StickerPacks.ANIM_ALL);
 
     @Test
-    @DisplayName("110종 — 4팩으로 나뉜다")
+    @DisplayName("110종 — 팩 하나다")
     void catalogSize() {
         assertThat(AnimatedSticker.values()).hasSize(110);
         assertThat(Arrays.stream(AnimatedSticker.values()).map(AnimatedSticker::packId).distinct())
-                .hasSize(4);
+                .hasSize(1);
     }
 
     /**
