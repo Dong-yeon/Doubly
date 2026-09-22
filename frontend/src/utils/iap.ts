@@ -34,6 +34,7 @@ import {
   type EventSubscription,
 } from 'react-native-iap';
 import { planApi } from '../api/plan';
+import type { PlanInfo } from '../types';
 import { usePlanStore } from '../store/planStore';
 import { toast } from '../store/toastStore';
 import { PRO_BASE_PLAN_ID, PRO_SUBSCRIPTION_SKU } from '../constants/config';
@@ -166,20 +167,31 @@ async function verifyAndFinish(purchase: Purchase): Promise<void> {
    *    그대로 보내면 서버가 쓰지 않는 값이다.
    * 웹은 애초에 여기까지 오지 않는다(리스너를 안 건다).
    */
-  const verify = async (): Promise<void> => {
+  const verify = async (): Promise<PlanInfo> => {
     if (Platform.OS === 'android') {
       const token = purchase.purchaseToken;
       if (!token) return Promise.reject(new Error('purchaseToken 없음'));
-      await planApi.verifyGooglePurchase(token);
-      return;
+      return planApi.verifyGooglePurchase(token);
     }
     // StoreKit 의 거래 id. 갱신 거래여도 애플이 같은 구독의 최신 상태를 돌려준다.
     if (!purchase.id) return Promise.reject(new Error('transactionId 없음'));
-    await planApi.verifyApplePurchase(purchase.id);
+    return planApi.verifyApplePurchase(purchase.id);
   };
 
   try {
-    await verify();
+    const info = await verify();
+    /*
+     * <b>200 은 "반영됐다"가 아니다.</b> 서버는 스토어 조회에 실패해도(키 미설정·일시적
+     * 장애·귀속 불일치) 예외를 던지지 않고 <b>지금 플랜</b>을 그대로 돌려준다 — 애플·구글이
+     * 웹훅을 재전송하므로 서버 입장에서는 그게 맞는 처리다. 대신 여기서 확인하지 않으면
+     * 돈만 빠져나간 채 "PRO가 시작됐어요!" 가 뜨고, 트랜잭션까지 닫혀 재시도 경로마저
+     * 사라진다. 응답에 담겨 온 플랜으로 실제 반영 여부를 판정한다.
+     */
+    // throw 여야 아래 catch 가 받는다 — Promise.reject 를 return 하면 이 함수가 그대로
+    // 거부된 프로미스를 돌려주고, 안내 토스트 없이 처리되지 않은 거부로 샌다.
+    if (info.plan !== 'PRO') {
+      throw new Error('결제가 아직 반영되지 않음');
+    }
     await finishTransaction({ purchase, isConsumable: false });
     await usePlanStore.getState().load();
     toast.success('PRO가 시작됐어요!');
