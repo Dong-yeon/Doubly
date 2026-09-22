@@ -1,14 +1,15 @@
 package com.fitto.sticker;
 
-import com.fitto.chat.domain.StickerPacks;
 import com.fitto.common.plan.GooglePlayDeveloperApiClient;
 import com.fitto.common.plan.StoreProductPurchase;
 import com.fitto.sticker.domain.UserStickerPurchase;
 import com.fitto.sticker.repository.UserStickerPurchaseRepository;
 import com.fitto.sticker.service.StickerPurchaseService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
@@ -52,14 +53,43 @@ import static org.mockito.Mockito.when;
 @ActiveProfiles("test")
 class StickerPurchaseIdempotencyTest {
 
-    private static final String PACK = StickerPacks.MOOD_PREMIUM;
-    private static final String PRODUCT_ID = "sticker_pack_mood_premium";
+    /**
+     * <b>이 테스트가 쓰는 유료 팩은 이 테스트가 만든다.</b>
+     *
+     * <p>예전에는 시드의 {@code MOOD_PREMIUM}(1,200원)을 빌려 썼는데, 2026-09-22 에 낱개
+     * 판매를 접으면서(V105) 시드에 값이 붙은 팩이 한 개도 없어졌다. 그러자 결제 <b>기계장치</b>를
+     * 보는 이 테스트가 <b>가격 정책</b> 때문에 깨졌다 — 서로 다른 두 가지가 묶여 있었던 것이다.
+     *
+     * <p>팩 행은 Flyway 시드로만 생긴다는 규칙({@code StickerPack} 주석)은 런타임 경로에 대한
+     * 것이라, 테스트가 픽스처를 네이티브 SQL 로 직접 넣는 것과 어긋나지 않는다.
+     */
+    private static final String PACK = "TEST_PAID_PACK";
+    private static final String PRODUCT_ID = "sticker_pack_test_paid_pack";
 
     /** 가입 없이 쓰는 합성 id — 다른 테스트와 겹치지 않게 멀리 떨어뜨린다 */
     private static final long USER_DUP = 990_001L;
     private static final long USER_REPLAY = 990_002L;
 
     @Autowired StickerPurchaseService purchaseService;
+    @Autowired JdbcTemplate jdbc;
+
+    /**
+     * 유료 팩 픽스처를 넣는다 — 같은 H2 를 공유하는 다른 클래스에도 보이지만, id 가
+     * {@code TEST_} 로 시작해 어느 카탈로그(앱·서버 enum)에도 없으므로 판정에 걸리지 않는다.
+     *
+     * <p>JdbcTemplate 을 쓰는 이유가 둘이다 — 테스트 메서드에 트랜잭션이 없어 JPA 의
+     * {@code executeUpdate} 는 못 쓰고, H2 전용 {@code MERGE} 를 피해야 PostgreSQL 로 돌릴 때도
+     * 같은 코드가 돈다(docs/RUNNING.md). 이미 있으면 넣지 않는다 — 팩을 지우면 앞선 메서드가
+     * 남긴 구매 행의 FK 에 걸린다.
+     */
+    @BeforeEach
+    void 유료_팩을_하나_만든다() {
+        Integer exists = jdbc.queryForObject(
+                "select count(*) from sticker_packs where id = ?", Integer.class, PACK);
+        if (exists != null && exists > 0) return;
+        jdbc.update("insert into sticker_packs (id, title, category, is_pro_only, price)"
+                + " values (?, ?, 'IMAGE', false, 1200)", PACK, "테스트 유료 팩");
+    }
 
     /** 실제 빈을 감싼다 — 저장은 진짜 DB 로 가고, 조회만 눌러 중복 경로를 만든다 */
     @MockitoSpyBean UserStickerPurchaseRepository purchaseRepository;
