@@ -50,17 +50,80 @@ export interface StickerCharacter {
 }
 
 /**
- * 피커에 뜨는 캐릭터 — <b>지금은 없다</b>(2026-09-21).
+ * 피커에 뜨는 캐릭터.
  *
- * 그림 출처를 정리하는 동안 이미지 스티커를 전부 내렸다. 패널에는 움직이는 이모티콘
- * (Noto Animated Emoji — CC BY 4.0 / Apache 2.0, 라이선스가 확실하다)과 우리 이모지
- * (사용자 본인 사진으로 런타임 생성)만 남는다.
+ * <p>곰돌이·더비·블리를 내리고(아래 RETIRED) 동연님이 새로 만든 달걀 두 마리로 갈았다 —
+ * 삶은달걀(솔로 23종)과 맥반석♥달걀(짝 20종)이다.
  *
- * <b>더비·블리는 되살릴 수 있다.</b> 동연님 손그림 스케치에서 나온 자체 캐릭터라
- * (설계 메모 §15·§17·§20·§21) 출처 문제가 애초에 없었다. 아래 RETIRED 목록에서
- * 여기로 옮기고 `stickerPacks.ts` 의 `CHARACTER_PACKS` 에 두 줄을 더하면 끝이다.
+ * <p>이 목록이 비면 `STICKER_CODE_INDEX` 도 비어서 텍스트 코드 `(삶은달걀_사랑해)` 와
+ * 키워드 추천이 통째로 죽는다(`utils/stickerCodes.ts`). 크래시가 아니라 조용히 안 뜨는
+ * 고장이라 눈치채기 어렵다 — 캐릭터를 내릴 때 함께 확인할 것.
  */
-export const STICKER_CHARACTERS: StickerCharacter[] = [];
+export const STICKER_CHARACTERS: StickerCharacter[] = [
+  {
+    /*
+     * 삶은달걀 — 머리에 꽃을 얹은 흰 달걀. 동연님 자체 캐릭터다.
+     */
+    key: 'boiled',
+    label: '삶은달걀',
+    stickers: [
+      { code: 'EGG_AWKWARD', label: '난감', source: require('../../assets/stickers/egg_awkward.png') },
+      { code: 'EGG_GLOOMY', label: '우울', source: require('../../assets/stickers/egg_gloomy.png') },
+      { code: 'EGG_IDEA', label: '아하', source: require('../../assets/stickers/egg_idea.png') },
+      { code: 'EGG_SLEEPY', label: '졸려', source: require('../../assets/stickers/egg_sleepy.png') },
+      { code: 'EGG_FURIOUS', label: '폭발', source: require('../../assets/stickers/egg_furious.png') },
+      { code: 'EGG_ANGRY', label: '화났어', source: require('../../assets/stickers/egg_angry.png') },
+      { code: 'EGG_SULKY', label: '삐짐', source: require('../../assets/stickers/egg_sulky.png') },
+      { code: 'EGG_GRUMPY', label: '흥', source: require('../../assets/stickers/egg_grumpy.png') },
+      { code: 'EGG_KISS', label: '뽀뽀', source: require('../../assets/stickers/egg_kiss.png') },
+      { code: 'EGG_EYE_ROLL', label: '하아', source: require('../../assets/stickers/egg_eye_roll.png') },
+      { code: 'EGG_UNAMUSED', label: '시큰둥', source: require('../../assets/stickers/egg_unamused.png') },
+      { code: 'EGG_SWEAT', label: '식은땀', source: require('../../assets/stickers/egg_sweat.png') },
+      { code: 'EGG_HAPPY', label: '행복', source: require('../../assets/stickers/egg_happy.png') },
+      { code: 'EGG_RELAXED', label: '편안', source: require('../../assets/stickers/egg_relaxed.png') },
+      { code: 'EGG_DROOL', label: '군침', source: require('../../assets/stickers/egg_drool.png') },
+      { code: 'EGG_PROUD', label: '뿌듯', source: require('../../assets/stickers/egg_proud.png') },
+      { code: 'EGG_ANGEL', label: '천사', source: require('../../assets/stickers/egg_angel.png') },
+      { code: 'EGG_SHOCKED', label: '헉', source: require('../../assets/stickers/egg_shocked.png') },
+      { code: 'EGG_MELTING', label: '녹는다', source: require('../../assets/stickers/egg_melting.png') },
+      { code: 'EGG_FROZEN', label: '얼었어', source: require('../../assets/stickers/egg_frozen.png') },
+      { code: 'EGG_HOT', label: '더워', source: require('../../assets/stickers/egg_hot.png') },
+      { code: 'EGG_SALUTE', label: '넵', source: require('../../assets/stickers/egg_salute.png') },
+      { code: 'EGG_LOVE', label: '사랑해', source: require('../../assets/stickers/egg_love.png') },
+    ],
+  },
+  {
+    /*
+     * 맥반석 x 삶은달걀 — 두 마리가 함께 나오는 짝 스티커다. 찜질방 짝꿍이고,
+     * 갈색이 맥반석이다. <b>가로가 넓어서</b> 에셋이 정사각이 아니다(360 x 약 300) —
+     * 격자도 말풍선도 contain 으로 그리므로 비율은 유지되고 세로만 덜 찬다.
+     */
+    key: 'duo',
+    label: '맥반석♥달걀',
+    stickers: [
+      { code: 'DUO_SAD', label: '속상해', source: require('../../assets/stickers/duo_sad.png') },
+      { code: 'DUO_GLOOMY', label: '우울', source: require('../../assets/stickers/duo_gloomy.png') },
+      { code: 'DUO_IDEA', label: '아하', source: require('../../assets/stickers/duo_idea.png') },
+      { code: 'DUO_SLEEP', label: '잘자', source: require('../../assets/stickers/duo_sleep.png') },
+      { code: 'DUO_FIGHT', label: '대판 싸움', source: require('../../assets/stickers/duo_fight.png') },
+      { code: 'DUO_GLARE', label: '째려봄', source: require('../../assets/stickers/duo_glare.png') },
+      { code: 'DUO_FURIOUS', label: '폭발', source: require('../../assets/stickers/duo_furious.png') },
+      { code: 'DUO_KISS', label: '뽀뽀', source: require('../../assets/stickers/duo_kiss.png') },
+      { code: 'DUO_DIZZY', label: '어질어질', source: require('../../assets/stickers/duo_dizzy.png') },
+      { code: 'DUO_SULKY', label: '삐짐', source: require('../../assets/stickers/duo_sulky.png') },
+      { code: 'DUO_HAPPY', label: '신남', source: require('../../assets/stickers/duo_happy.png') },
+      { code: 'DUO_RELAXED', label: '편안', source: require('../../assets/stickers/duo_relaxed.png') },
+      { code: 'DUO_DROOL', label: '군침', source: require('../../assets/stickers/duo_drool.png') },
+      { code: 'DUO_WINK', label: '찡긋', source: require('../../assets/stickers/duo_wink.png') },
+      { code: 'DUO_HEART_EYES', label: '반했어', source: require('../../assets/stickers/duo_heart_eyes.png') },
+      { code: 'DUO_CRY', label: '엉엉', source: require('../../assets/stickers/duo_cry.png') },
+      { code: 'DUO_FROZEN', label: '얼었어', source: require('../../assets/stickers/duo_frozen.png') },
+      { code: 'DUO_LOVE', label: '사랑해', source: require('../../assets/stickers/duo_love.png') },
+      { code: 'DUO_SHOCKED', label: '헉', source: require('../../assets/stickers/duo_shocked.png') },
+      { code: 'DUO_HEATED', label: '열받아', source: require('../../assets/stickers/duo_heated.png') },
+    ],
+  },
+];
 
 /**
  * 내린 스티커 — <b>고를 수는 없지만 그려지기는 해야 한다.</b>

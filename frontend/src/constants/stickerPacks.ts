@@ -24,6 +24,9 @@ export const PACK_ANIM_FOOD = 'ANIM_FOOD';
 export const PACK_ANIM_WEATHER = 'ANIM_WEATHER';
 export const PACK_MOOD_BASIC = 'MOOD_BASIC';
 export const PACK_TOUCH_BASIC = 'TOUCH_BASIC';
+/** 캐릭터 스티커 — 상점 상품이지만 첫 두 팩은 0원이다 */
+export const PACK_EGG_BOILED = 'EGG_BOILED';
+export const PACK_EGG_DUO = 'EGG_DUO';
 
 /** 유료 팩 — PRO 구독이면 전부, 아니면 낱개로 산 것만 */
 export const PACK_MOOD_PREMIUM = 'MOOD_PREMIUM';
@@ -160,11 +163,13 @@ export const ANIMATED_STICKER_PACKS: Record<string, string> = {
 /**
  * 이미지 스티커 캐릭터 키 → 팩. 캐릭터 한 마리가 곧 한 팩이다.
  *
- * <p>지금은 비어 있다(2026-09-21) — 그림 출처를 정리하는 동안 이미지 스티커를 전부
- * 내렸다(`stickerImages.ts` 의 `STICKER_CHARACTERS`). 캐릭터를 되살리거나 새로 붙이면
- * 여기에 한 줄, 유료면 마이그레이션 시드에 한 줄이면 끝이다.
+ * <p>캐릭터를 더 붙이면 여기에 한 줄, 그리고 마이그레이션 시드에 한 줄이면 끝이다.
+ * 유료로 팔 캐릭터는 `is_pro_only = TRUE` + 가격을 주면 잠금·구매 흐름이 저절로 붙는다.
  */
-export const CHARACTER_PACKS: Record<string, string> = {};
+export const CHARACTER_PACKS: Record<string, string> = {
+  boiled: PACK_EGG_BOILED,
+  duo: PACK_EGG_DUO,
+};
 
 /** 이 스티커 코드가 속한 팩. 팩이 없으면 undefined(= 무료). */
 export function packIdOfSticker(code: string): string | undefined {

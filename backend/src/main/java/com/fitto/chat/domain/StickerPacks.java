@@ -29,6 +29,9 @@ public final class StickerPacks {
     public static final String ANIM_WEATHER = "ANIM_WEATHER";
     public static final String MOOD_BASIC = "MOOD_BASIC";
     public static final String TOUCH_BASIC = "TOUCH_BASIC";
+    /* 캐릭터 스티커 — 상점에 올라가지만 첫 두 팩은 0원이다(V97) */
+    public static final String EGG_BOILED = "EGG_BOILED";
+    public static final String EGG_DUO = "EGG_DUO";
 
     /* ── 유료 (PRO 구독이면 전부 / 낱개로도 산다) ──────────────────────────── */
     public static final String MOOD_PREMIUM = "MOOD_PREMIUM";
