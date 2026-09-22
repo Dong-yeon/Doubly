@@ -801,7 +801,16 @@ export function HomeScreen({ navigation }: Props) {
                 actions={[
                   { icon: 'image-plus', label: '일상', onPress: () => navigation.navigate('FeedCompose') },
                   { icon: 'calendar-heart', label: '캘린더', onPress: () => navigation.navigate('CoupleCalendar') },
-                  { icon: 'emoticon-outline', label: '스티커', onPress: () => navigation.navigate('StickerShop') },
+                  {
+                    /*
+                     * 이모티콘 얼굴이 아니라 <b>가게 모양</b>이다. 얼굴은 "스티커를 보낸다"로
+                     * 읽혀 채팅 패널과 구분이 안 됐다 — 여기서 하는 일은 고르는 게 아니라
+                     * 사는 것이다. 라벨도 '스티커'가 아니라 '스티커 상점'으로 끝까지 적는다.
+                     */
+                    icon: 'storefront-outline',
+                    label: '스티커 상점',
+                    onPress: () => navigation.navigate('StickerShop'),
+                  },
                 ]}
               />
             </View>
