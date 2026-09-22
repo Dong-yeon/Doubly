@@ -102,12 +102,21 @@ export function StickerShopScreen() {
   }
 
   /*
-   * 무료 → 열림 → 잠김 순. 살 것을 맨 아래 두는 게 아니라 <b>받을 수 있는 것을 먼저</b>
-   * 보여준다 — 상점에 들어오자마자 값부터 보이면 둘러볼 마음이 사라진다.
+   * <b>스티커만 판다</b>(2026-09-22). 무드·터치 팩은 목록에서 뺐다 — 그림이 없어 아이콘만
+   * 덩그러니 나오고, 무엇보다 <b>상점에서 고르는 물건이 아니다</b>. 무드는 홈의 기분 칩에서,
+   * 터치는 채팅 트레이에서 고른다. 여기 있으면 "스티커 상점"이라는 이름이 거짓말이 된다.
+   *
+   * <p>잠금 판정은 그대로다 — 팩 행도 {@code Feature} 매핑도 손대지 않았고, 확장 무드와
+   * 프리미엄 터치는 지금처럼 PRO 에서 열린다. <b>여기서는 안 보일 뿐이다.</b>
+   *
+   * <p>가진 것 먼저, 살 것은 뒤. 상점에 들어오자마자 값부터 보이면 둘러볼 마음이 사라진다.
+   * 예전에는 "가지고 있어요 / 열려 있어요 / 더 있어요" 셋이었는데 앞의 둘을 합쳤다 —
+   * 쓰는 사람에게 무료로 받은 것과 구독으로 열린 것은 <b>똑같이 "지금 쓸 수 있는 것"</b>이고,
+   * 그 차이는 줄 오른쪽 칩이 이미 말한다.
    */
-  const free = packs.filter((p) => !p.proOnly && p.price === 0);
-  const owned = packs.filter((p) => (p.proOnly || p.price > 0) && p.usable);
-  const locked = packs.filter((p) => (p.proOnly || p.price > 0) && !p.usable);
+  const shown = packs.filter((p) => p.category === 'ANIMATED' || p.category === 'IMAGE');
+  const mine = shown.filter((p) => p.usable);
+  const locked = shown.filter((p) => !p.usable);
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
@@ -123,11 +132,10 @@ export function StickerShopScreen() {
           </Text>
         </View>
 
-        <Section title="가지고 있어요" packs={free} onBuy={onBuy} />
-        <Section title="열려 있어요" packs={owned} onBuy={onBuy} />
+        <Section title="가지고 있어요" packs={mine} onBuy={onBuy} />
         <Section title="더 있어요" packs={locked} onBuy={onBuy} />
 
-        {loaded && packs.length === 0 && !error ? (
+        {loaded && shown.length === 0 && !error ? (
           <EmptyState icon="emoticon-outline" title="아직 팩이 없어요" description="곧 새 스티커가 올라와요!" />
         ) : null}
       </ScrollView>

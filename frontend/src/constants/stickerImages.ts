@@ -53,19 +53,20 @@ export interface StickerCharacter {
  * 피커에 뜨는 캐릭터.
  *
  * <p>곰돌이·더비·블리를 내리고(아래 RETIRED) 동연님이 새로 만든 달걀 두 마리로 갈았다 —
- * 삶은달걀(솔로 23종)과 맥반석♥달걀(짝 20종)이다.
+ * 달걀이(솔로 23종)와 구운이(짝 20종)다.
  *
- * <p>이 목록이 비면 `STICKER_CODE_INDEX` 도 비어서 텍스트 코드 `(삶은달걀_사랑해)` 와
+ * <p>이 목록이 비면 `STICKER_CODE_INDEX` 도 비어서 텍스트 코드 `(달걀이_사랑해)` 와
  * 키워드 추천이 통째로 죽는다(`utils/stickerCodes.ts`). 크래시가 아니라 조용히 안 뜨는
  * 고장이라 눈치채기 어렵다 — 캐릭터를 내릴 때 함께 확인할 것.
  */
 export const STICKER_CHARACTERS: StickerCharacter[] = [
   {
     /*
-     * 삶은달걀 — 머리에 꽃을 얹은 흰 달걀. 동연님 자체 캐릭터다.
+     * 달걀이 — 머리에 꽃을 얹은 흰 달걀. 동연님 자체 캐릭터다.
+     * (2026-09-22 에 '삶은달걀' 에서 이름을 줄였다 — 캐릭터 이름은 설명이 아니라 이름이다.)
      */
     key: 'boiled',
-    label: '삶은달걀',
+    label: '달걀이',
     stickers: [
       { code: 'EGG_AWKWARD', label: '난감', source: require('../../assets/stickers/egg_awkward.png') },
       { code: 'EGG_GLOOMY', label: '우울', source: require('../../assets/stickers/egg_gloomy.png') },
@@ -94,12 +95,12 @@ export const STICKER_CHARACTERS: StickerCharacter[] = [
   },
   {
     /*
-     * 맥반석 x 삶은달걀 — 두 마리가 함께 나오는 짝 스티커다. 찜질방 짝꿍이고,
-     * 갈색이 맥반석이다. <b>가로가 넓어서</b> 에셋이 정사각이 아니다(360 x 약 300) —
+     * 구운이 x 달걀이 — 두 마리가 함께 나오는 짝 스티커다. 찜질방 짝꿍이고,
+     * 갈색이 구운이다. <b>가로가 넓어서</b> 에셋이 정사각이 아니다(360 x 약 300) —
      * 격자도 말풍선도 contain 으로 그리므로 비율은 유지되고 세로만 덜 찬다.
      */
     key: 'duo',
-    label: '맥반석♥달걀',
+    label: '구운이',
     stickers: [
       { code: 'DUO_SAD', label: '속상해', source: require('../../assets/stickers/duo_sad.png') },
       { code: 'DUO_GLOOMY', label: '우울', source: require('../../assets/stickers/duo_gloomy.png') },

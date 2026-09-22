@@ -98,7 +98,18 @@ const MAX_PANEL_HEIGHT = 320;
  */
 const MIN_PANEL_HEIGHT = 264;
 
-/** 키보드 높이를 하한·상한 사이로 가둔다 */
+/**
+ * 키보드 높이를 하한·상한 사이로 가둔다 — 결과는 <b>높이가 아니라 상한</b>이다.
+ *
+ * <p>고정 높이로 쓰면 팩이 작을 때 아래가 크게 빈다 — 달걀 팩 23장은 넓은 화면에서 두 줄이라
+ * 패널 절반이 흰 칸이었다(2026-09-22 실기기). {@code maxHeight} 로 주면 큰 팩은 그대로 차고
+ * 작은 팩은 내용만큼만 차지한다.
+ *
+ * <p>팩을 넘길 때 높이가 달라지지만 <b>입력바는 움직이지 않는다</b> — 패널은 입력바 위에
+ * 있고 줄어든 만큼 대화 목록이 늘어난다. (2026-09-11 에 "입력바가 튄다"로 고정 높이를 택한
+ * 것은 패널이 키보드 자리를 <b>대신</b>할 때의 이야기이고, 여닫을 때 쓰는 값은 여전히
+ * 키보드 높이 그대로다.)
+ */
 function panelHeight(keyboardHeight: number): number {
   return Math.min(Math.max(keyboardHeight, MIN_PANEL_HEIGHT), MAX_PANEL_HEIGHT);
 }
@@ -306,11 +317,12 @@ export function StickerPanel({
   };
 
   if (!active) {
+    // 아직 팩이 없을 때는 자리만 지킨다 — 여기서 줄이면 패널을 여는 순간 화면이 튄다
     return <View style={{ height: panelHeight(height) }} />;
   }
 
   return (
-    <View style={{ height: panelHeight(height) }}>
+    <View style={{ maxHeight: panelHeight(height) }}>
       {/* 팩 스트립 — 무엇이 들어 있는지가 여기서 끝난다 */}
       <View style={styles.strip}>
         <ScrollView
@@ -445,7 +457,8 @@ const styles = themedStyles((colors) => ({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  scroll: { flex: 1 },
+  // flex:1 을 주지 않는다 — 주면 부모가 내용 높이를 못 잡아 작은 팩에서도 끝까지 늘어난다
+  scroll: { flexGrow: 0, flexShrink: 1 },
   // 잠긴 팩 — 그림은 보이되 "아직 내 것이 아니다"가 읽혀야 한다
   lockedGrid: { opacity: 0.45 },
   /*
