@@ -1733,12 +1733,24 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           /*
            * 새로 만든 채팅방처럼 대화 이력이 아예 없을 때 안내 — 로딩 중(loadingHistory)
            * 엔 잠깐 빈 배열로 보이는 순간이 있어 그 사이엔 띄우지 않는다(QA_CHECKLIST.md
-           * 패턴10). inverted 리스트라 컨텐츠 전체가 scaleY:-1 로 뒤집혀 렌더되므로
-           * EmptyState 를 그대로 두면 거꾸로 보인다 — 감싸는 뷰에서 다시 뒤집어 바로 세운다.
+           * 패턴10).
+           *
+           * <p><b>여기서 되뒤집지 않는다 — RN 이 이미 한다.</b> {@code VirtualizedList} 는
+           * {@code ListEmptyComponent} 를 그릴 때 {@code StyleSheet.compose(inversionStyle,
+           * element.props.style)} 로 <b>되뒤집기 스타일을 직접 얹는다</b>
+           * ({@code _renderEmptyComponent}). {@code compose} 는 뒤에 오는 우리 스타일이
+           * 이기므로, 감싸는 뷰에 {@code transform} 을 주면 <b>RN 이 넣어 준 되뒤집기를
+           * 덮어써 버린다.</b>
+           *
+           * <p>예전 코드가 {@code scaleY: -1} 을 줬는데, 안드로이드의 inversion 은
+           * {@code scale: -1}(X·Y 둘 다)이라 X 뒤집힘이 남아 <b>문구가 좌우로 뒤집혀</b>
+           * 보였다("아직 메시지가 없어요" → "요어없 가지시메 직아"). iOS 는 inversion 이
+           * {@code scaleY} 뿐이라 우연히 값이 같아 멀쩡했고, 그래서 코드만 봐서는 안 드러났다
+           * — 2026-09-22 실기기에서 잡았다. 스타일을 빼는 것이 곧 고침이다.
            */
           ListEmptyComponent={
             !loadingHistory ? (
-              <View style={styles.emptyMessagesWrap}>
+              <View>
                 <EmptyState icon="chat-outline" title="아직 메시지가 없어요" description="첫 메시지를 보내보세요!" />
               </View>
             ) : null
@@ -2175,9 +2187,6 @@ const styles = themedStyles((colors) => ({
   imagePreviewThumbActive: { opacity: 1, borderWidth: 2, borderColor: colors.white },
   imagePreviewActions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg, width: '100%' },
   imagePreviewBtn: { flex: 1 },
-  // inverted FlatList 의 콘텐츠는 scaleY:-1 로 뒤집혀 그려진다 — EmptyState 만 다시
-  // 뒤집어 정방향으로 보이게 한다(QA_CHECKLIST.md 패턴10)
-  emptyMessagesWrap: { transform: [{ scaleY: -1 }] },
   // 목록 위에 떠 있는 "맨 아래로" FAB — 트레이·입력바 위 오른쪽 모서리
   scrollToBottomFab: {
     position: 'absolute',
