@@ -706,11 +706,16 @@ export function CoupleCalendarScreen({ navigation }: Props) {
                 <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.modalScroll}>
                   <Text style={styles.modalTitle}>{form?.id == null ? '일정 추가' : '일정 수정'}</Text>
 
+                  {/*
+                    <b>예시 placeholder 를 두지 않는다</b>(2026-09-22). "예: 우리 200일, 수인 생일"
+                    처럼 써 두면 그 예시가 곧 이 칸의 용도로 읽힌다 — 실제로 이 달력에는 회식·
+                    미용실 예약 같은 각자의 일정이 훨씬 많이 들어오는데, 예시는 기념일만 가리켰다.
+                    칸 이름(제목·메모)이 이미 무엇을 넣는지 말하므로 예시는 안내가 아니라 한정이다.
+                  */}
                   <TextField
                     label="제목"
                     value={form?.title ?? ''}
                     onChangeText={(t) => setForm((f) => (f ? { ...f, title: t } : f))}
-                    placeholder="예: 우리 200일, 수인 생일"
                     maxLength={100}
                   />
                   <DateField
@@ -857,7 +862,6 @@ export function CoupleCalendarScreen({ navigation }: Props) {
                     label="메모 (선택)"
                     value={form?.memo ?? ''}
                     onChangeText={(t) => setForm((f) => (f ? { ...f, memo: t } : f))}
-                    placeholder="예: 레스토랑 예약해두기"
                     maxLength={500}
                   />
 
