@@ -221,6 +221,15 @@ export interface FeedPhotosPage {
 // 커플 캘린더 — 기념일 외 일정(생일·데이트 약속) + D-day 푸시
 export type CalendarEventType = 'ANNIVERSARY' | 'BIRTHDAY' | 'DATE' | 'ETC';
 
+/**
+ * 일정의 공개 범위 — 누구의 일정이고 누가 보는가 (백엔드 EventVisibility).
+ *
+ * - `SHARED` 우리 일정: 둘 다 보고 둘 다 알림을 받는다. 지금까지의 모든 일정.
+ * - `PERSONAL` 내 일정: 상대도 보지만(누구 것인지 표시된다) 알림은 주인만.
+ * - `PRIVATE` 나만 보기: 상대에게 내려가지 않는다 — 목록에 없는 것이지 숨긴 게 아니다.
+ */
+export type CalendarEventVisibility = 'SHARED' | 'PERSONAL' | 'PRIVATE';
+
 export interface CoupleCalendarEvent {
   id: number;
   title: string;
@@ -232,6 +241,8 @@ export interface CoupleCalendarEvent {
   endDate?: string | null;
   eventType: CalendarEventType;
   repeatYearly: boolean;
+  /** 우리 일정인지 각자의 일정인지 — 누구 것인지는 createdBy 와 함께 읽는다 */
+  visibility: CalendarEventVisibility;
   memo?: string | null;
   /** 오늘 기준 D-day — 0=오늘, 양수=N일 남음, 음수=지남 */
   dday: number;

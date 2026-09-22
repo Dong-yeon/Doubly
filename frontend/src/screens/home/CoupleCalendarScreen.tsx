@@ -3,6 +3,12 @@
  * 월 그리드(일정 있는 날 점 표시) + 일정 목록(D-day 배지) + 추가/수정 모달.
  * 매일 아침(KST) 당일 일정은 서버가 커플 양쪽에 푸시한다.
  *
+ * <p><b>한 달력에 둘의 일정과 각자의 일정이 함께 놓인다</b>(V101 · `CalendarEventVisibility`).
+ * 달력에 적고 싶은 것의 절반은 회식·야근·병원처럼 각자의 일정이라, 그걸 넣을 자리가
+ * 없으면 캘린더가 기념일 보관함으로만 쓰인다. 내 일정은 기본적으로 <b>상대에게 보인다</b> —
+ * 그래야 서로 바쁜 날을 알 수 있고, 그게 달력을 같이 보는 이유다. 숨기고 싶은 날만
+ * '나만 보기'로 돌린다(그 일정은 상대 응답에 아예 내려가지 않는다).
+ *
  * <p>여행(PLAN.md Trip)이 럽슐랭(장소) 탭에서 홈 스택으로 이관되면서, 이 화면이 여행의
  * <b>상시 진입점</b>이 됐다 — 그리드에 여행 기간을 띠로 잇고, 그리드 아래 '우리 여행'
  * 섹션에서 상세·전체 목록·만들기로 들어간다. (홈의 D-day 카드는 여행이 있는 기간에만
@@ -38,9 +44,13 @@ import { getErrorMessage } from '../../utils/error';
 import type {
   CalendarDateMeal,
   CalendarEventType,
+  CalendarEventVisibility,
   CoupleCalendarEvent,
   Trip,
 } from '../../types';
+import { useAuthStore } from '../../store/authStore';
+import { useRelationStore } from '../../store/relationStore';
+import { MaterialCommunityIcons } from '../../components/Icon';
 import { confirmDiscard } from '../../utils/discardGuard';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
@@ -68,6 +78,23 @@ const TYPE_LABEL: Record<CalendarEventType, string> = {
   ETC: '기타',
 };
 
+/**
+ * 카드에 붙는 주인 표시 — 우리 일정은 아무것도 붙이지 않는다.
+ * 기본이 '우리 일정'이라 그쪽에 배지를 달면 거의 모든 카드에 같은 배지가 붙어 정보가 없다.
+ */
+function ownerBadge(
+  event: CoupleCalendarEvent,
+  myId: number | undefined,
+  partnerName: string | undefined,
+): { label: string; locked: boolean } | null {
+  if (event.visibility === 'SHARED') return null;
+  if (event.createdBy === myId) {
+    return { label: event.visibility === 'PRIVATE' ? '나만 보기' : '내 일정', locked: event.visibility === 'PRIVATE' };
+  }
+  // 상대의 '나만 보기'는 애초에 내려오지 않으므로 여기 오는 것은 PERSONAL 뿐이다
+  return { label: partnerName ? `${partnerName} 일정` : '상대 일정', locked: false };
+}
+
 function pad2(n: number): string {
   return String(n).padStart(2, '0');
 }
@@ -88,6 +115,7 @@ interface FormState {
   endDate: string;
   eventType: CalendarEventType;
   repeatYearly: boolean;
+  visibility: CalendarEventVisibility;
   memo: string;
 }
 
@@ -98,10 +126,15 @@ const EMPTY_FORM: FormState = {
   endDate: '',
   eventType: 'DATE',
   repeatYearly: false,
+  // 기본은 우리 일정 — 커플 달력에서 더 흔한 쪽이고, 지금까지의 동작이다
+  visibility: 'SHARED',
   memo: '',
 };
 
 export function CoupleCalendarScreen({ navigation }: Props) {
+  // 누구의 일정인지 가르려면 "나"를 알아야 한다 — 서버는 createdBy 만 내려준다
+  const myId = useAuthStore((s) => s.user?.id);
+  const partnerName = useRelationStore((s) => s.couple?.partner?.name);
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${pad2(today.getMonth() + 1)}-${pad2(today.getDate())}`;
 
@@ -298,6 +331,14 @@ export function CoupleCalendarScreen({ navigation }: Props) {
   };
 
   const openEdit = (event: CoupleCalendarEvent) => {
+    /*
+     * 상대의 개인 일정은 보이기만 한다 — 서버가 403 으로 막으므로(CalendarService),
+     * 폼을 열어 고치게 해놓고 저장할 때 튕기면 적어둔 내용만 날아간다.
+     */
+    if (event.visibility !== 'SHARED' && event.createdBy !== myId) {
+      toast.info(`${partnerName ?? '상대'}의 일정이라 볼 수만 있어요.`);
+      return;
+    }
     const initial = {
       id: event.id,
       title: event.title,
@@ -305,6 +346,7 @@ export function CoupleCalendarScreen({ navigation }: Props) {
       endDate: event.endDate ? event.endDate.slice(0, 10) : '',
       eventType: event.eventType,
       repeatYearly: event.repeatYearly,
+      visibility: event.visibility,
       memo: event.memo ?? '',
     };
     formInitialRef.current = JSON.stringify(initial);
@@ -341,6 +383,7 @@ export function CoupleCalendarScreen({ navigation }: Props) {
         endDate: !form.repeatYearly && form.endDate ? form.endDate : undefined,
         eventType: form.eventType,
         repeatYearly: form.repeatYearly,
+        visibility: form.visibility,
         memo: form.memo.trim() || undefined,
       };
       if (form.id == null) {
@@ -579,7 +622,7 @@ export function CoupleCalendarScreen({ navigation }: Props) {
             <EmptyState
               icon="calendar-heart"
               title="일정이 없어요"
-              description="생일, 데이트 약속, 기념일을 등록하면 당일 아침에 둘 다 알림을 받아요."
+              description="기념일·데이트 약속은 둘 다, 회식·야근 같은 내 일정은 나만 아침에 알림을 받아요."
             />
           )
         ) : (
@@ -587,6 +630,7 @@ export function CoupleCalendarScreen({ navigation }: Props) {
             const meta = typeMeta(event.eventType);
             // 시작일 당일은 D-day 로(강조 포함), 그 다음 날부터 종료일까지는 "진행 중"으로 읽는다
             const ongoing = !!event.endDate && event.date < todayStr && todayStr <= event.endDate;
+            const owner = ownerBadge(event, myId, partnerName);
             return (
               <TouchableOpacity key={`${event.id}-${event.date}`} activeOpacity={0.8} onPress={() => openEdit(event)}>
                 <Card elevation="sm" style={styles.eventCard}>
@@ -614,14 +658,29 @@ export function CoupleCalendarScreen({ navigation }: Props) {
                         </Text>
                       </View>
                     </View>
-                    <Text style={styles.eventMeta}>
-                      {Number(event.date.slice(5, 7))}월 {Number(event.date.slice(8, 10))}일
-                      {event.endDate
-                        ? ` ~ ${Number(event.endDate.slice(5, 7))}월 ${Number(event.endDate.slice(8, 10))}일`
-                        : ''}{' '}
-                      · {meta.label}
-                      {event.memo ? ` · ${event.memo}` : ''}
-                    </Text>
+                    <View style={styles.metaRow}>
+                      {/* 주인 표시는 종류·날짜보다 먼저 읽혀야 한다 — "누구 일정인가"가 첫 질문이다 */}
+                      {owner ? (
+                        <View style={styles.ownerBadge}>
+                          {owner.locked ? (
+                            <MaterialCommunityIcons
+                              name="lock-outline"
+                              size={11}
+                              color={colors.textSecondary}
+                            />
+                          ) : null}
+                          <Text style={styles.ownerBadgeText}>{owner.label}</Text>
+                        </View>
+                      ) : null}
+                      <Text style={styles.eventMeta} numberOfLines={1}>
+                        {Number(event.date.slice(5, 7))}월 {Number(event.date.slice(8, 10))}일
+                        {event.endDate
+                          ? ` ~ ${Number(event.endDate.slice(5, 7))}월 ${Number(event.endDate.slice(8, 10))}일`
+                          : ''}{' '}
+                        · {meta.label}
+                        {event.memo ? ` · ${event.memo}` : ''}
+                      </Text>
+                    </View>
                   </View>
                 </Card>
               </TouchableOpacity>
@@ -711,6 +770,73 @@ export function CoupleCalendarScreen({ navigation }: Props) {
                       );
                     })}
                   </View>
+
+                  {/*
+                    누구 일정인가 — '우리'와 '내 것'만 고르게 하고, 숨기기는 아래 스위치로
+                    따로 둔다. 칩 세 개로 늘어놓으면 "누구 것인가"와 "보여줄 것인가"라는
+                    다른 두 질문이 한 줄에 섞인다.
+                  */}
+                  <Text style={styles.fieldLabel}>누구 일정</Text>
+                  <View style={styles.typeRow}>
+                    {([
+                      { key: 'SHARED', label: '우리 일정' },
+                      { key: 'PERSONAL', label: '내 일정' },
+                    ] as const).map(({ key, label }) => {
+                      const active =
+                        key === 'SHARED'
+                          ? form?.visibility === 'SHARED'
+                          : form?.visibility !== 'SHARED';
+                      return (
+                        <Pressable
+                          key={key}
+                          style={[
+                            styles.typeChip,
+                            active && { borderColor: colors.primary, backgroundColor: colors.surfaceAlt },
+                          ]}
+                          onPress={() =>
+                            setForm((f) =>
+                              f
+                                ? {
+                                    ...f,
+                                    // '내 일정'으로 돌아올 때 켜 뒀던 숨기기를 잃지 않는다
+                                    visibility:
+                                      key === 'SHARED' ? 'SHARED' : f.visibility === 'PRIVATE' ? 'PRIVATE' : 'PERSONAL',
+                                  }
+                                : f,
+                            )
+                          }
+                          accessibilityState={{ selected: active }}
+                        >
+                          <Text
+                            style={[
+                              styles.typeChipText,
+                              active && { color: colors.textPrimary, fontWeight: '700' },
+                            ]}
+                          >
+                            {label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+
+                  {form?.visibility !== 'SHARED' ? (
+                    <View style={styles.repeatRow}>
+                      <View style={styles.flex}>
+                        <Text style={styles.fieldLabel}>나만 보기</Text>
+                        <Text style={styles.repeatHint}>
+                          꺼두면 상대도 이 일정을 봐요 · 알림은 어느 쪽이든 나만 받아요
+                        </Text>
+                      </View>
+                      <Switch
+                        value={form?.visibility === 'PRIVATE'}
+                        onValueChange={(v) =>
+                          setForm((f) => (f ? { ...f, visibility: v ? 'PRIVATE' : 'PERSONAL' } : f))
+                        }
+                        trackColor={{ true: colors.coral }}
+                      />
+                    </View>
+                  ) : null}
 
                   <View style={styles.repeatRow}>
                     <View style={styles.flex}>
@@ -841,7 +967,21 @@ const styles = themedStyles((colors) => ({
     backgroundColor: colors.surfaceAlt,
   },
   ddayText: { fontSize: fontSize.caption, fontWeight: '800', color: colors.textPrimary },
-  eventMeta: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
+  eventMeta: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2, flexShrink: 1 },
+
+  // 주인 표시 — 우리 일정에는 붙지 않으므로(대부분이 그렇다) 눈에 띄는 쪽이 예외다
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  ownerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    marginTop: 2,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceAlt,
+  },
+  ownerBadgeText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary },
 
   // 여행이 없을 때의 생성 진입점 — 카드 대신 점선 상자로 "비어 있음 + 행동"을 한 줄에
   tripCreate: {

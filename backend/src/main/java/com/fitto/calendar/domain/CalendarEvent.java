@@ -28,6 +28,10 @@ import java.time.LocalDateTime;
  * NULL 이면 하루 일정(기존 동작). 반복 일정은 기간을 갖지 않는다 — 생일·기념일이 원래
  * 용도라 하루로 충분하고, 연말을 걸치는 반복 기간의 발생일 계산 복잡도를 피한다
  * (서비스에서 거부).
+ *
+ * <p><b>공개 범위</b>: {@link EventVisibility} 가 "둘의 일정"과 "각자의 일정"을 가른다.
+ * 개인 일정도 couple_id 는 그대로 채워진다 — 관계 단위 삭제·복원 경로를 그대로 쓰기
+ * 위해서다(V101 주석). 주인은 {@code createdBy} 다.
  */
 @Entity
 @Table(name = "couple_events")
@@ -60,6 +64,10 @@ public class CalendarEvent {
     @Column(name = "repeat_yearly", nullable = false)
     private boolean repeatYearly;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private EventVisibility visibility;
+
     @Column(length = 500)
     private String memo;
 
@@ -72,13 +80,16 @@ public class CalendarEvent {
 
     @Builder
     private CalendarEvent(Long coupleId, String title, LocalDate eventDate, LocalDate endDate,
-                          EventType eventType, boolean repeatYearly, String memo, Long createdBy) {
+                          EventType eventType, boolean repeatYearly, EventVisibility visibility,
+                          String memo, Long createdBy) {
         this.coupleId = coupleId;
         this.title = title;
         this.eventDate = eventDate;
         this.endDate = endDate;
         this.eventType = eventType != null ? eventType : EventType.ETC;
         this.repeatYearly = repeatYearly;
+        // 생략하면 둘의 일정 — 지금까지의 동작이자, 커플 앱에서 더 흔한 쪽이다
+        this.visibility = visibility != null ? visibility : EventVisibility.SHARED;
         this.memo = memo;
         this.createdBy = createdBy;
     }
@@ -90,7 +101,7 @@ public class CalendarEvent {
      * 하루 일정으로 환원) 덮는다. eventDate 없이 endDate 만 오면 무시된다.
      */
     public void update(String title, LocalDate eventDate, LocalDate endDate, EventType eventType,
-                       Boolean repeatYearly, String memo) {
+                       Boolean repeatYearly, EventVisibility visibility, String memo) {
         if (title != null) this.title = title;
         if (eventDate != null) {
             this.eventDate = eventDate;
@@ -98,7 +109,27 @@ public class CalendarEvent {
         }
         if (eventType != null) this.eventType = eventType;
         if (repeatYearly != null) this.repeatYearly = repeatYearly;
+        if (visibility != null) this.visibility = visibility;
         if (memo != null) this.memo = memo.isBlank() ? null : memo;
+    }
+
+    /**
+     * 이 사람에게 보이는 일정인가 — "나만 보기"는 만든 사람에게만 보인다.
+     *
+     * <p>판정을 쿼리가 아니라 여기에 둔 이유: 한 커플의 한 달치 일정은 많아야 수십 건이라
+     * 걸러내는 비용이 없고, 규칙이 한 곳에 있어야 월 조회·다가오는 일정·수정 권한이
+     * 어긋나지 않는다. 조회 경로마다 WHERE 절을 복사하면 하나를 빠뜨리는 날이 온다.
+     */
+    public boolean visibleTo(Long userId) {
+        return !visibility.hiddenFromPartner() || createdBy.equals(userId);
+    }
+
+    /**
+     * 고치거나 지울 수 있는가 — 우리 일정은 둘 다, 각자의 일정은 주인만.
+     * (상대의 회식 일정을 내가 고칠 이유는 없다)
+     */
+    public boolean editableBy(Long userId) {
+        return visibility.isShared() || createdBy.equals(userId);
     }
 
     /** 일정이 차지하는 마지막 날 — 하루 일정이면 시작일 그대로. */

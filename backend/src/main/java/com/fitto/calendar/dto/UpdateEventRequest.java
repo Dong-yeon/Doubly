@@ -1,6 +1,7 @@
 package com.fitto.calendar.dto;
 
 import com.fitto.calendar.domain.EventType;
+import com.fitto.calendar.domain.EventVisibility;
 import jakarta.validation.constraints.Size;
 
 import java.time.LocalDate;
@@ -22,7 +23,15 @@ public record UpdateEventRequest(
 
         Boolean repeatYearly,
 
+        /** 공개 범위 — null 이면 유지. 만든 사람만 바꿀 수 있다(서비스 검증) */
+        EventVisibility visibility,
+
         @Size(max = 500)
         String memo
 ) {
+    /** 공개 범위가 없던 시절의 형태 — 이 요청은 공개 범위를 건드리지 않는다. */
+    public UpdateEventRequest(String title, LocalDate eventDate, LocalDate endDate,
+                              EventType eventType, Boolean repeatYearly, String memo) {
+        this(title, eventDate, endDate, eventType, repeatYearly, null, memo);
+    }
 }

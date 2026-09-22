@@ -4,6 +4,7 @@ import type {
   ApiResponse,
   CalendarDateMeal,
   CalendarEventType,
+  CalendarEventVisibility,
   CoupleCalendarEvent,
 } from '../types';
 
@@ -19,6 +20,11 @@ export interface SaveEventPayload {
   endDate?: string;
   eventType?: CalendarEventType;
   repeatYearly: boolean;
+  /**
+   * 공개 범위 — 생략하면 우리 일정(SHARED). 수정 시에는 <b>만든 사람만</b> 바꿀 수 있다
+   * (상대가 내 일정을 '나만 보기'로 돌려 내 달력에서 지우지 못하게).
+   */
+  visibility?: CalendarEventVisibility;
   memo?: string;
 }
 

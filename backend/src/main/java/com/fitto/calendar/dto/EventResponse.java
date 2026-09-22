@@ -2,6 +2,7 @@ package com.fitto.calendar.dto;
 
 import com.fitto.calendar.domain.CalendarEvent;
 import com.fitto.calendar.domain.EventType;
+import com.fitto.calendar.domain.EventVisibility;
 
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
@@ -22,6 +23,8 @@ public record EventResponse(
         LocalDate endDate,
         EventType eventType,
         boolean repeatYearly,
+        /** 우리 일정인지 각자의 일정인지 — 누구의 것인지는 createdBy 와 함께 읽는다 */
+        EventVisibility visibility,
         String memo,
         /** 오늘 기준 D-day — 0=오늘, 양수=N일 남음, 음수=지남 */
         long dday,
@@ -36,6 +39,7 @@ public record EventResponse(
                 event.getEndDate(),
                 event.getEventType(),
                 event.isRepeatYearly(),
+                event.getVisibility(),
                 event.getMemo(),
                 ChronoUnit.DAYS.between(today, occurrence),
                 event.getCreatedBy());
