@@ -53,7 +53,7 @@ export interface StickerCharacter {
  * 피커에 뜨는 캐릭터.
  *
  * <p>곰돌이·더비·블리를 내리고(아래 RETIRED) 동연님이 새로 만든 달걀 두 마리로 갈았다 —
- * 달걀이(솔로 23종)와 구운이(짝 20종)다.
+ * 달걀이(솔로 23종)와 구운이♥달걀이(짝 20종)다.
  *
  * <p>이 목록이 비면 `STICKER_CODE_INDEX` 도 비어서 텍스트 코드 `(달걀이_사랑해)` 와
  * 키워드 추천이 통째로 죽는다(`utils/stickerCodes.ts`). 크래시가 아니라 조용히 안 뜨는
@@ -100,7 +100,7 @@ export const STICKER_CHARACTERS: StickerCharacter[] = [
      * 격자도 말풍선도 contain 으로 그리므로 비율은 유지되고 세로만 덜 찬다.
      */
     key: 'duo',
-    label: '구운이',
+    label: '구운이♥달걀이',
     stickers: [
       { code: 'DUO_SAD', label: '속상해', source: require('../../assets/stickers/duo_sad.png') },
       { code: 'DUO_GLOOMY', label: '우울', source: require('../../assets/stickers/duo_gloomy.png') },
