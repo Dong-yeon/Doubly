@@ -12,11 +12,19 @@ package com.fitto.common.policy;
  */
 public final class PolicyVersion {
 
-    /** 이용약관 버전 — 1.1: 운영 주체 정보 반영(개인 개발자·문의처·책임 한계 조항) */
-    public static final String TERMS = "1.1";
+    /**
+     * 이용약관 버전 — 1.2: 유료 구독(PRO) 도입 반영.
+     * 제2조에 무료/유료 구성, 제8~10조에 유료 서비스·청약철회·환불·약관 변경 절차를 넣고,
+     * "무료로 제공됩니다"(구 제7조 ②)를 걷어냈다.
+     */
+    public static final String TERMS = "1.2";
 
-    /** 개인정보처리방침 버전 — 1.2: 운영 주체·수탁사(Railway)·보유기간·보호책임자·국외이전 반영 */
-    public static final String PRIVACY = "1.2";
+    /**
+     * 개인정보처리방침 버전 — 1.3: 구매 기록(스토어·상품 id·거래 식별자·구독 기간) 수집 항목과
+     * 전자상거래법 보존 기간(5년·5년·3년), 수탁사 Apple·Google 추가.
+     * 종전의 "유상 거래 기능을 제공하지 않으므로 보존 의무가 없다"는 문장은 사실이 아니게 됐다.
+     */
+    public static final String PRIVACY = "1.3";
 
     private PolicyVersion() {
     }
