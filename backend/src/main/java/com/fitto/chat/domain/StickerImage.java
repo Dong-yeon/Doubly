@@ -34,6 +34,61 @@ import java.util.Optional;
  */
 public enum StickerImage {
     /*
+     * ── 삶은달걀 23종 · 맥반석 x 삶은달걀 20종 (2026-09-21) ──
+     *
+     * 동연님이 직접 만든 자체 캐릭터다. 찜질방 짝꿍 — 흰 쪽이 삶은달걀(머리에 꽃),
+     * 갈색이 맥반석이다. 커플 팩은 두 마리가 함께 나오는 짝 스티커라 가로가 넓다.
+     *
+     * 캐릭터 스티커는 스티커 상점의 낱개 구매 상품이지만 <b>이 두 팩은 0원</b>이다 —
+     * 상점을 여는 첫 물건이라 무료로 푼다. 한 번 무료로 준 것은 되돌릴 수 없다
+     * (StickerPackSyncTest 가 막는다).
+     */
+    EGG_AWKWARD("난감", StickerPacks.EGG_BOILED),
+    EGG_GLOOMY("우울", StickerPacks.EGG_BOILED),
+    EGG_IDEA("아하", StickerPacks.EGG_BOILED),
+    EGG_SLEEPY("졸려", StickerPacks.EGG_BOILED),
+    EGG_FURIOUS("폭발", StickerPacks.EGG_BOILED),
+    EGG_ANGRY("화났어", StickerPacks.EGG_BOILED),
+    EGG_SULKY("삐짐", StickerPacks.EGG_BOILED),
+    EGG_GRUMPY("흥", StickerPacks.EGG_BOILED),
+    EGG_KISS("뽀뽀", StickerPacks.EGG_BOILED),
+    EGG_EYE_ROLL("하아", StickerPacks.EGG_BOILED),
+    EGG_UNAMUSED("시큰둥", StickerPacks.EGG_BOILED),
+    EGG_SWEAT("식은땀", StickerPacks.EGG_BOILED),
+    EGG_HAPPY("행복", StickerPacks.EGG_BOILED),
+    EGG_RELAXED("편안", StickerPacks.EGG_BOILED),
+    EGG_DROOL("군침", StickerPacks.EGG_BOILED),
+    EGG_PROUD("뿌듯", StickerPacks.EGG_BOILED),
+    EGG_ANGEL("천사", StickerPacks.EGG_BOILED),
+    EGG_SHOCKED("헉", StickerPacks.EGG_BOILED),
+    EGG_MELTING("녹는다", StickerPacks.EGG_BOILED),
+    EGG_FROZEN("얼었어", StickerPacks.EGG_BOILED),
+    EGG_HOT("더워", StickerPacks.EGG_BOILED),
+    EGG_SALUTE("넵", StickerPacks.EGG_BOILED),
+    EGG_LOVE("사랑해", StickerPacks.EGG_BOILED),
+
+    DUO_SAD("속상해", StickerPacks.EGG_DUO),
+    DUO_GLOOMY("우울", StickerPacks.EGG_DUO),
+    DUO_IDEA("아하", StickerPacks.EGG_DUO),
+    DUO_SLEEP("잘자", StickerPacks.EGG_DUO),
+    DUO_FIGHT("대판 싸움", StickerPacks.EGG_DUO),
+    DUO_GLARE("째려봄", StickerPacks.EGG_DUO),
+    DUO_FURIOUS("폭발", StickerPacks.EGG_DUO),
+    DUO_KISS("뽀뽀", StickerPacks.EGG_DUO),
+    DUO_DIZZY("어질어질", StickerPacks.EGG_DUO),
+    DUO_SULKY("삐짐", StickerPacks.EGG_DUO),
+    DUO_HAPPY("신남", StickerPacks.EGG_DUO),
+    DUO_RELAXED("편안", StickerPacks.EGG_DUO),
+    DUO_DROOL("군침", StickerPacks.EGG_DUO),
+    DUO_WINK("찡긋", StickerPacks.EGG_DUO),
+    DUO_HEART_EYES("반했어", StickerPacks.EGG_DUO),
+    DUO_CRY("엉엉", StickerPacks.EGG_DUO),
+    DUO_FROZEN("얼었어", StickerPacks.EGG_DUO),
+    DUO_LOVE("사랑해", StickerPacks.EGG_DUO),
+    DUO_SHOCKED("헉", StickerPacks.EGG_DUO),
+    DUO_HEATED("열받아", StickerPacks.EGG_DUO),
+
+    /*
      * ── 아래는 전부 내린 코드다(2026-09-21). 지난 말풍선을 위해서만 남는다 ──
      *
      * 곰돌이 10종 — 완성본 한 장을 참조 삼아 variants.mjs 로 감정 변주를 뽑은 세트다.

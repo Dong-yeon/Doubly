@@ -47,6 +47,8 @@ export type HomeStackParamList = PlaceScreensParamList & {
   My: undefined;
   // 플랜 — FREE/PRO 비교와 구독 (docs/PRO_UPSELL_AND_ADS_2026-09-17.md §6)
   Plan: undefined;
+  // 스티커 상점 — 팩 둘러보기와 낱개 구매. 채팅 패널의 잠금 해제 줄에서도 들어온다
+  StickerShop: undefined;
   // 설정 — 알림·마케팅 수신, 비밀번호 변경, 약관 열람
   Settings: undefined;
   ChangePassword: undefined;

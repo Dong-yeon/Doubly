@@ -993,19 +993,22 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   };
 
   /**
-   * 잠긴 팩을 열려고 할 때 — 낱개 구매가 있으면 그것부터 권하고, 없으면 PRO 안내로 간다.
+   * 잠긴 팩을 열려고 할 때 — 상점으로 보낸다.
    *
-   * <p><b>낱개를 먼저 말하는 이유</b>: 이모티콘 하나 보내려던 사람에게 월 구독부터 들이밀면
-   * 대부분은 아무것도 사지 않는다. 팩 하나는 한 번 내고 끝이라 결정이 가볍고, 그 다음에
-   * "PRO면 전부"가 비교 대상으로 읽힌다.
+   * <p><b>여기서 결제를 띄우지 않는다.</b> 이모티콘 하나 보내려던 사람에게 결제창을
+   * 바로 들이밀면 대부분은 닫는다. 상점에서 <b>무엇이 더 있는지 보고</b> 정하게 하는 편이
+   * 낫고, 그 자리가 이미 있다(`StickerShopScreen`).
    *
-   * <p>실제 결제 호출(스토어 상품 등록·`stickerApi.verifyGoogle/verifyApple`)은 아직
-   * 붙지 않았다 — 콘솔에 일회성 상품을 올린 뒤에 이 자리에서 잇는다.
+   * <p>PRO 로만 열리는 팩(확장 무드·프리미엄 터치)은 상점에도 살 것이 없으므로 기존
+   * 업그레이드 시트로 보낸다 — 상점에 보내 놓고 살 수 없게 하면 헛걸음이다.
    */
   const unlockStickerPack = (pack: StickerPack) => {
-    showUpgrade(pack.price > 0
-      ? `${withJosa(pack.title, '은', '는')} ${pack.price.toLocaleString()}원에 따로 살 수 있어요. PRO를 쓰면 모든 이모티콘 팩이 함께 열려요.`
-      : `${withJosa(pack.title, '은', '는')} PRO에서 쓸 수 있어요.`);
+    if (pack.price > 0) {
+      setShowStickers(false);
+      navigation.navigate('Home', { screen: 'StickerShop' });
+      return;
+    }
+    showUpgrade(`${withJosa(pack.title, '은', '는')} PRO에서 쓸 수 있어요.`);
   };
 
   const sendSticker = async (sticker: string, locked: boolean, label: string) => {

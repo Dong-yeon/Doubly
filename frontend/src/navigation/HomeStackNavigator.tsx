@@ -6,6 +6,7 @@ import { HomeScreen } from '../screens/home/HomeScreen';
 import { CoupleConnectScreen } from '../screens/home/CoupleConnectScreen';
 import { MyScreen } from '../screens/my/MyScreen';
 import { PlanScreen } from '../screens/my/PlanScreen';
+import { StickerShopScreen } from '../screens/home/StickerShopScreen';
 import { SettingsScreen } from '../screens/my/SettingsScreen';
 import { ChangePasswordScreen } from '../screens/my/ChangePasswordScreen';
 import { LegalDocumentScreen } from '../screens/onboarding/LegalDocumentScreen';
@@ -103,6 +104,7 @@ export function HomeStackNavigator() {
       <Stack.Screen name="CoupleCalendar" component={CoupleCalendarScreen} options={{ title: '커플 캘린더' }} />
       <Stack.Screen name="My" component={MyScreen} options={{ title: 'MY' }} />
       <Stack.Screen name="Plan" component={PlanScreen} options={{ title: '플랜' }} />
+      <Stack.Screen name="StickerShop" component={StickerShopScreen} options={{ title: '스티커 상점' }} />
       <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: '설정' }} />
       <Stack.Screen
         name="ChangePassword"

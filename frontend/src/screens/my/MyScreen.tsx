@@ -593,6 +593,18 @@ export function MyScreen({ navigation }: Props) {
             <Text style={styles.chevron}>›</Text>
           </Pressable>
           <View style={styles.divider} />
+          {/*
+            상점도 같은 카드에 둔다 — 스티커를 사러 오는 사람과 PRO 를 보러 오는 사람은
+            같은 마음이고, 자발적으로 찾아갈 수 있는 자리가 여기뿐이다.
+          */}
+          <Pressable
+            style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
+            onPress={() => navigation.navigate('StickerShop')}
+          >
+            <Text style={styles.menuText}>스티커 상점</Text>
+            <Text style={styles.chevron}>›</Text>
+          </Pressable>
+          <View style={styles.divider} />
           <Pressable
             style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
             onPress={() => navigation.navigate('Settings')}

@@ -34,9 +34,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 class StickerPackSyncTest {
 
     private static final List<String> FRONTEND_SRC_CANDIDATES = List.of("../frontend/src", "frontend/src");
-    private static final List<String> MIGRATION_CANDIDATES = List.of(
-            "src/main/resources/db/migration/V96__sticker_packs_and_purchases.sql",
-            "backend/src/main/resources/db/migration/V96__sticker_packs_and_purchases.sql");
+    private static final List<String> MIGRATION_DIR_CANDIDATES = List.of(
+            "src/main/resources/db/migration", "backend/src/main/resources/db/migration");
 
     /** {@code ('ANIM_LOVE', '두근두근', 'ANIMATED', TRUE,  1200)} 한 줄. */
     private static final Pattern SEED_ROW = Pattern.compile(
@@ -71,7 +70,7 @@ class StickerPackSyncTest {
         referenced.add(StickerPacks.MOOD_PREMIUM);
 
         assertThat(seeded.keySet())
-                .as("enum 이 가리키는 팩이 V96 시드에 없다 — 서버가 팩을 못 찾으면 무료로 통과시킨다")
+                .as("enum 이 가리키는 팩이 시드에 없다 — 서버가 팩을 못 찾으면 무료로 통과시킨다")
                 .containsAll(referenced);
     }
 
@@ -171,15 +170,25 @@ class StickerPackSyncTest {
         });
     }
 
+    /**
+     * 마이그레이션 <b>폴더 전체</b>에서 팩 행을 모은다 — 한 파일만 읽지 않는다.
+     *
+     * <p>팩은 여러 마이그레이션에 걸쳐 들어온다(V96 이 틀을 만들고 V97 이 캐릭터 팩을
+     * 더했다). 파일명을 박아두면 새 팩을 더할 때마다 이 테스트가 "시드에 없다"고 거짓
+     * 경보를 낸다 — 그러면 테스트를 고치는 게 습관이 되고, 진짜 누락도 같이 묻힌다.
+     */
     private Map<String, SeededPack> parseSeed() throws IOException {
-        String sql = Files.readString(migrationFile(), StandardCharsets.UTF_8);
         Map<String, SeededPack> packs = new LinkedHashMap<>();
-        Matcher m = SEED_ROW.matcher(sql);
-        while (m.find()) {
-            packs.put(m.group(1),
-                    new SeededPack(m.group(2), "TRUE".equals(m.group(3)), Integer.parseInt(m.group(4))));
+        try (var files = Files.list(firstExisting(MIGRATION_DIR_CANDIDATES))) {
+            for (Path f : files.sorted().toList()) {
+                Matcher m = SEED_ROW.matcher(Files.readString(f, StandardCharsets.UTF_8));
+                while (m.find()) {
+                    packs.put(m.group(1), new SeededPack(
+                            m.group(2), "TRUE".equals(m.group(3)), Integer.parseInt(m.group(4))));
+                }
+            }
         }
-        assertThat(packs).as("V96 시드에서 팩 행을 하나도 파싱하지 못했다").isNotEmpty();
+        assertThat(packs).as("마이그레이션에서 팩 행을 하나도 파싱하지 못했다").isNotEmpty();
         return packs;
     }
 
@@ -197,10 +206,6 @@ class StickerPackSyncTest {
             entries.put(m.group(1), m.group(2));
         }
         return entries;
-    }
-
-    private Path migrationFile() {
-        return firstExisting(MIGRATION_CANDIDATES);
     }
 
     private Path frontendSrc() {
