@@ -657,12 +657,15 @@ point_ledger              -- 포인트 적립·사용 내역 (잔액을 컬럼�
 > 가입하면 FREE 로 시작하고, `Feature.java` 의 FREE 한도가 실제로 강제된다.
 > 기존 사용자에게 영구 PRO 를 주는 안(`docs/FREE_TIER_AND_ADS.md`)은 보류했다 — 전원 FREE 다.
 >
-> Google Play 구독 결제(`react-native-iap` 클라이언트 + 서버 즉시 검증 + RTDN 웹훅)는
-> 코드가 준비돼 있고 앱에서도 열려 있다(`PURCHASE_ENABLED = Platform.OS !== 'web'`).
-> **다만 Play Console 에 구독 상품(`pro_monthly`)이 실제로 등록·활성화돼 있어야 결제가
-> 시작된다** — 없으면 가격도 안 뜨고 구매 버튼이 실패한다. 즉 상품 등록 전까지는
-> "PRO 가 될 방법이 없는 상태"이므로 전환과 상품 등록은 같이 가야 한다.
-> 절차는 [docs/GOOGLE_PLAY_BILLING.md](docs/GOOGLE_PLAY_BILLING.md) 참고.
+> 구독 결제는 Google·Apple 양쪽 모두 구현돼 있고 앱에서도 열려 있다
+> (`PURCHASE_ENABLED = Platform.OS !== 'web'`). **`pro_monthly` 는 App Store 에 등록됐고
+> iOS 실결제까지 확인했다(2026-09-22).**
+>
+> 다만 서버가 그 결제를 받으려면 스토어 키가 있어야 한다 — 없으면 동기화가 조용히 아무 일도
+> 하지 않고 증상은 "결제는 됐는데 PRO 가 안 열림" 하나뿐이다. 애플은 `APP_STORE_ISSUER_ID`·
+> `APP_STORE_KEY_ID`·`APP_STORE_PRIVATE_KEY_BASE64`·`APP_STORE_BUNDLE_ID`,
+> 구글은 서비스 계정 키다([docs/FREE_TIER_AND_ADS.md](docs/FREE_TIER_AND_ADS.md) ·
+> [docs/GOOGLE_PLAY_BILLING.md](docs/GOOGLE_PLAY_BILLING.md)).
 
 ### 왜 지금 넣었나
 
@@ -810,8 +813,8 @@ PRO 인 동안은 그런 사용자가 만들어지지 않는다. 그래서 자�
    유료 상품을 실제로 팔기 전에 필요하다. 사용자가 적은 지금이 `PolicyVersion` 상향
    비용이 가장 싸다 (아래 "약관 본문" 절 참고. 버전을 올리면 전원 재동의 게이트가 뜬다)
 3. ~~`react-native-iap` + 서버 영수증 검증 + 스토어 웹훅 → `subscriptions` 갱신~~ → **완료**
-4. ⚠️ **Play Console 구독 상품(`pro_monthly` / base plan `monthly`) 등록·활성화** —
-   이게 없으면 아무도 PRO 가 될 수 없다([GOOGLE_PLAY_BILLING.md](docs/GOOGLE_PLAY_BILLING.md))
+4. 구독 상품(`pro_monthly` / base plan `monthly`) 등록·활성화 — **App Store 완료(2026-09-22)**,
+   Play Console 쪽은 확인 필요([GOOGLE_PLAY_BILLING.md](docs/GOOGLE_PLAY_BILLING.md))
 5. ~~`PLAN_FREE_TRIAL=false`~~ → **완료(2026-09-22)**. `PLAN_TRIAL_DAYS=0` 도 함께.
 
 > **만료 시 원칙: 읽기는 남기고 쓰기만 막는다.** PRO 때 만든 여행 5개를 만료 후
