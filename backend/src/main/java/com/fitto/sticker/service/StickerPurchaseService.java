@@ -13,7 +13,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
 
@@ -27,6 +26,20 @@ import java.util.Optional;
  * <p><b>스토어 키가 없으면 거절한다.</b> 구독 동기화는 키가 없을 때 조용히 건너뛰는데
  * (웹훅이라 실패해도 다음 신호가 또 온다) 여기는 사용자가 방금 결제를 누른 자리다.
  * 조용히 넘어가면 돈은 나갔는데 팩이 안 열린 채로 아무 말도 없게 된다.
+ *
+ * <p><b>검증 메서드에 {@code @Transactional} 을 걸지 않는다.</b> 이유가 둘이다.
+ * <ol>
+ *   <li><b>멱등 처리가 실제로 동작하게 하려고.</b> {@code UserStickerPurchase} 는
+ *       {@code GenerationType.IDENTITY} 라 {@code save()} 가 즉시 INSERT 를 날리고, unique
+ *       인덱스에 걸리면 <b>Hibernate 가 그 트랜잭션을 rollback-only 로 표시한다</b>. 바깥에
+ *       트랜잭션이 있으면 {@link DataIntegrityViolationException} 을 잡아도 커밋 시점에
+ *       {@code UnexpectedRollbackException} 이 떠서 결국 500 이 나간다 — 결제는 됐는데
+ *       에러가 뜨는 최악의 자리다. 트랜잭션을 저장 한 줄({@code SimpleJpaRepository.save})
+ *       에만 남겨 두면 위반이 그 안에서만 롤백되고 여기서 잡는 것이 뜻대로 동작한다.</li>
+ *   <li><b>스토어 왕복이 커넥션을 물고 있지 않게.</b> Play·App Store 조회는 타임아웃이
+ *       15초다. 트랜잭션 안에서 부르면 그동안 DB 커넥션 하나가 묶인다.</li>
+ * </ol>
+ * 여기서 잃는 원자성은 없다 — 쓰기가 INSERT 한 줄뿐이다.
  */
 @Service
 public class StickerPurchaseService {
@@ -54,7 +67,6 @@ public class StickerPurchaseService {
      * @param packId 앱이 무엇을 샀다고 주장하는지 — <b>검증 대상이지 근거가 아니다</b>.
      *               스토어가 돌려준 상품 id 와 다르면 거절한다.
      */
-    @Transactional
     public StickerPack verifyGoogle(Long userId, String packId, String purchaseToken) {
         StickerPack pack = requirePurchasablePack(packId);
         StoreProductPurchase purchase = googlePlayClient.fetchProduct(pack.productId(), purchaseToken);
@@ -62,7 +74,6 @@ public class StickerPurchaseService {
     }
 
     /** App Store 결제 직후 앱이 부른다 — {@link #verifyGoogle} 의 짝. */
-    @Transactional
     public StickerPack verifyApple(Long userId, String packId, String transactionId) {
         StickerPack pack = requirePurchasablePack(packId);
         StoreProductPurchase purchase = appStoreClient.fetchTransaction(transactionId);
@@ -111,6 +122,11 @@ public class StickerPurchaseService {
             return pack;
         }
         try {
+            /*
+             * save() 가 자기 트랜잭션을 연다(SimpleJpaRepository 가 @Transactional). 그래서
+             * 아래 catch 가 뜻대로 동작한다 — 이 메서드에 트랜잭션을 걸면 안 되는 이유는
+             * 클래스 주석에 있다.
+             */
             purchaseRepository.save(UserStickerPurchase.builder()
                     .userId(userId)
                     .stickerPackId(pack.getId())
