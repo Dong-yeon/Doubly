@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -51,7 +52,20 @@ class StickerPackSyncTest {
     private static final Pattern SEED_DELETE = Pattern.compile(
             "DELETE\\s+FROM\\s+sticker_packs\\s+WHERE\\s+id\\s+IN\\s*\\(([^)]*)\\)", Pattern.CASE_INSENSITIVE);
 
+    /**
+     * {@code UPDATE sticker_packs SET price = 0 WHERE id IN ('A', 'B');} — 값을 바꿀 때 쓴다(V105).
+     *
+     * <p>INSERT 만 읽으면 첫 시드의 값이 영원히 최종 상태로 보인다. 낱개 판매를 접은 뒤에도
+     * "1200 원짜리 팩이 있다"고 읽히면, 이 파일의 가격 단언이 실제와 반대되는 것을 지킨다.
+     */
+    private static final Pattern SEED_PRICE_UPDATE = Pattern.compile(
+            "UPDATE\\s+sticker_packs\\s+SET\\s+price\\s*=\\s*(\\d+)\\s+WHERE\\s+id\\s+IN\\s*\\(([^)]*)\\)",
+            Pattern.CASE_INSENSITIVE);
+
     private static final Pattern QUOTED_ID = Pattern.compile("'([A-Z0-9_]+)'");
+
+    /** 마이그레이션 파일 이름의 버전 — 적용 순서를 파일 이름 순이 아니라 번호로 맞춘다. */
+    private static final Pattern MIGRATION_VERSION = Pattern.compile("^V(\\d+)__");
 
     /** 프론트 {@code ANIM_HEART: PACK_ANIM_LOVE,} 한 줄 — 상수 이름에서 팩 id 를 되살린다. */
     private static final Pattern FRONT_ENTRY = Pattern.compile("\\s+(ANIM_[A-Z0-9_]+):\\s*PACK_([A-Z0-9_]+),");
@@ -166,20 +180,23 @@ class StickerPackSyncTest {
         }
     }
 
+    /**
+     * 낱개로 파는 팩은 없다 — <b>스티커는 구독으로만 판다</b>(2026-09-22, V105).
+     *
+     * <p>예전 단언은 정반대였다: "PRO 전용인데 가격이 없으면 하이브리드 모델의 절반이 빈다".
+     * 그 모델을 접었다 — 팩 하나마다 스토어 상품을 등록하는 비용이 팩보다 비쌌고, 라인·카카오가
+     * 자체 캐시로 우회하는 그 비용을 유료 팩 둘짜리 앱이 감당할 이유가 없었다.
+     *
+     * <p><b>이 테스트가 곧 의사결정 지점이다.</b> 낱개 판매를 다시 열려면 여기가 먼저 빨개지고,
+     * 그때 확인할 것은 하나다 — 스토어 콘솔에 {@code sticker_pack_<id 소문자>} 상품이
+     * <b>실제로 등록·활성화</b>돼 있는가. 값만 올리면 살 수 없는 가격표가 붙는다.
+     */
     @Test
-    void 유료팩은_전부_가격이_있다() throws IOException {
-        // 가격 0 인 PRO 전용 팩은 낱개로 살 수 없다 — 하이브리드 모델의 절반이 빈다
-        parseSeed().forEach((id, pack) -> {
-            if (pack.proOnly()) {
-                assertThat(pack.price())
-                        .as("%s 는 PRO 전용인데 낱개 가격이 없다 — 구독 말고는 살 방법이 없다", id)
-                        .isPositive();
-            } else {
-                assertThat(pack.price())
-                        .as("%s 는 무료 팩인데 가격이 붙어 있다", id)
-                        .isZero();
-            }
-        });
+    void 낱개로_파는_팩은_없다() throws IOException {
+        parseSeed().forEach((id, pack) -> assertThat(pack.price())
+                .as("%s 에 낱개 가격이 붙었다 — 스토어 상품을 등록했다면 이 테스트를 고치고, "
+                        + "아니라면 살 수 없는 가격표다", id)
+                .isZero());
     }
 
     /**
@@ -192,12 +209,28 @@ class StickerPackSyncTest {
     private Map<String, SeededPack> parseSeed() throws IOException {
         Map<String, SeededPack> packs = new LinkedHashMap<>();
         try (var files = Files.list(firstExisting(MIGRATION_DIR_CANDIDATES))) {
-            for (Path f : files.sorted().toList()) {
+            /*
+             * <b>번호 순으로 읽는다 — 파일 이름 순이 아니다.</b> 사전순은 V100 을 V96 보다
+             * 앞에 두므로('1' < '9'), 나중 마이그레이션의 DELETE·UPDATE 가 먼저 적용되고
+             * 옛 INSERT 가 그 위를 덮는다. Flyway 가 실제로 적용하는 순서와 반대라, 파싱
+             * 결과가 운영 DB 와 어긋난 채로 단언을 통과시킨다(V105 를 넣고 처음 드러났다).
+             */
+            for (Path f : files.sorted(Comparator.comparingInt(StickerPackSyncTest::versionOf)).toList()) {
                 String sql = Files.readString(f, StandardCharsets.UTF_8);
                 Matcher m = SEED_ROW.matcher(sql);
                 while (m.find()) {
                     packs.put(m.group(1), new SeededPack(
                             m.group(2), "TRUE".equals(m.group(3)), Integer.parseInt(m.group(4))));
+                }
+                // 값이 바뀐 팩은 반영한다 — 안 하면 V96 의 옛 가격이 최종 상태로 보인다(V105)
+                Matcher u = SEED_PRICE_UPDATE.matcher(sql);
+                while (u.find()) {
+                    int price = Integer.parseInt(u.group(1));
+                    Matcher id = QUOTED_ID.matcher(u.group(2));
+                    while (id.find()) {
+                        packs.computeIfPresent(id.group(1),
+                                (key, pack) -> new SeededPack(pack.category(), pack.proOnly(), price));
+                    }
                 }
                 // 지워진 팩은 빼야 "시드에 있다"가 실제 DB 와 같은 뜻이 된다(SEED_DELETE 주석)
                 Matcher d = SEED_DELETE.matcher(sql);
@@ -211,6 +244,12 @@ class StickerPackSyncTest {
         }
         assertThat(packs).as("마이그레이션에서 팩 행을 하나도 파싱하지 못했다").isNotEmpty();
         return packs;
+    }
+
+    /** {@code V105__foo.sql} → 105. 번호가 없는 파일(있다면)은 맨 앞으로 보낸다. */
+    private static int versionOf(Path file) {
+        Matcher m = MIGRATION_VERSION.matcher(file.getFileName().toString());
+        return m.find() ? Integer.parseInt(m.group(1)) : -1;
     }
 
     private Map<String, String> parseFrontendAnimated() throws IOException {

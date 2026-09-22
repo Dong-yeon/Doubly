@@ -23,11 +23,15 @@
  * 알린다. 둘 다 고정 크기라 넓은 화면은 더 크게가 아니라 <b>더 많이</b> 보여준다
  * (`StickerPanel.CELL_SIZE` 와 같은 판단).
  *
- * <p><b>결제는 아직 안 붙었다.</b> 스토어 콘솔에 일회성 상품을 등록해야 이을 수 있고,
- * 그 상태를 `STICKER_PURCHASE_ENABLED` 한 줄이 들고 있다. 닫혀 있는 동안에는
- * <b>가격 버튼을 그리지 않는다</b> — 값을 붙여 놓고 누르면 "연결되지 않았어요"를 띄우는 건
- * 상점이 아니라 미끼다. 대신 "준비 중"으로 적고 값은 글자로만 보여준다. 콘솔 등록 뒤
- * 플래그를 켜고 `onBuy` 에서 `stickerApi.verifyGoogle/verifyApple` 로 이으면 된다.
+ * <p><b>낱개로 팔지 않는다</b>(2026-09-22, V105). 팩 하나마다 스토어 상품을 등록해야 하는데
+ * — 양쪽 스토어에, 애플은 심사까지 — 유료 팩 둘짜리 앱이 감당할 비용이 아니었다.
+ * 라인·카카오가 자체 캐시(코인·초코)로 그 비용을 우회하는 이유이고, 캐시는 지갑·원장·환불·
+ * 약관이 딸려오는 결제 시스템 한 채다. 그래서 <b>구독 하나로 판다</b>(카카오 이모티콘 플러스와
+ * 같은 자리). 지금 시드에는 값이 붙은 팩이 없으므로 이 화면에 가격표도 없다.
+ *
+ * <p>낱개를 다시 열 자리는 남겨 뒀다 — 팩에 {@code price} 를 주고 스토어에 상품을 등록한 뒤
+ * `STICKER_PURCHASE_ENABLED` 를 켜면 값 칩과 구매 흐름이 그대로 살아난다. 백엔드 검증
+ * (`POST /stickers/purchases/google|apple`)은 손대지 않았다.
  */
 import React, { useCallback, useState } from 'react';
 import { Alert, Image, Pressable, ScrollView, Text, View } from 'react-native';
@@ -38,6 +42,7 @@ import { MaterialCommunityIcons } from '../../components/Icon';
 import { stickerApi } from '../../api/stickers';
 import { STICKER_PURCHASE_ENABLED } from '../../constants/config';
 import { previewOf } from '../../constants/stickerPackPreview';
+import { usePlanStore } from '../../store/planStore';
 import { useStickerStore } from '../../store/stickerStore';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
@@ -61,6 +66,8 @@ const CATEGORY: Record<StickerPack['category'], { label: string; icon: IconName 
 export function StickerShopScreen() {
   const packs = useStickerStore((s) => s.packs);
   const replace = useStickerStore((s) => s.replace);
+  const isPro = usePlanStore((s) => s.plan === 'PRO');
+  const showUpgrade = usePlanStore((s) => s.showUpgrade);
   const [error, setError] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
@@ -128,12 +135,36 @@ export function StickerShopScreen() {
         <View style={styles.intro}>
           <Text style={styles.introTitle}>둘이 쓰는 스티커</Text>
           <Text style={styles.introText}>
-            한 번 받으면 둘 다 쓸 수 있어요. 산 팩은 구독을 끊어도 그대로 남아요.
+            한 번 열리면 둘 다 쓸 수 있어요. 무료 팩은 그냥, 나머지는 PRO에서 열려요.
           </Text>
         </View>
 
         <Section title="가지고 있어요" packs={mine} onBuy={onBuy} />
         <Section title="더 있어요" packs={locked} onBuy={onBuy} />
+
+        {/*
+          PRO 안내 — 목록 아래에 한 줄. 무드·터치 팩은 여기서 고르는 물건이 아니라
+          목록에서 뺐는데(위 shown 주석), 그러면 <b>PRO 가 스티커로 무엇을 주는지 말하는
+          자리가 한 곳도 없어진다</b>. 구독으로만 파는 이상 그걸 모르면 팔리지 않는다.
+          이미 PRO 면 권할 것이 없으므로 감춘다.
+        */}
+        {!isPro ? (
+          <Pressable
+            style={({ pressed }) => [styles.proRow, pressed && styles.pressed]}
+            onPress={() =>
+              showUpgrade('확장 무드와 프리미엄 터치, 우리 이모지는 PRO에서 열려요.')
+            }
+            accessibilityRole="button"
+            accessibilityLabel="PRO 안내 보기"
+          >
+            <MaterialCommunityIcons name="crown" size={18} color={colors.primaryDark} />
+            <View style={styles.proBody}>
+              <Text style={styles.proTitle}>PRO면 이것도 열려요</Text>
+              <Text style={styles.proText}>확장 무드 · 프리미엄 터치 · 우리 이모지</Text>
+            </View>
+            <Text style={styles.proMore}>보기 ›</Text>
+          </Pressable>
+        ) : null}
 
         {loaded && shown.length === 0 && !error ? (
           <EmptyState icon="emoticon-outline" title="아직 팩이 없어요" description="곧 새 스티커가 올라와요!" />
@@ -304,6 +335,22 @@ const styles = themedStyles((colors) => ({
   intro: { gap: spacing.xxs, paddingHorizontal: spacing.xs, paddingTop: spacing.xs },
   introTitle: { fontSize: fontSize.title, fontWeight: '800', color: colors.textPrimary },
   introText: { fontSize: fontSize.caption, color: colors.textSecondary, lineHeight: 18 },
+
+  // PRO 안내 — 카드가 아니라 한 줄. 목록의 팩들과 경쟁하지 않게 테두리만 준다
+  proRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.primaryBg,
+  },
+  proBody: { flex: 1, gap: 1 },
+  proTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
+  proText: { fontSize: fontSize.caption, color: colors.textSecondary },
+  proMore: { fontSize: fontSize.caption, fontWeight: '700', color: colors.primaryDark },
 
   section: { gap: spacing.sm },
   sectionHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.xs },
