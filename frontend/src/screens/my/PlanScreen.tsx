@@ -15,7 +15,7 @@
  * 국가·통화·프로모션에 따라 달라지고, Play Console 에서 가격을 바꾸면 앱은 그대로 따라간다.
  */
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../navigation/types';
@@ -27,7 +27,7 @@ import { useAuthStore } from '../../store/authStore';
 import { fetchProSubscription, requestProPurchase } from '../../utils/iap';
 import { toast } from '../../store/toastStore';
 import { getErrorMessage } from '../../utils/error';
-import { PURCHASE_ENABLED } from '../../constants/config';
+import { PRO_SUBSCRIPTION_SKU, PURCHASE_ENABLED } from '../../constants/config';
 import type { FeatureGroupKey, FeatureKey, PlanCatalogEntry, QuotaPeriod } from '../../types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
@@ -49,6 +49,23 @@ const CANCEL_PATH =
   Platform.OS === 'ios'
     ? '설정 → 내 이름 → 구독'
     : 'Play 스토어 → 프로필 → 결제 및 구독 → 구독';
+
+/**
+ * 스토어의 구독 관리 화면 — <b>해지가 실제로 되는 유일한 자리</b>다(위 CANCEL_PATH 주석).
+ *
+ * <p>앱이 구독을 직접 해지시킬 수는 없지만, 그 화면으로 <b>보내는 것</b>은 스토어가 공식으로
+ * 여는 길이다. 경로를 글로만 적어두면 사용자가 설정 앱을 뒤져야 하고, 해지를 못 찾는 것은
+ * 그대로 환불 요청과 별점 1점이 된다.
+ *
+ * <p>안드로이드는 상품을 지정해 곧장 그 구독으로 보낸다. 패키지명은 인프라와 짝이 맞아야 해서
+ * 바꾸지 않기로 한 식별자다(CLAUDE.md 3절) — 여기 박아도 드리프트하지 않는다.
+ *
+ * <p>웹에는 두지 않는다. 어느 스토어에서 샀는지 알 수 없어 둘 중 하나로 보낼 수가 없다.
+ */
+const MANAGE_SUBSCRIPTION_URL =
+  Platform.OS === 'ios'
+    ? 'https://apps.apple.com/account/subscriptions'
+    : `https://play.google.com/store/account/subscriptions?sku=${PRO_SUBSCRIPTION_SKU}&package=com.doubly.app`;
 
 /** 기간 — 스토어에 등록된 base plan 이 monthly 한 종류다(constants/config.ts PRO_BASE_PLAN_ID) */
 const SUBSCRIPTION_PERIOD = '1개월';
@@ -281,6 +298,20 @@ export function PlanScreen({ navigation }: Props) {
               해지는 <Text style={styles.strong}>{CANCEL_PATH}</Text>에서 언제든 할 수 있어요.
               해지해도 남은 기간 동안은 PRO가 유지돼요.
             </Text>
+            {Platform.OS === 'web' ? null : (
+              <Pressable
+                onPress={() =>
+                  Linking.openURL(MANAGE_SUBSCRIPTION_URL).catch(() =>
+                    toast.error('구독 관리 화면을 열 수 없어요.'),
+                  )
+                }
+                hitSlop={8}
+                accessibilityRole="link"
+                accessibilityLabel="스토어 구독 관리 화면 열기"
+              >
+                <Text style={styles.termsLink}>구독 관리 열기</Text>
+              </Pressable>
+            )}
             <View style={styles.termsLinks}>
               <Pressable
                 onPress={() => navigation.navigate('LegalDocument', { doc: 'terms' })}
