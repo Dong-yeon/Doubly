@@ -95,10 +95,10 @@ class StickerEntitlementTest {
     void 무료_이모티콘은_그대로_무료다() {
         Long user = register("sticker-free@fitto.com");
 
-        // 움직이는 이모티콘 8팩은 전부 무료다(2026-09-21) — 한 팩이라도 잠기면 기능 회수다
+        // 움직이는 이모티콘 4팩은 전부 무료다(2026-09-21 결정, 2026-09-22 에 8팩에서 합침)
+        // — 한 팩이라도 잠기면 기능 회수다
         for (String pack : new String[]{StickerPacks.ANIM_LOVE, StickerPacks.ANIM_FUN,
-                StickerPacks.ANIM_UPSET, StickerPacks.ANIM_CELEBRATE, StickerPacks.ANIM_CHEER,
-                StickerPacks.ANIM_ANIMAL, StickerPacks.ANIM_FOOD, StickerPacks.ANIM_WEATHER}) {
+                StickerPacks.ANIM_CHEER, StickerPacks.ANIM_DAILY}) {
             assertThat(stickerService.canUse(user, pack)).as(pack).isTrue();
             assertThatCode(() -> stickerService.requireUsable(user, pack)).as(pack)
                     .doesNotThrowAnyException();

@@ -34,7 +34,7 @@ import java.util.Optional;
  */
 public enum AnimatedSticker {
 
-    /* ── 사랑 18종 ── */
+    /* ── 사랑 (ANIM_LOVE) 18종 ── */
     ANIM_TWO_HEARTS("두근두근", StickerPacks.ANIM_LOVE),
     ANIM_KISS("뽀뽀", StickerPacks.ANIM_LOVE),
     ANIM_LOVE_FACE("사랑스러워", StickerPacks.ANIM_LOVE),
@@ -54,7 +54,7 @@ public enum AnimatedSticker {
     ANIM_HEART_CAT("하트냥", StickerPacks.ANIM_LOVE),
     ANIM_LOVE_LETTER("러브레터", StickerPacks.ANIM_LOVE),
 
-    /* ── 웃음·장난 18종 ── */
+    /* ── 웃음·축하 ① 웃음·장난 (ANIM_FUN) 18종 ── */
     ANIM_JOY("빵터짐", StickerPacks.ANIM_FUN),
     ANIM_ZANY("장난", StickerPacks.ANIM_FUN),
     ANIM_COOL("여유", StickerPacks.ANIM_FUN),
@@ -74,41 +74,41 @@ public enum AnimatedSticker {
     ANIM_SALUTE("넵", StickerPacks.ANIM_FUN),
     ANIM_SHUSH("쉿", StickerPacks.ANIM_FUN),
 
-    /* ── 속상해 16종 ── */
-    ANIM_SOB("엉엉", StickerPacks.ANIM_UPSET),
-    ANIM_HOLDING_TEARS("울컥", StickerPacks.ANIM_UPSET),
-    ANIM_RAGE("화남", StickerPacks.ANIM_UPSET),
-    ANIM_HUFF("씩씩", StickerPacks.ANIM_UPSET),
-    ANIM_CRY("눈물", StickerPacks.ANIM_UPSET),
-    ANIM_DISAPPOINTED("실망", StickerPacks.ANIM_UPSET),
-    ANIM_PENSIVE("시무룩", StickerPacks.ANIM_UPSET),
-    ANIM_WEARY("힘들어", StickerPacks.ANIM_UPSET),
-    ANIM_TIRED("지쳤어", StickerPacks.ANIM_UPSET),
-    ANIM_ANGRY("화났어", StickerPacks.ANIM_UPSET),
-    ANIM_CURSING("폭발", StickerPacks.ANIM_UPSET),
-    ANIM_UNAMUSED("별로", StickerPacks.ANIM_UPSET),
-    ANIM_EYE_ROLL("하아", StickerPacks.ANIM_UPSET),
-    ANIM_BROKEN_HEART("상처", StickerPacks.ANIM_UPSET),
-    ANIM_ANXIOUS("불안", StickerPacks.ANIM_UPSET),
-    ANIM_SWEAT("진땀", StickerPacks.ANIM_UPSET),
+    /* ── 위로·응원 ① 속상해 (ANIM_CHEER) 16종 ── */
+    ANIM_SOB("엉엉", StickerPacks.ANIM_CHEER),
+    ANIM_HOLDING_TEARS("울컥", StickerPacks.ANIM_CHEER),
+    ANIM_RAGE("화남", StickerPacks.ANIM_CHEER),
+    ANIM_HUFF("씩씩", StickerPacks.ANIM_CHEER),
+    ANIM_CRY("눈물", StickerPacks.ANIM_CHEER),
+    ANIM_DISAPPOINTED("실망", StickerPacks.ANIM_CHEER),
+    ANIM_PENSIVE("시무룩", StickerPacks.ANIM_CHEER),
+    ANIM_WEARY("힘들어", StickerPacks.ANIM_CHEER),
+    ANIM_TIRED("지쳤어", StickerPacks.ANIM_CHEER),
+    ANIM_ANGRY("화났어", StickerPacks.ANIM_CHEER),
+    ANIM_CURSING("폭발", StickerPacks.ANIM_CHEER),
+    ANIM_UNAMUSED("별로", StickerPacks.ANIM_CHEER),
+    ANIM_EYE_ROLL("하아", StickerPacks.ANIM_CHEER),
+    ANIM_BROKEN_HEART("상처", StickerPacks.ANIM_CHEER),
+    ANIM_ANXIOUS("불안", StickerPacks.ANIM_CHEER),
+    ANIM_SWEAT("진땀", StickerPacks.ANIM_CHEER),
 
-    /* ── 축하해 14종 ── */
-    ANIM_PARTY_FACE("신남", StickerPacks.ANIM_CELEBRATE),
-    ANIM_PARTY_POPPER("축하", StickerPacks.ANIM_CELEBRATE),
-    ANIM_BIRTHDAY_CAKE("생일", StickerPacks.ANIM_CELEBRATE),
-    ANIM_GIFT("선물", StickerPacks.ANIM_CELEBRATE),
-    ANIM_ROSE("장미", StickerPacks.ANIM_CELEBRATE),
-    ANIM_BOUQUET("꽃다발", StickerPacks.ANIM_CELEBRATE),
-    ANIM_CONFETTI("꽃가루", StickerPacks.ANIM_CELEBRATE),
-    ANIM_BALLOON("풍선", StickerPacks.ANIM_CELEBRATE),
-    ANIM_SPARKLES("반짝", StickerPacks.ANIM_CELEBRATE),
-    ANIM_CHEERS("짠", StickerPacks.ANIM_CELEBRATE),
-    ANIM_CHAMPAGNE("축포", StickerPacks.ANIM_CELEBRATE),
-    ANIM_TROPHY("우승", StickerPacks.ANIM_CELEBRATE),
-    ANIM_RING("반지", StickerPacks.ANIM_CELEBRATE),
-    ANIM_CHERRY_BLOSSOM("벚꽃", StickerPacks.ANIM_CELEBRATE),
+    /* ── 웃음·축하 ② 축하해 (ANIM_FUN) 14종 ── */
+    ANIM_PARTY_FACE("신남", StickerPacks.ANIM_FUN),
+    ANIM_PARTY_POPPER("축하", StickerPacks.ANIM_FUN),
+    ANIM_BIRTHDAY_CAKE("생일", StickerPacks.ANIM_FUN),
+    ANIM_GIFT("선물", StickerPacks.ANIM_FUN),
+    ANIM_ROSE("장미", StickerPacks.ANIM_FUN),
+    ANIM_BOUQUET("꽃다발", StickerPacks.ANIM_FUN),
+    ANIM_CONFETTI("꽃가루", StickerPacks.ANIM_FUN),
+    ANIM_BALLOON("풍선", StickerPacks.ANIM_FUN),
+    ANIM_SPARKLES("반짝", StickerPacks.ANIM_FUN),
+    ANIM_CHEERS("짠", StickerPacks.ANIM_FUN),
+    ANIM_CHAMPAGNE("축포", StickerPacks.ANIM_FUN),
+    ANIM_TROPHY("우승", StickerPacks.ANIM_FUN),
+    ANIM_RING("반지", StickerPacks.ANIM_FUN),
+    ANIM_CHERRY_BLOSSOM("벚꽃", StickerPacks.ANIM_FUN),
 
-    /* ── 응원해 18종 ── */
+    /* ── 위로·응원 ② 응원해 (ANIM_CHEER) 18종 ── */
     ANIM_THUMBS_UP("좋아", StickerPacks.ANIM_CHEER),
     ANIM_PLEADING("제발", StickerPacks.ANIM_CHEER),
     ANIM_FIRE("불타오르네", StickerPacks.ANIM_CHEER),
@@ -128,37 +128,37 @@ public enum AnimatedSticker {
     ANIM_WAVE("안녕", StickerPacks.ANIM_CHEER),
     ANIM_LOVE_SIGN("사랑해", StickerPacks.ANIM_CHEER),
 
-    /* ── 동물 9종 ── */
-    ANIM_CAT("고양이", StickerPacks.ANIM_ANIMAL),
-    ANIM_BEAR("곰", StickerPacks.ANIM_ANIMAL),
-    ANIM_PANDA("판다", StickerPacks.ANIM_ANIMAL),
-    ANIM_FOX("여우", StickerPacks.ANIM_ANIMAL),
-    ANIM_LION("사자", StickerPacks.ANIM_ANIMAL),
-    ANIM_FROG("개구리", StickerPacks.ANIM_ANIMAL),
-    ANIM_PENGUIN("펭귄", StickerPacks.ANIM_ANIMAL),
-    ANIM_CHICK("병아리", StickerPacks.ANIM_ANIMAL),
-    ANIM_UNICORN("유니콘", StickerPacks.ANIM_ANIMAL),
+    /* ── 일상 ① 동물 (ANIM_DAILY) 9종 ── */
+    ANIM_CAT("고양이", StickerPacks.ANIM_DAILY),
+    ANIM_BEAR("곰", StickerPacks.ANIM_DAILY),
+    ANIM_PANDA("판다", StickerPacks.ANIM_DAILY),
+    ANIM_FOX("여우", StickerPacks.ANIM_DAILY),
+    ANIM_LION("사자", StickerPacks.ANIM_DAILY),
+    ANIM_FROG("개구리", StickerPacks.ANIM_DAILY),
+    ANIM_PENGUIN("펭귄", StickerPacks.ANIM_DAILY),
+    ANIM_CHICK("병아리", StickerPacks.ANIM_DAILY),
+    ANIM_UNICORN("유니콘", StickerPacks.ANIM_DAILY),
 
-    /* ── 먹을 것 10종 ── */
-    ANIM_PIZZA("피자", StickerPacks.ANIM_FOOD),
-    ANIM_COFFEE("커피", StickerPacks.ANIM_FOOD),
-    ANIM_RAMEN("라면", StickerPacks.ANIM_FOOD),
-    ANIM_BURGER("버거", StickerPacks.ANIM_FOOD),
-    ANIM_ICE_CREAM("아이스크림", StickerPacks.ANIM_FOOD),
-    ANIM_STRAWBERRY("딸기", StickerPacks.ANIM_FOOD),
-    ANIM_WATERMELON("수박", StickerPacks.ANIM_FOOD),
-    ANIM_AVOCADO("아보카도", StickerPacks.ANIM_FOOD),
-    ANIM_EGG("계란", StickerPacks.ANIM_FOOD),
-    ANIM_BUBBLE_TEA("버블티", StickerPacks.ANIM_FOOD),
+    /* ── 일상 ② 먹을 것 (ANIM_DAILY) 10종 ── */
+    ANIM_PIZZA("피자", StickerPacks.ANIM_DAILY),
+    ANIM_COFFEE("커피", StickerPacks.ANIM_DAILY),
+    ANIM_RAMEN("라면", StickerPacks.ANIM_DAILY),
+    ANIM_BURGER("버거", StickerPacks.ANIM_DAILY),
+    ANIM_ICE_CREAM("아이스크림", StickerPacks.ANIM_DAILY),
+    ANIM_STRAWBERRY("딸기", StickerPacks.ANIM_DAILY),
+    ANIM_WATERMELON("수박", StickerPacks.ANIM_DAILY),
+    ANIM_AVOCADO("아보카도", StickerPacks.ANIM_DAILY),
+    ANIM_EGG("계란", StickerPacks.ANIM_DAILY),
+    ANIM_BUBBLE_TEA("버블티", StickerPacks.ANIM_DAILY),
 
-    /* ── 날씨 7종 ── */
-    ANIM_RAIN("비", StickerPacks.ANIM_WEATHER),
-    ANIM_SNOWMAN("눈사람", StickerPacks.ANIM_WEATHER),
-    ANIM_RAINBOW("무지개", StickerPacks.ANIM_WEATHER),
-    ANIM_SNOWFLAKE("눈", StickerPacks.ANIM_WEATHER),
-    ANIM_OCEAN("파도", StickerPacks.ANIM_WEATHER),
-    ANIM_MAPLE("단풍", StickerPacks.ANIM_WEATHER),
-    ANIM_SUN("햇살", StickerPacks.ANIM_WEATHER);
+    /* ── 일상 ③ 날씨 (ANIM_DAILY) 7종 ── */
+    ANIM_RAIN("비", StickerPacks.ANIM_DAILY),
+    ANIM_SNOWMAN("눈사람", StickerPacks.ANIM_DAILY),
+    ANIM_RAINBOW("무지개", StickerPacks.ANIM_DAILY),
+    ANIM_SNOWFLAKE("눈", StickerPacks.ANIM_DAILY),
+    ANIM_OCEAN("파도", StickerPacks.ANIM_DAILY),
+    ANIM_MAPLE("단풍", StickerPacks.ANIM_DAILY),
+    ANIM_SUN("햇살", StickerPacks.ANIM_DAILY);
 
     private final String label;
     private final String packId;

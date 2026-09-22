@@ -74,14 +74,48 @@ interface PanelPack {
  * 그런데 기기에 따라 키보드가 320px 를 넘고, 그러면 팩 대부분이(10~14장) 다 차고도 아래가
  * 남아 빈 칸이 크게 보인다(2026-09-17 제보).
  *
- * <p>240px 인 근거: 스트립 40 + 여백 16 을 빼면 184px 이고, 6칸 격자의 한 줄이 약 59px 이라
- * <b>3줄 = 18장</b>이 온전히 들어간다. 가장 큰 팩이 14장이므로 스크롤 없이 다 보인다.
- * 더 줄이면 3줄째가 잘려 "아래에 뭔가 더 있다"가 안 읽힌다.
+ * <p><b>300px 로 올렸다(2026-09-22).</b> 240px 이던 근거는 "가장 큰 팩이 14장이라 3줄이면
+ * 다 보인다 — 더 높이면 아래가 빈다"였다. 같은 날 8팩을 4팩으로 합치면서(V100) 한 팩이
+ * 18~34장이 됐으므로 <b>그 근거가 사라졌다</b>. 이제는 높이가 남는 게 아니라 모자란다.
  *
- * <p>고정값이지 내용 높이가 아니다 — 팩마다 높이가 달라지면 팩을 넘길 때마다 입력바가
+ * <p>300px 의 셈: 스트립 40 + 여백 16 을 빼면 244px 이고, 7칸 격자의 한 줄이 약 51px 이라
+ * <b>4줄 = 28장</b>이 들어간다(예전 18장). 5줄째가 살짝 걸쳐 "아래에 더 있다"도 읽힌다.
+ *
+ * <p>상한일 뿐이라 키보드가 낮은 기기에서는 여전히 키보드 높이를 따른다({@code Math.min}).
+ * 고정값이지 내용 높이가 아니다 — 팩마다 높이가 달라지면 팩을 넘길 때마다 입력바가
  * 위아래로 튄다(`useKeyboardPanelHeight` 주석이 2026-09-11 에 없앤 증상).
  */
-const MAX_PANEL_HEIGHT = 240;
+const MAX_PANEL_HEIGHT = 320;
+
+/**
+ * 패널 높이의 <b>하한</b>.
+ *
+ * <p>상한만 두면 키보드가 낮은 기기에서 격자가 두 줄로 잘린다 — 실제로 실기기(키보드 약
+ * 233dp)에서 그랬다. 패널은 키보드 자리를 이어받는 물건이지만 <b>키보드와 같은 높이여야
+ * 할 이유는 없다</b>. 네 줄이 보이는 높이를 바닥으로 두고, 그보다 키보드가 크면 키보드를
+ * 따른다(그래야 열고 닫을 때 입력바가 튀지 않는다).
+ */
+const MIN_PANEL_HEIGHT = 264;
+
+/** 키보드 높이를 하한·상한 사이로 가둔다 */
+function panelHeight(keyboardHeight: number): number {
+  return Math.min(Math.max(keyboardHeight, MIN_PANEL_HEIGHT), MAX_PANEL_HEIGHT);
+}
+
+/**
+ * 격자 한 칸의 크기(dp) — <b>퍼센트가 아니라 고정값</b>이다.
+ *
+ * <p>예전엔 {@code width: '15.5%'} 로 한 줄 6칸을 못 박았다. 그러면 화면이 넓어질수록
+ * <b>칸이 커지기만 하고 개수는 그대로다</b> — 태블릿(800dp)에서 한 칸이 124dp 가 되어
+ * 스티커가 우스꽝스럽게 크고, 정작 한 번에 보이는 장수는 폰과 같았다(2026-09-22 실기기).
+ *
+ * <p>고정 크기로 두면 <b>폭이 넓을수록 칸이 늘어난다</b> — 폰은 6~7칸, 태블릿은 13칸.
+ * 그림 크기는 어디서나 같고, 넓은 화면이 그만큼 더 보여준다는 당연한 동작이 된다.
+ *
+ * <p>46dp 인 근거: 이보다 작게 가면 그림이 40px 아래로 떨어지는데, 8칸(11.5%) 시절
+ * 32px 로 "표정이 안 보인다"던 그 경계에 가까워진다. 46dp 칸의 그림은 약 40px 이다.
+ */
+const CELL_SIZE = 46;
 
 /** 우리 이모지 팩의 키 앞자리 — 이 팩을 처음 열 때만 서버에서 받아온다 */
 const COUPLE_PACK_PREFIX = 'COUPLE_';
@@ -271,11 +305,11 @@ export function StickerPanel({
   };
 
   if (!active) {
-    return <View style={{ height: Math.min(height, MAX_PANEL_HEIGHT) }} />;
+    return <View style={{ height: panelHeight(height) }} />;
   }
 
   return (
-    <View style={{ height: Math.min(height, MAX_PANEL_HEIGHT) }}>
+    <View style={{ height: panelHeight(height) }}>
       {/* 팩 스트립 — 무엇이 들어 있는지가 여기서 끝난다 */}
       <View style={styles.strip}>
         <ScrollView
@@ -414,26 +448,24 @@ const styles = themedStyles((colors) => ({
   // 잠긴 팩 — 그림은 보이되 "아직 내 것이 아니다"가 읽혀야 한다
   lockedGrid: { opacity: 0.45 },
   /*
-   * 한 줄 6칸 — 15.5% × 6 = 93%, 남는 7% 를 space-between 이 칸 사이로 고르게 흩는다
-   * (고정 width 로 두면 좁은 기기에서 남는 폭이 전부 오른쪽에 몰린다 — 예전 실측 40px).
+   * 칸 크기는 CELL_SIZE 가 정하고 <b>줄당 개수는 폭이 정한다</b>(위 주석).
    *
-   * <p><b>칸 수 변천</b>: 8칸(11.5%) → 그림이 32px 라 표정이 안 보였다 → 5칸(18.5%, 67px)
-   * → 지금 6칸(15.5%, 약 56px). 6칸으로 되돌린 이유는 <b>패널 높이를 줄이기 위해서</b>다
-   * (아래 MAX_PANEL_HEIGHT 주석). 한 줄이 71px 에서 59px 로 낮아져, 같은 높이에 한 줄이 더
-   * 들어간다. 48px 로 그려지는 그림은 32px 와 달리 표정이 읽힌다.
-   */
-  grid: {
+   * <p><b>칸 수 변천</b>: 8칸(11.5%) → 그림이 32px 라 표정이 안 보였다 → 5칸(18.5%)
+   * → 6칸(15.5%) → 7칸(13.2%) → <b>고정 46dp</b>(2026-09-22). 퍼센트를 버린 이유는
+   * 넓은 화면에서 칸만 커지고 개수가 안 늘었기 때문이다.
+   */  grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    // 칸이 고정 크기라 왼쪽부터 채운다 — space-between 이면 마지막 줄만 벌어져 어긋나 보인다
+    justifyContent: 'flex-start',
     paddingHorizontal: spacing.sm,
     paddingTop: spacing.sm,
     gap: spacing.xs,
   },
   gridPad: { padding: spacing.sm },
   cell: {
-    width: '15.5%',
-    aspectRatio: 1,
+    width: CELL_SIZE,
+    height: CELL_SIZE,
     borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',

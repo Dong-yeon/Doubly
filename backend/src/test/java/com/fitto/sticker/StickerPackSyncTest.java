@@ -41,6 +41,18 @@ class StickerPackSyncTest {
     private static final Pattern SEED_ROW = Pattern.compile(
             "\\('([A-Z0-9_]+)',\\s*'[^']*',\\s*'([A-Z]+)',\\s*(TRUE|FALSE),\\s*(\\d+)\\)");
 
+    /**
+     * {@code DELETE FROM sticker_packs WHERE id IN ('A', 'B');} — 팩을 합칠 때 쓴다(V100).
+     *
+     * <p>INSERT 만 읽으면 <b>지워진 팩이 시드에 살아 있는 것으로 보인다</b>. 그러면 코드가
+     * 없는 팩을 가리켜도 이 테스트가 통과해 버리고, 정작 서버는 팩을 못 찾아 조용히 무료로
+     * 통과시킨다 — 이 테스트가 막으려던 바로 그 상태다.
+     */
+    private static final Pattern SEED_DELETE = Pattern.compile(
+            "DELETE\\s+FROM\\s+sticker_packs\\s+WHERE\\s+id\\s+IN\\s*\\(([^)]*)\\)", Pattern.CASE_INSENSITIVE);
+
+    private static final Pattern QUOTED_ID = Pattern.compile("'([A-Z0-9_]+)'");
+
     /** 프론트 {@code ANIM_HEART: PACK_ANIM_LOVE,} 한 줄 — 상수 이름에서 팩 id 를 되살린다. */
     private static final Pattern FRONT_ENTRY = Pattern.compile("\\s+(ANIM_[A-Z0-9_]+):\\s*PACK_([A-Z0-9_]+),");
 
@@ -181,10 +193,19 @@ class StickerPackSyncTest {
         Map<String, SeededPack> packs = new LinkedHashMap<>();
         try (var files = Files.list(firstExisting(MIGRATION_DIR_CANDIDATES))) {
             for (Path f : files.sorted().toList()) {
-                Matcher m = SEED_ROW.matcher(Files.readString(f, StandardCharsets.UTF_8));
+                String sql = Files.readString(f, StandardCharsets.UTF_8);
+                Matcher m = SEED_ROW.matcher(sql);
                 while (m.find()) {
                     packs.put(m.group(1), new SeededPack(
                             m.group(2), "TRUE".equals(m.group(3)), Integer.parseInt(m.group(4))));
+                }
+                // 지워진 팩은 빼야 "시드에 있다"가 실제 DB 와 같은 뜻이 된다(SEED_DELETE 주석)
+                Matcher d = SEED_DELETE.matcher(sql);
+                while (d.find()) {
+                    Matcher id = QUOTED_ID.matcher(d.group(1));
+                    while (id.find()) {
+                        packs.remove(id.group(1));
+                    }
                 }
             }
         }
