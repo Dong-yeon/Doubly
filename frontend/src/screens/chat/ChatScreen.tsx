@@ -108,7 +108,7 @@ export function ChatScreen({ navigation }: Props) {
                 onRetry={load}
               />
             ) : (
-              <EmptyState icon="chat-outline" title="아직 채팅방이 없어요" description="커플을 연결하면 채팅을 시작할 수 있어요 " />
+              <EmptyState illustration="duo" title="아직 채팅방이 없어요" description="커플을 연결하면 채팅을 시작할 수 있어요 " />
             )
           ) : null
         }
