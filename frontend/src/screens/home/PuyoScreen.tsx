@@ -1070,7 +1070,7 @@ const styles = themedStyles((colors) => ({
   opponentLine: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
   opponentPending: { fontSize: fontSize.caption, color: colors.danger, fontWeight: '800' },
   myPending: { fontSize: fontSize.caption, color: colors.danger, fontWeight: '800', marginTop: spacing.xs },
-  handicap: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '800', marginTop: spacing.xs },
+  handicap: { fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '800', marginTop: spacing.xs },
 
   chainBadge: {
     position: 'absolute',

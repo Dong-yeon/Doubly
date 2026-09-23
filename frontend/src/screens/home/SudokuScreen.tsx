@@ -637,7 +637,7 @@ const styles = themedStyles((colors) => ({
 
   statusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   statusLeft: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm },
-  statusDifficulty: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '800' },
+  statusDifficulty: { fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '800' },
   statusCount: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
   legend: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   legendDot: { width: 8, height: 8, borderRadius: 4, marginLeft: spacing.xs },
@@ -737,6 +737,6 @@ const styles = themedStyles((colors) => ({
   },
   histRow: { flexDirection: 'row', justifyContent: 'space-between' },
   histDate: { fontSize: fontSize.caption, color: colors.textMuted, fontWeight: '700' },
-  histDifficulty: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '800' },
+  histDifficulty: { fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '800' },
   histText: { fontSize: fontSize.body, color: colors.textPrimary, marginTop: 2, fontWeight: '600' },
 }));

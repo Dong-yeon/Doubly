@@ -299,7 +299,7 @@ const styles = themedStyles((colors) => ({
   chartBars: { flexDirection: 'row', alignItems: 'flex-end', height: 130, gap: 4 },
   chartCol: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', gap: 2 },
   chartVal: { fontSize: 9, color: colors.textTertiary },
-  chartValLast: { color: colors.primary, fontWeight: '800' },
+  chartValLast: { color: colors.textPrimary, fontWeight: '800' },
   chartBar: { width: '70%', borderRadius: 3, backgroundColor: colors.primaryBg },
   chartBarLast: { backgroundColor: colors.primary },
   chartDate: { fontSize: 9, color: colors.textTertiary },

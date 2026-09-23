@@ -590,7 +590,7 @@ const styles = themedStyles((colors) => ({
     borderColor: colors.primary,
   },
   findBtnText: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '700' },
-  linkedHint: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '600', marginTop: -spacing.xs, marginBottom: spacing.xs },
+  linkedHint: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600', marginTop: -spacing.xs, marginBottom: spacing.xs },
   catRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
   catChip: {
     paddingHorizontal: spacing.md,
@@ -617,7 +617,7 @@ const styles = themedStyles((colors) => ({
     minHeight: 44, // 반복해서 누르는 버튼이라 타깃을 확보한다
     marginBottom: spacing.xs,
   },
-  lastHintText: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '700' },
+  lastHintText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
   flex1: { flex: 1 },
   meta: { marginTop: spacing.sm },
   save: { marginTop: spacing.md },

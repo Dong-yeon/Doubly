@@ -526,7 +526,7 @@ const styles = themedStyles((colors) => ({
     borderColor: colors.border,
   },
   infoChipText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
-  infoStats: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '700', marginTop: spacing.xs },
+  infoStats: { fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '700', marginTop: spacing.xs },
   lovelichelinSection: {
     marginTop: spacing.md,
     paddingTop: spacing.md,

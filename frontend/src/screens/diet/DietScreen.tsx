@@ -980,7 +980,7 @@ const styles = themedStyles((colors) => ({
     gap: 2,
   },
   energyFormula: { fontSize: 10, color: colors.textTertiary, fontWeight: '600' },
-  energyResult: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '800' },
+  energyResult: { fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '800' },
   energyHint: { fontSize: fontSize.caption, color: colors.textSecondary, lineHeight: 18 },
   nutFormRow: { flexDirection: 'row', gap: spacing.sm },
   nutFormItem: { flex: 1 },

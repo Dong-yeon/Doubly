@@ -702,7 +702,7 @@ const styles = themedStyles((colors) => ({
   },
   infoChipText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
   infoAddress: { fontSize: fontSize.body, color: colors.textSecondary, marginTop: spacing.sm },
-  infoStats: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '700', marginTop: spacing.xs },
+  infoStats: { fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '700', marginTop: spacing.xs },
   infoMap: { marginTop: spacing.md },
   lovelichelinSection: {
     marginTop: spacing.md,
