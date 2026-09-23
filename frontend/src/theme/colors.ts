@@ -31,7 +31,7 @@
  * 실행 중 시스템 테마를 바꾸면 앱을 다시 시작해야 반영된다 (재실행 시 자동 적용).
  */
 import { Appearance } from 'react-native';
-import { readThemeModeSync } from './themePreference';
+import { readAccentVariantSync, readThemeModeSync } from './themePreference';
 
 const light = {
   // ── Doubly 코어 ──────────────────────────────────────────────
@@ -234,7 +234,75 @@ const dark: typeof light = {
 export type Palette = typeof light;
 export type Scheme = 'light' | 'dark';
 
-export const palettes: Record<Scheme, Palette> = { light, dark };
+/*
+ * ── 액센트 후보 (실기기 비교용, 2026-09-23) ──────────────────────────
+ * "커플 앱치고 무겁다"의 후속으로 색조(hue) 후보 둘을 앱 안에서 바로 바꿔 보기 위한 것이다
+ * (docs/UI_UX_COMPETITIVE_REVIEW_2026-09-22.md §3-3·§11). 중립(바탕·글자·보더)은 공통이고
+ * <b>액센트와 크롬만</b> 갈아끼운다. 값은 hue·채도에서 생성했고 검증 기준은 현행과 같다 —
+ * 글자 4.5:1(트랙 위), 채움 위 ink ≥ 5.8, 다크 액센트 ≥ 9.5. 다크 primary 는 현행과 같은
+ * 이중 역할 상충(white 3.9 / 표면 3.8)을 그대로 안고 있다.
+ *
+ *   mint  — 나 Gold(H42) · 상대 Mint(H160) · 함께 Lime(H100) · 크롬 Mint
+ *   peach — 나 Peach(H20) · 상대 Sage(H130, 저채도) · 함께 Gold(H50) · 크롬 Sage
+ *
+ * 결정되면 고른 값을 light/dark 본체에 넣고 이 블록과 설정 화면의 스위치를 지운다.
+ */
+export type AccentVariant = 'green' | 'mint' | 'peach';
+
+const ACCENT_OVERRIDES: Record<Exclude<AccentVariant, 'green'>, Record<Scheme, Partial<Palette>>> = {
+  mint: {
+    light: {
+      me: '#8C6918', meBg: '#F8F3E7', mePastelBg: '#EEDEBA', meText: '#8C6918', meFill: '#E5B443',
+      partner: '#2E7A61', partnerBg: '#E7F8F3', partnerPastelBg: '#BAEEDC', partnerText: '#2E7A61', partnerFill: '#5EC9A6',
+      together: '#487A2E', togetherBg: '#EDF8E7', togetherPastelBg: '#CBEEBA', togetherText: '#487A2E', togetherFill: '#82C95E',
+      primary: '#2E7A61', primaryDark: '#225946', primaryLight: '#45B590', primaryBg: '#E9F7F2', primarySoft: '#E9F7F2',
+      coral: '#8C6918', indigo: '#2E7A61', violet: '#487A2E', couple: '#8C6918', food: '#487A2E', health: '#2E7A61',
+      secondary: '#2E7A61', secondarySoft: '#E7F8F3', accent: '#487A2E', accentSoft: '#EDF8E7',
+    },
+    dark: {
+      me: '#E6D3A8', meBg: '#322915', mePastelBg: '#322915', meText: '#E6D3A8', meFill: '#E6D3A8',
+      partner: '#A8E6D1', partnerBg: '#153228', partnerPastelBg: '#153228', partnerText: '#A8E6D1', partnerFill: '#A8E6D1',
+      together: '#BDE6A8', togetherBg: '#1F3215', togetherPastelBg: '#1F3215', togetherText: '#BDE6A8', togetherFill: '#BDE6A8',
+      primary: '#3D8F74', primaryDark: '#347962', primaryLight: '#62BC9E', primaryBg: '#0F241D', primarySoft: '#0F241D',
+      coral: '#E6D3A8', indigo: '#A8E6D1', violet: '#BDE6A8', couple: '#E6D3A8', food: '#BDE6A8', health: '#A8E6D1',
+      secondary: '#A8E6D1', secondarySoft: '#153228', accent: '#BDE6A8', accentSoft: '#1F3215',
+    },
+  },
+  peach: {
+    light: {
+      me: '#B74E1A', meBg: '#FAF3EF', mePastelBg: '#EECBBA', meText: '#B74E1A', meFill: '#E58D61',
+      partner: '#407749', partnerBg: '#E7F8EA', partnerPastelBg: '#BAEEC2', partnerText: '#407749', partnerFill: '#6EB97B',
+      together: '#7A6B1F', togetherBg: '#F8F5E7', togetherPastelBg: '#EEE5BA', togetherText: '#7A6B1F', togetherFill: '#DAC24E',
+      primary: '#407749', primaryDark: '#305A37', primaryLight: '#60A96C', primaryBg: '#E9F7EB', primarySoft: '#E9F7EB',
+      coral: '#B74E1A', indigo: '#407749', violet: '#7A6B1F', couple: '#B74E1A', food: '#7A6B1F', health: '#407749',
+      secondary: '#407749', secondarySoft: '#E7F8EA', accent: '#7A6B1F', accentSoft: '#F8F5E7',
+    },
+    dark: {
+      me: '#E6BDA8', meBg: '#321F15', mePastelBg: '#321F15', meText: '#E6BDA8', meFill: '#E6BDA8',
+      partner: '#A8E6B2', partnerBg: '#15321A', partnerPastelBg: '#15321A', partnerText: '#A8E6B2', partnerFill: '#A8E6B2',
+      together: '#E6DBA8', togetherBg: '#322D15', togetherPastelBg: '#322D15', togetherText: '#E6DBA8', togetherFill: '#E6DBA8',
+      primary: '#3D8F4B', primaryDark: '#347940', primaryLight: '#62BC71', primaryBg: '#0F2413', primarySoft: '#0F2413',
+      coral: '#E6BDA8', indigo: '#A8E6B2', violet: '#E6DBA8', couple: '#E6BDA8', food: '#E6DBA8', health: '#A8E6B2',
+      secondary: '#A8E6B2', secondarySoft: '#15321A', accent: '#E6DBA8', accentSoft: '#322D15',
+    },
+  },
+};
+
+/** 변형 × 스킴으로 미리 합쳐 둔 팔레트 — 읽기 경로(프록시·themedStyles)는 여기서 꺼낸다 */
+const resolved: Record<AccentVariant, Record<Scheme, Palette>> = {
+  green: { light, dark },
+  mint: {
+    light: { ...light, ...ACCENT_OVERRIDES.mint.light },
+    dark: { ...dark, ...ACCENT_OVERRIDES.mint.dark },
+  },
+  peach: {
+    light: { ...light, ...ACCENT_OVERRIDES.peach.light },
+    dark: { ...dark, ...ACCENT_OVERRIDES.peach.dark },
+  },
+};
+
+/** 현행(green) 팔레트 — 변형과 무관하게 기준값이 필요한 곳(문서·검증 스크립트)용 */
+export const palettes: Record<Scheme, Palette> = resolved.green;
 
 /*
  * 현재 스킴 — <b>모듈 수준 가변값</b>이다.
@@ -246,9 +314,12 @@ export const palettes: Record<Scheme, Palette> = { light, dark };
  */
 let currentScheme: Scheme = (() => {
   const preferred = readThemeModeSync();
-  const resolved = preferred === 'system' ? Appearance.getColorScheme() : preferred;
-  return resolved === 'dark' ? 'dark' : 'light';
+  const resolvedMode = preferred === 'system' ? Appearance.getColorScheme() : preferred;
+  return resolvedMode === 'dark' ? 'dark' : 'light';
 })();
+
+/* 액센트 변형도 같은 방식 — 웹은 동기 저장소에서 바로, 네이티브는 themeStore.load 가 덮어쓴다 */
+let currentVariant: AccentVariant = readAccentVariantSync();
 
 export function getScheme(): Scheme {
   return currentScheme;
@@ -257,6 +328,20 @@ export function getScheme(): Scheme {
 /** 스킴 교체 — 화면 갱신은 themeStore 가 맡는다 (여기서는 값만 바꾼다) */
 export function setScheme(scheme: Scheme): void {
   currentScheme = scheme;
+}
+
+export function getAccentVariant(): AccentVariant {
+  return currentVariant;
+}
+
+/** 액센트 변형 교체 — 화면 갱신은 themeStore 가 맡는다 */
+export function setAccentVariant(variant: AccentVariant): void {
+  currentVariant = variant;
+}
+
+/** 지금 적용 중인 팔레트(변형 + 스킴). themedStyles 가 스타일을 만들 때 쓴다 */
+export function palette(scheme: Scheme = currentScheme): Palette {
+  return resolved[currentVariant][scheme];
 }
 
 /** 현재 테마가 다크인지 — 지도(웹뷰) 등 팔레트 밖 분기에 사용 */
@@ -272,7 +357,7 @@ export function isDarkMode(): boolean {
  * 그쪽은 themedStyles 로 감싸야 한다.
  */
 export const colors: Palette = new Proxy({} as Palette, {
-  get: (_target, key: string) => palettes[currentScheme][key as keyof Palette],
+  get: (_target, key: string) => palette()[key as keyof Palette],
   // 스프레드(...colors)나 Object.keys 가 동작하도록 열거도 지원한다
   ownKeys: () => Reflect.ownKeys(light),
   getOwnPropertyDescriptor: () => ({ enumerable: true, configurable: true }),

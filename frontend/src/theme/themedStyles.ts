@@ -19,18 +19,20 @@
  * </pre>
  */
 import { StyleSheet, type ImageStyle, type TextStyle, type ViewStyle } from 'react-native';
-import { getScheme, palettes, type Palette, type Scheme } from './colors';
+import { getAccentVariant, getScheme, palette, type Palette } from './colors';
 import { chatPalette, getChatThemeId, type ChatPalette } from './chatTheme';
 
 type NamedStyles<T> = { [P in keyof T]: ViewStyle | TextStyle | ImageStyle };
 
 export function themedStyles<T extends NamedStyles<T>>(factory: (colors: Palette) => T): T {
-  const cache = {} as Record<Scheme, T>;
+  // 캐시 키는 스킴 + 액센트 변형 (변형은 실기기 비교용 임시 축 — colors.ts 참고)
+  const cache: Record<string, T> = {};
 
   const resolve = (): T => {
     const scheme = getScheme();
-    if (!cache[scheme]) cache[scheme] = StyleSheet.create(factory(palettes[scheme]));
-    return cache[scheme];
+    const key = `${getAccentVariant()}:${scheme}`;
+    if (!cache[key]) cache[key] = StyleSheet.create(factory(palette(scheme)));
+    return cache[key];
   };
 
   return new Proxy({} as T, {

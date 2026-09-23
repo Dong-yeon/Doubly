@@ -16,6 +16,7 @@ import { useThemeStore } from '../../store/themeStore';
 import { useChatThemeStore } from '../../store/chatThemeStore';
 import { CHAT_THEMES } from '../../theme/chatTheme';
 import type { ThemeMode } from '../../theme/themePreference';
+import type { AccentVariant } from '../../theme/colors';
 import { authApi } from '../../api/auth';
 import { dietApi } from '../../api/diet';
 import {
@@ -42,6 +43,13 @@ const THEME_OPTIONS: { value: ThemeMode; label: string }[] = [
   { value: 'system', label: '시스템' },
   { value: 'light', label: '라이트' },
   { value: 'dark', label: '다크' },
+];
+
+/* 액센트 후보 — 실기기 비교용 임시 스위치. 결정되면 colors.ts 의 변형 블록과 함께 지운다 */
+const ACCENT_OPTIONS: { value: AccentVariant; label: string }[] = [
+  { value: 'green', label: '현행 초록' },
+  { value: 'mint', label: '민트+골드' },
+  { value: 'peach', label: '피치+세이지' },
 ];
 
 /**
@@ -114,6 +122,8 @@ export function SettingsScreen({ navigation }: Props) {
   /* 테마 — 고르는 즉시 화면에 반영된다 (RootNavigator 가 트리를 다시 그린다) */
   const themeMode = useThemeStore((s) => s.mode);
   const setThemeMode = useThemeStore((s) => s.setMode);
+  const accent = useThemeStore((s) => s.accent);
+  const setAccent = useThemeStore((s) => s.setAccent);
 
   /*
    * 채팅 배경 — 앱 테마와 달리 채팅 화면에만 적용된다. 견본은 <b>지금 보고 있는
@@ -516,6 +526,22 @@ export function SettingsScreen({ navigation }: Props) {
                 label={o.label}
                 selected={themeMode === o.value}
                 onPress={() => void setThemeMode(o.value)}
+                fill
+              />
+            ))}
+          </View>
+
+          <View style={[styles.rowText, styles.themeIntro, styles.chatThemeIntro]}>
+            <Text style={styles.rowTitle}>액센트 (비교용)</Text>
+            <Text style={styles.rowDesc}>색조 후보를 이 기기에서 바로 바꿔 봐요. 결정되면 이 스위치는 없어져요.</Text>
+          </View>
+          <View style={styles.themeRow}>
+            {ACCENT_OPTIONS.map((o) => (
+              <Chip
+                key={o.value}
+                label={o.label}
+                selected={accent === o.value}
+                onPress={() => void setAccent(o.value)}
                 fill
               />
             ))}

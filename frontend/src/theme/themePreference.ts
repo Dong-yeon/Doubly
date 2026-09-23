@@ -24,6 +24,11 @@ export type ThemeMode = 'system' | 'light' | 'dark';
 
 const STORAGE_KEY = 'doubly.theme.mode';
 
+/* ── 액센트 변형 (실기기 비교용 임시, colors.ts 의 AccentVariant 참고) ── */
+export type AccentVariantId = 'green' | 'mint' | 'peach';
+const ACCENT_KEY = 'doubly.theme.accent';
+const isAccent = (v: unknown): v is AccentVariantId => v === 'green' || v === 'mint' || v === 'peach';
+
 /** 웹에서만 존재하는 동기 저장소 — 네이티브에서는 null */
 function webStorage(): Storage | null {
   if (Platform.OS !== 'web') return null;
@@ -73,4 +78,21 @@ export async function restoreThemePreference(): Promise<ThemeMode> {
   const mode = await loadThemeMode();
   applyToAppearance(mode);
   return mode;
+}
+
+/** 액센트 변형의 동기 조회 — 웹만 값을 준다. colors.ts 모듈 초기화에서 부른다 */
+export function readAccentVariantSync(): AccentVariantId {
+  const stored = webStorage()?.getItem(ACCENT_KEY);
+  return isAccent(stored) ? stored : 'green';
+}
+
+export async function loadAccentVariant(): Promise<AccentVariantId> {
+  if (Platform.OS === 'web') return readAccentVariantSync();
+  const stored = await AsyncStorage.getItem(ACCENT_KEY);
+  return isAccent(stored) ? stored : 'green';
+}
+
+export async function saveAccentVariant(variant: AccentVariantId): Promise<void> {
+  webStorage()?.setItem(ACCENT_KEY, variant);
+  await AsyncStorage.setItem(ACCENT_KEY, variant);
 }
