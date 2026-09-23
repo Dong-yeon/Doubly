@@ -15,6 +15,7 @@ import { MaterialCommunityIcons } from './Icon';
 import { pickDate } from '../store/datePickerStore';
 import { toDateString } from '../utils/date';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
+import { onColor } from '../theme/onColor';
 import { themedStyles } from '../theme/themedStyles';
 import { layout } from '../theme/layout';
 
@@ -317,8 +318,8 @@ const styles = themedStyles((colors) => ({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radius.md,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primaryFill,
   },
   submitBtnDisabled: { opacity: 0.5 },
-  submitText: { fontSize: fontSize.body, fontWeight: '800', color: colors.white },
+  submitText: { fontSize: fontSize.body, fontWeight: '800', color: onColor(colors.primaryFill) },
 }));

@@ -14,6 +14,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from './Icon';
 import type { SpellSuggestion } from '../utils/koreanSpellCheck';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
+import { onColor } from '../theme/onColor';
 import { themedStyles } from '../theme/themedStyles';
 import { layout } from '../theme/layout';
 
@@ -90,14 +91,14 @@ const styles = themedStyles((colors) => ({
   count: { color: colors.textSecondary, fontSize: fontSize.caption },
   reason: { fontSize: 11, color: colors.textSecondary, marginTop: 1 },
   apply: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primaryFill,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.md,
     minHeight: layout.touchTarget,
     justifyContent: 'center',
   },
   // 배경이 colors.primary — 라이트/다크 모두 흰 글씨가 대비를 만족한다
-  applyText: { color: colors.white, fontWeight: '800', fontSize: fontSize.caption },
+  applyText: { color: onColor(colors.primaryFill), fontWeight: '800', fontSize: fontSize.caption },
   applyAll: {
     borderWidth: 1,
     borderColor: colors.primary,

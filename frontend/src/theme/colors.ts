@@ -92,6 +92,22 @@ const light = {
   primary: '#2A7731',
   primaryDark: '#1F5A25',
   primaryLight: '#4E9E56',
+  /**
+   * 크롬 <b>채움 전용</b> — 버튼·활성 칩처럼 면으로 칠하는 자리(2026-09-23).
+   *
+   * <p><b>왜 primary 와 따로 두나</b>: primary 는 글자로 115곳, 채움으로 48곳 쓰인다.
+   * 흰 바탕 위 글자로 4.5:1 을 넘기려면 L 35 아래여야 하고, 그 값을 면에도 쓰니
+   * 버튼이 어두워졌다(§3-3 이 소유자 색에서 겪은 것과 같은 상충). 채움을 분리하면
+   * 글자용 primary 는 어둡게 두고 면만 밝힐 수 있다.
+   *
+   * <p>위에 얹는 글자는 {@code onColor()} 가 배경 휘도로 고른다 — 이 값 위에서는 ink 다
+   * (실측 5.21). 바탕 대비 3.13 으로 그래픽 3:1 도 넘는다.
+   *
+   * <p><b>상대 Green 과 겹치지 않게 둔다</b>: partnerFill(#60C769, L58)과 같은 값이면
+   * §3-1 의 "크롬 = 상대 색 → 앱이 상대 것처럼 보인다"가 되살아난다. 여기는 L42 로
+   * 확실히 더 진하고 hue 도 137 로 벌려 두었다.
+   */
+  primaryFill: '#33A251',
   primaryBg: '#E9F2EA',
 
   // ── 텍스트 ───────────────────────────────────────────────────
@@ -204,6 +220,8 @@ const dark: typeof light = {
   primary: '#3E8E6B',
   primaryDark: '#2F7A55',
   primaryLight: '#68B58B',
+  /** 크롬 채움 — 다크는 파스텔이라 위에 ink 가 얹힌다(6.94). 라이트 주석 참고 */
+  primaryFill: '#68B58B',
   // 배경보다 어두운 웰 — 밝은 틴트로 두면 그 위의 primary 글자가 3:1도 안 나온다
   primaryBg: '#12211A',
 
@@ -283,7 +301,7 @@ const ACCENT_OVERRIDES: Record<Exclude<AccentVariant, 'green'>, Record<Scheme, P
       me: '#8C6918', meBg: '#F8F3E7', mePastelBg: '#EEDEBA', meText: '#8C6918', meFill: '#E5B443',
       partner: '#2E7A61', partnerBg: '#E7F8F3', partnerPastelBg: '#BAEEDC', partnerText: '#2E7A61', partnerFill: '#5EC9A6',
       together: '#487A2E', togetherBg: '#EDF8E7', togetherPastelBg: '#CBEEBA', togetherText: '#487A2E', togetherFill: '#82C95E',
-      primary: '#2E7A61', primaryDark: '#225946', primaryLight: '#45B590', primaryBg: '#E9F7F2', primarySoft: '#E9F7F2',
+      primary: '#2E7A61', primaryDark: '#225946', primaryLight: '#45B590', primaryFill: '#2E9E7E', primaryBg: '#E9F7F2', primarySoft: '#E9F7F2',
       coral: '#8C6918', indigo: '#2E7A61', violet: '#487A2E', couple: '#8C6918', food: '#487A2E', health: '#2E7A61',
       secondary: '#2E7A61', secondarySoft: '#E7F8F3', accent: '#487A2E', accentSoft: '#EDF8E7',
       markBack: '#90D5BE', markFront: '#225946', markSparkle: '#D9A441',
@@ -292,7 +310,7 @@ const ACCENT_OVERRIDES: Record<Exclude<AccentVariant, 'green'>, Record<Scheme, P
       me: '#E6D3A8', meBg: '#322915', mePastelBg: '#322915', meText: '#E6D3A8', meFill: '#E6D3A8',
       partner: '#A8E6D1', partnerBg: '#153228', partnerPastelBg: '#153228', partnerText: '#A8E6D1', partnerFill: '#A8E6D1',
       together: '#BDE6A8', togetherBg: '#1F3215', togetherPastelBg: '#1F3215', togetherText: '#BDE6A8', togetherFill: '#BDE6A8',
-      primary: '#3D8F74', primaryDark: '#347962', primaryLight: '#62BC9E', primaryBg: '#0F241D', primarySoft: '#0F241D',
+      primary: '#3D8F74', primaryDark: '#347962', primaryLight: '#62BC9E', primaryFill: '#62BC9E', primaryBg: '#0F241D', primarySoft: '#0F241D',
       coral: '#E6D3A8', indigo: '#A8E6D1', violet: '#BDE6A8', couple: '#E6D3A8', food: '#BDE6A8', health: '#A8E6D1',
       secondary: '#A8E6D1', secondarySoft: '#153228', accent: '#BDE6A8', accentSoft: '#1F3215',
       markBack: '#A8E6D1', markFront: '#62BC9E', markSparkle: '#FFF3C4',
@@ -303,7 +321,7 @@ const ACCENT_OVERRIDES: Record<Exclude<AccentVariant, 'green'>, Record<Scheme, P
       me: '#B74E1A', meBg: '#FAF3EF', mePastelBg: '#EECBBA', meText: '#B74E1A', meFill: '#E58D61',
       partner: '#407749', partnerBg: '#E7F8EA', partnerPastelBg: '#BAEEC2', partnerText: '#407749', partnerFill: '#6EB97B',
       together: '#7A6B1F', togetherBg: '#F8F5E7', togetherPastelBg: '#EEE5BA', togetherText: '#7A6B1F', togetherFill: '#DAC24E',
-      primary: '#407749', primaryDark: '#305A37', primaryLight: '#60A96C', primaryBg: '#E9F7EB', primarySoft: '#E9F7EB',
+      primary: '#407749', primaryDark: '#305A37', primaryLight: '#60A96C', primaryFill: '#4E9E57', primaryBg: '#E9F7EB', primarySoft: '#E9F7EB',
       coral: '#B74E1A', indigo: '#407749', violet: '#7A6B1F', couple: '#B74E1A', food: '#7A6B1F', health: '#407749',
       secondary: '#407749', secondarySoft: '#E7F8EA', accent: '#7A6B1F', accentSoft: '#F8F5E7',
       markBack: '#9CC9A3', markFront: '#305A37', markSparkle: '#DAC24E',
@@ -312,7 +330,7 @@ const ACCENT_OVERRIDES: Record<Exclude<AccentVariant, 'green'>, Record<Scheme, P
       me: '#E6BDA8', meBg: '#321F15', mePastelBg: '#321F15', meText: '#E6BDA8', meFill: '#E6BDA8',
       partner: '#A8E6B2', partnerBg: '#15321A', partnerPastelBg: '#15321A', partnerText: '#A8E6B2', partnerFill: '#A8E6B2',
       together: '#E6DBA8', togetherBg: '#322D15', togetherPastelBg: '#322D15', togetherText: '#E6DBA8', togetherFill: '#E6DBA8',
-      primary: '#3D8F4B', primaryDark: '#347940', primaryLight: '#62BC71', primaryBg: '#0F2413', primarySoft: '#0F2413',
+      primary: '#3D8F4B', primaryDark: '#347940', primaryLight: '#62BC71', primaryFill: '#62BC71', primaryBg: '#0F2413', primarySoft: '#0F2413',
       coral: '#E6BDA8', indigo: '#A8E6B2', violet: '#E6DBA8', couple: '#E6BDA8', food: '#E6DBA8', health: '#A8E6B2',
       secondary: '#A8E6B2', secondarySoft: '#15321A', accent: '#E6DBA8', accentSoft: '#322D15',
       markBack: '#A8E6B2', markFront: '#62BC71', markSparkle: '#FFF3C4',

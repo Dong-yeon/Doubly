@@ -1008,11 +1008,11 @@ const styles = themedStyles((colors) => ({
     bottom: spacing.lg,
     height: 52,
     borderRadius: radius.lg,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primaryFill,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  addBtnText: { color: colors.white, fontSize: fontSize.body, fontWeight: '800' },
+  addBtnText: { color: onColor(colors.primaryFill), fontSize: fontSize.body, fontWeight: '800' },
 
   modalBackdrop: {
     flex: 1,
@@ -1068,8 +1068,8 @@ const styles = themedStyles((colors) => ({
   modalSave: {
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.lg,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primaryFill,
     borderRadius: radius.md,
   },
-  modalSaveText: { color: colors.white, fontWeight: '800' },
+  modalSaveText: { color: onColor(colors.primaryFill), fontWeight: '800' },
 }));
