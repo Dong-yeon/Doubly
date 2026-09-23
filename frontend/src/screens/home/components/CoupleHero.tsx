@@ -1,24 +1,29 @@
 /**
- * 홈 히어로 — 배경 사진 위의 "우리" 영역.
+ * 홈 히어로 — 사진 <b>아래</b>에 놓이는 "우리" 패널.
  *
- * <p><b>좌우 분할</b>: 위쪽에 공통(D+ 숫자), 아래는 <b>왼쪽=나 / 오른쪽=상대</b>로
- * 화면을 반으로 나눈다. 예전에는 한 줄로 쭉 이어져(아바타 둘 → 상태 문구 한 줄 →
- * 공용 최근 기록) 두 사람의 정보가 섞여 있었고, 세로 여백이 크게 남았다
- * (실측 440x956 에서 빈 공간 51%).
+ * <p><b>2026-09-23 다시 짰다</b>(docs/SCREEN_DESIGN_PASS_2026-09-23.md §1, A 안). 예전에는
+ * D+ 숫자·좌우 2열·최근 기록이 화면 전면에 퍼져 있었고, 그 글자들이 어디에 와도 읽히게
+ * 하려고 사진 위에 흰 스크림을 84~97% 로 깔았다 — 결과적으로 "배경 사진 위의 우리 화면"인데
+ * 사진이 안 보였다. 이제 글자는 <b>하단 한 구역</b>에만 모이고, 사진은 그 위에서 그대로 보인다.
  *
- * <p>분할하면 "오늘 누가 뭘 했나"를 <b>같은 자리에서 같은 순서로</b> 비교하게 된다 —
- * 운동/식단이 좌우 같은 높이에 놓이므로 눈이 가로로만 움직인다.
+ * <p>구성(위에서부터):
+ * <ul>
+ *   <li>머리 — 겹친 아바타 둘 + 이름 둘, 오른쪽에 D+ (누르면 기념일 설정)</li>
+ *   <li>오늘 — 사람마다 한 줄: 아바타(무드 배지) · 이름 · 최근 기록, 오른쪽에 운동/식단 버튼</li>
+ * </ul>
+ * 좌우 대칭 2열은 없앴다. 사람 구분은 아바타·이름·소유자 색으로 충분하고, 한쪽이 빈 날
+ * 빈 자리를 예약해 두던 것(streakSlot·minHeight)도 함께 사라졌다. 줄은 <b>왼쪽 정렬</b>이다.
  *
- * <p><b>좌우의 뜻은 하나뿐이다</b>: 사람(나/상대). 운동·식단 같은 종류는 세로로
- * 쌓는다. 좌우를 두 가지 뜻으로 쓰면 어느 쪽이 무엇인지 매번 다시 읽어야 한다.
+ * <p><b>버튼은 형제 관계</b>다 — 줄 전체를 버튼으로 감싸고 그 안에 운동/식단 버튼을 두면
+ * 웹에서 &lt;button&gt; 중첩이 된다(react-native-web 은 accessibilityRole="button" 을 진짜
+ * &lt;button&gt; 으로 그린다). 줄은 View 이고, [사람 영역][운동][식단] 세 버튼이 나란히 놓인다.
  *
  * <p>순수 표현 컴포넌트다 — 스토어를 직접 읽지 않고 전부 props 로 받는다.
  */
 import React from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '../../../components/Icon';
 import { Avatar } from '../../../components/Avatar';
-import { DoublyMark } from '../../../components/DoublyLogo';
 import { HeartSproutIcon } from '../../../components/HeartSproutIcon';
 import { formatDateLabel } from '../../../utils/date';
 import { colors, fontSize, radius, spacing } from '../../../constants/theme';
@@ -26,21 +31,17 @@ import { themedStyles } from '../../../theme/themedStyles';
 import { onColor } from '../../../theme/onColor';
 import { layout } from '../../../theme/layout';
 
-/** 한 사람의 오늘 — 열 하나에 들어가는 값 묶음 */
+/** 한 사람의 오늘 — 한 줄에 들어가는 값 묶음 */
 export interface PersonToday {
   name: string;
   imageUrl?: string | null;
   workoutDone: boolean;
   mealDone: boolean;
   streak: number;
-  /** 그 사람의 가장 최근 기록 한 줄. 없으면 안내 문구가 뜬다 */
+  /** 그 사람의 가장 최근 기록 한 줄. 없으면 비운다(안내 문장을 상주시키지 않는다) */
   latestLabel?: string | null;
   latestTime?: string | null;
-  /**
-   * 지금 무드(Obimy 벤치마킹, PLAN.md "무드 상태" 참고) — 있으면 아바타 모서리에 작은 배지로.
-   * 새 행이 아니라 <b>오버레이</b>로만 넣는다 — 이 화면은 세로 여백이 빠듯해(파일 상단 주석
-   * 참고) 줄을 하나 늘리면 작은 기기에서 레이아웃이 깨진다.
-   */
+  /** 지금 무드(Obimy 벤치마킹, PLAN.md "무드 상태" 참고) — 있으면 아바타 모서리에 작은 배지로 */
   moodEmoji?: string | null;
   /**
    * 우리 이모지로 무드를 걸었으면 그 이미지 — 있으면 {@link moodEmoji} 대신 그린다(설계 메모 §18).
@@ -54,12 +55,12 @@ export interface CoupleHeroProps {
   partner: PersonToday;
   /** 함께한 일수 (D+N) */
   dday: number;
-  /** 기준 날짜 (YYYY-MM-DD) — 없으면 "눌러서 설정" 안내가 뜬다 */
+  /** 기준 날짜 (YYYY-MM-DD) — 없으면 D+ 대신 "기념일 정하기"가 뜬다 */
   anniversaryDate?: string | null;
   onPressDday: () => void;
-  /** 한 사람의 열(아바타·이름·최근 기록)을 눌렀을 때 — 그 사람의 기록으로 이동 */
+  /** 한 사람의 줄(아바타·이름·최근 기록)을 눌렀을 때 — 그 사람의 기록으로 이동 */
   onPressPerson?: (who: 'me' | 'partner') => void;
-  /** 오늘 운동/식단 칩을 눌렀을 때 — 그 종류의 기록 화면으로 이동 */
+  /** 운동/식단 버튼을 눌렀을 때 — 그 종류의 기록 화면으로 이동 */
   onPressToday?: (who: 'me' | 'partner', kind: 'workout' | 'meal') => void;
 }
 
@@ -74,36 +75,59 @@ export function CoupleHero({
 }: CoupleHeroProps) {
   return (
     <View style={styles.wrap}>
-      {/* 공통 — D+ 숫자 */}
-      <Pressable style={styles.ddayWrap} onPress={onPressDday} accessibilityRole="button">
-        <Text style={styles.ddayLabel}>함께한 지</Text>
-        <Text style={styles.dday} allowFontScaling={false}>
-          D+{dday}
-        </Text>
+      {/* 머리 — 우리 둘 + D+. 전체가 기념일 설정 버튼이다 */}
+      <Pressable
+        style={({ pressed }) => [styles.head, pressed && styles.pressed]}
+        onPress={onPressDday}
+        accessibilityRole="button"
+        accessibilityLabel={
+          anniversaryDate ? `함께한 지 ${dday}일, ${formatDateLabel(anniversaryDate)}부터 — 기념일 바꾸기` : '기념일 정하기'
+        }
+      >
+        <View style={styles.pair}>
+          <View style={[styles.pairRing, { borderColor: colors.meFill }]}>
+            <Avatar name={me.name} imageUrl={me.imageUrl} size={36} color={colors.meFill} />
+          </View>
+          <View style={[styles.pairRing, styles.pairSecond, { borderColor: colors.partnerFill }]}>
+            <Avatar name={partner.name} imageUrl={partner.imageUrl} size={36} color={colors.partnerFill} />
+          </View>
+        </View>
+        <View style={styles.headText}>
+          <Text style={styles.names} numberOfLines={1}>
+            {me.name}
+            <Text style={styles.namesAnd}> & </Text>
+            {partner.name}
+          </Text>
+          {anniversaryDate ? (
+            <Text style={styles.since} numberOfLines={1}>
+              {formatDateLabel(anniversaryDate)}부터
+            </Text>
+          ) : null}
+        </View>
         {anniversaryDate ? (
-          <Text style={styles.ddaySince}>{formatDateLabel(anniversaryDate)}부터</Text>
+          <Text style={styles.dday} allowFontScaling={false}>
+            D+{dday}
+          </Text>
         ) : (
-          <Text style={styles.ddaySince}>눌러서 기념일 설정하기</Text>
+          <View style={styles.ddaySet}>
+            <MaterialCommunityIcons name="calendar-heart" size={16} color={colors.textSecondary} />
+            <Text style={styles.ddaySetText}>기념일 정하기</Text>
+          </View>
         )}
       </Pressable>
 
-      {/* 좌=나 / 우=상대. 가운데 마크가 경계선을 겸한다 */}
-      <View style={styles.split}>
-        <Column
+      {/* 오늘 — 사람마다 한 줄. 위가 나, 아래가 상대 */}
+      <View style={styles.rows}>
+        <PersonRow
           person={me}
-          color={colors.meFill}
-          mine
+          fill={colors.meFill}
           onPress={() => onPressPerson?.('me')}
           onPressToday={(kind) => onPressToday?.('me', kind)}
+          mealHint="한 끼 기록하기"
         />
-        <View style={styles.divider}>
-          <View style={styles.dividerLine} />
-          <DoublyMark size={20} />
-          <View style={styles.dividerLine} />
-        </View>
-        <Column
+        <PersonRow
           person={partner}
-          color={colors.partnerFill}
+          fill={colors.partnerFill}
           onPress={() => onPressPerson?.('partner')}
           onPressToday={(kind) => onPressToday?.('partner', kind)}
         />
@@ -112,244 +136,173 @@ export function CoupleHero({
   );
 }
 
-/**
- * 한 사람의 열 — 아바타 · 이름 · 오늘 두 줄 · 최근 기록.
- *
- * <p><b>버튼 세 개, 형제 관계</b>. 예전엔 열 전체가 버튼 하나(TodayRow 는 그 안의
- * 평범한 View)였는데, TodayRow 를 눌러도 그 종류가 아니라 사람 전체 기록으로
- * 가버려 "운동을 눌렀는데 왜 전체가 열리지" 문제가 생겼다. 그래서 TodayRow 도
- * 버튼으로 만들었더니 — 웹에서 <b>&lt;button&gt; 안에 &lt;button&gt;이 중첩</b>되는
- * 문제가 났다(react-native-web 은 accessibilityRole="button" Pressable 을
- * 진짜 &lt;button&gt; 으로 그린다 — HTML 스펙상 버튼은 못 중첩되고, stopPropagation
- * 을 걸어도 클릭이 안정적으로 안 먹혔다).
- *
- * <p>그래서 열 전체를 감싸는 버튼 하나 대신, <b>형제로 나열된 버튼 셋</b>으로 바꿨다 —
- * ① 위(아바타·이름·연속기록) ② todayBox 안의 운동/식단(각자 버튼) ③ 아래(최근 기록).
- * ①·③ 은 같은 동작(그 사람 기록)이라 같은 핸들러를 쓴다.
- */
-function Column({
+/** 한 사람의 오늘 한 줄 — [아바타·이름·최근 기록] [운동] [식단], 버튼 셋이 형제다 */
+function PersonRow({
   person,
-  color,
-  mine,
+  fill,
   onPress,
   onPressToday,
+  mealHint,
 }: {
   person: PersonToday;
-  color: string;
-  /** 내 열인지 — 식단 줄이 하는 일이 갈려서(내 열만 기록 시트가 열린다) 안내 문구가 달라진다 */
-  mine?: boolean;
+  /** 그 사람의 채움색 — 완료 버튼·아바타 채움 */
+  fill: string;
   onPress: () => void;
   onPressToday: (kind: 'workout' | 'meal') => void;
+  /** 식단 버튼이 하는 일이 다를 때(내 줄은 기록 시트가 열린다) 접근성 힌트 */
+  mealHint?: string;
 }) {
-  const active = person.workoutDone || person.mealDone;
-  const label = `${person.name}님의 기록 보기`;
+  const meta = [person.latestLabel, person.latestTime].filter(Boolean).join(' · ');
   return (
-    <View style={styles.column}>
+    <View style={styles.row}>
       <Pressable
-        style={({ pressed }) => [styles.profileArea, pressed && styles.pressed]}
+        style={({ pressed }) => [styles.person, pressed && styles.pressed]}
         onPress={onPress}
         accessibilityRole="button"
-        accessibilityLabel={label}
+        accessibilityLabel={`${person.name}님의 기록 보기`}
       >
-        <View style={[styles.avatarRing, { borderColor: active ? color : colors.border }]}>
-          <Avatar name={person.name} imageUrl={person.imageUrl} size={58} color={color} />
-          {/* 무드 배지 — 절대 위치 오버레이라 열 높이에 영향이 없다 */}
+        <View>
+          <Avatar name={person.name} imageUrl={person.imageUrl} size={40} color={fill} />
           {person.moodEmoji ? (
             <View style={styles.moodBadge}>
               {person.moodImageUrl ? (
-                <Image
-                  source={{ uri: person.moodImageUrl }}
-                  style={styles.moodBadgeImage}
-                  resizeMode="contain"
-                />
+                <Image source={{ uri: person.moodImageUrl }} style={styles.moodBadgeImage} resizeMode="contain" />
               ) : (
                 <Text style={styles.moodBadgeEmoji}>{person.moodEmoji}</Text>
               )}
             </View>
           ) : null}
         </View>
-        <Text style={styles.name} numberOfLines={1}>
-          {person.name}
-        </Text>
-        {/*
-          연속 기록. 0일은 알려주는 정보가 없어 <b>글자만</b> 감추고 자리는 남긴다 —
-          한쪽만 줄이 사라지면 아래의 운동/식단 칩이 좌우로 어긋나 비교가 깨진다
-          (실측 17px 어긋남).
-        */}
-        <View style={styles.streakSlot}>
-          {person.streak > 0 ? (
-            <View style={styles.streakRow}>
-              <HeartSproutIcon size={14} />
-              <Text style={styles.streak}>{person.streak}일</Text>
-            </View>
+        <View style={styles.personText}>
+          <View style={styles.nameLine}>
+            <Text style={styles.name} numberOfLines={1}>
+              {person.name}
+            </Text>
+            {person.streak > 0 ? (
+              <View style={styles.streak}>
+                <HeartSproutIcon size={13} />
+                <Text style={styles.streakText}>{person.streak}일</Text>
+              </View>
+            ) : null}
+          </View>
+          {/* 기록이 없으면 줄을 비운다 — "아직 기록이 없어요"를 상주시키지 않는다 */}
+          {meta ? (
+            <Text style={styles.meta} numberOfLines={1}>
+              {meta}
+            </Text>
           ) : null}
         </View>
       </Pressable>
 
-      {/* 오늘 — 두 줄을 좌우 같은 높이에 두어 가로로 비교되게 한다. 각자 그 종류의 기록 화면으로 가는 버튼이다 */}
-      <View style={styles.todayBox}>
-        <TodayRow
-          icon="dumbbell"
-          label="운동"
-          done={person.workoutDone}
-          color={color}
-          onPress={() => onPressToday('workout')}
-        />
-        <TodayRow
-          icon="silverware-fork-knife"
-          label="식단"
-          done={person.mealDone}
-          color={color}
-          // 내 열에서는 기록을 남기는 시트가 열린다 — 이미 기록한 날도 마찬가지다
-          // (끼니는 하루 세 번이라 ✓ 가 잠금이 아니다. HomeScreen onPressToday 참고)
-          actionHint={mine ? '한 끼 기록하기' : undefined}
-          onPress={() => onPressToday('meal')}
-        />
-      </View>
-
-      <Pressable
-        style={({ pressed }) => [styles.latestArea, pressed && styles.pressed]}
-        onPress={onPress}
-        accessibilityRole="button"
-        accessibilityLabel={label}
-      >
-        <Text style={styles.latest} numberOfLines={2}>
-          {person.latestLabel ?? '아직 기록이 없어요'}
-        </Text>
-        {person.latestTime ? <Text style={styles.latestTime}>{person.latestTime}</Text> : null}
-      </Pressable>
+      <TodayButton
+        icon="dumbbell"
+        label="운동"
+        done={person.workoutDone}
+        fill={fill}
+        hint={`${person.name} 운동 기록`}
+        onPress={() => onPressToday('workout')}
+      />
+      <TodayButton
+        icon="silverware-fork-knife"
+        label="식단"
+        done={person.mealDone}
+        fill={fill}
+        hint={mealHint ?? `${person.name} 식단 기록`}
+        onPress={() => onPressToday('meal')}
+      />
     </View>
   );
 }
 
-/** 오늘의 한 종류 — 했으면 사람 색으로 채우고, 아니면 비운다. 그 종류의 기록 화면으로 가는 버튼이다 */
-function TodayRow({
+/**
+ * 오늘의 한 종류 — 했으면 사람 색으로 채운 원, 아니면 빈 원. 44px 터치 타깃.
+ * 상태는 채움/비움 <b>형태</b>로만 말한다 — "✓ / —" 같은 글자 기호는 쓰지 않는다.
+ */
+function TodayButton({
   icon,
   label,
   done,
-  color,
-  actionHint,
+  fill,
+  hint,
   onPress,
 }: {
   icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
   label: string;
   done: boolean;
-  color: string;
-  /** 누르면 무슨 일이 일어나는지 — 기본은 "그 종류 기록 보기" */
-  actionHint?: string;
+  fill: string;
+  hint: string;
   onPress: () => void;
 }) {
   return (
     <Pressable
-      style={({ pressed }) => [styles.todayRow, done && { backgroundColor: color, borderColor: color }, pressed && styles.todayRowPressed]}
+      style={({ pressed }) => [styles.today, pressed && styles.pressed]}
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`오늘 ${label} ${done ? '기록함' : '기록 없음'} — ${actionHint ?? `${label} 기록 보기`}`}
+      accessibilityLabel={`${label} ${done ? '기록함' : '기록 없음'}`}
+      accessibilityHint={hint}
     >
-      <MaterialCommunityIcons
-        name={icon}
-        size={13}
-        // 채워진 칩 위 글자색은 그 색의 휘도로 고른다 (다크의 파스텔 위 흰색은 1.55:1 이었다)
-        color={done ? onColor(color) : colors.textMuted}
-      />
-      <Text style={[styles.todayLabel, done && { color: onColor(color) }]}>{label}</Text>
-      <Text style={[styles.todayMark, done && { color: onColor(color) }]}>{done ? '✓' : '—'}</Text>
+      <View style={[styles.todayCircle, done ? { backgroundColor: fill, borderColor: fill } : null]}>
+        <MaterialCommunityIcons name={icon} size={18} color={done ? onColor(fill) : colors.textMuted} />
+      </View>
     </Pressable>
   );
 }
 
 const styles = themedStyles((colors) => ({
-  /*
-   * 남는 세로 공간을 <b>고르게</b> 나눈다.
-   * 예전에는 히어로 전체를 가운데 정렬했더니 위 190px · 아래 209px 짜리
-   * 큰 공백 두 개가 생겨 화면이 비어 보였다. space-evenly 로 두면 같은 여백이
-   * 세 군데로 쪼개져 "의도된 여백"으로 읽힌다.
-   */
-  wrap: { flex: 1, alignItems: 'stretch', justifyContent: 'space-evenly' },
-
-  ddayWrap: { alignItems: 'center' },
-  ddayLabel: {
-    color: colors.textSecondary,
-    fontSize: fontSize.caption,
-    fontWeight: '700',
-    letterSpacing: 1,
-  },
-  dday: {
-    color: colors.textPrimary,
-    fontSize: 64,
-    lineHeight: 74,
-    fontWeight: '800',
-    letterSpacing: -2,
-    // 스크림이 충분히 불투명해 그림자 없이도 읽힌다 (본문 9.12:1 최악값)
-  },
-  ddaySince: { color: colors.textSecondary, fontSize: fontSize.caption, fontWeight: '600', marginTop: 2 },
-
-  split: { flexDirection: 'row', alignItems: 'flex-start', marginTop: spacing.lg },
-  // 두 열은 정확히 반씩 — 같은 항목이 좌우 같은 높이에 놓여야 비교가 된다.
-  // 열 자체는 이제 버튼이 아니라 순수 레이아웃 컨테이너다 — 버튼 셋(위/오늘/아래)을 세로로 쌓는다.
-  column: { flex: 1, alignItems: 'center', paddingHorizontal: spacing.xs },
-  // 위 버튼 — 아바타·이름·연속기록. alignSelf:stretch 로 열 폭 전체를 눌림 영역으로 준다
-  profileArea: { alignSelf: 'stretch', alignItems: 'center', minHeight: layout.touchTarget, justifyContent: 'center' },
-  // 아래 버튼 — 최근 기록 한 줄. 위와 같은 동작(그 사람 기록 보기)
-  latestArea: { alignSelf: 'stretch', alignItems: 'center', minHeight: layout.touchTarget, justifyContent: 'center' },
+  wrap: { gap: spacing.sm },
   pressed: { opacity: 0.7 },
 
-  // 가운데 경계 — 선 사이에 마크를 끼워 "둘"을 나타낸다
-  divider: { width: 28, alignItems: 'center', alignSelf: 'stretch', paddingTop: 20 },
-  dividerLine: { flex: 1, width: 1, backgroundColor: colors.border, marginVertical: spacing.xs },
+  // ── 머리 ──
+  head: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: layout.touchTarget },
+  // 겹친 아바타 둘 — 뒤가 상대. 링은 소유자 채움색, 배경색 테두리로 서로 떼어 놓는다
+  pair: { flexDirection: 'row', alignItems: 'center' },
+  pairRing: { borderWidth: 2, borderRadius: radius.full, padding: 1, backgroundColor: colors.background },
+  pairSecond: { marginLeft: -12 },
+  headText: { flex: 1, minWidth: 0 },
+  names: { color: colors.textPrimary, fontSize: fontSize.subtitle, fontWeight: '800', lineHeight: 22 },
+  namesAnd: { color: colors.textMuted, fontWeight: '600' },
+  since: { color: colors.textSecondary, fontSize: fontSize.caption, fontWeight: '600', marginTop: 1 },
+  dday: { color: colors.textPrimary, fontSize: fontSize.title, fontWeight: '800', letterSpacing: -0.5 },
+  ddaySet: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  ddaySetText: { color: colors.textSecondary, fontSize: fontSize.caption, fontWeight: '700' },
 
-  avatarRing: { borderWidth: 2.5, borderRadius: 999, padding: 3 },
-  // 아바타 오른쪽 아래 모서리에 얹는 작은 배지 — RN 기본 position 이 relative 라
-  // avatarRing 을 건드리지 않고도 이 안에서 절대 위치로 겹칠 수 있다
+  // ── 오늘 ──
+  rows: { gap: spacing.xxs },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  person: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: layout.touchTarget },
+  personText: { flex: 1, minWidth: 0 },
+  nameLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  name: { color: colors.textPrimary, fontSize: fontSize.body, fontWeight: '700', flexShrink: 1 },
+  streak: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  streakText: { color: colors.textSecondary, fontSize: fontSize.caption, fontWeight: '700' },
+  meta: { color: colors.textSecondary, fontSize: fontSize.caption, marginTop: 1 },
+
+  // 무드 배지 — 아바타 오른쪽 아래. 배경색 테두리로 아바타에서 떼어 놓는다
   moodBadge: {
     position: 'absolute',
-    right: -2,
-    bottom: -2,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    right: -3,
+    bottom: -3,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     backgroundColor: colors.surface,
     borderWidth: 1.5,
     borderColor: colors.background,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  moodBadgeEmoji: { fontSize: 12, lineHeight: 14 },
-  /*
-   * 우리 이모지 배지 — 배지 원(22px)을 꽉 채운다. 유니코드 glyph 와 달리 그림에는
-   * 자체 여백(스티커 흰 테두리)이 있어서, 안쪽으로 더 줄이면 얼굴이 안 보인다.
-   */
-  moodBadgeImage: { width: 20, height: 20, borderRadius: 10 },
-  name: { color: colors.textPrimary, fontSize: fontSize.body, fontWeight: '800', marginTop: spacing.xs },
-  // 높이를 고정해 좌우 칩의 시작 높이를 맞춘다 (streak 유무와 무관)
-  streakSlot: { height: 18, justifyContent: 'center' },
-  streakRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  streak: { color: colors.textSecondary, fontSize: fontSize.caption, fontWeight: '700' },
+  moodBadgeEmoji: { fontSize: fontSize.micro, lineHeight: 13 },
+  moodBadgeImage: { width: 18, height: 18, borderRadius: 9 },
 
-  todayBox: { alignSelf: 'stretch', gap: 4, marginTop: spacing.sm },
-  todayRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingVertical: 5,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radius.pill,
-    borderWidth: 1,
+  today: { width: layout.touchTarget, height: layout.touchTarget, alignItems: 'center', justifyContent: 'center' },
+  todayCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1.5,
     borderColor: colors.border,
     backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  todayRowPressed: { opacity: 0.65 },
-  todayLabel: { flex: 1, color: colors.textSecondary, fontSize: fontSize.caption, fontWeight: '700' },
-  todayMark: { color: colors.textMuted, fontSize: fontSize.caption, fontWeight: '800' },
-
-  latest: {
-    color: colors.textPrimary,
-    fontSize: fontSize.caption,
-    fontWeight: '600',
-    textAlign: 'center',
-    marginTop: spacing.sm,
-    // 한쪽이 두 줄이어도 아래 시간 줄이 어긋나지 않게 두 줄분을 미리 잡는다
-    minHeight: 34,
-  },
-  latestTime: { color: colors.textMuted, fontSize: 11, fontWeight: '600', marginTop: 1 },
 }));
