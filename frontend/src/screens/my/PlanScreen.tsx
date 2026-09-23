@@ -15,11 +15,13 @@
  * 국가·통화·프로모션에 따라 달라지고, Play Console 에서 가격을 바꾸면 앱은 그대로 따라간다.
  */
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Linking, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Linking, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../navigation/types';
-import { Card } from '../../components/Card';
+import { Button } from '../../components/Button';
+import { SettingsGroup } from '../../components/SettingsList';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { planApi } from '../../api/plan';
 import { usePlanStore } from '../../store/planStore';
@@ -31,7 +33,6 @@ import { PRO_SUBSCRIPTION_SKU, PURCHASE_ENABLED } from '../../constants/config';
 import type { FeatureGroupKey, FeatureKey, PlanCatalogEntry, QuotaPeriod } from '../../types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
-import { onColor } from '../../theme/onColor';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'Plan'>;
 
@@ -70,6 +71,9 @@ const MANAGE_SUBSCRIPTION_URL =
 
 /** 기간 — 스토어에 등록된 base plan 이 monthly 한 종류다(constants/config.ts PRO_BASE_PLAN_ID) */
 const SUBSCRIPTION_PERIOD = '1개월';
+
+/** 머리 띠의 캐릭터 — 스티커 자산 재사용 */
+const HERO_DUO = require('../../../assets/stickers/duo_love.png');
 
 /**
  * 맨 위에 세울 넷 — 기능 40개를 다 나열하면 아무것도 전달되지 않는다.
@@ -201,170 +205,113 @@ export function PlanScreen({ navigation }: Props) {
   const byFeature = new Map((catalog ?? []).map((entry) => [entry.feature, entry]));
   const hasCoupleScoped = (catalog ?? []).some((entry) => entry.coupleScoped);
 
+  /*
+   * 상태 태그 — 체험 중이거나 구독 중일 때만. FREE 에게 "지금 FREE" 는 정보가 없다
+   * (docs/SCREEN_DESIGN_PASS_2026-09-23.md §3-2 P3).
+   */
+  const statusTag = freeTrial
+    ? daysLeft === null
+      ? '모두 체험 기간 · PRO 기능이 전부 열려 있어요'
+      : `체험 ${daysLeft}일 남음 · PRO 기능이 전부 열려 있어요`
+    : alreadySubscribed
+      ? 'PRO 이용 중'
+      : null;
+
+  const ctaTitle = alreadySubscribed ? '이미 PRO예요' : price ? `PRO 시작하기 · ${price}/월` : 'PRO 시작하기';
+
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.content}>
-        {/* 지금 내 상태 — 무엇을 팔기 전에 어디 서 있는지부터 말한다 */}
-        <Card elevation="sm" style={styles.statusCard}>
-          <View style={styles.statusRow}>
-            <Text style={styles.statusLabel}>지금 플랜</Text>
-            <View style={[styles.planBadge, isPro && styles.planBadgePro]}>
-              <Text style={[styles.planBadgeText, isPro && styles.planBadgeTextPro]}>
-                {isPro ? 'PRO' : 'FREE'}
-              </Text>
+        {/*
+          2026-09-23 — 카드 7개짜리 텍스트 페이월을 상용 페이월 문법으로 재배치했다
+          (docs/SCREEN_DESIGN_PASS_2026-09-23.md §3-4): 머리 띠(그림 + 한 문장) → 가치 3~4 →
+          CTA(가격 포함) → 비교표 → 법적 고지는 맨 아래. 데이터 원천·고지 문구·프레이밍은 그대로다.
+        */}
+        <LinearGradient
+          colors={[colors.partnerBg, colors.meBg]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.hero}
+        >
+          {statusTag ? (
+            <View style={styles.tag}>
+              <Text style={styles.tagText}>{statusTag}</Text>
             </View>
-          </View>
-          {freeTrial ? (
-            <Text style={styles.statusNote}>
-              {daysLeft === null ? (
-                <>
-                  지금은 <Text style={styles.strong}>모두 체험 기간</Text>이라 PRO 기능이 전부
-                  열려 있어요.
-                </>
-              ) : (
-                <>
-                  체험이 <Text style={styles.strong}>{daysLeft}일</Text> 남았어요. 그동안 아래
-                  기능이 전부 열려 있어요.
-                </>
-              )}
-            </Text>
           ) : null}
-        </Card>
-
-        {/* PRO 소개 — 넷만 앞세운다 */}
-        <Card elevation="sm" style={styles.pitchCard}>
-          <Text style={styles.pitchTitle}>PRO로 더 넉넉하게</Text>
-          <Text style={styles.pitchLead}>
+          {/* 스티커 자산 재사용 — 결제 화면에도 캐릭터가 얼굴을 낸다(새 그림 없음) */}
+          <Image source={HERO_DUO} style={styles.heroImage} resizeMode="contain" />
+          <Text style={styles.heroTitle}>PRO로 더 넉넉하게</Text>
+          <Text style={styles.heroLead}>
             둘 중 <Text style={styles.strong}>한 명만 결제하면 둘 다</Text> PRO예요.
           </Text>
+        </LinearGradient>
 
-          <View style={styles.highlights}>
-            {highlightsOf(catalog ?? []).map((feature) => {
-              const entry = byFeature.get(feature);
-              if (!entry) return null;
-              const line = HIGHLIGHT_LINES[feature];
-              return (
-                <View key={feature} style={styles.highlightRow}>
-                  {/* 서브셋에 있는 글리프만 쓴다 — 새 이름은 fingerprint 입력이라 OTA 로 못 나간다
-                      (docs/EAS_BUILD.md §8, LockedCard 주석과 같은 제약) */}
-                  <MaterialCommunityIcons name="check-circle" size={17} color={colors.together} />
-                  <View style={styles.highlightBody}>
-                    <Text style={styles.highlightName}>{entry.name}</Text>
-                    {line ? <Text style={styles.highlightLine}>{line}</Text> : null}
-                  </View>
+        {/* 가치 — 서버가 hero 로 고른 넷. 카드 없이 바탕 위에 */}
+        <View style={styles.highlights}>
+          {highlightsOf(catalog ?? []).map((feature) => {
+            const entry = byFeature.get(feature);
+            if (!entry) return null;
+            const line = HIGHLIGHT_LINES[feature];
+            return (
+              <View key={feature} style={styles.highlightRow}>
+                {/* 서브셋에 있는 글리프만 쓴다 — 새 이름은 fingerprint 입력이라 OTA 로 못 나간다
+                    (docs/EAS_BUILD.md §8, LockedCard 주석과 같은 제약) */}
+                <MaterialCommunityIcons name="check-circle" size={20} color={colors.primary} />
+                <View style={styles.highlightBody}>
+                  <Text style={styles.highlightName}>{entry.name}</Text>
+                  {line ? <Text style={styles.highlightLine}>{line}</Text> : null}
                 </View>
-              );
-            })}
+              </View>
+            );
+          })}
+        </View>
+
+        {/* CTA — 앱의 주 버튼과 같은 모양. 가격은 버튼 안에 */}
+        {PURCHASE_ENABLED ? (
+          <Button
+            title={ctaTitle}
+            onPress={() => void onPurchase()}
+            loading={purchasing}
+            disabled={purchasing || alreadySubscribed}
+            style={styles.cta}
+          />
+        ) : (
+          /* 없는 구매 흐름으로 보내면 막다른 길이 된다 — UpgradeSheet 와 같은 판단 */
+          <View style={styles.notice}>
+            <Text style={styles.noticeText}>PRO는 준비 중이에요. 곧 만나요!</Text>
           </View>
+        )}
 
-          {price ? <Text style={styles.price}>{price} / 월</Text> : null}
-
-          {PURCHASE_ENABLED ? (
-            <Pressable
-              style={({ pressed }) => [styles.primary, (pressed || purchasing) && styles.pressed]}
-              onPress={onPurchase}
-              disabled={purchasing || alreadySubscribed}
-              accessibilityRole="button"
-            >
-              {purchasing ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={styles.primaryText}>
-                  {alreadySubscribed ? '이미 PRO예요' : 'PRO 시작하기'}
-                </Text>
-              )}
-            </Pressable>
-          ) : (
-            /* 없는 구매 흐름으로 보내면 막다른 길이 된다 — UpgradeSheet 와 같은 판단 */
-            <View style={styles.notice}>
-              <Text style={styles.noticeText}>PRO는 준비 중이에요. 곧 만나요!</Text>
-            </View>
-          )}
-
-          {/*
-            구독 고지 — 위 CANCEL_PATH 주석 참고. 구매 버튼이 없는 경우(웹)에도 그대로 둔다.
-            상품 설명이지 구매 흐름의 일부가 아니고, 링크는 어디서든 닿아야 한다.
-          */}
-          <View style={styles.terms}>
-            <Text style={styles.termsText}>
-              <Text style={styles.strong}>Dubly PRO</Text> · {SUBSCRIPTION_PERIOD} 자동 갱신 구독
-              {price ? ` · ${price}` : ''}
-            </Text>
-            <Text style={styles.termsText}>
-              결제는 구매 확인 시점에 스토어 계정으로 청구돼요. 기간이 끝나기 24시간 전까지
-              해지하지 않으면 같은 금액으로 자동 갱신되고, 갱신 요금은 기간 만료 24시간 이내에
-              청구돼요.
-            </Text>
-            <Text style={styles.termsText}>
-              해지는 <Text style={styles.strong}>{CANCEL_PATH}</Text>에서 언제든 할 수 있어요.
-              해지해도 남은 기간 동안은 PRO가 유지돼요.
-            </Text>
-            {Platform.OS === 'web' ? null : (
-              <Pressable
-                onPress={() =>
-                  Linking.openURL(MANAGE_SUBSCRIPTION_URL).catch(() =>
-                    toast.error('구독 관리 화면을 열 수 없어요.'),
-                  )
-                }
-                hitSlop={8}
-                accessibilityRole="link"
-                accessibilityLabel="스토어 구독 관리 화면 열기"
-              >
-                <Text style={styles.termsLink}>구독 관리 열기</Text>
-              </Pressable>
-            )}
-            <View style={styles.termsLinks}>
-              <Pressable
-                onPress={() => navigation.navigate('LegalDocument', { doc: 'terms' })}
-                hitSlop={8}
-                accessibilityRole="link"
-              >
-                <Text style={styles.termsLink}>이용약관</Text>
-              </Pressable>
-              <Text style={styles.termsDot}>·</Text>
-              <Pressable
-                onPress={() => navigation.navigate('LegalDocument', { doc: 'privacy' })}
-                hitSlop={8}
-                accessibilityRole="link"
-              >
-                <Text style={styles.termsLink}>개인정보처리방침</Text>
-              </Pressable>
-            </View>
-          </View>
-        </Card>
-
-        {/* 전체 비교 */}
+        {/* 전체 비교 — 묶음 목록 문법(SettingsGroup). 사려는 사람은 위 넷으로 정하고, 따지는 사람만 여기를 본다 */}
         {catalog === null ? (
-          <ActivityIndicator style={styles.loading} color={colors.together} />
+          <ActivityIndicator style={styles.loading} color={colors.textSecondary} />
         ) : (
           GROUP_ORDER.map((group) => {
             const rows = catalog.filter((entry) => entry.group === group);
             if (rows.length === 0) return null;
             return (
-              <View key={group} style={styles.group}>
-                <Text style={styles.groupTitle}>{rows[0].groupName}</Text>
-                <Card elevation="sm" style={styles.table}>
-                  <View style={[styles.row, styles.headRow]}>
-                    <Text style={[styles.cellName, styles.headText]}>기능</Text>
-                    <Text style={[styles.cellLimit, styles.headText]}>FREE</Text>
-                    <Text style={[styles.cellLimit, styles.headText]}>PRO</Text>
+              <SettingsGroup key={group} title={rows[0].groupName} style={styles.group}>
+                <View style={styles.row}>
+                  <Text style={[styles.cellName, styles.headText]}>기능</Text>
+                  <Text style={[styles.cellLimit, styles.headText]}>FREE</Text>
+                  <Text style={[styles.cellLimit, styles.headText]}>PRO</Text>
+                </View>
+                {rows.map((entry) => (
+                  <View key={entry.feature} style={styles.row}>
+                    <Text style={styles.cellName} numberOfLines={2}>
+                      {entry.name}
+                      {entry.coupleScoped ? <Text style={styles.mark}> *</Text> : null}
+                    </Text>
+                    <Text style={[styles.cellLimit, entry.freeLimit === 0 && styles.muted]}>
+                      {limitLabel(entry.freeLimit, entry.freePeriod)}
+                    </Text>
+                    {/* PRO 열은 색이 아니라 굵기로 — 색으로 팔지 않는다 */}
+                    <Text style={[styles.cellLimit, styles.proValue]}>
+                      {limitLabel(entry.proLimit, entry.proPeriod)}
+                    </Text>
                   </View>
-                  {rows.map((entry, i) => (
-                    <View key={entry.feature} style={[styles.row, i > 0 && styles.rowBorder]}>
-                      <Text style={styles.cellName} numberOfLines={2}>
-                        {entry.name}
-                        {entry.coupleScoped ? <Text style={styles.mark}> *</Text> : null}
-                      </Text>
-                      <Text style={[styles.cellLimit, entry.freeLimit === 0 && styles.muted]}>
-                        {limitLabel(entry.freeLimit, entry.freePeriod)}
-                      </Text>
-                      <Text style={[styles.cellLimit, styles.proValue]}>
-                        {limitLabel(entry.proLimit, entry.proPeriod)}
-                      </Text>
-                    </View>
-                  ))}
-                </Card>
-              </View>
+                ))}
+              </SettingsGroup>
             );
           })
         )}
@@ -374,6 +321,61 @@ export function PlanScreen({ navigation }: Props) {
             * 표시된 한도는 <Text style={styles.strong}>둘이 함께</Text> 쓰는 양이에요.
           </Text>
         ) : null}
+
+        {/*
+          구독 고지 — 위 CANCEL_PATH 주석 참고. 애플 3.1.2 가 화면 안에 요구하는 항목이라
+          내용은 그대로이고 자리만 맨 아래다. 구매 버튼이 없는 경우(웹)에도 그대로 둔다 —
+          상품 설명이지 구매 흐름의 일부가 아니고, 링크는 어디서든 닿아야 한다.
+        */}
+        <View style={styles.terms}>
+          <Text style={styles.termsText}>
+            <Text style={styles.termsStrong}>Dubly PRO</Text> · {SUBSCRIPTION_PERIOD} 자동 갱신 구독
+            {price ? ` · ${price}` : ''}
+          </Text>
+          <Text style={styles.termsText}>
+            결제는 구매 확인 시점에 스토어 계정으로 청구돼요. 기간이 끝나기 24시간 전까지
+            해지하지 않으면 같은 금액으로 자동 갱신되고, 갱신 요금은 기간 만료 24시간 이내에
+            청구돼요.
+          </Text>
+          <Text style={styles.termsText}>
+            해지는 <Text style={styles.termsStrong}>{CANCEL_PATH}</Text>에서 언제든 할 수 있어요.
+            해지해도 남은 기간 동안은 PRO가 유지돼요.
+          </Text>
+          <View style={styles.termsLinks}>
+            {Platform.OS === 'web' ? null : (
+              <>
+                <Pressable
+                  onPress={() =>
+                    Linking.openURL(MANAGE_SUBSCRIPTION_URL).catch(() =>
+                      toast.error('구독 관리 화면을 열 수 없어요.'),
+                    )
+                  }
+                  hitSlop={8}
+                  accessibilityRole="link"
+                  accessibilityLabel="스토어 구독 관리 화면 열기"
+                >
+                  <Text style={styles.termsLink}>구독 관리</Text>
+                </Pressable>
+                <Text style={styles.termsDot}>·</Text>
+              </>
+            )}
+            <Pressable
+              onPress={() => navigation.navigate('LegalDocument', { doc: 'terms' })}
+              hitSlop={8}
+              accessibilityRole="link"
+            >
+              <Text style={styles.termsLink}>이용약관</Text>
+            </Pressable>
+            <Text style={styles.termsDot}>·</Text>
+            <Pressable
+              onPress={() => navigation.navigate('LegalDocument', { doc: 'privacy' })}
+              hitSlop={8}
+              accessibilityRole="link"
+            >
+              <Text style={styles.termsLink}>개인정보처리방침</Text>
+            </Pressable>
+          </View>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -381,88 +383,67 @@ export function PlanScreen({ navigation }: Props) {
 
 const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
-  content: { padding: spacing.md, paddingBottom: spacing.xl, gap: spacing.md },
+  content: { padding: spacing.lg, paddingBottom: spacing.xl },
 
-  statusCard: { padding: spacing.md, gap: spacing.xs },
-  statusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  statusLabel: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
-  planBadge: {
+  // ── 머리 띠 ──
+  hero: {
+    borderRadius: radius.xl,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.lg,
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  tag: {
+    alignSelf: 'center',
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
     borderRadius: radius.pill,
-    backgroundColor: colors.surfaceAlt,
+    backgroundColor: colors.surface,
+    marginBottom: spacing.xs,
   },
-  planBadgePro: { backgroundColor: colors.togetherBg },
-  planBadgeText: { fontSize: fontSize.caption, fontWeight: '800', color: colors.textSecondary },
-  planBadgeTextPro: { color: colors.together },
-  statusNote: { fontSize: fontSize.caption, color: colors.textSecondary, lineHeight: 18 },
-
-  pitchCard: { padding: spacing.md, gap: spacing.sm },
-  pitchTitle: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
-  pitchLead: { fontSize: fontSize.body, color: colors.textSecondary },
+  tagText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textPrimary },
+  heroImage: { width: 140, height: 140 },
+  heroTitle: { fontSize: fontSize.title, fontWeight: '800', color: colors.textPrimary, letterSpacing: -0.5 },
+  heroLead: { fontSize: fontSize.body, color: colors.textSecondary, textAlign: 'center', lineHeight: 21 },
   strong: { fontWeight: '800', color: colors.textPrimary },
 
-  highlights: { gap: spacing.sm, marginTop: spacing.xs },
+  // ── 가치 ──
+  highlights: { gap: spacing.md, marginTop: spacing.lg, paddingHorizontal: spacing.xs },
   highlightRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   highlightBody: { flex: 1 },
-  highlightName: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
+  highlightName: { fontSize: fontSize.subtitle, fontWeight: '700', color: colors.textPrimary, lineHeight: 22 },
   highlightLine: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 1 },
 
-  price: {
-    fontSize: fontSize.subtitle,
-    fontWeight: '800',
-    color: colors.textPrimary,
-    textAlign: 'center',
-    marginTop: spacing.xs,
-  },
-  primary: {
-    backgroundColor: colors.togetherFill,
-    borderRadius: radius.md,
-    paddingVertical: spacing.md - 2,
-    alignItems: 'center',
-    marginTop: spacing.xs,
-  },
-  // 채움이 밝아졌으므로 글자는 배경 휘도로 고른다 (흰색 고정이면 1.99:1)
-  primaryText: { color: onColor(colors.togetherFill), fontSize: fontSize.body, fontWeight: '800' },
-  pressed: { opacity: 0.85 },
+  // ── CTA ──
+  cta: { marginTop: spacing.lg },
   notice: {
+    marginTop: spacing.lg,
+    minHeight: 54,
+    borderRadius: radius.pill,
     backgroundColor: colors.surfaceAlt,
-    borderRadius: radius.md,
-    paddingVertical: spacing.md - 2,
     alignItems: 'center',
-    marginTop: spacing.xs,
+    justifyContent: 'center',
   },
   noticeText: { fontSize: fontSize.body, fontWeight: '700', color: colors.textSecondary },
 
-  // 구독 고지 — 읽히되 소개를 가리지 않게 한 단계 작고 흐리게
-  terms: { gap: spacing.xs, marginTop: spacing.xs },
-  termsText: { fontSize: fontSize.caption, color: colors.textSecondary, lineHeight: 18 },
-  termsLinks: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.xxs },
-  termsLink: {
-    fontSize: fontSize.caption,
-    fontWeight: '700',
-    color: colors.together,
-    textDecorationLine: 'underline',
-  },
-  termsDot: { fontSize: fontSize.caption, color: colors.textSecondary },
-
-  loading: { marginTop: spacing.lg },
-  group: { gap: spacing.xs },
-  groupTitle: {
-    fontSize: fontSize.body,
-    fontWeight: '800',
-    color: colors.textPrimary,
-    marginLeft: spacing.xs,
-  },
-  table: { paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
-  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm },
-  rowBorder: { borderTopWidth: 1, borderTopColor: colors.border },
-  headRow: { paddingBottom: spacing.xs },
-  headText: { fontSize: fontSize.caption, fontWeight: '800', color: colors.textSecondary },
-  cellName: { flex: 1, fontSize: fontSize.caption, color: colors.textPrimary, paddingRight: spacing.xs },
-  cellLimit: { width: 78, fontSize: fontSize.caption, color: colors.textSecondary, textAlign: 'right' },
-  proValue: { color: colors.together, fontWeight: '700' },
+  // ── 비교표 ──
+  loading: { marginTop: spacing.xl },
+  group: { marginTop: spacing.lg },
+  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm, paddingHorizontal: spacing.md, minHeight: 44 },
+  headText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary },
+  cellName: { flex: 1, fontSize: fontSize.body, color: colors.textPrimary, paddingRight: spacing.xs },
+  cellLimit: { width: 78, fontSize: fontSize.body, color: colors.textSecondary, textAlign: 'right' },
+  proValue: { color: colors.textPrimary, fontWeight: '700' },
   muted: { color: colors.textTertiary },
   mark: { color: colors.textTertiary },
-  footnote: { fontSize: fontSize.caption, color: colors.textSecondary, marginLeft: spacing.xs },
+  footnote: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.sm, marginLeft: spacing.xs },
+
+  // ── 구독 고지 — 읽히되 판매를 가리지 않게 맨 아래, 캡션·회색 ──
+  terms: { gap: spacing.xs, marginTop: spacing.xl, paddingHorizontal: spacing.xs },
+  termsText: { fontSize: fontSize.caption, color: colors.textSecondary, lineHeight: 18 },
+  termsStrong: { fontWeight: '700', color: colors.textSecondary },
+  termsLinks: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.xxs },
+  termsLink: { fontSize: fontSize.caption, fontWeight: '700', color: colors.primary, textDecorationLine: 'underline' },
+  termsDot: { fontSize: fontSize.caption, color: colors.textSecondary },
 }));
