@@ -499,7 +499,7 @@ const styles = themedStyles((colors) => ({
     borderColor: colors.border,
   },
   categoryText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
-  setInfo: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '700' },
+  setInfo: { fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '700' },
   // 세트 구성법 배지 — 카테고리 칩과 달리 강조색으로 눈에 띄게 (드랍/레스트-포즈 세트 등 고급 기법 안내)
   setMethodChip: {
     paddingHorizontal: spacing.sm,
@@ -507,7 +507,7 @@ const styles = themedStyles((colors) => ({
     borderRadius: radius.pill,
     backgroundColor: colors.accentSoft,
   },
-  setMethodText: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '700' },
+  setMethodText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
   exerciseComment: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
   dayComment: { fontSize: fontSize.caption, color: colors.textPrimary, marginTop: spacing.xs },
   saveRoutineBtn: { marginTop: spacing.md },

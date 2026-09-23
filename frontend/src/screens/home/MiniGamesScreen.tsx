@@ -347,7 +347,7 @@ const styles = themedStyles((colors) => ({
   },
   streakFlame: { fontSize: fontSize.subtitle },
   streakText: { flex: 1, fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
-  streakNumber: { color: colors.primary, fontWeight: '800' },
+  streakNumber: { color: colors.textPrimary, fontWeight: '800' },
   streakBest: { fontSize: 10, color: colors.textMuted, fontWeight: '800' },
 
   dailyCard: {
@@ -360,7 +360,7 @@ const styles = themedStyles((colors) => ({
   },
   dailyCardDone: { borderColor: colors.border, backgroundColor: colors.surface },
   dailyHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  dailyLabel: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '800' },
+  dailyLabel: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '800' },
   dailyTitle: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
   dailyDesc: { fontSize: fontSize.caption, color: colors.textSecondary, lineHeight: 18 },
   iconBox: {
