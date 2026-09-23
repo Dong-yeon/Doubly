@@ -16,13 +16,23 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import {
   DEFAULT_CHAT_THEME_ID,
+  getChatPhotoUri,
   getChatThemeId,
   isChatThemeId,
+  setChatPhotoUri,
   setChatThemeId,
   type ChatThemeId,
 } from '../theme/chatTheme';
+import { deleteChatBackgroundPhoto } from '../utils/chatBackgroundPhoto';
 
 const STORAGE_KEY = 'doubly.chat.background';
+
+/**
+ * 사진 배경의 파일 경로 — 테마 id 와 <b>따로</b> 둔다. 사진은 테마를 대체하지 않고
+ * 배경만 덮으므로(chatTheme 의 withPhoto 주석) "인디고 + 사진"을 그대로 저장해야 한다.
+ * 사진을 지우면 고르고 있던 테마로 자연히 돌아간다.
+ */
+const PHOTO_KEY = 'doubly.chat.background.photo';
 
 /**
  * 웹은 동기 저장소가 있어 첫 렌더 전에 값을 넣을 수 있다.
@@ -41,19 +51,34 @@ if (Platform.OS === 'web') {
 
 interface ChatThemeState {
   id: ChatThemeId;
+  /** 사진 배경의 로컬 파일 uri — 없으면 null */
+  photoUri: string | null;
   /** 저장된 선택을 불러와 적용 (앱 시작 시 1회) */
   load: () => Promise<void>;
   setTheme: (id: ChatThemeId) => Promise<void>;
+  /** 이미 처리·복사가 끝난 파일 uri 를 적용한다 (고르기는 utils/chatBackgroundPhoto) */
+  setPhoto: (uri: string) => Promise<void>;
+  clearPhoto: () => Promise<void>;
 }
 
-export const useChatThemeStore = create<ChatThemeState>((set) => ({
+export const useChatThemeStore = create<ChatThemeState>((set, get) => ({
   id: getChatThemeId(),
+  photoUri: getChatPhotoUri(),
 
   load: async () => {
-    const stored = await AsyncStorage.getItem(STORAGE_KEY);
+    const [stored, photo] = await Promise.all([
+      AsyncStorage.getItem(STORAGE_KEY),
+      AsyncStorage.getItem(PHOTO_KEY),
+    ]);
     const id = isChatThemeId(stored) ? stored : DEFAULT_CHAT_THEME_ID;
     setChatThemeId(id);
-    set({ id });
+    /*
+     * 경로만 복원하고 파일이 실제로 있는지는 확인하지 않는다 — 사라졌다면 <Image> 가
+     * 조용히 실패하고 그 아래 테마 배경색이 보인다(chatTheme 이 background 를 안 건드리는
+     * 이유). 시작 경로에 파일 I/O 를 한 번 더 넣을 값을 못 한다.
+     */
+    setChatPhotoUri(photo);
+    set({ id, photoUri: photo });
   },
 
   setTheme: async (id) => {
@@ -68,5 +93,22 @@ export const useChatThemeStore = create<ChatThemeState>((set) => ({
       // 무시 — AsyncStorage 쪽이 웹에서도 백업으로 동작한다
     }
     await AsyncStorage.setItem(STORAGE_KEY, id);
+  },
+
+  setPhoto: async (uri) => {
+    // 앞의 사진은 더 쓸 데가 없다 — 남겨 두면 고를 때마다 문서 폴더에 쌓인다
+    const previous = get().photoUri;
+    setChatPhotoUri(uri);
+    set({ photoUri: uri });
+    if (previous && previous !== uri) deleteChatBackgroundPhoto(previous);
+    await AsyncStorage.setItem(PHOTO_KEY, uri);
+  },
+
+  clearPhoto: async () => {
+    const previous = get().photoUri;
+    setChatPhotoUri(null);
+    set({ photoUri: null });
+    if (previous) deleteChatBackgroundPhoto(previous);
+    await AsyncStorage.removeItem(PHOTO_KEY);
   },
 }));
