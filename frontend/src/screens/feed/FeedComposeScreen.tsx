@@ -153,7 +153,10 @@ export function FeedComposeScreen({ navigation }: Props) {
               accessibilityRole="button"
               accessibilityLabel="사진 추가하기"
             >
-              <Text style={styles.photoPlaceholder}>사진 추가하기 (선택, 최대 {MAX_PHOTOS}장)</Text>
+              {/* 점선 타일 + 아이콘 — 문장 대신 형태로 말한다 (docs/SCREEN_DESIGN_PASS_2026-09-23.md §4-3) */}
+              <MaterialCommunityIcons name="image-plus" size={32} color={colors.textSecondary} />
+              <Text style={styles.photoPlaceholder}>사진 추가</Text>
+              <Text style={styles.photoHint}>최대 {MAX_PHOTOS}장</Text>
             </TouchableOpacity>
           ) : (
             <ScrollView
@@ -191,7 +194,7 @@ export function FeedComposeScreen({ navigation }: Props) {
 
           <TextField
             label="오늘의 일상"
-            placeholder="예: 퇴근하고 같이 한강 러닝 날씨 최고!"
+            placeholder="무슨 일이 있었나요?"
             value={content}
             onChangeText={(next) => {
               // 사용자가 다시 손대면 되돌리기는 의미가 없어진다
@@ -230,8 +233,10 @@ const styles = themedStyles((colors) => ({
     overflow: 'hidden',
     marginBottom: spacing.sm,
   },
-  photoBoxEmpty: { width: '100%', aspectRatio: 3 / 2 },
-  photoPlaceholder: { color: colors.textSecondary, fontSize: fontSize.body, fontWeight: '600' },
+  // 빈 사진 자리 — 점선 테두리(추가할 수 있는 자리라는 관용 형태), 높이는 3:2 에서 줄여 글 입력을 위로
+  photoBoxEmpty: { width: '100%', aspectRatio: 2 / 1, borderStyle: 'dashed', borderColor: colors.borderStrong, gap: spacing.xxs },
+  photoPlaceholder: { color: colors.textSecondary, fontSize: fontSize.body, fontWeight: '600', marginTop: spacing.xs },
+  photoHint: { color: colors.textMuted, fontSize: fontSize.caption },
 
   // 사진이 하나라도 있으면 큰 박스 대신 가로 스크롤 썸네일 줄로 바뀐다
   thumbRow: { marginBottom: spacing.sm },

@@ -15,6 +15,7 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
+  StyleSheet,
   Text,
   View,
 } from 'react-native';
@@ -23,7 +24,9 @@ import { usePhotoGrid } from '../../hooks/usePhotoGrid';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { AlbumStackParamList } from '../../navigation/types';
+import { Chip } from '../../components/Chip';
 import { EmptyState } from '../../components/EmptyState';
+import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { ImageViewer, type ViewerImage } from '../../components/ImageViewer';
 import { MemoryPeek } from '../home/components/MemoryPeek';
@@ -31,7 +34,7 @@ import { feedApi } from '../../api/feed';
 import { tripApi } from '../../api/trip';
 import { toast } from '../../store/toastStore';
 import { getErrorMessage } from '../../utils/error';
-import { relativeDateLabel } from '../../utils/date';
+import { localDateOf, relativeDateLabel } from '../../utils/date';
 import { thumbnailUrl } from '../../utils/imageUrl';
 import type { FeedPhoto, FeedPhotoSource, Memories, Trip } from '../../types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
@@ -55,6 +58,50 @@ const FILTERS: { key: string; label: string; sources?: FeedPhotoSource[] }[] = [
 
 /** 기록 하나를 가리키는 키 — 테이블마다 id 공간이 달라 type 까지 묶어야 유일하다 */
 const keyOf = (p: FeedPhoto) => `${p.type}:${p.refId}`;
+
+/**
+ * 그리드 줄 — 월 머리말 또는 사진 N칸.
+ *
+ * <p><b>왜 numColumns 를 안 쓰나</b>: 이 탭은 "지금까지의 우리"인데 3열 그리드가 날짜 구분
+ * 없이 무한히 이어져 스크롤 중엔 언제 찍은 사진인지 알 수 없었다
+ * (docs/SCREEN_DESIGN_PASS_2026-09-23.md §4-2). 애플·구글 포토처럼 <b>월 머리말</b>로
+ * 끊는다. FlatList 의 numColumns 는 머리말을 끼울 수 없으므로 줄 단위 데이터로 바꿨다 —
+ * 회전·창 크기로 열 수가 바뀌면 줄이 다시 묶이므로 key 를 갈 필요도 없어졌다.
+ */
+type GridRow =
+  | { kind: 'month'; key: string; label: string }
+  | { kind: 'photos'; key: string; items: FeedPhoto[] };
+
+function monthLabelOf(iso: string): string {
+  const d = localDateOf(iso); // YYYY-MM-DD (기기 로컬)
+  const year = d.slice(0, 4);
+  const month = Number(d.slice(5, 7));
+  return `${year}년 ${month}월`;
+}
+
+function toGridRows(photos: FeedPhoto[], columns: number): GridRow[] {
+  const rows: GridRow[] = [];
+  let currentMonth: string | null = null;
+  let bucket: FeedPhoto[] = [];
+  const flush = () => {
+    if (bucket.length > 0 && currentMonth) {
+      rows.push({ kind: 'photos', key: `${currentMonth}:${rows.length}`, items: bucket });
+      bucket = [];
+    }
+  };
+  for (const p of photos) {
+    const month = monthLabelOf(p.createdAt);
+    if (month !== currentMonth) {
+      flush();
+      currentMonth = month;
+      rows.push({ kind: 'month', key: `m:${month}`, label: month });
+    }
+    bucket.push(p);
+    if (bucket.length === columns) flush();
+  }
+  flush();
+  return rows;
+}
 
 export function AlbumScreen({ navigation }: Props) {
   // Dimensions.get() 은 정적 스냅샷이라 회전·창 크기 변경에 반응하지 않았다.
@@ -105,6 +152,8 @@ export function AlbumScreen({ navigation }: Props) {
     }
     return { viewerImages: images, firstIndexByKey };
   }, [photos]);
+
+  const gridRows = useMemo(() => toGridRows(photos, columns), [photos, columns]);
 
   const load = useCallback(
     async (key: string) => {
@@ -192,16 +241,40 @@ export function AlbumScreen({ navigation }: Props) {
             {trips.map((t) => (
               <Pressable
                 key={t.id}
-                style={styles.tripCard}
+                style={[styles.tripCard, t.coverImageUrl ? styles.tripCardCover : null]}
                 onPress={() => navigation.navigate('TripAlbum', { tripId: t.id, title: t.title })}
                 accessibilityRole="button"
                 accessibilityLabel={`${t.title} 여행 앨범`}
               >
-                <MaterialCommunityIcons name="airplane" size={18} color={colors.primary} />
-                <Text style={styles.tripTitle} numberOfLines={1}>
-                  {t.title}
-                </Text>
-                <Text style={styles.tripDate}>{t.startDate?.slice(0, 7) ?? ''}</Text>
+                {/*
+                  커버 사진이 있으면 사진 타일 + 하단 그라데이션 위 제목(구글 포토·비트윈 앨범 문법).
+                  없으면 아이콘 카드 — 여행에 사진이 한 장도 없을 때만이다.
+                */}
+                {t.coverImageUrl ? (
+                  <>
+                    <Image source={{ uri: thumbnailUrl(t.coverImageUrl, 280) }} style={StyleSheet.absoluteFill} />
+                    <LinearGradient
+                      colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.55)']}
+                      locations={[0.4, 1]}
+                      style={StyleSheet.absoluteFill}
+                      pointerEvents="none"
+                    />
+                    <View style={styles.tripCoverText}>
+                      <Text style={styles.tripTitleOnCover} numberOfLines={1}>
+                        {t.title}
+                      </Text>
+                      <Text style={styles.tripDateOnCover}>{t.startDate?.slice(0, 7) ?? ''}</Text>
+                    </View>
+                  </>
+                ) : (
+                  <>
+                    <MaterialCommunityIcons name="airplane" size={18} color={colors.textSecondary} />
+                    <Text style={styles.tripTitle} numberOfLines={1}>
+                      {t.title}
+                    </Text>
+                    <Text style={styles.tripDate}>{t.startDate?.slice(0, 7) ?? ''}</Text>
+                  </>
+                )}
               </Pressable>
             ))}
           </ScrollView>
@@ -228,7 +301,7 @@ export function AlbumScreen({ navigation }: Props) {
             accessibilityRole="button"
             accessibilityLabel="목록으로 보기"
           >
-            <MaterialCommunityIcons name="format-list-bulleted" size={22} color={colors.textPrimary} />
+            <MaterialCommunityIcons name="format-list-bulleted" size={24} color={colors.textPrimary} />
           </Pressable>
           <Pressable
             onPress={() => navigation.navigate('FeedCompose')}
@@ -253,30 +326,15 @@ export function AlbumScreen({ navigation }: Props) {
         style={styles.chipScroll}
         contentContainerStyle={styles.chipRow}
       >
-        {FILTERS.map((f) => {
-          const active = f.key === filter;
-          return (
-            <Pressable
-              key={f.key}
-              onPress={() => onPickFilter(f.key)}
-              style={[styles.chip, active && styles.chipActive]}
-              accessibilityRole="button"
-              accessibilityState={{ selected: active }}
-            >
-              <Text style={[styles.chipText, active && styles.chipTextActive]}>{f.label}</Text>
-            </Pressable>
-          );
-        })}
+        {/* 공용 Chip — 직접 만든 알약(≈28px)은 터치 타깃 44 에 못 미쳤다 */}
+        {FILTERS.map((f) => (
+          <Chip key={f.key} label={f.label} selected={f.key === filter} onPress={() => onPickFilter(f.key)} />
+        ))}
       </ScrollView>
 
       <FlatList
-        data={photos}
-        keyExtractor={keyOf}
-        /* numColumns 는 런타임 변경이 지원되지 않는다(RN 경고) — 회전·창 크기로 열이
-           바뀌면 key 를 갈아 목록을 새로 그린다 */
-        key={columns}
-        numColumns={columns}
-        columnWrapperStyle={styles.row}
+        data={gridRows}
+        keyExtractor={(row) => row.key}
         ListHeaderComponent={listHeader}
         contentContainerStyle={styles.list}
         refreshControl={
@@ -284,29 +342,38 @@ export function AlbumScreen({ navigation }: Props) {
         }
         onEndReached={loadMore}
         onEndReachedThreshold={0.4}
-        renderItem={({ item }) => (
-          <Pressable
-            onPress={() => setViewingIndex(firstIndexByKey.get(keyOf(item)) ?? 0)}
-            accessibilityRole="imagebutton"
-            accessibilityLabel={
-              item.imageUrls && item.imageUrls.length > 1
-                ? `${item.mine ? '내' : item.authorName} 사진 ${item.imageUrls.length}장 크게 보기`
-                : `${item.mine ? '내' : item.authorName} 사진 크게 보기`
-            }
-          >
-            {/* 그리드는 썸네일 — 원본을 3열에 그대로 깔면 한 화면에 수 MB 를 받는다 */}
-            <Image
-              source={{ uri: thumbnailUrl(item.imageUrl, Math.round(CELL)) }}
-              style={[styles.cell, { width: CELL, height: CELL }]}
-            />
-            {/* 여러 장 표시 — Instagram류 앱과 같은 자리(우상단)의 스택 아이콘 */}
-            {item.imageUrls && item.imageUrls.length > 1 ? (
-              <View style={styles.multiBadge}>
-                <MaterialCommunityIcons name="image-multiple-outline" size={14} color={colors.white} />
-              </View>
-            ) : null}
-          </Pressable>
-        )}
+        renderItem={({ item: row }) =>
+          row.kind === 'month' ? (
+            <Text style={styles.monthHeader}>{row.label}</Text>
+          ) : (
+            <View style={styles.row}>
+              {row.items.map((item) => (
+                <Pressable
+                  key={keyOf(item)}
+                  onPress={() => setViewingIndex(firstIndexByKey.get(keyOf(item)) ?? 0)}
+                  accessibilityRole="imagebutton"
+                  accessibilityLabel={
+                    item.imageUrls && item.imageUrls.length > 1
+                      ? `${item.mine ? '내' : item.authorName} 사진 ${item.imageUrls.length}장 크게 보기`
+                      : `${item.mine ? '내' : item.authorName} 사진 크게 보기`
+                  }
+                >
+                  {/* 그리드는 썸네일 — 원본을 3열에 그대로 깔면 한 화면에 수 MB 를 받는다 */}
+                  <Image
+                    source={{ uri: thumbnailUrl(item.imageUrl, Math.round(CELL)) }}
+                    style={[styles.cell, { width: CELL, height: CELL }]}
+                  />
+                  {/* 여러 장 표시 — Instagram류 앱과 같은 자리(우상단)의 스택 아이콘 */}
+                  {item.imageUrls && item.imageUrls.length > 1 ? (
+                    <View style={styles.multiBadge}>
+                      <MaterialCommunityIcons name="image-multiple-outline" size={14} color={colors.white} />
+                    </View>
+                  ) : null}
+                </Pressable>
+              ))}
+            </View>
+          )
+        }
         ListEmptyComponent={
           refreshing ? null : loadError ? (
             <EmptyState
@@ -318,7 +385,7 @@ export function AlbumScreen({ navigation }: Props) {
             />
           ) : (
             <EmptyState
-              icon="image-multiple-outline"
+              illustration="duo"
               title="아직 사진이 없어요"
               description={'일상·식단·운동·맛집에 사진을 남기면\n여기에 모두 모여요.'}
             />
@@ -353,7 +420,16 @@ const styles = themedStyles((colors) => ({
   // 빈 상태는 위에서 조금 내려온 자리에 둔다 — flexGrow+center 로 감싸면 위의 섹션까지
   // 함께 가운데로 끌려간다(2026-09-15 리포트: 칩이 화면 중앙으로 내려갔다)
   emptyPad: { paddingTop: spacing.xxl },
-  row: { gap: GAP, marginBottom: GAP },
+  row: { flexDirection: 'row', gap: GAP, marginBottom: GAP },
+  // 월 머리말 — 그리드 위에서 시간축을 만든다. 첫 머리말은 칩 바로 아래라 위 여백을 줄인다
+  monthHeader: {
+    fontSize: fontSize.body,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
+  },
   // width/height 는 렌더 시점의 useContentWidth 값으로 인라인 적용한다
   cell: { backgroundColor: colors.surfaceAlt },
   multiBadge: {
@@ -385,30 +461,27 @@ const styles = themedStyles((colors) => ({
    * 칩이 화면 높이만큼 늘어난 알약이 됐다(2026-09-15 리포트). 내용 높이만 쓰게 한다.
    */
   chipScroll: { flexGrow: 0, flexShrink: 0 },
-  chipRow: { gap: spacing.xs, paddingHorizontal: layout.screenPadding, paddingBottom: spacing.sm },
-  chip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  chipActive: { backgroundColor: colors.primaryBg, borderColor: colors.primary },
-  chipText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary },
-  chipTextActive: { color: colors.primary },
+  chipRow: { gap: spacing.xs, paddingHorizontal: layout.screenPadding, paddingBottom: spacing.xs },
   section: { paddingHorizontal: layout.screenPadding, paddingBottom: spacing.sm, gap: spacing.xs },
   sectionTitle: { fontSize: fontSize.caption, fontWeight: '800', color: colors.textSecondary },
   tripRow: { gap: spacing.sm, paddingVertical: spacing.xs },
   tripCard: {
     width: 140,
+    height: 140,
     gap: spacing.xxs,
     padding: spacing.sm,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
+    justifyContent: 'flex-end',
+    overflow: 'hidden',
   },
+  tripCardCover: { borderWidth: 0, backgroundColor: colors.surfaceAlt },
   tripTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
   tripDate: { fontSize: fontSize.caption, color: colors.textSecondary },
+  // 커버 위 글자 — 검은 그라데이션(0.55) 위라 테마와 무관하게 흰색
+  tripCoverText: { gap: 1 },
+  tripTitleOnCover: { fontSize: fontSize.body, fontWeight: '800', color: '#FFFFFF' },
+  tripDateOnCover: { fontSize: fontSize.caption, color: 'rgba(255,255,255,0.85)' },
 }));

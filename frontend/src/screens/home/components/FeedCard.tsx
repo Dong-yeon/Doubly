@@ -26,23 +26,22 @@ import { colors, fontSize, radius, spacing } from '../../../constants/theme';
 import { themedStyles } from '../../../theme/themedStyles';
 import { isHovered } from '../../../utils/pointer';
 import { layout } from '../../../theme/layout';
-import { onColor } from '../../../theme/onColor';
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 /**
- * 자동 기록의 종류별 아이콘·색 — 한눈에 무슨 기록인지 구분되게.
- * 함수로 두어 렌더 시점에 현재 팔레트를 읽는다(객체로 굳히면 테마 전환을 못 따라온다).
+ * 자동 기록의 종류별 아이콘 — 한눈에 무슨 기록인지 구분되게.
+ *
+ * <p>색은 <b>중립</b>이다. 예전엔 종류마다 소유자 색(indigo=상대·violet=함께·coral=나)을
+ * 빌려 써서 상대의 식단이 "함께" 색 원으로, 내 운동이 "상대" 색 원으로 나왔다
+ * (docs/SCREEN_DESIGN_PASS_2026-09-23.md §4-2). 종류는 아이콘이 이미 말한다.
  */
-const typeMeta = (
-  type: Exclude<FeedItemType, 'POST'>,
-): { icon: IconName; color: string } =>
-  ({
-    WORKOUT: { icon: 'dumbbell' as IconName, color: colors.indigo },
-    MEAL: { icon: 'silverware-fork-knife' as IconName, color: colors.violet },
-    PLACE_VISIT: { icon: 'map-marker' as IconName, color: colors.coral },
-    CONTENT_LOG: { icon: 'movie-open-outline' as IconName, color: colors.danger },
-  })[type];
+const TYPE_ICON: Record<Exclude<FeedItemType, 'POST'>, IconName> = {
+  WORKOUT: 'dumbbell',
+  MEAL: 'silverware-fork-knife',
+  PLACE_VISIT: 'map-marker',
+  CONTENT_LOG: 'movie-open-outline',
+};
 
 export interface FeedCardProps {
   item: FeedItem;
@@ -86,7 +85,7 @@ function RecordCard({
   quickEmojis,
   onReact,
 }: Pick<FeedCardProps, 'item' | 'timeLabel' | 'quickEmojis' | 'onReact'>) {
-  const meta = typeMeta(item.type as Exclude<FeedItemType, 'POST'>);
+  const icon = TYPE_ICON[item.type as Exclude<FeedItemType, 'POST'>];
   const reactions = item.reactions ?? [];
   const [picking, setPicking] = useState(false);
   // 내 기록엔 응원 버튼을 열지 않는다 — 받은 응원만 보여준다(내 기록 밑의 응원 버튼은 소음)
@@ -98,9 +97,8 @@ function RecordCard({
       delayLongPress={400}
     >
       <View style={styles.recordRow}>
-        <View style={[styles.recordIcon, { backgroundColor: meta.color }]}>
-          {/* 다크의 소유자 색은 파스텔이라 흰 아이콘이 1.50~1.69:1 이었다 — 배경 휘도로 고른다 */}
-          <MaterialCommunityIcons name={meta.icon} size={18} color={onColor(meta.color)} />
+        <View style={styles.recordIcon}>
+          <MaterialCommunityIcons name={icon} size={18} color={colors.textSecondary} />
         </View>
         <View style={styles.recordBody}>
           <View style={styles.recordTitleRow}>
@@ -263,7 +261,7 @@ function PostCard({ item, timeLabel, quickEmojis, onReact, onLongPress }: FeedCa
 
       <View style={[styles.postBody, hasPhoto && styles.postBodyOnPhoto]}>
         <View style={styles.postHeader}>
-          <View style={[styles.whoDot, { backgroundColor: item.mine ? colors.coral : colors.indigo }]} />
+          {/* 색 점은 뺐다 — 이름이 있으니 점은 정보를 더하지 않는다 */}
           <Text style={styles.who}>{item.mine ? '나' : item.userName}</Text>
           <Text style={styles.time}>{timeLabel}</Text>
         </View>
@@ -339,7 +337,14 @@ const styles = themedStyles((colors) => ({
     marginBottom: spacing.sm,
   },
   recordRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  recordIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  recordIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceAlt,
+  },
   recordBody: { flex: 1 },
   recordTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   // flexShrink 가 있어야 긴 제목이 '함께' 배지를 행 밖으로 밀지 않고 자기가 줄어든다
@@ -397,7 +402,6 @@ const styles = themedStyles((colors) => ({
   postBodyOnPhoto: { padding: spacing.md },
 
   postHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  whoDot: { width: 7, height: 7, borderRadius: 4 },
   who: { flex: 1, fontSize: fontSize.caption, fontWeight: '800', color: colors.textSecondary },
   time: { fontSize: fontSize.caption, color: colors.textMuted },
   content: { fontSize: fontSize.subtitle, color: colors.textPrimary, marginTop: spacing.xs, lineHeight: 24 },

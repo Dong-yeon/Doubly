@@ -120,7 +120,7 @@ export function MemoriesScreen({ route }: Props) {
               />
             ) : (
               <EmptyState
-                icon="flower-outline"
+                illustration="duo"
                 title="아직 이 날의 추억이 없어요"
                 description={'오늘을 남기면\n내년 오늘 찾아올 거예요.'}
               />
