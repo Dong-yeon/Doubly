@@ -532,16 +532,33 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           data: {
             members: [{ user_id: String(myId) }, { user_id: String(partnerId) }],
             /*
-             * 음성통화는 카메라를 처음부터 꺼둔다 — CallOverlay 가 곧바로 벨 화면을 띄운다.
-             * target_resolution 은 타입상 optional 이지만, video 오버라이드를 하나라도
-             * 보내면 Stream 서버가 값 없이는 400(width/height must be 240 or greater)을
-             * 뱉는다 — 카메라가 꺼져 있어 실제로 안 쓰이는 값이라 SDK 기본값(640x480)을
-             * 그대로 채워 스키마만 만족시킨다. 실기기 테스트로 확인된 이슈(PLAN.md 참고).
+             * 카메라를 <b>양쪽 다 명시</b>한다 — 음성은 끄고 영상은 켠다.
+             *
+             * <p>예전엔 영상통화만 {@code undefined} 로 두고 Stream 대시보드의 'default'
+             * 콜 타입 기본값에 맡겼다. 그 결과 <b>영상통화를 걸어도 카메라가 켜지지 않았다</b>
+             * — 발신 화면이 새까맣고(자기 미리보기 없음) 카메라 캡처 로그도 안 찍혔다
+             * (실기기 확인 2026-09-23). 기본값이 무엇인지는 대시보드를 봐야 알 수 있는데,
+             * 그건 코드에서 읽을 수 없는 값이라 <b>여기서 못 박는 편이 맞다</b>.
+             *
+             * <p>{@code target_resolution} 은 타입상 optional 이지만, video 오버라이드를
+             * 하나라도 보내면 Stream 서버가 값 없이는 400(width/height must be 240 or
+             * greater)을 뱉는다 — 음성통화에서 이미 겪은 이슈다(2026-08-25).
              */
-            settings_override:
-              callType === 'VOICE'
-                ? { video: { camera_default_on: false, target_resolution: { width: 640, height: 480 } } }
-                : undefined,
+            settings_override: {
+              video: {
+                /*
+                 * <b>영상통화가 한 번도 된 적 없던 이유가 이 한 줄이다.</b> Stream 대시보드의
+                 * 'default' 콜 타입은 비디오가 꺼져 있다. 예전 코드는 영상통화일 때
+                 * settings_override 를 통째로 생략해 그 기본값을 그대로 받았고, 그래서
+                 * <b>비디오 없는 통화</b>가 만들어졌다 — 벨은 울리고 화면은 검었다.
+                 * 켜달라고 명시하면 400 "Video is not enabled for this call" 대신 열린다
+                 * (실기기에서 그 400 을 직접 받아 확인했다, 2026-09-23).
+                 */
+                enabled: callType === 'VIDEO',
+                camera_default_on: callType === 'VIDEO',
+                target_resolution: { width: 640, height: 480 },
+              },
+            },
           },
         }));
       } catch (e) {
