@@ -15,7 +15,7 @@
  * 고치고 싶을 때(오늘은 별로였지만 가게 평가는 유지)를 위해 위쪽은 한 줄 요약 + "수정"으로
  * 접어둔다. 분석: docs/LOVELICHELIN_UX_REANALYSIS_2026-09-14.md 3-1 · 5-1.
  */
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
   Image,
@@ -40,6 +40,7 @@ import { DateField } from '../../components/DateField';
 import { EmptyState } from '../../components/EmptyState';
 import { ImageViewer } from '../../components/ImageViewer';
 import { IconButton } from '../../components/IconButton';
+import { MaterialCommunityIcons } from '../../components/Icon';
 import { KakaoMap } from '../../components/KakaoMap';
 import { LovelichelinBadge } from '../../components/LovelichelinBadge';
 import { LovelichelinFanfareModal } from '../../components/LovelichelinFanfareModal';
@@ -51,6 +52,7 @@ import { isKakaoMapConfigured } from '../../constants/config';
 import { placeApi } from '../../api/place';
 import { useDeleteAction } from '../../hooks/useDeleteAction';
 import { useDietStore } from '../../store/dietStore';
+import { useAuthStore } from '../../store/authStore';
 import { pickImage, uploadImage } from '../../utils/imageUpload';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
@@ -78,6 +80,8 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
   const { placeId, name: placeName } = route.params;
   const androidKeyboardHeight = useAndroidKeyboardHeight();
   const saveMeal = useDietStore((s) => s.save);
+  // 방문 기록 ★ 색 — 남긴 사람 기준(나/상대). 예전엔 한 사람의 기록에 '함께' 색을 썼다
+  const myUserId = useAuthStore((s) => s.user?.id);
   const [place, setPlace] = useState<Place | null>(null);
   const [visits, setVisits] = useState<PlaceVisit[]>([]);
   const [loading, setLoading] = useState(false);
@@ -173,6 +177,38 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
       load();
     }, [load]),
   );
+
+  /*
+   * 수정·삭제는 헤더 오른쪽 — 정보 카드 첫 줄에 장소 이름을 title 크기로 한 번 더 쓰고 그 옆에
+   * 두던 것을 옮겼다(docs/SCREEN_DESIGN_PASS_2026-09-23.md §7-3 6번). 헤더 제목이 곧 이름이라
+   * 카드의 이름 줄은 중복이었다. place 가 바뀌면 다시 그려야 하므로 setOptions 를 effect 로.
+   */
+  useEffect(() => {
+    if (!place) return;
+    navigation.setOptions({
+      headerRight: () => (
+        <View style={styles.headerActions}>
+          <IconButton
+            icon="pencil-outline"
+            label="장소 정보 수정"
+            color={colors.textPrimary}
+            onPress={() => navigation.navigate('PlaceAdd', { place })}
+          />
+          <IconButton
+            icon="delete-outline"
+            label="장소 삭제"
+            color={colors.danger}
+            // 성공하면 곧장 goBack 이라 흐려질 행이 없다 — 응답 대기 중 연타로
+            // 중복 DELETE 되지 않게 버튼만 잠근다(QA_CHECKLIST.md 전역 반복 패턴 7)
+            disabled={deletingPlaceId != null}
+            onPress={onDeletePlace}
+          />
+        </View>
+      ),
+    });
+    // onDeletePlace 는 place 와 deletingPlaceId 로만 달라진다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigation, place, deletingPlaceId]);
 
   const onPickPhoto = async () => {
     try {
@@ -355,25 +391,8 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
             <View>
               {place ? (
                 <View style={styles.infoCard}>
-                  <View style={styles.infoTop}>
-                    <Text style={styles.infoName}>{place.name}</Text>
-                    <View style={styles.infoActions}>
-                      <IconButton
-                        icon="pencil-outline"
-                        label="장소 정보 수정"
-                        onPress={() => navigation.navigate('PlaceAdd', { place })}
-                      />
-                      <IconButton
-                        icon="delete-outline"
-                        label="장소 삭제"
-                        color={colors.danger}
-                        // 성공하면 곧장 goBack 이라 흐려질 행이 없다 — 응답 대기 중 연타로
-                        // 중복 DELETE 되지 않게 버튼만 잠근다(QA_CHECKLIST.md 전역 반복 패턴 7)
-                        disabled={deletingPlaceId != null}
-                        onPress={onDeletePlace}
-                      />
-                    </View>
-                  </View>
+                  {/* 이름은 내비 헤더가 제목으로 이미 보여준다 — 카드에서 한 번 더 쓰지 않는다.
+                      수정·삭제는 헤더 오른쪽(아래 useEffect). 카드는 태그 줄부터 시작한다 */}
                   <View style={styles.infoChipRow}>
                     {place.category ? (
                       <View style={styles.infoChip}>
@@ -497,13 +516,14 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
                       </TouchableOpacity>
                     ))}
                   </View>
-                  <Text style={styles.starHint}>
-                    {rating > 0
-                      ? place?.myRating
+                  {/* 0 이면 비운다 — "별점 없이 기록만"은 빈 별 다섯 개가 이미 말한다 */}
+                  {rating > 0 ? (
+                    <Text style={styles.starHint}>
+                      {place?.myRating
                         ? '내 럽슐랭 평가도 이 별점으로 바뀌어요'
-                        : '이 별점이 내 럽슐랭 평가가 돼요 — 둘 다 매기면 등급이 붙어요'
-                      : '별점 없이 기록만 남길 수도 있어요'}
-                  </Text>
+                        : '이 별점이 내 럽슐랭 평가가 돼요. 둘 다 매기면 등급이 붙어요'}
+                    </Text>
+                  ) : null}
 
                   <DateField
                     label="다녀온 날"
@@ -523,7 +543,10 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
                     {photoUri ? (
                       <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />
                     ) : (
-                      <Text style={styles.photoPlaceholder}>사진 추가하기</Text>
+                      <View style={styles.photoPlaceholderRow}>
+                        <MaterialCommunityIcons name="image-plus" size={22} color={colors.textSecondary} />
+                        <Text style={styles.photoPlaceholder}>사진 추가하기</Text>
+                      </View>
                     )}
                   </TouchableOpacity>
 
@@ -626,13 +649,22 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
                 <Text style={styles.visitDate}>
                   {item.visitedAt} · {item.visitedByName ?? '커플'}
                 </Text>
-                {item.rating ? <Text style={styles.visitStars}>{stars(item.rating)}</Text> : null}
+                {item.rating ? (
+                  <Text style={[styles.visitStars, { color: item.visitedBy === myUserId ? colors.me : colors.partner }]}>
+                    {stars(item.rating)}
+                  </Text>
+                ) : null}
               </View>
               {item.imageUrl ? (
                 <Image source={{ uri: item.imageUrl }} style={styles.visitPhoto} resizeMode="cover" />
               ) : null}
               {item.memo ? <Text style={styles.visitMemo}>{item.memo}</Text> : null}
-              {item.mealId ? <Text style={styles.mealBadge}>🍽 식단에도 기록됨</Text> : null}
+              {item.mealId ? (
+                <View style={styles.mealBadge}>
+                  <MaterialCommunityIcons name="silverware-fork-knife" size={12} color={colors.textSecondary} />
+                  <Text style={styles.mealBadgeText}>식단에도 기록됨</Text>
+                </View>
+              ) : null}
             </TouchableOpacity>
           )}
           ListEmptyComponent={
@@ -688,10 +720,8 @@ const styles = themedStyles((colors) => ({
     padding: spacing.md,
     marginBottom: spacing.lg,
   },
-  infoTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  infoName: { flex: 1, fontSize: fontSize.title, fontWeight: '800', color: colors.textPrimary },
-  infoActions: { flexDirection: 'row', alignItems: 'center' },
-  infoChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
+  headerActions: { flexDirection: 'row', alignItems: 'center' },
+  infoChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   infoChip: {
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
@@ -701,7 +731,7 @@ const styles = themedStyles((colors) => ({
     borderColor: colors.border,
   },
   infoChipText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
-  infoAddress: { fontSize: fontSize.body, color: colors.textSecondary, marginTop: spacing.sm },
+  infoAddress: { fontSize: fontSize.body, color: colors.textSecondary, marginTop: spacing.xs },
   infoStats: { fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '700', marginTop: spacing.xs },
   infoMap: { marginTop: spacing.md },
   lovelichelinSection: {
@@ -728,11 +758,12 @@ const styles = themedStyles((colors) => ({
     padding: spacing.md,
   },
   label: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700', marginBottom: spacing.sm },
-  starRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.xs },
-  star: { fontSize: 32, color: colors.accent },
+  starRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
+  // 입력 별은 크롬 채움 — accent(테마 강조)는 소유자 뜻이 없다. 요약 줄의 me/partner 와 헷갈리지 않게
+  star: { fontSize: 32, color: colors.primaryFill },
   // 별점이 대표 평점으로도 간다는 사실을 그 자리에서 알려준다 — 별 위젯을 하나로 합친 뒤
   // 이게 없으면 "등급은 어디서 매기지?" 가 된다
-  starHint: { fontSize: fontSize.caption, color: colors.textSecondary, marginBottom: spacing.md },
+  starHint: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: -spacing.sm, marginBottom: spacing.md },
   photoBox: {
     borderRadius: radius.md,
     borderWidth: 1,
@@ -752,6 +783,7 @@ const styles = themedStyles((colors) => ({
   photoBoxEmpty: { width: '100%', aspectRatio: 16 / 9 },
   photoBoxFilled: { width: '100%', aspectRatio: 4 / 3 },
   photo: { width: '100%', height: '100%' },
+  photoPlaceholderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   photoPlaceholder: { color: colors.textSecondary, fontSize: fontSize.body, fontWeight: '600' },
   mealLogBox: {
     marginTop: spacing.md,
@@ -768,7 +800,7 @@ const styles = themedStyles((colors) => ({
     borderColor: colors.border,
     alignItems: 'center',
   },
-  typeChipActive: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
+  typeChipActive: { borderColor: colors.primaryFill, backgroundColor: colors.primaryBg },
   typeText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
   typeTextActive: { color: colors.textPrimary, fontWeight: '800' },
   mealHint: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.sm },
@@ -794,9 +826,10 @@ const styles = themedStyles((colors) => ({
   visitCardDeleting: { opacity: 0.5 },
   visitHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   visitDate: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
-  visitStars: { fontSize: fontSize.body, color: colors.togetherText, fontWeight: '700' },
+  visitStars: { fontSize: fontSize.body, fontWeight: '700' },
   visitPhoto: { width: '100%', height: 160, borderRadius: radius.md, marginTop: spacing.sm },
   visitMemo: { fontSize: fontSize.body, color: colors.textPrimary, marginTop: spacing.sm },
-  mealBadge: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '700', marginTop: spacing.sm },
+  mealBadge: { flexDirection: 'row', alignItems: 'center', gap: spacing.xxs, marginTop: spacing.sm },
+  mealBadgeText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
   empty: { fontSize: fontSize.caption, color: colors.textSecondary, textAlign: 'center', paddingVertical: spacing.lg },
 }));
