@@ -101,13 +101,14 @@ const light = {
    * 글자용 primary 는 어둡게 두고 면만 밝힐 수 있다.
    *
    * <p>위에 얹는 글자는 {@code onColor()} 가 배경 휘도로 고른다 — 이 값 위에서는 ink 다
-   * (실측 5.21). 바탕 대비 3.13 으로 그래픽 3:1 도 넘는다.
+   * (실측 7.87). 바탕 대비는 2.07 이다 — 글자가 식별을 맡는 채움이라 3:1 을 강제하지 않는다
+   * (채팅 검증 스크립트도 말풍선 대 배경을 1.1 로 잡는다).
    *
    * <p><b>상대 Green 과 겹치지 않게 둔다</b>: partnerFill(#60C769, L58)과 같은 값이면
-   * §3-1 의 "크롬 = 상대 색 → 앱이 상대 것처럼 보인다"가 되살아난다. 여기는 L42 로
-   * 확실히 더 진하고 hue 도 137 로 벌려 두었다.
+   * §3-1 의 "크롬 = 상대 색 → 앱이 상대 것처럼 보인다"가 되살아난다. 여기는 hue 137 로 벌려 두었지만
+   * <b>L54 로 올리면서 명도 차가 사라졌다</b>(2026-09-23) — 실기기에서 나란히 보고 판단할 것.
    */
-  primaryFill: '#33A251',
+  primaryFill: '#4DC76E',
   primaryBg: '#E9F2EA',
 
   // ── 텍스트 ───────────────────────────────────────────────────
@@ -301,7 +302,7 @@ const ACCENT_OVERRIDES: Record<Exclude<AccentVariant, 'green'>, Record<Scheme, P
       me: '#8C6918', meBg: '#F8F3E7', mePastelBg: '#EEDEBA', meText: '#8C6918', meFill: '#E5B443',
       partner: '#2E7A61', partnerBg: '#E7F8F3', partnerPastelBg: '#BAEEDC', partnerText: '#2E7A61', partnerFill: '#5EC9A6',
       together: '#487A2E', togetherBg: '#EDF8E7', togetherPastelBg: '#CBEEBA', togetherText: '#487A2E', togetherFill: '#82C95E',
-      primary: '#2E7A61', primaryDark: '#225946', primaryLight: '#45B590', primaryFill: '#2E9E7E', primaryBg: '#E9F7F2', primarySoft: '#E9F7F2',
+      primary: '#2E7A61', primaryDark: '#225946', primaryLight: '#45B590', primaryFill: '#49CAA5', primaryBg: '#E9F7F2', primarySoft: '#E9F7F2',
       coral: '#8C6918', indigo: '#2E7A61', violet: '#487A2E', couple: '#8C6918', food: '#487A2E', health: '#2E7A61',
       secondary: '#2E7A61', secondarySoft: '#E7F8F3', accent: '#487A2E', accentSoft: '#EDF8E7',
       markBack: '#90D5BE', markFront: '#225946', markSparkle: '#D9A441',
@@ -321,7 +322,7 @@ const ACCENT_OVERRIDES: Record<Exclude<AccentVariant, 'green'>, Record<Scheme, P
       me: '#B74E1A', meBg: '#FAF3EF', mePastelBg: '#EECBBA', meText: '#B74E1A', meFill: '#E58D61',
       partner: '#407749', partnerBg: '#E7F8EA', partnerPastelBg: '#BAEEC2', partnerText: '#407749', partnerFill: '#6EB97B',
       together: '#7A6B1F', togetherBg: '#F8F5E7', togetherPastelBg: '#EEE5BA', togetherText: '#7A6B1F', togetherFill: '#DAC24E',
-      primary: '#407749', primaryDark: '#305A37', primaryLight: '#60A96C', primaryFill: '#4E9E57', primaryBg: '#E9F7EB', primarySoft: '#E9F7EB',
+      primary: '#407749', primaryDark: '#305A37', primaryLight: '#60A96C', primaryFill: '#62B16B', primaryBg: '#E9F7EB', primarySoft: '#E9F7EB',
       coral: '#B74E1A', indigo: '#407749', violet: '#7A6B1F', couple: '#B74E1A', food: '#7A6B1F', health: '#407749',
       secondary: '#407749', secondarySoft: '#E7F8EA', accent: '#7A6B1F', accentSoft: '#F8F5E7',
       markBack: '#9CC9A3', markFront: '#305A37', markSparkle: '#DAC24E',

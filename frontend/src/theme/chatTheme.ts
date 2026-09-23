@@ -95,7 +95,7 @@ export const CHAT_THEMES: ChatTheme[] = [
     light: {
       background: '#FAFAF9',
       // green 액센트의 primaryFill — 런타임에 chatPalette 가 같은 값으로 덮는다
-      bubbleMine: '#33A251',
+      bubbleMine: '#4DC76E',
       bubbleMineText: '#1A1D1A',
       bubbleTheirs: '#E9EAE7',
       bubbleTheirsText: '#1A1D1A',
