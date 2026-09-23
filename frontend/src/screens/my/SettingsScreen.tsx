@@ -14,7 +14,7 @@ import { Card } from '../../components/Card';
 import { Chip } from '../../components/Chip';
 import { useThemeStore } from '../../store/themeStore';
 import { useChatThemeStore } from '../../store/chatThemeStore';
-import { CHAT_THEMES } from '../../theme/chatTheme';
+import { CHAT_THEMES, chatPalette } from '../../theme/chatTheme';
 import type { ThemeMode } from '../../theme/themePreference';
 import type { AccentVariant } from '../../theme/colors';
 import { authApi } from '../../api/auth';
@@ -553,7 +553,12 @@ export function SettingsScreen({ navigation }: Props) {
           </View>
           <View style={styles.chatThemeRow}>
             {CHAT_THEMES.map((t) => {
-              const preview = t[scheme];
+              /*
+               * 정적 값(t[scheme])이 아니라 chatPalette 을 쓴다 — '기본' 테마의 내 말풍선은
+               * 앱 액센트를 따르는데(chatTheme.chatPalette), 칩만 정적 배열을 그리면 민트를
+               * 고른 사람의 '기본' 칩이 초록으로 남는다. 나머지 테마는 같은 값을 돌려준다.
+               */
+              const preview = chatPalette(scheme, t.id);
               const selected = chatThemeId === t.id;
               return (
                 <Pressable
