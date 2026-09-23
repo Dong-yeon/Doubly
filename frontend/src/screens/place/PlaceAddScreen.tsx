@@ -148,11 +148,12 @@ export function PlaceAddScreen({ navigation, route }: Props) {
       <FormKeyboardView contentContainerStyle={styles.container}>
           {isKakaoMapConfigured() ? (
             <>
-              <Text style={styles.label}>카카오 장소 검색 — 이름·주소·위치가 자동 입력돼요</Text>
+              {/* 설명은 레이블이 아니라 placeholder 가 — 레이블은 명사 하나(§7-3 7번) */}
+              <Text style={styles.label}>카카오 장소 검색</Text>
               <View style={styles.searchRow}>
                 <View style={styles.flex}>
                   <TextField
-                    placeholder="예: 국립중앙박물관"
+                    placeholder="이름으로 찾으면 주소·위치가 채워져요"
                     value={keyword}
                     onChangeText={setKeyword}
                     onSubmitEditing={onSearch}
@@ -191,7 +192,7 @@ export function PlaceAddScreen({ navigation, route }: Props) {
 
           {isKakaoMapConfigured() ? (
             <>
-              <Text style={styles.label}>위치 확인 (선택) — 지도를 탭해 직접 고를 수도 있어요</Text>
+              <Text style={styles.label}>위치 (선택)</Text>
               <KakaoMap
                 ref={mapRef}
                 selectable
@@ -217,9 +218,12 @@ export function PlaceAddScreen({ navigation, route }: Props) {
                 onSelect={onMapSelect}
                 onSearchResults={onSearchResults}
               />
-              <Text style={styles.coordText}>
-                {coords ? `위치 선택됨 (${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)})` : '아직 위치를 선택하지 않았어요'}
-              </Text>
+              {/* 미선택 문장은 없다 — 핀 없는 지도가 이미 그 상태다 */}
+              {coords ? (
+                <Text style={styles.coordText}>
+                  위치 선택됨 · {coords.lat.toFixed(5)}, {coords.lng.toFixed(5)}
+                </Text>
+              ) : null}
             </>
           ) : null}
 

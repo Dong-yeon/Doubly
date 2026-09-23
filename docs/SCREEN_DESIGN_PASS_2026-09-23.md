@@ -660,6 +660,25 @@ AI 스럽다.
 모달, ★☆ 텍스트 관례(빌드 비용), 매거진 카드의 `together` 틴트(둘이 인증한 곳 — 뜻이 맞다),
 지도 핀 색(카카오 지도 관례), 방문 폼의 필드 구성.
 
-### 7-4. 결정
+### 7-4. 결정 — 7-3 의 여덟 항목 진행 (2026-09-23)
 
-(방향 확인 후 기록)
+구현했다(같은 날 main). 아이콘은 전부 서브셋에 있는 글리프(`crown`·`airplane`·`plus`·`image-plus`·
+`silverware-fork-knife`)라 빌드 없이 업데이트로 나간다.
+
+| 항목 | 전 | 후 |
+| --- | --- | --- |
+| 제목 줄 | "럽슐랭" + 지도 토글 + AI 알약 둘(`flexWrap`) | "럽슐랭" + 지도 토글. AI 알약 둘은 목록 `ListHeaderComponent`(스크롤, `flex:1` 둘). **지도 보기에서는 안 보인다** — 목록이 아니라 머리가 없다 |
+| 검색 필드 | 장소 1개부터 | 카테고리 칩과 같은 상수(`FILTER_MIN_PLACES` = 8)부터 |
+| 모드 | `Chip fill` 둘(44px 알약, 선택 `primaryBg`) | 밑줄 탭 — 선택 `textPrimary` 800 + 2px 밑줄, 비선택 `textSecondary` 600, 줄 아래 헤어라인. `accessibilityRole="tab"` |
+| 이모지 7곳 | 👑 범례, ✈️ 여행, ＋ 버튼 둘, 💡 이유, "추가했어요 ✓", 🍽 식단 | `crown` 14, `airplane` 12 + "여행에 담김", `leftIcon` plus, 문장만, "추가했어요", `silverware-fork-knife` 12 + "식단에도 기록됨"(`textSecondary`) |
+| 지도 안내문 | 항상(세 문장 중 하나) | 핀 0 + 좌표 미선택일 때만 "빈 곳을 탭해 장소를 추가해보세요" |
+| 상세 정보 카드 | 이름(`title` 22px) + 연필·휴지통 → 칩 → 주소 | 칩 줄부터. 연필·휴지통은 **헤더 오른쪽**(`navigation.setOptions` effect, `place`·삭제 중 상태에 따라 갱신) |
+| 상세 색 | 방문 ★ `togetherText`, 입력 ★ `accent`, 끼니 칩 `accentSoft/accent`, 식단 배지 `primary` | 방문 ★ 남긴 사람 기준 `me`/`partner`(`visitedBy === user.id`), 입력 ★ `primaryFill`, 끼니 칩 `primaryBg/primaryFill`, 식단 배지 `textSecondary` |
+| 상세 문장 | "별점 없이 기록만 남길 수도 있어요"(0일 때), "사진 추가하기" 글자만 | 0이면 비움(고른 뒤 두 갈래 문장만), `image-plus` 22 + 글자. "길게 눌러 삭제 · 사진은 탭해서 크게 보기"는 유지 |
+| 추가 화면 | 문장형 레이블 둘 + "아직 위치를 선택하지 않았어요" | "카카오 장소 검색"(설명은 placeholder "이름으로 찾으면 주소·위치가 채워져요"), "위치 (선택)", 상태문은 선택했을 때만 |
+| 카드 머리 줄 | 이름 + 알약 셋이 한 줄 wrap | 일반 카드: 이름(2줄까지) + 태그 줄(둘째 줄, 태그가 있을 때만). 매거진: 배지 `flexShrink:0` |
+
+**검증**: typecheck · 린트 · 버튼 중첩 검사 · 웹 번들 export 통과. 린트 경고 4건(`StyleSheet`·`colors`
+미사용 import)은 이 변경 전부터 있던 것. **실기기·다크는 미검증** — 특히 (a) 밑줄 탭이 아래 검색
+필드·칩과 간격이 맞는지(`modeRow` 헤어라인 위에 2px 밑줄을 `-hairline` 으로 겹침) (b) 헤더 오른쪽
+연필·휴지통이 iOS 헤더에서 잘리지 않는지 (c) 방문 ★ 의 `partner` 색이 다크 카드 위에서 읽히는지.

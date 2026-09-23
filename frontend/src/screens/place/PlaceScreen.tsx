@@ -19,7 +19,7 @@
  * 이름과 어긋난다는 지적이 있어 '우리' 탭 이관을 검토 중이다(같은 문서 3-5).
  */
 import React, { useCallback, useMemo, useState } from 'react';
-import { FlatList, Image, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, Image, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -71,10 +71,11 @@ const MODES: { value: Mode; label: string }[] = [
 ];
 
 /**
- * 카테고리 필터를 보여주기 시작하는 장소 수 — 장소가 세 개뿐인 커플에게 카테고리 칩 8개는
- * 목록보다 필터가 큰 상태다. 걸러낼 게 생겼을 때만 나타난다.
+ * 검색·카테고리 필터를 보여주기 시작하는 장소 수 — 장소가 세 개뿐인 커플에게 카테고리 칩 8개와
+ * 검색 필드는 목록보다 필터가 큰 상태다. 걸러낼 게 생겼을 때만 나타난다. 예전엔 검색은 1개부터,
+ * 칩은 8개부터라 같은 화면에서 기준이 둘이었다(§7-2).
  */
-const CATEGORY_FILTER_MIN_PLACES = 8;
+const FILTER_MIN_PLACES = 8;
 
 /*
  * AI 두 기능이 결과를 낼 수 있는 최소 재료 — 서버 판정과 같은 값이어야 한다
@@ -287,10 +288,10 @@ export function PlaceScreen() {
       <View style={styles.titleRow}>
         <Text style={styles.screenTitle}>럽슐랭</Text>
         {/*
-          AI 버튼 둘은 모드에 묶여 있었다 — 맛집 추천은 가이드에서만, 데이트 코스는
-          "둘러보기 → 지도"까지 두 번 들어가야 보였다. 둘 다 지금 무엇을 보고 있든 의미가
-          같으므로 장소 모드에서는 항상 같은 자리에 둔다. 콘텐츠 모드에서만 감춘다 —
-          영화·드라마를 보다가 "맛집 추천"이 뜨면 어긋난다.
+          제목 줄은 제목 + 지도 토글뿐이다. AI 버튼 둘은 여기 있다가 좁은 기기·큰 글꼴에서 제목
+          줄을 두 줄로 접었다 — 럽바디(§6-4)와 같이 목록 머리로 내렸다(docs/SCREEN_DESIGN_PASS
+          _2026-09-23.md §7-3). 콘텐츠 모드·지도 보기에서는 감춘다 — 영화·드라마를 보다가
+          "맛집 추천"이 뜨면 어긋나고, 지도는 목록이 아니라 머리가 없다.
         */}
         {mode !== 'content' ? (
           <View style={styles.titleActions}>
@@ -310,49 +311,38 @@ export function PlaceScreen() {
                 }}
               />
             ) : null}
-            <AiInsightButton
-              label="AI 맛집 추천"
-              title="럽슐랭 취향 맞춤 추천"
-              fetcher={placeApi.lovelichelinRecommend}
-              render={renderRecommendation}
-              disabledReason={
-                certifiedCount < MIN_CERTIFIED_FOR_RECOMMEND
-                  ? '둘 다 평점을 매긴 곳이 한 곳이라도 있어야 취향을 읽을 수 있어요. 다녀온 곳에 별점을 남겨보세요!'
-                  : undefined
-              }
-            />
-            <AiInsightButton
-              label="AI 데이트 코스"
-              title="AI 데이트 코스"
-              fetcher={placeApi.dateCourse}
-              render={renderDateCourse}
-              disabledReason={
-                allPlaces.length < MIN_PLACES_FOR_DATE_COURSE
-                  ? `코스를 짜려면 저장한 장소가 ${MIN_PLACES_FOR_DATE_COURSE}곳 이상이어야 해요. 가고 싶은 곳을 먼저 담아보세요!`
-                  : undefined
-              }
-            />
             {/* 여행(Trip)은 홈 스택으로 이관 — 진입은 홈 D-day 카드·커플 캘린더 (navigation/types.ts 참고) */}
           </View>
         ) : null}
       </View>
 
+      {/*
+        모드는 필터가 아니라 내비게이션이다 — 칩 둘(fill)로 그리면 아래 카테고리 칩의 선택 상태와
+        같은 옷(primaryBg + primary 테두리)이라 무엇이 모드이고 무엇이 필터인지 갈리지 않았다.
+        밑줄 탭 한 줄로 바꾼다(§7-3 3번). 콘텐츠 모드의 거취(§3-5)가 정해져 모드가 하나가 되면
+        이 줄은 통째로 사라진다.
+      */}
       <View style={styles.modeRow}>
-        {MODES.map((m) => (
-          <Chip
-            key={m.value}
-            label={m.label}
-            selected={mode === m.value}
-            onPress={() => {
-              setMode(m.value);
-              if (m.value !== 'places') setPendingPin(null);
-            }}
-            fill
-          />
-        ))}
+        {MODES.map((m) => {
+          const active = mode === m.value;
+          return (
+            <Pressable
+              key={m.value}
+              onPress={() => {
+                setMode(m.value);
+                if (m.value !== 'places') setPendingPin(null);
+              }}
+              style={[styles.modeTab, active && styles.modeTabActive]}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+            >
+              <Text style={[styles.modeText, active && styles.modeTextActive]}>{m.label}</Text>
+            </Pressable>
+          );
+        })}
       </View>
 
-      {mode === 'places' && allPlaces.length > 0 ? (
+      {mode === 'places' && allPlaces.length >= FILTER_MIN_PLACES ? (
         <View style={styles.searchWrap}>
           <TextField
             placeholder="장소 이름으로 검색"
@@ -365,9 +355,9 @@ export function PlaceScreen() {
 
       {/*
         카테고리 칩은 줄바꿈 2줄을 차지해 첫 카드를 화면 절반 아래로 밀어냈다. 가로 한 줄
-        스크롤로 접고, 걸러낼 만큼 쌓이기 전까지는(CATEGORY_FILTER_MIN_PLACES) 아예 숨긴다.
+        스크롤로 접고, 걸러낼 만큼 쌓이기 전까지는(FILTER_MIN_PLACES) 아예 숨긴다.
       */}
-      {mode === 'places' && allPlaces.length >= CATEGORY_FILTER_MIN_PLACES ? (
+      {mode === 'places' && allPlaces.length >= FILTER_MIN_PLACES ? (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -420,6 +410,34 @@ export function PlaceScreen() {
           contentContainerStyle={styles.list}
           refreshing={placeLoading}
           onRefresh={() => loadPlaces(true)}
+          ListHeaderComponent={
+            <View style={styles.aiRow}>
+              <AiInsightButton
+                label="AI 맛집 추천"
+                title="럽슐랭 취향 맞춤 추천"
+                fetcher={placeApi.lovelichelinRecommend}
+                render={renderRecommendation}
+                style={styles.aiBtn}
+                disabledReason={
+                  certifiedCount < MIN_CERTIFIED_FOR_RECOMMEND
+                    ? '둘 다 평점을 매긴 곳이 한 곳이라도 있어야 취향을 읽을 수 있어요. 다녀온 곳에 별점을 남겨보세요!'
+                    : undefined
+                }
+              />
+              <AiInsightButton
+                label="AI 데이트 코스"
+                title="AI 데이트 코스"
+                fetcher={placeApi.dateCourse}
+                render={renderDateCourse}
+                style={styles.aiBtn}
+                disabledReason={
+                  allPlaces.length < MIN_PLACES_FOR_DATE_COURSE
+                    ? `코스를 짜려면 저장한 장소가 ${MIN_PLACES_FOR_DATE_COURSE}곳 이상이어야 해요. 가고 싶은 곳을 먼저 담아보세요!`
+                    : undefined
+                }
+              />
+            </View>
+          }
           /*
            * 카드 두 종류가 한 목록에 섞인다 — 인증된 곳은 커버 사진이 있는 매거진 카드,
            * 나머지는 한 줄짜리 일반 카드. 정렬이 등급 우선이라 매거진 카드가 위에 모이고
@@ -446,8 +464,12 @@ export function PlaceScreen() {
                   )}
                   <View style={styles.magazineBody}>
                     <View style={styles.magazineHeaderRow}>
-                      <Text style={styles.magazineName}>{item.name}</Text>
-                      <LovelichelinBadge tier={item.lovelichelinTier} size="sm" />
+                      <Text style={styles.magazineName} numberOfLines={2}>
+                        {item.name}
+                      </Text>
+                      <View style={styles.noShrink}>
+                        <LovelichelinBadge tier={item.lovelichelinTier} size="sm" />
+                      </View>
                     </View>
                     {item.category ? <Text style={styles.magazineCategory}>{item.category}</Text> : null}
                     <View style={styles.magazineRatingRow}>
@@ -478,22 +500,28 @@ export function PlaceScreen() {
               onLongPress={() => onDeletePlace(item)}
             >
               {/* 이 가지는 tier === 0 인 카드만 탄다 — 럽슐랭 배지는 위쪽 매거진 카드 몫이다 */}
-              <View style={styles.cardHeader}>
-                <Text style={styles.name}>{item.name}</Text>
-                {item.category ? (
-                  <View style={styles.categoryChip}>
-                    <Text style={styles.categoryText}>{item.category}</Text>
-                  </View>
-                ) : null}
-                {isSoloPick(item) ? (
-                  <SoloPickBadge who={item.myRating != null ? 'me' : 'partner'} size="sm" />
-                ) : null}
-                {item.tripId != null ? (
-                  <View style={styles.categoryChip}>
-                    <Text style={styles.categoryText}>✈️ 여행에 담김</Text>
-                  </View>
-                ) : null}
-              </View>
+              {/* 이름 한 줄, 태그(카테고리·솔로 픽·여행)는 둘째 줄 — 한 줄에 wrap 하면 긴 이름 사이로 알약이 끼어들었다 */}
+              <Text style={styles.name} numberOfLines={2}>
+                {item.name}
+              </Text>
+              {item.category || isSoloPick(item) || item.tripId != null ? (
+                <View style={styles.tagRow}>
+                  {item.category ? (
+                    <View style={styles.categoryChip}>
+                      <Text style={styles.categoryText}>{item.category}</Text>
+                    </View>
+                  ) : null}
+                  {isSoloPick(item) ? (
+                    <SoloPickBadge who={item.myRating != null ? 'me' : 'partner'} size="sm" />
+                  ) : null}
+                  {item.tripId != null ? (
+                    <View style={styles.categoryChip}>
+                      <MaterialCommunityIcons name="airplane" size={12} color={colors.textSecondary} />
+                      <Text style={styles.categoryText}>여행에 담김</Text>
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
               {item.address ? <Text style={styles.address}>{item.address}</Text> : null}
               <View style={styles.cardFooter}>
                 {item.visitCount > 0 ? (
@@ -550,7 +578,7 @@ export function PlaceScreen() {
           <View style={styles.mapWrap}>
             <View style={styles.legendRow}>
               <View style={styles.legendItem}>
-                <Text style={styles.legendCrown}>👑</Text>
+                <MaterialCommunityIcons name="crown" size={14} color={colors.togetherText} />
                 <Text style={styles.legendText}>럽슐랭 인증</Text>
               </View>
             </View>
@@ -565,13 +593,10 @@ export function PlaceScreen() {
                 if (place) navigation.navigate('PlaceDetail', { placeId: place.id, name: place.name });
               }}
             />
-            <Text style={styles.mapHint}>
-              {pendingPin
-                ? '이 위치로 장소를 추가할까요?'
-                : markers.length === 0
-                  ? '위치가 등록된 장소가 없어요. 빈 곳을 탭해 장소를 추가해보세요!'
-                  : '핀을 탭하면 상세로, 빈 곳을 탭하면 그 자리에 장소를 추가할 수 있어요.'}
-            </Text>
+            {/* 안내는 핀이 하나도 없을 때만 — 좌표를 고른 상태는 하단 바가, 핀은 핀이 말한다 */}
+            {markers.length === 0 && !pendingPin ? (
+              <Text style={styles.mapHint}>빈 곳을 탭해 장소를 추가해보세요</Text>
+            ) : null}
           </View>
         )
       ) : null}
@@ -665,9 +690,17 @@ export function PlaceScreen() {
             </View>
           </View>
         ) : mode === 'content' ? (
-          <Button title="＋ 콘텐츠 추가하기" onPress={() => navigation.navigate('ContentAdd')} />
+          <Button
+            title="콘텐츠 추가하기"
+            leftIcon={<MaterialCommunityIcons name="plus" size={20} color={colors.white} />}
+            onPress={() => navigation.navigate('ContentAdd')}
+          />
         ) : (
-          <Button title="＋ 장소 추가하기" onPress={() => navigation.navigate('PlaceAdd')} />
+          <Button
+            title="장소 추가하기"
+            leftIcon={<MaterialCommunityIcons name="plus" size={20} color={colors.white} />}
+            onPress={() => navigation.navigate('PlaceAdd')}
+          />
         )}
       </View>
     </SafeAreaView>
@@ -680,15 +713,29 @@ const styles = themedStyles((colors) => ({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    // AI 버튼이 둘로 늘어 좁은 기기·큰 글꼴에서는 한 줄에 다 못 들어간다 — 넘치면 접는다
-    flexWrap: 'wrap',
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
   },
   screenTitle: { fontSize: fontSize.title, fontWeight: '800', color: colors.textPrimary },
-  titleActions: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
-  modeRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.md },
+  titleActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  // 모드 탭 — 밑줄 한 줄. 선택은 글자색 + 2px 밑줄이고 알약을 쓰지 않는다
+  modeRow: {
+    flexDirection: 'row',
+    gap: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xs,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  modeTab: { paddingVertical: spacing.sm, minHeight: layout.touchTarget, justifyContent: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent', marginBottom: -StyleSheet.hairlineWidth },
+  modeTabActive: { borderBottomColor: colors.textPrimary },
+  modeText: { fontSize: fontSize.subtitle, fontWeight: '600', color: colors.textSecondary },
+  modeTextActive: { color: colors.textPrimary, fontWeight: '800' },
+  // AI 인사이트 둘 — 목록 머리(스크롤). 럽바디 §6-4 와 같은 자리
+  aiRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
+  aiBtn: { flex: 1 },
+  noShrink: { flexShrink: 0 },
   searchWrap: { paddingHorizontal: spacing.lg, paddingTop: spacing.md },
   /*
    * 장소 카테고리는 가로 한 줄 스크롤(ScrollView contentContainerStyle)이라 flexWrap 이 없다 —
@@ -752,8 +799,12 @@ const styles = themedStyles((colors) => ({
   contentPoster: { width: 52, height: 74, borderRadius: radius.sm },
   flex: { flex: 1 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
+  tagRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap', marginTop: spacing.xs },
   name: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
   categoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
     borderRadius: radius.pill,
@@ -795,7 +846,6 @@ const styles = themedStyles((colors) => ({
   mapWrap: { flex: 1, padding: spacing.lg, paddingBottom: layout.listBottomWithFab },
   legendRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, marginBottom: spacing.sm },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  legendCrown: { fontSize: 12 },
   legendText: { fontSize: fontSize.caption, color: colors.textSecondary },
   map: { flex: 1 },
   mapHint: { fontSize: fontSize.caption, color: colors.textSecondary, textAlign: 'center', marginTop: spacing.sm },
