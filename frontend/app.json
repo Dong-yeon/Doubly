@@ -127,7 +127,9 @@
       },
       "predictiveBackGestureEnabled": true,
       "permissions": [
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.FOREGROUND_SERVICE_CAMERA",
+        "android.permission.FOREGROUND_SERVICE_MICROPHONE"
       ],
       "blockedPermissions": [
         "android.permission.READ_MEDIA_IMAGES",
