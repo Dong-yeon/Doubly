@@ -324,7 +324,8 @@ export function SettingsScreen({ navigation }: Props) {
               value={notificationsEnabled}
               onValueChange={onToggleNotification}
               disabled={savingNotification}
-              trackColor={{ true: colors.primary }}
+              trackColor={{ true: colors.primaryFill }}
+              thumbColor={colors.white}
             />
           </View>
 
@@ -380,7 +381,8 @@ export function SettingsScreen({ navigation }: Props) {
               value={marketingConsent}
               onValueChange={onToggleMarketing}
               disabled={savingMarketing}
-              trackColor={{ true: colors.primary }}
+              trackColor={{ true: colors.primaryFill }}
+              thumbColor={colors.white}
             />
           </View>
         </Card>
@@ -407,7 +409,8 @@ export function SettingsScreen({ navigation }: Props) {
                   value={notificationsEnabled && (user?.[c.field] ?? true)}
                   onValueChange={(next) => onToggleCategory(c.key, next)}
                   disabled={!notificationsEnabled || savingCategory === c.key}
-                  trackColor={{ true: colors.primary }}
+                  trackColor={{ true: colors.primaryFill }}
+                  thumbColor={colors.white}
                 />
               </View>
             </View>
@@ -441,7 +444,8 @@ export function SettingsScreen({ navigation }: Props) {
                     value={!!current}
                     onValueChange={(next) => onToggleMealReminder(m.type, defaultTime, next)}
                     disabled={!notificationsEnabled || saving}
-                    trackColor={{ true: colors.primary }}
+                    trackColor={{ true: colors.primaryFill }}
+                    thumbColor={colors.white}
                   />
                 </View>
                 {current ? (
@@ -476,7 +480,8 @@ export function SettingsScreen({ navigation }: Props) {
               value={user?.autoAnalyzeMealPhoto !== false}
               onValueChange={onToggleMealPhotoAnalysis}
               disabled={savingMealPhotoAnalysis}
-              trackColor={{ true: colors.primary }}
+              trackColor={{ true: colors.primaryFill }}
+              thumbColor={colors.white}
             />
           </View>
         </Card>
@@ -495,7 +500,8 @@ export function SettingsScreen({ navigation }: Props) {
             <Switch
               value={spellCheckEnabled}
               onValueChange={setSpellCheckEnabled}
-              trackColor={{ true: colors.primary }}
+              trackColor={{ true: colors.primaryFill }}
+              thumbColor={colors.white}
             />
           </View>
           {/* 개발용 — 위 onTestDictionary 참고. 스토어 빌드에는 안 보인다 */}
