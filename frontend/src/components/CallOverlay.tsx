@@ -13,7 +13,7 @@
  * 호출되므로, 우리 쪽은 상태 동기화만 책임진다(실패해도 통화 자체는 계속된다 — 통화
  * 기록·부재중 알림 같은 부가 기능만 어긋날 뿐).
  */
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { RootOverlayModal } from './RootOverlayModal';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -29,8 +29,29 @@ import {
 } from '@stream-io/video-react-native-sdk';
 import { useCallStore } from '../store/callStore';
 import { callApi } from '../api/call';
+import { ensureCallPermissions } from '../utils/callPermissions';
+import { toast } from '../store/toastStore';
 
 function CallSurface({ call }: { call: Call }) {
+  /*
+   * 받는 쪽 권한 — <b>벨이 뜨는 순간</b> 물어본다.
+   *
+   * <p>{@code onAcceptCallHandler} 에서 할 수 없다: 그 콜백은 SDK 가 이미 join 을 마친 뒤에
+   * 불린다(아래 주석). 그때 권한을 얻어도 마이크 트랙은 이미 실패한 뒤라 소리가 없다.
+   * 거는 쪽은 `ChatRoomScreen.startCall` 이 세션 생성 전에 처리한다.
+   *
+   * <p>내가 건 통화는 건너뛴다 — 이미 물어봤고, 발신 화면 위에 팝업이 또 뜬다.
+   * 거부해도 여기서 통화를 끊지는 않는다. 사용자가 "받기"를 누를지 아직 모르는 시점이라
+   * 우리가 대신 결정할 일이 아니고, 실제 실패는 받은 뒤에 드러난다.
+   */
+  useEffect(() => {
+    if (call.isCreatedByMe) return;
+    const callType = call.state.settings?.video?.enabled ? 'VIDEO' : 'VOICE';
+    void ensureCallPermissions(callType).then((result) => {
+      if (!result.granted) toast.error(result.message ?? '통화 권한이 필요해요.');
+    });
+  }, [call]);
+
   // SDK 가 accept/reject/hangup 을 이미 처리한 뒤 불리는 콜백이다(err 가 있으면 SDK 쪽에서
   // 실패한 것이므로 우리 백엔드는 건드리지 않는다 — 통화가 실제로 시작/종료되지 않았다).
   const onAccept = useCallback((err?: Error) => {

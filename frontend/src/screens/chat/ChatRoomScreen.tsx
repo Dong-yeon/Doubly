@@ -55,6 +55,7 @@ import { ChatSearchModal } from '../../components/ChatSearchModal';
 import { TouchGesturePicker } from '../../components/TouchGesturePicker';
 import { ChatMoreMenuSheet } from '../../components/ChatMoreMenuSheet';
 import { ChatBackgroundSheet } from '../../components/ChatBackgroundSheet';
+import { ensureCallPermissions } from '../../utils/callPermissions';
 import { ScheduleMessageSheet } from '../../components/ScheduleMessageSheet';
 import { VoiceRecordSheet } from '../../components/VoiceRecordSheet';
 import { VoiceMessageBubble } from '../../components/VoiceMessageBubble';
@@ -475,7 +476,12 @@ export function ChatRoomScreen({ navigation, route }: Props) {
    * 구독해서 "없으면 버튼을 막는" 구조였다면 부팅 때 한 번 실패한 사람은 재시도할 길조차
    * 없다(docs/CALL_BROKEN_ANALYSIS_2026-09-10.md §4-1).
    */
-  const [callStarting, setCallStarting] = useState(false);
+  /*
+   * 불리언이 아니라 "무엇을 거는 중인가"를 들고 있다 — 헤더에 버튼이 둘이라 불리언이면
+   * 스피너를 어느 쪽에 둘지 알 수 없다. null 이면 거는 중이 아니다.
+   */
+  const [callingType, setCallingType] = useState<CallType | null>(null);
+  const callStarting = callingType !== null;
   const partnerId = couple?.partner?.id;
 
   const startCall = useCallback(
@@ -489,9 +495,19 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         toast.error('상대 정보를 아직 불러오지 못했어요. 잠시 후 다시 시도해주세요.');
         return;
       }
-      setCallStarting(true);
+      setCallingType(callType);
       let joinedCallId: string | null = null;
       try {
+        /*
+         * 마이크(영상이면 카메라까지)를 먼저 확보한다 — 없으면 Stream SDK 가 경고만 남기고
+         * 통화창은 그대로 떠서 "소리 없는 통화"가 된다(utils/callPermissions 주석).
+         * 서버 세션을 만들기 전이라 실패해도 상대에게 헛벨이 가지 않는다.
+         */
+        const permission = await ensureCallPermissions(callType);
+        if (!permission.granted) {
+          toast.error(permission.message ?? '통화 권한이 필요해요.');
+          return;
+        }
         /*
          * 부팅 때 연결에 실패했으면 여기서 <b>한 번 더</b> 시도한다 — 예전엔 그 한 번의 실패로
          * 앱을 껐다 켜기 전까지 통화가 죽었다(§4-1).
@@ -534,7 +550,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         if (joinedCallId) callApi.end(joinedCallId).catch(() => undefined);
         toast.error(getErrorMessage(e));
       } finally {
-        setCallStarting(false);
+        setCallingType(null);
       }
     },
     [myId, partnerId, callStarting],
@@ -573,6 +589,12 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           >
             <MaterialCommunityIcons name="magnify" size={22} color={colors.textPrimary} />
           </Pressable>
+          {/*
+            거는 중에는 아이콘 자리에 스피너를 둔다. 예전엔 disabled 로 막기만 해서
+            <b>눌렀는데 아무 일도 안 일어나는 것처럼 보였다</b> — 권한 팝업·Stream 연결까지
+            수 초가 걸리는 구간이라 이 침묵이 "통화가 고장 났다"로 읽혔다(사용자 보고 2026-09-23).
+            누른 쪽에만 스피너를 두어 무엇을 기다리는 중인지도 함께 말한다.
+          */}
           <Pressable
             onPress={() => startCall('VOICE')}
             disabled={callStarting}
@@ -580,8 +602,13 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             hitSlop={8}
             accessibilityRole="button"
             accessibilityLabel="음성통화 걸기"
+            accessibilityState={{ disabled: callStarting, busy: callingType === 'VOICE' }}
           >
-            <MaterialCommunityIcons name="phone" size={22} color={colors.textPrimary} />
+            {callingType === 'VOICE' ? (
+              <ActivityIndicator size="small" color={colors.textPrimary} />
+            ) : (
+              <MaterialCommunityIcons name="phone" size={22} color={colors.textPrimary} />
+            )}
           </Pressable>
           <Pressable
             onPress={() => startCall('VIDEO')}
@@ -590,13 +617,18 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             hitSlop={8}
             accessibilityRole="button"
             accessibilityLabel="영상통화 걸기"
+            accessibilityState={{ disabled: callStarting, busy: callingType === 'VIDEO' }}
           >
-            <MaterialCommunityIcons name="video" size={22} color={colors.textPrimary} />
+            {callingType === 'VIDEO' ? (
+              <ActivityIndicator size="small" color={colors.textPrimary} />
+            ) : (
+              <MaterialCommunityIcons name="video" size={22} color={colors.textPrimary} />
+            )}
           </Pressable>
         </View>
       ),
     });
-  }, [navigation, partnerName, startCall, callStarting]);
+  }, [navigation, partnerName, startCall, callStarting, callingType]);
 
   /*
    * 히스토리 로딩 상태 — openRoom 이 REST 로 첫 페이지를 받아오는 동안에는 messages 가
