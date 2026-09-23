@@ -595,7 +595,7 @@ export function HomeScreen({ navigation }: Props) {
           accessibilityRole="button"
           accessibilityLabel="내 프로필"
         >
-          <Avatar name={user?.name} imageUrl={user?.profileImageUrl} size={32} color={colors.primaryDark} />
+          <Avatar name={user?.name} imageUrl={user?.profileImageUrl} size={32} color={colors.meFill} />
         </Pressable>
       </View>
     </View>

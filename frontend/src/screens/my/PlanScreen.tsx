@@ -31,6 +31,7 @@ import { PRO_SUBSCRIPTION_SKU, PURCHASE_ENABLED } from '../../constants/config';
 import type { FeatureGroupKey, FeatureKey, PlanCatalogEntry, QuotaPeriod } from '../../types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
+import { onColor } from '../../theme/onColor';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'Plan'>;
 
@@ -415,13 +416,14 @@ const styles = themedStyles((colors) => ({
     marginTop: spacing.xs,
   },
   primary: {
-    backgroundColor: colors.together,
+    backgroundColor: colors.togetherFill,
     borderRadius: radius.md,
     paddingVertical: spacing.md - 2,
     alignItems: 'center',
     marginTop: spacing.xs,
   },
-  primaryText: { color: '#FFFFFF', fontSize: fontSize.body, fontWeight: '800' },
+  // 채움이 밝아졌으므로 글자는 배경 휘도로 고른다 (흰색 고정이면 1.99:1)
+  primaryText: { color: onColor(colors.togetherFill), fontSize: fontSize.body, fontWeight: '800' },
   pressed: { opacity: 0.85 },
   notice: {
     backgroundColor: colors.surfaceAlt,

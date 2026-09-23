@@ -1311,7 +1311,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             {/* 삭제된 메시지는 그룹핑 대상이 아니라(항상 혼자) 아바타를 조건 없이 보여준다 */}
             {!mine ? (
               <View style={styles.avatarSlot}>
-                <Avatar name={partnerName} imageUrl={partnerAvatarUrl} size={26} color={colors.partner} />
+                <Avatar name={partnerName} imageUrl={partnerAvatarUrl} size={26} color={colors.partnerFill} />
               </View>
             ) : null}
             <View style={[styles.bubble, styles.bubbleDeleted]}>
@@ -1383,7 +1383,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         {!mine ? (
           <View style={styles.avatarSlot}>
             {isGroupEnd ? (
-              <Avatar name={partnerName} imageUrl={partnerAvatarUrl} size={26} color={colors.partner} />
+              <Avatar name={partnerName} imageUrl={partnerAvatarUrl} size={26} color={colors.partnerFill} />
             ) : null}
           </View>
         ) : null}

@@ -40,7 +40,7 @@
  * 흰색에 가까우므로 말풍선은 <b>어두워져야</b> 갈린다(iMessage 의 회색 말풍선과 같은 방향).
  * 이제 면제 항목은 하나도 없다.
  */
-import type { Scheme } from './colors';
+import { palette, type Scheme } from './colors';
 
 export type ChatThemeId =
   | 'default'
@@ -368,5 +368,20 @@ export function setChatThemeId(id: ChatThemeId): void {
 
 export function chatPalette(scheme: Scheme, id: ChatThemeId = currentId): ChatPalette {
   const theme = byId.get(id) ?? byId.get(DEFAULT_CHAT_THEME_ID)!;
-  return theme[scheme];
+  const base = theme[scheme];
+  if (id !== DEFAULT_CHAT_THEME_ID) return base;
+  /*
+   * '기본' 테마의 내 말풍선은 앱 액센트를 따른다 — 사용자가 민트·피치를 골랐는데 채팅만
+   * 초록이면 기본이 기본이 아니다. 위 CHAT_THEMES 의 'default' 값은 green 액센트일 때의
+   * 값이고(검증 스크립트는 그 정적 값을 잰다), green 이면 아래는 같은 값을 돌려준다.
+   *   라이트: primary(버튼 배경과 같은 값, white 5.2~5.6)
+   *   다크:   primaryDark(primary 는 링크 역할을 겸해 white 3.9 라 말풍선엔 한 단계 어둡게)
+   *   강조행: 상대 계열 파스텔(배경 대비 1.25 이상)
+   */
+  const app = palette(scheme);
+  return {
+    ...base,
+    bubbleMine: scheme === 'light' ? app.primary : app.primaryDark,
+    highlight: scheme === 'light' ? app.partnerPastelBg : base.highlight,
+  };
 }

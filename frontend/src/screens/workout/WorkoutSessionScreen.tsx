@@ -2043,7 +2043,7 @@ const styles = themedStyles((colors) => ({
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
     borderRadius: radius.pill,
-    backgroundColor: colors.couple,
+    backgroundColor: colors.meFill,
   },
   prBadgeText: { fontSize: 10, fontWeight: '800', color: colors.ink },
 

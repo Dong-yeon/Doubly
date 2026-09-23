@@ -31,7 +31,7 @@
  * 실행 중 시스템 테마를 바꾸면 앱을 다시 시작해야 반영된다 (재실행 시 자동 적용).
  */
 import { Appearance } from 'react-native';
-import { readThemeModeSync } from './themePreference';
+import { readAccentVariantSync, readThemeModeSync } from './themePreference';
 
 const light = {
   // ── Doubly 코어 ──────────────────────────────────────────────
@@ -48,6 +48,22 @@ const light = {
   partnerBg: '#E8F3E9',
   together: '#59772D',
   togetherBg: '#EFF4E4',
+
+  /*
+   * 채움 전용 — 아바타 채움·완료 칩·배지처럼 <b>면적이 큰 자리</b>에 쓴다. 위에는 ink 글자를
+   * 얹는다(onColor 가 자동으로 고른다).
+   *
+   * 왜 따로 두나: me/partner/together 는 흰 바탕 위 <b>글자</b>로도 쓰이므로 4.5:1 을 맞추려
+   * L 32 까지 내려가 있다. 그 값을 면에 그대로 쓰면 아바타·칩이 갈색·숲초록 덩어리가 되어
+   * "커플 앱치고 무겁다"는 인상의 직접 원인이었다(docs/UI_UX_COMPETITIVE_REVIEW_2026-09-22.md
+   * §3-3). 같은 hue 로 L 58 — ink 글자 대비 8.0~8.6.
+   *
+   * 글자 없이 색 점만 놓는 자리(캘린더 마커·게임 점수 점·그래프 막대)에는 쓰지 않는다 —
+   * 바탕 대비가 1.9~2.0 이라 그래픽 기준(3:1)에 못 미친다. 그런 자리는 원색을 유지한다.
+   */
+  meFill: '#E0B248',
+  partnerFill: '#60C769',
+  togetherFill: '#9EC464',
 
   /*
    * 파스텔 서피스 — …Bg 보다 한 단계 짙은 파스텔. 배지·칩용 …Bg 는 이미 meText/together
@@ -122,7 +138,18 @@ const light = {
   // 다크모드에서 흰 덩어리로 남던 것을 토큰으로 흡수했다
   successBg: '#E7F5EE',
   danger: '#E5484D',
+  // danger 의 배지용 짝 — 연한 배경 + 그 위에서 4.5 를 넘기는 어두운 글자
+  // (danger 원색은 연한 배경 위 글자로 3.6 이라 못 쓴다). Badge 'rose' 가 하드코딩하던 값
+  dangerBg: '#FFF0EF',
+  dangerText: '#9B3330',
   white: '#FFFFFF',
+
+  // ── 로고 마크 (DoublyMark) — 액센트를 따른다 ────────────────────
+  // 앱 아이콘(DoublySquareMark·icon.png)은 브랜드라 고정이고, 인앱 마크만 액센트에 맞춘다.
+  // Back = 상대 계열 연한 하트, Front = 크롬 진한 하트, Sparkle = 금색 반짝임
+  markBack: '#8FCB98',
+  markFront: '#1F5A25',
+  markSparkle: '#D9A441',
 };
 
 /**
@@ -145,6 +172,12 @@ const dark: typeof light = {
   partnerBg: '#1D2E1F',
   together: '#C9DA97',
   togetherBg: '#2A2F19',
+
+  // 다크의 액센트는 이미 파스텔(L 78~85)이라 채움으로도 그대로 쓴다 — ink(다크에서는 밝은 값)가
+  // 아니라 onColor 가 고르는 어두운 글자가 위에 얹힌다
+  meFill: '#F1C999',
+  partnerFill: '#A7D2A9',
+  togetherFill: '#C9DA97',
 
   // 다크는 …Bg 가 이미 짙은 웰이라 그대로 재사용 — 텍스트(ink)가 밝아 대비가 넉넉하다
   mePastelBg: '#332811',
@@ -206,13 +239,102 @@ const dark: typeof light = {
   // 다크 success 배경 — success(#3FBF80) 텍스트가 위에서 4.5:1 이상 나오는 어두운 그린
   successBg: '#1C3327',
   danger: '#F2555A',
+  dangerBg: '#3A1F20',
+  dangerText: '#F2A0A0',
   white: '#FFFFFF',
+
+  // 다크의 마크 — 어두운 배경 위라 밝게 (DoublyMark onDark 와 같은 값)
+  markBack: '#BFE3C4',
+  markFront: '#5FBE73',
+  markSparkle: '#FFF3C4',
 };
 
 export type Palette = typeof light;
 export type Scheme = 'light' | 'dark';
 
-export const palettes: Record<Scheme, Palette> = { light, dark };
+/*
+ * ── 액센트 변형 (사용자 선택, 2026-09-23) ────────────────────────────
+ * 앱 액센트를 사용자가 고른다 — 설정 > 화면 > 액센트. 채팅 배경 테마와 같은 <b>기기별</b>
+ * 설정이다. 중립(바탕·글자·보더)은 공통이고 <b>액센트·크롬·마크만</b> 갈아끼우므로
+ * 나/상대/함께의 의미와 대비 기준은 세 변형이 같다.
+ *
+ * 왜 하나로 정하지 않고 고르게 하나: 색조 하나를 정하느라 팔레트를 네 번 갈았고
+ * (파일 상단 경위), "커플 앱치고 무겁다"의 원인이 색조가 아니라 명도였음이 밝혀진 뒤에도
+ * 색조 취향은 남았다(docs/UI_UX_COMPETITIVE_REVIEW_2026-09-22.md §3-3·§3-4). 채팅 배경을
+ * 취향으로 열어둔 것과 같은 결정이다. 앱 아이콘·스토어·캐릭터는 한 색이어야 하므로
+ * <b>대표 액센트 하나</b>는 실기기 확인 후 따로 정한다(그때까지 기본은 green).
+ *
+ * 값은 hue·채도에서 생성했고 검증 기준은 green 과 같다 — 글자 4.5:1(트랙 위), 채움 위
+ * ink ≥ 5.8, 다크 액센트 ≥ 9.5. 다크 primary 는 세 변형 모두 같은 이중 역할 상충
+ * (white 3.9 / 표면 3.8)을 안고 있다(dark 블록의 primary 주석).
+ *
+ *   green — 나 Gold(H42) · 상대 Green(H125) · 함께 Olive(H84) · 크롬 Green (본체 값)
+ *   mint  — 나 Gold(H42) · 상대 Mint(H160) · 함께 Lime(H100) · 크롬 Mint
+ *   peach — 나 Peach(H20) · 상대 Sage(H130, 저채도) · 함께 Gold(H50) · 크롬 Sage
+ *
+ * 새 액센트 토큰을 만들면 <b>세 변형 × 두 스킴</b>에 다 넣는다 — 빠뜨리면 그 변형에서만
+ * green 값이 새어 나온다(Partial 이라 컴파일러가 잡아주지 않는다).
+ */
+export type AccentVariant = 'green' | 'mint' | 'peach';
+
+const ACCENT_OVERRIDES: Record<Exclude<AccentVariant, 'green'>, Record<Scheme, Partial<Palette>>> = {
+  mint: {
+    light: {
+      me: '#8C6918', meBg: '#F8F3E7', mePastelBg: '#EEDEBA', meText: '#8C6918', meFill: '#E5B443',
+      partner: '#2E7A61', partnerBg: '#E7F8F3', partnerPastelBg: '#BAEEDC', partnerText: '#2E7A61', partnerFill: '#5EC9A6',
+      together: '#487A2E', togetherBg: '#EDF8E7', togetherPastelBg: '#CBEEBA', togetherText: '#487A2E', togetherFill: '#82C95E',
+      primary: '#2E7A61', primaryDark: '#225946', primaryLight: '#45B590', primaryBg: '#E9F7F2', primarySoft: '#E9F7F2',
+      coral: '#8C6918', indigo: '#2E7A61', violet: '#487A2E', couple: '#8C6918', food: '#487A2E', health: '#2E7A61',
+      secondary: '#2E7A61', secondarySoft: '#E7F8F3', accent: '#487A2E', accentSoft: '#EDF8E7',
+      markBack: '#90D5BE', markFront: '#225946', markSparkle: '#D9A441',
+    },
+    dark: {
+      me: '#E6D3A8', meBg: '#322915', mePastelBg: '#322915', meText: '#E6D3A8', meFill: '#E6D3A8',
+      partner: '#A8E6D1', partnerBg: '#153228', partnerPastelBg: '#153228', partnerText: '#A8E6D1', partnerFill: '#A8E6D1',
+      together: '#BDE6A8', togetherBg: '#1F3215', togetherPastelBg: '#1F3215', togetherText: '#BDE6A8', togetherFill: '#BDE6A8',
+      primary: '#3D8F74', primaryDark: '#347962', primaryLight: '#62BC9E', primaryBg: '#0F241D', primarySoft: '#0F241D',
+      coral: '#E6D3A8', indigo: '#A8E6D1', violet: '#BDE6A8', couple: '#E6D3A8', food: '#BDE6A8', health: '#A8E6D1',
+      secondary: '#A8E6D1', secondarySoft: '#153228', accent: '#BDE6A8', accentSoft: '#1F3215',
+      markBack: '#A8E6D1', markFront: '#62BC9E', markSparkle: '#FFF3C4',
+    },
+  },
+  peach: {
+    light: {
+      me: '#B74E1A', meBg: '#FAF3EF', mePastelBg: '#EECBBA', meText: '#B74E1A', meFill: '#E58D61',
+      partner: '#407749', partnerBg: '#E7F8EA', partnerPastelBg: '#BAEEC2', partnerText: '#407749', partnerFill: '#6EB97B',
+      together: '#7A6B1F', togetherBg: '#F8F5E7', togetherPastelBg: '#EEE5BA', togetherText: '#7A6B1F', togetherFill: '#DAC24E',
+      primary: '#407749', primaryDark: '#305A37', primaryLight: '#60A96C', primaryBg: '#E9F7EB', primarySoft: '#E9F7EB',
+      coral: '#B74E1A', indigo: '#407749', violet: '#7A6B1F', couple: '#B74E1A', food: '#7A6B1F', health: '#407749',
+      secondary: '#407749', secondarySoft: '#E7F8EA', accent: '#7A6B1F', accentSoft: '#F8F5E7',
+      markBack: '#9CC9A3', markFront: '#305A37', markSparkle: '#DAC24E',
+    },
+    dark: {
+      me: '#E6BDA8', meBg: '#321F15', mePastelBg: '#321F15', meText: '#E6BDA8', meFill: '#E6BDA8',
+      partner: '#A8E6B2', partnerBg: '#15321A', partnerPastelBg: '#15321A', partnerText: '#A8E6B2', partnerFill: '#A8E6B2',
+      together: '#E6DBA8', togetherBg: '#322D15', togetherPastelBg: '#322D15', togetherText: '#E6DBA8', togetherFill: '#E6DBA8',
+      primary: '#3D8F4B', primaryDark: '#347940', primaryLight: '#62BC71', primaryBg: '#0F2413', primarySoft: '#0F2413',
+      coral: '#E6BDA8', indigo: '#A8E6B2', violet: '#E6DBA8', couple: '#E6BDA8', food: '#E6DBA8', health: '#A8E6B2',
+      secondary: '#A8E6B2', secondarySoft: '#15321A', accent: '#E6DBA8', accentSoft: '#322D15',
+      markBack: '#A8E6B2', markFront: '#62BC71', markSparkle: '#FFF3C4',
+    },
+  },
+};
+
+/** 변형 × 스킴으로 미리 합쳐 둔 팔레트 — 읽기 경로(프록시·themedStyles)는 여기서 꺼낸다 */
+const resolved: Record<AccentVariant, Record<Scheme, Palette>> = {
+  green: { light, dark },
+  mint: {
+    light: { ...light, ...ACCENT_OVERRIDES.mint.light },
+    dark: { ...dark, ...ACCENT_OVERRIDES.mint.dark },
+  },
+  peach: {
+    light: { ...light, ...ACCENT_OVERRIDES.peach.light },
+    dark: { ...dark, ...ACCENT_OVERRIDES.peach.dark },
+  },
+};
+
+/** green 팔레트 — 변형과 무관하게 기준값이 필요한 곳(문서·검증 스크립트)용 */
+export const palettes: Record<Scheme, Palette> = resolved.green;
 
 /*
  * 현재 스킴 — <b>모듈 수준 가변값</b>이다.
@@ -224,9 +346,12 @@ export const palettes: Record<Scheme, Palette> = { light, dark };
  */
 let currentScheme: Scheme = (() => {
   const preferred = readThemeModeSync();
-  const resolved = preferred === 'system' ? Appearance.getColorScheme() : preferred;
-  return resolved === 'dark' ? 'dark' : 'light';
+  const resolvedMode = preferred === 'system' ? Appearance.getColorScheme() : preferred;
+  return resolvedMode === 'dark' ? 'dark' : 'light';
 })();
+
+/* 액센트 변형도 같은 방식 — 웹은 동기 저장소에서 바로 읽고, 네이티브는 themeStore.load 가 덮어쓴다 */
+let currentVariant: AccentVariant = readAccentVariantSync();
 
 export function getScheme(): Scheme {
   return currentScheme;
@@ -235,6 +360,20 @@ export function getScheme(): Scheme {
 /** 스킴 교체 — 화면 갱신은 themeStore 가 맡는다 (여기서는 값만 바꾼다) */
 export function setScheme(scheme: Scheme): void {
   currentScheme = scheme;
+}
+
+export function getAccentVariant(): AccentVariant {
+  return currentVariant;
+}
+
+/** 액센트 변형 교체 — 화면 갱신은 themeStore 가 맡는다 */
+export function setAccentVariant(variant: AccentVariant): void {
+  currentVariant = variant;
+}
+
+/** 지금 적용 중인 팔레트(변형 + 스킴). themedStyles 가 스타일을 만들 때 쓴다 */
+export function palette(scheme: Scheme = currentScheme): Palette {
+  return resolved[currentVariant][scheme];
 }
 
 /** 현재 테마가 다크인지 — 지도(웹뷰) 등 팔레트 밖 분기에 사용 */
@@ -250,7 +389,7 @@ export function isDarkMode(): boolean {
  * 그쪽은 themedStyles 로 감싸야 한다.
  */
 export const colors: Palette = new Proxy({} as Palette, {
-  get: (_target, key: string) => palettes[currentScheme][key as keyof Palette],
+  get: (_target, key: string) => palette()[key as keyof Palette],
   // 스프레드(...colors)나 Object.keys 가 동작하도록 열거도 지원한다
   ownKeys: () => Reflect.ownKeys(light),
   getOwnPropertyDescriptor: () => ({ enumerable: true, configurable: true }),

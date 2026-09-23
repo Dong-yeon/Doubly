@@ -19,18 +19,20 @@
  * </pre>
  */
 import { StyleSheet, type ImageStyle, type TextStyle, type ViewStyle } from 'react-native';
-import { getScheme, palettes, type Palette, type Scheme } from './colors';
+import { getAccentVariant, getScheme, palette, type Palette } from './colors';
 import { chatPalette, getChatThemeId, type ChatPalette } from './chatTheme';
 
 type NamedStyles<T> = { [P in keyof T]: ViewStyle | TextStyle | ImageStyle };
 
 export function themedStyles<T extends NamedStyles<T>>(factory: (colors: Palette) => T): T {
-  const cache = {} as Record<Scheme, T>;
+  // 캐시 키는 액센트 변형 + 스킴 (colors.ts 의 AccentVariant)
+  const cache: Record<string, T> = {};
 
   const resolve = (): T => {
     const scheme = getScheme();
-    if (!cache[scheme]) cache[scheme] = StyleSheet.create(factory(palettes[scheme]));
-    return cache[scheme];
+    const key = `${getAccentVariant()}:${scheme}`;
+    if (!cache[key]) cache[key] = StyleSheet.create(factory(palette(scheme)));
+    return cache[key];
   };
 
   return new Proxy({} as T, {
@@ -42,7 +44,7 @@ export function themedStyles<T extends NamedStyles<T>>(factory: (colors: Palette
 
 /**
  * 채팅방 배경 테마를 따라가는 스타일시트 — 위 {@link themedStyles} 와 같은 원리인데
- * 캐시 키가 <b>스킴 + 채팅 테마</b> 두 축이다(라이트/다크 × 6종 = 12벌).
+ * 캐시 키가 <b>액센트 + 스킴 + 채팅 테마</b> 세 축이다.
  *
  * <p>채팅 화면의 스타일 전부가 아니라 <b>배경 위에 놓이는 것들만</b> 이걸로 만든다
  * (말풍선·시간·날짜 구분선). 나머지 크롬(입력바·트레이·헤더)은 앱 팔레트를 따르므로
@@ -57,7 +59,8 @@ export function chatThemedStyles<T extends NamedStyles<T>>(
 
   const resolve = (): T => {
     const scheme = getScheme();
-    const key = `${scheme}:${getChatThemeId()}`;
+    // '기본' 채팅 테마는 앱 액센트를 따르므로 변형도 키에 넣는다
+    const key = `${getAccentVariant()}:${scheme}:${getChatThemeId()}`;
     if (!cache[key]) cache[key] = StyleSheet.create(factory(chatPalette(scheme)));
     return cache[key];
   };
