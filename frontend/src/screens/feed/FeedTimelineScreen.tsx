@@ -206,7 +206,7 @@ export function FeedTimelineScreen({ navigation, route }: Props) {
             />
           ) : (
             <EmptyState
-              icon="timeline-text-outline"
+              illustration="duo"
               title="아직 기록이 없어요"
               description={'운동·식단·맛집을 기록하거나\n첫 일상을 남겨보세요!'}
             />
