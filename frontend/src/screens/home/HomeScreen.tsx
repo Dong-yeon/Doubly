@@ -75,32 +75,45 @@ type Props = CompositeScreenProps<
 >;
 
 /**
- * 배경 사진이 없을 때의 기본 벽지 — 테마를 따른다.
+ * 배경 사진이 없을 때의 기본 벽지 — 소유자 색의 연한 틴트 두 장을 대각으로 섞는다.
+ *
+ * <p>예전에는 흰→회색 그라데이션이라 사실상 흰 화면이었고, 그 위에 D+ 만 떠 있어 화면의 절반이
+ * 비었다(docs/SCREEN_DESIGN_PASS_2026-09-23.md §1-2 P10). 지금은 틴트 위에 달걀 캐릭터 둘을
+ * 앉히고(아래 wallpaper), "우리 사진 넣기"로 사진을 부른다.
  */
-const gradient = (): [string, string, string] =>
-  isDarkMode()
-    ? ['#262823', '#1E201C', '#151713']
-    : ['#FFFFFF', '#FAFAF9', '#F1F2F0'];
+const wallpaper = (): [string, string] => [colors.meBg, colors.partnerBg];
+
+/** 사진 없을 때 벽지에 앉는 캐릭터 — 스티커 자산을 그대로 쓴다(새 그림 없음) */
+const WALLPAPER_DUO = require('../../../assets/stickers/duo_relaxed.png');
 
 /**
- * 배경 사진 위 스크림 — 사진이 밝든 어둡든 그 위의 글씨가 읽혀야 한다.
+ * 사진 위 스크림 — <b>사진을 지우지 않는다.</b>
  *
- * <p>예전에는 <b>검정 기반 + 흰 글씨</b> 고정이었다. 안전했지만 앱에서 홈만 늘 어두워
- * 커플앱치고 무거웠다. 지금은 스크림도 테마를 따르고, 글씨는 테마색을 그대로 쓴다 —
- * 라이트에서는 크림 스크림 + 어두운 글씨(= 밝은 홈), 다크에서는 반대다.
+ * <p>예전에는 화면 전체에 흰색 84→97% 를 깔았다. 글자(D+·두 열·최근 기록)가 사진 전면에
+ * 퍼져 있어 어떤 사진이 와도 AA 를 맞추려면 사진을 지워야 했기 때문이다. 결과는
+ * "배경 사진 위의 우리 화면"인데 사진이 안 보이는 홈이었다.
+ *
+ * <p>지금은 글자가 <b>하단 패널</b>에만 있으므로(CoupleHero) 스크림도 아래에만 깐다 —
+ * 위 절반은 투명, 패널이 시작되는 자리부터 배경색으로 올라가 패널 영역에서는 불투명하다.
+ * 글자는 전부 불투명 구간(≥0.96) 위에 놓이므로 대비는 사진과 무관하게 테마 대비 그대로다.
+ * 맨 위에는 상단 바 아이콘용으로 짧은 스크림을 따로 깐다(topScrim).
  *
  * <p><b>⚠️ 스크림과 글씨의 테마가 어긋나면 안 된다.</b> 스크림만 크림으로 고정했다가
  * 다크 모드에서 밝은 글씨가 크림 위에 올라가 <b>대비 1.3:1</b> 로 안 읽힌 적이 있다.
  * 값을 만질 때는 반드시 두 테마 모두에서 확인할 것.
- *
- * <p><b>0.84 아래로 내리지 말 것.</b> 최악(순흑 사진 · 라이트)에서도 보조 텍스트가
- * AA(4.5)를 넘겨야 한다. 맨 위는 topBar(자체 배경이 있는 칩·아바타)만 있어 조금 옅어도 된다.
  */
-const scrim = (): [string, string, string] =>
+const SCRIM_LOCATIONS: [number, number, number, number] = [0, 0.42, 0.62, 1];
+const scrim = (): [string, string, string, string] =>
   isDarkMode()
-    // 다크는 하한이 더 높아야 한다 — 순백 사진 위 0.84 면 보조 텍스트가 4.35 로 미달이다
-    ? ['rgba(30,32,28,0.88)', 'rgba(30,32,28,0.93)', 'rgba(30,32,28,0.97)']
-    : ['rgba(255,255,255,0.84)', 'rgba(255,255,255,0.92)', 'rgba(255,255,255,0.97)'];
+    ? ['rgba(30,32,28,0)', 'rgba(30,32,28,0)', 'rgba(30,32,28,0.96)', 'rgba(30,32,28,1)']
+    : ['rgba(250,250,249,0)', 'rgba(250,250,249,0)', 'rgba(250,250,249,0.96)', 'rgba(250,250,249,1)'];
+
+/** 상단 바 아이콘이 밝은 사진 위에서도 읽히게 — 위 14% 만, 배경색 0.7 → 0 */
+const TOP_SCRIM_LOCATIONS: [number, number] = [0, 0.14];
+const topScrim = (): [string, string] =>
+  isDarkMode()
+    ? ['rgba(30,32,28,0.7)', 'rgba(30,32,28,0)']
+    : ['rgba(250,250,249,0.7)', 'rgba(250,250,249,0)'];
 
 /** 열에 들어갈 최근 기록 한 줄 — 종류마다 제목/본문 중 있는 쪽을 쓴다 */
 function recordLabel(item: FeedItem | null): string | null {
@@ -562,31 +575,38 @@ export function HomeScreen({ navigation }: Props) {
    */
   const topBar = (
     <View style={styles.topBar}>
+      {/*
+        무드 — 아이콘 버튼. 예전엔 "🙂 기분 남기기" 회색 알약이었는데, 기본 이모지가 아이콘
+        자리를 대신하고 배경 버튼과 같은 옷을 입어 무엇이 주 액션인지 읽히지 않았다
+        (docs/SCREEN_DESIGN_PASS_2026-09-23.md §1-2 P2·P9). 무드를 걸어 두었으면 그 이모지가
+        곧 아이콘이고, 아니면 빈 얼굴 아이콘이다. 라벨은 접근성으로만 남긴다.
+      */}
       <Pressable
-        style={styles.moodBtn}
+        style={styles.iconBtn}
         onPress={() => setShowMoodPicker(true)}
         hitSlop={8}
         accessibilityRole="button"
         accessibilityLabel={mood?.mine ? `지금 기분 ${mood.mine.emoji} — 눌러서 바꾸기` : '지금 기분 남기기'}
       >
         {mood?.mine?.imageUrl ? (
-          <Image source={{ uri: mood.mine.imageUrl }} style={styles.moodBtnImage} resizeMode="contain" />
+          <Image source={{ uri: mood.mine.imageUrl }} style={styles.moodImage} resizeMode="contain" />
+        ) : mood?.mine?.emoji ? (
+          <Text style={styles.moodEmoji}>{mood.mine.emoji}</Text>
         ) : (
-          <Text style={styles.moodBtnEmoji}>{mood?.mine?.emoji ?? '🙂'}</Text>
+          <MaterialCommunityIcons name="emoticon-outline" size={24} color={colors.textPrimary} style={styles.iconHalo} />
         )}
-        <Text style={styles.moodBtnText}>{mood?.mine ? '기분 바꾸기' : '기분 남기기'}</Text>
       </Pressable>
       <View style={styles.topBarRight}>
         {connected ? (
           <Pressable
-            style={styles.bgBtn}
+            style={styles.iconBtn}
             onPress={onBackgroundPress}
             hitSlop={8}
             accessibilityRole="button"
             accessibilityLabel={bgUrl ? '배경 사진 변경' : '배경 사진 설정'}
             accessibilityHint="화면을 길게 눌러도 바꿀 수 있어요"
           >
-            <MaterialCommunityIcons name="image-outline" size={20} color={colors.textPrimary} />
+            <MaterialCommunityIcons name="image-outline" size={24} color={colors.textPrimary} style={styles.iconHalo} />
           </Pressable>
         ) : null}
         <Pressable
@@ -642,7 +662,7 @@ export function HomeScreen({ navigation }: Props) {
           <Image source={{ uri: bgUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
         ) : (
           <LinearGradient
-            colors={gradient()}
+            colors={wallpaper()}
             style={StyleSheet.absoluteFill}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
@@ -650,7 +670,13 @@ export function HomeScreen({ navigation }: Props) {
         )}
         <LinearGradient
           colors={scrim()}
-          locations={[0, 0.45, 1]}
+          locations={SCRIM_LOCATIONS}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+        <LinearGradient
+          colors={topScrim()}
+          locations={TOP_SCRIM_LOCATIONS}
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
         />
@@ -660,7 +686,27 @@ export function HomeScreen({ navigation }: Props) {
 
           {connected ? (
             <View style={styles.body}>
-              {/* 남는 세로 공간을 히어로가 먹는다 → 아래 두 줄은 항상 바닥에 붙는다 */}
+              {/*
+                남는 세로 공간은 <b>사진 자리</b>가 먹는다 → 패널(히어로·슬롯·바로가기)은 항상
+                바닥에 붙고, 사진은 그 위에서 그대로 보인다. 사진이 없으면 이 자리에 캐릭터가 앉고
+                "우리 사진 넣기"가 사진을 부른다 — 상단 바의 배경 버튼과 같은 동작이다.
+              */}
+              <View style={styles.photoArea}>
+                {!bgUrl ? (
+                  <View style={styles.wallpaperDuo}>
+                    <Image source={WALLPAPER_DUO} style={styles.wallpaperDuoImage} resizeMode="contain" />
+                    <Pressable
+                      style={({ pressed }) => [styles.photoPrompt, pressed && styles.photoPromptPressed]}
+                      onPress={onBackgroundPress}
+                      accessibilityRole="button"
+                      accessibilityLabel="우리 사진 넣기"
+                    >
+                      <MaterialCommunityIcons name="image-plus" size={16} color={colors.textPrimary} />
+                      <Text style={styles.photoPromptText}>우리 사진 넣기</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+              </View>
               <View style={styles.heroSlot}>
                 <CoupleHero
                   me={{
@@ -856,7 +902,7 @@ export function HomeScreen({ navigation }: Props) {
                         <Text style={styles.soloLabel}>{a.label}</Text>
                         <Text style={styles.soloDesc}>{a.desc}</Text>
                       </View>
-                      <Text style={styles.soloChevron}>›</Text>
+                      <MaterialCommunityIcons name="chevron-right" size={22} color={colors.textMuted} />
                     </Pressable>
                     {i < arr.length - 1 ? <View style={styles.soloDivider} /> : null}
                   </React.Fragment>
@@ -937,16 +983,17 @@ const styles = themedStyles((colors) => ({
   },
   // 우측 묶음 — [배경][프로필]
   topBarRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  // 배경 변경 — 사진 위에 놓이므로 아이콘만 두면 밝은 배경에서 묻힌다. 무드 버튼과
-  // 같은 표면색 알약으로 깔아 대비를 만든다(크기는 프로필과 같은 최소 터치 타깃).
-  bgBtn: {
+  // 사진 위 아이콘 버튼 — 알약 배경 없이 아이콘만. 밝은 사진 위 가독성은 topScrim + 헤일로가 맡는다
+  iconBtn: {
     minWidth: layout.touchTarget,
     minHeight: layout.touchTarget,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: radius.pill,
-    backgroundColor: colors.surfaceAlt,
   },
+  // 아이콘 글리프 뒤에 배경색 번짐 — 사진의 밝기와 무관하게 윤곽을 살린다
+  iconHalo: { textShadowColor: colors.background, textShadowRadius: 8, textShadowOffset: { width: 0, height: 0 } },
+  moodEmoji: { fontSize: 20, lineHeight: 24 },
+  moodImage: { width: 26, height: 26 },
   // 아바타는 32px 이라 테두리를 더해도 36px 이다 — hitSlop 이 안 먹는 웹을 위해 크기를 보장한다
   profileBtn: {
     minWidth: layout.touchTarget,
@@ -957,25 +1004,28 @@ const styles = themedStyles((colors) => ({
     borderWidth: 2,
     borderColor: colors.borderStrong,
   },
-  // topBar 좌측 — 배경 버튼은 우측(topBarRight)으로 갔고 이 자리는 무드가 쓴다
-  moodBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: colors.surfaceAlt,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.md,
-    // hitSlop 은 웹에서 무효라 높이를 직접 확보한다 (실측 25px 였다)
-    minHeight: layout.touchTarget,
-  },
-  moodBtnEmoji: { fontSize: 15, lineHeight: 18 },
-  /** 우리 이모지 무드 — 옆 글자(15px)와 시각 무게를 맞춘다 */
-  moodBtnImage: { width: 18, height: 18 },
-  moodBtnText: { color: colors.textPrimary, fontSize: fontSize.caption, fontWeight: '700' },
 
   body: { flex: 1, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, gap: spacing.md },
-  // 히어로가 남는 공간을 다 먹는다. 그 안의 분배는 CoupleHero 가 한다
-  heroSlot: { flex: 1 },
+  // 사진 자리 — 남는 세로 공간을 전부 먹어 패널을 바닥으로 민다
+  photoArea: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  wallpaperDuo: { alignItems: 'center', gap: spacing.sm },
+  // 스티커 원본은 정사각에 가깝다. 폭 기준 절반 정도가 캐릭터 둘이 "앉아 있는" 크기다
+  wallpaperDuoImage: { width: 180, height: 180 },
+  photoPrompt: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    minHeight: layout.touchTarget,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  photoPromptPressed: { opacity: 0.7 },
+  photoPromptText: { color: colors.textPrimary, fontSize: fontSize.caption, fontWeight: '700' },
+  // 패널 — 스크림의 불투명 구간 위에 놓인다
+  heroSlot: {},
 
   disconnected: { padding: spacing.lg },
   connectWrap: { alignItems: 'center', paddingVertical: spacing.lg },
@@ -1015,7 +1065,6 @@ const styles = themedStyles((colors) => ({
   soloBody: { flex: 1 },
   soloLabel: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
   soloDesc: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
-  soloChevron: { fontSize: fontSize.title, color: colors.textMuted, fontWeight: '700' },
   soloDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
 
   // spacing.lg 로 통일 — 앱의 다른 모달 8곳과 맞춘다

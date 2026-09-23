@@ -80,6 +80,6 @@ const styles = themedStyles((colors) => ({
     backgroundColor: colors.togetherPastelBg,
   },
   body: { flex: 1 },
-  meta: { color: colors.textSecondary, fontSize: 11, fontWeight: '700' },
+  meta: { color: colors.textSecondary, fontSize: fontSize.micro, fontWeight: '700' },
   summary: { color: colors.textPrimary, fontSize: fontSize.body, fontWeight: '600', marginTop: 1 },
 }));

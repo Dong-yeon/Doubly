@@ -350,11 +350,11 @@ const styles = themedStyles((colors) => ({
     paddingHorizontal: spacing.xs + 2,
     paddingVertical: 1,
   },
-  sharedBadgeText: { fontSize: 11, fontWeight: '800', color: colors.textSecondary },
+  sharedBadgeText: { fontSize: fontSize.micro, fontWeight: '800', color: colors.textSecondary },
   recordContent: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 1 },
   recordMeta: { alignItems: 'flex-end' },
   recordWho: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary },
-  recordTime: { fontSize: 11, color: colors.textMuted, marginTop: 1 },
+  recordTime: { fontSize: fontSize.micro, color: colors.textMuted, marginTop: 1 },
   thumb: { width: 38, height: 38, borderRadius: radius.sm, backgroundColor: colors.surfaceAlt },
 
   // 응원 버튼 — 본문 행 안에 들어가 카드를 세로로 키우지 않는다(위 RecordCard 주석 참고)
