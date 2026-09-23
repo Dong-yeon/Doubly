@@ -17,7 +17,8 @@
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '../../../components/Icon';
-import { colors, spacing } from '../../../constants/theme';
+import { colors, fontSize, spacing } from '../../../constants/theme';
+import { layout } from '../../../theme/layout';
 import { themedStyles } from '../../../theme/themedStyles';
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -38,9 +39,7 @@ export function QuickActions({ actions }: { actions: QuickAction[] }) {
           onPress={a.onPress}
           accessibilityRole="button"
         >
-          <View style={styles.iconBox}>
-            <MaterialCommunityIcons name={a.icon} size={20} color={colors.primary} />
-          </View>
+          <MaterialCommunityIcons name={a.icon} size={18} color={colors.textPrimary} />
           <Text style={styles.label} numberOfLines={1}>
             {a.label}
           </Text>
@@ -59,24 +58,13 @@ const styles = themedStyles((colors) => ({
    * 부른다(이 파일 상단의 "칸을 늘리는 자리가 아니다"와 같은 방향). 왼쪽에 모아 두면
    * 줄의 길이가 기능 수를 그대로 드러낸다.
    */
-  row: { flexDirection: 'row', gap: spacing.lg, marginBottom: spacing.md },
-  item: { alignItems: 'center', gap: spacing.xs, paddingVertical: spacing.xs },
-  pressed: { opacity: 0.6 },
+  row: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.xs },
   /*
-   * 한때 7칸까지 늘어 320px 에서 칸당 45px·라벨 11px 까지 내려갔다. 세로로 못 늘리는
-   * 화면이라 새 기능이 전부 이 줄에 가로로 쌓인 결과였다. 칸 수를 못 박았으므로
-   * 44px 를 되돌려도 좁은 화면에서 여유가 있다.
+   * 원 안 아이콘 + 아래 라벨(런처 모양)을 접고 <b>아이콘 + 라벨 한 줄</b>의 텍스트 버튼으로
+   * 바꿨다(docs/SCREEN_DESIGN_PASS_2026-09-23.md §1-2 P5). 앱 안에 또 홈 화면을 만들지
+   * 않는다 — 이 줄은 링크 세 개다. 높이는 터치 타깃 44 를 그대로 확보한다.
    */
-  iconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    // 크림 스크림 위 — 표면 틴트로 눌러 담는다
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  label: { color: colors.textSecondary, fontSize: 11, fontWeight: '700' },
+  item: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, minHeight: layout.touchTarget, paddingRight: spacing.xs },
+  pressed: { opacity: 0.6 },
+  label: { color: colors.textPrimary, fontSize: fontSize.caption, fontWeight: '700' },
 }));
