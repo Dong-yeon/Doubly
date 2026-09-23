@@ -65,6 +65,7 @@ import { playTouchGesture } from '../../utils/haptics';
 import type { FeedItem, Meal, Memories, MoodResponse, PartnerToday, Streak, Trip } from '../../types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { isDarkMode } from '../../theme';
+import { onColor } from '../../theme/onColor';
 import { themedStyles } from '../../theme/themedStyles';
 import { layout } from '../../theme/layout';
 
@@ -982,7 +983,7 @@ const styles = themedStyles((colors) => ({
   connectDesc: { color: colors.textSecondary, fontSize: fontSize.body, textAlign: 'center', marginTop: spacing.xs },
   connectBtn: {
     marginTop: spacing.md,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primaryFill,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.sm,
@@ -990,7 +991,7 @@ const styles = themedStyles((colors) => ({
     justifyContent: 'center',
   },
   // 버튼 배경이 primary(딥 포레스트)라 글자는 흰색 — white 위 10.61:1
-  connectBtnText: { color: colors.white, fontWeight: '800', fontSize: fontSize.body },
+  connectBtnText: { color: onColor(colors.primaryFill), fontWeight: '800', fontSize: fontSize.body },
 
   soloTitle: {
     fontSize: fontSize.caption,
@@ -1025,6 +1026,6 @@ const styles = themedStyles((colors) => ({
   modalActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
   modalCancel: { flex: 1, alignItems: 'center', paddingVertical: spacing.md, borderRadius: radius.md, backgroundColor: colors.surfaceAlt },
   modalCancelText: { color: colors.textSecondary, fontWeight: '700' },
-  modalSave: { flex: 1, alignItems: 'center', paddingVertical: spacing.md, borderRadius: radius.md, backgroundColor: colors.primary },
-  modalSaveText: { color: colors.white, fontWeight: '800' },
+  modalSave: { flex: 1, alignItems: 'center', paddingVertical: spacing.md, borderRadius: radius.md, backgroundColor: colors.primaryFill },
+  modalSaveText: { color: onColor(colors.primaryFill), fontWeight: '800' },
 }));
