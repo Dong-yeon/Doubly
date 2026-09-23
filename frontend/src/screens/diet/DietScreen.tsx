@@ -26,7 +26,7 @@ import type { HealthStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
 import { MealCard } from '../../components/MealCard';
-import { QuickLinkChips } from '../../components/QuickLinkChips';
+import { MaterialCommunityIcons } from '../../components/Icon';
 import { EmptyState } from '../../components/EmptyState';
 import { AiInsightButton } from '../../components/AiInsightButton';
 import { ProteinRing } from '../../components/ProteinRing';
@@ -389,6 +389,35 @@ export function DietScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       {/*
+        화면 안 헤더 — 우리 탭과 같은 문법(제목 + 우측 아이콘). 예전엔 제목 없이 카드에서
+        시작했고 통계·캘린더는 칩 줄, AI 버튼 둘은 그 아래 고정 줄이라 목록 위 고정 영역이
+        세 줄(≈250px)이었다(docs/SCREEN_DESIGN_PASS_2026-09-23.md §6). 지금 고정은 제목 + 체크인뿐.
+      */}
+      <View style={styles.topBar}>
+        <Text style={styles.topTitle}>럽바디</Text>
+        <View style={styles.topButtons}>
+          <Pressable
+            onPress={() => navigation.navigate('DietStats')}
+            hitSlop={8}
+            style={({ pressed }) => [styles.topBtn, pressed && styles.topBtnPressed]}
+            accessibilityRole="button"
+            accessibilityLabel="식단 통계"
+          >
+            <MaterialCommunityIcons name="chart-bar" size={24} color={colors.textPrimary} />
+          </Pressable>
+          <Pressable
+            onPress={() => navigation.navigate('DietCalendar')}
+            hitSlop={8}
+            style={({ pressed }) => [styles.topBtn, pressed && styles.topBtnPressed]}
+            accessibilityRole="button"
+            accessibilityLabel="식단 캘린더"
+          >
+            <MaterialCommunityIcons name="calendar-blank-outline" size={24} color={colors.textPrimary} />
+          </Pressable>
+        </View>
+      </View>
+
+      {/*
         운동 체크인 — 운동 탭이 이 탭으로 흡수된 자리(ALBUM_TAB_IA_2026-09-14.md 5-2).
         맨 위에 두는 이유: 하루 한 번의 "챙겼다"가 운동에서 가장 자주 하는 동작이고,
         식단은 아래 목록·기록 버튼이 이미 화면 전체를 차지하고 있다. 자세한 기록은
@@ -399,33 +428,6 @@ export function DietScreen({ navigation }: Props) {
           onOpenRecord={(params) => navigation.navigate('WorkoutRecord', params)}
           onResume={() => navigation.navigate('WorkoutSession', { resume: true })}
           onOpenWorkoutHome={() => navigation.navigate('WorkoutMain')}
-        />
-      </View>
-
-      {/* 운동 홈과 같은 QuickLinkChips — 항목이 2개뿐이라도 같은 컴포넌트를 써서
-          정렬·톤이 화면을 넘나들며 흔들리지 않게 한다. */}
-      <QuickLinkChips
-        links={[
-          { icon: 'chart-bar', label: '통계', onPress: () => navigation.navigate('DietStats') },
-          { icon: 'calendar-blank-outline', label: '캘린더', onPress: () => navigation.navigate('DietCalendar') },
-        ]}
-      />
-
-      {/* AI 인사이트 — 주간 식단 코칭 / 커플 주간 레터 */}
-      <View style={styles.aiRow}>
-        <AiInsightButton
-          label="주간 식단 코칭"
-          title="주간 식단 코칭"
-          fetcher={dietApi.coach}
-          render={renderCoach}
-          style={styles.aiBtn}
-        />
-        <AiInsightButton
-          label="커플 주간 레터"
-          title="우리 주간 레터"
-          fetcher={summaryApi.aiLetter}
-          render={renderLetter}
-          style={styles.aiBtn}
         />
       </View>
 
@@ -443,6 +445,24 @@ export function DietScreen({ navigation }: Props) {
         onEndReached={loadMoreHistory}
         ListHeaderComponent={
           <View>
+            {/* AI 인사이트 — 주간 식단 코칭 / 커플 주간 레터. 목록과 함께 스크롤된다 */}
+            <View style={styles.aiRow}>
+              <AiInsightButton
+                label="주간 식단 코칭"
+                title="주간 식단 코칭"
+                fetcher={dietApi.coach}
+                render={renderCoach}
+                style={styles.aiBtn}
+              />
+              <AiInsightButton
+                label="커플 주간 레터"
+                title="우리 주간 레터"
+                fetcher={summaryApi.aiLetter}
+                render={renderLetter}
+                style={styles.aiBtn}
+              />
+            </View>
+
             {/* 식단 스트릭 — 운동 홈과 같은 표시 형식(연속/함께/최고) */}
             <View style={styles.streakRow}>
               <Text style={styles.streakText}>연속 {myStreak?.currentCount ?? 0}일</Text>
@@ -458,10 +478,9 @@ export function DietScreen({ navigation }: Props) {
                 <View style={styles.nutHeader}>
                   <Text style={styles.nutTitle}>오늘 영양</Text>
                   {/* 카드 전체를 누르면 정보를 읽으려다 실수로 모달이 열렸다 — 버튼만 탭 영역으로 좁힌다 */}
-                  <TouchableOpacity onPress={openNutModal} hitSlop={8} accessibilityRole="button">
-                    <Text style={styles.nutSet}>
-                      {nutrition.targetCalories ? '목표 수정' : '목표 설정 ›'}
-                    </Text>
+                  <TouchableOpacity onPress={openNutModal} hitSlop={8} accessibilityRole="button" style={styles.nutSetBtn}>
+                    <Text style={styles.nutSet}>{nutrition.targetCalories ? '목표 수정' : '목표 설정'}</Text>
+                    <MaterialCommunityIcons name="chevron-right" size={16} color={colors.primary} />
                   </TouchableOpacity>
                 </View>
                 {nutrition.travelMode ? (
@@ -510,48 +529,51 @@ export function DietScreen({ navigation }: Props) {
                     </>
                   ) : (
                     <Text style={styles.energyHint}>
-                      홈 오른쪽 위 프로필 → 신체 정보에서 키·생년월일·성별을 등록하면 오늘 운동한 만큼
-                      실시간으로 섭취 가능 칼로리를 계산해줘요.
+                      MY › 신체 정보를 등록하면 오늘 운동한 만큼 섭취 가능 칼로리를 계산해요.
                     </Text>
                   )}
                 </View>
               </View>
             ) : null}
 
-            {/* 물 + 간헐적 단식 트래커 — 둘 다 "오늘 몸 상태"를 재는 같은 성격의 트래커라
-                예전엔 카드가 따로였던 걸 한 카드로 묶어 스크롤 공간을 줄인다. */}
+            {/*
+              물 + 간헐적 단식 — 한 카드 안의 <b>한 줄 타일 둘</b>. 예전엔 제목·목표·상대·진행 막대·
+              버튼 셋이 한 트래커마다 있어 카드 하나가 화면의 1/3 이었다(docs/SCREEN_DESIGN_PASS
+              _2026-09-23.md §6-3). 물은 −/+ 스테퍼(250ml), 단식은 시작/종료 한 버튼이다.
+            */}
             <View style={styles.trackerCard}>
               {water ? (
-                <View style={styles.trackerSection}>
-                  <View style={styles.waterHeader}>
-                    <Text style={styles.waterTitle}>물 {formatNumber(water.consumedMl)}ml</Text>
-                    <Text style={styles.waterTarget}>목표 {formatNumber(water.targetMl)}ml</Text>
-                  </View>
-                  <View style={styles.nutTrack}>
-                    <View
-                      style={[
-                        styles.nutFill,
-                        { width: `${Math.min(100, (water.consumedMl / water.targetMl) * 100)}%` },
-                      ]}
-                    />
-                  </View>
-                  {water.coupleConnected ? (
-                    <Text style={styles.waterPartner}>
-                      상대 {formatNumber(water.partnerConsumedMl ?? 0)}ml
+                <View style={styles.trackerRow}>
+                  <View style={styles.trackerText}>
+                    <Text style={styles.trackerTitle}>
+                      물{'  '}
+                      <Text style={styles.trackerValue}>
+                        {formatNumber(water.consumedMl)} / {formatNumber(water.targetMl)}ml
+                      </Text>
                     </Text>
-                  ) : null}
-                  <View style={styles.waterButtonRow}>
-                    <TouchableOpacity style={styles.waterBtn} onPress={() => onAddWater(250)}>
-                      <Text style={styles.waterBtnText}>＋250ml</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.waterBtn} onPress={() => onAddWater(500)}>
-                      <Text style={styles.waterBtnText}>＋500ml</Text>
-                    </TouchableOpacity>
-                    {water.consumedMl > 0 ? (
-                      <TouchableOpacity style={styles.waterUndoBtn} onPress={() => onAddWater(-250)}>
-                        <Text style={styles.waterUndoText}>−250ml</Text>
-                      </TouchableOpacity>
+                    {water.coupleConnected ? (
+                      <Text style={styles.trackerSub}>상대 {formatNumber(water.partnerConsumedMl ?? 0)}ml</Text>
                     ) : null}
+                  </View>
+                  <View style={styles.stepper}>
+                    <Pressable
+                      style={({ pressed }) => [styles.stepBtn, pressed && styles.stepBtnPressed, water.consumedMl <= 0 && styles.stepBtnDisabled]}
+                      onPress={() => onAddWater(-250)}
+                      disabled={water.consumedMl <= 0}
+                      accessibilityRole="button"
+                      accessibilityLabel="물 250ml 빼기"
+                    >
+                      <MaterialCommunityIcons name="minus" size={18} color={colors.textPrimary} />
+                    </Pressable>
+                    <Text style={styles.stepLabel}>250</Text>
+                    <Pressable
+                      style={({ pressed }) => [styles.stepBtn, pressed && styles.stepBtnPressed]}
+                      onPress={() => onAddWater(250)}
+                      accessibilityRole="button"
+                      accessibilityLabel="물 250ml 더하기"
+                    >
+                      <MaterialCommunityIcons name="plus" size={18} color={colors.textPrimary} />
+                    </Pressable>
                   </View>
                 </View>
               ) : null}
@@ -559,51 +581,50 @@ export function DietScreen({ navigation }: Props) {
               {water ? <View style={styles.trackerDivider} /> : null}
 
               {/* 간헐적 단식 — 세션이 서버에 살아있어 커플 상대방 진행 상태도 함께 보여준다 */}
-              <View style={styles.trackerSection}>
-                {fasting?.active ? (
-                  <>
-                    <View style={styles.waterHeader}>
-                      <Text style={styles.waterTitle}>{fasting.planLabel} 단식 중</Text>
-                      <Text style={styles.waterTarget}>목표 {fasting.targetHours}시간</Text>
-                    </View>
-                    <View style={styles.nutTrack}>
-                      <View
-                        style={[
-                          styles.nutFill,
-                          fasting.achieved && styles.nutFillOver,
-                          { width: `${Math.min(100, fasting.progressPct ?? 0)}%` },
-                        ]}
-                      />
-                    </View>
-                    <Text style={styles.fastingElapsed}>
-                      {formatHM(liveElapsedMin)} 경과
-                      {fasting.achieved ? ' · 목표 달성!' : ` · ${formatHM((fasting.targetHours ?? 0) * 60 - liveElapsedMin)} 남음`}
+              {fasting?.active ? (
+                <View style={styles.trackerRow}>
+                  <View style={styles.trackerText}>
+                    <Text style={styles.trackerTitle}>
+                      {fasting.planLabel} 단식 중{'  '}
+                      <Text style={styles.trackerValue}>{formatHM(liveElapsedMin)} 경과</Text>
                     </Text>
+                    <Text style={styles.trackerSub}>
+                      {fasting.achieved
+                        ? '목표 달성!'
+                        : `목표 ${fasting.targetHours}시간 · ${formatHM((fasting.targetHours ?? 0) * 60 - liveElapsedMin)} 남음`}
+                      {partnerFasting?.connected && partnerFasting.active
+                        ? ` · 상대 ${formatHM(partnerFasting.elapsedMin ?? 0)} 경과`
+                        : ''}
+                    </Text>
+                  </View>
+                  <Pressable
+                    style={({ pressed }) => [styles.trackerAction, pressed && styles.stepBtnPressed]}
+                    onPress={onEndFasting}
+                    accessibilityRole="button"
+                    accessibilityLabel="단식 종료"
+                  >
+                    <Text style={styles.trackerActionText}>종료</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <Pressable
+                  style={({ pressed }) => [styles.trackerRow, pressed && styles.trackerRowPressed]}
+                  onPress={() => setFastingModal(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel="간헐적 단식 시작하기"
+                >
+                  <View style={styles.trackerText}>
+                    <Text style={styles.trackerTitle}>간헐적 단식</Text>
                     {partnerFasting?.connected && partnerFasting.active ? (
-                      <Text style={styles.waterPartner}>
-                        상대 {partnerFasting.partnerName} · {formatHM(partnerFasting.elapsedMin ?? 0)} 경과
-                      </Text>
-                    ) : null}
-                    <TouchableOpacity style={styles.waterUndoBtn} onPress={onEndFasting}>
-                      <Text style={styles.waterUndoText}>단식 종료</Text>
-                    </TouchableOpacity>
-                  </>
-                ) : (
-                  <>
-                    <View style={styles.waterHeader}>
-                      <Text style={styles.waterTitle}>간헐적 단식</Text>
-                    </View>
-                    {partnerFasting?.connected && partnerFasting.active ? (
-                      <Text style={styles.waterPartner}>
+                      <Text style={styles.trackerSub}>
                         상대 {partnerFasting.partnerName}님은 지금 단식 중 · {formatHM(partnerFasting.elapsedMin ?? 0)} 경과
                       </Text>
                     ) : null}
-                    <TouchableOpacity style={styles.waterBtn} onPress={() => setFastingModal(true)}>
-                      <Text style={styles.waterBtnText}>단식 시작하기</Text>
-                    </TouchableOpacity>
-                  </>
-                )}
-              </View>
+                  </View>
+                  <Text style={styles.trackerActionText}>시작</Text>
+                  <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textMuted} />
+                </Pressable>
+              )}
             </View>
 
             {/* 커플 공동 목표 */}
@@ -631,8 +652,11 @@ export function DietScreen({ navigation }: Props) {
                   </>
                 ) : (
                   <View style={styles.goalHeader}>
-                    <Text style={styles.goalTitle}>커플 식단 목표를 정해볼까요?</Text>
-                    <Text style={styles.goalSet}>설정하기 ›</Text>
+                    <Text style={styles.goalTitle}>커플 식단 목표</Text>
+                    <View style={styles.goalSetRow}>
+                      <Text style={styles.goalSet}>설정</Text>
+                      <MaterialCommunityIcons name="chevron-right" size={16} color={colors.primary} />
+                    </View>
                   </View>
                 )}
               </Pressable>
@@ -650,7 +674,7 @@ export function DietScreen({ navigation }: Props) {
                     ) : null}
                     <TouchableOpacity onPress={onCopyYesterday} disabled={copyingYesterday}>
                       <Text style={styles.copyYesterday}>
-                        {copyingYesterday ? '불러오는 중…' : '↺ 어제 식단 불러오기'}
+                        {copyingYesterday ? '불러오는 중…' : '어제 식단 불러오기'}
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -709,7 +733,11 @@ export function DietScreen({ navigation }: Props) {
       />
 
       <View style={styles.fabWrap}>
-        <Button title="＋ 식단 기록하기" onPress={() => navigation.navigate('DietRecord')} />
+        <Button
+          title="식단 기록하기"
+          leftIcon={<MaterialCommunityIcons name="plus" size={20} color={colors.white} />}
+          onPress={() => navigation.navigate('DietRecord')}
+        />
       </View>
 
       {/* 커플 목표 설정 모달 */}
@@ -946,8 +974,21 @@ export function DietScreen({ navigation }: Props) {
 
 const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
-  // 체크인 카드 자체가 아래 여백(marginBottom)을 갖고 있어 위쪽만 띄운다
-  workoutCheckin: { paddingTop: spacing.md },
+  // 화면 안 헤더 — AlbumScreen 과 같은 값
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xs,
+  },
+  topTitle: { fontSize: fontSize.title, fontWeight: '800', color: colors.textPrimary },
+  topButtons: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  topBtn: { minWidth: layout.touchTarget, minHeight: layout.touchTarget, alignItems: 'center', justifyContent: 'center' },
+  topBtnPressed: { opacity: 0.6 },
+  // 체크인 카드 자체가 아래 여백(marginBottom)을 갖고 있다
+  workoutCheckin: {},
   nutCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -959,19 +1000,21 @@ const styles = themedStyles((colors) => ({
   },
   nutHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs },
   nutTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
+  nutSetBtn: { flexDirection: 'row', alignItems: 'center' },
   nutSet: { fontSize: fontSize.caption, fontWeight: '700', color: colors.primary },
   nutMain: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   nutSecondary: { flex: 1, gap: spacing.xs },
-  travelModeBadge: { fontSize: fontSize.caption, fontWeight: '700', color: colors.accent, marginBottom: spacing.xs },
+  travelModeBadge: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary, marginBottom: spacing.xs },
   nutRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   // width 48 — "칼로리"(3글자)가 36px 에서 줄바꿈되어 첫 행만 높이가 달라졌다
   nutLabel: { width: 48, fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
   nutTrack: { flex: 1, height: 10, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
-  nutFill: { height: '100%', borderRadius: radius.pill, backgroundColor: colors.accent },
+  // 내 지표 — 소유자 의미가 없으므로 크롬 채움. 예전 accent(=함께)는 뜻이 없었다
+  nutFill: { height: '100%', borderRadius: radius.pill, backgroundColor: colors.primaryFill },
   nutFillOver: { backgroundColor: colors.primary },
   nutVal: { width: 92, textAlign: 'right', fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '700' },
   nutRemain: { fontSize: fontSize.caption, color: colors.togetherText, fontWeight: '800', textAlign: 'right', marginTop: spacing.xs },
-  extraNutrients: { fontSize: 10, color: colors.textTertiary, fontWeight: '600', marginTop: spacing.xs },
+  extraNutrients: { fontSize: fontSize.micro, color: colors.textTertiary, fontWeight: '600', marginTop: spacing.xs },
   energyBox: {
     marginTop: spacing.sm,
     paddingTop: spacing.sm,
@@ -979,7 +1022,7 @@ const styles = themedStyles((colors) => ({
     borderTopColor: colors.border,
     gap: 2,
   },
-  energyFormula: { fontSize: 10, color: colors.textTertiary, fontWeight: '600' },
+  energyFormula: { fontSize: fontSize.micro, color: colors.textTertiary, fontWeight: '600' },
   energyResult: { fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '800' },
   energyHint: { fontSize: fontSize.caption, color: colors.textSecondary, lineHeight: 18 },
   nutFormRow: { flexDirection: 'row', gap: spacing.sm },
@@ -997,9 +1040,9 @@ const styles = themedStyles((colors) => ({
     borderColor: colors.border,
     backgroundColor: colors.surfaceAlt,
   },
-  wizardChipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
+  wizardChipActive: { backgroundColor: colors.primaryFill, borderColor: colors.primaryFill },
   wizardChipText: { fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '600' },
-  wizardChipTextActive: { color: onColor(colors.accent), fontWeight: '800' },
+  wizardChipTextActive: { color: onColor(colors.primaryFill), fontWeight: '800' },
   // 물 + 간헐적 단식 트래커 — 한 카드 안에서 구획만 나눈다(물 섹션은 물 데이터가 있을 때만 노출)
   trackerCard: {
     backgroundColor: colors.surface,
@@ -1009,38 +1052,32 @@ const styles = themedStyles((colors) => ({
     padding: spacing.md,
     marginBottom: spacing.md,
   },
-  trackerSection: { gap: spacing.sm },
+  trackerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44 },
+  trackerRowPressed: { opacity: 0.7 },
   trackerDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginVertical: spacing.sm },
-  waterHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  waterTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
-  waterTarget: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
-  waterPartner: { fontSize: fontSize.caption, color: colors.textSecondary },
-  waterButtonRow: { flexDirection: 'row', gap: spacing.sm },
-  waterBtn: {
-    flex: 1,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.accent,
-    backgroundColor: colors.accentSoft,
-    alignItems: 'center',
-  },
-  waterBtnText: { fontSize: fontSize.caption, fontWeight: '800', color: colors.textPrimary },
-  waterUndoBtn: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
+  trackerText: { flex: 1, minWidth: 0 },
+  trackerTitle: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
+  trackerValue: { fontWeight: '600', color: colors.textSecondary },
+  trackerSub: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 1 },
+  // −/+ 스테퍼 — 250ml 단위. 원 버튼 36 에 hitSlop 없이도 행 높이 44 로 터치를 받는다
+  stepper: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  stepBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  waterUndoText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary },
-  fastingElapsed: { fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '700' },
+  stepBtnPressed: { backgroundColor: colors.primarySoft },
+  stepBtnDisabled: { opacity: 0.35 },
+  stepLabel: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary, minWidth: 28, textAlign: 'center' },
+  trackerAction: { paddingHorizontal: spacing.sm, minHeight: 36, justifyContent: 'center', borderRadius: radius.md },
+  trackerActionText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.primary },
   customFastingRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-end' },
   customFastingInput: { flex: 1 },
   customFastingBtn: { marginBottom: 2 },
-  aiRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
+  aiRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
   aiBtn: { flex: 1 },
   aiHeadline: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary, lineHeight: 22 },
   aiScore: { fontSize: fontSize.caption, fontWeight: '700', color: colors.primary },
@@ -1062,6 +1099,7 @@ const styles = themedStyles((colors) => ({
   goalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   goalTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
   goalBadge: { fontSize: fontSize.caption, fontWeight: '800', color: colors.success },
+  goalSetRow: { flexDirection: 'row', alignItems: 'center' },
   goalSet: { fontSize: fontSize.caption, fontWeight: '700', color: colors.primary },
   // colors.white 는 양 테마 모두 순백 고정이라 다크 카드 위에서 번쩍였다 — nutTrack 과 같은 surfaceAlt 로
   goalTrack: { height: 10, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
@@ -1102,9 +1140,10 @@ const styles = themedStyles((colors) => ({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  dayChipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
+  // 커플 공동 목표의 선택 — 함께 색(togetherFill). accent 는 테마 강조색이라 소유자 뜻이 없다
+  dayChipActive: { backgroundColor: colors.togetherFill, borderColor: colors.togetherFill },
   dayText: { fontSize: fontSize.subtitle, fontWeight: '700', color: colors.textPrimary },
-  // 다크 accent 위 white 는 팔레트 전체에서 가장 낮은 1.50:1 이었다 — 배경 휘도로 고른다
-  dayTextActive: { color: onColor(colors.accent) },
+  // 다크 채움 위 white 는 대비가 모자랄 수 있다 — 배경 휘도로 고른다
+  dayTextActive: { color: onColor(colors.togetherFill) },
   modalHint: { fontSize: fontSize.caption, color: colors.textTertiary, textAlign: 'center' },
 }));
