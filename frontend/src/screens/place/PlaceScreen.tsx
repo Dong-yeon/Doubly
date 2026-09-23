@@ -764,7 +764,13 @@ const styles = themedStyles((colors) => ({
   categoryText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
   address: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xs },
   cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.sm },
-  visitInfo: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '700' },
+  /*
+   * 평점·방문 횟수는 <b>정보 글자지 상태가 아니다</b> — 초록일 이유가 없다(2026-09-23).
+   * 카드마다 반복되는 줄이라 화면에서 초록이 가장 많이 깔리던 자리였다. 상용 앱들이
+   * "색은 면에, 글자는 검정" 으로 가는 이유가 여기다(§3-3). 선택 상태를 말하는 초록
+   * (세그먼트·필터 칩)과 소유자 색(pendingHint = togetherText)은 그대로 둔다.
+   */
+  visitInfo: { fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '700' },
   pendingHint: { fontSize: fontSize.micro, color: colors.togetherText, fontWeight: '700', marginTop: spacing.xs },
   // AI 인사이트 렌더
   courseComment: { fontSize: fontSize.body, color: colors.textSecondary, lineHeight: 22, marginBottom: spacing.xs },
