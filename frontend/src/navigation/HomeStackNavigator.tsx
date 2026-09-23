@@ -8,6 +8,8 @@ import { MyScreen } from '../screens/my/MyScreen';
 import { PlanScreen } from '../screens/my/PlanScreen';
 import { StickerShopScreen } from '../screens/home/StickerShopScreen';
 import { SettingsScreen } from '../screens/my/SettingsScreen';
+import { NotificationCategoriesScreen } from '../screens/my/NotificationCategoriesScreen';
+import { MealRemindersScreen } from '../screens/my/MealRemindersScreen';
 import { ChangePasswordScreen } from '../screens/my/ChangePasswordScreen';
 import { LegalDocumentScreen } from '../screens/onboarding/LegalDocumentScreen';
 import { FeedComposeScreen } from '../screens/feed/FeedComposeScreen';
@@ -106,6 +108,8 @@ export function HomeStackNavigator() {
       <Stack.Screen name="Plan" component={PlanScreen} options={{ title: '플랜' }} />
       <Stack.Screen name="StickerShop" component={StickerShopScreen} options={{ title: '스티커 상점' }} />
       <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: '설정' }} />
+      <Stack.Screen name="NotificationCategories" component={NotificationCategoriesScreen} options={{ title: '알림 종류' }} />
+      <Stack.Screen name="MealReminders" component={MealRemindersScreen} options={{ title: '식사 알림' }} />
       <Stack.Screen
         name="ChangePassword"
         component={ChangePasswordScreen}

@@ -51,6 +51,8 @@ export type HomeStackParamList = PlaceScreensParamList & {
   StickerShop: undefined;
   // 설정 — 알림·마케팅 수신, 비밀번호 변경, 약관 열람
   Settings: undefined;
+  NotificationCategories: undefined;
+  MealReminders: undefined;
   ChangePassword: undefined;
   // 약관 전문 (온보딩 스택과 동일 화면을 재사용)
   LegalDocument: { doc: 'terms' | 'privacy' | 'oss' };
