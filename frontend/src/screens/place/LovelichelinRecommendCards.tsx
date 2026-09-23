@@ -75,7 +75,7 @@ export function LovelichelinRecommendCards({ data }: { data: LovelichelinRecomme
                 ) : null}
               </View>
               {p.address ? <Text style={styles.address}>{p.address}</Text> : null}
-              {p.reason ? <Text style={styles.reason}>💡 {p.reason}</Text> : null}
+              {p.reason ? <Text style={styles.reason}>{p.reason}</Text> : null}
               <View style={styles.actionRow}>
                 {p.placeUrl ? (
                   <TouchableOpacity onPress={() => Linking.openURL(p.placeUrl!)} hitSlop={8}>
@@ -85,7 +85,7 @@ export function LovelichelinRecommendCards({ data }: { data: LovelichelinRecomme
                   <View />
                 )}
                 <Button
-                  title={saved ? '추가했어요 ✓' : '럽슐랭에 추가'}
+                  title={saved ? '추가했어요' : '럽슐랭에 추가'}
                   size="sm"
                   variant={saved ? 'soft' : 'primary'}
                   disabled={saved}
