@@ -586,15 +586,6 @@ export function ChatRoomScreen({ navigation, route }: Props) {
       headerRight: () => (
         <View style={styles.headerCallActions}>
           <Pressable
-            onPress={() => setShowMoreMenu(true)}
-            style={({ pressed }) => [styles.headerCallButton, pressed && styles.headerCallButtonPressed]}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="더보기"
-          >
-            <MaterialCommunityIcons name="dots-vertical" size={22} color={colors.textPrimary} />
-          </Pressable>
-          <Pressable
             onPress={() => setShowSearch(true)}
             style={({ pressed }) => [styles.headerCallButton, pressed && styles.headerCallButtonPressed]}
             hitSlop={8}
@@ -638,6 +629,16 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             ) : (
               <MaterialCommunityIcons name="video" size={22} color={colors.textPrimary} />
             )}
+          </Pressable>
+          {/* 더보기(⋮)는 맨 오른쪽 — iOS·안드로이드·카톡 관례. 검색·통화·영상 뒤에 둔다 */}
+          <Pressable
+            onPress={() => setShowMoreMenu(true)}
+            style={({ pressed }) => [styles.headerCallButton, pressed && styles.headerCallButtonPressed]}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="더보기"
+          >
+            <MaterialCommunityIcons name="dots-vertical" size={22} color={colors.textPrimary} />
           </Pressable>
         </View>
       ),
@@ -1534,7 +1535,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             mine ? styles.workoutCardMine : styles.workoutCardTheirs,
             isPr && styles.workoutCardPr,
           ]}>
-            <Text style={[styles.workoutBadge, isPr && styles.workoutBadgePr]}>
+            <Text style={[styles.workoutBadge, mine ? styles.cardBadgeMine : styles.cardBadgeTheirs, isPr && styles.workoutBadgePr]}>
               {isPr ? 'PR 달성 🔥' : isRoutine ? '루틴' : '운동 기록'}
             </Text>
             <Text style={[styles.workoutText, mine && styles.workoutTextMine]}>{item.content}</Text>
@@ -1545,7 +1546,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             mine ? styles.mealCardMine : styles.mealCardTheirs,
             isGoal && styles.mealCardGoal,
           ]}>
-            <Text style={[styles.mealBadge, isGoal && styles.mealBadgeGoal]}>
+            <Text style={[styles.mealBadge, mine ? styles.cardBadgeMine : styles.cardBadgeTheirs, isGoal && styles.mealBadgeGoal]}>
               {isGoal ? '목표 달성 🎯' : '식단'}
             </Text>
             {item.imageUrl ? (
@@ -2216,15 +2217,19 @@ function ExtraButton({
   onPress: () => void;
 }) {
   return (
-    <Pressable
-      style={({ pressed }) => [styles.extraBtn, pressed && styles.iconPressed]}
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-    >
-      {/* 칸이 25% 로 넓어졌으므로 아이콘도 한 단계 키운다 — 22 는 빈 칸에서 작아 보인다 */}
-      <MaterialCommunityIcons name={icon} size={26} color={colors.textSecondary} />
-      <Text style={styles.extraLabel}>{label}</Text>
+    <Pressable style={styles.extraBtn} onPress={onPress} accessibilityRole="button" accessibilityLabel={label}>
+      {({ pressed }) => (
+        <>
+          {/*
+            원 타일 — 카톡 "+" 패널처럼 아이콘마다 바닥을 깔아 격자가 버튼으로 읽히게 한다.
+            맨살 아이콘만 있으면 미완처럼 보였다(docs/SCREEN_DESIGN_PASS_2026-09-23.md §5-3).
+          */}
+          <View style={[styles.extraTile, pressed && styles.extraTilePressed]}>
+            <MaterialCommunityIcons name={icon} size={26} color={colors.textPrimary} />
+          </View>
+          <Text style={styles.extraLabel}>{label}</Text>
+        </>
+      )}
     </Pressable>
   );
 }
@@ -2309,11 +2314,18 @@ const styles = themedStyles((colors) => ({
   stickerImage: { width: 132, height: 132 },
   // 가상 터치 — 스티커와 같은 크기 + 아래 제스처 라벨 한 줄
   touchBlock: { alignItems: 'center' },
-  touchLabel: { fontSize: 11, fontWeight: '700', color: colors.textSecondary, marginTop: -4 },
+  touchLabel: { fontSize: fontSize.micro, fontWeight: '700', color: colors.textSecondary, marginTop: -4 },
   workoutCard: { paddingVertical: 10, paddingHorizontal: spacing.md, borderRadius: radius.lg, borderWidth: 1.5, maxWidth: 240 },
-  workoutCardMine: { backgroundColor: colors.secondarySoft, borderColor: colors.secondary },
-  workoutCardTheirs: { backgroundColor: colors.surface, borderColor: colors.secondary },
-  workoutBadge: { fontSize: fontSize.caption, fontWeight: '800', color: colors.secondary, marginBottom: 2 },
+  /*
+   * 카드 색은 <b>발신자</b> 기준 — 내 것은 나(Gold), 상대 것은 상대(Green). 예전엔 종류
+   * (운동=secondary, 식단=accent)로 칠해 내가 보낸 운동 카드에 상대 색이 둘러졌다
+   * (docs/SCREEN_DESIGN_PASS_2026-09-23.md §5-3). 종류는 배지 글자·아이콘이 이미 말한다.
+   */
+  workoutCardMine: { backgroundColor: colors.meBg, borderColor: colors.me },
+  workoutCardTheirs: { backgroundColor: colors.partnerBg, borderColor: colors.partner },
+  cardBadgeMine: { color: colors.meText },
+  cardBadgeTheirs: { color: colors.partnerText },
+  workoutBadge: { fontSize: fontSize.caption, fontWeight: '800', marginBottom: 2 },
   // PR 카드 — 같은 카드 레이아웃에 골드 강조만 얹는다(couple 토큰 = Gold, 성취를 나타내는 색)
   // 배경은 mePastelBg(파스텔) — 그 위 배지 글자는 couple 원색이면 대비가 안 나와 ink 를 쓴다
   workoutCardPr: { borderColor: colors.couple, backgroundColor: colors.mePastelBg },
@@ -2361,10 +2373,10 @@ const styles = themedStyles((colors) => ({
   },
   callCardButtonText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.primary },
   mealCard: { paddingVertical: 10, paddingHorizontal: spacing.md, borderRadius: radius.lg, borderWidth: 1.5, maxWidth: 240, gap: 6 },
-  mealCardMine: { backgroundColor: colors.accentSoft, borderColor: colors.accent },
-  mealCardTheirs: { backgroundColor: colors.surface, borderColor: colors.accent },
+  mealCardMine: { backgroundColor: colors.meBg, borderColor: colors.me },
+  mealCardTheirs: { backgroundColor: colors.partnerBg, borderColor: colors.partner },
   // 카드 보더(accent)와 같은 계열로 — 팔레트 밖 앰버는 다크에서 대비가 무너졌다
-  mealBadge: { fontSize: fontSize.caption, fontWeight: '800', color: colors.accent },
+  mealBadge: { fontSize: fontSize.caption, fontWeight: '800' },
   // 목표 달성 카드 — 같은 카드 레이아웃에 골드 강조만 얹는다(PR 카드와 같은 톤)
   mealCardGoal: { borderColor: colors.couple, backgroundColor: colors.mePastelBg },
   mealBadgeGoal: { color: colors.ink },
@@ -2430,7 +2442,7 @@ const styles = themedStyles((colors) => ({
   },
   quoteMine: { borderLeftColor: colors.coral },
   quoteTheirs: { borderLeftColor: colors.indigo },
-  quoteWho: { fontSize: 10, fontWeight: '800', color: colors.textSecondary },
+  quoteWho: { fontSize: fontSize.micro, fontWeight: '800', color: colors.textSecondary },
   quoteText: { fontSize: fontSize.caption, color: colors.textSecondary },
 
   // 삭제된 메시지
@@ -2458,7 +2470,7 @@ const styles = themedStyles((colors) => ({
   },
   reactionChipMine: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
   reactionChipEmoji: { fontSize: 13 },
-  reactionChipCount: { fontSize: 11, fontWeight: '800', color: colors.textSecondary },
+  reactionChipCount: { fontSize: fontSize.micro, fontWeight: '800', color: colors.textSecondary },
 
   // 답장·수정 배너
   composeBanner: {
@@ -2472,7 +2484,7 @@ const styles = themedStyles((colors) => ({
     backgroundColor: colors.surfaceAlt,
   },
   composeBannerBody: { flex: 1 },
-  composeBannerLabel: { fontSize: 10, fontWeight: '800', color: colors.primary },
+  composeBannerLabel: { fontSize: fontSize.micro, fontWeight: '800', color: colors.primary },
   composeBannerText: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 1 },
   meta: { marginHorizontal: spacing.xs, justifyContent: 'flex-end' },
   metaMine: { marginHorizontal: spacing.xs, alignItems: 'flex-end', justifyContent: 'flex-end' },
@@ -2481,7 +2493,6 @@ const styles = themedStyles((colors) => ({
   // 상대 아바타 자리 — 그룹 중간엔 내용 없이 폭만 차지해 말풍선이 계단식으로 안 밀린다
   avatarSlot: { width: 26, marginRight: spacing.xs },
   // 눌림 효과 — 스티커·트레이 버튼 공용(예전엔 "reactionPressed" 로 리액션 바 전용이었다)
-  iconPressed: { transform: [{ scale: 0.88 }], backgroundColor: colors.primarySoft },
   // 보조 도구 트레이 — "+" 로 펼치는 스티커/터치/사진 3개
   /*
    * <b>4열 고정 격자.</b> 버튼 폭이 64px 고정이던 때는 기기 폭에 따라 한 줄에 다섯 개가
@@ -2511,6 +2522,15 @@ const styles = themedStyles((colors) => ({
     paddingVertical: spacing.sm,
     borderRadius: radius.md,
   },
+  extraTile: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: colors.surfaceAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  extraTilePressed: { backgroundColor: colors.primarySoft },
   extraLabel: { fontSize: fontSize.caption, fontWeight: '600', color: colors.textSecondary },
   inputBar: {
     flexDirection: 'row',
@@ -2654,10 +2674,10 @@ const chatStyles = chatThemedStyles((chat) => ({
    * 그리므로 JSX 를 건드릴 필요가 없다 — 사진 모드를 위해 렌더 트리에 조건 분기를 심으면
    * 이 파일에서만 다섯 자리가 갈라진다.
    */
-  time: { fontSize: 10, color: chat.meta, ...metaCapsule(chat.metaCapsule) },
+  time: { fontSize: fontSize.micro, color: chat.meta, ...metaCapsule(chat.metaCapsule) },
   // "보내는 중" — 시간 자리에 들어가므로 같은 크기·색 체계를 따른다
-  sendingMark: { fontSize: 10, color: chat.meta, ...metaCapsule(chat.metaCapsule) },
-  editedMark: { fontSize: 10, color: chat.meta, ...metaCapsule(chat.metaCapsule) },
+  sendingMark: { fontSize: fontSize.micro, color: chat.meta, ...metaCapsule(chat.metaCapsule) },
+  editedMark: { fontSize: fontSize.micro, color: chat.meta, ...metaCapsule(chat.metaCapsule) },
 
   dateDividerLine: { flex: 1, height: 1, backgroundColor: chat.dividerLine },
   dateDividerText: {
