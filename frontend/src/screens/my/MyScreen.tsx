@@ -1,14 +1,15 @@
 /** MY — 미니멀·발랄. 프로필(이름 편집) + 로그아웃/탈퇴 */
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { Alert } from '../../utils/alert';
-import { MaterialCommunityIcons } from '../../components/Icon';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../navigation/types';
 import { Avatar } from '../../components/Avatar';
-import { Card } from '../../components/Card';
+import { Chip } from '../../components/Chip';
+import { Sheet } from '../../components/Sheet';
+import { SettingsGroup, SettingsRow } from '../../components/SettingsList';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
 import { DateField } from '../../components/DateField';
@@ -28,7 +29,7 @@ import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
 import { pickImageAsset, uploadImage, type PickedImage } from '../../utils/imageUpload';
 import { AvatarCropSheet } from '../../components/AvatarCropSheet';
-import { colors, fontSize, radius, spacing } from '../../constants/theme';
+import { colors, fontSize, spacing } from '../../constants/theme';
 import type { Gender, UserLevel, WeeklyRecap } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 
@@ -361,110 +362,52 @@ export function MyScreen({ navigation }: Props) {
     );
   };
 
+  const bodySummary = user?.heightCm || user?.birthDate || user?.gender
+    ? [
+        user?.heightCm ? `${user.heightCm}cm` : null,
+        user?.birthDate ?? null,
+        user?.gender ? (user.gender === 'MALE' ? '남성' : '여성') : null,
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : null;
+
   return (
     // 헤더(title: 'MY')가 상단 인셋과 제목을 담당한다 — top 인셋과 화면 내 제목을
     // 중복으로 그리면 "MY"가 두 번 보이고 제목 위 여백이 과다해진다
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <Card elevation="md" style={styles.profile}>
-          <Pressable
-            onPress={onChangePhoto}
-            disabled={photoUploading}
-            style={styles.avatarWrap}
-            accessibilityRole="button"
-            accessibilityLabel="프로필 사진 변경"
-          >
-            <Avatar name={user?.name} imageUrl={user?.profileImageUrl} size={80} />
-            <View style={styles.cameraBadge}>
-              {photoUploading ? (
-                <ActivityIndicator size="small" color={colors.white} />
-              ) : (
-                <MaterialCommunityIcons name="camera" size={15} color={colors.white} />
-              )}
-            </View>
-          </Pressable>
-
-          {editing ? (
-            <View style={styles.editBox}>
-              <TextField value={name} onChangeText={setName} placeholder="이름" maxLength={50} />
-              <View style={styles.editActions}>
-                <Button title="취소" variant="ghost" size="md" onPress={() => setEditing(false)} style={styles.flex} />
-                <Button title="저장" size="md" onPress={onSave} loading={saving} disabled={!name.trim()} style={styles.flex} />
-              </View>
-            </View>
-          ) : (
-            <>
-              <Text style={styles.name}>{user?.name ?? '사용자'}</Text>
-              <Text style={styles.email}>{user?.email ?? ''}</Text>
-              {/* [트레이너 기능 일시 비활성화]
-              {user?.role === 'TRAINER' ? <Text style={styles.badge}>트레이너</Text> : null}
-              */}
-              <Button title="이름 수정" variant="soft" size="md" onPress={startEdit} style={styles.editBtn} />
-            </>
-          )}
-        </Card>
-
-        {/* 신체 정보 — 실시간 에너지 밸런스(기초대사량 + 오늘 운동 소모 - 섭취) 계산에 쓰인다.
-            럽바디 탭 홈에서 이 정보가 없으면 계산을 못 하고 CTA 로 여기로 안내한다. */}
-        <Card elevation="sm" style={styles.bodyCard}>
-          <Text style={styles.bodyLabel}>신체 정보</Text>
-          <Text style={styles.bodyDesc}>키·생년월일·성별을 등록하면 럽바디 탭에서 실시간 칼로리 잔여량을 계산해줘요.</Text>
-          {bodyEditing ? (
-            <View style={styles.editBox}>
-              <TextField
-                label="키(cm)"
-                value={heightCm}
-                onChangeText={(t) => setHeightCm(t.replace(/[^0-9]/g, ''))}
-                keyboardType="number-pad"
-                placeholder="170"
-              />
-              <DateField label="생년월일" value={birthDate} onChange={setBirthDate} max={new Date().toISOString().slice(0, 10)} />
-              <Text style={styles.fieldLabel}>성별</Text>
-              <View style={styles.genderRow}>
-                {(['MALE', 'FEMALE'] as const).map((g) => (
-                  <Pressable
-                    key={g}
-                    style={({ pressed }) => [
-                      styles.genderChip,
-                      gender === g && styles.genderChipActive,
-                      pressed && styles.genderChipPressed,
-                    ]}
-                    onPress={() => setGender(gender === g ? undefined : g)}
-                    accessibilityState={{ selected: gender === g }}
-                  >
-                    <Text style={[styles.genderText, gender === g && styles.genderTextActive]}>
-                      {g === 'MALE' ? '남성' : '여성'}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-              <View style={styles.editActions}>
-                <Button title="취소" variant="ghost" size="md" onPress={() => setBodyEditing(false)} style={styles.flex} />
-                <Button title="저장" size="md" onPress={onSaveBody} loading={savingBody} style={styles.flex} />
-              </View>
-            </View>
-          ) : (
-            <View style={styles.bodyRow}>
-              <Text style={styles.bodyValue}>
-                {user?.heightCm ? `${user.heightCm}cm` : '키 미등록'}
-                {' · '}
-                {user?.birthDate ?? '생년월일 미등록'}
-                {' · '}
-                {user?.gender ? (user.gender === 'MALE' ? '남성' : '여성') : '성별 미등록'}
-              </Text>
-              <Button title="수정" variant="soft" size="sm" onPress={startBodyEdit} />
-            </View>
-          )}
-        </Card>
+        {/*
+          2026-09-23 — 프로필 스탯 카드(80px 아바타·가운데 정렬·상시 "이름 수정" 버튼)를
+          왼쪽 정렬 행으로, 신체 정보를 값 한 줄 행으로 바꾸고 편집은 시트로 뺐다
+          (docs/SCREEN_DESIGN_PASS_2026-09-23.md §2-4). 레벨·결산·뱃지 카드는 콘텐츠라 그대로다.
+        */}
+        <SettingsGroup>
+          <SettingsRow
+            title={user?.name ?? '사용자'}
+            note={user?.email ?? undefined}
+            leading={<Avatar name={user?.name} imageUrl={user?.profileImageUrl} size={48} color={colors.meFill} />}
+            onPress={startEdit}
+            accessibilityLabel="프로필 편집"
+          />
+          {/* 실시간 에너지 밸런스(기초대사량 + 오늘 운동 소모 - 섭취) 계산에 쓰인다.
+              럽바디 탭 홈에서 이 정보가 없으면 계산을 못 하고 CTA 로 여기로 안내한다. */}
+          <SettingsRow
+            title="신체 정보"
+            value={bodySummary ?? '등록'}
+            onPress={startBodyEdit}
+            accessibilityLabel={bodySummary ? `신체 정보 ${bodySummary}, 수정` : '신체 정보 등록'}
+          />
+        </SettingsGroup>
 
         {level ? (
-          <View style={styles.badgeWrap}>
+          <View style={styles.card}>
             <LevelCard level={level} />
           </View>
         ) : null}
 
         {recap ? (
-          <View style={styles.badgeWrap}>
+          <View style={styles.card}>
             {/*
               잠기면 수치가 전부 0 으로 내려온다. 그대로 그리면
               "지난주에 아무것도 안 했어요"로 보이므로 반드시 locked 를 먼저 본다.
@@ -481,175 +424,117 @@ export function MyScreen({ navigation }: Props) {
           </View>
         ) : null}
 
-        <View style={styles.badgeWrap}>
+        <View style={styles.card}>
           <BadgeCard title="운동 뱃지" maxStreak={maxStreak} />
         </View>
-        <View style={styles.badgeWrap}>
+        <View style={styles.card}>
           <BadgeCard title="식단 뱃지" maxStreak={maxMealStreak} badges={MEAL_BADGES} />
         </View>
 
-        {/* [트레이너 기능 일시 비활성화] 트레이너 — 트레이너면 대시보드, 아니면 등록/연결 진입
-        <Card elevation="sm" style={styles.menu}>
-          {isTrainer ? (
-            <Pressable
-              style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
-              onPress={() => navigation.navigate('TrainerDashboard')}
-            >
-              <Text style={styles.menuText}>트레이너 대시보드</Text>
-              <Text style={styles.chevron}>›</Text>
-            </Pressable>
-          ) : (
-            <>
-              <Pressable
-                style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
-                onPress={() => navigation.navigate('TrainerRegister')}
-              >
-                <Text style={styles.menuText}>트레이너로 등록하기</Text>
-                <Text style={styles.chevron}>›</Text>
-              </Pressable>
-              <View style={styles.divider} />
-              {myTrainer ? (
-                <Pressable
-                  style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
-                  onPress={onDisconnectTrainer}
-                >
-                  <Text style={styles.menuText}>내 트레이너 · {myTrainer.partner?.name ?? '트레이너'}</Text>
-                  <Text style={styles.chevron}>›</Text>
-                </Pressable>
-              ) : (
-                <Pressable
-                  style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
-                  onPress={() => navigation.navigate('TrainerConnect')}
-                >
-                  <Text style={styles.menuText}>트레이너 연결하기</Text>
-                  <Text style={styles.chevron}>›</Text>
-                </Pressable>
-              )}
-            </>
-          )}
-        </Card>
-        */}
+        {/* [트레이너 기능 일시 비활성화] — 트레이너 대시보드·등록·연결 진입은 git 이력 참고 */}
 
         {couple && canRestore ? (
-          <Card elevation="sm" style={styles.menu}>
-            <Text style={styles.sectionLabel}>지난 기록</Text>
-            <Text style={styles.sectionDesc}>
-              예전에 함께 남긴 기록이 남아있어요. 두 사람이 모두 요청하면 다시 가져올 수 있어요.
-            </Text>
-            <View style={styles.divider} />
-            <Pressable
-              style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
-              onPress={onRestoreRecords}
-              disabled={restoring}
-            >
-              <Text style={styles.menuText}>지난 기록 불러오기</Text>
-              {restoring ? (
-                <ActivityIndicator size="small" color={colors.primary} />
-              ) : (
-                <Text style={styles.chevron}>›</Text>
-              )}
-            </Pressable>
-          </Card>
+          <SettingsGroup
+            title="지난 기록"
+            footer="예전에 함께 남긴 기록이 남아있어요. 두 사람이 모두 요청하면 다시 가져올 수 있어요."
+            style={styles.group}
+          >
+            <SettingsRow title="지난 기록 불러오기" onPress={onRestoreRecords} loading={restoring} />
+          </SettingsGroup>
         ) : null}
 
         {endedCouples.length > 0 ? (
-          <Card elevation="sm" style={styles.menu}>
-            <Text style={styles.sectionLabel}>지난 기록</Text>
-            <Text style={styles.sectionDesc}>
-              연결이 끊긴 기록이에요. 다시 연결하면 불러올 수 있고, 원하면 지금 완전히 지울 수 있어요.
-            </Text>
+          <SettingsGroup
+            title="지난 기록"
+            footer="연결이 끊긴 기록이에요. 다시 연결하면 불러올 수 있고, 원하면 지금 완전히 지울 수 있어요."
+            style={styles.group}
+          >
             {endedCouples.map((rel) => (
-              <View key={rel.id}>
-                <View style={styles.divider} />
-                <Pressable
-                  style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
-                  onPress={() => onPurgeRecords(rel.id, rel.partner?.name ?? '상대방')}
-                  disabled={purgingId === rel.id}
-                >
-                  <Text style={[styles.menuText, styles.danger]}>
-                    {rel.partner?.name ?? '상대방'}님과의 기록 완전 삭제
-                  </Text>
-                  {purgingId === rel.id ? (
-                    <ActivityIndicator size="small" color={colors.danger} />
-                  ) : (
-                    <Text style={styles.chevron}>›</Text>
-                  )}
-                </Pressable>
-              </View>
+              <SettingsRow
+                key={rel.id}
+                title={`${rel.partner?.name ?? '상대방'}님과의 기록 완전 삭제`}
+                danger
+                onPress={() => onPurgeRecords(rel.id, rel.partner?.name ?? '상대방')}
+                loading={purgingId === rel.id}
+              />
             ))}
-          </Card>
+          </SettingsGroup>
         ) : null}
 
-        <Card elevation="sm" style={styles.menu}>
-          {/*
-            자발적으로 PRO 를 보러 갈 수 있는 유일한 자리다 — 나머지 업셀은 전부 한도에
-            부딪혔을 때만 뜬다(docs/PRO_UPSELL_AND_ADS_2026-09-17.md §2).
-          */}
-          <Pressable
-            style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
-            onPress={() => navigation.navigate('Plan')}
-          >
-            <Text style={styles.menuText}>플랜</Text>
-            <Text style={styles.chevron}>›</Text>
-          </Pressable>
-          <View style={styles.divider} />
-          {/*
-            상점도 같은 카드에 둔다 — 스티커를 사러 오는 사람과 PRO 를 보러 오는 사람은
-            같은 마음이고, 자발적으로 찾아갈 수 있는 자리가 여기뿐이다.
-          */}
-          <Pressable
-            style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
-            onPress={() => navigation.navigate('StickerShop')}
-          >
-            <Text style={styles.menuText}>스티커 상점</Text>
-            <Text style={styles.chevron}>›</Text>
-          </Pressable>
-          <View style={styles.divider} />
-          <Pressable
-            style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
-            onPress={() => navigation.navigate('Settings')}
-          >
-            <Text style={styles.menuText}>설정</Text>
-            <Text style={styles.chevron}>›</Text>
-          </Pressable>
-          <View style={styles.divider} />
-          <Pressable style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]} onPress={onLogout}>
-            <Text style={styles.menuText}>로그아웃</Text>
-            <Text style={styles.chevron}>›</Text>
-          </Pressable>
-        </Card>
+        {/*
+          플랜·상점 — 자발적으로 PRO 를 보러 갈 수 있는 자리(나머지 업셀은 한도에 부딪혔을
+          때만 뜬다, docs/PRO_UPSELL_AND_ADS_2026-09-17.md §2). 스티커를 사러 오는 사람과
+          PRO 를 보러 오는 사람은 같은 마음이라 같은 묶음에 둔다.
+        */}
+        <SettingsGroup style={styles.group}>
+          <SettingsRow title="플랜" onPress={() => navigation.navigate('Plan')} />
+          <SettingsRow title="스티커 상점" onPress={() => navigation.navigate('StickerShop')} />
+          <SettingsRow title="설정" onPress={() => navigation.navigate('Settings')} />
+          <SettingsRow title="로그아웃" onPress={onLogout} />
+        </SettingsGroup>
 
         {/*
-          파괴적 액션은 별도 카드로 분리한다 — 로그아웃 바로 아래 연결 끊기·탈퇴가
+          파괴적 액션은 별도 묶음으로 분리한다 — 로그아웃 바로 아래 연결 끊기·탈퇴가
           1px 구분선만 두고 붙어 있으면 스크롤 관성 중 오탭 한 번으로 되돌릴 수 없는
-          동작에 진입한다. 카드 사이 여백이 완충 지대 역할을 한다.
+          동작에 진입한다. 묶음 사이 여백이 완충 지대 역할을 한다.
         */}
-        <Card elevation="sm" style={styles.dangerMenu}>
-          {couple ? (
-            <>
-              <Pressable
-                style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
-                onPress={onDisconnectCouple}
-                disabled={disconnecting}
-              >
-                <Text style={[styles.menuText, styles.danger]}>커플 연결 끊기</Text>
-                {disconnecting ? <ActivityIndicator size="small" color={colors.danger} /> : <Text style={styles.chevron}>›</Text>}
-              </Pressable>
-              <View style={styles.divider} />
-            </>
-          ) : null}
-          <Pressable
-            style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
-            onPress={onWithdraw}
-            disabled={withdrawing}
-          >
-            <Text style={[styles.menuText, styles.danger]}>회원 탈퇴</Text>
-            {withdrawing ? <ActivityIndicator size="small" color={colors.danger} /> : <Text style={styles.chevron}>›</Text>}
-          </Pressable>
-        </Card>
+        <SettingsGroup style={styles.dangerGroup}>
+          {couple ? <SettingsRow title="커플 연결 끊기" danger onPress={onDisconnectCouple} loading={disconnecting} /> : null}
+          <SettingsRow title="회원 탈퇴" danger onPress={onWithdraw} loading={withdrawing} />
+        </SettingsGroup>
 
         <Text style={styles.footer}>Dubly · 둘이라서, 두 배로</Text>
       </ScrollView>
+
+      {/* 프로필 편집 시트 — 사진 + 이름 */}
+      <Sheet visible={editing} onClose={() => setEditing(false)} position="bottom">
+        <View style={styles.sheetAvatarRow}>
+          <Avatar name={user?.name} imageUrl={user?.profileImageUrl} size={72} color={colors.meFill} />
+          <Button
+            title="사진 바꾸기"
+            variant="soft"
+            size="sm"
+            onPress={onChangePhoto}
+            disabled={photoUploading}
+            loading={photoUploading}
+          />
+        </View>
+        <TextField label="이름" value={name} onChangeText={setName} placeholder="이름" maxLength={50} />
+        <View style={styles.sheetActions}>
+          <Button title="취소" variant="ghost" size="md" onPress={() => setEditing(false)} style={styles.flex} />
+          <Button title="저장" size="md" onPress={onSave} loading={saving} disabled={!name.trim()} style={styles.flex} />
+        </View>
+      </Sheet>
+
+      {/* 신체 정보 시트 */}
+      <Sheet visible={bodyEditing} onClose={() => setBodyEditing(false)} position="bottom">
+        <Text style={styles.sheetTitle}>신체 정보</Text>
+        <Text style={styles.sheetDesc}>키·생년월일·성별로 럽바디 탭의 칼로리 잔여량을 계산해요.</Text>
+        <TextField
+          label="키(cm)"
+          value={heightCm}
+          onChangeText={(t) => setHeightCm(t.replace(/[^0-9]/g, ''))}
+          keyboardType="number-pad"
+          placeholder="170"
+        />
+        <DateField label="생년월일" value={birthDate} onChange={setBirthDate} max={new Date().toISOString().slice(0, 10)} />
+        <Text style={styles.fieldLabel}>성별</Text>
+        <View style={styles.genderRow}>
+          {(['MALE', 'FEMALE'] as const).map((g) => (
+            <Chip
+              key={g}
+              label={g === 'MALE' ? '남성' : '여성'}
+              selected={gender === g}
+              onPress={() => setGender(gender === g ? undefined : g)}
+              fill
+            />
+          ))}
+        </View>
+        <View style={styles.sheetActions}>
+          <Button title="취소" variant="ghost" size="md" onPress={() => setBodyEditing(false)} style={styles.flex} />
+          <Button title="저장" size="md" onPress={onSaveBody} loading={savingBody} style={styles.flex} />
+        </View>
+      </Sheet>
 
       {/* 원형 크롭 — 동그라미 안에 들어갈 부분을 직접 맞춘 뒤에야 업로드로 넘어간다 */}
       <AvatarCropSheet
@@ -664,74 +549,17 @@ export function MyScreen({ navigation }: Props) {
 const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   container: { padding: spacing.lg, flexGrow: 1 },
-  profile: { alignItems: 'center', paddingVertical: spacing.xl },
-  avatarWrap: { position: 'relative' },
-  cameraBadge: {
-    position: 'absolute',
-    right: -2,
-    bottom: -2,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: colors.surface,
-  },
-  cameraIcon: { fontSize: 13 },
-  name: { fontSize: fontSize.title, fontWeight: '800', color: colors.textPrimary, marginTop: spacing.md },
-  email: { fontSize: fontSize.body, color: colors.textSecondary, marginTop: spacing.xs },
-  badge: { marginTop: spacing.sm, color: colors.secondary, fontWeight: '800' },
-  editBtn: { marginTop: spacing.md },
-  badgeWrap: { marginTop: spacing.lg },
-  editBox: { alignSelf: 'stretch', marginTop: spacing.lg },
-  editActions: { flexDirection: 'row', gap: spacing.sm },
+  card: { marginTop: spacing.md },
+  group: { marginTop: spacing.lg },
+  // 파괴 액션 묶음 — 위쪽 여백을 넓혀 일반 메뉴와 시각적으로 분리한다
+  dangerGroup: { marginTop: spacing.xl },
   flex: { flex: 1 },
-  bodyCard: { marginTop: spacing.lg, gap: spacing.xs },
-  bodyLabel: { fontSize: fontSize.caption, fontWeight: '800', color: colors.textSecondary },
-  bodyDesc: { fontSize: fontSize.caption, color: colors.textSecondary, lineHeight: 18 },
-  bodyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.xs, gap: spacing.sm },
-  bodyValue: { flex: 1, fontSize: fontSize.body, color: colors.textPrimary, fontWeight: '600' },
+  footer: { textAlign: 'center', color: colors.textTertiary, fontSize: fontSize.caption, marginTop: 'auto', paddingTop: spacing.xl },
+
+  sheetTitle: { fontSize: fontSize.subtitle, fontWeight: '700', color: colors.textPrimary },
+  sheetDesc: { fontSize: fontSize.caption, color: colors.textSecondary, lineHeight: 18, marginTop: spacing.xxs, marginBottom: spacing.md },
+  sheetAvatarRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
+  sheetActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
   fieldLabel: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700', marginBottom: spacing.sm },
   genderRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
-  genderChip: {
-    flex: 1,
-    height: 50,
-    borderRadius: radius.md,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surfaceAlt,
-  },
-  genderChipActive: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
-  genderChipPressed: { opacity: 0.7 },
-  genderText: { color: colors.textSecondary, fontWeight: '700' },
-  genderTextActive: { color: colors.primaryDark },
-  menu: { marginTop: spacing.lg, padding: 0 },
-  // 파괴 액션 카드 — 위쪽 여백을 넓혀 일반 메뉴와 시각적으로 분리한다
-  dangerMenu: { marginTop: spacing.xl, padding: 0 },
-  menuItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.md, paddingHorizontal: spacing.lg },
-  pressed: { backgroundColor: colors.surfaceAlt },
-  menuText: { fontSize: fontSize.subtitle, color: colors.textPrimary, fontWeight: '600' },
-  danger: { color: colors.danger },
-  sectionLabel: {
-    fontSize: fontSize.caption,
-    fontWeight: '800',
-    color: colors.textSecondary,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-  },
-  sectionDesc: {
-    fontSize: fontSize.caption,
-    color: colors.textSecondary,
-    lineHeight: 18,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xs,
-    paddingBottom: spacing.sm,
-  },
-  chevron: { fontSize: 22, color: colors.textTertiary },
-  divider: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.lg },
-  footer: { textAlign: 'center', color: colors.textTertiary, fontSize: fontSize.caption, marginTop: 'auto', paddingTop: spacing.xl },
 }));
