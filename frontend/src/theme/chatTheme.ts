@@ -41,6 +41,7 @@
  * 이제 면제 항목은 하나도 없다.
  */
 import { palette, type Scheme } from './colors';
+import { onColor } from './onColor';
 
 export type ChatThemeId =
   | 'default'
@@ -93,8 +94,9 @@ export const CHAT_THEMES: ChatTheme[] = [
     label: '기본',
     light: {
       background: '#FAFAF9',
-      bubbleMine: '#2A7731',
-      bubbleMineText: '#FFFFFF',
+      // green 액센트의 primaryFill — 런타임에 chatPalette 가 같은 값으로 덮는다
+      bubbleMine: '#33A251',
+      bubbleMineText: '#1A1D1A',
       bubbleTheirs: '#E9EAE7',
       bubbleTheirsText: '#1A1D1A',
       meta: '#6A706A',
@@ -103,8 +105,8 @@ export const CHAT_THEMES: ChatTheme[] = [
     },
     dark: {
       background: '#1E201C',
-      bubbleMine: '#2F7A55',
-      bubbleMineText: '#FFFFFF',
+      bubbleMine: '#68B58B',
+      bubbleMineText: '#1A1D1A',
       bubbleTheirs: '#31332D',
       bubbleTheirsText: '#ECEEEA',
       meta: '#868C84',
@@ -374,14 +376,20 @@ export function chatPalette(scheme: Scheme, id: ChatThemeId = currentId): ChatPa
    * '기본' 테마의 내 말풍선은 앱 액센트를 따른다 — 사용자가 민트·피치를 골랐는데 채팅만
    * 초록이면 기본이 기본이 아니다. 위 CHAT_THEMES 의 'default' 값은 green 액센트일 때의
    * 값이고(검증 스크립트는 그 정적 값을 잰다), green 이면 아래는 같은 값을 돌려준다.
-   *   라이트: primary(버튼 배경과 같은 값, white 5.2~5.6)
-   *   다크:   primaryDark(primary 는 링크 역할을 겸해 white 3.9 라 말풍선엔 한 단계 어둡게)
+   *   말풍선: primaryFill(버튼 채움과 같은 값) + 그 위에 onColor 가 고른 글자
    *   강조행: 상대 계열 파스텔(배경 대비 1.25 이상)
+   *
+   * <p><b>2026-09-23 에 한 단계 밝혔다.</b> 그전에는 라이트가 primary, 다크가
+   * primaryDark 였고 위에 흰 글자를 얹었다 — 말풍선이 화면에서 가장 넓은 색면인데
+   * 글자 대비를 맞추느라 어두운 값을 쓰고 있었다(colors.ts 의 primaryFill 주석과 같은
+   * 상충). 채움 전용 토큰이 생겼으므로 버튼과 같은 값을 쓰고, 글자는 흰색 고정이 아니라
+   * {@code onColor} 가 배경 휘도로 고른다 — 라이트·다크 모두 ink 로 뒤집힌다.
    */
   const app = palette(scheme);
   return {
     ...base,
-    bubbleMine: scheme === 'light' ? app.primary : app.primaryDark,
+    bubbleMine: app.primaryFill,
+    bubbleMineText: onColor(app.primaryFill),
     highlight: scheme === 'light' ? app.partnerPastelBg : base.highlight,
   };
 }
