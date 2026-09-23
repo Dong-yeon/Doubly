@@ -91,7 +91,7 @@ export function CoupleHero({
       <View style={styles.split}>
         <Column
           person={me}
-          color={colors.me}
+          color={colors.meFill}
           mine
           onPress={() => onPressPerson?.('me')}
           onPressToday={(kind) => onPressToday?.('me', kind)}
@@ -103,7 +103,7 @@ export function CoupleHero({
         </View>
         <Column
           person={partner}
-          color={colors.partner}
+          color={colors.partnerFill}
           onPress={() => onPressPerson?.('partner')}
           onPressToday={(kind) => onPressToday?.('partner', kind)}
         />
