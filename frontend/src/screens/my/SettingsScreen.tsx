@@ -5,18 +5,17 @@
  * — 비밀번호 변경, 알림 수신, 마케팅 동의 철회, 약관 열람.
  */
 import React, { useEffect, useState } from 'react';
-import { Linking, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Linking, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../navigation/types';
-import { Card } from '../../components/Card';
 import { Chip } from '../../components/Chip';
+import { SettingsGroup, SettingsInset, SettingsRow } from '../../components/SettingsList';
 import { useThemeStore } from '../../store/themeStore';
 import type { ThemeMode } from '../../theme/themePreference';
 import type { AccentVariant } from '../../theme/colors';
 import { authApi } from '../../api/auth';
-import { dietApi } from '../../api/diet';
 import {
   canAskPushPermission,
   isPushPermissionDenied,
@@ -26,13 +25,12 @@ import { useAuthStore } from '../../store/authStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { usePlanStore } from '../../store/planStore';
 import { getErrorMessage } from '../../utils/error';
-import type { MealType } from '../../types';
 import { checkWithDictionary, preloadDictionary } from '../../utils/koreanDictionary';
 import { copyText } from '../../utils/share';
 import { toast } from '../../store/toastStore';
 import { APP_VERSION, BUILD_LABEL, BUILD_STAMP } from '../../constants/config';
 import { CONTACT_EMAIL, PRIVACY_VERSION, TERMS_VERSION } from '../../constants/legal';
-import { colors, fontSize, spacing } from '../../constants/theme';
+import { fontSize, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'Settings'>;
@@ -48,28 +46,6 @@ const ACCENT_OPTIONS: { value: AccentVariant; label: string }[] = [
   { value: 'green', label: '그린' },
   { value: 'mint', label: '민트' },
   { value: 'peach', label: '피치' },
-];
-
-/**
- * 알림 종류 — 보내는 도메인(운동/식단/맛집…)이 아니라 사용자가 체감하는 성가심의 결로
- * 나눈다(서버 `NotificationCategory` 와 1:1). 도메인으로 나누면 이 목록이 20줄이 되고,
- * 어느 걸 꺼야 조용해지는지 알 수 없다.
- */
-const NOTIFICATION_CATEGORIES = [
-  { key: 'chat', field: 'notifyChat', title: '채팅 · 전화', desc: '메시지, 반응, 전화와 부재중 알림.' },
-  { key: 'anniversary', field: 'notifyAnniversary', title: '기념일 · 일정', desc: '커플 캘린더 당일과 D-7·D-1 미리 알림.' },
-  { key: 'partner', field: 'notifyPartner', title: '상대 활동', desc: '운동·식단·맛집·선물처럼 상대가 남긴 기록.' },
-  { key: 'reminder', field: 'notifyReminder', title: '리마인드', desc: '스트릭·오늘의 질문·추억처럼 앱이 먼저 부르는 알림.' },
-] as const;
-
-/**
- * 끼니 알림 시간 프리셋 — 아직 시간 입력 UI(피커) 없이 흔한 시간대만 칩으로 고르게 한다.
- * 서버는 어떤 시각이든 받지만, 목록을 좁혀야 "몇 시로 할까" 고민 없이 바로 켤 수 있다.
- */
-const MEAL_REMINDER_TYPES: { type: MealType; title: string; times: string[] }[] = [
-  { type: 'BREAKFAST', title: '아침', times: ['07:00', '07:30', '08:00', '08:30', '09:00'] },
-  { type: 'LUNCH', title: '점심', times: ['11:30', '12:00', '12:30', '13:00'] },
-  { type: 'DINNER', title: '저녁', times: ['18:00', '18:30', '19:00', '19:30', '20:00'] },
 ];
 
 export function SettingsScreen({ navigation }: Props) {
@@ -126,8 +102,6 @@ export function SettingsScreen({ navigation }: Props) {
   const [savingNotification, setSavingNotification] = useState(false);
   const [savingMarketing, setSavingMarketing] = useState(false);
   const [savingMealPhotoAnalysis, setSavingMealPhotoAnalysis] = useState(false);
-  /** 저장 중인 카테고리 키 — 카테고리마다 상태를 두면 네 개가 되므로 하나로 관리한다 */
-  const [savingCategory, setSavingCategory] = useState<string | null>(null);
   /** OS 권한이 거부된 상태 — 앱 안 설정으로는 되돌릴 수 없어 시스템 설정으로 보내야 한다 */
   const [permissionDenied, setPermissionDenied] = useState(false);
   /**
@@ -161,56 +135,6 @@ export function SettingsScreen({ navigation }: Props) {
   const notificationsEnabled = user?.notificationsEnabled ?? true;
   const marketingConsent = user?.marketingConsent ?? false;
 
-  /** 끼니 알림 — 등록해둔 것만 서버가 내려준다("HH:mm" 만 잘라서 칩 비교에 쓴다). */
-  const [mealReminders, setMealReminders] = useState<Partial<Record<MealType, string>>>({});
-  const [savingMealReminder, setSavingMealReminder] = useState<MealType | null>(null);
-
-  useEffect(() => {
-    dietApi
-      .reminders()
-      .then((list) => {
-        const map: Partial<Record<MealType, string>> = {};
-        list.forEach((r) => {
-          map[r.mealType] = r.reminderTime.slice(0, 5);
-        });
-        setMealReminders(map);
-      })
-      .catch(() => {});
-  }, []);
-
-  const onToggleMealReminder = async (type: MealType, defaultTime: string, next: boolean) => {
-    setSavingMealReminder(type);
-    try {
-      if (next) {
-        await dietApi.setReminder(type, defaultTime);
-        setMealReminders((prev) => ({ ...prev, [type]: defaultTime }));
-      } else {
-        await dietApi.removeReminder(type);
-        setMealReminders((prev) => {
-          const copy = { ...prev };
-          delete copy[type];
-          return copy;
-        });
-      }
-    } catch (e) {
-      Alert.alert('오류', getErrorMessage(e));
-    } finally {
-      setSavingMealReminder(null);
-    }
-  };
-
-  const onPickMealReminderTime = async (type: MealType, time: string) => {
-    setSavingMealReminder(type);
-    try {
-      await dietApi.setReminder(type, time);
-      setMealReminders((prev) => ({ ...prev, [type]: time }));
-    } catch (e) {
-      Alert.alert('오류', getErrorMessage(e));
-    } finally {
-      setSavingMealReminder(null);
-    }
-  };
-
   const onToggleNotification = async (next: boolean) => {
     setSavingNotification(true);
     try {
@@ -220,17 +144,6 @@ export function SettingsScreen({ navigation }: Props) {
       Alert.alert('오류', getErrorMessage(e));
     } finally {
       setSavingNotification(false);
-    }
-  };
-
-  const onToggleCategory = async (key: string, next: boolean) => {
-    setSavingCategory(key);
-    try {
-      setUser(await authApi.updateNotificationCategories({ [key]: next }));
-    } catch (e) {
-      Alert.alert('오류', getErrorMessage(e));
-    } finally {
-      setSavingCategory(null);
     }
   };
 
@@ -302,346 +215,134 @@ export function SettingsScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.container}>
-        <Card elevation="sm" style={styles.section}>
-          <Text style={styles.sectionLabel}>알림</Text>
-
-          <View style={styles.row}>
-            <View style={styles.rowText}>
-              <Text style={styles.rowTitle}>푸시 알림</Text>
-              <Text style={styles.rowDesc}>상대방 활동·채팅·기념일 알림을 받아요.</Text>
-            </View>
-            <Switch
-              value={notificationsEnabled}
-              onValueChange={onToggleNotification}
-              disabled={savingNotification}
-              trackColor={{ true: colors.primaryFill }}
-              thumbColor={colors.white}
-            />
-          </View>
-
+        {/*
+          2026-09-23 — 카드 10개를 묶음 5개로 접었다(docs/SCREEN_DESIGN_PASS_2026-09-23.md §2-4).
+          행마다 붙어 있던 설명 15개는 묶음 각주 셋과 법적 note 둘로 줄였고, 알림 종류·식사
+          알림은 하위 화면으로 뺐다. 항목 자체(무엇이 어디 있는지)는 그대로다.
+        */}
+        <SettingsGroup title="알림" footer="푸시 알림을 끄면 종류·식사 알림과 상관없이 모두 오지 않아요.">
+          <SettingsRow
+            title="푸시 알림"
+            switchValue={notificationsEnabled}
+            onSwitch={(next) => void onToggleNotification(next)}
+            disabled={savingNotification}
+          />
           {/*
             OS 권한 거부는 앱에서 되돌릴 수 없다(두 번째 권한창이 뜨지 않는다).
             이 안내가 없으면 "앱에서는 켜 놨는데 아무것도 안 온다"가 되어 알림이
-            고장 난 것처럼 보인다.
+            고장 난 것처럼 보인다. 조건부 행이라 상주 설명이 아니다.
           */}
           {permissionDenied ? (
-            <Pressable
-              style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+            <SettingsRow
+              title="기기에서 알림이 차단돼 있어요"
+              note="눌러서 시스템 설정에서 허용해주세요."
+              danger
               onPress={() => void Linking.openSettings()}
-              accessibilityRole="button"
               accessibilityLabel="시스템 알림 설정 열기"
-            >
-              <View style={styles.rowText}>
-                <Text style={styles.rowTitleWarn}>기기에서 알림이 차단돼 있어요</Text>
-                <Text style={styles.rowDesc}>
-                  아래 설정을 켜도 알림이 오지 않아요. 눌러서 시스템 설정에서 허용해주세요.
-                </Text>
-              </View>
-              <Text style={styles.chevron}>›</Text>
-            </Pressable>
+            />
           ) : null}
-
           {/* 아직 안 물어본 상태 — 여기서는 시스템 설정이 아니라 권한창을 바로 띄울 수 있다 */}
           {!permissionDenied && permissionUnasked ? (
-            <Pressable
-              style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+            <SettingsRow
+              title="기기 알림 허용이 아직 안 됐어요"
+              note="눌러서 허용해주세요."
+              danger
               onPress={() => void onRequestPermission()}
-              disabled={requestingPermission}
-              accessibilityRole="button"
+              loading={requestingPermission}
               accessibilityLabel="기기 알림 허용하기"
-            >
-              <View style={styles.rowText}>
-                <Text style={styles.rowTitleWarn}>기기 알림 허용이 아직 안 됐어요</Text>
-                <Text style={styles.rowDesc}>
-                  위 설정을 켜도 기기가 알림을 보여주지 않아요. 눌러서 허용해주세요.
-                </Text>
-              </View>
-              <Text style={styles.chevron}>›</Text>
-            </Pressable>
+            />
           ) : null}
-
-          <View style={styles.divider} />
-
-          <View style={styles.row}>
-            <View style={styles.rowText}>
-              <Text style={styles.rowTitle}>마케팅 정보 수신</Text>
-              <Text style={styles.rowDesc}>이벤트·혜택 소식을 받아요. (선택)</Text>
-            </View>
-            <Switch
-              value={marketingConsent}
-              onValueChange={onToggleMarketing}
-              disabled={savingMarketing}
-              trackColor={{ true: colors.primaryFill }}
-              thumbColor={colors.white}
-            />
-          </View>
-        </Card>
-
-        <Card elevation="sm" style={styles.section}>
-          <Text style={styles.sectionLabel}>알림 종류</Text>
-          <View style={[styles.rowText, styles.themeIntro]}>
-            <Text style={styles.rowDesc}>
-              받고 싶은 것만 골라 받을 수 있어요. 위의 푸시 알림을 끄면 여기 설정과 상관없이
-              모두 오지 않아요.
-            </Text>
-          </View>
-          {NOTIFICATION_CATEGORIES.map((c, i) => (
-            <View key={c.key}>
-              {i > 0 ? <View style={styles.divider} /> : null}
-              <View style={styles.row}>
-                <View style={styles.rowText}>
-                  <Text style={notificationsEnabled ? styles.rowTitle : styles.rowTitleMuted}>
-                    {c.title}
-                  </Text>
-                  <Text style={styles.rowDesc}>{c.desc}</Text>
-                </View>
-                <Switch
-                  value={notificationsEnabled && (user?.[c.field] ?? true)}
-                  onValueChange={(next) => onToggleCategory(c.key, next)}
-                  disabled={!notificationsEnabled || savingCategory === c.key}
-                  trackColor={{ true: colors.primaryFill }}
-                  thumbColor={colors.white}
-                />
-              </View>
-            </View>
-          ))}
-        </Card>
-
-        <Card elevation="sm" style={styles.section}>
-          <Text style={styles.sectionLabel}>식사 알림</Text>
-          <View style={[styles.rowText, styles.themeIntro]}>
-            <Text style={styles.rowDesc}>
-              정한 시간에 아직 기록 안 한 끼니만 물어봐요. 이미 기록했으면 오지 않아요.
-            </Text>
-          </View>
-          {MEAL_REMINDER_TYPES.map((m, i) => {
-            const current = mealReminders[m.type];
-            const defaultTime = m.times[Math.floor(m.times.length / 2)];
-            const saving = savingMealReminder === m.type;
-            return (
-              <View key={m.type}>
-                {i > 0 ? <View style={styles.divider} /> : null}
-                <View style={styles.row}>
-                  <View style={styles.rowText}>
-                    <Text style={notificationsEnabled ? styles.rowTitle : styles.rowTitleMuted}>
-                      {m.title} 식사
-                    </Text>
-                    <Text style={styles.rowDesc}>
-                      {current ? `${current}에 알려요` : '꺼져 있어요'}
-                    </Text>
-                  </View>
-                  <Switch
-                    value={!!current}
-                    onValueChange={(next) => onToggleMealReminder(m.type, defaultTime, next)}
-                    disabled={!notificationsEnabled || saving}
-                    trackColor={{ true: colors.primaryFill }}
-                    thumbColor={colors.white}
-                  />
-                </View>
-                {current ? (
-                  <View style={styles.themeRow}>
-                    {m.times.map((t) => (
-                      <Chip
-                        key={t}
-                        label={t}
-                        selected={current === t}
-                        onPress={() => onPickMealReminderTime(m.type, t)}
-                      />
-                    ))}
-                  </View>
-                ) : null}
-              </View>
-            );
-          })}
-        </Card>
-
-        <Card elevation="sm" style={styles.section}>
-          <Text style={styles.sectionLabel}>식단</Text>
-
-          <View style={styles.row}>
-            <View style={styles.rowText}>
-              <Text style={styles.rowTitle}>사진으로 칼로리 채우기</Text>
-              <Text style={styles.rowDesc}>
-                음식 사진을 올려 저장하면 칼로리를 알아서 계산해요.
-                직접 적은 값이 있으면 건드리지 않아요.
-              </Text>
-            </View>
-            <Switch
-              value={user?.autoAnalyzeMealPhoto !== false}
-              onValueChange={onToggleMealPhotoAnalysis}
-              disabled={savingMealPhotoAnalysis}
-              trackColor={{ true: colors.primaryFill }}
-              thumbColor={colors.white}
-            />
-          </View>
-        </Card>
-
-        <Card elevation="sm" style={styles.section}>
-          <Text style={styles.sectionLabel}>채팅</Text>
-
-          <View style={styles.row}>
-            <View style={styles.rowText}>
-              <Text style={styles.rowTitle}>맞춤법 제안</Text>
-              <Text style={styles.rowDesc}>
-                되/돼처럼 헷갈리는 말을 입력창 위에서 알려줘요. 기기 안에서만 검사하고
-                대화 내용은 어디로도 보내지 않아요.
-              </Text>
-            </View>
-            <Switch
-              value={spellCheckEnabled}
-              onValueChange={setSpellCheckEnabled}
-              trackColor={{ true: colors.primaryFill }}
-              thumbColor={colors.white}
-            />
-          </View>
-          {/* 개발용 — 위 onTestDictionary 참고. 스토어 빌드에는 안 보인다 */}
-          {__DEV__ ? (
-            <Pressable onPress={onTestDictionary} style={styles.row} disabled={dictTesting}>
-              <View style={styles.rowText}>
-                <Text style={styles.rowTitle}>
-                  {dictTesting ? '검사 중…' : '(개발용) 사전 검사 테스트'}
-                </Text>
-                <Text style={styles.rowDesc}>네이티브 사전 로드와 오탐 억제를 실기기에서 확인</Text>
-              </View>
-            </Pressable>
-          ) : null}
-        </Card>
-
-        <Card elevation="sm" style={styles.section}>
-          <Text style={styles.sectionLabel}>화면</Text>
-          {/* section 이 좌우 패딩 0 이라(위 주석) 행마다 패딩을 직접 준다 — 테마 블록은
-              row 를 안 쓰므로 빠뜨리면 제목이 카드 벽에 붙는다 */}
-          <View style={[styles.rowText, styles.themeIntro]}>
-            <Text style={styles.rowTitle}>테마</Text>
-            <Text style={styles.rowDesc}>시스템을 고르면 기기 설정을 따라가요.</Text>
-          </View>
-          <View style={styles.themeRow}>
-            {THEME_OPTIONS.map((o) => (
-              <Chip
-                key={o.value}
-                label={o.label}
-                selected={themeMode === o.value}
-                onPress={() => void setThemeMode(o.value)}
-                fill
-              />
-            ))}
-          </View>
-
-          {/*
-            채팅 배경은 2026-09-23 에 <b>채팅방 ⋮ 메뉴</b>로 옮겼다(ChatBackgroundSheet).
-            여기 나란히 두니 색 목록이 둘이라 "왜 색을 두 번 고르지"가 됐는데, 액센트는
-            앱 전체 정체성이고 배경은 그 방의 취향이라 층이 다르다. 다시 가져오지 말 것.
-          */}
-          <View style={[styles.rowText, styles.themeIntro, styles.accentIntro]}>
-            <Text style={styles.rowTitle}>액센트</Text>
-            <Text style={styles.rowDesc}>앱의 포인트 색이에요. 이 기기에서만 바뀌어요.</Text>
-          </View>
-          <View style={styles.themeRow}>
-            {ACCENT_OPTIONS.map((o) => (
-              <Chip
-                key={o.value}
-                label={o.label}
-                selected={accent === o.value}
-                onPress={() => void setAccent(o.value)}
-                fill
-              />
-            ))}
-          </View>
-        </Card>
+          <SettingsRow title="알림 종류" onPress={() => navigation.navigate('NotificationCategories')} />
+          <SettingsRow title="식사 알림" onPress={() => navigation.navigate('MealReminders')} />
+          <SettingsRow
+            title="마케팅 정보 수신"
+            note="이벤트·혜택 소식 (선택)"
+            switchValue={marketingConsent}
+            onSwitch={(next) => void onToggleMarketing(next)}
+            disabled={savingMarketing}
+          />
+        </SettingsGroup>
 
         {/*
-          MY 탭 메뉴에도 같은 자리가 있지만(`MyScreen`), 구독을 찾는 사람은 설정부터 연다.
-          docs/PRO_UPSELL_AND_ADS_2026-09-17.md §6 — 한도에 부딪혔을 때만 뜨는 반응형
-          업셀 8곳은 그대로 두고 <b>자발적으로 들어올 자리만</b> 늘린다.
+          채팅 배경은 2026-09-23 에 <b>채팅방 ⋮ 메뉴</b>로 옮겼다(ChatBackgroundSheet).
+          여기 나란히 두니 색 목록이 둘이라 "왜 색을 두 번 고르지"가 됐는데, 액센트는
+          앱 전체 정체성이고 배경은 그 방의 취향이라 층이 다르다. 다시 가져오지 말 것.
         */}
-        <Card elevation="sm" style={styles.section}>
-          <Text style={styles.sectionLabel}>구독</Text>
-          <Pressable
-            style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
-            onPress={() => navigation.navigate('Plan')}
-            accessibilityRole="button"
-            accessibilityLabel="플랜 보기"
-          >
-            <Text style={styles.rowTitle}>플랜</Text>
-            <View style={styles.menuValue}>
-              {/*
-                `PlanScreen` 의 배지와 같은 어휘를 쓴다 — 두 화면이 서로 다른 말로 같은
-                상태를 부르면 안 된다. 체험 중인지까지는 여기서 말하지 않는다(전역 체험이면
-                끝이 정해져 있지 않아 한 단어로 정확히 옮길 수 없다). 그 설명은 플랜 화면에 있다.
-              */}
-              <Text style={styles.version}>{isPro ? 'PRO' : 'FREE'}</Text>
-              <Text style={styles.chevron}>›</Text>
-            </View>
-          </Pressable>
-        </Card>
+        <SettingsGroup
+          title="화면"
+          footer="테마에서 시스템을 고르면 기기 설정을 따라가요. 액센트는 이 기기에서만 바뀌어요."
+          style={styles.group}
+        >
+          <View>
+            <SettingsRow title="테마" />
+            <SettingsInset style={styles.chips}>
+              {THEME_OPTIONS.map((o) => (
+                <Chip key={o.value} label={o.label} selected={themeMode === o.value} onPress={() => void setThemeMode(o.value)} fill />
+              ))}
+            </SettingsInset>
+          </View>
+          <View>
+            <SettingsRow title="액센트" />
+            <SettingsInset style={styles.chips}>
+              {ACCENT_OPTIONS.map((o) => (
+                <Chip key={o.value} label={o.label} selected={accent === o.value} onPress={() => void setAccent(o.value)} fill />
+              ))}
+            </SettingsInset>
+          </View>
+        </SettingsGroup>
 
-        <Card elevation="sm" style={styles.section}>
-          <Text style={styles.sectionLabel}>계정</Text>
+        <SettingsGroup
+          title="기능"
+          footer="사진 칼로리는 직접 적은 값이 있으면 건드리지 않아요."
+          style={styles.group}
+        >
+          <SettingsRow
+            title="사진으로 칼로리 채우기"
+            switchValue={user?.autoAnalyzeMealPhoto !== false}
+            onSwitch={(next) => void onToggleMealPhotoAnalysis(next)}
+            disabled={savingMealPhotoAnalysis}
+          />
+          <SettingsRow
+            title="맞춤법 제안"
+            note="기기 안에서만 검사해요. 대화 내용은 어디로도 보내지 않아요."
+            switchValue={spellCheckEnabled}
+            onSwitch={setSpellCheckEnabled}
+          />
+          {/* 개발용 — 위 onTestDictionary 참고. 스토어 빌드에는 안 보인다 */}
+          {__DEV__ ? (
+            <SettingsRow
+              title={dictTesting ? '검사 중…' : '(개발용) 사전 검사 테스트'}
+              onPress={() => void onTestDictionary()}
+              loading={dictTesting}
+            />
+          ) : null}
+        </SettingsGroup>
+
+        {/*
+          MY 탭 메뉴에도 플랜이 있지만(`MyScreen`), 구독을 찾는 사람은 설정부터 연다.
+          docs/PRO_UPSELL_AND_ADS_2026-09-17.md §6 — 자발적으로 들어올 자리만 늘린다.
+          값은 `PlanScreen` 의 배지와 같은 어휘(PRO/FREE)를 쓴다.
+        */}
+        <SettingsGroup title="계정" style={styles.group}>
+          <SettingsRow title="플랜" value={isPro ? 'PRO' : 'FREE'} onPress={() => navigation.navigate('Plan')} accessibilityLabel="플랜 보기" />
           {isSocialAccount ? (
-            <View style={styles.row}>
-              <View style={styles.rowText}>
-                <Text style={styles.rowTitleMuted}>비밀번호 변경</Text>
-                <Text style={styles.rowDesc}>소셜 로그인 계정은 비밀번호를 사용하지 않아요.</Text>
-              </View>
-            </View>
+            <SettingsRow title="비밀번호 변경" note="소셜 로그인 계정은 비밀번호를 사용하지 않아요." muted />
           ) : (
-            <Pressable
-              style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
-              onPress={() => navigation.navigate('ChangePassword')}
-            >
-              <Text style={styles.rowTitle}>비밀번호 변경</Text>
-              <Text style={styles.chevron}>›</Text>
-            </Pressable>
+            <SettingsRow title="비밀번호 변경" onPress={() => navigation.navigate('ChangePassword')} />
           )}
-        </Card>
+        </SettingsGroup>
 
-        <Card elevation="sm" style={styles.section}>
-          <Text style={styles.sectionLabel}>약관 및 정책</Text>
-          <Pressable
-            style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
-            onPress={() => navigation.navigate('LegalDocument', { doc: 'terms' })}
-          >
-            <Text style={styles.rowTitle}>이용약관</Text>
-            <Text style={styles.version}>v{TERMS_VERSION}</Text>
-          </Pressable>
-          <View style={styles.divider} />
-          <Pressable
-            style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
-            onPress={() => navigation.navigate('LegalDocument', { doc: 'privacy' })}
-          >
-            <Text style={styles.rowTitle}>개인정보처리방침</Text>
-            <Text style={styles.version}>v{PRIVACY_VERSION}</Text>
-          </Pressable>
-          <View style={styles.divider} />
+        <SettingsGroup title="정보" style={styles.group}>
+          <SettingsRow title="이용약관" value={`v${TERMS_VERSION}`} onPress={() => navigation.navigate('LegalDocument', { doc: 'terms' })} />
+          <SettingsRow title="개인정보처리방침" value={`v${PRIVACY_VERSION}`} onPress={() => navigation.navigate('LegalDocument', { doc: 'privacy' })} />
           {/*
            * 오픈소스 고지 — 선택이 아니라 의무다. 맞춤법·띄어쓰기 기능이 Hunspell(LGPL)·
            * 한국어 사전(GPL-3.0)·Kiwi(LGPL)를 네이티브 바이너리로 번들하고 있어서,
            * 이 화면이 없으면 스토어에 올리는 것 자체가 라이선스 위반이다(2026-09-07).
            */}
-          <Pressable
-            style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
-            onPress={() => navigation.navigate('LegalDocument', { doc: 'oss' })}
-          >
-            <Text style={styles.rowTitle}>오픈소스 라이선스</Text>
-            <Text style={styles.chevron}>›</Text>
-          </Pressable>
-        </Card>
-
-        <Card elevation="sm" style={styles.section}>
-          <Text style={styles.sectionLabel}>문의 및 지원</Text>
-          <Pressable
-            style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
-            onPress={onContact}
-            accessibilityRole="button"
-            accessibilityLabel="문의 및 버그 신고"
-          >
-            <View style={styles.rowText}>
-              <Text style={styles.rowTitle}>문의 · 버그 신고</Text>
-              <Text style={styles.rowDesc}>불편한 점이나 오류를 알려주세요.</Text>
-            </View>
-            <Text style={styles.chevron}>›</Text>
-          </Pressable>
-        </Card>
+          <SettingsRow title="오픈소스 라이선스" onPress={() => navigation.navigate('LegalDocument', { doc: 'oss' })} />
+          <SettingsRow title="문의 · 버그 신고" onPress={() => void onContact()} accessibilityLabel="문의 및 버그 신고" />
+        </SettingsGroup>
 
         <Pressable
           onLongPress={onCopyBuildInfo}
@@ -660,59 +361,14 @@ export function SettingsScreen({ navigation }: Props) {
 
 const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
-  container: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xl },
-  // Card 기본 좌우 패딩(16)을 지운다 — 안 지우면 container(24)+card(16)+row(24)=64 로
-  // MY 화면(24+0+24=48)보다 텍스트가 16px 더 안쪽에서 시작해 두 화면이 어긋났다
-  section: { paddingVertical: spacing.sm, paddingHorizontal: 0 },
-  themeIntro: { paddingHorizontal: spacing.lg, paddingTop: spacing.xs },
-  themeRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginTop: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xs,
-  },
-
-  // 테마 칩 바로 아래에 붙으므로 위쪽 간격을 한 번 벌려 준다
-  accentIntro: { marginTop: spacing.md },
-  sectionLabel: {
-    fontSize: fontSize.caption,
-    fontWeight: '800',
-    color: colors.textSecondary,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.xs,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    minHeight: 56,
-    gap: spacing.md,
-  },
-  rowText: { flex: 1, gap: 2 },
-  rowTitle: { fontSize: fontSize.subtitle, color: colors.textPrimary, fontWeight: '600' },
-  rowTitleMuted: { fontSize: fontSize.subtitle, color: colors.textSecondary, fontWeight: '600' },
-  rowTitleWarn: { fontSize: fontSize.subtitle, color: colors.danger, fontWeight: '600' },
-  rowDesc: { fontSize: fontSize.caption, color: colors.textSecondary, lineHeight: 18 },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    minHeight: 56,
-  },
-  menuValue: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  pressed: { opacity: 0.6 },
-  chevron: { fontSize: fontSize.title, color: colors.textSecondary },
-  version: { fontSize: fontSize.caption, color: colors.textSecondary },
-  divider: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.lg },
+  container: { padding: spacing.lg, paddingBottom: spacing.xl },
+  group: { marginTop: spacing.lg },
+  chips: { flexDirection: 'row', gap: spacing.sm },
   appVersion: {
     textAlign: 'center',
     fontSize: fontSize.caption,
     color: colors.textSecondary,
-    marginTop: spacing.sm,
+    marginTop: spacing.lg,
   },
   /* 커밋·빌드 시각 — 평소엔 눈에 걸리지 않아야 하고, 필요할 때만 읽히면 된다 */
   buildStamp: {
