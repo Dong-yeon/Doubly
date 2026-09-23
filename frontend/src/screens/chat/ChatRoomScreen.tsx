@@ -54,6 +54,7 @@ import { EmojiPicker } from '../../components/EmojiPicker';
 import { ChatSearchModal } from '../../components/ChatSearchModal';
 import { TouchGesturePicker } from '../../components/TouchGesturePicker';
 import { ChatMoreMenuSheet } from '../../components/ChatMoreMenuSheet';
+import { ChatBackgroundSheet } from '../../components/ChatBackgroundSheet';
 import { ScheduleMessageSheet } from '../../components/ScheduleMessageSheet';
 import { VoiceRecordSheet } from '../../components/VoiceRecordSheet';
 import { VoiceMessageBubble } from '../../components/VoiceMessageBubble';
@@ -92,6 +93,7 @@ import { STICKER_PURCHASE_ENABLED } from '../../constants/config';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { ChatMessage, CoupleEmoji, StickerPack, TouchGestureCode } from '../../types';
 import { themedStyles, chatThemedStyles } from '../../theme/themedStyles';
+import { CHAT_PHOTO_SCRIM } from '../../theme/chatTheme';
 import { useChatThemeStore } from '../../store/chatThemeStore';
 import { useAndroidKeyboardHeight } from '../../hooks/useAndroidKeyboardHeight';
 import { useKeyboardPanelHeight } from '../../hooks/useKeyboardPanelHeight';
@@ -279,6 +281,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const [showSearch, setShowSearch] = useState(false);
   // 헤더 "⋮" — 사진 모아보기·저장한 대화(자주 안 쓰는 항목이라 아이콘을 더 늘리지 않고 묶는다)
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  // 채팅 배경 고르기 — "⋮" 안에 있다(2026-09-23 에 설정에서 옮겨 왔다)
+  const [showBackgroundSheet, setShowBackgroundSheet] = useState(false);
   // 음성 메시지 녹음 시트 — 트레이 네 번째 버튼
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
   const [showScheduleSheet, setShowScheduleSheet] = useState(false);
@@ -327,6 +331,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
    * 앱 테마(themeStore)와 달리 이 화면 하나만 영향을 받아 루트 재마운트가 필요 없다.
    */
   useChatThemeStore((s) => s.id);
+  /* 사진 배경은 값을 직접 써야 한다(아래 배경 레이어) — 팔레트에 담기지 않는 유일한 것 */
+  const chatPhotoUri = useChatThemeStore((s) => s.photoUri);
 
   /*
    * 목록은 inverted(offset 0 = 맨 아래 = 최신). "채팅을 치면 자동으로 맨 아래로",
@@ -1623,6 +1629,18 @@ export function ChatRoomScreen({ navigation, route }: Props) {
      * 영역과는 무관하다(inputBar 스타일 주석 참고).
      */}
     <SafeAreaView style={chatStyles.safe} edges={['bottom', 'left', 'right']}>
+      {/*
+       * 사진 배경 — 테마 배경색 <b>위</b>, 대화 내용 <b>아래</b>. 이 순서라 파일이 사라지거나
+       * 디코딩이 실패해도 고른 테마의 배경색이 그대로 보인다(chatTheme 이 photo 모드에서
+       * background 를 안 건드리는 이유). 입력바·트레이는 앱 팔레트로 자기 배경을 칠하므로
+       * 전면을 덮어도 그 아래로 들어간다.
+       */}
+      {chatPhotoUri ? (
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          <Image source={{ uri: chatPhotoUri }} style={styles.flex} resizeMode="cover" />
+          <View style={[StyleSheet.absoluteFill, chatStyles.photoScrim]} />
+        </View>
+      ) : null}
       <KeyboardAvoidingView
         // Android 는 FlatList 를 직접 감싸면 KeyboardAvoidingView 의 자동 높이 보정이
         // edge-to-edge 아래에서 먹지 않아(실기기 확인) behavior 를 아예 안 쓰고
@@ -2091,6 +2109,12 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         onSaved={() => navigation.navigate('SavedMessages', { relationId, title: partnerName, myId })}
         onScheduled={() => navigation.navigate('ScheduledMessages', { relationId })}
         onExport={onExportChat}
+        onBackground={() => setShowBackgroundSheet(true)}
+      />
+      {/* 채팅 배경 고르기 — 열 벌의 테마 + (네이티브만) 사진 */}
+      <ChatBackgroundSheet
+        visible={showBackgroundSheet}
+        onClose={() => setShowBackgroundSheet(false)}
       />
       {/* 예약 전송 작성 — 트레이 "예약" */}
       <ScheduleMessageSheet
@@ -2524,6 +2548,24 @@ const styles = themedStyles((colors) => ({
 }));
 
 /**
+ * 배경 위 맨살 글자를 감싸는 알약.
+ *
+ * <p>단색 배경에서는 {@code color} 가 투명이라 <b>빈 객체를 돌려준다</b> — 투명한
+ * 배경색에 패딩만 남으면 글자 위치가 테마마다 달라진다. 사진 배경에서만 값이 붙는다.
+ */
+function metaCapsule(color: string) {
+  if (color === 'transparent') return {};
+  return {
+    backgroundColor: color,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: radius.pill,
+    // 안드로이드는 이게 없으면 Text 의 borderRadius 를 무시한다
+    overflow: 'hidden' as const,
+  };
+}
+
+/**
  * 채팅 배경 테마를 따라가는 것들 — <b>대화 목록 바탕과 그 위에 놓이는 것들</b>만이다.
  * 입력바·트레이·헤더는 앱 팔레트를 그대로 쓰므로 위 styles 에 남아 있다.
  * 값의 근거와 대비 실측은 theme/chatTheme.ts 주석 참고.
@@ -2552,18 +2594,35 @@ const chatStyles = chatThemedStyles((chat) => ({
     fontSize: fontSize.caption,
     color: chat.meta,
     lineHeight: 17,
+    // 이것도 배경 위 맨살이다 — 사진 모드에서 캡슐을 받는다(아래 time 주석)
+    ...metaCapsule(chat.metaCapsule),
   },
   // 우리 이모지 — 생성물에 흰 배경이 딸려 오므로 원형으로 잘라 낸다(렌더 주석)
   coupleEmojiImage: { borderRadius: 66, backgroundColor: chat.bubbleTheirs },
 
-  // 말풍선 없이 배경 위에 바로 놓이는 10px 글자들 — 테마별 meta 색이 여기서 쓰인다
-  time: { fontSize: 10, color: chat.meta },
+  /*
+   * 말풍선 없이 배경 위에 바로 놓이는 10px 글자들 — 테마별 meta 색이 여기서 쓰인다.
+   *
+   * <p>{@code metaCapsule} 은 단색 배경에서 투명이라 아무 일도 안 하고, <b>사진 배경에서만</b>
+   * 어두운 알약이 된다(chatTheme 의 같은 이름 주석). RN 의 Text 는 배경색과 반경을 스스로
+   * 그리므로 JSX 를 건드릴 필요가 없다 — 사진 모드를 위해 렌더 트리에 조건 분기를 심으면
+   * 이 파일에서만 다섯 자리가 갈라진다.
+   */
+  time: { fontSize: 10, color: chat.meta, ...metaCapsule(chat.metaCapsule) },
   // "보내는 중" — 시간 자리에 들어가므로 같은 크기·색 체계를 따른다
-  sendingMark: { fontSize: 10, color: chat.meta },
-  editedMark: { fontSize: 10, color: chat.meta },
+  sendingMark: { fontSize: 10, color: chat.meta, ...metaCapsule(chat.metaCapsule) },
+  editedMark: { fontSize: 10, color: chat.meta, ...metaCapsule(chat.metaCapsule) },
 
   dateDividerLine: { flex: 1, height: 1, backgroundColor: chat.dividerLine },
-  dateDividerText: { fontSize: fontSize.caption, fontWeight: '700', color: chat.meta },
+  dateDividerText: {
+    fontSize: fontSize.caption,
+    fontWeight: '700',
+    color: chat.meta,
+    ...metaCapsule(chat.metaCapsule),
+  },
+
+  // 사진 위에 덮는 옅은 막 — 대비가 아니라 미관용이다(chatTheme 의 CHAT_PHOTO_SCRIM)
+  photoScrim: { backgroundColor: CHAT_PHOTO_SCRIM },
 
   // 검색에서 골라 온 메시지 강조 — 1.8초 뒤 스스로 지운다(highlightedId 주석 참고)
   highlightRow: { backgroundColor: chat.highlight, borderRadius: radius.md },

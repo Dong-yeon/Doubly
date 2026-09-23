@@ -25,6 +25,11 @@
  * 배경보다 어두운 방향이었다). 검색에서 골라 온 메시지를 짚어 주는 것이 이 색의 유일한
  * 일이라, 안 보이면 기능이 없는 것과 같다. 열두 벌의 값을 올리고 규칙을 추가했다.
  *
+ * <p><b>고르는 자리는 채팅방 안이다</b>(2026-09-23). 그전에는 설정에 앱 테마·액센트와
+ * 나란히 있었는데, 같은 높이에 색 목록이 둘이라 "왜 색을 두 번 고르지"가 됐다. 둘은
+ * 층이 다르다 — 액센트는 앱 정체성(3종), 이건 방 취향(10종)이다. 카톡·라인도 배경은
+ * 방 안에서 고른다. 옮기면서 액센트와 겹치던 라벨 둘(민트·피치)도 실제 색에 맞게 바꿨다.
+ *
  * <p>앱 기본 팔레트를 그대로 옮긴 'default' 는 두 군데가 기준 미달이라
  * <b>채팅에서만</b> 값을 고쳤다(앱 전체 primary/textTertiary 는 안 건드린다).
  * <ul>
@@ -64,7 +69,8 @@ export type ChatThemeId =
   | 'indigo'
   | 'plum';
 
-export interface ChatPalette {
+/** 아래 CHAT_THEMES 의 리터럴이 직접 갖는 값 — 열 벌이 손으로 맞춰 둔 여덟 가지다 */
+export interface ChatPaletteBase {
   /** 대화 목록 바탕 */
   background: string;
   /** 내 말풍선 — 위에 bubbleMineText 를 얹는다 */
@@ -81,11 +87,32 @@ export interface ChatPalette {
   highlight: string;
 }
 
+/**
+ * 화면이 실제로 받는 팔레트 — {@link chatPalette} 만 만든다.
+ *
+ * <p>{@code metaCapsule} 은 리터럴에 없다. 열 벌 전부 단색 배경이라 항상 투명이고,
+ * <b>사진 배경일 때만</b> 값이 생기기 때문이다. 리터럴에 20번 `'transparent'` 를 적는
+ * 대신 파생 단계에서 붙인다 — 새 테마를 추가하는 사람이 빠뜨릴 수 있는 칸을 만들지 않는다.
+ */
+export interface ChatPalette extends ChatPaletteBase {
+  /**
+   * 배경 위 맨살 글자(시간·"보내는 중"·"수정됨"·날짜 라벨)를 감싸는 캡슐 색.
+   *
+   * <p>단색 배경에서는 {@code 'transparent'} 다 — 배경 휘도를 알고 {@code meta} 를 거기
+   * 맞춰 뒀으므로(파일 상단 대비 검증) 캡슐이 필요 없다. <b>사진 배경에서는 그 전제가
+   * 깨진다</b>: 픽셀마다 휘도가 달라 어떤 값을 골라도 어딘가에서는 묻힌다. 스크림을
+   * 덮어도 <b>보장</b>은 안 된다(흰 사진에 45% 검정을 씌워도 여전히 밝다). 그래서 배경이
+   * 아니라 <b>글자 쪽</b>을 고친다 — 캡슐을 깔면 대비가 사진과 무관해진다(카톡의 날짜
+   * 라벨과 같은 방식).
+   */
+  metaCapsule: string;
+}
+
 export interface ChatTheme {
   id: ChatThemeId;
   label: string;
-  light: ChatPalette;
-  dark: ChatPalette;
+  light: ChatPaletteBase;
+  dark: ChatPaletteBase;
 }
 
 export const CHAT_THEMES: ChatTheme[] = [
@@ -186,9 +213,22 @@ export const CHAT_THEMES: ChatTheme[] = [
       highlight: '#302847',
     },
   },
+  /*
+   * 라벨이 '피치'→'앰버' 다(2026-09-23). 액센트에도 '피치'가 있는데 <b>같은 이름이 다른
+   * 색을 내고 있었다</b> — 액센트 피치는 §3-1 때문에 primary 계열이 초록이라(colors.ts)
+   * 그걸 고르면 '기본' 말풍선이 초록 #62B16B 로 나오고, 이 테마의 말풍선은 주황
+   * #B25500 이다. 설정 한 화면에 두 줄로 나란히 있을 때 특히 헷갈렸다. 채팅 배경을
+   * 채팅방으로 옮기면서 겹치는 이름만 실제 색에 맞게 바꾼다 — <b>id 는 그대로</b>라
+   * 이미 고른 사람의 선택은 유지된다(검증 스크립트도 id 로 읽는다).
+   *
+   * <p><b>주석을 블록 밖에 둔다</b>: 검증 스크립트의 정규식이 {@code id → label → light}
+   * 를 한 덩어리로 훑어서, 그 사이에 주석을 끼우면 <b>그 테마가 조용히 검사에서 빠진다</b>.
+   * 실제로 여기서 한 번 그랬고 "10종"이 "8종"으로 줄어 들킨 것이라, 다음 사람도 똑같이
+   * 한다. 테마 하나에 붙이는 말은 전부 이 자리에.
+   */
   {
     id: 'peach',
-    label: '피치',
+    label: '앰버',
     light: {
       background: '#FDF2E9',
       bubbleMine: '#B25500',
@@ -210,9 +250,10 @@ export const CHAT_THEMES: ChatTheme[] = [
       highlight: '#3A2E20',
     },
   },
+  /* 위 'peach' 와 같은 이유 — 액센트 '민트'(#49CAA5)와 달리 이건 진한 청록이다 */
   {
     id: 'mint',
-    label: '민트',
+    label: '에메랄드',
     light: {
       background: '#EAF5F0',
       bubbleMine: '#00695C',
@@ -360,6 +401,37 @@ export function isChatThemeId(value: unknown): value is ChatThemeId {
  */
 let currentId: ChatThemeId = DEFAULT_CHAT_THEME_ID;
 
+/*
+ * 사진 배경 — 테마를 <b>대체하지 않고 배경만 덮는다</b>. "인디고 + 사진"이 가능하다는 뜻이고,
+ * 말풍선·글자는 고른 테마의 검증된 값을 그대로 쓴다. 사진 때문에 값을 새로 지어내면
+ * 위 대비 검증이 통째로 무의미해지므로, 사진이 건드리는 것은 아래 photoOverrides 뿐이다.
+ */
+let currentPhotoUri: string | null = null;
+
+export function getChatPhotoUri(): string | null {
+  return currentPhotoUri;
+}
+
+export function setChatPhotoUri(uri: string | null): void {
+  currentPhotoUri = uri;
+}
+
+/**
+ * 맨살 글자를 감싸는 캡슐 — <b>가장 밝은 사진(순백)에서도</b> 흰 글자가 4.76:1 이다.
+ * 0.55 는 거기서 나온 값이다: 순백 위 55% 검정 = #737373 이고 흰 글자가 4.76,
+ * 0.45 로 낮추면 4.48 로 AA 아래다. 더 올리면 사진이 안 보이기 시작한다.
+ */
+const PHOTO_CAPSULE = 'rgba(0, 0, 0, 0.55)';
+
+/** 사진 위 맨살 글자 — 캡슐이 어둡다고 보장되므로 테마와 무관하게 흰색이다 */
+const PHOTO_META = '#FFFFFF';
+
+/**
+ * 사진 전체에 덮는 옅은 막. 대비를 <b>보장하지는 않는다</b>(그 일은 캡슐이 한다) —
+ * 번잡한 사진에서 말풍선 경계가 덜 싸우게 하는 미관용이라 한 단계로 고정한다.
+ */
+export const CHAT_PHOTO_SCRIM = 'rgba(0, 0, 0, 0.18)';
+
 export function getChatThemeId(): ChatThemeId {
   return currentId;
 }
@@ -368,10 +440,22 @@ export function setChatThemeId(id: ChatThemeId): void {
   currentId = id;
 }
 
+/**
+ * 사진 배경일 때의 덮어쓰기.
+ *
+ * <p>{@code background} 는 <b>일부러 안 건드린다</b> — 사진 레이어는 그 색 <b>위에</b>
+ * 깔리므로, 사진이 안 뜨거나 파일이 사라져도 고른 테마의 배경색으로 떨어진다.
+ * 구분선은 지운다: 날짜 라벨이 캡슐을 얻으면 좌우 줄이 오히려 사진과 싸운다(카톡도 캡슐만 쓴다).
+ */
+function withPhoto(base: ChatPalette): ChatPalette {
+  if (!currentPhotoUri) return base;
+  return { ...base, meta: PHOTO_META, metaCapsule: PHOTO_CAPSULE, dividerLine: 'transparent' };
+}
+
 export function chatPalette(scheme: Scheme, id: ChatThemeId = currentId): ChatPalette {
   const theme = byId.get(id) ?? byId.get(DEFAULT_CHAT_THEME_ID)!;
-  const base = theme[scheme];
-  if (id !== DEFAULT_CHAT_THEME_ID) return base;
+  const base: ChatPalette = { ...theme[scheme], metaCapsule: 'transparent' };
+  if (id !== DEFAULT_CHAT_THEME_ID) return withPhoto(base);
   /*
    * '기본' 테마의 내 말풍선은 앱 액센트를 따른다 — 사용자가 민트·피치를 골랐는데 채팅만
    * 초록이면 기본이 기본이 아니다. 위 CHAT_THEMES 의 'default' 값은 green 액센트일 때의
@@ -386,10 +470,10 @@ export function chatPalette(scheme: Scheme, id: ChatThemeId = currentId): ChatPa
    * {@code onColor} 가 배경 휘도로 고른다 — 라이트·다크 모두 ink 로 뒤집힌다.
    */
   const app = palette(scheme);
-  return {
+  return withPhoto({
     ...base,
     bubbleMine: app.primaryFill,
     bubbleMineText: onColor(app.primaryFill),
     highlight: scheme === 'light' ? app.partnerPastelBg : base.highlight,
-  };
+  });
 }

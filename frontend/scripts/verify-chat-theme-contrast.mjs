@@ -71,10 +71,27 @@ function parseThemes(source) {
   return themes;
 }
 
-const themes = parseThemes(readFileSync(SOURCE, 'utf8'));
+const source = readFileSync(SOURCE, 'utf8');
+const themes = parseThemes(source);
 
 if (themes.length === 0) {
   console.error('chatTheme.ts 에서 테마를 하나도 못 찾았다 — 파일 형태가 바뀌었는지 확인할 것.');
+  process.exit(1);
+}
+
+/*
+ * 위 정규식은 id → label → light 를 <b>한 덩어리로</b> 훑는다. 그 사이에 주석 한 줄만
+ * 끼워도 해당 테마가 조용히 빠지는데, "전부 통과"는 그대로 나오므로 <b>아무도 모른다</b>.
+ * 2026-09-23 에 라벨을 고치다 실제로 10종이 8종이 됐다. 선언된 수와 대조해 시끄럽게 만든다.
+ */
+const declared = [...source.matchAll(/^\s{4}id:\s*'([a-z]+)',$/gm)].map((m) => m[1]);
+const missed = declared.filter((id) => !themes.some((t) => t.id === id));
+if (missed.length > 0) {
+  console.error(
+    `정규식이 테마 ${missed.length}종을 놓쳤다: ${missed.join(', ')}\n` +
+      'id 와 label 사이(또는 label 과 light 사이)에 주석이 끼어 있지 않은지 볼 것 — ' +
+      '테마에 붙이는 설명은 블록 바깥, { 위에 둔다.',
+  );
   process.exit(1);
 }
 

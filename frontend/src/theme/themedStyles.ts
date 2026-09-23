@@ -20,7 +20,7 @@
  */
 import { StyleSheet, type ImageStyle, type TextStyle, type ViewStyle } from 'react-native';
 import { getAccentVariant, getScheme, palette, type Palette } from './colors';
-import { chatPalette, getChatThemeId, type ChatPalette } from './chatTheme';
+import { chatPalette, getChatPhotoUri, getChatThemeId, type ChatPalette } from './chatTheme';
 
 type NamedStyles<T> = { [P in keyof T]: ViewStyle | TextStyle | ImageStyle };
 
@@ -59,8 +59,15 @@ export function chatThemedStyles<T extends NamedStyles<T>>(
 
   const resolve = (): T => {
     const scheme = getScheme();
-    // '기본' 채팅 테마는 앱 액센트를 따르므로 변형도 키에 넣는다
-    const key = `${getAccentVariant()}:${scheme}:${getChatThemeId()}`;
+    /*
+     * 키는 <b>팔레트를 바꾸는 축 전부</b>여야 한다. 하나라도 빠지면 그 축을 바꿨을 때
+     * 먼저 캐시된 스타일이 그대로 돌아온다 — 조용히, 화면만 안 바뀐다.
+     * · 액센트: '기본' 채팅 테마의 말풍선이 앱 액센트를 따른다
+     * · 사진 유무: 맨살 글자가 캡슐을 얻고 구분선이 사라진다(chatTheme 의 withPhoto)
+     *   uri <b>값</b>은 스타일을 바꾸지 않으므로 키에 넣지 않는다 — 넣으면 사진을 고를
+     *   때마다 캐시가 한 벌씩 새로 쌓인다.
+     */
+    const key = `${getAccentVariant()}:${scheme}:${getChatThemeId()}:${getChatPhotoUri() ? 'photo' : 'plain'}`;
     if (!cache[key]) cache[key] = StyleSheet.create(factory(chatPalette(scheme)));
     return cache[key];
   };
