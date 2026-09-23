@@ -65,7 +65,7 @@ export function MealCard({ meal, onPress, onLongPress, showDate, deleting, onPla
             {/* 데이트 식단(같이 먹기) — 상대방에게도 절반 칼로리로 짝이 등록된 기록 */}
             {meal.sharedWithPartner ? (
               <View style={styles.dateBadge}>
-                <Text style={styles.dateBadgeText}>🍽️ 데이트</Text>
+                <Text style={styles.dateBadgeText}>데이트</Text>
               </View>
             ) : null}
           </View>
@@ -160,7 +160,7 @@ const styles = themedStyles((colors) => ({
     borderRadius: radius.pill,
     backgroundColor: colors.primaryBg,
   },
-  dateBadgeText: { fontSize: 10, fontWeight: '800', color: colors.primary },
+  dateBadgeText: { fontSize: fontSize.micro, fontWeight: '800', color: colors.primary },
   cal: { fontSize: fontSize.caption, color: colors.accent, fontWeight: '800' },
   date: { fontSize: fontSize.caption, color: colors.textSecondary },
   placeTag: {

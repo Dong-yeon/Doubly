@@ -249,26 +249,7 @@ export function WorkoutScreen({ navigation }: Props) {
             })}
           </View>
         </View>
-        {/* 점 색의 뜻 — WeeklyRecapCard 와 같은 규칙(나/상대/together)이지만 처음 보는
-            자리라 한 번은 풀어 적는다. 연결 안 됐으면 상대 점이 영영 안 뜨니 숨긴다. */}
-        {connected ? (
-          <View style={styles.weekLegend}>
-            {(
-              [
-                { color: colors.me, label: '나' },
-                { color: colors.partner, label: couple?.partner?.name ?? '상대' },
-                { color: colors.together, label: '함께' },
-              ] as const
-            ).map((item) => (
-              <View key={item.label} style={styles.weekLegendItem}>
-                <View style={[styles.weekLegendDot, { backgroundColor: item.color }]} />
-                <Text style={styles.weekLegendLabel} numberOfLines={1}>
-                  {item.label}
-                </Text>
-              </View>
-            ))}
-          </View>
-        ) : null}
+        {/* 점 색 범례는 뺐다 — 나/상대/함께는 앱 전체의 소유자 색 규칙이라 여기서만 설명하지 않는다(§6-3) */}
       </View>
 
       {/*
@@ -524,7 +505,8 @@ export function WorkoutScreen({ navigation }: Props) {
             style={styles.fabBtn}
           />
           <Button
-            title="✨ 맞춤 운동"
+            title="맞춤 운동"
+            leftIcon={<MaterialCommunityIcons name="auto-fix" size={18} color={colors.textPrimary} />}
             variant="secondary"
             onPress={() => navigation.navigate('WorkoutRecommend')}
             style={styles.fabBtn}
@@ -571,10 +553,6 @@ const styles = themedStyles((colors) => ({
   // 요일 숫자들이 위아래로 들썩이지 않는다.
   weekCellDot: { height: 6, alignItems: 'center', justifyContent: 'center' },
   weekDot: { width: 6, height: 6, borderRadius: 3 },
-  weekLegend: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, paddingLeft: 2 },
-  weekLegendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  weekLegendDot: { width: 6, height: 6, borderRadius: 3 },
-  weekLegendLabel: { fontSize: fontSize.micro, color: colors.textTertiary, fontWeight: '600' },
   recoveryCard: {
     flexDirection: 'row',
     alignItems: 'center',

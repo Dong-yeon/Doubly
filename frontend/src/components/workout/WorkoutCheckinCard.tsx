@@ -161,7 +161,7 @@ export function WorkoutCheckinCard({ onOpenRecord, onResume, onCheckedIn, onOpen
           {/* 서브셋 글리프맵에 있는 아이콘만 쓴다(Icon.tsx 주석) — check-circle 은 목록에 없다 */}
           <MaterialCommunityIcons name="calendar-check-outline" size={20} color={colors.success} />
           <Text style={styles.doneLabel}>오늘 운동</Text>
-          <Text style={styles.doneValue}>챙겼어요 💪</Text>
+          <Text style={styles.doneValue}>챙겼어요</Text>
           {workoutHomeLink}
         </View>
       ) : (
@@ -171,15 +171,18 @@ export function WorkoutCheckinCard({ onOpenRecord, onResume, onCheckedIn, onOpen
             {workoutHomeLink}
           </View>
           <View style={styles.checkinRow}>
+            {/* 이모지 대신 leftIcon — 버튼 둘이 곧 안내라 아래 설명 문장은 뺐다(§6-3) */}
             <Button
-              title={checkingIn ? '기록 중…' : '✓ 운동 완료'}
+              title={checkingIn ? '기록 중…' : '운동 완료'}
+              leftIcon={<MaterialCommunityIcons name="calendar-check-outline" size={18} color={colors.white} />}
               size="md"
               onPress={onQuickCheckIn}
               loading={checkingIn}
               style={styles.checkinBtn}
             />
             <Button
-              title="📷 오운완"
+              title="오운완 사진"
+              leftIcon={<MaterialCommunityIcons name="camera-outline" size={18} color={colors.textPrimary} />}
               variant="secondary"
               size="md"
               onPress={onPhotoRecord}
@@ -187,9 +190,6 @@ export function WorkoutCheckinCard({ onOpenRecord, onResume, onCheckedIn, onOpen
               style={styles.checkinBtn}
             />
           </View>
-          <Text style={styles.checkinHint}>
-            자세한 기록 없이 눌러도 돼요. 오운완 사진은 애인의 우리 기록에도 올라가요.
-          </Text>
         </View>
       )}
     </View>
@@ -212,7 +212,6 @@ const styles = themedStyles((colors) => ({
   checkinTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary, flexShrink: 1 },
   checkinRow: { flexDirection: 'row', gap: spacing.sm },
   checkinBtn: { flex: 1 },
-  checkinHint: { fontSize: fontSize.caption, color: colors.textSecondary, lineHeight: 18 },
   // 완료 상태 — 운동 홈의 회복 카드와 같은 한 줄 형태(테두리만 success 로 구분)
   doneCard: {
     flexDirection: 'row',
