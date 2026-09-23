@@ -45,11 +45,11 @@ const THEME_OPTIONS: { value: ThemeMode; label: string }[] = [
   { value: 'dark', label: '다크' },
 ];
 
-/* 액센트 후보 — 실기기 비교용 임시 스위치. 결정되면 colors.ts 의 변형 블록과 함께 지운다 */
+/* 앱 액센트 — 채팅 배경처럼 기기별 취향 설정 (colors.ts 의 AccentVariant 주석 참고) */
 const ACCENT_OPTIONS: { value: AccentVariant; label: string }[] = [
-  { value: 'green', label: '현행 초록' },
-  { value: 'mint', label: '민트+골드' },
-  { value: 'peach', label: '피치+세이지' },
+  { value: 'green', label: '그린' },
+  { value: 'mint', label: '민트' },
+  { value: 'peach', label: '피치' },
 ];
 
 /**
@@ -532,8 +532,8 @@ export function SettingsScreen({ navigation }: Props) {
           </View>
 
           <View style={[styles.rowText, styles.themeIntro, styles.chatThemeIntro]}>
-            <Text style={styles.rowTitle}>액센트 (비교용)</Text>
-            <Text style={styles.rowDesc}>색조 후보를 이 기기에서 바로 바꿔 봐요. 결정되면 이 스위치는 없어져요.</Text>
+            <Text style={styles.rowTitle}>액센트</Text>
+            <Text style={styles.rowDesc}>앱의 포인트 색이에요. 이 기기에서만 바뀌어요.</Text>
           </View>
           <View style={styles.themeRow}>
             {ACCENT_OPTIONS.map((o) => (

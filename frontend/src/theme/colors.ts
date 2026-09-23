@@ -138,7 +138,18 @@ const light = {
   // 다크모드에서 흰 덩어리로 남던 것을 토큰으로 흡수했다
   successBg: '#E7F5EE',
   danger: '#E5484D',
+  // danger 의 배지용 짝 — 연한 배경 + 그 위에서 4.5 를 넘기는 어두운 글자
+  // (danger 원색은 연한 배경 위 글자로 3.6 이라 못 쓴다). Badge 'rose' 가 하드코딩하던 값
+  dangerBg: '#FFF0EF',
+  dangerText: '#9B3330',
   white: '#FFFFFF',
+
+  // ── 로고 마크 (DoublyMark) — 액센트를 따른다 ────────────────────
+  // 앱 아이콘(DoublySquareMark·icon.png)은 브랜드라 고정이고, 인앱 마크만 액센트에 맞춘다.
+  // Back = 상대 계열 연한 하트, Front = 크롬 진한 하트, Sparkle = 금색 반짝임
+  markBack: '#8FCB98',
+  markFront: '#1F5A25',
+  markSparkle: '#D9A441',
 };
 
 /**
@@ -228,24 +239,41 @@ const dark: typeof light = {
   // 다크 success 배경 — success(#3FBF80) 텍스트가 위에서 4.5:1 이상 나오는 어두운 그린
   successBg: '#1C3327',
   danger: '#F2555A',
+  dangerBg: '#3A1F20',
+  dangerText: '#F2A0A0',
   white: '#FFFFFF',
+
+  // 다크의 마크 — 어두운 배경 위라 밝게 (DoublyMark onDark 와 같은 값)
+  markBack: '#BFE3C4',
+  markFront: '#5FBE73',
+  markSparkle: '#FFF3C4',
 };
 
 export type Palette = typeof light;
 export type Scheme = 'light' | 'dark';
 
 /*
- * ── 액센트 후보 (실기기 비교용, 2026-09-23) ──────────────────────────
- * "커플 앱치고 무겁다"의 후속으로 색조(hue) 후보 둘을 앱 안에서 바로 바꿔 보기 위한 것이다
- * (docs/UI_UX_COMPETITIVE_REVIEW_2026-09-22.md §3-3·§11). 중립(바탕·글자·보더)은 공통이고
- * <b>액센트와 크롬만</b> 갈아끼운다. 값은 hue·채도에서 생성했고 검증 기준은 현행과 같다 —
- * 글자 4.5:1(트랙 위), 채움 위 ink ≥ 5.8, 다크 액센트 ≥ 9.5. 다크 primary 는 현행과 같은
- * 이중 역할 상충(white 3.9 / 표면 3.8)을 그대로 안고 있다.
+ * ── 액센트 변형 (사용자 선택, 2026-09-23) ────────────────────────────
+ * 앱 액센트를 사용자가 고른다 — 설정 > 화면 > 액센트. 채팅 배경 테마와 같은 <b>기기별</b>
+ * 설정이다. 중립(바탕·글자·보더)은 공통이고 <b>액센트·크롬·마크만</b> 갈아끼우므로
+ * 나/상대/함께의 의미와 대비 기준은 세 변형이 같다.
  *
+ * 왜 하나로 정하지 않고 고르게 하나: 색조 하나를 정하느라 팔레트를 네 번 갈았고
+ * (파일 상단 경위), "커플 앱치고 무겁다"의 원인이 색조가 아니라 명도였음이 밝혀진 뒤에도
+ * 색조 취향은 남았다(docs/UI_UX_COMPETITIVE_REVIEW_2026-09-22.md §3-3·§3-4). 채팅 배경을
+ * 취향으로 열어둔 것과 같은 결정이다. 앱 아이콘·스토어·캐릭터는 한 색이어야 하므로
+ * <b>대표 액센트 하나</b>는 실기기 확인 후 따로 정한다(그때까지 기본은 green).
+ *
+ * 값은 hue·채도에서 생성했고 검증 기준은 green 과 같다 — 글자 4.5:1(트랙 위), 채움 위
+ * ink ≥ 5.8, 다크 액센트 ≥ 9.5. 다크 primary 는 세 변형 모두 같은 이중 역할 상충
+ * (white 3.9 / 표면 3.8)을 안고 있다(dark 블록의 primary 주석).
+ *
+ *   green — 나 Gold(H42) · 상대 Green(H125) · 함께 Olive(H84) · 크롬 Green (본체 값)
  *   mint  — 나 Gold(H42) · 상대 Mint(H160) · 함께 Lime(H100) · 크롬 Mint
  *   peach — 나 Peach(H20) · 상대 Sage(H130, 저채도) · 함께 Gold(H50) · 크롬 Sage
  *
- * 결정되면 고른 값을 light/dark 본체에 넣고 이 블록과 설정 화면의 스위치를 지운다.
+ * 새 액센트 토큰을 만들면 <b>세 변형 × 두 스킴</b>에 다 넣는다 — 빠뜨리면 그 변형에서만
+ * green 값이 새어 나온다(Partial 이라 컴파일러가 잡아주지 않는다).
  */
 export type AccentVariant = 'green' | 'mint' | 'peach';
 
@@ -258,6 +286,7 @@ const ACCENT_OVERRIDES: Record<Exclude<AccentVariant, 'green'>, Record<Scheme, P
       primary: '#2E7A61', primaryDark: '#225946', primaryLight: '#45B590', primaryBg: '#E9F7F2', primarySoft: '#E9F7F2',
       coral: '#8C6918', indigo: '#2E7A61', violet: '#487A2E', couple: '#8C6918', food: '#487A2E', health: '#2E7A61',
       secondary: '#2E7A61', secondarySoft: '#E7F8F3', accent: '#487A2E', accentSoft: '#EDF8E7',
+      markBack: '#90D5BE', markFront: '#225946', markSparkle: '#D9A441',
     },
     dark: {
       me: '#E6D3A8', meBg: '#322915', mePastelBg: '#322915', meText: '#E6D3A8', meFill: '#E6D3A8',
@@ -266,6 +295,7 @@ const ACCENT_OVERRIDES: Record<Exclude<AccentVariant, 'green'>, Record<Scheme, P
       primary: '#3D8F74', primaryDark: '#347962', primaryLight: '#62BC9E', primaryBg: '#0F241D', primarySoft: '#0F241D',
       coral: '#E6D3A8', indigo: '#A8E6D1', violet: '#BDE6A8', couple: '#E6D3A8', food: '#BDE6A8', health: '#A8E6D1',
       secondary: '#A8E6D1', secondarySoft: '#153228', accent: '#BDE6A8', accentSoft: '#1F3215',
+      markBack: '#A8E6D1', markFront: '#62BC9E', markSparkle: '#FFF3C4',
     },
   },
   peach: {
@@ -276,6 +306,7 @@ const ACCENT_OVERRIDES: Record<Exclude<AccentVariant, 'green'>, Record<Scheme, P
       primary: '#407749', primaryDark: '#305A37', primaryLight: '#60A96C', primaryBg: '#E9F7EB', primarySoft: '#E9F7EB',
       coral: '#B74E1A', indigo: '#407749', violet: '#7A6B1F', couple: '#B74E1A', food: '#7A6B1F', health: '#407749',
       secondary: '#407749', secondarySoft: '#E7F8EA', accent: '#7A6B1F', accentSoft: '#F8F5E7',
+      markBack: '#9CC9A3', markFront: '#305A37', markSparkle: '#DAC24E',
     },
     dark: {
       me: '#E6BDA8', meBg: '#321F15', mePastelBg: '#321F15', meText: '#E6BDA8', meFill: '#E6BDA8',
@@ -284,6 +315,7 @@ const ACCENT_OVERRIDES: Record<Exclude<AccentVariant, 'green'>, Record<Scheme, P
       primary: '#3D8F4B', primaryDark: '#347940', primaryLight: '#62BC71', primaryBg: '#0F2413', primarySoft: '#0F2413',
       coral: '#E6BDA8', indigo: '#A8E6B2', violet: '#E6DBA8', couple: '#E6BDA8', food: '#E6DBA8', health: '#A8E6B2',
       secondary: '#A8E6B2', secondarySoft: '#15321A', accent: '#E6DBA8', accentSoft: '#322D15',
+      markBack: '#A8E6B2', markFront: '#62BC71', markSparkle: '#FFF3C4',
     },
   },
 };
@@ -301,7 +333,7 @@ const resolved: Record<AccentVariant, Record<Scheme, Palette>> = {
   },
 };
 
-/** 현행(green) 팔레트 — 변형과 무관하게 기준값이 필요한 곳(문서·검증 스크립트)용 */
+/** green 팔레트 — 변형과 무관하게 기준값이 필요한 곳(문서·검증 스크립트)용 */
 export const palettes: Record<Scheme, Palette> = resolved.green;
 
 /*
@@ -318,7 +350,7 @@ let currentScheme: Scheme = (() => {
   return resolvedMode === 'dark' ? 'dark' : 'light';
 })();
 
-/* 액센트 변형도 같은 방식 — 웹은 동기 저장소에서 바로, 네이티브는 themeStore.load 가 덮어쓴다 */
+/* 액센트 변형도 같은 방식 — 웹은 동기 저장소에서 바로 읽고, 네이티브는 themeStore.load 가 덮어쓴다 */
 let currentVariant: AccentVariant = readAccentVariantSync();
 
 export function getScheme(): Scheme {

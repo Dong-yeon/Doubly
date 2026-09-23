@@ -24,7 +24,7 @@ export type ThemeMode = 'system' | 'light' | 'dark';
 
 const STORAGE_KEY = 'doubly.theme.mode';
 
-/* ── 액센트 변형 (실기기 비교용 임시, colors.ts 의 AccentVariant 참고) ── */
+/* ── 액센트 변형 (사용자 선택, colors.ts 의 AccentVariant 참고) ── */
 export type AccentVariantId = 'green' | 'mint' | 'peach';
 const ACCENT_KEY = 'doubly.theme.accent';
 const isAccent = (v: unknown): v is AccentVariantId => v === 'green' || v === 'mint' || v === 'peach';

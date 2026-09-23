@@ -22,7 +22,7 @@ interface ThemeState {
   mode: ThemeMode;
   /** 실제로 적용 중인 스킴 (system 이면 기기 설정을 따라간 결과) */
   scheme: Scheme;
-  /** 액센트 변형 (실기기 비교용 임시 — colors.ts 참고) */
+  /** 액센트 변형 — 사용자 선택 (colors.ts 의 AccentVariant) */
   accent: AccentVariant;
   /** 테마가 바뀔 때마다 증가 — 화면 트리를 다시 그리는 키로 쓴다 */
   version: number;

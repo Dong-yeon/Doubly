@@ -20,6 +20,7 @@ import React from 'react';
 import { StyleSheet, Text, View, ViewStyle } from 'react-native';
 import Svg, { Defs, LinearGradient, Path, Polygon, Rect, Stop } from 'react-native-svg';
 import { colors, fontSize } from '../constants/theme';
+import { palette } from '../theme/colors';
 
 interface Props {
   size?: number;
@@ -88,12 +89,17 @@ const SPARKLES: { cx: number; cy: number; s: number }[] = [
   { cx: 62, cy: 20, s: 1.3 },
 ];
 
-/** 밝은 배경(흰/크림)용 색 — 인앱 마크 기본값 */
-const ON_LIGHT = { back: '#8FCB98', front: '#1F5A25', sparkle: '#D9A441' };
-/** 어두운 배경(다크모드, 사진 위 스크림)용 색 — 밝을수록 잘 읽힌다 */
-const ON_DARK = { back: '#BFE3C4', front: '#5FBE73', sparkle: '#FFF3C4' };
+/*
+ * 인앱 마크 색은 팔레트의 mark* 토큰을 따른다 — 사용자가 고른 액센트(민트·피치)에 맞춰
+ * 하트 색이 바뀌어야 홈 가운데 마크만 초록으로 남지 않는다. "어두운 배경 위"는 스킴이 아니라
+ * 밑에 깔린 것(사진 스크림)의 문제라, onDark 면 현재 스킴과 무관하게 다크 팔레트 값을 쓴다.
+ */
+const markColors = (onDark: boolean) => {
+  const p = palette(onDark ? 'dark' : 'light');
+  return { back: p.markBack, front: p.markFront, sparkle: p.markSparkle };
+};
 
-/** 아이콘 배경 그라데이션(초록, 좌상단 밝음 → 우하단 짙음) + 아이콘 전용 하트 색 */
+/** 아이콘 배경 그라데이션(초록, 좌상단 밝음 → 우하단 짙음) + 아이콘 전용 하트 색 — 앱 아이콘은 브랜드라 액센트를 따르지 않는다 */
 const ICON_GRADIENT = { from: '#4E9E56', to: '#143D19' };
 const ICON_HEART = { back: '#D7F0D6', front: '#0F3D16', sparkle: '#FFF3C4' };
 
@@ -137,12 +143,12 @@ export function DoublySquareMark({ size = 96, radius = 22 }: { size?: number; ra
  *   색으로 바꾼다
  */
 export function DoublyMark({ size = 40, onDark = false }: { size?: number; onDark?: boolean }) {
-  const palette = onDark ? ON_DARK : ON_LIGHT;
+  const mark = markColors(onDark);
   return (
     <Svg width={size} height={size} viewBox={`0 0 ${V} ${V}`}>
-      <Path d={BACK_D} fill="none" stroke={palette.back} strokeWidth={5} strokeLinejoin="round" strokeLinecap="round" />
-      <Path d={FRONT_D} fill="none" stroke={palette.front} strokeWidth={5} strokeLinejoin="round" strokeLinecap="round" />
-      <Sparkles color={palette.sparkle} />
+      <Path d={BACK_D} fill="none" stroke={mark.back} strokeWidth={5} strokeLinejoin="round" strokeLinecap="round" />
+      <Path d={FRONT_D} fill="none" stroke={mark.front} strokeWidth={5} strokeLinejoin="round" strokeLinecap="round" />
+      <Sparkles color={mark.sparkle} />
     </Svg>
   );
 }
