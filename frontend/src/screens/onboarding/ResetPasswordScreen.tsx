@@ -7,7 +7,6 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { OnboardingStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
-import { Card } from '../../components/Card';
 import { authApi } from '../../api/auth';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
@@ -71,14 +70,10 @@ export function ResetPasswordScreen({ navigation, route }: Props) {
     // 헤더가 상단 인셋을 처리하므로 top 을 빼서 이중 여백을 막는다
     <SafeAreaView style={styles.safe} edges={['bottom', 'left', 'right']}>
       <FormKeyboardView contentContainerStyle={styles.container}>
-          <View style={styles.hero}>
-            <Text style={styles.title}>새 비밀번호 설정</Text>
-            <Text style={styles.desc}>
-              메일로 받은 6자리 코드를 입력하고{'\n'}새 비밀번호를 정해주세요. 코드는 10분간 유효해요.
-            </Text>
-          </View>
+          {/* 제목은 헤더가 맡는다 — 본문은 설명부터, 왼쪽 정렬 */}
+          <Text style={styles.desc}>메일로 받은 6자리 코드를 입력하고 새 비밀번호를 정해주세요. 코드는 10분간 유효해요.</Text>
 
-          <Card elevation="md" style={styles.card}>
+          <View style={styles.form}>
             <TextField
               label="이메일"
               value={email}
@@ -126,7 +121,7 @@ export function ResetPasswordScreen({ navigation, route }: Props) {
               disabled={!canSubmit}
               style={styles.submitBtn}
             />
-          </Card>
+          </View>
 
           <View style={styles.footer}>
             <Button
@@ -151,24 +146,10 @@ export function ResetPasswordScreen({ navigation, route }: Props) {
 
 const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
-  flex: { flex: 1 },
   container: { flexGrow: 1, justifyContent: 'center', padding: spacing.lg },
-  hero: { alignItems: 'center', marginBottom: spacing.xl },
-  title: {
-    fontSize: fontSize.display,
-    fontWeight: '800',
-    color: colors.ink,
-    letterSpacing: -1,
-  },
-  desc: {
-    fontSize: fontSize.body,
-    color: colors.textSecondary,
-    marginTop: spacing.sm,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-  card: { gap: spacing.xs },
+  desc: { fontSize: fontSize.body, color: colors.textSecondary, lineHeight: 22, marginBottom: spacing.lg },
+  form: { gap: spacing.xs },
   codeInput: { letterSpacing: 8, fontSize: fontSize.title, fontWeight: '700' },
   submitBtn: { marginTop: spacing.sm },
-  footer: { alignItems: 'center', marginTop: spacing.lg, gap: spacing.xs },
+  footer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', marginTop: spacing.md },
 }));

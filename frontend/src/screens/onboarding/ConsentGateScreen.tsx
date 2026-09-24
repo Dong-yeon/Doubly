@@ -6,10 +6,9 @@
  * 띄워, 현재 버전 약관에 동의할 때까지 앱 진입을 막는다.
  */
 import React, { useState } from 'react';
-import { Modal, ScrollView, StyleSheet, Text } from 'react-native';
+import { Modal, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../components/Button';
-import { Card } from '../../components/Card';
 import { Checkbox } from '../../components/Checkbox';
 import { LegalDocumentScreen } from './LegalDocumentScreen';
 import { authApi } from '../../api/auth';
@@ -56,9 +55,9 @@ export function ConsentGateScreen() {
           계속 이용하려면 새 약관에 동의해주세요.
         </Text>
 
-        <Card elevation="md" style={styles.card}>
+        <View style={styles.form}>
           <Checkbox checked={allAgreed} onChange={toggleAll} label="전체 동의" emphasized />
-          <Text style={styles.divider} />
+          <View style={styles.divider} />
           <Checkbox
             checked={agreeTerms}
             onChange={setAgreeTerms}
@@ -88,7 +87,7 @@ export function ConsentGateScreen() {
             disabled={!allAgreed || loading}
             style={styles.submit}
           />
-        </Card>
+        </View>
 
         <Button title="로그아웃" variant="ghost" size="md" onPress={logout} />
       </ScrollView>
@@ -117,7 +116,7 @@ const styles = themedStyles((colors) => ({
     marginTop: spacing.xs,
     marginBottom: spacing.lg,
   },
-  card: { gap: spacing.xs, marginBottom: spacing.sm },
+  form: { gap: spacing.xs, marginBottom: spacing.sm },
   divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.xs },
   note: {
     fontSize: fontSize.caption,
