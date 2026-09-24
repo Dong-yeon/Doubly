@@ -12,6 +12,8 @@
 import React, { useRef, useState } from 'react';
 import {
   FlatList,
+  Image,
+  type ImageSourcePropType,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   Platform,
@@ -21,7 +23,6 @@ import {
 } from 'react-native';
 import { useContentWidth } from '../../hooks/useContentWidth';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MaterialCommunityIcons } from '../../components/Icon';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { OnboardingStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
@@ -31,8 +32,6 @@ import { colors, fontSize, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, 'Onboarding'>;
-
-type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 /**
  * 액센트는 <b>팔레트 키</b>로 들고 있다가 렌더 시점에 푼다.
@@ -45,7 +44,13 @@ type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 type AccentKey = 'me' | 'partner' | 'together' | 'primary';
 
 interface Slide {
-  icon: IconName;
+  /**
+   * 자체 캐릭터(assets/stickers, 달걀 커플 "duo") — 2026-09-24 에 140px 원 안의 Material 아이콘을
+   * 걷어냈다(docs/SCREEN_DESIGN_PASS_2026-09-23.md §8-3 1번). 아이콘 원은 LLM 이 온보딩을 만들면
+   * 반드시 나오는 모양이고, 이 앱은 캐릭터가 다섯 세트나 있는데 첫인상에서 안 쓰고 있었다.
+   * 화면 캡처와 달리 캐릭터는 탭 구조가 바뀌어도 낡지 않는다. 이미 번들에 있는 파일이라 OTA.
+   */
+  image: ImageSourcePropType;
   accent: AccentKey;
   title: string;
   desc: string;
@@ -66,25 +71,25 @@ interface Slide {
  */
 const SLIDES: Slide[] = [
   {
-    icon: 'camera-outline',
+    image: require('../../../assets/stickers/duo_idea.png'),
     accent: 'me',
     title: '사진 한 장이 기록이 돼요',
     desc: '식단은 AI가 칼로리를 채우고,\n운동은 오운완 한 장이면 끝.\n그 사진들은 둘의 앨범에 쌓여요.',
   },
   {
-    icon: 'emoticon-outline',
+    image: require('../../../assets/stickers/duo_heart_eyes.png'),
     accent: 'partner',
     title: '우리 얼굴로 만든 이모티콘',
     desc: '애인 사진으로 감정 이모지를 그려\n채팅에 보내고 오늘의 기분으로 걸어요.',
   },
   {
-    icon: 'gamepad-variant-outline',
+    image: require('../../../assets/stickers/duo_wink.png'),
     accent: 'together',
     title: '같이 놀고, 서로 응원해요',
     desc: '스도쿠·오목·캐치마인드를 같이 하고,\n서로의 기록에 반응하며 스트릭을 이어가요.',
   },
   {
-    icon: 'crown',
+    image: require('../../../assets/stickers/duo_drool.png'),
     accent: 'primary',
     title: '우리만의 맛집 가이드',
     desc: '둘이 함께 매긴 별점이 등급이 되고,\n가고 싶은 곳이 우리 지도에 쌓여요.',
@@ -208,9 +213,7 @@ export function OnboardingScreen({ navigation }: Props) {
         getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
         renderItem={({ item }) => (
           <View style={[styles.slide, { width, height: listHeight || undefined }]}>
-            <View style={[styles.iconCircle, { backgroundColor: colors[`${item.accent}Bg`] }]}>
-              <MaterialCommunityIcons name={item.icon} size={64} color={colors[item.accent]} />
-            </View>
+            <Image source={item.image} style={styles.picture} resizeMode="contain" />
             <Text style={styles.title}>{item.title}</Text>
             <Text style={styles.desc}>{item.desc}</Text>
           </View>
@@ -244,14 +247,7 @@ const styles = themedStyles((colors) => ({
   pressed: { opacity: 0.6 },
   list: { flex: 1 },
   slide: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl },
-  iconCircle: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.xl,
-  },
+  picture: { width: 180, height: 180, marginBottom: spacing.xl },
   title: {
     fontSize: fontSize.heading,
     fontWeight: '800',
