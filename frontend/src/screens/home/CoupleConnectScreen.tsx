@@ -1,6 +1,7 @@
 /** 커플 연결 — 설계서 3.2 REL-01/REL-02 (초대코드 생성 / 코드 입력 연결) */
 import React, { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
+import { MaterialCommunityIcons } from '../../components/Icon';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -33,9 +34,19 @@ function extractInviteCode(text: string): string {
   return match ? match[0] : upper.trim().slice(0, 6);
 }
 
+/*
+ * 세션 안에서 마지막으로 만든 코드 — 화면을 나갔다 들어와도 같은 코드를 보여준다. 예전엔 들어올
+ * 때마다 비어 있어 "새로 만들어야 하나?" 가 됐고, 만들 때마다 서버에 PENDING 관계 행이 하나씩
+ * 쌓인다(RelationService.createCoupleInvite). 진입 시 자동 생성은 그래서 하지 않았다 — 코드를
+ * <b>입력</b>하러 온 사람에게도 행이 생긴다. 서버가 "활성 초대 조회"를 주기 전까지는 명시적 생성.
+ */
+let lastInvite: { code: string; expiresAt: string } | null = null;
+
 export function CoupleConnectScreen({ navigation }: Props) {
   const { createInvite, connectCouple } = useRelationStore();
-  const [code, setCode] = useState<string | null>(null);
+  const [code, setCode] = useState<string | null>(() =>
+    lastInvite && new Date(lastInvite.expiresAt).getTime() > Date.now() ? lastInvite.code : null,
+  );
   const [generating, setGenerating] = useState(false);
 
   const [input, setInput] = useState('');
@@ -46,6 +57,7 @@ export function CoupleConnectScreen({ navigation }: Props) {
     setGenerating(true);
     try {
       const invite = await createInvite();
+      lastInvite = { code: invite.code, expiresAt: invite.expiresAt };
       setCode(invite.code);
     } catch (e) {
       Alert.alert('오류', getErrorMessage(e));
@@ -96,26 +108,30 @@ export function CoupleConnectScreen({ navigation }: Props) {
       <FormKeyboardView contentContainerStyle={styles.container}>
           {/* 초대코드 생성 */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>내 초대코드 만들기</Text>
-            <Text style={styles.desc}>코드를 상대방에게 공유하세요. (24시간 동안 유효)</Text>
+            <Text style={styles.sectionTitle}>내 초대코드</Text>
             {code ? (
               <>
                 <View style={styles.codeBox}>
                   <Text style={styles.code}>{code}</Text>
                 </View>
+                {/* 설명은 코드 아래 캡션 한 줄 — 예전엔 제목 아래 안내문 + 괄호 */}
+                <Text style={styles.codeCaption}>24시간 동안 유효 · 상대가 이 코드를 입력하면 연결돼요</Text>
                 <View style={styles.codeActions}>
                   <Button title="복사" variant="soft" size="md" onPress={onCopy} style={styles.actionBtn} />
-                  <Button title="공유" variant="soft" size="md" onPress={onShare} style={styles.actionBtn} />
+                  <Button
+                    title="공유"
+                    leftIcon={<MaterialCommunityIcons name="share-variant" size={18} color={colors.primary} />}
+                    variant="soft"
+                    size="md"
+                    onPress={onShare}
+                    style={styles.actionBtn}
+                  />
                 </View>
+                <Button title="새 코드 만들기" variant="ghost" size="md" onPress={onGenerate} loading={generating} />
               </>
-            ) : null}
-            <Button
-              title={code ? '새 코드 생성' : '초대코드 생성'}
-              variant="secondary"
-              onPress={onGenerate}
-              loading={generating}
-              style={styles.gap}
-            />
+            ) : (
+              <Button title="초대코드 만들기" onPress={onGenerate} loading={generating} style={styles.gap} />
+            )}
           </View>
 
           <View style={styles.divider} />
@@ -123,11 +139,10 @@ export function CoupleConnectScreen({ navigation }: Props) {
           {/* 코드 입력 연결 */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>상대방 코드 입력</Text>
-            <Text style={styles.desc}>받은 6자리 코드를 입력해 연결하세요.</Text>
             <TextField
               value={input}
               onChangeText={(t) => setInput(extractInviteCode(t))}
-              placeholder="예: ABC234"
+              placeholder="받은 6자리 코드"
               autoCapitalize="characters"
               errorText={error ?? undefined}
               style={styles.codeInput}
@@ -146,11 +161,10 @@ export function CoupleConnectScreen({ navigation }: Props) {
 
 const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
-  flex: { flex: 1 },
   container: { padding: spacing.lg },
   section: { marginBottom: spacing.lg },
-  sectionTitle: { fontSize: fontSize.subtitle, fontWeight: '700', color: colors.textPrimary },
-  desc: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xs, marginBottom: spacing.md },
+  sectionTitle: { fontSize: fontSize.subtitle, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.md },
+  codeCaption: { fontSize: fontSize.caption, color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.md },
   codeBox: {
     backgroundColor: colors.primarySoft,
     borderRadius: radius.lg,
@@ -158,10 +172,10 @@ const styles = themedStyles((colors) => ({
     alignItems: 'center',
     marginBottom: spacing.sm,
   },
-  code: { fontSize: 40, fontWeight: '800', color: colors.primaryDark, letterSpacing: 8 },
+  code: { fontSize: 40, fontWeight: '800', color: colors.textPrimary, letterSpacing: 8 },
   codeActions: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
   actionBtn: { flex: 1 },
-  gap: { marginTop: spacing.sm },
+  gap: { marginTop: 0 },
   divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
   codeInput: { letterSpacing: 4, fontWeight: '700' },
 }));

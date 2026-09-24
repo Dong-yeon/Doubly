@@ -20,7 +20,9 @@ import type { CompositeScreenProps } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList, MainTabParamList } from '../../navigation/types';
 import { Avatar } from '../../components/Avatar';
+import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
+import { SettingsGroup, SettingsRow } from '../../components/SettingsList';
 import { DateField } from '../../components/DateField';
 import { CoupleHero } from './components/CoupleHero';
 import { QuickActions } from './components/QuickActions';
@@ -68,6 +70,9 @@ import { isDarkMode } from '../../theme';
 import { onColor } from '../../theme/onColor';
 import { themedStyles } from '../../theme/themedStyles';
 import { layout } from '../../theme/layout';
+
+// 미연결 홈의 캐릭터 — 인트로(OnboardingScreen)와 같은 달걀 커플
+const CONNECT_PICTURE = require('../../../assets/stickers/duo_love.png');
 
 type Props = CompositeScreenProps<
   NativeStackScreenProps<HomeStackParamList, 'HomeMain'>,
@@ -868,46 +873,37 @@ export function HomeScreen({ navigation }: Props) {
              */
             <ScrollView contentContainerStyle={styles.disconnected} showsVerticalScrollIndicator={false}>
               <View style={styles.connectWrap}>
-                <MaterialCommunityIcons name="account-multiple-plus-outline" size={40} color={colors.primary} />
+                {/* 아이콘 40 이 아니라 캐릭터 — 인트로와 같은 달걀 커플(§8-3 5번) */}
+                <Image source={CONNECT_PICTURE} style={styles.connectPicture} resizeMode="contain" />
                 <Text style={styles.connectTitle}>커플을 연결해보세요</Text>
                 <Text style={styles.connectDesc}>초대코드로 연결하면 우리의 기록이 시작돼요.</Text>
-                <TouchableOpacity style={styles.connectBtn} onPress={() => navigation.navigate('CoupleConnect')}>
-                  <Text style={styles.connectBtnText}>커플 연결하기</Text>
-                </TouchableOpacity>
+                <Button title="커플 연결하기" onPress={() => navigation.navigate('CoupleConnect')} style={styles.connectBtn} />
               </View>
 
-              <Text style={styles.soloTitle}>연결을 기다리는 동안, 혼자서도 시작할 수 있어요</Text>
-              <Card elevation="sm" style={styles.soloCard}>
-                {/*
-                  initial: false — 럽슐랭 탭을 아직 안 연 세션에서 이 카드를 누르면 그 탭이
-                  PlaceAdd <b>하나</b>로 시작돼, 저장 후 goBack 할 곳도 가이드로 나갈 길도 없었다.
-                  아래에 PlaceMain 을 깔아둔다.
-                */}
-                {(
-                  [
-                    { icon: 'dumbbell', label: '운동 기록하기', desc: '오늘 운동을 남기면 스트릭이 시작돼요', go: () => navigation.navigate('Health', { screen: 'WorkoutRecord', params: { returnTo: 'Home' }, initial: false }) },
-                    { icon: 'silverware-fork-knife', label: '식단 기록하기', desc: '사진이나 글로 적으면 AI가 칼로리를 계산해요', go: () => navigation.navigate('Health', { screen: 'DietRecord', params: { returnTo: 'Home' }, initial: false }) },
-                    { icon: 'map-marker-plus-outline', label: '가고 싶은 장소 저장', desc: '맛집, 여행지, 전시… 둘이 함께 갈 곳을 미리 담아두세요', go: () => navigation.navigate('Place', { screen: 'PlaceAdd', params: { returnTo: 'Home' }, initial: false }) },
-                  ] as const
-                ).map((a, i, arr) => (
-                  <React.Fragment key={a.label}>
-                    <Pressable
-                      style={({ pressed }) => [styles.soloItem, pressed && styles.soloPressed]}
-                      onPress={a.go}
-                    >
-                      <View style={styles.soloIcon}>
-                        <MaterialCommunityIcons name={a.icon} size={22} color={colors.primary} />
-                      </View>
-                      <View style={styles.soloBody}>
-                        <Text style={styles.soloLabel}>{a.label}</Text>
-                        <Text style={styles.soloDesc}>{a.desc}</Text>
-                      </View>
-                      <MaterialCommunityIcons name="chevron-right" size={22} color={colors.textMuted} />
-                    </Pressable>
-                    {i < arr.length - 1 ? <View style={styles.soloDivider} /> : null}
-                  </React.Fragment>
-                ))}
-              </Card>
+              {/*
+                혼자 시작 — 설정과 같은 묶음 목록 문법. 예전엔 40px 회색 상자 아이콘 + 라벨 + 설명 문장
+                + 셰브론의 카드였다. 라벨 셋이 스스로 설명하므로 설명 줄은 뺐다.
+                initial: false — 럽슐랭 탭을 아직 안 연 세션에서 이 행을 누르면 그 탭이
+                PlaceAdd <b>하나</b>로 시작돼, 저장 후 goBack 할 곳도 가이드로 나갈 길도 없었다.
+                아래에 PlaceMain 을 깔아둔다.
+              */}
+              <SettingsGroup title="혼자서도 시작할 수 있어요" style={styles.soloGroup}>
+                <SettingsRow
+                  title="운동 기록하기"
+                  leading={<MaterialCommunityIcons name="dumbbell" size={22} color={colors.textSecondary} />}
+                  onPress={() => navigation.navigate('Health', { screen: 'WorkoutRecord', params: { returnTo: 'Home' }, initial: false })}
+                />
+                <SettingsRow
+                  title="식단 기록하기"
+                  leading={<MaterialCommunityIcons name="silverware-fork-knife" size={22} color={colors.textSecondary} />}
+                  onPress={() => navigation.navigate('Health', { screen: 'DietRecord', params: { returnTo: 'Home' }, initial: false })}
+                />
+                <SettingsRow
+                  title="가고 싶은 장소 저장"
+                  leading={<MaterialCommunityIcons name="map-marker-plus-outline" size={22} color={colors.textSecondary} />}
+                  onPress={() => navigation.navigate('Place', { screen: 'PlaceAdd', params: { returnTo: 'Home' }, initial: false })}
+                />
+              </SettingsGroup>
             </ScrollView>
           )}
         </SafeAreaView>
@@ -1029,43 +1025,11 @@ const styles = themedStyles((colors) => ({
 
   disconnected: { padding: spacing.lg },
   connectWrap: { alignItems: 'center', paddingVertical: spacing.lg },
+  connectPicture: { width: 140, height: 140 },
   connectTitle: { color: colors.textPrimary, fontSize: fontSize.title, fontWeight: '800', marginTop: spacing.sm },
   connectDesc: { color: colors.textSecondary, fontSize: fontSize.body, textAlign: 'center', marginTop: spacing.xs },
-  connectBtn: {
-    marginTop: spacing.md,
-    backgroundColor: colors.primaryFill,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.sm,
-    minHeight: 44, // 터치 타깃 — 텍스트+패딩만으론 36px
-    justifyContent: 'center',
-  },
-  // 버튼 배경이 primary(딥 포레스트)라 글자는 흰색 — white 위 10.61:1
-  connectBtnText: { color: onColor(colors.primaryFill), fontWeight: '800', fontSize: fontSize.body },
-
-  soloTitle: {
-    fontSize: fontSize.caption,
-    fontWeight: '700',
-    // 배경 사진 위에 놓이므로 테마색이 아니라 흰색 고정
-    color: colors.textSecondary,
-    marginTop: spacing.lg,
-    marginBottom: spacing.sm,
-  },
-  soloCard: { paddingVertical: spacing.xs, paddingHorizontal: spacing.md },
-  soloItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, minHeight: 44 },
-  soloPressed: { opacity: 0.6 },
-  soloIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.md,
-    backgroundColor: colors.primaryBg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  soloBody: { flex: 1 },
-  soloLabel: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
-  soloDesc: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
-  soloDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
+  connectBtn: { alignSelf: 'stretch', marginTop: spacing.md },
+  soloGroup: { marginTop: spacing.md },
 
   // spacing.lg 로 통일 — 앱의 다른 모달 8곳과 맞춘다
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: spacing.lg },

@@ -7,7 +7,6 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { OnboardingStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
-import { Card } from '../../components/Card';
 import { authApi } from '../../api/auth';
 import { getErrorMessage } from '../../utils/error';
 import { colors, fontSize, spacing } from '../../constants/theme';
@@ -42,14 +41,10 @@ export function ForgotPasswordScreen({ navigation }: Props) {
     // 헤더가 상단 인셋을 처리하므로 top 을 빼서 이중 여백을 막는다
     <SafeAreaView style={styles.safe} edges={['bottom', 'left', 'right']}>
       <FormKeyboardView contentContainerStyle={styles.container}>
-          <View style={styles.hero}>
-            <Text style={styles.title}>비밀번호 찾기</Text>
-            <Text style={styles.desc}>
-              가입한 이메일로 6자리 인증코드를 보내드려요.
-            </Text>
-          </View>
+          {/* 제목은 헤더("비밀번호 재설정")가 맡는다 — 본문은 설명 한 줄부터, 왼쪽 정렬 */}
+          <Text style={styles.desc}>가입한 이메일로 6자리 인증코드를 보내드려요.</Text>
 
-          <Card elevation="md" style={styles.card}>
+          <View style={styles.form}>
             <TextField
               label="이메일"
               value={email}
@@ -67,7 +62,7 @@ export function ForgotPasswordScreen({ navigation }: Props) {
               disabled={!canSubmit}
               style={styles.submitBtn}
             />
-          </Card>
+          </View>
 
           <View style={styles.footer}>
             <Button
@@ -90,23 +85,10 @@ export function ForgotPasswordScreen({ navigation }: Props) {
 
 const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
-  flex: { flex: 1 },
   container: { flexGrow: 1, justifyContent: 'center', padding: spacing.lg },
-  hero: { alignItems: 'center', marginBottom: spacing.xl },
-  title: {
-    fontSize: fontSize.display,
-    fontWeight: '800',
-    color: colors.ink,
-    letterSpacing: -1,
-  },
-  desc: {
-    fontSize: fontSize.body,
-    color: colors.textSecondary,
-    marginTop: spacing.sm,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-  card: { gap: spacing.xs },
+  desc: { fontSize: fontSize.body, color: colors.textSecondary, lineHeight: 22, marginBottom: spacing.lg },
+  form: { gap: spacing.xs },
   submitBtn: { marginTop: spacing.sm },
-  footer: { alignItems: 'center', marginTop: spacing.lg, gap: spacing.xs },
+  // 보조 동선 둘을 한 줄에 — 세로로 쌓인 고스트 버튼 둘이 화면 절반을 차지했다
+  footer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', marginTop: spacing.md },
 }));

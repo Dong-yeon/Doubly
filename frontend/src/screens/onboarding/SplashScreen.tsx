@@ -1,6 +1,6 @@
 /** 스플래시 — Doubly 로고 + 슬로건 '둘이라서, 두 배로' */
 import React, { useEffect, useRef } from 'react';
-import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { OnboardingStackParamList } from '../../navigation/types';
 import { DoublyMark } from '../../components/DoublyLogo';
@@ -49,9 +49,7 @@ export function SplashScreen({ navigation }: Props) {
       <Animated.View style={[styles.center, { opacity, transform: [{ scale }] }]}>
         <DoublyMark size={72} />
         <Text style={styles.brand}>Dubly</Text>
-        <View style={styles.sloganWrap}>
-          <Text style={styles.slogan}>둘이라서, 두 배로</Text>
-        </View>
+        <Text style={styles.slogan}>둘이라서, 두 배로</Text>
       </Animated.View>
     </View>
   );
@@ -61,7 +59,6 @@ const styles = themedStyles((colors) => ({
   container: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
   center: { alignItems: 'center' },
   brand: { fontSize: fontSize.display, fontWeight: '800', color: colors.ink, textAlign: 'center', marginTop: spacing.lg, letterSpacing: -1 },
-  sloganWrap: { marginTop: spacing.md, backgroundColor: colors.togetherPastelBg, borderRadius: 999, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
-  /* togetherPastelBg 는 텍스트와 짝지어 쓸 만큼 밝아 원색 violet 은 대비가 안 나온다 — ink 를 쓴다 */
-  slogan: { fontSize: fontSize.body, color: colors.ink, fontWeight: '700' },
+  // 알약을 벗겼다 — 마크·워드마크 아래에서 세 번째 도형이었다(§8-3 7번). 로그인 히어로와 같은 값
+  slogan: { fontSize: fontSize.subtitle, color: colors.textSecondary, marginTop: spacing.xs },
 }));

@@ -1,13 +1,12 @@
 /** 로그인 — 미니멀·발랄 톤. 설계서 2.1 / 3.1 (이메일 로그인) */
 import React, { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { FormKeyboardView } from '../../components/FormKeyboardView';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { OnboardingStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
-import { Card } from '../../components/Card';
 import { DoublyMark } from '../../components/DoublyLogo';
 import { GoogleLoginButton } from '../../components/GoogleLoginButton';
 import { useAuthStore } from '../../store/authStore';
@@ -48,7 +47,11 @@ export function LoginScreen({ navigation }: Props) {
             <Text style={styles.slogan}>둘이라서, 두 배로</Text>
           </View>
 
-          <Card elevation="md" style={styles.card}>
+          {/*
+            폼은 카드가 아니라 페이지 위에 놓인다 — 토스·카카오·당근의 로그인이 그렇다. 그림자 카드
+            다섯 화면(로그인·가입·비밀번호 둘·약관 게이트)을 같은 날 함께 걷어냈다(§8-3 2번).
+          */}
+          <View style={styles.form}>
             <TextField
               label="이메일"
               value={email}
@@ -80,17 +83,19 @@ export function LoginScreen({ navigation }: Props) {
                 <GoogleLoginButton onError={setError} />
               </>
             ) : null}
-            <Button
-              title="비밀번호를 잊으셨나요?"
-              variant="ghost"
-              size="md"
-              onPress={() => navigation.navigate('ForgotPassword')}
-            />
-          </Card>
+            {/* 보조 동선은 44px 고스트 버튼이 아니라 한 줄 링크 — 문장 하나에 버튼 한 줄을 주지 않는다 */}
+            <View style={styles.linkRow}>
+              <Pressable onPress={() => navigation.navigate('ForgotPassword')} hitSlop={8} accessibilityRole="link">
+                <Text style={styles.link}>비밀번호를 잊으셨나요?</Text>
+              </Pressable>
+            </View>
+          </View>
 
-          <View style={styles.signupRow}>
-            <Text style={styles.signupText}>아직 계정이 없나요?</Text>
-            <Button title="이메일로 회원가입" variant="ghost" size="md" onPress={() => navigation.navigate('Register')} />
+          <View style={styles.linkRow}>
+            <Text style={styles.linkLead}>아직 계정이 없나요?</Text>
+            <Pressable onPress={() => navigation.navigate('Register')} hitSlop={8} accessibilityRole="link">
+              <Text style={styles.link}>회원가입</Text>
+            </Pressable>
           </View>
       </FormKeyboardView>
     </SafeAreaView>
@@ -99,18 +104,18 @@ export function LoginScreen({ navigation }: Props) {
 
 const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
-  flex: { flex: 1 },
   dividerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginVertical: spacing.sm },
   dividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
   dividerText: { fontSize: fontSize.caption, color: colors.textSecondary },
   container: { flexGrow: 1, justifyContent: 'center', padding: spacing.lg },
   hero: { alignItems: 'center', marginBottom: spacing.xl },
-  logo: { fontSize: 56 },
   brand: { fontSize: fontSize.display, fontWeight: '800', color: colors.ink, marginTop: spacing.sm, letterSpacing: -1 },
   slogan: { fontSize: fontSize.subtitle, color: colors.textSecondary, marginTop: spacing.xs },
-  card: { gap: spacing.xs },
+  form: { gap: spacing.xs },
   formError: { color: colors.danger, fontSize: fontSize.caption, marginTop: -4 },
   loginBtn: { marginTop: spacing.sm },
-  signupRow: { alignItems: 'center', marginTop: spacing.lg, gap: spacing.xs },
-  signupText: { color: colors.textSecondary, fontSize: fontSize.body },
+  // 한 줄 링크 — 문장 + 링크. 링크는 primary 글자색, 44px 터치는 hitSlop 으로
+  linkRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: spacing.xs, minHeight: 44, marginTop: spacing.sm },
+  linkLead: { color: colors.textSecondary, fontSize: fontSize.body },
+  link: { color: colors.primary, fontSize: fontSize.body, fontWeight: '700' },
 }));
