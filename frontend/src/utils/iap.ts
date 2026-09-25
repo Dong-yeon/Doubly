@@ -37,7 +37,62 @@ import { planApi } from '../api/plan';
 import type { PlanInfo } from '../types';
 import { usePlanStore } from '../store/planStore';
 import { toast } from '../store/toastStore';
-import { PRO_BASE_PLAN_ID, PRO_SUBSCRIPTION_SKU } from '../constants/config';
+import { storage } from './storage';
+import { PRO_BASE_PLAN_ID, PRO_SUBSCRIPTION_SKU, STORAGE_KEYS } from '../constants/config';
+
+/**
+ * 어떤 경로로 이 구매를 처리하게 됐나 — 사용자에게 무엇을 말할지가 여기서 갈린다.
+ *  - launch:   앱 시작 시 {@code getAvailablePurchases()} 가 돌려준 것. 사용자는 아무것도 안 눌렀다
+ *  - purchase: 방금 결제창에서 성사된 것. 결과를 반드시 말해야 한다
+ *  - restore:  플랜 화면의 "구매 복원". 사용자가 결과를 기다리고 있다
+ */
+type Trigger = 'launch' | 'purchase' | 'restore';
+
+type Outcome = 'reflected' | 'pending' | 'error';
+
+/**
+ * 처리한 구매의 기록 — 키는 구매 식별자, 값은 'done'(서버 반영 확인) / 'warned'(미반영 안내함).
+ *
+ * <p><b>왜 필요한가(2026-09-25)</b>: {@code getAvailablePurchases()} 는 "아직 안 닫은 트랜잭션"이
+ * 아니라 <b>살아 있는 구독 전부</b>를 돌려준다(react-native-iap 문서: "non-consumables, active
+ * subscriptions, and any pending transactions"). 그래서 구독이 유효한 한 <b>앱을 켤 때마다</b>
+ * 같은 구매를 다시 검증하고 다시 닫으려 했고, 이미 닫힌 트랜잭션을 또 닫는 호출이 실패하면
+ * 아래 catch 가 매번 "반영이 늦어지고 있어요"를 띄웠다 — PRO 는 멀쩡한데 안내만 거짓말을
+ * 했다. 서버가 정말 반영하지 못한 경우에도 같은 문장이 매 실행마다 반복됐다.
+ *
+ * <p>기록은 최근 20건만 둔다. 갱신 거래는 iOS 에서 id 가 새로 나오므로 한 번 더 검증되고
+ * 그 뒤로는 기록에 남는다 — 그게 맞다(갱신도 서버가 한 번은 확인해야 한다).
+ */
+type Handled = Record<string, 'done' | 'warned'>;
+const HANDLED_MAX = 20;
+
+async function readHandled(): Promise<Handled> {
+  try {
+    const raw = await storage.getItem(STORAGE_KEYS.iapHandled);
+    return raw ? (JSON.parse(raw) as Handled) : {};
+  } catch {
+    return {};
+  }
+}
+
+async function markHandled(key: string, value: 'done' | 'warned'): Promise<void> {
+  try {
+    const handled = await readHandled();
+    handled[key] = value;
+    const keys = Object.keys(handled);
+    if (keys.length > HANDLED_MAX) {
+      keys.slice(0, keys.length - HANDLED_MAX).forEach((k) => delete handled[k]);
+    }
+    await storage.setItem(STORAGE_KEYS.iapHandled, JSON.stringify(handled));
+  } catch {
+    // 기록 실패는 다음 실행에서 한 번 더 검증하는 정도라 무시한다
+  }
+}
+
+/** 구매 식별자 — 안드로이드는 purchaseToken, iOS 는 거래 id. 검증에 보내는 값과 같다. */
+function keyOf(purchase: Purchase): string | null {
+  return Platform.OS === 'android' ? (purchase.purchaseToken ?? null) : (purchase.id ?? null);
+}
 
 let purchaseUpdateSub: EventSubscription | null = null;
 let purchaseErrorSub: EventSubscription | null = null;
@@ -54,11 +109,40 @@ export async function initIap(): Promise<void> {
     attachPurchaseListeners();
     const pending = await getAvailablePurchases();
     for (const purchase of pending ?? []) {
-      await verifyAndFinish(purchase);
+      await verifyAndFinish(purchase, 'launch');
     }
   } catch {
     // 스토어 연결 실패 — 구매 버튼을 누를 때 다시 시도된다
   }
+}
+
+/**
+ * 구매 복원 — 플랜 화면의 "구매 복원". 기기를 바꾸거나 다시 설치한 뒤, 또는 결제는 됐는데
+ * PRO 가 안 보일 때 사용자가 직접 누르는 재시도 경로다(애플 심사 3.1.1 이 눈에 보이는 복원
+ * 수단을 본다). 앱 시작 경로와 같은 검증을 타되, 결과를 <b>반드시</b> 말한다.
+ *
+ * @returns 반영된 구매가 하나라도 있으면 'reflected', 구매는 있는데 서버가 아직이면 'pending',
+ *          복원할 구매가 없으면 'none', 스토어 연결 자체가 안 되면 'error'
+ */
+export async function restorePurchases(): Promise<'reflected' | 'pending' | 'none' | 'error'> {
+  if (Platform.OS === 'web') return 'none';
+  let purchases: Purchase[];
+  try {
+    await initConnection();
+    attachPurchaseListeners();
+    purchases = (await getAvailablePurchases()) ?? [];
+  } catch {
+    return 'error';
+  }
+  if (purchases.length === 0) return 'none';
+  let result: 'reflected' | 'pending' | 'none' | 'error' = 'none';
+  for (const purchase of purchases) {
+    const outcome = await verifyAndFinish(purchase, 'restore');
+    if (outcome === 'reflected') result = 'reflected';
+    else if (outcome === 'pending' && result !== 'reflected') result = 'pending';
+    else if (outcome === 'error' && result === 'none') result = 'error';
+  }
+  return result;
 }
 
 export async function endIap(): Promise<void> {
@@ -77,7 +161,7 @@ export async function endIap(): Promise<void> {
 function attachPurchaseListeners(): void {
   if (purchaseUpdateSub) return; // 중복 등록 방지
   purchaseUpdateSub = purchaseUpdatedListener((purchase) => {
-    void verifyAndFinish(purchase);
+    void verifyAndFinish(purchase, 'purchase');
   });
   purchaseErrorSub = purchaseErrorListener((error) => {
     // 사용자가 결제창을 취소한 건 실패가 아니다 — 조용히 넘어간다
@@ -158,8 +242,32 @@ export async function requestProPurchase(userId: number): Promise<void> {
   });
 }
 
-/** 서버에 구매를 검증시키고, 반영된 뒤에만 스토어 트랜잭션을 닫는다. */
-async function verifyAndFinish(purchase: Purchase): Promise<void> {
+/**
+ * 서버에 구매를 검증시키고, 반영된 뒤에만 스토어 트랜잭션을 닫는다.
+ *
+ * <p>실패를 셋으로 나눈다 — 예전엔 catch 하나가 전부 "반영이 늦어지고 있어요"였다.
+ *  - 서버 응답이 PRO 가 아님(pending): 결제는 스토어에서 됐는데 우리 쪽이 아직이다.
+ *    트랜잭션을 닫지 않아 다음 실행에서 다시 온다. <b>같은 구매는 한 번만</b> 알린다 —
+ *    매 실행마다 같은 문장이 뜨면 앱이 고장 난 것으로 읽힌다. 방금 결제한 경우와 "구매 복원"은
+ *    사용자가 결과를 기다리므로 항상 말한다
+ *  - 검증 요청 실패(error): 네트워크·401(로그아웃 상태)·서버 장애. 앱 시작 경로에서는
+ *    조용히 넘기고 다음 실행에 맡긴다
+ *  - 반영됨(reflected): 닫는 호출이 실패해도(이미 닫힌 트랜잭션) 반영은 된 것이다 — 기록하고 끝
+ */
+async function verifyAndFinish(purchase: Purchase, trigger: Trigger): Promise<Outcome> {
+  const key = keyOf(purchase);
+  const handled = key ? await readHandled() : {};
+
+  if (trigger === 'launch' && key) {
+    // 이미 반영을 확인한 구매 — 살아 있는 구독은 매 실행마다 다시 오므로 여기서 걸러야 한다
+    if (handled[key] === 'done') return 'reflected';
+    // 안드로이드는 스토어가 "닫혔다(acknowledge)"를 알려준다 — 이 수정 전에 닫은 구매도 걸러진다
+    if ('isAcknowledgedAndroid' in purchase && purchase.isAcknowledgedAndroid) {
+      await markHandled(key, 'done');
+      return 'reflected';
+    }
+  }
+
   /*
    * 스토어마다 서버에 보내는 것이 다르다.
    *  - 안드로이드: purchaseToken (Play Developer API 의 키)
@@ -170,41 +278,54 @@ async function verifyAndFinish(purchase: Purchase): Promise<void> {
   const verify = async (): Promise<PlanInfo> => {
     if (Platform.OS === 'android') {
       const token = purchase.purchaseToken;
-      if (!token) return Promise.reject(new Error('purchaseToken 없음'));
+      if (!token) throw new Error('purchaseToken 없음');
       return planApi.verifyGooglePurchase(token);
     }
     // StoreKit 의 거래 id. 갱신 거래여도 애플이 같은 구독의 최신 상태를 돌려준다.
-    if (!purchase.id) return Promise.reject(new Error('transactionId 없음'));
+    if (!purchase.id) throw new Error('transactionId 없음');
     return planApi.verifyApplePurchase(purchase.id);
   };
 
+  let info: PlanInfo;
   try {
-    const info = await verify();
-    /*
-     * <b>200 은 "반영됐다"가 아니다.</b> 서버는 스토어 조회에 실패해도(키 미설정·일시적
-     * 장애·귀속 불일치) 예외를 던지지 않고 <b>지금 플랜</b>을 그대로 돌려준다 — 애플·구글이
-     * 웹훅을 재전송하므로 서버 입장에서는 그게 맞는 처리다. 대신 여기서 확인하지 않으면
-     * 돈만 빠져나간 채 "PRO가 시작됐어요!" 가 뜨고, 트랜잭션까지 닫혀 재시도 경로마저
-     * 사라진다. 응답에 담겨 온 플랜으로 실제 반영 여부를 판정한다.
-     */
-    // throw 여야 아래 catch 가 받는다 — Promise.reject 를 return 하면 이 함수가 그대로
-    // 거부된 프로미스를 돌려주고, 안내 토스트 없이 처리되지 않은 거부로 샌다.
-    if (info.plan !== 'PRO') {
-      throw new Error('결제가 아직 반영되지 않음');
-    }
-    await finishTransaction({ purchase, isConsumable: false });
-    await usePlanStore.getState().load();
-    toast.success('PRO가 시작됐어요!');
+    info = await verify();
   } catch {
-    /*
-     * 결제는 스토어에서 성사됐는데 우리 쪽 반영이 실패했다(네트워크·서버 문제).
-     * 트랜잭션을 닫지 않으므로 다음 앱 실행에서 initIap 의 getAvailablePurchases 가
-     * 다시 처리한다 — 대개 자가 복구된다.
-     *
-     * <b>그래도 말은 해야 한다.</b> 돈이 빠져나간 직후인데 화면에 아무 일도 안 일어나면
-     * 사용자는 결제가 실패한 줄 알고 한 번 더 누른다. 실패했다고 단정하지도 않는다 —
-     * 실제로는 성사됐고 반영만 늦은 상태다.
-     */
-    toast.info('결제는 확인했어요. 반영이 조금 늦어지고 있어요 — 앱을 다시 열면 이어집니다.');
+    if (trigger !== 'launch') {
+      toast.error('구매를 확인하지 못했어요. 네트워크를 확인하고 다시 시도해주세요.');
+    }
+    return 'error';
   }
+
+  /*
+   * <b>200 은 "반영됐다"가 아니다.</b> 서버는 스토어 조회에 실패해도(키 미설정·일시적
+   * 장애·귀속 불일치) 예외를 던지지 않고 <b>지금 플랜</b>을 그대로 돌려준다 — 애플·구글이
+   * 웹훅을 재전송하므로 서버 입장에서는 그게 맞는 처리다. 대신 여기서 확인하지 않으면
+   * 돈만 빠져나간 채 "PRO가 시작됐어요!" 가 뜨고, 트랜잭션까지 닫혀 재시도 경로마저
+   * 사라진다. 응답에 담겨 온 플랜으로 실제 반영 여부를 판정한다.
+   */
+  if (info.plan !== 'PRO') {
+    const warnedBefore = key ? handled[key] === 'warned' : false;
+    if (trigger !== 'launch' || !warnedBefore) {
+      toast.info('결제는 확인했어요. 반영이 조금 늦어지고 있어요 — 앱을 다시 열면 이어집니다.');
+      if (key) await markHandled(key, 'warned');
+    }
+    return 'pending';
+  }
+
+  /*
+   * 반영됐다. 트랜잭션을 닫는다 — 안드로이드는 3일 안에 닫지 않으면 자동 환불된다.
+   * 닫는 호출이 실패하는 건 대개 이미 닫힌 트랜잭션이라 반영과는 무관하다 — 기록은 남긴다.
+   */
+  try {
+    await finishTransaction({ purchase, isConsumable: false });
+  } catch {
+    // 이미 닫혔거나 스토어가 잠시 응답하지 않음 — 반영은 서버가 이미 확인했다
+  }
+  const firstTime = !key || handled[key] !== 'done';
+  if (key) await markHandled(key, 'done');
+  await usePlanStore.getState().load();
+  if (trigger === 'purchase' || (trigger === 'launch' && firstTime)) {
+    toast.success('PRO가 시작됐어요!');
+  }
+  return 'reflected';
 }

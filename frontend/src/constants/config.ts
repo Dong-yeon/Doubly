@@ -32,6 +32,8 @@ export const STORAGE_KEYS = {
   onboardingSeen: 'doubly.onboardingSeen',
   // 푸시 권한 사전 설명을 한 번 보여준 뒤로는 다시 묻지 않기 위한 플래그
   pushPrimed: 'doubly.pushPrimed',
+  // 처리한 스토어 구매(반영 완료 / 미반영 안내 완료) — utils/iap 가 매 실행마다 같은 구매를 다시 알리지 않게
+  iapHandled: 'doubly.iapHandled',
 } as const;
 
 /**

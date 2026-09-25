@@ -24,3 +24,7 @@ export async function endIap(): Promise<void> {
 export async function requestProPurchase(_userId: number): Promise<void> {
   throw new Error('웹에서는 인앱결제를 지원하지 않아요.');
 }
+
+export async function restorePurchases(): Promise<'reflected' | 'pending' | 'none' | 'error'> {
+  return 'none';
+}
