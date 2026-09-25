@@ -89,6 +89,7 @@ npm run lint                               # expo lint (+ 로컬 규칙 doubly-a
 npm run verify:spellcheck                  # 한국어 맞춤법 규칙 검증 — 규칙/사전 수정 시 필수
 npm run verify:nested-buttons              # 버튼 안 버튼 검사 (웹에서만 드러나는 마크업 오류)
 npm run verify:chat-theme                  # 채팅 배경 테마 WCAG 대비 검증 — theme/chatTheme.ts 수정 시
+npm run verify:theme                       # 앱 팔레트 WCAG 대비 검증(라이트/다크 × 액센트 3종) — theme/colors.ts 수정 시
 npm run verify:linkify                     # 링크 분리 검증 — utils/linkify.ts 수정 시
 npm run verify:puyo                        # 연쇄 퍼즐 엔진 검증 — games/puyo 규칙 수정 시
 npm run verify:sticker-codes               # 스티커 텍스트 코드·키워드 추천 검증 — utils/stickerCodes.ts 수정 시
