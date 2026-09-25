@@ -26,7 +26,7 @@ import { MaterialCommunityIcons } from '../../components/Icon';
 import { planApi } from '../../api/plan';
 import { usePlanStore } from '../../store/planStore';
 import { useAuthStore } from '../../store/authStore';
-import { fetchProSubscription, requestProPurchase } from '../../utils/iap';
+import { fetchProSubscription, requestProPurchase, restorePurchases } from '../../utils/iap';
 import { toast } from '../../store/toastStore';
 import { getErrorMessage } from '../../utils/error';
 import { PRO_SUBSCRIPTION_SKU, PURCHASE_ENABLED } from '../../constants/config';
@@ -161,6 +161,7 @@ export function PlanScreen({ navigation }: Props) {
   const [catalog, setCatalog] = useState<PlanCatalogEntry[] | null>(null);
   const [price, setPrice] = useState<string | null>(null);
   const [purchasing, setPurchasing] = useState(false);
+  const [restoring, setRestoring] = useState(false);
 
   useEffect(() => {
     planApi
@@ -189,6 +190,23 @@ export function PlanScreen({ navigation }: Props) {
       setPurchasing(false);
     }
   }, [userId, purchasing]);
+
+  /*
+   * 구매 복원 — 기기 교체·재설치 뒤, 또는 "결제는 됐는데 PRO 가 안 보여요"의 수동 재시도.
+   * 앱 시작 때도 같은 검증이 돌지만 그쪽은 조용하다 — 여기서는 결과를 말한다.
+   */
+  const onRestore = useCallback(async () => {
+    if (restoring) return;
+    setRestoring(true);
+    try {
+      const result = await restorePurchases();
+      if (result === 'none') toast.info('이 스토어 계정에 복원할 구매가 없어요.');
+      else if (result === 'error') toast.error('스토어에 연결하지 못했어요. 잠시 후 다시 시도해주세요.');
+      // reflected / pending 은 검증 흐름이 이미 말했다
+    } finally {
+      setRestoring(false);
+    }
+  }, [restoring]);
 
   const isPro = plan === 'PRO';
   /*
@@ -357,6 +375,19 @@ export function PlanScreen({ navigation }: Props) {
                   <Text style={styles.termsLink}>구독 관리</Text>
                 </Pressable>
                 <Text style={styles.termsDot}>·</Text>
+                <Pressable
+                  onPress={() => void onRestore()}
+                  disabled={restoring}
+                  hitSlop={8}
+                  accessibilityRole="link"
+                  accessibilityLabel="스토어 구매 복원"
+                  accessibilityState={{ busy: restoring }}
+                >
+                  <Text style={[styles.termsLink, restoring && styles.termsLinkBusy]}>
+                    {restoring ? '복원 중…' : '구매 복원'}
+                  </Text>
+                </Pressable>
+                <Text style={styles.termsDot}>·</Text>
               </>
             )}
             <Pressable
@@ -445,5 +476,6 @@ const styles = themedStyles((colors) => ({
   termsStrong: { fontWeight: '700', color: colors.textSecondary },
   termsLinks: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.xxs },
   termsLink: { fontSize: fontSize.caption, fontWeight: '700', color: colors.primary, textDecorationLine: 'underline' },
+  termsLinkBusy: { opacity: 0.5 },
   termsDot: { fontSize: fontSize.caption, color: colors.textSecondary },
 }));
