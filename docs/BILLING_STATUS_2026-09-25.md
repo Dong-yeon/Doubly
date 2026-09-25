@@ -114,3 +114,34 @@
 **자동 환불**된다.
 
 **미검증**: 실기기. 웹은 스텁이라 영향 없음.
+
+## 7. 9/25 오후 — 결제 모델 손질 네 가지 (1·2·4 코드 완료, 3 은 콘솔)
+
+| # | 항목 | 한 것 | 남은 것(콘솔·운영) |
+| --- | --- | --- | --- |
+| 1 | **이모지 세트를 정액 밖에서 판다** | 기능 크레딧(`feature_credits`, V106) — 스토어 소모성 상품 `emoji_set_1` 하나가 우리 이모지 세트 1회를 더한다. 판정은 `PlanGuard.consumeOrCredit`(플랜 한도 → 넘치면 크레딧, FREE 라 막혀도 크레딧이 있으면 열림), 표시는 `FeatureState.credits`(잔여 횟수에 합산). 검증은 스티커와 같은 원칙(스토어에 되묻고 귀속·상품 대조, 거래 id UNIQUE 로 멱등). 만들기 화면에 "세트 1개 추가 · 가격" 버튼(스토어에 상품이 있을 때만) | 양쪽 콘솔에 `emoji_set_1` 등록(1,900원 권장) — `GOOGLE_PLAY_BILLING` §1-3 · `APP_STORE_BILLING` §2-2 |
+| 2 | **연간 + 스토어 7일 무료 체험** | 앱이 `pro_yearly`(기본 요금제 `yearly`)를 알고, 스토어에 있을 때만 플랜 화면에 "월간 / 연간" 선택과 절약률(두 가격이 숫자로 올 때만)을 그린다. 고지 문구의 주기도 따라간다 | `pro_yearly` 등록(39,000원 권장) + 월간·연간에 **도입 혜택 7일 무료** — 앱 코드 변경 없음. `GOOGLE_PLAY_BILLING` §1-2 · `APP_STORE_BILLING` §2-1 |
+| 3 | **Small Business Program** | — (콘솔 전용) | ASC → 계약/세금/금융 → Small Business Program 신청. 승인 전 iOS 실수령은 3,430원(30%) |
+| 4 | **결제 퍼널 이벤트** | 프론트: `PAYWALL_VIEWED`(detail: `plan_screen` / `sheet_upgrade` / `sheet_limit`), `PURCHASE_STARTED`(monthly / yearly / emoji_set_1), `PURCHASE_CANCELLED`, `PURCHASE_FAILED`(스토어 오류 코드). 서버: 구독이 처음 생기는 자리에서 `SUBSCRIPTION_STARTED`(스토어), 크레딧 지급에서 `CREDIT_PURCHASED`(상품). `event_logs.detail` 이 50자라 그 안에서 | 운영 DB 에 아래 쿼리 |
+
+```sql
+-- 결제 퍼널(최근 30일) — 막힌 사람 → 페이월 본 사람 → 결제창 연 사람 → 구독 생긴 사람
+SELECT event_type, count(*) AS n, count(DISTINCT user_id) AS users
+  FROM event_logs
+ WHERE created_at >= now() - interval '30 days'
+   AND event_type IN ('FEATURE_BLOCKED','PAYWALL_VIEWED','PURCHASE_STARTED',
+                      'PURCHASE_CANCELLED','PURCHASE_FAILED','SUBSCRIPTION_STARTED','CREDIT_PURCHASED')
+ GROUP BY 1 ORDER BY 1;
+```
+
+**1번에서 바꾼 전제**: 이전 답에서 "PRO 월 5세트 = 약 3.4 USD 라 적자"라고 했는데, 그 숫자는 9/8 시점
+(세트 = 감정 17종)이다. 9/11 에 한 요청이 5장으로 제한되면서 지금 PRO 상한은 **월 4회 × 5장 = 20장 ≈
+0.8 USD** 다(`Feature.java` 주석). 적자는 아니다. 그래서 **PRO 한도는 4회 그대로 두고** 그 위에 세트 구매를
+얹었다 — 정액과 변동원가를 분리하는 구조는 그대로 맞고, 한도를 내릴 이유는 없어졌다. FREE 에게는 이게
+구독 없는 첫 구매(체험 구매)다.
+
+**설계 판단 둘**: (a) 크레딧 표는 이모지 전용이 아니라 `feature` 컬럼을 둔 범용 표다 — 다음에 "회수 추가"를
+팔 기능이 생기면 `CreditProduct` 에 한 줄이면 된다. (b) 크레딧은 관계가 아니라 **사용자**에 붙는다 —
+구독과 같은 이유(헤어져도 산 것은 남는다). 커플 기능이라 상대가 만든 세트도 둘이 같이 쓴다.
+
+**검증**: 프론트 typecheck·린트·버튼 중첩·웹 export 통과. 백엔드는 §8.
