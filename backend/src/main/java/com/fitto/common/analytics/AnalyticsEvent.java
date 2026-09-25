@@ -28,4 +28,19 @@ public final class AnalyticsEvent {
     public static final String FEATURE_USED = "FEATURE_USED";
     /** PlanGuard 게이팅에 막힘(업그레이드 유도) — detail 에 Feature.name(). */
     public static final String FEATURE_BLOCKED = "FEATURE_BLOCKED";
+
+    /* ── 결제 퍼널(2026-09-25) — FEATURE_BLOCKED 와 짝을 이뤄 "막힌 사람 중 몇이 샀는가"를 센다.
+     * 앞 셋은 프론트가 보낸다(ClientAnalyticsEvent). 뒤 둘은 서버가 결제를 확인한 지점에서 남긴다. */
+    /** 페이월을 봤다 — detail 에 어디서(upgrade_sheet / plan_screen). */
+    public static final String PAYWALL_VIEWED = "PAYWALL_VIEWED";
+    /** 결제창을 열었다 — detail 에 상품(monthly / yearly / emoji_set_1). */
+    public static final String PURCHASE_STARTED = "PURCHASE_STARTED";
+    /** 결제창을 닫았다(사용자 취소). */
+    public static final String PURCHASE_CANCELLED = "PURCHASE_CANCELLED";
+    /** 스토어가 결제 실패를 돌려줬다 — detail 에 스토어 오류 코드. */
+    public static final String PURCHASE_FAILED = "PURCHASE_FAILED";
+    /** 구독이 새로 생겼다(검증·웹훅 경로 공통) — detail 에 스토어. */
+    public static final String SUBSCRIPTION_STARTED = "SUBSCRIPTION_STARTED";
+    /** 크레딧 상품을 샀다 — detail 에 상품 id. */
+    public static final String CREDIT_PURCHASED = "CREDIT_PURCHASED";
 }

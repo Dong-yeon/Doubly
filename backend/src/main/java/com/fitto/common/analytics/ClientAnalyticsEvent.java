@@ -10,5 +10,10 @@ package com.fitto.common.analytics;
  */
 public enum ClientAnalyticsEvent {
     /** 홈 화면 진입 — README "최소한의 이벤트 로깅(기록 버튼 클릭·홈 진입 등)"의 그 예시. */
-    HOME_VIEWED;
+    HOME_VIEWED,
+    /** 결제 퍼널 — 페이월 노출·결제창 열림·취소·실패. 서버는 이 지점을 모른다(스토어 이벤트). */
+    PAYWALL_VIEWED,
+    PURCHASE_STARTED,
+    PURCHASE_CANCELLED,
+    PURCHASE_FAILED;
 }

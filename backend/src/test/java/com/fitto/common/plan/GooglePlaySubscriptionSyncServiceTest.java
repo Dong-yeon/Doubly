@@ -29,12 +29,14 @@ class GooglePlaySubscriptionSyncServiceTest {
     GooglePlayDeveloperApiClient apiClient;
     @Mock
     SubscriptionRepository subscriptionRepository;
+    @Mock
+    com.fitto.common.analytics.EventLogService eventLogService;
 
     GooglePlaySubscriptionSyncService service;
 
     @BeforeEach
     void setUp() {
-        service = new GooglePlaySubscriptionSyncService(apiClient, subscriptionRepository);
+        service = new GooglePlaySubscriptionSyncService(apiClient, subscriptionRepository, eventLogService);
     }
 
     @Test
