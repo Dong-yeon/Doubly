@@ -136,7 +136,7 @@ class CoupleEmojiFlowTest {
                 service.prepare(userId, new GenerateCoupleEmojiRequest(SOURCE_URL, subjectId, WITHIN_LIMIT));
         return service.generate(new CoupleEmojiService.GenerationTicket(
                 accepted.relationId(), accepted.userId(), accepted.subjectUserId(),
-                accepted.sourceImageUrl(), List.of(CoupleEmojiEmotion.values())));
+                accepted.sourceImageUrl(), List.of(CoupleEmojiEmotion.values()), accepted.charge()));
     }
 
     /**

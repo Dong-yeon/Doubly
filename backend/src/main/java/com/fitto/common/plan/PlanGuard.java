@@ -36,12 +36,21 @@ public class PlanGuard {
     private final PlanResolver planResolver;
     private final UsageCounter usageCounter;
     private final EventLogService eventLogService;
+    private final FeatureCreditService creditService;
 
-    public PlanGuard(PlanResolver planResolver, UsageCounter usageCounter, EventLogService eventLogService) {
+    public PlanGuard(PlanResolver planResolver, UsageCounter usageCounter, EventLogService eventLogService,
+                     FeatureCreditService creditService) {
         this.planResolver = planResolver;
         this.usageCounter = usageCounter;
         this.eventLogService = eventLogService;
+        this.creditService = creditService;
     }
+
+    /**
+     * {@link #consumeOrCredit} 가 무엇에서 차감했나 — 되돌릴 때 같은 곳에서 되돌리기 위해.
+     * {@code NONE} 은 무제한·비계수 기능이라 센 적이 없다는 뜻이다.
+     */
+    public enum Charge { QUOTA, CREDIT, NONE }
 
     /**
      * 이 기능의 사용량을 <b>어느 주머니에서</b> 셀지 — 사람인가 커플인가.
@@ -131,6 +140,55 @@ public class PlanGuard {
     }
 
     /**
+     * {@link #consume} 와 같되, 플랜 한도에 막히면 <b>산 크레딧</b>({@link FeatureCredit})에서 한 회를 쓴다.
+     *
+     * <p>정액 구독 밖에서 "한 세트 더"를 파는 기능(우리 이모지)이 쓴다. FREE 라 막힌 사람도
+     * 크레딧이 있으면 열린다 — 구독 없이 세트 하나를 사 보는 "체험 구매"가 이 경로다.
+     * 크레딧도 없으면 {@link #consume} 와 같은 402/429 를 던진다.
+     *
+     * @return 어디서 차감했나 — 되돌릴 때 {@link #refund(Long, Feature, Charge)} 에 그대로 넘긴다
+     */
+    public Charge consumeOrCredit(Long userId, Feature feature) {
+        Plan plan = planResolver.resolveFor(userId, feature);
+        Quota quota = feature.quotaFor(plan);
+        if (quota.isBlocked()) {
+            if (creditService.consumeOne(userId, feature)) {
+                logUsed(userId, feature);
+                return Charge.CREDIT;
+            }
+            logBlocked(userId, feature);
+            throw upgradeRequired(feature);
+        }
+        if (quota.isUnlimited() || !quota.isCounted()) {
+            logUsed(userId, feature);
+            return Charge.NONE;
+        }
+        UsageScope scope = scopeOf(userId, feature);
+        int used = incrementUsage(scope, feature, quota);
+        if (used <= quota.limit()) {
+            logUsed(userId, feature);
+            return Charge.QUOTA;
+        }
+        // 한도 초과 — 방금 올린 1을 도로 내리고 크레딧을 본다(카운터를 한도 위로 남기지 않는다)
+        decrementUsage(scope, feature, quota);
+        if (creditService.consumeOne(userId, feature)) {
+            logUsed(userId, feature);
+            return Charge.CREDIT;
+        }
+        logBlocked(userId, feature);
+        throw limitExceeded(feature, plan, quota);
+    }
+
+    /** {@link #consumeOrCredit} 의 되돌리기 — 차감한 곳에서 되돌린다. */
+    public void refund(Long userId, Feature feature, Charge charge) {
+        switch (charge) {
+            case QUOTA -> refund(userId, feature);
+            case CREDIT -> creditService.refundOne(userId, feature);
+            case NONE -> { }
+        }
+    }
+
+    /**
      * {@link #consume} 로 차감한 1회를 되돌린다 — <b>선차감이 부당해지는 경우에만</b> 쓴다.
      *
      * <p>위 {@code consume} 주석대로 기본은 선차감이고, 그 근거는 "실패해도 외부 쿼터는 이미
@@ -149,7 +207,10 @@ public class PlanGuard {
             return; // 애초에 센 적이 없다
         }
         // 올린 주머니에서 깎는다 — consume 과 같은 scopeOf 를 쓴다(다르면 한도가 안 줄어든다)
-        UsageScope scope = scopeOf(userId, feature);
+        decrementUsage(scopeOf(userId, feature), feature, quota);
+    }
+
+    private void decrementUsage(UsageScope scope, Feature feature, Quota quota) {
         if (scope.relationId() != null) {
             usageCounter.decrementForRelation(scope.relationId(), feature, quota);
         } else {
@@ -200,12 +261,15 @@ public class PlanGuard {
         Plan plan = planResolver.resolveFor(userId, feature);
         Quota quota = feature.quotaFor(plan);
         if (quota.isBlocked()) {
-            return false;
+            return feature.sellsCredits() && creditService.remaining(userId, feature) > 0;
         }
         if (!quota.isCounted()) {
             return true;
         }
-        return peekUsage(scopeOf(userId, feature), feature, quota) < quota.limit();
+        if (peekUsage(scopeOf(userId, feature), feature, quota) < quota.limit()) {
+            return true;
+        }
+        return feature.sellsCredits() && creditService.remaining(userId, feature) > 0;
     }
 
     /** 표시용 — 앱의 잔여 횟수·잠금 배지에 쓴다. */
@@ -218,11 +282,21 @@ public class PlanGuard {
         Integer remaining = quota.isUnlimited() || quota.isBlocked() || !quota.isCounted()
                 ? null
                 : Math.max(0, quota.limit() - used);
+        /*
+         * 산 크레딧은 플랜 한도 위에 얹힌다 — 잠금 표시·잔여 횟수가 같은 값을 봐야 "살 수 있다고
+         * 해서 샀는데 여전히 잠겨 있다"가 안 생긴다. 판정({@link #consumeOrCredit})과 같은 규칙.
+         */
+        int credits = feature.sellsCredits() ? creditService.remaining(userId, feature) : 0;
+        if (credits > 0) {
+            allowed = allowed || quota.isBlocked() || (quota.isCounted() && used >= quota.limit());
+            remaining = (remaining == null ? 0 : remaining) + credits;
+        }
         return new FeatureState(
                 feature.name(), feature.displayName(), allowed,
                 quota.limit(), used, remaining, quota.window().name(),
                 // limitExceeded 와 같은 근거 — 최상위 플랜이면 팔 것이 없다.
-                !plan.isAtLeast(Plan.PRO));
+                !plan.isAtLeast(Plan.PRO),
+                credits);
     }
 
     public Plan planOf(Long userId) {

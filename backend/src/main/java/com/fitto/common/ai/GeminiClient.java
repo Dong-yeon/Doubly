@@ -203,10 +203,21 @@ public class GeminiClient {
         if (!properties.isImageConfigured()) {
             throw new BusinessException(ErrorCode.AI_NOT_CONFIGURED);
         }
-        countUsage(userId, feature);
+        countUsage(userId, feature, false);
     }
 
-    private void countUsage(Long userId, Feature feature) {
+    /**
+     * {@link #requireImageConfiguredAndCountUsage} 와 같되 플랜 한도에 막히면 산 크레딧을 쓴다
+     * ({@link PlanGuard#consumeOrCredit}). 되돌릴 때는 {@link #refund(Long, Feature, PlanGuard.Charge)}.
+     */
+    public PlanGuard.Charge requireImageConfiguredAndCharge(Long userId, Feature feature) {
+        if (!properties.isImageConfigured()) {
+            throw new BusinessException(ErrorCode.AI_NOT_CONFIGURED);
+        }
+        return countUsage(userId, feature, true);
+    }
+
+    private PlanGuard.Charge countUsage(Long userId, Feature feature, boolean allowCredit) {
         Quota serviceWide = Quota.perDay(properties.getDailyLimitTotal());
         if (usageCounter.peekGlobal(Feature.AI_TOTAL, serviceWide) >= serviceWide.limit()) {
             log.warn("AI 서비스 전체 일일 한도 도달 — limit={}", serviceWide.limit());
@@ -218,12 +229,19 @@ public class GeminiClient {
             throw new BusinessException(ErrorCode.AI_DAILY_LIMIT_EXCEEDED);
         }
 
-        planGuard.consume(userId, feature);
+        PlanGuard.Charge charge;
+        if (allowCredit) {
+            charge = planGuard.consumeOrCredit(userId, feature);
+        } else {
+            planGuard.consume(userId, feature);
+            charge = PlanGuard.Charge.QUOTA;
+        }
 
         if (usageCounter.increment(userId, Feature.AI_TOTAL, backstop) > backstop.limit()) {
             throw new BusinessException(ErrorCode.AI_DAILY_LIMIT_EXCEEDED);
         }
         usageCounter.incrementGlobal(Feature.AI_TOTAL, serviceWide);
+        return charge;
     }
 
     /**
@@ -239,6 +257,13 @@ public class GeminiClient {
      */
     public void refund(Long userId, Feature feature) {
         refundUsage(userId, feature);
+    }
+
+    /** {@link #requireImageConfiguredAndCharge} 의 되돌리기 — 크레딧에서 썼으면 크레딧으로 돌려준다. */
+    public void refund(Long userId, Feature feature, PlanGuard.Charge charge) {
+        planGuard.refund(userId, feature, charge);
+        usageCounter.decrement(userId, Feature.AI_TOTAL,
+                Quota.perDay(properties.getDailyLimitPerUser()));
     }
 
     private void refundUsage(Long userId, Feature feature) {

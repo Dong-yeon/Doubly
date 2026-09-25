@@ -20,6 +20,8 @@ package com.fitto.common.plan;
  *                   <b>화면이 미리 그리는 잠금 표시에는 그 구분이 없어서</b> PRO 사용자에게
  *                   결제를 다시 권하는 문구가 떴다(우리 이모지 월 4회 소진 시). 같은 근거
  *                   ({@code plan.isAtLeast(PRO)})를 여기서도 내려보내 표시와 실행을 맞춘다.
+ * @param credits   따로 산 크레딧 잔량({@link FeatureCredit}). 이 기능이 크레딧을 팔지 않으면 0.
+ *                  {@code remaining} 에는 이미 합산돼 있다 — 화면은 "그중 N회는 산 것"을 말할 때만 쓴다
  */
 public record FeatureState(
         String feature,
@@ -29,6 +31,7 @@ public record FeatureState(
         int used,
         Integer remaining,
         String period,
-        boolean upgradable
+        boolean upgradable,
+        int credits
 ) {
 }
