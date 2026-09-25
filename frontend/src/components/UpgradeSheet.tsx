@@ -20,6 +20,7 @@ import { analyticsApi } from '../api/analytics';
 import { PURCHASE_ENABLED } from '../constants/config';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 import { themedStyles } from '../theme/themedStyles';
+import { onColor } from '../theme/onColor';
 
 export function UpgradeSheet() {
   const gate = usePlanStore((s) => s.gate);
@@ -79,7 +80,7 @@ export function UpgradeSheet() {
           accessibilityRole="button"
         >
           {purchasing ? (
-            <ActivityIndicator color="#FFFFFF" />
+            <ActivityIndicator color={onColor(colors.primaryFill)} />
           ) : (
             <Text style={styles.primaryText}>PRO 시작하기</Text>
           )}
@@ -140,12 +141,13 @@ const styles = themedStyles((colors) => ({
   primary: {
     minHeight: 50,
     borderRadius: radius.lg,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primaryFill,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: spacing.lg,
   },
-  primaryText: { fontSize: fontSize.body, fontWeight: '800', color: '#FFFFFF' },
+  // 채움은 primaryFill, 글자는 바탕 휘도로 — 주 Button 과 같은 규칙. white/primary 는 다크에서 3.3 이었다
+  primaryText: { fontSize: fontSize.body, fontWeight: '800', color: onColor(colors.primaryFill) },
   notice: {
     minHeight: 50,
     borderRadius: radius.lg,

@@ -735,7 +735,7 @@ export function DietScreen({ navigation }: Props) {
       <View style={styles.fabWrap}>
         <Button
           title="식단 기록하기"
-          leftIcon={<MaterialCommunityIcons name="plus" size={20} color={colors.white} />}
+          leftIcon={<MaterialCommunityIcons name="plus" size={20} color={onColor(colors.primaryFill)} />}
           onPress={() => navigation.navigate('DietRecord')}
         />
       </View>
