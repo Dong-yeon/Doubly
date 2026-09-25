@@ -191,7 +191,7 @@ public class GeminiClient {
         if (!properties.isConfigured()) {
             throw new BusinessException(ErrorCode.AI_NOT_CONFIGURED);
         }
-        countUsage(userId, feature);
+        countUsage(userId, feature, false);
     }
 
     /**
