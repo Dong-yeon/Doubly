@@ -21,7 +21,19 @@ export async function endIap(): Promise<void> {
   // no-op
 }
 
-export async function requestProPurchase(_userId: number): Promise<void> {
+export async function requestProPurchase(_userId: number, _term?: 'monthly' | 'yearly'): Promise<void> {
+  throw new Error('웹에서는 인앱결제를 지원하지 않아요.');
+}
+
+export async function fetchProSubscriptions(): Promise<Record<string, never>> {
+  return {};
+}
+
+export async function fetchEmojiSetProduct(): Promise<null> {
+  return null;
+}
+
+export async function requestEmojiSetPurchase(_userId: number): Promise<void> {
   throw new Error('웹에서는 인앱결제를 지원하지 않아요.');
 }
 

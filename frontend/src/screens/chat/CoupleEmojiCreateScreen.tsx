@@ -11,7 +11,7 @@
  * 안 되고 "트레이에서 확인하라"고 안내한다.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { ChatStackParamList } from '../../navigation/types';
 import { Avatar } from '../../components/Avatar';
@@ -30,6 +30,8 @@ import { Alert } from '../../utils/alert';
 import { getErrorMessage } from '../../utils/error';
 import { haptics } from '../../utils/haptics';
 import { pickImageAsset, takePhotoAsset, type PickedImage } from '../../utils/imageUpload';
+import { fetchEmojiSetProduct, requestEmojiSetPurchase } from '../../utils/iap';
+import { PURCHASE_ENABLED } from '../../constants/config';
 import {
   COUPLE_EMOJI_EMOTIONS,
   MAX_EMOJI_PER_REQUEST,
@@ -55,6 +57,33 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
   const couple = useRelationStore((s) => s.couple);
   const partner = couple?.partner ?? null;
   const allowed = usePlanStore((s) => s.can('AI_COUPLE_EMOJI'));
+  const emojiState = usePlanStore((s) => s.stateOf('AI_COUPLE_EMOJI'));
+  const buyerId = useAuthStore((s) => s.user?.id);
+  /*
+   * 세트 추가(소모성 상품) — 정액 구독 밖에서 파는 "한 세트 더". 스토어에 상품이 있을 때만 가격이
+   * 오고, 그때만 버튼을 그린다(없는 상품을 팔지 않는다). FREE 는 구독 없이 하나를 사 볼 수 있고,
+   * PRO 는 월 한도를 다 쓴 뒤 더 산다. 산 세트는 서버가 플랜 잔여 횟수에 합산해 내려준다
+   * (docs/BILLING_STATUS_2026-09-25.md §7).
+   */
+  const [setPrice, setSetPrice] = useState<string | null>(null);
+  const [buying, setBuying] = useState(false);
+  useEffect(() => {
+    if (!PURCHASE_ENABLED) return;
+    void fetchEmojiSetProduct().then((product) => setSetPrice(product?.displayPrice ?? null));
+  }, []);
+  const exhausted = !allowed || emojiState?.remaining === 0;
+  const canBuySet = PURCHASE_ENABLED && !!setPrice && !!buyerId && exhausted;
+  const onBuySet = async () => {
+    if (!buyerId || buying) return;
+    setBuying(true);
+    try {
+      await requestEmojiSetPurchase(buyerId);
+    } catch (e) {
+      toast.error(getErrorMessage(e, '결제를 시작하지 못했어요. 잠시 후 다시 시도해주세요.'));
+    } finally {
+      setBuying(false);
+    }
+  };
 
   const loadEmojis = useCoupleEmojiStore((s) => s.load);
   const allEmojis = useCoupleEmojiStore((s) => s.emojis);
@@ -260,6 +289,17 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
           // PRO 도 월 4회라, 같은 잠금이 "결제하세요"가 아니라 "다 썼어요"여야 할 때가 있다
           feature="AI_COUPLE_EMOJI"
         />
+      ) : null}
+
+      {canBuySet ? (
+        <View style={styles.creditBox}>
+          <Text style={styles.creditTitle}>세트를 하나만 더 만들고 싶다면</Text>
+          <Text style={styles.hint}>구독 없이 세트 하나(5장까지)를 살 수 있어요. 산 세트는 이번 달이 지나도 남아요.</Text>
+          <Button title={`세트 1개 추가 · ${setPrice}`} variant="secondary" size="md" onPress={() => void onBuySet()} loading={buying} />
+        </View>
+      ) : null}
+      {emojiState && emojiState.credits > 0 ? (
+        <Text style={styles.creditNote}>추가로 산 세트 {emojiState.credits}개가 남아 있어요.</Text>
       ) : null}
 
       {!startedOrDone ? (
@@ -505,6 +545,16 @@ const styles = themedStyles((colors) => ({
 
   sectionTitle: { fontSize: fontSize.subtitle, fontWeight: '700', color: colors.textPrimary },
   hint: { fontSize: fontSize.caption, color: colors.textSecondary, lineHeight: 18 },
+  creditBox: {
+    gap: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  creditTitle: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
+  creditNote: { fontSize: fontSize.caption, color: colors.togetherText, fontWeight: '700' },
 
   subjectRow: { flexDirection: 'row', gap: spacing.sm },
   subjectChip: {

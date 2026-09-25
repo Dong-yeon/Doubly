@@ -26,10 +26,11 @@ import { MaterialCommunityIcons } from '../../components/Icon';
 import { planApi } from '../../api/plan';
 import { usePlanStore } from '../../store/planStore';
 import { useAuthStore } from '../../store/authStore';
-import { fetchProSubscription, requestProPurchase, restorePurchases } from '../../utils/iap';
+import { fetchProSubscriptions, requestProPurchase, restorePurchases } from '../../utils/iap';
+import { analyticsApi } from '../../api/analytics';
 import { toast } from '../../store/toastStore';
 import { getErrorMessage } from '../../utils/error';
-import { PRO_SUBSCRIPTION_SKU, PURCHASE_ENABLED } from '../../constants/config';
+import { PRO_SUBSCRIPTION_SKUS, PURCHASE_ENABLED, type ProTerm } from '../../constants/config';
 import type { FeatureGroupKey, FeatureKey, PlanCatalogEntry, QuotaPeriod } from '../../types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
@@ -67,10 +68,10 @@ const CANCEL_PATH =
 const MANAGE_SUBSCRIPTION_URL =
   Platform.OS === 'ios'
     ? 'https://apps.apple.com/account/subscriptions'
-    : `https://play.google.com/store/account/subscriptions?sku=${PRO_SUBSCRIPTION_SKU}&package=com.doubly.app`;
+    : `https://play.google.com/store/account/subscriptions?sku=${PRO_SUBSCRIPTION_SKUS.monthly}&package=com.doubly.app`;
 
 /** 기간 — 스토어에 등록된 base plan 이 monthly 한 종류다(constants/config.ts PRO_BASE_PLAN_ID) */
-const SUBSCRIPTION_PERIOD = '1개월';
+const SUBSCRIPTION_PERIOD: Record<ProTerm, string> = { monthly: '1개월', yearly: '1년' };
 
 /** 머리 띠의 캐릭터 — 스티커 자산 재사용 */
 const HERO_DUO = require('../../../assets/stickers/duo_love.png');
@@ -159,7 +160,12 @@ export function PlanScreen({ navigation }: Props) {
   const userId = useAuthStore((s) => s.user?.id);
 
   const [catalog, setCatalog] = useState<PlanCatalogEntry[] | null>(null);
-  const [price, setPrice] = useState<string | null>(null);
+  /*
+   * 주기별 스토어 가격. 연간은 스토어에 상품이 있을 때만 선택지로 그린다 — 없는 상품을 고르게 하면
+   * 결제창에서 "상품을 찾을 수 없음"이 뜬다. 절약률은 두 숫자 가격이 다 있을 때만 계산한다.
+   */
+  const [prices, setPrices] = useState<Partial<Record<ProTerm, { display: string; amount?: number }>>>({});
+  const [term, setTerm] = useState<ProTerm>('monthly');
   const [purchasing, setPurchasing] = useState(false);
   const [restoring, setRestoring] = useState(false);
 
@@ -175,21 +181,30 @@ export function PlanScreen({ navigation }: Props) {
    * 여기서 "4,900원" 같은 값을 폴백으로 쓰면 실제 청구액과 다를 때 그게 거짓말이 된다.
    */
   useEffect(() => {
+    // 결제 퍼널 — 자발적으로 들어온 페이월 노출
+    analyticsApi.log('PAYWALL_VIEWED', 'plan_screen').catch(() => {});
     if (!PURCHASE_ENABLED) return;
-    void fetchProSubscription().then((product) => setPrice(product?.displayPrice ?? null));
+    void fetchProSubscriptions().then((products) => {
+      const next: Partial<Record<ProTerm, { display: string; amount?: number }>> = {};
+      (['monthly', 'yearly'] as ProTerm[]).forEach((t) => {
+        const product = products[t];
+        if (product) next[t] = { display: product.displayPrice, amount: typeof product.price === 'number' ? product.price : undefined };
+      });
+      setPrices(next);
+    });
   }, []);
 
   const onPurchase = useCallback(async () => {
     if (!userId || purchasing) return;
     setPurchasing(true);
     try {
-      await requestProPurchase(userId);
+      await requestProPurchase(userId, term);
     } catch (e) {
       toast.error(getErrorMessage(e, '결제를 시작하지 못했어요. 잠시 후 다시 시도해주세요.'));
     } finally {
       setPurchasing(false);
     }
-  }, [userId, purchasing]);
+  }, [userId, purchasing, term]);
 
   /*
    * 구매 복원 — 기기 교체·재설치 뒤, 또는 "결제는 됐는데 PRO 가 안 보여요"의 수동 재시도.
@@ -235,7 +250,18 @@ export function PlanScreen({ navigation }: Props) {
       ? 'PRO 이용 중'
       : null;
 
-  const ctaTitle = alreadySubscribed ? '이미 PRO예요' : price ? `PRO 시작하기 · ${price}/월` : 'PRO 시작하기';
+  const price = prices[term]?.display ?? null;
+  const hasYearly = !!prices.yearly;
+  // 연간이 월간 12번보다 얼마나 싼가 — 두 숫자 가격이 다 있을 때만. 없으면 말하지 않는다(지어낸 숫자 금지)
+  const yearlySaving =
+    prices.monthly?.amount && prices.yearly?.amount
+      ? Math.round((1 - prices.yearly.amount / (prices.monthly.amount * 12)) * 100)
+      : null;
+  const ctaTitle = alreadySubscribed
+    ? '이미 PRO예요'
+    : price
+      ? `PRO 시작하기 · ${price}/${term === 'yearly' ? '년' : '월'}`
+      : 'PRO 시작하기';
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
@@ -283,6 +309,30 @@ export function PlanScreen({ navigation }: Props) {
             );
           })}
         </View>
+
+        {/* 결제 주기 — 연간 상품이 스토어에 있을 때만 둘 중 고른다. 없으면 월간 하나라 선택지를 그리지 않는다 */}
+        {PURCHASE_ENABLED && hasYearly && !alreadySubscribed ? (
+          <View style={styles.termRow}>
+            {(['monthly', 'yearly'] as ProTerm[]).map((t) => {
+              const active = term === t;
+              return (
+                <Pressable
+                  key={t}
+                  onPress={() => setTerm(t)}
+                  style={[styles.termOption, active && styles.termOptionActive]}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: active }}
+                >
+                  <Text style={[styles.termTitle, active && styles.termTitleActive]}>{t === 'yearly' ? '연간' : '월간'}</Text>
+                  <Text style={styles.termPrice}>{prices[t]?.display ?? ''}</Text>
+                  {t === 'yearly' && yearlySaving !== null && yearlySaving > 0 ? (
+                    <Text style={styles.termBadge}>{yearlySaving}% 절약</Text>
+                  ) : null}
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
 
         {/* CTA — 앱의 주 버튼과 같은 모양. 가격은 버튼 안에 */}
         {PURCHASE_ENABLED ? (
@@ -347,7 +397,7 @@ export function PlanScreen({ navigation }: Props) {
         */}
         <View style={styles.terms}>
           <Text style={styles.termsText}>
-            <Text style={styles.termsStrong}>Dubly PRO</Text> · {SUBSCRIPTION_PERIOD} 자동 갱신 구독
+            <Text style={styles.termsStrong}>Dubly PRO</Text> · {SUBSCRIPTION_PERIOD[term]} 자동 갱신 구독
             {price ? ` · ${price}` : ''}
           </Text>
           <Text style={styles.termsText}>
@@ -448,6 +498,22 @@ const styles = themedStyles((colors) => ({
 
   // ── CTA ──
   cta: { marginTop: spacing.lg },
+  // 결제 주기 선택 — 선택 상태는 앱 전체와 같은 값(primaryBg / primaryFill)
+  termRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg },
+  termOption: {
+    flex: 1,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    gap: spacing.xxs,
+    backgroundColor: colors.surface,
+  },
+  termOptionActive: { borderColor: colors.primaryFill, backgroundColor: colors.primaryBg },
+  termTitle: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary },
+  termTitleActive: { color: colors.textPrimary },
+  termPrice: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
+  termBadge: { fontSize: fontSize.micro, fontWeight: '700', color: colors.togetherText },
   notice: {
     marginTop: spacing.lg,
     minHeight: 54,

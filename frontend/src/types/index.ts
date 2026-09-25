@@ -147,6 +147,8 @@ export interface FeatureState {
    * 섞여 있다. 후자에 PRO 유도 문구를 띄우면 돈 낸 사람에게 결제를 또 권하는 꼴이다.
    */
   upgradable: boolean;
+  /** 따로 산 크레딧 잔량 — remaining 에 이미 합산돼 있다. 이 기능이 크레딧을 팔지 않으면 0 */
+  credits: number;
 }
 
 export interface PlanInfo {

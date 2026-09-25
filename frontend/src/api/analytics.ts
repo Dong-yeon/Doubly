@@ -6,9 +6,16 @@
 import { apiClient } from './client';
 import type { ApiResponse } from '../types';
 
-export type ClientAnalyticsEvent = 'HOME_VIEWED';
+export type ClientAnalyticsEvent =
+  | 'HOME_VIEWED'
+  // 결제 퍼널 — 서버의 FEATURE_BLOCKED·SUBSCRIPTION_STARTED 와 짝을 이뤄 전환율을 센다
+  | 'PAYWALL_VIEWED'
+  | 'PURCHASE_STARTED'
+  | 'PURCHASE_CANCELLED'
+  | 'PURCHASE_FAILED';
 
 export const analyticsApi = {
-  log: (eventType: ClientAnalyticsEvent) =>
-    apiClient.post<ApiResponse<null>>('/analytics/events', { eventType }),
+  /** @param detail 어느 화면·어느 상품인지 — 서버 컬럼이 50자라 그 안에서 */
+  log: (eventType: ClientAnalyticsEvent, detail?: string) =>
+    apiClient.post<ApiResponse<null>>('/analytics/events', { eventType, detail: detail?.slice(0, 50) }),
 };

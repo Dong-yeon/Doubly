@@ -187,6 +187,24 @@ export const STICKER_PURCHASE_ENABLED = false;
 export const PRO_SUBSCRIPTION_SKU = 'pro_monthly';
 
 /**
+ * 결제 주기별 구독 상품 id — 연간(2026-09-25 추가, 39,000원 권장). 스토어에 없는 상품은
+ * `fetchProducts` 가 돌려주지 않으므로 플랜 화면이 그 선택지를 그리지 않는다 — 콘솔에
+ * 등록하기 전까지 "연간"이 없는 채로 안전하게 동작한다(docs/GOOGLE_PLAY_BILLING.md §1-2).
+ */
+export type ProTerm = 'monthly' | 'yearly';
+export const PRO_SUBSCRIPTION_SKUS: Record<ProTerm, string> = {
+  monthly: PRO_SUBSCRIPTION_SKU,
+  yearly: 'pro_yearly',
+};
+
+/**
+ * 소모성 크레딧 상품 — 우리 이모지 한 세트(요청 1회 = 최대 5장) 추가. 서버의
+ * `CreditProduct.EMOJI_SET_1` 과 값이 같아야 한다. 구독과 달리 플랜을 바꾸지 않고 잔여 횟수만
+ * 더한다 — FREE 도 구독 없이 하나 살 수 있다(docs/BILLING_STATUS_2026-09-25.md §7).
+ */
+export const EMOJI_SET_PRODUCT_ID = 'emoji_set_1';
+
+/**
  * 결제할 기본 요금제(base plan)의 id — Play Console 의 "기본 요금제 및 혜택" 표에 보이는 ID.
  *
  * <p><b>왜 지정해야 하나</b>: 한 구독 상품 아래에 기본 요금제가 여러 개 달릴 수 있다
@@ -198,3 +216,5 @@ export const PRO_SUBSCRIPTION_SKU = 'pro_monthly';
  * <p>여기 적힌 id 를 못 찾으면 결제를 시작하지 않는다(조용히 다른 걸 팔지 않는다).
  */
 export const PRO_BASE_PLAN_ID = 'monthly';
+/** 주기별 기본 요금제 id — Play Console 의 "기본 요금제 및 혜택" 표의 ID 와 같아야 한다. */
+export const PRO_BASE_PLAN_IDS: Record<ProTerm, string> = { monthly: PRO_BASE_PLAN_ID, yearly: 'yearly' };
