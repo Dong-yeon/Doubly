@@ -150,11 +150,11 @@ const light = {
   accentSoft: '#EFF4E4',
   textTertiary: '#767C76',
   // 기능색(체크·완료). 브랜드 초록과 구분되도록 더 푸른 쪽으로 민다
-  success: '#1F8A55',
+  success: '#1E8652', // white 위 4.58 — 2026-09-25 대비 검증(예전 #1F8A55 는 4.35)
   // success 의 연한 배경 — 정산 완료 배너 등. 하드코딩 민트(#E7F5EE)가
   // 다크모드에서 흰 덩어리로 남던 것을 토큰으로 흡수했다
   successBg: '#E7F5EE',
-  danger: '#E5484D',
+  danger: '#E12D33', // white 위 4.54 — 글자(탈퇴 행·입력 오류)로 27곳에서 쓰인다. 예전 #E5484D 는 3.91
   // danger 의 배지용 짝 — 연한 배경 + 그 위에서 4.5 를 넘기는 어두운 글자
   // (danger 원색은 연한 배경 위 글자로 3.6 이라 못 쓴다). Badge 'rose' 가 하드코딩하던 값
   dangerBg: '#FFF0EF',
@@ -218,7 +218,7 @@ const dark: typeof light = {
    * 그래서 이전 팔레트(Indigo #5B6BFF: white 4.21 / surface 3.96)와 같은 균형점에 둔다.
    * 해소하려면 링크 전용 토큰을 만들어 34곳을 옮겨야 한다.
    */
-  primary: '#3E8E6B',
+  primary: '#459E77', // surface 위 4.55 — 링크·선택 칩 글자. 예전 #3E8E6B 는 3.75 (2026-09-25)
   primaryDark: '#2F7A55',
   primaryLight: '#68B58B',
   /** 크롬 채움 — 다크는 파스텔이라 위에 ink 가 얹힌다(6.94). 라이트 주석 참고 */
@@ -257,7 +257,7 @@ const dark: typeof light = {
   success: '#3FBF80',
   // 다크 success 배경 — success(#3FBF80) 텍스트가 위에서 4.5:1 이상 나오는 어두운 그린
   successBg: '#1C3327',
-  danger: '#F2555A',
+  danger: '#F25A5F', // surface 위 4.54 (예전 #F2555A 는 4.41)
   dangerBg: '#3A1F20',
   dangerText: '#F2A0A0',
   white: '#FFFFFF',
@@ -311,7 +311,7 @@ const ACCENT_OVERRIDES: Record<Exclude<AccentVariant, 'green'>, Record<Scheme, P
       me: '#E6D3A8', meBg: '#322915', mePastelBg: '#322915', meText: '#E6D3A8', meFill: '#E6D3A8',
       partner: '#A8E6D1', partnerBg: '#153228', partnerPastelBg: '#153228', partnerText: '#A8E6D1', partnerFill: '#A8E6D1',
       together: '#BDE6A8', togetherBg: '#1F3215', togetherPastelBg: '#1F3215', togetherText: '#BDE6A8', togetherFill: '#BDE6A8',
-      primary: '#3D8F74', primaryDark: '#347962', primaryLight: '#62BC9E', primaryFill: '#62BC9E', primaryBg: '#0F241D', primarySoft: '#0F241D',
+      primary: '#439D80', primaryDark: '#347962', primaryLight: '#62BC9E', primaryFill: '#62BC9E', primaryBg: '#0F241D', primarySoft: '#0F241D',
       coral: '#E6D3A8', indigo: '#A8E6D1', violet: '#BDE6A8', couple: '#E6D3A8', food: '#BDE6A8', health: '#A8E6D1',
       secondary: '#A8E6D1', secondarySoft: '#153228', accent: '#BDE6A8', accentSoft: '#1F3215',
       markBack: '#A8E6D1', markFront: '#62BC9E', markSparkle: '#FFF3C4',
@@ -331,7 +331,7 @@ const ACCENT_OVERRIDES: Record<Exclude<AccentVariant, 'green'>, Record<Scheme, P
       me: '#E6BDA8', meBg: '#321F15', mePastelBg: '#321F15', meText: '#E6BDA8', meFill: '#E6BDA8',
       partner: '#A8E6B2', partnerBg: '#15321A', partnerPastelBg: '#15321A', partnerText: '#A8E6B2', partnerFill: '#A8E6B2',
       together: '#E6DBA8', togetherBg: '#322D15', togetherPastelBg: '#322D15', togetherText: '#E6DBA8', togetherFill: '#E6DBA8',
-      primary: '#3D8F4B', primaryDark: '#347940', primaryLight: '#62BC71', primaryFill: '#62BC71', primaryBg: '#0F2413', primarySoft: '#0F2413',
+      primary: '#45A154', primaryDark: '#347940', primaryLight: '#62BC71', primaryFill: '#62BC71', primaryBg: '#0F2413', primarySoft: '#0F2413',
       coral: '#E6BDA8', indigo: '#A8E6B2', violet: '#E6DBA8', couple: '#E6BDA8', food: '#E6DBA8', health: '#A8E6B2',
       secondary: '#A8E6B2', secondarySoft: '#15321A', accent: '#E6DBA8', accentSoft: '#322D15',
       markBack: '#A8E6B2', markFront: '#62BC71', markSparkle: '#FFF3C4',

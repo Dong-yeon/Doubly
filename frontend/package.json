@@ -79,6 +79,7 @@
     "lint": "expo lint",
     "verify:spellcheck": "node scripts/verify-spellcheck.mjs",
     "verify:chat-theme": "node scripts/verify-chat-theme-contrast.mjs",
+    "verify:theme": "node scripts/verify-theme-contrast.mjs",
     "verify:nested-buttons": "node scripts/verify-nested-pressable.mjs",
     "verify:puyo": "node scripts/verify-puyo.mjs",
     "verify:linkify": "node scripts/verify-linkify.mjs",

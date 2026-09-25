@@ -30,6 +30,7 @@ import { Alert } from '../../utils/alert';
 import { confirmPhotoPrivacy } from '../../utils/photoPrivacy';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
+import { onColor } from '../../theme/onColor';
 
 type Props = {
   /** 사진 업로드를 마쳤다 — 호출부가 운동 기록 화면을 연다(메모·세트는 거기서 덧붙인다) */
@@ -174,7 +175,7 @@ export function WorkoutCheckinCard({ onOpenRecord, onResume, onCheckedIn, onOpen
             {/* 이모지 대신 leftIcon — 버튼 둘이 곧 안내라 아래 설명 문장은 뺐다(§6-3) */}
             <Button
               title={checkingIn ? '기록 중…' : '운동 완료'}
-              leftIcon={<MaterialCommunityIcons name="calendar-check-outline" size={18} color={colors.white} />}
+              leftIcon={<MaterialCommunityIcons name="calendar-check-outline" size={18} color={onColor(colors.primaryFill)} />}
               size="md"
               onPress={onQuickCheckIn}
               loading={checkingIn}

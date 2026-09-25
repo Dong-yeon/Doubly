@@ -197,6 +197,9 @@ Railway psql 접속: Railway 대시보드 → Postgres 서비스 → `Connect` �
 
 ## Play Console 출시 — 남은 작업
 
+> **2026-09-25 갱신본은 [PLAY_LAUNCH_AUDIT_2026-09-25.md](PLAY_LAUNCH_AUDIT_2026-09-25.md)** 다 — 아래 표는 8/18 시점이라
+> 개인정보 링크 항목은 낡았고(정적 페이지로 해결), OAuth 항목은 "앱에서 구글 로그인이 꺼져 있다"가 실체다.
+
 8/18 세션에서 대부분 진행했고, 아래가 미완입니다.
 
 | 항목 | 상태 |

@@ -58,6 +58,7 @@ import type {
   Place,
 } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
+import { onColor } from '../../theme/onColor';
 import { layout } from '../../theme/layout';
 import { localDateOf } from '../../utils/date';
 
@@ -692,13 +693,13 @@ export function PlaceScreen() {
         ) : mode === 'content' ? (
           <Button
             title="콘텐츠 추가하기"
-            leftIcon={<MaterialCommunityIcons name="plus" size={20} color={colors.white} />}
+            leftIcon={<MaterialCommunityIcons name="plus" size={20} color={onColor(colors.primaryFill)} />}
             onPress={() => navigation.navigate('ContentAdd')}
           />
         ) : (
           <Button
             title="장소 추가하기"
-            leftIcon={<MaterialCommunityIcons name="plus" size={20} color={colors.white} />}
+            leftIcon={<MaterialCommunityIcons name="plus" size={20} color={onColor(colors.primaryFill)} />}
             onPress={() => navigation.navigate('PlaceAdd')}
           />
         )}
