@@ -144,7 +144,7 @@ public class CoupleEmojiService {
 
     /** 요청 스레드 → 백그라운드 작업으로 넘기는 것 — 검증이 끝난 값만 담는다 */
     public record GenerationTicket(Long relationId, Long userId, Long subjectUserId, String sourceImageUrl,
-                                   List<CoupleEmojiEmotion> emotions) {
+                                   List<CoupleEmojiEmotion> emotions, PlanGuard.Charge charge) {
     }
 
     /**
@@ -179,8 +179,9 @@ public class CoupleEmojiService {
              * 아무것도 못 받고 한도만 잃는다.
              */
             List<CoupleEmojiEmotion> emotions = resolveEmotions(request.emotions());
-            geminiClient.requireImageConfiguredAndCountUsage(userId, FEATURE);
-            return new GenerationTicket(couple.getId(), userId, subject, request.sourceImageUrl(), emotions);
+            // 플랜 한도에 막히면 산 세트(크레딧)를 쓴다 — 어디서 차감했는지 티켓이 들고 있어야 되돌릴 수 있다
+            PlanGuard.Charge charge = geminiClient.requireImageConfiguredAndCharge(userId, FEATURE);
+            return new GenerationTicket(couple.getId(), userId, subject, request.sourceImageUrl(), emotions, charge);
         } catch (RuntimeException e) {
             /*
              * 앱은 업로드 → 접수 순서라, 여기서 거절(402·429·관계 없음·대상 오류)해도 원본은 이미
@@ -268,7 +269,7 @@ public class CoupleEmojiService {
         try {
             source = imageFetcher.fetch(ticket.sourceImageUrl());
         } catch (RuntimeException e) {
-            geminiClient.refund(ticket.userId(), FEATURE);
+            geminiClient.refund(ticket.userId(), FEATURE, ticket.charge());
             throw e;
         }
         String facts = describe(ticket.userId(), source);
@@ -327,7 +328,7 @@ public class CoupleEmojiService {
         }
 
         if (saved.isEmpty()) {
-            geminiClient.refund(ticket.userId(), FEATURE);
+            geminiClient.refund(ticket.userId(), FEATURE, ticket.charge());
             // 사용자에게는 BusinessException 의 한국어만 보여준다 — 그 밖의 예외는 일반 실패 문구로 감싼다
             throw lastFailure instanceof BusinessException be ? be : new BusinessException(ErrorCode.AI_ANALYSIS_FAILED);
         }
@@ -432,7 +433,7 @@ public class CoupleEmojiService {
      * {@code AiJobService.submit} 의 거절 콜백으로 부른다.
      */
     public void abandon(GenerationTicket ticket) {
-        geminiClient.refund(ticket.userId(), FEATURE);
+        geminiClient.refund(ticket.userId(), FEATURE, ticket.charge());
         imageDeleter.deleteAll(List.of(ticket.sourceImageUrl()));
     }
 

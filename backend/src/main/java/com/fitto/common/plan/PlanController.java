@@ -29,12 +29,15 @@ public class PlanController {
     private final PlanGuard planGuard;
     private final GooglePlaySubscriptionSyncService googlePlaySyncService;
     private final AppStoreSubscriptionSyncService appStoreSyncService;
+    private final FeatureCreditService creditService;
 
     public PlanController(PlanGuard planGuard, GooglePlaySubscriptionSyncService googlePlaySyncService,
-                          AppStoreSubscriptionSyncService appStoreSyncService) {
+                          AppStoreSubscriptionSyncService appStoreSyncService,
+                          FeatureCreditService creditService) {
         this.planGuard = planGuard;
         this.googlePlaySyncService = googlePlaySyncService;
         this.appStoreSyncService = appStoreSyncService;
+        this.creditService = creditService;
     }
 
     @GetMapping("/me")
@@ -99,6 +102,33 @@ public class PlanController {
         }
         appStoreSyncService.sync(request.transactionId());
         return ApiResponse.success(currentPlanOf(user));
+    }
+
+    /**
+     * 크레딧 상품(소모성) 결제 직후 — 구독과 달리 웹훅이 없으므로 <b>이 호출이 유일한 반영 경로</b>다.
+     * 실패하면 예외로 알린다(구독 검증처럼 조용히 지금 플랜을 돌려주지 않는다 — 스티커와 같은 판단).
+     * 반영된 최신 플랜(크레딧이 합산된 잔여 횟수)을 돌려준다.
+     */
+    @PostMapping("/credits/purchases/google")
+    public ApiResponse<PlanResponse> verifyGoogleCredit(@AuthenticationPrincipal AuthUser user,
+                                                         @RequestBody CreditPurchaseVerifyRequest request) {
+        requireReceipt(request);
+        creditService.verifyGoogle(user.id(), request.productId(), request.receipt());
+        return ApiResponse.success(currentPlanOf(user));
+    }
+
+    @PostMapping("/credits/purchases/apple")
+    public ApiResponse<PlanResponse> verifyAppleCredit(@AuthenticationPrincipal AuthUser user,
+                                                        @RequestBody CreditPurchaseVerifyRequest request) {
+        requireReceipt(request);
+        creditService.verifyApple(user.id(), request.productId(), request.receipt());
+        return ApiResponse.success(currentPlanOf(user));
+    }
+
+    private void requireReceipt(CreditPurchaseVerifyRequest request) {
+        if (request == null || request.receipt() == null || request.receipt().isBlank()) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT);
+        }
     }
 
     private PlanResponse currentPlanOf(AuthUser user) {

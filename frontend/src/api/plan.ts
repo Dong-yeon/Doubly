@@ -27,4 +27,12 @@ export const planApi = {
    */
   verifyApplePurchase: (transactionId: string) =>
     unwrap(apiClient.post<ApiResponse<PlanInfo>>('/plan/purchases/apple', { transactionId })),
+  /**
+   * 소모성 크레딧 상품(우리 이모지 세트 추가) 검증 — 구독과 달리 웹훅이 없어 이 호출이 유일한
+   * 반영 경로다. 실패는 예외로 온다. 크레딧이 합산된 최신 플랜을 돌려준다.
+   */
+  verifyGoogleCredit: (productId: string, purchaseToken: string) =>
+    unwrap(apiClient.post<ApiResponse<PlanInfo>>('/plan/credits/purchases/google', { productId, receipt: purchaseToken })),
+  verifyAppleCredit: (productId: string, transactionId: string) =>
+    unwrap(apiClient.post<ApiResponse<PlanInfo>>('/plan/credits/purchases/apple', { productId, receipt: transactionId })),
 };

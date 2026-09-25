@@ -1,5 +1,7 @@
 package com.fitto.common.plan;
 
+import com.fitto.common.analytics.AnalyticsEvent;
+import com.fitto.common.analytics.EventLogService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -22,11 +24,14 @@ public class AppStoreSubscriptionSyncService {
 
     private final AppStoreServerApiClient apiClient;
     private final SubscriptionRepository subscriptionRepository;
+    private final EventLogService eventLogService;
 
     public AppStoreSubscriptionSyncService(AppStoreServerApiClient apiClient,
-                                            SubscriptionRepository subscriptionRepository) {
+                                            SubscriptionRepository subscriptionRepository,
+                                            EventLogService eventLogService) {
         this.apiClient = apiClient;
         this.subscriptionRepository = subscriptionRepository;
+        this.eventLogService = eventLogService;
     }
 
     @Transactional
@@ -81,6 +86,8 @@ public class AppStoreSubscriptionSyncService {
                 .expiresAt(state.expiresAt())
                 .autoRenew(state.autoRenew())
                 .build());
+        // 결제 퍼널의 끝 — 검증 경로든 웹훅 경로든 구독이 처음 생기는 자리는 여기뿐이다
+        eventLogService.log(state.userId(), AnalyticsEvent.SUBSCRIPTION_STARTED, Store.APP_STORE.name());
     }
 
     /** 로그에 거래 id 전체를 남기지 않는다 — 앞뒤 일부만 보여 추적은 되게 한다. */

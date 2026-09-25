@@ -32,13 +32,21 @@ import {
   type Purchase,
   type ProductSubscription,
   type EventSubscription,
+  type Product,
 } from 'react-native-iap';
 import { planApi } from '../api/plan';
+import { analyticsApi } from '../api/analytics';
 import type { PlanInfo } from '../types';
 import { usePlanStore } from '../store/planStore';
 import { toast } from '../store/toastStore';
 import { storage } from './storage';
-import { PRO_BASE_PLAN_ID, PRO_SUBSCRIPTION_SKU, STORAGE_KEYS } from '../constants/config';
+import {
+  EMOJI_SET_PRODUCT_ID,
+  PRO_BASE_PLAN_IDS,
+  PRO_SUBSCRIPTION_SKUS,
+  STORAGE_KEYS,
+  type ProTerm,
+} from '../constants/config';
 
 /**
  * 어떤 경로로 이 구매를 처리하게 됐나 — 사용자에게 무엇을 말할지가 여기서 갈린다.
@@ -164,8 +172,12 @@ function attachPurchaseListeners(): void {
     void verifyAndFinish(purchase, 'purchase');
   });
   purchaseErrorSub = purchaseErrorListener((error) => {
-    // 사용자가 결제창을 취소한 건 실패가 아니다 — 조용히 넘어간다
-    if (error.code === IapErrorCode.UserCancelled) return;
+    // 사용자가 결제창을 취소한 건 실패가 아니다 — 조용히 넘어간다. 퍼널에는 남긴다
+    if (error.code === IapErrorCode.UserCancelled) {
+      analyticsApi.log('PURCHASE_CANCELLED').catch(() => {});
+      return;
+    }
+    analyticsApi.log('PURCHASE_FAILED', String(error.code ?? 'unknown')).catch(() => {});
     toast.error('결제를 완료하지 못했어요. 잠시 후 다시 시도해주세요.');
   });
 }
@@ -185,12 +197,32 @@ function appAccountTokenOf(userId: number): string {
   return `00000000-0000-0000-0000-${userId.toString(16).padStart(12, '0')}`;
 }
 
-/** PRO 구독 상품 정보 — 가격 표시, 안드로이드 결제 요청에 필요한 offerToken 조회용. */
-export async function fetchProSubscription(): Promise<ProductSubscription | null> {
+/**
+ * PRO 구독 상품 정보(주기별) — 가격 표시, 안드로이드 결제 요청에 필요한 offerToken 조회용.
+ * 스토어에 없는 주기는 빠진다 — 연간 상품을 콘솔에 올리기 전까지 플랜 화면은 월간만 그린다.
+ */
+export async function fetchProSubscriptions(): Promise<Partial<Record<ProTerm, ProductSubscription>>> {
+  if (Platform.OS === 'web') return {};
+  try {
+    const products = await fetchProducts({ skus: Object.values(PRO_SUBSCRIPTION_SKUS), type: 'subs' });
+    const list = Array.isArray(products) ? (products as ProductSubscription[]) : [];
+    const result: Partial<Record<ProTerm, ProductSubscription>> = {};
+    (Object.keys(PRO_SUBSCRIPTION_SKUS) as ProTerm[]).forEach((term) => {
+      const found = list.find((p) => p.id === PRO_SUBSCRIPTION_SKUS[term]);
+      if (found) result[term] = found;
+    });
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+/** 우리 이모지 세트 추가(소모성) 상품 — 가격 표시용. 스토어에 없으면 null(구매 버튼을 그리지 않는다). */
+export async function fetchEmojiSetProduct(): Promise<Product | null> {
   if (Platform.OS === 'web') return null;
   try {
-    const products = await fetchProducts({ skus: [PRO_SUBSCRIPTION_SKU], type: 'subs' });
-    const list = Array.isArray(products) ? (products as ProductSubscription[]) : [];
+    const products = await fetchProducts({ skus: [EMOJI_SET_PRODUCT_ID], type: 'in-app' });
+    const list = Array.isArray(products) ? (products as Product[]) : [];
     return list[0] ?? null;
   } catch {
     return null;
@@ -198,15 +230,39 @@ export async function fetchProSubscription(): Promise<ProductSubscription | null
 }
 
 /**
+ * 우리 이모지 세트 추가 결제창을 연다. 결과는 {@link attachPurchaseListeners} 로 온다 —
+ * 상품 id 가 크레딧 상품이면 구독이 아니라 크레딧 검증 경로를 탄다.
+ */
+export async function requestEmojiSetPurchase(userId: number): Promise<void> {
+  if (Platform.OS === 'web') {
+    throw new Error('웹에서는 인앱결제를 지원하지 않아요.');
+  }
+  const product = await fetchEmojiSetProduct();
+  if (!product) {
+    throw new Error('상품 정보를 불러오지 못했어요. 잠시 후 다시 시도해주세요.');
+  }
+  analyticsApi.log('PURCHASE_STARTED', EMOJI_SET_PRODUCT_ID).catch(() => {});
+  await requestPurchase({
+    type: 'in-app',
+    request: {
+      google: { skus: [EMOJI_SET_PRODUCT_ID], obfuscatedAccountId: String(userId) },
+      apple: { sku: EMOJI_SET_PRODUCT_ID, appAccountToken: appAccountTokenOf(userId) },
+    },
+  });
+}
+
+/**
  * PRO 구독 결제창을 연다. 실제 결제 성공/실패는 {@link attachPurchaseListeners} 로 온다 —
  * 이 함수가 끝났다고 결제가 끝난 게 아니다(결제창을 여는 요청을 보냈을 뿐).
  */
-export async function requestProPurchase(userId: number): Promise<void> {
+export async function requestProPurchase(userId: number, term: ProTerm = 'monthly'): Promise<void> {
   if (Platform.OS === 'web') {
     throw new Error('웹에서는 인앱결제를 지원하지 않아요.');
   }
 
-  const product = await fetchProSubscription();
+  const sku = PRO_SUBSCRIPTION_SKUS[term];
+  const basePlanId = PRO_BASE_PLAN_IDS[term];
+  const product = (await fetchProSubscriptions())[term] ?? null;
   /*
    * 상품을 못 읽으면 여기서 멈춘다 — 스토어에 상품이 없거나(등록 전) 연결이 안 된 상태다.
    * 그대로 결제창을 열면 스토어가 던지는 영문 오류가 그대로 올라온다.
@@ -221,25 +277,56 @@ export async function requestProPurchase(userId: number): Promise<void> {
    * 못 찾으면 결제를 시작하지 않는다 — 다른 요금제를 조용히 파느니 실패하는 게 낫다.
    */
   const offerToken =
-    product.subscriptionOffers?.find((offer) => offer.basePlanIdAndroid === PRO_BASE_PLAN_ID)
+    product.subscriptionOffers?.find((offer) => offer.basePlanIdAndroid === basePlanId)
       ?.offerTokenAndroid ?? undefined;
   if (Platform.OS === 'android' && !offerToken) {
     throw new Error('구독 상품 정보를 불러오지 못했어요. 잠시 후 다시 시도해주세요.');
   }
 
+  analyticsApi.log('PURCHASE_STARTED', term).catch(() => {});
   await requestPurchase({
     type: 'subs',
     request: {
       google: {
-        skus: [PRO_SUBSCRIPTION_SKU],
-        subscriptionOffers: offerToken ? [{ sku: PRO_SUBSCRIPTION_SKU, offerToken }] : undefined,
+        skus: [sku],
+        subscriptionOffers: offerToken ? [{ sku, offerToken }] : undefined,
         // 서버가 이 값으로 구매를 사용자에 연결한다 — 없으면 웹훅이 아무도 못 찾는다.
         obfuscatedAccountId: String(userId),
       },
       // 서버가 이 값으로 구매를 사용자에 연결한다 — 구글의 obfuscatedAccountId 와 같은 역할.
-      apple: { sku: PRO_SUBSCRIPTION_SKU, appAccountToken: appAccountTokenOf(userId) },
+      apple: { sku, appAccountToken: appAccountTokenOf(userId) },
     },
   });
+}
+
+/**
+ * 소모성 크레딧 상품(우리 이모지 세트 추가) — 구독과 달리 웹훅이 없어 여기서 서버에 반영시킨 뒤
+ * <b>소비</b>(finishTransaction isConsumable)해야 다음 구매가 가능하다. 서버가 거절하면 소비하지
+ * 않는다 — 다음 실행의 getAvailablePurchases 가 다시 가져와 재시도한다.
+ */
+async function verifyCreditAndFinish(purchase: Purchase, trigger: Trigger): Promise<Outcome> {
+  const receipt = Platform.OS === 'android' ? purchase.purchaseToken : purchase.id;
+  if (!receipt) return 'error';
+  try {
+    if (Platform.OS === 'android') {
+      await planApi.verifyGoogleCredit(EMOJI_SET_PRODUCT_ID, receipt);
+    } else {
+      await planApi.verifyAppleCredit(EMOJI_SET_PRODUCT_ID, receipt);
+    }
+  } catch (e) {
+    if (trigger !== 'launch') {
+      toast.error(e instanceof Error && e.message ? e.message : '구매를 확인하지 못했어요. 잠시 후 다시 시도해주세요.');
+    }
+    return 'error';
+  }
+  try {
+    await finishTransaction({ purchase, isConsumable: true });
+  } catch {
+    // 이미 소비됐거나 스토어가 잠시 응답하지 않음 — 크레딧은 서버가 이미 줬다
+  }
+  await usePlanStore.getState().load();
+  if (trigger !== 'launch') toast.success('이모지 세트를 추가했어요!');
+  return 'reflected';
 }
 
 /**
@@ -255,6 +342,9 @@ export async function requestProPurchase(userId: number): Promise<void> {
  *  - 반영됨(reflected): 닫는 호출이 실패해도(이미 닫힌 트랜잭션) 반영은 된 것이다 — 기록하고 끝
  */
 async function verifyAndFinish(purchase: Purchase, trigger: Trigger): Promise<Outcome> {
+  if (purchase.productId === EMOJI_SET_PRODUCT_ID) {
+    return verifyCreditAndFinish(purchase, trigger);
+  }
   const key = keyOf(purchase);
   const handled = key ? await readHandled() : {};
 

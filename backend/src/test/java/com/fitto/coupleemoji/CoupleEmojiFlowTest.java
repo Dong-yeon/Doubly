@@ -136,7 +136,7 @@ class CoupleEmojiFlowTest {
                 service.prepare(userId, new GenerateCoupleEmojiRequest(SOURCE_URL, subjectId, WITHIN_LIMIT));
         return service.generate(new CoupleEmojiService.GenerationTicket(
                 accepted.relationId(), accepted.userId(), accepted.subjectUserId(),
-                accepted.sourceImageUrl(), List.of(CoupleEmojiEmotion.values())));
+                accepted.sourceImageUrl(), List.of(CoupleEmojiEmotion.values()), accepted.charge()));
     }
 
     /**
@@ -203,7 +203,7 @@ class CoupleEmojiFlowTest {
         assertThat(ticket.relationId()).isEqualTo(relationId);
         assertThat(ticket.subjectUserId()).isEqualTo(b);
         // 한도 차감은 요청 스레드(prepare)에서 — 비싼 준비 전에 402 를 즉시 돌려주기 위해
-        verify(geminiClient).requireImageConfiguredAndCountUsage(a, Feature.AI_COUPLE_EMOJI);
+        verify(geminiClient).requireImageConfiguredAndCharge(a, Feature.AI_COUPLE_EMOJI);
         // 접수가 됐으면 원본은 백그라운드 작업이 지운다 — 여기서는 안 지운다
         verify(imageDeleter, times(2)).deleteAll(List.of(SOURCE_URL));
     }
@@ -219,7 +219,7 @@ class CoupleEmojiFlowTest {
 
         service.abandon(ticket);
 
-        verify(geminiClient).refund(a, Feature.AI_COUPLE_EMOJI);
+        verify(geminiClient).refund(eq(a), eq(Feature.AI_COUPLE_EMOJI), any());
         verify(imageDeleter).deleteAll(List.of(SOURCE_URL));
     }
 
@@ -229,7 +229,7 @@ class CoupleEmojiFlowTest {
         Long b = register("ce-limit-b@fitto.com");
         connectCouple(a, b);
         doThrow(new BusinessException(ErrorCode.PLAN_LIMIT_EXCEEDED))
-                .when(geminiClient).requireImageConfiguredAndCountUsage(a, Feature.AI_COUPLE_EMOJI);
+                .when(geminiClient).requireImageConfiguredAndCharge(a, Feature.AI_COUPLE_EMOJI);
 
         assertThatThrownBy(() -> service.prepare(a, new GenerateCoupleEmojiRequest(SOURCE_URL, null, WITHIN_LIMIT)))
                 .isInstanceOf(BusinessException.class)
@@ -266,7 +266,7 @@ class CoupleEmojiFlowTest {
                 .isEqualTo(ErrorCode.INVALID_INPUT);
 
         // 거절이 한도보다 먼저다 — 한 번도 차감하지 않았다
-        verify(geminiClient, never()).requireImageConfiguredAndCountUsage(any(), any());
+        verify(geminiClient, never()).requireImageConfiguredAndCharge(any(), any());
         // 두 번 거절했으니 올라간 원본도 두 번 지운다
         verify(imageDeleter, times(2)).deleteAll(List.of(SOURCE_URL));
 
@@ -338,7 +338,7 @@ class CoupleEmojiFlowTest {
                 .setParameter("b", batch.batchId()).getSingleResult();
         assertThat(facts).contains("Male").contains("short above ears hair");
         // 살렸으므로 환불은 없다
-        verify(geminiClient, never()).refund(any(), any());
+        verify(geminiClient, never()).refund(any(), any(), any());
     }
 
     /**
@@ -404,7 +404,7 @@ class CoupleEmojiFlowTest {
         assertThat(batch.emojis()).hasSize(ALL_EMOTIONS - 1);
         assertThat(batch.failedEmotions()).containsExactly("HAPPY");
         assertThat(service.list(b)).hasSize(ALL_EMOTIONS - 1);
-        verify(geminiClient, never()).refund(any(), any());
+        verify(geminiClient, never()).refund(any(), any(), any());
     }
 
     @Test
@@ -421,7 +421,7 @@ class CoupleEmojiFlowTest {
                 .isEqualTo(ErrorCode.AI_IMAGE_REJECTED);
 
         assertThat(service.list(a)).isEmpty();
-        verify(geminiClient).refund(a, Feature.AI_COUPLE_EMOJI);
+        verify(geminiClient).refund(eq(a), eq(Feature.AI_COUPLE_EMOJI), any());
         // 실패해도 원본은 지운다(§9)
         verify(imageDeleter).deleteAll(List.of(SOURCE_URL));
     }
@@ -439,7 +439,7 @@ class CoupleEmojiFlowTest {
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.PHOTO_TOO_LARGE);
 
-        verify(geminiClient).refund(a, Feature.AI_COUPLE_EMOJI);
+        verify(geminiClient).refund(eq(a), eq(Feature.AI_COUPLE_EMOJI), any());
         verify(imageDeleter).deleteAll(List.of(SOURCE_URL));
     }
 
@@ -455,7 +455,7 @@ class CoupleEmojiFlowTest {
 
         assertThat(batch.emojis()).hasSize(ALL_EMOTIONS - 1);
         assertThat(batch.failedEmotions()).containsExactly("ANGRY");
-        verify(geminiClient, never()).refund(any(), any());
+        verify(geminiClient, never()).refund(any(), any(), any());
         verify(imageDeleter).deleteAll(List.of(SOURCE_URL));
     }
 

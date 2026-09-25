@@ -315,6 +315,14 @@ public enum Feature {
      * <p>공동 콘텐츠는 {@code couple_id} 에 매달려 있어서 개인 단위로 판정하면
      * 같은 여행을 한 명은 보고 한 명은 못 보는 상태가 된다.
      */
+    /**
+     * 정액 구독 밖에서 <b>회수 추가</b>를 파는 기능인가 — {@link CreditProduct} 에 상품이 있는 기능.
+     * 판정({@code PlanGuard.consumeOrCredit})과 표시({@code PlanGuard.state})가 같은 답을 본다.
+     */
+    public boolean sellsCredits() {
+        return java.util.Arrays.stream(CreditProduct.values()).anyMatch(p -> p.feature() == this);
+    }
+
     public boolean isCoupleScoped() {
         return switch (this) {
             case AI_DATE_COURSE, AI_RESTAURANT_RECOMMEND, AI_TRIP_ITINERARY, AI_WEEKLY_LETTER,

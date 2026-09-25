@@ -27,7 +27,7 @@ public class AnalyticsController {
     @PostMapping("/events")
     public ApiResponse<Void> log(@AuthenticationPrincipal AuthUser user,
                                  @Valid @RequestBody LogEventRequest request) {
-        eventLogService.log(user.id(), request.eventType().name());
+        eventLogService.log(user.id(), request.eventType().name(), request.detail());
         return ApiResponse.success(null);
     }
 }
