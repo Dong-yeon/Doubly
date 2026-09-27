@@ -23,6 +23,7 @@ import { Linking, Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import type { LinkingOptions } from '@react-navigation/native';
 import type { RootStackParamList } from './types';
+import { WORKOUT_HOME_ENABLED } from '../constants/config';
 
 export const PREFIX = 'doubly://';
 
@@ -237,7 +238,11 @@ export const linking: LinkingOptions<RootStackParamList> = {
           Health: {
             initialRouteName: 'DietMain',
             screens: {
-              DietMain: 'diet',
+              /*
+               * 운동 홈을 가린 동안(config.ts WORKOUT_HOME_ENABLED)은 'workout' 푸시(스트릭·재참여 알림)를
+               * 럽바디 메인이 받는다 — 체크인 카드가 거기 있다. 켜면 아래 WorkoutMain 이 다시 받는다.
+               */
+              DietMain: WORKOUT_HOME_ENABLED ? 'diet' : { path: 'diet', alias: ['workout'] },
               DietRecord: 'diet/record',
               DietCalendar: 'diet/calendar',
               DietStats: 'diet/stats',
@@ -248,7 +253,7 @@ export const linking: LinkingOptions<RootStackParamList> = {
                 path: 'diet/place/:placeId',
                 parse: { placeId: Number },
               },
-              WorkoutMain: 'workout',
+              ...(WORKOUT_HOME_ENABLED ? { WorkoutMain: 'workout' } : {}),
               WorkoutRecord: 'workout/record',
               WorkoutCalendar: 'workout/calendar',
               WorkoutDetail: {

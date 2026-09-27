@@ -3,7 +3,13 @@
  *
  * <p>세트·횟수·무게를 요구하면 "오늘 운동했다"는 사실 하나만 남기고 싶은 사람은 아무것도
  * 남길 수 없다. 그런데 스트릭·캘린더·커플 카드가 보는 건 세트가 아니라 <b>기록의 존재</b>라,
- * 빈 기록만으로도 그 목적은 전부 충족된다. 자세히 남기고 싶은 경로는 운동 홈에 그대로 있다.
+ * 빈 기록만으로도 그 목적은 전부 충족된다.
+ *
+ * <p><b>시간은 한 번 더 누르면 남는다(2026-09-27).</b> 예전 원탭은 시간을 비워 저장해 럽바디의
+ * "오늘 운동한 만큼 섭취 가능 칼로리"(EnergyBalanceService — 시간 × 가정 MET)에 0kcal 로
+ * 잡혔다. 그렇다고 1시간 같은 기본값을 넣으면 10분 산책에도 "400kcal 더 먹어도 돼요"가 된다
+ * — 식단 앱에서 과대 추정은 과소 추정보다 해롭다. 그래서 탭 뒤에 시간 칩을 띄우고,
+ * <b>건너뛰면 지금처럼 시간 없이</b> 저장한다. 고르는 것도 한 번의 탭이라 "느슨하게"를 깨지 않는다.
  *
  * <p><b>왜 컴포넌트로 뽑았나</b>: 운동이 독립 탭에서 럽바디 탭의 카드로 흡수되면서
  * (docs/ALBUM_TAB_IA_2026-09-14.md 5-2) 럽바디 메인(DietScreen)과 운동 홈(WorkoutScreen)
@@ -18,6 +24,7 @@
 import React, { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { Button } from '../Button';
+import { Chip } from '../Chip';
 import { MaterialCommunityIcons } from '../Icon';
 import { useWorkoutStore } from '../../store/workoutStore';
 import { useActiveWorkoutStore } from '../../store/activeWorkoutStore';
@@ -53,10 +60,16 @@ export function WorkoutCheckinCard({ onOpenRecord, onResume, onCheckedIn, onOpen
   /* 끝내지 않은 운동 — 하단 고정 바(ActiveWorkoutBar)와 같은 원본(기기에 저장된 초안)을 본다 */
   const activeWorkout = useActiveWorkoutStore((s) => s.active);
   const [checkingIn, setCheckingIn] = useState(false);
+  /** "운동 완료"를 눌러 시간 칩을 펼친 상태 — 칩을 고르는 순간 저장한다 */
+  const [pickingDuration, setPickingDuration] = useState(false);
+  /** 저장 중인 칩 — 누른 칩만 선택 표시한다(null = 건너뛰기) */
+  const [savingMin, setSavingMin] = useState<number | null | undefined>(undefined);
   const [photoBusy, setPhotoBusy] = useState(false);
 
   /** 오늘 이미 기록이 있는가 — 카드의 상태를 가른다(같은 날 중복 기록 방지도 겸한다) */
   const doneToday = today.length > 0;
+  /** 오늘 남긴 운동 시간 합 — 완료 줄에 "챙겼어요 · 1시간"으로 보인다. 시간 없는 기록은 0 */
+  const todayMin = today.reduce((sum, w) => sum + (w.totalDurationMin ?? 0), 0);
 
   /**
    * 원탭 체크인 — 종목 없이 "오늘 운동했다"만 남긴다.
@@ -64,18 +77,26 @@ export function WorkoutCheckinCard({ onOpenRecord, onResume, onCheckedIn, onOpen
    * <p>서버가 세트를 필수로 두지 않으므로 빈 배열로 저장하면 끝이다. 스트릭 갱신·커플 알림·
    * 캘린더는 전부 이 저장 하나로 지금까지와 똑같이 동작한다(WorkoutService.save 참고).
    */
-  const onQuickCheckIn = async () => {
+  const onQuickCheckIn = async (durationMin: number | null) => {
     setCheckingIn(true);
+    setSavingMin(durationMin);
     try {
-      await save({ workoutDate: toDateString(), sets: [] });
+      await save({
+        workoutDate: toDateString(),
+        sets: [],
+        // 건너뛰기(null)는 예전처럼 시간 없이 — 소모 칼로리에 잡히지 않는다
+        totalDurationMin: durationMin ?? undefined,
+      });
       haptics.success();
       toast.success('오늘 운동 챙겼어요! 💪');
+      setPickingDuration(false);
       void fetchToday();
       onCheckedIn?.();
     } catch (e) {
       toast.error(getErrorMessage(e, '기록에 실패했어요.'));
     } finally {
       setCheckingIn(false);
+      setSavingMin(undefined);
     }
   };
 
@@ -162,7 +183,7 @@ export function WorkoutCheckinCard({ onOpenRecord, onResume, onCheckedIn, onOpen
           {/* 서브셋 글리프맵에 있는 아이콘만 쓴다(Icon.tsx 주석) — check-circle 은 목록에 없다 */}
           <MaterialCommunityIcons name="calendar-check-outline" size={20} color={colors.success} />
           <Text style={styles.doneLabel}>오늘 운동</Text>
-          <Text style={styles.doneValue}>챙겼어요</Text>
+          <Text style={styles.doneValue}>챙겼어요{todayMin > 0 ? ` · ${formatMinutes(todayMin)}` : ''}</Text>
           {workoutHomeLink}
         </View>
       ) : (
@@ -171,14 +192,45 @@ export function WorkoutCheckinCard({ onOpenRecord, onResume, onCheckedIn, onOpen
             <Text style={styles.checkinTitle}>오늘 운동 챙겼나요?</Text>
             {workoutHomeLink}
           </View>
+          {pickingDuration ? (
+            /*
+             * 시간 칩 — 버튼 줄 자리를 그대로 쓴다. 고르는 순간 저장, "건너뛰기"는 시간 없이 저장.
+             * 칩 넷이 한 줄에 들어가도록 fill 로 균등 분할한다. 저장 중에는 전부 잠근다(연타 방지).
+             */
+            <View style={styles.durationBox}>
+              <View style={styles.durationHead}>
+                <Text style={styles.durationTitle}>얼마나 했나요?</Text>
+                <Pressable
+                  onPress={() => setPickingDuration(false)}
+                  disabled={checkingIn}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="시간 고르기 닫기"
+                >
+                  <Text style={styles.durationCancel}>취소</Text>
+                </Pressable>
+              </View>
+              <View style={styles.checkinRow}>
+                {DURATION_CHOICES.map((choice) => (
+                  <Chip
+                    key={choice.label}
+                    label={choice.label}
+                    selected={savingMin === choice.min}
+                    onPress={() => void onQuickCheckIn(choice.min)}
+                    disabled={checkingIn}
+                    fill
+                  />
+                ))}
+              </View>
+            </View>
+          ) : (
           <View style={styles.checkinRow}>
             {/* 이모지 대신 leftIcon — 버튼 둘이 곧 안내라 아래 설명 문장은 뺐다(§6-3) */}
             <Button
-              title={checkingIn ? '기록 중…' : '운동 완료'}
+              title="운동 완료"
               leftIcon={<MaterialCommunityIcons name="calendar-check-outline" size={18} color={onColor(colors.primaryFill)} />}
               size="md"
-              onPress={onQuickCheckIn}
-              loading={checkingIn}
+              onPress={() => setPickingDuration(true)}
               style={styles.checkinBtn}
             />
             <Button
@@ -191,10 +243,30 @@ export function WorkoutCheckinCard({ onOpenRecord, onResume, onCheckedIn, onOpen
               style={styles.checkinBtn}
             />
           </View>
+          )}
         </View>
       )}
     </View>
   );
+}
+
+/**
+ * 원탭 시간 선택지 — 흔한 운동 길이 셋 + 건너뛰기. 분 단위로 저장한다.
+ * 더 정확히 남기려면 기록 화면(오운완 사진 경로)에서 직접 적는다.
+ */
+const DURATION_CHOICES: { label: string; min: number | null }[] = [
+  { label: '30분', min: 30 },
+  { label: '1시간', min: 60 },
+  { label: '1시간 반', min: 90 },
+  { label: '건너뛰기', min: null },
+];
+
+/** 60 → "1시간", 90 → "1시간 30분", 45 → "45분" */
+function formatMinutes(min: number): string {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  if (h === 0) return `${m}분`;
+  return m === 0 ? `${h}시간` : `${h}시간 ${m}분`;
 }
 
 const styles = themedStyles((colors) => ({
@@ -213,6 +285,10 @@ const styles = themedStyles((colors) => ({
   checkinTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary, flexShrink: 1 },
   checkinRow: { flexDirection: 'row', gap: spacing.sm },
   checkinBtn: { flex: 1 },
+  durationBox: { gap: spacing.sm },
+  durationHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  durationTitle: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary },
+  durationCancel: { fontSize: fontSize.caption, fontWeight: '700', color: colors.primary },
   // 완료 상태 — 운동 홈의 회복 카드와 같은 한 줄 형태(테두리만 success 로 구분)
   doneCard: {
     flexDirection: 'row',

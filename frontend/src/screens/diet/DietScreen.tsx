@@ -63,6 +63,7 @@ import type {
   WeeklyLetter,
 } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
+import { WORKOUT_HOME_ENABLED } from '../../constants/config';
 import { onColor } from '../../theme/onColor';
 import { layout } from '../../theme/layout';
 
@@ -427,7 +428,8 @@ export function DietScreen({ navigation }: Props) {
         <WorkoutCheckinCard
           onOpenRecord={(params) => navigation.navigate('WorkoutRecord', params)}
           onResume={() => navigation.navigate('WorkoutSession', { resume: true })}
-          onOpenWorkoutHome={() => navigation.navigate('WorkoutMain')}
+          // 운동 홈은 2026-09-27 에 가렸다(config.ts WORKOUT_HOME_ENABLED) — prop 이 없으면 카드가 링크를 안 그린다
+          onOpenWorkoutHome={WORKOUT_HOME_ENABLED ? () => navigation.navigate('WorkoutMain') : undefined}
         />
       </View>
 
