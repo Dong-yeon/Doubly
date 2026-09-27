@@ -4,6 +4,7 @@ import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
 import com.fitto.question.dto.AnswerRequest;
 import com.fitto.question.dto.DailyQuestionResponse;
+import com.fitto.question.dto.PendingQuestionResponse;
 import com.fitto.question.dto.QuestionHistoryResponse;
 import com.fitto.question.service.DailyQuestionService;
 import jakarta.validation.Valid;
@@ -38,6 +39,12 @@ public class DailyQuestionController {
     public ApiResponse<DailyQuestionResponse> answer(@AuthenticationPrincipal AuthUser user,
                                                      @Valid @RequestBody AnswerRequest request) {
         return ApiResponse.success(questionService.answer(user.id(), request), "답을 저장했어요.");
+    }
+
+    /** 답을 기다리는 지난 질문 — 상대는 답했고 나는 아직인 날(최근순) */
+    @GetMapping("/pending")
+    public ApiResponse<List<PendingQuestionResponse>> pending(@AuthenticationPrincipal AuthUser user) {
+        return ApiResponse.success(questionService.pending(user.id()));
     }
 
     @GetMapping("/history")
