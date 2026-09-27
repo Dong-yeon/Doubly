@@ -69,6 +69,7 @@ import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { isDarkMode } from '../../theme';
 import { onColor } from '../../theme/onColor';
 import { themedStyles } from '../../theme/themedStyles';
+import { WORKOUT_HOME_ENABLED } from '../../constants/config';
 import { layout } from '../../theme/layout';
 
 // 미연결 홈의 캐릭터 — 인트로(OnboardingScreen)와 같은 달걀 커플
@@ -761,8 +762,11 @@ export function HomeScreen({ navigation }: Props) {
                        * 그것만으로는 탭 스택의 첫 화면이 되어 뒤로가기가 탭 밖으로 튕기기 때문이다
                        * (ActiveWorkoutBar 와 같은 이유) — 닫기는 returnTo, 뒤로가기는 initial:false 가 받는다.
                        */
+                      // 이미 했으면 운동 홈 — 가려 둔 동안(WORKOUT_HOME_ENABLED)은 체크인 카드가 있는 럽바디 메인
                       navigation.navigate('Health', myWorkoutDone
-                        ? { screen: 'WorkoutMain', initial: false }
+                        ? WORKOUT_HOME_ENABLED
+                          ? { screen: 'WorkoutMain', initial: false }
+                          : { screen: 'DietMain' }
                         : { screen: 'WorkoutRecord', params: { returnTo: 'Home' }, initial: false });
                       return;
                     }
