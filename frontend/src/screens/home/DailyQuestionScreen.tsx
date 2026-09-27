@@ -1,4 +1,10 @@
-/** 오늘의 질문 (커플 Q&A) — 둘 다 답하면 서로 공개. 지난 Q&A 히스토리. */
+/**
+ * 오늘의 질문 (커플 Q&A) — 둘 다 답하면 서로 공개. 지난 Q&A 히스토리.
+ *
+ * <p><b>답을 기다리는 질문(2026-09-27)</b>: 상대가 답한 날을 내가 넘기면 예전엔 그 답을 볼 길이
+ * 없었다(오늘 카드는 오늘만, 히스토리는 둘 다 답한 날만). 이제 그런 날은 오늘 카드 아래에
+ * 남아 있고, 거기서 답하면 둘의 답이 함께 열리며 히스토리로 옮겨 간다.
+ */
 import React, { useCallback, useState } from 'react';
 import { FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -14,7 +20,7 @@ import { relativeDateLabel } from '../../utils/date';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { DailyQuestion, QuestionHistory } from '../../types';
+import type { DailyQuestion, PendingQuestion, QuestionHistory } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { useAndroidKeyboardHeight } from '../../hooks/useAndroidKeyboardHeight';
 
@@ -24,6 +30,11 @@ export function DailyQuestionScreen(_: Props) {
   const androidKeyboardHeight = useAndroidKeyboardHeight();
   const [today, setToday] = useState<DailyQuestion | null>(null);
   const [history, setHistory] = useState<QuestionHistory[]>([]);
+  const [pending, setPending] = useState<PendingQuestion[]>([]);
+  /** 답을 적고 있는 지난 질문의 날짜 — 한 번에 하나만 펼친다 */
+  const [pendingOpen, setPendingOpen] = useState<string | null>(null);
+  const [pendingDraft, setPendingDraft] = useState('');
+  const [pendingSaving, setPendingSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   // 로드 실패가 "질문이 없는 빈 상태"로 위장하지 않도록 별도로 추적한다 (QA_CHECKLIST.md 패턴 1)
   const [loadError, setLoadError] = useState(false);
@@ -34,9 +45,15 @@ export function DailyQuestionScreen(_: Props) {
     setLoading(true);
     setLoadError(false);
     try {
-      const [t, h] = await Promise.all([questionApi.today(), questionApi.history()]);
+      // 기다리는 질문은 곁가지라 실패해도 화면 전체를 실패로 만들지 않는다
+      const [t, h, p] = await Promise.all([
+        questionApi.today(),
+        questionApi.history(),
+        questionApi.pending().catch(() => [] as PendingQuestion[]),
+      ]);
       setToday(t);
       setHistory(h);
+      setPending(p);
       if (t.myAnswer) setDraft(t.myAnswer);
     } catch (e) {
       toast.error(getErrorMessage(e, '질문을 불러오지 못했어요.'));
@@ -62,6 +79,82 @@ export function DailyQuestionScreen(_: Props) {
     } finally {
       setSaving(false);
     }
+  };
+
+  const onSubmitPending = async (questionDate: string) => {
+    if (!pendingDraft.trim()) return toast.error('답을 입력해주세요.');
+    setPendingSaving(true);
+    try {
+      await questionApi.answer(pendingDraft.trim(), questionDate);
+      haptics.success();
+      toast.success('서로의 답이 공개됐어요! 지난 질문에서 볼 수 있어요.');
+      setPending((list) => list.filter((q) => q.questionDate !== questionDate));
+      setPendingOpen(null);
+      setPendingDraft('');
+      questionApi.history().then(setHistory).catch(() => undefined);
+    } catch (e) {
+      toast.error(getErrorMessage(e, '저장에 실패했어요.'));
+      // 이미 답했거나 더는 기다리는 질문이 아니면 목록을 서버 기준으로 맞춘다
+      questionApi.pending().then(setPending).catch(() => undefined);
+    } finally {
+      setPendingSaving(false);
+    }
+  };
+
+  const renderPending = () => {
+    if (pending.length === 0) return null;
+    return (
+      <View>
+        <Text style={styles.sectionTitle}>답을 기다리는 질문 {pending.length}</Text>
+        {pending.map((q) => {
+          const open = pendingOpen === q.questionDate;
+          return (
+            <View key={q.questionDate} style={styles.pendingCard}>
+              <Text style={styles.histDate}>{relativeDateLabel(q.questionDate)}</Text>
+              <Text style={styles.histQuestion}>{q.question}</Text>
+              <Text style={styles.pendingNote}>
+                {q.partnerName ?? '상대'}님이 먼저 답했어요. 답하면 서로 볼 수 있어요.
+              </Text>
+              {open ? (
+                <>
+                  <TextField
+                    placeholder="이 질문에 대한 답을 적어보세요"
+                    value={pendingDraft}
+                    onChangeText={setPendingDraft}
+                    multiline
+                  />
+                  <View style={styles.pendingActions}>
+                    <Button
+                      title="취소"
+                      variant="secondary"
+                      size="sm"
+                      onPress={() => { setPendingOpen(null); setPendingDraft(''); }}
+                      disabled={pendingSaving}
+                      style={styles.flex}
+                    />
+                    <Button
+                      title="답 남기기"
+                      size="sm"
+                      onPress={() => void onSubmitPending(q.questionDate)}
+                      loading={pendingSaving}
+                      style={styles.flex}
+                    />
+                  </View>
+                </>
+              ) : (
+                <Button
+                  title="답하기"
+                  variant="secondary"
+                  size="sm"
+                  onPress={() => { setPendingOpen(q.questionDate); setPendingDraft(''); }}
+                  style={styles.pendingOpenBtn}
+                />
+              )}
+            </View>
+          );
+        })}
+      </View>
+    );
   };
 
   const renderToday = () => {
@@ -123,6 +216,7 @@ export function DailyQuestionScreen(_: Props) {
           ListHeaderComponent={
             <View>
               {renderToday()}
+              {renderPending()}
               {history.length > 0 ? <Text style={styles.sectionTitle}>지난 질문</Text> : null}
             </View>
           }
@@ -195,6 +289,18 @@ const styles = themedStyles((colors) => ({
     padding: spacing.md,
     marginBottom: spacing.sm,
   },
+  pendingCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    gap: spacing.xs,
+  },
+  pendingNote: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600', marginBottom: spacing.xs },
+  pendingActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
+  pendingOpenBtn: { alignSelf: 'flex-start' },
   histDate: { fontSize: fontSize.caption, color: colors.textMuted, fontWeight: '700' },
   histQuestion: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary, marginTop: 2 },
   histAnswer: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xs, lineHeight: 18 },

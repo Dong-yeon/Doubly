@@ -576,6 +576,12 @@ export interface DailyQuestion {
   partnerName?: string | null;
   bothAnswered: boolean;
 }
+/** 답을 기다리는 지난 질문 — 상대는 답했고 나는 아직인 날. 상대 답은 내가 답해야 보인다 */
+export interface PendingQuestion {
+  questionDate: string;
+  question: string;
+  partnerName?: string | null;
+}
 export interface QuestionHistory {
   questionDate: string;
   question: string;

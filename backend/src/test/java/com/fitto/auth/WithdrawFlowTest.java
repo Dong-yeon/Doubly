@@ -127,7 +127,7 @@ class WithdrawFlowTest {
                 "여행", LocalDate.now(), LocalDate.now().plusDays(2), null, null));
         challengeService.create(me, new CreateChallengeRequest(
                 ChallengeType.WORKOUT, "챌린지", LocalDate.now(), LocalDate.now().plusDays(7), null));
-        dailyQuestionService.answer(me, new AnswerRequest("오늘의 답변"));
+        dailyQuestionService.answer(me, new AnswerRequest("오늘의 답변", null));
 
         // users 를 참조하는 개인 데이터
         bodyMetricService.save(me, new SaveBodyMetricRequest(
