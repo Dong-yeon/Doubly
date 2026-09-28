@@ -25,6 +25,8 @@ export function MemoryPeek({ memories, onPress }: Props) {
   // 가장 오래된 해가 가장 회상 가치가 크다 (푸시 문구와 같은 규칙)
   const oldest = memories.groups[memories.groups.length - 1];
   const thumb = memories.groups.flatMap((g) => g.items).find((i) => i.imageUrl)?.imageUrl;
+  // 빈 응답(잠김 포함)은 호출부가 거르는 게 약속이지만, 어겨도 화면 전체가 죽지는 않게 — 9/28 우리 탭 크래시
+  if (!oldest) return null;
 
   return (
     <Pressable
