@@ -118,14 +118,17 @@ export function AnimatedCoupleEmoji({
     if (effect) setEffectOn(true);
   }, [motion, reduced, progress, effect]);
 
-  // 자동 재생 — 한 번만. 동작 줄이기 판정이 비동기라 첫 프레임에 켜져 있어도 run 이 스스로 거른다
+  /*
+   * 자동 재생 — 한 번만. 감정을 아직 모르면(우리 이모지 목록이 늦게 도착) 소비하지 않고 기다린다 —
+   * 목록이 들어와 모션이 정해지는 순간 움직인다. 동작 줄이기는 run 이 스스로 거른다.
+   */
   const autoPlayed = useRef(false);
   useEffect(() => {
-    if (!play || autoPlayed.current) return;
+    if (!play || !motion || autoPlayed.current) return;
     autoPlayed.current = true;
     run();
     onPlayed?.();
-  }, [play, run, onPlayed]);
+  }, [play, motion, run, onPlayed]);
 
   useEffect(() => {
     if (!effectOn) return;
