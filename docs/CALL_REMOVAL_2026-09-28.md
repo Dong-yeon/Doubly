@@ -49,6 +49,19 @@
 | Android | `a7bcc6b65b08a48ff1de50131383c6fd86447f9f` |
 | iOS | `902bbece239509c880ad31c9f69d48ab32b5b888` |
 
+> 🔸 **갱신(2026-09-28, `main` `f0dfdcd5`)** — 위 값은 **더 이상 맞지 않는다.** 같은 날 `package.json` 에
+> `verify:context-stickers` 스크립트를 더하면서 `packageJson:scripts` 해시가 바뀌었다(그것 하나뿐 — 소스 비교로 확인).
+>
+> | | fingerprint (`f0dfdcd5`, 두 번 생성해 일치 확인) |
+> | --- | --- |
+> | Android | `1742727be9ba39f1a092048ad0113cf582089118` |
+> | iOS | `8bbe5cbbe327357046afc0cb62068e57b7069cc4` |
+>
+> 이 시점에 **1.0.5 는 아직 빌드되지 않았다**(EAS 최신 production = 1.0.4, iOS 28 / Android vc35, `dccdaa0b`, 9/22).
+> 그래서 깨진 빌드는 없다. 1.0.5 를 빌드하면 그 커밋의 값이 새 기준선이다.
+> **`package.json` 의 `scripts` 를 한 줄만 바꿔도 런타임 버전이 바뀐다** — 빌드 뒤에 `verify:*` 같은 스크립트를 더하면
+> 그 빌드로 가는 업데이트가 끊긴다(런타임 버전이 달라 배달되지 않는다).
+
 ## 남은 일
 
 1. **빌드·제출** — `eas.json` 의 Android 제출은 `track: production`·`releaseStatus: completed` 라 **즉시 전체 출시**다.

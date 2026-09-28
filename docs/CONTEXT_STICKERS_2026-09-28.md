@@ -72,11 +72,15 @@
 | 🥶 추움 / 🥵 더움 | 따뜻하게(얼었어, 커피) / 시원하게(더워, 녹는다, 아이스크림, 수박) |
 | 나머지(여유·고민·평온·멘붕·당황·뿌듯·의욕) | 각각 맞춤 — 전체는 `constants/contextStickers.ts` |
 
-## 3. 아이콘을 새로 쓰지 않은 이유
+## 3. 맥락 칸 썸네일
 
-맥락 칸의 스트립 썸네일은 **첫 스티커 그림**이다(🎉 아이콘 등을 쓰지 않았다). MaterialCommunityIcons 는 서브셋 폰트라,
-새 아이콘을 쓰면 `subset:icons` 가 폰트 파일을 다시 만든다. 앱 폰트는 fingerprint 입력이라(`doubly-ota-preflight` 메모)
-**EAS Update 가 아니라 빌드**가 된다.
+맥락 칸의 스트립 썸네일은 **첫 스티커 그림**이다(🎉 아이콘 등을 쓰지 않았다).
+
+> 🔸 **정정(2026-09-28)**: 처음에는 "새 아이콘을 쓰면 서브셋 폰트가 바뀌어 빌드가 된다"고 적었는데 **틀렸다.**
+> fingerprint 입력인 폰트는 `app.json` 의 `expo-font` 플러그인이 가리키는 Pretendard 3종뿐이고,
+> `MaterialCommunityIcons.ttf`·`icon-glyphmap.json` 은 JS 번들 자산이라 fingerprint 에 들어가지 않는다
+> (fingerprint 소스 192개를 직접 확인했다). 아이콘은 EAS Update 로 바뀐다. 썸네일을 그림으로 둔 결정은 그대로 둔다.
+> 그래도 잘 어울린다.
 
 ## 4. 검증
 
@@ -90,7 +94,12 @@
 - `verify:sticker-codes` 457건, `typecheck`, `verify:nested-buttons`, `build:web` 통과.
   lint 는 바꾼 파일에 새 경고 0 이다(ChatRoomScreen·StickerPanel 기존 건수 그대로).
 - 서버·`types/index.ts` 를 건드리지 않아 백엔드 테스트는 돌리지 않았다.
-- `package.json` 에 `verify:context-stickers` 를 더했다. fingerprint 는 `android`/`ios` 스크립트만 보고 그것도 skip 설정이라(`fingerprint.config.js`) 런타임 버전이 바뀌지 않는다.
+- `package.json` 에 `verify:context-stickers` 를 더했다.
+  > 🔸 **정정(2026-09-28)**: 처음에는 "fingerprint 는 android/ios 스크립트만 본다"고 적었는데 **틀렸다.** fingerprint 는
+  > `packageJson:scripts` 로 `scripts` 절 **전체**를 해시한다(skip 설정은 `expo run:*` 을 담은 android/ios 두 줄만 뺀다).
+  > 그래서 이 한 줄로 **런타임 버전이 바뀌었다** — Android `a7bcc6b6…` → `1742727b…`, iOS `902bbece…` → `8bbe5cbb…`.
+  > 1.0.5 는 아직 빌드되지 않아(최신 스토어 빌드는 1.0.4) 사용자에게 간 빌드가 깨지지는 않았다.
+  > 새 기준선은 `CALL_REMOVAL_2026-09-28.md` 「빌드 기준선」에 적었다.
 
 ## 5. 실기기로 확인할 것
 
