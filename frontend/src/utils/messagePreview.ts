@@ -39,6 +39,9 @@ export function messagePreview(type: MessageType, content?: string | null): stri
     // 들고 있지 않다 — 서버 preview() 도 같은 이유로 "[우리 이모지]" 한 문구다.
     case 'COUPLE_EMOJI':
       return '우리 이모지';
+    // 문구가 곧 내용이다 — 방 목록·답장 배너는 문구만 보여 준다(서버 알림은 "[스티커] 문구")
+    case 'TEXT_STICKER':
+      return content ?? '스티커';
     case 'VOICE_MESSAGE': {
       const parsed = parseVoiceContent(content);
       return parsed ? `음성 메시지 ${formatVoiceDuration(parsed.durationSec)}` : '음성 메시지';

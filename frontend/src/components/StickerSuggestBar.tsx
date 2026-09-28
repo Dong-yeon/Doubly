@@ -22,13 +22,15 @@ interface Props {
   onPick: (item: StickerSuggestion) => void;
   /** X — 이번 입력 동안은 다시 띄우지 않는다(호출부가 기억한다) */
   onDismiss: () => void;
+  /** 캐릭터 스티커 길게 누르기 — 입력 중인 문장을 문구로 넣은 "문구 넣기" 시트를 연다 */
+  onCompose?: (item: StickerSuggestion) => void;
 }
 
 function thumbOf(item: StickerSuggestion) {
   return item.kind === 'image' ? stickerImageOf(item.code)?.source : animatedStickerOf(item.code)?.thumb;
 }
 
-export function StickerSuggestBar({ items, onPick, onDismiss }: Props) {
+export function StickerSuggestBar({ items, onPick, onDismiss, onCompose }: Props) {
   if (items.length === 0) return null;
   return (
     <View style={styles.bar}>
@@ -42,12 +44,15 @@ export function StickerSuggestBar({ items, onPick, onDismiss }: Props) {
         {items.map((item) => {
           const source = thumbOf(item);
           if (!source) return null;
+          const composable = !!onCompose && item.kind === 'image';
           return (
             <Pressable
               key={`${item.kind}:${item.code}`}
               onPress={() => onPick(item)}
+              onLongPress={composable ? () => onCompose?.(item) : undefined}
+              delayLongPress={350}
               accessibilityRole="button"
-              accessibilityLabel={`${item.label} ${item.kind === 'animated' ? '움직이는 이모티콘' : '스티커'} 보내기`}
+              accessibilityLabel={`${item.label} ${item.kind === 'animated' ? '움직이는 이모티콘' : '스티커'} 보내기${composable ? '. 길게 누르면 지금 쓰는 말을 넣어 보내기' : ''}`}
               style={({ pressed }) => [styles.item, pressed && styles.pressed]}
             >
               <Image source={source} style={styles.image} resizeMode="contain" />
