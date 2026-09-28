@@ -85,6 +85,8 @@ import { loadRecentStickers, recordRecentSticker } from '../../utils/recentStick
 import { parseStickerCode, suggestStickers, type StickerSuggestion } from '../../utils/stickerCodes';
 import { StickerPanel } from '../../components/chat/StickerPanel';
 import { AnimatedCoupleEmoji } from '../../components/chat/AnimatedCoupleEmoji';
+import { TextSticker } from '../../components/chat/TextSticker';
+import { TextStickerSheet } from '../../components/chat/TextStickerSheet';
 import { useCoupleEmojiStore } from '../../store/coupleEmojiStore';
 import { playTouchGesture } from '../../utils/haptics';
 import { messagePreview } from '../../utils/messagePreview';
@@ -1043,10 +1045,36 @@ export function ChatRoomScreen({ navigation, route }: Props) {
       return;
     }
     // 어디서 보냈든(패널·추천·텍스트 코드) 최근 목록에 올린다 — 추천 순서의 근거다
-    void recordRecentSticker(recentStickersRef.current, sticker).then((next) => {
+    rememberSticker(sticker);
+  };
+
+  const rememberSticker = (code: string) => {
+    void recordRecentSticker(recentStickersRef.current, code).then((next) => {
       recentStickersRef.current = next;
       setRecentStickers(next);
     });
+  };
+
+  /*
+   * 문구 스티커 — 캐릭터 스티커를 길게 눌러 연 시트의 상태. fromInput 은 추천 막대에서 열어
+   * 입력 중이던 문장을 문구로 옮겨 온 경우다: 보내고 나면 입력창을 비운다(같은 말이 글로 또 나가지 않게).
+   */
+  const [textStickerDraft, setTextStickerDraft] = useState<
+    { code: string; initialText: string; fromInput: boolean } | null
+  >(null);
+
+  const sendTextSticker = async (code: string, phrase: string) => {
+    const draft = textStickerDraft;
+    setTextStickerDraft(null);
+    if (draft?.fromInput) setText('');
+    haptics.light();
+    scrollToBottom();
+    const ok = await send(relationId, { messageType: 'TEXT_STICKER', content: phrase, stickerCode: code });
+    if (!ok) {
+      Alert.alert('전송 실패', '연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
+      return;
+    }
+    rememberSticker(code);
   };
 
   /**
@@ -1401,7 +1429,10 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             ) : null}
           </View>
         ) : null}
-        {isSticker ? (
+        {item.messageType === 'TEXT_STICKER' && item.stickerCode ? (
+          // 문구 스티커 — 캐릭터 스티커 위에 문구를 앱이 겹쳐 그린다(components/chat/TextSticker)
+          <TextSticker stickerCode={item.stickerCode} text={item.content ?? ''} />
+        ) : isSticker ? (
           isBigEmoji ? (
             // 개수에 따라 크기를 줄인다 — 셋이 나란히 56px 이면 좁은 기기에서 줄을 넘긴다
             <Text style={[styles.sticker, bigEmojiCount > 1 && styles.stickerSmall]}>{item.content}</Text>
@@ -1892,6 +1923,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             onCreateCoupleEmoji={() => { setShowStickers(false); navigation.navigate('CoupleEmojiCreate'); }}
             onUnlockPack={unlockStickerPack}
             onOpenCouplePack={() => { void loadCoupleEmojis().catch(() => undefined); }}
+            onComposeTextSticker={(code) => setTextStickerDraft({ code, initialText: '', fromInput: false })}
           />
         ) : null}
         {/* 답장·수정 중 배너 — 무엇에 대해 쓰고 있는지 보여주고 취소할 수 있게 */}
@@ -1929,6 +1961,11 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             void sendSticker(e.code, false, e.label);
           }}
           onDismiss={() => setStickerBarClosed(true)}
+          onCompose={(e) => {
+            // 코드를 치던 중("(달걀이_")이면 옮겨 올 문장이 없다
+            const typed = text.trim().startsWith('(') ? '' : text.trim();
+            setTextStickerDraft({ code: e.code, initialText: typed, fromInput: !!typed });
+          }}
         />
         <SpellCheckBar
           suggestion={spellBarVisible ? suggestions[0] : null}
@@ -2135,6 +2172,16 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         onClose={() => setShowBackgroundSheet(false)}
       />
       {/* 예약 전송 작성 — 트레이 "예약" */}
+      {/* 열 때만 마운트한다 — 처음 문구를 초기값으로 받는 시트라 닫으면 상태가 저절로 비워진다 */}
+      {textStickerDraft ? (
+        <TextStickerSheet
+          stickerCode={textStickerDraft.code}
+          initialText={textStickerDraft.initialText}
+          partnerName={couple?.partner?.name}
+          onClose={() => setTextStickerDraft(null)}
+          onSend={(code, phrase) => void sendTextSticker(code, phrase)}
+        />
+      ) : null}
       <ScheduleMessageSheet
         visible={showScheduleSheet}
         onClose={() => setShowScheduleSheet(false)}

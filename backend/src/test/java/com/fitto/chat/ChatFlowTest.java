@@ -494,4 +494,92 @@ class ChatFlowTest {
 
         assertThat(chatService.getPinned(a, relationId)).isNull();
     }
+
+    /* ── 문구 스티커(TEXT_STICKER, V107) ─────────────────────────────── */
+
+    private SendMessageRequest textSticker(String code, String text) {
+        return new SendMessageRequest(com.fitto.chat.domain.MessageType.TEXT_STICKER, text,
+                null, null, null, null, null, code);
+    }
+
+    private void assertInvalid(Long sender, Long relationId, SendMessageRequest req) {
+        assertThatThrownBy(() -> chatService.send(sender, relationId, req))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_INPUT);
+    }
+
+    /**
+     * 문구 스티커 — content 에는 문구 그대로, 코드는 따로. 옛 앱은 모르는 타입을 content 그대로 글 말풍선으로
+     * 그리므로 content 가 곧 호환 경로다. 알림·인용 미리보기는 "[스티커] 문구".
+     */
+    @Test
+    void 문구_스티커는_문구를_content_에_코드를_따로_담는다() {
+        Long a = register("ts-a@fitto.com");
+        Long b = register("ts-b@fitto.com");
+        Long relationId = connectCouple(a, b);
+
+        ChatMessageResponse sent = chatService.send(a, relationId, textSticker("EGG_LOVE", "  지민아 사랑해 "));
+
+        assertThat(sent.messageType()).isEqualTo(com.fitto.chat.domain.MessageType.TEXT_STICKER);
+        assertThat(sent.content()).isEqualTo("지민아 사랑해");
+        assertThat(sent.stickerCode()).isEqualTo("EGG_LOVE");
+        assertThat(chatService.getRooms(b).get(0).lastMessage().content()).isEqualTo("지민아 사랑해");
+
+        // 인용 미리보기는 알림 미리보기와 같은 preview() 를 쓴다
+        ChatMessageResponse reply = chatService.send(b, relationId,
+                new SendMessageRequest(null, "나도", null, null, null, sent.id()));
+        assertThat(reply.replyTo().content()).isEqualTo("[스티커] 지민아 사랑해");
+
+        // 사람이 쓴 문구라 TEXT 처럼 검색된다
+        assertThat(chatService.searchMessages(b, relationId, "사랑해", null))
+                .extracting(ChatMessageResponse::id).contains(sent.id());
+    }
+
+    @Test
+    void 문구_스티커는_이모지를_섞어_12자까지_받는다() {
+        Long a = register("ts12-a@fitto.com");
+        Long b = register("ts12-b@fitto.com");
+        Long relationId = connectCouple(a, b);
+
+        // 3 + 🥰×9 = 코드포인트 12 (UTF-16 으로는 21) — 이모지 하나를 두 글자로 세면 안 된다
+        String twelve = "사랑해" + "🥰".repeat(9);
+        assertThat(chatService.send(a, relationId, textSticker("DUO_KISS", twelve)).content()).isEqualTo(twelve);
+        assertInvalid(a, relationId, textSticker("DUO_KISS", "가나다라마바사아자차카타파"));
+    }
+
+    @Test
+    void 문구_스티커는_줄바꿈과_빈_문구를_거절한다() {
+        Long a = register("tsnl-a@fitto.com");
+        Long b = register("tsnl-b@fitto.com");
+        Long relationId = connectCouple(a, b);
+
+        assertInvalid(a, relationId, textSticker("EGG_LOVE", "사랑\n해"));
+        assertInvalid(a, relationId, textSticker("EGG_LOVE", "   "));
+        assertInvalid(a, relationId, textSticker("EGG_LOVE", null));
+    }
+
+    /** 피커에 있는 캐릭터 스티커만 — 내린 것·움직이는 이모티콘·없는 코드에는 얹지 않는다 */
+    @Test
+    void 문구_스티커는_피커에_있는_캐릭터_스티커에만_얹는다() {
+        Long a = register("tsr-a@fitto.com");
+        Long b = register("tsr-b@fitto.com");
+        Long relationId = connectCouple(a, b);
+
+        assertInvalid(a, relationId, textSticker("DUBI_LIKE", "좋아"));     // 내린 스티커
+        assertInvalid(a, relationId, textSticker("ANIM_TWO_HEARTS", "좋아")); // 움직이는 이모티콘
+        assertInvalid(a, relationId, textSticker("NOPE", "좋아"));
+        assertInvalid(a, relationId, textSticker(null, "좋아"));
+    }
+
+    /** 다른 타입에 실려 온 stickerCode 는 버린다 — 저장된 코드가 곧 "문구 스티커다"라는 뜻이어야 한다 */
+    @Test
+    void 문구_스티커가_아니면_스티커_코드를_저장하지_않는다() {
+        Long a = register("tsx-a@fitto.com");
+        Long b = register("tsx-b@fitto.com");
+        Long relationId = connectCouple(a, b);
+
+        ChatMessageResponse sent = chatService.send(a, relationId,
+                new SendMessageRequest(com.fitto.chat.domain.MessageType.STICKER, "🥰", null, null, null, null, null, "EGG_LOVE"));
+        assertThat(sent.stickerCode()).isNull();
+    }
 }

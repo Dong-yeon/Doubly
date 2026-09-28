@@ -160,6 +160,8 @@ interface Props {
   onUnlockPack: (pack: StickerPack) => void;
   /** 우리 이모지 팩을 처음 열 때 — 안 쓰는 사람에게 방마다 조회를 붙이지 않는다 */
   onOpenCouplePack: () => void;
+  /** 캐릭터 스티커 길게 누르기 — "문구 넣기" 시트. 움직이는 이모티콘·잠긴 팩에는 붙지 않는다 */
+  onComposeTextSticker?: (code: string) => void;
 }
 
 export function StickerPanel({
@@ -173,6 +175,7 @@ export function StickerPanel({
   onCreateCoupleEmoji,
   onUnlockPack,
   onOpenCouplePack,
+  onComposeTextSticker,
 }: Props) {
   const [activeKey, setActiveKey] = useState<string>(DEFAULT_PACK);
   const loadPacks = useStickerStore((s) => s.load);
@@ -260,6 +263,7 @@ export function StickerPanel({
   // 모르면 열린 것으로 본다 — 통신 문제로 잠긴 것처럼 보이는 쪽이 훨씬 나쁜 실패다
   const activeLocked = activePack ? !activePack.usable : false;
   const isCouplePack = active?.key.startsWith(COUPLE_PACK_PREFIX) ?? false;
+  const canCompose = !!onComposeTextSticker && !!active && !active.animated && !isCouplePack && !activeLocked;
 
   const selectPack = (key: string) => {
     setActiveKey(key);
@@ -308,8 +312,11 @@ export function StickerPanel({
         style={({ pressed }) => [styles.cell, pressed && styles.pressed]}
         // 잠긴 팩이면 전송이 아니라 안내로 간다 — locked 는 호출부가 해석한다
         onPress={() => onSendSticker(item.code, activeLocked, active.label)}
+        // 문구 스티커는 캐릭터 스티커에만 — 잠긴 팩에서 길게 누르면 짧게 누른 것과 같은 안내로 간다
+        onLongPress={canCompose ? () => onComposeTextSticker?.(item.code) : undefined}
+        delayLongPress={350}
         accessibilityRole="button"
-        accessibilityLabel={`이모티콘 ${item.label} 보내기${activeLocked ? ' — 잠김' : ''}`}
+        accessibilityLabel={`이모티콘 ${item.label} 보내기${activeLocked ? ' — 잠김' : ''}${canCompose ? '. 길게 누르면 문구 넣기' : ''}`}
       >
         <Image source={item.source} style={styles.cellImage} resizeMode="contain" />
       </Pressable>

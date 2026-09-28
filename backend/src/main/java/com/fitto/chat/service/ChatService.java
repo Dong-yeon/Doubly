@@ -320,6 +320,12 @@ public class ChatService {
              */
             stickerService.requireUsable(senderId, StickerPacks.ofStickerContent(req.content()));
         }
+        String content = req.content();
+        String stickerCode = null;
+        if (messageType == MessageType.TEXT_STICKER) {
+            content = requireValidTextSticker(senderId, req.stickerCode(), req.content());
+            stickerCode = req.stickerCode();
+        }
         String imageUrl = req.imageUrl();
         if (messageType == MessageType.COUPLE_EMOJI) {
             // 이 관계의, 아직 숨기지 않은 이모지만. URL 은 클라이언트 값이 아니라 행에서 복사한다 —
@@ -332,12 +338,13 @@ public class ChatService {
                 .relationId(relationId)
                 .senderId(senderId)
                 .messageType(messageType)
-                .content(req.content())
+                .content(content)
                 .imageUrl(imageUrl)
                 .workoutId(req.workoutId())
                 .routineId(req.routineId())
                 .replyToId(resolveReplyTarget(req.replyToId(), relationId))
                 .clientMessageId(clientMessageId)
+                .stickerCode(stickerCode)
                 .build();
         chatMessageRepository.save(message);
 
@@ -349,6 +356,37 @@ public class ChatService {
         }
         // 방금 만든 메시지라 북마크됐을 수 없다
         return ChatMessageResponse.from(message, replyPreview(message.getReplyToId()), List.of(), false);
+    }
+
+    /** 문구 스티커 문구의 최대 길이 — 코드포인트 기준(앱의 {@code Array.from(text).length} 와 같은 셈) */
+    static final int TEXT_STICKER_MAX_LENGTH = 12;
+
+    /**
+     * 문구 스티커 검증 — 통과하면 저장할 문구(앞뒤 공백 제거)를 돌려준다.
+     *
+     * <ul>
+     *   <li>스티커는 <b>피커에 있는</b> 캐릭터 스티커여야 한다 — 내린 스티커(`StickerImage.isRetired`)는
+     *       그릴 줄은 알아도 새로 고를 수 없다. 움직이는 이모티콘·유니코드 이모지 위에는 얹지 않는다.</li>
+     *   <li>팩 사용권은 STICKER 와 같은 판정(`requireUsable`)이다.</li>
+     *   <li>문구는 1~{@value #TEXT_STICKER_MAX_LENGTH}자, 줄바꿈 금지 — 스티커 아래 띠 두 줄에 들어가는 길이다.
+     *       코드포인트로 센다: 대부분의 이모지는 1자지만 ❤️ 처럼 변형 선택자가 붙은 것은 2자로 센다(앱도 같다).</li>
+     * </ul>
+     */
+    private String requireValidTextSticker(Long senderId, String stickerCode, String content) {
+        StickerImage sticker = StickerImage.from(stickerCode)
+                .filter(s -> !s.isRetired())
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_INPUT, "쓸 수 없는 스티커예요."));
+        stickerService.requireUsable(senderId, sticker.packId());
+        String text = content == null ? "" : content.strip();
+        int length = text.codePointCount(0, text.length());
+        if (length == 0 || length > TEXT_STICKER_MAX_LENGTH) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT,
+                    "문구는 1~" + TEXT_STICKER_MAX_LENGTH + "자로 써주세요.");
+        }
+        if (text.indexOf('\n') >= 0 || text.indexOf('\r') >= 0) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "문구에는 줄바꿈을 넣을 수 없어요.");
+        }
+        return text;
     }
 
     /**
@@ -660,6 +698,8 @@ public class ChatService {
             // 이모지 스티커는 이모지 자체가 가장 좋은 미리보기다. 이미지 스티커(StickerImage)는
             // content 가 "LOVE_BEAR" 같은 코드라 그대로 보여주면 안 되고 라벨로 바꿔야 한다.
             case STICKER -> stickerPreview(message.getContent());
+            // 문구가 곧 내용이다 — 스티커 라벨보다 사용자가 쓴 말이 알림에서 더 의미 있다
+            case TEXT_STICKER -> "[스티커] " + message.getContent();
             case WORKOUT_CARD -> "[운동 기록]";
             case MEAL_CARD -> "[식단]";
             case ROUTINE_CARD -> "[루틴]";

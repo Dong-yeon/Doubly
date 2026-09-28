@@ -22,6 +22,7 @@ import com.fitto.sticker.service.StickerService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.time.LocalDateTime;
@@ -51,6 +52,7 @@ class StickerEntitlementTest {
     @Autowired AuthService authService;
     @Autowired RelationService relationService;
     @Autowired ChatService chatService;
+    @Autowired JdbcTemplate jdbcTemplate;
     @Autowired StickerService stickerService;
     @Autowired UserStickerPurchaseRepository purchaseRepository;
     @Autowired SubscriptionRepository subscriptionRepository;
@@ -211,5 +213,28 @@ class StickerEntitlementTest {
                 .findFirst().orElseThrow();
         // 스토어 콘솔에 등록할 때 이 규칙을 따라야 한다 — 어긋나면 산 사람이 못 쓴다
         assertThat(mood.pack().productId()).isEqualTo("sticker_pack_mood_premium");
+    }
+
+    /**
+     * 문구 스티커도 팩 사용권을 본다 — STICKER 와 같은 requireUsable. 캐릭터 팩은 지금 전부 무료라
+     * 잠긴 경우를 실제 시드로는 만들 수 없어, 달걀이 팩을 잠깐 유료로 돌려 본다(끝나면 되돌린다).
+     */
+    @Test
+    void 문구_스티커는_잠긴_팩의_스티커에_얹을_수_없다() {
+        long[] c = couple("ts-locked-a@fitto.com", "ts-locked-b@fitto.com");
+        jdbcTemplate.update("UPDATE sticker_packs SET is_pro_only = TRUE WHERE id = 'EGG_BOILED'");
+        try {
+            assertThatThrownBy(() -> chatService.send(c[0], c[2], new SendMessageRequest(
+                    MessageType.TEXT_STICKER, "사랑해", null, null, null, null, null, "EGG_LOVE")))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getErrorCode())
+                    .isEqualTo(ErrorCode.PLAN_UPGRADE_REQUIRED);
+            // 다른(무료) 팩의 스티커는 그대로 된다
+            assertThatCode(() -> chatService.send(c[0], c[2], new SendMessageRequest(
+                    MessageType.TEXT_STICKER, "사랑해", null, null, null, null, null, "DUO_LOVE")))
+                    .doesNotThrowAnyException();
+        } finally {
+            jdbcTemplate.update("UPDATE sticker_packs SET is_pro_only = FALSE WHERE id = 'EGG_BOILED'");
+        }
     }
 }

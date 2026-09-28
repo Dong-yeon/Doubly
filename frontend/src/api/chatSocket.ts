@@ -83,6 +83,8 @@ export interface OutgoingMessage {
    * 서버가 두 번째를 저장하지 않고 먼저 저장한 메시지를 다시 브로드캐스트한다.
    */
   clientMessageId?: string;
+  /** 문구 스티커(TEXT_STICKER)가 얹힐 캐릭터 스티커 코드 — 다른 타입에서는 서버가 무시한다 */
+  stickerCode?: string;
 }
 
 /** 연결돼 있으면 즉시 구독하고, 아니면 다음 연결 때 {@link applyDesiredSubscriptions} 가 건다. */

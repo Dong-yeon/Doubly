@@ -44,5 +44,12 @@ public enum MessageType {
      * <b>그대로 읽히는 문장</b>을 담는다. 구버전 앱에서도 평범한 말풍선으로 읽힌다.
      * {@code SudokuService} 가 완성 시점에 대신 남긴다(발신자=마지막 칸을 채운 사람).
      */
-    GAME_CARD
+    GAME_CARD,
+    /**
+     * 문구 스티커(V107) — 캐릭터 스티커 위에 사용자가 쓴 짧은 문구(최대 12자)를 얹는다.
+     * content 에는 <b>문구 그대로</b>, 스티커 코드는 {@code chat_messages.sticker_code} 에 담는다.
+     * STREAK_CARD 와 같은 규칙이다 — 이 타입을 모르는 구버전 앱에서도 문구가 평범한 말풍선으로 읽힌다.
+     * 그림은 앱이 합성해 그린다(서버 이미지 생성·업로드 없음). 검증은 {@code ChatService.requireValidTextSticker}.
+     */
+    TEXT_STICKER
 }

@@ -1634,7 +1634,12 @@ export type MessageType =
   /** 우리 이모지 — content 에 couple_emojis.id, imageUrl 에 그 행의 URL(서버가 복사). PRO 판정 없음 */
   | 'COUPLE_EMOJI'
   /** 커플 게임 결과 카드(협동 스도쿠 완성) — STREAK_CARD 처럼 content 가 그대로 읽히는 문장이다 */
-  | 'GAME_CARD';
+  | 'GAME_CARD'
+  /**
+   * 문구 스티커 — 캐릭터 스티커 위에 짧은 문구를 얹는다. content 는 문구 그대로, 스티커는 stickerCode.
+   * 이 타입을 모르는 옛 앱은 content 를 글 말풍선으로 그려 문구가 그대로 읽힌다(STREAK_CARD 와 같은 규칙).
+   */
+  | 'TEXT_STICKER';
 /** 메시지 이모지 리액션 — mine 은 userIds 에 내 id 가 있는지로 판단한다(브로드캐스트 공용) */
 export interface ChatReactionSummary {
   emoji: string;
@@ -1672,6 +1677,8 @@ export interface ChatMessage {
    * (내용으로 짝지으면 같은 말을 두 번 보낼 때 깨진다). 옛 메시지·시스템 카드는 없다.
    */
   clientMessageId?: string | null;
+  /** 문구 스티커(TEXT_STICKER)의 캐릭터 스티커 코드 — 다른 타입이면 없다 */
+  stickerCode?: string | null;
   /**
    * 아직 서버 에코가 오지 않은 <b>내 화면에만 있는</b> 말풍선. id 는 임시 음수다.
    * 서버가 준 메시지에는 절대 붙지 않는다 — 읽음 처리·리액션·수정 같은 경로가 이 값을 보고 비켜난다.
