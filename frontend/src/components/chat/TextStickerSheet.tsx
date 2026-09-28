@@ -129,7 +129,7 @@ const styles = themedStyles((colors) => ({
   },
   handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: 'center' },
   title: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary, textAlign: 'center' },
-  // 스티커는 흰 배경 그림이라 다크 모드에서도 흰 판 위에 올려야 실제 말풍선과 같아 보인다
+  // 스티커는 배경이 투명하다 — 채팅 화면처럼 말풍선 없이 판 위에 그대로 올린다
   preview: {
     alignSelf: 'center',
     padding: spacing.sm,
