@@ -28,11 +28,18 @@ public record CoupleEmojiResponse(
          * 한 칸을 누가 차지할지는 앱이 정한다(MoodPicker 주석 참고).
          */
         String moodEmoji,
+        /**
+         * 이 장을 그린 프롬프트 버전(v1~v5…) — 앱이 움직이는 효과 레이어를 얹을지 정한다.
+         *
+         * <p>v4 이하는 김·색종이·zzz 같은 효과가 <b>그림 안에</b> 그려져 있어 앱이 효과를 또
+         * 얹으면 겹친다. 그 세트는 캐릭터 모션만 준다(docs/COUPLE_EMOJI_ANIMATION_SPEC_2026-09-28.md §5-4).
+         */
+        String promptVersion,
         LocalDateTime createdAt
 ) {
     public static CoupleEmojiResponse from(CoupleEmoji e) {
         return new CoupleEmojiResponse(e.getId(), e.getBatchId(), e.getEmotion(), e.getEmotion().label(),
                 e.getImageUrl(), e.getSubjectUserId(), e.getCreatedBy(), e.isMoodVisible(),
-                e.getEmotion().moodEmoji(), e.getCreatedAt());
+                e.getEmotion().moodEmoji(), e.getPromptVersion(), e.getCreatedAt());
     }
 }

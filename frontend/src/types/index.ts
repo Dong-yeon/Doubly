@@ -1782,6 +1782,11 @@ export interface CoupleEmoji {
    * 매핑은 서버(CoupleEmojiEmotion)가 갖고 우리는 받기만 한다. 여러 감정이 같은 값을 가질 수 있다.
    */
   moodEmoji: string;
+  /**
+   * 그린 프롬프트 버전(v1~v5…). v4 이하는 효과가 그림 안에 그려져 있어 앱이 효과 레이어를
+   * 얹지 않는다(constants/coupleEmojiMotion.ts). 옛 서버는 이 필드를 안 보낸다.
+   */
+  promptVersion?: string | null;
   createdAt: string;
 }
 
