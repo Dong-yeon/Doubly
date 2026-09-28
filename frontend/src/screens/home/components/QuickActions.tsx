@@ -3,10 +3,10 @@
  *
  * <p>예전에는 2×2 로 놓인 큼직한 사각 버튼 네 개였다. 배경 사진 위에 불투명한
  * 상자 넷이 얹히니 사진이 가려지고, 정작 아래 피드보다 시선을 먼저 끌었다.
- * 아이콘 + 짧은 라벨의 반투명 칩 한 줄로 눌러 담았다.
+ * 아이콘 + 짧은 라벨의 칩 한 줄로 눌러 담았다.
  *
  * <p><b>칸을 늘리는 자리가 아니다.</b> 기능이 늘 때마다 여기 칩을 더하다 7칸까지 갔고
- * (320px 에서 칸당 45px) 다음이 오면 8칸이었다. 지금은 <b>둘</b>이고(일상·캘린더 —
+ * (320px 에서 칸당 45px) 다음이 오면 8칸이었다. 지금은 <b>셋</b>이고(일상·캘린더·스티커 상점 —
  * 우리 기록·사진첩은 2026-09-15 에 "우리" 탭으로 갔다) 칸을 늘리지 않는 자리다 —
  * 새 기능은 각자의 탭이나 딥링크·푸시로 닿게 하고 이 줄은 건드리지 않는다.
  *
@@ -17,8 +17,7 @@
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '../../../components/Icon';
-import { colors, fontSize, spacing } from '../../../constants/theme';
-import { layout } from '../../../theme/layout';
+import { colors, fontSize, radius, spacing } from '../../../constants/theme';
 import { themedStyles } from '../../../theme/themedStyles';
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -39,7 +38,7 @@ export function QuickActions({ actions }: { actions: QuickAction[] }) {
           onPress={a.onPress}
           accessibilityRole="button"
         >
-          <MaterialCommunityIcons name={a.icon} size={18} color={colors.textPrimary} />
+          <MaterialCommunityIcons name={a.icon} size={20} color={colors.textPrimary} />
           <Text style={styles.label} numberOfLines={1}>
             {a.label}
           </Text>
@@ -52,20 +51,27 @@ export function QuickActions({ actions }: { actions: QuickAction[] }) {
 // themedStyles — StyleSheet.create 는 모듈 로드 시 색이 굳어 실행 중 테마 전환이 반영되지 않았다
 const styles = themedStyles((colors) => ({
   /*
-   * 좌측 정렬(2026-09-15) — 칸을 `flex: 1` 로 늘려 줄 전체에 고르게 펴던 것을 접었다.
-   * "우리" 탭이 생겨 우리 기록·사진첩이 빠지면서 이 줄이 둘로 줄었는데, 둘을 폭 전체에
-   * 펴면 칸 사이가 한참 벌어져 <b>"여기 빈자리가 있다"</b>로 읽히고 그 자리가 다시 칩을
-   * 부른다(이 파일 상단의 "칸을 늘리는 자리가 아니다"와 같은 방향). 왼쪽에 모아 두면
-   * 줄의 길이가 기능 수를 그대로 드러낸다.
+   * 한 줄에 같은 폭 셋(2026-09-28). 그 전(9/23~)에는 아이콘+작은 라벨 텍스트 버튼을 왼쪽에 모았는데,
+   * 히어로가 가운데로 돌아오면서 가운데에 모으니 원래 작던 버튼이 <b>더 작아 보였다</b>(동연님 지적).
+   * 칸이 셋으로 정해져 있으니 폭을 나눠 가져도 "빈자리가 있다"로 읽히지 않는다 — 9/15 에 왼쪽으로
+   * 모은 이유(둘을 폭 전체에 펴면 사이가 벌어진다)는 칸 사이가 아니라 칸 자체가 넓어지는 이 방식에는 해당하지 않는다.
+   * 줄은 패널 폭을 그대로 쓴다 — alignSelf:center 로 가운데 묶으면 줄이 내용 폭으로 줄어 칸이 제각각 넓어진다.
    */
-  // 히어로가 가운데 정렬이라(2026-09-28) 바로가기도 가운데로 — 왼쪽에 붙으면 축이 둘로 갈린다
-  row: { flexDirection: 'row', justifyContent: 'center', gap: spacing.md, marginBottom: spacing.xs },
-  /*
-   * 원 안 아이콘 + 아래 라벨(런처 모양)을 접고 <b>아이콘 + 라벨 한 줄</b>의 텍스트 버튼으로
-   * 바꿨다(docs/SCREEN_DESIGN_PASS_2026-09-23.md §1-2 P5). 앱 안에 또 홈 화면을 만들지
-   * 않는다 — 이 줄은 링크 세 개다. 높이는 터치 타깃 44 를 그대로 확보한다.
-   */
-  item: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, minHeight: layout.touchTarget, paddingRight: spacing.xs },
+  row: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.xs },
+  // 칸 하나 — 옅은 판 위에 아이콘 + 라벨. 높이 52 (터치 타깃 44 보다 넉넉히)
+  item: {
+    flexGrow: 1,
+    flexBasis: 0,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    minHeight: 52,
+    paddingHorizontal: spacing.xs,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceAlt,
+  },
   pressed: { opacity: 0.6 },
-  label: { color: colors.textPrimary, fontSize: fontSize.caption, fontWeight: '700' },
+  label: { color: colors.textPrimary, fontSize: fontSize.body, fontWeight: '700', flexShrink: 1 },
 }));

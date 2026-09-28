@@ -707,19 +707,19 @@ export function HomeScreen({ navigation }: Props) {
                 "우리 사진 넣기"가 사진을 부른다 — 상단 바의 배경 버튼과 같은 동작이다.
               */}
               <View style={styles.photoArea}>
+                {/*
+                  사진이 없을 때는 달걀이 둘이 <b>배경 그림</b>으로 앉아 있을 뿐이다 — 버튼이 아니다.
+                  9/23 에 "우리 사진 넣기" 알약을 여기 뒀다가 뺐다(2026-09-28, 동연님: "원래 배경으로 존재하던 것").
+                  사진은 예전처럼 상단 바의 배경 버튼으로 넣는다.
+                */}
                 {!bgUrl ? (
-                  <View style={styles.wallpaperDuo}>
-                    <Image source={WALLPAPER_DUO} style={styles.wallpaperDuoImage} resizeMode="contain" />
-                    <Pressable
-                      style={({ pressed }) => [styles.photoPrompt, pressed && styles.photoPromptPressed]}
-                      onPress={onBackgroundPress}
-                      accessibilityRole="button"
-                      accessibilityLabel="우리 사진 넣기"
-                    >
-                      <MaterialCommunityIcons name="image-plus" size={16} color={colors.textPrimary} />
-                      <Text style={styles.photoPromptText}>우리 사진 넣기</Text>
-                    </Pressable>
-                  </View>
+                  <Image
+                    source={WALLPAPER_DUO}
+                    style={styles.wallpaperDuoImage}
+                    resizeMode="contain"
+                    accessibilityElementsHidden
+                    importantForAccessibility="no"
+                  />
                 ) : null}
               </View>
               <View style={styles.panel}>
@@ -799,6 +799,8 @@ export function HomeScreen({ navigation }: Props) {
                   }}
                 />
               </View>
+              {/* 남는 높이는 히어로와 바로가기 사이가 먹는다 — 히어로는 화면 가운데쯤, 바로가기는 바닥에 */}
+              <View style={styles.panelSpacer} />
 
               {/*
                 조건부 한 줄 슬롯 — 홈은 스크롤 없는 고정 화면이라(MemoryPeek 주석 참고) 줄을
@@ -1018,24 +1020,15 @@ const styles = themedStyles((colors) => ({
   },
 
   body: { flex: 1, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, gap: spacing.md },
-  // 사진 자리 — 남는 세로 공간을 전부 먹어 패널을 바닥으로 민다
-  photoArea: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  wallpaperDuo: { alignItems: 'center', gap: spacing.sm },
+  /*
+   * 사진 자리 — 남는 세로 공간을 패널과 <b>나눠</b> 먹는다(3 : 1). 예전(9/23~)엔 전부 먹어서 패널이 바닥에
+   * 붙었고, 가운데 히어로(9/28)가 화면 아래 1/3 까지 내려갔다 — "너무 아래쪽". 패널 몫은 히어로와 바로가기
+   * 사이 틈이 된다: 1.4 : 1 이면 1080×2340 폰에서 틈이 화면의 ~19% 로 비어 보였고, 3 : 1 이면 D+ 가 세로 가운데쯤,
+   * 틈은 그 절반쯤이다. 패널은 내용 높이(flexBasis auto)에서 출발해 나머지를 받으므로 작은 폰에서 잘리지 않는다.
+   */
+  photoArea: { flexGrow: 3, flexBasis: 0, alignItems: 'center', justifyContent: 'center' },
   // 스티커 원본은 정사각에 가깝다. 폭 기준 절반 정도가 캐릭터 둘이 "앉아 있는" 크기다
   wallpaperDuoImage: { width: 180, height: 180 },
-  photoPrompt: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    minHeight: layout.touchTarget,
-    paddingHorizontal: spacing.md,
-    borderRadius: radius.pill,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  photoPromptPressed: { opacity: 0.7 },
-  photoPromptText: { color: colors.textPrimary, fontSize: fontSize.caption, fontWeight: '700' },
   // 패널 — 스크림의 불투명 구간 위에 놓인다
   heroSlot: {},
   /*
@@ -1043,6 +1036,7 @@ const styles = themedStyles((colors) => ({
    * 좌우 여백을 음수 마진으로 되돌려 배경이 화면 끝까지 닿게 하고, 바닥 여백도 같은 식으로 채운다.
    */
   panel: {
+    flexGrow: 1,
     gap: spacing.md,
     marginHorizontal: -spacing.lg,
     paddingHorizontal: spacing.lg,
@@ -1052,6 +1046,7 @@ const styles = themedStyles((colors) => ({
     backgroundColor: colors.background,
   },
   panelFade: { position: 'absolute', left: 0, right: 0, top: -72, height: 72 },
+  panelSpacer: { flexGrow: 1, marginTop: -spacing.md },
 
   disconnected: { padding: spacing.lg },
   connectWrap: { alignItems: 'center', paddingVertical: spacing.lg },
