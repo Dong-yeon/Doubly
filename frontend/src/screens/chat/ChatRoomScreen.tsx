@@ -440,6 +440,17 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     () => (editing ? [] : suggestStickers(STICKER_CODE_INDEX, text)),
     [text, editing],
   );
+  /*
+   * 추천 막대를 치운 입력 — X 를 누르면 이번 입력(보내거나 지울 때까지) 동안 다시 띄우지 않는다.
+   * 추천을 눌러 보낸 뒤에는 그 글 그대로일 때만 숨긴다(같은 그림을 또 권하지 않게).
+   */
+  const [stickerBarClosed, setStickerBarClosed] = useState(false);
+  const [stickerPickedFor, setStickerPickedFor] = useState<string | null>(null);
+  // 입력이 비면(보냈거나 지웠다) 새 입력이다 — 렌더 중 조정이라 effect 한 바퀴를 더 돌지 않는다
+  if (!text && (stickerBarClosed || stickerPickedFor !== null)) {
+    setStickerBarClosed(false);
+    setStickerPickedFor(null);
+  }
 
   /** 첫 제안을 적용한다. 남은 게 있으면 이어서 뜬다 */
   const applySpelling = () => {
@@ -1819,11 +1830,17 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           </View>
         ) : null}
         <StickerSuggestBar
-          items={stickerSuggestions}
+          items={stickerBarClosed || stickerPickedFor === text ? [] : stickerSuggestions}
           onPick={(e) => {
-            setText('');
+            /*
+             * 입력창의 글은 그대로 둔다 — "나도 사랑해"에 그림을 곁들인 사람은 문장도 보낼 생각이다.
+             * 코드를 치던 중("(달걀이_")만 비운다: 그 글은 보낼 말이 아니라 고르던 흔적이다.
+             */
+            if (text.trim().startsWith('(')) setText('');
+            else setStickerPickedFor(text);
             void sendSticker(e.code, false, e.label);
           }}
+          onDismiss={() => setStickerBarClosed(true)}
         />
         <SpellCheckBar
           suggestion={spellDismissedFor === text ? null : (suggestions[0] ?? null)}

@@ -107,50 +107,166 @@ export const STICKER_KEYWORDS: [string[], string[]][] = [
   [['윙크', '찡긋'], ['DUO_WINK']],
 ];
 
-/** 이보다 길면 문장이다 — 추천을 띄우지 않는다 */
+/** 이보다 길면 문장이다 — 입력 <b>전체</b>로 맞추는 추천(라벨·키워드·부분 일치)은 여기까지 */
 const MAX_TRIGGER_LENGTH = 10;
+/** 이보다 길면 문단이다 — 마지막 어절 추천도 끈다 */
+const MAX_INPUT_LENGTH = 40;
 export const MAX_SUGGESTIONS = 6;
+/** 캐릭터 스티커와 움직이는 이모티콘이 둘 다 있을 때 캐릭터 스티커가 차지하는 최대 칸 */
+const MAX_IMAGE_SLOTS_WHEN_MIXED = 4;
+
+/** 추천 막대의 한 칸 — 캐릭터 스티커(이미지)와 움직이는 이모티콘이 같은 막대에 선다 */
+export interface StickerSuggestion {
+  kind: 'image' | 'animated';
+  code: string;
+  label: string;
+  /** 무엇이 이 추천을 불렀나(라벨·키워드·코드 접두) — 계측용. 사용자 입력 원문은 담지 않는다 */
+  matched: string;
+}
+
+export interface SuggestOptions {
+  /** 움직이는 이모티콘 카탈로그 — 없으면 캐릭터 스티커만 */
+  animated?: { code: string; label: string }[];
+  /** 최근 내가 보낸 스티커 코드(최신이 앞) — 같은 순위 안에서 앞으로 당긴다 */
+  recent?: string[];
+  /** false 면 뺀다 — 잠긴 팩. 눌렀는데 결제창이 뜨면 추천이 광고가 된다 */
+  isAllowed?: (kind: StickerSuggestion['kind'], code: string) => boolean;
+  limit?: number;
+}
 
 /**
- * 짧은 입력에 맞는 스티커 — 없으면 빈 배열.
- * 순서: 코드 입력 중("(더비" 처럼)이면 그 캐릭터 전부 → 라벨 정확히 일치 → 키워드 → 라벨 포함.
+ * 반복 자모·물결을 줄인다 — "ㅋㅋㅋㅋㅋ" → "ㅋㅋ", "ㅠㅠㅠ" → "ㅠㅠ", "사랑해~~" → "사랑해".
+ * 같은 자모가 셋 이상 이어지면 둘로 줄인다(하나로 줄이면 "ㅋ" 한 글자가 되어 키워드와 안 맞는다).
  */
-export function suggestStickers(index: StickerCodeIndex, text: string, limit = MAX_SUGGESTIONS): StickerCodeEntry[] {
+export function collapseRepeats(s: string): string {
+  return s.replace(/([ㄱ-ㅎㅏ-ㅣ])\1{2,}/g, '$1$1');
+}
+
+/** 비교 키 — 반복 자모를 줄이고 공백·문장부호를 뺀다 */
+function keyOf(s: string): string {
+  return normalizeKey(collapseRepeats(s));
+}
+
+/** 끝에 붙은 자모 덩어리를 뗀다 — "피곤해ㅠㅠ" → "피곤해" */
+function stripTrailingJamo(s: string): string {
+  return s.replace(/[ㄱ-ㅎㅏ-ㅣ]+$/, '');
+}
+
+/*
+ * 순위 — 작을수록 앞. 같은 순위 안에서는 최근 보낸 것이 앞이고, 그다음은 표에 적힌 순서다.
+ * 캐릭터 스티커가 움직이는 이모티콘보다 늘 앞이다(순위보다 종류가 먼저).
+ */
+const RANK_LABEL_EXACT = 0;
+const RANK_KEYWORD_EXACT = 1;
+const RANK_LAST_WORD_LABEL = 2;
+const RANK_LAST_WORD_KEYWORD = 3;
+const RANK_PARTIAL = 4;
+
+interface Candidate extends StickerSuggestion {
+  rank: number;
+  order: number;
+}
+
+/**
+ * 입력에 맞는 스티커 — 없으면 빈 배열.
+ *
+ * <ol>
+ *   <li>코드를 치는 중("(달걀이" · "(달걀이_사")이면 그 캐릭터의 캐릭터 스티커만.</li>
+ *   <li>입력 전체가 짧으면(≤ {@link MAX_TRIGGER_LENGTH}) 라벨 정확 → 키워드 정확 → 부분 일치.</li>
+ *   <li>입력의 <b>마지막 어절</b>이 라벨·키워드와 같거나 그것으로 끝나면 — "나도 사랑해" → 사랑해,
+ *       "오늘 피곤해ㅠㅠ" → ㅠㅠ·피곤. 끝에 붙은 자모를 떼고도 한 번 더 본다. 전체 길이 상한은
+ *       적용하지 않고, 대신 {@link MAX_INPUT_LENGTH} 를 넘으면 끈다.</li>
+ * </ol>
+ *
+ * <p>"끝나면" 비교는 두 글자 이상 키워드만 한다 — "응원해"가 "응"으로, "네가"가 "네"로 걸리면 안 된다.
+ */
+export function suggestStickers(index: StickerCodeIndex, text: string, options: SuggestOptions = {}): StickerSuggestion[] {
+  const { animated = [], recent = [], isAllowed = () => true, limit = MAX_SUGGESTIONS } = options;
   const raw = text.trim();
-  if (!raw) return [];
-  const key = normalizeKey(raw);
-  if (!key || key.length > MAX_TRIGGER_LENGTH + 2) return [];
+  if (!raw || raw.length > MAX_INPUT_LENGTH) return [];
+  const key = keyOf(raw);
+  if (!key) return [];
 
-  const picked: StickerCodeEntry[] = [];
-  const push = (e: StickerCodeEntry | undefined) => {
-    if (e && !picked.includes(e) && picked.length < limit) picked.push(e);
-  };
-  const byCode = (code: string) => index.entries.find((e) => e.code === code);
-
-  // "(더비" · "(더비_" · "(더비_좋" — 코드를 치는 중이면 그 캐릭터를 보여준다
+  // "(달걀이" · "(달걀이_" · "(달걀이_사" — 코드를 치는 중이면 그 캐릭터를 보여준다
   if (key.startsWith('(')) {
+    if (key.length > MAX_TRIGGER_LENGTH + 2) return [];
     const inner = key.slice(1).replace(/\)$/, '');
     const [character, partial = ''] = inner.split('_');
     if (!character) return [];
+    const out: StickerSuggestion[] = [];
     for (const e of index.entries) {
-      if (normalizeKey(e.character).startsWith(character) && normalizeKey(e.label).startsWith(partial)) push(e);
-    }
-    return picked;
-  }
-
-  if (key.length > MAX_TRIGGER_LENGTH) return [];
-  for (const e of index.entries) if (normalizeKey(e.label) === key) push(e);
-  for (const [words, codes] of STICKER_KEYWORDS) {
-    if (words.some((w) => normalizeKey(w) === key)) codes.forEach((c) => push(byCode(c)));
-  }
-  // 두 글자부터 포함 검색 — 한 글자("좋")로는 너무 많이 잡힌다
-  if (key.length >= 2) {
-    for (const e of index.entries) if (normalizeKey(e.label).includes(key)) push(e);
-    for (const [words, codes] of STICKER_KEYWORDS) {
-      if (words.some((w) => normalizeKey(w).startsWith(key) || key.startsWith(normalizeKey(w)))) {
-        codes.forEach((c) => push(byCode(c)));
+      if (out.length >= limit) break;
+      if (!isAllowed('image', e.code)) continue;
+      if (normalizeKey(e.character).startsWith(character) && normalizeKey(e.label).startsWith(partial)) {
+        out.push({ kind: 'image', code: e.code, label: e.label, matched: `(${normalizeKey(e.character)}` });
       }
     }
+    return out;
   }
-  return picked;
+
+  const imageByCode = new Map(index.entries.map((e) => [e.code, e]));
+  const animatedByCode = new Map(animated.map((a) => [a.code, a]));
+  const labelled: { kind: StickerSuggestion['kind']; code: string; label: string }[] = [
+    ...index.entries.map((e) => ({ kind: 'image' as const, code: e.code, label: e.label })),
+    ...animated.map((a) => ({ kind: 'animated' as const, code: a.code, label: a.label })),
+  ];
+
+  const found = new Map<string, Candidate>();
+  let order = 0;
+  const add = (code: string, rank: number, matched: string) => {
+    const image = imageByCode.get(code);
+    const anim = image ? undefined : animatedByCode.get(code);
+    const kind = image ? 'image' : anim ? 'animated' : null;
+    if (!kind || !isAllowed(kind, code)) return;
+    const prev = found.get(code);
+    if (prev && prev.rank <= rank) return;
+    found.set(code, { kind, code, label: (image ?? anim)!.label, matched, rank, order: prev?.order ?? order++ });
+  };
+  const eachKeyword = (fn: (word: string, codes: string[]) => void) => {
+    for (const [words, codes] of STICKER_KEYWORDS) for (const w of words) fn(keyOf(w), codes);
+  };
+
+  // 입력 전체가 짧을 때 — 라벨·키워드 정확 일치, 그리고 부분 일치
+  if (key.length <= MAX_TRIGGER_LENGTH) {
+    for (const l of labelled) if (keyOf(l.label) === key) add(l.code, RANK_LABEL_EXACT, l.label);
+    eachKeyword((w, codes) => {
+      if (w === key) codes.forEach((c) => add(c, RANK_KEYWORD_EXACT, w));
+    });
+    // 두 글자부터 — 한 글자("좋")로는 너무 많이 잡힌다
+    if (key.length >= 2) {
+      for (const l of labelled) if (keyOf(l.label).includes(key)) add(l.code, RANK_PARTIAL, l.label);
+      eachKeyword((w, codes) => {
+        if (w.startsWith(key) || (w.length >= 2 && key.startsWith(w))) codes.forEach((c) => add(c, RANK_PARTIAL, w));
+      });
+    }
+  }
+
+  // 마지막 어절 — "나도 사랑해", "오늘 피곤해ㅠㅠ"
+  const lastWord = keyOf(raw.split(/\s+/).pop() ?? '');
+  const lastCore = stripTrailingJamo(lastWord);
+  const tails = lastCore && lastCore !== lastWord ? [lastWord, lastCore] : [lastWord];
+  const hits = (w: string) => tails.some((t) => t === w || (w.length >= 2 && t.endsWith(w)));
+  if (lastWord) {
+    for (const l of labelled) {
+      const lk = keyOf(l.label);
+      if (lk && hits(lk)) add(l.code, RANK_LAST_WORD_LABEL, l.label);
+    }
+    eachKeyword((w, codes) => {
+      if (w && hits(w)) codes.forEach((c) => add(c, RANK_LAST_WORD_KEYWORD, w));
+    });
+  }
+
+  const recency = (code: string) => {
+    const i = recent.indexOf(code);
+    return i < 0 ? Number.MAX_SAFE_INTEGER : i;
+  };
+  const sorted = [...found.values()].sort(
+    (a, b) => a.rank - b.rank || recency(a.code) - recency(b.code) || a.order - b.order,
+  );
+  const images = sorted.filter((c) => c.kind === 'image');
+  const anims = sorted.filter((c) => c.kind === 'animated');
+  // 둘 다 있으면 움직이는 이모티콘에도 자리를 남긴다 — 캐릭터 스티커가 늘 여섯 칸을 다 채우면 안 보인다
+  const imageSlots = anims.length > 0 ? Math.min(images.length, MAX_IMAGE_SLOTS_WHEN_MIXED, limit) : Math.min(images.length, limit);
+  const picked = [...images.slice(0, imageSlots), ...anims.slice(0, limit - imageSlots)];
+  return picked.map(({ kind, code, label, matched }) => ({ kind, code, label, matched }));
 }
