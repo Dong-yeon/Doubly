@@ -58,7 +58,8 @@ const styles = themedStyles((colors) => ({
    * 부른다(이 파일 상단의 "칸을 늘리는 자리가 아니다"와 같은 방향). 왼쪽에 모아 두면
    * 줄의 길이가 기능 수를 그대로 드러낸다.
    */
-  row: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.xs },
+  // 히어로가 가운데 정렬이라(2026-09-28) 바로가기도 가운데로 — 왼쪽에 붙으면 축이 둘로 갈린다
+  row: { flexDirection: 'row', justifyContent: 'center', gap: spacing.md, marginBottom: spacing.xs },
   /*
    * 원 안 아이콘 + 아래 라벨(런처 모양)을 접고 <b>아이콘 + 라벨 한 줄</b>의 텍스트 버튼으로
    * 바꿨다(docs/SCREEN_DESIGN_PASS_2026-09-23.md §1-2 P5). 앱 안에 또 홈 화면을 만들지

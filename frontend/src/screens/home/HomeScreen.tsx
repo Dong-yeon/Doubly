@@ -99,9 +99,11 @@ const WALLPAPER_DUO = require('../../../assets/stickers/duo_relaxed.png');
  * 퍼져 있어 어떤 사진이 와도 AA 를 맞추려면 사진을 지워야 했기 때문이다. 결과는
  * "배경 사진 위의 우리 화면"인데 사진이 안 보이는 홈이었다.
  *
- * <p>지금은 글자가 <b>하단 패널</b>에만 있으므로(CoupleHero) 스크림도 아래에만 깐다 —
- * 위 절반은 투명, 패널이 시작되는 자리부터 배경색으로 올라가 패널 영역에서는 불투명하다.
- * 글자는 전부 불투명 구간(≥0.96) 위에 놓이므로 대비는 사진과 무관하게 테마 대비 그대로다.
+ * <p>지금은 글자가 <b>하단 패널</b>에만 있다(CoupleHero·슬롯·바로가기). 2026-09-28 부터 패널이 스스로
+ * 불투명 배경을 깔고, 그 위로 짧은 페이드(panelFade)만 사진 쪽으로 번진다 — <b>화면 높이 비율이 아니라
+ * 패널에 붙어 있어서</b> 패널이 길어져도(가운데 D+ 히어로) 글자는 늘 불투명 구간 위에 놓인다.
+ * 예전처럼 화면 42%~62% 에 고정된 스크림이면, 키 큰 히어로의 윗부분이 반투명 구간에 걸려 밝은
+ * 사진 위에서 안 읽힌다. 전체 스크림(scrim)은 이제 미연결 화면(글자가 화면 전체에 있다)에서만 쓴다.
  * 맨 위에는 상단 바 아이콘용으로 짧은 스크림을 따로 깐다(topScrim).
  *
  * <p><b>⚠️ 스크림과 글씨의 테마가 어긋나면 안 된다.</b> 스크림만 크림으로 고정했다가
@@ -113,6 +115,10 @@ const scrim = (): [string, string, string, string] =>
   isDarkMode()
     ? ['rgba(30,32,28,0)', 'rgba(30,32,28,0)', 'rgba(30,32,28,0.96)', 'rgba(30,32,28,1)']
     : ['rgba(250,250,249,0)', 'rgba(250,250,249,0)', 'rgba(250,250,249,0.96)', 'rgba(250,250,249,1)'];
+
+/** 패널 위로 번지는 페이드 — 투명 → 패널 배경색(= colors.background). 패널 바로 위에 붙는다 */
+const panelFade = (): [string, string] =>
+  isDarkMode() ? ['rgba(30,32,28,0)', 'rgba(30,32,28,1)'] : ['rgba(250,250,249,0)', 'rgba(250,250,249,1)'];
 
 /** 상단 바 아이콘이 밝은 사진 위에서도 읽히게 — 위 14% 만, 배경색 0.7 → 0 */
 const TOP_SCRIM_LOCATIONS: [number, number] = [0, 0.14];
@@ -674,12 +680,15 @@ export function HomeScreen({ navigation }: Props) {
             end={{ x: 1, y: 1 }}
           />
         )}
-        <LinearGradient
-          colors={scrim()}
-          locations={SCRIM_LOCATIONS}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-        />
+        {/* 연결된 홈은 패널이 제 배경을 깐다(panelFade) — 전체 스크림은 글자가 화면 전체에 있는 미연결 화면만 */}
+        {!connected ? (
+          <LinearGradient
+            colors={scrim()}
+            locations={SCRIM_LOCATIONS}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
+        ) : null}
         <LinearGradient
           colors={topScrim()}
           locations={TOP_SCRIM_LOCATIONS}
@@ -713,6 +722,8 @@ export function HomeScreen({ navigation }: Props) {
                   </View>
                 ) : null}
               </View>
+              <View style={styles.panel}>
+              <LinearGradient colors={panelFade()} style={styles.panelFade} pointerEvents="none" />
               <View style={styles.heroSlot}>
                 <CoupleHero
                   me={{
@@ -869,6 +880,7 @@ export function HomeScreen({ navigation }: Props) {
                   },
                 ]}
               />
+              </View>
             </View>
           ) : (
             /*
@@ -1026,6 +1038,20 @@ const styles = themedStyles((colors) => ({
   photoPromptText: { color: colors.textPrimary, fontSize: fontSize.caption, fontWeight: '700' },
   // 패널 — 스크림의 불투명 구간 위에 놓인다
   heroSlot: {},
+  /*
+   * 하단 패널 — 히어로·슬롯·바로가기. 제 배경을 깔아 사진과 무관하게 읽힌다(scrim 주석).
+   * 좌우 여백을 음수 마진으로 되돌려 배경이 화면 끝까지 닿게 하고, 바닥 여백도 같은 식으로 채운다.
+   */
+  panel: {
+    gap: spacing.md,
+    marginHorizontal: -spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xs,
+    marginBottom: -spacing.sm,
+    paddingBottom: spacing.sm,
+    backgroundColor: colors.background,
+  },
+  panelFade: { position: 'absolute', left: 0, right: 0, top: -72, height: 72 },
 
   disconnected: { padding: spacing.lg },
   connectWrap: { alignItems: 'center', paddingVertical: spacing.lg },
