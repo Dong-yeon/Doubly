@@ -15,5 +15,11 @@ public enum ClientAnalyticsEvent {
     PAYWALL_VIEWED,
     PURCHASE_STARTED,
     PURCHASE_CANCELLED,
-    PURCHASE_FAILED;
+    PURCHASE_FAILED,
+    /**
+     * 입력 중 스티커 추천(2026-09-28) — 막대가 떴다 / 막대에서 골랐다. detail 에 걸린 키워드와 코드.
+     * 사용자가 친 글 원문은 넣지 않는다(앱이 표에 있는 키워드만 싣는다).
+     */
+    STICKER_SUGGEST_SHOWN,
+    STICKER_SUGGEST_PICKED;
 }
