@@ -85,7 +85,9 @@ import { useStickerStore } from '../../store/stickerStore';
 import { loadRecentStickers, recordRecentSticker } from '../../utils/recentStickers';
 import { parseStickerCode, suggestStickers, type StickerSuggestion } from '../../utils/stickerCodes';
 import { anniversaryContextOf, kstDateKey } from '../../utils/anniversary';
-import { ANNIVERSARY_STICKERS, contextSuggestions } from '../../constants/contextStickers';
+import { ANNIVERSARY_STICKERS, MOOD_REPLY, contextSuggestions } from '../../constants/contextStickers';
+import { MOOD_EMOJIS, PREMIUM_MOOD_EMOJIS } from '../../constants/moodEmojis';
+import { moodApi } from '../../api/mood';
 import { StickerPanel, type ContextPack } from '../../components/chat/StickerPanel';
 import { AnimatedCoupleEmoji } from '../../components/chat/AnimatedCoupleEmoji';
 import { TextSticker } from '../../components/chat/TextSticker';
@@ -99,7 +101,7 @@ import { chatDateDividerLabel, isSameLocalDay, toDateString } from '../../utils/
 import { buildChatTranscript, canExportTranscript, shareTranscript } from '../../utils/chatExport';
 import { STICKER_PURCHASE_ENABLED } from '../../constants/config';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { ChatMessage, CoupleEmoji, StickerPack, TouchGestureCode } from '../../types';
+import type { ChatMessage, CoupleEmoji, MoodEntry, StickerPack, TouchGestureCode } from '../../types';
 import { themedStyles, chatThemedStyles } from '../../theme/themedStyles';
 import { CHAT_PHOTO_SCRIM } from '../../theme/chatTheme';
 import { useChatThemeStore } from '../../store/chatThemeStore';
@@ -118,6 +120,8 @@ const EMPTY_MESSAGES: ChatMessage[] = [];
 const EMPTY_SUGGESTIONS: StickerSuggestion[] = [];
 /** 기념일 맥락 추천을 막대에 띄운 KST 날짜 — `.{relationId}` 를 붙여 방마다 하루 한 번 */
 const ANNIVERSARY_BAR_KEY = 'doubly.contextSticker.anniversary';
+/** 무드 유니코드 → 이름("슬픔") — 맥락 칸 한 줄에 쓴다 */
+const MOOD_LABEL = new Map([...MOOD_EMOJIS, ...PREMIUM_MOOD_EMOJIS].map((m) => [m.emoji, m.label]));
 
 /**
  * 채팅방은 탭 부모까지 본다 — 트레이의 "질문"·"게임"이 홈 스택 화면으로 건너가기 때문이다
@@ -572,14 +576,73 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     })();
   }, [anniversary, anniversaryItems, relationId]);
 
-  /** 패널 맨 앞 맥락 칸 — 기념일 > 상대 무드 */
+  /*
+   * 상대 무드에 답하는 스티커 — 슬프면 안아 주고 화났으면 달랜다(constants/contextStickers.ts MOOD_REPLY).
+   * 내 무드는 쓰지 않는다: 답장의 맥락은 상대 기분이다. 방에 들어올 때 한 번 받고, 상대가 바꾸면
+   * 커플 이벤트(MOOD)로 다시 받는다 — 바꾼 직후에만 막대에 한 번 띄운다(같은 무드에는 한 번).
+   */
+  const [partnerMood, setPartnerMood] = useState<MoodEntry | null>(null);
+  /** 직전에 받은 상대 무드 — "바뀌었나"를 이벤트 때 비교한다. 렌더에 안 쓰는 기록이라 ref 다 */
+  const partnerMoodRef = useRef<MoodEntry | null>(null);
+  const moodBarShownRef = useRef<Set<string>>(new Set());
+  const refreshPartnerMood = useCallback(
+    async (fromEvent: boolean) => {
+      let next: MoodEntry | null;
+      try {
+        next = (await moodApi.current()).partner;
+      } catch {
+        return; // 무드를 못 받으면 맥락 칸이 없을 뿐이다
+      }
+      const prev = partnerMoodRef.current;
+      partnerMoodRef.current = next;
+      setPartnerMood(next);
+      if (!fromEvent || !next || !MOOD_REPLY[next.emoji]) return;
+      if (prev?.createdAt === next.createdAt && prev?.emoji === next.emoji) return; // 내 무드가 바뀐 이벤트
+      const onceKey = `${next.emoji}|${next.createdAt}`;
+      if (moodBarShownRef.current.has(onceKey)) return;
+      moodBarShownRef.current.add(onceKey);
+      const items = contextSuggestions('MOOD', MOOD_REPLY[next.emoji], isSuggestAllowed);
+      // 기념일 막대가 떠 있으면 덮지 않는다 — 우선순위 기념일 > 무드
+      if (items.length > 0) setContextBar((cur) => (cur && cur[0]?.matched === 'ctx:ANNIVERSARY' ? cur : items));
+    },
+    [isSuggestAllowed],
+  );
+  // 소켓 핸들러는 구독할 때 한 번 잡히므로 최신 함수를 ref 로 건넨다(렌더 중이 아니라 effect 에서 갱신)
+  const refreshPartnerMoodRef = useRef(refreshPartnerMood);
+  useEffect(() => {
+    refreshPartnerMoodRef.current = refreshPartnerMood;
+  }, [refreshPartnerMood]);
+  useEffect(() => {
+    partnerMoodRef.current = null;
+    void refreshPartnerMoodRef.current(false);
+  }, [relationId]);
+
+  const moodItems = useMemo(
+    () =>
+      partnerMood && MOOD_REPLY[partnerMood.emoji]
+        ? contextSuggestions('MOOD', MOOD_REPLY[partnerMood.emoji], isSuggestAllowed)
+        : EMPTY_SUGGESTIONS,
+    [partnerMood, isSuggestAllowed],
+  );
+
+  /** 패널 맨 앞 맥락 칸 — 하나만 보인다. 기념일 > 상대 무드 */
   const contextPack = useMemo<ContextPack | null>(() => {
     if (anniversary && anniversaryItems.length > 0) {
       const what = anniversary.kind === 'YEARS' ? `${anniversary.years}주년` : `D+${anniversary.days}`;
       return { context: 'ANNIVERSARY', label: anniversary.title, caption: `오늘은 우리 ${what}이에요 🎉`, items: anniversaryItems };
     }
+    if (partnerMood && moodItems.length > 0) {
+      const name = couple?.partner?.name ?? '상대';
+      const moodLabel = MOOD_LABEL.get(partnerMood.emoji);
+      return {
+        context: 'MOOD',
+        label: `${name} 기분`,
+        caption: `지금 ${name}의 기분: ${partnerMood.emoji}${moodLabel ? ` ${moodLabel}` : ''}`,
+        items: moodItems,
+      };
+    }
     return null;
-  }, [anniversary, anniversaryItems]);
+  }, [anniversary, anniversaryItems, partnerMood, moodItems, couple?.partner?.name]);
 
   // 패널에 맥락 칸이 보인 것 — 패널을 열 때마다가 아니라 이 방에서 맥락마다 한 번
   const contextPanelShownRef = useRef<string | null>(null);
@@ -727,6 +790,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           if (!active) return;
           subscribeCouple(relationId, (type) => {
             if (type === 'COUPLE_EMOJI') void loadCoupleEmojis(true).catch(() => undefined);
+            // 상대(또는 내가 다른 기기에서)가 무드를 바꿨다 — 상대 무드가 실제로 바뀐 경우만 막대에 뜬다
+            if (type === 'MOOD') void refreshPartnerMoodRef.current(true);
           });
         })
         .catch(() => undefined);
