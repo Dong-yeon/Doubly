@@ -11,7 +11,10 @@
 엉뚱한 문구가 붙는 걸 막는다. 키가 아닌 이름은 남은 문구에 순서대로 배정된다.
 
 캡처는 비율이 달라도 된다 — 자리에 맞춰 <b>가운데를 채우도록</b> 잘라 넣는다(cover).
-상·하단 상태바까지 그대로 찍혀 있어도 되고, 그게 오히려 실제 화면이라는 근거가 된다.
+
+<b>맨 위 상태바(시각·배터리·알림 아이콘)는 지운다</b>(2026-09-28, 기본값). 잘라내지 않고 앱의 맨 윗줄을
+위로 늘려 덮는다 — 자리 비율이 그대로이고, 홈처럼 윗부분이 그라데이션이어도 자연스럽다.
+그대로 두려면 `--keep-status-bar`. 하단 내비게이션 바는 그대로 둔다.
 """
 import pathlib
 import sys
@@ -33,6 +36,32 @@ def cover(img: Image.Image, w: int, h: int) -> Image.Image:
     left = (resized.width - w) // 2
     top = (resized.height - h) // 2
     return resized.crop((left, top, left + w, top + h))
+
+
+# 상태바 24dp — 캡처 기준(1080 폭 @ 420dpi)에서 63px. 폭에 비례해 다른 크기 캡처에도 맞춘다
+STATUS_BAR_PX_AT_1080 = 63
+
+
+def clear_status_bar(img: Image.Image) -> Image.Image:
+    """상태바 영역을 <b>상태바 맨 윗부분의 한 줄</b>로 덮는다. 원본은 건드리지 않는다.
+
+    앱은 상태바 뒤까지 제 배경을 그리고(edge-to-edge) 아이콘은 상태바 세로 가운데에만 있어서, 맨 위 몇 줄은
+    순수한 앱 배경이다. 처음엔 상태바 바로 <b>아래</b> 줄을 늘렸는데, 홈에서는 그 줄에 프로필 링 윗가장자리가
+    걸쳐 세로 줄무늬로 늘어났다. 혹시 남는 가는 것은 가로 중앙값 필터(창 61px)로 지운다.
+    """
+    import numpy as np
+
+    bar = round(img.width * STATUS_BAR_PX_AT_1080 / 1080)
+    src_y = max(1, round(bar * 0.05))  # 63px 바에서 3번째 줄 — 아이콘(가운데 약 2/3)보다 위
+    row = np.asarray(img.crop((0, src_y, img.width, src_y + 1)))[0].astype(np.int16)  # (W, 3)
+    half = 30
+    padded = np.pad(row, ((half, half), (0, 0)), mode="edge")
+    windows = np.lib.stride_tricks.sliding_window_view(padded, 2 * half + 1, axis=0)  # (W, 3, 61)
+    smooth = np.median(windows, axis=2).astype(np.uint8)
+    fill = Image.fromarray(np.repeat(smooth[None, :, :], bar + 2, axis=0), "RGB")
+    out = img.copy()
+    out.paste(fill, (0, 0))
+    return out
 
 
 def pair_up(shots: list[pathlib.Path]) -> list[tuple[pathlib.Path, tuple[str, str, str]]]:
@@ -66,6 +95,7 @@ def main(argv: list[str]) -> int:
         print(f"캡처 폴더를 못 찾았어요: {shots_dir}", file=sys.stderr)
         return 1
 
+    keep_status_bar = "--keep-status-bar" in argv
     wanted = None
     if "--size" in argv:
         wanted = argv[argv.index("--size") + 1]
@@ -101,7 +131,10 @@ def main(argv: list[str]) -> int:
                 return 1
             plate = Image.open(plate_path).convert("RGBA")
             canvas = Image.new("RGBA", (w, h), (255, 255, 255, 255))
-            canvas.paste(cover(Image.open(shot).convert("RGB"), sw, sh), (x, y))
+            img = Image.open(shot).convert("RGB")
+            if not keep_status_bar:
+                img = clear_status_bar(img)
+            canvas.paste(cover(img, sw, sh), (x, y))
             canvas.alpha_composite(plate)          # 뚫린 자리로 캡처가 비친다
             out = dest / f"{cap_key}.png"
             canvas.convert("RGB").save(out)        # 스토어는 알파를 원하지 않는다
