@@ -311,3 +311,38 @@ interface Props {
 3. P2(v5 비교 실험 → 코드) → 병합·push
 4. P3 실험 → 문서 → 채택 여부 결정
 5. P4·P5 는 여유 있을 때
+
+---
+
+## 12. 구현 기록 (2026-09-28)
+
+### P0 — 완료
+- 진행 격자를 `drawing.map` 으로 돈다. 잠금 카드 문구에서 숫자를 뺐다.
+
+### P1 — 완료(실기기 확인 전)
+
+명세와 다르게 간 것과 그 이유:
+
+| 명세 | 실제 | 이유 |
+| --- | --- | --- |
+| 모션 = `react-native-reanimated`, 동작 줄이기 = `useReducedMotion()` | RN `Animated` + native driver, `AccessibilityInfo.isReduceMotionEnabled` + `reduceMotionChanged` | 앱 소스에서 Reanimated 를 import 하는 곳이 한 곳도 없다(babel 플러그인만 있음). 나머지 애니메이션은 전부 `Animated`. transform·opacity 만 움직이므로 native driver 로도 UI 스레드에서 돈다 — 첫 Reanimated 사용처가 되어 웹 번들 위험을 새로 질 이유가 없었다 |
+| 🫧(씻고왔다)·🪫(방전) | 💦·💫 | Emoji 14 라 Android 12 이전 시스템 폰트에서 네모로 뜬다 |
+| MotionKind 13종 | `hold` 추가(14종) | 멋진척의 "고개 젖힌 채 유지 후 복귀"가 기존 종류에 없다 |
+| 웹에서 Lottie 가 문제면 모션만 | 처음부터 웹은 모션만 | `lottie-react-native` 웹 진입점이 미설치 peer 를 import 해 번들이 깨진다(AnimatedSticker.tsx 와 같은 이유). `CoupleEmojiLottieEffect.web.tsx` 가 null |
+| 효과 판정 "v5 이상" | "v5 이상 또는 `duo-` 접두" | `COUPLE_EMOJI_DUO_SPEC_2026-09-28.md` §3-3 을 미리 반영 |
+
+구현 메모:
+- 모션은 키프레임 값 목록(`MOTIONS`)을 진행도 0→1 에 등분 보간한다. 모든 트랙이 정지 자세로 끝난다.
+- 자동 재생 기준 = 방을 열었을 때의 최대 메시지 id. 그보다 큰 `COUPLE_EMOJI` 메시지만 한 번 움직이고,
+  움직인 id 는 따로 적어 스크롤 재마운트 때 반복하지 않는다.
+- 받은 메시지의 감정을 알기 위해 방을 열 때 우리 이모지 목록을 캐시로 받는다(`load()` — 캐시가 있으면 요청 없음).
+  목록이 늦게 오면 자동 재생은 **소비되지 않고 기다렸다가** 감정이 정해지는 순간 움직인다.
+- 감정을 모르면(지운 이모지·모르는 감정) 예전과 같은 정지 원형 그림이고 터치를 가로채지 않는다.
+- 무드 피커·홈 무드 배지 연결(§5-5 선택 사항)은 하지 않았다.
+
+검증: `typecheck` · `verify:nested-buttons` · `build:web` 통과, lint 는 `ChatRoomScreen` 기존 오류 2건 외 새 경고 없음,
+백엔드 `CoupleEmojiFlowTest`·`MoodFlowTest` 통과. **실기기 확인 항목(§5-6)은 아직** — 지금 모든 세트가 v4 라
+효과 레이어는 P2(v5) 전까지 운영에서 보이지 않는다. 효과까지 보려면 개발 빌드에서 `coupleEmojiEffectsAllowed` 를 잠시 true 로.
+
+### 다음
+- P2 의 v4/v5 비교 실험(약 $1.5)과 DUO D0 실험(약 $1.7)은 유료 Gemini 호출이라 실행 전에 확인을 받는다.
