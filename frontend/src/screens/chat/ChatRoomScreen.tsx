@@ -2397,7 +2397,7 @@ function ExtraButton({
           <View style={[styles.extraTile, pressed && styles.extraTilePressed]}>
             <MaterialCommunityIcons name={icon} size={26} color={colors.textPrimary} />
           </View>
-          <Text style={styles.extraLabel}>{label}</Text>
+          <Text style={chatStyles.extraLabel}>{label}</Text>
         </>
       )}
     </Pressable>
@@ -2693,7 +2693,6 @@ const styles = themedStyles((colors) => ({
     justifyContent: 'center',
   },
   extraTilePressed: { backgroundColor: colors.primarySoft },
-  extraLabel: { fontSize: fontSize.caption, fontWeight: '600', color: colors.textSecondary },
   inputBar: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -2840,6 +2839,19 @@ const chatStyles = chatThemedStyles((chat) => ({
   // "보내는 중" — 시간 자리에 들어가므로 같은 크기·색 체계를 따른다
   sendingMark: { fontSize: fontSize.micro, color: chat.meta, ...metaCapsule(chat.metaCapsule) },
   editedMark: { fontSize: fontSize.micro, color: chat.meta, ...metaCapsule(chat.metaCapsule) },
+
+  /*
+   * "+" 메뉴 라벨(이모티콘·사진·음성…) — 패널에 바닥이 없어 <b>채팅 배경 위에 바로</b> 놓인다.
+   * 예전엔 앱 공용 textSecondary 라 남색 같은 어두운 채팅 테마에서 거의 안 보였다(2026-09-28 실기기).
+   * 날짜 라벨과 같은 meta 색 + 캡슐을 쓴다 — 테마마다 배경 대비가 검증된 색이고(verify:chat-theme),
+   * 사진 배경에서는 캡슐이 깔린다.
+   */
+  extraLabel: {
+    fontSize: fontSize.caption,
+    fontWeight: '600',
+    color: chat.meta,
+    ...metaCapsule(chat.metaCapsule),
+  },
 
   dateDividerLine: { flex: 1, height: 1, backgroundColor: chat.dividerLine },
   dateDividerText: {
