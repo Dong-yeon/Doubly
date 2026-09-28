@@ -17,7 +17,7 @@ import { animatedStickerOf } from './animatedStickers';
 
 export type MotionKind =
   | 'shake' | 'tilt' | 'bounce' | 'droop' | 'sway' | 'beat' | 'pop' | 'lean'
-  | 'jitter' | 'bob' | 'stretch' | 'sink' | 'breathe' | 'hold';
+  | 'jitter' | 'bob' | 'stretch' | 'sink' | 'breathe' | 'hold' | 'squash';
 
 export type MotionTrack = 'translateX' | 'translateY' | 'rotate' | 'scale' | 'scaleY' | 'opacity';
 
@@ -56,6 +56,8 @@ export const MOTIONS: Record<MotionKind, MotionSpec> = {
   breathe: { duration: 1600, tracks: { scale: [1, 1.03, 1] } },
   // 고개를 젖힌 채 잠깐 버티다 돌아온다 — 멋진척
   hold: { duration: 1200, tracks: { rotate: [0, -6, -6, -6, 0] } },
+  // 위아래로 눌렸다 돌아온다 — 녹는 달걀이처럼 바닥에 붙은 그림은 내려가면 바닥째 떠 보인다
+  squash: { duration: 1200, tracks: { scaleY: [1, 0.93, 0.96, 0.93, 1] } },
 };
 
 export const COUPLE_EMOJI_MOTION: Record<CoupleEmojiEmotion, CoupleEmojiMotion> = {
