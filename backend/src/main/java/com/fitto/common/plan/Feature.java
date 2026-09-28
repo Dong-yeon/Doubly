@@ -261,6 +261,22 @@ public enum Feature {
     }
 
     /**
+     * 앱에서 내린 기능인가 — 게이팅은 그대로 두고 <b>파는 목록에서만</b> 뺀다.
+     *
+     * <p>{@link #VIDEO_CALL}: 통화는 2026-09-28 에 앱에서 뺐다(docs/CALL_REMOVAL_2026-09-28.md).
+     * 상수를 지우지 않는 이유는 둘이다 — 스토어의 1.0.4 는 여전히 통화 API 를 부르며 이 게이트를
+     * 지나고, {@code usage_counters}·분석 이벤트가 이 이름을 문자열로 들고 있다.
+     */
+    public boolean isWithdrawn() {
+        return this == VIDEO_CALL;
+    }
+
+    /** 결제 화면 비교표에 올리는가 — 한도가 갈리고({@link #isComparable()}) 내린 기능이 아닌 것. */
+    public boolean isListed() {
+        return isComparable() && !isWithdrawn();
+    }
+
+    /**
      * PRO 를 대표하는 세 기능인가 — 결제 화면이 <b>맨 위에 크게</b> 보여줄 것들.
      *
      * <p>비교 화면은 {@link #isComparable()} 로 30줄 가까이 나열되는데, 30줄을 다 읽고
