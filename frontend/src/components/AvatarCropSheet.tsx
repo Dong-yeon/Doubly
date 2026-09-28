@@ -220,7 +220,7 @@ export function AvatarCropSheet({ source, onCancel, onConfirm }: Props) {
       }}
     >
       {/* Modal 은 별도 네이티브 창이라 바깥의 GestureHandlerRootView 컨텍스트가 안 이어진다 —
-          CallOverlay 와 같은 이유로 여기서 다시 감싼다. 빠뜨리면 안드로이드에서 제스처가
+          그래서 여기서 다시 감싼다. 빠뜨리면 안드로이드에서 제스처가
           아예 먹지 않는다. */}
       <GestureHandlerRootView style={styles.root}>
         <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>

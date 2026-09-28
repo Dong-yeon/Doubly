@@ -3,7 +3,11 @@
  * 같은 문자열이어야 한다(단일 출처: "{VOICE|VIDEO}|{MISSED|DECLINED|ENDED}[|durationSec]").
  * PLAN.md "통화·영상통화" 참고.
  */
-import type { CallType } from '../api/call';
+/*
+ * 통화 기능은 2026-09-28 에 앱에서 뺐다(docs/CALL_REMOVAL_2026-09-28.md). 이 파서는 채팅에
+ * 남아 있는 지난 통화 카드를 읽기 위해서만 남는다 — 타입도 여기로 옮겼다(api/call.ts 삭제).
+ */
+export type CallType = 'VOICE' | 'VIDEO';
 
 export interface CallCardInfo {
   callType: CallType;

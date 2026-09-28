@@ -362,7 +362,7 @@ export function ImageViewer({ images, initialIndex, onClose }: Props) {
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       {/* Modal 은 별도 네이티브 창이라 바깥의 GestureHandlerRootView 컨텍스트가 안 이어진다 —
-          여기서 다시 감싸야 아래로 끌어 닫기가 동작한다(CallOverlay 와 같은 이유). */}
+          여기서 다시 감싸야 아래로 끌어 닫기가 동작한다. */}
       <GestureHandlerRootView style={styles.root}>
         {/* 배경은 사진과 따로 둔다 — 끌 때 사진만 따라가고 배경은 옅어져야 한다 */}
         <Animated.View style={[styles.backdrop, { opacity: chromeOpacity }]} />

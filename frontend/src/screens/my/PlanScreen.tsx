@@ -79,8 +79,7 @@ const HERO_DUO = require('../../../assets/stickers/duo_love.png');
 /**
  * 맨 위에 세울 넷 — 기능 40개를 다 나열하면 아무것도 전달되지 않는다.
  *
- * <p>고르는 기준은 "커플 앱이라서 가능한 것". 영상통화는 이 카테고리에서 Doubly 만의
- * 차별점이고(`Feature.VIDEO_CALL` 주석), 우리 이모지는 원가가 실제로 드는 유일한 기능이며,
+ * <p>고르는 기준은 "커플 앱이라서 가능한 것". 우리 이모지는 원가가 실제로 드는 유일한 기능이며,
  * 추억·전체 통계는 <b>오래 쓴 커플일수록 가치가 커지는</b> 쪽이라 지불 의사와 곡선이 같다.
  *
  * <p>이름(`name`)은 여기 적지 않는다 — 서버 카탈로그에서 가져온다. 두 군데에 적으면 갈라진다.
@@ -89,7 +88,6 @@ const HIGHLIGHT_LINES: Partial<Record<FeatureKey, string>> = {
   AI_COUPLE_EMOJI: '사진 한 장으로 우리 둘만의 이모지를',
   AI_FOOD_PHOTO: '찍기만 하면 칼로리와 영양소가 붙어요',
   WORKOUT_V2_STATS: '볼륨·1RM·부위 밸런스까지',
-  VIDEO_CALL: '목소리 말고 얼굴 보면서',
   MEMORIES: '작년 오늘 우리가 뭘 했는지',
   FULL_STATS: '처음부터 지금까지 전부',
 };
