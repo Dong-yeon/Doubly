@@ -284,7 +284,7 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
       {!allowed ? (
         <LockedCard
           title="우리 이모지"
-          description="애인 얼굴로 감정 이모지 6종을 만들어 채팅에서 써요."
+          description="애인 얼굴로 감정 이모지를 만들어 채팅에서 써요."
           upgradeMessage="우리 이모지는 PRO에서 만들 수 있어요."
           // PRO 도 월 4회라, 같은 잠금이 "결제하세요"가 아니라 "다 썼어요"여야 할 때가 있다
           feature="AI_COUPLE_EMOJI"
@@ -408,7 +408,8 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
       {startedOrDone ? (
         <>
           <View style={styles.grid}>
-            {COUPLE_EMOJI_EMOTIONS.map((emotion, i) => {
+            {/* 이번에 그리는 감정만 칸으로 — slots 는 drawing 순서라 17종 전체를 돌면 라벨이 어긋난다 */}
+            {drawing.map((emotion, i) => {
               const emoji = slots[i];
               return (
                 <View key={emotion.key} style={styles.cell}>
