@@ -241,8 +241,12 @@ export const linking: LinkingOptions<RootStackParamList> = {
               /*
                * 운동 홈을 가린 동안(config.ts WORKOUT_HOME_ENABLED)은 'workout' 푸시(스트릭·재참여 알림)를
                * 럽바디 메인이 받는다 — 체크인 카드가 거기 있다. 켜면 아래 WorkoutMain 이 다시 받는다.
+               * 음성 응원 녹음 화면('workout/voice-clips')도 입구가 운동 홈에만 있어 같이 닫는다 —
+               * 1.0.4 사용자의 옛 푸시·알림함 링크가 여기로 오므로 경로를 지우지 않고 메인으로 돌린다.
                */
-              DietMain: WORKOUT_HOME_ENABLED ? 'diet' : { path: 'diet', alias: ['workout'] },
+              DietMain: WORKOUT_HOME_ENABLED
+                ? 'diet'
+                : { path: 'diet', alias: ['workout', 'workout/voice-clips'] },
               DietRecord: 'diet/record',
               DietCalendar: 'diet/calendar',
               DietStats: 'diet/stats',
@@ -271,7 +275,7 @@ export const linking: LinkingOptions<RootStackParamList> = {
               WorkoutRoutineForm: 'workout/routines/new',
               BodyMetric: 'workout/body',
               Challenge: 'workout/challenge',
-              VoiceClips: 'workout/voice-clips',
+              ...(WORKOUT_HOME_ENABLED ? { VoiceClips: 'workout/voice-clips' } : {}),
             },
           },
           Place: {

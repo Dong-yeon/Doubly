@@ -38,8 +38,6 @@ import { connectSocket, subscribeCouple, unsubscribeCouple } from '../../api/cha
 import { useChatStore } from '../../store/chatStore';
 import { useAuthStore } from '../../store/authStore';
 import { useRelationStore } from '../../store/relationStore';
-import { useCallStore } from '../../store/callStore';
-import { callApi, CallType } from '../../api/call';
 import { haptics } from '../../utils/haptics';
 import { pickImages, releaseObjectUrl, shrinkUnknownImage, uploadImage } from '../../utils/imageUpload';
 import { isCoarsePointer } from '../../utils/pointer';
@@ -55,7 +53,6 @@ import { ChatSearchModal } from '../../components/ChatSearchModal';
 import { TouchGesturePicker } from '../../components/TouchGesturePicker';
 import { ChatMoreMenuSheet } from '../../components/ChatMoreMenuSheet';
 import { ChatBackgroundSheet } from '../../components/ChatBackgroundSheet';
-import { ensureCallPermissions } from '../../utils/callPermissions';
 import { ScheduleMessageSheet } from '../../components/ScheduleMessageSheet';
 import { VoiceRecordSheet } from '../../components/VoiceRecordSheet';
 import { VoiceMessageBubble } from '../../components/VoiceMessageBubble';
@@ -132,19 +129,6 @@ const GROUP_GAP_MS = 5 * 60 * 1000;
  * 보내게 두면 한 번의 손짓으로 월 한도의 절반이 사라진다.
  */
 const MAX_CHAT_IMAGES = 5;
-
-/** 통화 요청이 응답 없이 멈추는 것을 막는 시간 제한 — 걸면 사용자에게 알린다. */
-const CALL_REQUEST_TIMEOUT_MS = 15_000;
-
-function withCallTimeout<T>(promise: Promise<T>): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(
-      () => reject(new Error('통화를 연결하지 못했어요. 잠시 후 다시 시도해주세요.')),
-      CALL_REQUEST_TIMEOUT_MS,
-    );
-    promise.then(resolve, reject).finally(() => clearTimeout(timer));
-  });
-}
 
 /**
  * 전송 멱등키 — 서버가 {@code (relation_id, client_message_id)} 로 중복을 거른다(V89).
@@ -466,110 +450,6 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     setText(applyAllSuggestions(text, suggestions));
   };
 
-  /*
-   * 통화 발신 — 이 화면은 걸기만 담당한다. 벨·통화 중 UI는 전역 CallOverlay(App.tsx)가
-   * 어느 화면에서든 뜨므로, 여기서는 세션 생성(callApi.start)과 Stream 콜 오브젝트 생성
-   * (client.call().getOrCreate({ring:true}))까지만 하면 나머지는 오버레이가 이어받는다.
-   */
-  /*
-   * 클라이언트를 여기서 구독하지 않는다 — 통화 버튼을 누를 때 ensure() 로 가져온다.
-   * 구독해서 "없으면 버튼을 막는" 구조였다면 부팅 때 한 번 실패한 사람은 재시도할 길조차
-   * 없다(docs/CALL_BROKEN_ANALYSIS_2026-09-10.md §4-1).
-   */
-  /*
-   * 불리언이 아니라 "무엇을 거는 중인가"를 들고 있다 — 헤더에 버튼이 둘이라 불리언이면
-   * 스피너를 어느 쪽에 둘지 알 수 없다. null 이면 거는 중이 아니다.
-   */
-  const [callingType, setCallingType] = useState<CallType | null>(null);
-  const callStarting = callingType !== null;
-  const partnerId = couple?.partner?.id;
-
-  const startCall = useCallback(
-    async (callType: CallType) => {
-      if (callStarting) return;
-      /*
-       * 상대를 아직 못 읽었으면 알려준다. 예전엔 조용히 return 이라 버튼이 고장 난 것처럼
-       * 보였다(docs/CALL_BROKEN_ANALYSIS_2026-09-10.md §7-3).
-       */
-      if (!myId || !partnerId) {
-        toast.error('상대 정보를 아직 불러오지 못했어요. 잠시 후 다시 시도해주세요.');
-        return;
-      }
-      setCallingType(callType);
-      let joinedCallId: string | null = null;
-      try {
-        /*
-         * 마이크(영상이면 카메라까지)를 먼저 확보한다 — 없으면 Stream SDK 가 경고만 남기고
-         * 통화창은 그대로 떠서 "소리 없는 통화"가 된다(utils/callPermissions 주석).
-         * 서버 세션을 만들기 전이라 실패해도 상대에게 헛벨이 가지 않는다.
-         */
-        const permission = await ensureCallPermissions(callType);
-        if (!permission.granted) {
-          toast.error(permission.message ?? '통화 권한이 필요해요.');
-          return;
-        }
-        /*
-         * 부팅 때 연결에 실패했으면 여기서 <b>한 번 더</b> 시도한다 — 예전엔 그 한 번의 실패로
-         * 앱을 껐다 켜기 전까지 통화가 죽었다(§4-1).
-         */
-        const client = await useCallStore.getState().ensure();
-        if (!client) {
-          toast.error('통화 기능을 준비하지 못했어요. 잠시 후 다시 시도해주세요.');
-          return;
-        }
-        const joined = await callApi.start(callType);
-        joinedCallId = joined.callId;
-        const call = client.call('default', joined.callId);
-        /*
-         * ring 요청에 시간 제한을 둔다. 연결이 온전치 않으면 SDK 가 요청을 큐에 쌓아 두는데,
-         * 그러면 예외도 응답도 없이 멈춰 finally 에 닿지 못하고 callStarting 이 true 로 굳는다 —
-         * 그 뒤로는 버튼을 눌러도 맨 위 `if (callStarting) return` 에 걸려 아무 일도 안 일어난다.
-         * "통화가 조용히 죽는" 경로를 남기지 않는다(2026-09-11).
-         */
-        await withCallTimeout(call.getOrCreate({
-          ring: true,
-          video: callType === 'VIDEO',
-          data: {
-            members: [{ user_id: String(myId) }, { user_id: String(partnerId) }],
-            /*
-             * 음성통화만 오버라이드하고, <b>영상통화는 손대지 않는다</b>(undefined).
-             * 대시보드의 'default' 콜 타입이 이미 Video on · Camera on · 720p 이므로
-             * 그대로 물려받는 것이 맞다 — 여기서 값을 적으면 720p 를 640x480 으로
-             * 떨어뜨리기만 한다.
-             *
-             * <p><b>{@code settings_override} 는 병합이 아니라 교체다.</b> video 를 하나라도
-             * 적으면 <b>안 적은 필드는 기본값(false·0)으로 덮인다</b> — 2026-09-23 에
-             * {@code camera_default_on} 만 보냈다가 {@code enabled} 가 false 로 떨어져
-             * Stream 이 400 "Video is not enabled for this call" 을 뱉었다. 대시보드는
-             * 켜져 있었는데도 그랬다. 같은 이유로 {@code target_resolution} 을 빼면
-             * 400(width/height must be 240 or greater)이 난다(2026-08-25).
-             *
-             * <p>그래서 음성 쪽 세 값은 <b>한 벌로 묶여 있다</b> — 하나만 지우면 안 된다.
-             */
-            settings_override:
-              callType === 'VOICE'
-                ? {
-                    video: {
-                      enabled: false,
-                      camera_default_on: false,
-                      target_resolution: { width: 640, height: 480 },
-                    },
-                  }
-                : undefined,
-          },
-        }));
-      } catch (e) {
-        // Stream 쪽 콜 생성이 실패해도 우리 세션은 이미 RINGING 으로 남아있다 —
-        // 24시간 안전장치를 기다리지 않고 바로 정리한다(상대에게 헛벨이 안 뜬 상태이므로 무해).
-        if (joinedCallId) callApi.end(joinedCallId).catch(() => undefined);
-        toast.error(getErrorMessage(e));
-      } finally {
-        setCallingType(null);
-      }
-    },
-    [myId, partnerId, callStarting],
-  );
-
   useLayoutEffect(() => {
     navigation.setOptions({
       /*
@@ -594,43 +474,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           >
             <MaterialCommunityIcons name="magnify" size={22} color={colors.textPrimary} />
           </Pressable>
-          {/*
-            거는 중에는 아이콘 자리에 스피너를 둔다. 예전엔 disabled 로 막기만 해서
-            <b>눌렀는데 아무 일도 안 일어나는 것처럼 보였다</b> — 권한 팝업·Stream 연결까지
-            수 초가 걸리는 구간이라 이 침묵이 "통화가 고장 났다"로 읽혔다(사용자 보고 2026-09-23).
-            누른 쪽에만 스피너를 두어 무엇을 기다리는 중인지도 함께 말한다.
-          */}
-          <Pressable
-            onPress={() => startCall('VOICE')}
-            disabled={callStarting}
-            style={({ pressed }) => [styles.headerCallButton, pressed && styles.headerCallButtonPressed]}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="음성통화 걸기"
-            accessibilityState={{ disabled: callStarting, busy: callingType === 'VOICE' }}
-          >
-            {callingType === 'VOICE' ? (
-              <ActivityIndicator size="small" color={colors.textPrimary} />
-            ) : (
-              <MaterialCommunityIcons name="phone" size={22} color={colors.textPrimary} />
-            )}
-          </Pressable>
-          <Pressable
-            onPress={() => startCall('VIDEO')}
-            disabled={callStarting}
-            style={({ pressed }) => [styles.headerCallButton, pressed && styles.headerCallButtonPressed]}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="영상통화 걸기"
-            accessibilityState={{ disabled: callStarting, busy: callingType === 'VIDEO' }}
-          >
-            {callingType === 'VIDEO' ? (
-              <ActivityIndicator size="small" color={colors.textPrimary} />
-            ) : (
-              <MaterialCommunityIcons name="video" size={22} color={colors.textPrimary} />
-            )}
-          </Pressable>
-          {/* 더보기(⋮)는 맨 오른쪽 — iOS·안드로이드·카톡 관례. 검색·통화·영상 뒤에 둔다 */}
+          {/* 더보기(⋮)는 맨 오른쪽 — iOS·안드로이드·카톡 관례. 검색 뒤에 둔다 */}
           <Pressable
             onPress={() => setShowMoreMenu(true)}
             style={({ pressed }) => [styles.headerCallButton, pressed && styles.headerCallButtonPressed]}
@@ -643,7 +487,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         </View>
       ),
     });
-  }, [navigation, partnerName, startCall, callStarting, callingType]);
+  }, [navigation, partnerName]);
 
   /*
    * 히스토리 로딩 상태 — openRoom 이 REST 로 첫 페이지를 받아오는 동안에는 messages 가
@@ -1573,17 +1417,11 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               size={18}
               color={callCard.outcome === 'ENDED' ? colors.textPrimary : colors.coral}
             />
+            {/*
+              통화 기능은 2026-09-28 에 앱에서 뺐다(docs/CALL_REMOVAL_2026-09-28.md). 지난 통화
+              기록은 대화의 일부라 카드는 그대로 보여 주고, "다시 걸기" 버튼만 없앴다.
+            */}
             <Text style={styles.callCardText}>{callCardLabel(callCard)}</Text>
-            {/* 정상 종료 통화도 "다시 걸기"를 굳이 막지 않는다 — 통화 기록에서 재발신하는 흔한 동작 */}
-            <Pressable
-              onPress={() => startCall(callCard.callType)}
-              disabled={callStarting}
-              style={({ pressed }) => [styles.callCardButton, pressed && styles.headerCallButtonPressed]}
-              accessibilityRole="button"
-              accessibilityLabel="다시 걸기"
-            >
-              <Text style={styles.callCardButtonText}>다시 걸기</Text>
-            </Pressable>
           </View>
         ) : (
           // 꼬리(뾰족한 모서리)는 그룹의 마지막 말풍선에만 — 나머지는 완전히 둥글게 이어붙는다
@@ -2364,14 +2202,6 @@ const styles = themedStyles((colors) => ({
   callCardMine: { backgroundColor: colors.surface, borderColor: colors.border },
   callCardTheirs: { backgroundColor: colors.surface, borderColor: colors.border },
   callCardText: { fontSize: fontSize.body, color: colors.textPrimary, fontWeight: '600', flexShrink: 1 },
-  callCardButton: {
-    marginLeft: 'auto',
-    paddingVertical: 5,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radius.pill,
-    backgroundColor: colors.primarySoft,
-  },
-  callCardButtonText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.primary },
   mealCard: { paddingVertical: 10, paddingHorizontal: spacing.md, borderRadius: radius.lg, borderWidth: 1.5, maxWidth: 240, gap: 6 },
   mealCardMine: { backgroundColor: colors.meBg, borderColor: colors.me },
   mealCardTheirs: { backgroundColor: colors.partnerBg, borderColor: colors.partner },

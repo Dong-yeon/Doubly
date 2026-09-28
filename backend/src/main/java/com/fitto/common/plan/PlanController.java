@@ -53,12 +53,12 @@ public class PlanController {
      * 카탈로그까지 짊어지게 된다.
      *
      * <p>두 플랜의 한도가 같은 기능은 빼고 준다({@code Feature.isComparable}) — 비교 화면에
-     * "무제한 / 무제한" 줄이 섞이면 무엇이 다른지가 묻힌다.
+     * "무제한 / 무제한" 줄이 섞이면 무엇이 다른지가 묻힌다. 앱에서 내린 기능({@code Feature.isWithdrawn})도 뺀다.
      */
     @GetMapping("/catalog")
     public ApiResponse<List<PlanCatalogEntry>> catalog() {
         return ApiResponse.success(Arrays.stream(Feature.values())
-                .filter(Feature::isComparable)
+                .filter(Feature::isListed)
                 .map(PlanCatalogEntry::of)
                 .toList());
     }

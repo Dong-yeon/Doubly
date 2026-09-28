@@ -10,7 +10,6 @@ import { storage } from '../utils/storage';
 import { registerPushTokenIfGranted } from '../utils/push';
 import { useChatStore } from './chatStore';
 import { usePlanStore } from './planStore';
-import { useCallStore } from './callStore';
 import { usePlaceStore } from './placeStore';
 import { useContentStore } from './contentStore';
 import { useCoupleEmojiStore } from './coupleEmojiStore';
@@ -44,9 +43,8 @@ interface AuthState {
 async function clearTokens() {
   await storage.removeItem(STORAGE_KEYS.accessToken);
   await storage.removeItem(STORAGE_KEYS.refreshToken);
-  // 세션 종료 시 채팅 소켓·통화 클라이언트 정리
+  // 세션 종료 시 채팅 소켓 정리
   useChatStore.getState().teardown();
-  void useCallStore.getState().teardown();
   /*
    * "한 번 받으면 재사용" 캐시 스토어(럽슐랭 장소·콘텐츠·우리 이모지)를 비운다 — 안 비우면
    * 로그아웃 후 다른 계정으로 로그인해도 loaded 플래그가 그대로 살아있어 load() 가 재조회를
@@ -83,8 +81,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       registerPushTokenIfGranted();
       // 플랜·잔여 한도 로드 — 실패해도 앱은 그대로 동작한다(서버가 최종 판정을 한다)
       void usePlanStore.getState().load();
-      // 통화 클라이언트 연결 — 연결돼 있어야 상대의 발신을 받을 수 있다(선택 기능, 실패 무시)
-      void useCallStore.getState().init();
       /*
        * 안 읽은 배지(부재중 통화 카드 포함) 로드 — 커플 계정은 ChatScreen 이 방을
        * 열자마자 ChatRoom 으로 replace 하므로(App.tsx 참고) ChatScreen 이 화면에
@@ -105,8 +101,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     registerPushTokenIfGranted();
     // 로그인 직후에도 플랜을 읽는다 — 계정이 바뀌면 한도도 바뀐다
     void usePlanStore.getState().load();
-    // 통화 클라이언트 연결(선택 기능, 실패 무시)
-    void useCallStore.getState().init();
     // 안 읽은 배지 로드 — bootstrap() 과 같은 이유(위 주석 참고)
     void useChatStore.getState().loadRooms();
   },
@@ -163,6 +157,5 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 // refresh 실패 시(client 인터셉터) 세션을 비인증으로 전환. 토큰은 이미 정리됨.
 setAuthFailureHandler(() => {
   useChatStore.getState().teardown();
-  void useCallStore.getState().teardown();
   useAuthStore.setState({ user: null, isAuthenticated: false });
 });

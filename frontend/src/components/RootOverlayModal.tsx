@@ -1,6 +1,6 @@
 /**
  * 전역 오버레이 전용 프레젠테이션 — App.tsx 루트에 한 번만 마운트되는 컴포넌트들
- * (ConfirmDialog·DatePickerSheet·BusyOverlay·CallOverlay·Sheet) 이 공용으로 쓴다.
+ * (ConfirmDialog·DatePickerSheet·BusyOverlay·Sheet) 이 공용으로 쓴다.
  *
  * <p><b>왜 필요한가</b>(2026-09-03, TestFlight 실기기 리포트 — 식단 기록 "사진
  * 추가하기"를 눌러도 반응이 없다가 화면 전체가 먹통이 됨): 이 컴포넌트들은 App.tsx
@@ -29,7 +29,7 @@ export function RootOverlayModal({ children, ...modalProps }: Props) {
   if (Platform.OS === 'ios') {
     // FullWindowOverlay 는 RN Modal 과 달리 visible prop 이 없다 — 마운트되면
     // 곧바로 보인다. 호출부 대부분은 안 보일 때 컴포넌트 자체를 null 로 반환하지만
-    // (ConfirmDialog·DatePickerSheet·CallOverlay), BusyOverlay·Sheet 는 항상
+    // (ConfirmDialog·DatePickerSheet), BusyOverlay·Sheet 는 항상
     // 마운트해두고 visible 로만 켜고 끈다 — 그 경우를 위해 여기서도 존중해야 한다.
     if (modalProps.visible === false) return null;
     return <FullWindowOverlay>{children}</FullWindowOverlay>;

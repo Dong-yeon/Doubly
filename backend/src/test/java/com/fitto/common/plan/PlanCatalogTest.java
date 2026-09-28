@@ -28,9 +28,18 @@ class PlanCatalogTest {
     }
 
     @Test
+    void 앱에서_내린_영상통화는_비교표에_오르지_않지만_게이트는_남는다() {
+        // 1.0.4 는 아직 통화 API 를 부른다 — 한도(FREE 차단·PRO 무제한)는 그대로여야 한다.
+        assertThat(Feature.VIDEO_CALL.isComparable()).isTrue();
+        assertThat(Feature.VIDEO_CALL.isListed()).isFalse();
+        assertThat(Arrays.stream(Feature.values()).filter(Feature::isWithdrawn))
+                .containsExactly(Feature.VIDEO_CALL);
+    }
+
+    @Test
     void 비교표에_올라가는_기능은_모두_묶음과_이름을_가진다() {
         for (Feature feature : Feature.values()) {
-            if (!feature.isComparable()) continue;
+            if (!feature.isListed()) continue;
             PlanCatalogEntry entry = PlanCatalogEntry.of(feature);
 
             assertThat(entry.name()).isNotBlank();
@@ -55,7 +64,7 @@ class PlanCatalogTest {
     @Test
     void 묶음은_다섯_개_모두_쓰인다() {
         Set<FeatureGroup> used = Arrays.stream(Feature.values())
-                .filter(Feature::isComparable)
+                .filter(Feature::isListed)
                 .map(Feature::group)
                 .collect(java.util.stream.Collectors.toCollection(() -> EnumSet.noneOf(FeatureGroup.class)));
 
