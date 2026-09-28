@@ -32,7 +32,9 @@ public record ChatMessageResponse(
          * 보낸 앱이 붙인 멱등키 — 그 앱이 낙관적 말풍선을 이 에코와 짝짓는 데 쓴다.
          * 옛 메시지·시스템 카드는 null(ChatMessage.clientMessageId 주석).
          */
-        String clientMessageId
+        String clientMessageId,
+        /** 문구 스티커(TEXT_STICKER)의 캐릭터 스티커 코드 — 다른 타입이면 null. content 는 문구다 */
+        String stickerCode
 ) {
     public static ChatMessageResponse from(ChatMessage m) {
         return from(m, null, List.of(), false);
@@ -44,6 +46,7 @@ public record ChatMessageResponse(
                 m.getMessageType(), m.getContent(), m.getImageUrl(), m.getWorkoutId(),
                 m.getRoutineId(), m.isRead(), m.getCreatedAt(),
                 replyTo, reactions != null ? reactions : List.of(),
-                m.getEditedAt() != null, m.isDeleted(), bookmarked, m.getClientMessageId());
+                m.getEditedAt() != null, m.isDeleted(), bookmarked, m.getClientMessageId(),
+                m.getStickerCode());
     }
 }
