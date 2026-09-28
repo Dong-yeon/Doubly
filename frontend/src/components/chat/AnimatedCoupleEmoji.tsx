@@ -10,13 +10,12 @@
  *
  * <p><b>재생 규칙</b>: 루프하지 않는다. {@code play} 가 true 인 채로 마운트되거나 false→true 로
  * 바뀌면 한 번, 누르면 다시 한 번. "동작 줄이기"가 켜져 있으면 모션·효과 모두 끄고 정지 그림이다.
+ * 재생·보간 자체는 캐릭터 스티커와 같이 쓰는 hooks/useOneShotMotion.ts 에 있다.
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  AccessibilityInfo,
   Animated,
   Easing,
-  Platform,
   Pressable,
   StyleProp,
   StyleSheet,
@@ -30,12 +29,11 @@ import { CoupleEmojiLottieEffect } from './CoupleEmojiLottieEffect';
 import {
   EffectSpec,
   MOTIONS,
-  MotionTrack,
   coupleEmojiEffectsAllowed,
   coupleEmojiMotionOf,
 } from '../../constants/coupleEmojiMotion';
+import { USE_NATIVE_DRIVER, track, useOneShotMotion } from '../../hooks/useOneShotMotion';
 
-const USE_NATIVE_DRIVER = Platform.OS !== 'web';
 /** 글리프 효과 한 번의 길이 */
 const GLYPH_MS = 1300;
 /** Lottie 가 끝을 알리지 못하는 경우(웹·언마운트 경합)에도 레이어가 남지 않게 */
@@ -58,30 +56,6 @@ interface Props {
   accessibilityLabel?: string;
 }
 
-/** 키프레임 목록을 진행도 0→1 에 등분해 보간한다 */
-function track(progress: Animated.Value, values: number[], unit = '') {
-  const inputRange = values.map((_, i) => i / (values.length - 1));
-  return unit
-    ? progress.interpolate({ inputRange, outputRange: values.map((v) => `${v}${unit}`) })
-    : progress.interpolate({ inputRange, outputRange: values });
-}
-
-function useReduceMotion(): boolean {
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    let alive = true;
-    AccessibilityInfo.isReduceMotionEnabled()
-      .then((v) => alive && setReduced(v))
-      .catch(() => undefined);
-    const sub = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduced);
-    return () => {
-      alive = false;
-      sub.remove();
-    };
-  }, []);
-  return reduced;
-}
-
 export function AnimatedCoupleEmoji({
   uri,
   emotion,
@@ -94,8 +68,6 @@ export function AnimatedCoupleEmoji({
   accessibilityLabel,
 }: Props) {
   const preset = coupleEmojiMotionOf(emotion);
-  const reduced = useReduceMotion();
-  const [progress] = useState(() => new Animated.Value(0));
   /** 재생할 때마다 올린다 — 효과 레이어를 새로 마운트해 처음부터 돌리는 키 */
   const [runId, setRunId] = useState(0);
   const [effectOn, setEffectOn] = useState(false);
@@ -104,54 +76,17 @@ export function AnimatedCoupleEmoji({
     preset && coupleEmojiEffectsAllowed(promptVersion) ? preset.effect : null;
   const motion = preset ? MOTIONS[preset.motion] : null;
 
-  const run = useCallback(() => {
-    if (!motion || reduced) return;
-    progress.stopAnimation();
-    progress.setValue(0);
-    Animated.timing(progress, {
-      toValue: 1,
-      duration: motion.duration,
-      easing: Easing.inOut(Easing.quad),
-      useNativeDriver: USE_NATIVE_DRIVER,
-    }).start();
+  const onRun = useCallback(() => {
     setRunId((n) => n + 1);
     if (effect) setEffectOn(true);
-  }, [motion, reduced, progress, effect]);
-
-  /*
-   * 자동 재생 — 한 번만. 감정을 아직 모르면(우리 이모지 목록이 늦게 도착) 소비하지 않고 기다린다 —
-   * 목록이 들어와 모션이 정해지는 순간 움직인다. 동작 줄이기는 run 이 스스로 거른다.
-   */
-  const autoPlayed = useRef(false);
-  useEffect(() => {
-    if (!play || !motion || autoPlayed.current) return;
-    autoPlayed.current = true;
-    run();
-    onPlayed?.();
-  }, [play, motion, run, onPlayed]);
+  }, [effect]);
+  const { run, reduced, transform, opacity } = useOneShotMotion(motion, { play, onPlayed, onRun });
 
   useEffect(() => {
     if (!effectOn) return;
     const t = setTimeout(() => setEffectOn(false), EFFECT_SAFETY_MS);
     return () => clearTimeout(t);
   }, [effectOn, runId]);
-
-  const transform = useMemo(() => {
-    if (!motion) return [];
-    const t = motion.tracks;
-    const out: Record<string, Animated.AnimatedInterpolation<number | string>>[] = [];
-    const add = (key: MotionTrack, unit = '') => {
-      const values = t[key];
-      if (values) out.push({ [key]: track(progress, values, unit) });
-    };
-    add('translateX');
-    add('translateY');
-    add('rotate', 'deg');
-    add('scale');
-    add('scaleY');
-    return out;
-  }, [motion, progress]);
-  const opacity = motion?.tracks.opacity ? track(progress, motion.tracks.opacity) : 1;
 
   const image = (
     <CachedImage uri={uri} style={[{ width: size, height: size }, imageStyle]} contentFit="cover" />
