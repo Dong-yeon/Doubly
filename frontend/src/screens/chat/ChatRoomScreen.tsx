@@ -76,8 +76,11 @@ import { isCatchMindShareContent } from '../../utils/catchMindShare';
 import { isGoalShareContent } from '../../utils/dietShare';
 import { touchGestureOf } from '../../constants/touchGestures';
 import { callCardLabel, parseCallCard } from '../../utils/callCard';
-import { animatedStickerOf } from '../../constants/animatedStickers';
-import { STICKER_CODE_INDEX, stickerImageOf } from '../../constants/stickerImages';
+import { ANIMATED_STICKERS, animatedStickerOf } from '../../constants/animatedStickers';
+import { STICKER_CHARACTERS, STICKER_CODE_INDEX, stickerImageOf } from '../../constants/stickerImages';
+import { CHARACTER_PACKS, packIdOfSticker } from '../../constants/stickerPacks';
+import { useStickerStore } from '../../store/stickerStore';
+import { loadRecentStickers, recordRecentSticker } from '../../utils/recentStickers';
 import { parseStickerCode, suggestStickers } from '../../utils/stickerCodes';
 import { StickerPanel } from '../../components/chat/StickerPanel';
 import { AnimatedCoupleEmoji } from '../../components/chat/AnimatedCoupleEmoji';
@@ -99,6 +102,11 @@ import { EmptyState } from '../../components/EmptyState';
 
 
 // zustand 셀렉터가 매번 새 배열을 만들면 무한 리렌더(하얀 화면)가 나므로 안정 참조 사용
+/** 캐릭터 스티커 코드 → 팩 — 캐릭터 한 마리가 곧 한 팩이다(stickerPacks.ts CHARACTER_PACKS) */
+const IMAGE_STICKER_PACK = new Map(
+  STICKER_CHARACTERS.flatMap((c) => c.stickers.map((st) => [st.code, CHARACTER_PACKS[c.key]] as const)),
+);
+
 const EMPTY_MESSAGES: ChatMessage[] = [];
 
 /**
@@ -436,9 +444,60 @@ export function ChatRoomScreen({ navigation, route }: Props) {
    * 스티커 추천 — 짧은 입력("사랑해"·"ㅠㅠ"·"(더비")에만 뜬다(utils/stickerCodes.ts).
    * 카톡 키워드 이모티콘처럼 바꿔주지 않고 보여준다. 수정 중에는 끈다 — 고치는 글에 그림을 권할 자리가 아니다.
    */
+  /*
+   * 잠긴 팩은 추천에서 뺀다 — 눌렀는데 결제 안내가 뜨면 추천이 광고가 된다. 판정은 패널과 같다:
+   * 서버 팩 목록(usable)을 보고, 모르면 열린 것으로 본다. 목록은 패널을 열 때만 받던 것이라
+   * 방에 들어올 때 한 번 받는다(캐시가 있으면 요청하지 않는다).
+   */
+  const stickerPacks = useStickerStore((s) => s.packs);
+  const loadStickerPacks = useStickerStore((s) => s.load);
+  useEffect(() => {
+    void loadStickerPacks();
+  }, [loadStickerPacks]);
+  const isSuggestAllowed = useCallback(
+    (kind: 'image' | 'animated', code: string) => {
+      const packId = kind === 'image' ? IMAGE_STICKER_PACK.get(code) : packIdOfSticker(code);
+      const pack = packId ? stickerPacks.find((p) => p.id === packId) : undefined;
+      return pack ? pack.usable : true;
+    },
+    [stickerPacks],
+  );
+
+  /** 최근 보낸 스티커(최신이 앞) — 같은 순위의 추천 안에서 자주 쓰는 것을 앞에 둔다 */
+  const [recentStickers, setRecentStickers] = useState<string[]>([]);
+  const recentStickersRef = useRef<string[]>([]);
+  useEffect(() => {
+    let alive = true;
+    void loadRecentStickers().then((list) => {
+      if (!alive) return;
+      recentStickersRef.current = list;
+      setRecentStickers(list);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  /*
+   * 입력이 250ms 멈췄을 때의 글 — 타이핑 중에 막대가 떴다 꺼졌다 하지 않게 한다.
+   * 지금 글과 같을 때만 추천을 보여 주므로, 다시 치기 시작하면 바로 숨는다.
+   */
+  const [settledText, setSettledText] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => setSettledText(text), 250);
+    return () => clearTimeout(timer);
+  }, [text]);
+
   const stickerSuggestions = useMemo(
-    () => (editing ? [] : suggestStickers(STICKER_CODE_INDEX, text)),
-    [text, editing],
+    () =>
+      editing || settledText !== text
+        ? []
+        : suggestStickers(STICKER_CODE_INDEX, settledText, {
+            animated: ANIMATED_STICKERS,
+            recent: recentStickers,
+            isAllowed: isSuggestAllowed,
+          }),
+    [text, settledText, editing, recentStickers, isSuggestAllowed],
   );
   /*
    * 추천 막대를 치운 입력 — X 를 누르면 이번 입력(보내거나 지울 때까지) 동안 다시 띄우지 않는다.
@@ -451,6 +510,9 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     setStickerBarClosed(false);
     setStickerPickedFor(null);
   }
+
+  /** 맞춤법 막대가 떠 있는가 — 떠 있으면 스티커 추천 막대는 숨는다(같은 자리를 쓴다) */
+  const spellBarVisible = spellDismissedFor !== text && suggestions.length > 0;
 
   /** 첫 제안을 적용한다. 남은 게 있으면 이어서 뜬다 */
   const applySpelling = () => {
@@ -959,7 +1021,13 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     const ok = await send(relationId, { messageType: 'STICKER', content: sticker });
     if (!ok) {
       Alert.alert('전송 실패', '연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
+      return;
     }
+    // 어디서 보냈든(패널·추천·텍스트 코드) 최근 목록에 올린다 — 추천 순서의 근거다
+    void recordRecentSticker(recentStickersRef.current, sticker).then((next) => {
+      recentStickersRef.current = next;
+      setRecentStickers(next);
+    });
   };
 
   /**
@@ -1830,7 +1898,10 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           </View>
         ) : null}
         <StickerSuggestBar
-          items={stickerBarClosed || stickerPickedFor === text ? [] : stickerSuggestions}
+          items={
+            // 맞춤법 제안이 떠 있으면 그쪽이 먼저다 — 같은 자리에 두 줄이 쌓이면 입력창이 밀려난다
+            stickerBarClosed || stickerPickedFor === text || spellBarVisible ? [] : stickerSuggestions
+          }
           onPick={(e) => {
             /*
              * 입력창의 글은 그대로 둔다 — "나도 사랑해"에 그림을 곁들인 사람은 문장도 보낼 생각이다.
@@ -1843,7 +1914,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           onDismiss={() => setStickerBarClosed(true)}
         />
         <SpellCheckBar
-          suggestion={spellDismissedFor === text ? null : (suggestions[0] ?? null)}
+          suggestion={spellBarVisible ? suggestions[0] : null}
           total={suggestions.length}
           onApply={applySpelling}
           onApplyAll={applyAllSpelling}
