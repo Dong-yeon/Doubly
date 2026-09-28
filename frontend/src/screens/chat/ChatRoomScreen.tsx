@@ -86,6 +86,7 @@ import { parseStickerCode, suggestStickers, type StickerSuggestion } from '../..
 import { StickerPanel } from '../../components/chat/StickerPanel';
 import { AnimatedCoupleEmoji } from '../../components/chat/AnimatedCoupleEmoji';
 import { TextSticker } from '../../components/chat/TextSticker';
+import { AnimatedCharacterSticker } from '../../components/chat/AnimatedCharacterSticker';
 import { TextStickerSheet } from '../../components/chat/TextStickerSheet';
 import { useCoupleEmojiStore } from '../../store/coupleEmojiStore';
 import { playTouchGesture } from '../../utils/haptics';
@@ -247,13 +248,17 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   /** 말풍선이 어떤 감정·버전인지 — 메시지에는 URL 만 있어 움직임을 고르려면 목록에서 찾는다 */
   const coupleEmojiById = useMemo(() => new Map(coupleEmojis.map((e) => [e.id, e])), [coupleEmojis]);
   /*
-   * 움직이는 우리 이모지는 "이번에 보내거나 받은 것"만 저절로 움직인다(ANIMATION_SPEC §5-3).
+   * 움직이는 우리 이모지·캐릭터 스티커는 "이번에 보내거나 받은 것"만 저절로 움직인다(ANIMATION_SPEC §5-3).
    * 기준은 방을 열었을 때의 가장 큰 메시지 id — 그보다 큰 것만 새로 온 것이다. 위로 스크롤해
    * 불러온 옛 메시지는 id 가 작아 걸리지 않는다. 한 번 움직인 id 는 따로 적어, 스크롤로
    * 말풍선이 다시 마운트돼도 또 움직이지 않게 한다. 둘 다 렌더에 영향 없는 기록이라 ref 다.
    */
-  const coupleEmojiFreshAfterRef = useRef<number | null>(null);
-  const coupleEmojiPlayedRef = useRef<Set<number>>(new Set());
+  const oneShotFreshAfterRef = useRef<number | null>(null);
+  const oneShotPlayedRef = useRef<Set<number>>(new Set());
+  const shouldAutoPlay = (messageId: number) =>
+    oneShotFreshAfterRef.current !== null &&
+    messageId > oneShotFreshAfterRef.current &&
+    !oneShotPlayedRef.current.has(messageId);
   const showUpgrade = usePlanStore((s) => s.showUpgrade);
   const [showExtras, setShowExtras] = useState(false);
   /* 대화 영역을 건드렸을 때 — 이미 닫혀 있으면 상태를 그대로 둬 헛된 재렌더를 만들지 않는다 */
@@ -601,14 +606,14 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const [loadingHistory, setLoadingHistory] = useState(true);
   useEffect(() => {
     setLoadingHistory(true);
-    coupleEmojiFreshAfterRef.current = null;
-    coupleEmojiPlayedRef.current = new Set();
+    oneShotFreshAfterRef.current = null;
+    oneShotPlayedRef.current = new Set();
     // 받은 우리 이모지가 무슨 감정인지 알아야 움직일 수 있다 — 캐시가 있으면 요청하지 않는다
     void loadCoupleEmojis().catch(() => undefined);
     openRoom(relationId).finally(() => {
       const loaded = useChatStore.getState().messages[relationId] ?? [];
       // pending 은 음수 임시 id 라 기준에서 뺀다
-      coupleEmojiFreshAfterRef.current = loaded.reduce((max, m) => (m.pending ? max : Math.max(max, m.id)), 0);
+      oneShotFreshAfterRef.current = loaded.reduce((max, m) => (m.pending ? max : Math.max(max, m.id)), 0);
       setLoadingHistory(false);
     });
     // 이 방으로 이미 와 있던 알림(트레이에 뜬 것)을 지우는 일은 RootNavigator 가 경로
@@ -1445,7 +1450,16 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               onLongPress={() => onLongPressMessage(item)}
             />
           ) : stickerImageOf(item.content) ? (
-            <Image source={stickerImageOf(item.content)!.source} style={styles.stickerImage} resizeMode="contain" />
+            // 캐릭터 스티커 — 받은 순간 한 번 움직이고 누르면 다시(constants/stickerMotion.ts). 모션이 없으면 정지 그림
+            <AnimatedCharacterSticker
+              code={item.content!}
+              source={stickerImageOf(item.content)!.source}
+              label={stickerImageOf(item.content)!.label}
+              style={styles.stickerImage}
+              play={shouldAutoPlay(item.id)}
+              onPlayed={() => oneShotPlayedRef.current.add(item.id)}
+              onLongPress={() => onLongPressMessage(item)}
+            />
           ) : (
             <Text style={styles.sticker}>{item.content}</Text>
           )
@@ -1460,12 +1474,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             promptVersion={coupleEmojiById.get(Number(item.content))?.promptVersion}
             size={132}
             imageStyle={chatStyles.coupleEmojiImage}
-            play={
-              coupleEmojiFreshAfterRef.current !== null &&
-              item.id > coupleEmojiFreshAfterRef.current &&
-              !coupleEmojiPlayedRef.current.has(item.id)
-            }
-            onPlayed={() => coupleEmojiPlayedRef.current.add(item.id)}
+            play={shouldAutoPlay(item.id)}
+            onPlayed={() => oneShotPlayedRef.current.add(item.id)}
             onLongPress={() => onLongPressMessage(item)}
             accessibilityLabel={coupleEmojiById.get(Number(item.content))?.label ?? '우리 이모지'}
           />

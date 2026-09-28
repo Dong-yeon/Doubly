@@ -144,7 +144,20 @@ eq('"(달걀이_사" 는 사랑해', suggest('(달걀이_사'), ['EGG_LOVE']);
 eq('"(구운" 은 짝', suggest('(구운')[0], 'DUO_SAD');
 eq('내린 캐릭터', suggest('(곰돌이'), []);
 
-console.log('7. 코드 텍스트');
+console.log('7. 캐릭터 스티커 모션 (constants/stickerMotion.ts)');
+const motionSrc = read('../src/constants/stickerMotion.ts');
+const MOTION_OF = new Map([...motionSrc.matchAll(/^\s+([A-Z0-9_]+): '([a-z]+)',\r?$/gm)].map((m) => [m[1], m[2]]));
+const motionsSrc = read('../src/constants/coupleEmojiMotion.ts');
+const motionsBody = motionsSrc.slice(motionsSrc.indexOf('export const MOTIONS'), motionsSrc.indexOf('};', motionsSrc.indexOf('export const MOTIONS')));
+const KINDS = new Set([...motionsBody.matchAll(/^\s+([a-z]+): \{ duration/gm)].map((m) => m[1]));
+ok('모션 종류를 읽었다', KINDS.size >= 14, `${KINDS.size}종`);
+for (const code of LIVE) ok(`${code} 에 모션이 있다`, MOTION_OF.has(code));
+for (const [code, kind] of MOTION_OF) {
+  ok(`${code} 의 모션 ${kind} 이 MOTIONS 에 있다`, KINDS.has(kind));
+  ok(`${code} 는 피커에 있는 스티커다`, LIVE.has(code));
+}
+
+console.log('8. 코드 텍스트');
 eq('코드 표기', index.entries.find((e) => e.code === 'DUO_FIGHT').text, '(구운이♥달걀이_대판싸움)');
 
 rmSync(tmp, { recursive: true, force: true });
