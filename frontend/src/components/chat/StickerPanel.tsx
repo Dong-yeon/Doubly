@@ -32,8 +32,10 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Image, Pressable, ScrollView, Text, View, type ImageSourcePropType } from 'react-native';
 import { CachedImage } from '../CachedImage';
 import { MaterialCommunityIcons } from '../Icon';
-import { ANIMATED_STICKERS } from '../../constants/animatedStickers';
-import { STICKER_CHARACTERS } from '../../constants/stickerImages';
+import { ANIMATED_STICKERS, animatedStickerOf } from '../../constants/animatedStickers';
+import { STICKER_CHARACTERS, stickerImageOf } from '../../constants/stickerImages';
+import type { StickerContext } from '../../constants/contextStickers';
+import type { StickerSuggestion } from '../../utils/stickerCodes';
 import { CHARACTER_PACKS } from '../../constants/stickerPacks';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { useStickerStore } from '../../store/stickerStore';
@@ -162,7 +164,25 @@ interface Props {
   onOpenCouplePack: () => void;
   /** 캐릭터 스티커 길게 누르기 — "문구 넣기" 시트. 움직이는 이모티콘·잠긴 팩에는 붙지 않는다 */
   onComposeTextSticker?: (code: string) => void;
+  /**
+   * 맥락 칸(기념일·상대 무드) — 있으면 스트립 맨 앞에 서고, 패널을 열면 이 칸부터 보인다.
+   * 잠긴 팩은 호출부가 이미 걸러서 준다. constants/contextStickers.ts
+   */
+  contextPack?: ContextPack | null;
+  /** 맥락 칸에서 골라 보냈다 — 계측용(전송 자체는 onSendSticker 가 한다) */
+  onContextPicked?: (item: StickerSuggestion) => void;
 }
+
+export interface ContextPack {
+  context: StickerContext;
+  /** 스트립 칸 이름표 — "D+100 축하해요" · "지민 기분" */
+  label: string;
+  /** 격자 위 한 줄 — "지금 지민의 기분: 😢 슬픔" */
+  caption?: string;
+  items: StickerSuggestion[];
+}
+
+const CONTEXT_PACK_KEY = 'context';
 
 export function StickerPanel({
   height,
@@ -176,8 +196,13 @@ export function StickerPanel({
   onUnlockPack,
   onOpenCouplePack,
   onComposeTextSticker,
+  contextPack,
+  onContextPicked,
 }: Props) {
-  const [activeKey, setActiveKey] = useState<string>(DEFAULT_PACK);
+  // 패널은 열 때 마운트된다 — 맥락 칸이 있으면 거기서 시작한다. 연 뒤에 맥락이 생겨도 탭을 옮기지 않는다
+  const [activeKey, setActiveKey] = useState<string>(() =>
+    contextPack && contextPack.items.length > 0 ? CONTEXT_PACK_KEY : DEFAULT_PACK,
+  );
   const loadPacks = useStickerStore((s) => s.load);
   const packOf = useStickerStore((s) => s.packOf);
   const serverPacks = useStickerStore((s) => s.packs);
@@ -236,7 +261,30 @@ export function StickerPanel({
       couplePacks.push(couplePack(COUPLE_PACK_PARTNER, `${partnerName} 이모지`, theirs));
     }
 
-    return [...animatedPacks, ...characterPacks, ...couplePacks];
+    /*
+     * 맥락 칸 — 그 순간에만 맨 앞. 캐릭터 스티커와 움직이는 이모티콘이 섞여 있어 animated 로 둔다:
+     * 스트립에 재생 배지가 붙고, 문구 넣기(캐릭터 전용)는 이 칸에서 붙지 않는다.
+     */
+    const contextPacks: PanelPack[] = [];
+    if (contextPack && contextPack.items.length > 0) {
+      const items: PackItem[] = [];
+      for (const s of contextPack.items) {
+        const source = s.kind === 'image' ? stickerImageOf(s.code)?.source : animatedStickerOf(s.code)?.thumb;
+        if (source) items.push({ type: 'image', key: `${CONTEXT_PACK_KEY}-${s.code}`, code: s.code, label: s.label, source });
+      }
+      const first = items[0];
+      if (first && first.type === 'image') {
+        contextPacks.push({
+          key: CONTEXT_PACK_KEY,
+          label: contextPack.label,
+          thumb: { type: 'image', source: first.source },
+          animated: true,
+          items,
+        });
+      }
+    }
+
+    return [...contextPacks, ...animatedPacks, ...characterPacks, ...couplePacks];
 
     function isFree(packId?: string) {
       const pack = packId ? packOf(packId) : undefined;
@@ -256,13 +304,14 @@ export function StickerPanel({
       };
     }
     // serverPacks 를 의존성에 두는 이유: 팩 이름·잠금이 서버에서 늦게 도착한다
-  }, [coupleEmojis, myUserId, partnerName, packOf, serverPacks]);
+  }, [coupleEmojis, myUserId, partnerName, packOf, serverPacks, contextPack]);
 
   const active = packs.find((p) => p.key === activeKey) ?? packs[0];
   const activePack = active?.packId ? packOf(active.packId) : undefined;
   // 모르면 열린 것으로 본다 — 통신 문제로 잠긴 것처럼 보이는 쪽이 훨씬 나쁜 실패다
   const activeLocked = activePack ? !activePack.usable : false;
   const isCouplePack = active?.key.startsWith(COUPLE_PACK_PREFIX) ?? false;
+  const isContextPack = active?.key === CONTEXT_PACK_KEY;
   const canCompose = !!onComposeTextSticker && !!active && !active.animated && !isCouplePack && !activeLocked;
 
   const selectPack = (key: string) => {
@@ -311,7 +360,13 @@ export function StickerPanel({
         key={item.key}
         style={({ pressed }) => [styles.cell, pressed && styles.pressed]}
         // 잠긴 팩이면 전송이 아니라 안내로 간다 — locked 는 호출부가 해석한다
-        onPress={() => onSendSticker(item.code, activeLocked, active.label)}
+        onPress={() => {
+          onSendSticker(item.code, activeLocked, active.label);
+          if (isContextPack) {
+            const picked = contextPack?.items.find((s) => s.code === item.code);
+            if (picked) onContextPicked?.(picked);
+          }
+        }}
         // 문구 스티커는 캐릭터 스티커에만 — 잠긴 팩에서 길게 누르면 짧게 누른 것과 같은 안내로 간다
         onLongPress={canCompose ? () => onComposeTextSticker?.(item.code) : undefined}
         delayLongPress={350}
@@ -391,6 +446,12 @@ export function StickerPanel({
         </View>
       ) : (
         <>
+          {/* 맥락 칸의 한 줄 — 왜 이 스티커들이 맨 앞에 있는지("지금 지민의 기분: 😢 슬픔") */}
+          {isContextPack && contextPack?.caption ? (
+            <Text style={styles.contextCaption} numberOfLines={1}>
+              {contextPack.caption}
+            </Text>
+          ) : null}
           <ScrollView
             style={[styles.scroll, activeLocked && styles.lockedGrid]}
             contentContainerStyle={styles.grid}
@@ -484,6 +545,13 @@ const styles = themedStyles((colors) => ({
     gap: spacing.xs,
   },
   gridPad: { padding: spacing.sm },
+  contextCaption: {
+    fontSize: fontSize.caption,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.xs,
+  },
   cell: {
     width: CELL_SIZE,
     height: CELL_SIZE,
