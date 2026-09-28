@@ -43,4 +43,11 @@ public final class AnalyticsEvent {
     public static final String SUBSCRIPTION_STARTED = "SUBSCRIPTION_STARTED";
     /** 크레딧 상품을 샀다 — detail 에 상품 id. */
     public static final String CREDIT_PURCHASED = "CREDIT_PURCHASED";
+
+    /* ── 입력 중 스티커 추천(2026-09-28) — 프론트가 보낸다(ClientAnalyticsEvent).
+     * 노출 대비 선택으로 추천 표가 쓸모 있는지 본다. 원문 입력은 싣지 않는다. */
+    /** 추천 막대가 떴다 — detail 에 "키워드:코드,코드,…". */
+    public static final String STICKER_SUGGEST_SHOWN = "STICKER_SUGGEST_SHOWN";
+    /** 추천 막대에서 골라 보냈다 — detail 에 "키워드:코드". */
+    public static final String STICKER_SUGGEST_PICKED = "STICKER_SUGGEST_PICKED";
 }

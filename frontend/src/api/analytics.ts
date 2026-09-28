@@ -12,7 +12,10 @@ export type ClientAnalyticsEvent =
   | 'PAYWALL_VIEWED'
   | 'PURCHASE_STARTED'
   | 'PURCHASE_CANCELLED'
-  | 'PURCHASE_FAILED';
+  | 'PURCHASE_FAILED'
+  // 입력 중 스티커 추천 — detail 에 걸린 키워드와 코드만(입력 원문은 넣지 않는다)
+  | 'STICKER_SUGGEST_SHOWN'
+  | 'STICKER_SUGGEST_PICKED';
 
 export const analyticsApi = {
   /** @param detail 어느 화면·어느 상품인지 — 서버 컬럼이 50자라 그 안에서 */

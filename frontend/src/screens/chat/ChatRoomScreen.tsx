@@ -71,6 +71,7 @@ import {
 } from '../../utils/koreanSpellCheck';
 import { checkWithDictionary, preloadDictionary } from '../../utils/koreanDictionary';
 import { chatApi } from '../../api/chat';
+import { analyticsApi } from '../../api/analytics';
 import { isPrShareContent } from '../../utils/workoutShare';
 import { isCatchMindShareContent } from '../../utils/catchMindShare';
 import { isGoalShareContent } from '../../utils/dietShare';
@@ -81,7 +82,7 @@ import { STICKER_CHARACTERS, STICKER_CODE_INDEX, stickerImageOf } from '../../co
 import { CHARACTER_PACKS, packIdOfSticker } from '../../constants/stickerPacks';
 import { useStickerStore } from '../../store/stickerStore';
 import { loadRecentStickers, recordRecentSticker } from '../../utils/recentStickers';
-import { parseStickerCode, suggestStickers } from '../../utils/stickerCodes';
+import { parseStickerCode, suggestStickers, type StickerSuggestion } from '../../utils/stickerCodes';
 import { StickerPanel } from '../../components/chat/StickerPanel';
 import { AnimatedCoupleEmoji } from '../../components/chat/AnimatedCoupleEmoji';
 import { useCoupleEmojiStore } from '../../store/coupleEmojiStore';
@@ -108,6 +109,7 @@ const IMAGE_STICKER_PACK = new Map(
 );
 
 const EMPTY_MESSAGES: ChatMessage[] = [];
+const EMPTY_SUGGESTIONS: StickerSuggestion[] = [];
 
 /**
  * 채팅방은 탭 부모까지 본다 — 트레이의 "질문"·"게임"이 홈 스택 화면으로 건너가기 때문이다
@@ -440,6 +442,9 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     return dedupeOverlapping([...ruleSuggestions, ...dict]);
   }, [ruleSuggestions, dictResult, text]);
 
+  /** 맞춤법 막대가 떠 있는가 — 떠 있으면 스티커 추천 막대는 숨는다(같은 자리를 쓴다) */
+  const spellBarVisible = spellDismissedFor !== text && suggestions.length > 0;
+
   /*
    * 스티커 추천 — 짧은 입력("사랑해"·"ㅠㅠ"·"(더비")에만 뜬다(utils/stickerCodes.ts).
    * 카톡 키워드 이모티콘처럼 바꿔주지 않고 보여준다. 수정 중에는 끈다 — 고치는 글에 그림을 권할 자리가 아니다.
@@ -505,14 +510,28 @@ export function ChatRoomScreen({ navigation, route }: Props) {
    */
   const [stickerBarClosed, setStickerBarClosed] = useState(false);
   const [stickerPickedFor, setStickerPickedFor] = useState<string | null>(null);
+  /** 실제로 막대에 올라가는 추천 — 닫았거나, 방금 골랐거나, 맞춤법 제안이 떠 있으면 비어 있다 */
+  const visibleStickerSuggestions =
+    stickerBarClosed || stickerPickedFor === text || spellBarVisible ? EMPTY_SUGGESTIONS : stickerSuggestions;
+
+  /*
+   * 계측 — 막대가 뜬 것을 남긴다. 같은 막대(같은 키워드·같은 칸)는 한 번만: 글자를 지웠다 다시
+   * 쳐서 같은 막대가 또 뜨는 것까지 세면 노출이 부풀려진다. detail 에는 표의 키워드와 코드만 싣는다.
+   */
+  const stickerShownRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (visibleStickerSuggestions.length === 0) return;
+    const detail = `${visibleStickerSuggestions[0].matched}:${visibleStickerSuggestions.map((e) => e.code).join(',')}`;
+    if (stickerShownRef.current === detail) return;
+    stickerShownRef.current = detail;
+    analyticsApi.log('STICKER_SUGGEST_SHOWN', detail).catch(() => {});
+  }, [visibleStickerSuggestions]);
+
   // 입력이 비면(보냈거나 지웠다) 새 입력이다 — 렌더 중 조정이라 effect 한 바퀴를 더 돌지 않는다
   if (!text && (stickerBarClosed || stickerPickedFor !== null)) {
     setStickerBarClosed(false);
     setStickerPickedFor(null);
   }
-
-  /** 맞춤법 막대가 떠 있는가 — 떠 있으면 스티커 추천 막대는 숨는다(같은 자리를 쓴다) */
-  const spellBarVisible = spellDismissedFor !== text && suggestions.length > 0;
 
   /** 첫 제안을 적용한다. 남은 게 있으면 이어서 뜬다 */
   const applySpelling = () => {
@@ -1898,10 +1917,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           </View>
         ) : null}
         <StickerSuggestBar
-          items={
-            // 맞춤법 제안이 떠 있으면 그쪽이 먼저다 — 같은 자리에 두 줄이 쌓이면 입력창이 밀려난다
-            stickerBarClosed || stickerPickedFor === text || spellBarVisible ? [] : stickerSuggestions
-          }
+          items={visibleStickerSuggestions}
           onPick={(e) => {
             /*
              * 입력창의 글은 그대로 둔다 — "나도 사랑해"에 그림을 곁들인 사람은 문장도 보낼 생각이다.
@@ -1909,6 +1925,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
              */
             if (text.trim().startsWith('(')) setText('');
             else setStickerPickedFor(text);
+            analyticsApi.log('STICKER_SUGGEST_PICKED', `${e.matched}:${e.code}`).catch(() => {});
             void sendSticker(e.code, false, e.label);
           }}
           onDismiss={() => setStickerBarClosed(true)}
