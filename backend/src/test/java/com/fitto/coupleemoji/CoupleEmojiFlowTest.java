@@ -326,6 +326,8 @@ class CoupleEmojiFlowTest {
             assertThat(e.subjectUserId()).isEqualTo(b);
             assertThat(e.createdBy()).isEqualTo(a);
             assertThat(e.imageUrl()).contains("/couple-emoji/");
+            // 앱이 효과 레이어를 얹을지 이 값으로 가른다 — 비면 새 세트도 효과 없이 보인다
+            assertThat(e.promptVersion()).matches("v\\d+");
         });
 
         // 커플 공용 — 만든 사람이 아닌 상대도 같은 목록을 본다
