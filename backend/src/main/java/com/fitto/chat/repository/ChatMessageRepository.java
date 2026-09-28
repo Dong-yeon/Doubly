@@ -45,12 +45,14 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
     /**
      * 대화 검색 — 텍스트 메시지 본문에 키워드가 포함된 것만, 최신순 커서 페이징.
      * STICKER/TOUCH 등은 content 가 사람이 읽는 문장이 아니라 코드값이라 검색 대상에서 뺀다.
+     * 문구 스티커(TEXT_STICKER)는 content 가 사용자가 쓴 문구라 TEXT 와 같이 찾는다.
      * keyword 는 호출자(ChatService)가 LIKE 와일드카드를 이스케이프해서 넘긴다.
      */
     @Query("""
             select m from ChatMessage m
             where m.relationId = :relationId
-              and m.messageType = com.fitto.chat.domain.MessageType.TEXT
+              and m.messageType in (com.fitto.chat.domain.MessageType.TEXT,
+                                    com.fitto.chat.domain.MessageType.TEXT_STICKER)
               and m.deletedAt is null
               and lower(m.content) like lower(concat('%', :keyword, '%')) escape '\\'
               and (cast(:cursor as Long) is null or m.id < :cursor)
