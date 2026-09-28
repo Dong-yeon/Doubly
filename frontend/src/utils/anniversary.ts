@@ -1,9 +1,11 @@
 /**
- * 오늘이 커플 기념일인가 — 스티커 패널의 "오늘의 스티커" 칸(constants/contextStickers.ts)이 쓴다.
+ * 커플 날짜 계산 — 홈 D-day(`utils/date.ts` 의 `daysSince` 가 여기로 온다)와 스티커 패널의
+ * "오늘의 스티커" 칸(constants/contextStickers.ts)이 <b>같은 셈</b>을 쓴다. 둘이 다르게 세면 홈은 D+99 인데
+ * 패널은 "D+100 축하해요"가 되는 날이 생긴다.
  *
- * <p><b>"오늘"은 KST 로 판단한다.</b> 백엔드의 `KstClock.today()` 규칙과 같다(CLAUDE.md 4절). 기존 `utils/date.ts`
- * 의 `daysSince` 는 기기 현지 시간으로 오늘을 정해서, 해외에 있거나 기기 시간대가 다르면 기념일이 하루 어긋난다 —
- * 그래서 여기서는 쓰지 않고 순간(Date)에서 KST 날짜를 직접 뽑는다.
+ * <p><b>"오늘"은 KST 로 판단한다.</b> 백엔드의 `KstClock.today()` 규칙과 같다(CLAUDE.md 4절). 예전 `daysSince` 는
+ * 기기 현지 시간으로 오늘을 정해서, 해외에 있거나 기기 시간대가 다르면 D-day 가 하루 어긋났다(2026-09-28 에 고침) —
+ * 순간(Date)에서 KST 날짜를 직접 뽑는다.
  *
  * <p><b>일수 규칙은 앱의 D-day 표시와 같다</b>(`daysSince`): 사귄 날이 1일이다. 그래서 100일 = 사귄 날 + 99일.
  *
@@ -46,6 +48,17 @@ function parseDate(s: string | null | undefined): KstDate | null {
 
 const dayNumber = ({ y, m, d }: KstDate) => Math.round(Date.UTC(y, m - 1, d) / DAY_MS);
 const isLeapYear = (y: number) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+
+/**
+ * 사귄 날부터 오늘(KST)까지 — 사귄 날이 1일이다. 홈 D-day 의 "D+n".
+ * 날짜가 없거나 잘못됐으면 0, 아직 오지 않은 날이면 1(예전 `daysSince` 와 같은 바닥값).
+ * `LocalDate("2026-08-21")`·`LocalDateTime("2026-08-21T14:03:12")` 어느 쪽이 와도 앞 10자만 본다.
+ */
+export function daysSinceKst(baseDate: string | null | undefined, now: Date): number {
+  const start = parseDate(baseDate);
+  if (!start) return 0;
+  return Math.max(1, dayNumber(kstDateOf(now)) - dayNumber(start) + 1);
+}
 
 export type AnniversaryContext =
   | { kind: 'YEARS'; years: number; title: string }

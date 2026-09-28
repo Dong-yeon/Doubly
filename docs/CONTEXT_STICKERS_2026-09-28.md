@@ -109,7 +109,10 @@
 
 ## 6. 남은 것
 
-- 🔸 **`daysSince` 의 현지 시간 문제** — 홈 D-day 등 기존 표시 전체가 기기 시간대를 따른다. 해외 사용자에게는 D-day 가 하루 어긋날 수 있고,
-  그러면 "D+100 축하해요" 칸(KST)과 홈 D-day(현지)가 다른 날을 가리킬 수 있다. 별도 작업으로 `anniversary.ts` 의 KST 계산에 맞출지 결정이 필요하다.
+- ~~`daysSince` 의 현지 시간 문제~~ → **2026-09-28 해결**: 홈 D-day·안드로이드 위젯의 `daysSince` 가 `anniversary.ts` 의 `daysSinceKst` 를 쓴다.
+  기념일 칸과 **같은 함수**라 홈이 D+99 인데 패널이 "D+100 축하해요"인 날이 생길 수 없다(검증 스크립트에 그 대조 케이스가 있다).
+- 🔸 **남은 현지 시간 계산**: 홈의 **여행 D-day 카드**(`TripPeek`·`TripListScreen`)와 캘린더 D-day(`CoupleCalendarScreen`)는
+  `toDateString()`(기기 현지 날짜)로 오늘을 정한다. `toDateString()` 은 운동·식단 기록의 "오늘"로도 앱 전체에서 쓰여서
+  한 번에 KST 로 바꾸면 기록 날짜까지 바뀐다 — 범위가 커서 이번에 건드리지 않았다. 해외 사용자가 생기면 별도로 설계한다.
 - 전용 그림(달걀이 100일 케이크 등)이 생기면 `ANNIVERSARY_STICKERS` 에 넣는다 — 팩·코드 추가 절차는 `STICKER_PACK_MONETIZATION_2026-09-21.md` §13.
 - 우리 이모지를 맥락 칸에 섞는 것은 우리 둘 D2 이후(프롬프트 문서 부록).

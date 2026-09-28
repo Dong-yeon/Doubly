@@ -1,5 +1,6 @@
 /** 날짜 유틸 */
 import type { WeekDay } from '../types';
+import { daysSinceKst } from './anniversary';
 
 /** YYYY-MM-DD (로컬 기준) */
 export function toDateString(date: Date = new Date()): string {
@@ -123,21 +124,17 @@ export function isSameLocalDay(isoA: string, isoB: string): boolean {
 }
 
 /**
- * D+ 일수 — 시작일을 1일차로 센다 (홈 D+ 히어로 · 홈 위젯 공용).
+ * 커플 D-day — 사귄 날이 1일이다(홈 "D+n"·안드로이드 위젯).
  *
- * `new Date('2026-08-21')` 은 <b>UTC 자정</b>으로 파싱돼 KST 로는 09:00 이 된다 —
- * 그대로 오늘과 빼면 KST 00:00~09:00 사이에는 D+ 가 하루 적게 나온다(백엔드 KstClock
- * 도입 사유였던 "UTC 서버에서 00~09시에 어제로 판정"과 같은 함정, V27 참고). 그래서
- * 앞 10자(날짜부)만 떼어 {@link parseDateString} 으로 로컬 자정을 만들고, 오늘도
- * 로컬 자정으로 맞춰 뺀다 — LocalDate("2026-08-21")·LocalDateTime("2026-08-21T14:03:12")
- * 어느 쪽이 넘어와도 앞 10자는 날짜이므로 안전하다.
+ * <p><b>오늘은 KST 로 센다</b>(2026-09-28). 예전에는 기기 현지 자정으로 셌는데, 그러면 해외에 있거나 기기 시간대가
+ * 다르면 D-day 가 하루 어긋났고, 스티커 패널의 기념일 칸(KST)과 다른 날을 가리켰다. 셈은 `utils/anniversary.ts`
+ * 의 {@link daysSinceKst} 하나다 — 기념일 칸과 같은 함수라 어긋날 수 없다.
+ *
+ * <p>`new Date('2026-08-21')` 은 UTC 자정으로 파싱돼 KST 로는 09:00 이 된다 — 그대로 빼면 KST 00~09시에 하루
+ * 적게 나온다(백엔드 KstClock 도입 사유와 같은 함정, V27 참고). 그래서 앞 10자(날짜부)만 떼어 <b>연·월·일끼리</b> 뺀다.
  */
 export function daysSince(baseDate: string | null | undefined): number {
-  const start = parseDateString(baseDate?.slice(0, 10));
-  if (!start) return 0;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return Math.max(1, Math.round((today.getTime() - start.getTime()) / 86400000) + 1);
+  return daysSinceKst(baseDate, new Date());
 }
 
 /**
