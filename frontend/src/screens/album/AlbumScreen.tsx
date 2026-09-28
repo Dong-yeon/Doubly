@@ -30,6 +30,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { ImageViewer, type ViewerImage } from '../../components/ImageViewer';
 import { MemoryPeek } from '../home/components/MemoryPeek';
+import { LockedCard } from '../../components/LockedCard';
 import { feedApi } from '../../api/feed';
 import { tripApi } from '../../api/trip';
 import { toast } from '../../store/toastStore';
@@ -227,7 +228,19 @@ export function AlbumScreen({ navigation }: Props) {
         작년 오늘 — 있는 날만. 홈의 MemoryPeek 과 같은 카드를 쓴다(같은 것이 두 모양이면
         같은 카드여야 한다). PRO 잠금은 서버 응답의 locked 를 그대로 따른다.
       */}
-      {memories && (memories.groups.length > 0 || memories.locked) ? (
+      {/*
+        잠김(FREE)은 groups 가 <b>빈 채로</b> 온다(Memories.locked 주석) — MemoryPeek 에 넘기면 가장 오래된 해를
+        찾다가 undefined.label 로 우리 탭 전체가 죽었다(9/15 부터, 2026-09-28 발견). 홈과 같은 잠금 카드로 가른다.
+      */}
+      {memories?.locked ? (
+        <View style={styles.section}>
+          <LockedCard
+            title="작년 오늘"
+            description="함께한 기록을 해마다 다시 꺼내볼 수 있어요"
+            upgradeMessage="작년 오늘의 추억은 PRO에서 볼 수 있어요."
+          />
+        </View>
+      ) : memories && memories.groups.length > 0 ? (
         <View style={styles.section}>
           <MemoryPeek memories={memories} onPress={() => navigation.navigate('Memories')} />
         </View>
