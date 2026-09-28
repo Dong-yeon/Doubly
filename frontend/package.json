@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "main": "index.ts",
   "dependencies": {
-    "@config-plugins/react-native-webrtc": "^15.0.2",
     "@expo/metro-runtime": "~56.0.19",
     "@expo/vector-icons": "^15.1.1",
     "@react-native-async-storage/async-storage": "^2.2.0",
@@ -14,9 +13,6 @@
     "@react-navigation/native-stack": "^7.17.6",
     "@sentry/react-native": "~7.11.0",
     "@stomp/stompjs": "^7.3.0",
-    "@stream-io/react-native-callingx": "^0.11.3",
-    "@stream-io/react-native-webrtc": "^145.3.1",
-    "@stream-io/video-react-native-sdk": "^1.44.0",
     "expo": "~56.0.12",
     "expo-asset": "~56.0.24",
     "expo-audio": "~56.0.13",
@@ -93,20 +89,5 @@
     "update:production": "npx eas-cli update --channel production --auto",
     "update:preview": "npx eas-cli update --channel preview --auto"
   },
-  "private": true,
-  "expo": {
-    "autolinking": {
-      "ios": {
-        "exclude": [
-          "@react-native-firebase/app",
-          "@react-native-firebase/messaging"
-        ]
-      },
-      "android": {
-        "exclude": [
-          "@stream-io/react-native-callingx"
-        ]
-      }
-    }
-  }
+  "private": true
 }
