@@ -14,7 +14,7 @@ import java.util.Optional;
  * ({@link FeatureCreditService}). 여기 없는 상품 id 가 오면 크레딧을 주지 않는다.
  */
 public enum CreditProduct {
-    /** 우리 이모지 한 세트(요청 1회 = 최대 5장) 추가. */
+    /** 우리 이모지 한 세트(요청 1회 = 최대 6장) 추가. */
     EMOJI_SET_1("emoji_set_1", Feature.AI_COUPLE_EMOJI, 1);
 
     private final String productId;
