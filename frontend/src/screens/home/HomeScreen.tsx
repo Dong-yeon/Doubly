@@ -208,6 +208,18 @@ export function HomeScreen({ navigation }: Props) {
   // 잠깐 스쳤다 사라지는 깜빡임(P2-13)을 막는다. 로딩이 끝나면 실제 값을 따른다.
   const connected = relationLoading ? true : !!couple?.partner;
   const bgUrl = couple?.backgroundImageUrl ?? null;
+  /*
+   * 배경 사진이 실제로 보이는 높이 — 화면 맨 위부터 하단 패널 윗선까지.
+   *
+   * <p>사진을 화면 전체(absoluteFill)에 cover 로 깔면 <b>화면 비율로 확대·크롭된 뒤 아래 절반 이상이
+   * 불투명 패널에 가려진다</b>(9/28 에 패널이 제 배경을 깔면서 생긴 어긋남). 보이는 건 확대된 사진의
+   * 윗부분뿐이라 사진의 주인공(보통 가운데)이 패널 뒤에 숨는다 — 2026-09-29 "배경이 이상하다".
+   * 그래서 사진을 보이는 자리에만 맞춰 그린다. 패널 위 페이드(panelFade)가 경계를 덮는다.
+   * 재기 전(첫 프레임)에는 화면 전체로 그린다.
+   */
+  const [bodyTop, setBodyTop] = useState(0);
+  const [panelTop, setPanelTop] = useState<number | null>(null);
+  const photoHeight = panelTop == null ? null : bodyTop + panelTop;
   const dday = daysSince(couple?.anniversaryDate ?? couple?.connectedAt);
 
   /*
@@ -671,7 +683,11 @@ export function HomeScreen({ navigation }: Props) {
         {/* 배경화면은 화면 전체를 채운다 — 그 위 레이어는 모두 투명이다.
             배경이 있든 없든(그라데이션) 길게 눌러 정하거나 바꿀 수 있어야 한다. */}
         {bgUrl ? (
-          <Image source={{ uri: bgUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+          <Image
+            source={{ uri: bgUrl }}
+            style={photoHeight != null && connected ? [styles.bgPhoto, { height: photoHeight }] : StyleSheet.absoluteFill}
+            resizeMode="cover"
+          />
         ) : (
           <LinearGradient
             colors={wallpaper()}
@@ -700,7 +716,7 @@ export function HomeScreen({ navigation }: Props) {
           {topBar}
 
           {connected ? (
-            <View style={styles.body}>
+            <View style={styles.body} onLayout={(e) => setBodyTop(e.nativeEvent.layout.y)}>
               {/*
                 남는 세로 공간은 <b>사진 자리</b>가 먹는다 → 패널(히어로·슬롯·바로가기)은 항상
                 바닥에 붙고, 사진은 그 위에서 그대로 보인다. 사진이 없으면 이 자리에 캐릭터가 앉고
@@ -722,7 +738,7 @@ export function HomeScreen({ navigation }: Props) {
                   />
                 ) : null}
               </View>
-              <View style={styles.panel}>
+              <View style={styles.panel} onLayout={(e) => setPanelTop(e.nativeEvent.layout.y)}>
               <LinearGradient colors={panelFade()} style={styles.panelFade} pointerEvents="none" />
               <View style={styles.heroSlot}>
                 <CoupleHero
@@ -986,6 +1002,8 @@ const styles = themedStyles((colors) => ({
   // 배경·스크림·콘텐츠를 함께 담는 무대 — 길게 누르기 Pressable 이 여기다(위 주석 참고).
   // absoluteFill 이 아니라 flex 로 자리를 잡는다: 형제가 아니라 조상이어야 터치가 닿는다.
   stage: { flex: 1 },
+  // 배경 사진 — 보이는 자리(패널 윗선까지)에만 맞춘다. 높이는 onLayout 으로 잰다(photoHeight 주석)
+  bgPhoto: { position: 'absolute', top: 0, left: 0, right: 0 },
   safe: { flex: 1, backgroundColor: 'transparent' },
 
   topBar: {
