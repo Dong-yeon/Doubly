@@ -1760,12 +1760,14 @@ export interface ChatRoom {
 
 // 5.8b couple_emojis — 애인 얼굴로 만든 감정 이모지 세트
 /**
- * 감정 17종(표정 6 + 상황 11) — 서버 {@code CoupleEmojiEmotion} 과 순서·이름이 같다. 사용자가 고르지 않는다
+ * 감정 23종(표정 6 + 자주 하는 말 6 + 상황 11) — 서버 {@code CoupleEmojiEmotion} 과 순서·이름이 같다. 사용자가 고르지 않는다
  * (사진 한 장 → 세트 한 벌). 생성 대기 화면의 "칸이 채워지는" 순서가 이 순서다.
  */
 export type CoupleEmojiEmotion =
   // 표정 6종
   | 'ANGRY' | 'HAPPY' | 'EXCITED' | 'SAD' | 'SLEEPY' | 'LOVE'
+  // 자주 하는 말 6종 (2026-09-29 추가)
+  | 'SORRY' | 'THANKS' | 'MISS_YOU' | 'GOOD_NIGHT' | 'HUNGRY' | 'CHEER'
   // 상황 11종 (2026-09-10 추가)
   | 'FRESHLY_WASHED' | 'BOUQUET' | 'KISS' | 'HARD_AT_WORK' | 'COMMUTING' | 'OFF_WORK'
   | 'DRAINED' | 'SHOWING_OFF' | 'DRESSED_UP' | 'FACE_MASK' | 'DOING_MAKEUP';

@@ -67,6 +67,13 @@ export const COUPLE_EMOJI_MOTION: Record<CoupleEmojiEmotion, CoupleEmojiMotion> 
   SAD: { motion: 'droop', effect: { kind: 'glyph', glyph: '💧', path: 'fall' } },
   SLEEPY: { motion: 'sway', effect: { kind: 'glyph', glyph: '💤', path: 'rise' } },
   LOVE: { motion: 'beat', effect: { kind: 'lottie', code: 'ANIM_TWO_HEARTS' } },
+  // 자주 하는 말(2026-09-29)
+  SORRY: { motion: 'droop', effect: { kind: 'glyph', glyph: '💦', path: 'fall' } },
+  THANKS: { motion: 'pop', effect: { kind: 'lottie', code: 'ANIM_PRAY' } },
+  MISS_YOU: { motion: 'sway', effect: { kind: 'glyph', glyph: '💭', path: 'rise' } },
+  GOOD_NIGHT: { motion: 'breathe', effect: { kind: 'glyph', glyph: '💤', path: 'rise' } },
+  HUNGRY: { motion: 'bob', effect: { kind: 'lottie', code: 'ANIM_RAMEN' } },
+  CHEER: { motion: 'bounce', effect: { kind: 'lottie', code: 'ANIM_MUSCLE' } },
   FRESHLY_WASHED: { motion: 'sway', effect: { kind: 'glyph', glyph: '💦', path: 'rise' } },
   BOUQUET: { motion: 'pop', effect: { kind: 'lottie', code: 'ANIM_CHERRY_BLOSSOM' } },
   KISS: { motion: 'lean', effect: { kind: 'glyph', glyph: '💗', path: 'drift' } },
