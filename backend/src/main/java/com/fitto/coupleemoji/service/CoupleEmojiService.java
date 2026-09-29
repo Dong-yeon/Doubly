@@ -96,10 +96,14 @@ public class CoupleEmojiService {
      * <p>5장이면 한 요청이 약 15~20초에 끝나고 실비도 0.2 USD 선이다. 17종을 다 갖고 싶으면
      * 여러 번 나눠 만들면 된다 — 부분 재생성(이번에 그릴 감정만 보내기)이 이미 그 경로다.
      *
+     * <p><b>2026-09-29: 5 → 6.</b> 기본 표정이 6종(화남·기쁨·신남·슬픔·졸림·사랑)인데 한 번에 5장이라 첫 세트로
+     * 기본 표정조차 다 못 채웠다(docs/COUPLE_EMOJI_CREATE_UX_2026-09-29.md §2). 한 장 더(약 0.045 USD)로
+     * 첫 세트가 "기본 표정 한 벌"로 딱 떨어진다. 동시 4장이라 대기 시간은 한 바퀴(약 5초) 늘어난다.
+     *
      * <p>상한은 <b>요청 경계</b>({@link #prepare})에서만 본다. 그 아래 생성 로직은 장 수에
      * 제한이 없다 — 정책이 바뀌면 여기 숫자만 바꾼다.
      */
-    static final int MAX_EMOTIONS_PER_REQUEST = 5;
+    static final int MAX_EMOTIONS_PER_REQUEST = 6;
 
     private final CoupleEmojiRepository repository;
     private final RelationRepository relationRepository;

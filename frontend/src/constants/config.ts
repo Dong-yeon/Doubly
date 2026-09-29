@@ -213,7 +213,7 @@ export const PRO_SUBSCRIPTION_SKUS: Record<ProTerm, string> = {
 };
 
 /**
- * 소모성 크레딧 상품 — 우리 이모지 한 세트(요청 1회 = 최대 5장) 추가. 서버의
+ * 소모성 크레딧 상품 — 우리 이모지 한 세트(요청 1회 = 최대 6장) 추가. 서버의
  * `CreditProduct.EMOJI_SET_1` 과 값이 같아야 한다. 구독과 달리 플랜을 바꾸지 않고 잔여 횟수만
  * 더한다 — FREE 도 구독 없이 하나 살 수 있다(docs/BILLING_STATUS_2026-09-25.md §7).
  */

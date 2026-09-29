@@ -14,7 +14,15 @@ export interface CoupleEmojiEmotionDef {
   label: string;
   /** 빈 칸 자리표시 — 생성 전에도 무슨 표정이 올지 알 수 있게 */
   placeholder: string;
+  /** 표정(얼굴만) / 상황(소품이 있는 장면) — 고르기 시트가 두 묶음으로 나눠 보여 준다 */
+  group: 'face' | 'scene';
 }
+
+/** 고르기 시트의 묶음 이름 */
+export const COUPLE_EMOJI_GROUP_LABEL: Record<CoupleEmojiEmotionDef['group'], string> = {
+  face: '표정',
+  scene: '상황',
+};
 
 /**
  * 한 번에 만들 수 있는 장 수 — 백엔드 {@code CoupleEmojiService.MAX_EMOTIONS_PER_REQUEST} 와 같아야 한다.
@@ -24,32 +32,35 @@ export interface CoupleEmojiEmotionDef {
  * 한 번이 15~20초에 끝나고, 마음에 든 장은 트레이에 그대로 남는다.
  *
  * <p>여기서 막는 건 사용자 경험용이다 — 진짜 상한은 서버가 본다(넘겨 보내면 400).
+ *
+ * <p>2026-09-29: 5 → 6. 표정이 6종인데 한 번에 5장이라 첫 세트로 기본 표정조차 다 못 채웠다
+ * (docs/COUPLE_EMOJI_CREATE_UX_2026-09-29.md §2). 이제 첫 세트 기본값이 "표정 한 벌"이다.
  */
-export const MAX_EMOJI_PER_REQUEST = 5;
+export const MAX_EMOJI_PER_REQUEST = 6;
 
 export const COUPLE_EMOJI_EMOTIONS: CoupleEmojiEmotionDef[] = [
-  { key: 'ANGRY', label: '화남', placeholder: '😠' },
-  { key: 'HAPPY', label: '기쁨', placeholder: '😊' },
-  { key: 'EXCITED', label: '신남', placeholder: '🎉' },
-  { key: 'SAD', label: '슬픔', placeholder: '😢' },
-  { key: 'SLEEPY', label: '졸림', placeholder: '😴' },
-  { key: 'LOVE', label: '사랑', placeholder: '🥰' },
+  { key: 'ANGRY', label: '화남', placeholder: '😠', group: 'face' },
+  { key: 'HAPPY', label: '기쁨', placeholder: '😊', group: 'face' },
+  { key: 'EXCITED', label: '신남', placeholder: '🎉', group: 'face' },
+  { key: 'SAD', label: '슬픔', placeholder: '😢', group: 'face' },
+  { key: 'SLEEPY', label: '졸림', placeholder: '😴', group: 'face' },
+  { key: 'LOVE', label: '사랑', placeholder: '🥰', group: 'face' },
   /*
    * 상황 11종(2026-09-10 추가) — 위 6종이 순수한 표정이라면 이쪽은 소품이 있는 상황이다.
    * placeholder 는 아직 안 만들어진 칸에만 쓰이므로, 무드용 유니코드(백엔드 moodEmoji)와
    * 달라도 된다 — 여기서는 "무엇이 올지" 알아보기 쉬운 쪽을 골랐다.
    */
-  { key: 'FRESHLY_WASHED', label: '씻고왔다', placeholder: '🧖' },
-  { key: 'BOUQUET', label: '꽃다발', placeholder: '💐' },
-  { key: 'KISS', label: '뽀뽀', placeholder: '😘' },
-  { key: 'HARD_AT_WORK', label: '열일', placeholder: '💪' },
-  { key: 'COMMUTING', label: '출근', placeholder: '🏃' },
-  { key: 'OFF_WORK', label: '퇴근', placeholder: '🙌' },
-  { key: 'DRAINED', label: '방전', placeholder: '🪫' },
-  { key: 'SHOWING_OFF', label: '멋진척', placeholder: '😎' },
-  { key: 'DRESSED_UP', label: '꽃단장', placeholder: '💄' },
-  { key: 'FACE_MASK', label: '마스크팩', placeholder: '🧴' },
-  { key: 'DOING_MAKEUP', label: '화장', placeholder: '🖌️' },
+  { key: 'FRESHLY_WASHED', label: '씻고왔다', placeholder: '🧖', group: 'scene' },
+  { key: 'BOUQUET', label: '꽃다발', placeholder: '💐', group: 'scene' },
+  { key: 'KISS', label: '뽀뽀', placeholder: '😘', group: 'scene' },
+  { key: 'HARD_AT_WORK', label: '열일', placeholder: '💪', group: 'scene' },
+  { key: 'COMMUTING', label: '출근', placeholder: '🏃', group: 'scene' },
+  { key: 'OFF_WORK', label: '퇴근', placeholder: '🙌', group: 'scene' },
+  { key: 'DRAINED', label: '방전', placeholder: '😩', group: 'scene' },
+  { key: 'SHOWING_OFF', label: '멋진척', placeholder: '😎', group: 'scene' },
+  { key: 'DRESSED_UP', label: '꽃단장', placeholder: '💄', group: 'scene' },
+  { key: 'FACE_MASK', label: '마스크팩', placeholder: '🧴', group: 'scene' },
+  { key: 'DOING_MAKEUP', label: '화장', placeholder: '🖌️', group: 'scene' },
 ];
 
 export function coupleEmojiEmotionOf(

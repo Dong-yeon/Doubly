@@ -58,6 +58,8 @@ interface Props {
   onCancel: () => void;
   /** 잘라낸 로컬 이미지 uri — 업로드는 호출부 책임 */
   onConfirm: (uri: string) => void;
+  /** 머리 제목 — 우리 이모지처럼 프로필이 아닌 곳에서 쓸 때 바꾼다 */
+  title?: string;
 }
 
 interface Transform {
@@ -68,7 +70,7 @@ interface Transform {
 
 const IDENTITY: Transform = { scale: 1, x: 0, y: 0 };
 
-export function AvatarCropSheet({ source, onCancel, onConfirm }: Props) {
+export function AvatarCropSheet({ source, onCancel, onConfirm, title = '프로필 사진' }: Props) {
   const insets = useSafeAreaInsets();
   const [canvas, setCanvas] = useState({ width: 0, height: 0 });
   const [working, setWorking] = useState(false);
@@ -234,7 +236,7 @@ export function AvatarCropSheet({ source, onCancel, onConfirm }: Props) {
           >
             <Text style={styles.headerText}>취소</Text>
           </Pressable>
-          <Text style={styles.headerTitle}>프로필 사진</Text>
+          <Text style={styles.headerTitle}>{title}</Text>
           <Pressable
             onPress={onDone}
             disabled={working || !geometry}

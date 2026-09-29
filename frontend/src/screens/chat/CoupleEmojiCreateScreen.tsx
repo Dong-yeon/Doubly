@@ -19,6 +19,7 @@ import { AvatarCropSheet } from '../../components/AvatarCropSheet';
 import { Button } from '../../components/Button';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { LockedCard } from '../../components/LockedCard';
+import { Sheet } from '../../components/Sheet';
 import { awaitAiJob } from '../../api/aiJob';
 import { startCoupleEmojiGeneration } from '../../api/coupleEmoji';
 import { useAuthStore } from '../../store/authStore';
@@ -34,6 +35,7 @@ import { fetchEmojiSetProduct, requestEmojiSetPurchase } from '../../utils/iap';
 import { PURCHASE_ENABLED } from '../../constants/config';
 import {
   COUPLE_EMOJI_EMOTIONS,
+  COUPLE_EMOJI_GROUP_LABEL,
   MAX_EMOJI_PER_REQUEST,
   coupleEmojiEmotionOf,
   type CoupleEmojiEmotionDef,
@@ -168,6 +170,17 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
     setSelectedKeys(next);
   };
 
+  /** 고른 감정(표 순서) — 접힌 줄의 이모지 미리보기와 접근성 라벨 */
+  const selectedDefs = COUPLE_EMOJI_EMOTIONS.filter((e) => effectiveSelected.has(e.key));
+  /** "아직 없는 것부터 6개" — 기본값과 같은 규칙. 시트의 "6개 고르기" */
+  const fillDefault = () => {
+    const missing = COUPLE_EMOJI_EMOTIONS.filter((e) => !existingEmotions.has(e.key)).map((e) => e.key);
+    const pool = missing.length > 0 ? missing : COUPLE_EMOJI_EMOTIONS.map((e) => e.key);
+    setSelectedKeys(new Set<CoupleEmojiEmotion>(pool.slice(0, MAX_EMOJI_PER_REQUEST)));
+  };
+  /** 감정 고르기 시트 — 접어 둔 17종을 여기서만 펼친다 */
+  const [pickerOpen, setPickerOpen] = useState(false);
+
   /** 생성이 시작되면 그때 고른 감정으로 고정한다 — 진행 중에 토글해도 칸이 흔들리지 않게 */
   const [drawing, setDrawing] = useState<CoupleEmojiEmotionDef[]>([]);
 
@@ -268,7 +281,16 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
     ]);
   };
 
-  const subjectName = subjectUserId === me?.id ? '나' : (partner?.name ?? '상대');
+  /** 결과 화면에서 다음 세트로 — 같은 얼굴, 기본값은 다시 "아직 없는 것부터" */
+  const startAnother = () => {
+    setFresh([]);
+    setDone(null);
+    setDrawing([]);
+    setSelection(null);
+  };
+
+  // "내 이모지" / "지민 이모지" — "나 이모지"는 조사가 어색했다
+  const subjectName = subjectUserId === me?.id ? '내' : (partner?.name ?? '상대');
   const startedOrDone = generating || fresh.length > 0;
 
   return (
@@ -294,7 +316,7 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
       {canBuySet ? (
         <View style={styles.creditBox}>
           <Text style={styles.creditTitle}>세트를 하나만 더 만들고 싶다면</Text>
-          <Text style={styles.hint}>구독 없이 세트 하나(5장까지)를 살 수 있어요. 산 세트는 이번 달이 지나도 남아요.</Text>
+          <Text style={styles.hint}>구독 없이 세트 하나(6장까지)를 살 수 있어요. 산 세트는 이번 달이 지나도 남아요.</Text>
           <Button title={`세트 1개 추가 · ${setPrice}`} variant="secondary" size="md" onPress={() => void onBuySet()} loading={buying} />
         </View>
       ) : null}
@@ -317,6 +339,8 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
             {me ? (
               <SubjectChip
                 name="나"
+                // 아바타 글자는 진짜 이름에서 — "나" 로 두면 칩이 "나 나" 로 읽혔다
+                avatarName={me.name}
                 imageUrl={me.profileImageUrl}
                 selected={subjectUserId === me.id}
                 onPress={() => setSubjectPick(me.id)}
@@ -334,69 +358,39 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
           </Text>
 
           {/*
-            어떤 감정을 그릴지 고른다. 감정이 17종이라 전부 다시 뽑으면 그만큼 시간과 실비가
-            든다 — 이미 있는 감정은 기본으로 빠져 있고, 고르지 않아도 가장 싼 선택이 기본값이다.
+            감정은 <b>접어 둔다</b>(2026-09-29, docs/COUPLE_EMOJI_CREATE_UX_2026-09-29.md §4). 예전엔 17개 칩을
+            한 화면에 펼쳐 두었는데, 대부분은 미리 골라 둔 기본값(아직 없는 것부터 6개)을 그대로 쓴다 —
+            고르지 않는 사람에게 칩 17개는 읽을 필요 없는 장애물이었다. 기본 흐름은 "누구 → 사진" 두 결정이고,
+            바꾸고 싶은 사람만 시트를 연다.
           */}
-          <View style={styles.emotionHeader}>
-            <Text style={styles.sectionTitle}>
-              어떤 감정을 만들까요? ({effectiveSelected.size}/{MAX_EMOJI_PER_REQUEST})
-            </Text>
-            {/*
-              전체 선택은 없앴다 — 한 번에 MAX_EMOJI_PER_REQUEST 장까지라 누를 수 없는 버튼이 된다.
-              대신 "아직 없는 것부터 5개"를 채워 준다: 가장 자주 쓰는 선택이고, 이미 가진 감정을
-              또 그리는 것이 가장 아까운 지출이다.
-            */}
-            <Pressable
-              onPress={() => {
-                const missing = COUPLE_EMOJI_EMOTIONS.filter((e) => !existingEmotions.has(e.key)).map((e) => e.key);
-                const pool = missing.length > 0 ? missing : COUPLE_EMOJI_EMOTIONS.map((e) => e.key);
-                setSelectedKeys(
-                  effectiveSelected.size > 0
-                    ? new Set<CoupleEmojiEmotion>()
-                    : new Set<CoupleEmojiEmotion>(pool.slice(0, MAX_EMOJI_PER_REQUEST)),
-                );
-              }}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel={effectiveSelected.size > 0 ? '선택 해제' : `${MAX_EMOJI_PER_REQUEST}개 고르기`}
-            >
-              <Text style={styles.emotionSelectAll}>
-                {effectiveSelected.size > 0 ? '선택 해제' : `${MAX_EMOJI_PER_REQUEST}개 고르기`}
+          <View style={styles.emotionRow}>
+            <View style={styles.emotionRowText}>
+              <Text style={styles.sectionTitle}>
+                만들 감정 ({effectiveSelected.size}/{MAX_EMOJI_PER_REQUEST})
               </Text>
+              {selectedDefs.length > 0 ? (
+                <Text style={styles.emotionPreview} numberOfLines={1}>
+                  {selectedDefs.map((e) => e.placeholder).join(' ')}
+                </Text>
+              ) : (
+                <Text style={styles.hint}>고른 감정이 없어요</Text>
+              )}
+            </View>
+            <Pressable
+              onPress={() => setPickerOpen(true)}
+              style={({ pressed }) => [styles.emotionChange, pressed && styles.cellPressed]}
+              accessibilityRole="button"
+              accessibilityLabel={`감정 바꾸기, 지금 ${selectedDefs.map((e) => e.label).join(', ') || '없음'}`}
+            >
+              <Text style={styles.emotionChangeText}>바꾸기</Text>
+              <MaterialCommunityIcons name="chevron-right" size={18} color={colors.primary} />
             </Pressable>
           </View>
-          <View style={styles.emotionWrap}>
-            {COUPLE_EMOJI_EMOTIONS.map((emotion) => {
-              const on = effectiveSelected.has(emotion.key);
-              const have = existingEmotions.has(emotion.key);
-              return (
-                <Pressable
-                  key={emotion.key}
-                  onPress={() => toggleEmotion(emotion.key)}
-                  style={({ pressed }) => [
-                    styles.emotionChip,
-                    on && styles.emotionChipOn,
-                    pressed && styles.cellPressed,
-                  ]}
-                  accessibilityRole="checkbox"
-                  accessibilityState={{ checked: on }}
-                  accessibilityLabel={`${emotion.label}${have ? ' — 이미 있음' : ''}`}
-                >
-                  <Text style={styles.emotionChipEmoji}>{emotion.placeholder}</Text>
-                  <Text style={[styles.emotionChipText, on && styles.emotionChipTextOn]}>
-                    {emotion.label}
-                  </Text>
-                  {/* 이미 가진 감정 — 다시 그리면 덮어쓰는 게 아니라 한 장이 더 생긴다 */}
-                  {have ? <View style={styles.emotionHaveDot} /> : null}
-                </Pressable>
-              );
-            })}
-          </View>
           <Text style={styles.hint}>
-            {existingEmotions.size > 0
-              ? `점이 붙은 건 이미 만들어 둔 감정이에요. 빼 두면 그대로 남고, 고른 ${effectiveSelected.size}장만 새로 그려요.`
-              : `고른 ${effectiveSelected.size}장을 그려요.`}
-            {` 한 번에 ${MAX_EMOJI_PER_REQUEST}장까지 만들 수 있어요 — 나머지는 다음에 이어서 만들면 돼요.`}
+            {existingEmotions.size === 0
+              ? `기본 표정 ${MAX_EMOJI_PER_REQUEST}가지를 골라 뒀어요.`
+              : '아직 없는 감정부터 골라 뒀어요.'}
+            {` 한 번에 ${MAX_EMOJI_PER_REQUEST}장까지 — 나머지는 다음에 이어서 만들면 돼요.`}
           </Text>
         </>
       ) : (
@@ -438,6 +432,13 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
                 </View>
               );
             })}
+            {/*
+              마지막 줄을 왼쪽부터 채운다 — 3열 space-between 이라 5장이면 [졸림 · 빈칸 · 사랑]처럼 양 끝으로
+              벌어졌다. 모자란 칸을 빈 칸으로 채워 줄을 맞춘다(보이지 않는다).
+            */}
+            {Array.from({ length: (3 - (drawing.length % 3)) % 3 }, (_, i) => (
+              <View key={`filler-${i}`} style={styles.cell} />
+            ))}
           </View>
 
           {generating ? (
@@ -456,45 +457,120 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
         </>
       ) : null}
 
-      <View style={styles.actions}>
-        {done ? (
-          <>
-            <Button title="채팅에서 쓰기" onPress={() => navigation.goBack()} />
-            {/*
-              부분 실패 안내가 "다른 사진으로 다시 만들면 채워져요" 라고 말하는데 그 버튼이 없었다
-              (2026-09-08 점검 #11) — 실패한 칸이 있을 때만 재시도 진입점을 같이 둔다.
-            */}
-            {done.failedEmotions.length > 0 ? (
+      {/* 그리는 동안에는 버튼을 숨긴다 — 흐린 버튼 둘이 남아 있으면 눌러야 할 것처럼 보였다 */}
+      {generating ? null : (
+        <View style={styles.actions}>
+          {done ? (
+            <>
+              <Button title="채팅에서 쓰기" onPress={() => navigation.goBack()} />
+              {/*
+                17종을 채우려면 여러 번 나눠 만든다 — 결과 화면에서 바로 다음 세트로 간다.
+                기본값은 다시 "아직 없는 것부터"라 방금 만든 감정은 빠진다.
+              */}
+              {existingEmotions.size < COUPLE_EMOJI_EMOTIONS.length && emojiState?.remaining !== 0 ? (
+                <Button title="이어서 더 만들기" variant="secondary" onPress={startAnother} disabled={!allowed} />
+              ) : null}
+              {/*
+                부분 실패 안내가 "다른 사진으로 다시 만들면 채워져요" 라고 말하는데 그 버튼이 없었다
+                (2026-09-08 점검 #11) — 실패한 칸이 있을 때만 재시도 진입점을 같이 둔다.
+              */}
+              {done.failedEmotions.length > 0 ? (
+                <Button
+                  title="다른 사진으로 다시 만들기"
+                  variant="secondary"
+                  onPress={() => pick('library')}
+                  disabled={!allowed}
+                />
+              ) : null}
+            </>
+          ) : (
+            <>
               <Button
-                title="다른 사진으로 다시 만들기"
-                variant="secondary"
+                title={fresh.length > 0 ? '다른 사진으로 다시 만들기' : '사진 고르기'}
                 onPress={() => pick('library')}
-                disabled={!allowed}
+                // 감정을 하나도 안 고르면 그릴 것이 없다
+                disabled={!allowed || effectiveSelected.size === 0}
               />
-            ) : null}
-          </>
-        ) : (
-          <>
-            <Button
-              title={fresh.length > 0 ? '다른 사진으로 다시 만들기' : '사진 고르기'}
-              onPress={() => pick('library')}
-              loading={generating}
-              // 감정을 하나도 안 고르면 그릴 것이 없다
-              disabled={generating || !allowed || effectiveSelected.size === 0}
-            />
-            <Button
-              title="촬영하기"
-              variant="secondary"
-              onPress={() => pick('camera')}
-              // 사진 고르기와 같은 조건 — 감정을 하나도 안 고르면 그릴 것이 없다
-              disabled={generating || !allowed || effectiveSelected.size === 0}
-            />
-          </>
-        )}
-      </View>
+              <Button
+                title="촬영하기"
+                variant="secondary"
+                onPress={() => pick('camera')}
+                // 사진 고르기와 같은 조건 — 감정을 하나도 안 고르면 그릴 것이 없다
+                disabled={!allowed || effectiveSelected.size === 0}
+              />
+              {/* 남은 횟수 — 예전엔 다 쓰고 나서야 알았다. remaining 에는 산 세트가 이미 합산돼 있다 */}
+              {allowed && emojiState?.remaining != null ? (
+                <Text style={[styles.hint, styles.remainingNote]}>
+                  {emojiState.remaining > 0
+                    ? `${emojiState.remaining}세트 더 만들 수 있어요`
+                    : '이번 달 세트를 다 썼어요'}
+                </Text>
+              ) : null}
+            </>
+          )}
+        </View>
+      )}
+
+      {/* 감정 고르기 — 표정 / 상황 두 묶음. 이미 가진 감정에는 점이 붙는다 */}
+      <Sheet visible={pickerOpen} onClose={() => setPickerOpen(false)} position="bottom">
+        <View style={styles.pickerHead}>
+          <Text style={styles.sectionTitle}>
+            감정 고르기 ({effectiveSelected.size}/{MAX_EMOJI_PER_REQUEST})
+          </Text>
+          {/*
+            전체 선택은 없앴다 — 한 번에 MAX_EMOJI_PER_REQUEST 장까지라 누를 수 없는 버튼이 된다.
+            대신 "아직 없는 것부터 6개"를 채워 준다: 가장 자주 쓰는 선택이고, 이미 가진 감정을
+            또 그리는 것이 가장 아까운 지출이다.
+          */}
+          <Pressable
+            onPress={() => (effectiveSelected.size > 0 ? setSelectedKeys(new Set<CoupleEmojiEmotion>()) : fillDefault())}
+            hitSlop={8}
+            accessibilityRole="button"
+          >
+            <Text style={styles.emotionSelectAll}>
+              {effectiveSelected.size > 0 ? '선택 해제' : `${MAX_EMOJI_PER_REQUEST}개 고르기`}
+            </Text>
+          </Pressable>
+        </View>
+        {(['face', 'scene'] as const).map((group) => (
+          <View key={group} style={styles.pickerGroup}>
+            <Text style={styles.pickerGroupTitle}>{COUPLE_EMOJI_GROUP_LABEL[group]}</Text>
+            <View style={styles.emotionWrap}>
+              {COUPLE_EMOJI_EMOTIONS.filter((e) => e.group === group).map((emotion) => {
+                const on = effectiveSelected.has(emotion.key);
+                const have = existingEmotions.has(emotion.key);
+                return (
+                  <Pressable
+                    key={emotion.key}
+                    onPress={() => toggleEmotion(emotion.key)}
+                    style={({ pressed }) => [
+                      styles.emotionChip,
+                      on && styles.emotionChipOn,
+                      pressed && styles.cellPressed,
+                    ]}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: on }}
+                    accessibilityLabel={`${emotion.label}${have ? ' — 이미 있음' : ''}`}
+                  >
+                    <Text style={styles.emotionChipEmoji}>{emotion.placeholder}</Text>
+                    <Text style={[styles.emotionChipText, on && styles.emotionChipTextOn]}>{emotion.label}</Text>
+                    {/* 이미 가진 감정 — 다시 그리면 덮어쓰는 게 아니라 한 장이 더 생긴다 */}
+                    {have ? <View style={styles.emotionHaveDot} /> : null}
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        ))}
+        {existingEmotions.size > 0 ? (
+          <Text style={styles.hint}>점이 붙은 건 이미 만들어 둔 감정이에요. 다시 고르면 한 장이 더 생겨요.</Text>
+        ) : null}
+        <Button title="완료" onPress={() => setPickerOpen(false)} />
+      </Sheet>
 
       {/* 정사각 512 JPEG 로 잘라 넘긴다 — 업로드는 확정 후 한 번뿐(AvatarCropSheet 주석) */}
       <AvatarCropSheet
+        title="얼굴 맞추기"
         source={picked}
         onCancel={() => setPicked(null)}
         onConfirm={(uri) => {
@@ -508,11 +584,14 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
 
 function SubjectChip({
   name,
+  avatarName,
   imageUrl,
   selected,
   onPress,
 }: {
   name: string;
+  /** 아바타 첫 글자에 쓸 이름 — 없으면 name */
+  avatarName?: string;
   imageUrl?: string | null;
   selected: boolean;
   onPress: () => void;
@@ -524,7 +603,7 @@ function SubjectChip({
       accessibilityState={{ selected }}
       style={[styles.subjectChip, selected && styles.subjectChipSelected]}
     >
-      <Avatar name={name} imageUrl={imageUrl ?? undefined} size={36} />
+      <Avatar name={avatarName ?? name} imageUrl={imageUrl ?? undefined} size={36} />
       <Text style={[styles.subjectName, selected && styles.subjectNameSelected]}>{name}</Text>
     </Pressable>
   );
@@ -587,6 +666,31 @@ const styles = themedStyles((colors) => ({
     backgroundColor: colors.surfaceAlt,
   },
   cellPressed: { opacity: 0.7 },
+  /* 감정 — 접힌 한 줄(고른 감정 이모지 + 바꾸기) */
+  emotionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  emotionRowText: { flex: 1, gap: spacing.xxs },
+  emotionPreview: { fontSize: 22, letterSpacing: 2 },
+  emotionChange: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 44,
+    paddingLeft: spacing.sm,
+  },
+  emotionChangeText: { fontSize: fontSize.body, fontWeight: '700', color: colors.primary },
+  remainingNote: { textAlign: 'center' },
+  /* 감정 고르기 시트 */
+  pickerHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  pickerGroup: { gap: spacing.xs, marginTop: spacing.sm },
+  pickerGroupTitle: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary },
   /* 감정 고르기 — 칩 격자 */
   emotionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   emotionSelectAll: { fontSize: fontSize.caption, fontWeight: '700', color: colors.primary },

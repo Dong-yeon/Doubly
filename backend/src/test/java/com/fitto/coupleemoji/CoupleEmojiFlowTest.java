@@ -67,10 +67,10 @@ class CoupleEmojiFlowTest {
      */
     private static final int ALL_EMOTIONS = CoupleEmojiEmotion.values().length;
 
-    /** 한 요청 상한(5) 이하의 평범한 요청 — prepare 를 통과시키는 것이 목적이다. */
+    /** 한 요청 상한(6) — 기본 표정 한 벌. prepare 를 통과시키는 것이 목적이다. */
     private static final List<CoupleEmojiEmotion> WITHIN_LIMIT = List.of(
             CoupleEmojiEmotion.ANGRY, CoupleEmojiEmotion.HAPPY, CoupleEmojiEmotion.EXCITED,
-            CoupleEmojiEmotion.SAD, CoupleEmojiEmotion.SLEEPY);
+            CoupleEmojiEmotion.SAD, CoupleEmojiEmotion.SLEEPY, CoupleEmojiEmotion.LOVE);
 
     private static final String SOURCE_URL =
             "https://res.cloudinary.com/demo/image/upload/v1712345678/fitto/emoji-source/abc123.jpg";
@@ -125,11 +125,11 @@ class CoupleEmojiFlowTest {
     /**
      * 17종을 한 번에 그린다 — <b>요청 상한을 우회하는 게 아니라 그 아래를 보기 위해서다.</b>
      *
-     * <p>한 요청 5장 상한({@code MAX_EMOTIONS_PER_REQUEST})은 요청 경계(prepare)의 정책이고,
+     * <p>한 요청 6장 상한({@code MAX_EMOTIONS_PER_REQUEST})은 요청 경계(prepare)의 정책이고,
      * 이 헬퍼를 쓰는 테스트들이 보는 건 그 아래 도메인 동작 — 트레이 공유, 무드 플래그, 부분
      * 실패, 배치 삭제 — 이라 17종이 한 배치에 있어야 의미가 있다. 그래서 prepare 는 정상 요청
      * (검증·한도 차감)으로 통과시키고, 생성만 전체 감정으로 다시 묶어 부른다.
-     * 상한 자체는 {@code 한_번에_다섯_장까지만_받는다} 가 본다.
+     * 상한 자체는 {@code 한_번에_여섯_장까지만_받는다} 가 본다.
      */
     private CoupleEmojiBatchResponse generateFor(Long userId, Long subjectId) {
         CoupleEmojiService.GenerationTicket accepted =
@@ -240,22 +240,23 @@ class CoupleEmojiFlowTest {
     }
 
     /**
-     * 한 요청 5장 상한 — 17종을 한 번에 받지 않는다.
+     * 한 요청 6장 상한 — 17종을 한 번에 받지 않는다.
      *
      * <p>거절은 <b>한도 차감 전</b>이어야 한다. 차감 뒤에 거절하면 사용자는 아무것도 못 받고
      * 세트만 잃는다. 올라간 원본도 같이 지운다(사진은 저장하지 않는다, §9).
      */
     @Test
-    void 한_번에_다섯_장까지만_받는다() {
+    void 한_번에_여섯_장까지만_받는다() {
         Long a = register("ce-cap-a@fitto.com");
         Long b = register("ce-cap-b@fitto.com");
         connectCouple(a, b);
 
-        List<CoupleEmojiEmotion> six = List.of(
+        List<CoupleEmojiEmotion> seven = List.of(
                 CoupleEmojiEmotion.ANGRY, CoupleEmojiEmotion.HAPPY, CoupleEmojiEmotion.EXCITED,
-                CoupleEmojiEmotion.SAD, CoupleEmojiEmotion.SLEEPY, CoupleEmojiEmotion.LOVE);
+                CoupleEmojiEmotion.SAD, CoupleEmojiEmotion.SLEEPY, CoupleEmojiEmotion.LOVE,
+                CoupleEmojiEmotion.FRESHLY_WASHED);
 
-        assertThatThrownBy(() -> service.prepare(a, new GenerateCoupleEmojiRequest(SOURCE_URL, null, six)))
+        assertThatThrownBy(() -> service.prepare(a, new GenerateCoupleEmojiRequest(SOURCE_URL, null, seven)))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.INVALID_INPUT);
@@ -270,9 +271,9 @@ class CoupleEmojiFlowTest {
         // 두 번 거절했으니 올라간 원본도 두 번 지운다
         verify(imageDeleter, times(2)).deleteAll(List.of(SOURCE_URL));
 
-        // 딱 5장은 통과한다
+        // 딱 6장(기본 표정 한 벌)은 통과한다
         assertThat(service.prepare(a, new GenerateCoupleEmojiRequest(SOURCE_URL, null, WITHIN_LIMIT)).emotions())
-                .hasSize(5);
+                .hasSize(6);
     }
 
     /**
