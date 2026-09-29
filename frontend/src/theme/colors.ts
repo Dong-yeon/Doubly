@@ -161,12 +161,6 @@ const light = {
   dangerText: '#9B3330',
   white: '#FFFFFF',
 
-  // ── 로고 마크 (DoublyMark) — 액센트를 따른다 ────────────────────
-  // 앱 아이콘(DoublySquareMark·icon.png)은 브랜드라 고정이고, 인앱 마크만 액센트에 맞춘다.
-  // Back = 상대 계열 연한 하트, Front = 크롬 진한 하트, Sparkle = 금색 반짝임
-  markBack: '#8FCB98',
-  markFront: '#1F5A25',
-  markSparkle: '#D9A441',
 };
 
 /**
@@ -261,11 +255,6 @@ const dark: typeof light = {
   dangerBg: '#3A1F20',
   dangerText: '#F2A0A0',
   white: '#FFFFFF',
-
-  // 다크의 마크 — 어두운 배경 위라 밝게 (DoublyMark onDark 와 같은 값)
-  markBack: '#BFE3C4',
-  markFront: '#5FBE73',
-  markSparkle: '#FFF3C4',
 };
 
 export type Palette = typeof light;
@@ -305,7 +294,6 @@ const ACCENT_OVERRIDES: Record<Exclude<AccentVariant, 'green'>, Record<Scheme, P
       primary: '#2E7A61', primaryDark: '#225946', primaryLight: '#45B590', primaryFill: '#49CAA5', primaryBg: '#E9F7F2', primarySoft: '#E9F7F2',
       coral: '#8C6918', indigo: '#2E7A61', violet: '#487A2E', couple: '#8C6918', food: '#487A2E', health: '#2E7A61',
       secondary: '#2E7A61', secondarySoft: '#E7F8F3', accent: '#487A2E', accentSoft: '#EDF8E7',
-      markBack: '#90D5BE', markFront: '#225946', markSparkle: '#D9A441',
     },
     dark: {
       me: '#E6D3A8', meBg: '#322915', mePastelBg: '#322915', meText: '#E6D3A8', meFill: '#E6D3A8',
@@ -314,7 +302,6 @@ const ACCENT_OVERRIDES: Record<Exclude<AccentVariant, 'green'>, Record<Scheme, P
       primary: '#439D80', primaryDark: '#347962', primaryLight: '#62BC9E', primaryFill: '#62BC9E', primaryBg: '#0F241D', primarySoft: '#0F241D',
       coral: '#E6D3A8', indigo: '#A8E6D1', violet: '#BDE6A8', couple: '#E6D3A8', food: '#BDE6A8', health: '#A8E6D1',
       secondary: '#A8E6D1', secondarySoft: '#153228', accent: '#BDE6A8', accentSoft: '#1F3215',
-      markBack: '#A8E6D1', markFront: '#62BC9E', markSparkle: '#FFF3C4',
     },
   },
   peach: {
@@ -325,7 +312,6 @@ const ACCENT_OVERRIDES: Record<Exclude<AccentVariant, 'green'>, Record<Scheme, P
       primary: '#407749', primaryDark: '#305A37', primaryLight: '#60A96C', primaryFill: '#62B16B', primaryBg: '#E9F7EB', primarySoft: '#E9F7EB',
       coral: '#B74E1A', indigo: '#407749', violet: '#7A6B1F', couple: '#B74E1A', food: '#7A6B1F', health: '#407749',
       secondary: '#407749', secondarySoft: '#E7F8EA', accent: '#7A6B1F', accentSoft: '#F8F5E7',
-      markBack: '#9CC9A3', markFront: '#305A37', markSparkle: '#DAC24E',
     },
     dark: {
       me: '#E6BDA8', meBg: '#321F15', mePastelBg: '#321F15', meText: '#E6BDA8', meFill: '#E6BDA8',
@@ -334,7 +320,6 @@ const ACCENT_OVERRIDES: Record<Exclude<AccentVariant, 'green'>, Record<Scheme, P
       primary: '#45A154', primaryDark: '#347940', primaryLight: '#62BC71', primaryFill: '#62BC71', primaryBg: '#0F2413', primarySoft: '#0F2413',
       coral: '#E6BDA8', indigo: '#A8E6B2', violet: '#E6DBA8', couple: '#E6BDA8', food: '#E6DBA8', health: '#A8E6B2',
       secondary: '#A8E6B2', secondarySoft: '#15321A', accent: '#E6DBA8', accentSoft: '#322D15',
-      markBack: '#A8E6B2', markFront: '#62BC71', markSparkle: '#FFF3C4',
     },
   },
 };

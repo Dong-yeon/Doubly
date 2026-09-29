@@ -144,6 +144,42 @@ def render(size, bg, scale=1.0, mono=None, shapes=None):
     return img.resize((size, size), Image.LANCZOS)
 
 
+TS_OUT = ROOT.parent.parent / 'frontend' / 'src' / 'components' / 'dublyMarkPaths.ts'
+
+
+def ts_paths():
+    """인앱 로고(DoublyMark)용 SVG 경로 — 아이콘과 같은 점에서 뽑는다. 점을 솎아 번들을 가볍게 한다."""
+    def thin(pts, n):
+        step = max(1, len(pts) // n)
+        return pts[::step]
+
+    def d(pts):
+        return 'M' + ' L'.join(f'{x:.0f},{y:.0f}' for x, y in pts) + ' Z'
+
+    left = d(thin(LEFT[0], 220))
+    right = d(thin(RIGHT[0], 220))
+    # 하트는 원 둘 + 몸통으로 되어 있고 감는 방향이 서로 반대다 — 한 Path 에 합치면 nonzero 규칙에서
+    # 겹친 자리가 비어 버린다(실제로 하트 가운데에 틈이 났다). 조각마다 따로 그리도록 배열로 낸다.
+    heart = ', '.join("'" + d(thin(p, 60)) + "'" for p in HEART)
+    # 마크 외곽을 담는 정사각 — 호출부의 size 가 곧 마크 크기가 되게. 손으로 적었다가 손잡이 끝(869)이
+    # 잘린 적이 있어 점에서 직접 잰다.
+    allpts = [q for part in LEFT + RIGHT + HEART for q in part]
+    x0, x1 = min(q[0] for q in allpts), max(q[0] for q in allpts)
+    y0, y1 = min(q[1] for q in allpts), max(q[1] for q in allpts)
+    side = max(x1 - x0, y1 - y0) + 8
+    cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+    vb = f'{cx - side / 2:.0f} {cy - side / 2:.0f} {side:.0f} {side:.0f}'
+    return f"""/**
+ * 인앱 로고 경로 — store/icon/make_icon.py 가 생성한다. 직접 고치지 말 것(아이콘과 어긋난다).
+ * 앱 아이콘(맞댄 두 숟가락 + 하트)과 같은 도형이다. 좌표는 1024 캔버스 기준.
+ */
+export const DUBLY_MARK_VIEWBOX = '{vb}';
+export const DUBLY_MARK_LEFT = '{left}';
+export const DUBLY_MARK_RIGHT = '{right}';
+export const DUBLY_MARK_HEART: readonly string[] = [{heart}];
+"""
+
+
 if __name__ == '__main__':
     (ROOT / 'dubly-mark.svg').write_text(svg(), encoding='utf-8')
     render(1024, BG).convert('RGB').save(ASSETS / 'icon.png')                  # iOS · 기본 아이콘(알파 금지)
@@ -154,4 +190,5 @@ if __name__ == '__main__':
     render(432, None, ANDROID_SCALE, mono='#000000', shapes=mono_shapes()).save(ASSETS / 'android-icon-monochrome.png')
     # Play 스토어 512 — 불투명 바탕. Play 는 원 마스크에서 반지름 0.455 까지 남긴다: 422/1024*512=211 < 233
     render(512, BG).convert('RGB').save(ROOT.parent / 'play_icon_512.png')
+    TS_OUT.write_text(ts_paths(), encoding='utf-8')
     print('ok')
