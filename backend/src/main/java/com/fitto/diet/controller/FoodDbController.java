@@ -2,6 +2,7 @@ package com.fitto.diet.controller;
 
 import com.fitto.common.response.ApiResponse;
 import com.fitto.diet.dto.BarcodeLookupResponse;
+import com.fitto.diet.service.BarcodeLookupService;
 import com.fitto.diet.service.FoodDbClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -20,14 +21,16 @@ import java.util.List;
 public class FoodDbController {
 
     private final FoodDbClient foodDbClient;
+    private final BarcodeLookupService barcodeLookupService;
 
-    public FoodDbController(FoodDbClient foodDbClient) {
+    public FoodDbController(FoodDbClient foodDbClient, BarcodeLookupService barcodeLookupService) {
         this.foodDbClient = foodDbClient;
+        this.barcodeLookupService = barcodeLookupService;
     }
 
     @GetMapping("/barcode/{code}")
     public ApiResponse<BarcodeLookupResponse> barcode(@PathVariable String code) {
-        return ApiResponse.success(foodDbClient.lookup(code));
+        return ApiResponse.success(barcodeLookupService.lookup(code));
     }
 
     /** 음식 이름으로 검색 — AI 텍스트 분석 대신 실제 표기값을 먼저 찾을 때 쓴다. 못 찾으면 빈 목록. */
