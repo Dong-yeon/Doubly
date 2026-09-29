@@ -17,7 +17,8 @@
 | `shots/<문구키>.png` | 폰에서 찍어둔 원본 캡처. `compose.py` 에 그대로 먹인다 |
 | `make_plates.py` | 배경판·피처 그래픽 생성기 (문구·크기를 여기서 고친다) |
 | `compose.py` | 캡처 + 배경판 → 올릴 이미지 |
-| `mascot.png` | 앱 아이콘에서 흰 배경을 지운 마스코트 |
+| `play_icon_512.png` | Play 스토어 아이콘 512×512 — `icon/make_icon.py` 가 앱 아이콘과 함께 뽑는다 |
+| `icon/` | 앱 아이콘 생성기(`make_icon.py`)와 벡터 원본(`dubly-mark.svg`). 2026-09-29 맞댄 두 숟가락 |
 
 크기는 여섯이다. iOS 는 `supportsTablet: false` 라 **iPad 규격이 필요 없다**.
 
