@@ -227,6 +227,11 @@ export type DietStackParamList = {
         date?: string;
         meal?: Meal;
         barcodeResult?: BarcodeLookup;
+        /**
+         * 바코드로 영양정보를 못 찾았을 때 — 돌아오자마자 영양성분표를 찍어 AI 로 읽는다.
+         * 값은 바코드로 알아낸 제품명(없으면 빈 문자열) — 읽은 결과가 한 항목이면 이름으로 쓴다.
+         */
+        scanLabel?: string;
         /** 다른 탭에서 열렸으면 그 탭 이름 — 닫을 때 거기로 돌아간다(useReturnToTab) */
         returnTo?: keyof MainTabParamList;
       }

@@ -1239,6 +1239,8 @@ export interface BarcodeLookup {
   sugar?: number | null;
   sodium?: number | null;
   fiber?: number | null;
+  /** 어디서 찾았나 — 영양 필드가 전부 비어 있으면 "제품명만 찾음" */
+  source?: 'FOOD_DB' | 'OPEN_FOOD_FACTS' | null;
 }
 
 // 주간 식단 AI 코칭 (GET /meal/coach)
