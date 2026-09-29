@@ -29,7 +29,8 @@ SHOT_RATIO = 9 / 19.5
 INK = (26, 29, 26)
 OLIVE = (89, 119, 45)
 SUB = (60, 74, 51)
-GRAD = ((239, 244, 228), (218, 230, 193), (198, 225, 200))  # togetherBg → togetherPastel → partnerPastel
+# 2026-09-29: 피치 → 크림 → 하늘 — 나노바나나 시안의 배경. 앞 판(올리브 계열)은 앱 초록과 겹쳐 화면이 묻혔다
+GRAD = ((255, 216, 199), (251, 245, 233), (204, 228, 243))
 
 # (키, 너비, 높이) — iOS 는 supportsTablet:false 라 iPad 규격이 필요 없다.
 SIZES = [
@@ -47,13 +48,13 @@ CAPTIONS = [
     # 2026-09-29: 6장으로. 우리 이모지는 실제 얼굴을 공개할 수 없어 9/17 에 뺐었는데,
     # AI 가상 인물 얼굴(scripts/couple-emoji-experiment/make-face.mjs)로 테스트 계정
     # 서준·지민의 이모지를 만들어 되살렸다 — 실존 인물이 아니라 공개 문제가 없다.
-    ("01-emoji", "우리 얼굴로 만든", "이모지로 대화해요"),
-    # 2026-09-28: 더비·블리를 내리고(9/21) 달걀이·구운이로 바뀌어 문구도 따라 바꿨다 — 화면과 글이 어긋나면 안 된다.
-    ("02-sticker", "달걀이와 구운이로", "마음 전하기"),
-    ("03-home", "함께한 날과", "오늘의 서로"),
-    ("04-play", "같이 놀고", "서로 응원해요"),
-    ("05-place", "우리 둘만의", "맛집 가이드"),
-    ("06-photo", "사진 한 장이면", "오늘 기록 끝"),
+    # 같은 날 문구를 나노바나나 시안에서 가져왔다. 앱에 없는 것(랭킹·투두)을 말하는 문구는 뺐다.
+    ("01-emoji", "귀여운 캐릭터로 전하는", "우리 둘만의 마음"),
+    ("02-sticker", "커플 전용 이모티콘으로", "마음을 전하세요"),
+    ("03-home", "우리만의 특별한 날을", "함께 세어요"),
+    ("04-play", "함께 풀어가는 즐거움,", "커플 스도쿠"),
+    ("05-place", "데이트 코스 고민 끝!", "우리의 최애 장소"),
+    ("06-photo", "서로의 건강을 챙겨요,", "사진 한 장 식단 기록"),
 ]
 
 
@@ -100,39 +101,52 @@ def text_tracked(d: ImageDraw.ImageDraw, xy, s: str, f, fill, tracking: float = 
 
 def slot_box(w: int, h: int) -> tuple[int, int, int, int]:
     """캡처가 들어갈 자리 — compose.py 가 같은 값을 써야 어긋나지 않는다."""
-    sh = round(h * 0.74)
+    sh = round(h * 0.72)
     sw = round(sh * SHOT_RATIO)
-    return (w - sw) // 2, h - sh - round(h * 0.045), sw, sh
+    return (w - sw) // 2, h - sh - round(h * 0.05), sw, sh
 
 
 def radius_of(w: int) -> int:
     return round(w * 0.055)
 
 
-def plate(w: int, h: int, line1: str, line2: str, mascot: Image.Image) -> Image.Image:
+def bezel_of(w: int) -> int:
+    """휴대폰 틀 두께 — 화면 자리(slot) 바깥으로 이만큼 검은 테를 두른다."""
+    return round(w * 0.022)
+
+
+def plate(w: int, h: int, line1: str, line2: str, mascot: Image.Image | None = None) -> Image.Image:
+    """배경 + 가운데 정렬 카피 두 줄 + 휴대폰 틀, 화면 자리는 뚫려 있다.
+
+    2026-09-29 에 나노바나나 시안 스타일로 바꿨다 — 휴대폰 틀과 튀어나온 스티커가 화면을 "앱"으로 읽히게
+    한다. <b>틀 안은 반드시 실제 캡처다</b>(스토어 심사 기준). 이미지 생성으로 화면까지 만든 시안은
+    글자·숫자·기능(투두)이 지어져 있어 쓸 수 없었다. 마스코트(개구리) 줄은 아이콘이 정해질 때까지 뺀다.
+    """
     im = diagonal_gradient(w, h)
     blobs(im, w, h)
     d = ImageDraw.Draw(im)
 
-    pad = round(w * 0.085)
-    # 브랜드 줄 — 마스코트 + 이름
-    mh = round(w * 0.052)
-    m = mascot.resize((mh, mh), Image.LANCZOS)
-    im.alpha_composite(m, (pad, round(h * 0.052)))
-    text_tracked(d, (pad + mh + round(w * 0.018), round(h * 0.052) + round(mh * 0.16)),
-                 "DUBLY · 더블리", font("SemiBold", round(w * 0.026)), OLIVE, tracking=w * 0.004)
-
-    # 카피 두 줄
-    cap = round(w * 0.082)
+    cap = round(w * 0.074)
     f = font("SemiBold", cap)
-    top = round(h * 0.095)
-    d.text((pad, top), line1, font=f, fill=INK)
-    d.text((pad, top + round(cap * 1.22)), line2, font=f, fill=INK)
+    top = round(h * 0.058)
+    for i, line in enumerate((line1, line2)):
+        d.text((w / 2, top + i * round(cap * 1.25)), line, font=f, fill=INK, anchor="ma")
 
     drop_shadow(im, w, h)
+    phone_frame(im, w, h)
     punch_slot(im, w, h)
-    edge_ring(im, w, h)
     return im
+
+
+def phone_frame(im: Image.Image, w: int, h: int) -> None:
+    """검은 테 + 바깥 금속 테두리 한 줄. 화면 자리는 이후 punch_slot 이 뚫는다."""
+    x, y, sw, sh = slot_box(w, h)
+    b = bezel_of(w)
+    r = radius_of(w)
+    d = ImageDraw.Draw(im)
+    rim = max(2, round(w * 0.004))
+    d.rounded_rectangle((x - b - rim, y - b - rim, x + sw + b + rim, y + sh + b + rim), radius=r + b + rim, fill=(201, 170, 150, 255))
+    d.rounded_rectangle((x - b, y - b, x + sw + b, y + sh + b), radius=r + b, fill=(22, 22, 24, 255))
 
 
 def drop_shadow(im: Image.Image, w: int, h: int) -> None:
@@ -145,7 +159,7 @@ def drop_shadow(im: Image.Image, w: int, h: int) -> None:
     layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     off = round(h * 0.004)
     ImageDraw.Draw(layer).rounded_rectangle(
-        (x - 1, y + off, x + sw + 1, y + sh + off), radius=radius_of(w), fill=(*INK, 70))
+        (x - bezel_of(w), y + off, x + sw + bezel_of(w), y + sh + off + bezel_of(w)), radius=radius_of(w) + bezel_of(w), fill=(*INK, 70))
     im.alpha_composite(layer.filter(ImageFilter.GaussianBlur(blur)))
 
 
