@@ -440,7 +440,7 @@ export function StickerPanel({
             <MaterialCommunityIcons name="face-woman-shimmer-outline" size={28} color={colors.primary} />
             <Text style={styles.emptyTitle}>우리 이모지 만들기</Text>
             <Text style={styles.emptyText}>
-              사진 한 장으로 감정 17종 이모지를 만들어요. 둘 다 쓸 수 있어요.
+              사진 한 장으로 둘의 감정 이모지를 만들어요. 둘 다 쓸 수 있어요.
             </Text>
           </Pressable>
         </View>

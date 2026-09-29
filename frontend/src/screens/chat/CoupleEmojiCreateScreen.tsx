@@ -1,5 +1,5 @@
 /**
- * 우리 이모지 만들기 — 사진 한 장 → 감정 17종 캐릭터 세트.
+ * 우리 이모지 만들기 — 사진 한 장 → 감정 캐릭터 세트(23종을 여러 번 나눠 모은다).
  * docs/COUPLE_EMOJI_AI_DESIGN_2026-09-08.md §7 (프론트 1단계).
  *
  * <p><b>왜 진행률 바가 아니라 6칸인가</b>: 세트 하나가 60초 안팎이고 서버가 감정 하나를
@@ -511,7 +511,7 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
         </View>
       )}
 
-      {/* 감정 고르기 — 표정 / 상황 두 묶음. 이미 가진 감정에는 점이 붙는다 */}
+      {/* 감정 고르기 — 표정 / 자주 하는 말 / 상황 세 묶음. 이미 가진 감정에는 점이 붙는다 */}
       <Sheet visible={pickerOpen} onClose={() => setPickerOpen(false)} position="bottom">
         <View style={styles.pickerHead}>
           <Text style={styles.sectionTitle}>
@@ -532,7 +532,7 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
             </Text>
           </Pressable>
         </View>
-        {(['face', 'scene'] as const).map((group) => (
+        {(['face', 'words', 'scene'] as const).map((group) => (
           <View key={group} style={styles.pickerGroup}>
             <Text style={styles.pickerGroupTitle}>{COUPLE_EMOJI_GROUP_LABEL[group]}</Text>
             <View style={styles.emotionWrap}>
