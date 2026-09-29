@@ -181,40 +181,47 @@ def edge_ring(im: Image.Image, w: int, h: int) -> None:
     im.alpha_composite(ring)
 
 
-def feature_graphic(mascot: Image.Image) -> Image.Image:
-    """Play 피처 그래픽 1024x500 — 2026-09-15 에 A 안으로 확정.
+def feature_graphic(mascot: Image.Image | None = None) -> Image.Image:
+    """Play 피처 그래픽 1024x500 — 2026-09-29 에 달걀이·구운이 + 스크린샷과 같은 배경으로 바꿨다.
 
     <b>가운데를 비워 둔다</b>: Play 는 홍보 영상이 있으면 이 그래픽 한가운데에 재생 버튼을
-    겹쳐 띄운다. 문구를 왼쪽에, 마스코트를 오른쪽에 두는 구성이 그 버튼을 피한다.
+    겹쳐 띄운다. 문구를 왼쪽에, 캐릭터를 오른쪽에 두는 구성이 그 버튼을 피한다.
+    개구리 마스코트는 앱에 없는 캐릭터라 뺐다(docs/APP_ICON_EXPLORATION_2026-09-29.md).
     """
+    from compose import STICKERS_DIR, outlined  # compose 가 이 모듈을 import 하므로 여기서 늦게 부른다
+
     w, h = 1024, 500
     im = diagonal_gradient(w, h)
     blobs(im, w, h)
     d = ImageDraw.Draw(im)
-    text_tracked(d, (92, 96), "DUBLY · 더블리", font("SemiBold", 26), OLIVE, tracking=6)
-    f = font("SemiBold", 72)
-    d.text((92, 148), "둘이서 쌓는", font=f, fill=INK)
-    d.text((92, 148 + 85), "우리 기록", font=f, fill=INK)
-    d.text((92, 366), "사진 한 장이면 끝나는 커플 다이어리", font=font("Medium", 26), fill=SUB)
-    m = mascot.resize((340, 340), Image.LANCZOS)
-    im.alpha_composite(m, (w - 54 - 340, (h - 340) // 2))
+    f = font("SemiBold", 60)
+    d.text((72, 118), "둘이 함께 쌓는", font=f, fill=INK)
+    d.text((72, 118 + 76), "우리의 일상", font=f, fill=INK)
+    d.text((72, 300), "채팅 · 식단 · 맛집 · 게임까지", font=font("Medium", 26), fill=SUB)
+    d.text((72, 340), "커플을 위한 모든 것, 더블리", font=font("Medium", 26), fill=SUB)
+
+    def sticker(name: str, width: int, angle: float) -> Image.Image:
+        s = Image.open(STICKERS_DIR / name).convert("RGBA")
+        s = s.resize((width, round(s.height * width / s.width)), Image.LANCZOS)
+        return outlined(s, 8, angle)
+
+    big = sticker("duo_love.png", 300, -6)
+    im.alpha_composite(big, (w - big.width - 40, (h - big.height) // 2 + 10))
+    small = sticker("egg_happy.png", 120, 10)
+    im.alpha_composite(small, (w - big.width - 110, 300))
     return im
 
 
 def main() -> int:
-    mascot_path = ROOT / "mascot.png"
-    if not mascot_path.exists():
-        print(f"마스코트가 없어요: {mascot_path}", file=sys.stderr)
-        return 1
-    mascot = Image.open(mascot_path).convert("RGBA")
+    mascot = None  # 개구리 마스코트는 2026-09-29 에 뺐다 — 아이콘이 정해지면 다시 정한다
     OUT.mkdir(parents=True, exist_ok=True)
 
     for size_key, w, h in SIZES:
         for cap_key, l1, l2 in CAPTIONS:
-            plate(w, h, l1, l2, mascot).save(OUT / f"{size_key}_{cap_key}.png", optimize=True)
+            plate(w, h, l1, l2).save(OUT / f"{size_key}_{cap_key}.png", optimize=True)
         print(f"{size_key}: {len(CAPTIONS)}장")
 
-    feature_graphic(mascot).convert("RGB").save(ROOT / "feature_graphic.png", optimize=True)
+    feature_graphic().convert("RGB").save(ROOT / "feature_graphic.png", optimize=True)
     print("피처 그래픽: feature_graphic.png (1024x500)")
     print(f"→ {OUT}")
     return 0
