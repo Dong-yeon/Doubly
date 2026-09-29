@@ -1,43 +1,23 @@
-/** Doubly 심볼 — 겹친 두 하트 아웃라인 + 반짝임 셋. 전부 초록 계열이다:
- *  뒤(연함) = 상대, 앞(짙음) = 나. 하트 곡선은 파라메트릭 카디오이드 공식(heartPoints).
+/** Dubly 인앱 로고 — 앱 아이콘과 같은 <b>맞댄 두 숟가락 + 하트</b>(2026-09-29 통일).
  *
- *  <b>2026-09-08 부터 하트는 앱 아이콘이 아니다.</b> 스토어·홈화면 아이콘은 마스코트
- *  비개구리였다가, 2026-09-29 에 <b>맞댄 두 숟가락 + 하트</b>로 바뀌었다(assets/icon.png,
- *  생성기 store/icon/make_icon.py). 하트는 <b>인앱 심볼</b>로만 남는다 —
- *  스플래시(72)·로그인(56)·에러화면(48)·홈 히어로(20). 둘을 나눈 이유는 아이콘이
- *  마스코트 색을 입으면 정작 마스코트(스티커·우리 이모지)가 화면에서 안 튀기 때문이다.
- *  카카오톡이 아이콘은 노랑이면서 앱 안은 무채색인 것과 같은 구조다.
+ *  스플래시(72)·로그인(56)·에러 화면(48)에서 쓴다. 경로는 store/icon/make_icon.py 가 아이콘과 같은
+ *  점에서 뽑은 dublyMarkPaths.ts 다 — 한쪽만 고치면 런처 아이콘과 앱 안 로고가 갈라진다.
  *
- *  DoublySquareMark(초록 그라데이션 정사각 + 두 하트)는 그 이전 아이콘이다. 지금은
- *  인앱에서 쓰이지 않으며 assets/doubly-logo.svg 가 그 마스터다 — 되돌릴 때를 위해 남긴다.
+ *  <b>색은 액센트를 따르지 않는다.</b> 예전 하트 로고는 mark* 토큰으로 액센트(민트·피치)를 따랐지만,
+ *  지금 로고는 브랜드 마크이고 네이티브 스플래시(splash-icon.png)가 바로 앞에 같은 그림을 같은 색으로
+ *  띄운다 — 색이 다르면 스플래시가 JS 화면으로 넘어가는 순간 로고 색이 바뀐다.
  *
- *  인앱 마크(DoublyMark)는 배경 없이 하트 두 개만 그린다 — 배경이 항상 밝다는 보장이
- *  없어서(사진 위 스크림 등) onDark prop 으로 밝은/어두운 배경용 색을 고른다.
- *
- *  이전에는 톱니(레코드) 하트였다(Gold/Green). 그 전엔 덩굴이 얽힌 하트(Gold/Green, 잎 셋).
- *  그 전엔 겹친 두 하트(Pink/Sky)였다.
+ *  이전 로고의 역사: 겹친 두 하트(Pink/Sky) → 덩굴 하트 → 톱니 하트 → 겹친 두 하트 아웃라인(초록) → 숟가락.
+ *  하트 곡선 헬퍼(heartPoints)는 HeartSproutIcon 이 재사용하므로 남긴다.
  */
 import React from 'react';
-import { StyleSheet, Text, View, ViewStyle } from 'react-native';
-import Svg, { Defs, LinearGradient, Path, Polygon, Rect, Stop } from 'react-native-svg';
-import { colors, fontSize } from '../constants/theme';
-import { palette } from '../theme/colors';
-
-interface Props {
-  size?: number;
-  showWordmark?: boolean;
-  wordmarkColor?: string;
-  style?: ViewStyle;
-}
+import Svg, { Path } from 'react-native-svg';
+import { DUBLY_MARK_HEART, DUBLY_MARK_LEFT, DUBLY_MARK_RIGHT, DUBLY_MARK_VIEWBOX } from './dublyMarkPaths';
 
 export type Pt = { x: number; y: number };
 
-/** 뷰박스 한 변 — 모든 좌표가 이 기준이다 */
-const V = 100;
-
 /**
- * 매끈한 하트 곡선(카디오이드류 파라메트릭 공식). 두 하트, 반짝임 별 모두 이 하나의
- * 곡선을 스케일만 바꿔 재사용한다.
+ * 매끈한 하트 곡선(카디오이드류 파라메트릭 공식). HeartSproutIcon 이 쓴다.
  */
 export function heartPoints(scale: number, segments = 96): Pt[] {
   const out: Pt[] = [];
@@ -50,123 +30,27 @@ export function heartPoints(scale: number, segments = 96): Pt[] {
   return out;
 }
 
-function toPath(pts: Pt[], dx = 0, dy = 0, scale = 1): string {
-  return (
-    pts
-      .map((p, i) => `${i === 0 ? 'M' : 'L'}${(p.x * scale + dx).toFixed(2)},${(p.y * scale + dy).toFixed(2)}`)
-      .join(' ') + ' Z'
-  );
-}
-
-/** 네 꼭짓점 반짝임 별 하나의 폴리곤 점 (Polygon points 문자열용) */
-function starPoints(cx: number, cy: number, s: number): string {
-  const pts: string[] = [];
-  for (let i = 0; i < 8; i += 1) {
-    const r = i % 2 === 0 ? 1 : 0.28;
-    const ang = (Math.PI / 4) * i;
-    pts.push(`${(cx + r * s * Math.cos(ang)).toFixed(2)},${(cy + r * s * Math.sin(ang)).toFixed(2)}`);
-  }
-  return pts.join(' ');
-}
-
-/** 뒤(상대) 하트 — 위·왼쪽으로 살짝 치우친다 */
-const BACK_SCALE = 1.5;
-const BACK_CX = 40;
-const BACK_CY = 44;
-/** 앞(나) 하트 — 아래·오른쪽, 뒤 하트보다 살짝 크다 */
-const FRONT_SCALE = 1.55;
-const FRONT_CX = 60;
-const FRONT_CY = 58;
-
-const BACK_HEART = heartPoints(BACK_SCALE, 120);
-const FRONT_HEART = heartPoints(FRONT_SCALE, 120);
-const BACK_D = toPath(BACK_HEART, BACK_CX, BACK_CY, 1);
-const FRONT_D = toPath(FRONT_HEART, FRONT_CX, FRONT_CY, 1);
-
-/** 하트 위쪽 반짝임 세 개 — 위치·크기는 아이콘 마스터(doubly-logo.svg)와 맞춘다 */
-const SPARKLES: { cx: number; cy: number; s: number }[] = [
-  { cx: 48, cy: 18, s: 3.2 },
-  { cx: 56, cy: 14, s: 1.8 },
-  { cx: 62, cy: 20, s: 1.3 },
-];
-
-/*
- * 인앱 마크 색은 팔레트의 mark* 토큰을 따른다 — 사용자가 고른 액센트(민트·피치)에 맞춰
- * 하트 색이 바뀌어야 홈 가운데 마크만 초록으로 남지 않는다. "어두운 배경 위"는 스킴이 아니라
- * 밑에 깔린 것(사진 스크림)의 문제라, onDark 면 현재 스킴과 무관하게 다크 팔레트 값을 쓴다.
- */
-const markColors = (onDark: boolean) => {
-  const p = palette(onDark ? 'dark' : 'light');
-  return { back: p.markBack, front: p.markFront, sparkle: p.markSparkle };
+/** 아이콘과 같은 값(store/icon/make_icon.py 의 CORAL·GREEN). onDark 는 사진 스크림 등 어두운 바탕 위 */
+const MARK = {
+  light: { coral: '#EF7757', green: '#2A7731' },
+  onDark: { coral: '#F58F72', green: '#5FBE73' },
 };
 
-/** 아이콘 배경 그라데이션(초록, 좌상단 밝음 → 우하단 짙음) + 아이콘 전용 하트 색 — 앱 아이콘은 브랜드라 액센트를 따르지 않는다 */
-const ICON_GRADIENT = { from: '#4E9E56', to: '#143D19' };
-const ICON_HEART = { back: '#D7F0D6', front: '#0F3D16', sparkle: '#FFF3C4' };
-
-function Sparkles({ color }: { color: string }) {
-  return (
-    <>
-      {SPARKLES.map((sp, i) => (
-        <Polygon key={i} points={starPoints(sp.cx, sp.cy, sp.s)} fill={color} />
-      ))}
-    </>
-  );
-}
-
 /**
- * 앱 아이콘과 같은 정사각 마크 — 초록 그라데이션 배경 위에 두 하트 + 반짝임.
- * 실제 icon.png 등은 assets/doubly-logo.svg 를 래스터화해서 만들지만, 인앱에서
- * (공유 카드 미리보기 등) 아이콘 그대로가 필요할 때 이 컴포넌트를 쓸 수 있다.
- */
-export function DoublySquareMark({ size = 96, radius = 22 }: { size?: number; radius?: number }) {
-  return (
-    <Svg width={size} height={size} viewBox={`0 0 ${V} ${V}`}>
-      <Defs>
-        <LinearGradient id="doublyBg" x1="0" y1="0" x2="1" y2="1">
-          <Stop offset="0" stopColor={ICON_GRADIENT.from} />
-          <Stop offset="1" stopColor={ICON_GRADIENT.to} />
-        </LinearGradient>
-      </Defs>
-      <Rect width={V} height={V} rx={radius} fill="url(#doublyBg)" />
-      <Path d={BACK_D} fill="none" stroke={ICON_HEART.back} strokeWidth={5} strokeLinejoin="round" strokeLinecap="round" />
-      <Path d={FRONT_D} fill="none" stroke={ICON_HEART.front} strokeWidth={5} strokeLinejoin="round" strokeLinecap="round" />
-      <Sparkles color={ICON_HEART.sparkle} />
-    </Svg>
-  );
-}
-
-/**
- * 인앱 마크(텍스트 없음) — 겹친 두 하트 아웃라인 + 반짝임. 배경은 없다(호출부 배경 위에
- * 얹힌다).
+ * 인앱 마크(텍스트 없음) — 배경 없이 두 숟가락과 하트만 그린다(호출부 배경 위에 얹힌다).
+ * size 는 마크를 담는 정사각 한 변이다.
  *
- * @param onDark 어두운 배경(배경 사진 위 스크림 등)에 얹을 때 true. 밝을수록 잘 읽히는
- *   색으로 바꾼다
+ * @param onDark 어두운 배경(배경 사진 위 스크림 등)에 얹을 때 true — 초록을 밝혀 묻히지 않게 한다
  */
 export function DoublyMark({ size = 40, onDark = false }: { size?: number; onDark?: boolean }) {
-  const mark = markColors(onDark);
+  const c = onDark ? MARK.onDark : MARK.light;
   return (
-    <Svg width={size} height={size} viewBox={`0 0 ${V} ${V}`}>
-      <Path d={BACK_D} fill="none" stroke={mark.back} strokeWidth={5} strokeLinejoin="round" strokeLinecap="round" />
-      <Path d={FRONT_D} fill="none" stroke={mark.front} strokeWidth={5} strokeLinejoin="round" strokeLinecap="round" />
-      <Sparkles color={mark.sparkle} />
+    <Svg width={size} height={size} viewBox={DUBLY_MARK_VIEWBOX} accessibilityLabel="Dubly">
+      <Path d={DUBLY_MARK_LEFT} fill={c.coral} />
+      <Path d={DUBLY_MARK_RIGHT} fill={c.green} />
+      {DUBLY_MARK_HEART.map((d, i) => (
+        <Path key={i} d={d} fill={c.coral} />
+      ))}
     </Svg>
   );
 }
-
-/** 마크 + 워드마크(Doubly) 가로 조합 */
-export function DoublyLogo({ size = 40, showWordmark = true, wordmarkColor = colors.ink, style }: Props) {
-  return (
-    <View style={[styles.row, style]}>
-      <DoublyMark size={size} />
-      {showWordmark ? (
-        <Text style={[styles.word, { fontSize: size * 0.78, color: wordmarkColor }]}>Dubly</Text>
-      ) : null}
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  word: { fontWeight: '800', letterSpacing: -1 },
-});
