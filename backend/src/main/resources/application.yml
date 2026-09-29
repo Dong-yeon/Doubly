@@ -180,6 +180,11 @@ fitto:
   food-db:
     api-key: ${FOOD_DB_API_KEY:}
     base-url: ${FOOD_DB_BASE_URL:https://apis.data.go.kr/1471000/FoodNtrCpntDbInfo02}
+    # 바코드 1단계 — 식품안전나라 I2570(유통바코드)/C005(바코드연계제품정보). 위 키와 다른 키다.
+    # 비어 있으면 이 단계만 건너뛰고 Open Food Facts 로 간다(docs/BARCODE_LOOKUP_2026-09-29.md).
+    food-safety-api-key: ${FOOD_SAFETY_API_KEY:}
+    # 바코드 2단계 — Open Food Facts(무료·키 없음). 수입 다이어트 식품이 많다.
+    open-food-facts-enabled: ${OPEN_FOOD_FACTS_ENABLED:true}
 
   # 카카오 로컬 REST API (AI 맛집 추천의 실존 장소 검색) — 프론트 지도용 JS 키와 별개.
   # 카카오 개발자 콘솔의 같은 앱에서 "REST API 키"를 복사한다. 미설정 시 맛집 추천만 비활성.

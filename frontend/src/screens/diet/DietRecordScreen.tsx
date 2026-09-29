@@ -11,7 +11,7 @@
  * 저장 시 PUT 으로 보낸다. 폼이 완전히 같아서 화면을 나누면 두 벌을 같이 고쳐야 한다.
  */
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Image, Platform, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, Image, InteractionManager, Platform, Text, TouchableOpacity, View } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -52,6 +52,7 @@ import type {
   BarcodeLookup,
   FavoriteFood,
   FoodLookupResult,
+  MealAnalysis,
   MealAnalysisSource,
   MealType,
   Place,
@@ -556,7 +557,13 @@ export function DietRecordScreen({ navigation, route }: Props) {
       }));
     }
     haptics.success();
-    toast.success(result.foodName ? `${result.foodName} 정보를 불러왔어요` : '바코드 정보를 불러왔어요');
+    const hasNutrition = result.calories != null || result.carbs != null || result.protein != null;
+    if (hasNutrition) {
+      toast.success(result.foodName ? `${result.foodName} 정보를 불러왔어요` : '바코드 정보를 불러왔어요');
+    } else {
+      // "이름만 넣기" — 스캔 화면에서 영양정보가 없다는 걸 이미 보고 고른 경로다
+      toast.info('이름만 넣었어요. 칼로리는 직접 적거나 AI로 계산해보세요.');
+    }
     navigation.setParams({ barcodeResult: undefined });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route.params?.barcodeResult]);
@@ -766,36 +773,92 @@ export function DietRecordScreen({ navigation, route }: Props) {
       // 전역 화면 잠금은 걷었다(대기가 분 단위까지 늘 수 있다). 이 경로는 결과를
       // 기존 항목 <b>뒤에 덧붙이므로</b>, 기다리는 동안 뭘 더 적어도 지워지지 않는다.
       const result = await dietApi.analyze(photoUrl);
-      if (!result.isFood || result.foods.length === 0) {
-        // 실제 음식·메뉴판·영양성분표 중 아무것도 못 찾았을 때만 여기로 온다(source 세 갈래 모두 실패)
-        toast.error('음식 사진이 아닌 것 같아요');
-        return;
-      }
-      // 다음 안내 문구·사진 위 칩 표시를 여기서 정한다 — appendFoods 보다 먼저 둬서
-      // hasChips 계산(items 기반)이 이번 렌더에 바로 반영되게 한다
-      setAnalysisSource(result.source ?? 'PHOTO_FOOD');
-      appendFoods(result.foods.map(toForm));
-      if (result.foods.every((f) => !f.calories)) {
-        // 음식은 알아봤지만 양을 가늠하지 못한 경우 — 빈 칸으로 두면 실패로 오해한다
-        toast.info('칼로리는 추정하지 못했어요. 직접 입력해주세요.');
-      }
-      // 탄단지는 항목이 들고 있으니 끼니 레벨 값(당류/나트륨/식이섬유)만 담는다
-      setExtras({ sugar: result.totalSugar, sodium: result.totalSodium, fiber: result.totalFiber });
-      haptics.success();
-      toast.success(
-        result.comment?.trim() ||
-          (result.source === 'NUTRITION_LABEL'
-            ? '영양성분표를 읽었어요!'
-            : result.source === 'TEXT_IN_PHOTO'
-              ? '사진 속 글자로 알아냈어요!'
-              : 'AI 분석 완료! '),
-      );
+      applyPhotoAnalysis(result);
     } catch (e) {
       toast.error(getErrorMessage(e, 'AI 분석에 실패했어요.'));
     } finally {
       setAnalyzing(false);
     }
   };
+
+  /**
+   * 사진 분석 결과를 항목으로 — "AI로 음식 분석"과 영양성분표 촬영(바코드 폴백)이 함께 쓴다.
+   *
+   * @param label 영양성분표 촬영 경로일 때 — 바코드로 알아낸 제품명을 함께 받는다
+   */
+  const applyPhotoAnalysis = (result: MealAnalysis, label?: { productName?: string }) => {
+    if (!result.isFood || result.foods.length === 0) {
+      // 실제 음식·메뉴판·영양성분표 중 아무것도 못 찾았을 때만 여기로 온다(source 세 갈래 모두 실패)
+      toast.error(label ? '영양성분표를 읽지 못했어요. 표가 잘 보이게 다시 찍어주세요.' : '음식 사진이 아닌 것 같아요');
+      return;
+    }
+    // 다음 안내 문구·사진 위 칩 표시를 여기서 정한다 — appendFoods 보다 먼저 둬서
+    // hasChips 계산(items 기반)이 이번 렌더에 바로 반영되게 한다.
+    // 영양성분표 촬영은 끼니 사진이 아니므로 사진 아래 안내 문구를 바꾸지 않는다
+    if (!label) setAnalysisSource(result.source ?? 'PHOTO_FOOD');
+    const forms = result.foods.map(toForm);
+    // 표에는 제품명이 없어 AI 가 "영양성분표" 같은 이름을 붙이기 쉽다 — 바코드로 안 이름이 있으면 그걸 쓴다
+    if (label?.productName && result.source === 'NUTRITION_LABEL' && forms.length === 1) {
+      forms[0] = { ...forms[0], name: label.productName.slice(0, MAX_NAME) };
+    }
+    appendFoods(forms);
+    if (result.foods.every((f) => !f.calories)) {
+      // 음식은 알아봤지만 양을 가늠하지 못한 경우 — 빈 칸으로 두면 실패로 오해한다
+      toast.info('칼로리는 추정하지 못했어요. 직접 입력해주세요.');
+    }
+    // 탄단지는 항목이 들고 있으니 끼니 레벨 값(당류/나트륨/식이섬유)만 담는다
+    setExtras({ sugar: result.totalSugar, sodium: result.totalSodium, fiber: result.totalFiber });
+    haptics.success();
+    if (label && result.source !== 'NUTRITION_LABEL') {
+      // 표가 아니라 음식으로 읽혔다 — 표기값이 아니라 추정치라는 걸 분명히 한다
+      toast.info('영양성분표가 잘 안 보여서 음식 사진으로 추정했어요.');
+      return;
+    }
+    toast.success(
+      result.comment?.trim() ||
+        (result.source === 'NUTRITION_LABEL'
+          ? '영양성분표를 읽었어요!'
+          : result.source === 'TEXT_IN_PHOTO'
+            ? '사진 속 글자로 알아냈어요!'
+            : 'AI 분석 완료! '),
+    );
+  };
+
+  /**
+   * 영양성분표 촬영 → AI 로 읽기 — 바코드로 영양정보를 못 찾았을 때의 경로.
+   *
+   * <p><b>끼니 사진으로 쓰지 않는다.</b> 표 사진이 식단 앨범에 남으면 이상하고, 이미 찍어 둔 음식
+   * 사진을 덮어서도 안 된다. 그래서 {@link pickFrom} 을 거치지 않고 분석용으로만 올린다.
+   * 글씨가 작아 평소(1024)보다 크게 줄인다.
+   */
+  const analyzeLabelPhoto = async (productName?: string) => {
+    try {
+      const picked = await takePhotoAsset();
+      if (!picked) return;
+      const uri = await shrinkImage(picked, 1600);
+      setAnalyzing(true);
+      const url = await runBusy('영양성분표 올리는 중…', () => uploadImage(uri));
+      const result = await dietApi.analyze(url);
+      applyPhotoAnalysis(result, { productName });
+    } catch (e) {
+      toast.error(getErrorMessage(e, '영양성분표를 읽지 못했어요.'));
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  // 바코드 스캔 화면의 "영양성분표 찍기" — 돌아오자마자 카메라를 연다
+  useEffect(() => {
+    const productName = route.params?.scanLabel;
+    if (productName === undefined) return;
+    navigation.setParams({ scanLabel: undefined });
+    // 스캔 화면이 닫히는 전환이 끝난 뒤에 카메라를 연다 — 전환 도중에 띄우면 화면이 겹쳐 보인다
+    const task = InteractionManager.runAfterInteractions(() => {
+      void analyzeLabelPhoto(productName || undefined);
+    });
+    return () => task.cancel();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route.params?.scanLabel]);
 
   /**
    * 적어둔 항목(source)을 AI 에 보내 칼로리·매크로를 채운 새 목록으로 교체한다.
@@ -1337,7 +1400,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
                 title="AI로 음식 분석"
                 variant="soft"
                 size="md"
-                onPress={onAnalyze}
+                onPress={() => void onAnalyze()}
                 loading={analyzing}
                 style={styles.analyzeButton}
               />

@@ -30,6 +30,9 @@ fitto:
   # (SchedulingConfig.ScheduledTriggers 주석 참고). 스케줄러 빈은 그대로 살아 있다.
   scheduling:
     enabled: false
+  # 바코드 조회가 테스트 중 외부(Open Food Facts)로 나가지 않게 — 조회 로직은 목킹 단위 테스트로 본다
+  food-db:
+    open-food-facts-enabled: false
   jwt:
     secret: test-secret-test-secret-test-secret-32b
     access-token-expire-minutes: 30

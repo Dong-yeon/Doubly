@@ -19,6 +19,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * 음식 이름 → 식품영양정보 조회 — 공공데이터포털
@@ -38,8 +39,9 @@ import java.util.List;
  * 안 그러면 "공기밥 137kcal"처럼 기준량이 빠진 숫자가 1인분으로 읽힌다. 1인분 환산이 필요하면
  * {@code NUTRI_AMOUNT_SERVING}(1회 섭취참고량)·{@code DISH_ONE_SERVING}(1회분량 참고량)이 있다.
  *
- * <p><b>바코드 조회는 이 API 로 할 수 없다</b> — 새 데이터셋에 바코드 필드가 없다(옛 {@code I2790}
- * 에는 {@code BAR_CD} 가 있었다). {@link #lookup} 이 그 사실을 명시적으로 알린다.
+ * <p><b>바코드는 이 API 로 바로 찾을 수 없다</b> — 새 데이터셋에 바코드 필드가 없다(옛 {@code I2790}
+ * 에는 {@code BAR_CD} 가 있었다). 바코드는 {@link BarcodeLookupService} 가 식품안전나라에서 제품을 찾은 뒤
+ * {@link #findForProduct} 로 영양을 붙인다.
  *
  * @see FoodDbProperties
  */
@@ -75,16 +77,74 @@ public class FoodDbClient {
     }
 
     /**
-     * 바코드 조회 — <b>지원하지 않는다.</b>
+     * 바코드로 찾은 <b>제품</b>의 영양정보 — 이 데이터셋엔 바코드가 없으므로 식품안전나라가 준
+     * 품목보고번호·제품명으로 찾는다({@link BarcodeLookupService} 의 1단계 뒷부분).
      *
-     * <p>현재 데이터셋에는 바코드 필드가 없다. 살리려면 별도 API(식품안전나라 {@code I2570}
-     * 유통바코드 등)로 바코드 → 제품명을 얻어 {@link #search} 로 넘기는 2단 구조가 필요하고,
-     * 그 API 는 인증키 체계가 또 다르다. 그때까지는 "준비되지 않았다"고 정확히 말한다 —
-     * 예전처럼 조회 실패를 "등록되지 않은 바코드"로 번역하지 않는다.
+     * <p><b>돌아온 행을 반드시 대조한다.</b> 조회 조건이 무시되면(파라미터 이름이 틀리거나 서버가
+     * 모르는 조건) 포털은 에러 대신 <b>DB 첫 행들</b>을 돌려준다 — 대조 없이 첫 행을 쓰면 엉뚱한
+     * 음식의 칼로리가 들어간다. 그래서 품목보고번호가 같거나, 이름이 같거나(업체까지 맞으면
+     * 포함 관계도) 한 행만 받는다.
+     *
+     * <p>실패는 삼키고 비어 있음을 돌려준다 — 다음 단계(Open Food Facts)로 넘어가야 하기 때문이다.
      */
-    public BarcodeLookupResponse lookup(String barcode) {
-        log.debug("바코드 조회 요청({})이 들어왔으나 현재 데이터셋에 바코드 필드가 없다", barcode);
-        throw new BusinessException(ErrorCode.FOOD_DB_NOT_CONFIGURED);
+    public Optional<BarcodeLookupResponse> findForProduct(String productName, String maker, String reportNo) {
+        if (!isConfigured()) return Optional.empty();
+        try {
+            String reportDigits = digits(reportNo);
+            if (!reportDigits.isEmpty()) {
+                for (JsonNode item : iterable(fetchItems("ITEM_REPORT_NO", reportNo.trim()))) {
+                    if (reportDigits.equals(digits(textOrNull(item, "ITEM_REPORT_NO")))) {
+                        return Optional.of(map(item));
+                    }
+                }
+            }
+            if (productName != null && !productName.isBlank()) {
+                return pickByName(fetchItems("FOOD_NM_KR", productName.trim()), productName, maker).map(this::map);
+            }
+        } catch (BusinessException | RestClientException e) {
+            log.warn("바코드 제품의 영양 조회 실패(제품 {}, 보고번호 {}): {}", productName, reportNo, e.getMessage());
+        }
+        return Optional.empty();
+    }
+
+    /** 이름이 같은 행, 없으면 업체가 맞으면서 이름이 서로 포함되는 행. 둘 다 없으면 비어 있음. */
+    Optional<JsonNode> pickByName(JsonNode items, String productName, String maker) {
+        String want = normalizeName(productName);
+        String wantMaker = normalizeMaker(maker);
+        JsonNode loose = null;
+        for (JsonNode item : iterable(items)) {
+            String got = normalizeName(textOrNull(item, "FOOD_NM_KR"));
+            if (got.isEmpty()) continue;
+            if (got.equals(want)) return Optional.of(item);
+            String gotMaker = normalizeMaker(textOrNull(item, "MAKER_NM"));
+            boolean makerMatches = !wantMaker.isEmpty() && !gotMaker.isEmpty()
+                    && (gotMaker.contains(wantMaker) || wantMaker.contains(gotMaker));
+            if (loose == null && makerMatches && (got.contains(want) || want.contains(got))) {
+                loose = item;
+            }
+        }
+        return Optional.ofNullable(loose);
+    }
+
+    /** "라면_신라면"·"신 라면" → "신라면" — 분류 접두어(언더바 앞)와 공백·괄호 설명을 떼고 비교한다 */
+    static String normalizeName(String name) {
+        if (name == null) return "";
+        String n = name.contains("_") ? name.substring(name.lastIndexOf('_') + 1) : name;
+        return n.replaceAll("\\(.*?\\)", "").replaceAll("\\s+", "").toLowerCase();
+    }
+
+    static String normalizeMaker(String maker) {
+        if (maker == null) return "";
+        return maker.replace("(주)", "").replace("㈜", "").replace("주식회사", "")
+                .replaceAll("\\s+", "").toLowerCase();
+    }
+
+    private static String digits(String s) {
+        return s == null ? "" : s.replaceAll("\\D", "");
+    }
+
+    private static Iterable<JsonNode> iterable(JsonNode items) {
+        return items != null && items.isArray() ? items : List.of();
     }
 
     /**
@@ -100,7 +160,7 @@ public class FoodDbClient {
             return List.of();
         }
 
-        JsonNode items = fetchItems(trimmed);
+        JsonNode items = fetchItems("FOOD_NM_KR", trimmed);
         if (!items.isArray() || items.isEmpty()) {
             return List.of();
         }
@@ -111,13 +171,14 @@ public class FoodDbClient {
         return results;
     }
 
-    private JsonNode fetchItems(String keyword) {
-        String url = "%s/%s?serviceKey=%s&type=json&pageNo=1&numOfRows=%d&FOOD_NM_KR=%s".formatted(
+    private JsonNode fetchItems(String param, String value) {
+        String url = "%s/%s?serviceKey=%s&type=json&pageNo=1&numOfRows=%d&%s=%s".formatted(
                 trimTrailingSlash(properties.getBaseUrl()),
                 OPERATION,
                 encodedServiceKey(),
                 SEARCH_LIMIT,
-                URLEncoder.encode(keyword, StandardCharsets.UTF_8));
+                param,
+                URLEncoder.encode(value, StandardCharsets.UTF_8));
 
         JsonNode root;
         try {
@@ -203,7 +264,8 @@ public class FoodDbClient {
                 intOrNull(item, "AMT_NUM4"),            // 지방(g)
                 intOrNull(item, "AMT_NUM7"),            // 당류(g)
                 intOrNull(item, "AMT_NUM13"),           // 나트륨(mg)
-                intOrNull(item, "AMT_NUM8")             // 식이섬유(g)
+                intOrNull(item, "AMT_NUM8"),            // 식이섬유(g)
+                BarcodeLookupResponse.SOURCE_FOOD_DB
         );
     }
 
