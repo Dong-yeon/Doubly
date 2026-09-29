@@ -22,7 +22,7 @@
  * 카드가 직접 부르면 운동 홈에서 같은 조회가 두 번 나간다.
  */
 import React, { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Image, Pressable, Text, View } from 'react-native';
 import { Button } from '../Button';
 import { Chip } from '../Chip';
 import { MaterialCommunityIcons } from '../Icon';
@@ -40,7 +40,7 @@ import { themedStyles } from '../../theme/themedStyles';
 import { onColor } from '../../theme/onColor';
 
 type Props = {
-  /** 사진 업로드를 마쳤다 — 호출부가 운동 기록 화면을 연다(메모·세트는 거기서 덧붙인다) */
+  /** 오운완 사진의 "자세히 적기" — 호출부가 운동 기록 화면을 연다(종목·세트·메모는 거기서 덧붙인다) */
   onOpenRecord: (params: { imageUrl: string }) => void;
   /** 하던 운동 이어서 하기 */
   onResume: () => void;
@@ -65,6 +65,8 @@ export function WorkoutCheckinCard({ onOpenRecord, onResume, onCheckedIn, onOpen
   /** 저장 중인 칩 — 누른 칩만 선택 표시한다(null = 건너뛰기) */
   const [savingMin, setSavingMin] = useState<number | null | undefined>(undefined);
   const [photoBusy, setPhotoBusy] = useState(false);
+  /** 올려 둔 오운완 사진 — 있으면 시간 칩이 이 사진과 함께 저장한다 */
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
 
   /** 오늘 이미 기록이 있는가 — 카드의 상태를 가른다(같은 날 중복 기록 방지도 겸한다) */
   const doneToday = today.length > 0;
@@ -86,10 +88,13 @@ export function WorkoutCheckinCard({ onOpenRecord, onResume, onCheckedIn, onOpen
         sets: [],
         // 건너뛰기(null)는 예전처럼 시간 없이 — 소모 칼로리에 잡히지 않는다
         totalDurationMin: durationMin ?? undefined,
+        // 오운완 사진 경로 — 사진은 기록 화면과 똑같이 우리 기록에 공유된다
+        ...(photoUrl ? { imageUrl: photoUrl, imageShared: true } : {}),
       });
       haptics.success();
-      toast.success('오늘 운동 챙겼어요! 💪');
+      toast.success(photoUrl ? '오운완 사진과 함께 챙겼어요! 💪' : '오늘 운동 챙겼어요! 💪');
       setPickingDuration(false);
+      setPhotoUrl(null);
       void fetchToday();
       onCheckedIn?.();
     } catch (e) {
@@ -108,7 +113,10 @@ export function WorkoutCheckinCard({ onOpenRecord, onResume, onCheckedIn, onOpen
    * 정작 남기고 싶어 한 건 "오늘 했다"는 인증샷이었다. 판독을 걷어내고(백엔드
    * analyze-photo 엔드포인트까지) 사진 자체가 기록이 되게 했다.
    *
-   * 업로드까지만 여기서 하고 저장은 기록 화면에 맡긴다 — 메모·세트를 덧붙일 자리가 거기다.
+   * <b>2026-09-29: 사진 → 시간 칩 → 끝.</b> 예전에는 업로드 뒤 기록 화면(종목·세트 폼)을 열어
+   * "완료!"를 한 번 더 눌러야 저장됐다. 인증샷을 찍은 사람에게 "어떤 운동을 했나요?"를 묻는 건
+   * "운동 완료" 원탭과 어긋난다 — 사진이 곧 기록이므로 원탭과 같은 시간 칩으로 바로 저장하고,
+   * 종목까지 남기고 싶은 사람만 "자세히 적기"로 기록 화면에 간다.
    *
    * 올리기 전에 한 번 알린다(첫 1회) — 이 사진은 <b>애인의 우리 기록에도 올라가고</b>,
    * 배경이나 메타데이터로 위치가 딸려 갈 수 있다. 확인한 뒤에야 카메라·앨범이 열린다.
@@ -127,8 +135,8 @@ export function WorkoutCheckinCard({ onOpenRecord, onResume, onCheckedIn, onOpen
     try {
       const picked = source === 'camera' ? await takePhoto() : await pickImage();
       if (!picked) return;
-      const imageUrl = await uploadImage(picked);
-      onOpenRecord({ imageUrl });
+      setPhotoUrl(await uploadImage(picked));
+      setPickingDuration(true);
     } catch (e) {
       toast.error(getErrorMessage(e, '사진을 올리지 못했어요.'));
     } finally {
@@ -198,10 +206,32 @@ export function WorkoutCheckinCard({ onOpenRecord, onResume, onCheckedIn, onOpen
              * 칩 넷이 한 줄에 들어가도록 fill 로 균등 분할한다. 저장 중에는 전부 잠근다(연타 방지).
              */
             <View style={styles.durationBox}>
+              {photoUrl ? (
+                <View style={styles.photoRow}>
+                  <Image source={{ uri: photoUrl }} style={styles.photoThumb} accessibilityIgnoresInvertColors />
+                  <Text style={styles.photoNote}>사진은 우리 기록에도 올라가요</Text>
+                  {/* 종목·세트·메모까지 남기려면 예전 기록 화면으로 — 사진은 그대로 들고 간다 */}
+                  <Pressable
+                    onPress={() => {
+                      onOpenRecord({ imageUrl: photoUrl });
+                      setPickingDuration(false);
+                      setPhotoUrl(null);
+                    }}
+                    disabled={checkingIn}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                  >
+                    <Text style={styles.durationCancel}>자세히 적기</Text>
+                  </Pressable>
+                </View>
+              ) : null}
               <View style={styles.durationHead}>
                 <Text style={styles.durationTitle}>얼마나 했나요?</Text>
                 <Pressable
-                  onPress={() => setPickingDuration(false)}
+                  onPress={() => {
+                    setPickingDuration(false);
+                    setPhotoUrl(null);
+                  }}
                   disabled={checkingIn}
                   hitSlop={8}
                   accessibilityRole="button"
@@ -252,7 +282,7 @@ export function WorkoutCheckinCard({ onOpenRecord, onResume, onCheckedIn, onOpen
 
 /**
  * 원탭 시간 선택지 — 흔한 운동 길이 셋 + 건너뛰기. 분 단위로 저장한다.
- * 더 정확히 남기려면 기록 화면(오운완 사진 경로)에서 직접 적는다.
+ * 오운완 사진도 같은 칩을 쓴다. 더 정확히 남기려면 "자세히 적기"로 기록 화면에서 직접 적는다.
  */
 const DURATION_CHOICES: { label: string; min: number | null }[] = [
   { label: '30분', min: 30 },
@@ -289,6 +319,9 @@ const styles = themedStyles((colors) => ({
   durationHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   durationTitle: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary },
   durationCancel: { fontSize: fontSize.caption, fontWeight: '700', color: colors.primary },
+  photoRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  photoThumb: { width: 44, height: 44, borderRadius: radius.md, backgroundColor: colors.border },
+  photoNote: { flex: 1, fontSize: fontSize.caption, color: colors.textSecondary },
   // 완료 상태 — 운동 홈의 회복 카드와 같은 한 줄 형태(테두리만 success 로 구분)
   doneCard: {
     flexDirection: 'row',
