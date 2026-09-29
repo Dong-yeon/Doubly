@@ -182,33 +182,27 @@ def edge_ring(im: Image.Image, w: int, h: int) -> None:
 
 
 def feature_graphic(mascot: Image.Image | None = None) -> Image.Image:
-    """Play 피처 그래픽 1024x500 — 2026-09-29 에 달걀이·구운이 + 스크린샷과 같은 배경으로 바꿨다.
+    """Play 피처 그래픽 1024x500 — 2026-09-29 새 아이콘(맞댄 두 숟가락)으로.
+
+    아이콘과 같은 크림 바탕 위에 마크를 크게 — 스토어 목록에는 바로 아래 아이콘 타일이 따로 보이므로
+    타일을 또 그리지 않고 마크 자체를 주인공으로 둔다. 마크는 store/icon/make_icon.py 가 그린 것과 같은 점이다.
 
     <b>가운데를 비워 둔다</b>: Play 는 홍보 영상이 있으면 이 그래픽 한가운데에 재생 버튼을
-    겹쳐 띄운다. 문구를 왼쪽에, 캐릭터를 오른쪽에 두는 구성이 그 버튼을 피한다.
-    개구리 마스코트는 앱에 없는 캐릭터라 뺐다(docs/APP_ICON_EXPLORATION_2026-09-29.md).
+    겹쳐 띄운다. 문구는 x≤450 안에, 마크는 오른쪽 끝에 둔다.
     """
-    from compose import STICKERS_DIR, outlined  # compose 가 이 모듈을 import 하므로 여기서 늦게 부른다
+    sys.path.insert(0, str(ROOT / "icon"))
+    import make_icon  # noqa: E402 — 아이콘과 같은 도형을 쓴다
 
     w, h = 1024, 500
-    im = diagonal_gradient(w, h)
-    blobs(im, w, h)
+    im = Image.new("RGBA", (w, h), make_icon.BG)
     d = ImageDraw.Draw(im)
-    f = font("SemiBold", 60)
-    d.text((72, 118), "둘이 함께 쌓는", font=f, fill=INK)
-    d.text((72, 118 + 76), "우리의 일상", font=f, fill=INK)
-    d.text((72, 300), "채팅 · 식단 · 맛집 · 게임까지", font=font("Medium", 26), fill=SUB)
-    d.text((72, 340), "커플을 위한 모든 것, 더블리", font=font("Medium", 26), fill=SUB)
-
-    def sticker(name: str, width: int, angle: float) -> Image.Image:
-        s = Image.open(STICKERS_DIR / name).convert("RGBA")
-        s = s.resize((width, round(s.height * width / s.width)), Image.LANCZOS)
-        return outlined(s, 8, angle)
-
-    big = sticker("duo_love.png", 300, -6)
-    im.alpha_composite(big, (w - big.width - 40, (h - big.height) // 2 + 10))
-    small = sticker("egg_happy.png", 120, 10)
-    im.alpha_composite(small, (w - big.width - 110, 300))
+    f = font("SemiBold", 48)
+    d.text((64, 134), "같이 먹고, 같이 웃는", font=f, fill=INK)
+    d.text((64, 134 + 64), "우리 둘의 매일", font=f, fill=INK)
+    d.text((64, 298), "채팅 · 식단 · 맛집 · 게임까지", font=font("Medium", 24), fill=SUB)
+    d.text((64, 334), "커플을 위한 모든 것, 더블리", font=font("Medium", 24), fill=SUB)
+    mark = make_icon.render(560, None)
+    im.alpha_composite(mark, (w - 560 + 60, (h - 560) // 2 + 10))
     return im
 
 
