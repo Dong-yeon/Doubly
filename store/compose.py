@@ -64,6 +64,66 @@ def clear_status_bar(img: Image.Image) -> Image.Image:
     return out
 
 
+STICKERS_DIR = ROOT.parent / "frontend" / "assets" / "stickers"
+
+# 휴대폰 가장자리에 걸치는 스티커 — (그림, 가로 중심, 세로 중심, 폭) 은 판 크기에 대한 비율, 마지막은 기울기(도).
+# 그림은 앱에 실제로 있는 스티커 PNG 이거나, ("crop", cx, cy, r) = 캡처 속 원을 오려 낸 것(우리 이모지).
+# 화면을 가리지 않게 가장자리에만 둔다 — 캡처 속 글자를 덮으면 "실제 화면"의 의미가 흐려진다.
+STICKERS: dict[str, list[tuple]] = {
+    "01-emoji": [(("crop", 861, 1590, 150), 0.86, 0.60, 0.25, -8), (("crop", 291, 891, 150), 0.13, 0.44, 0.23, 7)],
+    "02-sticker": [("duo_love.png", 0.11, 0.50, 0.24, 8), ("duo_heart_eyes.png", 0.89, 0.83, 0.23, -8)],
+    "03-home": [("duo_happy.png", 0.89, 0.33, 0.23, -7), ("egg_happy.png", 0.11, 0.80, 0.21, 8)],
+    "04-play": [("duo_idea.png", 0.89, 0.24, 0.21, -8), ("duo_wink.png", 0.11, 0.86, 0.22, 8)],
+    "05-place": [("duo_drool.png", 0.89, 0.31, 0.23, -7), ("duo_kiss.png", 0.11, 0.84, 0.21, 8)],
+    "06-photo": [("duo_relaxed.png", 0.89, 0.84, 0.23, -8), ("egg_angel.png", 0.11, 0.40, 0.21, 7)],
+}
+
+
+def sticker_image(spec, shot: Image.Image) -> Image.Image:
+    """스티커 한 장(RGBA). 크롭은 원으로 오리고 흰 바탕을 둔다 — 채팅 속 이모지 말풍선과 같은 모양."""
+    from PIL import ImageDraw
+
+    if isinstance(spec, tuple) and spec[0] == "crop":
+        _, cx, cy, r = spec
+        k = shot.width / 1080
+        cx, cy, r = cx * k, cy * k, r * k
+        im = shot.crop((round(cx - r), round(cy - r), round(cx + r), round(cy + r))).convert("RGBA")
+        m = Image.new("L", (im.width * 4, im.height * 4), 0)
+        ImageDraw.Draw(m).ellipse((0, 0, m.width - 1, m.height - 1), fill=255)
+        im.putalpha(m.resize(im.size, Image.LANCZOS))
+        return im
+    return Image.open(STICKERS_DIR / spec).convert("RGBA")
+
+
+def outlined(st: Image.Image, width_px: int, angle: float) -> Image.Image:
+    """흰 테두리 + 옅은 그림자를 두른 스티커 — 나노바나나 시안의 '떠 있는 스티커'."""
+    from PIL import ImageFilter
+
+    pad = width_px * 3
+    base = Image.new("RGBA", (st.width + pad * 2, st.height + pad * 2), (0, 0, 0, 0))
+    base.alpha_composite(st, (pad, pad))
+    a = base.getchannel("A").point(lambda v: 255 if v > 24 else 0)
+    ring = a.filter(ImageFilter.MaxFilter(width_px * 2 + 1)).filter(ImageFilter.GaussianBlur(1))
+    shadow = ring.filter(ImageFilter.GaussianBlur(width_px * 1.2)).point(lambda v: v * 0.28)
+    out = Image.new("RGBA", base.size, (0, 0, 0, 0))
+    sh = Image.new("RGBA", base.size, (40, 30, 30, 255)); sh.putalpha(shadow)
+    out.alpha_composite(sh, (0, width_px // 2))
+    white = Image.new("RGBA", base.size, (255, 255, 255, 255)); white.putalpha(ring)
+    out.alpha_composite(white)
+    out.alpha_composite(base)
+    return out.rotate(angle, resample=Image.BICUBIC, expand=True)
+
+
+def place_stickers(canvas: Image.Image, cap_key: str, shot: Image.Image) -> None:
+    w, h = canvas.size
+    for spec, fx, fy, fw, angle in STICKERS.get(cap_key, []):
+        st = sticker_image(spec, shot)
+        tw = round(w * fw)
+        st = st.resize((tw, round(st.height * tw / st.width)), Image.LANCZOS)
+        st = outlined(st, max(4, round(w * 0.009)), angle)
+        canvas.alpha_composite(st, (round(w * fx - st.width / 2), round(h * fy - st.height / 2)))
+
+
 def pair_up(shots: list[pathlib.Path]) -> list[tuple[pathlib.Path, tuple[str, str, str]]]:
     """캡처 ↔ 문구 짝짓기.
 
@@ -136,6 +196,7 @@ def main(argv: list[str]) -> int:
                 img = clear_status_bar(img)
             canvas.paste(cover(img, sw, sh), (x, y))
             canvas.alpha_composite(plate)          # 뚫린 자리로 캡처가 비친다
+            place_stickers(canvas, cap_key, Image.open(shot).convert("RGB"))
             out = dest / f"{cap_key}.png"
             canvas.convert("RGB").save(out)        # 스토어는 알파를 원하지 않는다
             made += 1
