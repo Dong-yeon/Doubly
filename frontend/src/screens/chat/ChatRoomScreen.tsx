@@ -118,6 +118,8 @@ const IMAGE_STICKER_PACK = new Map(
 
 const EMPTY_MESSAGES: ChatMessage[] = [];
 const EMPTY_SUGGESTIONS: StickerSuggestion[] = [];
+/** 같은 글 연타로 보는 간격 — 이 안에 같은 글을 다시 누르면 한 번만 보낸다 */
+const SEND_DEDUPE_MS = 800;
 /** 기념일 맥락 추천을 막대에 띄운 KST 날짜 — `.{relationId}` 를 붙여 방마다 하루 한 번 */
 const ANNIVERSARY_BAR_KEY = 'doubly.contextSticker.anniversary';
 /** 무드 유니코드 → 이름("슬픔") — 맥락 칸 한 줄에 쓴다 */
@@ -328,10 +330,15 @@ export function ChatRoomScreen({ navigation, route }: Props) {
    */
   const [sending, setSending] = useState(false);
   /**
-   * 같은 프레임 안의 연타 차단 — state 는 리렌더 전까지 stale 해서 두 번째 탭이 가드를
-   * 그냥 지나간다. 실제 잠금은 이 ref 가 하고, {@code sending} 은 화면 표시용이다.
+   * 연타 차단 — <b>같은 글</b>을 아주 짧은 사이(SEND_DEDUPE_MS)에 두 번 누른 것만 막는다.
+   *
+   * <p>예전엔 앞 메시지가 발행을 마칠 때까지 버튼을 통째로 잠갔다. 그래서 짧은 말을 연달아 보내면
+   * (한국어 채팅의 흔한 방식) 두 번째부터 탭이 그냥 먹혔다 — "보내기 버튼이 잘 안 먹힌다"(2026-09-30,
+   * 실기기에서 재현: 첫 메시지 발행 중 두 번째 탭이 무시되고 글이 입력창에 남음). 입력창은 누르는 즉시
+   * 비고 "보내는 중" 말풍선도 바로 서므로, 잠글 이유는 같은 프레임 연타로 같은 글이 두 번 나가는 것뿐이다.
+   * state 는 리렌더 전까지 stale 하므로 ref 로 본다.
    */
-  const sendingRef = useRef(false);
+  const lastSendRef = useRef<{ content: string; at: number } | null>(null);
   const [showTouchPicker, setShowTouchPicker] = useState(false);
   const spellCheckEnabled = useSettingsStore((s) => s.spellCheckEnabled);
   // 이미 읽음 처리한 최대 메시지 id — 중복 PUT 방지
@@ -865,7 +872,9 @@ export function ChatRoomScreen({ navigation, route }: Props) {
       return;
     }
 
-    if (sendingRef.current) return; // 같은 프레임 연타 — state 가드는 여기서 stale 하다
+    // 같은 글을 방금 보냈다 — 같은 프레임 연타. 다른 글이면 앞 메시지가 아직 가는 중이어도 보낸다
+    const last = lastSendRef.current;
+    if (last && last.content === content && Date.now() - last.at < SEND_DEDUPE_MS) return;
 
     /*
      * 텍스트 코드 "(더비_좋아)" 는 스티커로 나간다(utils/stickerCodes.ts). 입력 <b>전체</b>가
@@ -881,7 +890,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
       return;
     }
 
-    sendingRef.current = true;
+    lastSendRef.current = { content, at: Date.now() };
 
     /*
      * 입력창을 먼저 비운다. 전송은 서버 왕복이고 끊겨 있으면 5초까지 가는데, 그동안
@@ -938,7 +947,6 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         Alert.alert('전송 실패', '연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
       }
     } finally {
-      sendingRef.current = false;
       setSending(false);
     }
   };
@@ -2187,16 +2195,17 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           */}
           {text.trim() || sending ? (
             <TouchableOpacity
-              style={[styles.sendBtn, (editSaving || sending) && styles.sendDisabled]}
+              style={[styles.sendBtn, editSaving && styles.sendDisabled]}
               onPress={onSend}
-              disabled={editSaving || sending}
+              // 앞 메시지가 가는 중이어도 다음 글은 보낸다 — 진행 표시는 말풍선이 한다
+              disabled={editSaving}
               // 44px 이지만 화면 맨 끝이라 엄지가 가장자리를 빗나가기 쉽다
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               accessibilityRole="button"
-              accessibilityState={{ disabled: editSaving || sending, busy: sending }}
+              accessibilityState={{ disabled: editSaving, busy: sending }}
               accessibilityLabel={editing ? '수정 완료' : '전송'}
             >
-              {sending ? (
+              {editSaving ? (
                 <ActivityIndicator size="small" color={colors.white} />
               ) : (
                 <MaterialCommunityIcons name="arrow-up" size={22} color={colors.white} style={styles.sendIcon} />
