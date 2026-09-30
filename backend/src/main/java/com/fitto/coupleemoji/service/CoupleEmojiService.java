@@ -77,6 +77,11 @@ public class CoupleEmojiService {
      */
     static final String SOURCE_SUBFOLDER = "emoji-source";
     static final String RESULT_SUBFOLDER = "couple-emoji";
+    /**
+     * 배경을 따낸 투명 PNG 폴더 — <b>앱이 이 폴더 이름으로 원판 없이 그린다</b>(frontend utils/coupleEmoji.ts).
+     * 채팅 메시지는 URL 만 들고 있어서 "따낸 이미지인가"를 URL 로 알 수 있어야 한다.
+     */
+    static final String CUTOUT_SUBFOLDER = "couple-emoji-cut";
 
     /**
      * 한 세트 안에서 동시에 그릴 장 수. {@code AiJobService} 풀을 4로 둔 것과 같은 이유 —
@@ -255,7 +260,11 @@ public class CoupleEmojiService {
         GeneratedImage image = geminiClient.generateImageInBackground(ticket.userId(), FEATURE, List.of(
                 GeminiClient.imagePart(source.mimeType(), source.bytes()),
                 GeminiClient.textPart(CoupleEmojiPrompts.imagePrompt(facts, emotion))));
-        String url = imageUploader.upload(image.bytes(), image.mimeType(), RESULT_SUBFOLDER);
+        // 흰 배경을 따낸 투명 PNG 로 올린다 — 수상하면(EmojiCutout 이 비워 돌려주면) 원본 그대로
+        java.util.Optional<byte[]> cutout = EmojiCutout.cut(image.bytes());
+        String url = cutout.isPresent()
+                ? imageUploader.upload(cutout.get(), "image/png", CUTOUT_SUBFOLDER)
+                : imageUploader.upload(image.bytes(), image.mimeType(), RESULT_SUBFOLDER);
         return transactionTemplate.execute(status -> repository.save(CoupleEmoji.builder()
                 .relationId(ticket.relationId())
                 .createdBy(ticket.userId())
@@ -265,6 +274,7 @@ public class CoupleEmojiService {
                 .imageUrl(url)
                 .promptVersion(CoupleEmojiPrompts.VERSION)
                 .identityFacts(facts)
+                .bgRemoved(cutout.isPresent())
                 .build()));
     }
 
