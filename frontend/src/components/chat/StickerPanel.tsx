@@ -28,6 +28,7 @@
  * <p><b>화면에서 떼어낸 이유</b>: ChatRoomScreen 이 이미 2200줄이다. 패널은 자기
  * 상태(고른 팩)만 갖고 나머지는 콜백으로 올려 보내므로, 말풍선 렌더와 얽히지 않는다.
  */
+import { isCutoutEmoji } from '../../utils/coupleEmoji';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Image, Pressable, ScrollView, Text, View, type ImageSourcePropType } from 'react-native';
 import { CachedImage } from '../CachedImage';
@@ -343,13 +344,14 @@ export function StickerPanel({
       return (
         <Pressable
           key={item.key}
-          style={({ pressed }) => [styles.cell, styles.coupleCell, pressed && styles.pressed]}
+          // 배경을 따낸 이모지는 원판 없이 — 채팅에 그려지는 모양과 같게
+          style={({ pressed }) => [styles.cell, !isCutoutEmoji(e.imageUrl) && styles.coupleCell, pressed && styles.pressed]}
           onPress={() => onSendCoupleEmoji(e.id)}
           onLongPress={() => onManageCoupleEmoji(e)}
           accessibilityRole="button"
           accessibilityLabel={`우리 이모지 ${e.label} 보내기. 길게 누르면 무드 올리기·삭제`}
         >
-          <CachedImage uri={e.imageUrl} style={styles.coupleThumb} contentFit="cover" />
+          <CachedImage uri={e.imageUrl} style={styles.coupleThumb} contentFit={isCutoutEmoji(e.imageUrl) ? 'contain' : 'cover'} />
           {/* 무드에 올라간 장은 점 하나로 — 안 보이면 "길게 눌러 바꾼다"를 알 방법이 없다 */}
           {e.moodVisible ? <View style={styles.moodDot} /> : null}
         </Pressable>

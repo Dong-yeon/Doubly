@@ -1,4 +1,5 @@
 /** 채팅 대화 — 설계서 2.5 / 4.5 CHAT-02 (실시간 메시지) */
+import { isCutoutEmoji } from '../../utils/coupleEmoji';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -120,6 +121,15 @@ const EMPTY_MESSAGES: ChatMessage[] = [];
 const EMPTY_SUGGESTIONS: StickerSuggestion[] = [];
 /** 같은 글 연타로 보는 간격 — 이 안에 같은 글을 다시 누르면 한 번만 보낸다 */
 const SEND_DEDUPE_MS = 800;
+
+/* 시각을 읽는 곳은 컴포넌트 밖에 둔다 — 컴포넌트 안의 Date.now() 는 react-hooks 린트가 "렌더 중 비순수 호출"로 막는다 */
+function sendStamp(content: string): { content: string; at: number } {
+  return { content, at: Date.now() };
+}
+
+function isDuplicateSend(last: { content: string; at: number } | null, content: string): boolean {
+  return !!last && last.content === content && Date.now() - last.at < SEND_DEDUPE_MS;
+}
 /** 기념일 맥락 추천을 막대에 띄운 KST 날짜 — `.{relationId}` 를 붙여 방마다 하루 한 번 */
 const ANNIVERSARY_BAR_KEY = 'doubly.contextSticker.anniversary';
 /** 무드 유니코드 → 이름("슬픔") — 맥락 칸 한 줄에 쓴다 */
@@ -873,8 +883,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     }
 
     // 같은 글을 방금 보냈다 — 같은 프레임 연타. 다른 글이면 앞 메시지가 아직 가는 중이어도 보낸다
-    const last = lastSendRef.current;
-    if (last && last.content === content && Date.now() - last.at < SEND_DEDUPE_MS) return;
+    if (isDuplicateSend(lastSendRef.current, content)) return;
 
     /*
      * 텍스트 코드 "(더비_좋아)" 는 스티커로 나간다(utils/stickerCodes.ts). 입력 <b>전체</b>가
@@ -890,7 +899,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
       return;
     }
 
-    lastSendRef.current = { content, at: Date.now() };
+    lastSendRef.current = sendStamp(content);
 
     /*
      * 입력창을 먼저 비운다. 전송은 서버 왕복이고 끊겨 있으면 5초까지 가는데, 그동안
@@ -1611,15 +1620,16 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           )
         ) : coupleEmojiUrl ? (
           /*
-           * 생성 모델 출력에 알파가 없어 흰 배경이 딸려 온다(§5-2) — 그대로 그리면
-           * 다크 모드에서 흰 사각형이 뜬다. 원형 마스크로 감싸 스티커처럼 보이게 한다.
+           * 서버가 배경을 따낸 이모지(투명 PNG)는 캐릭터 스티커처럼 원판 없이 그린다(2026-09-30, 비트윈 비교).
+           * 그 전에 만든 흰 배경 JPEG 는 그대로 그리면 다크 모드에서 흰 사각형이 뜨므로 원판에 얹는다 —
+           * 서버 백필이 옮기는 동안 둘이 섞여 있다(utils/coupleEmoji.ts).
            */
           <AnimatedCoupleEmoji
             uri={coupleEmojiUrl}
             emotion={coupleEmojiById.get(Number(item.content))?.emotion ?? null}
             promptVersion={coupleEmojiById.get(Number(item.content))?.promptVersion}
             size={132}
-            imageStyle={chatStyles.coupleEmojiImage}
+            imageStyle={isCutoutEmoji(coupleEmojiUrl) ? undefined : chatStyles.coupleEmojiImage}
             play={shouldAutoPlay(item.id)}
             onPlayed={() => oneShotPlayedRef.current.add(item.id)}
             onLongPress={() => onLongPressMessage(item)}
