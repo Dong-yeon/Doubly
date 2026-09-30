@@ -20,10 +20,12 @@
  */
 
 export const TERMS_VERSION = '1.2';
-export const PRIVACY_VERSION = '1.3';
+export const PRIVACY_VERSION = '1.4';
 
 /** 현재 버전(TERMS_VERSION/PRIVACY_VERSION)의 시행일 — 유료 구독(PRO) 개시 시점 */
 const EFFECTIVE_DATE = '2026년 9월 22일';
+/** 개인정보처리방침만 따로 개정된 시행일 — 1.4: 탈퇴 유예기간(14일) 도입 */
+const PRIVACY_EFFECTIVE_DATE = '2026년 9월 30일';
 
 /** 문의·개인정보 연락처 (설정의 문의하기, 약관 문의처 등 단일 출처) */
 export const CONTACT_EMAIL = 'ehddus5712@gmail.com';
@@ -138,7 +140,9 @@ export const PRIVACY_POLICY = `Dubly(이하 "서비스")는 이용자의 개인�
  - 유료 구독의 유효성 확인 및 이용권 제공, 결제 관련 문의·분쟁 대응
 
 3. 보유 및 이용 기간
- 회원 탈퇴 시 수집한 개인정보를 지체 없이 파기합니다.
+ 회원 탈퇴를 요청하면 14일의 유예기간이 지난 뒤 수집한 개인정보를 지체 없이 파기합니다.
+ 유예기간 중 다시 로그인하면 탈퇴 요청이 취소되며, 연결된 상대방에게는 탈퇴 요청 사실과
+ 삭제 예정일이 알려집니다(함께 남긴 기록도 이날 함께 삭제되기 때문입니다).
  다만 관계 법령에서 일정 기간 보존을 요구하는 정보는 해당 법령이 정한 기간 동안
  보관한 후 파기합니다.
  - 계약 또는 청약철회 등에 관한 기록 : 5년 (전자상거래법)
@@ -181,5 +185,5 @@ export const PRIVACY_POLICY = `Dubly(이하 "서비스")는 이용자의 개인�
 9. 고지의 의무
  이 방침의 내용이 변경되는 경우 앱 내 공지를 통해 알려드립니다.
 
-시행일: ${EFFECTIVE_DATE}
+시행일: ${PRIVACY_EFFECTIVE_DATE}
 `;
