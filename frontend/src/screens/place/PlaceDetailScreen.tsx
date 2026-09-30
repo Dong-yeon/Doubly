@@ -31,6 +31,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { PlaceScreensParamList } from '../../navigation/types';
+import { bareHeaderItems } from '../../navigation/headerOptions';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
 import { SpacingFixBar } from '../../components/SpacingFixBar';
@@ -185,26 +186,29 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
    */
   useEffect(() => {
     if (!place) return;
+    const headerActions = (
+      <View style={styles.headerActions}>
+        <IconButton
+          icon="pencil-outline"
+          label="장소 정보 수정"
+          color={colors.textPrimary}
+          onPress={() => navigation.navigate('PlaceAdd', { place })}
+        />
+        <IconButton
+          icon="delete-outline"
+          label="장소 삭제"
+          color={colors.danger}
+          // 성공하면 곧장 goBack 이라 흐려질 행이 없다 — 응답 대기 중 연타로
+          // 중복 DELETE 되지 않게 버튼만 잠근다(QA_CHECKLIST.md 전역 반복 패턴 7)
+          disabled={deletingPlaceId != null}
+          onPress={onDeletePlace}
+        />
+      </View>
+    );
     navigation.setOptions({
-      headerRight: () => (
-        <View style={styles.headerActions}>
-          <IconButton
-            icon="pencil-outline"
-            label="장소 정보 수정"
-            color={colors.textPrimary}
-            onPress={() => navigation.navigate('PlaceAdd', { place })}
-          />
-          <IconButton
-            icon="delete-outline"
-            label="장소 삭제"
-            color={colors.danger}
-            // 성공하면 곧장 goBack 이라 흐려질 행이 없다 — 응답 대기 중 연타로
-            // 중복 DELETE 되지 않게 버튼만 잠근다(QA_CHECKLIST.md 전역 반복 패턴 7)
-            disabled={deletingPlaceId != null}
-            onPress={onDeletePlace}
-          />
-        </View>
-      ),
+      headerRight: () => headerActions,
+      // iOS 26 유리 알약 없이 — headerOptions.tsx bareHeaderItems 참고
+      unstable_headerRightItems: () => bareHeaderItems(headerActions),
     });
     // onDeletePlace 는 place 와 deletingPlaceId 로만 달라진다
     // eslint-disable-next-line react-hooks/exhaustive-deps

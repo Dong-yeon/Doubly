@@ -32,6 +32,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import type { ChatStackParamList, MainTabParamList } from '../../navigation/types';
+import { bareHeaderItems } from '../../navigation/headerOptions';
 import { ImageViewer, type ViewerImage } from '../../components/ImageViewer';
 import { Avatar } from '../../components/Avatar';
 import { useFocusEffect } from '@react-navigation/native';
@@ -713,6 +714,29 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   };
 
   useLayoutEffect(() => {
+    const headerActions = (
+      <View style={styles.headerCallActions}>
+        <Pressable
+          onPress={() => setShowSearch(true)}
+          style={({ pressed }) => [styles.headerCallButton, pressed && styles.headerCallButtonPressed]}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="대화 검색"
+        >
+          <MaterialCommunityIcons name="magnify" size={22} color={colors.textPrimary} />
+        </Pressable>
+        {/* 더보기(⋮)는 맨 오른쪽 — iOS·안드로이드·카톡 관례. 검색 뒤에 둔다 */}
+        <Pressable
+          onPress={() => setShowMoreMenu(true)}
+          style={({ pressed }) => [styles.headerCallButton, pressed && styles.headerCallButtonPressed]}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="더보기"
+        >
+          <MaterialCommunityIcons name="dots-vertical" size={22} color={colors.textPrimary} />
+        </Pressable>
+      </View>
+    );
     navigation.setOptions({
       /*
        * route.params.title 만 쓰면(예전 코드) 채팅 목록에서 들어올 땐 문제없지만,
@@ -725,29 +749,9 @@ export function ChatRoomScreen({ navigation, route }: Props) {
        * 파라미터가 있든 없든 항상 사람이 읽을 수 있는 제목이 나온다.
        */
       title: partnerName ?? '채팅',
-      headerRight: () => (
-        <View style={styles.headerCallActions}>
-          <Pressable
-            onPress={() => setShowSearch(true)}
-            style={({ pressed }) => [styles.headerCallButton, pressed && styles.headerCallButtonPressed]}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="대화 검색"
-          >
-            <MaterialCommunityIcons name="magnify" size={22} color={colors.textPrimary} />
-          </Pressable>
-          {/* 더보기(⋮)는 맨 오른쪽 — iOS·안드로이드·카톡 관례. 검색 뒤에 둔다 */}
-          <Pressable
-            onPress={() => setShowMoreMenu(true)}
-            style={({ pressed }) => [styles.headerCallButton, pressed && styles.headerCallButtonPressed]}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="더보기"
-          >
-            <MaterialCommunityIcons name="dots-vertical" size={22} color={colors.textPrimary} />
-          </Pressable>
-        </View>
-      ),
+      headerRight: () => headerActions,
+      // iOS 26 유리 알약 없이 — headerOptions.tsx bareHeaderItems 참고
+      unstable_headerRightItems: () => bareHeaderItems(headerActions),
     });
   }, [navigation, partnerName]);
 
