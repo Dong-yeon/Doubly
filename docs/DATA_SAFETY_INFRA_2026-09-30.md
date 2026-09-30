@@ -51,7 +51,7 @@
 - **운영자 열람**: 위탁 고지는 되어 있음(처리방침 5절 Cloudinary). 의무는 목적 외 열람 금지 + 콘솔 접근 최소화(2FA, 1인).
 - **국외이전 고지 부족**: "일부 수탁사는 해외…" 한 줄뿐이고 Cloudinary 는 국가도 없음. 이전 국가·시기·방법·항목을 명시해야 함(법률 검토).
 - **이미지 URL 이 공개**: 서명 업로드지만 delivery type 은 기본 `upload` (`CloudinarySigner` 는 folder·timestamp 만 서명) → URL 만 알면 비로그인 열람 가능. 대책은 `authenticated` 타입 + 서버가 권한 확인 후 만료형 서명 URL 발급 — 이미지 표시 경로 전반을 건드리므로 권장 조치 4번(R2/S3 이전)과 함께 설계.
-- 콘솔 확인: unsigned preset `fitto_unsigned` 가 운영 계정에 남아 있지 않은지.
+- ~~콘솔 확인: unsigned preset `fitto_unsigned` 가 운영 계정에 남아 있지 않은지.~~ → **남아 있었음(Unsigned, 2026-07-03 생성) → 2026-09-30 삭제.** 앱은 서버 서명 업로드만 쓰므로 영향 없음 — 대체 경로(`uploadImage` 의 unsigned 폴백)는 서버가 UPLOAD_NOT_CONFIGURED 일 때만 탄다.
 - 마케팅: "운영자도 못 본다"는 E2E 없이는 쓸 수 없다. "사라지지 않는 추억"(보존)은 가능.
 
 ## 우선순위 판단 (2026-09-30)
