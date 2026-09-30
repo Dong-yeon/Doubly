@@ -805,17 +805,16 @@ export function HomeScreen({ navigation }: Props) {
                   onPressToday={(who, kind) => {
                     if (kind === 'workout') {
                       /*
-                       * returnTo — 닫을 때 럽바디 탭에 남지 않고 홈으로 돌아온다(위 "탭 안 옮기고" 약속).
-                       * initial:false 를 함께 주는 이유는 운동 화면들이 이제 럽바디 탭 <b>안쪽</b>이라
-                       * 그것만으로는 탭 스택의 첫 화면이 되어 뒤로가기가 탭 밖으로 튕기기 때문이다
-                       * (ActiveWorkoutBar 와 같은 이유) — 닫기는 returnTo, 뒤로가기는 initial:false 가 받는다.
+                       * 아직 안 했으면 럽바디 메인의 체크인 카드로 — 시간 칩("얼마나 했나요?")을 펼친 채로
+                       * 연다. 예전엔 운동 기록 화면(종목·세트 폼)을 열었는데, 운동은 "챙겼다" 원탭으로
+                       * 가기로 했고(WORKOUT_CHECKIN_DURATION_2026-09-27) 이 칩도 그 약속을 따른다.
                        */
                       // 이미 했으면 운동 홈 — 가려 둔 동안(WORKOUT_HOME_ENABLED)은 체크인 카드가 있는 럽바디 메인
                       navigation.navigate('Health', myWorkoutDone
                         ? WORKOUT_HOME_ENABLED
                           ? { screen: 'WorkoutMain', initial: false }
                           : { screen: 'DietMain' }
-                        : { screen: 'WorkoutRecord', params: { returnTo: 'Home' }, initial: false });
+                        : { screen: 'DietMain', params: { checkin: Date.now() } });
                       return;
                     }
                     /*
@@ -944,9 +943,9 @@ export function HomeScreen({ navigation }: Props) {
               */}
               <SettingsGroup title="혼자서도 시작할 수 있어요" style={styles.soloGroup}>
                 <SettingsRow
-                  title="운동 기록하기"
+                  title="운동 챙기기"
                   leading={<MaterialCommunityIcons name="dumbbell" size={22} color={colors.textSecondary} />}
-                  onPress={() => navigation.navigate('Health', { screen: 'WorkoutRecord', params: { returnTo: 'Home' }, initial: false })}
+                  onPress={() => navigation.navigate('Health', { screen: 'DietMain', params: { checkin: Date.now() } })}
                 />
                 <SettingsRow
                   title="식단 기록하기"

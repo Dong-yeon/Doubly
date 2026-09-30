@@ -124,7 +124,7 @@ function renderLetter(l: WeeklyLetter) {
  */
 type Props = NativeStackScreenProps<HealthStackParamList, 'DietMain'>;
 
-export function DietScreen({ navigation }: Props) {
+export function DietScreen({ navigation, route }: Props) {
   const {
     today,
     history,
@@ -430,6 +430,7 @@ export function DietScreen({ navigation }: Props) {
           onResume={() => navigation.navigate('WorkoutSession', { resume: true })}
           // 운동 홈은 2026-09-27 에 가렸다(config.ts WORKOUT_HOME_ENABLED) — prop 이 없으면 카드가 링크를 안 그린다
           onOpenWorkoutHome={WORKOUT_HOME_ENABLED ? () => navigation.navigate('WorkoutMain') : undefined}
+          openDurationKey={route.params?.checkin}
         />
       </View>
 

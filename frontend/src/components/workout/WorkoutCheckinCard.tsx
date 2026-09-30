@@ -51,9 +51,14 @@ type Props = {
    * 이 prop 이 없을 때 링크를 그리지 않는다.
    */
   onOpenWorkoutHome?: () => void;
+  /**
+   * 값이 바뀔 때마다 시간 칩을 펼친다 — 홈 운동 칩이 "운동 완료"까지 눌러 준 셈이 되게.
+   * 이펙트가 아니라 렌더 중 비교로 받는다(이전 값을 상태로 들고 있는 React 권장 패턴).
+   */
+  openDurationKey?: number;
 };
 
-export function WorkoutCheckinCard({ onOpenRecord, onResume, onCheckedIn, onOpenWorkoutHome }: Props) {
+export function WorkoutCheckinCard({ onOpenRecord, onResume, onCheckedIn, onOpenWorkoutHome, openDurationKey }: Props) {
   const today = useWorkoutStore((s) => s.today);
   const save = useWorkoutStore((s) => s.save);
   const fetchToday = useWorkoutStore((s) => s.fetchToday);
@@ -67,6 +72,11 @@ export function WorkoutCheckinCard({ onOpenRecord, onResume, onCheckedIn, onOpen
   const [photoBusy, setPhotoBusy] = useState(false);
   /** 올려 둔 오운완 사진 — 있으면 시간 칩이 이 사진과 함께 저장한다 */
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [seenDurationKey, setSeenDurationKey] = useState(openDurationKey);
+  if (openDurationKey !== seenDurationKey) {
+    setSeenDurationKey(openDurationKey);
+    if (openDurationKey !== undefined) setPickingDuration(true);
+  }
 
   /** 오늘 이미 기록이 있는가 — 카드의 상태를 가른다(같은 날 중복 기록 방지도 겸한다) */
   const doneToday = today.length > 0;
