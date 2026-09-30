@@ -67,6 +67,13 @@ export function formatDateCompact(value: string | null | undefined): string {
   return `${d.getFullYear()}.${m}.${day} (${WEEKDAY_NAMES[d.getDay()]})`;
 }
 
+/** 'YYYY-MM-DD' → 'M월 D일' — 달력 날짜 그대로(시간대 변환 없음). 형식이 아니면 원문. */
+export function formatMonthDay(value: string | null | undefined): string {
+  const d = parseDateString(value);
+  if (!d) return value ?? '';
+  return `${d.getMonth() + 1}월 ${d.getDate()}일`;
+}
+
 /** 'YYYY-MM-DD' → 오늘/어제/그제/N일 전, 7일 이상은 'M월 D일' */
 export function relativeDateLabel(dateStr: string): string {
   const today = new Date();

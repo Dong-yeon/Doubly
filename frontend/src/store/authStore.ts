@@ -7,6 +7,8 @@ import { STORAGE_KEYS } from '../constants/config';
 import { authApi, RegisterPayload } from '../api/auth';
 import { setAuthFailureHandler } from '../api/client';
 import { storage } from '../utils/storage';
+import { Alert } from '../utils/alert';
+import { formatMonthDay } from '../utils/date';
 import { registerPushTokenIfGranted } from '../utils/push';
 import { useChatStore } from './chatStore';
 import { usePlanStore } from './planStore';
@@ -97,6 +99,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setSession: async (tokens) => {
     await persistTokens(tokens);
     set({ user: tokens.user, isAuthenticated: true });
+    if (tokens.withdrawalCanceled) {
+      Alert.alert('다시 오셨네요', '탈퇴 요청을 취소했어요. 기록은 그대로 남아 있어요.');
+    }
     // 로그인/회원가입 직후 푸시 토큰 등록 (실패해도 무시)
     registerPushTokenIfGranted();
     // 로그인 직후에도 플랜을 읽는다 — 계정이 바뀌면 한도도 바뀐다
@@ -144,13 +149,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ user: null, isAuthenticated: false });
   },
 
+  /**
+   * 탈퇴 요청 — 서버는 삭제 예정일만 남기고 세션을 전부 끊는다. 요청이 실패하면
+   * 로그인 상태를 유지한다(예전처럼 finally 로 로그아웃시키면 탈퇴가 된 줄 알게 된다).
+   */
   withdraw: async () => {
-    try {
-      await authApi.withdraw();
-    } finally {
-      await clearTokens();
-      set({ user: null, isAuthenticated: false });
-    }
+    const { scheduledDate } = await authApi.withdraw();
+    await clearTokens();
+    set({ user: null, isAuthenticated: false });
+    Alert.alert(
+      '탈퇴가 접수됐어요',
+      `${formatMonthDay(scheduledDate)}에 계정과 기록이 삭제돼요.\n그 전에 다시 로그인하면 탈퇴가 취소돼요.`,
+    );
   },
 }));
 

@@ -51,7 +51,7 @@ import {
   unsubscribeCouple,
 } from '../../api/chatSocket';
 import { pickImage, takePhoto, uploadImage } from '../../utils/imageUpload';
-import { daysSince, toDateString } from '../../utils/date';
+import { daysSince, formatMonthDay, toDateString } from '../../utils/date';
 import { mealTypeForNow, mealTypeLabel } from '../../utils/mealTimeSlot';
 import { haptics } from '../../utils/haptics';
 import { toast } from '../../store/toastStore';
@@ -715,6 +715,23 @@ export function HomeScreen({ navigation }: Props) {
         <SafeAreaView style={styles.safe} edges={['top']}>
           {topBar}
 
+          {/*
+            상대가 탈퇴를 요청한 상태(유예기간) — 14일 뒤 함께한 기록까지 지워지므로,
+            남기고 싶은 것을 저장할 시간이 있다는 걸 푸시 말고 홈에서도 알린다.
+            푸시는 꺼 뒀을 수 있고, 지나가면 다시 볼 수 없기 때문이다.
+          */}
+          {connected && couple?.partner?.withdrawalScheduledDate ? (
+            <View style={styles.withdrawalNotice} accessibilityRole="alert">
+              <Text style={styles.withdrawalNoticeTitle}>
+                {couple.partner.name}님이 탈퇴를 요청했어요
+              </Text>
+              <Text style={styles.withdrawalNoticeBody}>
+                {formatMonthDay(couple.partner.withdrawalScheduledDate)}에 함께한 기록이 삭제돼요.
+                남기고 싶은 사진은 그 전에 저장해 두세요.
+              </Text>
+            </View>
+          ) : null}
+
           {connected ? (
             <View style={styles.body} onLayout={(e) => setBodyTop(e.nativeEvent.layout.y)}>
               {/*
@@ -1005,6 +1022,17 @@ const styles = themedStyles((colors) => ({
   // 배경 사진 — 보이는 자리(패널 윗선까지)에만 맞춘다. 높이는 onLayout 으로 잰다(photoHeight 주석)
   bgPhoto: { position: 'absolute', top: 0, left: 0, right: 0 },
   safe: { flex: 1, backgroundColor: 'transparent' },
+  withdrawalNotice: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.dangerBg,
+    gap: 2,
+  },
+  withdrawalNoticeTitle: { fontSize: fontSize.body, fontWeight: '700', color: colors.dangerText },
+  withdrawalNoticeBody: { fontSize: fontSize.caption, color: colors.dangerText },
 
   topBar: {
     flexDirection: 'row',
