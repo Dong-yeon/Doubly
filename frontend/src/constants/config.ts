@@ -34,6 +34,21 @@ export const STORAGE_KEYS = {
   pushPrimed: 'doubly.pushPrimed',
   // 처리한 스토어 구매(반영 완료 / 미반영 안내 완료) — utils/iap 가 매 실행마다 같은 구매를 다시 알리지 않게
   iapHandled: 'doubly.iapHandled',
+  // 사용자가 닫은 서비스 공지의 updatedAt — 같은 공지를 다시 띄우지 않기 위해(store/serviceStatusStore)
+  dismissedNotice: 'doubly.dismissedNotice',
+} as const;
+
+/**
+ * 장애 공지·점검·최소 버전 — 백엔드가 아니라 소개 사이트(Netlify, landing/status.json)에서 읽는다.
+ * 장애는 대개 백엔드가 죽은 때라, 백엔드가 주는 공지는 정작 필요할 때 오지 않는다.
+ * 운영 절차: docs/INCIDENT_NOTICE_2026-09-30.md
+ */
+export const SERVICE_STATUS_URL = 'https://dubly.co.kr/status.json';
+
+/** 강제 업데이트 화면의 스토어 링크 */
+export const STORE_URLS = {
+  android: 'https://play.google.com/store/apps/details?id=com.doubly.app',
+  ios: 'https://apps.apple.com/app/id6807249370', // eas.json 의 ascAppId
 } as const;
 
 /**

@@ -1,5 +1,7 @@
 import { isApiError } from '../api/client';
+import { activeMaintenance } from '../store/serviceStatusStore';
 import type { ApiResponse } from '../types';
+import { maintenanceErrorMessage } from './serviceStatus';
 
 /**
  * API 에러에서 백엔드 ApiResponse.message 를 추출 (설계서 4.1).
@@ -12,6 +14,15 @@ import type { ApiResponse } from '../types';
  */
 export function getErrorMessage(error: unknown, fallback = '문제가 발생했습니다. 다시 시도해주세요.'): string {
   if (isApiError(error)) {
+    /*
+     * 점검 중(landing/status.json 의 maintenance 공지 기간)이면 연결 실패·5xx 를 "점검 중"으로
+     * 바꾼다. 서버 메시지보다 먼저 본다 — 점검 중 5xx 의 본문은 대개 게이트웨이·프레임워크가
+     * 채운 것이라 "점검 중"보다 정확하지 않다. 4xx 는 점검과 무관한 진짜 거절이라 그대로 둔다.
+     */
+    if (error.status === 0 || error.status >= 500) {
+      const maintenance = activeMaintenance();
+      if (maintenance) return maintenanceErrorMessage(maintenance);
+    }
     const data = error.data as ApiResponse<unknown> | undefined;
     if (data?.message) return data.message;
     /*
