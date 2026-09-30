@@ -898,6 +898,9 @@ export function ChatRoomScreen({ navigation, route }: Props) {
      */
     const pending = replyTo;
     setText('');
+    // 네이티브 입력창도 직접 비운다 — 한글 조합 중에 보내면 키보드가 조합 중이던 마지막 글자를
+    // 뒤늦게 확정하며 빈 입력창에 다시 써 넣는다(값만 '' 로 바꾸면 그 글자가 남았다)
+    inputRef.current?.clear();
     setReplyTo(null);
     setSending(true);
     haptics.light();
@@ -2195,8 +2198,18 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           */}
           {text.trim() || sending ? (
             <TouchableOpacity
+              // 키로 두 버튼을 갈라 둔다 — 같은 자리·같은 타입이라 React 가 한 버튼으로 재사용하면, 보낸 직후
+              // 이모티콘 버튼으로 바뀐 채 손가락을 떼는 순간 그 onPress(패널 열기)가 불렸다(실기기 재현)
+              key="send"
               style={[styles.sendBtn, editSaving && styles.sendDisabled]}
-              onPress={onSend}
+              /*
+               * 누르는 순간(onPressIn) 보낸다 — 떼는 순간(onPress)이 아니라.
+               * 한글은 마지막 글자가 조합 중(밑줄)인 채로 전송을 누르게 되는데, 손가락이 닿는 순간
+               * 키보드가 그 글자를 확정하고 그 사이 누름이 취소돼 첫 탭이 먹지 않았다 — "전송을 두 번
+               * 눌러야 한다"(2026-09-30, 실기기 재현: 130ms 누름에서 한글은 실패·영문은 성공).
+               * 누름 시작은 확정보다 먼저 오므로 여기서 보내면 한 번에 간다. 같은 글 연타는 onSend 가 거른다.
+               */
+              onPressIn={() => void onSend()}
               // 앞 메시지가 가는 중이어도 다음 글은 보낸다 — 진행 표시는 말풍선이 한다
               disabled={editSaving}
               // 44px 이지만 화면 맨 끝이라 엄지가 가장자리를 빗나가기 쉽다
@@ -2213,6 +2226,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
+              key="tray"
               style={[styles.trayBtn, showStickers && styles.trayBtnActive]}
               onPress={() => togglePanel('stickers')}
               accessibilityRole="button"
