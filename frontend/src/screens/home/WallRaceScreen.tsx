@@ -10,7 +10,7 @@
  * <p>벽은 칸이 아니라 <b>칸 사이</b>에 놓이고 한 번 놓으면 되돌릴 수 없는 자원이라, 탭 한 번에
  * 바로 놓지 않는다 — 교차점을 누르면 미리보기가 뜨고 한 번 더 눌러야 확정된다.
  */
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -109,6 +109,14 @@ export function WallRaceScreen(_: Props) {
   const [game, setGame] = useState<WallRaceGame | null>(null);
   /** 방금 끝난 판 — current 가 null 이 된 뒤에도 결과를 보여주기 위해 따로 든다 */
   const [justFinished, setJustFinished] = useState<WallRaceGame | null>(null);
+  /** 상대가 접은 판 — 기록에 안 남으므로 결과 카드 대신 이 안내를 띄운다. 값은 상대 이름 */
+  const [foldedBy, setFoldedBy] = useState<string | null>(null);
+  /**
+   * 이 화면에서 보고 있던 진행 중 판 — current 가 null 로 바뀌었을 때 "그 판이 끝났나, 접혔나"를 가른다.
+   * 예전엔 current 가 null 이면 무조건 기록의 맨 위 판을 결과로 올려서, 상대가 판을 접거나 처음 들어왔을 때
+   * 몇 주 전 판의 "이겼어요"가 방금 끝난 판처럼 떴다(docs/WALL_RACE_UX_REVIEW_2026-09-30.md P1-1).
+   */
+  const watchingRef = useRef<WallRaceGame | null>(null);
   const [history, setHistory] = useState<WallRaceGame[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -131,11 +139,19 @@ export function WallRaceScreen(_: Props) {
         setPending(null);
         setWallMode(false);
       }
-      // 상대가 이겨서 끝났으면 current 가 null 이 된다 — 최신 기록을 결과 화면으로 올린다
-      if (!g && h.length > 0) {
-        setJustFinished((prev) => (prev && prev.id === h[0].id ? prev : h[0]));
+      // 보고 있던 판이 사라졌다 — 기록에 있으면 끝난 것(결과), 없으면 상대가 접은 것(안내).
+      // 보고 있던 판이 없었으면(처음 들어옴) 아무것도 올리지 않는다 — 지난 판은 아래 목록에 있다
+      const watching = watchingRef.current;
+      if (!g && watching) {
+        const done = h.find((x) => x.id === watching.id);
+        if (done) setJustFinished(done);
+        else setFoldedBy(watching.partnerName ?? '상대');
+        watchingRef.current = null;
       }
-      if (g) setJustFinished(null);
+      if (g) {
+        setJustFinished(null);
+        setFoldedBy(null);
+      }
     } catch (e) {
       if (!silent) toast.error(getErrorMessage(e, '판을 불러오지 못했어요.'));
       setLoadError(true);
@@ -145,6 +161,11 @@ export function WallRaceScreen(_: Props) {
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  // 진행 중 판을 볼 때마다 기억해 둔다 — 사라졌을 때 끝났는지 접혔는지 가르는 기준
+  useEffect(() => {
+    if (game) watchingRef.current = game;
+  }, [game]);
 
   useFocusEffect(
     useCallback(() => {
@@ -171,6 +192,7 @@ export function WallRaceScreen(_: Props) {
       const g = await wallRaceApi.start();
       setGame(g);
       setJustFinished(null);
+      setFoldedBy(null);
       setPending(null);
       setWallMode(false);
       haptics.light();
@@ -277,7 +299,13 @@ export function WallRaceScreen(_: Props) {
         onPress: () => {
           wallRaceApi
             .giveUp(game.id)
-            .then(() => { setGame(null); setPending(null); toast.success('이 판은 접었어요.'); })
+            .then(() => {
+              // 내가 접었다 — "상대가 접었어요" 안내가 뜨지 않게 보던 판을 잊는다
+              watchingRef.current = null;
+              setGame(null);
+              setPending(null);
+              toast.success('이 판은 접었어요.');
+            })
             .catch((e) => toast.error(getErrorMessage(e, '접지 못했어요.')));
         },
       },
@@ -658,6 +686,14 @@ export function WallRaceScreen(_: Props) {
         <>
           {renderResult(justFinished)}
           {renderStart('한 판 더?')}
+        </>
+      ) : foldedBy ? (
+        <>
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>{foldedBy}님이 이 판을 접었어요</Text>
+            <Text style={styles.cardDesc}>접은 판은 전적에 남지 않아요. 새 판을 열어 볼까요?</Text>
+          </View>
+          {renderStart('새 판 열까요?')}
         </>
       ) : !loading && !loadError ? (
         renderStart('한 판 둘까요?')
