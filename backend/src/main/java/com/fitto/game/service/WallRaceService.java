@@ -217,13 +217,24 @@ public class WallRaceService {
         return toResponse(game, userId, couple);
     }
 
-    /** 포기 — 기록에 남지 않는다. */
+    /**
+     * 포기 — 기록에 남지 않는다.
+     *
+     * <p>상대에게 푸시로 알린다. 예전엔 소켓 이벤트뿐이라, 앱을 안 켠 상대는 판이 사라진 줄 모르고
+     * "내 차례" 알림을 기다렸다(docs/WALL_RACE_UX_REVIEW_2026-09-30.md P1-2). 연쇄 퍼즐의 접기와 같은 형태다.
+     */
     @Transactional
     public void giveUp(Long userId, Long gameId) {
         Relation couple = activeCouple(userId);
         WallRaceGame game = lockedGame(gameId, couple);
         if (!game.isInProgress()) return;
         game.abandon();
+        Long partnerId = couple.partnerOf(userId);
+        if (partnerId != null) {
+            notificationService.notify(partnerId, NotificationCategory.PARTNER, "길막기 — 판을 접었어요",
+                    userName(userId) + "님이 하던 판을 접었어요. 새 판을 열어 볼까요?",
+                    PushLinks.GAME_WALL_RACE);
+        }
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.GAME);
     }
 

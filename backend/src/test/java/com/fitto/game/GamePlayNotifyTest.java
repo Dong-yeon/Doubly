@@ -13,6 +13,8 @@ import com.fitto.common.exception.ErrorCode;
 import com.fitto.game.service.GameNudgeService;
 import com.fitto.game.service.OmokService;
 import com.fitto.game.service.SudokuService;
+import com.fitto.game.service.WallRaceService;
+import com.fitto.game.dto.WallRaceGameResponse;
 import com.fitto.relation.dto.InviteCodeResponse;
 import com.fitto.relation.service.RelationService;
 import org.junit.jupiter.api.Test;
@@ -52,6 +54,7 @@ class GamePlayNotifyTest {
     @Autowired SudokuService sudokuService;
     @Autowired OmokService omokService;
     @Autowired GameNudgeService nudgeService;
+    @Autowired WallRaceService wallRaceService;
     @Autowired JdbcTemplate jdbcTemplate;
 
     /** 실제 Expo 발송 대신 호출만 기록한다 — 발송 대상·문구를 그대로 검증할 수 있다. */
@@ -249,5 +252,17 @@ class GamePlayNotifyTest {
         nudgeService.remindStalled();
         verify(notificationService).notify(eq(users[0]), eq(NotificationCategory.PARTNER),
                 contains("오목"), contains("멈춰 있어요"), anyString());
+    }
+
+    @Test
+    void 길막기_판을_접으면_상대에게_알린다() {
+        long[] users = couple("wga", "wgb");
+        WallRaceGameResponse game = wallRaceService.start(users[0]);
+        clearInvocations(notificationService);
+
+        wallRaceService.giveUp(users[1], game.id());
+
+        verify(notificationService).notify(eq(users[0]), eq(NotificationCategory.PARTNER),
+                contains("길막기"), contains("접었어요"), anyString());
     }
 }
