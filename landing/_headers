@@ -1,0 +1,7 @@
+# 앱이 읽는 장애 공지 파일 — docs/INCIDENT_NOTICE_2026-09-30.md
+# no-cache: 공지를 올리고 내리는 즉시 반영돼야 한다(CDN·브라우저 캐시 금지).
+# CORS: 앱 웹 버전은 별개 Netlify 사이트(다른 오리진)에서 이 파일을 fetch 한다.
+/status.json
+  Cache-Control: no-cache, no-store, must-revalidate
+  Access-Control-Allow-Origin: *
+  Content-Type: application/json; charset=utf-8

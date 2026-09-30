@@ -93,6 +93,7 @@ npm run verify:theme                       # 앱 팔레트 WCAG 대비 검증(�
 npm run verify:linkify                     # 링크 분리 검증 — utils/linkify.ts 수정 시
 npm run verify:puyo                        # 연쇄 퍼즐 엔진 검증 — games/puyo 규칙 수정 시
 npm run verify:sticker-codes               # 스티커 텍스트 코드·키워드 추천 검증 — utils/stickerCodes.ts 수정 시
+npm run verify:service-status              # 장애 공지 status.json 해석 검증 — utils/serviceStatus.ts·landing/status.json 수정 시
 npm run build:web                          # 아이콘 폰트 서브셋 + 웹 export
 npm run build:android / build:ios          # EAS production 빌드 (건당 과금 — 네이티브가 바뀔 때만)
 npm run update:production                  # EAS Update — JS/에셋만 바뀐 변경을 빌드 없이 배포

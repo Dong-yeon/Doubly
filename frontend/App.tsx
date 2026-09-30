@@ -11,6 +11,8 @@ import { BusyOverlay } from './src/components/BusyOverlay';
 import { ConfirmDialog } from './src/components/ConfirmDialog';
 import { DatePickerSheet } from './src/components/DatePickerSheet';
 import { UpgradeSheet } from './src/components/UpgradeSheet';
+import { ForceUpdateGate } from './src/components/ForceUpdateGate';
+import { useServiceStatusSync } from './src/hooks/useServiceStatusSync';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { AppShell } from './src/components/AppShell';
 import { installGlobalErrorHandlers } from './src/utils/globalErrorHandler';
@@ -82,6 +84,9 @@ export default function App() {
     };
   }, []);
 
+  // 장애 공지·점검·최소 버전(landing/status.json) — 폰트보다 먼저 걸어 둔다. 기다리지 않는다.
+  useServiceStatusSync();
+
   if (!fontsLoaded && !fontError) {
     // 아이콘 폰트만 기다린다 — 배경색만 깔아 깜빡임을 줄인다
     return <View style={{ flex: 1, backgroundColor: colors.background }} />;
@@ -120,6 +125,11 @@ export default function App() {
             어느 화면에서 걸렸든 한 곳에서만 그린다.
           */}
           <UpgradeSheet />
+          {/*
+            강제 업데이트 — 설치 빌드가 status.json 의 minAppVersion 보다 낮을 때만. 맨 위에 덮는다.
+            웹은 판정하지 않는다(utils/appVersion.web.ts).
+          */}
+          <ForceUpdateGate />
         </AppShell>
       </SafeAreaProvider>
     </GestureHandlerRootView>
