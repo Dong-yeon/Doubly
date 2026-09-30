@@ -1,5 +1,22 @@
 package com.fitto.auth;
 
+import com.fitto.auth.dto.LoginRequest;
+import com.fitto.auth.dto.TokenResponse;
+import com.fitto.auth.dto.UserResponse;
+import com.fitto.auth.service.AccountWithdrawalService;
+import com.fitto.auth.service.AccountWithdrawalSweeper;
+import com.fitto.common.notification.NotificationCategory;
+import com.fitto.common.notification.NotificationService;
+import com.fitto.common.time.KstClock;
+import com.fitto.user.domain.User;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import java.time.LocalDateTime;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import com.fitto.auth.dto.RegisterRequest;
 import com.fitto.auth.service.AuthService;
 import com.fitto.common.plan.SubscriptionRepository;
@@ -71,6 +88,10 @@ import static org.mockito.Mockito.verify;
  * 하나라도 빠지면 외래키 위반으로 탈퇴 자체가 실패한다.
  * 이 테스트는 실제 마이그레이션 스키마(외래키 포함)에서 돌아야 의미가 있다
  * — application-test.yml 에서 Flyway 를 켜둔 이유다.
+ *
+ * <p>2026-09-30 부터 탈퇴는 유예기간을 둔다 — 요청({@code request})은 예정일만 남기고,
+ * 실제 삭제({@code purgeNow} / 스위퍼의 {@code purgeIfDue})는 기간이 지난 뒤다.
+ * FK 정리 순서 검증은 삭제 본체인 purgeNow 로 한다.
  */
 @SpringBootTest
 @ActiveProfiles("test")
@@ -79,6 +100,10 @@ class WithdrawFlowTest {
     private static final String IP = "127.0.0.1";
 
     @Autowired AuthService authService;
+    @Autowired AccountWithdrawalService withdrawalService;
+    @Autowired AccountWithdrawalSweeper withdrawalSweeper;
+    /** 탈퇴 요청·취소 때 상대에게 가는 푸시를 확인한다 */
+    @MockitoBean NotificationService notificationService;
     @Autowired RelationService relationService;
     @Autowired SubscriptionRepository subscriptionRepository;
     @Autowired PlaceService placeService;
@@ -133,7 +158,7 @@ class WithdrawFlowTest {
         bodyMetricService.save(me, new SaveBodyMetricRequest(
                 LocalDate.now(), new BigDecimal("70.0"), null, null, null, null));
 
-        assertThatCode(() -> authService.withdraw(me)).doesNotThrowAnyException();
+        assertThatCode(() -> withdrawalService.purgeNow(me)).doesNotThrowAnyException();
         assertThat(userRepository.findById(me)).isEmpty();
     }
 
@@ -151,7 +176,7 @@ class WithdrawFlowTest {
         workoutService.save(me, new SaveWorkoutRequest(
                 LocalDate.now(), null, 30, null, null, screenshot, List.of()));
 
-        authService.withdraw(me);
+        withdrawalService.purgeNow(me);
 
         // 커밋 이후 삭제라 목록에 담겨 넘어갔는지로 확인한다(테스트 프로필은 실제 호출 no-op)
         ArgumentCaptor<Collection<String>> captor = ArgumentCaptor.forClass(Collection.class);
@@ -174,10 +199,10 @@ class WithdrawFlowTest {
                 "맛집", "서울", new BigDecimal("37.5"), new BigDecimal("127.0"), null));
         feedService.createPost(partner, new CreatePostRequest("상대의 기록", null));
 
-        authService.withdraw(me);
+        withdrawalService.purgeNow(me);
         assertThat(userRepository.findById(partner)).isPresent();
 
-        assertThatCode(() -> authService.withdraw(partner)).doesNotThrowAnyException();
+        assertThatCode(() -> withdrawalService.purgeNow(partner)).doesNotThrowAnyException();
         assertThat(userRepository.findById(partner)).isEmpty();
     }
 
@@ -221,7 +246,7 @@ class WithdrawFlowTest {
                         DayOfWeek.MONDAY, List.of(new Exercise(
                                 "스쿼트", "하체", 3, 10, new BigDecimal("50"), null, "하체", "바벨"))))));
 
-        assertThatCode(() -> authService.withdraw(me)).doesNotThrowAnyException();
+        assertThatCode(() -> withdrawalService.purgeNow(me)).doesNotThrowAnyException();
         assertThat(userRepository.findById(me)).isEmpty();
     }
 
@@ -257,9 +282,9 @@ class WithdrawFlowTest {
         feedService.toggleReaction(partner, FeedItemType.PLACE_VISIT, visitId, "👍");
         feedService.toggleReaction(me, FeedItemType.WORKOUT, workoutId, "🔥");
 
-        assertThatCode(() -> authService.withdraw(me)).doesNotThrowAnyException();
+        assertThatCode(() -> withdrawalService.purgeNow(me)).doesNotThrowAnyException();
         assertThat(userRepository.findById(me)).isEmpty();
-        assertThatCode(() -> authService.withdraw(partner)).doesNotThrowAnyException();
+        assertThatCode(() -> withdrawalService.purgeNow(partner)).doesNotThrowAnyException();
     }
 
     /**
@@ -279,7 +304,7 @@ class WithdrawFlowTest {
                 .transactionId("txn-withdraw")
                 .build());
 
-        assertThatCode(() -> authService.withdraw(me)).doesNotThrowAnyException();
+        assertThatCode(() -> withdrawalService.purgeNow(me)).doesNotThrowAnyException();
         assertThat(stickerPurchaseRepository.findByUserIdAndStickerPackId(me, StickerPacks.MOOD_PREMIUM))
                 .as("탈퇴했는데 스티커 팩 구매 이력이 남아 있다")
                 .isEmpty();
@@ -303,7 +328,7 @@ class WithdrawFlowTest {
                 .transactionId("txn-keep")
                 .build());
 
-        authService.withdraw(partner);
+        withdrawalService.purgeNow(partner);
 
         assertThat(stickerPurchaseRepository.findByUserIdAndStickerPackId(me, StickerPacks.TOUCH_PREMIUM))
                 .as("상대가 탈퇴했다고 내가 산 팩이 사라졌다")
@@ -316,7 +341,96 @@ class WithdrawFlowTest {
         bodyMetricService.save(solo, new SaveBodyMetricRequest(
                 LocalDate.now(), new BigDecimal("65.0"), null, null, null, null));
 
-        assertThatCode(() -> authService.withdraw(solo)).doesNotThrowAnyException();
+        assertThatCode(() -> withdrawalService.purgeNow(solo)).doesNotThrowAnyException();
         assertThat(userRepository.findById(solo)).isEmpty();
+    }
+
+    /* ── 탈퇴 유예기간 (2026-09-30) ─────────────────────────────────────────── */
+
+    private Long connectCouple(Long me, Long partner) {
+        InviteCodeResponse invite = relationService.createCoupleInvite(me);
+        relationService.connectCouple(partner, invite.code());
+        return me;
+    }
+
+    /**
+     * 한 명의 탈퇴가 상대의 추억을 예고 없이 지우던 것을 막는다 — 요청 시점에는 아무것도
+     * 지우지 않고, 상대에게 삭제 예정일을 알린다.
+     */
+    @Test
+    void 탈퇴_요청은_기록을_지우지_않고_상대에게_알린다() {
+        Long me = register("grace-request-a@fitto.com");
+        Long partner = register("grace-request-b@fitto.com");
+        connectCouple(me, partner);
+        feedService.createPost(me, new CreatePostRequest("함께한 기록", null));
+
+        LocalDate scheduled = withdrawalService.request(me);
+
+        assertThat(scheduled).isEqualTo(KstClock.today().plusDays(14));
+        User user = userRepository.findById(me).orElseThrow();
+        assertThat(user.isWithdrawalPending()).isTrue();
+        assertThat(UserResponse.from(user).withdrawalScheduledDate()).isEqualTo(scheduled);
+        verify(imageDeleter, never()).deleteAllAfterCommit(any());
+        verify(notificationService).notify(eq(partner), eq(NotificationCategory.PARTNER),
+                contains("탈퇴를 요청"), anyString(), anyString());
+    }
+
+    @Test
+    void 유예기간_중_로그인하면_탈퇴가_취소된다() {
+        Long me = register("grace-cancel-a@fitto.com");
+        Long partner = register("grace-cancel-b@fitto.com");
+        connectCouple(me, partner);
+        withdrawalService.request(me);
+
+        TokenResponse tokens = authService.login(new LoginRequest("grace-cancel-a@fitto.com", "password123"), IP);
+
+        assertThat(tokens.withdrawalCanceled()).isTrue();
+        assertThat(tokens.user().withdrawalScheduledDate()).isNull();
+        assertThat(userRepository.findById(me).orElseThrow().isWithdrawalPending()).isFalse();
+        verify(notificationService).notify(eq(partner), eq(NotificationCategory.PARTNER),
+                contains("탈퇴를 취소"), anyString(), anyString());
+
+        // 취소된 계정은 예정 시각이 지나도 지워지지 않는다
+        assertThat(withdrawalService.purgeIfDue(me, LocalDateTime.now().plusDays(30))).isFalse();
+        assertThat(userRepository.findById(me)).isPresent();
+    }
+
+    @Test
+    void 평소_로그인은_탈퇴_취소로_보이지_않는다() {
+        register("grace-normal@fitto.com");
+        TokenResponse tokens = authService.login(new LoginRequest("grace-normal@fitto.com", "password123"), IP);
+        assertThat(tokens.withdrawalCanceled()).isFalse();
+    }
+
+    @Test
+    void 유예기간이_지나야_계정과_기록이_삭제된다() {
+        Long me = register("grace-due-a@fitto.com");
+        Long partner = register("grace-due-b@fitto.com");
+        connectCouple(me, partner);
+        feedService.createPost(me, new CreatePostRequest("함께한 기록", null));
+        withdrawalService.request(me);
+
+        // 지금 돌아가는 스위퍼는 아직 기간이 남은 계정을 건드리지 않는다
+        withdrawalSweeper.sweep();
+        assertThat(userRepository.findById(me)).isPresent();
+        assertThat(withdrawalService.purgeIfDue(me, LocalDateTime.now().plusDays(13))).isFalse();
+
+        assertThat(withdrawalService.purgeIfDue(me, LocalDateTime.now().plusDays(15))).isTrue();
+        assertThat(userRepository.findById(me)).isEmpty();
+        assertThat(userRepository.findById(partner)).isPresent();
+    }
+
+    @Test
+    void 탈퇴를_두_번_요청해도_예정일이_밀리지_않고_알림도_한_번이다() {
+        Long me = register("grace-twice-a@fitto.com");
+        Long partner = register("grace-twice-b@fitto.com");
+        connectCouple(me, partner);
+
+        LocalDate first = withdrawalService.request(me);
+        LocalDate second = withdrawalService.request(me);
+
+        assertThat(second).isEqualTo(first);
+        verify(notificationService, times(1)).notify(eq(partner), eq(NotificationCategory.PARTNER),
+                contains("탈퇴를 요청"), anyString(), anyString());
     }
 }

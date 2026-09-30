@@ -11,7 +11,6 @@ import com.fitto.common.analytics.EventLogService;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.security.AuthRateLimiter;
-import com.fitto.common.upload.CloudinaryImageDeleter;
 import com.fitto.common.policy.PolicyVersion;
 import com.fitto.common.security.JwtTokenProvider;
 import com.fitto.common.security.RefreshTokenStore;
@@ -27,11 +26,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-
 /**
  * 인증 서비스 — 설계서 3.1 / 4.2.
- * 이메일 회원가입/로그인, 토큰 발급/갱신/회전, 로그아웃, 회원 탈퇴.
+ * 이메일 회원가입/로그인, 토큰 발급/갱신/회전, 로그아웃. 회원 탈퇴는 {@link AccountWithdrawalService}.
  */
 @Service
 @Transactional(readOnly = true)
@@ -40,8 +37,7 @@ public class AuthService {
     private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
     private final UserRepository userRepository;
-    private final UserDataPurger userDataPurger;
-    private final CloudinaryImageDeleter imageDeleter;
+    private final AccountWithdrawalService withdrawalService;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider tokenProvider;
     private final RefreshTokenStore refreshTokenStore;
@@ -56,8 +52,7 @@ public class AuthService {
     private final String timingDummyHash;
 
     public AuthService(UserRepository userRepository,
-                       UserDataPurger userDataPurger,
-                       CloudinaryImageDeleter imageDeleter,
+                       AccountWithdrawalService withdrawalService,
                        PasswordEncoder passwordEncoder,
                        JwtTokenProvider tokenProvider,
                        RefreshTokenStore refreshTokenStore,
@@ -65,8 +60,7 @@ public class AuthService {
                        GoogleTokenVerifier googleTokenVerifier,
                        EventLogService eventLogService) {
         this.userRepository = userRepository;
-        this.userDataPurger = userDataPurger;
-        this.imageDeleter = imageDeleter;
+        this.withdrawalService = withdrawalService;
         this.passwordEncoder = passwordEncoder;
         this.tokenProvider = tokenProvider;
         this.refreshTokenStore = refreshTokenStore;
@@ -99,6 +93,7 @@ public class AuthService {
         return issueTokens(user);
     }
 
+    @Transactional   // 탈퇴 유예 중이면 로그인이 탈퇴를 취소한다(쓰기)
     public TokenResponse login(LoginRequest request, String clientIp) {
         rateLimiter.checkLogin(clientIp, request.email());
 
@@ -115,7 +110,7 @@ public class AuthService {
         }
         rateLimiter.resetLogin(clientIp, request.email());
         eventLogService.log(user.getId(), AnalyticsEvent.LOGIN, SocialType.EMAIL.name());
-        return issueTokens(user);
+        return issueTokensOnLogin(user);
     }
 
     /**
@@ -150,7 +145,7 @@ public class AuthService {
         } else {
             eventLogService.log(user.getId(), AnalyticsEvent.LOGIN, SocialType.GOOGLE.name());
         }
-        return issueTokens(user);
+        return issueTokensOnLogin(user);
     }
 
     /**
@@ -274,21 +269,6 @@ public class AuthService {
         return UserResponse.from(user);
     }
 
-    /** 회원 탈퇴 — 연결된 관계를 종료한 뒤 계정 삭제 (AUTH-06). */
-    @Transactional
-    public void withdraw(Long userId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
-        // 의존 데이터 정리 — 삭제 순서와 대상은 UserDataPurger 에 모여 있다.
-        // (커플 콘텐츠까지 지우지 않으면 relations 삭제가 외래키 위반으로 실패한다)
-        List<String> imageUrls = userDataPurger.purgeFor(userId);
-        userRepository.delete(user);
-        // 업로드된 이미지는 커밋 이후에 지운다 — DB 롤백이 나도 파일은 되돌릴 수 없기 때문
-        imageDeleter.deleteAllAfterCommit(imageUrls);
-        // 탈퇴 후에는 남은 리프레시 토큰으로 재로그인할 수 없도록 전부 폐기
-        refreshTokenStore.revokeAll(userId);
-    }
-
     // ---- helpers ----
 
     /** 리프레시 토큰 서명/만료/타입 검증 후 Claims 반환. */
@@ -305,12 +285,22 @@ public class AuthService {
         return claims;
     }
 
+    /**
+     * 로그인 성공 시 발급 — 탈퇴 유예기간 중이던 계정이면 탈퇴를 먼저 취소한다.
+     * 리프레시 토큰은 탈퇴 요청 때 전부 폐기됐으므로, 다시 들어오는 길은 로그인뿐이다.
+     */
+    private TokenResponse issueTokensOnLogin(User user) {
+        boolean canceled = withdrawalService.cancelIfPending(user);
+        TokenResponse tokens = issueTokens(user);
+        return canceled ? tokens.withWithdrawalCanceled() : tokens;
+    }
+
     private TokenResponse issueTokens(User user) {
         String access = tokenProvider.createAccessToken(user.getId(), user.getRole());
         String refresh = tokenProvider.createRefreshToken(user.getId());
         // 발급된 리프레시 토큰을 화이트리스트에 등록 — 회전/무효화의 기준점
         String jti = tokenProvider.parse(refresh).getId();
         refreshTokenStore.store(user.getId(), jti, tokenProvider.refreshTokenTtl());
-        return new TokenResponse(access, refresh, UserResponse.from(user));
+        return new TokenResponse(access, refresh, UserResponse.from(user), false);
     }
 }

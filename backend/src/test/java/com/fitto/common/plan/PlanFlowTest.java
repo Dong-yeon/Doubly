@@ -37,6 +37,8 @@ class PlanFlowTest {
     @Autowired
     AuthService authService;
     @Autowired
+    com.fitto.auth.service.AccountWithdrawalService withdrawalService;
+    @Autowired
     RelationService relationService;
     @Autowired
     PlanResolver planResolver;
@@ -315,7 +317,7 @@ class PlanFlowTest {
         Long user = register("plan-credit-withdraw@fitto.com");
         giveCredits(user, Feature.AI_COUPLE_EMOJI, 2);
 
-        assertThatCode(() -> authService.withdraw(user)).doesNotThrowAnyException();
+        assertThatCode(() -> withdrawalService.purgeNow(user)).doesNotThrowAnyException();
     }
 
     /* ── 탈퇴 (FK) ────────────────────────────────────────────────────────── */
@@ -327,6 +329,6 @@ class PlanFlowTest {
         Long user = register("plan-withdraw@fitto.com");
         givePro(user, LocalDateTime.now().plusDays(30));
 
-        assertThatCode(() -> authService.withdraw(user)).doesNotThrowAnyException();
+        assertThatCode(() -> withdrawalService.purgeNow(user)).doesNotThrowAnyException();
     }
 }

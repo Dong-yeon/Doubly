@@ -51,4 +51,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
                   and (r.userAId = u.id or r.userBId = u.id))
             """)
     List<User> findSoloJoinedBetween(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+
+    /** 탈퇴 유예기간이 끝난 계정 — AccountWithdrawalSweeper 가 영구 삭제한다. */
+    @Query("select u.id from User u where u.withdrawalScheduledAt is not null "
+            + "and u.withdrawalScheduledAt <= :now")
+    List<Long> findIdsDueForWithdrawal(@Param("now") LocalDateTime now);
 }
