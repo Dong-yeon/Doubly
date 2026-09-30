@@ -17,7 +17,8 @@
  *
  * <p>백엔드 {@code com.fitto.chat.domain.AnimatedSticker} 와 code·label·팩이 정확히
  * 짝을 맞춰야 한다. 어긋나면 앱에는 보이는데 서버가 막는 — 또는 그 반대의 — 이모티콘이
- * 생긴다. 두 파일 모두 `gen_catalog.py` 의 한 원본에서 생성했다.
+ * 생긴다. 두 파일 모두 `gen_catalog.py` 의 한 원본에서 생성했다. 2026-10-01 에 더한 50종(110 → 160)의
+ * 코드포인트·출처는 docs/NOTO_EMOJI_EXPANSION_2026-10-01.md 에 있다.
  */
 import type { AnimationObject } from 'lottie-react-native';
 import type { ImageSourcePropType } from 'react-native';
@@ -37,7 +38,7 @@ export interface AnimatedStickerDef {
 import { PACK_ANIM_ALL } from './stickerPacks';
 
 export const ANIMATED_STICKERS: AnimatedStickerDef[] = [
-  // ── 사랑 18종 ──
+  // ── 사랑 23종 ──
   { code: 'ANIM_TWO_HEARTS', label: '두근두근', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/two_hearts.png'), source: require('../../assets/animated/two_hearts.json') },
   { code: 'ANIM_KISS', label: '뽀뽀', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/kiss.png'), source: require('../../assets/animated/kiss.json') },
   { code: 'ANIM_LOVE_FACE', label: '사랑스러워', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/love_face.png'), source: require('../../assets/animated/love_face.json') },
@@ -56,7 +57,12 @@ export const ANIMATED_STICKERS: AnimatedStickerDef[] = [
   { code: 'ANIM_LIPS', label: '입술', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/lips.png'), source: require('../../assets/animated/lips.json') },
   { code: 'ANIM_HEART_CAT', label: '하트냥', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/heart_cat.png'), source: require('../../assets/animated/heart_cat.json') },
   { code: 'ANIM_LOVE_LETTER', label: '러브레터', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/love_letter.png'), source: require('../../assets/animated/love_letter.json') },
-  // ── 웃음·장난 18종 ──
+  { code: 'ANIM_PINK_HEART', label: '핑크하트', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/pink_heart.png'), source: require('../../assets/animated/pink_heart.json') },
+  { code: 'ANIM_FIRE_HEART', label: '불꽃하트', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/fire_heart.png'), source: require('../../assets/animated/fire_heart.json') },
+  { code: 'ANIM_MENDING_HEART', label: '화해', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/mending_heart.png'), source: require('../../assets/animated/mending_heart.json') },
+  { code: 'ANIM_HUGGING', label: '꼬옥', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/hugging.png'), source: require('../../assets/animated/hugging.json') },
+  { code: 'ANIM_KISSING_CLOSED', label: '쪽', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/kissing_closed.png'), source: require('../../assets/animated/kissing_closed.json') },
+  // ── 웃음·장난 28종 ──
   { code: 'ANIM_JOY', label: '빵터짐', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/joy.png'), source: require('../../assets/animated/joy.json') },
   { code: 'ANIM_ZANY', label: '장난', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/zany.png'), source: require('../../assets/animated/zany.json') },
   { code: 'ANIM_COOL', label: '여유', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/cool.png'), source: require('../../assets/animated/cool.json') },
@@ -75,7 +81,17 @@ export const ANIMATED_STICKERS: AnimatedStickerDef[] = [
   { code: 'ANIM_MELTING', label: '녹는다', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/melting.png'), source: require('../../assets/animated/melting.json') },
   { code: 'ANIM_SALUTE', label: '넵', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/salute.png'), source: require('../../assets/animated/salute.json') },
   { code: 'ANIM_SHUSH', label: '쉿', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/shush.png'), source: require('../../assets/animated/shush.json') },
-  // ── 속상해 16종 ──
+  { code: 'ANIM_ROFL', label: '데굴데굴', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/rofl.png'), source: require('../../assets/animated/rofl.json') },
+  { code: 'ANIM_LAUGHING', label: '깔깔', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/laughing.png'), source: require('../../assets/animated/laughing.json') },
+  { code: 'ANIM_YUM', label: '냠냠', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/yum.png'), source: require('../../assets/animated/yum.json') },
+  { code: 'ANIM_WINK', label: '찡긋', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/wink.png'), source: require('../../assets/animated/wink.json') },
+  { code: 'ANIM_TONGUE', label: '메롱', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/tongue.png'), source: require('../../assets/animated/tongue.json') },
+  { code: 'ANIM_GRIN', label: '헤헤', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/grin.png'), source: require('../../assets/animated/grin.json') },
+  { code: 'ANIM_PEEKING', label: '빼꼼', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/peeking.png'), source: require('../../assets/animated/peeking.json') },
+  { code: 'ANIM_NOD', label: '끄덕끄덕', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/nod.png'), source: require('../../assets/animated/nod.json') },
+  { code: 'ANIM_HEAD_SHAKE', label: '도리도리', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/head_shake.png'), source: require('../../assets/animated/head_shake.json') },
+  { code: 'ANIM_SEE_NO_EVIL', label: '부끄', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/see_no_evil.png'), source: require('../../assets/animated/see_no_evil.json') },
+  // ── 속상해 26종 ──
   { code: 'ANIM_SOB', label: '엉엉', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/sob.png'), source: require('../../assets/animated/sob.json') },
   { code: 'ANIM_HOLDING_TEARS', label: '울컥', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/holding_tears.png'), source: require('../../assets/animated/holding_tears.json') },
   { code: 'ANIM_RAGE', label: '화남', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/rage.png'), source: require('../../assets/animated/rage.json') },
@@ -92,7 +108,17 @@ export const ANIMATED_STICKERS: AnimatedStickerDef[] = [
   { code: 'ANIM_BROKEN_HEART', label: '상처', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/broken_heart.png'), source: require('../../assets/animated/broken_heart.json') },
   { code: 'ANIM_ANXIOUS', label: '불안', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/anxious.png'), source: require('../../assets/animated/anxious.json') },
   { code: 'ANIM_SWEAT', label: '진땀', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/sweat.png'), source: require('../../assets/animated/sweat.json') },
-  // ── 축하해 14종 ──
+  { code: 'ANIM_HAPPY_CRY', label: '웃프다', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/happy_cry.png'), source: require('../../assets/animated/happy_cry.json') },
+  { code: 'ANIM_CRYING_CAT', label: '울보냥', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/crying_cat.png'), source: require('../../assets/animated/crying_cat.json') },
+  { code: 'ANIM_SCREAM', label: '으악', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/scream.png'), source: require('../../assets/animated/scream.json') },
+  { code: 'ANIM_MIND_BLOWN', label: '멘붕', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/mind_blown.png'), source: require('../../assets/animated/mind_blown.json') },
+  { code: 'ANIM_DIZZY', label: '어질어질', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/dizzy.png'), source: require('../../assets/animated/dizzy.json') },
+  { code: 'ANIM_SHAKING', label: '덜덜', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/shaking.png'), source: require('../../assets/animated/shaking.json') },
+  { code: 'ANIM_EXHALE', label: '휴', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/exhale.png'), source: require('../../assets/animated/exhale.json') },
+  { code: 'ANIM_SICK', label: '아파', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/sick.png'), source: require('../../assets/animated/sick.json') },
+  { code: 'ANIM_COLD', label: '추워', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/cold.png'), source: require('../../assets/animated/cold.json') },
+  { code: 'ANIM_HOT', label: '더워', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/hot.png'), source: require('../../assets/animated/hot.json') },
+  // ── 축하해 17종 ──
   { code: 'ANIM_PARTY_FACE', label: '신남', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/party_face.png'), source: require('../../assets/animated/party_face.json') },
   { code: 'ANIM_PARTY_POPPER', label: '축하', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/party_popper.png'), source: require('../../assets/animated/party_popper.json') },
   { code: 'ANIM_BIRTHDAY_CAKE', label: '생일', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/birthday_cake.png'), source: require('../../assets/animated/birthday_cake.json') },
@@ -107,7 +133,10 @@ export const ANIMATED_STICKERS: AnimatedStickerDef[] = [
   { code: 'ANIM_TROPHY', label: '우승', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/trophy.png'), source: require('../../assets/animated/trophy.json') },
   { code: 'ANIM_RING', label: '반지', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/ring.png'), source: require('../../assets/animated/ring.json') },
   { code: 'ANIM_CHERRY_BLOSSOM', label: '벚꽃', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/cherry_blossom.png'), source: require('../../assets/animated/cherry_blossom.json') },
-  // ── 응원해 18종 ──
+  { code: 'ANIM_FIREWORKS', label: '불꽃놀이', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/fireworks.png'), source: require('../../assets/animated/fireworks.json') },
+  { code: 'ANIM_MIRROR_BALL', label: '파티', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/mirror_ball.png'), source: require('../../assets/animated/mirror_ball.json') },
+  { code: 'ANIM_CROWN', label: '왕관', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/crown.png'), source: require('../../assets/animated/crown.json') },
+  // ── 응원해 22종 ──
   { code: 'ANIM_THUMBS_UP', label: '좋아', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/thumbs_up.png'), source: require('../../assets/animated/thumbs_up.json') },
   { code: 'ANIM_PLEADING', label: '제발', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/pleading.png'), source: require('../../assets/animated/pleading.json') },
   { code: 'ANIM_FIRE', label: '불타오르네', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/fire.png'), source: require('../../assets/animated/fire.json') },
@@ -126,7 +155,11 @@ export const ANIMATED_STICKERS: AnimatedStickerDef[] = [
   { code: 'ANIM_ZAP', label: '번쩍', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/zap.png'), source: require('../../assets/animated/zap.json') },
   { code: 'ANIM_WAVE', label: '안녕', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/wave.png'), source: require('../../assets/animated/wave.json') },
   { code: 'ANIM_LOVE_SIGN', label: '사랑해', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/love_sign.png'), source: require('../../assets/animated/love_sign.json') },
-  // ── 동물 9종 ──
+  { code: 'ANIM_OK', label: '오케이', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/ok.png'), source: require('../../assets/animated/ok.json') },
+  { code: 'ANIM_VICTORY', label: '브이', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/victory.png'), source: require('../../assets/animated/victory.json') },
+  { code: 'ANIM_CROSSED_FINGERS', label: '행운을', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/crossed_fingers.png'), source: require('../../assets/animated/crossed_fingers.json') },
+  { code: 'ANIM_CALL_ME', label: '연락해', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/call_me.png'), source: require('../../assets/animated/call_me.json') },
+  // ── 동물 14종 ──
   { code: 'ANIM_CAT', label: '고양이', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/cat.png'), source: require('../../assets/animated/cat.json') },
   { code: 'ANIM_BEAR', label: '곰', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/bear.png'), source: require('../../assets/animated/bear.json') },
   { code: 'ANIM_PANDA', label: '판다', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/panda.png'), source: require('../../assets/animated/panda.json') },
@@ -136,7 +169,12 @@ export const ANIMATED_STICKERS: AnimatedStickerDef[] = [
   { code: 'ANIM_PENGUIN', label: '펭귄', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/penguin.png'), source: require('../../assets/animated/penguin.json') },
   { code: 'ANIM_CHICK', label: '병아리', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/chick.png'), source: require('../../assets/animated/chick.json') },
   { code: 'ANIM_UNICORN', label: '유니콘', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/unicorn.png'), source: require('../../assets/animated/unicorn.json') },
-  // ── 먹을 것 10종 ──
+  { code: 'ANIM_DOG', label: '강아지', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/dog.png'), source: require('../../assets/animated/dog.json') },
+  { code: 'ANIM_RABBIT', label: '토끼', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/rabbit.png'), source: require('../../assets/animated/rabbit.json') },
+  { code: 'ANIM_PIG', label: '돼지', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/pig.png'), source: require('../../assets/animated/pig.json') },
+  { code: 'ANIM_OTTER', label: '수달', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/otter.png'), source: require('../../assets/animated/otter.json') },
+  { code: 'ANIM_BUTTERFLY', label: '나비', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/butterfly.png'), source: require('../../assets/animated/butterfly.json') },
+  // ── 먹을 것 15종 ──
   { code: 'ANIM_PIZZA', label: '피자', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/pizza.png'), source: require('../../assets/animated/pizza.json') },
   { code: 'ANIM_COFFEE', label: '커피', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/coffee.png'), source: require('../../assets/animated/coffee.json') },
   { code: 'ANIM_RAMEN', label: '라면', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/ramen.png'), source: require('../../assets/animated/ramen.json') },
@@ -147,7 +185,12 @@ export const ANIMATED_STICKERS: AnimatedStickerDef[] = [
   { code: 'ANIM_AVOCADO', label: '아보카도', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/avocado.png'), source: require('../../assets/animated/avocado.json') },
   { code: 'ANIM_EGG', label: '계란', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/egg.png'), source: require('../../assets/animated/egg.json') },
   { code: 'ANIM_BUBBLE_TEA', label: '버블티', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/bubble_tea.png'), source: require('../../assets/animated/bubble_tea.json') },
-  // ── 날씨 7종 ──
+  { code: 'ANIM_CHICKEN', label: '치킨', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/chicken.png'), source: require('../../assets/animated/chicken.json') },
+  { code: 'ANIM_SPAGHETTI', label: '파스타', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/spaghetti.png'), source: require('../../assets/animated/spaghetti.json') },
+  { code: 'ANIM_DOUGHNUT', label: '도넛', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/doughnut.png'), source: require('../../assets/animated/doughnut.json') },
+  { code: 'ANIM_POPCORN', label: '팝콘', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/popcorn.png'), source: require('../../assets/animated/popcorn.json') },
+  { code: 'ANIM_WINE', label: '와인', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/wine.png'), source: require('../../assets/animated/wine.json') },
+  // ── 날씨 9종 ──
   { code: 'ANIM_RAIN', label: '비', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/rain.png'), source: require('../../assets/animated/rain.json') },
   { code: 'ANIM_SNOWMAN', label: '눈사람', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/snowman.png'), source: require('../../assets/animated/snowman.json') },
   { code: 'ANIM_RAINBOW', label: '무지개', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/rainbow.png'), source: require('../../assets/animated/rainbow.json') },
@@ -155,6 +198,15 @@ export const ANIMATED_STICKERS: AnimatedStickerDef[] = [
   { code: 'ANIM_OCEAN', label: '파도', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/ocean.png'), source: require('../../assets/animated/ocean.json') },
   { code: 'ANIM_MAPLE', label: '단풍', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/maple.png'), source: require('../../assets/animated/maple.json') },
   { code: 'ANIM_SUN', label: '햇살', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/sun.png'), source: require('../../assets/animated/sun.json') },
+  { code: 'ANIM_CLOUD', label: '구름', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/cloud.png'), source: require('../../assets/animated/cloud.json') },
+  { code: 'ANIM_UMBRELLA', label: '우산', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/umbrella.png'), source: require('../../assets/animated/umbrella.json') },
+  // ── 데이트·일상 6종 ──
+  { code: 'ANIM_AIRPLANE', label: '여행', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/airplane.png'), source: require('../../assets/animated/airplane.json') },
+  { code: 'ANIM_FERRIS_WHEEL', label: '관람차', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/ferris_wheel.png'), source: require('../../assets/animated/ferris_wheel.json') },
+  { code: 'ANIM_HOUSE', label: '집', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/house.png'), source: require('../../assets/animated/house.json') },
+  { code: 'ANIM_ALARM', label: '알람', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/alarm.png'), source: require('../../assets/animated/alarm.json') },
+  { code: 'ANIM_CAR', label: '드라이브', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/car.png'), source: require('../../assets/animated/car.json') },
+  { code: 'ANIM_CAMERA', label: '찰칵', packId: PACK_ANIM_ALL, thumb: require('../../assets/animated/camera.png'), source: require('../../assets/animated/camera.json') },
 ];
 
 /** 코드로 한 장을 찾는 경로(말풍선·알림 미리보기). */
