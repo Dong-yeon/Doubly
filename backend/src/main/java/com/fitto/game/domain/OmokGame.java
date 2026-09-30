@@ -78,6 +78,11 @@ public class OmokGame extends CoupleGame {
         return GameType.OMOK;
     }
 
+    @Override
+    public char awaitedSide() {
+        return nextTurnSide();
+    }
+
     public char nextTurnSide() {
         return nextTurn.charAt(0);
     }

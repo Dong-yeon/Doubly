@@ -18,6 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../navigation/types';
+import { GameNudgeButton } from '../../components/GameNudgeButton';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { GameReactionBar } from '../../components/GameReactionBar';
@@ -429,6 +430,8 @@ export function SudokuScreen(_: Props) {
         <View style={styles.progressTrack}>
           <View style={[styles.progressFill, { width: `${Math.round((done / total) * 100)}%` }]} />
         </View>
+        {/* 같이 푸는 판이라 차례가 없다 — 오늘의 판은 그날로 끝나므로 부르지 않는다 */}
+        {g.dailyDate ? null : <GameNudgeButton gameId={g.id} partnerName={g.partnerName} />}
 
         <View style={[styles.board, { width: boardSize, height: boardSize }]}>
           {Array.from({ length: 81 }, (_, i) => renderCell(i))}

@@ -106,6 +106,11 @@ public class WallRaceGame extends CoupleGame {
         return GameType.WALL_RACE;
     }
 
+    @Override
+    public char awaitedSide() {
+        return turnSide();
+    }
+
     public char turnSide() {
         return raceTurn.charAt(0);
     }

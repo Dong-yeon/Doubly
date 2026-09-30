@@ -157,3 +157,12 @@ export const gameReactionApi = {
   send: (gameType: GameTypeKey, reaction: string) =>
     unwrap(apiClient.post<ApiResponse<void>>('/games/reactions', { gameType, reaction })),
 };
+
+/**
+ * 게임 재촉 — 기다리는 쪽이 상대를 한 번 부른다(판마다 한 사람당 하루 한 번). 종목 공통.
+ * docs/GAME_NUDGE_2026-09-30.md
+ */
+export const gameNudgeApi = {
+  nudge: (gameId: number) =>
+    unwrap(apiClient.post<ApiResponse<{ nudgedAt: string }>>(`/games/nudge/${gameId}`)),
+};

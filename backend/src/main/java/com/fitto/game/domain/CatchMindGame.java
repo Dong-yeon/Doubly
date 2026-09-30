@@ -64,6 +64,12 @@ public class CatchMindGame extends CoupleGame {
         return GameType.CATCH_MIND;
     }
 
+    /** 판을 연 사람이 그렸으므로 기다리는 쪽은 늘 맞히는 사람(상대)이다 */
+    @Override
+    public char awaitedSide() {
+        return OWNER_PARTNER;
+    }
+
     /** 그린 사람인가 — 아니면 맞히는 사람이다 */
     public boolean isDrawer(Long userId) {
         return isCreator(userId);

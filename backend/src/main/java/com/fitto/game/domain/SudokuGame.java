@@ -72,6 +72,12 @@ public class SudokuGame extends CoupleGame {
         return GameType.SUDOKU;
     }
 
+    /** 같이 푸는 판이라 차례가 없다 — 누구든 상대를 부를 수 있다 */
+    @Override
+    public char awaitedSide() {
+        return OWNER_NONE;
+    }
+
     public boolean isGiven(int index) {
         return puzzle.charAt(index) != '0';
     }

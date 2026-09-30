@@ -25,6 +25,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../navigation/types';
+import { GameNudgeButton } from '../../components/GameNudgeButton';
 import { Button } from '../../components/Button';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { PIECE_COLORS, PuyoBoard } from '../../components/PuyoBoard';
@@ -974,6 +975,10 @@ export function PuyoScreen({ navigation }: Props) {
               style={styles.overlayBtn}
             />
             {battleDesc ? <Text style={styles.overlayHint}>{battleDesc}</Text> : null}
+            {/* 내 결과는 냈고 상대를 기다리는 중 — 도전장 푸시는 판을 열 때 한 번뿐이었다 */}
+            {battle && battle.status === 'IN_PROGRESS' && battle.me && !battle.partner ? (
+              <GameNudgeButton gameId={battle.id} partnerName={battle.partnerName} />
+            ) : null}
             {battle && battle.status === 'IN_PROGRESS' && battle.myHandicap !== 100 ? (
               <Text style={styles.handicap}>내 핸디캡 · 받는 방해 {battle.myHandicap}%</Text>
             ) : null}

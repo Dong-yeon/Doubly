@@ -91,6 +91,16 @@ public class PuzzleBattleGame extends CoupleGame {
         return runOf(side) != null;
     }
 
+    /** 한쪽만 결과를 냈으면 아직 안 낸 쪽을, 아니면(둘 다 아직) 누구든 */
+    @Override
+    public char awaitedSide() {
+        boolean a = hasSubmitted(OWNER_CREATOR);
+        boolean b = hasSubmitted(OWNER_PARTNER);
+        if (a && !b) return OWNER_PARTNER;
+        if (b && !a) return OWNER_CREATOR;
+        return OWNER_NONE;
+    }
+
     public boolean bothSubmitted() {
         return hasSubmitted(OWNER_CREATOR) && hasSubmitted(OWNER_PARTNER);
     }
