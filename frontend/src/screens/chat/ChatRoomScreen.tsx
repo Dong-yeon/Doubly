@@ -23,6 +23,7 @@ import {
 } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { withJosa } from '../../utils/format';
+import { copyText } from '../../utils/share';
 import { AnimatedSticker } from '../../components/AnimatedSticker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '../../components/Icon';
@@ -1025,6 +1026,18 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     if (msg) { setEditing(null); setReplyTo(msg); }
   };
 
+  const onCopyFromSheet = async () => {
+    const msg = actionSheetFor;
+    closeActionSheet();
+    if (!msg?.content) return;
+    try {
+      await copyText(msg.content);
+      toast.success('복사했어요.');
+    } catch {
+      toast.error('복사하지 못했어요.');
+    }
+  };
+
   const onEditFromSheet = () => {
     const msg = actionSheetFor;
     closeActionSheet();
@@ -1841,14 +1854,13 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   };
 
   return (
-    <SwipeBackView style={styles.flex}>
-    {/*
+    /*
      * left/right 도 인셋에 포함한다(가로 화면·노치가 옆에 오는 기기 대비) — 온보딩의
      * 여백 없는 화면들(RegisterScreen 등)과 같은 패턴. 아래 inputBar 의 가로·세로
      * 여백은 별개로 늘렸다 — 화면 모서리가 물리적으로 둥글어서, safe-area 인셋만
      * 으론 안 잡히는 "동그란 버튼이 모서리 곡률에 살짝 잘려 보이는" 문제라 안전
      * 영역과는 무관하다(inputBar 스타일 주석 참고).
-     */}
+     */
     <SafeAreaView style={chatStyles.safe} edges={['bottom', 'left', 'right']}>
       {/*
        * 사진 배경 — 테마 배경색 <b>위</b>, 대화 내용 <b>아래</b>. 이 순서라 파일이 사라지거나
@@ -1918,6 +1930,12 @@ export function ChatRoomScreen({ navigation, route }: Props) {
          * FlatList 와 FAB 을 같이 감싼다 — FAB 이 이 뷰 기준으로 bottom-right 에 붙어야
          * 메시지 목록 위에만 뜨고, 그 아래 입력바·트레이는 가리지 않는다.
          */}
+        {/*
+         * 스와이프 뒤로가기는 대화 영역에만 건다. 예전엔 화면 전체(입력바 포함)를 감쌌는데,
+         * 제스처 핸들러가 입력창까지 덮으면 길게 눌러 뜨는 OS 의 붙여넣기·선택 메뉴가
+         * 씹혔다(2026-10-01 "채팅창에 붙여넣기가 안 된다").
+         */}
+        <SwipeBackView style={styles.flex}>
         <View
           style={styles.flex}
           /*
@@ -2010,6 +2028,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           </Pressable>
         ) : null}
         </View>
+        </SwipeBackView>
         {/*
          * 보조 도구 트레이 — 예전엔 스티커·터치·무드·카메라 4개 버튼이 입력바에 항상 떠
          * 있어(46px×4) 좁은 기기에서 입력창이 짓눌렸다. "+" 로 펼치는 트레이 하나로
@@ -2400,6 +2419,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         onQuickReact={onQuickReactFromSheet}
         onMoreEmoji={onMoreEmojiFromSheet}
         onReply={onReplyFromSheet}
+        onCopy={actionSheetFor?.messageType === 'TEXT' && actionSheetFor.content ? onCopyFromSheet : undefined}
         onEdit={onEditFromSheet}
         onDelete={onDeleteFromSheet}
         onBookmark={onBookmarkFromSheet}
@@ -2418,7 +2438,6 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         </View>
       ) : null}
     </SafeAreaView>
-    </SwipeBackView>
   );
 }
 
