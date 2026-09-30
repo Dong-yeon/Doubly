@@ -97,13 +97,38 @@ async function markHandled(key: string, value: 'done' | 'warned'): Promise<void>
   }
 }
 
-/** 구매 식별자 — 안드로이드는 purchaseToken, iOS 는 거래 id. 검증에 보내는 값과 같다. */
+/**
+ * 구매 식별자(중복 거르기용) — 안드로이드는 purchaseToken(갱신돼도 같다), iOS 는 <b>원 거래 id</b>.
+ * iOS 는 자동 갱신마다 거래 id 가 새로 생겨, 거래 id 로 기록하면 갱신 때마다 "처음 보는 구매"가 되어
+ * "PRO가 시작됐어요!" 가 다시 떴다. 원 거래 id 는 한 구독 내내 같다. 검증에는 여전히 거래 id 를 보낸다.
+ */
 function keyOf(purchase: Purchase): string | null {
-  return Platform.OS === 'android' ? (purchase.purchaseToken ?? null) : (purchase.id ?? null);
+  if (Platform.OS === 'android') return purchase.purchaseToken ?? null;
+  const original = 'originalTransactionIdentifierIOS' in purchase ? purchase.originalTransactionIdentifierIOS : null;
+  return original ?? purchase.id ?? null;
 }
 
 let purchaseUpdateSub: EventSubscription | null = null;
 let purchaseErrorSub: EventSubscription | null = null;
+
+/**
+ * 이번 실행에서 사용자가 결제창을 연 시각 + 여유 — 이 안에 리스너로 온 구매만 "방금 결제"로 본다.
+ *
+ * <p><b>리스너로 오는 것이 전부 방금 결제는 아니다(2026-09-30).</b> 스토어는 앱을 켤 때마다 이미 끝난
+ * 구독(iOS 자동 갱신 거래·남은 트랜잭션)을 같은 리스너로 다시 보낸다. 예전엔 리스너 경로를 전부
+ * 'purchase' 로 처리해 앱 시작 경로의 중복 거르기('done' 기록·acknowledged)를 건너뛰었고,
+ * 들어올 때마다 "PRO가 시작됐어요!" 가 떴다. 결제창을 열지 않았는데 온 구매는 'launch' 로 다룬다.
+ */
+let purchaseFlowUntil = 0;
+const PURCHASE_FLOW_WINDOW_MS = 10 * 60 * 1000;
+
+function beginPurchaseFlow(): void {
+  purchaseFlowUntil = Date.now() + PURCHASE_FLOW_WINDOW_MS;
+}
+
+function inPurchaseFlow(): boolean {
+  return Date.now() < purchaseFlowUntil;
+}
 
 /**
  * 스토어 연결 초기화 — 앱 부팅 시 한 번(App.tsx). 리스너를 걸어두고, 앱이 죽는 바람에
@@ -169,10 +194,14 @@ export async function endIap(): Promise<void> {
 function attachPurchaseListeners(): void {
   if (purchaseUpdateSub) return; // 중복 등록 방지
   purchaseUpdateSub = purchaseUpdatedListener((purchase) => {
-    void verifyAndFinish(purchase, 'purchase');
+    const trigger: Trigger = inPurchaseFlow() ? 'purchase' : 'launch';
+    void verifyAndFinish(purchase, trigger).then((outcome) => {
+      if (trigger === 'purchase' && outcome === 'reflected') purchaseFlowUntil = 0;
+    });
   });
   purchaseErrorSub = purchaseErrorListener((error) => {
     // 사용자가 결제창을 취소한 건 실패가 아니다 — 조용히 넘어간다. 퍼널에는 남긴다
+    purchaseFlowUntil = 0;
     if (error.code === IapErrorCode.UserCancelled) {
       analyticsApi.log('PURCHASE_CANCELLED').catch(() => {});
       return;
@@ -242,6 +271,7 @@ export async function requestEmojiSetPurchase(userId: number): Promise<void> {
     throw new Error('상품 정보를 불러오지 못했어요. 잠시 후 다시 시도해주세요.');
   }
   analyticsApi.log('PURCHASE_STARTED', EMOJI_SET_PRODUCT_ID).catch(() => {});
+  beginPurchaseFlow();
   await requestPurchase({
     type: 'in-app',
     request: {
@@ -284,6 +314,7 @@ export async function requestProPurchase(userId: number, term: ProTerm = 'monthl
   }
 
   analyticsApi.log('PURCHASE_STARTED', term).catch(() => {});
+  beginPurchaseFlow();
   await requestPurchase({
     type: 'subs',
     request: {
