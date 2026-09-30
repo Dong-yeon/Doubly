@@ -8,6 +8,9 @@ import com.fitto.game.domain.GameDifficulty;
 import com.fitto.game.dto.OmokGameResponse;
 import com.fitto.game.dto.StartSudokuRequest;
 import com.fitto.game.dto.SudokuGameResponse;
+import com.fitto.common.exception.BusinessException;
+import com.fitto.common.exception.ErrorCode;
+import com.fitto.game.service.GameNudgeService;
 import com.fitto.game.service.OmokService;
 import com.fitto.game.service.SudokuService;
 import com.fitto.relation.dto.InviteCodeResponse;
@@ -22,6 +25,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
@@ -46,6 +51,7 @@ class GamePlayNotifyTest {
     @Autowired RelationService relationService;
     @Autowired SudokuService sudokuService;
     @Autowired OmokService omokService;
+    @Autowired GameNudgeService nudgeService;
     @Autowired JdbcTemplate jdbcTemplate;
 
     /** 실제 Expo 발송 대신 호출만 기록한다 — 발송 대상·문구를 그대로 검증할 수 있다. */
@@ -174,5 +180,74 @@ class GamePlayNotifyTest {
 
         verify(notificationService).notify(eq(users[0]), eq(NotificationCategory.PARTNER),
                 contains("네 차례야"), anyString(), anyString());
+    }
+
+    // ── 재촉·리마인더(docs/GAME_NUDGE_2026-09-30.md) — 같은 컨텍스트를 쓰려고 이 클래스에 둔다 ──────
+
+    private LocalDateTime updatedAt(Long gameId) {
+        return jdbcTemplate.queryForObject("select updated_at from couple_games where id = ?", LocalDateTime.class, gameId);
+    }
+
+    @Test
+    void 기다리는_쪽이_찌르면_상대에게_알림이_가고_판은_움직인_것으로_치지_않는다() {
+        long[] users = couple("nua", "nub");
+        OmokGameResponse game = omokService.start(users[0]);   // 상대가 선공 — 판을 연 쪽이 기다린다
+        clearInvocations(notificationService);
+        LocalDateTime before = updatedAt(game.id());
+
+        nudgeService.nudge(users[0], game.id());
+
+        verify(notificationService).notify(eq(users[1]), eq(NotificationCategory.PARTNER),
+                contains("오목"), contains("기다리고 있어요"), anyString());
+        assertEquals(before, updatedAt(game.id()), "찌르기가 updated_at 을 바꾸면 차례 알림·멈춘 판 판정이 틀어진다");
+    }
+
+    @Test
+    void 내_차례에는_찌를_수_없다() {
+        long[] users = couple("nma", "nmb");
+        OmokGameResponse game = omokService.start(users[0]);
+
+        BusinessException e = assertThrows(BusinessException.class, () -> nudgeService.nudge(users[1], game.id()));
+        assertEquals(ErrorCode.GAME_NUDGE_MY_TURN, e.getErrorCode());
+    }
+
+    @Test
+    void 하루에_한_번만_찌를_수_있다() {
+        long[] users = couple("nta", "ntb");
+        SudokuGameResponse game = sudokuService.start(users[0], new StartSudokuRequest(GameDifficulty.EASY));
+        nudgeService.nudge(users[1], game.id());   // 스도쿠는 차례가 없어 누구든 부를 수 있다
+
+        BusinessException e = assertThrows(BusinessException.class, () -> nudgeService.nudge(users[1], game.id()));
+        assertEquals(ErrorCode.GAME_NUDGE_TOO_SOON, e.getErrorCode());
+        // 상대의 몫은 따로다
+        nudgeService.nudge(users[0], game.id());
+    }
+
+    @Test
+    void 멈춘_판은_한_번만_알리고_다시_움직였다_멈추면_또_알린다() {
+        long[] users = couple("nra", "nrb");
+        OmokGameResponse game = omokService.start(users[0]);
+        quietFor(game.id(), 25 * 60);
+        clearInvocations(notificationService);
+
+        nudgeService.remindStalled();
+        // 오목은 상대(선공) 차례 — 그쪽에만 간다
+        verify(notificationService).notify(eq(users[1]), eq(NotificationCategory.PARTNER),
+                contains("오목"), contains("멈춰 있어요"), anyString());
+        verify(notificationService, never()).notify(eq(users[0]), any(), contains("오목"), contains("멈춰 있어요"), anyString());
+
+        clearInvocations(notificationService);
+        nudgeService.remindStalled();
+        verify(notificationService, never()).notify(any(), any(), anyString(), contains("멈춰 있어요"), anyString());
+
+        // 다시 두고 또 멈추면 그 멈춤에 한 번 더 — 실제 순서(알림 → 수 → 24시간 정적)대로 시각을 과거로 돌린다
+        omokService.place(users[1], game.id(), 0);
+        quietFor(game.id(), 25 * 60);
+        jdbcTemplate.update("update couple_games set reminded_at = ? where id = ?",
+                LocalDateTime.now().minusMinutes(26 * 60), game.id());
+        clearInvocations(notificationService);
+        nudgeService.remindStalled();
+        verify(notificationService).notify(eq(users[0]), eq(NotificationCategory.PARTNER),
+                contains("오목"), contains("멈춰 있어요"), anyString());
     }
 }
