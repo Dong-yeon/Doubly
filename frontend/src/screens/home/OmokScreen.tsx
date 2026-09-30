@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../navigation/types';
+import { GameNudgeButton } from '../../components/GameNudgeButton';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { GameReactionBar } from '../../components/GameReactionBar';
@@ -467,6 +468,8 @@ export function OmokScreen(_: Props) {
       ) : game ? (
         <View>
           {renderTurnBar(game)}
+          {/* 상대 차례에 기다리는 쪽만 — 하루 한 번(docs/GAME_NUDGE_2026-09-30.md) */}
+          {!game.myTurn && !game.undoRequest ? <GameNudgeButton gameId={game.id} partnerName={game.partnerName} /> : null}
           {renderBoard(game, game.myTurn && !placing && !game.undoRequest)}
           <Text style={styles.hint}>
             {game.myTurn ? '교차점을 누르면 돌이 놓여요.' : '상대가 두면 바로 보여요. 2분 넘게 조용하면 상대에게 알림이 가요.'}

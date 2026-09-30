@@ -17,6 +17,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../navigation/types';
 import { useContentWidth } from '../../hooks/useContentWidth';
+import { GameNudgeButton } from '../../components/GameNudgeButton';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { GameReactionBar } from '../../components/GameReactionBar';
@@ -645,6 +646,7 @@ export function WallRaceScreen(_: Props) {
       {game ? (
         <View>
           {renderTurnBar(game)}
+          {!game.myTurn && !game.undoRequest ? <GameNudgeButton gameId={game.id} partnerName={game.partnerName} /> : null}
           {renderHandicap(game)}
           {renderBoard(game, game.myTurn && !busy && !game.undoRequest)}
           {game.undoRequest ? null : renderActionBar(game)}

@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../navigation/types';
+import { GameNudgeButton } from '../../components/GameNudgeButton';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { GameReactionBar } from '../../components/GameReactionBar';
@@ -380,6 +381,8 @@ export function CatchMindScreen(_: Props) {
         </View>
       ) : null}
       <GameReactionBar gameType="CATCH_MIND" />
+      {/* 그린 쪽은 늘 맞히기를 기다린다 */}
+      <GameNudgeButton gameId={g.id} partnerName={g.partnerName} />
       <Button title="이 판 접기" variant="ghost" size="sm" onPress={confirmGiveUp} style={styles.giveUp} />
     </View>
   );
