@@ -121,6 +121,9 @@ const EMPTY_MESSAGES: ChatMessage[] = [];
 const EMPTY_SUGGESTIONS: StickerSuggestion[] = [];
 /** 같은 글 연타로 보는 간격 — 이 안에 같은 글을 다시 누르면 한 번만 보낸다 */
 const SEND_DEDUPE_MS = 800;
+/** 말풍선 모서리 — 이어지는 쪽은 덜 둥글게, 그룹 마지막 아래는 꼬리 */
+const BUBBLE_JOIN = 6;
+const BUBBLE_TAIL = 2;
 
 /* 시각을 읽는 곳은 컴포넌트 밖에 둔다 — 컴포넌트 안의 Date.now() 는 react-hooks 린트가 "렌더 중 비순수 호출"로 막는다 */
 function sendStamp(content: string): { content: string; at: number } {
@@ -1747,11 +1750,17 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             <Text style={styles.callCardText}>{callCardLabel(callCard)}</Text>
           </View>
         ) : (
-          // 꼬리(뾰족한 모서리)는 그룹의 마지막 말풍선에만 — 나머지는 완전히 둥글게 이어붙는다
+          /*
+            묶음 모양 — 보낸 사람 쪽 모서리 중 위·아래 말풍선과 붙는 곳은 덜 둥글게(JOIN), 그룹의 마지막 아래
+            모서리는 꼬리(TAIL). 2026-09-30 까지는 중간 말풍선을 완전히 둥글게 둬 한 사람이 이어 말한 게
+            알약 여러 개로만 보였다(비트윈 비교).
+          */
           <View style={[
             styles.bubble,
             mine ? chatStyles.bubbleMine : chatStyles.bubbleTheirs,
-            !isGroupEnd && (mine ? styles.bubbleMineGrouped : styles.bubbleTheirsGrouped),
+            mine
+              ? [!isGroupStart && styles.bubbleMineJoinTop, !isGroupEnd && styles.bubbleMineJoinBottom]
+              : [!isGroupStart && styles.bubbleTheirsJoinTop, !isGroupEnd && styles.bubbleTheirsJoinBottom],
           ]}>
             {/*
               우리 이모지인데 이미지가 없는 행(실패·레거시)은 content 가 숫자 id 라 그대로 보이면
@@ -2503,9 +2512,11 @@ const styles = themedStyles((colors) => ({
   rowSpaced: { marginTop: spacing.sm },
   rowGrouped: { marginTop: spacing.xxs },
   bubble: { flexShrink: 1, paddingVertical: 10, paddingHorizontal: spacing.md, borderRadius: radius.lg },
-  // 그룹 중간 말풍선(마지막이 아님) — 꼬리 없이 완전히 둥글게 이어붙는다
-  bubbleMineGrouped: { borderBottomRightRadius: radius.lg },
-  bubbleTheirsGrouped: { borderBottomLeftRadius: radius.lg },
+  // 묶음 모양 — 붙는 쪽 모서리(BUBBLE_JOIN). 꼬리(BUBBLE_TAIL)는 chatStyles 의 기본값이다
+  bubbleMineJoinTop: { borderTopRightRadius: BUBBLE_JOIN },
+  bubbleMineJoinBottom: { borderBottomRightRadius: BUBBLE_JOIN },
+  bubbleTheirsJoinTop: { borderTopLeftRadius: BUBBLE_JOIN },
+  bubbleTheirsJoinBottom: { borderBottomLeftRadius: BUBBLE_JOIN },
   // subtitle(16)이던 걸 한 단계 내렸다 — 그룹핑·아바타로 밀도가 오른 목록에서
   // 상대적으로 더 커 보였다(비교 화면 피드백). lineHeight 는 body(14)의 기존
   // 1.5배 관행(typography.ts cardBody)과 같은 21을 그대로 쓴다.
@@ -2833,11 +2844,11 @@ function metaCapsule(color: string) {
 const chatStyles = chatThemedStyles((chat) => ({
   safe: { flex: 1, backgroundColor: chat.background },
 
-  bubbleMine: { backgroundColor: chat.bubbleMine, borderBottomRightRadius: 6 },
+  bubbleMine: { backgroundColor: chat.bubbleMine, borderBottomRightRadius: BUBBLE_TAIL },
   // 예전엔 surface(흰색)+테두리로 배경과 구분했는데, background 와 거의 같은 색이라
   // 테두리 선이 메시지마다 하나씩 더 생겨 화면이 촘촘해 보였다(Between 비교 피드백,
   // 2026-08-31). 테마마다 배경과 분리되는 값을 골라 뒀으므로 테두리 없이도 구분된다.
-  bubbleTheirs: { backgroundColor: chat.bubbleTheirs, borderBottomLeftRadius: 6 },
+  bubbleTheirs: { backgroundColor: chat.bubbleTheirs, borderBottomLeftRadius: BUBBLE_TAIL },
 
   // subtitle(16)이던 걸 한 단계 내렸다 — 그룹핑·아바타로 밀도가 오른 목록에서
   // 상대적으로 더 커 보였다(비교 화면 피드백). lineHeight 는 body(14)의 기존
