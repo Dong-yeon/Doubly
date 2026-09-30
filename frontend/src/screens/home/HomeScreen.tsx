@@ -29,6 +29,7 @@ import { QuickActions } from './components/QuickActions';
 import { MemoryPeek } from './components/MemoryPeek';
 import { TripPeek, isTripLive, isTripOngoing, pickHomeTrip } from './components/TripPeek';
 import { LockedCard } from '../../components/LockedCard';
+import { ServiceStatusBanner } from '../../components/ServiceStatusBanner';
 import { MoodPicker } from '../../components/MoodPicker';
 import { QuickMealSheet } from './components/QuickMealSheet';
 import { useAuthStore } from '../../store/authStore';
@@ -714,6 +715,9 @@ export function HomeScreen({ navigation }: Props) {
 
         <SafeAreaView style={styles.safe} edges={['top']}>
           {topBar}
+
+          {/* 장애 공지·점검 — 백엔드가 아니라 dubly.co.kr/status.json 에서 온다(백엔드가 죽어도 뜬다) */}
+          <ServiceStatusBanner />
 
           {/*
             상대가 탈퇴를 요청한 상태(유예기간) — 14일 뒤 함께한 기록까지 지워지므로,
