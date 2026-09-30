@@ -825,18 +825,14 @@ export function DietRecordScreen({ navigation, route }: Props) {
   };
 
   /**
-   * 영양성분표 촬영 → AI 로 읽기 — 바코드로 영양정보를 못 찾았을 때의 경로.
+   * 영양성분표 사진 → AI 로 읽기 — 바코드로 영양정보를 못 찾았을 때 스캔 화면에서 찍어 넘긴다.
    *
    * <p><b>끼니 사진으로 쓰지 않는다.</b> 표 사진이 식단 앨범에 남으면 이상하고, 이미 찍어 둔 음식
    * 사진을 덮어서도 안 된다. 그래서 {@link pickFrom} 을 거치지 않고 분석용으로만 올린다.
-   * 글씨가 작아 평소(1024)보다 크게 줄인다.
    */
-  const analyzeLabelPhoto = async (productName?: string) => {
+  const analyzeLabelPhoto = async (uri: string, productName?: string) => {
+    setAnalyzing(true);
     try {
-      const picked = await takePhotoAsset();
-      if (!picked) return;
-      const uri = await shrinkImage(picked, 1600);
-      setAnalyzing(true);
       const url = await runBusy('영양성분표 올리는 중…', () => uploadImage(uri));
       const result = await dietApi.analyze(url);
       applyPhotoAnalysis(result, { productName });
@@ -847,18 +843,21 @@ export function DietRecordScreen({ navigation, route }: Props) {
     }
   };
 
-  // 바코드 스캔 화면의 "영양성분표 찍기" — 돌아오자마자 카메라를 연다
+  // 바코드 스캔 화면에서 찍은 영양성분표 — 원래 이 인스턴스로 popTo 되어 돌아온다
   useEffect(() => {
-    const productName = route.params?.scanLabel;
-    if (productName === undefined) return;
-    navigation.setParams({ scanLabel: undefined });
-    // 스캔 화면이 닫히는 전환이 끝난 뒤에 카메라를 연다 — 전환 도중에 띄우면 화면이 겹쳐 보인다
-    const task = InteractionManager.runAfterInteractions(() => {
-      void analyzeLabelPhoto(productName || undefined);
+    const label = route.params?.labelPhoto;
+    if (!label) return;
+    navigation.setParams({ labelPhoto: undefined });
+    /*
+     * 스캔 화면이 닫히는 전환이 끝난 뒤에 올린다 — 전환 도중에 전역 잠금이 뜨면 화면이 겹쳐 보인다.
+     * <b>정리 함수로 취소하지 않는다.</b> 바로 위 setParams 가 이 effect 를 다시 돌리고, 그때 정리 함수가
+     * 불려 예약한 분석을 지워 버린다(2026-09-30 웹에서 분석 요청이 아예 안 나가던 원인).
+     */
+    InteractionManager.runAfterInteractions(() => {
+      void analyzeLabelPhoto(label.uri, label.productName);
     });
-    return () => task.cancel();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [route.params?.scanLabel]);
+  }, [route.params?.labelPhoto]);
 
   /**
    * 적어둔 항목(source)을 AI 에 보내 칼로리·매크로를 채운 새 목록으로 교체한다.
