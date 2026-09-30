@@ -124,4 +124,12 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
      * {@code (relation_id, client_message_id)} unique 인덱스가 이 조회를 받쳐 준다(V89).
      */
     Optional<ChatMessage> findByRelationIdAndClientMessageId(Long relationId, String clientMessageId);
+
+    /**
+     * 우리 이모지 이미지를 배경 따낸 것으로 바꿀 때 — 보낼 때 URL 을 복사해 둔 지난 메시지도 같이 바꾼다
+     * (docs/COUPLE_EMOJI_CUTOUT_2026-09-30.md). 안 바꾸면 옛 대화에만 흰 원판이 남는다.
+     */
+    @Modifying
+    @Query("update ChatMessage m set m.imageUrl = :to where m.imageUrl = :from and m.messageType = :type")
+    int replaceImageUrl(@Param("from") String from, @Param("to") String to, @Param("type") MessageType type);
 }

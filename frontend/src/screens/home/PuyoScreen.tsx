@@ -19,7 +19,7 @@
  * ms 도 여기서 잰다.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Animated, Easing, PanResponder, Platform, Pressable, Text, View, useWindowDimensions } from 'react-native';
+import { Animated, Easing, type LayoutChangeEvent, PanResponder, Platform, Pressable, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
@@ -96,6 +96,14 @@ const DRAG_DEAD_ZONE = 10;
 const FLICK_VY = 0.7;
 /** 세로로 판정된 뒤 이만큼 내려가면(속도와 무관) 바로 떨어뜨린다 — 짧게 툭 쓸어도 먹게 */
 const SWIPE_DOWN_DY = 40;
+/**
+ * 옆으로 끌 때 한 열로 치는 거리 — 칸 폭의 이만큼. 칸 폭 그대로(손가락 아래 열을 따라가게)였을 땐 판이 커질수록
+ * 엄지를 멀리 끌어야 해서 둔했다(2026-09-30 실기기). 대신 최소 거리를 둬 작은 판에서 손떨림에 튀지 않게 한다.
+ */
+const DRAG_COL_RATIO = 0.6;
+const DRAG_COL_MIN = 22;
+/** 판 테두리 등 칸 밖 여유 — 잰 자리에서 뺀다 */
+const BOARD_FRAME = 4;
 /** 결과 제출 재시도 — 서버 재배포 중(502)·잠깐 끊김에도 결과가 사라지지 않게 */
 const SUBMIT_RETRY_MS = [1500, 4000, 9000];
 /** 아이템 알림이 떠 있는 시간 */
@@ -254,14 +262,24 @@ export function PuyoScreen({ navigation }: Props) {
     }, [loadBattle]),
   );
 
-  /* 판 크기 — 가로는 여백을 뺀 폭, 세로는 헤더·(상대 패널)·버튼 줄을 뺀 높이 중 작은 쪽에 맞춘다 */
+  /*
+   * 판 크기 — 판이 앉을 자리(boardArea)를 직접 재서 맞춘다. 2026-09-30 까지는 "창 높이 − 300" 으로 어림했는데,
+   * 창 높이에는 헤더·하단 탭 바·안전 영역이 다 들어 있어 판이 탭 바 밑으로 파고들고 버튼 줄이 가려졌다.
+   * 재기 전 첫 프레임만 어림값을 쓴다.
+   */
+  const [boardArea, setBoardArea] = useState<{ w: number; h: number } | null>(null);
   const cell = useMemo(() => {
-    const reserved = mode === 'BATTLE' ? 300 + MINI_CELL * VISIBLE_HEIGHT + spacing.md : 300;
     const byWidth = Math.floor((width - spacing.lg * 2) / WIDTH);
-    const byHeight = Math.floor((height - reserved) / VISIBLE_HEIGHT);
-    // 큰 화면(태블릿·폴드)에서 판이 작게 떠 있지 않게 상한을 넉넉히 — 폰은 폭이 먼저 막는다
+    const byHeight = boardArea
+      ? Math.floor((boardArea.h - BOARD_FRAME) / VISIBLE_HEIGHT)
+      : Math.floor((height - (mode === 'BATTLE' ? 420 + MINI_CELL * VISIBLE_HEIGHT : 420)) / VISIBLE_HEIGHT);
+    // 큰 화면(태블릿·폴드)에서 판이 작게 떠 있지 않게 상한을 넉넉히 — 폰은 대개 높이가 먼저 막는다
     return Math.max(18, Math.min(byWidth, byHeight, 60));
-  }, [width, height, mode]);
+  }, [width, height, mode, boardArea]);
+  const onBoardAreaLayout = useCallback((e: LayoutChangeEvent) => {
+    const { width: w, height: h } = e.nativeEvent.layout;
+    setBoardArea((prev) => (prev && prev.w === w && prev.h === h ? prev : { w, h }));
+  }, []);
   const boardW = cell * WIDTH;
 
   /* ─── 대전: 결과 제출 ─── */
@@ -745,7 +763,14 @@ export function PuyoScreen({ navigation }: Props) {
           cur.axis = g.dy > Math.abs(g.dx) ? 'v' : 'h';
         }
         if (cur.axis === 'h') {
-          const target = Math.round(g.dx / cell);
+          // 옆으로 옮기다 그대로 아래로 튕기면 떨어뜨린다 — 예전엔 가로로 정해지면 손을 떼고 다시 쓸어야 했다
+          if (g.vy > FLICK_VY && g.vy > Math.abs(g.vx) * 1.5 && g.dy > cell) {
+            cur.done = true;
+            onHardDrop();
+            return;
+          }
+          const step = Math.max(DRAG_COL_MIN, cell * DRAG_COL_RATIO);
+          const target = Math.round(g.dx / step);
           while (cur.appliedCols < target) {
             onRight();
             cur.appliedCols++;
@@ -1013,6 +1038,7 @@ export function PuyoScreen({ navigation }: Props) {
           </View>
         </View>
 
+        <View style={styles.boardArea} onLayout={onBoardAreaLayout}>
         <Animated.View style={{ transform: [{ translateX: shake }] }}>
         <PuyoBoard
           board={board}
@@ -1033,6 +1059,7 @@ export function PuyoScreen({ navigation }: Props) {
           {renderOverlay()}
         </PuyoBoard>
         </Animated.View>
+        </View>
 
         {renderItems()}
 
@@ -1258,6 +1285,8 @@ const styles = themedStyles((colors) => ({
   link: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '800' },
   giveUp: { marginTop: spacing.md },
 
+  /* 헤더·버튼 줄을 뺀 나머지 전부 — 여기 크기를 재서 칸 크기를 정한다 */
+  boardArea: { flex: 1, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', minHeight: 0 },
   controls: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.md, gap: spacing.sm },
   control: {
     flex: 1,
