@@ -188,6 +188,11 @@ export interface User {
   autoAnalyzeMealPhoto?: boolean;
   /** 필수 약관 재동의 필요 여부 — 약관 개정 또는 동의 이력 없는 기존 가입자면 true */
   requiresConsent?: boolean;
+  /**
+   * 탈퇴 삭제 예정일 'YYYY-MM-DD'(KST) — 탈퇴 유예기간 중이면 값이 있다.
+   * 상대 쪽 홈이 couple.partner 의 이 값으로 "기록이 삭제돼요" 배너를 띄운다.
+   */
+  withdrawalScheduledDate?: string | null;
 }
 
 // 전체 사진첩 — 사진 있는 피드 포스트 모아보기
@@ -1826,4 +1831,6 @@ export interface AuthTokens {
   accessToken: string;
   refreshToken: string;
   user: User;
+  /** 탈퇴 유예기간 중 로그인해 탈퇴가 취소됐으면 true */
+  withdrawalCanceled?: boolean;
 }

@@ -48,7 +48,9 @@ export const authApi = {
         headers: { Authorization: `Bearer ${refreshToken}` },
       }),
     ),
-  withdraw: () => unwrap(apiClient.delete<ApiResponse<void>>('/auth/withdraw')),
+  /** 탈퇴 요청 — 바로 지우지 않는다. 유예기간 뒤 삭제되며 그 전에 다시 로그인하면 취소된다. */
+  withdraw: () =>
+    unwrap(apiClient.delete<ApiResponse<{ scheduledDate: string }>>('/auth/withdraw')),
 
   /** 필수 약관 재동의 — 개정된 현재 버전 약관에 다시 동의한다(재동의 게이트). */
   agreeToCurrentTerms: () =>

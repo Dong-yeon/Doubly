@@ -14,6 +14,8 @@ import com.fitto.auth.dto.ResetPasswordRequest;
 import com.fitto.auth.dto.TokenResponse;
 import com.fitto.auth.dto.UpdateProfileRequest;
 import com.fitto.auth.dto.UserResponse;
+import com.fitto.auth.dto.WithdrawalResponse;
+import com.fitto.auth.service.AccountWithdrawalService;
 import com.fitto.auth.service.AuthService;
 import com.fitto.auth.service.PasswordResetService;
 import com.fitto.common.exception.BusinessException;
@@ -44,8 +46,11 @@ public class AuthController {
 
     private final AuthService authService;
     private final PasswordResetService passwordResetService;
+    private final AccountWithdrawalService withdrawalService;
 
-    public AuthController(AuthService authService, PasswordResetService passwordResetService) {
+    public AuthController(AuthService authService, PasswordResetService passwordResetService,
+                          AccountWithdrawalService withdrawalService) {
+        this.withdrawalService = withdrawalService;
         this.authService = authService;
         this.passwordResetService = passwordResetService;
     }
@@ -176,9 +181,10 @@ public class AuthController {
     }
 
     @DeleteMapping("/withdraw")
-    public ApiResponse<Void> withdraw(@AuthenticationPrincipal AuthUser user) {
-        authService.withdraw(user.id());
-        return ApiResponse.success(null, "탈퇴가 완료되었습니다.");
+    public ApiResponse<WithdrawalResponse> withdraw(@AuthenticationPrincipal AuthUser user) {
+        // 바로 지우지 않는다 — 유예기간 뒤 삭제되고, 그 전에 다시 로그인하면 취소된다
+        return ApiResponse.success(new WithdrawalResponse(withdrawalService.request(user.id())),
+                "탈퇴가 접수되었습니다.");
     }
 
     // ---- helpers ----

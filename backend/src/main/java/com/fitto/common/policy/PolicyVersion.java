@@ -23,8 +23,10 @@ public final class PolicyVersion {
      * 개인정보처리방침 버전 — 1.3: 구매 기록(스토어·상품 id·거래 식별자·구독 기간) 수집 항목과
      * 전자상거래법 보존 기간(5년·5년·3년), 수탁사 Apple·Google 추가.
      * 종전의 "유상 거래 기능을 제공하지 않으므로 보존 의무가 없다"는 문장은 사실이 아니게 됐다.
+     * 1.4 (2026-09-30): 탈퇴 유예기간 14일 — "탈퇴 시 지체 없이 파기"가 "유예기간 뒤 파기"로 바뀌고,
+     * 상대방에게 탈퇴 요청 사실과 삭제 예정일이 알려진다는 점을 고지.
      */
-    public static final String PRIVACY = "1.3";
+    public static final String PRIVACY = "1.4";
 
     private PolicyVersion() {
     }
