@@ -19,7 +19,7 @@
  * ms 도 여기서 잰다.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { PanResponder, Platform, Pressable, Text, View, useWindowDimensions } from 'react-native';
+import { Animated, Easing, PanResponder, Platform, Pressable, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
@@ -84,10 +84,19 @@ const GRAVITY_MS = 800;
 /** 연출 — 터지는 프레임 · 떨어지는 프레임 */
 const CLEAR_FLASH_MS = 260;
 const GRAVITY_FRAME_MS = 160;
-/** 좌우 끌기 — 이만큼 움직이면 "끌었다"로 보고 탭(회전)으로 치지 않는다 */
-const DRAG_DEAD_ZONE = 8;
-/** 아래로 쓸기 — 바로 떨어뜨리기 */
-const SWIPE_DOWN_DY = 56;
+/** 끌기 — 이만큼 움직이면 "끌었다"로 보고 탭(회전)으로 치지 않는다. 방향도 이때 정한다 */
+const DRAG_DEAD_ZONE = 10;
+/**
+ * 아래로 튕기기 — 이 속도(px/ms)를 넘으면 바로 떨어뜨린다.
+ * <p>예전엔 "가로로 8px 이상 움직이지 않은 채 아래로 56px" 여야 했다 — 엄지로 쓸면 손가락이 조금만 옆으로
+ * 흘러도 가로 끌기로 판정돼 떨어지지 않았다("한번에 쭉쭉 내리는 게 잘 안 먹힌다", 2026-09-30).
+ * 이제 처음 움직인 방향이 세로면 세로 조작이고, 빠르게 튕기면 떨어지고 천천히 끌면 손가락을 따라 내려온다.
+ */
+const FLICK_VY = 0.7;
+/** 세로로 판정된 뒤 이만큼 내려가면(속도와 무관) 바로 떨어뜨린다 — 짧게 툭 쓸어도 먹게 */
+const SWIPE_DOWN_DY = 40;
+/** 결과 제출 재시도 — 서버 재배포 중(502)·잠깐 끊김에도 결과가 사라지지 않게 */
+const SUBMIT_RETRY_MS = [1500, 4000, 9000];
 /** 아이템 알림이 떠 있는 시간 */
 const ITEM_TOAST_MS = 1400;
 /** 상대 미니 판의 칸 크기 */
@@ -192,6 +201,12 @@ export function PuyoScreen({ navigation }: Props) {
   const [shownBoard, setShownBoard] = useState<Board | null>(null);
   const [flashing, setFlashing] = useState<Set<number>>(() => new Set());
   const [chainLabel, setChainLabel] = useState<string | null>(null);
+  /** 이번 연쇄 단계에서 얻은 점수 — 연쇄 배지 아래에 잠깐 */
+  const [chainScore, setChainScore] = useState<number | null>(null);
+  /** 터짐 연출을 다시 트는 값 — 연쇄 단계마다 올린다 */
+  const [burstKey, setBurstKey] = useState(0);
+  /** 큰 연쇄의 판 흔들림 */
+  const [shake] = useState(() => new Animated.Value(0));
   /** 방금 얻은 아이템 · 상대가 쓴 아이템 — 잠깐 떴다 사라지는 알림 */
   const [itemToast, setItemToast] = useState<string | null>(null);
   /** 서버가 아는 대전 판 — 허브 카드와 같은 값. 시작 전 안내와 끝난 뒤 결과가 여기서 나온다 */
@@ -243,7 +258,8 @@ export function PuyoScreen({ navigation }: Props) {
     const reserved = mode === 'BATTLE' ? 300 + MINI_CELL * VISIBLE_HEIGHT + spacing.md : 300;
     const byWidth = Math.floor((width - spacing.lg * 2) / WIDTH);
     const byHeight = Math.floor((height - reserved) / VISIBLE_HEIGHT);
-    return Math.max(18, Math.min(byWidth, byHeight, 44));
+    // 큰 화면(태블릿·폴드)에서 판이 작게 떠 있지 않게 상한을 넉넉히 — 폰은 폭이 먼저 막는다
+    return Math.max(18, Math.min(byWidth, byHeight, 60));
   }, [width, height, mode]);
   const boardW = cell * WIDTH;
 
@@ -254,7 +270,7 @@ export function PuyoScreen({ navigation }: Props) {
       if (!s) return;
       setBattleBusy(true);
       try {
-        const updated = await puzzleApi.finish(s.gameId, run);
+        const updated = await finishWithRetry(s.gameId, run);
         setBattle(updated);
         setPendingRun(null);
         if (updated.status === 'COMPLETED') {
@@ -416,6 +432,7 @@ export function PuyoScreen({ navigation }: Props) {
         setShownBoard(null);
         setFlashing(new Set());
         setChainLabel(null);
+        setChainScore(null);
         if (outcome.gainedItem !== ITEM_NONE) {
           const def = itemOf(outcome.gainedItem);
           if (def) flashItemToast(`${def.emoji} ${def.label} 획득!`);
@@ -438,9 +455,13 @@ export function PuyoScreen({ navigation }: Props) {
       for (const step of outcome.steps) {
         schedule(() => {
           setFlashing(new Set(step.cleared));
+          setBurstKey((k) => k + 1);
           setChainLabel(step.chain >= 2 ? `${step.chain}연쇄!` : null);
-          if (step.chain >= 3) haptics.medium();
-          else haptics.light();
+          setChainScore(step.score > 0 ? step.score : null);
+          if (step.chain >= 3) {
+            haptics.medium();
+            shakeBoard(shake, step.chain);
+          } else haptics.light();
         }, t);
         t += CLEAR_FLASH_MS;
         schedule(() => {
@@ -458,7 +479,7 @@ export function PuyoScreen({ navigation }: Props) {
       }
       schedule(after, t + 80);
     },
-    [finish, setPhaseBoth, flashItemToast],
+    [finish, setPhaseBoth, flashItemToast, shake],
   );
 
   const resetView = useCallback(() => {
@@ -701,38 +722,63 @@ export function PuyoScreen({ navigation }: Props) {
    */
   const pan = useMemo(() => {
     // 한 번의 터치 동안만 사는 값 — 리스폰더와 같이 만들어져 ref 가 필요 없다
-    const cur = { appliedCols: 0, dragged: false, dropped: false };
+    const cur = { appliedCols: 0, appliedRows: 0, axis: null as 'h' | 'v' | null, done: false, moves: 0 };
+    /** 이 터치 동안 조각이 착지했나 — 착지 뒤에 끌기를 이어 가면 다음 조각이 딸려 내려온다 */
+    const landed = () => (live?.moves ?? 0) !== cur.moves;
     return PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: () => {
         cur.appliedCols = 0;
-        cur.dragged = false;
-        cur.dropped = false;
+        cur.appliedRows = 0;
+        cur.axis = null;
+        cur.done = false;
+        cur.moves = live?.moves ?? 0;
       },
       onPanResponderMove: (_e, g) => {
-        if (cur.dropped) return;
-        if (Math.abs(g.dx) > DRAG_DEAD_ZONE) cur.dragged = true;
-        const target = Math.round(g.dx / cell);
-        while (cur.appliedCols < target) {
-          onRight();
-          cur.appliedCols++;
+        if (cur.done) return;
+        if (cur.axis === null) {
+          if (Math.abs(g.dx) < DRAG_DEAD_ZONE && Math.abs(g.dy) < DRAG_DEAD_ZONE) return;
+          // 처음 움직인 방향으로 정한다 — 아래로 쓸다 옆으로 조금 흘러도 세로로 남는다
+          cur.axis = g.dy > Math.abs(g.dx) ? 'v' : 'h';
         }
-        while (cur.appliedCols > target) {
-          onLeft();
-          cur.appliedCols--;
+        if (cur.axis === 'h') {
+          const target = Math.round(g.dx / cell);
+          while (cur.appliedCols < target) {
+            onRight();
+            cur.appliedCols++;
+          }
+          while (cur.appliedCols > target) {
+            onLeft();
+            cur.appliedCols--;
+          }
+          return;
         }
-        if (!cur.dragged && g.dy > SWIPE_DOWN_DY) {
-          cur.dropped = true;
+        // 세로: 빠르게 튕기거나 충분히 쓸었으면 바로 떨어뜨리고, 아니면 손가락을 따라 한 칸씩
+        if (g.vy > FLICK_VY || g.dy > SWIPE_DOWN_DY + cell) {
+          cur.done = true;
           onHardDrop();
+          return;
         }
+        const rows = Math.floor(g.dy / cell);
+        while (cur.appliedRows < rows && !landed()) {
+          onSoftDrop();
+          cur.appliedRows++;
+        }
+        if (landed()) cur.done = true;
       },
-      onPanResponderRelease: () => {
-        if (!cur.dragged && !cur.dropped) onRotate();
+      onPanResponderRelease: (_e, g) => {
+        if (cur.done) return;
+        if (cur.axis === null) {
+          onRotate();
+          return;
+        }
+        // 짧게 툭 쓸고 뗀 경우 — 움직일 때 속도를 못 넘었어도 떼는 순간 아래로 향했으면 떨어뜨린다
+        if (cur.axis === 'v' && !landed() && (g.vy > FLICK_VY * 0.6 || g.dy > SWIPE_DOWN_DY)) onHardDrop();
       },
     });
-  }, [cell, onLeft, onRight, onRotate, onHardDrop]);
+  }, [cell, onLeft, onRight, onRotate, onSoftDrop, onHardDrop]);
 
   /* ─── 그리기 ─── */
   const board = shownBoard ?? state?.board ?? null;
@@ -962,20 +1008,18 @@ export function PuyoScreen({ navigation }: Props) {
           </View>
         </View>
 
+        <Animated.View style={{ transform: [{ translateX: shake }] }}>
         <PuyoBoard
           board={board}
           cell={cell}
           piece={piece}
           ghost={ghost}
           flashing={flashing}
+          burstKey={burstKey}
           containerProps={phase === 'PLAYING' ? pan.panHandlers : undefined}
-          accessibilityLabel="퍼즐 판. 좌우로 끌면 이동, 탭하면 회전, 아래로 쓸면 바로 떨어져요"
+          accessibilityLabel="퍼즐 판. 좌우로 끌면 이동, 탭하면 회전, 아래로 쓸면 떨어져요"
         >
-          {chainLabel ? (
-            <View style={styles.chainBadge} pointerEvents="none">
-              <Text style={styles.chainText}>{chainLabel}</Text>
-            </View>
-          ) : null}
+          {chainLabel || chainScore ? <ChainBadge key={burstKey} label={chainLabel} score={chainScore} /> : null}
           {itemToast ? (
             <View style={styles.itemToast} pointerEvents="none">
               <Text style={styles.itemToastText}>{itemToast}</Text>
@@ -983,6 +1027,7 @@ export function PuyoScreen({ navigation }: Props) {
           ) : null}
           {renderOverlay()}
         </PuyoBoard>
+        </Animated.View>
 
         {renderItems()}
 
@@ -1010,6 +1055,76 @@ export function PuyoScreen({ navigation }: Props) {
 }
 
 /** 방금 착지한 조각은 위의 모듈 변수 lastLocked 에 있다 */
+
+/**
+ * 결과 제출 — 잠깐 끊겼거나 서버가 재배포 중이면(502·503·네트워크) 몇 번 더 보낸다.
+ * <p>2026-09-30 실제로 났다: 백엔드 재배포 30초 사이에 제출이 502 를 받아 "결과를 보내지 못했어요".
+ * 결과는 판이 끝난 순간의 값이라 다시 만들 수 없으므로, 사용자가 누르기 전에 조용히 재시도한다.
+ * 4xx(이미 냈음 등)는 재시도해도 같으니 바로 올린다.
+ */
+async function finishWithRetry(gameId: number, run: PuzzleBattleRun): Promise<PuzzleBattleGame> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= SUBMIT_RETRY_MS.length; attempt++) {
+    try {
+      return await puzzleApi.finish(gameId, run);
+    } catch (e) {
+      lastError = e;
+      const status = (e as { status?: number } | null)?.status ?? 0;
+      const retryable = status === 0 || status === 502 || status === 503 || status === 504;
+      if (!retryable || attempt === SUBMIT_RETRY_MS.length) break;
+      await new Promise((r) => setTimeout(r, SUBMIT_RETRY_MS[attempt]));
+    }
+  }
+  throw lastError;
+}
+
+/** 큰 연쇄의 판 흔들림 — 연쇄가 클수록 조금 더 세게(상한 있음) */
+function shakeBoard(v: Animated.Value, chain: number): void {
+  const a = Math.min(10, 3 + chain * 1.5);
+  v.setValue(0);
+  Animated.sequence([
+    Animated.timing(v, { toValue: a, duration: 40, useNativeDriver: true }),
+    Animated.timing(v, { toValue: -a, duration: 60, useNativeDriver: true }),
+    Animated.timing(v, { toValue: a * 0.5, duration: 50, useNativeDriver: true }),
+    Animated.timing(v, { toValue: 0, duration: 50, useNativeDriver: true }),
+  ]).start();
+}
+
+/** 연쇄 배지 — 튀어나오며 커지고, 얻은 점수가 위로 떠오른다. key 로 단계마다 새로 재생된다 */
+function ChainBadge({ label, score }: { label: string | null; score: number | null }) {
+  const [pop] = useState(() => new Animated.Value(0));
+  const [rise] = useState(() => new Animated.Value(0));
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(pop, { toValue: 1, friction: 4, tension: 180, useNativeDriver: true }),
+      Animated.timing(rise, { toValue: 1, duration: 520, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+    ]).start();
+  }, [pop, rise]);
+  return (
+    <View style={styles.chainWrap} pointerEvents="none">
+      {label ? (
+        <Animated.View
+          style={[styles.chainBadge, { transform: [{ scale: pop.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }) }] }]}
+        >
+          <Text style={styles.chainText}>{label}</Text>
+        </Animated.View>
+      ) : null}
+      {score ? (
+        <Animated.Text
+          style={[
+            styles.chainScore,
+            {
+              opacity: rise.interpolate({ inputRange: [0, 0.7, 1], outputRange: [1, 1, 0] }),
+              transform: [{ translateY: rise.interpolate({ inputRange: [0, 1], outputRange: [0, -24] }) }],
+            },
+          ]}
+        >
+          +{score.toLocaleString()}
+        </Animated.Text>
+      ) : null}
+    </View>
+  );
+}
 
 function ControlButton({
   icon,
@@ -1072,10 +1187,16 @@ const styles = themedStyles((colors) => ({
   myPending: { fontSize: fontSize.caption, color: colors.danger, fontWeight: '800', marginTop: spacing.xs },
   handicap: { fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '800', marginTop: spacing.xs },
 
-  chainBadge: {
+  chainWrap: {
     position: 'absolute',
-    top: '38%',
-    alignSelf: 'center',
+    top: '34%',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  chainScore: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
+  chainBadge: {
     backgroundColor: colors.primary,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
