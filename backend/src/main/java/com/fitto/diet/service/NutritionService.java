@@ -106,14 +106,14 @@ public class NutritionService {
      */
     public NutritionGoalSuggestionResponse suggestGoal(Long userId, NutritionGoalSuggestionRequest req) {
         User user = userRepository.findById(userId).orElse(null);
-        BigDecimal weightKg = bodyMetricRepository.findTopByUserIdOrderByMeasuredDateDescIdDesc(userId)
-                .map(BodyMetric::getWeightKg)
+        BodyMetric metric = bodyMetricRepository.findTopByUserIdAndWeightKgIsNotNullOrderByMeasuredDateDescIdDesc(userId)
                 .orElse(null);
-        Integer bmr = BmrCalculator.calc(user, weightKg);
+        Integer bmr = BmrCalculator.calc(user, metric);
         if (bmr == null) {
             return NutritionGoalSuggestionResponse.unavailable(
                     "MY 탭 → 신체 정보에서 키·생년월일·성별과 체중을 등록하면 목표를 자동으로 계산해드려요.");
         }
+        BigDecimal weightKg = metric.getWeightKg();
         int tdee = (int) Math.round(bmr * req.activityLevel().multiplier());
 
         double weeklyRateKg = req.goalType() == DietGoalType.MAINTAIN ? 0
@@ -135,7 +135,8 @@ public class NutritionService {
         double carbsG = Math.max(0, (targetCalories - proteinG * 4 - fatG * 9) / 4);
 
         return new NutritionGoalSuggestionResponse(bmr, tdee, targetCalories,
-                (int) Math.round(carbsG), (int) Math.round(proteinG), (int) Math.round(fatG), null);
+                (int) Math.round(carbsG), (int) Math.round(proteinG), (int) Math.round(fatG),
+                BmrCalculator.usesBodyFat(metric), null);
     }
 
     /** 커플이 여행 모드를 켜둔 여행 중 오늘이 그 기간 안인 것 — 없으면(미연결 포함) empty. */

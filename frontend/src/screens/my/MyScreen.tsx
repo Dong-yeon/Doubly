@@ -22,6 +22,8 @@ import { relationApi } from '../../api/relation';
 import { selectEndedCouples, useRelationStore } from '../../store/relationStore';
 import { streakApi } from '../../api/streak';
 import { summaryApi } from '../../api/summary';
+import { bodyApi } from '../../api/body';
+import { sanitizeDecimalInput } from '../../utils/numericInput';
 import { publishEnsuringConnection } from '../../api/chatSocket';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
@@ -30,7 +32,7 @@ import { haptics } from '../../utils/haptics';
 import { pickImageAsset, uploadImage, type PickedImage } from '../../utils/imageUpload';
 import { AvatarCropSheet } from '../../components/AvatarCropSheet';
 import { colors, fontSize, spacing } from '../../constants/theme';
-import type { Gender, UserLevel, WeeklyRecap } from '../../types';
+import type { BodyMetric, Gender, UserLevel, WeeklyRecap } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 
 // 식단 뱃지 — 운동(7/30/100)과 같은 단계, 식단 스트릭 기준
@@ -63,6 +65,14 @@ export function MyScreen({ navigation }: Props) {
   const [heightCm, setHeightCm] = useState('');
   const [birthDate, setBirthDate] = useState('');
   const [gender, setGender] = useState<Gender | undefined>(undefined);
+  /*
+   * 체중·체지방률 — 프로필이 아니라 몸 변화 기록(body_metrics)에 한 줄로 남는다. 예전엔 운동 홈의
+   * "몸 변화"에서만 적을 수 있었는데, 운동 홈을 가린 뒤(2026-09-27) 들어갈 길이 없어져 목표 칼로리
+   * 자동 계산이 체중 없음으로 늘 꺼져 있었다. 키와 같은 자리에서 받는다.
+   */
+  const [latestBody, setLatestBody] = useState<BodyMetric | null>(null);
+  const [weightKg, setWeightKg] = useState('');
+  const [bodyFatPct, setBodyFatPct] = useState('');
   const [savingBody, setSavingBody] = useState(false);
   const [maxStreak, setMaxStreak] = useState(0);
   const [maxMealStreak, setMaxMealStreak] = useState(0);
@@ -79,6 +89,10 @@ export function MyScreen({ navigation }: Props) {
       streakApi.mealMe().then((s) => setMaxMealStreak(s.maxCount)).catch(() => setMaxMealStreak(0));
       summaryApi.weeklyRecap().then(setRecap).catch(() => setRecap(null));
       summaryApi.level().then(setLevel).catch(() => setLevel(null));
+      bodyApi
+        .list()
+        .then((list) => setLatestBody([...list].reverse().find((m) => m.weightKg != null) ?? null))
+        .catch(() => setLatestBody(null));
       fetchRelations().catch(() => {});
       // 커플 연결이 없으면 404 가 나므로 실패는 "없음"으로 취급한다
       relationApi.hasRestorableRecords().then(setCanRestore).catch(() => setCanRestore(false));
@@ -131,6 +145,8 @@ export function MyScreen({ navigation }: Props) {
     setHeightCm(user?.heightCm ? String(user.heightCm) : '');
     setBirthDate(user?.birthDate ?? '');
     setGender(user?.gender ?? undefined);
+    setWeightKg(latestBody?.weightKg != null ? String(latestBody.weightKg) : '');
+    setBodyFatPct(latestBody?.bodyFatPct != null ? String(latestBody.bodyFatPct) : '');
     setBodyEditing(true);
   };
 
@@ -142,6 +158,12 @@ export function MyScreen({ navigation }: Props) {
         birthDate: birthDate || undefined,
         gender,
       });
+      // 체중·체지방률은 바뀌었을 때만 새 측정으로 남긴다 — 키만 고쳐도 같은 체중이 줄줄이 쌓이지 않게
+      const w = weightKg ? Number(weightKg) : undefined;
+      const f = bodyFatPct ? Number(bodyFatPct) : undefined;
+      if (w !== undefined && (w !== latestBody?.weightKg || f !== (latestBody?.bodyFatPct ?? undefined))) {
+        setLatestBody(await bodyApi.save({ weightKg: w, bodyFatPct: f }));
+      }
       haptics.success();
       toast.success('신체 정보를 저장했어요 ');
       setBodyEditing(false);
@@ -365,11 +387,12 @@ export function MyScreen({ navigation }: Props) {
     );
   };
 
-  const bodySummary = user?.heightCm || user?.birthDate || user?.gender
+  const bodySummary = user?.heightCm || user?.birthDate || user?.gender || latestBody?.weightKg != null
     ? [
         user?.heightCm ? `${user.heightCm}cm` : null,
         user?.birthDate ?? null,
         user?.gender ? (user.gender === 'MALE' ? '남성' : '여성') : null,
+        latestBody?.weightKg != null ? `${latestBody.weightKg}kg` : null,
       ]
         .filter(Boolean)
         .join(' · ')
@@ -512,7 +535,7 @@ export function MyScreen({ navigation }: Props) {
       {/* 신체 정보 시트 */}
       <Sheet visible={bodyEditing} onClose={() => setBodyEditing(false)} position="bottom">
         <Text style={styles.sheetTitle}>신체 정보</Text>
-        <Text style={styles.sheetDesc}>키·생년월일·성별로 럽바디 탭의 칼로리 잔여량을 계산해요.</Text>
+        <Text style={styles.sheetDesc}>럽바디 탭의 목표 칼로리와 남은 칼로리를 계산할 때 써요.</Text>
         <TextField
           label="키(cm)"
           value={heightCm}
@@ -520,6 +543,27 @@ export function MyScreen({ navigation }: Props) {
           keyboardType="number-pad"
           placeholder="170"
         />
+        <View style={styles.bodyRow}>
+          <View style={styles.flex}>
+            <TextField
+              label="체중(kg)"
+              value={weightKg}
+              onChangeText={(t) => setWeightKg(sanitizeDecimalInput(t))}
+              keyboardType="decimal-pad"
+              placeholder="60"
+            />
+          </View>
+          <View style={styles.flex}>
+            {/* 인바디 결과지의 값 — 있으면 근육량까지 반영된 제지방량 기준으로 계산한다(BmrCalculator) */}
+            <TextField
+              label="체지방률(%) · 선택"
+              value={bodyFatPct}
+              onChangeText={(t) => setBodyFatPct(sanitizeDecimalInput(t))}
+              keyboardType="decimal-pad"
+              placeholder="인바디 값"
+            />
+          </View>
+        </View>
         <DateField label="생년월일" value={birthDate} onChange={setBirthDate} max={new Date().toISOString().slice(0, 10)} />
         <Text style={styles.fieldLabel}>성별</Text>
         <View style={styles.genderRow}>
@@ -564,5 +608,6 @@ const styles = themedStyles((colors) => ({
   sheetAvatarRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
   sheetActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
   fieldLabel: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700', marginBottom: spacing.sm },
+  bodyRow: { flexDirection: 'row', gap: spacing.sm },
   genderRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
 }));

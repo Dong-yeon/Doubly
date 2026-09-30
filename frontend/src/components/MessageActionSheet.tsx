@@ -28,6 +28,8 @@ interface Props {
   onQuickReact: (emoji: string) => void;
   onMoreEmoji: () => void;
   onReply: () => void;
+  /** 텍스트 메시지만 — 없으면 행을 숨긴다 */
+  onCopy?: () => void;
   onEdit: () => void;
   onDelete: () => void;
   onBookmark: () => void;
@@ -44,6 +46,7 @@ export function MessageActionSheet({
   onQuickReact,
   onMoreEmoji,
   onReply,
+  onCopy,
   onEdit,
   onDelete,
   onBookmark,
@@ -88,6 +91,11 @@ export function MessageActionSheet({
           <View style={styles.divider} />
 
           <ActionRow icon="reply-outline" label="답장하기" onPress={onReply} />
+          {/*
+            말풍선은 길게 누르면 이 시트가 뜨므로 OS 의 글자 선택·복사 메뉴가 끼어들 자리가
+            없다 — 복사는 여기서 해 준다(카톡과 같은 자리).
+          */}
+          {onCopy ? <ActionRow icon="clipboard-text-outline" label="복사하기" onPress={onCopy} /> : null}
           {/* 삭제된 메시지엔 내용이 없어 저장할 게 없다 */}
           {!message?.deleted ? (
             <ActionRow

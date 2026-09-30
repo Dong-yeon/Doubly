@@ -207,7 +207,11 @@ export type WorkoutStackParamList = {
 
 // 식단 화면들 — 운동과 함께 럽바디(Health) 탭에 올라간다(위 WorkoutStackParamList 주석)
 export type DietStackParamList = {
-  DietMain: undefined;
+  /**
+   * checkin — 홈 운동 칩에서 왔다. 체크인 카드가 시간 칩을 펼친 채로 뜬다. 값은 누를 때마다
+   * 바뀌는 수(Date.now())라, 이미 떠 있는 화면에 다시 와도 한 번 더 펼쳐진다.
+   */
+  DietMain: { checkin?: number } | undefined;
   /*
    * 럽슐랭 탭과 공유하는 장소 상세 — 식단 기록에 붙은 장소를 탭했을 때 이 스택에 그대로
    * 쌓는다(크로스탭으로 보내면 뒤로가기가 식단 목록으로 안 돌아온다 — PlaceScreensParamList
