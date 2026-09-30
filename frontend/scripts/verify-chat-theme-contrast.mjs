@@ -23,6 +23,11 @@ const RULES = [
   { name: '상대 말풍선 글자', pick: (p) => [p.bubbleTheirs, p.bubbleTheirsText], min: 4.5 },
   { name: '배경 위 시간·날짜', pick: (p) => [p.background, p.meta], min: 4.5 },
   { name: '상대 말풍선 vs 배경', pick: (p) => [p.background, p.bubbleTheirs], min: 1.1 },
+  /*
+   * 2026-09-30 에 라이트 5종의 내 말풍선을 진한 색+흰 글자에서 파스텔+진한 글자로 바꿨다(비트윈 비교).
+   * 파스텔은 같은 계열 배경에 묻히기 쉬워 이 줄을 더했다 — 흰 글자 시절엔 검사할 필요가 없었다.
+   */
+  { name: '내 말풍선 vs 배경', pick: (p) => [p.background, p.bubbleMine], min: 1.2 },
   { name: '구분선 vs 배경', pick: (p) => [p.background, p.dividerLine], min: 1.18 },
   /*
    * 검색에서 골라 온 메시지를 짚어 주는 행 배경. 2026-09-18 에 추가했다 — 그전까지
