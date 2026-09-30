@@ -1195,6 +1195,8 @@ export interface NutritionGoalSuggestion {
   targetCarbs?: number | null;
   targetProtein?: number | null;
   targetFat?: number | null;
+  /** 체지방률로 제지방량 기준 계산을 했는가(Katch-McArdle) — 아니면 키·나이·성별 기준 */
+  usedBodyFat?: boolean;
   /** 계산 불가 시(프로필/체중 미등록) 안내 문구 */
   message?: string | null;
 }

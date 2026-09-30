@@ -162,6 +162,8 @@ export function DietScreen({ navigation, route }: Props) {
   const [wizRate, setWizRate] = useState(0.5);
   const [wizPreset, setWizPreset] = useState<MacroPreset>('BALANCED');
   const [calculating, setCalculating] = useState(false);
+  /** 목표 모달이 뜨고 나서 마법사를 이어 연다 — 모달 둘을 한 번에 띄우면 iOS 가 뒤의 것을 버린다 */
+  const wizardAfterNutRef = useRef(false);
 
   // 물 섭취 트래커
   const [water, setWater] = useState<WaterSummary | null>(null);
@@ -226,6 +228,11 @@ export function DietScreen({ navigation, route }: Props) {
     setNutModal(true);
   };
 
+  const openGoalWizard = () => {
+    wizardAfterNutRef.current = true;
+    openNutModal();
+  };
+
   // 백드롭·Android 백 공용 — 입력이 달라졌으면 확인 후 닫는다
   const closeNutModal = () =>
     confirmDiscard([tCal, tCarbs, tProtein, tFat].join('|') !== nutInitialRef.current, () =>
@@ -271,7 +278,7 @@ export function DietScreen({ navigation, route }: Props) {
       setTProtein(String(res.targetProtein));
       setTFat(String(res.targetFat));
       haptics.success();
-      toast.success('계산했어요. 확인 후 저장해주세요');
+      toast.success(res.usedBodyFat ? '체지방률까지 반영해 계산했어요. 확인 후 저장해주세요' : '계산했어요. 확인 후 저장해주세요');
       setWizardModal(false);
     } catch (e) {
       toast.error(getErrorMessage(e, '계산에 실패했어요.'));
@@ -500,6 +507,16 @@ export function DietScreen({ navigation, route }: Props) {
                     <NutritionBar label="지방" consumed={nutrition.consumedFat} target={nutrition.targetFat} unit="g" />
                   </View>
                 </View>
+                {/*
+                  목표가 비어 있고 계산할 재료(신체 정보)는 있을 때 — 먼저 권한다. 예전엔 "목표 설정 ›" →
+                  "자동 계산"을 스스로 찾아야 해서, 신체 정보를 다 넣고도 목표가 빈 채로 남았다.
+                */}
+                {!nutrition.targetCalories && !nutrition.travelMode && nutrition.bmr != null ? (
+                  <TouchableOpacity onPress={openGoalWizard} style={styles.goalPrompt} accessibilityRole="button">
+                    <Text style={styles.goalPromptText}>신체 정보로 하루 목표 칼로리를 계산해 드릴게요</Text>
+                    <MaterialCommunityIcons name="chevron-right" size={16} color={colors.primary} />
+                  </TouchableOpacity>
+                ) : null}
                 {nutrition.targetCalories ? (
                   <Text style={styles.nutRemain}>
                     남은 칼로리 {formatKcal(Math.max(0, nutrition.targetCalories - nutrition.consumedCalories))}
@@ -527,12 +544,12 @@ export function DietScreen({ navigation, route }: Props) {
                       <Text style={styles.energyResult}>
                         {(nutrition.energyBalance ?? 0) >= 0
                           ? `오늘 ${nutrition.energyBalance}kcal 더 섭취 가능`
-                          : `목표보다 ${Math.abs(nutrition.energyBalance ?? 0)}kcal 더 먹었어요`}
+                          : `오늘 쓴 칼로리보다 ${Math.abs(nutrition.energyBalance ?? 0)}kcal 더 먹었어요`}
                       </Text>
                     </>
                   ) : (
                     <Text style={styles.energyHint}>
-                      MY › 신체 정보를 등록하면 오늘 운동한 만큼 섭취 가능 칼로리를 계산해요.
+                      MY › 신체 정보에 키·생년월일·성별·체중을 넣으면 목표 칼로리와 오늘 섭취 가능 칼로리를 계산해요.
                     </Text>
                   )}
                 </View>
@@ -769,7 +786,17 @@ export function DietScreen({ navigation, route }: Props) {
 
       {/* 영양 목표 설정 모달 — 입력 4개 + 저장 버튼이 키보드에 가리지 않게 감싼다
           (QA_CHECKLIST.md 패턴 4, CoupleCalendarScreen.tsx 모달과 같은 래핑) */}
-      <Modal visible={nutModal} transparent animationType="fade" onRequestClose={closeNutModal}>
+      <Modal
+        visible={nutModal}
+        transparent
+        animationType="fade"
+        onRequestClose={closeNutModal}
+        onShow={() => {
+          if (!wizardAfterNutRef.current) return;
+          wizardAfterNutRef.current = false;
+          setWizardModal(true);
+        }}
+      >
         <Pressable style={styles.modalBackdrop} onPress={closeNutModal}>
           <KeyboardAvoidingView style={styles.modalAvoid} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <Pressable style={styles.modalCard} onPress={() => {}}>
@@ -1027,6 +1054,17 @@ const styles = themedStyles((colors) => ({
   },
   energyFormula: { fontSize: fontSize.micro, color: colors.textTertiary, fontWeight: '600' },
   energyResult: { fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '800' },
+  goalPrompt: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.primarySoft,
+  },
+  goalPromptText: { flex: 1, fontSize: fontSize.caption, color: colors.primary, fontWeight: '700' },
   energyHint: { fontSize: fontSize.caption, color: colors.textSecondary, lineHeight: 18 },
   nutFormRow: { flexDirection: 'row', gap: spacing.sm },
   nutFormItem: { flex: 1 },
