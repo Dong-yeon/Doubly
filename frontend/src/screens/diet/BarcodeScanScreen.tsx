@@ -7,8 +7,15 @@
  * <p><b>한 번 읽으면 사용자가 고를 때까지 다시 읽지 않는다.</b> 예전엔 실패하자마자 스캔을 다시
  * 열어서, 카메라가 여전히 보고 있는 같은 바코드를 곧장 또 읽었다 — 진동과 실패 토스트가 끝없이
  * 반복돼 "인식을 못 한다"로 보였다(2026-09-29 사용자 보고).
+ *
+ * <p><b>영양성분표도 이 화면에서 찍는다(2026-09-30).</b> 예전엔 "영양성분표 찍기"가 식단기록으로
+ * 돌아가 카메라를 다시 열었는데, 그 "돌아가기"가 {@code navigate} 였다. React Navigation 7 의
+ * navigate 는 스택에 있는 화면으로 <b>돌아가지 않고 새로 쌓는다</b> — 식단기록 → 스캔 → 식단기록(새것)
+ * 이 되어, X 로 닫으면 스캔 화면이 남고 반복할수록 쌓였다(적어 둔 항목도 밑의 식단기록에 남아 있었다).
+ * 이제 이미 떠 있는 카메라를 "표 찍기" 모드로 돌려 셔터로 찍고, 결과는 {@code popTo(..., { merge: true })}
+ * 로 <b>원래 식단기록 인스턴스</b>에 넘긴다. 바코드 조회 성공 경로도 같은 이유로 popTo 다.
  */
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,6 +25,8 @@ import { Button } from '../../components/Button';
 import { foodDbApi } from '../../api/foodDb';
 import { isApiError } from '../../api/client';
 import { getErrorMessage } from '../../utils/error';
+import { pickImageAsset, shrinkImage } from '../../utils/imageUpload';
+import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
@@ -42,9 +51,21 @@ export function BarcodeScanScreen({ navigation }: Props) {
   const [looking, setLooking] = useState(false);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [torch, setTorch] = useState(false);
+  /**
+   * 영양성분표 찍기 모드 — 바코드 인식을 끄고 셔터를 띄운다. 값은 바코드로 알아낸 제품명(없으면 빈 문자열).
+   * null 이면 바코드 모드.
+   */
+  const [labelFor, setLabelFor] = useState<string | null>(null);
+  const [capturing, setCapturing] = useState(false);
+  const cameraRef = useRef<CameraView>(null);
 
-  // 조회 중이거나 결과를 보여 주는 동안에는 카메라가 바코드를 더 읽지 않는다
-  const paused = looking || outcome !== null;
+  // 조회 중이거나 결과를 보여 주는 동안, 표 찍기 모드에서는 카메라가 바코드를 더 읽지 않는다
+  const paused = looking || outcome !== null || labelFor !== null;
+
+  /** 원래 식단기록 인스턴스로 돌아가며 파라미터를 합친다 — navigate 는 새로 쌓는다(파일 주석) */
+  const backToRecord = (params: DietStackParamList['DietRecord']) => {
+    navigation.popTo('DietRecord', params, { merge: true });
+  };
 
   const onScanned = async ({ data }: { data: string }) => {
     if (paused) return;
@@ -55,8 +76,7 @@ export function BarcodeScanScreen({ navigation }: Props) {
       const hasNutrition = result.calories != null || result.carbs != null || result.protein != null;
       if (hasNutrition) {
         haptics.success();
-        // 이미 스택에 있는 DietRecord 인스턴스로 복귀 + 파라미터 병합
-        navigation.navigate('DietRecord', { barcodeResult: result });
+        backToRecord({ barcodeResult: result });
         return;
       }
       setOutcome({ kind: 'nameOnly', result });
@@ -72,9 +92,44 @@ export function BarcodeScanScreen({ navigation }: Props) {
     }
   };
 
-  /** 영양성분표 촬영 — DietRecord 가 돌아오자마자 카메라를 열고 AI 로 읽는다 */
+  /** 영양성분표 찍기 모드로 — 같은 카메라를 그대로 쓴다 */
   const toLabel = (productName?: string | null) => {
-    navigation.navigate('DietRecord', { scanLabel: productName ?? '' });
+    setOutcome(null);
+    setLabelFor(productName ?? '');
+  };
+
+  /**
+   * 찍은(고른) 표 사진을 식단기록에 넘긴다 — 업로드·AI 분석·항목 채우기는 식단기록이 한다
+   * (사진 분석 결과를 적용하는 코드가 거기 있다). 글씨가 작아 평소(1024)보다 크게 줄인다.
+   */
+  const sendLabel = async (image: { uri: string; width: number; height: number }) => {
+    const uri = await shrinkImage(image, 1600);
+    backToRecord({ labelPhoto: { uri, productName: labelFor || undefined } });
+  };
+
+  const onShutter = async () => {
+    if (capturing) return;
+    setCapturing(true);
+    try {
+      const photo = await cameraRef.current?.takePictureAsync({ quality: 0.8 });
+      if (!photo) return;
+      haptics.light();
+      await sendLabel(photo);
+    } catch (e) {
+      toast.error(getErrorMessage(e, '사진을 찍지 못했어요. 다시 시도해주세요.'));
+    } finally {
+      setCapturing(false);
+    }
+  };
+
+  /** 이미 찍어 둔 표 사진이 있을 때 */
+  const onPickLabel = async () => {
+    try {
+      const picked = await pickImageAsset();
+      if (picked) await sendLabel(picked);
+    } catch (e) {
+      toast.error(getErrorMessage(e, '사진을 불러오지 못했어요.'));
+    }
   };
 
   if (!permission) {
@@ -121,7 +176,7 @@ export function BarcodeScanScreen({ navigation }: Props) {
           <Button
             title="이름만 넣기"
             variant="secondary"
-            onPress={() => navigation.navigate('DietRecord', { barcodeResult: o.result })}
+            onPress={() => backToRecord({ barcodeResult: o.result })}
           />
         ) : null}
         <Button
@@ -136,6 +191,7 @@ export function BarcodeScanScreen({ navigation }: Props) {
   return (
     <View style={styles.safe}>
       <CameraView
+        ref={cameraRef}
         style={StyleSheet.absoluteFill}
         facing="back"
         enableTorch={torch}
@@ -143,9 +199,13 @@ export function BarcodeScanScreen({ navigation }: Props) {
         onBarcodeScanned={paused ? undefined : onScanned}
       />
       <View style={styles.overlay} pointerEvents="none">
-        <View style={styles.frame} />
+        <View style={labelFor !== null ? styles.labelFrame : styles.frame} />
         <Text style={styles.hint}>
-          {looking ? '조회 중…' : '바코드를 프레임 안에 맞춰주세요\n흐리게 보이면 조금 멀리서 비춰보세요'}
+          {labelFor !== null
+            ? '영양성분표가 틀 안에 꽉 차게 찍어주세요\n글씨가 또렷하게 보일 때 누르세요'
+            : looking
+              ? '조회 중…'
+              : '바코드를 프레임 안에 맞춰주세요\n흐리게 보이면 조금 멀리서 비춰보세요'}
         </Text>
       </View>
 
@@ -162,7 +222,35 @@ export function BarcodeScanScreen({ navigation }: Props) {
       </SafeAreaView>
 
       <SafeAreaView edges={['bottom']} style={styles.bottom} pointerEvents="box-none">
-        {outcome ? (
+        {labelFor !== null ? (
+          <View style={styles.labelBar}>
+            <Pressable
+              onPress={() => setLabelFor(null)}
+              style={styles.labelSide}
+              accessibilityRole="button"
+              disabled={capturing}
+            >
+              <Text style={styles.labelSideText}>바코드로</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => void onShutter()}
+              style={[styles.shutter, capturing && styles.shutterBusy]}
+              accessibilityRole="button"
+              accessibilityLabel="영양성분표 찍기"
+              disabled={capturing}
+            >
+              {capturing ? <ActivityIndicator color={colors.white} /> : <View style={styles.shutterInner} />}
+            </Pressable>
+            <Pressable
+              onPress={() => void onPickLabel()}
+              style={styles.labelSide}
+              accessibilityRole="button"
+              disabled={capturing}
+            >
+              <Text style={styles.labelSideText}>앨범에서</Text>
+            </Pressable>
+          </View>
+        ) : outcome ? (
           renderOutcome(outcome)
         ) : (
           <Pressable
@@ -220,6 +308,36 @@ const styles = themedStyles((colors) => ({
   },
   torchText: { color: colors.white, fontSize: fontSize.caption, fontWeight: '800' },
   bottom: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: spacing.lg },
+  // 영양성분표는 세로로 길다 — 바코드 틀보다 크고 세로로
+  labelFrame: {
+    width: 300,
+    height: 380,
+    borderRadius: radius.lg,
+    borderWidth: 2,
+    borderColor: colors.white,
+  },
+  labelBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  labelSide: {
+    minWidth: 88,
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.pill,
+  },
+  labelSideText: { color: colors.white, fontSize: fontSize.caption, fontWeight: '800' },
+  shutter: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    borderWidth: 4,
+    borderColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.25)',
+  },
+  shutterBusy: { opacity: 0.6 },
+  shutterInner: { width: 58, height: 58, borderRadius: 29, backgroundColor: colors.white },
   labelLink: {
     alignSelf: 'center',
     backgroundColor: 'rgba(0,0,0,0.55)',
