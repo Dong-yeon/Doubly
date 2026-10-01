@@ -19,7 +19,8 @@
  * 10종 × 라이트/다크 모두 아래 기준을 통과한다.
  *   내 말풍선 위 흰 글자 ≥ 4.5 · 상대 말풍선 글자 ≥ 4.5 · 배경 위 meta ≥ 4.5
  *   상대 말풍선 vs 배경 ≥ 1.10 · 구분선 vs 배경 ≥ 1.18 · 강조 행 vs 배경 ≥ 1.20
- *   입력칸 글자·플레이스홀더 ≥ 4.5 · 입력칸 vs 입력바 ≥ 1.10(목표 3:1, 진한 배경 8벌만 닿는다)
+ *   입력칸 글자·플레이스홀더 ≥ 4.5 · 입력칸 vs 입력바 ≥ 1.10(목표 3:1, 진한 배경 8벌만 닿는다) ·
+ *   안 읽음 하트 vs 배경 ≥ 3
  *
  * <p><b>강조 행(highlight) 은 2026-09-18 까지 검증 대상이 아니었다</b> — 그래서 20벌 중
  * 절반이 기준 미달이었고, 기본/다크는 1.02 로 <b>사실상 보이지 않았다</b>(게다가 혼자만
@@ -102,6 +103,11 @@ export interface ChatPaletteBase {
   inputField: string;
   /** 입력칸 플레이스홀더 — inputField 위 4.5 이상 */
   inputPlaceholder: string;
+  /**
+   * 안 읽음 하트. 예전엔 앱 팔레트 partner 라 라이트 앱 + 진한 채팅 테마에서 배경 대비 2.9~3.1
+   * (비텍스트 3:1 경계)이었다. 상대 색 계열은 유지하고 배경 명도에 맞는 쪽을 고른다.
+   */
+  readMark: string;
 }
 
 /**
@@ -158,6 +164,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       inputBar: '#FAFAF9',
       inputField: '#E9EAE7',
       inputPlaceholder: '#626562',
+      readMark: '#2C7D33',
     },
     dark: {
       background: '#1E201C',
@@ -171,6 +178,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       inputBar: '#1E201C',
       inputField: '#31332D',
       inputPlaceholder: '#9FA19D',
+      readMark: '#A7D2A9',
     },
   },
   {
@@ -188,6 +196,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       inputBar: '#FDEEF1',
       inputField: '#FFFFFF',
       inputPlaceholder: '#6F716F',
+      readMark: '#2C7D33',
     },
     dark: {
       background: '#221A1D',
@@ -201,6 +210,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       inputBar: '#221A1D',
       inputField: '#332A2D',
       inputPlaceholder: '#9B9897',
+      readMark: '#A7D2A9',
     },
   },
   {
@@ -218,6 +228,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       inputBar: '#ECF3FB',
       inputField: '#FFFFFF',
       inputPlaceholder: '#6F716F',
+      readMark: '#2C7D33',
     },
     dark: {
       background: '#171B21',
@@ -231,6 +242,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       inputBar: '#171B21',
       inputField: '#262C33',
       inputPlaceholder: '#959999',
+      readMark: '#A7D2A9',
     },
   },
   {
@@ -248,6 +260,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       inputBar: '#F2EFFB',
       inputField: '#FFFFFF',
       inputPlaceholder: '#6F716F',
+      readMark: '#2C7D33',
     },
     dark: {
       background: '#1C1A23',
@@ -261,6 +274,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       inputBar: '#1C1A23',
       inputField: '#302C3D',
       inputPlaceholder: '#9B9BA0',
+      readMark: '#A7D2A9',
     },
   },
   /*
@@ -291,6 +305,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       inputBar: '#FDF2E9',
       inputField: '#FFFFFF',
       inputPlaceholder: '#6F716F',
+      readMark: '#2C7D33',
     },
     dark: {
       background: '#221D18',
@@ -304,6 +319,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       inputBar: '#221D18',
       inputField: '#332C25',
       inputPlaceholder: '#9B9993',
+      readMark: '#A7D2A9',
     },
   },
   /* 위 'peach' 와 같은 이유 — 액센트 '민트'(#49CAA5)와 달리 이건 진한 청록이다 */
@@ -322,6 +338,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       inputBar: '#EAF5F0',
       inputField: '#FFFFFF',
       inputPlaceholder: '#6F716F',
+      readMark: '#2C7D33',
     },
     dark: {
       background: '#171F1C',
@@ -335,6 +352,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       inputBar: '#171F1C',
       inputField: '#252E2A',
       inputPlaceholder: '#949A96',
+      readMark: '#A7D2A9',
     },
   },
 
@@ -365,6 +383,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       inputBar: '#23262B',
       inputField: '#F2F4F7',
       inputPlaceholder: '#686A6F',
+      readMark: '#A7D2A9',
     },
     dark: {
       background: '#17191D',
@@ -378,6 +397,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       inputBar: '#17191D',
       inputField: '#E6E9ED',
       inputPlaceholder: '#616469',
+      readMark: '#A7D2A9',
     },
   },
   {
@@ -395,6 +415,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       inputBar: '#1C2A20',
       inputField: '#F1F4F0',
       inputPlaceholder: '#676A67',
+      readMark: '#A7D2A9',
     },
     dark: {
       background: '#131E17',
@@ -408,6 +429,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       inputBar: '#131E17',
       inputField: '#E4E9E3',
       inputPlaceholder: '#616460',
+      readMark: '#A7D2A9',
     },
   },
   {
@@ -425,6 +447,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       inputBar: '#1B2440',
       inputField: '#F2F4FA',
       inputPlaceholder: '#686A75',
+      readMark: '#A7D2A9',
     },
     dark: {
       background: '#131A2E',
@@ -438,6 +461,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       inputBar: '#131A2E',
       inputField: '#E5E9F2',
       inputPlaceholder: '#616470',
+      readMark: '#A7D2A9',
     },
   },
   {
@@ -455,6 +479,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       inputBar: '#2A1E2E',
       inputField: '#F5F2F6',
       inputPlaceholder: '#6D686E',
+      readMark: '#A7D2A9',
     },
     dark: {
       background: '#1D1420',
@@ -468,6 +493,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       inputBar: '#1D1420',
       inputField: '#E9E4EB',
       inputPlaceholder: '#666168',
+      readMark: '#A7D2A9',
     },
   },
 ];
@@ -561,5 +587,7 @@ export function chatPalette(scheme: Scheme, id: ChatThemeId = currentId): ChatPa
     bubbleMine: app.primaryFill,
     bubbleMineText: onColor(app.primaryFill),
     highlight: scheme === 'light' ? app.partnerPastelBg : base.highlight,
+    // 하트는 "상대" 색이다 — 기본 테마에서는 액센트별 partner 를 따른다(green 이면 리터럴과 같은 값)
+    readMark: app.partner,
   });
 }

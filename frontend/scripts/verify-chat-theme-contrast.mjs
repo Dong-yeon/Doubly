@@ -53,6 +53,8 @@ const RULES = [
   { name: '입력칸 vs 입력바', pick: (p) => [p.inputBar, p.inputField], min: 1.1 },
   /* "+"·이모티콘 아이콘은 inputIcon(= 리터럴 meta)이다. 바가 배경과 갈라지는 날 여기서 걸린다 */
   { name: '입력바 아이콘 vs 입력바', pick: (p) => [p.inputBar, p.meta], min: 3 },
+  /* 안 읽음 하트 — 10→12px 아이콘. 그림이라 비텍스트 기준 3:1 */
+  { name: '안 읽음 하트 vs 배경', pick: (p) => [p.background, p.readMark], min: 3 },
 ];
 
 /*

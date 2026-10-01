@@ -1865,8 +1865,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             {mine && !item.isRead && !item.pending ? (
               <MaterialCommunityIcons
                 name="heart"
-                size={10}
-                color={colors.partner}
+                size={12}
+                color={chatStyles.readHeart.color as string}
                 style={styles.readHeart}
                 accessibilityLabel="아직 안 읽었어요"
               />
@@ -2077,7 +2077,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           ListEmptyComponent={
             !loadingHistory ? (
               <View>
-                <EmptyState icon="chat-outline" title="아직 메시지가 없어요" description="첫 메시지를 보내보세요!" />
+                {/* 새 커플이 처음 들어오는 화면 — 회색 아이콘 대신 채팅방 목록과 같은 달걀 캐릭터(2026-10-01, D2) */}
+                <EmptyState illustration="duo" title="아직 메시지가 없어요" description="첫 메시지를 보내보세요!" />
               </View>
             ) : null
           }
@@ -2810,6 +2811,7 @@ const styles = themedStyles((colors) => ({
   meta: { marginHorizontal: spacing.xs, justifyContent: 'flex-end' },
   metaMine: { marginHorizontal: spacing.xs, alignItems: 'flex-end', justifyContent: 'flex-end' },
   // 읽음 표시 — 안 읽었을 때만 하트를 띄우고, 읽으면 사라진다(카톡 "1" 방식).
+  // 색은 chatStyles.readHeart(채팅 테마), 크기는 12 — 10 이던 때는 진한 테마에서 대비 2.9 로 안 보였다.
   readHeart: { marginBottom: 2 },
   // 상대 아바타 자리 — 그룹 중간엔 내용 없이 폭만 차지해 말풍선이 계단식으로 안 밀린다
   avatarSlot: { width: 26, marginRight: spacing.xs },
@@ -3038,6 +3040,11 @@ const chatStyles = chatThemedStyles((chat) => ({
   input: { backgroundColor: chat.inputField, color: chat.bubbleTheirsText },
   inputPlaceholder: { color: chat.inputPlaceholder },
   inputIcon: { color: chat.inputIcon },
+  /*
+   * 안 읽음 하트 — 예전엔 앱 팔레트 partner 라 진한 채팅 테마에서 배경 대비 2.9~3.1 이었다.
+   * 표시 방식(안 읽었을 때만 있다가 사라짐)은 그대로이고 색과 크기만 바꿨다(2026-10-01, R1).
+   */
+  readHeart: { color: chat.readMark },
 
   // 사진 위에 덮는 옅은 막 — 대비가 아니라 미관용이다(chatTheme 의 CHAT_PHOTO_SCRIM)
   photoScrim: { backgroundColor: CHAT_PHOTO_SCRIM },
