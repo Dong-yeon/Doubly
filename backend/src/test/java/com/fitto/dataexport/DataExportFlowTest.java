@@ -111,7 +111,8 @@ class DataExportFlowTest {
         assertThat(summary.coupled()).isTrue();
         assertThat(summary.sections()).filteredOn(s -> s.key().equals("chat_messages"))
                 .extracting(SectionCount::mediaCount).containsExactly(1L);
-        assertThat(summary.mediaCount()).isGreaterThanOrEqualTo(3);
+        // 사진 2장 + 음성 1개 — 첫 사진이 image_url 과 사진 표에 겹쳐 있어도 한 번만 센다(V79)
+        assertThat(summary.mediaCount()).isEqualTo(3);
     }
 
     @Test

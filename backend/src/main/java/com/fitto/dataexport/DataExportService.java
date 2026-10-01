@@ -81,7 +81,14 @@ public class DataExportService {
             long count = count("SELECT COUNT(*) FROM " + section.from(), params);
             long media = 0;
             for (String column : section.mediaColumns()) {
-                long n = count("SELECT COUNT(t." + column + ") FROM " + section.from(), params);
+                /*
+                 * 새 피드 글은 첫 사진을 image_url 과 feed_post_photos 에 둘 다 적는다(V79, 의도한 중복).
+                 * 앱은 URL 로 한 번만 받으므로 세는 것도 사진 표에 없는 것(V79 이전 글)만 센다.
+                 */
+                String extra = section == ExportSection.FEED_POSTS
+                        ? " AND NOT EXISTS (SELECT 1 FROM feed_post_photos ph WHERE ph.post_id = t.id AND ph.url = t.image_url)"
+                        : "";
+                long n = count("SELECT COUNT(t." + column + ") FROM " + section.from() + extra, params);
                 media += n;
                 if (isAudio(column)) audios += n;
                 else images += n;
