@@ -11,6 +11,7 @@ import com.fitto.place.dto.SavePlaceRequest;
 import com.fitto.place.service.PlaceService;
 import com.fitto.relation.dto.InviteCodeResponse;
 import com.fitto.relation.repository.RelationRepository;
+import com.fitto.relation.service.RelationRecordPurger;
 import com.fitto.relation.service.RelationService;
 import com.fitto.trip.dto.SaveTripRequest;
 import com.fitto.trip.service.TripService;
@@ -46,6 +47,7 @@ class PurgeRecordsFlowTest {
     @Autowired RelationRepository relationRepository;
     @Autowired WorkoutRepository workoutRepository;
     @Autowired CloudinaryImageDeleter imageDeleter;
+    @Autowired RelationRecordPurger relationRecordPurger;
 
     @PersistenceContext EntityManager em;
 
@@ -170,6 +172,53 @@ class PurgeRecordsFlowTest {
                         "select count(*) from workouts where user_id = :uid and relation_id is null")
                 .setParameter("uid", partner).getSingleResult();
         assertThat(remaining.longValue()).isEqualTo(1);
+    }
+
+    /**
+     * 관계 삭제가 돌려주는 목록에 음성 메시지·예약 전송 사진·운동 부스터 녹음이 들어 있어야 한다 —
+     * 예전에는 빠져 있어 행만 지워지고 파일은 Cloudinary 에 남았다. 음성 메시지는 URL 이
+     * image_url 이 아니라 content("{audioUrl}|{초}")에 있어서 컬럼만 훑어서는 안 보인다.
+     */
+    @Test
+    @Transactional
+    void 기록을_삭제하면_음성_메시지와_예약_사진과_부스터_녹음도_삭제_목록에_오른다() {
+        Long me = register("purge-media-a@fitto.com");
+        Long partner = register("purge-media-b@fitto.com");
+        Long relationId = connect(me, partner);
+
+        String voice = "https://res.cloudinary.com/demo/video/upload/v1/fitto/chat-voice/a.m4a";
+        String scheduledImage = "https://res.cloudinary.com/demo/image/upload/v1/fitto/scheduled.jpg";
+        String booster = "https://res.cloudinary.com/demo/video/upload/v1/fitto/voice/boost.m4a";
+        em.createNativeQuery("insert into chat_messages (relation_id, sender_id, message_type, content) "
+                        + "values (:rid, :sid, 'VOICE_MESSAGE', :content)")
+                .setParameter("rid", relationId).setParameter("sid", me)
+                .setParameter("content", voice + "|12").executeUpdate();
+        em.createNativeQuery("insert into scheduled_chat_messages "
+                        + "(relation_id, sender_id, message_type, image_url, scheduled_at) "
+                        + "values (:rid, :sid, 'IMAGE', :url, :when)")
+                .setParameter("rid", relationId).setParameter("sid", me).setParameter("url", scheduledImage)
+                .setParameter("when", java.time.LocalDateTime.now().plusHours(1)).executeUpdate();
+        em.createNativeQuery("insert into workout_boosters (relation_id, sender_id, receiver_id, audio_url) "
+                        + "values (:rid, :sid, :recv, :url)")
+                .setParameter("rid", relationId).setParameter("sid", me).setParameter("recv", partner)
+                .setParameter("url", booster).executeUpdate();
+
+        assertThat(relationRecordPurger.purge(relationId)).contains(voice, scheduledImage, booster);
+    }
+
+    /** 오디오는 /video/upload 자산이라 image/destroy 로 보내면 지워지지 않는다. */
+    @Test
+    void Cloudinary_URL_에서_리소스_종류를_읽는다() {
+        assertThat(imageDeleter.extractResourceType(
+                "https://res.cloudinary.com/demo/video/upload/v1/fitto/voice/a.m4a")).isEqualTo("video");
+        assertThat(imageDeleter.extractResourceType(
+                "https://res.cloudinary.com/demo/image/upload/v1/fitto/a.jpg")).isEqualTo("image");
+        // 종류가 생략된 짧은 형식은 Cloudinary 기본값(image)
+        assertThat(imageDeleter.extractResourceType(
+                "https://res.cloudinary.com/demo/upload/fitto/a.jpg")).isEqualTo("image");
+        assertThat(imageDeleter.extractPublicId(
+                "https://res.cloudinary.com/demo/video/upload/v1712345678/fitto/voice/a.m4a"))
+                .isEqualTo("fitto/voice/a");
     }
 
     /** Cloudinary URL 에서 public_id 를 뽑지 못하면 이미지가 영영 남는다. */

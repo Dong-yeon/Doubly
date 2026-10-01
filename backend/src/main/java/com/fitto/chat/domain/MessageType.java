@@ -51,5 +51,19 @@ public enum MessageType {
      * STREAK_CARD 와 같은 규칙이다 — 이 타입을 모르는 구버전 앱에서도 문구가 평범한 말풍선으로 읽힌다.
      * 그림은 앱이 합성해 그린다(서버 이미지 생성·업로드 없음). 검증은 {@code ChatService.requireValidTextSticker}.
      */
-    TEXT_STICKER
+    TEXT_STICKER;
+
+    /**
+     * 음성 메시지 본문({@code "{audioUrl}|{durationSec}"})에서 오디오 URL 만 꺼낸다.
+     * 내보내기(파일 받기)와 탈퇴·기록 삭제(Cloudinary 정리)가 같은 규칙으로 읽어야 해서 여기 둔다.
+     * URL 이 아니면 null.
+     */
+    public static String voiceAudioUrl(Object content) {
+        if (!(content instanceof String s) || s.isBlank()) {
+            return null;
+        }
+        int bar = s.lastIndexOf('|');
+        String url = bar > 0 ? s.substring(0, bar) : s;
+        return url.startsWith("http") ? url : null;
+    }
 }

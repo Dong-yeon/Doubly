@@ -1,5 +1,6 @@
 package com.fitto.dataexport;
 
+import com.fitto.chat.domain.MessageType;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.plan.Feature;
@@ -165,12 +166,7 @@ public class DataExportService {
 
     /** 음성 메시지 본문은 {@code "{audioUrl}|{durationSec}"} 다 (MessageType.VOICE_MESSAGE). */
     static String voiceUrlOf(Object content) {
-        if (!(content instanceof String s) || s.isBlank()) {
-            return null;
-        }
-        int bar = s.lastIndexOf('|');
-        String url = bar > 0 ? s.substring(0, bar) : s;
-        return url.startsWith("http") ? url : null;
+        return MessageType.voiceAudioUrl(content);
     }
 
     private static boolean isAudio(String column) {
