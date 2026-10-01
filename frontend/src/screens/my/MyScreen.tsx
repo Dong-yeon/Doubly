@@ -564,6 +564,8 @@ export function MyScreen({ navigation }: Props) {
             />
           </View>
         </View>
+        {/* 근육량 칸을 찾는 사람에게 — 공식의 입력은 제지방량이라 골격근량은 따로 받지 않는다(BmrCalculator) */}
+        <Text style={styles.fieldHint}>근육량은 체지방률에 반영돼요 — 인바디 결과지의 체지방률을 넣어 주세요.</Text>
         <DateField label="생년월일" value={birthDate} onChange={setBirthDate} max={new Date().toISOString().slice(0, 10)} />
         <Text style={styles.fieldLabel}>성별</Text>
         <View style={styles.genderRow}>
@@ -607,6 +609,7 @@ const styles = themedStyles((colors) => ({
   sheetDesc: { fontSize: fontSize.caption, color: colors.textSecondary, lineHeight: 18, marginTop: spacing.xxs, marginBottom: spacing.md },
   sheetAvatarRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
   sheetActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
+  fieldHint: { fontSize: fontSize.caption, color: colors.textSecondary, lineHeight: 18, marginTop: -spacing.xs, marginBottom: spacing.md },
   fieldLabel: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700', marginBottom: spacing.sm },
   bodyRow: { flexDirection: 'row', gap: spacing.sm },
   genderRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
