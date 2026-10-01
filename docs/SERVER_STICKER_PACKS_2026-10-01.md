@@ -137,10 +137,14 @@ backend/src/main/resources/
 
 ## 남은 것 / 다음
 
-- **LottieFiles 추가 후보 30개**: 미리보기 `scripts/sticker-trial/shots/lottiefiles_more_candidates.png`(커밋 안 함). 모두 Lottie Simple License 표기를 확인했다.
-  - 유력: 시바 3종(빼꼼 시바와 같은 작가 Margarita Ivanchikova — 웃음·화남·행복), Abdul Latif 동물(21), 잠자는 펭귄(6), 당근 토끼(23), 시바 커피(19), 하트 코기(9), 판다(1).
-  - 사용자 선택을 기다린다.
-
+- **동물 친구들 팩(ANIM_ANIMALS, V112, 무료)** — 후보 30개 중 사용자가 고른 9종이다.
+  - 구성: 시바 3종(Margarita Ivanchikova — 빼꼼 시바와 같은 작가), 반짝 토끼(Abdul Latif), 잠자는 펭귄, 당근 토끼, 커피 시바, 하트 코기, 안녕 판다.
+  - 펭귄·토끼·코기는 .lottie 안에 PNG 가 따로 있어 data URI 로 JSON 안에 넣었다. 그래서 크기가 150~480KB 로 크다. 벡터 그림은 8~300KB.
+  - 래스터가 섞여 있어 그림 범위는 svg 경로가 아니라 **canvas 픽셀로** 쟀다(경로로 재면 이미지 레이어가 잡히지 않는다).
+  - 근거: `scripts/sticker-packs/ANIM_ANIMALS.sources.json`
+  - 사용자 결정: LottieFiles 팩은 모두 무료로 제공한다.
+  - **미확인**: 이미지가 든 3종의 네이티브 재생 — lottie-react-native 는 data URI 이미지 에셋을 지원한다.
+  - 후보 미리보기: `scripts/sticker-trial/shots/lottiefiles_more_candidates.png`(커밋 안 함)
 - **번들 110종을 서버로 옮길지** — 옮기면 번들이 −7.8MB 다.
   - 대가 1: 첫 패널을 열 때 썸네일 110장을 받는다.
   - 대가 2: 오프라인 첫 실행에 지난 말풍선이 썸네일·빈칸으로 보인다.
