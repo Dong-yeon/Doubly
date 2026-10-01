@@ -1,5 +1,6 @@
 package com.fitto.relation.service;
 
+import com.fitto.chat.domain.MessageType;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.springframework.stereotype.Component;
@@ -163,6 +164,20 @@ public class RelationRecordPurger {
                 + "where t.couple_id = :rid and t.cover_image_url is not null", relationId));
         urls.addAll(select("select m.image_url from chat_messages m "
                 + "where m.relation_id = :rid and m.image_url is not null", relationId));
+        // 음성 메시지는 파일 URL 이 image_url 이 아니라 content("{audioUrl}|{초}")에 들어 있다.
+        // 오디오는 /video/upload 자산이다 — 삭제기가 URL 을 보고 video/destroy 로 보낸다.
+        for (String content : select("select m.content from chat_messages m "
+                + "where m.relation_id = :rid and m.message_type = 'VOICE_MESSAGE'", relationId)) {
+            String audioUrl = MessageType.voiceAudioUrl(content);
+            if (audioUrl != null) {
+                urls.add(audioUrl);
+            }
+        }
+        // 예약 전송(V76) — 아직 안 보낸 사진은 chat_messages 에 없다. 이미 보낸 건은 위와 겹치지만 멱등이라 둔다.
+        urls.addAll(select("select s.image_url from scheduled_chat_messages s "
+                + "where s.relation_id = :rid and s.image_url is not null", relationId));
+        // 운동 부스터(V61) 녹음 — 보낼 때마다 새로 올린 파일이라 음성 응원(voice_clips)과 공유하지 않는다
+        urls.addAll(select("select b.audio_url from workout_boosters b where b.relation_id = :rid", relationId));
         // 우리 이모지(V80) — 트레이에서 숨긴 것(deleted_at)도 파일은 아직 있으므로 조건 없이 전부 모은다.
         // 채팅 메시지가 같은 URL 을 image_url 로 복사해 두므로 위 chat_messages 와 중복될 수 있지만,
         // 지운 자산을 다시 지우는 호출은 무시되므로(멱등) 걸러내지 않는다(feed_post_photos 와 같은 이유).
