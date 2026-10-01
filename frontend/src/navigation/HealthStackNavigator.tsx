@@ -32,7 +32,7 @@ import { VoiceClipsScreen } from '../screens/workout/VoiceClipsScreen';
 import { BodyMetricScreen } from '../screens/workout/BodyMetricScreen';
 import { ChallengeScreen } from '../screens/workout/ChallengeScreen';
 import { PlaceDetailScreen } from '../screens/place/PlaceDetailScreen';
-import { stackScreenOptions, modalOptions } from './headerOptions';
+import { stackScreenOptions, modalOptions, crossTabModalOptions } from './headerOptions';
 
 const Stack = createNativeStackNavigator<HealthStackParamList>();
 
@@ -44,7 +44,11 @@ export function HealthStackNavigator() {
       <Stack.Screen
         name="DietRecord"
         component={DietRecordScreen}
-        options={{ title: '식단 기록', ...modalOptions }}
+        // returnTo = 다른 탭(홈)에서 왔다 — iOS 네이티브 모달을 쓰지 않는다(crossTabModalOptions 주석)
+        options={({ route }) => ({
+          title: '식단 기록',
+          ...(route.params?.returnTo ? crossTabModalOptions : modalOptions),
+        })}
       />
       <Stack.Screen name="DietCalendar" component={DietCalendarScreen} options={{ title: '식단 캘린더' }} />
       <Stack.Screen name="DietStats" component={DietStatsScreen} options={{ title: '식단 통계' }} />
