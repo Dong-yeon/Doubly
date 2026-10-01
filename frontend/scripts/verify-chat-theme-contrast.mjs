@@ -36,6 +36,23 @@ const RULES = [
    * 밝지" 로도 안 읽힌다.
    */
   { name: '강조 행 vs 배경', pick: (p) => [p.background, p.highlight], min: 1.2 },
+  /*
+   * 입력바 — 2026-10-01 에 앱 팔레트에서 채팅 테마로 옮겼다(docs/CHAT_UX_REVIEW_2026-10-01.md).
+   * 입력칸 글자는 bubbleTheirsText 를 그대로 쓰므로 그 쌍을 inputField 기준으로 다시 잰다.
+   */
+  { name: '입력칸 글자', pick: (p) => [p.inputField, p.bubbleTheirsText], min: 4.5 },
+  { name: '입력칸 플레이스홀더', pick: (p) => [p.inputField, p.inputPlaceholder], min: 4.5 },
+  /*
+   * 입력칸 vs 입력바 — <b>목표는 비텍스트 3:1 이지만 기준은 1.10 이다.</b> 진한 배경 4종은 13 이상으로
+   * 넘기지만, 연한 배경 6종은 칸이 상대 말풍선과 같은 흰색 계열이라 1.10~1.28 에 머문다. 3:1 을 맞추려면
+   * 연한 테마의 칸을 진회색으로 칠해야 하고, 그건 고친 문제(바가 무겁다)를 반대 방향으로 다시 만든다.
+   * 칸은 채움 하나로만 식별되지 않는다 — 플레이스홀더(4.5 이상)와 커서가 함께 말한다(WCAG 1.4.11 은
+   * "식별에 필요한 시각 정보"를 본다). 그래서 상대 말풍선 vs 배경과 같은 바닥(1.10)을 쓴다.
+   * 3:1 미달 벌 수는 아래 표의 입력칸 vs 입력바 열에서 바로 보인다.
+   */
+  { name: '입력칸 vs 입력바', pick: (p) => [p.inputBar, p.inputField], min: 1.1 },
+  /* "+"·이모티콘 아이콘은 inputIcon(= 리터럴 meta)이다. 바가 배경과 갈라지는 날 여기서 걸린다 */
+  { name: '입력바 아이콘 vs 입력바', pick: (p) => [p.inputBar, p.meta], min: 3 },
 ];
 
 /*
@@ -130,6 +147,11 @@ console.log(line(header));
 rows.forEach((r) => console.log(line(r)));
 console.log(`\n테마 ${themes.length}종 × 라이트/다크 = ${themes.length * 2}벌, 검사 ${themes.length * 2 * RULES.length}건`);
 if (EXEMPT.size > 0) console.log('~ 는 면제 항목');
+/* 입력칸 vs 입력바 는 기준(1.10)과 목표(3:1)가 다르다 — 목표에 몇 벌이 닿는지 매번 보이게 한다(규칙 주석) */
+const fieldTarget = themes.flatMap((t) => ['light', 'dark'].map((s) => t[s])).filter(
+  (p) => p.inputBar && p.inputField && contrast(p.inputBar, p.inputField) >= 3,
+).length;
+console.log(`입력칸 vs 입력바 3:1 목표 달성 ${fieldTarget}/${themes.length * 2}벌 (기준은 1.10)`);
 
 if (failures.length > 0) {
   console.error(`\n대비 미달 ${failures.length}건:`);

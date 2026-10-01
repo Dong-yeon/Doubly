@@ -26,7 +26,7 @@ import { withJosa } from '../../utils/format';
 import { copyText } from '../../utils/share';
 import { AnimatedSticker } from '../../components/AnimatedSticker';
 import { RemoteAnimatedSticker } from '../../components/RemoteAnimatedSticker';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { Button } from '../../components/Button';
 import { useHeaderHeight } from '@react-navigation/elements';
@@ -188,6 +188,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const androidKeyboardHeight = useAndroidKeyboardHeight();
   /* 이모티콘·보조 도구 패널 높이 — 키보드가 있던 자리를 그대로 이어받는다(훅 주석 참고) */
   const panelHeight = useKeyboardPanelHeight();
+  // safe-area 아래 띠를 입력바 색으로 칠할 높이(렌더의 bottomInset 주석)
+  const bottomInset = useSafeAreaInsets().bottom;
   /* 전체화면으로 연 사진 — 목록에서 이 uri 를 찾아 그 자리에서 시작한다(아래 viewing) */
   const [viewingImage, setViewingImage] = useState<string | null>(null);
   const openImage = (uri: string) => setViewingImage(uri);
@@ -1901,6 +1903,14 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           <View style={[StyleSheet.absoluteFill, chatStyles.photoScrim]} />
         </View>
       ) : null}
+      {/*
+       * safe-area 아래 띠 — SafeAreaView 가 패딩으로 비워 둔 자리라 원래는 채팅 배경(또는 사진)이
+       * 비쳤다. 입력바만 다른 색이면 그 아래 띠가 다시 배경색이라 바가 <b>떠 있는 판</b>처럼 보인다.
+       * 입력바와 같은 색으로 칠해 바가 화면 바닥까지 이어지게 한다. 키보드가 뜨면 키보드가 덮는다.
+       */}
+      {bottomInset > 0 ? (
+        <View style={[chatStyles.bottomInset, { height: bottomInset }]} pointerEvents="none" />
+      ) : null}
       <KeyboardAvoidingView
         // Android 는 FlatList 를 직접 감싸면 KeyboardAvoidingView 의 자동 높이 보정이
         // edge-to-edge 아래에서 먹지 않아(실기기 확인) behavior 를 아예 안 쓰고
@@ -2207,7 +2217,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           onApplyAll={applyAllSpelling}
           onDismiss={() => setSpellDismissedFor(text)}
         />
-        <View style={styles.inputBar}>
+        <View style={[styles.inputBar, chatStyles.inputBar]}>
           {uploading ? (
             <View style={styles.trayBtn}>
               <ActivityIndicator size="small" color={colors.primary} />
@@ -2222,7 +2232,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               <MaterialCommunityIcons
                 name={showExtras ? 'close' : 'plus'}
                 size={24}
-                color={showExtras ? colors.primary : colors.textSecondary}
+                color={showExtras ? colors.primary : (chatStyles.inputIcon.color as string)}
                 style={styles.trayIcon}
               />
             </TouchableOpacity>
@@ -2239,14 +2249,14 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           */}
           <TextInput
             ref={inputRef}
-            style={styles.input}
+            style={[styles.input, chatStyles.input]}
             value={text}
             onChangeText={setText}
             onPressIn={dismissPanels}
             onFocus={dismissPanels}
             onKeyPress={onInputKeyPress}
             placeholder={sendOnEnter ? '메시지를 입력하세요 (Shift+Enter 줄바꿈)' : '메시지를 입력하세요'}
-            placeholderTextColor={colors.textSecondary}
+            placeholderTextColor={chatStyles.inputPlaceholder.color as string}
             multiline
           />
           {/*
@@ -2305,7 +2315,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               <MaterialCommunityIcons
                 name="emoticon-outline"
                 size={24}
-                color={showStickers ? colors.primary : colors.textSecondary}
+                color={showStickers ? colors.primary : (chatStyles.inputIcon.color as string)}
                 style={styles.trayIcon}
               />
             </TouchableOpacity>
@@ -2812,7 +2822,7 @@ const styles = themedStyles((colors) => ({
     paddingTop: spacing.sm,
     paddingBottom: spacing.sm,
     gap: spacing.sm,
-    backgroundColor: colors.background,
+    // 바탕색은 chatStyles.inputBar — 채팅 테마를 따른다(그쪽 주석)
   },
   /*
    * 트레이 버튼("+" · 이모티콘) — 테두리도 채움도 없다.
@@ -2856,10 +2866,9 @@ const styles = themedStyles((colors) => ({
      * 내려놓아도 돌아오지 않는다. 16 은 그 문턱이라 토큰이 아니라 리터럴로 둔다.
      */
     fontSize: Platform.OS === 'web' ? 16 : fontSize.body,
-    color: colors.textPrimary,
+    // 글자색·채움은 chatStyles.input — 채팅 테마를 따른다.
     // 테두리 대신 살짝 눌린 채움 — 폼 필드가 아니라 "쓰는 자리"로 읽힌다.
     // 테두리를 지운 만큼 입력바 전체가 메시지 목록 뒤로 물러난다(trayBtn 주석).
-    backgroundColor: colors.surfaceAlt,
     borderRadius: radius.lg,
   },
   /*
@@ -2964,6 +2973,17 @@ const chatStyles = chatThemedStyles((chat) => ({
     color: chat.meta,
     ...metaCapsule(chat.metaCapsule),
   },
+
+  /*
+   * 입력바·입력칸 — 2026-10-01 에 앱 팔레트에서 옮겨 왔다(chatTheme 의 inputBar 주석).
+   * 예전엔 앱 background 라 진한 채팅 테마 아래 흰 판이 깔렸다. 바깥 safe-area 띠도 같은 색이다(bottomInset).
+   */
+  inputBar: { backgroundColor: chat.inputBar },
+  bottomInset: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: chat.inputBar },
+  // 칸은 상대 말풍선 계열이라 글자도 그 글자색 — 검증된 쌍을 다시 쓴다
+  input: { backgroundColor: chat.inputField, color: chat.bubbleTheirsText },
+  inputPlaceholder: { color: chat.inputPlaceholder },
+  inputIcon: { color: chat.inputIcon },
 
   // 사진 위에 덮는 옅은 막 — 대비가 아니라 미관용이다(chatTheme 의 CHAT_PHOTO_SCRIM)
   photoScrim: { backgroundColor: CHAT_PHOTO_SCRIM },

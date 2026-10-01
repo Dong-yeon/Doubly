@@ -19,6 +19,7 @@
  * 10종 × 라이트/다크 모두 아래 기준을 통과한다.
  *   내 말풍선 위 흰 글자 ≥ 4.5 · 상대 말풍선 글자 ≥ 4.5 · 배경 위 meta ≥ 4.5
  *   상대 말풍선 vs 배경 ≥ 1.10 · 구분선 vs 배경 ≥ 1.18 · 강조 행 vs 배경 ≥ 1.20
+ *   입력칸 글자·플레이스홀더 ≥ 4.5 · 입력칸 vs 입력바 ≥ 1.10(목표 3:1, 진한 배경 8벌만 닿는다)
  *
  * <p><b>강조 행(highlight) 은 2026-09-18 까지 검증 대상이 아니었다</b> — 그래서 20벌 중
  * 절반이 기준 미달이었고, 기본/다크는 1.02 로 <b>사실상 보이지 않았다</b>(게다가 혼자만
@@ -85,6 +86,22 @@ export interface ChatPaletteBase {
   dividerLine: string;
   /** 검색에서 골라 온 메시지를 잠깐 강조하는 행 배경 */
   highlight: string;
+  /*
+   * ── 입력바 (2026-10-01, docs/CHAT_UX_REVIEW_2026-10-01.md §1-2 E) ──────────────
+   * 그전에는 입력바·입력칸이 앱 팔레트(background·surfaceAlt)였다. 라이트 앱 + 진한 채팅 테마에서
+   * 바 대 대화 대비가 14~15:1 — 어두운 대화 아래 흰 판이 깔려 "입력칸이 너무 크다"로 읽혔다.
+   * 반대로 입력칸 대 바는 1.08 이라 칸 윤곽이 없어서, 눈이 칸(44)이 아니라 바 전체를 하나로 봤다.
+   *
+   * <p>바는 대화 바탕과 같은 값에서 출발한다(떠 있는 판이 없다). 칸은 상대 말풍선과 같은 값이라
+   * 그 위 글자는 이미 검증된 bubbleTheirsText 를 쓴다 — 새 글자색을 지어내지 않는다.
+   * 별도 토큰으로 두는 이유는 나중에 바를 대화와 갈라야 할 때 이 자리만 고치면 되게 하려는 것이다.
+   */
+  /** 입력바 바탕 — safe-area 아래 띠도 같은 색으로 칠한다 */
+  inputBar: string;
+  /** 입력칸 채움 — 글자는 bubbleTheirsText */
+  inputField: string;
+  /** 입력칸 플레이스홀더 — inputField 위 4.5 이상 */
+  inputPlaceholder: string;
 }
 
 /**
@@ -106,6 +123,15 @@ export interface ChatPalette extends ChatPaletteBase {
    * 라벨과 같은 방식).
    */
   metaCapsule: string;
+  /**
+   * 입력바의 "+"·이모티콘 아이콘 — 테마 리터럴의 {@code meta} 그대로다.
+   *
+   * <p>{@code meta} 를 직접 쓰지 않는 이유: 사진 배경에서 {@code meta} 는 흰색으로 바뀌는데
+   * (캡슐 위 글자라서), 입력바는 사진 위가 아니라 불투명한 inputBar 위에 있다. 덮어쓰기 전 값을
+   * 따로 들고 있어야 연한 테마 + 사진에서 흰 아이콘이 흰 바에 사라지지 않는다.
+   * inputBar 가 background 와 같으므로 검증된 "배경 위 meta ≥ 4.5" 가 그대로 성립한다.
+   */
+  inputIcon: string;
 }
 
 export interface ChatTheme {
@@ -129,6 +155,9 @@ export const CHAT_THEMES: ChatTheme[] = [
       meta: '#6A706A',
       dividerLine: '#E1E3E0',
       highlight: '#D8E7DB',
+      inputBar: '#FAFAF9',
+      inputField: '#E9EAE7',
+      inputPlaceholder: '#626562',
     },
     dark: {
       background: '#1E201C',
@@ -139,6 +168,9 @@ export const CHAT_THEMES: ChatTheme[] = [
       meta: '#868C84',
       dividerLine: '#3A3D36',
       highlight: '#2A3A2E',
+      inputBar: '#1E201C',
+      inputField: '#31332D',
+      inputPlaceholder: '#9FA19D',
     },
   },
   {
@@ -153,6 +185,9 @@ export const CHAT_THEMES: ChatTheme[] = [
       meta: '#7A5C62',
       dividerLine: '#F0D0D8',
       highlight: '#F4D2DC',
+      inputBar: '#FDEEF1',
+      inputField: '#FFFFFF',
+      inputPlaceholder: '#6F716F',
     },
     dark: {
       background: '#221A1D',
@@ -163,6 +198,9 @@ export const CHAT_THEMES: ChatTheme[] = [
       meta: '#A08E93',
       dividerLine: '#3F3338',
       highlight: '#3A2830',
+      inputBar: '#221A1D',
+      inputField: '#332A2D',
+      inputPlaceholder: '#9B9897',
     },
   },
   {
@@ -177,6 +215,9 @@ export const CHAT_THEMES: ChatTheme[] = [
       meta: '#556B80',
       dividerLine: '#C9DCEF',
       highlight: '#C8DCF2',
+      inputBar: '#ECF3FB',
+      inputField: '#FFFFFF',
+      inputPlaceholder: '#6F716F',
     },
     dark: {
       background: '#171B21',
@@ -187,6 +228,9 @@ export const CHAT_THEMES: ChatTheme[] = [
       meta: '#8B98A5',
       dividerLine: '#333A42',
       highlight: '#22303F',
+      inputBar: '#171B21',
+      inputField: '#262C33',
+      inputPlaceholder: '#959999',
     },
   },
   {
@@ -201,6 +245,9 @@ export const CHAT_THEMES: ChatTheme[] = [
       meta: '#67607F',
       dividerLine: '#DAD1F0',
       highlight: '#DED3F3',
+      inputBar: '#F2EFFB',
+      inputField: '#FFFFFF',
+      inputPlaceholder: '#6F716F',
     },
     dark: {
       background: '#1C1A23',
@@ -211,6 +258,9 @@ export const CHAT_THEMES: ChatTheme[] = [
       meta: '#958DA8',
       dividerLine: '#383345',
       highlight: '#302847',
+      inputBar: '#1C1A23',
+      inputField: '#302C3D',
+      inputPlaceholder: '#9B9BA0',
     },
   },
   /*
@@ -238,6 +288,9 @@ export const CHAT_THEMES: ChatTheme[] = [
       meta: '#7C6550',
       dividerLine: '#EFD9BE',
       highlight: '#F2D4B4',
+      inputBar: '#FDF2E9',
+      inputField: '#FFFFFF',
+      inputPlaceholder: '#6F716F',
     },
     dark: {
       background: '#221D18',
@@ -248,6 +301,9 @@ export const CHAT_THEMES: ChatTheme[] = [
       meta: '#A0918A',
       dividerLine: '#3F372E',
       highlight: '#3A2E20',
+      inputBar: '#221D18',
+      inputField: '#332C25',
+      inputPlaceholder: '#9B9993',
     },
   },
   /* 위 'peach' 와 같은 이유 — 액센트 '민트'(#49CAA5)와 달리 이건 진한 청록이다 */
@@ -263,6 +319,9 @@ export const CHAT_THEMES: ChatTheme[] = [
       meta: '#556B63',
       dividerLine: '#C4DED2',
       highlight: '#C2DFD1',
+      inputBar: '#EAF5F0',
+      inputField: '#FFFFFF',
+      inputPlaceholder: '#6F716F',
     },
     dark: {
       background: '#171F1C',
@@ -273,6 +332,9 @@ export const CHAT_THEMES: ChatTheme[] = [
       meta: '#8A9B94',
       dividerLine: '#333E39',
       highlight: '#1E322B',
+      inputBar: '#171F1C',
+      inputField: '#252E2A',
+      inputPlaceholder: '#949A96',
     },
   },
 
@@ -300,6 +362,9 @@ export const CHAT_THEMES: ChatTheme[] = [
       meta: '#A9AEB6',
       dividerLine: '#3A3F47',
       highlight: '#343A42',
+      inputBar: '#23262B',
+      inputField: '#F2F4F7',
+      inputPlaceholder: '#686A6F',
     },
     dark: {
       background: '#17191D',
@@ -310,6 +375,9 @@ export const CHAT_THEMES: ChatTheme[] = [
       meta: '#9BA0A8',
       dividerLine: '#2C2F35',
       highlight: '#282C32',
+      inputBar: '#17191D',
+      inputField: '#E6E9ED',
+      inputPlaceholder: '#616469',
     },
   },
   {
@@ -324,6 +392,9 @@ export const CHAT_THEMES: ChatTheme[] = [
       meta: '#9FB3A4',
       dividerLine: '#2E4235',
       highlight: '#2A3C31',
+      inputBar: '#1C2A20',
+      inputField: '#F1F4F0',
+      inputPlaceholder: '#676A67',
     },
     dark: {
       background: '#131E17',
@@ -334,6 +405,9 @@ export const CHAT_THEMES: ChatTheme[] = [
       meta: '#94A898',
       dividerLine: '#23332A',
       highlight: '#213228',
+      inputBar: '#131E17',
+      inputField: '#E4E9E3',
+      inputPlaceholder: '#616460',
     },
   },
   {
@@ -348,6 +422,9 @@ export const CHAT_THEMES: ChatTheme[] = [
       meta: '#A3AECB',
       dividerLine: '#2E3A5C',
       highlight: '#293354',
+      inputBar: '#1B2440',
+      inputField: '#F2F4FA',
+      inputPlaceholder: '#686A75',
     },
     dark: {
       background: '#131A2E',
@@ -358,6 +435,9 @@ export const CHAT_THEMES: ChatTheme[] = [
       meta: '#97A2BE',
       dividerLine: '#232C47',
       highlight: '#212C49',
+      inputBar: '#131A2E',
+      inputField: '#E5E9F2',
+      inputPlaceholder: '#616470',
     },
   },
   {
@@ -372,6 +452,9 @@ export const CHAT_THEMES: ChatTheme[] = [
       meta: '#B7A4BB',
       dividerLine: '#3E2E44',
       highlight: '#3E2D45',
+      inputBar: '#2A1E2E',
+      inputField: '#F5F2F6',
+      inputPlaceholder: '#6D686E',
     },
     dark: {
       background: '#1D1420',
@@ -382,6 +465,9 @@ export const CHAT_THEMES: ChatTheme[] = [
       meta: '#A992AD',
       dividerLine: '#332438',
       highlight: '#33243B',
+      inputBar: '#1D1420',
+      inputField: '#E9E4EB',
+      inputPlaceholder: '#666168',
     },
   },
 ];
@@ -454,7 +540,7 @@ function withPhoto(base: ChatPalette): ChatPalette {
 
 export function chatPalette(scheme: Scheme, id: ChatThemeId = currentId): ChatPalette {
   const theme = byId.get(id) ?? byId.get(DEFAULT_CHAT_THEME_ID)!;
-  const base: ChatPalette = { ...theme[scheme], metaCapsule: 'transparent' };
+  const base: ChatPalette = { ...theme[scheme], metaCapsule: 'transparent', inputIcon: theme[scheme].meta };
   if (id !== DEFAULT_CHAT_THEME_ID) return withPhoto(base);
   /*
    * '기본' 테마의 내 말풍선은 앱 액센트를 따른다 — 사용자가 민트·피치를 골랐는데 채팅만
