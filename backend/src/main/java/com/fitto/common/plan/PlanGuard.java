@@ -294,8 +294,8 @@ public class PlanGuard {
         return new FeatureState(
                 feature.name(), feature.displayName(), allowed,
                 quota.limit(), used, remaining, quota.window().name(),
-                // limitExceeded 와 같은 근거 — 최상위 플랜이면 팔 것이 없다.
-                !plan.isAtLeast(Plan.PRO),
+                // limitExceeded 와 같은 근거 — 결제로 풀리지 않으면 팔 것이 없다.
+                upsells(feature, plan),
                 credits);
     }
 
@@ -353,6 +353,17 @@ public class PlanGuard {
         return (last - 0xAC00) % 28 == 0 ? Jongseong.NO : Jongseong.YES;
     }
 
+    /**
+     * 이 한도가 <b>결제로 풀리는가</b> — 402(업셀)와 429(그냥 한도)를 가르는 단 하나의 근거.
+     *
+     * <p>최상위 플랜이면 팔 것이 없고, FREE·PRO 한도가 같은 기능({@link Feature#isComparable()}
+     * 이 false — 기록 내보내기)은 결제해도 똑같이 막힌다. 그런데도 402 를 주면 앱이 결제 시트를
+     * 띄워 "돈을 내면 풀린다"는 거짓말을 한다.
+     */
+    private static boolean upsells(Feature feature, Plan plan) {
+        return !plan.isAtLeast(Plan.PRO) && feature.isComparable();
+    }
+
     private BusinessException limitExceeded(Feature feature, Plan plan, Quota quota) {
         String period = switch (quota.window()) {
             case DAY -> "하루";
@@ -360,8 +371,8 @@ public class PlanGuard {
             case MONTH -> "한 달";
             case TOTAL, NONE -> null;
         };
-        if (plan.isAtLeast(Plan.PRO)) {
-            // 이미 최상위 플랜 — 업셀할 것이 없다. 남용 방지 한도에 걸린 것뿐이다.
+        if (!upsells(feature, plan)) {
+            // 이미 최상위 플랜이거나 PRO 도 한도가 같다 — 업셀할 것이 없다. 남용 방지 한도에 걸린 것뿐이다.
             return new BusinessException(ErrorCode.USAGE_LIMIT_EXCEEDED,
                     period == null
                             ? "%s 이용 한도를 모두 사용했어요.".formatted(feature.displayName())

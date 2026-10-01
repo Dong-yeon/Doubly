@@ -55,6 +55,8 @@ export type HomeStackParamList = PlaceScreensParamList & {
   NotificationCategories: undefined;
   MealReminders: undefined;
   ChangePassword: undefined;
+  // 내 기록 내보내기 — 사진까지 ZIP 한 파일로 (docs/DATA_EXPORT_2026-10-01.md)
+  RecordExport: undefined;
   // 약관 전문 (온보딩 스택과 동일 화면을 재사용)
   LegalDocument: { doc: 'terms' | 'privacy' | 'oss' };
   TrainerRegister: undefined;

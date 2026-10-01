@@ -83,6 +83,7 @@
     "verify:sticker-codes": "node scripts/verify-sticker-codes.mjs",
     "verify:context-stickers": "node scripts/verify-context-stickers.mjs",
     "verify:service-status": "node scripts/verify-service-status.mjs",
+    "verify:export-zip": "node scripts/verify-export-zip.mjs",
     "build:android": "npx eas-cli build --platform android --profile production",
     "build:ios": "npx eas-cli build --platform ios --profile production",
     "build:store": "npx eas-cli build --platform all --profile production",
