@@ -5,7 +5,7 @@
 import { create } from 'zustand';
 import { STORAGE_KEYS } from '../constants/config';
 import { authApi, RegisterPayload } from '../api/auth';
-import { setAuthFailureHandler } from '../api/client';
+import { isSessionRejected, setAuthFailureHandler } from '../api/client';
 import { storage } from '../utils/storage';
 import { Alert } from '../utils/alert';
 import { formatMonthDay } from '../utils/date';
@@ -21,6 +21,11 @@ interface AuthState {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  /**
+   * 저장된 세션은 있는데 서버에 닿지 못해 복원을 못 한 상태. 로그아웃이 아니다 —
+   * 토큰은 그대로 두고 RootNavigator 가 "다시 시도" 화면을 보여 준다.
+   */
+  bootFailed: boolean;
   bootstrap: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   /** 구글 로그인 — 검증된 ID 토큰으로 로그인/가입 */
@@ -66,18 +71,20 @@ async function persistTokens(tokens: AuthTokens) {
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   isLoading: true,
+  bootFailed: false,
   isAuthenticated: false,
 
   // 앱 시작 시 저장된 토큰 확인 후 프로필 복원
   bootstrap: async () => {
     const token = await storage.getItem(STORAGE_KEYS.accessToken);
     if (!token) {
-      set({ isAuthenticated: false, isLoading: false });
+      set({ isAuthenticated: false, isLoading: false, bootFailed: false });
       return;
     }
+    set({ isLoading: true, bootFailed: false });
     try {
       // 토큰 만료 시 client 인터셉터가 refresh 를 시도. 실패하면 catch 로 이동.
-      const user = await authApi.me();
+      const user = await meWithRetry();
       set({ user, isAuthenticated: true, isLoading: false });
       // 인증 복원 후 푸시 토큰 등록 (실패해도 무시)
       registerPushTokenIfGranted();
@@ -90,9 +97,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
        * 데이터 자체가 커플 사용자에게 영영 로드되지 않았다 — 여기서 부팅 시 채운다.
        */
       void useChatStore.getState().loadRooms();
-    } catch {
-      await clearTokens();
-      set({ user: null, isAuthenticated: false, isLoading: false });
+    } catch (e) {
+      // 서버가 세션을 거절했을 때만 로그아웃. 연결 문제면 토큰을 지키고 다시 시도하게 한다.
+      if (isSessionRejected(e)) {
+        await clearTokens();
+        set({ user: null, isAuthenticated: false, isLoading: false });
+      } else {
+        set({ isLoading: false, bootFailed: true });
+      }
     }
   },
 
@@ -146,7 +158,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // 네트워크 오류 등은 무시 — 로컬 세션 정리는 항상 수행
     }
     await clearTokens();
-    set({ user: null, isAuthenticated: false });
+    set({ user: null, isAuthenticated: false, bootFailed: false });
   },
 
   /**
@@ -163,6 +175,23 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     );
   },
 }));
+
+/**
+ * 앱 시작 시 프로필 조회 — 연결 문제면 잠깐 기다렸다 다시 묻는다(1s → 2s → 4s).
+ * 앱을 켜는 순간 와이파이↔LTE 전환 등으로 첫 요청만 끊기는 일이 흔하다.
+ * 세션 거절(401/403)은 기다려도 바뀌지 않으니 바로 올린다.
+ */
+async function meWithRetry(): Promise<User> {
+  const delays = [1000, 2000, 4000];
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await authApi.me();
+    } catch (e) {
+      if (isSessionRejected(e) || attempt >= delays.length) throw e;
+      await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
+    }
+  }
+}
 
 // refresh 실패 시(client 인터셉터) 세션을 비인증으로 전환. 토큰은 이미 정리됨.
 setAuthFailureHandler(() => {
