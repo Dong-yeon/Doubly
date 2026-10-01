@@ -49,11 +49,15 @@ public interface CoupleGameRepository extends JpaRepository<CoupleGame, Long> {
     /**
      * 멈춘 판 — 진행 중인데 {@code before} 전부터 움직임이 없고, 이번 멈춤에는 아직 알리지 않은 판.
      * 리마인더를 보낸 뒤 판이 다시 움직이면 updated_at 이 reminded_at 을 앞질러 다음 멈춤에 또 알린다.
+     * {@code after} 보다 오래 묵은 판은 버려진 판으로 보고 부르지 않는다.
      */
     @Query("""
             select g from CoupleGame g
-            where g.status = :status and g.updatedAt < :before
+            where g.status = :status and g.updatedAt < :before and g.updatedAt >= :after
               and (g.remindedAt is null or g.remindedAt < g.updatedAt)
+            order by g.updatedAt desc
             """)
-    List<CoupleGame> findStalled(@Param("status") GameStatus status, @Param("before") LocalDateTime before);
+    List<CoupleGame> findStalled(@Param("status") GameStatus status,
+                                 @Param("before") LocalDateTime before,
+                                 @Param("after") LocalDateTime after);
 }

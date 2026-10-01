@@ -21,7 +21,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 게임 재촉("살짝 찌르기")과 멈춘 판 리마인더 — 종목 공통. docs/GAME_NUDGE_2026-09-30.md.
@@ -41,6 +43,11 @@ public class GameNudgeService {
     static final Duration NUDGE_GAP = Duration.ofHours(24);
     /** 이만큼 움직임이 없으면 멈춘 판으로 보고 한 번 알린다 */
     static final Duration STALL = Duration.ofHours(24);
+    /**
+     * 이보다 오래 멈춘 판은 버려진 판이다 — 부르지 않는다. 하한이 없으면 리마인더가 처음 돈 날,
+     * 몇 달 전에 둔 판마다 "판이 기다려요" 가 한꺼번에 갔다(1.0.5 점검).
+     */
+    static final Duration ABANDONED = Duration.ofDays(7);
     /** 리마인더를 보내는 시간대(KST) — 밤에 게임 알림으로 깨우지 않는다 */
     static final int REMIND_FROM_HOUR = 10;
     static final int REMIND_UNTIL_HOUR = 22;
@@ -119,9 +126,15 @@ public class GameNudgeService {
     public int remindStalled() {
         LocalDateTime now = LocalDateTime.now();
         int count = 0;
-        for (CoupleGame game : games.findStalled(GameStatus.IN_PROGRESS, now.minus(STALL))) {
-            // 오늘의 스도쿠는 그날의 판이라 멈춰도 부를 일이 아니다 — 내일은 새 판이다
-            if (game instanceof SudokuGame s && s.isDaily()) continue;
+        // 한 번 돌 때 한 사람에게 한 통 — 여러 종목이 함께 멈췄으면 최근 판부터 시간마다 하나씩
+        Set<Long> notified = new HashSet<>();
+        for (CoupleGame game : games.findStalled(GameStatus.IN_PROGRESS, now.minus(STALL), now.minus(ABANDONED))) {
+            // 오늘의 스도쿠는 그날의 판이라 멈춰도 부를 일이 아니다 — 내일은 새 판이다.
+            // 알린 것으로 적어 두지 않으면 매시간 다시 조회된다
+            if (game instanceof SudokuGame s && s.isDaily()) {
+                games.markReminded(game.getId(), now);
+                continue;
+            }
             Relation couple = relations.findById(game.getCoupleId()).orElse(null);
             if (couple == null || !couple.isActive()) continue;
 
@@ -133,6 +146,8 @@ public class GameNudgeService {
             char awaited = game.awaitedSide();
             if (awaited != CoupleGame.OWNER_PARTNER) targets.add(creator);
             if (awaited != CoupleGame.OWNER_CREATOR) targets.add(other);
+            if (targets.stream().anyMatch(notified::contains)) continue; // 다음 시간에
+            notified.addAll(targets);
 
             String label = labelOf(game.getGameType());
             for (Long target : targets) {
