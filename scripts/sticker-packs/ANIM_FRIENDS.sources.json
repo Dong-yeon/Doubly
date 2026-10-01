@@ -8,15 +8,56 @@
     "썸네일": "lottie-web canvas 렌더러로 중간 프레임을 144px PNG 로"
   },
   "items": [
-    { "code": "FRIEND_COUPLE_BEAR", "sourceUrl": "https://lottiefiles.com/free-animation/couple-bear-valentine-iqYd5yFl0g", "creator": "Tam Doan" },
-    { "code": "FRIEND_KISS_SHEEP", "sourceUrl": "https://lottiefiles.com/free-animation/love-sheep-jXaFB2LFQu", "creator": "Harshil Verma" },
-    { "code": "FRIEND_HUG_DOG", "sourceUrl": "https://lottiefiles.com/free-animation/pet-hug-vjKeztSrmY", "creator": "can nazlican" },
-    { "code": "FRIEND_LOVE_BUNNY", "sourceUrl": "https://lottiefiles.com/free-animation/kawaii-animals-giving-love-409LdhB8ws", "creator": "Abdul Latif" },
-    { "code": "FRIEND_SHY_HEART", "sourceUrl": "https://lottiefiles.com/free-animation/red-cute-enamored-heart-VaarfaILr5", "creator": "Abdul Latif" },
-    { "code": "FRIEND_HI_BEAR", "sourceUrl": "https://lottiefiles.com/free-animation/kawaii-emoji-saying-hi-3KvCHlg6Y2", "creator": "Abdul Latif" },
-    { "code": "FRIEND_WAVE_BEAR", "sourceUrl": "https://lottiefiles.com/free-animation/waving-bear-3e2qFVfuGO", "creator": "Nafta" },
-    { "code": "FRIEND_HI_HEART", "sourceUrl": "https://lottiefiles.com/free-animation/cute-heart-saying-hi-F7Y3B0x8mk", "creator": "Abdul Latif" },
-    { "code": "FRIEND_PEEK_DOG", "sourceUrl": "https://lottiefiles.com/free-animation/flirting-dog-GMvO9XCHkr", "creator": "Margarita Ivanchikova" },
-    { "code": "FRIEND_SLEEPY_CAT", "sourceUrl": "https://lottiefiles.com/free-animation/sleepy-cat-4pXauzENzA", "creator": "Julio" }
-  ]
+    {
+      "code": "FRIEND_COUPLE_BEAR",
+      "sourceUrl": "https://lottiefiles.com/free-animation/couple-bear-valentine-iqYd5yFl0g",
+      "creator": "Tam Doan"
+    },
+    {
+      "code": "FRIEND_KISS_SHEEP",
+      "sourceUrl": "https://lottiefiles.com/free-animation/love-sheep-jXaFB2LFQu",
+      "creator": "Harshil Verma"
+    },
+    {
+      "code": "FRIEND_HUG_DOG",
+      "sourceUrl": "https://lottiefiles.com/free-animation/pet-hug-vjKeztSrmY",
+      "creator": "can nazlican"
+    },
+    {
+      "code": "FRIEND_LOVE_BUNNY",
+      "sourceUrl": "https://lottiefiles.com/free-animation/kawaii-animals-giving-love-409LdhB8ws",
+      "creator": "Abdul Latif"
+    },
+    {
+      "code": "FRIEND_SHY_HEART",
+      "sourceUrl": "https://lottiefiles.com/free-animation/red-cute-enamored-heart-VaarfaILr5",
+      "creator": "Abdul Latif"
+    },
+    {
+      "code": "FRIEND_HI_BEAR",
+      "sourceUrl": "https://lottiefiles.com/free-animation/kawaii-emoji-saying-hi-3KvCHlg6Y2",
+      "creator": "Abdul Latif"
+    },
+    {
+      "code": "FRIEND_WAVE_BEAR",
+      "sourceUrl": "https://lottiefiles.com/free-animation/waving-bear-3e2qFVfuGO",
+      "creator": "Nafta"
+    },
+    {
+      "code": "FRIEND_HI_HEART",
+      "sourceUrl": "https://lottiefiles.com/free-animation/cute-heart-saying-hi-F7Y3B0x8mk",
+      "creator": "Abdul Latif"
+    },
+    {
+      "code": "FRIEND_PEEK_DOG",
+      "sourceUrl": "https://lottiefiles.com/free-animation/flirting-dog-GMvO9XCHkr",
+      "creator": "Margarita Ivanchikova"
+    },
+    {
+      "code": "FRIEND_SLEEPY_CAT",
+      "sourceUrl": "https://lottiefiles.com/free-animation/sleepy-cat-4pXauzENzA",
+      "creator": "Julio"
+    }
+  ],
+  "_merged": "2026-10-01 V113: 이 10종은 \"동물 친구들\"(ANIM_ANIMALS) 팩의 앞 10종으로 합쳐졌다. 코드(FRIEND_*)는 그대로."
 }
