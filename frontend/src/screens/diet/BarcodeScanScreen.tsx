@@ -15,7 +15,7 @@
  * 이제 이미 떠 있는 카메라를 "표 찍기" 모드로 돌려 셔터로 찍고, 결과는 {@code popTo(..., { merge: true })}
  * 로 <b>원래 식단기록 인스턴스</b>에 넘긴다. 바코드 조회 성공 경로도 같은 이유로 popTo 다.
  */
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -61,6 +61,16 @@ export function BarcodeScanScreen({ navigation }: Props) {
 
   // 조회 중이거나 결과를 보여 주는 동안, 표 찍기 모드에서는 카메라가 바코드를 더 읽지 않는다
   const paused = looking || outcome !== null || labelFor !== null;
+  /*
+   * 동기 잠금 — paused 는 상태라 다음 렌더에야 반영되는데, 카메라는 같은 바코드를 프레임마다 연달아
+   * 콜백한다. 그 사이 두 번째 콜백이 들어와 조회가 두 번 나가고 식단기록에 같은 음식이 두 번 붙었다
+   * (1.0.5 점검). 결과 화면이 닫혀 스캔이 다시 열릴 때 풀고, 찾아서 돌아가는 중이면 끝까지 잠가 둔다.
+   */
+  const scanLockRef = useRef(false);
+  const leavingRef = useRef(false);
+  useEffect(() => {
+    if (!paused && !leavingRef.current) scanLockRef.current = false;
+  }, [paused]);
 
   /** 원래 식단기록 인스턴스로 돌아가며 파라미터를 합친다 — navigate 는 새로 쌓는다(파일 주석) */
   const backToRecord = (params: DietStackParamList['DietRecord']) => {
@@ -68,7 +78,8 @@ export function BarcodeScanScreen({ navigation }: Props) {
   };
 
   const onScanned = async ({ data }: { data: string }) => {
-    if (paused) return;
+    if (paused || scanLockRef.current) return;
+    scanLockRef.current = true;
     setLooking(true);
     haptics.light();
     try {
@@ -76,6 +87,7 @@ export function BarcodeScanScreen({ navigation }: Props) {
       const hasNutrition = result.calories != null || result.carbs != null || result.protein != null;
       if (hasNutrition) {
         haptics.success();
+        leavingRef.current = true;
         backToRecord({ barcodeResult: result });
         return;
       }

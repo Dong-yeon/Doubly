@@ -36,6 +36,7 @@ import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 /**
@@ -253,6 +254,38 @@ class GamePlayNotifyTest {
         nudgeService.remindStalled();
         verify(notificationService).notify(eq(users[0]), eq(NotificationCategory.PARTNER),
                 contains("오목"), contains("멈춰 있어요"), anyString());
+    }
+
+    @Test
+    void 일주일_넘게_버려진_판은_부르지_않는다() {
+        long[] users = couple("nba", "nbb");
+        OmokGameResponse game = omokService.start(users[0]);
+        quietFor(game.id(), 8 * 24 * 60);
+        clearInvocations(notificationService);
+
+        nudgeService.remindStalled();
+
+        verify(notificationService, never()).notify(any(), any(), anyString(), contains("멈춰 있어요"), anyString());
+    }
+
+    @Test
+    void 여러_판이_함께_멈췄어도_한_번에_한_통만_간다() {
+        long[] users = couple("nma", "nmb");
+        OmokGameResponse omok = omokService.start(users[0]);
+        SudokuGameResponse sudoku = sudokuService.start(users[0], new StartSudokuRequest(GameDifficulty.EASY));
+        quietFor(omok.id(), 25 * 60);
+        quietFor(sudoku.id(), 30 * 60);
+        clearInvocations(notificationService);
+
+        nudgeService.remindStalled();
+
+        // 최근에 멈춘 오목부터 — 둘 다 기다리는 스도쿠는 오목을 받은 상대와 겹치므로 다음 시간으로
+        verify(notificationService, times(1)).notify(eq(users[1]), any(), anyString(), contains("멈춰 있어요"), anyString());
+        verify(notificationService, never()).notify(eq(users[0]), any(), anyString(), contains("멈춰 있어요"), anyString());
+
+        clearInvocations(notificationService);
+        nudgeService.remindStalled();
+        verify(notificationService).notify(eq(users[0]), any(), contains("협동 스도쿠"), contains("멈춰 있어요"), anyString());
     }
 
     /**

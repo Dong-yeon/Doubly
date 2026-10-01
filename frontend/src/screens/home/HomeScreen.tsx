@@ -819,11 +819,13 @@ export function HomeScreen({ navigation }: Props) {
                        * 가기로 했고(WORKOUT_CHECKIN_DURATION_2026-09-27) 이 칩도 그 약속을 따른다.
                        */
                       // 이미 했으면 운동 홈 — 가려 둔 동안(WORKOUT_HOME_ENABLED)은 체크인 카드가 있는 럽바디 메인
+                      // pop: 스택은 같은 화면이 맨 위일 때만 재사용한다 — 캘린더 등을 열어 둔 채 오면 DietMain 이
+                      // 하나 더 쌓여 뒤로가기 없는 첫 화면처럼 보였다. 이 파일의 DietMain 이동은 전부 같은 이유로 pop
                       navigation.navigate('Health', myWorkoutDone
                         ? WORKOUT_HOME_ENABLED
                           ? { screen: 'WorkoutMain', initial: false }
-                          : { screen: 'DietMain' }
-                        : { screen: 'DietMain', params: { checkin: Date.now() } });
+                          : { screen: 'DietMain', pop: true }
+                        : { screen: 'DietMain', params: { checkin: Date.now() }, pop: true });
                       return;
                     }
                     /*
@@ -837,7 +839,7 @@ export function HomeScreen({ navigation }: Props) {
                      * (기존 주석대로 두 화면 모두 내 기록만 보여주므로 목적지는 그대로 DietMain)
                      */
                     if (who === 'partner') {
-                      navigation.navigate('Health', { screen: 'DietMain' });
+                      navigation.navigate('Health', { screen: 'DietMain', pop: true });
                       return;
                     }
                     setMealSheet(true);
@@ -954,7 +956,7 @@ export function HomeScreen({ navigation }: Props) {
                 <SettingsRow
                   title="운동 챙기기"
                   leading={<MaterialCommunityIcons name="dumbbell" size={22} color={colors.textSecondary} />}
-                  onPress={() => navigation.navigate('Health', { screen: 'DietMain', params: { checkin: Date.now() } })}
+                  onPress={() => navigation.navigate('Health', { screen: 'DietMain', params: { checkin: Date.now() }, pop: true })}
                 />
                 <SettingsRow
                   title="식단 기록하기"
@@ -1014,7 +1016,7 @@ export function HomeScreen({ navigation }: Props) {
         onPickPhoto={() => void saveMealFromPhoto('library')}
         onViewToday={() => {
           setMealSheet(false);
-          navigation.navigate('Health', { screen: 'DietMain' });
+          navigation.navigate('Health', { screen: 'DietMain', pop: true });
         }}
       />
     </View>

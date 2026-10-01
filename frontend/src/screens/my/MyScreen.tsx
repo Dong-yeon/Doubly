@@ -151,6 +151,25 @@ export function MyScreen({ navigation }: Props) {
   };
 
   const onSaveBody = async () => {
+    /*
+     * 저장 전에 먼저 본다 — 프로필(키·성별)을 저장한 뒤 체중에서 서버가 거절하면 반쯤만 저장됐다.
+     * 범위는 서버 SaveBodyMetricRequest 와 같다. 체지방률은 측정 한 건에 체중과 함께 남으므로
+     * 체중 없이 넣으면 저장되지 않는데도 "저장했어요"가 떴다(1.0.5 점검).
+     */
+    const w = weightKg ? Number(weightKg) : undefined;
+    const f = bodyFatPct ? Number(bodyFatPct) : undefined;
+    if (w !== undefined && !(Number.isFinite(w) && w >= 20 && w <= 300)) {
+      Alert.alert('체중을 확인해 주세요', '20~300kg 사이로 입력해 주세요.');
+      return;
+    }
+    if (f !== undefined && !(Number.isFinite(f) && f >= 1 && f <= 75)) {
+      Alert.alert('체지방률을 확인해 주세요', '1~75% 사이로 입력해 주세요.');
+      return;
+    }
+    if (f !== undefined && w === undefined) {
+      Alert.alert('체중도 함께 적어 주세요', '체지방률은 체중과 함께 저장돼요.');
+      return;
+    }
     setSavingBody(true);
     try {
       await updateProfile({
@@ -159,8 +178,6 @@ export function MyScreen({ navigation }: Props) {
         gender,
       });
       // 체중·체지방률은 바뀌었을 때만 새 측정으로 남긴다 — 키만 고쳐도 같은 체중이 줄줄이 쌓이지 않게
-      const w = weightKg ? Number(weightKg) : undefined;
-      const f = bodyFatPct ? Number(bodyFatPct) : undefined;
       if (w !== undefined && (w !== latestBody?.weightKg || f !== (latestBody?.bodyFatPct ?? undefined))) {
         setLatestBody(await bodyApi.save({ weightKg: w, bodyFatPct: f }));
       }

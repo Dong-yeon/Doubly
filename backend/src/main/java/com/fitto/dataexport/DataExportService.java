@@ -6,6 +6,7 @@ import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.plan.Feature;
 import com.fitto.common.plan.FeatureState;
 import com.fitto.common.plan.PlanGuard;
+import com.fitto.common.time.KstClock;
 import com.fitto.dataexport.dto.ExportMedia;
 import com.fitto.dataexport.dto.ExportPageResponse;
 import com.fitto.dataexport.dto.ExportSummaryResponse;
@@ -204,7 +205,11 @@ public class DataExportService {
 
     /**
      * 드라이버가 주는 값을 JSON 으로 옮기기 좋게 — 컬럼 이름은 소문자(H2 는 대문자로 준다),
-     * 날짜·시각은 ISO 문자열(KST 벽시계 그대로), CLOB 은 문자열.
+     * 날짜·시각은 ISO 문자열(KST 벽시계), CLOB 은 문자열.
+     *
+     * <p>timestamp 는 저장 TZ(= JVM 기본, 운영은 UTC) 벽시계라 <b>KST 로 옮겨야 한다</b>. 예전엔 그대로 내보내
+     * 운영에서 모든 시각이 9시간 이르게 찍혔다 — 밤 11시 대화가 14:00 로(1.0.5 점검). 내보내는 timestamp 는
+     * 모두 서버가 now() 로 남긴 값이다(사용자가 고른 시각인 예약 메시지는 내보내지 않는다).
      */
     static Map<String, Object> normalize(Map<String, Object> raw) {
         Map<String, Object> row = new LinkedHashMap<>();
@@ -214,7 +219,7 @@ public class DataExportService {
 
     private static Object plain(Object v) {
         if (v == null) return null;
-        if (v instanceof java.sql.Timestamp ts) return ts.toLocalDateTime().toString();
+        if (v instanceof java.sql.Timestamp ts) return ts.toInstant().atZone(KstClock.ZONE).toLocalDateTime().toString();
         if (v instanceof java.sql.Date d) return d.toLocalDate().toString();
         if (v instanceof java.sql.Time t) return t.toLocalTime().toString();
         if (v instanceof TemporalAccessor) return v.toString();

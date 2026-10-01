@@ -329,7 +329,16 @@ async function downloadMedia(s: ExportState, onProgress: (p: ExportProgress) => 
       ensureDir(target.parentDirectory);
       while (m.status === 'pending') {
         try {
-          if (!target.exists) await File.downloadFileAsync(url, target, { idempotent: true });
+          if (!target.exists) {
+            /*
+             * 임시 이름으로 받고 다 받은 뒤에만 제 이름을 붙인다. 안드로이드는 목적지 파일에 바로 쓰므로,
+             * 받다 끊기면 반쪽 파일이 남고 다음 시도에서 exists 가 참이라 깨진 채 "받음"이 됐다(1.0.5 점검).
+             */
+            const part = new File(target.parentDirectory, `${target.name}.part`);
+            if (part.exists) part.delete();
+            await File.downloadFileAsync(url, part, { idempotent: true });
+            part.rename(target.name);
+          }
           m.status = 'done';
         } catch (e) {
           if (isGone(e)) {
