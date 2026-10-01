@@ -731,8 +731,17 @@ export function HomeScreen({ navigation }: Props) {
               </Text>
               <Text style={styles.withdrawalNoticeBody}>
                 {formatMonthDay(couple.partner.withdrawalScheduledDate)}에 함께한 기록이 삭제돼요.
-                남기고 싶은 사진은 그 전에 저장해 두세요.
+                남기고 싶은 기록은 그 전에 받아 두세요.
               </Text>
+              {/* 유예기간 중에도 관계는 ACTIVE 라 공동 기록 전부를 받을 수 있다(docs/DATA_EXPORT_2026-10-01.md) */}
+              <Pressable
+                onPress={() => navigation.navigate('RecordExport')}
+                accessibilityRole="button"
+                hitSlop={8}
+                style={styles.withdrawalNoticeAction}
+              >
+                <Text style={styles.withdrawalNoticeActionText}>사진·채팅까지 기록 받기 ›</Text>
+              </Pressable>
             </View>
           ) : null}
 
@@ -1031,6 +1040,8 @@ const styles = themedStyles((colors) => ({
   },
   withdrawalNoticeTitle: { fontSize: fontSize.body, fontWeight: '700', color: colors.dangerText },
   withdrawalNoticeBody: { fontSize: fontSize.caption, color: colors.dangerText },
+  withdrawalNoticeAction: { alignSelf: 'flex-start', paddingVertical: 4, marginTop: 2 },
+  withdrawalNoticeActionText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.dangerText, textDecorationLine: 'underline' },
 
   topBar: {
     flexDirection: 'row',

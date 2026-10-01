@@ -358,9 +358,10 @@ export function MyScreen({ navigation }: Props) {
   const onWithdraw = () => {
     Alert.alert(
       '회원 탈퇴',
-      '14일 뒤 계정과 개인 기록(운동·식단·체중)이 삭제되고, 연결된 관계도 해제돼요.\n커플 공동 기록(맛집·피드·여행·채팅)은 상대방 화면에서도 사라지며, 상대에게 탈퇴 사실이 알려져요.\n\n그 전에 다시 로그인하면 탈퇴가 취소돼요.',
+      '14일 뒤 계정과 개인 기록(운동·식단·체중)이 삭제되고, 연결된 관계도 해제돼요.\n커플 공동 기록(맛집·피드·여행·채팅)은 상대방 화면에서도 사라지며, 상대에게 탈퇴 사실이 알려져요.\n\n그 전에 다시 로그인하면 탈퇴가 취소돼요.\n기록을 남기고 싶다면 탈퇴 전에 먼저 받아 두세요 — 탈퇴하면 로그인하는 순간 취소되므로, 유예기간 중에는 받을 수 없어요.',
       [
         { text: '취소', style: 'cancel' },
+        { text: '기록 먼저 받기', onPress: () => navigation.navigate('RecordExport') },
         {
           text: '계속',
           style: 'destructive',
@@ -495,6 +496,8 @@ export function MyScreen({ navigation }: Props) {
         <SettingsGroup style={styles.group}>
           <SettingsRow title="플랜" onPress={() => navigation.navigate('Plan')} />
           <SettingsRow title="스티커 상점" onPress={() => navigation.navigate('StickerShop')} />
+          {/* 결제와 무관 — "내 기록은 언제든 가져갈 수 있다"(docs/DATA_EXPORT_2026-10-01.md) */}
+          <SettingsRow title="내 기록 내보내기" onPress={() => navigation.navigate('RecordExport')} />
           <SettingsRow title="설정" onPress={() => navigation.navigate('Settings')} />
           <SettingsRow title="로그아웃" onPress={onLogout} />
         </SettingsGroup>

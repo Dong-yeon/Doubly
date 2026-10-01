@@ -1854,3 +1854,34 @@ export interface AuthTokens {
   /** 탈퇴 유예기간 중 로그인해 탈퇴가 취소됐으면 true */
   withdrawalCanceled?: boolean;
 }
+
+// 기록 내보내기 (docs/DATA_EXPORT_2026-10-01.md) — 백엔드 com.fitto.dataexport.dto 대응.
+export interface ExportSectionCount {
+  /** 섹션 키 — feed_posts, chat_messages … (ZIP 안 data/<key>.json) */
+  key: string;
+  scope: 'COUPLE' | 'PERSONAL';
+  count: number;
+  mediaCount: number;
+}
+
+export interface ExportSummary {
+  /** 연결된 커플이 있는가 — 없으면 개인 기록만 나간다 */
+  coupled: boolean;
+  sections: ExportSectionCount[];
+  mediaCount: number;
+  /** 장당 평균으로 잡은 어림값(바이트) — 저장공간 확인용 */
+  estimatedBytes: number;
+  /** 이번 주에 새로 시작할 수 있는 횟수(이어받기는 세지 않는다) */
+  remaining: number | null;
+  limit: number;
+  period: string;
+}
+
+export interface ExportPage {
+  section: string;
+  /** 테이블 행 그대로 — 컬럼 이름은 소문자 snake_case */
+  items: Record<string, unknown>[];
+  /** 모양은 utils/exportPaths.ts 의 ExportMediaRef(검증 스크립트가 그 파일만 읽어서 거기 둔다) */
+  media: { section: string; rowId: number; column: string; url: string; kind: 'IMAGE' | 'AUDIO' }[];
+  nextCursor: number | null;
+}

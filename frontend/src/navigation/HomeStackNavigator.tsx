@@ -12,6 +12,7 @@ import { StickerSettingsScreen } from '../screens/chat/StickerSettingsScreen';
 import { NotificationCategoriesScreen } from '../screens/my/NotificationCategoriesScreen';
 import { MealRemindersScreen } from '../screens/my/MealRemindersScreen';
 import { ChangePasswordScreen } from '../screens/my/ChangePasswordScreen';
+import { RecordExportScreen } from '../screens/my/RecordExportScreen';
 import { LegalDocumentScreen } from '../screens/onboarding/LegalDocumentScreen';
 import { FeedComposeScreen } from '../screens/feed/FeedComposeScreen';
 import { DailyQuestionScreen } from '../screens/home/DailyQuestionScreen';
@@ -117,6 +118,7 @@ export function HomeStackNavigator() {
         component={ChangePasswordScreen}
         options={{ title: '비밀번호 변경' }}
       />
+      <Stack.Screen name="RecordExport" component={RecordExportScreen} options={{ title: '내 기록 내보내기' }} />
       <Stack.Screen
         name="LegalDocument"
         component={LegalDocumentScreen}
