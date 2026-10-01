@@ -371,7 +371,12 @@ export function DietScreen({ navigation, route }: Props) {
         text: '삭제',
         style: 'destructive',
         // useDeleteAction 이 in-flight 가드 + 기본 에러 토스트를 처리한다 (QA_CHECKLIST.md 패턴 7)
-        onPress: () => runDelete(m.id, () => remove(m.id), '식단 기록을 삭제하지 못했어요.'),
+        // 지운 뒤 영양 합계·스트릭도 다시 읽는다 — 목록만 빠지고 "오늘 영양" 칼로리가 그대로 남았다
+        onPress: () =>
+          runDelete(m.id, async () => {
+            await remove(m.id);
+            refreshExtras();
+          }, '식단 기록을 삭제하지 못했어요.'),
       },
     ]);
   };
