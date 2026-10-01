@@ -2,7 +2,7 @@
  * 루트 네비게이터 — 인증 상태에 따라 온보딩 / 메인 분기
  */
 import React, { useCallback, useEffect, useRef } from 'react';
-import { ActivityIndicator, AppState, View } from 'react-native';
+import { ActivityIndicator, AppState, Text, View } from 'react-native';
 import {
   DarkTheme,
   DefaultTheme,
@@ -17,6 +17,7 @@ import { linking } from './linking';
 import { OnboardingNavigator } from './OnboardingNavigator';
 import { MainTabNavigator } from './MainTabNavigator';
 import { PushPermissionPrimer } from '../components/PushPermissionPrimer';
+import { Button } from '../components/Button';
 import { dismissNotificationsForPath, setCurrentPath } from '../utils/push';
 import { ConsentGateScreen } from '../screens/onboarding/ConsentGateScreen';
 import { useAuthStore } from '../store/authStore';
@@ -55,7 +56,7 @@ function navTheme() {
 }
 
 export function RootNavigator() {
-  const { isAuthenticated, isLoading, user, bootstrap } = useAuthStore();
+  const { isAuthenticated, isLoading, bootFailed, user, bootstrap, logout } = useAuthStore();
   // 약관 개정(또는 동의 이력 없는 기존 가입자) — 재동의 전까지 메인 진입을 막는다
   const needsConsent = isAuthenticated && !!user?.requiresConsent;
 
@@ -138,10 +139,47 @@ export function RootNavigator() {
     return () => sub.remove();
   }, [pathOf]);
 
+  // 연결 실패로 세션 복원을 못 했다면, 앱으로 돌아올 때(네트워크가 돌아왔을 가능성이 크다) 다시 묻는다
+  useEffect(() => {
+    if (!bootFailed) return;
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') void bootstrap();
+    });
+    return () => sub.remove();
+  }, [bootFailed, bootstrap]);
+
   if (isLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', backgroundColor: colors.background }}>
         <ActivityIndicator color={colors.primary} size="large" />
+      </View>
+    );
+  }
+
+  /*
+   * 로그인 정보는 있는데 서버에 닿지 못했다 — 로그아웃시키지 않고 기다린다.
+   * 예전엔 여기서 토큰을 지워, 앱을 켜는 순간 잠깐 끊기기만 해도 로그인 화면으로 튕겼다.
+   */
+  if (bootFailed) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: 32,
+          gap: 12,
+          backgroundColor: colors.background,
+        }}
+      >
+        <Text style={{ fontSize: 17, fontWeight: '700', color: colors.textPrimary, textAlign: 'center' }}>
+          서버에 연결하지 못했어요
+        </Text>
+        <Text style={{ fontSize: 14, color: colors.textSecondary, textAlign: 'center', marginBottom: 12 }}>
+          인터넷 연결을 확인하고 다시 시도해 주세요.{'\n'}로그인은 그대로 유지돼요.
+        </Text>
+        <Button title="다시 시도" onPress={() => void bootstrap()} />
+        <Button title="다른 계정으로 로그인" variant="ghost" onPress={() => void logout()} />
       </View>
     );
   }
