@@ -35,6 +35,7 @@ import { CachedImage } from '../CachedImage';
 import { MaterialCommunityIcons } from '../Icon';
 import { ANIMATED_STICKERS, animatedStickerOf } from '../../constants/animatedStickers';
 import { useRemoteStickerStore } from '../../store/remoteStickerStore';
+import { applyOrder, useStickerPrefsStore } from '../../store/stickerPrefsStore';
 import { STICKER_CHARACTERS, stickerImageOf } from '../../constants/stickerImages';
 import type { StickerContext } from '../../constants/contextStickers';
 import type { StickerSuggestion } from '../../utils/stickerCodes';
@@ -162,6 +163,8 @@ interface Props {
   onCreateCoupleEmoji: () => void;
   /** 잠긴 팩을 열려고 할 때 — 구매 시트/업그레이드 안내는 화면이 띄운다 */
   onUnlockPack: (pack: StickerPack) => void;
+  /** 탭 줄 끝 정리 버튼 — 이모티콘 설정(받기·숨기기·순서) 화면으로 */
+  onOpenStickerSettings?: () => void;
   /** 우리 이모지 팩을 처음 열 때 — 안 쓰는 사람에게 방마다 조회를 붙이지 않는다 */
   onOpenCouplePack: () => void;
   /** 캐릭터 스티커 길게 누르기 — "문구 넣기" 시트. 움직이는 이모티콘·잠긴 팩에는 붙지 않는다 */
@@ -196,6 +199,7 @@ export function StickerPanel({
   onManageCoupleEmoji,
   onCreateCoupleEmoji,
   onUnlockPack,
+  onOpenStickerSettings,
   onOpenCouplePack,
   onComposeTextSticker,
   contextPack,
@@ -214,6 +218,16 @@ export function StickerPanel({
   // 패널이 처음 그려질 때 한 번. 안 열어 본 사람에게는 조회가 아예 안 간다.
   useEffect(() => { void loadPacks(); }, [loadPacks]);
   useEffect(() => { void useRemoteStickerStore.getState().refresh(); }, []);
+  // 순서·숨김·받은 서버 팩(store/stickerPrefsStore) — 정리는 패널(보내는 쪽)에만 걸린다
+  const prefsOrder = useStickerPrefsStore((s) => s.order);
+  const prefsHidden = useStickerPrefsStore((s) => s.hidden);
+  const prefsDownloaded = useStickerPrefsStore((s) => s.downloaded);
+  const prefsSeen = useStickerPrefsStore((s) => s.seen);
+  useEffect(() => { void useStickerPrefsStore.getState().load(); }, []);
+  // 앱에 든 팩 id — 이게 아니면 서버에만 있는 팩이라 받아야 선다
+  const bundledPackIds = useMemo(() => new Set(ANIMATED_STICKERS.map((a) => a.packId)), []);
+  // 설정 화면에서 아직 못 본 서버 팩 — 정리 버튼에 점을 찍는다
+  const hasNewPack = remotePacks.some((p) => !bundledPackIds.has(p.id) && !prefsSeen.includes(p.id));
 
   const packs = useMemo<PanelPack[]>(() => {
     /*
@@ -304,7 +318,21 @@ export function StickerPanel({
       }
     }
 
-    return [...contextPacks, ...animatedPacks, ...characterPacks, ...couplePacks];
+    /*
+     * 정리 적용 — 서버에만 있는 팩은 받은 것만, 숨긴 칸은 빼고, 사용자 순서로. 맥락 칸(맨 앞)과
+     * 우리 이모지(맨 끝)는 정리 대상이 아니다(utils/stickerPackList 주석). 다 숨겨도 설정 화면이
+     * 한 칸은 남기게 막는다.
+     */
+    const managed = applyOrder(
+      [...animatedPacks, ...characterPacks].filter(
+        (p) =>
+          (bundledPackIds.has(p.key) || !p.animated || prefsDownloaded.includes(p.key)) &&
+          !prefsHidden.includes(p.key),
+      ),
+      prefsOrder,
+    );
+
+    return [...contextPacks, ...managed, ...couplePacks];
 
     function isFree(packId?: string) {
       const pack = packId ? packOf(packId) : undefined;
@@ -324,7 +352,8 @@ export function StickerPanel({
       };
     }
     // serverPacks 를 의존성에 두는 이유: 팩 이름·잠금이 서버에서 늦게 도착한다
-  }, [coupleEmojis, myUserId, partnerName, packOf, serverPacks, contextPack, remotePacks]);
+  }, [coupleEmojis, myUserId, partnerName, packOf, serverPacks, contextPack, remotePacks,
+    prefsOrder, prefsHidden, prefsDownloaded, bundledPackIds]);
 
   const active = packs.find((p) => p.key === activeKey) ?? packs[0];
   const activePack = active?.packId ? packOf(active.packId) : undefined;
@@ -443,6 +472,18 @@ export function StickerPanel({
               </Pressable>
             );
           })}
+          {onOpenStickerSettings ? (
+            // 카카오톡의 이모티콘 설정 자리 — 받기·숨기기·순서. 새 팩이 있으면 점
+            <Pressable
+              style={styles.stripBtn}
+              onPress={onOpenStickerSettings}
+              accessibilityRole="button"
+              accessibilityLabel={`이모티콘 설정${hasNewPack ? ' — 새 이모티콘이 있어요' : ''}`}
+            >
+              <MaterialCommunityIcons name="format-list-bulleted" size={20} color={colors.textSecondary} />
+              {hasNewPack ? <View style={styles.newDot} /> : null}
+            </Pressable>
+          ) : null}
         </ScrollView>
       </View>
 
@@ -535,6 +576,15 @@ const styles = themedStyles((colors) => ({
   stripBtnActive: { backgroundColor: colors.surfaceCard },
   stripImage: { width: 28, height: 28 },
   stripAvatar: { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.surfaceCard },
+  newDot: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: colors.danger,
+  },
   stripBadge: {
     position: 'absolute',
     right: 1,

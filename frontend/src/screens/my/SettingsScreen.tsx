@@ -296,6 +296,8 @@ export function SettingsScreen({ navigation }: Props) {
           footer="사진 칼로리는 직접 적은 값이 있으면 건드리지 않아요."
           style={styles.group}
         >
+          {/* 카카오톡처럼 이모티콘 패널을 정리하는 곳 — 채팅 패널 탭 줄 끝에서도 들어온다 */}
+          <SettingsRow title="이모티콘 설정" onPress={() => navigation.navigate('StickerSettings')} />
           <SettingsRow
             title="사진으로 칼로리 채우기"
             switchValue={user?.autoAnalyzeMealPhoto !== false}

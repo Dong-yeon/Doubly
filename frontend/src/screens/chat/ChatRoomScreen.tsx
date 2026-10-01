@@ -2147,6 +2147,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             onManageCoupleEmoji={manageCoupleEmoji}
             onCreateCoupleEmoji={() => { setShowStickers(false); navigation.navigate('CoupleEmojiCreate'); }}
             onUnlockPack={unlockStickerPack}
+            onOpenStickerSettings={() => { setShowStickers(false); navigation.navigate('StickerSettings'); }}
             onOpenCouplePack={() => { void loadCoupleEmojis().catch(() => undefined); }}
             onComposeTextSticker={(code) => setTextStickerDraft({ code, initialText: '', fromInput: false })}
             contextPack={contextPack}
