@@ -13,6 +13,10 @@
  * <p><b>사진은 폼을 안 거친다.</b> 끼니는 시각으로 정하고(mealTimeSlot) 그 자리에서 저장한다.
  * 칼로리는 저장 뒤 서버가 백그라운드로 채우므로(MealPhotoAutoAnalysisService) 확인할 화면이
  * 필요 없다 — 운동 체크인 카드의 "📷 사진으로"가 기록 화면으로 넘어가는 것과 갈리는 지점이다.
+ *
+ * <p><b>"직접 적기"는 뺐다(2026-10-01).</b> 럽바디의 "+ 식단 기록하기"와 같은 일이라 겹치기만 했고,
+ * 홈에서 다른 탭의 모달을 띄우는 이 경로가 iPhone 에서 럽바디 버튼을 먹통으로 만들었다
+ * (headerOptions.tsx crossTabModalOptions 주석). 폼이 필요하면 "오늘 기록 보기"로 럽바디에 가면 된다.
  */
 import React from 'react';
 import { ActivityIndicator, Modal, Pressable, Text, View } from 'react-native';
@@ -33,7 +37,6 @@ interface Props {
   busy: boolean;
   onTakePhoto: () => void;
   onPickPhoto: () => void;
-  onWriteManually: () => void;
   onViewToday: () => void;
 }
 
@@ -44,7 +47,6 @@ export function QuickMealSheet({
   busy,
   onTakePhoto,
   onPickPhoto,
-  onWriteManually,
   onViewToday,
 }: Props) {
   const kcal = todayMeals.reduce((sum, m) => sum + (m.calories ?? 0), 0);
@@ -79,12 +81,6 @@ export function QuickMealSheet({
             desc={`${slot}으로 바로 기록돼요`}
             busy={busy}
             onPress={onPickPhoto}
-          />
-          <Row
-            icon="pencil-outline"
-            label="직접 적기"
-            desc="끼니·음식·칼로리를 직접 채워요"
-            onPress={onWriteManually}
           />
 
           <View style={styles.divider} />

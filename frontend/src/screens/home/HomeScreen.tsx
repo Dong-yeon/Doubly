@@ -820,7 +820,7 @@ export function HomeScreen({ navigation }: Props) {
                     /*
                      * 식단만 시트를 연다 — 끼니는 하루 세 번이라 "오늘 했다/안 했다"로 목적지를
                      * 가르면 아침 이후로는 빠른 경로가 사라진다. 시트는 기록 여부와 무관하게
-                     * 같은 모양이고(사진 두 갈래 + 직접 적기 + 오늘 기록 보기) ✓ 는 잠금이
+                     * 같은 모양이고(사진 두 갈래 + 오늘 기록 보기) ✓ 는 잠금이
                      * 아니라 상태 표시로 남는다. 운동은 하루 한 번에 가깝고 럽바디 메인의 체크인 카드에
                      * 원탭·사진 버튼이 이미 있어 여기서 겹칠 이유가 없다.
                      *
@@ -1003,11 +1003,6 @@ export function HomeScreen({ navigation }: Props) {
         busy={mealSaving}
         onTakePhoto={() => void saveMealFromPhoto('camera')}
         onPickPhoto={() => void saveMealFromPhoto('library')}
-        onWriteManually={() => {
-          setMealSheet(false);
-          // returnTo — 닫으면 럽바디 탭에 남지 않고 홈으로 돌아온다(위 바로가기와 같은 규칙)
-          navigation.navigate('Health', { screen: 'DietRecord', params: { returnTo: 'Home' }, initial: false });
-        }}
         onViewToday={() => {
           setMealSheet(false);
           navigation.navigate('Health', { screen: 'DietMain' });
