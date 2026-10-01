@@ -1,0 +1,23 @@
+{
+  "_note": "서버 배포 \"동물 친구들\" 팩의 라이선스 근거. 확인일 = 파일 페이지의 'Free to use under the Lottie Simple License' 표기를 본 날(원문은 ANIM_FRIENDS.sources.json 과 같다).",
+  "license": "Lottie Simple License (FL 9.13.21)",
+  "확인일": "2026-10-01",
+  "제공": "무료 (사용자 결정 2026-10-01)",
+  "손질": {
+    "이미지 내장": "잠자는 펭귄·당근 토끼·하트 코기는 .lottie 안에 PNG 가 따로 있어 data URI 로 JSON 안에 넣었다(앱은 JSON 하나만 받는다)",
+    "배경 제거": "잠자는 펭귄의 흰 단색 레이어(ty 1, #ffffff)",
+    "여백 정리": "반짝 토끼·잠자는 펭귄·당근 토끼·하트 코기·안녕 판다 — 래스터가 섞여 있어 lottie-web canvas 로 13프레임 픽셀 범위를 재고 정사각(범위+3%)으로 옮김",
+    "썸네일": "lottie-web canvas 중간 프레임 144px"
+  },
+  "items": [
+    { "code": "ANIMAL_SHIBA_LAUGH", "sourceUrl": "https://lottiefiles.com/free-animation/smiling-dog-bIoJyWZIay", "creator": "Margarita Ivanchikova" },
+    { "code": "ANIMAL_SHIBA_ANGRY", "sourceUrl": "https://lottiefiles.com/free-animation/angry-dog-Yg4vKdXX8d", "creator": "Margarita Ivanchikova" },
+    { "code": "ANIMAL_SHIBA_HAPPY", "sourceUrl": "https://lottiefiles.com/free-animation/happy-dog-JQlCkLqWSP", "creator": "Margarita Ivanchikova" },
+    { "code": "ANIMAL_STAR_BUNNY", "sourceUrl": "https://lottiefiles.com/free-animation/kawaii-animals-emoji-animation-11he01fjrc", "creator": "Abdul Latif" },
+    { "code": "ANIMAL_SLEEPY_PENGUIN", "sourceUrl": "https://lottiefiles.com/free-animation/sleeping-penguin-5mYVcRPGFw", "creator": "Roshni" },
+    { "code": "ANIMAL_CARROT_BUNNY", "sourceUrl": "https://lottiefiles.com/free-animation/transparent-bunny-gif-IiY0iEUbzd", "creator": "Roshni" },
+    { "code": "ANIMAL_COFFEE_SHIBA", "sourceUrl": "https://lottiefiles.com/free-animation/shiba-coffee-relax-B45AGLHZjl", "creator": "Jodie" },
+    { "code": "ANIMAL_HEART_CORGI", "sourceUrl": "https://lottiefiles.com/free-animation/heart-from-corgi-e4oleSt2IT", "creator": "Jonhson Subianto" },
+    { "code": "ANIMAL_PANDA_HI", "sourceUrl": "https://lottiefiles.com/free-animation/cute-panda-waving-friendly-animal-loop-o5Cwjar91S", "creator": "Shreyas" }
+  ]
+}

@@ -369,6 +369,65 @@
           "thumb": "friend_sleepy_cat.c3645033.png"
         }
       ]
+    },
+    {
+      "id": "ANIM_ANIMALS",
+      "items": [
+        {
+          "code": "ANIMAL_SHIBA_LAUGH",
+          "label": "웃는 시바",
+          "file": "animal_shiba_laugh.84a23ca3.json",
+          "thumb": "animal_shiba_laugh.1d63de00.png"
+        },
+        {
+          "code": "ANIMAL_SHIBA_ANGRY",
+          "label": "화난 시바",
+          "file": "animal_shiba_angry.73f6d943.json",
+          "thumb": "animal_shiba_angry.747cf22b.png"
+        },
+        {
+          "code": "ANIMAL_SHIBA_HAPPY",
+          "label": "신난 시바",
+          "file": "animal_shiba_happy.2c35588f.json",
+          "thumb": "animal_shiba_happy.c8996c8d.png"
+        },
+        {
+          "code": "ANIMAL_STAR_BUNNY",
+          "label": "반짝 토끼",
+          "file": "animal_star_bunny.41cf31ac.json",
+          "thumb": "animal_star_bunny.9bc1f2e8.png"
+        },
+        {
+          "code": "ANIMAL_SLEEPY_PENGUIN",
+          "label": "잘자 펭귄",
+          "file": "animal_sleepy_penguin.b98f79e8.json",
+          "thumb": "animal_sleepy_penguin.56a56308.png"
+        },
+        {
+          "code": "ANIMAL_CARROT_BUNNY",
+          "label": "당근 토끼",
+          "file": "animal_carrot_bunny.8ce920df.json",
+          "thumb": "animal_carrot_bunny.b8fb8c38.png"
+        },
+        {
+          "code": "ANIMAL_COFFEE_SHIBA",
+          "label": "커피 시바",
+          "file": "animal_coffee_shiba.ca12714e.json",
+          "thumb": "animal_coffee_shiba.313bba49.png"
+        },
+        {
+          "code": "ANIMAL_HEART_CORGI",
+          "label": "하트 코기",
+          "file": "animal_heart_corgi.6a0e7bb0.json",
+          "thumb": "animal_heart_corgi.ff0aff06.png"
+        },
+        {
+          "code": "ANIMAL_PANDA_HI",
+          "label": "안녕 판다",
+          "file": "animal_panda_hi.90d38214.json",
+          "thumb": "animal_panda_hi.2260e805.png"
+        }
+      ]
     }
   ]
 }

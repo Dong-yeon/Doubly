@@ -66,6 +66,13 @@ export const OSS_ENTRIES: OssEntry[] = [
     usedFor: '채팅 "친구들" 이모티콘 10종 (서버에서 받는 Lottie 애니메이션)',
   },
   {
+    name: 'LottieFiles 무료 애니메이션 (동물 친구들 팩)',
+    copyright: '작가: Margarita Ivanchikova · Abdul Latif · Roshni · Jodie · Jonhson Subianto · Shreyas',
+    license: 'Lottie Simple License (FL 9.13.21) — 일부 그림은 배경·여백을 손질하고 이미지를 파일 안에 넣었다',
+    url: 'https://lottiefiles.com/page/license',
+    usedFor: '채팅 "동물 친구들" 이모티콘 9종 (서버에서 받는 Lottie 애니메이션)',
+  },
+  {
     name: 'Noto Emoji',
     copyright: 'Copyright (c) Google LLC',
     license: 'Apache License 2.0',
