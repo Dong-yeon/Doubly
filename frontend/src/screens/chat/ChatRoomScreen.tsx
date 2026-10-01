@@ -2709,7 +2709,7 @@ function ExtraButton({
             맨살 아이콘만 있으면 미완처럼 보였다(docs/SCREEN_DESIGN_PASS_2026-09-23.md §5-3).
           */}
           <View style={[styles.extraTile, pressed && styles.extraTilePressed]}>
-            <MaterialCommunityIcons name={icon} size={26} color={colors.textPrimary} />
+            <MaterialCommunityIcons name={icon} size={22} color={colors.textPrimary} />
           </View>
           <Text style={chatStyles.extraLabel}>{label}</Text>
         </>
@@ -3009,10 +3009,16 @@ const styles = themedStyles((colors) => ({
     paddingVertical: spacing.sm,
     borderRadius: radius.md,
   },
+  /*
+   * 44 / 아이콘 22 (2026-10-01, 52 / 26 에서). 같은 날 입력바 "+" 원이 28 로 줄어 그걸 눌러 나오는 원이 1.9배가 됐고,
+   * 아이콘(26)이 라벨(12)의 2.2배라 라벨을 눌렀다(카톡 "+" 시트 실측 1.25배). 44 는 입력바 버튼 칸과 같은 숫자다.
+   * 터치는 원이 아니라 칸(extraBtn, 폭 25%) 전체가 받으므로 줄여도 누르는 영역은 그대로다.
+   * 근거: docs/CHAT_KAKAO_MEASURE_2026-10-01.md §3
+   */
   extraTile: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: colors.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
