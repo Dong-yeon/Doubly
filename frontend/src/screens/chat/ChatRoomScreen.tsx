@@ -1,6 +1,6 @@
 /** 채팅 대화 — 설계서 2.5 / 4.5 CHAT-02 (실시간 메시지) */
 import { isCutoutEmoji } from '../../utils/coupleEmoji';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -2846,7 +2846,16 @@ const styles = themedStyles((colors) => ({
     // 12 였을 때 내부 여백만으로 46 을 넘겨 minHeight 가 무의미했다. 10 이면 44 가 산다
     paddingTop: 10,
     paddingBottom: 10,
-    fontSize: fontSize.subtitle,
+    /*
+     * 쓰는 글자 = 보내진 글자. 예전엔 subtitle(17)이라 말풍선(body 14)보다 3px 컸고, 화면에서
+     * 가장 큰 글자가 입력칸이라 "칸이 크다"로 읽혔다(docs/CHAT_UX_REVIEW_2026-10-01.md §1-2 B).
+     * 2026-09-18 에 17 을 둔 이유는 "16 토큰이 없다"였는데, 비교 대상은 16 이 아니라 보낸 결과였다.
+     * 플레이스홀더는 같은 TextInput 이라 따라온다.
+     *
+     * <p><b>웹만 16 이다</b> — 모바일 사파리는 16px 미만 입력칸에 포커스가 가면 화면을 자동 확대하고,
+     * 내려놓아도 돌아오지 않는다. 16 은 그 문턱이라 토큰이 아니라 리터럴로 둔다.
+     */
+    fontSize: Platform.OS === 'web' ? 16 : fontSize.body,
     color: colors.textPrimary,
     // 테두리 대신 살짝 눌린 채움 — 폼 필드가 아니라 "쓰는 자리"로 읽힌다.
     // 테두리를 지운 만큼 입력바 전체가 메시지 목록 뒤로 물러난다(trayBtn 주석).
