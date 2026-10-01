@@ -30,12 +30,11 @@ import java.util.Optional;
  *
  * <p>프론트 {@code frontend/src/constants/animatedStickers.ts} 와 code·label·팩이 정확히
  * 짝을 맞춰야 한다 — 어긋나면 {@code StickerPackSyncTest} 가 잡는다. 두 파일 모두
- * {@code gen_catalog.py} 의 한 원본에서 생성했다. 2026-10-01 에 더한 50종(110 → 160)의 코드포인트·출처는
- * {@code docs/NOTO_EMOJI_EXPANSION_2026-10-01.md} 에 있다.
+ * {@code gen_catalog.py} 의 한 원본에서 생성했다.
  */
 public enum AnimatedSticker {
 
-    /* ── 사랑 23종 ── */
+    /* ── 사랑 18종 ── */
     ANIM_TWO_HEARTS("두근두근", StickerPacks.ANIM_ALL),
     ANIM_KISS("뽀뽀", StickerPacks.ANIM_ALL),
     ANIM_LOVE_FACE("사랑스러워", StickerPacks.ANIM_ALL),
@@ -54,13 +53,8 @@ public enum AnimatedSticker {
     ANIM_LIPS("입술", StickerPacks.ANIM_ALL),
     ANIM_HEART_CAT("하트냥", StickerPacks.ANIM_ALL),
     ANIM_LOVE_LETTER("러브레터", StickerPacks.ANIM_ALL),
-    ANIM_PINK_HEART("핑크하트", StickerPacks.ANIM_ALL),
-    ANIM_FIRE_HEART("불꽃하트", StickerPacks.ANIM_ALL),
-    ANIM_MENDING_HEART("화해", StickerPacks.ANIM_ALL),
-    ANIM_HUGGING("꼬옥", StickerPacks.ANIM_ALL),
-    ANIM_KISSING_CLOSED("쪽", StickerPacks.ANIM_ALL),
 
-    /* ── 웃음·장난 28종 ── */
+    /* ── 웃음·장난 18종 ── */
     ANIM_JOY("빵터짐", StickerPacks.ANIM_ALL),
     ANIM_ZANY("장난", StickerPacks.ANIM_ALL),
     ANIM_COOL("여유", StickerPacks.ANIM_ALL),
@@ -79,18 +73,8 @@ public enum AnimatedSticker {
     ANIM_MELTING("녹는다", StickerPacks.ANIM_ALL),
     ANIM_SALUTE("넵", StickerPacks.ANIM_ALL),
     ANIM_SHUSH("쉿", StickerPacks.ANIM_ALL),
-    ANIM_ROFL("데굴데굴", StickerPacks.ANIM_ALL),
-    ANIM_LAUGHING("깔깔", StickerPacks.ANIM_ALL),
-    ANIM_YUM("냠냠", StickerPacks.ANIM_ALL),
-    ANIM_WINK("찡긋", StickerPacks.ANIM_ALL),
-    ANIM_TONGUE("메롱", StickerPacks.ANIM_ALL),
-    ANIM_GRIN("헤헤", StickerPacks.ANIM_ALL),
-    ANIM_PEEKING("빼꼼", StickerPacks.ANIM_ALL),
-    ANIM_NOD("끄덕끄덕", StickerPacks.ANIM_ALL),
-    ANIM_HEAD_SHAKE("도리도리", StickerPacks.ANIM_ALL),
-    ANIM_SEE_NO_EVIL("부끄", StickerPacks.ANIM_ALL),
 
-    /* ── 속상해 26종 ── */
+    /* ── 속상해 16종 ── */
     ANIM_SOB("엉엉", StickerPacks.ANIM_ALL),
     ANIM_HOLDING_TEARS("울컥", StickerPacks.ANIM_ALL),
     ANIM_RAGE("화남", StickerPacks.ANIM_ALL),
@@ -107,18 +91,8 @@ public enum AnimatedSticker {
     ANIM_BROKEN_HEART("상처", StickerPacks.ANIM_ALL),
     ANIM_ANXIOUS("불안", StickerPacks.ANIM_ALL),
     ANIM_SWEAT("진땀", StickerPacks.ANIM_ALL),
-    ANIM_HAPPY_CRY("웃프다", StickerPacks.ANIM_ALL),
-    ANIM_CRYING_CAT("울보냥", StickerPacks.ANIM_ALL),
-    ANIM_SCREAM("으악", StickerPacks.ANIM_ALL),
-    ANIM_MIND_BLOWN("멘붕", StickerPacks.ANIM_ALL),
-    ANIM_DIZZY("어질어질", StickerPacks.ANIM_ALL),
-    ANIM_SHAKING("덜덜", StickerPacks.ANIM_ALL),
-    ANIM_EXHALE("휴", StickerPacks.ANIM_ALL),
-    ANIM_SICK("아파", StickerPacks.ANIM_ALL),
-    ANIM_COLD("추워", StickerPacks.ANIM_ALL),
-    ANIM_HOT("더워", StickerPacks.ANIM_ALL),
 
-    /* ── 축하해 17종 ── */
+    /* ── 축하해 14종 ── */
     ANIM_PARTY_FACE("신남", StickerPacks.ANIM_ALL),
     ANIM_PARTY_POPPER("축하", StickerPacks.ANIM_ALL),
     ANIM_BIRTHDAY_CAKE("생일", StickerPacks.ANIM_ALL),
@@ -133,11 +107,8 @@ public enum AnimatedSticker {
     ANIM_TROPHY("우승", StickerPacks.ANIM_ALL),
     ANIM_RING("반지", StickerPacks.ANIM_ALL),
     ANIM_CHERRY_BLOSSOM("벚꽃", StickerPacks.ANIM_ALL),
-    ANIM_FIREWORKS("불꽃놀이", StickerPacks.ANIM_ALL),
-    ANIM_MIRROR_BALL("파티", StickerPacks.ANIM_ALL),
-    ANIM_CROWN("왕관", StickerPacks.ANIM_ALL),
 
-    /* ── 응원해 22종 ── */
+    /* ── 응원해 18종 ── */
     ANIM_THUMBS_UP("좋아", StickerPacks.ANIM_ALL),
     ANIM_PLEADING("제발", StickerPacks.ANIM_ALL),
     ANIM_FIRE("불타오르네", StickerPacks.ANIM_ALL),
@@ -156,12 +127,8 @@ public enum AnimatedSticker {
     ANIM_ZAP("번쩍", StickerPacks.ANIM_ALL),
     ANIM_WAVE("안녕", StickerPacks.ANIM_ALL),
     ANIM_LOVE_SIGN("사랑해", StickerPacks.ANIM_ALL),
-    ANIM_OK("오케이", StickerPacks.ANIM_ALL),
-    ANIM_VICTORY("브이", StickerPacks.ANIM_ALL),
-    ANIM_CROSSED_FINGERS("행운을", StickerPacks.ANIM_ALL),
-    ANIM_CALL_ME("연락해", StickerPacks.ANIM_ALL),
 
-    /* ── 동물 14종 ── */
+    /* ── 동물 9종 ── */
     ANIM_CAT("고양이", StickerPacks.ANIM_ALL),
     ANIM_BEAR("곰", StickerPacks.ANIM_ALL),
     ANIM_PANDA("판다", StickerPacks.ANIM_ALL),
@@ -171,13 +138,8 @@ public enum AnimatedSticker {
     ANIM_PENGUIN("펭귄", StickerPacks.ANIM_ALL),
     ANIM_CHICK("병아리", StickerPacks.ANIM_ALL),
     ANIM_UNICORN("유니콘", StickerPacks.ANIM_ALL),
-    ANIM_DOG("강아지", StickerPacks.ANIM_ALL),
-    ANIM_RABBIT("토끼", StickerPacks.ANIM_ALL),
-    ANIM_PIG("돼지", StickerPacks.ANIM_ALL),
-    ANIM_OTTER("수달", StickerPacks.ANIM_ALL),
-    ANIM_BUTTERFLY("나비", StickerPacks.ANIM_ALL),
 
-    /* ── 먹을 것 15종 ── */
+    /* ── 먹을 것 10종 ── */
     ANIM_PIZZA("피자", StickerPacks.ANIM_ALL),
     ANIM_COFFEE("커피", StickerPacks.ANIM_ALL),
     ANIM_RAMEN("라면", StickerPacks.ANIM_ALL),
@@ -188,30 +150,15 @@ public enum AnimatedSticker {
     ANIM_AVOCADO("아보카도", StickerPacks.ANIM_ALL),
     ANIM_EGG("계란", StickerPacks.ANIM_ALL),
     ANIM_BUBBLE_TEA("버블티", StickerPacks.ANIM_ALL),
-    ANIM_CHICKEN("치킨", StickerPacks.ANIM_ALL),
-    ANIM_SPAGHETTI("파스타", StickerPacks.ANIM_ALL),
-    ANIM_DOUGHNUT("도넛", StickerPacks.ANIM_ALL),
-    ANIM_POPCORN("팝콘", StickerPacks.ANIM_ALL),
-    ANIM_WINE("와인", StickerPacks.ANIM_ALL),
 
-    /* ── 날씨 9종 ── */
+    /* ── 날씨 7종 ── */
     ANIM_RAIN("비", StickerPacks.ANIM_ALL),
     ANIM_SNOWMAN("눈사람", StickerPacks.ANIM_ALL),
     ANIM_RAINBOW("무지개", StickerPacks.ANIM_ALL),
     ANIM_SNOWFLAKE("눈", StickerPacks.ANIM_ALL),
     ANIM_OCEAN("파도", StickerPacks.ANIM_ALL),
     ANIM_MAPLE("단풍", StickerPacks.ANIM_ALL),
-    ANIM_SUN("햇살", StickerPacks.ANIM_ALL),
-    ANIM_CLOUD("구름", StickerPacks.ANIM_ALL),
-    ANIM_UMBRELLA("우산", StickerPacks.ANIM_ALL),
-
-    /* ── 데이트·일상 6종 ── */
-    ANIM_AIRPLANE("여행", StickerPacks.ANIM_ALL),
-    ANIM_FERRIS_WHEEL("관람차", StickerPacks.ANIM_ALL),
-    ANIM_HOUSE("집", StickerPacks.ANIM_ALL),
-    ANIM_ALARM("알람", StickerPacks.ANIM_ALL),
-    ANIM_CAR("드라이브", StickerPacks.ANIM_ALL),
-    ANIM_CAMERA("찰칵", StickerPacks.ANIM_ALL);
+    ANIM_SUN("햇살", StickerPacks.ANIM_ALL);
 
     private final String label;
     private final String packId;

@@ -23,9 +23,9 @@ class AnimatedStickerTest {
     private static final Set<String> FREE_PACKS = Set.of(StickerPacks.ANIM_ALL);
 
     @Test
-    @DisplayName("160종 — 팩 하나다")
+    @DisplayName("110종 — 팩 하나다")
     void catalogSize() {
-        assertThat(AnimatedSticker.values()).hasSize(160);
+        assertThat(AnimatedSticker.values()).hasSize(110);
         assertThat(Arrays.stream(AnimatedSticker.values()).map(AnimatedSticker::packId).distinct())
                 .hasSize(1);
     }

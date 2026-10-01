@@ -34,6 +34,7 @@ import com.fitto.coupleemoji.domain.CoupleEmoji;
 import com.fitto.coupleemoji.repository.CoupleEmojiRepository;
 import com.fitto.relation.domain.Relation;
 import com.fitto.relation.repository.RelationRepository;
+import com.fitto.sticker.service.RemoteStickerCatalog;
 import com.fitto.sticker.service.StickerService;
 import com.fitto.user.domain.User;
 import com.fitto.user.repository.UserRepository;
@@ -80,6 +81,7 @@ public class ChatService {
     private final StickerService stickerService;
     private final CoupleEventPublisher coupleEventPublisher;
     private final CoupleEmojiRepository coupleEmojiRepository;
+    private final RemoteStickerCatalog remoteStickerCatalog;
 
     public ChatService(ChatMessageRepository chatMessageRepository,
                        ChatMessageReactionRepository reactionRepository,
@@ -90,7 +92,8 @@ public class ChatService {
                        NotificationService notificationService,
                        StickerService stickerService,
                        CoupleEventPublisher coupleEventPublisher,
-                       CoupleEmojiRepository coupleEmojiRepository) {
+                       CoupleEmojiRepository coupleEmojiRepository,
+                       RemoteStickerCatalog remoteStickerCatalog) {
         this.chatMessageRepository = chatMessageRepository;
         this.reactionRepository = reactionRepository;
         this.bookmarkRepository = bookmarkRepository;
@@ -101,6 +104,7 @@ public class ChatService {
         this.stickerService = stickerService;
         this.coupleEventPublisher = coupleEventPublisher;
         this.coupleEmojiRepository = coupleEmojiRepository;
+        this.remoteStickerCatalog = remoteStickerCatalog;
     }
 
     /** 내 채팅방 목록 (활성 관계별 1개). */
@@ -318,7 +322,7 @@ public class ChatService {
              * docs/STICKER_PACK_OVERLAP_2026-09-14.md. 팩에 없는 코드가 통과하는 규칙
              * (StickerPacks 주석)이 그 재발을 막는 자리다.
              */
-            stickerService.requireUsable(senderId, StickerPacks.ofStickerContent(req.content()));
+            stickerService.requireUsable(senderId, stickerPackOf(req.content()));
         }
         String content = req.content();
         String stickerCode = null;
@@ -665,6 +669,20 @@ public class ChatService {
                 .toList();
     }
 
+    /**
+     * 스티커 content 가 속한 팩 — 번들 카탈로그(enum) 다음에 서버 배포 카탈로그를 본다.
+     *
+     * <p>둘 다 아니면 {@code null}(무료로 통과)인 규칙은 그대로다({@link StickerPacks} 주석). 서버
+     * 배포 팩을 여기서 빠뜨리면 유료 팩을 서버에 올렸을 때 <b>조용히 공짜로 샌다</b>.
+     */
+    private String stickerPackOf(String content) {
+        String bundled = StickerPacks.ofStickerContent(content);
+        if (bundled != null) {
+            return bundled;
+        }
+        return remoteStickerCatalog.find(content).map(RemoteStickerCatalog.RemoteSticker::packId).orElse(null);
+    }
+
     /** 브로드캐스트용 메시지 상세 — 뷰어에 따라 달라지는 값이 없다. */
     public java.util.Optional<ChatMessageResponse> findForBroadcast(Long messageId) {
         return chatMessageRepository.findById(messageId).map(this::detailOf);
@@ -681,6 +699,8 @@ public class ChatService {
     private String stickerPreview(String content) {
         return AnimatedSticker.from(content)
                 .map(s -> "[이모티콘] " + s.label())
+                // 서버 배포 이모티콘 — 번들 카탈로그에 없어도 라벨을 안다(RemoteStickerCatalog)
+                .or(() -> remoteStickerCatalog.find(content).map(s -> "[이모티콘] " + s.label()))
                 .or(() -> StickerImage.from(content).map(s -> "[스티커] " + s.label()))
                 .orElse(content != null ? content : "[스티커]");
     }
