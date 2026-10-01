@@ -61,3 +61,36 @@ export function loadRemoteLottie(url: string): Promise<AnimationObject> {
   inflight.set(url, job);
   return job;
 }
+
+/**
+ * 팩 받기 — 설정 화면의 "받기". 애니메이션을 전부 미리 받아 둔다(말풍선이 썸네일을 거치지 않고 바로 움직이게).
+ * 하나가 실패해도 나머지는 받는다 — 못 받은 것은 처음 그릴 때 다시 받는다. 받은 개수를 돌려준다.
+ */
+export async function downloadRemoteLotties(urls: string[], onProgress?: (done: number) => void): Promise<number> {
+  let ok = 0;
+  let done = 0;
+  for (const url of urls) {
+    try {
+      await loadRemoteLottie(url);
+      ok += 1;
+    } catch {
+      // 다음 기회에 — 위 주석
+    }
+    done += 1;
+    onProgress?.(done);
+  }
+  return ok;
+}
+
+/** 팩 삭제 — 기기의 파일과 메모리 파싱본을 지운다. 다시 받으면 같은 이름으로 돌아온다 */
+export function deleteRemoteLotties(urls: string[]): void {
+  for (const url of urls) {
+    memory.delete(url);
+    try {
+      const file = new File(dir(), fileNameOf(url));
+      if (file.exists) file.delete();
+    } catch {
+      // 남아도 수십 KB 다
+    }
+  }
+}

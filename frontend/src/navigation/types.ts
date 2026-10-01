@@ -51,6 +51,7 @@ export type HomeStackParamList = PlaceScreensParamList & {
   StickerShop: undefined;
   // 설정 — 알림·마케팅 수신, 비밀번호 변경, 약관 열람
   Settings: undefined;
+  StickerSettings: undefined;
   NotificationCategories: undefined;
   MealReminders: undefined;
   ChangePassword: undefined;
@@ -293,6 +294,8 @@ export type ChatStackParamList = {
     scrollToMessageId?: number;
   };
   ChatPhotoGallery: { relationId: number; myId: number | undefined };
+  // 이모티콘 설정 — 받기·숨기기·순서(카카오톡 방식). 설정 화면에서도 들어온다(HomeStack 에 같은 이름)
+  StickerSettings: undefined;
   SavedMessages: { relationId: number; title: string; myId: number | undefined };
   ScheduledMessages: { relationId: number };
   /** 우리 이모지 만들기 — 사진 선택 → 크롭 → 생성 대기 → 미리보기 */
