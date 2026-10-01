@@ -173,6 +173,25 @@ const GROUP_GAP_MS = 5 * 60 * 1000;
  */
 const MAX_CHAT_IMAGES = 5;
 
+/*
+ * 입력바 치수 — 카톡 채팅방 캡처(iPhone 15, 2026-10-01) 실측을 pt 로 옮긴 값. 근거는
+ * docs/CHAT_INPUT_KAKAO_RATIO_2026-10-01.md. 스타일 여러 곳이 서로 맞물려 있어 이름을 둔다.
+ */
+/** 버튼 칸 = 터치 영역. iOS HIG 44pt / Material 48dp 하한 */
+const INPUT_SLOT = Platform.OS === 'android' ? 48 : 44;
+/** 보이는 알약 높이(카톡 실측 42.4pt) — 버튼 칸보다 작게 보이고, 터치는 칸이 받는다 */
+const PILL_HEIGHT = 42;
+/** 버튼 칸 위아래로 알약이 안쪽에 들어간 양 */
+const PILL_INSET = (INPUT_SLOT - PILL_HEIGHT) / 2;
+/** "+"·전송 원 지름(카톡 실측 28pt) */
+const INPUT_ICON_CIRCLE = 28;
+/** 입력 글자 줄높이 — 본문 14(웹 16)에 맞춘 값. 다섯 줄 높이 계산의 단위다 */
+const INPUT_LINE_HEIGHT = Platform.OS === 'web' ? 22 : 20;
+/** 이 줄 수까지 칸이 늘고, 그 뒤로는 칸 안에서 스크롤한다 */
+const INPUT_MAX_LINES = 5;
+/** 한 줄일 때 칸 높이가 버튼 칸과 같아지는 위아래 여백 */
+const INPUT_PAD_V = (INPUT_SLOT - INPUT_LINE_HEIGHT) / 2;
+
 /**
  * 전송 멱등키 — 서버가 {@code (relation_id, client_message_id)} 로 중복을 거른다(V89).
  *
@@ -189,7 +208,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const headerHeight = useHeaderHeight();
   const androidKeyboardHeight = useAndroidKeyboardHeight();
   /* 이모티콘·보조 도구 패널 높이 — 키보드가 있던 자리를 그대로 이어받는다(훅 주석 참고) */
-  const panelHeight = useKeyboardPanelHeight();
+  const keyboardPanelHeight = useKeyboardPanelHeight();
   /*
    * 겹쳐 뜬 추천 막대의 실측 높이(0 = 없음). 목록은 이만큼 바닥 여백을 더 받아 최신 말풍선이
    * 막대 뒤로 숨지 않는다. 막대가 사라지면 0 으로 돌아가 여백도 원래대로다.
@@ -200,6 +219,13 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const prevSuggestBarHeightRef = useRef(0);
   // safe-area 아래 띠를 입력바 색으로 칠할 높이(렌더의 bottomInset 주석)
   const bottomInset = useSafeAreaInsets().bottom;
+  /*
+   * 패널이 실제로 차지할 높이 — 키보드가 덮던 높이와 같아야 입력바가 제자리에 있다.
+   * iOS 키보드 높이는 홈 인디케이터 띠(bottomInset)까지 포함하는데, 패널은 그 띠 <b>위</b>에 놓인다
+   * (SafeAreaView edges: bottom). 그대로 쓰면 패널을 열 때마다 입력바가 34pt 올라갔다
+   * (docs/CHAT_UX_REVIEW_2026-10-01.md K2). 안드로이드는 키보드 높이가 시스템 바를 이미 빼고 오므로 그대로다.
+   */
+  const panelHeight = Math.max(0, keyboardPanelHeight - (Platform.OS === 'ios' ? bottomInset : 0));
   /* 전체화면으로 연 사진 — 목록에서 이 uri 를 찾아 그 자리에서 시작한다(아래 viewing) */
   const [viewingImage, setViewingImage] = useState<string | null>(null);
   const openImage = (uri: string) => setViewingImage(uri);
@@ -321,28 +347,113 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     setShowExtras((v) => (v ? false : v));
   }, []);
   /*
+   * 키보드 ↔ 패널 교대 — 입력바가 <b>제자리에 있도록</b> 둘을 같은 순간에 바꾼다.
+   *
+   * <p>패널은 키보드와 같은 높이라(panelHeight 주석) 한쪽이 사라지는 순간 다른 쪽이 나타나면 입력바는
+   * 움직이지 않는다. 문제는 "순간"이 플랫폼마다 다르다는 것이다.
+   * <ul>
+   *   <li><b>iOS</b> — KeyboardAvoidingView 가 keyboardWillShow/WillHide 에서 바닥 여백을 바꾼다. 패널도
+   *       같은 이벤트에서 바꿔야 한 번의 렌더에 묶인다(WillShow 쪽은 KAV 가 건 LayoutAnimation 을 같이 탄다).
+   *       버튼을 누른 순간 패널을 세우면 키보드 여백이 아직 남아 입력바가 패널 높이만큼 튀어 올랐다 내려온다.</li>
+   *   <li><b>Android</b> — 키보드 여백은 keyboardDidShow/DidHide 에서야 바뀐다(useAndroidKeyboardHeight).
+   *       그래서 패널이 열려 있는 동안엔 키보드 여백을 아예 0 으로 본다(KeyboardAvoidingView 의 style) —
+   *       패널은 누른 즉시 열고, 키보드로 돌아갈 때는 DidShow 까지 패널을 남겨 둔다.</li>
+   * </ul>
+   * 키보드 이벤트가 끝내 오지 않는 경우(하드웨어 키보드·웹)를 위해 상한 시간이 지나면 그냥 바꾼다.
+   */
+  const pendingPanelRef = useRef<'stickers' | 'extras' | 'keyboard' | null>(null);
+  const pendingPanelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const applyPendingPanel = useCallback(() => {
+    const next = pendingPanelRef.current;
+    pendingPanelRef.current = null;
+    if (pendingPanelTimerRef.current) {
+      clearTimeout(pendingPanelTimerRef.current);
+      pendingPanelTimerRef.current = null;
+    }
+    if (next === null) return;
+    if (next === 'keyboard') {
+      dismissPanels();
+    } else {
+      setShowStickers(next === 'stickers');
+      setShowExtras(next === 'extras');
+    }
+  }, [dismissPanels]);
+  const schedulePanel = useCallback((next: 'stickers' | 'extras' | 'keyboard') => {
+    pendingPanelRef.current = next;
+    if (pendingPanelTimerRef.current) clearTimeout(pendingPanelTimerRef.current);
+    // 키보드 애니메이션(iOS 약 250ms·Android 약 300ms)보다 넉넉하게 — 이벤트가 오면 그 전에 치워진다
+    pendingPanelTimerRef.current = setTimeout(applyPendingPanel, 600);
+  }, [applyPendingPanel]);
+  useEffect(() => {
+    const subs =
+      Platform.OS === 'ios'
+        ? [
+            Keyboard.addListener('keyboardWillShow', () => {
+              if (pendingPanelRef.current === 'keyboard') applyPendingPanel();
+            }),
+            Keyboard.addListener('keyboardWillHide', () => {
+              if (pendingPanelRef.current && pendingPanelRef.current !== 'keyboard') applyPendingPanel();
+            }),
+          ]
+        : [
+            Keyboard.addListener('keyboardDidShow', () => {
+              if (pendingPanelRef.current === 'keyboard') applyPendingPanel();
+            }),
+          ];
+    return () => {
+      subs.forEach((sub) => sub.remove());
+      if (pendingPanelTimerRef.current) clearTimeout(pendingPanelTimerRef.current);
+    };
+  }, [applyPendingPanel]);
+  /*
+   * 입력창을 건드렸을 때 — 패널이 열려 있으면 키보드가 그 자리를 받을 때 닫는다(위 교대 주석).
+   * 웹은 키보드 이벤트가 없어 기다릴 것이 없으므로 바로 닫는다.
+   */
+  const onInputTouched = useCallback(() => {
+    if (!showStickers && !showExtras) return;
+    if (pendingPanelRef.current === 'keyboard') return;
+    if (Platform.OS === 'web') {
+      dismissPanels();
+      return;
+    }
+    schedulePanel('keyboard');
+  }, [showStickers, showExtras, dismissPanels, schedulePanel]);
+  /*
    * 트레이 버튼(이모티콘 · "+")의 단일 규칙 — 카톡 기준.
    *
    * <p><b>열 때는 키보드를 내린다.</b> 패널은 키보드가 있던 자리를 이어받는 물건이라
    * 둘이 동시에 떠 있으면 안 된다. 예전에는 setShow* 만 불러서, 키보드가 올라온 채로
    * 패널을 열면 입력바가 패널+키보드 높이만큼 밀려 올라갔다(2026-09-11).
    *
-   * <p><b>닫을 때는 키보드를 올리지 않는다.</b> 패널만 접히고 입력창은 포커스를 얻지
-   * 않는다 — 키보드를 부르려면 입력창을 직접 눌러야 한다(카톡과 같다).
+   * <p><b>이모티콘은 다시 누르면 키보드로 돌아간다</b>(2026-10-01, 카톡과 같다 — 열려 있는 동안 버튼이
+   * 키보드 아이콘으로 바뀐다). "+" 는 하나 눌러 바로 닫히는 메뉴라 예전대로 패널만 접는다.
    *
    * <p>두 패널은 자리를 공유하므로 하나를 열면 다른 하나는 반드시 닫힌다.
    */
   const togglePanel = useCallback((which: 'stickers' | 'extras') => {
     const isOpen = which === 'stickers' ? showStickers : showExtras;
     if (isOpen) {
+      if (which === 'stickers' && Platform.OS !== 'web') {
+        schedulePanel('keyboard');
+        inputRef.current?.focus();
+        return;
+      }
+      pendingPanelRef.current = null;
       setShowStickers(false);
       setShowExtras(false);
       return;
     }
+    // iOS 는 키보드가 실제로 내려가기 시작할 때 연다(위 교대 주석). 키보드가 없으면 기다릴 것이 없다.
+    if (Platform.OS === 'ios' && Keyboard.isVisible()) {
+      schedulePanel(which);
+      Keyboard.dismiss();
+      return;
+    }
+    pendingPanelRef.current = null;
     Keyboard.dismiss();
     setShowStickers(which === 'stickers');
     setShowExtras(which === 'extras');
-  }, [showStickers, showExtras]);
+  }, [showStickers, showExtras, schedulePanel]);
   // 대화 검색 — 헤더 돋보기 버튼으로 연다(2026-09-03, 전체 기간 서버 검색)
   const [showSearch, setShowSearch] = useState(false);
   // 헤더 "⋮" — 사진 모아보기·저장한 대화(자주 안 쓰는 항목이라 아이콘을 더 늘리지 않고 묶는다)
@@ -1958,7 +2069,9 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         // Android 는 FlatList 를 직접 감싸면 KeyboardAvoidingView 의 자동 높이 보정이
         // edge-to-edge 아래에서 먹지 않아(실기기 확인) behavior 를 아예 안 쓰고
         // useAndroidKeyboardHeight 로 받은 실측 키보드 높이만큼 직접 패딩을 준다.
-        style={[styles.flex, Platform.OS === 'android' && { paddingBottom: androidKeyboardHeight }]}
+        // 패널이 열려 있으면 키보드 여백은 0 이다 — 패널이 그 자리를 이미 차지했다(togglePanel 위 교대 주석).
+        // DidHide 가 늦게 와도 패널+키보드 여백이 겹쳐 입력바가 두 배로 뜨지 않는다.
+        style={[styles.flex, Platform.OS === 'android' && { paddingBottom: panelOpen ? 0 : androidKeyboardHeight }]}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         /*
          * 오프셋은 실제 헤더 높이로 — 예전엔 90 을 상수로 박아서 노치 없는 기기
@@ -2288,117 +2401,136 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           </View>
         ) : null}
         <View style={[styles.inputBar, chatStyles.inputBar]}>
-          {uploading ? (
-            <View style={styles.trayBtn}>
-              <ActivityIndicator size="small" color={colors.primary} />
-            </View>
-          ) : (
-            <TouchableOpacity
-              style={[styles.trayBtn, showExtras && styles.trayBtnActive]}
-              onPress={() => togglePanel('extras')}
-              accessibilityRole="button"
-              accessibilityLabel={showExtras ? '보조 도구 닫기' : '이모티콘·사진 더 보기'}
-            >
-              <MaterialCommunityIcons
-                name={showExtras ? 'close' : 'plus'}
-                size={24}
-                color={showExtras ? colors.primary : (chatStyles.inputIcon.color as string)}
-                style={styles.trayIcon}
-              />
-            </TouchableOpacity>
-          )}
           {/*
-            입력창을 건드려도 열린 패널을 닫는다 — 안 닫으면 키보드가 올라오면서 패널과
-            겹친다. 대화 영역의 onTouchStart 와 같은 규칙이고(위 flex View 주석), 같은
-            이유로 탭을 삼키지 않는다 — 닫히면서 커서도 그대로 들어간다.
+            입력칸 하나에 버튼을 모두 넣는다 — 카톡 채팅방 실측(iPhone 15 캡처, 2026-10-01)의 비율:
+            칸 높이 42pt · 좌우 화면 여백 ≈9pt · "+"·오른쪽 원 지름 28pt(칸 끝에서 중심까지 ≈22pt) ·
+            이모티콘 ↔ 오른쪽 원 중심 간격 36pt. 상세와 Dubly 값은 docs/CHAT_INPUT_KAKAO_RATIO_2026-10-01.md.
 
-            onPressIn 과 onFocus 를 같이 건다. 패널을 여는 순간 입력창이 포커스를
-            잃는다는 보장이 없어서, 포커스가 남아 있는 채로 다시 탭하면 onFocus 는
-            아예 발생하지 않는다 — 그 경우를 onPressIn 이 받는다. dismissPanels 는
-            이미 닫혀 있으면 아무 것도 안 하므로 두 번 불려도 무해하다.
+            터치 영역은 <b>버튼 칸</b>(iOS 44 · Android 48)이 정하고, 눈에 보이는 알약은 그 칸 안쪽에
+            깐 배경(inputPill)이다 — 알약은 42 로 보이고 버튼은 44/48 로 눌린다. hitSlop 으로 넓히지 않는
+            이유: 안드로이드는 부모 경계 밖으로 나간 hitSlop 이 터치를 받지 못한다(같은 문서 §1-4).
           */}
-          <TextInput
-            ref={inputRef}
-            style={[styles.input, chatStyles.input]}
-            value={text}
-            onChangeText={setText}
-            onPressIn={dismissPanels}
-            onFocus={dismissPanels}
-            onKeyPress={onInputKeyPress}
-            placeholder={sendOnEnter ? '메시지를 입력하세요 (Shift+Enter 줄바꿈)' : '메시지를 입력하세요'}
-            placeholderTextColor={chatStyles.inputPlaceholder.color as string}
-            multiline
-          />
-          {/*
-            오른쪽 슬롯 — 보낼 게 있을 때만 전송 버튼이다.
+          <View style={styles.inputRow}>
+            <View style={[styles.inputPill, chatStyles.input]} pointerEvents="none" />
+            {uploading ? (
+              <View style={styles.inputSlot}>
+                <ActivityIndicator size="small" color={colors.primary} />
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.inputSlot}
+                onPress={() => togglePanel('extras')}
+                accessibilityRole="button"
+                accessibilityLabel={showExtras ? '보조 도구 닫기' : '이모티콘·사진 더 보기'}
+              >
+                <View style={[styles.plusCircle, showExtras ? styles.plusCircleActive : chatStyles.inputBar]}>
+                  <MaterialCommunityIcons
+                    name={showExtras ? 'close' : 'plus'}
+                    size={20}
+                    color={showExtras ? colors.primary : (chatStyles.inputIcon.color as string)}
+                    style={styles.plusIcon}
+                  />
+                </View>
+              </TouchableOpacity>
+            )}
+            {/*
+              입력창을 건드리면 열린 패널을 키보드와 교대시킨다(onInputTouched — togglePanel 위 교대 주석).
+              탭을 삼키지 않으므로 커서도 그대로 들어간다.
 
-            예전엔 채워진 녹색 원이 빈 입력창 옆에 opacity 0.4 로 <b>상주</b>했다. 누를 수도
-            없는 버튼이 화면에서 가장 채도 높은 물체로 계속 떠 있었고, 주요 동작(전송)과
-            부수 도구("+")가 똑같이 46px 이라 입력바 안에 위계가 없었다.
+              onPressIn 과 onFocus 를 같이 건다. 패널을 여는 순간 입력창이 포커스를
+              잃는다는 보장이 없어서, 포커스가 남아 있는 채로 다시 탭하면 onFocus 는
+              아예 발생하지 않는다 — 그 경우를 onPressIn 이 받는다. 이미 교대 중이면 아무 것도 안 한다.
 
-            글자가 있을 때만 나타나게 하면 (1) 상주하는 녹색 덩어리가 사라지고 (2) 버튼이
-            뜨는 순간 자체가 "보낼 수 있다"는 피드백이 된다. 빈 자리는 이모티콘이 대신
-            받는다 — 버튼 총량이 느는 게 아니라 어차피 비어 있던 슬롯을 쓰는 것이라,
-            "+" 로 4개를 모았던 결정(extrasPanel 주석)과 어긋나지 않는다.
-          */}
-          {/*
-            전송 중에도 이 자리를 지킨다. 입력창을 먼저 비우므로 text 만 보면 버튼이
-            곧바로 이모티콘 버튼으로 교체되는데, 그러면 연달아 누른 탭이 이모티콘 패널을
-            열어 버린다(게다가 패널은 열릴 때 키보드를 내린다 — togglePanel 주석).
-          */}
-          {text.trim() || sending ? (
+              붙여넣기를 막는 속성(contextMenuHidden 등)은 두지 않는다 — 길게 눌러 뜨는 OS 메뉴가 그대로 산다.
+            */}
+            <TextInput
+              ref={inputRef}
+              style={[styles.input, { color: chatStyles.input.color }]}
+              value={text}
+              onChangeText={setText}
+              onPressIn={onInputTouched}
+              onFocus={onInputTouched}
+              onKeyPress={onInputKeyPress}
+              placeholder={sendOnEnter ? '메시지를 입력하세요 (Shift+Enter 줄바꿈)' : '메시지를 입력하세요'}
+              placeholderTextColor={chatStyles.inputPlaceholder.color as string}
+              multiline
+              // 다섯 줄까지 늘고(maxHeight) 그 뒤로는 칸 안에서 스크롤한다
+              scrollEnabled
+              textAlignVertical="center"
+            />
+            {/*
+              이모티콘 — 글자가 있어도 늘 칸 안에 있다(쓰다가 바로 이모티콘으로 넘어가고, 다시 눌러 키보드로
+              돌아오는 왕복이 이 버튼 하나로 된다). 패널이 열려 있으면 키보드 아이콘이 된다(카톡과 같다).
+              예전엔 빈 입력일 때만 전송 자리를 빌려 떴다.
+            */}
             <TouchableOpacity
-              // 키로 두 버튼을 갈라 둔다 — 같은 자리·같은 타입이라 React 가 한 버튼으로 재사용하면, 보낸 직후
-              // 이모티콘 버튼으로 바뀐 채 손가락을 떼는 순간 그 onPress(패널 열기)가 불렸다(실기기 재현)
-              key="send"
-              style={[styles.sendBtn, editSaving && styles.sendDisabled]}
-              /*
-               * 누르는 순간(onPressIn) 보낸다 — 떼는 순간(onPress)이 아니라.
-               * 한글은 마지막 글자가 조합 중(밑줄)인 채로 전송을 누르게 되는데, 손가락이 닿는 순간
-               * 키보드가 그 글자를 확정하고 그 사이 누름이 취소돼 첫 탭이 먹지 않았다 — "전송을 두 번
-               * 눌러야 한다"(2026-09-30, 실기기 재현: 130ms 누름에서 한글은 실패·영문은 성공).
-               * 누름 시작은 확정보다 먼저 오므로 여기서 보내면 한 번에 간다. 같은 글 연타는 onSend 가 거른다.
-               */
-              onPressIn={() => void onSend()}
-              /*
-               * 스크린리더의 두 번 탭은 onPressIn 을 거치지 않고 onPress 만 부른다 — 그래서 TalkBack 으로는
-               * 전송이 안 됐다(1.0.5 점검). onPress 를 더하면 손가락 탭에서 두 번 불려 수정 저장이 겹치므로,
-               * 스크린리더 전용 경로인 activate 동작에만 단다.
-               */
-              accessibilityActions={[{ name: 'activate' }]}
-              onAccessibilityAction={(e) => {
-                if (e.nativeEvent.actionName === 'activate' && !editSaving) void onSend();
-              }}
-              // 앞 메시지가 가는 중이어도 다음 글은 보낸다 — 진행 표시는 말풍선이 한다
-              disabled={editSaving}
-              // 44px 이지만 화면 맨 끝이라 엄지가 가장자리를 빗나가기 쉽다
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              accessibilityRole="button"
-              accessibilityState={{ disabled: editSaving, busy: sending }}
-              accessibilityLabel={editing ? '수정 완료' : '전송'}
-            >
-              {editSaving ? (
-                <ActivityIndicator size="small" color={colors.white} />
-              ) : (
-                <MaterialCommunityIcons name="arrow-up" size={22} color={colors.white} style={styles.sendIcon} />
-              )}
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              key="tray"
-              style={[styles.trayBtn, showStickers && styles.trayBtnActive]}
+              style={styles.inputSlot}
               onPress={() => togglePanel('stickers')}
               accessibilityRole="button"
-              accessibilityLabel={showStickers ? '이모티콘 닫기' : '이모티콘'}
+              accessibilityLabel={showStickers ? '키보드로 돌아가기' : '이모티콘'}
             >
               <MaterialCommunityIcons
-                name="emoticon-outline"
+                name={showStickers ? 'keyboard-outline' : 'emoticon-outline'}
                 size={24}
-                color={showStickers ? colors.primary : (chatStyles.inputIcon.color as string)}
+                color={chatStyles.inputPlaceholder.color as string}
                 style={styles.trayIcon}
               />
             </TouchableOpacity>
-          )}
+            {/*
+              오른쪽 끝 — 보낼 게 있을 때만 전송 버튼이다.
+
+              예전엔 채워진 녹색 원이 빈 입력창 옆에 opacity 0.4 로 <b>상주</b>했다. 누를 수도
+              없는 버튼이 화면에서 가장 채도 높은 물체로 계속 떠 있었다. 글자가 있을 때만 나타나게
+              하면 버튼이 뜨는 순간 자체가 "보낼 수 있다"는 피드백이 된다.
+
+              전송 중에도 이 자리를 지킨다. 입력창을 먼저 비우므로 text 만 보면 버튼이
+              곧바로 사라지는데, 그러면 연달아 누른 탭이 옆으로 밀려온 이모티콘 버튼을 눌러
+              패널을 열어 버린다(게다가 패널은 열릴 때 키보드를 내린다 — togglePanel 주석).
+            */}
+            {text.trim() || sending ? (
+              <TouchableOpacity
+                // 키로 다른 버튼과 갈라 둔다 — 예전엔 이 자리를 이모티콘 버튼과 번갈아 써서, React 가 한 버튼으로
+                // 재사용하자 보낸 직후 손가락을 떼는 순간 이모티콘 onPress(패널 열기)가 불렸다(실기기 재현)
+                key="send"
+                style={[styles.sendBtn, editSaving && styles.sendDisabled]}
+                /*
+                 * 누르는 순간(onPressIn) 보낸다 — 떼는 순간(onPress)이 아니라.
+                 * 한글은 마지막 글자가 조합 중(밑줄)인 채로 전송을 누르게 되는데, 손가락이 닿는 순간
+                 * 키보드가 그 글자를 확정하고 그 사이 누름이 취소돼 첫 탭이 먹지 않았다 — "전송을 두 번
+                 * 눌러야 한다"(2026-09-30, 실기기 재현: 130ms 누름에서 한글은 실패·영문은 성공).
+                 * 누름 시작은 확정보다 먼저 오므로 여기서 보내면 한 번에 간다. 같은 글 연타는 onSend 가 거른다.
+                 */
+                onPressIn={() => void onSend()}
+                /*
+                 * 스크린리더의 두 번 탭은 onPressIn 을 거치지 않고 onPress 만 부른다 — 그래서 TalkBack 으로는
+                 * 전송이 안 됐다(1.0.5 점검). onPress 를 더하면 손가락 탭에서 두 번 불려 수정 저장이 겹치므로,
+                 * 스크린리더 전용 경로인 activate 동작에만 단다.
+                 */
+                accessibilityActions={[{ name: 'activate' }]}
+                onAccessibilityAction={(e) => {
+                  if (e.nativeEvent.actionName === 'activate' && !editSaving) void onSend();
+                }}
+                // 앞 메시지가 가는 중이어도 다음 글은 보낸다 — 진행 표시는 말풍선이 한다
+                disabled={editSaving}
+                // 화면 끝 쪽(오른쪽·아래)으로만 넓힌다 — 왼쪽은 이모티콘 칸이라 겹치면 그 탭을 빼앗는다.
+                // 안드로이드는 부모 경계 밖 hitSlop 을 무시하지만 그쪽은 칸 자체가 48 이다
+                hitSlop={{ right: 8, bottom: 8 }}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: editSaving, busy: sending }}
+                accessibilityLabel={editing ? '수정 완료' : '전송'}
+              >
+                {editSaving ? (
+                  <View style={styles.sendCircle}>
+                    <ActivityIndicator size="small" color={colors.white} />
+                  </View>
+                ) : (
+                  <View style={styles.sendCircle}>
+                    <MaterialCommunityIcons name="arrow-up" size={18} color={colors.white} style={styles.sendIcon} />
+                  </View>
+                )}
+              </TouchableOpacity>
+            ) : null}
+          </View>
         </View>
       </KeyboardAvoidingView>
 
@@ -2886,89 +3018,111 @@ const styles = themedStyles((colors) => ({
     justifyContent: 'center',
   },
   extraTilePressed: { backgroundColor: colors.primarySoft },
+  /*
+   * 입력바 — 카톡 채팅방 실측 비율(2026-10-01, docs/CHAT_INPUT_KAKAO_RATIO_2026-10-01.md).
+   *
+   * <p>버튼을 모두 알약 하나(inputPill) 안에 넣었다. 예전엔 "+"·입력칸·이모티콘/전송이 따로 놓여
+   * 좌우 여백 16 을 둬야 동그란 버튼이 화면 모서리 곡률에 잘리지 않았는데(2026-08-31 실기기), 이제 버튼은
+   * 알약 안쪽으로 8 더 들어가 있어 화면 끝에서 "+" 원까지가 예전과 같은 16 이다 — 바깥 여백은 카톡처럼 8.
+   *
+   * <p>세로: 보이는 알약과 바깥 사이가 9pt 가 되게 잡는다(카톡 실측 — 알약 아래 → 키보드·패널 9pt).
+   * 버튼 칸(INPUT_SLOT)이 알약보다 커서 그 차이의 절반(PILL_INSET)만큼 바 여백이 덜 필요하다.
+   * 바 전체는 iOS 8+44+8, Android 6+48+6 — 둘 다 60 이라 2026-09-18 의 높이(60)를 바꾸지 않는다.
+   * <b>아래쪽 safe-area 인셋은 SafeAreaView(edges: bottom)가 따로 더한다</b>(09-18, 24 가 이중 여백이던 이유).
+   */
   inputBar: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    /*
-     * 동그란 "+"/전송 버튼이 화면 맨 끝에 거의 붙어 있으면 기기의 둥근 모서리
-     * 곡률에 살짝 잘려 보인다(실기기 확인). safe-area 인셋은 좌우가 대개 0 이라
-     * (코너 곡률까지 잡아주진 않는다) 여백을 직접 늘렸다 — 물리적으로 둥근 건
-     * 가장자리 전체가 아니라 네 "꼭짓점" 부근이라, 가로(paddingHorizontal)만
-     * 늘렸을 때보다 세로(paddingBottom)도 함께 늘리면 버튼이 꼭짓점에서 대각선
-     * 으로 더 멀어진다. 위쪽은 꼭짓점과 무관해 기존 값을 유지한다.
-     *
-     * paddingTop/paddingBottom 은 2026-08-31 에 Between 비교로 한 단계씩 키웠다가
-     * (하단에 너무 붙어 촘촘하다는 지적) 2026-09-18 에 다시 줄였다 — 늘린 쪽이 지나쳐서
-     * 빈 바가 86px + safe-area 인셋이 됐다(16+46+24). 지금은 8+44+8 = 60px 이다.
-     *
-     * <b>아래쪽 safe-area 인셋은 SafeAreaView(edges: bottom)가 이미 더해준다</b> — 여기
-     * 값은 그 위에 얹히는 순수 여백이라, 24 는 노치 기기에서 사실상 이중 여백이었다.
-     * 가로(paddingHorizontal)는 건드리지 않는다: 위 주석대로 둥근 모서리 잘림을 막는
-     * 값이고, 세로를 줄인 만큼 버튼이 꼭짓점에 다시 가까워지므로 여기서 더 줄이면 안 된다.
-     */
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.sm,
-    gap: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    paddingTop: 9 - PILL_INSET,
+    paddingBottom: 9 - PILL_INSET,
     // 바탕색은 chatStyles.inputBar — 채팅 테마를 따른다(그쪽 주석)
   },
+  inputRow: {
+    flexDirection: 'row',
+    // 여러 줄로 늘면 버튼은 바닥 줄에 붙는다(카톡과 같다)
+    alignItems: 'flex-end',
+  },
   /*
-   * 트레이 버튼("+" · 이모티콘) — 테두리도 채움도 없다.
-   *
-   * 예전엔 46px 원 + 1px 테두리라 입력바에 "활성 객체"가 셋이었고(버튼·입력창·전송),
-   * 그만큼 메시지 목록과 시각적으로 경쟁했다. 입력바는 콘텐츠가 아니라 도구라
-   * 물러나 있어야 한다 — 터치 영역(44)은 남겨 두고 그림만 지운다.
+   * 보이는 알약 — 버튼 칸보다 위아래로 PILL_INSET 씩 안쪽에 깐 배경이다. 줄이 늘면 inputRow 가 커지고
+   * 알약도 같이 늘어난다. 채움·글자색은 chatStyles.input(채팅 테마, 대비 검증은 verify:chat-theme).
+   * 테두리 대신 채움 — 폼 필드가 아니라 "쓰는 자리"로 읽힌다.
    */
-  // 44 는 iOS HIG 최소 터치 영역이다 — 바를 더 줄이고 싶어도 이 아래로는 내리지 않는다
-  trayBtn: { width: 44, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
-  trayBtnActive: { backgroundColor: colors.primarySoft },
+  inputPill: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: PILL_INSET,
+    bottom: PILL_INSET,
+    borderRadius: PILL_HEIGHT / 2,
+  },
   /*
-   * "+"(24)와 전송(20) 아이콘은 크기가 달라 실제 박스는 둘 다 44x44 로 완전히
-   * 같은데도(alignItems/justifyContent: center) 세로 정렬이 어긋나 보였다.
-   * 아이콘 폰트는 lineHeight 를 안 정해주면 브라우저가 폰트 자체의 "normal"
-   * 줄높이를 쓰는데, 이 여백 비율이 fontSize 에 비례해서 커지므로 크기가
-   * 다른 두 아이콘은 같은 상자 안에서도 글리프가 서로 다른 픽셀만큼
-   * 위/아래로 밀린다. lineHeight 를 size 와 같게 못박아 그 여백을 없앤다.
+   * 버튼 칸 — 터치 영역 그 자체. iOS HIG 44pt / Material 48dp 하한을 칸 크기로 지킨다.
+   * 그림(원 28·아이콘 24)은 칸 가운데 놓여, 알약 끝에서 첫 버튼 중심까지가 22(카톡 실측 21.5)다.
    */
+  inputSlot: { width: INPUT_SLOT, height: INPUT_SLOT, alignItems: 'center', justifyContent: 'center' },
+  /*
+   * "+" — 지름 28 원(카톡 실측 28). 원 채움은 입력바 색(chatStyles.inputBar), 아이콘은 inputIcon —
+   * verify:chat-theme 가 "입력바 아이콘 vs 입력바" 로 이미 검증한 쌍을 그대로 쓴다. 칸(알약) 위에
+   * 바탕색 원이 뚫린 것처럼 보여 칸 색과도 구분된다.
+   */
+  plusCircle: {
+    width: INPUT_ICON_CIRCLE,
+    height: INPUT_ICON_CIRCLE,
+    borderRadius: INPUT_ICON_CIRCLE / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  plusCircleActive: { backgroundColor: colors.primarySoft },
+  /*
+   * 아이콘 폰트는 lineHeight 를 안 정해주면 폰트 자체의 "normal" 줄높이를 써서, 크기가 다른 아이콘이
+   * 같은 상자 안에서도 서로 다른 픽셀만큼 위/아래로 밀린다. lineHeight 를 size 와 같게 못박는다.
+   */
+  plusIcon: { lineHeight: 20 },
   trayIcon: { lineHeight: 24 },
-  sendIcon: { lineHeight: 22 },
+  sendIcon: { lineHeight: 18 },
   input: {
     flex: 1,
     // 웹 필수 — <textarea> 내재 최소 폭 탓에 flex:1 이어도 안 줄어든다
     // (WorkoutSessionScreen.setInput 과 같은 문제). 네이티브에는 영향 없다.
     minWidth: 0,
-    maxHeight: 110,
-    // 좌우 버튼(44)과 높이를 맞춘다 — 어긋나면 flex-end 정렬에서 바닥선이 틀어진다
-    minHeight: 44,
-    paddingHorizontal: spacing.md,
-    // 12 였을 때 내부 여백만으로 46 을 넘겨 minHeight 가 무의미했다. 10 이면 44 가 산다
-    paddingTop: 10,
-    paddingBottom: 10,
+    /*
+     * 줄높이를 못박아야 "다섯 줄"이 기기 폰트와 무관하게 다섯 줄이다 — 예전엔 lineHeight 없이
+     * maxHeight 110 이라 Android 3.7줄·iOS 4.4줄처럼 기기마다 달랐다(CHAT_UX_REVIEW §1-2 B).
+     * 한 줄일 때 칸 높이 = 버튼 칸이 되게 위아래 여백을 정한다 — 글자가 버튼 아이콘과 같은 줄에 선다.
+     */
+    lineHeight: INPUT_LINE_HEIGHT,
+    minHeight: INPUT_SLOT,
+    maxHeight: INPUT_LINE_HEIGHT * INPUT_MAX_LINES + INPUT_PAD_V * 2,
+    paddingTop: INPUT_PAD_V,
+    paddingBottom: INPUT_PAD_V,
+    // 왼쪽은 "+" 칸이 이미 띄워 준다 — 글자 시작이 알약 끝에서 44+2(카톡 실측 43.7)
+    paddingHorizontal: 2,
     /*
      * 쓰는 글자 = 보내진 글자. 예전엔 subtitle(17)이라 말풍선(body 14)보다 3px 컸고, 화면에서
      * 가장 큰 글자가 입력칸이라 "칸이 크다"로 읽혔다(docs/CHAT_UX_REVIEW_2026-10-01.md §1-2 B).
-     * 2026-09-18 에 17 을 둔 이유는 "16 토큰이 없다"였는데, 비교 대상은 16 이 아니라 보낸 결과였다.
-     * 플레이스홀더는 같은 TextInput 이라 따라온다.
      *
      * <p><b>웹만 16 이다</b> — 모바일 사파리는 16px 미만 입력칸에 포커스가 가면 화면을 자동 확대하고,
      * 내려놓아도 돌아오지 않는다. 16 은 그 문턱이라 토큰이 아니라 리터럴로 둔다.
      */
     fontSize: Platform.OS === 'web' ? 16 : fontSize.body,
-    // 글자색·채움은 chatStyles.input — 채팅 테마를 따른다.
-    // 테두리 대신 살짝 눌린 채움 — 폼 필드가 아니라 "쓰는 자리"로 읽힌다.
-    // 테두리를 지운 만큼 입력바 전체가 메시지 목록 뒤로 물러난다(trayBtn 주석).
-    borderRadius: radius.lg,
+    // 안드로이드 기본 글꼴 여백을 빼야 lineHeight 그대로 선다
+    includeFontPadding: false,
+    // 칸 채움은 inputPill 이 그린다 — TextInput 은 투명하다
+    backgroundColor: 'transparent',
   },
   /*
-   * 전송 — 입력창과 <b>같은 곡률</b>(radius.lg)을 쓴다. 완전한 원(radius.pill)이면
-   * 바로 옆 입력창(16)과 곡률이 따로 놀아 나중에 얹은 물건처럼 보였다.
-   * 글자가 있을 때만 뜨므로(렌더 주석) 상주하던 녹색 원은 이제 없다.
+   * 전송 — 칸(44/48) 가운데 지름 28 원(카톡 오른쪽 원 실측 28). 글자가 있을 때만 뜬다(렌더 주석).
    */
   sendBtn: {
+    width: INPUT_SLOT,
+    height: INPUT_SLOT,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sendCircle: {
+    width: INPUT_ICON_CIRCLE,
+    height: INPUT_ICON_CIRCLE,
+    borderRadius: INPUT_ICON_CIRCLE / 2,
     backgroundColor: colors.primary,
-    borderRadius: radius.lg,
-    width: 44,
-    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },
