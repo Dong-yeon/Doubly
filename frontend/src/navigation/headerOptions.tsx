@@ -97,6 +97,22 @@ export const modalOptions = {
     canGoBack ? bareHeaderItems(<HeaderIconButton icon="close" label="닫기" />) : [],
 } as const;
 
+/**
+ * <b>다른 탭에서 연</b> 모달 화면 옵션 — 모양(닫기 ✕·아래에서 올라옴)은 같고 iOS 네이티브 모달만 뺀다.
+ *
+ * <p>홈 칩이 {@code navigate('Health', { screen: 'DietRecord' })} 로 <b>탭 전환과 모달 띄우기를
+ * 한 번에</b> 하면, iOS 는 아직 화면에 올라오지 않은 탭 위에 모달을 띄우려다 조용히 실패하거나,
+ * 닫을 때 useReturnToTab 의 jumpTo 가 모달이 내려가는 도중에 탭을 바꿔 네이티브 스택이
+ * 어긋난다. 그 뒤로 럽바디의 "식단 기록하기"가 아무 반응이 없었다(2026-10-01, iPhone 만 —
+ * 안드로이드의 modal 은 그냥 push 라 멀쩡했다). 일반 push 로 바꾸면 둘 다 생기지 않는다.
+ */
+export const crossTabModalOptions = {
+  headerBackVisible: false,
+  animation: 'slide_from_bottom',
+  headerLeft: modalOptions.headerLeft,
+  unstable_headerLeftItems: modalOptions.unstable_headerLeftItems,
+} as const;
+
 const styles = StyleSheet.create({
   button: {
     minWidth: 44,
