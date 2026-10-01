@@ -26,7 +26,7 @@ import { withJosa } from '../../utils/format';
 import { copyText } from '../../utils/share';
 import { AnimatedSticker } from '../../components/AnimatedSticker';
 import { RemoteAnimatedSticker } from '../../components/RemoteAnimatedSticker';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { Button } from '../../components/Button';
 import { useHeaderHeight } from '@react-navigation/elements';
@@ -190,6 +190,16 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const androidKeyboardHeight = useAndroidKeyboardHeight();
   /* 이모티콘·보조 도구 패널 높이 — 키보드가 있던 자리를 그대로 이어받는다(훅 주석 참고) */
   const panelHeight = useKeyboardPanelHeight();
+  /*
+   * 겹쳐 뜬 추천 막대의 실측 높이(0 = 없음). 목록은 이만큼 바닥 여백을 더 받아 최신 말풍선이
+   * 막대 뒤로 숨지 않는다. 막대가 사라지면 0 으로 돌아가 여백도 원래대로다.
+   */
+  const [suggestBarHeight, setSuggestBarHeight] = useState(0);
+  // 목록의 현재 스크롤 위치 — 위 여백이 바뀔 때 과거를 보던 화면이 튀지 않게 보정한다
+  const listScrollYRef = useRef(0);
+  const prevSuggestBarHeightRef = useRef(0);
+  // safe-area 아래 띠를 입력바 색으로 칠할 높이(렌더의 bottomInset 주석)
+  const bottomInset = useSafeAreaInsets().bottom;
   /* 전체화면으로 연 사진 — 목록에서 이 uri 를 찾아 그 자리에서 시작한다(아래 viewing) */
   const [viewingImage, setViewingImage] = useState<string | null>(null);
   const openImage = (uri: string) => setViewingImage(uri);
@@ -400,6 +410,19 @@ export function ChatRoomScreen({ navigation, route }: Props) {
    * "많이 올려본 뒤 한 번에 내려가기" 두 요청(2026-09-03)을 이 ref 하나로 처리한다.
    */
   const listRef = useRef<FlatList<ChatMessage>>(null);
+  /*
+   * 추천 막대가 뜨고 질 때 목록 바닥 여백이 그만큼 바뀐다. 맨 아래(최신)를 보고 있으면 말풍선이 막대
+   * 위로 밀려 올라가는 게 맞다 — 그게 여백을 주는 이유다. 하지만 과거를 올려 보던 중이면 같은 변화가
+   * 보던 화면을 막대 높이만큼 끌어내린다. inverted 라 오프셋이 바닥부터 재므로, 늘어난 만큼 오프셋을
+   * 더해 보던 자리를 지킨다.
+   */
+  useLayoutEffect(() => {
+    const delta = suggestBarHeight - prevSuggestBarHeightRef.current;
+    prevSuggestBarHeightRef.current = suggestBarHeight;
+    const y = listScrollYRef.current;
+    if (delta === 0 || y < 8) return;
+    listRef.current?.scrollToOffset({ offset: Math.max(0, y + delta), animated: false });
+  }, [suggestBarHeight]);
   const scrollToBottom = (animated = true) => listRef.current?.scrollToOffset({ offset: 0, animated });
   // 과거 쪽으로 일정 거리 이상 올라갔을 때만 "맨 아래로" FAB 을 보여준다
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -498,6 +521,11 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     return dedupeOverlapping([...ruleSuggestions, ...dict]);
   }, [ruleSuggestions, dictResult, text]);
 
+  /*
+   * 패널(이모티콘·"+")이 열려 있으면 추천 막대를 띄우지 않는다 — 막대가 목록 바닥에 겹쳐 뜨므로
+   * 패널을 고르는 동안엔 같은 일을 하는 두 번째 줄일 뿐이다. 패널을 닫으면 그대로 돌아온다.
+   */
+  const panelOpen = showStickers || showExtras;
   /** 맞춤법 막대가 떠 있는가 — 떠 있으면 스티커 추천 막대는 숨는다(같은 자리를 쓴다) */
   const spellBarVisible = spellDismissedFor !== text && suggestions.length > 0;
 
@@ -592,7 +620,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
    * 키워드 추천이 먼저고, 입력이 비어 있을 때만 맥락 추천이 선다.
    */
   const visibleStickerSuggestions =
-    stickerBarClosed || stickerPickedFor === text || spellBarVisible
+    stickerBarClosed || stickerPickedFor === text || spellBarVisible || panelOpen
       ? EMPTY_SUGGESTIONS
       : stickerSuggestions.length > 0
         ? stickerSuggestions
@@ -1853,8 +1881,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             {mine && !item.isRead && !item.pending ? (
               <MaterialCommunityIcons
                 name="heart"
-                size={10}
-                color={colors.partner}
+                size={12}
+                color={chatStyles.readHeart.color as string}
                 style={styles.readHeart}
                 accessibilityLabel="아직 안 읽었어요"
               />
@@ -1917,6 +1945,14 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           <View style={[StyleSheet.absoluteFill, chatStyles.photoScrim]} />
         </View>
       ) : null}
+      {/*
+       * safe-area 아래 띠 — SafeAreaView 가 패딩으로 비워 둔 자리라 원래는 채팅 배경(또는 사진)이
+       * 비쳤다. 입력바만 다른 색이면 그 아래 띠가 다시 배경색이라 바가 <b>떠 있는 판</b>처럼 보인다.
+       * 입력바와 같은 색으로 칠해 바가 화면 바닥까지 이어지게 한다. 키보드가 뜨면 키보드가 덮는다.
+       */}
+      {bottomInset > 0 ? (
+        <View style={[chatStyles.bottomInset, { height: bottomInset }]} pointerEvents="none" />
+      ) : null}
       <KeyboardAvoidingView
         // Android 는 FlatList 를 직접 감싸면 KeyboardAvoidingView 의 자동 높이 보정이
         // edge-to-edge 아래에서 먹지 않아(실기기 확인) behavior 를 아예 안 쓰고
@@ -1978,6 +2014,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
          * 제스처 핸들러가 입력창까지 덮으면 길게 눌러 뜨는 OS 의 붙여넣기·선택 메뉴가
          * 씹혔다(2026-10-01 "채팅창에 붙여넣기가 안 된다").
          */}
+        <View style={styles.flex}>
         <SwipeBackView style={styles.flex}>
         <View
           style={styles.flex}
@@ -2009,7 +2046,11 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             listRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
             setTimeout(() => listRef.current?.scrollToIndex({ index: info.index, animated: true }), 120);
           }}
-          contentContainerStyle={styles.list}
+          /*
+           * inverted 라 contentContainer 의 paddingTop 이 <b>화면 바닥</b>이다. 막대가 떠 있는 동안
+           * 그 높이만큼 더 비워 최신 말풍선이 막대 위로 올라온다.
+           */
+          contentContainerStyle={[styles.list, suggestBarHeight > 0 && { paddingTop: spacing.md + suggestBarHeight }]}
           /*
            * 과거 메시지 페이징 — inverted 목록이라 onEndReached = 위(가장 오래된 쪽) 도달.
            * 서버 커서는 준비돼 있었지만 연결이 안 돼 첫 페이지 이전 대화를 볼 수 없었다.
@@ -2019,6 +2060,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           // "맨 아래로" FAB — inverted 라 contentOffset.y 가 클수록 과거(위) 쪽이다
           onScroll={(e) => {
             const y = e.nativeEvent.contentOffset.y;
+            listScrollYRef.current = y;
             setShowScrollToBottom((prev) => {
               const next = y > SCROLL_TO_BOTTOM_THRESHOLD;
               return prev === next ? prev : next;
@@ -2051,7 +2093,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           ListEmptyComponent={
             !loadingHistory ? (
               <View>
-                <EmptyState icon="chat-outline" title="아직 메시지가 없어요" description="첫 메시지를 보내보세요!" />
+                {/* 새 커플이 처음 들어오는 화면 — 회색 아이콘 대신 채팅방 목록과 같은 달걀 캐릭터(2026-10-01, D2) */}
+                <EmptyState illustration="duo" title="아직 메시지가 없어요" description="첫 메시지를 보내보세요!" />
               </View>
             ) : null
           }
@@ -2061,7 +2104,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         {/* 과거를 한참 올려본 뒤 한 번에 내려가는 FAB (2026-09-03 요청) */}
         {showScrollToBottom ? (
           <Pressable
-            style={styles.scrollToBottomFab}
+            // 추천 막대가 떠 있으면 그 위로 비켜 선다 — 같은 모서리라 막대 오른쪽 X 를 덮는다
+            style={[styles.scrollToBottomFab, suggestBarHeight > 0 && { bottom: spacing.md + suggestBarHeight }]}
             onPress={() => scrollToBottom()}
             accessibilityRole="button"
             accessibilityLabel="맨 아래로 이동"
@@ -2072,6 +2116,54 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         ) : null}
         </View>
         </SwipeBackView>
+        {/*
+         * 추천 막대(스티커·맞춤법) — <b>레이아웃 흐름 밖</b>, 목록 바닥 위에 겹쳐 띄운다(2026-10-01).
+         * 예전엔 입력바 바로 위 흐름에 있어서, 짧게 쓰면 64 가 끼고 길어지면 빠지고 맞춤법이 뜨면 60 이
+         * 끼면서 입력바 윗변이 쓰는 내내 오르내렸다(docs/CHAT_UX_REVIEW_2026-10-01.md I3). 이제 입력바는
+         * 60 에 고정되고, 막대 높이만큼은 목록 쪽이 비켜 준다(suggestBarHeight 주석).
+         *
+         * <p>목록과 같은 부모 안에 둔다 — 안드로이드는 부모 경계 밖으로 나간 자식이 터치를 못 받으므로,
+         * 입력바 쪽에 붙여 위로 삐져나오게 하면 막대를 눌러도 반응하지 않는다.
+         */}
+        <View
+          style={styles.suggestOverlay}
+          pointerEvents="box-none"
+          onLayout={(e) => {
+            const h = Math.round(e.nativeEvent.layout.height);
+            setSuggestBarHeight((prev) => (prev === h ? prev : h));
+          }}
+        >
+          <StickerSuggestBar
+            items={visibleStickerSuggestions}
+            onPick={(e) => {
+              /*
+               * 입력창의 글은 그대로 둔다 — "나도 사랑해"에 그림을 곁들인 사람은 문장도 보낼 생각이다.
+               * 코드를 치던 중("(달걀이_")만 비운다: 그 글은 보낼 말이 아니라 고르던 흔적이다.
+               * 맥락 추천은 한 번 골랐으면 끝이다.
+               */
+              if (showingContextBar) setContextBar(null);
+              else if (text.trim().startsWith('(')) setText('');
+              else setStickerPickedFor(text);
+              analyticsApi.log('STICKER_SUGGEST_PICKED', `${e.matched}:${e.code}`).catch(() => {});
+              void sendSticker(e.code, false, e.label);
+            }}
+            // 맥락 추천은 입력이 빈 채로 떠 있어 "입력이 비면 다시" 규칙이 곧바로 되살린다 — 따로 치운다
+            onDismiss={() => (showingContextBar ? setContextBar(null) : setStickerBarClosed(true))}
+            onCompose={(e) => {
+              // 코드를 치던 중("(달걀이_")이면 옮겨 올 문장이 없다
+              const typed = text.trim().startsWith('(') ? '' : text.trim();
+              setTextStickerDraft({ code: e.code, initialText: typed, fromInput: !!typed });
+            }}
+          />
+          <SpellCheckBar
+            suggestion={spellBarVisible && !panelOpen ? suggestions[0] : null}
+            total={suggestions.length}
+            onApply={applySpelling}
+            onApplyAll={applyAllSpelling}
+            onDismiss={() => setSpellDismissedFor(text)}
+          />
+        </View>
+        </View>
         {/*
          * 보조 도구 트레이 — 예전엔 스티커·터치·무드·카메라 4개 버튼이 입력바에 항상 떠
          * 있어(46px×4) 좁은 기기에서 입력창이 짓눌렸다. "+" 로 펼치는 트레이 하나로
@@ -2194,36 +2286,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             </Pressable>
           </View>
         ) : null}
-        <StickerSuggestBar
-          items={visibleStickerSuggestions}
-          onPick={(e) => {
-            /*
-             * 입력창의 글은 그대로 둔다 — "나도 사랑해"에 그림을 곁들인 사람은 문장도 보낼 생각이다.
-             * 코드를 치던 중("(달걀이_")만 비운다: 그 글은 보낼 말이 아니라 고르던 흔적이다.
-             * 맥락 추천은 한 번 골랐으면 끝이다.
-             */
-            if (showingContextBar) setContextBar(null);
-            else if (text.trim().startsWith('(')) setText('');
-            else setStickerPickedFor(text);
-            analyticsApi.log('STICKER_SUGGEST_PICKED', `${e.matched}:${e.code}`).catch(() => {});
-            void sendSticker(e.code, false, e.label);
-          }}
-          // 맥락 추천은 입력이 빈 채로 떠 있어 "입력이 비면 다시" 규칙이 곧바로 되살린다 — 따로 치운다
-          onDismiss={() => (showingContextBar ? setContextBar(null) : setStickerBarClosed(true))}
-          onCompose={(e) => {
-            // 코드를 치던 중("(달걀이_")이면 옮겨 올 문장이 없다
-            const typed = text.trim().startsWith('(') ? '' : text.trim();
-            setTextStickerDraft({ code: e.code, initialText: typed, fromInput: !!typed });
-          }}
-        />
-        <SpellCheckBar
-          suggestion={spellBarVisible ? suggestions[0] : null}
-          total={suggestions.length}
-          onApply={applySpelling}
-          onApplyAll={applyAllSpelling}
-          onDismiss={() => setSpellDismissedFor(text)}
-        />
-        <View style={styles.inputBar}>
+        <View style={[styles.inputBar, chatStyles.inputBar]}>
           {uploading ? (
             <View style={styles.trayBtn}>
               <ActivityIndicator size="small" color={colors.primary} />
@@ -2238,7 +2301,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               <MaterialCommunityIcons
                 name={showExtras ? 'close' : 'plus'}
                 size={24}
-                color={showExtras ? colors.primary : colors.textSecondary}
+                color={showExtras ? colors.primary : (chatStyles.inputIcon.color as string)}
                 style={styles.trayIcon}
               />
             </TouchableOpacity>
@@ -2255,14 +2318,14 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           */}
           <TextInput
             ref={inputRef}
-            style={styles.input}
+            style={[styles.input, chatStyles.input]}
             value={text}
             onChangeText={setText}
             onPressIn={dismissPanels}
             onFocus={dismissPanels}
             onKeyPress={onInputKeyPress}
             placeholder={sendOnEnter ? '메시지를 입력하세요 (Shift+Enter 줄바꿈)' : '메시지를 입력하세요'}
-            placeholderTextColor={colors.textSecondary}
+            placeholderTextColor={chatStyles.inputPlaceholder.color as string}
             multiline
           />
           {/*
@@ -2321,7 +2384,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               <MaterialCommunityIcons
                 name="emoticon-outline"
                 size={24}
-                color={showStickers ? colors.primary : colors.textSecondary}
+                color={showStickers ? colors.primary : (chatStyles.inputIcon.color as string)}
                 style={styles.trayIcon}
               />
             </TouchableOpacity>
@@ -2541,6 +2604,8 @@ const styles = themedStyles((colors) => ({
   imagePreviewThumbActive: { opacity: 1, borderWidth: 2, borderColor: colors.white },
   imagePreviewActions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg, width: '100%' },
   imagePreviewBtn: { flex: 1 },
+  // 추천 막대를 목록 바닥에 겹쳐 띄우는 자리(렌더 주석). 비어 있으면 높이 0 이다
+  suggestOverlay: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   // 목록 위에 떠 있는 "맨 아래로" FAB — 트레이·입력바 위 오른쪽 모서리
   scrollToBottomFab: {
     position: 'absolute',
@@ -2762,6 +2827,7 @@ const styles = themedStyles((colors) => ({
   meta: { marginHorizontal: spacing.xs, justifyContent: 'flex-end' },
   metaMine: { marginHorizontal: spacing.xs, alignItems: 'flex-end', justifyContent: 'flex-end' },
   // 읽음 표시 — 안 읽었을 때만 하트를 띄우고, 읽으면 사라진다(카톡 "1" 방식).
+  // 색은 chatStyles.readHeart(채팅 테마), 크기는 12 — 10 이던 때는 진한 테마에서 대비 2.9 로 안 보였다.
   readHeart: { marginBottom: 2 },
   // 상대 아바타 자리 — 그룹 중간엔 내용 없이 폭만 차지해 말풍선이 계단식으로 안 밀린다
   avatarSlot: { width: 26, marginRight: spacing.xs },
@@ -2828,7 +2894,7 @@ const styles = themedStyles((colors) => ({
     paddingTop: spacing.sm,
     paddingBottom: spacing.sm,
     gap: spacing.sm,
-    backgroundColor: colors.background,
+    // 바탕색은 chatStyles.inputBar — 채팅 테마를 따른다(그쪽 주석)
   },
   /*
    * 트레이 버튼("+" · 이모티콘) — 테두리도 채움도 없다.
@@ -2862,11 +2928,19 @@ const styles = themedStyles((colors) => ({
     // 12 였을 때 내부 여백만으로 46 을 넘겨 minHeight 가 무의미했다. 10 이면 44 가 산다
     paddingTop: 10,
     paddingBottom: 10,
-    fontSize: fontSize.subtitle,
-    color: colors.textPrimary,
+    /*
+     * 쓰는 글자 = 보내진 글자. 예전엔 subtitle(17)이라 말풍선(body 14)보다 3px 컸고, 화면에서
+     * 가장 큰 글자가 입력칸이라 "칸이 크다"로 읽혔다(docs/CHAT_UX_REVIEW_2026-10-01.md §1-2 B).
+     * 2026-09-18 에 17 을 둔 이유는 "16 토큰이 없다"였는데, 비교 대상은 16 이 아니라 보낸 결과였다.
+     * 플레이스홀더는 같은 TextInput 이라 따라온다.
+     *
+     * <p><b>웹만 16 이다</b> — 모바일 사파리는 16px 미만 입력칸에 포커스가 가면 화면을 자동 확대하고,
+     * 내려놓아도 돌아오지 않는다. 16 은 그 문턱이라 토큰이 아니라 리터럴로 둔다.
+     */
+    fontSize: Platform.OS === 'web' ? 16 : fontSize.body,
+    // 글자색·채움은 chatStyles.input — 채팅 테마를 따른다.
     // 테두리 대신 살짝 눌린 채움 — 폼 필드가 아니라 "쓰는 자리"로 읽힌다.
     // 테두리를 지운 만큼 입력바 전체가 메시지 목록 뒤로 물러난다(trayBtn 주석).
-    backgroundColor: colors.surfaceAlt,
     borderRadius: radius.lg,
   },
   /*
@@ -2971,6 +3045,22 @@ const chatStyles = chatThemedStyles((chat) => ({
     color: chat.meta,
     ...metaCapsule(chat.metaCapsule),
   },
+
+  /*
+   * 입력바·입력칸 — 2026-10-01 에 앱 팔레트에서 옮겨 왔다(chatTheme 의 inputBar 주석).
+   * 예전엔 앱 background 라 진한 채팅 테마 아래 흰 판이 깔렸다. 바깥 safe-area 띠도 같은 색이다(bottomInset).
+   */
+  inputBar: { backgroundColor: chat.inputBar },
+  bottomInset: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: chat.inputBar },
+  // 칸은 상대 말풍선 계열이라 글자도 그 글자색 — 검증된 쌍을 다시 쓴다
+  input: { backgroundColor: chat.inputField, color: chat.bubbleTheirsText },
+  inputPlaceholder: { color: chat.inputPlaceholder },
+  inputIcon: { color: chat.inputIcon },
+  /*
+   * 안 읽음 하트 — 예전엔 앱 팔레트 partner 라 진한 채팅 테마에서 배경 대비 2.9~3.1 이었다.
+   * 표시 방식(안 읽었을 때만 있다가 사라짐)은 그대로이고 색과 크기만 바꿨다(2026-10-01, R1).
+   */
+  readHeart: { color: chat.readMark },
 
   // 사진 위에 덮는 옅은 막 — 대비가 아니라 미관용이다(chatTheme 의 CHAT_PHOTO_SCRIM)
   photoScrim: { backgroundColor: CHAT_PHOTO_SCRIM },
