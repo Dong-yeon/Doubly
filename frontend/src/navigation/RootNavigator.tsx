@@ -22,6 +22,7 @@ import { ConsentGateScreen } from '../screens/onboarding/ConsentGateScreen';
 import { useAuthStore } from '../store/authStore';
 import { useThemeStore } from '../store/themeStore';
 import { useChatThemeStore } from '../store/chatThemeStore';
+import { useRemoteStickerStore } from '../store/remoteStickerStore';
 import { colors } from '../constants/theme';
 import { isDarkMode } from '../theme';
 
@@ -90,6 +91,12 @@ export function RootNavigator() {
     // 미리 읽어 둬야 처음 들어갔을 때 기본색이 한 번 스쳤다 바뀌지 않는다
     void useChatThemeStore.getState().load();
   }, [bootstrap]);
+
+  // 서버 배포 이모티콘 카탈로그 — 저장본을 먼저 펼쳐 방 목록·말풍선이 코드 글자 없이 그려지게 한다.
+  // 서버 질의는 인증이 필요하므로 로그인된 뒤에 한다(store/remoteStickerStore)
+  useEffect(() => {
+    if (isAuthenticated) void useRemoteStickerStore.getState().init();
+  }, [isAuthenticated]);
 
   /*
    * 상단바에 떠 있는 알림 치우기 — <b>앱 전체에서 여기 한 곳</b>이다.

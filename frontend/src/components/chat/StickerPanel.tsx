@@ -34,6 +34,7 @@ import { Image, Pressable, ScrollView, Text, View, type ImageSourcePropType } fr
 import { CachedImage } from '../CachedImage';
 import { MaterialCommunityIcons } from '../Icon';
 import { ANIMATED_STICKERS, animatedStickerOf } from '../../constants/animatedStickers';
+import { useRemoteStickerStore } from '../../store/remoteStickerStore';
 import { STICKER_CHARACTERS, stickerImageOf } from '../../constants/stickerImages';
 import type { StickerContext } from '../../constants/contextStickers';
 import type { StickerSuggestion } from '../../utils/stickerCodes';
@@ -207,9 +208,12 @@ export function StickerPanel({
   const loadPacks = useStickerStore((s) => s.load);
   const packOf = useStickerStore((s) => s.packOf);
   const serverPacks = useStickerStore((s) => s.packs);
+  // 서버 배포 이모티콘(store/remoteStickerStore) — 격자에는 썸네일만 받는다
+  const remotePacks = useRemoteStickerStore((s) => s.packs);
 
   // 패널이 처음 그려질 때 한 번. 안 열어 본 사람에게는 조회가 아예 안 간다.
   useEffect(() => { void loadPacks(); }, [loadPacks]);
+  useEffect(() => { void useRemoteStickerStore.getState().refresh(); }, []);
 
   const packs = useMemo<PanelPack[]>(() => {
     /*
@@ -223,6 +227,17 @@ export function StickerPanel({
       const items = animatedByPack.get(packId) ?? [];
       items.push({ type: 'image', key: a.code, code: a.code, label: a.label, source: a.thumb });
       animatedByPack.set(packId, items);
+    }
+    /*
+     * 서버 배포 이모티콘 — 같은 팩 id 면 번들 뒤에 잇고(ANIM_ALL 의 추가분), 새 팩이면 새 칸이 된다.
+     * 번들이 먼저인 이유: 썸네일이 이미 기기에 있어 패널을 열자마자 그려진다.
+     */
+    for (const p of remotePacks) {
+      const items = animatedByPack.get(p.id) ?? [];
+      for (const s of p.items) {
+        items.push({ type: 'image', key: s.code, code: s.code, label: s.label, source: { uri: s.thumbUrl } });
+      }
+      if (items.length > 0) animatedByPack.set(p.id, items);
     }
 
     const animatedPacks: PanelPack[] = [...animatedByPack.entries()].map(([packId, items]) => ({
@@ -270,7 +285,11 @@ export function StickerPanel({
     if (contextPack && contextPack.items.length > 0) {
       const items: PackItem[] = [];
       for (const s of contextPack.items) {
-        const source = s.kind === 'image' ? stickerImageOf(s.code)?.source : animatedStickerOf(s.code)?.thumb;
+        const remote = useRemoteStickerStore.getState().byCode[s.code];
+        const source =
+          s.kind === 'image'
+            ? stickerImageOf(s.code)?.source
+            : animatedStickerOf(s.code)?.thumb ?? (remote ? { uri: remote.thumbUrl } : undefined);
         if (source) items.push({ type: 'image', key: `${CONTEXT_PACK_KEY}-${s.code}`, code: s.code, label: s.label, source });
       }
       const first = items[0];
@@ -305,7 +324,7 @@ export function StickerPanel({
       };
     }
     // serverPacks 를 의존성에 두는 이유: 팩 이름·잠금이 서버에서 늦게 도착한다
-  }, [coupleEmojis, myUserId, partnerName, packOf, serverPacks, contextPack]);
+  }, [coupleEmojis, myUserId, partnerName, packOf, serverPacks, contextPack, remotePacks]);
 
   const active = packs.find((p) => p.key === activeKey) ?? packs[0];
   const activePack = active?.packId ? packOf(active.packId) : undefined;

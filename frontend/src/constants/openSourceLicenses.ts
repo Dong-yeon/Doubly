@@ -51,7 +51,19 @@ export const OSS_ENTRIES: OssEntry[] = [
     copyright: 'Copyright (c) Google LLC',
     license: 'Creative Commons Attribution 4.0 International (CC BY 4.0)',
     url: 'https://googlefonts.github.io/noto-emoji-animation/',
-    usedFor: '채팅 "움직이는 이모티콘" 160종 (Lottie 애니메이션)',
+    usedFor: '채팅 "움직이는 이모티콘" (Lottie 애니메이션 — 앱에 든 110종과 서버에서 받는 추가분)',
+  },
+  /*
+   * 서버에서 받는 "친구들" 팩(2026-10-01). Lottie Simple License 는 저작자 표시가 의무는 아니지만 권장이고,
+   * 배포물에 같은 라이선스 조건을 실어야 한다 — 아래 LOTTIE_SIMPLE_LICENSE 전문을 본문에 붙인다.
+   * 서버 팩에 LottieFiles 그림을 더하면 여기 작가를 함께 적는다(docs/SERVER_STICKER_PACKS_2026-10-01.md).
+   */
+  {
+    name: 'LottieFiles 무료 애니메이션 (친구들 팩)',
+    copyright: '작가: Tam Doan · Harshil Verma · can nazlican · Abdul Latif · Nafta · Margarita Ivanchikova · Julio',
+    license: 'Lottie Simple License (FL 9.13.21) — 일부 그림은 배경·여백을 손질했다',
+    url: 'https://lottiefiles.com/page/license',
+    usedFor: '채팅 "친구들" 이모티콘 10종 (서버에서 받는 Lottie 애니메이션)',
   },
   {
     name: 'Noto Emoji',
@@ -99,6 +111,27 @@ ${OSS_ENTRIES.map(
    위에 적지 않은 JavaScript 의존성은 MIT, Apache License 2.0, BSD 등
    허용적(permissive) 라이선스를 따르며, 각 패키지의 저작권 표시는 배포물에
    포함된 라이선스 파일에 담겨 있습니다.
+
+■ Lottie Simple License (FL 9.13.21) 전문
+   Copyright © 2021 Design Barn Inc.
+   Permission is hereby granted, free of charge, to any person obtaining a copy of the public animation
+   files available for download at the LottieFiles site ("Files") to download, reproduce, modify, publish,
+   distribute, publicly display, and publicly digitally perform such Files, including for commercial
+   purposes, provided that any display, publication, performance, or distribution of Files must contain
+   (and be subject to) the same terms and conditions of this license. Modifications to Files are deemed
+   derivative works and must also be expressly distributed under the same terms and conditions of this
+   license. You may not purport to impose any additional or different terms or conditions on, or apply
+   any technical measures that restrict exercise of, the rights granted under this license. This license
+   does not include the right to collect or compile Files from LottieFiles to replicate or develop a
+   similar or competing service.
+   Use of Files without attributing the creator(s) of the Files is permitted under this license, though
+   attribution is strongly encouraged. If attributions are included, such attributions should be visible
+   to the end user.
+   FILES ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+   TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. EXCEPT TO THE
+   EXTENT REQUIRED BY APPLICABLE LAW, IN NO EVENT WILL THE CREATOR(S) OF FILES OR DESIGN BARN, INC. BE
+   LIABLE ON ANY LEGAL THEORY FOR ANY SPECIAL, INCIDENTAL, CONSEQUENTIAL, PUNITIVE, OR EXEMPLARY DAMAGES
+   ARISING OUT OF THIS LICENSE OR THE USE OF SUCH FILES.
 
 LGPL 라이선스 저작물(Hunspell, Kiwi)에 대해서는 해당 라이브러리의 수정본으로
 교체할 수 있도록 동적 링킹된 형태로 배포하고 있습니다. 소스 코드 요청 등 문의는

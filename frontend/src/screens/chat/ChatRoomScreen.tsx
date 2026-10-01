@@ -25,6 +25,7 @@ import { Alert } from '../../utils/alert';
 import { withJosa } from '../../utils/format';
 import { copyText } from '../../utils/share';
 import { AnimatedSticker } from '../../components/AnimatedSticker';
+import { RemoteAnimatedSticker } from '../../components/RemoteAnimatedSticker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { Button } from '../../components/Button';
@@ -85,6 +86,7 @@ import { ANIMATED_STICKERS, animatedStickerOf } from '../../constants/animatedSt
 import { STICKER_CHARACTERS, STICKER_CODE_INDEX, stickerImageOf } from '../../constants/stickerImages';
 import { CHARACTER_PACKS, packIdOfSticker } from '../../constants/stickerPacks';
 import { useStickerStore } from '../../store/stickerStore';
+import { looksLikeStickerCode, useRemoteStickerStore } from '../../store/remoteStickerStore';
 import { loadRecentStickers, recordRecentSticker } from '../../utils/recentStickers';
 import { parseStickerCode, suggestStickers, type StickerSuggestion } from '../../utils/stickerCodes';
 import { anniversaryContextOf, kstDateKey } from '../../utils/anniversary';
@@ -497,13 +499,27 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   useEffect(() => {
     void loadStickerPacks();
   }, [loadStickerPacks]);
+  /*
+   * 서버 배포 이모티콘(store/remoteStickerStore) — 구독해 두면 카탈로그가 늦게 와도 말풍선이 다시 그려진다.
+   * 방에 들어올 때 한 번 묻는다(최근에 물었으면 스토어가 건너뛴다).
+   */
+  const remoteByCode = useRemoteStickerStore((s) => s.byCode);
+  const remoteCatalogVersion = useRemoteStickerStore((s) => s.version);
+  useEffect(() => {
+    void useRemoteStickerStore.getState().refresh();
+  }, []);
+  const suggestAnimated = useMemo(
+    () => [...ANIMATED_STICKERS, ...Object.values(remoteByCode)],
+    [remoteByCode],
+  );
   const isSuggestAllowed = useCallback(
     (kind: 'image' | 'animated', code: string) => {
-      const packId = kind === 'image' ? IMAGE_STICKER_PACK.get(code) : packIdOfSticker(code);
+      const packId =
+        kind === 'image' ? IMAGE_STICKER_PACK.get(code) : packIdOfSticker(code) ?? remoteByCode[code]?.packId;
       const pack = packId ? stickerPacks.find((p) => p.id === packId) : undefined;
       return pack ? pack.usable : true;
     },
-    [stickerPacks],
+    [stickerPacks, remoteByCode],
   );
 
   /** 최근 보낸 스티커(최신이 앞) — 같은 순위의 추천 안에서 자주 쓰는 것을 앞에 둔다 */
@@ -536,11 +552,11 @@ export function ChatRoomScreen({ navigation, route }: Props) {
       editing || settledText !== text
         ? []
         : suggestStickers(STICKER_CODE_INDEX, settledText, {
-            animated: ANIMATED_STICKERS,
+            animated: suggestAnimated,
             recent: recentStickers,
             isAllowed: isSuggestAllowed,
           }),
-    [text, settledText, editing, recentStickers, isSuggestAllowed],
+    [text, settledText, editing, recentStickers, isSuggestAllowed, suggestAnimated],
   );
   /*
    * 추천 막대를 치운 입력 — X 를 누르면 이번 입력(보내거나 지울 때까지) 동안 다시 띄우지 않는다.
@@ -1633,6 +1649,17 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               style={styles.stickerImage}
               play={shouldAutoPlay(item.id)}
               onPlayed={() => oneShotPlayedRef.current.add(item.id)}
+              onLongPress={() => onLongPressMessage(item)}
+            />
+          ) : remoteByCode[item.content!] || (remoteCatalogVersion === null && looksLikeStickerCode(item.content)) ? (
+            /*
+             * 서버 배포 이모티콘 — 파일은 처음 그릴 때 받는다. 카탈로그를 아직 한 번도 못 받았으면 코드처럼 생긴
+             * 값은 자리만 잡아 둔다(코드 글자가 스쳐 보이지 않게). 카탈로그가 있는데도 모르는 코드는 아래로 —
+             * 지금까지처럼 글자로 남긴다(내린 캐릭터의 옛 코드 등).
+             */
+            <RemoteAnimatedSticker
+              code={item.content!}
+              style={styles.stickerImage}
               onLongPress={() => onLongPressMessage(item)}
             />
           ) : (

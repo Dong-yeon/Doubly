@@ -36,6 +36,8 @@ export const STORAGE_KEYS = {
   iapHandled: 'doubly.iapHandled',
   // 사용자가 닫은 서비스 공지의 updatedAt — 같은 공지를 다시 띄우지 않기 위해(store/serviceStatusStore)
   dismissedNotice: 'doubly.dismissedNotice',
+  // 서버 배포 스티커 카탈로그 — 오프라인으로 켜도 지난 말풍선이 그려지게(store/remoteStickerStore)
+  stickerCatalog: 'doubly.stickerCatalog',
 } as const;
 
 /**

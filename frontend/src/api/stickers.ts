@@ -9,9 +9,15 @@
  * (`constants/stickerPacks.ts`). 서버가 답하는 건 "얼마고, 열려 있고, 샀나"뿐이다.
  */
 import { apiClient, unwrap } from './client';
-import type { ApiResponse, StickerPack } from '../types';
+import type { ApiResponse, StickerCatalog, StickerPack } from '../types';
 
 export const stickerApi = {
+  /**
+   * 서버 배포 스티커 카탈로그 — 번들에 없는 코드를 그림으로 바꾸는 표(2026-10-01).
+   * 위 "그림 목록은 내려오지 않는다"는 번들 이모티콘 얘기다. 서버 팩은 그림 목록까지 서버가 답한다.
+   */
+  catalog: () => unwrap(apiClient.get<ApiResponse<StickerCatalog>>('/stickers/catalog')),
+
   /** 팩 전체 + 내 잠금 상태. 잠긴 팩도 함께 온다 — 자물쇠를 그려야 판매가 된다. */
   packs: () => unwrap(apiClient.get<ApiResponse<StickerPack[]>>('/stickers/packs')),
 

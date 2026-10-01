@@ -9,6 +9,7 @@ import type { MessageType } from '../types';
 import { touchGestureOf } from '../constants/touchGestures';
 import { animatedStickerOf } from '../constants/animatedStickers';
 import { stickerImageOf } from '../constants/stickerImages';
+import { looksLikeStickerCode, remoteStickerOf } from '../store/remoteStickerStore';
 import { callCardLabel, parseCallCard } from './callCard';
 import { formatVoiceDuration, parseVoiceContent } from './chatVoice';
 
@@ -20,7 +21,12 @@ export function messagePreview(type: MessageType, content?: string | null): stri
     // 'LOVE_BEAR' 같은 코드라 라벨로 바꿔야 한다(TOUCH 와 같은 이유).
     case 'STICKER':
       return (
-        animatedStickerOf(content)?.label ?? stickerImageOf(content)?.label ?? content ?? '스티커'
+        animatedStickerOf(content)?.label ??
+        stickerImageOf(content)?.label ??
+        remoteStickerOf(content)?.label ??
+        // 서버 배포 이모티콘인데 카탈로그가 아직 없다 — 코드 글자를 방 목록에 흘리지 않는다
+        (looksLikeStickerCode(content) ? '이모티콘' : content) ??
+        '스티커'
       );
     case 'WORKOUT_CARD':
       return '운동 기록';

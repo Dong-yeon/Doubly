@@ -13,6 +13,7 @@ import { Pressable, ScrollView, StyleSheet, Image, View } from 'react-native';
 import { MaterialCommunityIcons } from './Icon';
 import { stickerImageOf } from '../constants/stickerImages';
 import { animatedStickerOf } from '../constants/animatedStickers';
+import { remoteStickerOf } from '../store/remoteStickerStore';
 import type { StickerSuggestion } from '../utils/stickerCodes';
 import { colors, spacing, radius } from '../constants/theme';
 import { themedStyles } from '../theme/themedStyles';
@@ -27,7 +28,12 @@ interface Props {
 }
 
 function thumbOf(item: StickerSuggestion) {
-  return item.kind === 'image' ? stickerImageOf(item.code)?.source : animatedStickerOf(item.code)?.thumb;
+  if (item.kind === 'image') return stickerImageOf(item.code)?.source;
+  const bundled = animatedStickerOf(item.code)?.thumb;
+  if (bundled) return bundled;
+  // 서버 배포 이모티콘 — 패널에서 이미 받은 썸네일이면 디스크 캐시에서 나온다
+  const remote = remoteStickerOf(item.code);
+  return remote ? { uri: remote.thumbUrl } : undefined;
 }
 
 export function StickerSuggestBar({ items, onPick, onDismiss, onCompose }: Props) {

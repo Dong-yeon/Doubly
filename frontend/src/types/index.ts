@@ -129,6 +129,24 @@ export interface StickerPack {
   purchased: boolean;
 }
 
+/**
+ * 서버 배포 스티커 한 장 — `GET /stickers/catalog` (2026-10-01, docs/SERVER_STICKER_PACKS_2026-10-01.md).
+ *
+ * `url`·`thumbUrl` 은 오리진 없는 경로(`/sticker-assets/...`)다 — `store/remoteStickerStore` 가 API 오리진을 붙인다.
+ */
+export interface RemoteStickerItem {
+  code: string;
+  label: string;
+  url: string;
+  thumbUrl: string;
+}
+
+export interface StickerCatalog {
+  /** 카탈로그 내용 해시 — 같으면 저장해 둔 것을 그대로 쓴다 */
+  version: string;
+  packs: { id: string; items: RemoteStickerItem[] }[];
+}
+
 export interface FeatureState {
   feature: FeatureKey;
   /** 사용자에게 보여줄 기능 이름 */
