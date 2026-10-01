@@ -438,6 +438,8 @@ export function DietScreen({ navigation, route }: Props) {
           // 운동 홈은 2026-09-27 에 가렸다(config.ts WORKOUT_HOME_ENABLED) — prop 이 없으면 카드가 링크를 안 그린다
           onOpenWorkoutHome={WORKOUT_HOME_ENABLED ? () => navigation.navigate('WorkoutMain') : undefined}
           openDurationKey={route.params?.checkin}
+          // 한 번 펼쳤으면 지운다 — 남겨 두면 화면이 다시 마운트될 때마다 또 펼쳐진다
+          onDurationOpened={() => navigation.setParams({ checkin: undefined })}
         />
       </View>
 
