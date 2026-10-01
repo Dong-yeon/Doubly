@@ -185,6 +185,53 @@ class WithdrawFlowTest {
     }
 
     /**
+     * 목소리 녹음(음성 응원·운동 부스터)과 프로필 사진도 탈퇴와 함께 지운다 — 예전에는 삭제 목록에
+     * 빠져 있어 DB 행만 사라지고 파일은 Cloudinary 에 남았다. 소셜 가입이 들고 온 카카오·구글
+     * 주소는 우리가 지울 수 있는 파일이 아니므로 목록에 넣지 않는다.
+     */
+    @Test
+    void 탈퇴하면_음성_녹음과_프로필_사진도_함께_지운다() {
+        Long me = register("withdraw-audio-a@fitto.com");
+        Long partner = register("withdraw-audio-b@fitto.com");
+        InviteCodeResponse invite = relationService.createCoupleInvite(me);
+        relationService.connectCouple(partner, invite.code());
+        TestPro.grant(subscriptionRepository, me, partner);
+
+        String clip = "https://res.cloudinary.com/demo/video/upload/v1/fitto/voice/rest.m4a";
+        String sentBoost = "https://res.cloudinary.com/demo/video/upload/v1/fitto/voice/boost-me.m4a";
+        String receivedBoost = "https://res.cloudinary.com/demo/video/upload/v1/fitto/voice/boost-partner.m4a";
+        String profile = "https://res.cloudinary.com/demo/image/upload/v1/fitto/profile.jpg";
+        voiceClipService.save(me, new SaveVoiceClipRequest(VoicePhrase.REST_END, clip));
+        boosterService.send(me, new SendBoosterRequest(sentBoost, "화이팅"));
+        boosterService.send(partner, new SendBoosterRequest(receivedBoost, null));
+        User user = userRepository.findById(me).orElseThrow();
+        user.updateProfile(user.getName(), profile);
+        userRepository.save(user);
+
+        withdrawalService.purgeNow(me);
+
+        ArgumentCaptor<Collection<String>> captor = ArgumentCaptor.forClass(Collection.class);
+        verify(imageDeleter, atLeastOnce()).deleteAllAfterCommit(captor.capture());
+        assertThat(captor.getAllValues().stream().flatMap(Collection::stream))
+                .contains(clip, sentBoost, receivedBoost, profile);
+    }
+
+    @Test
+    void 소셜_프로필_주소는_삭제_목록에_넣지_않는다() {
+        Long me = register("withdraw-social-profile@fitto.com");
+        String kakao = "http://k.kakaocdn.net/dn/abc/img_640x640.jpg";
+        User user = userRepository.findById(me).orElseThrow();
+        user.updateProfile(user.getName(), kakao);
+        userRepository.save(user);
+
+        withdrawalService.purgeNow(me);
+
+        ArgumentCaptor<Collection<String>> captor = ArgumentCaptor.forClass(Collection.class);
+        verify(imageDeleter, atLeastOnce()).deleteAllAfterCommit(captor.capture());
+        assertThat(captor.getAllValues().stream().flatMap(Collection::stream)).doesNotContain(kakao);
+    }
+
+    /**
      * 상대가 탈퇴해도 남은 쪽 계정은 살아있어야 하고,
      * 이후 그 사람도 정상적으로 탈퇴할 수 있어야 한다(잔여 데이터가 발목을 잡지 않는지).
      */
