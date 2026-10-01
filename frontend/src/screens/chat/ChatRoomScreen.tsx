@@ -2790,8 +2790,14 @@ const styles = themedStyles((colors) => ({
   rowMine: { alignSelf: 'flex-end', flexDirection: 'row-reverse' },
   rowTheirs: { alignSelf: 'flex-start' },
   rowSpaced: { marginTop: spacing.sm },
-  rowGrouped: { marginTop: spacing.xxs },
-  bubble: { flexShrink: 1, paddingVertical: 10, paddingHorizontal: spacing.md, borderRadius: radius.lg },
+  rowGrouped: { marginTop: spacing.xs }, // msgBlockGrouped 와 같은 값 — 삭제된 메시지도 같은 리듬
+  /*
+   * 말풍선 여백·모서리 — 2026-10-01 에 카톡 실측(docs/CHAT_KAKAO_MEASURE_2026-10-01.md §1)으로 줄였다.
+   * 글자 크기는 카톡과 같은 14 인데 한 줄 말풍선이 41 대 30.8 이었고, 차이는 전부 여백(10·16)과 줄높이(21)였다.
+   * 위아래 10 → 7, 좌우 16 → 12, 모서리 16 → 10(카톡 ≈9). 한 줄 높이 19 + 7×2 = 33.
+   * 모서리는 높이를 따라 내려야 한다 — 16 이면 높이 33 에서 거의 알약이 된다.
+   */
+  bubble: { flexShrink: 1, paddingVertical: 7, paddingHorizontal: 12, borderRadius: radius.sm },
   // 묶음 모양 — 붙는 쪽 모서리(BUBBLE_JOIN). 꼬리(BUBBLE_TAIL)는 chatStyles 의 기본값이다
   bubbleMineJoinTop: { borderTopRightRadius: BUBBLE_JOIN },
   bubbleMineJoinBottom: { borderBottomRightRadius: BUBBLE_JOIN },
@@ -2914,7 +2920,8 @@ const styles = themedStyles((colors) => ({
   // 그룹 첫 메시지는 넉넉하게(spaced), 같은 사람이 이어 보낸 메시지는 바짝(grouped) 붙인다
   msgBlock: { maxWidth: '82%' },
   msgBlockSpaced: { marginTop: spacing.sm },
-  msgBlockGrouped: { marginTop: spacing.xxs },
+  // 같은 사람이 이어 보낸 말풍선 사이 — 2 → 4(2026-10-01, 카톡 실측 5.8). 말풍선이 얇아진 만큼 2 로는 한 덩어리로 붙어 보인다
+  msgBlockGrouped: { marginTop: spacing.xs },
   blockMine: { alignSelf: 'flex-end', alignItems: 'flex-end' },
   blockTheirs: { alignSelf: 'flex-start', alignItems: 'flex-start' },
 
@@ -3168,9 +3175,12 @@ const chatStyles = chatThemedStyles((chat) => ({
   bubbleTheirs: { backgroundColor: chat.bubbleTheirs, borderBottomLeftRadius: BUBBLE_TAIL },
 
   // subtitle(16)이던 걸 한 단계 내렸다 — 그룹핑·아바타로 밀도가 오른 목록에서
-  // 상대적으로 더 커 보였다(비교 화면 피드백). lineHeight 는 body(14)의 기존
-  // 1.5배 관행(typography.ts cardBody)과 같은 21을 그대로 쓴다.
-  msgText: { fontSize: fontSize.body, color: chat.bubbleTheirsText, lineHeight: 21 },
+  // 상대적으로 더 커 보였다(비교 화면 피드백).
+  //
+  // lineHeight 는 body 의 1.5배 관행(typography.ts cardBody, 21)에서 <b>말풍선만 예외로</b> 19(1.36배)다(2026-10-01).
+  // 카드 본문은 긴 글을 읽는 자리지만 말풍선은 한두 줄짜리가 대부분이라, 1.5배면 두 줄 말풍선이 62 대 카톡 46 이었다.
+  // 카톡 실측 15.3(1.1배)까지는 내리지 않는다 — 안드로이드 한글 기본 줄높이(≈1.45em)보다 많이 작으면 이모지 글리프가 잘린다.
+  msgText: { fontSize: fontSize.body, color: chat.bubbleTheirsText, lineHeight: 19 },
   msgTextMine: { color: chat.bubbleMineText },
 
   // 로딩 중 빈 자리가 배경에 뚫린 구멍처럼 보이지 않도록 상대 말풍선 색을 깐다
