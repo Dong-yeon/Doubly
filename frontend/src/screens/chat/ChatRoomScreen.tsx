@@ -1,6 +1,6 @@
 /** 채팅 대화 — 설계서 2.5 / 4.5 CHAT-02 (실시간 메시지) */
 import { isCutoutEmoji } from '../../utils/coupleEmoji';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -125,6 +125,8 @@ const EMPTY_MESSAGES: ChatMessage[] = [];
 const EMPTY_SUGGESTIONS: StickerSuggestion[] = [];
 /** 같은 글 연타로 보는 간격 — 이 안에 같은 글을 다시 누르면 한 번만 보낸다 */
 const SEND_DEDUPE_MS = 800;
+// 이보다 짧게 끊겼다 붙는 건 띠로 알리지 않는다(앱 복귀 때마다의 재연결)
+const OFFLINE_BAR_DELAY_MS = 2500;
 /** 말풍선 모서리 — 이어지는 쪽은 덜 둥글게, 그룹 마지막 아래는 꼬리 */
 const BUBBLE_JOIN = 6;
 const BUBBLE_TAIL = 2;
@@ -255,6 +257,20 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     unpin,
   } = useChatStore();
   const socketConnected = useChatStore((s) => s.connected);
+  /*
+   * "연결 중이에요" 띠는 끊긴 상태가 잠깐 이어질 때만 띄운다. 앱으로 돌아올 때마다
+   * 소켓은 새로 붙는데(백그라운드에서 OS 가 끊는다), 보통 1초 안에 붙는 그 사이에도
+   * 띠가 번쩍여서 "오늘따라 연결 중이 많이 뜬다"로 느껴졌다(2026-10-01).
+   */
+  const [showOffline, setShowOffline] = useState(false);
+  useEffect(() => {
+    if (socketConnected) {
+      setShowOffline(false);
+      return;
+    }
+    const t = setTimeout(() => setShowOffline(true), OFFLINE_BAR_DELAY_MS);
+    return () => clearTimeout(t);
+  }, [socketConnected]);
   const [text, setText] = useState('');
   const [uploading, setUploading] = useState(false);
   // 사진 전송 미리보기 — 고른 사진이 바로 전송돼 "고른 게 원하는 사진이 아니었는데
@@ -1918,12 +1934,12 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           * 들어올 때 true 로 고정돼서, 소켓이 죽어도 화면은 멀쩡해 보였다 — 사용자는
           * "왜 답이 없지"라고 생각하고, 보낸 뒤에야 실패를 알았다.
           */}
-        {socketConnected ? null : (
+        {showOffline ? (
           <View style={styles.offlineBar} accessibilityRole="alert">
             <ActivityIndicator size="small" color={colors.textSecondary} />
             <Text style={styles.offlineText}>연결 중이에요… 잠시만요</Text>
           </View>
-        )}
+        ) : null}
         {/*
          * 공지 고정 배너 — 방 상단 고정, 하나만 존재한다(§3 "공지 고정" — 짧고 자주
          * 바뀌는 "지금 필요한 것". 여러 개 쌓이는 북마크와는 성격이 다르다).
