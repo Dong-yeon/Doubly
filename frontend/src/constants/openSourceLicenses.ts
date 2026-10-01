@@ -54,23 +54,17 @@ export const OSS_ENTRIES: OssEntry[] = [
     usedFor: '채팅 "움직이는 이모티콘" (Lottie 애니메이션 — 앱에 든 110종과 서버에서 받는 추가분)',
   },
   /*
-   * 서버에서 받는 "친구들" 팩(2026-10-01). Lottie Simple License 는 저작자 표시가 의무는 아니지만 권장이고,
+   * 서버에서 받는 "동물 친구들" 팩(2026-10-01, 친구들 팩을 합쳤다). Lottie Simple License 는 저작자 표시가 의무는 아니지만 권장이고,
    * 배포물에 같은 라이선스 조건을 실어야 한다 — 아래 LOTTIE_SIMPLE_LICENSE 전문을 본문에 붙인다.
    * 서버 팩에 LottieFiles 그림을 더하면 여기 작가를 함께 적는다(docs/SERVER_STICKER_PACKS_2026-10-01.md).
    */
   {
-    name: 'LottieFiles 무료 애니메이션 (친구들 팩)',
-    copyright: '작가: Tam Doan · Harshil Verma · can nazlican · Abdul Latif · Nafta · Margarita Ivanchikova · Julio',
-    license: 'Lottie Simple License (FL 9.13.21) — 일부 그림은 배경·여백을 손질했다',
-    url: 'https://lottiefiles.com/page/license',
-    usedFor: '채팅 "친구들" 이모티콘 10종 (서버에서 받는 Lottie 애니메이션)',
-  },
-  {
     name: 'LottieFiles 무료 애니메이션 (동물 친구들 팩)',
-    copyright: '작가: Margarita Ivanchikova · Abdul Latif · Roshni · Jodie · Jonhson Subianto · Shreyas',
+    copyright:
+      '작가: Tam Doan · Harshil Verma · can nazlican · Abdul Latif · Nafta · Margarita Ivanchikova · Julio · Roshni · Jodie · Jonhson Subianto · Shreyas',
     license: 'Lottie Simple License (FL 9.13.21) — 일부 그림은 배경·여백을 손질하고 이미지를 파일 안에 넣었다',
     url: 'https://lottiefiles.com/page/license',
-    usedFor: '채팅 "동물 친구들" 이모티콘 9종 (서버에서 받는 Lottie 애니메이션)',
+    usedFor: '채팅 "동물 친구들" 이모티콘 19종 (서버에서 받는 Lottie 애니메이션)',
   },
   {
     name: 'Noto Emoji',

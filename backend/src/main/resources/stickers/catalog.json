@@ -306,7 +306,7 @@
       ]
     },
     {
-      "id": "ANIM_FRIENDS",
+      "id": "ANIM_ANIMALS",
       "items": [
         {
           "code": "FRIEND_COUPLE_BEAR",
@@ -367,12 +367,7 @@
           "label": "잘자 고양이",
           "file": "friend_sleepy_cat.b37c82d1.json",
           "thumb": "friend_sleepy_cat.c3645033.png"
-        }
-      ]
-    },
-    {
-      "id": "ANIM_ANIMALS",
-      "items": [
+        },
         {
           "code": "ANIMAL_SHIBA_LAUGH",
           "label": "웃는 시바",

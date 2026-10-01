@@ -11,7 +11,7 @@
  * <p><b>기기별로 둔다.</b> 서버에 두면 기기를 바꿔도 따라오지만, 그건 계정 단위 설정 API·마이그레이션이
  * 딸려 온다. 정리 상태가 사라져도 잃는 건 순서뿐이라(팩은 다시 받으면 된다) 지금은 기기에 둔다.
  *
- * <p>키는 패널 칸의 키와 같다 — 움직이는 이모티콘은 팩 id(`ANIM_ALL`·`ANIM_FRIENDS`), 캐릭터는 캐릭터 키.
+ * <p>키는 패널 칸의 키와 같다 — 움직이는 이모티콘은 팩 id(`ANIM_ALL`·`ANIM_ANIMALS`), 캐릭터는 캐릭터 키.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';

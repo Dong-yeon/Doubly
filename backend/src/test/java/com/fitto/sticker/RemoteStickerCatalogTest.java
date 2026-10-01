@@ -65,7 +65,7 @@ class RemoteStickerCatalogTest {
     @Test
     void 카탈로그가_실린다() {
         assertThat(catalog.packs()).extracting(RemoteStickerCatalog.RemotePack::id)
-                .contains("ANIM_ALL", "ANIM_FRIENDS");
+                .containsExactly("ANIM_ALL", "ANIM_ANIMALS");
         assertThat(all()).isNotEmpty();
         assertThat(catalog.version()).hasSize(12);
     }
@@ -125,8 +125,8 @@ class RemoteStickerCatalogTest {
         mockMvc.perform(get("/api/v1/stickers/catalog").header("Authorization", token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.version").value(catalog.version()))
-                .andExpect(jsonPath("$.data.packs[?(@.id=='ANIM_FRIENDS')].items[0].code").value("FRIEND_COUPLE_BEAR"))
-                .andExpect(jsonPath("$.data.packs[?(@.id=='ANIM_FRIENDS')].items[0].url").value(s.url()));
+                .andExpect(jsonPath("$.data.packs[?(@.id=='ANIM_ANIMALS')].items[0].code").value("FRIEND_COUPLE_BEAR"))
+                .andExpect(jsonPath("$.data.packs[?(@.id=='ANIM_ANIMALS')].items[0].url").value(s.url()));
     }
 
     @Test
