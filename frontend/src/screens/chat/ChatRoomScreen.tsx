@@ -2051,7 +2051,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
            * inverted 라 contentContainer 의 paddingTop 이 <b>화면 바닥</b>이다. 막대가 떠 있는 동안
            * 그 높이만큼 더 비워 최신 말풍선이 막대 위로 올라온다.
            */
-          contentContainerStyle={[styles.list, suggestBarHeight > 0 && { paddingTop: spacing.md + suggestBarHeight }]}
+          contentContainerStyle={[styles.list, suggestBarHeight > 0 && { paddingTop: spacing.sm + suggestBarHeight }]}
           /*
            * 과거 메시지 페이징 — inverted 목록이라 onEndReached = 위(가장 오래된 쪽) 도달.
            * 서버 커서는 준비돼 있었지만 연결이 안 돼 첫 페이지 이전 대화를 볼 수 없었다.
@@ -2593,7 +2593,13 @@ const styles = themedStyles((colors) => ({
   headerCallButtonPressed: { opacity: 0.6 },
   /* 캐치마인드 그림 카드 — 누르면 게임으로 간다. 눌린 티를 내 버튼인 걸 알게 한다 */
   imagePressed: { opacity: 0.7 },
-  list: { padding: spacing.md },
+  /*
+   * inverted 라 paddingTop 이 <b>화면 바닥</b>(마지막 말풍선 ↔ 입력바 사이)이다. 여기만 8 이다.
+   * 2026-10-01 에 입력바를 채팅 배경과 같은 색으로 바꾸자(chatStyles.inputBar) 바의 위 여백 8 이 대화 쪽
+   * 빈 공간으로 합쳐져, 16 + 8 = 24pt 가 통째로 비어 보였다(실기기 캡처). 바 여백은 터치·모서리 이유로
+   * 고정이라(inputBar 주석) 목록 쪽을 줄인다 — 8 + 8 = 16, 말풍선 그룹 사이 간격(8)과 같은 리듬이다.
+   */
+  list: { padding: spacing.md, paddingTop: spacing.sm },
   imagePreviewBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.85)',
