@@ -1,0 +1,22 @@
+{
+  "_note": "서버 배포 \"친구들\" 팩의 라이선스 근거. 확인일 = 파일 페이지의 'Free to use under the Lottie Simple License' 표기와 라이선스 원문(https://lottiefiles.com/page/license, FL 9.13.21)을 본 날. 원본은 각 페이지의 .lottie(zip) 안 JSON.",
+  "license": "Lottie Simple License (FL 9.13.21) — 상업 이용·수정 허용, 배포물에 같은 조건을 실어야 함(앱 오픈소스 고지에 전문), 저작자 표시는 권장",
+  "확인일": "2026-10-01",
+  "손질": {
+    "배경 제거": "pet_hug·waving_bear 의 흰 단색 레이어(ty 1, #ffffff) 삭제",
+    "여백 정리": "couple_bear·pet_hug·kawaii_love·enamored_heart·kawaii_hi·waving_bear·heart_hi — lottie-web 으로 25프레임 그림 범위를 재고, 원본 레이어를 프리컴프 하나로 감싸 정사각 캔버스(범위 + 3% 여백)로 옮김",
+    "썸네일": "lottie-web canvas 렌더러로 중간 프레임을 144px PNG 로"
+  },
+  "items": [
+    { "code": "FRIEND_COUPLE_BEAR", "sourceUrl": "https://lottiefiles.com/free-animation/couple-bear-valentine-iqYd5yFl0g", "creator": "Tam Doan" },
+    { "code": "FRIEND_KISS_SHEEP", "sourceUrl": "https://lottiefiles.com/free-animation/love-sheep-jXaFB2LFQu", "creator": "Harshil Verma" },
+    { "code": "FRIEND_HUG_DOG", "sourceUrl": "https://lottiefiles.com/free-animation/pet-hug-vjKeztSrmY", "creator": "can nazlican" },
+    { "code": "FRIEND_LOVE_BUNNY", "sourceUrl": "https://lottiefiles.com/free-animation/kawaii-animals-giving-love-409LdhB8ws", "creator": "Abdul Latif" },
+    { "code": "FRIEND_SHY_HEART", "sourceUrl": "https://lottiefiles.com/free-animation/red-cute-enamored-heart-VaarfaILr5", "creator": "Abdul Latif" },
+    { "code": "FRIEND_HI_BEAR", "sourceUrl": "https://lottiefiles.com/free-animation/kawaii-emoji-saying-hi-3KvCHlg6Y2", "creator": "Abdul Latif" },
+    { "code": "FRIEND_WAVE_BEAR", "sourceUrl": "https://lottiefiles.com/free-animation/waving-bear-3e2qFVfuGO", "creator": "Nafta" },
+    { "code": "FRIEND_HI_HEART", "sourceUrl": "https://lottiefiles.com/free-animation/cute-heart-saying-hi-F7Y3B0x8mk", "creator": "Abdul Latif" },
+    { "code": "FRIEND_PEEK_DOG", "sourceUrl": "https://lottiefiles.com/free-animation/flirting-dog-GMvO9XCHkr", "creator": "Margarita Ivanchikova" },
+    { "code": "FRIEND_SLEEPY_CAT", "sourceUrl": "https://lottiefiles.com/free-animation/sleepy-cat-4pXauzENzA", "creator": "Julio" }
+  ]
+}

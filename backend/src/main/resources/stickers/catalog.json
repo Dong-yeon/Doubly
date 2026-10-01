@@ -1,0 +1,374 @@
+{
+  "packs": [
+    {
+      "id": "ANIM_ALL",
+      "items": [
+        {
+          "code": "ANIM_PINK_HEART",
+          "label": "핑크하트",
+          "file": "anim_pink_heart.743a30fb.json",
+          "thumb": "anim_pink_heart.a4a69460.png"
+        },
+        {
+          "code": "ANIM_FIRE_HEART",
+          "label": "불꽃하트",
+          "file": "anim_fire_heart.79b906bb.json",
+          "thumb": "anim_fire_heart.92813942.png"
+        },
+        {
+          "code": "ANIM_MENDING_HEART",
+          "label": "화해",
+          "file": "anim_mending_heart.8ca93af1.json",
+          "thumb": "anim_mending_heart.20445b3d.png"
+        },
+        {
+          "code": "ANIM_HUGGING",
+          "label": "꼬옥",
+          "file": "anim_hugging.7003f614.json",
+          "thumb": "anim_hugging.177ccb20.png"
+        },
+        {
+          "code": "ANIM_KISSING_CLOSED",
+          "label": "쪽",
+          "file": "anim_kissing_closed.23b6fd09.json",
+          "thumb": "anim_kissing_closed.1d15f28e.png"
+        },
+        {
+          "code": "ANIM_ROFL",
+          "label": "데굴데굴",
+          "file": "anim_rofl.da5832ec.json",
+          "thumb": "anim_rofl.d65b0190.png"
+        },
+        {
+          "code": "ANIM_LAUGHING",
+          "label": "깔깔",
+          "file": "anim_laughing.0b9be8be.json",
+          "thumb": "anim_laughing.43528741.png"
+        },
+        {
+          "code": "ANIM_YUM",
+          "label": "냠냠",
+          "file": "anim_yum.a5bdb14e.json",
+          "thumb": "anim_yum.9aa6d5bc.png"
+        },
+        {
+          "code": "ANIM_WINK",
+          "label": "찡긋",
+          "file": "anim_wink.2ac8b005.json",
+          "thumb": "anim_wink.cba9ef1b.png"
+        },
+        {
+          "code": "ANIM_TONGUE",
+          "label": "메롱",
+          "file": "anim_tongue.d5a841a9.json",
+          "thumb": "anim_tongue.9d7e078a.png"
+        },
+        {
+          "code": "ANIM_GRIN",
+          "label": "헤헤",
+          "file": "anim_grin.7da983e2.json",
+          "thumb": "anim_grin.dc2d32b8.png"
+        },
+        {
+          "code": "ANIM_PEEKING",
+          "label": "빼꼼",
+          "file": "anim_peeking.7f649a4c.json",
+          "thumb": "anim_peeking.24a15256.png"
+        },
+        {
+          "code": "ANIM_NOD",
+          "label": "끄덕끄덕",
+          "file": "anim_nod.cec2b37a.json",
+          "thumb": "anim_nod.1ae58625.png"
+        },
+        {
+          "code": "ANIM_HEAD_SHAKE",
+          "label": "도리도리",
+          "file": "anim_head_shake.20756b31.json",
+          "thumb": "anim_head_shake.d9340ccb.png"
+        },
+        {
+          "code": "ANIM_SEE_NO_EVIL",
+          "label": "부끄",
+          "file": "anim_see_no_evil.6314f533.json",
+          "thumb": "anim_see_no_evil.6ea8edf5.png"
+        },
+        {
+          "code": "ANIM_HAPPY_CRY",
+          "label": "웃프다",
+          "file": "anim_happy_cry.f49be496.json",
+          "thumb": "anim_happy_cry.1cd4d23c.png"
+        },
+        {
+          "code": "ANIM_CRYING_CAT",
+          "label": "울보냥",
+          "file": "anim_crying_cat.cf4f7301.json",
+          "thumb": "anim_crying_cat.08756d07.png"
+        },
+        {
+          "code": "ANIM_SCREAM",
+          "label": "으악",
+          "file": "anim_scream.159c6e05.json",
+          "thumb": "anim_scream.4ec16dd9.png"
+        },
+        {
+          "code": "ANIM_MIND_BLOWN",
+          "label": "멘붕",
+          "file": "anim_mind_blown.553f0131.json",
+          "thumb": "anim_mind_blown.e4403e03.png"
+        },
+        {
+          "code": "ANIM_DIZZY",
+          "label": "어질어질",
+          "file": "anim_dizzy.8bf11574.json",
+          "thumb": "anim_dizzy.d1891897.png"
+        },
+        {
+          "code": "ANIM_SHAKING",
+          "label": "덜덜",
+          "file": "anim_shaking.80f10082.json",
+          "thumb": "anim_shaking.417a9f0d.png"
+        },
+        {
+          "code": "ANIM_EXHALE",
+          "label": "휴",
+          "file": "anim_exhale.0a4d81f3.json",
+          "thumb": "anim_exhale.cec1bdf3.png"
+        },
+        {
+          "code": "ANIM_SICK",
+          "label": "아파",
+          "file": "anim_sick.111705db.json",
+          "thumb": "anim_sick.e9142643.png"
+        },
+        {
+          "code": "ANIM_COLD",
+          "label": "추워",
+          "file": "anim_cold.dd0727e4.json",
+          "thumb": "anim_cold.2c710b7d.png"
+        },
+        {
+          "code": "ANIM_HOT",
+          "label": "더워",
+          "file": "anim_hot.e1e7d07f.json",
+          "thumb": "anim_hot.5b55e7a5.png"
+        },
+        {
+          "code": "ANIM_FIREWORKS",
+          "label": "불꽃놀이",
+          "file": "anim_fireworks.1da59d53.json",
+          "thumb": "anim_fireworks.b901eb86.png"
+        },
+        {
+          "code": "ANIM_MIRROR_BALL",
+          "label": "파티",
+          "file": "anim_mirror_ball.64c3f1e2.json",
+          "thumb": "anim_mirror_ball.4bbe4334.png"
+        },
+        {
+          "code": "ANIM_CROWN",
+          "label": "왕관",
+          "file": "anim_crown.242b70a8.json",
+          "thumb": "anim_crown.93fa44b9.png"
+        },
+        {
+          "code": "ANIM_OK",
+          "label": "오케이",
+          "file": "anim_ok.6f8ad3f6.json",
+          "thumb": "anim_ok.0085cf90.png"
+        },
+        {
+          "code": "ANIM_VICTORY",
+          "label": "브이",
+          "file": "anim_victory.59e418cb.json",
+          "thumb": "anim_victory.8daa13fe.png"
+        },
+        {
+          "code": "ANIM_CROSSED_FINGERS",
+          "label": "행운을",
+          "file": "anim_crossed_fingers.084a804e.json",
+          "thumb": "anim_crossed_fingers.978b3854.png"
+        },
+        {
+          "code": "ANIM_CALL_ME",
+          "label": "연락해",
+          "file": "anim_call_me.b689f5ab.json",
+          "thumb": "anim_call_me.256e0a5c.png"
+        },
+        {
+          "code": "ANIM_DOG",
+          "label": "강아지",
+          "file": "anim_dog.dc99a89f.json",
+          "thumb": "anim_dog.e72353ca.png"
+        },
+        {
+          "code": "ANIM_RABBIT",
+          "label": "토끼",
+          "file": "anim_rabbit.9bd44687.json",
+          "thumb": "anim_rabbit.194443e7.png"
+        },
+        {
+          "code": "ANIM_PIG",
+          "label": "돼지",
+          "file": "anim_pig.091b9ee6.json",
+          "thumb": "anim_pig.8d6629e1.png"
+        },
+        {
+          "code": "ANIM_OTTER",
+          "label": "수달",
+          "file": "anim_otter.500b4f72.json",
+          "thumb": "anim_otter.aa981a45.png"
+        },
+        {
+          "code": "ANIM_BUTTERFLY",
+          "label": "나비",
+          "file": "anim_butterfly.f99e1505.json",
+          "thumb": "anim_butterfly.a7e71017.png"
+        },
+        {
+          "code": "ANIM_CHICKEN",
+          "label": "치킨",
+          "file": "anim_chicken.78c72410.json",
+          "thumb": "anim_chicken.83db14c7.png"
+        },
+        {
+          "code": "ANIM_SPAGHETTI",
+          "label": "파스타",
+          "file": "anim_spaghetti.91c23716.json",
+          "thumb": "anim_spaghetti.5e316ab3.png"
+        },
+        {
+          "code": "ANIM_DOUGHNUT",
+          "label": "도넛",
+          "file": "anim_doughnut.b7d88d44.json",
+          "thumb": "anim_doughnut.7cf48020.png"
+        },
+        {
+          "code": "ANIM_POPCORN",
+          "label": "팝콘",
+          "file": "anim_popcorn.8b485097.json",
+          "thumb": "anim_popcorn.c62f2d7b.png"
+        },
+        {
+          "code": "ANIM_WINE",
+          "label": "와인",
+          "file": "anim_wine.edbdc158.json",
+          "thumb": "anim_wine.1e05eb37.png"
+        },
+        {
+          "code": "ANIM_CLOUD",
+          "label": "구름",
+          "file": "anim_cloud.f73f6271.json",
+          "thumb": "anim_cloud.3e9926b2.png"
+        },
+        {
+          "code": "ANIM_UMBRELLA",
+          "label": "우산",
+          "file": "anim_umbrella.9fa78e69.json",
+          "thumb": "anim_umbrella.9260225d.png"
+        },
+        {
+          "code": "ANIM_AIRPLANE",
+          "label": "여행",
+          "file": "anim_airplane.0148a21c.json",
+          "thumb": "anim_airplane.5bfa5539.png"
+        },
+        {
+          "code": "ANIM_FERRIS_WHEEL",
+          "label": "관람차",
+          "file": "anim_ferris_wheel.504e41b3.json",
+          "thumb": "anim_ferris_wheel.ec491ac5.png"
+        },
+        {
+          "code": "ANIM_HOUSE",
+          "label": "집",
+          "file": "anim_house.308fd85a.json",
+          "thumb": "anim_house.8afa7393.png"
+        },
+        {
+          "code": "ANIM_ALARM",
+          "label": "알람",
+          "file": "anim_alarm.78d204eb.json",
+          "thumb": "anim_alarm.96eb967d.png"
+        },
+        {
+          "code": "ANIM_CAR",
+          "label": "드라이브",
+          "file": "anim_car.a22ec8a2.json",
+          "thumb": "anim_car.57cc1d1d.png"
+        },
+        {
+          "code": "ANIM_CAMERA",
+          "label": "찰칵",
+          "file": "anim_camera.4632b37d.json",
+          "thumb": "anim_camera.d0971b01.png"
+        }
+      ]
+    },
+    {
+      "id": "ANIM_FRIENDS",
+      "items": [
+        {
+          "code": "FRIEND_COUPLE_BEAR",
+          "label": "커플 곰",
+          "file": "friend_couple_bear.66dddd5c.json",
+          "thumb": "friend_couple_bear.db081375.png"
+        },
+        {
+          "code": "FRIEND_KISS_SHEEP",
+          "label": "뽀뽀 양",
+          "file": "friend_kiss_sheep.39c1efb5.json",
+          "thumb": "friend_kiss_sheep.11281d3f.png"
+        },
+        {
+          "code": "FRIEND_HUG_DOG",
+          "label": "안아주기",
+          "file": "friend_hug_dog.de69be4b.json",
+          "thumb": "friend_hug_dog.89c06f96.png"
+        },
+        {
+          "code": "FRIEND_LOVE_BUNNY",
+          "label": "사랑 토끼",
+          "file": "friend_love_bunny.1ecf3523.json",
+          "thumb": "friend_love_bunny.12962903.png"
+        },
+        {
+          "code": "FRIEND_SHY_HEART",
+          "label": "반한 하트",
+          "file": "friend_shy_heart.12652a07.json",
+          "thumb": "friend_shy_heart.23843131.png"
+        },
+        {
+          "code": "FRIEND_HI_BEAR",
+          "label": "안녕 곰",
+          "file": "friend_hi_bear.1a5fa553.json",
+          "thumb": "friend_hi_bear.1a42885f.png"
+        },
+        {
+          "code": "FRIEND_WAVE_BEAR",
+          "label": "손 흔드는 곰",
+          "file": "friend_wave_bear.9f37e130.json",
+          "thumb": "friend_wave_bear.2f1c3437.png"
+        },
+        {
+          "code": "FRIEND_HI_HEART",
+          "label": "안녕 하트",
+          "file": "friend_hi_heart.85c4911e.json",
+          "thumb": "friend_hi_heart.a35191e6.png"
+        },
+        {
+          "code": "FRIEND_PEEK_DOG",
+          "label": "빼꼼 시바",
+          "file": "friend_peek_dog.f596a8d3.json",
+          "thumb": "friend_peek_dog.3734c08d.png"
+        },
+        {
+          "code": "FRIEND_SLEEPY_CAT",
+          "label": "잘자 고양이",
+          "file": "friend_sleepy_cat.b37c82d1.json",
+          "thumb": "friend_sleepy_cat.c3645033.png"
+        }
+      ]
+    }
+  ]
+}

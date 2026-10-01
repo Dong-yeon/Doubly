@@ -4,8 +4,10 @@ import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
+import com.fitto.sticker.dto.StickerCatalogResponse;
 import com.fitto.sticker.dto.StickerPackResponse;
 import com.fitto.sticker.dto.StickerPurchaseVerifyRequest;
+import com.fitto.sticker.service.RemoteStickerCatalog;
 import com.fitto.sticker.service.StickerPurchaseService;
 import com.fitto.sticker.service.StickerService;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -31,10 +33,24 @@ public class StickerController {
 
     private final StickerService stickerService;
     private final StickerPurchaseService purchaseService;
+    private final RemoteStickerCatalog remoteCatalog;
 
-    public StickerController(StickerService stickerService, StickerPurchaseService purchaseService) {
+    public StickerController(StickerService stickerService, StickerPurchaseService purchaseService,
+                             RemoteStickerCatalog remoteCatalog) {
         this.stickerService = stickerService;
         this.purchaseService = purchaseService;
+        this.remoteCatalog = remoteCatalog;
+    }
+
+    /**
+     * 서버 배포 스티커 카탈로그 — 번들에 없는 코드를 그림으로 바꾸는 표({@link RemoteStickerCatalog}).
+     *
+     * <p>사람마다 다르지 않다(잠금은 {@link #packs} 가 따로 답한다). 앱은 {@code version} 이 같으면
+     * 저장해 둔 것을 그대로 쓴다.
+     */
+    @GetMapping("/catalog")
+    public ApiResponse<StickerCatalogResponse> catalog() {
+        return ApiResponse.success(StickerCatalogResponse.from(remoteCatalog));
     }
 
     /** 팩 전체 + 내 잠금 상태. 잠긴 팩도 함께 내린다 — 앱이 자물쇠를 그려야 판매가 된다. */
