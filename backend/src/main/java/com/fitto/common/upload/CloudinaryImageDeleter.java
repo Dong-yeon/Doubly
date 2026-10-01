@@ -43,6 +43,14 @@ public class CloudinaryImageDeleter {
     private static final Pattern PUBLIC_ID = Pattern.compile(
             "/upload/(?:[^/]+/)*?(?:v\\d+/)?(.+?)(?:\\.[a-zA-Z0-9]+)?$");
 
+    /**
+     * URL 의 리소스 종류 — {@code .../video/upload/...} 이면 video.
+     * 오디오(음성 응원·음성 메시지)는 앱이 {@code /video/upload} 로 올린다(Cloudinary 는 오디오를
+     * video 로 다룬다). destroy 도 같은 종류의 엔드포인트로 보내야 지워진다 — image/destroy 로
+     * 보내면 "not found" 로 끝나고 파일은 그대로 남는다.
+     */
+    private static final Pattern RESOURCE_TYPE = Pattern.compile("/(image|video)/upload/");
+
     private final CloudinaryProperties properties;
     private final RestClient restClient;
 
@@ -102,6 +110,7 @@ public class CloudinaryImageDeleter {
             log.warn("Cloudinary URL 형식이 아니어서 건너뜁니다: {}", imageUrl);
             return false;
         }
+        String resourceType = extractResourceType(imageUrl);
         try {
             long timestamp = Instant.now().getEpochSecond();
             // 서명 규칙은 업로드와 동일 — 파라미터 알파벳순 '&' 연결 후 api_secret 붙여 SHA-1
@@ -115,15 +124,15 @@ public class CloudinaryImageDeleter {
             form.add("signature", signature);
 
             restClient.post()
-                    .uri("https://api.cloudinary.com/v1_1/{cloud}/image/destroy",
-                            properties.getCloudName())
+                    .uri("https://api.cloudinary.com/v1_1/{cloud}/{type}/destroy",
+                            properties.getCloudName(), resourceType)
                     .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                     .body(form)
                     .retrieve()
                     .toBodilessEntity();
             return true;
         } catch (Exception e) {
-            log.error("이미지 삭제 실패 — 수동 정리 필요: publicId={} ({})", publicId, e.getMessage());
+            log.error("이미지 삭제 실패 — 수동 정리 필요: {}/{} ({})", resourceType, publicId, e.getMessage());
             return false;
         }
     }
@@ -135,6 +144,12 @@ public class CloudinaryImageDeleter {
         }
         Matcher matcher = PUBLIC_ID.matcher(imageUrl);
         return matcher.find() ? matcher.group(1) : null;
+    }
+
+    /** destroy 엔드포인트의 리소스 종류. 경로에 종류가 없으면 Cloudinary 기본값인 image. */
+    public String extractResourceType(String url) {
+        Matcher matcher = RESOURCE_TYPE.matcher(url);
+        return matcher.find() ? matcher.group(1) : "image";
     }
 
     private String sha1Hex(String value) {
