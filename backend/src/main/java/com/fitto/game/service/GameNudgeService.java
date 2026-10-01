@@ -20,8 +20,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -38,7 +36,6 @@ import java.util.List;
 public class GameNudgeService {
 
     private static final Logger log = LoggerFactory.getLogger(GameNudgeService.class);
-    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     /** 찌르기 간격 — 판마다 한 사람당 하루 한 번. 그 이상은 재촉이 아니라 독촉이다 */
     static final Duration NUDGE_GAP = Duration.ofHours(24);
@@ -97,11 +94,17 @@ public class GameNudgeService {
         return now;
     }
 
-    /** 매시 15분 — 낮 시간에만 멈춘 판을 알린다. 테스트는 스케줄러가 꺼져 있어 {@link #remindStalled()} 를 직접 부른다 */
-    @Scheduled(cron = "0 15 * * * *", zone = "Asia/Seoul")
+    /**
+     * 낮 시간(KST {@value #REMIND_FROM_HOUR}~{@value #REMIND_UNTIL_HOUR}시) 매시 15분 — 멈춘 판을 알린다.
+     *
+     * <p>시간대는 cron 이 거른다. <b>여기에 {@code @Transactional} 이 있어야 한다</b> — 스케줄러는 프록시를 거쳐
+     * 이 메서드만 부르고, 안에서 {@code this.remindStalled()} 는 자기 호출이라 그쪽 {@code @Transactional} 이
+     * 걸리지 않는다. 빠져 있던 동안 운영에서 매시 {@code markReminded} 가 "Executing an update/delete query"
+     * 로 죽어 리마인더가 한 판도 기록되지 않았다.
+     */
+    @Scheduled(cron = "0 15 " + REMIND_FROM_HOUR + "-" + (REMIND_UNTIL_HOUR - 1) + " * * *", zone = "Asia/Seoul")
+    @Transactional
     public void remindHourly() {
-        int hour = ZonedDateTime.now(KST).getHour();
-        if (hour < REMIND_FROM_HOUR || hour >= REMIND_UNTIL_HOUR) return;
         int sent = remindStalled();
         if (sent > 0) log.info("멈춘 게임 판 리마인더 {}판", sent);
     }

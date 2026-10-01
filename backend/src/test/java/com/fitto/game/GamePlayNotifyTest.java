@@ -27,6 +27,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
@@ -252,6 +253,27 @@ class GamePlayNotifyTest {
         nudgeService.remindStalled();
         verify(notificationService).notify(eq(users[0]), eq(NotificationCategory.PARTNER),
                 contains("오목"), contains("멈춰 있어요"), anyString());
+    }
+
+    /**
+     * 스케줄러가 실제로 부르는 입구로 — remindHourly 가 remindStalled 를 자기 호출해 트랜잭션 없이
+     * markReminded(@Modifying) 를 실행하던 운영 오류(매시 15분 InvalidDataAccessApiUsageException)의 회귀 검사.
+     * 이 클래스는 @Transactional 이 아니므로 바깥에서 트랜잭션이 대신 열려 있지 않다.
+     */
+    @Test
+    void 매시_리마인더_입구로_불러도_알리고_기록한다() {
+        long[] users = couple("nha", "nhb");
+        OmokGameResponse game = omokService.start(users[0]);
+        quietFor(game.id(), 25 * 60);
+        clearInvocations(notificationService);
+
+        nudgeService.remindHourly();
+
+        verify(notificationService).notify(eq(users[1]), eq(NotificationCategory.PARTNER),
+                contains("오목"), contains("멈춰 있어요"), anyString());
+        LocalDateTime reminded = jdbcTemplate.queryForObject(
+                "select reminded_at from couple_games where id = ?", LocalDateTime.class, game.id());
+        assertNotNull(reminded);
     }
 
     @Test
