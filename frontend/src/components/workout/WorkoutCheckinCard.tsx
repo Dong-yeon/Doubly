@@ -21,7 +21,7 @@
  * <p>오늘 기록을 읽어오는 책임은 <b>호출하는 화면</b>에 있다(포커스마다 `fetchToday`).
  * 카드가 직접 부르면 운동 홈에서 같은 조회가 두 번 나간다.
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Image, Pressable, Text, View } from 'react-native';
 import { Button } from '../Button';
 import { Chip } from '../Chip';
@@ -56,9 +56,11 @@ type Props = {
    * 이펙트가 아니라 렌더 중 비교로 받는다(이전 값을 상태로 들고 있는 React 권장 패턴).
    */
   openDurationKey?: number;
+  /** openDurationKey 로 펼친 직후 — 호출부가 그 값을 지운다 */
+  onDurationOpened?: () => void;
 };
 
-export function WorkoutCheckinCard({ onOpenRecord, onResume, onCheckedIn, onOpenWorkoutHome, openDurationKey }: Props) {
+export function WorkoutCheckinCard({ onOpenRecord, onResume, onCheckedIn, onOpenWorkoutHome, openDurationKey, onDurationOpened }: Props) {
   const today = useWorkoutStore((s) => s.today);
   const save = useWorkoutStore((s) => s.save);
   const fetchToday = useWorkoutStore((s) => s.fetchToday);
@@ -72,11 +74,15 @@ export function WorkoutCheckinCard({ onOpenRecord, onResume, onCheckedIn, onOpen
   const [photoBusy, setPhotoBusy] = useState(false);
   /** 올려 둔 오운완 사진 — 있으면 시간 칩이 이 사진과 함께 저장한다 */
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
-  const [seenDurationKey, setSeenDurationKey] = useState(openDurationKey);
+  // 처음엔 "본 적 없음"에서 시작한다 — 홈 칩이 럽바디를 처음 마운트시킨 경우에도 펼쳐져야 한다
+  const [seenDurationKey, setSeenDurationKey] = useState<number | undefined>(undefined);
   if (openDurationKey !== seenDurationKey) {
     setSeenDurationKey(openDurationKey);
     if (openDurationKey !== undefined) setPickingDuration(true);
   }
+  useEffect(() => {
+    if (openDurationKey !== undefined) onDurationOpened?.();
+  }, [openDurationKey, onDurationOpened]);
 
   /** 오늘 이미 기록이 있는가 — 카드의 상태를 가른다(같은 날 중복 기록 방지도 겸한다) */
   const doneToday = today.length > 0;
