@@ -2360,6 +2360,15 @@ export function ChatRoomScreen({ navigation, route }: Props) {
                * 누름 시작은 확정보다 먼저 오므로 여기서 보내면 한 번에 간다. 같은 글 연타는 onSend 가 거른다.
                */
               onPressIn={() => void onSend()}
+              /*
+               * 스크린리더의 두 번 탭은 onPressIn 을 거치지 않고 onPress 만 부른다 — 그래서 TalkBack 으로는
+               * 전송이 안 됐다(1.0.5 점검). onPress 를 더하면 손가락 탭에서 두 번 불려 수정 저장이 겹치므로,
+               * 스크린리더 전용 경로인 activate 동작에만 단다.
+               */
+              accessibilityActions={[{ name: 'activate' }]}
+              onAccessibilityAction={(e) => {
+                if (e.nativeEvent.actionName === 'activate' && !editSaving) void onSend();
+              }}
               // 앞 메시지가 가는 중이어도 다음 글은 보낸다 — 진행 표시는 말풍선이 한다
               disabled={editSaving}
               // 44px 이지만 화면 맨 끝이라 엄지가 가장자리를 빗나가기 쉽다
