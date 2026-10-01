@@ -211,8 +211,16 @@ public enum Feature {
     VOICE_MESSAGE("채팅 음성 메시지", Quota.perDay(5), Quota.perDay(100)),
     /** 럽슐랭 매거진의 읽기 전용 공개 웹페이지 — 바이럴 자산이라 무료도 1개는 준다. */
     PUBLIC_GUIDE_LINK("럽슐랭 공개 가이드", Quota.upTo(1), Quota.unlimited()),
-    /** 운동·식단·체중·럽슐랭 기록 CSV 내보내기 — "데이터 인질 금지" 원칙상 무료도 반드시 제공. */
-    CSV_EXPORT("기록 내보내기", Quota.perMonth(1), Quota.perWeek(1)),
+    /**
+     * 기록 전체 내보내기(사진 포함 ZIP) — "내 기록은 언제든 가져갈 수 있다".
+     *
+     * <p><b>FREE 와 PRO 가 같다</b>(2026-10-01, docs/DATA_EXPORT_2026-10-01.md). 내보내기를 결제로
+     * 풀어 주는 순간 "추억을 보려면 결제" 가 된다. 한도는 원가 방어선일 뿐이라 플랜과 무관하고,
+     * 두 값이 같으니 {@link #isListed()} 가 false 가 되어 결제 화면 비교표에서도 빠진다.
+     * 넘겨도 업셀하지 않는다({@code PlanGuard} 의 upsells). 키 이름은 사용량·이벤트가 문자열로
+     * 들고 있어 그대로 둔다(CSV 는 처음 계획의 흔적).
+     */
+    CSV_EXPORT("기록 내보내기", Quota.perWeek(2), Quota.perWeek(2)),
 
     /*
      * 협동 게임(스도쿠) — 게이팅 없음(둘 다 무제한). 그래도 Feature 로 두는 이유는 새 판 생성이
@@ -354,8 +362,10 @@ public enum Feature {
                  WORKOUT_RECOVERY_FULL, VIDEO_CALL,
                  // 무드 캘린더는 두 사람의 무드를 나란히 보여준다.
                  MOOD_CALENDAR_FULL,
-                 // 연간 리캡·스트릭 복구권·기록 내보내기는 커플 단위 데이터(관계 전체 이력)를 다룬다.
-                 ANNIVERSARY_RECAP, STREAK_REPAIR, CSV_EXPORT,
+                 // 연간 리캡·스트릭 복구권은 커플 단위 데이터(관계 전체 이력)를 다룬다.
+                 // 기록 내보내기는 여기 없다 — 한도가 플랜과 무관하고, 상대가 쓴 횟수 때문에
+                 // 내가 못 받는 일이 없어야 한다(탈퇴 유예 중인 상대의 기록을 받는 경우 등).
+                 ANNIVERSARY_RECAP, STREAK_REPAIR,
                  // 보내는/만드는 사람은 한 명이어도 "선물하는 결제" 프레임 — 한쪽만 PRO 여도 함께 쓴다.
                  WORKOUT_BOOSTER, CUSTOM_QUESTION, VOICE_MESSAGE,
                  // 매거진(럽슐랭)은 이미 커플 소유 콘텐츠 — PLACE_PIN 과 같은 판정.

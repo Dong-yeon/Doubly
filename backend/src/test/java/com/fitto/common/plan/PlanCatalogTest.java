@@ -22,9 +22,10 @@ class PlanCatalogTest {
                 .filter(feature -> !feature.isComparable())
                 .collect(java.util.stream.Collectors.toCollection(() -> EnumSet.noneOf(Feature.class)));
 
-        // AI_TOTAL 은 플랜과 무관한 내부 안전망, COUPLE_GAME 은 게이팅이 없다.
+        // AI_TOTAL 은 플랜과 무관한 내부 안전망, COUPLE_GAME 은 게이팅이 없다, CSV_EXPORT(기록
+        // 내보내기)는 "결제로 풀지 않는다" 원칙상 같은 한도다(docs/DATA_EXPORT_2026-10-01.md).
         // 나중에 한도가 갈라지면 저절로 화면에 나타나야 하므로 이름이 아니라 값으로 판정한다.
-        assertThat(hidden).containsExactlyInAnyOrder(Feature.AI_TOTAL, Feature.COUPLE_GAME);
+        assertThat(hidden).containsExactlyInAnyOrder(Feature.AI_TOTAL, Feature.COUPLE_GAME, Feature.CSV_EXPORT);
     }
 
     @Test
