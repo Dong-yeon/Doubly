@@ -548,7 +548,6 @@ export function ChatRoomScreen({ navigation, route }: Props) {
    * 방에 들어올 때 한 번 묻는다(최근에 물었으면 스토어가 건너뛴다).
    */
   const remoteByCode = useRemoteStickerStore((s) => s.byCode);
-  const remoteCatalogVersion = useRemoteStickerStore((s) => s.version);
   useEffect(() => {
     void useRemoteStickerStore.getState().refresh();
   }, []);
@@ -1695,16 +1694,18 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               onPlayed={() => oneShotPlayedRef.current.add(item.id)}
               onLongPress={() => onLongPressMessage(item)}
             />
-          ) : remoteByCode[item.content!] || (remoteCatalogVersion === null && looksLikeStickerCode(item.content)) ? (
+          ) : remoteByCode[item.content!] || looksLikeStickerCode(item.content) ? (
             /*
-             * 서버 배포 이모티콘 — 파일은 처음 그릴 때 받는다. 카탈로그를 아직 한 번도 못 받았으면 코드처럼 생긴
-             * 값은 자리만 잡아 둔다(코드 글자가 스쳐 보이지 않게). 카탈로그가 있는데도 모르는 코드는 아래로 —
-             * 지금까지처럼 글자로 남긴다(내린 캐릭터의 옛 코드 등).
+             * 서버 배포 이모티콘 — 파일은 처음 그릴 때 받는다. 코드처럼 생겼는데 카탈로그에 없으면 새 팩일 수
+             * 있으니 자리만 잡고 카탈로그를 다시 묻는다. 예전엔 카탈로그가 한 번이라도 있으면 바로 글자로
+             * 떨어져, 서버에 팩을 더한 뒤 받은 말풍선이 "ANIMAL_XXX" 로 굳었다(2026-10-01 1.0.5 점검).
+             * 다시 물어도 모르면(내린 캐릭터의 옛 코드 등) 그때 글자로 남긴다.
              */
             <RemoteAnimatedSticker
               code={item.content!}
               style={styles.stickerImage}
               onLongPress={() => onLongPressMessage(item)}
+              fallback={<Text style={styles.sticker}>{item.content}</Text>}
             />
           ) : (
             <Text style={styles.sticker}>{item.content}</Text>

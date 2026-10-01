@@ -21,10 +21,18 @@ interface Props {
   code: string;
   style?: StyleProp<ImageStyle>;
   onLongPress?: () => void;
+  /**
+   * 카탈로그를 다시 받아 봐도 모르는 코드일 때 대신 그릴 것(내린 캐릭터의 옛 코드 등).
+   * 카탈로그를 한 번도 못 받은 상태(오프라인 첫 실행)에선 쓰지 않고 자리만 잡는다.
+   */
+  fallback?: React.ReactNode;
 }
 
-export function RemoteAnimatedSticker({ code, style, onLongPress }: Props) {
+export function RemoteAnimatedSticker({ code, style, onLongPress, fallback }: Props) {
   const sticker: RemoteSticker | undefined = useRemoteStickerStore((s) => s.byCode[code]);
+  const catalogKnown = useRemoteStickerStore((s) => s.version !== null);
+  // 모르는 코드로 카탈로그를 다시 물어본 뒤인가 — 그래도 모르면 fallback 으로
+  const [rechecked, setRechecked] = useState(false);
   const [source, setSource] = useState<AnimationObject | undefined>(() =>
     sticker ? cachedRemoteLottie(sticker.url) : undefined,
   );
@@ -32,12 +40,17 @@ export function RemoteAnimatedSticker({ code, style, onLongPress }: Props) {
   const url = sticker?.url;
 
   useEffect(() => {
+    let alive = true;
     if (!url) {
       // 모르는 코드 — 새 팩일 수 있다. 짧은 간격 제한은 스토어가 건다
-      void useRemoteStickerStore.getState().refresh(true);
-      return;
+      void useRemoteStickerStore
+        .getState()
+        .refresh(true)
+        .finally(() => alive && setRechecked(true));
+      return () => {
+        alive = false;
+      };
     }
-    let alive = true;
     loadRemoteLottie(url)
       .then((s) => alive && setSource(s))
       .catch(() => {
@@ -52,6 +65,8 @@ export function RemoteAnimatedSticker({ code, style, onLongPress }: Props) {
     ref.current?.reset();
     ref.current?.play();
   };
+
+  if (!sticker && rechecked && catalogKnown && fallback !== undefined) return <>{fallback}</>;
 
   const label = sticker ? `${sticker.label} 이모티콘, 누르면 다시 움직입니다` : '이모티콘';
   return (
