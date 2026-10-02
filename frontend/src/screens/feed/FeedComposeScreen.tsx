@@ -31,11 +31,18 @@ type Props = NativeStackScreenProps<HomeStackParamList & AlbumStackParamList, 'F
 
 /** 인스타그램류 앱을 넘길 이유가 없다 — 서버 상한(FeedService.MAX_PHOTOS_PER_POST)과 맞춘다 */
 const MAX_PHOTOS = 5;
+/** 서버 상한(CreatePostRequest.content @Size(max = 2000))과 맞춘다 */
+const MAX_CONTENT = 2000;
 
 export function FeedComposeScreen({ navigation }: Props) {
   const [content, setContent] = useState('');
   const [photoUris, setPhotoUris] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  /*
+   * 중복 제출 가드 — saving 은 state 라 다음 렌더 전까지는 false 로 읽힌다. 그 사이 두 번 누르면
+   * 포스트가 두 개 생기고 상대에게 푸시도 두 번 간다(서버엔 멱등키가 없다). ref 는 즉시 바뀐다.
+   */
+  const savingRef = useRef(false);
   /*
    * 올라간 사진의 URL 캐시(로컬 uri → Cloudinary url). 서명 발급마다 PHOTO_UPLOAD 가 선차감되고
    * 환불이 없어서, 5장 중 3장이 올라간 뒤 실패했을 때 재시도에서 그 3장을 다시 올리면 한도만
@@ -81,10 +88,21 @@ export function FeedComposeScreen({ navigation }: Props) {
   };
 
   const onSave = async () => {
+    if (savingRef.current) return;
     if (!content.trim() && photoUris.length === 0) {
       toast.error('글이나 사진 중 하나는 남겨주세요.');
       return;
     }
+    /*
+     * 글 길이는 사진을 올리기 <b>전에</b> 본다 — 서버의 400 은 업로드가 끝난 뒤에야 오는데,
+     * 그때는 PHOTO_UPLOAD 가 이미 장당 차감돼 있다(환불 없음). maxLength 가 입력은 막지만
+     * 띄어쓰기 정리처럼 코드가 넣은 값은 그 제한을 지나므로 여기서 한 번 더 본다.
+     */
+    if (content.trim().length > MAX_CONTENT) {
+      toast.error(`글은 ${MAX_CONTENT}자 이내로 써주세요. 지금 ${content.trim().length}자예요.`);
+      return;
+    }
+    savingRef.current = true;
     setSaving(true);
     try {
       let imageUrls: string[] | undefined;
@@ -137,6 +155,7 @@ export function FeedComposeScreen({ navigation }: Props) {
     } catch (e) {
       Alert.alert('오류', getErrorMessage(e));
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
@@ -202,7 +221,13 @@ export function FeedComposeScreen({ navigation }: Props) {
               setContent(next);
             }}
             multiline
+            maxLength={MAX_CONTENT}
           />
+          {content.length > MAX_CONTENT - 200 ? (
+            <Text style={styles.counter}>
+              {content.length} / {MAX_CONTENT}
+            </Text>
+          ) : null}
 
           {content.trim().length > 0 ? (
             <SpacingFixBar
@@ -237,6 +262,7 @@ const styles = themedStyles((colors) => ({
   photoBoxEmpty: { width: '100%', aspectRatio: 2 / 1, borderStyle: 'dashed', borderColor: colors.borderStrong, gap: spacing.xxs },
   photoPlaceholder: { color: colors.textSecondary, fontSize: fontSize.body, fontWeight: '600', marginTop: spacing.xs },
   photoHint: { color: colors.textMuted, fontSize: fontSize.caption },
+  counter: { alignSelf: 'flex-end', color: colors.textTertiary, fontSize: fontSize.caption, marginTop: -spacing.xs },
 
   // 사진이 하나라도 있으면 큰 박스 대신 가로 스크롤 썸네일 줄로 바뀐다
   thumbRow: { marginBottom: spacing.sm },
