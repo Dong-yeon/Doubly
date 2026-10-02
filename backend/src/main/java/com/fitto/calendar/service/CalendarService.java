@@ -3,6 +3,7 @@ package com.fitto.calendar.service;
 import com.fitto.common.plan.Feature;
 import com.fitto.common.plan.PlanGuard;
 import com.fitto.calendar.domain.CalendarEvent;
+import com.fitto.calendar.domain.EventType;
 import com.fitto.calendar.domain.EventVisibility;
 import com.fitto.calendar.dto.CreateEventRequest;
 import com.fitto.calendar.dto.EventResponse;
@@ -28,6 +29,7 @@ import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * 커플 캘린더 — 기념일 외 일정(생일·데이트 약속 등) CRUD + 월/다가오는 일정 조회.
@@ -144,8 +146,19 @@ public class CalendarService {
         LocalDate effectiveEnd = req.eventDate() != null ? req.endDate() : event.getEndDate();
         boolean effectiveRepeat = req.repeatYearly() != null ? req.repeatYearly() : event.isRepeatYearly();
         validatePeriod(effectiveStart, effectiveEnd, effectiveRepeat);
+        Snapshot before = Snapshot.of(event);
         event.update(req.title(), req.eventDate(), normalizeEnd(effectiveStart, req.endDate()),
                 req.eventType(), req.repeatYearly(), req.visibility(), req.memo());
+        Snapshot after = Snapshot.of(event);
+
+        // 화면의 저장 버튼은 아무것도 안 고쳐도 눌린다 — 바뀐 게 없으면 알릴 것도 없다
+        if (!after.equals(before) && worthTellingPartner(event)) {
+            String body = after.datesDifferFrom(before)
+                    ? "'" + event.getTitle() + "' 일정이 " + periodLabel(event) + "(으)로 옮겨졌어요"
+                    : "'" + event.getTitle() + "' 일정이 수정됐어요";
+            notificationService.notify(couple.partnerOf(userId), NotificationCategory.ANNIVERSARY,
+                    "커플 캘린더", body, PushLinks.CALENDAR);
+        }
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.CALENDAR);
         return EventResponse.of(event, event.nextOccurrence(KstClock.today()), KstClock.today());
     }
@@ -155,10 +168,53 @@ public class CalendarService {
         Relation couple = requireCouple(userId);
         CalendarEvent event = requireEditableEvent(userId, eventId, couple);
         eventRepository.delete(event);
+        if (worthTellingPartner(event)) {
+            notificationService.notify(couple.partnerOf(userId), NotificationCategory.ANNIVERSARY,
+                    "커플 캘린더", "'" + event.getTitle() + "' 일정이 삭제됐어요", PushLinks.CALENDAR);
+        }
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.CALENDAR);
     }
 
     // ---- helpers ----
+
+    /**
+     * 수정·삭제를 상대에게 알릴 일정인가 — 등록 알림과 같은 원칙이다.
+     *
+     * <ul>
+     *   <li><b>우리 일정만</b>. 각자의 일정은 등록도 알리지 않는다. 수정 뒤 상태로 판단하므로
+     *       '나만 보기'로 돌린 일정은 알리지 않는다(알리면 제목이 새어 나간다).</li>
+     *   <li><b>이미 끝난 단발 일정은 뺀다</b>. 지난 기록을 정리할 때마다 상대 폰이 울리면
+     *       그건 소식이 아니라 소음이다. 반복 일정은 다시 돌아오므로 끝나지 않는다.</li>
+     * </ul>
+     */
+    private boolean worthTellingPartner(CalendarEvent event) {
+        if (!event.getVisibility().isShared()) return false;
+        return event.isRepeatYearly() || !event.lastDate().isBefore(KstClock.today());
+    }
+
+    /** "10월 5일" 또는 "10월 5일~10월 7일" — 반복 일정은 발생일이 아니라 월·일만 의미가 있다. */
+    private String periodLabel(CalendarEvent event) {
+        String start = monthDay(event.getEventDate());
+        return event.getEndDate() == null ? start : start + "~" + monthDay(event.getEndDate());
+    }
+
+    private String monthDay(LocalDate d) {
+        return d.getMonthValue() + "월 " + d.getDayOfMonth() + "일";
+    }
+
+    /** 수정 전후 비교용 — 엔티티는 같은 인스턴스가 바뀌므로 값을 떠 둔다. */
+    private record Snapshot(String title, LocalDate eventDate, LocalDate endDate, EventType eventType,
+                            boolean repeatYearly, EventVisibility visibility, String memo) {
+        static Snapshot of(CalendarEvent e) {
+            return new Snapshot(e.getTitle(), e.getEventDate(), e.getEndDate(), e.getEventType(),
+                    e.isRepeatYearly(), e.getVisibility(), e.getMemo());
+        }
+
+        boolean datesDifferFrom(Snapshot other) {
+            return !Objects.equals(eventDate, other.eventDate)
+                   || !Objects.equals(endDate, other.endDate);
+        }
+    }
 
     /**
      * 종료일이 시작일과 같은 날이면 <b>하루 일정</b>이다 — 기간으로 저장하면 "8월 10일 ~

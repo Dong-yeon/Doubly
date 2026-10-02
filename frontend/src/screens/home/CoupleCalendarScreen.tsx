@@ -157,7 +157,7 @@ export function CoupleCalendarScreen({ navigation }: Props) {
    */
   const [tripsLoaded, setTripsLoaded] = useState(false);
   /*
-   * 데이트 기록 — 장소가 연결된 데이트 식단. 일정과 달리 여기서 만들거나 지우지 않는다
+   * 다녀온 곳 — 커플 장소의 방문(같이 먹기 식단 + "다녀왔어요"). 일정과 달리 여기서 만들거나 지우지 않는다
    * (원본은 식단 기록이고 이 화면은 겹쳐 그리기만 한다 — 여행 띠와 같은 방식).
    * 여행과 달리 월 단위로 받는다: 식단은 여행보다 훨씬 자주 쌓여 전체를 들고 있을 이유가 없다.
    */
@@ -201,7 +201,7 @@ export function CoupleCalendarScreen({ navigation }: Props) {
   }, []);
 
   /*
-   * 데이트 기록은 일정과 따로 받는다 — 소스가 다르고(식단+장소), 실패해도 일정 표시를
+   * 다녀온 곳은 일정과 따로 받는다 — 소스가 다르고(방문·식단), 실패해도 일정 표시를
    * 막으면 안 된다. 같은 요청 토큰을 쓰면 둘 중 하나의 지연이 다른 쪽을 버리게 되므로
    * 토큰도 따로 둔다. 실패 시 조용히 비운다: 이 화면의 주인공은 일정이고, 오버레이가
    * 없다고 재시도를 권하면 정작 보러 온 일정 위에 에러가 얹힌다.
@@ -312,7 +312,7 @@ export function CoupleCalendarScreen({ navigation }: Props) {
     ? monthTrips.filter((t) => t.startDate <= selectedDate && selectedDate <= t.endDate)
     : monthTrips;
 
-  /** 데이트 기록이 있는 날짜 집합 — 셀마다 배열을 훑지 않게 미리 편다(tripDays 와 같은 이유) */
+  /** 다녀온 곳이 있는 날짜 집합 — 셀마다 배열을 훑지 않게 미리 편다(tripDays 와 같은 이유) */
   const dateMealDays = useMemo(
     () => new Set(dateMeals.map((m) => m.date)),
     [dateMeals],
@@ -494,7 +494,7 @@ export function CoupleCalendarScreen({ navigation }: Props) {
                       />
                     ))}
                     {/*
-                      데이트 기록은 <b>속이 빈 점</b>으로 그린다 — 채워진 점(앞으로 있을 일정)과
+                      다녀온 곳은 <b>속이 빈 점</b>으로 그린다 — 채워진 점(앞으로 있을 일정)과
                       한눈에 갈라져야 한다. 색까지 달리하면 일정 종류 색과 섞여 범례가 늘어난다.
                     */}
                     {dateMealDays.has(dateStr) ? <View style={styles.dotRecord} /> : null}
@@ -558,20 +558,22 @@ export function CoupleCalendarScreen({ navigation }: Props) {
         )}
 
         {/*
-          데이트 기록 — 장소가 연결된 데이트 식단. 없으면 섹션째 숨긴다: 여행처럼 여기서
-          만들 수 있는 게 아니라(식단 탭에서 "같이 먹기"로 남긴다) 빈 상태를 보여줘도
-          할 일이 없고, 화면만 길어진다.
+          다녀온 곳 — 커플 장소의 방문(같이 먹기 식단 + "다녀왔어요"). 없으면 섹션째 숨긴다:
+          여행처럼 여기서 만들 수 있는 게 아니라(럽슐랭·식단에서 남긴다) 빈 상태를 보여줘도
+          할 일이 없고, 화면만 길어진다. 예전 이름 '데이트'는 같이 먹기 식단만 실을 때의 것이다 —
+          "다녀왔어요"는 혼자 다녀온 곳일 수 있어, 데이트라고 부르는 대신 누구 기록인지 붙인다.
         */}
         {listDateMeals.length > 0 ? (
           <>
             <View style={styles.listHeader}>
               <Text style={styles.listTitle}>
-                {selectedDate ? `${Number(selectedDate.slice(8, 10))}일 데이트` : '이번 달 데이트'}
+                {selectedDate ? `${Number(selectedDate.slice(8, 10))}일 다녀온 곳` : '이번 달 다녀온 곳'}
               </Text>
             </View>
             {listDateMeals.map((meal) => (
               <TouchableOpacity
-                key={meal.mealId}
+                // visitId 가 없는 응답(서버 2026-10-02 이전)은 같이 먹기 식단뿐이라 mealId 가 있다
+                key={meal.visitId ?? `meal-${meal.mealId}`}
                 activeOpacity={0.8}
                 onPress={() =>
                   navigation.navigate('PlaceDetail', { placeId: meal.placeId, name: meal.placeName })
@@ -582,7 +584,7 @@ export function CoupleCalendarScreen({ navigation }: Props) {
                   <View style={styles.eventBody}>
                     <View style={styles.eventTitleRow}>
                       <Text style={styles.eventTitle} numberOfLines={1}>
-                        🍽 {meal.placeName}
+                        📍 {meal.placeName}
                       </Text>
                       {meal.lovelichelinTier ? (
                         <View style={styles.ddayBadge}>
@@ -590,10 +592,20 @@ export function CoupleCalendarScreen({ navigation }: Props) {
                         </View>
                       ) : null}
                     </View>
-                    <Text style={styles.eventMeta}>
-                      {/* 날짜를 고른 상태면 헤더가 이미 그 날을 말하고 있다 */}
-                      {selectedDate ? meal.title : `${Number(meal.date.slice(8, 10))}일 · ${meal.title}`}
-                    </Text>
+                    <View style={styles.metaRow}>
+                      {/* 한 사람만 남긴 기록이면 누구 것인지 — 둘이 함께(같이 먹기·둘 다 기록)면 붙이지 않는다 */}
+                      {meal.visitedBy != null ? (
+                        <View style={styles.ownerBadge}>
+                          <Text style={styles.ownerBadgeText}>
+                            {meal.visitedBy === myId ? '내 기록' : `${partnerName ?? '상대'} 기록`}
+                          </Text>
+                        </View>
+                      ) : null}
+                      <Text style={styles.eventMeta} numberOfLines={1}>
+                        {/* 날짜를 고른 상태면 헤더가 이미 그 날을 말하고 있다 */}
+                        {selectedDate ? meal.title : `${Number(meal.date.slice(8, 10))}일 · ${meal.title}`}
+                      </Text>
+                    </View>
                   </View>
                 </Card>
               </TouchableOpacity>

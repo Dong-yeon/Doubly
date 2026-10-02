@@ -125,18 +125,25 @@ public interface WorkoutRepository extends JpaRepository<Workout, Long> {
      * {@code workouts} 테이블에는 status 컬럼이 없고, 끝내지 않은 운동은 행으로 저장되지 않는다
      * — 기기에만 남는 초안(프론트 {@code activeWorkoutStore})이고 저장 시점에 비로소 행이 된다.
      * 즉 이 테이블의 행은 전부 완료분이라 필터가 필요 없다. status 컬럼이 생기면 여기도 함께 고칠 것.
+     *
+     * <p><b>정렬은 기록일 우선</b>(2026-10-02 결정) — (기록일, created_at, id) keyset 이다.
+     * 지난 날짜로 늦게 올린 기록이 올린 달이 아니라 그 날짜에 묶여야 달력·회고와 의미가 맞는다.
+     * 타임라인({@code findRecentForFeed})은 업로드 순서 그대로다 — 통일하지 말 것.
      */
     @Query("""
             select w from Workout w
             where w.userId in :userIds
               and w.imageUrl is not null
               and w.imageShared = true
-              and (cast(:cursorAt as LocalDateTime) is null
-                   or w.createdAt < :cursorAt
-                   or (w.createdAt = :cursorAt and w.id < :cursorId))
-            order by w.createdAt desc, w.id desc
+              and (cast(:cursorDate as LocalDate) is null
+                   or w.workoutDate < :cursorDate
+                   or (w.workoutDate = :cursorDate
+                       and (w.createdAt < :cursorAt
+                            or (w.createdAt = :cursorAt and w.id < :cursorId))))
+            order by w.workoutDate desc, w.createdAt desc, w.id desc
             """)
     List<Workout> findPhotosForFeed(@Param("userIds") List<Long> userIds,
+                                    @Param("cursorDate") java.time.LocalDate cursorDate,
                                     @Param("cursorAt") java.time.LocalDateTime cursorAt,
                                     @Param("cursorId") Long cursorId,
                                     Pageable pageable);
@@ -145,4 +152,21 @@ public interface WorkoutRepository extends JpaRepository<Workout, Long> {
     @Modifying
     @Query("delete from Workout w where w.userId = :userId")
     void deleteAllByUserId(@Param("userId") Long userId);
+
+    /**
+     * 사진첩 달력 — 기록일이 {@code [from, to]} 인 공유된 운동 사진. 공개 조건({@code image_shared})은
+     * {@link #findPhotosForFeed} 와 같다 — 달력이라고 비공개 사진이 새면 안 된다.
+     */
+    @Query("""
+            select w from Workout w
+            where w.userId in :userIds
+              and w.imageUrl is not null
+              and w.imageShared = true
+              and w.workoutDate between :from and :to
+            order by w.workoutDate desc, w.createdAt desc, w.id desc
+            """)
+    List<Workout> findPhotosInDateRange(@Param("userIds") List<Long> userIds,
+                                        @Param("from") LocalDate from,
+                                        @Param("to") LocalDate to,
+                                        Pageable pageable);
 }

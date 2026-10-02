@@ -135,7 +135,8 @@ ALTER TABLE couple_events ADD COLUMN visibility VARCHAR(20) NOT NULL DEFAULT 'SH
 |---|---|---|
 | 생성(SHARED) | 상대 | "새 일정이 등록됐어요: {제목}" |
 | 생성(PERSONAL/PRIVATE) | 없음 | — |
-| 수정 / 삭제 | **push 없음** | 실시간 이벤트 `CoupleEvent.CALENDAR` 만 발행 |
+| 수정(2026-10-02~) | 상대(고친 사람의 상대) | 날짜가 바뀌면 "'{제목}' 일정이 10월 5일(으)로 옮겨졌어요", 아니면 "'{제목}' 일정이 수정됐어요". **우리 일정(수정 뒤 기준)·실제로 바뀐 것·아직 안 끝난 일정**일 때만 |
+| 삭제(2026-10-02~) | 상대 | "'{제목}' 일정이 삭제됐어요". 우리 일정·아직 안 끝난 일정일 때만 |
 | D-7 09:00 KST | SHARED=둘 다, 개인=주인만 | 기념일·생일만 |
 | D-1 09:00 KST | 〃 | 모든 종류 |
 | 당일 09:00 KST | 〃 | 모든 종류 (기간 일정은 시작일만) |
@@ -149,6 +150,7 @@ ALTER TABLE couple_events ADD COLUMN visibility VARCHAR(20) NOT NULL DEFAULT 'SH
 | 기능 | 상태 | 근거 / 경로 |
 |---|---|---|
 | 기념일·디데이 자동 생성 | **없음** | 커플 기념일은 `relations.anniversary_date`(V4)에 따로 있고 홈 D+ 히어로·위젯에만 쓰인다. 100일·1주년 같은 일정을 캘린더에 자동으로 만드는 코드 없음. 사용자가 '기념일' 종류 + 매년 반복으로 직접 등록 |
+| 생일 원천 데이터 | 있음(캘린더 미연결) | `users.birth_date DATE`(V1, nullable). 입력은 마이 화면 '신체 정보'의 "생년월일"(`MyScreen.tsx:621`)이고 용도는 기초대사량 계산(`BmrCalculator`). **상대에게 내려가지 않는다** — `PartnerUserResponse` 는 id·이름·프로필 사진·탈퇴 예정일뿐. 생일 자동 표시에 쓰려면 상대 노출 동의 문제가 먼저다(2026-10-02 확인) |
 | 일정 D-day 표시 | 구현됨 | 서버가 `dday` 계산(`EventResponse.of`), 목록 배지 `D-n / D-day / n일 지남 / 진행 중` |
 | 한국 공휴일 | **없음** | `holiday`/`공휴일` 검색 결과 0건. 요일 머리의 일요일만 coral 색 |
 | 색 구분 — 카테고리 | 구현됨 | `typeMeta`(65행): 기념일 violet / 생일 coral / 데이트 indigo / 기타 회색 |
@@ -160,7 +162,7 @@ ALTER TABLE couple_events ADD COLUMN visibility VARCHAR(20) NOT NULL DEFAULT 'SH
 | 외부 캘린더 연동 | **없음** | `expo-calendar`, iCal(.ics), Google Calendar 연동 코드 없음 |
 | 홈 widget | **부분 (일정은 없음)** | `frontend/src/widget/DoublyWidget.tsx`(react-native-android-widget, Android 전용)은 사귄 날 D+ 만 표시. 일정·다가오는 일정 표시 없음 |
 | 여행 기간 겹쳐 보기 | 구현됨 | 격자 하단 띠 + "우리 여행" 섹션(`tripApi.list`) |
-| 데이트 기록 겹쳐 보기 | 구현됨 | 속 빈 점 + "이번 달 데이트" 섹션 (6절) |
+| 다녀온 곳 겹쳐 보기 | 구현됨 | 속 빈 점 + "이번 달 다녀온 곳" 섹션 (6절). 2026-10-02 전엔 "이번 달 데이트"(같이 먹기 식단만) |
 | 누구 일정 필터 칩 | 없음 | `CALENDAR_PERSONAL_EVENTS_2026-09-22.md` §8 "남은 것" |
 | FREE 한도 | 구현됨 | `Feature.CALENDAR_EVENT` FREE 월 10건 / PRO 무제한 (`common/plan/Feature.java:122`) |
 
@@ -168,10 +170,10 @@ ALTER TABLE couple_events ADD COLUMN visibility VARCHAR(20) NOT NULL DEFAULT 'SH
 
 - **일정 → 장소 선택: 없음.** 일정 폼에 장소 필드가 없고 `couple_events` 에 장소 FK 도 없다. 럽슐랭 저장 장소를 고르는 UI 없음.
 - **방문 기록 → 캘린더: 읽기 전용 오버레이만 있음.**
-  - `backend/.../calendar/service/DateMealCalendarService.java` 가 그 달의 **"같이 먹기" 식단**(`MealRepository.findSharedInPeriod`: `shared_group_id is not null`, 파트너 복제본 제외) 중 **`place_visits.meal_id` 로 방문이 붙은 것만** 골라 장소명·럽슐랭 등급(`places.lovelichelin_tier`)·사진과 함께 내려준다.
+  - `backend/.../calendar/service/DateMealCalendarService.java` 가 그 달의 ① **"같이 먹기" 식단**(`MealRepository.findSharedInPeriod`) 중 방문이 붙은 것과 ② **커플 장소의 모든 방문**(`PlaceVisitRepository.findByCoupleInPeriod`, 2026-10-02 추가)을 합쳐, **같은 날·같은 장소는 한 줄**로 장소명·럽슐랭 등급·사진과 함께 내려준다. 한 사람만 기록한 방문은 `visitedBy` 로 그 사람을 싣고(화면 배지 "내 기록"/"○○ 기록"), 같이 먹기 식단이거나 둘 다 기록했으면 null(함께 간 것).
   - 화면에서 누르면 `PlaceDetail` 로 이동(570행). 수정·삭제·D-day 없음(원본은 식단).
   - 일정으로 행을 만들지 않은 이유는 서비스 클래스 주석에 있음(FREE 한도 잠식, 4경로 동기화, 미래/과거 혼재).
-- **"다녀왔어요"(`PlaceDetailScreen.tsx` `onSaveVisit`, 244행)와의 관계**: 이 경로는 "식단으로도 등록"을 체크했을 때만 식단을 만들고 `mealId` 를 방문에 붙인다. 그런데 이때 `saveMeal` 호출에 같이 먹기(공유) 표시가 보이지 않는다 → **"다녀왔어요"로 남긴 방문은 캘린더 오버레이에 안 나올 가능성이 높다. 확인 필요**(`saveMeal` 이 공유 그룹을 만드는지). 식단과 연결되지 않은 방문은 확실히 안 나온다.
+- **"다녀왔어요"(`PlaceDetailScreen.tsx` `onSaveVisit`)와의 관계**: 이 경로는 식단을 같이 먹기로 저장하지 않아(`sharedWithPartner` 없음) 2026-10-02 전엔 캘린더에 **전혀 나오지 않았다.** 같은 날 ②번 경로를 추가해 해결했다. 같이 먹기 식단으로 바꾸는 방법은 쓰지 않았다 — 칼로리가 절반으로 나뉘고 상대 식단에 복제본이 생긴다. 예전 테스트 "혼자 먹은 기록은 장소가 있어도 캘린더에 올라오지 않는다"는 사용자 결정으로 뒤집었다(혼자 간 곳도 싣고 누구 기록인지 표시).
 - 일정(약속) ↔ 방문(기록)을 잇는 코드(예: "이 약속에 다녀왔어요"로 방문 생성)는 **없음**.
 
 ## 7. 알려진 문제 / 위험
@@ -182,9 +184,9 @@ ALTER TABLE couple_events ADD COLUMN visibility VARCHAR(20) NOT NULL DEFAULT 'SH
 |---|---|---|---|
 | 1 | 타임존 | ~~프론트 "오늘"이 기기 현지 날짜(`new Date()`)라 해외에서 오늘 테두리·첫 진입 월·추가 기본 날짜·'진행 중'이 서버 KST `dday` 와 하루 어긋날 수 있다.~~ **2026-10-02 수정** — `utils/anniversary.ts` 의 `kstDateOf` 로 KST 기준 판단 | `CoupleCalendarScreen.tsx:139~148` |
 | 2 | 동시성 | 낙관적 락 없음 + `updated_at` 없음. 우리 일정을 둘이 동시에 고치면 나중 저장이 덮어쓰고 알림도 없음 | `CalendarEvent` |
-| 3 | 실시간 | 수정·삭제는 상대에게 push 가 안 가고, 캘린더 화면은 `CALENDAR` 실시간 이벤트를 구독하지 않는다 → 화면을 열어둔 상대는 다시 들어오기 전까지 낡은 목록을 본다 | `CoupleCalendarScreen.tsx` 216행 |
+| 3 | 실시간 | ~~수정·삭제는 상대에게 push 가 안 간다~~(2026-10-02 수정, 4절 표). 캘린더 화면은 `CALENDAR` 실시간 이벤트를 구독하지 않는다 → 화면을 열어둔 상대는 다시 들어오기 전까지 낡은 목록을 본다 | `CoupleCalendarScreen.tsx` 216행 |
 | 4 | 한도 | `create` 가 `planGuard.consume` 으로 선차감하고 `delete` 에서 `refund` 하지 않는다 → FREE 사용자가 잘못 만들고 지워도 월 10건이 줄어든다. 의도인지 확인 필요 | `CalendarService.create/delete` |
-| 5 | 중복 알림 | `CalendarDdayNotifier` 는 발송 이력 없이 "하루 한 번 돈다"에 기댄다. 서버 인스턴스가 2개 이상이면 같은 알림이 중복 발송됨. Railway 인스턴스 수 확인 필요 | `CalendarDdayNotifier.java` |
+| 5 | 중복 알림 | `CalendarDdayNotifier` 는 발송 이력 없이 "하루 한 번 돈다"에 기댄다. 서버 인스턴스가 2개 이상이면 같은 알림이 중복 발송됨. **2026-10-02 확인: Doubly-Back 은 replica 1(sfo)이라 평소엔 중복 없음.** 같은 프로젝트의 Doubly-Spike(`claude/call-spike-android`, 8/25)는 `@Scheduled`·캘린더 코드가 없어 무관. 남는 틈은 09:00 KST 정각에 배포가 겹쳐 옛·새 인스턴스가 함께 떠 있는 몇 초뿐 | `CalendarDdayNotifier.java` |
 | 6 | 성능 | 알림 스케줄러의 `findByEventDate` / `findByRepeatYearlyTrue` 는 전 커플 대상인데 `event_date` 단독 인덱스가 없음. 월 조회도 `coalesce` 조건은 인덱스로 못 자름. 현재 규모에선 무해, PG 실행 계획 확인 필요 | `CalendarEventRepository` |
 | 7 | 미사용 API | `/events/upcoming` 을 프론트 어디서도 호출하지 않는다(홈에 다가오는 일정 카드 없음) | `api/calendar.ts:50` |
 | 8 | 알림 설정 | 캘린더 알림이 `ANNIVERSARY` 카테고리를 같이 써서 따로 끌 수 없다 | `CalendarService.create`, `CalendarDdayNotifier.notify` |
@@ -223,7 +225,7 @@ ALTER TABLE couple_events ADD COLUMN visibility VARCHAR(20) NOT NULL DEFAULT 'SH
 | 반복 일정 | 부분 구현 | 매년만 |
 | 낙관적 락 / version | 없음 | |
 | 생성 시 상대 push | 구현됨 | 우리 일정만 |
-| 수정·삭제 시 상대 push | 없음 | 실시간 이벤트만 발행 |
+| 수정·삭제 시 상대 push | 구현됨 | 2026-10-02, 우리 일정·변경 있음·안 끝난 일정만 |
 | 캘린더 화면 실시간 갱신 | 없음 | 포커스 재조회만 |
 | D-7 / D-1 / 당일 리마인더 | 부분 구현 | 고정 09:00, 사용자 설정 없음 |
 | 기념일·디데이 자동 생성 | 없음 | 홈 D+ 는 별도 |
@@ -233,12 +235,12 @@ ALTER TABLE couple_events ADD COLUMN visibility VARCHAR(20) NOT NULL DEFAULT 'SH
 | 일정 댓글·리액션 | 없음 | |
 | 일정에 장소 첨부 | 없음 | |
 | 럽슐랭 장소 선택 | 없음 | |
-| 데이트 기록(방문) 오버레이 | 구현됨 | 같이 먹기 + 장소 연결 식단만, 읽기 전용 |
-| "다녀왔어요" 방문이 캘린더에 표시 | 확인 필요 | 식단 공유 여부에 달림(6절) |
+| 다녀온 곳(방문) 오버레이 | 구현됨 | 같이 먹기 식단 + 커플 장소 방문 전부, 같은 날·같은 곳 한 줄, 읽기 전용 |
+| "다녀왔어요" 방문이 캘린더에 표시 | 구현됨 | 2026-10-02 — 누구 기록인지 배지 |
 | 외부 캘린더 연동 | 없음 | |
 | 홈 위젯에 일정 | 없음 | 위젯은 D+ 만(Android) |
 | 다가오는 일정 API | 부분 구현 | 백엔드만 있고 프론트 미사용 |
 | 누구 일정 필터 | 없음 | |
 | 프론트 "오늘"의 KST 기준 | 구현됨 | 2026-10-02 `kstDateOf` 로 수정 |
-| 알림 중복 방지(다중 인스턴스) | 확인 필요 | 인스턴스 수에 달림 |
+| 알림 중복 방지(다중 인스턴스) | 해당 없음 | replica 1 — 배포가 09:00 에 겹치는 몇 초만 예외 |
 | 월 조회 인덱스 효율 | 확인 필요 | PG 실행 계획 미확인 |

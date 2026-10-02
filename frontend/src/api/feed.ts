@@ -4,6 +4,7 @@ import type {
   ApiResponse,
   FeedItem,
   FeedItemType,
+  FeedPhotoMonth,
   FeedPhotoSource,
   FeedPhotosPage,
   FeedTimeline,
@@ -50,6 +51,21 @@ export const feedApi = {
         params: {
           cursor: cursor ?? undefined,
           limit,
+          sources: sources && sources.length > 0 ? sources.join(',') : undefined,
+          who,
+        },
+      }),
+    ),
+
+  /**
+   * 사진첩 달력 — 한 달(기록일 기준)의 사진 전부. month 는 'YYYY-MM'.
+   * sources·who 는 photos 와 같은 필터다.
+   */
+  photoMonth: (month: string, sources?: FeedPhotoSource[], who?: 'me' | 'partner') =>
+    unwrap(
+      apiClient.get<ApiResponse<FeedPhotoMonth>>('/feed/photos/month', {
+        params: {
+          month,
           sources: sources && sources.length > 0 ? sources.join(',') : undefined,
           who,
         },

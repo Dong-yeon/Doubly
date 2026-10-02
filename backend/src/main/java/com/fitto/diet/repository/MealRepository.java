@@ -150,18 +150,25 @@ public interface MealRepository extends JpaRepository<Meal, Long> {
      * 우리 탭(사진첩) — 사진이 붙은 끼니만. {@link #findRecentForFeed} 와 같은 keyset·같은
      * 복제본 제외 규칙을 쓰고 {@code photo_url is not null} 만 더한다
      * (docs/ALBUM_TAB_IA_2026-09-14.md 5-4).
+     *
+     * <p><b>정렬은 기록일 우선</b>(2026-10-02 결정) — (기록일, created_at, id) keyset 이다.
+     * 지난 날짜로 늦게 올린 기록이 올린 달이 아니라 그 날짜에 묶여야 달력·회고와 의미가 맞는다.
+     * 타임라인({@code findRecentForFeed})은 업로드 순서 그대로다 — 통일하지 말 것.
      */
     @Query("""
             select m from Meal m
             where m.userId in :userIds
               and m.photoUrl is not null
               and (m.createdBy is null or m.createdBy = m.userId)
-              and (cast(:cursorAt as LocalDateTime) is null
-                   or m.createdAt < :cursorAt
-                   or (m.createdAt = :cursorAt and m.id < :cursorId))
-            order by m.createdAt desc, m.id desc
+              and (cast(:cursorDate as LocalDate) is null
+                   or m.mealDate < :cursorDate
+                   or (m.mealDate = :cursorDate
+                       and (m.createdAt < :cursorAt
+                            or (m.createdAt = :cursorAt and m.id < :cursorId))))
+            order by m.mealDate desc, m.createdAt desc, m.id desc
             """)
     List<Meal> findPhotosForFeed(@Param("userIds") List<Long> userIds,
+                                 @Param("cursorDate") java.time.LocalDate cursorDate,
                                  @Param("cursorAt") java.time.LocalDateTime cursorAt,
                                  @Param("cursorId") Long cursorId,
                                  Pageable pageable);
@@ -170,4 +177,21 @@ public interface MealRepository extends JpaRepository<Meal, Long> {
     @Modifying
     @Query("delete from Meal m where m.userId = :userId")
     void deleteAllByUserId(@Param("userId") Long userId);
+
+    /**
+     * 사진첩 달력 — 기록일이 {@code [from, to]} 인 사진 끼니. {@link #findPhotosForFeed} 와 같은
+     * 복제본 제외 규칙·같은 정렬이다(달력 칸의 대표 사진이 그리드 맨 앞 사진과 같아야 한다).
+     */
+    @Query("""
+            select m from Meal m
+            where m.userId in :userIds
+              and m.photoUrl is not null
+              and (m.createdBy is null or m.createdBy = m.userId)
+              and m.mealDate between :from and :to
+            order by m.mealDate desc, m.createdAt desc, m.id desc
+            """)
+    List<Meal> findPhotosInDateRange(@Param("userIds") List<Long> userIds,
+                                     @Param("from") LocalDate from,
+                                     @Param("to") LocalDate to,
+                                     Pageable pageable);
 }

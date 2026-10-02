@@ -248,6 +248,12 @@ export interface FeedPhoto {
   placeId?: number | null;
   /** 장소 상세 화면 제목용 — placeId 와 함께만 온다 */
   placeName?: string | null;
+  /**
+   * 기록일 'YYYY-MM-DD' — 사진첩의 정렬·월 묶음 기준(식단·운동·방문은 고른 날짜, 일상은 올린 날 KST).
+   * 날짜만 담긴 값이라 시간대 변환 없이 그대로 쓴다. 구 서버 응답에는 없을 수 있다.
+   */
+  recordDate?: string | null;
+  /** 올린 시각(UTC 인스턴트) — 같은 기록일 안의 순서 */
   createdAt: string;
 }
 
@@ -255,6 +261,15 @@ export interface FeedPhotosPage {
   items: FeedPhoto[];
   nextCursor: string | null;
   hasMore: boolean;
+}
+
+/** 사진첩 달력 한 달 — 그 달(기록일 기준) 사진 전부, 목록과 같은 순서. 페이징 없음 */
+export interface FeedPhotoMonth {
+  /** 'YYYY-MM' */
+  month: string;
+  items: FeedPhoto[];
+  /** 서버 상한에 걸려 일부가 빠졌다 */
+  truncated: boolean;
 }
 
 // 커플 캘린더 — 기념일 외 일정(생일·데이트 약속) + D-day 푸시
@@ -289,22 +304,28 @@ export interface CoupleCalendarEvent {
 }
 
 /**
- * 캘린더에 겹쳐 그리는 데이트 기록 — 장소가 연결된 데이트 식단.
+ * 캘린더에 겹쳐 그리는 다녀온 곳 — 커플 장소의 방문(같은 날·같은 곳은 한 줄).
  *
- * 일정(CoupleCalendarEvent)과 달리 캘린더에서 만들거나 지우지 않는다. 원본은 식단 기록이고
+ * 일정(CoupleCalendarEvent)과 달리 캘린더에서 만들거나 지우지 않는다. 원본은 방문·식단 기록이고
  * 캘린더는 읽어서 겹쳐 그리기만 한다(여행 기간 띠와 같은 방식) — 그래서 D-day 도 없다.
+ * 이름이 DateMeal 인 것은 처음엔 장소가 붙은 같이 먹기 식단만 실었기 때문이다(2026-10-02 확장).
  */
 export interface CalendarDateMeal {
   /** YYYY-MM-DD */
   date: string;
-  mealId: number;
-  /** 무엇을 먹었는지 — 음식 항목이 없으면 메모, 그마저 없으면 끼니 이름 */
+  /** 연결된 식단 — 식단 없이 남긴 방문이면 null */
+  mealId?: number | null;
+  /** 무엇을 했는지 — 식단이면 음식, 식단 없는 방문이면 방문 메모(없으면 '다녀왔어요') */
   title: string;
   placeId: number;
   placeName: string;
   /** 럽슐랭 등급 — 0=일반, 1~3=럽스타 */
   lovelichelinTier?: number | null;
   photoUrl?: string | null;
+  /** 방문 기록 id — 목록 키. 서버가 2026-10-02 이전이면 없다 */
+  visitId?: number | null;
+  /** 한 사람만 다녀간 기록이면 그 사람, 둘이 함께면 null — "누가 갔는지" 배지의 근거 */
+  visitedBy?: number | null;
 }
 
 /** 지난 기록 불러오기 결과 — 양쪽이 모두 요청해야 RESTORED 가 된다 */

@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.EnumMap;
@@ -23,13 +24,24 @@ import java.util.Map;
  *
  * <p>인코딩은 {@code POST:<epochSecond>.<nano>:<id>|WORKOUT:...} 를 Base64URL 로 감싼 형태다.
  * 클라이언트는 내용을 해석하지 않고 그대로 되돌려주기만 하면 된다(불투명 토큰).
+ *
+ * <p>사진첩은 <b>기록일</b>이 1차 정렬키라 위치에 날짜가 하나 더 붙는다
+ * ({@code MEAL:<sec>.<nano>:<id>:<epochDay>}). 타임라인 커서는 날짜 없이 예전 형식 그대로다.
  */
 public record FeedCursor(Map<FeedItemType, Position> positions) {
 
     private static final Logger log = LoggerFactory.getLogger(FeedCursor.class);
 
-    /** 소스별 마지막 소비 위치. 이 지점보다 "이전"부터 다음 페이지를 읽는다. */
-    public record Position(LocalDateTime createdAt, Long id) {
+    /**
+     * 소스별 마지막 소비 위치. 이 지점보다 "이전"부터 다음 페이지를 읽는다.
+     *
+     * @param recordDate 사진첩의 기록일(1차 정렬키). 타임라인 커서에서는 null.
+     */
+    public record Position(LocalDateTime createdAt, Long id, LocalDate recordDate) {
+
+        public Position(LocalDateTime createdAt, Long id) {
+            this(createdAt, id, null);
+        }
     }
 
     /** 첫 페이지 — 어느 소스도 아직 읽지 않은 상태. */
@@ -52,6 +64,12 @@ public record FeedCursor(Map<FeedItemType, Position> positions) {
         return p != null ? p.id() : null;
     }
 
+    /** 해당 소스의 기록일 (없으면 null → 쿼리에서 전체 조회). */
+    public LocalDate recordDateOf(FeedItemType type) {
+        Position p = positions.get(type);
+        return p != null ? p.recordDate() : null;
+    }
+
     public String encode() {
         StringBuilder sb = new StringBuilder();
         positions.forEach((type, pos) -> {
@@ -62,6 +80,9 @@ public record FeedCursor(Map<FeedItemType, Position> positions) {
                     .append(pos.createdAt().toEpochSecond(java.time.ZoneOffset.UTC))
                     .append('.').append(pos.createdAt().getNano())
                     .append(':').append(pos.id());
+            if (pos.recordDate() != null) {
+                sb.append(':').append(pos.recordDate().toEpochDay());
+            }
         });
         return Base64.getUrlEncoder().withoutPadding()
                 .encodeToString(sb.toString().getBytes(StandardCharsets.UTF_8));
@@ -92,7 +113,8 @@ public record FeedCursor(Map<FeedItemType, Position> positions) {
                                 LocalDateTime.ofEpochSecond(
                                         Long.parseLong(ts[0]), Integer.parseInt(ts[1]),
                                         java.time.ZoneOffset.UTC),
-                                Long.parseLong(f[2])));
+                                Long.parseLong(f[2]),
+                                f.length > 3 ? LocalDate.ofEpochDay(Long.parseLong(f[3])) : null));
             }
             return new FeedCursor(positions);
         } catch (RuntimeException e) {
