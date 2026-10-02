@@ -69,7 +69,11 @@ class FeedPhotosTest {
 
     /** 사진 붙은 점심 한 끼 — 끼니 id 를 돌려준다(방문 파생 테스트가 쓴다) */
     private Long mealWithPhoto(long userId, String photoUrl, boolean shared) {
-        return mealService.save(userId, new SaveMealRequest(LocalDate.now(), MealType.LUNCH, "점심",
+        return mealWithPhoto(userId, photoUrl, shared, LocalDate.now());
+    }
+
+    private Long mealWithPhoto(long userId, String photoUrl, boolean shared, LocalDate mealDate) {
+        return mealService.save(userId, new SaveMealRequest(mealDate, MealType.LUNCH, "점심",
                 photoUrl, 600, null, null, null, null, null, null, null, shared)).id();
     }
 
@@ -79,7 +83,11 @@ class FeedPhotosTest {
     }
 
     private void workoutWithPhoto(long userId, String imageUrl, boolean shared) {
-        workoutService.save(userId, new SaveWorkoutRequest(LocalDate.now(), null, 30, null, null,
+        workoutWithPhoto(userId, imageUrl, shared, LocalDate.now());
+    }
+
+    private void workoutWithPhoto(long userId, String imageUrl, boolean shared, LocalDate workoutDate) {
+        workoutService.save(userId, new SaveWorkoutRequest(workoutDate, null, 30, null, null,
                 imageUrl, shared, List.of()));
     }
 
@@ -99,9 +107,12 @@ class FeedPhotosTest {
         assertThat(page.items()).extracting(FeedPhotoResponse::type)
                 .containsExactlyInAnyOrder(FeedItemType.POST, FeedItemType.MEAL,
                         FeedItemType.WORKOUT, FeedItemType.PLACE_VISIT);
-        // 최신순 — 같은 시각이면 refId 역순(정렬 키가 (occurredAt, refId) 복합키다)
+        // 기록일 최신순, 같은 날이면 올린 시각 역순 — 정렬 키가 (기록일, createdAt, refId) 복합키다
         assertThat(page.items()).isSortedAccordingTo(
-                (x, y) -> y.createdAt().compareTo(x.createdAt()));
+                java.util.Comparator.comparing(FeedPhotoResponse::recordDate)
+                        .thenComparing(FeedPhotoResponse::createdAt)
+                        .reversed());
+        assertThat(page.items()).allSatisfy(p -> assertThat(p.recordDate()).isNotNull());
         assertThat(page.items()).allSatisfy(p -> assertThat(p.imageUrl()).isNotNull());
         // 상대가 올린 사진도 함께 보이고 mine 으로 구분된다
         assertThat(page.items()).anySatisfy(p -> assertThat(p.mine()).isFalse());
@@ -291,5 +302,84 @@ class FeedPhotosTest {
                 });
         assertThat(items).filteredOn(p -> p.type() == FeedItemType.WORKOUT).singleElement()
                 .satisfies(p -> assertThat(p.placeId()).isNull());
+    }
+
+    /**
+     * 기록일 정렬(2026-10-02 결정) — 지난 날짜로 <b>나중에</b> 올린 기록은 올린 순서가 아니라
+     * 그 날짜 자리에 들어가야 한다. 업로드 순으로는 가장 최신인 끼니가 맨 뒤로 가는지 본다.
+     */
+    @Test
+    void 지난_날짜로_늦게_올린_기록은_기록일_자리에_묶인다() {
+        long[] c = couple("ph-recdate-a@fitto.com", "ph-recdate-b@fitto.com");
+        LocalDate today = LocalDate.now();
+        workoutWithPhoto(c[0], "https://img.example.com/today-w.jpg", true, today);
+        feedService.createPost(c[1], new CreatePostRequest("오늘 일상", "https://img.example.com/today-p.jpg"));
+        // 마지막에 올렸지만 먹은 날은 한 달 전
+        mealWithPhoto(c[0], "https://img.example.com/last-month-m.jpg", false, today.minusMonths(1));
+        Long placeId = placeService.save(c[0], new SavePlaceRequest("가게", null, null, null, null)).id();
+        placeService.recordVisit(c[0], placeId,
+                new RecordVisitRequest(today.minusDays(3), 4, null, "https://img.example.com/3days-v.jpg", null));
+
+        List<FeedPhotoResponse> items = feedService.photos(c[0], null, 20, null).items();
+
+        assertThat(items).extracting(FeedPhotoResponse::imageUrl).last()
+                .isEqualTo("https://img.example.com/last-month-m.jpg");
+        assertThat(items).filteredOn(p -> p.type() == FeedItemType.MEAL).singleElement()
+                .extracting(FeedPhotoResponse::recordDate).isEqualTo(today.minusMonths(1));
+        assertThat(items).filteredOn(p -> p.type() == FeedItemType.PLACE_VISIT).singleElement()
+                .extracting(FeedPhotoResponse::recordDate).isEqualTo(today.minusDays(3));
+    }
+
+    /**
+     * 기록일이 뒤섞인 4소스를 작은 페이지로 끝까지 넘겨도 중복·누락이 없고, 이어 붙인 순서가
+     * 전체 정렬과 같아야 한다 — 소스별 keyset 의 1차 키가 날짜로 바뀌었으므로 경계 조건을 다시 본다.
+     */
+    @Test
+    void 기록일이_섞여도_커서로_이어_받으면_중복_누락_없이_정렬이_이어진다() {
+        long[] c = couple("ph-datecur-a@fitto.com", "ph-datecur-b@fitto.com");
+        LocalDate today = LocalDate.now();
+        Long placeId = placeService.save(c[0], new SavePlaceRequest("가게", null, null, null, null)).id();
+        int[] offsets = {0, 5, 1, 9, 1, 0, 30};
+        for (int i = 0; i < offsets.length; i++) {
+            LocalDate d = today.minusDays(offsets[i]);
+            mealWithPhoto(c[i % 2], "https://img.example.com/dm" + i + ".jpg", false, d);
+            workoutWithPhoto(c[(i + 1) % 2], "https://img.example.com/dw" + i + ".jpg", true, d);
+            placeService.recordVisit(c[i % 2], placeId,
+                    new RecordVisitRequest(d, 3, null, "https://img.example.com/dv" + i + ".jpg", null));
+        }
+        feedService.createPost(c[0], new CreatePostRequest("일상", "https://img.example.com/dp.jpg"));
+
+        List<FeedPhotoResponse> all = new ArrayList<>();
+        String cursor = null;
+        for (int guard = 0; guard < 30; guard++) {
+            FeedPhotosResponse page = feedService.photos(c[0], cursor, 4, null);
+            all.addAll(page.items());
+            if (!page.hasMore()) {
+                break;
+            }
+            cursor = page.nextCursor();
+        }
+
+        assertThat(all).hasSize(offsets.length * 3 + 1);
+        assertThat(all.stream().map(p -> p.type() + ":" + p.refId()).distinct()).hasSize(all.size());
+        assertThat(all).isSortedAccordingTo(
+                java.util.Comparator.comparing(FeedPhotoResponse::recordDate)
+                        .thenComparing(FeedPhotoResponse::createdAt)
+                        .reversed());
+    }
+
+    /**
+     * 기록일 정렬 이전 형식의 커서(날짜 없음)를 들고 온 앱 — 오류 대신 첫 페이지로 되돌린다.
+     */
+    @Test
+    void 날짜_없는_옛_커서는_첫_페이지로_되돌린다() {
+        long[] c = couple("ph-oldcur-a@fitto.com", "ph-oldcur-b@fitto.com");
+        mealWithPhoto(c[0], "https://img.example.com/o1.jpg", false);
+        mealWithPhoto(c[0], "https://img.example.com/o2.jpg", false);
+        String legacy = new com.fitto.feed.dto.FeedCursor(new java.util.EnumMap<>(java.util.Map.of(
+                FeedItemType.MEAL, new com.fitto.feed.dto.FeedCursor.Position(
+                        java.time.LocalDateTime.of(2000, 1, 1, 0, 0), 1L)))).encode();
+
+        assertThat(feedService.photos(c[0], legacy, 20, null).items()).hasSize(2);
     }
 }

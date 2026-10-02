@@ -248,6 +248,12 @@ export interface FeedPhoto {
   placeId?: number | null;
   /** 장소 상세 화면 제목용 — placeId 와 함께만 온다 */
   placeName?: string | null;
+  /**
+   * 기록일 'YYYY-MM-DD' — 사진첩의 정렬·월 묶음 기준(식단·운동·방문은 고른 날짜, 일상은 올린 날 KST).
+   * 날짜만 담긴 값이라 시간대 변환 없이 그대로 쓴다. 구 서버 응답에는 없을 수 있다.
+   */
+  recordDate?: string | null;
+  /** 올린 시각(UTC 인스턴트) — 같은 기록일 안의 순서 */
   createdAt: string;
 }
 

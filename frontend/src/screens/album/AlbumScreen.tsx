@@ -64,7 +64,20 @@ type Who = 'all' | 'me' | 'partner';
 /** 기록 하나를 가리키는 키 — 테이블마다 id 공간이 달라 type 까지 묶어야 유일하다 */
 const keyOf = (p: FeedPhoto) => `${p.type}:${p.refId}`;
 
-const timeOf = (p: FeedPhoto) => Date.parse(p.createdAt);
+/**
+ * 기록일 — 사진첩의 정렬·월 묶음 기준(2026-10-02 결정: 올린 날이 아니라 먹은·운동한·다녀온 날).
+ * 서버가 'YYYY-MM-DD' 로 주므로 그대로 쓴다(localDateOf 는 시각 전용이라 여기 쓰면 안 된다).
+ * 구 서버 응답에 없으면 올린 시각의 기기 날짜로 대신한다.
+ */
+const recordDateOf = (p: FeedPhoto) => p.recordDate ?? localDateOf(p.createdAt);
+
+/** 서버 병합과 같은 정렬키 (기록일, 올린 시각) 비교 — a 가 b 보다 최신이면 음수 */
+function compareNewestFirst(a: FeedPhoto, b: FeedPhoto): number {
+  const da = recordDateOf(a);
+  const db = recordDateOf(b);
+  if (da !== db) return da > db ? -1 : 1;
+  return Date.parse(b.createdAt) - Date.parse(a.createdAt);
+}
 
 interface PhotoPage {
   items: FeedPhoto[];
@@ -79,16 +92,20 @@ const EMPTY_PAGE: PhotoPage = { items: [], nextCursor: null, hasMore: false };
  *
  * <p>예전엔 포커스마다 첫 페이지로 목록을 통째로 덮어써, 깊이 내려가 보던 사진첩이 여행 앨범에
  * 다녀오면 30장으로 잘렸다. 첫 페이지는 서버 기준으로 "가장 최근 N건 전부"이므로, 그 구간
- * (가장 오래된 항목의 시각까지)은 새 페이지가 정답이다 — 새로 올라온 것은 들어오고 지워진 것은
- * 빠진다. 그보다 오래된 꼬리는 이미 받은 것을 그대로 두고, 다음 페이지 커서도 그대로 쓴다
+ * (가장 오래된 항목의 정렬 위치까지)은 새 페이지가 정답이다 — 새로 올라온 것은 들어오고 지워진
+ * 것은 빠진다. 그보다 오래된 꼬리는 이미 받은 것을 그대로 두고, 다음 페이지 커서도 그대로 쓴다
  * (커서는 소스별로 꼬리 끝을 가리키므로 머리가 바뀌어도 유효하다).
+ *
+ * <p>한계: 기록일 정렬이라 <b>지난 날짜로 새로 올린 기록</b>이 머리 구간보다 뒤에 놓이면 이
+ * 갱신으로는 안 들어온다 — 당겨서 새로고침하면 보인다. 대부분의 새 기록은 오늘 날짜라 머리에 온다.
  */
 function mergeHead(prev: PhotoPage, head: PhotoPage): PhotoPage {
   if (!head.hasMore || prev.items.length === 0) return head; // 첫 페이지가 전부면 그게 전부다
   const oldest = head.items[head.items.length - 1];
-  const boundary = oldest ? timeOf(oldest) : Number.POSITIVE_INFINITY;
+  if (!oldest) return head;
   const inHead = new Set(head.items.map(keyOf));
-  const tail = prev.items.filter((p) => !inHead.has(keyOf(p)) && timeOf(p) <= boundary);
+  // 경계보다 오래된(정렬상 뒤인) 것만 꼬리로 남긴다 — 같은 위치면 남긴다(경계에서 잘린 것일 수 있다)
+  const tail = prev.items.filter((p) => !inHead.has(keyOf(p)) && compareNewestFirst(p, oldest) >= 0);
   return { items: [...head.items, ...tail], nextCursor: prev.nextCursor, hasMore: prev.hasMore };
 }
 
@@ -105,8 +122,8 @@ type GridRow =
   | { kind: 'month'; key: string; label: string }
   | { kind: 'photos'; key: string; items: FeedPhoto[] };
 
-function monthLabelOf(iso: string): string {
-  const d = localDateOf(iso); // YYYY-MM-DD (기기 로컬)
+function monthLabelOf(p: FeedPhoto): string {
+  const d = recordDateOf(p); // YYYY-MM-DD
   const year = d.slice(0, 4);
   const month = Number(d.slice(5, 7));
   return `${year}년 ${month}월`;
@@ -123,7 +140,7 @@ function toGridRows(photos: FeedPhoto[], columns: number): GridRow[] {
     }
   };
   for (const p of photos) {
-    const month = monthLabelOf(p.createdAt);
+    const month = monthLabelOf(p);
     if (month !== currentMonth) {
       flush();
       currentMonth = month;
@@ -205,8 +222,8 @@ export function AlbumScreen({ navigation }: Props) {
           key: `${keyOf(p)}-${i}`,
           // 뷰어는 원본을 쓴다 — 크게 보는 자리에서 썸네일을 늘리면 뭉갠다
           uri,
-          // slice(0, 10) 은 UTC 날짜라 KST 00~09시 사진이 "어제"로 떴다 — 월 머리말과 같은 localDateOf 를 쓴다
-          title: `${p.mine ? '나' : p.authorName}  ·  ${relativeDateLabel(localDateOf(p.createdAt))}`,
+          // 기록일 — 월 머리말과 같은 날짜를 보여준다(먹은·다녀온 날). 일상은 서버가 올린 날 KST 로 준다
+          title: `${p.mine ? '나' : p.authorName}  ·  ${relativeDateLabel(recordDateOf(p))}`,
           titleColor: p.mine ? colors.coral : colors.indigo,
           caption: p.caption ?? undefined,
           action,
