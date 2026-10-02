@@ -1,5 +1,5 @@
 /** 일상 남기기 — 사진(선택, 최대 5장) + 글 작성. 글/사진 중 하나는 필수 */
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,6 +15,8 @@ import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { usePlanStore } from '../../store/planStore';
+import { useAuthStore } from '../../store/authStore';
+import { clearWritingDraft, draftKeys, loadWritingDraft, saveWritingDraft } from '../../utils/writingDraft';
 import { haptics } from '../../utils/haptics';
 import { useDirtyGuard } from '../../hooks/useDirtyGuard';
 import { useSpacingFix } from '../../hooks/useSpacingFix';
@@ -52,6 +54,38 @@ export function FeedComposeScreen({ navigation }: Props) {
 
   // 글이나 사진이 있으면 이탈(뒤로가기·스와이프) 전에 확인한다
   const allowLeave = useDirtyGuard(content.trim().length > 0 || photoUris.length > 0);
+
+  /*
+   * 초안 보존(utils/writingDraft) — 앱이 꺼지거나 웹을 새로고침해도 쓰던 글이 남는다. 사진은 남기지 않는다.
+   * 불러오기가 끝나기 전에는 저장하지 않는다 — 빈 글로 남아 있던 초안을 덮어쓰지 않으려고.
+   */
+  const userId = useAuthStore((s) => s.user?.id);
+  const [draftLoaded, setDraftLoaded] = useState(false);
+  useEffect(() => {
+    let active = true;
+    loadWritingDraft(draftKeys.feedCompose, userId).then((draft) => {
+      if (!active) return;
+      if (draft?.text) {
+        // 그사이 이미 쓰기 시작했으면 그 글이 우선이다
+        setContent((current) => (current ? current : draft.text));
+        toast.info('쓰던 글을 불러왔어요');
+      }
+      setDraftLoaded(true);
+    });
+    return () => {
+      active = false;
+    };
+  }, [userId]);
+  useEffect(() => {
+    if (!draftLoaded || userId == null) return undefined;
+    const timer = setTimeout(() => {
+      if (content.trim()) void saveWritingDraft(draftKeys.feedCompose, { userId, text: content });
+      else void clearWritingDraft(draftKeys.feedCompose);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [content, draftLoaded, userId]);
+  // 화면을 정상적으로 벗어나면(남겼거나, 이탈 확인에서 "닫기") 초안을 지운다. 강제 종료는 여기를 지나지 않는다
+  useEffect(() => () => void clearWritingDraft(draftKeys.feedCompose), []);
 
   /*
    * 띄어쓰기 정리 — 채팅과 달리 여기는 문장을 쓰는 자리라 붙여 쓴 글을 풀어주면 도움이
@@ -148,6 +182,7 @@ export function FeedComposeScreen({ navigation }: Props) {
         );
       }
       await feedApi.createPost({ content: content.trim() || undefined, imageUrls });
+      void clearWritingDraft(draftKeys.feedCompose);
       haptics.success();
       toast.success('일상을 남겼어요 ');
       allowLeave();
