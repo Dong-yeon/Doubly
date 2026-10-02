@@ -58,6 +58,7 @@ import java.util.Optional;
 import java.util.Objects;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * 식단 기록 서비스 — 저장·오늘 조회·히스토리·캘린더·통계·삭제, 커플 상대방 오늘 여부.
@@ -213,16 +214,34 @@ public class MealService {
      */
     @Transactional
     public List<MealResponse> copyFrom(Long userId, LocalDate sourceDate) {
-        if (sourceDate.isAfter(KstClock.today())) {
-            throw new BusinessException(ErrorCode.INVALID_INPUT, "미래 날짜는 불러올 수 없습니다.");
+        LocalDate today = KstClock.today();
+        // 오늘을 오늘로 불러오면 오늘 식단이 통째로 한 벌 더 생긴다 — 미래뿐 아니라 오늘도 막는다.
+        if (!sourceDate.isBefore(today)) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "지난 날짜의 식단만 불러올 수 있어요.");
         }
         List<Meal> sourceMeals = mealRepository.findByUserIdAndMealDateOrderByIdAsc(userId, sourceDate);
         if (sourceMeals.isEmpty()) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "해당 날짜에는 식단 기록이 없어요.");
         }
-        LocalDate today = KstClock.today();
+        /*
+         * 이미 불러온 끼니는 건너뛴다 — 버튼은 요청 중에만 잠기므로 끝난 뒤 다시 누르면 그날 식단이
+         * 한 벌 더 생겼다. 복사본에는 표시가 따로 없어서 "내용이 같은 오늘 끼니"를 이미 불러온 것으로 본다.
+         * 하나씩 짝지어 지우므로(멀티셋) 어제 같은 간식을 두 번 먹었다면 오늘 하나만 있어도 하나는 더 온다.
+         * 손으로 고친 복사본은 더 이상 같지 않으니 다시 불러올 수 있다 — 막는 것보다 그쪽이 덜 놀랍다.
+         */
+        List<CopyKey> alreadyToday = mealRepository.findByUserIdAndMealDateOrderByIdAsc(userId, today)
+                .stream().map(CopyKey::of).collect(Collectors.toCollection(ArrayList::new));
+        List<Meal> toCopy = new ArrayList<>();
+        for (Meal source : sourceMeals) {
+            if (!alreadyToday.remove(CopyKey.of(source))) {
+                toCopy.add(source);
+            }
+        }
+        if (toCopy.isEmpty()) {
+            throw new BusinessException(ErrorCode.MEAL_ALREADY_COPIED);
+        }
         boolean firstMealOfDay = !mealRepository.existsByUserIdAndMealDate(userId, today);
-        List<Meal> copies = sourceMeals.stream().map(this::copyOf).toList();
+        List<Meal> copies = toCopy.stream().map(this::copyOf).toList();
         mealRepository.saveAll(copies);
         afterMealsAdded(userId, today, firstMealOfDay, true);
         return copies.stream().map(MealResponse::from).toList();
@@ -364,6 +383,8 @@ public class MealService {
                 .sugar(source.getSugar())
                 .sodium(source.getSodium())
                 .fiber(source.getFiber())
+                // "약"(AI 추정) 표시도 따라간다 — 같은 숫자를 옮겼다고 본인이 확인한 값이 되지는 않는다
+                .nutritionSource(source.getNutritionSource())
                 .build();
         for (MealItem item : source.getItems()) {
             copy.addItem(MealItem.builder()
@@ -377,6 +398,27 @@ public class MealService {
                     .build());
         }
         return copy;
+    }
+
+    /**
+     * "이미 불러온 끼니인가" 판정용 — {@link #copyOf} 가 옮기는 내용 그대로다. 날짜·id·짝 묶음은 뺀다
+     * (복사본은 날짜가 다르고, 데이트 식단을 불러오면 혼자 기록이 되므로).
+     */
+    private record CopyKey(MealType mealType, String memo, String photoUrl,
+                           Integer calories, Integer carbs, Integer protein, Integer fat,
+                           Integer sugar, Integer sodium, Integer fiber, List<ItemKey> items) {
+        private record ItemKey(String name, String portion,
+                               Integer calories, Integer carbs, Integer protein, Integer fat) {}
+
+        static CopyKey of(Meal m) {
+            return new CopyKey(m.getMealType(), m.getMemo(), m.getPhotoUrl(),
+                    m.getCalories(), m.getCarbs(), m.getProtein(), m.getFat(),
+                    m.getSugar(), m.getSodium(), m.getFiber(),
+                    m.getItems().stream()
+                            .map(i -> new ItemKey(i.getName(), i.getPortion(),
+                                    i.getCalories(), i.getCarbs(), i.getProtein(), i.getFat()))
+                            .toList());
+        }
     }
 
     private String blankToNull(String v) {

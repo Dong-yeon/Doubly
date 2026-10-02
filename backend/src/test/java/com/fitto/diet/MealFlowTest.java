@@ -259,6 +259,54 @@ class MealFlowTest {
         assertThat(breakfast.calories()).isEqualTo(420);
     }
 
+    /**
+     * 같은 날을 두 번 불러오면 그날 식단이 통째로 한 벌 더 생겼다 — 버튼은 요청 중에만 잠겨서
+     * 다 끝난 뒤 다시 누르면 막을 수단이 없었다(lovebody-current-state §4-3).
+     */
+    @Test
+    void 어제_식단을_두_번_불러와도_한_벌만_생긴다() {
+        Long user = register("copy-twice@fitto.com");
+        LocalDate yesterday = KstClock.today().minusDays(1);
+        mealService.save(user, sample(yesterday, MealType.BREAKFAST));
+        mealService.save(user, withItems(yesterday, MealType.DINNER));
+        mealService.copyFrom(user, yesterday);
+
+        assertThatThrownBy(() -> mealService.copyFrom(user, yesterday))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.MEAL_ALREADY_COPIED);
+        assertThat(mealService.findToday(user)).hasSize(2);
+    }
+
+    /** 불러온 것 중 하나를 지웠다면 다시 불러올 때 그 하나만 돌아온다 — 이미 있는 건 건너뛴다. */
+    @Test
+    void 불러온_식단_하나를_지운_뒤_다시_불러오면_그것만_다시_생긴다() {
+        Long user = register("copy-partial@fitto.com");
+        LocalDate yesterday = KstClock.today().minusDays(1);
+        mealService.save(user, sample(yesterday, MealType.BREAKFAST));
+        mealService.save(user, withItems(yesterday, MealType.DINNER));
+        List<MealResponse> first = mealService.copyFrom(user, yesterday);
+        Long dinnerCopy = first.stream().filter(m -> m.mealType() == MealType.DINNER).findFirst().orElseThrow().id();
+        mealService.delete(user, dinnerCopy);
+
+        List<MealResponse> again = mealService.copyFrom(user, yesterday);
+
+        assertThat(again).extracting(MealResponse::mealType).containsExactly(MealType.DINNER);
+        assertThat(again.get(0).items()).hasSize(3);
+        assertThat(mealService.findToday(user)).hasSize(2);
+    }
+
+    /** 오늘을 "불러올 날짜"로 주면 오늘 식단이 그대로 한 벌 더 생겼다 — isAfter 만 보던 검사의 빈틈. */
+    @Test
+    void 오늘_식단은_오늘로_불러올_수_없다() {
+        Long user = register("copy-today@fitto.com");
+        mealService.save(user, sample(KstClock.today(), MealType.LUNCH));
+
+        assertThatThrownBy(() -> mealService.copyFrom(user, KstClock.today()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_INPUT);
+        assertThat(mealService.findToday(user)).hasSize(1);
+    }
+
     @Test
     void 복사할_기록이_없는_날짜는_예외를_던진다() {
         Long user = register("m6@fitto.com");

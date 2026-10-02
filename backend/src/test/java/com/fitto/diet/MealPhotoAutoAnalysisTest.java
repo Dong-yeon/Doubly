@@ -4,6 +4,7 @@ import com.fitto.auth.dto.RegisterRequest;
 import com.fitto.auth.service.AuthService;
 import com.fitto.diet.domain.MealType;
 import com.fitto.diet.domain.NutritionSource;
+import com.fitto.common.time.KstClock;
 import com.fitto.diet.dto.MealAnalysisResponse;
 import com.fitto.diet.dto.MealItemRequest;
 import com.fitto.diet.dto.MealResponse;
@@ -172,5 +173,25 @@ class MealPhotoAutoAnalysisTest {
         MealResponse after = mealService.findToday(user).get(0);
         assertThat(after.nutritionSource()).isEqualTo(NutritionSource.USER);
         assertThat(after.calories()).isEqualTo(450);
+    }
+
+    /** 어제 사진 기록이 "약"(AI 추정)으로 채워졌다면 오늘로 불러온 복사본도 같은 표시여야 한다 — 복사가 출처를 떨어뜨렸었다. */
+    @Test
+    void 불러온_식단은_AI_추정_표시를_그대로_가져간다() {
+        Long user = register("auto-copy@fitto.com");
+        when(foodAnalysisService.analyze(anyLong(), any())).thenReturn(twoFoods());
+        LocalDate yesterday = KstClock.today().minusDays(1);
+        mealService.save(user, new SaveMealRequest(yesterday, MealType.LUNCH, null,
+                "https://res.cloudinary.com/demo/image/upload/yesterday-lunch.jpg",
+                null, null, null, null, null, null, null, null));
+        await().atMost(ANALYZED).untilAsserted(() -> assertThat(mealService.findHistory(user, null))
+                .singleElement().extracting(MealResponse::nutritionSource).isEqualTo(NutritionSource.AI_ESTIMATED));
+
+        List<MealResponse> copied = mealService.copyFrom(user, yesterday);
+
+        assertThat(copied).singleElement().satisfies(m -> {
+            assertThat(m.calories()).isEqualTo(800);
+            assertThat(m.nutritionSource()).isEqualTo(NutritionSource.AI_ESTIMATED);
+        });
     }
 }
