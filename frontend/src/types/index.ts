@@ -1743,6 +1743,20 @@ export interface Memories {
    * `groups` 가 비었을 때 "추억이 없음"과 "잠김"을 구분하는 유일한 값이다.
    */
   locked?: boolean;
+  /**
+   * 오늘의 기념일 — 사귄 지 N주년·N백일, 캘린더 반복 기념일, 몇 년 전 오늘의 일정.
+   * 기록(groups)이 없어도 기념일만 있는 날이 있다. 구 서버 응답엔 없다.
+   */
+  anniversaries?: MemoryAnniversary[];
+}
+
+export interface MemoryAnniversary {
+  kind: 'COUPLE_YEARS' | 'COUPLE_DAYS' | 'EVENT_YEARLY' | 'EVENT_PAST';
+  /** 화면 문구 그대로 — "오늘은 우리 2주년" · "1년 전 오늘 · 제주 여행" */
+  label: string;
+  years?: number | null;
+  days?: number | null;
+  eventId?: number | null;
 }
 
 // 5.8 chat_messages

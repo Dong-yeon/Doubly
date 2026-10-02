@@ -26,7 +26,7 @@ import { SettingsGroup, SettingsRow } from '../../components/SettingsList';
 import { DateField } from '../../components/DateField';
 import { CoupleHero } from './components/CoupleHero';
 import { QuickActions } from './components/QuickActions';
-import { MemoryPeek } from './components/MemoryPeek';
+import { MemoryPeek, hasMemories } from './components/MemoryPeek';
 import { TripPeek, isTripLive, isTripOngoing, pickHomeTrip } from './components/TripPeek';
 import { EventPeek, isEventToday, pickHomeEvent } from './components/EventPeek';
 import { LockedCard } from '../../components/LockedCard';
@@ -351,7 +351,7 @@ export function HomeScreen({ navigation }: Props) {
     feedApi
       .memories()
       // 잠긴 응답(locked)도 들고 있는다 — 빈 결과와 구분해서 잠금 카드를 그려야 한다
-      .then((res) => setMemories(res.locked || res.groups.length > 0 ? res : null))
+      .then((res) => setMemories(res.locked || hasMemories(res) ? res : null))
       .catch(() => setMemories(null));
     // 여행 — 진행 중 > 가장 가까운 예정 하나만 고른다. 없거나 실패(미연결 404 포함)면 카드도 없다
     tripApi
