@@ -244,6 +244,10 @@ export interface FeedPhoto {
   mine: boolean;
   /** 여행 앨범에 담긴 사진이면 그 여행 id */
   tripId?: number | null;
+  /** 럽슐랭 장소 — 맛집 방문, 또는 장소를 붙여 기록한 끼니. 뷰어의 "장소 보기"가 쓴다 */
+  placeId?: number | null;
+  /** 장소 상세 화면 제목용 — placeId 와 함께만 온다 */
+  placeName?: string | null;
   createdAt: string;
 }
 
@@ -481,6 +485,11 @@ export interface PartnerToday {
   connected: boolean;
   partnerName: string | null;
   completed: boolean;
+  /**
+   * 상대가 오늘 기록한 끼니 종류 — <b>식단</b> 응답(/meal/partner/today)에만 있다(운동 응답엔 없음).
+   * 홈 아바타 "오늘 챙김" 링. 구서버 응답엔 없다(옵셔널).
+   */
+  mealTypes?: MealType[];
 }
 
 /**
@@ -1342,6 +1351,23 @@ export interface PlaceSearchResult {
   lng?: number | null;
   placeUrl?: string | null;
 }
+/** 홈 이름 옆 럽슐랭 왕관 — 백엔드 LovelichelinPulseResponse.Signal 과 짝 */
+export interface LovelichelinSignal {
+  /** CERTIFIED: 관여한 곳이 24시간 안에 등극(처음 볼 때 한 번 반짝) / TODAY: 오늘 럽슐랭에 기록함(정지) */
+  state: 'CERTIFIED' | 'TODAY';
+  kind: 'PLACE' | 'CONTENT';
+  targetId: number;
+  targetName: string;
+  tier: number;
+  /** CERTIFIED 일 때만 — 본 등극을 기기에 기억하는 열쇠 */
+  certificationKey?: string | null;
+  /** 보는 사람(나)이 그 곳에 대표 평점을 남겼는가 */
+  viewerRated: boolean;
+}
+export interface LovelichelinPulse {
+  me?: LovelichelinSignal | null;
+  partner?: LovelichelinSignal | null;
+}
 export interface PlaceSearchResponse {
   /** false = 카카오 REST API 키 미설정 — places 는 항상 빈 배열 */
   available: boolean;
@@ -1647,6 +1673,8 @@ export interface FeedItem {
    * 서버가 커플 양쪽 짝 중 원본 한 장만 내려주므로, 카드는 "누가"가 아니라 "함께"로 읽힌다.
    */
   shared?: boolean;
+  /** 한 줄 요약 — 장소·콘텐츠는 "이름 ★4". 한 줄 자리는 utils/feedSummary 로 읽는다(예전 서버는 없다) */
+  summary?: string | null;
 }
 export interface FeedTimeline {
   items: FeedItem[];

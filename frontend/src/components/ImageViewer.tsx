@@ -68,6 +68,17 @@ export interface ViewerImage {
   caption?: string;
   /** 제목 강조색 — 나/상대 구분 등 */
   titleColor?: string;
+  /**
+   * 이 사진에서 이어 갈 곳 — 예: 사진첩의 맛집 사진 → 장소 상세. 캡션 위 알약 버튼으로 그린다.
+   * 뷰어는 이동을 모른다: onPress 는 호출부가 뷰어를 닫고 화면을 옮기는 일까지 맡는다.
+   */
+  action?: ViewerAction;
+}
+
+export interface ViewerAction {
+  label: string;
+  icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+  onPress: () => void;
 }
 
 /*
@@ -439,8 +450,19 @@ export function ImageViewer({ images, initialIndex, onClose }: Props) {
           </View>
         ) : null}
 
-        {current?.title || current?.caption ? (
-          <View style={[styles.caption, { paddingBottom: insets.bottom + spacing.lg }]}>
+        {current?.title || current?.caption || current?.action ? (
+          <View style={[styles.caption, { paddingBottom: insets.bottom + spacing.lg }]} pointerEvents="box-none">
+            {current.action ? (
+              <Pressable
+                style={({ pressed }) => [styles.actionPill, pressed && styles.actionPillPressed]}
+                onPress={current.action.onPress}
+                accessibilityRole="button"
+                accessibilityLabel={current.action.label}
+              >
+                <MaterialCommunityIcons name={current.action.icon} size={16} color={colors.white} />
+                <Text style={styles.actionPillText}>{current.action.label}</Text>
+              </Pressable>
+            ) : null}
             {current.title ? (
               <Text style={[styles.title, current.titleColor ? { color: current.titleColor } : null]}>
                 {current.title}
@@ -523,6 +545,22 @@ const styles = themedStyles((colors) => ({
     bottom: 0,
     padding: spacing.lg,
   },
+  // 이어 가기 버튼 — 사진 위라 테마와 무관하게 반투명 흰 테두리. 높이 44 는 터치 타깃
+  actionPill: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    minHeight: 44,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.6)',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  actionPillPressed: { opacity: 0.6 },
+  actionPillText: { color: colors.white, fontSize: fontSize.body, fontWeight: '700' },
   title: { color: colors.white, fontSize: fontSize.body, fontWeight: '800', marginBottom: 2 },
   captionText: { color: colors.white, fontSize: fontSize.body, lineHeight: 21 },
 }));

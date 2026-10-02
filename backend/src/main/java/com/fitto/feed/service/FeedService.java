@@ -43,6 +43,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.EnumSet;
@@ -128,6 +129,16 @@ public class FeedService {
      * 정확히 size 건만 읽으면 남은 데이터가 있어도 hasMore 가 false 가 된다.
      */
     public FeedTimelineResponse timeline(Long userId, String cursor, int limit) {
+        return timeline(userId, cursor, limit, Set.of());
+    }
+
+    /**
+     * @param exclude 빼고 볼 소스 — 홈 열의 "최근 기록 한 줄"은 식단·운동·일상을 보여 주고 장소 방문·콘텐츠
+     *                관람은 뺀다(그날의 식단·운동 글이 럽슐랭 기록에 밀려나지 않게). <b>쿼리 자체를 건너뛴다</b> —
+     *                받아서 거르면 그 소스가 {@code limit} 을 다 채운 날에는 나머지가 한 건도 안 실린다.
+     *                비어 있으면 전부(피드 화면). 빠진 소스의 커서 위치는 그대로 남는다({@link #nextCursorOf}).
+     */
+    public FeedTimelineResponse timeline(Long userId, String cursor, int limit, Set<FeedItemType> exclude) {
         Relation couple = activeCouple(userId);
         int size = Math.min(Math.max(limit, 1), MAX_LIMIT);
         FeedCursor from = FeedCursor.decode(cursor);
@@ -138,30 +149,41 @@ public class FeedService {
         List<Long> userIds = partnerId != null ? List.of(userId, partnerId) : List.of(userId);
         Map<Long, String> names = mapper.userNames(userIds);
 
+        Set<FeedItemType> skip = exclude == null ? Set.of() : exclude;
         List<FeedItemResponse> merged = new ArrayList<>();
-        List<FeedPost> posts = feedPostRepository.findTimeline(couple.getId(),
-                from.createdAtOf(FeedItemType.POST), from.idOf(FeedItemType.POST), page);
-        Map<Long, List<String>> photosByPost = mapper.photosByPostId(posts);
-        for (FeedPost p : posts) {
-            merged.add(mapper.toItem(p, names, userId, null, photosByPost.getOrDefault(p.getId(), List.of())));
+        if (!skip.contains(FeedItemType.POST)) {
+            List<FeedPost> posts = feedPostRepository.findTimeline(couple.getId(),
+                    from.createdAtOf(FeedItemType.POST), from.idOf(FeedItemType.POST), page);
+            Map<Long, List<String>> photosByPost = mapper.photosByPostId(posts);
+            for (FeedPost p : posts) {
+                merged.add(mapper.toItem(p, names, userId, null, photosByPost.getOrDefault(p.getId(), List.of())));
+            }
         }
-        for (Workout w : workoutRepository.findRecentForFeed(userIds,
-                from.createdAtOf(FeedItemType.WORKOUT), from.idOf(FeedItemType.WORKOUT), page)) {
-            merged.add(mapper.toItem(w, names, userId));
+        if (!skip.contains(FeedItemType.WORKOUT)) {
+            for (Workout w : workoutRepository.findRecentForFeed(userIds,
+                    from.createdAtOf(FeedItemType.WORKOUT), from.idOf(FeedItemType.WORKOUT), page)) {
+                merged.add(mapper.toItem(w, names, userId));
+            }
         }
-        List<Meal> meals = mealRepository.findRecentForFeed(userIds,
-                from.createdAtOf(FeedItemType.MEAL), from.idOf(FeedItemType.MEAL), page);
-        Map<Long, String> placeNameByMealId = placeNamesOf(meals);
-        for (Meal m : meals) {
-            merged.add(mapper.toItem(m, names, userId, placeNameByMealId.get(m.getId())));
+        if (!skip.contains(FeedItemType.MEAL)) {
+            List<Meal> meals = mealRepository.findRecentForFeed(userIds,
+                    from.createdAtOf(FeedItemType.MEAL), from.idOf(FeedItemType.MEAL), page);
+            Map<Long, String> placeNameByMealId = placeNamesOf(meals);
+            for (Meal m : meals) {
+                merged.add(mapper.toItem(m, names, userId, placeNameByMealId.get(m.getId())));
+            }
         }
-        for (VisitWithPlace v : placeVisitRepository.findRecentForFeed(couple.getId(),
-                from.createdAtOf(FeedItemType.PLACE_VISIT), from.idOf(FeedItemType.PLACE_VISIT), page)) {
-            merged.add(mapper.toItem(v, names, userId));
+        if (!skip.contains(FeedItemType.PLACE_VISIT)) {
+            for (VisitWithPlace v : placeVisitRepository.findRecentForFeed(couple.getId(),
+                    from.createdAtOf(FeedItemType.PLACE_VISIT), from.idOf(FeedItemType.PLACE_VISIT), page)) {
+                merged.add(mapper.toItem(v, names, userId));
+            }
         }
-        for (LogWithContent l : contentLogRepository.findRecentForFeed(couple.getId(),
-                from.createdAtOf(FeedItemType.CONTENT_LOG), from.idOf(FeedItemType.CONTENT_LOG), page)) {
-            merged.add(mapper.toItem(l, names, userId));
+        if (!skip.contains(FeedItemType.CONTENT_LOG)) {
+            for (LogWithContent l : contentLogRepository.findRecentForFeed(couple.getId(),
+                    from.createdAtOf(FeedItemType.CONTENT_LOG), from.idOf(FeedItemType.CONTENT_LOG), page)) {
+                merged.add(mapper.toItem(l, names, userId));
+            }
         }
 
         // 정렬도 (occurredAt, refId) 복합키 — 같은 시각이면 id 역순으로 안정 정렬한다
@@ -188,12 +210,19 @@ public class FeedService {
      * 부제에 들어갈 자리는 한 곳뿐이다.
      */
     private Map<Long, String> placeNamesOf(List<Meal> meals) {
+        Map<Long, String> byMealId = new LinkedHashMap<>();
+        placeLinksOf(meals).forEach((mealId, vp) -> byMealId.put(mealId, vp.getPlaceName()));
+        return byMealId;
+    }
+
+    /** {@link #placeNamesOf} 의 원본 — 사진첩은 이름뿐 아니라 장소 id 도 필요하다(장소 상세로 이동). */
+    private Map<Long, VisitWithPlace> placeLinksOf(List<Meal> meals) {
         if (meals.isEmpty()) {
             return Map.of();
         }
-        Map<Long, String> byMealId = new LinkedHashMap<>();
+        Map<Long, VisitWithPlace> byMealId = new LinkedHashMap<>();
         for (VisitWithPlace vp : placeVisitRepository.findByMealIdIn(meals.stream().map(Meal::getId).toList())) {
-            byMealId.putIfAbsent(vp.getVisit().getMealId(), vp.getPlaceName());
+            byMealId.putIfAbsent(vp.getVisit().getMealId(), vp);
         }
         return byMealId;
     }
@@ -210,6 +239,15 @@ public class FeedService {
      * 식단에서 파생된 방문 제외(docs/ALBUM_TAB_IA_2026-09-14.md 5-4).
      */
     public FeedPhotosResponse photos(Long userId, String cursor, int limit, List<FeedItemType> sources) {
+        return photos(userId, cursor, limit, sources, null);
+    }
+
+    /**
+     * @param who {@code "me"} · {@code "partner"} 면 그 사람이 올린 사진만, null·빈 값이면 둘 다.
+     *            커서는 필터마다 따로다 — 필터를 바꾸면 클라이언트가 첫 페이지부터 다시 읽는다.
+     */
+    public FeedPhotosResponse photos(Long userId, String cursor, int limit, List<FeedItemType> sources,
+                                     String who) {
         Relation couple = activeCouple(userId);
         int size = Math.min(Math.max(limit, 1), MAX_LIMIT);
         FeedCursor from = FeedCursor.decode(cursor);
@@ -225,43 +263,67 @@ public class FeedService {
         Map<Long, String> names = mapper.userNames(userIds);
 
         /*
+         * 작성자 필터 — 받은 페이지를 클라이언트에서 거르면(FeedTimelineScreen 의 who 방식)
+         * 한쪽이 몰아 올린 날 반대쪽 화면이 빈 페이지만 받는다. 사진첩은 그리드가 비어 보이면
+         * 끝난 줄 알므로 서버에서 거른다.
+         */
+        Long authorId = authorOf(who, userId, partnerId);
+        if (authorId != null) {
+            if (authorId == -1L) {
+                return new FeedPhotosResponse(List.of(), null, false); // 상대가 없는 관계에서 '상대'
+            }
+            userIds = List.of(authorId);
+        }
+
+        /*
          * 타임라인 아이템으로 한 번 변환한 뒤 사진 항목으로 옮긴다. 캡션 문구와 커서 계산을
          * 타임라인과 <b>같은 코드</b>로 처리하려는 것 — 따로 만들면 같은 기록이 화면마다
          * 다르게 읽히고(제목 규칙이 두 벌), 커서 누락 버그도 두 곳에서 따로 나야 한다.
          */
         List<PhotoCandidate> merged = new ArrayList<>();
         if (wanted.contains(FeedItemType.POST)) {
-            List<FeedPost> posts = feedPostRepository.findPhotos(couple.getId(),
-                    from.createdAtOf(FeedItemType.POST), from.idOf(FeedItemType.POST), page);
+            LocalDateTime at = from.createdAtOf(FeedItemType.POST);
+            Long id = from.idOf(FeedItemType.POST);
+            List<FeedPost> posts = authorId != null
+                    ? feedPostRepository.findPhotosByAuthor(couple.getId(), authorId, at, id, page)
+                    : feedPostRepository.findPhotos(couple.getId(), at, id, page);
             Map<Long, List<String>> photosByPost = mapper.photosByPostId(posts);
             for (FeedPost p : posts) {
                 List<String> urls = photosByPost.getOrDefault(p.getId(), List.of());
                 merged.add(new PhotoCandidate(mapper.toItem(p, names, userId, null, urls),
-                        p.getImageUrl(), urls, p.getTripId()));
+                        p.getImageUrl(), urls, p.getTripId(), null, null));
             }
         }
         if (wanted.contains(FeedItemType.MEAL)) {
             List<Meal> meals = mealRepository.findPhotosForFeed(userIds,
                     from.createdAtOf(FeedItemType.MEAL), from.idOf(FeedItemType.MEAL), page);
-            Map<Long, String> placeNameByMealId = placeNamesOf(meals);
+            Map<Long, VisitWithPlace> placeByMealId = placeLinksOf(meals);
             for (Meal m : meals) {
+                VisitWithPlace place = placeByMealId.get(m.getId());
+                String placeName = place != null ? place.getPlaceName() : null;
                 merged.add(new PhotoCandidate(
-                        mapper.toItem(m, names, userId, placeNameByMealId.get(m.getId())),
-                        m.getPhotoUrl(), List.of(), null));
+                        mapper.toItem(m, names, userId, placeName),
+                        m.getPhotoUrl(), List.of(), null,
+                        place != null ? place.getVisit().getPlaceId() : null, placeName));
             }
         }
         if (wanted.contains(FeedItemType.WORKOUT)) {
             for (Workout w : workoutRepository.findPhotosForFeed(userIds,
                     from.createdAtOf(FeedItemType.WORKOUT), from.idOf(FeedItemType.WORKOUT), page)) {
                 merged.add(new PhotoCandidate(mapper.toItem(w, names, userId),
-                        w.getImageUrl(), List.of(), null));
+                        w.getImageUrl(), List.of(), null, null, null));
             }
         }
         if (wanted.contains(FeedItemType.PLACE_VISIT)) {
-            for (VisitWithPlace v : placeVisitRepository.findPhotosForFeed(couple.getId(),
-                    from.createdAtOf(FeedItemType.PLACE_VISIT), from.idOf(FeedItemType.PLACE_VISIT), page)) {
+            LocalDateTime at = from.createdAtOf(FeedItemType.PLACE_VISIT);
+            Long id = from.idOf(FeedItemType.PLACE_VISIT);
+            List<VisitWithPlace> visits = authorId != null
+                    ? placeVisitRepository.findPhotosForFeedByVisitor(couple.getId(), authorId, at, id, page)
+                    : placeVisitRepository.findPhotosForFeed(couple.getId(), at, id, page);
+            for (VisitWithPlace v : visits) {
                 merged.add(new PhotoCandidate(mapper.toItem(v, names, userId),
-                        v.getVisit().getImageUrl(), List.of(), null));
+                        v.getVisit().getImageUrl(), List.of(), null,
+                        v.getVisit().getPlaceId(), v.getPlaceName()));
             }
         }
 
@@ -288,10 +350,28 @@ public class FeedService {
                     item.mine() ? "나" : item.userName(),
                     item.mine(),
                     c.tripId(),
+                    c.placeId(),
+                    c.placeName(),
                     item.occurredAt());
         }).toList();
 
         return new FeedPhotosResponse(items, nextCursor, hasMore);
+    }
+
+    /**
+     * {@code who} → 거를 작성자 id. 거르지 않으면 null, '상대'인데 상대가 없으면 -1.
+     * 화면의 칩이 보내는 고정 값이라 모르는 값은 조용히 무시하지 않고 400 으로 드러낸다
+     * ({@code sources} 와 같은 원칙 — FeedController).
+     */
+    private static Long authorOf(String who, Long userId, Long partnerId) {
+        if (who == null || who.isBlank()) {
+            return null;
+        }
+        return switch (who.toLowerCase(java.util.Locale.ROOT)) {
+            case "me" -> userId;
+            case "partner" -> partnerId != null ? partnerId : -1L;
+            default -> throw new BusinessException(ErrorCode.INVALID_INPUT, "알 수 없는 작성자 필터입니다: " + who);
+        };
     }
 
     /**
@@ -303,9 +383,11 @@ public class FeedService {
      * 아이템에 의존하지 않고 소스 필드를 그대로 쓴다.
      *
      * <p>{@code imageUrls} 는 포스트만 여러 장이고, {@code tripId} 도 포스트에만 있다.
+     * {@code placeId}·{@code placeName} 은 맛집 방문과 장소가 붙은 끼니에만 있다.
      */
     private record PhotoCandidate(FeedItemResponse item, String imageUrl,
-                                  List<String> imageUrls, Long tripId) {
+                                  List<String> imageUrls, Long tripId,
+                                  Long placeId, String placeName) {
     }
 
     /**

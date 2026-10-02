@@ -4,6 +4,7 @@ import { runAiJob, type AiJobStart } from './aiJob';
 import type {
   ApiResponse,
   DateCourse,
+  LovelichelinPulse,
   LovelichelinRecommendation,
   Place,
   PlaceSearchResponse,
@@ -52,6 +53,8 @@ export const placeApi = {
       // 서버가 짧은 링크의 리다이렉트를 따라가고 카카오 검색까지 한다 — 기본 10초는 빠듯하다
       apiClient.post<ApiResponse<ResolvePlaceLinkResponse>>('/places/resolve-link', { url, messageText }, { timeout: 20000 }),
     ),
+  // 홈 이름 옆 럽슐랭 왕관 신호 — 나·상대 각각(없으면 null). 미연결이면 빈 신호(404 아님)
+  lovelichelinPulse: () => unwrap(apiClient.get<ApiResponse<LovelichelinPulse>>('/places/lovelichelin/pulse')),
   get: (id: number) => unwrap(apiClient.get<ApiResponse<Place>>(`/places/${id}`)),
   update: (id: number, payload: Partial<SavePlacePayload>) =>
     unwrap(apiClient.put<ApiResponse<Place>>(`/places/${id}`, payload)),

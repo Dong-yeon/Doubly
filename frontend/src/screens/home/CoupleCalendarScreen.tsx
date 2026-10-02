@@ -52,6 +52,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useRelationStore } from '../../store/relationStore';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { confirmDiscard } from '../../utils/discardGuard';
+import { kstDateOf } from '../../utils/anniversary';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 import { onColor } from '../../theme/onColor';
@@ -135,11 +136,16 @@ export function CoupleCalendarScreen({ navigation }: Props) {
   // 누구의 일정인지 가르려면 "나"를 알아야 한다 — 서버는 createdBy 만 내려준다
   const myId = useAuthStore((s) => s.user?.id);
   const partnerName = useRelationStore((s) => s.couple?.partner?.name);
-  const today = new Date();
-  const todayStr = `${today.getFullYear()}-${pad2(today.getMonth() + 1)}-${pad2(today.getDate())}`;
+  /*
+   * "오늘"은 KST 로 판단한다 — 서버가 dday 를 KstClock.today() 로 세기 때문이다. 기기 현지
+   * 날짜를 쓰면 해외(기기 시간대 ≠ KST)에서 오늘 테두리·첫 화면의 달·추가 기본 날짜·'진행 중'이
+   * 서버 D-day 배지와 하루 어긋났다(docs/calendar-current-state.md 7절 #1).
+   */
+  const today = kstDateOf(new Date());
+  const todayStr = `${today.y}-${pad2(today.m)}-${pad2(today.d)}`;
 
-  const [year, setYear] = useState(today.getFullYear());
-  const [month, setMonth] = useState(today.getMonth() + 1); // 1~12
+  const [year, setYear] = useState(today.y);
+  const [month, setMonth] = useState(today.m); // 1~12
   const [events, setEvents] = useState<CoupleCalendarEvent[]>([]);
   // 여행 전체 목록 — 월과 무관하게 한 번 받고, 그리드 띠·'우리 여행' 섹션은 보이는 달로 거른다
   const [trips, setTrips] = useState<Trip[]>([]);

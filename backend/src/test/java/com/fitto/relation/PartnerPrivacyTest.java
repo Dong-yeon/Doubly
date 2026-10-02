@@ -8,6 +8,9 @@ import com.fitto.auth.service.AuthService;
 import com.fitto.chat.service.ChatService;
 import com.fitto.diet.domain.DietGoalType;
 import com.fitto.diet.service.NutritionService;
+import com.fitto.diet.domain.MealType;
+import com.fitto.diet.dto.SaveMealRequest;
+import com.fitto.diet.service.MealService;
 import com.fitto.relation.dto.InviteCodeResponse;
 import com.fitto.relation.service.RelationService;
 import com.fitto.trainer.dto.TrainerProfileRequest;
@@ -52,6 +55,8 @@ class PartnerPrivacyTest {
     TrainerService trainerService;
     @Autowired
     NutritionService nutritionService;
+    @Autowired
+    MealService mealService;
     @Autowired
     ObjectMapper objectMapper;
 
@@ -105,5 +110,28 @@ class PartnerPrivacyTest {
         // 회원 쪽에서 본 트레이너(RelationResponse.partner)도 같은 경계
         JsonNode relation = objectMapper.valueToTree(relationService.findMyRelations(member).get(0));
         assertThat(relation.get("partner").has("email")).isFalse();
+    }
+
+    /**
+     * 홈 "오늘 챙김" 링(LOVEBODY_REVIEW §2-2) — 상대 오늘 식단 응답은 끼니 <b>종류</b>까지만이다. 메모·사진·칼로리·
+     * 매크로는 싣지 않는다. 필드 목록을 고정해, 누가 식사 내용을 얹으면 이 테스트가 먼저 깨지게 한다.
+     */
+    @Test
+    void 상대_오늘_식단_응답에는_끼니_종류_외_식단_정보가_없다() {
+        Long a = registerWithBody("privacyMealA@fitto.com");
+        Long b = authService.register(
+                new RegisterRequest("privacyMealB@fitto.com", "password123", "나", null, null, true, true, false),
+                "127.0.0.1").user().id();
+        relationService.connectCouple(b, relationService.createCoupleInvite(a).code());
+        String photo = "https://res.cloudinary.com/demo/image/upload/v1/fitto/private-lunch.jpg";
+        mealService.save(a, new SaveMealRequest(LocalDate.now(), MealType.LUNCH, "비밀 메모 크림파스타", photo, 987,
+                111, 22, 33, null, null, null, null));
+
+        JsonNode today = objectMapper.valueToTree(mealService.partnerToday(b));
+        assertThat(today.get("mealTypes").get(0).asText()).isEqualTo("LUNCH");
+        java.util.List<String> fields = new java.util.ArrayList<>();
+        today.fieldNames().forEachRemaining(fields::add);
+        assertThat(fields).isSubsetOf("connected", "partnerName", "completed", "mealTypes");
+        assertThat(today.toString()).doesNotContain("비밀 메모").doesNotContain(photo).doesNotContain("987");
     }
 }

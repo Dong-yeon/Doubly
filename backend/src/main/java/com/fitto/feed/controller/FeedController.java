@@ -25,7 +25,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 커플 일상 피드 API — PLAN.md Couple Feed.
@@ -47,8 +49,11 @@ public class FeedController {
             @AuthenticationPrincipal AuthUser user,
             // 커서는 서버가 만든 불투명 토큰 — 클라이언트는 받은 값을 그대로 되돌려준다
             @RequestParam(required = false) String cursor,
-            @RequestParam(defaultValue = "20") int limit) {
-        return ApiResponse.success(feedService.timeline(user.id(), cursor, limit));
+            @RequestParam(defaultValue = "20") int limit,
+            // 선택 — 빼고 볼 소스(예: ?exclude=PLACE_VISIT,CONTENT_LOG). 예전 앱은 안 보내므로 전부가 그대로다
+            @RequestParam(required = false) List<FeedItemType> exclude) {
+        return ApiResponse.success(feedService.timeline(user.id(), cursor, limit,
+                exclude == null || exclude.isEmpty() ? Set.of() : EnumSet.copyOf(exclude)));
     }
 
     /**
@@ -57,14 +62,17 @@ public class FeedController {
      * <p>{@code sources} 는 상단 필터 칩용이며 생략하면 4소스 전부다
      * (예: {@code ?sources=MEAL,WORKOUT}). 값이 잘못되면 400 — 화면의 칩이 보내는
      * 고정 목록이라 조용히 무시하기보다 드러나는 편이 낫다.
+     *
+     * <p>{@code who} 는 작성자 필터 칩용이다({@code me} · {@code partner}, 생략하면 둘 다).
      */
     @GetMapping("/photos")
     public ApiResponse<FeedPhotosResponse> photos(
             @AuthenticationPrincipal AuthUser user,
             @RequestParam(required = false) String cursor,
             @RequestParam(defaultValue = "30") int limit,
-            @RequestParam(required = false) List<FeedItemType> sources) {
-        return ApiResponse.success(feedService.photos(user.id(), cursor, limit, sources));
+            @RequestParam(required = false) List<FeedItemType> sources,
+            @RequestParam(required = false) String who) {
+        return ApiResponse.success(feedService.photos(user.id(), cursor, limit, sources, who));
     }
 
     /**

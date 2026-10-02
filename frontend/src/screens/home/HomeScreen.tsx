@@ -47,6 +47,7 @@ import { moodApi } from '../../api/mood';
 import { journalApi, journalToday } from '../../api/journal';
 import type { MoodChoice } from '../../api/mood';
 import { tripApi } from '../../api/trip';
+import { placeApi } from '../../api/place';
 import { feedTimeLabel } from '../feed/FeedTimelineScreen';
 import {
   connectSocket,
@@ -64,10 +65,11 @@ import { Alert } from '../../utils/alert';
 import { errorCodeOf, isApiError } from '../../api/client';
 import { reportError } from '../../utils/errorReporter';
 import { updateHomeWidget } from '../../widget/updateHomeWidget';
+import { HOME_RECORD_EXCLUDE, feedSummary, isHomeRecord } from '../../utils/feedSummary';
 import { loadWidgetData } from '../../widget/widgetData';
 import { touchGestureOf } from '../../constants/touchGestures';
 import { playTouchGesture } from '../../utils/haptics';
-import type { FeedItem, Meal, Memories, MoodResponse, PartnerToday, Streak, Trip } from '../../types';
+import type { FeedItem, LovelichelinPulse, Meal, Memories, MoodResponse, PartnerToday, Streak, Trip } from '../../types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { isDarkMode } from '../../theme';
 import { onColor } from '../../theme/onColor';
@@ -130,11 +132,6 @@ const topScrim = (): [string, string] =>
     ? ['rgba(30,32,28,0.7)', 'rgba(30,32,28,0)']
     : ['rgba(250,250,249,0.7)', 'rgba(250,250,249,0)'];
 
-/** 열에 들어갈 최근 기록 한 줄 — 종류마다 제목/본문 중 있는 쪽을 쓴다 */
-function recordLabel(item: FeedItem | null): string | null {
-  if (!item) return null;
-  return item.content || item.title || '기록을 남겼어요';
-}
 
 /**
  * 위젯 캐시의 숫자를 화면이 쓰는 스트릭 모양으로 감싼다.
@@ -164,12 +161,38 @@ export function HomeScreen({ navigation }: Props) {
   const myMealDone = myMeals.length > 0;
   const [partnerMeal, setPartnerMeal] = useState<PartnerToday | null>(null);
   /*
+   * 오늘 챙김 링(LOVEBODY_REVIEW §2-2) — 아침·점심·저녁·운동. 내 쪽은 이미 받는 오늘 식단·운동에서 만들고(새 호출 없음),
+   * 상대 쪽은 식단 응답의 끼니 종류(mealTypes)와 운동 응답의 completed 로 만든다. 상대가 기록하면 커플 소켓 이벤트가
+   * refresh() 를 돌려 둘 다 다시 읽으므로 링도 따라온다. 구서버(mealTypes 없음)면 상대 링은 그리지 않는다.
+   * 간식은 조각이 없다(4조각 고정) — 간식만 먹은 날 링은 비어 있고, 식단 배지(✓)와 스크린리더 문장이 기록을 말한다.
+   */
+  const myMealTypes = new Set(myMeals.map((m) => m.mealType));
+  const mySlices = {
+    breakfast: myMealTypes.has('BREAKFAST'),
+    lunch: myMealTypes.has('LUNCH'),
+    dinner: myMealTypes.has('DINNER'),
+    workout: myWorkoutDone,
+  };
+  const mySnack = myMealTypes.has('SNACK');
+  const partnerMealTypes = partnerMeal?.mealTypes;
+  const partnerSlices = partnerMealTypes
+    ? {
+        breakfast: partnerMealTypes.includes('BREAKFAST'),
+        lunch: partnerMealTypes.includes('LUNCH'),
+        dinner: partnerMealTypes.includes('DINNER'),
+        workout: !!partner?.completed,
+      }
+    : null;
+  const partnerSnack = !!partnerMealTypes?.includes('SNACK');
+  /*
    * 최근 기록 — 좌우 열이 <b>각자의</b> 마지막 기록을 보여주므로 두 건이 필요하다.
    * 타임라인은 시간순 한 줄이라 사람별로 나눠 받을 수 없어, 한 페이지를 받아
    * mine 으로 갈라 각각 첫 건만 쓴다.
    */
   const [myLatest, setMyLatest] = useState<FeedItem | null>(null);
   const [partnerLatest, setPartnerLatest] = useState<FeedItem | null>(null);
+  // 이름 옆 럽슐랭 왕관 — 오늘 럽슐랭에 기록했거나 막 등극한 사람에게만(LovelichelinCrownSignal)
+  const [lovelichelinPulse, setLovelichelinPulse] = useState<LovelichelinPulse | null>(null);
   // 작년 오늘 — 있는 날에만 최근 기록 자리를 대신 차지한다 (PLAN.md Memories)
   const [memories, setMemories] = useState<Memories | null>(null);
   // 다가오는/진행 중 여행 — 있는 기간에만 조건부 한 줄 슬롯에 D-day 카드를 띄운다 (PLAN.md Trip)
@@ -288,19 +311,28 @@ export function HomeScreen({ navigation }: Props) {
     /*
      * 좌우 열이 각자의 마지막 기록을 보여주므로 <b>두 사람 몫</b>이 필요하다.
      * 12건이면 한쪽이 연속으로 기록한 날에도 반대쪽 한 건이 대개 들어온다 —
-     * 그래도 없으면 그 열은 "아직 기록이 없어요" 로 둔다(추가 호출은 하지 않는다).
+     * 그래도 없으면 그 열의 기록 줄은 비워 둔다(추가 호출은 하지 않는다).
      * (커플 미연결이면 피드가 404 다 — 조용히 비운다)
+     *
+     * <p>럽슐랭 방문·콘텐츠 관람은 뺀다(utils/feedSummary 의 HOME_RECORD_EXCLUDE) — 그날의 식단·운동
+     * 글이 맛집 기록에 밀려나던 자리다. 서버가 쿼리에서 빼고, 모르는 서버였을 때를 위해 여기서도 거른다.
      */
     feedApi
-      .timeline(null, 12)
+      .timeline(null, 12, HOME_RECORD_EXCLUDE)
       .then((page) => {
-        setMyLatest(page.items.find((i) => i.mine) ?? null);
-        setPartnerLatest(page.items.find((i) => !i.mine) ?? null);
+        const items = page.items.filter(isHomeRecord);
+        setMyLatest(items.find((i) => i.mine) ?? null);
+        setPartnerLatest(items.find((i) => !i.mine) ?? null);
       })
       .catch(() => {
         setMyLatest(null);
         setPartnerLatest(null);
       });
+    // 럽슐랭 왕관 — 실패하면 조용히 없앤다(홈의 다른 줄을 막을 정보가 아니다)
+    placeApi
+      .lovelichelinPulse()
+      .then(setLovelichelinPulse)
+      .catch(() => setLovelichelinPulse(null));
     // 추억은 대부분의 날에 비어 있다 — 없으면 최근 기록이 그대로 남는다
     feedApi
       .memories()
@@ -812,10 +844,13 @@ export function HomeScreen({ navigation }: Props) {
                     workoutDone: myWorkoutDone,
                     mealDone: myMealDone,
                     streak: myStreak?.currentCount ?? 0,
-                    latestLabel: recordLabel(myLatest),
+                    latestLabel: feedSummary(myLatest),
                     latestTime: myLatest ? feedTimeLabel(myLatest.occurredAt) : null,
                     moodEmoji: mood?.mine?.emoji,
                     moodImageUrl: mood?.mine?.imageUrl,
+                    crown: lovelichelinPulse?.me ?? null,
+                    today: mySlices,
+                    snack: mySnack,
                   }}
                   partner={{
                     name: partner?.partnerName ?? couple?.partner?.name ?? '상대방',
@@ -823,10 +858,13 @@ export function HomeScreen({ navigation }: Props) {
                     workoutDone: !!partner?.completed,
                     mealDone: !!partnerMeal?.completed,
                     streak: partnerStreak?.currentCount ?? 0,
-                    latestLabel: recordLabel(partnerLatest),
+                    latestLabel: feedSummary(partnerLatest),
                     latestTime: partnerLatest ? feedTimeLabel(partnerLatest.occurredAt) : null,
                     moodEmoji: mood?.partner?.emoji,
                     moodImageUrl: mood?.partner?.imageUrl,
+                    crown: lovelichelinPulse?.partner ?? null,
+                    today: partnerSlices,
+                    snack: partnerSnack,
                   }}
                   dday={dday}
                   anniversaryDate={couple?.anniversaryDate ?? null}
@@ -838,6 +876,28 @@ export function HomeScreen({ navigation }: Props) {
                    * 기록은 "우리" 탭으로 이관됐다 — 탭을 건너뛰되 initial:false 로 그 탭의
                    * 첫 화면(AlbumMain)을 아래에 깔아 뒤로가기가 탭 안에 남게 한다.
                    */
+                  /*
+                   * 이름 옆 럽슐랭 왕관 — 그 장소·콘텐츠 상세로(럽슐랭 탭 스택). 상대 왕관인데 내 대표 평점이 아직
+                   * 없으면 평가 영역을 펼친 채 들어간다 — "상대가 매겼으니 내 차례"를 한 번에 잇는다.
+                   */
+                  onPressCrown={(who) => {
+                    const signal = who === 'me' ? lovelichelinPulse?.me : lovelichelinPulse?.partner;
+                    if (!signal) return;
+                    const openRating = who === 'partner' && !signal.viewerRated ? true : undefined;
+                    if (signal.kind === 'PLACE') {
+                      navigation.navigate('Place', {
+                        screen: 'PlaceDetail',
+                        params: { placeId: signal.targetId, name: signal.targetName, openRating },
+                        initial: false,
+                      });
+                    } else {
+                      navigation.navigate('Place', {
+                        screen: 'ContentDetail',
+                        params: { contentId: signal.targetId, title: signal.targetName, openRating },
+                        initial: false,
+                      });
+                    }
+                  }}
                   onPressPerson={(who) =>
                     navigation.navigate('Album', { screen: 'FeedTimeline', params: { who }, initial: false })
                   }

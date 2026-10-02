@@ -28,13 +28,14 @@ import { Chip } from '../../components/Chip';
 import { EmptyState } from '../../components/EmptyState';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '../../components/Icon';
-import { ImageViewer, type ViewerImage } from '../../components/ImageViewer';
+import { ImageViewer, type ViewerAction, type ViewerImage } from '../../components/ImageViewer';
 import { MemoryPeek } from '../home/components/MemoryPeek';
 import { LockedCard } from '../../components/LockedCard';
 import { feedApi } from '../../api/feed';
 import { tripApi } from '../../api/trip';
 import { toast } from '../../store/toastStore';
 import { getErrorMessage } from '../../utils/error';
+import { useRelationStore } from '../../store/relationStore';
 import { localDateOf, relativeDateLabel } from '../../utils/date';
 import { thumbnailUrl } from '../../utils/imageUrl';
 import type { FeedPhoto, FeedPhotoSource, Memories, Trip } from '../../types';
@@ -57,8 +58,39 @@ const FILTERS: { key: string; label: string; sources?: FeedPhotoSource[] }[] = [
   { key: 'place', label: '맛집', sources: ['PLACE_VISIT'] },
 ];
 
+/** 작성자 필터 — '둘 다'는 파라미터를 안 보낸다. 상대 칩의 라벨은 상대 이름으로 그린다 */
+type Who = 'all' | 'me' | 'partner';
+
 /** 기록 하나를 가리키는 키 — 테이블마다 id 공간이 달라 type 까지 묶어야 유일하다 */
 const keyOf = (p: FeedPhoto) => `${p.type}:${p.refId}`;
+
+const timeOf = (p: FeedPhoto) => Date.parse(p.createdAt);
+
+interface PhotoPage {
+  items: FeedPhoto[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
+const EMPTY_PAGE: PhotoPage = { items: [], nextCursor: null, hasMore: false };
+
+/**
+ * 탭에 돌아왔을 때 — 첫 페이지만 다시 받아 <b>머리 부분만</b> 갈아 끼운다.
+ *
+ * <p>예전엔 포커스마다 첫 페이지로 목록을 통째로 덮어써, 깊이 내려가 보던 사진첩이 여행 앨범에
+ * 다녀오면 30장으로 잘렸다. 첫 페이지는 서버 기준으로 "가장 최근 N건 전부"이므로, 그 구간
+ * (가장 오래된 항목의 시각까지)은 새 페이지가 정답이다 — 새로 올라온 것은 들어오고 지워진 것은
+ * 빠진다. 그보다 오래된 꼬리는 이미 받은 것을 그대로 두고, 다음 페이지 커서도 그대로 쓴다
+ * (커서는 소스별로 꼬리 끝을 가리키므로 머리가 바뀌어도 유효하다).
+ */
+function mergeHead(prev: PhotoPage, head: PhotoPage): PhotoPage {
+  if (!head.hasMore || prev.items.length === 0) return head; // 첫 페이지가 전부면 그게 전부다
+  const oldest = head.items[head.items.length - 1];
+  const boundary = oldest ? timeOf(oldest) : Number.POSITIVE_INFINITY;
+  const inHead = new Set(head.items.map(keyOf));
+  const tail = prev.items.filter((p) => !inHead.has(keyOf(p)) && timeOf(p) <= boundary);
+  return { items: [...head.items, ...tail], nextCursor: prev.nextCursor, hasMore: prev.hasMore };
+}
 
 /**
  * 그리드 줄 — 월 머리말 또는 사진 N칸.
@@ -109,17 +141,31 @@ export function AlbumScreen({ navigation }: Props) {
   // usePhotoGrid 는 매 렌더마다 최신 폭(웹은 셸 폭)으로 열 수와 칸을 다시 계산한다.
   const { columns, cell: CELL } = usePhotoGrid({ gap: GAP, phoneColumns: PHONE_COLUMNS });
 
+  const partnerName = useRelationStore((s) => s.couple?.partner?.name) ?? '상대';
+
   const [filter, setFilter] = useState('all');
-  const [photos, setPhotos] = useState<FeedPhoto[]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [hasMore, setHasMore] = useState(false);
+  const [who, setWho] = useState<Who>('all');
+  const [page, setPage] = useState<PhotoPage>(EMPTY_PAGE);
+  const photos = page.items;
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   /* 뷰어는 인덱스로 연다 — 좌우 스와이프로 옆 사진까지 이어 보려면 목록 위치가 필요하다 */
   const [viewingIndex, setViewingIndex] = useState<number | null>(null);
-  const loadingRef = useRef(false);
+  /*
+   * 요청 세대 — 첫 페이지 요청마다 올린다. 응답이 왔을 때 세대가 바뀌어 있으면 버린다.
+   *
+   * <p>예전엔 "진행 중이면 새 요청을 무시"하는 잠금 하나였다. 스크롤 끝에서 다음 페이지를
+   * 받는 중에 칩을 바꾸면 새 필터 요청이 버려지고, 늦게 온 <b>이전 필터의 사진</b>이 새 칩
+   * 아래에 붙었다. 이제는 새 요청이 항상 이기고, 늦게 온 옛 응답이 진다.
+   */
+  const generationRef = useRef(0);
+  const loadingMoreRef = useRef(false);
+  /* 지금 목록이 어느 필터 조합으로 받은 것인지 — 탭 복귀 때 머리만 갈지, 처음부터 받을지 가른다 */
+  const loadedKeyRef = useRef<string | null>(null);
   // 로드 실패가 빈 상태로 위장하지 않게 구분한다 (QA_CHECKLIST.md 전역 반복 패턴 1)
   const [loadError, setLoadError] = useState(false);
+  /* 다음 페이지 실패 — 끝까지 다시 스크롤할 공간이 없을 수 있어 꼬리에 재시도 버튼을 둔다 */
+  const [loadMoreError, setLoadMoreError] = useState(false);
   /* 머리글의 두 섹션 — 있는 날/있을 때만 그린다. 부가 정보라 실패해도 그리드는 정상 동작 */
   const [memories, setMemories] = useState<Memories | null>(null);
   const [trips, setTrips] = useState<Trip[]>([]);
@@ -127,6 +173,14 @@ export function AlbumScreen({ navigation }: Props) {
   const sourcesOf = useCallback(
     (key: string) => FILTERS.find((f) => f.key === key)?.sources,
     [],
+  );
+
+  const openPlace = useCallback(
+    (placeId: number, name: string) => {
+      setViewingIndex(null);
+      navigation.navigate('PlaceDetail', { placeId, name });
+    },
+    [navigation],
   );
 
   /*
@@ -140,66 +194,86 @@ export function AlbumScreen({ navigation }: Props) {
     for (const p of photos) {
       const uris = p.imageUrls && p.imageUrls.length > 0 ? p.imageUrls : [p.imageUrl];
       firstIndexByKey.set(keyOf(p), images.length);
+      // 럽슐랭 장소가 걸린 사진(맛집 방문·장소 붙은 끼니)은 그 장소 상세로 이어 간다
+      const { placeId, placeName } = p;
+      const action: ViewerAction | undefined =
+        placeId != null && placeName
+          ? { label: `${placeName} 보기`, icon: 'map-marker-outline', onPress: () => openPlace(placeId, placeName) }
+          : undefined;
       uris.forEach((uri, i) => {
         images.push({
           key: `${keyOf(p)}-${i}`,
           // 뷰어는 원본을 쓴다 — 크게 보는 자리에서 썸네일을 늘리면 뭉갠다
           uri,
-          title: `${p.mine ? '나' : p.authorName}  ·  ${relativeDateLabel(p.createdAt.slice(0, 10))}`,
+          // slice(0, 10) 은 UTC 날짜라 KST 00~09시 사진이 "어제"로 떴다 — 월 머리말과 같은 localDateOf 를 쓴다
+          title: `${p.mine ? '나' : p.authorName}  ·  ${relativeDateLabel(localDateOf(p.createdAt))}`,
           titleColor: p.mine ? colors.coral : colors.indigo,
           caption: p.caption ?? undefined,
+          action,
         });
       });
     }
     return { viewerImages: images, firstIndexByKey };
-  }, [photos]);
+  }, [photos, openPlace]);
 
   const gridRows = useMemo(() => toGridRows(photos, columns), [photos, columns]);
 
+  /**
+   * 첫 페이지 — `replace` 는 목록을 새로 받고(필터 변경·당겨서 새로고침), `head` 는 탭 복귀 때
+   * 머리만 갈아 끼운다({@link mergeHead}). head 는 조용히 돈다(스피너·실패 토스트 없음 —
+   * 보던 목록이 그대로 있으므로).
+   */
   const load = useCallback(
-    async (key: string) => {
-      if (loadingRef.current) return;
-      loadingRef.current = true;
-      setRefreshing(true);
-      setLoadError(false);
+    async (filterKey: string, whoKey: Who, mode: 'replace' | 'head') => {
+      const generation = ++generationRef.current;
+      if (mode === 'replace') {
+        setRefreshing(true);
+        setLoadError(false);
+      }
+      setLoadMoreError(false);
       try {
-        const page = await feedApi.photos(null, 30, sourcesOf(key));
-        setPhotos(page.items);
-        setNextCursor(page.nextCursor);
-        setHasMore(page.hasMore);
+        const next = await feedApi.photos(null, 30, sourcesOf(filterKey), whoKey === 'all' ? undefined : whoKey);
+        if (generation !== generationRef.current) return; // 더 새 요청이 있다 — 이 응답은 낡았다
+        setPage((prev) => (mode === 'head' ? mergeHead(prev, next) : next));
+        loadedKeyRef.current = `${filterKey}|${whoKey}`;
       } catch (e) {
+        if (generation !== generationRef.current || mode === 'head') return;
         // 커플 미연결 등 — 빈 상태 안내로 대체하되, "진짜 빈 앨범"과는 loadError 로 구분한다
         toast.error(getErrorMessage(e, '사진을 불러오지 못했어요.'));
-        setPhotos([]);
-        setHasMore(false);
+        setPage(EMPTY_PAGE);
+        loadedKeyRef.current = null;
         setLoadError(true);
       } finally {
-        loadingRef.current = false;
-        setRefreshing(false);
+        if (generation === generationRef.current) setRefreshing(false);
       }
     },
     [sourcesOf],
   );
 
   const loadMore = useCallback(async () => {
-    if (loadingRef.current || !hasMore || !nextCursor) return;
-    loadingRef.current = true;
+    if (loadingMoreRef.current || refreshing || !page.hasMore || !page.nextCursor) return;
+    const generation = generationRef.current;
+    loadingMoreRef.current = true;
     setLoadingMore(true);
+    setLoadMoreError(false);
     try {
-      const page = await feedApi.photos(nextCursor, 30, sourcesOf(filter));
-      setPhotos((prev) => {
-        const seen = new Set(prev.map(keyOf));
-        return [...prev, ...page.items.filter((p) => !seen.has(keyOf(p)))];
+      const more = await feedApi.photos(page.nextCursor, 30, sourcesOf(filter), who === 'all' ? undefined : who);
+      if (generation !== generationRef.current) return; // 그 사이 필터가 바뀌었거나 새로 받았다
+      setPage((prev) => {
+        const seen = new Set(prev.items.map(keyOf));
+        return {
+          items: [...prev.items, ...more.items.filter((p) => !seen.has(keyOf(p)))],
+          nextCursor: more.nextCursor,
+          hasMore: more.hasMore,
+        };
       });
-      setNextCursor(page.nextCursor);
-      setHasMore(page.hasMore);
-    } catch (e) {
-      toast.error(getErrorMessage(e, '사진을 불러오지 못했어요.'));
+    } catch {
+      if (generation === generationRef.current) setLoadMoreError(true);
     } finally {
-      loadingRef.current = false;
+      loadingMoreRef.current = false;
       setLoadingMore(false);
     }
-  }, [hasMore, nextCursor, filter, sourcesOf]);
+  }, [page, refreshing, filter, who, sourcesOf]);
 
   /* 머리글 데이터 — 사진 목록과 독립이라 실패는 조용히 넘긴다(섹션만 안 뜬다) */
   const loadHeader = useCallback(() => {
@@ -207,20 +281,31 @@ export function AlbumScreen({ navigation }: Props) {
     tripApi.list().then(setTrips).catch(() => setTrips([]));
   }, []);
 
+  /*
+   * 포커스·필터 변경 모두 여기로 온다(필터가 deps 라 포커스 중에 바뀌면 다시 돈다).
+   * 이미 같은 조합으로 받아 둔 목록이 있으면 머리만 갈고, 아니면 처음부터 받는다.
+   */
   useFocusEffect(
     useCallback(() => {
-      void load(filter);
+      const mode = loadedKeyRef.current === `${filter}|${who}` ? 'head' : 'replace';
+      void load(filter, who, mode);
       loadHeader();
-    }, [load, filter, loadHeader]),
+    }, [load, filter, who, loadHeader]),
   );
 
   const onPickFilter = (key: string) => {
     if (key === filter) return;
     setFilter(key);
-    setPhotos([]);
-    setNextCursor(null);
-    void load(key);
+    setPage(EMPTY_PAGE);
   };
+
+  const onPickWho = (key: Who) => {
+    if (key === who) return;
+    setWho(key);
+    setPage(EMPTY_PAGE);
+  };
+
+  const filtered = filter !== 'all' || who !== 'all';
 
   const listHeader = (
     <View>
@@ -343,6 +428,11 @@ export function AlbumScreen({ navigation }: Props) {
         {FILTERS.map((f) => (
           <Chip key={f.key} label={f.label} selected={f.key === filter} onPress={() => onPickFilter(f.key)} />
         ))}
+        {/* 작성자 — 소스와 다른 축이라 구분선으로 떼어 둔다 */}
+        <View style={styles.chipDivider} />
+        <Chip label="둘 다" selected={who === 'all'} onPress={() => onPickWho('all')} />
+        <Chip label="나" selected={who === 'me'} onPress={() => onPickWho('me')} />
+        <Chip label={partnerName} selected={who === 'partner'} onPress={() => onPickWho('partner')} />
       </ScrollView>
 
       <FlatList
@@ -351,9 +441,14 @@ export function AlbumScreen({ navigation }: Props) {
         ListHeaderComponent={listHeader}
         contentContainerStyle={styles.list}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => void load(filter)} tintColor={colors.primary} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => void load(filter, who, 'replace')}
+            tintColor={colors.primary}
+          />
         }
-        onEndReached={loadMore}
+        // 실패한 뒤에는 자동으로 다시 부르지 않는다 — 꼬리의 재시도 버튼으로만
+        onEndReached={loadMoreError ? undefined : loadMore}
         onEndReachedThreshold={0.4}
         renderItem={({ item: row }) =>
           row.kind === 'month' ? (
@@ -394,7 +489,12 @@ export function AlbumScreen({ navigation }: Props) {
               title="사진을 불러오지 못했어요"
               description="네트워크 상태를 확인하고 다시 시도해주세요."
               error
-              onRetry={() => void load(filter)}
+              onRetry={() => void load(filter, who, 'replace')}
+            />
+          ) : filtered ? (
+            <EmptyState
+              title="조건에 맞는 사진이 없어요"
+              description="다른 필터를 골라 보세요."
             />
           ) : (
             <EmptyState
@@ -408,6 +508,18 @@ export function AlbumScreen({ navigation }: Props) {
           loadingMore ? (
             <View style={styles.footer}>
               <ActivityIndicator color={colors.primary} />
+            </View>
+          ) : loadMoreError ? (
+            <View style={styles.footer}>
+              <Text style={styles.footerError}>사진을 더 불러오지 못했어요.</Text>
+              <Pressable
+                onPress={() => void loadMore()}
+                style={({ pressed }) => [styles.retryBtn, pressed && styles.topBtnPressed]}
+                accessibilityRole="button"
+                accessibilityLabel="사진 더 불러오기 다시 시도"
+              >
+                <Text style={styles.retryText}>다시 시도</Text>
+              </Pressable>
             </View>
           ) : null
         }
@@ -456,7 +568,18 @@ const styles = themedStyles((colors) => ({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  footer: { paddingVertical: spacing.lg },
+  footer: { paddingVertical: spacing.lg, alignItems: 'center', gap: spacing.xs },
+  footerError: { fontSize: fontSize.caption, color: colors.textSecondary },
+  retryBtn: {
+    minHeight: layout.touchTarget,
+    paddingHorizontal: spacing.lg,
+    justifyContent: 'center',
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  retryText: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
+  chipDivider: { width: 1, alignSelf: 'stretch', marginVertical: spacing.sm, backgroundColor: colors.border },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',

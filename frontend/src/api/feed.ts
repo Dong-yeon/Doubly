@@ -22,10 +22,18 @@ export const feedApi = {
    * 통합 타임라인 — cursor 는 이전 페이지의 nextCursor 를 그대로 넘긴다.
    * 서버가 만든 불투명 토큰이므로 해석하거나 가공하지 말 것(내부 형식은 바뀔 수 있다).
    */
-  timeline: (cursor?: string | null, limit = 20) =>
+  /*
+   * exclude — 빼고 받을 종류(선택). 홈 열은 utils/feedSummary 의 HOME_RECORD_EXCLUDE 를 보낸다.
+   * 서버가 쿼리 단계에서 빼므로 그 종류가 limit 을 다 채운 날에도 나머지가 실린다.
+   */
+  timeline: (cursor?: string | null, limit = 20, exclude?: readonly FeedItemType[]) =>
     unwrap(
       apiClient.get<ApiResponse<FeedTimeline>>('/feed', {
-        params: { cursor: cursor ?? undefined, limit },
+        params: {
+          cursor: cursor ?? undefined,
+          limit,
+          exclude: exclude && exclude.length > 0 ? exclude.join(',') : undefined,
+        },
       }),
     ),
 
@@ -34,14 +42,16 @@ export const feedApi = {
    *
    * <p>`sources` 를 주면 그 소스만 받는다(상단 필터 칩). 생략하면 4소스 전부 —
    * 서버 기본값과 같으므로 "전체" 칩은 파라미터를 아예 보내지 않는다.
+   * `who` 는 작성자 필터(나/상대) — 서버가 거르므로 한쪽만 볼 때도 페이지가 꽉 찬다.
    */
-  photos: (cursor?: string | null, limit = 30, sources?: FeedPhotoSource[]) =>
+  photos: (cursor?: string | null, limit = 30, sources?: FeedPhotoSource[], who?: 'me' | 'partner') =>
     unwrap(
       apiClient.get<ApiResponse<FeedPhotosPage>>('/feed/photos', {
         params: {
           cursor: cursor ?? undefined,
           limit,
           sources: sources && sources.length > 0 ? sources.join(',') : undefined,
+          who,
         },
       }),
     ),
