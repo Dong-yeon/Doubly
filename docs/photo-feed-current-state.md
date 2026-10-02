@@ -224,21 +224,33 @@
 
 - 뷰어 리액션 — API(`POST /feed/items/{type}/{refId}/reactions`)는 있음, 응답에 반응 요약을 실어야 한다
 - `expo-image` 전환(디스크 캐시·placeholder) — 의존성은 이미 있음
-- **정렬 기준 결정 → 달력 view** (아래 결정 필요)
+- ~~정렬 기준 결정~~ → **기록일로 결정·구현 완료**(아래). 다음은 달력 view
 - 작년 오늘에 식단·운동·기념일 포함
 - 지도 view (`places.lat/lng` 기반, 맛집·장소 붙은 끼니만 해당)
 
 ### P2
 
-- `(user_id, created_at desc, id desc)` 인덱스(meals·workouts), place_visits `created_at` 인덱스, 소스별 size+1 과다 조회(§8-6·7)
+- place_visits `(place_id → couple)` 기준 기록일 정렬 인덱스, 소스별 size+1 과다 조회(§8-6·7). meals·workouts 는 기록일 정렬로 기존 `(user_id, *_date)` 인덱스와 맞게 됨
 - Android 핀치 줌(§8-11)
 - recap · 위젯 · streak 연동
 
-### 결정 필요 — 정렬·월 묶음 기준: 업로드일 vs 기록일
+### 결정됨 (2026-10-02) — 정렬·월 묶음 기준은 **기록일**
 
-지금은 4소스 모두 `created_at`(업로드 시각). 달력 view·recap 은 "그날 무엇을 했나"를 보여주므로 **이 결정이 선행**되어야 한다.
+사용자 결정. 비교했던 안:
+
+결정 전에는 4소스 모두 `created_at`(업로드 시각)이었다. 달력 view·recap 은 "그날 무엇을 했나"를 보여주므로 이 결정이 선행 조건이었다.
 
 | 안 | 장점 | 비용 |
 |---|---|---|
 | 업로드일 유지 | 커서·인덱스 그대로, 피드 타임라인과 일치 | 과거 날짜로 늦게 올린 기록이 엉뚱한 달에 묶임. 작년 오늘(방문=방문일)과 기준이 다름 |
 | 기록일(`meal_date`·`workout_date`·`visited_at`, 포스트는 `created_at`) | 달력·recap 과 의미가 맞음 | 기록일은 DATE 라 같은 날 안의 순서용 보조키 필요 → 커서 형식 변경(`FeedCursor` 소스별 위치에 날짜 추가), 소스별 인덱스 새로 필요, 타임라인과 사진첩 정렬이 갈라짐 |
+
+**구현** (사진첩만 — 타임라인은 업로드 순서 그대로):
+- 정렬키 `(기록일, created_at, id)` 내림차순. 기록일 = 식단 `meal_date` · 운동 `workout_date` · 방문 `visited_at`, 일상 포스트는 `created_at` 의 KST 날짜(`FeedService.recordDateOf` — `@CreatedDate` 가 JVM 기본 시간대로 채우므로 systemDefault→KST 로 옮긴다. 운영 UTC·테스트 KST 둘 다 맞음).
+- 포스트 쿼리는 `created_at` 정렬 그대로 — KST 날짜는 시각을 따라 단조 증가하므로 순서가 같다. 식단·운동·방문 쿼리만 날짜 keyset 으로 바꿈.
+- `FeedCursor.Position` 에 선택적 `recordDate`(인코딩 `TYPE:sec.nano:id:epochDay`). 타임라인 커서 형식은 그대로. 날짜 없는 옛 커서가 오면 사진첩은 첫 페이지로 되돌린다(앱이 키로 중복 제거).
+- 응답에 `recordDate`('YYYY-MM-DD'). 앱은 월 머리말·뷰어 날짜에 그대로 쓰고(시간대 변환 금지), 없으면(구 서버) 올린 날로 대신한다. `mergeHead` 도 같은 정렬키로 비교.
+- 인덱스: `idx_meals_user_date (user_id, meal_date)`·`idx_workouts_user_date (user_id, workout_date)` 가 새 정렬의 앞부분과 맞아 오히려 나아졌다. place_visits 는 여전히 없음(P2).
+- 한계: 지난 날짜로 새로 올린 기록이 머리 구간 밖에 놓이면 탭 복귀 갱신으로는 안 들어온다(당겨서 새로고침하면 보임).
+- 배포 순서: 서버 먼저. 구 앱 + 새 서버면 앱이 올린 날로 월을 묶는데 순서는 기록일이라, 늦게 올린 기록이 있으면 같은 달 머리말이 두 번 뜰 수 있다 — OTA 로 해소.
+- 검증: `FeedPhotosTest` 14건(기록일 3건 추가: 늦게 올린 기록 위치·날짜 섞인 커서 연속성·옛 커서 폴백) H2 + PostgreSQL 16 통과, `FeedPaginationTest`·`FeedFlowTest` PG 통과.
