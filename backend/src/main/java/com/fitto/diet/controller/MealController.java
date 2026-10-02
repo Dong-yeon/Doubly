@@ -13,6 +13,7 @@ import com.fitto.diet.dto.FoodLookupRequest;
 import com.fitto.diet.dto.FoodLookupResponse;
 import com.fitto.diet.dto.MealAnalysisResponse;
 import com.fitto.diet.dto.MealResponse;
+import com.fitto.diet.dto.PartnerMealTodayResponse;
 import com.fitto.diet.dto.MealStatsResponse;
 import com.fitto.diet.dto.NutritionGoalDirectionRequest;
 import com.fitto.diet.dto.PhotoRecordLookupRequest;
@@ -29,7 +30,6 @@ import com.fitto.diet.service.MealService;
 import com.fitto.diet.service.NutritionService;
 import org.springframework.web.bind.annotation.PutMapping;
 import com.fitto.workout.dto.CalendarDayResponse;
-import com.fitto.workout.dto.PartnerTodayResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -181,7 +181,7 @@ public class MealController {
     }
 
     @GetMapping("/partner/today")
-    public ApiResponse<PartnerTodayResponse> partnerToday(@AuthenticationPrincipal AuthUser user) {
+    public ApiResponse<PartnerMealTodayResponse> partnerToday(@AuthenticationPrincipal AuthUser user) {
         return ApiResponse.success(mealService.partnerToday(user.id()));
     }
 
