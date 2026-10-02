@@ -1629,6 +1629,8 @@ export interface FeedItem {
    * 서버가 커플 양쪽 짝 중 원본 한 장만 내려주므로, 카드는 "누가"가 아니라 "함께"로 읽힌다.
    */
   shared?: boolean;
+  /** 한 줄 요약 — 장소·콘텐츠는 "이름 ★4". 한 줄 자리는 utils/feedSummary 로 읽는다(예전 서버는 없다) */
+  summary?: string | null;
 }
 export interface FeedTimeline {
   items: FeedItem[];

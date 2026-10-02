@@ -63,6 +63,7 @@ import { Alert } from '../../utils/alert';
 import { errorCodeOf, isApiError } from '../../api/client';
 import { reportError } from '../../utils/errorReporter';
 import { updateHomeWidget } from '../../widget/updateHomeWidget';
+import { HOME_RECORD_EXCLUDE, feedSummary, isHomeRecord } from '../../utils/feedSummary';
 import { loadWidgetData } from '../../widget/widgetData';
 import { touchGestureOf } from '../../constants/touchGestures';
 import { playTouchGesture } from '../../utils/haptics';
@@ -129,11 +130,6 @@ const topScrim = (): [string, string] =>
     ? ['rgba(30,32,28,0.7)', 'rgba(30,32,28,0)']
     : ['rgba(250,250,249,0.7)', 'rgba(250,250,249,0)'];
 
-/** 열에 들어갈 최근 기록 한 줄 — 종류마다 제목/본문 중 있는 쪽을 쓴다 */
-function recordLabel(item: FeedItem | null): string | null {
-  if (!item) return null;
-  return item.content || item.title || '기록을 남겼어요';
-}
 
 /**
  * 위젯 캐시의 숫자를 화면이 쓰는 스트릭 모양으로 감싼다.
@@ -287,14 +283,18 @@ export function HomeScreen({ navigation }: Props) {
     /*
      * 좌우 열이 각자의 마지막 기록을 보여주므로 <b>두 사람 몫</b>이 필요하다.
      * 12건이면 한쪽이 연속으로 기록한 날에도 반대쪽 한 건이 대개 들어온다 —
-     * 그래도 없으면 그 열은 "아직 기록이 없어요" 로 둔다(추가 호출은 하지 않는다).
+     * 그래도 없으면 그 열의 기록 줄은 비워 둔다(추가 호출은 하지 않는다).
      * (커플 미연결이면 피드가 404 다 — 조용히 비운다)
+     *
+     * <p>럽슐랭 방문·콘텐츠 관람은 뺀다(utils/feedSummary 의 HOME_RECORD_EXCLUDE) — 그날의 식단·운동
+     * 글이 맛집 기록에 밀려나던 자리다. 서버가 쿼리에서 빼고, 모르는 서버였을 때를 위해 여기서도 거른다.
      */
     feedApi
-      .timeline(null, 12)
+      .timeline(null, 12, HOME_RECORD_EXCLUDE)
       .then((page) => {
-        setMyLatest(page.items.find((i) => i.mine) ?? null);
-        setPartnerLatest(page.items.find((i) => !i.mine) ?? null);
+        const items = page.items.filter(isHomeRecord);
+        setMyLatest(items.find((i) => i.mine) ?? null);
+        setPartnerLatest(items.find((i) => !i.mine) ?? null);
       })
       .catch(() => {
         setMyLatest(null);
@@ -809,7 +809,7 @@ export function HomeScreen({ navigation }: Props) {
                     workoutDone: myWorkoutDone,
                     mealDone: myMealDone,
                     streak: myStreak?.currentCount ?? 0,
-                    latestLabel: recordLabel(myLatest),
+                    latestLabel: feedSummary(myLatest),
                     latestTime: myLatest ? feedTimeLabel(myLatest.occurredAt) : null,
                     moodEmoji: mood?.mine?.emoji,
                     moodImageUrl: mood?.mine?.imageUrl,
@@ -820,7 +820,7 @@ export function HomeScreen({ navigation }: Props) {
                     workoutDone: !!partner?.completed,
                     mealDone: !!partnerMeal?.completed,
                     streak: partnerStreak?.currentCount ?? 0,
-                    latestLabel: recordLabel(partnerLatest),
+                    latestLabel: feedSummary(partnerLatest),
                     latestTime: partnerLatest ? feedTimeLabel(partnerLatest.occurredAt) : null,
                     moodEmoji: mood?.partner?.emoji,
                     moodImageUrl: mood?.partner?.imageUrl,
