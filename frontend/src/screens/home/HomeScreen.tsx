@@ -28,6 +28,7 @@ import { CoupleHero } from './components/CoupleHero';
 import { QuickActions } from './components/QuickActions';
 import { MemoryPeek } from './components/MemoryPeek';
 import { TripPeek, isTripLive, isTripOngoing, pickHomeTrip } from './components/TripPeek';
+import { EventPeek, isEventToday, pickHomeEvent } from './components/EventPeek';
 import { LockedCard } from '../../components/LockedCard';
 import { ServiceStatusBanner } from '../../components/ServiceStatusBanner';
 import { MoodPicker } from '../../components/MoodPicker';
@@ -47,6 +48,7 @@ import { moodApi } from '../../api/mood';
 import { journalApi, journalToday } from '../../api/journal';
 import type { MoodChoice } from '../../api/mood';
 import { tripApi } from '../../api/trip';
+import { calendarApi } from '../../api/calendar';
 import { placeApi } from '../../api/place';
 import { feedTimeLabel } from '../feed/FeedTimelineScreen';
 import {
@@ -69,7 +71,17 @@ import { HOME_RECORD_EXCLUDE, feedSummary, isHomeRecord } from '../../utils/feed
 import { loadWidgetData } from '../../widget/widgetData';
 import { touchGestureOf } from '../../constants/touchGestures';
 import { playTouchGesture } from '../../utils/haptics';
-import type { FeedItem, LovelichelinPulse, Meal, Memories, MoodResponse, PartnerToday, Streak, Trip } from '../../types';
+import type {
+  CoupleCalendarEvent,
+  FeedItem,
+  LovelichelinPulse,
+  Meal,
+  Memories,
+  MoodResponse,
+  PartnerToday,
+  Streak,
+  Trip,
+} from '../../types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { isDarkMode } from '../../theme';
 import { onColor } from '../../theme/onColor';
@@ -197,6 +209,8 @@ export function HomeScreen({ navigation }: Props) {
   const [memories, setMemories] = useState<Memories | null>(null);
   // 다가오는/진행 중 여행 — 있는 기간에만 조건부 한 줄 슬롯에 D-day 카드를 띄운다 (PLAN.md Trip)
   const [homeTrip, setHomeTrip] = useState<Trip | null>(null);
+  // 다가오는 일정 — 서버 upcoming 을 그대로 들고 있고, 띄울지(7일 안)는 렌더 시점에 고른다(EventPeek)
+  const [upcomingEvents, setUpcomingEvents] = useState<CoupleCalendarEvent[]>([]);
 
   const [annModal, setAnnModal] = useState(false);
   const [annInput, setAnnInput] = useState('');
@@ -344,6 +358,15 @@ export function HomeScreen({ navigation }: Props) {
       .list()
       .then((trips) => setHomeTrip(pickHomeTrip(trips)))
       .catch(() => setHomeTrip(null));
+    /*
+     * 다가오는 일정 — 커플 이벤트가 오면 이 refresh() 가 통째로 다시 불리므로(구독부 참고) 상대가
+     * 일정을 고쳐도 따라온다. 실패(미연결 404 포함)면 조용히 비운다 — 슬롯 후보 하나가 없어질 뿐이다.
+     * 진행 중인 기간 일정이 앞에 오므로 5건이면 7일 안의 것을 놓치지 않는다.
+     */
+    calendarApi
+      .upcoming(5)
+      .then(setUpcomingEvents)
+      .catch(() => setUpcomingEvents([]));
   }, [fetchAll, noteOffline]);
 
   /**
@@ -713,6 +736,9 @@ export function HomeScreen({ navigation }: Props) {
     </View>
   );
 
+  // 렌더 시점에 고른다 — 앱을 켜둔 채 자정을 넘기면 어제 일정이 '오늘'로 남지 않게(isTripLive 와 같은 이유)
+  const homeEvent = pickHomeEvent(upcomingEvents);
+
   return (
     <View style={styles.root}>
       {/*
@@ -948,8 +974,10 @@ export function HomeScreen({ navigation }: Props) {
               {/*
                 조건부 한 줄 슬롯 — 홈은 스크롤 없는 고정 화면이라(MemoryPeek 주석 참고) 줄을
                 쌓지 않고 하나만 고른다. 우선순위: ① 여행 중(일정표가 지금 필요한 순간) >
-                ② 작년 오늘(그날 하루뿐인 희소 콘텐츠) > ③ 여행 D-day(기간 내내 노출되므로
-                하루 양보해도 잃는 게 없다). 대부분의 날은 셋 다 없어 비어 있다.
+                ② 오늘 일정(기념일·약속 당일·진행 중 — 그날 놓치면 끝이다) >
+                ③ 작년 오늘(그날 하루뿐인 희소 콘텐츠) > ④ 여행 D-day(기간 내내 노출되므로
+                하루 양보해도 잃는 게 없다) > ⑤ 7일 안 일정(미리 보기라 맨 뒤 — 그 주 내내 뜬다).
+                대부분의 날은 다섯 다 없어 비어 있다.
                 공용 "최근 기록" 줄은 없앴다 — 좌우 열이 각자의 마지막 기록을 이미 보여준다.
               */}
               {homeTrip && isTripLive(homeTrip) && isTripOngoing(homeTrip) ? (
@@ -957,6 +985,8 @@ export function HomeScreen({ navigation }: Props) {
                   trip={homeTrip}
                   onPress={() => navigation.navigate('TripDetail', { tripId: homeTrip.id, title: homeTrip.title })}
                 />
+              ) : homeEvent && isEventToday(homeEvent) ? (
+                <EventPeek event={homeEvent} onPress={() => navigation.navigate('CoupleCalendar')} />
               ) : memories ? (
                 memories.locked ? (
                   <LockedCard
@@ -979,6 +1009,8 @@ export function HomeScreen({ navigation }: Props) {
                   trip={homeTrip}
                   onPress={() => navigation.navigate('TripDetail', { tripId: homeTrip.id, title: homeTrip.title })}
                 />
+              ) : homeEvent ? (
+                <EventPeek event={homeEvent} onPress={() => navigation.navigate('CoupleCalendar')} />
               ) : null}
 
               {/*
