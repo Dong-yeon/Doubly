@@ -11,6 +11,7 @@ import React from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '../../../components/Icon';
 import type { FeedItem, FeedItemType } from '../../../types';
+import { feedSummary } from '../../../utils/feedSummary';
 import { colors, fontSize, radius, spacing } from '../../../constants/theme';
 import { themedStyles } from '../../../theme/themedStyles';
 
@@ -32,7 +33,7 @@ interface Props {
 }
 
 export function RecentPeek({ latest, timeLabel, onPress }: Props) {
-  const summary = latest ? (latest.content || latest.title || '기록을 남겼어요') : null;
+  const summary = feedSummary(latest);
   return (
     <Pressable
       style={({ pressed }) => [styles.card, pressed && styles.pressed]}

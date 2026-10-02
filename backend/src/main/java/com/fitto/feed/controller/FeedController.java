@@ -25,7 +25,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 커플 일상 피드 API — PLAN.md Couple Feed.
@@ -47,8 +49,11 @@ public class FeedController {
             @AuthenticationPrincipal AuthUser user,
             // 커서는 서버가 만든 불투명 토큰 — 클라이언트는 받은 값을 그대로 되돌려준다
             @RequestParam(required = false) String cursor,
-            @RequestParam(defaultValue = "20") int limit) {
-        return ApiResponse.success(feedService.timeline(user.id(), cursor, limit));
+            @RequestParam(defaultValue = "20") int limit,
+            // 선택 — 빼고 볼 소스(예: ?exclude=PLACE_VISIT,CONTENT_LOG). 예전 앱은 안 보내므로 전부가 그대로다
+            @RequestParam(required = false) List<FeedItemType> exclude) {
+        return ApiResponse.success(feedService.timeline(user.id(), cursor, limit,
+                exclude == null || exclude.isEmpty() ? Set.of() : EnumSet.copyOf(exclude)));
     }
 
     /**

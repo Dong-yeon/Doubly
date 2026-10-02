@@ -22,10 +22,18 @@ export const feedApi = {
    * 통합 타임라인 — cursor 는 이전 페이지의 nextCursor 를 그대로 넘긴다.
    * 서버가 만든 불투명 토큰이므로 해석하거나 가공하지 말 것(내부 형식은 바뀔 수 있다).
    */
-  timeline: (cursor?: string | null, limit = 20) =>
+  /*
+   * exclude — 빼고 받을 종류(선택). 홈 열은 utils/feedSummary 의 HOME_RECORD_EXCLUDE 를 보낸다.
+   * 서버가 쿼리 단계에서 빼므로 그 종류가 limit 을 다 채운 날에도 나머지가 실린다.
+   */
+  timeline: (cursor?: string | null, limit = 20, exclude?: readonly FeedItemType[]) =>
     unwrap(
       apiClient.get<ApiResponse<FeedTimeline>>('/feed', {
-        params: { cursor: cursor ?? undefined, limit },
+        params: {
+          cursor: cursor ?? undefined,
+          limit,
+          exclude: exclude && exclude.length > 0 ? exclude.join(',') : undefined,
+        },
       }),
     ),
 

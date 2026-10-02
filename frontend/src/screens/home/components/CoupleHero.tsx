@@ -13,7 +13,7 @@
  * </ul>
  *
  * <p>구성(위에서부터): 함께한 지 · <b>D+n</b> · 기념일 날짜(누르면 기념일 설정) → 두 사람 좌우 열
- * [아바타(무드 배지) · 이름·스트릭 / 운동·식단 / 최근 기록]. 왼쪽이 나, 오른쪽이 상대.
+ * [아바타(무드 배지) · 이름·스트릭(·럽슐랭 왕관) / 운동·식단 / 최근 기록]. 왼쪽이 나, 오른쪽이 상대.
  *
  * <p><b>버튼은 형제 관계</b>다 — 열 전체를 버튼으로 감싸고 그 안에 운동/식단 버튼을 두면
  * 웹에서 &lt;button&gt; 중첩이 된다(react-native-web 은 accessibilityRole="button" 을 진짜
@@ -26,12 +26,14 @@ import { Image, Pressable, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '../../../components/Icon';
 import { Avatar } from '../../../components/Avatar';
 import { HeartSproutIcon } from '../../../components/HeartSproutIcon';
+import { LovelichelinCrownSignal } from './LovelichelinCrownSignal';
 import { TodayRing, todayRingLabel, type TodaySlices } from './TodayRing';
 import { formatDateLabel } from '../../../utils/date';
 import { colors, fontSize, radius, spacing } from '../../../constants/theme';
 import { themedStyles } from '../../../theme/themedStyles';
 import { onColor } from '../../../theme/onColor';
 import { layout } from '../../../theme/layout';
+import type { LovelichelinSignal } from '../../../types';
 
 /** 한 사람의 오늘 — 한 열에 들어가는 값 묶음 */
 export interface PersonToday {
@@ -50,6 +52,8 @@ export interface PersonToday {
    * 상대가 그 이모지를 지우면 서버가 null 로 내려주므로 저절로 유니코드로 돌아간다.
    */
   moodImageUrl?: string | null;
+  /** 럽슐랭 왕관 신호 — 오늘 기록했거나 막 등극했으면. 없으면 이름 줄에 아무것도 없다(LovelichelinCrownSignal) */
+  crown?: LovelichelinSignal | null;
   /**
    * 오늘 챙김 — 아침·점심·저녁·운동(LOVEBODY_REVIEW §2-2). 있으면 아바타 둘레에 네 조각 링을 그린다.
    * 없으면(구서버라 상대 끼니 종류를 모를 때) 예전처럼 소유자 색 테두리만.
@@ -71,6 +75,8 @@ export interface CoupleHeroProps {
   onPressPerson?: (who: 'me' | 'partner') => void;
   /** 운동/식단 버튼을 눌렀을 때 — 그 종류의 기록 화면으로 이동 */
   onPressToday?: (who: 'me' | 'partner', kind: 'workout' | 'meal') => void;
+  /** 이름 옆 럽슐랭 왕관을 눌렀을 때 — 그 장소·콘텐츠 상세로 */
+  onPressCrown?: (who: 'me' | 'partner') => void;
 }
 
 export function CoupleHero({
@@ -81,6 +87,7 @@ export function CoupleHero({
   onPressDday,
   onPressPerson,
   onPressToday,
+  onPressCrown,
 }: CoupleHeroProps) {
   return (
     <View style={styles.wrap}>
@@ -119,6 +126,7 @@ export function CoupleHero({
           ringColor={colors.me}
           onPress={() => onPressPerson?.('me')}
           onPressToday={(kind) => onPressToday?.('me', kind)}
+          onPressCrown={() => onPressCrown?.('me')}
           mealHint="한 끼 기록하기"
         />
         <View style={styles.link} importantForAccessibility="no-hide-descendants">
@@ -130,19 +138,27 @@ export function CoupleHero({
           ringColor={colors.partner}
           onPress={() => onPressPerson?.('partner')}
           onPressToday={(kind) => onPressToday?.('partner', kind)}
+          onPressCrown={() => onPressCrown?.('partner')}
         />
       </View>
     </View>
   );
 }
 
-/** 한 사람의 열 — [아바타·이름] 버튼 아래에 [운동][식단] 버튼, 그 아래 최근 기록 한 줄. 버튼은 형제다 */
+/**
+ * 한 사람의 열 — [아바타] 버튼, [이름·스트릭(·왕관)] 줄, [운동][식단] 버튼, 최근 기록 한 줄. 버튼은 전부 형제다.
+ *
+ * <p>이름 줄은 아바타 버튼 <b>밖</b>에 있다(2026-10-02). 그 줄에 럽슐랭 왕관 버튼이 들어가는데, 아바타 버튼 안에 두면
+ * 버튼 안 버튼이 된다(웹 마크업 오류 — npm run verify:nested-buttons). 이름을 눌러도 예전처럼 기록으로 가도록 이름·스트릭은
+ * 같은 동작의 버튼으로 감싸되, 스크린리더에는 숨긴다 — 아바타 버튼의 라벨("○○님의 기록 보기")이 이미 그 말이다.
+ */
 function PersonColumn({
   person,
   fill,
   ringColor,
   onPress,
   onPressToday,
+  onPressCrown,
   mealHint,
 }: {
   person: PersonToday;
@@ -152,6 +168,7 @@ function PersonColumn({
   ringColor: string;
   onPress: () => void;
   onPressToday: (kind: 'workout' | 'meal') => void;
+  onPressCrown: () => void;
   /** 식단 버튼이 하는 일이 다를 때(내 쪽은 기록 시트가 열린다) 접근성 힌트 */
   mealHint?: string;
 }) {
@@ -186,7 +203,15 @@ function PersonColumn({
             </View>
           ) : null}
         </View>
-        <View style={styles.nameLine}>
+      </Pressable>
+
+      <View style={styles.nameLine}>
+        <Pressable
+          onPress={onPress}
+          style={({ pressed }) => [styles.nameTap, pressed && styles.pressed]}
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+        >
           <Text style={styles.name} numberOfLines={1}>
             {person.name}
           </Text>
@@ -196,8 +221,12 @@ function PersonColumn({
               <Text style={styles.streakText}>{person.streak}일</Text>
             </View>
           ) : null}
-        </View>
-      </Pressable>
+        </Pressable>
+        {/* 럽슐랭 왕관 — 스트릭 옆. PRO 왕관과 헷갈리지 않게 색·자리를 정해 두었다(컴포넌트 주석) */}
+        {person.crown ? (
+          <LovelichelinCrownSignal signal={person.crown} ownerName={person.name} onPress={onPressCrown} />
+        ) : null}
+      </View>
 
       <View style={styles.todayRow}>
         <TodayButton
@@ -289,7 +318,9 @@ const styles = themedStyles((colors) => ({
   avatarRing: { borderWidth: 2, borderRadius: radius.full, padding: 2, backgroundColor: colors.background },
   // 오늘 챙김 링 자리 — 배경색 원 위에 링을 그려 사진 배경 위에서도 조각이 읽히게
   avatarRingToday: { width: AVATAR_RING, height: AVATAR_RING, borderRadius: AVATAR_RING / 2, backgroundColor: colors.background },
-  nameLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, maxWidth: '100%' },
+  // 아바타 버튼 밖으로 나오면서 열의 gap(xxs)만 남았다 — 예전 버튼 안 간격(xs)에 맞춰 조금 띄운다
+  nameLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, maxWidth: '100%', marginTop: spacing.xs - spacing.xxs },
+  nameTap: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, flexShrink: 1, minWidth: 0 },
   name: { color: colors.textPrimary, fontSize: fontSize.body, fontWeight: '800', flexShrink: 1 },
   streak: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   streakText: { color: colors.textSecondary, fontSize: fontSize.caption, fontWeight: '700' },

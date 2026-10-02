@@ -30,6 +30,26 @@ public record FeedItemResponse(
          * 타임라인은 이런 끼니를 커플 한쪽 카드로 합쳐 내리므로({@code FeedService.timeline}),
          * 화면은 "누가" 대신 "둘이 함께"로 읽어야 한다.
          */
-        boolean shared
+        boolean shared,
+        /**
+         * 한 줄 요약 — 홈 열처럼 <b>한 줄만</b> 보여 주는 자리용. 카드 본문(title/content)은 그대로 둔다.
+         *
+         * <p>장소 방문·콘텐츠 관람은 "이름 ★4" 다. 그 둘의 {@code content} 는 "★★★★ 메모" 라, 메모가 없으면
+         * 한 줄 자리에 별만 남았다(2026-10-02). 나머지 타입은 예전 홈 규칙 그대로 content, 없으면 title.
+         * 예전 앱은 이 필드를 모른 채 무시한다.
+         */
+        String summary
 ) {
+    /** summary 를 따로 정하지 않는 타입 — content, 없으면 title */
+    public FeedItemResponse(FeedItemType type, Long refId, Long userId, String userName, boolean mine,
+                            String title, String content, String imageUrl, LocalDateTime occurredAt,
+                            List<ReactionSummary> reactions, List<String> imageUrls, boolean shared) {
+        this(type, refId, userId, userName, mine, title, content, imageUrl, occurredAt, reactions, imageUrls, shared,
+                content != null && !content.isBlank() ? content : title);
+    }
+
+    /** 장소·콘텐츠 한 줄 요약 — "이름 ★4", 별점이 없으면 이름만 */
+    public static String ratedSummary(String name, Integer rating) {
+        return rating != null ? name + " ★" + rating : name;
+    }
 }

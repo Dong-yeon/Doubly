@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -51,4 +52,7 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
               and exists (select 1 from PlaceVisit v where v.placeId = p.id)
             """)
     long countVisitedByTripId(@Param("tripId") Long tripId);
+
+    /** 홈 왕관 — since 이후 등극한 이 커플 장소 (등극 시각은 0→양수 전환 때만 찍힌다) */
+    List<Place> findByCoupleIdAndLovelichelinCertifiedAtGreaterThanEqual(Long coupleId, LocalDateTime since);
 }

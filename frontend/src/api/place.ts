@@ -4,6 +4,7 @@ import { runAiJob, type AiJobStart } from './aiJob';
 import type {
   ApiResponse,
   DateCourse,
+  LovelichelinPulse,
   LovelichelinRecommendation,
   Place,
   PlaceSearchResponse,
@@ -41,6 +42,8 @@ export const placeApi = {
   // 채워진 채로 바로 생긴다. /places/{id} 와 겹치지 않게 라우트 이름은 고정 경로.
   search: (query: string, size = 8) =>
     unwrap(apiClient.get<ApiResponse<PlaceSearchResponse>>('/places/search', { params: { query, size } })),
+  // 홈 이름 옆 럽슐랭 왕관 신호 — 나·상대 각각(없으면 null). 미연결이면 빈 신호(404 아님)
+  lovelichelinPulse: () => unwrap(apiClient.get<ApiResponse<LovelichelinPulse>>('/places/lovelichelin/pulse')),
   get: (id: number) => unwrap(apiClient.get<ApiResponse<Place>>(`/places/${id}`)),
   update: (id: number, payload: Partial<SavePlacePayload>) =>
     unwrap(apiClient.put<ApiResponse<Place>>(`/places/${id}`, payload)),

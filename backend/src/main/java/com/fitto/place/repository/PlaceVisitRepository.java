@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 public interface PlaceVisitRepository extends JpaRepository<PlaceVisit, Long> {
@@ -149,4 +150,14 @@ public interface PlaceVisitRepository extends JpaRepository<PlaceVisit, Long> {
 
         String getPlaceName();
     }
+
+    /** 홈 왕관 — 이 커플 장소에 [from, to) 사이 남긴 방문 기록 (to 배타) */
+    @Query("""
+            select v.placeId as targetId, p.name as targetName, v.visitedBy as userId, v.createdAt as at
+            from PlaceVisit v join Place p on p.id = v.placeId
+            where p.coupleId = :coupleId and v.createdAt >= :from and v.createdAt < :to
+            """)
+    List<LovelichelinActivityRow> findActivityBetween(@Param("coupleId") Long coupleId,
+                                                                                @Param("from") LocalDateTime from,
+                                                                                @Param("to") LocalDateTime to);
 }

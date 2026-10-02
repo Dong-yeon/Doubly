@@ -341,7 +341,11 @@ export type PlaceScreensParamList = {
         returnTo?: keyof MainTabParamList;
       }
     | undefined;
-  PlaceDetail: { placeId: number; name: string };
+  /*
+   * openRating: 들어오자마자 럽슐랭 평가 영역을 펼친다 — 홈에서 상대 왕관을 눌렀는데 내 대표 평점이 아직
+   * 없을 때(HomeScreen.onPressCrown). 웹은 URL 에 실려 문자열 'true' 로 올 수 있다.
+   */
+  PlaceDetail: { placeId: number; name: string; openRating?: boolean };
 };
 
 // 콘텐츠(영화·공연·드라마) 추가/상세 — Place 와 별개 도메인이라 지도·좌표 파라미터가 없다.
@@ -349,7 +353,8 @@ export type PlaceScreensParamList = {
 export type ContentScreensParamList = {
   // content: 기존 콘텐츠를 수정하러 들어올 때만 채워짐 (없으면 새 콘텐츠 추가)
   ContentAdd: { content?: Content } | undefined;
-  ContentDetail: { contentId: number; title: string };
+  // openRating: PlaceDetail 과 같다
+  ContentDetail: { contentId: number; title: string; openRating?: boolean };
 };
 
 // 럽슐랭 탭 내부 스택 — 가이드/둘러보기(목록·지도)/콘텐츠(한 화면, Chip 세그먼트) + 추가 / 상세 (PLACE)
