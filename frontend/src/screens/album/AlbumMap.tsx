@@ -9,12 +9,13 @@
  * (사용자가 옮긴 시야를 뺏지 않으려는 설계 — kakaoMapHtml.ts), 데이터가 온 뒤에 마운트하고 필터가 바뀌면
  * 부모가 key 를 갈아 새로 맞추게 한다.
  *
- * <p>핀은 지금 색 핀 + "가게명 · 장수" 이름표다. 핀 자리에 사진 썸네일을 띄우려면 네이티브(WebView HTML)와
- * 웹 구현을 함께 고쳐야 해 다음으로 미뤘다.
+ * <p>핀은 그 장소의 <b>가장 최근 사진</b>(52px 둥근 사각형) + 장수 뱃지, 아래에 가게 이름표다
+ * ({@code KakaoMapMarker.imageUrl} — 네이티브 WebView HTML 과 웹 구현이 같은 모양으로 그린다).
  */
 import React, { useMemo } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { KakaoMap } from '../../components/KakaoMap';
+import { thumbnailUrl } from '../../utils/imageUrl';
 import type { KakaoMapMarker } from '../../utils/kakaoMapHtml';
 import type { FeedPhotoMapPlace } from '../../types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
@@ -40,12 +41,16 @@ export function AlbumMap({ places, loading, error, truncated, filtered, onPressP
           (n, i) => n + (i.imageUrls && i.imageUrls.length > 0 ? i.imageUrls.length : 1),
           0,
         );
+        // 핀 = 그 장소의 가장 최근 사진(목록 순서상 [0]). 52dp 칸이라 썸네일로 받는다 — 원본을 지도에 깔면 무겁다
+        const cover = p.items[0]?.imageUrl;
         return {
           id: p.placeId,
           lat: p.lat,
           lng: p.lng,
-          title: count > 1 ? `${p.name} · ${count}` : p.name,
+          title: p.name,
           color: colors.coral,
+          imageUrl: cover ? thumbnailUrl(cover, 52) : undefined,
+          count,
         };
       }),
     [places],

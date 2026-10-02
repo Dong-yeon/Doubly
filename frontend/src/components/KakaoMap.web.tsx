@@ -12,6 +12,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { KAKAO_JS_KEY } from '../constants/config';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 import type { KakaoMapHandle, KakaoMapProps } from './KakaoMap.types';
+import type { KakaoMapMarker } from '../utils/kakaoMapHtml';
 import { themedStyles } from '../theme/themedStyles';
 
 export type { KakaoMapHandle, KakaoMapProps };
@@ -54,6 +55,45 @@ function pinImage(kakao: any, color: string, filled: boolean) {
   return new kakao.maps.MarkerImage(url, new kakao.maps.Size(28, 28), {
     offset: new kakao.maps.Point(14, 14),
   });
+}
+
+/**
+ * 사진 핀 DOM — kakaoMapHtml.ts 의 photoPin(네이티브)과 <b>같은 모양</b>이어야 한다.
+ * URL·글자는 innerHTML 로 잇지 않고 DOM 속성으로 넣는다(이름에 꺾쇠·따옴표가 있어도 안전).
+ */
+function photoPinElement(m: KakaoMapMarker, onPress: () => void): HTMLElement {
+  const root = document.createElement('div');
+  root.style.cssText = 'position:relative;display:flex;flex-direction:column;align-items:center;cursor:pointer;';
+  const box = document.createElement('div');
+  box.style.cssText =
+    'width:52px;height:52px;border-radius:12px;border:3px solid #fff;overflow:hidden;' +
+    'background:#eee;box-shadow:0 2px 6px rgba(0,0,0,.3);box-sizing:border-box;';
+  const img = document.createElement('img');
+  img.src = m.imageUrl ?? '';
+  img.alt = '';
+  img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
+  box.appendChild(img);
+  const tail = document.createElement('div');
+  tail.style.cssText =
+    'width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;' +
+    'border-top:8px solid #fff;margin-top:-1px;filter:drop-shadow(0 2px 1px rgba(0,0,0,.2));';
+  root.appendChild(box);
+  root.appendChild(tail);
+  if (m.count && m.count > 1) {
+    const badge = document.createElement('div');
+    badge.textContent = m.count > 99 ? '99+' : String(m.count);
+    badge.style.cssText =
+      'position:absolute;top:-7px;right:-9px;min-width:20px;height:20px;padding:0 5px;' +
+      'border-radius:10px;border:2px solid #fff;box-sizing:border-box;background:' +
+      (m.color ?? '#333') +
+      ';color:#fff;font-size:11px;font-weight:700;line-height:16px;text-align:center;';
+    root.appendChild(badge);
+  }
+  root.addEventListener('click', (e) => {
+    e.stopPropagation();
+    onPress();
+  });
+  return root;
 }
 
 export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap(
@@ -117,10 +157,23 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
     (markers ?? []).forEach((m) => {
       const pos = new kakao.maps.LatLng(m.lat, m.lng);
       bounds.extend(pos);
-      const markerOpts: any = { map, position: pos, title: m.title };
-      if (m.color) markerOpts.image = pinImage(kakao, m.color, m.filled !== false);
-      const marker = new kakao.maps.Marker(markerOpts);
-      kakao.maps.event.addListener(marker, 'click', () => cbRef.current.onMarkerPress?.(m.id));
+      let marker: any;
+      if (m.imageUrl) {
+        // 사진 핀 — 네이티브(kakaoMapHtml.ts photoPin)와 같은 모양. 꼭짓점이 좌표(yAnchor 1)
+        marker = new kakao.maps.CustomOverlay({
+          map,
+          position: pos,
+          xAnchor: 0.5,
+          yAnchor: 1,
+          clickable: true,
+          content: photoPinElement(m, () => cbRef.current.onMarkerPress?.(m.id)),
+        });
+      } else {
+        const markerOpts: any = { map, position: pos, title: m.title };
+        if (m.color) markerOpts.image = pinImage(kakao, m.color, m.filled !== false);
+        marker = new kakao.maps.Marker(markerOpts);
+        kakao.maps.event.addListener(marker, 'click', () => cbRef.current.onMarkerPress?.(m.id));
+      }
       const label = new kakao.maps.CustomOverlay({
         map,
         position: pos,

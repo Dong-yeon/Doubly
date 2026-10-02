@@ -231,7 +231,9 @@
 
 검증: `FeedPhotosTest` 18 · `MemoriesFlowTest` 13 · `MemoriesNotifierTest` 5 — H2 + PostgreSQL 16 통과. 프론트 typecheck·lint·verify:nested-buttons 통과. **화면은 미확인**(실기기·웹 모두) — 특히 지도 핀 탭→뷰어, 뷰어 반응 줄 위치, 기념일 카드 문구.
 
-후속: 지도 핀을 사진 썸네일로(네이티브 WebView HTML·웹 구현 둘 다 손대야 함), 달 넘기기 스와이프, 기념일·여행을 사진 달력에 겹치기.
+**지도 사진 핀 (2026-10-02 추가)**: `KakaoMapMarker.imageUrl`·`count` — 주면 동그란 핀 대신 그 장소의 가장 최근 사진(52px 둥근 사각형, 흰 테두리, 아래 꼬리 꼭짓점이 좌표) + 우상단 장수 뱃지, 이름표는 그대로 아래. 네이티브(`kakaoMapHtml.ts` photoPin)와 웹(`KakaoMap.web.tsx` photoPinElement)이 **같은 모양을 따로 그린다** — 하나를 고치면 다른 쪽도. `CustomOverlay` + `clickable: true`(지도 탭으로 새지 않게), URL·글자는 DOM 속성으로(문자열 HTML 잇기 금지). 검증: 생성 HTML 인라인 스크립트를 Node 로 구문 검사 + 가짜 SDK/DOM 에서 실행해 사진 핀 생성·클릭 시 `{type:'marker', id}` 전송 확인. 실기기·웹 화면은 미확인.
+
+후속: 달 넘기기 스와이프, 기념일·여행을 사진 달력에 겹치기, 핀이 겹치는 곳의 묶음(클러스터).
 
 ### P2
 
