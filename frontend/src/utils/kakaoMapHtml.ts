@@ -15,6 +15,13 @@ export interface KakaoMapMarker {
   filled?: boolean;
   /** 럽슐랭 등급(1~3) — 지정하면 핀 우상단에 금색 등급 뱃지가 덧그려진다. 0/미지정 시 없음 */
   tier?: number;
+  /**
+   * 사진 핀 — 주면 동그란 핀 대신 이 사진을 52px 둥근 사각형으로 꽂는다(사진첩 지도).
+   * 작은 썸네일 URL 을 넘길 것 — 지도 위에 원본 수십 장을 받으면 무겁다.
+   */
+  imageUrl?: string;
+  /** 사진 핀 우상단 장수 뱃지 — 2 이상일 때만 그린다(imageUrl 이 있을 때만 의미) */
+  count?: number;
 }
 
 export type KakaoMapMessage =
@@ -152,6 +159,39 @@ kakao.maps.load(function () {
    * (여행 상세에서 Day 를 누를 때마다 지도가 하얗게 깜빡였다).
    * 이제 fittoSetMarkers 만 호출해 그린 것만 바꾼다.
    */
+  /*
+   * 사진 핀 — 52px 둥근 사진 + 흰 테두리 + 아래 꼬리(꼭짓점이 좌표). 장수 뱃지는 우상단.
+   * KakaoMap.web.tsx 의 photoPinElement 와 <b>같은 모양</b>이어야 한다(네이티브·웹이 따로 그린다).
+   * URL·글자는 innerHTML 로 잇지 않고 DOM 속성으로 넣는다 — 이름에 따옴표·꺾쇠가 있어도 안전하다.
+   */
+  function photoPin(m, color) {
+    var root = document.createElement('div');
+    root.style.cssText = 'position:relative;display:flex;flex-direction:column;align-items:center;cursor:pointer;';
+    var box = document.createElement('div');
+    box.style.cssText = 'width:52px;height:52px;border-radius:12px;border:3px solid #fff;overflow:hidden;' +
+      'background:#eee;box-shadow:0 2px 6px rgba(0,0,0,.3);box-sizing:border-box;';
+    var img = document.createElement('img');
+    img.src = m.imageUrl;
+    img.alt = '';
+    img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
+    box.appendChild(img);
+    var tail = document.createElement('div');
+    tail.style.cssText = 'width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;' +
+      'border-top:8px solid #fff;margin-top:-1px;filter:drop-shadow(0 2px 1px rgba(0,0,0,.2));';
+    root.appendChild(box);
+    root.appendChild(tail);
+    if (m.count && m.count > 1) {
+      var badge = document.createElement('div');
+      badge.textContent = m.count > 99 ? '99+' : String(m.count);
+      badge.style.cssText = 'position:absolute;top:-7px;right:-9px;min-width:20px;height:20px;padding:0 5px;' +
+        'border-radius:10px;border:2px solid #fff;box-sizing:border-box;background:' + (color || '#333') + ';' +
+        'color:#fff;font-size:11px;font-weight:700;line-height:16px;text-align:center;';
+      root.appendChild(badge);
+    }
+    root.addEventListener('click', function (e) { e.stopPropagation(); post({ type: 'marker', id: m.id }); });
+    return root;
+  }
+
   var drawn = [];
   window.fittoSetMarkers = function (markers, path, fit) {
     drawn.forEach(function (o) { o.setMap(null); });
@@ -161,11 +201,18 @@ kakao.maps.load(function () {
     markers.forEach(function (m) {
       var pos = new kakao.maps.LatLng(m.lat, m.lng);
       bounds.extend(pos);
-      var markerOpts = { map: map, position: pos, title: m.title };
-      if (m.color) { markerOpts.image = pinImage(m.color, m.filled !== false, m.tier || 0); }
-      var marker = new kakao.maps.Marker(markerOpts);
-      kakao.maps.event.addListener(marker, 'click', function () { post({ type: 'marker', id: m.id }); });
-      drawn.push(marker);
+      if (m.imageUrl) {
+        // 사진 핀 — 아래 꼭짓점이 좌표에 오도록 yAnchor 1. clickable 이라 지도 탭(좌표 선택)으로 새지 않는다
+        drawn.push(new kakao.maps.CustomOverlay({
+          map: map, position: pos, xAnchor: 0.5, yAnchor: 1, clickable: true, content: photoPin(m, m.color)
+        }));
+      } else {
+        var markerOpts = { map: map, position: pos, title: m.title };
+        if (m.color) { markerOpts.image = pinImage(m.color, m.filled !== false, m.tier || 0); }
+        var marker = new kakao.maps.Marker(markerOpts);
+        kakao.maps.event.addListener(marker, 'click', function () { post({ type: 'marker', id: m.id }); });
+        drawn.push(marker);
+      }
       var label = new kakao.maps.CustomOverlay({
         map: map, position: pos, yAnchor: 0,
         content: '<div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:2px 8px;' +
