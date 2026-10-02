@@ -1,8 +1,9 @@
 import React from 'react';
-import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, Text, TouchableOpacity, View } from 'react-native';
 import { MaterialCommunityIcons } from './Icon';
 import type { Meal, MealType } from '../types';
-import { relativeDateLabel } from '../utils/date';
+import { relativeDateLabel, toDateString } from '../utils/date';
+import { cardImageUrl } from '../utils/imageUrl';
 import { formatKcal } from '../utils/format';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 import { themedStyles } from '../theme/themedStyles';
@@ -37,8 +38,31 @@ export const MEAL_ICON: Record<MealType, IconName> = {
 /** 카드에 펼쳐 보여줄 항목 수 — 나머지는 "외 N개" 로 접는다 */
 const PREVIEW_COUNT = 3;
 
-/** 식단 기록 카드 — 끼니·사진·음식 항목·칼로리·메모 요약 */
-export function MealCard({ meal, onPress, onLongPress, showDate, deleting, onPlacePress }: Props) {
+/**
+ * "칼로리 채우는 중"을 얼마나 보여줄지 — 사진만 올려 저장하면 서버가 백그라운드로 분석해 칼로리를 채운다
+ * (MealPhotoAutoAnalysisService). 분석이 실패하거나 설정에서 꺼 두면 영원히 비어 있으므로, 앱이 그 기록을
+ * <b>처음 대기 상태로 본 시각</b>부터 이 시간이 지나면 표시를 거둔다. 서버 createdAt 은 존 없는
+ * LocalDateTime 이라 기기 시계와 비교할 수 없어 기준으로 쓰지 않는다.
+ */
+const PENDING_WINDOW_MS = 10 * 60 * 1000;
+/** meal id → 처음 대기 상태로 본 시각. 화면이 다시 마운트돼도 이어지도록 모듈에 둔다 */
+const pendingSeenAt = new Map<number, number>();
+
+/** 사진은 있는데 칼로리가 아직 없는 오늘 기록 — 자동 분석을 기다리는 중으로 본다 */
+function isFillingCalories(meal: Meal): boolean {
+  if (!meal.photoUrl || meal.calories != null || (meal.items?.length ?? 0) > 0) {
+    pendingSeenAt.delete(meal.id);
+    return false;
+  }
+  if (meal.mealDate !== toDateString()) return false;
+  const now = Date.now();
+  const seen = pendingSeenAt.get(meal.id) ?? now;
+  if (!pendingSeenAt.has(meal.id)) pendingSeenAt.set(meal.id, now);
+  return now - seen < PENDING_WINDOW_MS;
+}
+
+/** 식단 기록 카드 — 끼니·사진·음식 항목·칼로리·메모 요약. 목록에서 다시 그려지지 않도록 memo */
+export const MealCard = React.memo(function MealCard({ meal, onPress, onLongPress, showDate, deleting, onPlacePress }: Props) {
   const items = meal.items ?? [];
   return (
     /*
@@ -80,13 +104,17 @@ export function MealCard({ meal, onPress, onLongPress, showDate, deleting, onPla
                 {meal.nutritionSource === 'AI_ESTIMATED' ? '약 ' : ''}
                 {formatKcal(meal.calories)}
               </Text>
+            ) : isFillingCalories(meal) ? (
+              // 저장 토스트("칼로리는 곧 채워져요")와 같은 말 — 0kcal 로 남은 카드를 "저장이 반쪽 났다"로 읽지 않게
+              <Text style={styles.calPending}>칼로리 채우는 중</Text>
             ) : null}
             {showDate ? <Text style={styles.date}>{relativeDateLabel(meal.mealDate)}</Text> : null}
           </View>
         </View>
 
         {meal.photoUrl ? (
-          <Image source={{ uri: meal.photoUrl }} style={styles.photo} resizeMode="cover" />
+          // 180dp 칸에 폰 원본(수 MB)을 받지 않게 폭을 줄인 변환 URL — Cloudinary 가 아니면 그대로
+          <Image source={{ uri: cardImageUrl(meal.photoUrl) }} style={styles.photo} resizeMode="cover" />
         ) : null}
 
         {/*
@@ -137,7 +165,7 @@ export function MealCard({ meal, onPress, onLongPress, showDate, deleting, onPla
       ) : null}
     </View>
   );
-}
+});
 
 const styles = themedStyles((colors) => ({
   card: {
@@ -161,7 +189,9 @@ const styles = themedStyles((colors) => ({
     backgroundColor: colors.primaryBg,
   },
   dateBadgeText: { fontSize: fontSize.micro, fontWeight: '800', color: colors.primary },
-  cal: { fontSize: fontSize.caption, color: colors.accent, fontWeight: '800' },
+  // 내 기록의 숫자 — 소유자·함께 의미가 없으므로 본문색. 예전 accent(=함께 olive)는 뜻이 없었다(§3 A-9)
+  cal: { fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '800' },
+  calPending: { fontSize: fontSize.caption, color: colors.textTertiary, fontWeight: '700' },
   date: { fontSize: fontSize.caption, color: colors.textSecondary },
   placeTag: {
     flexDirection: 'row',

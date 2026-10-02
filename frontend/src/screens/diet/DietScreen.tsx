@@ -29,7 +29,7 @@ import { MealCard } from '../../components/MealCard';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { EmptyState } from '../../components/EmptyState';
 import { AiInsightButton } from '../../components/AiInsightButton';
-import { ProteinRing } from '../../components/ProteinRing';
+import { NutritionRing } from '../../components/NutritionRing';
 import { WorkoutCheckinCard } from '../../components/workout/WorkoutCheckinCard';
 import { useDietStore } from '../../store/dietStore';
 import { useWorkoutStore } from '../../store/workoutStore';
@@ -68,19 +68,52 @@ import { onColor } from '../../theme/onColor';
 import { layout } from '../../theme/layout';
 
 /** 목표 대비 섭취 바 */
-function NutritionBar({ label, consumed, target, unit }: { label: string; consumed: number; target?: number | null; unit: string }) {
+function NutritionBar({
+  label,
+  consumed,
+  target,
+  unit,
+  overIsBad = true,
+}: {
+  label: string;
+  consumed: number;
+  target?: number | null;
+  unit: string;
+  /** 넘으면 강조할지 — 단백질은 넘는 게 나쁜 일이 아니라 초과색을 쓰지 않는다 */
+  overIsBad?: boolean;
+}) {
   const pct = target && target > 0 ? Math.min(100, (consumed / target) * 100) : 0;
-  const over = target != null && consumed > target;
+  const over = overIsBad && target != null && consumed > target;
   return (
-    <View style={styles.nutRow}>
-      <Text style={styles.nutLabel} numberOfLines={1}>{label}</Text>
+    <View
+      style={styles.nutRow}
+      accessible
+      accessibilityLabel={`${label} ${formatNumber(consumed)}${unit}${target != null ? `, 목표 ${formatNumber(target)}${unit}` : ''}`}
+    >
+      {/*
+        [라벨 ··· 값] 한 줄 + 그 아래 막대. 예전엔 라벨·막대·값을 한 줄에 고정 폭(48·92)으로 놓아 큰 글자에서
+        잘렸고, 링이 커진 뒤 360 폭에서는 막대 칸이 남지 않았다(§3 A-10). 세 줄 높이가 링 높이 안에 든다.
+      */}
+      <View style={styles.nutRowHead}>
+        <Text style={styles.nutLabel}>{label}</Text>
+        {/* 표기는 format 유틸로 통일 — 한 화면 안에서 kcal 표기가 세 갈래였다 */}
+        <Text style={styles.nutVal}>
+          {unit === 'kcal' ? formatKcalOfGoal(consumed, target) : `${formatNumber(consumed)}${target != null ? ` / ${formatNumber(target)}` : ''}${unit}`}
+        </Text>
+      </View>
       <View style={styles.nutTrack}>
         <View style={[styles.nutFill, { width: `${pct}%` }, over && styles.nutFillOver]} />
       </View>
-      {/* 표기는 format 유틸로 통일 — 한 화면 안에서 kcal 표기가 세 갈래였다 */}
-      <Text style={styles.nutVal}>
-        {unit === 'kcal' ? formatKcalOfGoal(consumed, target) : `${formatNumber(consumed)}${target != null ? ` / ${formatNumber(target)}` : ''}${unit}`}
-      </Text>
+    </View>
+  );
+}
+
+/** 계산식 시트의 한 줄 */
+function FormulaRow({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <View style={styles.formulaRow}>
+      <Text style={[styles.formulaLabel, strong && styles.formulaStrong]}>{label}</Text>
+      <Text style={[styles.formulaValue, strong && styles.formulaStrong]}>{value}</Text>
     </View>
   );
 }
@@ -91,6 +124,117 @@ function formatHM(min: number): string {
   const h = Math.floor(abs / 60);
   const m = abs % 60;
   return h > 0 ? `${h}시간 ${m}분` : `${m}분`;
+}
+
+/** 카드 하나의 첫 로드 상태 — 실패를 "카드가 없다"로 숨기지 않으려고 따로 든다(§3 A-6) */
+type LoadState = 'loading' | 'ok' | 'error';
+
+/** 첫 로드 동안의 자리 — 고정 높이라 데이터가 들어와도 아래 목록이 덜 출렁인다 */
+function CardSkeleton({ height }: { height: number }) {
+  return <View style={[styles.skeleton, { height }]} accessibilityLabel="불러오는 중" />;
+}
+
+/** 조회 실패 — 카드 자리에 한 줄. 예전엔 .catch 가 null 을 넣어 카드가 조용히 사라졌다 */
+function LoadErrorRow({ what, onRetry }: { what: string; onRetry: () => void }) {
+  return (
+    <Pressable
+      style={({ pressed }) => [styles.loadError, pressed && styles.trackerRowPressed]}
+      onPress={onRetry}
+      accessibilityRole="button"
+      accessibilityLabel={`${what} 불러오기 실패. 다시 시도`}
+    >
+      <MaterialCommunityIcons name="cloud-off-outline" size={18} color={colors.textSecondary} />
+      <Text style={styles.loadErrorText}>{what} · 불러오지 못했어요</Text>
+      <Text style={styles.trackerActionText}>다시</Text>
+    </Pressable>
+  );
+}
+
+/**
+ * 단식 진행 줄 — 경과 시간을 <b>이 컴포넌트 안에서만</b> 1분마다 다시 그린다.
+ * 예전엔 화면 전체의 상태(forceTick)여서 1분마다 영양 카드·식사 카드·모달 셋까지 다시 그렸다(§3 A-12).
+ */
+function FastingActiveRow({
+  fasting,
+  partnerFasting,
+  onEnd,
+}: {
+  fasting: FastingStatus;
+  partnerFasting: PartnerFasting | null;
+  onEnd: () => void;
+}) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60000);
+    return () => clearInterval(id);
+  }, []);
+  const elapsedMin = fasting.startedAt
+    ? Math.max(0, Math.floor((now - new Date(fasting.startedAt).getTime()) / 60000))
+    : (fasting.elapsedMin ?? 0);
+  return (
+    <View style={styles.trackerRow}>
+      <View style={styles.trackerText}>
+        <Text style={styles.trackerTitle}>
+          {fasting.planLabel} 단식 중{'  '}
+          <Text style={styles.trackerValue}>{formatHM(elapsedMin)} 경과</Text>
+        </Text>
+        <Text style={styles.trackerSub}>
+          {fasting.achieved
+            ? '목표 달성!'
+            : `목표 ${fasting.targetHours}시간 · ${formatHM((fasting.targetHours ?? 0) * 60 - elapsedMin)} 남음`}
+          {partnerFasting?.connected && partnerFasting.active
+            ? ` · 상대 ${formatHM(partnerFasting.elapsedMin ?? 0)} 경과`
+            : ''}
+        </Text>
+      </View>
+      <Pressable
+        style={({ pressed }) => [styles.trackerAction, pressed && styles.stepBtnPressed]}
+        onPress={onEnd}
+        accessibilityRole="button"
+        accessibilityLabel="단식 종료"
+      >
+        <Text style={styles.trackerActionText}>종료</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+/**
+ * 칼로리 링의 가운데·아래 글자 — 결정(2026-10-02): 중심 = <b>목표 − 섭취</b>. 운동 소모는 더하지 않는다.
+ * 체크인 시간 칩의 소모 칼로리는 "시간 × 가정 MET" 추정이라, 더하면 "더 먹어도 된다"로 과하게 읽힌다.
+ * 운동은 링 아래 캡션으로 따로 보여준다. 방향이 증량이면 남은 양을 "더 드세요"로 말한다.
+ */
+function calorieRing(n: NutritionSummary) {
+  const target = n.targetCalories ?? null;
+  const consumed = n.consumedCalories;
+  const gain = n.goalDirection === 'GAIN';
+  if (!target) {
+    return {
+      progress: null,
+      over: false,
+      value: formatNumber(consumed),
+      label: 'kcal 먹었어요',
+      a11y: `오늘 섭취 ${formatNumber(consumed)}킬로칼로리, 목표 없음`,
+    };
+  }
+  const remain = target - consumed;
+  if (remain >= 0) {
+    return {
+      progress: consumed / target,
+      over: false,
+      value: formatNumber(remain),
+      label: gain ? 'kcal 더 드세요' : 'kcal 남았어요',
+      a11y: `${gain ? '더 먹을' : '남은'} 칼로리 ${formatNumber(remain)}, 목표 ${formatNumber(target)}, 섭취 ${formatNumber(consumed)}`,
+    };
+  }
+  // 넘었다 — 감량·유지·미설정이면 강조, 증량이면 목표를 채운 것이라 강조하지 않는다
+  return {
+    progress: 1,
+    over: !gain,
+    value: formatNumber(-remain),
+    label: gain ? 'kcal 더 먹었어요' : 'kcal 넘었어요',
+    a11y: `목표 ${formatNumber(target)}보다 ${formatNumber(-remain)}킬로칼로리 ${gain ? '더 먹었어요' : '넘었어요'}, 섭취 ${formatNumber(consumed)}`,
+  };
 }
 
 /** 주간 식단 코칭 결과 렌더 */
@@ -131,6 +275,7 @@ export function DietScreen({ navigation, route }: Props) {
     loading,
     loadingMore,
     historyError,
+    todayError,
     fetchToday,
     fetchHistory,
     loadMoreHistory,
@@ -147,6 +292,9 @@ export function DietScreen({ navigation, route }: Props) {
 
   // 영양 목표 대시보드
   const [nutrition, setNutrition] = useState<NutritionSummary | null>(null);
+  const [nutState, setNutState] = useState<LoadState>('loading');
+  /** 링을 누르면 여는 계산식 시트 — 예전 카드 하단의 10px 수식 줄을 대신한다 */
+  const [formulaModal, setFormulaModal] = useState(false);
   const [nutModal, setNutModal] = useState(false);
   const [tCal, setTCal] = useState('');
   const [tCarbs, setTCarbs] = useState('');
@@ -169,8 +317,16 @@ export function DietScreen({ navigation, route }: Props) {
 
   // 물 섭취 트래커
   const [water, setWater] = useState<WaterSummary | null>(null);
+  const [waterState, setWaterState] = useState<LoadState>('loading');
+  // 실패해도 이미 보이던 값은 지우지 않는다 — 새로고침 한 번 실패로 카드가 사라지면 안 된다
   const refreshWater = useCallback(() => {
-    waterApi.today().then(setWater).catch(() => setWater(null));
+    waterApi
+      .today()
+      .then((w) => {
+        setWater(w);
+        setWaterState('ok');
+      })
+      .catch(() => setWaterState((st) => (st === 'ok' ? 'ok' : 'error')));
   }, []);
 
   // 간헐적 단식 타이머
@@ -179,23 +335,18 @@ export function DietScreen({ navigation, route }: Props) {
   const [fastingModal, setFastingModal] = useState(false);
   const [fastingBusy, setFastingBusy] = useState(false);
   const [customHours, setCustomHours] = useState('16');
+  const [fastingState, setFastingState] = useState<LoadState>('loading');
   const refreshFasting = useCallback(() => {
-    fastingApi.active().then(setFasting).catch(() => setFasting(null));
+    fastingApi
+      .active()
+      .then((f) => {
+        setFasting(f);
+        setFastingState('ok');
+      })
+      .catch(() => setFastingState((st) => (st === 'ok' ? 'ok' : 'error')));
+    // 상대 진행 상태는 곁들이는 정보라 실패해도 줄을 비우기만 한다
     fastingApi.partner().then(setPartnerFasting).catch(() => setPartnerFasting(null));
   }, []);
-
-  // 진행 중일 때만 1분마다 화면을 다시 그려 경과 시간을 갱신한다(재조회 없이 클라이언트에서 계산)
-  const [, forceTick] = useState(0);
-  useEffect(() => {
-    if (!fasting?.active) return;
-    const id = setInterval(() => forceTick((t) => t + 1), 60000);
-    return () => clearInterval(id);
-  }, [fasting?.active]);
-
-  const liveElapsedMin =
-    fasting?.active && fasting.startedAt
-      ? Math.max(0, Math.floor((Date.now() - new Date(fasting.startedAt).getTime()) / 60000))
-      : (fasting?.elapsedMin ?? 0);
 
   /*
    * 오늘 운동 기록 — 상단 체크인 카드가 "챙겼는지"를 이 값으로 가른다. 카드가 스스로
@@ -203,16 +354,37 @@ export function DietScreen({ navigation, route }: Props) {
    * 같은 요청이 두 번 나간다(WorkoutCheckinCard 주석).
    */
   const fetchWorkoutToday = useWorkoutStore((s) => s.fetchToday);
+  const [goalState, setGoalState] = useState<LoadState>('loading');
+
+  const refreshNutrition = useCallback(() => {
+    dietApi
+      .nutrition()
+      .then((n) => {
+        setNutrition(n);
+        setNutState('ok');
+      })
+      .catch(() => setNutState((st) => (st === 'ok' ? 'ok' : 'error')));
+  }, []);
+
+  const refreshGoal = useCallback(() => {
+    dietApi
+      .coupleGoal()
+      .then((g) => {
+        setGoal(g);
+        setGoalState('ok');
+      })
+      .catch(() => setGoalState((st) => (st === 'ok' ? 'ok' : 'error')));
+  }, []);
 
   const refreshExtras = useCallback(() => {
     fetchWorkoutToday();
     streakApi.mealMe().then(setMyStreak).catch(() => setMyStreak(null));
     streakApi.mealCouple().then(setCoupleStreak).catch(() => setCoupleStreak(null));
-    dietApi.coupleGoal().then(setGoal).catch(() => setGoal(null));
-    dietApi.nutrition().then(setNutrition).catch(() => setNutrition(null));
+    refreshGoal();
+    refreshNutrition();
     refreshWater();
     refreshFasting();
-  }, [refreshWater, refreshFasting, fetchWorkoutToday]);
+  }, [refreshWater, refreshFasting, refreshGoal, refreshNutrition, fetchWorkoutToday]);
 
   // 모달을 연 시점의 목표 스냅샷 — 백드롭으로 닫을 때 "달라진 게 있는지"를 판단한다
   const nutInitialRef = useRef('');
@@ -369,14 +541,18 @@ export function DietScreen({ navigation, route }: Props) {
   };
 
   // 탭하면 그 기록을 채운 수정 화면으로. 길게 누르면 삭제(기존 동작 유지)
-  const onEdit = (m: Meal) => navigation.navigate('DietRecord', { meal: m });
+  // 아래 셋은 useCallback — MealCard 가 memo 라 매 렌더 새 함수를 넘기면 memo 가 무의미해진다
+  const onEdit = useCallback((m: Meal) => navigation.navigate('DietRecord', { meal: m }), [navigation]);
 
   // 카드의 장소 태그 — 럽슐랭 탭과 공유하는 화면이라 이 스택에 그대로 쌓인다(navigation/types.ts 참고)
-  const onPlacePress = (m: Meal) => {
-    if (m.placeId && m.placeName) navigation.navigate('PlaceDetail', { placeId: m.placeId, name: m.placeName });
-  };
+  const onPlacePress = useCallback(
+    (m: Meal) => {
+      if (m.placeId && m.placeName) navigation.navigate('PlaceDetail', { placeId: m.placeId, name: m.placeName });
+    },
+    [navigation],
+  );
 
-  const onLongPress = (m: Meal) => {
+  const onLongPress = useCallback((m: Meal) => {
     Alert.alert('식단 기록 삭제', `${m.mealTypeLabel} 기록을 삭제할까요?`, [
       { text: '취소', style: 'cancel' },
       {
@@ -391,7 +567,7 @@ export function DietScreen({ navigation, route }: Props) {
           }, '식단 기록을 삭제하지 못했어요.'),
       },
     ]);
-  };
+  }, [runDelete, remove, refreshExtras]);
 
   const todayCalories = today.reduce((sum, m) => sum + (m.calories ?? 0), 0);
 
@@ -439,6 +615,20 @@ export function DietScreen({ navigation, route }: Props) {
           >
             <MaterialCommunityIcons name="calendar-blank-outline" size={24} color={colors.textPrimary} />
           </Pressable>
+          {/*
+            몸 변화(체중 기록·그래프) — 입구가 운동 홈의 칩 하나뿐이었는데 운동 홈을 가린 뒤(2026-09-27)
+            딥링크 외에 닿을 길이 없었다(LOVEBODY_REVIEW §3 A-13). 같은 HealthStack 화면이라 탭을 건너지
+            않는다 — MY(HomeStack)에 두면 탭을 건너는 이동이 되고, iOS 에서 크로스탭 모달이 먹통이 된 전례가 있다.
+          */}
+          <Pressable
+            onPress={() => navigation.navigate('BodyMetric')}
+            hitSlop={8}
+            style={({ pressed }) => [styles.topBtn, pressed && styles.topBtnPressed]}
+            accessibilityRole="button"
+            accessibilityLabel="몸 변화"
+          >
+            <MaterialCommunityIcons name="human" size={24} color={colors.textPrimary} />
+          </Pressable>
         </View>
       </View>
 
@@ -474,34 +664,12 @@ export function DietScreen({ navigation, route }: Props) {
         onEndReached={loadMoreHistory}
         ListHeaderComponent={
           <View>
-            {/* AI 인사이트 — 주간 식단 코칭 / 커플 주간 레터. 목록과 함께 스크롤된다 */}
-            <View style={styles.aiRow}>
-              <AiInsightButton
-                label="주간 식단 코칭"
-                title="주간 식단 코칭"
-                fetcher={dietApi.coach}
-                render={renderCoach}
-                style={styles.aiBtn}
-              />
-              <AiInsightButton
-                label="커플 주간 레터"
-                title="우리 주간 레터"
-                fetcher={summaryApi.aiLetter}
-                render={renderLetter}
-                style={styles.aiBtn}
-              />
-            </View>
-
-            {/* 식단 스트릭 — 운동 홈과 같은 표시 형식(연속/함께/최고) */}
-            <View style={styles.streakRow}>
-              <Text style={styles.streakText}>연속 {myStreak?.currentCount ?? 0}일</Text>
-              {goal?.connected ? (
-                <Text style={styles.streakText}>함께 {coupleStreak?.currentCount ?? 0}일</Text>
-              ) : null}
-              <Text style={styles.streakMax}>최고 {myStreak?.maxCount ?? 0}일</Text>
-            </View>
-
-            {/* 오늘 영양 목표 대시보드 */}
+            {/*
+              순서(2026-10-02, LOVEBODY_REVIEW §3 A-1): 영양 요약 → <b>오늘 식사</b> → 물·단식 → 스트릭·커플 목표 →
+              AI 알약. 예전엔 AI 알약·스트릭·영양·물/단식·커플 목표가 먼저라 첫 식사가 리스트 y≈720dp 에서
+              시작했고, 어느 기기에서도 첫 화면에 식사가 한 장도 안 보였다. 이 탭은 "밥 사진 일기"로 쓰인다
+              (DIET_USAGE_ANALYSIS §1) — 그 일기가 맨 아래 있었다.
+            */}
             {nutrition ? (
               <View style={styles.nutCard}>
                 <View style={styles.nutHeader}>
@@ -517,153 +685,179 @@ export function DietScreen({ navigation, route }: Props) {
                     여행 모드 중 · {nutrition.travelModeTripTitle} — 목표는 잠깐 쉬어가요
                   </Text>
                 ) : null}
-                <View style={styles.nutMain}>
-                  {/* 단백질만 원형 게이지로 분리 — 운동 유저는 단백질 달성률에 가장 민감하다 */}
-                  <ProteinRing consumed={nutrition.consumedProtein} target={nutrition.targetProtein} />
-                  <View style={styles.nutSecondary}>
-                    <NutritionBar label="칼로리" consumed={nutrition.consumedCalories} target={nutrition.targetCalories} unit="kcal" />
-                    <NutritionBar label="탄수" consumed={nutrition.consumedCarbs} target={nutrition.targetCarbs} unit="g" />
-                    <NutritionBar label="지방" consumed={nutrition.consumedFat} target={nutrition.targetFat} unit="g" />
-                  </View>
-                </View>
+                {(() => {
+                  const ring = calorieRing(nutrition);
+                  return (
+                    <View style={styles.nutMain}>
+                      {/*
+                        주인공 = 남은 칼로리(목표 − 섭취). 예전엔 단백질 링이었다(2026-08-10, 운동 트래커 시절의 판단).
+                        운동 소모는 링에 더하지 않고 아래 캡션으로 — §2-1 결정. 누르면 계산식 시트.
+                      */}
+                      <View style={styles.ringCol}>
+                        <NutritionRing
+                          progress={ring.progress}
+                          over={ring.over}
+                          value={ring.value}
+                          label={ring.label}
+                          accessibilityLabel={ring.a11y}
+                          onPress={() => setFormulaModal(true)}
+                        />
+                        {nutrition.exerciseCalories > 0 ? (
+                          <Text style={styles.exerciseCaption}>오늘 운동 −{formatNumber(nutrition.exerciseCalories)} kcal</Text>
+                        ) : null}
+                      </View>
+                      <View style={styles.nutSecondary}>
+                        {/* 단백질은 막대 첫 줄로 — 넘는 게 나쁜 일이 아니라 초과색을 쓰지 않는다 */}
+                        <NutritionBar label="단백질" consumed={nutrition.consumedProtein} target={nutrition.targetProtein} unit="g" overIsBad={false} />
+                        <NutritionBar label="탄수" consumed={nutrition.consumedCarbs} target={nutrition.targetCarbs} unit="g" />
+                        <NutritionBar label="지방" consumed={nutrition.consumedFat} target={nutrition.targetFat} unit="g" />
+                      </View>
+                    </View>
+                  );
+                })()}
                 {/*
-                  목표가 비어 있고 계산할 재료(신체 정보)는 있을 때 — 먼저 권한다. 예전엔 "목표 설정 ›" →
-                  "자동 계산"을 스스로 찾아야 해서, 신체 정보를 다 넣고도 목표가 빈 채로 남았다.
+                  목표가 없을 때가 사실상 기본 화면이다(앱에 "목표"는 이 숫자 칸뿐 — §2-1-1). 계산할 재료(신체 정보)가
+                  있으면 계산을 권하고, 없으면 어디서 넣는지 한 줄로 말한다.
                 */}
-                {!nutrition.targetCalories && !nutrition.travelMode && nutrition.bmr != null ? (
-                  <TouchableOpacity onPress={openGoalWizard} style={styles.goalPrompt} accessibilityRole="button">
-                    <Text style={styles.goalPromptText}>신체 정보로 하루 목표 칼로리를 계산해 드릴게요</Text>
-                    <MaterialCommunityIcons name="chevron-right" size={16} color={colors.primary} />
-                  </TouchableOpacity>
-                ) : null}
-                {nutrition.targetCalories ? (
-                  <Text style={styles.nutRemain}>
-                    남은 칼로리 {formatKcal(Math.max(0, nutrition.targetCalories - nutrition.consumedCalories))}
-                  </Text>
+                {!nutrition.targetCalories && !nutrition.travelMode ? (
+                  nutrition.bmr != null ? (
+                    <TouchableOpacity onPress={openGoalWizard} style={styles.goalPrompt} accessibilityRole="button">
+                      <Text style={styles.goalPromptText}>신체 정보로 하루 목표 칼로리를 계산해 드릴게요</Text>
+                      <MaterialCommunityIcons name="chevron-right" size={16} color={colors.primary} />
+                    </TouchableOpacity>
+                  ) : (
+                    <Text style={styles.energyHint}>MY › 신체 정보를 넣으면 목표 칼로리를 계산해 드려요.</Text>
+                  )
                 ) : null}
 
-                {/* 당류/나트륨/식이섬유 — 목표(target) 없이 오늘 합계만 참고하는 정보성 지표라
-                    게이지 없이 한 줄로만 보여준다. */}
+                {/* 당류/나트륨/식이섬유 — 목표 없이 오늘 합계만 참고하는 정보성 지표라 게이지 없이 한 줄 */}
                 {nutrition.consumedSugar > 0 || nutrition.consumedSodium > 0 || nutrition.consumedFiber > 0 ? (
                   <Text style={styles.extraNutrients}>
                     당류 {formatNumber(nutrition.consumedSugar)}g · 나트륨 {formatNumber(nutrition.consumedSodium)}mg
                     {' '}· 식이섬유 {formatNumber(nutrition.consumedFiber)}g
                   </Text>
                 ) : null}
-
-                {/* 실시간 에너지 밸런스 — 기초대사량 + 오늘 운동 소모 - 섭취. 수동 목표와 별개로,
-                    "오늘 움직인 만큼" 반영된 잔여 칼로리를 보여준다. 프로필(키/생년월일/성별)이나
-                    체중 기록이 없으면 계산할 수 없어 등록 안내만 노출한다. */}
-                <View style={styles.energyBox}>
-                  {nutrition.bmr != null ? (
-                    <>
-                      <Text style={styles.energyFormula}>
-                        기초대사량 {nutrition.bmr} + 운동 소모 {nutrition.exerciseCalories} − 섭취 {nutrition.consumedCalories}
-                      </Text>
-                      <Text style={styles.energyResult}>
-                        {(nutrition.energyBalance ?? 0) >= 0
-                          ? `오늘 ${nutrition.energyBalance}kcal 더 섭취 가능`
-                          : `오늘 쓴 칼로리보다 ${Math.abs(nutrition.energyBalance ?? 0)}kcal 더 먹었어요`}
-                      </Text>
-                    </>
-                  ) : (
-                    <Text style={styles.energyHint}>
-                      MY › 신체 정보에 키·생년월일·성별·체중을 넣으면 목표 칼로리와 오늘 섭취 가능 칼로리를 계산해요.
-                    </Text>
-                  )}
-                </View>
               </View>
-            ) : null}
+            ) : nutState === 'error' ? (
+              <LoadErrorRow what="오늘 영양" onRetry={refreshNutrition} />
+            ) : (
+              <CardSkeleton height={200} />
+            )}
 
-            {/*
-              물 + 간헐적 단식 — 한 카드 안의 <b>한 줄 타일 둘</b>. 예전엔 제목·목표·상대·진행 막대·
-              버튼 셋이 한 트래커마다 있어 카드 하나가 화면의 1/3 이었다(docs/SCREEN_DESIGN_PASS
-              _2026-09-23.md §6-3). 물은 −/+ 스테퍼(250ml), 단식은 시작/종료 한 버튼이다.
-            */}
-            <View style={styles.trackerCard}>
-              {water ? (
-                <View style={styles.trackerRow}>
-                  <View style={styles.trackerText}>
-                    <Text style={styles.trackerTitle}>
-                      물{'  '}
-                      <Text style={styles.trackerValue}>
-                        {formatNumber(water.consumedMl)} / {formatNumber(water.targetMl)}ml
+            {/* 오늘 — 영양 카드 바로 아래. 비어 있어도 섹션은 그린다(빈 상태가 화면 밖으로 밀려나지 않게) */}
+            <View style={styles.todayHeader}>
+              <Text style={styles.sectionTitle}>오늘</Text>
+              <View style={styles.todayHeaderRight}>
+                {todayCalories > 0 ? <Text style={styles.todayCal}>총 {formatKcal(todayCalories)}</Text> : null}
+                {history.length > 0 ? (
+                  <TouchableOpacity onPress={onCopyYesterday} disabled={copyingYesterday} hitSlop={8} accessibilityRole="button">
+                    <Text style={styles.copyYesterday}>{copyingYesterday ? '불러오는 중…' : '어제 식단 불러오기'}</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            </View>
+            {today.length > 0 ? (
+              today.map((m) => (
+                <MealCard
+                  key={m.id}
+                  meal={m}
+                  onPress={onEdit}
+                  onLongPress={onLongPress}
+                  onPlacePress={onPlacePress}
+                  deleting={deletingId === m.id}
+                />
+              ))
+            ) : todayError ? (
+              <LoadErrorRow what="오늘 식단" onRetry={fetchToday} />
+            ) : (
+              <View style={styles.emptyToday}>
+                <Text style={styles.emptyText}>
+                  {history.length === 0 && !loading && !historyError
+                    ? '아직 식단 기록이 없어요 — 아래 버튼으로 첫 끼를 남겨 보세요'
+                    : '오늘 식단 기록이 아직 없어요'}
+                </Text>
+              </View>
+            )}
+
+            {/* 물 + 간헐적 단식 — 한 카드 안의 한 줄 타일 둘(§6-3, 9/23) */}
+            {waterState === 'loading' && fastingState === 'loading' ? (
+              <CardSkeleton height={105} />
+            ) : (
+              <View style={styles.trackerCard}>
+                {water ? (
+                  <View style={styles.trackerRow}>
+                    <View style={styles.trackerText}>
+                      <Text style={styles.trackerTitle}>
+                        물{'  '}
+                        <Text style={styles.trackerValue}>
+                          {formatNumber(water.consumedMl)} / {formatNumber(water.targetMl)}ml
+                        </Text>
                       </Text>
-                    </Text>
-                    {water.coupleConnected ? (
-                      <Text style={styles.trackerSub}>상대 {formatNumber(water.partnerConsumedMl ?? 0)}ml</Text>
-                    ) : null}
+                      {water.coupleConnected ? (
+                        <Text style={styles.trackerSub}>상대 {formatNumber(water.partnerConsumedMl ?? 0)}ml</Text>
+                      ) : null}
+                    </View>
+                    <View style={styles.stepper}>
+                      <Pressable
+                        style={({ pressed }) => [styles.stepBtn, pressed && styles.stepBtnPressed, water.consumedMl <= 0 && styles.stepBtnDisabled]}
+                        onPress={() => onAddWater(-250)}
+                        disabled={water.consumedMl <= 0}
+                        accessibilityRole="button"
+                        accessibilityLabel="물 250ml 빼기"
+                      >
+                        <MaterialCommunityIcons name="minus" size={18} color={colors.textPrimary} />
+                      </Pressable>
+                      <Text style={styles.stepLabel}>250</Text>
+                      <Pressable
+                        style={({ pressed }) => [styles.stepBtn, pressed && styles.stepBtnPressed]}
+                        onPress={() => onAddWater(250)}
+                        accessibilityRole="button"
+                        accessibilityLabel="물 250ml 더하기"
+                      >
+                        <MaterialCommunityIcons name="plus" size={18} color={colors.textPrimary} />
+                      </Pressable>
+                    </View>
                   </View>
-                  <View style={styles.stepper}>
-                    <Pressable
-                      style={({ pressed }) => [styles.stepBtn, pressed && styles.stepBtnPressed, water.consumedMl <= 0 && styles.stepBtnDisabled]}
-                      onPress={() => onAddWater(-250)}
-                      disabled={water.consumedMl <= 0}
-                      accessibilityRole="button"
-                      accessibilityLabel="물 250ml 빼기"
-                    >
-                      <MaterialCommunityIcons name="minus" size={18} color={colors.textPrimary} />
-                    </Pressable>
-                    <Text style={styles.stepLabel}>250</Text>
-                    <Pressable
-                      style={({ pressed }) => [styles.stepBtn, pressed && styles.stepBtnPressed]}
-                      onPress={() => onAddWater(250)}
-                      accessibilityRole="button"
-                      accessibilityLabel="물 250ml 더하기"
-                    >
-                      <MaterialCommunityIcons name="plus" size={18} color={colors.textPrimary} />
-                    </Pressable>
-                  </View>
-                </View>
-              ) : null}
+                ) : waterState === 'error' ? (
+                  <LoadErrorRow what="물" onRetry={refreshWater} />
+                ) : null}
 
-              {water ? <View style={styles.trackerDivider} /> : null}
+                <View style={styles.trackerDivider} />
 
-              {/* 간헐적 단식 — 세션이 서버에 살아있어 커플 상대방 진행 상태도 함께 보여준다 */}
-              {fasting?.active ? (
-                <View style={styles.trackerRow}>
-                  <View style={styles.trackerText}>
-                    <Text style={styles.trackerTitle}>
-                      {fasting.planLabel} 단식 중{'  '}
-                      <Text style={styles.trackerValue}>{formatHM(liveElapsedMin)} 경과</Text>
-                    </Text>
-                    <Text style={styles.trackerSub}>
-                      {fasting.achieved
-                        ? '목표 달성!'
-                        : `목표 ${fasting.targetHours}시간 · ${formatHM((fasting.targetHours ?? 0) * 60 - liveElapsedMin)} 남음`}
-                      {partnerFasting?.connected && partnerFasting.active
-                        ? ` · 상대 ${formatHM(partnerFasting.elapsedMin ?? 0)} 경과`
-                        : ''}
-                    </Text>
-                  </View>
+                {/* 간헐적 단식 — 세션이 서버에 살아있어 커플 상대방 진행 상태도 함께 보여준다 */}
+                {fasting?.active ? (
+                  <FastingActiveRow fasting={fasting} partnerFasting={partnerFasting} onEnd={onEndFasting} />
+                ) : fastingState === 'error' ? (
+                  <LoadErrorRow what="간헐적 단식" onRetry={refreshFasting} />
+                ) : (
                   <Pressable
-                    style={({ pressed }) => [styles.trackerAction, pressed && styles.stepBtnPressed]}
-                    onPress={onEndFasting}
+                    style={({ pressed }) => [styles.trackerRow, pressed && styles.trackerRowPressed]}
+                    onPress={() => setFastingModal(true)}
                     accessibilityRole="button"
-                    accessibilityLabel="단식 종료"
+                    accessibilityLabel="간헐적 단식 시작하기"
                   >
-                    <Text style={styles.trackerActionText}>종료</Text>
+                    <View style={styles.trackerText}>
+                      <Text style={styles.trackerTitle}>간헐적 단식</Text>
+                      {partnerFasting?.connected && partnerFasting.active ? (
+                        <Text style={styles.trackerSub}>
+                          상대 {partnerFasting.partnerName}님은 지금 단식 중 · {formatHM(partnerFasting.elapsedMin ?? 0)} 경과
+                        </Text>
+                      ) : null}
+                    </View>
+                    <Text style={styles.trackerActionText}>시작</Text>
+                    <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textMuted} />
                   </Pressable>
-                </View>
-              ) : (
-                <Pressable
-                  style={({ pressed }) => [styles.trackerRow, pressed && styles.trackerRowPressed]}
-                  onPress={() => setFastingModal(true)}
-                  accessibilityRole="button"
-                  accessibilityLabel="간헐적 단식 시작하기"
-                >
-                  <View style={styles.trackerText}>
-                    <Text style={styles.trackerTitle}>간헐적 단식</Text>
-                    {partnerFasting?.connected && partnerFasting.active ? (
-                      <Text style={styles.trackerSub}>
-                        상대 {partnerFasting.partnerName}님은 지금 단식 중 · {formatHM(partnerFasting.elapsedMin ?? 0)} 경과
-                      </Text>
-                    ) : null}
-                  </View>
-                  <Text style={styles.trackerActionText}>시작</Text>
-                  <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textMuted} />
-                </Pressable>
-              )}
+                )}
+              </View>
+            )}
+
+            {/* 식단 스트릭 — 운동 홈과 같은 표시 형식(연속/함께/최고). 커플 목표와 한 묶음 */}
+            <View style={styles.streakRow}>
+              <Text style={styles.streakText}>연속 {myStreak?.currentCount ?? 0}일</Text>
+              {goal?.connected ? (
+                <Text style={styles.streakText}>함께 {coupleStreak?.currentCount ?? 0}일</Text>
+              ) : null}
+              <Text style={styles.streakMax}>최고 {myStreak?.maxCount ?? 0}일</Text>
             </View>
 
             {/* 커플 공동 목표 */}
@@ -699,44 +893,29 @@ export function DietScreen({ navigation, route }: Props) {
                   </View>
                 )}
               </Pressable>
+            ) : goalState === 'error' ? (
+              <LoadErrorRow what="커플 식단 목표" onRetry={refreshGoal} />
             ) : null}
 
-            {/* 기록이 하나도 없으면 섹션을 숨긴다 — "오늘 없어요" 카드와 EmptyState 가
-                겹쳐 빈 안내가 두 번 보이던 중복 제거 (ListEmptyComponent 하나로 통일) */}
-            {today.length > 0 || history.length > 0 ? (
-              <>
-                <View style={styles.todayHeader}>
-                  <Text style={styles.sectionTitle}>오늘</Text>
-                  <View style={styles.todayHeaderRight}>
-                    {todayCalories > 0 ? (
-                      <Text style={styles.todayCal}>총 {formatKcal(todayCalories)}</Text>
-                    ) : null}
-                    <TouchableOpacity onPress={onCopyYesterday} disabled={copyingYesterday}>
-                      <Text style={styles.copyYesterday}>
-                        {copyingYesterday ? '불러오는 중…' : '어제 식단 불러오기'}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-                {today.length > 0 ? (
-                  today.map((m) => (
-                    <MealCard
-                      key={m.id}
-                      meal={m}
-                      onPress={onEdit}
-                      onLongPress={onLongPress}
-                      onPlacePress={onPlacePress}
-                      deleting={deletingId === m.id}
-                    />
-                  ))
-                ) : (
-                  <View style={styles.emptyToday}>
-                    <Text style={styles.emptyText}>오늘 식단 기록이 아직 없어요</Text>
-                  </View>
-                )}
-                <Text style={[styles.sectionTitle, styles.historyTitle]}>히스토리</Text>
-              </>
-            ) : null}
+            {/* AI 인사이트 — 주간 식단 코칭 / 커플 주간 레터. 매일 보는 것이 아니라 맨 아래로 */}
+            <View style={styles.aiRow}>
+              <AiInsightButton
+                label="주간 식단 코칭"
+                title="주간 식단 코칭"
+                fetcher={dietApi.coach}
+                render={renderCoach}
+                style={styles.aiBtn}
+              />
+              <AiInsightButton
+                label="커플 주간 레터"
+                title="우리 주간 레터"
+                fetcher={summaryApi.aiLetter}
+                render={renderLetter}
+                style={styles.aiBtn}
+              />
+            </View>
+
+            {history.length > 0 ? <Text style={[styles.sectionTitle, styles.historyTitle]}>히스토리</Text> : null}
           </View>
         }
         renderItem={({ item }) => (
@@ -750,22 +929,18 @@ export function DietScreen({ navigation, route }: Props) {
           />
         )}
         ListEmptyComponent={
-          !loading ? (
-            // 로드 실패를 "진짜 빈 목록"과 구분해 재시도를 준다 (QA_CHECKLIST.md 패턴 1)
-            historyError ? (
-              <EmptyState
-                icon="cloud-off-outline"
-                title="식단 기록을 불러오지 못했어요"
-                description="네트워크 상태를 확인하고 다시 시도해주세요."
-                error
-                onRetry={() => {
-                  fetchToday();
-                  fetchHistory();
-                }}
-              />
-            ) : (
-              <EmptyState icon="silverware-fork-knife" title="아직 식단 기록이 없어요" description="아래 버튼으로 첫 식단을 기록해보세요!" />
-            )
+          // 비어 있음은 위 "오늘" 섹션이 말한다 — 여기서는 로드 실패만 구분해 재시도를 준다 (QA_CHECKLIST.md 패턴 1)
+          !loading && historyError ? (
+            <EmptyState
+              icon="cloud-off-outline"
+              title="식단 기록을 불러오지 못했어요"
+              description="네트워크 상태를 확인하고 다시 시도해주세요."
+              error
+              onRetry={() => {
+                fetchToday();
+                fetchHistory();
+              }}
+            />
           ) : null
         }
         ListFooterComponent={loadingMore ? <Text style={styles.footer}>불러오는 중…</Text> : null}
@@ -778,6 +953,42 @@ export function DietScreen({ navigation, route }: Props) {
           onPress={() => navigation.navigate('DietRecord')}
         />
       </View>
+
+      {/*
+        계산식 시트 — 링을 누르면. 예전엔 카드 하단에 10px 수식("기초대사량 + 운동 − 섭취")과 두 번째 "남은 칼로리"가
+        상주해, 기준이 다른 숫자 둘이 한 카드에 있었다(§2-1 반박 4). 링 하나만 남기고 나머지는 여기서 "참고"로.
+      */}
+      <Modal visible={formulaModal} transparent animationType="fade" onRequestClose={() => setFormulaModal(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setFormulaModal(false)}>
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            <Text style={styles.modalTitle}>오늘 칼로리 계산</Text>
+            {nutrition ? (
+              <View style={styles.formulaList}>
+                <FormulaRow label="목표" value={nutrition.targetCalories ? formatKcal(nutrition.targetCalories) : '없음'} />
+                <FormulaRow label="섭취" value={formatKcal(nutrition.consumedCalories)} />
+                {nutrition.targetCalories ? (
+                  <FormulaRow
+                    label="목표 − 섭취"
+                    value={formatKcal(nutrition.targetCalories - nutrition.consumedCalories)}
+                    strong
+                  />
+                ) : null}
+                <View style={styles.trackerDivider} />
+                <Text style={styles.formulaNote}>참고 — 오늘 쓴 칼로리 기준</Text>
+                <FormulaRow label="기초대사량" value={nutrition.bmr != null ? formatKcal(nutrition.bmr) : '신체 정보 필요'} />
+                <FormulaRow label="운동 소모(추정)" value={formatKcal(nutrition.exerciseCalories)} />
+                {nutrition.energyBalance != null ? (
+                  <FormulaRow label="기초대사량 + 운동 − 섭취" value={formatKcal(nutrition.energyBalance)} />
+                ) : null}
+                <Text style={styles.formulaNote}>
+                  운동 소모는 운동 시간으로 어림한 값이라 링의 남은 칼로리에는 더하지 않아요.
+                </Text>
+              </View>
+            ) : null}
+            <Button title="닫기" variant="secondary" size="md" onPress={() => setFormulaModal(false)} />
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* 커플 목표 설정 모달 */}
       <Modal visible={goalModal} transparent animationType="fade" onRequestClose={() => setGoalModal(false)}>
@@ -1052,27 +1263,40 @@ const styles = themedStyles((colors) => ({
   nutSetBtn: { flexDirection: 'row', alignItems: 'center' },
   nutSet: { fontSize: fontSize.caption, fontWeight: '700', color: colors.primary },
   nutMain: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  nutSecondary: { flex: 1, gap: spacing.xs },
+  nutSecondary: { flex: 1, minWidth: 0, gap: spacing.sm },
   travelModeBadge: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary, marginBottom: spacing.xs },
-  nutRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  // width 48 — "칼로리"(3글자)가 36px 에서 줄바꿈되어 첫 행만 높이가 달라졌다
-  nutLabel: { width: 48, fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
-  nutTrack: { flex: 1, height: 10, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
+  nutRow: { gap: 3 },
+  // 큰 글자에서 라벨·값이 한 줄에 안 들어가면 값이 다음 줄로 내려간다(고정 폭 없음 — §3 A-10)
+  nutRowHead: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'baseline', columnGap: spacing.sm },
+  nutLabel: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
+  nutTrack: { height: 8, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
   // 내 지표 — 소유자 의미가 없으므로 크롬 채움. 예전 accent(=함께)는 뜻이 없었다
   nutFill: { height: '100%', borderRadius: radius.pill, backgroundColor: colors.primaryFill },
   nutFillOver: { backgroundColor: colors.primary },
-  nutVal: { width: 92, textAlign: 'right', fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '700' },
-  nutRemain: { fontSize: fontSize.caption, color: colors.togetherText, fontWeight: '800', textAlign: 'right', marginTop: spacing.xs },
+  nutVal: { marginLeft: 'auto', textAlign: 'right', fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '700' },
+  ringCol: { alignItems: 'center', gap: spacing.xs },
+  exerciseCaption: { fontSize: fontSize.micro, color: colors.textSecondary, fontWeight: '700', textAlign: 'center' },
   extraNutrients: { fontSize: fontSize.micro, color: colors.textTertiary, fontWeight: '600', marginTop: spacing.xs },
-  energyBox: {
-    marginTop: spacing.sm,
-    paddingTop: spacing.sm,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-    gap: 2,
+  formulaList: { gap: spacing.xs },
+  formulaRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm },
+  formulaLabel: { flexShrink: 1, fontSize: fontSize.body, color: colors.textSecondary },
+  formulaValue: { fontSize: fontSize.body, color: colors.textPrimary, fontWeight: '700' },
+  formulaStrong: { color: colors.textPrimary, fontWeight: '800' },
+  formulaNote: { fontSize: fontSize.caption, color: colors.textTertiary, lineHeight: 18 },
+  skeleton: { borderRadius: radius.lg, backgroundColor: colors.surfaceAlt, marginBottom: spacing.md },
+  loadError: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    marginBottom: spacing.md,
   },
-  energyFormula: { fontSize: fontSize.micro, color: colors.textTertiary, fontWeight: '600' },
-  energyResult: { fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '800' },
+  loadErrorText: { flex: 1, fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
   goalPrompt: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1084,7 +1308,7 @@ const styles = themedStyles((colors) => ({
     backgroundColor: colors.primarySoft,
   },
   goalPromptText: { flex: 1, fontSize: fontSize.caption, color: colors.primary, fontWeight: '700' },
-  energyHint: { fontSize: fontSize.caption, color: colors.textSecondary, lineHeight: 18 },
+  energyHint: { fontSize: fontSize.caption, color: colors.textSecondary, lineHeight: 18, marginTop: spacing.xs },
   nutFormRow: { flexDirection: 'row', gap: spacing.sm },
   nutFormItem: { flex: 1 },
   nutSaveBtn: { marginTop: spacing.sm },
@@ -1137,7 +1361,7 @@ const styles = themedStyles((colors) => ({
   customFastingRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-end' },
   customFastingInput: { flex: 1 },
   customFastingBtn: { marginBottom: 2 },
-  aiRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
+  aiRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
   aiBtn: { flex: 1 },
   aiHeadline: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary, lineHeight: 22 },
   aiScore: { fontSize: fontSize.caption, fontWeight: '700', color: colors.primary },
@@ -1167,10 +1391,11 @@ const styles = themedStyles((colors) => ({
   goalSub: { fontSize: fontSize.caption, color: colors.textSecondary },
   todayHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
   todayHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  todayCal: { fontSize: fontSize.body, color: colors.togetherText, fontWeight: '800' },
+  // 내 오늘 합계 — 소유자·함께 의미가 없으므로 본문색. 예전 togetherText 는 뜻이 없었다(§3 A-9)
+  todayCal: { fontSize: fontSize.body, color: colors.textPrimary, fontWeight: '800' },
   copyYesterday: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '700' },
   sectionTitle: { fontSize: fontSize.subtitle, fontWeight: '700', color: colors.textPrimary },
-  historyTitle: { marginTop: spacing.lg, marginBottom: spacing.sm },
+  historyTitle: { marginTop: spacing.md, marginBottom: spacing.sm },
   emptyToday: {
     backgroundColor: colors.surface,
     borderRadius: 16,

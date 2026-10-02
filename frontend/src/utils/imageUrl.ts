@@ -35,3 +35,19 @@ export function thumbnailUrl(url: string, size = 150): string {
   const px = Math.max(1, Math.round(size)) * 2;
   return `${prefix}${UPLOAD_MARKER}w_${px},h_${px},c_fill,q_auto,f_auto/${rest}`;
 }
+
+/**
+ * 폭만 줄인 URL — 카드 안 전폭 사진용(식사 카드 180dp 칸에 폰 원본 수 MB 를 받던 자리).
+ * 비율은 그대로 두고(c_limit) 원본보다 키우지 않는다. `widthDp` 의 2배 픽셀로 요청한다.
+ */
+export function cardImageUrl(url: string, widthDp = 360): string {
+  if (!url || !url.includes(UPLOAD_MARKER)) {
+    return url;
+  }
+  const [prefix, rest] = url.split(UPLOAD_MARKER);
+  if (rest.startsWith('w_')) {
+    return url;
+  }
+  const px = Math.max(1, Math.round(widthDp)) * 2;
+  return `${prefix}${UPLOAD_MARKER}w_${px},c_limit,q_auto,f_auto/${rest}`;
+}
