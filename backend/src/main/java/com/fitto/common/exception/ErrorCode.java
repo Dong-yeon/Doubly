@@ -58,6 +58,7 @@ public enum ErrorCode {
     GIFT_ALREADY_RESPONDED(HttpStatus.CONFLICT, "이미 응답한 선물이에요."),
     /** 같은 사진으로 만든 식단이 이미 있다 — 채팅 사진 → 식단 기록을 두 번 누른 경우(LOVEBODY_REVIEW §2-5) */
     MEAL_PHOTO_ALREADY_RECORDED(HttpStatus.CONFLICT, "이 사진으로 이미 남긴 식단이 있어요."),
+    MEAL_ALREADY_COPIED(HttpStatus.CONFLICT, "이미 불러온 식단이에요."),
 
     // 맛집 지도 (PLACE)
     PLACE_NOT_FOUND(HttpStatus.NOT_FOUND, "장소를 찾을 수 없습니다."),
