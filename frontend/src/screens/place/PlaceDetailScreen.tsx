@@ -139,7 +139,8 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
   // 럽슐랭 대표 평점 — 기본 동선("다녀왔어요")이 이 값을 함께 쓰므로 평소엔 한 줄 요약으로
   // 접어두고, 방문과 무관하게 가게 평가만 고칠 때만 펼친다.
   const [myRatingInput, setMyRatingInput] = useState(0);
-  const [ratingEditing, setRatingEditing] = useState(false);
+  // 홈 왕관에서 "아직 내 평점이 없다"로 들어오면 펼친 채 시작한다(웹은 URL 이라 문자열로 올 수 있다)
+  const [ratingEditing, setRatingEditing] = useState(() => String(route.params.openRating) === 'true');
   const [ratingSaving, setRatingSaving] = useState(false);
   const [ruleOpen, setRuleOpen] = useState(false);
   // 재평가로 등급이 유지/하락할 때는 축하 모달을 열지 않는다 — 0→양수로 "새로 등극"할 때만

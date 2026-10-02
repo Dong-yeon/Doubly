@@ -46,6 +46,7 @@ import { moodApi } from '../../api/mood';
 import { journalApi, journalToday } from '../../api/journal';
 import type { MoodChoice } from '../../api/mood';
 import { tripApi } from '../../api/trip';
+import { placeApi } from '../../api/place';
 import { feedTimeLabel } from '../feed/FeedTimelineScreen';
 import {
   connectSocket,
@@ -67,7 +68,7 @@ import { HOME_RECORD_EXCLUDE, feedSummary, isHomeRecord } from '../../utils/feed
 import { loadWidgetData } from '../../widget/widgetData';
 import { touchGestureOf } from '../../constants/touchGestures';
 import { playTouchGesture } from '../../utils/haptics';
-import type { FeedItem, Meal, Memories, MoodResponse, PartnerToday, Streak, Trip } from '../../types';
+import type { FeedItem, LovelichelinPulse, Meal, Memories, MoodResponse, PartnerToday, Streak, Trip } from '../../types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { isDarkMode } from '../../theme';
 import { onColor } from '../../theme/onColor';
@@ -165,6 +166,8 @@ export function HomeScreen({ navigation }: Props) {
    */
   const [myLatest, setMyLatest] = useState<FeedItem | null>(null);
   const [partnerLatest, setPartnerLatest] = useState<FeedItem | null>(null);
+  // 이름 옆 럽슐랭 왕관 — 오늘 럽슐랭에 기록했거나 막 등극한 사람에게만(LovelichelinCrownSignal)
+  const [lovelichelinPulse, setLovelichelinPulse] = useState<LovelichelinPulse | null>(null);
   // 작년 오늘 — 있는 날에만 최근 기록 자리를 대신 차지한다 (PLAN.md Memories)
   const [memories, setMemories] = useState<Memories | null>(null);
   // 다가오는/진행 중 여행 — 있는 기간에만 조건부 한 줄 슬롯에 D-day 카드를 띄운다 (PLAN.md Trip)
@@ -300,6 +303,11 @@ export function HomeScreen({ navigation }: Props) {
         setMyLatest(null);
         setPartnerLatest(null);
       });
+    // 럽슐랭 왕관 — 실패하면 조용히 없앤다(홈의 다른 줄을 막을 정보가 아니다)
+    placeApi
+      .lovelichelinPulse()
+      .then(setLovelichelinPulse)
+      .catch(() => setLovelichelinPulse(null));
     // 추억은 대부분의 날에 비어 있다 — 없으면 최근 기록이 그대로 남는다
     feedApi
       .memories()
@@ -813,6 +821,7 @@ export function HomeScreen({ navigation }: Props) {
                     latestTime: myLatest ? feedTimeLabel(myLatest.occurredAt) : null,
                     moodEmoji: mood?.mine?.emoji,
                     moodImageUrl: mood?.mine?.imageUrl,
+                    crown: lovelichelinPulse?.me ?? null,
                   }}
                   partner={{
                     name: partner?.partnerName ?? couple?.partner?.name ?? '상대방',
@@ -824,6 +833,7 @@ export function HomeScreen({ navigation }: Props) {
                     latestTime: partnerLatest ? feedTimeLabel(partnerLatest.occurredAt) : null,
                     moodEmoji: mood?.partner?.emoji,
                     moodImageUrl: mood?.partner?.imageUrl,
+                    crown: lovelichelinPulse?.partner ?? null,
                   }}
                   dday={dday}
                   anniversaryDate={couple?.anniversaryDate ?? null}
@@ -835,6 +845,28 @@ export function HomeScreen({ navigation }: Props) {
                    * 기록은 "우리" 탭으로 이관됐다 — 탭을 건너뛰되 initial:false 로 그 탭의
                    * 첫 화면(AlbumMain)을 아래에 깔아 뒤로가기가 탭 안에 남게 한다.
                    */
+                  /*
+                   * 이름 옆 럽슐랭 왕관 — 그 장소·콘텐츠 상세로(럽슐랭 탭 스택). 상대 왕관인데 내 대표 평점이 아직
+                   * 없으면 평가 영역을 펼친 채 들어간다 — "상대가 매겼으니 내 차례"를 한 번에 잇는다.
+                   */
+                  onPressCrown={(who) => {
+                    const signal = who === 'me' ? lovelichelinPulse?.me : lovelichelinPulse?.partner;
+                    if (!signal) return;
+                    const openRating = who === 'partner' && !signal.viewerRated ? true : undefined;
+                    if (signal.kind === 'PLACE') {
+                      navigation.navigate('Place', {
+                        screen: 'PlaceDetail',
+                        params: { placeId: signal.targetId, name: signal.targetName, openRating },
+                        initial: false,
+                      });
+                    } else {
+                      navigation.navigate('Place', {
+                        screen: 'ContentDetail',
+                        params: { contentId: signal.targetId, title: signal.targetName, openRating },
+                        initial: false,
+                      });
+                    }
+                  }}
                   onPressPerson={(who) =>
                     navigation.navigate('Album', { screen: 'FeedTimeline', params: { who }, initial: false })
                   }

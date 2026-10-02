@@ -74,7 +74,8 @@ export function ContentDetailScreen({ route, navigation }: Props) {
   // 럽슐랭 대표 평점 — 기본 동선("봤어요")이 이 값을 함께 쓰므로 평소엔 한 줄 요약으로 접어두고,
   // 이번 관람과 무관하게 작품 평가만 고칠 때만 펼친다(장소 쪽과 같은 구조).
   const [myRatingInput, setMyRatingInput] = useState(0);
-  const [ratingEditing, setRatingEditing] = useState(false);
+  // 홈 왕관에서 "아직 내 평점이 없다"로 들어오면 펼친 채 시작한다 — PlaceDetailScreen 과 같다
+  const [ratingEditing, setRatingEditing] = useState(() => String(route.params.openRating) === 'true');
   const [ratingSaving, setRatingSaving] = useState(false);
   const [ruleOpen, setRuleOpen] = useState(false);
   const [fanfareTier, setFanfareTier] = useState(0);

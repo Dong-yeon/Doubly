@@ -1340,6 +1340,23 @@ export interface PlaceSearchResult {
   lng?: number | null;
   placeUrl?: string | null;
 }
+/** 홈 이름 옆 럽슐랭 왕관 — 백엔드 LovelichelinPulseResponse.Signal 과 짝 */
+export interface LovelichelinSignal {
+  /** CERTIFIED: 관여한 곳이 24시간 안에 등극(처음 볼 때 한 번 반짝) / TODAY: 오늘 럽슐랭에 기록함(정지) */
+  state: 'CERTIFIED' | 'TODAY';
+  kind: 'PLACE' | 'CONTENT';
+  targetId: number;
+  targetName: string;
+  tier: number;
+  /** CERTIFIED 일 때만 — 본 등극을 기기에 기억하는 열쇠 */
+  certificationKey?: string | null;
+  /** 보는 사람(나)이 그 곳에 대표 평점을 남겼는가 */
+  viewerRated: boolean;
+}
+export interface LovelichelinPulse {
+  me?: LovelichelinSignal | null;
+  partner?: LovelichelinSignal | null;
+}
 export interface PlaceSearchResponse {
   /** false = 카카오 REST API 키 미설정 — places 는 항상 빈 배열 */
   available: boolean;
