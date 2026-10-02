@@ -180,7 +180,7 @@ ALTER TABLE couple_events ADD COLUMN visibility VARCHAR(20) NOT NULL DEFAULT 'SH
 
 | # | 구분 | 내용 | 위치 |
 |---|---|---|---|
-| 1 | 타임존 | 프론트 "오늘"이 **기기 현지 날짜**(`new Date()`)다. 오늘 테두리, 첫 진입 월, 추가 시 기본 날짜, '진행 중' 판정이 여기에 기댄다. 서버 `dday` 는 KST 라 해외(기기 시간대 ≠ KST)에서는 같은 카드의 배지와 오늘 표시가 하루 어긋날 수 있다. 홈 D-day 는 2026-09-28 에 KST 로 고쳤지만(`utils/anniversary.ts`) 이 화면엔 적용 안 됨 | `CoupleCalendarScreen.tsx:138~142, 632` |
+| 1 | 타임존 | ~~프론트 "오늘"이 기기 현지 날짜(`new Date()`)라 해외에서 오늘 테두리·첫 진입 월·추가 기본 날짜·'진행 중'이 서버 KST `dday` 와 하루 어긋날 수 있다.~~ **2026-10-02 수정** — `utils/anniversary.ts` 의 `kstDateOf` 로 KST 기준 판단 | `CoupleCalendarScreen.tsx:139~148` |
 | 2 | 동시성 | 낙관적 락 없음 + `updated_at` 없음. 우리 일정을 둘이 동시에 고치면 나중 저장이 덮어쓰고 알림도 없음 | `CalendarEvent` |
 | 3 | 실시간 | 수정·삭제는 상대에게 push 가 안 가고, 캘린더 화면은 `CALENDAR` 실시간 이벤트를 구독하지 않는다 → 화면을 열어둔 상대는 다시 들어오기 전까지 낡은 목록을 본다 | `CoupleCalendarScreen.tsx` 216행 |
 | 4 | 한도 | `create` 가 `planGuard.consume` 으로 선차감하고 `delete` 에서 `refund` 하지 않는다 → FREE 사용자가 잘못 만들고 지워도 월 10건이 줄어든다. 의도인지 확인 필요 | `CalendarService.create/delete` |
@@ -239,6 +239,6 @@ ALTER TABLE couple_events ADD COLUMN visibility VARCHAR(20) NOT NULL DEFAULT 'SH
 | 홈 위젯에 일정 | 없음 | 위젯은 D+ 만(Android) |
 | 다가오는 일정 API | 부분 구현 | 백엔드만 있고 프론트 미사용 |
 | 누구 일정 필터 | 없음 | |
-| 프론트 "오늘"의 KST 기준 | 없음 | 기기 현지 날짜 사용 |
+| 프론트 "오늘"의 KST 기준 | 구현됨 | 2026-10-02 `kstDateOf` 로 수정 |
 | 알림 중복 방지(다중 인스턴스) | 확인 필요 | 인스턴스 수에 달림 |
 | 월 조회 인덱스 효율 | 확인 필요 | PG 실행 계획 미확인 |
