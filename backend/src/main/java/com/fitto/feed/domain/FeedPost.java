@@ -70,6 +70,13 @@ public class FeedPost {
         this.recordDate = recordDate != null ? recordDate : KstClock.today();
     }
 
+    /** 고치기 — 글·대표 사진·기록일을 바꾼다. 검증은 FeedService 가 한다(작성과 같은 규칙) */
+    public void edit(String content, String imageUrl, LocalDate recordDate) {
+        this.content = content;
+        this.imageUrl = imageUrl;
+        this.recordDate = recordDate;
+    }
+
     /** 여행 앨범에 담기 / 빼기(null) */
     public void assignTrip(Long tripId) {
         this.tripId = tripId;

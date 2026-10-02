@@ -12,6 +12,7 @@ import com.fitto.feed.dto.FeedTimelineResponse;
 import com.fitto.feed.dto.MemoriesResponse;
 import com.fitto.feed.dto.ReactRequest;
 import com.fitto.feed.dto.ReactionSummary;
+import com.fitto.feed.dto.UpdatePostRequest;
 import com.fitto.feed.service.FeedService;
 import com.fitto.feed.service.MemoriesService;
 import jakarta.validation.Valid;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -120,6 +122,19 @@ public class FeedController {
     public ApiResponse<FeedItemResponse> createPost(@AuthenticationPrincipal AuthUser user,
                                                     @Valid @RequestBody CreatePostRequest request) {
         return ApiResponse.success(feedService.createPost(user.id(), request), "일상이 기록되었습니다.");
+    }
+
+    /** 포스트 하나 — 고치기 화면이 불러온다 */
+    @GetMapping("/posts/{id}")
+    public ApiResponse<FeedItemResponse> getPost(@AuthenticationPrincipal AuthUser user, @PathVariable Long id) {
+        return ApiResponse.success(feedService.getPost(user.id(), id));
+    }
+
+    /** 포스트 고치기 — 글·사진·기록일을 통째로 바꾼다(작성자 본인만) */
+    @PutMapping("/posts/{id}")
+    public ApiResponse<FeedItemResponse> updatePost(@AuthenticationPrincipal AuthUser user, @PathVariable Long id,
+                                                    @Valid @RequestBody UpdatePostRequest request) {
+        return ApiResponse.success(feedService.updatePost(user.id(), id, request), "일상을 고쳤어요.");
     }
 
     @DeleteMapping("/posts/{id}")

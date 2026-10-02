@@ -21,6 +21,7 @@ import com.fitto.feed.domain.FeedPost;
 import com.fitto.feed.domain.FeedPostPhoto;
 import com.fitto.feed.domain.FeedReaction;
 import com.fitto.feed.dto.CreatePostRequest;
+import com.fitto.feed.dto.UpdatePostRequest;
 import com.fitto.feed.dto.FeedCursor;
 import com.fitto.feed.dto.FeedItemResponse;
 import com.fitto.feed.dto.FeedItemType;
@@ -672,40 +673,9 @@ public class FeedService {
     /** 포스트 작성 (FEED-02) — 글/사진(최대 5장) 중 하나는 필수. 상대에게 푸시 + FEED 이벤트. */
     @Transactional
     public FeedItemResponse createPost(Long userId, CreatePostRequest request) {
-        String content = request.content() != null ? request.content().trim() : null;
-        List<String> photos = request.photosOrEmpty().stream()
-                .map(String::trim).filter(s -> !s.isEmpty()).toList();
-        if ((content == null || content.isEmpty()) && photos.isEmpty()) {
-            throw new BusinessException(ErrorCode.INVALID_INPUT, "글이나 사진 중 하나는 남겨주세요.");
-        }
-        if (photos.size() > MAX_PHOTOS_PER_POST) {
-            throw new BusinessException(ErrorCode.INVALID_INPUT,
-                    "사진은 최대 " + MAX_PHOTOS_PER_POST + "장까지 올릴 수 있어요.");
-        }
-        /*
-         * 앱이 공용 업로드 서명(UploadController — 기본 폴더)으로 올린 원본 URL 만 받는다. 예전엔 길이만 봐서
-         * 아무 URL 이나 저장됐고, 변형 URL 로 남의 원본을 지우는 경로가 열려 있었다(§8-6, 삭제기도 따로 막는다).
-         * Cloudinary 미설정(개발·테스트)은 unsigned 폴백이라 폴더를 알 수 없어 보지 않는다.
-         */
-        if (cloudinaryProperties.isConfigured()) {
-            for (String url : photos) {
-                if (!CloudinaryUrls.isImageDirectlyIn(url, cloudinaryProperties, cloudinaryProperties.getFolder())) {
-                    throw new BusinessException(ErrorCode.INVALID_INPUT, "앱에서 올린 사진만 남길 수 있어요.");
-                }
-            }
-        }
-
-        /*
-         * 기록일 — 이 일이 있었던 날(V119). 고르지 않으면 오늘. 미래는 아직 일어나지 않은 일이라 받지 않는다
-         * (식단·운동·하루 기록과 같은 규칙). 오늘은 KST 로 판단한다(CLAUDE.md 4절).
-         */
-        LocalDate recordDate = request.recordDate() != null ? request.recordDate() : KstClock.today();
-        if (recordDate.isAfter(KstClock.today())) {
-            throw new BusinessException(ErrorCode.INVALID_INPUT, "아직 오지 않은 날짜에는 남길 수 없어요.");
-        }
-        if (recordDate.isBefore(MIN_RECORD_DATE)) {
-            throw new BusinessException(ErrorCode.INVALID_INPUT, "날짜를 다시 골라 주세요.");
-        }
+        String content = contentOf(request.content());
+        List<String> photos = validatedPhotos(request.photosOrEmpty(), content);
+        LocalDate recordDate = validatedRecordDate(request.recordDate());
 
         Relation couple = activeCouple(userId);
         FeedPost post = FeedPost.builder()
@@ -734,6 +704,104 @@ public class FeedService {
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.FEED);
 
         return mapper.toItem(post, Map.of(userId, authorName), userId, List.of(), photos);
+    }
+
+    /** 글 — 앞뒤 공백을 걷고, 비었으면 null */
+    private static String contentOf(String raw) {
+        String content = raw != null ? raw.trim() : null;
+        return content == null || content.isEmpty() ? null : content;
+    }
+
+    /**
+     * 사진 목록 검증 — 작성·수정이 같은 규칙을 쓴다. 글·사진 중 하나는 있어야 하고, 최대
+     * {@value #MAX_PHOTOS_PER_POST}장, 앱이 공용 업로드 서명(UploadController — 기본 폴더)으로 올린 원본 URL 만.
+     * 예전엔 길이만 봐서 아무 URL 이나 저장됐고, 변형 URL 로 남의 원본을 지우는 경로가 열려 있었다
+     * (§8-6, 삭제기도 따로 막는다). Cloudinary 미설정(개발·테스트)은 unsigned 폴백이라 폴더를 알 수 없어 보지 않는다.
+     */
+    private List<String> validatedPhotos(List<String> raw, String content) {
+        List<String> photos = raw.stream().map(String::trim).filter(u -> !u.isEmpty()).toList();
+        if (content == null && photos.isEmpty()) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "글이나 사진 중 하나는 남겨주세요.");
+        }
+        if (photos.size() > MAX_PHOTOS_PER_POST) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT,
+                    "사진은 최대 " + MAX_PHOTOS_PER_POST + "장까지 올릴 수 있어요.");
+        }
+        if (cloudinaryProperties.isConfigured()) {
+            for (String url : photos) {
+                if (!CloudinaryUrls.isImageDirectlyIn(url, cloudinaryProperties, cloudinaryProperties.getFolder())) {
+                    throw new BusinessException(ErrorCode.INVALID_INPUT, "앱에서 올린 사진만 남길 수 있어요.");
+                }
+            }
+        }
+        return photos;
+    }
+
+    /**
+     * 기록일 — 이 일이 있었던 날(V119). 고르지 않으면 오늘. 미래는 아직 일어나지 않은 일이라 받지 않는다
+     * (식단·운동·하루 기록과 같은 규칙). 오늘은 KST 로 판단한다(CLAUDE.md 4절).
+     */
+    private static LocalDate validatedRecordDate(LocalDate requested) {
+        LocalDate recordDate = requested != null ? requested : KstClock.today();
+        if (recordDate.isAfter(KstClock.today())) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "아직 오지 않은 날짜에는 남길 수 없어요.");
+        }
+        if (recordDate.isBefore(MIN_RECORD_DATE)) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "날짜를 다시 골라 주세요.");
+        }
+        return recordDate;
+    }
+
+    /** 포스트 하나 — 수정 화면이 불러온다(웹은 화면 파라미터를 URL 에 굽어 본문을 넘기지 않는다). */
+    public FeedItemResponse getPost(Long userId, Long postId) {
+        FeedPost post = getCouplePost(userId, postId);
+        List<String> urls = feedPostPhotoRepository.findByPostIdOrderByOrderNoAsc(postId).stream()
+                .map(FeedPostPhoto::getUrl).toList();
+        FeedItemResponse item = mapper.toItem(post, mapper.userNames(List.of(post.getAuthorId())), userId, null,
+                urls.isEmpty() && post.getImageUrl() != null ? List.of(post.getImageUrl()) : urls);
+        return mapper.attachReactions(List.of(item), userId).get(0);
+    }
+
+    /**
+     * 포스트 고치기 — 작성자 본인만. 글·사진·기록일을 <b>통째로</b> 바꾼다(빠진 사진은 지운 것이다).
+     *
+     * <p>상대에게 푸시는 보내지 않는다 — 오타 하나 고칠 때마다 폰이 울리면 소음이다. 열려 있는 화면은
+     * FEED 이벤트로 다시 읽는다. 반응은 그대로 둔다(같은 기록에 단 마음이다).
+     *
+     * <p>빠진 사진 파일은 커밋 뒤에 지운다 — 삭제기가 다른 행이 아직 쓰는 파일은 남긴다
+     * (CloudinaryImageDeleter.deletable). 새로 붙인 사진의 한도는 앱이 서명받을 때 이미 셌다.
+     */
+    @Transactional
+    public FeedItemResponse updatePost(Long userId, Long postId, UpdatePostRequest request) {
+        FeedPost post = getCouplePost(userId, postId);
+        if (!userId.equals(post.getAuthorId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "내가 쓴 포스트만 고칠 수 있습니다.");
+        }
+        String content = contentOf(request.content());
+        List<String> photos = validatedPhotos(request.imageUrls() != null ? request.imageUrls() : List.of(), content);
+        LocalDate recordDate = validatedRecordDate(request.recordDate());
+
+        List<FeedPostPhoto> before = feedPostPhotoRepository.findByPostIdOrderByOrderNoAsc(postId);
+        Set<String> removed = new java.util.LinkedHashSet<>();
+        if (post.getImageUrl() != null) {
+            removed.add(post.getImageUrl());
+        }
+        before.forEach(ph -> removed.add(ph.getUrl()));
+        removed.removeAll(photos);
+
+        feedPostPhotoRepository.deleteAll(before);
+        feedPostPhotoRepository.flush();
+        for (int i = 0; i < photos.size(); i++) {
+            feedPostPhotoRepository.save(
+                    FeedPostPhoto.builder().postId(postId).url(photos.get(i)).orderNo(i).build());
+        }
+        post.edit(content, photos.isEmpty() ? null : photos.get(0), recordDate);
+
+        coupleEventPublisher.publish(post.getCoupleId(), CoupleEvent.FEED);
+        imageDeleter.deleteAllAfterCommit(removed);
+
+        FeedItemResponse item = mapper.toItem(post, mapper.userNames(List.of(userId)), userId, null, photos);
+        return mapper.attachReactions(List.of(item), userId).get(0);
     }
 
     /** 포스트 삭제 — 작성자 본인만. */
