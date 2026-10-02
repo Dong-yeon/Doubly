@@ -2,6 +2,7 @@ package com.fitto.feed.dto;
 
 import jakarta.validation.constraints.Size;
 
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -16,11 +17,21 @@ public record CreatePostRequest(
         @Size(max = 500)
         String imageUrl,
         /** 최대 개수는 서비스에서 검사한다({@code FeedService.MAX_PHOTOS_PER_POST}) — 초과 시 안내 메시지를 직접 준다. */
-        List<@Size(max = 500) String> imageUrls
+        List<@Size(max = 500) String> imageUrls,
+        /**
+         * 기록일(KST, V119) — 이 일이 있었던 날. 없으면 오늘. 미래는 서비스가 거절한다.
+         * 예전 앱은 보내지 않으므로 그대로 오늘로 남는다(올린 날 = 기록일, 예전 동작과 같다).
+         */
+        LocalDate recordDate
 ) {
     /** 여러 장 사진 이전부터 쓰던 2개짜리 호출부(기존 테스트 등) 호환용. */
     public CreatePostRequest(String content, String imageUrl) {
-        this(content, imageUrl, null);
+        this(content, imageUrl, null, null);
+    }
+
+    /** 기록일 이전의 3개짜리 호출부 호환용 — 기록일은 오늘. */
+    public CreatePostRequest(String content, String imageUrl, List<String> imageUrls) {
+        this(content, imageUrl, imageUrls, null);
     }
 
     public List<String> photosOrEmpty() {

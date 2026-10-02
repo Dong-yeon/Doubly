@@ -1,5 +1,6 @@
 package com.fitto.feed.dto;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -38,8 +39,21 @@ public record FeedItemResponse(
          * 한 줄 자리에 별만 남았다(2026-10-02). 나머지 타입은 예전 홈 규칙 그대로 content, 없으면 title.
          * 예전 앱은 이 필드를 모른 채 무시한다.
          */
-        String summary
+        String summary,
+        /**
+         * 일상 포스트의 기록일(KST, V119) — 이 일이 있었던 날. 올린 날({@code occurredAt})과 다르면 카드가
+         * "N월 N일의 일상"으로 알려 준다. 다른 타입은 null(제목·부제가 이미 날짜를 말한다).
+         */
+        LocalDate recordDate
 ) {
+    /** 기록일이 없는 타입 — 일상 포스트 외 전부 */
+    public FeedItemResponse(FeedItemType type, Long refId, Long userId, String userName, boolean mine,
+                            String title, String content, String imageUrl, LocalDateTime occurredAt,
+                            List<ReactionSummary> reactions, List<String> imageUrls, boolean shared, String summary) {
+        this(type, refId, userId, userName, mine, title, content, imageUrl, occurredAt, reactions, imageUrls, shared,
+                summary, null);
+    }
+
     /** summary 를 따로 정하지 않는 타입 — content, 없으면 title */
     public FeedItemResponse(FeedItemType type, Long refId, Long userId, String userName, boolean mine,
                             String title, String content, String imageUrl, LocalDateTime occurredAt,

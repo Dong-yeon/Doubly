@@ -51,7 +51,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.EnumSet;
@@ -94,9 +93,15 @@ public class FeedService {
             .thenComparing(c -> c.item().refId())
             .reversed();
 
-    /** 사진첩에서 기록일 컬럼으로 keyset 을 거는 소스 — 커서 위치에 날짜가 있어야 이어 읽는다. */
+    /**
+     * 사진첩에서 기록일 컬럼으로 keyset 을 거는 소스 — 커서 위치에 날짜가 있어야 이어 읽는다.
+     * 일상 포스트는 V119 에서 record_date 가 생겨 함께 들어왔다(그 전엔 created_at 만으로 넘겼다).
+     */
     private static final Set<FeedItemType> DATED_PHOTO_SOURCES = EnumSet.of(
-            FeedItemType.MEAL, FeedItemType.WORKOUT, FeedItemType.PLACE_VISIT);
+            FeedItemType.POST, FeedItemType.MEAL, FeedItemType.WORKOUT, FeedItemType.PLACE_VISIT);
+
+    /** 기록일 하한 — 이보다 앞 날짜는 입력 실수로 본다(날짜 선택기가 연도를 잘못 굴린 경우 등) */
+    private static final LocalDate MIN_RECORD_DATE = LocalDate.of(2000, 1, 1);
 
     private final FeedPostRepository feedPostRepository;
     private final FeedPostPhotoRepository feedPostPhotoRepository;
@@ -259,8 +264,8 @@ public class FeedService {
      * 사진첩("우리" 탭) — 일상·식단·운동·맛집 중 <b>사진이 있는</b> 기록을 합쳐 기록일 최신순으로 준다.
      *
      * <p><b>정렬은 (기록일, created_at, id) 내림차순</b>(2026-10-02 결정). 기록일은 식단
-     * {@code meal_date} · 운동 {@code workout_date} · 방문 {@code visited_at} 이고, 날짜 컬럼이
-     * 없는 일상 포스트는 올린 시각의 KST 날짜다({@link #recordDateOf(FeedPost)}). 지난 날짜로
+     * {@code meal_date} · 운동 {@code workout_date} · 방문 {@code visited_at} · 일상 {@code record_date}(V119,
+     * 고르지 않았으면 올린 날)다. 지난 날짜로
      * 늦게 올린 끼니가 "올린 달"이 아니라 "먹은 날"에 묶여야 월 묶음·달력·회고가 맞는다.
      * 타임라인({@link #timeline})은 업로드 순서 그대로 둔다 — 피드는 "방금 무엇이 올라왔나"다.
      *
@@ -323,11 +328,12 @@ public class FeedService {
 
         List<PhotoCandidate> merged = new ArrayList<>();
         if (wanted.contains(FeedItemType.POST)) {
+            LocalDate date = from.recordDateOf(FeedItemType.POST);
             LocalDateTime at = from.createdAtOf(FeedItemType.POST);
             Long id = from.idOf(FeedItemType.POST);
             merged.addAll(postCandidates(authorId != null
-                    ? feedPostRepository.findPhotosByAuthor(couple.getId(), authorId, at, id, page)
-                    : feedPostRepository.findPhotos(couple.getId(), at, id, page), names, userId));
+                    ? feedPostRepository.findPhotosByAuthor(couple.getId(), authorId, date, at, id, page)
+                    : feedPostRepository.findPhotos(couple.getId(), date, at, id, page), names, userId));
         }
         if (wanted.contains(FeedItemType.MEAL)) {
             merged.addAll(mealCandidates(mealRepository.findPhotosForFeed(userIds, from.recordDateOf(FeedItemType.MEAL),
@@ -348,9 +354,7 @@ public class FeedService {
         }
 
         /*
-         * 병합 정렬키는 소스별 쿼리의 정렬키와 같아야 한다 — (기록일, created_at, id).
-         * 포스트 쿼리는 created_at 만으로 정렬하지만, 포스트의 기록일은 created_at 의 KST 날짜라
-         * 둘의 순서가 같다(날짜는 시각을 따라 단조 증가).
+         * 병합 정렬키는 소스별 쿼리의 정렬키와 같아야 한다 — (기록일, created_at, id). 네 소스 모두 그 순서로 읽는다.
          */
         merged.sort(PHOTO_ORDER);
 
@@ -400,9 +404,7 @@ public class FeedService {
         boolean truncated = false;
 
         if (wanted.contains(FeedItemType.POST)) {
-            // 포스트의 기록일은 created_at 의 KST 날짜 — 달 경계를 서버 시각(JVM 기본 시간대)으로 옮긴다
-            List<FeedPost> posts = feedPostRepository.findPhotosInPeriod(couple.getId(),
-                    serverTimeOf(first), serverTimeOf(ym.plusMonths(1).atDay(1)), cap);
+            List<FeedPost> posts = feedPostRepository.findPhotosInDateRange(couple.getId(), first, last, cap);
             truncated |= posts.size() > MONTH_CAP;
             merged.addAll(postCandidates(posts.stream().limit(MONTH_CAP)
                     .filter(p -> only == null || only.equals(p.getAuthorId())).toList(), names, userId));
@@ -510,10 +512,6 @@ public class FeedService {
         return new FeedPhotoMapResponse(places, truncated);
     }
 
-    /** KST 날짜의 0시를 서버 시각(@CreatedDate 가 쓰는 JVM 기본 시간대의 벽시계)으로 — {@link #recordDateOf(FeedPost)} 의 역 */
-    private static LocalDateTime serverTimeOf(LocalDate kstDate) {
-        return kstDate.atStartOfDay(KstClock.ZONE).withZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime();
-    }
 
     /*
      * 소스별 후보 만들기 — 페이지 조회({@link #photos})와 달 조회({@link #photoMonth})가 같이 쓴다.
@@ -629,15 +627,9 @@ public class FeedService {
                                   Long placeId, String placeName) {
     }
 
-    /**
-     * 일상 포스트의 기록일 — 날짜 컬럼이 없어 올린 시각의 KST 날짜로 둔다.
-     *
-     * <p>{@code created_at} 은 {@code @CreatedDate} 가 <b>JVM 기본 시간대</b>로 채운 벽시계 시각이다
-     * (운영 컨테이너는 UTC — JacksonConfig 의 전제, 테스트 JVM 은 Asia/Seoul). 그래서 상수 UTC 가
-     * 아니라 기본 시간대로 해석해 KST 로 옮긴다 — 둘 다에서 맞는 날짜가 나온다.
-     */
+    /** 일상 포스트의 기록일 — V119 의 record_date. 기존 행은 올린 시각의 KST 날짜로 채워졌다 */
     private static LocalDate recordDateOf(FeedPost p) {
-        return p.getCreatedAt().atZone(ZoneId.systemDefault()).withZoneSameInstant(KstClock.ZONE).toLocalDate();
+        return p.getRecordDate();
     }
 
     /** 사진첩 커서 — {@link #nextCursorOf} 와 같되 위치에 기록일을 함께 담는다(쿼리의 1차 정렬키). */
@@ -703,10 +695,23 @@ public class FeedService {
             }
         }
 
+        /*
+         * 기록일 — 이 일이 있었던 날(V119). 고르지 않으면 오늘. 미래는 아직 일어나지 않은 일이라 받지 않는다
+         * (식단·운동·하루 기록과 같은 규칙). 오늘은 KST 로 판단한다(CLAUDE.md 4절).
+         */
+        LocalDate recordDate = request.recordDate() != null ? request.recordDate() : KstClock.today();
+        if (recordDate.isAfter(KstClock.today())) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "아직 오지 않은 날짜에는 남길 수 없어요.");
+        }
+        if (recordDate.isBefore(MIN_RECORD_DATE)) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "날짜를 다시 골라 주세요.");
+        }
+
         Relation couple = activeCouple(userId);
         FeedPost post = FeedPost.builder()
                 .coupleId(couple.getId())
                 .authorId(userId)
+                .recordDate(recordDate)
                 .content(content)
                 // 대표 사진 — 기존 쿼리(findPhotos/findAlbumCandidates 등)가 계속 이 값을 쓴다
                 .imageUrl(photos.isEmpty() ? null : photos.get(0))

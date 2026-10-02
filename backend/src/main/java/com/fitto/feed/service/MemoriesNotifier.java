@@ -14,13 +14,11 @@ import com.fitto.relation.domain.RelationStatus;
 import com.fitto.relation.repository.RelationRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -49,7 +47,6 @@ public class MemoriesNotifier {
     private final ContentLogRepository contentLogRepository;
     private final RelationRepository relationRepository;
     private final NotificationService notificationService;
-    private final ZoneId storageZone;
     private final PlanResolver planResolver;
 
     public MemoriesNotifier(FeedPostRepository feedPostRepository,
@@ -57,15 +54,12 @@ public class MemoriesNotifier {
                             ContentLogRepository contentLogRepository,
                             RelationRepository relationRepository,
                             NotificationService notificationService,
-                            @Value("${fitto.storage-zone:}") String storageZone,
                             PlanResolver planResolver) {
         this.feedPostRepository = feedPostRepository;
         this.placeVisitRepository = placeVisitRepository;
         this.contentLogRepository = contentLogRepository;
         this.relationRepository = relationRepository;
         this.notificationService = notificationService;
-        // MemoriesService 와 반드시 같은 규칙으로 푼다 — 다르면 "푸시는 왔는데 열면 비어 있다"
-        this.storageZone = MemoryDates.storageZoneOf(storageZone);
         this.planResolver = planResolver;
     }
 
@@ -135,9 +129,8 @@ public class MemoriesNotifier {
     private Map<Long, Long> countsForYear(int year, LocalDate today) {
         Map<Long, Long> counts = new LinkedHashMap<>();
         for (LocalDate date : MemoryDates.occurrencesIn(year, today)) {
-            LocalDateTime from = MemoryDates.storageStartOfDay(date, storageZone);
-            LocalDateTime to = MemoryDates.storageStartOfDay(date.plusDays(1), storageZone);
-            feedPostRepository.countByCoupleInPeriod(from, to)
+            // MemoriesService 와 같은 기준(포스트 기록일) — 다르면 "푸시는 왔는데 열면 비어 있다"
+            feedPostRepository.countByCoupleOnRecordDate(date)
                     .forEach(c -> counts.merge(c.getCoupleId(), c.getItemCount(), Long::sum));
             placeVisitRepository.countByCoupleOnVisitedAt(date)
                     .forEach(c -> counts.merge(c.getCoupleId(), c.getItemCount(), Long::sum));
@@ -149,7 +142,7 @@ public class MemoriesNotifier {
 
     /** 훑을 연도의 하한 — 전체를 통틀어 가장 오래된 기록의 연도. 기록이 없으면 null. */
     private Integer globalEarliestYear() {
-        LocalDateTime firstPost = feedPostRepository.findGlobalEarliestCreatedAt();
+        LocalDate firstPost = feedPostRepository.findGlobalEarliestRecordDate();
         LocalDate firstVisit = placeVisitRepository.findGlobalEarliestVisitedAt();
         LocalDate firstLog = contentLogRepository.findGlobalEarliestWatchedAt();
 
