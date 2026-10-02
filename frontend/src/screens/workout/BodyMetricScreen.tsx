@@ -1,5 +1,6 @@
 /** 몸 변화 — 체중·체지방·둘레 추적 + 진행 사진(before/after). 경량 막대 그래프. */
 import React, { useCallback, useState } from 'react';
+import Svg, { Circle, Polyline } from 'react-native-svg';
 import {
   FlatList,
   Image,
@@ -39,29 +40,104 @@ import { useDeleteAction } from '../../hooks/useDeleteAction';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'BodyMetric'>;
 
-/** 체중 막대 그래프 — 최근 N개, min~max 정규화 */
-function WeightChart({ data }: { data: BodyMetric[] }) {
-  const points = data.filter((d) => d.weightKg != null).slice(-14);
+/** YYYY-MM-DD → 그날 0시(로컬) 기준 일 수 — 이동평균 창(7일)을 날짜로 자르려고 */
+function dayIndex(date: string): number {
+  const [y, m, d] = date.split('-').map(Number);
+  return Math.round(new Date(y, m - 1, d).getTime() / 86400000);
+}
+
+/** 이동평균 창 — 그날 포함 지난 7일(달력 기준) */
+const MA_WINDOW_DAYS = 7;
+
+/**
+ * 측정마다 "그날까지 7일 안에 잰 체중의 평균". 하루하루의 물·식사 변동을 눌러 추세만 남긴다.
+ * <b>기록이 7일어치가 안 되면 null</b> — 첫 기록부터 마지막 기록까지가 6일 이하이면 평균이 원 데이터와
+ * 거의 같아 선이 정보를 더하지 않고, 짧은 구간의 "추세"는 오해만 산다. 클라이언트 계산(서버 변경 없음).
+ */
+function movingAverage(points: { measuredDate: string; weightKg: number }[]): number[] | null {
   if (points.length < 2) return null;
-  const weights = points.map((p) => p.weightKg as number);
-  const min = Math.min(...weights);
-  const max = Math.max(...weights);
+  const days = points.map((p) => dayIndex(p.measuredDate));
+  if (days[days.length - 1] - days[0] < MA_WINDOW_DAYS - 1) return null;
+  return points.map((_, i) => {
+    let sum = 0;
+    let n = 0;
+    for (let j = i; j >= 0 && days[i] - days[j] < MA_WINDOW_DAYS; j--) {
+      sum += points[j].weightKg;
+      n++;
+    }
+    return sum / n;
+  });
+}
+
+/** 막대 높이(px) — 12~88 */
+const BAR_MIN = 12;
+const BAR_SPAN = 76;
+const CHART_H = 100;
+
+/**
+ * 체중 막대 그래프 — 최근 14개, min~max 정규화 + 7일 이동평균 선.
+ *
+ * <p>이 화면은 <b>나만 본다</b>. 체중·추세는 상대에게 보이지 않는다는 원칙(LOVEBODY_REVIEW §2-6)이라
+ * 이 선을 피드·홈·채팅 같은 공유 화면으로 옮기지 않는다.
+ */
+function WeightChart({ data }: { data: BodyMetric[] }) {
+  const [width, setWidth] = useState(0);
+  // 평균은 화면에 그리는 14개보다 앞선 기록까지 써야 첫 점의 창이 비지 않는다
+  const all = data
+    .filter((d) => d.weightKg != null)
+    .map((d) => ({ id: d.id, measuredDate: d.measuredDate, weightKg: d.weightKg as number }));
+  const ma = movingAverage(all);
+  const from = Math.max(0, all.length - 14);
+  const points = all.slice(from);
+  const avg = ma ? ma.slice(from) : null;
+  if (points.length < 2) return null;
+  const values = [...points.map((p) => p.weightKg), ...(avg ?? [])];
+  const min = Math.min(...values);
+  const max = Math.max(...values);
   const range = max - min || 1;
+  const heightOf = (kg: number) => BAR_MIN + ((kg - min) / range) * BAR_SPAN;
+  // 막대 칸은 flex 균등 분할(gap 4) — 선의 x 는 각 칸의 가운데
+  const GAP = 4;
+  const col = width > 0 ? (width - GAP * (points.length - 1)) / points.length : 0;
+  const xOf = (i: number) => i * (col + GAP) + col / 2;
+  const fmt = (n: number) => (Math.round(n * 10) / 10).toString();
+  const lastAvg = avg ? avg[avg.length - 1] : null;
   return (
-    <View style={styles.chart}>
-      <View style={styles.chartBars}>
+    <View
+      style={styles.chart}
+      accessible
+      accessibilityLabel={`최근 체중 ${points.length}개, ${fmt(min)}~${fmt(max)}kg${
+        lastAvg != null ? `, 7일 평균 ${fmt(lastAvg)}kg` : ''
+      }`}
+    >
+      <View style={styles.chartBars} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
         {points.map((p, i) => {
-          const h = 12 + ((p.weightKg as number) - min) / range * 76; // 12~88
           const isLast = i === points.length - 1;
           return (
             <View key={p.id} style={styles.chartCol}>
               <Text style={styles.chartVal}>{p.weightKg}</Text>
-              <View style={[styles.chartBar, { height: h }, isLast && styles.chartBarLast]} />
+              <View style={[styles.chartBar, { height: heightOf(p.weightKg) }, isLast && styles.chartBarLast]} />
             </View>
           );
         })}
+        {avg && width > 0 ? (
+          <Svg width={width} height={CHART_H} style={StyleSheet.absoluteFill} pointerEvents="none">
+            <Polyline
+              points={avg.map((v, i) => `${xOf(i)},${CHART_H - heightOf(v)}`).join(' ')}
+              fill="none"
+              stroke={colors.textPrimary}
+              strokeWidth={2}
+              strokeLinejoin="round"
+              strokeLinecap="round"
+            />
+            <Circle cx={xOf(avg.length - 1)} cy={CHART_H - heightOf(avg[avg.length - 1])} r={3} fill={colors.textPrimary} />
+          </Svg>
+        ) : null}
       </View>
-      <Text style={styles.chartCaption}>최근 체중 추이 (kg) · {min}~{max}</Text>
+      <Text style={styles.chartCaption}>
+        최근 체중 추이 (kg) · {fmt(min)}~{fmt(max)}
+        {lastAvg != null ? ` · 선 = 7일 평균 ${fmt(lastAvg)}kg` : ''}
+      </Text>
     </View>
   );
 }

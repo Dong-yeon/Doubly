@@ -11,6 +11,10 @@ import com.fitto.diet.dto.NutritionGoalRequest;
 import com.fitto.diet.dto.SaveMealRequest;
 import com.fitto.diet.service.MealService;
 import com.fitto.diet.service.NutritionService;
+import com.fitto.diet.dto.CoupleMealGoalResponse;
+import com.fitto.feed.dto.FeedItemType;
+import com.fitto.feed.dto.ReactionSummary;
+import com.fitto.feed.service.FeedService;
 import com.fitto.relation.dto.InviteCodeResponse;
 import com.fitto.relation.service.RelationService;
 import com.fitto.workout.dto.PartnerTodayResponse;
@@ -38,6 +42,8 @@ class MealFlowTest {
     MealService mealService;
     @Autowired
     NutritionService nutritionService;
+    @Autowired
+    FeedService feedService;
 
     private Long register(String email) {
         return authService.register(
@@ -494,5 +500,65 @@ class MealFlowTest {
         assertThat(updated.sugar()).isEqualTo(8);
         assertThat(updated.sodium()).isEqualTo(150);
         assertThat(updated.fiber()).isEqualTo(3);
+    }
+
+    // ---- 럽바디 3단계(LOVEBODY_REVIEW §2-3·§2-4) ----
+
+    /** 주간 스트립 — 개수만 내던 coupleGoal 이 이번 주 날짜 목록도 싣는다. 미연결이면 내 날짜만 */
+    @Test
+    void 커플_식단_목표에_이번_주_기록_날짜가_실리고_미연결이면_상대는_비어_있다() {
+        Long solo = register("week-solo@fitto.com");
+        mealService.save(solo, sample(LocalDate.now(), MealType.LUNCH));
+        mealService.save(solo, sample(LocalDate.now(), MealType.DINNER)); // 같은 날 두 끼 — 날짜는 하나
+        CoupleMealGoalResponse alone = mealService.coupleGoal(solo);
+        assertThat(alone.connected()).isFalse();
+        assertThat(alone.myDates()).containsExactly(LocalDate.now());
+        assertThat(alone.partnerDates()).isEmpty();
+
+        Long a = register("week-a@fitto.com");
+        Long b = register("week-b@fitto.com");
+        relationService.connectCouple(b, relationService.createCoupleInvite(a).code());
+        mealService.save(b, sample(LocalDate.now(), MealType.BREAKFAST));
+        CoupleMealGoalResponse goal = mealService.coupleGoal(a);
+        assertThat(goal.connected()).isTrue();
+        assertThat(goal.myDates()).isEmpty();
+        assertThat(goal.partnerDates()).containsExactly(LocalDate.now());
+        assertThat(goal.partnerDays()).isEqualTo(1);
+    }
+
+    /** 내 식사 카드에 상대가 피드에서 남긴 반응이 실린다 — 우리 탭 피드와 같은 데이터 */
+    @Test
+    void 식사_목록에_피드_반응이_실린다() {
+        Long a = register("react-a@fitto.com");
+        Long b = register("react-b@fitto.com");
+        relationService.connectCouple(b, relationService.createCoupleInvite(a).code());
+        MealResponse meal = mealService.save(a, sample(LocalDate.now(), MealType.LUNCH));
+
+        feedService.toggleReaction(b, FeedItemType.MEAL, meal.id(), "❤️");
+
+        List<ReactionSummary> reactions = mealService.findToday(a).get(0).reactions();
+        assertThat(reactions).containsExactly(new ReactionSummary("❤️", 1, false));
+    }
+
+    /**
+     * 데이트 식단 함정(§2-4) — 상대가 등록한 데이트 식단은 피드에 <b>원본</b>만 나오고 반응도 원본에 달린다.
+     * 내 몫(복사본) 카드가 자기 id 로만 반응을 찾으면 "피드엔 하트가 있는데 럽바디 카드엔 없다"가 된다.
+     */
+    @Test
+    void 상대가_등록한_데이트_식단의_내_몫은_원본에_달린_반응을_보여준다() {
+        Long registrant = register("react-date-a@fitto.com");
+        Long me = register("react-date-b@fitto.com");
+        relationService.connectCouple(me, relationService.createCoupleInvite(registrant).code());
+        MealResponse original = mealService.save(registrant, sharedWithItems(LocalDate.now(), MealType.DINNER));
+        MealResponse myCopy = mealService.findToday(me).get(0);
+        assertThat(myCopy.id()).isNotEqualTo(original.id());
+
+        // 피드에서 나는 상대(등록자)의 원본 카드에 반응한다 — 복사본은 피드에 없다
+        feedService.toggleReaction(me, FeedItemType.MEAL, original.id(), "😋");
+
+        assertThat(mealService.findToday(me).get(0).reactions())
+                .containsExactly(new ReactionSummary("😋", 1, true));
+        assertThat(mealService.findToday(registrant).get(0).reactions())
+                .containsExactly(new ReactionSummary("😋", 1, false));
     }
 }

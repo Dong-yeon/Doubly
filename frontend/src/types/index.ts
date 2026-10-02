@@ -1121,6 +1121,8 @@ export interface Meal {
   placeId?: number | null;
   placeName?: string | null;
   createdAt: string;
+  /** 이 끼니에 달린 응원 반응(우리 탭 피드와 같은 데이터, 읽기 전용) — 구서버 응답엔 없다 */
+  reactions?: ReactionSummary[] | null;
 }
 
 // 오늘 영양 요약 (목표 대비 섭취) — GET /meal/nutrition
@@ -1474,6 +1476,10 @@ export interface CoupleMealGoal {
   partnerDays: number;
   bothDays: number;
   achieved: boolean;
+  /** 이번 주 내가 기록한 날짜(YYYY-MM-DD) — 주간 스트립. 구서버 응답엔 없다(옵셔널) */
+  myDates?: string[];
+  /** 이번 주 상대가 기록한 날짜 — 미연결이면 빈 목록. 구서버 응답엔 없다 */
+  partnerDates?: string[];
 }
 
 // 커플 여행 (PLAN.md Trip) — 장소(places)를 여행 단위로 그룹핑

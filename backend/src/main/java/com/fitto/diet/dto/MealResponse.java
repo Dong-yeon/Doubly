@@ -1,5 +1,7 @@
 package com.fitto.diet.dto;
 
+import com.fitto.feed.dto.ReactionSummary;
+
 import com.fitto.diet.domain.Meal;
 import com.fitto.diet.domain.MealType;
 import com.fitto.diet.domain.NutritionSource;
@@ -45,7 +47,13 @@ public record MealResponse(
          */
         Long placeId,
         String placeName,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        /**
+         * 이 끼니에 달린 응원 반응(우리 탭 피드의 MEAL 반응과 같은 데이터, 이모지별 요약·mine 은 요청자 기준).
+         * 목록 조회(오늘/히스토리)에서만 채우고 저장·수정 응답은 빈 목록이다. 데이트 식단의 상대 명의 복사본은
+         * 피드에 원본만 나오므로 <b>원본</b>의 반응을 싣는다 — 안 그러면 피드엔 하트가 있는데 럽바디 카드엔 없다.
+         */
+        List<ReactionSummary> reactions
 ) {
     /**
      * 영양 목표 달성 — {@code WorkoutResponse.PrHighlight} 와 같은 패턴으로
@@ -86,6 +94,13 @@ public record MealResponse(
                 m.getCarbs(), m.getProtein(), m.getFat(),
                 m.getSugar(), m.getSodium(), m.getFiber(), m.getNutritionSource(),
                 m.getItems().stream().map(MealItemResponse::of).toList(),
-                goals, m.isSharedMeal(), placeId, placeName, m.getCreatedAt());
+                goals, m.isSharedMeal(), placeId, placeName, m.getCreatedAt(), List.of());
+    }
+
+    /** 목록 조회에서 배치로 모은 반응을 얹는다 */
+    public MealResponse withReactions(List<ReactionSummary> reactions) {
+        return new MealResponse(id, mealDate, mealType, mealTypeLabel, memo, photoUrl, calories, carbs, protein, fat,
+                sugar, sodium, fiber, nutritionSource, items, goals, sharedWithPartner, placeId, placeName, createdAt,
+                reactions);
     }
 }
