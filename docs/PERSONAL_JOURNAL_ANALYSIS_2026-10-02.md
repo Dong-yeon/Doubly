@@ -1,6 +1,6 @@
 # 나만의 하루 기록 — 코드 분석·설계 (2026-10-02)
 
-> **상태: 분석·설계만. 코드 변경 없음.** 방향은 `PERSONAL_JOURNAL_DIRECTION_2026-10-02.md` §3 원칙 6개(확정)를 따른다.
+> **상태: 1차 MVP 구현·main 병합(2026-10-02, §6-1 — V116, 서버 배포, 앱은 다음 빌드). 2차·3차 착수 전.** 방향은 `PERSONAL_JOURNAL_DIRECTION_2026-10-02.md` §3 원칙 6개(확정)를 따른다.
 > 이 문서는 그 문서 §5 열린 질문 7개에 코드로 답하고, 착수 순서를 정한다.
 > 선행 문서: `LIFECYCLE_DIRECTION_2026-09-28.md`, `LOVEBODY_REVIEW_2026-10-02.md` §3 A-4,
 > `HOME_SCREEN_ANALYSIS_2026-09-12.md`, `FEED_AND_CALENDAR_UX_2026-09-14.md`.
@@ -400,6 +400,58 @@ CREATE TABLE journal_entries (
 | 프론트 | 설정의 동의 토글(MY → 설정), `Journal` 화면의 월 회고 카드, `FeatureKey` |
 | 배포 | 서버 → Update(+ landing 개인정보처리방침 재배포) |
 | 비용 | 중(법무 문구 포함). 착수 조건: 1차 이후 월 10일 이상 쓰는 사용자 비율을 보고 판단한다 — 쓰는 사람이 없으면 회고할 것도 없다 |
+
+---
+
+## §6-1 1차 구현 기록 (2026-10-02)
+
+브랜치 `feat/personal-journal` → main. 1차-b(공유)는 하지 않았다.
+
+### 무엇이 들어갔나
+
+| 층 | 내용 |
+| --- | --- |
+| 마이그레이션 | `V116__journal_entries.sql` — §1-1에서 `shared_post_id` 만 뺀 모양 |
+| 백엔드 | `com.fitto.journal` — `GET /me/journals?month=`, `GET·PUT·DELETE /me/journals/{date}`, `POST /me/journals/photo-signature`. upsert는 찾아서 넣고, 유니크 경합에 지면 새 트랜잭션에서 한 번 더 시도(`ON CONFLICT` 없이). 미래 날짜 거절은 `KstClock.today()`, 사진은 `{folder}/journal/` URL만 받는다(`..`·`?`·`#` 거절). 교체·삭제한 사진은 커밋 뒤에 지운다 |
+| 한도·계측 | `Feature.JOURNAL_PHOTO`(사람 단위, FREE=PRO 하루 3, 업셀 없음), `Feature.JOURNAL`(무제한, **새 기록일 때만** `FEATURE_USED`), `AnalyticsEvent.JOURNAL_SAVED`(detail = `입구:NEW/EDIT` 뿐), `JOURNAL_PROMPT_SHOWN`(프론트·백엔드 양쪽) |
+| 삭제·내보내기 | `UserDataPurger`(URL 수집 + 삭제), `ExportSection.JOURNAL_ENTRIES`(PERSONAL), `StoredMediaReferences` 에 `journal_entries.photo_url` 등록(분석 당시엔 없던 A-3 참조 검사 — 다른 삭제 경로가 같은 URL을 지우려 해도 일기 사진을 남긴다). 관계 단위 Purger·Restorer는 손대지 않음 |
+| 프론트 | MoodPicker 2단계 + 공용 `Sheet` 이전, `JournalScreen`(월 그리드 + 목록), `JournalDayScreen`(작성·수정·삭제·사진 1장·지난 날짜·dirty guard·띄어쓰기 정리), `components/MonthGrid`(새로 뽑음, 기존 4곳은 그대로), MY "나의 하루" 행, 미연결 홈 "오늘 하루 남기기" 행, `FeatureKey` 2개, 내보내기 라벨 |
+
+### 분석 문서와 다르게 한 것
+
+| 무엇 | 왜 |
+| --- | --- |
+| MoodPicker 2단계는 **오늘 기록이 아직 없을 때만** 보인다. 이미 썼으면 무드만 보내고 닫는다(기록의 기분은 바꾸지 않는다) | 사용자 결정(2026-10-02). 시트를 열 때마다 `GET /me/journals/{오늘}` 로 확인하고, 모르면(불러오는 중·실패) 2단계로 넘어가지 않는다 |
+| `shared_post_id` 를 뺐다 | 1차-b를 하지 않기로 해서. 공유를 붙일 때 별도 마이그레이션으로 넣는다 |
+| 마이그레이션 번호 V114 → **V116** | 작업 중에 main에 V115(`nutrition_goal_direction`)가 먼저 병합·배포됐다. Flyway 기본값(`outOfOrder=false`)에서는 이미 적용된 V115보다 낮은 미적용 V114가 검증에서 거절되어 **운영 부팅이 실패**한다. 아직 푸시하지 않은 이쪽을 옮겼다 |
+| 미연결 사용자의 무드: 고른 기분은 **오늘 기록에만** 남는다. 2단계를 그냥 닫아도 기분은 저장한다("고르면 남는다"). 오늘 기록이 이미 있으면 기분을 덮어쓰지 않고, 토스트로 기록 화면을 안내한다 | §0의 "확인 필요"를 확인한 결과다. 미연결 레이아웃에서도 무드 버튼이 보였고, 누르면 `POST /mood` 가 404 → 오류 토스트가 떴다(기존 버그). 미연결이면 기분이 남을 곳이 기록뿐이다. 무드 버튼도 오늘 기록의 기분을 그린다 |
+| "더 쓰기"의 초안을 **라우트 파라미터가 아니라 메모리**(`store/journalDraft`)로 건넨다 | 웹 확인에서 `/JournalDay?draftBody=…` 로 나만 보는 본문이 주소창·방문 기록에 남았다(React Navigation 이 웹에서 파라미터를 URL에 굽는다). 파라미터에는 날짜와 입구만 둔다 |
+| 2단계의 사진 버튼 대신 "더 쓰기"(→ 그날 페이지, 사진은 거기서) | 시트 안에 업로드·한도 처리를 또 만들지 않는다. 사진 한도 차감은 그날 페이지 한 곳에서만 일어난다 |
+| 아이콘은 이미 글리프맵에 있는 것만(`text-box-outline`·`lock-outline`·`image-plus`) | 새 이름을 넣으면 서브셋 폰트(`assets/`)가 바뀌어 fingerprint가 흔들린다 |
+
+### 검증
+
+| 항목 | 결과 |
+| --- | --- |
+| `./gradlew test`(H2, Redis 6399) | 145 클래스 942건 통과(main 최신 위에서 다시 돌림) |
+| PostgreSQL | 전용 컨테이너에서 V113 → V115 → V116 순서로 적용(운영과 같은 순서), `JournalPrivacyTest`·`WithdrawFlowTest`·`DataExportFlowTest`·`FeedFlowTest`·`PartnerPrivacyTest`·`PlanCatalogTest` 59건 통과 |
+| `JournalPrivacyTest` | §2-3의 1·2·3·4·6·8 + 같은 날 두 번 쓰기·동시 저장 4스레드·거절 규칙(미래·빈 기록·다른 폴더 사진·`..` 우회). 7(탈퇴)과 사진 교체·삭제 시 옛 파일 삭제는 `WithdrawFlowTest` 쪽(이미지 삭제 스파이가 있는 기존 컨텍스트). **새 스프링 컨텍스트 조합 없음** |
+| 프론트 | `typecheck` 통과, `lint` 새 경고 0(HomeScreen의 haptics 중복 import 2건·RootNavigator 1건은 main에도 있던 것), `verify:nested-buttons` 통과, `build:web` 통과(아이콘 폰트·글리프맵 내용 변화 없음) |
+| 웹 실제 동작 | 로컬 백엔드(PostgreSQL) + 웹(19007)으로: 미연결 홈 행 표시 → 무드 고르기 → 2단계 → 저장 → 무드 버튼에 반영 / 오늘 기록이 있을 때 다른 무드를 골라도 기록의 기분 유지 / MY → 나의 하루 달력·목록 / 지난 날짜 쓰기 / 삭제 확인 → 지움 / 커플 연결 후 메모칸 "상대에게 한마디" + 무드 전송 + 2단계 "오늘 기분, 남겼어요" / "더 쓰기" 초안 이어받기 / **상대 계정으로 내 날짜 조회 → 404** / 저장 실패 시 오류 표시. 이 확인에서 URL 초안 노출·닫힐 때 1단계 번쩍임·지난 날짜 "오늘" 문구를 찾아 고쳤다 |
+
+### 배포 상태
+
+- **서버**: main 푸시로 Railway가 배포한다(V116 적용). 옛 앱은 이 API를 부르지 않으므로 서버만 먼저 나가도 안전하다.
+- **EAS Update는 하지 않았다 — 지금 올려도 아무에게도 배달되지 않는다.** 라이브 1.0.5(iOS 빌드 30, 소스 `bf3f0073`)의 fingerprint는 `2aebafe2…`인데, main에는 그 뒤로 앱 아이콘·알림 아이콘·아이콘 폰트 변경(`9798a978` 등)이 이미 들어와 있어 이 브랜치 HEAD의 fingerprint가 `80041f30…`(두 번 계산해 같음)이다. 이 기록의 변경은 fingerprint 입력을 건드리지 않았다. `RELEASE_OTA_MISDELIVERY_2026-09-11.md` §3 규칙("다르면 업데이트가 아니라 빌드 + 제출")에 따라 **다음 빌드(1.0.6)에 실려 나간다.**
+
+### 실기기 확인 항목 (남은 것)
+
+1. **iOS 한글 입력 — 2단계 시트**: `autoFocus` 로 키보드가 올라올 때 시트가 키보드 위로 밀려 "남기기"가 가려지지 않는지(공용 `Sheet` 의 `KeyboardAvoidingView`), 조합 중인 마지막 글자가 "남기기"를 눌렀을 때 빠지지 않는지(채팅 전송 사고 `doubly-chat-send-korean-ime` 와 같은 계열 — 여긴 `onPress` 라 조합 확정이 누름을 취소할 수 있다), 배경을 누르면 키보드만 내려가고 시트는 남는지
+2. Android 같은 항목 + 하드웨어 뒤로 가기: 연결 상태면 무드는 이미 갔고 시트만 닫힌다 / 미연결이면 기분만 기록에 남는다
+3. 그날 페이지 사진 1장: 서명(`journal/` 폴더) → 업로드 → 저장, 사진 교체 후 옛 파일이 Cloudinary에서 지워지는지(운영 Cloudinary에서만 확인 가능 — 로컬은 미설정이라 서명이 `UPLOAD_NOT_CONFIGURED`), 하루 4번째 서명에서 429 문구("기록 사진은 하루에 3회까지…")가 결제 권유 없이 뜨는지
+4. 우리 이모지로 무드를 고른 경우 2단계에 내 얼굴 그림이 보이고, 기록에는 대응 유니코드가 남는지
+5. 큰 글자 설정에서 월 그리드 칸(최소 높이 52)과 2단계 버튼 줄이 잘리지 않는지
+6. 다크 모드: 자물쇠 안내 줄·월 그리드 오늘 테두리·선택 칸 대비
 
 ---
 
