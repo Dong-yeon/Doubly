@@ -1,5 +1,6 @@
 package com.fitto.feed.dto;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -38,6 +39,12 @@ public record FeedPhotoResponse(
         Long placeId,
         /** 장소 상세 화면 제목용 — placeId 와 함께만 채워진다 */
         String placeName,
+        /**
+         * 기록일 — 사진첩의 정렬·월 묶음 기준(2026-10-02 결정). 식단·운동·방문은 사용자가 고른
+         * 날짜, 일상 포스트는 올린 시각의 KST 날짜. 날짜만 담긴 값이라 앱은 시간대 변환 없이 쓴다.
+         */
+        LocalDate recordDate,
+        /** 올린 시각(UTC 인스턴트) — 같은 기록일 안의 순서 */
         LocalDateTime createdAt
 ) {
 }

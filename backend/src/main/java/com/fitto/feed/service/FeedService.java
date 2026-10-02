@@ -7,6 +7,7 @@ import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.notification.NotificationCategory;
 import com.fitto.common.notification.NotificationService;
 import com.fitto.common.notification.PushLinks;
+import com.fitto.common.time.KstClock;
 import com.fitto.common.upload.CloudinaryImageDeleter;
 import com.fitto.content.domain.ContentLog;
 import com.fitto.content.repository.ContentLogRepository;
@@ -43,7 +44,9 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.EnumSet;
@@ -72,6 +75,10 @@ public class FeedService {
      */
     private static final Set<FeedItemType> PHOTO_SOURCES = EnumSet.of(
             FeedItemType.POST, FeedItemType.MEAL, FeedItemType.WORKOUT, FeedItemType.PLACE_VISIT);
+
+    /** 사진첩에서 기록일 컬럼으로 keyset 을 거는 소스 — 커서 위치에 날짜가 있어야 이어 읽는다. */
+    private static final Set<FeedItemType> DATED_PHOTO_SOURCES = EnumSet.of(
+            FeedItemType.MEAL, FeedItemType.WORKOUT, FeedItemType.PLACE_VISIT);
 
     private final FeedPostRepository feedPostRepository;
     private final FeedPostPhotoRepository feedPostPhotoRepository;
@@ -228,7 +235,13 @@ public class FeedService {
     }
 
     /**
-     * 사진첩("우리" 탭) — 일상·식단·운동·맛집 중 <b>사진이 있는</b> 기록을 합쳐 최신순으로 준다.
+     * 사진첩("우리" 탭) — 일상·식단·운동·맛집 중 <b>사진이 있는</b> 기록을 합쳐 기록일 최신순으로 준다.
+     *
+     * <p><b>정렬은 (기록일, created_at, id) 내림차순</b>(2026-10-02 결정). 기록일은 식단
+     * {@code meal_date} · 운동 {@code workout_date} · 방문 {@code visited_at} 이고, 날짜 컬럼이
+     * 없는 일상 포스트는 올린 시각의 KST 날짜다({@link #recordDateOf(FeedPost)}). 지난 날짜로
+     * 늦게 올린 끼니가 "올린 달"이 아니라 "먹은 날"에 묶여야 월 묶음·달력·회고가 맞는다.
+     * 타임라인({@link #timeline})은 업로드 순서 그대로 둔다 — 피드는 "방금 무엇이 올라왔나"다.
      *
      * <p>새 컨트롤러를 만들지 않는 이유: 앨범은 피드의 다른 보기다(같은 4소스, 같은 커서,
      * 사진만 남긴 것). {@link #timeline} 과 같은 소스별 keyset·Java 병합을 그대로 쓴다 —
@@ -257,6 +270,18 @@ public class FeedService {
         Set<FeedItemType> wanted = (sources == null || sources.isEmpty())
                 ? PHOTO_SOURCES
                 : EnumSet.copyOf(sources);
+
+        /*
+         * 기록일 정렬 이전에 발급된 커서(날짜 없음)는 이어 읽을 수 없다 — 위치의 의미가 다르다.
+         * 배포 직후 스크롤 중이던 앱이 들고 있을 수 있으므로 오류 대신 첫 페이지로 되돌린다
+         * (FeedCursor.decode 의 해석 실패와 같은 원칙). 앱은 받은 항목을 키로 중복 제거한다.
+         */
+        for (FeedItemType type : DATED_PHOTO_SOURCES) {
+            if (from.positionOf(type) != null && from.recordDateOf(type) == null) {
+                from = FeedCursor.first();
+                break;
+            }
+        }
 
         Long partnerId = couple.partnerOf(userId);
         List<Long> userIds = partnerId != null ? List.of(userId, partnerId) : List.of(userId);
@@ -290,54 +315,58 @@ public class FeedService {
             Map<Long, List<String>> photosByPost = mapper.photosByPostId(posts);
             for (FeedPost p : posts) {
                 List<String> urls = photosByPost.getOrDefault(p.getId(), List.of());
-                merged.add(new PhotoCandidate(mapper.toItem(p, names, userId, null, urls),
+                merged.add(new PhotoCandidate(mapper.toItem(p, names, userId, null, urls), recordDateOf(p),
                         p.getImageUrl(), urls, p.getTripId(), null, null));
             }
         }
         if (wanted.contains(FeedItemType.MEAL)) {
-            List<Meal> meals = mealRepository.findPhotosForFeed(userIds,
+            List<Meal> meals = mealRepository.findPhotosForFeed(userIds, from.recordDateOf(FeedItemType.MEAL),
                     from.createdAtOf(FeedItemType.MEAL), from.idOf(FeedItemType.MEAL), page);
             Map<Long, VisitWithPlace> placeByMealId = placeLinksOf(meals);
             for (Meal m : meals) {
                 VisitWithPlace place = placeByMealId.get(m.getId());
                 String placeName = place != null ? place.getPlaceName() : null;
                 merged.add(new PhotoCandidate(
-                        mapper.toItem(m, names, userId, placeName),
+                        mapper.toItem(m, names, userId, placeName), m.getMealDate(),
                         m.getPhotoUrl(), List.of(), null,
                         place != null ? place.getVisit().getPlaceId() : null, placeName));
             }
         }
         if (wanted.contains(FeedItemType.WORKOUT)) {
-            for (Workout w : workoutRepository.findPhotosForFeed(userIds,
+            for (Workout w : workoutRepository.findPhotosForFeed(userIds, from.recordDateOf(FeedItemType.WORKOUT),
                     from.createdAtOf(FeedItemType.WORKOUT), from.idOf(FeedItemType.WORKOUT), page)) {
-                merged.add(new PhotoCandidate(mapper.toItem(w, names, userId),
+                merged.add(new PhotoCandidate(mapper.toItem(w, names, userId), w.getWorkoutDate(),
                         w.getImageUrl(), List.of(), null, null, null));
             }
         }
         if (wanted.contains(FeedItemType.PLACE_VISIT)) {
+            LocalDate date = from.recordDateOf(FeedItemType.PLACE_VISIT);
             LocalDateTime at = from.createdAtOf(FeedItemType.PLACE_VISIT);
             Long id = from.idOf(FeedItemType.PLACE_VISIT);
             List<VisitWithPlace> visits = authorId != null
-                    ? placeVisitRepository.findPhotosForFeedByVisitor(couple.getId(), authorId, at, id, page)
-                    : placeVisitRepository.findPhotosForFeed(couple.getId(), at, id, page);
+                    ? placeVisitRepository.findPhotosForFeedByVisitor(couple.getId(), authorId, date, at, id, page)
+                    : placeVisitRepository.findPhotosForFeed(couple.getId(), date, at, id, page);
             for (VisitWithPlace v : visits) {
-                merged.add(new PhotoCandidate(mapper.toItem(v, names, userId),
+                merged.add(new PhotoCandidate(mapper.toItem(v, names, userId), v.getVisit().getVisitedAt(),
                         v.getVisit().getImageUrl(), List.of(), null,
                         v.getVisit().getPlaceId(), v.getPlaceName()));
             }
         }
 
-        // 정렬도 (occurredAt, refId) 복합키 — 같은 시각이면 id 역순으로 안정 정렬한다
-        merged.sort(Comparator.<PhotoCandidate, java.time.LocalDateTime>comparing(c -> c.item().occurredAt())
+        /*
+         * 병합 정렬키는 소스별 쿼리의 정렬키와 같아야 한다 — (기록일, created_at, id).
+         * 포스트 쿼리는 created_at 만으로 정렬하지만, 포스트의 기록일은 created_at 의 KST 날짜라
+         * 둘의 순서가 같다(날짜는 시각을 따라 단조 증가).
+         */
+        merged.sort(Comparator.comparing(PhotoCandidate::recordDate)
+                .thenComparing(c -> c.item().occurredAt())
                 .thenComparing(c -> c.item().refId())
                 .reversed());
 
         boolean hasMore = merged.size() > size;
         List<PhotoCandidate> picked = hasMore ? merged.subList(0, size) : merged;
 
-        String nextCursor = picked.isEmpty()
-                ? null
-                : nextCursorOf(from, picked.stream().map(PhotoCandidate::item).toList()).encode();
+        String nextCursor = picked.isEmpty() ? null : photoCursorOf(from, picked).encode();
 
         List<FeedPhotoResponse> items = picked.stream().map(c -> {
             FeedItemResponse item = c.item();
@@ -352,6 +381,7 @@ public class FeedService {
                     c.tripId(),
                     c.placeId(),
                     c.placeName(),
+                    c.recordDate(),
                     item.occurredAt());
         }).toList();
 
@@ -385,9 +415,30 @@ public class FeedService {
      * <p>{@code imageUrls} 는 포스트만 여러 장이고, {@code tripId} 도 포스트에만 있다.
      * {@code placeId}·{@code placeName} 은 맛집 방문과 장소가 붙은 끼니에만 있다.
      */
-    private record PhotoCandidate(FeedItemResponse item, String imageUrl,
+    private record PhotoCandidate(FeedItemResponse item, LocalDate recordDate, String imageUrl,
                                   List<String> imageUrls, Long tripId,
                                   Long placeId, String placeName) {
+    }
+
+    /**
+     * 일상 포스트의 기록일 — 날짜 컬럼이 없어 올린 시각의 KST 날짜로 둔다.
+     *
+     * <p>{@code created_at} 은 {@code @CreatedDate} 가 <b>JVM 기본 시간대</b>로 채운 벽시계 시각이다
+     * (운영 컨테이너는 UTC — JacksonConfig 의 전제, 테스트 JVM 은 Asia/Seoul). 그래서 상수 UTC 가
+     * 아니라 기본 시간대로 해석해 KST 로 옮긴다 — 둘 다에서 맞는 날짜가 나온다.
+     */
+    private static LocalDate recordDateOf(FeedPost p) {
+        return p.getCreatedAt().atZone(ZoneId.systemDefault()).withZoneSameInstant(KstClock.ZONE).toLocalDate();
+    }
+
+    /** 사진첩 커서 — {@link #nextCursorOf} 와 같되 위치에 기록일을 함께 담는다(쿼리의 1차 정렬키). */
+    private FeedCursor photoCursorOf(FeedCursor previous, List<PhotoCandidate> picked) {
+        Map<FeedItemType, FeedCursor.Position> next = new EnumMap<>(previous.positions());
+        for (PhotoCandidate c : picked) {
+            next.put(c.item().type(),
+                    new FeedCursor.Position(c.item().occurredAt(), c.item().refId(), c.recordDate()));
+        }
+        return new FeedCursor(next);
     }
 
     /**

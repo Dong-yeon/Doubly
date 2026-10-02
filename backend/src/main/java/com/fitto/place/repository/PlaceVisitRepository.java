@@ -81,6 +81,10 @@ public interface PlaceVisitRepository extends JpaRepository<PlaceVisit, Long> {
      * <p>식단 기록에 장소를 붙이면 방문이 함께 만들어지고({@code meal_id} 가 그 끼니를 가리킨다)
      * 사진도 같은 파일이 실린다. 그대로 두면 한 장의 사진이 식단·맛집 두 칸으로 뜨므로
      * 식단 쪽만 남긴다 (docs/ALBUM_TAB_IA_2026-09-14.md 5-4 중복 제거 규칙).
+     *
+     * <p><b>정렬은 기록일 우선</b>(2026-10-02 결정) — (기록일, created_at, id) keyset 이다.
+     * 지난 날짜로 늦게 올린 기록이 올린 달이 아니라 그 날짜에 묶여야 달력·회고와 의미가 맞는다.
+     * 타임라인({@code findRecentForFeed})은 업로드 순서 그대로다 — 통일하지 말 것.
      */
     @Query("""
             select v as visit, p.name as placeName
@@ -88,12 +92,15 @@ public interface PlaceVisitRepository extends JpaRepository<PlaceVisit, Long> {
             where p.coupleId = :coupleId
               and v.imageUrl is not null
               and v.mealId is null
-              and (cast(:cursorAt as LocalDateTime) is null
-                   or v.createdAt < :cursorAt
-                   or (v.createdAt = :cursorAt and v.id < :cursorId))
-            order by v.createdAt desc, v.id desc
+              and (cast(:cursorDate as LocalDate) is null
+                   or v.visitedAt < :cursorDate
+                   or (v.visitedAt = :cursorDate
+                       and (v.createdAt < :cursorAt
+                            or (v.createdAt = :cursorAt and v.id < :cursorId))))
+            order by v.visitedAt desc, v.createdAt desc, v.id desc
             """)
     List<VisitWithPlace> findPhotosForFeed(@Param("coupleId") Long coupleId,
+                                           @Param("cursorDate") java.time.LocalDate cursorDate,
                                            @Param("cursorAt") java.time.LocalDateTime cursorAt,
                                            @Param("cursorId") Long cursorId,
                                            org.springframework.data.domain.Pageable pageable);
@@ -109,13 +116,16 @@ public interface PlaceVisitRepository extends JpaRepository<PlaceVisit, Long> {
               and v.visitedBy = :visitedBy
               and v.imageUrl is not null
               and v.mealId is null
-              and (cast(:cursorAt as LocalDateTime) is null
-                   or v.createdAt < :cursorAt
-                   or (v.createdAt = :cursorAt and v.id < :cursorId))
-            order by v.createdAt desc, v.id desc
+              and (cast(:cursorDate as LocalDate) is null
+                   or v.visitedAt < :cursorDate
+                   or (v.visitedAt = :cursorDate
+                       and (v.createdAt < :cursorAt
+                            or (v.createdAt = :cursorAt and v.id < :cursorId))))
+            order by v.visitedAt desc, v.createdAt desc, v.id desc
             """)
     List<VisitWithPlace> findPhotosForFeedByVisitor(@Param("coupleId") Long coupleId,
                                                     @Param("visitedBy") Long visitedBy,
+                                                    @Param("cursorDate") java.time.LocalDate cursorDate,
                                                     @Param("cursorAt") java.time.LocalDateTime cursorAt,
                                                     @Param("cursorId") Long cursorId,
                                                     org.springframework.data.domain.Pageable pageable);
