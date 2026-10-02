@@ -179,6 +179,16 @@ public interface MealRepository extends JpaRepository<Meal, Long> {
     void deleteAllByUserId(@Param("userId") Long userId);
 
     /**
+     * "같이 먹기" 전환의 선점 — 아직 혼자 기록일 때만 묶음 키를 붙이고 바뀐 행 수를 돌려준다(0 이면 이미 나눠졌다).
+     * 읽고 확인한 뒤 쓰면 동시에 들어온 두 요청이 둘 다 "혼자 기록"을 보고 두 번 나눈다(내 몫 1/4, 복제본 두 장).
+     * 조건부 UPDATE 는 행 잠금 아래에서 조건을 다시 보므로 한 요청만 1 을 받는다.
+     * 컨텍스트를 비우므로 호출부는 이후 끼니를 다시 읽어야 한다.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("update Meal m set m.sharedGroupId = :groupId where m.id = :id and m.sharedGroupId is null")
+    int claimForSharing(@Param("id") Long id, @Param("groupId") String groupId);
+
+    /**
      * 사진첩 달력 — 기록일이 {@code [from, to]} 인 사진 끼니. {@link #findPhotosForFeed} 와 같은
      * 복제본 제외 규칙·같은 정렬이다(달력 칸의 대표 사진이 그리드 맨 앞 사진과 같아야 한다).
      */

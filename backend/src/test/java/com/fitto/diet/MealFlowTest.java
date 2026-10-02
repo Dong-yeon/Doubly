@@ -37,7 +37,13 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -305,6 +311,41 @@ class MealFlowTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.INVALID_INPUT);
         assertThat(mealService.findToday(user)).hasSize(1);
+    }
+
+    /**
+     * 홈의 "같이 먹었어요"를 연달아 누르면 두 요청이 동시에 "아직 혼자 기록"을 읽고 둘 다 나눴다 —
+     * 내 몫이 1/4 이 되고 상대에게 복제본이 두 장 생긴다. 순차 재탭은 이미 막혀 있었다.
+     */
+    @Test
+    void 같이_먹었어요를_동시에_두_번_눌러도_한_번만_나눈다() throws Exception {
+        Long a = register("share-race-a@fitto.com");
+        Long b = register("share-race-b@fitto.com");
+        relationService.connectCouple(b, relationService.createCoupleInvite(a).code());
+        MealResponse solo = mealService.save(a, sample(KstClock.today(), MealType.DINNER)); // 420kcal
+
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            List<Future<MealResponse>> results = new ArrayList<>();
+            for (int i = 0; i < 2; i++) {
+                results.add(pool.submit(() -> {
+                    start.await();
+                    return mealService.share(a, solo.id());
+                }));
+            }
+            start.countDown();
+            for (Future<MealResponse> r : results) {
+                assertThat(r.get(30, TimeUnit.SECONDS).sharedWithPartner()).isTrue();
+            }
+        } finally {
+            pool.shutdownNow();
+        }
+
+        assertThat(mealService.findToday(a)).singleElement()
+                .extracting(MealResponse::calories).isEqualTo(210);
+        assertThat(mealService.findToday(b)).singleElement()
+                .extracting(MealResponse::calories).isEqualTo(210);
     }
 
     @Test

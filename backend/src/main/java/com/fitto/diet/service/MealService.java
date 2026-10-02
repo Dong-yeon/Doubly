@@ -322,7 +322,19 @@ public class MealService {
          */
         boolean newlyQualifiesDate = !mealRepository.existsByUserIdAndMealDate(partnerId, meal.getMealDate());
 
-        meal.convertToShared(UUID.randomUUID().toString());
+        /*
+         * 위의 isSharedMeal 은 순차 재탭만 막는다 — 홈 토스트를 연달아 누르면 두 요청이 동시에 "혼자 기록"을
+         * 읽고 둘 다 나눴다. 조건부 UPDATE 로 먼저 선점한 요청만 나누고, 진 쪽은 이긴 쪽의 결과를 돌려준다.
+         */
+        String sharedGroupId = UUID.randomUUID().toString();
+        if (mealRepository.claimForSharing(mealId, sharedGroupId) == 0) {
+            return MealResponse.from(mealRepository.findById(mealId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND)));
+        }
+        // 선점 쿼리가 영속성 컨텍스트를 비웠다 — 다시 읽어서 나눈다
+        meal = mealRepository.findById(mealId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        meal.convertToShared(sharedGroupId);
         mealRepository.save(meal);
         mealRepository.save(copyForPartner(meal, partnerId, userId));
 
