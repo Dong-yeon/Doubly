@@ -15,6 +15,7 @@ import { ChangePasswordScreen } from '../screens/my/ChangePasswordScreen';
 import { RecordExportScreen } from '../screens/my/RecordExportScreen';
 import { JournalScreen } from '../screens/journal/JournalScreen';
 import { JournalDayScreen } from '../screens/journal/JournalDayScreen';
+import { MoodCalendarScreen } from '../screens/mood/MoodCalendarScreen';
 import { LegalDocumentScreen } from '../screens/onboarding/LegalDocumentScreen';
 import { FeedComposeScreen } from '../screens/feed/FeedComposeScreen';
 import { DailyQuestionScreen } from '../screens/home/DailyQuestionScreen';
@@ -123,6 +124,7 @@ export function HomeStackNavigator() {
       <Stack.Screen name="RecordExport" component={RecordExportScreen} options={{ title: '내 기록 내보내기' }} />
       <Stack.Screen name="Journal" component={JournalScreen} options={{ title: '나의 하루' }} />
       <Stack.Screen name="JournalDay" component={JournalDayScreen} options={{ title: '' }} />
+      <Stack.Screen name="MoodCalendar" component={MoodCalendarScreen} options={{ title: '우리 무드 달력' }} />
       <Stack.Screen
         name="LegalDocument"
         component={LegalDocumentScreen}

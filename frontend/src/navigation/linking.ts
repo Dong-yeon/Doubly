@@ -130,6 +130,7 @@ export const linking: LinkingOptions<RootStackParamList> = {
               HomeMain: '',
               CoupleConnect: 'couple/connect',
               FeedCompose: 'feed/new',
+              MoodCalendar: 'mood/calendar',
               DailyQuestion: 'question',
               MiniGames: 'games',
               // 푸시 data.link = PushLinks.GAME_SUDOKU / GAME_OMOK
