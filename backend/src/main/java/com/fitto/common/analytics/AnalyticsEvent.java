@@ -50,4 +50,11 @@ public final class AnalyticsEvent {
     public static final String STICKER_SUGGEST_SHOWN = "STICKER_SUGGEST_SHOWN";
     /** 추천 막대에서 골라 보냈다 — detail 에 "키워드:코드". */
     public static final String STICKER_SUGGEST_PICKED = "STICKER_SUGGEST_PICKED";
+    /**
+     * 나만의 하루 기록 저장 — detail 은 {@code JournalSource} 이름 + ":NEW"/":EDIT" 뿐이다(서버가 enum 으로 만든다).
+     * <b>본문·무드·사진은 절대 싣지 않는다</b> — event_logs 는 탈퇴해도 남는 익명 집계 테이블이다.
+     */
+    public static final String JOURNAL_SAVED = "JOURNAL_SAVED";
+    /** MoodPicker 2단계("한 줄 남기기")가 떴다 — 저장 수(JOURNAL_SAVED:MOOD_PICKER)와 나눠 입구 전환율을 본다. detail 없음 */
+    public static final String JOURNAL_PROMPT_SHOWN = "JOURNAL_PROMPT_SHOWN";
 }

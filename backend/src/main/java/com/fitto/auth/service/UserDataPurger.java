@@ -52,6 +52,10 @@ public class UserDataPurger {
         imageUrls.addAll(selectStrings(
                 "select m.photo_url from meals m "
                         + "where m.user_id = :uid and m.photo_url is not null", userId));
+        // 나만의 하루 기록 사진(V116) — 관계가 아니라 사람 소유라 위 1단계(관계 단위 삭제)가 건드리지 않는다.
+        imageUrls.addAll(selectStrings(
+                "select j.photo_url from journal_entries j "
+                        + "where j.user_id = :uid and j.photo_url is not null", userId));
         /*
          * 운동 인증샷(V84) — 다른 앱의 완료 화면 캡처가 대부분이라 <b>지도(달린 경로)가 함께
          * 찍혀 있을 수 있다</b>. 즉 집 근처 경로가 그대로 담긴 이미지다. DB 행만 지우고 파일을
@@ -98,6 +102,8 @@ public class UserDataPurger {
         exec("delete from fasting_sessions where user_id = :uid", userId);
         exec("delete from favorite_foods where user_id = :uid", userId);
         exec("delete from body_metrics where user_id = :uid", userId);
+        // 나만의 하루 기록(V116) — 자식 테이블도, 이 테이블을 참조하는 곳도 없는 말단이다.
+        exec("delete from journal_entries where user_id = :uid", userId);
         exec("delete from nutrition_goals where user_id = :uid", userId);
         exec("delete from device_tokens where user_id = :uid", userId);
         exec("delete from password_reset_tokens where user_id = :uid", userId);

@@ -21,5 +21,7 @@ public enum ClientAnalyticsEvent {
      * 사용자가 친 글 원문은 넣지 않는다(앱이 표에 있는 키워드만 싣는다).
      */
     STICKER_SUGGEST_SHOWN,
-    STICKER_SUGGEST_PICKED;
+    STICKER_SUGGEST_PICKED,
+    /** 홈 무드 시트의 "한 줄 남기기" 2단계 노출(2026-10-02). detail 없음 — 앱이 아무것도 싣지 않는다. */
+    JOURNAL_PROMPT_SHOWN;
 }
