@@ -16,4 +16,7 @@ public interface LovelichelinActivityRow {
     Long getUserId();
 
     LocalDateTime getAt();
+
+    /** 그 활동에 남긴 별점(방문·관람 기록은 선택, 대표 평점은 필수) — 없으면 null */
+    Integer getRating();
 }

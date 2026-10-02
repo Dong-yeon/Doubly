@@ -106,7 +106,7 @@ public interface ContentLogRepository extends JpaRepository<ContentLog, Long> {
 
     /** 홈 왕관 — 이 커플 콘텐츠에 [from, to) 사이 남긴 관람 기록 */
     @Query("""
-            select l.contentId as targetId, c.title as targetName, l.loggedBy as userId, l.createdAt as at
+            select l.contentId as targetId, c.title as targetName, l.loggedBy as userId, l.createdAt as at, l.rating as rating
             from ContentLog l join Content c on c.id = l.contentId
             where c.coupleId = :coupleId and l.createdAt >= :from and l.createdAt < :to
             """)

@@ -21,7 +21,7 @@ public interface PlaceRatingRepository extends JpaRepository<PlaceRating, Long> 
 
     /** 홈 왕관 — 이 커플 장소에 [from, to) 사이 매기거나 고친 대표 평점 (rated_at 은 재평가 때 갱신된다) */
     @Query("""
-            select r.placeId as targetId, p.name as targetName, r.userId as userId, r.ratedAt as at
+            select r.placeId as targetId, p.name as targetName, r.userId as userId, r.ratedAt as at, r.rating as rating
             from PlaceRating r join Place p on p.id = r.placeId
             where p.coupleId = :coupleId and r.ratedAt >= :from and r.ratedAt < :to
             """)

@@ -179,6 +179,49 @@ class LovelichelinPulseTest {
     }
 
     @Test
+    void 말풍선_별점은_대표_평점이_먼저고_없으면_오늘_방문_별점이다() {
+        long[] c = couple("lp9a@fitto.com", "lp9b@fitto.com");
+        Long placeId = place(c[0], "별점 가게");
+        placeService.recordVisit(c[0], placeId, new RecordVisitRequest(KstClock.today(), 3, null, null, null));
+
+        assertThat(pulseService.pulse(c[0]).me().rating()).isEqualTo(3);
+
+        placeService.rate(c[0], placeId, new RatePlaceRequest(5, null));
+        assertThat(pulseService.pulse(c[0]).me().rating()).isEqualTo(5);
+    }
+
+    @Test
+    void 별점_없이_남긴_기록이면_말풍선_별점은_비어_있다() {
+        long[] c = couple("lp10a@fitto.com", "lp10b@fitto.com");
+        Long placeId = place(c[0], "별점 없는 곳");
+        placeService.recordVisit(c[0], placeId, new RecordVisitRequest(KstClock.today(), null, "메모만", null, null));
+
+        assertThat(pulseService.pulse(c[0]).me().rating()).isNull();
+    }
+
+    @Test
+    void 오늘_신호의_열쇠는_같은_날_새로_기록하면_바뀌고_등극_열쇠는_certificationKey_와_같다() {
+        long[] c = couple("lp11a@fitto.com", "lp11b@fitto.com");
+        Long placeId = place(c[0], "열쇠 가게");
+        placeService.recordVisit(c[0], placeId, new RecordVisitRequest(KstClock.today(), null, null, null, null));
+        String first = pulseService.pulse(c[0]).me().signalKey();
+        // 같은 응답을 다시 받아도 그대로다 — 홈에 다시 들어올 때마다 "새 신호"가 되면 안 된다
+        assertThat(pulseService.pulse(c[0]).me().signalKey()).isEqualTo(first);
+
+        jdbc.update("update place_visits set created_at = ? where place_id = ?",
+                Timestamp.valueOf(LocalDateTime.now(ZoneId.systemDefault()).minusMinutes(5)), placeId);
+        String moved = pulseService.pulse(c[0]).me().signalKey();
+        placeService.recordVisit(c[0], placeId, new RecordVisitRequest(KstClock.today(), 4, null, null, null));
+        assertThat(pulseService.pulse(c[0]).me().signalKey()).isNotEqualTo(moved).startsWith("TODAY:PLACE:" + placeId + ":");
+
+        placeService.rate(c[0], placeId, new RatePlaceRequest(5, null));
+        placeService.rate(c[1], placeId, new RatePlaceRequest(5, null));
+        Signal certified = pulseService.pulse(c[0]).me();
+        assertThat(certified.state()).isEqualTo(State.CERTIFIED);
+        assertThat(certified.signalKey()).isEqualTo(certified.certificationKey());
+    }
+
+    @Test
     void 커플이_아니면_빈_신호() {
         Long solo = register("lp8solo@fitto.com");
 

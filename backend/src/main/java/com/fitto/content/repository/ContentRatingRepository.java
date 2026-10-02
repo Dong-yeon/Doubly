@@ -22,7 +22,7 @@ public interface ContentRatingRepository extends JpaRepository<ContentRating, Lo
 
     /** 홈 왕관 — 이 커플 콘텐츠에 [from, to) 사이 매기거나 고친 대표 평점 */
     @Query("""
-            select r.contentId as targetId, c.title as targetName, r.userId as userId, r.ratedAt as at
+            select r.contentId as targetId, c.title as targetName, r.userId as userId, r.ratedAt as at, r.rating as rating
             from ContentRating r join Content c on c.id = r.contentId
             where c.coupleId = :coupleId and r.ratedAt >= :from and r.ratedAt < :to
             """)
