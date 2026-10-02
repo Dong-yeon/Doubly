@@ -130,10 +130,23 @@ public class MoodService {
         Long partnerId = couple.partnerOf(userId);
         if (partnerId != null) {
             notificationService.notify(partnerId, NotificationCategory.PARTNER, "지금 기분",
-                    userName(userId) + "님 지금 기분: " + emoji, PushLinks.HOME);
+                    pushBody(userName(userId), emoji, req.message()), PushLinks.HOME);
         }
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.MOOD);
         return current(userId);
+    }
+
+    /**
+     * 무드 푸시 본문 — 한마디가 있으면 뒤에 따옴표로 붙인다. 예) {@code 보리님 지금 기분: 😴 “야근 중”}
+     *
+     * <p>예전엔 이모지만 보내서, 피커가 받은 "상대에게 한마디"(20자)가 상대의 알림에 실리지 않았다 —
+     * 받는 사람이 앱을 열기 전에 보는 유일한 자리가 푸시다(docs/daily-mood-current-state.md §8-7).
+     * 20자라 잘라낼 일은 없다(MoodRequest @Size).
+     */
+    static String pushBody(String name, String emoji, String message) {
+        String body = name + "님 지금 기분: " + emoji;
+        String note = message == null ? null : message.strip();
+        return note == null || note.isEmpty() ? body : body + " “" + note + "”";
     }
 
     private String blankToNull(String value) {
