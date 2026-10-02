@@ -50,6 +50,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Optional;
 import java.util.Objects;
 import java.util.Map;
 import java.util.UUID;
@@ -557,8 +558,29 @@ public class MealService {
         return withPlaces(mealRepository.findByUserIdAndMealDateOrderByIdAsc(userId, KstClock.today()));
     }
 
+    /**
+     * 히스토리 — 오늘 이전, 먹은 날짜 최신순. 오늘 식사는 {@link #findToday} 몫이다.
+     *
+     * <p><b>커서는 여전히 id 하나로 받는다(구버전·신버전 앱 공통).</b> 앱은 받은 목록의 마지막 카드 id 를
+     * 보내므로(dietStore.loadMoreHistory), 서버가 그 행을 찾아 (meal_date, id) 복합 커서로 바꾼다. API 모양이
+     * 그대로라 앱 업데이트 없이 정렬만 바뀐다. 그 기록이 그사이 지워졌으면 그보다 먼저 적은 가장 가까운
+     * 내 기록을 기준점으로 쓴다 — 드물게 경계 근처가 한두 건 겹치거나 빠질 수 있지만 목록이 끊기지는 않는다.
+     * 남의 기록 id 는 내 기록으로 찾지 않으므로 기준점이 되지 않는다.
+     */
     public List<MealResponse> findHistory(Long userId, Long cursor) {
-        return withPlaces(mealRepository.findHistory(userId, cursor, PageRequest.of(0, HISTORY_PAGE_SIZE)));
+        LocalDate today = KstClock.today();
+        PageRequest page = PageRequest.of(0, HISTORY_PAGE_SIZE);
+        if (cursor == null) {
+            return withPlaces(mealRepository.findHistoryFirstPage(userId, today, page));
+        }
+        Optional<Meal> anchor = mealRepository.findById(cursor)
+                .filter(m -> userId.equals(m.getUserId()))
+                .or(() -> mealRepository.findTopByUserIdAndIdLessThanOrderByIdDesc(userId, cursor));
+        if (anchor.isEmpty()) {
+            return List.of();
+        }
+        Meal a = anchor.get();
+        return withPlaces(mealRepository.findHistoryAfter(userId, today, a.getMealDate(), a.getId(), page));
     }
 
     /**
