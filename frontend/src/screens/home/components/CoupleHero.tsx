@@ -26,6 +26,7 @@ import { Image, Pressable, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '../../../components/Icon';
 import { Avatar } from '../../../components/Avatar';
 import { HeartSproutIcon } from '../../../components/HeartSproutIcon';
+import { TodayRing, todayRingLabel, type TodaySlices } from './TodayRing';
 import { formatDateLabel } from '../../../utils/date';
 import { colors, fontSize, radius, spacing } from '../../../constants/theme';
 import { themedStyles } from '../../../theme/themedStyles';
@@ -49,6 +50,13 @@ export interface PersonToday {
    * 상대가 그 이모지를 지우면 서버가 null 로 내려주므로 저절로 유니코드로 돌아간다.
    */
   moodImageUrl?: string | null;
+  /**
+   * 오늘 챙김 — 아침·점심·저녁·운동(LOVEBODY_REVIEW §2-2). 있으면 아바타 둘레에 네 조각 링을 그린다.
+   * 없으면(구서버라 상대 끼니 종류를 모를 때) 예전처럼 소유자 색 테두리만.
+   */
+  today?: TodaySlices | null;
+  /** 오늘 간식을 남겼는가 — 조각은 없고(4조각 고정) 스크린리더 문장에만 들어간다 */
+  snack?: boolean;
 }
 
 export interface CoupleHeroProps {
@@ -108,6 +116,7 @@ export function CoupleHero({
         <PersonColumn
           person={me}
           fill={colors.meFill}
+          ringColor={colors.me}
           onPress={() => onPressPerson?.('me')}
           onPressToday={(kind) => onPressToday?.('me', kind)}
           mealHint="한 끼 기록하기"
@@ -118,6 +127,7 @@ export function CoupleHero({
         <PersonColumn
           person={partner}
           fill={colors.partnerFill}
+          ringColor={colors.partner}
           onPress={() => onPressPerson?.('partner')}
           onPressToday={(kind) => onPressToday?.('partner', kind)}
         />
@@ -130,13 +140,16 @@ export function CoupleHero({
 function PersonColumn({
   person,
   fill,
+  ringColor,
   onPress,
   onPressToday,
   mealHint,
 }: {
   person: PersonToday;
-  /** 그 사람의 채움색 — 완료 버튼·아바타 링 */
+  /** 그 사람의 채움색 — 완료 버튼·(링이 없을 때의) 아바타 테두리 */
   fill: string;
+  /** 오늘 챙김 링의 채운 조각 색 — 진한 소유자 값(연한 fill 은 배경 대비 미달) */
+  ringColor: string;
   onPress: () => void;
   onPressToday: (kind: 'workout' | 'meal') => void;
   /** 식단 버튼이 하는 일이 다를 때(내 쪽은 기록 시트가 열린다) 접근성 힌트 */
@@ -149,10 +162,20 @@ function PersonColumn({
         style={({ pressed }) => [styles.person, pressed && styles.pressed]}
         onPress={onPress}
         accessibilityRole="button"
-        accessibilityLabel={`${person.name}님의 기록 보기`}
+        accessibilityLabel={`${person.name}님의 기록 보기${person.today ? `. ${todayRingLabel(person.today, !!person.snack)}` : ''}`}
       >
-        <View style={[styles.avatarRing, { borderColor: fill }]}>
-          <Avatar name={person.name} imageUrl={person.imageUrl} size={56} color={fill} />
+        {/*
+          오늘 챙김 링 — 바깥 68(예전 테두리 링 64). 아바타 56 은 그대로, 링과 사이에 배경색 틈 2.
+          링이 없으면(구서버) 예전 소유자 색 테두리.
+        */}
+        <View style={person.today ? styles.avatarRingToday : [styles.avatarRing, { borderColor: fill }]}>
+          {person.today ? (
+            <TodayRing slices={person.today} color={ringColor} size={AVATAR_RING}>
+              <Avatar name={person.name} imageUrl={person.imageUrl} size={56} color={fill} />
+            </TodayRing>
+          ) : (
+            <Avatar name={person.name} imageUrl={person.imageUrl} size={56} color={fill} />
+          )}
           {person.moodEmoji ? (
             <View style={styles.moodBadge}>
               {person.moodImageUrl ? (
@@ -239,6 +262,9 @@ function TodayButton({
   );
 }
 
+/** 오늘 챙김 링 바깥 지름 — 아바타 56 + 틈 2 + 굵은 조각 4, 양쪽 */
+const AVATAR_RING = 68;
+
 const styles = themedStyles((colors) => ({
   wrap: { gap: spacing.md },
   pressed: { opacity: 0.7 },
@@ -255,12 +281,14 @@ const styles = themedStyles((colors) => ({
   // ── 두 사람 ──
   // 넓은 화면(태블릿·가로 큰 폰)에서 두 열이 양 끝으로 벌어지지 않게 — 둘은 한 쌍으로 붙어 있어야 한다
   columns: { flexDirection: 'row', alignItems: 'flex-start', alignSelf: 'center', width: '100%', maxWidth: 400 },
-  // 두 열 사이 — 아바타 높이 가운데쯤에 하트
-  link: { width: 28, height: 64, alignItems: 'center', justifyContent: 'center' },
+  // 두 열 사이 — 아바타 높이 가운데쯤에 하트(오늘 챙김 링 바깥 지름에 맞춘다)
+  link: { width: 28, height: AVATAR_RING, alignItems: 'center', justifyContent: 'center' },
   column: { flex: 1, minWidth: 0, alignItems: 'center', gap: spacing.xxs },
   person: { alignItems: 'center', gap: spacing.xs, minHeight: layout.touchTarget, maxWidth: '100%' },
   // 소유자 색 링 — 배경색 틈으로 아바타에서 떼어 놓는다
   avatarRing: { borderWidth: 2, borderRadius: radius.full, padding: 2, backgroundColor: colors.background },
+  // 오늘 챙김 링 자리 — 배경색 원 위에 링을 그려 사진 배경 위에서도 조각이 읽히게
+  avatarRingToday: { width: AVATAR_RING, height: AVATAR_RING, borderRadius: AVATAR_RING / 2, backgroundColor: colors.background },
   nameLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, maxWidth: '100%' },
   name: { color: colors.textPrimary, fontSize: fontSize.body, fontWeight: '800', flexShrink: 1 },
   streak: { flexDirection: 'row', alignItems: 'center', gap: 2 },
@@ -268,11 +296,13 @@ const styles = themedStyles((colors) => ({
   todayRow: { flexDirection: 'row', justifyContent: 'center' },
   meta: { color: colors.textSecondary, fontSize: fontSize.caption, textAlign: 'center', maxWidth: '100%' },
 
-  // 무드 배지 — 아바타 오른쪽 아래. 배경색 테두리로 아바타에서 떼어 놓는다
+  // 무드 배지 — 아바타 오른쪽 아래. 배경색 테두리로 아바타에서 떼어 놓는다.
+  // 오늘 챙김 링의 틈(4시 반)에 앉힌다 — 68 상자에서 배지 중심 (64,64), 링 중심에서 42.4. 배지(지름 24)가 링(반지름 32)을
+  // 가리는 범위가 ±9.4° 로 틈(±8°)과 거의 같다. 예전 −4 면 ±18.5° 라 점심 끝·저녁 시작이 10° 씩 덮였다
   moodBadge: {
     position: 'absolute',
-    right: -4,
-    bottom: -4,
+    right: -8,
+    bottom: -8,
     width: 24,
     height: 24,
     borderRadius: 12,
