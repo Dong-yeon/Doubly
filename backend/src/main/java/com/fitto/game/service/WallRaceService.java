@@ -104,7 +104,7 @@ public class WallRaceService {
 
         Long partnerId = locked.partnerOf(userId);
         List<WallRaceGame> recent = gameRepository
-                .findTop5ByCoupleIdAndStatusOrderByCompletedAtDesc(locked.getId(), GameStatus.COMPLETED);
+                .findTop5ByCoupleIdAndStatusOrderByIdDesc(locked.getId(), GameStatus.COMPLETED);
 
         WallRaceGame game = gameRepository.save(WallRaceGame.builder()
                 .coupleId(locked.getId())

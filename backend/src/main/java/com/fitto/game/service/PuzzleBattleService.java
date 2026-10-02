@@ -111,7 +111,7 @@ public class PuzzleBattleService {
 
         Long partnerId = locked.partnerOf(userId);
         List<PuzzleBattleGame> recent = gameRepository
-                .findTop20ByCoupleIdAndStatusOrderByCompletedAtDesc(locked.getId(), GameStatus.COMPLETED);
+                .findTop20ByCoupleIdAndStatusOrderByIdDesc(locked.getId(), GameStatus.COMPLETED);
         PuzzleBattleGame game = gameRepository.save(PuzzleBattleGame.builder()
                 .coupleId(locked.getId())
                 .createdBy(userId)
