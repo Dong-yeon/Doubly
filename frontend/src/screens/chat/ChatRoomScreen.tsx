@@ -2373,6 +2373,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             onOpenCouplePack={() => { void loadCoupleEmojis().catch(() => undefined); }}
             onComposeTextSticker={(code) => setTextStickerDraft({ code, initialText: '', fromInput: false })}
             contextPack={contextPack}
+            recentCodes={recentStickers}
             onContextPicked={(e) =>
               analyticsApi.log('STICKER_SUGGEST_PICKED', `${e.matched}:panel:${e.code}`).catch(() => {})
             }

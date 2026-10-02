@@ -148,6 +148,11 @@ interface Props {
   contextPack?: ContextPack | null;
   /** 맥락 칸에서 골라 보냈다 — 계측용(전송 자체는 onSendSticker 가 한다) */
   onContextPicked?: (item: StickerSuggestion) => void;
+  /**
+   * 최근 보낸 스티커 코드(최신이 앞, utils/recentStickers) — 있으면 스트립 맨 앞에 "최근" 칸이 선다.
+   * 패널·추천 막대·텍스트 코드 어디서 보냈든 전송이 성공한 것만 들어온다(ChatRoomScreen.sendSticker).
+   */
+  recentCodes?: string[];
 }
 
 export interface ContextPack {
@@ -160,6 +165,11 @@ export interface ContextPack {
 }
 
 const CONTEXT_PACK_KEY = 'context';
+/**
+ * 최근 사용 칸(2026-10-02, 카톡 이모티콘 패널의 시계 칸) — 팩이 넷, 한 팩에 18~34장이라 자주 쓰는 한 장을
+ * 찾으려면 매번 팩을 넘겨야 했다. 우리 이모지·문구 스티커는 담지 않는다(코드가 아니라 id·문구라 기록이 없다).
+ */
+const RECENT_PACK_KEY = 'recent';
 
 export function StickerPanel({
   height,
@@ -176,11 +186,25 @@ export function StickerPanel({
   onComposeTextSticker,
   contextPack,
   onContextPicked,
+  recentCodes = [],
 }: Props) {
-  // 패널은 열 때 마운트된다 — 맥락 칸이 있으면 거기서 시작한다. 연 뒤에 맥락이 생겨도 탭을 옮기지 않는다
+  /*
+   * 패널은 열 때 마운트된다 — 시작 칸은 맥락 칸 > 최근 > 기본 팩 순이다. 맥락 칸은 "그날만" 뜨는 것이라
+   * 최근보다 앞선다. 연 뒤에 맥락이 생겨도 탭을 옮기지 않는다.
+   */
   const [activeKey, setActiveKey] = useState<string>(() =>
-    contextPack && contextPack.items.length > 0 ? CONTEXT_PACK_KEY : DEFAULT_PACK,
+    contextPack && contextPack.items.length > 0
+      ? CONTEXT_PACK_KEY
+      : recentCodes.length > 0
+        ? RECENT_PACK_KEY
+        : DEFAULT_PACK,
   );
+  /*
+   * 최근 칸이 그리는 목록은 <b>칸을 고른 순간의 사본</b>이다. 원본을 그대로 쓰면 하나 보낼 때마다 그 장이
+   * 맨 앞으로 와 격자가 손가락 밑에서 재배열된다 — 연달아 같은 줄을 누르면 다른 그림이 나간다.
+   * 다음에 패널을 열거나 칸을 다시 고르면 새 순서가 된다.
+   */
+  const [recentSnapshot, setRecentSnapshot] = useState<string[]>(recentCodes);
   const loadPacks = useStickerStore((s) => s.load);
   const packOf = useStickerStore((s) => s.packOf);
   const serverPacks = useStickerStore((s) => s.packs);
@@ -201,7 +225,7 @@ export function StickerPanel({
   // 설정 화면에서 아직 못 본 서버 팩 — 정리 버튼에 점을 찍는다
   const hasNewPack = remotePacks.some((p) => !bundledPackIds.has(p.id) && !prefsSeen.includes(p.id));
 
-  const packs = useMemo<PanelPack[]>(() => {
+  const { packs, packOfCode } = useMemo(() => {
     /*
      * 순서 = 손이 가는 순서다. 무료 이모티콘 → 캐릭터 → 유료 주제팩 → 우리 이모지.
      * 우리 이모지를 끝에 두는 것은 "내 얼굴"이라 찾기 쉬운 자리(맨 끝)가 낫고, 없는
@@ -304,7 +328,56 @@ export function StickerPanel({
       prefsOrder,
     );
 
-    return [...contextPacks, ...managed, ...couplePacks];
+    /*
+     * 코드 → 원래 팩 — 최근 칸은 여러 팩이 섞여 있어 잠금·이름을 칸마다 원래 팩에서 읽는다.
+     * 숨기거나 순서를 바꾸기 <b>전</b> 목록으로 만든다: 숨긴 팩의 스티커도 최근에서는 보낸다(카톡과 같다).
+     */
+    const byCode = new Map<string, { packId?: string; packLabel: string; label: string }>();
+    for (const p of [...animatedPacks, ...characterPacks]) {
+      for (const it of p.items) {
+        if (it.type === 'image' && !byCode.has(it.code)) {
+          byCode.set(it.code, { packId: p.packId, packLabel: p.label, label: it.label });
+        }
+      }
+    }
+
+    const recentPacks: PanelPack[] = [];
+    const recentSource = recentSnapshot.length > 0 ? recentSnapshot : recentCodes;
+    if (recentCodes.length > 0) {
+      const items: PackItem[] = [];
+      for (const code of recentSource) {
+        const source = thumbOfCode(code);
+        // 앱·서버에서 사라진 코드는 건너뛴다 — 빈 칸을 그리지 않는다
+        if (source) items.push({ type: 'image', key: `${RECENT_PACK_KEY}-${code}`, code, label: byCode.get(code)?.label ?? thumbLabelOf(code), source });
+      }
+      if (items.length > 0) {
+        recentPacks.push({
+          key: RECENT_PACK_KEY,
+          label: '최근 사용',
+          thumb: { type: 'icon', name: 'clock-outline' },
+          // 문구 넣기(캐릭터 전용)를 막는다 — 섞인 칸이라 칸마다 갈리면 길게 누르기가 들쭉날쭉해진다
+          animated: true,
+          items,
+        });
+      }
+    }
+
+    return { packs: [...recentPacks, ...contextPacks, ...managed, ...couplePacks], packOfCode: byCode };
+
+    /** 캐릭터 스티커 → 앱에 든 움직이는 이모티콘 → 서버 이모티콘 순으로 썸네일을 찾는다 */
+    function thumbOfCode(code: string): ImageSourcePropType | undefined {
+      const image = stickerImageOf(code);
+      if (image) return image.source;
+      const animated = animatedStickerOf(code);
+      if (animated) return animated.thumb;
+      const remote = useRemoteStickerStore.getState().byCode[code];
+      return remote ? { uri: remote.thumbUrl } : undefined;
+    }
+
+    /** 팩 목록에 없는 코드(숨김이 아니라 서버에서 늦게 온 것 등)의 이름표 */
+    function thumbLabelOf(code: string): string {
+      return stickerImageOf(code)?.label ?? animatedStickerOf(code)?.label ?? useRemoteStickerStore.getState().byCode[code]?.label ?? '이모티콘';
+    }
 
     function isFree(packId?: string) {
       const pack = packId ? packOf(packId) : undefined;
@@ -325,7 +398,7 @@ export function StickerPanel({
     }
     // serverPacks 를 의존성에 두는 이유: 팩 이름·잠금이 서버에서 늦게 도착한다
   }, [coupleEmojis, myUserId, partnerName, packOf, serverPacks, contextPack, remotePacks,
-    prefsOrder, prefsHidden, prefsDownloaded, bundledPackIds]);
+    prefsOrder, prefsHidden, prefsDownloaded, bundledPackIds, recentCodes, recentSnapshot]);
 
   const active = packs.find((p) => p.key === activeKey) ?? packs[0];
   const activePack = active?.packId ? packOf(active.packId) : undefined;
@@ -333,10 +406,19 @@ export function StickerPanel({
   const activeLocked = activePack ? !activePack.usable : false;
   const isCouplePack = active?.key.startsWith(COUPLE_PACK_PREFIX) ?? false;
   const isContextPack = active?.key === CONTEXT_PACK_KEY;
+  const isRecentPack = active?.key === RECENT_PACK_KEY;
+  /** 최근 칸은 칸마다 원래 팩의 잠금을 본다(PRO 가 끝나 다시 잠긴 팩의 스티커가 섞여 있을 수 있다) */
+  const lockedOfCode = (code: string) => {
+    const packId = packOfCode.get(code)?.packId;
+    const pack = packId ? packOf(packId) : undefined;
+    return pack ? !pack.usable : false;
+  };
   const canCompose = !!onComposeTextSticker && !!active && !active.animated && !isCouplePack && !activeLocked;
 
   const selectPack = (key: string) => {
     setActiveKey(key);
+    // 최근 칸을 고를 때마다 그 순간의 순서로 다시 찍는다(recentSnapshot 주석)
+    if (key === RECENT_PACK_KEY) setRecentSnapshot(recentCodes);
     if (key.startsWith(COUPLE_PACK_PREFIX)) onOpenCouplePack();
   };
 
@@ -377,13 +459,16 @@ export function StickerPanel({
         </Pressable>
       );
     }
+    // 최근 칸만 칸마다 잠금·팩 이름이 다르다 — 나머지는 지금 고른 팩 하나의 것이다
+    const itemLocked = isRecentPack ? lockedOfCode(item.code) : activeLocked;
+    const itemPackLabel = isRecentPack ? packOfCode.get(item.code)?.packLabel ?? item.label : active.label;
     return (
       <Pressable
         key={item.key}
-        style={({ pressed }) => [styles.cell, pressed && styles.pressed]}
+        style={({ pressed }) => [styles.cell, isRecentPack && itemLocked && styles.lockedGrid, pressed && styles.pressed]}
         // 잠긴 팩이면 전송이 아니라 안내로 간다 — locked 는 호출부가 해석한다
         onPress={() => {
-          onSendSticker(item.code, activeLocked, active.label);
+          onSendSticker(item.code, itemLocked, itemPackLabel);
           if (isContextPack) {
             const picked = contextPack?.items.find((s) => s.code === item.code);
             if (picked) onContextPicked?.(picked);
@@ -393,7 +478,7 @@ export function StickerPanel({
         onLongPress={canCompose ? () => onComposeTextSticker?.(item.code) : undefined}
         delayLongPress={350}
         accessibilityRole="button"
-        accessibilityLabel={`이모티콘 ${item.label} 보내기${activeLocked ? ' — 잠김' : ''}${canCompose ? '. 길게 누르면 문구 넣기' : ''}`}
+        accessibilityLabel={`이모티콘 ${item.label} 보내기${itemLocked ? ' — 잠김' : ''}${canCompose ? '. 길게 누르면 문구 넣기' : ''}`}
       >
         <Image source={item.source} style={styles.cellImage} resizeMode="contain" />
       </Pressable>
