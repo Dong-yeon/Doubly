@@ -14,6 +14,7 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.BatchSize;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
@@ -84,8 +85,13 @@ public class Workout {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    /**
+     * 세트 — 피드·사진첩이 한 페이지(최대 51건)의 운동마다 제목용으로 첫 종목을 읽는다.
+     * {@code Meal.items} 와 같은 처방으로 묶어 읽어 N+1 을 막는다.
+     */
     @OneToMany(mappedBy = "workout", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("orderNo asc")
+    @BatchSize(size = 50)
     private List<WorkoutSet> sets = new ArrayList<>();
 
     @Builder
