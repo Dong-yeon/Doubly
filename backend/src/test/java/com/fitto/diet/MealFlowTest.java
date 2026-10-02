@@ -11,7 +11,12 @@ import com.fitto.diet.dto.NutritionGoalRequest;
 import com.fitto.diet.dto.SaveMealRequest;
 import com.fitto.diet.service.MealService;
 import com.fitto.diet.service.NutritionService;
+import com.fitto.chat.domain.MessageType;
+import com.fitto.chat.dto.ChatMessageResponse;
+import com.fitto.chat.dto.SendMessageRequest;
+import com.fitto.chat.service.ChatService;
 import com.fitto.common.exception.ErrorCode;
+import com.fitto.common.upload.CloudinaryImageDeleter;
 import com.fitto.diet.dto.PhotoRecordLookupResponse;
 import com.fitto.diet.dto.CoupleMealGoalResponse;
 import com.fitto.feed.dto.FeedItemType;
@@ -46,6 +51,10 @@ class MealFlowTest {
     NutritionService nutritionService;
     @Autowired
     FeedService feedService;
+    @Autowired
+    ChatService chatService;
+    @Autowired
+    CloudinaryImageDeleter imageDeleter;
 
     private Long register(String email) {
         return authService.register(
@@ -563,6 +572,7 @@ class MealFlowTest {
         assertThat(mealService.findToday(registrant).get(0).reactions())
                 .containsExactly(new ReactionSummary("😋", 1, false));
     }
+
     // ---- 4단계: 채팅 사진 → 식단 기록(LOVEBODY_REVIEW §2-5) ----
 
     private SaveMealRequest withPhoto(String photoUrl) {
@@ -574,6 +584,36 @@ class MealFlowTest {
         out[0] = register(a);
         out[1] = register(b);
         return relationService.connectCouple(out[1], relationService.createCoupleInvite(out[0]).code()).id();
+    }
+
+    /** 채팅 사진을 식단으로 옮기면 같은 URL 을 둘이 쓴다 — 식사를 지워도 채팅 이미지 파일은 남아야 한다(A-3 경로) */
+    @Test
+    void 채팅_사진으로_만든_식사를_지워도_채팅_이미지가_남는다() {
+        Long[] u = new Long[2];
+        Long relationId = couple("c2m-a@fitto.com", "c2m-b@fitto.com", u);
+        String photo = "https://res.cloudinary.com/demo/image/upload/v1/fitto/chat-lunch.jpg";
+        chatService.send(u[0], relationId, new SendMessageRequest(MessageType.IMAGE, null, photo, null, null, null));
+        MealResponse meal = mealService.save(u[0], withPhoto(photo));
+
+        mealService.delete(u[0], meal.id());
+
+        assertThat(imageDeleter.deletable(List.of(photo))).as("채팅이 아직 쓰는 파일").isEmpty();
+    }
+
+    /** 반대로 채팅 메시지를 지워도 식사 사진은 남는다 — 채팅 삭제는 소프트 삭제라 파일을 지우지 않고, 식사가 계속 참조한다 */
+    @Test
+    void 채팅_메시지를_지워도_식사_사진은_남는다() {
+        Long[] u = new Long[2];
+        Long relationId = couple("c2m-c@fitto.com", "c2m-d@fitto.com", u);
+        String photo = "https://res.cloudinary.com/demo/image/upload/v1/fitto/chat-dinner.jpg";
+        ChatMessageResponse sent = chatService.send(u[0], relationId,
+                new SendMessageRequest(MessageType.IMAGE, null, photo, null, null, null));
+        mealService.save(u[0], withPhoto(photo));
+
+        chatService.delete(u[0], sent.id());
+
+        assertThat(mealService.findToday(u[0]).get(0).photoUrl()).isEqualTo(photo);
+        assertThat(imageDeleter.deletable(List.of(photo))).as("식사가 아직 쓰는 파일").isEmpty();
     }
 
     /** 같은 사진으로 두 번 남기지 않는다 — 메뉴가 먼저 묻고(findByPhoto), 저장도 막는다. 남의 기록과는 무관 */
