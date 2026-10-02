@@ -18,9 +18,12 @@ import pathlib
 from PIL import Image, ImageDraw
 
 
-BG = '#FAF5E8'
-CORAL = '#EF7757'
-GREEN = '#2A7731'   # 앱 primary — 아이콘과 앱 안의 초록을 같은 값으로
+# 2026-10-02: 크림 바탕 + 코랄·초록 → 흰 바탕 + 연한 코랄·하늘(시안 H).
+# 원색 판 아이콘들 사이에서 흰 판이 가장 눈에 띄고, 두 숟가락이 색으로 갈려 "둘"이 바로 읽힌다.
+# 진한 빨강+파랑(정당 색)·분홍+하늘(성별 색)은 피했다 — docs/APP_ICON_COLOR_2026-10-02.md
+BG = '#FFFFFF'
+CORAL = '#F28472'
+SKY = '#62A8EC'
 
 # ── 왼쪽 숟가락: 곧은 축 하나 + 축을 따라 변하는 폭 ──
 # 시안을 재 보니 볼의 기울기와 손잡이 방향이 한 직선 위에 있다(윗부분은 가운데로, 끝은 바깥으로).
@@ -98,7 +101,7 @@ def mirror(pts):
 LEFT = [spoon_outline()]
 RIGHT = [mirror(p) for p in LEFT]
 HEART = heart_parts()
-SHAPES = [(p, CORAL) for p in LEFT] + [(p, GREEN) for p in RIGHT] + [(p, CORAL) for p in HEART]
+SHAPES = [(p, CORAL) for p in LEFT] + [(p, SKY) for p in RIGHT] + [(p, CORAL) for p in HEART]
 
 
 def svg(bg=True, scale=1.0, mono=None):
@@ -188,6 +191,10 @@ if __name__ == '__main__':
     render(432, None, ANDROID_SCALE).save(ASSETS / 'android-icon-foreground.png')
     Image.new('RGBA', (432, 432), BG).save(ASSETS / 'android-icon-background.png')
     render(432, None, ANDROID_SCALE, mono='#000000', shapes=mono_shapes()).save(ASSETS / 'android-icon-monochrome.png')
+    # 안드로이드 알림(상태 표시줄) 아이콘 — 시스템이 <b>알파만</b> 쓰고 색은 app.json 의 color 로 입힌다.
+    # 지정하지 않으면 런처 아이콘(불투명 흰 판)을 쓰는데, 알파가 꽉 차 있어 상태 표시줄에 흰 덩어리로 나온다.
+    # 단색 아이콘과 같은 도형(볼 사이 틈을 벌린 것)을 흰색으로 — 24dp 에서도 두 숟가락이 갈린다.
+    render(96, None, 1.0, mono='#FFFFFF', shapes=mono_shapes()).save(ASSETS / 'notification-icon.png')
     # Play 스토어 512 — 불투명 바탕. Play 는 원 마스크에서 반지름 0.455 까지 남긴다: 422/1024*512=211 < 233
     render(512, BG).convert('RGB').save(ROOT.parent / 'play_icon_512.png')
     TS_OUT.write_text(ts_paths(), encoding='utf-8')

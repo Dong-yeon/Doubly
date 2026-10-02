@@ -30,24 +30,24 @@ export function heartPoints(scale: number, segments = 96): Pt[] {
   return out;
 }
 
-/** 아이콘과 같은 값(store/icon/make_icon.py 의 CORAL·GREEN). onDark 는 사진 스크림 등 어두운 바탕 위 */
+/** 아이콘과 같은 값(store/icon/make_icon.py 의 CORAL·SKY). onDark 는 사진 스크림 등 어두운 바탕 위 — 한 단계 밝힌다 */
 const MARK = {
-  light: { coral: '#EF7757', green: '#2A7731' },
-  onDark: { coral: '#F58F72', green: '#5FBE73' },
+  light: { coral: '#F28472', sky: '#62A8EC' },
+  onDark: { coral: '#F69A8A', sky: '#8CC0F2' },
 };
 
 /**
  * 인앱 마크(텍스트 없음) — 배경 없이 두 숟가락과 하트만 그린다(호출부 배경 위에 얹힌다).
  * size 는 마크를 담는 정사각 한 변이다.
  *
- * @param onDark 어두운 배경(배경 사진 위 스크림 등)에 얹을 때 true — 초록을 밝혀 묻히지 않게 한다
+ * @param onDark 어두운 배경(배경 사진 위 스크림 등)에 얹을 때 true — 색을 한 단계 밝혀 묻히지 않게 한다
  */
 export function DoublyMark({ size = 40, onDark = false }: { size?: number; onDark?: boolean }) {
   const c = onDark ? MARK.onDark : MARK.light;
   return (
     <Svg width={size} height={size} viewBox={DUBLY_MARK_VIEWBOX} accessibilityLabel="Dubly">
       <Path d={DUBLY_MARK_LEFT} fill={c.coral} />
-      <Path d={DUBLY_MARK_RIGHT} fill={c.green} />
+      <Path d={DUBLY_MARK_RIGHT} fill={c.sky} />
       {DUBLY_MARK_HEART.map((d, i) => (
         <Path key={i} d={d} fill={c.coral} />
       ))}
