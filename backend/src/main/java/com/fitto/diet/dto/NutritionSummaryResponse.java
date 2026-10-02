@@ -1,5 +1,7 @@
 package com.fitto.diet.dto;
 
+import com.fitto.diet.domain.DietGoalType;
+
 /**
  * 오늘 영양 요약 — 목표 대비 섭취량. 목표 미설정 시(또는 여행 모드 중) target* 는 null.
  * bmr/energyBalance 는 프로필(키/생년월일/성별)·체중 기록이 없으면 null — 수동 목표와는 별개로,
@@ -27,6 +29,8 @@ public record NutritionSummaryResponse(
         int exerciseCalories,
         Integer energyBalance,
         boolean travelMode,
-        String travelModeTripTitle
+        String travelModeTripTitle,
+        /** 목표 방향(LOSE/MAINTAIN/GAIN) — null 이면 미설정. 본인 응답에만 있다. 여행 모드와 무관하게 싣는다 */
+        DietGoalType goalDirection
 ) {
 }

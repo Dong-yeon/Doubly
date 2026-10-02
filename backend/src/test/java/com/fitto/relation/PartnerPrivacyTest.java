@@ -6,6 +6,8 @@ import com.fitto.auth.dto.RegisterRequest;
 import com.fitto.auth.dto.UpdateProfileRequest;
 import com.fitto.auth.service.AuthService;
 import com.fitto.chat.service.ChatService;
+import com.fitto.diet.domain.DietGoalType;
+import com.fitto.diet.service.NutritionService;
 import com.fitto.relation.dto.InviteCodeResponse;
 import com.fitto.relation.service.RelationService;
 import com.fitto.trainer.dto.TrainerProfileRequest;
@@ -36,7 +38,9 @@ class PartnerPrivacyTest {
     private static final List<String> PRIVATE_FIELDS = List.of(
             "email", "birthDate", "gender", "heightCm", "role", "socialType",
             "marketingConsent", "notificationsEnabled", "notifyChat", "notifyAnniversary",
-            "notifyPartner", "notifyReminder", "autoAnalyzeMealPhoto", "requiresConsent");
+            "notifyPartner", "notifyReminder", "autoAnalyzeMealPhoto", "requiresConsent",
+            // 식단 목표 방향(감량·유지·증량, V115) — 본인 영양 요약에만 실린다
+            "goalDirection");
 
     @Autowired
     AuthService authService;
@@ -47,6 +51,8 @@ class PartnerPrivacyTest {
     @Autowired
     TrainerService trainerService;
     @Autowired
+    NutritionService nutritionService;
+    @Autowired
     ObjectMapper objectMapper;
 
     /** 신체 정보까지 다 채운 사용자 — 비어 있어서 안 보이는 것과 구분하려고 값을 넣는다 */
@@ -55,6 +61,7 @@ class PartnerPrivacyTest {
                 new RegisterRequest(email, "password123", "상대", LocalDate.of(1995, 3, 1), Gender.FEMALE,
                         true, true, false), "127.0.0.1").user().id();
         authService.updateMe(id, new UpdateProfileRequest(null, null, null, null, 165));
+        nutritionService.setGoalDirection(id, DietGoalType.LOSE);
         return id;
     }
 

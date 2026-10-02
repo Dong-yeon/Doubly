@@ -14,6 +14,7 @@ import com.fitto.diet.dto.FoodLookupResponse;
 import com.fitto.diet.dto.MealAnalysisResponse;
 import com.fitto.diet.dto.MealResponse;
 import com.fitto.diet.dto.MealStatsResponse;
+import com.fitto.diet.dto.NutritionGoalDirectionRequest;
 import com.fitto.diet.dto.NutritionGoalRequest;
 import com.fitto.diet.dto.NutritionGoalSuggestionRequest;
 import com.fitto.diet.dto.NutritionGoalSuggestionResponse;
@@ -203,6 +204,13 @@ public class MealController {
     public ApiResponse<NutritionSummaryResponse> setGoal(@AuthenticationPrincipal AuthUser user,
                                                          @jakarta.validation.Valid @RequestBody NutritionGoalRequest request) {
         return ApiResponse.success(nutritionService.setGoal(user.id(), request), "목표를 저장했어요.");
+    }
+
+    /** 목표 방향(감량·유지·증량)만 바꾼다 — 신체 정보 시트. 본문 goalDirection 이 null 이면 미설정 */
+    @PutMapping("/nutrition/direction")
+    public ApiResponse<NutritionSummaryResponse> setGoalDirection(@AuthenticationPrincipal AuthUser user,
+                                                                  @RequestBody NutritionGoalDirectionRequest request) {
+        return ApiResponse.success(nutritionService.setGoalDirection(user.id(), request.goalDirection()));
     }
 
     /**

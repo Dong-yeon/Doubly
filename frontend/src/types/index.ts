@@ -1142,6 +1142,8 @@ export interface NutritionSummary {
   // 여행 모드 중이면(PLAN.md Travel Mode) target* 는 전부 null — travelModeTripTitle 이 그 이유
   travelMode: boolean;
   travelModeTripTitle?: string | null;
+  /** 목표 방향(감량·유지·증량) — null 이면 미설정. 본인 응답에만 있다(V115). 구서버면 필드 자체가 없다 */
+  goalDirection?: DietGoalType | null;
 }
 
 // AI 음식 사진 분석 (POST /meal/analyze) — 칼로리·매크로는 추정치, 사용자가 수정 후 저장

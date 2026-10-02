@@ -85,13 +85,27 @@ public class NutritionService {
                 travelMode || goal == null ? null : goal.getTargetFat(),
                 cal, carbs, protein, fat, sugar, sodium, fiber,
                 energy.bmr(), energy.exerciseCalories(), energy.energyBalance(),
-                travelMode, travelMode ? travelTrip.getTitle() : null);
+                travelMode, travelMode ? travelTrip.getTitle() : null,
+                goal == null ? null : goal.getGoalDirection());
     }
 
     @Transactional
     public NutritionSummaryResponse setGoal(Long userId, NutritionGoalRequest req) {
         NutritionGoal goal = goalRepository.findById(userId).orElseGet(() -> new NutritionGoal(userId));
         goal.update(req.targetCalories(), req.targetCarbs(), req.targetProtein(), req.targetFat());
+        // 마법사에서 고른 방향 — 계산에만 쓰고 버리던 값이다. null 은 "안 보냄"(구버전 앱)이라 건드리지 않는다
+        if (req.goalDirection() != null) {
+            goal.updateGoalDirection(req.goalDirection());
+        }
+        goalRepository.save(goal);
+        return today(userId);
+    }
+
+    /** 목표 방향만 바꾼다(신체 정보 시트). null 이면 미설정으로 되돌린다 — 칼로리·매크로 목표는 그대로 */
+    @Transactional
+    public NutritionSummaryResponse setGoalDirection(Long userId, DietGoalType goalDirection) {
+        NutritionGoal goal = goalRepository.findById(userId).orElseGet(() -> new NutritionGoal(userId));
+        goal.updateGoalDirection(goalDirection);
         goalRepository.save(goal);
         return today(userId);
     }
