@@ -2,7 +2,7 @@ import React from 'react';
 import { Image, Text, TouchableOpacity, View } from 'react-native';
 import { MaterialCommunityIcons } from './Icon';
 import type { Meal, MealType } from '../types';
-import { relativeDateLabel, toDateString } from '../utils/date';
+import { relativeDateLabel, todayKst } from '../utils/date';
 import { cardImageUrl } from '../utils/imageUrl';
 import { formatKcal } from '../utils/format';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
@@ -54,7 +54,7 @@ function isFillingCalories(meal: Meal): boolean {
     pendingSeenAt.delete(meal.id);
     return false;
   }
-  if (meal.mealDate !== toDateString()) return false;
+  if (meal.mealDate !== todayKst()) return false;
   const now = Date.now();
   const seen = pendingSeenAt.get(meal.id) ?? now;
   if (!pendingSeenAt.has(meal.id)) pendingSeenAt.set(meal.id, now);

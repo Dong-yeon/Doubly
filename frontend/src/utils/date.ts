@@ -1,6 +1,6 @@
 /** 날짜 유틸 */
 import type { WeekDay } from '../types';
-import { daysSinceKst } from './anniversary';
+import { daysSinceKst, kstDateKey } from './anniversary';
 
 /** YYYY-MM-DD (로컬 기준) */
 export function toDateString(date: Date = new Date()): string {
@@ -8,6 +8,23 @@ export function toDateString(date: Date = new Date()): string {
   const m = String(date.getMonth() + 1).padStart(2, '0');
   const d = String(date.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
+}
+
+/**
+ * 오늘(KST) 'YYYY-MM-DD' — 서버가 "오늘"을 판단하는 기준(KstClock.today())과 같은 날.
+ *
+ * <p>서버로 보내는 기록 날짜는 이걸 쓴다. {@link toDateString} 은 기기 현지 날짜라 해외에 있거나
+ * 기기 시간대가 다르면 서버와 하루 어긋난다 — 앞서가면 "미래 날짜"로 거절되고, 뒤처지면 오늘 기록이
+ * 어제로 들어가 오늘 목록에서 빠진다(docs/lovebody-current-state.md §4-2).
+ */
+export function todayKst(): string {
+  return kstDateKey(new Date());
+}
+
+/** 어제(KST) 'YYYY-MM-DD' — 서버의 "어제 식단 불러오기" 기본값(KstClock.today().minusDays(1))과 같은 날 */
+export function yesterdayKst(): string {
+  // KST 는 서머타임이 없어 하루가 늘 24시간이다
+  return kstDateKey(new Date(Date.now() - 86400000));
 }
 
 /** 'YYYY-MM-DD' → Date (로컬 자정). 형식이 틀리거나 없는 날짜면 null */

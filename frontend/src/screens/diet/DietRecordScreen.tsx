@@ -42,7 +42,7 @@ import { errorCodeOf } from '../../api/client';
 import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
-import { toDateString } from '../../utils/date';
+import { todayKst } from '../../utils/date';
 import { buildDietShareCopy } from '../../utils/dietShare';
 import { defaultMealType } from '../../utils/mealType';
 import { colors, fontSize, radius, shadow, spacing } from '../../constants/theme';
@@ -134,7 +134,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
   const initialPhoto = editing?.photoUrl ?? chatPhotoUrl ?? null;
   const [mealType, setMealType] = useState<MealType>(editing?.mealType ?? defaultMealType());
   /** 기록할 날짜 — 수정이면 그 기록의 날짜, 캘린더에서 날짜를 골라 들어오면 그 날짜, 아니면 오늘 */
-  const [mealDate, setMealDate] = useState(editing?.mealDate ?? route.params?.date ?? toDateString());
+  const [mealDate, setMealDate] = useState(editing?.mealDate ?? route.params?.date ?? todayKst());
   const [memo, setMemo] = useState(editing?.memo ?? '');
   /**
    * 항목을 하나도 안 쓰고 총 칼로리만 적는 경로 — 사진만 찍고 끝낼 때.
@@ -220,6 +220,8 @@ export function DietRecordScreen({ navigation, route }: Props) {
   const [kakaoUnavailable, setKakaoUnavailable] = useState(false);
   const [addingPlaceName, setAddingPlaceName] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // 버튼 비활성은 saving 이 렌더된 뒤에야 걸린다 — 그 사이 두 번째 탭이 같은 끼니를 한 번 더 저장했다
+  const savingRef = useRef(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzingText, setAnalyzingText] = useState(false);
   /** DB 이름 검색 — 어느 항목에 대한 결과인지(key)와 후보 목록. 한 번에 한 항목만 연다. */
@@ -1042,6 +1044,8 @@ export function DietRecordScreen({ navigation, route }: Props) {
       Alert.alert('알림', '음식이나 사진을 하나 이상 입력해주세요.');
       return;
     }
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     try {
       let photoUrl: string | undefined;
@@ -1186,6 +1190,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
     } catch (e) {
       Alert.alert('오류', getErrorMessage(e));
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
@@ -1202,7 +1207,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
             label="먹은 날"
             value={mealDate}
             onChange={setMealDate}
-            max={toDateString()}
+            max={todayKst()}
             pickerTitle="언제 먹은 식단인가요?"
           />
 

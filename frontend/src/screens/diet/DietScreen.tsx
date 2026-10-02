@@ -42,6 +42,7 @@ import { fastingApi } from '../../api/fasting';
 import { summaryApi } from '../../api/summary';
 import { streakApi } from '../../api/streak';
 import { getErrorMessage } from '../../utils/error';
+import { yesterdayKst } from '../../utils/date';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { confirmDiscard } from '../../utils/discardGuard';
@@ -571,6 +572,12 @@ export function DietScreen({ navigation, route }: Props) {
   }, [runDelete, remove, refreshExtras]);
 
   const todayCalories = today.reduce((sum, m) => sum + (m.calories ?? 0), 0);
+  /*
+   * "어제 식단 불러오기"는 어제(KST) 기록이 있을 때만 — 예전엔 지난 기록이 하나라도 있으면 보여서, 어제를 건너뛴
+   * 사람이 누르면 "해당 날짜에는 식단 기록이 없어요" 오류만 났다. 히스토리는 먹은 날짜 최신순이라 어제 기록이 있으면
+   * 첫 페이지에 들어 있다. 이미 불러왔다면 서버가 "이미 불러온 식단이에요"로 답한다.
+   */
+  const hasYesterday = history.some((m) => m.mealDate === yesterdayKst());
 
   // 어제 식단을 오늘 날짜로 통째로 복사 — 매일 비슷한 식단을 먹는 유저를 위한 3초 퀵 로깅
   const onCopyYesterday = async () => {
@@ -750,7 +757,7 @@ export function DietScreen({ navigation, route }: Props) {
               <Text style={styles.sectionTitle}>오늘</Text>
               <View style={styles.todayHeaderRight}>
                 {todayCalories > 0 ? <Text style={styles.todayCal}>총 {formatKcal(todayCalories)}</Text> : null}
-                {history.length > 0 ? (
+                {hasYesterday ? (
                   <TouchableOpacity onPress={onCopyYesterday} disabled={copyingYesterday} hitSlop={8} accessibilityRole="button">
                     <Text style={styles.copyYesterday}>{copyingYesterday ? '불러오는 중…' : '어제 식단 불러오기'}</Text>
                   </TouchableOpacity>
