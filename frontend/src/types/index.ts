@@ -1384,6 +1384,10 @@ export interface LovelichelinSignal {
   certificationKey?: string | null;
   /** 보는 사람(나)이 그 곳에 대표 평점을 남겼는가 */
   viewerRated: boolean;
+  /** 왕관 주인이 그 곳에 준 별점(1~5) — 말풍선 "장소명 ★N". 없으면(별점 없이 기록·예전 서버) 별을 빼고 쓴다 */
+  rating?: number | null;
+  /** 이 신호 한 번의 열쇠 — 처음 보는 신호에만 내려앉는다. 등극은 certificationKey 와 같다(예전 서버는 없음) */
+  signalKey?: string | null;
 }
 export interface LovelichelinPulse {
   me?: LovelichelinSignal | null;

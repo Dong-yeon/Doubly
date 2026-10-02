@@ -191,7 +191,7 @@ export function HomeScreen({ navigation }: Props) {
    */
   const [myLatest, setMyLatest] = useState<FeedItem | null>(null);
   const [partnerLatest, setPartnerLatest] = useState<FeedItem | null>(null);
-  // 이름 옆 럽슐랭 왕관 — 오늘 럽슐랭에 기록했거나 막 등극한 사람에게만(LovelichelinCrownSignal)
+  // 아바타 위 럽슐랭 왕관 — 오늘 럽슐랭에 기록했거나 막 등극한 사람에게만(AvatarCrown)
   const [lovelichelinPulse, setLovelichelinPulse] = useState<LovelichelinPulse | null>(null);
   // 작년 오늘 — 있는 날에만 최근 기록 자리를 대신 차지한다 (PLAN.md Memories)
   const [memories, setMemories] = useState<Memories | null>(null);
@@ -877,7 +877,7 @@ export function HomeScreen({ navigation }: Props) {
                    * 첫 화면(AlbumMain)을 아래에 깔아 뒤로가기가 탭 안에 남게 한다.
                    */
                   /*
-                   * 이름 옆 럽슐랭 왕관 — 그 장소·콘텐츠 상세로(럽슐랭 탭 스택). 상대 왕관인데 내 대표 평점이 아직
+                   * 아바타 위 럽슐랭 왕관의 말풍선 — 그 장소·콘텐츠 상세로(럽슐랭 탭 스택). 상대 왕관인데 내 대표 평점이 아직
                    * 없으면 평가 영역을 펼친 채 들어간다 — "상대가 매겼으니 내 차례"를 한 번에 잇는다.
                    */
                   onPressCrown={(who) => {

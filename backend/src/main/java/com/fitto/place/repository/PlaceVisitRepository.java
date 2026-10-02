@@ -200,7 +200,7 @@ public interface PlaceVisitRepository extends JpaRepository<PlaceVisit, Long> {
 
     /** 홈 왕관 — 이 커플 장소에 [from, to) 사이 남긴 방문 기록 (to 배타) */
     @Query("""
-            select v.placeId as targetId, p.name as targetName, v.visitedBy as userId, v.createdAt as at
+            select v.placeId as targetId, p.name as targetName, v.visitedBy as userId, v.createdAt as at, v.rating as rating
             from PlaceVisit v join Place p on p.id = v.placeId
             where p.coupleId = :coupleId and v.createdAt >= :from and v.createdAt < :to
             """)

@@ -112,7 +112,7 @@ public class LovelichelinPulseService {
 
     /** 신호 후보 한 건 — userId 는 그 활동을 한(또는 그 등극에 평점을 보탠) 사람 */
     private record Candidate(Kind kind, Long targetId, String targetName, Long userId, LocalDateTime at,
-                             int tier, String certificationKey) {
+                             int tier, String certificationKey, Integer rating) {
     }
 
     private Signal signalFor(Long personId, Long viewerId, List<Candidate> certified, List<Candidate> todays) {
@@ -127,9 +127,20 @@ public class LovelichelinPulseService {
             return null;
         }
         Candidate c = pick.get();
-        return new Signal(state, c.kind(), c.targetId(), c.targetName(), c.tier(),
-                state == State.CERTIFIED ? c.certificationKey() : null,
-                viewerRated(c.kind(), c.targetId(), viewerId));
+        String certificationKey = state == State.CERTIFIED ? c.certificationKey() : null;
+        String signalKey = state == State.CERTIFIED
+                ? certificationKey
+                : "TODAY:" + c.kind().name() + ":" + c.targetId() + ":" + personId + ":" + c.at();
+        return new Signal(state, c.kind(), c.targetId(), c.targetName(), c.tier(), certificationKey,
+                viewerRated(c.kind(), c.targetId(), viewerId),
+                ownerRating(c.kind(), c.targetId(), personId).orElse(c.rating()), signalKey);
+    }
+
+    /** 왕관 주인의 대표 평점 — 말풍선 별점은 이 값이 먼저다(오늘 방문 별점은 그날의 기분일 수 있다) */
+    private Optional<Integer> ownerRating(Kind kind, Long targetId, Long ownerId) {
+        return kind == Kind.PLACE
+                ? placeRatingRepository.findByPlaceIdAndUserId(targetId, ownerId).map(PlaceRating::getRating)
+                : contentRatingRepository.findByContentIdAndUserId(targetId, ownerId).map(ContentRating::getRating);
     }
 
     /** 등극 24시간 안 — 그 곳에 대표 평점을 남긴 사람마다 한 건씩 */
@@ -144,7 +155,7 @@ public class LovelichelinPulseService {
                     if (r.getPlaceId().equals(p.getId())) {
                         out.add(new Candidate(Kind.PLACE, p.getId(), p.getName(), r.getUserId(),
                                 p.getLovelichelinCertifiedAt(), p.getLovelichelinTier(),
-                                keyOf(Kind.PLACE, p.getId(), p.getLovelichelinCertifiedAt())));
+                                keyOf(Kind.PLACE, p.getId(), p.getLovelichelinCertifiedAt()), r.getRating()));
                     }
                 }
             }
@@ -158,7 +169,7 @@ public class LovelichelinPulseService {
                     if (r.getContentId().equals(c.getId())) {
                         out.add(new Candidate(Kind.CONTENT, c.getId(), c.getTitle(), r.getUserId(),
                                 c.getLovelichelinCertifiedAt(), c.getLovelichelinTier(),
-                                keyOf(Kind.CONTENT, c.getId(), c.getLovelichelinCertifiedAt())));
+                                keyOf(Kind.CONTENT, c.getId(), c.getLovelichelinCertifiedAt()), r.getRating()));
                     }
                 }
             }
@@ -179,7 +190,7 @@ public class LovelichelinPulseService {
     private static void add(List<Candidate> out, Kind kind, List<LovelichelinActivityRow> rows) {
         for (LovelichelinActivityRow r : rows) {
             if (r.getAt() == null) continue;
-            out.add(new Candidate(kind, r.getTargetId(), r.getTargetName(), r.getUserId(), r.getAt(), 0, null));
+            out.add(new Candidate(kind, r.getTargetId(), r.getTargetName(), r.getUserId(), r.getAt(), 0, null, r.getRating()));
         }
     }
 
