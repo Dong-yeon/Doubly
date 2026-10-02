@@ -169,4 +169,13 @@ public interface WorkoutRepository extends JpaRepository<Workout, Long> {
                                         @Param("from") LocalDate from,
                                         @Param("to") LocalDate to,
                                         Pageable pageable);
+
+    /** 추억의 하한 연도용 — 공유된 운동 사진 중 가장 이른 기록일(없으면 null). 공개 조건은 사진첩과 같다 */
+    @Query("""
+            select min(w.workoutDate) from Workout w
+            where w.userId in :userIds
+              and w.imageUrl is not null
+              and w.imageShared = true
+            """)
+    LocalDate findEarliestPhotoWorkoutDate(@Param("userIds") List<Long> userIds);
 }

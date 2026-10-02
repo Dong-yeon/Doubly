@@ -204,4 +204,16 @@ public interface MealRepository extends JpaRepository<Meal, Long> {
                                      @Param("from") LocalDate from,
                                      @Param("to") LocalDate to,
                                      Pageable pageable);
+
+    /**
+     * 추억("작년 오늘")의 하한 연도용 — 두 사람의 사진 끼니 중 가장 이른 기록일(없으면 null).
+     * 사진첩과 같은 규칙(사진 있음·데이트 식단 복제본 제외)이라 추억에 실릴 수 있는 것만 센다.
+     */
+    @Query("""
+            select min(m.mealDate) from Meal m
+            where m.userId in :userIds
+              and m.photoUrl is not null
+              and (m.createdBy is null or m.createdBy = m.userId)
+            """)
+    LocalDate findEarliestPhotoMealDate(@Param("userIds") List<Long> userIds);
 }
