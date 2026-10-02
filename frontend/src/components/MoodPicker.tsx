@@ -36,6 +36,7 @@ import { journalApi, journalToday, type JournalEntry } from '../api/journal';
 import { setJournalDraft } from '../store/journalDraft';
 import { analyticsApi } from '../api/analytics';
 import { getErrorMessage } from '../utils/error';
+import { confirmDiscard } from '../utils/discardGuard';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 import { themedStyles } from '../theme/themedStyles';
 import type { MoodChoice } from '../api/mood';
@@ -194,15 +195,27 @@ export function MoodPicker({ visible, onClose, onSelect, connected, onOpenJourna
   /**
    * "나중에"·배경 탭·뒤로 가기. 연결됐으면 무드는 이미 상대에게 갔으니 그냥 닫는다.
    * 미연결이면 기분이 남을 곳이 기록뿐이라 — 고른 기분만이라도 기록에 남긴다("고르면 남는다").
+   *
+   * <p>배경 탭·뒤로 가기는 한 줄을 쓰다 말았으면 먼저 묻는다. 예전엔 배경을 잘못 건드리기만 해도 쓴 글이
+   * 경고 없이 사라졌다(docs/daily-mood-current-state.md §8-11). "나중에"는 누른 사람의 뜻이 분명하니
+   * 묻지 않는다 — utils/discardGuard 의 공용 정책(명시적 취소 버튼은 바로 닫는다)과 같다.
    */
-  const dismissLine = () => {
+  const dismissLine = (ask: boolean) => {
     if (savingLine) return;
-    if (!connected && picked) {
-      void saveJournal(null);
-      return;
-    }
-    close();
+    confirmDiscard(ask && line.trim().length > 0, () => {
+      if (!connected && picked) {
+        void saveJournal(null);
+        return;
+      }
+      close();
+    });
   };
+
+  /**
+   * 1단계 시트 닫기(배경 탭·뒤로 가기) — "상대에게 한마디"를 쓰다 말았으면 묻는다.
+   * 무드를 고른 뒤 닫히는 경로는 {@link close} 를 바로 부르므로 여기를 지나지 않는다.
+   */
+  const dismissPicker = () => confirmDiscard(message.trim().length > 0, close);
 
   const openMore = () => {
     const date = journalToday();
@@ -242,7 +255,7 @@ export function MoodPicker({ visible, onClose, onSelect, connected, onOpenJourna
 
   if (picked) {
     return (
-      <Sheet visible={visible} onClose={dismissLine} position="bottom">
+      <Sheet visible={visible} onClose={() => dismissLine(true)} position="bottom">
         <View style={styles.pickedRow}>
           {picked.imageUrl ? (
             <Image source={{ uri: picked.imageUrl }} style={styles.pickedImage} resizeMode="contain" />
@@ -281,7 +294,7 @@ export function MoodPicker({ visible, onClose, onSelect, connected, onOpenJourna
             <Text style={styles.moreText}>더 쓰기</Text>
           </Pressable>
           <View style={styles.lineButtons}>
-            <Button title="나중에" variant="ghost" size="md" onPress={dismissLine} disabled={savingLine} />
+            <Button title="나중에" variant="ghost" size="md" onPress={() => dismissLine(false)} disabled={savingLine} />
             <Button
               title="남기기"
               size="md"
@@ -296,7 +309,7 @@ export function MoodPicker({ visible, onClose, onSelect, connected, onOpenJourna
   }
 
   return (
-    <Sheet visible={visible} onClose={close} position="bottom" cardStyle={styles.sheet}>
+    <Sheet visible={visible} onClose={dismissPicker} position="bottom" cardStyle={styles.sheet}>
       <View style={styles.titleRow}>
         <Text style={styles.title}>지금 기분</Text>
         {/*
