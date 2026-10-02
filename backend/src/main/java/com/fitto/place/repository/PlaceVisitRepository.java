@@ -147,6 +147,21 @@ public interface PlaceVisitRepository extends JpaRepository<PlaceVisit, Long> {
     List<VisitWithPlace> findByCoupleAndVisitedAt(@Param("coupleId") Long coupleId,
                                                   @Param("visitedAt") java.time.LocalDate visitedAt);
 
+    /**
+     * 커플 캘린더의 "다녀온 곳" — 커플 장소의 방문 중 방문일이 기간 안인 것, 날짜순.
+     * 피드와 같은 범위(커플 장소 전체)라 캘린더에 올린다고 새로 드러나는 것은 없다.
+     */
+    @Query("""
+            select v as visit, p.name as placeName
+            from PlaceVisit v join Place p on p.id = v.placeId
+            where p.coupleId = :coupleId
+              and v.visitedAt between :start and :end
+            order by v.visitedAt asc, v.id asc
+            """)
+    List<VisitWithPlace> findByCoupleInPeriod(@Param("coupleId") Long coupleId,
+                                              @Param("start") java.time.LocalDate start,
+                                              @Param("end") java.time.LocalDate end);
+
     /** 추억 조회의 하한 연도용 — 커플의 첫 방문일 (없으면 null). */
     @Query("""
             select min(v.visitedAt) from PlaceVisit v join Place p on p.id = v.placeId
