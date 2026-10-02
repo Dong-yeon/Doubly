@@ -355,9 +355,7 @@ public class FeedService {
 
         String nextCursor = picked.isEmpty() ? null : photoCursorOf(from, picked).encode();
 
-        List<FeedPhotoResponse> items = picked.stream().map(FeedService::toPhotoResponse).toList();
-
-        return new FeedPhotosResponse(items, nextCursor, hasMore);
+        return new FeedPhotosResponse(toPhotoResponses(picked, userId), nextCursor, hasMore);
     }
 
     /**
@@ -423,8 +421,7 @@ public class FeedService {
         }
 
         merged.sort(PHOTO_ORDER);
-        return new FeedPhotoMonthResponse(ym.toString(),
-                merged.stream().map(FeedService::toPhotoResponse).toList(), truncated);
+        return new FeedPhotoMonthResponse(ym.toString(), toPhotoResponses(merged, userId), truncated);
     }
 
     /** KST 날짜의 0시를 서버 시각(@CreatedDate 가 쓰는 JVM 기본 시간대의 벽시계)으로 — {@link #recordDateOf(FeedPost)} 의 역 */
@@ -481,7 +478,22 @@ public class FeedService {
         return out;
     }
 
-    private static FeedPhotoResponse toPhotoResponse(PhotoCandidate c) {
+    /**
+     * 후보 → 응답. 반응은 타임라인과 같은 {@code attachReactions} 로 <b>한 번에</b> 붙인다(종류별 IN 조회 —
+     * 칸마다 부르면 N+1). 뷰어에서 남긴 반응이 타임라인 카드와 같은 행이라 어디서 봐도 같다.
+     * attachReactions 는 입력 순서를 지키므로 인덱스로 맞춘다.
+     */
+    private List<FeedPhotoResponse> toPhotoResponses(List<PhotoCandidate> picked, Long viewerId) {
+        List<FeedItemResponse> withReactions =
+                mapper.attachReactions(picked.stream().map(PhotoCandidate::item).toList(), viewerId);
+        List<FeedPhotoResponse> out = new ArrayList<>(picked.size());
+        for (int i = 0; i < picked.size(); i++) {
+            out.add(toPhotoResponse(picked.get(i), withReactions.get(i).reactions()));
+        }
+        return out;
+    }
+
+    private static FeedPhotoResponse toPhotoResponse(PhotoCandidate c, List<ReactionSummary> reactions) {
         FeedItemResponse item = c.item();
         return new FeedPhotoResponse(
                 item.type(),
@@ -495,7 +507,8 @@ public class FeedService {
                 c.placeId(),
                 c.placeName(),
                 c.recordDate(),
-                item.occurredAt());
+                item.occurredAt(),
+                reactions != null ? reactions : List.of());
     }
 
     /**

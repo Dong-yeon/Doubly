@@ -433,4 +433,27 @@ class FeedPhotosTest {
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> feedService.photoMonth(c[0], "2026/10", null, null))
                 .isInstanceOf(com.fitto.common.exception.BusinessException.class);
     }
+
+    /**
+     * 뷰어 반응 — 사진첩 응답에 타임라인과 같은 반응 요약이 실리고, 남긴 반응은 (type, refId) 로
+     * 같은 행이라 목록·달력 어디서 봐도 같다. mine 은 보는 사람 기준.
+     */
+    @Test
+    void 사진첩_항목에_반응_요약이_실린다() {
+        long[] c = couple("ph-react-a@fitto.com", "ph-react-b@fitto.com");
+        workoutWithPhoto(c[0], "https://img.example.com/rx-w.jpg");
+        FeedPhotoResponse w = feedService.photos(c[0], null, 20, null).items().get(0);
+        assertThat(w.reactions()).isEmpty();
+
+        feedService.toggleReaction(c[1], w.type(), w.refId(), "❤️");
+
+        FeedPhotoResponse mineView = feedService.photos(c[0], null, 20, null).items().get(0);
+        assertThat(mineView.reactions()).singleElement().satisfies(r -> {
+            assertThat(r.emoji()).isEqualTo("❤️");
+            assertThat(r.count()).isEqualTo(1);
+            assertThat(r.mine()).isFalse();
+        });
+        FeedPhotoResponse partnerView = feedService.photoMonth(c[1], null, null, null).items().get(0);
+        assertThat(partnerView.reactions()).singleElement().satisfies(r -> assertThat(r.mine()).isTrue());
+    }
 }
