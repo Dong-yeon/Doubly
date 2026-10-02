@@ -471,6 +471,8 @@ fingerprint 를 바꾸는 변경이라 지금 빌드에 업데이트를 계속 �
 - `package.json` 에 `"verify:place-link": "node scripts/verify-place-link.mjs"`(2026-10-02, 채팅 지도 링크 판별 검증) — 그때까지는
   `node scripts/verify-place-link.mjs` 로 직접 돌린다. 등록하면 main 의 fingerprint 가 바뀌어 그 뒤 모든 업데이트가 지금 빌드에 안 간다
   (docs/LOVELICHELIN_CHAT_LINK_2026-10-02.md §0).
+- `package.json` 에 `"verify:home-event": "node --experimental-strip-types scripts/verify-home-event.mjs"`(2026-10-02, 홈 다가오는 일정
+  날짜 경계 검증) — 그때까지는 그 명령으로 직접 돌린다. 등록을 미루는 이유는 위 verify:place-link 와 같다.
 
 ## 다음 단계
 - iOS는 Apple 개발자 계정($99/년)이 있어야 ad-hoc/TestFlight 배포가 가능합니다. 준비되면
