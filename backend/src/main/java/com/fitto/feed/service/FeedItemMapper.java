@@ -197,7 +197,8 @@ public class FeedItemMapper {
                 names.getOrDefault(v.getVisitedBy(), "커플"), viewerId.equals(v.getVisitedBy()),
                 // 카드 왼쪽 아이콘이 이미 '장소'를 말한다 — 제목의 📍은 같은 말의 반복이었다
                 vp.getPlaceName() + " 방문", content, v.getImageUrl(),
-                byVisitedAt ? v.getVisitedAt().atStartOfDay() : v.getCreatedAt(), null, List.of(), false);
+                byVisitedAt ? v.getVisitedAt().atStartOfDay() : v.getCreatedAt(), null, List.of(), false,
+                FeedItemResponse.ratedSummary(vp.getPlaceName(), v.getRating()));
     }
 
     /**
@@ -222,7 +223,8 @@ public class FeedItemMapper {
         return new FeedItemResponse(FeedItemType.CONTENT_LOG, l.getId(), l.getLoggedBy(),
                 names.getOrDefault(l.getLoggedBy(), "커플"), viewerId.equals(l.getLoggedBy()),
                 lc.getContentTitle() + " 관람", content, l.getImageUrl(),
-                byWatchedAt ? l.getWatchedAt().atStartOfDay() : l.getCreatedAt(), null, List.of(), false);
+                byWatchedAt ? l.getWatchedAt().atStartOfDay() : l.getCreatedAt(), null, List.of(), false,
+                FeedItemResponse.ratedSummary(lc.getContentTitle(), l.getRating()));
     }
 
     // ---- 반응 ----
@@ -259,7 +261,7 @@ public class FeedItemMapper {
                         summarize(byTypeAndId
                                 .getOrDefault(i.type(), Map.of())
                                 .getOrDefault(i.refId(), List.of()), viewerId),
-                        i.imageUrls(), i.shared()))
+                        i.imageUrls(), i.shared(), i.summary()))
                 .toList();
     }
 

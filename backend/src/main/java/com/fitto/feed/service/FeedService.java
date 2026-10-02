@@ -128,6 +128,16 @@ public class FeedService {
      * 정확히 size 건만 읽으면 남은 데이터가 있어도 hasMore 가 false 가 된다.
      */
     public FeedTimelineResponse timeline(Long userId, String cursor, int limit) {
+        return timeline(userId, cursor, limit, Set.of());
+    }
+
+    /**
+     * @param exclude 빼고 볼 소스 — 홈 열의 "최근 기록 한 줄"은 식단·운동·일상을 보여 주고 장소 방문·콘텐츠
+     *                관람은 뺀다(그날의 식단·운동 글이 럽슐랭 기록에 밀려나지 않게). <b>쿼리 자체를 건너뛴다</b> —
+     *                받아서 거르면 그 소스가 {@code limit} 을 다 채운 날에는 나머지가 한 건도 안 실린다.
+     *                비어 있으면 전부(피드 화면). 빠진 소스의 커서 위치는 그대로 남는다({@link #nextCursorOf}).
+     */
+    public FeedTimelineResponse timeline(Long userId, String cursor, int limit, Set<FeedItemType> exclude) {
         Relation couple = activeCouple(userId);
         int size = Math.min(Math.max(limit, 1), MAX_LIMIT);
         FeedCursor from = FeedCursor.decode(cursor);
@@ -138,30 +148,41 @@ public class FeedService {
         List<Long> userIds = partnerId != null ? List.of(userId, partnerId) : List.of(userId);
         Map<Long, String> names = mapper.userNames(userIds);
 
+        Set<FeedItemType> skip = exclude == null ? Set.of() : exclude;
         List<FeedItemResponse> merged = new ArrayList<>();
-        List<FeedPost> posts = feedPostRepository.findTimeline(couple.getId(),
-                from.createdAtOf(FeedItemType.POST), from.idOf(FeedItemType.POST), page);
-        Map<Long, List<String>> photosByPost = mapper.photosByPostId(posts);
-        for (FeedPost p : posts) {
-            merged.add(mapper.toItem(p, names, userId, null, photosByPost.getOrDefault(p.getId(), List.of())));
+        if (!skip.contains(FeedItemType.POST)) {
+            List<FeedPost> posts = feedPostRepository.findTimeline(couple.getId(),
+                    from.createdAtOf(FeedItemType.POST), from.idOf(FeedItemType.POST), page);
+            Map<Long, List<String>> photosByPost = mapper.photosByPostId(posts);
+            for (FeedPost p : posts) {
+                merged.add(mapper.toItem(p, names, userId, null, photosByPost.getOrDefault(p.getId(), List.of())));
+            }
         }
-        for (Workout w : workoutRepository.findRecentForFeed(userIds,
-                from.createdAtOf(FeedItemType.WORKOUT), from.idOf(FeedItemType.WORKOUT), page)) {
-            merged.add(mapper.toItem(w, names, userId));
+        if (!skip.contains(FeedItemType.WORKOUT)) {
+            for (Workout w : workoutRepository.findRecentForFeed(userIds,
+                    from.createdAtOf(FeedItemType.WORKOUT), from.idOf(FeedItemType.WORKOUT), page)) {
+                merged.add(mapper.toItem(w, names, userId));
+            }
         }
-        List<Meal> meals = mealRepository.findRecentForFeed(userIds,
-                from.createdAtOf(FeedItemType.MEAL), from.idOf(FeedItemType.MEAL), page);
-        Map<Long, String> placeNameByMealId = placeNamesOf(meals);
-        for (Meal m : meals) {
-            merged.add(mapper.toItem(m, names, userId, placeNameByMealId.get(m.getId())));
+        if (!skip.contains(FeedItemType.MEAL)) {
+            List<Meal> meals = mealRepository.findRecentForFeed(userIds,
+                    from.createdAtOf(FeedItemType.MEAL), from.idOf(FeedItemType.MEAL), page);
+            Map<Long, String> placeNameByMealId = placeNamesOf(meals);
+            for (Meal m : meals) {
+                merged.add(mapper.toItem(m, names, userId, placeNameByMealId.get(m.getId())));
+            }
         }
-        for (VisitWithPlace v : placeVisitRepository.findRecentForFeed(couple.getId(),
-                from.createdAtOf(FeedItemType.PLACE_VISIT), from.idOf(FeedItemType.PLACE_VISIT), page)) {
-            merged.add(mapper.toItem(v, names, userId));
+        if (!skip.contains(FeedItemType.PLACE_VISIT)) {
+            for (VisitWithPlace v : placeVisitRepository.findRecentForFeed(couple.getId(),
+                    from.createdAtOf(FeedItemType.PLACE_VISIT), from.idOf(FeedItemType.PLACE_VISIT), page)) {
+                merged.add(mapper.toItem(v, names, userId));
+            }
         }
-        for (LogWithContent l : contentLogRepository.findRecentForFeed(couple.getId(),
-                from.createdAtOf(FeedItemType.CONTENT_LOG), from.idOf(FeedItemType.CONTENT_LOG), page)) {
-            merged.add(mapper.toItem(l, names, userId));
+        if (!skip.contains(FeedItemType.CONTENT_LOG)) {
+            for (LogWithContent l : contentLogRepository.findRecentForFeed(couple.getId(),
+                    from.createdAtOf(FeedItemType.CONTENT_LOG), from.idOf(FeedItemType.CONTENT_LOG), page)) {
+                merged.add(mapper.toItem(l, names, userId));
+            }
         }
 
         // 정렬도 (occurredAt, refId) 복합키 — 같은 시각이면 id 역순으로 안정 정렬한다
