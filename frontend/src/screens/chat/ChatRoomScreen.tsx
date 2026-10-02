@@ -31,6 +31,7 @@ import { MaterialCommunityIcons } from '../../components/Icon';
 import { Button } from '../../components/Button';
 import { useHeaderHeight } from '@react-navigation/elements';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { dietApi } from '../../api/diet';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import type { ChatStackParamList, MainTabParamList } from '../../navigation/types';
@@ -1296,6 +1297,37 @@ export function ChatRoomScreen({ navigation, route }: Props) {
    * 만들 이유가 없다) store 는 이 필드만 직접 patch 한다. replaceMessage 는 통째로
    * 바꿔치기라 다른 화면(검색 결과 등)에서 들고 있는 낡은 객체와는 무관하다.
    */
+  /**
+   * 내가 보낸 사진 → 식단 기록(LOVEBODY_REVIEW §2-5). 이미 올라가 있는 URL 을 그대로 넘겨 재업로드가 없고,
+   * 저장하면 사진 자동 분석이 칼로리를 채운다. 같은 사진으로 이미 남겼으면 먼저 알려 주고 열지 않는다
+   * (서버 저장도 409 로 막는다 — 조회가 실패하면 그 안전망을 믿고 연다).
+   *
+   * 럽바디 탭의 기록 화면으로 <b>탭을 건너</b> 간다 — returnTo 를 실어 iOS 네이티브 모달을 피하고(5acf1699,
+   * crossTabModalOptions) 닫으면 이 채팅으로 돌아온다(useReturnToTab). 날짜는 이 메시지를 보낸 날 — 채팅의
+   * 날짜 구분선과 같은 기준이다. 끼니는 기록 화면에서 고른다.
+   */
+  const onRecordMealFromSheet = async () => {
+    const msg = actionSheetFor;
+    closeActionSheet();
+    if (!msg?.imageUrl) return;
+    const photoUrl = msg.imageUrl;
+    try {
+      const found = await dietApi.photoRecord(photoUrl);
+      if (found.recorded) {
+        const when = found.mealDate ? `${Number(found.mealDate.slice(5, 7))}월 ${Number(found.mealDate.slice(8, 10))}일 ` : '';
+        Alert.alert('이미 남긴 식단이 있어요', `${when}${found.mealTypeLabel ?? ''}에 이 사진으로 남겼어요.`.trim());
+        return;
+      }
+    } catch {
+      // 조회 실패는 막지 않는다 — 저장 단계에서 서버가 중복을 다시 본다
+    }
+    navigation.navigate('Health', {
+      screen: 'DietRecord',
+      params: { photoUrl, date: toDateString(new Date(msg.createdAt)), returnTo: 'Chat' },
+      initial: false,
+    });
+  };
+
   const onBookmarkFromSheet = async () => {
     const msg = actionSheetFor;
     closeActionSheet();
@@ -2761,6 +2793,12 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         onEdit={onEditFromSheet}
         onDelete={onDeleteFromSheet}
         onBookmark={onBookmarkFromSheet}
+        // 내가 보낸 사진에만 — 상대 사진을 내 식단으로 만들 수 없게
+        onRecordMeal={
+          actionSheetFor && actionSheetFor.senderId === myId && actionSheetFor.messageType === 'IMAGE' && actionSheetFor.imageUrl
+            ? onRecordMealFromSheet
+            : undefined
+        }
         pinned={!!actionSheetFor && pinnedMessage?.id === actionSheetFor.id}
         onTogglePin={onTogglePinFromSheet}
       />
