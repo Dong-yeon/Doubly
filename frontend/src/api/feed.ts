@@ -17,6 +17,8 @@ export interface CreatePostPayload {
   content?: string;
   /** 최대 5장 — 서버가 photosOrEmpty()로 검사한다(FeedService.MAX_PHOTOS_PER_POST). */
   imageUrls?: string[];
+  /** 기록일 YYYY-MM-DD(KST) — 이 일이 있었던 날. 없으면 서버가 오늘로 둔다. 미래는 서버가 거절한다(V119) */
+  recordDate?: string;
 }
 
 export const feedApi = {

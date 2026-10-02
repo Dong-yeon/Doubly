@@ -1728,6 +1728,11 @@ export interface FeedItem {
   shared?: boolean;
   /** 한 줄 요약 — 장소·콘텐츠는 "이름 ★4". 한 줄 자리는 utils/feedSummary 로 읽는다(예전 서버는 없다) */
   summary?: string | null;
+  /**
+   * 일상 포스트의 기록일 YYYY-MM-DD(KST, V119) — 이 일이 있었던 날. 올린 날과 다르면 카드가
+   * "N월 N일의 일상"으로 알린다. 다른 타입·예전 서버는 없다.
+   */
+  recordDate?: string | null;
 }
 export interface FeedTimeline {
   items: FeedItem[];

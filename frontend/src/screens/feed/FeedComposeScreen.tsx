@@ -7,6 +7,8 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { AlbumStackParamList, HomeStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
+import { DateField } from '../../components/DateField';
+import { todayKst } from '../../utils/date';
 import { FormKeyboardView } from '../../components/FormKeyboardView';
 import { feedApi } from '../../api/feed';
 import { MaterialCommunityIcons } from '../../components/Icon';
@@ -38,6 +40,11 @@ const MAX_CONTENT = 2000;
 
 export function FeedComposeScreen({ navigation }: Props) {
   const [content, setContent] = useState('');
+  /*
+   * 기록일 — 이 일이 있었던 날(V119). 어젯밤 일을 오늘 아침 올려도 어제 기록이 되어야 사진첩·작년 오늘이
+   * 식단·운동·방문과 같은 날에 묶인다. 기본은 오늘(KST), 미래는 고를 수 없다(서버도 거절).
+   */
+  const [recordDate, setRecordDate] = useState(() => todayKst());
   const [photoUris, setPhotoUris] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   /*
@@ -181,7 +188,7 @@ export function FeedComposeScreen({ navigation }: Props) {
           },
         );
       }
-      await feedApi.createPost({ content: content.trim() || undefined, imageUrls });
+      await feedApi.createPost({ content: content.trim() || undefined, imageUrls, recordDate });
       void clearWritingDraft(draftKeys.feedCompose);
       haptics.success();
       toast.success('일상을 남겼어요 ');
@@ -246,8 +253,16 @@ export function FeedComposeScreen({ navigation }: Props) {
             </ScrollView>
           )}
 
+          <DateField
+            label="언제의 일상인가요"
+            value={recordDate}
+            onChange={setRecordDate}
+            max={todayKst()}
+            pickerTitle="언제 있었던 일인가요?"
+          />
+
           <TextField
-            label="오늘의 일상"
+            label={recordDate === todayKst() ? '오늘의 일상' : '그날의 일상'}
             placeholder="무슨 일이 있었나요?"
             value={content}
             onChangeText={(next) => {
