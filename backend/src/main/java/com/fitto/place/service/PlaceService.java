@@ -31,8 +31,12 @@ import com.fitto.relation.domain.RelationType;
 import com.fitto.relation.repository.RelationRepository;
 import com.fitto.user.domain.User;
 import com.fitto.user.repository.UserRepository;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -59,6 +63,7 @@ public class PlaceService {
     private final PlanGuard planGuard;
     private final FeedReactionRepository feedReactionRepository;
     private final KakaoLocalClient kakaoLocalClient;
+    private final TransactionTemplate tx;
 
     public PlaceService(PlaceRepository placeRepository,
                         PlaceVisitRepository placeVisitRepository,
@@ -69,7 +74,8 @@ public class PlaceService {
                         NotificationService notificationService,
                         PlanGuard planGuard,
                         FeedReactionRepository feedReactionRepository,
-                        KakaoLocalClient kakaoLocalClient) {
+                        KakaoLocalClient kakaoLocalClient,
+                        PlatformTransactionManager transactionManager) {
         this.placeRepository = placeRepository;
         this.placeVisitRepository = placeVisitRepository;
         this.placeRatingRepository = placeRatingRepository;
@@ -80,6 +86,7 @@ public class PlaceService {
         this.planGuard = planGuard;
         this.feedReactionRepository = feedReactionRepository;
         this.kakaoLocalClient = kakaoLocalClient;
+        this.tx = new TransactionTemplate(transactionManager);
     }
 
     /**
@@ -106,16 +113,41 @@ public class PlaceService {
      * 저장하는 경로에서, 이미 등록된 맛집을 다시 검색해 추가할 때 똑같은 장소가 중복
      * 생성되던 문제를 막는다. 재사용일 때는 플랜 한도({@link Feature#PLACE_PIN})도
      * 소모하지 않는다 — 실제로 늘어난 핀이 없으므로.
+     *
+     * <p>응답의 {@code created} 로 둘을 가른다 — 화면이 중복일 때 "추가했어요" 대신 "이미 럽슐랭에
+     * 있어요"를 띄운다.
+     *
+     * <p><b>동시 저장</b>: 두 사람이 같은 카카오 장소를 거의 동시에 담으면 둘 다 "없다"를 보고 넣으려
+     * 한다. 늦은 쪽은 {@code UNIQUE (couple_id, kakao_place_id)}(V117)에 막힌다. {@code ON CONFLICT}
+     * 는 쓸 수 없으므로(CLAUDE.md 4절) 그 위반을 잡아 <b>새 트랜잭션에서</b> 먼저 들어간 행을 돌려준다 —
+     * 같은 트랜잭션은 이미 롤백 표시가 붙어 다시 쓸 수 없다({@code JournalService.save} 와 같은 이유).
+     * 그래서 이 메서드에는 트랜잭션을 걸지 않는다(클래스 기본값 readOnly 도 끈다).
      */
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public PlaceResponse save(Long userId, SavePlaceRequest request) {
+        try {
+            return tx.execute(status -> saveOnce(userId, request));
+        } catch (DataIntegrityViolationException raced) {
+            PlaceResponse winner = tx.execute(status -> {
+                Place existing = findExisting(activeCouple(userId).getId(), request.kakaoPlaceId(),
+                        request.name().trim(), request.address(), request.lat(), request.lng());
+                return existing == null ? null : withSummary(existing, userId).withCreated(false);
+            });
+            if (winner == null) {
+                throw raced;
+            }
+            return winner;
+        }
+    }
+
+    private PlaceResponse saveOnce(Long userId, SavePlaceRequest request) {
         Relation couple = activeCouple(userId);
         String name = request.name().trim();
 
         Place existing = findExisting(couple.getId(), request.kakaoPlaceId(), name,
                 request.address(), request.lat(), request.lng());
         if (existing != null) {
-            return withSummary(existing, userId);
+            return withSummary(existing, userId).withCreated(false);
         }
 
         planGuard.requireCapacity(userId, Feature.PLACE_PIN,
@@ -127,11 +159,16 @@ public class PlaceService {
                 .lat(request.lat())
                 .lng(request.lng())
                 .category(request.category())
-                .kakaoPlaceId(request.kakaoPlaceId())
+                .kakaoPlaceId(blankToNull(request.kakaoPlaceId()))
                 .addedBy(userId)
                 .build();
-        placeRepository.save(place);
-        return toResponse(place, null, RatingPair.EMPTY, null);
+        // 즉시 INSERT — UNIQUE 위반이 커밋 시점이 아니라 여기서 터져야 위의 catch 가 받는다
+        placeRepository.saveAndFlush(place);
+        return toResponse(place, null, RatingPair.EMPTY, null).withCreated(true);
+    }
+
+    private static String blankToNull(String s) {
+        return s == null || s.isBlank() ? null : s;
     }
 
     /**

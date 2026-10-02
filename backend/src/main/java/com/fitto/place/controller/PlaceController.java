@@ -56,7 +56,9 @@ public class PlaceController {
     @PostMapping
     public ApiResponse<PlaceResponse> save(@AuthenticationPrincipal AuthUser user,
                                            @Valid @RequestBody SavePlaceRequest request) {
-        return ApiResponse.success(placeService.save(user.id(), request), "장소가 등록되었습니다.");
+        PlaceResponse saved = placeService.save(user.id(), request);
+        return ApiResponse.success(saved,
+                Boolean.TRUE.equals(saved.created()) ? "장소가 등록되었습니다." : "이미 럽슐랭에 있는 장소예요.");
     }
 
     @GetMapping
