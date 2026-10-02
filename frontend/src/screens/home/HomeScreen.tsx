@@ -43,6 +43,7 @@ import { streakApi } from '../../api/streak';
 import { feedApi } from '../../api/feed';
 import { chatApi } from '../../api/chat';
 import { moodApi } from '../../api/mood';
+import { journalApi, journalToday } from '../../api/journal';
 import type { MoodChoice } from '../../api/mood';
 import { tripApi } from '../../api/trip';
 import { feedTimeLabel } from '../feed/FeedTimelineScreen';
@@ -198,6 +199,11 @@ export function HomeScreen({ navigation }: Props) {
    */
   const [mood, setMood] = useState<MoodResponse | null>(null);
   const [showMoodPicker, setShowMoodPicker] = useState(false);
+  /*
+   * 미연결일 때 무드 버튼에 그릴 오늘 기분 — 무드(mood_statuses)는 관계 소유라 미연결이면 없다.
+   * 그때 고른 기분은 나만의 하루 기록에 남으므로(MoodPicker 주석) 오늘 기록의 기분을 대신 그린다.
+   */
+  const [soloMood, setSoloMood] = useState<string | null>(null);
   /* 오늘 식단 시트 — 히어로의 내 식단 칩에서 연다(아래 onPressToday 참고) */
   const [mealSheet, setMealSheet] = useState(false);
   const [mealSaving, setMealSaving] = useState(false);
@@ -492,6 +498,23 @@ export function HomeScreen({ navigation }: Props) {
 
   // moodApi.set 이 갱신된 나/상대 무드를 함께 돌려주므로, 소켓 이벤트를 기다리지 않고
   // 응답으로 바로 반영한다(홈을 나가지 않고 연달아 바꿔도 배지가 즉시 따라온다).
+  // 미연결 — 오늘 기록의 기분을 무드 버튼에 그린다(연결되면 상대에게 보이는 무드가 그 자리를 쓴다)
+  useFocusEffect(
+    useCallback(() => {
+      if (connected) return;
+      let active = true;
+      journalApi
+        .day(journalToday())
+        .then((entry) => {
+          if (active) setSoloMood(entry?.moodEmoji ?? null);
+        })
+        .catch(() => undefined);
+      return () => {
+        active = false;
+      };
+    }, [connected]),
+  );
+
   const sendMood = (choice: MoodChoice, message?: string) => {
     moodApi
       .set(choice, message)
@@ -611,12 +634,20 @@ export function HomeScreen({ navigation }: Props) {
         onPress={() => setShowMoodPicker(true)}
         hitSlop={8}
         accessibilityRole="button"
-        accessibilityLabel={mood?.mine ? `지금 기분 ${mood.mine.emoji} — 눌러서 바꾸기` : '지금 기분 남기기'}
+        accessibilityLabel={
+          mood?.mine
+            ? `지금 기분 ${mood.mine.emoji} — 눌러서 바꾸기`
+            : !connected && soloMood
+              ? `오늘 기분 ${soloMood} — 눌러서 남기기`
+              : '지금 기분 남기기'
+        }
       >
         {mood?.mine?.imageUrl ? (
           <Image source={{ uri: mood.mine.imageUrl }} style={styles.moodImage} resizeMode="contain" />
         ) : mood?.mine?.emoji ? (
           <Text style={styles.moodEmoji}>{mood.mine.emoji}</Text>
+        ) : !connected && soloMood ? (
+          <Text style={styles.moodEmoji}>{soloMood}</Text>
         ) : (
           <MaterialCommunityIcons name="emoticon-outline" size={24} color={colors.textPrimary} style={styles.iconHalo} />
         )}
@@ -953,6 +984,16 @@ export function HomeScreen({ navigation }: Props) {
                 아래에 PlaceMain 을 깔아둔다.
               */}
               <SettingsGroup title="혼자서도 시작할 수 있어요" style={styles.soloGroup}>
+                {/*
+                  나만의 하루 기록 — 맨 위에 둔다. 연결 없이 <b>매일</b> 할 수 있는 유일한 행이다
+                  (나머지는 운동·식사 때만 쓴다). docs/PERSONAL_JOURNAL_ANALYSIS_2026-10-02.md §4-4
+                */}
+                <SettingsRow
+                  title="오늘 하루 남기기"
+                  note="나만 보는 기록이에요"
+                  leading={<MaterialCommunityIcons name="text-box-outline" size={22} color={colors.textSecondary} />}
+                  onPress={() => navigation.navigate('JournalDay', { date: journalToday(), source: 'UNCONNECTED_HOME' })}
+                />
                 <SettingsRow
                   title="운동 챙기기"
                   leading={<MaterialCommunityIcons name="dumbbell" size={22} color={colors.textSecondary} />}
@@ -1005,6 +1046,13 @@ export function HomeScreen({ navigation }: Props) {
         visible={showMoodPicker}
         onClose={() => setShowMoodPicker(false)}
         onSelect={sendMood}
+        connected={connected}
+        onOpenJournal={({ date, draftMood, draftBody }) =>
+          navigation.navigate('JournalDay', { date, source: 'MOOD_PICKER', draftMood, draftBody })
+        }
+        onJournalSaved={(entry) => {
+          if (!connected) setSoloMood(entry.moodEmoji ?? null);
+        }}
       />
       {/* 오늘 식단 — 히어로의 내 식단 칩에서 연다(위 onPressToday 주석 참고) */}
       <QuickMealSheet

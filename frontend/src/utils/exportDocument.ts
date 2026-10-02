@@ -46,15 +46,16 @@ export const SECTION_LABELS: Record<string, string> = {
   voice_clips: '음성 클립',
   water_logs: '물 마시기',
   fasting_sessions: '단식',
+  journal_entries: '나만의 하루 기록',
 };
 
 export function sectionLabel(key: string): string {
   return SECTION_LABELS[key] ?? key;
 }
 
-const TITLE_KEYS = ['title', 'name', 'content', 'answer', 'message', 'phrase', 'emotion', 'stake', 'emoji', 'exercise_name'];
+const TITLE_KEYS = ['title', 'name', 'content', 'body', 'answer', 'message', 'phrase', 'emotion', 'stake', 'emoji', 'exercise_name'];
 const DATE_KEYS = [
-  'event_date', 'visited_at', 'watched_at', 'meal_date', 'workout_date', 'measured_date', 'log_date',
+  'event_date', 'journal_date', 'visited_at', 'watched_at', 'meal_date', 'workout_date', 'measured_date', 'log_date',
   'question_date', 'start_date', 'started_at', 'connected_at', 'created_at',
 ];
 const AUTHOR_KEYS = ['author_id', 'sender_id', 'user_id', 'created_by', 'subject_user_id'];
