@@ -45,6 +45,11 @@ public record FeedPhotoResponse(
          */
         LocalDate recordDate,
         /** 올린 시각(UTC 인스턴트) — 같은 기록일 안의 순서 */
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        /**
+         * 이모지 반응 요약 — 타임라인 카드와 같은 행({@code feed_reactions}, 대상 = (type, refId)).
+         * 뷰어에서 남겨도 타임라인에 그대로 보인다. 없으면 빈 목록.
+         */
+        List<ReactionSummary> reactions
 ) {
 }

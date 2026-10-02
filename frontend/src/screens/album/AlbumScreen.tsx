@@ -37,6 +37,8 @@ import { tripApi } from '../../api/trip';
 import { toast } from '../../store/toastStore';
 import { getErrorMessage } from '../../utils/error';
 import { useRelationStore } from '../../store/relationStore';
+import { haptics } from '../../utils/haptics';
+import { QUICK_EMOJIS } from '../feed/FeedTimelineScreen';
 import { localDateOf, relativeDateLabel } from '../../utils/date';
 import { thumbnailUrl } from '../../utils/imageUrl';
 import type { FeedPhoto, FeedPhotoSource, Memories, Trip } from '../../types';
@@ -207,6 +209,30 @@ export function AlbumScreen({ navigation }: Props) {
     [],
   );
 
+  /*
+   * 뷰어 반응 — 타임라인과 같은 API·같은 행. 응답(갱신된 요약)으로 그리드·달력 양쪽 사본을
+   * 함께 고친다(같은 기록이 둘에 있을 수 있다). 같은 칸에서 연달아 누르면 앞 요청이 끝날 때까지
+   * 무시한다 — 토글이라 두 번 가면 상쇄된다.
+   */
+  // 진행 중인 칸 — useRef(...).current 대신 useState 초기화(ImageViewer 의 dragY 와 같은 이유: 렌더 중 ref 접근 규칙)
+  const [reacting] = useState(() => new Set<string>());
+  const onReact = useCallback(async (p: FeedPhoto, emoji: string) => {
+    const key = keyOf(p);
+    if (reacting.has(key)) return;
+    reacting.add(key);
+    haptics.light();
+    try {
+      const reactions = await feedApi.react(p.type, p.refId, emoji);
+      const patch = (items: FeedPhoto[]) => items.map((i) => (keyOf(i) === key ? { ...i, reactions } : i));
+      setPage((prev) => ({ ...prev, items: patch(prev.items) }));
+      setMonthData((prev) => ({ ...prev, items: patch(prev.items) }));
+    } catch (e) {
+      toast.error(getErrorMessage(e, '반응을 남기지 못했어요.'));
+    } finally {
+      reacting.delete(key);
+    }
+  }, [reacting]);
+
   const openPlace = useCallback(
     (placeId: number, name: string) => {
       setViewingIndex(null);
@@ -244,11 +270,12 @@ export function AlbumScreen({ navigation }: Props) {
           titleColor: p.mine ? colors.coral : colors.indigo,
           caption: p.caption ?? undefined,
           action,
+          reactions: { options: QUICK_EMOJIS, summary: p.reactions ?? [], onToggle: (emoji) => void onReact(p, emoji) },
         });
       });
     }
     return { viewerImages: images, firstIndexByKey };
-  }, [viewerSource, openPlace]);
+  }, [viewerSource, openPlace, onReact]);
 
   const gridRows = useMemo(() => toGridRows(photos, columns), [photos, columns]);
 

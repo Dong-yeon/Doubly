@@ -255,6 +255,8 @@ export interface FeedPhoto {
   recordDate?: string | null;
   /** 올린 시각(UTC 인스턴트) — 같은 기록일 안의 순서 */
   createdAt: string;
+  /** 이모지 반응 — 타임라인 카드와 같은 행이라 어디서 남겨도 같다. 구 서버 응답엔 없다 */
+  reactions?: ReactionSummary[];
 }
 
 export interface FeedPhotosPage {

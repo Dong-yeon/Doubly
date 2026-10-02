@@ -73,6 +73,16 @@ export interface ViewerImage {
    * 뷰어는 이동을 모른다: onPress 는 호출부가 뷰어를 닫고 화면을 옮기는 일까지 맡는다.
    */
   action?: ViewerAction;
+  /** 이모지 반응 줄 — 있으면 캡션 위에 그린다. 반응을 어디에 저장할지는 호출부가 안다 */
+  reactions?: ViewerReactions;
+}
+
+export interface ViewerReactions {
+  /** 늘 보여줄 빠른 이모지 — 타임라인 카드와 같은 목록을 넘긴다 */
+  options: string[];
+  /** 지금 반응 요약 — options 에 없는 이모지(다른 화면에서 남긴 것)도 뒤에 붙여 보여준다 */
+  summary: { emoji: string; count: number; mine: boolean }[];
+  onToggle: (emoji: string) => void;
 }
 
 export interface ViewerAction {
@@ -450,7 +460,7 @@ export function ImageViewer({ images, initialIndex, onClose }: Props) {
           </View>
         ) : null}
 
-        {current?.title || current?.caption || current?.action ? (
+        {current?.title || current?.caption || current?.action || current?.reactions ? (
           <View style={[styles.caption, { paddingBottom: insets.bottom + spacing.lg }]} pointerEvents="box-none">
             {current.action ? (
               <Pressable
@@ -463,6 +473,7 @@ export function ImageViewer({ images, initialIndex, onClose }: Props) {
                 <Text style={styles.actionPillText}>{current.action.label}</Text>
               </Pressable>
             ) : null}
+            {current.reactions ? <ReactionRow reactions={current.reactions} /> : null}
             {current.title ? (
               <Text style={[styles.title, current.titleColor ? { color: current.titleColor } : null]}>
                 {current.title}
@@ -493,6 +504,37 @@ export function ImageViewer({ images, initialIndex, onClose }: Props) {
         <Toast />
       </GestureHandlerRootView>
     </Modal>
+  );
+}
+
+/**
+ * 뷰어의 반응 줄 — 빠른 이모지 + 이미 달린 다른 이모지. 내가 누른 것은 채운 알약.
+ * 사진 위라 테마와 무관하게 흰 글자·반투명 알약이다(아래 actionPill 과 같은 문법).
+ */
+function ReactionRow({ reactions }: { reactions: ViewerReactions }) {
+  const byEmoji = new Map(reactions.summary.map((r) => [r.emoji, r]));
+  const emojis = [...reactions.options, ...reactions.summary.map((r) => r.emoji).filter((e) => !reactions.options.includes(e))];
+  return (
+    <View style={styles.reactionRow}>
+      {emojis.map((emoji) => {
+        const r = byEmoji.get(emoji);
+        const mine = r?.mine ?? false;
+        const count = r?.count ?? 0;
+        return (
+          <Pressable
+            key={emoji}
+            onPress={() => reactions.onToggle(emoji)}
+            style={({ pressed }) => [styles.reactionPill, mine && styles.reactionPillMine, pressed && styles.actionPillPressed]}
+            accessibilityRole="button"
+            accessibilityState={{ selected: mine }}
+            accessibilityLabel={`${emoji} 반응${count > 0 ? ` ${count}개` : ''}${mine ? ', 내가 남김' : ''}`}
+          >
+            <Text style={styles.reactionEmoji}>{emoji}</Text>
+            {count > 0 ? <Text style={styles.reactionCount}>{count}</Text> : null}
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }
 
@@ -561,6 +603,24 @@ const styles = themedStyles((colors) => ({
   },
   actionPillPressed: { opacity: 0.6 },
   actionPillText: { color: colors.white, fontSize: fontSize.body, fontWeight: '700' },
+  reactionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.sm },
+  // 44 터치 타깃 — 이모지 알약이 작아 보여도 누르는 면적은 줄이지 않는다
+  reactionPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    minHeight: 44,
+    minWidth: 44,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  reactionPillMine: { borderColor: colors.white, backgroundColor: 'rgba(255,255,255,0.25)' },
+  reactionEmoji: { fontSize: 18 },
+  reactionCount: { color: colors.white, fontSize: fontSize.caption, fontWeight: '700' },
   title: { color: colors.white, fontSize: fontSize.body, fontWeight: '800', marginBottom: 2 },
   captionText: { color: colors.white, fontSize: fontSize.body, lineHeight: 21 },
 }));
