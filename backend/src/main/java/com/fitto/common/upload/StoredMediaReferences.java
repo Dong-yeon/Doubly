@@ -39,6 +39,7 @@ public class StoredMediaReferences {
             Map.entry("feed_post_photos", List.of("url")),
             Map.entry("workouts", List.of("image_url")),
             Map.entry("body_metrics", List.of("photo_url")),
+            Map.entry("journal_entries", List.of("photo_url")),
             Map.entry("place_visits", List.of("image_url")),
             Map.entry("content_logs", List.of("image_url")),
             Map.entry("contents", List.of("poster_url")),

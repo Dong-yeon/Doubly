@@ -1,6 +1,7 @@
 /** 네비게이션 파라미터 타입 — 설계서 2. 화면 설계 */
 import type { NavigatorScreenParams } from '@react-navigation/native';
 import type { BarcodeLookup, Content, Meal, Place, Trip, WeekDay } from '../types';
+import type { JournalSource } from '../api/journal';
 
 // 2.1 온보딩 플로우 (인증 전)
 export type OnboardingStackParamList = {
@@ -57,6 +58,14 @@ export type HomeStackParamList = PlaceScreensParamList & {
   ChangePassword: undefined;
   // 내 기록 내보내기 — 사진까지 ZIP 한 파일로 (docs/DATA_EXPORT_2026-10-01.md)
   RecordExport: undefined;
+  /*
+   * 나만의 하루 기록 — 상대에게 보이지 않는 개인 기록(docs/PERSONAL_JOURNAL_ANALYSIS_2026-10-02.md §4).
+   * MY 의 "나의 하루"에서 들어오는 월 달력·목록과, 그날 페이지(쓰기·고치기·지우기).
+   * <b>본문·기분을 파라미터로 넘기지 않는다</b> — 웹은 파라미터를 URL 에 굽는다. 무드 시트의 초안은
+   * store/journalDraft 로 건넨다.
+   */
+  Journal: undefined;
+  JournalDay: { date: string; source?: JournalSource };
   // 약관 전문 (온보딩 스택과 동일 화면을 재사용)
   LegalDocument: { doc: 'terms' | 'privacy' | 'oss' };
   TrainerRegister: undefined;

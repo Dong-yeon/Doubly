@@ -15,7 +15,9 @@ export type ClientAnalyticsEvent =
   | 'PURCHASE_FAILED'
   // 입력 중 스티커 추천 — detail 에 걸린 키워드와 코드만(입력 원문은 넣지 않는다)
   | 'STICKER_SUGGEST_SHOWN'
-  | 'STICKER_SUGGEST_PICKED';
+  | 'STICKER_SUGGEST_PICKED'
+  // 홈 무드 시트의 "한 줄 남기기"(나만의 하루 기록) 2단계 노출 — detail 없음
+  | 'JOURNAL_PROMPT_SHOWN';
 
 export const analyticsApi = {
   /** @param detail 어느 화면·어느 상품인지 — 서버 컬럼이 50자라 그 안에서 */

@@ -62,6 +62,11 @@ import com.fitto.workout.dto.SaveRoutineRequest.Exercise;
 import com.fitto.workout.service.RoutineGiftService;
 import com.fitto.workout.service.WorkoutRoutineService;
 import com.fitto.workout.service.WorkoutService;
+import com.fitto.journal.domain.JournalSource;
+import com.fitto.journal.dto.SaveJournalRequest;
+import com.fitto.journal.repository.JournalEntryRepository;
+import com.fitto.journal.service.JournalService;
+import com.fitto.common.time.KstClock;
 import com.fitto.common.upload.CloudinaryImageDeleter;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -122,6 +127,8 @@ class WithdrawFlowTest {
     @Autowired FavoriteFoodGiftService favoriteFoodGiftService;
     @Autowired WorkoutService workoutService;
     @Autowired MealService mealService;
+    @Autowired JournalService journalService;
+    @Autowired JournalEntryRepository journalEntryRepository;
     /** 스파이 — 테스트 프로필은 Cloudinary 미설정이라 실제 삭제는 no-op, 어떤 URL 을 넘기는지만 본다 */
     @MockitoSpyBean CloudinaryImageDeleter imageDeleter;
 
@@ -479,5 +486,46 @@ class WithdrawFlowTest {
         assertThat(second).isEqualTo(first);
         verify(notificationService, times(1)).notify(eq(partner), eq(NotificationCategory.PARTNER),
                 contains("탈퇴를 요청"), anyString(), anyString());
+    }
+
+    /**
+     * 나만의 하루 기록(V116) — 관계가 아니라 사람 소유라 관계 단위 삭제가 건드리지 않는다. 탈퇴가 유일한
+     * 삭제 경로이므로 여기서 행과 사진 파일을 모두 거둬야 한다(docs/PERSONAL_JOURNAL_ANALYSIS_2026-10-02.md §1-4).
+     */
+    @Test
+    void 탈퇴하면_나만의_하루_기록과_사진도_지운다() {
+        Long me = register("withdraw-journal@fitto.com");
+        Long partner = register("withdraw-journal-p@fitto.com");
+        relationService.connectCouple(partner, relationService.createCoupleInvite(me).code());
+        String photo = "https://res.cloudinary.com/demo/image/upload/v1/fitto/journal/withdraw.jpg";
+        journalService.save(me, KstClock.today(), new SaveJournalRequest("😊", "오늘", photo, JournalSource.JOURNAL_LIST));
+        journalService.save(me, KstClock.today().minusDays(1), new SaveJournalRequest(null, "어제", null, null));
+
+        assertThatCode(() -> withdrawalService.purgeNow(me)).doesNotThrowAnyException();
+
+        assertThat(journalEntryRepository.findByUserIdAndJournalDateBetweenOrderByJournalDateAsc(
+                me, KstClock.today().minusDays(7), KstClock.today())).isEmpty();
+        ArgumentCaptor<Collection<String>> captor = ArgumentCaptor.forClass(Collection.class);
+        verify(imageDeleter, atLeastOnce()).deleteAllAfterCommit(captor.capture());
+        assertThat(captor.getAllValues().stream().flatMap(Collection::stream)).contains(photo);
+    }
+
+    /** 기록 사진을 바꾸거나 기록을 지우면 옛 파일을 커밋 뒤에 지운다 — 같은 스파이를 쓰려고 여기 둔다 */
+    @Test
+    void 기록_사진을_바꾸거나_기록을_지우면_옛_사진을_지운다() {
+        Long me = register("journal-photo-swap@fitto.com");
+        String first = "https://res.cloudinary.com/demo/image/upload/v1/fitto/journal/first.jpg";
+        String second = "https://res.cloudinary.com/demo/image/upload/v1/fitto/journal/second.jpg";
+        java.time.LocalDate today = KstClock.today();
+        journalService.save(me, today, new SaveJournalRequest(null, "한 줄", first, null));
+        // 본문만 고치면 사진은 그대로 — 지우지 않는다
+        journalService.save(me, today, new SaveJournalRequest(null, "한 줄 더", first, null));
+        verify(imageDeleter, never()).deleteAllAfterCommit(any());
+
+        journalService.save(me, today, new SaveJournalRequest(null, "한 줄 더", second, null));
+        verify(imageDeleter).deleteAllAfterCommit(List.of(first));
+
+        journalService.delete(me, today);
+        verify(imageDeleter).deleteAllAfterCommit(List.of(second));
     }
 }

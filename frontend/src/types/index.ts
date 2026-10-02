@@ -65,7 +65,11 @@ export type FeatureKey =
   | 'PUBLIC_GUIDE_LINK'
   | 'CSV_EXPORT'
   // 협동 게임(스도쿠) — 게이팅 없음, 계측용. docs/COUPLE_GAMES_DESIGN_2026-09-09.md 3-5
-  | 'COUPLE_GAME';
+  | 'COUPLE_GAME'
+  // 나만의 하루 기록 사진 — 사람 단위, FREE=PRO 하루 3(업셀 없음). docs/PERSONAL_JOURNAL_ANALYSIS_2026-10-02.md §5-1
+  | 'JOURNAL_PHOTO'
+  // 나만의 하루 기록 — 게이팅 없음, 새 기록 생성 계측용
+  | 'JOURNAL';
 
 /** 한도 주기 — TOTAL 은 리셋되지 않는 보유 개수 상한 */
 export type QuotaPeriod = 'DAY' | 'WEEK' | 'MONTH' | 'TOTAL' | 'NONE';

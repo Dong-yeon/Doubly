@@ -222,6 +222,23 @@ public enum Feature {
      */
     CSV_EXPORT("기록 내보내기", Quota.perWeek(2), Quota.perWeek(2)),
 
+    /**
+     * 나만의 하루 기록 사진(최대 1장/일) — 전용 서명({@code JournalService.photoSignature})에서 센다.
+     *
+     * <p><b>{@link #PHOTO_UPLOAD} 에서 세지 않는다.</b> 그쪽은 커플이 함께 쓰는 주머니라, 매일 사진을 붙이는
+     * 사람이 커플 무료 한도(월 60)의 절반을 먹고 상대가 피드에서 402 를 만난다. 사람 단위로 따로 센다.
+     *
+     * <p>하루 3 = "1장 + 바꾸기 2번"의 사고 방지선일 뿐이다. FREE 와 PRO 가 같아 결제 비교표에서 빠지고
+     * ({@link #isListed()}) 넘겨도 업셀하지 않는다 — 기록은 무료가 원칙이다("데이터 인질 금지").
+     * docs/PERSONAL_JOURNAL_ANALYSIS_2026-10-02.md §5-1.
+     */
+    JOURNAL_PHOTO("기록 사진", Quota.perDay(3), Quota.perDay(3)),
+    /*
+     * 나만의 하루 기록 — 게이팅 없음(둘 다 무제한). COUPLE_GAME 과 같은 이유로 Feature 로 둔다: <b>새 기록을
+     * 만들 때만</b> PlanGuard.require 를 지나 FEATURE_USED 가 남는다(수정은 세지 않는다). 본문은 어디에도 싣지 않는다.
+     */
+    JOURNAL("나만의 하루 기록", Quota.unlimited(), Quota.unlimited()),
+
     /*
      * 협동 게임(스도쿠) — 게이팅 없음(둘 다 무제한). 그래도 Feature 로 두는 이유는 새 판 생성이
      * PlanGuard.require 를 지나 FEATURE_USED 가 남게 하기 위해서다 — 육성을 접을 때의
@@ -326,9 +343,9 @@ public enum Feature {
                  VIDEO_CALL, STREAK_REPAIR -> FeatureGroup.DEPTH;
             case PHOTO_UPLOAD, TRIP_ACTIVE, PLACE_PIN, CONTENT_ITEM, WORKOUT_ROUTINE,
                  CALENDAR_EVENT, FAVORITE_FOOD, CUSTOM_EXERCISE, CHALLENGE_ACTIVE,
-                 COOP_GOAL_ACTIVE -> FeatureGroup.STORAGE;
+                 COOP_GOAL_ACTIVE, JOURNAL_PHOTO -> FeatureGroup.STORAGE;
             case WORKOUT_BOOSTER, CUSTOM_QUESTION, VOICE_MESSAGE, PUBLIC_GUIDE_LINK,
-                 CSV_EXPORT, COUPLE_GAME -> FeatureGroup.ENGAGEMENT;
+                 CSV_EXPORT, COUPLE_GAME, JOURNAL -> FeatureGroup.ENGAGEMENT;
             case CUSTOM_BACKGROUND, PREMIUM_STICKER, TOUCH_GESTURE_PREMIUM -> FeatureGroup.DECORATION;
         };
     }

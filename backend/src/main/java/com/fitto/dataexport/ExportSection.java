@@ -69,7 +69,12 @@ public enum ExportSection {
     BODY_METRICS(Scope.PERSONAL, "body_metrics t WHERE t.user_id = :uid", List.of("photo_url")),
     VOICE_CLIPS(Scope.PERSONAL, "voice_clips t WHERE t.user_id = :uid", List.of("audio_url")),
     WATER_LOGS(Scope.PERSONAL, "water_logs t WHERE t.user_id = :uid", List.of()),
-    FASTING_SESSIONS(Scope.PERSONAL, "fasting_sessions t WHERE t.user_id = :uid", List.of());
+    FASTING_SESSIONS(Scope.PERSONAL, "fasting_sessions t WHERE t.user_id = :uid", List.of()),
+    /**
+     * 나만의 하루 기록(V116) — 반드시 PERSONAL 이다. COUPLE 범위에 두면 상대의 내보내기 파일에 내 일기가 들어간다.
+     * docs/PERSONAL_JOURNAL_ANALYSIS_2026-10-02.md §5-4.
+     */
+    JOURNAL_ENTRIES(Scope.PERSONAL, "journal_entries t WHERE t.user_id = :uid", List.of("photo_url"));
 
     public enum Scope { COUPLE, PERSONAL }
 

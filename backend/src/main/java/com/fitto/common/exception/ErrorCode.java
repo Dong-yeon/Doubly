@@ -147,7 +147,10 @@ public enum ErrorCode {
     CALL_INVALID_STATE(HttpStatus.CONFLICT, "이미 끝났거나 받을 수 없는 통화예요."),
     // 영상통화는 PRO 전용(Feature.VIDEO_CALL) — PLAN_UPGRADE_REQUIRED 를 그대로 쓴다(별도 코드 불필요).
     // 통화 시간 안전망은 판매 문구가 아니라 Stream Video 무료 티어 보호용이라 402(업셀)가 아닌 429.
-    CALL_TIME_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "이번 달 통화 가능 시간을 모두 사용했어요. 다음 달에 다시 이용해주세요.");
+    CALL_TIME_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "이번 달 통화 가능 시간을 모두 사용했어요. 다음 달에 다시 이용해주세요."),
+
+    // 나만의 하루 기록 — 남의 기록은 지목할 수단이 없어서 403 이 나올 자리가 없다. 없으면 404 하나다.
+    JOURNAL_NOT_FOUND(HttpStatus.NOT_FOUND, "이 날의 기록이 없어요.");
 
     private final HttpStatus status;
     private final String message;

@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../navigation/types';
+import { MaterialCommunityIcons } from '../../components/Icon';
 import { Avatar } from '../../components/Avatar';
 import { Chip } from '../../components/Chip';
 import { Sheet } from '../../components/Sheet';
@@ -458,6 +459,20 @@ export function MyScreen({ navigation }: Props) {
             value={bodySummary ?? '등록'}
             onPress={startBodyEdit}
             accessibilityLabel={bodySummary ? `신체 정보 ${bodySummary}, 수정` : '신체 정보 등록'}
+          />
+        </SettingsGroup>
+
+        {/*
+          나만의 하루 기록 — "나"의 공간이라 MY 에 둔다. 우리 탭·커플 캘린더에 두면 "상대도 보나?"라는
+          의심이 비공개 원칙을 흐린다. 주 입구는 홈 무드 시트의 "한 줄 남기기"이고 여기는 모아 보는 자리다
+          (docs/PERSONAL_JOURNAL_ANALYSIS_2026-10-02.md §4-2).
+        */}
+        <SettingsGroup>
+          <SettingsRow
+            title="나의 하루"
+            note="나만 보는 기록"
+            leading={<MaterialCommunityIcons name="text-box-outline" size={22} color={colors.textSecondary} />}
+            onPress={() => navigation.navigate('Journal')}
           />
         </SettingsGroup>
 
