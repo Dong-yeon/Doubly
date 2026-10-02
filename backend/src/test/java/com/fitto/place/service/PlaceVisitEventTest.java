@@ -18,6 +18,7 @@ import com.fitto.user.repository.UserRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -39,6 +40,9 @@ import static org.mockito.Mockito.when;
  * <p>스프링 없이 조립한다. 실시간 이벤트를 보려고 {@code CoupleEventPublisher} 를 {@code @MockitoBean}
  * 으로 바꾸면 컨텍스트가 하나 더 생겨 JVM 끝까지 캐시된다(CLAUDE.md — 2026-09-22 CI OOM).
  * 확인할 것은 "언제 보내는가"뿐이라 트랜잭션 동기화를 직접 켜서 커밋 전후를 가른다.
+ *
+ * <p>커밋 뒤로 미루는 일은 발행기({@link CoupleEventPublisher})가 하므로 발행기는 진짜를 쓰고, 그 아래
+ * 메시지 템플릿만 가짜로 둔다 — 실제로 소켓으로 나가는 시점을 본다.
  */
 class PlaceVisitEventTest {
 
@@ -52,7 +56,8 @@ class PlaceVisitEventTest {
     private final PlaceVisitRepository placeVisitRepository = mock(PlaceVisitRepository.class);
     private final RelationRepository relationRepository = mock(RelationRepository.class);
     private final UserRepository userRepository = mock(UserRepository.class);
-    private final CoupleEventPublisher publisher = mock(CoupleEventPublisher.class);
+    private final SimpMessagingTemplate messaging = mock(SimpMessagingTemplate.class);
+    private final CoupleEventPublisher publisher = new CoupleEventPublisher(messaging);
 
     private final PlaceService service = new PlaceService(placeRepository, placeVisitRepository,
             mock(PlaceRatingRepository.class), relationRepository, userRepository, mock(MealRepository.class),
@@ -93,9 +98,9 @@ class PlaceVisitEventTest {
         service.recordVisit(USER, PLACE_ID, new RecordVisitRequest(LocalDate.now(), 5, null, null, null));
 
         // 커밋 전에 보내면 상대 앱이 다시 조회해도 방금 남긴 방문이 아직 안 보인다
-        verify(publisher, never()).publish(anyLong(), any());
+        verify(messaging, never()).convertAndSend(any(String.class), any(Object.class));
         commit();
-        verify(publisher).publish(COUPLE, CoupleEvent.PLACE);
+        verify(messaging).convertAndSend("/sub/couple/" + COUPLE, new CoupleEvent(CoupleEvent.PLACE));
     }
 
     @Test
@@ -104,9 +109,9 @@ class PlaceVisitEventTest {
 
         service.deleteVisit(USER, PLACE_ID, VISIT_ID);
 
-        verify(publisher, never()).publish(anyLong(), any());
+        verify(messaging, never()).convertAndSend(any(String.class), any(Object.class));
         commit();
-        verify(publisher).publish(COUPLE, CoupleEvent.PLACE);
+        verify(messaging).convertAndSend("/sub/couple/" + COUPLE, new CoupleEvent(CoupleEvent.PLACE));
     }
 
     /** 트랜잭션 밖(테스트·배치)이면 기다릴 커밋이 없다 — 바로 보낸다. */
@@ -114,7 +119,7 @@ class PlaceVisitEventTest {
     void 트랜잭션_밖이면_바로_보낸다() {
         service.recordVisit(USER, PLACE_ID, new RecordVisitRequest(LocalDate.now(), null, null, null, null));
 
-        verify(publisher).publish(COUPLE, CoupleEvent.PLACE);
+        verify(messaging).convertAndSend("/sub/couple/" + COUPLE, new CoupleEvent(CoupleEvent.PLACE));
     }
 
     private static void commit() {

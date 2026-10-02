@@ -38,8 +38,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
@@ -291,7 +289,7 @@ public class PlaceService {
                 .mealId(request.mealId())
                 .build();
         placeVisitRepository.save(visit);
-        publishAfterCommit(place.getCoupleId());
+        publishVisitChanged(place.getCoupleId());
 
         Long partnerId = activeCouple(userId).partnerOf(userId);
         if (partnerId != null) {
@@ -324,7 +322,7 @@ public class PlaceService {
         // 피드 카드 응원 반응 — 다형 참조라 FK 가 없어 직접 지운다 (V60 주석 참고)
         feedReactionRepository.deleteByTargetTypeAndTargetId(FeedItemType.PLACE_VISIT, visitId);
         placeVisitRepository.delete(visit);
-        publishAfterCommit(place.getCoupleId());
+        publishVisitChanged(place.getCoupleId());
     }
 
     /**
@@ -332,21 +330,11 @@ public class PlaceService {
      * 다시 받는다. 장소 저장({@link #save})과 같은 {@code PLACE} 이벤트를 쓴다: 받는 쪽이 하는 일
      * (목록 다시 받기)이 같아서 종류를 늘릴 이유가 없다.
      *
-     * <p><b>커밋 뒤에 보낸다.</b> 발행기는 즉시 보내므로 트랜잭션 안에서 부르면 상대 앱이 커밋 전에
-     * 다시 조회해 방금 남긴 방문을 못 볼 수 있다. 트랜잭션 밖이면(테스트 등) 바로 보낸다 —
-     * {@code MealPhotoAutoAnalysisService.afterCommit} 과 같은 처방.
+     * <p>커밋 뒤에 보내는 일은 이제 발행기가 한다({@link CoupleEventPublisher} 주석) — 여기서 따로
+     * afterCommit 을 걸면 그 콜백 안에서 발행기가 다시 예약해 이벤트가 사라진다.
      */
-    private void publishAfterCommit(Long coupleId) {
-        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            coupleEventPublisher.publish(coupleId, CoupleEvent.PLACE);
-            return;
-        }
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                coupleEventPublisher.publish(coupleId, CoupleEvent.PLACE);
-            }
-        });
+    private void publishVisitChanged(Long coupleId) {
+        coupleEventPublisher.publish(coupleId, CoupleEvent.PLACE);
     }
 
     /**
