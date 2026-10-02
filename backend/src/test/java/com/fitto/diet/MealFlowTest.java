@@ -24,7 +24,7 @@ import com.fitto.feed.dto.ReactionSummary;
 import com.fitto.feed.service.FeedService;
 import com.fitto.relation.dto.InviteCodeResponse;
 import com.fitto.relation.service.RelationService;
-import com.fitto.workout.dto.PartnerTodayResponse;
+import com.fitto.diet.dto.PartnerMealTodayResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -263,13 +263,23 @@ class MealFlowTest {
         InviteCodeResponse invite = relationService.createCoupleInvite(a);
         relationService.connectCouple(b, invite.code());
 
-        PartnerTodayResponse before = mealService.partnerToday(a);
+        PartnerMealTodayResponse before = mealService.partnerToday(a);
         assertThat(before.connected()).isTrue();
         assertThat(before.completed()).isFalse();
+        assertThat(before.mealTypes()).isEmpty();
 
         mealService.save(b, sample(LocalDate.now(), MealType.LUNCH));
-        PartnerTodayResponse after = mealService.partnerToday(a);
+        PartnerMealTodayResponse after = mealService.partnerToday(a);
         assertThat(after.completed()).isTrue();
+        assertThat(after.mealTypes()).containsExactly(MealType.LUNCH);
+
+        // 홈 "오늘 챙김" 링 — 끼니 종류만, 중복 없이 아침→저녁→간식 순. 어제 기록은 오늘이 아니다
+        mealService.save(b, sample(LocalDate.now(), MealType.SNACK));
+        mealService.save(b, sample(LocalDate.now(), MealType.BREAKFAST));
+        mealService.save(b, sample(LocalDate.now(), MealType.LUNCH));
+        mealService.save(b, sample(LocalDate.now().minusDays(1), MealType.DINNER));
+        assertThat(mealService.partnerToday(a).mealTypes())
+                .containsExactly(MealType.BREAKFAST, MealType.LUNCH, MealType.SNACK);
     }
 
     @Test

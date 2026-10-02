@@ -39,6 +39,10 @@ public interface MealRepository extends JpaRepository<Meal, Long> {
             """)
     List<Meal> findByUserIdAndPhoto(@Param("userId") Long userId, @Param("photoUrl") String photoUrl, Pageable pageable);
 
+    /** 그날 기록한 끼니 종류(중복 없이) — 홈 "오늘 챙김" 링. 내용은 읽지 않는다 */
+    @Query("select distinct m.mealType from Meal m where m.userId = :userId and m.mealDate = :date")
+    List<MealType> findMealTypes(@Param("userId") Long userId, @Param("date") LocalDate date);
+
     /** 데이트 식단 짝을 한 번에 — 목록의 복사본들이 반응을 읽을 원본 id 를 찾는다(MealService.withPlaces) */
     List<Meal> findBySharedGroupIdIn(java.util.Collection<String> sharedGroupIds);
 

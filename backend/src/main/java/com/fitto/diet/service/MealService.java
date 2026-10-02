@@ -13,12 +13,14 @@ import com.fitto.common.time.KstClock;
 import com.fitto.common.upload.CloudinaryImageDeleter;
 import com.fitto.diet.domain.Meal;
 import com.fitto.diet.domain.MealItem;
+import com.fitto.diet.domain.MealType;
 import com.fitto.diet.domain.NutritionGoal;
 import com.fitto.diet.dto.CoupleMealGoalResponse;
 import com.fitto.diet.dto.FoodLookupRequest;
 import com.fitto.diet.dto.FoodLookupResponse;
 import com.fitto.diet.dto.MealItemRequest;
 import com.fitto.diet.dto.MealResponse;
+import com.fitto.diet.dto.PartnerMealTodayResponse;
 import com.fitto.diet.dto.PhotoRecordLookupResponse;
 import com.fitto.diet.dto.MealStatsResponse;
 import com.fitto.diet.dto.RecentFoodResponse;
@@ -38,7 +40,6 @@ import com.fitto.feed.repository.FeedReactionRepository;
 import com.fitto.streak.service.StreakService;
 import com.fitto.user.repository.UserRepository;
 import com.fitto.workout.dto.CalendarDayResponse;
-import com.fitto.workout.dto.PartnerTodayResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
@@ -896,20 +897,23 @@ public class MealService {
         return dates.stream().distinct().sorted().toList();
     }
 
-    /** 커플 상대방의 오늘 식단 기록 여부 — 홈 커플 카드용. */
-    public PartnerTodayResponse partnerToday(Long userId) {
+    /**
+     * 커플 상대의 오늘 식단 — 기록 여부 + 끼니 종류(홈 "오늘 챙김" 링). 예전의 존재 확인 쿼리를 끼니 종류
+     * 조회 하나로 바꿨다(completed 는 그 목록이 비었는지) — 쿼리 수는 그대로 1회, 날짜는 KstClock.
+     */
+    public PartnerMealTodayResponse partnerToday(Long userId) {
         List<Relation> couples = relationRepository
                 .findByUserAndTypeAndStatus(userId, RelationType.COUPLE, RelationStatus.ACTIVE);
         if (couples.isEmpty()) {
-            return new PartnerTodayResponse(false, null, false);
+            return PartnerMealTodayResponse.notConnected();
         }
         Long partnerId = couples.get(0).partnerOf(userId);
         if (partnerId == null) {
-            return new PartnerTodayResponse(false, null, false);
+            return PartnerMealTodayResponse.notConnected();
         }
         String partnerName = userRepository.findById(partnerId)
                 .map(u -> u.getName()).orElse(null);
-        boolean completed = mealRepository.existsByUserIdAndMealDate(partnerId, KstClock.today());
-        return new PartnerTodayResponse(true, partnerName, completed);
+        List<MealType> mealTypes = mealRepository.findMealTypes(partnerId, KstClock.today()).stream().sorted().toList();
+        return new PartnerMealTodayResponse(true, partnerName, !mealTypes.isEmpty(), mealTypes);
     }
 }
