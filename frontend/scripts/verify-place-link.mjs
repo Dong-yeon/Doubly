@@ -4,7 +4,10 @@
  * 칩을 띄워야 하는 링크(정탐)와 띄우면 안 되는 링크(오탐 방지)를 같이 돌린다. 오탐은 곧 모든 대화에
  * 엉뚱한 칩이 붙는다는 뜻이라 정탐만큼 중요하다.
  *
- * 실행: npm run verify:place-link
+ * 실행: node scripts/verify-place-link.mjs
+ *
+ * package.json 에 아직 등록하지 않았다 — npm scripts 는 EAS fingerprint 입력이라 등록하는 순간 main 에서 올리는
+ * 모든 업데이트가 지금 앱에 안 간다. 다음 네이티브 빌드 때 함께 등록한다(docs/EAS_BUILD.md "다음 빌드에 묶을 것").
  */
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
