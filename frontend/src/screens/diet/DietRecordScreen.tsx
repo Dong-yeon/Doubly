@@ -42,7 +42,7 @@ import { errorCodeOf } from '../../api/client';
 import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
-import { toDateString } from '../../utils/date';
+import { todayKst } from '../../utils/date';
 import { buildDietShareCopy } from '../../utils/dietShare';
 import { defaultMealType } from '../../utils/mealType';
 import { colors, fontSize, radius, shadow, spacing } from '../../constants/theme';
@@ -134,7 +134,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
   const initialPhoto = editing?.photoUrl ?? chatPhotoUrl ?? null;
   const [mealType, setMealType] = useState<MealType>(editing?.mealType ?? defaultMealType());
   /** 기록할 날짜 — 수정이면 그 기록의 날짜, 캘린더에서 날짜를 골라 들어오면 그 날짜, 아니면 오늘 */
-  const [mealDate, setMealDate] = useState(editing?.mealDate ?? route.params?.date ?? toDateString());
+  const [mealDate, setMealDate] = useState(editing?.mealDate ?? route.params?.date ?? todayKst());
   const [memo, setMemo] = useState(editing?.memo ?? '');
   /**
    * 항목을 하나도 안 쓰고 총 칼로리만 적는 경로 — 사진만 찍고 끝낼 때.
@@ -1202,7 +1202,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
             label="먹은 날"
             value={mealDate}
             onChange={setMealDate}
-            max={toDateString()}
+            max={todayKst()}
             pickerTitle="언제 먹은 식단인가요?"
           />
 

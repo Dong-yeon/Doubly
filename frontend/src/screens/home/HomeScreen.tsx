@@ -57,7 +57,7 @@ import {
   unsubscribeCouple,
 } from '../../api/chatSocket';
 import { pickImage, takePhoto, uploadImage } from '../../utils/imageUpload';
-import { daysSince, formatMonthDay, toDateString } from '../../utils/date';
+import { daysSince, formatMonthDay, todayKst } from '../../utils/date';
 import { mealTypeForNow, mealTypeLabel } from '../../utils/mealTimeSlot';
 import { haptics } from '../../utils/haptics';
 import { toast } from '../../store/toastStore';
@@ -402,7 +402,7 @@ export function HomeScreen({ navigation }: Props) {
       if (!picked) return;
       const photoUrl = await uploadImage(picked);
       const mealType = mealTypeForNow();
-      const saved = await dietApi.save({ mealDate: toDateString(), mealType, photoUrl });
+      const saved = await dietApi.save({ mealDate: todayKst(), mealType, photoUrl });
       haptics.success();
       setMealSheet(false);
       /*
