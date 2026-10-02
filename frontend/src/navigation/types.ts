@@ -248,6 +248,11 @@ export type DietStackParamList = {
          * productName 은 바코드로 알아낸 제품명 — 읽은 결과가 한 항목이면 그 이름으로 쓴다.
          */
         labelPhoto?: { uri: string; productName?: string };
+        /**
+         * 이미 올라가 있는 사진 URL — 채팅에서 내가 보낸 사진을 "식단으로 남기기"로 열 때(LOVEBODY_REVIEW §2-5).
+         * 재업로드 없이 그대로 쓴다. 수정(meal)과 함께 오지 않는다.
+         */
+        photoUrl?: string;
         /** 다른 탭에서 열렸으면 그 탭 이름 — 닫을 때 거기로 돌아간다(useReturnToTab) */
         returnTo?: keyof MainTabParamList;
       }

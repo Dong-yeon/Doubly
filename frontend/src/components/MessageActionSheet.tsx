@@ -33,6 +33,12 @@ interface Props {
   onEdit: () => void;
   onDelete: () => void;
   onBookmark: () => void;
+  /**
+   * 내가 보낸 사진을 식단으로 남기기 — 호출부가 <b>내 IMAGE 메시지일 때만</b> 넘긴다. 상대가 보낸 사진에서 열면
+   * 남의 식사가 내 기록이 된다. 음식 사진인지 자동으로 가려 권하지 않는다(사진마다 AI 호출 + 둘만의 사진을
+   * 분류기에 보냄 — LOVEBODY_REVIEW §2-5). 없으면 줄을 그리지 않는다.
+   */
+  onRecordMeal?: () => void;
   /** 이 메시지가 지금 방의 공지로 고정돼 있는가 — 라벨/아이콘 전환용 */
   pinned: boolean;
   onTogglePin: () => void;
@@ -50,6 +56,7 @@ export function MessageActionSheet({
   onEdit,
   onDelete,
   onBookmark,
+  onRecordMeal,
   pinned,
   onTogglePin,
 }: Props) {
@@ -96,6 +103,9 @@ export function MessageActionSheet({
             없다 — 복사는 여기서 해 준다(카톡과 같은 자리).
           */}
           {onCopy ? <ActionRow icon="clipboard-text-outline" label="복사하기" onPress={onCopy} /> : null}
+          {onRecordMeal && !message?.deleted ? (
+            <ActionRow icon="silverware-fork-knife" label="식단으로 남기기" onPress={onRecordMeal} />
+          ) : null}
           {/* 삭제된 메시지엔 내용이 없어 저장할 게 없다 */}
           {!message?.deleted ? (
             <ActionRow

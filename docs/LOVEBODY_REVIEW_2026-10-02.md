@@ -79,7 +79,7 @@
 | 2 | **✅ 완료(`844ea671`·`d1e00f7d`)** 주간 스트립 | 식단용 7일 API **없음**. `/meal/calendar` 는 내 날짜만(`MealService.java:649-655`). `coupleGoal` 이 `myDates`/`partnerDates` 를 **계산해 놓고 개수만** 내보낸다(`:779-803`). 운동엔 `GET /workout/couple/week`(`WorkoutService.java:545-561`) 있음 | `CoupleMealGoalResponse` 에 `myDates`·`partnerDates` 추가(하위 호환) 또는 `/meal/couple/week` 신설(운동 DTO 재사용). 프론트 7칸 띠 | `MealService`, `CoupleMealGoalResponse`, `types/index.ts`, `DietScreen.tsx`(+공용 `WeekStrip`) | **있음(작음)** | 없음 | 업데이트(서버 먼저) | 소~중 | 없음. 오히려 스트릭 줄·커플 목표 카드를 흡수 | **채택** |
 | 3 | **✅ (a) 완료(`a5ca5516`·`3405f963`)** 식사 카드 반응 | 반응은 `feed_reactions`(V60) 에 MEAL 로 존재, 우리 탭 `FeedCard` 만 표시(`FeedCard.tsx:92`, `:284-328`). `MealCard`·`MealResponse` 에 반응 **없음**. 럽바디엔 **내 식사만** 나온다(`MealService.java:556-562`) | (a) 내 카드에 "상대가 남긴 반응" 읽기 전용 표시: `MealResponse.reactions` 를 `withPlaces` 처럼 배치 조회 (b) 상대 식사에 반응하기는 상대 식사 목록이 럽바디에 없어 별도(§3 참고) | `MealService`, `MealResponse`, `MealCard.tsx`, `types` | **있음** | 없음 | 업데이트(서버 먼저) | 소~중 | 없음. 단 "빠른 한마디"는 댓글 엔티티가 없어 **대**(새 테이블) | **(a)만 채택** |
 | 4 | 기록 흐름 광고 금지 | 광고 SDK 없음(벤치마크 확인) | 원칙만 유지 | — | — | — | — | — | — | 해당 없음 |
-| 5 | 채팅에서 식단 기록 | 반대 방향(식단→채팅 `MEAL_CARD`, 같은 URL)은 있음(`DietRecordScreen.tsx:1152-1172`). 채팅 이미지 → 식단 경로 없음. `MessageActionSheet` 에 해당 액션 없음 | 채팅 **내가 보낸** 이미지 길게 누르기 → "식단으로 남기기" → `DietRecord` 에 `photoUrl` 파라미터 → 저장 시 자동 분석(기존 `MealPhotoAutoAnalysisService`) | `MessageActionSheet.tsx`, `ChatRoomScreen.tsx`, `navigation/types.ts`, `DietRecordScreen.tsx`, **`MealService.delete`·Purger(자산 공유 처리)** | **있음** | 없음 | 업데이트(서버 먼저) | 중 | 9/9 "확인 강요 안 함"과 맞음. "음식 사진 자동 감지 제안"은 기각(아래) | **채택 — 자산 공유 문제 선해결 조건** |
+| 5 | **✅ 완료(서버 `c98ff780`·`08eac53a` → 앱 `6924d201`)** 채팅에서 식단 기록 | 반대 방향(식단→채팅 `MEAL_CARD`, 같은 URL)은 있음(`DietRecordScreen.tsx:1152-1172`). 채팅 이미지 → 식단 경로 없음. `MessageActionSheet` 에 해당 액션 없음 | 채팅 **내가 보낸** 이미지 길게 누르기 → "식단으로 남기기" → `DietRecord` 에 `photoUrl` 파라미터 → 저장 시 자동 분석(기존 `MealPhotoAutoAnalysisService`) | `MessageActionSheet.tsx`, `ChatRoomScreen.tsx`, `navigation/types.ts`, `DietRecordScreen.tsx`, **`MealService.delete`·Purger(자산 공유 처리)** | **있음** | 없음 | 업데이트(서버 먼저) | 중 | 9/9 "확인 강요 안 함"과 맞음. "음식 사진 자동 감지 제안"은 기각(아래) | **채택 — 자산 공유 문제 선해결 조건** |
 | 6 | 달걀이 반응 캐릭터 | 달걀이 스티커 PNG 23종 보유(`constants/stickerImages.ts:55-56`) | 영양 카드 옆 48dp 달걀이, 상태 4개(기록 전/목표 안/초과/둘 다 기록)를 기존 PNG 매핑 | `DietScreen.tsx`(+작은 컴포넌트) | 없음 | 없음 | 업데이트 | 소 | 9/23 P2(이모지 장식 걷어내기)와 긴장 — 장식이 아니라 상태 표시일 때만 | **보류** — §1-2 정리 후 남는 자리가 있을 때 |
 | 7 | **✅ 이동평균 완료(`89cd3b23`)**, 도달일은 안 함 · 체중 추세 + 예상 도달일 | `body_metrics`(V14): 날짜·체중·체지방·허리·사진. 목표 체중 필드 **없음**. 화면 `BodyMetricScreen` 은 14개 막대뿐이고 **입구가 가려진 운동 홈에만** 있다(`WorkoutScreen.tsx:303`) | 7일 이동평균은 클라이언트 계산(백엔드 불필요). 도달일은 목표 체중이 있어야 함 → `users.goal_weight_kg` | `BodyMetricScreen.tsx`, 입구(MY 신체 정보 또는 럽바디 헤더), [User·DTO·마이그레이션] | 도달일만 | 도달일만(새 번호) | 업데이트 / 서버 | 이동평균 소 · 도달일 중 | 9/28 민감정보 보류 원칙 — 비공개면 충돌 없음 | **이동평균+입구 복구만 채택**, 도달일 보류 |
 | 8 | Health Connect / HealthKit | 라이브러리 0, 권한 없음, Expo SDK 56 + dev-client + CNG, Android minSdk 24 | 걸음·운동 세션 읽기 → 체크인 칩에 "오늘 8,000보 · 운동 완료로 남길까요?" | `package.json`, `app.json` plugins·권한, 새 모듈, `WorkoutCheckinCard.tsx` | 없음(읽기만, 저장은 기존 save) | 없음 | **빌드** | 대 | 9/9 "사진 연동 먼저, 헬스는 미룸" — 미룬 걸 꺼내는 것 | **보류 유지** — 아래 |
@@ -445,3 +445,58 @@
 4. 큰 글자 200% — 스트립 요일·날짜가 칸을 넘지 않는지(칸은 flex 1/7), 반응 칩 줄바꿈.
 5. 몸 변화 — 기록 7일 미만이면 선 없음, 이상이면 막대 위 선과 마지막 점, 캡션 "선 = 7일 평균".
 6. 다크 모드 — 빈 원(textMuted 테두리)·연결선 대비.
+
+---
+
+## 4단계 구현 기록 — 채팅 사진 → 식단 기록 (2026-10-02)
+
+브랜치 `feat/chat-photo-to-meal`. 서버 커밋을 앞에 두었다.
+
+| 커밋 | 내용 |
+| --- | --- |
+| `c98ff780` 서버 | 같은 사진 중복 방지 — `POST /meal/photo-record`(조회) + `MealService.save` 409 `MEAL_PHOTO_ALREADY_RECORDED` |
+| `08eac53a` 테스트 | A-3 참조 검사가 이 경로도 막는지 세 방향 |
+| `6924d201` 앱 | 내 IMAGE 길게 누르기 → "식단으로 남기기" → DietRecord(photoUrl) |
+
+### 흐름
+
+채팅 IMAGE(내가 보낸 것) 길게 누르기 → `MessageActionSheet` "식단으로 남기기" → 같은 사진으로 남긴 식단이 있는지 조회 →
+없으면 `navigate('Health', { screen: 'DietRecord', params: { photoUrl, date, returnTo: 'Chat' }, initial: false })` →
+끼니 고르고 저장 → `MealPhotoAutoAnalysisService` 가 칼로리를 채움 → 닫으면 채팅으로 돌아옴.
+
+### 결정
+
+- **재업로드 없음**: `photoUrl` 을 사진 칸과 업로드 캐시(`uploadedRef`·`uploadedDoneRef`)의 시작값으로 넣는다 — 수정 화면이 기존 사진을
+  다루는 방식과 같아 `ensureUploaded` 가 그대로 통과한다. `PHOTO_UPLOAD` 한도도 두 번 쓰지 않는다.
+- **iOS 크로스탭**: `returnTo: 'Chat'` 를 싣는다 — `HealthStackNavigator` 가 returnTo 가 있으면 `crossTabModalOptions`(네이티브 모달 아님)를
+  쓰고(5acf1699), 닫으면 `useReturnToTab` 이 채팅 탭으로 돌려보낸다. 채팅 스택의 ChatRoom 은 그대로 남아 있어 대화 자리로 돌아온다.
+- **날짜 = 메시지를 보낸 날**(채팅 날짜 구분선과 같은 `toDateString(new Date(createdAt))`). 끼니는 기록 화면에서 고른다 — 시각으로 끼니를
+  짐작하면 늦게 보낸 점심 사진이 저녁이 된다.
+- **중복 방지 두 겹**: 메뉴를 누를 때 `POST /meal/photo-record` 로 묻고, 있으면 "○월 ○일 점심에 이 사진으로 남겼어요" 안내만 하고 열지 않는다.
+  조회가 실패하면 열고 저장의 409 가 막는다. 저장 단계 검사는 같은 사용자·같은 URL — 새로 고른 사진은 매번 새 URL 이라 걸리지 않고,
+  걸리는 건 URL 재사용 경로(채팅 사진, 응답이 끊겨 같은 업로드로 다시 저장)뿐이다. URL 은 쿼리가 아니라 본문으로 보낸다(접속 로그).
+- **채팅 공유 재권유 안 함**: 채팅에서 가져온 사진으로 저장했으면 저장 직후의 "채팅에 공유할까요?" 알림을 띄우지 않는다.
+- **하지 않은 것**: 상대가 보낸 사진에는 메뉴 없음(남의 식사가 내 기록이 된다). 음식 사진 자동 감지·제안 없음.
+
+### A-3·A-5 와의 관계
+
+- 같은 URL 을 식사·채팅이 함께 쓴다. `StoredMediaReferences`(A-3) 덕에 ① 식사를 지워도 채팅 IMAGE 파일이 남고 ② 채팅 메시지 삭제는
+  소프트 삭제라 파일을 지우지 않으며 식사가 계속 참조하고 ③ 관계 영구 삭제는 Purger 가 채팅 이미지를 전부 넘기지만 식단(관계가 끝나도
+  남는 개인 데이터)이 쓰는 파일은 남고 채팅에만 있던 파일만 지운다 — 세 가지를 테스트로 박았다(`08eac53a`).
+- 분석 차감·환불은 A-5(`11931e0c`) 경로 그대로다. 오래된 채팅 이미지가 404(만료·삭제)나 10MB 초과로 다운로드에 실패하면 `fetch` 가 던지는
+  예외를 잡아 환불한다 — 그 분기는 `FoodAnalysisResponseMappingTest` 가 덮는다(네트워크 없이 재현 가능한 INVALID_PHOTO_URL 로). 실제 404·대용량은
+  네트워크가 필요해 단위 테스트로 재현하지 않았다.
+
+### 검증
+
+- 서버: 신규 4건(MealFlowTest 3 · PurgeRecordsFlowTest 1) 포함 전체 **H2 953건·PostgreSQL 16 953건 통과**.
+- 앱: typecheck 통과, lint 208건 그대로(**새 경고·오류 0**), verify:nested-buttons 통과, build:web 성공. 브라우저·실기기 확인은 하지 않았다.
+
+### 실기기 확인 항목
+
+1. **iOS** 채팅 → 내 사진 길게 누르기 → 식단으로 남기기 → 저장 → 채팅으로 돌아오는지(모달 먹통 여부). 닫기(X)·스와이프로 나와도 채팅으로.
+2. 상대가 보낸 사진을 길게 누르면 "식단으로 남기기"가 없는지.
+3. 저장 후 럽바디 카드 "칼로리 채우는 중" → 잠시 뒤 "약 N kcal"(자동 분석 설정 켜짐 기준).
+4. 같은 사진으로 다시 누르면 "이미 남긴 식단이 있어요" 안내만 뜨는지.
+5. 저장 직후 "채팅에 공유할까요?"가 뜨지 않는지.
+6. 오래된 사진(몇 주 전)으로 남겨 분석이 실패하면 오늘 남은 사진 분석 횟수가 줄지 않는지(한도 화면·event_logs).
