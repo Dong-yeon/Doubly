@@ -160,6 +160,30 @@ export function HomeScreen({ navigation }: Props) {
   const myMealDone = myMeals.length > 0;
   const [partnerMeal, setPartnerMeal] = useState<PartnerToday | null>(null);
   /*
+   * 오늘 챙김 링(LOVEBODY_REVIEW §2-2) — 아침·점심·저녁·운동. 내 쪽은 이미 받는 오늘 식단·운동에서 만들고(새 호출 없음),
+   * 상대 쪽은 식단 응답의 끼니 종류(mealTypes)와 운동 응답의 completed 로 만든다. 상대가 기록하면 커플 소켓 이벤트가
+   * refresh() 를 돌려 둘 다 다시 읽으므로 링도 따라온다. 구서버(mealTypes 없음)면 상대 링은 그리지 않는다.
+   * 간식은 조각이 없다(4조각 고정) — 간식만 먹은 날 링은 비어 있고, 식단 배지(✓)와 스크린리더 문장이 기록을 말한다.
+   */
+  const myMealTypes = new Set(myMeals.map((m) => m.mealType));
+  const mySlices = {
+    breakfast: myMealTypes.has('BREAKFAST'),
+    lunch: myMealTypes.has('LUNCH'),
+    dinner: myMealTypes.has('DINNER'),
+    workout: myWorkoutDone,
+  };
+  const mySnack = myMealTypes.has('SNACK');
+  const partnerMealTypes = partnerMeal?.mealTypes;
+  const partnerSlices = partnerMealTypes
+    ? {
+        breakfast: partnerMealTypes.includes('BREAKFAST'),
+        lunch: partnerMealTypes.includes('LUNCH'),
+        dinner: partnerMealTypes.includes('DINNER'),
+        workout: !!partner?.completed,
+      }
+    : null;
+  const partnerSnack = !!partnerMealTypes?.includes('SNACK');
+  /*
    * 최근 기록 — 좌우 열이 <b>각자의</b> 마지막 기록을 보여주므로 두 건이 필요하다.
    * 타임라인은 시간순 한 줄이라 사람별로 나눠 받을 수 없어, 한 페이지를 받아
    * mine 으로 갈라 각각 첫 건만 쓴다.
@@ -822,6 +846,8 @@ export function HomeScreen({ navigation }: Props) {
                     moodEmoji: mood?.mine?.emoji,
                     moodImageUrl: mood?.mine?.imageUrl,
                     crown: lovelichelinPulse?.me ?? null,
+                    today: mySlices,
+                    snack: mySnack,
                   }}
                   partner={{
                     name: partner?.partnerName ?? couple?.partner?.name ?? '상대방',
@@ -834,6 +860,8 @@ export function HomeScreen({ navigation }: Props) {
                     moodEmoji: mood?.partner?.emoji,
                     moodImageUrl: mood?.partner?.imageUrl,
                     crown: lovelichelinPulse?.partner ?? null,
+                    today: partnerSlices,
+                    snack: partnerSnack,
                   }}
                   dday={dday}
                   anniversaryDate={couple?.anniversaryDate ?? null}

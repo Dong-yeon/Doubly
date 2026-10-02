@@ -481,6 +481,11 @@ export interface PartnerToday {
   connected: boolean;
   partnerName: string | null;
   completed: boolean;
+  /**
+   * 상대가 오늘 기록한 끼니 종류 — <b>식단</b> 응답(/meal/partner/today)에만 있다(운동 응답엔 없음).
+   * 홈 아바타 "오늘 챙김" 링. 구서버 응답엔 없다(옵셔널).
+   */
+  mealTypes?: MealType[];
 }
 
 /**

@@ -461,6 +461,14 @@ console.log((total / 1024 / 1024).toFixed(1), 'MB');
 | "출처를 알 수 없는 앱" 이 계속 막힘 | 설정 → 보안 → 해당 브라우저/파일관리자 앱의 "알 수 없는 앱 설치" 권한 허용 |
 | `eas update` 가 `Asset processing timed out for assets:` 목록과 `Error: update command failed.` 로 죽음 | **서버측 에셋 처리 타임아웃 — 그냥 재시도하면 된다**(2026-09-18 확인). 코드·에셋 문제가 아니다: `번들 export ✔` → `assetmap.json 업로드 ✔` 까지 지나고 그다음 단계에서 죽으며, 목록에 iOS·안드로이드 `.hbc` 가 **둘 다** 들어 있다(특정 에셋이 큰 게 아니라 처리 단계 전체가 못 끝난 것). `frontend/assets` 는 113개·12MB(폰트 4개가 6MB)로 타임아웃을 낼 규모가 아니다. **중요: 이때 업데이트는 발행되지 않는다** — EAS 는 에셋 처리가 끝난 뒤에 업데이트 레코드를 만들므로 채널은 이전 업데이트를 그대로 가리킨다(앱이 깨지지 않고, 수정도 반영되지 않는다). `npx eas-cli channel:view production` 으로 먼저 확인하고 재시도한다. 에셋은 해시로 중복 제거되므로 두 번째가 더 빠르다. 계속 실패하면 `rm -rf dist .expo` 후 재시도 → <https://status.expo.dev> 확인 → 불안정한 네트워크(테더링 등)면 다른 회선에서 시도 |
 
+## 다음 빌드에 묶을 것
+
+fingerprint 를 바꾸는 변경이라 지금 빌드에 업데이트를 계속 보내려면 미뤄야 하는 것들. 다음 네이티브 빌드 직전에 함께 넣는다.
+
+- `package.json` 의 `update:production` 에 `--environment production`(2026-10-02) — 없으면 `--non-interactive` 업데이트가
+  "The `--environment` flag must be set" 으로 실패한다. 넣어 보니 Android `5025c62d…`→`1a88b1bb…`, iOS `810b9a8b…`→`6b1a1a32…` 로 바뀌었다
+  (`fingerprint.config.js` 가 건너뛰는 건 `run` 이 없는 android/ios 스크립트뿐이다). `update:preview` 도 같이.
+
 ## 다음 단계
 - iOS는 Apple 개발자 계정($99/년)이 있어야 ad-hoc/TestFlight 배포가 가능합니다. 준비되면
   `npx eas-cli build --platform ios --profile preview` 로 동일하게 진행합니다.
