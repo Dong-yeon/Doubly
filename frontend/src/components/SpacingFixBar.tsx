@@ -14,6 +14,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { MaterialCommunityIcons } from './Icon';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 import { themedStyles } from '../theme/themedStyles';
+import { isSpacingSupported } from '../utils/koreanSpacing';
 
 interface Props {
   /** 준비 중이면 스피너를 보여준다 */
@@ -25,6 +26,9 @@ interface Props {
 }
 
 export function SpacingFixBar({ busy, canUndo, onFix, onUndo }: Props) {
+  // iOS·웹에는 교정 엔진이 없다 — 눌러도 아무 일 없는 버튼을 보여주지 않는다
+  if (!isSpacingSupported()) return null;
+
   if (canUndo) {
     return (
       <View style={styles.bar}>
