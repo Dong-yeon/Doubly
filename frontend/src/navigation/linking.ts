@@ -214,6 +214,12 @@ export const linking: LinkingOptions<RootStackParamList> = {
                 path: 'album/trips/:tripId',
                 parse: { tripId: Number },
               },
+              // 사진첩의 "장소 보기" — 경로를 album/ 아래로 나누는 이유는 Home 블록 PlaceDetail 주석과 같다
+              PlaceDetail: {
+                path: 'album/place/:placeId',
+                parse: { placeId: Number },
+              },
+              PlaceAdd: 'album/place/edit',
             },
           },
           Chat: {

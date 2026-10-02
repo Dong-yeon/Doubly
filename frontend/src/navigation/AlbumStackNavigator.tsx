@@ -12,6 +12,8 @@ import { FeedTimelineScreen } from '../screens/feed/FeedTimelineScreen';
 import { FeedComposeScreen } from '../screens/feed/FeedComposeScreen';
 import { MemoriesScreen } from '../screens/feed/MemoriesScreen';
 import { TripAlbumScreen } from '../screens/trip/TripAlbumScreen';
+import { PlaceDetailScreen } from '../screens/place/PlaceDetailScreen';
+import { PlaceAddScreen } from '../screens/place/PlaceAddScreen';
 import { stackScreenOptions, modalOptions } from './headerOptions';
 
 const Stack = createNativeStackNavigator<AlbumStackParamList>();
@@ -36,6 +38,20 @@ export function AlbumStackNavigator() {
         name="TripAlbum"
         component={TripAlbumScreen}
         options={({ route }) => ({ title: route.params.title })}
+      />
+      {/* 럽슐랭 탭과 공유하는 장소 화면 — 사진첩의 "장소 보기"로 들어온 경우 이 스택에 쌓인다 */}
+      <Stack.Screen
+        name="PlaceDetail"
+        component={PlaceDetailScreen}
+        options={({ route }) => ({ title: route.params.name })}
+      />
+      <Stack.Screen
+        name="PlaceAdd"
+        component={PlaceAddScreen}
+        options={({ route }) => ({
+          title: route.params?.place ? '장소 수정' : '장소 추가',
+          ...modalOptions,
+        })}
       />
     </Stack.Navigator>
   );
