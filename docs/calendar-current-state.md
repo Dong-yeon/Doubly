@@ -152,7 +152,7 @@ ALTER TABLE couple_events ADD COLUMN visibility VARCHAR(20) NOT NULL DEFAULT 'SH
 | 기념일·디데이 자동 생성 | **없음** | 커플 기념일은 `relations.anniversary_date`(V4)에 따로 있고 홈 D+ 히어로·위젯에만 쓰인다. 100일·1주년 같은 일정을 캘린더에 자동으로 만드는 코드 없음. 사용자가 '기념일' 종류 + 매년 반복으로 직접 등록 |
 | 생일 원천 데이터 | 있음(캘린더 미연결) | `users.birth_date DATE`(V1, nullable). 입력은 마이 화면 '신체 정보'의 "생년월일"(`MyScreen.tsx:621`)이고 용도는 기초대사량 계산(`BmrCalculator`). **상대에게 내려가지 않는다** — `PartnerUserResponse` 는 id·이름·프로필 사진·탈퇴 예정일뿐. 생일 자동 표시에 쓰려면 상대 노출 동의 문제가 먼저다(2026-10-02 확인) |
 | 일정 D-day 표시 | 구현됨 | 서버가 `dday` 계산(`EventResponse.of`), 목록 배지 `D-n / D-day / n일 지남 / 진행 중` |
-| 한국 공휴일 | **없음** | `holiday`/`공휴일` 검색 결과 0건. 요일 머리의 일요일만 coral 색 |
+| 한국 공휴일 | **구현됨**(2026-10-02) | 서버 표 `backend/src/main/resources/calendar/holidays-kr.json`(2025~2027) + `GET /api/v1/calendar/holidays?year=`. 캘린더 격자에서 일요일·공휴일 숫자를 빨강(`colors.danger` — `coral` 은 이름과 달리 금색), 격자 아래 그 달 공휴일 이름 한 줄, 날짜를 고르면 목록 제목에 이름. **해마다 6월 말 다음 해 월력요항(우주항공청)이 나오면 표에 추가**하고 임시공휴일은 지정되는 대로 넣는다 — 서버 배포만으로 반영(OTA 불필요). `HolidayCatalogTest` 가 정부 발표 집계(공휴일·주5일제 휴일 수)와 대조하므로 새 해를 넣을 때 그 해 숫자도 테스트에 추가 |
 | 색 구분 — 카테고리 | 구현됨 | `typeMeta`(65행): 기념일 violet / 생일 coral / 데이트 indigo / 기타 회색 |
 | 색 구분 — 작성자 | **부분** | 색이 아니라 텍스트 배지(`ownerBadge`, 85행): '내 일정' / '나만 보기'(자물쇠) / '{상대 이름} 일정'. 우리 일정은 배지 없음 |
 | 반복 | 부분 | 매년 반복만(`repeat_yearly`) |
@@ -229,7 +229,7 @@ ALTER TABLE couple_events ADD COLUMN visibility VARCHAR(20) NOT NULL DEFAULT 'SH
 | 캘린더 화면 실시간 갱신 | 구현됨 | 2026-10-02, 포커스 동안 구독 · 방문 기록도 `PLACE` 발행 |
 | D-7 / D-1 / 당일 리마인더 | 부분 구현 | 고정 09:00, 사용자 설정 없음 |
 | 기념일·디데이 자동 생성 | 없음 | 홈 D+ 는 별도 |
-| 한국 공휴일 | 없음 | |
+| 한국 공휴일 | 구현됨 | 2026-10-02, 서버 표 2025~2027 — 매년 6월 말 갱신 필요 |
 | 카테고리 색 구분 | 구현됨 | 4종 |
 | 작성자 구분 | 부분 구현 | 색 아닌 텍스트 배지 |
 | 일정 댓글·리액션 | 없음 | |
