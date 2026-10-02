@@ -16,7 +16,8 @@ public interface PuzzleBattleGameRepository extends JpaRepository<PuzzleBattleGa
 
     Optional<PuzzleBattleGame> findFirstByCoupleIdAndStatusOrderByCreatedAtDesc(Long coupleId, GameStatus status);
 
-    List<PuzzleBattleGame> findTop20ByCoupleIdAndStatusOrderByCompletedAtDesc(Long coupleId, GameStatus status);
+    /** 기록 화면 — 연달아 끝난 판은 completed_at 이 같을 수 있어(시계가 ~1ms 단위) id 로 동률을 가른다. */
+    List<PuzzleBattleGame> findTop20ByCoupleIdAndStatusOrderByCompletedAtDescIdDesc(Long coupleId, GameStatus status);
 
     /**
      * 핸디캡 계산용 — 최근 끝난 판부터. completed_at 이 아니라 id 로 센다: 시계는 1ms 안팎으로만

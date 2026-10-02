@@ -16,7 +16,8 @@ public interface WallRaceGameRepository extends JpaRepository<WallRaceGame, Long
 
     Optional<WallRaceGame> findFirstByCoupleIdAndStatusOrderByCreatedAtDesc(Long coupleId, GameStatus status);
 
-    List<WallRaceGame> findTop20ByCoupleIdAndStatusOrderByCompletedAtDesc(Long coupleId, GameStatus status);
+    /** 기록 화면 — 연달아 끝난 판은 completed_at 이 같을 수 있어(시계가 ~1ms 단위) id 로 동률을 가른다. */
+    List<WallRaceGame> findTop20ByCoupleIdAndStatusOrderByCompletedAtDescIdDesc(Long coupleId, GameStatus status);
 
     /**
      * 핸디캡 계산용 — 최근 끝난 판부터. 연패를 세는 데만 쓴다. completed_at 은 연달아 끝난 판끼리
