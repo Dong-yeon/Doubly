@@ -265,6 +265,22 @@ export interface FeedPhotosPage {
   hasMore: boolean;
 }
 
+/** 사진첩 지도의 장소 하나 — 좌표와 그 장소에 걸린 사진(최신순) */
+export interface FeedPhotoMapPlace {
+  placeId: number;
+  name: string;
+  lat: number;
+  lng: number;
+  items: FeedPhoto[];
+}
+
+/** 사진첩 지도 — 장소별 사진 묶음(가장 최근 기록일 순). 맛집 방문·장소 붙은 끼니만 */
+export interface FeedPhotoMap {
+  places: FeedPhotoMapPlace[];
+  /** 서버 상한에 걸려 오래된 일부가 빠졌다 */
+  truncated: boolean;
+}
+
 /** 사진첩 달력 한 달 — 그 달(기록일 기준) 사진 전부, 목록과 같은 순서. 페이징 없음 */
 export interface FeedPhotoMonth {
   /** 'YYYY-MM' */
