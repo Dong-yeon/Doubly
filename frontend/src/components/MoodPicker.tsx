@@ -33,6 +33,7 @@ import { useCoupleEmojiStore } from '../store/coupleEmojiStore';
 import { useAuthStore } from '../store/authStore';
 import { toast } from '../store/toastStore';
 import { journalApi, journalToday, type JournalEntry } from '../api/journal';
+import { setJournalDraft } from '../store/journalDraft';
 import { analyticsApi } from '../api/analytics';
 import { getErrorMessage } from '../utils/error';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
@@ -46,8 +47,8 @@ interface Props {
   onSelect: (choice: MoodChoice, message?: string) => void;
   /** 커플 연결 여부 — 아니면 메모칸을 숨기고 무드를 보내지 않는다 */
   connected: boolean;
-  /** "더 쓰기" — 그날 페이지로(아직 저장하지 않은 값을 넘긴다) */
-  onOpenJournal: (draft: { date: string; draftMood?: string; draftBody?: string }) => void;
+  /** 그날 페이지 열기 — 초안은 store/journalDraft 로 먼저 건네 둔다(URL 에 싣지 않는다) */
+  onOpenJournal: (date: string) => void;
   /** 기록을 저장했다 — 홈이 미연결 무드 아이콘을 갱신한다 */
   onJournalSaved?: (entry: JournalEntry) => void;
 }
@@ -159,12 +160,18 @@ export function MoodPicker({ visible, onClose, onSelect, connected, onOpenJourna
   const { height: windowHeight } = useWindowDimensions();
   const gridMaxHeight = Math.max(320, windowHeight * 0.45);
 
+  /*
+   * 닫기 — 시트가 사라지는 애니메이션 동안 내용이 1단계로 되돌아가 번쩍이지 않도록(웹 확인)
+   * 내부 상태는 사라진 뒤에 비운다. 300ms 는 Sheet 의 slide/fade 길이보다 조금 길다.
+   */
   const close = () => {
-    setMessage('');
-    setPicked(null);
-    setLine('');
-    setHasToday(null);
     onClose();
+    setTimeout(() => {
+      setMessage('');
+      setPicked(null);
+      setLine('');
+      setHasToday(null);
+    }, 300);
   };
 
   const saveJournal = async (body: string | null) => {
@@ -196,9 +203,10 @@ export function MoodPicker({ visible, onClose, onSelect, connected, onOpenJourna
   };
 
   const openMore = () => {
-    const draft = { date: journalToday(), draftMood: picked?.glyph, draftBody: line.trim() || undefined };
+    const date = journalToday();
+    setJournalDraft({ date, mood: picked?.glyph, body: line.trim() || undefined });
     close();
-    onOpenJournal(draft);
+    onOpenJournal(date);
   };
 
   const onPress = (choice: MoodChoice, locked: boolean, label: string, glyph: string, imageUrl?: string) => {
@@ -220,7 +228,7 @@ export function MoodPicker({ visible, onClose, onSelect, connected, onOpenJourna
       if (hasToday) {
         toast.success('오늘 기록의 기분은 기록에서 바꿀 수 있어요', {
           label: '열기',
-          onPress: () => onOpenJournal({ date }),
+          onPress: () => onOpenJournal(date),
         });
       } else {
         toast.error('기록을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.');

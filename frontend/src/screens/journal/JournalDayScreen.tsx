@@ -15,7 +15,8 @@ import { TextField } from '../../components/TextField';
 import { FormKeyboardView } from '../../components/FormKeyboardView';
 import { SpacingFixBar } from '../../components/SpacingFixBar';
 import { MaterialCommunityIcons } from '../../components/Icon';
-import { journalApi, type JournalEntry } from '../../api/journal';
+import { journalApi, journalToday, type JournalEntry } from '../../api/journal';
+import { takeJournalDraft } from '../../store/journalDraft';
 import { MOOD_EMOJIS } from '../../constants/moodEmojis';
 import { pickImage, uploadImageWithSignature } from '../../utils/imageUpload';
 import { useDirtyGuard } from '../../hooks/useDirtyGuard';
@@ -42,13 +43,16 @@ export function journalDateTitle(date: string): string {
 }
 
 export function JournalDayScreen({ navigation, route }: Props) {
-  const { date, source, draftMood, draftBody } = route.params;
+  const { date, source } = route.params;
+  const isToday = date === journalToday();
+  // 무드 시트 "더 쓰기"의 초안 — 첫 렌더에 한 번만 꺼낸다(URL 에 싣지 않으려고 메모리로 받는다)
+  const [draft] = useState(() => takeJournalDraft(date));
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [entry, setEntry] = useState<JournalEntry | null>(null);
-  const [mood, setMood] = useState<string | null>(draftMood ?? null);
-  const [body, setBody] = useState(draftBody ?? '');
+  const [mood, setMood] = useState<string | null>(draft?.mood ?? null);
+  const [body, setBody] = useState(draft?.body ?? '');
   /** 지금 화면에 보이는 사진 — 서버 URL 이거나, 아직 안 올린 기기 안 uri */
   const [photo, setPhoto] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -211,7 +215,7 @@ export function JournalDayScreen({ navigation, route }: Props) {
           <Text style={styles.privateText}>나만 보여요 · 상대에게도, 우리 기록에도 나가지 않아요</Text>
         </View>
 
-        <Text style={styles.sectionLabel}>오늘 기분</Text>
+        <Text style={styles.sectionLabel}>{isToday ? '오늘 기분' : '그날 기분'}</Text>
         <View style={styles.moodRow}>
           {moodChoices.map((m) => {
             const selected = mood === m.emoji;
@@ -231,8 +235,8 @@ export function JournalDayScreen({ navigation, route }: Props) {
         </View>
 
         <TextField
-          label="나에게 쓰는 오늘"
-          placeholder="오늘 어땠어요? 한 줄이어도 좋아요."
+          label={isToday ? '나에게 쓰는 오늘' : '나에게 쓰는 그날'}
+          placeholder={isToday ? '오늘 어땠어요? 한 줄이어도 좋아요.' : '그날 어땠어요? 한 줄이어도 좋아요.'}
           value={body}
           onChangeText={(next) => {
             spacing_.clearUndo();

@@ -61,10 +61,11 @@ export type HomeStackParamList = PlaceScreensParamList & {
   /*
    * 나만의 하루 기록 — 상대에게 보이지 않는 개인 기록(docs/PERSONAL_JOURNAL_ANALYSIS_2026-10-02.md §4).
    * MY 의 "나의 하루"에서 들어오는 월 달력·목록과, 그날 페이지(쓰기·고치기·지우기).
-   * draft* 는 무드 시트의 "더 쓰기"가 넘기는 아직 저장하지 않은 값이다.
+   * <b>본문·기분을 파라미터로 넘기지 않는다</b> — 웹은 파라미터를 URL 에 굽는다. 무드 시트의 초안은
+   * store/journalDraft 로 건넨다.
    */
   Journal: undefined;
-  JournalDay: { date: string; source?: JournalSource; draftMood?: string; draftBody?: string };
+  JournalDay: { date: string; source?: JournalSource };
   // 약관 전문 (온보딩 스택과 동일 화면을 재사용)
   LegalDocument: { doc: 'terms' | 'privacy' | 'oss' };
   TrainerRegister: undefined;
