@@ -27,6 +27,9 @@ public interface MealRepository extends JpaRepository<Meal, Long> {
     /** 데이트 식단 짝 — 같은 shared_group_id 를 가진 커플 양쪽 레코드(자기 자신 포함). */
     List<Meal> findBySharedGroupId(String sharedGroupId);
 
+    /** 데이트 식단 짝을 한 번에 — 목록의 복사본들이 반응을 읽을 원본 id 를 찾는다(MealService.withPlaces) */
+    List<Meal> findBySharedGroupIdIn(java.util.Collection<String> sharedGroupIds);
+
     /**
      * 커플 캘린더의 데이트 식단 오버레이 — 두 사람의 "같이 먹기" 기록 중 그 기간 것.
      *

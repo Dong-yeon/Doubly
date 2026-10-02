@@ -31,6 +31,8 @@ import com.fitto.relation.domain.RelationStatus;
 import com.fitto.relation.domain.RelationType;
 import com.fitto.relation.repository.RelationRepository;
 import com.fitto.feed.dto.FeedItemType;
+import com.fitto.feed.domain.FeedReaction;
+import com.fitto.feed.dto.ReactionSummary;
 import com.fitto.feed.repository.FeedReactionRepository;
 import com.fitto.streak.service.StreakService;
 import com.fitto.user.repository.UserRepository;
@@ -597,13 +599,58 @@ public class MealService {
         Map<Long, PlaceVisitRepository.VisitWithPlace> byMealId = placeVisitRepository.findByMealIdIn(mealIds)
                 .stream()
                 .collect(java.util.stream.Collectors.toMap(vp -> vp.getVisit().getMealId(), vp -> vp));
+        Map<Long, Long> reactionTarget = reactionTargets(meals);
+        Map<Long, List<FeedReaction>> reactionsByTarget = new HashMap<>();
+        for (FeedReaction r : feedReactionRepository.findByTargetTypeAndTargetIdIn(
+                FeedItemType.MEAL, new HashSet<>(reactionTarget.values()))) {
+            reactionsByTarget.computeIfAbsent(r.getTargetId(), k -> new ArrayList<>()).add(r);
+        }
         return meals.stream()
                 .map(m -> {
                     PlaceVisitRepository.VisitWithPlace vp = byMealId.get(m.getId());
-                    return vp == null
+                    MealResponse res = vp == null
                             ? MealResponse.from(m)
                             : MealResponse.from(m, vp.getVisit().getPlaceId(), vp.getPlaceName());
+                    return res.withReactions(summarizeReactions(
+                            reactionsByTarget.getOrDefault(reactionTarget.get(m.getId()), List.of()), m.getUserId()));
                 })
+                .toList();
+    }
+
+    /**
+     * 끼니 id → 반응이 달려 있는 id. 보통은 자기 자신이고, <b>상대가 등록한 데이트 식단의 내 몫(복사본)</b>만
+     * 원본 id 다 — 피드는 원본만 보여주므로(created_by 필터, MealRepository) 반응도 원본에 달린다
+     * (LOVEBODY_REVIEW §2-4). 짝은 이 페이지의 복사본 그룹만 한 번에 묻는다(N+1 없음).
+     */
+    private Map<Long, Long> reactionTargets(List<Meal> meals) {
+        Map<Long, Long> target = new HashMap<>();
+        Map<String, Long> copyGroups = new HashMap<>();
+        for (Meal m : meals) {
+            target.put(m.getId(), m.getId());
+            boolean partnerCopy = m.isSharedMeal() && m.getCreatedBy() != null && !m.getCreatedBy().equals(m.getUserId());
+            if (partnerCopy) copyGroups.put(m.getSharedGroupId(), m.getId());
+        }
+        if (!copyGroups.isEmpty()) {
+            for (Meal other : mealRepository.findBySharedGroupIdIn(copyGroups.keySet())) {
+                boolean original = other.getCreatedBy() == null || other.getCreatedBy().equals(other.getUserId());
+                Long copyId = copyGroups.get(other.getSharedGroupId());
+                if (original && copyId != null && !other.getId().equals(copyId)) {
+                    target.put(copyId, other.getId());
+                }
+            }
+        }
+        return target;
+    }
+
+    /** 이모지별 요약 — 피드(FeedItemMapper.summarize)와 같은 모양. mine 은 이 목록 주인 기준 */
+    private static List<ReactionSummary> summarizeReactions(List<FeedReaction> reactions, Long viewerId) {
+        Map<String, List<FeedReaction>> byEmoji = new LinkedHashMap<>();
+        for (FeedReaction r : reactions) {
+            byEmoji.computeIfAbsent(r.getEmoji(), k -> new ArrayList<>()).add(r);
+        }
+        return byEmoji.entrySet().stream()
+                .map(e -> new ReactionSummary(e.getKey(), e.getValue().size(),
+                        e.getValue().stream().anyMatch(r -> viewerId.equals(r.getUserId()))))
                 .toList();
     }
 
