@@ -53,6 +53,28 @@ public interface FeedPostRepository extends JpaRepository<FeedPost, Long> {
                               Pageable pageable);
 
     /**
+     * 사진첩 작성자 필터(나/상대) — {@link #findPhotos} 에 작성자 조건만 더한다.
+     *
+     * <p>{@code :authorId is null} 로 한 쿼리에 합치지 않는다 — PostgreSQL 이 null 파라미터의
+     * 타입을 정하지 못해 거절한다(CLAUDE.md 6절). 거르지 않을 때는 위 쿼리를 쓴다.
+     */
+    @Query("""
+            select p from FeedPost p
+            where p.coupleId = :coupleId
+              and p.authorId = :authorId
+              and p.imageUrl is not null
+              and (cast(:cursorAt as LocalDateTime) is null
+                   or p.createdAt < :cursorAt
+                   or (p.createdAt = :cursorAt and p.id < :cursorId))
+            order by p.createdAt desc, p.id desc
+            """)
+    List<FeedPost> findPhotosByAuthor(@Param("coupleId") Long coupleId,
+                                      @Param("authorId") Long authorId,
+                                      @Param("cursorAt") LocalDateTime cursorAt,
+                                      @Param("cursorId") Long cursorId,
+                                      Pageable pageable);
+
+    /**
      * 추억 리마인드 — 하루 범위의 포스트 (PLAN.md Memories).
      *
      * <p><b>{@code extract(month from created_at)} 같은 함수 조건으로 쓰지 말 것.</b>

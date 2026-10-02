@@ -29,6 +29,15 @@ public record FeedPhotoResponse(
         boolean mine,
         /** 여행 앨범에 담긴 사진이면 그 여행 id (아니면 null) */
         Long tripId,
+        /**
+         * 이 사진이 걸린 럽슐랭 장소 — 뷰어의 "장소 보기"가 장소 상세로 보낸다(없으면 null).
+         * 맛집 방문은 그 장소, 식단은 장소를 붙여 기록한 끼니일 때 그 장소다
+         * ({@code place_visits.meal_id} 역방향 — 식단에서 파생된 방문은 사진첩에서 빠지므로
+         * 그 장소로 가는 길은 식단 칸이 대신 갖는다).
+         */
+        Long placeId,
+        /** 장소 상세 화면 제목용 — placeId 와 함께만 채워진다 */
+        String placeName,
         LocalDateTime createdAt
 ) {
 }

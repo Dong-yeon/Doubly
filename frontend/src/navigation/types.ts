@@ -298,6 +298,13 @@ export type AlbumStackParamList = {
   Memories: { on?: string } | undefined;
   /** 여행 앨범 — 홈 스택(여행 상세)에도 같은 화면이 등록돼 있다 */
   TripAlbum: { tripId: number; title: string };
+  /**
+   * 사진첩의 맛집 사진 → 장소 상세. 럽슐랭 탭으로 건너지 않고 이 스택에 쌓는다
+   * (PlaceScreensParamList 주석 — 뒤로가기가 사진첩으로 돌아와야 한다). 상세의 수정 버튼이
+   * PlaceAdd 로 가므로 둘 다 등록한다.
+   */
+  PlaceDetail: PlaceScreensParamList['PlaceDetail'];
+  PlaceAdd: PlaceScreensParamList['PlaceAdd'];
 };
 
 // 채팅 탭 내부 스택 — 방 목록 / 대화 (CHAT-01/02)

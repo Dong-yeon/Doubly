@@ -244,6 +244,10 @@ export interface FeedPhoto {
   mine: boolean;
   /** 여행 앨범에 담긴 사진이면 그 여행 id */
   tripId?: number | null;
+  /** 럽슐랭 장소 — 맛집 방문, 또는 장소를 붙여 기록한 끼니. 뷰어의 "장소 보기"가 쓴다 */
+  placeId?: number | null;
+  /** 장소 상세 화면 제목용 — placeId 와 함께만 온다 */
+  placeName?: string | null;
   createdAt: string;
 }
 
