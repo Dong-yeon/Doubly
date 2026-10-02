@@ -116,6 +116,11 @@ public interface WorkoutRepository extends JpaRepository<Workout, Long> {
      * 우리 탭(사진첩) — 인증샷이 붙은 운동만. {@link #findRecentForFeed} 와 같은 keyset 에
      * {@code image_url is not null} 만 더한다 (docs/ALBUM_TAB_IA_2026-09-14.md 5-4).
      *
+     * <p><b>{@code image_shared = true} 인 사진만</b>이다(V94). 예전 운동 사진은 "애인에게는
+     * 공유되지 않아요" 약속 아래 올라왔고 러닝 경로 지도가 찍혀 있을 수 있다. 타임라인
+     * ({@code FeedItemMapper.toItem(Workout, ...)})과 같이 <b>올린 본인에게도</b> 싣지 않는다 —
+     * 우리 탭은 둘이 같은 것을 보는 자리이고, 그 사진은 처음부터 앨범감이 아니었다.
+     *
      * <p><b>진행 중 상태를 걸러낼 조건이 없다</b>(CLAUDE.md 4절의 {@code status='COMPLETED'}).
      * {@code workouts} 테이블에는 status 컬럼이 없고, 끝내지 않은 운동은 행으로 저장되지 않는다
      * — 기기에만 남는 초안(프론트 {@code activeWorkoutStore})이고 저장 시점에 비로소 행이 된다.
@@ -125,6 +130,7 @@ public interface WorkoutRepository extends JpaRepository<Workout, Long> {
             select w from Workout w
             where w.userId in :userIds
               and w.imageUrl is not null
+              and w.imageShared = true
               and (cast(:cursorAt as LocalDateTime) is null
                    or w.createdAt < :cursorAt
                    or (w.createdAt = :cursorAt and w.id < :cursorId))

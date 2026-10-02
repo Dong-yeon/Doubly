@@ -73,9 +73,14 @@ class FeedPhotosTest {
                 photoUrl, 600, null, null, null, null, null, null, null, shared)).id();
     }
 
+    /** 오운완 인증샷(피드 공유) — 사진첩에 실리는 운동 사진 */
     private void workoutWithPhoto(long userId, String imageUrl) {
+        workoutWithPhoto(userId, imageUrl, true);
+    }
+
+    private void workoutWithPhoto(long userId, String imageUrl, boolean shared) {
         workoutService.save(userId, new SaveWorkoutRequest(LocalDate.now(), null, 30, null, null,
-                imageUrl, List.of()));
+                imageUrl, shared, List.of()));
     }
 
     @Test
@@ -110,6 +115,23 @@ class FeedPhotosTest {
         workoutWithPhoto(c[0], null);
 
         assertThat(feedService.photos(c[0], null, 20, null).items()).isEmpty();
+    }
+
+    /**
+     * 공유하지 않은 운동 사진(V94 이전 "애인에게는 공유되지 않아요" 사진 — 러닝 경로 지도가
+     * 찍혀 있을 수 있다)은 상대의 사진첩에 뜨면 안 된다. 타임라인과 같이 본인에게도 싣지 않는다.
+     */
+    @Test
+    void 공유하지_않은_운동_사진은_사진첩에_싣지_않는다() {
+        long[] c = couple("ph-unshared-a@fitto.com", "ph-unshared-b@fitto.com");
+        workoutWithPhoto(c[1], "https://img.example.com/route-map.jpg", false);
+        workoutWithPhoto(c[1], "https://img.example.com/ootd.jpg", true);
+
+        for (long viewer : c) {
+            FeedPhotosResponse page = feedService.photos(viewer, null, 20, List.of(FeedItemType.WORKOUT));
+            assertThat(page.items()).extracting(FeedPhotoResponse::imageUrl)
+                    .containsExactly("https://img.example.com/ootd.jpg");
+        }
     }
 
     @Test
