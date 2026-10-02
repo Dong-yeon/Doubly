@@ -152,4 +152,21 @@ public interface WorkoutRepository extends JpaRepository<Workout, Long> {
     @Modifying
     @Query("delete from Workout w where w.userId = :userId")
     void deleteAllByUserId(@Param("userId") Long userId);
+
+    /**
+     * 사진첩 달력 — 기록일이 {@code [from, to]} 인 공유된 운동 사진. 공개 조건({@code image_shared})은
+     * {@link #findPhotosForFeed} 와 같다 — 달력이라고 비공개 사진이 새면 안 된다.
+     */
+    @Query("""
+            select w from Workout w
+            where w.userId in :userIds
+              and w.imageUrl is not null
+              and w.imageShared = true
+              and w.workoutDate between :from and :to
+            order by w.workoutDate desc, w.createdAt desc, w.id desc
+            """)
+    List<Workout> findPhotosInDateRange(@Param("userIds") List<Long> userIds,
+                                        @Param("from") LocalDate from,
+                                        @Param("to") LocalDate to,
+                                        Pageable pageable);
 }
