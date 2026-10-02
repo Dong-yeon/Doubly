@@ -11,7 +11,6 @@ import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
-  Image,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -30,6 +29,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { ImageViewer, type ViewerAction, type ViewerImage } from '../../components/ImageViewer';
 import { MemoryPeek } from '../home/components/MemoryPeek';
+import { CachedImage } from '../../components/CachedImage';
 import { AlbumCalendar, currentMonth, shiftMonth } from './AlbumCalendar';
 import { LockedCard } from '../../components/LockedCard';
 import { feedApi } from '../../api/feed';
@@ -263,8 +263,10 @@ export function AlbumScreen({ navigation }: Props) {
       uris.forEach((uri, i) => {
         images.push({
           key: `${keyOf(p)}-${i}`,
-          // 뷰어는 원본을 쓴다 — 크게 보는 자리에서 썸네일을 늘리면 뭉갠다
+          // 뷰어는 원본을 쓴다 — 크게 보는 자리에서 썸네일을 늘리면 뭉갠다. 대표 사진은 그리드에서 이미
+          // 받은 썸네일을 먼저 깔고(같은 URL 이라 캐시 적중) 원본으로 바꿔 끼운다
           uri,
+          thumbUri: i === 0 ? thumbnailUrl(uri, Math.round(CELL)) : undefined,
           // 기록일 — 월 머리말과 같은 날짜를 보여준다(먹은·다녀온 날). 일상은 서버가 올린 날 KST 로 준다
           title: `${p.mine ? '나' : p.authorName}  ·  ${relativeDateLabel(recordDateOf(p))}`,
           titleColor: p.mine ? colors.coral : colors.indigo,
@@ -275,7 +277,7 @@ export function AlbumScreen({ navigation }: Props) {
       });
     }
     return { viewerImages: images, firstIndexByKey };
-  }, [viewerSource, openPlace, onReact]);
+  }, [viewerSource, openPlace, onReact, CELL]);
 
   const gridRows = useMemo(() => toGridRows(photos, columns), [photos, columns]);
 
@@ -443,7 +445,7 @@ export function AlbumScreen({ navigation }: Props) {
                 */}
                 {t.coverImageUrl ? (
                   <>
-                    <Image source={{ uri: thumbnailUrl(t.coverImageUrl, 280) }} style={StyleSheet.absoluteFill} />
+                    <CachedImage uri={thumbnailUrl(t.coverImageUrl, 280)} style={StyleSheet.absoluteFill} contentFit="cover" />
                     <LinearGradient
                       colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.55)']}
                       locations={[0.4, 1]}
@@ -598,9 +600,11 @@ export function AlbumScreen({ navigation }: Props) {
                     }
                   >
                     {/* 그리드는 썸네일 — 원본을 3열에 그대로 깔면 한 화면에 수 MB 를 받는다 */}
-                    <Image
-                      source={{ uri: thumbnailUrl(item.imageUrl, Math.round(CELL)) }}
+                    <CachedImage
+                      uri={thumbnailUrl(item.imageUrl, Math.round(CELL))}
                       style={[styles.cell, { width: CELL, height: CELL }]}
+                      contentFit="cover"
+                      recyclingKey={keyOf(item)}
                     />
                     {/* 여러 장 표시 — Instagram류 앱과 같은 자리(우상단)의 스택 아이콘 */}
                     {item.imageUrls && item.imageUrls.length > 1 ? (
