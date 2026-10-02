@@ -27,6 +27,18 @@ public interface MealRepository extends JpaRepository<Meal, Long> {
     /** 데이트 식단 짝 — 같은 shared_group_id 를 가진 커플 양쪽 레코드(자기 자신 포함). */
     List<Meal> findBySharedGroupId(String sharedGroupId);
 
+    /**
+     * 내가 이 사진(URL)으로 남긴 식단 — 채팅 사진을 식단으로 옮길 때 중복을 막는다. photo_url 은 TEXT 라
+     * H2 에서 CLOB 이 되어 그대로는 비교가 안 된다 — varchar 로 맞춘다(StoredMediaReferences 와 같은 처방).
+     * 상대 명의의 데이트 식단 복사본은 상대 행이라 걸리지 않는다.
+     */
+    @Query("""
+            select m from Meal m
+            where m.userId = :userId and m.photoUrl is not null and cast(m.photoUrl as string) = :photoUrl
+            order by m.id asc
+            """)
+    List<Meal> findByUserIdAndPhoto(@Param("userId") Long userId, @Param("photoUrl") String photoUrl, Pageable pageable);
+
     /** 데이트 식단 짝을 한 번에 — 목록의 복사본들이 반응을 읽을 원본 id 를 찾는다(MealService.withPlaces) */
     List<Meal> findBySharedGroupIdIn(java.util.Collection<String> sharedGroupIds);
 

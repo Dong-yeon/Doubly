@@ -19,6 +19,7 @@ import com.fitto.diet.dto.FoodLookupRequest;
 import com.fitto.diet.dto.FoodLookupResponse;
 import com.fitto.diet.dto.MealItemRequest;
 import com.fitto.diet.dto.MealResponse;
+import com.fitto.diet.dto.PhotoRecordLookupResponse;
 import com.fitto.diet.dto.MealStatsResponse;
 import com.fitto.diet.dto.RecentFoodResponse;
 import com.fitto.diet.dto.SaveMealRequest;
@@ -118,6 +119,16 @@ public class MealService {
     public MealResponse save(Long userId, SaveMealRequest req) {
         if (req.mealDate().isAfter(KstClock.today())) {
             throw new BusinessException(ErrorCode.INVALID_INPUT, "미래 날짜는 기록할 수 없습니다.");
+        }
+        /*
+         * 같은 사진으로 두 번 남기지 않는다. 새로 고른 사진은 매번 새 URL 로 올라가므로 이 조건에 걸리는 건
+         * 이미 올라가 있는 URL 을 다시 쓰는 경로뿐이다 — 채팅 사진 → 식단 기록(LOVEBODY_REVIEW §2-5)과,
+         * 저장 응답이 끊겨 같은 업로드 URL 로 다시 누른 경우. 둘 다 막는 게 맞다. 앱은 메뉴를 누를 때
+         * 먼저 묻고(findByPhoto) 안내하므로 여기는 안전망이다.
+         */
+        if (req.photoUrl() != null && !req.photoUrl().isBlank()
+                && !mealRepository.findByUserIdAndPhoto(userId, req.photoUrl(), PageRequest.of(0, 1)).isEmpty()) {
+            throw new BusinessException(ErrorCode.MEAL_PHOTO_ALREADY_RECORDED);
         }
 
         // "데이트" 칩 — 연결된 커플이 있을 때만 실제로 나눠 담는다. 없으면 플래그가 와도 조용히 무시(혼자 저장).
@@ -844,6 +855,13 @@ public class MealService {
         if (!photoUrls.isEmpty()) {
             imageDeleter.deleteAllAfterCommit(photoUrls);
         }
+    }
+
+    /** 이 사진(URL)으로 남긴 내 식단 — 채팅 사진 → 식단 기록 메뉴가 먼저 묻는다(중복 안내) */
+    public PhotoRecordLookupResponse findByPhoto(Long userId, String photoUrl) {
+        return mealRepository.findByUserIdAndPhoto(userId, photoUrl, PageRequest.of(0, 1)).stream().findFirst()
+                .map(m -> new PhotoRecordLookupResponse(true, m.getId(), m.getMealDate(), m.getMealType().label()))
+                .orElseGet(PhotoRecordLookupResponse::none);
     }
 
     /** 커플 공동 식단 목표 진행률 — 이번 주(월~) 둘 다 기록한 날 수. */

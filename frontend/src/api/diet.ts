@@ -64,6 +64,14 @@ export interface SaveMealPayload {
   sharedWithPartner?: boolean;
 }
 
+/** POST /meal/photo-record — 같은 사진으로 남긴 식단 */
+export interface PhotoRecordLookup {
+  recorded: boolean;
+  mealId?: number | null;
+  mealDate?: string | null;
+  mealTypeLabel?: string | null;
+}
+
 export interface NutritionGoalPayload {
   targetCalories?: number;
   targetCarbs?: number;
@@ -113,6 +121,9 @@ export const dietApi = {
   calendar: (year: number, month: number) =>
     unwrap(apiClient.get<ApiResponse<CalendarDay[]>>('/meal/calendar', { params: { year, month } })),
   remove: (id: number) => unwrap(apiClient.delete<ApiResponse<void>>(`/meal/${id}`)),
+  // 이 사진(URL)으로 남긴 내 식단 — 채팅 사진 → 식단 기록 전에 묻는다. URL 은 본문으로(접속 로그에 안 남게)
+  photoRecord: (photoUrl: string) =>
+    unwrap(apiClient.post<ApiResponse<PhotoRecordLookup>>('/meal/photo-record', { photoUrl })),
   partnerToday: () => unwrap(apiClient.get<ApiResponse<PartnerToday>>('/meal/partner/today')),
   stats: () => unwrap(apiClient.get<ApiResponse<MealStats>>('/meal/stats')),
   coupleGoal: () => unwrap(apiClient.get<ApiResponse<CoupleMealGoal>>('/meal/couple/goal')),

@@ -126,6 +126,12 @@ export function DietRecordScreen({ navigation, route }: Props) {
   const autoAnalyzeMealPhoto = useAuthStore((s) => s.user?.autoAnalyzeMealPhoto) !== false;
   /** 수정할 기록 — 없으면 새 기록 작성 */
   const editing = route.params?.meal;
+  /**
+   * 채팅에서 가져온 사진(이미 올라가 있는 URL) — 사진 칸·업로드 캐시를 이 값으로 시작해 재업로드하지 않는다.
+   * 수정 화면에는 오지 않는다. 처음 연 값만 쓴다(바코드 화면을 다녀오며 파라미터가 바뀌어도 그대로).
+   */
+  const [chatPhotoUrl] = useState(() => (editing ? undefined : route.params?.photoUrl));
+  const initialPhoto = editing?.photoUrl ?? chatPhotoUrl ?? null;
   const [mealType, setMealType] = useState<MealType>(editing?.mealType ?? defaultMealType());
   /** 기록할 날짜 — 수정이면 그 기록의 날짜, 캘린더에서 날짜를 골라 들어오면 그 날짜, 아니면 오늘 */
   const [mealDate, setMealDate] = useState(editing?.mealDate ?? route.params?.date ?? toDateString());
@@ -137,7 +143,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
   const [totalCalories, setTotalCalories] = useState(
     editing && !editing.items?.length && editing.calories ? String(editing.calories) : '',
   );
-  const [photoUri, setPhotoUri] = useState<string | null>(editing?.photoUrl ?? null);
+  const [photoUri, setPhotoUri] = useState<string | null>(initialPhoto);
   /**
    * 크게 보기·저장(다운로드)·공유 — 원격(Cloudinary) 사진에만 의미가 있다. 방금 고른
    * 로컬 사진(file://)은 이미 기기 안에 있어 "다운로드"할 대상이 아니다. 데이트 식단으로
@@ -268,17 +274,17 @@ export function DietRecordScreen({ navigation, route }: Props) {
    * 올리기 시작하는데(pickFrom), 그게 끝나기 전에 분석을 눌러도 그 업로드를 같이
    * 기다리게 하려면 진행 중인 Promise 자체가 캐시에 있어야 한다.
    *
-   * 수정으로 들어왔으면 이미 올라가 있는 사진이라 그 URL 을 이미 끝난 Promise 로 넣어둔다
-   * (photoUri === photoUrl 이므로 ensureUploaded 가 재업로드 없이 통과한다).
+   * 수정으로 들어왔거나 채팅 사진으로 열었으면 이미 올라가 있는 사진이라 그 URL 을 이미 끝난 Promise 로
+   * 넣어둔다(photoUri === photoUrl 이므로 ensureUploaded 가 재업로드 없이 통과한다).
    */
   const uploadedRef = useRef<{ uri: string; url: Promise<string> } | null>(
-    editing?.photoUrl ? { uri: editing.photoUrl, url: Promise.resolve(editing.photoUrl) } : null,
+    initialPhoto ? { uri: initialPhoto, url: Promise.resolve(initialPhoto) } : null,
   );
   /**
    * 선업로드가 <b>이미 끝난</b> uri. 분석·저장에서 화면 잠금을 걸지 말지 판단한다 —
    * 올릴 게 남지 않았는데 "사진 올리는 중…" 이 한 프레임 번쩍이면 오히려 느려 보인다.
    */
-  const uploadedDoneRef = useRef<string | null>(editing?.photoUrl ?? null);
+  const uploadedDoneRef = useRef<string | null>(initialPhoto);
 
   // 헤더 제목은 스택 옵션이 "식단 기록"으로 고정돼 있어 수정일 때만 바꿔 단다
   useLayoutEffect(() => {
@@ -1152,7 +1158,8 @@ export function DietRecordScreen({ navigation, route }: Props) {
       // 커플이 연결돼 있으면 채팅 공유 제안
       // 단백질 목표를 이번 기록으로 막 채웠으면 확인창·카드 문구를 다르게 만든다 (saved.goals 는
       // 저장 응답에만 실리는 일회성 정보 — MealService.detectGoalsAchieved 참고)
-      if (couple?.id) {
+      // 채팅에서 가져온 사진이면 채팅 공유를 다시 권하지 않는다 — 방금 그 채팅에 있던 사진이다
+      if (couple?.id && !(chatPhotoUrl && photoUri === chatPhotoUrl)) {
         const foodNames = filled.map((i) => i.name.trim()).join(', ') || memo.trim();
         const kcal = saved.calories ?? undefined;
         const summary = `${label}${foodNames ? ` · ${foodNames}` : ''}${kcal ? ` (${kcal}kcal)` : ''}`;

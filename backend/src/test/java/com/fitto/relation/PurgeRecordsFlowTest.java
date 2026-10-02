@@ -5,6 +5,12 @@ import com.fitto.auth.service.AuthService;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.upload.CloudinaryImageDeleter;
+import com.fitto.chat.domain.MessageType;
+import com.fitto.chat.dto.SendMessageRequest;
+import com.fitto.chat.service.ChatService;
+import com.fitto.diet.domain.MealType;
+import com.fitto.diet.dto.SaveMealRequest;
+import com.fitto.diet.service.MealService;
 import com.fitto.feed.dto.CreatePostRequest;
 import com.fitto.feed.service.FeedService;
 import com.fitto.place.dto.SavePlaceRequest;
@@ -48,6 +54,8 @@ class PurgeRecordsFlowTest {
     @Autowired WorkoutRepository workoutRepository;
     @Autowired CloudinaryImageDeleter imageDeleter;
     @Autowired RelationRecordPurger relationRecordPurger;
+    @Autowired ChatService chatService;
+    @Autowired MealService mealService;
 
     @PersistenceContext EntityManager em;
 
@@ -232,5 +240,30 @@ class PurgeRecordsFlowTest {
                 .isEqualTo("fitto/abc123");
         assertThat(imageDeleter.extractPublicId("https://example.com/photo.jpg")).isNull();
         assertThat(imageDeleter.extractPublicId(null)).isNull();
+    }
+
+    /**
+     * 채팅 사진 → 식단 기록(LOVEBODY_REVIEW §2-5) 이후의 관계 영구 삭제 — 채팅 이미지는 전부 지울 대상으로
+     * 넘어오지만, 식단(개인 데이터라 관계가 끝나도 남는다)이 쓰는 파일은 남고 <b>관계 안에서만</b> 쓰이던 파일만 지워진다.
+     */
+    @Test
+    @Transactional
+    void 관계를_영구_삭제해도_식단이_쓰는_채팅_사진은_남고_채팅에만_있던_사진만_지운다() {
+        Long me = register("purge-c2m-a@fitto.com");
+        Long partner = register("purge-c2m-b@fitto.com");
+        Long relationId = connect(me, partner);
+        String usedByMeal = "https://res.cloudinary.com/demo/image/upload/v1/fitto/purge-meal.jpg";
+        String chatOnly = "https://res.cloudinary.com/demo/image/upload/v1/fitto/purge-chat-only.jpg";
+        chatService.send(me, relationId, new SendMessageRequest(MessageType.IMAGE, null, usedByMeal, null, null, null));
+        chatService.send(me, relationId, new SendMessageRequest(MessageType.IMAGE, null, chatOnly, null, null, null));
+        mealService.save(me, new SaveMealRequest(LocalDate.now(), MealType.LUNCH, null, usedByMeal, 500,
+                null, null, null, null, null, null, null));
+
+        relationService.endRelation(me, relationId);
+        java.util.List<String> returned = relationRecordPurger.purge(relationId);
+        em.flush();
+
+        assertThat(returned).contains(usedByMeal, chatOnly);
+        assertThat(imageDeleter.deletable(java.util.List.of(usedByMeal, chatOnly))).containsExactly(chatOnly);
     }
 }
