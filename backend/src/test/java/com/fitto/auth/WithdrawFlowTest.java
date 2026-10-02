@@ -31,6 +31,7 @@ import com.fitto.diet.dto.SaveFavoriteFoodRequest;
 import com.fitto.diet.service.FavoriteFoodGiftService;
 import com.fitto.diet.service.FavoriteFoodService;
 import com.fitto.diet.domain.MealType;
+import com.fitto.diet.dto.MealResponse;
 import com.fitto.diet.dto.SaveMealRequest;
 import com.fitto.diet.service.MealService;
 import com.fitto.feed.dto.CreatePostRequest;
@@ -397,6 +398,53 @@ class WithdrawFlowTest {
 
         assertThatCode(() -> withdrawalService.purgeNow(solo)).doesNotThrowAnyException();
         assertThat(userRepository.findById(solo)).isEmpty();
+    }
+
+    /* ── 같이 먹은 식단 (lovebody-current-state §4-1) ─────────────────────────── */
+
+    private SaveMealRequest dateMeal() {
+        return new SaveMealRequest(KstClock.today(), MealType.DINNER, "파스타", null, 900,
+                null, null, null, null, null, null, null, true);
+    }
+
+    /**
+     * 데이트 식단은 상대 명의 복제본을 만들고 그 행의 {@code created_by} 에 등록자를 적는다(V50, users FK).
+     * 탈퇴 정리가 {@code user_id} 로만 지우면 상대 행이 탈퇴자를 계속 가리켜 users 삭제가 FK 위반으로 실패했다.
+     * 상대 몫은 상대의 기록이다 — 지우지 않고 혼자 먹은 기록으로 남긴다.
+     */
+    @Test
+    void 같이_먹은_식단을_등록한_계정도_탈퇴할_수_있고_상대_몫은_혼자_기록으로_남는다() {
+        Long me = register("withdraw-datemeal-a@fitto.com");
+        Long partner = register("withdraw-datemeal-b@fitto.com");
+        connectCouple(me, partner);
+        mealService.save(me, dateMeal());
+
+        assertThatCode(() -> withdrawalService.purgeNow(me)).doesNotThrowAnyException();
+        assertThat(userRepository.findById(me)).isEmpty();
+
+        List<MealResponse> left = mealService.findToday(partner);
+        assertThat(left).hasSize(1);
+        assertThat(left.get(0).calories()).isEqualTo(450);
+        assertThat(left.get(0).sharedWithPartner()).isFalse();
+        // 남은 쪽도 그 기록을 지우고 탈퇴할 수 있다
+        assertThatCode(() -> mealService.delete(partner, left.get(0).id())).doesNotThrowAnyException();
+        assertThatCode(() -> withdrawalService.purgeNow(partner)).doesNotThrowAnyException();
+    }
+
+    /** 반대 방향 — 상대가 등록한 데이트 식단의 내 몫을 갖고 탈퇴해도, 상대 원본이 사라진 짝을 가리키지 않는다. */
+    @Test
+    void 상대가_등록한_데이트_식단의_몫을_가진_채_탈퇴하면_상대_원본은_혼자_기록이_된다() {
+        Long me = register("withdraw-datemeal-c@fitto.com");
+        Long partner = register("withdraw-datemeal-d@fitto.com");
+        connectCouple(me, partner);
+        mealService.save(partner, dateMeal());
+
+        assertThatCode(() -> withdrawalService.purgeNow(me)).doesNotThrowAnyException();
+
+        List<MealResponse> left = mealService.findToday(partner);
+        assertThat(left).hasSize(1);
+        assertThat(left.get(0).sharedWithPartner()).isFalse();
+        assertThatCode(() -> withdrawalService.purgeNow(partner)).doesNotThrowAnyException();
     }
 
     /* ── 탈퇴 유예기간 (2026-09-30) ─────────────────────────────────────────── */

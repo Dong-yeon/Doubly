@@ -96,6 +96,17 @@ public class UserDataPurger {
         exec("delete from workout_programs where user_id = :uid", userId);
 
         exec("delete from streaks where user_id = :uid", userId);
+        /*
+         * 데이트 식단(V50)의 상대 몫 — 상대 명의 행이 created_by 로 나를 가리킨다(users FK). user_id 로만
+         * 지우면 그 행이 남아 users 삭제가 FK 위반으로 실패한다. 상대 몫은 상대의 기록이므로 지우지 않고
+         * 짝을 풀어 혼자 기록으로 남긴다 — shared_group_id 까지 비워야 사라진 짝을 가리키는 "같이 먹기"
+         * 배지가 뜨지 않는다(내가 상대 기록의 몫을 가진 반대 방향도 같은 그룹이라 함께 풀린다).
+         */
+        exec("update meals set created_by = null, shared_group_id = null "
+                + "where user_id <> :uid and shared_group_id in "
+                + "(select m.shared_group_id from meals m "
+                + "where m.user_id = :uid and m.shared_group_id is not null)", userId);
+        exec("update meals set created_by = null where created_by = :uid", userId);
         exec("delete from meals where user_id = :uid", userId);
         exec("delete from meal_reminders where user_id = :uid", userId);
         exec("delete from water_logs where user_id = :uid", userId);
