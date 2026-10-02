@@ -1,5 +1,5 @@
 /** 일상 남기기 — 사진(선택, 최대 5장) + 글 작성. 글/사진 중 하나는 필수 */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,6 +7,8 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { AlbumStackParamList, HomeStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
+import { DateField } from '../../components/DateField';
+import { todayKst } from '../../utils/date';
 import { FormKeyboardView } from '../../components/FormKeyboardView';
 import { feedApi } from '../../api/feed';
 import { MaterialCommunityIcons } from '../../components/Icon';
@@ -36,8 +38,23 @@ const MAX_PHOTOS = 5;
 /** 서버 상한(CreatePostRequest.content @Size(max = 2000))과 맞춘다 */
 const MAX_CONTENT = 2000;
 
-export function FeedComposeScreen({ navigation }: Props) {
+/** 이미 올라가 있는 사진(서버 URL) — 고치기에서 그대로 둔 사진은 다시 올리지 않는다 */
+const isRemote = (uri: string) => /^https?:\/\//.test(uri);
+
+export function FeedComposeScreen({ navigation, route }: Props) {
+  /*
+   * 고치기 — postId 가 있으면 그 포스트를 서버에서 읽어 채운다. 본문을 파라미터로 받지 않는 이유는
+   * navigation/types 주석. 고치기는 초안을 남기지 않는다(원본이 서버에 있다).
+   */
+  const editingId = route.params?.postId;
+  const editing = editingId != null;
+  const [original, setOriginal] = useState<{ content: string; photos: string[]; recordDate: string } | null>(null);
   const [content, setContent] = useState('');
+  /*
+   * 기록일 — 이 일이 있었던 날(V119). 어젯밤 일을 오늘 아침 올려도 어제 기록이 되어야 사진첩·작년 오늘이
+   * 식단·운동·방문과 같은 날에 묶인다. 기본은 오늘(KST), 미래는 고를 수 없다(서버도 거절).
+   */
+  const [recordDate, setRecordDate] = useState(() => todayKst());
   const [photoUris, setPhotoUris] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   /*
@@ -52,8 +69,42 @@ export function FeedComposeScreen({ navigation }: Props) {
    */
   const uploadedRef = useRef<Map<string, string>>(new Map());
 
-  // 글이나 사진이 있으면 이탈(뒤로가기·스와이프) 전에 확인한다
-  const allowLeave = useDirtyGuard(content.trim().length > 0 || photoUris.length > 0);
+  useLayoutEffect(() => {
+    if (editing) navigation.setOptions({ title: '일상 고치기' });
+  }, [navigation, editing]);
+  useEffect(() => {
+    if (editingId == null) return undefined;
+    let active = true;
+    feedApi
+      .getPost(editingId)
+      .then((post) => {
+        if (!active) return;
+        const photos =
+          post.imageUrls && post.imageUrls.length > 0 ? post.imageUrls : post.imageUrl ? [post.imageUrl] : [];
+        const loaded = { content: post.content ?? '', photos, recordDate: post.recordDate ?? todayKst() };
+        setOriginal(loaded);
+        setContent(loaded.content);
+        setPhotoUris(loaded.photos);
+        setRecordDate(loaded.recordDate);
+      })
+      .catch((e) => {
+        if (!active) return;
+        toast.error(getErrorMessage(e, '일상을 불러오지 못했어요.'));
+        navigation.goBack();
+      });
+    return () => {
+      active = false;
+    };
+  }, [editingId, navigation]);
+
+  // 글이나 사진이 있으면 이탈(뒤로가기·스와이프) 전에 확인한다. 고치기는 원본과 달라졌을 때만
+  const dirty = editing
+    ? original !== null &&
+      (content.trim() !== original.content.trim() ||
+        recordDate !== original.recordDate ||
+        photoUris.join('\n') !== original.photos.join('\n'))
+    : content.trim().length > 0 || photoUris.length > 0;
+  const allowLeave = useDirtyGuard(dirty);
 
   /*
    * 초안 보존(utils/writingDraft) — 앱이 꺼지거나 웹을 새로고침해도 쓰던 글이 남는다. 사진은 남기지 않는다.
@@ -62,6 +113,7 @@ export function FeedComposeScreen({ navigation }: Props) {
   const userId = useAuthStore((s) => s.user?.id);
   const [draftLoaded, setDraftLoaded] = useState(false);
   useEffect(() => {
+    if (editing) return undefined;
     let active = true;
     loadWritingDraft(draftKeys.feedCompose, userId).then((draft) => {
       if (!active) return;
@@ -75,7 +127,7 @@ export function FeedComposeScreen({ navigation }: Props) {
     return () => {
       active = false;
     };
-  }, [userId]);
+  }, [userId, editing]);
   useEffect(() => {
     if (!draftLoaded || userId == null) return undefined;
     const timer = setTimeout(() => {
@@ -84,8 +136,14 @@ export function FeedComposeScreen({ navigation }: Props) {
     }, 400);
     return () => clearTimeout(timer);
   }, [content, draftLoaded, userId]);
-  // 화면을 정상적으로 벗어나면(남겼거나, 이탈 확인에서 "닫기") 초안을 지운다. 강제 종료는 여기를 지나지 않는다
-  useEffect(() => () => void clearWritingDraft(draftKeys.feedCompose), []);
+  // 화면을 정상적으로 벗어나면(남겼거나, 이탈 확인에서 "닫기") 초안을 지운다. 강제 종료는 여기를 지나지 않는다.
+  // 고치기 화면은 새 글 초안을 건드리지 않는다 — 쓰다 만 새 글이 있을 수 있다
+  useEffect(
+    () => () => {
+      if (!editing) void clearWritingDraft(draftKeys.feedCompose);
+    },
+    [editing],
+  );
 
   /*
    * 띄어쓰기 정리 — 채팅과 달리 여기는 문장을 쓰는 자리라 붙여 쓴 글을 풀어주면 도움이
@@ -136,12 +194,14 @@ export function FeedComposeScreen({ navigation }: Props) {
       toast.error(`글은 ${MAX_CONTENT}자 이내로 써주세요. 지금 ${content.trim().length}자예요.`);
       return;
     }
+    if (editing && original === null) return; // 아직 원본을 못 읽었다
     savingRef.current = true;
     setSaving(true);
     try {
       let imageUrls: string[] | undefined;
       if (photoUris.length > 0) {
-        const pending = photoUris.filter((uri) => !uploadedRef.current.has(uri));
+        // 한도는 새로 올릴 사진만 센다 — 고치기에서 그대로 둔 사진(서버 URL)은 이미 올라가 있다
+        const pending = photoUris.filter((uri) => !isRemote(uri) && !uploadedRef.current.has(uri));
         /*
          * 한도 프리체크 — 예전엔 Promise.all 로 동시에 올려서, 잔여 3장인 FREE 사용자가 5장을 고르면
          * 3장 차감 + 2장 402 + 글 없음이 됐다(한도는 환불되지 않는다. 2026-09-08 점검 #4).
@@ -165,11 +225,15 @@ export function FeedComposeScreen({ navigation }: Props) {
           }
         }
         imageUrls = await runBusy(
-          photoUris.length > 1 ? `사진 ${photoUris.length}장 올리는 중…` : '사진 올리는 중…',
+          pending.length > 1 ? `사진 ${pending.length}장 올리는 중…` : '사진 올리는 중…',
           async () => {
             // 순차 업로드 — 한 장이 실패하면 거기서 멈춘다. 올라간 장은 캐시에 남아 재시도 때 건너뛴다.
             const urls: string[] = [];
             for (const uri of photoUris) {
+              if (isRemote(uri)) {
+                urls.push(uri);
+                continue;
+              }
               let url = uploadedRef.current.get(uri);
               if (!url) {
                 url = await uploadImage(uri);
@@ -181,10 +245,20 @@ export function FeedComposeScreen({ navigation }: Props) {
           },
         );
       }
-      await feedApi.createPost({ content: content.trim() || undefined, imageUrls });
-      void clearWritingDraft(draftKeys.feedCompose);
-      haptics.success();
-      toast.success('일상을 남겼어요 ');
+      if (editingId != null) {
+        await feedApi.updatePost(editingId, {
+          content: content.trim() || undefined,
+          imageUrls: imageUrls ?? [],
+          recordDate,
+        });
+        haptics.success();
+        toast.success('일상을 고쳤어요');
+      } else {
+        await feedApi.createPost({ content: content.trim() || undefined, imageUrls, recordDate });
+        void clearWritingDraft(draftKeys.feedCompose);
+        haptics.success();
+        toast.success('일상을 남겼어요 ');
+      }
       allowLeave();
       navigation.goBack();
     } catch (e) {
@@ -246,8 +320,16 @@ export function FeedComposeScreen({ navigation }: Props) {
             </ScrollView>
           )}
 
+          <DateField
+            label="언제의 일상인가요"
+            value={recordDate}
+            onChange={setRecordDate}
+            max={todayKst()}
+            pickerTitle="언제 있었던 일인가요?"
+          />
+
           <TextField
-            label="오늘의 일상"
+            label={recordDate === todayKst() ? '오늘의 일상' : '그날의 일상'}
             placeholder="무슨 일이 있었나요?"
             value={content}
             onChangeText={(next) => {
@@ -273,7 +355,13 @@ export function FeedComposeScreen({ navigation }: Props) {
             />
           ) : null}
 
-          <Button title="남기기" onPress={onSave} loading={saving} style={styles.saveBtn} />
+          <Button
+            title={editing ? '고치기' : '남기기'}
+            onPress={onSave}
+            loading={saving}
+            disabled={editing && original === null}
+            style={styles.saveBtn}
+          />
       </FormKeyboardView>
     </SafeAreaView>
   );

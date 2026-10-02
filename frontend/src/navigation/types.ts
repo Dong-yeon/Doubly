@@ -27,7 +27,8 @@ export type HomeStackParamList = PlaceScreensParamList & {
    * navigate('Album', { screen: 'FeedTimeline', params: { who }, initial: false }).
    */
   // 커플 일상 피드 작성 — 홈의 "일상 남기기"가 여기서 바로 열어야 해서 양쪽 스택에 둔다
-  FeedCompose: undefined;
+  /** postId 가 있으면 그 포스트 고치기 — 본문은 넘기지 않고 화면이 서버에서 다시 읽는다(웹은 파라미터를 URL 에 굽는다) */
+  FeedCompose: { postId?: number } | undefined;
   // 데일리 질문 (커플 Q&A)
   DailyQuestion: undefined;
   // 미니게임 허브 — 협동 스도쿠·오목 선택 (docs/COUPLE_GAMES_DESIGN_2026-09-09.md 5절)
@@ -295,7 +296,8 @@ export type AlbumStackParamList = {
   /** 기록(구 '우리 기록') — 같은 4소스를 시간순 목록으로. who 로 한 사람만 거를 수 있다 */
   FeedTimeline: { who?: 'me' | 'partner' } | undefined;
   /** 일상 남기기 — 홈에서도 열 수 있어 양쪽 스택에 등록된다(HomeStackParamList 참고) */
-  FeedCompose: undefined;
+  /** postId 가 있으면 그 포스트 고치기 — 본문은 넘기지 않고 화면이 서버에서 다시 읽는다(웹은 파라미터를 URL 에 굽는다) */
+  FeedCompose: { postId?: number } | undefined;
   /** 작년 오늘 — 홈의 MemoryPeek 카드가 탭을 건너 이 화면으로 보낸다 */
   Memories: { on?: string } | undefined;
   /** 여행 앨범 — 홈 스택(여행 상세)에도 같은 화면이 등록돼 있다 */

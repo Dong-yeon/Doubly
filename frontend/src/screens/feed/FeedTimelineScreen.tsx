@@ -153,9 +153,18 @@ export function FeedTimelineScreen({ navigation, route }: Props) {
     // 걸러지는 건 "POST 인데 내 글이 아닌" 경우뿐이라, 그 경우에만 피드백을 준다.
     if (item.type !== 'POST') return;
     if (!item.mine) {
-      toast.info('내가 쓴 글만 삭제할 수 있어요.');
+      toast.info('내가 쓴 글만 고치거나 지울 수 있어요.');
       return;
     }
+    // 고치기는 작성 화면을 그대로 쓴다 — 돌아오면 포커스 때 다시 읽어 바뀐 글이 보인다
+    Alert.alert('내 일상', undefined, [
+      { text: '고치기', onPress: () => navigation.navigate('FeedCompose', { postId: item.refId }) },
+      { text: '삭제', style: 'destructive', onPress: () => confirmDelete(item) },
+      { text: '취소', style: 'cancel' },
+    ]);
+  };
+
+  const confirmDelete = (item: FeedItem) => {
     Alert.alert('포스트 삭제', '이 일상 기록을 삭제할까요?', [
       { text: '취소', style: 'cancel' },
       {

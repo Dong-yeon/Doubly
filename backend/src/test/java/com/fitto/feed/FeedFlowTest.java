@@ -16,6 +16,9 @@ import com.fitto.feed.dto.FeedItemResponse;
 import com.fitto.feed.dto.FeedItemType;
 import com.fitto.feed.dto.FeedTimelineResponse;
 import com.fitto.feed.dto.ReactionSummary;
+import com.fitto.feed.dto.UpdatePostRequest;
+import com.fitto.common.exception.ErrorCode;
+import com.fitto.common.time.KstClock;
 import com.fitto.feed.service.FeedService;
 import com.fitto.place.dto.RecordVisitRequest;
 import com.fitto.place.dto.SavePlaceRequest;
@@ -38,6 +41,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.verify;
 
 /** 커플 일상 피드 통합 플로우 (PLAN.md Couple Feed) — H2 기반. */
@@ -378,5 +382,80 @@ class FeedFlowTest {
                 null, null, null, null, null, null, null));
 
         assertThat(imageDeleter.deletable(List.of(kept, orphan, orphan))).containsExactly(orphan);
+    }
+
+    // ---- 고치기 (PUT /feed/posts/{id}) ----
+
+    @Test
+    void 고치면_글_사진_기록일이_바뀌고_빠진_사진만_지운다() {
+        long[] c = couple("edit-a@fitto.com", "edit-b@fitto.com");
+        String p1 = "https://img.example.com/e1.jpg";
+        String p2 = "https://img.example.com/e2.jpg";
+        String p3 = "https://img.example.com/e3.jpg";
+        String p4 = "https://img.example.com/e4.jpg";
+        FeedItemResponse post = feedService.createPost(c[0], new CreatePostRequest("처음 글", null, List.of(p1, p2, p3)));
+        LocalDate yesterday = KstClock.today().minusDays(1);
+
+        FeedItemResponse edited = feedService.updatePost(c[0], post.refId(),
+                new UpdatePostRequest("  고친 글  ", List.of(p2, p4), yesterday));
+
+        assertThat(edited.content()).isEqualTo("고친 글");
+        assertThat(edited.imageUrls()).containsExactly(p2, p4);
+        assertThat(edited.imageUrl()).isEqualTo(p2); // 대표 사진은 새 목록의 첫 장
+        assertThat(edited.recordDate()).isEqualTo(yesterday);
+
+        // 상대가 다시 읽어도 같다
+        FeedItemResponse fromPartner = feedService.getPost(c[1], post.refId());
+        assertThat(fromPartner.content()).isEqualTo("고친 글");
+        assertThat(fromPartner.imageUrls()).containsExactly(p2, p4);
+
+        // 빠진 p1(예전 대표)·p3 만 지운다 — 남긴 p2 와 새 p4 는 아니다
+        verify(imageDeleter).deleteAllAfterCommit(argThat(urls ->
+                urls.size() == 2 && urls.containsAll(List.of(p1, p3))));
+    }
+
+    @Test
+    void 고쳐도_반응은_그대로_남는다() {
+        long[] c = couple("edit-c@fitto.com", "edit-d@fitto.com");
+        FeedItemResponse post = feedService.createPost(c[0], new CreatePostRequest("반응 받을 글", null));
+        feedService.toggleReaction(c[1], FeedItemType.POST, post.refId(), "❤️");
+
+        FeedItemResponse edited = feedService.updatePost(c[0], post.refId(),
+                new UpdatePostRequest("고친 글", null, KstClock.today()));
+
+        assertThat(edited.reactions()).extracting(ReactionSummary::emoji).containsExactly("❤️");
+    }
+
+    @Test
+    void 남이_쓴_포스트는_고칠_수_없다() {
+        long[] c = couple("edit-e@fitto.com", "edit-f@fitto.com");
+        FeedItemResponse post = feedService.createPost(c[0], new CreatePostRequest("내 글", null));
+
+        assertThatThrownBy(() -> feedService.updatePost(c[1], post.refId(),
+                new UpdatePostRequest("남의 글 고치기", null, KstClock.today())))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.FORBIDDEN);
+    }
+
+    @Test
+    void 고칠_때도_작성과_같은_규칙으로_거른다() {
+        long[] c = couple("edit-g@fitto.com", "edit-h@fitto.com");
+        FeedItemResponse post = feedService.createPost(c[0], new CreatePostRequest("글", null));
+
+        // 글·사진을 다 비우면 안 된다
+        assertThatThrownBy(() -> feedService.updatePost(c[0], post.refId(),
+                new UpdatePostRequest("   ", List.of(), KstClock.today())))
+                .isInstanceOf(BusinessException.class);
+        // 미래 날짜
+        assertThatThrownBy(() -> feedService.updatePost(c[0], post.refId(),
+                new UpdatePostRequest("글", null, KstClock.today().plusDays(1))))
+                .isInstanceOf(BusinessException.class);
+        // 6장
+        List<String> six = List.of("https://img.example.com/1.jpg", "https://img.example.com/2.jpg",
+                "https://img.example.com/3.jpg", "https://img.example.com/4.jpg",
+                "https://img.example.com/5.jpg", "https://img.example.com/6.jpg");
+        assertThatThrownBy(() -> feedService.updatePost(c[0], post.refId(),
+                new UpdatePostRequest("글", six, KstClock.today())))
+                .isInstanceOf(BusinessException.class);
     }
 }

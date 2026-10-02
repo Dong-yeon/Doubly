@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -36,18 +37,23 @@ public interface FeedPostRepository extends JpaRepository<FeedPost, Long> {
                                 Pageable pageable);
 
     /**
-     * 전체 사진첩 — 사진 있는 커플 포스트만, 타임라인과 동일한 (createdAt, id) keyset.
+     * 전체 사진첩 — 사진 있는 커플 포스트만, <b>(기록일, created_at, id) keyset</b>(V119).
+     * 식단·운동·방문의 사진첩 쿼리와 같은 모양이라 지난 날짜로 올린 포스트도 그 날짜 자리에 섞인다.
+     * 타임라인({@link #findTimeline})은 업로드 순서 그대로다 — 통일하지 말 것.
      */
     @Query("""
             select p from FeedPost p
             where p.coupleId = :coupleId
               and p.imageUrl is not null
-              and (cast(:cursorAt as LocalDateTime) is null
-                   or p.createdAt < :cursorAt
-                   or (p.createdAt = :cursorAt and p.id < :cursorId))
-            order by p.createdAt desc, p.id desc
+              and (cast(:cursorDate as LocalDate) is null
+                   or p.recordDate < :cursorDate
+                   or (p.recordDate = :cursorDate
+                       and (p.createdAt < :cursorAt
+                            or (p.createdAt = :cursorAt and p.id < :cursorId))))
+            order by p.recordDate desc, p.createdAt desc, p.id desc
             """)
     List<FeedPost> findPhotos(@Param("coupleId") Long coupleId,
+                              @Param("cursorDate") LocalDate cursorDate,
                               @Param("cursorAt") LocalDateTime cursorAt,
                               @Param("cursorId") Long cursorId,
                               Pageable pageable);
@@ -63,51 +69,48 @@ public interface FeedPostRepository extends JpaRepository<FeedPost, Long> {
             where p.coupleId = :coupleId
               and p.authorId = :authorId
               and p.imageUrl is not null
-              and (cast(:cursorAt as LocalDateTime) is null
-                   or p.createdAt < :cursorAt
-                   or (p.createdAt = :cursorAt and p.id < :cursorId))
-            order by p.createdAt desc, p.id desc
+              and (cast(:cursorDate as LocalDate) is null
+                   or p.recordDate < :cursorDate
+                   or (p.recordDate = :cursorDate
+                       and (p.createdAt < :cursorAt
+                            or (p.createdAt = :cursorAt and p.id < :cursorId))))
+            order by p.recordDate desc, p.createdAt desc, p.id desc
             """)
     List<FeedPost> findPhotosByAuthor(@Param("coupleId") Long coupleId,
                                       @Param("authorId") Long authorId,
+                                      @Param("cursorDate") LocalDate cursorDate,
                                       @Param("cursorAt") LocalDateTime cursorAt,
                                       @Param("cursorId") Long cursorId,
                                       Pageable pageable);
 
     /**
-     * 추억 리마인드 — 하루 범위의 포스트 (PLAN.md Memories).
+     * 추억 리마인드 — 그 기록일의 포스트 (PLAN.md Memories).
      *
-     * <p><b>{@code extract(month from created_at)} 같은 함수 조건으로 쓰지 말 것.</b>
-     * 인덱스 {@code idx_feed_posts_couple (couple_id, created_at DESC)} 를 타지 못해
-     * 커플의 전체 포스트를 스캔하고, PostgreSQL·H2 의 날짜 함수 방언 차이까지 떠안는다.
-     * 반각 범위 {@code [from, to)} 로 조회하면 인덱스를 그대로 쓴다.
-     *
-     * <p>여기서는 {@code cast(:param as LocalDateTime)} 이 필요 없다 — 두 파라미터 모두
-     * 절대 null 이 아니라 타입 추론이 실패할 자리가 없다 (첫 페이지 null 을 다루는
-     * {@link #findTimeline} 과 다른 점).
+     * <p>V119 전에는 날짜 컬럼이 없어 KST 하루를 저장 TZ 벽시계 범위로 옮겨 {@code created_at} 으로 찾았다.
+     * 이제 기록일 등호 하나다 — 시간대 보정이 필요 없고 인덱스 {@code idx_feed_posts_couple_record} 를 탄다.
+     * {@code extract(month from …)} 같은 함수 조건은 여전히 쓰지 않는다(인덱스를 못 타고 방언이 갈린다).
      */
     @Query("""
             select p from FeedPost p
             where p.coupleId = :coupleId
-              and p.createdAt >= :from and p.createdAt < :to
+              and p.recordDate = :date
             order by p.createdAt desc, p.id desc
             """)
-    List<FeedPost> findInPeriod(@Param("coupleId") Long coupleId,
-                                @Param("from") LocalDateTime from,
-                                @Param("to") LocalDateTime to);
+    List<FeedPost> findOnRecordDate(@Param("coupleId") Long coupleId,
+                                    @Param("date") LocalDate date);
 
     /**
-     * 추억 조회의 하한 연도용 — 커플의 첫 포스트 시각 (없으면 null).
+     * 추억 조회의 하한 연도용 — 커플의 가장 이른 포스트 기록일 (없으면 null).
      *
      * <p>관계 생성일({@code relations.connected_at})을 하한으로 쓸 수 없다 —
      * 재회 후 불러오기(RelationRecordRestorer)가 옛 포스트의 {@code couple_id} 를
      * 새 관계로 옮기므로, 기록이 관계보다 앞설 수 있다.
      */
-    @Query("select min(p.createdAt) from FeedPost p where p.coupleId = :coupleId")
-    LocalDateTime findEarliestCreatedAt(@Param("coupleId") Long coupleId);
+    @Query("select min(p.recordDate) from FeedPost p where p.coupleId = :coupleId")
+    LocalDate findEarliestRecordDate(@Param("coupleId") Long coupleId);
 
     /**
-     * 추억 푸시 대상 — 하루 범위에 포스트가 있는 <b>커플과 그 개수</b>.
+     * 추억 푸시 대상 — 그 기록일에 포스트가 있는 <b>커플과 그 개수</b>.
      *
      * <p>스케줄러는 커플을 하나씩 돌며 묻지 않는다. 커플 수만큼 쿼리가 늘기 때문이다.
      * 기록 쪽에서 한 번에 집계해 대상 커플을 뽑는다
@@ -116,15 +119,14 @@ public interface FeedPostRepository extends JpaRepository<FeedPost, Long> {
     @Query("""
             select p.coupleId as coupleId, count(p) as itemCount
             from FeedPost p
-            where p.createdAt >= :from and p.createdAt < :to
+            where p.recordDate = :date
             group by p.coupleId
             """)
-    List<CoupleItemCount> countByCoupleInPeriod(@Param("from") LocalDateTime from,
-                                                @Param("to") LocalDateTime to);
+    List<CoupleItemCount> countByCoupleOnRecordDate(@Param("date") LocalDate date);
 
     /** 전체를 통틀어 가장 오래된 포스트 — 스케줄러가 훑을 연도의 하한 (없으면 null). */
-    @Query("select min(p.createdAt) from FeedPost p")
-    LocalDateTime findGlobalEarliestCreatedAt();
+    @Query("select min(p.recordDate) from FeedPost p")
+    LocalDate findGlobalEarliestRecordDate();
 
     interface CoupleItemCount {
         Long getCoupleId();
@@ -152,19 +154,18 @@ public interface FeedPostRepository extends JpaRepository<FeedPost, Long> {
                                        Pageable pageable);
 
     /**
-     * 사진첩 달력 — 한 달치 사진 포스트. 포스트엔 날짜 컬럼이 없어 기록일(KST 날짜)의 달 경계를
-     * 서버 시각 범위 {@code [from, to)} 로 바꿔 받는다(FeedService.photoMonth). 작성자 필터는
-     * 한 달치를 통째로 받으므로 서비스에서 거른다.
+     * 사진첩 달력 — 기록일이 {@code [from, to]} 인 사진 포스트(V119 — 식단·운동의 같은 쿼리와 같은 모양).
+     * 작성자 필터는 한 달치를 통째로 받으므로 서비스에서 거른다.
      */
     @Query("""
             select p from FeedPost p
             where p.coupleId = :coupleId
               and p.imageUrl is not null
-              and p.createdAt >= :from and p.createdAt < :to
-            order by p.createdAt desc, p.id desc
+              and p.recordDate between :from and :to
+            order by p.recordDate desc, p.createdAt desc, p.id desc
             """)
-    List<FeedPost> findPhotosInPeriod(@Param("coupleId") Long coupleId,
-                                      @Param("from") LocalDateTime from,
-                                      @Param("to") LocalDateTime to,
-                                      Pageable pageable);
+    List<FeedPost> findPhotosInDateRange(@Param("coupleId") Long coupleId,
+                                         @Param("from") LocalDate from,
+                                         @Param("to") LocalDate to,
+                                         Pageable pageable);
 }

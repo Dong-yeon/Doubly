@@ -21,6 +21,7 @@ import com.fitto.feed.domain.FeedPost;
 import com.fitto.feed.domain.FeedPostPhoto;
 import com.fitto.feed.domain.FeedReaction;
 import com.fitto.feed.dto.CreatePostRequest;
+import com.fitto.feed.dto.UpdatePostRequest;
 import com.fitto.feed.dto.FeedCursor;
 import com.fitto.feed.dto.FeedItemResponse;
 import com.fitto.feed.dto.FeedItemType;
@@ -51,7 +52,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.EnumSet;
@@ -94,9 +94,15 @@ public class FeedService {
             .thenComparing(c -> c.item().refId())
             .reversed();
 
-    /** 사진첩에서 기록일 컬럼으로 keyset 을 거는 소스 — 커서 위치에 날짜가 있어야 이어 읽는다. */
+    /**
+     * 사진첩에서 기록일 컬럼으로 keyset 을 거는 소스 — 커서 위치에 날짜가 있어야 이어 읽는다.
+     * 일상 포스트는 V119 에서 record_date 가 생겨 함께 들어왔다(그 전엔 created_at 만으로 넘겼다).
+     */
     private static final Set<FeedItemType> DATED_PHOTO_SOURCES = EnumSet.of(
-            FeedItemType.MEAL, FeedItemType.WORKOUT, FeedItemType.PLACE_VISIT);
+            FeedItemType.POST, FeedItemType.MEAL, FeedItemType.WORKOUT, FeedItemType.PLACE_VISIT);
+
+    /** 기록일 하한 — 이보다 앞 날짜는 입력 실수로 본다(날짜 선택기가 연도를 잘못 굴린 경우 등) */
+    private static final LocalDate MIN_RECORD_DATE = LocalDate.of(2000, 1, 1);
 
     private final FeedPostRepository feedPostRepository;
     private final FeedPostPhotoRepository feedPostPhotoRepository;
@@ -259,8 +265,8 @@ public class FeedService {
      * 사진첩("우리" 탭) — 일상·식단·운동·맛집 중 <b>사진이 있는</b> 기록을 합쳐 기록일 최신순으로 준다.
      *
      * <p><b>정렬은 (기록일, created_at, id) 내림차순</b>(2026-10-02 결정). 기록일은 식단
-     * {@code meal_date} · 운동 {@code workout_date} · 방문 {@code visited_at} 이고, 날짜 컬럼이
-     * 없는 일상 포스트는 올린 시각의 KST 날짜다({@link #recordDateOf(FeedPost)}). 지난 날짜로
+     * {@code meal_date} · 운동 {@code workout_date} · 방문 {@code visited_at} · 일상 {@code record_date}(V119,
+     * 고르지 않았으면 올린 날)다. 지난 날짜로
      * 늦게 올린 끼니가 "올린 달"이 아니라 "먹은 날"에 묶여야 월 묶음·달력·회고가 맞는다.
      * 타임라인({@link #timeline})은 업로드 순서 그대로 둔다 — 피드는 "방금 무엇이 올라왔나"다.
      *
@@ -323,11 +329,12 @@ public class FeedService {
 
         List<PhotoCandidate> merged = new ArrayList<>();
         if (wanted.contains(FeedItemType.POST)) {
+            LocalDate date = from.recordDateOf(FeedItemType.POST);
             LocalDateTime at = from.createdAtOf(FeedItemType.POST);
             Long id = from.idOf(FeedItemType.POST);
             merged.addAll(postCandidates(authorId != null
-                    ? feedPostRepository.findPhotosByAuthor(couple.getId(), authorId, at, id, page)
-                    : feedPostRepository.findPhotos(couple.getId(), at, id, page), names, userId));
+                    ? feedPostRepository.findPhotosByAuthor(couple.getId(), authorId, date, at, id, page)
+                    : feedPostRepository.findPhotos(couple.getId(), date, at, id, page), names, userId));
         }
         if (wanted.contains(FeedItemType.MEAL)) {
             merged.addAll(mealCandidates(mealRepository.findPhotosForFeed(userIds, from.recordDateOf(FeedItemType.MEAL),
@@ -348,9 +355,7 @@ public class FeedService {
         }
 
         /*
-         * 병합 정렬키는 소스별 쿼리의 정렬키와 같아야 한다 — (기록일, created_at, id).
-         * 포스트 쿼리는 created_at 만으로 정렬하지만, 포스트의 기록일은 created_at 의 KST 날짜라
-         * 둘의 순서가 같다(날짜는 시각을 따라 단조 증가).
+         * 병합 정렬키는 소스별 쿼리의 정렬키와 같아야 한다 — (기록일, created_at, id). 네 소스 모두 그 순서로 읽는다.
          */
         merged.sort(PHOTO_ORDER);
 
@@ -400,9 +405,7 @@ public class FeedService {
         boolean truncated = false;
 
         if (wanted.contains(FeedItemType.POST)) {
-            // 포스트의 기록일은 created_at 의 KST 날짜 — 달 경계를 서버 시각(JVM 기본 시간대)으로 옮긴다
-            List<FeedPost> posts = feedPostRepository.findPhotosInPeriod(couple.getId(),
-                    serverTimeOf(first), serverTimeOf(ym.plusMonths(1).atDay(1)), cap);
+            List<FeedPost> posts = feedPostRepository.findPhotosInDateRange(couple.getId(), first, last, cap);
             truncated |= posts.size() > MONTH_CAP;
             merged.addAll(postCandidates(posts.stream().limit(MONTH_CAP)
                     .filter(p -> only == null || only.equals(p.getAuthorId())).toList(), names, userId));
@@ -510,10 +513,6 @@ public class FeedService {
         return new FeedPhotoMapResponse(places, truncated);
     }
 
-    /** KST 날짜의 0시를 서버 시각(@CreatedDate 가 쓰는 JVM 기본 시간대의 벽시계)으로 — {@link #recordDateOf(FeedPost)} 의 역 */
-    private static LocalDateTime serverTimeOf(LocalDate kstDate) {
-        return kstDate.atStartOfDay(KstClock.ZONE).withZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime();
-    }
 
     /*
      * 소스별 후보 만들기 — 페이지 조회({@link #photos})와 달 조회({@link #photoMonth})가 같이 쓴다.
@@ -629,15 +628,9 @@ public class FeedService {
                                   Long placeId, String placeName) {
     }
 
-    /**
-     * 일상 포스트의 기록일 — 날짜 컬럼이 없어 올린 시각의 KST 날짜로 둔다.
-     *
-     * <p>{@code created_at} 은 {@code @CreatedDate} 가 <b>JVM 기본 시간대</b>로 채운 벽시계 시각이다
-     * (운영 컨테이너는 UTC — JacksonConfig 의 전제, 테스트 JVM 은 Asia/Seoul). 그래서 상수 UTC 가
-     * 아니라 기본 시간대로 해석해 KST 로 옮긴다 — 둘 다에서 맞는 날짜가 나온다.
-     */
+    /** 일상 포스트의 기록일 — V119 의 record_date. 기존 행은 올린 시각의 KST 날짜로 채워졌다 */
     private static LocalDate recordDateOf(FeedPost p) {
-        return p.getCreatedAt().atZone(ZoneId.systemDefault()).withZoneSameInstant(KstClock.ZONE).toLocalDate();
+        return p.getRecordDate();
     }
 
     /** 사진첩 커서 — {@link #nextCursorOf} 와 같되 위치에 기록일을 함께 담는다(쿼리의 1차 정렬키). */
@@ -680,33 +673,15 @@ public class FeedService {
     /** 포스트 작성 (FEED-02) — 글/사진(최대 5장) 중 하나는 필수. 상대에게 푸시 + FEED 이벤트. */
     @Transactional
     public FeedItemResponse createPost(Long userId, CreatePostRequest request) {
-        String content = request.content() != null ? request.content().trim() : null;
-        List<String> photos = request.photosOrEmpty().stream()
-                .map(String::trim).filter(s -> !s.isEmpty()).toList();
-        if ((content == null || content.isEmpty()) && photos.isEmpty()) {
-            throw new BusinessException(ErrorCode.INVALID_INPUT, "글이나 사진 중 하나는 남겨주세요.");
-        }
-        if (photos.size() > MAX_PHOTOS_PER_POST) {
-            throw new BusinessException(ErrorCode.INVALID_INPUT,
-                    "사진은 최대 " + MAX_PHOTOS_PER_POST + "장까지 올릴 수 있어요.");
-        }
-        /*
-         * 앱이 공용 업로드 서명(UploadController — 기본 폴더)으로 올린 원본 URL 만 받는다. 예전엔 길이만 봐서
-         * 아무 URL 이나 저장됐고, 변형 URL 로 남의 원본을 지우는 경로가 열려 있었다(§8-6, 삭제기도 따로 막는다).
-         * Cloudinary 미설정(개발·테스트)은 unsigned 폴백이라 폴더를 알 수 없어 보지 않는다.
-         */
-        if (cloudinaryProperties.isConfigured()) {
-            for (String url : photos) {
-                if (!CloudinaryUrls.isImageDirectlyIn(url, cloudinaryProperties, cloudinaryProperties.getFolder())) {
-                    throw new BusinessException(ErrorCode.INVALID_INPUT, "앱에서 올린 사진만 남길 수 있어요.");
-                }
-            }
-        }
+        String content = contentOf(request.content());
+        List<String> photos = validatedPhotos(request.photosOrEmpty(), content);
+        LocalDate recordDate = validatedRecordDate(request.recordDate());
 
         Relation couple = activeCouple(userId);
         FeedPost post = FeedPost.builder()
                 .coupleId(couple.getId())
                 .authorId(userId)
+                .recordDate(recordDate)
                 .content(content)
                 // 대표 사진 — 기존 쿼리(findPhotos/findAlbumCandidates 등)가 계속 이 값을 쓴다
                 .imageUrl(photos.isEmpty() ? null : photos.get(0))
@@ -729,6 +704,104 @@ public class FeedService {
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.FEED);
 
         return mapper.toItem(post, Map.of(userId, authorName), userId, List.of(), photos);
+    }
+
+    /** 글 — 앞뒤 공백을 걷고, 비었으면 null */
+    private static String contentOf(String raw) {
+        String content = raw != null ? raw.trim() : null;
+        return content == null || content.isEmpty() ? null : content;
+    }
+
+    /**
+     * 사진 목록 검증 — 작성·수정이 같은 규칙을 쓴다. 글·사진 중 하나는 있어야 하고, 최대
+     * {@value #MAX_PHOTOS_PER_POST}장, 앱이 공용 업로드 서명(UploadController — 기본 폴더)으로 올린 원본 URL 만.
+     * 예전엔 길이만 봐서 아무 URL 이나 저장됐고, 변형 URL 로 남의 원본을 지우는 경로가 열려 있었다
+     * (§8-6, 삭제기도 따로 막는다). Cloudinary 미설정(개발·테스트)은 unsigned 폴백이라 폴더를 알 수 없어 보지 않는다.
+     */
+    private List<String> validatedPhotos(List<String> raw, String content) {
+        List<String> photos = raw.stream().map(String::trim).filter(u -> !u.isEmpty()).toList();
+        if (content == null && photos.isEmpty()) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "글이나 사진 중 하나는 남겨주세요.");
+        }
+        if (photos.size() > MAX_PHOTOS_PER_POST) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT,
+                    "사진은 최대 " + MAX_PHOTOS_PER_POST + "장까지 올릴 수 있어요.");
+        }
+        if (cloudinaryProperties.isConfigured()) {
+            for (String url : photos) {
+                if (!CloudinaryUrls.isImageDirectlyIn(url, cloudinaryProperties, cloudinaryProperties.getFolder())) {
+                    throw new BusinessException(ErrorCode.INVALID_INPUT, "앱에서 올린 사진만 남길 수 있어요.");
+                }
+            }
+        }
+        return photos;
+    }
+
+    /**
+     * 기록일 — 이 일이 있었던 날(V119). 고르지 않으면 오늘. 미래는 아직 일어나지 않은 일이라 받지 않는다
+     * (식단·운동·하루 기록과 같은 규칙). 오늘은 KST 로 판단한다(CLAUDE.md 4절).
+     */
+    private static LocalDate validatedRecordDate(LocalDate requested) {
+        LocalDate recordDate = requested != null ? requested : KstClock.today();
+        if (recordDate.isAfter(KstClock.today())) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "아직 오지 않은 날짜에는 남길 수 없어요.");
+        }
+        if (recordDate.isBefore(MIN_RECORD_DATE)) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "날짜를 다시 골라 주세요.");
+        }
+        return recordDate;
+    }
+
+    /** 포스트 하나 — 수정 화면이 불러온다(웹은 화면 파라미터를 URL 에 굽어 본문을 넘기지 않는다). */
+    public FeedItemResponse getPost(Long userId, Long postId) {
+        FeedPost post = getCouplePost(userId, postId);
+        List<String> urls = feedPostPhotoRepository.findByPostIdOrderByOrderNoAsc(postId).stream()
+                .map(FeedPostPhoto::getUrl).toList();
+        FeedItemResponse item = mapper.toItem(post, mapper.userNames(List.of(post.getAuthorId())), userId, null,
+                urls.isEmpty() && post.getImageUrl() != null ? List.of(post.getImageUrl()) : urls);
+        return mapper.attachReactions(List.of(item), userId).get(0);
+    }
+
+    /**
+     * 포스트 고치기 — 작성자 본인만. 글·사진·기록일을 <b>통째로</b> 바꾼다(빠진 사진은 지운 것이다).
+     *
+     * <p>상대에게 푸시는 보내지 않는다 — 오타 하나 고칠 때마다 폰이 울리면 소음이다. 열려 있는 화면은
+     * FEED 이벤트로 다시 읽는다. 반응은 그대로 둔다(같은 기록에 단 마음이다).
+     *
+     * <p>빠진 사진 파일은 커밋 뒤에 지운다 — 삭제기가 다른 행이 아직 쓰는 파일은 남긴다
+     * (CloudinaryImageDeleter.deletable). 새로 붙인 사진의 한도는 앱이 서명받을 때 이미 셌다.
+     */
+    @Transactional
+    public FeedItemResponse updatePost(Long userId, Long postId, UpdatePostRequest request) {
+        FeedPost post = getCouplePost(userId, postId);
+        if (!userId.equals(post.getAuthorId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "내가 쓴 포스트만 고칠 수 있습니다.");
+        }
+        String content = contentOf(request.content());
+        List<String> photos = validatedPhotos(request.imageUrls() != null ? request.imageUrls() : List.of(), content);
+        LocalDate recordDate = validatedRecordDate(request.recordDate());
+
+        List<FeedPostPhoto> before = feedPostPhotoRepository.findByPostIdOrderByOrderNoAsc(postId);
+        Set<String> removed = new java.util.LinkedHashSet<>();
+        if (post.getImageUrl() != null) {
+            removed.add(post.getImageUrl());
+        }
+        before.forEach(ph -> removed.add(ph.getUrl()));
+        removed.removeAll(photos);
+
+        feedPostPhotoRepository.deleteAll(before);
+        feedPostPhotoRepository.flush();
+        for (int i = 0; i < photos.size(); i++) {
+            feedPostPhotoRepository.save(
+                    FeedPostPhoto.builder().postId(postId).url(photos.get(i)).orderNo(i).build());
+        }
+        post.edit(content, photos.isEmpty() ? null : photos.get(0), recordDate);
+
+        coupleEventPublisher.publish(post.getCoupleId(), CoupleEvent.FEED);
+        imageDeleter.deleteAllAfterCommit(removed);
+
+        FeedItemResponse item = mapper.toItem(post, mapper.userNames(List.of(userId)), userId, null, photos);
+        return mapper.attachReactions(List.of(item), userId).get(0);
     }
 
     /** 포스트 삭제 — 작성자 본인만. */

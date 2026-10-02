@@ -97,8 +97,9 @@ class PlanProUnlockTest {
     private void postLastYear(Long userId, String content) {
         FeedItemResponse post = feedService.createPost(userId, new CreatePostRequest(content, null));
         em.flush();
-        em.createNativeQuery("update feed_posts set created_at = :t where id = :id")
+        em.createNativeQuery("update feed_posts set created_at = :t, record_date = :d where id = :id")
                 .setParameter("t", LocalDateTime.of(2025, 7, 30, 3, 0))   // UTC 03:00 = KST 12:00
+                .setParameter("d", java.time.LocalDate.of(2025, 7, 30))   // 기록일(V119) — 그날
                 .setParameter("id", post.refId())
                 .executeUpdate();
         em.flush();

@@ -29,13 +29,10 @@ import com.fitto.relation.domain.RelationType;
 import com.fitto.relation.repository.RelationRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -81,12 +78,6 @@ public class MemoriesService {
     private final WorkoutRepository workoutRepository;
     private final CalendarEventRepository calendarEventRepository;
 
-    /**
-     * {@code created_at} 이 어느 TZ 벽시계로 적혔는지 — {@link MemoryDates#storageStartOfDay} 참고.
-     * 기본값은 JVM 기본 TZ 이고, 컨테이너 TZ 가 바뀌면 {@code FITTO_STORAGE_ZONE} 으로 고정할 수 있다.
-     */
-    private final ZoneId storageZone;
-
     public MemoriesService(FeedPostRepository feedPostRepository,
                            PlaceVisitRepository placeVisitRepository,
                            ContentLogRepository contentLogRepository,
@@ -95,8 +86,7 @@ public class MemoriesService {
                            PlanGuard planGuard,
                            MealRepository mealRepository,
                            WorkoutRepository workoutRepository,
-                           CalendarEventRepository calendarEventRepository,
-                           @Value("${fitto.storage-zone:}") String storageZone) {
+                           CalendarEventRepository calendarEventRepository) {
         this.feedPostRepository = feedPostRepository;
         this.placeVisitRepository = placeVisitRepository;
         this.contentLogRepository = contentLogRepository;
@@ -106,7 +96,6 @@ public class MemoriesService {
         this.mealRepository = mealRepository;
         this.workoutRepository = workoutRepository;
         this.calendarEventRepository = calendarEventRepository;
-        this.storageZone = MemoryDates.storageZoneOf(storageZone);
     }
 
     /**
@@ -169,9 +158,8 @@ public class MemoriesService {
                                            Map<Long, String> names, Long viewerId) {
         List<FeedItemResponse> items = new ArrayList<>();
         for (LocalDate date : MemoryDates.occurrencesIn(year, today)) {
-            LocalDateTime from = MemoryDates.storageStartOfDay(date, storageZone);
-            LocalDateTime to = MemoryDates.storageStartOfDay(date.plusDays(1), storageZone);
-            List<FeedPost> posts = feedPostRepository.findInPeriod(coupleId, from, to);
+            // 포스트도 기록일 기준(V119) — 어젯밤 일을 오늘 올렸어도 어제의 추억이다(방문·관람과 같은 규칙)
+            List<FeedPost> posts = feedPostRepository.findOnRecordDate(coupleId, date);
             Map<Long, List<String>> photosByPost = mapper.photosByPostId(posts);
             for (FeedPost p : posts) {
                 items.add(mapper.toItem(p, names, viewerId, null, photosByPost.getOrDefault(p.getId(), List.of())));
@@ -207,7 +195,7 @@ public class MemoriesService {
     private static FeedItemResponse onDay(FeedItemResponse i, LocalDate date) {
         return new FeedItemResponse(i.type(), i.refId(), i.userId(), i.userName(), i.mine(), i.title(),
                 i.content(), i.imageUrl(), date.atStartOfDay(), i.reactions(), i.imageUrls(), i.shared(),
-                i.summary());
+                i.summary(), i.recordDate());
     }
 
     /**
@@ -254,11 +242,9 @@ public class MemoriesService {
     /**
      * 훑어볼 연도의 하한 — 커플의 첫 기록 연도. 기록이 하나도 없으면 null.
      *
-     * <p>포스트 쪽 값은 저장 TZ 의 벽시계라 연말·연초에 한 해 어긋날 수 있지만,
-     * <b>하한으로만 쓰므로</b> 최악의 경우 빈 범위 조회가 한 번 더 도는 것이 전부다.
      */
     private Integer earliestRecordYear(Long coupleId, List<Long> userIds) {
-        LocalDateTime firstPost = feedPostRepository.findEarliestCreatedAt(coupleId);
+        LocalDate firstPost = feedPostRepository.findEarliestRecordDate(coupleId);
         Integer earliest = firstPost != null ? firstPost.getYear() : null;
         for (LocalDate d : new LocalDate[]{
                 placeVisitRepository.findEarliestVisitedAt(coupleId),

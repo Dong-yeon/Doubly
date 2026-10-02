@@ -98,8 +98,11 @@ class MemoriesFlowTest {
     private Long postAt(Long userId, String content, LocalDateTime storedAt) {
         FeedItemResponse post = feedService.createPost(userId, new CreatePostRequest(content, null));
         em.flush();
-        em.createNativeQuery("update feed_posts set created_at = :t where id = :id")
+        em.createNativeQuery("update feed_posts set created_at = :t, record_date = :d where id = :id")
                 .setParameter("t", storedAt)
+                // 기록일(V119)은 그 시각(UTC 벽시계)에 올렸다면 받았을 KST 날짜 — 예전 created_at 기준과 같은 날
+                .setParameter("d", storedAt.atZone(java.time.ZoneOffset.UTC)
+                        .withZoneSameInstant(java.time.ZoneId.of("Asia/Seoul")).toLocalDate())
                 .setParameter("id", post.refId())
                 .executeUpdate();
         em.flush();

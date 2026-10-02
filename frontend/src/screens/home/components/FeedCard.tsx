@@ -26,6 +26,7 @@ import { colors, fontSize, radius, spacing } from '../../../constants/theme';
 import { themedStyles } from '../../../theme/themedStyles';
 import { isHovered } from '../../../utils/pointer';
 import { layout } from '../../../theme/layout';
+import { kstDateKey } from '../../../utils/anniversary';
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -251,6 +252,8 @@ function PostCard({ item, timeLabel, quickEmojis, onReact, onLongPress }: FeedCa
     ? item.imageUrls
     : item.imageUrl ? [item.imageUrl] : [];
   const hasPhoto = photos.length > 0;
+  // 지난 날짜로 남긴 일상 — 올린 시각(timeLabel)만 보이면 "오늘 일"로 읽힌다. 기록일이 다를 때만 덧붙인다
+  const pastDay = pastRecordDayLabel(item);
   return (
     <Pressable
       style={[styles.post, hasPhoto && styles.postPhoto]}
@@ -265,6 +268,7 @@ function PostCard({ item, timeLabel, quickEmojis, onReact, onLongPress }: FeedCa
           <Text style={styles.who}>{item.mine ? '나' : item.userName}</Text>
           <Text style={styles.time}>{timeLabel}</Text>
         </View>
+        {pastDay ? <Text style={styles.pastDay}>{pastDay}</Text> : null}
 
         {item.content ? <Text style={styles.content}>{item.content}</Text> : null}
 
@@ -276,6 +280,15 @@ function PostCard({ item, timeLabel, quickEmojis, onReact, onLongPress }: FeedCa
       </View>
     </Pressable>
   );
+}
+
+/** 기록일이 올린 날(KST)과 다르면 "10월 1일의 일상", 같거나 모르면 null */
+function pastRecordDayLabel(item: FeedItem): string | null {
+  if (!item.recordDate) return null;
+  const uploaded = new Date(item.occurredAt);
+  if (Number.isNaN(uploaded.getTime()) || kstDateKey(uploaded) === item.recordDate) return null;
+  const [, m, d] = item.recordDate.split('-').map(Number);
+  return `${m}월 ${d}일의 일상`;
 }
 
 /**
@@ -404,6 +417,8 @@ const styles = themedStyles((colors) => ({
   postHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   who: { flex: 1, fontSize: fontSize.caption, fontWeight: '800', color: colors.textSecondary },
   time: { fontSize: fontSize.caption, color: colors.textMuted },
+  // 지난 날짜로 남긴 일상의 기록일 — 올린 시각 줄 바로 아래, 본문보다 한 단계 옅게
+  pastDay: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary, marginTop: -spacing.xxs },
   content: { fontSize: fontSize.subtitle, color: colors.textPrimary, marginTop: spacing.xs, lineHeight: 24 },
 
   reactionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.sm },
