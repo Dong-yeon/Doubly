@@ -141,6 +141,26 @@ export const MealCard = React.memo(function MealCard({ meal, onPress, onLongPres
         {meal.memo ? (
           <Text style={items.length > 0 ? styles.memoAside : styles.memo}>{meal.memo}</Text>
         ) : null}
+
+        {/*
+          받은 응원 — 우리 탭 피드의 식단 반응과 같은 데이터(LOVEBODY_REVIEW §2-4 (a)). 내 식사라 여기서는
+          <b>읽기만</b> 한다(누르는 칩이 아니다). 칩 모양은 피드 카드와 같게 — 이모지 + 수, 내가 남긴 건 채움.
+          데이트 식단의 내 몫은 서버가 원본 반응을 실어 준다.
+        */}
+        {meal.reactions && meal.reactions.length > 0 ? (
+          <View
+            style={styles.reactionRow}
+            accessible
+            accessibilityLabel={`받은 반응 ${meal.reactions.map((r) => `${r.emoji} ${r.count}`).join(', ')}`}
+          >
+            {meal.reactions.map((r) => (
+              <View key={r.emoji} style={[styles.reactionChip, r.mine && styles.reactionChipMine]}>
+                <Text style={styles.reactionEmoji}>{r.emoji}</Text>
+                <Text style={[styles.reactionCount, r.mine && styles.reactionCountMine]}>{r.count}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
       </TouchableOpacity>
 
       {/*
@@ -191,6 +211,22 @@ const styles = themedStyles((colors) => ({
   dateBadgeText: { fontSize: fontSize.micro, fontWeight: '800', color: colors.primary },
   // 내 기록의 숫자 — 소유자·함께 의미가 없으므로 본문색. 예전 accent(=함께 olive)는 뜻이 없었다(§3 A-9)
   cal: { fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '800' },
+  reactionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.sm },
+  // 피드 카드(FeedCard.chip)와 같은 모양 — 누를 수 없는 칩이라 눌림 상태만 없다
+  reactionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceAlt,
+  },
+  reactionChipMine: { backgroundColor: colors.primary },
+  reactionEmoji: { fontSize: fontSize.caption },
+  reactionCount: { fontSize: fontSize.micro, color: colors.textSecondary, fontWeight: '800' },
+  // 채운 칩은 배경이 colors.primary — 라이트/다크 모두 흰 글씨가 대비를 만족한다(FeedCard 와 같은 근거)
+  reactionCountMine: { color: colors.white },
   calPending: { fontSize: fontSize.caption, color: colors.textTertiary, fontWeight: '700' },
   date: { fontSize: fontSize.caption, color: colors.textSecondary },
   placeTag: {

@@ -1121,6 +1121,8 @@ export interface Meal {
   placeId?: number | null;
   placeName?: string | null;
   createdAt: string;
+  /** 이 끼니에 달린 응원 반응(우리 탭 피드와 같은 데이터, 읽기 전용) — 구서버 응답엔 없다 */
+  reactions?: ReactionSummary[] | null;
 }
 
 // 오늘 영양 요약 (목표 대비 섭취) — GET /meal/nutrition
