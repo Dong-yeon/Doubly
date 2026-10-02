@@ -143,7 +143,7 @@ ALTER TABLE couple_events ADD COLUMN visibility VARCHAR(20) NOT NULL DEFAULT 'SH
 
 - 스케줄러: `calendar/service/CalendarDdayNotifier.java` (`@Scheduled(cron = "0 0 9 * * *", zone = "Asia/Seoul")`)
 - 알림 카테고리가 `NotificationCategory.ANNIVERSARY` 라, 사용자가 "기념일" 알림을 끄면 캘린더 알림도 전부 꺼진다.
-- 실시간: 서버는 `/sub/couple/{relationId}` 로 이벤트를 보낸다. **2026-10-02 부터 캘린더 화면도 포커스 동안 구독한다** — `CALENDAR`→일정, `TRIP`→여행, `DIET`·`PLACE`→다녀온 곳을 다시 받는다. 소켓 모듈은 경로 하나에 핸들러 하나라 홈·캐치마인드처럼 포커스 단위로만 쥔다(계속 쥐면 아래 깔린 홈 구독을 밀어내고, 나갈 때 끊는다). 방문 기록("다녀왔어요")은 서버가 이벤트를 보내지 않아 포커스 때만 갱신된다.
+- 실시간: 서버는 `/sub/couple/{relationId}` 로 이벤트를 보낸다. **2026-10-02 부터 캘린더 화면도 포커스 동안 구독한다** — `CALENDAR`→일정, `TRIP`→여행, `DIET`·`PLACE`→다녀온 곳을 다시 받는다. 소켓 모듈은 경로 하나에 핸들러 하나라 홈·캐치마인드처럼 포커스 단위로만 쥔다(계속 쥐면 아래 깔린 홈 구독을 밀어내고, 나갈 때 끊는다). 방문 기록 추가·삭제도 2026-10-02 부터 커밋 뒤 `PLACE` 를 발행한다(`PlaceService.publishAfterCommit`).
 
 ## 5. 부가 기능 존재 여부
 
@@ -184,7 +184,7 @@ ALTER TABLE couple_events ADD COLUMN visibility VARCHAR(20) NOT NULL DEFAULT 'SH
 |---|---|---|---|
 | 1 | 타임존 | ~~프론트 "오늘"이 기기 현지 날짜(`new Date()`)라 해외에서 오늘 테두리·첫 진입 월·추가 기본 날짜·'진행 중'이 서버 KST `dday` 와 하루 어긋날 수 있다.~~ **2026-10-02 수정** — `utils/anniversary.ts` 의 `kstDateOf` 로 KST 기준 판단 | `CoupleCalendarScreen.tsx:139~148` |
 | 2 | 동시성 | 낙관적 락 없음 + `updated_at` 없음. 우리 일정을 둘이 동시에 고치면 나중 저장이 덮어쓰고 알림도 없음 | `CalendarEvent` |
-| 3 | 실시간 | ~~수정·삭제 push 없음, 캘린더 화면 실시간 미구독~~ **2026-10-02 둘 다 수정**(4절). 남은 것: 방문 기록 추가·삭제는 `CoupleEvent` 를 발행하지 않아 열린 캘린더의 "다녀온 곳"은 포커스 때만 갱신 | `PlaceService.recordVisit/deleteVisit` |
+| 3 | 실시간 | ~~수정·삭제 push 없음, 캘린더 화면 실시간 미구독~~ **2026-10-02 둘 다 수정**(4절). 방문 기록 추가·삭제의 `PLACE` 발행도 같은 날 추가(커밋 뒤 발행) — 남은 것 없음 | `PlaceService.recordVisit/deleteVisit` |
 | 4 | 한도 | ~~`delete` 에서 `refund` 하지 않아 잘못 만들고 지워도 월 10건이 줄었다.~~ **2026-10-02 수정** — 이번 달(KST)에 만든 일정을 지우면 커플 공용 주머니로 1건 돌려준다. 지난달에 만든 일정은 돌려주지 않는다(월말에 채우고 월초에 지워 한도를 불리는 우회로). `created_at` 은 JVM 기본 TZ(운영 UTC) 벽시계라 KST 로 옮겨 판정 | `CalendarService.delete` · `createdThisQuotaMonth` |
 | 5 | 중복 알림 | `CalendarDdayNotifier` 는 발송 이력 없이 "하루 한 번 돈다"에 기댄다. 서버 인스턴스가 2개 이상이면 같은 알림이 중복 발송됨. **2026-10-02 확인: Doubly-Back 은 replica 1(sfo)이라 평소엔 중복 없음.** 같은 프로젝트의 Doubly-Spike(`claude/call-spike-android`, 8/25)는 `@Scheduled`·캘린더 코드가 없어 무관. 남는 틈은 09:00 KST 정각에 배포가 겹쳐 옛·새 인스턴스가 함께 떠 있는 몇 초뿐 | `CalendarDdayNotifier.java` |
 | 6 | 성능 | 알림 스케줄러의 `findByEventDate` / `findByRepeatYearlyTrue` 는 전 커플 대상인데 `event_date` 단독 인덱스가 없음. 월 조회도 `coalesce` 조건은 인덱스로 못 자름. 현재 규모에선 무해, PG 실행 계획 확인 필요 | `CalendarEventRepository` |
@@ -226,7 +226,7 @@ ALTER TABLE couple_events ADD COLUMN visibility VARCHAR(20) NOT NULL DEFAULT 'SH
 | 낙관적 락 / version | 없음 | |
 | 생성 시 상대 push | 구현됨 | 우리 일정만 |
 | 수정·삭제 시 상대 push | 구현됨 | 2026-10-02, 우리 일정·변경 있음·안 끝난 일정만 |
-| 캘린더 화면 실시간 갱신 | 구현됨 | 2026-10-02, 포커스 동안 구독(방문 기록은 이벤트 없음) |
+| 캘린더 화면 실시간 갱신 | 구현됨 | 2026-10-02, 포커스 동안 구독 · 방문 기록도 `PLACE` 발행 |
 | D-7 / D-1 / 당일 리마인더 | 부분 구현 | 고정 09:00, 사용자 설정 없음 |
 | 기념일·디데이 자동 생성 | 없음 | 홈 D+ 는 별도 |
 | 한국 공휴일 | 없음 | |
