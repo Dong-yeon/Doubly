@@ -257,8 +257,8 @@
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | A-1 | **첫 화면에 식사 0장**(§1-2) | 목록 위 머리 621~720dp | 순서 재배치: 영양 요약(링) → **오늘 식사** → 물·단식 → 주간/목표 → AI 알약은 맨 아래 또는 통계 화면으로. 빈 상태는 영양 카드 바로 아래 | `DietScreen.tsx` | 없음 | 없음 | 업데이트 | 소 | 9/23 §6 "구조 유지"를 일부 뒤집음 — 그때는 고정 영역만 봤다 |
 | A-2 | **오늘 식사가 두 번 나온다** — "오늘" 섹션 + "히스토리" 맨 위 | `findHistory` 에 날짜 조건 없음(`MealRepository.java:53-60`) | 히스토리에서 오늘 제외(`mealDate < today`) 또는 프론트 필터. 정렬도 `id desc` 라 날짜를 거슬러 적은 기록·어제 복사분이 순서를 깬다 → `meal_date desc, id desc` 커서 | `MealRepository`, `MealService`(또는 `dietStore.ts`) | 있음(작음) | 없음 | 서버 | 소 | 없음 |
-| A-3 | **식사 삭제가 채팅 MEAL_CARD 이미지를 깨뜨림** | `MealService.java:753-775` 가 공유 URL 무조건 destroy | 삭제 전 참조 검사(§2-5) | `MealService`, `CloudinaryImageDeleter` 호출부, Purger 둘 | 있음 | 없음 | 서버 | 중 | 없음 — 4절 "커밋 후 삭제" 원칙 유지 |
-| A-4 | **상대에게 이메일·생년월일·성별·키가 API 로 내려감** | `RelationResponse.partner = UserResponse.from(partner)` | 상대용 축소 DTO(이름·사진·id 등). 프론트 사용처 확인 후 | `RelationResponse`, `ChatService`, `TrainerService`, 새 DTO, `types` | 있음 | 없음 | 서버(+앱이 쓰는 필드 확인) | 소~중 | 없음. 럽바디 밖이지만 #7 선행 |
+| A-3 | **✅ 완료(`2a4976e1`)** **식사 삭제가 채팅 MEAL_CARD 이미지를 깨뜨림** — 해결: 모든 삭제가 지나는 `CloudinaryImageDeleter.deleteAll` 이 지우기 직전 `StoredMediaReferences`(파일 URL 컬럼 전수)로 아직 쓰이는 URL 을 남긴다. 탈퇴·지난 기록 삭제도 같은 검사를 지난다 — 남은 행(상대의 식사, 내 식사)이 쓰는 파일만 남고 관계 안에서만 쓰이던 파일은 그대로 지워진다 | `MealService.java:753-775` 가 공유 URL 무조건 destroy | 삭제 전 참조 검사(§2-5) | `MealService`, `CloudinaryImageDeleter` 호출부, Purger 둘 | 있음 | 없음 | 서버 | 중 | 없음 — 4절 "커밋 후 삭제" 원칙 유지 |
+| A-4 | **✅ 완료(`9c0c71f5`)** **상대에게 이메일·생년월일·성별·키가 API 로 내려감** | `RelationResponse.partner = UserResponse.from(partner)` | 상대용 축소 DTO(이름·사진·id 등). 프론트 사용처 확인 후 | `RelationResponse`, `ChatService`, `TrainerService`, 새 DTO, `types` | 있음 | 없음 | 서버(+앱이 쓰는 필드 확인) | 소~중 | 없음. 럽바디 밖이지만 #7 선행 |
 | A-5 | 사진 분석 다운로드 실패 시 한도 미환불 | `FoodAnalysisService.java:145-147` | 다운로드를 차감 앞으로 | `FoodAnalysisService` | 있음 | 없음 | 서버 | 소 | 없음 |
 | A-6 | **로딩·오류가 침묵** — 영양·물·단식·목표 조회 실패 시 카드가 그냥 사라짐 | `.catch(() => setX(null))`(`DietScreen.tsx:171`, `:181-182`, `:207-210`), `nutrition ? … : null`(`:493`) | 첫 로드 동안 고정 높이 스켈레톤(레이아웃 점프 방지), 실패 시 카드 자리에 한 줄 "불러오지 못했어요 · 다시". 목록만 오류 구분이 있다(`:743-753`) | `DietScreen.tsx` | 없음 | 없음 | 업데이트 | 소 | 없음 |
 | A-7 | 자동 분석 대기 중 카드가 칼로리 칸 없이 보임 | `meal.calories` null 이면 아무것도 안 그림(`MealCard.tsx:78`) | 사진 있음 + 칼로리 null + 오늘 저장분 → "칼로리 채우는 중" 캡션(9/9 토스트와 같은 말). 분석 실패 시 영원히 그 상태가 되지 않게 시간 조건 | `MealCard.tsx` | 없음 | 없음 | 업데이트 | 소 | 9/9 "푸시·이벤트 없이 조용히" — 표시만이라 충돌 없음 |
@@ -335,3 +335,6 @@
 - 실기기 캡처 4장 — §1 높이 추정을 실측으로 바꿔야 한다(특히 Android 360 폭의 안내문 줄바꿈과 큰 글자 설정).
 - #8 라이브러리의 Expo SDK 56 호환과 두 스토어의 현재 심사 양식.
 - `AI_FOOD_PHOTO` `FEATURE_BLOCKED`·`meal-auto-analyze` 성공률 — 9/9 문서 §7-4 의 지표 확인은 여전히 미착수.
+- A-3 의 참조 확인은 파일 URL 컬럼 16개를 인덱스 없이 조회한다(삭제 1회당 테이블별 1쿼리, 관계 단위 삭제는 500건씩).
+  지금 규모에선 문제없지만 `chat_messages` 가 커지면 `image_url` 인덱스를 검토한다. **파일 URL 컬럼을 새로 만들면
+  `StoredMediaReferences.COLUMNS` 에 추가해야** 그 테이블에서 같은 문제가 되살아나지 않는다.

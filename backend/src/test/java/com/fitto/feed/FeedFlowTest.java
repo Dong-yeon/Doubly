@@ -2,6 +2,9 @@ package com.fitto.feed;
 
 import com.fitto.auth.dto.RegisterRequest;
 import com.fitto.auth.service.AuthService;
+import com.fitto.chat.domain.MessageType;
+import com.fitto.chat.dto.SendMessageRequest;
+import com.fitto.chat.service.ChatService;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.upload.CloudinaryImageDeleter;
 import com.fitto.diet.domain.MealType;
@@ -18,6 +21,7 @@ import com.fitto.place.dto.RecordVisitRequest;
 import com.fitto.place.dto.SavePlaceRequest;
 import com.fitto.place.service.PlaceService;
 import com.fitto.relation.dto.InviteCodeResponse;
+import com.fitto.relation.dto.RelationResponse;
 import com.fitto.relation.service.RelationService;
 import com.fitto.workout.dto.SaveWorkoutRequest;
 import com.fitto.workout.dto.WorkoutSetRequest;
@@ -56,6 +60,8 @@ class FeedFlowTest {
     /** 스파이 — 테스트 프로필은 Cloudinary 미설정이라 실제 삭제는 no-op, 어떤 URL 을 넘기는지만 본다 */
     @MockitoSpyBean
     CloudinaryImageDeleter imageDeleter;
+    @Autowired
+    ChatService chatService;
 
     private Long register(String email) {
         return authService.register(
@@ -340,5 +346,37 @@ class FeedFlowTest {
         verify(imageDeleter).deleteAllAfterCommit(List.of(
                 "https://img.example.com/d1.jpg",
                 "https://img.example.com/d1.jpg", "https://img.example.com/d2.jpg", "https://img.example.com/d3.jpg"));
+    }
+    /**
+     * 식단을 "채팅에 공유"하면 MEAL_CARD 가 식사 사진 URL 을 그대로 싣는다. 예전엔 식사를 지우면 그 파일까지
+     * 지워 채팅 카드 사진이 깨졌다(LOVEBODY_REVIEW_2026-10-02 §3 A-3) — 같은 URL 을 쓰는 행이 남아 있으면 남긴다.
+     */
+    @Test
+    void 채팅에_공유한_식사를_지워도_채팅_카드가_쓰는_사진_파일은_남긴다() {
+        long[] c = couple("share-asset-a@fitto.com", "share-asset-b@fitto.com");
+        // couple() 은 relationId 를 돌려주지 않는다 — 내 관계 목록에서 찾는다
+        Long relationId = relationService.findMyRelations(c[0]).stream().map(RelationResponse::id).findFirst().orElseThrow();
+        String photo = "https://res.cloudinary.com/demo/image/upload/v1/fitto/shared-meal.jpg";
+        Long mealId = mealService.save(c[0], new SaveMealRequest(LocalDate.now(), MealType.LUNCH, "김밥", photo, 500,
+                null, null, null, null, null, null, null)).id();
+        chatService.send(c[0], relationId, new SendMessageRequest(MessageType.MEAL_CARD, "점심 · 김밥", photo, null, null, null));
+
+        mealService.delete(c[0], mealId);
+
+        // 삭제 경로는 지운 행의 URL 을 그대로 넘기고(호출부는 몰라도 된다), 지우기 직전 거르기가 남긴다
+        verify(imageDeleter).deleteAllAfterCommit(List.of(photo));
+        assertThat(imageDeleter.deletable(List.of(photo))).isEmpty();
+    }
+
+    /** 참조 확인은 TEXT 컬럼(meals.photo_url — H2 에선 CLOB)까지 본다. 아무도 안 쓰는 URL 만 지울 대상이다 */
+    @Test
+    void 아무_행도_쓰지_않는_URL만_지울_대상이다() {
+        long[] c = couple("share-asset-c@fitto.com", "share-asset-d@fitto.com");
+        String kept = "https://res.cloudinary.com/demo/image/upload/v1/fitto/still-used.jpg";
+        String orphan = "https://res.cloudinary.com/demo/image/upload/v1/fitto/orphan.jpg";
+        mealService.save(c[0], new SaveMealRequest(LocalDate.now(), MealType.DINNER, "파스타", kept, 700,
+                null, null, null, null, null, null, null));
+
+        assertThat(imageDeleter.deletable(List.of(kept, orphan, orphan))).containsExactly(orphan);
     }
 }
