@@ -4,6 +4,7 @@ import type {
   ApiResponse,
   FeedItem,
   FeedItemType,
+  FeedPhotoMap,
   FeedPhotoMonth,
   FeedPhotoSource,
   FeedPhotosPage,
@@ -66,6 +67,17 @@ export const feedApi = {
       apiClient.get<ApiResponse<FeedPhotoMonth>>('/feed/photos/month', {
         params: {
           month,
+          sources: sources && sources.length > 0 ? sources.join(',') : undefined,
+          who,
+        },
+      }),
+    ),
+
+  /** 사진첩 지도 — 좌표 있는 장소별 사진 묶음. sources·who 는 photos 와 같은 필터 */
+  photoMap: (sources?: FeedPhotoSource[], who?: 'me' | 'partner') =>
+    unwrap(
+      apiClient.get<ApiResponse<FeedPhotoMap>>('/feed/photos/map', {
+        params: {
           sources: sources && sources.length > 0 ? sources.join(',') : undefined,
           who,
         },

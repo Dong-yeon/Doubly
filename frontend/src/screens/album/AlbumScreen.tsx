@@ -31,6 +31,7 @@ import { ImageViewer, type ViewerAction, type ViewerImage } from '../../componen
 import { MemoryPeek, hasMemories } from '../home/components/MemoryPeek';
 import { CachedImage } from '../../components/CachedImage';
 import { AlbumCalendar, currentMonth, shiftMonth } from './AlbumCalendar';
+import { AlbumMap } from './AlbumMap';
 import { LockedCard } from '../../components/LockedCard';
 import { feedApi } from '../../api/feed';
 import { tripApi } from '../../api/trip';
@@ -41,7 +42,7 @@ import { haptics } from '../../utils/haptics';
 import { QUICK_EMOJIS } from '../feed/FeedTimelineScreen';
 import { localDateOf, relativeDateLabel } from '../../utils/date';
 import { thumbnailUrl } from '../../utils/imageUrl';
-import type { FeedPhoto, FeedPhotoSource, Memories, Trip } from '../../types';
+import type { FeedPhoto, FeedPhotoMapPlace, FeedPhotoSource, Memories, Trip } from '../../types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 import { layout } from '../../theme/layout';
@@ -59,6 +60,14 @@ const FILTERS: { key: string; label: string; sources?: FeedPhotoSource[] }[] = [
   { key: 'meal', label: '식단', sources: ['MEAL'] },
   { key: 'workout', label: '운동', sources: ['WORKOUT'] },
   { key: 'place', label: '맛집', sources: ['PLACE_VISIT'] },
+];
+
+/** 보기 — 그리드(시간순) · 달력(한 달) · 지도(장소별) */
+type AlbumView = 'grid' | 'calendar' | 'map';
+const VIEWS: { key: AlbumView; label: string; icon: 'grid' | 'calendar-month-outline' | 'map-marker-outline' }[] = [
+  { key: 'grid', label: '사진 모아보기', icon: 'grid' },
+  { key: 'calendar', label: '달력', icon: 'calendar-month-outline' },
+  { key: 'map', label: '지도', icon: 'map-marker-outline' },
 ];
 
 /** 작성자 필터 — '둘 다'는 파라미터를 안 보낸다. 상대 칩의 라벨은 상대 이름으로 그린다 */
@@ -175,7 +184,7 @@ export function AlbumScreen({ navigation }: Props) {
    * 보기 — 그리드(시간순 무한 스크롤) / 달력(한 달 단위). 필터 칩은 둘이 공유한다.
    * 달력은 한 달치를 통째로 받는다(GET /feed/photos/month) — 그리드의 페이지와는 따로 둔다.
    */
-  const [view, setView] = useState<'grid' | 'calendar'>('grid');
+  const [view, setView] = useState<AlbumView>('grid');
   const [month, setMonth] = useState(currentMonth);
   const [monthData, setMonthData] = useState<{ items: FeedPhoto[]; truncated: boolean }>({
     items: [],
@@ -185,6 +194,12 @@ export function AlbumScreen({ navigation }: Props) {
   const [monthError, setMonthError] = useState(false);
   /* 달 요청 세대 — 달을 빠르게 넘길 때 늦게 온 이전 달 응답이 이번 달을 덮지 않게(그리드의 generationRef 와 같은 이유) */
   const monthGenerationRef = useRef(0);
+  /* 지도 — null 은 "아직 못 받음"(지도를 마운트하지 않는다 — AlbumMap 주석: 첫 그리기에만 핀에 시야를 맞춘다) */
+  const [mapPlaces, setMapPlaces] = useState<FeedPhotoMapPlace[] | null>(null);
+  const [mapTruncated, setMapTruncated] = useState(false);
+  const [mapLoading, setMapLoading] = useState(false);
+  const [mapError, setMapError] = useState(false);
+  const mapGenerationRef = useRef(0);
   /*
    * 요청 세대 — 첫 페이지 요청마다 올린다. 응답이 왔을 때 세대가 바뀌어 있으면 버린다.
    *
@@ -247,7 +262,9 @@ export function AlbumScreen({ navigation }: Props) {
    * firstIndexByKey 는 "이 칸을 탭하면 뷰어의 몇 번째부터 열지"를 알려준다.
    */
   // 뷰어는 지금 보이는 모양의 사진을 넘긴다 — 달력이면 그 달, 그리드면 받아 둔 목록
-  const viewerSource = view === 'calendar' ? monthData.items : photos;
+  // 지도는 장소 순서대로 이어 붙인다 — 핀을 누르면 그 장소부터, 넘기면 다음 장소로 간다
+  const mapItems = useMemo(() => (mapPlaces ?? []).flatMap((p) => p.items), [mapPlaces]);
+  const viewerSource = view === 'calendar' ? monthData.items : view === 'map' ? mapItems : photos;
   const { viewerImages, firstIndexByKey } = useMemo(() => {
     const images: ViewerImage[] = [];
     const firstIndexByKey = new Map<string, number>();
@@ -365,6 +382,27 @@ export function AlbumScreen({ navigation }: Props) {
     [sourcesOf],
   );
 
+  /** 지도 — 다시 받을 때 이미 있는 핀은 그대로 둔다(필터를 바꿀 때만 비운다 — onPick*) */
+  const loadMap = useCallback(
+    async (filterKey: string, whoKey: Who) => {
+      const generation = ++mapGenerationRef.current;
+      setMapLoading(true);
+      setMapError(false);
+      try {
+        const res = await feedApi.photoMap(sourcesOf(filterKey), whoKey === 'all' ? undefined : whoKey);
+        if (generation !== mapGenerationRef.current) return;
+        setMapPlaces(res.places);
+        setMapTruncated(res.truncated);
+      } catch {
+        if (generation !== mapGenerationRef.current) return;
+        setMapError(true);
+      } finally {
+        if (generation === mapGenerationRef.current) setMapLoading(false);
+      }
+    },
+    [sourcesOf],
+  );
+
   /*
    * 포커스·필터·보기·달 변경 모두 여기로 온다(deps 라 포커스 중에 바뀌면 다시 돈다).
    * 그리드: 이미 같은 조합으로 받아 둔 목록이 있으면 머리만 갈고, 아니면 처음부터 받는다.
@@ -376,10 +414,14 @@ export function AlbumScreen({ navigation }: Props) {
         void loadMonth(month, filter, who);
         return;
       }
+      if (view === 'map') {
+        void loadMap(filter, who);
+        return;
+      }
       const mode = loadedKeyRef.current === `${filter}|${who}` ? 'head' : 'replace';
       void load(filter, who, mode);
       loadHeader();
-    }, [view, month, load, loadMonth, filter, who, loadHeader]),
+    }, [view, month, load, loadMonth, loadMap, filter, who, loadHeader]),
   );
 
   /** 달력 칸 → 그날 가장 최근 사진부터 뷰어. 넘기면 그 달의 다른 날로 이어진다 */
@@ -388,15 +430,23 @@ export function AlbumScreen({ navigation }: Props) {
     if (first) setViewingIndex(firstIndexByKey.get(keyOf(first)) ?? 0);
   };
 
+  /** 지도 핀 → 그 장소의 가장 최근 사진부터 뷰어 */
+  const onPressPlace = (placeId: number) => {
+    const first = mapPlaces?.find((p) => p.placeId === placeId)?.items[0];
+    if (first) setViewingIndex(firstIndexByKey.get(keyOf(first)) ?? 0);
+  };
+
   const onPickFilter = (key: string) => {
     if (key === filter) return;
     setFilter(key);
     setPage(EMPTY_PAGE);
+    setMapPlaces(null); // 새 조건의 핀에 시야를 다시 맞추도록 지도를 새로 띄운다
   };
 
   const onPickWho = (key: Who) => {
     if (key === who) return;
     setWho(key);
+    setMapPlaces(null);
     setPage(EMPTY_PAGE);
   };
 
@@ -487,20 +537,32 @@ export function AlbumScreen({ navigation }: Props) {
       <View style={styles.topBar}>
         <Text style={styles.topTitle}>우리</Text>
         <View style={styles.topButtons}>
-          {/* 보기 전환 — 아이콘은 "누르면 갈 모양"이다(지금 모양이 아니라) */}
-          <Pressable
-            onPress={() => setView((v) => (v === 'grid' ? 'calendar' : 'grid'))}
-            hitSlop={8}
-            style={({ pressed }) => [styles.topBtn, pressed && styles.topBtnPressed]}
-            accessibilityRole="button"
-            accessibilityLabel={view === 'grid' ? '달력으로 보기' : '사진 모아보기로 보기'}
-          >
-            <MaterialCommunityIcons
-              name={view === 'grid' ? 'calendar-month-outline' : 'grid'}
-              size={24}
-              color={colors.textPrimary}
-            />
-          </Pressable>
+          {/*
+            보기 전환 — 셋이라 토글 대신 묶음 버튼이다(누를 때마다 다음 모양으로 도는 토글은 지금 어느
+            모양인지, 다음이 무엇인지 둘 다 숨긴다). 고른 것은 채운 칸.
+          */}
+          <View style={styles.viewSwitch} accessibilityRole="tablist">
+            {VIEWS.map((v) => (
+              <Pressable
+                key={v.key}
+                onPress={() => setView(v.key)}
+                style={({ pressed }) => [
+                  styles.viewBtn,
+                  view === v.key && styles.viewBtnOn,
+                  pressed && styles.topBtnPressed,
+                ]}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: view === v.key }}
+                accessibilityLabel={`${v.label}로 보기`}
+              >
+                <MaterialCommunityIcons
+                  name={v.icon}
+                  size={20}
+                  color={view === v.key ? colors.white : colors.textSecondary}
+                />
+              </Pressable>
+            ))}
+          </View>
           <Pressable
             onPress={() => navigation.navigate('FeedTimeline')}
             hitSlop={8}
@@ -544,7 +606,18 @@ export function AlbumScreen({ navigation }: Props) {
         <Chip label={partnerName} selected={who === 'partner'} onPress={() => onPickWho('partner')} />
       </ScrollView>
 
-      {view === 'calendar' ? (
+      {view === 'map' ? (
+        <AlbumMap
+          key={`${filter}|${who}`}
+          places={mapPlaces}
+          loading={mapLoading}
+          error={mapError}
+          truncated={mapTruncated}
+          filtered={filtered}
+          onPressPlace={onPressPlace}
+          onRetry={() => void loadMap(filter, who)}
+        />
+      ) : view === 'calendar' ? (
         <ScrollView
           contentContainerStyle={styles.list}
           refreshControl={
@@ -728,6 +801,21 @@ const styles = themedStyles((colors) => ({
   topButtons: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   topBtn: { minWidth: layout.touchTarget, minHeight: layout.touchTarget, alignItems: 'center', justifyContent: 'center' },
   topBtnPressed: { opacity: 0.6 },
+  viewSwitch: {
+    flexDirection: 'row',
+    padding: 2,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceAlt,
+  },
+  // 칸 하나는 터치 타깃 44 — 묶음이라 작아 보여도 누르는 면적은 줄이지 않는다
+  viewBtn: {
+    width: layout.touchTarget,
+    height: layout.touchTarget - 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.md,
+  },
+  viewBtnOn: { backgroundColor: colors.primary },
   /*
    * flexGrow:0 — 세로 flex 컨테이너 안의 ScrollView 는 남은 높이를 전부 먹는다. 없으면
    * 칩이 화면 높이만큼 늘어난 알약이 됐다(2026-09-15 리포트). 내용 높이만 쓰게 한다.
