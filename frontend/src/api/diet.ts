@@ -62,6 +62,11 @@ export interface SaveMealPayload {
   fiber?: number;
   /** "데이트" 칩 — true 면 커플 상대방에게도 같은 끼니가 칼로리 절반으로 자동 등록된다 */
   sharedWithPartner?: boolean;
+  /**
+   * 저장 멱등키(V118) — 같은 키로 이미 저장된 끼니가 있으면 서버가 새로 만들지 않고 그걸 돌려준다.
+   * 새 기록 저장(POST)에만 보낸다.
+   */
+  clientRequestId?: string;
 }
 
 /** POST /meal/photo-record — 같은 사진으로 남긴 식단 */
