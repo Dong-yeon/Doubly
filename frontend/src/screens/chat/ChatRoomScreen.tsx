@@ -51,6 +51,7 @@ import { parseVoiceContent } from '../../utils/chatVoice';
 import { getErrorMessage } from '../../utils/error';
 import { coupleEmojiApi } from '../../api/coupleEmoji';
 import { toast } from '../../store/toastStore';
+import { pickDate } from '../../store/datePickerStore';
 import { runBusy } from '../../store/busyStore';
 import { EmojiPicker } from '../../components/EmojiPicker';
 import { ChatSearchModal } from '../../components/ChatSearchModal';
@@ -568,6 +569,76 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     });
     setTimeout(() => setHighlightedId((cur) => (cur === id ? null : cur)), 1800);
   }, [relationId]);
+
+  /*
+   * 날짜로 이동 — 날짜 구분선을 누르면 달력이 뜨고, 고른 날의 첫 메시지로 간다(2026-10-02, 카톡 날짜 알약의 "›").
+   *
+   * <p>서버에 "그날의 첫 메시지" API 를 두지 않았다. 목록이 이어진 한 덩어리(inverted FlatList)라 그 메시지까지
+   * 가려면 어차피 사이의 페이지를 전부 받아야 해서, id 를 먼저 알아도 요청 수가 줄지 않는다. 검색 결과로
+   * 이동(scrollToMessage)과 같은 방식으로 과거를 불러오고, 같은 상한(300페이지)을 쓴다.
+   *
+   * <p>그날 대화가 없으면 <b>그 뒤 가장 가까운 날</b>로 가고 그렇다고 말한다. 첫 대화보다 이전 날을 고르면 첫 대화로 간다.
+   * 날짜는 구분선과 같은 기준(기기 시간대의 toDateString)으로 비교한다 — 구분선이 말한 날과 어긋나지 않게.
+   */
+  const jumpingToDateRef = useRef(false);
+  const jumpToDate = useCallback(async (fromIso: string) => {
+    if (jumpingToDateRef.current) return;
+    const picked = await pickDate({ title: '날짜로 이동', value: toDateString(new Date(fromIso)), max: toDateString() });
+    if (!picked) return;
+    jumpingToDateRef.current = true;
+    try {
+      const LOAD_GUARD = 300;
+      const dayOf = (m: ChatMessage) => toDateString(new Date(m.createdAt));
+      let state = useChatStore.getState();
+      let list = state.messages[relationId] ?? [];
+      // 목록은 최신이 앞 — 맨 끝(가장 오래된 것)이 고른 날보다 이전이 될 때까지 과거를 불러온다
+      const needOlder = () => {
+        const oldest = list[list.length - 1];
+        return !!oldest && dayOf(oldest) >= picked && state.hasMoreOlder[relationId] !== false;
+      };
+      if (needOlder()) toast.info('그날 대화를 불러오는 중이에요…');
+      let guard = 0;
+      while (needOlder() && guard < LOAD_GUARD) {
+        const before = list.length;
+        if (state.loadingOlder[relationId]) {
+          // 스크롤이 부른 불러오기가 도는 중 — loadOlder 는 이때 기다리지 않고 바로 돌아오므로 잠깐 쉰다
+          await new Promise((res) => setTimeout(res, 150));
+        } else {
+          await state.loadOlder(relationId);
+        }
+        state = useChatStore.getState();
+        list = state.messages[relationId] ?? [];
+        guard++;
+        // 불러왔는데 늘지 않았다 = 실패(네트워크) — 같은 요청을 300번 반복하지 않는다
+        if (!state.loadingOlder[relationId] && list.length === before && state.hasMoreOlder[relationId] !== false) {
+          toast.error('대화를 불러오지 못했어요. 잠시 후 다시 시도해주세요.');
+          return;
+        }
+      }
+      if (needOlder()) {
+        toast.error('너무 오래전이라 찾지 못했어요.');
+        return;
+      }
+      // 고른 날 이후의 가장 이른 메시지 — 오래된 쪽(뒤)부터 찾는다
+      let target: ChatMessage | undefined;
+      for (let i = list.length - 1; i >= 0; i--) {
+        if (dayOf(list[i]) >= picked) {
+          target = list[i];
+          break;
+        }
+      }
+      if (!target) {
+        toast.info('그날 이후로는 대화가 없어요.');
+        return;
+      }
+      if (dayOf(target) !== picked) {
+        toast.info(`그날은 대화가 없어 ${chatDateDividerLabel(target.createdAt)}로 이동했어요.`);
+      }
+      await scrollToMessage(target.id);
+    } finally {
+      jumpingToDateRef.current = false;
+    }
+  }, [relationId, scrollToMessage]);
 
   /*
    * 저장한 대화 목록에서 항목을 눌러 돌아왔을 때만 채워진다(navigation.navigate 로
@@ -1689,7 +1760,22 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     const divider = showDateDivider ? (
       <View style={styles.dateDivider}>
         <View style={chatStyles.dateDividerLine} />
-        <Text style={chatStyles.dateDividerText}>{chatDateDividerLabel(item.createdAt)}</Text>
+        {/*
+          누르면 달력 → 그날로 이동(jumpToDate). "›" 는 눌린다는 표시다(카톡 날짜 알약과 같다).
+          글자가 12 라 위아래로 hitSlop 을 준다 — 구분선 줄 안쪽이라 다른 터치를 빼앗지 않는다.
+        */}
+        <Pressable
+          onPress={() => void jumpToDate(item.createdAt)}
+          hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+          style={({ pressed }) => pressed && styles.dateDividerPressed}
+          accessibilityRole="button"
+          accessibilityLabel={`${chatDateDividerLabel(item.createdAt)}. 눌러서 다른 날짜로 이동`}
+        >
+          <Text style={chatStyles.dateDividerText}>
+            {chatDateDividerLabel(item.createdAt)}{' '}
+            <MaterialCommunityIcons name="chevron-right" size={12} color={chatStyles.dateDividerText.color as string} />
+          </Text>
+        </Pressable>
         <View style={chatStyles.dateDividerLine} />
       </View>
     ) : null;
@@ -2904,6 +2990,7 @@ const styles = themedStyles((colors) => ({
   pinnedText: { flex: 1, fontSize: fontSize.caption, fontWeight: '600', color: colors.textPrimary },
   // 날짜 구분선 — 가운데 라벨 + 양옆 선
   dateDivider: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginVertical: spacing.md },
+  dateDividerPressed: { opacity: 0.5 },
 
   // 드래그앤드롭 안내 — 화면 전체를 덮되 입력바 위쪽 여백은 남기지 않는다(끌고 있는 동안만)
   dropHint: {
