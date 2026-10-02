@@ -251,7 +251,7 @@ public class CatchMindService {
         Relation couple = couples.active(userId);
         String partnerName = couples.partnerName(couple, userId);
         return gameRepository
-                .findTop20ByCoupleIdAndStatusOrderByCompletedAtDesc(couple.getId(), GameStatus.COMPLETED)
+                .findTop20ByCoupleIdAndStatusOrderByCompletedAtDescIdDesc(couple.getId(), GameStatus.COMPLETED)
                 .stream()
                 .map(g -> CatchMindResponse.of(g, userId, partnerName))
                 .toList();

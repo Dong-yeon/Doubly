@@ -263,7 +263,7 @@ public class SudokuService {
         Relation couple = activeCouple(userId);
         String partnerName = couples.partnerName(couple, userId);
         return gameRepository
-                .findTop20ByCoupleIdAndStatusOrderByCompletedAtDesc(couple.getId(), GameStatus.COMPLETED)
+                .findTop20ByCoupleIdAndStatusOrderByCompletedAtDescIdDesc(couple.getId(), GameStatus.COMPLETED)
                 .stream()
                 .map(g -> SudokuGameResponse.of(g, userId, partnerName))
                 .toList();
