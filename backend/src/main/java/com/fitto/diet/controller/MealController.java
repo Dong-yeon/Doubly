@@ -31,6 +31,7 @@ import com.fitto.diet.service.NutritionService;
 import org.springframework.web.bind.annotation.PutMapping;
 import com.fitto.workout.dto.CalendarDayResponse;
 import jakarta.validation.Valid;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -72,7 +73,17 @@ public class MealController {
     @PostMapping
     public ApiResponse<MealResponse> save(@AuthenticationPrincipal AuthUser user,
                                           @Valid @RequestBody SaveMealRequest request) {
-        return ApiResponse.success(mealService.save(user.id(), request), "식단이 기록되었습니다.");
+        try {
+            return ApiResponse.success(mealService.save(user.id(), request), "식단이 기록되었습니다.");
+        } catch (DataIntegrityViolationException e) {
+            /*
+             * 같은 멱등키의 저장이 동시에 도착해 (user_id, client_request_id) unique 인덱스가 두 번째 INSERT 를
+             * 막은 경우다(V118). 서비스의 사전 조회가 놓치는 좁은 경합이고, 먼저 처리된 쪽이 이미 저장했으므로
+             * 그 끼니를 돌려준다(채팅 client_message_id 와 같은 처방). 다른 제약 위반이면 그대로 던진다.
+             */
+            return ApiResponse.success(mealService.findSavedByClientRequestId(user.id(), request.clientRequestIdOrNull())
+                    .orElseThrow(() -> e), "식단이 기록되었습니다.");
+        }
     }
 
     /**

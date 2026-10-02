@@ -222,6 +222,13 @@ export function DietRecordScreen({ navigation, route }: Props) {
   const [saving, setSaving] = useState(false);
   // 버튼 비활성은 saving 이 렌더된 뒤에야 걸린다 — 그 사이 두 번째 탭이 같은 끼니를 한 번 더 저장했다
   const savingRef = useRef(false);
+  /*
+   * 저장 멱등키 — 이 화면을 연 동안 한 번만 만든다. 저장 요청은 10초에 끊기는데 서버가 그보다 늦게 커밋하면
+   * 앱은 실패로 보고 사용자는 다시 누른다. 같은 키를 다시 보내면 서버가 먼저 저장된 끼니를 돌려줘 두 번 생기지 않는다.
+   * 그 사이 내용을 고쳤다면 먼저 저장된 쪽이 남는다 — 실제로 저장된 걸 보여주는 게 중복보다 낫다.
+   * UUID 대신 채팅 client_message_id 와 같은 형식이다: 사람 한 명 안에서만 유일하면 된다.
+   */
+  const [clientRequestId] = useState(() => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`);
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzingText, setAnalyzingText] = useState(false);
   /** DB 이름 검색 — 어느 항목에 대한 결과인지(key)와 후보 목록. 한 번에 한 항목만 연다. */
@@ -1075,6 +1082,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
         fiber: extras?.fiber,
         // 커플이 아니면 서버가 조용히 무시하므로 editing 상태에서만 항상 false 로 둔다
         sharedWithPartner: !editing && dateMeal ? true : undefined,
+        clientRequestId: editing ? undefined : clientRequestId,
       };
 
       /*

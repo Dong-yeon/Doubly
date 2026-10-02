@@ -35,6 +35,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
+import com.fitto.common.security.AuthUser;
+import com.fitto.diet.controller.MealController;
+import com.fitto.user.domain.Role;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -72,6 +75,8 @@ class MealFlowTest {
     PlaceService placeService;
     @Autowired
     PlaceVisitRepository placeVisitRepository;
+    @Autowired
+    MealController mealController;
 
     private Long register(String email) {
         return authService.register(
@@ -792,5 +797,106 @@ class MealFlowTest {
         assertThat(mealService.findToday(u[1])).isEmpty();
         assertThat(placeVisitRepository.findById(visitId)).get()
                 .extracting(PlaceVisit::getMealId).isNull();
+    }
+
+    // ---- 저장 멱등키 (lovebody-current-state §4-3, V118) ----
+
+    /** 앱이 보내는 모양 그대로 — 기록 화면을 열 때 만든 키를 재시도에도 같이 보낸다. */
+    private SaveMealRequest withRequestId(String requestId, String photoUrl, boolean shared) {
+        return new SaveMealRequest(KstClock.today(), MealType.LUNCH, "비빔밥", photoUrl, 600,
+                null, null, null, null, null, null, null, shared, requestId);
+    }
+
+    /**
+     * 앱은 저장 요청을 10초에 끊는다 — 서버가 그보다 늦게 커밋하면 앱은 실패로 보고 사용자는 다시 누른다.
+     * 같은 키로 다시 오면 새로 만들지 않고 먼저 저장된 끼니를 돌려줘야 한다.
+     */
+    @Test
+    void 같은_요청_ID로_다시_저장하면_새로_만들지_않고_먼저_것을_돌려준다() {
+        Long user = register("reqid-1@fitto.com");
+
+        MealResponse first = mealService.save(user, withRequestId("req-abc", null, false));
+        MealResponse retried = mealService.save(user, withRequestId("req-abc", null, false));
+
+        assertThat(retried.id()).isEqualTo(first.id());
+        assertThat(mealService.findToday(user)).hasSize(1);
+        // 키가 다르면 다른 끼니다
+        mealService.save(user, withRequestId("req-def", null, false));
+        assertThat(mealService.findToday(user)).hasSize(2);
+    }
+
+    /** 사진 기록의 재시도는 예전엔 "이 사진으로 이미 남긴 식단이 있어요"(409)로 실패했다 — 멱등 검사가 그보다 먼저다. */
+    @Test
+    void 사진_기록을_같은_요청_ID로_다시_보내도_사진_중복_오류가_나지_않는다() {
+        Long user = register("reqid-2@fitto.com");
+        String photo = "https://res.cloudinary.com/demo/image/upload/v1/fitto/reqid-lunch.jpg";
+
+        MealResponse first = mealService.save(user, withRequestId("req-photo", photo, false));
+
+        assertThatCode(() -> mealService.save(user, withRequestId("req-photo", photo, false)))
+                .doesNotThrowAnyException();
+        assertThat(mealService.findToday(user)).singleElement()
+                .extracting(MealResponse::id).isEqualTo(first.id());
+    }
+
+    /** 키는 사람마다 따로다 — 두 사람이 우연히 같은 키를 만들어도 서로를 막지 않는다. */
+    @Test
+    void 요청_ID는_사람마다_따로_센다() {
+        Long a = register("reqid-3a@fitto.com");
+        Long b = register("reqid-3b@fitto.com");
+
+        mealService.save(a, withRequestId("same-key", null, false));
+        mealService.save(b, withRequestId("same-key", null, false));
+
+        assertThat(mealService.findToday(a)).hasSize(1);
+        assertThat(mealService.findToday(b)).hasSize(1);
+    }
+
+    /** 데이트 식단 재시도 — 상대에게 복제본이 한 장만 생기고 내 몫도 한 번만 나뉜다. */
+    @Test
+    void 데이트_식단을_같은_요청_ID로_다시_보내도_상대_몫은_한_장이다() {
+        Long a = register("reqid-4a@fitto.com");
+        Long b = register("reqid-4b@fitto.com");
+        relationService.connectCouple(b, relationService.createCoupleInvite(a).code());
+
+        mealService.save(a, withRequestId("req-date", null, true));
+        MealResponse retried = mealService.save(a, withRequestId("req-date", null, true));
+
+        assertThat(retried.calories()).isEqualTo(300);
+        assertThat(mealService.findToday(a)).hasSize(1);
+        assertThat(mealService.findToday(b)).singleElement()
+                .extracting(MealResponse::calories).isEqualTo(300);
+    }
+
+    /**
+     * 사전 조회를 둘 다 통과하는 동시 도착 — unique 인덱스(V118)가 두 번째 INSERT 를 막고, 컨트롤러가 그걸 받아
+     * 먼저 저장된 끼니를 돌려준다. 컨트롤러 빈을 직접 불러야 그 경로를 탄다.
+     */
+    @Test
+    void 같은_요청_ID가_동시에_두_번_와도_한_건만_저장된다() throws Exception {
+        Long user = register("reqid-5@fitto.com");
+        AuthUser auth = new AuthUser(user, Role.USER);
+
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        List<Long> ids = new ArrayList<>();
+        try {
+            List<Future<MealResponse>> results = new ArrayList<>();
+            for (int i = 0; i < 2; i++) {
+                results.add(pool.submit(() -> {
+                    start.await();
+                    return mealController.save(auth, withRequestId("req-race", null, false)).data();
+                }));
+            }
+            start.countDown();
+            for (Future<MealResponse> r : results) {
+                ids.add(r.get(30, TimeUnit.SECONDS).id());
+            }
+        } finally {
+            pool.shutdownNow();
+        }
+
+        assertThat(ids.get(0)).isEqualTo(ids.get(1));
+        assertThat(mealService.findToday(user)).hasSize(1);
     }
 }
