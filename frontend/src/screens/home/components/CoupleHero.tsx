@@ -52,6 +52,12 @@ export interface PersonToday {
    * 상대가 그 이모지를 지우면 서버가 null 로 내려주므로 저절로 유니코드로 돌아간다.
    */
   moodImageUrl?: string | null;
+  /**
+   * 무드와 함께 남긴 "상대에게 한마디"(20자). 이름 아래 한 줄 말풍선으로 보인다.
+   * 예전에는 피커가 받고 서버가 저장했는데 앱 어디에도 그리지 않아, 쓴 말이 상대에게 닿지 않았다
+   * (docs/daily-mood-current-state.md §8-7).
+   */
+  moodMessage?: string | null;
   /** 럽슐랭 왕관 신호 — 오늘 기록했거나 막 등극했으면 아바타 링 위에 씌운다(AvatarCrown). 없으면 아무것도 없다 */
   crown?: LovelichelinSignal | null;
   /**
@@ -176,13 +182,14 @@ function PersonColumn({
   mealHint?: string;
 }) {
   const meta = [person.latestLabel, person.latestTime].filter(Boolean).join(' · ');
+  const moodNote = person.moodMessage?.trim() || null;
   return (
     <View style={styles.column}>
       <Pressable
         style={({ pressed }) => [styles.person, pressed && styles.pressed]}
         onPress={onPress}
         accessibilityRole="button"
-        accessibilityLabel={`${person.name}님의 기록 보기${person.today ? `. ${todayRingLabel(person.today, !!person.snack)}` : ''}`}
+        accessibilityLabel={`${person.name}님의 기록 보기${person.today ? `. ${todayRingLabel(person.today, !!person.snack)}` : ''}${moodNote ? `. 한마디: ${moodNote}` : ''}`}
       >
         {/*
           오늘 챙김 링 — 바깥 68(예전 테두리 링 64). 아바타 56 은 그대로, 링과 사이에 배경색 틈 2.
@@ -218,6 +225,13 @@ function PersonColumn({
             </View>
           ) : null}
         </View>
+        {moodNote ? (
+          <View style={styles.moodNote}>
+            <Text style={styles.moodNoteText} numberOfLines={1}>
+              {moodNote}
+            </Text>
+          </View>
+        ) : null}
       </Pressable>
 
       <View style={styles.todayRow}>
@@ -344,6 +358,15 @@ const styles = themedStyles((colors) => ({
   },
   moodBadgeEmoji: { fontSize: fontSize.caption, lineHeight: 16 },
   moodBadgeImage: { width: 22, height: 22, borderRadius: 11 },
+  // 무드 한마디 — 이름 아래 작은 말풍선. 20자라 한 줄이면 충분하고, 좁은 열에서는 말줄임
+  moodNote: {
+    maxWidth: '100%',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radius.full,
+    backgroundColor: colors.surfaceAlt,
+  },
+  moodNoteText: { color: colors.textSecondary, fontSize: fontSize.caption, fontWeight: '600' },
 
   today: { width: layout.touchTarget, height: layout.touchTarget, alignItems: 'center', justifyContent: 'center' },
   todayCircle: {
