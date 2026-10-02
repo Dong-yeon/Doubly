@@ -2,6 +2,7 @@ package com.fitto.place.repository;
 
 import com.fitto.place.domain.PlaceVisit;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -28,6 +29,14 @@ public interface PlaceVisitRepository extends JpaRepository<PlaceVisit, Long> {
             where v.mealId in :mealIds
             """)
     List<VisitWithPlace> findByMealIdIn(@Param("mealIds") List<Long> mealIds);
+
+    /**
+     * 끼니를 지우기 전에 방문과의 연결을 끊는다 — {@code place_visits.meal_id} 는 ON DELETE 절 없는 FK 라(V8)
+     * 그대로 두면 끼니 삭제가 FK 위반으로 실패한다. 방문은 장소 별점·등급의 근거이므로 지우지 않는다.
+     */
+    @Modifying(flushAutomatically = true)
+    @Query("update PlaceVisit v set v.mealId = null where v.mealId in :mealIds")
+    int detachMeals(@Param("mealIds") List<Long> mealIds);
 
     /**
      * 럽슐랭 가이드 매거진 카드의 커버 사진/한줄평용 배치 조회 — 장소별로 최근 방문순.

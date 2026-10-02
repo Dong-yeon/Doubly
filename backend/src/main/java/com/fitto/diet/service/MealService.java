@@ -844,11 +844,14 @@ public class MealService {
              * 있어도 무방하다(지운 자산을 다시 지우는 호출은 멱등이다. Purger 주석과 같은 근거).
              */
             photoUrls = pair.stream().map(Meal::getPhotoUrl).filter(Objects::nonNull).distinct().toList();
+            // 장소를 붙인 끼니면 방문이 이 행을 가리킨다(FK) — 방문은 남기고 연결만 끊는다
+            placeVisitRepository.detachMeals(pair.stream().map(Meal::getId).toList());
             mealRepository.deleteAll(pair);
             publishDietEvent(userId);
         } else {
             feedReactionRepository.deleteByTargetTypeAndTargetId(FeedItemType.MEAL, mealId);
             photoUrls = meal.getPhotoUrl() != null ? List.of(meal.getPhotoUrl()) : List.of();
+            placeVisitRepository.detachMeals(List.of(mealId));
             mealRepository.delete(meal);
         }
         // 채팅에 공유한 MEAL_CARD 처럼 같은 URL 을 쓰는 다른 행이 남아 있으면 삭제기가 파일을 남긴다

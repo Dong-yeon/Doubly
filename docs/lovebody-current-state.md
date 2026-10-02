@@ -402,6 +402,18 @@
    - 이어서 users 하드 삭제 (`B/auth/service/AccountWithdrawalService.java:154-155`)
    - `WithdrawFlowTest` 에 같이 먹기 사례 없음 (`backend/src/test/java/com/fitto/auth/WithdrawFlowTest.java:324-335` 은 단일 식단)
 
+> **2026-10-02 후속 — 두 건 모두 재현 후 수정함** (브랜치 `fix/meal-fk-violations`).
+> - 재현: 고치기 전 H2 에서 새 테스트 4건이 전부 실패했다 — `PLACE_VISITS FOREIGN KEY(MEAL_ID)` (식단 삭제 2건),
+>   `MEALS FOREIGN KEY(CREATED_BY)` at `delete from users` (탈퇴 1건), 반대 방향 탈퇴는 FK 는 통과하지만
+>   상대 원본에 "같이 먹기" 배지가 남음(1건).
+> - 1번 수정: `MealService.delete` 가 끼니(짝 포함)를 지우기 전에 `PlaceVisitRepository.detachMeals` 로
+>   `meal_id` 만 null 로 만든다. **방문은 지우지 않는다** — 장소 별점·등급의 근거이기 때문이다.
+>   마이그레이션(ON DELETE SET NULL)은 쓰지 않았다: 자동 생성된 FK 이름이 H2·PostgreSQL 에서 달라 양쪽에서 도는 DROP CONSTRAINT 를 쓰기 어렵다.
+> - 2번 수정: `UserDataPurger` 가 meals 를 지우기 전에, 탈퇴자와 같은 `shared_group_id` 를 가진 **상대 행의
+>   `created_by`·`shared_group_id` 를 비운다**. 상대 몫(절반 값)은 상대의 혼자 기록으로 남는다(관계 종료 시
+>   식단을 남기는 기존 원칙과 같다). 안전망으로 `created_by = 탈퇴자` 인 행도 null 로 만든다.
+> - 테스트: `MealFlowTest` 2건, `WithdrawFlowTest` 2건 추가. 관련 4클래스 79건 H2·PostgreSQL 모두 통과.
+
 ### 4-2. 타임존
 
 - 서버: `KstClock.today()` 로 통일됨 — 확인됨, 문제 없음
@@ -480,8 +492,8 @@
 - 낙관적 락, 저장 멱등 키, Cloudinary 고아 정리 배치, 금액 단위 비용 집계(미확인)
 
 ### 위험
-- **장소를 붙인 식단 삭제가 FK 위반**(`place_visits.meal_id`, ON DELETE 없음) — 정적 확인, 테스트 없음
-- **같이 먹기 이력이 있으면 탈퇴가 FK 위반 가능**(`meals.created_by` 미정리) — 정적 확인, 테스트 없음
+- ~~장소를 붙인 식단 삭제가 FK 위반~~ — 재현 후 수정(§4-1 후속)
+- ~~같이 먹기 이력이 있으면 탈퇴가 FK 위반~~ — 재현 후 수정(§4-1 후속)
 - 앱이 기기 로컬 날짜를 보냄 → 해외·시간대 변경 시 거절 또는 어제로 저장
 - "어제 식단 불러오기" 반복 시 무한 복제, `onSave` 더블탭 가드 없음, share 동시 요청 시 1/4
 - 같이 먹기 짝은 last-write-wins, 자동 분석과 share/수정 경합(`@Version`·`@DynamicUpdate` 없음)
@@ -496,7 +508,7 @@
 - 실기기에서의 실제 탭 수(OS 피커 내부), `DietScreen.tsx` 1097행 이후 모달 본문, `FeedCard.tsx` 의 식단 카드 표시
 - 운영 환경변수의 실제 값(모델 override, 한도 override), Railway 가 쓰는 Dockerfile 의 JVM 시간대 설정
 - 비용의 금액 환산, 다중 인스턴스에서 스케줄러·`UsageCounter`·쿨다운 맵 동작
-- §4-1 두 FK 위반의 실제 재현(H2·PostgreSQL 모두 실행하지 않음)
+- ~~§4-1 두 FK 위반의 실제 재현~~ — 2026-10-02 후속에서 H2 재현, 수정 후 H2·PostgreSQL 통과
 - 식품안전나라 바코드 응답 필드명(코드 주석 스스로 미대조라고 적음)
 
 ---

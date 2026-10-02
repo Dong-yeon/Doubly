@@ -25,6 +25,12 @@ import com.fitto.feed.service.FeedService;
 import com.fitto.relation.dto.InviteCodeResponse;
 import com.fitto.relation.service.RelationService;
 import com.fitto.diet.dto.PartnerMealTodayResponse;
+import com.fitto.common.time.KstClock;
+import com.fitto.place.domain.PlaceVisit;
+import com.fitto.place.dto.RecordVisitRequest;
+import com.fitto.place.dto.SavePlaceRequest;
+import com.fitto.place.repository.PlaceVisitRepository;
+import com.fitto.place.service.PlaceService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -34,6 +40,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** 식단 기록 통합 플로우 — H2 기반. */
@@ -55,6 +62,10 @@ class MealFlowTest {
     ChatService chatService;
     @Autowired
     CloudinaryImageDeleter imageDeleter;
+    @Autowired
+    PlaceService placeService;
+    @Autowired
+    PlaceVisitRepository placeVisitRepository;
 
     private Long register(String email) {
         return authService.register(
@@ -645,5 +656,52 @@ class MealFlowTest {
                 .extracting("errorCode").isEqualTo(ErrorCode.MEAL_PHOTO_ALREADY_RECORDED);
         // 상대는 자기 기록이 없으니 같은 URL 이어도 걸리지 않는다
         assertThat(mealService.findByPhoto(u[1], photo).recorded()).isFalse();
+    }
+
+    // ---- 장소를 붙인 식단 삭제 (lovebody-current-state §4-1) ----
+
+    /** 식단에 럽슐랭 장소를 붙여 저장한다 — 앱의 저장 직후 recordVisit(mealId) 와 같은 순서. 방문 id 를 돌려준다. */
+    private Long attachPlace(Long userId, Long mealId) {
+        Long placeId = placeService.save(userId, new SavePlaceRequest("트라토리아", "서울", null, null, "양식")).id();
+        return placeService.recordVisit(userId, placeId,
+                new RecordVisitRequest(KstClock.today(), 4, null, null, mealId)).id();
+    }
+
+    /**
+     * place_visits.meal_id 는 ON DELETE 절 없는 FK 다(V8). 끼니만 지우면 방문이 그 끼니를 계속 가리켜
+     * 삭제가 FK 위반으로 실패했다. 방문은 장소의 별점·등급 근거라 끼니와 함께 사라지면 안 된다 — 연결만 끊는다.
+     */
+    @Test
+    void 장소를_붙인_식단을_지우면_방문_기록은_남고_연결만_끊긴다() {
+        Long[] u = new Long[2];
+        couple("meal-place-a@fitto.com", "meal-place-b@fitto.com", u);
+        MealResponse meal = mealService.save(u[0], sample(KstClock.today(), MealType.DINNER));
+        Long visitId = attachPlace(u[0], meal.id());
+
+        assertThatCode(() -> mealService.delete(u[0], meal.id())).doesNotThrowAnyException();
+
+        assertThat(mealService.findToday(u[0])).isEmpty();
+        assertThat(placeVisitRepository.findById(visitId)).get()
+                .satisfies(v -> {
+                    assertThat(v.getMealId()).isNull();
+                    assertThat(v.getRating()).isEqualTo(4);
+                });
+    }
+
+    /** 데이트 식단은 짝을 통째로 지운다(deleteAll 경로) — 상대 몫을 지워도 내 끼니에 붙은 방문이 막지 않아야 한다. */
+    @Test
+    void 장소를_붙인_데이트_식단을_상대가_지워도_실패하지_않는다() {
+        Long[] u = new Long[2];
+        couple("meal-place-c@fitto.com", "meal-place-d@fitto.com", u);
+        MealResponse mine = mealService.save(u[0], sharedWithItems(KstClock.today(), MealType.DINNER));
+        Long visitId = attachPlace(u[0], mine.id());
+        Long partnerCopyId = mealService.findToday(u[1]).get(0).id();
+
+        assertThatCode(() -> mealService.delete(u[1], partnerCopyId)).doesNotThrowAnyException();
+
+        assertThat(mealService.findToday(u[0])).isEmpty();
+        assertThat(mealService.findToday(u[1])).isEmpty();
+        assertThat(placeVisitRepository.findById(visitId)).get()
+                .extracting(PlaceVisit::getMealId).isNull();
     }
 }
