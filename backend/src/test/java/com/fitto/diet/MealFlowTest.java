@@ -3,6 +3,7 @@ package com.fitto.diet;
 import com.fitto.auth.dto.RegisterRequest;
 import com.fitto.auth.service.AuthService;
 import com.fitto.common.exception.BusinessException;
+import com.fitto.diet.domain.DietGoalType;
 import com.fitto.diet.domain.MealType;
 import com.fitto.diet.dto.MealItemRequest;
 import com.fitto.diet.dto.MealResponse;
@@ -80,6 +81,31 @@ class MealFlowTest {
         List<MealResponse> history = mealService.findHistory(user, null);
         assertThat(history).hasSize(2);
         assertThat(history.get(0).id()).isGreaterThan(history.get(1).id());
+    }
+
+    /**
+     * 목표 방향(감량·유지·증량) — 마법사가 계산에만 쓰고 버리던 값을 저장한다(V115, LOVEBODY_REVIEW §2-1-1).
+     * 방향을 싣지 않는 구버전 앱의 목표 저장이 방향을 지우면 안 되고, 비우기는 전용 경로로만 한다.
+     */
+    @Test
+    void 목표_방향은_저장되고_방향_없는_목표_저장은_그것을_지우지_않는다() {
+        Long user = register("dir1@fitto.com");
+        assertThat(nutritionService.today(user).goalDirection()).isNull();
+
+        nutritionService.setGoal(user, new NutritionGoalRequest(1600, null, 100, null, DietGoalType.LOSE));
+        assertThat(nutritionService.today(user).goalDirection()).isEqualTo(DietGoalType.LOSE);
+
+        // 구버전 앱 — 방향 없이 목표만 바꾼다
+        nutritionService.setGoal(user, new NutritionGoalRequest(1700, null, 100, null));
+        assertThat(nutritionService.today(user).goalDirection()).isEqualTo(DietGoalType.LOSE);
+        assertThat(nutritionService.today(user).targetCalories()).isEqualTo(1700);
+
+        // 신체 정보 시트 — 방향만 바꾸고, 비우면 미설정. 칼로리 목표는 그대로
+        nutritionService.setGoalDirection(user, DietGoalType.GAIN);
+        assertThat(nutritionService.today(user).goalDirection()).isEqualTo(DietGoalType.GAIN);
+        nutritionService.setGoalDirection(user, null);
+        assertThat(nutritionService.today(user).goalDirection()).isNull();
+        assertThat(nutritionService.today(user).targetCalories()).isEqualTo(1700);
     }
 
     @Test
