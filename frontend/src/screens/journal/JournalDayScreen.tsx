@@ -17,6 +17,8 @@ import { SpacingFixBar } from '../../components/SpacingFixBar';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { journalApi, journalToday, type JournalEntry } from '../../api/journal';
 import { takeJournalDraft } from '../../store/journalDraft';
+import { useAuthStore } from '../../store/authStore';
+import { clearWritingDraft, draftKeys, loadWritingDraft, saveWritingDraft } from '../../utils/writingDraft';
 import { MOOD_EMOJIS } from '../../constants/moodEmojis';
 import { pickImage, uploadImageWithSignature } from '../../utils/imageUpload';
 import { useDirtyGuard } from '../../hooks/useDirtyGuard';
@@ -66,6 +68,18 @@ export function JournalDayScreen({ navigation, route }: Props) {
     navigation.setOptions({ title: journalDateTitle(date) });
   }, [navigation, date]);
 
+  /*
+   * 초안 보존(utils/writingDraft) — 앱이 꺼지거나 새로고침돼도 쓰던 글·기분이 남는다(사진은 남기지 않는다).
+   * 서버 기록을 받은 뒤에만 되살리고, 쓰기 시작할 때의 서버 버전(base)과 지금 버전이 같을 때만 덮는다 —
+   * 그사이 다른 기기에서 고쳤다면 초안을 버린다(그쪽 글을 지우지 않는다). 시각을 비교하지 않는 이유:
+   * 서버 시각은 시간대 없는 벽시계라 기기 시각과 앞뒤를 잴 수 없다. 같은 문자열인지만 본다.
+   * 무드 시트에서 막 넘어온 메모리 초안이 있으면 그게 더 새것이라 저장된 초안은 보지 않는다.
+   */
+  const userId = useAuthStore((s) => s.user?.id);
+  const draftKey = draftKeys.journal(date);
+  const [draftLoaded, setDraftLoaded] = useState(false);
+  const versionOf = (e: JournalEntry | null) => (e ? (e.updatedAt ?? e.createdAt) : null);
+
   const [reloadKey, setReloadKey] = useState(0);
   const retry = () => {
     setLoading(true);
@@ -85,6 +99,21 @@ export function JournalDayScreen({ navigation, route }: Props) {
           setBody(found.body ?? '');
           setPhoto(found.photoUrl ?? null);
         }
+        if (draft) {
+          setDraftLoaded(true);
+          return;
+        }
+        loadWritingDraft(draftKey, userId).then((saved) => {
+          if (!active) return;
+          if (saved && (saved.base ?? null) === versionOf(found)) {
+            setMood(saved.mood ?? null);
+            setBody(saved.text);
+            toast.info('쓰던 글을 불러왔어요');
+          } else if (saved) {
+            void clearWritingDraft(draftKey);
+          }
+          setDraftLoaded(true);
+        });
       })
       .catch(() => {
         if (active) setLoadError(true);
@@ -95,13 +124,27 @@ export function JournalDayScreen({ navigation, route }: Props) {
     return () => {
       active = false;
     };
-  }, [date, reloadKey]);
+    // draft 는 첫 렌더에 한 번 꺼낸 값이고 userId 는 이 화면이 사는 동안 바뀌지 않는다 — 다시 불러올 일은 없다
+  }, [date, reloadKey, draft, draftKey, userId]);
 
   const dirty =
     (mood ?? null) !== (entry?.moodEmoji ?? null) ||
     body.trim() !== (entry?.body ?? '').trim() ||
     (photo ?? null) !== (entry?.photoUrl ?? null);
   const allowLeave = useDirtyGuard(!loading && dirty);
+
+  useEffect(() => {
+    if (loading || !draftLoaded || userId == null) return undefined;
+    const timer = setTimeout(() => {
+      // 사진만 바뀐 경우는 남길 게 없다(사진은 초안에 넣지 않는다)
+      const changedText = (mood ?? null) !== (entry?.moodEmoji ?? null) || body.trim() !== (entry?.body ?? '').trim();
+      if (changedText) void saveWritingDraft(draftKey, { userId, text: body, mood, base: versionOf(entry) });
+      else void clearWritingDraft(draftKey);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [mood, body, entry, loading, draftLoaded, userId, draftKey]);
+  // 정상적으로 벗어나면(저장·삭제·이탈 확인 "닫기") 지운다. 강제 종료는 여기를 지나지 않는다
+  useEffect(() => () => void clearWritingDraft(draftKey), [draftKey]);
 
   const spacing_ = useSpacingFix();
   const onFixSpacing = async () => {
@@ -154,6 +197,7 @@ export function JournalDayScreen({ navigation, route }: Props) {
         source: source ?? 'JOURNAL_LIST',
       });
       setEntry(saved);
+      void clearWritingDraft(draftKey);
       haptics.success();
       toast.success('나만의 기록에 남겼어요');
       allowLeave();
@@ -175,6 +219,7 @@ export function JournalDayScreen({ navigation, route }: Props) {
           journalApi
             .remove(date)
             .then(() => {
+              void clearWritingDraft(draftKey);
               toast.success('기록을 지웠어요');
               allowLeave();
               navigation.goBack();
