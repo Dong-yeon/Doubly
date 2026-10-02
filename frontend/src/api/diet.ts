@@ -69,6 +69,8 @@ export interface NutritionGoalPayload {
   targetCarbs?: number;
   targetProtein?: number;
   targetFat?: number;
+  /** 마법사에서 고른 방향 — 보내지 않으면 서버가 기존 값을 그대로 둔다 */
+  goalDirection?: DietGoalType;
 }
 
 export interface NutritionGoalSuggestionPayload {
@@ -129,6 +131,9 @@ export const dietApi = {
   nutrition: () => unwrap(apiClient.get<ApiResponse<NutritionSummary>>('/meal/nutrition')),
   setNutritionGoal: (payload: NutritionGoalPayload) =>
     unwrap(apiClient.put<ApiResponse<NutritionSummary>>('/meal/nutrition/goal', payload)),
+  // 목표 방향만 바꾼다(신체 정보 시트) — null 이면 미설정으로 되돌린다. 칼로리·매크로 목표는 그대로
+  setGoalDirection: (goalDirection: DietGoalType | null) =>
+    unwrap(apiClient.put<ApiResponse<NutritionSummary>>('/meal/nutrition/direction', { goalDirection })),
   // 목표 칼로리 자동 계산(TDEE 마법사) — 계산만 하고 저장은 안 한다. 확정은 setNutritionGoal 로.
   suggestNutritionGoal: (payload: NutritionGoalSuggestionPayload) =>
     unwrap(apiClient.post<ApiResponse<NutritionGoalSuggestion>>('/meal/nutrition/goal/suggest', payload)),

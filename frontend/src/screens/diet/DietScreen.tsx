@@ -153,6 +153,8 @@ export function DietScreen({ navigation, route }: Props) {
   const [tProtein, setTProtein] = useState('');
   const [tFat, setTFat] = useState('');
   const [savingNut, setSavingNut] = useState(false);
+  /** 마법사로 계산했을 때 고른 방향 — 목표 저장에 함께 실린다. 직접 숫자만 고쳤으면 undefined(서버가 기존 값 유지) */
+  const [tDirection, setTDirection] = useState<DietGoalType | undefined>(undefined);
   const [copyingYesterday, setCopyingYesterday] = useState(false);
 
   // 목표 칼로리 자동 계산(TDEE 마법사) — 계산만 하고, 확정 저장은 기존 목표 모달의 "저장"으로 한다
@@ -225,7 +227,14 @@ export function DietScreen({ navigation, route }: Props) {
     setTProtein(protein);
     setTFat(fat);
     nutInitialRef.current = [cal, carbs, protein, fat].join('|');
+    setTDirection(undefined);
     setNutModal(true);
+  };
+
+  /** 마법사를 연다 — 저장해 둔 방향이 있으면 그 칩부터 선택해 둔다 */
+  const openWizard = () => {
+    if (nutrition?.goalDirection) setWizGoalType(nutrition.goalDirection);
+    setWizardModal(true);
   };
 
   const openGoalWizard = () => {
@@ -247,6 +256,7 @@ export function DietScreen({ navigation, route }: Props) {
         targetCarbs: tCarbs ? Number(tCarbs) : undefined,
         targetProtein: tProtein ? Number(tProtein) : undefined,
         targetFat: tFat ? Number(tFat) : undefined,
+        goalDirection: tDirection,
       });
       setNutrition(updated);
       haptics.success();
@@ -277,6 +287,8 @@ export function DietScreen({ navigation, route }: Props) {
       setTCarbs(String(res.targetCarbs));
       setTProtein(String(res.targetProtein));
       setTFat(String(res.targetFat));
+      // 계산에 쓴 방향을 저장 버튼까지 들고 간다 — 예전엔 계산에만 쓰고 버려 앱이 감량 중인지 몰랐다
+      setTDirection(wizGoalType);
       haptics.success();
       toast.success(res.usedBodyFat ? '체지방률까지 반영해 계산했어요. 확인 후 저장해주세요' : '계산했어요. 확인 후 저장해주세요');
       setWizardModal(false);
@@ -801,7 +813,7 @@ export function DietScreen({ navigation, route }: Props) {
         onShow={() => {
           if (!wizardAfterNutRef.current) return;
           wizardAfterNutRef.current = false;
-          setWizardModal(true);
+          openWizard();
         }}
       >
         <Pressable style={styles.modalBackdrop} onPress={closeNutModal}>
@@ -809,7 +821,7 @@ export function DietScreen({ navigation, route }: Props) {
           <Pressable style={styles.modalCard} onPress={() => {}}>
             <View style={styles.nutModalHeader}>
               <Text style={styles.modalTitle}>하루 영양 목표</Text>
-              <TouchableOpacity onPress={() => setWizardModal(true)}>
+              <TouchableOpacity onPress={openWizard}>
                 <Text style={styles.wizardLink}>자동 계산</Text>
               </TouchableOpacity>
             </View>

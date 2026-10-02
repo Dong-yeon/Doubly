@@ -23,6 +23,7 @@ import { selectEndedCouples, useRelationStore } from '../../store/relationStore'
 import { streakApi } from '../../api/streak';
 import { summaryApi } from '../../api/summary';
 import { bodyApi } from '../../api/body';
+import { dietApi } from '../../api/diet';
 import { sanitizeDecimalInput } from '../../utils/numericInput';
 import { publishEnsuringConnection } from '../../api/chatSocket';
 import { getErrorMessage } from '../../utils/error';
@@ -32,7 +33,7 @@ import { haptics } from '../../utils/haptics';
 import { pickImageAsset, uploadImage, type PickedImage } from '../../utils/imageUpload';
 import { AvatarCropSheet } from '../../components/AvatarCropSheet';
 import { colors, fontSize, spacing } from '../../constants/theme';
-import type { BodyMetric, Gender, UserLevel, WeeklyRecap } from '../../types';
+import type { BodyMetric, DietGoalType, Gender, UserLevel, WeeklyRecap } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 
 // 식단 뱃지 — 운동(7/30/100)과 같은 단계, 식단 스트릭 기준
@@ -74,6 +75,13 @@ export function MyScreen({ navigation }: Props) {
   const [weightKg, setWeightKg] = useState('');
   const [bodyFatPct, setBodyFatPct] = useState('');
   const [savingBody, setSavingBody] = useState(false);
+  /*
+   * 목표 방향(감량·유지·증량, 선택) — 영양 목표(nutrition_goals)에 저장된다. 럽바디 칼로리 링 문구와 목표 칼로리
+   * 자동 계산의 기본값이 이 값을 본다. 상대에게는 보이지 않는다(본인 영양 요약에만 실린다).
+   * undefined = 아직 못 읽음(구서버 포함) — 그때는 칸을 그리지 않는다.
+   */
+  const [savedDirection, setSavedDirection] = useState<DietGoalType | null | undefined>(undefined);
+  const [goalDirection, setGoalDirection] = useState<DietGoalType | null>(null);
   const [maxStreak, setMaxStreak] = useState(0);
   const [maxMealStreak, setMaxMealStreak] = useState(0);
   const [recap, setRecap] = useState<WeeklyRecap | null>(null);
@@ -93,6 +101,10 @@ export function MyScreen({ navigation }: Props) {
         .list()
         .then((list) => setLatestBody([...list].reverse().find((m) => m.weightKg != null) ?? null))
         .catch(() => setLatestBody(null));
+      dietApi
+        .nutrition()
+        .then((n) => setSavedDirection(n.goalDirection === undefined ? undefined : (n.goalDirection ?? null)))
+        .catch(() => setSavedDirection(undefined));
       fetchRelations().catch(() => {});
       // 커플 연결이 없으면 404 가 나므로 실패는 "없음"으로 취급한다
       relationApi.hasRestorableRecords().then(setCanRestore).catch(() => setCanRestore(false));
@@ -147,6 +159,7 @@ export function MyScreen({ navigation }: Props) {
     setGender(user?.gender ?? undefined);
     setWeightKg(latestBody?.weightKg != null ? String(latestBody.weightKg) : '');
     setBodyFatPct(latestBody?.bodyFatPct != null ? String(latestBody.bodyFatPct) : '');
+    setGoalDirection(savedDirection ?? null);
     setBodyEditing(true);
   };
 
@@ -180,6 +193,10 @@ export function MyScreen({ navigation }: Props) {
       // 체중·체지방률은 바뀌었을 때만 새 측정으로 남긴다 — 키만 고쳐도 같은 체중이 줄줄이 쌓이지 않게
       if (w !== undefined && (w !== latestBody?.weightKg || f !== (latestBody?.bodyFatPct ?? undefined))) {
         setLatestBody(await bodyApi.save({ weightKg: w, bodyFatPct: f }));
+      }
+      if (savedDirection !== undefined && goalDirection !== savedDirection) {
+        const n = await dietApi.setGoalDirection(goalDirection);
+        setSavedDirection(n.goalDirection ?? null);
       }
       haptics.success();
       toast.success('신체 정보를 저장했어요 ');
@@ -599,6 +616,23 @@ export function MyScreen({ navigation }: Props) {
             />
           ))}
         </View>
+        {savedDirection !== undefined ? (
+          <>
+            <Text style={styles.fieldLabel}>목표 · 선택</Text>
+            <View style={styles.genderRow}>
+              {GOAL_DIRECTIONS.map(([value, label]) => (
+                <Chip
+                  key={value}
+                  label={label}
+                  selected={goalDirection === value}
+                  // 다시 누르면 비운다 — 성별 칩과 같은 규칙
+                  onPress={() => setGoalDirection(goalDirection === value ? null : value)}
+                  fill
+                />
+              ))}
+            </View>
+          </>
+        ) : null}
         <View style={styles.sheetActions}>
           <Button title="취소" variant="ghost" size="md" onPress={() => setBodyEditing(false)} style={styles.flex} />
           <Button title="저장" size="md" onPress={onSaveBody} loading={savingBody} style={styles.flex} />
@@ -614,6 +648,13 @@ export function MyScreen({ navigation }: Props) {
     </SafeAreaView>
   );
 }
+
+/** 목표 방향 칩 — 서버 DietGoalType 과 같은 값 */
+const GOAL_DIRECTIONS: [DietGoalType, string][] = [
+  ['LOSE', '감량'],
+  ['MAINTAIN', '유지'],
+  ['GAIN', '증량'],
+];
 
 const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
