@@ -25,7 +25,6 @@ import {
   ActivityIndicator,
   Animated,
   FlatList,
-  Image,
   Modal,
   Platform,
   Pressable,
@@ -50,6 +49,7 @@ import {
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { MaterialCommunityIcons } from './Icon';
+import { CachedImage } from './CachedImage';
 import { useContentWidth } from '../hooks/useContentWidth';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { toast } from '../store/toastStore';
@@ -68,6 +68,8 @@ export interface ViewerImage {
   caption?: string;
   /** 제목 강조색 — 나/상대 구분 등 */
   titleColor?: string;
+  /** 원본이 오는 동안 먼저 보여줄 작은 그림(이미 받은 썸네일) — 없으면 원본만 기다린다 */
+  thumbUri?: string;
   /**
    * 이 사진에서 이어 갈 곳 — 예: 사진첩의 맛집 사진 → 장소 상세. 캡션 위 알약 버튼으로 그린다.
    * 뷰어는 이동을 모른다: onPress 는 호출부가 뷰어를 닫고 화면을 옮기는 일까지 맡는다.
@@ -305,11 +307,13 @@ export function ImageViewer({ images, initialIndex, onClose }: Props) {
         onScroll={onPageScroll}
         scrollEventThrottle={16}
       >
-        <Image
-          source={{ uri: item.uri }}
+        {/* expo-image(디스크 캐시) — 한 번 본 원본은 다시 열 때 바로 뜬다. 썸네일이 있으면 먼저 깐다 */}
+        <CachedImage
+          uri={item.uri}
+          placeholderUri={item.thumbUri}
           style={{ width, height: height * 0.8 }}
-          resizeMode="contain"
-          accessibilityIgnoresInvertColors
+          contentFit="contain"
+          transitionMs={150}
         />
       </ScrollView>
     ),

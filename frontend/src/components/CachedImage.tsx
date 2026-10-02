@@ -11,10 +11,11 @@
  * <p>{@code expo-image} 의 {@code cachePolicy="memory-disk"} 는 메모리와 디스크에 함께
  * 남긴다 — 앱을 껐다 켜도, 비행기 모드에서도 이미 받은 이모티콘은 그려진다.
  *
- * <p><b>지금 쓰는 곳</b>: 우리 이모지(런타임 생성 → Cloudinary URL) 세 자리뿐이다.
- * 아바타·채팅 사진은 그대로 RN {@code Image} 를 쓴다 — 그쪽은 한 번 보고 지나가는 그림이라
- * 영구 캐시의 이득이 작고, 바꾸면 변경 범위만 넓어진다. 이모티콘 카탈로그를 서버로 옮길 때
- * 이 컴포넌트를 그대로 쓰면 된다.
+ * <p><b>지금 쓰는 곳</b>: 우리 이모지(런타임 생성 → Cloudinary URL), 그리고 2026-10-02 부터
+ * <b>사진첩</b>(그리드·달력 칸·여행 커버)과 공용 사진 뷰어. 사진첩은 탭을 오갈 때마다 같은 썸네일을
+ * 다시 그리고, 뷰어는 그 썸네일을 {@code placeholderUri} 로 먼저 깐 뒤 원본으로 바꿔 끼운다
+ * (원본 수 MB 를 받는 동안 빈 검은 화면 대신 흐린 사진이 보인다).
+ * 아바타·채팅 말풍선 사진은 그대로 RN {@code Image} 다 — 바꾸면 변경 범위만 넓어진다.
  *
  * <p><b>왜 래퍼를 두는가</b>: {@code cachePolicy} 를 호출부마다 적으면 한 곳이라도 빠지는
  * 순간 그 그림만 캐시를 타지 않는다. 기본값을 여기 한 곳에 둔다. {@code resizeMode} 대신
@@ -32,6 +33,13 @@ interface Props {
   accessibilityLabel?: string;
   /** 켜면 나타날 때 서서히 — 기본은 0(즉시). 이모티콘은 깜빡임이 더 눈에 띈다 */
   transitionMs?: number;
+  /** 원본이 오기 전 먼저 깔 그림(보통 이미 캐시된 썸네일) */
+  placeholderUri?: string;
+  /**
+   * 목록 칸 재활용 키 — FlatList 가 칸을 재사용할 때 이전 칸의 그림이 잠깐 비치는 것을 막는다.
+   * 칸이 가리키는 대상(예: 기록 키)을 넘긴다.
+   */
+  recyclingKey?: string;
 }
 
 export function CachedImage({
@@ -40,6 +48,8 @@ export function CachedImage({
   contentFit = 'contain',
   accessibilityLabel,
   transitionMs = 0,
+  placeholderUri,
+  recyclingKey,
 }: Props) {
   return (
     <Image
@@ -48,6 +58,9 @@ export function CachedImage({
       contentFit={contentFit}
       cachePolicy="memory-disk"
       transition={transitionMs}
+      placeholder={placeholderUri ? { uri: placeholderUri } : undefined}
+      placeholderContentFit={contentFit}
+      recyclingKey={recyclingKey}
       accessible={!!accessibilityLabel}
       accessibilityLabel={accessibilityLabel}
     />

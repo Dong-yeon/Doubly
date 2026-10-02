@@ -11,7 +11,8 @@
  * <p>요일·일요일 색·이전/다음 달 버튼은 커플 캘린더(CoupleCalendarScreen)와 같은 문법이다.
  */
 import React, { useMemo } from 'react';
-import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { CachedImage } from '../../components/CachedImage';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { useContentWidth } from '../../hooks/useContentWidth';
 import { thumbnailUrl } from '../../utils/imageUrl';
@@ -154,7 +155,7 @@ export function AlbumCalendar({ month, items, loading, error, truncated, filtere
               accessibilityRole="imagebutton"
               accessibilityLabel={`${m}월 ${day}일 사진 ${count}장 보기`}
             >
-              <Image source={{ uri: thumbnailUrl(cover.imageUrl, cell) }} style={styles.cover} />
+              <CachedImage uri={thumbnailUrl(cover.imageUrl, cell)} style={styles.cover} contentFit="cover" recyclingKey={date} />
               {/* 사진 위 글자 — 테마와 무관하게 흰 글자 + 어두운 알약 */}
               <View style={[styles.dayPill, isToday && styles.dayPillToday]}>
                 <Text style={styles.dayOnPhoto}>{day}</Text>
