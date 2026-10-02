@@ -31,6 +31,7 @@ import { EmptyState } from '../../components/EmptyState';
 import { AiInsightButton } from '../../components/AiInsightButton';
 import { NutritionRing } from '../../components/NutritionRing';
 import { WorkoutCheckinCard } from '../../components/workout/WorkoutCheckinCard';
+import { WeekStrip } from '../../components/WeekStrip';
 import { useDietStore } from '../../store/dietStore';
 import { useWorkoutStore } from '../../store/workoutStore';
 import { useRelationStore } from '../../store/relationStore';
@@ -851,51 +852,53 @@ export function DietScreen({ navigation, route }: Props) {
               </View>
             )}
 
-            {/* 식단 스트릭 — 운동 홈과 같은 표시 형식(연속/함께/최고). 커플 목표와 한 묶음 */}
-            <View style={styles.streakRow}>
-              <Text style={styles.streakText}>연속 {myStreak?.currentCount ?? 0}일</Text>
-              {goal?.connected ? (
-                <Text style={styles.streakText}>함께 {coupleStreak?.currentCount ?? 0}일</Text>
-              ) : null}
-              <Text style={styles.streakMax}>최고 {myStreak?.maxCount ?? 0}일</Text>
-            </View>
-
-            {/* 커플 공동 목표 */}
-            {goal?.connected ? (
-              <Pressable style={styles.goalCard} onPress={() => setGoalModal(true)}>
-                {goal.goalDays ? (
-                  <>
-                    <View style={styles.goalHeader}>
-                      <Text style={styles.goalTitle}>
-                        이번 주 함께 식단 {goal.bothDays}/{goal.goalDays}일
-                      </Text>
-                      {goal.achieved ? <Text style={styles.goalBadge}>달성!</Text> : null}
-                    </View>
-                    <View style={styles.goalTrack}>
-                      <View
-                        style={[
-                          styles.goalFill,
-                          { width: `${Math.min(100, (goal.bothDays / goal.goalDays) * 100)}%` },
-                        ]}
-                      />
-                    </View>
-                    <Text style={styles.goalSub}>
-                      나 {goal.myDays}일 · 상대 {goal.partnerDays}일 — 둘 다 기록한 날만 카운트돼요
+            {/*
+              이번 주 — 스트릭 줄과 커플 목표 카드를 <b>주간 스트립 한 줄 + 목표 캡션</b>으로 합쳤다(LOVEBODY_REVIEW §2-3).
+              "이번 주 함께 3/5일"은 스트립이 그림으로 보여주는 것의 숫자판이라 따로 카드일 이유가 없었다.
+              미연결이면 내 점만, 목표 캡션은 숨긴다. 구서버(날짜 목록 없음)면 스트립 없이 숫자만.
+            */}
+            {goal ? (
+              <View style={styles.weekCard}>
+                <View style={styles.weekHead}>
+                  <Text style={styles.weekTitle}>이번 주</Text>
+                  <Text style={styles.streakText}>
+                    연속 {myStreak?.currentCount ?? 0}일
+                    {goal.connected ? ` · 함께 ${coupleStreak?.currentCount ?? 0}일` : ''}
+                  </Text>
+                  <Text style={styles.streakMax}>최고 {myStreak?.maxCount ?? 0}일</Text>
+                </View>
+                {goal.myDates ? (
+                  <WeekStrip
+                    myDates={goal.myDates}
+                    partnerDates={goal.partnerDates}
+                    showPartner={goal.connected}
+                    what="식단"
+                  />
+                ) : null}
+                {goal.connected ? (
+                  <Pressable
+                    style={({ pressed }) => [styles.goalCaption, pressed && styles.trackerRowPressed]}
+                    onPress={() => setGoalModal(true)}
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      goal.goalDays
+                        ? `이번 주 함께 ${goal.bothDays}/${goal.goalDays}일${goal.achieved ? ', 달성' : ''}. 목표 바꾸기`
+                        : '커플 식단 목표 설정'
+                    }
+                  >
+                    <Text style={styles.goalCaptionText}>
+                      {goal.goalDays ? `이번 주 함께 ${goal.bothDays}/${goal.goalDays}일` : '커플 식단 목표 · 설정'}
                     </Text>
-                  </>
-                ) : (
-                  <View style={styles.goalHeader}>
-                    <Text style={styles.goalTitle}>커플 식단 목표</Text>
-                    <View style={styles.goalSetRow}>
-                      <Text style={styles.goalSet}>설정</Text>
-                      <MaterialCommunityIcons name="chevron-right" size={16} color={colors.primary} />
-                    </View>
-                  </View>
-                )}
-              </Pressable>
+                    {goal.achieved ? <Text style={styles.goalBadge}>달성!</Text> : null}
+                    <MaterialCommunityIcons name="chevron-right" size={16} color={colors.textMuted} />
+                  </Pressable>
+                ) : null}
+              </View>
             ) : goalState === 'error' ? (
-              <LoadErrorRow what="커플 식단 목표" onRetry={refreshGoal} />
-            ) : null}
+              <LoadErrorRow what="이번 주 기록" onRetry={refreshGoal} />
+            ) : (
+              <CardSkeleton height={112} />
+            )}
 
             {/* AI 인사이트 — 주간 식단 코칭 / 커플 주간 레터. 매일 보는 것이 아니라 맨 아래로 */}
             <View style={styles.aiRow}>
@@ -1368,27 +1371,23 @@ const styles = themedStyles((colors) => ({
   aiTip: { fontSize: fontSize.body, color: colors.textPrimary, lineHeight: 21 },
   aiLetter: { fontSize: fontSize.body, color: colors.textPrimary, lineHeight: 24 },
   list: { padding: spacing.lg, paddingBottom: layout.listBottomWithFab },
-  streakRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
-  streakText: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
+  streakText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary },
   streakMax: { fontSize: fontSize.caption, color: colors.textSecondary, marginLeft: 'auto' },
-  goalCard: {
-    backgroundColor: colors.accentSoft,
+  // 이번 주 — 스트릭 + 주간 스트립 + 커플 목표 캡션. 커플 목표의 함께 색은 캡션 글자에 남긴다
+  weekCard: {
+    backgroundColor: colors.surface,
     borderRadius: radius.lg,
-    padding: spacing.md,
     borderWidth: 1,
-    borderColor: colors.accent,
-    marginBottom: spacing.lg,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginBottom: spacing.md,
     gap: spacing.sm,
   },
-  goalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  goalTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
+  weekHead: { flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', columnGap: spacing.sm },
+  weekTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
+  goalCaption: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, minHeight: 36 },
+  goalCaptionText: { flex: 1, fontSize: fontSize.caption, fontWeight: '800', color: colors.togetherText },
   goalBadge: { fontSize: fontSize.caption, fontWeight: '800', color: colors.success },
-  goalSetRow: { flexDirection: 'row', alignItems: 'center' },
-  goalSet: { fontSize: fontSize.caption, fontWeight: '700', color: colors.primary },
-  // colors.white 는 양 테마 모두 순백 고정이라 다크 카드 위에서 번쩍였다 — nutTrack 과 같은 surfaceAlt 로
-  goalTrack: { height: 10, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
-  goalFill: { height: '100%', borderRadius: radius.pill, backgroundColor: colors.accent },
-  goalSub: { fontSize: fontSize.caption, color: colors.textSecondary },
   todayHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
   todayHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   // 내 오늘 합계 — 소유자·함께 의미가 없으므로 본문색. 예전 togetherText 는 뜻이 없었다(§3 A-9)

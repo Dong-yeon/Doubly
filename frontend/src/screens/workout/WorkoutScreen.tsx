@@ -1,8 +1,8 @@
 /** 운동 메인 — 설계서 2.4 (오늘 기록 + 히스토리 + 캘린더 진입). WORKOUT-02/03
  *  트레이너가 배정한 루틴은 이 화면에서 뺐다 — 필요하면 git 히스토리(이 파일의 이전 버전)에서
  *  복원할 수 있다. 트레이너 기능 자체는 src/screens/trainer 에 살아있다. */
-import React, { useCallback, useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { FlatList, Pressable, Text, TouchableOpacity, View } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -22,7 +22,7 @@ import { voiceClipsApi } from '../../api/voiceClips';
 import { getErrorMessage } from '../../utils/error';
 import { haptics } from '../../utils/haptics';
 import { useDeleteAction } from '../../hooks/useDeleteAction';
-import { todayWeekDay, toDateString } from '../../utils/date';
+import { todayWeekDay } from '../../utils/date';
 import { routineToSessionParams } from '../../utils/routine';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type {
@@ -36,11 +36,10 @@ import type {
 } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { WorkoutCheckinCard } from '../../components/workout/WorkoutCheckinCard';
+import { WeekStrip } from '../../components/WeekStrip';
 import { layout } from '../../theme/layout';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'WorkoutMain'>;
-
-const WEEKDAY_LETTERS = ['일', '월', '화', '수', '목', '금', '토'];
 
 /** N시간 전 → "6시간 전"/"어제"/"3일 전". 회복 카드는 시간 단위까지만 다루므로 이 정도 정밀도면 충분 */
 function hoursAgoLabel(hoursAgo: number): string {
@@ -48,20 +47,6 @@ function hoursAgoLabel(hoursAgo: number): string {
   if (hoursAgo < 24) return `${hoursAgo}시간 전`;
   const days = Math.floor(hoursAgo / 24);
   return days === 1 ? '어제' : `${days}일 전`;
-}
-
-/** 이번 주(월~일) 날짜 7개 — 상단 요일 스트립용. 일요일이면 지난주로 안 넘어가게 월요일 기준으로 계산 */
-function thisWeekDates(): Date[] {
-  const today = new Date();
-  const day = today.getDay(); // 0=일 … 6=토
-  const mondayOffset = day === 0 ? -6 : 1 - day;
-  const monday = new Date(today);
-  monday.setDate(today.getDate() + mondayOffset);
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
-    return d;
-  });
 }
 
 export function WorkoutScreen({ navigation }: Props) {
@@ -74,9 +59,6 @@ export function WorkoutScreen({ navigation }: Props) {
   const connected = !!couple?.partner;
   const [myStreak, setMyStreak] = useState<Streak | null>(null);
   const [coupleStreak, setCoupleStreak] = useState<Streak | null>(null);
-  // 화면이 떠 있는 동안(자정을 넘기지 않는 한) 매번 다시 계산할 필요 없음
-  const weekDates = useMemo(() => thisWeekDates(), []);
-  const todayKey = useMemo(() => new Date().toDateString(), []);
 
   // 내 루틴 — 홈 화면에 직접 몇 개 보여주고 탭하면 바로 시작한다(WorkoutRoutineListScreen 과
   // 같은 패턴: 별도 스토어 없이 화면 로컬 state + API 직접 호출). 전체 목록·수정·삭제는
@@ -223,30 +205,18 @@ export function WorkoutScreen({ navigation }: Props) {
             <MaterialCommunityIcons name="fire" size={16} color={colors.white} />
             <Text style={styles.streakBadgeText}>{myStreak?.currentCount ?? 0}</Text>
           </View>
+          {/*
+            주간 스트립 — 럽바디와 같은 공용 컴포넌트. 예전엔 점 하나의 색(나/상대/함께)만으로 사람을 갈랐는데,
+            소유자 3색은 명도가 같아 색약·흑백에서 구별이 안 됐다(§3-2). 이제 자리(왼쪽 나·오른쪽 상대)와
+            모양(●/○)이 말한다.
+          */}
           <View style={styles.weekStrip}>
-            {weekDates.map((d) => {
-              const isToday = d.toDateString() === todayKey;
-              // 서버 날짜(YYYY-MM-DD)와 비교 — 네이티브 toDateString() 은 "Mon Jan 01 2026"
-              // 형식이라 그대로 못 견준다(위 isToday 판정과는 다른 문자열이 필요하다).
-              const key = toDateString(d);
-              const mine = coupleWeek?.myDates.includes(key) ?? false;
-              const partner = coupleWeek?.partnerDates.includes(key) ?? false;
-              // 둘 다 했으면 "함께"(WeeklyRecapCard 와 같은 색 규칙) — 하나만 했으면 그 사람 색
-              const dotColor = mine && partner ? colors.together : mine ? colors.me : partner ? colors.partner : null;
-              return (
-                <View key={d.toISOString()} style={styles.weekCell}>
-                  <Text style={styles.weekCellLabel}>{WEEKDAY_LETTERS[d.getDay()]}</Text>
-                  <View style={[styles.weekCellDateWrap, isToday && styles.weekCellDateWrapToday]}>
-                    <Text style={[styles.weekCellDate, isToday && styles.weekCellDateToday]}>
-                      {d.getDate()}
-                    </Text>
-                  </View>
-                  <View style={styles.weekCellDot}>
-                    {dotColor ? <View style={[styles.weekDot, { backgroundColor: dotColor }]} /> : null}
-                  </View>
-                </View>
-              );
-            })}
+            <WeekStrip
+              myDates={coupleWeek?.myDates ?? []}
+              partnerDates={coupleWeek?.partnerDates}
+              showPartner={connected}
+              what="운동"
+            />
           </View>
         </View>
         {/* 점 색 범례는 뺐다 — 나/상대/함께는 앱 전체의 소유자 색 규칙이라 여기서만 설명하지 않는다(§6-3) */}
@@ -536,23 +506,7 @@ const styles = themedStyles((colors) => ({
     paddingVertical: 6,
   },
   streakBadgeText: { color: colors.white, fontSize: fontSize.caption, fontWeight: '800' },
-  weekStrip: { flex: 1, flexDirection: 'row', justifyContent: 'space-between' },
-  weekCell: { alignItems: 'center', gap: 4 },
-  weekCellLabel: { fontSize: fontSize.micro, color: colors.textMuted, fontWeight: '600' },
-  weekCellDateWrap: {
-    width: 26,
-    height: 26,
-    borderRadius: radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  weekCellDateWrapToday: { backgroundColor: colors.primary },
-  weekCellDate: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
-  weekCellDateToday: { color: colors.white },
-  // 날짜 아래 완료 점 한 칸 — 점이 없는 날에도 높이를 고정해야 있는 날 없는 날 사이에서
-  // 요일 숫자들이 위아래로 들썩이지 않는다.
-  weekCellDot: { height: 6, alignItems: 'center', justifyContent: 'center' },
-  weekDot: { width: 6, height: 6, borderRadius: 3 },
+  weekStrip: { flex: 1 },
   recoveryCard: {
     flexDirection: 'row',
     alignItems: 'center',
