@@ -10,10 +10,12 @@
 | 1 | 장소 추가 검색을 서버 카카오 검색(`GET /places/search`)으로 통일 → `kakao_place_id` 가 항상 저장된다. 검색 결과 탭 = 바로 저장. 저장 응답의 `created` 로 중복을 가려 "이미 럽슐랭에 있어요" → 그 장소 상세. 카테고리 매핑은 서버 `KakaoLocalClient.mapCategory` 한 곳 | **V117** `UNIQUE (couple_id, kakao_place_id)` |
 | 2 | 채팅 텍스트 말풍선의 지도 링크 아래 "럽슐랭에 추가할까요?" 칩 → 누르면 `POST /places/resolve-link` → 후보 시트 → 고르면 `POST /places` 로 저장 | 없음 |
 
-**배포**: 서버는 `main` 에 push 하면 Railway 가 배포한다. **앱은 OTA 로 나가지 않는다** — `package.json` 의 `scripts` 에
-`verify:place-link` 를 등록했고, 그 한 줄이 EAS fingerprint 를 바꾼다(실측: origin/main 대비 유일한 차이가
-`packageJson:scripts`). 사용자 결정(2026-10-02): 등록을 유지하고 다음 네이티브 빌드에 싣는다. 그 전까지 기존 앱(1.0.4/1.0.5)은
-예전 동작 그대로다 — 서버 변경은 하위 호환이라(새 필드 `created` 는 추가뿐, 새 엔드포인트는 안 부르면 그만) 깨지지 않는다.
+**배포**: 서버는 `main` 에 push 하면 Railway 가 배포한다. 앱은 **EAS Update 로 나갈 수 있다**.
+- 처음엔 `package.json` 의 `scripts` 에 `verify:place-link` 를 등록했고, 그 한 줄이 EAS fingerprint 를 바꿨다(실측: origin/main 대비
+  유일한 차이가 `packageJson:scripts`). 그대로 main 에 넣으면 이 기능만이 아니라 **다음 빌드까지 main 에서 올리는 모든 업데이트**가
+  지금 앱(1.0.6)에 안 간다. 사용자 결정(2026-10-02, 두 번째): 등록만 다음 빌드로 미룬다 — `docs/EAS_BUILD.md` "다음 빌드에 묶을 것".
+  검증은 `node scripts/verify-place-link.mjs` 로 직접 돌린다.
+- 서버 변경은 하위 호환이다(새 필드 `created` 는 추가뿐, 새 엔드포인트는 안 부르면 그만) — 예전 앱은 예전 동작 그대로다.
 
 ## 1. 운영 중복 데이터 점검 (UNIQUE 제약 추가 전)
 
@@ -44,7 +46,7 @@ ORDER BY p.couple_id, p.kakao_place_id, p.id;
 - SDK 경로로 추가된 장소는 `kakao_place_id` 가 NULL 이라 ①에 잡히지 않는다. 이름만 같은 중복은 제약 대상이 아니다.
 - **정리 방식(사용자 결정)**: 중복이 있으면 가장 오래된 행으로 병합한다 — 방문 기록·반응을 옮기고, 평점은 사람마다 최근 값 하나만
   남기고, 등급을 다시 계산한 뒤 나머지 행을 지운다.
-- **점검 결과**: _사용자가 운영에서 돌린 결과를 기다리는 중 — 받으면 여기 적는다._
+- **점검 결과(2026-10-02, 사용자가 Railway 콘솔에서 ①을 실행)**: **0행 — 중복 없음.** V117 을 병합 처리 없이 그대로 배포한다.
 
 NULL 은 몇 개든 허용된다(표준 UNIQUE 는 NULL 끼리 같다고 보지 않는다). H2 는 `PlaceDedupeFlowTest`
 (`DB_제약_kakaoPlaceId가_NULL인_수동_장소는_여러_개_허용된다`)로, PostgreSQL 은 같은 테스트를 PG 로 돌려 확인했다(§6).
