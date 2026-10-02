@@ -13,7 +13,7 @@
  * 작성 중인 내용이 조용히 사라지지 않게 한다.
  */
 import React from 'react';
-import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { RootOverlayModal } from './RootOverlayModal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radius, spacing } from '../constants/theme';
@@ -55,6 +55,25 @@ export function Sheet({
   const bottom = position === 'bottom' && !desktop;
   const asDesktopDialog = position === 'bottom' && desktop;
 
+  /*
+   * 키보드부터 내린다 (2026-10-02, 신체 정보 시트 리포트 — "체중·체지방률을 입력하고 닫을 방법이 없다").
+   * 숫자 키패드(decimal-pad)는 iOS 에서 완료 키가 없어, 키패드가 올라오면 내릴 길이 없었다.
+   * 그 상태로 배경을 누르면 시트째 닫혀 적던 값이 사라졌으므로, 키보드가 떠 있을 때의
+   * 배경 탭은 키보드만 내리고 시트는 남긴다. 카드 빈 곳 탭도 키보드를 내린다.
+   */
+  const onBackdropPress = () => {
+    if (Keyboard.isVisible()) {
+      Keyboard.dismiss();
+      return;
+    }
+    onClose();
+  };
+  /*
+   * 웹은 제외 — react-native-web 에서는 입력칸 클릭이 이 카드의 onPress 까지 올라와 방금 잡은
+   * 포커스를 곧바로 풀어 버린다. 웹은 실물 키보드라 내릴 일도 없다.
+   */
+  const dismissOnCardPress = Platform.OS === 'web' ? () => {} : () => Keyboard.dismiss();
+
   return (
     <RootOverlayModal
       visible={visible}
@@ -62,32 +81,40 @@ export function Sheet({
       animationType={animationType ?? (bottom ? 'slide' : 'fade')}
       onRequestClose={onClose}
     >
-      <Pressable
-        style={[styles.backdrop, bottom ? styles.backdropBottom : styles.backdropCenter]}
-        onPress={onClose}
-      >
-        {/*
-          onPress 로 탭을 흡수한다 — 없으면 카드 빈 곳 터치가 배경으로 새어나가 닫힌다.
-          Pressable 을 한 겹 더 두는 이유가 이것뿐이라 지우면 안 된다.
-        */}
+      {/*
+        iOS 는 FullWindowOverlay 라 키보드가 카드 아래쪽(취소·저장 버튼)을 그대로 덮는다 — padding 으로 밀어 올린다.
+        Android 는 Modal 창이 스스로 리사이즈한다(ScheduleMessageSheet 와 같은 판단).
+      */}
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <Pressable
-          style={[
-            styles.card,
-            bottom ? { paddingBottom: insets.bottom + spacing.md } : null,
-            asDesktopDialog ? styles.desktopDialog : null,
-            cardStyle,
-          ]}
-          onPress={() => {}}
+          style={[styles.backdrop, bottom ? styles.backdropBottom : styles.backdropCenter]}
+          onPress={onBackdropPress}
         >
-          {bottom ? <View style={styles.grabber} /> : null}
-          {children}
+          {/*
+            onPress 로 탭을 흡수한다 — 없으면 카드 빈 곳 터치가 배경으로 새어나가 닫힌다.
+            흡수하는 김에 키보드를 내린다(위 onBackdropPress 참고).
+            이 Pressable 을 지우면 안 된다.
+          */}
+          <Pressable
+            style={[
+              styles.card,
+              bottom ? { paddingBottom: insets.bottom + spacing.md } : null,
+              asDesktopDialog ? styles.desktopDialog : null,
+              cardStyle,
+            ]}
+            onPress={dismissOnCardPress}
+          >
+            {bottom ? <View style={styles.grabber} /> : null}
+            {children}
+          </Pressable>
         </Pressable>
-      </Pressable>
+      </KeyboardAvoidingView>
     </RootOverlayModal>
   );
 }
 
 const styles = themedStyles((colors) => ({
+  flex: { flex: 1 },
   backdrop: { flex: 1, backgroundColor: colors.backdrop },
   backdropCenter: { justifyContent: 'center', padding: spacing.lg },
   backdropBottom: { justifyContent: 'flex-end' },
