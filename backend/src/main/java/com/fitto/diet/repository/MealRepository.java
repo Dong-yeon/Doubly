@@ -173,6 +173,9 @@ public interface MealRepository extends JpaRepository<Meal, Long> {
                                  @Param("cursorId") Long cursorId,
                                  Pageable pageable);
 
+    /** 저장 멱등키로 찾기 — {@code (user_id, client_request_id)} unique 인덱스가 받쳐 준다(V118). */
+    Optional<Meal> findByUserIdAndClientRequestId(Long userId, String clientRequestId);
+
     /** 회원 탈퇴 시 본인 식단 기록 삭제. */
     @Modifying
     @Query("delete from Meal m where m.userId = :userId")

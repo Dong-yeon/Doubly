@@ -119,6 +119,19 @@ public class MealService {
 
     @Transactional
     public MealResponse save(Long userId, SaveMealRequest req) {
+        /*
+         * 멱등 검사 — 다른 무엇보다 먼저 본다. 같은 키로 다시 온 저장은 "새 기록"이 아니라 응답을 못 받은 앱의
+         * 재시도이므로 스트릭·응원 푸시·목표 축하·자동 분석을 다시 태우지 않고 먼저 저장된 끼니를 그대로 돌려준다.
+         * 아래 사진 중복 검사보다 앞서야 한다 — 사진 기록의 재시도가 MEAL_PHOTO_ALREADY_RECORDED 로 실패하던 경로다.
+         * 동시에 도착한 두 요청은 (user_id, client_request_id) unique 인덱스가 두 번째 INSERT 를 막고 컨트롤러가 받는다.
+         */
+        String clientRequestId = req.clientRequestIdOrNull();
+        if (clientRequestId != null) {
+            Optional<Meal> already = mealRepository.findByUserIdAndClientRequestId(userId, clientRequestId);
+            if (already.isPresent()) {
+                return MealResponse.from(already.get());
+            }
+        }
         if (req.mealDate().isAfter(KstClock.today())) {
             throw new BusinessException(ErrorCode.INVALID_INPUT, "미래 날짜는 기록할 수 없습니다.");
         }
@@ -180,6 +193,7 @@ public class MealService {
                 .sodium(sodium)
                 .fiber(fiber)
                 .sharedGroupId(sharedGroupId)
+                .clientRequestId(clientRequestId)
                 .build();
         // 항목을 보냈으면 그게 기준 — 합계는 서버가 다시 더한다(요청의 합계값은 무시)
         items.forEach(meal::addItem);
@@ -212,6 +226,16 @@ public class MealService {
      * 지정한 날짜(기본: 어제)의 식단을 오늘 날짜로 통째로 복사 — 매일 비슷한 식단을 먹는
      * 운동 유저를 위한 3초 퀵 로깅. 사진/메모/칼로리/매크로를 그대로 들고 오고, 끼니 종류도 유지한다.
      */
+    /**
+     * 같은 멱등키의 저장이 동시에 들어와 unique 인덱스가 두 번째를 막았을 때 — 먼저 커밋된 끼니를 돌려준다.
+     * 없으면(다른 제약 위반이었다면) 빈 값이라 호출자가 원래 예외를 다시 던진다.
+     */
+    @Transactional(readOnly = true)
+    public Optional<MealResponse> findSavedByClientRequestId(Long userId, String clientRequestId) {
+        if (clientRequestId == null) return Optional.empty();
+        return mealRepository.findByUserIdAndClientRequestId(userId, clientRequestId).map(MealResponse::from);
+    }
+
     @Transactional
     public List<MealResponse> copyFrom(Long userId, LocalDate sourceDate) {
         LocalDate today = KstClock.today();
