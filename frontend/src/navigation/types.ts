@@ -295,7 +295,8 @@ export type ChatStackParamList = {
     /** 검색·저장한 대화 목록에서 골라 돌아올 때만 채워진다 — 도착하면 스스로 지운다 */
     scrollToMessageId?: number;
   };
-  ChatPhotoGallery: { relationId: number; myId: number | undefined };
+  /** initialPhotoId — "⋮" 시트의 사진 줄에서 한 장을 눌러 왔을 때, 그 장을 크게 연 채로 시작한다 */
+  ChatPhotoGallery: { relationId: number; myId: number | undefined; initialPhotoId?: number };
   // 이모티콘 설정 — 받기·숨기기·순서(카카오톡 방식). 설정 화면에서도 들어온다(HomeStack 에 같은 이름)
   StickerSettings: undefined;
   SavedMessages: { relationId: number; title: string; myId: number | undefined };

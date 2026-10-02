@@ -2627,7 +2627,9 @@ export function ChatRoomScreen({ navigation, route }: Props) {
       <ChatMoreMenuSheet
         visible={showMoreMenu}
         onClose={() => setShowMoreMenu(false)}
+        relationId={relationId}
         onPhotos={() => navigation.navigate('ChatPhotoGallery', { relationId, myId })}
+        onPhoto={(id) => navigation.navigate('ChatPhotoGallery', { relationId, myId, initialPhotoId: id })}
         onSaved={() => navigation.navigate('SavedMessages', { relationId, title: partnerName, myId })}
         onScheduled={() => navigation.navigate('ScheduledMessages', { relationId })}
         onExport={onExportChat}
