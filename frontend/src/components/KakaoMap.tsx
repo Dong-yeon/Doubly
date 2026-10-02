@@ -10,7 +10,7 @@ import { themedStyles } from '../theme/themedStyles';
 export type { KakaoMapHandle, KakaoMapProps };
 
 export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap(
-  { markers, path, selectable, centerLat, centerLng, height = 300, style, onSelect, onMarkerPress, onSearchResults },
+  { markers, path, selectable, centerLat, centerLng, height = 300, style, onSelect, onMarkerPress },
   ref,
 ) {
   const webViewRef = useRef<WebView>(null);
@@ -43,11 +43,6 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
   }, [markersKey, pathKey]);
 
   useImperativeHandle(ref, () => ({
-    search: (keyword: string) => {
-      webViewRef.current?.injectJavaScript(
-        `window.fittoSearch && window.fittoSearch(${JSON.stringify(keyword)}); true;`,
-      );
-    },
     setPin: (lat: number, lng: number) => {
       webViewRef.current?.injectJavaScript(
         `window.fittoSetPin && window.fittoSetPin(${lat}, ${lng}); true;`,
@@ -95,7 +90,6 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
           if (!msg) return;
           if (msg.type === 'select') onSelect?.({ lat: msg.lat, lng: msg.lng, address: msg.address });
           if (msg.type === 'marker') onMarkerPress?.(msg.id);
-          if (msg.type === 'search-results') onSearchResults?.(msg.keyword, msg.results);
           if (msg.type === 'failed') {
             // WebView 내부 JS 콘솔은 RN 쪽 Metro 로그에 안 잡힌다 — 원인 문자열을 여기서 다시 찍어준다.
             console.warn('[KakaoMap] 지도 로드 실패:', msg.reason ?? '(원인 미상)');

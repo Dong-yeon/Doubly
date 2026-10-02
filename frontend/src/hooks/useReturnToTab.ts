@@ -20,12 +20,16 @@
  * <p>같은 탭 안에서 연 경우에는 `returnTo` 가 없고, 그때는 아무 일도 하지 않는다 —
  * 운동 탭에서 연 기록은 운동 탭 메인으로 돌아가는 것이 맞다.
  */
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { MainTabParamList } from '../navigation/types';
 
-export function useReturnToTab(returnTo: keyof MainTabParamList | undefined): void {
+/**
+ * 돌려주는 함수를 부르면 이번 언마운트에서는 돌아가지 않는다 — 닫으면서 <b>같은 탭의 다른 화면</b>으로
+ * 넘어가는 경우(장소 추가 → 이미 있던 장소 상세)에 쓴다. 안 부르면 예전과 똑같다.
+ */
+export function useReturnToTab(returnTo: keyof MainTabParamList | undefined): () => void {
   const navigation = useNavigation();
 
   /*
@@ -44,11 +48,17 @@ export function useReturnToTab(returnTo: keyof MainTabParamList | undefined): vo
     if (returnTo) returnToRef.current = returnTo;
   }, [returnTo]);
 
+  const cancelledRef = useRef(false);
+
   useEffect(
     () => () => {
-      const tab = returnToRef.current;
+      const tab = cancelledRef.current ? undefined : returnToRef.current;
       if (tab) navigation.getParent<BottomTabNavigationProp<MainTabParamList>>()?.jumpTo(tab);
     },
     [navigation],
   );
+
+  return useCallback(() => {
+    cancelledRef.current = true;
+  }, []);
 }

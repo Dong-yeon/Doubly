@@ -17,20 +17,9 @@ export interface KakaoMapMarker {
   tier?: number;
 }
 
-/** 카카오 플레이스 키워드 검색 결과 1건 */
-export interface KakaoPlaceResult {
-  name: string;
-  address?: string | null;
-  /** 카카오 category_group_code (FD6=음식점, CE7=카페 등) */
-  categoryGroup?: string | null;
-  lat: number;
-  lng: number;
-}
-
 export type KakaoMapMessage =
   | { source: 'fitto-kakao-map'; type: 'select'; lat: number; lng: number; address?: string | null }
   | { source: 'fitto-kakao-map'; type: 'marker'; id: number }
-  | { source: 'fitto-kakao-map'; type: 'search-results'; keyword: string; results: KakaoPlaceResult[] }
   /** SDK 로드 실패·도메인 미등록 등 — 지도가 정상 동작하지 않는다는 신호 (buildKakaoMapHtml 하단 주석 참고) */
   | { source: 'fitto-kakao-map'; type: 'failed'; reason?: string };
 
@@ -123,33 +112,15 @@ kakao.maps.load(function () {
     if (map.getLevel() > 4) { map.setLevel(4); }
   };
 
-  // 카카오 플레이스 키워드 검색 (SDK services 라이브러리 — 별도 REST 키 불필요)
-  var places = new kakao.maps.services.Places();
-  window.fittoSearch = function (keyword) {
-    if (!keyword) { return; }
-    places.keywordSearch(keyword, function (res, status) {
-      var results = [];
-      if (status === kakao.maps.services.Status.OK) {
-        results = res.slice(0, 10).map(function (p) {
-          return {
-            name: p.place_name,
-            address: p.road_address_name || p.address_name || null,
-            categoryGroup: p.category_group_code || null,
-            lat: parseFloat(p.y),
-            lng: parseFloat(p.x)
-          };
-        });
-      }
-      post({ type: 'search-results', keyword: keyword, results: results });
-    });
-  };
+  // 장소 검색은 지도가 하지 않는다 — 서버 GET /places/search(카카오 로컬 REST)가 카카오 장소 id 까지
+  // 돌려줘 중복 방지가 된다. SDK keywordSearch 는 id 를 버려 같은 장소가 두 번 생기곤 했다
+  // (docs/LOVELICHELIN_CHAT_LINK_2026-10-02.md). 지도는 표시와 좌표 고르기만 맡는다.
 
   // 웹(iframe)은 postMessage 명령으로 호출
   window.addEventListener('message', function (e) {
     var d = e.data;
     try { if (typeof d === 'string') { d = JSON.parse(d); } } catch (err) { return; }
     if (!d || d.source !== 'fitto-kakao-map-cmd') { return; }
-    if (d.type === 'search') { window.fittoSearch(d.keyword); }
     if (d.type === 'pin') { window.fittoSetPin(d.lat, d.lng); }
     if (d.type === 'markers') { window.fittoSetMarkers(d.markers, d.path, false); }
   });

@@ -997,6 +997,8 @@ export interface Place {
   coverImageUrl?: string | null;
   coverMemo?: string | null;
   createdAt: string;
+  /** 저장(POST /places) 응답에만 온다 — false 면 같은 커플에 이미 있던 장소를 돌려준 것(중복 방지) */
+  created?: boolean;
 }
 export interface PlaceVisit {
   id: number;

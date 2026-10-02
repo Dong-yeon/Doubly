@@ -57,7 +57,7 @@ function pinImage(kakao: any, color: string, filled: boolean) {
 }
 
 export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap(
-  { markers, path, selectable, centerLat, centerLng, height = 300, style, onSelect, onMarkerPress, onSearchResults },
+  { markers, path, selectable, centerLat, centerLng, height = 300, style, onSelect, onMarkerPress },
   ref,
 ) {
   const boxRef = useRef<HTMLDivElement | null>(null);
@@ -70,8 +70,8 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
   const [failed, setFailed] = useState(false);
 
   // 콜백은 ref 로 잡는다 — 매 렌더마다 지도를 다시 만들지 않기 위해
-  const cbRef = useRef({ onSelect, onMarkerPress, onSearchResults });
-  cbRef.current = { onSelect, onMarkerPress, onSearchResults };
+  const cbRef = useRef({ onSelect, onMarkerPress });
+  cbRef.current = { onSelect, onMarkerPress };
 
   // 1) 지도 생성 (한 번)
   useEffect(() => {
@@ -185,23 +185,6 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
   }, [ready, selectable]);
 
   useImperativeHandle(ref, () => ({
-    search: (keyword: string) => {
-      const kakao = (window as any).kakao;
-      if (!kakao?.maps || !keyword) return;
-      new kakao.maps.services.Places().keywordSearch(keyword, (res: any[], status: string) => {
-        const results =
-          status === kakao.maps.services.Status.OK
-            ? res.slice(0, 10).map((p) => ({
-                name: p.place_name,
-                address: p.road_address_name || p.address_name || null,
-                categoryGroup: p.category_group_code || null,
-                lat: parseFloat(p.y),
-                lng: parseFloat(p.x),
-              }))
-            : [];
-        cbRef.current.onSearchResults?.(keyword, results);
-      });
-    },
     setPin: (lat: number, lng: number) => {
       const kakao = (window as any).kakao;
       const map = mapRef.current;
