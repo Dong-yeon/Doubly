@@ -5,6 +5,7 @@ import type {
   ActivityLevel,
   ApiResponse,
   CalendarDay,
+  FeedItem,
   CoupleMealGoal,
   DietCoach,
   DietGoalType,
@@ -105,6 +106,12 @@ export const dietApi = {
   update: (id: number, payload: SaveMealPayload) =>
     unwrap(apiClient.put<ApiResponse<Meal>>(`/meal/${id}`, payload)),
   // 어제(기본) 식단을 오늘 날짜로 통째로 복사 — 3초 퀵 로깅
+  /**
+   * 럽바디 "○○님 오늘" — 상대가 오늘 혼자 남긴 식사. 피드 카드와 같은 모양·같은 노출(칼로리 없음)이고,
+   * 반응은 feedApi.react('MEAL', refId, emoji) 로 단다. 커플이 아니면 빈 배열.
+   */
+  partnerTodayMeals: () =>
+    unwrap(apiClient.get<ApiResponse<FeedItem[]>>('/meal/partner/today/meals')),
   copyFromYesterday: () =>
     unwrap(apiClient.post<ApiResponse<Meal[]>>('/meal/copy')),
   /*

@@ -49,8 +49,12 @@ import { confirmDiscard } from '../../utils/discardGuard';
 import { formatKcal, formatKcalOfGoal, formatNumber } from '../../utils/format';
 import { sanitizeIntegerInput } from '../../utils/numericInput';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
+import { FeedCard } from '../home/components/FeedCard';
+import { QUICK_EMOJIS, feedTimeLabel } from '../feed/FeedTimelineScreen';
+import { feedApi } from '../../api/feed';
 import type {
   ActivityLevel,
+  FeedItem,
   CoupleMealGoal,
   DietCoach,
   DietGoalType,
@@ -284,6 +288,33 @@ export function DietScreen({ navigation, route }: Props) {
     remove,
   } = useDietStore();
   const setDietGoal = useRelationStore((s) => s.setDietGoal);
+  /*
+   * "○○님 오늘" — 럽바디는 "우리 식사 기록"이다(docs/lovebody-direction_2026-10-02.md 1순위). 예전엔 이 화면에
+   * 상대 식사가 한 장도 없었다. 우리 탭 피드와 같은 카드·같은 노출(칼로리 없음)·같은 반응 행을 쓴다.
+   * 실시간 구독은 걸지 않는다 — subscribeCouple 은 목적지당 핸들러 하나라 홈과 탭을 오갈 때 서로의 구독을
+   * 지울 수 있다. 포커스·당겨서 새로고침으로 충분하다.
+   */
+  const partnerName = useRelationStore((s) => s.couple?.partner?.name ?? null);
+  const [partnerMeals, setPartnerMeals] = useState<FeedItem[]>([]);
+  const [partnerMealsError, setPartnerMealsError] = useState(false);
+  const loadPartnerMeals = useCallback(async () => {
+    try {
+      setPartnerMeals(await dietApi.partnerTodayMeals());
+      setPartnerMealsError(false);
+    } catch {
+      // 받아 둔 목록은 지우지 않는다 — 실패가 "아직 안 먹었다"로 위장하지 않게 오류 줄만 띄운다
+      setPartnerMealsError(true);
+    }
+  }, []);
+  const onReactPartnerMeal = async (item: FeedItem, emoji: string) => {
+    haptics.light();
+    try {
+      const reactions = await feedApi.react(item.type, item.refId, emoji);
+      setPartnerMeals((prev) => prev.map((i) => (i.refId === item.refId ? { ...i, reactions } : i)));
+    } catch (e) {
+      toast.error(getErrorMessage(e, '반응을 남기지 못했어요.'));
+    }
+  };
   // 삭제 in-flight 가드 — 연타로 인한 중복 DELETE 방지 + 해당 카드만 흐리게 (QA_CHECKLIST.md 패턴 7)
   const { deletingId, runDelete } = useDeleteAction<number>();
   const [myStreak, setMyStreak] = useState<Streak | null>(null);
@@ -524,7 +555,8 @@ export function DietScreen({ navigation, route }: Props) {
       fetchToday();
       fetchHistory();
       refreshExtras();
-    }, [fetchToday, fetchHistory, refreshExtras]),
+      void loadPartnerMeals();
+    }, [fetchToday, fetchHistory, refreshExtras, loadPartnerMeals]),
   );
 
   const onPickGoal = async (days: number) => {
@@ -667,6 +699,7 @@ export function DietScreen({ navigation, route }: Props) {
           fetchToday();
           fetchHistory();
           refreshExtras();
+          void loadPartnerMeals();
         }}
         onEndReachedThreshold={0.3}
         onEndReached={loadMoreHistory}
@@ -786,6 +819,30 @@ export function DietScreen({ navigation, route }: Props) {
                 </Text>
               </View>
             )}
+
+            {/* ○○님 오늘 — 커플일 때만. 같이 먹은 끼니는 내 "오늘"에 데이트 배지로 있어 여기선 빠진다(서버) */}
+            {partnerName ? (
+              <View style={styles.partnerSection}>
+                <Text style={styles.sectionTitle}>{partnerName}님 오늘</Text>
+                {partnerMeals.length > 0 ? (
+                  partnerMeals.map((item) => (
+                    <FeedCard
+                      key={item.refId}
+                      item={item}
+                      timeLabel={feedTimeLabel(item.occurredAt)}
+                      quickEmojis={QUICK_EMOJIS}
+                      onReact={onReactPartnerMeal}
+                      // 식단 카드(RecordCard)에는 길게 누르기가 연결되지 않는다 — 피드 타임라인과 같다
+                      onLongPress={() => undefined}
+                    />
+                  ))
+                ) : partnerMealsError ? (
+                  <LoadErrorRow what={`${partnerName}님 식사`} onRetry={() => void loadPartnerMeals()} />
+                ) : (
+                  <Text style={styles.partnerEmpty}>아직 남긴 식사가 없어요</Text>
+                )}
+              </View>
+            ) : null}
 
             {/* 물 + 간헐적 단식 — 한 카드 안의 한 줄 타일 둘(§6-3, 9/23) */}
             {waterState === 'loading' && fastingState === 'loading' ? (
@@ -1412,6 +1469,8 @@ const styles = themedStyles((colors) => ({
     marginBottom: spacing.md,
   },
   emptyText: { color: colors.textSecondary, fontSize: fontSize.body },
+  partnerSection: { marginBottom: spacing.md, gap: spacing.sm },
+  partnerEmpty: { color: colors.textSecondary, fontSize: fontSize.body },
   footer: { textAlign: 'center', color: colors.textSecondary, paddingVertical: spacing.md },
   fabWrap: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: spacing.lg },
   // colors.backdrop — 하드코딩 rgba 리터럴이 다크모드에서 대비가 안 맞던 문제 (QA_CHECKLIST.md 패턴 8)
