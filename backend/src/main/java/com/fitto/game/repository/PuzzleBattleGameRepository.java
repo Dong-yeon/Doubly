@@ -19,6 +19,13 @@ public interface PuzzleBattleGameRepository extends JpaRepository<PuzzleBattleGa
     List<PuzzleBattleGame> findTop20ByCoupleIdAndStatusOrderByCompletedAtDesc(Long coupleId, GameStatus status);
 
     /**
+     * 핸디캡 계산용 — 최근 끝난 판부터. completed_at 이 아니라 id 로 센다: 시계는 1ms 안팎으로만
+     * 움직여 연달아 끝난 두 판이 같은 시각을 갖고, 그러면 순서가 정해지지 않는다. 진행 중인 판은
+     * 커플당 하나뿐이라(start 가 관계 행을 잠근다) id 순서가 곧 끝난 순서다.
+     */
+    List<PuzzleBattleGame> findTop20ByCoupleIdAndStatusOrderByIdDesc(Long coupleId, GameStatus status);
+
+    /**
      * 행 잠금 재조회 — 결과 제출을 직렬화한다.
      * 둘이 동시에 결과를 내면 "상대가 냈는가" 판정이 서로를 못 보고 판이 안 끝난다.
      */
