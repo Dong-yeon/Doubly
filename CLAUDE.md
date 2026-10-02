@@ -100,6 +100,13 @@ npm run update:production                  # EAS Update — JS/에셋만 바뀐 
 npm run submit:android / submit:ios        # 최신 빌드를 스토어에 제출
 ```
 
+- **업데이트 전에 fingerprint 부터 비교합니다.** `npx eas-cli build:list --channel production --json` 의 `runtime.version` 과
+  `npx expo-updates fingerprint:generate --platform <p>` 가 다르면 업데이트는 그 빌드에 배달되지 않습니다(빌드가 필요).
+- 비대화형(에이전트)으로 올릴 때는 `--environment production` 이 있어야 합니다 —
+  `npx eas-cli update --channel production --environment production --message "…" --non-interactive`.
+  `update:production` 스크립트엔 아직 없습니다: **`package.json` scripts 는 fingerprint 입력**이라 고치는 순간 지금 빌드(1.0.6)에
+  업데이트가 안 갑니다. 다음 네이티브 빌드 때 함께 넣습니다(`docs/EAS_BUILD.md` "다음 빌드에 묶을 것").
+
 - **빌드 vs 업데이트**: 의존성 추가·삭제, `app.json`의 plugins/permissions, `modules/` 네이티브 코드·`.so`,
   Expo SDK 업그레이드는 **빌드**. 화면·로직·문구·이미지 변경은 **업데이트**로 충분합니다.
   런타임 버전이 `fingerprint` 정책이라 네이티브가 바뀐 커밋에서 업데이트를 올려도 기존 빌드에는
