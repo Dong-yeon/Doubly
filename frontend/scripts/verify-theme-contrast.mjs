@@ -102,6 +102,10 @@ const RULES = [
   { name: '나 글자 / 카드', pick: (p) => [p.surface, p.meText], min: 4.5 },
   { name: '상대 글자 / 카드', pick: (p) => [p.surface, p.partnerText], min: 4.5 },
   { name: '함께 글자 / 카드', pick: (p) => [p.surface, p.togetherText], min: 4.5 },
+  // 홈 아바타 위 럽슐랭 왕관(아이콘 — 비텍스트 3:1). 오늘 기록 = togetherText, 등극 = lovelichelinGold
+  { name: '왕관(오늘) / 배경', pick: (p) => [p.background, p.togetherText], min: 3.0 },
+  { name: '왕관(등극 금색) / 배경', pick: (p) => [p.background, p.lovelichelinGold], min: 3.0 },
+  { name: '왕관(등극 금색) / 카드', pick: (p) => [p.surface, p.lovelichelinGold], min: 3.0 },
   // 채움 위 onColor (버튼·아바타·완료 칩·요일 칩)
   { name: 'onColor / primaryFill (주 버튼)', pick: (p) => [p.primaryFill, onColor(p.primaryFill)], min: 4.5 },
   { name: 'onColor / meFill', pick: (p) => [p.meFill, onColor(p.meFill)], min: 4.5 },
@@ -126,8 +130,46 @@ const RULES = [
   { name: 'onColor / primary (구식 채움)', pick: (p) => [p.primary, onColor(p.primary)], min: 4.5 },
 ];
 
+/*
+ * 구분 규칙 — 대비가 아니라 "다른 색으로 읽히는가". 등극 왕관 금색이 PRO 왕관(primary·primaryDark)이나 '나' 색,
+ * 오늘 왕관(togetherText)과 붙으면 무엇의 표시인지 갈리지 않는다(docs/HOME_RECORD_AND_CROWN_2026-10-02.md).
+ * 지각 색차 CIE76 ΔE — 10 이상이면 나란히 놓았을 때 한눈에 다른 색이다. 15 로 여유를 둔다.
+ * 실측 중 가장 가까운 쌍: 라이트 '오늘 왕관(togetherText) vs primary' 16.4 — 둘 다 초록 계열이라 아슬아슬하다.
+ * 오늘 왕관 색은 사용자 지정(togetherText)이라 바꾸지 않았고, 자리(아바타 위 vs 스티커 상점)가 함께 가른다.
+ */
+const lin = (v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+const lab = (hex) => {
+  const [r, g, b] = [1, 3, 5].map((i) => lin(parseInt(hex.slice(i, i + 2), 16)));
+  const f = (t) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116);
+  const x = f((r * 0.4124 + g * 0.3576 + b * 0.1805) / 0.95047);
+  const y = f(r * 0.2126 + g * 0.7152 + b * 0.0722);
+  const z = f((r * 0.0193 + g * 0.1192 + b * 0.9505) / 1.08883);
+  return [116 * y - 16, 500 * (x - y), 200 * (y - z)];
+};
+const deltaE = (a, b) => { const p = lab(a), q = lab(b); return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]); };
+const DISTINCT = [
+  { name: '등극 금색 ≠ PRO(primary)', pick: (p) => [p.lovelichelinGold, p.primary], min: 15 },
+  { name: '등극 금색 ≠ PRO(primaryDark)', pick: (p) => [p.lovelichelinGold, p.primaryDark], min: 15 },
+  { name: '등극 금색 ≠ 나 색', pick: (p) => [p.lovelichelinGold, p.me], min: 15 },
+  { name: '등극 금색 ≠ 오늘 왕관(togetherText)', pick: (p) => [p.lovelichelinGold, p.togetherText], min: 15 },
+  { name: '오늘 왕관 ≠ PRO(primary)', pick: (p) => [p.togetherText, p.primary], min: 15 },
+  { name: '오늘 왕관 ≠ PRO(primaryDark)', pick: (p) => [p.togetherText, p.primaryDark], min: 15 },
+];
+
 let failures = 0;
 const rows = [];
+for (const [name, p] of Object.entries(palettes)) {
+  for (const rule of DISTINCT) {
+    const [a, b] = rule.pick(p);
+    if (!a || !b) { rows.push(`  ?   ${name.padEnd(12)} ${rule.name} — 토큰 없음`); failures++; continue; }
+    const d = deltaE(a, b);
+    const ok = d >= rule.min;
+    if (!ok) failures++;
+    if (!ok || process.argv.includes('--all')) {
+      rows.push(`  ${ok ? 'ok ' : 'FAIL'} ${name.padEnd(12)} ${rule.name.padEnd(36)} ΔE ${d.toFixed(1)} (min ${rule.min})  ${a} vs ${b}`);
+    }
+  }
+}
 for (const [name, p] of Object.entries(palettes)) {
   for (const rule of RULES) {
     const [bg, fg] = rule.pick(p);

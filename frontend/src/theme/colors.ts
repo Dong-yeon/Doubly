@@ -87,6 +87,12 @@ const light = {
   meText: '#8A6817',
   partnerText: '#2C7D33',
   togetherText: '#59772D',
+  /*
+   * 럽슐랭 등극 왕관(홈 아바타 위) — '나'의 Gold(#8A6817, 탁한 황토)와 갈리게 채도를 올린 트로피 금색.
+   * 아이콘이라 비텍스트 3:1 이 기준(배경 3.12 · 카드 3.25). PRO 왕관(primary 초록)과는 색상이 다르다.
+   * 더 밝히면 배경 대비가 3 아래로, 더 어둡게 하면 '나' 색에 붙는다 — verify:theme 가 둘 다 본다.
+   */
+  lovelichelinGold: '#B8860B',
 
   // ── 크롬 (Green) — 버튼·활성탭·링크·선택 상태 ─────────────────
   primary: '#2A7731',
@@ -203,6 +209,8 @@ const dark: typeof light = {
   meText: '#F1C999',
   partnerText: '#A7D2A9',
   togetherText: '#C9DA97',
+  // 럽슐랭 등극 왕관 — '나'의 파스텔 금색(#F1C999)과 갈리게 선명한 금색. 배경 10.08 · 카드 9.14
+  lovelichelinGold: '#F5C518',
 
   /*
    * primary 는 다크에서 <b>두 가지 상충하는 역할</b>을 동시에 한다.
