@@ -5,6 +5,7 @@ import com.fitto.common.ai.AiJobService;
 import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
 import com.fitto.place.dto.DateCourseResponse;
+import com.fitto.place.dto.LovelichelinPulseResponse;
 import com.fitto.place.dto.LovelichelinRecommendationResponse;
 import com.fitto.place.dto.PlaceResponse;
 import com.fitto.place.dto.PlaceSearchResponse;
@@ -14,6 +15,7 @@ import com.fitto.place.dto.RecordVisitRequest;
 import com.fitto.place.dto.SavePlaceRequest;
 import com.fitto.place.dto.UpdatePlaceRequest;
 import com.fitto.place.service.DateCourseService;
+import com.fitto.place.service.LovelichelinPulseService;
 import com.fitto.place.service.LovelichelinRecommendService;
 import com.fitto.place.service.PlaceService;
 import jakarta.validation.Valid;
@@ -43,14 +45,17 @@ public class PlaceController {
     private final DateCourseService dateCourseService;
     private final LovelichelinRecommendService lovelichelinRecommendService;
     private final AiJobService aiJobService;
+    private final LovelichelinPulseService lovelichelinPulseService;
 
     public PlaceController(PlaceService placeService, DateCourseService dateCourseService,
                            LovelichelinRecommendService lovelichelinRecommendService,
-                           AiJobService aiJobService) {
+                           AiJobService aiJobService,
+                           LovelichelinPulseService lovelichelinPulseService) {
         this.placeService = placeService;
         this.dateCourseService = dateCourseService;
         this.lovelichelinRecommendService = lovelichelinRecommendService;
         this.aiJobService = aiJobService;
+        this.lovelichelinPulseService = lovelichelinPulseService;
     }
 
     @PostMapping
@@ -104,6 +109,15 @@ public class PlaceController {
                                                     @RequestParam String query,
                                                     @RequestParam(defaultValue = "8") int size) {
         return ApiResponse.success(placeService.search(query, size));
+    }
+
+    /**
+     * 홈 이름 옆 럽슐랭 왕관 — 나·상대 각각 "오늘 럽슐랭에 기록함" / "막 등극함" 신호(없으면 null).
+     * 홈이 화면에 올 때마다 부른다. 미연결이면 빈 신호다(404 아님).
+     */
+    @GetMapping("/lovelichelin/pulse")
+    public ApiResponse<LovelichelinPulseResponse> lovelichelinPulse(@AuthenticationPrincipal AuthUser user) {
+        return ApiResponse.success(lovelichelinPulseService.pulse(user.id()));
     }
 
     @GetMapping("/{id}")

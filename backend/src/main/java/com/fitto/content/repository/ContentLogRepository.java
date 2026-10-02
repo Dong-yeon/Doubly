@@ -1,11 +1,13 @@
 package com.fitto.content.repository;
 
 import com.fitto.content.domain.ContentLog;
+import com.fitto.place.repository.LovelichelinActivityRow;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 public interface ContentLogRepository extends JpaRepository<ContentLog, Long> {
@@ -101,4 +103,14 @@ public interface ContentLogRepository extends JpaRepository<ContentLog, Long> {
 
         String getContentTitle();
     }
+
+    /** 홈 왕관 — 이 커플 콘텐츠에 [from, to) 사이 남긴 관람 기록 */
+    @Query("""
+            select l.contentId as targetId, c.title as targetName, l.loggedBy as userId, l.createdAt as at
+            from ContentLog l join Content c on c.id = l.contentId
+            where c.coupleId = :coupleId and l.createdAt >= :from and l.createdAt < :to
+            """)
+    List<LovelichelinActivityRow> findActivityBetween(@Param("coupleId") Long coupleId,
+                                                                                @Param("from") LocalDateTime from,
+                                                                                @Param("to") LocalDateTime to);
 }
