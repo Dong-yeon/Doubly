@@ -78,6 +78,7 @@ class PlanGatingFlowTest {
     @Autowired CoupleChallengeService challengeService;
     @Autowired WorkoutService workoutService;
     @Autowired MuscleRecoveryService muscleRecoveryService;
+    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
     private Long register(String email) {
         return authService.register(
@@ -205,6 +206,60 @@ class PlanGatingFlowTest {
         for (int i = 0; i < limit; i++) {
             calendarService.create(user, new CreateEventRequest("일정" + i, today, null, null, false, null));
         }
+
+        assertThatThrownBy(() -> calendarService.create(user,
+                new CreateEventRequest("한도초과", today, null, null, false, null)))
+                .isInstanceOf(BusinessException.class)
+                .extracting(this::errorCodeOf)
+                .isEqualTo(ErrorCode.PLAN_LIMIT_EXCEEDED);
+    }
+
+    /**
+     * 잘못 만든 일정을 지우면 한도가 돌아온다 — 상대가 지워도 같다(커플 공용 주머니).
+     * 예전엔 선차감만 하고 돌려주지 않아, 무료는 실수 한 번이 그 달 한 칸이었다.
+     */
+    @Test
+    void 무료_캘린더는_이번_달에_만든_일정을_지우면_한도가_돌아온다() {
+        Long user = register("gate-calref-a@fitto.com");
+        Long partner = register("gate-calref-b@fitto.com");
+        relationService.connectCouple(partner, relationService.createCoupleInvite(user).code());
+        int limit = Feature.CALENDAR_EVENT.quotaFor(Plan.FREE).limit();
+        LocalDate today = LocalDate.now();
+
+        Long last = null;
+        for (int i = 0; i < limit; i++) {
+            last = calendarService.create(user,
+                    new CreateEventRequest("일정" + i, today, null, null, false, null)).id();
+        }
+        calendarService.delete(partner, last);
+
+        // 한 칸이 돌아왔으니 하나는 더 만들 수 있고, 그다음은 다시 막힌다
+        calendarService.create(user, new CreateEventRequest("다시", today, null, null, false, null));
+        assertThatThrownBy(() -> calendarService.create(user,
+                new CreateEventRequest("한도초과", today, null, null, false, null)))
+                .isInstanceOf(BusinessException.class)
+                .extracting(this::errorCodeOf)
+                .isEqualTo(ErrorCode.PLAN_LIMIT_EXCEEDED);
+    }
+
+    /**
+     * 지난달에 만든 일정을 지워도 이번 달 한도는 늘지 않는다 — 월말에 채워 두고 월초에 지우는
+     * 것만으로 한도를 불리는 우회로를 막는다. created_at 을 지난달로 돌려 재현한다.
+     */
+    @Test
+    void 무료_캘린더는_지난달에_만든_일정을_지워도_한도가_늘지_않는다() {
+        Long user = couple("gate-calold-a@fitto.com", "gate-calold-b@fitto.com");
+        int limit = Feature.CALENDAR_EVENT.quotaFor(Plan.FREE).limit();
+        LocalDate today = LocalDate.now();
+
+        Long old = calendarService.create(user,
+                new CreateEventRequest("지난달 일정", today, null, null, false, null)).id();
+        jdbcTemplate.update("update couple_events set created_at = ? where id = ?",
+                java.sql.Timestamp.valueOf(today.withDayOfMonth(1).minusDays(1).atTime(12, 0)), old);
+        for (int i = 1; i < limit; i++) {
+            calendarService.create(user, new CreateEventRequest("일정" + i, today, null, null, false, null));
+        }
+        calendarService.delete(user, old);
 
         assertThatThrownBy(() -> calendarService.create(user,
                 new CreateEventRequest("한도초과", today, null, null, false, null)))
