@@ -164,7 +164,7 @@ ALTER TABLE couple_events ADD COLUMN visibility VARCHAR(20) NOT NULL DEFAULT 'SH
 | 여행 기간 겹쳐 보기 | 구현됨 | 격자 하단 띠 + "우리 여행" 섹션(`tripApi.list`) |
 | 다녀온 곳 겹쳐 보기 | 구현됨 | 속 빈 점 + "이번 달 다녀온 곳" 섹션 (6절). 2026-10-02 전엔 "이번 달 데이트"(같이 먹기 식단만) |
 | 누구 일정 필터 칩 | 없음 | `CALENDAR_PERSONAL_EVENTS_2026-09-22.md` §8 "남은 것" |
-| FREE 한도 | 구현됨 | `Feature.CALENDAR_EVENT` FREE 월 10건 / PRO 무제한 (`common/plan/Feature.java:122`) |
+| FREE 한도 | 구현됨 | `Feature.CALENDAR_EVENT` FREE 월 10건(커플 공용) / PRO 무제한 (`common/plan/Feature.java:122`). 이번 달에 만든 일정을 지우면 돌려줌(2026-10-02~) |
 
 ## 6. 럽슐랭 연결
 
@@ -185,7 +185,7 @@ ALTER TABLE couple_events ADD COLUMN visibility VARCHAR(20) NOT NULL DEFAULT 'SH
 | 1 | 타임존 | ~~프론트 "오늘"이 기기 현지 날짜(`new Date()`)라 해외에서 오늘 테두리·첫 진입 월·추가 기본 날짜·'진행 중'이 서버 KST `dday` 와 하루 어긋날 수 있다.~~ **2026-10-02 수정** — `utils/anniversary.ts` 의 `kstDateOf` 로 KST 기준 판단 | `CoupleCalendarScreen.tsx:139~148` |
 | 2 | 동시성 | 낙관적 락 없음 + `updated_at` 없음. 우리 일정을 둘이 동시에 고치면 나중 저장이 덮어쓰고 알림도 없음 | `CalendarEvent` |
 | 3 | 실시간 | ~~수정·삭제는 상대에게 push 가 안 간다~~(2026-10-02 수정, 4절 표). 캘린더 화면은 `CALENDAR` 실시간 이벤트를 구독하지 않는다 → 화면을 열어둔 상대는 다시 들어오기 전까지 낡은 목록을 본다 | `CoupleCalendarScreen.tsx` 216행 |
-| 4 | 한도 | `create` 가 `planGuard.consume` 으로 선차감하고 `delete` 에서 `refund` 하지 않는다 → FREE 사용자가 잘못 만들고 지워도 월 10건이 줄어든다. 의도인지 확인 필요 | `CalendarService.create/delete` |
+| 4 | 한도 | ~~`delete` 에서 `refund` 하지 않아 잘못 만들고 지워도 월 10건이 줄었다.~~ **2026-10-02 수정** — 이번 달(KST)에 만든 일정을 지우면 커플 공용 주머니로 1건 돌려준다. 지난달에 만든 일정은 돌려주지 않는다(월말에 채우고 월초에 지워 한도를 불리는 우회로). `created_at` 은 JVM 기본 TZ(운영 UTC) 벽시계라 KST 로 옮겨 판정 | `CalendarService.delete` · `createdThisQuotaMonth` |
 | 5 | 중복 알림 | `CalendarDdayNotifier` 는 발송 이력 없이 "하루 한 번 돈다"에 기댄다. 서버 인스턴스가 2개 이상이면 같은 알림이 중복 발송됨. **2026-10-02 확인: Doubly-Back 은 replica 1(sfo)이라 평소엔 중복 없음.** 같은 프로젝트의 Doubly-Spike(`claude/call-spike-android`, 8/25)는 `@Scheduled`·캘린더 코드가 없어 무관. 남는 틈은 09:00 KST 정각에 배포가 겹쳐 옛·새 인스턴스가 함께 떠 있는 몇 초뿐 | `CalendarDdayNotifier.java` |
 | 6 | 성능 | 알림 스케줄러의 `findByEventDate` / `findByRepeatYearlyTrue` 는 전 커플 대상인데 `event_date` 단독 인덱스가 없음. 월 조회도 `coalesce` 조건은 인덱스로 못 자름. 현재 규모에선 무해, PG 실행 계획 확인 필요 | `CalendarEventRepository` |
 | 7 | 미사용 API | `/events/upcoming` 을 프론트 어디서도 호출하지 않는다(홈에 다가오는 일정 카드 없음) | `api/calendar.ts:50` |
