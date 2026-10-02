@@ -47,6 +47,7 @@ import type {
   CalendarEventType,
   CalendarEventVisibility,
   CoupleCalendarEvent,
+  HolidayYear,
   Trip,
 } from '../../types';
 import { useAuthStore } from '../../store/authStore';
@@ -163,6 +164,12 @@ export function CoupleCalendarScreen({ navigation }: Props) {
    * 여행과 달리 월 단위로 받는다: 식단은 여행보다 훨씬 자주 쌓여 전체를 들고 있을 이유가 없다.
    */
   const [dateMeals, setDateMeals] = useState<CalendarDateMeal[]>([]);
+  /*
+   * 공휴일 — 해마다 한 번만 받는다(사용자와 무관한 공용 표). 해 단위로 쥐고 있어 12월↔1월을 오가도
+   * 다시 받지 않는다. 실패하거나 서버가 그 해 표를 아직 모르면(covered=false) 빨간 날 없이 그린다 —
+   * 공휴일은 덧칠이라, 없다고 일정 표시를 막거나 재시도를 권할 일이 아니다.
+   */
+  const [holidayYears, setHolidayYears] = useState<Record<number, HolidayYear>>({});
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
   const [saving, setSaving] = useState(false);
@@ -227,6 +234,33 @@ export function CoupleCalendarScreen({ navigation }: Props) {
   // 성공했을 때만 목록을 갈아끼운다 — 실패(일시적 네트워크 오류 등)면 직전 목록을 그대로 둔다.
   // 커플 미연결(RELATION_NOT_FOUND)도 실패로 들어오지만, 그 경우 애초에 받아둔 목록이 없어
   // 빈 상태 그대로다(아래 tripsLoaded 로 '아직 모름'과 구분해 CTA 를 늦춘다).
+  useEffect(() => {
+    if (holidayYears[year]) return;
+    let active = true;
+    calendarApi
+      .holidays(year)
+      .then((h) => {
+        if (active) setHolidayYears((prev) => ({ ...prev, [year]: h }));
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [year, holidayYears]);
+
+  /** 보이는 해의 공휴일 — 날짜(YYYY-MM-DD) → 이름 */
+  const holidayByDate = useMemo(() => {
+    const map = new Map<string, string>();
+    holidayYears[year]?.holidays.forEach((h) => map.set(h.date, h.name));
+    return map;
+  }, [holidayYears, year]);
+
+  /** 이번 달 공휴일 — 격자 아래 한 줄로 이름을 보여준다(칸이 좁아 칸 안에는 이름을 못 넣는다) */
+  const monthHolidays = useMemo(() => {
+    const prefix = `${year}-${pad2(month)}-`;
+    return [...holidayByDate.entries()].filter(([d]) => d.startsWith(prefix));
+  }, [holidayByDate, year, month]);
+
   const loadTrips = useCallback(() => {
     tripApi
       .list()
@@ -498,7 +532,7 @@ export function CoupleCalendarScreen({ navigation }: Props) {
             {WEEKDAYS.map((w, i) => (
               <Text
                 key={w}
-                style={[styles.weekday, i === 0 && { color: colors.coral }]}
+                style={[styles.weekday, i === 0 && styles.redText]}
               >
                 {w}
               </Text>
@@ -515,15 +549,20 @@ export function CoupleCalendarScreen({ navigation }: Props) {
               // 하나의 띠로 보인다. 배경 틴트로 하면 선택 하이라이트(surfaceAlt)와 명도가 겹쳐
               // 어느 날을 골랐는지 안 보이고, 다크에서는 틴트 자체도 배경과 1.08:1 로 묻힌다.
               const inTrip = tripDays.has(dateStr);
+              // 빨간 날 — 일요일과 공휴일. 칸 순서가 일요일부터라 idx % 7 === 0 이 일요일이다
+              const holiday = holidayByDate.get(dateStr);
+              const isRed = !!holiday || idx % 7 === 0;
               return (
                 <Pressable
                   key={dateStr}
                   style={[styles.cell, isSelected && styles.cellSelected]}
                   onPress={() => setSelectedDate(isSelected ? null : dateStr)}
                   accessibilityState={{ selected: isSelected }}
+                  accessibilityLabel={`${month}월 ${day}일${holiday ? ` ${holiday}` : ''}`}
                 >
                   <View style={[styles.dayWrap, isToday && styles.todayWrap]}>
-                    <Text style={[styles.dayText, isToday && styles.todayText]}>{day}</Text>
+                    {/* 오늘은 채운 원 위 흰 글자가 우선 — 빨강을 얹으면 원 위에서 대비가 무너진다 */}
+                    <Text style={[styles.dayText, isRed && styles.redText, isToday && styles.todayText]}>{day}</Text>
                   </View>
                   <View style={styles.dotRow}>
                     {dayEvents.slice(0, 3).map((e) => (
@@ -544,6 +583,11 @@ export function CoupleCalendarScreen({ navigation }: Props) {
               );
             })}
           </View>
+          {monthHolidays.length > 0 ? (
+            <Text style={styles.holidayLine}>
+              {monthHolidays.map(([d, name]) => `${Number(d.slice(8, 10))}일 ${name}`).join(' · ')}
+            </Text>
+          ) : null}
         </Card>
 
         {/* 우리 여행 — 여행의 상시 진입점 (파일 상단 주석 참고). 목록·상세는 홈 스택의 Trip* 화면 */}
@@ -655,7 +699,9 @@ export function CoupleCalendarScreen({ navigation }: Props) {
         {/* 일정 목록 */}
         <View style={styles.listHeader}>
           <Text style={styles.listTitle}>
-            {selectedDate ? `${Number(selectedDate.slice(8, 10))}일 일정` : '이번 달 일정'}
+            {selectedDate
+              ? `${Number(selectedDate.slice(8, 10))}일 일정${holidayByDate.has(selectedDate) ? ` · ${holidayByDate.get(selectedDate)}` : ''}`
+              : '이번 달 일정'}
           </Text>
           {selectedDate ? (
             <Pressable onPress={() => setSelectedDate(null)} hitSlop={8}>
@@ -994,6 +1040,16 @@ const styles = themedStyles((colors) => ({
   },
   todayWrap: { backgroundColor: colors.primary },
   dayText: { fontSize: fontSize.body, color: colors.textPrimary },
+  // 빨간 날 — danger 는 라이트·다크 모두 카드 위 4.5:1 이 검증된 빨강이다(verify:theme).
+  // coral 은 이름과 달리 금색(나 = Gold)이라 "빨간 날"로 읽히지 않는다.
+  redText: { color: colors.danger },
+  holidayLine: {
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.xs,
+    fontSize: fontSize.caption,
+    color: colors.danger,
+    fontWeight: '600',
+  },
   todayText: { color: colors.white, fontWeight: '800' },
   dotRow: { flexDirection: 'row', gap: 3, height: 6, marginTop: 2 },
   dot: { width: 6, height: 6, borderRadius: 3 },

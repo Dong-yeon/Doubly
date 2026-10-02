@@ -330,6 +330,16 @@ export interface CalendarDateMeal {
   visitedBy?: number | null;
 }
 
+/**
+ * 한 해의 관공서 공휴일(일요일 제외) — 서버 표(holidays-kr.json)에서 온다.
+ * covered=false 면 그 해 표가 아직 없다는 뜻이다(공휴일이 없는 게 아니다 — 다음 해 월력요항은 6월 말에 나온다).
+ */
+export interface HolidayYear {
+  year: number;
+  covered: boolean;
+  holidays: { date: string; name: string }[];
+}
+
 /** 지난 기록 불러오기 결과 — 양쪽이 모두 요청해야 RESTORED 가 된다 */
 export interface RestoreRecords {
   status: 'WAITING_PARTNER' | 'RESTORED';
