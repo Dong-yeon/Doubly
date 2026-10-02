@@ -234,4 +234,29 @@ public interface PlaceVisitRepository extends JpaRepository<PlaceVisit, Long> {
                                                @Param("from") java.time.LocalDate from,
                                                @Param("to") java.time.LocalDate to,
                                                org.springframework.data.domain.Pageable pageable);
+
+    /** 사진 지도용 — 방문에 장소 좌표까지. 장소 이름은 {@link VisitWithPlace} 를 그대로 물려받는다 */
+    interface VisitOnMap extends VisitWithPlace {
+        java.math.BigDecimal getLat();
+
+        java.math.BigDecimal getLng();
+    }
+
+    /**
+     * 사진첩 지도 — 좌표가 있는 장소에 걸린 사진 방문 전부(식단에서 파생된 방문 <b>포함</b>).
+     *
+     * <p>파생 방문을 여기서 빼지 않는 이유: 식단 사진이 지도에 앉으려면 그 끼니가 어느 장소인지가
+     * 필요하고, 그 연결은 파생 방문({@code meal_id})뿐이다. 서비스가 둘을 갈라 파생 방문은 끼니
+     * 항목으로 바꿔 싣는다 — 사진첩과 같은 중복 제거 규칙(한 장은 한 칸).
+     */
+    @Query("""
+            select v as visit, p.name as placeName, p.lat as lat, p.lng as lng
+            from PlaceVisit v join Place p on p.id = v.placeId
+            where p.coupleId = :coupleId
+              and v.imageUrl is not null
+              and p.lat is not null and p.lng is not null
+            order by v.visitedAt desc, v.createdAt desc, v.id desc
+            """)
+    List<VisitOnMap> findPhotoVisitsOnMap(@Param("coupleId") Long coupleId,
+                                          org.springframework.data.domain.Pageable pageable);
 }

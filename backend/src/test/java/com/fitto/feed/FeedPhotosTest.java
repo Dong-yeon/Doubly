@@ -456,4 +456,45 @@ class FeedPhotosTest {
         FeedPhotoResponse partnerView = feedService.photoMonth(c[1], null, null, null).items().get(0);
         assertThat(partnerView.reactions()).singleElement().satisfies(r -> assertThat(r.mine()).isTrue());
     }
+
+    /**
+     * 지도 — 좌표가 있는 장소에 걸린 사진만, 장소별로. 맛집 방문 사진과 장소를 붙인 끼니 사진이 대상이고,
+     * 끼니에서 파생된 방문은 끼니 항목(MEAL)으로 실린다(그리드와 같은 식별자). 좌표 없는 장소·일상·운동은 빠진다.
+     */
+    @Test
+    void 지도는_좌표가_있는_장소의_사진을_장소별로_묶는다() {
+        long[] c = couple("ph-map-a@fitto.com", "ph-map-b@fitto.com");
+        java.math.BigDecimal lat = new java.math.BigDecimal("37.5665000");
+        java.math.BigDecimal lng = new java.math.BigDecimal("126.9780000");
+        Long seoul = placeService.save(c[0], new SavePlaceRequest("시청 국밥", null, lat, lng, null)).id();
+        Long nowhere = placeService.save(c[0], new SavePlaceRequest("좌표 없는 집", null, null, null, null)).id();
+        placeService.recordVisit(c[0], seoul,
+                new RecordVisitRequest(LocalDate.now().minusDays(1), 5, null, "https://img.example.com/map-v.jpg", null));
+        Long mealId = mealWithPhoto(c[1], "https://img.example.com/map-m.jpg", false);
+        placeService.recordVisit(c[1], seoul,
+                new RecordVisitRequest(LocalDate.now(), 4, null, "https://img.example.com/map-m.jpg", mealId));
+        placeService.recordVisit(c[0], nowhere,
+                new RecordVisitRequest(LocalDate.now(), 3, null, "https://img.example.com/map-x.jpg", null));
+        feedService.createPost(c[0], new CreatePostRequest("일상", "https://img.example.com/map-p.jpg"));
+
+        com.fitto.feed.dto.FeedPhotoMapResponse map = feedService.photoMap(c[0], null, null);
+
+        assertThat(map.places()).singleElement().satisfies(pl -> {
+            assertThat(pl.placeId()).isEqualTo(seoul);
+            assertThat(pl.name()).isEqualTo("시청 국밥");
+            assertThat(pl.lat()).isEqualTo(37.5665);
+            // 최신(기록일) 먼저 — 오늘 끼니, 어제 방문. 파생 방문은 끼니로 한 번만
+            assertThat(pl.items()).extracting(FeedPhotoResponse::type)
+                    .containsExactly(FeedItemType.MEAL, FeedItemType.PLACE_VISIT);
+            assertThat(pl.items()).allSatisfy(i -> assertThat(i.placeId()).isEqualTo(seoul));
+        });
+        // 필터는 목록과 같다
+        assertThat(feedService.photoMap(c[0], null, "me").places()).singleElement()
+                .satisfies(pl -> assertThat(pl.items()).extracting(FeedPhotoResponse::type)
+                        .containsExactly(FeedItemType.PLACE_VISIT));
+        assertThat(feedService.photoMap(c[0], List.of(FeedItemType.MEAL), null).places()).singleElement()
+                .satisfies(pl -> assertThat(pl.items()).extracting(FeedPhotoResponse::type)
+                        .containsExactly(FeedItemType.MEAL));
+        assertThat(feedService.photoMap(c[0], List.of(FeedItemType.POST), null).places()).isEmpty();
+    }
 }

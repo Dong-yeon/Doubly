@@ -24,6 +24,7 @@ import com.fitto.feed.dto.CreatePostRequest;
 import com.fitto.feed.dto.FeedCursor;
 import com.fitto.feed.dto.FeedItemResponse;
 import com.fitto.feed.dto.FeedItemType;
+import com.fitto.feed.dto.FeedPhotoMapResponse;
 import com.fitto.feed.dto.FeedPhotoMonthResponse;
 import com.fitto.feed.dto.FeedPhotoResponse;
 import com.fitto.feed.dto.FeedPhotosResponse;
@@ -79,6 +80,9 @@ public class FeedService {
      */
     private static final Set<FeedItemType> PHOTO_SOURCES = EnumSet.of(
             FeedItemType.POST, FeedItemType.MEAL, FeedItemType.WORKOUT, FeedItemType.PLACE_VISIT);
+
+    /** 사진첩 지도가 읽는 사진 방문 상한 — 넘치면 응답의 truncated 로 알린다. */
+    private static final int MAP_CAP = 1000;
 
     /** 사진첩 달력이 한 소스에서 한 달에 읽는 상한 — 넘치면 응답의 truncated 로 알린다. */
     private static final int MONTH_CAP = 500;
@@ -422,6 +426,88 @@ public class FeedService {
 
         merged.sort(PHOTO_ORDER);
         return new FeedPhotoMonthResponse(ym.toString(), toPhotoResponses(merged, userId), truncated);
+    }
+
+    /**
+     * 사진첩 지도 — 좌표가 있는 장소에 걸린 사진을 <b>장소별로</b> 묶는다. 맛집 방문 사진과 장소를 붙여
+     * 기록한 끼니 사진이 대상이다(일상·운동은 위치가 없다). 장소는 가장 최근 기록일 순.
+     *
+     * <p>파생 방문(끼니에서 만들어진 방문)은 끼니 항목으로 바꿔 싣는다 — 사진첩 그리드와 같은 기록이
+     * 같은 (type, refId) 로 보여야 반응·중복 제거가 맞는다. 끼니는 사진첩과 같은 규칙(사진 있음·데이트
+     * 식단 복제본 제외)을 다시 건다.
+     *
+     * <p>방문은 {@value #MAP_CAP} 건까지 읽는다 — 넘치면 {@code truncated}.
+     */
+    public FeedPhotoMapResponse photoMap(Long userId, List<FeedItemType> sources, String who) {
+        Relation couple = activeCouple(userId);
+        Set<FeedItemType> wanted = (sources == null || sources.isEmpty()) ? PHOTO_SOURCES : EnumSet.copyOf(sources);
+        boolean wantVisits = wanted.contains(FeedItemType.PLACE_VISIT);
+        boolean wantMeals = wanted.contains(FeedItemType.MEAL);
+        if (!wantVisits && !wantMeals) {
+            return new FeedPhotoMapResponse(List.of(), false); // 일상·운동만 고른 칩 — 지도에 앉을 사진이 없다
+        }
+
+        Long partnerId = couple.partnerOf(userId);
+        List<Long> userIds = partnerId != null ? List.of(userId, partnerId) : List.of(userId);
+        Map<Long, String> names = mapper.userNames(userIds);
+        Long authorId = authorOf(who, userId, partnerId);
+        if (authorId != null && authorId == -1L) {
+            return new FeedPhotoMapResponse(List.of(), false);
+        }
+
+        List<PlaceVisitRepository.VisitOnMap> rows =
+                placeVisitRepository.findPhotoVisitsOnMap(couple.getId(), PageRequest.of(0, MAP_CAP + 1));
+        boolean truncated = rows.size() > MAP_CAP;
+        if (truncated) {
+            rows = rows.subList(0, MAP_CAP);
+        }
+
+        Map<Long, PlaceVisitRepository.VisitOnMap> placeOf = new LinkedHashMap<>(); // placeId → 좌표·이름
+        List<VisitWithPlace> visits = new ArrayList<>();
+        Map<Long, Long> placeIdByMealId = new LinkedHashMap<>();
+        for (PlaceVisitRepository.VisitOnMap r : rows) {
+            placeOf.putIfAbsent(r.getVisit().getPlaceId(), r);
+            if (r.getVisit().getMealId() == null) {
+                if (wantVisits && (authorId == null || authorId.equals(r.getVisit().getVisitedBy()))) {
+                    visits.add(r);
+                }
+            } else if (wantMeals) {
+                placeIdByMealId.putIfAbsent(r.getVisit().getMealId(), r.getVisit().getPlaceId());
+            }
+        }
+
+        List<PhotoCandidate> candidates = new ArrayList<>(visitCandidates(visits, names, userId));
+        if (!placeIdByMealId.isEmpty()) {
+            List<Meal> meals = mealRepository.findAllById(placeIdByMealId.keySet()).stream()
+                    .filter(m -> m.getPhotoUrl() != null)
+                    .filter(m -> m.getCreatedBy() == null || m.getCreatedBy().equals(m.getUserId()))
+                    .filter(m -> userIds.contains(m.getUserId()))
+                    .filter(m -> authorId == null || authorId.equals(m.getUserId()))
+                    .toList();
+            candidates.addAll(mealCandidates(meals, names, userId));
+        }
+        candidates.sort(PHOTO_ORDER);
+
+        // 장소별로 모은다 — 정렬된 후보를 순서대로 넣으므로 장소 안에서도, 장소끼리도 최신순이 된다
+        Map<Long, List<PhotoCandidate>> byPlace = new LinkedHashMap<>();
+        for (PhotoCandidate c : candidates) {
+            if (c.placeId() != null && placeOf.containsKey(c.placeId())) {
+                byPlace.computeIfAbsent(c.placeId(), k -> new ArrayList<>()).add(c);
+            }
+        }
+        List<PhotoCandidate> flat = byPlace.values().stream().flatMap(List::stream).toList();
+        List<FeedPhotoResponse> responses = toPhotoResponses(flat, userId);
+
+        List<FeedPhotoMapResponse.PlacePhotos> places = new ArrayList<>();
+        int i = 0;
+        for (Map.Entry<Long, List<PhotoCandidate>> e : byPlace.entrySet()) {
+            PlaceVisitRepository.VisitOnMap p = placeOf.get(e.getKey());
+            int n = e.getValue().size();
+            places.add(new FeedPhotoMapResponse.PlacePhotos(e.getKey(), p.getPlaceName(),
+                    p.getLat().doubleValue(), p.getLng().doubleValue(), responses.subList(i, i + n)));
+            i += n;
+        }
+        return new FeedPhotoMapResponse(places, truncated);
     }
 
     /** KST 날짜의 0시를 서버 시각(@CreatedDate 가 쓰는 JVM 기본 시간대의 벽시계)으로 — {@link #recordDateOf(FeedPost)} 의 역 */

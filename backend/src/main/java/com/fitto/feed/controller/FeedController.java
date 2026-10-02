@@ -5,6 +5,7 @@ import com.fitto.common.security.AuthUser;
 import com.fitto.feed.dto.CreatePostRequest;
 import com.fitto.feed.dto.FeedItemResponse;
 import com.fitto.feed.dto.FeedItemType;
+import com.fitto.feed.dto.FeedPhotoMapResponse;
 import com.fitto.feed.dto.FeedPhotoMonthResponse;
 import com.fitto.feed.dto.FeedPhotosResponse;
 import com.fitto.feed.dto.FeedTimelineResponse;
@@ -80,6 +81,18 @@ public class FeedController {
      * 사진첩 달력 — 한 달(기록일 기준)의 사진 전부. {@code month} 는 {@code YYYY-MM}, 생략하면 이번 달(KST).
      * {@code sources}·{@code who} 는 위 목록과 같은 필터다.
      */
+    /**
+     * 사진첩 지도 — 좌표가 있는 장소에 걸린 사진(맛집 방문·장소 붙은 끼니)을 장소별로.
+     * {@code sources}·{@code who} 는 목록과 같은 필터다(일상·운동은 위치가 없어 지도엔 없다).
+     */
+    @GetMapping("/photos/map")
+    public ApiResponse<FeedPhotoMapResponse> photoMap(
+            @AuthenticationPrincipal AuthUser user,
+            @RequestParam(required = false) List<FeedItemType> sources,
+            @RequestParam(required = false) String who) {
+        return ApiResponse.success(feedService.photoMap(user.id(), sources, who));
+    }
+
     @GetMapping("/photos/month")
     public ApiResponse<FeedPhotoMonthResponse> photoMonth(
             @AuthenticationPrincipal AuthUser user,
