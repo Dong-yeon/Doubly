@@ -51,6 +51,8 @@ interface Props {
   onOpenJournal: (date: string) => void;
   /** 기록을 저장했다 — 홈이 미연결 무드 아이콘을 갱신한다 */
   onJournalSaved?: (entry: JournalEntry) => void;
+  /** 무드 달력 열기 — 연결됐을 때만 입구가 보인다(무드 원장은 커플 단위) */
+  onOpenCalendar?: () => void;
 }
 
 /**
@@ -65,7 +67,7 @@ interface Picked {
 /** 서버 상한(SaveJournalRequest.body)과 맞춘다 */
 const MAX_JOURNAL = 2000;
 
-export function MoodPicker({ visible, onClose, onSelect, connected, onOpenJournal, onJournalSaved }: Props) {
+export function MoodPicker({ visible, onClose, onSelect, connected, onOpenJournal, onJournalSaved, onOpenCalendar }: Props) {
   const [message, setMessage] = useState('');
   /** 오늘 기록이 있나 — null 은 아직 모름(불러오는 중·실패). 모르면 2단계로 넘어가지 않는다 */
   const [hasToday, setHasToday] = useState<boolean | null>(null);
@@ -295,7 +297,28 @@ export function MoodPicker({ visible, onClose, onSelect, connected, onOpenJourna
 
   return (
     <Sheet visible={visible} onClose={close} position="bottom" cardStyle={styles.sheet}>
-      <Text style={styles.title}>지금 기분</Text>
+      <View style={styles.titleRow}>
+        <Text style={styles.title}>지금 기분</Text>
+        {/*
+          무드 달력 입구 — 무드를 고르러 들어온 자리가 지난 기분을 떠올리기도 가장 쉬운 자리다.
+          미연결이면 무드가 서버에 쌓이지 않아(하루 기록에만 남는다) 보여 줄 게 없다.
+        */}
+        {connected && onOpenCalendar ? (
+          <Pressable
+            onPress={() => {
+              close();
+              onOpenCalendar();
+            }}
+            hitSlop={8}
+            style={styles.calendarLink}
+            accessibilityRole="button"
+            accessibilityLabel="지난 기분 보기 — 우리 무드 달력"
+          >
+            <MaterialCommunityIcons name="calendar-heart" size={16} color={colors.primary} />
+            <Text style={styles.calendarLinkText}>지난 기분</Text>
+          </Pressable>
+        ) : null}
+      </View>
       <Text style={styles.desc}>
         {connected ? '이모지 하나로 답장 없이 알려줘요.' : '오늘 기분을 골라 나만의 기록에 남겨요.'}
       </Text>
@@ -387,6 +410,9 @@ const styles = themedStyles((colors) => ({
   /* 격자 칸 폭(22%)이 예전 시트 여백(md)에 맞춰져 있다 — 공용 Sheet 의 lg 를 md 로 되돌린다 */
   sheet: { paddingHorizontal: spacing.md },
   title: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  calendarLink: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 32, paddingHorizontal: spacing.xs },
+  calendarLinkText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.primary },
   desc: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2, marginBottom: spacing.sm },
   messageInput: {
     height: 40,

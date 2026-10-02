@@ -3,6 +3,8 @@ package com.fitto.mood.repository;
 import com.fitto.mood.domain.MoodStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -15,4 +17,12 @@ public interface MoodStatusRepository extends JpaRepository<MoodStatus, Long> {
 
     /** 관계 내 특정 사용자의 최신 무드 — "지금 상태" 조회에 쓴다. */
     Optional<MoodStatus> findTopByCoupleIdAndUserIdOrderByCreatedAtDescIdDesc(Long coupleId, Long userId);
+
+    /**
+     * 관계의 무드를 기간으로 — 무드 달력용, 시간순. {@code [from, to)} 는 저장 TZ 벽시계 값이다
+     * (MoodCalendarService 가 KST 날짜에서 옮겨 준다). (couple_id, user_id, created_at) 인덱스의
+     * 첫 열로 관계를 좁힌다.
+     */
+    List<MoodStatus> findByCoupleIdAndCreatedAtGreaterThanEqualAndCreatedAtLessThanOrderByCreatedAtAscIdAsc(
+            Long coupleId, LocalDateTime from, LocalDateTime to);
 }

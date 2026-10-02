@@ -1113,6 +1113,7 @@ export function HomeScreen({ navigation }: Props) {
         onSelect={sendMood}
         connected={connected}
         onOpenJournal={(date) => navigation.navigate('JournalDay', { date, source: 'MOOD_PICKER' })}
+        onOpenCalendar={() => navigation.navigate('MoodCalendar')}
         onJournalSaved={(entry) => {
           if (!connected) setSoloMood(entry.moodEmoji ?? null);
         }}

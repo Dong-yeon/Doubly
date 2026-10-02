@@ -66,6 +66,8 @@ export type HomeStackParamList = PlaceScreensParamList & {
    */
   Journal: undefined;
   JournalDay: { date: string; source?: JournalSource };
+  /** 무드 달력 — 두 사람의 지난 무드를 날짜별로 나란히. 홈 무드 시트의 "지난 기분 보기"에서 */
+  MoodCalendar: undefined;
   // 약관 전문 (온보딩 스택과 동일 화면을 재사용)
   LegalDocument: { doc: 'terms' | 'privacy' | 'oss' };
   TrainerRegister: undefined;

@@ -1854,6 +1854,38 @@ export interface MoodResponse {
   partner: MoodEntry | null;
 }
 
+/** 무드 달력 한 칸의 한 사람 — 그날 마지막으로 고른 무드 */
+export interface MoodMark {
+  emoji: string;
+  /** 우리 이모지면 그 이미지(숨긴 이모지면 null) */
+  imageUrl?: string | null;
+  /** 그날 바꾼 횟수 */
+  count: number;
+}
+
+/** GET /mood/calendar?month=YYYY-MM */
+export interface MoodCalendar {
+  month: string;
+  /** 이 날짜(YYYY-MM-DD)보다 앞은 잠김 — 무료는 최근 30일. 전체 열림이면 null */
+  lockedBefore: string | null;
+  /** 무드가 있는 날만, 날짜 오름차순 */
+  days: { date: string; mine: MoodMark | null; partner: MoodMark | null }[];
+}
+
+/** GET /mood/days/{date} — 그날 두 사람의 무드 흐름(시간순) */
+export interface MoodDay {
+  date: string;
+  locked: boolean;
+  entries: {
+    mine: boolean;
+    emoji: string;
+    imageUrl?: string | null;
+    message?: string | null;
+    /** KST HH:mm — 서버가 맞춰 준다 */
+    time: string;
+  }[];
+}
+
 /** 가상 터치 제스처 코드 — constants/touchGestures.ts 의 TOUCH_GESTURES 와 짝 */
 export type TouchGestureCode = 'HAND_HOLD' | 'PAT' | 'POKE' | 'HUG' | 'KISS';
 
