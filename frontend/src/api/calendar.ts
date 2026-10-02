@@ -6,6 +6,7 @@ import type {
   CalendarEventType,
   CalendarEventVisibility,
   CoupleCalendarEvent,
+  HolidayYear,
 } from '../types';
 
 export interface SaveEventPayload {
@@ -51,6 +52,9 @@ export const calendarApi = {
     unwrap(
       apiClient.get<ApiResponse<CoupleCalendarEvent[]>>(`/calendar/events/upcoming?limit=${limit}`),
     ),
+  /** 한 해의 공휴일 — 사용자와 무관한 공용 표라 해마다 한 번만 받으면 된다 */
+  holidays: (year: number) =>
+    unwrap(apiClient.get<ApiResponse<HolidayYear>>(`/calendar/holidays?year=${year}`)),
   create: (payload: SaveEventPayload) =>
     unwrap(apiClient.post<ApiResponse<CoupleCalendarEvent>>('/calendar/events', payload)),
   update: (id: number, payload: Partial<SaveEventPayload>) =>
