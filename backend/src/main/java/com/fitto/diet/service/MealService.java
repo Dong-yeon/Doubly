@@ -770,6 +770,8 @@ public class MealService {
             photoUrls = meal.getPhotoUrl() != null ? List.of(meal.getPhotoUrl()) : List.of();
             mealRepository.delete(meal);
         }
+        // 채팅에 공유한 MEAL_CARD 처럼 같은 URL 을 쓰는 다른 행이 남아 있으면 삭제기가 파일을 남긴다
+        // (StoredMediaReferences) — 여기서는 지운 행의 URL 만 넘긴다
         if (!photoUrls.isEmpty()) {
             imageDeleter.deleteAllAfterCommit(photoUrls);
         }
