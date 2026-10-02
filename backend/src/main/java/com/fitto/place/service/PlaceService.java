@@ -1,5 +1,7 @@
 package com.fitto.place.service;
 
+import com.fitto.common.event.CoupleEvent;
+import com.fitto.common.event.CoupleEventPublisher;
 import com.fitto.common.plan.Feature;
 import com.fitto.common.plan.PlanGuard;
 import com.fitto.common.exception.BusinessException;
@@ -64,6 +66,7 @@ public class PlaceService {
     private final FeedReactionRepository feedReactionRepository;
     private final KakaoLocalClient kakaoLocalClient;
     private final TransactionTemplate tx;
+    private final CoupleEventPublisher coupleEventPublisher;
 
     public PlaceService(PlaceRepository placeRepository,
                         PlaceVisitRepository placeVisitRepository,
@@ -75,7 +78,8 @@ public class PlaceService {
                         PlanGuard planGuard,
                         FeedReactionRepository feedReactionRepository,
                         KakaoLocalClient kakaoLocalClient,
-                        PlatformTransactionManager transactionManager) {
+                        PlatformTransactionManager transactionManager,
+                        CoupleEventPublisher coupleEventPublisher) {
         this.placeRepository = placeRepository;
         this.placeVisitRepository = placeVisitRepository;
         this.placeRatingRepository = placeRatingRepository;
@@ -87,6 +91,7 @@ public class PlaceService {
         this.feedReactionRepository = feedReactionRepository;
         this.kakaoLocalClient = kakaoLocalClient;
         this.tx = new TransactionTemplate(transactionManager);
+        this.coupleEventPublisher = coupleEventPublisher;
     }
 
     /**
@@ -126,7 +131,12 @@ public class PlaceService {
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public PlaceResponse save(Long userId, SavePlaceRequest request) {
         try {
-            return tx.execute(status -> saveOnce(userId, request));
+            Saved saved = tx.execute(status -> saveOnce(userId, request));
+            if (Boolean.TRUE.equals(saved.response().created())) {
+                // 커밋이 끝난 뒤에 알린다 — 상대 앱이 럽슐랭 목록 캐시를 비우고 다음에 다시 받는다
+                coupleEventPublisher.publish(saved.coupleId(), CoupleEvent.PLACE);
+            }
+            return saved.response();
         } catch (DataIntegrityViolationException raced) {
             PlaceResponse winner = tx.execute(status -> {
                 Place existing = findExisting(activeCouple(userId).getId(), request.kakaoPlaceId(),
@@ -140,14 +150,17 @@ public class PlaceService {
         }
     }
 
-    private PlaceResponse saveOnce(Long userId, SavePlaceRequest request) {
+    private record Saved(PlaceResponse response, Long coupleId) {
+    }
+
+    private Saved saveOnce(Long userId, SavePlaceRequest request) {
         Relation couple = activeCouple(userId);
         String name = request.name().trim();
 
         Place existing = findExisting(couple.getId(), request.kakaoPlaceId(), name,
                 request.address(), request.lat(), request.lng());
         if (existing != null) {
-            return withSummary(existing, userId).withCreated(false);
+            return new Saved(withSummary(existing, userId).withCreated(false), couple.getId());
         }
 
         planGuard.requireCapacity(userId, Feature.PLACE_PIN,
@@ -164,7 +177,7 @@ public class PlaceService {
                 .build();
         // 즉시 INSERT — UNIQUE 위반이 커밋 시점이 아니라 여기서 터져야 위의 catch 가 받는다
         placeRepository.saveAndFlush(place);
-        return toResponse(place, null, RatingPair.EMPTY, null).withCreated(true);
+        return new Saved(toResponse(place, null, RatingPair.EMPTY, null).withCreated(true), couple.getId());
     }
 
     private static String blankToNull(String s) {

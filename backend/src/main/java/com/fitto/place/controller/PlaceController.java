@@ -7,6 +7,8 @@ import com.fitto.common.security.AuthUser;
 import com.fitto.place.dto.DateCourseResponse;
 import com.fitto.place.dto.LovelichelinRecommendationResponse;
 import com.fitto.place.dto.PlaceResponse;
+import com.fitto.place.dto.ResolvePlaceLinkRequest;
+import com.fitto.place.dto.ResolvePlaceLinkResponse;
 import com.fitto.place.dto.PlaceSearchResponse;
 import com.fitto.place.dto.PlaceVisitResponse;
 import com.fitto.place.dto.RatePlaceRequest;
@@ -15,6 +17,7 @@ import com.fitto.place.dto.SavePlaceRequest;
 import com.fitto.place.dto.UpdatePlaceRequest;
 import com.fitto.place.service.DateCourseService;
 import com.fitto.place.service.LovelichelinRecommendService;
+import com.fitto.place.service.PlaceLinkResolveService;
 import com.fitto.place.service.PlaceService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -43,14 +46,17 @@ public class PlaceController {
     private final DateCourseService dateCourseService;
     private final LovelichelinRecommendService lovelichelinRecommendService;
     private final AiJobService aiJobService;
+    private final PlaceLinkResolveService placeLinkResolveService;
 
     public PlaceController(PlaceService placeService, DateCourseService dateCourseService,
                            LovelichelinRecommendService lovelichelinRecommendService,
-                           AiJobService aiJobService) {
+                           AiJobService aiJobService,
+                           PlaceLinkResolveService placeLinkResolveService) {
         this.placeService = placeService;
         this.dateCourseService = dateCourseService;
         this.lovelichelinRecommendService = lovelichelinRecommendService;
         this.aiJobService = aiJobService;
+        this.placeLinkResolveService = placeLinkResolveService;
     }
 
     @PostMapping
@@ -106,6 +112,16 @@ public class PlaceController {
                                                     @RequestParam String query,
                                                     @RequestParam(defaultValue = "8") int size) {
         return ApiResponse.success(placeService.search(query, size));
+    }
+
+    /**
+     * 채팅 링크 해석 — 지도 링크(카카오·네이버)를 장소 후보로 바꾼다. 저장은 하지 않는다: 앱이 고른 후보를
+     * {@link #save} 로 넘겨야 플랜 한도·중복 방지를 장소 추가와 똑같이 탄다. 칩을 눌렀을 때만 부른다.
+     */
+    @PostMapping("/resolve-link")
+    public ApiResponse<ResolvePlaceLinkResponse> resolveLink(@AuthenticationPrincipal AuthUser user,
+                                                             @Valid @RequestBody ResolvePlaceLinkRequest request) {
+        return ApiResponse.success(placeLinkResolveService.resolve(user.id(), request.url(), request.messageText()));
     }
 
     @GetMapping("/{id}")
