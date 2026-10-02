@@ -126,9 +126,14 @@ public class PlaceService {
      * 한다. 늦은 쪽은 {@code UNIQUE (couple_id, kakao_place_id)}(V117)에 막힌다. {@code ON CONFLICT}
      * 는 쓸 수 없으므로(CLAUDE.md 4절) 그 위반을 잡아 <b>새 트랜잭션에서</b> 먼저 들어간 행을 돌려준다 —
      * 같은 트랜잭션은 이미 롤백 표시가 붙어 다시 쓸 수 없다({@code JournalService.save} 와 같은 이유).
-     * 그래서 이 메서드에는 트랜잭션을 걸지 않는다(클래스 기본값 readOnly 도 끈다).
+     * 그래서 이 메서드는 스스로 트랜잭션을 열지 않는다(클래스 기본값 readOnly 도 끈다).
+     *
+     * <p><b>SUPPORTS 인 이유</b>: 바깥 트랜잭션이 있으면 거기에 합류한다. NOT_SUPPORTED 로 바깥을 끊으면 호출자가
+     * 아직 커밋하지 않은 데이터(방금 만든 커플 등)가 보이지 않는다 — 처음엔 그렇게 했다가 바깥 트랜잭션 안에서
+     * save 를 부르는 테스트 6건이 "커플 연결 후 사용할 수 있는 기능"으로 깨졌다. 운영의 호출자는 컨트롤러뿐이라
+     * 바깥 트랜잭션이 없고, 경합 재시도는 그 경우에 동작한다. 바깥 트랜잭션 안에서 경합이 나면 예전처럼 실패한다.
      */
-    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    @Transactional(propagation = Propagation.SUPPORTS, readOnly = false)
     public PlaceResponse save(Long userId, SavePlaceRequest request) {
         try {
             Saved saved = tx.execute(status -> saveOnce(userId, request));
