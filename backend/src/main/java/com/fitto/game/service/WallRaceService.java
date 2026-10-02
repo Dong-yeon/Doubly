@@ -243,7 +243,7 @@ public class WallRaceService {
         Relation couple = activeCouple(userId);
         String partnerName = couples.partnerName(couple, userId);
         return gameRepository
-                .findTop20ByCoupleIdAndStatusOrderByCompletedAtDesc(couple.getId(), GameStatus.COMPLETED)
+                .findTop20ByCoupleIdAndStatusOrderByCompletedAtDescIdDesc(couple.getId(), GameStatus.COMPLETED)
                 .stream()
                 .map(g -> WallRaceGameResponse.of(g, userId, partnerName))
                 .toList();
