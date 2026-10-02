@@ -145,7 +145,8 @@ export function AlbumScreen({ navigation }: Props) {
           key: `${keyOf(p)}-${i}`,
           // 뷰어는 원본을 쓴다 — 크게 보는 자리에서 썸네일을 늘리면 뭉갠다
           uri,
-          title: `${p.mine ? '나' : p.authorName}  ·  ${relativeDateLabel(p.createdAt.slice(0, 10))}`,
+          // slice(0, 10) 은 UTC 날짜라 KST 00~09시 사진이 "어제"로 떴다 — 월 머리말과 같은 localDateOf 를 쓴다
+          title: `${p.mine ? '나' : p.authorName}  ·  ${relativeDateLabel(localDateOf(p.createdAt))}`,
           titleColor: p.mine ? colors.coral : colors.indigo,
           caption: p.caption ?? undefined,
         });
