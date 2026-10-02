@@ -68,6 +68,11 @@ import { MessageActionSheet } from '../../components/MessageActionSheet';
 import { SwipeBackView } from '../../components/SwipeBackView';
 import { useSettingsStore } from '../../store/settingsStore';
 import { usePlanStore } from '../../store/planStore';
+import { usePlaceStore } from '../../store/placeStore';
+import { usePlaceLinkChipStore } from '../../store/placeLinkChipStore';
+import { PlaceLinkChip } from '../../components/chat/PlaceLinkChip';
+import { PlaceLinkSheet } from '../../components/chat/PlaceLinkSheet';
+import { findPlaceLink } from '../../utils/placeLinkHosts';
 import {
   applyAllSuggestions,
   applySuggestion,
@@ -496,6 +501,40 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const lastSendRef = useRef<{ content: string; at: number } | null>(null);
   const [showTouchPicker, setShowTouchPicker] = useState(false);
   const spellCheckEnabled = useSettingsStore((s) => s.spellCheckEnabled);
+
+  /*
+   * 지도 링크 → 럽슐랭 칩(components/chat/PlaceLinkChip). 칩을 띄울지는 본문 문자열만 보고 정한다 —
+   * 서버 해석은 눌렀을 때만(PlaceLinkSheet). 닫은 메시지·끄기 설정은 기기에만 저장한다.
+   */
+  const chatPlaceLinkSuggest = useSettingsStore((s) => s.chatPlaceLinkSuggest);
+  const setChatPlaceLinkSuggest = useSettingsStore((s) => s.setChatPlaceLinkSuggest);
+  const placeLinkHidden = usePlaceLinkChipStore((s) => s.hidden);
+  const dismissPlaceLink = usePlaceLinkChipStore((s) => s.dismiss);
+  const markPlaceLinkHandled = usePlaceLinkChipStore((s) => s.handled);
+  const [placeLinkTarget, setPlaceLinkTarget] = useState<{ messageId: number; url: string; text: string } | null>(null);
+  useEffect(() => {
+    void usePlaceLinkChipStore.getState().load();
+  }, []);
+  const placeLinkOf = (m: ChatMessage): string | null =>
+    chatPlaceLinkSuggest && m.messageType === 'TEXT' && !m.deleted && !m.pending && !placeLinkHidden.includes(m.id)
+      ? findPlaceLink(m.content)
+      : null;
+  const onDismissPlaceLink = (messageId: number) => {
+    const offerTurnOff = dismissPlaceLink(messageId);
+    if (!offerTurnOff) return;
+    // 연달아 닫았다 — 한 번만 끄기를 권한다(placeLinkChipStore). 다시 켜는 자리도 함께 알린다
+    Alert.alert('채팅 링크 제안을 끌까요?', '지도 링크 아래 "럽슐랭에 추가할까요?"가 더 뜨지 않아요.\n설정 > 기능에서 다시 켤 수 있어요.', [
+      { text: '계속 보기', style: 'cancel' },
+      {
+        text: '끄기',
+        onPress: () => {
+          void setChatPlaceLinkSuggest(false);
+          toast.info('채팅 링크 제안을 껐어요');
+        },
+      },
+    ]);
+  };
+
   // 이미 읽음 처리한 최대 메시지 id — 중복 PUT 방지
   const markedUpToRef = useRef(0);
   // 이미 진동을 울린 최대 메시지 id — 화면 재마운트·리렌더로 같은 터치가 다시 울리지 않게
@@ -1058,6 +1097,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             if (type === 'COUPLE_EMOJI') void loadCoupleEmojis(true).catch(() => undefined);
             // 상대(또는 내가 다른 기기에서)가 무드를 바꿨다 — 상대 무드가 실제로 바뀐 경우만 막대에 뜬다
             if (type === 'MOOD') void refreshPartnerMoodRef.current(true);
+            // 상대가 (채팅 링크 칩 등으로) 럽슐랭에 장소를 담았다 — 다음에 럽슐랭 탭을 열면 다시 받는다
+            if (type === 'PLACE') usePlaceStore.getState().invalidate();
           });
         })
         .catch(() => undefined);
@@ -2096,6 +2137,18 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         ) : null}
         </Pressable>
 
+        {/*
+          지도 링크 → "럽슐랭에 추가할까요?" — 텍스트 말풍선만. 문자열만 보고 그리고, 서버는 눌렀을 때만
+          부른다(PlaceLinkSheet). 보내는 중(pending)인 말풍선은 아직 id 가 임시라 닫기 기록이 남지 않는다.
+        */}
+        {placeLinkOf(item) ? (
+          <PlaceLinkChip
+            mine={mine}
+            onOpen={() => setPlaceLinkTarget({ messageId: item.id, url: placeLinkOf(item) as string, text: item.content ?? '' })}
+            onDismiss={() => onDismissPlaceLink(item.id)}
+          />
+        ) : null}
+
         {/* 리액션 칩 — 다시 누르면 해제된다. mine 은 userIds 로 판단(브로드캐스트 공용) */}
         {item.reactions && item.reactions.length > 0 ? (
           <View style={[styles.reactionRow, mine ? styles.reactionRowMine : null]}>
@@ -2708,6 +2761,25 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           setShowSearch(false);
           scrollToMessage(msg.id);
         }}
+      />
+      <PlaceLinkSheet
+        url={placeLinkTarget?.url ?? null}
+        messageText={placeLinkTarget?.text}
+        onClose={() => setPlaceLinkTarget(null)}
+        onHandled={() => {
+          if (placeLinkTarget) markPlaceLinkHandled(placeLinkTarget.messageId);
+        }}
+        onOpenPlace={(placeId, name) =>
+          navigation.navigate('Place', { screen: 'PlaceDetail', params: { placeId, name }, initial: false })
+        }
+        onFallbackAdd={(keyword) =>
+          navigation.navigate('Place', {
+            screen: 'PlaceAdd',
+            // returnTo — 다 담고 닫으면 이 대화로 돌아온다(그리고 iOS 크로스탭 모달을 피한다, PlaceStackNavigator)
+            params: { initialKeyword: keyword || undefined, returnTo: 'Chat' },
+            initial: false,
+          })
+        }
       />
       {/* 헤더 "⋮" — 사진 모아보기·저장한 대화·예약된 메시지 */}
       <ChatMoreMenuSheet

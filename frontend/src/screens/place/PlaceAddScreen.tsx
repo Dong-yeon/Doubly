@@ -9,7 +9,7 @@
  * id 를 버려 같은 장소가 두 번 생기곤 했다. 서버 결과는 id 와 앱 카테고리까지 싣고 온다.
  * 지도는 표시와 좌표 고르기만 맡는다. 결정 기록: docs/LOVELICHELIN_CHAT_LINK_2026-10-02.md
  */
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -65,9 +65,12 @@ export function PlaceAddScreen({ navigation, route }: Props) {
 
   // 카카오 장소 검색 — 서버 경유(파일 상단 주석). 지도 ref 는 핀 옮기기에만 쓴다
   const mapRef = useRef<KakaoMapHandle>(null);
-  const [keyword, setKeyword] = useState('');
+  // 채팅 링크를 해석하지 못하고 넘어왔으면 링크에서 읽은 이름으로 시작한다(아래 effect 가 바로 검색)
+  const initialKeyword = route.params?.initialKeyword?.trim() ?? '';
+  const [keyword, setKeyword] = useState(initialKeyword);
   const [results, setResults] = useState<PlaceSearchResult[]>([]);
-  const [searching, setSearching] = useState(false);
+  // 채팅에서 검색어를 들고 왔으면 열리자마자 찾고 있는 상태로 시작한다(아래 effect)
+  const [searching, setSearching] = useState(initialKeyword.length > 0 && !isEdit);
   // 서버에 카카오 키가 없으면 검색은 늘 빈 결과다 — "결과 없음"과 다른 말을 해야 한다
   const [searchUnavailable, setSearchUnavailable] = useState(false);
   // 결과를 눌러 바로 저장하는 중인 항목 — 연타로 두 번 저장되지 않게 잠근다
@@ -84,18 +87,24 @@ export function PlaceAddScreen({ navigation, route }: Props) {
       address.trim().length > 0 ||
       category != null ||
       coords != null ||
-      keyword.trim().length > 0;
+      // 채팅에서 채워 온 검색어는 사용자가 쓴 것이 아니다 — 그대로면 떠날 때 묻지 않는다
+      (keyword.trim().length > 0 && keyword.trim() !== initialKeyword);
   const allowLeave = useDirtyGuard(dirty);
 
   // 홈처럼 다른 탭에서 열렸으면 닫을 때 그 탭으로 돌려보낸다(훅 주석에 경위)
   const stayInThisTab = useReturnToTab(route.params?.returnTo);
 
-  const onSearch = async () => {
+  const onSearch = () => {
     const q = keyword.trim();
     if (!q || searching) return;
     setSearching(true);
     setResults([]);
     setSearchUnavailable(false);
+    void fetchResults(q);
+  };
+
+  // 서버 검색 — 상태는 응답이 온 뒤에만 바꾼다(effect 에서도 부르기 때문)
+  const fetchResults = async (q: string) => {
     try {
       const res = await placeApi.search(q);
       setSearchUnavailable(!res.available);
@@ -107,6 +116,13 @@ export function PlaceAddScreen({ navigation, route }: Props) {
       setSearching(false);
     }
   };
+
+  // 채팅 링크에서 넘어온 검색어 — 화면이 열리자마자 한 번 찾아 둔다(결과를 누르면 바로 담긴다)
+  useEffect(() => {
+    if (initialKeyword && !isEdit) void fetchResults(initialKeyword);
+    // 처음 한 번만 — 검색어를 고쳐 다시 찾는 건 사용자 몫이다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /*
    * 새 장소 저장이 끝난 뒤 — 새로 생겼으면 닫고, 이미 있던 장소면 "이미 있어요"와 함께 그 장소 상세로

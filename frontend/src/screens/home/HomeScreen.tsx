@@ -34,6 +34,7 @@ import { MoodPicker } from '../../components/MoodPicker';
 import { QuickMealSheet } from './components/QuickMealSheet';
 import { useAuthStore } from '../../store/authStore';
 import { useCoupleEmojiStore } from '../../store/coupleEmojiStore';
+import { usePlaceStore } from '../../store/placeStore';
 import { usePlanStore } from '../../store/planStore';
 import { useRelationStore } from '../../store/relationStore';
 import { workoutApi } from '../../api/workout';
@@ -486,6 +487,8 @@ export function HomeScreen({ navigation }: Props) {
              * 채팅방이 하는 것과 같은 규칙(2026-09-08 점검 #14).
              */
             if (type === 'COUPLE_EMOJI') void useCoupleEmojiStore.getState().load(true).catch(() => undefined);
+            // 상대가 럽슐랭에 장소를 담았다 — 목록 캐시만 비운다(다음에 럽슐랭 탭이 다시 받는다)
+            if (type === 'PLACE') usePlaceStore.getState().invalidate();
           });
         })
         .catch(() => undefined);

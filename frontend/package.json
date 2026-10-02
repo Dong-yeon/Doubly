@@ -80,6 +80,7 @@
     "verify:nested-buttons": "node scripts/verify-nested-pressable.mjs",
     "verify:puyo": "node scripts/verify-puyo.mjs",
     "verify:linkify": "node scripts/verify-linkify.mjs",
+    "verify:place-link": "node scripts/verify-place-link.mjs",
     "verify:sticker-codes": "node scripts/verify-sticker-codes.mjs",
     "verify:context-stickers": "node scripts/verify-context-stickers.mjs",
     "verify:service-status": "node scripts/verify-service-status.mjs",
