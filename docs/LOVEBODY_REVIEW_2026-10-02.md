@@ -489,7 +489,7 @@
 
 ### 검증
 
-- 서버: 신규 4건(MealFlowTest 3 · PurgeRecordsFlowTest 1) 포함 전체 H2·PostgreSQL 16 — 결과는 아래.
+- 서버: 신규 4건(MealFlowTest 3 · PurgeRecordsFlowTest 1) 포함 전체 **H2 953건·PostgreSQL 16 953건 통과**.
 - 앱: typecheck 통과, lint 208건 그대로(**새 경고·오류 0**), verify:nested-buttons 통과, build:web 성공. 브라우저·실기기 확인은 하지 않았다.
 
 ### 실기기 확인 항목
