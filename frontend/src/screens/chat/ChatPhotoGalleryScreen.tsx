@@ -35,7 +35,9 @@ const PHONE_COLUMNS = 3;
 const GAP = 2;
 
 export function ChatPhotoGalleryScreen({ route }: Props) {
-  const { relationId, myId } = route.params;
+  const { relationId, myId, initialPhotoId } = route.params;
+  // 시트 사진 줄에서 고른 장 — 첫 로드에서 한 번만 연다(다시 포커스될 때 또 열리면 안 된다)
+  const initialPhotoIdRef = useRef<number | undefined>(initialPhotoId);
   const { columns, cell: CELL } = usePhotoGrid({ gap: GAP, phoneColumns: PHONE_COLUMNS });
 
   const [photos, setPhotos] = useState<ChatMessage[]>([]);
@@ -68,6 +70,12 @@ export function ChatPhotoGalleryScreen({ route }: Props) {
       const page = await chatApi.photos(relationId);
       setPhotos(page);
       setHasMore(page.length > 0);
+      if (initialPhotoIdRef.current != null) {
+        // 뷰어의 목록은 imageUrl 이 있는 것만이라(viewerImages) 같은 기준으로 위치를 센다
+        const i = page.filter((p) => !!p.imageUrl).findIndex((p) => p.id === initialPhotoIdRef.current);
+        initialPhotoIdRef.current = undefined;
+        if (i >= 0) setViewingIndex(i);
+      }
     } catch (e) {
       toast.error(getErrorMessage(e, '사진을 불러오지 못했어요.'));
       setPhotos([]);
