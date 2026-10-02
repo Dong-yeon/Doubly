@@ -801,16 +801,16 @@ public class MealService {
 
     /** 커플 공동 식단 목표 진행률 — 이번 주(월~) 둘 다 기록한 날 수. */
     public CoupleMealGoalResponse coupleGoal(Long userId) {
+        LocalDate today = KstClock.today();
+        LocalDate weekStart = today.with(DayOfWeek.MONDAY);
         List<Relation> couples = relationRepository
                 .findByUserAndTypeAndStatus(userId, RelationType.COUPLE, RelationStatus.ACTIVE);
         if (couples.isEmpty()) {
-            return CoupleMealGoalResponse.notConnected();
+            // 미연결 — 스트립은 나만 그리므로 내 날짜만 싣는다
+            return CoupleMealGoalResponse.notConnected(weekStart, sorted(mealRepository.findMealDates(userId, weekStart, today)));
         }
         Relation couple = couples.get(0);
         Long partnerId = couple.partnerOf(userId);
-
-        LocalDate today = KstClock.today();
-        LocalDate weekStart = today.with(DayOfWeek.MONDAY);
 
         var myDates = new HashSet<>(mealRepository.findMealDates(userId, weekStart, today));
         var partnerDates = partnerId == null
@@ -823,7 +823,12 @@ public class MealService {
         Integer goalDays = couple.getDietGoalDays();
         boolean achieved = goalDays != null && both.size() >= goalDays;
         return new CoupleMealGoalResponse(true, goalDays, weekStart,
-                myDates.size(), partnerDates.size(), both.size(), achieved);
+                myDates.size(), partnerDates.size(), both.size(), achieved,
+                sorted(myDates), sorted(partnerDates));
+    }
+
+    private static List<LocalDate> sorted(java.util.Collection<LocalDate> dates) {
+        return dates.stream().distinct().sorted().toList();
     }
 
     /** 커플 상대방의 오늘 식단 기록 여부 — 홈 커플 카드용. */

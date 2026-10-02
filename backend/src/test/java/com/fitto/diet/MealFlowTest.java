@@ -11,6 +11,7 @@ import com.fitto.diet.dto.NutritionGoalRequest;
 import com.fitto.diet.dto.SaveMealRequest;
 import com.fitto.diet.service.MealService;
 import com.fitto.diet.service.NutritionService;
+import com.fitto.diet.dto.CoupleMealGoalResponse;
 import com.fitto.relation.dto.InviteCodeResponse;
 import com.fitto.relation.service.RelationService;
 import com.fitto.workout.dto.PartnerTodayResponse;
@@ -494,5 +495,28 @@ class MealFlowTest {
         assertThat(updated.sugar()).isEqualTo(8);
         assertThat(updated.sodium()).isEqualTo(150);
         assertThat(updated.fiber()).isEqualTo(3);
+    }
+    // ---- 럽바디 3단계(LOVEBODY_REVIEW §2-3·§2-4) ----
+
+    /** 주간 스트립 — 개수만 내던 coupleGoal 이 이번 주 날짜 목록도 싣는다. 미연결이면 내 날짜만 */
+    @Test
+    void 커플_식단_목표에_이번_주_기록_날짜가_실리고_미연결이면_상대는_비어_있다() {
+        Long solo = register("week-solo@fitto.com");
+        mealService.save(solo, sample(LocalDate.now(), MealType.LUNCH));
+        mealService.save(solo, sample(LocalDate.now(), MealType.DINNER)); // 같은 날 두 끼 — 날짜는 하나
+        CoupleMealGoalResponse alone = mealService.coupleGoal(solo);
+        assertThat(alone.connected()).isFalse();
+        assertThat(alone.myDates()).containsExactly(LocalDate.now());
+        assertThat(alone.partnerDates()).isEmpty();
+
+        Long a = register("week-a@fitto.com");
+        Long b = register("week-b@fitto.com");
+        relationService.connectCouple(b, relationService.createCoupleInvite(a).code());
+        mealService.save(b, sample(LocalDate.now(), MealType.BREAKFAST));
+        CoupleMealGoalResponse goal = mealService.coupleGoal(a);
+        assertThat(goal.connected()).isTrue();
+        assertThat(goal.myDates()).isEmpty();
+        assertThat(goal.partnerDates()).containsExactly(LocalDate.now());
+        assertThat(goal.partnerDays()).isEqualTo(1);
     }
 }
