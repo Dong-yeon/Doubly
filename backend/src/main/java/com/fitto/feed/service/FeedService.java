@@ -923,6 +923,41 @@ public class FeedService {
 
     // ---- helpers ----
 
+    /**
+     * 럽바디 "○○님 오늘" — 상대가 오늘(KST) 혼자 남긴 식사를 피드 카드와 <b>같은 모양</b>으로 준다.
+     *
+     * <p>피드 매퍼({@link FeedItemMapper#toItem(Meal, Map, Long, String)})를 그대로 쓰는 이유: 상대 식사의 노출 수준을
+     * 우리 탭 피드와 한 곳에서 맞추기 위해서다 — 칼로리는 싣지 않는다(매퍼 주석, 2026-09-13 결정 · 2026-10-02 재확인).
+     * 반응도 피드와 같은 행이라 어디서 달아도 같다.
+     *
+     * <p>데이트 식단(같이 먹기)은 뺀다 — 내 몫이 이미 내 "오늘" 목록에 "데이트" 배지로 있어 같은 끼니가 두 번 보인다.
+     * 커플이 아니면 빈 목록이다(럽바디는 혼자 써도 열리는 화면이라 예외를 던지지 않는다).
+     */
+    @Transactional(readOnly = true)
+    public List<FeedItemResponse> partnerMealsToday(Long userId) {
+        Relation couple = relationRepository
+                .findByUserAndTypeAndStatus(userId, RelationType.COUPLE, RelationStatus.ACTIVE)
+                .stream().findFirst().orElse(null);
+        Long partnerId = couple != null ? couple.partnerOf(userId) : null;
+        if (partnerId == null) {
+            return List.of();
+        }
+        List<Meal> meals = mealRepository.findByUserIdAndMealDateOrderByIdAsc(partnerId, KstClock.today())
+                .stream().filter(m -> !m.isSharedMeal()).toList();
+        if (meals.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, String> names = mapper.userNames(List.of(partnerId));
+        Map<Long, VisitWithPlace> places = placeLinksOf(meals);
+        List<FeedItemResponse> items = meals.stream()
+                .map(m -> {
+                    VisitWithPlace place = places.get(m.getId());
+                    return mapper.toItem(m, names, userId, place != null ? place.getPlaceName() : null);
+                })
+                .toList();
+        return mapper.attachReactions(items, userId);
+    }
+
     private Relation activeCouple(Long userId) {
         return relationRepository
                 .findByUserAndTypeAndStatus(userId, RelationType.COUPLE, RelationStatus.ACTIVE)

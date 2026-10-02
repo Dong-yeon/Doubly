@@ -32,6 +32,8 @@ import org.springframework.web.bind.annotation.PutMapping;
 import com.fitto.workout.dto.CalendarDayResponse;
 import jakarta.validation.Valid;
 import org.springframework.dao.DataIntegrityViolationException;
+import com.fitto.feed.dto.FeedItemResponse;
+import com.fitto.feed.service.FeedService;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -59,10 +61,12 @@ public class MealController {
     private final DietCoachService dietCoachService;
     private final NutritionService nutritionService;
     private final AiJobService aiJobService;
+    private final FeedService feedService;
 
     public MealController(MealService mealService, FoodAnalysisService foodAnalysisService,
                           DietCoachService dietCoachService, NutritionService nutritionService,
-                          AiJobService aiJobService) {
+                          AiJobService aiJobService, FeedService feedService) {
+        this.feedService = feedService;
         this.mealService = mealService;
         this.foodAnalysisService = foodAnalysisService;
         this.dietCoachService = dietCoachService;
@@ -194,6 +198,15 @@ public class MealController {
     @GetMapping("/partner/today")
     public ApiResponse<PartnerMealTodayResponse> partnerToday(@AuthenticationPrincipal AuthUser user) {
         return ApiResponse.success(mealService.partnerToday(user.id()));
+    }
+
+    /**
+     * 럽바디 "○○님 오늘" — 상대가 오늘 혼자 남긴 식사 카드. 피드 카드와 같은 모양·같은 노출(칼로리 없음)이고
+     * 반응은 기존 {@code POST /feed/items/MEAL/{id}/reactions} 로 단다.
+     */
+    @GetMapping("/partner/today/meals")
+    public ApiResponse<List<FeedItemResponse>> partnerTodayMeals(@AuthenticationPrincipal AuthUser user) {
+        return ApiResponse.success(feedService.partnerMealsToday(user.id()));
     }
 
     @GetMapping("/couple/goal")

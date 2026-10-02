@@ -19,6 +19,7 @@ import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.upload.CloudinaryImageDeleter;
 import com.fitto.diet.dto.PhotoRecordLookupResponse;
 import com.fitto.diet.dto.CoupleMealGoalResponse;
+import com.fitto.feed.dto.FeedItemResponse;
 import com.fitto.feed.dto.FeedItemType;
 import com.fitto.feed.dto.ReactionSummary;
 import com.fitto.feed.service.FeedService;
@@ -898,5 +899,67 @@ class MealFlowTest {
 
         assertThat(ids.get(0)).isEqualTo(ids.get(1));
         assertThat(mealService.findToday(user)).hasSize(1);
+    }
+
+    // ---- 럽바디 "○○님 오늘" (docs/lovebody-direction_2026-10-02.md 1순위) ----
+
+    /**
+     * 상대가 오늘 남긴 식사가 피드 카드 모양으로 온다 — <b>칼로리는 어디에도 없다</b>(사용자 결정 2026-10-02,
+     * 피드 매퍼 2026-09-13 결정과 같은 선). 음식 이름·끼니는 있다.
+     */
+    @Test
+    void 상대_오늘_식사가_칼로리_없이_보인다() {
+        Long[] u = new Long[2];
+        couple("ptoday-a@fitto.com", "ptoday-b@fitto.com", u);
+        mealService.save(u[1], withItems(KstClock.today(), MealType.DINNER)); // 820kcal
+
+        List<FeedItemResponse> seen = feedService.partnerMealsToday(u[0]);
+
+        assertThat(seen).singleElement().satisfies(item -> {
+            assertThat(item.type()).isEqualTo(FeedItemType.MEAL);
+            assertThat(item.mine()).isFalse();
+            assertThat(item.title()).isEqualTo("삼겹살 외 2개");
+            assertThat(item.content()).contains("저녁");
+            assertThat(String.valueOf(item)).doesNotContain("820").doesNotContain("kcal");
+        });
+    }
+
+    /** 오늘 것만, 혼자 먹은 것만 — 어제 식사는 빠지고, 데이트 식단은 내 "오늘"에 이미 있어 빠진다. 내 식사는 당연히 없다. */
+    @Test
+    void 상대_오늘_식사에는_어제_것과_데이트_식단과_내_것이_빠진다() {
+        Long[] u = new Long[2];
+        couple("ptoday-c@fitto.com", "ptoday-d@fitto.com", u);
+        mealService.save(u[1], sample(KstClock.today().minusDays(1), MealType.LUNCH));
+        mealService.save(u[1], sharedWithItems(KstClock.today(), MealType.DINNER));
+        mealService.save(u[0], sample(KstClock.today(), MealType.BREAKFAST));
+        MealResponse solo = mealService.save(u[1], sample(KstClock.today(), MealType.LUNCH));
+
+        assertThat(feedService.partnerMealsToday(u[0]))
+                .extracting(FeedItemResponse::refId).containsExactly(solo.id());
+    }
+
+    /** 반응은 피드와 같은 행이다 — 럽바디에서 단 하트가 상대 식사 카드(그리고 우리 탭)에 그대로 보인다. */
+    @Test
+    void 상대_오늘_식사에_단_반응이_내_것으로_표시된다() {
+        Long[] u = new Long[2];
+        couple("ptoday-e@fitto.com", "ptoday-f@fitto.com", u);
+        MealResponse meal = mealService.save(u[1], sample(KstClock.today(), MealType.LUNCH));
+
+        feedService.toggleReaction(u[0], FeedItemType.MEAL, meal.id(), "❤️");
+
+        assertThat(feedService.partnerMealsToday(u[0])).singleElement()
+                .extracting(FeedItemResponse::reactions).asList()
+                .containsExactly(new ReactionSummary("❤️", 1, true));
+        // 상대 쪽 럽바디 카드에도 받은 반응으로 보인다(3단계 reactions 경로)
+        assertThat(mealService.findToday(u[1]).get(0).reactions())
+                .containsExactly(new ReactionSummary("❤️", 1, false));
+    }
+
+    /** 혼자 쓰는 사람에게도 럽바디는 열린다 — 커플이 아니면 오류가 아니라 빈 목록. */
+    @Test
+    void 커플이_아니면_상대_오늘_식사는_빈_목록이다() {
+        Long solo = register("ptoday-solo@fitto.com");
+
+        assertThat(feedService.partnerMealsToday(solo)).isEmpty();
     }
 }
