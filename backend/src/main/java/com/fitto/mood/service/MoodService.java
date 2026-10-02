@@ -25,6 +25,10 @@ import com.fitto.user.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.util.Objects;
+
 /**
  * 무드 상태 — Obimy 벤치마킹. 이모지 하나로 "지금 상태"를 커플 화면 상단에 띄운다.
  * PLAN.md "무드 상태 (Mood Status — Obimy 벤치마킹)" 참고.
@@ -35,6 +39,15 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @Transactional(readOnly = true)
 public class MoodService {
+
+    /**
+     * 무드 푸시 간격 — 직전 무드 뒤로 이만큼 지나야 다시 푸시한다.
+     *
+     * <p>피커에서 몇 번 고쳐 고르면 고른 만큼 상대 폰이 울렸다(docs/daily-mood-current-state.md §8-8).
+     * 무드는 "지금 상태"라 연달아 바꾸는 동안의 알림은 소음이고, 상대 홈은 실시간 이벤트로 이미
+     * 최신을 보여 준다. 10분은 "기분이 정말 바뀌었다"로 읽힐 만한 간격이다.
+     */
+    static final Duration PUSH_QUIET = Duration.ofMinutes(10);
 
     private final MoodStatusRepository moodStatusRepository;
     private final CoupleEmojiRepository coupleEmojiRepository;
@@ -119,21 +132,48 @@ public class MoodService {
             stickerService.requireUsable(userId, StickerPacks.ofMoodEmoji(emoji));
         }
 
+        // 저장 전에 직전 무드를 본다 — 푸시 간격 판정은 원장 그대로(따로 "보낸 시각"을 두지 않는다)
+        MoodStatus previous = moodStatusRepository
+                .findTopByCoupleIdAndUserIdOrderByCreatedAtDescIdDesc(couple.getId(), userId)
+                .orElse(null);
+        String message = blankToNull(req.message());
+
         moodStatusRepository.save(MoodStatus.builder()
                 .coupleId(couple.getId())
                 .userId(userId)
                 .emoji(emoji)
                 .coupleEmojiId(coupleEmojiId)
-                .message(blankToNull(req.message()))
+                .message(message)
                 .build());
 
         Long partnerId = couple.partnerOf(userId);
-        if (partnerId != null) {
+        if (partnerId != null && shouldPush(previous, message, LocalDateTime.now())) {
             notificationService.notify(partnerId, NotificationCategory.PARTNER, "지금 기분",
                     pushBody(userName(userId), emoji, req.message()), PushLinks.HOME);
         }
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.MOOD);
         return current(userId);
+    }
+
+    /**
+     * 이번 무드를 상대에게 푸시할까.
+     *
+     * <ul>
+     *   <li>직전 무드가 없거나 {@link #PUSH_QUIET} 보다 오래됐으면 보낸다.</li>
+     *   <li>간격 안이어도 <b>새 한마디</b>가 붙었으면 보낸다 — 직접 쳐 넣은 말은 전하려는 뜻이 분명하다.
+     *       직전과 같은 한마디를 다시 고른 것(이모지만 바꾼 경우)은 새 말이 아니다.</li>
+     * </ul>
+     * 건너뛰어도 무드는 저장되고 MOOD 이벤트는 나간다 — 상대 홈은 그대로 최신이다.
+     * 시각은 둘 다 JVM 기본 TZ 벽시계라(@CreatedDate 와 now()) 저장 TZ 와 무관하게 비교된다.
+     */
+    static boolean shouldPush(MoodStatus previous, String message, LocalDateTime now) {
+        if (previous == null || previous.getCreatedAt() == null) {
+            return true;
+        }
+        if (Duration.between(previous.getCreatedAt(), now).compareTo(PUSH_QUIET) >= 0) {
+            return true;
+        }
+        return message != null && !Objects.equals(message, previous.getMessage());
     }
 
     /**
