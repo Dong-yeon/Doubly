@@ -138,6 +138,16 @@ public class CloudinaryImageDeleter {
 
     /** 단건 삭제. 성공 여부 반환 — 예외는 밖으로 던지지 않는다. */
     public boolean delete(String imageUrl) {
+        /*
+         * 우리 클라우드·루트 폴더의 원본 URL 만 지운다 — 변형 URL(다른 cloud 이름, 변환 세그먼트, "..")로
+         * 남의 원본을 지우는 경로를 막는다(CloudinaryUrls 주석). 기록마다 저장 시점 검증이 제각각이라
+         * (운동·식단·방문 사진은 URL 을 따로 보지 않는다) 모든 삭제가 지나는 이 자리에서 한 번에 막는다.
+         * 걸러진 파일은 남을 뿐이다 — 남은 파일은 치울 수 있지만 잘못 지운 파일은 되돌릴 수 없다.
+         */
+        if (!CloudinaryUrls.isOwnOriginal(imageUrl, properties)) {
+            log.warn("우리가 올린 원본 URL 이 아니어서 지우지 않습니다: {}", imageUrl);
+            return false;
+        }
         String publicId = extractPublicId(imageUrl);
         if (publicId == null) {
             log.warn("Cloudinary URL 형식이 아니어서 건너뜁니다: {}", imageUrl);

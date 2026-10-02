@@ -9,6 +9,8 @@ import com.fitto.common.notification.NotificationService;
 import com.fitto.common.notification.PushLinks;
 import com.fitto.common.time.KstClock;
 import com.fitto.common.upload.CloudinaryImageDeleter;
+import com.fitto.common.upload.CloudinaryProperties;
+import com.fitto.common.upload.CloudinaryUrls;
 import com.fitto.content.domain.ContentLog;
 import com.fitto.content.repository.ContentLogRepository;
 import com.fitto.content.repository.ContentLogRepository.LogWithContent;
@@ -106,6 +108,7 @@ public class FeedService {
     private final CoupleEventPublisher coupleEventPublisher;
     private final FeedItemMapper mapper;
     private final CloudinaryImageDeleter imageDeleter;
+    private final CloudinaryProperties cloudinaryProperties;
 
     public FeedService(FeedPostRepository feedPostRepository,
                        FeedPostPhotoRepository feedPostPhotoRepository,
@@ -120,8 +123,10 @@ public class FeedService {
                        NotificationService notificationService,
                        CoupleEventPublisher coupleEventPublisher,
                        FeedItemMapper mapper,
-                       CloudinaryImageDeleter imageDeleter) {
+                       CloudinaryImageDeleter imageDeleter,
+                       CloudinaryProperties cloudinaryProperties) {
         this.imageDeleter = imageDeleter;
+        this.cloudinaryProperties = cloudinaryProperties;
         this.feedPostRepository = feedPostRepository;
         this.feedPostPhotoRepository = feedPostPhotoRepository;
         this.feedReactionRepository = feedReactionRepository;
@@ -585,6 +590,18 @@ public class FeedService {
         if (photos.size() > MAX_PHOTOS_PER_POST) {
             throw new BusinessException(ErrorCode.INVALID_INPUT,
                     "사진은 최대 " + MAX_PHOTOS_PER_POST + "장까지 올릴 수 있어요.");
+        }
+        /*
+         * 앱이 공용 업로드 서명(UploadController — 기본 폴더)으로 올린 원본 URL 만 받는다. 예전엔 길이만 봐서
+         * 아무 URL 이나 저장됐고, 변형 URL 로 남의 원본을 지우는 경로가 열려 있었다(§8-6, 삭제기도 따로 막는다).
+         * Cloudinary 미설정(개발·테스트)은 unsigned 폴백이라 폴더를 알 수 없어 보지 않는다.
+         */
+        if (cloudinaryProperties.isConfigured()) {
+            for (String url : photos) {
+                if (!CloudinaryUrls.isImageDirectlyIn(url, cloudinaryProperties, cloudinaryProperties.getFolder())) {
+                    throw new BusinessException(ErrorCode.INVALID_INPUT, "앱에서 올린 사진만 남길 수 있어요.");
+                }
+            }
         }
 
         Relation couple = activeCouple(userId);
