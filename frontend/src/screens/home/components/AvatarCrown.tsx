@@ -16,7 +16,9 @@
  *   <li>연출 — 이 기기에서 <b>처음 보는 신호</b>(signalKey)일 때만 왼쪽 위에서 대각선으로 내려앉으며 한 번 반짝인다.
  *       등극은 반짝임이 길다. 내 신호면 햅틱 한 번. 동작 줄이기면 움직이지 않고 바로 보인다. 루프 없음. 끝까지 돈 뒤에만
  *       '봤음'으로 적는다(화면이 가려져 프레임이 안 돌면 아무도 못 본 연출이 '봤음'이 되므로). 본 기록을 못 읽으면 연출하지 않는다.</li>
- *   <li>탭 — 아바타 위 가운데에 말풍선 "장소명 ★N · 오늘"(콘텐츠는 "제목 ★N")을 3초 보여 준다. 말풍선을 누르면 상세로.
+ *   <li>탭 — 왕관 바로 아래, 아바타 아래쪽 위에 말풍선 "장소명 ★N · 오늘"(콘텐츠는 "제목 ★N")을 3초 보여 준다. 누르면 상세로.
+ *       (넷째 손질, 2026-10-03 — 아바타 위에 띄우면 D+ 블록의 "기념일 정하기"·"…부터" 줄을 가렸다. 그 블록은 기념일 유무로
+ *       높이·폭이 바뀌어 위쪽엔 비는 자리가 없다. 아바타 위라면 가리는 글자가 없다 — 3초 동안 얼굴 아래쪽과 무드 배지만 덮는다)</li>
  *       왕관 터치는 hitSlop 이 아니라 <b>실제 44×44 상자</b>다 — 겹친 아바타 버튼보다 위에 그려져, 그 상자 안의 탭은 왕관만 받는다.</li>
  * </ul>
  *
@@ -81,10 +83,10 @@ export function AvatarCrown({ signal, ownerName, mine, onOpen, ringSize = 68 }: 
   const key = signal.signalKey ?? (certified ? signal.certificationKey : null) ?? null;
   const center = crownCenter(ringSize);
   /*
-   * 왕관 터치 상자가 열 위로 삐져나온 만큼 말풍선을 더 올린다 — 안 올리면 말풍선 아래 끝이 왕관 위 끝에 닿고(360dp 실측 8px 겹침)
-   * 겹친 자리의 탭을 말풍선이 먼저 가져간다.
+   * 말풍선 위 끝 — 왕관 글리프 아래 끝 바로 밑. 왕관은 가리지 않고, 터치 상자 아래 7pt 정도와는 겹친다:
+   * 말풍선이 떠 있는 3초 동안 그 띠의 탭은 말풍선(상세)이 받는다 — 글리프 밖이라 왕관을 노린 탭이 아니다.
    */
-  const bubbleLift = Math.max(0, TOUCH / 2 - center.y);
+  const bubbleTop = center.y + CROWN_SIZE / 2 + OUTLINE;
 
   const [phase, setPhase] = useState<Phase>('pending');
   const [drop] = useState(() => new Animated.Value(ENTER_FROM.y));
@@ -189,8 +191,8 @@ export function AvatarCrown({ signal, ownerName, mine, onOpen, ringSize = 68 }: 
 
   return (
     <>
-      {/* 말풍선 — 아바타 위 가운데(열 맨 위 바로 위). 왕관 자리(왼쪽 위)와 상관없이 가운데에 뜬다 */}
-      <View style={[styles.bubbleLayer, { marginBottom: spacing.xs + bubbleLift }]} pointerEvents="box-none">
+      {/* 말풍선 — 왕관 바로 아래, 아바타 위에 가운데 정렬. 위쪽 D+ 블록·아래쪽 이름·무드 한마디를 가리지 않는다 */}
+      <View style={[styles.bubbleLayer, { top: bubbleTop }]} pointerEvents="box-none">
         {bubble ? (
           <Pressable
             style={({ pressed }) => [styles.bubble, pressed && styles.pressed]}
@@ -272,10 +274,9 @@ const styles = themedStyles((colors) => ({
   crownBox: { width: CROWN_SIZE + OUTLINE * 2, height: CROWN_SIZE + OUTLINE * 2, alignItems: 'center', justifyContent: 'center' },
   outline: { position: 'absolute' },
   glow: { position: 'absolute', width: CROWN_SIZE, height: CROWN_SIZE, borderRadius: CROWN_SIZE / 2 },
-  // 말풍선 층 — 열 맨 위 바로 위에 붙는다(bottom 100%). 가운데 정렬, 왕관 자리와 무관
+  // 말풍선 층 — 열 기준 절대 위치, top 은 렌더에서(왕관 아래 끝). 가운데 정렬이라 링 중심 아래에 온다
   bubbleLayer: {
     position: 'absolute',
-    bottom: '100%',
     left: 0,
     right: 0,
     alignItems: 'center',
@@ -283,11 +284,12 @@ const styles = themedStyles((colors) => ({
     elevation: 4,
   },
   /*
-   * 말풍선 — 이름이 길면 말줄임. 폭 상한 160: 왼쪽 열의 중심이 360dp 기기에서 화면 왼쪽 끝에서 약 93pt 라(열 폭 146),
-   * 반폭 80 이면 가장자리에 13pt 가 남는다. 200 이었을 때 375pt(iPhone SE)에서 왼쪽 끝이 화면에 거의 붙었다(2026-10-02 웹 확인).
+   * 말풍선 — 이름이 길면 말줄임. 폭 상한 150: 아바타 높이에 뜨므로 두 열 사이 하트(화면 가운데 16pt)를 비켜야 한다 —
+   * 360dp 에서 160 이면 하트 가장자리를 3pt 덮었다. 화면 가장자리 쪽은 20pt 남는다. 200 이었을 때 375pt(iPhone SE)에서
+   * 왼쪽 끝이 화면에 거의 붙었다(2026-10-02 웹 확인).
    */
   bubble: {
-    maxWidth: 160,
+    maxWidth: 150,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     borderRadius: radius.pill,
