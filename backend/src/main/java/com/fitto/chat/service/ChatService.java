@@ -1,6 +1,6 @@
 package com.fitto.chat.service;
 
-import com.fitto.auth.dto.UserResponse;
+import com.fitto.auth.dto.PartnerUserResponse;
 import com.fitto.chat.domain.AnimatedSticker;
 import com.fitto.chat.domain.ChatMessage;
 import com.fitto.chat.domain.ChatMessageReaction;
@@ -113,8 +113,8 @@ public class ChatService {
                 .filter(Relation::isActive)
                 .map(r -> {
                     Long partnerId = r.partnerOf(userId);
-                    UserResponse partner = partnerId == null ? null
-                            : userRepository.findById(partnerId).map(UserResponse::from).orElse(null);
+                    PartnerUserResponse partner = partnerId == null ? null
+                            : userRepository.findById(partnerId).map(PartnerUserResponse::from).orElse(null);
                     ChatMessageResponse last = chatMessageRepository
                             .findTopByRelationIdOrderByIdDesc(r.getId())
                             .map(ChatMessageResponse::from).orElse(null);

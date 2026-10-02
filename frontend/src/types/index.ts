@@ -213,6 +213,12 @@ export interface User {
   withdrawalScheduledDate?: string | null;
 }
 
+/**
+ * 남에게 보이는 사용자 — 커플·채팅 상대, 트레이너의 회원 목록(서버 PartnerUserResponse).
+ * 이메일·생년월일·성별·키·설정은 서버가 내리지 않는다. 필드를 늘리려면 서버 DTO 부터.
+ */
+export type PartnerUser = Pick<User, 'id' | 'name' | 'profileImageUrl' | 'withdrawalScheduledDate'>;
+
 // 전체 사진첩 — 사진 있는 피드 포스트 모아보기
 /**
  * 사진첩이 모으는 소스 — 타임라인의 FeedItemType 중 "우리가 찍은 사진"이 달리는 넷.
@@ -308,7 +314,7 @@ export interface Relation {
   relationType: RelationType;
   status: RelationStatus;
   // 상대방(커플 파트너 / 트레이너 입장에선 회원, 회원 입장에선 트레이너)
-  partner: User | null;
+  partner: PartnerUser | null;
   connectedAt?: string | null;
   backgroundImageUrl?: string | null;
   anniversaryDate?: string | null;
@@ -1780,7 +1786,7 @@ export interface LatestTouch {
 export interface ChatRoom {
   relationId: number;
   relationType: RelationType;
-  partner: User | null;
+  partner: PartnerUser | null;
   lastMessage?: ChatMessage | null;
   unreadCount: number;
 }

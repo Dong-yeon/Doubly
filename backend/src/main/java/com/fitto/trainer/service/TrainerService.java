@@ -6,7 +6,7 @@ import com.fitto.common.notification.NotificationCategory;
 import com.fitto.common.notification.NotificationService;
 import com.fitto.common.notification.PushLinks;
 import com.fitto.common.time.KstClock;
-import com.fitto.auth.dto.UserResponse;
+import com.fitto.auth.dto.PartnerUserResponse;
 import com.fitto.relation.domain.Relation;
 import com.fitto.relation.domain.RelationStatus;
 import com.fitto.relation.domain.RelationType;
@@ -110,7 +110,7 @@ public class TrainerService {
         List<MemberSummary> members = new ArrayList<>();
         for (Relation relation : activeMemberRelations(trainerId)) {
             userRepository.findById(relation.getUserBId()).ifPresent(member -> members.add(new MemberSummary(
-                    UserResponse.from(member),
+                    PartnerUserResponse.from(member),
                     workoutRepository.existsByUserIdAndWorkoutDate(member.getId(), today),
                     workoutRepository.findLastWorkoutDate(member.getId()))));
         }
