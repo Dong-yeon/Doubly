@@ -18,6 +18,7 @@ import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { usePlanStore } from '../../store/planStore';
 import { useAuthStore } from '../../store/authStore';
+import { useRelationStore } from '../../store/relationStore';
 import { clearWritingDraft, draftKeys, loadWritingDraft, saveWritingDraft } from '../../utils/writingDraft';
 import { haptics } from '../../utils/haptics';
 import { useDirtyGuard } from '../../hooks/useDirtyGuard';
@@ -47,6 +48,7 @@ export function FeedComposeScreen({ navigation, route }: Props) {
    * navigation/types 주석. 고치기는 초안을 남기지 않는다(원본이 서버에 있다).
    */
   const editingId = route.params?.postId;
+  const partnerName = useRelationStore((s) => s.couple?.partner?.name) ?? '상대';
   const editing = editingId != null;
   const [original, setOriginal] = useState<{ content: string; photos: string[]; recordDate: string } | null>(null);
   const [content, setContent] = useState('');
@@ -273,6 +275,19 @@ export function FeedComposeScreen({ navigation, route }: Props) {
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       {/* 키보드가 "남기기" 버튼을 가리지 않도록 회피 (스크롤하면 키보드가 내려간다) */}
       <FormKeyboardView contentContainerStyle={styles.container}>
+          {/*
+            공개 범위 — 누가 보는지를 쓰기 전에 말한다. 하루 기록의 "나만 보여요" 줄과 같은 모양이라 두 기능이
+            나란히 읽힌다(docs/daily-mood-current-state.md §6). 푸시는 간격 제한이 있어(무드) 약속하지 않고
+            "보인다"까지만 말한다.
+          */}
+          <View style={styles.scopeRow}>
+            <MaterialCommunityIcons name="account-group-outline" size={16} color={colors.textSecondary} />
+            <Text style={styles.scopeText}>
+              {editing
+                ? `고친 내용도 ${partnerName}님에게 바로 보여요`
+                : `${partnerName}님에게 바로 보여요 · 우리 기록과 사진첩에 남아요`}
+            </Text>
+          </View>
           {photoUris.length === 0 ? (
             <TouchableOpacity
               style={[styles.photoBox, styles.photoBoxEmpty]}
@@ -371,6 +386,18 @@ const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
   container: { padding: spacing.lg, paddingBottom: spacing.xl },
+  // 공개 범위 줄 — JournalDayScreen.privateRow 와 같은 모양(자물쇠 대신 사람 아이콘)
+  scopeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  scopeText: { flex: 1, color: colors.textSecondary, fontSize: fontSize.caption },
   photoBox: {
     borderRadius: radius.lg,
     borderWidth: 1,

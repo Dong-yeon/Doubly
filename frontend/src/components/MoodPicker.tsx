@@ -31,6 +31,7 @@ import { COUPLE_EMOJI_EMOTIONS } from '../constants/coupleEmojiEmotions';
 import { usePlanStore } from '../store/planStore';
 import { useCoupleEmojiStore } from '../store/coupleEmojiStore';
 import { useAuthStore } from '../store/authStore';
+import { useRelationStore } from '../store/relationStore';
 import { toast } from '../store/toastStore';
 import { journalApi, journalToday, type JournalEntry } from '../api/journal';
 import { setJournalDraft } from '../store/journalDraft';
@@ -80,6 +81,7 @@ export function MoodPicker({ visible, onClose, onSelect, connected, onOpenJourna
   const premiumAllowed = can('PREMIUM_STICKER');
 
   const myId = useAuthStore((s) => s.user?.id);
+  const partnerName = useRelationStore((s) => s.couple?.partner?.name) ?? '상대';
   const coupleEmojis = useCoupleEmojiStore((s) => s.emojis);
   const loadCoupleEmojis = useCoupleEmojiStore((s) => s.load);
 
@@ -333,7 +335,10 @@ export function MoodPicker({ visible, onClose, onSelect, connected, onOpenJourna
         ) : null}
       </View>
       <Text style={styles.desc}>
-        {connected ? '이모지 하나로 답장 없이 알려줘요.' : '오늘 기분을 골라 나만의 기록에 남겨요.'}
+        {/* 공개 범위 — 고르는 순간 상대 홈에 뜬다. 2단계 "나만 보여요"와 짝이 맞게 누구에게 가는지 이름으로 말한다 */}
+        {connected
+          ? `고르면 ${partnerName}님 홈에 바로 보여요. 답장은 안 해도 돼요.`
+          : '오늘 기분을 골라 나만의 기록에 남겨요.'}
       </Text>
 
       {/* 상대에게 보이는 한마디 — 미연결이면 받을 사람이 없다 */}
@@ -342,10 +347,10 @@ export function MoodPicker({ visible, onClose, onSelect, connected, onOpenJourna
           style={styles.messageInput}
           value={message}
           onChangeText={setMessage}
-          placeholder="상대에게 한마디 (선택, 20자)"
+          placeholder={`${partnerName}님에게 한마디 (선택, 20자)`}
           placeholderTextColor={colors.textTertiary}
           maxLength={20}
-          accessibilityLabel="상대에게 보이는 한마디"
+          accessibilityLabel={`${partnerName}님에게 보이는 한마디`}
         />
       ) : null}
 
