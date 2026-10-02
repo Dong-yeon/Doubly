@@ -162,7 +162,7 @@ ALTER TABLE couple_events ADD COLUMN visibility VARCHAR(20) NOT NULL DEFAULT 'SH
 | 외부 캘린더 연동 | **없음** | `expo-calendar`, iCal(.ics), Google Calendar 연동 코드 없음 |
 | 홈 widget | **부분 (일정은 없음)** | `frontend/src/widget/DoublyWidget.tsx`(react-native-android-widget, Android 전용)은 사귄 날 D+ 만 표시. 일정·다가오는 일정 표시 없음 |
 | 여행 기간 겹쳐 보기 | 구현됨 | 격자 하단 띠 + "우리 여행" 섹션(`tripApi.list`) |
-| 데이트 기록 겹쳐 보기 | 구현됨 | 속 빈 점 + "이번 달 데이트" 섹션 (6절) |
+| 다녀온 곳 겹쳐 보기 | 구현됨 | 속 빈 점 + "이번 달 다녀온 곳" 섹션 (6절). 2026-10-02 전엔 "이번 달 데이트"(같이 먹기 식단만) |
 | 누구 일정 필터 칩 | 없음 | `CALENDAR_PERSONAL_EVENTS_2026-09-22.md` §8 "남은 것" |
 | FREE 한도 | 구현됨 | `Feature.CALENDAR_EVENT` FREE 월 10건 / PRO 무제한 (`common/plan/Feature.java:122`) |
 
@@ -170,10 +170,10 @@ ALTER TABLE couple_events ADD COLUMN visibility VARCHAR(20) NOT NULL DEFAULT 'SH
 
 - **일정 → 장소 선택: 없음.** 일정 폼에 장소 필드가 없고 `couple_events` 에 장소 FK 도 없다. 럽슐랭 저장 장소를 고르는 UI 없음.
 - **방문 기록 → 캘린더: 읽기 전용 오버레이만 있음.**
-  - `backend/.../calendar/service/DateMealCalendarService.java` 가 그 달의 **"같이 먹기" 식단**(`MealRepository.findSharedInPeriod`: `shared_group_id is not null`, 파트너 복제본 제외) 중 **`place_visits.meal_id` 로 방문이 붙은 것만** 골라 장소명·럽슐랭 등급(`places.lovelichelin_tier`)·사진과 함께 내려준다.
+  - `backend/.../calendar/service/DateMealCalendarService.java` 가 그 달의 ① **"같이 먹기" 식단**(`MealRepository.findSharedInPeriod`) 중 방문이 붙은 것과 ② **커플 장소의 모든 방문**(`PlaceVisitRepository.findByCoupleInPeriod`, 2026-10-02 추가)을 합쳐, **같은 날·같은 장소는 한 줄**로 장소명·럽슐랭 등급·사진과 함께 내려준다. 한 사람만 기록한 방문은 `visitedBy` 로 그 사람을 싣고(화면 배지 "내 기록"/"○○ 기록"), 같이 먹기 식단이거나 둘 다 기록했으면 null(함께 간 것).
   - 화면에서 누르면 `PlaceDetail` 로 이동(570행). 수정·삭제·D-day 없음(원본은 식단).
   - 일정으로 행을 만들지 않은 이유는 서비스 클래스 주석에 있음(FREE 한도 잠식, 4경로 동기화, 미래/과거 혼재).
-- **"다녀왔어요"(`PlaceDetailScreen.tsx` `onSaveVisit`, 244행)와의 관계**: 이 경로는 "식단으로도 등록"을 체크했을 때만 식단을 만들고 `mealId` 를 방문에 붙인다. 그런데 이때 `saveMeal` 호출에 같이 먹기(공유) 표시가 보이지 않는다 → **2026-10-02 확인: "다녀왔어요"로 남긴 방문은 캘린더 오버레이에 나오지 않는다.** `saveMeal` 페이로드에 `sharedWithPartner` 가 없어 `SaveMealRequest.sharedWithPartnerOrDefault()` = false → `MealService` 가 `shared_group_id` 를 만들지 않고, 오버레이 쿼리(`findSharedInPeriod`)는 `shared_group_id is not null` 만 읽는다. 식단과 연결되지 않은 방문은 확실히 안 나온다.
+- **"다녀왔어요"(`PlaceDetailScreen.tsx` `onSaveVisit`)와의 관계**: 이 경로는 식단을 같이 먹기로 저장하지 않아(`sharedWithPartner` 없음) 2026-10-02 전엔 캘린더에 **전혀 나오지 않았다.** 같은 날 ②번 경로를 추가해 해결했다. 같이 먹기 식단으로 바꾸는 방법은 쓰지 않았다 — 칼로리가 절반으로 나뉘고 상대 식단에 복제본이 생긴다. 예전 테스트 "혼자 먹은 기록은 장소가 있어도 캘린더에 올라오지 않는다"는 사용자 결정으로 뒤집었다(혼자 간 곳도 싣고 누구 기록인지 표시).
 - 일정(약속) ↔ 방문(기록)을 잇는 코드(예: "이 약속에 다녀왔어요"로 방문 생성)는 **없음**.
 
 ## 7. 알려진 문제 / 위험
@@ -235,8 +235,8 @@ ALTER TABLE couple_events ADD COLUMN visibility VARCHAR(20) NOT NULL DEFAULT 'SH
 | 일정 댓글·리액션 | 없음 | |
 | 일정에 장소 첨부 | 없음 | |
 | 럽슐랭 장소 선택 | 없음 | |
-| 데이트 기록(방문) 오버레이 | 구현됨 | 같이 먹기 + 장소 연결 식단만, 읽기 전용 |
-| "다녀왔어요" 방문이 캘린더에 표시 | 없음 | 2026-10-02 확인 — 식단이 공유 그룹 없이 저장됨(6절) |
+| 다녀온 곳(방문) 오버레이 | 구현됨 | 같이 먹기 식단 + 커플 장소 방문 전부, 같은 날·같은 곳 한 줄, 읽기 전용 |
+| "다녀왔어요" 방문이 캘린더에 표시 | 구현됨 | 2026-10-02 — 누구 기록인지 배지 |
 | 외부 캘린더 연동 | 없음 | |
 | 홈 위젯에 일정 | 없음 | 위젯은 D+ 만(Android) |
 | 다가오는 일정 API | 부분 구현 | 백엔드만 있고 프론트 미사용 |
