@@ -11,6 +11,8 @@ import com.fitto.diet.dto.NutritionGoalRequest;
 import com.fitto.diet.dto.SaveMealRequest;
 import com.fitto.diet.service.MealService;
 import com.fitto.diet.service.NutritionService;
+import com.fitto.common.exception.ErrorCode;
+import com.fitto.diet.dto.PhotoRecordLookupResponse;
 import com.fitto.diet.dto.CoupleMealGoalResponse;
 import com.fitto.feed.dto.FeedItemType;
 import com.fitto.feed.dto.ReactionSummary;
@@ -560,5 +562,38 @@ class MealFlowTest {
                 .containsExactly(new ReactionSummary("😋", 1, true));
         assertThat(mealService.findToday(registrant).get(0).reactions())
                 .containsExactly(new ReactionSummary("😋", 1, false));
+    }
+    // ---- 4단계: 채팅 사진 → 식단 기록(LOVEBODY_REVIEW §2-5) ----
+
+    private SaveMealRequest withPhoto(String photoUrl) {
+        // 칼로리를 채워 둔다 — 자동 분석 대상이 되면 백그라운드 작업이 이 테스트와 무관하게 돈다
+        return new SaveMealRequest(LocalDate.now(), MealType.LUNCH, null, photoUrl, 500, null, null, null, null, null, null, null);
+    }
+
+    private Long couple(String a, String b, Long[] out) {
+        out[0] = register(a);
+        out[1] = register(b);
+        return relationService.connectCouple(out[1], relationService.createCoupleInvite(out[0]).code()).id();
+    }
+
+    /** 같은 사진으로 두 번 남기지 않는다 — 메뉴가 먼저 묻고(findByPhoto), 저장도 막는다. 남의 기록과는 무관 */
+    @Test
+    void 같은_사진으로_두_번_식단을_남기면_막힌다() {
+        Long[] u = new Long[2];
+        couple("c2m-e@fitto.com", "c2m-f@fitto.com", u);
+        String photo = "https://res.cloudinary.com/demo/image/upload/v1/fitto/twice.jpg";
+        assertThat(mealService.findByPhoto(u[0], photo).recorded()).isFalse();
+
+        MealResponse first = mealService.save(u[0], withPhoto(photo));
+
+        PhotoRecordLookupResponse found = mealService.findByPhoto(u[0], photo);
+        assertThat(found.recorded()).isTrue();
+        assertThat(found.mealId()).isEqualTo(first.id());
+        assertThat(found.mealTypeLabel()).isEqualTo("점심");
+        assertThatThrownBy(() -> mealService.save(u[0], withPhoto(photo)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.MEAL_PHOTO_ALREADY_RECORDED);
+        // 상대는 자기 기록이 없으니 같은 URL 이어도 걸리지 않는다
+        assertThat(mealService.findByPhoto(u[1], photo).recorded()).isFalse();
     }
 }

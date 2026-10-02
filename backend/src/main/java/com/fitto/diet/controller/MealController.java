@@ -15,6 +15,8 @@ import com.fitto.diet.dto.MealAnalysisResponse;
 import com.fitto.diet.dto.MealResponse;
 import com.fitto.diet.dto.MealStatsResponse;
 import com.fitto.diet.dto.NutritionGoalDirectionRequest;
+import com.fitto.diet.dto.PhotoRecordLookupRequest;
+import com.fitto.diet.dto.PhotoRecordLookupResponse;
 import com.fitto.diet.dto.NutritionGoalRequest;
 import com.fitto.diet.dto.NutritionGoalSuggestionRequest;
 import com.fitto.diet.dto.NutritionGoalSuggestionResponse;
@@ -145,6 +147,13 @@ public class MealController {
     @GetMapping("/today")
     public ApiResponse<List<MealResponse>> today(@AuthenticationPrincipal AuthUser user) {
         return ApiResponse.success(mealService.findToday(user.id()));
+    }
+
+    /** 이 사진으로 남긴 식단이 있는지 — 채팅 사진을 식단으로 옮기기 전 중복 안내. URL 은 본문으로(로그에 안 남게) */
+    @PostMapping("/photo-record")
+    public ApiResponse<PhotoRecordLookupResponse> photoRecord(@AuthenticationPrincipal AuthUser user,
+                                                              @Valid @RequestBody PhotoRecordLookupRequest request) {
+        return ApiResponse.success(mealService.findByPhoto(user.id(), request.photoUrl()));
     }
 
     @GetMapping("/history")
