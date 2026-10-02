@@ -10,6 +10,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 public interface MealRepository extends JpaRepository<Meal, Long> {
 
@@ -49,15 +50,41 @@ public interface MealRepository extends JpaRepository<Meal, Long> {
      * DB 마다 다른 DISTINCT ON 류 문법을 안 쓰려고(H2 호환) Java 에서 그룹핑한다. */
     List<Meal> findTop200ByUserIdOrderByCreatedAtDesc(Long userId);
 
-    /** 히스토리 — 커서(id) 기반 페이징. cursor 가 null 이면 최신부터. */
+    /**
+     * 히스토리 첫 페이지 — <b>오늘 이전</b>, 먹은 날짜 최신순(같은 날은 나중에 적은 것 먼저).
+     *
+     * <p>예전엔 날짜 조건 없이 {@code id desc} 였다. 오늘 식사가 화면의 "오늘" 섹션과 히스토리 맨 위에 두 번
+     * 나왔고, 지난 날짜로 나중에 적은 기록·어제 복사분이 순서를 깼다(LOVEBODY_REVIEW_2026-10-02 §3 A-2).
+     * {@code idx_meals_user_date (user_id, meal_date)} 를 탄다.
+     */
     @Query("""
             select m from Meal m
-            where m.userId = :userId and (cast(:cursor as Long) is null or m.id < :cursor)
-            order by m.id desc
+            where m.userId = :userId and m.mealDate < :today
+            order by m.mealDate desc, m.id desc
             """)
-    List<Meal> findHistory(@Param("userId") Long userId,
-                           @Param("cursor") Long cursor,
-                           Pageable pageable);
+    List<Meal> findHistoryFirstPage(@Param("userId") Long userId,
+                                    @Param("today") LocalDate today,
+                                    Pageable pageable);
+
+    /**
+     * 히스토리 다음 페이지 — (meal_date, id) 복합 커서보다 뒤인 것. 정렬이 날짜 우선이라 id 하나로는
+     * 경계를 정할 수 없다. 쿼리를 둘로 나눈 이유: {@code :cursor is null} 분기는 PostgreSQL 이
+     * 파라미터 타입을 못 정해 거절한 전례가 있다(docs/RUNNING.md).
+     */
+    @Query("""
+            select m from Meal m
+            where m.userId = :userId and m.mealDate < :today
+              and (m.mealDate < :cursorDate or (m.mealDate = :cursorDate and m.id < :cursorId))
+            order by m.mealDate desc, m.id desc
+            """)
+    List<Meal> findHistoryAfter(@Param("userId") Long userId,
+                                @Param("today") LocalDate today,
+                                @Param("cursorDate") LocalDate cursorDate,
+                                @Param("cursorId") Long cursorId,
+                                Pageable pageable);
+
+    /** 커서로 받은 기록이 그사이 지워졌을 때 — 그보다 앞서 적은 내 기록 중 가장 가까운 것을 기준점으로 */
+    Optional<Meal> findTopByUserIdAndIdLessThanOrderByIdDesc(Long userId, Long id);
 
     /** 캘린더 — 해당 기간 식단을 기록한 날짜(중복 제거). */
     @Query("""

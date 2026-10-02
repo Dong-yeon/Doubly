@@ -72,6 +72,65 @@ class MealFlowTest {
         assertThat(mealService.findToday(user)).hasSize(1);
     }
 
+    /** 오늘 식사는 럽바디 "오늘" 섹션 몫 — 히스토리 맨 위에 또 나오던 중복(LOVEBODY_REVIEW §3 A-2) */
+    @Test
+    void 오늘_식사는_히스토리에_나오지_않는다() {
+        Long user = register("hist-today@fitto.com");
+        mealService.save(user, sample(LocalDate.now(), MealType.LUNCH));
+        MealResponse yesterday = mealService.save(user, sample(LocalDate.now().minusDays(1), MealType.DINNER));
+
+        assertThat(mealService.findHistory(user, null)).extracting(MealResponse::id).containsExactly(yesterday.id());
+    }
+
+    /** 지난 날짜로 나중에 적은 기록 — id 순이면 맨 위로 튀어 올랐다. 먹은 날짜 순, 같은 날은 나중에 적은 것 먼저 */
+    @Test
+    void 지난_날짜로_나중에_적은_기록도_먹은_날짜_순서대로_나온다() {
+        Long user = register("hist-order@fitto.com");
+        LocalDate today = LocalDate.now();
+        mealService.save(user, sample(today.minusDays(1), MealType.LUNCH));
+        mealService.save(user, sample(today.minusDays(5), MealType.DINNER)); // 나중에 적은 5일 전
+        mealService.save(user, sample(today.minusDays(3), MealType.BREAKFAST));
+        MealResponse laterSameDay = mealService.save(user, sample(today.minusDays(1), MealType.DINNER));
+
+        List<MealResponse> history = mealService.findHistory(user, null);
+        assertThat(history).extracting(MealResponse::mealDate).containsExactly(
+                today.minusDays(1), today.minusDays(1), today.minusDays(3), today.minusDays(5));
+        assertThat(history.get(0).id()).isEqualTo(laterSameDay.id());
+    }
+
+    /**
+     * 페이지 경계 — 커서는 여전히 id 하나(구버전 앱과 같은 요청)인데, 정렬이 날짜 우선이라 서버가 그 행의
+     * (meal_date, id) 로 경계를 잡는다. 같은 날짜가 경계를 걸치고, 입력 순서가 날짜와 뒤섞여도 겹치거나 빠지지 않는다.
+     */
+    @Test
+    void 히스토리_페이지_경계에서_중복도_누락도_없다() {
+        Long user = register("hist-page@fitto.com");
+        LocalDate today = LocalDate.now();
+        int[] daysAgo = {3, 1, 7, 2, 2, 5, 1, 9, 4, 4, 4, 6, 8, 2, 3, 10, 1, 5, 7, 4, 6, 3, 2, 8, 9};
+        for (int d : daysAgo) {
+            mealService.save(user, sample(today.minusDays(d), MealType.SNACK));
+        }
+        mealService.save(user, sample(today, MealType.LUNCH)); // 오늘 — 어느 페이지에도 없어야 한다
+
+        List<MealResponse> first = mealService.findHistory(user, null);
+        assertThat(first).hasSize(20);
+        List<MealResponse> second = mealService.findHistory(user, first.get(first.size() - 1).id());
+        List<MealResponse> all = new java.util.ArrayList<>(first);
+        all.addAll(second);
+
+        assertThat(all).hasSize(daysAgo.length);
+        assertThat(all).extracting(MealResponse::id).doesNotHaveDuplicates();
+        // 이어 붙인 결과가 그대로 (날짜 desc, id desc) 정렬이어야 한다
+        for (int i = 1; i < all.size(); i++) {
+            MealResponse prev = all.get(i - 1);
+            MealResponse cur = all.get(i);
+            boolean ordered = prev.mealDate().isAfter(cur.mealDate())
+                    || (prev.mealDate().isEqual(cur.mealDate()) && prev.id() > cur.id());
+            assertThat(ordered).as("%d번째 경계 %s/%d → %s/%d", i, prev.mealDate(), prev.id(), cur.mealDate(), cur.id()).isTrue();
+        }
+        assertThat(mealService.findHistory(user, all.get(all.size() - 1).id())).isEmpty();
+    }
+
     @Test
     void 히스토리는_최신순으로_조회된다() {
         Long user = register("m2@fitto.com");
