@@ -62,14 +62,17 @@ public class FeedController {
      * <p>{@code sources} 는 상단 필터 칩용이며 생략하면 4소스 전부다
      * (예: {@code ?sources=MEAL,WORKOUT}). 값이 잘못되면 400 — 화면의 칩이 보내는
      * 고정 목록이라 조용히 무시하기보다 드러나는 편이 낫다.
+     *
+     * <p>{@code who} 는 작성자 필터 칩용이다({@code me} · {@code partner}, 생략하면 둘 다).
      */
     @GetMapping("/photos")
     public ApiResponse<FeedPhotosResponse> photos(
             @AuthenticationPrincipal AuthUser user,
             @RequestParam(required = false) String cursor,
             @RequestParam(defaultValue = "30") int limit,
-            @RequestParam(required = false) List<FeedItemType> sources) {
-        return ApiResponse.success(feedService.photos(user.id(), cursor, limit, sources));
+            @RequestParam(required = false) List<FeedItemType> sources,
+            @RequestParam(required = false) String who) {
+        return ApiResponse.success(feedService.photos(user.id(), cursor, limit, sources, who));
     }
 
     /**

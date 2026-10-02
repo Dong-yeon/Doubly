@@ -227,4 +227,69 @@ class FeedPhotosTest {
         assertThat(item.caption()).doesNotContain("kcal");
         assertThat(item.authorName()).isEqualTo("나");
     }
+
+    /**
+     * 작성자 필터는 서버에서 거른다 — 클라이언트에서 페이지를 거르면 한쪽이 몰아 올린 날
+     * 반대쪽 화면이 빈 페이지만 받는다. 포스트(author_id)·방문(visited_by)·식단/운동(user_id)
+     * 네 갈래가 모두 같은 사람으로 걸러져야 한다.
+     */
+    @Test
+    void 작성자를_지정하면_그_사람이_올린_사진만_준다() {
+        long[] c = couple("ph-who-a@fitto.com", "ph-who-b@fitto.com");
+        feedService.createPost(c[0], new CreatePostRequest("내 일상", "https://img.example.com/me-post.jpg"));
+        feedService.createPost(c[1], new CreatePostRequest("상대 일상", "https://img.example.com/pa-post.jpg"));
+        mealWithPhoto(c[0], "https://img.example.com/me-meal.jpg", false);
+        workoutWithPhoto(c[1], "https://img.example.com/pa-workout.jpg");
+        Long placeId = placeService.save(c[0], new SavePlaceRequest("가게", null, null, null, null)).id();
+        placeService.recordVisit(c[1], placeId,
+                new RecordVisitRequest(LocalDate.now(), 4, null, "https://img.example.com/pa-visit.jpg", null));
+
+        assertThat(feedService.photos(c[0], null, 20, null, "me").items())
+                .extracting(FeedPhotoResponse::imageUrl)
+                .containsExactlyInAnyOrder("https://img.example.com/me-post.jpg", "https://img.example.com/me-meal.jpg");
+        assertThat(feedService.photos(c[0], null, 20, null, "partner").items())
+                .extracting(FeedPhotoResponse::imageUrl)
+                .containsExactlyInAnyOrder("https://img.example.com/pa-post.jpg",
+                        "https://img.example.com/pa-workout.jpg", "https://img.example.com/pa-visit.jpg");
+        assertThat(feedService.photos(c[0], null, 20, null, null).items()).hasSize(5);
+    }
+
+    @Test
+    void 모르는_작성자_필터는_거절한다() {
+        long[] c = couple("ph-who-bad-a@fitto.com", "ph-who-bad-b@fitto.com");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> feedService.photos(c[0], null, 20, null, "everyone"))
+                .isInstanceOf(com.fitto.common.exception.BusinessException.class);
+    }
+
+    /**
+     * 뷰어의 "장소 보기"가 장소 상세로 가는 근거 — 맛집 방문은 그 장소, 장소를 붙인 끼니는
+     * 파생 방문({@code meal_id})을 거슬러 그 장소를 싣는다. 장소가 없는 기록은 null.
+     */
+    @Test
+    void 맛집_방문과_장소를_붙인_끼니는_장소_id_를_싣는다() {
+        long[] c = couple("ph-place-a@fitto.com", "ph-place-b@fitto.com");
+        Long visitPlace = placeService.save(c[0], new SavePlaceRequest("방문한 가게", null, null, null, null)).id();
+        placeService.recordVisit(c[0], visitPlace,
+                new RecordVisitRequest(LocalDate.now(), 5, null, "https://img.example.com/v.jpg", null));
+        Long mealId = mealWithPhoto(c[0], "https://img.example.com/m.jpg", false);
+        Long mealPlace = placeService.save(c[0], new SavePlaceRequest("끼니 가게", null, null, null, null)).id();
+        placeService.recordVisit(c[0], mealPlace,
+                new RecordVisitRequest(LocalDate.now(), 4, null, "https://img.example.com/m.jpg", mealId));
+        workoutWithPhoto(c[0], "https://img.example.com/w.jpg");
+
+        List<FeedPhotoResponse> items = feedService.photos(c[0], null, 20, null).items();
+
+        assertThat(items).filteredOn(p -> p.type() == FeedItemType.PLACE_VISIT).singleElement()
+                .satisfies(p -> {
+                    assertThat(p.placeId()).isEqualTo(visitPlace);
+                    assertThat(p.placeName()).isEqualTo("방문한 가게");
+                });
+        assertThat(items).filteredOn(p -> p.type() == FeedItemType.MEAL).singleElement()
+                .satisfies(p -> {
+                    assertThat(p.placeId()).isEqualTo(mealPlace);
+                    assertThat(p.placeName()).isEqualTo("끼니 가게");
+                });
+        assertThat(items).filteredOn(p -> p.type() == FeedItemType.WORKOUT).singleElement()
+                .satisfies(p -> assertThat(p.placeId()).isNull());
+    }
 }

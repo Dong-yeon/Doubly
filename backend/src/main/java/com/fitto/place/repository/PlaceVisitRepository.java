@@ -99,6 +99,28 @@ public interface PlaceVisitRepository extends JpaRepository<PlaceVisit, Long> {
                                            org.springframework.data.domain.Pageable pageable);
 
     /**
+     * 사진첩 작성자 필터(나/상대) — {@link #findPhotosForFeed} 에 방문자 조건만 더한다.
+     * null 파라미터로 합치지 않는 이유는 {@code FeedPostRepository.findPhotosByAuthor} 와 같다.
+     */
+    @Query("""
+            select v as visit, p.name as placeName
+            from PlaceVisit v join Place p on p.id = v.placeId
+            where p.coupleId = :coupleId
+              and v.visitedBy = :visitedBy
+              and v.imageUrl is not null
+              and v.mealId is null
+              and (cast(:cursorAt as LocalDateTime) is null
+                   or v.createdAt < :cursorAt
+                   or (v.createdAt = :cursorAt and v.id < :cursorId))
+            order by v.createdAt desc, v.id desc
+            """)
+    List<VisitWithPlace> findPhotosForFeedByVisitor(@Param("coupleId") Long coupleId,
+                                                    @Param("visitedBy") Long visitedBy,
+                                                    @Param("cursorAt") java.time.LocalDateTime cursorAt,
+                                                    @Param("cursorId") Long cursorId,
+                                                    org.springframework.data.domain.Pageable pageable);
+
+    /**
      * 추억 리마인드 — 그 날 방문한 기록 (PLAN.md Memories).
      *
      * <p>{@code visited_at} 은 {@code DATE} 라 시간대 보정이 필요 없고, "방문한 날"이라는
