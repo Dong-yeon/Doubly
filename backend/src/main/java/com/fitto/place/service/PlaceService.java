@@ -1,5 +1,7 @@
 package com.fitto.place.service;
 
+import com.fitto.common.event.CoupleEvent;
+import com.fitto.common.event.CoupleEventPublisher;
 import com.fitto.common.plan.Feature;
 import com.fitto.common.plan.PlanGuard;
 import com.fitto.common.exception.BusinessException;
@@ -31,8 +33,12 @@ import com.fitto.relation.domain.RelationType;
 import com.fitto.relation.repository.RelationRepository;
 import com.fitto.user.domain.User;
 import com.fitto.user.repository.UserRepository;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -59,6 +65,8 @@ public class PlaceService {
     private final PlanGuard planGuard;
     private final FeedReactionRepository feedReactionRepository;
     private final KakaoLocalClient kakaoLocalClient;
+    private final TransactionTemplate tx;
+    private final CoupleEventPublisher coupleEventPublisher;
 
     public PlaceService(PlaceRepository placeRepository,
                         PlaceVisitRepository placeVisitRepository,
@@ -69,7 +77,9 @@ public class PlaceService {
                         NotificationService notificationService,
                         PlanGuard planGuard,
                         FeedReactionRepository feedReactionRepository,
-                        KakaoLocalClient kakaoLocalClient) {
+                        KakaoLocalClient kakaoLocalClient,
+                        PlatformTransactionManager transactionManager,
+                        CoupleEventPublisher coupleEventPublisher) {
         this.placeRepository = placeRepository;
         this.placeVisitRepository = placeVisitRepository;
         this.placeRatingRepository = placeRatingRepository;
@@ -80,6 +90,8 @@ public class PlaceService {
         this.planGuard = planGuard;
         this.feedReactionRepository = feedReactionRepository;
         this.kakaoLocalClient = kakaoLocalClient;
+        this.tx = new TransactionTemplate(transactionManager);
+        this.coupleEventPublisher = coupleEventPublisher;
     }
 
     /**
@@ -106,16 +118,54 @@ public class PlaceService {
      * 저장하는 경로에서, 이미 등록된 맛집을 다시 검색해 추가할 때 똑같은 장소가 중복
      * 생성되던 문제를 막는다. 재사용일 때는 플랜 한도({@link Feature#PLACE_PIN})도
      * 소모하지 않는다 — 실제로 늘어난 핀이 없으므로.
+     *
+     * <p>응답의 {@code created} 로 둘을 가른다 — 화면이 중복일 때 "추가했어요" 대신 "이미 럽슐랭에
+     * 있어요"를 띄운다.
+     *
+     * <p><b>동시 저장</b>: 두 사람이 같은 카카오 장소를 거의 동시에 담으면 둘 다 "없다"를 보고 넣으려
+     * 한다. 늦은 쪽은 {@code UNIQUE (couple_id, kakao_place_id)}(V117)에 막힌다. {@code ON CONFLICT}
+     * 는 쓸 수 없으므로(CLAUDE.md 4절) 그 위반을 잡아 <b>새 트랜잭션에서</b> 먼저 들어간 행을 돌려준다 —
+     * 같은 트랜잭션은 이미 롤백 표시가 붙어 다시 쓸 수 없다({@code JournalService.save} 와 같은 이유).
+     * 그래서 이 메서드는 스스로 트랜잭션을 열지 않는다(클래스 기본값 readOnly 도 끈다).
+     *
+     * <p><b>SUPPORTS 인 이유</b>: 바깥 트랜잭션이 있으면 거기에 합류한다. NOT_SUPPORTED 로 바깥을 끊으면 호출자가
+     * 아직 커밋하지 않은 데이터(방금 만든 커플 등)가 보이지 않는다 — 처음엔 그렇게 했다가 바깥 트랜잭션 안에서
+     * save 를 부르는 테스트 6건이 "커플 연결 후 사용할 수 있는 기능"으로 깨졌다. 운영의 호출자는 컨트롤러뿐이라
+     * 바깥 트랜잭션이 없고, 경합 재시도는 그 경우에 동작한다. 바깥 트랜잭션 안에서 경합이 나면 예전처럼 실패한다.
      */
-    @Transactional
+    @Transactional(propagation = Propagation.SUPPORTS, readOnly = false)
     public PlaceResponse save(Long userId, SavePlaceRequest request) {
+        try {
+            Saved saved = tx.execute(status -> saveOnce(userId, request));
+            if (Boolean.TRUE.equals(saved.response().created())) {
+                // 커밋이 끝난 뒤에 알린다 — 상대 앱이 럽슐랭 목록 캐시를 비우고 다음에 다시 받는다
+                coupleEventPublisher.publish(saved.coupleId(), CoupleEvent.PLACE);
+            }
+            return saved.response();
+        } catch (DataIntegrityViolationException raced) {
+            PlaceResponse winner = tx.execute(status -> {
+                Place existing = findExisting(activeCouple(userId).getId(), request.kakaoPlaceId(),
+                        request.name().trim(), request.address(), request.lat(), request.lng());
+                return existing == null ? null : withSummary(existing, userId).withCreated(false);
+            });
+            if (winner == null) {
+                throw raced;
+            }
+            return winner;
+        }
+    }
+
+    private record Saved(PlaceResponse response, Long coupleId) {
+    }
+
+    private Saved saveOnce(Long userId, SavePlaceRequest request) {
         Relation couple = activeCouple(userId);
         String name = request.name().trim();
 
         Place existing = findExisting(couple.getId(), request.kakaoPlaceId(), name,
                 request.address(), request.lat(), request.lng());
         if (existing != null) {
-            return withSummary(existing, userId);
+            return new Saved(withSummary(existing, userId).withCreated(false), couple.getId());
         }
 
         planGuard.requireCapacity(userId, Feature.PLACE_PIN,
@@ -127,11 +177,16 @@ public class PlaceService {
                 .lat(request.lat())
                 .lng(request.lng())
                 .category(request.category())
-                .kakaoPlaceId(request.kakaoPlaceId())
+                .kakaoPlaceId(blankToNull(request.kakaoPlaceId()))
                 .addedBy(userId)
                 .build();
-        placeRepository.save(place);
-        return toResponse(place, null, RatingPair.EMPTY, null);
+        // 즉시 INSERT — UNIQUE 위반이 커밋 시점이 아니라 여기서 터져야 위의 catch 가 받는다
+        placeRepository.saveAndFlush(place);
+        return new Saved(toResponse(place, null, RatingPair.EMPTY, null).withCreated(true), couple.getId());
+    }
+
+    private static String blankToNull(String s) {
+        return s == null || s.isBlank() ? null : s;
     }
 
     /**

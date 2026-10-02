@@ -9,6 +9,7 @@ import type {
   Place,
   PlaceSearchResponse,
   PlaceVisit,
+  ResolvePlaceLinkResponse,
 } from '../types';
 
 export interface SavePlacePayload {
@@ -42,6 +43,16 @@ export const placeApi = {
   // 채워진 채로 바로 생긴다. /places/{id} 와 겹치지 않게 라우트 이름은 고정 경로.
   search: (query: string, size = 8) =>
     unwrap(apiClient.get<ApiResponse<PlaceSearchResponse>>('/places/search', { params: { query, size } })),
+  /*
+   * 채팅 지도 링크 → 장소 후보. 칩을 눌렀을 때만 부른다(말풍선이 그려질 때마다 부르지 않는다).
+   * messageText 는 링크가 붙어 온 메시지 — 지도 앱 공유 문구의 이름·주소를, 서버가 페이지를 못 읽었을
+   * 때 대신 쓴다. 저장은 하지 않는다: 고른 후보를 save() 로 넘긴다.
+   */
+  resolveLink: (url: string, messageText?: string) =>
+    unwrap(
+      // 서버가 짧은 링크의 리다이렉트를 따라가고 카카오 검색까지 한다 — 기본 10초는 빠듯하다
+      apiClient.post<ApiResponse<ResolvePlaceLinkResponse>>('/places/resolve-link', { url, messageText }, { timeout: 20000 }),
+    ),
   // 홈 이름 옆 럽슐랭 왕관 신호 — 나·상대 각각(없으면 null). 미연결이면 빈 신호(404 아님)
   lovelichelinPulse: () => unwrap(apiClient.get<ApiResponse<LovelichelinPulse>>('/places/lovelichelin/pulse')),
   get: (id: number) => unwrap(apiClient.get<ApiResponse<Place>>(`/places/${id}`)),

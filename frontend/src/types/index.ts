@@ -1006,6 +1006,8 @@ export interface Place {
   coverImageUrl?: string | null;
   coverMemo?: string | null;
   createdAt: string;
+  /** 저장(POST /places) 응답에만 온다 — false 면 같은 커플에 이미 있던 장소를 돌려준 것(중복 방지) */
+  created?: boolean;
 }
 export interface PlaceVisit {
   id: number;
@@ -1370,6 +1372,22 @@ export interface PlaceSearchResponse {
   /** false = 카카오 REST API 키 미설정 — places 는 항상 빈 배열 */
   available: boolean;
   places: PlaceSearchResult[];
+}
+/** 채팅 지도 링크 해석 후보 — 카카오 검색 결과라 그대로 placeApi.save 에 넘긴다 */
+export interface PlaceLinkCandidate extends PlaceSearchResult {
+  /** 이미 이 커플 럽슐랭에 있으면 그 장소 id */
+  existingPlaceId?: number | null;
+}
+/** POST /places/resolve-link — 백엔드 ResolvePlaceLinkResponse 와 짝 */
+export interface ResolvePlaceLinkResponse {
+  provider?: 'KAKAO' | 'NAVER' | null;
+  /** 카카오 링크의 장소 id 와 같은 곳을 찾았다 → 후보는 그 하나 */
+  matched: boolean;
+  /** 페이지(또는 공유 문구)에서 읽은 가게 이름 — 후보가 없으면 장소 추가 화면의 검색어로 쓴다 */
+  ogTitle?: string | null;
+  /** matched 후보가 이미 럽슐랭에 있으면 그 장소 id */
+  existingPlaceId?: number | null;
+  candidates: PlaceLinkCandidate[];
 }
 
 // 식단 즐겨찾기 — 자주 먹는 음식 "세트" (원탭 추가). 여러 음식을 한 번에 등록해둘 수 있다.

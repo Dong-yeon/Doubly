@@ -448,7 +448,9 @@ export function DietRecordScreen({ navigation, route }: Props) {
         kakaoPlaceId: result.kakaoPlaceId ?? undefined,
       });
       haptics.success();
-      toast.success(`${saved.name}을(를) 럽슐랭에 추가했어요`);
+      // 이미 담겨 있던 곳이면 그 장소가 그대로 온다 — 그때 "추가했어요"는 사실이 아니다
+      if (saved.created === false) toast.info(`${saved.name}은(는) 이미 럽슐랭에 있어요`);
+      else toast.success(`${saved.name}을(를) 럽슐랭에 추가했어요`);
       usePlaceStore.getState().invalidate();
       setSelectedPlace(saved);
       setPlaceRating(0);

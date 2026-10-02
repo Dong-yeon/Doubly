@@ -346,6 +346,8 @@ export type PlaceScreensParamList = {
         initialCoords?: { lat: number; lng: number; address?: string | null };
         /** 다른 탭에서 열렸으면 그 탭 이름 — 닫을 때 거기로 돌아간다(useReturnToTab) */
         returnTo?: keyof MainTabParamList;
+        /** 채팅 링크를 해석하지 못했을 때 — 링크에서 읽은 이름으로 카카오 검색을 바로 돌린다 */
+        initialKeyword?: string;
       }
     | undefined;
   /*

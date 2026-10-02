@@ -19,12 +19,5 @@ export const PLACE_CATEGORIES = [
   '기타',
 ];
 
-// 카카오 카테고리 그룹 코드 → 앱 카테고리 자동 매핑
-// FD6 음식점 / CE7 카페 / AT4 관광명소 / CT1 문화시설 / AD5 숙박
-export const KAKAO_CATEGORY_AUTO: Record<string, string> = {
-  FD6: '음식점',
-  CE7: '카페·디저트',
-  AT4: '여행지',
-  CT1: '박물관·전시',
-  AD5: '숙소',
-};
+// 카카오 카테고리 → 앱 카테고리 매핑은 서버(KakaoLocalClient.mapCategory) 한 곳에만 있다 —
+// 검색 결과가 이미 이 목록의 값으로 매핑된 category 를 싣고 온다.

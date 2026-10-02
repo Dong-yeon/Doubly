@@ -32,4 +32,6 @@ public record CoupleEvent(String type) {
     public static final String COUPLE_EMOJI = "COUPLE_EMOJI";
     /** 커플 게임 판 변경(새 판·칸 입력·완성·포기) — 수신측은 GET /api/v1/games/sudoku/current 로 다시 조회한다 */
     public static final String GAME = "GAME";
+    /** 럽슐랭 장소가 새로 생겼다(채팅 링크 칩·장소 추가 등) — 수신측은 럽슐랭 목록 캐시를 비우고 GET /api/v1/places 로 다시 받는다 */
+    public static final String PLACE = "PLACE";
 }

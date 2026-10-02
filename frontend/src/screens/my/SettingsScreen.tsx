@@ -54,6 +54,8 @@ export function SettingsScreen({ navigation }: Props) {
   const setUser = useAuthStore((s) => s.setUser);
   const spellCheckEnabled = useSettingsStore((s) => s.spellCheckEnabled);
   const setSpellCheckEnabled = useSettingsStore((s) => s.setSpellCheckEnabled);
+  const chatPlaceLinkSuggest = useSettingsStore((s) => s.chatPlaceLinkSuggest);
+  const setChatPlaceLinkSuggest = useSettingsStore((s) => s.setChatPlaceLinkSuggest);
   /*
    * 개발용 — 사전 검사(2·3층)가 실기기에서 실제로 도는지 확인한다. 규칙 검증은
    * npm run verify:spellcheck 가 기기 없이 하지만, 사전 자체의 판정과 로딩 시간은
@@ -309,6 +311,13 @@ export function SettingsScreen({ navigation }: Props) {
             note="기기 안에서만 검사해요. 대화 내용은 어디로도 보내지 않아요."
             switchValue={spellCheckEnabled}
             onSwitch={setSpellCheckEnabled}
+          />
+          {/* 채팅 지도 링크 아래 칩 — 칩을 연달아 닫으면 채팅방에서 여기를 안내한다(ChatRoomScreen) */}
+          <SettingsRow
+            title="채팅 링크 제안"
+            note="지도 링크 아래에 '럽슐랭에 추가할까요?'를 보여 줘요."
+            switchValue={chatPlaceLinkSuggest}
+            onSwitch={setChatPlaceLinkSuggest}
           />
           {/* 개발용 — 위 onTestDictionary 참고. 스토어 빌드에는 안 보인다 */}
           {__DEV__ ? (

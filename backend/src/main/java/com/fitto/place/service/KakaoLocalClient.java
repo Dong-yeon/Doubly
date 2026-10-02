@@ -106,9 +106,10 @@ public class KakaoLocalClient {
     }
 
     /**
-     * 카카오 category_group_code → 앱 카테고리. 프론트 constants/placeCategories.ts 의
-     * KAKAO_CATEGORY_AUTO(지도 SDK 검색용)와 반드시 같은 값을 써야 한다 — 둘 다
-     * PLACE_CATEGORIES(7개, docs/LOVELICHELIN_IA_SIMPLIFICATION.md) 밖의 값을 내보내면
+     * 카카오 category_group_code → 앱 카테고리. <b>매핑은 여기 한 곳뿐이다</b> — 프론트에 있던
+     * 같은 표(KAKAO_CATEGORY_AUTO, 지도 SDK 검색용)는 장소 검색을 이 서버 경로로 모으면서 지웠다
+     * (docs/LOVELICHELIN_CHAT_LINK_2026-10-02.md). 값은 프론트 constants/placeCategories.ts 의
+     * PLACE_CATEGORIES(7개, docs/LOVELICHELIN_IA_SIMPLIFICATION.md) 안에 있어야 한다 — 밖의 값을 내보내면
      * 그 장소가 목록의 특정 카테고리 칩에서 안 보이고 "전체"에만 뜬다(2026-08-31에
      * 실제로 이 매핑이 없어서 생긴 문제 — 텍스트(category_name)로 대충 추측하던 예전
      * 방식은 카카오의 2차 분류 문구가 그대로 나와 7개 중 어디에도 안 맞을 수 있었다).

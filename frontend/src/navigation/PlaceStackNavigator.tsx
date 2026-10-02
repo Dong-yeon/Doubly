@@ -10,7 +10,7 @@ import { PlaceAddScreen } from '../screens/place/PlaceAddScreen';
 import { PlaceDetailScreen } from '../screens/place/PlaceDetailScreen';
 import { ContentAddScreen } from '../screens/content/ContentAddScreen';
 import { ContentDetailScreen } from '../screens/content/ContentDetailScreen';
-import { stackScreenOptions, modalOptions } from './headerOptions';
+import { stackScreenOptions, modalOptions, crossTabModalOptions } from './headerOptions';
 
 const Stack = createNativeStackNavigator<PlaceStackParamList>();
 
@@ -26,7 +26,8 @@ export function PlaceStackNavigator() {
         component={PlaceAddScreen}
         options={({ route }) => ({
           title: route.params?.place ? '장소 수정' : '장소 추가',
-          ...modalOptions,
+          // returnTo = 다른 탭(홈·채팅)에서 왔다 — iOS 네이티브 모달을 쓰지 않는다(crossTabModalOptions 주석)
+          ...(route.params?.returnTo ? crossTabModalOptions : modalOptions),
         })}
       />
       <Stack.Screen
