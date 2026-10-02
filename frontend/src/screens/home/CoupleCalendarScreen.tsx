@@ -14,7 +14,7 @@
  * 섹션에서 상세·전체 목록·만들기로 들어간다. (홈의 D-day 카드는 여행이 있는 기간에만
  * 뜨는 조건부 표면이라, 여행이 하나도 없을 때의 생성 진입로는 여기뿐이다.)
  */
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Modal,
@@ -38,6 +38,7 @@ import { EmptyState } from '../../components/EmptyState';
 import { IconButton } from '../../components/IconButton';
 import { calendarApi } from '../../api/calendar';
 import { tripApi } from '../../api/trip';
+import { connectSocket, subscribeCouple, unsubscribeCouple } from '../../api/chatSocket';
 import { tripStatusLabel } from '../trip/TripListScreen';
 import { toast } from '../../store/toastStore';
 import { getErrorMessage } from '../../utils/error';
@@ -226,16 +227,54 @@ export function CoupleCalendarScreen({ navigation }: Props) {
   // 성공했을 때만 목록을 갈아끼운다 — 실패(일시적 네트워크 오류 등)면 직전 목록을 그대로 둔다.
   // 커플 미연결(RELATION_NOT_FOUND)도 실패로 들어오지만, 그 경우 애초에 받아둔 목록이 없어
   // 빈 상태 그대로다(아래 tripsLoaded 로 '아직 모름'과 구분해 CTA 를 늦춘다).
+  const loadTrips = useCallback(() => {
+    tripApi
+      .list()
+      .then((list) => {
+        setTrips(list);
+        setTripsLoaded(true);
+      })
+      .catch(() => {});
+  }, []);
+  useFocusEffect(loadTrips);
+
+  /*
+   * 실시간 갱신 — 상대가 일정을 고치거나 여행·식단·장소를 바꾸면 이 화면을 연 채로도 바로 보인다.
+   * 예전엔 포커스 때만 다시 받아서, 같이 달력을 보며 약속을 잡는 중에 상대 화면은 낡은 채였다.
+   *
+   * <p><b>포커스 동안만 구독한다</b>(홈·캐치마인드와 같은 규칙). chatSocket 은 경로 하나에
+   * 핸들러 하나라, 이 화면이 같은 `/sub/couple/{id}` 를 계속 쥐고 있으면 아래 깔린 홈의
+   * 핸들러를 밀어내고, 나갈 때 해제하면 홈 구독까지 끊긴다. 포커스를 가진 화면은 하나뿐이라
+   * 포커스 단위로 주고받으면 충돌하지 않는다.
+   *
+   * <p>보이는 달은 ref 로 읽는다 — 의존성에 넣으면 달을 넘길 때마다 구독을 끊었다 다시 건다.
+   * 방문 기록("다녀왔어요")은 서버가 이벤트를 보내지 않아 여기서 잡히지 않는다(포커스 때 갱신).
+   */
+  const relationId = useRelationStore((s) => s.couple?.id);
+  const visibleMonthRef = useRef({ year, month });
+  useEffect(() => {
+    visibleMonthRef.current = { year, month };
+  }, [year, month]);
   useFocusEffect(
     useCallback(() => {
-      tripApi
-        .list()
-        .then((list) => {
-          setTrips(list);
-          setTripsLoaded(true);
+      if (!relationId) return undefined;
+      let active = true;
+      connectSocket()
+        .then(() => {
+          if (!active) return;
+          subscribeCouple(relationId, (type) => {
+            const { year: y, month: m } = visibleMonthRef.current;
+            if (type === 'CALENDAR') void load(y, m);
+            if (type === 'DIET' || type === 'PLACE') void loadDateMeals(y, m);
+            if (type === 'TRIP') loadTrips();
+          });
         })
-        .catch(() => {});
-    }, []),
+        .catch(() => undefined);
+      return () => {
+        active = false;
+        unsubscribeCouple(relationId);
+      };
+    }, [relationId, load, loadDateMeals, loadTrips]),
   );
 
   const moveMonth = (delta: number) => {
