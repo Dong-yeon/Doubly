@@ -1,6 +1,6 @@
 package com.fitto.relation.dto;
 
-import com.fitto.auth.dto.UserResponse;
+import com.fitto.auth.dto.PartnerUserResponse;
 import com.fitto.relation.domain.Relation;
 import com.fitto.relation.domain.RelationStatus;
 import com.fitto.relation.domain.RelationType;
@@ -17,7 +17,7 @@ public record RelationResponse(
         Long id,
         RelationType relationType,
         RelationStatus status,
-        UserResponse partner,
+        PartnerUserResponse partner,
         LocalDateTime connectedAt,
         String backgroundImageUrl,
         LocalDate anniversaryDate,
@@ -28,7 +28,7 @@ public record RelationResponse(
                 relation.getId(),
                 relation.getRelationType(),
                 relation.getStatus(),
-                partner != null ? UserResponse.from(partner) : null,
+                partner != null ? PartnerUserResponse.from(partner) : null,
                 relation.getConnectedAt(),
                 relation.getBackgroundImageUrl(),
                 relation.getAnniversaryDate(),
