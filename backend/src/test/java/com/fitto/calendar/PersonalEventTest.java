@@ -219,4 +219,104 @@ class PersonalEventTest {
                 eq("내 일정"), contains("건강검진"), anyString());
         verify(notificationService, never()).notify(eq(c[1]), any(), anyString(), contains("건강검진"), anyString());
     }
+
+    // ---- 수정·삭제 알림 ----
+
+    private UpdateEventRequest edit(String title, LocalDate date, EventVisibility visibility, String memo) {
+        return new UpdateEventRequest(title, date, null, EventType.DATE, false, visibility, memo);
+    }
+
+    /** 약속이 옮겨졌는데 상대가 모르면 그날 엇갈린다 — 바뀐 날짜까지 알린다. */
+    @Test
+    void 우리_일정을_옮기면_상대에게_새_날짜를_알린다() {
+        Long[] c = couple("pv-move-a@fitto.com", "pv-move-b@fitto.com");
+        LocalDate day = LocalDate.now().plusDays(5);
+        EventResponse e = calendarService.create(c[0], new CreateEventRequest(
+                "영화", day, null, EventType.DATE, false, null));
+        clearInvocations(notificationService);
+
+        LocalDate moved = day.plusDays(1);
+        calendarService.update(c[0], e.id(), edit("영화", moved, null, null));
+
+        verify(notificationService).notify(eq(c[1]), eq(NotificationCategory.ANNIVERSARY), anyString(),
+                eq("'영화' 일정이 " + moved.getMonthValue() + "월 " + moved.getDayOfMonth() + "일(으)로 옮겨졌어요"),
+                anyString());
+        verify(notificationService, never()).notify(eq(c[0]), any(), anyString(), anyString(), anyString());
+    }
+
+    /** 우리 일정은 둘 다 고친다 — 상대가 고치면 이번엔 내가 알림을 받는다. */
+    @Test
+    void 상대가_우리_일정을_고치면_내가_알림을_받는다() {
+        Long[] c = couple("pv-partner-edit-a@fitto.com", "pv-partner-edit-b@fitto.com");
+        LocalDate day = LocalDate.now().plusDays(5);
+        EventResponse e = calendarService.create(c[0], new CreateEventRequest(
+                "저녁", day, null, EventType.DATE, false, null));
+        clearInvocations(notificationService);
+
+        calendarService.update(c[1], e.id(), edit("저녁 (예약함)", day, null, null));
+
+        verify(notificationService).notify(eq(c[0]), eq(NotificationCategory.ANNIVERSARY), anyString(),
+                eq("'저녁 (예약함)' 일정이 수정됐어요"), anyString());
+    }
+
+    /** 화면의 저장 버튼은 아무것도 안 고쳐도 눌린다 — 그때마다 상대 폰이 울리면 안 된다. */
+    @Test
+    void 바뀐_게_없는_저장은_알리지_않는다() {
+        Long[] c = couple("pv-noop-a@fitto.com", "pv-noop-b@fitto.com");
+        LocalDate day = LocalDate.now().plusDays(5);
+        EventResponse e = calendarService.create(c[0], new CreateEventRequest(
+                "산책", day, null, EventType.DATE, false, null));
+        clearInvocations(notificationService);
+
+        calendarService.update(c[0], e.id(), edit("산책", day, EventVisibility.SHARED, null));
+
+        verify(notificationService, never()).notify(any(), any(), anyString(), anyString(), anyString());
+    }
+
+    /** '나만 보기'로 돌린 일정을 알리면 숨기려던 제목이 그 알림으로 새어 나간다. */
+    @Test
+    void 각자의_일정과_나만_보기로_돌린_일정은_수정을_알리지_않는다() {
+        Long[] c = couple("pv-hide-a@fitto.com", "pv-hide-b@fitto.com");
+        LocalDate day = LocalDate.now().plusDays(5);
+        EventResponse personal = calendarService.create(c[0], new CreateEventRequest(
+                "야근", day, null, EventType.ETC, false, EventVisibility.PERSONAL, null));
+        EventResponse shared = calendarService.create(c[0], new CreateEventRequest(
+                "깜짝 선물", day, null, EventType.DATE, false, null));
+        clearInvocations(notificationService);
+
+        calendarService.update(c[0], personal.id(), edit("야근 (늦게)", day, null, null));
+        calendarService.update(c[0], shared.id(), edit("깜짝 선물", day, EventVisibility.PRIVATE, null));
+
+        verify(notificationService, never()).notify(any(), any(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void 우리_일정을_지우면_상대에게_알린다() {
+        Long[] c = couple("pv-del-a@fitto.com", "pv-del-b@fitto.com");
+        EventResponse e = calendarService.create(c[0], new CreateEventRequest(
+                "전시회", LocalDate.now().plusDays(5), null, EventType.DATE, false, null));
+        clearInvocations(notificationService);
+
+        calendarService.delete(c[0], e.id());
+
+        verify(notificationService).notify(eq(c[1]), eq(NotificationCategory.ANNIVERSARY), anyString(),
+                eq("'전시회' 일정이 삭제됐어요"), anyString());
+    }
+
+    /** 지난 기록 정리는 소식이 아니다 — 끝난 일정을 지우거나 고쳐도 상대 폰은 조용하다. */
+    @Test
+    void 이미_끝난_일정을_지우거나_고쳐도_알리지_않는다() {
+        Long[] c = couple("pv-past-a@fitto.com", "pv-past-b@fitto.com");
+        LocalDate past = LocalDate.now().minusDays(30);
+        EventResponse edited = calendarService.create(c[0], new CreateEventRequest(
+                "지난 데이트", past, null, EventType.DATE, false, null));
+        EventResponse deleted = calendarService.create(c[0], new CreateEventRequest(
+                "지난 약속", past, null, EventType.DATE, false, null));
+        clearInvocations(notificationService);
+
+        calendarService.update(c[0], edited.id(), edit("지난 데이트", past, null, "좋았다"));
+        calendarService.delete(c[0], deleted.id());
+
+        verify(notificationService, never()).notify(any(), any(), anyString(), anyString(), anyString());
+    }
 }
