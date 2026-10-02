@@ -13,7 +13,7 @@
  * </ul>
  *
  * <p>구성(위에서부터): 함께한 지 · <b>D+n</b> · 기념일 날짜(누르면 기념일 설정) → 두 사람 좌우 열
- * [아바타(무드 배지·위에 럽슐랭 왕관) · 이름·스트릭 / 운동·식단 / 최근 기록]. 왼쪽이 나, 오른쪽이 상대.
+ * [아바타(무드 배지·왼쪽 위에 럽슐랭 왕관) · 이름·스트릭 / 운동·식단 / 최근 기록]. 왼쪽이 나, 오른쪽이 상대.
  *
  * <p><b>버튼은 형제 관계</b>다 — 열 전체를 버튼으로 감싸고 그 안에 운동/식단 버튼을 두면
  * 웹에서 &lt;button&gt; 중첩이 된다(react-native-web 은 accessibilityRole="button" 을 진짜
@@ -261,11 +261,18 @@ function PersonColumn({
       ) : null}
 
       {/*
-        럽슐랭 왕관 — 링 위쪽 가운데에 씌운다. 열의 마지막 자식이라 위에 그려지고, 절대 위치라 열 높이에 안 든다.
-        이름 옆에 두었던 첫 판은 상태(배지)로 읽혔다 — 사건으로 보이게 사람 위로 올렸다(AvatarCrown 주석).
+        럽슐랭 왕관 — 링 왼쪽 위(10시 반)에 비스듬히 씌운다. 열의 마지막 자식이라 위에 그려지고, 절대 위치라 열 높이에
+        안 든다. 이름 옆(첫 판)은 상태로, 위쪽 가운데(둘째 판)는 장식으로 읽혔다 — AvatarCrown 주석.
+        ringSize: 오늘 챙김 링이면 68, 예전 테두리 링이면 64 — 왕관이 그 원 위에 걸린다.
       */}
       {person.crown ? (
-        <AvatarCrown signal={person.crown} ownerName={person.name} mine={mine} onOpen={onPressCrown} />
+        <AvatarCrown
+          signal={person.crown}
+          ownerName={person.name}
+          mine={mine}
+          onOpen={onPressCrown}
+          ringSize={person.today ? AVATAR_RING : AVATAR_RING_PLAIN}
+        />
       ) : null}
     </View>
   );
@@ -307,6 +314,8 @@ function TodayButton({
 
 /** 오늘 챙김 링 바깥 지름 — 아바타 56 + 틈 2 + 굵은 조각 4, 양쪽 */
 const AVATAR_RING = 68;
+/** 오늘 챙김 링이 없을 때(구서버)의 소유자 색 테두리 링 바깥 지름 — 아바타 56 + 틈 2 + 테두리 2, 양쪽 */
+const AVATAR_RING_PLAIN = 64;
 
 const styles = themedStyles((colors) => ({
   wrap: { gap: spacing.md },

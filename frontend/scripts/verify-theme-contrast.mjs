@@ -102,10 +102,13 @@ const RULES = [
   { name: '나 글자 / 카드', pick: (p) => [p.surface, p.meText], min: 4.5 },
   { name: '상대 글자 / 카드', pick: (p) => [p.surface, p.partnerText], min: 4.5 },
   { name: '함께 글자 / 카드', pick: (p) => [p.surface, p.togetherText], min: 4.5 },
-  // 홈 아바타 위 럽슐랭 왕관(아이콘 — 비텍스트 3:1). 오늘 기록 = togetherText, 등극 = lovelichelinGold
-  { name: '왕관(오늘) / 배경', pick: (p) => [p.background, p.togetherText], min: 3.0 },
-  { name: '왕관(등극 금색) / 배경', pick: (p) => [p.background, p.lovelichelinGold], min: 3.0 },
-  { name: '왕관(등극 금색) / 카드', pick: (p) => [p.surface, p.lovelichelinGold], min: 3.0 },
+  /*
+   * 홈 아바타 링의 럽슐랭 왕관(아이콘 — 비텍스트 3:1). 두 상태 모두 lovelichelinGold(2026-10-02 셋째 판, togetherText 제거).
+   * 왕관은 반쯤 '나' 아바타 채움(meFill) 위에 걸리는데 금색끼리라 대비가 1.05~1.7 이다 — 그래서 경계는 왕관 뒤에 깐
+   * 배경색 외곽선이 만든다. 실제로 맞닿는 쌍은 "금색 / 외곽선(=background)" 이고, 그 대비를 본다.
+   */
+  { name: '왕관 금색 / 배경색 외곽선', pick: (p) => [p.background, p.lovelichelinGold], min: 3.0 },
+  { name: '왕관 금색 / 카드', pick: (p) => [p.surface, p.lovelichelinGold], min: 3.0 },
   // 채움 위 onColor (버튼·아바타·완료 칩·요일 칩)
   { name: 'onColor / primaryFill (주 버튼)', pick: (p) => [p.primaryFill, onColor(p.primaryFill)], min: 4.5 },
   { name: 'onColor / meFill', pick: (p) => [p.meFill, onColor(p.meFill)], min: 4.5 },
@@ -131,11 +134,10 @@ const RULES = [
 ];
 
 /*
- * 구분 규칙 — 대비가 아니라 "다른 색으로 읽히는가". 등극 왕관 금색이 PRO 왕관(primary·primaryDark)이나 '나' 색,
- * 오늘 왕관(togetherText)과 붙으면 무엇의 표시인지 갈리지 않는다(docs/HOME_RECORD_AND_CROWN_2026-10-02.md).
+ * 구분 규칙 — 대비가 아니라 "다른 색으로 읽히는가". 왕관 금색이 PRO 왕관(primary·primaryDark)·상대 색(partnerFill)이나
+ * '나' 색 글자(me)와 붙으면 무엇의 표시인지 갈리지 않는다(docs/HOME_RECORD_AND_CROWN_2026-10-02.md §4).
  * 지각 색차 CIE76 ΔE — 10 이상이면 나란히 놓았을 때 한눈에 다른 색이다. 15 로 여유를 둔다.
- * 실측 중 가장 가까운 쌍: 라이트 '오늘 왕관(togetherText) vs primary' 16.4 — 둘 다 초록 계열이라 아슬아슬하다.
- * 오늘 왕관 색은 사용자 지정(togetherText)이라 바꾸지 않았고, 자리(아바타 위 vs 스티커 상점)가 함께 가른다.
+ * (셋째 판에서 오늘 왕관의 togetherText 를 걷었다 — 라이트에서 primary 와 ΔE 16.4 로 같은 초록 계열이었다)
  */
 const lin = (v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
 const lab = (hex) => {
@@ -148,12 +150,10 @@ const lab = (hex) => {
 };
 const deltaE = (a, b) => { const p = lab(a), q = lab(b); return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]); };
 const DISTINCT = [
-  { name: '등극 금색 ≠ PRO(primary)', pick: (p) => [p.lovelichelinGold, p.primary], min: 15 },
-  { name: '등극 금색 ≠ PRO(primaryDark)', pick: (p) => [p.lovelichelinGold, p.primaryDark], min: 15 },
-  { name: '등극 금색 ≠ 나 색', pick: (p) => [p.lovelichelinGold, p.me], min: 15 },
-  { name: '등극 금색 ≠ 오늘 왕관(togetherText)', pick: (p) => [p.lovelichelinGold, p.togetherText], min: 15 },
-  { name: '오늘 왕관 ≠ PRO(primary)', pick: (p) => [p.togetherText, p.primary], min: 15 },
-  { name: '오늘 왕관 ≠ PRO(primaryDark)', pick: (p) => [p.togetherText, p.primaryDark], min: 15 },
+  { name: '왕관 금색 ≠ PRO(primary)', pick: (p) => [p.lovelichelinGold, p.primary], min: 15 },
+  { name: '왕관 금색 ≠ PRO(primaryDark)', pick: (p) => [p.lovelichelinGold, p.primaryDark], min: 15 },
+  { name: '왕관 금색 ≠ 나 색', pick: (p) => [p.lovelichelinGold, p.me], min: 15 },
+  { name: '왕관 금색 ≠ 상대 색(partnerFill)', pick: (p) => [p.lovelichelinGold, p.partnerFill], min: 15 },
 ];
 
 let failures = 0;
