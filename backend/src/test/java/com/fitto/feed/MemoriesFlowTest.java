@@ -63,6 +63,7 @@ class MemoriesFlowTest {
     @Autowired PlaceService placeService;
     @Autowired WorkoutService workoutService;
     @Autowired MealService mealService;
+    @Autowired com.fitto.calendar.service.CalendarService calendarService;
 
     @PersistenceContext EntityManager em;
 
@@ -236,7 +237,7 @@ class MemoriesFlowTest {
 
     @Test
     @Transactional
-    void 운동과_식단은_추억에_포함되지_않는다() {
+    void 사진_없는_운동과_식단은_추억에_포함되지_않는다() {
         long[] c = couple("mem-src-a@fitto.com", "mem-src-b@fitto.com");
         workoutService.save(c[0], new SaveWorkoutRequest(LocalDate.of(2025, 7, 30), null, 30, null,
                 List.of(new WorkoutSetRequest("러닝", "유산소", 1, null, null, 1))));
@@ -278,5 +279,86 @@ class MemoriesFlowTest {
 
         assertThatThrownBy(() -> memoriesService.memories(solo, TODAY))
                 .isInstanceOf(BusinessException.class);
+    }
+
+    // ---- 사진 있는 식단·운동 (2026-10-02) ----
+
+    /**
+     * 사진을 남긴 끼니·공유한 오운완은 추억에 실린다 — 등록일이 아니라 먹은 날·운동한 날 기준이고,
+     * 공유하지 않은 운동 사진은 사진첩과 같이 빠진다.
+     */
+    @Test
+    @Transactional
+    void 사진_있는_식단과_공유한_운동_사진은_기록일로_추억에_실린다() {
+        long[] c = couple("mem-photo-a@fitto.com", "mem-photo-b@fitto.com");
+        LocalDate lastYear = LocalDate.of(2025, 7, 30);
+        // 작년 오늘 먹은 끼니를 사흘 뒤에 올렸다 — 등록일이 아니라 먹은 날로 묶여야 한다
+        mealService.save(c[0], new SaveMealRequest(lastYear, MealType.LUNCH, "냉면",
+                "https://img.example.com/mem-meal.jpg", 600, null, null, null, null, null, null, null, false));
+        workoutService.save(c[1], new SaveWorkoutRequest(lastYear, null, 30, null, null,
+                "https://img.example.com/mem-ootd.jpg", true, List.of()));
+        workoutService.save(c[1], new SaveWorkoutRequest(lastYear, null, 30, null, null,
+                "https://img.example.com/mem-route.jpg", false, List.of()));
+        em.flush();
+        em.createNativeQuery("update meals set created_at = :t")
+                .setParameter("t", LocalDateTime.of(2025, 8, 2, 3, 0)).executeUpdate();
+        em.flush();
+        em.clear();
+
+        MemoriesResponse res = memoriesService.memories(c[0], TODAY);
+
+        assertThat(res.groups()).singleElement().satisfies(g -> {
+            assertThat(g.yearsAgo()).isEqualTo(1);
+            assertThat(g.items()).extracting(FeedItemResponse::imageUrl)
+                    .containsExactlyInAnyOrder("https://img.example.com/mem-meal.jpg",
+                            "https://img.example.com/mem-ootd.jpg");
+            assertThat(g.items()).allSatisfy(i ->
+                    assertThat(i.occurredAt()).isEqualTo(lastYear.atStartOfDay()));
+        });
+    }
+
+    // ---- 기념일 ----
+
+    @Test
+    @Transactional
+    void 사귄_날_기준_주년과_100일_단위가_오늘의_기념일로_온다() {
+        long[] c = couple("mem-anniv-a@fitto.com", "mem-anniv-b@fitto.com");
+        relationService.setAnniversary(c[0], LocalDate.of(2024, 7, 30));
+
+        assertThat(memoriesService.memories(c[0], TODAY).anniversaries())
+                .extracting(com.fitto.feed.dto.MemoryAnniversaryResponse::label)
+                .containsExactly("오늘은 우리 2주년");
+
+        // 사귄 날이 1일 — TODAY 가 300일째가 되는 날로 옮긴다
+        relationService.setAnniversary(c[0], TODAY.minusDays(299));
+        assertThat(memoriesService.memories(c[1], TODAY).anniversaries())
+                .extracting(com.fitto.feed.dto.MemoryAnniversaryResponse::label)
+                .containsExactly("오늘은 우리 300일");
+        // 기록이 하나도 없어도 기념일은 온다
+        assertThat(memoriesService.memories(c[1], TODAY).groups()).isEmpty();
+    }
+
+    @Test
+    @Transactional
+    void 캘린더의_반복_기념일과_몇_년_전_일정이_오고_상대의_나만_보기는_빠진다() {
+        long[] c = couple("mem-cal-a@fitto.com", "mem-cal-b@fitto.com");
+        calendarService.create(c[0], new com.fitto.calendar.dto.CreateEventRequest("처음 만난 날",
+                LocalDate.of(2023, 7, 30), null, com.fitto.calendar.domain.EventType.ANNIVERSARY, true, null));
+        calendarService.create(c[0], new com.fitto.calendar.dto.CreateEventRequest("제주 여행",
+                LocalDate.of(2025, 7, 30), null, com.fitto.calendar.domain.EventType.DATE, false, null));
+        calendarService.create(c[1], new com.fitto.calendar.dto.CreateEventRequest("비밀 계획",
+                LocalDate.of(2025, 7, 30), null, com.fitto.calendar.domain.EventType.ETC, false,
+                com.fitto.calendar.domain.EventVisibility.PRIVATE, null));
+        // 올해 일정·다른 날 일정은 기념일이 아니다
+        calendarService.create(c[0], new com.fitto.calendar.dto.CreateEventRequest("올해 일정",
+                TODAY, null, com.fitto.calendar.domain.EventType.DATE, false, null));
+
+        assertThat(memoriesService.memories(c[0], TODAY).anniversaries())
+                .extracting(com.fitto.feed.dto.MemoryAnniversaryResponse::label)
+                .containsExactlyInAnyOrder("처음 만난 날 3주년", "1년 전 오늘 · 제주 여행");
+        // 만든 사람에겐 자기 '나만 보기' 일정도 보인다
+        assertThat(memoriesService.memories(c[1], TODAY).anniversaries())
+                .extracting(com.fitto.feed.dto.MemoryAnniversaryResponse::label)
+                .contains("1년 전 오늘 · 비밀 계획");
     }
 }

@@ -20,7 +20,8 @@ import { feedApi } from '../../api/feed';
 import { toast } from '../../store/toastStore';
 import { getErrorMessage } from '../../utils/error';
 import { haptics } from '../../utils/haptics';
-import type { FeedItem, MemoryGroup } from '../../types';
+import type { FeedItem, MemoryAnniversary, MemoryGroup } from '../../types';
+import { MaterialCommunityIcons } from '../../components/Icon';
 import { colors, fontSize, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 
@@ -45,6 +46,8 @@ function toSections(groups: MemoryGroup[]): Section[] {
 export function MemoriesScreen({ route }: Props) {
   const on = route.params?.on;
   const [sections, setSections] = useState<Section[]>([]);
+  /* 오늘의 기념일 — 지난 기록과 별개로 머리에 한 줄씩 */
+  const [anniversaries, setAnniversaries] = useState<MemoryAnniversary[]>([]);
   const [loading, setLoading] = useState(false);
   // 첫 진입에 빈 상태를 먼저 그리지 않도록 — 로드가 끝난 적이 있는지
   const [loaded, setLoaded] = useState(false);
@@ -57,6 +60,7 @@ export function MemoriesScreen({ route }: Props) {
     try {
       const res = await feedApi.memories(on);
       setSections(toSections(res.groups));
+      setAnniversaries(res.anniversaries ?? []);
     } catch (e) {
       toast.error(getErrorMessage(e, '추억을 불러오지 못했어요.'));
       setLoadError(true);
@@ -93,6 +97,18 @@ export function MemoriesScreen({ route }: Props) {
         refreshing={loading}
         onRefresh={load}
         stickySectionHeadersEnabled={false}
+        ListHeaderComponent={
+          anniversaries.length > 0 ? (
+            <View style={styles.anniversaries}>
+              {anniversaries.map((a) => (
+                <View key={`${a.kind}:${a.eventId ?? a.label}`} style={styles.anniversaryRow}>
+                  <MaterialCommunityIcons name="calendar-heart" size={18} color={colors.together} />
+                  <Text style={styles.anniversaryText}>{a.label}</Text>
+                </View>
+              ))}
+            </View>
+          ) : null
+        }
         renderSectionHeader={({ section }) => (
           <View style={styles.header}>
             <Text style={styles.headerTitle}>{section.title}</Text>
@@ -110,7 +126,8 @@ export function MemoriesScreen({ route }: Props) {
           />
         )}
         ListEmptyComponent={
-          loaded && !loading ? (
+          // 기념일만 있는 날은 빈 안내를 띄우지 않는다 — 머리에 이미 오늘의 소식이 있다
+          loaded && !loading && (loadError || anniversaries.length === 0) ? (
             loadError ? (
               <EmptyState
                 error
@@ -147,4 +164,15 @@ const styles = themedStyles((colors) => ({
   headerTitle: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
   headerDate: { fontSize: fontSize.caption, color: colors.textMuted, fontWeight: '600' },
   tail: { height: spacing.lg },
+  anniversaries: { gap: spacing.xs, marginBottom: spacing.md },
+  anniversaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: 14,
+    backgroundColor: colors.togetherPastelBg,
+  },
+  anniversaryText: { flex: 1, fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
 }));

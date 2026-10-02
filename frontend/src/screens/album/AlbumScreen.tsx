@@ -28,7 +28,7 @@ import { EmptyState } from '../../components/EmptyState';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { ImageViewer, type ViewerAction, type ViewerImage } from '../../components/ImageViewer';
-import { MemoryPeek } from '../home/components/MemoryPeek';
+import { MemoryPeek, hasMemories } from '../home/components/MemoryPeek';
 import { CachedImage } from '../../components/CachedImage';
 import { AlbumCalendar, currentMonth, shiftMonth } from './AlbumCalendar';
 import { LockedCard } from '../../components/LockedCard';
@@ -420,7 +420,7 @@ export function AlbumScreen({ navigation }: Props) {
             upgradeMessage="작년 오늘의 추억은 PRO에서 볼 수 있어요."
           />
         </View>
-      ) : memories && memories.groups.length > 0 ? (
+      ) : hasMemories(memories) ? (
         <View style={styles.section}>
           <MemoryPeek memories={memories} onPress={() => navigation.navigate('Memories')} />
         </View>

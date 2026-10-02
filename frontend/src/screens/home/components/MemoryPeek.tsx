@@ -15,6 +15,11 @@ import type { Memories } from '../../../types';
 import { colors, fontSize, radius, spacing } from '../../../constants/theme';
 import { themedStyles } from '../../../theme/themedStyles';
 
+/** 추억 카드를 띄울 만한가 — 지난 기록이나 오늘의 기념일 중 하나라도 있으면(홈·우리 탭 공용 판정) */
+export function hasMemories(m: Memories | null | undefined): m is Memories {
+  return !!m && (m.groups.length > 0 || (m.anniversaries?.length ?? 0) > 0);
+}
+
 interface Props {
   /** 추억 응답 — groups 가 비어 있으면 이 컴포넌트를 아예 그리지 않는다 */
   memories: Memories;
@@ -25,30 +30,43 @@ export function MemoryPeek({ memories, onPress }: Props) {
   // 가장 오래된 해가 가장 회상 가치가 크다 (푸시 문구와 같은 규칙)
   const oldest = memories.groups[memories.groups.length - 1];
   const thumb = memories.groups.flatMap((g) => g.items).find((i) => i.imageUrl)?.imageUrl;
+  // 오늘의 기념일 — 지난 기록이 없어도 이것만으로 카드가 뜬다. 있으면 윗줄을 차지한다(날짜 자체가 더 큰 소식)
+  const anniversary = memories.anniversaries?.[0];
   // 빈 응답(잠김 포함)은 호출부가 거르는 게 약속이지만, 어겨도 화면 전체가 죽지는 않게 — 9/28 우리 탭 크래시
-  if (!oldest) return null;
+  if (!oldest && !anniversary) return null;
+
+  const meta = anniversary ? anniversary.label : oldest!.label;
+  const summary = oldest
+    ? anniversary
+      ? `${oldest.label} 기록도 ${memories.totalCount}개 있어요`
+      : `둘이 함께한 기록이 ${memories.totalCount}개 있어요`
+    : '오늘을 함께 기억해요';
 
   return (
     <Pressable
       style={({ pressed }) => [styles.card, pressed && styles.pressed]}
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${oldest.label} 추억 ${memories.totalCount}개 보기`}
+      accessibilityLabel={`${meta}, ${summary}. 추억 보기`}
     >
       {thumb ? (
         <Image source={{ uri: thumb }} style={styles.thumb} />
       ) : (
         <View style={styles.iconBox}>
-          <MaterialCommunityIcons name="flower-outline" size={19} color={colors.together} />
+          <MaterialCommunityIcons
+            name={anniversary ? 'calendar-heart' : 'flower-outline'}
+            size={19}
+            color={colors.together}
+          />
         </View>
       )}
 
       <View style={styles.body}>
         <Text style={styles.meta} numberOfLines={1}>
-          {oldest.label}
+          {meta}
         </Text>
         <Text style={styles.summary} numberOfLines={1}>
-          둘이 함께한 기록이 {memories.totalCount}개 있어요
+          {summary}
         </Text>
       </View>
 
