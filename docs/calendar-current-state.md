@@ -188,7 +188,7 @@ ALTER TABLE couple_events ADD COLUMN visibility VARCHAR(20) NOT NULL DEFAULT 'SH
 | 4 | 한도 | ~~`delete` 에서 `refund` 하지 않아 잘못 만들고 지워도 월 10건이 줄었다.~~ **2026-10-02 수정** — 이번 달(KST)에 만든 일정을 지우면 커플 공용 주머니로 1건 돌려준다. 지난달에 만든 일정은 돌려주지 않는다(월말에 채우고 월초에 지워 한도를 불리는 우회로). `created_at` 은 JVM 기본 TZ(운영 UTC) 벽시계라 KST 로 옮겨 판정 | `CalendarService.delete` · `createdThisQuotaMonth` |
 | 5 | 중복 알림 | `CalendarDdayNotifier` 는 발송 이력 없이 "하루 한 번 돈다"에 기댄다. 서버 인스턴스가 2개 이상이면 같은 알림이 중복 발송됨. **2026-10-02 확인: Doubly-Back 은 replica 1(sfo)이라 평소엔 중복 없음.** 같은 프로젝트의 Doubly-Spike(`claude/call-spike-android`, 8/25)는 `@Scheduled`·캘린더 코드가 없어 무관. 남는 틈은 09:00 KST 정각에 배포가 겹쳐 옛·새 인스턴스가 함께 떠 있는 몇 초뿐 | `CalendarDdayNotifier.java` |
 | 6 | 성능 | 알림 스케줄러의 `findByEventDate` / `findByRepeatYearlyTrue` 는 전 커플 대상인데 `event_date` 단독 인덱스가 없음. 월 조회도 `coalesce` 조건은 인덱스로 못 자름. 현재 규모에선 무해, PG 실행 계획 확인 필요 | `CalendarEventRepository` |
-| 7 | 미사용 API | `/events/upcoming` 을 프론트 어디서도 호출하지 않는다(홈에 다가오는 일정 카드 없음) | `api/calendar.ts:50` |
+| 7 | 미사용 API | ~~`/events/upcoming` 을 프론트 어디서도 호출하지 않는다~~ **2026-10-02 수정** — 홈 조건부 한 줄 슬롯의 `EventPeek` 가 쓴다(오늘 일정은 ② 순위, 7일 안 일정은 ⑤ 순위, KST 로 렌더 시점 재계산) | `screens/home/components/EventPeek.tsx` · `utils/homeEvent.ts` |
 | 8 | 알림 설정 | 캘린더 알림이 `ANNIVERSARY` 카테고리를 같이 써서 따로 끌 수 없다 | `CalendarService.create`, `CalendarDdayNotifier.notify` |
 | 9 | 부분 수정 규칙 | `PUT` 에서 `eventDate` 없이 `endDate` 만 보내면 조용히 무시된다(엔티티 주석에 명시된 규칙). 현재 프론트는 항상 둘을 함께 보내므로 실제 피해 없음 | `CalendarEvent.update` |
 | 10 | 관계 조회 | `requireCouple` 이 활성 커플 목록의 `get(0)` 을 쓴다. 활성 커플이 둘 이상인 데이터가 생기면 임의의 하나가 선택됨(정상 흐름에선 불가능한 상태로 보임 — 확인 필요) | `CalendarService`, `DateMealCalendarService` |
@@ -239,7 +239,8 @@ ALTER TABLE couple_events ADD COLUMN visibility VARCHAR(20) NOT NULL DEFAULT 'SH
 | "다녀왔어요" 방문이 캘린더에 표시 | 구현됨 | 2026-10-02 — 누구 기록인지 배지 |
 | 외부 캘린더 연동 | 없음 | |
 | 홈 위젯에 일정 | 없음 | 위젯은 D+ 만(Android) |
-| 다가오는 일정 API | 부분 구현 | 백엔드만 있고 프론트 미사용 |
+| 다가오는 일정 API | 구현됨 | 2026-10-02 홈 슬롯 카드(7일 안·오늘 일정 우선)에서 사용 |
+| 홈 화면 다가오는 일정 카드 | 구현됨 | 2026-10-02 `EventPeek` — 스크롤 없는 홈이라 새 줄이 아니라 기존 조건부 슬롯의 후보 |
 | 누구 일정 필터 | 없음 | |
 | 프론트 "오늘"의 KST 기준 | 구현됨 | 2026-10-02 `kstDateOf` 로 수정 |
 | 알림 중복 방지(다중 인스턴스) | 해당 없음 | replica 1 — 배포가 09:00 에 겹치는 몇 초만 예외 |
