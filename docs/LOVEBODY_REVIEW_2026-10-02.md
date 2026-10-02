@@ -227,6 +227,10 @@
   (`TrainerService.java:113`)에게 내려가는 객체가 본인용 `UserResponse` 그대로라 **이메일·생년월일·성별·키**가 응답에 실린다
   (`UserResponse.java:12-66`). 화면에는 안 그리지만 API 로는 보인다. 체중 추세를 붙이기 전에 상대용 축소 DTO 로 바꾸는
   게 순서다(패밀리 쪽은 이미 그렇게 했다 — `FamilyMemberResponse.java:11`). → §3 A-4.
+  - **A-4 해소(2026-10-02)**: 세 자리 모두 `PartnerUserResponse`(id·name·profileImageUrl·withdrawalScheduledDate)로
+    바꿨다. 앱이 상대 객체에서 읽는 필드는 이 넷뿐이었고(전수 grep + git 이력에서도 상대의 email·birthDate·gender·heightCm
+    를 읽은 적 없음), 이름이 같아 옛 빌드도 그대로 동작한다 — 서버 배포만으로 끝. 프론트 타입도 `PartnerUser` 로 좁혀
+    tsc 가 다시 읽는 것을 막는다. 회귀 방지는 직렬화 JSON 을 보는 `PartnerPrivacyTest`.
 - 체중 데이터: `body_metrics`(V14) `measured_date`·`weight_kg(5,2)`·`body_fat_pct`·`waist_cm`·`photo_url`·`memo`, 목표 체중 없음.
   BMR 은 체중이 있는 최신 행을 쓴다(`EnergyBalanceService.java:51`).
 - **입구가 없다**: 몸 변화 화면은 운동 홈 칩에서만 열리는데(`WorkoutScreen.tsx:303`) 운동 홈이 9/27 에 가려져 지금은
