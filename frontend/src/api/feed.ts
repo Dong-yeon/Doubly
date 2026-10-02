@@ -100,6 +100,13 @@ export const feedApi = {
   createPost: (payload: CreatePostPayload) =>
     unwrap(apiClient.post<ApiResponse<FeedItem>>('/feed/posts', payload)),
 
+  /** 포스트 하나 — 고치기 화면이 불러온다 */
+  getPost: (postId: number) => unwrap(apiClient.get<ApiResponse<FeedItem>>(`/feed/posts/${postId}`)),
+
+  /** 포스트 고치기 — 글·사진·기록일을 통째로 보낸다. imageUrls 가 빈 배열이면 사진을 전부 뺀 것이다 */
+  updatePost: (postId: number, payload: { content?: string; imageUrls: string[]; recordDate: string }) =>
+    unwrap(apiClient.put<ApiResponse<FeedItem>>(`/feed/posts/${postId}`, payload)),
+
   removePost: (postId: number) =>
     unwrap(apiClient.delete<ApiResponse<void>>(`/feed/posts/${postId}`)),
 
