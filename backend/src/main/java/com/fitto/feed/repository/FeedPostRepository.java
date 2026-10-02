@@ -150,4 +150,21 @@ public interface FeedPostRepository extends JpaRepository<FeedPost, Long> {
     List<FeedPost> findAlbumCandidates(@Param("coupleId") Long coupleId,
                                        @Param("tripId") Long tripId,
                                        Pageable pageable);
+
+    /**
+     * 사진첩 달력 — 한 달치 사진 포스트. 포스트엔 날짜 컬럼이 없어 기록일(KST 날짜)의 달 경계를
+     * 서버 시각 범위 {@code [from, to)} 로 바꿔 받는다(FeedService.photoMonth). 작성자 필터는
+     * 한 달치를 통째로 받으므로 서비스에서 거른다.
+     */
+    @Query("""
+            select p from FeedPost p
+            where p.coupleId = :coupleId
+              and p.imageUrl is not null
+              and p.createdAt >= :from and p.createdAt < :to
+            order by p.createdAt desc, p.id desc
+            """)
+    List<FeedPost> findPhotosInPeriod(@Param("coupleId") Long coupleId,
+                                      @Param("from") LocalDateTime from,
+                                      @Param("to") LocalDateTime to,
+                                      Pageable pageable);
 }

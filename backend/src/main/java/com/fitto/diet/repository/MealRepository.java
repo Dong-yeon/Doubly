@@ -177,4 +177,21 @@ public interface MealRepository extends JpaRepository<Meal, Long> {
     @Modifying
     @Query("delete from Meal m where m.userId = :userId")
     void deleteAllByUserId(@Param("userId") Long userId);
+
+    /**
+     * 사진첩 달력 — 기록일이 {@code [from, to]} 인 사진 끼니. {@link #findPhotosForFeed} 와 같은
+     * 복제본 제외 규칙·같은 정렬이다(달력 칸의 대표 사진이 그리드 맨 앞 사진과 같아야 한다).
+     */
+    @Query("""
+            select m from Meal m
+            where m.userId in :userIds
+              and m.photoUrl is not null
+              and (m.createdBy is null or m.createdBy = m.userId)
+              and m.mealDate between :from and :to
+            order by m.mealDate desc, m.createdAt desc, m.id desc
+            """)
+    List<Meal> findPhotosInDateRange(@Param("userIds") List<Long> userIds,
+                                     @Param("from") LocalDate from,
+                                     @Param("to") LocalDate to,
+                                     Pageable pageable);
 }

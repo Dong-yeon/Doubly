@@ -22,6 +22,7 @@ import com.fitto.feed.dto.CreatePostRequest;
 import com.fitto.feed.dto.FeedCursor;
 import com.fitto.feed.dto.FeedItemResponse;
 import com.fitto.feed.dto.FeedItemType;
+import com.fitto.feed.dto.FeedPhotoMonthResponse;
 import com.fitto.feed.dto.FeedPhotoResponse;
 import com.fitto.feed.dto.FeedPhotosResponse;
 import com.fitto.feed.dto.FeedTimelineResponse;
@@ -46,6 +47,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -75,6 +77,16 @@ public class FeedService {
      */
     private static final Set<FeedItemType> PHOTO_SOURCES = EnumSet.of(
             FeedItemType.POST, FeedItemType.MEAL, FeedItemType.WORKOUT, FeedItemType.PLACE_VISIT);
+
+    /** 사진첩 달력이 한 소스에서 한 달에 읽는 상한 — 넘치면 응답의 truncated 로 알린다. */
+    private static final int MONTH_CAP = 500;
+
+    /** 사진첩 정렬 — (기록일, 올린 시각, id) 내림차순. 소스별 쿼리의 정렬키와 같아야 병합이 맞다. */
+    private static final Comparator<PhotoCandidate> PHOTO_ORDER = Comparator
+            .comparing(PhotoCandidate::recordDate)
+            .thenComparing((PhotoCandidate c) -> c.item().occurredAt())
+            .thenComparing(c -> c.item().refId())
+            .reversed();
 
     /** 사진첩에서 기록일 컬럼으로 keyset 을 거는 소스 — 커서 위치에 날짜가 있어야 이어 읽는다. */
     private static final Set<FeedItemType> DATED_PHOTO_SOURCES = EnumSet.of(
@@ -300,57 +312,30 @@ public class FeedService {
             userIds = List.of(authorId);
         }
 
-        /*
-         * 타임라인 아이템으로 한 번 변환한 뒤 사진 항목으로 옮긴다. 캡션 문구와 커서 계산을
-         * 타임라인과 <b>같은 코드</b>로 처리하려는 것 — 따로 만들면 같은 기록이 화면마다
-         * 다르게 읽히고(제목 규칙이 두 벌), 커서 누락 버그도 두 곳에서 따로 나야 한다.
-         */
         List<PhotoCandidate> merged = new ArrayList<>();
         if (wanted.contains(FeedItemType.POST)) {
             LocalDateTime at = from.createdAtOf(FeedItemType.POST);
             Long id = from.idOf(FeedItemType.POST);
-            List<FeedPost> posts = authorId != null
+            merged.addAll(postCandidates(authorId != null
                     ? feedPostRepository.findPhotosByAuthor(couple.getId(), authorId, at, id, page)
-                    : feedPostRepository.findPhotos(couple.getId(), at, id, page);
-            Map<Long, List<String>> photosByPost = mapper.photosByPostId(posts);
-            for (FeedPost p : posts) {
-                List<String> urls = photosByPost.getOrDefault(p.getId(), List.of());
-                merged.add(new PhotoCandidate(mapper.toItem(p, names, userId, null, urls), recordDateOf(p),
-                        p.getImageUrl(), urls, p.getTripId(), null, null));
-            }
+                    : feedPostRepository.findPhotos(couple.getId(), at, id, page), names, userId));
         }
         if (wanted.contains(FeedItemType.MEAL)) {
-            List<Meal> meals = mealRepository.findPhotosForFeed(userIds, from.recordDateOf(FeedItemType.MEAL),
-                    from.createdAtOf(FeedItemType.MEAL), from.idOf(FeedItemType.MEAL), page);
-            Map<Long, VisitWithPlace> placeByMealId = placeLinksOf(meals);
-            for (Meal m : meals) {
-                VisitWithPlace place = placeByMealId.get(m.getId());
-                String placeName = place != null ? place.getPlaceName() : null;
-                merged.add(new PhotoCandidate(
-                        mapper.toItem(m, names, userId, placeName), m.getMealDate(),
-                        m.getPhotoUrl(), List.of(), null,
-                        place != null ? place.getVisit().getPlaceId() : null, placeName));
-            }
+            merged.addAll(mealCandidates(mealRepository.findPhotosForFeed(userIds, from.recordDateOf(FeedItemType.MEAL),
+                    from.createdAtOf(FeedItemType.MEAL), from.idOf(FeedItemType.MEAL), page), names, userId));
         }
         if (wanted.contains(FeedItemType.WORKOUT)) {
-            for (Workout w : workoutRepository.findPhotosForFeed(userIds, from.recordDateOf(FeedItemType.WORKOUT),
-                    from.createdAtOf(FeedItemType.WORKOUT), from.idOf(FeedItemType.WORKOUT), page)) {
-                merged.add(new PhotoCandidate(mapper.toItem(w, names, userId), w.getWorkoutDate(),
-                        w.getImageUrl(), List.of(), null, null, null));
-            }
+            merged.addAll(workoutCandidates(workoutRepository.findPhotosForFeed(userIds,
+                    from.recordDateOf(FeedItemType.WORKOUT), from.createdAtOf(FeedItemType.WORKOUT),
+                    from.idOf(FeedItemType.WORKOUT), page), names, userId));
         }
         if (wanted.contains(FeedItemType.PLACE_VISIT)) {
             LocalDate date = from.recordDateOf(FeedItemType.PLACE_VISIT);
             LocalDateTime at = from.createdAtOf(FeedItemType.PLACE_VISIT);
             Long id = from.idOf(FeedItemType.PLACE_VISIT);
-            List<VisitWithPlace> visits = authorId != null
+            merged.addAll(visitCandidates(authorId != null
                     ? placeVisitRepository.findPhotosForFeedByVisitor(couple.getId(), authorId, date, at, id, page)
-                    : placeVisitRepository.findPhotosForFeed(couple.getId(), date, at, id, page);
-            for (VisitWithPlace v : visits) {
-                merged.add(new PhotoCandidate(mapper.toItem(v, names, userId), v.getVisit().getVisitedAt(),
-                        v.getVisit().getImageUrl(), List.of(), null,
-                        v.getVisit().getPlaceId(), v.getPlaceName()));
-            }
+                    : placeVisitRepository.findPhotosForFeed(couple.getId(), date, at, id, page), names, userId));
         }
 
         /*
@@ -358,34 +343,154 @@ public class FeedService {
          * 포스트 쿼리는 created_at 만으로 정렬하지만, 포스트의 기록일은 created_at 의 KST 날짜라
          * 둘의 순서가 같다(날짜는 시각을 따라 단조 증가).
          */
-        merged.sort(Comparator.comparing(PhotoCandidate::recordDate)
-                .thenComparing(c -> c.item().occurredAt())
-                .thenComparing(c -> c.item().refId())
-                .reversed());
+        merged.sort(PHOTO_ORDER);
 
         boolean hasMore = merged.size() > size;
         List<PhotoCandidate> picked = hasMore ? merged.subList(0, size) : merged;
 
         String nextCursor = picked.isEmpty() ? null : photoCursorOf(from, picked).encode();
 
-        List<FeedPhotoResponse> items = picked.stream().map(c -> {
-            FeedItemResponse item = c.item();
-            return new FeedPhotoResponse(
-                    item.type(),
-                    item.refId(),
-                    c.imageUrl(),
-                    c.imageUrls(),
-                    captionOf(item),
-                    item.mine() ? "나" : item.userName(),
-                    item.mine(),
-                    c.tripId(),
-                    c.placeId(),
-                    c.placeName(),
-                    c.recordDate(),
-                    item.occurredAt());
-        }).toList();
+        List<FeedPhotoResponse> items = picked.stream().map(FeedService::toPhotoResponse).toList();
 
         return new FeedPhotosResponse(items, nextCursor, hasMore);
+    }
+
+    /**
+     * 사진첩 달력 — 한 달(기록일 기준)의 사진 전부. 페이징 없이 한 번에 준다: 달력은 그 달의
+     * 칸을 한꺼번에 그려야 하고, 한 달치는 작다. 정렬·필터·중복 제거·캡션은 {@link #photos} 와 같다.
+     *
+     * <p>소스마다 {@value #MONTH_CAP} 건까지만 읽는다 — 넘치면 {@code truncated}. 한 달에 한 소스로
+     * 수백 장을 올리는 커플은 드물지만, 상한 없는 조회를 운영에 두지 않는다.
+     *
+     * @param month {@code YYYY-MM}. 비우면 이번 달(KST).
+     */
+    public FeedPhotoMonthResponse photoMonth(Long userId, String month, List<FeedItemType> sources, String who) {
+        YearMonth ym;
+        try {
+            ym = month == null || month.isBlank() ? YearMonth.from(KstClock.today()) : YearMonth.parse(month);
+        } catch (java.time.format.DateTimeParseException e) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "달은 YYYY-MM 형식이어야 합니다: " + month);
+        }
+        Relation couple = activeCouple(userId);
+        Set<FeedItemType> wanted = (sources == null || sources.isEmpty()) ? PHOTO_SOURCES : EnumSet.copyOf(sources);
+
+        Long partnerId = couple.partnerOf(userId);
+        List<Long> userIds = partnerId != null ? List.of(userId, partnerId) : List.of(userId);
+        Map<Long, String> names = mapper.userNames(userIds);
+        Long authorId = authorOf(who, userId, partnerId);
+        if (authorId != null) {
+            if (authorId == -1L) {
+                return new FeedPhotoMonthResponse(ym.toString(), List.of(), false);
+            }
+            userIds = List.of(authorId);
+        }
+        Long only = authorId;
+
+        LocalDate first = ym.atDay(1);
+        LocalDate last = ym.atEndOfMonth();
+        Pageable cap = PageRequest.of(0, MONTH_CAP + 1);
+        List<PhotoCandidate> merged = new ArrayList<>();
+        boolean truncated = false;
+
+        if (wanted.contains(FeedItemType.POST)) {
+            // 포스트의 기록일은 created_at 의 KST 날짜 — 달 경계를 서버 시각(JVM 기본 시간대)으로 옮긴다
+            List<FeedPost> posts = feedPostRepository.findPhotosInPeriod(couple.getId(),
+                    serverTimeOf(first), serverTimeOf(ym.plusMonths(1).atDay(1)), cap);
+            truncated |= posts.size() > MONTH_CAP;
+            merged.addAll(postCandidates(posts.stream().limit(MONTH_CAP)
+                    .filter(p -> only == null || only.equals(p.getAuthorId())).toList(), names, userId));
+        }
+        if (wanted.contains(FeedItemType.MEAL)) {
+            List<Meal> meals = mealRepository.findPhotosInDateRange(userIds, first, last, cap);
+            truncated |= meals.size() > MONTH_CAP;
+            merged.addAll(mealCandidates(meals.stream().limit(MONTH_CAP).toList(), names, userId));
+        }
+        if (wanted.contains(FeedItemType.WORKOUT)) {
+            List<Workout> workouts = workoutRepository.findPhotosInDateRange(userIds, first, last, cap);
+            truncated |= workouts.size() > MONTH_CAP;
+            merged.addAll(workoutCandidates(workouts.stream().limit(MONTH_CAP).toList(), names, userId));
+        }
+        if (wanted.contains(FeedItemType.PLACE_VISIT)) {
+            List<VisitWithPlace> visits = placeVisitRepository.findPhotosInDateRange(couple.getId(), first, last, cap);
+            truncated |= visits.size() > MONTH_CAP;
+            merged.addAll(visitCandidates(visits.stream().limit(MONTH_CAP)
+                    .filter(v -> only == null || only.equals(v.getVisit().getVisitedBy())).toList(), names, userId));
+        }
+
+        merged.sort(PHOTO_ORDER);
+        return new FeedPhotoMonthResponse(ym.toString(),
+                merged.stream().map(FeedService::toPhotoResponse).toList(), truncated);
+    }
+
+    /** KST 날짜의 0시를 서버 시각(@CreatedDate 가 쓰는 JVM 기본 시간대의 벽시계)으로 — {@link #recordDateOf(FeedPost)} 의 역 */
+    private static LocalDateTime serverTimeOf(LocalDate kstDate) {
+        return kstDate.atStartOfDay(KstClock.ZONE).withZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime();
+    }
+
+    /*
+     * 소스별 후보 만들기 — 페이지 조회({@link #photos})와 달 조회({@link #photoMonth})가 같이 쓴다.
+     * 타임라인 아이템으로 한 번 변환한 뒤 사진 항목으로 옮긴다. 캡션 문구를 타임라인과 <b>같은 코드</b>로
+     * 만들려는 것 — 따로 만들면 같은 기록이 화면마다 다르게 읽힌다(제목 규칙이 두 벌).
+     */
+
+    private List<PhotoCandidate> postCandidates(List<FeedPost> posts, Map<Long, String> names, Long viewerId) {
+        Map<Long, List<String>> photosByPost = mapper.photosByPostId(posts);
+        List<PhotoCandidate> out = new ArrayList<>();
+        for (FeedPost p : posts) {
+            List<String> urls = photosByPost.getOrDefault(p.getId(), List.of());
+            out.add(new PhotoCandidate(mapper.toItem(p, names, viewerId, null, urls), recordDateOf(p),
+                    p.getImageUrl(), urls, p.getTripId(), null, null));
+        }
+        return out;
+    }
+
+    private List<PhotoCandidate> mealCandidates(List<Meal> meals, Map<Long, String> names, Long viewerId) {
+        Map<Long, VisitWithPlace> placeByMealId = placeLinksOf(meals);
+        List<PhotoCandidate> out = new ArrayList<>();
+        for (Meal m : meals) {
+            VisitWithPlace place = placeByMealId.get(m.getId());
+            String placeName = place != null ? place.getPlaceName() : null;
+            out.add(new PhotoCandidate(mapper.toItem(m, names, viewerId, placeName), m.getMealDate(),
+                    m.getPhotoUrl(), List.of(), null,
+                    place != null ? place.getVisit().getPlaceId() : null, placeName));
+        }
+        return out;
+    }
+
+    private List<PhotoCandidate> workoutCandidates(List<Workout> workouts, Map<Long, String> names, Long viewerId) {
+        List<PhotoCandidate> out = new ArrayList<>();
+        for (Workout w : workouts) {
+            out.add(new PhotoCandidate(mapper.toItem(w, names, viewerId), w.getWorkoutDate(),
+                    w.getImageUrl(), List.of(), null, null, null));
+        }
+        return out;
+    }
+
+    private List<PhotoCandidate> visitCandidates(List<VisitWithPlace> visits, Map<Long, String> names, Long viewerId) {
+        List<PhotoCandidate> out = new ArrayList<>();
+        for (VisitWithPlace v : visits) {
+            out.add(new PhotoCandidate(mapper.toItem(v, names, viewerId), v.getVisit().getVisitedAt(),
+                    v.getVisit().getImageUrl(), List.of(), null,
+                    v.getVisit().getPlaceId(), v.getPlaceName()));
+        }
+        return out;
+    }
+
+    private static FeedPhotoResponse toPhotoResponse(PhotoCandidate c) {
+        FeedItemResponse item = c.item();
+        return new FeedPhotoResponse(
+                item.type(),
+                item.refId(),
+                c.imageUrl(),
+                c.imageUrls(),
+                captionOf(item),
+                item.mine() ? "나" : item.userName(),
+                item.mine(),
+                c.tripId(),
+                c.placeId(),
+                c.placeName(),
+                c.recordDate(),
+                item.occurredAt());
     }
 
     /**

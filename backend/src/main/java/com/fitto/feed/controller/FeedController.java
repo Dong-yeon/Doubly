@@ -5,6 +5,7 @@ import com.fitto.common.security.AuthUser;
 import com.fitto.feed.dto.CreatePostRequest;
 import com.fitto.feed.dto.FeedItemResponse;
 import com.fitto.feed.dto.FeedItemType;
+import com.fitto.feed.dto.FeedPhotoMonthResponse;
 import com.fitto.feed.dto.FeedPhotosResponse;
 import com.fitto.feed.dto.FeedTimelineResponse;
 import com.fitto.feed.dto.MemoriesResponse;
@@ -73,6 +74,19 @@ public class FeedController {
             @RequestParam(required = false) List<FeedItemType> sources,
             @RequestParam(required = false) String who) {
         return ApiResponse.success(feedService.photos(user.id(), cursor, limit, sources, who));
+    }
+
+    /**
+     * 사진첩 달력 — 한 달(기록일 기준)의 사진 전부. {@code month} 는 {@code YYYY-MM}, 생략하면 이번 달(KST).
+     * {@code sources}·{@code who} 는 위 목록과 같은 필터다.
+     */
+    @GetMapping("/photos/month")
+    public ApiResponse<FeedPhotoMonthResponse> photoMonth(
+            @AuthenticationPrincipal AuthUser user,
+            @RequestParam(required = false) String month,
+            @RequestParam(required = false) List<FeedItemType> sources,
+            @RequestParam(required = false) String who) {
+        return ApiResponse.success(feedService.photoMonth(user.id(), month, sources, who));
     }
 
     /**

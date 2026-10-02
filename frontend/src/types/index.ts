@@ -263,6 +263,15 @@ export interface FeedPhotosPage {
   hasMore: boolean;
 }
 
+/** 사진첩 달력 한 달 — 그 달(기록일 기준) 사진 전부, 목록과 같은 순서. 페이징 없음 */
+export interface FeedPhotoMonth {
+  /** 'YYYY-MM' */
+  month: string;
+  items: FeedPhoto[];
+  /** 서버 상한에 걸려 일부가 빠졌다 */
+  truncated: boolean;
+}
+
 // 커플 캘린더 — 기념일 외 일정(생일·데이트 약속) + D-day 푸시
 export type CalendarEventType = 'ANNIVERSARY' | 'BIRTHDAY' | 'DATE' | 'ETC';
 

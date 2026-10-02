@@ -192,4 +192,22 @@ public interface PlaceVisitRepository extends JpaRepository<PlaceVisit, Long> {
     List<LovelichelinActivityRow> findActivityBetween(@Param("coupleId") Long coupleId,
                                                                                 @Param("from") LocalDateTime from,
                                                                                 @Param("to") LocalDateTime to);
+
+    /**
+     * 사진첩 달력 — 방문일이 {@code [from, to]} 인 사진 방문(식단에서 파생된 방문 제외 —
+     * {@link #findPhotosForFeed} 와 같은 중복 제거 규칙).
+     */
+    @Query("""
+            select v as visit, p.name as placeName
+            from PlaceVisit v join Place p on p.id = v.placeId
+            where p.coupleId = :coupleId
+              and v.imageUrl is not null
+              and v.mealId is null
+              and v.visitedAt between :from and :to
+            order by v.visitedAt desc, v.createdAt desc, v.id desc
+            """)
+    List<VisitWithPlace> findPhotosInDateRange(@Param("coupleId") Long coupleId,
+                                               @Param("from") java.time.LocalDate from,
+                                               @Param("to") java.time.LocalDate to,
+                                               org.springframework.data.domain.Pageable pageable);
 }

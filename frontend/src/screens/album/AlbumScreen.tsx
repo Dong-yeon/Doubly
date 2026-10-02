@@ -30,6 +30,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { ImageViewer, type ViewerAction, type ViewerImage } from '../../components/ImageViewer';
 import { MemoryPeek } from '../home/components/MemoryPeek';
+import { AlbumCalendar, currentMonth, shiftMonth } from './AlbumCalendar';
 import { LockedCard } from '../../components/LockedCard';
 import { feedApi } from '../../api/feed';
 import { tripApi } from '../../api/trip';
@@ -169,6 +170,20 @@ export function AlbumScreen({ navigation }: Props) {
   /* 뷰어는 인덱스로 연다 — 좌우 스와이프로 옆 사진까지 이어 보려면 목록 위치가 필요하다 */
   const [viewingIndex, setViewingIndex] = useState<number | null>(null);
   /*
+   * 보기 — 그리드(시간순 무한 스크롤) / 달력(한 달 단위). 필터 칩은 둘이 공유한다.
+   * 달력은 한 달치를 통째로 받는다(GET /feed/photos/month) — 그리드의 페이지와는 따로 둔다.
+   */
+  const [view, setView] = useState<'grid' | 'calendar'>('grid');
+  const [month, setMonth] = useState(currentMonth);
+  const [monthData, setMonthData] = useState<{ items: FeedPhoto[]; truncated: boolean }>({
+    items: [],
+    truncated: false,
+  });
+  const [monthLoading, setMonthLoading] = useState(false);
+  const [monthError, setMonthError] = useState(false);
+  /* 달 요청 세대 — 달을 빠르게 넘길 때 늦게 온 이전 달 응답이 이번 달을 덮지 않게(그리드의 generationRef 와 같은 이유) */
+  const monthGenerationRef = useRef(0);
+  /*
    * 요청 세대 — 첫 페이지 요청마다 올린다. 응답이 왔을 때 세대가 바뀌어 있으면 버린다.
    *
    * <p>예전엔 "진행 중이면 새 요청을 무시"하는 잠금 하나였다. 스크롤 끝에서 다음 페이지를
@@ -205,10 +220,12 @@ export function AlbumScreen({ navigation }: Props) {
    * 사진을 전부 편다. 계속 스와이프하면 다음 기록의 사진으로 자연스럽게 넘어간다.
    * firstIndexByKey 는 "이 칸을 탭하면 뷰어의 몇 번째부터 열지"를 알려준다.
    */
+  // 뷰어는 지금 보이는 모양의 사진을 넘긴다 — 달력이면 그 달, 그리드면 받아 둔 목록
+  const viewerSource = view === 'calendar' ? monthData.items : photos;
   const { viewerImages, firstIndexByKey } = useMemo(() => {
     const images: ViewerImage[] = [];
     const firstIndexByKey = new Map<string, number>();
-    for (const p of photos) {
+    for (const p of viewerSource) {
       const uris = p.imageUrls && p.imageUrls.length > 0 ? p.imageUrls : [p.imageUrl];
       firstIndexByKey.set(keyOf(p), images.length);
       // 럽슐랭 장소가 걸린 사진(맛집 방문·장소 붙은 끼니)은 그 장소 상세로 이어 간다
@@ -231,7 +248,7 @@ export function AlbumScreen({ navigation }: Props) {
       });
     }
     return { viewerImages: images, firstIndexByKey };
-  }, [photos, openPlace]);
+  }, [viewerSource, openPlace]);
 
   const gridRows = useMemo(() => toGridRows(photos, columns), [photos, columns]);
 
@@ -298,17 +315,49 @@ export function AlbumScreen({ navigation }: Props) {
     tripApi.list().then(setTrips).catch(() => setTrips([]));
   }, []);
 
+  /** 달력 한 달 — 칸은 그대로 두고 제목 옆 스피너만 돈다(달을 넘길 때 격자가 깜빡이지 않게) */
+  const loadMonth = useCallback(
+    async (monthKey: string, filterKey: string, whoKey: Who) => {
+      const generation = ++monthGenerationRef.current;
+      setMonthLoading(true);
+      setMonthError(false);
+      try {
+        const res = await feedApi.photoMonth(monthKey, sourcesOf(filterKey), whoKey === 'all' ? undefined : whoKey);
+        if (generation !== monthGenerationRef.current) return;
+        setMonthData({ items: res.items, truncated: res.truncated });
+      } catch {
+        if (generation !== monthGenerationRef.current) return;
+        setMonthData({ items: [], truncated: false });
+        setMonthError(true);
+      } finally {
+        if (generation === monthGenerationRef.current) setMonthLoading(false);
+      }
+    },
+    [sourcesOf],
+  );
+
   /*
-   * 포커스·필터 변경 모두 여기로 온다(필터가 deps 라 포커스 중에 바뀌면 다시 돈다).
-   * 이미 같은 조합으로 받아 둔 목록이 있으면 머리만 갈고, 아니면 처음부터 받는다.
+   * 포커스·필터·보기·달 변경 모두 여기로 온다(deps 라 포커스 중에 바뀌면 다시 돈다).
+   * 그리드: 이미 같은 조합으로 받아 둔 목록이 있으면 머리만 갈고, 아니면 처음부터 받는다.
+   * 달력: 보이는 달을 다시 받는다(한 달치라 가볍다).
    */
   useFocusEffect(
     useCallback(() => {
+      if (view === 'calendar') {
+        void loadMonth(month, filter, who);
+        return;
+      }
       const mode = loadedKeyRef.current === `${filter}|${who}` ? 'head' : 'replace';
       void load(filter, who, mode);
       loadHeader();
-    }, [load, filter, who, loadHeader]),
+    }, [view, month, load, loadMonth, filter, who, loadHeader]),
   );
+
+  /** 달력 칸 → 그날 가장 최근 사진부터 뷰어. 넘기면 그 달의 다른 날로 이어진다 */
+  const onPressDay = (date: string) => {
+    const first = monthData.items.find((p) => p.recordDate === date);
+    if (first) setViewingIndex(firstIndexByKey.get(keyOf(first)) ?? 0);
+  };
 
   const onPickFilter = (key: string) => {
     if (key === filter) return;
@@ -409,6 +458,20 @@ export function AlbumScreen({ navigation }: Props) {
       <View style={styles.topBar}>
         <Text style={styles.topTitle}>우리</Text>
         <View style={styles.topButtons}>
+          {/* 보기 전환 — 아이콘은 "누르면 갈 모양"이다(지금 모양이 아니라) */}
+          <Pressable
+            onPress={() => setView((v) => (v === 'grid' ? 'calendar' : 'grid'))}
+            hitSlop={8}
+            style={({ pressed }) => [styles.topBtn, pressed && styles.topBtnPressed]}
+            accessibilityRole="button"
+            accessibilityLabel={view === 'grid' ? '달력으로 보기' : '사진 모아보기로 보기'}
+          >
+            <MaterialCommunityIcons
+              name={view === 'grid' ? 'calendar-month-outline' : 'grid'}
+              size={24}
+              color={colors.textPrimary}
+            />
+          </Pressable>
           <Pressable
             onPress={() => navigation.navigate('FeedTimeline')}
             hitSlop={8}
@@ -452,95 +515,120 @@ export function AlbumScreen({ navigation }: Props) {
         <Chip label={partnerName} selected={who === 'partner'} onPress={() => onPickWho('partner')} />
       </ScrollView>
 
-      <FlatList
-        data={gridRows}
-        keyExtractor={(row) => row.key}
-        ListHeaderComponent={listHeader}
-        contentContainerStyle={styles.list}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => void load(filter, who, 'replace')}
-            tintColor={colors.primary}
+      {view === 'calendar' ? (
+        <ScrollView
+          contentContainerStyle={styles.list}
+          refreshControl={
+            <RefreshControl
+              refreshing={false}
+              onRefresh={() => void loadMonth(month, filter, who)}
+              tintColor={colors.primary}
+            />
+          }
+        >
+          <AlbumCalendar
+            month={month}
+            items={monthData.items}
+            loading={monthLoading}
+            error={monthError}
+            truncated={monthData.truncated}
+            filtered={filtered}
+            onMove={(delta) => setMonth((m) => shiftMonth(m, delta))}
+            onPressDay={onPressDay}
+            onRetry={() => void loadMonth(month, filter, who)}
           />
-        }
-        // 실패한 뒤에는 자동으로 다시 부르지 않는다 — 꼬리의 재시도 버튼으로만
-        onEndReached={loadMoreError ? undefined : loadMore}
-        onEndReachedThreshold={0.4}
-        renderItem={({ item: row }) =>
-          row.kind === 'month' ? (
-            <Text style={styles.monthHeader}>{row.label}</Text>
-          ) : (
-            <View style={styles.row}>
-              {row.items.map((item) => (
+        </ScrollView>
+      ) : (
+        <FlatList
+          data={gridRows}
+          keyExtractor={(row) => row.key}
+          ListHeaderComponent={listHeader}
+          contentContainerStyle={styles.list}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => void load(filter, who, 'replace')}
+              tintColor={colors.primary}
+            />
+          }
+          // 실패한 뒤에는 자동으로 다시 부르지 않는다 — 꼬리의 재시도 버튼으로만
+          onEndReached={loadMoreError ? undefined : loadMore}
+          onEndReachedThreshold={0.4}
+          renderItem={({ item: row }) =>
+            row.kind === 'month' ? (
+              <Text style={styles.monthHeader}>{row.label}</Text>
+            ) : (
+              <View style={styles.row}>
+                {row.items.map((item) => (
+                  <Pressable
+                    key={keyOf(item)}
+                    onPress={() => setViewingIndex(firstIndexByKey.get(keyOf(item)) ?? 0)}
+                    accessibilityRole="imagebutton"
+                    accessibilityLabel={
+                      item.imageUrls && item.imageUrls.length > 1
+                        ? `${item.mine ? '내' : item.authorName} 사진 ${item.imageUrls.length}장 크게 보기`
+                        : `${item.mine ? '내' : item.authorName} 사진 크게 보기`
+                    }
+                  >
+                    {/* 그리드는 썸네일 — 원본을 3열에 그대로 깔면 한 화면에 수 MB 를 받는다 */}
+                    <Image
+                      source={{ uri: thumbnailUrl(item.imageUrl, Math.round(CELL)) }}
+                      style={[styles.cell, { width: CELL, height: CELL }]}
+                    />
+                    {/* 여러 장 표시 — Instagram류 앱과 같은 자리(우상단)의 스택 아이콘 */}
+                    {item.imageUrls && item.imageUrls.length > 1 ? (
+                      <View style={styles.multiBadge}>
+                        <MaterialCommunityIcons name="image-multiple-outline" size={14} color={colors.white} />
+                      </View>
+                    ) : null}
+                  </Pressable>
+                ))}
+              </View>
+            )
+          }
+          ListEmptyComponent={
+            refreshing ? null : loadError ? (
+              <EmptyState
+                icon="cloud-off-outline"
+                title="사진을 불러오지 못했어요"
+                description="네트워크 상태를 확인하고 다시 시도해주세요."
+                error
+                onRetry={() => void load(filter, who, 'replace')}
+              />
+            ) : filtered ? (
+              <EmptyState
+                title="조건에 맞는 사진이 없어요"
+                description="다른 필터를 골라 보세요."
+              />
+            ) : (
+              <EmptyState
+                illustration="duo"
+                title="아직 사진이 없어요"
+                description={'일상·식단·운동·맛집에 사진을 남기면\n여기에 모두 모여요.'}
+              />
+            )
+          }
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={styles.footer}>
+                <ActivityIndicator color={colors.primary} />
+              </View>
+            ) : loadMoreError ? (
+              <View style={styles.footer}>
+                <Text style={styles.footerError}>사진을 더 불러오지 못했어요.</Text>
                 <Pressable
-                  key={keyOf(item)}
-                  onPress={() => setViewingIndex(firstIndexByKey.get(keyOf(item)) ?? 0)}
-                  accessibilityRole="imagebutton"
-                  accessibilityLabel={
-                    item.imageUrls && item.imageUrls.length > 1
-                      ? `${item.mine ? '내' : item.authorName} 사진 ${item.imageUrls.length}장 크게 보기`
-                      : `${item.mine ? '내' : item.authorName} 사진 크게 보기`
-                  }
+                  onPress={() => void loadMore()}
+                  style={({ pressed }) => [styles.retryBtn, pressed && styles.topBtnPressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel="사진 더 불러오기 다시 시도"
                 >
-                  {/* 그리드는 썸네일 — 원본을 3열에 그대로 깔면 한 화면에 수 MB 를 받는다 */}
-                  <Image
-                    source={{ uri: thumbnailUrl(item.imageUrl, Math.round(CELL)) }}
-                    style={[styles.cell, { width: CELL, height: CELL }]}
-                  />
-                  {/* 여러 장 표시 — Instagram류 앱과 같은 자리(우상단)의 스택 아이콘 */}
-                  {item.imageUrls && item.imageUrls.length > 1 ? (
-                    <View style={styles.multiBadge}>
-                      <MaterialCommunityIcons name="image-multiple-outline" size={14} color={colors.white} />
-                    </View>
-                  ) : null}
+                  <Text style={styles.retryText}>다시 시도</Text>
                 </Pressable>
-              ))}
-            </View>
-          )
-        }
-        ListEmptyComponent={
-          refreshing ? null : loadError ? (
-            <EmptyState
-              icon="cloud-off-outline"
-              title="사진을 불러오지 못했어요"
-              description="네트워크 상태를 확인하고 다시 시도해주세요."
-              error
-              onRetry={() => void load(filter, who, 'replace')}
-            />
-          ) : filtered ? (
-            <EmptyState
-              title="조건에 맞는 사진이 없어요"
-              description="다른 필터를 골라 보세요."
-            />
-          ) : (
-            <EmptyState
-              illustration="duo"
-              title="아직 사진이 없어요"
-              description={'일상·식단·운동·맛집에 사진을 남기면\n여기에 모두 모여요.'}
-            />
-          )
-        }
-        ListFooterComponent={
-          loadingMore ? (
-            <View style={styles.footer}>
-              <ActivityIndicator color={colors.primary} />
-            </View>
-          ) : loadMoreError ? (
-            <View style={styles.footer}>
-              <Text style={styles.footerError}>사진을 더 불러오지 못했어요.</Text>
-              <Pressable
-                onPress={() => void loadMore()}
-                style={({ pressed }) => [styles.retryBtn, pressed && styles.topBtnPressed]}
-                accessibilityRole="button"
-                accessibilityLabel="사진 더 불러오기 다시 시도"
-              >
-                <Text style={styles.retryText}>다시 시도</Text>
-              </Pressable>
-            </View>
-          ) : null
-        }
-      />
+              </View>
+            ) : null
+          }
+        />
+      )}
 
       {/* 큰 보기 — 좌우 스와이프로 앨범을 이어서 넘긴다 */}
       <ImageViewer

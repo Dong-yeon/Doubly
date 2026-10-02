@@ -382,4 +382,55 @@ class FeedPhotosTest {
 
         assertThat(feedService.photos(c[0], legacy, 20, null).items()).hasSize(2);
     }
+
+    /**
+     * 달력 — 기록일 기준으로 그 달의 사진만 준다. 이번 달에 올렸어도 지난달에 먹은 끼니는
+     * 지난달 칸에 있어야 하고, 이번 달 조회엔 없어야 한다. 순서는 목록과 같은 (기록일, 올린 시각).
+     */
+    @Test
+    void 달력은_기록일_기준으로_그_달의_사진만_준다() {
+        long[] c = couple("ph-month-a@fitto.com", "ph-month-b@fitto.com");
+        LocalDate today = LocalDate.now();
+        java.time.YearMonth thisMonth = java.time.YearMonth.from(today);
+        LocalDate lastMonthDay = thisMonth.minusMonths(1).atDay(10);
+        feedService.createPost(c[0], new CreatePostRequest("오늘", "https://img.example.com/mo-p.jpg"));
+        workoutWithPhoto(c[1], "https://img.example.com/mo-w.jpg", true, today);
+        mealWithPhoto(c[0], "https://img.example.com/mo-m-last.jpg", false, lastMonthDay);
+        Long placeId = placeService.save(c[0], new SavePlaceRequest("가게", null, null, null, null)).id();
+        placeService.recordVisit(c[1], placeId,
+                new RecordVisitRequest(lastMonthDay, 5, null, "https://img.example.com/mo-v-last.jpg", null));
+
+        com.fitto.feed.dto.FeedPhotoMonthResponse now = feedService.photoMonth(c[0], thisMonth.toString(), null, null);
+        com.fitto.feed.dto.FeedPhotoMonthResponse last =
+                feedService.photoMonth(c[0], thisMonth.minusMonths(1).toString(), null, null);
+
+        assertThat(now.month()).isEqualTo(thisMonth.toString());
+        assertThat(now.items()).extracting(FeedPhotoResponse::imageUrl)
+                .containsExactlyInAnyOrder("https://img.example.com/mo-p.jpg", "https://img.example.com/mo-w.jpg");
+        assertThat(last.items()).extracting(FeedPhotoResponse::imageUrl)
+                .containsExactlyInAnyOrder("https://img.example.com/mo-m-last.jpg", "https://img.example.com/mo-v-last.jpg");
+        assertThat(last.items()).allSatisfy(p -> assertThat(p.recordDate()).isEqualTo(lastMonthDay));
+        assertThat(now.items()).isSortedAccordingTo(
+                java.util.Comparator.comparing(FeedPhotoResponse::recordDate)
+                        .thenComparing(FeedPhotoResponse::createdAt)
+                        .reversed());
+        assertThat(now.truncated()).isFalse();
+
+        // 필터는 목록과 같다 — 작성자·소스
+        assertThat(feedService.photoMonth(c[0], thisMonth.minusMonths(1).toString(), null, "partner").items())
+                .extracting(FeedPhotoResponse::imageUrl).containsExactly("https://img.example.com/mo-v-last.jpg");
+        assertThat(feedService.photoMonth(c[0], thisMonth.toString(), List.of(FeedItemType.WORKOUT), null).items())
+                .extracting(FeedPhotoResponse::type).containsExactly(FeedItemType.WORKOUT);
+        // 생략하면 이번 달
+        assertThat(feedService.photoMonth(c[0], null, null, null).month()).isEqualTo(thisMonth.toString());
+    }
+
+    @Test
+    void 달_형식이_틀리면_거절한다() {
+        long[] c = couple("ph-month-bad-a@fitto.com", "ph-month-bad-b@fitto.com");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> feedService.photoMonth(c[0], "2026-13", null, null))
+                .isInstanceOf(com.fitto.common.exception.BusinessException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> feedService.photoMonth(c[0], "2026/10", null, null))
+                .isInstanceOf(com.fitto.common.exception.BusinessException.class);
+    }
 }
