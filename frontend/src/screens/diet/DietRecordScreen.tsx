@@ -220,6 +220,8 @@ export function DietRecordScreen({ navigation, route }: Props) {
   const [kakaoUnavailable, setKakaoUnavailable] = useState(false);
   const [addingPlaceName, setAddingPlaceName] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // 버튼 비활성은 saving 이 렌더된 뒤에야 걸린다 — 그 사이 두 번째 탭이 같은 끼니를 한 번 더 저장했다
+  const savingRef = useRef(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzingText, setAnalyzingText] = useState(false);
   /** DB 이름 검색 — 어느 항목에 대한 결과인지(key)와 후보 목록. 한 번에 한 항목만 연다. */
@@ -1042,6 +1044,8 @@ export function DietRecordScreen({ navigation, route }: Props) {
       Alert.alert('알림', '음식이나 사진을 하나 이상 입력해주세요.');
       return;
     }
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     try {
       let photoUrl: string | undefined;
@@ -1186,6 +1190,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
     } catch (e) {
       Alert.alert('오류', getErrorMessage(e));
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
