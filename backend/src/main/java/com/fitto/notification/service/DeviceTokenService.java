@@ -17,15 +17,37 @@ public class DeviceTokenService {
         this.deviceTokenRepository = deviceTokenRepository;
     }
 
-    /** 토큰 등록 — 동일 토큰이 있으면 현재 사용자로 재할당. */
+    /**
+     * 사용자당 남겨 둘 토큰 수. 한 사람이 동시에 쓰는 기기(폰·태블릿·예비 폰)는 이보다 적다.
+     * 넘는 것은 재설치·dev 빌드가 남긴 죽은 토큰이라 오래된 것부터 지운다.
+     */
+    static final int MAX_TOKENS_PER_USER = 5;
+
+    /**
+     * 토큰 등록 — 같은 토큰이 있으면 그 행을 현재 사용자로 갱신하고, 없으면 새로 넣는다.
+     *
+     * <p>예전엔 지우고 다시 넣었다. 그러면 같은 토큰의 등록이 동시에 들어올 때(권한 허용 직후와 로그인 직후가
+     * 겹칠 때) 둘 다 지운 뒤 둘 다 넣다가 unique 위반이 났다. 갱신이면 한쪽만 넣는다.
+     *
+     * <p>등록 뒤 이 사용자의 토큰이 {@link #MAX_TOKENS_PER_USER} 개를 넘으면 오래 등록되지 않은 것부터 지운다
+     * (docs/first-experience-audit.md #28 — 운영에서 한 사람에게 52개가 쌓였다). 기간으로 지우지 않는 건
+     * 오래 접속하지 않은 사람에게 가는 재방문 알림까지 끊기 때문이다.
+     */
     @Transactional
     public void register(Long userId, String token, String platform) {
-        deviceTokenRepository.deleteByToken(token);
-        deviceTokenRepository.save(DeviceToken.builder()
-                .userId(userId)
-                .token(token)
-                .platform(platform)
-                .build());
+        deviceTokenRepository.findByToken(token).ifPresentOrElse(
+                existing -> existing.reRegister(userId, platform),
+                () -> deviceTokenRepository.save(DeviceToken.builder()
+                        .userId(userId)
+                        .token(token)
+                        .platform(platform)
+                        .build()));
+        deviceTokenRepository.flush();
+
+        List<DeviceToken> mine = deviceTokenRepository.findByUserIdOrderByLastRegisteredAtDescIdDesc(userId);
+        if (mine.size() > MAX_TOKENS_PER_USER) {
+            deviceTokenRepository.deleteAll(mine.subList(MAX_TOKENS_PER_USER, mine.size()));
+        }
     }
 
     /**

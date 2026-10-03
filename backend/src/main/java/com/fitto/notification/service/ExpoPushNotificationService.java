@@ -101,17 +101,26 @@ public class ExpoPushNotificationService implements NotificationService {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
-                    executor.execute(() -> send(recipientUserId, category, title, body, link));
+                    executor.execute(() -> send(recipientUserId, category, title, body, link, 0));
                 }
             });
         } else {
-            executor.execute(() -> send(recipientUserId, category, title, body, link));
+            executor.execute(() -> send(recipientUserId, category, title, body, link, 0));
         }
     }
 
+    /**
+     * Expo 발송 재시도 간격 — 1차 실패 뒤 5초, 2차 실패 뒤 30초. 그 뒤엔 포기한다.
+     *
+     * <p>예전엔 한 번 실패하면 WARN 한 줄로 사라졌다(docs/first-experience-audit.md #27). 재시도는
+     * <b>Expo 가 받지 않은 게 확실한 실패</b>(5xx·연결 실패)에만 한다. 응답 대기 시간 초과는 Expo 가 이미
+     * 받았을 수 있어서 다시 보내면 같은 알림이 두 번 간다 — 놓치는 것보다 그게 더 나쁘다.
+     */
+    private static final long[] RETRY_DELAYS_MS = {5_000, 30_000};
+
     /** 발송 스레드에서 실행 — 어떤 실패도 앱 흐름에 전파하지 않는다. */
     private void send(Long recipientUserId, NotificationCategory category,
-                      String title, String body, String link) {
+                      String title, String body, String link, int attempt) {
         try {
             /*
              * 수신 거부 확인은 발송 직전 이 지점에서 한 번만 한다 (SET-01).
@@ -139,7 +148,35 @@ public class ExpoPushNotificationService implements NotificationService {
                     .body(ExpoPushResponse.class);
             handleTickets(recipientUserId, tokens, response);
         } catch (Exception e) {
+            if (attempt < RETRY_DELAYS_MS.length && isSafeToRetry(e)) {
+                log.warn("Expo push 발송 실패 recipient={} — {}ms 뒤 재시도({}회째): {}",
+                        recipientUserId, RETRY_DELAYS_MS[attempt], attempt + 1, e.getMessage());
+                scheduleRetry(recipientUserId, category, title, body, link, attempt + 1);
+                return;
+            }
             log.warn("Expo push 발송 실패 recipient={}: {}", recipientUserId, e.getMessage());
+        }
+    }
+
+    /** Expo 가 메시지를 받지 않은 게 확실한 실패인지 — 서버 오류 응답이거나 연결 자체가 안 됐을 때 */
+    static boolean isSafeToRetry(Exception e) {
+        if (e instanceof org.springframework.web.client.HttpServerErrorException) return true;
+        if (e instanceof org.springframework.web.client.ResourceAccessException) {
+            Throwable cause = e.getCause();
+            return cause instanceof java.net.ConnectException || cause instanceof java.net.UnknownHostException;
+        }
+        return false;
+    }
+
+    /** 대기는 영수증 스케줄러에 맡긴다 — 발송 스레드(2개)를 sleep 으로 붙잡으면 다른 알림이 밀린다 */
+    private void scheduleRetry(Long recipientUserId, NotificationCategory category,
+                               String title, String body, String link, int attempt) {
+        try {
+            receiptScheduler.schedule(
+                    () -> executor.execute(() -> send(recipientUserId, category, title, body, link, attempt)),
+                    RETRY_DELAYS_MS[attempt - 1], TimeUnit.MILLISECONDS);
+        } catch (Exception e) {
+            log.warn("Expo push 재시도 예약 실패 recipient={}: {}", recipientUserId, e.getMessage());
         }
     }
 
