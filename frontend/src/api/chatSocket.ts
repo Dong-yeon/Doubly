@@ -342,13 +342,30 @@ export async function publishEnsuringConnection(
   relationId: number,
   payload: OutgoingMessage,
 ): Promise<boolean> {
-  if (client?.connected) return publishMessage(relationId, payload);
+  /*
+   * 멱등키가 없으면 여기서 붙인다 — 전송 경로가 여럿(텍스트·스티커·사진·음성·터치·식단 카드…)이라
+   * 호출부마다 챙기게 두면 빠진다. 예전엔 TEXT 만 실어서 나머지는 서버 중복 방어(V89)를 못 받았다
+   * (docs/chat-current-state.md §3-3). 낙관적 말풍선과 짝지어야 하는 호출부는 직접 만들어 넣는다.
+   */
+  const keyed = payload.clientMessageId ? payload : { ...payload, clientMessageId: newClientMessageId() };
+  if (client?.connected) return publishMessage(relationId, keyed);
   try {
     await withTimeout(connectSocket(), CONNECT_WAIT_MS);
   } catch {
     return false;
   }
-  return publishMessage(relationId, payload);
+  return publishMessage(relationId, keyed);
+}
+
+/**
+ * 전송 멱등키 — 서버가 {@code (relation_id, client_message_id)} 로 중복을 거른다(V89).
+ *
+ * <p>UUID 라이브러리를 쓰지 않는 이유: 이 값이 유일해야 하는 범위는 <b>한 관계의 몇 초</b>
+ * 뿐이고, 그 안에서 시각(ms)과 난수 8자가 겹칠 일은 없다. 의존성을 하나 더 들이는 대신
+ * 필요한 만큼만 만든다. 컬럼 길이는 64 — 이 형식은 20자 안쪽이다.
+ */
+export function newClientMessageId(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 /**

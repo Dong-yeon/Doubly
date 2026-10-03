@@ -96,6 +96,34 @@ class ChatFlowTest {
         assertThat(chatService.getMessages(a, relationId, null)).hasSize(2);
     }
 
+    /**
+     * 멱등키는 TEXT 만의 것이 아니다 — 앱이 2026-10-03 부터 스티커·사진·터치 등 모든 전송에 키를 싣는다
+     * (docs/chat-current-state.md §3-3). 서버가 타입과 무관하게 같은 키를 한 건으로 다루는지 본다.
+     * 키 판정이 플랜·팩 판정보다 먼저라 두 번째 프레임은 검증도 다시 타지 않는다.
+     */
+    @Test
+    void 스티커와_사진도_같은_멱등키면_한_건만_저장한다() {
+        Long a = register("cidem4-a@fitto.com");
+        Long b = register("cidem4-b@fitto.com");
+        Long relationId = connectCouple(a, b);
+
+        ChatMessageResponse sticker = chatService.send(a, relationId, new SendMessageRequest(
+                com.fitto.chat.domain.MessageType.STICKER, "🥰", null, null, null, null, "stk-1"));
+        ChatMessageResponse stickerAgain = chatService.send(a, relationId, new SendMessageRequest(
+                com.fitto.chat.domain.MessageType.STICKER, "🥰", null, null, null, null, "stk-1"));
+        ChatMessageResponse photo = chatService.send(a, relationId, new SendMessageRequest(
+                com.fitto.chat.domain.MessageType.IMAGE, null, "https://res.cloudinary.com/x/image/upload/a.jpg",
+                null, null, null, "img-1"));
+        ChatMessageResponse photoAgain = chatService.send(a, relationId, new SendMessageRequest(
+                com.fitto.chat.domain.MessageType.IMAGE, null, "https://res.cloudinary.com/x/image/upload/a.jpg",
+                null, null, null, "img-1"));
+
+        assertThat(stickerAgain.id()).isEqualTo(sticker.id());
+        assertThat(photoAgain.id()).isEqualTo(photo.id());
+        assertThat(photoAgain.clientMessageId()).isEqualTo("img-1");
+        assertThat(chatService.getMessages(a, relationId, null)).hasSize(2);
+    }
+
     /** 키가 없으면(구버전 앱·시스템 카드) 예전대로 매번 저장된다 — NULL 은 unique 에 걸리지 않는다. */
     @Test
     void 멱등키가_없으면_예전처럼_매번_저장한다() {
