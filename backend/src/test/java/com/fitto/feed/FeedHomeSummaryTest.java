@@ -21,8 +21,10 @@ import com.fitto.relation.service.RelationService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
+import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
@@ -53,6 +55,8 @@ class FeedHomeSummaryTest {
     PlaceService placeService;
     @Autowired
     ContentService contentService;
+    @Autowired
+    JdbcTemplate jdbc;
 
     private Long register(String email) {
         return authService.register(
@@ -129,7 +133,10 @@ class FeedHomeSummaryTest {
     @Test
     void 장소_방문이_한도를_채운_날에도_제외하면_식단이_실린다() {
         long[] c = couple("fhs5a@fitto.com", "fhs5b@fitto.com");
-        meal(c[0], "점심 김밥");
+        Long mealId = meal(c[0], "점심 김밥");
+        // 식단을 한 시간 앞으로 민다 — 같은 밀리초에 찍히면 병합 정렬이 (시각, refId) 로 가르는데 refId 는
+        // 테이블마다 따로 매긴 id 라 식단이 방문들 사이로 끼어든다(전체 suite 에서 11+1 로 깨진 적 있다)
+        jdbc.update("update meals set created_at = ? where id = ?", LocalDateTime.now().minusHours(1), mealId);
         Long placeId = placeService.save(c[0], new SavePlaceRequest("단골집", "어딘가", null, null, "음식점")).id();
         // 식단보다 나중에 방문 12건 — 홈이 받는 12건이 전부 방문으로 찬다
         for (int i = 0; i < 12; i++) {
