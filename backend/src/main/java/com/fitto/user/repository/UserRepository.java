@@ -2,7 +2,9 @@ package com.fitto.user.repository;
 
 import com.fitto.user.domain.SocialType;
 import com.fitto.user.domain.User;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -15,6 +17,14 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByEmail(String email);
 
     boolean existsByEmail(String email);
+
+    /**
+     * 사용자 행 잠금 — 커플 연결을 사람 단위로 직렬화한다(RelationService.connectCouple).
+     * 관계 행만 잠그면 A·B 가 <b>서로의</b> 코드를 동시에 넣는 경우(서로 다른 행)를 못 막는다.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from User u where u.id = :id")
+    Optional<User> findByIdForUpdate(@Param("id") Long id);
 
     /** 소셜 로그인 — 제공자 + 제공자측 사용자 id 로 조회 */
     Optional<User> findBySocialTypeAndSocialId(SocialType socialType, String socialId);
