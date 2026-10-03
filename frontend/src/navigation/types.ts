@@ -300,6 +300,8 @@ export type AlbumStackParamList = {
   FeedCompose: { postId?: number } | undefined;
   /** 작년 오늘 — 홈의 MemoryPeek 카드가 탭을 건너 이 화면으로 보낸다 */
   Memories: { on?: string } | undefined;
+  /** 일상 댓글(V124) — 카드의 "댓글 N"에서 연다 */
+  FeedComments: { postId: number };
   /** 여행 앨범 — 홈 스택(여행 상세)에도 같은 화면이 등록돼 있다 */
   TripAlbum: { tripId: number; title: string };
   /**

@@ -200,6 +200,7 @@ export function FeedTimelineScreen({ navigation, route }: Props) {
               quickEmojis={QUICK_EMOJIS}
               onReact={onReact}
               onLongPress={onLongPress}
+              onOpenComments={(i) => navigation.navigate('FeedComments', { postId: i.refId })}
             />
           </View>
         )}

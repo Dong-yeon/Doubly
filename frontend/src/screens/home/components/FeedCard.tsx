@@ -50,9 +50,11 @@ export interface FeedCardProps {
   quickEmojis: readonly string[];
   onReact: (item: FeedItem, emoji: string) => void;
   onLongPress: (item: FeedItem) => void;
+  /** 댓글 열기(V124) — 넘겨준 화면에서만 일상 카드에 "댓글 N"이 보인다(댓글 화면이 같은 스택에 있어야 한다) */
+  onOpenComments?: (item: FeedItem) => void;
 }
 
-export function FeedCard({ item, timeLabel, quickEmojis, onReact, onLongPress }: FeedCardProps) {
+export function FeedCard({ item, timeLabel, quickEmojis, onReact, onLongPress, onOpenComments }: FeedCardProps) {
   if (item.type !== 'POST') {
     return (
       <RecordCard item={item} timeLabel={timeLabel} quickEmojis={quickEmojis} onReact={onReact} />
@@ -61,6 +63,7 @@ export function FeedCard({ item, timeLabel, quickEmojis, onReact, onLongPress }:
   return (
     <PostCard
       item={item}
+      onOpenComments={onOpenComments}
       timeLabel={timeLabel}
       quickEmojis={quickEmojis}
       onReact={onReact}
@@ -247,7 +250,7 @@ function PostPhotos({ uris }: { uris: string[] }) {
 }
 
 /** 직접 남긴 일상 — 사진이 있으면 사진이 주인공 */
-function PostCard({ item, timeLabel, quickEmojis, onReact, onLongPress }: FeedCardProps) {
+function PostCard({ item, timeLabel, quickEmojis, onReact, onLongPress, onOpenComments }: FeedCardProps) {
   const photos = item.imageUrls && item.imageUrls.length > 0
     ? item.imageUrls
     : item.imageUrl ? [item.imageUrl] : [];
@@ -278,6 +281,20 @@ function PostCard({ item, timeLabel, quickEmojis, onReact, onLongPress }: FeedCa
           quickEmojis={quickEmojis}
           onPress={(emoji) => onReact(item, emoji)}
         />
+        {onOpenComments ? (
+          <Pressable
+            onPress={() => onOpenComments(item)}
+            style={({ pressed }) => [styles.commentBtn, pressed && styles.commentBtnPressed]}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel={item.commentCount ? `댓글 ${item.commentCount}개 보기` : '댓글 남기기'}
+          >
+            <MaterialCommunityIcons name="chat-outline" size={16} color={colors.textSecondary} />
+            <Text style={styles.commentBtnText}>
+              {item.commentCount ? `댓글 ${item.commentCount}` : '댓글 남기기'}
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
     </Pressable>
   );
@@ -419,6 +436,9 @@ const styles = themedStyles((colors) => ({
   who: { flex: 1, fontSize: fontSize.caption, fontWeight: '800', color: colors.textSecondary },
   time: { fontSize: fontSize.caption, color: colors.textMuted },
   // 지난 날짜로 남긴 일상의 기록일 — 올린 시각 줄 바로 아래, 본문보다 한 단계 옅게
+  commentBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, alignSelf: 'flex-start', marginTop: spacing.sm, minHeight: 32 },
+  commentBtnPressed: { opacity: 0.6 },
+  commentBtnText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary },
   pastDay: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary, marginTop: -spacing.xxs },
   content: { fontSize: fontSize.subtitle, color: colors.textPrimary, marginTop: spacing.xs, lineHeight: 24 },
 

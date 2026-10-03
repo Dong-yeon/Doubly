@@ -10,6 +10,7 @@ import type { AlbumStackParamList } from './types';
 import { AlbumScreen } from '../screens/album/AlbumScreen';
 import { FeedTimelineScreen } from '../screens/feed/FeedTimelineScreen';
 import { FeedComposeScreen } from '../screens/feed/FeedComposeScreen';
+import { FeedCommentsScreen } from '../screens/feed/FeedCommentsScreen';
 import { MemoriesScreen } from '../screens/feed/MemoriesScreen';
 import { TripAlbumScreen } from '../screens/trip/TripAlbumScreen';
 import { PlaceDetailScreen } from '../screens/place/PlaceDetailScreen';
@@ -34,6 +35,7 @@ export function AlbumStackNavigator() {
         options={{ title: '일상 남기기', ...modalOptions }}
       />
       <Stack.Screen name="Memories" component={MemoriesScreen} options={{ title: '작년 오늘' }} />
+      <Stack.Screen name="FeedComments" component={FeedCommentsScreen} options={{ title: '댓글' }} />
       <Stack.Screen
         name="TripAlbum"
         component={TripAlbumScreen}

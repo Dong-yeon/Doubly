@@ -43,7 +43,7 @@ function toSections(groups: MemoryGroup[]): Section[] {
   return groups.map((g) => ({ title: g.label, date: g.date, data: g.items }));
 }
 
-export function MemoriesScreen({ route }: Props) {
+export function MemoriesScreen({ navigation, route }: Props) {
   const on = route.params?.on;
   const [sections, setSections] = useState<Section[]>([]);
   /* 오늘의 기념일 — 지난 기록과 별개로 머리에 한 줄씩 */
@@ -123,6 +123,7 @@ export function MemoriesScreen({ route }: Props) {
             onReact={onReact}
             /* 추억은 되돌아보는 화면이다 — 여기서 삭제까지 되면 실수하기 쉽다 */
             onLongPress={() => undefined}
+            onOpenComments={(i) => navigation.navigate('FeedComments', { postId: i.refId })}
           />
         )}
         ListEmptyComponent={
