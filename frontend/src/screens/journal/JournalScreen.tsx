@@ -5,13 +5,18 @@
  * 의심이 비공개 원칙을 화면에서 흐린다(docs/PERSONAL_JOURNAL_ANALYSIS_2026-10-02.md §4-2).
  * 칸에는 그날 기분, 사진이 있으면 작은 점. 칸이나 행을 누르면 그날 페이지가 열린다.
  */
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, Image, Pressable, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../navigation/types';
 import { MonthGrid } from '../../components/MonthGrid';
+import { Chip } from '../../components/Chip';
+import { SettingsGroup, SettingsInset, SettingsRow } from '../../components/SettingsList';
+import { useAuthStore } from '../../store/authStore';
+import { toast } from '../../store/toastStore';
+import { getErrorMessage } from '../../utils/error';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { journalApi, journalToday, type JournalEntry } from '../../api/journal';
 import { journalDateTitle } from './JournalDayScreen';
@@ -19,6 +24,10 @@ import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'Journal'>;
+
+/** 리마인드 시각 칩 — 하루를 돌아보는 밤 시간대만. 서버는 어떤 분이든 받는다(식사 알림 화면과 같은 방식) */
+const REMINDER_TIMES = ['21:00', '21:30', '22:00', '22:30', '23:00'];
+const DEFAULT_REMINDER = '22:00';
 
 function monthKey(year: number, month: number): string {
   return `${year}-${String(month).padStart(2, '0')}`;
@@ -34,6 +43,36 @@ export function JournalScreen({ navigation }: Props) {
   const [year, setYear] = useState(todayY);
   const [month, setMonth] = useState(todayM);
   const [entries, setEntries] = useState<JournalEntry[]>([]);
+
+  /*
+   * 매일 알림(V125, 옵트인) — 고른 시각에 그날 기록이 없을 때만 온다. 문구는 고정이고 기록 내용은 실리지 않는다
+   * (서버 JournalReminderNotifier). 리마인드 카테고리나 푸시 전체를 꺼 두면 오지 않으니 그때는 그렇게 알린다.
+   */
+  const user = useAuthStore((s) => s.user);
+  const pushOff = user?.notificationsEnabled === false || user?.notifyReminder === false;
+  const [reminder, setReminder] = useState<string | null>(null);
+  const [reminderBusy, setReminderBusy] = useState(false);
+  useEffect(() => {
+    journalApi
+      .reminder()
+      .then((r) => setReminder(r ? r.reminderTime.slice(0, 5) : null))
+      .catch(() => {});
+  }, []);
+  const changeReminder = async (next: string | null) => {
+    setReminderBusy(true);
+    try {
+      if (next) {
+        await journalApi.setReminder(next);
+      } else {
+        await journalApi.removeReminder();
+      }
+      setReminder(next);
+    } catch (e) {
+      toast.error(getErrorMessage(e, '알림을 바꾸지 못했어요.'));
+    } finally {
+      setReminderBusy(false);
+    }
+  };
   const [loadError, setLoadError] = useState(false);
 
   const fetchMonth = useCallback(() => {
@@ -87,6 +126,33 @@ export function JournalScreen({ navigation }: Props) {
         <MaterialCommunityIcons name="lock-outline" size={16} color={colors.textSecondary} />
         <Text style={styles.privateText}>나만 보는 기록이에요. 연결이 끊겨도 남아요.</Text>
       </View>
+
+      <SettingsGroup
+        style={styles.reminderGroup}
+        footer={
+          pushOff
+            ? '리마인드 알림이 꺼져 있어요. 설정 > 알림에서 켜면 와요.'
+            : '그날 기록이 없을 때만 알려요. 알림에는 기록 내용이 실리지 않아요.'
+        }
+      >
+        <View>
+          <SettingsRow
+            title="매일 알림"
+            value={reminder ?? undefined}
+            muted={pushOff}
+            switchValue={!!reminder}
+            onSwitch={(on) => void changeReminder(on ? DEFAULT_REMINDER : null)}
+            disabled={reminderBusy}
+          />
+          {reminder ? (
+            <SettingsInset style={styles.reminderTimes}>
+              {REMINDER_TIMES.map((t) => (
+                <Chip key={t} label={t} selected={reminder === t} onPress={() => void changeReminder(t)} />
+              ))}
+            </SettingsInset>
+          ) : null}
+        </View>
+      </SettingsGroup>
 
       <View style={styles.monthBar}>
         <TouchableOpacity onPress={() => changeMonth(-1)} hitSlop={12} accessibilityRole="button" accessibilityLabel="이전 달">
@@ -218,6 +284,8 @@ const styles = themedStyles((colors) => ({
     marginBottom: spacing.md,
   },
   privateText: { flex: 1, color: colors.textSecondary, fontSize: fontSize.caption },
+  reminderGroup: { marginBottom: spacing.md },
+  reminderTimes: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   monthBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
   monthTitle: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
   errorBanner: { backgroundColor: colors.surfaceAlt, borderRadius: radius.md, padding: spacing.sm, marginBottom: spacing.sm },

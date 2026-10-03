@@ -29,6 +29,8 @@ public final class PushLinks {
     public static final String WORKOUT_ROUTINES = "workout/routines";
     public static final String WORKOUT_VOICE_CLIPS = "workout/voice-clips";
     public static final String DIET = "diet";
+    /** 나의 하루(하루 기록 목록) — 하루 기록 리마인드가 연다. linking.ts 의 Home {@code Journal: 'me/journal'} */
+    public static final String JOURNAL = "me/journal";
     public static final String PLACE = "place";
     /**
      * 콘텐츠 목록 — 별도 화면이 아니라 럽슐랭 화면의 칩 세그먼트다(linking.ts 의 {@code PlaceMain}).
