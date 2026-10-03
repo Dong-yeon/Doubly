@@ -18,7 +18,7 @@
 > 권한이 있을 때만 다시 발급(3초 제한). 옛 앱·본문 없는 호출은 이전과 같다. 테스트 `LogoutPushTokenTest`.
 > 내보내기 임시 폴더도 고쳤다: 로그아웃(세션 만료 포함)이 `dubly-export/` 를 지우고(`utils/exportStorage.ts`),
 > 상태 파일에 `userId` 를 남겨 다른 계정의 것은 보여주지도 이어받지도 않고 지운다(주인 모를 옛 상태는 둔다).
-> §7-3 내보내기 연타도 ref 가드로 막았다(첫 await 전에 잠금). 앱만 바뀌어 OTA 대상이다.
+> §7-3 내보내기 연타도 ref 가드로 막았다(첫 await 전에 잠금). production OTA 완료(`ae3ec9f5`, 2026-10-03, 런타임 1.0.6).
 > **후속 조치 (2026-10-03)**: §7-1 상대 PRO 이중 결제 — 사용자 결정은 "화면만 정직하게"(공유 범위는 그대로).
 > `GET /plan/me` 에 `couplePlan`(두 사람 중 높은 등급, 커플이 없으면 `plan` 과 같음)을 더했다(`PlanResolver.resolveCouple`).
 > `plan=FREE · couplePlan=PRO` 면 PlanScreen 은 "○○님 덕분에 커플 기능은 PRO예요" 태그, 개인 기능의 FREE → PRO 목록,
