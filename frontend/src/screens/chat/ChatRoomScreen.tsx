@@ -57,6 +57,7 @@ import { parseVoiceContent } from '../../utils/chatVoice';
 import { getErrorMessage } from '../../utils/error';
 import { coupleEmojiApi } from '../../api/coupleEmoji';
 import { toast } from '../../store/toastStore';
+import { isUnsent } from '../../utils/chatSync';
 import { pickDate } from '../../store/datePickerStore';
 import { runBusy } from '../../store/busyStore';
 import { EmojiPicker } from '../../components/EmojiPicker';
@@ -292,8 +293,18 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     syncMissed,
     togglePin,
     unpin,
+    retrySend,
+    discardUnsent,
   } = useChatStore();
   const socketConnected = useChatStore((s) => s.connected);
+  /*
+   * 말풍선 없이 보낸 것(사진·음성)이 서버에서 거절됐다 — 업로드는 끝났는데 메시지가 안 생긴 경우라 그대로 두면
+   * 사용자는 보낸 줄 안다(chatStore.sendNotice). 말풍선이 있는 것은 그 자리에 "보내지 못했어요"가 뜬다.
+   */
+  const sendNotice = useChatStore((s) => s.sendNotice);
+  useEffect(() => {
+    if (sendNotice) toast.error(sendNotice.message);
+  }, [sendNotice]);
   /*
    * "연결 중이에요" 띠는 끊긴 상태가 잠깐 이어질 때만 띄운다. 앱으로 돌아올 때마다
    * 소켓은 새로 붙는데(백그라운드에서 OS 가 끊는다), 보통 1초 안에 붙는 그 사이에도
@@ -511,7 +522,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     void usePlaceLinkChipStore.getState().load();
   }, []);
   const placeLinkOf = (m: ChatMessage): string | null =>
-    chatPlaceLinkSuggest && m.messageType === 'TEXT' && !m.deleted && !m.pending && !placeLinkHidden.includes(m.id)
+    chatPlaceLinkSuggest && m.messageType === 'TEXT' && !m.deleted && !isUnsent(m) && !placeLinkHidden.includes(m.id)
       ? findPlaceLink(m.content)
       : null;
   const onDismissPlaceLink = (messageId: number) => {
@@ -1046,7 +1057,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     openRoom(relationId).finally(() => {
       const loaded = useChatStore.getState().messages[relationId] ?? [];
       // pending 은 음수 임시 id 라 기준에서 뺀다
-      oneShotFreshAfterRef.current = loaded.reduce((max, m) => (m.pending ? max : Math.max(max, m.id)), 0);
+      oneShotFreshAfterRef.current = loaded.reduce((max, m) => (isUnsent(m) ? max : Math.max(max, m.id)), 0);
       setLoadingHistory(false);
     });
     // 이 방으로 이미 와 있던 알림(트레이에 뜬 것)을 지우는 일은 RootNavigator 가 경로
@@ -1276,10 +1287,28 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     void onSend();
   };
 
+  /**
+   * 보내지 못한 말풍선 — 이유를 보여 주고 다시 보내거나 지운다. 다시 보내기는 <b>같은 멱등키</b>라
+   * 서버가 사실 저장했던 경우에도 두 번 생기지 않는다(chatStore.retrySend).
+   */
+  const onFailedPress = (msg: ChatMessage) => {
+    const key = msg.clientMessageId;
+    if (!key) return;
+    Alert.alert('보내지 못했어요', msg.failReason ?? '메시지를 보내지 못했어요.', [
+      { text: '지우기', style: 'destructive', onPress: () => discardUnsent(relationId, key) },
+      { text: '취소', style: 'cancel' },
+      { text: '다시 보내기', onPress: () => void retrySend(relationId, key) },
+    ]);
+  };
+
   /** 메시지 길게 누르기 — MessageActionSheet 로 리액션/답장/수정/삭제를 한 시트에 모은다 */
   const onLongPressMessage = (msg: ChatMessage) => {
     if (msg.deleted) return;
-    if (msg.pending) return; // 서버에 아직 없는 말풍선 — 리액션·수정·삭제 대상이 될 수 없다
+    // 서버에 아직 없는 말풍선 — 리액션·수정·삭제 대상이 될 수 없다. 보내지 못한 것은 다시 보내기/지우기를 묻는다
+    if (isUnsent(msg)) {
+      if (msg.failed) onFailedPress(msg);
+      return;
+    }
     haptics.light();
     setActionSheetFor(msg);
   };
@@ -2176,7 +2205,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           메시지마다 그대로 유지한다 — isRead 는 메시지마다 따로 갖는 값이라 시간과
           달리 "몇 번째까지 읽었는지"가 중요한 정보라서 그룹 끝으로 뭉치면 안 된다.
         */}
-        {(isGroupEnd || (mine && !item.isRead) || item.edited || item.pending) ? (
+        {(isGroupEnd || (mine && !item.isRead) || item.edited || isUnsent(item)) ? (
           <View style={mine ? styles.metaMine : styles.meta}>
             {/*
               읽음은 내가 보낸 메시지에만 — 상대 메시지의 읽음 여부는 알 필요가 없다.
@@ -2186,7 +2215,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               없앤다. 색은 "상대"의 고유색(colors.partner)을 그대로 써서 이 앱의
               나/상대 색 체계(theme/colors.ts 의 Duo 시맨틱)를 유지한다.
             */}
-            {mine && !item.isRead && !item.pending ? (
+            {mine && !item.isRead && !isUnsent(item) ? (
               <MaterialCommunityIcons
                 name="heart"
                 size={12}
@@ -2197,7 +2226,22 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             ) : null}
             {item.edited ? <Text style={chatStyles.editedMark}>수정됨</Text> : null}
             {/* 아직 서버 에코가 안 온 말풍선 — 시간 대신 상태를 보여준다(다시 누를 이유를 없앤다) */}
-            {item.pending ? (
+            {item.failed ? (
+              /*
+               * 보내지 못했다 — 서버 거절이나 확인 시간 초과(chatStore). 색을 빨강으로 바꾸지 않고 테마의 meta 색에
+               * 굵기·아이콘만 더한다: 이 글자는 배경(사진 포함 10종) 위 맨살이라 테마별 대비 검증을 받은 색만 쓴다.
+               */
+              <Pressable
+                onPress={() => onFailedPress(item)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel="보내지 못했어요. 눌러서 다시 보내거나 지우기"
+                style={styles.failedMarkRow}
+              >
+                <MaterialCommunityIcons name="alert-outline" size={12} color={chatStyles.failedMark.color as string} />
+                <Text style={chatStyles.failedMark}>보내지 못했어요 · 다시</Text>
+              </Pressable>
+            ) : item.pending ? (
               <Text style={chatStyles.sendingMark}>보내는 중</Text>
             ) : isGroupEnd ? (
               <Text style={chatStyles.time}>{timeOf(item.createdAt)}</Text>
@@ -3221,6 +3265,7 @@ const styles = themedStyles((colors) => ({
   // 읽음 표시 — 안 읽었을 때만 하트를 띄우고, 읽으면 사라진다(카톡 "1" 방식).
   // 색은 chatStyles.readHeart(채팅 테마), 크기는 12 — 10 이던 때는 진한 테마에서 대비 2.9 로 안 보였다.
   readHeart: { marginBottom: 2 },
+  failedMarkRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   // 상대 아바타 자리 — 그룹 중간엔 내용 없이 폭만 차지해 말풍선이 계단식으로 안 밀린다
   avatarSlot: { width: 26, marginRight: spacing.xs },
   // 눌림 효과 — 스티커·트레이 버튼 공용(예전엔 "reactionPressed" 로 리액션 바 전용이었다)
@@ -3446,6 +3491,8 @@ const chatStyles = chatThemedStyles((chat) => ({
   time: { fontSize: fontSize.micro, color: chat.meta, ...metaCapsule(chat.metaCapsule) },
   // "보내는 중" — 시간 자리에 들어가므로 같은 크기·색 체계를 따른다
   sendingMark: { fontSize: fontSize.micro, color: chat.meta, ...metaCapsule(chat.metaCapsule) },
+  // "보내지 못했어요" — 같은 자리·같은 색 체계, 굵기로만 구분한다(렌더 주석)
+  failedMark: { fontSize: fontSize.micro, color: chat.meta, fontWeight: '700' as const, ...metaCapsule(chat.metaCapsule) },
   editedMark: { fontSize: fontSize.micro, color: chat.meta, ...metaCapsule(chat.metaCapsule) },
 
   /*

@@ -185,6 +185,7 @@ function createClient(): Client {
  * 되어 같은 메시지를 두 번 받는다.
  */
 export async function connectSocket(): Promise<Client> {
+  ensureSendErrorSubscription();
   if (client?.connected) return client;
   if (connecting) return connecting; // 진행 중인 연결 공유 (중복 Client 생성 방지)
 
@@ -221,6 +222,40 @@ export async function connectSocket(): Promise<Client> {
   });
 
   return connecting;
+}
+
+/**
+ * 전송 거절 알림 — 서버가 STOMP 전송을 거절하면 보낸 사람에게만 온다(백엔드 ChatSendError, /user/queue/chat-errors).
+ * 예전엔 이 길이 없어 거절된 말풍선이 "보내는 중"에 멈췄다(docs/chat-current-state.md §8-2 ③).
+ */
+export interface ChatSendError {
+  /** 거절된 프레임의 멱등키 — 어느 말풍선인지 짝짓는다 */
+  clientMessageId: string | null;
+  /** 서버 ErrorCode 이름 */
+  code: string;
+  /** 사용자에게 보여 줄 문구 */
+  message: string;
+}
+
+const SEND_ERRORS_DESTINATION = '/user/queue/chat-errors';
+const sendErrorListeners = new Set<(e: ChatSendError) => void>();
+
+/** 전송 거절을 듣는다 — 해제 함수를 돌려준다. 구독 자체는 connectSocket 이 챙긴다. */
+export function onSendError(listener: (e: ChatSendError) => void): () => void {
+  sendErrorListeners.add(listener);
+  return () => sendErrorListeners.delete(listener);
+}
+
+/**
+ * 거절 큐 구독을 "걸려 있어야 하는 것"에 올린다. 방 구독과 달리 방에 묶이지 않는다 — 식단 카드처럼 채팅방
+ * 밖에서 보내는 것도 있다. disconnectSocket(로그아웃)이 desired 를 비우므로 연결할 때마다 다시 확인한다.
+ */
+function ensureSendErrorSubscription() {
+  if (desired.has(SEND_ERRORS_DESTINATION)) return;
+  register(
+    SEND_ERRORS_DESTINATION,
+    jsonHandler<ChatSendError>((e) => sendErrorListeners.forEach((l) => l(e))),
+  );
 }
 
 export function subscribeRoom(relationId: number, onMessage: (msg: ChatMessage) => void) {
@@ -379,6 +414,7 @@ export async function publishEnsuringConnection(
    * (docs/chat-current-state.md §3-3). 낙관적 말풍선과 짝지어야 하는 호출부는 직접 만들어 넣는다.
    */
   const keyed = payload.clientMessageId ? payload : { ...payload, clientMessageId: newClientMessageId() };
+  ensureSendErrorSubscription(); // 이미 붙은 소켓으로 바로 보내는 경로도 거절을 들을 수 있게
   if (client?.connected) return publishMessage(relationId, keyed);
   try {
     await withTimeout(connectSocket(), CONNECT_WAIT_MS);

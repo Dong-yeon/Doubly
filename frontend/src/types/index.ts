@@ -1870,6 +1870,13 @@ export interface ChatMessage {
    * 서버가 준 메시지에는 절대 붙지 않는다 — 읽음 처리·리액션·수정 같은 경로가 이 값을 보고 비켜난다.
    */
   pending?: boolean;
+  /**
+   * 보내지 못한 말풍선 — 서버가 거절했거나(/user/queue/chat-errors) 기다려도 확인이 안 왔다. pending 과 마찬가지로
+   * 내 화면에만 있다. 누르면 같은 멱등키로 다시 보내거나 지운다(같은 키라 서버가 사실 저장했어도 두 번 생기지 않는다).
+   */
+  failed?: boolean;
+  /** 실패 이유 — 서버 문구 그대로(없으면 화면이 기본 문구를 쓴다) */
+  failReason?: string;
 }
 
 /** 저장한 대화 목록 항목 — bookmarkId 를 다음 페이지 커서로 쓴다(ChatMessage.id 아님) */
