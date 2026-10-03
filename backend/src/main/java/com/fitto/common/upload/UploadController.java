@@ -8,6 +8,10 @@ import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+
+import java.time.Instant;
+import java.util.List;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -32,10 +36,12 @@ public class UploadController {
 
     private final CloudinaryProperties properties;
     private final PlanGuard planGuard;
+    private final CloudinaryImageDeleter imageDeleter;
 
-    public UploadController(CloudinaryProperties properties, PlanGuard planGuard) {
+    public UploadController(CloudinaryProperties properties, PlanGuard planGuard, CloudinaryImageDeleter imageDeleter) {
         this.properties = properties;
         this.planGuard = planGuard;
+        this.imageDeleter = imageDeleter;
     }
 
     @PostMapping("/signature")
@@ -46,5 +52,24 @@ public class UploadController {
         }
         planGuard.consume(user.id(), Feature.PHOTO_UPLOAD);
         return ApiResponse.success(CloudinarySigner.sign(properties));
+    }
+
+    /**
+     * 올렸지만 쓰지 않은 사진 치우기 — 앱이 미리 올린 사진을 저장하지 않고 버렸을 때(다시 고르기·사진 빼기·화면 나가기)와
+     * 분석에만 쓰고 저장하지 않는 사진(영양성분표)을 부른다. 예전엔 이런 파일이 Cloudinary 에 그대로 쌓였다
+     * (docs/lovebody-current-state.md §4-6).
+     *
+     * <p>지울지는 {@link UploadDiscardPolicy} 와 삭제기의 참조 확인이 정한다. 조건에 안 맞으면 조용히 아무것도 하지 않는다 —
+     * 앱은 결과를 기다리지 않고(파일 정리는 화면 동작이 아니다), 이유를 알려 줄 필요도 없다.
+     */
+    @PostMapping("/discard")
+    public ApiResponse<Void> discard(@AuthenticationPrincipal AuthUser user, @RequestBody DiscardUploadRequest request) {
+        if (request != null && UploadDiscardPolicy.isDiscardable(request.url(), properties, Instant.now())) {
+            imageDeleter.deleteAll(List.of(request.url()));
+        }
+        return ApiResponse.success(null);
+    }
+
+    public record DiscardUploadRequest(String url) {
     }
 }

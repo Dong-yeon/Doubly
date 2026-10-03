@@ -291,7 +291,14 @@ public class MealService {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
 
+        // 사진을 바꾸거나 뺐으면 예전 파일을 커밋 뒤에 지운다 — 예전엔 남아 고아가 됐다(lovebody-current-state §4-6).
+        // 데이트 식단은 아래 syncSharedPair 가 짝의 사진도 새 것으로 바꾸므로 예전 URL 을 쥔 행이 없어진다.
+        // 채팅 MEAL_CARD 처럼 다른 행이 아직 쓰면 삭제기가 남긴다(StoredMediaReferences).
+        String previousPhoto = meal.getPhotoUrl();
         meal.update(req.mealDate(), req.mealType(), req.memo(), req.photoUrl());
+        if (previousPhoto != null && !previousPhoto.equals(req.photoUrl())) {
+            imageDeleter.deleteAllAfterCommit(List.of(previousPhoto));
+        }
         meal.replaceItems(toItems(req));
         if (meal.getItems().isEmpty()) {
             meal.applyTotals(req.calories(), req.carbs(), req.protein(), req.fat());
