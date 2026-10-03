@@ -70,11 +70,21 @@ public class FeedPost {
         this.recordDate = recordDate != null ? recordDate : KstClock.today();
     }
 
-    /** 고치기 — 글·대표 사진·기록일을 바꾼다. 검증은 FeedService 가 한다(작성과 같은 규칙) */
-    public void edit(String content, String imageUrl, LocalDate recordDate) {
+    /** 고친 시각(V123) — 실제로 바뀐 적이 있으면 카드가 "수정됨"을 보여 준다. 없으면 null */
+    @Column(name = "edited_at")
+    private LocalDateTime editedAt;
+
+    /**
+     * 고치기 — 글·대표 사진·기록일을 바꾼다. 검증은 FeedService 가 한다(작성과 같은 규칙).
+     * 바뀐 게 없으면 수정 시각을 찍지 않는다 — 저장만 다시 누른 글에 "수정됨"이 붙으면 거짓말이다.
+     */
+    public void edit(String content, String imageUrl, LocalDate recordDate, boolean changed) {
         this.content = content;
         this.imageUrl = imageUrl;
         this.recordDate = recordDate;
+        if (changed) {
+            this.editedAt = LocalDateTime.now();
+        }
     }
 
     /** 여행 앨범에 담기 / 빼기(null) */

@@ -44,8 +44,19 @@ public record FeedItemResponse(
          * 일상 포스트의 기록일(KST, V119) — 이 일이 있었던 날. 올린 날({@code occurredAt})과 다르면 카드가
          * "N월 N일의 일상"으로 알려 준다. 다른 타입은 null(제목·부제가 이미 날짜를 말한다).
          */
-        LocalDate recordDate
+        LocalDate recordDate,
+        /** 일상 포스트를 고친 적이 있는가(V123) — 카드가 "수정됨"을 붙인다. 다른 타입은 false */
+        boolean edited
 ) {
+    /** 고침 표시가 없는 경우 — 일상 포스트 외 전부, 그리고 예전 호출부 */
+    public FeedItemResponse(FeedItemType type, Long refId, Long userId, String userName, boolean mine,
+                            String title, String content, String imageUrl, LocalDateTime occurredAt,
+                            List<ReactionSummary> reactions, List<String> imageUrls, boolean shared, String summary,
+                            LocalDate recordDate) {
+        this(type, refId, userId, userName, mine, title, content, imageUrl, occurredAt, reactions, imageUrls, shared,
+                summary, recordDate, false);
+    }
+
     /** 기록일이 없는 타입 — 일상 포스트 외 전부 */
     public FeedItemResponse(FeedItemType type, Long refId, Long userId, String userName, boolean mine,
                             String title, String content, String imageUrl, LocalDateTime occurredAt,

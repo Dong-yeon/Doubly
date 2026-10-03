@@ -72,7 +72,8 @@ public class FeedItemMapper {
         return new FeedItemResponse(FeedItemType.POST, p.getId(), p.getAuthorId(),
                 names.getOrDefault(p.getAuthorId(), "커플"), viewerId.equals(p.getAuthorId()),
                 null, p.getContent(), p.getImageUrl(), p.getCreatedAt(), reactions, imageUrls, false,
-                p.getContent() != null && !p.getContent().isBlank() ? p.getContent() : null, p.getRecordDate());
+                p.getContent() != null && !p.getContent().isBlank() ? p.getContent() : null, p.getRecordDate(),
+                p.getEditedAt() != null);
     }
 
     /**
@@ -262,7 +263,7 @@ public class FeedItemMapper {
                         summarize(byTypeAndId
                                 .getOrDefault(i.type(), Map.of())
                                 .getOrDefault(i.refId(), List.of()), viewerId),
-                        i.imageUrls(), i.shared(), i.summary(), i.recordDate()))
+                        i.imageUrls(), i.shared(), i.summary(), i.recordDate(), i.edited()))
                 .toList();
     }
 

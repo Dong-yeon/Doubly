@@ -782,6 +782,12 @@ public class FeedService {
         LocalDate recordDate = validatedRecordDate(request.recordDate());
 
         List<FeedPostPhoto> before = feedPostPhotoRepository.findByPostIdOrderByOrderNoAsc(postId);
+        List<String> beforeUrls = before.isEmpty() && post.getImageUrl() != null
+                ? List.of(post.getImageUrl())
+                : before.stream().map(FeedPostPhoto::getUrl).toList();
+        boolean changed = !java.util.Objects.equals(contentOf(post.getContent()), content)
+                || !beforeUrls.equals(photos)
+                || !recordDate.equals(post.getRecordDate());
         Set<String> removed = new java.util.LinkedHashSet<>();
         if (post.getImageUrl() != null) {
             removed.add(post.getImageUrl());
@@ -795,7 +801,7 @@ public class FeedService {
             feedPostPhotoRepository.save(
                     FeedPostPhoto.builder().postId(postId).url(photos.get(i)).orderNo(i).build());
         }
-        post.edit(content, photos.isEmpty() ? null : photos.get(0), recordDate);
+        post.edit(content, photos.isEmpty() ? null : photos.get(0), recordDate, changed);
 
         coupleEventPublisher.publish(post.getCoupleId(), CoupleEvent.FEED);
         imageDeleter.deleteAllAfterCommit(removed);

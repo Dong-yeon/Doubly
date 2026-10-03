@@ -458,4 +458,28 @@ class FeedFlowTest {
                 new UpdatePostRequest("글", six, KstClock.today())))
                 .isInstanceOf(BusinessException.class);
     }
+
+    @Test
+    void 실제로_고친_글에만_수정됨이_붙는다() {
+        long[] c = couple("edited-a@fitto.com", "edited-b@fitto.com");
+        String photo = "https://img.example.com/ed1.jpg";
+        FeedItemResponse post = feedService.createPost(c[0], new CreatePostRequest("처음", null, List.of(photo)));
+        assertThat(post.edited()).isFalse();
+
+        // 아무것도 바꾸지 않고 다시 저장 — 거짓 "수정됨"은 붙지 않는다
+        FeedItemResponse same = feedService.updatePost(c[0], post.refId(),
+                new UpdatePostRequest("처음", List.of(photo), post.recordDate()));
+        assertThat(same.edited()).isFalse();
+
+        FeedItemResponse changed = feedService.updatePost(c[0], post.refId(),
+                new UpdatePostRequest("고쳤어", List.of(photo), post.recordDate()));
+        assertThat(changed.edited()).isTrue();
+
+        // 상대 타임라인에도 같은 표시가 간다
+        FeedItemResponse inPartnerTimeline = feedService.timeline(c[1], null, 20).items().stream()
+                .filter(i -> i.type() == FeedItemType.POST && i.refId().equals(post.refId()))
+                .findFirst().orElseThrow();
+        assertThat(inPartnerTimeline.edited()).isTrue();
+        assertThat(feedService.getPost(c[1], post.refId()).edited()).isTrue();
+    }
 }
