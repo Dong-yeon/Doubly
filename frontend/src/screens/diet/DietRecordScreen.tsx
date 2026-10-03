@@ -43,6 +43,7 @@ import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
 import { todayKst } from '../../utils/date';
+import { MULTIPLIERS, activeMultiplier, applyMultiplier, type ScaleBase } from '../../utils/mealScale';
 import { buildDietShareCopy } from '../../utils/dietShare';
 import { defaultMealType } from '../../utils/mealType';
 import { colors, fontSize, radius, shadow, spacing } from '../../constants/theme';
@@ -95,7 +96,14 @@ interface ItemForm {
    * (바코드·즐겨찾기 등 다른 경로로 들어온 항목은 항상 undefined — 칩이 안 뜬다).
    */
   box?: number[] | null;
+  /**
+   * 먹은 양 배수 칩(0.5·1·1.5·2) — 처음 칩을 누를 때의 값을 1배 기준으로 잡아 둔다. 칩은 기준 × 배수로 값을 바꾼다.
+   * 값이 출처(AI·공공 DB·내 기록·바코드·직접 입력)마다 다른 경로로 바뀌므로 그 경로들을 다 추적하지 않고,
+   * <b>지금 값이 기준 × 배수와 같은지</b>로 판단한다 — 다르면 누가 고친 것이니 지금 값이 새 1배다({@link activeMultiplier}).
+   */
+  scale?: { base: ScaleBase; multiplier: number };
 }
+
 
 const num = (v: string) => (v.trim() ? Number(v) : undefined);
 const isFilled = (i: ItemForm) => i.name.trim().length > 0;
@@ -477,6 +485,10 @@ export function DietRecordScreen({ navigation, route }: Props) {
 
   const updateItem = (key: string, patch: Partial<ItemForm>) => {
     setItems((prev) => prev.map((i) => (i.key === key ? { ...i, ...patch } : i)));
+  };
+  /** 먹은 양 배수 칩 — 기준 × 배수(utils/mealScale) */
+  const scaleItem = (key: string, m: number) => {
+    setItems((prev) => prev.map((i) => (i.key === key ? applyMultiplier(i, m) : i)));
   };
   const addItem = () => setItems((prev) => [...prev, newItem()]);
   const removeItem = (key: string) => {
@@ -1563,6 +1575,21 @@ export function DietRecordScreen({ navigation, route }: Props) {
                 onChange={(v) => updateItem(item.key, { calories: v })}
                 step={10}
               />
+
+              {/* 먹은 양 — 칼로리가 있을 때만. 기준 × 배수로 칼로리·탄단지·양 글자를 함께 바꾼다 */}
+              {Number(item.calories) > 0 ? (
+                <View style={styles.typeRow} accessibilityLabel="먹은 양">
+                  {MULTIPLIERS.map((m) => (
+                    <Chip
+                      key={m}
+                      label={`× ${m}`}
+                      selected={activeMultiplier(item) === m}
+                      onPress={() => scaleItem(item.key, m)}
+                      fill
+                    />
+                  ))}
+                </View>
+              ) : null}
 
               {/* 탄단지는 대개 AI가 채워두고 손대지 않는다 — 접어두되 값은 요약으로 보여준다 */}
               <TouchableOpacity
