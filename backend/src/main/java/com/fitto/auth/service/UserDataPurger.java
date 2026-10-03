@@ -84,6 +84,8 @@ public class UserDataPurger {
          * — 하나라도 남으면 users 삭제가 FK 위반으로 실패한다.
          */
         exec("delete from feed_reactions where user_id = :uid", userId);
+        // 내가 쓴 일상 댓글(V124) — author_id 가 users 를 참조한다. 관계 단위 정리 뒤에도 남을 수 있어 같은 이유로 훑는다
+        exec("delete from feed_comments where author_id = :uid", userId);
 
         exec("delete from workout_sets where workout_id in "
                 + "(select w.id from workouts w where w.user_id = :uid)", userId);

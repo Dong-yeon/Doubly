@@ -2,7 +2,9 @@ package com.fitto.feed.controller;
 
 import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
+import com.fitto.feed.dto.CreateCommentRequest;
 import com.fitto.feed.dto.CreatePostRequest;
+import com.fitto.feed.dto.FeedCommentResponse;
 import com.fitto.feed.dto.FeedItemResponse;
 import com.fitto.feed.dto.FeedItemType;
 import com.fitto.feed.dto.FeedPhotoMapResponse;
@@ -13,6 +15,7 @@ import com.fitto.feed.dto.MemoriesResponse;
 import com.fitto.feed.dto.ReactRequest;
 import com.fitto.feed.dto.ReactionSummary;
 import com.fitto.feed.dto.UpdatePostRequest;
+import com.fitto.feed.service.FeedCommentService;
 import com.fitto.feed.service.FeedService;
 import com.fitto.feed.service.MemoriesService;
 import jakarta.validation.Valid;
@@ -41,9 +44,11 @@ import java.util.Set;
 public class FeedController {
 
     private final FeedService feedService;
+    private final FeedCommentService feedCommentService;
     private final MemoriesService memoriesService;
 
-    public FeedController(FeedService feedService, MemoriesService memoriesService) {
+    public FeedController(FeedService feedService, MemoriesService memoriesService, FeedCommentService feedCommentService) {
+        this.feedCommentService = feedCommentService;
         this.feedService = feedService;
         this.memoriesService = memoriesService;
     }
@@ -122,6 +127,27 @@ public class FeedController {
     public ApiResponse<FeedItemResponse> createPost(@AuthenticationPrincipal AuthUser user,
                                                     @Valid @RequestBody CreatePostRequest request) {
         return ApiResponse.success(feedService.createPost(user.id(), request), "일상이 기록되었습니다.");
+    }
+
+    /** 일상 댓글 — 오래된 순(대화처럼 읽힌다), 최대 200개 */
+    @GetMapping("/posts/{id}/comments")
+    public ApiResponse<List<FeedCommentResponse>> comments(@AuthenticationPrincipal AuthUser user,
+                                                           @PathVariable Long id) {
+        return ApiResponse.success(feedCommentService.list(user.id(), id));
+    }
+
+    /** 일상 댓글 쓰기 — 상대에게 푸시(앞 40자)와 FEED 이벤트 */
+    @PostMapping("/posts/{id}/comments")
+    public ApiResponse<FeedCommentResponse> addComment(@AuthenticationPrincipal AuthUser user, @PathVariable Long id,
+                                                       @Valid @RequestBody CreateCommentRequest request) {
+        return ApiResponse.success(feedCommentService.add(user.id(), id, request.content()));
+    }
+
+    /** 일상 댓글 지우기 — 쓴 사람만 */
+    @DeleteMapping("/comments/{commentId}")
+    public ApiResponse<Void> deleteComment(@AuthenticationPrincipal AuthUser user, @PathVariable Long commentId) {
+        feedCommentService.delete(user.id(), commentId);
+        return ApiResponse.success(null, "댓글을 지웠어요.");
     }
 
     /** 포스트 하나 — 고치기 화면이 불러온다 */

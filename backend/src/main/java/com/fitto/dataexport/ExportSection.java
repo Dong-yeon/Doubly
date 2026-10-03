@@ -28,6 +28,9 @@ public enum ExportSection {
     FEED_POSTS(Scope.COUPLE, "feed_posts t WHERE t.couple_id = :rid", List.of("image_url")),
     FEED_POST_PHOTOS(Scope.COUPLE,
             "feed_post_photos t JOIN feed_posts p ON p.id = t.post_id WHERE p.couple_id = :rid", List.of("url")),
+    /** 일상 댓글(V124) — 둘이 나눈 말이라 관계 범위 */
+    FEED_COMMENTS(Scope.COUPLE,
+            "feed_comments t JOIN feed_posts p ON p.id = t.post_id WHERE p.couple_id = :rid", List.of()),
     TRIPS(Scope.COUPLE, "trips t WHERE t.couple_id = :rid", List.of("cover_image_url")),
     TRIP_ITEMS(Scope.COUPLE, "trip_items t JOIN trips p ON p.id = t.trip_id WHERE p.couple_id = :rid", List.of()),
     TRIP_EXPENSES(Scope.COUPLE, "trip_expenses t JOIN trips p ON p.id = t.trip_id WHERE p.couple_id = :rid", List.of()),

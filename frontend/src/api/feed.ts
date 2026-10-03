@@ -1,17 +1,6 @@
 /** 커플 일상 피드 API — PLAN.md Couple Feed */
 import { apiClient, unwrap } from './client';
-import type {
-  ApiResponse,
-  FeedItem,
-  FeedItemType,
-  FeedPhotoMap,
-  FeedPhotoMonth,
-  FeedPhotoSource,
-  FeedPhotosPage,
-  FeedTimeline,
-  Memories,
-  ReactionSummary,
-} from '../types';
+import type { ApiResponse, FeedItem, FeedItemType, FeedPhotoMap, FeedPhotoMonth, FeedPhotoSource, FeedPhotosPage, FeedTimeline, Memories, ReactionSummary, FeedComment } from '../types';
 
 export interface CreatePostPayload {
   content?: string;
@@ -99,6 +88,14 @@ export const feedApi = {
 
   createPost: (payload: CreatePostPayload) =>
     unwrap(apiClient.post<ApiResponse<FeedItem>>('/feed/posts', payload)),
+
+  /** 일상 댓글 — 오래된 순(V124) */
+  comments: (postId: number) => unwrap(apiClient.get<ApiResponse<FeedComment[]>>(`/feed/posts/${postId}/comments`)),
+  /** 댓글 쓰기 — 상대에게 푸시가 간다 */
+  addComment: (postId: number, content: string) =>
+    unwrap(apiClient.post<ApiResponse<FeedComment>>(`/feed/posts/${postId}/comments`, { content })),
+  /** 댓글 지우기 — 쓴 사람만 */
+  removeComment: (commentId: number) => unwrap(apiClient.delete<ApiResponse<null>>(`/feed/comments/${commentId}`)),
 
   /** 포스트 하나 — 고치기 화면이 불러온다 */
   getPost: (postId: number) => unwrap(apiClient.get<ApiResponse<FeedItem>>(`/feed/posts/${postId}`)),

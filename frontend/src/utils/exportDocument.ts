@@ -19,6 +19,7 @@ export const SECTION_LABELS: Record<string, string> = {
   members: '사람',
   feed_posts: '우리 기록',
   feed_post_photos: '우리 기록 사진',
+  feed_comments: '우리 기록 댓글',
   trips: '여행',
   trip_items: '여행 일정',
   trip_expenses: '여행 지출',

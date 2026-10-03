@@ -1743,6 +1743,19 @@ export interface FeedItem {
   recordDate?: string | null;
   /** 일상 포스트를 고친 적이 있는가(V123) — 카드가 "수정됨"을 붙인다. 다른 타입·예전 서버는 없다 */
   edited?: boolean;
+  /** 일상 포스트의 댓글 수(V124) — 카드가 "댓글 N"을 보여 준다. 다른 타입·예전 서버는 없다 */
+  commentCount?: number;
+}
+
+/** 일상 댓글 하나(V124) */
+export interface FeedComment {
+  id: number;
+  authorId: number;
+  authorName: string;
+  /** 내가 쓴 댓글 — 길게 눌러 지울 수 있다 */
+  mine: boolean;
+  content: string;
+  createdAt: string;
 }
 export interface FeedTimeline {
   items: FeedItem[];
