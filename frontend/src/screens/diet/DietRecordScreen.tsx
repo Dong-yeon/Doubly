@@ -29,6 +29,7 @@ import { ImageViewer } from '../../components/ImageViewer';
 import { useDietStore } from '../../store/dietStore';
 import { useRelationStore } from '../../store/relationStore';
 import { useAuthStore } from '../../store/authStore';
+import { usePlanStore } from '../../store/planStore';
 import { usePlaceStore } from '../../store/placeStore';
 import { useDirtyGuard } from '../../hooks/useDirtyGuard';
 import { useReturnToTab } from '../../hooks/useReturnToTab';
@@ -52,6 +53,7 @@ import type {
   AnalyzedFood,
   BarcodeLookup,
   FavoriteFood,
+  FeatureState,
   FoodLookupResult,
   MealAnalysis,
   MealAnalysisSource,
@@ -109,6 +111,19 @@ const num = (v: string) => (v.trim() ? Number(v) : undefined);
 const isFilled = (i: ItemForm) => i.name.trim().length > 0;
 /** 이름은 적었는데 칼로리가 빈 항목 — "0" 을 직접 적은 건 의도한 값이므로 빈 것으로 보지 않는다 */
 const lacksCalories = (i: ItemForm) => isFilled(i) && i.calories.trim() === '';
+/** 한도 주기를 말로 — /plan/me 의 period 그대로(AI 음식 분석은 지금 DAY) */
+const PERIOD_WORD: Partial<Record<FeatureState['period'], string>> = { DAY: '오늘', WEEK: '이번 주', MONTH: '이번 달' };
+const NEXT_PERIOD_WORD: Partial<Record<FeatureState['period'], string>> = { DAY: '내일', WEEK: '다음 주', MONTH: '다음 달' };
+/**
+ * 남은 AI 횟수 한 줄 — 예전엔 다 쓰고 나서야 알았다(무료 사진 하루 5회). 무제한·차단이면 remaining 이 null 이라 말하지 않는다.
+ * 다 썼을 때 결제로 풀리는 경우(무료)는 버튼을 그대로 둔다 — 누르면 업그레이드 안내가 뜬다. PRO 는 내일을 말한다.
+ */
+function quotaLine(q: FeatureState | undefined): string | null {
+  if (!q || q.remaining == null) return null;
+  const when = PERIOD_WORD[q.period] ?? '';
+  if (q.remaining > 0) return `${when} ${q.remaining}회 더 분석할 수 있어요`.trim();
+  return q.upgradable ? `${when} 분석 횟수를 다 썼어요`.trim() : `${when} 분석 횟수를 다 썼어요 · ${NEXT_PERIOD_WORD[q.period] ?? '다음에'} 다시 쓸 수 있어요`.trim();
+}
 /**
  * 한 번의 "칼로리 계산"에서 공공 DB(식품안전나라)를 부를 이름 개수 상한 — 배치 엔드포인트가
  * 없어 이름마다 한 번씩 부른다. 넘는 항목은 AI 가 함께 받으므로 빠지는 값은 없다.
@@ -132,6 +147,18 @@ export function DietRecordScreen({ navigation, route }: Props) {
   const couple = useRelationStore((s) => s.couple);
   /* 설정이 생기기 전 세션(값 undefined)은 서버 기본값과 맞춰 켜진 것으로 본다 */
   const autoAnalyzeMealPhoto = useAuthStore((s) => s.user?.autoAnalyzeMealPhoto) !== false;
+  // 남은 AI 횟수 — /plan/me 의 기능별 상태 그대로(앱은 한도를 하드코딩하지 않는다, FeatureState 주석)
+  const photoQuota = usePlanStore((s) => s.features.AI_FOOD_PHOTO);
+  const textQuota = usePlanStore((s) => s.features.AI_FOOD_TEXT);
+  // 결제로 못 푸는 소진(PRO 한도)이면 눌러도 429 뿐이다 — 버튼을 잠근다. 무료는 눌러야 업그레이드 안내가 뜬다
+  const photoQuotaSpent = photoQuota?.remaining === 0 && !photoQuota.upgradable;
+  // 분석을 하거나 실패할 때마다(그리고 화면을 열 때) 다시 읽는다 — 자동 분석도 같은 횟수를 쓰므로 앱 시작 때 값은 낡는다
+  const refreshAiQuota = useCallback(() => {
+    void usePlanStore.getState().load();
+  }, []);
+  useEffect(() => {
+    refreshAiQuota();
+  }, [refreshAiQuota]);
   /** 수정할 기록 — 없으면 새 기록 작성 */
   const editing = route.params?.meal;
   /**
@@ -806,6 +833,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
     } catch (e) {
       toast.error(getErrorMessage(e, 'AI 분석에 실패했어요.'));
     } finally {
+      refreshAiQuota();
       setAnalyzing(false);
     }
   };
@@ -868,6 +896,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
     } catch (e) {
       toast.error(getErrorMessage(e, '영양성분표를 읽지 못했어요.'));
     } finally {
+      refreshAiQuota();
       setAnalyzing(false);
     }
   };
@@ -926,6 +955,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
       toast.error(getErrorMessage(e, 'AI 계산에 실패했어요.'));
       return null;
     } finally {
+      refreshAiQuota();
       setAnalyzingText(false);
     }
   };
@@ -1162,7 +1192,12 @@ export function DietRecordScreen({ navigation, route }: Props) {
         (payload.sharedWithPartner
           ? `데이트 식단 완료! ${partnerName}님에게도 등록됐어요 💕`
           : '식단 기록 완료! ') +
-        (willAutoAnalyze ? '칼로리는 곧 채워져요.' : '') +
+        (willAutoAnalyze
+          ? photoQuota?.remaining === 0
+            // 자동 분석도 사진 분석 횟수를 쓴다 — 다 썼으면 서버가 조용히 건너뛰므로 "곧 채워져요"는 거짓말이 된다
+            ? '오늘 AI 분석 횟수를 다 써서 칼로리는 직접 적어주세요.'
+            : '칼로리는 곧 채워져요.'
+          : '') +
         placeToastSuffix;
       if (placeLinkFailed) {
         toast.error(saveMessage);
@@ -1435,8 +1470,10 @@ export function DietRecordScreen({ navigation, route }: Props) {
                 size="md"
                 onPress={() => void onAnalyze()}
                 loading={analyzing}
+                disabled={photoQuotaSpent}
                 style={styles.analyzeButton}
               />
+              {quotaLine(photoQuota) ? <Text style={styles.analyzeHint}>{quotaLine(photoQuota)}</Text> : null}
               {/*
                 신뢰도 표현 — NUTRITION_LABEL 은 추정이 아니라 표기값을 그대로 읽은 것이라
                 바코드·DB 조회와 같은 급으로 다르게 말한다(추정치라고 하면 신뢰도를 낮춰 보인다).
@@ -1653,6 +1690,8 @@ export function DietRecordScreen({ navigation, route }: Props) {
               <Text style={styles.analyzeHint}>
                 표기값이 있는 음식은 그 값으로, 없으면 AI가 추정해요. 항목별로 수정할 수 있어요.
               </Text>
+              {/* 표기값 조회는 횟수를 안 쓰므로 버튼은 잠그지 않는다 — AI 추정 몫만 남은 횟수를 말한다 */}
+              {quotaLine(textQuota) ? <Text style={styles.analyzeHint}>{quotaLine(textQuota)}</Text> : null}
             </>
           ) : null}
 
