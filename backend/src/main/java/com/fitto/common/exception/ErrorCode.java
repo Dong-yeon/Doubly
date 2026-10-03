@@ -59,6 +59,10 @@ public enum ErrorCode {
     /** 같은 사진으로 만든 식단이 이미 있다 — 채팅 사진 → 식단 기록을 두 번 누른 경우(LOVEBODY_REVIEW §2-5) */
     MEAL_PHOTO_ALREADY_RECORDED(HttpStatus.CONFLICT, "이 사진으로 이미 남긴 식단이 있어요."),
     MEAL_ALREADY_COPIED(HttpStatus.CONFLICT, "이미 불러온 식단이에요."),
+    /** 식단 찌르기(V120) — 하루 한 번, 상대가 아직 안 남겼을 때만, 밤에는 안 보낸다 */
+    MEAL_NUDGE_TOO_SOON(HttpStatus.CONFLICT, "오늘은 이미 물어봤어요. 내일 다시 물어볼 수 있어요."),
+    MEAL_NUDGE_ALREADY_RECORDED(HttpStatus.CONFLICT, "오늘 식사를 이미 남겼어요."),
+    MEAL_NUDGE_QUIET_HOURS(HttpStatus.BAD_REQUEST, "밤에는 알리지 않아요. 아침 8시부터 물어볼 수 있어요."),
 
     // 맛집 지도 (PLACE)
     PLACE_NOT_FOUND(HttpStatus.NOT_FOUND, "장소를 찾을 수 없습니다."),

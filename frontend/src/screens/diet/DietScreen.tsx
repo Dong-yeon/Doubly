@@ -297,7 +297,12 @@ export function DietScreen({ navigation, route }: Props) {
   const partnerName = useRelationStore((s) => s.couple?.partner?.name ?? null);
   const [partnerMeals, setPartnerMeals] = useState<FeedItem[]>([]);
   const [partnerMealsError, setPartnerMealsError] = useState(false);
+  // 식단 찌르기(direction 2순위) — 오늘 이미 물어봤으면 버튼 대신 "오늘 물어봤어요"
+  const [nudgedToday, setNudgedToday] = useState(false);
+  const [nudging, setNudging] = useState(false);
   const loadPartnerMeals = useCallback(async () => {
+    // 찌르기 여부는 곁가지라 실패해도 식사 목록을 막지 않는다
+    dietApi.partnerToday().then((t) => setNudgedToday(!!t.nudgedToday)).catch(() => undefined);
     try {
       setPartnerMeals(await dietApi.partnerTodayMeals());
       setPartnerMealsError(false);
@@ -306,6 +311,22 @@ export function DietScreen({ navigation, route }: Props) {
       setPartnerMealsError(true);
     }
   }, []);
+  const onNudgePartner = async () => {
+    if (nudging) return;
+    setNudging(true);
+    try {
+      await dietApi.nudgePartner();
+      haptics.success();
+      setNudgedToday(true);
+      toast.success(`${partnerName ?? '상대'}님께 물어봤어요`);
+    } catch (e) {
+      // 409(오늘 이미 물어봄·방금 남김)·400(밤) — 서버 문구가 그대로 설명이다. 다시 읽으면 상태도 맞춰진다
+      toast.info(getErrorMessage(e, '지금은 물어볼 수 없어요.'));
+      void loadPartnerMeals();
+    } finally {
+      setNudging(false);
+    }
+  };
   const onReactPartnerMeal = async (item: FeedItem, emoji: string) => {
     haptics.light();
     try {
@@ -839,7 +860,22 @@ export function DietScreen({ navigation, route }: Props) {
                 ) : partnerMealsError ? (
                   <LoadErrorRow what={`${partnerName}님 식사`} onRetry={() => void loadPartnerMeals()} />
                 ) : (
-                  <Text style={styles.partnerEmpty}>아직 남긴 식사가 없어요</Text>
+                  <View style={styles.partnerEmptyRow}>
+                    <Text style={styles.partnerEmpty}>아직 남긴 식사가 없어요</Text>
+                    {nudgedToday ? (
+                      <Text style={styles.partnerEmpty}>오늘 물어봤어요</Text>
+                    ) : (
+                      <TouchableOpacity
+                        onPress={onNudgePartner}
+                        disabled={nudging}
+                        hitSlop={8}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${partnerName}님께 뭐 먹었는지 물어보기`}
+                      >
+                        <Text style={styles.copyYesterday}>{nudging ? '보내는 중…' : '뭐 먹었는지 물어보기 👋'}</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 )}
               </View>
             ) : null}
@@ -1471,6 +1507,7 @@ const styles = themedStyles((colors) => ({
   emptyText: { color: colors.textSecondary, fontSize: fontSize.body },
   partnerSection: { marginBottom: spacing.md, gap: spacing.sm },
   partnerEmpty: { color: colors.textSecondary, fontSize: fontSize.body },
+  partnerEmptyRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.sm },
   footer: { textAlign: 'center', color: colors.textSecondary, paddingVertical: spacing.md },
   fabWrap: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: spacing.lg },
   // colors.backdrop — 하드코딩 rgba 리터럴이 다크모드에서 대비가 안 맞던 문제 (QA_CHECKLIST.md 패턴 8)

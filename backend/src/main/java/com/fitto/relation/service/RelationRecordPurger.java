@@ -72,6 +72,9 @@ public class RelationRecordPurger {
                 + "(select t.id from trips t where t.couple_id = :rid)", relationId);
         exec("delete from trips where couple_id = :rid", relationId);
 
+        // 식단 찌르기(V120) — relations 를 참조한다
+        exec("delete from meal_nudges where relation_id = :rid", relationId);
+
         exec("delete from place_visits where place_id in "
                 + "(select p.id from places p where p.couple_id = :rid)", relationId);
         exec("delete from places where couple_id = :rid", relationId);

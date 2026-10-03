@@ -34,6 +34,7 @@ import com.fitto.diet.domain.MealType;
 import com.fitto.diet.dto.MealResponse;
 import com.fitto.diet.dto.SaveMealRequest;
 import com.fitto.diet.service.MealService;
+import com.fitto.diet.service.MealNudgeService;
 import com.fitto.feed.dto.CreatePostRequest;
 import com.fitto.feed.dto.FeedItemType;
 import com.fitto.feed.service.FeedService;
@@ -128,6 +129,7 @@ class WithdrawFlowTest {
     @Autowired FavoriteFoodGiftService favoriteFoodGiftService;
     @Autowired WorkoutService workoutService;
     @Autowired MealService mealService;
+    @Autowired MealNudgeService mealNudgeService;
     @Autowired JournalService journalService;
     @Autowired JournalEntryRepository journalEntryRepository;
     /** 스파이 — 테스트 프로필은 Cloudinary 미설정이라 실제 삭제는 no-op, 어떤 URL 을 넘기는지만 본다 */
@@ -428,6 +430,20 @@ class WithdrawFlowTest {
         assertThat(left.get(0).sharedWithPartner()).isFalse();
         // 남은 쪽도 그 기록을 지우고 탈퇴할 수 있다
         assertThatCode(() -> mealService.delete(partner, left.get(0).id())).doesNotThrowAnyException();
+        assertThatCode(() -> withdrawalService.purgeNow(partner)).doesNotThrowAnyException();
+    }
+
+    /** 식단 찌르기(V120) — meal_nudges 가 보낸·받은 쪽 users 와 relations 를 모두 참조한다. 주고받은 계정도 탈퇴할 수 있어야 한다 */
+    @Test
+    void 식단_찌르기를_주고받은_계정도_탈퇴할_수_있다() {
+        Long me = register("withdraw-nudge-a@fitto.com");
+        Long partner = register("withdraw-nudge-b@fitto.com");
+        connectCouple(me, partner);
+        LocalDateTime noon = KstClock.today().atTime(12, 0);
+        mealNudgeService.nudgeAt(me, noon);
+        mealNudgeService.nudgeAt(partner, noon);
+
+        assertThatCode(() -> withdrawalService.purgeNow(me)).doesNotThrowAnyException();
         assertThatCode(() -> withdrawalService.purgeNow(partner)).doesNotThrowAnyException();
     }
 

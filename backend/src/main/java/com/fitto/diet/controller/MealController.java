@@ -34,6 +34,7 @@ import jakarta.validation.Valid;
 import org.springframework.dao.DataIntegrityViolationException;
 import com.fitto.feed.dto.FeedItemResponse;
 import com.fitto.feed.service.FeedService;
+import com.fitto.diet.service.MealNudgeService;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -62,11 +63,13 @@ public class MealController {
     private final NutritionService nutritionService;
     private final AiJobService aiJobService;
     private final FeedService feedService;
+    private final MealNudgeService mealNudgeService;
 
     public MealController(MealService mealService, FoodAnalysisService foodAnalysisService,
                           DietCoachService dietCoachService, NutritionService nutritionService,
-                          AiJobService aiJobService, FeedService feedService) {
+                          AiJobService aiJobService, FeedService feedService, MealNudgeService mealNudgeService) {
         this.feedService = feedService;
+        this.mealNudgeService = mealNudgeService;
         this.mealService = mealService;
         this.foodAnalysisService = foodAnalysisService;
         this.dietCoachService = dietCoachService;
@@ -197,7 +200,20 @@ public class MealController {
 
     @GetMapping("/partner/today")
     public ApiResponse<PartnerMealTodayResponse> partnerToday(@AuthenticationPrincipal AuthUser user) {
-        return ApiResponse.success(mealService.partnerToday(user.id()));
+        PartnerMealTodayResponse today = mealService.partnerToday(user.id());
+        return ApiResponse.success(today.connected()
+                ? today.withNudgedToday(mealNudgeService.nudgedToday(user.id()))
+                : today);
+    }
+
+    /**
+     * 식단 찌르기 — 상대가 오늘 식사를 안 남겼을 때 "뭐 먹었어?" 푸시를 한 번 보낸다(하루 한 번, KST 8~22시).
+     * 채팅에는 남지 않는다. 막히면 409(오늘 이미 물어봄·상대가 이미 남김) / 400(밤).
+     */
+    @PostMapping("/partner/nudge")
+    public ApiResponse<Void> nudgePartner(@AuthenticationPrincipal AuthUser user) {
+        mealNudgeService.nudge(user.id());
+        return ApiResponse.success(null, "물어봤어요");
     }
 
     /**
