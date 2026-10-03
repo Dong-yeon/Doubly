@@ -41,6 +41,12 @@ public class RelationController {
         return ApiResponse.success(relationService.createCoupleInvite(user.id()));
     }
 
+    /** 지금 살아 있는 내 초대코드 — 없으면 data 가 null. */
+    @GetMapping("/couple/invite")
+    public ApiResponse<InviteCodeResponse> findCoupleInvite(@AuthenticationPrincipal AuthUser user) {
+        return ApiResponse.success(relationService.findCoupleInvite(user.id()));
+    }
+
     @PostMapping("/couple/connect")
     public ApiResponse<RelationResponse> connectCouple(@AuthenticationPrincipal AuthUser user,
                                                        @Valid @RequestBody ConnectRequest request) {

@@ -6,6 +6,9 @@ import com.fitto.common.plan.Feature;
 import com.fitto.common.plan.PlanGuard;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
+import com.fitto.common.notification.NotificationCategory;
+import com.fitto.common.notification.NotificationService;
+import com.fitto.common.notification.PushLinks;
 import com.fitto.relation.domain.MemberRole;
 import com.fitto.relation.domain.Relation;
 import com.fitto.relation.domain.RelationMember;
@@ -53,6 +56,7 @@ public class RelationService {
     private final CloudinaryImageDeleter imageDeleter;
     private final PlanGuard planGuard;
     private final EventLogService eventLogService;
+    private final NotificationService notificationService;
 
     public RelationService(RelationRepository relationRepository,
                            RelationMemberRepository relationMemberRepository,
@@ -63,7 +67,8 @@ public class RelationService {
                            RelationRecordRestorer relationRecordRestorer,
                            CloudinaryImageDeleter imageDeleter,
                            PlanGuard planGuard,
-                           EventLogService eventLogService) {
+                           EventLogService eventLogService,
+                           NotificationService notificationService) {
         this.relationRepository = relationRepository;
         this.relationMemberRepository = relationMemberRepository;
         this.userRepository = userRepository;
@@ -74,51 +79,105 @@ public class RelationService {
         this.imageDeleter = imageDeleter;
         this.planGuard = planGuard;
         this.eventLogService = eventLogService;
+        this.notificationService = notificationService;
     }
 
-    /** 커플 초대코드 생성 — 6자리, 24시간 유효 (REL-01). */
+    /**
+     * 커플 초대코드 생성 — 6자리, 24시간 유효 (REL-01).
+     *
+     * <p><b>사람마다 살아 있는 코드는 하나다.</b> 대기 중인 초대가 있으면 그 행의 코드를 바꾸고(옛 코드는
+     * 즉시 무효), 없을 때만 행을 만든다. 예전엔 누를 때마다 행이 쌓이고 옛 코드도 살아 있었다
+     * (docs/first-experience-audit.md #4·#15).
+     */
     @Transactional
     public InviteCodeResponse createCoupleInvite(Long userId) {
+        lockUser(userId); // 연타·연결과 겹치지 않게 — connectCouple 과 같은 잠금
         if (hasActiveCouple(userId)) {
             throw new BusinessException(ErrorCode.ALREADY_CONNECTED);
         }
-        Relation relation = Relation.builder()
-                .relationType(RelationType.COUPLE)
-                .userAId(userId)
-                .status(RelationStatus.PENDING)
-                .inviteCode(generateUniqueCode())
-                .codeExpiresAt(LocalDateTime.now().plusHours(CODE_TTL_HOURS))
-                .build();
-        relationRepository.save(relation);
-        addMember(relation.getId(), userId, MemberRole.PARTNER);
+        String code = generateUniqueCode();
+        LocalDateTime expiresAt = LocalDateTime.now().plusHours(CODE_TTL_HOURS);
+
+        Relation relation = relationRepository.findPendingCoupleInvites(userId).stream().findFirst().orElse(null);
+        if (relation != null) {
+            relation.issueInviteCode(code, expiresAt);
+        } else {
+            relation = relationRepository.save(Relation.builder()
+                    .relationType(RelationType.COUPLE)
+                    .userAId(userId)
+                    .status(RelationStatus.PENDING)
+                    .inviteCode(code)
+                    .codeExpiresAt(expiresAt)
+                    .build());
+            addMember(relation.getId(), userId, MemberRole.PARTNER);
+        }
+        relationRepository.clearOtherCoupleInvites(userId, relation.getId());
         return new InviteCodeResponse(relation.getInviteCode(), relation.getCodeExpiresAt());
     }
 
-    /** 초대코드로 커플 연결 (REL-02). */
+    /**
+     * 지금 살아 있는 내 커플 초대코드 — 없거나 만료됐으면 null.
+     * 앱이 화면을 다시 열거나 재시작해도 같은 코드를 보여 주기 위함이다(예전엔 앱 메모리에만 있었다).
+     */
+    public InviteCodeResponse findCoupleInvite(Long userId) {
+        return relationRepository.findPendingCoupleInvites(userId).stream()
+                .filter(r -> r.getInviteCode() != null && !r.isExpired())
+                .findFirst()
+                .map(r -> new InviteCodeResponse(r.getInviteCode(), r.getCodeExpiresAt()))
+                .orElse(null);
+    }
+
+    /**
+     * 초대코드로 커플 연결 (REL-02).
+     *
+     * <p><b>두 사람을 id 순서로 잠근 뒤</b> 판단한다. 잠금이 없을 때는
+     * ① 두 사람이 같은 코드를 동시에 넣으면 둘 다 200 을 받았고,
+     * ② A·B 가 서로의 코드를 동시에 넣으면 같은 두 사람 사이에 활성 커플이 둘 생겼다.
+     * 사람 단위 잠금이면 둘 다 한 줄로 서고, 뒤에 선 쪽은 앞의 결과를 보고 거절된다.
+     */
     @Transactional
     public RelationResponse connectCouple(Long userId, String code) {
-        Relation relation = relationRepository.findByInviteCode(code.trim().toUpperCase())
+        String normalized = code.trim().toUpperCase();
+        Long inviterId = relationRepository.findInviterByInviteCode(normalized)
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVITE_CODE_INVALID));
+        if (inviterId.equals(userId)) {
+            throw new BusinessException(ErrorCode.INVITE_CODE_INVALID, "본인이 생성한 코드로는 연결할 수 없습니다.");
+        }
+        lockUser(Math.min(userId, inviterId));
+        lockUser(Math.max(userId, inviterId));
 
+        // 잠금 대기 중 다른 사람이 먼저 연결했으면 코드가 비워져 여기서 걸린다
+        Relation relation = relationRepository.findByInviteCodeForUpdate(normalized)
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVITE_CODE_INVALID));
         if (relation.getRelationType() != RelationType.COUPLE
-                || relation.getStatus() != RelationStatus.PENDING) {
+                || relation.getStatus() != RelationStatus.PENDING
+                || !relation.getUserAId().equals(inviterId)) {
             throw new BusinessException(ErrorCode.INVITE_CODE_INVALID);
         }
         if (relation.isExpired()) {
             throw new BusinessException(ErrorCode.INVITE_CODE_EXPIRED);
         }
-        if (relation.getUserAId().equals(userId)) {
-            throw new BusinessException(ErrorCode.INVITE_CODE_INVALID, "본인이 생성한 코드로는 연결할 수 없습니다.");
-        }
         if (hasActiveCouple(userId)) {
             throw new BusinessException(ErrorCode.ALREADY_CONNECTED);
+        }
+        // 초대한 쪽이 그사이 다른 사람과 연결됐다 — 예전엔 이 확인이 없어 활성 커플이 둘 생길 수 있었다
+        if (hasActiveCouple(inviterId)) {
+            throw new BusinessException(ErrorCode.INVITE_CODE_INVALID, "상대가 이미 다른 분과 연결되어 있어요.");
         }
 
         relation.connect(userId);
         addMember(relation.getId(), userId, MemberRole.PARTNER);
-        User partner = userRepository.findById(relation.getUserAId()).orElse(null);
+        // 두 사람이 따로 만들어 둔 다른 초대코드는 이제 쓸 데가 없다 — 남겨 두면 제3자가 연결할 수 있다
+        relationRepository.clearOtherCoupleInvites(inviterId, relation.getId());
+        relationRepository.clearOtherCoupleInvites(userId, relation.getId());
+
+        User inviter = userRepository.findById(inviterId).orElse(null);
+        String accepterName = userRepository.findById(userId).map(User::getName).orElse("상대");
+        // 초대한 쪽은 아직 관계 id 가 없어 실시간 채널을 구독할 수 없다 — 푸시로 알린다(커밋 후 발송)
+        notificationService.notify(inviterId, NotificationCategory.PARTNER,
+                "커플로 연결됐어요", accepterName + "님이 초대를 받아 주었어요. 이제 함께 기록해요", PushLinks.HOME);
         eventLogService.log(userId, relation.getId(), AnalyticsEvent.COUPLE_CONNECTED, null);
-        return RelationResponse.of(relation, partner);
+        return RelationResponse.of(relation, inviter);
     }
 
     /** 트레이너 회원 초대코드 생성 (REL-03) — 정원·수락 여부 확인. */
@@ -330,6 +389,12 @@ public class RelationService {
     }
 
     // ---- helpers ----
+
+    /** 사용자 행 잠금 — 커플 초대·연결을 사람 단위로 직렬화한다. 두 명을 잠글 땐 반드시 id 오름차순으로(교착 방지). */
+    private void lockUser(Long userId) {
+        userRepository.findByIdForUpdate(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+    }
 
     private boolean hasActiveCouple(Long userId) {
         return !relationRepository
