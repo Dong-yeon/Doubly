@@ -289,8 +289,9 @@ SUBSCRIBE 인가: `/sub/rooms/`·`/sub/couple/`·`/sub/games/` 는 **관계 구�
 - **관계 해제**(`RelationService.endRelation`): 관계를 ENDED 로만 바꾸고 메시지는 **남는다**. 이후 REST·STOMP 전송·SUBSCRIBE 모두
   `RELATION_NOT_ACTIVE`/구독 거부 — 양쪽 다 과거 대화를 못 본다. 대기 중 예약 메시지는 발송 시점에 실패 → 취소 처리.
 - **지난 기록 불러오기**(재회, `RelationRecordRestorer`): `chat_messages.relation_id` 를 새 관계로 옮긴 뒤 옛 `relations` 행을 지운다.
-  **`chat_message_bookmarks`·`chat_pinned_messages`·`scheduled_chat_messages` 는 옮기지 않는데 셋 다 `relations` FK 가 `ON DELETE CASCADE` 라
-  옛 관계 삭제와 함께 사라진다** — FK 위반은 아니지만 저장한 대화·공지 고정이 조용히 유실된다(§8-2 ⑥). 리액션은 message_id 기준이라 따라간다.
+  리액션은 message_id 기준이라 따라간다. 2026-10-03 부터 **저장한 대화·공지 고정도 함께 옮긴다**(예전엔 `relations` CASCADE 로
+  조용히 유실, §8-2 ⑥). 공지는 관계당 하나라 재회 후 새로 고정한 게 있으면 그쪽을 남긴다. **예약 전송은 일부러 옮기지 않는다** —
+  헤어지기 전에 걸어 둔 메시지가 재회 뒤 나가면 안 되고, 발송·취소 행은 화면에 없는 이력이다(옛 관계와 함께 CASCADE 삭제).
 - **지난 기록 완전 삭제**(`purgeRecords`, 해제된 관계만) / **회원 탈퇴**(14일 유예 후 `AccountWithdrawalService.purge` → `UserDataPurger.purgeFor` → 관계마다 `RelationRecordPurger.purge`):
   순서 = 리액션 → 북마크 → 예약 → 고정 → `reply_to_id = null` → `chat_messages` 삭제 → … → `relations`.
   이미지 URL(`chat_messages.image_url`, 음성 `content` 의 오디오 URL, 예약 메시지 `image_url`)을 **삭제 전에 모아** 커밋 이후 Cloudinary 에서 지운다.
@@ -329,7 +330,7 @@ SUBSCRIBE 인가: `/sub/rooms/`·`/sub/couple/`·`/sub/games/` 는 **관계 구�
 | ③ | 서버가 STOMP 전송을 거절(관계 종료·검증 실패·팩 잠금 등) | 클라이언트 통보 없음. TEXT 는 "보내는 중" 정체 → 재진입 시 사라짐(글 유실), 그 외 타입은 아무 일도 안 일어남 |
 | ④ | 두 사람이 거의 동시에 전송 | 저장 id 순서와 브로드캐스트 도착 순서가 다를 수 있음(인바운드 채널 스레드 풀). 앱은 도착 순으로 앞에 붙여 **다음 보충(재연결·복귀) 또는 방 재진입 전까지 순서 뒤바뀜**(보충이 id 순으로 다시 세운다). 2인 대화라 드묾 — 확인 필요 |
 | ⑤ | ~~멱등키 없는 타입 더블탭·재시도~~ | 2026-10-03 수정 — 전 타입 키 + 그림류 낙관적 말풍선(§3-3). 앱 OTA 필요 |
-| ⑥ | 재회 후 지난 기록 복원 | 북마크·공지 고정·예약 메시지 유실(§7) |
+| ⑥ | ~~재회 후 지난 기록 복원 시 북마크·공지 유실~~ | 2026-10-03 수정(§7). 예약 메시지는 의도적으로 복원 안 함 |
 | ⑦ | 사진 업로드 성공 후 전송 실패/서버 저장 실패 | Cloudinary 고아 파일 |
 | ⑧ | 식단 "공유하기"(`DietRecordScreen.tsx` ~1188) | `publishEnsuringConnection` 의 false 를 보지 않고 항상 "채팅에 공유했어요" 토스트 → 실패해도 성공으로 보임 |
 | ⑨ | 다중 인스턴스 배포 시 | 실시간 미전달(§2-4) |
@@ -352,9 +353,9 @@ SUBSCRIBE 인가: `/sub/rooms/`·`/sub/couple/`·`/sub/games/` 는 **관계 구�
 - 백엔드(있음):
   - `chat/ChatFlowTest`(27개, 서비스 직접 호출) — 멱등키 3종, 주고받기·읽음, 비구성원·관계 종료 차단, 스티커·터치, 리액션, 답장(타 방 인용 차단), 수정/삭제 권한, 내보내기 3종, 공지 고정 5종, 문구 스티커 5종(검색은 그 안에서 1회 확인할 뿐 전용 테스트 없음).
   - `chat/ScheduledChatMessageFlowTest`(5개) — 스위퍼 발송·중복 방지·취소·검증·관계 종료 시 취소. 시간대(T1)는 JVM 이 KST 라 원래 못 잡았다 — 수정과 함께 `KstInputLocalDateTimeDeserializerTest`(UTC 조건을 인자로 재현)와 JSON 배선 테스트를 더했다.
-  - `common/security/StompSubscriptionAuthTest` — 구독 인가. `relation/PurgeRecordsFlowTest`·`auth/WithdrawFlowTest` — 삭제 순서.
+  - `common/security/StompSubscriptionAuthTest` — 구독 인가. `relation/RestoreRecordsFlowTest` — 복원 시 저장한 대화·공지 고정·예약 처리(2026-10-03, H2·PostgreSQL). `relation/PurgeRecordsFlowTest`·`auth/WithdrawFlowTest` — 삭제 순서.
   - 동기화: `StickerImageSyncTest`, `StickerPackSyncTest`, `CatchMindShareCaptionSyncTest`, `AnimatedStickerTest`.
-- 백엔드(없음): STOMP 전송 왕복(실제 `@MessageMapping`·브로드캐스트·`DataIntegrityViolation` 삼키기) 통합 테스트, `/photos`·북마크 목록·`markReadUpTo` 경계, **복원 시 북마크·고정 보존**(`RestoreRecordsFlowTest` 에 채팅 항목 없음), 예약 시각 시간대.
+- 백엔드(없음): STOMP 전송 왕복(실제 `@MessageMapping`·브로드캐스트·`DataIntegrityViolation` 삼키기) 통합 테스트, `/photos`·북마크 목록·`markReadUpTo` 경계, 예약 시각 시간대.
 - 프론트: 테스트 러너 없음. 보충 병합은 `scripts/verify-chat-sync.mjs`(24개, 2026-10-03 — package.json 미등록, fingerprint 때문). `chatSocket`(재연결·구독 복구) 검증 스크립트는 없음.
   관련 verify 스크립트는 `verify:linkify`, `verify:sticker-codes`, `verify:chat-theme`, `verify-context-stickers` 뿐.
 
