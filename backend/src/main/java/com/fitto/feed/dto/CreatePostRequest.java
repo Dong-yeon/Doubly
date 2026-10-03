@@ -22,16 +22,31 @@ public record CreatePostRequest(
          * 기록일(KST, V119) — 이 일이 있었던 날. 없으면 오늘. 미래는 서비스가 거절한다.
          * 예전 앱은 보내지 않으므로 그대로 오늘로 남는다(올린 날 = 기록일, 예전 동작과 같다).
          */
-        LocalDate recordDate
+        LocalDate recordDate,
+        /**
+         * 저장 멱등키(V127) — 같은 작성 화면의 재시도는 같은 값을 보낸다. 앱이 10초 만에 실패로 본 저장이
+         * 실제로는 커밋됐을 때, 다시 누른 저장이 글을 하나 더 만들지 않게 한다. 옛 앱은 보내지 않는다.
+         */
+        @Size(max = 64)
+        String clientRequestId
 ) {
     /** 여러 장 사진 이전부터 쓰던 2개짜리 호출부(기존 테스트 등) 호환용. */
     public CreatePostRequest(String content, String imageUrl) {
-        this(content, imageUrl, null, null);
+        this(content, imageUrl, null, null, null);
     }
 
     /** 기록일 이전의 3개짜리 호출부 호환용 — 기록일은 오늘. */
     public CreatePostRequest(String content, String imageUrl, List<String> imageUrls) {
-        this(content, imageUrl, imageUrls, null);
+        this(content, imageUrl, imageUrls, null, null);
+    }
+
+    /** 멱등키 이전의 4개짜리 호출부 호환용 — 키 없음. */
+    public CreatePostRequest(String content, String imageUrl, List<String> imageUrls, LocalDate recordDate) {
+        this(content, imageUrl, imageUrls, recordDate, null);
+    }
+
+    public String clientRequestIdOrNull() {
+        return clientRequestId == null || clientRequestId.isBlank() ? null : clientRequestId.trim();
     }
 
     public List<String> photosOrEmpty() {

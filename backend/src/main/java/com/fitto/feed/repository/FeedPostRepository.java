@@ -12,6 +12,9 @@ import java.util.List;
 
 public interface FeedPostRepository extends JpaRepository<FeedPost, Long> {
 
+    /** 저장 멱등 — 같은 작성자의 같은 키로 이미 저장된 글(V127) */
+    java.util.Optional<FeedPost> findByAuthorIdAndClientRequestId(Long authorId, String clientRequestId);
+
     /**
      * 타임라인 — 커서 (createdAt, id) 이전 포스트, 최신순.
      * id 보조키가 없으면 같은 시각의 포스트가 페이지 경계에서 누락된다.
