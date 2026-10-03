@@ -362,6 +362,12 @@ public class ChatService {
         return ChatMessageResponse.from(message, replyPreview(message.getReplyToId()), List.of(), false);
     }
 
+    /** 이 멱등키로 저장된 메시지가 있는가 — STOMP 컨트롤러가 unique 위반이 동시 도착 경합인지 가른다. */
+    public boolean isSaved(Long relationId, String rawClientMessageId) {
+        String key = normalizeClientMessageId(rawClientMessageId);
+        return key != null && chatMessageRepository.findByRelationIdAndClientMessageId(relationId, key).isPresent();
+    }
+
     /** 문구 스티커 문구의 최대 길이 — 코드포인트 기준(앱의 {@code Array.from(text).length} 와 같은 셈) */
     static final int TEXT_STICKER_MAX_LENGTH = 12;
 
