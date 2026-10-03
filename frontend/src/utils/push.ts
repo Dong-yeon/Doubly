@@ -8,6 +8,8 @@ import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { notificationApi } from '../api/notification';
+import { STORAGE_KEYS } from '../constants/config';
+import { storage } from './storage';
 import { useChatStore } from '../store/chatStore';
 
 /**
@@ -182,4 +184,39 @@ async function registerToken(): Promise<void> {
     projectId ? { projectId } : undefined,
   );
   await notificationApi.registerToken(token, Platform.OS);
+  // 로그아웃 때 서버에서 지우려면 무엇을 등록했는지 알아야 한다(pushTokenForLogout)
+  await storage.setItem(STORAGE_KEYS.pushToken, token).catch(() => {});
+}
+
+/** 로그아웃이 토큰 조회 때문에 늘어지지 않게 — 넘으면 토큰 없이 로그아웃한다 */
+const LOGOUT_TOKEN_TIMEOUT_MS = 3000;
+
+/**
+ * 로그아웃 때 서버에서 지울 이 기기의 푸시 토큰. 모르면 null.
+ *
+ * <p>예전 로그아웃은 리프레시 토큰만 폐기해서, 로그아웃한 폰에 그 계정의 채팅·상대 활동 알림이
+ * 미리보기 본문째로 계속 왔다(docs/my-current-state.md §7-4). 그래서 등록할 때 남겨 둔 토큰을
+ * 로그아웃 요청에 실어 보낸다.
+ *
+ * <p>남겨 둔 값이 없으면(이 코드 이전에 등록한 기기) 권한이 있을 때만 다시 발급받아 본다.
+ * 권한을 <b>요청하지는 않는다</b> — 로그아웃하는 사람에게 권한창을 띄울 이유가 없다.
+ * 남겨 둔 값은 로그아웃 뒤에도 지우지 않는다. 기기 토큰이라 다음 계정이 등록해도 같은 값이다.
+ */
+export async function pushTokenForLogout(): Promise<string | null> {
+  if (Platform.OS === 'web') return null;
+  try {
+    const saved = await storage.getItem(STORAGE_KEYS.pushToken);
+    if (saved) return saved;
+    const current = await Notifications.getPermissionsAsync();
+    if (!current.granted) return null;
+    const projectId =
+      Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
+    const fetched = Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined).then(
+      (t) => t.data,
+    );
+    const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), LOGOUT_TOKEN_TIMEOUT_MS));
+    return await Promise.race([fetched, timeout]);
+  } catch {
+    return null;
+  }
 }

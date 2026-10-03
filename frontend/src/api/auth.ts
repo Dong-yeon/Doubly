@@ -41,10 +41,13 @@ export const authApi = {
     gender?: Gender;
     heightCm?: number;
   }) => unwrap(apiClient.put<ApiResponse<User>>('/auth/me', payload)),
-  /** 서버에서 리프레시 토큰 폐기 — 만료 전이라도 재사용 불가하게 만든다 */
-  logout: (refreshToken: string) =>
+  /**
+   * 서버에서 리프레시 토큰 폐기 — 만료 전이라도 재사용 불가하게 만든다.
+   * pushToken 을 주면 이 기기의 푸시 토큰도 지워, 로그아웃한 기기로 알림이 더 가지 않는다.
+   */
+  logout: (refreshToken: string, pushToken?: string | null) =>
     unwrap(
-      apiClient.post<ApiResponse<void>>('/auth/logout', {}, {
+      apiClient.post<ApiResponse<void>>('/auth/logout', pushToken ? { pushToken } : {}, {
         headers: { Authorization: `Bearer ${refreshToken}` },
       }),
     ),

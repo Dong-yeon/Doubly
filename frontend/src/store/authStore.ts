@@ -9,7 +9,7 @@ import { isSessionRejected, setAuthFailureHandler } from '../api/client';
 import { storage } from '../utils/storage';
 import { Alert } from '../utils/alert';
 import { formatMonthDay } from '../utils/date';
-import { registerPushTokenIfGranted } from '../utils/push';
+import { pushTokenForLogout, registerPushTokenIfGranted } from '../utils/push';
 import { useChatStore } from './chatStore';
 import { usePlanStore } from './planStore';
 import { usePlaceStore } from './placeStore';
@@ -153,10 +153,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: async () => {
-    // 서버에서 리프레시 토큰 폐기(베스트 에포트) 후 로컬 토큰 삭제
+    // 서버에서 리프레시 토큰과 이 기기의 푸시 토큰 폐기(베스트 에포트) 후 로컬 토큰 삭제
     try {
       const refreshToken = await storage.getItem(STORAGE_KEYS.refreshToken);
-      if (refreshToken) await authApi.logout(refreshToken);
+      if (refreshToken) await authApi.logout(refreshToken, await pushTokenForLogout());
     } catch {
       // 네트워크 오류 등은 무시 — 로컬 세션 정리는 항상 수행
     }

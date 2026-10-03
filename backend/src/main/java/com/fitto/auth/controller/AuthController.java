@@ -5,6 +5,7 @@ import com.fitto.auth.dto.ConsentRequest;
 import com.fitto.auth.dto.ForgotPasswordRequest;
 import com.fitto.auth.dto.GoogleLoginRequest;
 import com.fitto.auth.dto.LoginRequest;
+import com.fitto.auth.dto.LogoutRequest;
 import com.fitto.auth.dto.MarketingConsentRequest;
 import com.fitto.auth.dto.MealPhotoAnalysisSettingRequest;
 import com.fitto.auth.dto.NotificationCategorySettingRequest;
@@ -81,10 +82,14 @@ public class AuthController {
         return ApiResponse.success(authService.refresh(bearerToken(authorization), clientIp(http)));
     }
 
-    /** 로그아웃 — 리프레시 토큰을 서버에서 폐기한다(만료 전이라도 재사용 불가). */
+    /**
+     * 로그아웃 — 리프레시 토큰을 서버에서 폐기하고, 본문에 이 기기의 푸시 토큰이 있으면 함께 지운다.
+     * 본문은 없어도 된다(옛 앱).
+     */
     @PostMapping("/logout")
-    public ApiResponse<Void> logout(@RequestHeader("Authorization") String authorization) {
-        authService.logout(bearerToken(authorization));
+    public ApiResponse<Void> logout(@RequestHeader("Authorization") String authorization,
+                                    @Valid @RequestBody(required = false) LogoutRequest request) {
+        authService.logout(bearerToken(authorization), request == null ? null : request.pushToken());
         return ApiResponse.success(null, "로그아웃되었습니다.");
     }
 

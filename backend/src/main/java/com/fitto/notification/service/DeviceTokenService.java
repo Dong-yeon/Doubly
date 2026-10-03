@@ -29,6 +29,18 @@ public class DeviceTokenService {
     }
 
     /**
+     * 로그아웃한 기기의 토큰을 지운다 — 그 기기로 이 계정 알림이 더 가지 않게.
+     *
+     * <p>토큰만으로 지우지 않고 사용자를 함께 건다. 토큰 값을 아는 다른 사람이 남의 기기 알림을
+     * 끊을 수 없게 하기 위해서다. 그 사이 다른 계정이 같은 기기에 등록해 토큰이 넘어갔다면
+     * 지울 행이 없어 아무 일도 일어나지 않는다(그게 맞다).
+     */
+    @Transactional
+    public void unregister(Long userId, String token) {
+        deviceTokenRepository.deleteByUserIdAndToken(userId, token);
+    }
+
+    /**
      * Expo 가 <b>DeviceNotRegistered</b> 로 거절한 토큰을 지운다.
      *
      * <p>앱 삭제·재설치·기기 교체를 하면 APNs/FCM 이 기존 토큰을 폐기하는데, 그 사실은
