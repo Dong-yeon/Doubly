@@ -303,6 +303,11 @@ public class PlanGuard {
         return planResolver.resolve(userId);
     }
 
+    /** 커플 기능에 적용되는 플랜 — 상대가 결제했으면 PRO. 커플이 없으면 {@link #planOf} 와 같다. */
+    public Plan couplePlanOf(Long userId) {
+        return planResolver.resolveCouple(userId);
+    }
+
     /** 이 사람이 체험 중인가 — 전역 플래그 또는 가입 후 N일. */
     public boolean isInTrial(Long userId) {
         return planResolver.isInTrial(userId);
