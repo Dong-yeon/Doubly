@@ -16,6 +16,7 @@ import { Checkbox } from '../../components/Checkbox';
 import { exportApi } from '../../api/export';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
+import { useAuthStore } from '../../store/authStore';
 import { Alert } from '../../utils/alert';
 import { sectionLabel } from '../../utils/exportDocument';
 import {
@@ -45,6 +46,8 @@ function KeepAwake() {
 type Pending = ReturnType<typeof pendingExport>;
 
 export function RecordExportScreen() {
+  // 로그인한 사람만 오는 화면이다. 0 은 어떤 계정과도 맞지 않아 남은 상태를 남의 것으로 본다(안전한 쪽)
+  const userId = useAuthStore((s) => s.user?.id) ?? 0;
   const [summary, setSummary] = useState<ExportSummary | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [pending, setPending] = useState<Pending>(null);
@@ -53,16 +56,22 @@ export function RecordExportScreen() {
   const [progress, setProgress] = useState<ExportProgress | null>(null);
   const [result, setResult] = useState<ExportResult | null>(null);
   const cancel = useRef<ExportCancelToken>({ cancelled: false });
+  /*
+   * 연타 가드 — running(state)은 다음 렌더에야 버튼을 끄므로, 그 사이 두 번째 탭이 들어오면
+   * start() 가 두 번 불려 주 2회 한도가 한 번에 다 깎였다(docs/my-current-state.md §7-3).
+   * 첫 await 보다 먼저 ref 로 잠근다.
+   */
+  const inFlight = useRef(false);
 
   const load = useCallback(async () => {
     setLoadError(null);
-    setPending(pendingExport());
+    setPending(pendingExport(userId));
     try {
       setSummary(await exportApi.summary());
     } catch (e) {
       setLoadError(getErrorMessage(e, '내보낼 기록을 불러오지 못했어요.'));
     }
-  }, []);
+  }, [userId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -79,12 +88,16 @@ export function RecordExportScreen() {
   );
 
   const run = async (fresh: boolean) => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setRunning(true);
     if (!(await canExportRecords())) {
       toast.error('이 기기에서는 파일을 저장할 수 없어요.');
+      inFlight.current = false;
+      setRunning(false);
       return;
     }
     cancel.current = { cancelled: false };
-    setRunning(true);
     setResult(null);
     try {
       let started: ExportSummary | null = null;
@@ -101,19 +114,21 @@ export function RecordExportScreen() {
         setSummary(started);
       }
       const done = await runExport({
+        userId,
         summary: started,
         saveToGallery: fresh ? saveToGallery : false,
         onProgress: setProgress,
         cancel: cancel.current,
       });
       setResult(done);
-      setPending(pendingExport());
+      setPending(pendingExport(userId));
       await shareExport(done.zipUri, done.zipName);
     } catch (e) {
       if (e instanceof ExportCancelled) return;
       Alert.alert('내보내기를 멈췄어요', `${getErrorMessage(e, '잠시 뒤 다시 시도해주세요.')}\n받은 것은 남아 있어 이어서 할 수 있어요.`);
-      setPending(pendingExport());
+      setPending(pendingExport(userId));
     } finally {
+      inFlight.current = false;
       setRunning(false);
     }
   };
