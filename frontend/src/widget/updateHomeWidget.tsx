@@ -7,11 +7,15 @@
  */
 import React from 'react';
 import { Platform } from 'react-native';
-import { saveWidgetData, WidgetData } from './widgetData';
+import { loadWidgetData, saveWidgetData, WidgetData } from './widgetData';
 
 export async function updateHomeWidget(data: WidgetData): Promise<void> {
   if (Platform.OS !== 'android') return;
   try {
+    // 무드를 이번에 모르면(undefined) 지난 캐시 값을 그대로 둔다 — 조회 한 번 실패로 위젯에서 상대 기분이 사라지지 않게
+    if (data.partnerMood === undefined) {
+      data = { ...data, partnerMood: (await loadWidgetData())?.partnerMood ?? null };
+    }
     await saveWidgetData(data);
     const { requestWidgetUpdate } = await import('react-native-android-widget');
     const { DoublyWidget } = await import('./DoublyWidget');
