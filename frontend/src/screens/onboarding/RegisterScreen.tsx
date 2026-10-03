@@ -10,6 +10,8 @@ import { FormKeyboardView } from '../../components/FormKeyboardView';
 import { Checkbox } from '../../components/Checkbox';
 import { useAuthStore } from '../../store/authStore';
 import { getErrorMessage } from '../../utils/error';
+import { errorCodeOf, isApiError } from '../../api/client';
+import { Alert } from '../../utils/alert';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { Gender } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
@@ -53,6 +55,24 @@ export function RegisterScreen({ navigation }: Props) {
         agreeMarketing,
       });
     } catch (e) {
+      /*
+       * 이전 시도가 타임아웃으로 끊겼지만 서버에선 가입이 끝난 경우가 대표적이다 — 다시 누르면 409 가
+       * 온다. 오류 문구만 띄우면 사용자는 가입이 안 된 줄 안다. 로그인으로 보내고 이메일을 채워 준다.
+       * (first-experience-audit.md #19)
+       */
+      if (errorCodeOf(e) === 'EMAIL_ALREADY_EXISTS') {
+        const typed = email.trim();
+        Alert.alert('이미 가입된 이메일이에요', '로그인해 주세요.', [
+          { text: '로그인하기', onPress: () => navigation.popTo('Login', { email: typed }, { merge: true }) },
+        ]);
+        return;
+      }
+      // 공용 타임아웃 문구는 AI 화면용("다시 시도하면 대개 바로 나와요")이라 가입엔 맞지 않는다.
+      // 서버는 이미 가입을 끝냈을 수 있으니 그 가능성을 함께 알린다 (#19)
+      if (isApiError(e) && e.timedOut) {
+        setError('응답이 늦어 기다리다 멈췄어요. 잠시 후 다시 시도해 주세요. 이미 가입됐다면 로그인할 수 있어요.');
+        return;
+      }
       setError(getErrorMessage(e));
     } finally {
       setLoading(false);

@@ -8,7 +8,9 @@ export type OnboardingStackParamList = {
   Splash: undefined;
   // 첫 실행 인트로 (서비스 소개 3장)
   Onboarding: undefined;
-  Login: undefined;
+  // email — 가입 화면이 "이미 가입된 이메일"을 받고 돌려보낼 때 입력칸을 채워 준다
+  // (first-experience-audit.md #19)
+  Login: { email?: string } | undefined;
   Register: undefined;
   // 비밀번호 재설정 — 코드 발송 → 코드 입력+새 비밀번호 설정
   ForgotPassword: undefined;

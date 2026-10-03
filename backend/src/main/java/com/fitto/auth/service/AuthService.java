@@ -75,6 +75,12 @@ public class AuthService {
         this.timingDummyHash = passwordEncoder.encode("timing-equalization-dummy");
     }
 
+    /** 이 이메일(정규화된 값)로 가입된 계정이 있는지 — 가입 경합 판정용 */
+    @Transactional(readOnly = true)
+    public boolean isRegistered(String email) {
+        return userRepository.existsByEmail(email);
+    }
+
     @Transactional
     public TokenResponse register(RegisterRequest request, String clientIp) {
         rateLimiter.checkRegister(clientIp);
