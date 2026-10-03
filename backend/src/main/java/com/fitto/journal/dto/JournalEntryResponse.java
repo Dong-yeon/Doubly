@@ -12,10 +12,12 @@ public record JournalEntryResponse(
         String body,
         String photoUrl,
         LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+        /** 우리 기록에 공유한 글의 id(V121) — 없으면 아직 공유하지 않았다. 메뉴가 "공유한 글 보기"로 바뀐다 */
+        Long sharedPostId
 ) {
     public static JournalEntryResponse from(JournalEntry e) {
         return new JournalEntryResponse(e.getJournalDate(), e.getMoodEmoji(), e.getBody(), e.getPhotoUrl(),
-                e.getCreatedAt(), e.getUpdatedAt());
+                e.getCreatedAt(), e.getUpdatedAt(), e.getSharedPostId());
     }
 }
