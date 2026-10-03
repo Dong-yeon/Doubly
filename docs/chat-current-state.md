@@ -135,9 +135,12 @@ SUBSCRIBE 인가: `/sub/rooms/`·`/sub/couple/`·`/sub/games/` 는 **관계 구�
 - 재연결: stompjs `reconnectDelay: 3000` **고정 간격(백오프 없음)**. 매 시도 `beforeConnect` 에서 토큰을 다시 읽고,
   직전이 STOMP ERROR 였으면 refresh 후 연결(최대 2회).
 - 구독 복구: `desired` 맵을 `onConnect` 마다 전부 다시 SUBSCRIBE(`applyDesiredSubscriptions`).
-- **빠진 메시지 보충**: `AppState → 'active'` 일 때만 `syncMissed(relationId)` — REST 로 **최신 1페이지(30건)** 를 받아 id 로 합친다.
-  - 앱이 포그라운드인 채 소켓만 끊겼다 붙은 경우(지하철 등)엔 보충 호출이 **없다** → §8-2 ①.
-  - 끊긴 사이 30건 넘게 오면 그 사이가 **비어 남는다** → §8-2 ②.
+- **빠진 메시지 보충**(2026-10-03 수정): `syncMissed(relationId)` 가 ⓐ `AppState → 'active'`, ⓑ 소켓이 **(재)연결될 때마다**
+  (`chatStore` 의 `subscribeSocketStatus`, 열린 방이 있을 때), ⓒ 이미 붙은 소켓으로 방에 들어올 때 돈다.
+  최신 페이지부터 과거로 내려가 화면의 가장 최근 메시지와 **겹칠 때까지** 받고(`utils/chatSync.ts` `fetchUntilBridged`),
+  10페이지(300건)로도 못 이으면 목록을 받은 것으로 갈아끼우고 `hasMoreOlder` 를 다시 연다. 합친 뒤 id 순으로 다시 세운다.
+  겹친 호출은 한 번으로 모으되 진행 중이면 끝난 뒤 한 번 더 돈다. 검증: `node frontend/scripts/verify-chat-sync.mjs`.
+  - 예전: 복귀 때만 최신 30건 → 포그라운드 재연결 공백(①)·30건 초과 공백(②).
 - 전송 시 끊겨 있으면 `publishEnsuringConnection` 이 최대 5초(`CONNECT_WAIT_MS`) 연결을 기다린 뒤 발행, 실패면 false.
 
 ### 2-3. 순서
@@ -321,10 +324,10 @@ SUBSCRIBE 인가: `/sub/rooms/`·`/sub/couple/`·`/sub/games/` 는 **관계 구�
 ### 8-2. 유실·중복·순서
 | # | 경로 | 결과 |
 | --- | --- | --- |
-| ① | 앱이 포그라운드인 채 소켓만 끊겼다 재연결(이동 중 등). 보충(`syncMissed`)은 `AppState` 복귀 때만 돈다 | 끊긴 사이 상대 메시지가 **방을 다시 열 때까지 안 보임**(유실처럼 보임). 푸시는 방을 보는 중이라 억제됨 |
-| ② | 끊긴 사이 30건 초과 수신 후 `syncMissed` | 최신 30건만 붙고 그 이전 공백은 메워지지 않음. `loadOlder` 커서는 기존의 가장 오래된 것이라 **공백이 영구히 남음**(방 재진입 전까지) |
+| ① | ~~앱이 포그라운드인 채 소켓만 끊겼다 재연결~~ — 2026-10-03 수정(재연결마다 보충) | 끊긴 사이 상대 메시지가 **방을 다시 열 때까지 안 보임**(유실처럼 보임). 푸시는 방을 보는 중이라 억제됨 |
+| ② | ~~끊긴 사이 30건 초과 수신 후 `syncMissed`~~ — 2026-10-03 수정(겹칠 때까지 페이지, 300건 초과는 갈아끼움) | 최신 30건만 붙고 그 이전 공백은 메워지지 않음. `loadOlder` 커서는 기존의 가장 오래된 것이라 **공백이 영구히 남음**(방 재진입 전까지) |
 | ③ | 서버가 STOMP 전송을 거절(관계 종료·검증 실패·팩 잠금 등) | 클라이언트 통보 없음. TEXT 는 "보내는 중" 정체 → 재진입 시 사라짐(글 유실), 그 외 타입은 아무 일도 안 일어남 |
-| ④ | 두 사람이 거의 동시에 전송 | 저장 id 순서와 브로드캐스트 도착 순서가 다를 수 있음(인바운드 채널 스레드 풀). 앱은 도착 순으로 앞에 붙여 **방 재진입 전까지 순서 뒤바뀜**. 2인 대화라 드묾 — 확인 필요 |
+| ④ | 두 사람이 거의 동시에 전송 | 저장 id 순서와 브로드캐스트 도착 순서가 다를 수 있음(인바운드 채널 스레드 풀). 앱은 도착 순으로 앞에 붙여 **다음 보충(재연결·복귀) 또는 방 재진입 전까지 순서 뒤바뀜**(보충이 id 순으로 다시 세운다). 2인 대화라 드묾 — 확인 필요 |
 | ⑤ | ~~멱등키 없는 타입 더블탭·재시도~~ | 2026-10-03 수정 — 전 타입 키 + 그림류 낙관적 말풍선(§3-3). 앱 OTA 필요 |
 | ⑥ | 재회 후 지난 기록 복원 | 북마크·공지 고정·예약 메시지 유실(§7) |
 | ⑦ | 사진 업로드 성공 후 전송 실패/서버 저장 실패 | Cloudinary 고아 파일 |
@@ -352,7 +355,7 @@ SUBSCRIBE 인가: `/sub/rooms/`·`/sub/couple/`·`/sub/games/` 는 **관계 구�
   - `common/security/StompSubscriptionAuthTest` — 구독 인가. `relation/PurgeRecordsFlowTest`·`auth/WithdrawFlowTest` — 삭제 순서.
   - 동기화: `StickerImageSyncTest`, `StickerPackSyncTest`, `CatchMindShareCaptionSyncTest`, `AnimatedStickerTest`.
 - 백엔드(없음): STOMP 전송 왕복(실제 `@MessageMapping`·브로드캐스트·`DataIntegrityViolation` 삼키기) 통합 테스트, `/photos`·북마크 목록·`markReadUpTo` 경계, **복원 시 북마크·고정 보존**(`RestoreRecordsFlowTest` 에 채팅 항목 없음), 예약 시각 시간대.
-- 프론트: 테스트 러너 없음. `chatStore`(낙관적 교체·`syncMissed` 병합)·`chatSocket`(재연결·구독 복구) 검증 스크립트 없음.
+- 프론트: 테스트 러너 없음. 보충 병합은 `scripts/verify-chat-sync.mjs`(24개, 2026-10-03 — package.json 미등록, fingerprint 때문). `chatSocket`(재연결·구독 복구) 검증 스크립트는 없음.
   관련 verify 스크립트는 `verify:linkify`, `verify:sticker-codes`, `verify:chat-theme`, `verify-context-stickers` 뿐.
 
 ---
