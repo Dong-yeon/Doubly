@@ -12,6 +12,11 @@
 > - "확인 필요"는 코드만으로 결론을 못 낸 항목이다.
 > - 하루 기록·무드는 `docs/daily-mood-current-state.md` 에 자세히 있다. 이 문서에서는 MY 에서 보이는 면만 다룬다.
 
+> **후속 조치 (2026-10-03)**: §7-4 로그아웃 후 푸시 — `POST /auth/logout` 이 본문 `{ pushToken }`(선택)을 받아,
+> 리프레시 토큰 주인의 그 토큰만 지운다(`DeviceTokenService.unregister`, 다른 기기·남의 토큰은 그대로).
+> 앱은 등록할 때 토큰을 SecureStore `doubly.pushToken` 에 남겨 두고 로그아웃 요청에 싣는다. 남겨 둔 값이 없으면
+> 권한이 있을 때만 다시 발급(3초 제한). 옛 앱·본문 없는 호출은 이전과 같다. 테스트 `LogoutPushTokenTest`.
+> 내보내기 임시 폴더 잔존은 아직 그대로다.
 > **후속 조치 (2026-10-03)**: §7-1 상대 PRO 이중 결제 — 사용자 결정은 "화면만 정직하게"(공유 범위는 그대로).
 > `GET /plan/me` 에 `couplePlan`(두 사람 중 높은 등급, 커플이 없으면 `plan` 과 같음)을 더했다(`PlanResolver.resolveCouple`).
 > `plan=FREE · couplePlan=PRO` 면 PlanScreen 은 "○○님 덕분에 커플 기능은 PRO예요" 태그, 개인 기능의 FREE → PRO 목록,
