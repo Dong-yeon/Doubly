@@ -40,6 +40,7 @@ import { placeApi } from '../../api/place';
 import { pickImageAsset, takePhotoAsset, shrinkImage, uploadImage } from '../../utils/imageUpload';
 import { getErrorMessage } from '../../utils/error';
 import { errorCodeOf } from '../../api/client';
+import { uploadApi, wasRejected } from '../../api/upload';
 import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
@@ -329,6 +330,30 @@ export function DietRecordScreen({ navigation, route }: Props) {
    * 올릴 게 남지 않았는데 "사진 올리는 중…" 이 한 프레임 번쩍이면 오히려 느려 보인다.
    */
   const uploadedDoneRef = useRef<string | null>(initialPhoto);
+  /*
+   * Cloudinary 고아 정리(lovebody-current-state §4-6) — 이 화면에서 <b>새로 올린</b> 사진을 저장하지 않고 버리면
+   * 서버에 치워 달라고 한다(다시 고르기·사진 빼기·저장 없이 나가기). initialPhoto(고치는 기록의 사진·채팅 사진)는
+   * 이미 다른 기록이 쓰는 파일이라 건드리지 않는다 — 고치면서 바꾼 예전 사진은 서버가 저장 때 지운다.
+   * 서버도 "아무 기록도 안 쓰는 막 올린 사진"만 지우므로 여기서 실수해도 쓰이는 파일은 남는다.
+   */
+  const discardPreUpload = useCallback(
+    (entry: { uri: string; url: Promise<string> } | null) => {
+      if (!entry || entry.uri === initialPhoto) return;
+      entry.url.then(uploadApi.discard, () => undefined);
+    },
+    [initialPhoto],
+  );
+  // 저장이 됐거나 됐을 수도 있으면(타임아웃) 나갈 때 사진을 치우지 않는다
+  const maybeSavedRef = useRef(false);
+  useEffect(
+    () => () => {
+      // 저장 요청이 아직 가는 중이면 곧 기록이 될 사진일 수 있다 — 그때도 두고 간다
+      if (!maybeSavedRef.current && !savingRef.current) discardPreUpload(uploadedRef.current);
+    },
+    // 나갈 때 한 번 — 그 순간의 ref 를 읽는 게 목적이다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
 
   // 헤더 제목은 스택 옵션이 "식단 기록"으로 고정돼 있어 수정일 때만 바꿔 단다
   useLayoutEffect(() => {
@@ -789,6 +814,9 @@ export function DietRecordScreen({ navigation, route }: Props) {
       if (!picked) return;
       // 고르자마자 줄인다 — 업로드·서버 다운로드·Gemini 전송이 한꺼번에 가벼워진다
       const uri = await shrinkImage(picked);
+      // 다시 고른 것이면 앞서 미리 올린 사진은 버려진다
+      const previous = uploadedRef.current;
+      if (previous && previous.uri !== uri) discardPreUpload(previous);
       setPhotoUri(uri);
       // 새 사진이니 이전 사진의 분석 안내(추정치/표기값 문구)는 더 이상 안 맞는다
       setAnalysisSource(null);
@@ -889,11 +917,16 @@ export function DietRecordScreen({ navigation, route }: Props) {
    */
   const analyzeLabelPhoto = async (uri: string, productName?: string) => {
     setAnalyzing(true);
+    // 영양성분표 사진은 분석에만 쓰고 저장하지 않는다 — 분석이 <b>끝나면</b> 치운다(예전엔 항상 고아로 남았다).
+    // "아직 만들고 있어요"(2분 대기 초과, status 0)면 서버 작업이 아직 그 파일을 받아야 할 수 있어 두고 간다.
+    let url: string | null = null;
     try {
-      const url = await runBusy('영양성분표 올리는 중…', () => uploadImage(uri));
+      url = await runBusy('영양성분표 올리는 중…', () => uploadImage(uri));
       const result = await dietApi.analyze(url);
+      uploadApi.discard(url);
       applyPhotoAnalysis(result, { productName });
     } catch (e) {
+      if (url && wasRejected(e)) uploadApi.discard(url);
       toast.error(getErrorMessage(e, '영양성분표를 읽지 못했어요.'));
     } finally {
       refreshAiQuota();
@@ -1133,6 +1166,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
        */
       if (editing) {
         await update(editing.id, payload);
+        maybeSavedRef.current = true;
         haptics.success();
         toast.success('식단을 수정했어요');
         allowLeave();
@@ -1141,6 +1175,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
       }
 
       const saved = await save(payload);
+      maybeSavedRef.current = true;
       haptics.success();
 
       /*
@@ -1243,6 +1278,8 @@ export function DietRecordScreen({ navigation, route }: Props) {
         ]);
       }
     } catch (e) {
+      // 타임아웃·끊김이면 서버가 뒤늦게 저장했을 수 있다 — 나갈 때 사진을 치우지 않는다
+      if (!wasRejected(e)) maybeSavedRef.current = true;
       Alert.alert('오류', getErrorMessage(e));
     } finally {
       savingRef.current = false;
@@ -1451,6 +1488,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
               onPress={() => {
                 setPhotoUri(null);
                 setAnalysisSource(null);
+                discardPreUpload(uploadedRef.current);
                 // 업로드 캐시만 버린다. 분석으로 들어온 음식 항목은 그대로 둔다 —
                 // 사진을 지워도 먹은 건 먹은 것이고, 틀렸으면 항목별로 지울 수 있다.
                 uploadedRef.current = null;

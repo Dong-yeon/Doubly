@@ -65,6 +65,7 @@ import { runBusy } from '../../store/busyStore';
 import { getErrorMessage } from '../../utils/error';
 import { Alert } from '../../utils/alert';
 import { errorCodeOf, isApiError } from '../../api/client';
+import { uploadApi, wasRejected } from '../../api/upload';
 import { reportError } from '../../utils/errorReporter';
 import { updateHomeWidget } from '../../widget/updateHomeWidget';
 import { HOME_RECORD_EXCLUDE, feedSummary, isHomeRecord } from '../../utils/feedSummary';
@@ -397,10 +398,11 @@ export function HomeScreen({ navigation }: Props) {
    */
   const saveMealFromPhoto = async (source: 'camera' | 'library') => {
     setMealSaving(true);
+    let photoUrl: string | null = null;
     try {
       const picked = source === 'camera' ? await takePhoto() : await pickImage();
       if (!picked) return;
-      const photoUrl = await uploadImage(picked);
+      photoUrl = await uploadImage(picked);
       const mealType = mealTypeForNow();
       const saved = await dietApi.save({ mealDate: todayKst(), mealType, photoUrl });
       haptics.success();
@@ -427,6 +429,8 @@ export function HomeScreen({ navigation }: Props) {
       refresh();
     } catch (e) {
       toast.error(getErrorMessage(e, '기록하지 못했어요.'));
+      // 올렸는데 저장이 거절됐으면 그 사진은 어디에도 안 쓰인다 — 치운다(lovebody-current-state §4-6)
+      if (photoUrl && wasRejected(e)) uploadApi.discard(photoUrl);
     } finally {
       setMealSaving(false);
     }
