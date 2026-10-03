@@ -26,6 +26,7 @@ import { MaterialCommunityIcons } from '../../components/Icon';
 import { planApi } from '../../api/plan';
 import { usePlanStore } from '../../store/planStore';
 import { useAuthStore } from '../../store/authStore';
+import { useRelationStore } from '../../store/relationStore';
 import { fetchProSubscriptions, requestProPurchase, restorePurchases } from '../../utils/iap';
 import { analyticsApi } from '../../api/analytics';
 import { toast } from '../../store/toastStore';
@@ -153,6 +154,8 @@ function limitLabel(limit: number, period: QuotaPeriod): string {
 
 export function PlanScreen({ navigation }: Props) {
   const plan = usePlanStore((s) => s.plan);
+  const couplePlan = usePlanStore((s) => s.couplePlan);
+  const partnerName = useRelationStore((s) => s.couple?.partner?.name) ?? '상대';
   const freeTrial = usePlanStore((s) => s.freeTrial);
   const trialEndsAt = usePlanStore((s) => s.trialEndsAt);
   const userId = useAuthStore((s) => s.user?.id);
@@ -231,6 +234,17 @@ export function PlanScreen({ navigation }: Props) {
    * 그때는 결제를 다시 권하지 않는다.
    */
   const alreadySubscribed = isPro && !freeTrial;
+  /*
+   * <b>상대 덕분에 커플 기능만 PRO 인 상태.</b> 구독은 사람에게 붙고, 둘 중 높은 등급을 쓰는 건 커플
+   * 기능뿐이다(`PlanResolver` · `Feature.isCoupleScoped`). AI 음식 분석·심화 통계 같은 개인 기능은
+   * 결제한 사람에게만 열린다(docs/PRO_PLAN_DESIGN.md).
+   *
+   * 예전엔 개인 등급만 보고 이 사람을 그냥 FREE 로 그렸다 — "한 명만 결제하면 둘 다 PRO"라는 문구 아래에
+   * 결제 버튼이 그대로 열려 있으니, 상대가 이미 결제한 걸 모르고 한 번 더 결제하게 됐다
+   * (docs/my-current-state.md §7-1). 결제는 막지 않는다. 그 결제로 실제로 늘어나는 것(개인 기능)만
+   * 앞에 세워, 무엇을 위해 내는 돈인지 알고 내게 한다.
+   */
+  const coveredByPartner = !freeTrial && !isPro && couplePlan === 'PRO';
   // 끝이 정해진 체험(가입 후 N일)이면 남은 날을 말해 준다. 전역 체험이면 끝이 없어 null 이다.
   const daysLeft = trialDaysLeft(trialEndsAt);
   const byFeature = new Map((catalog ?? []).map((entry) => [entry.feature, entry]));
@@ -246,7 +260,9 @@ export function PlanScreen({ navigation }: Props) {
       : `체험 ${daysLeft}일 남음 · PRO 기능이 전부 열려 있어요`
     : alreadySubscribed
       ? 'PRO 이용 중'
-      : null;
+      : coveredByPartner
+        ? `${partnerName}님 덕분에 커플 기능은 PRO예요`
+        : null;
 
   const price = prices[term]?.display ?? null;
   const hasYearly = !!prices.yearly;
@@ -255,11 +271,17 @@ export function PlanScreen({ navigation }: Props) {
     prices.monthly?.amount && prices.yearly?.amount
       ? Math.round((1 - prices.yearly.amount / (prices.monthly.amount * 12)) * 100)
       : null;
+  const priceSuffix = price ? ` · ${price}/${term === 'yearly' ? '년' : '월'}` : '';
   const ctaTitle = alreadySubscribed
     ? '이미 PRO예요'
-    : price
-      ? `PRO 시작하기 · ${price}/${term === 'yearly' ? '년' : '월'}`
-      : 'PRO 시작하기';
+    : coveredByPartner
+      ? `내 기능도 PRO로 열기${priceSuffix}`
+      : `PRO 시작하기${priceSuffix}`;
+  /*
+   * 상대 덕분에 PRO 인 사람에게 보여줄 "결제하면 늘어나는 것" — 개인 기능만. 커플 기능을 여기 세우면
+   * 이미 가진 것을 또 파는 셈이 된다. 순서는 카탈로그(서버 enum) 그대로다.
+   */
+  const personalGains = (catalog ?? []).filter((entry) => !entry.coupleScoped);
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
@@ -282,13 +304,44 @@ export function PlanScreen({ navigation }: Props) {
           ) : null}
           {/* 스티커 자산 재사용 — 결제 화면에도 캐릭터가 얼굴을 낸다(새 그림 없음) */}
           <Image source={HERO_DUO} style={styles.heroImage} resizeMode="contain" />
-          <Text style={styles.heroTitle}>PRO로 더 넉넉하게</Text>
-          <Text style={styles.heroLead}>
-            둘 중 <Text style={styles.strong}>한 명만 결제하면 둘 다</Text> PRO예요.
-          </Text>
+          <Text style={styles.heroTitle}>{coveredByPartner ? '내 기능도 PRO로' : 'PRO로 더 넉넉하게'}</Text>
+          {/*
+            공유 범위를 사실대로 — 예전 문구 "한 명만 결제하면 둘 다 PRO예요"는 개인 기능까지 열리는 것처럼
+            읽혔다. 무엇이 둘이 함께 쓰는 기능인지는 아래 비교표의 * 표시가 말한다.
+          */}
+          {coveredByPartner ? (
+            <Text style={styles.heroLead}>
+              둘이 함께 쓰는 기능은 이미 열려 있어요.{'\n'}
+              AI 분석·통계 같은 <Text style={styles.strong}>내 기능</Text>은 결제한 사람에게만 열려요.
+            </Text>
+          ) : (
+            <Text style={styles.heroLead}>
+              둘 중 한 명만 결제하면 <Text style={styles.strong}>둘이 함께 쓰는 기능</Text>은 둘 다 PRO예요.{'\n'}
+              AI 분석·통계 같은 개인 기능은 결제한 사람에게만 열려요.
+            </Text>
+          )}
         </LinearGradient>
 
-        {/* 가치 — 서버가 hero 로 고른 넷. 카드 없이 바탕 위에 */}
+        {/* 가치 — 서버가 hero 로 고른 넷. 카드 없이 바탕 위에.
+            상대 덕분에 커플 기능이 PRO 면 대신 "결제하면 늘어나는 내 기능"을 FREE → PRO 로 보여준다 */}
+        {coveredByPartner ? (
+          <View style={styles.highlights}>
+            {personalGains.length > 0 ? <Text style={styles.gainsTitle}>결제하면 이만큼 늘어나요</Text> : null}
+            {personalGains.map((entry) => (
+              <View key={entry.feature} style={styles.highlightRow}>
+                <MaterialCommunityIcons name="check-circle" size={20} color={colors.primary} />
+                <View style={styles.highlightBody}>
+                  <Text style={styles.highlightName}>{entry.name}</Text>
+                  <Text style={styles.highlightLine}>
+                    {entry.freeLimit === 0 ? '지금은 못 써요' : limitLabel(entry.freeLimit, entry.freePeriod)}
+                    {' → '}
+                    {limitLabel(entry.proLimit, entry.proPeriod)}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        ) : (
         <View style={styles.highlights}>
           {highlightsOf(catalog ?? []).map((feature) => {
             const entry = byFeature.get(feature);
@@ -307,6 +360,7 @@ export function PlanScreen({ navigation }: Props) {
             );
           })}
         </View>
+        )}
 
         {/* 결제 주기 — 연간 상품이 스토어에 있을 때만 둘 중 고른다. 없으면 월간 하나라 선택지를 그리지 않는다 */}
         {PURCHASE_ENABLED && hasYearly && !alreadySubscribed ? (
@@ -385,6 +439,7 @@ export function PlanScreen({ navigation }: Props) {
         {hasCoupleScoped ? (
           <Text style={styles.footnote}>
             * 표시된 한도는 <Text style={styles.strong}>둘이 함께</Text> 쓰는 양이에요.
+            {coveredByPartner ? ` ${partnerName}님 덕분에 지금 PRO 한도로 쓰고 있어요.` : ' 한 명만 결제해도 둘 다 PRO 한도가 돼요.'}
           </Text>
         ) : null}
 
@@ -493,6 +548,7 @@ const styles = themedStyles((colors) => ({
   highlightBody: { flex: 1 },
   highlightName: { fontSize: fontSize.subtitle, fontWeight: '700', color: colors.textPrimary, lineHeight: 22 },
   highlightLine: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 1 },
+  gainsTitle: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary },
 
   // ── CTA ──
   cta: { marginTop: spacing.lg },

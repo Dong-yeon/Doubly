@@ -174,7 +174,13 @@ export interface FeatureState {
 }
 
 export interface PlanInfo {
+  /** 개인 등급 — 내 구독으로만 정해진다. 개인 기능(AI 음식 분석·심화 통계 등)이 이 값을 따른다 */
   plan: Plan;
+  /**
+   * 커플 기능에 적용되는 등급 — 두 사람 중 높은 쪽. 커플이 없으면 plan 과 같다.
+   * plan=FREE · couplePlan=PRO 면 "상대 덕분에 커플 기능은 PRO". 옛 서버는 보내지 않는다(undefined).
+   */
+  couplePlan?: Plan;
   /** 체험 중 — true 면 "체험 중" 배지를 띄운다(나중에 "뺏겼다"로 읽히지 않게) */
   freeTrial: boolean;
   /**

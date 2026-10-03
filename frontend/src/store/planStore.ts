@@ -11,7 +11,13 @@ import { setPlanGateHandler, type PlanGateInfo } from '../api/client';
 import type { FeatureKey, FeatureState, Plan, PlanInfo } from '../types';
 
 interface PlanState {
+  /** 개인 등급 — 개인 기능(AI 음식 분석·심화 통계 등)의 기준 */
   plan: Plan;
+  /**
+   * 커플 기능에 적용되는 등급 — 상대가 결제했으면 PRO. "PRO 다"를 화면에 말할 때 개인 등급만 보면
+   * 상대 덕분에 열린 커플 기능을 숨기고 결제를 또 권하게 된다(docs/my-current-state.md §7-1).
+   */
+  couplePlan: Plan;
   /** 체험 중 — "체험 중" 배지 노출 여부 */
   freeTrial: boolean;
   /** 체험 종료 시각(ISO). 끝이 정해져 있지 않으면 null */
@@ -45,6 +51,7 @@ function indexByFeature(info: PlanInfo): Partial<Record<FeatureKey, FeatureState
 
 export const usePlanStore = create<PlanState>((set, get) => ({
   plan: 'FREE',
+  couplePlan: 'FREE',
   /*
    * 2026-09-22 에 전역 체험을 껐다(PLAN_FREE_TRIAL=false) — 이제 기본 상태는 "체험 중이
    * 아님"이다. true 로 두면 로드 전 한 프레임 동안 있지도 않은 "체험 중" 배지가 스친다.
@@ -61,6 +68,8 @@ export const usePlanStore = create<PlanState>((set, get) => ({
       const info = await planApi.me();
       set({
         plan: info.plan,
+        // 옛 서버는 couplePlan 을 모른다 — 그때는 지금까지처럼 개인 등급으로 말한다
+        couplePlan: info.couplePlan ?? info.plan,
         freeTrial: info.freeTrial,
         trialEndsAt: info.trialEndsAt ?? null,
         features: indexByFeature(info),

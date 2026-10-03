@@ -83,6 +83,24 @@ public class PlanResolver {
     }
 
     /**
+     * 커플 기능에 적용되는 플랜 — 활성 커플이 있으면 두 사람 중 높은 쪽, 없으면 본인 플랜.
+     *
+     * <p>{@link #resolve} 와 따로 두는 이유: 상대가 결제하면 커플 기능은 열리지만 개인 기능은
+     * 그대로 FREE 다. 앱이 개인 플랜만 받으면 상대 화면은 "FREE"로 보이고 결제 버튼이 그대로
+     * 열려, 상대가 이미 PRO 인 줄 모른 채 한 번 더 결제하게 된다(docs/my-current-state.md §7-1).
+     * {@link #resolveFor} 의 커플 분기와 같은 판정이다.
+     */
+    @Transactional(readOnly = true)
+    public Plan resolveCouple(Long userId) {
+        if (properties.isFreeTrial()) {
+            return Plan.PRO;
+        }
+        return activeCoupleIdOf(userId)
+                .map(this::resolveForRelation)
+                .orElseGet(() -> highestOf(List.of(userId)));
+    }
+
+    /**
      * 관계(커플·가족) 플랜 = 멤버 중 가장 높은 등급.
      *
      * <p>A/B 슬롯과 {@code relation_members} 를 함께 본다 — FAMILY 는 3번째 이후 멤버가
@@ -111,9 +129,7 @@ public class PlanResolver {
         if (!feature.isCoupleScoped()) {
             return highestOf(List.of(userId));
         }
-        return activeCoupleIdOf(userId)
-                .map(this::resolveForRelation)
-                .orElseGet(() -> highestOf(List.of(userId)));
+        return resolveCouple(userId);
     }
 
     /**
