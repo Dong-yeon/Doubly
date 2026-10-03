@@ -1,6 +1,8 @@
 package com.fitto.chat.dto;
 
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fitto.chat.domain.MessageType;
+import com.fitto.common.time.KstInputLocalDateTimeDeserializer;
 
 import java.time.LocalDateTime;
 
@@ -14,6 +16,11 @@ public record ScheduleMessageRequest(
         MessageType messageType,
         String content,
         String imageUrl,
+        /**
+         * 사용자가 고른 발송 시각 — 오프셋이 없으면 KST 로 읽는다(1.0.6 이하 앱은 기기 현지 시각을
+         * 오프셋 없이 보낸다). 전역 규칙(UTC)으로 읽으면 9시간 늦게 나간다 — 역직렬화기 주석 참고.
+         */
+        @JsonDeserialize(using = KstInputLocalDateTimeDeserializer.class)
         LocalDateTime scheduledAt
 ) {
 }
