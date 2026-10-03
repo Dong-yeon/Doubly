@@ -20,6 +20,13 @@ export interface WidgetData {
   myStreak: number;
   /** 상대 개인 운동 스트릭 (현재 연속일) */
   partnerStreak: number;
+  /**
+   * 상대의 지금 무드(유니코드 + 한마디). 우리 이모지 그림은 위젯이 원격 이미지를 그리지 않아 유니코드 대역으로 둔다
+   * (서버가 늘 채워 준다 — MoodEntry.emoji). 상대가 아직 고른 적 없으면 null.
+   * <b>undefined 는 "이번엔 모른다"</b> — 조회가 실패했을 때 캐시의 값을 지우지 않으려고 구분한다
+   * ({@link updateHomeWidget} 가 이전 값으로 메운다).
+   */
+  partnerMood?: { emoji: string; message?: string | null } | null;
   /** 캐시 시각 (ISO) — 디버깅용 */
   updatedAt: string;
 }

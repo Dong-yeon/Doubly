@@ -505,9 +505,20 @@ export function HomeScreen({ navigation }: Props) {
       partnerName: couple?.partner?.name ?? null,
       myStreak: myCount,
       partnerStreak: partnerCount,
+      /*
+       * 상대 무드 — 무드 조회가 실패하면 mood 가 null 이라 "모름"(undefined)으로 넘겨 위젯이 지난 값을 지키게 한다.
+       * 받았는데 상대가 아직 안 골랐으면 null(없음). MOOD 실시간 이벤트로 refresh 되면 여기도 다시 돈다.
+       */
+      partnerMood: !connected
+        ? null
+        : mood
+          ? mood.partner
+            ? { emoji: mood.partner.emoji, message: mood.partner.message ?? null }
+            : null
+          : undefined,
       updatedAt: new Date().toISOString(),
     });
-  }, [connected, couple, myStreak, partnerStreak]);
+  }, [connected, couple, myStreak, partnerStreak, mood]);
 
   // 커플 실시간 이벤트 — 상대가 기록하면 바로 반영
   const relationId = couple?.id;
