@@ -50,6 +50,8 @@ const ACCENT_OPTIONS: { value: AccentVariant; label: string }[] = [
 
 export function SettingsScreen({ navigation }: Props) {
   const isPro = usePlanStore((s) => s.plan) === 'PRO';
+  // 상대가 결제해 커플 기능만 PRO 인 상태 — "FREE"라고만 쓰면 상대의 결제가 안 보인다
+  const isCouplePro = usePlanStore((s) => s.couplePlan) === 'PRO';
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
   const spellCheckEnabled = useSettingsStore((s) => s.spellCheckEnabled);
@@ -335,7 +337,7 @@ export function SettingsScreen({ navigation }: Props) {
           값은 `PlanScreen` 의 배지와 같은 어휘(PRO/FREE)를 쓴다.
         */}
         <SettingsGroup title="계정" style={styles.group}>
-          <SettingsRow title="플랜" value={isPro ? 'PRO' : 'FREE'} onPress={() => navigation.navigate('Plan')} accessibilityLabel="플랜 보기" />
+          <SettingsRow title="플랜" value={isPro ? 'PRO' : isCouplePro ? '커플 기능 PRO' : 'FREE'} onPress={() => navigation.navigate('Plan')} accessibilityLabel="플랜 보기" />
           {isSocialAccount ? (
             <SettingsRow title="비밀번호 변경" note="소셜 로그인 계정은 비밀번호를 사용하지 않아요." muted />
           ) : (

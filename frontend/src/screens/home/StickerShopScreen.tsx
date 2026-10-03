@@ -66,7 +66,8 @@ const CATEGORY: Record<StickerPack['category'], { label: string; icon: IconName 
 export function StickerShopScreen() {
   const packs = useStickerStore((s) => s.packs);
   const replace = useStickerStore((s) => s.replace);
-  const isPro = usePlanStore((s) => s.plan === 'PRO');
+  // 여기서 권하는 것(확장 무드·프리미엄 터치·우리 이모지)은 전부 커플 기능이라 상대가 결제했어도 이미 열려 있다
+  const isPro = usePlanStore((s) => s.couplePlan === 'PRO');
   const showUpgrade = usePlanStore((s) => s.showUpgrade);
   const [error, setError] = useState(false);
   const [loaded, setLoaded] = useState(false);
