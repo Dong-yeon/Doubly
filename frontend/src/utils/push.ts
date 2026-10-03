@@ -155,6 +155,33 @@ export async function registerPushTokenOnResume(): Promise<void> {
   }
 }
 
+/** 마지막으로 받은 기기 토큰 — 같은 값으로 다시 불려도 서버를 또 부르지 않는다 */
+let lastDeviceToken: string | null = null;
+
+/**
+ * 앱이 떠 있는 동안 FCM/APNs 가 기기 토큰을 바꾸면 다시 등록한다. 해제 함수를 돌려준다.
+ *
+ * <p>예전엔 로그인·부팅·권한 켜짐 때만 등록해서, 실행 중에 토큰이 회전되면 다음 재시작까지
+ * 서버가 죽은 토큰으로 보내 알림이 조용히 사라졌다 (docs/first-experience-audit.md #28).
+ * 이벤트는 기기 토큰이지만 서버엔 Expo 토큰을 올리므로 기존 등록 경로를 그대로 탄다
+ * (Expo 토큰은 기기 토큰에서 다시 발급된다). 웹은 아무것도 하지 않고, 어떤 경우에도 던지지 않는다.
+ */
+export function watchPushTokenChanges(): () => void {
+  if (Platform.OS === 'web') return () => {};
+  try {
+    const sub = Notifications.addPushTokenListener((token) => {
+      const value = typeof token.data === 'string' ? token.data : JSON.stringify(token.data);
+      if (value === lastDeviceToken) return;
+      lastDeviceToken = value;
+      void registerPushTokenIfGranted();
+    });
+    return () => sub.remove();
+  } catch {
+    // 알림 모듈이 없는 환경 — 무시
+    return () => {};
+  }
+}
+
 /**
  * OS 알림 권한이 <b>거부된</b> 상태인지.
  *

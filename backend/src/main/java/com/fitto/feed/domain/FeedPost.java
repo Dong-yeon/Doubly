@@ -61,13 +61,19 @@ public class FeedPost {
     private LocalDate recordDate;
 
     /** @param recordDate null 이면 오늘(KST) */
+    /** 저장 멱등키(V127) — 앱이 응답을 못 받고 다시 보낸 저장을 같은 글로 알아본다. 옛 앱·옛 행은 null */
+    @Column(name = "client_request_id", length = 64)
+    private String clientRequestId;
+
     @Builder
-    private FeedPost(Long coupleId, Long authorId, String content, String imageUrl, LocalDate recordDate) {
+    private FeedPost(Long coupleId, Long authorId, String content, String imageUrl, LocalDate recordDate,
+                     String clientRequestId) {
         this.coupleId = coupleId;
         this.authorId = authorId;
         this.content = content;
         this.imageUrl = imageUrl;
         this.recordDate = recordDate != null ? recordDate : KstClock.today();
+        this.clientRequestId = clientRequestId;
     }
 
     /** 고친 시각(V123) — 실제로 바뀐 적이 있으면 카드가 "수정됨"을 보여 준다. 없으면 null */

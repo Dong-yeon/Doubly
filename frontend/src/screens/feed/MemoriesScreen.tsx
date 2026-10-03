@@ -72,18 +72,28 @@ export function MemoriesScreen({ navigation, route }: Props) {
 
   useFocusEffect(useCallback(() => void load(), [load]));
 
+  /*
+   * 반응 전송 중인 카드 — 반응은 토글이라 연달아 두 번 가면 켰다 바로 꺼진다. 앞 요청이 끝날 때까지
+   * 같은 카드의 탭은 무시한다(AlbumScreen.onReact 와 같은 방식, first-experience-audit.md #26)
+   */
+  const [reacting] = useState(() => new Set<string>());
   const onReact = async (item: FeedItem, emoji: string) => {
+    const key = feedItemKey(item);
+    if (reacting.has(key)) return;
+    reacting.add(key);
     haptics.light();
     try {
       const reactions = await feedApi.react(item.type, item.refId, emoji);
       setSections((prev) =>
         prev.map((s) => ({
           ...s,
-          data: s.data.map((i) => (feedItemKey(i) === feedItemKey(item) ? { ...i, reactions } : i)),
+          data: s.data.map((i) => (feedItemKey(i) === key ? { ...i, reactions } : i)),
         })),
       );
     } catch (e) {
       toast.error(getErrorMessage(e, '반응을 남기지 못했어요.'));
+    } finally {
+      reacting.delete(key);
     }
   };
 

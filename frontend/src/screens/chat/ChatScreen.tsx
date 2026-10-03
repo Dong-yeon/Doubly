@@ -4,10 +4,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, type CompositeScreenProps } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { ChatStackParamList } from '../../navigation/types';
+import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
+import type { ChatStackParamList, MainTabParamList } from '../../navigation/types';
 import { Avatar } from '../../components/Avatar';
+import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { useChatStore } from '../../store/chatStore';
 import { getErrorMessage } from '../../utils/error';
@@ -17,7 +19,11 @@ import type { ChatRoom } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { messagePreview } from '../../utils/messagePreview';
 
-type Props = NativeStackScreenProps<ChatStackParamList, 'ChatRooms'>;
+// 빈 상태에서 홈 탭의 커플 연결로 건너가야 해서 탭 내비게이션까지 합친다 (#23)
+type Props = CompositeScreenProps<
+  NativeStackScreenProps<ChatStackParamList, 'ChatRooms'>,
+  BottomTabScreenProps<MainTabParamList>
+>;
 
 export function ChatScreen({ navigation }: Props) {
   const { rooms, loadingRooms, loadRooms } = useChatStore();
@@ -108,7 +114,19 @@ export function ChatScreen({ navigation }: Props) {
                 onRetry={load}
               />
             ) : (
-              <EmptyState illustration="duo" title="아직 채팅방이 없어요" description="커플을 연결하면 채팅을 시작할 수 있어요 " />
+              /*
+               * "연결하면 시작할 수 있어요"라고만 하면 연결하러 갈 길이 없었다 — 커플 연결은 홈 탭
+               * 스택에 있다 (first-experience-audit.md #23)
+               */
+              <View>
+                <EmptyState illustration="duo" title="아직 채팅방이 없어요" description="커플을 연결하면 채팅을 시작할 수 있어요 " />
+                <Button
+                  title="커플 연결하기"
+                  size="sm"
+                  onPress={() => navigation.navigate('Home', { screen: 'CoupleConnect' })}
+                  style={styles.connectBtn}
+                />
+              </View>
             )
           ) : null
         }
@@ -132,4 +150,5 @@ const styles = themedStyles((colors) => ({
   badge: { minWidth: 24, height: 24, borderRadius: radius.pill, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 7 },
   badgeText: { color: colors.white, fontSize: fontSize.caption, fontWeight: '800' },
   sep: { height: spacing.xs },
+  connectBtn: { alignSelf: 'center', marginTop: -spacing.md },
 }));

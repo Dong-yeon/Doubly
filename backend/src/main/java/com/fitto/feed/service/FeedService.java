@@ -120,6 +120,15 @@ public class FeedService {
     private final CloudinaryImageDeleter imageDeleter;
     private final CloudinaryProperties cloudinaryProperties;
 
+    /**
+     * 반응 푸시 간격 — 같은 사람이 같은 기록에 반응을 달았다 지웠다 반복해도 상대에게 푸시는 이 간격에 한 번이다
+     * (docs/first-experience-audit.md #26). 서버 한 대 메모리 기준이라 재시작하면 잊는데, 그건 감수한다 —
+     * 놓치는 쪽이 아니라 한 번 더 가는 쪽으로만 틀린다.
+     */
+    static final java.time.Duration REACTION_PUSH_INTERVAL = java.time.Duration.ofMinutes(10);
+    private final java.util.concurrent.ConcurrentHashMap<String, Long> lastReactionPushAt =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
     public FeedService(FeedPostRepository feedPostRepository,
                        FeedPostPhotoRepository feedPostPhotoRepository,
                        FeedReactionRepository feedReactionRepository,
@@ -673,6 +682,18 @@ public class FeedService {
     /** 포스트 작성 (FEED-02) — 글/사진(최대 5장) 중 하나는 필수. 상대에게 푸시 + FEED 이벤트. */
     @Transactional
     public FeedItemResponse createPost(Long userId, CreatePostRequest request) {
+        /*
+         * 멱등 검사 — 무엇보다 먼저 본다. 같은 키로 다시 온 저장은 응답을 못 받은 앱의 재시도이므로
+         * 글을 새로 만들지도, 상대에게 푸시를 다시 보내지도 않고 먼저 저장된 글을 그대로 돌려준다.
+         * 동시에 도착한 두 요청은 (author_id, client_request_id) unique 인덱스가 막고 컨트롤러가 받는다.
+         */
+        String clientRequestId = request.clientRequestIdOrNull();
+        if (clientRequestId != null) {
+            var already = feedPostRepository.findByAuthorIdAndClientRequestId(userId, clientRequestId);
+            if (already.isPresent()) {
+                return savedItem(userId, already.get());
+            }
+        }
         String content = contentOf(request.content());
         List<String> photos = validatedPhotos(request.photosOrEmpty(), content);
         LocalDate recordDate = validatedRecordDate(request.recordDate());
@@ -685,6 +706,7 @@ public class FeedService {
                 .content(content)
                 // 대표 사진 — 기존 쿼리(findPhotos/findAlbumCandidates 등)가 계속 이 값을 쓴다
                 .imageUrl(photos.isEmpty() ? null : photos.get(0))
+                .clientRequestId(clientRequestId)
                 .build();
         feedPostRepository.save(post);
         for (int i = 0; i < photos.size(); i++) {
@@ -704,6 +726,25 @@ public class FeedService {
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.FEED);
 
         return mapper.toItem(post, Map.of(userId, authorName), userId, List.of(), photos);
+    }
+
+    /**
+     * 같은 멱등키의 저장이 동시에 들어와 unique 인덱스가 두 번째를 막았을 때 — 먼저 커밋된 글을 돌려준다.
+     * 없으면(다른 제약 위반이었다면) 빈 값이라 호출자가 원래 예외를 다시 던진다.
+     */
+    @Transactional(readOnly = true)
+    public java.util.Optional<FeedItemResponse> findSavedByClientRequestId(Long userId, String clientRequestId) {
+        if (clientRequestId == null) return java.util.Optional.empty();
+        return feedPostRepository.findByAuthorIdAndClientRequestId(userId, clientRequestId)
+                .map(post -> savedItem(userId, post));
+    }
+
+    /** 이미 저장된 내 글을 작성 응답과 같은 모양으로 */
+    private FeedItemResponse savedItem(Long userId, FeedPost post) {
+        List<String> photos = feedPostPhotoRepository.findByPostIdOrderByOrderNoAsc(post.getId()).stream()
+                .map(FeedPostPhoto::getUrl).toList();
+        if (photos.isEmpty() && post.getImageUrl() != null) photos = List.of(post.getImageUrl());
+        return mapper.toItem(post, Map.of(userId, mapper.userName(userId)), userId, List.of(), photos);
     }
 
     /** 글 — 앞뒤 공백을 걷고, 비었으면 null */
@@ -858,13 +899,40 @@ public class FeedService {
                     .userId(userId)
                     .emoji(emoji)
                     .build());
-            if (!userId.equals(target.ownerId())) {
+            if (!userId.equals(target.ownerId()) && claimReactionPush(userId, type, refId)) {
                 notificationService.notify(target.ownerId(), NotificationCategory.PARTNER,
                         target.pushTitle(),
                         mapper.userName(userId) + "님이 " + emoji + " 를 남겼어요", PushLinks.FEED);
             }
         }
         coupleEventPublisher.publish(target.coupleId(), CoupleEvent.FEED);
+        return mapper.summarize(feedReactionRepository.findByTargetTypeAndTargetId(type, refId), userId);
+    }
+
+    /** 이 사람이 이 기록에 대한 반응 푸시를 지금 보내도 되는지 — 되면 시각을 찍는다 */
+    private boolean claimReactionPush(Long userId, FeedItemType type, Long refId) {
+        long now = System.currentTimeMillis();
+        long window = REACTION_PUSH_INTERVAL.toMillis();
+        if (lastReactionPushAt.size() > 10_000) {
+            lastReactionPushAt.values().removeIf(at -> now - at > window);
+        }
+        String key = userId + ":" + type + ":" + refId;
+        boolean[] claimed = {false};
+        lastReactionPushAt.compute(key, (k, at) -> {
+            if (at != null && now - at < window) return at;
+            claimed[0] = true;
+            return now;
+        });
+        return claimed[0];
+    }
+
+    /**
+     * 반응을 동시에 두 번 보내 unique 인덱스(V60)가 두 번째를 막았을 때 — 먼저 처리된 쪽의 결과(지금 상태)를 돌려준다.
+     * 예전엔 500 이 나가 첫 요청은 성공했는데 "반응을 남기지 못했어요"가 떴다.
+     */
+    @Transactional(readOnly = true)
+    public List<ReactionSummary> currentReactions(Long userId, FeedItemType type, Long refId) {
+        resolveTarget(userId, type, refId);
         return mapper.summarize(feedReactionRepository.findByTargetTypeAndTargetId(type, refId), userId);
     }
 

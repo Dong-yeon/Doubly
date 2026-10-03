@@ -54,7 +54,7 @@ import { isCoarsePointer } from '../../utils/pointer';
 import { useImageDrop } from '../../hooks/useImageDrop';
 import { uploadChatVoice } from '../../utils/chatVoiceUpload';
 import { parseVoiceContent } from '../../utils/chatVoice';
-import { getErrorMessage } from '../../utils/error';
+import { getErrorMessage, isPlanGateError } from '../../utils/error';
 import { coupleEmojiApi } from '../../api/coupleEmoji';
 import { toast } from '../../store/toastStore';
 import { isUnsent } from '../../utils/chatSync';
@@ -1743,10 +1743,38 @@ export function ChatRoomScreen({ navigation, route }: Props) {
    *
    * <p>중간에 실패하면 <b>거기서 멈추고</b> 몇 장이 나갔는지 말해 준다. 남은 것을 계속
    * 밀어붙이면 한도 초과나 연결 끊김 같은 원인일 때 같은 실패를 N번 반복하게 된다.
+   * 못 보낸 사진은 미리보기로 되돌려 둔다 — 예전엔 목록을 먼저 비워서 중간에 실패하면 나머지가
+   * 사라졌다 (first-experience-audit.md #32).
    */
+  // 한도 확인이 서버를 기다리는 사이 두 번 눌러 같은 묶음을 두 번 보내지 않게
+  const sendingImagesRef = useRef(false);
   const onConfirmSendImage = async () => {
     const uris = pendingImages;
-    if (uris.length === 0) return;
+    if (uris.length === 0 || sendingImagesRef.current) return;
+    sendingImagesRef.current = true;
+    try {
+      /*
+       * 한도 프리체크(FeedComposeScreen 과 같은 방식) — 남은 장수보다 많이 고르면 시작하지 않는다.
+       * 들고 있는 값이 모자랄 때만 서버에서 다시 읽는다: 달이 바뀌었거나 결제했으면 풀려 있을 수 있고,
+       * 넉넉한 경우까지 매번 기다리게 할 이유는 없다. PRO(무제한)는 null 이라 그대로 지나간다 (#32)
+       */
+      const plan = usePlanStore.getState();
+      let remaining = plan.remainingOf('PHOTO_UPLOAD');
+      if (remaining !== null && remaining < uris.length) {
+        await plan.load();
+        remaining = usePlanStore.getState().remainingOf('PHOTO_UPLOAD');
+      }
+      if (remaining !== null && remaining < uris.length) {
+        if (remaining <= 0) {
+          showUpgrade('이번 달 사진 한도를 다 썼어요. 둘이 함께 쓰는 한도예요. PRO에서는 넉넉하게 올릴 수 있어요.');
+        } else {
+          toast.error(`이번 달 사진 한도가 ${remaining}장 남았어요(둘이 함께 쓰는 한도). 사진을 ${remaining}장까지 줄여주세요.`);
+        }
+        return;
+      }
+    } finally {
+      sendingImagesRef.current = false;
+    }
     setPendingImages([]);
     setUploading(true);
     scrollToBottom();
@@ -1765,11 +1793,24 @@ export function ChatRoomScreen({ navigation, route }: Props) {
       }
       if (sent > 0) haptics.light();
     } catch (e) {
-      const base = getErrorMessage(e, '이미지 전송에 실패했어요.');
-      toast.error(sent > 0 ? `${sent}장까지 보냈어요. ${base}` : base);
+      // 402 는 api/client 가 연 업그레이드 시트로 충분하다 — 토스트를 겹치지 않는다 (#31).
+      // 못 보낸 사진은 아래에서 미리보기로 돌아오므로 몇 장 나갔는지도 화면에 남는다
+      if (!isPlanGateError(e)) {
+        const base = getErrorMessage(e, '이미지 전송에 실패했어요.');
+        toast.error(sent > 0 ? `${sent}장까지 보냈어요. ${base}` : base);
+      }
     } finally {
       setUploading(false);
-      uris.forEach(releaseObjectUrl);
+      // 보낸 것만 놓아준다. 못 보낸 것은 미리보기로 되돌린다 — 그사이 떨군 사진이 있으면 그 앞에 둔다 (#32)
+      uris.slice(0, sent).forEach(releaseObjectUrl);
+      const unsent = uris.slice(sent);
+      if (unsent.length > 0) {
+        setPendingImages((prev) => {
+          const merged = [...unsent, ...prev];
+          merged.slice(MAX_CHAT_IMAGES).forEach(releaseObjectUrl);
+          return merged.slice(0, MAX_CHAT_IMAGES);
+        });
+      }
     }
   };
 

@@ -12,6 +12,11 @@ public interface DeviceTokenRepository extends JpaRepository<DeviceToken, Long> 
 
     List<DeviceToken> findByUserId(Long userId);
 
+    java.util.Optional<DeviceToken> findByToken(String token);
+
+    /** 이 사용자의 토큰 — 최근 등록 순 */
+    List<DeviceToken> findByUserIdOrderByLastRegisteredAtDescIdDesc(Long userId);
+
     @Modifying
     @Query("delete from DeviceToken d where d.token = :token")
     void deleteByToken(@Param("token") String token);

@@ -590,11 +590,19 @@ export function HomeScreen({ navigation }: Props) {
     }, [connected]),
   );
 
+  /*
+   * 전송 중 가드 — 빠르게 연달아 누르면 같은 무드가 두 번 가고 상대에게 푸시도 두 번 간다.
+   * state 는 다음 렌더 전까지 바뀌지 않으므로 ref 로 즉시 막는다 (first-experience-audit.md #25)
+   */
+  const sendingMoodRef = useRef(false);
   const sendMood = (choice: MoodChoice, message?: string) => {
+    if (sendingMoodRef.current) return;
+    sendingMoodRef.current = true;
     moodApi
       .set(choice, message)
       .then((res) => { setMood(res); haptics.light(); toast.success('무드를 남겼어요'); })
-      .catch((e) => toast.error(getErrorMessage(e, '무드를 남기지 못했어요.')));
+      .catch((e) => toast.error(getErrorMessage(e, '무드를 남기지 못했어요.')))
+      .finally(() => { sendingMoodRef.current = false; });
   };
 
   /*

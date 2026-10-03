@@ -13,7 +13,7 @@ import { FormKeyboardView } from '../../components/FormKeyboardView';
 import { feedApi } from '../../api/feed';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { pickImages, uploadImage } from '../../utils/imageUpload';
-import { getErrorMessage } from '../../utils/error';
+import { getErrorMessage, isPlanGateError } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { usePlanStore } from '../../store/planStore';
@@ -41,6 +41,8 @@ const MAX_CONTENT = 2000;
 
 /** 이미 올라가 있는 사진(서버 URL) — 고치기에서 그대로 둔 사진은 다시 올리지 않는다 */
 const isRemote = (uri: string) => /^https?:\/\//.test(uri);
+/** 저장 멱등키 — 사람 한 명 안에서만 유일하면 된다(채팅 client_message_id·식단과 같은 형식) */
+const newClientRequestId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 
 export function FeedComposeScreen({ navigation, route }: Props) {
   /*
@@ -70,6 +72,11 @@ export function FeedComposeScreen({ navigation, route }: Props) {
    * 두 번 나간다. 화면이 살아 있는 동안 한 번 올라간 사진은 다시 올리지 않는다.
    */
   const uploadedRef = useRef<Map<string, string>>(new Map());
+  /*
+   * 저장 멱등키 — 이 초안 하나에 하나. 요청이 끊겨 다시 눌러도 같은 키를 보내 포스트가 두 개 생기지 않는다.
+   * 저장에 성공하면 새로 만든다. 형식은 DietRecordScreen 의 clientRequestId 와 같다 (#24)
+   */
+  const clientRequestIdRef = useRef(newClientRequestId());
 
   useLayoutEffect(() => {
     if (editing) navigation.setOptions({ title: '일상 고치기' });
@@ -256,7 +263,13 @@ export function FeedComposeScreen({ navigation, route }: Props) {
         haptics.success();
         toast.success('일상을 고쳤어요');
       } else {
-        await feedApi.createPost({ content: content.trim() || undefined, imageUrls, recordDate });
+        await feedApi.createPost({
+          content: content.trim() || undefined,
+          imageUrls,
+          recordDate,
+          clientRequestId: clientRequestIdRef.current,
+        });
+        clientRequestIdRef.current = newClientRequestId();
         void clearWritingDraft(draftKeys.feedCompose);
         haptics.success();
         toast.success('일상을 남겼어요 ');
@@ -264,7 +277,8 @@ export function FeedComposeScreen({ navigation, route }: Props) {
       allowLeave();
       navigation.goBack();
     } catch (e) {
-      Alert.alert('오류', getErrorMessage(e));
+      // 402 는 api/client 가 연 업그레이드 시트로 충분하다 — 그 위에 '오류' 창을 또 띄우지 않는다 (#31)
+      if (!isPlanGateError(e)) Alert.alert('오류', getErrorMessage(e));
     } finally {
       savingRef.current = false;
       setSaving(false);

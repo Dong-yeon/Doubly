@@ -8,6 +8,11 @@ export interface CreatePostPayload {
   imageUrls?: string[];
   /** 기록일 YYYY-MM-DD(KST) — 이 일이 있었던 날. 없으면 서버가 오늘로 둔다. 미래는 서버가 거절한다(V119) */
   recordDate?: string;
+  /**
+   * 저장 멱등키(≤64자) — 응답이 늦어 앱이 실패로 보고 다시 눌러도 같은 키면 서버가 먼저 만든 포스트를
+   * 돌려준다(식단 V118 과 같은 방식). 새 포스트에만 보낸다 (first-experience-audit.md #24)
+   */
+  clientRequestId?: string;
 }
 
 export const feedApi = {

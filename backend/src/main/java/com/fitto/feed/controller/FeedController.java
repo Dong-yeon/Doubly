@@ -126,7 +126,13 @@ public class FeedController {
     @PostMapping("/posts")
     public ApiResponse<FeedItemResponse> createPost(@AuthenticationPrincipal AuthUser user,
                                                     @Valid @RequestBody CreatePostRequest request) {
-        return ApiResponse.success(feedService.createPost(user.id(), request), "일상이 기록되었습니다.");
+        try {
+            return ApiResponse.success(feedService.createPost(user.id(), request), "일상이 기록되었습니다.");
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            // 같은 멱등키의 저장이 동시에 도착해 unique 인덱스(V127)가 두 번째를 막았다 — 먼저 저장된 글을 돌려준다
+            return ApiResponse.success(feedService.findSavedByClientRequestId(user.id(), request.clientRequestIdOrNull())
+                    .orElseThrow(() -> e), "일상이 기록되었습니다.");
+        }
     }
 
     /** 일상 댓글 — 오래된 순(대화처럼 읽힌다), 최대 200개 */
@@ -178,7 +184,12 @@ public class FeedController {
                                                           @PathVariable FeedItemType type,
                                                           @PathVariable Long refId,
                                                           @Valid @RequestBody ReactRequest request) {
-        return ApiResponse.success(feedService.toggleReaction(user.id(), type, refId, request.emoji()));
+        try {
+            return ApiResponse.success(feedService.toggleReaction(user.id(), type, refId, request.emoji()));
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            // 같은 반응이 동시에 두 번 도착했다 — 먼저 처리된 결과가 곧 원하는 상태다
+            return ApiResponse.success(feedService.currentReactions(user.id(), type, refId));
+        }
     }
 
     /**

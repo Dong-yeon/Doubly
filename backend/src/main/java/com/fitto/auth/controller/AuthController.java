@@ -59,8 +59,21 @@ public class AuthController {
     @PostMapping("/register")
     public ApiResponse<TokenResponse> register(@Valid @RequestBody RegisterRequest request,
                                                HttpServletRequest http) {
-        return ApiResponse.success(
-                authService.register(request, clientIp(http)), "회원가입이 완료되었습니다.");
+        try {
+            return ApiResponse.success(
+                    authService.register(request, clientIp(http)), "회원가입이 완료되었습니다.");
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            /*
+             * 같은 이메일의 가입이 동시에 들어와 존재 확인을 둘 다 통과했고, users.email unique 가 두 번째를 막았다.
+             * 예전엔 일반 500("서버 오류")으로 나갔다 — 실제 상태 그대로 "이미 가입된 이메일"로 답한다
+             * (docs/first-experience-audit.md #18). 다른 제약 위반이면 원래 예외를 던진다.
+             */
+            if (authService.isRegistered(request.email())) {
+                throw new com.fitto.common.exception.BusinessException(
+                        com.fitto.common.exception.ErrorCode.EMAIL_ALREADY_EXISTS);
+            }
+            throw e;
+        }
     }
 
     /** 구글 로그인 — AUTH-11. 기존 계정이면 로그인, 없으면 가입까지 한 번에. */

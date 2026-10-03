@@ -17,9 +17,17 @@ import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, 'Login'>;
 
-export function LoginScreen({ navigation }: Props) {
+export function LoginScreen({ navigation, route }: Props) {
   const login = useAuthStore((s) => s.login);
-  const [email, setEmail] = useState('');
+  const prefillEmail = route.params?.email;
+  const [email, setEmail] = useState(prefillEmail ?? '');
+  // 가입 화면에서 popTo 로 돌아오면 이 인스턴스가 그대로라 초기값이 다시 읽히지 않는다 —
+  // 파라미터가 바뀐 렌더에서 맞춘다(effect 로 하면 한 번 더 그린다) (#19)
+  const [seenPrefill, setSeenPrefill] = useState(prefillEmail);
+  if (prefillEmail !== seenPrefill) {
+    setSeenPrefill(prefillEmail);
+    if (prefillEmail) setEmail(prefillEmail);
+  }
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);

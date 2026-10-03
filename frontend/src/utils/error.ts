@@ -1,4 +1,4 @@
-import { isApiError } from '../api/client';
+import { errorCodeOf, isApiError } from '../api/client';
 import { activeMaintenance } from '../store/serviceStatusStore';
 import type { ApiResponse } from '../types';
 import { maintenanceErrorMessage } from './serviceStatus';
@@ -36,4 +36,14 @@ export function getErrorMessage(error: unknown, fallback = '문제가 발생했�
   }
   if (error instanceof Error && error.message) return error.message;
   return fallback;
+}
+
+/**
+ * 플랜 한도(402) 에러인지 — api/client 가 이미 업그레이드 시트를 열었으니 호출부는 따로 알리지 않는다.
+ * 시트 위로 '오류' 창·토스트가 겹치면 같은 사실을 두 번 알린다 (HomeScreen.notifyUnless402 와 같은 판정,
+ * first-experience-audit.md #31).
+ */
+export function isPlanGateError(error: unknown): boolean {
+  const code = errorCodeOf(error);
+  return code === 'PLAN_UPGRADE_REQUIRED' || code === 'PLAN_LIMIT_EXCEEDED';
 }

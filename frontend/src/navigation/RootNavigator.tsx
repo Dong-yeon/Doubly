@@ -1,7 +1,7 @@
 /**
  * 루트 네비게이터 — 인증 상태에 따라 온보딩 / 메인 분기
  */
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Text, View } from 'react-native';
 import {
   DarkTheme,
@@ -18,7 +18,12 @@ import { OnboardingNavigator } from './OnboardingNavigator';
 import { MainTabNavigator } from './MainTabNavigator';
 import { PushPermissionPrimer } from '../components/PushPermissionPrimer';
 import { Button } from '../components/Button';
-import { dismissNotificationsForPath, registerPushTokenOnResume, setCurrentPath } from '../utils/push';
+import {
+  dismissNotificationsForPath,
+  registerPushTokenOnResume,
+  setCurrentPath,
+  watchPushTokenChanges,
+} from '../utils/push';
 import { usePlanStore } from '../store/planStore';
 import { ConsentGateScreen } from '../screens/onboarding/ConsentGateScreen';
 import { useAuthStore } from '../store/authStore';
@@ -57,6 +62,29 @@ function navTheme() {
       primary: colors.primary,
     },
   };
+}
+
+/** 부팅 스피너가 이만큼 넘게 돌면 "연결 중" 문구를 붙인다 (first-experience-audit.md #22) */
+const BOOT_CAPTION_DELAY_MS = 5_000;
+
+/**
+ * 세션 복원 중 스피너. authStore.meWithRetry 가 연결 문제로 재시도하면 수십 초까지 걸리는데,
+ * 스피너만 돌면 앱이 멈춘 것처럼 보인다 — 잠시 뒤 문구로 "기다리는 중"임을 알린다 (#22).
+ */
+function BootSpinner() {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setSlow(true), BOOT_CAPTION_DELAY_MS);
+    return () => clearTimeout(t);
+  }, []);
+  return (
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12, backgroundColor: colors.background }}>
+      <ActivityIndicator color={colors.primary} size="large" />
+      {slow ? (
+        <Text style={{ fontSize: 14, color: colors.textSecondary, textAlign: 'center' }}>연결 중이에요…</Text>
+      ) : null}
+    </View>
+  );
 }
 
 export function RootNavigator() {
@@ -162,6 +190,12 @@ export function RootNavigator() {
     return () => sub.remove();
   }, [isAuthenticated]);
 
+  // 실행 중 푸시 토큰 회전 → 다시 등록. 로그인된 동안만 건다 (first-experience-audit.md #28)
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    return watchPushTokenChanges();
+  }, [isAuthenticated]);
+
   // 연결 실패로 세션 복원을 못 했다면, 앱으로 돌아올 때(네트워크가 돌아왔을 가능성이 크다) 다시 묻는다
   useEffect(() => {
     if (!bootFailed) return;
@@ -172,11 +206,7 @@ export function RootNavigator() {
   }, [bootFailed, bootstrap]);
 
   if (isLoading) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', backgroundColor: colors.background }}>
-        <ActivityIndicator color={colors.primary} size="large" />
-      </View>
-    );
+    return <BootSpinner />;
   }
 
   /*
