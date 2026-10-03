@@ -15,6 +15,7 @@ import { usePlanStore } from './planStore';
 import { usePlaceStore } from './placeStore';
 import { useContentStore } from './contentStore';
 import { useCoupleEmojiStore } from './coupleEmojiStore';
+import { useRelationStore } from './relationStore';
 import { clearAllWritingDrafts } from '../utils/writingDraft';
 import type { AuthTokens, Gender, User } from '../types';
 
@@ -64,6 +65,7 @@ async function clearTokens() {
   usePlaceStore.getState().reset();
   useContentStore.getState().reset();
   useCoupleEmojiStore.getState().reset();
+  useRelationStore.getState().reset();
 }
 
 async function persistTokens(tokens: AuthTokens) {
@@ -79,7 +81,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   // 앱 시작 시 저장된 토큰 확인 후 프로필 복원
   bootstrap: async () => {
-    const token = await storage.getItem(STORAGE_KEYS.accessToken);
+    /*
+     * 저장소 읽기는 try 밖에서 던지면 isLoading 이 true 로 남아 스피너가 영원히 돈다
+     * (Android 키스토어 복호화 실패·백업 복원 등). 읽을 수 없는 토큰은 없는 것으로 보고 로그인 화면으로 보낸다
+     * (docs/first-experience-audit.md #1).
+     */
+    let token: string | null = null;
+    try {
+      token = await storage.getItem(STORAGE_KEYS.accessToken);
+    } catch {
+      await clearTokens().catch(() => undefined);
+    }
     if (!token) {
       set({ isAuthenticated: false, isLoading: false, bootFailed: false });
       return;
