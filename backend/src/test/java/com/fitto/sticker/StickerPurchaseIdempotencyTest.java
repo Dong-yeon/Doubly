@@ -1,6 +1,17 @@
 package com.fitto.sticker;
 
 import com.fitto.common.plan.GooglePlayDeveloperApiClient;
+import com.fitto.common.plan.GooglePlaySubscriptionState;
+import com.fitto.common.plan.GooglePlaySubscriptionSyncService;
+import com.fitto.common.plan.Plan;
+import com.fitto.common.plan.Store;
+import com.fitto.common.plan.Subscription;
+import com.fitto.common.plan.SubscriptionRepository;
+import com.fitto.common.plan.SubscriptionStatus;
+import com.fitto.user.domain.Role;
+import com.fitto.user.domain.User;
+import com.fitto.user.repository.UserRepository;
+import jakarta.persistence.EntityManager;
 import com.fitto.common.plan.StoreProductPurchase;
 import com.fitto.sticker.domain.UserStickerPurchase;
 import com.fitto.sticker.repository.UserStickerPurchaseRepository;
@@ -14,6 +25,8 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 
@@ -95,6 +108,59 @@ class StickerPurchaseIdempotencyTest {
     @MockitoSpyBean UserStickerPurchaseRepository purchaseRepository;
     /** 스토어 키가 없는 테스트 환경에서는 실제 클라이언트가 null 을 돌려준다 */
     @MockitoBean GooglePlayDeveloperApiClient googlePlayClient;
+
+    /*
+     * 구독 검증도 같은 사고를 겪어서 여기 함께 둔다 — 새 클래스로 빼면 빈 교체 조합이 달라 스프링 컨텍스트가
+     * 하나 더 생긴다(CLAUDE.md 6절, 2026-09-22 OOM). 스파이·모킹 대상이 이미 이 클래스에 모여 있다.
+     */
+    @MockitoSpyBean SubscriptionRepository subscriptionRepository;
+    @Autowired GooglePlaySubscriptionSyncService subscriptionSync;
+    @Autowired UserRepository userRepository;
+    /** 재시도 조회를 실제 DB 로 보내는 통로 — 인터페이스 스파이는 실제 메서드를 부를 수 없다 */
+    @Autowired EntityManager em;
+
+    /**
+     * 같은 구독 영수증이 겹쳐 들어온 경우 — 검증 연타, 또는 검증 API 와 웹훅(RTDN)이 같은 순간에 도착.
+     *
+     * <p>예전엔 sync 전체가 한 트랜잭션이라 INSERT 가 커밋 때에야 나갔고, 늦은 쪽의 유니크 위반이 메서드
+     * 밖에서 터져 500 이 됐다 — PRO 는 이미 들어가 있는데 앱은 "구매를 확인하지 못했어요"를 띄웠다
+     * (docs/my-current-state.md §7-2). 위 팩 테스트와 같은 방식으로, 먼저 들어온 요청이 이미 행을 남긴
+     * 상태에서 첫 조회만 "없다"로 눌러 뒤 요청의 실제 경로(중복 INSERT → 재시도)를 결정적으로 태운다.
+     *
+     * <p>사용자는 리포지토리로 직접 만든다 — {@code subscriptions.user_id} 에 FK 가 있고, 가입 API 는
+     * IP 한도를 다른 클래스와 나눠 쓴다(위 클래스 주석).
+     */
+    @Test
+    void 구독_검증이_겹쳐_들어와도_성공으로_끝나고_먼저_생긴_행에_반영한다() {
+        Long userId = userRepository.save(User.builder()
+                .email("sub-race@fitto.com").name("U").role(Role.USER).build()).getId();
+        String token = "sub-race-token";
+        LocalDateTime renewedUntil = LocalDateTime.now().plusDays(30).truncatedTo(ChronoUnit.SECONDS);
+        when(googlePlayClient.fetch(token))
+                .thenReturn(new GooglePlaySubscriptionState(SubscriptionStatus.ACTIVE, "pro_monthly",
+                        renewedUntil, true, userId));
+
+        // 먼저 들어온 요청이 이미 행을 남겼다
+        subscriptionRepository.save(Subscription.builder()
+                .userId(userId).plan(Plan.PRO).status(SubscriptionStatus.ACTIVE).store(Store.GOOGLE_PLAY)
+                .productId("pro_monthly").purchaseToken(token)
+                .expiresAt(LocalDateTime.now().plusDays(1)).build());
+
+        // 뒤 요청의 첫 조회는 그 행을 아직 못 본다. 재시도 때는 실제 DB 에서 그 행을 찾는다 — 재시도 트랜잭션의
+        // 영속성 컨텍스트로 읽으므로, sync 가 바꾼 상태가 커밋에 실린다(실제 finder 와 같은 조건)
+        doReturn(Optional.empty())
+                .doAnswer(inv -> em.createQuery(
+                                "select s from Subscription s where s.purchaseToken = :t", Subscription.class)
+                        .setParameter("t", token).getResultStream().findFirst())
+                .when(subscriptionRepository).findByPurchaseToken(token);
+
+        assertThatCode(() -> subscriptionSync.sync(token)).doesNotThrowAnyException();
+
+        // 스텁을 지나 DB 를 직접 본다 — 행은 하나이고, 늦은 요청이 가져온 만료일로 갱신돼 있어야 한다
+        List<LocalDateTime> expiries = jdbc.queryForList(
+                "select expires_at from subscriptions where purchase_token = ?", LocalDateTime.class, token);
+        assertThat(expiries).containsExactly(renewedUntil);
+    }
 
     @Test
     void 검증이_겹쳐_들어와도_성공으로_끝나고_행은_하나다() {

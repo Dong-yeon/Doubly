@@ -12,6 +12,11 @@
 > - "확인 필요"는 코드만으로 결론을 못 낸 항목이다.
 > - 하루 기록·무드는 `docs/daily-mood-current-state.md` 에 자세히 있다. 이 문서에서는 MY 에서 보이는 면만 다룬다.
 
+> **후속 조치 (2026-10-04)**: §7-2 구독 동시 검증 500 — 구글·애플 sync 에서 메서드 트랜잭션을 걷고, 스토어 조회는
+> 트랜잭션 밖, 저장은 `saveAndFlush` 트랜잭션 안에서 한다. 유니크에 막히면 새 트랜잭션에서 한 번 더(먼저 생긴 행에 상태만
+> 반영, `JournalService.save` 와 같은 방식). `SUBSCRIPTION_STARTED` 는 커밋 뒤 실제로 만든 쪽만 남긴다(예전엔
+> REQUIRES_NEW 라 진 쪽도 남겼다). 테스트: 단위 `GooglePlay/AppStoreSubscriptionSyncServiceTest`, DB 경로
+> `StickerPurchaseIdempotencyTest.구독_검증이_겹쳐_…`(옛 코드에서 DataIntegrityViolation 으로 실패 확인). 서버만 바뀜.
 > **후속 조치 (2026-10-03)**: §7-4 로그아웃 후 푸시 — `POST /auth/logout` 이 본문 `{ pushToken }`(선택)을 받아,
 > 리프레시 토큰 주인의 그 토큰만 지운다(`DeviceTokenService.unregister`, 다른 기기·남의 토큰은 그대로).
 > 앱은 등록할 때 토큰을 SecureStore `doubly.pushToken` 에 남겨 두고 로그아웃 요청에 싣는다. 남겨 둔 값이 없으면
