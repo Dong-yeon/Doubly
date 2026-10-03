@@ -71,3 +71,20 @@
   홈과 럽바디가 동시에 구독하면 탭을 오갈 때 한쪽의 blur 정리가 다른 쪽 구독을 지울 수 있다. 필요하면 먼저 구독을
   리스너 목록으로 바꿔야 한다(홈·캘린더도 같은 구조).
 - 화면은 실기기·웹에서 눌러 보지 않았다(운영 로그인 필요). 타입 검사·웹 빌드·백엔드 테스트로 확인했다.
+
+---
+
+## 6. 2번 구현 기록 — 식단 찌르기 (2026-10-03)
+
+REVIEW §4 판단 그대로 **터치(POKE)에 얹지 않고 게임 찌르기 패턴**으로 따로 만들었다.
+
+| 쪽 | 내용 |
+| --- | --- |
+| 서버 | `POST /api/v1/meal/partner/nudge` → `MealNudgeService`. 푸시 "뭐 먹었어? 🍽️ / ○○님이 오늘 식단을 기다려요." · PARTNER 카테고리(받는 쪽이 따로 끌 수 있다) · 링크 `PushLinks.DIET` · 채팅에 안 남음. 막히는 경우: 커플 아님(404) · KST 22~08시(400 `MEAL_NUDGE_QUIET_HOURS`) · 상대가 오늘 이미 남김(409 `MEAL_NUDGE_ALREADY_RECORDED`) · 오늘 이미 물어봄(409 `MEAL_NUDGE_TOO_SOON`). `GET /meal/partner/today` 에 `nudgedToday` 추가(구버전 호환) |
+| DB | **V120** `meal_nudges`(relation·sender·receiver·nudge_date) + `UNIQUE (sender_id, nudge_date)` — 하루 한 번을 DB 가 지킨다(연타·동시 요청 포함). Purger 두 곳에 추가: `RelationRecordPurger`(relation_id) · `UserDataPurger`(sender·receiver) |
+| 앱 | 럽바디 "○○님 오늘"이 비어 있을 때만 "뭐 먹었는지 물어보기 👋"(보낸 뒤엔 "오늘 물어봤어요"). 막히면 서버 문구를 토스트로 보여주고 상태를 다시 읽는다 |
+| 테스트 | `MealNudgeTest` 6건(성공·푸시 내용 / 하루 두 번 / 상대가 이미 남김 / 밤 07:59·22:00·02:00 막힘, 08:00 통과 / 커플 아님 / 동시 연타 → 푸시 한 통) — 시간 창은 `nudgeAt(…, 고정 시각)` 으로 검증해 테스트 실행 시각에 흔들리지 않는다. `WithdrawFlowTest` 1건 — Purger 줄을 빼고 돌리면 `delete from relations` 에서 FK 위반으로 실패하는 것을 확인했다 |
+
+- **시간 창 8~22시**: 게임 리마인더(10~22시)보다 이르게 열었다 — 아침 식사를 묻는 8시는 자연스럽고, 이건 자동 알림이 아니라 사람이 누르는 것이다.
+- **상대가 이미 남겼으면 안 보낸다**: 먹은 걸 남긴 사람에게 "뭐 먹었어?"는 확인이 아니라 감시로 읽힌다.
+- 발견: CLAUDE.md §7 의 마이그레이션 번호 세기가 `resources/db/migration` 만 봐서 **Java 마이그레이션(V119)을 놓쳤다** — 그대로 썼으면 V119 를 중복으로 집었다. 명령을 SQL·Java 둘 다 세도록 고쳤다.
