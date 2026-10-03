@@ -131,7 +131,8 @@ class PartnerPrivacyTest {
         assertThat(today.get("mealTypes").get(0).asText()).isEqualTo("LUNCH");
         java.util.List<String> fields = new java.util.ArrayList<>();
         today.fieldNames().forEachRemaining(fields::add);
-        assertThat(fields).isSubsetOf("connected", "partnerName", "completed", "mealTypes");
+        // nudgedToday(V120)는 상대 식사가 아니라 <b>내가</b> 오늘 "뭐 먹었어?"를 보냈는지다 — 식사 정보가 아니라 허용한다
+        assertThat(fields).isSubsetOf("connected", "partnerName", "completed", "mealTypes", "nudgedToday");
         assertThat(today.toString()).doesNotContain("비밀 메모").doesNotContain(photo).doesNotContain("987");
     }
 }

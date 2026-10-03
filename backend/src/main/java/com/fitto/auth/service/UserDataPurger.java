@@ -109,6 +109,8 @@ public class UserDataPurger {
         exec("update meals set created_by = null where created_by = :uid", userId);
         exec("delete from meals where user_id = :uid", userId);
         exec("delete from meal_reminders where user_id = :uid", userId);
+        // 식단 찌르기(V120) — 관계 단위 정리에서 이미 지워졌지만 users FK 가 보낸·받은 쪽 둘 다 걸려 있어 한 번 더 훑는다
+        exec("delete from meal_nudges where sender_id = :uid or receiver_id = :uid", userId);
         exec("delete from water_logs where user_id = :uid", userId);
         exec("delete from fasting_sessions where user_id = :uid", userId);
         exec("delete from favorite_foods where user_id = :uid", userId);
