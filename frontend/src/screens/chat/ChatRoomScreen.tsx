@@ -39,7 +39,13 @@ import { bareHeaderItems } from '../../navigation/headerOptions';
 import { ImageViewer, type ViewerImage } from '../../components/ImageViewer';
 import { Avatar } from '../../components/Avatar';
 import { useFocusEffect } from '@react-navigation/native';
-import { connectSocket, subscribeCouple, unsubscribeCouple } from '../../api/chatSocket';
+import {
+  connectSocket,
+  newClientMessageId,
+  subscribeCouple,
+  unsubscribeCouple,
+  type OutgoingMessage,
+} from '../../api/chatSocket';
 import { useChatStore } from '../../store/chatStore';
 import { useAuthStore } from '../../store/authStore';
 import { useRelationStore } from '../../store/relationStore';
@@ -198,17 +204,6 @@ const INPUT_LINE_HEIGHT = Platform.OS === 'web' ? 22 : 20;
 const INPUT_MAX_LINES = 5;
 /** 한 줄일 때 칸 높이가 버튼 칸과 같아지는 위아래 여백 */
 const INPUT_PAD_V = (INPUT_SLOT - INPUT_LINE_HEIGHT) / 2;
-
-/**
- * 전송 멱등키 — 서버가 {@code (relation_id, client_message_id)} 로 중복을 거른다(V89).
- *
- * <p>UUID 라이브러리를 쓰지 않는 이유: 이 값이 유일해야 하는 범위는 <b>한 관계의 몇 초</b>
- * 뿐이고, 그 안에서 시각(ms)과 난수 8자가 겹칠 일은 없다. 의존성을 하나 더 들이는 대신
- * 필요한 만큼만 만든다. 컬럼 길이는 64 — 이 형식은 20자 안쪽이다.
- */
-function newClientMessageId(): string {
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-}
 
 export function ChatRoomScreen({ navigation, route }: Props) {
   const { relationId, title } = route.params;
@@ -1478,6 +1473,40 @@ export function ChatRoomScreen({ navigation, route }: Props) {
    * 이제 트레이 버튼 말고 하나 더 있다 — 대화 영역을 건드리면 닫힌다(dismissPanels).
    */
   /**
+   * 그림류(스티커·문구 스티커·우리 이모지·터치) 전송 — 멱등키를 만들고 <b>낙관적 말풍선</b>을 함께 세운다.
+   *
+   * <p>예전엔 TEXT 만 이렇게 보냈다. 나머지는 에코가 와야 화면에 떠서, 서버가 밀리면 스티커가 안 간 것처럼
+   * 보이고 다시 누른 만큼 저장됐다(텍스트가 2026-09-12 에 겪은 것과 같은 경로, docs/chat-current-state.md §3-3).
+   * 이 넷은 content(와 우리 이모지의 URL)만으로 그릴 수 있어 서버 응답 없이도 같은 모양의 말풍선을 세울 수 있다.
+   * 연달아 누르는 것(하트 세 번)은 막지 않는다 — 누를 때마다 새 키라 의도한 만큼 나간다.
+   */
+  const sendWithBubble = (payload: OutgoingMessage, bubbleImageUrl?: string | null) => {
+    const clientMessageId = newClientMessageId();
+    const keyed = { ...payload, clientMessageId };
+    return send(
+      relationId,
+      keyed,
+      myId
+        ? {
+            id: -Date.now(),
+            relationId,
+            senderId: myId,
+            messageType: payload.messageType ?? 'TEXT',
+            content: payload.content,
+            // 우리 이모지는 URL 을 페이로드에 싣지 않는다(서버가 행에서 복사) — 말풍선만 트레이의 URL 로 그린다
+            imageUrl: bubbleImageUrl ?? payload.imageUrl,
+            stickerCode: payload.stickerCode,
+            isRead: false,
+            createdAt: new Date().toISOString(),
+            replyTo: null,
+            clientMessageId,
+            pending: true,
+          }
+        : undefined,
+    );
+  };
+
+  /**
    * 가상 터치 — 홈에서 옮겨왔다(2026-09-12).
    *
    * <p>원래 홈 바로가기에 있었고 "채팅방을 열지 않고도 보낸다"가 그 자리의 이유였다.
@@ -1491,7 +1520,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const sendTouch = async (code: TouchGestureCode) => {
     haptics.light();
     scrollToBottom();
-    const ok = await send(relationId, { messageType: 'TOUCH', content: code });
+    const ok = await sendWithBubble({ messageType: 'TOUCH', content: code });
     if (!ok) {
       Alert.alert('전송 실패', '연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
     }
@@ -1533,7 +1562,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     }
     haptics.light();
     scrollToBottom();
-    const ok = await send(relationId, { messageType: 'STICKER', content: sticker });
+    const ok = await sendWithBubble({ messageType: 'STICKER', content: sticker });
     if (!ok) {
       Alert.alert('전송 실패', '연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
       return;
@@ -1563,7 +1592,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     if (draft?.fromInput) setText('');
     haptics.light();
     scrollToBottom();
-    const ok = await send(relationId, { messageType: 'TEXT_STICKER', content: phrase, stickerCode: code });
+    const ok = await sendWithBubble({ messageType: 'TEXT_STICKER', content: phrase, stickerCode: code });
     if (!ok) {
       Alert.alert('전송 실패', '연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
       return;
@@ -1584,7 +1613,10 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const sendCoupleEmoji = async (emojiId: number) => {
     haptics.light();
     scrollToBottom();
-    const ok = await send(relationId, { messageType: 'COUPLE_EMOJI', content: String(emojiId) });
+    const ok = await sendWithBubble(
+      { messageType: 'COUPLE_EMOJI', content: String(emojiId) },
+      coupleEmojiById.get(emojiId)?.imageUrl,
+    );
     if (!ok) {
       Alert.alert('전송 실패', '연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
     }
