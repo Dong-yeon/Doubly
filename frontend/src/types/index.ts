@@ -539,6 +539,8 @@ export interface PartnerToday {
    * 홈 아바타 "오늘 챙김" 링. 구서버 응답엔 없다(옵셔널).
    */
   mealTypes?: MealType[];
+  /** 오늘 내가 상대에게 "뭐 먹었어?"를 이미 보냈는지(식단 찌르기, V120) — 식단 응답에만, 구서버엔 없다 */
+  nudgedToday?: boolean;
 }
 
 /**

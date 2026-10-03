@@ -137,6 +137,11 @@ export const dietApi = {
   photoRecord: (photoUrl: string) =>
     unwrap(apiClient.post<ApiResponse<PhotoRecordLookup>>('/meal/photo-record', { photoUrl })),
   partnerToday: () => unwrap(apiClient.get<ApiResponse<PartnerToday>>('/meal/partner/today')),
+  /**
+   * 식단 찌르기 — 상대가 오늘 안 남겼을 때 "뭐 먹었어?" 푸시 한 번(하루 한 번, KST 8~22시). 채팅엔 남지 않는다.
+   * 오늘 이미 물어봤거나 상대가 이미 남겼으면 409, 밤이면 400 — 서버 문구를 그대로 보여주면 된다.
+   */
+  nudgePartner: () => unwrap(apiClient.post<ApiResponse<null>>('/meal/partner/nudge')),
   stats: () => unwrap(apiClient.get<ApiResponse<MealStats>>('/meal/stats')),
   coupleGoal: () => unwrap(apiClient.get<ApiResponse<CoupleMealGoal>>('/meal/couple/goal')),
   // 주간 식단 AI 코칭 — 최근 7일 기반, 시간이 걸려 timeout 상향.
