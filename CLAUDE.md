@@ -193,23 +193,26 @@ game, sticker, coupleemoji) 아래에 controller/domain/dto/repository/service�
 `backend/src/main/resources/db/migration/V{n}__*.sql`. **번호는 매번 직접 확인하고 붙입니다** —
 병렬 세션이 같은 번호를 동시에 쓰는 충돌이 반복적으로 발생했습니다.
 
+**Java 마이그레이션도 같은 번호 공간입니다** — `backend/src/main/java/db/migration/V{n}__*.java`(예: V119).
+SQL 폴더만 세면 그 번호를 못 보고 중복을 집습니다(2026-10-03, V119 를 다시 집을 뻔했다). 아래 명령은 둘 다 셉니다.
+
 **세는 기준이 최신 `main` 이어야 합니다.** 갈라진 로컬에서 세면 원격이 이미 쓴 번호를 그대로
 다시 집습니다(1절 참고). 먼저 `git fetch origin` 하고, 미병합 브랜치가 선점한 번호도 함께 봅니다.
 
 ```bash
 git fetch origin
 
-# ① 지금까지 쓰인 최대 번호 — 원격 기준으로 센다
-MIG=backend/src/main/resources/db/migration
-git ls-tree --name-only origin/main $MIG/ | sed 's#.*/##; s/^V//; s/__.*//' | sort -n | tail -1
+# ① 지금까지 쓰인 최대 번호 — 원격 기준으로, SQL·Java 마이그레이션을 함께 센다
+git ls-tree -r --name-only origin/main backend/src/main | grep -E '/V[0-9]+__' \
+  | sed 's#.*/##; s/^V//; s/__.*//' | sort -n | tail -1
 
-# ② 미병합 브랜치가 선점한 번호 — 여기 나오는 것보다 큰 번호를 쓴다
-for b in $(git for-each-ref --format='%(refname:short)' refs/heads); do
-  git diff --name-only --diff-filter=A origin/main..$b -- $MIG
+# ② 미병합 브랜치(로컬·원격)가 선점한 번호 — 여기 나오는 것보다 큰 번호를 쓴다
+for b in $(git for-each-ref --format='%(refname:short)' refs/heads refs/remotes/origin | grep -v 'main\|HEAD'); do
+  git diff --name-only --diff-filter=A origin/main...$b -- backend/src/main | grep -E '/V[0-9]+__'
 done | sed 's#.*/##' | sort -u
 
 # ③ 중복 검사 — 병합한 뒤에도 한 번 더
-ls $MIG | sed 's/^V//; s/__.*//' | sort -n | uniq -d
+git ls-files backend/src/main | grep -E '/V[0-9]+__' | sed 's#.*/##; s/^V//; s/__.*//' | sort -n | uniq -d
 ```
 
 4절의 H2/PostgreSQL 양립 규칙(`JSONB`·`ON CONFLICT` 금지)이 여기 걸립니다. CI가 H2로 Flyway를 돌리므로
