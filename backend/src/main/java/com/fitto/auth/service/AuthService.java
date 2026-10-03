@@ -1,5 +1,6 @@
 package com.fitto.auth.service;
 
+import com.fitto.auth.dto.EmailNormalizer;
 import com.fitto.auth.dto.LoginRequest;
 import com.fitto.auth.dto.NotificationCategorySettingRequest;
 import com.fitto.auth.dto.RegisterRequest;
@@ -130,15 +131,16 @@ public class AuthService {
         rateLimiter.checkRefresh(clientIp);   // 토큰 검증 남용 방지 — 갱신과 같은 완만한 한도
         GoogleTokenVerifier.GoogleProfile profile = googleTokenVerifier.verify(idToken);
 
+        String email = EmailNormalizer.normalize(profile.email());
         User user = userRepository
                 .findBySocialTypeAndSocialId(SocialType.GOOGLE, profile.sub())
-                .or(() -> userRepository.findByEmail(profile.email()))
+                .or(() -> userRepository.findByEmail(email))
                 .orElse(null);
         if (user == null) {
             String name = profile.name() != null && !profile.name().isBlank()
                     ? profile.name() : "사용자";
             user = userRepository.save(User.builder()
-                    .email(profile.email())
+                    .email(email)
                     .name(name.length() > 50 ? name.substring(0, 50) : name)
                     .profileImageUrl(profile.picture())
                     .role(Role.USER)

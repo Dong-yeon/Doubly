@@ -9,4 +9,7 @@ public record ForgotPasswordRequest(
         @NotBlank(message = "이메일은 필수입니다.")
         String email
 ) {
+    public ForgotPasswordRequest {
+        email = EmailNormalizer.normalize(email);
+    }
 }

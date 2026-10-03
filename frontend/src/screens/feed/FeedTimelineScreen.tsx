@@ -21,6 +21,7 @@ import { relativeDateLabel, toDateString } from '../../utils/date';
 import { haptics } from '../../utils/haptics';
 import { useDeleteAction } from '../../hooks/useDeleteAction';
 import { useRelationStore } from '../../store/relationStore';
+import { connectSocket, subscribeCouple } from '../../api/chatSocket';
 import type { FeedItem } from '../../types';
 import { colors, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
@@ -134,6 +135,52 @@ export function FeedTimelineScreen({ navigation, route }: Props) {
   }, [hasMore, nextCursor, pageLimit, matches]);
 
   useFocusEffect(useCallback(() => void load(), [load]));
+
+  /**
+   * 상대가 기록을 남기거나 반응·댓글을 달았을 때 — 첫 페이지만 다시 받아 위에 합친다.
+   * load() 로 갈아끼우면 더 읽어 둔 아래쪽이 사라지고 스크롤이 튄다. 첫 페이지 안에서 지워진 글은
+   * 더 읽기 전(첫 페이지만 있을 때)에만 걷어낸다 — 그 너머는 다음 진입 때 맞춰진다.
+   */
+  const refreshTop = useCallback(async () => {
+    if (busy.current) return;
+    try {
+      const page = await feedApi.timeline(null, pageLimit);
+      const fresh = page.items.filter(matches);
+      setItems((prev) => {
+        if (prev.length <= fresh.length) return fresh;
+        const seen = new Set(fresh.map(feedItemKey));
+        return [...fresh, ...prev.filter((i) => !seen.has(feedItemKey(i)))];
+      });
+    } catch {
+      // 조용히 — 다음 이벤트나 다음 진입 때 다시 맞춰진다
+    }
+  }, [pageLimit, matches]);
+
+  /*
+   * 실시간 갱신 — 예전엔 이 화면이 커플 채널을 듣지 않았다. 그런데 이 화면을 보고 있으면 같은 경로의
+   * 푸시 배너는 "지금 보는 화면"이라 억제되어, 상대의 새 일상이 아무 신호 없이 묻혔다
+   * (docs/first-experience-audit.md #9). 목록에 실리는 일상·식단·운동의 변경을 듣는다.
+   */
+  const relationId = useRelationStore((s) => s.couple?.id);
+  useFocusEffect(
+    useCallback(() => {
+      if (!relationId) return undefined;
+      let active = true;
+      let offCouple: (() => void) | undefined;
+      connectSocket()
+        .then(() => {
+          if (!active) return;
+          offCouple = subscribeCouple(relationId, (type) => {
+            if (type === 'FEED' || type === 'DIET' || type === 'WORKOUT' || type === '') void refreshTop();
+          });
+        })
+        .catch(() => undefined);
+      return () => {
+        active = false;
+        offCouple?.();
+      };
+    }, [relationId, refreshTop]),
+  );
 
   const onReact = async (item: FeedItem, emoji: string) => {
     haptics.light();

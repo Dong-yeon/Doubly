@@ -8,7 +8,15 @@ interface RelationState {
   /** 활성 커플 관계 */
   couple: Relation | null;
   loading: boolean;
+  /**
+   * 한 번이라도 관계를 불러왔는지. false 인 채 loading 도 끝났으면 "미연결"이 아니라 "모름"이다 —
+   * 첫 조회가 네트워크 오류로 실패한 연결된 사용자에게 "커플을 연결해보세요"를 보이지 않기 위함이다
+   * (docs/first-experience-audit.md #13).
+   */
+  loaded: boolean;
   fetchAll: () => Promise<void>;
+  /** 로그아웃 시 — 다음 계정에 앞 계정의 커플이 비치지 않게 비운다 */
+  reset: () => void;
   createInvite: () => Promise<InviteCode>;
   /** 살아 있는 내 초대코드 — 화면을 다시 열거나 앱을 재시작해도 같은 코드를 보여 주기 위함 */
   findInvite: () => Promise<InviteCode | null>;
@@ -35,16 +43,19 @@ export const useRelationStore = create<RelationState>((set, get) => ({
   relations: [],
   couple: null,
   loading: false,
+  loaded: false,
 
   fetchAll: async () => {
     set({ loading: true });
     try {
       const relations = await relationApi.list();
-      set({ relations, couple: findActiveCouple(relations) });
+      set({ relations, couple: findActiveCouple(relations), loaded: true });
     } finally {
       set({ loading: false });
     }
   },
+
+  reset: () => set({ relations: [], couple: null, loading: false, loaded: false }),
 
   createInvite: async () => relationApi.createCoupleInvite(),
 

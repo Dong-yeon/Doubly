@@ -77,7 +77,9 @@ export const usePlanStore = create<PlanState>((set, get) => ({
       });
     } catch {
       // 플랜을 못 받아도 앱은 그대로 동작해야 한다. 서버가 어차피 최종 판정을 한다.
-      set({ isLoaded: false });
+      // 이미 받아 둔 값이 있으면 그대로 둔다 — 화면 포커스·앱 복귀 때도 다시 읽으므로, 잠깐의 끊김에
+      // "모름"으로 돌아가면 멀쩡한 PRO 화면이 깜빡인다.
+      if (!get().isLoaded) set({ isLoaded: false });
     }
   },
 

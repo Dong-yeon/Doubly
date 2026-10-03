@@ -21,6 +21,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList, MainTabParamList } from '../../navigation/types';
 import { Avatar } from '../../components/Avatar';
 import { Button } from '../../components/Button';
+import { EmptyState } from '../../components/EmptyState';
 import { Card } from '../../components/Card';
 import { SettingsGroup, SettingsRow } from '../../components/SettingsList';
 import { DateField } from '../../components/DateField';
@@ -54,7 +55,6 @@ import { feedTimeLabel } from '../feed/FeedTimelineScreen';
 import {
   connectSocket,
   subscribeCouple,
-  unsubscribeCouple,
 } from '../../api/chatSocket';
 import { pickImage, takePhoto, uploadImage } from '../../utils/imageUpload';
 import { daysSince, formatMonthDay, todayKst } from '../../utils/date';
@@ -159,7 +159,8 @@ function cachedStreak(currentCount: number): Streak {
 
 export function HomeScreen({ navigation }: Props) {
   const user = useAuthStore((s) => s.user);
-  const { couple, loading: relationLoading, fetchAll, setBackground, setAnniversary } = useRelationStore();
+  const { couple, loading: relationLoading, loaded: relationLoaded, fetchAll, setBackground, setAnniversary } =
+    useRelationStore();
   // 표시용 판정 — 모르면 열린 것으로 본다(planStore 주석 참고). 최종 판정은 서버가 한다.
   const canUse = usePlanStore((s) => s.can);
   const showUpgrade = usePlanStore((s) => s.showUpgrade);
@@ -533,10 +534,11 @@ export function HomeScreen({ navigation }: Props) {
     useCallback(() => {
       if (!relationId) return;
       let active = true;
+      let offCouple: (() => void) | undefined;
       connectSocket()
         .then(() => {
           if (!active) return;
-          subscribeCouple(relationId, (type) => {
+          offCouple = subscribeCouple(relationId, (type) => {
             refresh();
             // 가상 터치는 새로고침 대상이 아니라 즉시 반응(진동) 대상이다
             if (type === 'TOUCH') onIncomingTouch();
@@ -553,7 +555,7 @@ export function HomeScreen({ navigation }: Props) {
         .catch(() => undefined);
       return () => {
         active = false;
-        unsubscribeCouple(relationId);
+        offCouple?.();
       };
     }, [relationId, refresh, onIncomingTouch]),
   );
@@ -1063,6 +1065,17 @@ export function HomeScreen({ navigation }: Props) {
               />
               </View>
             </View>
+          ) : !relationLoaded ? (
+            /*
+             * 관계를 한 번도 못 불러왔다 — 미연결인지 알 수 없다. 연결된 사람에게 "커플을 연결해보세요"를
+             * 보이면 이미 연결돼 있는데 코드를 만들게 되고 409 를 만난다(docs/first-experience-audit.md #13).
+             */
+            <EmptyState
+              error
+              title="연결 상태를 불러오지 못했어요"
+              description="인터넷 연결을 확인하고 다시 시도해 주세요."
+              onRetry={refresh}
+            />
           ) : (
             /*
              * 미연결 상태만 스크롤을 허용한다 — 연결 안내 + 혼자 시작하기 목록이

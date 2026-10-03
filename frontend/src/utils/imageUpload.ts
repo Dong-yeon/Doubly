@@ -210,11 +210,32 @@ async function buildFileForm(uri: string): Promise<FormData> {
   return form;
 }
 
+/**
+ * 사진 한 장 업로드의 상한. 예전엔 타임아웃이 없어 네트워크가 멈추면 "사진 올리는 중…" 가림막이
+ * 끝나지 않았다(docs/first-experience-audit.md #11). 느린 회선에서 큰 사진도 넉넉히 올라가는 값이다.
+ */
+const UPLOAD_TIMEOUT_MS = 60_000;
+
 async function postToCloudinary(cloudName: string, form: FormData): Promise<string> {
-  const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
-    method: 'POST',
-    body: form,
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+      method: 'POST',
+      body: form,
+      signal: controller.signal,
+    });
+  } catch {
+    // 시간 초과(abort)·연결 끊김 모두 — fetch 의 영문 메시지("Network request failed")를 그대로 보이지 않는다
+    throw new Error(
+      controller.signal.aborted
+        ? '사진 올리기가 너무 오래 걸려 멈췄어요. 연결을 확인하고 다시 시도해 주세요.'
+        : '사진을 올리지 못했어요. 인터넷 연결을 확인해 주세요.',
+    );
+  } finally {
+    clearTimeout(timer);
+  }
   if (!res.ok) throw new Error('이미지 업로드에 실패했어요.');
   const data = (await res.json()) as { secure_url?: string };
   if (!data.secure_url) throw new Error('이미지 업로드 응답이 올바르지 않아요.');

@@ -18,7 +18,8 @@ import { OnboardingNavigator } from './OnboardingNavigator';
 import { MainTabNavigator } from './MainTabNavigator';
 import { PushPermissionPrimer } from '../components/PushPermissionPrimer';
 import { Button } from '../components/Button';
-import { dismissNotificationsForPath, setCurrentPath } from '../utils/push';
+import { dismissNotificationsForPath, registerPushTokenOnResume, setCurrentPath } from '../utils/push';
+import { usePlanStore } from '../store/planStore';
 import { ConsentGateScreen } from '../screens/onboarding/ConsentGateScreen';
 import { useAuthStore } from '../store/authStore';
 import { useThemeStore } from '../store/themeStore';
@@ -28,6 +29,9 @@ import { colors } from '../constants/theme';
 import { isDarkMode } from '../theme';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+
+/** 앱 복귀 때 플랜을 다시 읽는 최소 간격 — 앱을 오가는 동안 매번 부를 이유는 없다 */
+const PLAN_RECHECK_MS = 60_000;
 
 /**
  * 네비게이터 자체의 배경색 — 우리 팔레트를 따르게 한다.
@@ -138,6 +142,25 @@ export function RootNavigator() {
     });
     return () => sub.remove();
   }, [pathOf]);
+
+  /*
+   * 앱으로 돌아왔을 때:
+   *  - 시스템 설정에서 알림을 켜고 왔으면 그 자리에서 토큰을 등록한다 — 재시작을 기다리면 그사이 알림이 사라진다.
+   *  - 플랜을 다시 읽는다(1분에 한 번까지) — 상대가 결제했거나 내 구독이 끝난 걸 재시작 없이 반영한다.
+   */
+  const planCheckedAtRef = useRef(0);
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next !== 'active') return;
+      void registerPushTokenOnResume();
+      if (Date.now() - planCheckedAtRef.current > PLAN_RECHECK_MS) {
+        planCheckedAtRef.current = Date.now();
+        void usePlanStore.getState().load();
+      }
+    });
+    return () => sub.remove();
+  }, [isAuthenticated]);
 
   // 연결 실패로 세션 복원을 못 했다면, 앱으로 돌아올 때(네트워크가 돌아왔을 가능성이 크다) 다시 묻는다
   useEffect(() => {

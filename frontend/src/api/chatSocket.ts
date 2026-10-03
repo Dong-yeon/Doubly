@@ -263,19 +263,50 @@ export function subscribeRoomPin(relationId: number, onPin: (event: PinEvent) =>
   register(`/sub/rooms/${relationId}/pin`, jsonHandler(onPin));
 }
 
-/** 커플 실시간 이벤트 구독 (/sub/couple/{relationId}) — 배경/기념일/운동 변경 알림 */
-export function subscribeCouple(relationId: number, onEvent: (type: string) => void) {
-  register(`/sub/couple/${relationId}`, (frame) => {
-    try {
-      onEvent((JSON.parse(frame.body) as { type?: string }).type ?? '');
-    } catch {
-      onEvent('');
-    }
-  });
-}
+/** 커플 채널을 듣는 화면들 — 관계 id 마다 리스너 묶음 */
+const coupleListeners = new Map<number, Set<(type: string) => void>>();
 
-export function unsubscribeCouple(relationId: number) {
-  unregister(`/sub/couple/${relationId}`);
+/**
+ * 커플 실시간 이벤트 구독 (/sub/couple/{relationId}) — 배경/기념일/운동/기록 변경 알림.
+ * 돌려받은 함수를 부르면 <b>이 리스너만</b> 빠진다.
+ *
+ * <p>여러 화면이 같은 채널을 동시에 듣는다(홈·기록 목록·채팅방·게임). 예전엔 목적지 하나에 핸들러
+ * 하나라 나중에 구독한 화면이 앞의 것을 덮어썼고, 한 화면이 해제하면 남은 화면의 구독까지 끊겼다.
+ * 이제 STOMP 구독은 채널마다 하나만 두고, 들어온 이벤트를 모든 리스너에 나눠 준다.
+ */
+export function subscribeCouple(relationId: number, onEvent: (type: string) => void): () => void {
+  let listeners = coupleListeners.get(relationId);
+  if (!listeners) {
+    const set = new Set<(type: string) => void>();
+    listeners = set;
+    coupleListeners.set(relationId, set);
+    register(`/sub/couple/${relationId}`, (frame) => {
+      let type = '';
+      try {
+        type = (JSON.parse(frame.body) as { type?: string }).type ?? '';
+      } catch {
+        // 깨진 프레임 — 타입 없이 "뭔가 바뀌었다"로만 알린다
+      }
+      // 리스너 하나가 던져도 나머지 화면은 받아야 한다
+      [...set].forEach((fn) => {
+        try {
+          fn(type);
+        } catch {
+          // 무시
+        }
+      });
+    });
+  }
+  listeners.add(onEvent);
+  return () => {
+    const current = coupleListeners.get(relationId);
+    if (!current) return;
+    current.delete(onEvent);
+    if (current.size === 0) {
+      coupleListeners.delete(relationId);
+      unregister(`/sub/couple/${relationId}`);
+    }
+  };
 }
 
 /**

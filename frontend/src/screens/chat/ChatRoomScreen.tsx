@@ -43,7 +43,6 @@ import {
   connectSocket,
   newClientMessageId,
   subscribeCouple,
-  unsubscribeCouple,
   type OutgoingMessage,
 } from '../../api/chatSocket';
 import { useChatStore } from '../../store/chatStore';
@@ -1086,10 +1085,11 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   useFocusEffect(
     useCallback(() => {
       let active = true;
+      let offCouple: (() => void) | undefined;
       connectSocket()
         .then(() => {
           if (!active) return;
-          subscribeCouple(relationId, (type) => {
+          offCouple = subscribeCouple(relationId, (type) => {
             if (type === 'COUPLE_EMOJI') void loadCoupleEmojis(true).catch(() => undefined);
             // 상대(또는 내가 다른 기기에서)가 무드를 바꿨다 — 상대 무드가 실제로 바뀐 경우만 막대에 뜬다
             if (type === 'MOOD') void refreshPartnerMoodRef.current(true);
@@ -1100,7 +1100,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         .catch(() => undefined);
       return () => {
         active = false;
-        unsubscribeCouple(relationId);
+        offCouple?.();
       };
     }, [relationId, loadCoupleEmojis]),
   );
