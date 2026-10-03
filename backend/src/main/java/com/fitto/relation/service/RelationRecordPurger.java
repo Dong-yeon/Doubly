@@ -61,6 +61,9 @@ public class RelationRecordPurger {
                 + "(select w.id from workouts w where w.user_id in " + MEMBER_IDS + ")", relationId);
         exec("delete from feed_reactions where target_type = 'MEAL' and target_id in "
                 + "(select m.id from meals m where m.user_id in " + MEMBER_IDS + ")", relationId);
+        // 일상 댓글(V124) — feed_posts 삭제가 CASCADE 로 함께 지우지만, 순서를 여기서 읽을 수 있게 먼저 거둔다
+        exec("delete from feed_comments where post_id in "
+                + "(select p.id from feed_posts p where p.couple_id = :rid)", relationId);
         // feed_posts.trip_id 가 trips 를 참조하므로 피드를 먼저 지운다
         exec("delete from feed_posts where couple_id = :rid", relationId);
 

@@ -10,6 +10,7 @@ import com.fitto.feed.dto.FeedItemResponse;
 import com.fitto.feed.dto.FeedItemType;
 import com.fitto.feed.dto.ReactionSummary;
 import com.fitto.feed.repository.FeedPostPhotoRepository;
+import com.fitto.feed.repository.FeedCommentRepository;
 import com.fitto.feed.repository.FeedReactionRepository;
 import com.fitto.place.repository.PlaceVisitRepository.VisitWithPlace;
 import com.fitto.place.domain.PlaceVisit;
@@ -38,13 +39,16 @@ import java.util.Map;
 public class FeedItemMapper {
 
     private final FeedReactionRepository feedReactionRepository;
+    private final FeedCommentRepository feedCommentRepository;
     private final FeedPostPhotoRepository feedPostPhotoRepository;
     private final UserRepository userRepository;
 
     public FeedItemMapper(FeedReactionRepository feedReactionRepository,
+                          FeedCommentRepository feedCommentRepository,
                           FeedPostPhotoRepository feedPostPhotoRepository,
                           UserRepository userRepository) {
         this.feedReactionRepository = feedReactionRepository;
+        this.feedCommentRepository = feedCommentRepository;
         this.feedPostPhotoRepository = feedPostPhotoRepository;
         this.userRepository = userRepository;
     }
@@ -257,13 +261,23 @@ public class FeedItemMapper {
             }
             byTypeAndId.put(type, byId);
         });
+        // 댓글 수(V124) — 일상 포스트만, 한 페이지를 한 번에 센다
+        Map<Long, Long> commentCounts = new java.util.HashMap<>();
+        List<Long> postIds = idsByType.getOrDefault(FeedItemType.POST, List.of());
+        if (!postIds.isEmpty()) {
+            feedCommentRepository.countByPostIds(postIds)
+                    .forEach(c -> commentCounts.put(c.getPostId(), c.getCount()));
+        }
         return items.stream()
                 .map(i -> new FeedItemResponse(i.type(), i.refId(), i.userId(), i.userName(), i.mine(),
                         i.title(), i.content(), i.imageUrl(), i.occurredAt(),
                         summarize(byTypeAndId
                                 .getOrDefault(i.type(), Map.of())
                                 .getOrDefault(i.refId(), List.of()), viewerId),
-                        i.imageUrls(), i.shared(), i.summary(), i.recordDate(), i.edited()))
+                        i.imageUrls(), i.shared(), i.summary(), i.recordDate(), i.edited(),
+                        i.type() == FeedItemType.POST
+                                ? commentCounts.getOrDefault(i.refId(), 0L).intValue()
+                                : 0))
                 .toList();
     }
 

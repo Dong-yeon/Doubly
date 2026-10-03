@@ -46,8 +46,22 @@ public record FeedItemResponse(
          */
         LocalDate recordDate,
         /** 일상 포스트를 고친 적이 있는가(V123) — 카드가 "수정됨"을 붙인다. 다른 타입은 false */
-        boolean edited
+        boolean edited,
+        /**
+         * 일상 포스트의 댓글 수(V124) — 카드가 "댓글 N"을 보여 준다. 다른 타입은 0.
+         * {@code FeedItemMapper.attachReactions} 가 반응과 함께 한 번에 채운다.
+         */
+        int commentCount
 ) {
+    /** 댓글 수를 아직 모르는 단계 — attachReactions 가 채운다 */
+    public FeedItemResponse(FeedItemType type, Long refId, Long userId, String userName, boolean mine,
+                            String title, String content, String imageUrl, LocalDateTime occurredAt,
+                            List<ReactionSummary> reactions, List<String> imageUrls, boolean shared, String summary,
+                            LocalDate recordDate, boolean edited) {
+        this(type, refId, userId, userName, mine, title, content, imageUrl, occurredAt, reactions, imageUrls, shared,
+                summary, recordDate, edited, 0);
+    }
+
     /** 고침 표시가 없는 경우 — 일상 포스트 외 전부, 그리고 예전 호출부 */
     public FeedItemResponse(FeedItemType type, Long refId, Long userId, String userName, boolean mine,
                             String title, String content, String imageUrl, LocalDateTime occurredAt,

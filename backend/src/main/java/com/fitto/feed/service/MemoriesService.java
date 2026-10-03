@@ -195,7 +195,7 @@ public class MemoriesService {
     private static FeedItemResponse onDay(FeedItemResponse i, LocalDate date) {
         return new FeedItemResponse(i.type(), i.refId(), i.userId(), i.userName(), i.mine(), i.title(),
                 i.content(), i.imageUrl(), date.atStartOfDay(), i.reactions(), i.imageUrls(), i.shared(),
-                i.summary(), i.recordDate(), i.edited());
+                i.summary(), i.recordDate(), i.edited(), i.commentCount());
     }
 
     /**
