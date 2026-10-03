@@ -1735,7 +1735,12 @@ export function ChatRoomScreen({ navigation, route }: Props) {
       await chatApi.scheduleMessage(relationId, {
         messageType: 'TEXT',
         content,
-        scheduledAt: `${scheduledAt.getFullYear()}-${String(scheduledAt.getMonth() + 1).padStart(2, '0')}-${String(scheduledAt.getDate()).padStart(2, '0')}T${String(scheduledAt.getHours()).padStart(2, '0')}:${String(scheduledAt.getMinutes()).padStart(2, '0')}:00`,
+        /*
+         * 순간(UTC, "...Z")으로 보낸다. 예전엔 기기 현지 시각을 오프셋 없이 보냈고 서버가 그걸 UTC 로 읽어
+         * 9시간 늦게 나갔다(docs/chat-current-state.md §8-1 T1). 서버는 이제 오프셋 없는 값을 KST 로 읽어
+         * 옛 앱도 맞추지만, 순간으로 보내면 해외에 있어도 고른 시각 그대로 나간다.
+         */
+        scheduledAt: scheduledAt.toISOString(),
       });
       toast.success('예약했어요.');
     } catch (e) {
