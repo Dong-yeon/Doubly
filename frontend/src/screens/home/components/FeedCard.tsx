@@ -266,7 +266,8 @@ function PostCard({ item, timeLabel, quickEmojis, onReact, onLongPress }: FeedCa
         <View style={styles.postHeader}>
           {/* 색 점은 뺐다 — 이름이 있으니 점은 정보를 더하지 않는다 */}
           <Text style={styles.who}>{item.mine ? '나' : item.userName}</Text>
-          <Text style={styles.time}>{timeLabel}</Text>
+          {/* 수정됨 — 고칠 때 상대에게 푸시가 가지 않으니(소음) 대신 카드에 흔적을 남긴다. 반응한 내용이 조용히 바뀌지 않게 */}
+          <Text style={styles.time}>{item.edited ? `${timeLabel} · 수정됨` : timeLabel}</Text>
         </View>
         {pastDay ? <Text style={styles.pastDay}>{pastDay}</Text> : null}
 

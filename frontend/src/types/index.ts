@@ -1741,6 +1741,8 @@ export interface FeedItem {
    * "N월 N일의 일상"으로 알린다. 다른 타입·예전 서버는 없다.
    */
   recordDate?: string | null;
+  /** 일상 포스트를 고친 적이 있는가(V123) — 카드가 "수정됨"을 붙인다. 다른 타입·예전 서버는 없다 */
+  edited?: boolean;
 }
 export interface FeedTimeline {
   items: FeedItem[];
