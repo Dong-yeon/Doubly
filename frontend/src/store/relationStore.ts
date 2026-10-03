@@ -10,6 +10,8 @@ interface RelationState {
   loading: boolean;
   fetchAll: () => Promise<void>;
   createInvite: () => Promise<InviteCode>;
+  /** 살아 있는 내 초대코드 — 화면을 다시 열거나 앱을 재시작해도 같은 코드를 보여 주기 위함 */
+  findInvite: () => Promise<InviteCode | null>;
   connectCouple: (code: string) => Promise<void>;
   /** null 이면 배경 해제 — 기본 그라데이션으로 돌아간다 */
   setBackground: (url: string | null) => Promise<void>;
@@ -46,9 +48,13 @@ export const useRelationStore = create<RelationState>((set, get) => ({
 
   createInvite: async () => relationApi.createCoupleInvite(),
 
+  findInvite: async () => relationApi.findCoupleInvite(),
+
   connectCouple: async (code) => {
     await relationApi.connectCouple(code);
-    await get().fetchAll();
+    // 연결은 이미 성공했다 — 목록 갱신이 실패했다고 "연결 실패"로 보이면 다시 눌러 409 를 만난다.
+    // 홈이 포커스될 때 다시 불러오므로 여기선 삼킨다.
+    await get().fetchAll().catch(() => undefined);
   },
 
   setBackground: async (url) => {
