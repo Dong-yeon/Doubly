@@ -30,6 +30,7 @@ public enum ErrorCode {
     INVITE_CODE_EXPIRED(HttpStatus.BAD_REQUEST, "만료된 초대코드입니다."),
     INVITE_CODE_INVALID(HttpStatus.BAD_REQUEST, "유효하지 않은 초대코드입니다."),
     ALREADY_CONNECTED(HttpStatus.CONFLICT, "이미 연결된 관계입니다."),
+    JOURNAL_ALREADY_SHARED(HttpStatus.CONFLICT, "이 기록은 이미 우리 기록에 공유했어요."),
     RELATION_NOT_FOUND(HttpStatus.NOT_FOUND, "관계를 찾을 수 없습니다."),
     // 연결이 끊긴 뒤의 접근 — 상대가 종료된 관계로 계속 메시지를 보내는 것을 막는다
     RELATION_NOT_ACTIVE(HttpStatus.FORBIDDEN, "연결이 끊긴 관계입니다."),

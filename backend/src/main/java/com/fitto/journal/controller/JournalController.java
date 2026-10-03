@@ -6,6 +6,8 @@ import com.fitto.common.upload.UploadSignatureResponse;
 import com.fitto.journal.dto.JournalEntryResponse;
 import com.fitto.journal.dto.SaveJournalRequest;
 import com.fitto.journal.service.JournalService;
+import com.fitto.journal.service.JournalShareService;
+import com.fitto.journal.dto.ShareJournalRequest;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -33,9 +35,11 @@ import java.util.List;
 public class JournalController {
 
     private final JournalService journalService;
+    private final JournalShareService journalShareService;
 
-    public JournalController(JournalService journalService) {
+    public JournalController(JournalService journalService, JournalShareService journalShareService) {
         this.journalService = journalService;
+        this.journalShareService = journalShareService;
     }
 
     /** 한 달 기록 — {@code ?month=2026-10} */
@@ -63,6 +67,17 @@ public class JournalController {
                                     @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         journalService.delete(user.id(), date);
         return ApiResponse.success(null, "기록을 지웠어요.");
+    }
+
+    /**
+     * 우리 기록에 공유 — 사진은 서버가 복사하고 일기 날짜의 일상 글을 만든다(상대에게 푸시가 간다).
+     * 한 기록에 한 번, 이미 공유했으면 409. 본문은 공유본에서만 고칠 수 있다.
+     */
+    @PostMapping("/{date}/share")
+    public ApiResponse<JournalEntryResponse> share(@AuthenticationPrincipal AuthUser user,
+                                                   @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+                                                   @Valid @RequestBody(required = false) ShareJournalRequest request) {
+        return ApiResponse.success(journalShareService.share(user.id(), date, request), "우리 기록에 공유했어요.");
     }
 
     /** 사진 업로드 서명 — {@code journal/} 폴더, 사람 단위 {@code JOURNAL_PHOTO} 한도 */

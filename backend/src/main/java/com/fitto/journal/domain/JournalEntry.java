@@ -55,6 +55,13 @@ public class JournalEntry extends BaseTimeEntity {
     @Column(name = "photo_url", length = 500)
     private String photoUrl;
 
+    /**
+     * "우리 기록에 공유"한 피드 글(V121) — 공유본은 독립된 복사본이라 이 기록을 고쳐도 그 글은 그대로다.
+     * 그 글이 지워지면 FK 가 null 로 되돌려 다시 공유할 수 있다. 쓰기는 JournalShareService 만 한다.
+     */
+    @Column(name = "shared_post_id")
+    private Long sharedPostId;
+
     @Builder
     private JournalEntry(Long userId, LocalDate journalDate, String moodEmoji, String body, String photoUrl) {
         this.userId = userId;

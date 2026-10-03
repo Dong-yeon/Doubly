@@ -15,6 +15,10 @@ import com.fitto.feed.service.FeedService;
 import com.fitto.feed.service.MemoriesService;
 import com.fitto.journal.domain.JournalSource;
 import com.fitto.journal.dto.SaveJournalRequest;
+import com.fitto.journal.dto.ShareJournalRequest;
+import com.fitto.journal.service.JournalShareService;
+import com.fitto.feed.dto.FeedItemResponse;
+import com.fitto.feed.dto.FeedItemType;
 import com.fitto.journal.repository.JournalEntryRepository;
 import com.fitto.journal.service.JournalService;
 import com.fitto.mood.service.MoodService;
@@ -62,6 +66,7 @@ class JournalPrivacyTest {
     @Autowired RelationService relationService;
     @Autowired RelationRecordPurger relationRecordPurger;
     @Autowired JournalService journalService;
+    @Autowired JournalShareService journalShareService;
     @Autowired JournalEntryRepository journalRepository;
     @Autowired FeedService feedService;
     @Autowired MemoriesService memoriesService;
@@ -273,5 +278,106 @@ class JournalPrivacyTest {
                 .isInstanceOf(BusinessException.class);
         // 지난 날짜는 쓸 수 있다
         write(me, today.minusDays(3), "그저께의 그저께", null);
+    }
+
+    // 공유(1차-b) ───────────────────────────────────────────────────────────────
+
+    private FeedItemResponse partnerPost(Long viewer, Long postId) {
+        return feedService.timeline(viewer, null, 50).items().stream()
+                .filter(i -> i.type() == FeedItemType.POST && i.refId().equals(postId))
+                .findFirst().orElse(null);
+    }
+
+    @Test
+    void 공유하면_일기_날짜의_일상이_상대에게_보이고_원본은_그대로다() {
+        Long[] ab = couple("share1");
+        LocalDate day = KstClock.today().minusDays(2);
+        write(ab[0], day, "그날 있었던 일", null);
+
+        var shared = journalShareService.share(ab[0], day, null);
+
+        assertThat(shared.sharedPostId()).isNotNull();
+        FeedItemResponse post = partnerPost(ab[1], shared.sharedPostId());
+        assertThat(post).isNotNull();
+        assertThat(post.content()).isEqualTo("그날 있었던 일");
+        assertThat(post.recordDate()).isEqualTo(day); // 오늘 공유해도 그날의 일상
+        assertThat(journalService.day(ab[0], day).body()).isEqualTo("그날 있었던 일");
+    }
+
+    @Test
+    void 공유본에서_다듬은_본문은_원본_기록에_돌아가지_않는다() {
+        Long[] ab = couple("share2");
+        LocalDate day = KstClock.today();
+        write(ab[0], day, "날것의 일기", null);
+
+        var shared = journalShareService.share(ab[0], day, new ShareJournalRequest("다듬어 보여 줄 글"));
+
+        assertThat(partnerPost(ab[1], shared.sharedPostId()).content()).isEqualTo("다듬어 보여 줄 글");
+        assertThat(journalService.day(ab[0], day).body()).isEqualTo("날것의 일기");
+    }
+
+    @Test
+    void 한_기록은_한_번만_공유하고_그_글을_지우면_다시_공유할_수_있다() {
+        Long[] ab = couple("share3");
+        LocalDate day = KstClock.today();
+        write(ab[0], day, "한 번만", null);
+        Long first = journalShareService.share(ab[0], day, null).sharedPostId();
+
+        assertThatThrownBy(() -> journalShareService.share(ab[0], day, null))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.JOURNAL_ALREADY_SHARED);
+
+        // 공유한 글을 지우면 FK(SET NULL, V121)가 표시를 거둬 다시 공유할 수 있다
+        feedService.deletePost(ab[0], first);
+        assertThat(journalService.day(ab[0], day).sharedPostId()).isNull();
+        assertThat(journalShareService.share(ab[0], day, null).sharedPostId()).isNotNull().isNotEqualTo(first);
+    }
+
+    @Test
+    void 일기를_지워도_공유한_글은_상대에게_남는다() {
+        Long[] ab = couple("share4");
+        LocalDate day = KstClock.today();
+        write(ab[0], day, "남을 글", null);
+        Long postId = journalShareService.share(ab[0], day, null).sharedPostId();
+
+        journalService.delete(ab[0], day);
+
+        assertThat(partnerPost(ab[1], postId)).isNotNull();
+    }
+
+    @Test
+    void 연결_전이면_공유할_수_없고_아무것도_남지_않는다() {
+        Long solo = register("journal-share5-solo@fitto.com");
+        LocalDate day = KstClock.today();
+        write(solo, day, "혼자 쓴 글", null);
+
+        assertThatThrownBy(() -> journalShareService.share(solo, day, null))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.RELATION_NOT_FOUND);
+        assertThat(journalService.day(solo, day).sharedPostId()).isNull();
+    }
+
+    @Test
+    void 없는_날은_공유할_수_없다() {
+        Long[] ab = couple("share6");
+        assertThatThrownBy(() -> journalShareService.share(ab[0], KstClock.today(), null))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.JOURNAL_NOT_FOUND);
+    }
+
+    @Test
+    void 지난_기록_삭제로_공유한_글이_지워져도_일기는_남고_공유_표시만_풀린다() {
+        Long[] ab = couple("share7");
+        LocalDate day = KstClock.today();
+        write(ab[0], day, "끝나도 남을 일기", null);
+        journalShareService.share(ab[0], day, null);
+        Long relationId = relationService.findMyRelations(ab[0]).get(0).id();
+
+        relationService.endRelation(ab[1], relationId);
+        relationRecordPurger.purge(relationId); // feed_posts 삭제 → V121 FK 가 shared_post_id 를 비운다
+
+        var entry = journalService.day(ab[0], day);
+        assertThat(entry.body()).isEqualTo("끝나도 남을 일기");
+        assertThat(entry.sharedPostId()).isNull();
     }
 }
