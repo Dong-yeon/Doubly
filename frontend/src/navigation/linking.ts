@@ -128,6 +128,8 @@ export const linking: LinkingOptions<RootStackParamList> = {
             initialRouteName: 'HomeMain',
             screens: {
               HomeMain: '',
+              // 푸시 data.link = PushLinks.JOURNAL — 하루 기록 리마인드가 연다. 목록 화면이라 URL 에 본문이 실리지 않는다
+              Journal: 'me/journal',
               CoupleConnect: 'couple/connect',
               FeedCompose: 'feed/new',
               MoodCalendar: 'mood/calendar',

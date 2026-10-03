@@ -56,6 +56,13 @@ export const journalApi = {
    */
   share: (date: string, content?: string) =>
     unwrap(apiClient.post<ApiResponse<JournalEntry>>(`/me/journals/${date}/share`, { content })),
+  /** 하루 기록 리마인드(V125, 옵트인) — 꺼져 있으면 null. reminderTime 은 "HH:mm:ss" */
+  reminder: () =>
+    unwrap(apiClient.get<ApiResponse<{ reminderTime: string } | null>>('/me/journal-reminder')),
+  /** 켜기·시각 바꾸기 — "HH:mm" */
+  setReminder: (time: string) =>
+    unwrap(apiClient.put<ApiResponse<{ reminderTime: string }>>('/me/journal-reminder', { reminderTime: time })),
+  removeReminder: () => unwrap(apiClient.delete<ApiResponse<null>>('/me/journal-reminder')),
   /** 사진 서명 — journal/ 폴더, 사람 단위 JOURNAL_PHOTO 한도(하루 3) */
   photoSignature: () =>
     unwrap(apiClient.post<ApiResponse<UploadSignature>>('/me/journals/photo-signature')),
