@@ -16,6 +16,7 @@ import { usePlaceStore } from './placeStore';
 import { useContentStore } from './contentStore';
 import { useCoupleEmojiStore } from './coupleEmojiStore';
 import { clearAllWritingDrafts } from '../utils/writingDraft';
+import { discardExportFiles } from '../utils/exportStorage';
 import type { AuthTokens, Gender, User } from '../types';
 
 interface AuthState {
@@ -55,6 +56,8 @@ async function clearTokens() {
   useChatStore.getState().teardown();
   // 쓰다 만 글(하루 기록은 나만 보는 글이다)이 다음 계정에 보이지 않게 지운다
   await clearAllWritingDrafts();
+  // 받아 둔 기록 내보내기(사진·채팅이 든 ZIP)도 — 폴더가 기기 공용이라 다음 계정에 보였다
+  discardExportFiles();
   /*
    * "한 번 받으면 재사용" 캐시 스토어(럽슐랭 장소·콘텐츠·우리 이모지)를 비운다 — 안 비우면
    * 로그아웃 후 다른 계정으로 로그인해도 loaded 플래그가 그대로 살아있어 load() 가 재조회를

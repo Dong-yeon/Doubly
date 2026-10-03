@@ -19,6 +19,7 @@ import type { ExportSummary } from '../types';
 import { ZipWriter } from './zipWriter';
 import { mediaPath, zipFileName, type ExportMediaRef } from './exportPaths';
 import { buildChatText, buildIndexHtml, buildReadme, mediaKey } from './exportDocument';
+import { discardExportFiles, exportRoot } from './exportStorage';
 
 export { formatBytes } from './exportPaths';
 
@@ -59,6 +60,11 @@ interface MediaEntry {
 
 interface ExportState {
   version: 1;
+  /**
+   * 누구의 내보내기인가 — 폴더는 기기 공용이라, 다른 계정이 로그인하면 이 값으로 걸러낸다.
+   * 이 필드가 생기기 전(2026-10-03 이전)에 시작한 상태에는 없다 — 그때는 주인을 모르므로 그대로 둔다.
+   */
+  userId?: number;
   startedAt: string;
   sections: { key: string; count: number }[];
   doneSections: string[];
@@ -79,7 +85,7 @@ const MAX_ATTEMPTS = 3;
 const PAGE_SIZE = 200;
 const BOM = String.fromCharCode(0xfeff);
 
-const root = () => new Directory(Paths.document, 'dubly-export');
+const root = exportRoot;
 const staging = () => new Directory(root(), 'staging');
 const stateFile = () => new File(root(), 'state.json');
 
@@ -122,10 +128,24 @@ export function availableBytes(): number | null {
   }
 }
 
-/** 이어받을 내보내기 — 끝나지 않았거나, 끝나서 ZIP 이 남아 있는 것. */
-export function pendingExport(): { phase: ExportPhase; startedAt: string; zipUri?: string; zipName?: string } | null {
+/** 남은 상태가 다른 계정의 것인가 — 주인을 모르는 옛 상태는 아니라고 본다. */
+function ownedByOther(state: ExportState, userId: number): boolean {
+  return state.userId !== undefined && state.userId !== userId;
+}
+
+/**
+ * 이어받을 내보내기 — 끝나지 않았거나, 끝나서 ZIP 이 남아 있는 것.
+ *
+ * <p>다른 계정이 남긴 것이면 보여주지 않고 지운다. 로그아웃이 폴더를 지우지만(exportStorage),
+ * 로그아웃을 거치지 않고 세션이 끊긴 경우(토큰 만료 등)에도 남의 ZIP 이 보이면 안 된다.
+ */
+export function pendingExport(userId: number): { phase: ExportPhase; startedAt: string; zipUri?: string; zipName?: string } | null {
   const state = readState();
   if (!state) return null;
+  if (ownedByOther(state, userId)) {
+    discardExport();
+    return null;
+  }
   if (state.phase === 'done') {
     const zip = state.zipName ? new File(root(), state.zipName) : null;
     if (!zip?.exists) return null;
@@ -135,14 +155,7 @@ export function pendingExport(): { phase: ExportPhase; startedAt: string; zipUri
 }
 
 /** 남은 임시 파일·ZIP 을 모두 지운다. */
-export function discardExport(): void {
-  try {
-    const dir = root();
-    if (dir.exists) dir.delete();
-  } catch {
-    // 지우지 못해도 다음 시작 때 덮어쓴다
-  }
-}
+export const discardExport = discardExportFiles;
 
 function progressOf(state: ExportState, waiting = false): ExportProgress {
   const entries = Object.values(state.media);
@@ -169,17 +182,25 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * @param summary 새로 시작할 때만 — {@code exportApi.start()} 의 응답. null 이면 남은 상태를 이어받는다.
  */
 export async function runExport(opts: {
+  /** 지금 로그인한 사람 — 새 상태에 남기고, 남의 상태는 이어받지 않는다 */
+  userId: number;
   summary: ExportSummary | null;
   saveToGallery: boolean;
   onProgress: (p: ExportProgress) => void;
   cancel: ExportCancelToken;
 }): Promise<ExportResult> {
   let state = readState();
+  // 다른 계정의 받다 만 기록에 이어 붙이면 두 사람의 데이터가 한 ZIP 에 섞인다
+  if (state && ownedByOther(state, opts.userId)) {
+    discardExport();
+    state = null;
+  }
   if (opts.summary || !state) {
     if (!opts.summary) throw new Error('이어받을 내보내기가 없어요.');
     discardExport();
     state = {
       version: 1,
+      userId: opts.userId,
       startedAt: new Date().toISOString(),
       sections: opts.summary.sections.filter((s) => s.count > 0).map((s) => ({ key: s.key, count: s.count })),
       doneSections: [],
