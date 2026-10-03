@@ -16,6 +16,11 @@ public interface DeviceTokenRepository extends JpaRepository<DeviceToken, Long> 
     @Query("delete from DeviceToken d where d.token = :token")
     void deleteByToken(@Param("token") String token);
 
+    /** 이 사용자의 이 토큰만 — 남의 토큰은 지우지 못하게 사용자를 함께 건다(로그아웃용). */
+    @Modifying
+    @Query("delete from DeviceToken d where d.userId = :userId and d.token = :token")
+    int deleteByUserIdAndToken(@Param("userId") Long userId, @Param("token") String token);
+
     @Modifying
     @Query("delete from DeviceToken d where d.userId = :userId")
     void deleteAllByUserId(@Param("userId") Long userId);

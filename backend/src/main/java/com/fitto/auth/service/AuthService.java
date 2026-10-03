@@ -14,6 +14,7 @@ import com.fitto.common.security.AuthRateLimiter;
 import com.fitto.common.policy.PolicyVersion;
 import com.fitto.common.security.JwtTokenProvider;
 import com.fitto.common.security.RefreshTokenStore;
+import com.fitto.notification.service.DeviceTokenService;
 import com.fitto.user.domain.Role;
 import com.fitto.user.domain.SocialType;
 import com.fitto.user.domain.User;
@@ -44,6 +45,7 @@ public class AuthService {
     private final AuthRateLimiter rateLimiter;
     private final GoogleTokenVerifier googleTokenVerifier;
     private final EventLogService eventLogService;
+    private final DeviceTokenService deviceTokenService;
 
     /**
      * 존재하지 않는 이메일 로그인 시에도 BCrypt 매칭을 수행해 응답 시간을 균일화한다
@@ -58,7 +60,8 @@ public class AuthService {
                        RefreshTokenStore refreshTokenStore,
                        AuthRateLimiter rateLimiter,
                        GoogleTokenVerifier googleTokenVerifier,
-                       EventLogService eventLogService) {
+                       EventLogService eventLogService,
+                       DeviceTokenService deviceTokenService) {
         this.userRepository = userRepository;
         this.withdrawalService = withdrawalService;
         this.passwordEncoder = passwordEncoder;
@@ -67,6 +70,7 @@ public class AuthService {
         this.rateLimiter = rateLimiter;
         this.googleTokenVerifier = googleTokenVerifier;
         this.eventLogService = eventLogService;
+        this.deviceTokenService = deviceTokenService;
         this.timingDummyHash = passwordEncoder.encode("timing-equalization-dummy");
     }
 
@@ -183,12 +187,23 @@ public class AuthService {
         return tokens;
     }
 
-    /** 로그아웃 — 제시된 리프레시 토큰을 폐기한다(만료 전이라도 재사용 불가). */
-    public void logout(String refreshToken) {
+    /**
+     * 로그아웃 — 제시된 리프레시 토큰을 폐기하고(만료 전이라도 재사용 불가), 이 기기의 푸시 토큰이
+     * 오면 함께 지운다.
+     *
+     * <p>푸시 토큰은 리프레시 토큰의 주인 것일 때만 지운다({@link DeviceTokenService#unregister}).
+     * 액세스 토큰이 아니라 리프레시 토큰으로 사용자를 정하는 이유: 로그아웃은 액세스 토큰이 만료된
+     * 뒤에도 끝까지 되어야 하는 동작이다.
+     */
+    public void logout(String refreshToken, String pushToken) {
         Claims claims = parseRefreshClaims(refreshToken);
+        Long userId = Long.valueOf(claims.getSubject());
         String jti = claims.getId();
         if (jti != null) {
-            refreshTokenStore.revoke(Long.valueOf(claims.getSubject()), jti);
+            refreshTokenStore.revoke(userId, jti);
+        }
+        if (pushToken != null && !pushToken.isBlank()) {
+            deviceTokenService.unregister(userId, pushToken);
         }
     }
 
