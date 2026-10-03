@@ -28,16 +28,24 @@ export async function fetchUntilBridged(
   return { latest, bridged: false };
 }
 
-/** 화면에 있는 서버 메시지 중 가장 큰 id — 낙관적 말풍선(음수 임시 id)은 뺀다. 없으면 0. */
-export function newestKnownId(list: ChatMessage[]): number {
-  return list.reduce((max, m) => (m.pending ? max : Math.max(max, m.id)), 0);
+/**
+ * 서버에 아직 없는(내 화면에만 있는) 말풍선인가 — 보내는 중(pending)이거나 보내지 못했다(failed).
+ * 둘 다 id 가 임시 음수라 읽음·리액션·수정·정렬 같은 경로가 이걸 보고 비켜나야 한다.
+ */
+export function isUnsent(m: ChatMessage): boolean {
+  return !!(m.pending || m.failed);
 }
 
-/** id 내림차순 — 낙관적 말풍선(pending)은 아직 서버 순서가 없으니 맨 앞(가장 최근)에 둔다. */
+/** 화면에 있는 서버 메시지 중 가장 큰 id — 내 화면에만 있는 말풍선(음수 임시 id)은 뺀다. 없으면 0. */
+export function newestKnownId(list: ChatMessage[]): number {
+  return list.reduce((max, m) => (isUnsent(m) ? max : Math.max(max, m.id)), 0);
+}
+
+/** id 내림차순 — 보내는 중·보내지 못한 말풍선은 아직 서버 순서가 없으니 맨 앞(가장 최근)에 둔다. */
 export function newestFirst(list: ChatMessage[]): ChatMessage[] {
-  const pending = list.filter((m) => m.pending);
-  const saved = list.filter((m) => !m.pending).sort((a, b) => b.id - a.id);
-  return [...pending, ...saved];
+  const unsent = list.filter(isUnsent);
+  const saved = list.filter((m) => !isUnsent(m)).sort((a, b) => b.id - a.id);
+  return [...unsent, ...saved];
 }
 
 /**
@@ -54,14 +62,15 @@ export function mergeSynced(
   /*
    * 낙관적 말풍선은 에코로만 사라지는데, 끊긴 사이에 저장된 메시지는 에코 없이 이
    * 재조회로 들어온다. 그대로 두면 같은 말이 화면에 두 번 보이므로(DB 중복이 아니라
-   * 화면 중복) 서버가 돌려준 멱등키로 짝을 찾아 걷어낸다.
+   * 화면 중복) 서버가 돌려준 멱등키로 짝을 찾아 걷어낸다. "보내지 못했어요"로 바뀐 말풍선도
+   * 같다 — 확인이 늦었을 뿐 사실 저장됐다면 여기서 진짜 메시지로 갈음된다.
    */
   const echoed = new Set(latest.map((m) => m.clientMessageId).filter(Boolean));
-  const cur = all.filter((m) => !(m.pending && m.clientMessageId && echoed.has(m.clientMessageId)));
+  const cur = all.filter((m) => !(isUnsent(m) && m.clientMessageId && echoed.has(m.clientMessageId)));
 
   if (!bridged) {
     // 아직 안 간 말풍선은 살린다
-    return { list: newestFirst([...cur.filter((m) => m.pending), ...latest]), resetOlder: true };
+    return { list: newestFirst([...cur.filter(isUnsent), ...latest]), resetOlder: true };
   }
 
   const seen = new Set(cur.map((m) => m.id));

@@ -4,6 +4,8 @@ import { chatApi } from '../api/chat';
 import {
   connectSocket,
   disconnectSocket,
+  newClientMessageId,
+  onSendError,
   OutgoingMessage,
   publishEnsuringConnection,
   socketStatus,
@@ -15,7 +17,7 @@ import {
   unsubscribeRoom,
 } from '../api/chatSocket';
 import type { ChatMessage, ChatRoom } from '../types';
-import { fetchUntilBridged, mergeSynced, newestKnownId } from '../utils/chatSync';
+import { fetchUntilBridged, isUnsent, mergeSynced, newestKnownId } from '../utils/chatSync';
 
 interface ChatState {
   rooms: ChatRoom[];
@@ -56,9 +58,22 @@ interface ChatState {
    * 다시 눌렀다 — 누른 만큼 저장됐다(2026-09-12 리포트). 이제 누르는 즉시 "보내는 중"
    * 말풍선이 서고, 서버 에코가 오면 {@code clientMessageId} 로 짝지어 제자리에서 바뀐다.
    *
+   * <p>발행 뒤에도 끝이 아니다. 서버가 거절하면(/user/queue/chat-errors) 말풍선이 "보내지 못했어요"로 바뀌고,
+   * 거절도 에코도 없이 CONFIRM_TIMEOUT_MS 가 지나면 한 번 따라잡아 본 뒤 그래도 없으면 같은 표시를 한다.
+   * 말풍선이 없는 전송(사진·음성)의 거절은 {@code sendNotice} 로 알린다.
+   *
    * @returns 발행 성공 여부. false 면 낙관적 말풍선은 이미 걷어냈다(화면이 글을 되돌린다)
    */
   send: (relationId: number, payload: OutgoingMessage, optimistic?: ChatMessage) => Promise<boolean>;
+  /** 보내지 못한 말풍선을 <b>같은 멱등키로</b> 다시 보낸다 — 서버가 사실 저장했어도 두 번 생기지 않는다. */
+  retrySend: (relationId: number, clientMessageId: string) => Promise<boolean>;
+  /** 보내지 못한 말풍선을 화면에서 지운다(서버엔 원래 없다). */
+  discardUnsent: (relationId: number, clientMessageId: string) => void;
+  /**
+   * 말풍선 없이 보낸 것(사진·음성 등)이 거절됐다는 알림 — 화면이 토스트로 띄운다. id 는 같은 문구가 연달아
+   * 와도 효과가 다시 돌게 하는 값이다.
+   */
+  sendNotice: { id: number; message: string } | null;
   markRead: (messageId: number) => Promise<void>;
   /** REST 응답으로 받은 메시지를 목록에서 제자리 교체 (리액션·수정·삭제) */
   replaceMessage: (relationId: number, updated: ChatMessage) => void;
@@ -78,6 +93,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   hasMoreOlder: {},
   pinnedMessages: {},
   activeRoomId: null,
+  sendNotice: null,
 
   loadRooms: async () => {
     set({ loadingRooms: true });
@@ -93,11 +109,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
   openRoom: async (relationId) => {
     set({ activeRoomId: relationId });
     const history = await chatApi.messages(relationId);
-    set((s) => ({
-      messages: { ...s.messages, [relationId]: history },
-      // 재진입 시 과거 로드 상태 초기화 — 첫 페이지가 꽉 찼다면 더 있을 수 있다
-      hasMoreOlder: { ...s.hasMoreOlder, [relationId]: history.length > 0 },
-    }));
+    set((s) => {
+      /*
+       * 아직 서버에 없는 말풍선(보내는 중·보내지 못함)은 살린다. 예전엔 목록을 통째로 갈아끼워, 거절된 글이
+       * 방을 나갔다 오면 흔적 없이 사라졌다. 그사이 저장된 것(히스토리에 같은 키가 있다)만 걷는다.
+       */
+      const saved = new Set(history.map((m) => m.clientMessageId).filter(Boolean));
+      const unsent = (s.messages[relationId] ?? []).filter(
+        (m) => isUnsent(m) && !(m.clientMessageId && saved.has(m.clientMessageId)),
+      );
+      return {
+        messages: { ...s.messages, [relationId]: [...unsent, ...history] },
+        // 재진입 시 과거 로드 상태 초기화 — 첫 페이지가 꽉 찼다면 더 있을 수 있다
+        hasMoreOlder: { ...s.hasMoreOlder, [relationId]: history.length > 0 },
+      };
+    });
+    history.forEach((m) => m.clientMessageId && settle(m.clientMessageId));
 
     /*
      * 구독을 <b>연결보다 먼저</b> 등록한다. chatSocket 의 구독은 "지금 거는 것"이 아니라
@@ -117,7 +144,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
          */
         const key = msg.clientMessageId;
         if (key) {
-          const at = existing.findIndex((m) => m.pending && m.clientMessageId === key);
+          settle(key);
+          // "보내지 못했어요"로 바뀐 뒤에 늦게 온 에코도 짝짓는다 — 확인이 늦었을 뿐 저장된 것이다
+          const at = existing.findIndex((m) => isUnsent(m) && m.clientMessageId === key);
           if (at >= 0) {
             const next = [...existing];
             next[at] = msg;
@@ -151,13 +180,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     subscribeRoomRead(relationId, ({ lastReadMessageId }) => {
       set((s) => {
         const existing = s.messages[relationId] ?? [];
-        // pending 은 임시 음수 id 라 어떤 lastReadMessageId 보다도 작다 — 빼지 않으면 "읽음"이 붙는다
-        if (!existing.some((m) => !m.isRead && !m.pending && m.id <= lastReadMessageId)) return s;
+        // 보내는 중·보내지 못한 말풍선은 임시 음수 id 라 어떤 lastReadMessageId 보다도 작다 — 빼지 않으면 "읽음"이 붙는다
+        if (!existing.some((m) => !m.isRead && !isUnsent(m) && m.id <= lastReadMessageId)) return s;
         return {
           messages: {
             ...s.messages,
             [relationId]: existing.map((m) =>
-              m.isRead || m.pending || m.id > lastReadMessageId ? m : { ...m, isRead: true },
+              m.isRead || isUnsent(m) || m.id > lastReadMessageId ? m : { ...m, isRead: true },
             ),
           },
         };
@@ -219,22 +248,57 @@ export const useChatStore = create<ChatState>((set, get) => ({
    * 상황이 대부분이었다 — 사용자에겐 "연결이 끊겼어요"만 반복해서 보였다.
    */
   send: async (relationId, payload, optimistic) => {
+    // 거절·확인을 짝지으려면 키가 지금 있어야 한다(없으면 chatSocket 이 붙이지만 그 값을 여기서 모른다)
+    const key = payload.clientMessageId ?? optimistic?.clientMessageId ?? newClientMessageId();
+    const keyed = { ...payload, clientMessageId: key };
+    outbox.set(key, { relationId, payload: keyed, hasBubble: !!optimistic });
     if (optimistic) {
+      const bubble = { ...optimistic, clientMessageId: key };
       set((s) => ({
-        messages: { ...s.messages, [relationId]: [optimistic, ...(s.messages[relationId] ?? [])] },
+        messages: { ...s.messages, [relationId]: [bubble, ...(s.messages[relationId] ?? [])] },
       }));
     }
-    const ok = await publishEnsuringConnection(relationId, payload);
-    if (!ok && optimistic) {
-      // 발행 자체가 실패했다 — 서버에 갈 일이 없으므로 말풍선을 걷는다(화면이 글을 되돌린다)
-      set((s) => ({
-        messages: {
-          ...s.messages,
-          [relationId]: (s.messages[relationId] ?? []).filter((m) => m.id !== optimistic.id),
-        },
-      }));
+    const ok = await publishEnsuringConnection(relationId, keyed);
+    if (!ok) {
+      settle(key);
+      if (optimistic) {
+        // 발행 자체가 실패했다 — 서버에 갈 일이 없으므로 말풍선을 걷는다(화면이 글을 되돌린다)
+        set((s) => ({
+          messages: {
+            ...s.messages,
+            [relationId]: (s.messages[relationId] ?? []).filter((m) => m.clientMessageId !== key),
+          },
+        }));
+      }
+      return false;
     }
-    return ok;
+    armConfirmTimer(key);
+    return true;
+  },
+
+  retrySend: async (relationId, clientMessageId) => {
+    const entry = outbox.get(clientMessageId);
+    if (!entry) return false;
+    setUnsent(relationId, clientMessageId, { pending: true, failed: false, failReason: undefined });
+    const ok = await publishEnsuringConnection(relationId, entry.payload);
+    if (!ok) {
+      markFailed(relationId, clientMessageId, '연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
+      return false;
+    }
+    armConfirmTimer(clientMessageId);
+    return true;
+  },
+
+  discardUnsent: (relationId, clientMessageId) => {
+    settle(clientMessageId);
+    set((s) => ({
+      messages: {
+        ...s.messages,
+        [relationId]: (s.messages[relationId] ?? []).filter(
+          (m) => !(isUnsent(m) && m.clientMessageId === clientMessageId),
+        ),
+      },
+    }));
   },
 
   replaceMessage: (relationId, updated) =>
@@ -297,6 +361,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   teardown: () => {
     disconnectSocket();
+    pendingTimers.forEach((t) => clearTimeout(t));
+    pendingTimers.clear();
+    outbox.clear();
     set({ connected: false });
   },
 }));
@@ -319,6 +386,7 @@ async function syncMissedNow(relationId: number): Promise<void> {
     newestKnown,
     SYNC_MAX_PAGES,
   );
+  latest.forEach((m) => m.clientMessageId && settle(m.clientMessageId));
   useChatStore.setState((s) => {
     const merged = mergeSynced(s.messages[relationId] ?? [], latest, bridged);
     if (!merged) return s;
@@ -328,6 +396,94 @@ async function syncMissedNow(relationId: number): Promise<void> {
     };
   });
 }
+
+/**
+ * 발행했지만 아직 결론(에코·거절)이 나지 않은 전송 — 멱등키 → 무엇을 어디로 보냈나.
+ * 거절 알림을 말풍선과 짝짓고, "다시 보내기"가 <b>같은 페이로드·같은 키</b>로 보내는 데 쓴다.
+ * 에코·따라잡기로 저장이 확인되거나 사용자가 지우면 빠진다.
+ */
+const outbox = new Map<string, { relationId: number; payload: OutgoingMessage; hasBubble: boolean }>();
+const pendingTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+/**
+ * 에코도 거절도 없이 기다리는 최대 시간. 연결이 살아 있으면 에코는 1초 안쪽이다 — 이만큼 지나면 프레임이 가는 길에
+ * 사라졌을(발행 직후 끊김 등) 가능성이 크다. 그래도 바로 실패로 단정하지 않고 한 번 따라잡아 본다.
+ */
+const CONFIRM_TIMEOUT_MS = 20_000;
+
+/** 결론이 났다 — 기다림을 끝낸다. */
+function settle(key: string) {
+  const t = pendingTimers.get(key);
+  if (t) clearTimeout(t);
+  pendingTimers.delete(key);
+  outbox.delete(key);
+}
+
+function setUnsent(relationId: number, key: string, patch: Partial<ChatMessage>) {
+  useChatStore.setState((s) => {
+    const list = s.messages[relationId] ?? [];
+    if (!list.some((m) => isUnsent(m) && m.clientMessageId === key)) return s;
+    return {
+      messages: {
+        ...s.messages,
+        [relationId]: list.map((m) => (isUnsent(m) && m.clientMessageId === key ? { ...m, ...patch } : m)),
+      },
+    };
+  });
+}
+
+/** 말풍선을 "보내지 못했어요"로 — outbox 는 남긴다(다시 보내기에 쓴다). */
+function markFailed(relationId: number, key: string, reason: string) {
+  const t = pendingTimers.get(key);
+  if (t) clearTimeout(t);
+  pendingTimers.delete(key);
+  setUnsent(relationId, key, { pending: false, failed: true, failReason: reason });
+}
+
+function stillPending(relationId: number, key: string): boolean {
+  return (useChatStore.getState().messages[relationId] ?? []).some((m) => m.pending && m.clientMessageId === key);
+}
+
+function armConfirmTimer(key: string) {
+  const old = pendingTimers.get(key);
+  if (old) clearTimeout(old);
+  pendingTimers.set(
+    key,
+    setTimeout(async () => {
+      pendingTimers.delete(key);
+      const entry = outbox.get(key);
+      if (!entry) return;
+      // 말풍선이 없는 전송은 기다릴 화면이 없다 — 거절 짝짓기용으로 남겨 둔 것만 치운다
+      if (!entry.hasBubble) {
+        outbox.delete(key);
+        return;
+      }
+      if (!stillPending(entry.relationId, key)) return;
+      // 확인이 늦었을 뿐 저장됐을 수 있다 — 따라잡기가 찾으면 진짜 메시지로 갈음된다
+      await useChatStore.getState().syncMissed(entry.relationId).catch(() => undefined);
+      if (stillPending(entry.relationId, key)) {
+        markFailed(entry.relationId, key, '전송이 확인되지 않았어요. 다시 보내 볼까요?');
+      }
+    }, CONFIRM_TIMEOUT_MS),
+  );
+}
+
+/*
+ * 서버 거절 — 내가 보낸 키만 짝짓는다(같은 계정의 다른 기기 거절도 오지만 outbox 에 없다).
+ * 말풍선이 있으면 그 자리에서 "보내지 못했어요", 없으면(사진·음성) 화면이 토스트로 띄울 알림을 남긴다.
+ */
+onSendError((e) => {
+  const key = e.clientMessageId;
+  if (!key) return;
+  const entry = outbox.get(key);
+  if (!entry) return;
+  if (entry.hasBubble) {
+    markFailed(entry.relationId, key, e.message);
+    return;
+  }
+  settle(key);
+  useChatStore.setState({ sendNotice: { id: Date.now(), message: e.message } });
+});
 
 /*
  * connected 는 소켓의 실제 상태를 따라간다.

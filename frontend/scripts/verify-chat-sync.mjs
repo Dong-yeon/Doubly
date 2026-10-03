@@ -127,6 +127,23 @@ async function sync(onScreen, total, maxPages = 10) {
   eq('낙관적: 같은 말 두 번 없음', merged.list.filter((m) => m.clientMessageId === 'k-saved').length, 1);
 }
 
+// ⑦-1 보내지 못한 말풍선(failed) — pending 과 같이 다룬다: 기준 id 에서 빼고, 맨 위에 두고,
+//      확인이 늦었을 뿐 사실 저장됐으면(재조회에 같은 키) 진짜 메시지로 갈음된다
+{
+  const onScreen = [
+    msg(-3, { failed: true, clientMessageId: 'k-rejected' }),
+    msg(-4, { failed: true, clientMessageId: 'k-late' }),
+    ...screen(71, 100),
+  ];
+  const s = server(101);
+  const { latest, bridged } = await fetchUntilBridged(s.fetchPage, newestKnownId(onScreen), 10);
+  latest[0] = { ...latest[0], clientMessageId: 'k-late' }; // 101 = 시간 초과로 실패 표시됐던 것
+  const merged = mergeSynced(onScreen, latest, bridged);
+  eq('실패: 음수 id 는 기준에서 뺌', newestKnownId(onScreen), 100);
+  eq('실패: 거절된 것은 맨 위에 남고, 늦게 확인된 것은 갈음', ids(merged.list).slice(0, 3), [-3, 101, 100]);
+  eq('실패: 늦게 확인된 것은 실패 표시 없음', merged.list[1].failed, undefined);
+}
+
 // ⑧ 실시간 수신이 도착 순으로 뒤바뀌어 있었다 — id 순으로 다시 선다
 {
   const onScreen = [msg(99), msg(100), ...screen(71, 98)];
