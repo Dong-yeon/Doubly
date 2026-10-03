@@ -6,7 +6,7 @@
  * docs/PERSONAL_JOURNAL_ANALYSIS_2026-10-02.md §4-3.
  */
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../navigation/types';
@@ -15,9 +15,11 @@ import { TextField } from '../../components/TextField';
 import { FormKeyboardView } from '../../components/FormKeyboardView';
 import { SpacingFixBar } from '../../components/SpacingFixBar';
 import { MaterialCommunityIcons } from '../../components/Icon';
+import { Sheet } from '../../components/Sheet';
 import { journalApi, journalToday, type JournalEntry } from '../../api/journal';
 import { takeJournalDraft } from '../../store/journalDraft';
 import { useAuthStore } from '../../store/authStore';
+import { useRelationStore } from '../../store/relationStore';
 import { clearWritingDraft, draftKeys, loadWritingDraft, saveWritingDraft } from '../../utils/writingDraft';
 import { MOOD_EMOJIS } from '../../constants/moodEmojis';
 import { pickImage, uploadImageWithSignature } from '../../utils/imageUpload';
@@ -209,8 +211,44 @@ export function JournalDayScreen({ navigation, route }: Props) {
     }
   };
 
+  /*
+   * 우리 기록에 공유(1차-b) — 하루 기록이 상대에게 닿는 유일한 출구다. 서버가 사진을 복사해 독립된 일상 글을
+   * 만든다: 이 기록을 고쳐도 그 글은 그대로고, 기분은 함께 가지 않는다(무드는 이미 상대에게 보이는 별도 채널).
+   * 본문은 공유본에서만 다듬을 수 있다. 저장하지 않은 고침이 있으면 버튼을 숨긴다 — 공유되는 건 저장된 기록이다.
+   */
+  const partnerName = useRelationStore((s) => s.couple?.partner?.name);
+  const connected = !!partnerName;
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareText, setShareText] = useState('');
+  const [sharing, setSharing] = useState(false);
+  const openShare = () => {
+    setShareText(entry?.body ?? '');
+    setShareOpen(true);
+  };
+  const canShare = shareText.trim().length > 0 || !!entry?.photoUrl;
+  const onShare = async () => {
+    if (sharing || !canShare) return;
+    setSharing(true);
+    try {
+      const updated = await journalApi.share(date, shareText.trim() || undefined);
+      setEntry(updated);
+      setShareOpen(false);
+      haptics.success();
+      toast.success('우리 기록에 공유했어요');
+    } catch (e) {
+      toast.error(getErrorMessage(e, '공유하지 못했어요.'));
+    } finally {
+      setSharing(false);
+    }
+  };
+
   const onDelete = () => {
-    Alert.alert('이 날 기록을 지울까요?', '지운 기록은 되돌릴 수 없어요.', [
+    Alert.alert(
+      '이 날 기록을 지울까요?',
+      entry?.sharedPostId
+        ? '지운 기록은 되돌릴 수 없어요. 우리 기록에 공유한 글은 그대로 남아요.'
+        : '지운 기록은 되돌릴 수 없어요.',
+      [
       { text: '취소', style: 'cancel' },
       {
         text: '지우기',
@@ -333,6 +371,30 @@ export function JournalDayScreen({ navigation, route }: Props) {
 
         <Button title="남기기" onPress={onSave} loading={saving} style={styles.saveBtn} />
 
+        {entry && connected && !dirty ? (
+          entry.sharedPostId ? (
+            <View style={styles.sharedRow}>
+              <MaterialCommunityIcons name="account-group-outline" size={16} color={colors.textSecondary} />
+              <Text style={styles.sharedText}>우리 기록에 공유한 날이에요</Text>
+              <Pressable
+                onPress={() => navigation.navigate('FeedCompose', { postId: entry.sharedPostId ?? undefined })}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="공유한 글 고치기"
+              >
+                <Text style={styles.sharedLink}>공유한 글 고치기</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <Button
+              title="우리 기록에 공유하기"
+              variant="secondary"
+              onPress={openShare}
+              style={styles.shareBtn}
+            />
+          )
+        ) : null}
+
         {/* 삭제는 길게 누르기가 아니라 보이는 자리에 — 발견할 수 없는 삭제는 없는 것과 같다(럽바디 리뷰 A-8) */}
         {entry ? (
           <TouchableOpacity
@@ -346,6 +408,29 @@ export function JournalDayScreen({ navigation, route }: Props) {
           </TouchableOpacity>
         ) : null}
       </FormKeyboardView>
+
+      <Sheet visible={shareOpen} onClose={() => !sharing && setShareOpen(false)} position="bottom">
+        <Text style={styles.sheetTitle}>우리 기록에 공유</Text>
+        <Text style={styles.sheetNote}>
+          {`${partnerName ?? '상대'}님에게 알림이 가고 우리 기록·사진첩에 남아요.\n이 기록을 나중에 고쳐도 공유한 글은 바뀌지 않아요. 기분은 함께 가지 않아요.`}
+        </Text>
+        {entry?.photoUrl ? <Image source={{ uri: entry.photoUrl }} style={styles.sheetPhoto} resizeMode="cover" /> : null}
+        <TextInput
+          style={styles.sheetInput}
+          value={shareText}
+          onChangeText={setShareText}
+          placeholder="함께 보여 줄 글 (원본은 그대로예요)"
+          placeholderTextColor={colors.textTertiary}
+          maxLength={MAX_BODY}
+          multiline
+          accessibilityLabel="공유할 글 — 원본 기록은 바뀌지 않아요"
+        />
+        {!canShare ? <Text style={styles.sheetHint}>글이나 사진이 있어야 공유할 수 있어요.</Text> : null}
+        <View style={styles.sheetButtons}>
+          <Button title="취소" variant="ghost" size="md" onPress={() => setShareOpen(false)} disabled={sharing} />
+          <Button title="공유하기" size="md" onPress={onShare} loading={sharing} disabled={!canShare} />
+        </View>
+      </Sheet>
     </SafeAreaView>
   );
 }
@@ -366,6 +451,34 @@ const styles = themedStyles((colors) => ({
     marginBottom: spacing.lg,
   },
   privateText: { flex: 1, color: colors.textSecondary, fontSize: fontSize.caption },
+  shareBtn: { marginTop: spacing.sm },
+  sharedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceAlt,
+  },
+  sharedText: { flex: 1, color: colors.textSecondary, fontSize: fontSize.caption },
+  sharedLink: { color: colors.primary, fontSize: fontSize.caption, fontWeight: '700' },
+  sheetTitle: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
+  sheetNote: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xs, marginBottom: spacing.md, lineHeight: 18 },
+  sheetPhoto: { width: '100%', height: 160, borderRadius: radius.md, backgroundColor: colors.surfaceAlt, marginBottom: spacing.sm },
+  sheetInput: {
+    minHeight: 96,
+    maxHeight: 200,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceAlt,
+    padding: spacing.md,
+    fontSize: fontSize.body,
+    color: colors.textPrimary,
+    textAlignVertical: 'top',
+  },
+  sheetHint: { fontSize: fontSize.caption, color: colors.danger, marginTop: spacing.xs },
+  sheetButtons: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, marginTop: spacing.md },
   sectionLabel: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary, marginBottom: spacing.xs },
   moodRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.lg },
   moodChip: {

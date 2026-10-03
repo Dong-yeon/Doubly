@@ -17,6 +17,8 @@ export interface JournalEntry {
   photoUrl?: string | null;
   createdAt: string;
   updatedAt?: string | null;
+  /** 우리 기록에 공유한 일상 글 id(V121) — 없으면 아직 공유하지 않았다 */
+  sharedPostId?: number | null;
 }
 
 /** 어디서 남겼나 — 서버가 입구별 비율을 센다(본문은 계측에 실리지 않는다) */
@@ -48,6 +50,12 @@ export const journalApi = {
   save: (date: string, payload: SaveJournalPayload) =>
     unwrap(apiClient.put<ApiResponse<JournalEntry>>(`/me/journals/${date}`, payload)),
   remove: (date: string) => unwrap(apiClient.delete<ApiResponse<null>>(`/me/journals/${date}`)),
+  /**
+   * 우리 기록에 공유 — 서버가 사진을 복사해 일기 날짜의 일상 글을 만든다(상대에게 푸시가 간다).
+   * content 를 비우면 원본 본문 그대로. 한 기록에 한 번(이미 공유했으면 409).
+   */
+  share: (date: string, content?: string) =>
+    unwrap(apiClient.post<ApiResponse<JournalEntry>>(`/me/journals/${date}/share`, { content })),
   /** 사진 서명 — journal/ 폴더, 사람 단위 JOURNAL_PHOTO 한도(하루 3) */
   photoSignature: () =>
     unwrap(apiClient.post<ApiResponse<UploadSignature>>('/me/journals/photo-signature')),
