@@ -32,6 +32,8 @@ export const STORAGE_KEYS = {
   onboardingSeen: 'doubly.onboardingSeen',
   // 푸시 권한 사전 설명을 한 번 보여준 뒤로는 다시 묻지 않기 위한 플래그
   pushPrimed: 'doubly.pushPrimed',
+  // 이 기기에서 마지막으로 서버에 등록한 Expo 푸시 토큰 — 로그아웃 때 서버에서 지우려고 둔다(utils/push)
+  pushToken: 'doubly.pushToken',
   // 처리한 스토어 구매(반영 완료 / 미반영 안내 완료) — utils/iap 가 매 실행마다 같은 구매를 다시 알리지 않게
   iapHandled: 'doubly.iapHandled',
   // 사용자가 닫은 서비스 공지의 updatedAt — 같은 공지를 다시 띄우지 않기 위해(store/serviceStatusStore)
