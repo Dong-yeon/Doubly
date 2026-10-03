@@ -1,5 +1,6 @@
 package com.fitto.chat;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fitto.auth.dto.RegisterRequest;
 import com.fitto.auth.service.AuthService;
 import com.fitto.chat.domain.MessageType;
@@ -12,6 +13,7 @@ import com.fitto.chat.service.ScheduledChatMessageService;
 import com.fitto.chat.service.ScheduledChatMessageSweeper;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
+import com.fitto.common.time.KstClock;
 import com.fitto.relation.dto.InviteCodeResponse;
 import com.fitto.relation.dto.RelationResponse;
 import com.fitto.relation.service.RelationService;
@@ -25,6 +27,8 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -42,6 +46,7 @@ class ScheduledChatMessageFlowTest {
     @Autowired ScheduledChatMessageSweeper sweeper;
     @Autowired ScheduledChatMessageRepository scheduledRepository;
     @Autowired PlatformTransactionManager transactionManager;
+    @Autowired ObjectMapper objectMapper;
 
     @PersistenceContext EntityManager em;
 
@@ -193,5 +198,28 @@ class ScheduledChatMessageFlowTest {
         assertThat(failed.getSentAt()).isNull(); // 발송 안 됨, 취소 처리됨
 
         assertThat(chatService.getMessages(c, otherRelationId, null)).hasSize(1);
+    }
+
+    /**
+     * 예약 시각이 9시간 밀리던 버그(docs/chat-current-state.md §8-1 T1)의 배선 확인 — 전역 규칙(오프셋 없으면 UTC)이
+     * 아니라 필드 전용 역직렬화기(오프셋 없으면 KST)를 타는지 본다. 기대값을 JVM 시간대로 환산해 쓰므로
+     * 운영(UTC)·테스트(KST) 어느 JVM 에서도 같은 뜻이다. UTC 에서의 실제 숫자는 KstInputLocalDateTimeDeserializerTest.
+     */
+    @Test
+    void 예약_시각은_오프셋이_없으면_KST_로_읽고_있으면_그_순간으로_읽는다() throws Exception {
+        LocalDateTime kst21 = ZonedDateTime.of(2026, 10, 3, 21, 0, 0, 0, KstClock.ZONE)
+                .withZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime();
+
+        // 1.0.6 이하 앱 — 기기 현지 시각을 오프셋 없이
+        ScheduleMessageRequest legacy = objectMapper.readValue(
+                "{\"messageType\":\"TEXT\",\"content\":\"hi\",\"scheduledAt\":\"2026-10-03T21:00:00\"}",
+                ScheduleMessageRequest.class);
+        assertThat(legacy.scheduledAt()).isEqualTo(kst21);
+
+        // 새 앱 — Date.toISOString()
+        ScheduleMessageRequest iso = objectMapper.readValue(
+                "{\"messageType\":\"TEXT\",\"content\":\"hi\",\"scheduledAt\":\"2026-10-03T12:00:00.000Z\"}",
+                ScheduleMessageRequest.class);
+        assertThat(iso.scheduledAt()).isEqualTo(kst21);
     }
 }

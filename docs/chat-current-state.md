@@ -267,7 +267,7 @@ SUBSCRIBE 인가: `/sub/rooms/`·`/sub/couple/`·`/sub/games/` 는 **관계 구�
 | GIF/움짤 | **없음**(GIF) / 대체: Lottie 움직이는 이모티콘·우리 이모지 모션 | GIF 검색·GIF 업로드 코드 없음. 갤러리 피커가 `mediaTypes: ['images']` 라 GIF 파일 선택 시 동작은 **확인 필요** |
 | 음성메시지 | **있음** | `VOICE_MESSAGE`, 최대 30초, `utils/chatVoice*.ts`, 한도 `VOICE_MESSAGE` |
 | typing indicator | **없음** | 관련 코드·채널 없음 |
-| 예약 전송 | **있음**(TEXT 만 UI) | 서버는 TEXT·STICKER·IMAGE 지원, 앱 시트는 TEXT 만. **시간대 버그 의심 §8-1** |
+| 예약 전송 | **있음**(TEXT 만 UI) | 서버는 TEXT·STICKER·IMAGE 지원, 앱 시트는 TEXT 만. 시간대 버그(§8-1 T1)는 2026-10-03 수정 |
 | 채팅 잠금 | **없음** | `expo-local-authentication`·앱 잠금 코드 없음 |
 | 링크 미리보기 | **부분** | URL 링크화(`utils/linkify.ts`)만, OG 카드 미리보기 없음. 지도 링크만 별도 칩 |
 | 채팅 URL → 럽슐랭 연동 | **있음** | `PlaceLinkChip`/`PlaceLinkSheet`, TEXT 말풍선의 지도 링크에 "럽슐랭에 추가할까요?"(`docs/LOVELICHELIN_CHAT_LINK_2026-10-02.md`) |
@@ -302,10 +302,19 @@ SUBSCRIBE 인가: `/sub/rooms/`·`/sub/couple/`·`/sub/games/` 는 **관계 구�
 ### 8-1. 시간대
 | # | 내용 | 판정 |
 | --- | --- | --- |
-| T1 | **예약 전송 시각이 9시간 늦게 나갈 가능성.** 앱이 `scheduledAt` 을 오프셋 없는 기기 현지 시각(`"2026-10-03T21:00:00"`)으로 보내고(`ChatRoomScreen.onScheduleMessage`), `JacksonConfig` 는 오프셋 없는 문자열을 **UTC 벽시계로** 해석한다. 운영 JVM 이 UTC 이므로 KST 21:00 예약은 UTC 21:00 = KST 다음 날 06:00 에 발송된다. "미래여야 함" 검사도 9시간 여유가 생겨 항상 통과. 테스트 JVM 은 `Asia/Seoul` 이라 `ScheduledChatMessageFlowTest` 가 이걸 못 잡는다. 예약 목록 화면(`…Z` 로 내려온 값을 현지로 표시)에는 9시간 뒤 시각이 찍혀 보일 것 | 코드상 높은 확률. **운영에서 예약 1건으로 실측 확인 필요** |
+| T1 | **예약 전송 시각이 9시간 늦게 나갈 가능성.** 앱이 `scheduledAt` 을 오프셋 없는 기기 현지 시각(`"2026-10-03T21:00:00"`)으로 보내고(`ChatRoomScreen.onScheduleMessage`), `JacksonConfig` 는 오프셋 없는 문자열을 **UTC 벽시계로** 해석한다. 운영 JVM 이 UTC 이므로 KST 21:00 예약은 UTC 21:00 = KST 다음 날 06:00 에 발송된다. "미래여야 함" 검사도 9시간 여유가 생겨 항상 통과. 테스트 JVM 은 `Asia/Seoul` 이라 `ScheduledChatMessageFlowTest` 가 이걸 못 잡는다. 예약 목록 화면(`…Z` 로 내려온 값을 현지로 표시)에는 9시간 뒤 시각이 찍혀 보일 것 | **2026-10-03 수정**(V122) — 아래 "T1 수정" 참고 |
 | T2 | 날짜 구분선·시각·날짜 이동·사진 모아보기 라벨은 **기기 로컬 시간대**(`toDateString`/`getHours`). KST 기준이 아니다. 국내 사용자에겐 동일, 해외 체류 시 서버 KST 개념(D-day 등)과 하루 어긋날 수 있음 | 확인됨(의도/미정) |
 | T3 | 대화 내보내기 `from`: 앱은 기기 현지 날짜를 보내고 서버는 `LocalDate.atStartOfDay()` 를 UTC 벽시계 `created_at` 과 비교 → 시작일의 KST 00:00~09:00 메시지가 빠진다(앱은 `to` 를 안 보냄) | 코드상 확인, 영향 작음 |
 | T4 | 운영 JVM 시간대: `backend/Dockerfile` 은 `-Duser.timezone=UTC` 명시, **루트 `Dockerfile` 은 명시 없음**(temurin 기본 UTC 에 기댐). Railway 가 어느 쪽으로 빌드하는지 **확인 필요** | 확인 필요 |
+
+**T1 수정 (2026-10-03)**
+- 서버: `ScheduleMessageRequest.scheduledAt` 에 필드 전용 `common/time/KstInputLocalDateTimeDeserializer` —
+  오프셋이 있으면 그 순간, **없으면 KST** 로 읽고 서버 JVM 시간대로 바꾼다(스위퍼의 `LocalDateTime.now()` 와 같은 기준).
+  전역 `JacksonConfig` 는 그대로 둔다(서버가 내려준 값을 되받는 자리는 UTC 가 맞다). 옛 앱(오프셋 없이 보냄)도 서버 배포만으로 맞춰진다.
+- 앱: `scheduledAt.toISOString()`(…Z)으로 보낸다 — 해외에서도 고른 순간 그대로. OTA 필요.
+- 데이터: `V122__scheduled_chat_messages_kst_fix.sql` 이 **대기 중인** 예약만 9시간 당긴다(발송·취소 행은 그대로).
+  당겨서 이미 지난 것은 다음 스위퍼 주기에 바로 나간다. 전제는 운영 JVM = UTC. H2(Flyway)·PostgreSQL 16 에서 문법 확인.
+- 남은 것: 배포 후 실제 예약 1건으로 확인. 같은 모양(사용자가 고른 시각을 오프셋 없이 보내는 다른 API)이 더 있는지는 보지 않았다.
 
 ### 8-2. 유실·중복·순서
 | # | 경로 | 결과 |
@@ -337,7 +346,7 @@ SUBSCRIBE 인가: `/sub/rooms/`·`/sub/couple/`·`/sub/games/` 는 **관계 구�
 ### 8-4. 테스트 커버리지
 - 백엔드(있음):
   - `chat/ChatFlowTest`(27개, 서비스 직접 호출) — 멱등키 3종, 주고받기·읽음, 비구성원·관계 종료 차단, 스티커·터치, 리액션, 답장(타 방 인용 차단), 수정/삭제 권한, 내보내기 3종, 공지 고정 5종, 문구 스티커 5종(검색은 그 안에서 1회 확인할 뿐 전용 테스트 없음).
-  - `chat/ScheduledChatMessageFlowTest`(5개) — 스위퍼 발송·중복 방지·취소·검증·관계 종료 시 취소. **시간대(T1)는 못 잡는 구조**.
+  - `chat/ScheduledChatMessageFlowTest`(5개) — 스위퍼 발송·중복 방지·취소·검증·관계 종료 시 취소. 시간대(T1)는 JVM 이 KST 라 원래 못 잡았다 — 수정과 함께 `KstInputLocalDateTimeDeserializerTest`(UTC 조건을 인자로 재현)와 JSON 배선 테스트를 더했다.
   - `common/security/StompSubscriptionAuthTest` — 구독 인가. `relation/PurgeRecordsFlowTest`·`auth/WithdrawFlowTest` — 삭제 순서.
   - 동기화: `StickerImageSyncTest`, `StickerPackSyncTest`, `CatchMindShareCaptionSyncTest`, `AnimatedStickerTest`.
 - 백엔드(없음): STOMP 전송 왕복(실제 `@MessageMapping`·브로드캐스트·`DataIntegrityViolation` 삼키기) 통합 테스트, `/photos`·북마크 목록·`markReadUpTo` 경계, **복원 시 북마크·고정 보존**(`RestoreRecordsFlowTest` 에 채팅 항목 없음), 예약 시각 시간대.
@@ -348,7 +357,7 @@ SUBSCRIBE 인가: `/sub/rooms/`·`/sub/couple/`·`/sub/games/` 는 **관계 구�
 
 ## 9. 확인 필요 목록 (모아 보기)
 
-1. 예약 전송 9시간 지연(T1) — 운영에서 예약 1건 실측.
+1. ~~예약 전송 9시간 지연(T1)~~ — 2026-10-03 수정. 배포 후 예약 1건으로 실측 확인은 남음.
 2. Railway 레플리카 수, 사용 Dockerfile(루트/backend) — 다중 인스턴스·JVM 시간대 판단.
 3. 서버가 STOMP 전송을 거절할 때 클라이언트가 받는 것(ERROR 프레임 유무) — 실기기 로그.
 4. 운영 DB 에 `workout_id`/`routine_id` 가 채워진 옛 카드 행 존재 여부 — `select count(*) from chat_messages where workout_id is not null or routine_id is not null`.
