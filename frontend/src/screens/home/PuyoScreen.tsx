@@ -36,7 +36,6 @@ import {
   publishGameEvent,
   subscribeCouple,
   subscribeGames,
-  unsubscribeCouple,
   unsubscribeGames,
 } from '../../api/chatSocket';
 import { useAuthStore } from '../../store/authStore';
@@ -613,6 +612,7 @@ export function PuyoScreen({ navigation }: Props) {
     useCallback(() => {
       if (!relationId) return undefined;
       let active = true;
+      let offCouple: (() => void) | undefined;
       connectSocket()
         .then(() => {
           if (!active) return;
@@ -638,7 +638,7 @@ export function PuyoScreen({ navigation }: Props) {
             if (e.item > 0) showOpponentItem(e.item as ItemCode);
             if (e.lost) onOpponentEnded(e.elapsedMs);
           });
-          subscribeCouple(relationId, (type) => {
+          offCouple = subscribeCouple(relationId, (type) => {
             if (type === 'GAME' && livePhase !== 'PLAYING' && livePhase !== 'ANIMATING') void loadBattle();
           });
         })
@@ -646,7 +646,7 @@ export function PuyoScreen({ navigation }: Props) {
       return () => {
         active = false;
         unsubscribeGames(relationId);
-        unsubscribeCouple(relationId);
+        offCouple?.();
       };
     }, [relationId, myId, receive, onOpponentEnded, showOpponentItem, loadBattle]),
   );

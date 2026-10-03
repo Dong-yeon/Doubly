@@ -23,7 +23,7 @@ import { EmptyState } from '../../components/EmptyState';
 import { GameReactionBar } from '../../components/GameReactionBar';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { wallRaceApi } from '../../api/game';
-import { connectSocket, subscribeCouple, unsubscribeCouple } from '../../api/chatSocket';
+import { connectSocket, subscribeCouple } from '../../api/chatSocket';
 import { useRelationStore } from '../../store/relationStore';
 import { getErrorMessage } from '../../utils/error';
 import { relativeTimestampLabel } from '../../utils/date';
@@ -171,17 +171,18 @@ export function WallRaceScreen(_: Props) {
     useCallback(() => {
       if (!relationId) return undefined;
       let active = true;
+      let offCouple: (() => void) | undefined;
       connectSocket()
         .then(() => {
           if (!active) return;
-          subscribeCouple(relationId, (type) => {
+          offCouple = subscribeCouple(relationId, (type) => {
             if (type === 'GAME') void load(true);
           });
         })
         .catch(() => undefined);
       return () => {
         active = false;
-        unsubscribeCouple(relationId);
+        offCouple?.();
       };
     }, [relationId, load]),
   );

@@ -25,7 +25,7 @@ import { GameReactionBar } from '../../components/GameReactionBar';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { sudokuApi } from '../../api/game';
 import { clearMemos, loadMemos, pruneMemos, saveMemos, type SudokuMemos } from './sudokuMemo';
-import { connectSocket, subscribeCouple, unsubscribeCouple } from '../../api/chatSocket';
+import { connectSocket, subscribeCouple } from '../../api/chatSocket';
 import { useRelationStore } from '../../store/relationStore';
 import { getErrorMessage } from '../../utils/error';
 import { relativeTimestampLabel } from '../../utils/date';
@@ -106,17 +106,18 @@ export function SudokuScreen(_: Props) {
     useCallback(() => {
       if (!relationId) return undefined;
       let active = true;
+      let offCouple: (() => void) | undefined;
       connectSocket()
         .then(() => {
           if (!active) return;
-          subscribeCouple(relationId, (type) => {
+          offCouple = subscribeCouple(relationId, (type) => {
             if (type === 'GAME') void load(true);
           });
         })
         .catch(() => undefined);
       return () => {
         active = false;
-        unsubscribeCouple(relationId);
+        offCouple?.();
       };
     }, [relationId, load]),
   );

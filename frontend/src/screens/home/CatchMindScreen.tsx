@@ -29,7 +29,7 @@ import {
 } from '../../components/DrawingCanvas';
 import { catchMindApi } from '../../api/game';
 import { uploadDataUriWithSignature } from '../../utils/imageUpload';
-import { connectSocket, subscribeCouple, unsubscribeCouple } from '../../api/chatSocket';
+import { connectSocket, subscribeCouple } from '../../api/chatSocket';
 import { useRelationStore } from '../../store/relationStore';
 import { getErrorMessage } from '../../utils/error';
 import { relativeDateLabel } from '../../utils/date';
@@ -124,17 +124,18 @@ export function CatchMindScreen(_: Props) {
     useCallback(() => {
       if (!relationId) return undefined;
       let active = true;
+      let offCouple: (() => void) | undefined;
       connectSocket()
         .then(() => {
           if (!active) return;
-          subscribeCouple(relationId, (type) => {
+          offCouple = subscribeCouple(relationId, (type) => {
             if (type === 'GAME') void load(true);
           });
         })
         .catch(() => undefined);
       return () => {
         active = false;
-        unsubscribeCouple(relationId);
+        offCouple?.();
       };
     }, [relationId, load]),
   );

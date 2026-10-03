@@ -38,7 +38,7 @@ import { EmptyState } from '../../components/EmptyState';
 import { IconButton } from '../../components/IconButton';
 import { calendarApi } from '../../api/calendar';
 import { tripApi } from '../../api/trip';
-import { connectSocket, subscribeCouple, unsubscribeCouple } from '../../api/chatSocket';
+import { connectSocket, subscribeCouple } from '../../api/chatSocket';
 import { tripStatusLabel } from '../trip/TripListScreen';
 import { toast } from '../../store/toastStore';
 import { getErrorMessage } from '../../utils/error';
@@ -293,10 +293,11 @@ export function CoupleCalendarScreen({ navigation }: Props) {
     useCallback(() => {
       if (!relationId) return undefined;
       let active = true;
+      let offCouple: (() => void) | undefined;
       connectSocket()
         .then(() => {
           if (!active) return;
-          subscribeCouple(relationId, (type) => {
+          offCouple = subscribeCouple(relationId, (type) => {
             const { year: y, month: m } = visibleMonthRef.current;
             if (type === 'CALENDAR') void load(y, m);
             if (type === 'DIET' || type === 'PLACE') void loadDateMeals(y, m);
@@ -306,7 +307,7 @@ export function CoupleCalendarScreen({ navigation }: Props) {
         .catch(() => undefined);
       return () => {
         active = false;
-        unsubscribeCouple(relationId);
+        offCouple?.();
       };
     }, [relationId, load, loadDateMeals, loadTrips]),
   );
