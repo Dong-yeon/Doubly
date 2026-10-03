@@ -828,8 +828,14 @@ export function DietRecordScreen({ navigation, route }: Props) {
        * 실패는 여기서 삼킨다 — ensureUploaded 가 캐시를 비워두므로 분석/저장 때 다시 시도하며
        * 그때 제대로 알린다. 아직 아무것도 누르지 않은 사용자에게 업로드 오류를 띄우면
        * 무엇 때문에 뜬 건지 알 수 없다.
+       *
+       * 단 사진 한도가 0이면 선업로드하지 않는다 — 402 는 위의 catch 와 무관하게 api/client 가 업그레이드
+       * 시트를 띄우므로, 저장도 안 누른 사용자 앞에 결제 안내가 뜬다. 그 경우는 저장 때 올리며 그때 알린다.
+       * 잔여치는 표시용(PRO 는 null)이라 최종 판정은 여전히 서버다 (first-experience-audit.md #30)
        */
-      void ensureUploaded(uri).catch(() => {});
+      if (usePlanStore.getState().remainingOf('PHOTO_UPLOAD') !== 0) {
+        void ensureUploaded(uri).catch(() => {});
+      }
     } catch (e) {
       toast.error(getErrorMessage(e, '사진 선택에 실패했어요.'));
     }
