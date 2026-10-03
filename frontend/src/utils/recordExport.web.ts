@@ -54,13 +54,14 @@ export function availableBytes(): number | null {
 }
 
 /** 웹은 이어받기가 없다 — 기록만이라 처음부터 해도 몇 초다. */
-export function pendingExport(): null {
+export function pendingExport(_userId: number): null {
   return null;
 }
 
 export function discardExport(): void {}
 
 export async function runExport(opts: {
+  userId: number;
   summary: ExportSummary | null;
   saveToGallery: boolean;
   onProgress: (p: ExportProgress) => void;
