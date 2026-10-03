@@ -99,9 +99,9 @@ SUBSCRIBE 인가: `/sub/rooms/`·`/sub/couple/`·`/sub/games/` 는 **관계 구�
 | `scheduled_chat_messages` | `id`, `relation_id` FK **CASCADE**, `sender_id`, `message_type`, `content`, `image_url`, `scheduled_at`, `sent_at`, `sent_message_id` FK chat_messages **SET NULL**, `canceled_at`, `created_at` | `idx_…_due (sent_at, canceled_at, scheduled_at)`, `idx_…_relation (relation_id, scheduled_at)` | V76 |
 | `chat_pinned_messages` | `id`, `relation_id` FK **CASCADE**, `message_id` FK **CASCADE**, `pinned_by`, `pinned_at` | `UNIQUE (relation_id)` — 방당 하나 | V77 |
 
-인덱스가 **없는** FK 컬럼: `chat_messages.sender_id`, `workout_id`, `routine_id`, `reply_to_id`,
-`chat_pinned_messages.message_id`, `scheduled_chat_messages.sent_message_id`, `chat_message_bookmarks.saved_by`.
-(영향은 §8-3)
+V126(2026-10-03)이 더한 인덱스: `chat_messages (relation_id, id)`·`(relation_id, is_read)`·`(reply_to_id)`·`(workout_id)`·
+`(routine_id)`·`(sender_id)`, `chat_pinned_messages (message_id)`, `scheduled_chat_messages (sent_message_id)` — 근거는 §8-3.
+아직 인덱스가 없는 FK 는 `chat_message_bookmarks.saved_by`·`chat_message_reactions.user_id`(users 삭제 때 한 번 훑을 뿐이라 둠).
 
 ### 1-4. 앱
 
@@ -336,18 +336,29 @@ SUBSCRIBE 인가: `/sub/rooms/`·`/sub/couple/`·`/sub/games/` 는 **관계 구�
 | ⑨ | 다중 인스턴스 배포 시 | 실시간 미전달(§2-4) |
 | ⑩ | TEXT 본문 길이 제한 없음(전송 DTO 에 `@Size` 없음, 입력창 `maxLength` 없음, 수정은 2000자 제한) | 실질 상한은 STOMP 프레임 한도(Spring 기본 64KB — 설정 변경 없음). 초과 시 동작은 확인 필요 |
 
-### 8-3. 인덱스 (PostgreSQL EXPLAIN 필요 표시 ★)
-| 쿼리 | 현재 인덱스 | 우려 |
-| --- | --- | --- |
-| ★ `findMessages`/`findImages`: `relation_id = ? AND id < ? ORDER BY id DESC LIMIT 30` | `(relation_id, created_at)` | 정렬 키가 id 라 인덱스 순서를 못 탄다. 관계의 전 행을 읽고 정렬하거나 PK 역방향 스캔+필터. 메시지가 쌓일수록 느려짐. `(relation_id, id)` 가 맞는 모양 |
-| ★ `countByRelationIdAndSenderIdNotAndIsReadFalse`(방 목록 배지, 읽음마다 재호출) | `(relation_id, created_at)` | 관계 전 행 스캔 후 필터 |
-| ★ `markReadUpTo` | 동일 | 위와 같음(UPDATE) |
-| ★ `searchMessages` `lower(content) LIKE '%…%'` | 없음 | 관계 내 전수 스캔 — 구조상 불가피(trigram 등 필요). 영구 보관이라 커질수록 느림 |
-| `findTopByRelationIdOrderByIdDesc`, `findTopBy…MessageTypeAndSenderIdNot…` | 동일 | 위 ★ 와 같은 문제 |
-| `findForExport`/`countForExport` (`created_at` 범위) | `(relation_id, created_at)` | 적합 |
-| `findByRelationIdAndClientMessageId` | UNIQUE `(relation_id, client_message_id)` | 적합 |
-| FK 쪽 — `workouts`/`trainer_routines`/`users` 행 삭제 시 `chat_messages.workout_id`/`routine_id`/`sender_id` 참조 검사 | 없음 | 운동 하나 지울 때마다 `chat_messages` 전체 스캔 ★ |
-| `reply_to_id`(자기 참조 SET NULL), `chat_pinned_messages.message_id`, `scheduled_chat_messages.sent_message_id` | 없음 | 메시지 삭제(탈퇴·완전 삭제) 시 참조 검사 스캔. 대량 삭제에서 느려질 수 있음 |
+### 8-3. 인덱스 — 2026-10-03 실측 후 V126 으로 보강
+
+처음 이 절은 코드만 보고 "목록 조회가 관계 전 행을 스캔한다"고 적었는데, **실측해 보니 틀렸다** — V89 의 UNIQUE
+`(relation_id, client_message_id)` 가 relation_id 로 시작해 이미 관계 범위는 좁혀 주고 있었다. 진짜 문제는 **삭제**였다.
+
+측정: PostgreSQL 16, 메시지 40만 건(커플 2,000 × 170건 + 한 커플 6만 건, 시간순으로 섞어 삽입), `EXPLAIN ANALYZE`.
+쿼리는 Hibernate 가 보내는 모양(`$2 IS NULL OR id < $2`, generic plan 포함)으로 재현했다.
+
+| 쿼리 | 전 | 후 | 원인 → 인덱스 |
+| --- | --- | --- | --- |
+| 관계 메시지 전체 삭제(탈퇴·완전 삭제), 170건 커플 | **3.3초** | 14ms | `reply_to_id` 자기 참조 FK 검사가 행마다 전체 스캔 → `(reply_to_id)` + 고정·예약 FK 쪽 `(message_id)`·`(sent_message_id)` |
+| 같은 삭제, 6만 건 커플 | **10분 넘게(중단)** | 3.4초 | 위와 같음(행 수의 제곱으로 커지던 것이 선형으로) |
+| 운동 기록 한 건 삭제(`chat_messages.workout_id` FK 검사) | 18ms | 1.5ms | 전체 스캔 → `(workout_id)`, 같은 모양 `(routine_id)`·`(sender_id)` |
+| 첫 페이지, 가벼운 커플 | 0.87ms | 0.10ms | 커플 메시지 전부 정렬 → `(relation_id, id)` 로 역순 30건 |
+| 커서 페이지(generic plan), 6만 건 커플 | 7.5ms | 2.7ms | 위와 같음 |
+| 안 읽은 수(방 목록 배지, 수신마다) | 4.2ms | 0.12ms | 커플 메시지 전부 필터 → `(relation_id, is_read)` |
+| 읽음 처리 `markReadUpTo` | 6.1ms | 1.2ms | 위와 같음 |
+
+- 그대로 둔 것: `(relation_id, created_at)`(내보내기 기간 조건이 쓴다). 대화 검색 `lower(content) LIKE '%…%'` 는 B-tree 로 못 받는다 —
+  trigram 은 PostgreSQL 전용이라 H2 양립 규칙(4절)과 맞지 않아 다루지 않았다. 대화가 아주 길어지면 다시 볼 것.
+- 남은 비용: 6만 건 삭제의 3.4초는 고정·예약 FK 트리거가 6만 번 도는 몫이다(인덱스로 건당 µs 단위). 탈퇴는 배치에서 돌아 사용자 대기는 없다.
+- 쓰기 비용: `is_read` 가 인덱스에 들어가 읽음 처리 UPDATE 가 HOT 이 아니게 됐다. 메시지당 한 번이라 감수했다.
+- 실측 스크립트는 남기지 않았다(일회성). 같은 측정을 다시 하려면 이 표의 데이터 모양으로 시드하고 위 쿼리를 `EXPLAIN (ANALYZE)` 하면 된다.
 
 ### 8-4. 테스트 커버리지
 - 백엔드(있음):
@@ -367,6 +378,6 @@ SUBSCRIBE 인가: `/sub/rooms/`·`/sub/couple/`·`/sub/games/` 는 **관계 구�
 2. Railway 레플리카 수, 사용 Dockerfile(루트/backend) — 다중 인스턴스·JVM 시간대 판단.
 3. 서버가 STOMP 전송을 거절할 때 클라이언트가 받는 것(ERROR 프레임 유무) — 실기기 로그.
 4. 운영 DB 에 `workout_id`/`routine_id` 가 채워진 옛 카드 행 존재 여부 — `select count(*) from chat_messages where workout_id is not null or routine_id is not null`.
-5. ★ 표시 쿼리의 PostgreSQL `EXPLAIN ANALYZE`(메시지 많은 관계 기준).
+5. ~~★ 표시 쿼리의 PostgreSQL `EXPLAIN ANALYZE`~~ — 2026-10-03 실측·V126(§8-3). 운영 데이터 규모로는 재보지 않았다.
 6. 방 화면이 스택 뒤에 있을 때 읽음 처리되는지, 동시 전송 시 순서 뒤바뀜 재현 여부.
 7. 탈퇴 유예 기간 중 채팅 가능 여부, GIF 파일을 갤러리에서 골랐을 때 동작.
