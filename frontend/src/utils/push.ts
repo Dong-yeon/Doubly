@@ -124,10 +124,34 @@ export async function registerPushTokenIfGranted(): Promise<void> {
   if (Platform.OS === 'web') return;
   try {
     const current = await Notifications.getPermissionsAsync();
+    lastKnownGranted = current.granted;
     if (!current.granted) return;
     await registerToken();
   } catch {
     // Expo Go / projectId 없음 등 → 무시
+  }
+}
+
+/** 마지막으로 확인한 OS 알림 권한 — 앱 복귀 때 "꺼져 있다가 켜졌는지"를 가르는 데 쓴다 */
+let lastKnownGranted: boolean | null = null;
+
+/**
+ * 앱으로 돌아왔을 때 — 알림 권한이 <b>꺼져 있다가 켜졌으면</b> 토큰을 등록한다.
+ *
+ * <p>권한창에서 "나중에"를 고른 사람이 시스템 설정에서 알림을 켜고 돌아와도, 예전엔 앱 프로세스를
+ * 다시 띄우기 전까지 토큰이 등록되지 않아 그사이 상대의 알림이 조용히 사라졌다
+ * (docs/first-experience-audit.md #8). 켜져 있던 상태 그대로면 아무것도 하지 않는다 —
+ * 복귀할 때마다 서버를 부를 이유는 없다.
+ */
+export async function registerPushTokenOnResume(): Promise<void> {
+  if (Platform.OS === 'web') return;
+  try {
+    const current = await Notifications.getPermissionsAsync();
+    const turnedOn = current.granted && lastKnownGranted !== true;
+    lastKnownGranted = current.granted;
+    if (turnedOn) await registerToken();
+  } catch {
+    // 알림 모듈이 없는 환경 — 무시
   }
 }
 

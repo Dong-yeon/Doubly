@@ -15,6 +15,7 @@
  * 국가·통화·프로모션에 따라 달라지고, Play Console 에서 가격을 바꾸면 앱은 그대로 따라간다.
  */
 import React, { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator, Image, Linking, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -169,6 +170,17 @@ export function PlanScreen({ navigation }: Props) {
   const [term, setTerm] = useState<ProTerm>('monthly');
   const [purchasing, setPurchasing] = useState(false);
   const [restoring, setRestoring] = useState(false);
+
+  /*
+   * 들어올 때마다 내 플랜을 다시 읽는다. 예전엔 로그인·부팅 때만 읽어서, 상대가 방금 결제했어도 이 화면은
+   * 재시작 전까지 FREE 로 보였고 couplePlan 이 막으려던 "상대도 또 결제"가 그대로 가능했다
+   * (docs/first-experience-audit.md #14).
+   */
+  useFocusEffect(
+    useCallback(() => {
+      void usePlanStore.getState().load();
+    }, []),
+  );
 
   useEffect(() => {
     planApi
