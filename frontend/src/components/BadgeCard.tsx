@@ -22,14 +22,29 @@ const WORKOUT_BADGES: Badge[] = [
 ];
 
 interface Props {
+  /** 최고 연속 일수 — 뱃지를 땄는지의 기준(한 번 딴 뱃지는 유지한다, 2026-10-05 결정) */
   maxStreak: number;
+  /**
+   * 지금 이어지는 연속 일수 — "다음 뱃지까지 며칠"의 기준. 다음 뱃지는 한 번의 연속으로 채워야 하므로
+   * 최고 기록이 아니라 지금 연속에서 센다. 없으면(옛 호출부) 최고 기록으로 센다.
+   */
+  currentStreak?: number;
   title?: string;
   badges?: Badge[];
 }
 
-export function BadgeCard({ maxStreak, title = '뱃지', badges = WORKOUT_BADGES }: Props) {
+export function BadgeCard({ maxStreak, currentStreak, title = '뱃지', badges = WORKOUT_BADGES }: Props) {
   const earned = badges.filter((b) => maxStreak >= b.days).length;
   const next = badges.find((b) => maxStreak < b.days);
+  /*
+   * 예전 문구는 "최고 연속 12일 · 30일 뱃지까지 18일!"이었다 — 이미 끊겨 지금 3일째인 사람은 실제로 27일을
+   * 더 해야 하는데 18일로 보였다(docs/my-current-state.md §3-4). 지금 연속에서 세고, 최고 기록은 덧붙인다.
+   */
+  const current = currentStreak ?? maxStreak;
+  const progressText = !next
+    ? '모든 뱃지를 달성했어요! '
+    : `지금 연속 ${current}일 · ${next.label} 뱃지까지 ${next.days - current}일!`
+      + (maxStreak > current ? ` (최고 ${maxStreak}일)` : '');
 
   return (
     <Card elevation="sm" style={styles.card}>
@@ -56,11 +71,7 @@ export function BadgeCard({ maxStreak, title = '뱃지', badges = WORKOUT_BADGES
         })}
       </View>
 
-      <Text style={styles.progress}>
-        {next
-          ? `최고 연속 ${maxStreak}일 · ${next.label} 뱃지까지 ${next.days - maxStreak}일!`
-          : '모든 뱃지를 달성했어요! '}
-      </Text>
+      <Text style={styles.progress}>{progressText}</Text>
     </Card>
   );
 }

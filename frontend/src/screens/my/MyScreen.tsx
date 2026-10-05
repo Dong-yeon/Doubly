@@ -35,7 +35,7 @@ import { haptics } from '../../utils/haptics';
 import { pickImageAsset, uploadImage, type PickedImage } from '../../utils/imageUpload';
 import { AvatarCropSheet } from '../../components/AvatarCropSheet';
 import { colors, fontSize, spacing } from '../../constants/theme';
-import type { BodyMetric, DietGoalType, Gender, UserLevel, WeeklyRecap } from '../../types';
+import type { BodyMetric, DietGoalType, Gender, Streak, UserLevel, WeeklyRecap } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 
 // 식단 뱃지 — 운동(7/30/100)과 같은 단계, 식단 스트릭 기준
@@ -88,8 +88,8 @@ export function MyScreen({ navigation }: Props) {
    * null = 아직 모름. 예전엔 조회가 실패하면 0 으로 두어, 네트워크가 잠깐 끊긴 사람에게 뱃지가 전부 잠긴 것처럼
    * 보였다(docs/my-current-state.md §7-8). 실패하면 받아 둔 값을 그대로 두고, 한 번도 못 받았으면 카드를 그리지 않는다.
    */
-  const [maxStreak, setMaxStreak] = useState<number | null>(null);
-  const [maxMealStreak, setMaxMealStreak] = useState<number | null>(null);
+  const [streak, setStreak] = useState<Streak | null>(null);
+  const [mealStreak, setMealStreak] = useState<Streak | null>(null);
   /** 이번 조회에서 하나라도 실패했나 — 카드가 조용히 사라지는 대신 "다시 시도" 줄을 띄운다 */
   const [loadFailed, setLoadFailed] = useState(false);
   const [reloading, setReloading] = useState(false);
@@ -106,8 +106,8 @@ export function MyScreen({ navigation }: Props) {
    */
   const loadAll = useCallback(async () => {
     const results = await Promise.allSettled([
-      streakApi.me().then((s) => setMaxStreak(s.maxCount)),
-      streakApi.mealMe().then((s) => setMaxMealStreak(s.maxCount)),
+      streakApi.me().then(setStreak),
+      streakApi.mealMe().then(setMealStreak),
       summaryApi.weeklyRecap().then(setRecap),
       summaryApi.level().then(setLevel),
       bodyApi
@@ -526,14 +526,19 @@ export function MyScreen({ navigation }: Props) {
           </View>
         ) : null}
 
-        {maxStreak !== null ? (
+        {streak ? (
           <View style={styles.card}>
-            <BadgeCard title="운동 뱃지" maxStreak={maxStreak} />
+            <BadgeCard title="운동 뱃지" maxStreak={streak.maxCount} currentStreak={streak.currentCount} />
           </View>
         ) : null}
-        {maxMealStreak !== null ? (
+        {mealStreak ? (
           <View style={styles.card}>
-            <BadgeCard title="식단 뱃지" maxStreak={maxMealStreak} badges={MEAL_BADGES} />
+            <BadgeCard
+              title="식단 뱃지"
+              maxStreak={mealStreak.maxCount}
+              currentStreak={mealStreak.currentCount}
+              badges={MEAL_BADGES}
+            />
           </View>
         ) : null}
 
