@@ -12,6 +12,13 @@ package com.fitto.common.plan;
  *                  정한다</b> — 로그인한 사람이 남의 영수증을 보내도 자기 계정에 붙지 않는다
  *                  (구독 검증과 같은 원칙, {@code PlanController} 주석). 못 읽으면 {@code null}
  * @param valid     결제가 완료됐고 환불·취소되지 않았는가. 보류(pending)도 {@code false} 다
+ * @param acknowledged 스토어에서 승인(acknowledge)됐는가 — Google 만 의미가 있다. 애플은 승인 개념이 없어
+ *                     늘 {@code true} 다
  */
-public record StoreProductPurchase(String productId, Long userId, boolean valid) {
+public record StoreProductPurchase(String productId, Long userId, boolean valid, boolean acknowledged) {
+
+    /** 승인 개념이 없는 스토어·호출부용 — 이미 승인된 것으로 본다. */
+    public StoreProductPurchase(String productId, Long userId, boolean valid) {
+        this(productId, userId, valid, true);
+    }
 }

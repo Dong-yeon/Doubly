@@ -64,6 +64,20 @@ public class GooglePlaySubscriptionSyncService {
         if (created != null) {
             eventLogService.log(created, AnalyticsEvent.SUBSCRIPTION_STARTED, Store.GOOGLE_PLAY.name());
         }
+        acknowledgeIfNeeded(purchaseToken, state);
+    }
+
+    /**
+     * 검증을 통과한 결제를 서버가 승인해 둔다 — 앱이 승인 전에 꺼져도 3일 자동 환불이 나지 않게
+     * ({@link GooglePlayDeveloperApiClient#acknowledgeSubscription}). DB 반영이 커밋된 뒤에만 하고,
+     * 실패해도 동기화는 성공이다 — 앱의 승인과 다음 알림이 남아 있다.
+     */
+    private void acknowledgeIfNeeded(String purchaseToken, GooglePlaySubscriptionState state) {
+        if (state.acknowledged() || state.status() != SubscriptionStatus.ACTIVE
+                || state.userId() == null || !SubscriptionProducts.grantsPro(state.productId())) {
+            return;
+        }
+        apiClient.acknowledgeSubscription(state.productId(), purchaseToken);
     }
 
     /** 있으면 상태를 맞추고 없으면 만든다. 새로 만들었으면 그 사용자 id, 아니면 null. */
@@ -91,6 +105,11 @@ public class GooglePlaySubscriptionSyncService {
             // 건너뛴다. 이후 알림이 다시 오면 그때 연결된 값으로 재시도된다.
             log.warn("Play 구독을 사용자에 연결할 수 없음(계정 식별자 없음) — purchaseToken={}",
                     mask(purchaseToken));
+            return null;
+        }
+        if (!SubscriptionProducts.grantsPro(state.productId())) {
+            // PRO 상품이 아니다 — 스토어가 돌려준 상품 id 로 판정한다(앱이 말한 상품을 믿지 않는다)
+            log.warn("PRO 상품이 아닌 구독은 만들지 않음 — productId={}", state.productId());
             return null;
         }
         if (state.status() != SubscriptionStatus.ACTIVE) {
