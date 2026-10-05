@@ -22,6 +22,8 @@ import com.fitto.place.service.DateCourseService;
 import com.fitto.place.service.LovelichelinPulseService;
 import com.fitto.place.service.LovelichelinRecommendService;
 import com.fitto.place.service.MealVisitService;
+import com.fitto.place.service.EatOutStatsService;
+import com.fitto.place.dto.EatOutStatsResponse;
 import com.fitto.place.service.PlaceLinkResolveService;
 import com.fitto.place.service.PlaceService;
 import jakarta.validation.Valid;
@@ -54,13 +56,15 @@ public class PlaceController {
     private final PlaceLinkResolveService placeLinkResolveService;
     private final LovelichelinPulseService lovelichelinPulseService;
     private final MealVisitService mealVisitService;
+    private final EatOutStatsService eatOutStatsService;
 
     public PlaceController(PlaceService placeService, DateCourseService dateCourseService,
                            LovelichelinRecommendService lovelichelinRecommendService,
                            AiJobService aiJobService,
                            PlaceLinkResolveService placeLinkResolveService,
                            LovelichelinPulseService lovelichelinPulseService,
-                           MealVisitService mealVisitService) {
+                           MealVisitService mealVisitService,
+                           EatOutStatsService eatOutStatsService) {
         this.placeService = placeService;
         this.dateCourseService = dateCourseService;
         this.lovelichelinRecommendService = lovelichelinRecommendService;
@@ -68,6 +72,14 @@ public class PlaceController {
         this.placeLinkResolveService = placeLinkResolveService;
         this.lovelichelinPulseService = lovelichelinPulseService;
         this.mealVisitService = mealVisitService;
+        this.eatOutStatsService = eatOutStatsService;
+    }
+
+    /** 이번 달 외식 — 외식(식단이 붙은 방문)·같이 먹은 것·다녀온 곳·처음 간 곳·많이 간 곳·끼니별. month=YYYY-MM(기본 KST 이번 달) */
+    @GetMapping("/eat-out/stats")
+    public ApiResponse<EatOutStatsResponse> eatOutStats(@AuthenticationPrincipal AuthUser user,
+                                                        @RequestParam(required = false) String month) {
+        return ApiResponse.success(eatOutStatsService.stats(user.id(), month));
     }
 
     @PostMapping

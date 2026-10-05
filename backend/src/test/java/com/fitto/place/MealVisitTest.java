@@ -24,6 +24,14 @@ import com.fitto.place.dto.SavePlaceRequest;
 import com.fitto.place.repository.PlaceRatingRepository;
 import com.fitto.place.repository.PlaceVisitRepository;
 import com.fitto.place.service.MealVisitService;
+import com.fitto.place.service.EatOutStatsService;
+import com.fitto.place.service.LovelichelinRecommendService;
+import com.fitto.place.dto.EatOutStatsResponse;
+import com.fitto.diet.domain.DietGoalType;
+import com.fitto.diet.service.NutritionService;
+import com.fitto.relation.domain.RelationStatus;
+import com.fitto.relation.domain.RelationType;
+import com.fitto.relation.repository.RelationRepository;
 import com.fitto.place.service.PlaceService;
 import com.fitto.relation.dto.InviteCodeResponse;
 import com.fitto.relation.service.RelationService;
@@ -66,6 +74,10 @@ class MealVisitTest {
     @Autowired PlaceVisitRepository placeVisitRepository;
     @Autowired PlaceRatingRepository placeRatingRepository;
     @Autowired MealRepository mealRepository;
+    @Autowired EatOutStatsService eatOutStatsService;
+    @Autowired LovelichelinRecommendService recommendService;
+    @Autowired NutritionService nutritionService;
+    @Autowired RelationRepository relationRepository;
 
     @MockitoBean
     NotificationService notificationService;
@@ -288,6 +300,46 @@ class MealVisitTest {
                 .findFirst().orElseThrow();
 
         assertThat(mealCard.placeId()).isEqualTo(placeId);
+    }
+
+    @Test
+    void 이번_달_외식은_식단이_붙은_방문만_세고_같이_먹기는_한_번이다() {
+        long[] u = couple("mv14");
+        Long pasta = place(u[0], "연남 파스타");
+        Long cafe = place(u[0], "성수 카페");
+        mealVisitService.record(u[0], req(UUID.randomUUID().toString(), pasta, null, lunch(false)));
+        mealVisitService.record(u[1], req(UUID.randomUUID().toString(), pasta, null,
+                new RecordMealVisitRequest.MealPart(MealType.DINNER, null, 500, null, null, null, null, null, null, null, true)));
+        mealVisitService.record(u[0], req(UUID.randomUUID().toString(), cafe, null, null)); // 방문만 — 외식 아님
+
+        EatOutStatsResponse st = eatOutStatsService.stats(u[0], null);
+
+        assertThat(st.month()).isEqualTo(java.time.YearMonth.from(KstClock.today()).toString());
+        assertThat(st.outings()).isEqualTo(2);
+        assertThat(st.sharedOutings()).isEqualTo(1);
+        assertThat(st.visits()).isEqualTo(3);
+        assertThat(st.newPlaces()).isEqualTo(2);
+        assertThat(st.topPlaces()).first().extracting(EatOutStatsResponse.TopPlace::name).isEqualTo("연남 파스타");
+        assertThat(st.byMealType()).containsEntry("LUNCH", 1).containsEntry("DINNER", 1);
+        assertThat(st.previousOutings()).isZero();
+        // 상대 쪽에서 봐도 같은 숫자 — 커플 단위다
+        assertThat(eatOutStatsService.stats(u[1], null).outings()).isEqualTo(2);
+    }
+
+    @Test
+    void AI_맛집_추천_입력에_식사_방향과_최근_외식_메뉴가_들어간다() {
+        long[] u = couple("mv15");
+        Long placeId = place(u[0], "연남 파스타");
+        var couple = relationRepository.findByUserAndTypeAndStatus(u[0], RelationType.COUPLE, RelationStatus.ACTIVE).get(0);
+        // 아무것도 없으면 빈 문자열 — 예전 입력(캐시 키)이 그대로다
+        assertThat(recommendService.describeEating(couple, u[0])).isEmpty();
+
+        nutritionService.setGoalDirection(u[1], DietGoalType.LOSE);
+        mealVisitService.record(u[0], req(UUID.randomUUID().toString(), placeId, null, lunch(false)));
+
+        String eating = recommendService.describeEating(couple, u[0]);
+        assertThat(eating).contains("식사 방향: 나 정하지 않음 / 상대 덜 먹는 쪽");
+        assertThat(eating).contains("최근 7일 외식 메뉴: 파스타 1번");
     }
 
     @Test
