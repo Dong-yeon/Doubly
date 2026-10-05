@@ -33,6 +33,7 @@ import { haptics } from '../../utils/haptics';
 import { fontSize, radius, spacing } from '../../constants/theme';
 import type { WallRaceGame } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
+import { palettes } from '../../theme/palette';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'WallRace'>;
 
@@ -44,8 +45,15 @@ const BOARD_BG = '#E9E3D6';
 const CELL_BG = '#FBF8F1';
 const GROOVE = '#D6CDB9';
 const WALL_COLOR = '#7A5C3A';
-const PAWN_ME = '#2F6FEB';
-const PAWN_PARTNER = '#E5484D';
+/*
+ * 말·목표줄은 소유자 색 — 판이 다크에서도 같은 밝은 판이라 <b>라이트 팔레트로 고정</b>한다.
+ * 예전엔 나 파랑·상대 빨강 하드코딩이라 앱의 나(코랄)/상대(하늘)와 정반대였다(2026-10-05).
+ * CELL_BG 위 대비: 나 4.90 · 상대 4.88.
+ */
+const PAWN_ME = palettes.light.me;
+const PAWN_PARTNER = palettes.light.partner;
+const GOAL_ME = palettes.light.mePastelBg; // …Bg 는 판 위에서 1.02 라 안 보인다 — 파스텔 1.27
+const GOAL_PARTNER = palettes.light.partnerPastelBg;
 
 /** 수 요청 순번 — 옛 응답이 새 상태를 덮지 않도록(OmokScreen.placeSeq 와 같은 이유) */
 let moveSeq = 0;
@@ -359,8 +367,8 @@ export function WallRaceScreen(_: Props) {
               style={[
                 styles.cell,
                 { left: cellX(col), top: cellY(row), width: cell, height: cell },
-                isMyGoal && { backgroundColor: '#DCE8FF' },
-                isPartnerGoal && { backgroundColor: '#FFE1E2' },
+                isMyGoal && { backgroundColor: GOAL_ME },
+                isPartnerGoal && { backgroundColor: GOAL_PARTNER },
               ]}
             />
           );

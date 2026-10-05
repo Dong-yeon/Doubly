@@ -274,7 +274,7 @@ const styles = themedStyles((colors) => ({
     padding: spacing.md,
     marginTop: spacing.md,
   },
-  partnerBox: { borderWidth: 1, borderColor: colors.together },
+  partnerBox: { borderWidth: 1, borderColor: colors.partner },
   answerWho: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '800', marginBottom: 2 },
   answerText: { fontSize: fontSize.body, color: colors.textPrimary, lineHeight: 22 },
   waiting: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.md, fontWeight: '600' },

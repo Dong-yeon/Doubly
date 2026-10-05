@@ -420,9 +420,9 @@ export function SudokuScreen(_: Props) {
             </Text>
           </View>
           <View style={styles.legend}>
-            <View style={[styles.legendDot, { backgroundColor: colors.primary }]} />
+            <View style={[styles.legendDot, { backgroundColor: colors.me }]} />
             <Text style={styles.legendText}>나 {g.myCells}</Text>
-            <View style={[styles.legendDot, { backgroundColor: colors.together }]} />
+            <View style={[styles.legendDot, { backgroundColor: colors.partner }]} />
             <Text style={styles.legendText}>
               {g.partnerName ?? '상대'} {g.partnerCells}
             </Text>
@@ -691,8 +691,9 @@ const styles = themedStyles((colors) => ({
   cellSelected: { backgroundColor: colors.primaryBg, borderColor: colors.primary },
   cellText: { fontWeight: '600', color: colors.textSecondary },
   cellGiven: { fontWeight: '800', color: colors.textPrimary },
-  cellMine: { color: colors.primary, fontWeight: '800' },
-  cellPartner: { color: colors.together, fontWeight: '800' },
+  // 누가 채운 칸인가 — 소유자 색(선택 칸·같은 숫자 강조는 크롬 primary 가 맡는다)
+  cellMine: { color: colors.meText, fontWeight: '800' },
+  cellPartner: { color: colors.partnerText, fontWeight: '800' },
   cellWrong: { color: colors.danger },
 
   pad: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, justifyContent: 'center', marginTop: spacing.md },

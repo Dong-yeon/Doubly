@@ -48,12 +48,14 @@ import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { Content, ContentLog } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { useAndroidKeyboardHeight } from '../../hooks/useAndroidKeyboardHeight';
+import { useAuthStore } from '../../store/authStore';
 
 type Props = NativeStackScreenProps<PlaceStackParamList, 'ContentDetail'>;
 
 export function ContentDetailScreen({ route, navigation }: Props) {
   const { contentId, title: contentTitle } = route.params;
   const androidKeyboardHeight = useAndroidKeyboardHeight();
+  const myUserId = useAuthStore((s) => s.user?.id);
   const [content, setContent] = useState<Content | null>(null);
   const [logs, setLogs] = useState<ContentLog[]>([]);
   const [loading, setLoading] = useState(false);
@@ -455,7 +457,12 @@ export function ContentDetailScreen({ route, navigation }: Props) {
                 <Text style={styles.logDate}>
                   {item.watchedAt} · {item.loggedByName ?? '커플'}
                 </Text>
-                {item.rating ? <Text style={styles.logStars}>{stars(item.rating)}</Text> : null}
+                {/* 누가 남긴 별점인가 — 럽슐랭 방문 기록(PlaceDetailScreen)과 같은 규칙, 보는 사람 기준 */}
+                {item.rating ? (
+                  <Text style={[styles.logStars, { color: item.loggedBy === myUserId ? colors.meText : colors.partnerText }]}>
+                    {stars(item.rating)}
+                  </Text>
+                ) : null}
               </View>
               {item.imageUrl ? <Image source={{ uri: item.imageUrl }} style={styles.logPhoto} resizeMode="cover" /> : null}
               {item.memo ? <Text style={styles.logMemo}>{item.memo}</Text> : null}
@@ -590,7 +597,7 @@ const styles = themedStyles((colors) => ({
   },
   logHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   logDate: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
-  logStars: { fontSize: fontSize.body, color: colors.togetherText, fontWeight: '700' },
+  logStars: { fontSize: fontSize.body, fontWeight: '700' },
   logPhoto: { width: '100%', height: 160, borderRadius: radius.md, marginTop: spacing.sm },
   logMemo: { fontSize: fontSize.body, color: colors.textPrimary, marginTop: spacing.sm },
 }));
