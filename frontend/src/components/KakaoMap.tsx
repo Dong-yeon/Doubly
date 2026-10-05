@@ -68,7 +68,9 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
     setPin: (lat: number, lng: number) => inject(`window.fittoSetPin && window.fittoSetPin(${lat}, ${lng})`),
     fitToMarkers: () => inject('window.fittoFitMarkers && window.fittoFitMarkers()'),
     setPadding: (pad) => inject(`window.fittoSetPadding && window.fittoSetPadding(${JSON.stringify(pad)})`),
-    panTo: (lat: number, lng: number) => inject(`window.fittoPanTo && window.fittoPanTo(${lat}, ${lng})`),
+    panTo: (lat: number, lng: number, offsetY = 0) =>
+      inject(`window.fittoPanTo && window.fittoPanTo(${lat}, ${lng}, ${offsetY})`),
+    clearPin: () => inject('window.fittoClearPin && window.fittoClearPin()'),
   }));
 
   const fail = () => {

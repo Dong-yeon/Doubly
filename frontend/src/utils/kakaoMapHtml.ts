@@ -242,7 +242,8 @@ kakao.maps.load(function () {
     if (d.type === 'markers') { window.fittoSetMarkers(d.markers, d.path, false); }
     if (d.type === 'fit') { window.fittoFitMarkers(); }
     if (d.type === 'padding') { window.fittoSetPadding(d.padding); }
-    if (d.type === 'panTo') { window.fittoPanTo(d.lat, d.lng); }
+    if (d.type === 'panTo') { window.fittoPanTo(d.lat, d.lng, d.offsetY); }
+    if (d.type === 'clearPin') { window.fittoClearPin(); }
   });
 
   // 색상 지정 핀 — 원형 SVG 를 데이터 URI 로 인라인 렌더링 (외부 이미지 호스팅 불필요)
@@ -386,8 +387,22 @@ kakao.maps.load(function () {
     if (n > 1) { fitTo(bounds); }
     else if (n === 1) { programmatic = true; map.setCenter(bounds.getSouthWest()); }
   };
-  // 고른 핀으로 시야 옮기기 — 확대 단계는 그대로 둔다(사용자가 맞춘 축척을 뺏지 않는다)
-  window.fittoPanTo = function (lat, lng) { programmatic = true; map.panTo(new kakao.maps.LatLng(lat, lng)); };
+  /*
+   * 고른 핀으로 시야 옮기기 — 확대 단계는 그대로 둔다(사용자가 맞춘 축척을 뺏지 않는다).
+   * offsetY(px): 핀을 지도 한가운데보다 이만큼 위에 둔다 — 아래쪽을 하단 시트가 덮고 있어서다.
+   */
+  window.fittoPanTo = function (lat, lng, offsetY) {
+    programmatic = true;
+    var target = new kakao.maps.LatLng(lat, lng);
+    if (offsetY) {
+      var proj = map.getProjection();
+      var pt = proj.containerPointFromCoords(target);
+      target = proj.coordsFromContainerPoint(new kakao.maps.Point(pt.x, pt.y + offsetY));
+    }
+    map.panTo(target);
+  };
+  // 좌표 고르기 핀 지우기 — 고른 걸 취소했을 때
+  window.fittoClearPin = function () { if (selMarker) { selMarker.setMap(null); selMarker = null; } };
 
   /*
    * 지도가 멈출 때마다(idle) 보이는 범위를 알린다. 사용자가 끌거나 확대했는지(byUser)를 같이 보낸다 —

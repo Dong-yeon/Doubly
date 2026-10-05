@@ -314,12 +314,25 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
     setPadding: (pad) => {
       padRef.current = { ...padRef.current, ...pad };
     },
-    panTo: (lat: number, lng: number) => {
+    panTo: (lat: number, lng: number, offsetY = 0) => {
       const kakao = (window as any).kakao;
       const map = mapRef.current;
       if (!kakao?.maps || !map) return;
       programmaticRef.current = true;
-      map.panTo(new kakao.maps.LatLng(lat, lng));
+      let target = new kakao.maps.LatLng(lat, lng);
+      if (offsetY) {
+        // kakaoMapHtml 의 fittoPanTo 와 같은 계산 — 핀을 가운데보다 offsetY 위에 둔다
+        const proj = map.getProjection();
+        const pt = proj.containerPointFromCoords(target);
+        target = proj.coordsFromContainerPoint(new kakao.maps.Point(pt.x, pt.y + offsetY));
+      }
+      map.panTo(target);
+    },
+    clearPin: () => {
+      if (selMarkerRef.current) {
+        selMarkerRef.current.setMap(null);
+        selMarkerRef.current = null;
+      }
     },
   }));
 

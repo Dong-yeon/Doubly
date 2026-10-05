@@ -33,6 +33,8 @@ export interface KakaoMapHandle {
   fitToMarkers: () => void;
   /** 시야 맞추기 여백 — 아래쪽은 하단 시트가 덮는 높이를 넘긴다 */
   setPadding: (pad: { top?: number; right?: number; bottom?: number; left?: number }) => void;
-  /** 그 좌표로 부드럽게 옮긴다(확대 단계는 그대로) */
-  panTo: (lat: number, lng: number) => void;
+  /** 그 좌표로 부드럽게 옮긴다(확대 단계는 그대로). offsetY 만큼 화면 가운데보다 위에 둔다(하단 시트가 덮는 몫) */
+  panTo: (lat: number, lng: number, offsetY?: number) => void;
+  /** 지도 탭으로 고른 좌표 핀을 지운다 */
+  clearPin: () => void;
 }

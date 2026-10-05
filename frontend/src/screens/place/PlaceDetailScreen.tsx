@@ -92,8 +92,8 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
   const [viewingIndex, setViewingIndex] = useState<number | null>(null);
   const photoVisits = useMemo(() => visits.filter((v) => v.imageUrl), [visits]);
 
-  // 방문 기록 입력 폼
-  const [formOpen, setFormOpen] = useState(false);
+  // 방문 기록 입력 폼 — 지도 핀 카드의 [다녀왔어요]로 들어오면 펼친 채로 시작한다
+  const [formOpen, setFormOpen] = useState(() => String(route.params.openVisit) === 'true');
   const [rating, setRating] = useState(0);
   // 기록은 대개 사후에 남긴다 — "지난 주말 갔던 곳"이 오늘로 저장되지 않게 날짜를 고를 수 있다
   // (API는 원래 visitedAt 을 받고 있었는데 화면에만 없었다)
