@@ -390,13 +390,42 @@ PlanGuard: `PLACE_PIN`(장소 새로 만들 때만)·`PHOTO_UPLOAD`(업로드 �
 
 ---
 
+### 5-1. 사용자 답 (2026-10-05)
+
+| # | 결정 | 설계에 미치는 것 |
+|---|---|---|
+| Q1 | **방문만 · 식단만 둘 다 허용** | 외식 API 의 `meal` 은 선택(null = 방문만). 장소 없는 식단은 기존 `POST /meal` 그대로 |
+| Q2 | **같이 먹기 평점은 작성자만** | 외식 API 는 작성자 `place_ratings` 만 다룬다. 상대에게는 기존 "평가를 기다려요" 푸시 |
+| Q3 | **방문 별점은 대표 평점이 비어 있을 때만 채운다** | `rateAsMine` 플래그 대신 서버 규칙: 내 `place_ratings` 행이 없을 때만 방문 별점으로 만든다. 이미 있으면 그대로(방문 별점은 `place_visits.rating` 에만). 대표 평점 수정은 상세 화면의 [평가하기/수정]. **구앱의 `PUT /rating` 동작은 바꾸지 않는다**(그 API 는 명시적 평가라 덮어쓰는 게 맞다) — 바뀌는 건 두 화면이 방문 별점을 `rate` 로 다시 보내던 엮음뿐 |
+| Q4 | **식단 삭제 시 연결된 방문을 같이 지울지 묻는다** | `DELETE /meal/{id}` 에 선택 파라미터 `withVisit=true`(기본 false = 지금처럼 끊기만). 앱은 `placeId` 가 있는 식단을 지울 때 확인 창 [식단만 / 방문 기록도]. 같이 먹기 짝은 작성자 쪽에만 방문이 있으므로 짝 삭제 경로도 같은 파라미터를 탄다 |
+| Q5 | **방문 삭제 시 식단은 그대로 + 안내 한 줄** | `deleteVisit` 무변경. 앱 확인 창에 "식단 기록은 럽바디에 남아요"(연결 식단이 있을 때만) + 삭제 뒤 `dietStore` 무효화(P1-2 의 캐시 문제 같이 해결) |
+| Q6 | **AI 맛집 추천에 식단 목표를 반영한다** | P2-2 진행. 단 문구는 "가볍게 먹어야 할 곳"을 강요하지 않게(럽바디 방향 "감량 도구 아님") — 목표 방향은 추천 이유에 참고로만, 결과 캐시 키에 목표 방향 포함 |
+| Q7 | **같이 먹기 외식의 방문은 1행 + "둘이" 표시** | 스키마 변경 없음. 상대 몫 식단 📍는 `shared_group_id` 짝으로 찾고, 방문 응답에 `together` 파생 필드 |
+| Q8 | **`place_visits.meal_id` UNIQUE 를 건다 — 운영 중복 점검이 먼저** | 아래 SQL 을 운영에서 돌려 **0행**인지 확인한 뒤 마이그레이션(V117 때와 같은 절차). 0행이 아니면 정리 방법을 먼저 정한다 |
+| Q9 | (미정) EXIF GPS — 나중에 결정 | P2-1 은 착수하지 않는다 |
+
+Q8 운영 점검 SQL(읽기 전용):
+```sql
+select meal_id, count(*) as visits, min(id) as first_visit_id, max(id) as last_visit_id
+from place_visits
+where meal_id is not null
+group by meal_id
+having count(*) > 1
+order by visits desc;
+```
+
+이 답으로 P0 마이그레이션은 2개로 정해진다: ① `place_visits.client_request_id` + UNIQUE(visited_by, client_request_id) ② `place_ratings.revisit_intent` NULL 초기화.
+③ `place_visits.meal_id` UNIQUE 는 위 SQL 결과를 받은 뒤 별도 마이그레이션.
+
 ## 6. P0 구현 순서 (한 줄씩)
 
-1. 마이그레이션: `place_visits.client_request_id` + UNIQUE(visited_by, client_request_id), `place_ratings.revisit_intent` NULL 초기화 — 번호는 원격 기준으로 그때 센다.
-2. 서버 `POST /places/meal-visits`: 장소 확정(별도 tx) → 식단·방문·평점(본 tx) → 커밋 뒤 푸시 1회·이벤트 2종·자동 분석, 멱등 재전송 테스트를 먼저 실패시키고 구현.
+1. 마이그레이션: `place_visits.client_request_id` + UNIQUE(visited_by, client_request_id), `place_ratings.revisit_intent` NULL 초기화 — 번호는 원격 기준으로 그때 센다. (`meal_id` UNIQUE 는 Q8 점검 SQL 결과 뒤)
+2. 서버 `POST /places/meal-visits`: 장소 확정(별도 tx) → 식단·방문·평점(본 tx, 평점은 대표 평점이 없을 때만 — Q3) → 커밋 뒤 푸시 1회·이벤트 2종·자동 분석, 멱등 재전송 테스트를 먼저 실패시키고 구현.
+2-1. 서버 `DELETE /meal/{id}?withVisit=true`(Q4) — 기본은 지금처럼 끊기만.
 3. 서버 `withPlaces` 가 같이 먹기 짝(`shared_group_id`)으로 상대 몫 📍를 찾게, `recordVisit` 에 KST 미래 날짜 거부.
 4. 서버 피드 타임라인·작년 오늘에서 식단에 연결된 방문 제외(사진첩과 같은 규칙), 식사 카드에 방문 별점·메모 싣기.
 5. H2 + PostgreSQL 로 테스트(쿼리 변경), 서버 배포 → Railway SUCCESS 확인.
 6. 앱 럽바디: 장소가 있으면 새 API, 카카오 [추가]는 고르기만, 별은 건드렸을 때만, `revisitIntent: true` 제거.
 7. 앱 럽슐랭 "다녀왔어요": 새 API, 식단 메모에 장소명 넣지 않기, 날짜 `todayKst()`, 거절 시 사진 discard.
+7-1. 앱 삭제 확인 창: 장소 붙은 식단 삭제 → [식단만 / 방문 기록도](Q4), 연결 식단 있는 방문 삭제 → "식단 기록은 럽바디에 남아요" + dietStore 무효화(Q5).
 8. 앱 채팅 → 식단 날짜를 `kstDateKey`, 반쪽 기록 안내 문구 정리 → typecheck·lint·build:web → fingerprint 비교 후 EAS Update.
