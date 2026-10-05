@@ -74,6 +74,7 @@ import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { buildPlacePinIcons, type KakaoLatLng, type KakaoMapMarker } from '../../utils/kakaoMapHtml';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
+import { palettes } from '../../theme/palette';
 import type {
   Content,
   ContentType,
@@ -281,9 +282,17 @@ export function PlaceScreen() {
 
   // 핀 이미지 — 테마 색이 바뀔 때만 다시 그린다(다크 모드에서도 지도 타일은 밝아 색은 그대로 쓴다)
   const pinIcons = useMemo(
-    () => buildPlacePinIcons({ gold: colors.lovelichelinGold, visited: colors.mapPin, search: colors.textPrimary }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [colors.lovelichelinGold, colors.mapPin, colors.textPrimary],
+    /*
+     * 지도 타일은 다크 모드에서도 밝은 지도다 — 다크 팔레트의 파스텔 핀(라벤더 #E1C9FF)·밝은 잉크 검색 핀은
+     * 타일 위에서 흐려진다. 핀 색은 라이트 팔레트로 고정한다(utils/kakaoMapHtml.ts 의 경로선과 같은 이유).
+     */
+    () =>
+      buildPlacePinIcons({
+        gold: palettes.light.lovelichelinGold,
+        visited: palettes.light.mapPin,
+        search: palettes.light.textPrimary,
+      }),
+    [],
   );
 
   // 지도도 시트와 같은 결과를 쓴다 — 시트에서 '카페'만 보면 지도에도 카페만 찍힌다

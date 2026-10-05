@@ -19,6 +19,7 @@ import { thumbnailUrl } from '../../utils/imageUrl';
 import type { KakaoMapMarker } from '../../utils/kakaoMapHtml';
 import type { FeedPhotoMapPlace } from '../../types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
+import { palettes } from '../../theme/palette';
 import { themedStyles } from '../../theme/themedStyles';
 import { layout } from '../../theme/layout';
 
@@ -48,7 +49,8 @@ export function AlbumMap({ places, loading, error, truncated, filtered, onPressP
           lat: p.lat,
           lng: p.lng,
           title: p.name,
-          color: colors.mapPin,
+          // 지도 타일은 다크에서도 밝다 — 핀은 라이트 팔레트로 고정(PlaceScreen 과 같은 이유)
+          color: palettes.light.mapPin,
           imageUrl: cover ? thumbnailUrl(cover, 52) : undefined,
           count,
         };
