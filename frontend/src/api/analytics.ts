@@ -26,7 +26,9 @@ export type ClientAnalyticsEvent =
   | 'MEAL_ITEM_EDIT_OPENED'
   | 'MEAL_MULTIPLIER_CHANGED'
   | 'MEAL_RECORD_SAVED'
-  | 'MEAL_RECORD_ABANDONED';
+  | 'MEAL_RECORD_ABANDONED'
+  // 채팅 소켓이 앱 포그라운드에서 5초 넘게 끊겨 있었다 — detail 은 utils/socketTelemetry 의 요약(초·원인·시도·갱신·네트워크)뿐
+  | 'CHAT_SOCKET_SLOW';
 
 /**
  * 보내고 잊는다 — 실패(서버가 아직 모르는 이벤트면 400, 끊김 등)는 조용히 삼킨다. 계측 때문에 화면이 멈추거나

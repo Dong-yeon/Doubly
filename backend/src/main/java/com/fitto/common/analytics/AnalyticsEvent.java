@@ -68,4 +68,11 @@ public final class AnalyticsEvent {
     public static final String MEAL_MULTIPLIER_CHANGED = "MEAL_MULTIPLIER_CHANGED";
     public static final String MEAL_RECORD_SAVED = "MEAL_RECORD_SAVED";
     public static final String MEAL_RECORD_ABANDONED = "MEAL_RECORD_ABANDONED";
+
+    /**
+     * 채팅 소켓이 앱 포그라운드에서 5초 넘게 끊겨 있었다(2026-10-05) — "연결 중이에요"가 오래 뜨는 원인을 가르는 계측.
+     * detail 예: {@code 13.2s close1006 a3 r1/420 ok cell room}(초·원인·시도 수·토큰 갱신 횟수/ms·끝난 방식·네트워크·채팅방 여부).
+     * docs/server-stability-current-state.md §12.
+     */
+    public static final String CHAT_SOCKET_SLOW = "CHAT_SOCKET_SLOW";
 }
