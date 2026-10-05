@@ -12,7 +12,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { KAKAO_JS_KEY } from '../constants/config';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 import type { KakaoMapHandle, KakaoMapProps } from './KakaoMap.types';
-import type { KakaoMapMarker } from '../utils/kakaoMapHtml';
+import { MAP_ROUTE_COLOR, type KakaoMapMarker } from '../utils/kakaoMapHtml';
 import { themedStyles } from '../theme/themedStyles';
 
 export type { KakaoMapHandle, KakaoMapProps };
@@ -192,7 +192,7 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
         map,
         path: path.map((p) => new kakao.maps.LatLng(p.lat, p.lng)),
         strokeWeight: 4,
-        strokeColor: '#4A5BFF',
+        strokeColor: MAP_ROUTE_COLOR,
         strokeOpacity: 0.85,
         strokeStyle: 'solid',
       });
