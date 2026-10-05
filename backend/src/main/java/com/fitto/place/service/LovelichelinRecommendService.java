@@ -10,7 +10,12 @@ import com.fitto.place.domain.Place;
 import com.fitto.place.domain.PlaceRating;
 import com.fitto.place.dto.LovelichelinRecommendationResponse;
 import com.fitto.place.dto.LovelichelinRecommendationResponse.RecommendedPlace;
+import com.fitto.diet.domain.DietGoalType;
+import com.fitto.diet.domain.NutritionGoal;
+import com.fitto.diet.repository.NutritionGoalRepository;
+import com.fitto.common.time.KstClock;
 import com.fitto.place.repository.PlaceRatingRepository;
+import com.fitto.place.repository.PlaceVisitRepository;
 import com.fitto.place.repository.PlaceRepository;
 import com.fitto.place.service.KakaoLocalClient.KakaoPlace;
 import com.fitto.place.service.PlaceService.RatingPair;
@@ -62,6 +67,10 @@ public class LovelichelinRecommendService {
                 지역은 커플이 다니는 동네 근처, 또는 취향에 맞을 만한 새로운 동네로 고릅니다.
               - reason: 이 검색을 추천하는 이유(커플 취향과 연결한 한 문장, 한국어).
             - 이미 목록에 있는 장소와 같은 곳을 다시 찾게 되는 검색어는 피합니다.
+            - [요즘 식사]가 있으면 참고만 합니다: 최근 외식에서 많이 먹은 메뉴와 겹치지 않는 새 선택을 한두 개 섞고,
+              식사 방향은 고를 때 살짝 기울이는 정도로만 씁니다. 추천을 그쪽으로 몰지 마세요.
+            - greeting·reason 에 체중·다이어트·칼로리·"가볍게"·"건강하게" 같은 말을 쓰지 마세요. 이 앱은 감량 도구가 아니라
+              커플의 식사 기록이고, 상대의 식사 방향은 그 사람의 사적인 정보입니다.
 
             [럽슐랭 인증 장소]
             %s
@@ -87,18 +96,28 @@ public class LovelichelinRecommendService {
     private final PlaceRepository placeRepository;
     private final PlaceRatingRepository placeRatingRepository;
     private final RelationRepository relationRepository;
+    private final NutritionGoalRepository nutritionGoalRepository;
+    private final PlaceVisitRepository placeVisitRepository;
+
+    /** "요즘 식사"로 보는 기간·메뉴 수 — 한 주면 "최근"이고, 다섯 개면 프롬프트가 길어지지 않는다 */
+    static final int RECENT_DAYS = 7;
+    static final int RECENT_MENU_MAX = 5;
 
     public LovelichelinRecommendService(GeminiClient geminiClient, AiResultCache aiResultCache,
                                         KakaoLocalClient kakaoLocalClient,
                                         PlaceRepository placeRepository,
                                         PlaceRatingRepository placeRatingRepository,
-                                        RelationRepository relationRepository) {
+                                        RelationRepository relationRepository,
+                                        NutritionGoalRepository nutritionGoalRepository,
+                                        PlaceVisitRepository placeVisitRepository) {
         this.geminiClient = geminiClient;
         this.aiResultCache = aiResultCache;
         this.kakaoLocalClient = kakaoLocalClient;
         this.placeRepository = placeRepository;
         this.placeRatingRepository = placeRatingRepository;
         this.relationRepository = relationRepository;
+        this.nutritionGoalRepository = nutritionGoalRepository;
+        this.placeVisitRepository = placeVisitRepository;
     }
 
     /**
@@ -117,7 +136,12 @@ public class LovelichelinRecommendService {
             return LovelichelinRecommendationResponse.empty();
         }
 
-        String input = describe(certified, userId);
+        /*
+         * 입력 = 취향(인증 장소) + 요즘 식사(식단 목표 방향·최근 7일 외식 메뉴, P2-2). 캐시 키가 이 문자열이라
+         * 목표 방향을 바꾸거나 새로 외식하면 지난 추천을 그대로 돌려주지 않는다.
+         */
+        String eating = describeEating(couple, userId);
+        String input = describe(certified, userId) + (eating.isEmpty() ? "" : "\n" + eating);
         return aiResultCache.remember(userId, Feature.AI_RESTAURANT_RECOMMEND, input, refresh,
                 LovelichelinRecommendationResponse.class, () -> generate(userId, all, input));
     }
@@ -187,6 +211,42 @@ public class LovelichelinRecommendService {
                                     ? " · 평점 " + pair.mine() + "점/" + pair.partner() + "점" : "");
                 })
                 .collect(Collectors.joining("\n"));
+    }
+
+    /**
+     * 요즘 식사 — 두 사람의 식단 목표 방향(설정한 사람만)과 최근 {@link #RECENT_DAYS}일 외식 메뉴 상위.
+     * 결정 Q6(2026-10-05): 반영한다. 다만 방향은 "참고"로만 쓰라고 프롬프트가 못 박는다(럽바디는 감량 도구가 아니다).
+     * 둘 다 비어 있으면 빈 문자열 — 예전과 같은 입력이 되어 예전 캐시가 그대로 맞는다.
+     */
+    public String describeEating(Relation couple, Long userId) {
+        Long partnerId = couple.partnerOf(userId);
+        List<String> lines = new ArrayList<>();
+        String mine = directionLabel(userId);
+        String partner = partnerId != null ? directionLabel(partnerId) : null;
+        if (mine != null || partner != null) {
+            lines.add("- 식사 방향: 나 " + (mine != null ? mine : "정하지 않음")
+                    + " / 상대 " + (partner != null ? partner : "정하지 않음"));
+        }
+        List<String> menu = placeVisitRepository
+                .countCoupleMenuSince(couple.getId(), KstClock.today().minusDays(RECENT_DAYS - 1L),
+                        org.springframework.data.domain.PageRequest.of(0, RECENT_MENU_MAX))
+                .stream()
+                .map(c -> c.getName() + " " + c.getTimes() + "번")
+                .toList();
+        if (!menu.isEmpty()) {
+            lines.add("- 최근 " + RECENT_DAYS + "일 외식 메뉴: " + String.join(", ", menu));
+        }
+        return lines.isEmpty() ? "" : "[요즘 식사]\n" + String.join("\n", lines);
+    }
+
+    private String directionLabel(Long userId) {
+        DietGoalType d = nutritionGoalRepository.findById(userId).map(NutritionGoal::getGoalDirection).orElse(null);
+        if (d == null) return null;
+        return switch (d) {
+            case LOSE -> "덜 먹는 쪽";
+            case MAINTAIN -> "지금처럼";
+            case GAIN -> "더 먹는 쪽";
+        };
     }
 
     /** 이름 대조용 정규화 — 공백·대소문자 차이로 같은 가게를 다른 곳으로 보지 않게 */

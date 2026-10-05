@@ -52,6 +52,32 @@ public interface PlaceVisitRepository extends JpaRepository<PlaceVisit, Long> {
             """)
     List<MenuCount> countMenu(@Param("placeId") Long placeId, org.springframework.data.domain.Pageable pageable);
 
+    /**
+     * 커플이 최근(since 이후) 외식에서 먹은 음식 이름별 횟수 — AI 맛집 추천의 "요즘 이런 걸 먹었다" 재료(P2-2).
+     * {@link #countMenu} 와 같은 규칙이고 장소 하나 대신 커플 장소 전체·기간으로 거른다.
+     */
+    @Query("""
+            select mi.name as name, count(mi) as times, max(m.mealDate) as lastDate
+            from MealItem mi join mi.meal m, PlaceVisit v, Place p
+            where v.mealId = m.id and p.id = v.placeId and p.coupleId = :coupleId and v.visitedAt >= :since
+            group by mi.name
+            order by count(mi) desc, max(m.mealDate) desc
+            """)
+    List<MenuCount> countCoupleMenuSince(@Param("coupleId") Long coupleId,
+                                         @Param("since") java.time.LocalDate since,
+                                         org.springframework.data.domain.Pageable pageable);
+
+    /** 장소별 첫 방문일 — 외식 통계의 "이번 달 처음 가 본 곳"(P2-3). 빈 목록으로 부르지 않는다 */
+    @Query("select v.placeId as placeId, min(v.visitedAt) as firstDate from PlaceVisit v "
+            + "where v.placeId in :placeIds group by v.placeId")
+    List<FirstVisit> firstVisitDates(@Param("placeIds") java.util.Collection<Long> placeIds);
+
+    interface FirstVisit {
+        Long getPlaceId();
+
+        java.time.LocalDate getFirstDate();
+    }
+
     interface MenuCount {
         String getName();
 
