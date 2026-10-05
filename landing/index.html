@@ -15,7 +15,8 @@
 
   2026-10-05 개편: 아이콘이 숟가락 둘(코랄·하늘, 흰 바탕)로 바뀌었는데 이 페이지는 초록 하트·초록 히어로,
   "스토어 준비 중", 운동 중심의 예전 소개 그대로였다. 색은 아이콘에서 따왔다(코랄 #F28472 · 하늘 #62A8EC).
-  흰 글자를 올리는 면은 대비 4.5:1 을 넘는 진한 톤만 쓴다 — 버튼 #B8473A(5.25), 링크 #2A6AAE(5.57).
+  버튼은 앱과 같은 잉크다(2026-10-05 — 앱 크롬이 잉크로 바뀌어 맞췄다, docs/color-redesign-viewer-based_2026-10-05.md §10).
+  라이트 #1A1D1A 위 흰 글자 17.0, 다크 #ECEEEA 위 잉크 글자 14.6. 링크 #2A6AAE(5.57). 코랄·하늘은 마크·태그에만 쓴다.
 
   ⚠️ 기능 소개는 실제 앱과 맞아야 한다(스토어 심사관도 이 페이지를 본다). 탭 구성이나 기능이 바뀌면 함께 고칠 것.
   ⚠️ icon.png 는 frontend/assets/icon.png 와 같은 파일이어야 한다.
@@ -30,7 +31,8 @@
     --text-dim: #5e6168;
     --coral: #f28472;
     --sky: #62a8ec;
-    --button: #b8473a;
+    --button: #1a1d1a;
+    --on-button: #ffffff;
     --link: #2a6aae;
   }
   * { box-sizing: border-box; }
@@ -67,7 +69,7 @@
   .stores { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 28px; }
   .store-btn {
     display: inline-block; padding: 12px 22px; border-radius: 12px;
-    background: var(--button); color: #fff; text-decoration: none; font-size: 15px; font-weight: 700;
+    background: var(--button); color: var(--on-button); text-decoration: none; font-size: 15px; font-weight: 700;
   }
   .store-btn:hover { filter: brightness(1.06); }
 
@@ -94,7 +96,7 @@
   }
   .steps li::before {
     content: counter(step); position: absolute; left: 18px; top: 14px; width: 26px; height: 26px; border-radius: 50%;
-    background: var(--button); color: #fff; font-size: 14px; font-weight: 700; text-align: center; line-height: 26px;
+    background: var(--button); color: var(--on-button); font-size: 14px; font-weight: 700; text-align: center; line-height: 26px;
   }
   .note { font-size: 15px; color: var(--text-dim); word-break: keep-all; margin: 0; }
   .note a, footer a { color: var(--link); }
@@ -119,6 +121,7 @@
     :root {
       --bg: #17181b; --surface: #1f2124; --border: #2c2f33;
       --text: #f1f2f0; --text-dim: #a8acb2; --link: #8cc2f5;
+      --button: #eceeea; --on-button: #1a1d1a; /* 앱 다크의 primary·onPrimary 와 같은 값 */
     }
     .t-coral { color: #f6a698; }
     .t-sky { color: #9ccaf5; }
