@@ -183,8 +183,8 @@ game, sticker, coupleemoji) 아래에 controller/domain/dto/repository/service�
 서버 enum 과 앱 상수가 어긋나면 에러 없이 조용히 깨지는 것들(플랜 기능 키, 약관 버전, 스티커 코드·팩,
 캐치마인드 공유 캡션)은 백엔드 테스트가 `../frontend/src/...` 를 직접 읽어 대조합니다 —
 `PlanFeatureSyncTest`, `PolicyVersionSyncTest`, `StickerImageSyncTest`, `StickerPackSyncTest`,
-`CatchMindShareCaptionSyncTest`. 따라서 **프론트의 `types/index.ts`·`constants/legal.ts`·
-`constants/stickerImages.ts` 를 고치면 백엔드 테스트가 빨개질 수 있습니다.** `build.gradle` 이 이
+`CatchMindShareCaptionSyncTest`, `StoreProductIdSyncTest`(스토어 상품 id). 따라서 **프론트의 `types/index.ts`·
+`constants/legal.ts`·`constants/stickerImages.ts`·`constants/config.ts` 를 고치면 백엔드 테스트가 빨개질 수 있습니다.** `build.gradle` 이 이
 파일들을 test 태스크 입력으로 등록해 두어 프론트만 고쳐도 테스트가 다시 돕니다 — 동기화 테스트를
 새로 만들면 그 경로도 `build.gradle` 의 `frontendSyncSources` 에 추가합니다.
 

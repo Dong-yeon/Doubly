@@ -34,13 +34,16 @@ public class AppStoreNotificationController {
 
     private final AppStoreProperties properties;
     private final AppStoreSubscriptionSyncService syncService;
+    private final FeatureCreditService creditService;
     private final ObjectMapper objectMapper;
 
     public AppStoreNotificationController(AppStoreProperties properties,
                                            AppStoreSubscriptionSyncService syncService,
+                                           FeatureCreditService creditService,
                                            ObjectMapper objectMapper) {
         this.properties = properties;
         this.syncService = syncService;
+        this.creditService = creditService;
         this.objectMapper = objectMapper;
     }
 
@@ -60,9 +63,31 @@ public class AppStoreNotificationController {
             return ResponseEntity.ok().build();
         }
 
-        String transactionId = transactionIdOf(envelope.signedPayload());
-        if (transactionId == null) {
+        JsonNode transaction = transactionOf(envelope.signedPayload());
+        if (transaction == null) {
             // 구독과 무관한 알림(예: 테스트 알림)이거나 형식이 다르다. 재전송해도 같으므로 닫는다.
+            log.info("App Store 알림에서 거래 정보를 찾지 못함 — 건너뜀");
+            return ResponseEntity.ok().build();
+        }
+
+        /*
+         * 소모성 크레딧(우리 이모지 세트)의 환불 알림 — 구독 경로로 보내면 구독 조회가 404 로 끝나 아무 일도 없었고,
+         * 환불받은 사람이 크레딧을 그대로 썼다(docs/my-current-state.md §7-2). 여기서도 상품 id 는 갈래만 정하고,
+         * 환불 여부는 creditService 가 애플에 되물어 정한다. 크레딧 행의 키는 원 거래가 아니라 그 거래 id 다.
+         */
+        String productId = transaction.path("productId").asText(null);
+        if (productId != null && CreditProduct.byProductId(productId).isPresent()) {
+            String transactionId = transaction.path("transactionId").asText(null);
+            if (transactionId != null) {
+                creditService.revokeIfRefundedOnAppStore(transactionId);
+            }
+            return ResponseEntity.ok().build();
+        }
+
+        // originalTransactionId 가 있으면 그걸 쓴다 — 어느 쪽이든 애플이 최신 상태를 돌려준다.
+        String original = transaction.path("originalTransactionId").asText(null);
+        String transactionId = original != null ? original : transaction.path("transactionId").asText(null);
+        if (transactionId == null) {
             log.info("App Store 알림에서 거래 id 를 찾지 못함 — 건너뜀");
             return ResponseEntity.ok().build();
         }
@@ -70,19 +95,13 @@ public class AppStoreNotificationController {
         return ResponseEntity.ok().build();
     }
 
-    /** 알림 JWS → data.signedTransactionInfo JWS → transactionId. 하나라도 없으면 null. */
-    private String transactionIdOf(String signedPayload) {
+    /** 알림 JWS → data.signedTransactionInfo JWS 의 payload. 하나라도 없으면 null. */
+    private JsonNode transactionOf(String signedPayload) {
         JsonNode notification = AppStoreJws.payload(objectMapper, signedPayload);
         if (notification == null) {
             return null;
         }
-        JsonNode transaction = AppStoreJws.payload(objectMapper,
+        return AppStoreJws.payload(objectMapper,
                 notification.path("data").path("signedTransactionInfo").asText(null));
-        if (transaction == null) {
-            return null;
-        }
-        // originalTransactionId 가 있으면 그걸 쓴다 — 어느 쪽이든 애플이 최신 상태를 돌려준다.
-        String original = transaction.path("originalTransactionId").asText(null);
-        return original != null ? original : transaction.path("transactionId").asText(null);
     }
 }

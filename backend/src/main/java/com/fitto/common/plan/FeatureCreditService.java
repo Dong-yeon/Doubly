@@ -109,6 +109,7 @@ public class FeatureCreditService {
         }
 
         if (repository.findByTransactionId(transactionId).isPresent()) {
+            acknowledgeIfNeeded(store, product, purchase, transactionId);
             return product.credits();
         }
         try {
@@ -125,6 +126,60 @@ public class FeatureCreditService {
             // 동시에 두 번 눌린 경우 — unique 인덱스가 막는다. 이미 줬으므로 성공으로 본다.
             log.debug("크레딧 행 중복 — 이미 지급 (product={}, userId={})", product.productId(), userId);
         }
+        acknowledgeIfNeeded(store, product, purchase, transactionId);
         return product.credits();
+    }
+
+    /**
+     * 크레딧을 준 결제를 서버가 승인해 둔다(Google 만) — 앱이 소모(consume) 전에 꺼지면 3일 뒤 자동 환불되어
+     * <b>크레딧은 받고 돈은 돌려받는</b> 상태가 됐다(docs/my-current-state.md §7-2). 소모는 여전히 앱이 한다.
+     */
+    private void acknowledgeIfNeeded(Store store, CreditProduct product, StoreProductPurchase purchase,
+                                     String purchaseToken) {
+        if (store == Store.GOOGLE_PLAY && !purchase.acknowledged()) {
+            googlePlayClient.acknowledgeProduct(product.productId(), purchaseToken);
+        }
+    }
+
+    /**
+     * 애플 환불 알림 — 스토어에 다시 물어 정말 환불(revocationDate)됐을 때만 안 쓴 크레딧을 거둔다.
+     *
+     * <p>알림 본문을 믿지 않는 이유는 구독 쪽과 같다({@code AppStoreNotificationController} 주석) — 웹훅 인증이
+     * 공유 토큰뿐이라, 본문만 보고 거두면 토큰이 새는 순간 남의 크레딧을 지울 수 있다.
+     */
+    public void revokeIfRefundedOnAppStore(String transactionId) {
+        if (repository.findByTransactionId(transactionId).isEmpty()) {
+            return;   // 우리가 준 적 없는 거래(다른 상품·다른 앱)
+        }
+        StoreProductPurchase purchase = appStoreClient.fetchTransaction(transactionId);
+        if (purchase == null || purchase.valid()) {
+            return;   // 조회 실패면 다음 알림을 기다린다. 유효하면 거둘 게 없다
+        }
+        revoke(transactionId);
+    }
+
+    /** Google 무효 결제 알림 — Voided Purchases API 로 다시 확인한 뒤에만 거둔다({@link #revokeIfRefundedOnAppStore} 와 같은 이유). */
+    public void revokeIfVoidedOnGooglePlay(String purchaseToken) {
+        if (repository.findByTransactionId(purchaseToken).isEmpty()) {
+            return;
+        }
+        if (!Boolean.TRUE.equals(googlePlayClient.isVoided(purchaseToken))) {
+            return;
+        }
+        revoke(purchaseToken);
+    }
+
+    /**
+     * 같은 클래스 안에서 부르므로 {@code @Transactional} 프록시를 타지 않는다 — 그래서 고친 행을 직접 {@code save} 한다
+     * (리포지토리의 save 가 자기 트랜잭션을 연다). 거둔 뒤 그 회차의 실패 되돌림({@link #refundOne})이 오면 한 회가
+     * 다시 살아날 수 있지만, 환불과 그 회차 실패가 겹치는 드문 경우라 받아들인다.
+     */
+    private void revoke(String transactionId) {
+        repository.findByTransactionId(transactionId).ifPresent(credit -> {
+            int taken = credit.revokeUnused();
+            repository.save(credit);
+            log.info("환불된 크레딧 회수 — product={} userId={} taken={}", credit.getProductId(), credit.getUserId(), taken);
+            eventLogService.log(credit.getUserId(), AnalyticsEvent.CREDIT_REVOKED, credit.getProductId() + ":" + taken);
+        });
     }
 }

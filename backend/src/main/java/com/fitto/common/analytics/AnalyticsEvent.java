@@ -43,6 +43,8 @@ public final class AnalyticsEvent {
     public static final String SUBSCRIPTION_STARTED = "SUBSCRIPTION_STARTED";
     /** 크레딧 상품을 샀다 — detail 에 상품 id. */
     public static final String CREDIT_PURCHASED = "CREDIT_PURCHASED";
+    /** 환불된 크레딧 결제에서 안 쓴 크레딧을 거뒀다 — detail 에 "상품 id:거둔 수". */
+    public static final String CREDIT_REVOKED = "CREDIT_REVOKED";
 
     /* ── 입력 중 스티커 추천(2026-09-28) — 프론트가 보낸다(ClientAnalyticsEvent).
      * 노출 대비 선택으로 추천 표가 쓸모 있는지 본다. 원문 입력은 싣지 않는다. */

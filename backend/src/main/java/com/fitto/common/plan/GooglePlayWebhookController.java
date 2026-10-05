@@ -35,13 +35,16 @@ public class GooglePlayWebhookController {
 
     private final GooglePlayProperties properties;
     private final GooglePlaySubscriptionSyncService syncService;
+    private final FeatureCreditService creditService;
     private final ObjectMapper objectMapper;
 
     public GooglePlayWebhookController(GooglePlayProperties properties,
                                         GooglePlaySubscriptionSyncService syncService,
+                                        FeatureCreditService creditService,
                                         ObjectMapper objectMapper) {
         this.properties = properties;
         this.syncService = syncService;
+        this.creditService = creditService;
         this.objectMapper = objectMapper;
     }
 
@@ -54,6 +57,23 @@ public class GooglePlayWebhookController {
         }
 
         GooglePlayDeveloperNotification notification = decode(envelope);
+
+        /*
+         * 무효 결제(환불·지불 거절) — 일회성 상품이면 크레딧을 거두러 간다. 예전엔 이 알림을 읽지 않아 환불받은 사람이
+         * 크레딧을 그대로 썼다(docs/my-current-state.md §7-2). 구독 쪽은 구독 알림(REVOKED)도 따로 오지만,
+         * 같은 동기화를 한 번 더 돌려도 해가 없으니 그대로 태운다. 무효 여부는 각 서비스가 Play API 로 다시 확인한다.
+         */
+        if (notification != null && notification.voidedPurchaseNotification() != null
+                && notification.voidedPurchaseNotification().purchaseToken() != null) {
+            var voided = notification.voidedPurchaseNotification();
+            if (voided.productType() == 2) {
+                creditService.revokeIfVoidedOnGooglePlay(voided.purchaseToken());
+            } else {
+                syncService.sync(voided.purchaseToken());
+            }
+            return ResponseEntity.ok().build();
+        }
+
         String purchaseToken = notification == null || notification.subscriptionNotification() == null
                 ? null
                 : notification.subscriptionNotification().purchaseToken();

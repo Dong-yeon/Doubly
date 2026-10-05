@@ -70,6 +70,16 @@ public class FeatureCredit extends BaseTimeEntity {
         return Math.max(0, credits - used);
     }
 
+    /**
+     * 환불된 결제의 크레딧을 거둔다 — <b>아직 안 쓴 것만</b>. 이미 쓴 회차는 결과물(이모지)이 나갔으므로
+     * 되돌릴 방법이 없다. 묶음 크기를 쓴 만큼으로 줄여 남은 횟수를 0 으로 만들고, 거둔 수를 돌려준다.
+     */
+    public int revokeUnused() {
+        int taken = remaining();
+        credits = used;
+        return taken;
+    }
+
     /** 한 회 쓴다 — 남은 게 없으면 {@code false}. */
     public boolean consumeOne() {
         if (remaining() <= 0) {

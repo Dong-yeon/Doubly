@@ -5,6 +5,10 @@ import com.google.api.client.json.gson.GsonFactory;
 import com.google.api.services.androidpublisher.AndroidPublisher;
 import com.google.api.services.androidpublisher.AndroidPublisherScopes;
 import com.google.api.services.androidpublisher.model.ProductPurchase;
+import com.google.api.services.androidpublisher.model.ProductPurchasesAcknowledgeRequest;
+import com.google.api.services.androidpublisher.model.SubscriptionPurchasesAcknowledgeRequest;
+import com.google.api.services.androidpublisher.model.VoidedPurchase;
+import com.google.api.services.androidpublisher.model.VoidedPurchasesListResponse;
 import com.google.api.services.androidpublisher.model.SubscriptionPurchaseLineItem;
 import com.google.api.services.androidpublisher.model.SubscriptionPurchaseV2;
 import com.google.auth.http.HttpCredentialsAdapter;
@@ -86,7 +90,10 @@ public class GooglePlayDeveloperApiClient {
              */
             Integer state = purchase.getPurchaseState();
             boolean valid = state != null && state == 0;
-            return new StoreProductPurchase(productId, parseUserId(purchase.getObfuscatedExternalAccountId()), valid);
+            // acknowledgementState: 0 미승인 · 1 승인
+            boolean acknowledged = purchase.getAcknowledgementState() != null && purchase.getAcknowledgementState() == 1;
+            return new StoreProductPurchase(productId, parseUserId(purchase.getObfuscatedExternalAccountId()), valid,
+                    acknowledged);
         } catch (IOException e) {
             log.warn("Play Developer API 일회성 상품 조회 실패({}): {}", productId, e.getMessage());
             return null;
@@ -115,7 +122,92 @@ public class GooglePlayDeveloperApiClient {
         String productId = item == null ? null : item.getProductId();
 
         Long userId = parseUserId(purchase);
-        return new GooglePlaySubscriptionState(status, productId, expiresAt, autoRenew, userId);
+        boolean acknowledged = "ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED".equals(purchase.getAcknowledgementState());
+        return new GooglePlaySubscriptionState(status, productId, expiresAt, autoRenew, userId, acknowledged);
+    }
+
+    /**
+     * 구독 결제를 승인한다 — 앱이 {@code finishTransaction} 전에 꺼져도 3일 자동 환불을 막는다.
+     *
+     * <p>승인은 원래 앱 몫인데, 앱은 서버 검증이 끝난 뒤에만 승인한다(iap.ts). 그 사이 앱이 죽거나 사용자가
+     * 사흘 동안 앱을 안 열면 <b>PRO 는 이미 준 채로 돈만 돌려준다</b>. 검증을 통과한 결제는 서버가 바로
+     * 승인해 둔다. 이미 승인된 결제를 다시 승인해도 문제는 없지만, 호출부가 미승인일 때만 부른다.
+     *
+     * @return 승인했으면 true. 키가 없거나 실패하면 false(앱의 승인·다음 동기화가 남아 있다)
+     */
+    public boolean acknowledgeSubscription(String subscriptionId, String purchaseToken) {
+        AndroidPublisher publisher = clientOrNull();
+        if (publisher == null || subscriptionId == null || purchaseToken == null) {
+            return false;
+        }
+        try {
+            publisher.purchases().subscriptions()
+                    .acknowledge(properties.getPackageName(), subscriptionId, purchaseToken,
+                            new SubscriptionPurchasesAcknowledgeRequest())
+                    .execute();
+            return true;
+        } catch (IOException e) {
+            log.warn("Play 구독 승인 실패({}): {}", subscriptionId, e.getMessage());
+            return false;
+        }
+    }
+
+    /** 일회성 상품(크레딧) 결제를 승인한다 — {@link #acknowledgeSubscription} 과 같은 이유. 소모(consume)는 앱이 한다. */
+    public boolean acknowledgeProduct(String productId, String purchaseToken) {
+        AndroidPublisher publisher = clientOrNull();
+        if (publisher == null || productId == null || purchaseToken == null) {
+            return false;
+        }
+        try {
+            publisher.purchases().products()
+                    .acknowledge(properties.getPackageName(), productId, purchaseToken,
+                            new ProductPurchasesAcknowledgeRequest())
+                    .execute();
+            return true;
+        } catch (IOException e) {
+            log.warn("Play 일회성 상품 승인 실패({}): {}", productId, e.getMessage());
+            return false;
+        }
+    }
+
+    /** 무효 결제를 찾을 때 거슬러 보는 기간 — Play 가 보관하는 최대치(30일)와 같다. */
+    private static final long VOIDED_LOOKBACK_MS = 30L * 24 * 60 * 60 * 1000;
+
+    /**
+     * 이 결제가 무효(환불·지불 거절·취소)됐는가 — Voided Purchases API 로 확인한다.
+     *
+     * <p>RTDN 의 {@code voidedPurchaseNotification} 을 그대로 믿지 않고 여기서 다시 묻는다. 웹훅 인증이 공유 토큰뿐이라,
+     * 알림만 보고 크레딧을 회수하면 토큰이 새는 순간 남의 크레딧을 지울 수 있다.
+     *
+     * @return 무효면 true, 아니면 false, 조회 실패면 null
+     */
+    public Boolean isVoided(String purchaseToken) {
+        AndroidPublisher publisher = clientOrNull();
+        if (publisher == null || purchaseToken == null) {
+            return null;
+        }
+        try {
+            String pageToken = null;
+            do {
+                VoidedPurchasesListResponse page = publisher.purchases().voidedpurchases()
+                        .list(properties.getPackageName())
+                        .setStartTime(System.currentTimeMillis() - VOIDED_LOOKBACK_MS)
+                        .setToken(pageToken)
+                        .execute();
+                if (page.getVoidedPurchases() != null) {
+                    for (VoidedPurchase voided : page.getVoidedPurchases()) {
+                        if (purchaseToken.equals(voided.getPurchaseToken())) {
+                            return true;
+                        }
+                    }
+                }
+                pageToken = page.getTokenPagination() == null ? null : page.getTokenPagination().getNextPageToken();
+            } while (pageToken != null);
+            return false;
+        } catch (IOException e) {
+            log.warn("Play 무효 결제 조회 실패: {}", e.getMessage());
+            return null;
+        }
     }
 
     /**

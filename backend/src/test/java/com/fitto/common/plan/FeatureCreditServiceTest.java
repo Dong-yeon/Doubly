@@ -101,4 +101,95 @@ class FeatureCreditServiceTest {
                 .isInstanceOf(BusinessException.class);
         verify(googlePlayClient, never()).fetchProduct(anyString(), anyString());
     }
+
+    private FeatureCredit bought(int used) {
+        FeatureCredit credit = FeatureCredit.builder().userId(USER).feature(Feature.AI_COUPLE_EMOJI)
+                .store(Store.GOOGLE_PLAY).productId(PRODUCT).transactionId("token").credits(1).build();
+        for (int i = 0; i < used; i++) {
+            credit.consumeOne();
+        }
+        return credit;
+    }
+
+    /** 앱이 소모(consume) 전에 꺼지면 Google 이 3일 뒤 자동 환불한다 — 크레딧을 준 서버가 승인해 둔다(§7-2). */
+    @Test
+    void 미승인_Google_결제는_크레딧을_준_뒤_서버가_승인한다() {
+        when(googlePlayClient.fetchProduct(PRODUCT, "token"))
+                .thenReturn(new StoreProductPurchase(PRODUCT, USER, true, false));
+        when(repository.findByTransactionId("token")).thenReturn(Optional.empty());
+
+        service.verifyGoogle(USER, PRODUCT, "token");
+
+        verify(googlePlayClient).acknowledgeProduct(PRODUCT, "token");
+    }
+
+    @Test
+    void 이미_승인된_결제는_다시_승인하지_않는다() {
+        when(googlePlayClient.fetchProduct(PRODUCT, "token")).thenReturn(new StoreProductPurchase(PRODUCT, USER, true));
+        when(repository.findByTransactionId("token")).thenReturn(Optional.empty());
+
+        service.verifyGoogle(USER, PRODUCT, "token");
+
+        verify(googlePlayClient, never()).acknowledgeProduct(anyString(), anyString());
+    }
+
+    @Test
+    void 애플이_환불을_확인하면_안_쓴_크레딧을_거둔다() {
+        FeatureCredit credit = bought(0);
+        when(repository.findByTransactionId("tx")).thenReturn(Optional.of(credit));
+        when(appStoreClient.fetchTransaction("tx")).thenReturn(new StoreProductPurchase(PRODUCT, USER, false));
+
+        service.revokeIfRefundedOnAppStore("tx");
+
+        assertThat(credit.remaining()).isZero();
+        verify(repository).save(credit);
+        verify(eventLogService).log(USER, com.fitto.common.analytics.AnalyticsEvent.CREDIT_REVOKED, PRODUCT + ":1");
+    }
+
+    /** 웹훅 인증이 공유 토큰뿐이라, 알림만 믿고 거두면 토큰이 새는 순간 남의 크레딧을 지울 수 있다. */
+    @Test
+    void 애플이_아직_유효하다고_하면_알림이_와도_거두지_않는다() {
+        FeatureCredit credit = bought(0);
+        when(repository.findByTransactionId("tx")).thenReturn(Optional.of(credit));
+        when(appStoreClient.fetchTransaction("tx")).thenReturn(new StoreProductPurchase(PRODUCT, USER, true));
+
+        service.revokeIfRefundedOnAppStore("tx");
+
+        assertThat(credit.remaining()).isEqualTo(1);
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void 이미_쓴_크레딧은_거둘_게_없다() {
+        FeatureCredit credit = bought(1);
+        when(repository.findByTransactionId("token")).thenReturn(Optional.of(credit));
+        when(googlePlayClient.isVoided("token")).thenReturn(true);
+
+        service.revokeIfVoidedOnGooglePlay("token");
+
+        assertThat(credit.remaining()).isZero();
+        assertThat(credit.getUsed()).isEqualTo(1);
+        verify(eventLogService).log(USER, com.fitto.common.analytics.AnalyticsEvent.CREDIT_REVOKED, PRODUCT + ":0");
+    }
+
+    @Test
+    void Google_이_무효로_확인하지_않으면_거두지_않는다() {
+        FeatureCredit credit = bought(0);
+        when(repository.findByTransactionId("token")).thenReturn(Optional.of(credit));
+        when(googlePlayClient.isVoided("token")).thenReturn(null);   // 조회 실패 — 다음 알림을 기다린다
+
+        service.revokeIfVoidedOnGooglePlay("token");
+
+        assertThat(credit.remaining()).isEqualTo(1);
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void 우리가_준_적_없는_거래면_스토어에_묻지도_않는다() {
+        when(repository.findByTransactionId("other")).thenReturn(Optional.empty());
+
+        service.revokeIfVoidedOnGooglePlay("other");
+
+        verify(googlePlayClient, never()).isVoided(anyString());
+    }
 }

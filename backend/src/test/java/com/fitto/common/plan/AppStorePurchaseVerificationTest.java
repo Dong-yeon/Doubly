@@ -47,6 +47,8 @@ class AppStorePurchaseVerificationTest {
     ObjectMapper objectMapper;
     @MockitoBean
     AppStoreSubscriptionSyncService syncService;
+    @MockitoBean
+    FeatureCreditService creditService;
 
     private AuthUser register(String email) {
         Long userId = authService.register(
@@ -114,6 +116,25 @@ class AppStorePurchaseVerificationTest {
                 new AppStoreNotificationController.Envelope(jws("{\"notificationType\":\"TEST\"}")));
 
         assertThat(response.getStatusCode().value()).isEqualTo(200);
+        verify(syncService, never()).sync(any());
+    }
+
+    /**
+     * 크레딧 상품(우리 이모지 세트)의 환불 알림 — 예전엔 구독 동기화로 가서 404 로 끝났고 크레딧은 그대로였다(§7-2).
+     * 회수 여부는 creditService 가 애플에 되묻고 정한다. 키는 원 거래가 아니라 그 거래 id 다(크레딧 행의 키).
+     */
+    @Test
+    void 크레딧_상품_알림은_구독이_아니라_크레딧_회수로_보낸다() {
+        String transaction = jws("{\"transactionId\":\"3000000111\",\"originalTransactionId\":\"3000000100\","
+                + "\"productId\":\"emoji_set_1\"}");
+        String payload = jws("{\"notificationType\":\"REFUND\",\"data\":{\"signedTransactionInfo\":\""
+                + transaction + "\"}}");
+
+        var response = notificationController.receive("test-token",
+                new AppStoreNotificationController.Envelope(payload));
+
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
+        verify(creditService).revokeIfRefundedOnAppStore("3000000111");
         verify(syncService, never()).sync(any());
     }
 }

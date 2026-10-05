@@ -101,6 +101,11 @@ public class AppStoreSubscriptionSyncService {
                     mask(state.originalTransactionId()));
             return null;
         }
+        if (!SubscriptionProducts.grantsPro(state.productId())) {
+            // PRO 상품이 아니다 — 스토어가 돌려준 상품 id 로 판정한다(앱이 말한 상품을 믿지 않는다)
+            log.warn("PRO 상품이 아닌 구독은 만들지 않음 — productId={}", state.productId());
+            return null;
+        }
         if (state.status() != SubscriptionStatus.ACTIVE) {
             // 활성이 아닌 상태의 "첫" 알림(해지 직후 도착 등)은 새로 만들 이유가 없다.
             return null;

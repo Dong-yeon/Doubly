@@ -19,6 +19,18 @@
 > 남아 있던 "첫 조회 실패면 기본값 FREE 로 결제 버튼이 열림"은 플랜 화면에서 `isLoaded` 전엔 버튼을 "플랜 확인 중…"으로 잠갔다.
 > MY 는 조회 실패 시 받아 둔 값을 지우지 않고(뱃지 0개·카드 사라짐·신체 정보 '등록'으로 보이던 것), 한 번도 못 받은 카드는 숨기며
 > "기록 일부를 불러오지 못했어요 · 다시 시도" 한 줄을 띄운다. 생년월일 상한도 KST 날짜로(§7-5). 앱만 바뀜.
+> **후속 조치 (2026-10-05)**: §7-2 나머지 —
+> ① **구독 상품 허용 목록** `SubscriptionProducts.PRO`(pro_monthly·pro_yearly) 밖이면 구독을 만들지 않는다. 앱 `constants/config.ts` 와는
+> `StoreProductIdSyncTest` 가 대조(build.gradle `frontendSyncSources` 에 config.ts 추가).
+> ② **Google 서버 승인** — 검증을 통과한 미승인 결제를 서버가 acknowledge(구독 `acknowledgeSubscription`, 크레딧 `acknowledgeProduct`).
+> 앱이 승인 전에 꺼져 3일 자동 환불(PRO·크레딧은 받고 돈은 돌려받음)되던 구멍. 소모(consume)는 여전히 앱.
+> ③ **크레딧 환불 회수** — 애플 REFUND(크레딧 상품이면 구독 대신 `revokeIfRefundedOnAppStore`, `fetchTransaction` 의 revocationDate 로 재확인)·
+> Google `voidedPurchaseNotification`(productType 2 → `revokeIfVoidedOnGooglePlay`, Voided Purchases API 로 재확인). 안 쓴 크레딧만 거두고
+> `CREDIT_REVOKED` 를 남긴다. 알림 본문만으로는 거두지 않는다(웹훅 인증이 공유 토큰뿐이라).
+> **일부러 안 한 것**: 웹훅 인증 강화(본문을 판정에 쓰지 않고 스토어에 되묻으므로 토큰이 새도 최악은 재조회 유발 — Google OIDC 는
+> Pub/Sub 콘솔 설정이 필요), `requireCapacity` 경합(TOTAL 한도를 동시에 1개 넘는 정도, 고치려면 잠금·카운터 테이블),
+> refund 의 카운터 키 재선택(플랜 전환과 실패가 겹칠 때만), Redis 부재 시 인메모리 카운터(운영엔 Redis 가 있다),
+> 월→연 전환(새 토큰으로 새 행, 옛 행은 RTDN 으로 만료 — PRO 는 끊기지 않는다), 스티커 팩 환불(낱개 판매 0개 — 판매를 재개하면 ③과 같은 방식).
 > **후속 조치 (2026-10-04)**: §7-2 구독 동시 검증 500 — 구글·애플 sync 에서 메서드 트랜잭션을 걷고, 스토어 조회는
 > 트랜잭션 밖, 저장은 `saveAndFlush` 트랜잭션 안에서 한다. 유니크에 막히면 새 트랜잭션에서 한 번 더(먼저 생긴 행에 상태만
 > 반영, `JournalService.save` 와 같은 방식). `SUBSCRIPTION_STARTED` 는 커밋 뒤 실제로 만든 쪽만 남긴다(예전엔
