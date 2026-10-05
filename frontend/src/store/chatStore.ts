@@ -18,6 +18,7 @@ import {
 } from '../api/chatSocket';
 import type { ChatMessage, ChatRoom } from '../types';
 import { fetchUntilBridged, isUnsent, mergeSynced, newestKnownId } from '../utils/chatSync';
+import { toast } from './toastStore';
 
 interface ChatState {
   rooms: ChatRoom[];
@@ -60,7 +61,7 @@ interface ChatState {
    *
    * <p>발행 뒤에도 끝이 아니다. 서버가 거절하면(/user/queue/chat-errors) 말풍선이 "보내지 못했어요"로 바뀌고,
    * 거절도 에코도 없이 CONFIRM_TIMEOUT_MS 가 지나면 한 번 따라잡아 본 뒤 그래도 없으면 같은 표시를 한다.
-   * 말풍선이 없는 전송(사진·음성)의 거절은 {@code sendNotice} 로 알린다.
+   * 말풍선이 없는 전송(사진·음성·식단 카드)의 거절은 토스트로 알린다 — 채팅방 밖(럽바디)에서 보낸 것도 보이도록 화면이 아니라 여기서 띄운다.
    *
    * @returns 발행 성공 여부. false 면 낙관적 말풍선은 이미 걷어냈다(화면이 글을 되돌린다)
    */
@@ -69,11 +70,7 @@ interface ChatState {
   retrySend: (relationId: number, clientMessageId: string) => Promise<boolean>;
   /** 보내지 못한 말풍선을 화면에서 지운다(서버엔 원래 없다). */
   discardUnsent: (relationId: number, clientMessageId: string) => void;
-  /**
-   * 말풍선 없이 보낸 것(사진·음성 등)이 거절됐다는 알림 — 화면이 토스트로 띄운다. id 는 같은 문구가 연달아
-   * 와도 효과가 다시 돌게 하는 값이다.
-   */
-  sendNotice: { id: number; message: string } | null;
+
   markRead: (messageId: number) => Promise<void>;
   /** REST 응답으로 받은 메시지를 목록에서 제자리 교체 (리액션·수정·삭제) */
   replaceMessage: (relationId: number, updated: ChatMessage) => void;
@@ -93,7 +90,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
   hasMoreOlder: {},
   pinnedMessages: {},
   activeRoomId: null,
-  sendNotice: null,
 
   loadRooms: async () => {
     set({ loadingRooms: true });
@@ -470,7 +466,7 @@ function armConfirmTimer(key: string) {
 
 /*
  * 서버 거절 — 내가 보낸 키만 짝짓는다(같은 계정의 다른 기기 거절도 오지만 outbox 에 없다).
- * 말풍선이 있으면 그 자리에서 "보내지 못했어요", 없으면(사진·음성) 화면이 토스트로 띄울 알림을 남긴다.
+ * 말풍선이 있으면 그 자리에서 "보내지 못했어요", 없으면(사진·음성·식단 카드) 토스트.
  */
 onSendError((e) => {
   const key = e.clientMessageId;
@@ -482,7 +478,7 @@ onSendError((e) => {
     return;
   }
   settle(key);
-  useChatStore.setState({ sendNotice: { id: Date.now(), message: e.message } });
+  toast.error(e.message);
 });
 
 /*

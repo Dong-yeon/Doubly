@@ -50,6 +50,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useRelationStore } from '../../store/relationStore';
 import { haptics } from '../../utils/haptics';
 import { pickImages, releaseObjectUrl, shrinkUnknownImage, uploadImage } from '../../utils/imageUpload';
+import { cardImageUrl, thumbnailUrl } from '../../utils/imageUrl';
 import { isCoarsePointer } from '../../utils/pointer';
 import { useImageDrop } from '../../hooks/useImageDrop';
 import { uploadChatVoice } from '../../utils/chatVoiceUpload';
@@ -186,6 +187,13 @@ const GROUP_GAP_MS = 5 * 60 * 1000;
  */
 const MAX_CHAT_IMAGES = 5;
 
+/**
+ * 채팅 사진 업로드 전 장변 상한(px). 갤러리 피커는 압축률(quality 0.7)만 낮출 뿐 화소는 원본 그대로라
+ * 12MP 사진이 수 MB 로 올라갔다(docs/chat-current-state.md §4-1). 2048 이면 폰 화면 전체로 펼쳐도
+ * 뭉개지지 않으면서 용량은 몇 분의 일이다. 붙여넣기·드래그는 이미 1600 으로 줄여 들어온다(onDroppedImage).
+ */
+const CHAT_PHOTO_MAX_SIDE = 2048;
+
 /*
  * 입력바 치수 — 카톡 채팅방 캡처(iPhone 15, 2026-10-01) 실측을 pt 로 옮긴 값. 근거는
  * docs/CHAT_INPUT_KAKAO_RATIO_2026-10-01.md. 스타일 여러 곳이 서로 맞물려 있어 이름을 둔다.
@@ -297,14 +305,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     discardUnsent,
   } = useChatStore();
   const socketConnected = useChatStore((s) => s.connected);
-  /*
-   * 말풍선 없이 보낸 것(사진·음성)이 서버에서 거절됐다 — 업로드는 끝났는데 메시지가 안 생긴 경우라 그대로 두면
-   * 사용자는 보낸 줄 안다(chatStore.sendNotice). 말풍선이 있는 것은 그 자리에 "보내지 못했어요"가 뜬다.
-   */
-  const sendNotice = useChatStore((s) => s.sendNotice);
-  useEffect(() => {
-    if (sendNotice) toast.error(sendNotice.message);
-  }, [sendNotice]);
+
   /*
    * "연결 중이에요" 띠는 끊긴 상태가 잠깐 이어질 때만 띄운다. 앱으로 돌아올 때마다
    * 소켓은 새로 붙는데(백그라운드에서 OS 가 끊는다), 보통 1초 안에 붙는 그 사이에도
@@ -1783,7 +1784,15 @@ export function ChatRoomScreen({ navigation, route }: Props) {
       for (const uri of uris) {
         const label =
           uris.length > 1 ? `사진 보내는 중… (${sent + 1}/${uris.length})` : '사진 보내는 중…';
-        const url = await runBusy(label, () => uploadImage(uri));
+        const url = await runBusy(label, async () => {
+          // 줄인 사본을 올린다 — 미리보기·못 보낸 사진 복원은 원본 uri 를 그대로 쓴다
+          const prepared = await shrinkUnknownImage(uri, CHAT_PHOTO_MAX_SIDE);
+          try {
+            return await uploadImage(prepared);
+          } finally {
+            if (prepared !== uri) releaseObjectUrl(prepared);
+          }
+        });
         const ok = await send(relationId, { messageType: 'IMAGE', imageUrl: url });
         if (!ok) {
           Alert.alert('전송 실패', '연결이 끊겼어요. 잠시 후 다시 시도해주세요.');
@@ -2129,7 +2138,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               accessibilityLabel="캐치마인드 열기"
               style={({ pressed }) => (pressed ? styles.imagePressed : undefined)}
             >
-              <Image source={{ uri: item.imageUrl! }} style={chatStyles.msgImage} resizeMode="cover" />
+              <Image source={{ uri: thumbnailUrl(item.imageUrl!, 200) }} style={chatStyles.msgImage} resizeMode="cover" />
               {/*
                 캡션이 그대로 안내가 된다("…시작해보세요") — 새 배지나 색을 들이지 않는다.
                 말풍선 배경 위 글자색은 20개 팔레트 전부 검증된 chat.meta 뿐이다
@@ -2152,7 +2161,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               accessibilityRole="imagebutton"
               accessibilityLabel="사진 크게 보기"
             >
-              <Image source={{ uri: item.imageUrl! }} style={chatStyles.msgImage} resizeMode="cover" />
+              <Image source={{ uri: thumbnailUrl(item.imageUrl!, 200) }} style={chatStyles.msgImage} resizeMode="cover" />
             </Pressable>
             {/*
               * 캡션 — 사용자가 보내는 사진에는 본문이 없고(ChatService.send), 지금은 캐치마인드
@@ -2193,7 +2202,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
                 accessibilityRole="imagebutton"
                 accessibilityLabel="식단 사진 크게 보기"
               >
-                <Image source={{ uri: item.imageUrl }} style={styles.mealImage} resizeMode="cover" />
+                <Image source={{ uri: cardImageUrl(item.imageUrl, 208) }} style={styles.mealImage} resizeMode="cover" />
               </Pressable>
             ) : null}
             {item.content ? (
