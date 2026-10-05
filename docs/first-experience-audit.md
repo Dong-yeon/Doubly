@@ -120,6 +120,10 @@ fingerprint 일치 확인, iOS 업데이트 그룹 `32771986`·Android `b5bdab01
 
 **2026-10-05 — #2 딥링크 1단계 (빌드 없이)**
 
+소개 사이트 `/i/CODE` 배포 확인 뒤 production OTA 완료(2026-10-05, 소스 `22ad1f32`, 1.0.6 빌드 대상 — fingerprint 일치,
+iOS 업데이트 그룹 `f7c26a04`·Android `c1b36ef8`). 소개 사이트는 **Git 자동 배포가 아니다** — `landing/` 을 Netlify 에 직접 올린다.
+주 체크아웃이 뒤처져 있으면 옛 파일이 올라가므로 `git archive origin/main landing` 으로 뽑은 폴더를 올린다.
+
 - **초대 문구:** `https://dubly.co.kr/i/CODE` 링크와 코드를 함께 보냅니다 (`CoupleConnectScreen.onShare`).
 - **소개 사이트 `/i/CODE`** (`landing/invite.html`, `_redirects`): 코드를 크게 보여 주고 세 가지로 잇습니다.
   - "앱에서 열기": 지금 빌드에도 있는 `doubly://couple/connect/CODE` 스킴입니다.
