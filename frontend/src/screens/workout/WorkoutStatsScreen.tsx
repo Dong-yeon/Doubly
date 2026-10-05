@@ -21,9 +21,9 @@ import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 
 const CAT_COLORS: Record<string, string> = {
-  근력: colors.primary,
-  유산소: colors.secondary,
-  유연성: colors.accent,
+  근력: colors.chart1,
+  유산소: colors.chart2,
+  유연성: colors.chart3,
 };
 
 export function WorkoutStatsScreen() {
@@ -194,7 +194,7 @@ function DeepStatsSection({ deep }: { deep: WorkoutDeepStats }) {
             <View key={m.muscleGroup} style={styles.catRow}>
               <Text style={styles.catName} numberOfLines={1}>{m.muscleGroup}</Text>
               <View style={styles.barTrack}>
-                <View style={[styles.barFill, { width: `${(m.sharePercent / maxShare) * 100}%`, backgroundColor: colors.secondary }]} />
+                <View style={[styles.barFill, { width: `${(m.sharePercent / maxShare) * 100}%`, backgroundColor: colors.chart2 }]} />
               </View>
               <Text style={styles.catCount}>{m.sharePercent}%</Text>
             </View>

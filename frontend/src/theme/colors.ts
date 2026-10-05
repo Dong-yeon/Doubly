@@ -3,8 +3,9 @@
  * 바탕은 <b>흰색</b>이고, 색은 <b>액센트에만</b> 쓴다 — 아이콘·선택 상태·소유자 구분:
  *   나 = Gold, 상대 = Green, 함께 = Olive. 크롬(버튼·활성탭·링크)은 Green.
  *
- * 아래 "호환 별칭"은 기존 코드(수십 개 파일)가 참조하던 키를 새 팔레트로 매핑해
- * 앱 전체가 한 번에 리스킨되도록 한다. (constants/theme.ts 가 이 파일을 re-export)
+ * 소유자 색(me·partner·together)은 <b>"누구 것"에만</b> 쓴다. 다른 뜻(캘린더 종류·요일·차트·성취)은
+ * 아래 "목적 토큰"을 쓴다 — 예전의 coral·indigo·violet·accent·secondary 별칭은 2026-10-05 에 걷었다.
+ * (constants/theme.ts 가 이 파일을 re-export)
  *
  * ── 여기까지 온 경위 ─────────────────────────────────────────────
  * Coral/Indigo(빨강+파랑) → 국내에서 정당 색으로 읽힐 소지가 있어 교체.
@@ -37,9 +38,6 @@ const light = {
   // ── Doubly 코어 ──────────────────────────────────────────────
   cream: '#FFFFFF', // (구 크림) 지금은 순백 — 키 이름은 호환을 위해 유지
   ink: '#1A1D1A',
-  coral: '#8A6817', // 나 (Gold) — 키 이름은 호환을 위해 유지
-  indigo: '#2C7D33', // 상대 (Green)
-  violet: '#59772D', // 함께 (Olive)
 
   // ── Duo 시맨틱 (나/상대/함께) ─────────────────────────────────
   me: '#8A6817',
@@ -145,16 +143,40 @@ const light = {
   // 바깥이 오히려 밝아져 관계가 뒤집힌다(dark 쪽 값 참고). components/AppShell.web.tsx.
   shellBackdrop: '#EDEEEB',
 
-  // ── 호환 별칭 (기존 키 → Doubly 팔레트) ───────────────────────
-  couple: '#8A6817', // 커플 대표 → gold
-  food: '#59772D', // (구 amber) → olive
-  health: '#2C7D33', // (구 green) → green
   primarySoft: '#E9F2EA', // = primaryBg
-  secondary: '#2C7D33', // 보조 액센트 → green
-  secondarySoft: '#E8F3E9',
-  accent: '#59772D', // 하이라이트/포인트 → olive
-  accentSoft: '#EFF4E4',
   textTertiary: '#767C76',
+
+  /*
+   * ── 목적 토큰 (2026-10-05, docs/color-redesign-viewer-based_2026-10-05.md 1단계) ──
+   * 예전엔 coral·indigo·violet·accent·secondary·couple 같은 <b>소유자 색의 별칭</b>을 캘린더 종류·요일·
+   * 차트·성취에 빌려 썼다. 그러면 나/상대 색을 바꾸는 순간 "생일"이 내 색이 되고 "토요일"이 상대 색이 된다.
+   * 뜻마다 키를 따로 둔다 — 값은 지금 화면에 보이던 그대로(이번 단계는 화면을 바꾸지 않는다).
+   * 액센트 변형(mint·peach)은 이 키들을 덮지 않는다 — 변형은 2단계에서 폐지한다(결정 D2).
+   */
+  /** 캘린더 일정 종류 — 소유자 색과 무관(결정 D3: 지금 값 유지) */
+  eventAnniversary: '#59772D',
+  eventBirthday: '#8A6817',
+  eventDate: '#2C7D33',
+  /** 성취 — PR·목표 카드, 스트릭 불꽃, 배지. 누가 했든 같은 금색 */
+  achievement: '#8A6817',
+  achievementBg: '#F6E2B2', // 위에는 ink 글자
+  /** 주의 — 장애 공지 배너 */
+  warning: '#8A6817',
+  warningBg: '#FBF3DF',
+  /** 달력 요일 */
+  sunday: '#E12D33', // = danger
+  saturday: '#2C7D33',
+  /** 차트 계열 — 소유자 색과 무관한 데이터 구분 */
+  chart1: '#2A7731',
+  chart2: '#2C7D33',
+  chart3: '#59772D',
+  chart4: '#8A6817',
+  /** 입력 별점(만족도) — 럽슐랭의 나/상대 별은 소유자 색을 그대로 쓴다 */
+  rating: '#59772D',
+  /** 지도 핀·경로 */
+  mapPin: '#E12D33',
+  /** 강조 카드 바탕(프로그램·추천 카드) — 위에는 ink 글자 */
+  highlightBg: '#EFF4E4',
   // 기능색(체크·완료). 브랜드 초록과 구분되도록 더 푸른 쪽으로 민다
   success: '#1E8652', // white 위 4.58 — 2026-09-25 대비 검증(예전 #1F8A55 는 4.35)
   // success 의 연한 배경 — 정산 완료 배너 등. 하드코딩 민트(#E7F5EE)가
@@ -179,9 +201,6 @@ const light = {
 const dark: typeof light = {
   cream: '#FFFFFF',
   ink: '#ECEEEA',
-  coral: '#F1C999', // 나 (Gold) — 파스텔
-  indigo: '#A7D2A9', // 상대 (Sage) — 파스텔
-  violet: '#C9DA97', // 함께 (Lime) — 파스텔
 
   me: '#F1C999',
   meBg: '#332811',
@@ -247,15 +266,26 @@ const dark: typeof light = {
   // 유지하려면 다크에서는 바깥을 더 낮춰야 한다.
   shellBackdrop: '#141613',
 
-  couple: '#F1C999',
-  food: '#C9DA97',
-  health: '#A7D2A9',
   primarySoft: '#12211A', // = primaryBg
-  secondary: '#A7D2A9',
-  secondarySoft: '#1D2E1F',
-  accent: '#C9DA97',
-  accentSoft: '#2A2F19',
   textTertiary: '#868C84',
+
+  // 목적 토큰 — 라이트 주석 참고. 지금 다크 화면에 보이던 값 그대로
+  eventAnniversary: '#C9DA97',
+  eventBirthday: '#F1C999',
+  eventDate: '#A7D2A9',
+  achievement: '#F1C999',
+  achievementBg: '#332811',
+  warning: '#F1C999',
+  warningBg: '#332811',
+  sunday: '#F25A5F', // = danger
+  saturday: '#A7D2A9',
+  chart1: '#459E77',
+  chart2: '#A7D2A9',
+  chart3: '#C9DA97',
+  chart4: '#F1C999',
+  rating: '#C9DA97',
+  mapPin: '#F25A5F',
+  highlightBg: '#2A2F19',
   success: '#3FBF80',
   // 다크 success 배경 — success(#3FBF80) 텍스트가 위에서 4.5:1 이상 나오는 어두운 그린
   successBg: '#1C3327',
@@ -300,16 +330,12 @@ const ACCENT_OVERRIDES: Record<Exclude<AccentVariant, 'green'>, Record<Scheme, P
       partner: '#2E7A61', partnerBg: '#E7F8F3', partnerPastelBg: '#BAEEDC', partnerText: '#2E7A61', partnerFill: '#5EC9A6',
       together: '#487A2E', togetherBg: '#EDF8E7', togetherPastelBg: '#CBEEBA', togetherText: '#487A2E', togetherFill: '#82C95E',
       primary: '#2E7A61', primaryDark: '#225946', primaryLight: '#45B590', primaryFill: '#49CAA5', primaryBg: '#E9F7F2', primarySoft: '#E9F7F2',
-      coral: '#8C6918', indigo: '#2E7A61', violet: '#487A2E', couple: '#8C6918', food: '#487A2E', health: '#2E7A61',
-      secondary: '#2E7A61', secondarySoft: '#E7F8F3', accent: '#487A2E', accentSoft: '#EDF8E7',
     },
     dark: {
       me: '#E6D3A8', meBg: '#322915', mePastelBg: '#322915', meText: '#E6D3A8', meFill: '#E6D3A8',
       partner: '#A8E6D1', partnerBg: '#153228', partnerPastelBg: '#153228', partnerText: '#A8E6D1', partnerFill: '#A8E6D1',
       together: '#BDE6A8', togetherBg: '#1F3215', togetherPastelBg: '#1F3215', togetherText: '#BDE6A8', togetherFill: '#BDE6A8',
       primary: '#439D80', primaryDark: '#347962', primaryLight: '#62BC9E', primaryFill: '#62BC9E', primaryBg: '#0F241D', primarySoft: '#0F241D',
-      coral: '#E6D3A8', indigo: '#A8E6D1', violet: '#BDE6A8', couple: '#E6D3A8', food: '#BDE6A8', health: '#A8E6D1',
-      secondary: '#A8E6D1', secondarySoft: '#153228', accent: '#BDE6A8', accentSoft: '#1F3215',
     },
   },
   peach: {
@@ -318,16 +344,12 @@ const ACCENT_OVERRIDES: Record<Exclude<AccentVariant, 'green'>, Record<Scheme, P
       partner: '#407749', partnerBg: '#E7F8EA', partnerPastelBg: '#BAEEC2', partnerText: '#407749', partnerFill: '#6EB97B',
       together: '#7A6B1F', togetherBg: '#F8F5E7', togetherPastelBg: '#EEE5BA', togetherText: '#7A6B1F', togetherFill: '#DAC24E',
       primary: '#407749', primaryDark: '#305A37', primaryLight: '#60A96C', primaryFill: '#62B16B', primaryBg: '#E9F7EB', primarySoft: '#E9F7EB',
-      coral: '#B74E1A', indigo: '#407749', violet: '#7A6B1F', couple: '#B74E1A', food: '#7A6B1F', health: '#407749',
-      secondary: '#407749', secondarySoft: '#E7F8EA', accent: '#7A6B1F', accentSoft: '#F8F5E7',
     },
     dark: {
       me: '#E6BDA8', meBg: '#321F15', mePastelBg: '#321F15', meText: '#E6BDA8', meFill: '#E6BDA8',
       partner: '#A8E6B2', partnerBg: '#15321A', partnerPastelBg: '#15321A', partnerText: '#A8E6B2', partnerFill: '#A8E6B2',
       together: '#E6DBA8', togetherBg: '#322D15', togetherPastelBg: '#322D15', togetherText: '#E6DBA8', togetherFill: '#E6DBA8',
       primary: '#45A154', primaryDark: '#347940', primaryLight: '#62BC71', primaryFill: '#62BC71', primaryBg: '#0F2413', primarySoft: '#0F2413',
-      coral: '#E6BDA8', indigo: '#A8E6B2', violet: '#E6DBA8', couple: '#E6BDA8', food: '#E6DBA8', health: '#A8E6B2',
-      secondary: '#A8E6B2', secondarySoft: '#15321A', accent: '#E6DBA8', accentSoft: '#322D15',
     },
   },
 };

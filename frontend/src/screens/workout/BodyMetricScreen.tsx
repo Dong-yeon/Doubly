@@ -398,7 +398,7 @@ const styles = themedStyles((colors) => ({
   summaryValue: { fontSize: 40, fontWeight: '800', color: colors.textPrimary, marginTop: spacing.xs },
   summaryDelta: { fontSize: fontSize.body, fontWeight: '800', marginTop: spacing.xs },
   deltaDown: { color: colors.success },
-  deltaUp: { color: colors.accent },
+  deltaUp: { color: colors.textSecondary },
   chart: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,

@@ -30,6 +30,15 @@ const TYPE_ICON: Record<CalendarEventType, { name: IconName; label: string }> = 
   ETC: { name: 'calendar-month-outline', label: '일정' },
 };
 
+/** 캘린더 화면(CoupleCalendarScreen typeMeta)과 같은 종류색 — 렌더 시점에 팔레트를 읽는다 */
+const typeColor = (type: CalendarEventType): string =>
+  ({
+    ANNIVERSARY: colors.eventAnniversary,
+    BIRTHDAY: colors.eventBirthday,
+    DATE: colors.eventDate,
+    ETC: colors.textSecondary,
+  })[type];
+
 interface Props {
   event: CoupleCalendarEvent;
   onPress: () => void;
@@ -54,7 +63,7 @@ export function EventPeek({ event, onPress }: Props) {
       accessibilityLabel={`${badge} ${event.title} 캘린더에서 보기`}
     >
       <View style={styles.iconBox}>
-        <MaterialCommunityIcons name={type.name} size={19} color={colors.coral} />
+        <MaterialCommunityIcons name={type.name} size={19} color={typeColor(event.eventType)} />
       </View>
 
       <View style={styles.body}>

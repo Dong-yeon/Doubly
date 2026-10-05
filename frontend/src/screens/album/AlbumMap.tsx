@@ -48,7 +48,7 @@ export function AlbumMap({ places, loading, error, truncated, filtered, onPressP
           lat: p.lat,
           lng: p.lng,
           title: p.name,
-          color: colors.coral,
+          color: colors.mapPin,
           imageUrl: cover ? thumbnailUrl(cover, 52) : undefined,
           count,
         };

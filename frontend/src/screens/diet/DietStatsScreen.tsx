@@ -86,7 +86,7 @@ export function DietStatsScreen() {
                   <View
                     style={[
                       styles.barFill,
-                      { height: `${(d.calories / maxCal) * 100}%`, backgroundColor: d.completed ? colors.accent : colors.surfaceAlt },
+                      { height: `${(d.calories / maxCal) * 100}%`, backgroundColor: d.completed ? colors.success : colors.surfaceAlt },
                     ]}
                   />
                 </View>
@@ -273,8 +273,8 @@ const styles = themedStyles((colors) => ({
   trendRow: { flexDirection: 'row', alignItems: 'flex-end', height: 90, gap: 1 },
   trendCol: { flex: 1, flexDirection: 'row', alignItems: 'flex-end', gap: 1, height: '100%' },
   trendBar: { flex: 1, borderRadius: 1, minHeight: 1 },
-  trendSodium: { backgroundColor: colors.indigo },
-  trendSugar: { backgroundColor: colors.coral },
+  trendSodium: { backgroundColor: colors.chart2 },
+  trendSugar: { backgroundColor: colors.chart4 },
   legendRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
 }));

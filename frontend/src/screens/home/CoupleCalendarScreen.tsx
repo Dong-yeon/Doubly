@@ -67,9 +67,9 @@ const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 /** 렌더 시점에 현재 팔레트를 읽는다 — 객체로 굳히면 테마 전환을 못 따라온다 */
 const typeMeta = (type: CalendarEventType): { label: string; color: string } =>
   ({
-    ANNIVERSARY: { label: '기념일', color: colors.violet },
-    BIRTHDAY: { label: '생일', color: colors.coral },
-    DATE: { label: '데이트', color: colors.indigo },
+    ANNIVERSARY: { label: '기념일', color: colors.eventAnniversary },
+    BIRTHDAY: { label: '생일', color: colors.eventBirthday },
+    DATE: { label: '데이트', color: colors.eventDate },
     ETC: { label: '기타', color: colors.textSecondary },
   })[type];
 
@@ -622,7 +622,7 @@ export function CoupleCalendarScreen({ navigation }: Props) {
               onPress={() => navigation.navigate('TripDetail', { tripId: trip.id, title: trip.title })}
             >
               <Card elevation="sm" style={styles.eventCard}>
-                <View style={[styles.typeBar, { backgroundColor: colors.accent }]} />
+                <View style={[styles.typeBar, { backgroundColor: colors.together }]} />
                 <View style={styles.eventBody}>
                   <View style={styles.eventTitleRow}>
                     <Text style={styles.eventTitle} numberOfLines={1}>
@@ -664,7 +664,7 @@ export function CoupleCalendarScreen({ navigation }: Props) {
                 }
               >
                 <Card elevation="sm" style={styles.eventCard}>
-                  <View style={[styles.typeBar, { backgroundColor: colors.violet }]} />
+                  <View style={[styles.typeBar, { backgroundColor: colors.together }]} />
                   <View style={styles.eventBody}>
                     <View style={styles.eventTitleRow}>
                       <Text style={styles.eventTitle} numberOfLines={1}>
@@ -748,14 +748,14 @@ export function CoupleCalendarScreen({ navigation }: Props) {
                       <View
                         style={[
                           styles.ddayBadge,
-                          event.dday === 0 && { backgroundColor: colors.coral },
+                          event.dday === 0 && { backgroundColor: colors.achievement },
                         ]}
                       >
                         <Text
                           // 다크의 coral 은 파스텔이라 흰 글자가 1.55:1 이었다 — 배경 휘도로 고른다
                           style={[
                             styles.ddayText,
-                            event.dday === 0 && { color: onColor(colors.coral) },
+                            event.dday === 0 && { color: onColor(colors.achievement) },
                           ]}
                         >
                           {ddayLabel(event.dday, ongoing)}
@@ -942,7 +942,7 @@ export function CoupleCalendarScreen({ navigation }: Props) {
                         onValueChange={(v) =>
                           setForm((f) => (f ? { ...f, visibility: v ? 'PRIVATE' : 'PERSONAL' } : f))
                         }
-                        trackColor={{ true: colors.coral }}
+                        trackColor={{ true: colors.primary }}
                       />
                     </View>
                   ) : null}
@@ -958,7 +958,7 @@ export function CoupleCalendarScreen({ navigation }: Props) {
                       onValueChange={(v) =>
                         setForm((f) => (f ? { ...f, repeatYearly: v, endDate: v ? '' : f.endDate } : f))
                       }
-                      trackColor={{ true: colors.coral }}
+                      trackColor={{ true: colors.primary }}
                     />
                   </View>
 
@@ -1031,7 +1031,7 @@ const styles = themedStyles((colors) => ({
   cellSelected: { backgroundColor: colors.surfaceAlt },
   // 여행 기간 띠 — 없는 날도 같은 높이를 차지해 그리드 행 높이가 흔들리지 않는다
   tripBar: { alignSelf: 'stretch', height: 3, marginTop: 3, borderRadius: 2 },
-  tripBarOn: { backgroundColor: colors.accent },
+  tripBarOn: { backgroundColor: colors.together },
   dayWrap: {
     width: 28,
     height: 28,
@@ -1060,7 +1060,7 @@ const styles = themedStyles((colors) => ({
     height: 6,
     borderRadius: 3,
     borderWidth: 1.5,
-    borderColor: colors.violet,
+    borderColor: colors.together,
   },
 
   listHeader: {

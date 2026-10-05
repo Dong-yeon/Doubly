@@ -66,7 +66,7 @@ export function PushPermissionPrimer() {
       <View style={styles.backdrop}>
         <View style={styles.card}>
           <View style={styles.iconCircle}>
-            <MaterialCommunityIcons name="bell-ring-outline" size={40} color={colors.violet} />
+            <MaterialCommunityIcons name="bell-ring-outline" size={40} color={colors.together} />
           </View>
           <Text style={styles.title}>알림을 받을까요?</Text>
           <Text style={styles.desc}>

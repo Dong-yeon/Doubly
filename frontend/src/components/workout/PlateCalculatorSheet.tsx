@@ -154,7 +154,7 @@ const styles = themedStyles((colors) => ({
     alignItems: 'center',
   },
   plateText: { fontSize: fontSize.body, fontWeight: '800', color: colors.primary },
-  remainder: { fontSize: fontSize.caption, color: colors.coral },
+  remainder: { fontSize: fontSize.caption, color: colors.warning },
   hint: { fontSize: fontSize.caption, color: colors.textSecondary, paddingVertical: spacing.md },
 
   close: { alignItems: 'center', paddingVertical: spacing.sm },

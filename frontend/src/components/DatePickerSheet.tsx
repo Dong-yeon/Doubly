@@ -321,8 +321,8 @@ const styles = themedStyles((colors) => ({
     fontWeight: '700',
     color: colors.textSecondary,
   },
-  sun: { color: colors.danger },
-  sat: { color: colors.indigo },
+  sun: { color: colors.sunday },
+  sat: { color: colors.saturday },
 
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
   // 7칸 고정 — flex 대신 퍼센트를 써야 줄바꿈이 정확히 7개마다 일어난다

@@ -69,7 +69,7 @@ export function TripPeek({ trip, onPress }: Props) {
         <Image source={{ uri: trip.coverImageUrl }} style={styles.thumb} />
       ) : (
         <View style={styles.iconBox}>
-          <MaterialCommunityIcons name="airplane" size={19} color={colors.accent} />
+          <MaterialCommunityIcons name="airplane" size={19} color={colors.together} />
         </View>
       )}
 
@@ -109,7 +109,7 @@ const styles = themedStyles((colors) => ({
     borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.accentSoft,
+    backgroundColor: colors.togetherBg,
   },
   body: { flex: 1 },
   meta: { color: colors.textSecondary, fontSize: fontSize.micro, fontWeight: '700' },
