@@ -41,5 +41,6 @@ public enum ClientAnalyticsEvent {
     /** 저장 성공 — detail: new|edit|sheet;t=열린 뒤 초;i=항목 수;p=사진;d=같이 먹기;a=자동 분석 예정 */
     MEAL_RECORD_SAVED,
     /** 저장하지 않고 나감 — detail: new|edit;t=초;i=적어 둔 항목 수;p=사진 */
-    MEAL_RECORD_ABANDONED;
+    MEAL_RECORD_ABANDONED,
+    CHAT_SOCKET_SLOW;
 }
