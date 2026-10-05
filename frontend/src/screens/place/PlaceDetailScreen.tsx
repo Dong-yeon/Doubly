@@ -9,11 +9,10 @@
  * 않는다(바뀌는 건 avgRating 숫자뿐). 즉 "다녀왔으니 별 다섯 개"라는 가장 자연스러운 동선을
  * 밟은 사람은 럽슐랭을 한 곳도 만들지 못했다.
  *
- * <p>그래서 <b>"다녀왔어요" 하나</b>로 합친다 — 폼의 별점을 저장하면 방문 기록을 남기고
- * 그 별점을 대표 평점으로 upsert 한다(rate() 는 원래 upsert 라 재방문에도 안전). 이미
- * 식단 탭이 쓰던 방식이고(DietRecordScreen), 이제 두 탭의 규칙이 같다. 대표 평점만 따로
- * 고치고 싶을 때(오늘은 별로였지만 가게 평가는 유지)를 위해 위쪽은 한 줄 요약 + "수정"으로
- * 접어둔다. 분석: docs/LOVELICHELIN_UX_REANALYSIS_2026-09-14.md 3-1 · 5-1.
+ * <p>그래서 <b>"다녀왔어요" 하나</b>로 합친다 — 폼의 별점은 방문 기록에 남고, <b>내 대표 평점이 아직 없으면</b>
+ * 그 별점이 대표 평점도 된다(결정 Q3, 2026-10-05 — 예전엔 늘 덮어써서 "오늘은 별로였다"가 등급을 내렸다).
+ * 대표 평점을 고치는 곳은 위쪽 한 줄 요약의 "수정"이다. 분석: docs/LOVELICHELIN_UX_REANALYSIS_2026-09-14.md 3-1 · 5-1,
+ * docs/LOVEBODY_LOVELICHELIN_LINK_2026-10-05.md §5-1.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -59,7 +58,8 @@ import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
-import { toDateString } from '../../utils/date';
+import { todayKst } from '../../utils/date';
+import { uploadApi, wasRejected } from '../../api/upload';
 import { defaultMealType } from '../../utils/mealType';
 import { stars } from '../../utils/ratingStars';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
@@ -77,10 +77,12 @@ const MEAL_TYPES: { value: MealType; label: string }[] = [
   { value: 'SNACK', label: '간식' },
 ];
 
+/** 외식 기록 멱등키 — 렌더 중이 아니라 저장할 때 만든다(React Compiler 린트: 렌더 중 비순수 호출 금지) */
+const newRequestId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+
 export function PlaceDetailScreen({ route, navigation }: Props) {
-  const { placeId, name: placeName } = route.params;
+  const { placeId } = route.params;
   const androidKeyboardHeight = useAndroidKeyboardHeight();
-  const saveMeal = useDietStore((s) => s.save);
   // 방문 기록 ★ 색 — 남긴 사람 기준(나/상대). 예전엔 한 사람의 기록에 '함께' 색을 썼다
   const myUserId = useAuthStore((s) => s.user?.id);
   const [place, setPlace] = useState<Place | null>(null);
@@ -97,7 +99,8 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
   const [rating, setRating] = useState(0);
   // 기록은 대개 사후에 남긴다 — "지난 주말 갔던 곳"이 오늘로 저장되지 않게 날짜를 고를 수 있다
   // (API는 원래 visitedAt 을 받고 있었는데 화면에만 없었다)
-  const [visitedAt, setVisitedAt] = useState(toDateString());
+  // KST 오늘 — 이 앱의 하루는 KST 다(CLAUDE.md §4). 예전엔 기기 날짜라 해외·자정 근처에 하루 어긋났다
+  const [visitedAt, setVisitedAt] = useState(todayKst());
   const [memo, setMemo] = useState('');
 
   /*
@@ -130,11 +133,11 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
   const [logMeal, setLogMeal] = useState(false);
   const [mealType, setMealType] = useState<MealType>(defaultMealType());
   /*
-   * 식단을 먼저 저장하고 방문 기록을 남기는 2단 저장이라, 뒤가 실패하면 식단만 떠 있는
-   * 상태가 된다. 그대로 재시도하면 식단이 두 번 쌓이므로 발급받은 id 를 들고 있다가
-   * 재시도 때 재사용한다 — 폼을 닫을 때만 비운다.
+   * 외식 기록 멱등키 — 폼을 열 때마다 새로, 재시도에는 같은 값을 보낸다. 저장이 한 번의 요청(POST /places/meal-visits)이
+   * 되면서 예전의 2단 저장(식단 → 방문) 반쪽 상태와 그걸 막던 savedMealId 가 사라졌다 — 응답을 못 받고 다시 눌러도
+   * 서버가 처음 결과를 돌려준다.
    */
-  const savedMealId = useRef<number | undefined>(undefined);
+  const visitRequestId = useRef<string | null>(null);
 
   // 럽슐랭 대표 평점 — 기본 동선("다녀왔어요")이 이 값을 함께 쓰므로 평소엔 한 줄 요약으로
   // 접어두고, 방문과 무관하게 가게 평가만 고칠 때만 펼친다.
@@ -226,87 +229,61 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
 
   const resetForm = () => {
     setRating(0);
-    setVisitedAt(toDateString());
+    setVisitedAt(todayKst());
     setMemo('');
     setPhotoUri(null);
     setLogMeal(false);
     setMealType(defaultMealType());
-    savedMealId.current = undefined;
+    visitRequestId.current = null;
   };
 
   /*
-   * "다녀왔어요" 저장 — 방문 기록을 남기고, 별점을 매겼으면 그 별점을 럽슐랭 대표 평점으로
-   * 함께 올린다(파일 상단 주석). 실패 지점마다 남는 것이 달라 처리도 다르다:
-   *   ① 사진 업로드 / ② 식단 저장  — 아직 방문 기록이 없다. 폼을 열어둔 채 알리고 재시도.
-   *   ③ 방문 기록                  — 식단만 떠 있을 수 있다. savedMealId 로 중복을 막고 재시도.
-   *   ④ 대표 평점                  — 방문 기록은 이미 남았다. 재시도하면 방문이 두 번 쌓이므로
-   *                                 폼을 닫고 "평가만 실패"를 알린다(위 '수정'에서 다시 할 수 있다).
+   * "다녀왔어요" 저장 — 외식 기록 API 한 번(서버 MealVisitService): 방문 + (체크하면) 식단 + (대표 평점이 없으면) 대표 평점.
+   * 예전엔 사진 → 식단 → 방문 → 평점을 여기서 엮어 실패 지점마다 남는 것이 달랐다. 이제 실패하면 아무것도 안 남고,
+   * 같은 키로 다시 누르면 된다. 사진은 한 번 올린 URL 이 식단·방문에 같이 들어간다. 식단 메모에는 장소 이름을 섞지
+   * 않는다(식사 카드의 📍가 이미 말한다 — 예전엔 "장소명 · 메모"라 한 카드에 장소명이 두 번 나왔다).
    */
   const onSaveVisit = async () => {
     setSaving(true);
+    let imageUrl: string | undefined;
     try {
-      let imageUrl: string | undefined;
       if (photoUri) {
         imageUrl = await runBusy('사진 올리는 중…', () => uploadImage(photoUri));
       }
-
-      // 식단으로도 등록 체크 시 meals 를 먼저 저장하고, 발급된 id 를 방문 기록에 연동한다
-      if (logMeal && savedMealId.current == null) {
-        const savedMeal = await saveMeal({
-          // 다녀온 날 = 먹은 날. 예전엔 방문 날짜와 무관하게 항상 오늘로 저장했다
-          mealDate: visitedAt,
-          mealType,
-          memo: memo.trim() ? `${placeName} · ${memo.trim()}` : placeName,
-          photoUrl: imageUrl,
-        });
-        savedMealId.current = savedMeal.id;
-      }
-
-      await placeApi.recordVisit(placeId, {
+      // 처음 저장할 때 만들고, 실패해 다시 누르면 같은 키를 보낸다(폼을 닫을 때 비운다)
+      visitRequestId.current ??= newRequestId();
+      const res = await placeApi.recordMealVisit({
+        clientRequestId: visitRequestId.current,
+        placeId,
         visitedAt,
-        rating: rating > 0 ? rating : undefined,
+        photoUrl: imageUrl,
         memo: memo.trim() || undefined,
-        imageUrl,
-        mealId: savedMealId.current,
+        rating: rating > 0 ? rating : undefined,
+        meal: logMeal ? { mealType } : undefined,
       });
 
-      // 여기부터는 방문 기록이 이미 남았다 — 재시도로 되돌아오면 안 된다
       setFormOpen(false);
-      const mealSuffix = logMeal ? '방문 기록과 식단을 함께 남겼어요!' : '방문 기록 완료!';
+      const hadMyRating = place?.myRating != null;
       resetForm();
-
-      if (rating > 0) {
-        try {
-          const previousTier = place?.lovelichelinTier ?? 0;
-          const updated = await placeApi.rate(placeId, { rating });
-          setMyRatingInput(rating);
-          if (previousTier === 0 && updated.lovelichelinTier > 0) {
-            setFanfareTier(updated.lovelichelinTier);
-          } else {
-            toast.success(`${mealSuffix} 내 럽슐랭 평가도 ${stars(rating)} 로 저장했어요.`);
-          }
-        } catch (e) {
-          // 방문 기록은 살아 있으므로 실패로 되돌리지 않는다 — 무엇이 안 됐는지만 알린다
-          toast.error(getErrorMessage(e, '방문 기록은 남겼지만 럽슐랭 평가 저장에 실패했어요. 위 "수정"에서 다시 시도해주세요.'));
-        }
+      setPlace(res.place);
+      if (res.place.myRating != null) setMyRatingInput(res.place.myRating);
+      if (res.tierUp) {
+        setFanfareTier(res.place.lovelichelinTier);
       } else {
-        toast.success(mealSuffix);
+        const base = res.meal ? '방문 기록과 식단을 함께 남겼어요!' : '방문 기록 완료!';
+        toast.success(
+          rating > 0 && !hadMyRating ? `${base} 내 럽슐랭 평가도 ${stars(rating)} 로 정했어요.` : base,
+        );
       }
-
       haptics.success();
       load();
-      // 방문 기록이 상태·평균 별점·커버 사진을 바꿀 수 있다 — 가이드/둘러보기/지도가
-      // 다음에 focus 될 때 캐시된 목록 대신 다시 받아오게 한다
+      // 방문 기록이 평균 별점·커버 사진을, 식단이 럽바디 목록을 바꾼다 — 다음에 볼 때 다시 받는다
       usePlaceStore.getState().invalidate();
+      if (res.meal) void useDietStore.getState().reload();
     } catch (e) {
-      // 식단이 이미 저장된 뒤 방문 기록에서 실패했다면 그 사실을 알려준다 — 아무 말이 없으면
-      // 전부 실패한 줄 알고 폼을 닫아버리고, 식단 탭에서 뒤늦게 발견하게 된다
-      Alert.alert(
-        '오류',
-        savedMealId.current != null
-          ? `${getErrorMessage(e)}\n\n식단 기록은 이미 저장됐어요. 다시 저장해도 식단이 중복되지는 않아요.`
-          : getErrorMessage(e),
-      );
+      // 확실히 거절됐을 때만 올린 사진을 치운다 — 타임아웃이면 서버가 뒤늦게 저장했을 수 있다(럽바디와 같은 규칙)
+      if (imageUrl && wasRejected(e)) uploadApi.discard(imageUrl);
+      Alert.alert('오류', getErrorMessage(e));
     } finally {
       setSaving(false);
     }
@@ -358,7 +335,12 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
   };
 
   const onDeleteVisit = (visit: PlaceVisit) => {
-    Alert.alert('방문 기록 삭제', `${visit.visitedAt} 기록을 삭제할까요?`, [
+    // 식단이 붙은 방문이면 식단은 그대로 둔다(결정 Q5) — 무엇이 남는지 미리 말한다
+    const message =
+      visit.mealId != null
+        ? `${visit.visitedAt} 기록을 삭제할까요?\n식단 기록은 럽바디에 남아요.`
+        : `${visit.visitedAt} 기록을 삭제할까요?`;
+    Alert.alert('방문 기록 삭제', message, [
       { text: '취소', style: 'cancel' },
       {
         text: '삭제',
@@ -370,6 +352,8 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
             toast.success('방문 기록을 삭제했어요.');
             load();
             usePlaceStore.getState().invalidate();
+            // 그 식단 카드의 📍가 다음 새로고침까지 남지 않게
+            if (visit.mealId != null) void useDietStore.getState().reload();
           }),
       },
     ]);
@@ -525,7 +509,7 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
                   {rating > 0 ? (
                     <Text style={styles.starHint}>
                       {place?.myRating
-                        ? '내 럽슐랭 평가도 이 별점으로 바뀌어요'
+                        ? '이번 방문 기록에 남아요 — 내 럽슐랭 평가는 위 "수정"에서 바꿔요'
                         : '이 별점이 내 럽슐랭 평가가 돼요. 둘 다 매기면 등급이 붙어요'}
                     </Text>
                   ) : null}
@@ -534,7 +518,7 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
                     label="다녀온 날"
                     value={visitedAt}
                     onChange={setVisitedAt}
-                    max={toDateString()}
+                    max={todayKst()}
                     pickerTitle="언제 다녀오셨나요?"
                   />
 
