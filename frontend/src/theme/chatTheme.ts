@@ -2,7 +2,7 @@
  * 채팅방 배경 테마 — <b>채팅 화면에서만</b> 쓰는 별도 팔레트.
  *
  * <p><b>왜 앱 팔레트({@link ./colors})와 분리했나</b>: 앱 전체 색은 나/상대/함께를
- * 구분하는 <b>의미</b>를 지고 있어서(me=Gold, partner=Green …) 취향으로 갈아끼울 수
+ * 구분하는 <b>의미</b>를 지고 있어서(me=코랄, partner=하늘 …) 취향으로 갈아끼울 수
  * 없다. 반면 채팅방 배경은 카톡처럼 순전히 취향 문제다. 둘을 한 팔레트에 섞으면
  * "핑크 배경을 골랐더니 기록 화면의 소유자 색이 같이 바뀐다"가 되므로 아예 나눈다.
  *
@@ -153,32 +153,32 @@ export const CHAT_THEMES: ChatTheme[] = [
     label: '기본',
     light: {
       background: '#FAFAF9',
-      // green 액센트의 primaryFill — 런타임에 chatPalette 가 같은 값으로 덮는다
-      bubbleMine: '#4DC76E',
+      // 앱 팔레트의 meFill — 런타임에 chatPalette 가 같은 값으로 덮는다(검증 스크립트는 이 리터럴을 잰다)
+      bubbleMine: '#FC7961',
       bubbleMineText: '#1A1D1A',
       bubbleTheirs: '#E9EAE7',
       bubbleTheirsText: '#1A1D1A',
       meta: '#6A706A',
       dividerLine: '#E1E3E0',
-      highlight: '#D8E7DB',
+      highlight: '#C9E3FE', // = partnerPastelBg
       inputBar: '#FAFAF9',
       inputField: '#E9EAE7',
       inputPlaceholder: '#626562',
-      readMark: '#2C7D33',
+      readMark: '#2470B5',
     },
     dark: {
       background: '#1E201C',
-      bubbleMine: '#68B58B',
+      bubbleMine: '#FEC6BB', // = 다크 meFill
       bubbleMineText: '#1A1D1A',
       bubbleTheirs: '#31332D',
       bubbleTheirsText: '#ECEEEA',
       meta: '#868C84',
       dividerLine: '#3A3D36',
-      highlight: '#2A3A2E',
+      highlight: '#243A52', // 상대(하늘) 계열 — 배경 대비 1.41
       inputBar: '#1E201C',
       inputField: '#31332D',
       inputPlaceholder: '#9FA19D',
-      readMark: '#A7D2A9',
+      readMark: '#B2D7FF',
     },
   },
   {
@@ -196,7 +196,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       inputBar: '#FDEEF1',
       inputField: '#FFFFFF',
       inputPlaceholder: '#6F716F',
-      readMark: '#2C7D33',
+      readMark: '#2470B5',
     },
     dark: {
       background: '#221A1D',
@@ -210,7 +210,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       inputBar: '#221A1D',
       inputField: '#332A2D',
       inputPlaceholder: '#9B9897',
-      readMark: '#A7D2A9',
+      readMark: '#B2D7FF',
     },
   },
   {
@@ -228,7 +228,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       inputBar: '#ECF3FB',
       inputField: '#FFFFFF',
       inputPlaceholder: '#6F716F',
-      readMark: '#2C7D33',
+      readMark: '#2470B5',
     },
     dark: {
       background: '#171B21',
@@ -242,7 +242,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       inputBar: '#171B21',
       inputField: '#262C33',
       inputPlaceholder: '#959999',
-      readMark: '#A7D2A9',
+      readMark: '#B2D7FF',
     },
   },
   {
@@ -260,7 +260,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       inputBar: '#F2EFFB',
       inputField: '#FFFFFF',
       inputPlaceholder: '#6F716F',
-      readMark: '#2C7D33',
+      readMark: '#2470B5',
     },
     dark: {
       background: '#1C1A23',
@@ -274,7 +274,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       inputBar: '#1C1A23',
       inputField: '#302C3D',
       inputPlaceholder: '#9B9BA0',
-      readMark: '#A7D2A9',
+      readMark: '#B2D7FF',
     },
   },
   /*
@@ -305,7 +305,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       inputBar: '#FDF2E9',
       inputField: '#FFFFFF',
       inputPlaceholder: '#6F716F',
-      readMark: '#2C7D33',
+      readMark: '#2470B5',
     },
     dark: {
       background: '#221D18',
@@ -319,7 +319,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       inputBar: '#221D18',
       inputField: '#332C25',
       inputPlaceholder: '#9B9993',
-      readMark: '#A7D2A9',
+      readMark: '#B2D7FF',
     },
   },
   /* 위 'peach' 와 같은 이유 — 액센트 '민트'(#49CAA5)와 달리 이건 진한 청록이다 */
@@ -338,7 +338,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       inputBar: '#EAF5F0',
       inputField: '#FFFFFF',
       inputPlaceholder: '#6F716F',
-      readMark: '#2C7D33',
+      readMark: '#2470B5',
     },
     dark: {
       background: '#171F1C',
@@ -352,7 +352,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       inputBar: '#171F1C',
       inputField: '#252E2A',
       inputPlaceholder: '#949A96',
-      readMark: '#A7D2A9',
+      readMark: '#B2D7FF',
     },
   },
 
@@ -383,7 +383,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       inputBar: '#23262B',
       inputField: '#F2F4F7',
       inputPlaceholder: '#686A6F',
-      readMark: '#A7D2A9',
+      readMark: '#B2D7FF',
     },
     dark: {
       background: '#17191D',
@@ -397,7 +397,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       inputBar: '#17191D',
       inputField: '#E6E9ED',
       inputPlaceholder: '#616469',
-      readMark: '#A7D2A9',
+      readMark: '#B2D7FF',
     },
   },
   {
@@ -415,7 +415,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       inputBar: '#1C2A20',
       inputField: '#F1F4F0',
       inputPlaceholder: '#676A67',
-      readMark: '#A7D2A9',
+      readMark: '#B2D7FF',
     },
     dark: {
       background: '#131E17',
@@ -429,7 +429,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       inputBar: '#131E17',
       inputField: '#E4E9E3',
       inputPlaceholder: '#616460',
-      readMark: '#A7D2A9',
+      readMark: '#B2D7FF',
     },
   },
   {
@@ -447,7 +447,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       inputBar: '#1B2440',
       inputField: '#F2F4FA',
       inputPlaceholder: '#686A75',
-      readMark: '#A7D2A9',
+      readMark: '#B2D7FF',
     },
     dark: {
       background: '#131A2E',
@@ -461,7 +461,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       inputBar: '#131A2E',
       inputField: '#E5E9F2',
       inputPlaceholder: '#616470',
-      readMark: '#A7D2A9',
+      readMark: '#B2D7FF',
     },
   },
   {
@@ -479,7 +479,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       inputBar: '#2A1E2E',
       inputField: '#F5F2F6',
       inputPlaceholder: '#6D686E',
-      readMark: '#A7D2A9',
+      readMark: '#B2D7FF',
     },
     dark: {
       background: '#1D1420',
@@ -493,7 +493,7 @@ export const CHAT_THEMES: ChatTheme[] = [
       inputBar: '#1D1420',
       inputField: '#E9E4EB',
       inputPlaceholder: '#666168',
-      readMark: '#A7D2A9',
+      readMark: '#B2D7FF',
     },
   },
 ];
@@ -569,10 +569,11 @@ export function chatPalette(scheme: Scheme, id: ChatThemeId = currentId): ChatPa
   const base: ChatPalette = { ...theme[scheme], metaCapsule: 'transparent', inputIcon: theme[scheme].meta };
   if (id !== DEFAULT_CHAT_THEME_ID) return withPhoto(base);
   /*
-   * '기본' 테마의 내 말풍선은 앱 액센트를 따른다 — 사용자가 민트·피치를 골랐는데 채팅만
-   * 초록이면 기본이 기본이 아니다. 위 CHAT_THEMES 의 'default' 값은 green 액센트일 때의
-   * 값이고(검증 스크립트는 그 정적 값을 잰다), green 이면 아래는 같은 값을 돌려준다.
-   *   말풍선: primaryFill(버튼 채움과 같은 값) + 그 위에 onColor 가 고른 글자
+   * '기본' 테마는 앱 팔레트의 소유자 색을 그대로 쓴다 — <b>내 말풍선 = 나(meFill)</b>, 하트 = 상대.
+   * 2026-10-05 까지는 내 말풍선이 크롬(primaryFill)이었다. "선택됨은 크롬, 누구 것은 소유자 색"
+   * (docs/color-redesign-viewer-based_2026-10-05.md 원칙 3)에 따라 소유자 색으로 옮겼다.
+   * 위 CHAT_THEMES 의 'default' 리터럴은 같은 값이다(검증 스크립트는 리터럴을 잰다).
+   *   말풍선: meFill + 그 위에 onColor 가 고른 글자
    *   강조행: 상대 계열 파스텔(배경 대비 1.25 이상)
    *
    * <p><b>2026-09-23 에 한 단계 밝혔다.</b> 그전에는 라이트가 primary, 다크가
@@ -584,10 +585,10 @@ export function chatPalette(scheme: Scheme, id: ChatThemeId = currentId): ChatPa
   const app = palette(scheme);
   return withPhoto({
     ...base,
-    bubbleMine: app.primaryFill,
-    bubbleMineText: onColor(app.primaryFill),
+    bubbleMine: app.meFill,
+    bubbleMineText: onColor(app.meFill),
     highlight: scheme === 'light' ? app.partnerPastelBg : base.highlight,
-    // 하트는 "상대" 색이다 — 기본 테마에서는 액센트별 partner 를 따른다(green 이면 리터럴과 같은 값)
+    // 하트는 "상대" 색이다
     readMark: app.partner,
   });
 }
