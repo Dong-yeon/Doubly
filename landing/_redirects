@@ -3,3 +3,5 @@
 /support    /support.html    200
 /terms      /terms.html      200
 /privacy    /privacy.html    200
+# 커플 초대 링크 — 코드는 경로에 있고 invite.html 의 스크립트가 읽는다(docs/first-experience-audit.md #2)
+/i/*       /invite.html  200
