@@ -1750,6 +1750,22 @@ export interface FeedItem {
   placeId?: number | null;
 }
 
+/** 이번 달 외식 — GET /places/eat-out/stats. 커플 단위, 칼로리 없음 */
+export interface EatOutStats {
+  month: string;
+  /** 식단이 붙은 방문 수(같이 먹기는 한 번) */
+  outings: number;
+  sharedOutings: number;
+  /** 다녀온 곳 전체(식단 없는 방문 포함) */
+  visits: number;
+  /** 이번 달 처음 가 본 곳 */
+  newPlaces: number;
+  topPlaces: { placeId: number; name: string; visits: number }[];
+  /** 끼니별 외식 횟수 — 0 인 끼니는 없다 */
+  byMealType: Partial<Record<MealType, number>>;
+  previousOutings: number;
+}
+
 /** 장소 상세 "여기서 먹은 것" — GET /places/{id}/menu. 칼로리는 싣지 않는다(상대 식사 양 비노출 결정) */
 export interface PlaceMenu {
   items: { name: string; times: number; lastDate: string }[];
