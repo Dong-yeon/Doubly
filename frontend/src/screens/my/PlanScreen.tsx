@@ -159,6 +159,12 @@ export function PlanScreen({ navigation }: Props) {
   const partnerName = useRelationStore((s) => s.couple?.partner?.name) ?? '상대';
   const freeTrial = usePlanStore((s) => s.freeTrial);
   const trialEndsAt = usePlanStore((s) => s.trialEndsAt);
+  /*
+   * 내 플랜을 아직 모른다(첫 조회가 실패했거나 진행 중). 스토어 기본값이 'FREE' 라 그대로 그리면 이미 PRO 인
+   * 사람에게도 결제 버튼이 열린다 — 결제 화면에서만은 "모르면 열림"이 아니라 "모르면 기다림"이다
+   * (docs/my-current-state.md §7-7). 포커스·앱 복귀 때마다 다시 읽으므로 대개 곧 풀린다.
+   */
+  const planKnown = usePlanStore((s) => s.isLoaded);
   const userId = useAuthStore((s) => s.user?.id);
 
   const [catalog, setCatalog] = useState<PlanCatalogEntry[] | null>(null);
@@ -284,11 +290,13 @@ export function PlanScreen({ navigation }: Props) {
       ? Math.round((1 - prices.yearly.amount / (prices.monthly.amount * 12)) * 100)
       : null;
   const priceSuffix = price ? ` · ${price}/${term === 'yearly' ? '년' : '월'}` : '';
-  const ctaTitle = alreadySubscribed
-    ? '이미 PRO예요'
-    : coveredByPartner
-      ? `내 기능도 PRO로 열기${priceSuffix}`
-      : `PRO 시작하기${priceSuffix}`;
+  const ctaTitle = !planKnown
+    ? '플랜 확인 중…'
+    : alreadySubscribed
+      ? '이미 PRO예요'
+      : coveredByPartner
+        ? `내 기능도 PRO로 열기${priceSuffix}`
+        : `PRO 시작하기${priceSuffix}`;
   /*
    * 상대 덕분에 PRO 인 사람에게 보여줄 "결제하면 늘어나는 것" — 개인 기능만. 커플 기능을 여기 세우면
    * 이미 가진 것을 또 파는 셈이 된다. 순서는 카탈로그(서버 enum) 그대로다.
@@ -404,7 +412,7 @@ export function PlanScreen({ navigation }: Props) {
             title={ctaTitle}
             onPress={() => void onPurchase()}
             loading={purchasing}
-            disabled={purchasing || alreadySubscribed}
+            disabled={purchasing || alreadySubscribed || !planKnown}
             style={styles.cta}
           />
         ) : (
