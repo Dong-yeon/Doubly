@@ -506,7 +506,13 @@ WARN [ai-job] AiJobService : AI 작업 오류(food-photo): org.springframework.w
 
 ### 11-7. 수정 제안 갱신 (§9 P0 대체, 구현은 하지 않음)
 
-1. **P0: 읽기 타임아웃을 네트워크 오류로 분류한다.**
+1. **P0: 읽기 타임아웃을 네트워크 오류로 분류한다.** — **2026-10-05 구현(`e9aad451`)**.
+   상태 코드 없는 실패(`RestClientException`)를 함께 잡는다. 읽기 타임아웃이면 폴백 모델이 있을 때 **같은 모델을 다시 기다리지 않고 바로 폴백**으로 넘기고
+   (45초 + 폴백 응답 ≈ 50초로 앱의 2분 안에 들어온다), 폴백이 없거나 폴백 자신이 타임아웃이면 예산 안에서 재시도한다.
+   지표는 `fitto.ai.gemini.call{outcome=timeout}`, 로그는 `응답하지 않음 — 다시 기다리지 않고 폴백으로 넘긴다` 로 찾는다.
+   응답은 받았는데 읽지 못한 경우(형식 오류)는 `outcome=error` 로 남기고 바로 실패한다. 재현 테스트는 `GeminiReadTimeoutTest`(상태 줄을 보내지 않는 서버로 운영과 같은 예외를 낸다).
+   이미지 생성도 같은 경로라 타임아웃 시 같은 모델로 재시도한다 — Google 쪽에서 끝난 요청이면 이미지 원가가 한 번 더 들 수 있다(미확인).
+   (아래는 당시 제안 원문)
    - `callModel` 에서 `RestClientException`(그 밖의 것)도 잡는다. 원인이 `SocketTimeoutException` 이면 `record(model, "timeout", …)` 를 남기고 재시도·폴백 대상으로 넘긴다. 폴백은 모델이 느린 경우일 수 있으므로 열어 두는 편이 맞다.
    - 대상: `B/common/ai/GeminiClient.java:515-583`.
    - 영향: 모든 AI 기능. 서버 배포만 하면 된다. 테스트는 `GeminiModelFallbackTest` 에 읽기 타임아웃 사례를 추가한다.
