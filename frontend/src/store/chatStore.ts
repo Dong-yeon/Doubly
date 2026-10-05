@@ -18,6 +18,7 @@ import {
 } from '../api/chatSocket';
 import type { ChatMessage, ChatRoom } from '../types';
 import { fetchUntilBridged, isUnsent, mergeSynced, newestKnownId } from '../utils/chatSync';
+import { setSocketTelemetryInRoom } from '../utils/socketTelemetry';
 import { toast } from './toastStore';
 
 interface ChatState {
@@ -104,6 +105,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // 방 진입: 히스토리 로드 + 소켓 구독 등록 + 연결
   openRoom: async (relationId) => {
     set({ activeRoomId: relationId });
+    setSocketTelemetryInRoom(true);
     const history = await chatApi.messages(relationId);
     set((s) => {
       /*
@@ -205,7 +207,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     unsubscribeRoom(relationId);
     // 빠르게 방을 옮기면(A 진입→B 진입→A 의 언마운트 cleanup 순으로) A 의 closeRoom 이
     // B 가 이미 activeRoomId 로 세워둔 값을 지울 수 있다 — 지금 값이 정말 이 방일 때만 비운다.
-    if (get().activeRoomId === relationId) set({ activeRoomId: null });
+    if (get().activeRoomId === relationId) {
+      set({ activeRoomId: null });
+      setSocketTelemetryInRoom(false);
+    }
   },
 
   /*

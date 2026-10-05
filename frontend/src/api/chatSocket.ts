@@ -15,6 +15,15 @@ import { Client, IMessage, StompSubscription } from '@stomp/stompjs';
 import { STORAGE_KEYS, WS_BASE_URL } from '../constants/config';
 import { storage } from '../utils/storage';
 import { refreshAccessToken } from './client';
+import {
+  noteClosed,
+  noteConnectAttempt,
+  noteConnected,
+  noteDeactivated,
+  noteHeartbeatLost,
+  noteStompError,
+  noteTokenRefresh,
+} from '../utils/socketTelemetry';
 import type { ChatMessage, GameReactionEvent, MessageType, PuzzleBattleEvent } from '../types';
 
 /** /sub/rooms/{relationId}/pin 페이로드 — 백엔드 ChatPinResponse 와 짝. */
@@ -144,13 +153,17 @@ function createClient(): Client {
    */
   c.beforeConnect = async () => {
     setStatus('connecting');
+    noteConnectAttempt();
     if (rejectedByServer && refreshAttempts < MAX_REFRESH_ATTEMPTS) {
       rejectedByServer = false;
       refreshAttempts += 1;
+      const refreshStartedAt = Date.now();
       try {
         await refreshAccessToken();
+        noteTokenRefresh(Date.now() - refreshStartedAt, true);
       } catch {
         // 갱신 실패 — 아래에서 기존 토큰으로 시도한다
+        noteTokenRefresh(Date.now() - refreshStartedAt, false);
       }
     }
     const token = await storage.getItem(STORAGE_KEYS.accessToken);
@@ -162,16 +175,24 @@ function createClient(): Client {
     refreshAttempts = 0;
     applyDesiredSubscriptions(c);
     setStatus('connected');
+    noteConnected();
   };
 
   // 서버가 CONNECT/SUBSCRIBE 를 거절 — 토큰 만료가 가장 흔한 원인이다
-  c.onStompError = () => {
+  c.onStompError = (frame) => {
     rejectedByServer = true;
+    noteStompError(frame.headers['message']);
   };
 
-  c.onWebSocketClose = () => {
+  // 하트비트가 끊겨 stompjs 가 연결을 죽은 것으로 판정 — 곧 onWebSocketClose 가 따라온다(계측용 구분)
+  c.onHeartbeatLost = () => {
+    noteHeartbeatLost();
+  };
+
+  c.onWebSocketClose = (evt) => {
     active.clear(); // 이 소켓의 구독 객체는 전부 무효 (desired 는 그대로 둔다)
     setStatus('disconnected');
+    noteClosed(evt?.code);
   };
 
   return c;
@@ -449,6 +470,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 }
 
 export function disconnectSocket() {
+  noteDeactivated(); // 일부러 내리는 것 — 끊김으로 재지 않는다
   active.forEach((s) => s.unsubscribe());
   active.clear();
   desired.clear();
