@@ -1746,6 +1746,15 @@ export interface FeedItem {
   edited?: boolean;
   /** 일상 포스트의 댓글 수(V124) — 카드가 "댓글 N"을 보여 준다. 다른 타입·예전 서버는 없다 */
   commentCount?: number;
+  /** 식사 카드에 붙은 장소 id — 부제의 📍를 누르면 그 장소 상세로(2026-10-05). MEAL 외·예전 서버는 없다 */
+  placeId?: number | null;
+}
+
+/** 장소 상세 "여기서 먹은 것" — GET /places/{id}/menu. 칼로리는 싣지 않는다(상대 식사 양 비노출 결정) */
+export interface PlaceMenu {
+  items: { name: string; times: number; lastDate: string }[];
+  /** 대표 메뉴 제안 — 2번 이상 먹은 것 중 상위 3개(저장하지 않는다) */
+  signature: string[];
 }
 
 /** 일상 댓글 하나(V124) */

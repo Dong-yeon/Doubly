@@ -11,7 +11,7 @@
  * 저장 시 PUT 으로 보낸다. 폼이 완전히 같아서 화면을 나누면 두 벌을 같이 고쳐야 한다.
  */
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Image, InteractionManager, Platform, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, Image, InteractionManager, Platform, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -508,6 +508,21 @@ export function DietRecordScreen({ navigation, route }: Props) {
       (p) => p.name.toLowerCase().includes(q) || (p.address ?? '').toLowerCase().includes(q),
     );
   }, [places, placeSearch]);
+  /*
+   * 빠른 칩 — 시트를 열지 않고 고른다(LOVEBODY_LOVELICHELIN_LINK P1-3). 최근 다녀온 3곳 + 아직 안 가본 곳(방문 0건 파생,
+   * 상태 컬럼 없음 — V70 결정) 2곳. 외식은 대개 "자주 가는 곳"이나 "가 보자던 곳"이라 검색까지 갈 일이 줄어든다.
+   */
+  const quickPlaces = useMemo(() => {
+    const recent = places
+      .filter((p) => p.visitCount > 0 && p.lastVisitedAt)
+      .sort((a, b) => (b.lastVisitedAt ?? '').localeCompare(a.lastVisitedAt ?? ''))
+      .slice(0, 3);
+    const wish = places
+      .filter((p) => p.visitCount === 0)
+      .sort((a, b) => b.id - a.id)
+      .slice(0, 2);
+    return [...recent, ...wish];
+  }, [places]);
 
   // 시트를 닫을 때(백드롭·닫기 버튼 공통) 검색 상태까지 비운다 — 다음에 열었을 때
   // 이전 카카오 검색 결과가 엉뚱하게 남아 있지 않게.
@@ -1456,6 +1471,29 @@ export function DietRecordScreen({ navigation, route }: Props) {
                 )}
               </View>
 
+              {!pickedPlaceName && quickPlaces.length > 0 ? (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.quickPlaceScroll}
+                  contentContainerStyle={styles.quickPlaceRow}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  {quickPlaces.map((p) => (
+                    <Chip
+                      key={p.id}
+                      label={p.visitCount > 0 ? p.name : `${p.name} · 가고 싶은 곳`}
+                      onPress={() => {
+                        // 별은 미리 채우지 않는다 — 건드리지 않은 값이 방문 별점으로 저장되던 문제(P0)
+                        setSelectedPlace(p);
+                        setPendingKakao(null);
+                        setPlaceRating(0);
+                      }}
+                    />
+                  ))}
+                </ScrollView>
+              ) : null}
+
               {pickedPlaceName ? (
                 <>
                   <Text style={styles.label}>같이 별점도 남길까요? (선택)</Text>
@@ -2055,6 +2093,9 @@ const styles = themedStyles((colors) => ({
   placePickerText: { flex: 1, fontSize: fontSize.body, color: colors.textPrimary, fontWeight: '600' },
   starRow: { flexDirection: 'row', gap: spacing.sm },
   star: { fontSize: 32, color: colors.rating },
+  // 빠른 장소 칩 — 가로 한 줄. 세로로 줄어들지 않게 flexGrow/Shrink 를 끈다(PlaceScreen.filterScroll 과 같은 처방)
+  quickPlaceScroll: { flexGrow: 0, flexShrink: 0, marginTop: spacing.sm },
+  quickPlaceRow: { flexDirection: 'row', gap: spacing.sm },
   placeRatingHint: { color: colors.textSecondary, fontSize: fontSize.caption, marginTop: spacing.xs },
   placeSheetCard: { maxHeight: '80%' },
   sheetTitle: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary, marginBottom: spacing.md },

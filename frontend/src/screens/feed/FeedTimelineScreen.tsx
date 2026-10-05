@@ -258,6 +258,11 @@ export function FeedTimelineScreen({ navigation, route }: Props) {
               onReact={onReact}
               onLongPress={onLongPress}
               onOpenComments={(i) => navigation.navigate('FeedComments', { postId: i.refId })}
+              onOpenPlace={(i) => {
+                // 부제 "끼니 · 📍장소 ★N" 에서 이름만 — 헤더 제목용(상세가 불러온 뒤 실제 이름으로 바꾼다)
+                const name = i.content?.split('📍')[1]?.replace(/ ★\d$/, '') ?? '장소';
+                if (i.placeId != null) navigation.navigate('PlaceDetail', { placeId: i.placeId, name });
+              }}
             />
           </View>
         )}

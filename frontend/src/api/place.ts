@@ -9,6 +9,7 @@ import type {
   Meal,
   MealType,
   Place,
+  PlaceMenu,
   PlaceSearchResponse,
   PlaceVisit,
   ResolvePlaceLinkResponse,
@@ -111,6 +112,8 @@ export const placeApi = {
 
   recordVisit: (placeId: number, payload: RecordVisitPayload) =>
     unwrap(apiClient.post<ApiResponse<PlaceVisit>>(`/places/${placeId}/visits`, payload)),
+  // "여기서 먹은 것" — 이 장소 방문에 붙은 식단의 음식 이름·횟수 + 대표 메뉴 제안
+  menu: (placeId: number) => unwrap(apiClient.get<ApiResponse<PlaceMenu>>(`/places/${placeId}/menu`)),
   visits: (placeId: number) =>
     unwrap(apiClient.get<ApiResponse<PlaceVisit[]>>(`/places/${placeId}/visits`)),
   removeVisit: (placeId: number, visitId: number) =>
