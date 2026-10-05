@@ -33,7 +33,7 @@ import { usePlanStore } from '../../store/planStore';
 import { usePlaceStore } from '../../store/placeStore';
 import { useDirtyGuard } from '../../hooks/useDirtyGuard';
 import { useReturnToTab } from '../../hooks/useReturnToTab';
-import { publishEnsuringConnection } from '../../api/chatSocket';
+import { useChatStore } from '../../store/chatStore';
 import { dietApi, SaveMealItemPayload } from '../../api/diet';
 import { foodDbApi } from '../../api/foodDb';
 import { placeApi } from '../../api/place';
@@ -1273,11 +1273,20 @@ export function DietRecordScreen({ navigation, route }: Props) {
           {
             text: '공유하기',
             onPress: async () => {
-              await publishEnsuringConnection(couple.id, {
+              /*
+               * 채팅 스토어를 거쳐 보낸다 — 예전엔 소켓에 바로 쏘고 결과를 보지 않아, 연결이 없어 못 보냈어도
+               * "공유했어요"가 떴다(docs/chat-current-state.md §8-2 ⑧). 스토어를 거치면 서버가 거절했을 때도
+               * 토스트로 알려 준다(chatStore 의 거절 짝짓기 — 채팅방 밖에서 보낸 것도 된다).
+               */
+              const ok = await useChatStore.getState().send(couple.id, {
                 messageType: 'MEAL_CARD',
                 content: cardContent,
                 imageUrl: saved.photoUrl ?? undefined,
               });
+              if (!ok) {
+                toast.error('연결이 끊겨 채팅에 공유하지 못했어요. 식단은 저장됐어요.');
+                return;
+              }
               toast.success(isGoalAchieved ? '🎯 목표 달성 소식을 공유했어요 ' : '채팅에 공유했어요 ');
             },
           },
