@@ -20,7 +20,17 @@
  * 지도·카테고리 필터와는 다른 자기만의 목록·타입 필터를 갖는다.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Image, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  FlatList,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -49,6 +59,9 @@ import {
 import { MapSheet, sheetTops, type SheetSnap } from './MapSheet';
 import { PlaceListCard, hasNoLocation, ratingHint } from './PlaceListCard';
 import { PlacePinCard } from './PlacePinCard';
+import { PlaceSearchResultCard, searchResultKey } from './PlaceSearchResultCard';
+import { errorCodeOf } from '../../api/client';
+import { getErrorMessage } from '../../utils/error';
 import { CONTENT_TYPE_FILTERS, contentTypeLabel } from '../../constants/contentTypes';
 import { placeApi } from '../../api/place';
 import { contentApi } from '../../api/content';
@@ -61,7 +74,14 @@ import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { buildPlacePinIcons, type KakaoMapMarker } from '../../utils/kakaoMapHtml';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { Content, ContentType, DateCourse, LovelichelinRecommendation, Place } from '../../types';
+import type {
+  Content,
+  ContentType,
+  DateCourse,
+  LovelichelinRecommendation,
+  Place,
+  PlaceSearchResult,
+} from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { onColor } from '../../theme/onColor';
 import { layout } from '../../theme/layout';
@@ -116,6 +136,25 @@ function renderRecommendation(data: LovelichelinRecommendation) {
   return <LovelichelinRecommendCards data={data} />;
 }
 
+/** 402 는 api/client 가 이미 업그레이드 시트를 열었다 — 화면이 또 알리면 같은 말을 두 번 한다(PlaceAddScreen 과 같다) */
+function isPlanError(e: unknown): boolean {
+  const code = errorCodeOf(e);
+  return code === 'PLAN_UPGRADE_REQUIRED' || code === 'PLAN_LIMIT_EXCEEDED';
+}
+
+/**
+ * 지도 위 검색(서버 GET /places/search — 카카오 로컬 REST). WebView SDK 의 keywordSearch 는 쓰지 않는다:
+ * 카카오 장소 id 를 버려 같은 곳이 두 번 담기곤 했다(docs/LOVELICHELIN_CHAT_LINK_2026-10-02.md).
+ */
+type PlaceSearch =
+  | { query: string; status: 'loading' }
+  | { query: string; status: 'error'; message: string }
+  | { query: string; status: 'unavailable' }
+  | { query: string; status: 'done'; results: PlaceSearchResult[] };
+
+/** 검색 결과 임시 핀의 id — 우리 장소 id(양수)와 겹치지 않게 음수 */
+const resultPinId = (i: number) => -(i + 1);
+
 /** 핀 모양 — 등극 > 다녀옴 > 안 가봄. kakaoMapHtml.buildPlacePinIcons 의 키 */
 function pinKind(p: Place): 'certified' | 'visited' | 'wish' {
   if (p.lovelichelinTier > 0) return 'certified';
@@ -143,7 +182,11 @@ export function PlaceScreen() {
 
   // 지도·시트(·물러선 목록)가 공유하는 필터 하나
   const [filter, setFilter] = useState<PlaceFilterState>(EMPTY_PLACE_FILTER);
-  const patchFilter = (patch: Partial<PlaceFilterState>) => setFilter((f) => ({ ...f, ...patch }));
+  // 필터를 바꾸면 고른 핀은 푼다 — 걸러져 사라진 핀의 카드가 남지 않게
+  const patchFilter = (patch: Partial<PlaceFilterState>) => {
+    setFilter((f) => ({ ...f, ...patch }));
+    setSelectedId(null);
+  };
 
   // 콘텐츠 모드가 쓰는 검색·타입 필터 — 장소 쪽과 도메인이 달라 따로 둔다
   const [contentSearch, setContentSearch] = useState('');
@@ -153,6 +196,11 @@ export function PlaceScreen() {
   const [pendingPin, setPendingPin] = useState<{ lat: number; lng: number; address?: string | null } | null>(null);
   // 지도에서 고른 핀(우리 장소) — 시트가 그 한 곳의 카드가 된다
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  // 지도 위 검색 — 결과는 임시 핀 + 시트 목록. 고른 결과(인덱스)가 있으면 시트가 그 한 곳이 된다
+  const [search, setSearch] = useState<PlaceSearch | null>(null);
+  const [selectedResult, setSelectedResult] = useState<number | null>(null);
+  const [savingResultKey, setSavingResultKey] = useState<string | null>(null);
+  const searchSeq = useRef(0);
   const [snap, setSnap] = useState<SheetSnap>('half');
 
   // 지도를 못 쓰면(키 없음·로드 실패) 목록 화면으로 물러선다. 실패는 한 번 나면 이 화면 동안 유지한다
@@ -208,8 +256,10 @@ export function PlaceScreen() {
   );
   // 걸러진 것 중 좌표가 없어 지도에 못 꽂는 곳 — 지도 위 안내 "지도에 없는 N곳"
   const unmappedCount = useMemo(() => sortedPlaces.filter(hasNoLocation).length, [sortedPlaces]);
-  // 고른 핀이 필터에 걸려 사라지거나 지워졌으면 고르지 않은 것으로 본다(상태를 지우지 않고 파생한다)
-  const selectedPlace = selectedId != null ? (sortedPlaces.find((p) => p.id === selectedId) ?? null) : null;
+  // 고른 장소 — 전체에서 찾는다. 검색에서 막 담은 곳은 검색어(=이름 필터)에 안 걸릴 수 있어서다. 지워졌으면 null
+  const selectedPlace = selectedId != null ? (allPlaces.find((p) => p.id === selectedId) ?? null) : null;
+  const searchResults = search?.status === 'done' ? search.results : [];
+  const pickedResult = selectedResult != null ? (searchResults[selectedResult] ?? null) : null;
 
   // 핀 이미지 — 테마 색이 바뀔 때만 다시 그린다(다크 모드에서도 지도 타일은 밝아 색은 그대로 쓴다)
   const pinIcons = useMemo(
@@ -219,23 +269,31 @@ export function PlaceScreen() {
   );
 
   // 지도도 시트와 같은 결과를 쓴다 — 시트에서 '카페'만 보면 지도에도 카페만 찍힌다
-  const markers = useMemo<KakaoMapMarker[]>(
-    () =>
-      sortedPlaces
-        .filter((p) => !hasNoLocation(p))
-        .map((p) => ({
-          id: p.id,
-          lat: p.lat as number,
-          lng: p.lng as number,
-          title: p.name,
-          icon: pinKind(p),
-          selected: p.id === selectedPlace?.id,
-        })),
-    [sortedPlaces, selectedPlace?.id],
-  );
+  const markers = useMemo<KakaoMapMarker[]>(() => {
+    const ours = sortedPlaces.some((p) => p.id === selectedPlace?.id) || !selectedPlace
+      ? sortedPlaces
+      : [selectedPlace, ...sortedPlaces]; // 필터에 안 걸려도 고른 곳의 핀은 보인다(검색에서 막 담은 곳)
+    const placePins = ours
+      .filter((p) => !hasNoLocation(p))
+      .map((p) => ({
+        id: p.id,
+        lat: p.lat as number,
+        lng: p.lng as number,
+        title: p.name,
+        icon: pinKind(p),
+        selected: p.id === selectedPlace?.id,
+      }));
+    // 검색 결과 — 우리 핀과 다른 모양(물방울). 담으면 결과에서 빠지고 우리 핀으로 다시 그려진다
+    const resultPins = searchResults.flatMap((r, i) =>
+      r.lat != null && r.lng != null
+        ? [{ id: resultPinId(i), lat: r.lat, lng: r.lng, title: r.name, icon: 'search', selected: i === selectedResult }]
+        : [],
+    );
+    return [...placePins, ...resultPins];
+  }, [sortedPlaces, selectedPlace, searchResults, selectedResult]);
 
   // ---- 시트 단 높이 ----
-  const showSheetCard = selectedPlace != null || pendingPin != null;
+  const showSheetCard = selectedPlace != null || pendingPin != null || pickedResult != null;
   const fullTop = overlayHeight + spacing.sm;
   /*
    * 미리보기 높이 = 손잡이 + 제목 줄 + (카드 한 장 | 목록 반 장). 머리의 AI 버튼 줄은 미리보기에서 접는다 —
@@ -295,23 +353,40 @@ export function PlaceScreen() {
   const fixLocation = (p: Place) => navigation.navigate('PlaceAdd', { place: p, focusLocation: true });
 
   // 핀 탭 → 그 한 곳의 카드를 미리보기 높이로. 핀은 시트에 가리지 않게 보이는 영역 가운데로 옮긴다
+  const panToVisible = (lat: number, lng: number) => {
+    if (!areaHeight) return;
+    const visibleCenter = (overlayHeight + tops.peek) / 2;
+    mapRef.current?.panTo(lat, lng, Math.round(areaHeight / 2 - visibleCenter));
+  };
+
   const onMarkerPress = (id: number) => {
-    const p = sortedPlaces.find((x) => x.id === id);
+    if (id < 0) {
+      // 검색 결과 임시 핀
+      const i = -id - 1;
+      const r = searchResults[i];
+      if (!r) return;
+      setSelectedId(null);
+      setPendingPin(null);
+      setSelectedResult(i);
+      setSnap('peek');
+      if (r.lat != null && r.lng != null) panToVisible(r.lat, r.lng);
+      return;
+    }
+    const p = allPlaces.find((x) => x.id === id);
     if (!p) return;
+    setSelectedResult(null);
     setPendingPin(null);
     mapRef.current?.clearPin();
     setSelectedId(id);
     setSnap('peek');
-    if (p.lat != null && p.lng != null && areaHeight) {
-      const visibleCenter = (overlayHeight + tops.peek) / 2;
-      mapRef.current?.panTo(p.lat, p.lng, Math.round(areaHeight / 2 - visibleCenter));
-    }
+    if (p.lat != null && p.lng != null) panToVisible(p.lat, p.lng);
   };
 
   // 지도 빈 곳 탭 — 고른 핀이 있으면 먼저 고름만 푼다(지도 앱의 "빈 곳 탭 = 닫기"), 없으면 그 자리에 추가할지 묻는다
   const onMapSelect = (pos: { lat: number; lng: number; address?: string | null }) => {
-    if (selectedPlace) {
+    if (selectedPlace || pickedResult) {
       setSelectedId(null);
+      setSelectedResult(null);
       mapRef.current?.clearPin();
       return;
     }
@@ -322,7 +397,76 @@ export function PlaceScreen() {
   const clearSheetCard = () => {
     setSelectedId(null);
     setPendingPin(null);
+    setSelectedResult(null);
     mapRef.current?.clearPin();
+  };
+
+  // ---- 지도 위 검색 ----
+  const runSearch = async () => {
+    const q = filter.search.trim();
+    if (!q) return;
+    const seq = ++searchSeq.current;
+    clearSheetCard();
+    setSearch({ query: q, status: 'loading' });
+    setSnap('half');
+    try {
+      const res = await placeApi.search(q, 10);
+      if (seq !== searchSeq.current) return; // 그 사이 다시 검색했거나 취소했다
+      if (!res.available) {
+        setSearch({ query: q, status: 'unavailable' });
+        return;
+      }
+      setSearch({ query: q, status: 'done', results: res.places });
+      const pts = res.places.flatMap((r) => (r.lat != null && r.lng != null ? [{ lat: r.lat, lng: r.lng }] : []));
+      mapRef.current?.fitPoints(pts);
+    } catch (e) {
+      if (seq !== searchSeq.current) return;
+      setSearch({ query: q, status: 'error', message: getErrorMessage(e, '검색하지 못했어요.') });
+    }
+  };
+
+  // 검색 취소 — 임시 핀은 결과에서 파생되므로 결과를 비우면 같이 사라진다
+  const cancelSearch = () => {
+    searchSeq.current += 1;
+    setSearch(null);
+    setSelectedResult(null);
+  };
+
+  const addResult = async (r: PlaceSearchResult) => {
+    const key = searchResultKey(r);
+    if (savingResultKey) return;
+    setSavingResultKey(key);
+    try {
+      const saved = await placeApi.save({
+        name: r.name,
+        address: r.address ?? undefined,
+        lat: r.lat ?? undefined,
+        lng: r.lng ?? undefined,
+        category: r.category ?? undefined,
+        kakaoPlaceId: r.kakaoPlaceId ?? undefined,
+      });
+      invalidatePlaces();
+      await loadPlaces(true).catch(() => {});
+      if (saved.created === false) {
+        haptics.light();
+        toast.info('이미 럽슐랭에 있어요');
+      } else {
+        haptics.success();
+        toast.success('럽슐랭에 담았어요');
+      }
+      // 담은 결과는 임시 핀에서 빼고 우리 핀으로 고른다 — 같은 자리에 핀이 두 개 겹치지 않게
+      setSearch((s) =>
+        s?.status === 'done' ? { ...s, results: s.results.filter((x) => searchResultKey(x) !== key) } : s,
+      );
+      setSelectedResult(null);
+      setSelectedId(saved.id);
+      setSnap('peek');
+      if (saved.lat != null && saved.lng != null) panToVisible(saved.lat, saved.lng);
+    } catch (e) {
+      if (!isPlanError(e)) toast.error(getErrorMessage(e, '장소를 담지 못했어요.'));
+    } finally {
+      setSavingResultKey(null);
+    }
   };
 
   const placeCount = allPlaces.length;
@@ -335,9 +479,15 @@ export function PlaceScreen() {
         <TextField
           placeholder={searchPlaceholder}
           value={filter.search}
-          onChangeText={(t) => patchFilter({ search: t })}
+          onChangeText={(t) => {
+            patchFilter({ search: t });
+            // 글자를 다 지우면 검색도 끝난다 — 남은 임시 핀이 빈 검색창과 어긋나지 않게
+            if (overMap && !t.trim()) cancelSearch();
+          }}
+          // 쓰는 동안은 우리 장소를 거르고, [검색]을 누르면 카카오에서 새 장소를 찾는다(지도 화면만)
+          onSubmitEditing={overMap ? runSearch : undefined}
           returnKeyType="search"
-          accessibilityLabel="장소 찾기"
+          accessibilityLabel={overMap ? '장소 찾기 — 검색을 누르면 새 장소도 찾아요' : '장소 찾기'}
           style={overMap ? styles.searchInputOverMap : undefined}
         />
       </View>
@@ -439,9 +589,18 @@ export function PlaceScreen() {
     <View style={styles.sheetHeader}>
       <View style={styles.sheetTitleRow}>
         <Text style={styles.sheetTitle} numberOfLines={1}>
-          {pendingPin ? '여기에 장소 추가' : '고른 장소'}
+          {pendingPin ? '여기에 장소 추가' : pickedResult ? '검색 결과' : '고른 장소'}
         </Text>
         <IconButton icon="close" label="목록으로 돌아가기" onPress={clearSheetCard} />
+      </View>
+    </View>
+  ) : search ? (
+    <View style={styles.sheetHeader}>
+      <View style={styles.sheetTitleRow}>
+        <Text style={styles.sheetTitle} numberOfLines={1}>
+          ‘{search.query}’ 검색{search.status === 'done' ? ` ${search.results.length}곳` : ''}
+        </Text>
+        <IconButton icon="close" label="검색 취소" onPress={cancelSearch} />
       </View>
     </View>
   ) : (
@@ -489,6 +648,62 @@ export function PlaceScreen() {
         onVisit={() => openDetail(selectedPlace, { openVisit: true })}
       />
     </View>
+  ) : pickedResult ? (
+    <View style={styles.resultSingle} onLayout={(e) => setPinCardHeight(e.nativeEvent.layout.height)}>
+      <PlaceSearchResultCard
+        result={pickedResult}
+        saving={savingResultKey === searchResultKey(pickedResult)}
+        onAdd={() => addResult(pickedResult)}
+      />
+    </View>
+  ) : search ? (
+    search.status === 'loading' ? (
+      <View style={styles.searchState}>
+        <ActivityIndicator color={colors.primary} />
+        <Text style={styles.searchStateText}>‘{search.query}’ 찾는 중…</Text>
+      </View>
+    ) : search.status === 'error' ? (
+      <EmptyState icon="cloud-off-outline" title="검색하지 못했어요" description={search.message} error onRetry={runSearch} />
+    ) : search.status === 'unavailable' ? (
+      <EmptyState
+        icon="map-marker-outline"
+        title="지금은 새 장소 검색을 쓸 수 없어요"
+        description="[직접 추가]로 이름만 넣어 담을 수 있어요."
+      />
+    ) : search.results.length === 0 ? (
+      <View style={styles.searchState}>
+        <Text style={styles.searchStateText}>‘{search.query}’에 맞는 곳을 찾지 못했어요.</Text>
+        <Button
+          title="이름으로 직접 추가"
+          size="sm"
+          variant="secondary"
+          onPress={() => navigation.navigate('PlaceAdd', { initialKeyword: search.query })}
+        />
+      </View>
+    ) : (
+      <FlatList
+        data={search.results}
+        keyExtractor={(r) => searchResultKey(r)}
+        contentContainerStyle={styles.sheetList}
+        keyboardShouldPersistTaps="handled"
+        renderItem={({ item, index }) => (
+          <PlaceSearchResultCard
+            result={item}
+            saving={savingResultKey === searchResultKey(item)}
+            onFocus={
+              item.lat != null && item.lng != null
+                ? () => {
+                    setSelectedResult(index);
+                    setSnap('peek');
+                    panToVisible(item.lat as number, item.lng as number);
+                  }
+                : undefined
+            }
+            onAdd={() => addResult(item)}
+          />
+        )}
+      />
+    )
   ) : (
     <FlatList
       data={sortedPlaces}
@@ -827,6 +1042,9 @@ const styles = themedStyles((colors) => ({
   },
   sheetTitle: { flexShrink: 1, fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
   sheetList: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl },
+  resultSingle: { paddingHorizontal: spacing.lg },
+  searchState: { alignItems: 'center', gap: spacing.md, paddingVertical: spacing.xl, paddingHorizontal: spacing.lg },
+  searchStateText: { fontSize: fontSize.body, color: colors.textSecondary, textAlign: 'center' },
   sheetEmpty: {
     fontSize: fontSize.body,
     color: colors.textSecondary,

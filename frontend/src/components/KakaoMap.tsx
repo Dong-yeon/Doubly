@@ -71,6 +71,7 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
     panTo: (lat: number, lng: number, offsetY = 0) =>
       inject(`window.fittoPanTo && window.fittoPanTo(${lat}, ${lng}, ${offsetY})`),
     clearPin: () => inject('window.fittoClearPin && window.fittoClearPin()'),
+    fitPoints: (points) => inject(`window.fittoFitPoints && window.fittoFitPoints(${JSON.stringify(points)})`),
   }));
 
   const fail = () => {

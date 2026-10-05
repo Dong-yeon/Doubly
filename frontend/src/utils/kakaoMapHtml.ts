@@ -244,6 +244,7 @@ kakao.maps.load(function () {
     if (d.type === 'padding') { window.fittoSetPadding(d.padding); }
     if (d.type === 'panTo') { window.fittoPanTo(d.lat, d.lng, d.offsetY); }
     if (d.type === 'clearPin') { window.fittoClearPin(); }
+    if (d.type === 'fitPoints') { window.fittoFitPoints(d.points); }
   });
 
   // 색상 지정 핀 — 원형 SVG 를 데이터 URI 로 인라인 렌더링 (외부 이미지 호스팅 불필요)
@@ -400,6 +401,14 @@ kakao.maps.load(function () {
       target = proj.coordsFromContainerPoint(new kakao.maps.Point(pt.x, pt.y + offsetY));
     }
     map.panTo(target);
+  };
+  // 주어진 좌표들이 다 보이게(검색 결과만 맞출 때 — 우리 핀까지 넣으면 결과가 작아진다)
+  window.fittoFitPoints = function (points) {
+    if (!points || !points.length) { return; }
+    if (points.length === 1) { programmatic = true; map.setCenter(new kakao.maps.LatLng(points[0].lat, points[0].lng)); return; }
+    var bounds = new kakao.maps.LatLngBounds();
+    points.forEach(function (p) { bounds.extend(new kakao.maps.LatLng(p.lat, p.lng)); });
+    fitTo(bounds);
   };
   // 좌표 고르기 핀 지우기 — 고른 걸 취소했을 때
   window.fittoClearPin = function () { if (selMarker) { selMarker.setMap(null); selMarker = null; } };

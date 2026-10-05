@@ -37,4 +37,6 @@ export interface KakaoMapHandle {
   panTo: (lat: number, lng: number, offsetY?: number) => void;
   /** 지도 탭으로 고른 좌표 핀을 지운다 */
   clearPin: () => void;
+  /** 이 좌표들이 다 보이게 시야를 맞춘다(검색 결과) — 여백은 setPadding 값을 쓴다 */
+  fitPoints: (points: KakaoLatLng[]) => void;
 }

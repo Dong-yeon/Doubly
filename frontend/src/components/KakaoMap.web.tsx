@@ -328,6 +328,20 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
       }
       map.panTo(target);
     },
+    fitPoints: (points) => {
+      const kakao = (window as any).kakao;
+      const map = mapRef.current;
+      if (!kakao?.maps || !map || points.length === 0) return;
+      programmaticRef.current = true;
+      if (points.length === 1) {
+        map.setCenter(new kakao.maps.LatLng(points[0].lat, points[0].lng));
+        return;
+      }
+      const bounds = new kakao.maps.LatLngBounds();
+      points.forEach((p) => bounds.extend(new kakao.maps.LatLng(p.lat, p.lng)));
+      const pad = padRef.current;
+      map.setBounds(bounds, pad.top, pad.right, pad.bottom, pad.left);
+    },
     clearPin: () => {
       if (selMarkerRef.current) {
         selMarkerRef.current.setMap(null);
