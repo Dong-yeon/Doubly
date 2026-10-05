@@ -335,6 +335,30 @@ public class PlaceService {
         return PlaceVisitResponse.of(visit, userName(visit.getVisitedBy()));
     }
 
+    /** "여기서 먹은 것"에 보여 줄 음식 수 — 그 이상은 화면이 길어지기만 한다 */
+    static final int MENU_MAX_ITEMS = 8;
+    /** 대표 메뉴로 제안하는 최소 횟수 — 한 번 먹은 건 그날의 선택이지 그 집의 대표가 아니다 */
+    static final int SIGNATURE_MIN_TIMES = 2;
+
+    /**
+     * 장소 상세 "여기서 먹은 것" + 대표 메뉴 제안(LOVEBODY_LOVELICHELIN_LINK P1-1). 대표 메뉴는 저장하지 않는다 —
+     * 저장하려면 장소에 컬럼이 필요하고, 그건 태그(분위기·가격대) 백로그와 함께 정한다.
+     */
+    public com.fitto.place.dto.PlaceMenuResponse menu(Long userId, Long placeId) {
+        getCouplePlace(userId, placeId);
+        List<com.fitto.place.dto.PlaceMenuResponse.MenuItem> items = placeVisitRepository
+                .countMenu(placeId, org.springframework.data.domain.PageRequest.of(0, MENU_MAX_ITEMS))
+                .stream()
+                .map(c -> new com.fitto.place.dto.PlaceMenuResponse.MenuItem(c.getName(), c.getTimes(), c.getLastDate()))
+                .toList();
+        List<String> signature = items.stream()
+                .filter(i -> i.times() >= SIGNATURE_MIN_TIMES)
+                .limit(3)
+                .map(com.fitto.place.dto.PlaceMenuResponse.MenuItem::name)
+                .toList();
+        return new com.fitto.place.dto.PlaceMenuResponse(items, signature);
+    }
+
     /** 장소의 방문 기록 목록 (PLACE-05) */
     public List<PlaceVisitResponse> visits(Long userId, Long placeId) {
         getCouplePlace(userId, placeId);

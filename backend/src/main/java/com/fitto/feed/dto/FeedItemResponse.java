@@ -51,8 +51,28 @@ public record FeedItemResponse(
          * 일상 포스트의 댓글 수(V124) — 카드가 "댓글 N"을 보여 준다. 다른 타입은 0.
          * {@code FeedItemMapper.attachReactions} 가 반응과 함께 한 번에 채운다.
          */
-        int commentCount
+        int commentCount,
+        /**
+         * 식사 카드에 붙은 장소 id — 부제의 "📍장소"를 누르면 그 장소 상세로 간다(2026-10-05, LOVEBODY_LOVELICHELIN_LINK P1-2).
+         * MEAL 타입에서만 값이 있다. 예전 앱은 이 필드를 모른 채 무시한다.
+         */
+        Long placeId
 ) {
+    /** 장소 id 가 없는 경우 — MEAL 외 전부, 그리고 예전 호출부 */
+    public FeedItemResponse(FeedItemType type, Long refId, Long userId, String userName, boolean mine,
+                            String title, String content, String imageUrl, LocalDateTime occurredAt,
+                            List<ReactionSummary> reactions, List<String> imageUrls, boolean shared, String summary,
+                            LocalDate recordDate, boolean edited, int commentCount) {
+        this(type, refId, userId, userName, mine, title, content, imageUrl, occurredAt, reactions, imageUrls, shared,
+                summary, recordDate, edited, commentCount, null);
+    }
+
+    /** 장소를 붙인다 — 식사 카드 */
+    public FeedItemResponse withPlaceId(Long id) {
+        return new FeedItemResponse(type, refId, userId, userName, mine, title, content, imageUrl, occurredAt,
+                reactions, imageUrls, shared, summary, recordDate, edited, commentCount, id);
+    }
+
     /** 댓글 수를 아직 모르는 단계 — attachReactions 가 채운다 */
     public FeedItemResponse(FeedItemType type, Long refId, Long userId, String userName, boolean mine,
                             String title, String content, String imageUrl, LocalDateTime occurredAt,

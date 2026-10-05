@@ -211,9 +211,13 @@ public class FeedService {
         if (!skip.contains(FeedItemType.MEAL)) {
             List<Meal> meals = mealRepository.findRecentForFeed(userIds,
                     from.createdAtOf(FeedItemType.MEAL), from.idOf(FeedItemType.MEAL), page);
-            Map<Long, String> placeNameByMealId = placeNamesOf(meals);
+            // 한 번만 묻는다 — 이름표(★ 포함)와 장소 id 를 같은 조회에서 뽑는다
+            Map<Long, VisitWithPlace> placeLinkByMealId = placeLinksOf(meals);
+            Map<Long, String> placeNameByMealId = placeLabelsOf(placeLinkByMealId);
             for (Meal m : meals) {
-                merged.add(mapper.toItem(m, names, userId, placeNameByMealId.get(m.getId())));
+                VisitWithPlace at = placeLinkByMealId.get(m.getId());
+                merged.add(mapper.toItem(m, names, userId, placeNameByMealId.get(m.getId()),
+                        at != null ? at.getVisit().getPlaceId() : null));
             }
         }
         if (!skip.contains(FeedItemType.PLACE_VISIT)) {
@@ -252,15 +256,15 @@ public class FeedService {
      * <p>한 끼니에 방문이 여러 건 붙는 일은 없지만, 있더라도 먼저 온 것을 쓴다 —
      * 부제에 들어갈 자리는 한 곳뿐이다.
      */
-    private Map<Long, String> placeNamesOf(List<Meal> meals) {
+    private Map<Long, String> placeLabelsOf(Map<Long, VisitWithPlace> links) {
         Map<Long, String> byMealId = new LinkedHashMap<>();
         // 방문 카드를 타임라인에서 뺐으므로(findRecentForFeed) 그 별점은 식사 카드의 📍 줄이 싣는다 — "📍장소 ★4"
-        placeLinksOf(meals).forEach((mealId, vp) -> byMealId.put(mealId,
+        links.forEach((mealId, vp) -> byMealId.put(mealId,
                 vp.getVisit().getRating() != null ? vp.getPlaceName() + " ★" + vp.getVisit().getRating() : vp.getPlaceName()));
         return byMealId;
     }
 
-    /** {@link #placeNamesOf} 의 원본 — 사진첩은 이름뿐 아니라 장소 id 도 필요하다(장소 상세로 이동). */
+    /** {@link #placeLabelsOf} 의 원본 — 사진첩은 이름뿐 아니라 장소 id 도 필요하다(장소 상세로 이동). */
     private Map<Long, VisitWithPlace> placeLinksOf(List<Meal> meals) {
         if (meals.isEmpty()) {
             return Map.of();
@@ -1028,7 +1032,8 @@ public class FeedService {
         List<FeedItemResponse> items = meals.stream()
                 .map(m -> {
                     VisitWithPlace place = places.get(m.getId());
-                    return mapper.toItem(m, names, userId, place != null ? place.getPlaceName() : null);
+                    return mapper.toItem(m, names, userId, place != null ? place.getPlaceName() : null,
+                            place != null ? place.getVisit().getPlaceId() : null);
                 })
                 .toList();
         return mapper.attachReactions(items, userId);
