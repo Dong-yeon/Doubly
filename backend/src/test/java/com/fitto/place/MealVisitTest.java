@@ -88,7 +88,7 @@ class MealVisitTest {
     }
 
     private static RecordMealVisitRequest.MealPart lunch(Boolean shared) {
-        return new RecordMealVisitRequest.MealPart(MealType.LUNCH, null, null, null, null, null, null, null,
+        return new RecordMealVisitRequest.MealPart(MealType.LUNCH, null, null, null, null, null, null, null, null,
                 List.of(new MealItemRequest("파스타", "1인분", 600, 70, 20, 25)), shared);
     }
 
@@ -232,7 +232,7 @@ class MealVisitTest {
         Long placeId = place(u[0], "홍대 라멘");
         MealVisitResponse keep = mealVisitService.record(u[0], req(UUID.randomUUID().toString(), placeId, null, lunch(false)));
         MealVisitResponse drop = mealVisitService.record(u[0], req(UUID.randomUUID().toString(), placeId, null,
-                new RecordMealVisitRequest.MealPart(MealType.DINNER, 500, null, null, null, null, null, null, null, false)));
+                new RecordMealVisitRequest.MealPart(MealType.DINNER, "회식", 500, null, null, null, null, null, null, null, false)));
 
         mealService.delete(u[0], keep.meal().id());
         mealService.delete(u[0], drop.meal().id(), true);

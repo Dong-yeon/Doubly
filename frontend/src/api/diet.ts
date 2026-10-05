@@ -132,7 +132,9 @@ export const dietApi = {
     unwrap(apiClient.get<ApiResponse<Meal[]>>('/meal/history', { params: { cursor } })),
   calendar: (year: number, month: number) =>
     unwrap(apiClient.get<ApiResponse<CalendarDay[]>>('/meal/calendar', { params: { year, month } })),
-  remove: (id: number) => unwrap(apiClient.delete<ApiResponse<void>>(`/meal/${id}`)),
+  // withVisit — 장소가 붙은 식단에서 "방문 기록도 지우기"를 골랐을 때만(결정 Q4). 기본은 방문은 남기고 연결만 끊는다
+  remove: (id: number, withVisit = false) =>
+    unwrap(apiClient.delete<ApiResponse<void>>(`/meal/${id}`, withVisit ? { params: { withVisit: true } } : undefined)),
   // 이 사진(URL)으로 남긴 내 식단 — 채팅 사진 → 식단 기록 전에 묻는다. URL 은 본문으로(접속 로그에 안 남게)
   photoRecord: (photoUrl: string) =>
     unwrap(apiClient.post<ApiResponse<PhotoRecordLookup>>('/meal/photo-record', { photoUrl })),

@@ -58,6 +58,8 @@ public record RecordMealVisitRequest(
     public record MealPart(
             @NotNull(message = "끼니 종류는 필수입니다.")
             MealType mealType,
+            /** 식단 메모 — 럽바디 기록 화면의 메모. 방문 메모(바깥 memo)와 따로다. 장소 이름을 섞지 않는다 */
+            String memo,
             Integer calories,
             Integer carbs,
             Integer protein,

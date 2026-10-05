@@ -33,6 +33,7 @@ import { NutritionRing } from '../../components/NutritionRing';
 import { WorkoutCheckinCard } from '../../components/workout/WorkoutCheckinCard';
 import { WeekStrip } from '../../components/WeekStrip';
 import { useDietStore } from '../../store/dietStore';
+import { usePlaceStore } from '../../store/placeStore';
 import { useWorkoutStore } from '../../store/workoutStore';
 import { useRelationStore } from '../../store/relationStore';
 import { useDeleteAction } from '../../hooks/useDeleteAction';
@@ -624,19 +625,31 @@ export function DietScreen({ navigation, route }: Props) {
   );
 
   const onLongPress = useCallback((m: Meal) => {
+    // useDeleteAction 이 in-flight 가드 + 기본 에러 토스트를 처리한다 (QA_CHECKLIST.md 패턴 7)
+    // 지운 뒤 영양 합계·스트릭도 다시 읽는다 — 목록만 빠지고 "오늘 영양" 칼로리가 그대로 남았다
+    const run = (withVisit: boolean) =>
+      runDelete(m.id, async () => {
+        await remove(m.id, withVisit);
+        refreshExtras();
+        // 방문을 지웠든 연결만 끊겼든 럽슐랭 목록의 방문 수·커버가 바뀐다
+        if (m.placeId) usePlaceStore.getState().invalidate();
+      }, '식단 기록을 삭제하지 못했어요.');
+    /*
+     * 장소가 붙은 끼니면 방문 기록도 지울지 묻는다(결정 Q4, 2026-10-05). 방문은 장소 별점·방문 횟수의 근거라 말없이
+     * 지우면 안 되고, 말없이 남기면 사진첩에 그때부터 방문 사진으로 나타난다. 지우는 건 내가 남긴 방문뿐이다(서버).
+     */
+    if (m.placeId && m.placeName) {
+      Alert.alert('식단 기록 삭제', `${m.mealTypeLabel} 기록을 삭제할까요?
+${m.placeName} 방문 기록도 함께 지울 수 있어요.`, [
+        { text: '취소', style: 'cancel' },
+        { text: '식단만 삭제', onPress: () => run(false) },
+        { text: '방문 기록도 삭제', style: 'destructive', onPress: () => run(true) },
+      ]);
+      return;
+    }
     Alert.alert('식단 기록 삭제', `${m.mealTypeLabel} 기록을 삭제할까요?`, [
       { text: '취소', style: 'cancel' },
-      {
-        text: '삭제',
-        style: 'destructive',
-        // useDeleteAction 이 in-flight 가드 + 기본 에러 토스트를 처리한다 (QA_CHECKLIST.md 패턴 7)
-        // 지운 뒤 영양 합계·스트릭도 다시 읽는다 — 목록만 빠지고 "오늘 영양" 칼로리가 그대로 남았다
-        onPress: () =>
-          runDelete(m.id, async () => {
-            await remove(m.id);
-            refreshExtras();
-          }, '식단 기록을 삭제하지 못했어요.'),
-      },
+      { text: '삭제', style: 'destructive', onPress: () => run(false) },
     ]);
   }, [runDelete, remove, refreshExtras]);
 

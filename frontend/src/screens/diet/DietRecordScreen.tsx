@@ -57,6 +57,7 @@ import type {
   FavoriteFood,
   FeatureState,
   FoodLookupResult,
+  Meal,
   MealAnalysis,
   MealAnalysisSource,
   MealType,
@@ -253,23 +254,27 @@ export function DietRecordScreen({ navigation, route }: Props) {
   const [dateMeal, setDateMeal] = useState(false);
   /*
    * 어디서 먹었는지(럽슐랭 장소 연동) — 식단 기록 = 그 장소를 다녀왔다는 뜻이라, 고르면
-   * 저장 시 방문 기록으로도 남는다. 별점은 그 김에 럽슐랭 대표 평점까지 같이 매기는
-   * 선택 사항(방문만 남기고 평가는 건너뛸 수 있다). 수정 화면에서는 dateMeal 과 같은
-   * 이유로 노출하지 않는다.
+   * 저장 시 방문 기록으로도 남는다(외식 기록 API 한 번 — onSave). 별점은 선택이고, 내 대표
+   * 평점이 아직 없을 때만 대표 평점도 된다(결정 Q3, 2026-10-05). 수정 화면에서는 dateMeal 과
+   * 같은 이유로 노출하지 않는다.
+   *
+   * <p>고른 장소는 둘 중 하나다 — 이미 있는 우리 장소(selectedPlace) 또는 카카오 검색 결과(pendingKakao).
+   * 검색 결과는 고르는 순간이 아니라 <b>저장할 때</b> 서버가 장소로 만든다 — 예전엔 [추가]를 누르는 순간
+   * 장소가 생겨, 식단을 저장하지 않고 나가도 장소만 남았다.
    */
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
+  const [pendingKakao, setPendingKakao] = useState<PlaceSearchResult | null>(null);
+  const pickedPlaceName = selectedPlace?.name ?? pendingKakao?.name ?? null;
   const [placeRating, setPlaceRating] = useState(0);
   const [placeSheetOpen, setPlaceSheetOpen] = useState(false);
   const [placeSearch, setPlaceSearch] = useState('');
   /*
    * 카카오 장소 검색(새 장소 추가) — 저장된 장소 목록에 없을 때의 경로. 검색어를 그대로
    * 재사용해 "검색" 버튼 한 번으로 저장된 목록 필터와 카카오 조회를 동시에 돌린다.
-   * addingPlaceName 은 어느 결과를 지금 담는 중인지(버튼별 로딩 표시) 판별용.
    */
   const [kakaoResults, setKakaoResults] = useState<PlaceSearchResult[] | null>(null);
   const [kakaoSearching, setKakaoSearching] = useState(false);
   const [kakaoUnavailable, setKakaoUnavailable] = useState(false);
-  const [addingPlaceName, setAddingPlaceName] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   // 버튼 비활성은 saving 이 렌더된 뒤에야 걸린다 — 그 사이 두 번째 탭이 같은 끼니를 한 번 더 저장했다
   const savingRef = useRef(false);
@@ -532,39 +537,16 @@ export function DietRecordScreen({ navigation, route }: Props) {
     }
   };
 
-  /*
-   * 카카오 검색 결과를 바로 럽슐랭 장소로 추가 — 식단 기록에서 등록하는 흐름이라
-   * 추가 즉시 선택 상태로 만들어 별점까지 이어서 매길 수 있게 한다.
+  /**
+   * 카카오 검색 결과를 고른다 — 저장은 하지 않는다. 식단을 저장할 때 외식 기록 API 가 장소까지 만든다
+   * (이미 같은 곳이 있으면 그 장소에 붙는다 — 서버 PlaceService.findExisting). 고르기만 하고 나가면 아무것도 안 남는다.
    */
-  const onAddFromKakao = async (result: PlaceSearchResult) => {
-    setAddingPlaceName(result.name);
-    try {
-      const saved = await placeApi.save({
-        name: result.name,
-        address: result.address ?? undefined,
-        lat: result.lat ?? undefined,
-        lng: result.lng ?? undefined,
-        category: result.category ?? undefined,
-        // 이미 등록된 같은 장소면(카카오 id로 대조) 새로 만들지 않고 그 장소가 그대로 온다
-        kakaoPlaceId: result.kakaoPlaceId ?? undefined,
-      });
-      haptics.success();
-      // 이미 담겨 있던 곳이면 그 장소가 그대로 온다 — 그때 "추가했어요"는 사실이 아니다
-      if (saved.created === false) toast.info(`${saved.name}은(는) 이미 럽슐랭에 있어요`);
-      else toast.success(`${saved.name}을(를) 럽슐랭에 추가했어요`);
-      usePlaceStore.getState().invalidate();
-      setSelectedPlace(saved);
-      setPlaceRating(0);
-      closePlaceSheet();
-    } catch (e) {
-      // 402(플랜 한도)는 api/client 가 이미 업그레이드 시트를 열었다 — 여기서 또 띄우면
-      // 같은 사실을 두 번 알리게 된다 (HomeScreen.notifyUnless402 와 같은 이유).
-      const code = errorCodeOf(e);
-      if (code === 'PLAN_UPGRADE_REQUIRED' || code === 'PLAN_LIMIT_EXCEEDED') return;
-      toast.error(getErrorMessage(e, '장소를 추가하지 못했어요.'));
-    } finally {
-      setAddingPlaceName(null);
-    }
+  const onAddFromKakao = (result: PlaceSearchResult) => {
+    haptics.light();
+    setSelectedPlace(null);
+    setPendingKakao(result);
+    setPlaceRating(0);
+    closePlaceSheet();
   };
 
   const updateItem = (key: string, patch: Partial<ItemForm>) => {
@@ -1226,45 +1208,57 @@ export function DietRecordScreen({ navigation, route }: Props) {
         return;
       }
 
-      const saved = await save(payload);
-      maybeSavedRef.current = true;
-      haptics.success();
-
       /*
-       * 장소를 골랐으면 이 식단 기록을 그 장소 방문 기록으로도 남긴다 — "식단에 등록했다"는
-       * 곧 "거기 다녀왔다"는 뜻이라 두 번 입력받지 않는다. 별점을 같이 매겼으면 럽슐랭 대표
-       * 평점도 그 자리에서 upsert 한다(재평가라도 안전 — PlaceService.rate 참고). 이 연동이
-       * 실패해도 식단 기록 자체는 이미 저장됐으므로 전체 저장을 실패로 되돌리지 않는다.
+       * 장소를 골랐으면 외식 기록 API 한 번으로 식단·방문·평점을 같이 남긴다(서버 MealVisitService) —
+       * "식단에 등록했다"는 곧 "거기 다녀왔다"는 뜻이라 두 번 입력받지 않는다. 예전엔 식단 저장 → 방문 저장 →
+       * 평점 저장을 여기서 엮어, 뒤의 둘이 실패하면 식단만 남고 다시 시도할 길이 없었다. 이제 실패하면 아무것도
+       * 안 남고(같은 clientRequestId 로 다시 누르면 된다), 사진은 한 번 올린 URL 이 식단·방문에 같이 들어간다.
        */
       let placeToastSuffix = '';
-      // 장소 연동이 실패해도 식단 기록 자체는 이미 저장됐다 — 하지만 바로 아래서 성공
-      // 토스트를 또 띄우면(둘 다 단일 슬롯 toastStore라 나중 호출이 앞 걸 그냥 덮어써서)
-      // 이 실패 토스트는 화면에 뜰 새도 없이 사라졌다(2026-08-31). 실패 여부를 들고 있다가
-      // 토스트를 딱 한 번만 — 실패했으면 타입도 error 로 — 보낸다.
-      let placeLinkFailed = false;
-      if (selectedPlace) {
-        try {
-          await placeApi.recordVisit(selectedPlace.id, {
-            visitedAt: mealDate,
-            mealId: saved.id,
-            rating: placeRating > 0 ? placeRating : undefined,
-          });
-          if (placeRating > 0) {
-            const previousTier = selectedPlace.lovelichelinTier;
-            const updated = await placeApi.rate(selectedPlace.id, { rating: placeRating, revisitIntent: true });
-            placeToastSuffix =
-              previousTier === 0 && updated.lovelichelinTier > 0
-                ? ` · 럽슐랭 ${updated.lovelichelinTier}스타 등극! 🎉`
-                : ` · ${selectedPlace.name} 럽슐랭 평가 완료`;
-          } else {
-            placeToastSuffix = ` · ${selectedPlace.name} 방문 기록 완료`;
-          }
-          usePlaceStore.getState().invalidate();
-        } catch (e) {
-          placeLinkFailed = true;
-          placeToastSuffix = ` · ${getErrorMessage(e, '장소 방문 기록 연동에 실패했어요. 럽슐랭에서 다시 시도해주세요.')}`;
-        }
+      let saved: Meal;
+      if (pickedPlaceName) {
+        const res = await placeApi.recordMealVisit({
+          clientRequestId,
+          placeId: selectedPlace?.id,
+          place: pendingKakao
+            ? {
+                name: pendingKakao.name,
+                address: pendingKakao.address ?? undefined,
+                lat: pendingKakao.lat ?? undefined,
+                lng: pendingKakao.lng ?? undefined,
+                category: pendingKakao.category ?? undefined,
+                kakaoPlaceId: pendingKakao.kakaoPlaceId ?? undefined,
+              }
+            : undefined,
+          visitedAt: mealDate,
+          photoUrl,
+          rating: placeRating > 0 ? placeRating : undefined,
+          meal: {
+            mealType,
+            memo: payload.memo,
+            items: payload.items,
+            calories: payload.calories,
+            sugar: payload.sugar,
+            sodium: payload.sodium,
+            fiber: payload.fiber,
+            sharedWithPartner: payload.sharedWithPartner,
+          },
+        });
+        // 식단 목록은 이 API 가 아니라 식단 스토어가 들고 있다 — 저장(save)이 하던 다시 받기를 대신 한다
+        await useDietStore.getState().reload();
+        usePlaceStore.getState().invalidate();
+        saved = res.meal as Meal;
+        const name = res.place.name;
+        placeToastSuffix = res.tierUp
+          ? ` · 럽슐랭 ${res.place.lovelichelinTier}스타 등극! 🎉`
+          : pendingKakao && res.place.created === false
+            ? ` · ${name}은(는) 이미 럽슐랭에 있어서 거기에 남겼어요`
+            : ` · ${name} 방문 기록 완료`;
+      } else {
+        saved = await save(payload);
       }
+      maybeSavedRef.current = true;
+      haptics.success();
 
       /*
        * 사진만 올리고 영양 정보를 비워두면 서버가 뒤이어 칼로리를 채운다
@@ -1290,11 +1284,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
             : '칼로리는 곧 채워져요.'
           : '') +
         placeToastSuffix;
-      if (placeLinkFailed) {
-        toast.error(saveMessage);
-      } else {
-        toast.success(saveMessage);
-      }
+      toast.success(saveMessage);
 
       /*
        * 저장이 끝나면 공유 여부와 무관하게 화면부터 닫는다.
@@ -1345,7 +1335,16 @@ export function DietRecordScreen({ navigation, route }: Props) {
     } catch (e) {
       // 타임아웃·끊김이면 서버가 뒤늦게 저장했을 수 있다 — 나갈 때 사진을 치우지 않는다
       if (!wasRejected(e)) maybeSavedRef.current = true;
-      Alert.alert('오류', getErrorMessage(e));
+      /*
+       * 새 장소를 담다 FREE 장소 한도(402)에 걸렸다 — 업그레이드 안내는 api/client 가 이미 열었다. 같은 말을 또 하지
+       * 않고, 장소만 빼면 식단은 저장할 수 있다는 것만 알린다(외식 기록은 한 덩어리라 식단도 함께 저장되지 않았다).
+       */
+      const code = errorCodeOf(e);
+      if (code === 'PLAN_UPGRADE_REQUIRED' || code === 'PLAN_LIMIT_EXCEEDED') {
+        if (pendingKakao) toast.info('장소를 빼면 식단은 바로 저장할 수 있어요.');
+      } else {
+        Alert.alert('오류', getErrorMessage(e));
+      }
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -1429,13 +1428,14 @@ export function DietRecordScreen({ navigation, route }: Props) {
                       리포트). 시트를 열어야 "카카오에서 찾기"가 보이므로, 닫힌 상태 문구부터
                       "검색"을 앞세운다.
                     */}
-                    {selectedPlace ? selectedPlace.name : '장소 검색하기'}
+                    {pickedPlaceName ?? '장소 검색하기'}
                   </Text>
                 </TouchableOpacity>
-                {selectedPlace ? (
+                {pickedPlaceName ? (
                   <TouchableOpacity
                     onPress={() => {
                       setSelectedPlace(null);
+                      setPendingKakao(null);
                       setPlaceRating(0);
                     }}
                     hitSlop={8}
@@ -1456,7 +1456,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
                 )}
               </View>
 
-              {selectedPlace ? (
+              {pickedPlaceName ? (
                 <>
                   <Text style={styles.label}>같이 별점도 남길까요? (선택)</Text>
                   <View style={styles.starRow}>
@@ -1471,10 +1471,17 @@ export function DietRecordScreen({ navigation, route }: Props) {
                       </TouchableOpacity>
                     ))}
                   </View>
+                  {/*
+                    대표 평점은 비어 있을 때만 이 별점으로 정해진다(결정 Q3) — 이미 있으면 그대로 두고,
+                    이 별점은 이번 방문 기록에만 남는다. 그래서 기존 대표 평점으로 별을 미리 채우지 않는다
+                    (채워 두면 건드리지 않아도 그 값이 방문 별점으로 저장됐다).
+                  */}
                   <Text style={styles.placeRatingHint}>
-                    {placeRating > 0
-                      ? '방문 기록과 함께 럽슐랭 평가에도 반영돼요.'
-                      : '별점 없이 저장하면 방문 기록만 남아요.'}
+                    {selectedPlace?.myRating != null
+                      ? `내 대표 평점 ${'★'.repeat(selectedPlace.myRating)}은 그대로예요 — 이 별점은 이번 방문 기록에 남아요.`
+                      : placeRating > 0
+                        ? '방문 기록과 함께 내 럽슐랭 평점이 돼요.'
+                        : '별점 없이 저장하면 방문 기록만 남아요.'}
                   </Text>
                 </>
               ) : null}
@@ -1858,8 +1865,8 @@ export function DietRecordScreen({ navigation, route }: Props) {
       </FormKeyboardView>
 
       {/*
-        럽슐랭 장소 선택 시트 — 저장된 장소 중에서 고르거나, 없으면 카카오에서 찾아 바로
-        추가한다(다녀온 곳이니 곧장 방문완료로 생긴다 — onAddFromKakao 참고).
+        럽슐랭 장소 선택 시트 — 저장된 장소 중에서 고르거나, 없으면 카카오에서 찾아 고른다.
+        카카오 결과는 식단을 저장할 때 장소로 만들어진다(onAddFromKakao 참고).
       */}
       <Sheet visible={placeSheetOpen} onClose={closePlaceSheet} cardStyle={styles.placeSheetCard}>
         <Text style={styles.sheetTitle}>어디서 드셨어요?</Text>
@@ -1884,7 +1891,8 @@ export function DietRecordScreen({ navigation, route }: Props) {
                   activeOpacity={0.7}
                   onPress={() => {
                     setSelectedPlace(item);
-                    setPlaceRating(item.myRating ?? 0);
+                    setPendingKakao(null);
+                    setPlaceRating(0);
                     closePlaceSheet();
                   }}
                 >
@@ -1928,12 +1936,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
                     {item.category ?? item.address ?? ''}
                   </Text>
                 </View>
-                <Button
-                  title="추가"
-                  size="sm"
-                  loading={addingPlaceName === item.name}
-                  onPress={() => onAddFromKakao(item)}
-                />
+                <Button title="고르기" size="sm" onPress={() => onAddFromKakao(item)} />
               </View>
             )}
             ListEmptyComponent={<Text style={styles.empty}>검색 결과가 없어요.</Text>}

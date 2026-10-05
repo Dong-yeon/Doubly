@@ -114,7 +114,7 @@ public class MealVisitService {
         MealResponse meal = null;
         RecordMealVisitRequest.MealPart part = req.meal();
         if (part != null) {
-            SaveMealRequest saveMeal = new SaveMealRequest(visitedAt, part.mealType(), null, photoUrl,
+            SaveMealRequest saveMeal = new SaveMealRequest(visitedAt, part.mealType(), blankToNull(part.memo()), photoUrl,
                     part.calories(), part.carbs(), part.protein(), part.fat(),
                     part.sugar(), part.sodium(), part.fiber(), part.items(), part.sharedWithPartner(), key);
             meal = mealService.save(userId, saveMeal, place.getName());
