@@ -821,7 +821,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
    */
   const ensureUploaded = (uri: string): Promise<string> => {
     if (uploadedRef.current?.uri === uri) return uploadedRef.current.url;
-    const url = uploadImage(uri).then(
+    const url = uploadImage(uri, { purpose: 'meal' }).then(
       (uploaded) => {
         // 그사이 사진이 바뀌었다면 이건 남의 결과다 — 지금 캐시된 uri 일 때만 "끝남"으로 적는다
         if (uploadedRef.current?.uri === uri) uploadedDoneRef.current = uri;
@@ -869,11 +869,11 @@ export function DietRecordScreen({ navigation, route }: Props) {
        * 그때 제대로 알린다. 아직 아무것도 누르지 않은 사용자에게 업로드 오류를 띄우면
        * 무엇 때문에 뜬 건지 알 수 없다.
        *
-       * 단 사진 한도가 0이면 선업로드하지 않는다 — 402 는 위의 catch 와 무관하게 api/client 가 업그레이드
-       * 시트를 띄우므로, 저장도 안 누른 사용자 앞에 결제 안내가 뜬다. 그 경우는 저장 때 올리며 그때 알린다.
-       * 잔여치는 표시용(PRO 는 null)이라 최종 판정은 여전히 서버다 (first-experience-audit.md #30)
+       * 단 오늘 식단 사진 한도(MEAL_PHOTO, 사람 단위 하루 10장)가 0이면 선업로드하지 않는다 — 고르기만 해도
+       * 한 장이 깎이고, 저장도 안 누른 사용자 앞에 한도 안내가 뜬다. 그 경우는 저장 때 올리며 그때 알린다.
+       * 잔여치는 표시용이라 최종 판정은 여전히 서버다 (first-experience-audit.md #10·#30)
        */
-      if (usePlanStore.getState().remainingOf('PHOTO_UPLOAD') !== 0) {
+      if (usePlanStore.getState().remainingOf('MEAL_PHOTO') !== 0) {
         void ensureUploaded(uri).catch(() => {});
       }
     } catch (e) {
@@ -970,7 +970,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
     // "아직 만들고 있어요"(2분 대기 초과, status 0)면 서버 작업이 아직 그 파일을 받아야 할 수 있어 두고 간다.
     let url: string | null = null;
     try {
-      url = await runBusy('영양성분표 올리는 중…', () => uploadImage(uri));
+      url = await runBusy('영양성분표 올리는 중…', () => uploadImage(uri, { purpose: 'meal' }));
       const result = await dietApi.analyze(url);
       uploadApi.discard(url);
       applyPhotoAnalysis(result, { productName });

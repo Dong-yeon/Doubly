@@ -238,6 +238,19 @@ public enum Feature {
      * docs/PERSONAL_JOURNAL_ANALYSIS_2026-10-02.md §5-1.
      */
     JOURNAL_PHOTO("기록 사진", Quota.perDay(3), Quota.perDay(3)),
+
+    /**
+     * 식단 사진(끼니 사진·영양성분표) — 전용 서명({@code UploadController.mealSignature})에서 센다.
+     *
+     * <p><b>{@link #PHOTO_UPLOAD} 에서 세지 않는다.</b> 예전엔 같은 주머니라, 둘이 하루 세 끼를 찍으면 커플 무료 한도
+     * 월 60장이 열흘 안에 바닥나고 그 뒤로는 일상·채팅 사진까지 402 가 떴다(docs/first-experience-audit.md #10 —
+     * 우리 커플 실측 30일 209장, 대부분 식단). AI 음식 분석이 하루 5회로 "끼니마다"를 전제로 한 것과도 어긋났다.
+     *
+     * <p>사람 단위·하루 10장 = 세 끼 + 간식 + 영양성분표 + 다시 찍기의 사고 방지선이다. FREE 와 PRO 가 같아
+     * 결제 비교표에서 빠지고({@link #isListed()}) 넘겨도 업셀하지 않는다 — {@link #JOURNAL_PHOTO} 와 같은 원칙(기록은 무료).
+     * 옛 앱은 공용 서명을 쓰므로 지금처럼 {@link #PHOTO_UPLOAD} 에서 빠진다.
+     */
+    MEAL_PHOTO("식단 사진", Quota.perDay(10), Quota.perDay(10)),
     /*
      * 나만의 하루 기록 — 게이팅 없음(둘 다 무제한). COUPLE_GAME 과 같은 이유로 Feature 로 둔다: <b>새 기록을
      * 만들 때만</b> PlanGuard.require 를 지나 FEATURE_USED 가 남는다(수정은 세지 않는다). 본문은 어디에도 싣지 않는다.
@@ -348,7 +361,7 @@ public enum Feature {
                  VIDEO_CALL, STREAK_REPAIR -> FeatureGroup.DEPTH;
             case PHOTO_UPLOAD, TRIP_ACTIVE, PLACE_PIN, CONTENT_ITEM, WORKOUT_ROUTINE,
                  CALENDAR_EVENT, FAVORITE_FOOD, CUSTOM_EXERCISE, CHALLENGE_ACTIVE,
-                 COOP_GOAL_ACTIVE, JOURNAL_PHOTO -> FeatureGroup.STORAGE;
+                 COOP_GOAL_ACTIVE, JOURNAL_PHOTO, MEAL_PHOTO -> FeatureGroup.STORAGE;
             case WORKOUT_BOOSTER, CUSTOM_QUESTION, VOICE_MESSAGE, PUBLIC_GUIDE_LINK,
                  CSV_EXPORT, COUPLE_GAME, JOURNAL -> FeatureGroup.ENGAGEMENT;
             case CUSTOM_BACKGROUND, PREMIUM_STICKER, TOUCH_GESTURE_PREMIUM -> FeatureGroup.DECORATION;

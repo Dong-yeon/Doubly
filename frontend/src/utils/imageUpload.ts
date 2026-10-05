@@ -5,7 +5,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { CLOUDINARY, isCloudinaryConfigured } from '../constants/config';
 import { uploadApi, type UploadSignature } from '../api/upload';
-import { errorCodeOf } from '../api/client';
+import { errorCodeOf, isApiError } from '../api/client';
 import { toast } from '../store/toastStore';
 
 /** 고른 사진 한 장 — 원본 픽셀 크기까지. 크롭처럼 좌표를 계산하는 쪽이 크기를 알아야 한다 */
@@ -283,6 +283,19 @@ export async function uploadDataUriWithSignature(
 }
 
 /**
+ * 식단 사진 서명 — 식단 전용 서명이 없는 옛 서버(404)면 공용 서명으로. 서버가 먼저 배포되므로 보통은 안 탄다.
+ * 한도 초과 등 다른 실패는 그대로 던진다(공용으로 넘어가면 식단 한도가 아무 일도 하지 않는다).
+ */
+async function mealSignatureOrShared(): Promise<UploadSignature> {
+  try {
+    return await uploadApi.mealSignature();
+  } catch (e) {
+    if (isApiError(e) && e.status === 404) return uploadApi.signature();
+    throw e;
+  }
+}
+
+/**
  * Cloudinary 업로드 → secure_url.
  *
  * <p>백엔드 서명(signed)을 우선 사용하고, <b>서명 기능이 꺼져 있을 때만</b>
@@ -294,12 +307,12 @@ export async function uploadDataUriWithSignature(
  * 운영에서 존재하지도 않는 unsigned preset 으로 가서 원인 모를 실패가 된다.
  * 폴백해도 되는 건 서버가 명시적으로 "설정 안 됨"이라고 답한 경우 하나뿐이다.
  */
-export async function uploadImage(uri: string): Promise<string> {
+export async function uploadImage(uri: string, options?: { purpose?: 'meal' }): Promise<string> {
   let sig: Awaited<ReturnType<typeof uploadApi.signature>> | null = null;
   try {
-    sig = await uploadApi.signature();
+    sig = options?.purpose === 'meal' ? await mealSignatureOrShared() : await uploadApi.signature();
   } catch (e) {
-    // 한도 초과(402)는 여기서 그대로 던진다 — api/client 가 이미 업그레이드 안내를 띄웠다.
+    // 한도 초과(402·429)는 여기서 그대로 던진다 — api/client 가 이미 업그레이드 안내를 띄웠다.
     if (errorCodeOf(e) !== 'UPLOAD_NOT_CONFIGURED') throw e;
   }
 
