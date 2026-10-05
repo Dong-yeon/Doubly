@@ -119,7 +119,12 @@ public enum Feature {
     CONTENT_ITEM("콘텐츠", Quota.upTo(20), Quota.unlimited()),
     /** PRO 의 30은 기존 {@code MAX_ROUTINES} 를 옮겨온 것 — 상한의 단일 출처를 여기로 모았다. */
     WORKOUT_ROUTINE("내 운동 루틴", Quota.upTo(3), Quota.upTo(30)),
-    CALENDAR_EVENT("커플 캘린더 일정", Quota.perMonth(10), Quota.unlimited()),
+    /**
+     * 다가오는 일정 수 — 매년 반복(기념일·생일)과 아직 끝나지 않은 일정만 센다.
+     * 예전엔 월 10건 소비형이라 지워도 돌아오지 않았고, 첫날 기념일·생일·약속을 넣다 보면 그 달이 끝났다
+     * (docs/first-experience-audit.md #33). 지난 일정은 세지 않는다 — 세면 기록이 쌓일수록 지워야만 새로 넣을 수 있다.
+     */
+    CALENDAR_EVENT("다가오는 캘린더 일정", Quota.upTo(10), Quota.unlimited()),
     /** PRO 의 50은 기존 {@code MAX_FAVORITES} 를 옮겨온 것. */
     FAVORITE_FOOD("즐겨찾는 음식", Quota.upTo(10), Quota.upTo(50)),
     /**

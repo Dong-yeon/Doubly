@@ -26,7 +26,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.YearMonth;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -109,7 +108,9 @@ public class CalendarService {
     public EventResponse create(Long userId, CreateEventRequest req) {
         Relation couple = requireCouple(userId);
         validatePeriod(req.eventDate(), req.endDate(), req.repeatYearly());
-        planGuard.consume(userId, Feature.CALENDAR_EVENT);
+        // 개수형 — 지우면 바로 다시 넣을 수 있다. 카운터가 아니라 지금 남아 있는 다가오는 일정 수로 판정한다
+        planGuard.requireCapacity(userId, Feature.CALENDAR_EVENT,
+                eventRepository.countUpcoming(couple.getId(), KstClock.today()));
         CalendarEvent event = eventRepository.save(CalendarEvent.builder()
                 .coupleId(couple.getId())
                 .title(req.title())
@@ -169,10 +170,6 @@ public class CalendarService {
         Relation couple = requireCouple(userId);
         CalendarEvent event = requireEditableEvent(userId, eventId, couple);
         eventRepository.delete(event);
-        if (createdThisQuotaMonth(event)) {
-            // 커플 공용 주머니라 지운 사람이 누구든 만든 사람이 썼던 같은 주머니로 돌아간다(Feature.isCoupleScoped)
-            planGuard.refund(userId, Feature.CALENDAR_EVENT);
-        }
         if (worthTellingPartner(event)) {
             notificationService.notify(couple.partnerOf(userId), NotificationCategory.ANNIVERSARY,
                     "커플 캘린더", "'" + event.getTitle() + "' 일정이 삭제됐어요", PushLinks.CALENDAR);
@@ -181,23 +178,6 @@ public class CalendarService {
     }
 
     // ---- helpers ----
-
-    /**
-     * 이번 달(KST) 한도에서 차감된 일정인가 — 지울 때 한도를 돌려줄지 가른다.
-     *
-     * <p>{@code CALENDAR_EVENT} 는 월 한도라 카운터 키가 <b>이번 달</b>이다. 지난달에 만든 일정을
-     * 이번 달에 지우며 돌려주면, 차감된 적 없는 이번 달 카운터가 깎인다 — 월말에 꽉 채워 두고
-     * 월초에 지우는 것만으로 한도가 늘어나는 우회로다. 그래서 같은 달에 만든 것만 돌려준다.
-     *
-     * <p>{@code created_at} 은 JVM 기본 시간대의 벽시계 값이다(운영 UTC — {@code MemoryDates}
-     * 주석 참고). 그대로 월을 읽으면 KST 1일 00~09시에 만든 일정이 지난달로 읽히므로 KST 로 옮겨 본다.
-     */
-    private boolean createdThisQuotaMonth(CalendarEvent event) {
-        if (event.getCreatedAt() == null) return false;
-        LocalDate createdKst = event.getCreatedAt().atZone(ZoneId.systemDefault())
-                .withZoneSameInstant(KstClock.ZONE).toLocalDate();
-        return YearMonth.from(createdKst).equals(YearMonth.from(KstClock.today()));
-    }
 
     /**
      * 수정·삭제를 상대에게 알릴 일정인가 — 등록 알림과 같은 원칙이다.
