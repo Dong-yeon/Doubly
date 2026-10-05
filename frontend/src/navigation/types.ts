@@ -233,10 +233,11 @@ export type DietStackParamList = {
   /*
    * 럽슐랭 탭과 공유하는 장소 상세 — 식단 기록에 붙은 장소를 탭했을 때 이 스택에 그대로
    * 쌓는다(크로스탭으로 보내면 뒤로가기가 식단 목록으로 안 돌아온다 — PlaceScreensParamList
-   * 주석과 같은 이유). PlaceAdd 는 여기서 안 쓴다 — 식단의 장소 픽커는 새 장소를
-   * placeApi.save() 로 바로 등록하지 PlaceAddScreen 으로 이동하지 않는다.
+   * 주석과 같은 이유). PlaceAdd 도 함께 둔다 — 식단의 장소 픽커는 PlaceAdd 로 가지 않지만, 여기서 연
+   * 장소 상세의 수정 버튼(연필)이 PlaceAdd 로 간다. 예전엔 이 스택에 없어 그 버튼이 막혔다(2026-10-05).
    */
   PlaceDetail: PlaceScreensParamList['PlaceDetail'];
+  PlaceAdd: PlaceScreensParamList['PlaceAdd'];
   /*
    * date: 캘린더에서 특정 날짜를 골라 들어올 때 그 날짜로 시작한다 (없으면 오늘)
    * meal: 이미 저장한 기록을 고치러 들어올 때 그 기록. id 만 넘기지 않는 이유는

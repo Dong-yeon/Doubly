@@ -52,12 +52,28 @@ export interface FeedCardProps {
   onLongPress: (item: FeedItem) => void;
   /** 댓글 열기(V124) — 넘겨준 화면에서만 일상 카드에 "댓글 N"이 보인다(댓글 화면이 같은 스택에 있어야 한다) */
   onOpenComments?: (item: FeedItem) => void;
+  /** 식사 카드의 📍 줄을 눌렀다 — 그 장소 상세로. 안 주면(장소 상세가 없는 스택) 글자만 보인다 */
+  onOpenPlace?: (item: FeedItem) => void;
 }
 
-export function FeedCard({ item, timeLabel, quickEmojis, onReact, onLongPress, onOpenComments }: FeedCardProps) {
+export function FeedCard({
+  item,
+  timeLabel,
+  quickEmojis,
+  onReact,
+  onLongPress,
+  onOpenComments,
+  onOpenPlace,
+}: FeedCardProps) {
   if (item.type !== 'POST') {
     return (
-      <RecordCard item={item} timeLabel={timeLabel} quickEmojis={quickEmojis} onReact={onReact} />
+      <RecordCard
+        item={item}
+        timeLabel={timeLabel}
+        quickEmojis={quickEmojis}
+        onReact={onReact}
+        onOpenPlace={onOpenPlace}
+      />
     );
   }
   return (
@@ -88,7 +104,8 @@ function RecordCard({
   timeLabel,
   quickEmojis,
   onReact,
-}: Pick<FeedCardProps, 'item' | 'timeLabel' | 'quickEmojis' | 'onReact'>) {
+  onOpenPlace,
+}: Pick<FeedCardProps, 'item' | 'timeLabel' | 'quickEmojis' | 'onReact' | 'onOpenPlace'>) {
   const icon = TYPE_ICON[item.type as Exclude<FeedItemType, 'POST'>];
   const reactions = item.reactions ?? [];
   const [picking, setPicking] = useState(false);
@@ -116,7 +133,22 @@ function RecordCard({
               </View>
             ) : null}
           </View>
-          {item.content ? (
+          {/*
+            식사 카드의 "끼니 · 📍장소 ★N" — 장소가 붙어 있으면 줄을 눌러 그 장소 상세로 간다(2026-10-05).
+            카드 자체는 길게 누르기(응원)만 받으므로 응원 버튼과 같은 자리 규칙이다(버튼 안 버튼 아님).
+          */}
+          {item.content && item.placeId != null && onOpenPlace ? (
+            <Pressable
+              onPress={() => onOpenPlace(item)}
+              hitSlop={6}
+              accessibilityRole="link"
+              accessibilityLabel={`${item.content} — 장소 보기`}
+            >
+              <Text style={[styles.recordContent, styles.recordContentLink]} numberOfLines={1}>
+                {item.content}
+              </Text>
+            </Pressable>
+          ) : item.content ? (
             <Text style={styles.recordContent} numberOfLines={1}>
               {item.content}
             </Text>
@@ -388,6 +420,8 @@ const styles = themedStyles((colors) => ({
   },
   sharedBadgeText: { fontSize: fontSize.micro, fontWeight: '800', color: colors.textSecondary },
   recordContent: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 1 },
+  // 누를 수 있는 📍 줄 — 밑줄로만 표시한다(색은 그대로 — 정보 글자다)
+  recordContentLink: { textDecorationLine: 'underline' },
   recordMeta: { alignItems: 'flex-end' },
   recordWho: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary },
   recordTime: { fontSize: fontSize.micro, color: colors.textMuted, marginTop: 1 },

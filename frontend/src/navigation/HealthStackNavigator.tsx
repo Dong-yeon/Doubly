@@ -32,6 +32,7 @@ import { VoiceClipsScreen } from '../screens/workout/VoiceClipsScreen';
 import { BodyMetricScreen } from '../screens/workout/BodyMetricScreen';
 import { ChallengeScreen } from '../screens/workout/ChallengeScreen';
 import { PlaceDetailScreen } from '../screens/place/PlaceDetailScreen';
+import { PlaceAddScreen } from '../screens/place/PlaceAddScreen';
 import { stackScreenOptions, modalOptions, crossTabModalOptions } from './headerOptions';
 
 const Stack = createNativeStackNavigator<HealthStackParamList>();
@@ -139,6 +140,15 @@ export function HealthStackNavigator() {
         name="PlaceDetail"
         component={PlaceDetailScreen}
         options={({ route }) => ({ title: route.params.name })}
+      />
+      {/* 위 장소 상세의 수정 버튼이 가는 곳 — 홈·우리·럽슐랭 스택과 같은 등록 */}
+      <Stack.Screen
+        name="PlaceAdd"
+        component={PlaceAddScreen}
+        options={({ route }) => ({
+          title: route.params?.place ? '장소 수정' : '장소 추가',
+          ...modalOptions,
+        })}
       />
     </Stack.Navigator>
   );
