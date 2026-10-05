@@ -11,6 +11,7 @@ import com.fitto.feed.dto.FeedItemType;
 import com.fitto.feed.repository.FeedReactionRepository;
 import com.fitto.common.notification.NotificationService;
 import com.fitto.common.notification.PushLinks;
+import com.fitto.common.time.KstClock;
 import com.fitto.diet.repository.MealRepository;
 import com.fitto.place.domain.Place;
 import com.fitto.place.domain.PlaceRating;
@@ -270,35 +271,68 @@ public class PlaceService {
     @Transactional
     public PlaceVisitResponse recordVisit(Long userId, Long placeId, RecordVisitRequest request) {
         Place place = getCouplePlace(userId, placeId);
-        if (request.mealId() != null) {
-            boolean myMeal = mealRepository.findById(request.mealId())
+        PlaceVisit visit = createVisit(userId, place, request.visitedAt(), request.rating(), request.memo(),
+                request.imageUrl(), request.mealId(), null, true);
+        return PlaceVisitResponse.of(visit, userName(userId));
+    }
+
+    /**
+     * 방문 한 건을 만든다 — {@link #recordVisit} 와 외식 기록({@link MealVisitService})이 같이 쓴다.
+     *
+     * <p>{@code notifyPartner=false} 는 외식 기록에서 식단 푸시가 장소 이름을 실어 대신 나갈 때다 — 외식 한 번에
+     * 상대 폰이 두 번 울리던 것(식단 + 방문)을 한 번으로 줄인다(LOVEBODY_LOVELICHELIN_LINK §1-4).
+     */
+    @Transactional
+    public PlaceVisit createVisit(Long userId, Place place, java.time.LocalDate visitedAt, Integer rating, String memo,
+                           String imageUrl, Long mealId, String clientRequestId, boolean notifyPartner) {
+        if (mealId != null) {
+            boolean myMeal = mealRepository.findById(mealId)
                     .map(m -> userId.equals(m.getUserId()))
                     .orElse(false);
             if (!myMeal) {
                 throw new BusinessException(ErrorCode.INVALID_INPUT, "내 식단 기록만 연동할 수 있습니다.");
             }
+            // 식단 하나에 방문 하나(V129 unique) — 인덱스에 맡기면 500 이라 먼저 말한다
+            if (!placeVisitRepository.findByMealIdIn(List.of(mealId)).isEmpty()) {
+                throw new BusinessException(ErrorCode.INVALID_INPUT, "이미 장소가 연결된 식단이에요.");
+            }
+        }
+        // 다녀온 날은 미래일 수 없다 — 식단 저장과 같은 기준(KST). 예전엔 방문만 검사가 없었다
+        if (visitedAt != null && visitedAt.isAfter(KstClock.today())) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "미래 날짜는 기록할 수 없습니다.");
         }
 
         PlaceVisit visit = PlaceVisit.builder()
                 .placeId(place.getId())
                 .visitedBy(userId)
-                .visitedAt(request.visitedAt())
-                .rating(request.rating())
-                .memo(request.memo())
-                .imageUrl(request.imageUrl())
-                .mealId(request.mealId())
+                .visitedAt(visitedAt)
+                .rating(rating)
+                .memo(memo)
+                .imageUrl(imageUrl)
+                .mealId(mealId)
+                .clientRequestId(clientRequestId)
                 .build();
         placeVisitRepository.save(visit);
         publishVisitChanged(place.getCoupleId());
 
-        Long partnerId = activeCouple(userId).partnerOf(userId);
+        Long partnerId = notifyPartner ? activeCouple(userId).partnerOf(userId) : null;
         if (partnerId != null) {
             notificationService.notify(partnerId, NotificationCategory.PARTNER, "새 맛집 방문 기록!",
                     userName(userId) + " — " + place.getName()
                             + (visit.getRating() != null ? " ★" + visit.getRating() : ""),
                     PushLinks.place(place.getId()));
         }
-        return PlaceVisitResponse.of(visit, userName(userId));
+        return visit;
+    }
+
+    /** 외식 기록이 방문을 붙일 장소 — 커플 장소인지 확인까지 */
+    public Place couplePlace(Long userId, Long placeId) {
+        return getCouplePlace(userId, placeId);
+    }
+
+    /** 방문 응답 조립(외식 기록 응답·재전송용) */
+    public PlaceVisitResponse visitResponse(PlaceVisit visit) {
+        return PlaceVisitResponse.of(visit, userName(visit.getVisitedBy()));
     }
 
     /** 장소의 방문 기록 목록 (PLACE-05) */
@@ -344,6 +378,39 @@ public class PlaceService {
      */
     @Transactional
     public PlaceResponse rate(Long userId, Long placeId, RatePlaceRequest request) {
+        return rate(userId, placeId, request, true);
+    }
+
+    /**
+     * 외식 기록의 평점 — 결정 Q3(2026-10-05): <b>내 대표 평점이 아직 없을 때만</b> 방문 별점으로 채운다. 이미 있으면
+     * 건드리지 않는다("오늘은 별로였다"가 등급을 내리지 않게). 재방문 의사만 왔으면 그것만 고친다.
+     *
+     * <p>{@code nudgePartner=false} — "평가를 기다려요" 재촉은 외식 기록의 식단 푸시 문구가 대신 말한다(푸시 한 번).
+     * 등극 푸시는 드물고 따로 알릴 가치가 있어 그대로 보낸다.
+     *
+     * @return 평점을 새로 매겼으면 그 결과, 아니면 null
+     */
+    @Transactional
+    public PlaceResponse rateIfUnrated(Long userId, Long placeId, Integer rating, Boolean revisitIntent) {
+        PlaceRating mine = placeRatingRepository.findByPlaceIdAndUserId(placeId, userId).orElse(null);
+        if (mine != null) {
+            if (revisitIntent != null) {
+                mine.update(mine.getRating(), revisitIntent);
+            }
+            return null;
+        }
+        if (rating == null) {
+            return null;
+        }
+        return rate(userId, placeId, new RatePlaceRequest(rating, revisitIntent), false);
+    }
+
+    /** 장소 응답(요약·평점·커버 포함) — 외식 기록 응답용 */
+    public PlaceResponse placeResponse(Long userId, Long placeId) {
+        return withSummary(getCouplePlace(userId, placeId), userId);
+    }
+
+    private PlaceResponse rate(Long userId, Long placeId, RatePlaceRequest request, boolean nudgePartner) {
         Place place = getCouplePlace(userId, placeId);
 
         PlaceRating mine = placeRatingRepository.findByPlaceIdAndUserId(placeId, userId)
@@ -392,7 +459,7 @@ public class PlaceService {
         // 등급은 둘 다 평가해야 매겨지는데, 정작 상대는 내가 평가했다는 사실을 알 길이 없었다
         // ("상대 평가 대기 중" 문구는 내 화면에만 보인다) — 첫 평가 시 상대에게 차례를 알린다.
         // 등극 알림과는 상호배타적이다: 등극은 상대 평점이 있어야, 재촉은 없어야 나간다.
-        if (firstRating && pair.partner() == null) {
+        if (nudgePartner && firstRating && pair.partner() == null) {
             Long partnerId = activeCouple(userId).partnerOf(userId);
             if (partnerId != null) {
                 notificationService.notify(partnerId, NotificationCategory.PARTNER, "럽슐랭 평가를 기다려요 ⭐",

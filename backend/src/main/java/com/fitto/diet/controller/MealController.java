@@ -193,8 +193,10 @@ public class MealController {
     }
 
     @DeleteMapping("/{id}")
-    public ApiResponse<Void> delete(@AuthenticationPrincipal AuthUser user, @PathVariable Long id) {
-        mealService.delete(user.id(), id);
+    public ApiResponse<Void> delete(@AuthenticationPrincipal AuthUser user, @PathVariable Long id,
+                                    // 장소가 붙은 식단에서 "방문 기록도 지우기"를 골랐을 때만 true(결정 Q4). 옛 앱은 안 보낸다
+                                    @RequestParam(defaultValue = "false") boolean withVisit) {
+        mealService.delete(user.id(), id, withVisit);
         return ApiResponse.success(null, "식단 기록이 삭제되었습니다.");
     }
 

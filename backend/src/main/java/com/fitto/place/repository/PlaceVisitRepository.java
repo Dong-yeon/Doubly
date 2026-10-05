@@ -38,6 +38,12 @@ public interface PlaceVisitRepository extends JpaRepository<PlaceVisit, Long> {
     @Query("update PlaceVisit v set v.mealId = null where v.mealId in :mealIds")
     int detachMeals(@Param("mealIds") List<Long> mealIds);
 
+    /** 외식 기록 멱등 — 같은 사람이 같은 키로 이미 남긴 방문(V129 unique 인덱스와 짝) */
+    java.util.Optional<PlaceVisit> findByVisitedByAndClientRequestId(Long visitedBy, String clientRequestId);
+
+    /** 식단 삭제에서 "방문 기록도 지우기"를 골랐을 때 — 그 식단들에 붙은 방문 */
+    List<PlaceVisit> findAllByMealIdIn(java.util.Collection<Long> mealIds);
+
     /**
      * 럽슐랭 가이드 매거진 카드의 커버 사진/한줄평용 배치 조회 — 장소별로 최근 방문순.
      * place_id 로 in 절 하나만 날리고 "장소별 최근 방문(사진 있으면 그걸, 없으면 가장 최근
