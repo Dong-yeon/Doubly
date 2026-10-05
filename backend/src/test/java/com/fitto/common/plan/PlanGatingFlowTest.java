@@ -78,7 +78,6 @@ class PlanGatingFlowTest {
     @Autowired CoupleChallengeService challengeService;
     @Autowired WorkoutService workoutService;
     @Autowired MuscleRecoveryService muscleRecoveryService;
-    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
     private Long register(String email) {
         return authService.register(
@@ -198,7 +197,7 @@ class PlanGatingFlowTest {
     }
 
     @Test
-    void 무료_캘린더_월_한도를_넘기면_막힌다() {
+    void 무료_캘린더는_다가오는_일정이_한도만큼_있으면_막힌다() {
         Long user = couple("gate-cal-a@fitto.com", "gate-cal-b@fitto.com");
         int limit = Feature.CALENDAR_EVENT.quotaFor(Plan.FREE).limit();
         LocalDate today = LocalDate.now();
@@ -215,11 +214,11 @@ class PlanGatingFlowTest {
     }
 
     /**
-     * 잘못 만든 일정을 지우면 한도가 돌아온다 — 상대가 지워도 같다(커플 공용 주머니).
-     * 예전엔 선차감만 하고 돌려주지 않아, 무료는 실수 한 번이 그 달 한 칸이었다.
+     * 개수형 — 지우면 바로 다시 넣을 수 있다. 상대가 지워도 같다(커플 공용 주머니).
+     * 예전 월 소비형은 지난달 일정을 지워도 돌려주지 않았다(docs/first-experience-audit.md #33).
      */
     @Test
-    void 무료_캘린더는_이번_달에_만든_일정을_지우면_한도가_돌아온다() {
+    void 무료_캘린더는_일정을_지우면_그만큼_다시_넣을_수_있다() {
         Long user = register("gate-calref-a@fitto.com");
         Long partner = register("gate-calref-b@fitto.com");
         relationService.connectCouple(partner, relationService.createCoupleInvite(user).code());
@@ -233,7 +232,7 @@ class PlanGatingFlowTest {
         }
         calendarService.delete(partner, last);
 
-        // 한 칸이 돌아왔으니 하나는 더 만들 수 있고, 그다음은 다시 막힌다
+        // 한 칸이 비었으니 하나는 더 만들 수 있고, 그다음은 다시 막힌다
         calendarService.create(user, new CreateEventRequest("다시", today, null, null, false, null));
         assertThatThrownBy(() -> calendarService.create(user,
                 new CreateEventRequest("한도초과", today, null, null, false, null)))
@@ -243,23 +242,26 @@ class PlanGatingFlowTest {
     }
 
     /**
-     * 지난달에 만든 일정을 지워도 이번 달 한도는 늘지 않는다 — 월말에 채워 두고 월초에 지우는
-     * 것만으로 한도를 불리는 우회로를 막는다. created_at 을 지난달로 돌려 재현한다.
+     * 지나간 단발 일정은 세지 않는다 — 세면 기록이 쌓일수록 옛 일정을 지워야만 새로 넣을 수 있다.
+     * 매년 반복(기념일·생일)은 날짜가 지나도 늘 다가오므로 센다.
      */
     @Test
-    void 무료_캘린더는_지난달에_만든_일정을_지워도_한도가_늘지_않는다() {
+    void 무료_캘린더는_지난_일정은_세지_않고_매년_반복은_센다() {
         Long user = couple("gate-calold-a@fitto.com", "gate-calold-b@fitto.com");
         int limit = Feature.CALENDAR_EVENT.quotaFor(Plan.FREE).limit();
         LocalDate today = LocalDate.now();
 
-        Long old = calendarService.create(user,
-                new CreateEventRequest("지난달 일정", today, null, null, false, null)).id();
-        jdbcTemplate.update("update couple_events set created_at = ? where id = ?",
-                java.sql.Timestamp.valueOf(today.withDayOfMonth(1).minusDays(1).atTime(12, 0)), old);
-        for (int i = 1; i < limit; i++) {
-            calendarService.create(user, new CreateEventRequest("일정" + i, today, null, null, false, null));
+        // 지난 단발 일정은 한도만큼 넣어도 새 일정을 막지 않는다
+        for (int i = 0; i < limit; i++) {
+            calendarService.create(user,
+                    new CreateEventRequest("지난 일정" + i, today.minusDays(10 + i), null, null, false, null));
         }
-        calendarService.delete(user, old);
+        // 매년 반복은 날짜가 지났어도 센다 — 한도-1 개를 채우면 단발 하나만 더 들어간다
+        for (int i = 1; i < limit; i++) {
+            calendarService.create(user,
+                    new CreateEventRequest("기념일" + i, today.minusYears(1).minusDays(i), null, null, true, null));
+        }
+        calendarService.create(user, new CreateEventRequest("다가오는 약속", today.plusDays(3), null, null, false, null));
 
         assertThatThrownBy(() -> calendarService.create(user,
                 new CreateEventRequest("한도초과", today, null, null, false, null)))
