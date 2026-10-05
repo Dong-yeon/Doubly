@@ -12,7 +12,7 @@
  * <p>시트는 지도 <b>위에 겹친 형제 View</b> 라 시트 위의 터치는 지도(WebView/iframe)로 새지 않는다 —
  * 지도 팬·줌과 시트 끌기가 손가락을 나눠 갖지 않는다.
  */
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { Pressable, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -53,25 +53,30 @@ export function MapSheet({ containerHeight, fullTop, peekHeight, snap, onSnapCha
   const top = useSharedValue(tops[snap]);
   const start = useSharedValue(0);
 
-  // 단이 바뀌거나 영역 크기가 바뀌면(회전·키보드·창 크기) 그 단의 자리로 간다
+  // 단이 바뀌거나 영역 크기가 바뀌면(회전·키보드·창 크기) 그 단의 자리로 간다.
+  // 처음 크기를 잰 순간은 애니메이션 없이 바로 놓는다 — 아니면 열 때마다 시트가 위에서 미끄러져 내려온다
+  const placed = useRef(false);
   useEffect(() => {
-    top.value = reduceMotion ? tops[snap] : withTiming(tops[snap], { duration: 220 });
-  }, [snap, tops, reduceMotion, top]);
+    if (containerHeight <= 0) return;
+    const instant = reduceMotion || !placed.current;
+    placed.current = true;
+    top.set(instant ? tops[snap] : withTiming(tops[snap], { duration: 220 }));
+  }, [snap, tops, reduceMotion, top, containerHeight]);
 
   const pan = useMemo(() => {
     const { peek, half, full } = tops;
     return Gesture.Pan()
       .activeOffsetY([-6, 6])
       .onStart(() => {
-        start.value = top.value;
+        start.set(top.get());
       })
       .onUpdate((e) => {
-        const next = start.value + e.translationY;
-        top.value = Math.min(peek, Math.max(full, next));
+        const next = start.get() + e.translationY;
+        top.set(Math.min(peek, Math.max(full, next)));
       })
       .onEnd((e) => {
         // 빠르게 튕기면 그 방향의 다음 단, 아니면 가장 가까운 단
-        const y = top.value;
+        const y = top.get();
         let target: SheetSnap;
         if (e.velocityY < -800) target = y > half ? 'half' : 'full';
         else if (e.velocityY > 800) target = y < half ? 'half' : 'peek';
@@ -82,12 +87,12 @@ export function MapSheet({ containerHeight, fullTop, peekHeight, snap, onSnapCha
           target = dFull <= dHalf && dFull <= dPeek ? 'full' : dHalf <= dPeek ? 'half' : 'peek';
         }
         const dest = target === 'peek' ? peek : target === 'half' ? half : full;
-        top.value = withTiming(dest, { duration: 200 });
+        top.set(withTiming(dest, { duration: 200 }));
         scheduleOnRN(onSnapChange, target);
       });
   }, [tops, onSnapChange, start, top]);
 
-  const animated = useAnimatedStyle(() => ({ top: top.value }));
+  const animated = useAnimatedStyle(() => ({ top: top.get() }));
 
   const step = (dir: 1 | -1) => {
     const i = ORDER.indexOf(snap);
