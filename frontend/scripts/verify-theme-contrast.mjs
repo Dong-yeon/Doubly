@@ -1,14 +1,14 @@
 /**
- * 앱 팔레트 WCAG 대비 검증 — 라이트/다크 × 액센트 3종(그린·민트·피치) = 6벌 전부.
+ * 앱 팔레트 WCAG 대비 + 색 구분 검증 — 라이트/다크 2벌(액센트 변형은 2026-10-05 폐지).
  *
  * <p>왜 있나(2026-09-25): 화면 점검(docs/SCREEN_DESIGN_PASS_2026-09-23.md) 8개 절마다 "다크는
  * 미검증"이 쌓였다. 채팅 배경 테마는 verify-chat-theme-contrast.mjs 가 20벌을 자동으로 보는데
  * 정작 앱 전체 팔레트는 아무도 보지 않았다. 여기서 보는 건 <b>토큰 쌍</b>이다 — 어떤 글자색이
  * 어떤 바탕 위에 놓이는지는 컴포넌트가 정하지만, 자주 쓰는 조합은 정해져 있어 그걸 규칙으로 적는다.
  *
- * <p>src/theme/colors.ts 를 <b>텍스트로 읽어</b> 팔레트를 복원한다(TS 를 실행하지 않는다 — 채팅
- * 테마 스크립트와 같은 방식). 객체 리터럴의 `key: '#hex'` 만 줍고, 액센트 오버라이드를 라이트/다크
- * 위에 덮어 6벌을 만든다. colors.ts 의 구조(light / dark / ACCENT_OVERRIDES)가 바뀌면 여기도 본다.
+ * <p>src/theme/palette.ts 를 <b>텍스트로 읽어</b> 팔레트를 복원한다(TS 를 실행하지 않는다 — 채팅
+ * 테마 스크립트와 같은 방식). 객체 리터럴의 `key: '#hex'` 만 줍는다. palette.ts 의 구조
+ * (export const light / export const dark)가 바뀌면 여기도 본다.
  *
  *   npm run verify:theme
  */
@@ -16,13 +16,13 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-const SOURCE = join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'theme', 'colors.ts');
+const SOURCE = join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'theme', 'palette.ts');
 const src = readFileSync(SOURCE, 'utf8');
 
 /** `const <name> = {` ~ 짝 `};` 구간에서 key: '#hex' 를 줍는다 */
 function objectAt(startMarker) {
   const start = src.indexOf(startMarker);
-  if (start < 0) throw new Error(`colors.ts 에서 찾지 못함: ${startMarker}`);
+  if (start < 0) throw new Error(`palette.ts 에서 찾지 못함: ${startMarker}`);
   let depth = 0;
   let i = src.indexOf('{', start);
   const open = i;
@@ -39,28 +39,10 @@ function tokensOf(block) {
   return out;
 }
 
-const light = tokensOf(objectAt('const light = {'));
-const dark = tokensOf(objectAt('const dark: typeof light = {'));
-const overrides = objectAt('const ACCENT_OVERRIDES');
-const variantBlock = (name) => objectAt.call(null, `${name}: {`) && (() => {
-  const s = overrides.indexOf(`${name}: {`);
-  let depth = 0, i = overrides.indexOf('{', s), open = i;
-  for (; i < overrides.length; i++) { if (overrides[i] === '{') depth++; else if (overrides[i] === '}') { depth--; if (depth === 0) break; } }
-  return overrides.slice(open, i + 1);
-})();
-const schemeOf = (block, scheme) => {
-  const s = block.indexOf(`${scheme}: {`);
-  let depth = 0, i = block.indexOf('{', s), open = i;
-  for (; i < block.length; i++) { if (block[i] === '{') depth++; else if (block[i] === '}') { depth--; if (depth === 0) break; } }
-  return tokensOf(block.slice(open, i + 1));
-};
+const light = tokensOf(objectAt('export const light = {'));
+const dark = tokensOf(objectAt('export const dark: typeof light = {'));
 
-const palettes = { 'green/light': light, 'green/dark': dark };
-for (const v of ['mint', 'peach']) {
-  const b = variantBlock(v);
-  palettes[`${v}/light`] = { ...light, ...schemeOf(b, 'light') };
-  palettes[`${v}/dark`] = { ...dark, ...schemeOf(b, 'dark') };
-}
+const palettes = { light, dark };
 
 const luminance = (hex) => {
   const ch = [1, 3, 5]
@@ -131,6 +113,7 @@ const RULES = [
   // primary 를 채움으로 쓰는 자리가 아직 39곳 남아 있다(2026-09-25 기준, backgroundColor: colors.primary) —
   // 그 위 글자는 onColor 여야 한다. white 를 박은 곳은 다크에서 3.3 이라 여기서 잡는다
   { name: 'onColor / primary (구식 채움)', pick: (p) => [p.primary, onColor(p.primary)], min: 4.5 },
+  { name: 'onPrimary / primary (배지·전송 버튼)', pick: (p) => [p.primary, p.onPrimary], min: 4.5 },
 ];
 
 /*
@@ -154,6 +137,22 @@ const DISTINCT = [
   { name: '왕관 금색 ≠ PRO(primaryDark)', pick: (p) => [p.lovelichelinGold, p.primaryDark], min: 15 },
   { name: '왕관 금색 ≠ 나 색', pick: (p) => [p.lovelichelinGold, p.me], min: 15 },
   { name: '왕관 금색 ≠ 상대 색(partnerFill)', pick: (p) => [p.lovelichelinGold, p.partnerFill], min: 15 },
+  /*
+   * 크롬 ≠ 소유자 색 (2026-10-05). 이 규칙이 없어서 primary #2A7731 과 상대 #2C7D33 이 ΔE 3.1 —
+   * 사실상 같은 색 — 인 채로 몇 달을 지냈다. 버튼·탭이 상대 색이면 앱 전체가 상대 것처럼 보인다.
+   */
+  { name: 'primary ≠ 나', pick: (p) => [p.primary, p.me], min: 15 },
+  { name: 'primary ≠ 상대', pick: (p) => [p.primary, p.partner], min: 15 },
+  { name: 'primary ≠ 함께', pick: (p) => [p.primary, p.together], min: 15 },
+  { name: 'primaryFill ≠ 나 채움(내 말풍선·버튼)', pick: (p) => [p.primaryFill, p.meFill], min: 15 },
+  { name: 'primaryFill ≠ 상대 채움', pick: (p) => [p.primaryFill, p.partnerFill], min: 15 },
+  // 소유자 셋끼리 — 나/상대는 한눈에 갈려야 하고, 함께는 둘 중 하나로 읽히면 안 된다
+  { name: '나 ≠ 상대', pick: (p) => [p.me, p.partner], min: 40 },
+  { name: '나 채움 ≠ 상대 채움', pick: (p) => [p.meFill, p.partnerFill], min: 40 },
+  { name: '함께 ≠ 나', pick: (p) => [p.together, p.me], min: 20 },
+  { name: '함께 ≠ 상대', pick: (p) => [p.together, p.partner], min: 20 },
+  // 나 색이 따뜻한 계열이라 삭제·오류의 빨강과 붙을 수 있다
+  { name: '나 ≠ danger', pick: (p) => [p.me, p.danger], min: 15 },
 ];
 
 let failures = 0;
