@@ -71,6 +71,18 @@ export interface KakaoMapOptions {
 const DEFAULT_LAT = 37.5665;
 const DEFAULT_LNG = 126.978;
 
+/**
+ * 핀을 묶기(MarkerClusterer) 시작하는 개수 — 21(20곳 초과).
+ *
+ * <p>FREE 커플의 장소 한도가 20곳이라(PLACE_PIN, Feature.java) 무료 커플의 지도는 늘 낱개 핀 + 이름표 그대로다.
+ * 그 이상은 PRO 커플인데, 서울 한 화면(축척 5~7)에 20개가 넘는 이름표가 겹치면 핀도 이름도 못 읽는다.
+ * 묶음은 축척 {@link CLUSTER_MIN_LEVEL} 이상(넓게 볼 때)만 — 동네 단위로 당겨 보면 낱개로 풀린다.
+ */
+export const CLUSTER_MIN_MARKERS = 21;
+export const CLUSTER_MIN_LEVEL = 5;
+/** 묶음을 쓸 때 이름표는 이 축척 이하(가까이)에서만 — 묶인 핀 위에 이름표만 떠 있지 않게 */
+export const LABEL_MAX_LEVEL = CLUSTER_MIN_LEVEL - 1;
+
 function svgUri(svg: string): string {
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
 }
@@ -205,7 +217,7 @@ setTimeout(function () {
   if (!fittoMapReady) { post({ type: 'failed', reason: 'timeout' }); }
 }, 6000);
 </script>
-<script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_JS_KEY}&libraries=services&autoload=false"
+<script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_JS_KEY}&libraries=services,clusterer&autoload=false"
         onerror="post({ type: 'failed', reason: 'sdk-load-error' })"></script>
 <script>
 kakao.maps.load(function () {
@@ -318,10 +330,24 @@ kakao.maps.load(function () {
       offset: new kakao.maps.Point(ic.anchorX, ic.anchorY)
     });
   }
+  // 핀 묶기 — 핀이 많을 때만(CLUSTER_MIN_MARKERS). 이름표는 묶음이 풀리는 축척에서만 보인다
+  var clusterer = null;
+  var labels = [];
+  var clustering = false;
+  function updateLabels() {
+    var show = !clustering || map.getLevel() <= ${LABEL_MAX_LEVEL};
+    labels.forEach(function (l) { l.setMap(show ? map : null); });
+  }
+  kakao.maps.event.addListener(map, 'zoom_changed', updateLabels);
+
   window.fittoSetMarkers = function (markers, path, fit, nextIcons) {
     if (nextIcons) { icons = nextIcons; }
     drawn.forEach(function (o) { o.setMap(null); });
     drawn = [];
+    labels = [];
+    if (clusterer) { clusterer.clear(); }
+    clustering = markers.length >= ${CLUSTER_MIN_MARKERS} && !!kakao.maps.MarkerClusterer;
+    var clustered = [];
 
     var bounds = new kakao.maps.LatLngBounds();
     markers.forEach(function (m) {
@@ -333,7 +359,8 @@ kakao.maps.load(function () {
           map: map, position: pos, xAnchor: 0.5, yAnchor: 1, clickable: true, content: photoPin(m, m.color)
         }));
       } else {
-        var markerOpts = { map: map, position: pos, title: m.title };
+        // 묶을 때는 지도에 직접 올리지 않고 clusterer 에 맡긴다
+        var markerOpts = { map: clustering ? null : map, position: pos, title: m.title };
         var ic = iconImage(m);
         if (ic) { markerOpts.image = ic; }
         else if (m.color) { markerOpts.image = pinImage(m.color, m.filled !== false, m.tier || 0); }
@@ -341,15 +368,24 @@ kakao.maps.load(function () {
         var marker = new kakao.maps.Marker(markerOpts);
         kakao.maps.event.addListener(marker, 'click', function () { post({ type: 'marker', id: m.id }); });
         drawn.push(marker);
+        if (clustering) { clustered.push(marker); }
       }
       var label = new kakao.maps.CustomOverlay({
-        map: map, position: pos, yAnchor: 0,
+        map: null, position: pos, yAnchor: 0,
         content: '<div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:2px 8px;' +
                  'font-size:11px;font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.15);white-space:nowrap;">' +
                  m.title.replace(/</g, '&lt;') + '</div>'
       });
       drawn.push(label);
+      labels.push(label);
     });
+    if (clustering) {
+      if (!clusterer) {
+        clusterer = new kakao.maps.MarkerClusterer({ map: map, averageCenter: true, minLevel: ${CLUSTER_MIN_LEVEL} });
+      }
+      clusterer.addMarkers(clustered);
+    }
+    updateLabels();
 
     // 동선 폴리라인 — 일정 순서대로 이어 그린다 (2점 이상)
     if (path.length > 1) {
@@ -376,7 +412,8 @@ kakao.maps.load(function () {
    */
   var fitPad = { top: 40, right: 40, bottom: 40, left: 40 };
   window.fittoSetPadding = function (pad) { fitPad = Object.assign(fitPad, pad || {}); };
-  var programmatic = false;
+  // 처음 지도가 멈추는 것(로드 직후 idle)은 사용자가 움직인 게 아니다
+  var programmatic = true;
   function fitTo(bounds) {
     programmatic = true;
     map.setBounds(bounds, fitPad.top, fitPad.right, fitPad.bottom, fitPad.left);
@@ -416,12 +453,18 @@ kakao.maps.load(function () {
   /*
    * 지도가 멈출 때마다(idle) 보이는 범위를 알린다. 사용자가 끌거나 확대했는지(byUser)를 같이 보낸다 —
    * 앱이 setBounds·panTo 로 움직인 건 "이 지역 장소 보기" 버튼을 띄울 이유가 아니다.
+   * "사용자가 움직였다"는 idle 이 아니라 그 앞의 dragstart(끌기는 늘 사용자다)·zoom_start(앱이 안 움직일 때)로
+   * 판단한다 — 로드 직후와 시야 맞추기가 idle 을 두 번 내면 두 번째가 사용자 것으로 읽혔다(2026-10-05 웹 확인).
    */
+  var userMoved = false;
+  kakao.maps.event.addListener(map, 'dragstart', function () { userMoved = true; });
+  kakao.maps.event.addListener(map, 'zoom_start', function () { if (!programmatic) { userMoved = true; } });
   kakao.maps.event.addListener(map, 'idle', function () {
     var b = map.getBounds();
     var sw = b.getSouthWest();
     var ne = b.getNorthEast();
-    post({ type: 'bounds', sw: { lat: sw.getLat(), lng: sw.getLng() }, ne: { lat: ne.getLat(), lng: ne.getLng() }, byUser: !programmatic });
+    post({ type: 'bounds', sw: { lat: sw.getLat(), lng: sw.getLng() }, ne: { lat: ne.getLat(), lng: ne.getLng() }, byUser: userMoved });
+    userMoved = false;
     programmatic = false;
   });
 

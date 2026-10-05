@@ -12,7 +12,13 @@ import { StyleSheet, Text, View } from 'react-native';
 import { KAKAO_JS_KEY } from '../constants/config';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 import type { KakaoMapHandle, KakaoMapProps } from './KakaoMap.types';
-import { pinIconKey, type KakaoMapMarker } from '../utils/kakaoMapHtml';
+import {
+  CLUSTER_MIN_LEVEL,
+  CLUSTER_MIN_MARKERS,
+  LABEL_MAX_LEVEL,
+  pinIconKey,
+  type KakaoMapMarker,
+} from '../utils/kakaoMapHtml';
 import { themedStyles } from '../theme/themedStyles';
 
 export type { KakaoMapHandle, KakaoMapProps };
@@ -31,7 +37,7 @@ function loadSdk(): Promise<void> {
     }
     const script = document.createElement('script');
     script.src =
-      `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_JS_KEY}&libraries=services&autoload=false`;
+      `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_JS_KEY}&libraries=services,clusterer&autoload=false`;
     script.async = true;
     script.onload = () => (window as any).kakao.maps.load(() => resolve());
     script.onerror = () => reject(new Error('카카오맵 SDK 로드 실패'));
@@ -127,8 +133,18 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
   cbRef.current = { onSelect, onMarkerPress, onFailed, onBoundsChange };
   /** 시야 맞추기 여백 — 아래쪽은 하단 시트 높이(setPadding). kakaoMapHtml 의 fitPad 와 같은 뜻 */
   const padRef = useRef({ top: 40, right: 40, bottom: 40, left: 40 });
-  /** 앱이 움직인 시야인지 — idle 이벤트의 byUser 판정(kakaoMapHtml 의 programmatic 과 같다) */
-  const programmaticRef = useRef(false);
+  /** 앱이 움직인 시야인지 — idle 이벤트의 byUser 판정(kakaoMapHtml 의 programmatic 과 같다). 로드 직후 idle 은 사용자가 아니다 */
+  const programmaticRef = useRef(true);
+  /** 핀 묶기 — kakaoMapHtml 의 clusterer 와 같은 규칙(CLUSTER_MIN_MARKERS 이상일 때만) */
+  const clustererRef = useRef<any>(null);
+  const labelsRef = useRef<any[]>([]);
+  const clusteringRef = useRef(false);
+  const updateLabels = () => {
+    const map = mapRef.current;
+    if (!map) return;
+    const show = !clusteringRef.current || map.getLevel() <= LABEL_MAX_LEVEL;
+    labelsRef.current.forEach((l) => l.setMap(show ? map : null));
+  };
 
   // 1) 지도 생성 (한 번)
   useEffect(() => {
@@ -154,6 +170,15 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
             cbRef.current.onFailed?.();
           }
         }, 6000);
+        kakao.maps.event.addListener(mapRef.current, 'zoom_changed', updateLabels);
+        // "사용자가 움직였다"는 dragstart·zoom_start 로 판단한다 — kakaoMapHtml 의 idle 주석과 같은 이유
+        let userMoved = false;
+        kakao.maps.event.addListener(mapRef.current, 'dragstart', () => {
+          userMoved = true;
+        });
+        kakao.maps.event.addListener(mapRef.current, 'zoom_start', () => {
+          if (!programmaticRef.current) userMoved = true;
+        });
         kakao.maps.event.addListener(mapRef.current, 'idle', () => {
           const b = mapRef.current.getBounds();
           const sw = b.getSouthWest();
@@ -161,8 +186,9 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
           cbRef.current.onBoundsChange?.({
             sw: { lat: sw.getLat(), lng: sw.getLng() },
             ne: { lat: ne.getLat(), lng: ne.getLng() },
-            byUser: !programmaticRef.current,
+            byUser: userMoved,
           });
+          userMoved = false;
           programmaticRef.current = false;
         });
       })
@@ -186,6 +212,11 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
 
     overlaysRef.current.forEach((o) => o.setMap(null));
     overlaysRef.current = [];
+    labelsRef.current = [];
+    clustererRef.current?.clear();
+    const clustering = (markers?.length ?? 0) >= CLUSTER_MIN_MARKERS && !!kakao.maps.MarkerClusterer;
+    clusteringRef.current = clustering;
+    const clustered: any[] = [];
 
     const bounds = new kakao.maps.LatLngBounds();
     (markers ?? []).forEach((m) => {
@@ -204,7 +235,8 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
         });
         marker.__fittoPin = true;
       } else {
-        const markerOpts: any = { map, position: pos, title: m.title };
+        // 묶을 때는 지도에 직접 올리지 않고 clusterer 에 맡긴다
+        const markerOpts: any = { map: clustering ? null : map, position: pos, title: m.title };
         const key = pinIconKey(m, icons);
         const ic = key ? icons?.[key] : undefined;
         if (ic) {
@@ -217,9 +249,10 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
         if (m.selected) markerOpts.zIndex = 10;
         marker = new kakao.maps.Marker(markerOpts);
         kakao.maps.event.addListener(marker, 'click', () => cbRef.current.onMarkerPress?.(m.id));
+        if (clustering) clustered.push(marker);
       }
       const label = new kakao.maps.CustomOverlay({
-        map,
+        map: null,
         position: pos,
         yAnchor: 0,
         content:
@@ -229,7 +262,15 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
           '</div>',
       });
       overlaysRef.current.push(marker, label);
+      labelsRef.current.push(label);
     });
+    if (clustering) {
+      if (!clustererRef.current) {
+        clustererRef.current = new kakao.maps.MarkerClusterer({ map, averageCenter: true, minLevel: CLUSTER_MIN_LEVEL });
+      }
+      clustererRef.current.addMarkers(clustered);
+    }
+    updateLabels();
 
     if (path && path.length > 1) {
       const line = new kakao.maps.Polyline({

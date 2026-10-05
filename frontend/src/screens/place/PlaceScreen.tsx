@@ -72,7 +72,7 @@ import { useDeleteAction } from '../../hooks/useDeleteAction';
 import { isKakaoMapConfigured } from '../../constants/config';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
-import { buildPlacePinIcons, type KakaoMapMarker } from '../../utils/kakaoMapHtml';
+import { buildPlacePinIcons, type KakaoLatLng, type KakaoMapMarker } from '../../utils/kakaoMapHtml';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type {
   Content,
@@ -152,6 +152,10 @@ type PlaceSearch =
   | { query: string; status: 'unavailable' }
   | { query: string; status: 'done'; results: PlaceSearchResult[] };
 
+type MapBounds = { sw: KakaoLatLng; ne: KakaoLatLng };
+const inBounds = (b: MapBounds, lat: number, lng: number) =>
+  lat >= b.sw.lat && lat <= b.ne.lat && lng >= b.sw.lng && lng <= b.ne.lng;
+
 /** 검색 결과 임시 핀의 id — 우리 장소 id(양수)와 겹치지 않게 음수 */
 const resultPinId = (i: number) => -(i + 1);
 
@@ -201,6 +205,12 @@ export function PlaceScreen() {
   const [selectedResult, setSelectedResult] = useState<number | null>(null);
   const [savingResultKey, setSavingResultKey] = useState<string | null>(null);
   const searchSeq = useRef(0);
+  /*
+   * "이 지역 장소 보기" — 사용자가 지도를 움직이면 버튼만 띄우고, 누르면 그때의 범위로 시트 목록을 거른다.
+   * 움직일 때마다 목록이 저절로 바뀌면 보던 카드가 사라지고 스크롤이 튄다 — 그래서 자동으로 거르지 않는다.
+   */
+  const [movedBounds, setMovedBounds] = useState<MapBounds | null>(null);
+  const [areaBounds, setAreaBounds] = useState<MapBounds | null>(null);
   const [snap, setSnap] = useState<SheetSnap>('half');
 
   // 지도를 못 쓰면(키 없음·로드 실패) 목록 화면으로 물러선다. 실패는 한 번 나면 이 화면 동안 유지한다
@@ -256,6 +266,14 @@ export function PlaceScreen() {
   );
   // 걸러진 것 중 좌표가 없어 지도에 못 꽂는 곳 — 지도 위 안내 "지도에 없는 N곳"
   const unmappedCount = useMemo(() => sortedPlaces.filter(hasNoLocation).length, [sortedPlaces]);
+  // 시트 목록 — "이 지역 장소 보기"를 눌렀으면 그 범위 안만(지도 핀은 그대로 다 보인다)
+  const sheetPlaces = useMemo(
+    () =>
+      areaBounds
+        ? sortedPlaces.filter((p) => p.lat != null && p.lng != null && inBounds(areaBounds, p.lat, p.lng))
+        : sortedPlaces,
+    [sortedPlaces, areaBounds],
+  );
   // 고른 장소 — 전체에서 찾는다. 검색에서 막 담은 곳은 검색어(=이름 필터)에 안 걸릴 수 있어서다. 지워졌으면 null
   const selectedPlace = selectedId != null ? (allPlaces.find((p) => p.id === selectedId) ?? null) : null;
   const searchResults = search?.status === 'done' ? search.results : [];
@@ -607,8 +625,15 @@ export function PlaceScreen() {
     <View style={styles.sheetHeader}>
       <View style={styles.sheetTitleRow}>
         <Text style={styles.sheetTitle} numberOfLines={1}>
-          {isPlaceFilterActive(filter) ? `${sortedPlaces.length}곳` : `우리 장소 ${placeCount}곳`}
+          {areaBounds
+            ? `이 지역 ${sheetPlaces.length}곳`
+            : isPlaceFilterActive(filter)
+              ? `${sortedPlaces.length}곳`
+              : `우리 장소 ${placeCount}곳`}
         </Text>
+        {areaBounds ? (
+          <IconButton icon="close" label="지역 거르기 풀기" onPress={() => setAreaBounds(null)} />
+        ) : null}
         {/* 하단 고정 [장소 추가하기]를 여기로 옮겼다 — 시트와 겹치지 않는다(2026-10-05 결정) */}
         <Button
           title="직접 추가"
@@ -706,7 +731,7 @@ export function PlaceScreen() {
     )
   ) : (
     <FlatList
-      data={sortedPlaces}
+      data={sheetPlaces}
       keyExtractor={(p) => String(p.id)}
       contentContainerStyle={styles.sheetList}
       refreshing={placeLoading}
@@ -714,7 +739,9 @@ export function PlaceScreen() {
       renderItem={({ item }) => renderPlaceCard(item, true)}
       ListEmptyComponent={
         // 장소 0곳 — 시트에는 짧은 안내만. 할 일(검색)은 위 검색창이 말한다
-        placeCount === 0 && !placeLoading && !placeLoadError ? (
+        areaBounds ? (
+          <Text style={styles.sheetEmpty}>이 지역에는 우리 장소가 없어요. 지도를 옮겨 다시 눌러 보세요.</Text>
+        ) : placeCount === 0 && !placeLoading && !placeLoadError ? (
           <Text style={styles.sheetEmpty}>
             위에서 가보고 싶은 곳을 찾아 담거나, 지도 빈 곳을 눌러 직접 추가해보세요.{'\n'}
             다녀와서 둘 다 별점을 남기면 우리 럽슐랭이 돼요.
@@ -741,6 +768,10 @@ export function PlaceScreen() {
         onSelect={onMapSelect}
         onMarkerPress={onMarkerPress}
         onFailed={() => setMapFailed(true)}
+        // 사용자가 움직였을 때만 버튼을 띄운다 — 앱이 맞춘 시야(처음 맞추기·핀 고르기·검색 결과)는 아니다
+        onBoundsChange={(b) => {
+          if (b.byUser) setMovedBounds({ sw: b.sw, ne: b.ne });
+        }}
       />
       {/* 지도 위 덮개 — 검색창 + 필터 칩 + 지도에 없는 N곳 안내. 시트 "전체" 높이의 위 끝이 이 아래다 */}
       <View
@@ -761,6 +792,23 @@ export function PlaceScreen() {
           </Pressable>
         ) : null}
       </View>
+      {/* 덮개 밖에 둔다 — 덮개 높이(시트 '전체' 위 끝)가 버튼이 뜰 때마다 출렁이지 않게 */}
+      {movedBounds && !search ? (
+        <Pressable
+          style={[styles.areaButton, { top: overlayHeight + spacing.xs }]}
+          onPress={() => {
+            setAreaBounds(movedBounds);
+            setMovedBounds(null);
+            clearSheetCard();
+            setSnap('half');
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="이 지역 장소 보기 — 지금 지도 범위의 장소만 목록에 보여요"
+        >
+          <MaterialCommunityIcons name="restart" size={16} color={colors.primary} />
+          <Text style={styles.areaButtonText}>이 지역 장소 보기</Text>
+        </Pressable>
+      ) : null}
       <MapSheet
         containerHeight={areaHeight}
         fullTop={fullTop}
@@ -1030,6 +1078,27 @@ const styles = themedStyles((colors) => ({
     borderColor: colors.border,
   },
   unmappedText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
+  // 지도를 움직이면 뜨는 "이 지역 장소 보기" — 덮개 가운데, 지도 앱들의 "이 지역 재검색" 자리
+  areaButton: {
+    position: 'absolute',
+    alignSelf: 'center',
+    zIndex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    minHeight: layout.touchTarget,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  areaButtonText: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '800' },
   // 시트 머리 — 제목 줄 + AI 버튼
   sheetHeader: { paddingHorizontal: spacing.lg },
   sheetTitleRow: {
