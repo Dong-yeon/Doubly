@@ -170,3 +170,67 @@ S1 하나만으로도 가장 큰 문제(저장 위치)가 사라진다. S3 이 �
 | Q5 | **펼침 안 + 장소를 고른 뒤엔 접힌 줄에 "📍 ○○식당" 요약** | 확인: **장소를 가지고 기록 화면에 들어오는 경로는 지금 없다**(파라미터 `navigation/types.ts:248-260` 에 장소 없음, 럽슐랭에서 DietRecord 로 가는 코드 없음, 채팅은 사진만). 장소가 붙은 식사를 **수정**할 때는 지금 장소 줄 자체가 숨는다(`DR:1361`). 그래서 "요약으로 시작"은 고른 뒤 + 앞으로 생길 진입(럽슐랭 연동 P0)에 적용 — **수정 모드에서 기존 장소를 요약으로 보일지(읽기 전용/변경 가능)는 미결**, 럽슐랭 P0 의 수정 처리와 맞춘다 |
 | Q6 | **계측 붙이기 — 순서는 바꾼다** | 이유와 순서는 사용자 메모가 잘려 **미수신** |
 | Q7 | 진행 순서 | 사용자 안 **미수신** — 받기 전엔 구현을 시작하지 않는다(Q6 이 "계측 먼저"면 S1 이 첫 단계가 아니게 된다) |
+
+---
+
+## 10. 진행 순서 확정 · 배수 전제 정정 · 기준선 계측 (2026-10-05)
+
+### 10-1. 진행 순서 (사용자 안, 확정)
+
+1. 서버 이벤트 enum 배포
+2. **지금 UI**에 계측을 붙이고 1주간 기준 데이터 수집 — UI 를 바꾼 뒤에 붙이면 비교할 "전"이 없다
+3. 사진 자리 두 버튼, 키보드와 저장 줄(iOS 숫자 키패드 "완료" 포함)
+4. 음식 편집 제자리 펼침(accordion)
+5. 장소 접기 + 요약 표시
+6. 배수 칩을 행에 — 백엔드 기준값 저장 뒤
+
+### 10-2. Q3 조정 이유와 전제 정정
+
+**조정 이유(사용자)**: "반만 먹었어"는 가장 자주 할 수정이라 편집 안에 넣으면 매번 한 탭이 는다. 그렇다고 모든 행에 칩 4개를
+펼치면 3항목에 칩 12개다 → 행에는 지금 배수 칩 하나("1인분 ▾"), 누르면 0.5/1/1.5/2.
+
+**전제 정정**: 배수 기능 자체는 **이미 있다** — 10-03 에 `× 0.5 / 1 / 1.5 / 2` 칩을 OTA 로 내보냈다(`441083bc`, `frontend/src/utils/mealScale.ts`,
+칩은 칼로리가 있을 때만 `DR` 의 음식 카드 안). 다만 1배 기준값을 **화면을 열어 둔 동안만** 기억하고 서버에 저장하지 않는다 — 다음에 수정
+화면을 열면 저장된 값(예: 반으로 줄인 값)이 새 1배가 되어 ① "지금 0.5배"를 행에 보여줄 수 없고 ② 반올림이 한 번 더 쌓일 수 있다.
+→ 6단계는 "배수를 새로 만들기"가 아니라 **`meal_items` 에 1배 기준값(과 배수)을 저장하는 백엔드 작업 + 행 칩 표시**다.
+
+### 10-3. 기준선 이벤트 (1·2단계 구현)
+
+서버 `ClientAnalyticsEvent` 에 7개를 더했다(`backend/src/main/java/com/fitto/common/analytics/ClientAnalyticsEvent.java`). `detail` 은 50자 안,
+**종류·초·개수만** — 음식 이름·메모·사진 주소는 싣지 않는다.
+
+| 이벤트 | 언제 | detail |
+| --- | --- | --- |
+| `MEAL_RECORD_OPENED` | 기록 화면 열림 | 들어온 곳 `main`(럽바디 버튼·푸시·딥링크) · `edit` · `calendar` · `home` · `chat` |
+| `MEAL_INPUT_ADDED` | 입력 수단을 씀 | `photo_camera` · `photo_gallery` · `favorite` · `recent` · `barcode` · `label` · `manual`(＋ 음식 추가) |
+| `MEAL_ANALYZE_STARTED` | AI 를 실제로 부름 | `photo` · `label` · `text`(공공 DB 로 다 찾으면 안 셈) |
+| `MEAL_ITEM_EDIT_OPENED` | 편집 펼침 | 지금 화면은 `macros`(탄단지 펼침) — accordion 뒤엔 `row` |
+| `MEAL_MULTIPLIER_CHANGED` | 배수 칩 | `0.5` · `1` · `1.5` · `2` |
+| `MEAL_RECORD_SAVED` | 저장 성공 | `new\|edit;t=초;i=항목 수;p=사진;d=같이 먹기;a=자동 분석 예정` · 홈 시트는 `sheet;i=0;p=1;d=0;a=…` |
+| `MEAL_RECORD_ABANDONED` | 저장 없이 나감 | `new\|edit;t=초;i=적어 둔 항목 수;p=사진` — 저장 요청이 가는 중이었거나 결과를 모르면(타임아웃) 세지 않는다 |
+
+**안전장치**
+- 앱은 `track()` 으로 보내고 잊는다 — 실패(서버가 아직 모르면 400)는 조용히 삼키고 토스트를 띄우지 않는다(`frontend/src/api/analytics.ts`).
+  서버보다 앱이 먼저 나가도 앱은 멀쩡하고 데이터만 빠진다.
+- 그 "데이터만 빠지는" 상태를 막으려고 **동기화 테스트**를 붙였다 — `ClientAnalyticsEventSyncTest` 가 앱의 이벤트 목록과 서버 enum,
+  `AnalyticsEvent` 상수를 대조한다(앱에서 하나를 빼면 실패하는 것 확인). `build.gradle` 의 `frontendSyncSources` 에 `src/api/analytics.ts` 를 등록했다.
+
+**1주 뒤 볼 것** (운영 DB 읽기 전용, `docs/first-experience-audit.md` 와 같은 방식)
+
+```sql
+-- 들어온 곳 · 입력 수단 · 분석 방식 · 배수 · 편집 펼침
+select event_type, detail, count(*) from event_logs
+where event_type like 'MEAL_%' and created_at >= now() at time zone 'UTC' - interval '7 days'
+group by 1, 2 order by 1, 3 desc;
+
+-- 저장 vs 이탈, 저장까지 걸린 초(중앙값) — detail 의 t= 를 뽑는다
+select event_type, split_part(detail, ';', 1) as kind, count(*),
+       percentile_cont(0.5) within group (order by substring(detail from 't=([0-9]+)')::int) as median_sec
+from event_logs
+where event_type in ('MEAL_RECORD_SAVED', 'MEAL_RECORD_ABANDONED')
+  and created_at >= now() at time zone 'UTC' - interval '7 days'
+group by 1, 2 order by 1, 2;
+```
+
+**한계**: 지금 실사용자는 사실상 우리 커플 둘이다(`first-experience-audit.md:8`) — 1주면 수십 건이라 비율보다 "쓰이는가/안 쓰이는가"를 보는 데이터다.
+홈 토스트 "같이 먹었어요"(저장 후 전환)는 이 7개에 넣지 않았다 — 저장 이벤트의 `d=` 는 저장 순간 값이라 그 전환은 안 잡힌다.
