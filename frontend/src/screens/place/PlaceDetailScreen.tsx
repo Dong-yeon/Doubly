@@ -63,7 +63,7 @@ import { uploadApi, wasRejected } from '../../api/upload';
 import { defaultMealType } from '../../utils/mealType';
 import { stars } from '../../utils/ratingStars';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { MealType, Place, PlaceVisit } from '../../types';
+import type { MealType, Place, PlaceMenu, PlaceVisit } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { useAndroidKeyboardHeight } from '../../hooks/useAndroidKeyboardHeight';
 
@@ -87,6 +87,7 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
   const myUserId = useAuthStore((s) => s.user?.id);
   const [place, setPlace] = useState<Place | null>(null);
   const [visits, setVisits] = useState<PlaceVisit[]>([]);
+  const [menu, setMenu] = useState<PlaceMenu | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
   // 사진 있는 카드를 눌러 전체화면으로 본다 — 예전엔 onLongPress(삭제)만 있고
@@ -165,6 +166,8 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
       const [p, v] = await Promise.all([placeApi.get(placeId), placeApi.visits(placeId)]);
       setPlace(p);
       setVisits(v);
+      // "여기서 먹은 것" — 부가 정보라 실패해도 화면은 그대로(빈 섹션 = 안 보임)
+      placeApi.menu(placeId).then(setMenu, () => setMenu(null));
       setMyRatingInput(p.myRating ?? 0);
       // 수정 후 돌아왔을 때도 헤더 타이틀이 최신 이름을 따라가도록
       navigation.setOptions({ title: p.name });
@@ -616,6 +619,36 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
                 />
               )}
 
+              {/*
+                여기서 먹은 것 — 이 장소 방문에 붙은 식단의 음식 이름·횟수(칼로리 없음 — 상대 식사 양 비노출 결정).
+                2번 이상 먹은 것은 "대표 메뉴"로 제안만 한다(저장하지 않는다). 연결된 식단이 없으면 섹션째 숨긴다.
+              */}
+              {menu && menu.items.length > 0 ? (
+                <View>
+                  <Text style={styles.sectionTitle}>여기서 먹은 것</Text>
+                  {menu.signature.length > 0 ? (
+                    <View style={styles.signatureRow}>
+                      <Text style={styles.signatureLabel}>대표 메뉴</Text>
+                      {menu.signature.map((name) => (
+                        <View key={name} style={styles.signatureChip}>
+                          <Text style={styles.signatureChipText}>{name}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : null}
+                  {menu.items.map((m) => (
+                    <View key={m.name} style={styles.menuRow}>
+                      <Text style={styles.menuName} numberOfLines={1}>
+                        {m.name}
+                      </Text>
+                      <Text style={styles.menuMeta}>
+                        {m.times}번 · 최근 {m.lastDate.slice(5).replace('-', '/')}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+
               <Text style={styles.sectionTitle}>방문 기록</Text>
               {/* 지울 기록이 있을 때만 의미가 있다 — 빈 목록에는 EmptyState 쪽 안내로 충분 */}
               {visits.length > 0 ? <Text style={styles.visitHint}>길게 눌러 삭제 · 사진은 탭해서 크게 보기</Text> : null}
@@ -803,6 +836,27 @@ const styles = themedStyles((colors) => ({
     marginBottom: spacing.sm,
   },
   visitHint: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: -spacing.xs, marginBottom: spacing.sm },
+  // 여기서 먹은 것
+  signatureRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.xs, marginBottom: spacing.sm },
+  signatureLabel: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700', marginRight: spacing.xs },
+  signatureChip: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  signatureChipText: { fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '700' },
+  menuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  menuName: { flex: 1, fontSize: fontSize.body, color: colors.textPrimary },
+  menuMeta: { fontSize: fontSize.caption, color: colors.textSecondary },
   visitCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
