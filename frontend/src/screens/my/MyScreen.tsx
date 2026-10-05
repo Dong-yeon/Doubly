@@ -26,6 +26,7 @@ import { summaryApi } from '../../api/summary';
 import { bodyApi } from '../../api/body';
 import { dietApi } from '../../api/diet';
 import { sanitizeDecimalInput } from '../../utils/numericInput';
+import { kstDateKey } from '../../utils/anniversary';
 import { publishEnsuringConnection } from '../../api/chatSocket';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
@@ -83,8 +84,15 @@ export function MyScreen({ navigation }: Props) {
    */
   const [savedDirection, setSavedDirection] = useState<DietGoalType | null | undefined>(undefined);
   const [goalDirection, setGoalDirection] = useState<DietGoalType | null>(null);
-  const [maxStreak, setMaxStreak] = useState(0);
-  const [maxMealStreak, setMaxMealStreak] = useState(0);
+  /*
+   * null = 아직 모름. 예전엔 조회가 실패하면 0 으로 두어, 네트워크가 잠깐 끊긴 사람에게 뱃지가 전부 잠긴 것처럼
+   * 보였다(docs/my-current-state.md §7-8). 실패하면 받아 둔 값을 그대로 두고, 한 번도 못 받았으면 카드를 그리지 않는다.
+   */
+  const [maxStreak, setMaxStreak] = useState<number | null>(null);
+  const [maxMealStreak, setMaxMealStreak] = useState<number | null>(null);
+  /** 이번 조회에서 하나라도 실패했나 — 카드가 조용히 사라지는 대신 "다시 시도" 줄을 띄운다 */
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [reloading, setReloading] = useState(false);
   const [recap, setRecap] = useState<WeeklyRecap | null>(null);
   const [level, setLevel] = useState<UserLevel | null>(null);
   const [sharing, setSharing] = useState(false);
@@ -92,25 +100,43 @@ export function MyScreen({ navigation }: Props) {
   /** 크롭 대기 중인 원본 — null 이면 크롭 시트가 닫힌 상태 */
   const [cropSource, setCropSource] = useState<PickedImage | null>(null);
 
-  useFocusEffect(
-    useCallback(() => {
-      streakApi.me().then((s) => setMaxStreak(s.maxCount)).catch(() => setMaxStreak(0));
-      streakApi.mealMe().then((s) => setMaxMealStreak(s.maxCount)).catch(() => setMaxMealStreak(0));
-      summaryApi.weeklyRecap().then(setRecap).catch(() => setRecap(null));
-      summaryApi.level().then(setLevel).catch(() => setLevel(null));
+  /*
+   * 실패해도 받아 둔 값은 지우지 않는다 — 지우면 "기록이 없다"(뱃지 0개·레벨 카드 없음·신체 정보 '등록')로
+   * 읽힌다. 실패는 loadFailed 하나로 모아 화면에 한 줄로 말한다.
+   */
+  const loadAll = useCallback(async () => {
+    const results = await Promise.allSettled([
+      streakApi.me().then((s) => setMaxStreak(s.maxCount)),
+      streakApi.mealMe().then((s) => setMaxMealStreak(s.maxCount)),
+      summaryApi.weeklyRecap().then(setRecap),
+      summaryApi.level().then(setLevel),
       bodyApi
         .list()
-        .then((list) => setLatestBody([...list].reverse().find((m) => m.weightKg != null) ?? null))
-        .catch(() => setLatestBody(null));
+        .then((list) => setLatestBody([...list].reverse().find((m) => m.weightKg != null) ?? null)),
       dietApi
         .nutrition()
-        .then((n) => setSavedDirection(n.goalDirection === undefined ? undefined : (n.goalDirection ?? null)))
-        .catch(() => setSavedDirection(undefined));
+        .then((n) => setSavedDirection(n.goalDirection === undefined ? undefined : (n.goalDirection ?? null))),
+    ]);
+    setLoadFailed(results.some((r) => r.status === 'rejected'));
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadAll();
       fetchRelations().catch(() => {});
       // 커플 연결이 없으면 404 가 나므로 실패는 "없음"으로 취급한다
       relationApi.hasRestorableRecords().then(setCanRestore).catch(() => setCanRestore(false));
-    }, [fetchRelations]),
+    }, [loadAll, fetchRelations]),
   );
+
+  const onReload = async () => {
+    setReloading(true);
+    try {
+      await loadAll();
+    } finally {
+      setReloading(false);
+    }
+  };
 
   const onShareRecap = async () => {
     if (!couple?.id || !recap) return;
@@ -500,12 +526,28 @@ export function MyScreen({ navigation }: Props) {
           </View>
         ) : null}
 
-        <View style={styles.card}>
-          <BadgeCard title="운동 뱃지" maxStreak={maxStreak} />
-        </View>
-        <View style={styles.card}>
-          <BadgeCard title="식단 뱃지" maxStreak={maxMealStreak} badges={MEAL_BADGES} />
-        </View>
+        {maxStreak !== null ? (
+          <View style={styles.card}>
+            <BadgeCard title="운동 뱃지" maxStreak={maxStreak} />
+          </View>
+        ) : null}
+        {maxMealStreak !== null ? (
+          <View style={styles.card}>
+            <BadgeCard title="식단 뱃지" maxStreak={maxMealStreak} badges={MEAL_BADGES} />
+          </View>
+        ) : null}
+
+        {loadFailed ? (
+          <SettingsGroup style={styles.group}>
+            <SettingsRow
+              title="기록 일부를 불러오지 못했어요"
+              value="다시 시도"
+              onPress={() => void onReload()}
+              loading={reloading}
+              accessibilityLabel="기록 일부를 불러오지 못했어요. 다시 시도"
+            />
+          </SettingsGroup>
+        ) : null}
 
         {/* [트레이너 기능 일시 비활성화] — 트레이너 대시보드·등록·연결 진입은 git 이력 참고 */}
 
@@ -618,7 +660,7 @@ export function MyScreen({ navigation }: Props) {
         </View>
         {/* 근육량 칸을 찾는 사람에게 — 공식의 입력은 제지방량이라 골격근량은 따로 받지 않는다(BmrCalculator) */}
         <Text style={styles.fieldHint}>근육량은 체지방률에 반영돼요 — 인바디 결과지의 체지방률을 넣어 주세요.</Text>
-        <DateField label="생년월일" value={birthDate} onChange={setBirthDate} max={new Date().toISOString().slice(0, 10)} />
+        <DateField label="생년월일" value={birthDate} onChange={setBirthDate} max={kstDateKey(new Date())} />
         <Text style={styles.fieldLabel}>성별</Text>
         <View style={styles.genderRow}>
           {(['MALE', 'FEMALE'] as const).map((g) => (
