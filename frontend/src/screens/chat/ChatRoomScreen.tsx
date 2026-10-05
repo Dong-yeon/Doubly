@@ -1389,7 +1389,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     }
     navigation.navigate('Health', {
       screen: 'DietRecord',
-      params: { photoUrl, date: toDateString(new Date(msg.createdAt)), returnTo: 'Chat' },
+      // 먹은 날 = 그 사진을 보낸 날(KST) — 기기 날짜로 잡으면 해외·자정 근처에 하루 어긋난다
+      params: { photoUrl, date: kstDateKey(new Date(msg.createdAt)), returnTo: 'Chat' },
       initial: false,
     });
   };
