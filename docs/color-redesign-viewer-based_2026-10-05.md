@@ -2,7 +2,9 @@
 
 > **기준 커밋: `010ded8611a1a0c8dc688af6e4f7e901cdffeae9`** (origin/main). 현황은 `docs/color-current-state.md`(이하 **현황 문서**) 참고 — 절 번호를 그대로 인용한다.
 >
-> **상태: 설계안, 착수 전.** 코드 수정 없음. 아래 색 값은 전부 `scripts/verify-theme-contrast.mjs` 와 같은 식(WCAG 대비 · CIE76 ΔE)으로
+> **상태: D1~D5 권장안으로 확정(2026-10-05). 1단계 완료 — main `76a775ac`(OTA 전). 2단계 착수 전.** 아래 §8 참고.
+>
+> (작성 당시 상태: 설계안, 착수 전.) 코드 수정 없음. 아래 색 값은 전부 `scripts/verify-theme-contrast.mjs` 와 같은 식(WCAG 대비 · CIE76 ΔE)으로
 > 미리 재 본 값이다. 결정이 필요한 곳은 **[결정 Dn]** 으로 표시했다.
 
 ## 0. 한 줄 요약
@@ -228,3 +230,33 @@ B 안(초록 유지)을 고르면 2-5 가 통째로 빠진다.
 5. 위젯이 OTA 로 갱신되는지·위젯 헤드리스 런타임에서 테마 모듈을 import 할 수 있는지 미확인(3-5).
 6. 채팅 진한 테마 10종 중 일부에서 새 하트 색이 배경 3:1 에 못 미칠 수 있다 — verify:chat-theme 결과를 보고 테마별로 고른다.
 7. 병렬 세션이 같은 화면 파일(채팅·캘린더·럽슐랭)을 고치는 중이면 1단계 치환이 충돌한다 — 1단계는 짧게, 한 번에 병합·푸시.
+
+---
+
+## 8. 1단계 결과 (2026-10-05, main `76a775ac`)
+
+결정: D1 잉크 · D2 액센트 변형 폐지 · D3 캘린더 종류색 유지 · D4 작성자 있으면 사람별 · D5 라벤더 — 전부 권장안.
+
+**한 것**
+- `theme/colors.ts`: 목적 토큰 16개(eventAnniversary·eventBirthday·eventDate·achievement·achievementBg·warning·warningBg·sunday·saturday·chart1~4·rating·mapPin·highlightBg)를
+  **지금 보이던 값 그대로** light/dark 에 추가. 별칭 10개(coral·indigo·violet·couple·food·health·secondary·secondarySoft·accent·accentSoft)를 Palette 와 mint·peach 변형에서 삭제.
+- 별칭 참조 92곳을 33파일에서 목적 토큰 또는 소유자 토큰으로 이동(§3-1 표대로). 남은 참조 0 — `typecheck` 가 보장.
+- 홈 일정 미리보기 아이콘을 일정 종류색으로(`EventPeek.tsx` `typeColor`).
+- 죽은 코드 `components/Badge.tsx` 삭제(별도 커밋 `99705af8`).
+
+**의도한 화면 변화**(그 밖에는 값이 같다 — green 변형 기준)
+일요일(앨범 달력)·앨범 지도 핀·부재중 통화 금색 → danger 빨강 · 캘린더 스위치·트레이너 날짜 칩 → primary · 식단 완료일·완료 막대 올리브 → success ·
+식단 kcal 올리브 → 본문색 · 체중 증가 올리브 → 보조 글자색 · 배지 올리브 → 성취 금색 · 홈 일정 아이콘 금색 → 종류색 ·
+여행 일차·결제자 칩 secondary → primary(ΔE 3.1, 사실상 같음).
+mint·peach 사용자는 목적 토큰 자리가 green 값으로 보인다(변형은 2단계에서 폐지).
+
+**검증**: `typecheck` · `verify:theme`(6벌 × 32규칙) · `verify:chat-theme` · `build:web` 통과. `lint` 오류 88건은 기존 React 규칙 위반(setState in effect 등)으로 이번 변경과 무관하고 CI 대상 아님.
+화면 실측(브라우저·실기기)은 **안 했다** — 대부분 같은 값으로의 치환이라 2단계 실기기 확인 때 함께 본다.
+
+**2단계로 넘긴 것**
+- 스도쿠·오늘의 질문의 상대 색: 1단계에선 값 유지를 위해 together 로 옮겼다 → 2단계에서 partner 로(§3-2).
+- 여행 화면 전반이 together(라벤더가 된다) — 선택 칩(`catSelectOn`)은 원칙 3 상 primary 가 맞을 수 있다. 2단계에서 화면 보고 결정.
+- 프로그램·추천 카드 `highlightBg` 의 2단계 값(지금 올리브 연한 바탕).
+- DISTINCT 규칙(§4-1) — 현 팔레트에선 primary≈partner 라 실패하므로 2단계 값과 같은 커밋에서 켠다.
+
+**발견**: `build:web` 이 아이콘 서브셋을 다시 만들며 `head` 글리프를 추가한다 — main 에 서브셋에 없는 아이콘을 쓰는 코드가 이미 있다는 뜻(이번 변경과 무관, 커밋하지 않음).
