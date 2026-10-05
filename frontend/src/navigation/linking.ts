@@ -24,6 +24,7 @@ import * as Notifications from 'expo-notifications';
 import type { LinkingOptions } from '@react-navigation/native';
 import type { RootStackParamList } from './types';
 import { WORKOUT_HOME_ENABLED } from '../constants/config';
+import { inviteCodeFromUrl, savePendingInvite } from '../utils/pendingInvite';
 
 export const PREFIX = 'doubly://';
 
@@ -39,8 +40,20 @@ function linkFrom(notification: Notifications.Notification | undefined | null): 
   return typeof link === 'string' ? PREFIX + link : null;
 }
 
+/**
+ * 초대 링크는 내비게이션에 넘기지 않고 맡겨 둔다 — 로그인 전이면 연결 화면이 없어 버려지기 때문이다.
+ * 로그인이 끝나면 RootNavigator 가 꺼내 연결 화면을 연다(utils/pendingInvite). 초대 링크였으면 true.
+ */
+function holdIfInvite(url: string | null | undefined): boolean {
+  const code = inviteCodeFromUrl(url);
+  if (!code) return false;
+  void savePendingInvite(code);
+  return true;
+}
+
 export const linking: LinkingOptions<RootStackParamList> = {
-  prefixes: [PREFIX],
+  // 소개 사이트 주소는 2단계(App Links·Universal Links, 빌드 필요)부터 앱으로 바로 들어온다. 지금은 무해하다.
+  prefixes: [PREFIX, 'https://dubly.co.kr', 'https://www.dubly.co.kr'],
 
   /*
    * 알림을 탭해서 앱이 <b>처음 뜨는</b> 경우 — 콜드 스타트에는 아래 subscribe 리스너가
@@ -60,7 +73,7 @@ export const linking: LinkingOptions<RootStackParamList> = {
       Linking.getInitialURL(),
       new Promise<undefined>((resolve) => setTimeout(resolve, 150)),
     ]);
-    if (url != null) return url;
+    if (url != null) return holdIfInvite(url) ? null : url;
     if (Platform.OS === 'web') return null;
     try {
       return linkFrom((await Notifications.getLastNotificationResponseAsync())?.notification);
@@ -72,7 +85,9 @@ export const linking: LinkingOptions<RootStackParamList> = {
 
   /* 앱이 떠 있는 동안(백그라운드 포함) 알림을 탭한 경우. */
   subscribe(listener) {
-    const urlSub = Linking.addEventListener('url', ({ url }) => listener(url));
+    const urlSub = Linking.addEventListener('url', ({ url }) => {
+      if (!holdIfInvite(url)) listener(url);
+    });
     if (Platform.OS === 'web') {
       return () => urlSub.remove();
     }
@@ -130,7 +145,8 @@ export const linking: LinkingOptions<RootStackParamList> = {
               HomeMain: '',
               // 푸시 data.link = PushLinks.JOURNAL — 하루 기록 리마인드가 연다. 목록 화면이라 URL 에 본문이 실리지 않는다
               Journal: 'me/journal',
-              CoupleConnect: 'couple/connect',
+              // 코드는 초대 링크(utils/pendingInvite)가 채운다 — 웹 새로고침에도 남게 경로에 둔다
+              CoupleConnect: 'couple/connect/:code?',
               FeedCompose: 'feed/new',
               MoodCalendar: 'mood/calendar',
               DailyQuestion: 'question',

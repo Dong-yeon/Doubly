@@ -22,7 +22,8 @@ export type OnboardingStackParamList = {
 // 홈 탭 내부 스택 — 홈 / 커플 연결 / 우리 기록(피드) / MY(프로필·트레이너) / 여행(TRIP)
 export type HomeStackParamList = PlaceScreensParamList & {
   HomeMain: undefined;
-  CoupleConnect: undefined;
+  // code — 초대 링크로 들어왔을 때 입력칸을 채운다(utils/pendingInvite, docs/first-experience-audit.md #2)
+  CoupleConnect: { code?: string } | undefined;
   /*
    * 기록(타임라인)·사진첩·작년 오늘은 <b>"우리" 탭으로 이관됐다</b>
    * (AlbumStackParamList). 홈에서 갈 때는 탭을 건너뛴다 — 예: 히어로의 좌/우 열은

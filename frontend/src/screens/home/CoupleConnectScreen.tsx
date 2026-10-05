@@ -15,6 +15,7 @@ import { relationApi } from '../../api/relation';
 import { errorCodeOf } from '../../api/client';
 import { getErrorMessage } from '../../utils/error';
 import { copyText, shareText } from '../../utils/share';
+import { INVITE_LINK_BASE } from '../../constants/config';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
@@ -46,7 +47,9 @@ const CONNECT_POLL_MS = 4000;
  * 보였다 — 그 코드를 공유하면 상대는 앞 계정과 연결됐다(docs/first-experience-audit.md #6·#16).
  * 진입 시 자동 생성은 여전히 하지 않는다 — 코드를 <b>입력</b>하러 온 사람에게도 초대가 생긴다.
  */
-export function CoupleConnectScreen({ navigation }: Props) {
+export function CoupleConnectScreen({ navigation, route }: Props) {
+  // 초대 링크로 들어왔으면 받은 코드를 채워 둔다 — 누르는 건 사용자 몫이다(누구와 연결되는지 확인하고 누르게)
+  const linkedCode = route.params?.code ? extractInviteCode(route.params.code) : null;
   const { createInvite, findInvite, connectCouple, fetchAll } = useRelationStore();
   const [code, setCode] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -110,7 +113,13 @@ export function CoupleConnectScreen({ navigation }: Props) {
     }, [code, finishConnected]),
   );
 
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState(linkedCode ?? '');
+  // 화면이 열려 있는 채로 새 초대 링크가 들어오면 그 코드로 바꾼다
+  const [seenLinkedCode, setSeenLinkedCode] = useState(linkedCode);
+  if (linkedCode !== seenLinkedCode) {
+    setSeenLinkedCode(linkedCode);
+    if (linkedCode) setInput(linkedCode);
+  }
   const [error, setError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
 
@@ -140,7 +149,11 @@ export function CoupleConnectScreen({ navigation }: Props) {
   const onShare = async () => {
     if (!code) return;
     try {
-      await shareText(`Dubly에서 커플로 연결해요! 초대코드: ${code} (24시간 유효)`);
+      // 링크를 누르면 소개 사이트가 앱 열기·설치로 잇고, 앱이 받은 코드를 연결 화면에 채운다(#2).
+      // 코드도 함께 적는다 — 링크를 못 여는 환경이면 직접 입력하거나 문구째 붙여넣으면 된다(extractInviteCode)
+      await shareText(
+        `Dubly에서 커플로 연결해요!\n${INVITE_LINK_BASE}${code}\n초대코드: ${code} (24시간 유효)`,
+      );
     } catch (e) {
       // 공유 시트를 사용자가 그냥 닫아도 일부 플랫폼은 reject 한다 — 진짜 실패만 알린다
       toast.error(getErrorMessage(e, '공유에 실패했어요.'));
@@ -214,6 +227,9 @@ export function CoupleConnectScreen({ navigation }: Props) {
               errorText={error ?? undefined}
               style={styles.codeInput}
             />
+            {linkedCode && input === linkedCode && !error ? (
+              <Text style={styles.codeCaption}>초대 링크의 코드를 채워 뒀어요 · 연결하기를 누르면 연결돼요</Text>
+            ) : null}
             <Button
               title="연결하기"
               onPress={onConnect}

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<!-- 초대 링크는 사람마다 다르고 24시간 뒤 쓸모없어진다 — 검색에 남길 이유가 없다 -->
+<meta name="robots" content="noindex" />
+<title>Dubly 커플 초대</title>
+<meta property="og:title" content="Dubly에서 커플로 연결해요" />
+<meta property="og:description" content="초대 링크를 열면 앱에서 바로 연결할 수 있어요." />
+<meta property="og:image" content="https://dubly.co.kr/icon.png" />
+<!--
+  커플 초대 링크(https://dubly.co.kr/i/CODE)의 착지 페이지 — _redirects 가 /i/* 를 이 파일로 보낸다.
+  docs/first-experience-audit.md #2.
+
+  1단계(지금): 링크를 누르면 브라우저로 여기 온다. 앱이 있으면 "앱에서 열기"(doubly:// 스킴)로 앱이
+  열리고, 앱이 그 코드를 연결 화면에 채운다(frontend/src/utils/pendingInvite.ts). 앱이 없으면 설치 후
+  "코드 복사"한 것을 붙여넣으면 된다(앱이 공유 문구째 붙여넣어도 코드를 골라낸다).
+  2단계(빌드 필요): App Links·Universal Links 가 켜지면 앱이 깔린 폰에서는 이 페이지를 거치지 않고
+  앱이 바로 열린다. Play 링크의 referrer 는 그때 설치 직후 코드를 이어받는 데 쓴다.
+
+  ⚠️ 코드 알파벳·길이는 백엔드 RelationService 와 같아야 한다(혼동 문자 I·O·0·1 제외 32자, 6자리).
+-->
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    margin: 0;
+    padding: 40px 20px 64px;
+    max-width: 480px;
+    margin-inline: auto;
+    font-family: -apple-system, BlinkMacSystemFont, "Pretendard", "Malgun Gothic", sans-serif;
+    line-height: 1.6;
+    color: #1c1c1e;
+    background: #fafaf9;
+    text-align: center;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { color: #f1f2f0; background: #16171a; }
+  }
+  img.icon { width: 72px; height: 72px; border-radius: 18px; }
+  h1 { font-size: 21px; margin: 16px 0 4px; word-break: keep-all; }
+  .meta { font-size: 14px; color: #8a8f8a; margin: 0 0 24px; word-break: keep-all; }
+  .code {
+    font-size: 38px; font-weight: 800; letter-spacing: 8px;
+    background: #fff; border: 1px solid #e6e6e3; border-radius: 14px;
+    padding: 16px 0; margin: 0 0 8px;
+  }
+  .caption { font-size: 13px; color: #8a8f8a; margin: 0 0 24px; }
+  .btn {
+    display: block; width: 100%; box-sizing: border-box;
+    padding: 14px 16px; margin: 10px 0; border-radius: 12px;
+    font-size: 16px; font-weight: 700; text-decoration: none; border: 0; cursor: pointer;
+    font-family: inherit;
+  }
+  .primary { background: #ff8a7a; color: #fff; }
+  .secondary { background: #fff; color: #1c1c1e; border: 1px solid #e6e6e3; }
+  .section { font-size: 13px; color: #8a8f8a; margin: 28px 0 4px; }
+  .steps { text-align: left; font-size: 14px; padding-left: 20px; word-break: keep-all; }
+  .hidden { display: none; }
+  @media (prefers-color-scheme: dark) {
+    .code, .secondary { background: #1f2124; border-color: #2c2f33; color: #f1f2f0; }
+  }
+</style>
+</head>
+<body>
+<img class="icon" src="/icon.png" alt="Dubly" />
+
+<div id="valid" class="hidden">
+  <h1>Dubly에서 커플로 연결해요</h1>
+  <p class="meta">상대가 보낸 초대예요. 앱에서 이 코드로 연결하면 둘만의 기록이 시작돼요.</p>
+  <p class="code" id="code"></p>
+  <p class="caption">초대코드는 만든 뒤 24시간 동안 쓸 수 있어요</p>
+
+  <p class="section">앱이 있다면</p>
+  <a class="btn primary" id="open">앱에서 열기</a>
+
+  <p class="section">앱이 없다면</p>
+  <button class="btn secondary" id="copy" type="button">코드 복사하기</button>
+  <a class="btn secondary" id="store-android" href="#">Google Play에서 받기</a>
+  <a class="btn secondary" id="store-ios" href="https://apps.apple.com/app/id6807249370">App Store에서 받기</a>
+  <ol class="steps">
+    <li>앱을 설치하고 가입해요.</li>
+    <li>홈의 <strong>커플 연결하기</strong>에서 복사한 코드를 붙여넣어요.</li>
+  </ol>
+</div>
+
+<div id="invalid" class="hidden">
+  <h1>초대 링크를 확인해 주세요</h1>
+  <p class="meta">링크가 잘렸거나 올바르지 않아요. 상대에게 초대 링크를 다시 받아 주세요.</p>
+  <a class="btn secondary" href="/">Dubly 소개 보기</a>
+</div>
+
+<script>
+  (function () {
+    var match = location.pathname.match(/^\/i\/([ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6})\/?$/i);
+    if (!match) {
+      document.getElementById('invalid').classList.remove('hidden');
+      return;
+    }
+    var code = match[1].toUpperCase();
+    document.getElementById('valid').classList.remove('hidden');
+    document.getElementById('code').textContent = code;
+    document.getElementById('open').href = 'doubly://couple/connect/' + code;
+    // referrer 는 2단계(Play Install Referrer)에서 설치 직후 코드를 이어받는 데 쓴다 — 지금은 스토어가 무시한다
+    document.getElementById('store-android').href =
+      'https://play.google.com/store/apps/details?id=com.doubly.app&referrer=' + encodeURIComponent('invite=' + code);
+
+    // 지금 기기의 스토어 버튼만 먼저 보이게 — 다른 쪽은 숨기지 않고 아래로(PC 에서 보내는 경우도 있다)
+    var ua = navigator.userAgent || '';
+    if (/iPhone|iPad|iPod/i.test(ua)) {
+      var ios = document.getElementById('store-ios');
+      ios.parentNode.insertBefore(ios, document.getElementById('store-android'));
+    }
+
+    var copyBtn = document.getElementById('copy');
+    copyBtn.addEventListener('click', function () {
+      var done = function () { copyBtn.textContent = '복사했어요 ✓'; };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(code).then(done, function () { window.prompt('코드를 복사해 주세요', code); });
+      } else {
+        window.prompt('코드를 복사해 주세요', code);
+      }
+    });
+  })();
+</script>
+</body>
+</html>

@@ -473,6 +473,19 @@ fingerprint 를 바꾸는 변경이라 지금 빌드에 업데이트를 계속 �
   (docs/LOVELICHELIN_CHAT_LINK_2026-10-02.md §0).
 - `package.json` 에 `"verify:home-event": "node --experimental-strip-types scripts/verify-home-event.mjs"`(2026-10-02, 홈 다가오는 일정
   날짜 경계 검증) — 그때까지는 그 명령으로 직접 돌린다. 등록을 미루는 이유는 위 verify:place-link 와 같다.
+- **커플 초대 App Links·Universal Links + 설치 후 코드 이어받기**(2026-10-05, docs/first-experience-audit.md #2 2단계).
+  1단계(초대 링크·소개 사이트 `/i/CODE`·`doubly://couple/connect/CODE`·로그인 뒤 코드 채우기)는 JS 라 업데이트로 나갔다.
+  빌드 때 넣을 것:
+  - `app.json` `android.intentFilters`: `https://dubly.co.kr/i/*`(`autoVerify: true`, `BROWSABLE`·`DEFAULT`)
+  - `app.json` `ios.associatedDomains`: `["applinks:dubly.co.kr"]` — App ID 에 Associated Domains 기능이 켜져야 한다(EAS 가 프로비저닝 갱신)
+  - `landing/.well-known/assetlinks.json`: 패키지 `com.doubly.app` + **Play 앱 서명 키** SHA-256(업로드 키가 아니다 —
+    Play Console › 테스트 및 출시 › 앱 무결성 › 앱 서명). `_headers` 로 `Content-Type: application/json`
+  - `landing/.well-known/apple-app-site-association`(확장자 없음): `appIDs: ["<TeamID>.com.doubly.app.ios"]`,
+    `components: [{ "/": "/i/*" }]`, `Content-Type: application/json`, 리다이렉트 없이 200
+  - 설치 후 코드 이어받기(Android): Play Install Referrer(`react-native-play-install-referrer` 등, 의존성 추가 = 빌드).
+    소개 사이트의 Play 링크가 이미 `referrer=invite%3DCODE` 를 싣는다. 첫 실행에 읽어 `savePendingInvite` 로 넘기면 된다.
+    iOS 는 동등한 장치가 없어 "코드 복사 → 붙여넣기"가 그대로 길이다.
+  - 소개 사이트 파일은 **빌드보다 먼저** 배포해 둔다 — 앱이 설치될 때 OS 가 도메인을 검증한다.
 
 ## 다음 단계
 - iOS는 Apple 개발자 계정($99/년)이 있어야 ad-hoc/TestFlight 배포가 가능합니다. 준비되면
