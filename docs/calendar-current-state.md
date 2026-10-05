@@ -110,7 +110,7 @@ ALTER TABLE couple_events ADD COLUMN visibility VARCHAR(20) NOT NULL DEFAULT 'SH
 |---|---|---|---|
 | GET | `/api/v1/calendar/events?year=&month=` | 월 조회(생략 시 KST 이번 달) | O (`calendarApi.month`) |
 | GET | `/api/v1/calendar/events/upcoming?limit=5` | 다가오는 일정(최대 20) | **X — 호출하는 곳 없음** |
-| POST | `/api/v1/calendar/events` | 생성 (`PlanGuard.consume(CALENDAR_EVENT)`) | O |
+| POST | `/api/v1/calendar/events` | 생성 (`PlanGuard.requireCapacity(CALENDAR_EVENT, 다가오는 일정 수)`) | O |
 | PUT | `/api/v1/calendar/events/{id}` | 부분 수정(null = 유지) | O |
 | DELETE | `/api/v1/calendar/events/{id}` | 삭제 | O |
 
@@ -164,7 +164,7 @@ ALTER TABLE couple_events ADD COLUMN visibility VARCHAR(20) NOT NULL DEFAULT 'SH
 | 여행 기간 겹쳐 보기 | 구현됨 | 격자 하단 띠 + "우리 여행" 섹션(`tripApi.list`) |
 | 다녀온 곳 겹쳐 보기 | 구현됨 | 속 빈 점 + "이번 달 다녀온 곳" 섹션 (6절). 2026-10-02 전엔 "이번 달 데이트"(같이 먹기 식단만) |
 | 누구 일정 필터 칩 | 없음 | `CALENDAR_PERSONAL_EVENTS_2026-09-22.md` §8 "남은 것" |
-| FREE 한도 | 구현됨 | `Feature.CALENDAR_EVENT` FREE 월 10건(커플 공용) / PRO 무제한 (`common/plan/Feature.java:122`). 이번 달에 만든 일정을 지우면 돌려줌(2026-10-02~) |
+| FREE 한도 | 구현됨 | `Feature.CALENDAR_EVENT` FREE **다가오는 일정 10개**(커플 공용, 2026-10-05~ 개수형) / PRO 무제한. 매년 반복 + 끝나는 날이 오늘 이후인 일정만 센다(`CalendarEventRepository.countUpcoming`). 지우면 바로 다시 넣을 수 있다. 그 전엔 월 10건 소비형 + 이번 달 환불이었다(docs/first-experience-audit.md #33) |
 
 ## 6. 럽슐랭 연결
 
