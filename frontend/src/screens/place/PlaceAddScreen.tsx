@@ -10,7 +10,7 @@
  * 지도는 표시와 좌표 고르기만 맡는다. 결정 기록: docs/LOVELICHELIN_CHAT_LINK_2026-10-02.md
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -50,6 +50,10 @@ export function PlaceAddScreen({ navigation, route }: Props) {
   const isEdit = editingPlace != null;
   // 지도 탭에서 빈 곳을 탭해 "여기에 추가"로 들어오면 좌표·주소가 미리 채워져 있다
   const initialCoords = route.params?.initialCoords;
+  // 럽슐랭 지도의 "위치 없음"에서 왔으면 위치 칸까지 내려 준다 — 폼 맨 아래쯤이라 찾아 내려가야 했다
+  const focusLocation = String(route.params?.focusLocation) === 'true';
+  const scrollRef = useRef<ScrollView>(null);
+  const scrolledToLocation = useRef(false);
 
   const [name, setName] = useState(editingPlace?.name ?? '');
   const [address, setAddress] = useState(editingPlace?.address ?? initialCoords?.address ?? '');
@@ -219,7 +223,7 @@ export function PlaceAddScreen({ navigation, route }: Props) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
-      <FormKeyboardView contentContainerStyle={styles.container}>
+      <FormKeyboardView contentContainerStyle={styles.container} scrollRef={scrollRef}>
           {/* 설명은 레이블이 아니라 placeholder 가 — 레이블은 명사 하나(§7-3 7번) */}
           <Text style={styles.label}>카카오 장소 검색</Text>
           <View style={styles.searchRow}>
@@ -277,7 +281,16 @@ export function PlaceAddScreen({ navigation, route }: Props) {
 
           {isKakaoMapConfigured() ? (
             <>
-              <Text style={styles.label}>위치 (선택)</Text>
+              <Text
+                style={styles.label}
+                onLayout={(e) => {
+                  if (!focusLocation || scrolledToLocation.current) return;
+                  scrolledToLocation.current = true;
+                  scrollRef.current?.scrollTo({ y: Math.max(0, e.nativeEvent.layout.y - 12), animated: true });
+                }}
+              >
+                위치 (선택)
+              </Text>
               <KakaoMap
                 ref={mapRef}
                 selectable

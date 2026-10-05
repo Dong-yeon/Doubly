@@ -26,3 +26,60 @@ export const CATEGORY_FILTERS: { value: string; label: string }[] = [
   { value: 'ALL', label: '전체' },
   ...PLACE_CATEGORIES.map((c) => ({ value: c, label: c })),
 ];
+
+/** 장소 필터 — 지도 핀과 하단 시트 목록이 <b>같은 결과</b>를 쓴다(한쪽만 거르면 핀과 목록이 어긋난다) */
+export interface PlaceFilterState {
+  /** 이름·주소에 들어 있는 글자 */
+  search: string;
+  /** 'ALL' 또는 카테고리 이름 */
+  category: string;
+  /** 아직 안 가본 곳 — 방문 0건으로 파생한다. 상태 컬럼은 다시 넣지 않는다(V70 결정) */
+  unvisitedOnly: boolean;
+  /** 럽슐랭 인증(등급 1~3) */
+  certifiedOnly: boolean;
+}
+
+export const EMPTY_PLACE_FILTER: PlaceFilterState = {
+  search: '',
+  category: 'ALL',
+  unvisitedOnly: false,
+  certifiedOnly: false,
+};
+
+export function isPlaceFilterActive(f: PlaceFilterState): boolean {
+  return !!f.search.trim() || f.category !== 'ALL' || f.unvisitedOnly || f.certifiedOnly;
+}
+
+/**
+ * 거르고 "인증 등급 → 솔로 픽 → 최근 방문 → 등록" 순으로 세운다(정렬 이유는 PlaceScreen 상단 주석).
+ * 최근 방문을 등록순보다 앞에 두는 건 등록순(id desc)이 "어제 다녀온 곳은 아래, 석 달 전 넣고 안 간 곳은 위"를
+ * 만들기 때문이다. lastVisitedAt 은 YYYY-MM-DD 라 문자열 비교로 충분하다.
+ */
+export function filterAndSortPlaces<
+  T extends {
+    id: number;
+    name: string;
+    address?: string | null;
+    category?: string | null;
+    visitCount: number;
+    lovelichelinTier: number;
+    lastVisitedAt?: string | null;
+    myRating?: number | null;
+    partnerRating?: number | null;
+  },
+>(places: T[], f: PlaceFilterState): T[] {
+  const q = f.search.trim().toLowerCase();
+  return places
+    .filter((p) => !q || p.name.toLowerCase().includes(q) || (p.address ?? '').toLowerCase().includes(q))
+    .filter((p) => f.category === 'ALL' || p.category === f.category)
+    .filter((p) => !f.unvisitedOnly || p.visitCount === 0)
+    .filter((p) => !f.certifiedOnly || p.lovelichelinTier > 0)
+    .sort((a, b) => {
+      if (b.lovelichelinTier !== a.lovelichelinTier) return b.lovelichelinTier - a.lovelichelinTier;
+      const pick = Number(isSoloPick(b)) - Number(isSoloPick(a));
+      if (pick !== 0) return pick;
+      const visited = (b.lastVisitedAt ?? '').localeCompare(a.lastVisitedAt ?? '');
+      if (visited !== 0) return visited;
+      return b.id - a.id;
+    });
+}

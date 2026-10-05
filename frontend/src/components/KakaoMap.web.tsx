@@ -12,7 +12,13 @@ import { StyleSheet, Text, View } from 'react-native';
 import { KAKAO_JS_KEY } from '../constants/config';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 import type { KakaoMapHandle, KakaoMapProps } from './KakaoMap.types';
-import type { KakaoMapMarker } from '../utils/kakaoMapHtml';
+import {
+  CLUSTER_MIN_LEVEL,
+  CLUSTER_MIN_MARKERS,
+  LABEL_MAX_LEVEL,
+  pinIconKey,
+  type KakaoMapMarker,
+} from '../utils/kakaoMapHtml';
 import { themedStyles } from '../theme/themedStyles';
 
 export type { KakaoMapHandle, KakaoMapProps };
@@ -31,7 +37,7 @@ function loadSdk(): Promise<void> {
     }
     const script = document.createElement('script');
     script.src =
-      `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_JS_KEY}&libraries=services&autoload=false`;
+      `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_JS_KEY}&libraries=services,clusterer&autoload=false`;
     script.async = true;
     script.onload = () => (window as any).kakao.maps.load(() => resolve());
     script.onerror = () => reject(new Error('카카오맵 SDK 로드 실패'));
@@ -97,7 +103,20 @@ function photoPinElement(m: KakaoMapMarker, onPress: () => void): HTMLElement {
 }
 
 export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap(
-  { markers, path, selectable, centerLat, centerLng, height = 300, style, onSelect, onMarkerPress },
+  {
+    markers,
+    path,
+    icons,
+    selectable,
+    centerLat,
+    centerLng,
+    height = 300,
+    style,
+    onSelect,
+    onMarkerPress,
+    onFailed,
+    onBoundsChange,
+  },
   ref,
 ) {
   const boxRef = useRef<HTMLDivElement | null>(null);
@@ -110,8 +129,22 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
   const [failed, setFailed] = useState(false);
 
   // 콜백은 ref 로 잡는다 — 매 렌더마다 지도를 다시 만들지 않기 위해
-  const cbRef = useRef({ onSelect, onMarkerPress });
-  cbRef.current = { onSelect, onMarkerPress };
+  const cbRef = useRef({ onSelect, onMarkerPress, onFailed, onBoundsChange });
+  cbRef.current = { onSelect, onMarkerPress, onFailed, onBoundsChange };
+  /** 시야 맞추기 여백 — 아래쪽은 하단 시트 높이(setPadding). kakaoMapHtml 의 fitPad 와 같은 뜻 */
+  const padRef = useRef({ top: 40, right: 40, bottom: 40, left: 40 });
+  /** 앱이 움직인 시야인지 — idle 이벤트의 byUser 판정(kakaoMapHtml 의 programmatic 과 같다). 로드 직후 idle 은 사용자가 아니다 */
+  const programmaticRef = useRef(true);
+  /** 핀 묶기 — kakaoMapHtml 의 clusterer 와 같은 규칙(CLUSTER_MIN_MARKERS 이상일 때만) */
+  const clustererRef = useRef<any>(null);
+  const labelsRef = useRef<any[]>([]);
+  const clusteringRef = useRef(false);
+  const updateLabels = () => {
+    const map = mapRef.current;
+    if (!map) return;
+    const show = !clusteringRef.current || map.getLevel() <= LABEL_MAX_LEVEL;
+    labelsRef.current.forEach((l) => l.setMap(show ? map : null));
+  };
 
   // 1) 지도 생성 (한 번)
   useEffect(() => {
@@ -132,11 +165,38 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
           tilesLoaded = true;
         });
         setTimeout(() => {
-          if (!disposed && !tilesLoaded) setFailed(true);
+          if (!disposed && !tilesLoaded) {
+            setFailed(true);
+            cbRef.current.onFailed?.();
+          }
         }, 6000);
+        kakao.maps.event.addListener(mapRef.current, 'zoom_changed', updateLabels);
+        // "사용자가 움직였다"는 dragstart·zoom_start 로 판단한다 — kakaoMapHtml 의 idle 주석과 같은 이유
+        let userMoved = false;
+        kakao.maps.event.addListener(mapRef.current, 'dragstart', () => {
+          userMoved = true;
+        });
+        kakao.maps.event.addListener(mapRef.current, 'zoom_start', () => {
+          if (!programmaticRef.current) userMoved = true;
+        });
+        kakao.maps.event.addListener(mapRef.current, 'idle', () => {
+          const b = mapRef.current.getBounds();
+          const sw = b.getSouthWest();
+          const ne = b.getNorthEast();
+          cbRef.current.onBoundsChange?.({
+            sw: { lat: sw.getLat(), lng: sw.getLng() },
+            ne: { lat: ne.getLat(), lng: ne.getLng() },
+            byUser: userMoved,
+          });
+          userMoved = false;
+          programmaticRef.current = false;
+        });
       })
       .catch(() => {
-        if (!disposed) setFailed(true);
+        if (!disposed) {
+          setFailed(true);
+          cbRef.current.onFailed?.();
+        }
       });
     return () => {
       disposed = true;
@@ -152,6 +212,11 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
 
     overlaysRef.current.forEach((o) => o.setMap(null));
     overlaysRef.current = [];
+    labelsRef.current = [];
+    clustererRef.current?.clear();
+    const clustering = (markers?.length ?? 0) >= CLUSTER_MIN_MARKERS && !!kakao.maps.MarkerClusterer;
+    clusteringRef.current = clustering;
+    const clustered: any[] = [];
 
     const bounds = new kakao.maps.LatLngBounds();
     (markers ?? []).forEach((m) => {
@@ -168,14 +233,26 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
           clickable: true,
           content: photoPinElement(m, () => cbRef.current.onMarkerPress?.(m.id)),
         });
+        marker.__fittoPin = true;
       } else {
-        const markerOpts: any = { map, position: pos, title: m.title };
-        if (m.color) markerOpts.image = pinImage(kakao, m.color, m.filled !== false);
+        // 묶을 때는 지도에 직접 올리지 않고 clusterer 에 맡긴다
+        const markerOpts: any = { map: clustering ? null : map, position: pos, title: m.title };
+        const key = pinIconKey(m, icons);
+        const ic = key ? icons?.[key] : undefined;
+        if (ic) {
+          markerOpts.image = new kakao.maps.MarkerImage(ic.url, new kakao.maps.Size(ic.width, ic.height), {
+            offset: new kakao.maps.Point(ic.anchorX, ic.anchorY),
+          });
+        } else if (m.color) {
+          markerOpts.image = pinImage(kakao, m.color, m.filled !== false);
+        }
+        if (m.selected) markerOpts.zIndex = 10;
         marker = new kakao.maps.Marker(markerOpts);
         kakao.maps.event.addListener(marker, 'click', () => cbRef.current.onMarkerPress?.(m.id));
+        if (clustering) clustered.push(marker);
       }
       const label = new kakao.maps.CustomOverlay({
-        map,
+        map: null,
         position: pos,
         yAnchor: 0,
         content:
@@ -185,7 +262,15 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
           '</div>',
       });
       overlaysRef.current.push(marker, label);
+      labelsRef.current.push(label);
     });
+    if (clustering) {
+      if (!clustererRef.current) {
+        clustererRef.current = new kakao.maps.MarkerClusterer({ map, averageCenter: true, minLevel: CLUSTER_MIN_LEVEL });
+      }
+      clustererRef.current.addMarkers(clustered);
+    }
+    updateLabels();
 
     if (path && path.length > 1) {
       const line = new kakao.maps.Polyline({
@@ -201,18 +286,22 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
     }
 
     /*
-     * 화면 맞추기는 <b>처음 그릴 때만</b> 한다.
+     * 화면 맞추기는 <b>처음 마커가 생겼을 때 한 번만</b> 한다.
      * 갱신마다 setBounds 를 부르면(여행 상세의 Day 전환 등) 사용자가 확대·이동해둔
-     * 시야를 매번 빼앗는다. 이후에는 마커만 바꾸고 시야는 그대로 둔다.
+     * 시야를 매번 빼앗는다. 예전엔 "처음 그릴 때"였는데, 목록이 늦게 오면 첫 그리기가 빈 마커라
+     * 그 뒤 들어온 마커에 시야를 못 맞추고 서울시청에 머물렀다.
      */
     if (fittedRef.current) return;
+    if (!(markers?.length) && !((path?.length ?? 0) > 1)) return;
     fittedRef.current = true;
+    programmaticRef.current = true;
     if ((markers?.length ?? 0) > 1 || (path?.length ?? 0) > 1) {
-      map.setBounds(bounds, 40, 40, 40, 40);
+      const pad = padRef.current;
+      map.setBounds(bounds, pad.top, pad.right, pad.bottom, pad.left);
     } else if (markers?.length === 1) {
       map.setCenter(new kakao.maps.LatLng(markers[0].lat, markers[0].lng));
     }
-  }, [ready, markers, path]);
+  }, [ready, markers, path, icons]);
 
   // 3) 탭으로 좌표 선택 (주소 자동 조회)
   useEffect(() => {
@@ -247,6 +336,58 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
       else selMarkerRef.current = new kakao.maps.Marker({ map, position: pos });
       map.setCenter(pos);
       if (map.getLevel() > 4) map.setLevel(4);
+    },
+    fitToMarkers: () => {
+      const kakao = (window as any).kakao;
+      const map = mapRef.current;
+      if (!kakao?.maps || !map) return;
+      const bounds = new kakao.maps.LatLngBounds();
+      const ms = overlaysRef.current.filter((o) => o instanceof kakao.maps.Marker || o.__fittoPin);
+      ms.forEach((o) => bounds.extend(o.getPosition()));
+      programmaticRef.current = true;
+      if (ms.length > 1) {
+        const pad = padRef.current;
+        map.setBounds(bounds, pad.top, pad.right, pad.bottom, pad.left);
+      } else if (ms.length === 1) {
+        map.setCenter(ms[0].getPosition());
+      }
+    },
+    setPadding: (pad) => {
+      padRef.current = { ...padRef.current, ...pad };
+    },
+    panTo: (lat: number, lng: number, offsetY = 0) => {
+      const kakao = (window as any).kakao;
+      const map = mapRef.current;
+      if (!kakao?.maps || !map) return;
+      programmaticRef.current = true;
+      let target = new kakao.maps.LatLng(lat, lng);
+      if (offsetY) {
+        // kakaoMapHtml 의 fittoPanTo 와 같은 계산 — 핀을 가운데보다 offsetY 위에 둔다
+        const proj = map.getProjection();
+        const pt = proj.containerPointFromCoords(target);
+        target = proj.coordsFromContainerPoint(new kakao.maps.Point(pt.x, pt.y + offsetY));
+      }
+      map.panTo(target);
+    },
+    fitPoints: (points) => {
+      const kakao = (window as any).kakao;
+      const map = mapRef.current;
+      if (!kakao?.maps || !map || points.length === 0) return;
+      programmaticRef.current = true;
+      if (points.length === 1) {
+        map.setCenter(new kakao.maps.LatLng(points[0].lat, points[0].lng));
+        return;
+      }
+      const bounds = new kakao.maps.LatLngBounds();
+      points.forEach((p) => bounds.extend(new kakao.maps.LatLng(p.lat, p.lng)));
+      const pad = padRef.current;
+      map.setBounds(bounds, pad.top, pad.right, pad.bottom, pad.left);
+    },
+    clearPin: () => {
+      if (selMarkerRef.current) {
+        selMarkerRef.current.setMap(null);
+        selMarkerRef.current = null;
+      }
     },
   }));
 

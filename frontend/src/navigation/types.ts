@@ -357,13 +357,19 @@ export type PlaceScreensParamList = {
         returnTo?: keyof MainTabParamList;
         /** 채팅 링크를 해석하지 못했을 때 — 링크에서 읽은 이름으로 카카오 검색을 바로 돌린다 */
         initialKeyword?: string;
+        /** 럽슐랭 지도의 "위치 없음"에서 왔다 — 열리자마자 위치(지도) 칸으로 내려간다 */
+        focusLocation?: boolean;
       }
     | undefined;
   /*
    * openRating: 들어오자마자 럽슐랭 평가 영역을 펼친다 — 홈에서 상대 왕관을 눌렀는데 내 대표 평점이 아직
    * 없을 때(HomeScreen.onPressCrown). 웹은 URL 에 실려 문자열 'true' 로 올 수 있다.
    */
-  PlaceDetail: { placeId: number; name: string; openRating?: boolean };
+  /*
+   * openVisit: 들어오자마자 "다녀왔어요" 폼을 펼친다 — 럽슐랭 지도의 핀 카드 [다녀왔어요](2026-10-05).
+   * openRating 과 같이 웹은 URL 에 실려 문자열 'true' 로 올 수 있다.
+   */
+  PlaceDetail: { placeId: number; name: string; openRating?: boolean; openVisit?: boolean };
 };
 
 // 콘텐츠(영화·공연·드라마) 추가/상세 — Place 와 별개 도메인이라 지도·좌표 파라미터가 없다.
