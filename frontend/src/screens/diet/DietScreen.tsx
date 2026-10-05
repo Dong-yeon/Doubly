@@ -587,6 +587,12 @@ export function DietScreen({ navigation, route }: Props) {
       fetchHistory();
       refreshExtras();
       void loadPartnerMeals();
+      /*
+       * 커플 관계를 아직 한 번도 못 읽었으면 여기서 읽는다 — 부팅 때 조회가 실패했고 홈을 거치지 않은 경우.
+       * 비어 있으면 "같이 먹었어요" 칩·"○○님 오늘"이 숨는다(authStore.loadRelations 주석).
+       */
+      const relations = useRelationStore.getState();
+      if (!relations.loaded && !relations.loading) void relations.fetchAll().catch(() => undefined);
     }, [fetchToday, fetchHistory, refreshExtras, loadPartnerMeals]),
   );
 

@@ -71,6 +71,19 @@ async function clearTokens() {
   useRelationStore.getState().reset();
 }
 
+/**
+ * 커플 관계를 부팅·로그인 때 한 번 읽어 둔다.
+ *
+ * <p>예전엔 홈 화면(HomeScreen.refresh)만 읽었다. 하단 탭은 열어야 만들어지므로(lazy) 푸시로 럽바디에
+ * 바로 들어오면 홈이 한 번도 안 열려 couple 이 null 로 남았다 — 기록 화면의 "같이 먹었어요" 칩과
+ * 럽바디 "○○님 오늘"이 사라지고, 그 상태로 남긴 식사는 데이트 배지 없이 혼자 기록이 됐다. 식단을
+ * 링크하는 푸시(상대 기록·끼니 리마인드·"뭐 먹었어?")가 흔해서 자주 밟는 길이었다.
+ * 실패는 삼킨다 — 홈·럽바디가 들어올 때 다시 시도한다(loaded 가 false 로 남는다).
+ */
+function loadRelations() {
+  void useRelationStore.getState().fetchAll().catch(() => undefined);
+}
+
 async function persistTokens(tokens: AuthTokens) {
   await storage.setItem(STORAGE_KEYS.accessToken, tokens.accessToken);
   await storage.setItem(STORAGE_KEYS.refreshToken, tokens.refreshToken);
@@ -115,6 +128,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
        * 데이터 자체가 커플 사용자에게 영영 로드되지 않았다 — 여기서 부팅 시 채운다.
        */
       void useChatStore.getState().loadRooms();
+      loadRelations();
     } catch (e) {
       // 서버가 세션을 거절했을 때만 로그아웃. 연결 문제면 토큰을 지키고 다시 시도하게 한다.
       if (isSessionRejected(e)) {
@@ -138,6 +152,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     void usePlanStore.getState().load();
     // 안 읽은 배지 로드 — bootstrap() 과 같은 이유(위 주석 참고)
     void useChatStore.getState().loadRooms();
+    loadRelations();
   },
 
   login: async (email, password) => {
