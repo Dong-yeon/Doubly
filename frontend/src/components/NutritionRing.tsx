@@ -58,7 +58,7 @@ export function NutritionRing({
             cx={size / 2}
             cy={size / 2}
             r={radius}
-            stroke={over ? colors.danger : colors.primaryLight}
+            stroke={over ? colors.danger : colors.me}
             strokeWidth={strokeWidth}
             fill="none"
             strokeDasharray={`${circumference} ${circumference}`}

@@ -218,7 +218,7 @@ const styles = themedStyles((colors) => ({
   daySelected: { borderWidth: 2, borderColor: colors.primary },
   dayDone: { backgroundColor: colors.primary },
   dayText: { fontSize: fontSize.body, color: colors.textPrimary },
-  dayTextDone: { color: colors.white, fontWeight: '700' },
+  dayTextDone: { color: colors.onPrimary, fontWeight: '700' },
   legend: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.xl, gap: spacing.sm },
   selectedBox: { marginTop: spacing.xl, gap: spacing.sm },
   selectedText: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },

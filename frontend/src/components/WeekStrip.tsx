@@ -106,7 +106,7 @@ const styles = themedStyles((colors) => ({
   // 오늘 — 진한 채움 원. 색이 아니라 "칸 하나만 채워져 있다"는 모양으로도 읽힌다
   dateWrapToday: { backgroundColor: colors.primary },
   date: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
-  dateToday: { color: colors.white },
+  dateToday: { color: colors.onPrimary },
   dots: { height: DOT + 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   dot: { width: DOT, height: DOT, borderRadius: DOT / 2, borderWidth: 1.5 },
   // 빈 원 — 소유자 색을 쓰지 않는다(없음은 누구의 것도 아니다). 테두리 대비는 textMuted 기준

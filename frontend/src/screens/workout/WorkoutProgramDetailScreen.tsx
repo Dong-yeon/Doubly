@@ -194,7 +194,7 @@ const styles = themedStyles((colors) => ({
     borderRadius: radius.pill,
     backgroundColor: colors.primary,
   },
-  todayBadgeText: { fontSize: 10, fontWeight: '800', color: colors.white },
+  todayBadgeText: { fontSize: 10, fontWeight: '800', color: colors.onPrimary },
   start: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '800' },
   dayDotRow: { flexDirection: 'row', gap: 4, marginTop: spacing.xs },
   dayDot: {
@@ -209,7 +209,7 @@ const styles = themedStyles((colors) => ({
   },
   dayDotActive: { backgroundColor: colors.primaryBg, borderColor: colors.primary },
   dayDotText: { fontSize: 10, fontWeight: '700', color: colors.textTertiary },
-  dayDotTextActive: { color: colors.primary },
+  dayDotTextActive: { color: colors.primary, fontWeight: '800' },
   summary: { fontSize: fontSize.caption, color: colors.textPrimary, marginTop: spacing.xs, lineHeight: 18 },
   count: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xs },
   deleteLink: { alignItems: 'center', paddingVertical: spacing.md, marginTop: spacing.sm },

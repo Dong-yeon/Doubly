@@ -24,6 +24,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Switch, Text, View, type Styl
 import { MaterialCommunityIcons } from './Icon';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 import { themedStyles } from '../theme/themedStyles';
+import { onColor } from '../theme/onColor';
 
 interface GroupProps {
   /** 묶음 머리말 — 캡션·회색. 없으면 블록만 */
@@ -106,7 +107,8 @@ export function SettingsRow({
       onValueChange={onSwitch}
       disabled={disabled}
       trackColor={{ true: colors.primaryFill }}
-      thumbColor={colors.white}
+      // 켜진 트랙은 잉크 — 다크에서는 밝은 잉크라 흰 손잡이가 묻힌다. 트랙 위 글자색 규칙(onColor)을 그대로 쓴다
+      thumbColor={switchValue ? onColor(colors.primaryFill) : colors.white}
     />
   ) : right !== undefined ? (
     right

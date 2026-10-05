@@ -172,9 +172,9 @@ export function FeedCommentsScreen({ route }: Props) {
             accessibilityLabel="댓글 보내기"
           >
             {sending ? (
-              <ActivityIndicator size="small" color={colors.white} />
+              <ActivityIndicator size="small" color={colors.onPrimary} />
             ) : (
-              <MaterialCommunityIcons name="send" size={18} color={colors.white} />
+              <MaterialCommunityIcons name="send" size={18} color={colors.onPrimary} />
             )}
           </Pressable>
         </View>

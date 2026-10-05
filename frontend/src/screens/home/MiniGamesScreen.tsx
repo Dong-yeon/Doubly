@@ -384,6 +384,6 @@ const styles = themedStyles((colors) => ({
   },
   badgeHighlight: { backgroundColor: colors.primary },
   badgeText: { fontSize: 10, fontWeight: '800', color: colors.textSecondary },
-  badgeTextHighlight: { color: colors.white },
+  badgeTextHighlight: { color: colors.onPrimary },
   footnote: { fontSize: fontSize.caption, color: colors.textMuted, textAlign: 'center', marginTop: spacing.md, lineHeight: 18 },
 }));

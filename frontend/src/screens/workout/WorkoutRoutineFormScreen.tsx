@@ -720,7 +720,7 @@ const styles = themedStyles((colors) => ({
   catChipSmall: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border },
   catChipActive: { borderColor: colors.primary, backgroundColor: colors.primaryBg },
   catText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
-  catTextActive: { color: colors.primary },
+  catTextActive: { color: colors.primary, fontWeight: '800' },
   formRow: { flexDirection: 'row', gap: spacing.sm },
   modalBtn: { marginTop: spacing.md },
   groupRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },

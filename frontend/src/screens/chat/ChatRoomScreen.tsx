@@ -2527,7 +2527,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             accessibilityLabel="맨 아래로 이동"
             hitSlop={8}
           >
-            <MaterialCommunityIcons name="chevron-down" size={22} color={colors.white} />
+            <MaterialCommunityIcons name="chevron-down" size={22} color={colors.onPrimary} />
           </Pressable>
         ) : null}
         </View>
@@ -2824,11 +2824,11 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               >
                 {editSaving ? (
                   <View style={styles.sendCircle}>
-                    <ActivityIndicator size="small" color={colors.white} />
+                    <ActivityIndicator size="small" color={colors.onPrimary} />
                   </View>
                 ) : (
                   <View style={styles.sendCircle}>
-                    <MaterialCommunityIcons name="arrow-up" size={18} color={colors.white} style={styles.sendIcon} />
+                    <MaterialCommunityIcons name="arrow-up" size={18} color={colors.onPrimary} style={styles.sendIcon} />
                   </View>
                 )}
               </TouchableOpacity>
@@ -3147,7 +3147,7 @@ const styles = themedStyles((colors) => ({
   touchLabel: { fontSize: fontSize.micro, fontWeight: '700', color: colors.textSecondary, marginTop: -4 },
   workoutCard: { paddingVertical: 10, paddingHorizontal: spacing.md, borderRadius: radius.lg, borderWidth: 1.5, maxWidth: 240 },
   /*
-   * 카드 색은 <b>발신자</b> 기준 — 내 것은 나(Gold), 상대 것은 상대(Green). 예전엔 종류
+   * 카드 색은 <b>발신자</b> 기준 — 내 것은 나(코랄), 상대 것은 상대(하늘). 예전엔 종류
    * (운동=secondary, 식단=accent)로 칠해 내가 보낸 운동 카드에 상대 색이 둘러졌다
    * (docs/SCREEN_DESIGN_PASS_2026-09-23.md §5-3). 종류는 배지 글자·아이콘이 이미 말한다.
    */
@@ -3156,7 +3156,7 @@ const styles = themedStyles((colors) => ({
   cardBadgeMine: { color: colors.meText },
   cardBadgeTheirs: { color: colors.partnerText },
   workoutBadge: { fontSize: fontSize.caption, fontWeight: '800', marginBottom: 2 },
-  // PR 카드 — 같은 카드 레이아웃에 골드 강조만 얹는다(couple 토큰 = Gold, 성취를 나타내는 색)
+  // PR 카드 — 같은 카드 레이아웃에 금색 강조만 얹는다(achievement — 누가 했든 같은 성취 색)
   // 배경은 mePastelBg(파스텔) — 그 위 배지 글자는 couple 원색이면 대비가 안 나와 ink 를 쓴다
   workoutCardPr: { borderColor: colors.achievement, backgroundColor: colors.achievementBg },
   workoutBadgePr: { color: colors.ink },

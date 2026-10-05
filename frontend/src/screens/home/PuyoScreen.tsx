@@ -1234,7 +1234,7 @@ const styles = themedStyles((colors) => ({
     paddingVertical: spacing.xs,
     borderRadius: radius.pill,
   },
-  chainText: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.white },
+  chainText: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.onPrimary },
 
   itemToast: {
     position: 'absolute',

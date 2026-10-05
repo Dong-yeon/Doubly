@@ -338,7 +338,7 @@ const styles = themedStyles((colors) => ({
   selectedBox: { backgroundColor: colors.primary },
   dayText: { fontSize: fontSize.body, fontWeight: '600', color: colors.textPrimary },
   // 선택된 날은 배경이 colors.primary — 라이트/다크 모두 흰 글씨가 대비를 만족한다
-  selectedText: { color: '#FFFFFF', fontWeight: '800' },
+  selectedText: { color: colors.onPrimary, fontWeight: '800' },
   disabledText: { color: colors.textTertiary, opacity: 0.4 },
 
   ymPanel: { flexDirection: 'row', gap: spacing.sm, height: YEAR_LIST_HEIGHT },

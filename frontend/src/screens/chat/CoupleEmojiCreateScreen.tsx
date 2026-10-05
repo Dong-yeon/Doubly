@@ -709,7 +709,7 @@ const styles = themedStyles((colors) => ({
   emotionChipOn: { borderColor: colors.primary, backgroundColor: colors.surfaceAlt },
   emotionChipEmoji: { fontSize: 14 },
   emotionChipText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary },
-  emotionChipTextOn: { color: colors.primary },
+  emotionChipTextOn: { color: colors.primary, fontWeight: '800' },
   /* 이미 가진 감정 표시 — 다시 그리면 덮어쓰는 게 아니라 한 장이 더 생긴다 */
   emotionHaveDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.textTertiary },
   cellEmpty: { alignItems: 'center', justifyContent: 'center' },

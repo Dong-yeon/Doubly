@@ -148,7 +148,7 @@ const styles = themedStyles((colors) => ({
   partnerName: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
   lastMessage: { fontSize: fontSize.body, color: colors.textSecondary, marginTop: 3 },
   badge: { minWidth: 24, height: 24, borderRadius: radius.pill, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 7 },
-  badgeText: { color: colors.white, fontSize: fontSize.caption, fontWeight: '800' },
+  badgeText: { color: colors.onPrimary, fontSize: fontSize.caption, fontWeight: '800' },
   sep: { height: spacing.xs },
   connectBtn: { alignSelf: 'center', marginTop: -spacing.md },
 }));

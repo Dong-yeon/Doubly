@@ -942,7 +942,8 @@ export function CoupleCalendarScreen({ navigation }: Props) {
                         onValueChange={(v) =>
                           setForm((f) => (f ? { ...f, visibility: v ? 'PRIVATE' : 'PERSONAL' } : f))
                         }
-                        trackColor={{ true: colors.primary }}
+                        trackColor={{ true: colors.primaryFill }}
+                        thumbColor={form?.visibility === 'PRIVATE' ? onColor(colors.primaryFill) : colors.white}
                       />
                     </View>
                   ) : null}
@@ -958,7 +959,8 @@ export function CoupleCalendarScreen({ navigation }: Props) {
                       onValueChange={(v) =>
                         setForm((f) => (f ? { ...f, repeatYearly: v, endDate: v ? '' : f.endDate } : f))
                       }
-                      trackColor={{ true: colors.primary }}
+                      trackColor={{ true: colors.primaryFill }}
+                      thumbColor={form?.repeatYearly ? onColor(colors.primaryFill) : colors.white}
                     />
                   </View>
 
@@ -1042,7 +1044,7 @@ const styles = themedStyles((colors) => ({
   todayWrap: { backgroundColor: colors.primary },
   dayText: { fontSize: fontSize.body, color: colors.textPrimary },
   // 빨간 날 — danger 는 라이트·다크 모두 카드 위 4.5:1 이 검증된 빨강이다(verify:theme).
-  // coral 은 이름과 달리 금색(나 = Gold)이라 "빨간 날"로 읽히지 않는다.
+  // 소유자 색(나 = 코랄)은 "빨간 날"이 아니다 — 요일·공휴일은 sunday/danger 를 쓴다.
   redText: { color: colors.danger },
   holidayLine: {
     marginTop: spacing.sm,
@@ -1051,7 +1053,7 @@ const styles = themedStyles((colors) => ({
     color: colors.danger,
     fontWeight: '600',
   },
-  todayText: { color: colors.white, fontWeight: '800' },
+  todayText: { color: colors.onPrimary, fontWeight: '800' },
   dotRow: { flexDirection: 'row', gap: 3, height: 6, marginTop: 2 },
   dot: { width: 6, height: 6, borderRadius: 3 },
   // 지난 기록 — 속이 빈 점. 앞으로 있을 일정(채워진 점)과 갈라 읽힌다

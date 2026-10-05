@@ -129,7 +129,7 @@ export function VoiceRecordSheet({ visible, onClose, onSend }: Props) {
             </View>
           ) : (
             <Pressable style={styles.recordButton} onPress={startRecording} accessibilityRole="button">
-              <MaterialCommunityIcons name="microphone" size={28} color={colors.white} />
+              <MaterialCommunityIcons name="microphone" size={28} color={colors.onPrimary} />
             </Pressable>
           )}
         </Pressable>

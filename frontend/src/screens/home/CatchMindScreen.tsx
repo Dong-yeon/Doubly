@@ -553,7 +553,7 @@ const styles = themedStyles((colors) => ({
   wordChipOn: { borderColor: colors.primary, backgroundColor: colors.primaryBg },
   wordCategory: { fontSize: 10, color: colors.textMuted, fontWeight: '700' },
   wordText: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary, marginTop: 2 },
-  wordTextOn: { color: colors.primary },
+  wordTextOn: { color: colors.primary, fontWeight: '800' },
   wordActions: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.sm },
   link: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '800' },
   linkRight: { textAlign: 'right', marginTop: spacing.sm },

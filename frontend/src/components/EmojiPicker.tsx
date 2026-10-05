@@ -230,7 +230,7 @@ const styles = themedStyles((colors) => ({
   },
   tabActive: { backgroundColor: colors.primary },
   tabText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary },
-  tabTextActive: { color: colors.white },
+  tabTextActive: { color: colors.onPrimary },
   grid: { flexDirection: 'row', flexWrap: 'wrap', paddingTop: spacing.sm },
   cell: {
     width: '12.5%',
