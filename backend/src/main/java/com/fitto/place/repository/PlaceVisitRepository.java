@@ -75,11 +75,15 @@ public interface PlaceVisitRepository extends JpaRepository<PlaceVisit, Long> {
     /**
      * 커플 피드 타임라인 — 커플 장소의 방문 기록(장소명 포함), 커서 (createdAt, id) 이전 최신순.
      * cursorAt 이 null 이면 첫 페이지(전체 조회)다.
+     *
+     * <p><b>식단에 붙은 방문은 뺀다</b>(2026-10-05) — 같은 외식이 식사 카드와 방문 카드로 두 번 떴다. 식사 카드가 📍장소 ★N 을
+     * 대신 싣는다(FeedService.placeNamesOf). 사진첩 격자({@link #findPhotosForFeed})와 같은 규칙이다.
      */
     @Query("""
             select v as visit, p.name as placeName
             from PlaceVisit v join Place p on p.id = v.placeId
             where p.coupleId = :coupleId
+              and v.mealId is null
               and (cast(:cursorAt as LocalDateTime) is null
                    or v.createdAt < :cursorAt
                    or (v.createdAt = :cursorAt and v.id < :cursorId))
