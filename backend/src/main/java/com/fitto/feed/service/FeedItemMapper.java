@@ -145,6 +145,11 @@ public class FeedItemMapper {
      *                  따로 찾아가야만 볼 수 있었다.
      */
     public FeedItemResponse toItem(Meal m, Map<Long, String> names, Long viewerId, String placeName) {
+        return toItem(m, names, viewerId, placeName, null);
+    }
+
+    /** @param placeId 장소 id — 카드의 📍를 누르면 그 장소 상세로 간다(없으면 null) */
+    public FeedItemResponse toItem(Meal m, Map<Long, String> names, Long viewerId, String placeName, Long placeId) {
         String food = null;
         if (!m.getItems().isEmpty()) {
             food = m.getItems().get(0).getName()
@@ -175,7 +180,8 @@ public class FeedItemMapper {
                 names.getOrDefault(m.getUserId(), "커플"), viewerId.equals(m.getUserId()),
                 food != null ? food : m.getMealType().label() + " 식단",
                 parts.isEmpty() ? null : String.join(" · ", parts),
-                m.getPhotoUrl(), m.getCreatedAt(), null, List.of(), m.isSharedMeal());
+                m.getPhotoUrl(), m.getCreatedAt(), null, List.of(), m.isSharedMeal())
+                .withPlaceId(placeName != null ? placeId : null);
     }
 
     /**
@@ -277,7 +283,8 @@ public class FeedItemMapper {
                         i.imageUrls(), i.shared(), i.summary(), i.recordDate(), i.edited(),
                         i.type() == FeedItemType.POST
                                 ? commentCounts.getOrDefault(i.refId(), 0L).intValue()
-                                : 0))
+                                : 0,
+                        i.placeId()))
                 .toList();
     }
 

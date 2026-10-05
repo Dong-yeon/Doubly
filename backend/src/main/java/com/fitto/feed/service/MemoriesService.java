@@ -169,11 +169,11 @@ public class MemoriesService {
             List<Meal> meals = mealRepository.findPhotosInDateRange(userIds, date, date, day);
             java.util.Set<Long> photoMealIds = new java.util.HashSet<>();
             meals.forEach(m -> photoMealIds.add(m.getId()));
-            Map<Long, String> placeByMealId = new java.util.HashMap<>();
+            Map<Long, VisitWithPlace> placeByMealId = new java.util.HashMap<>();
             for (VisitWithPlace v : placeVisitRepository.findByCoupleAndVisitedAt(coupleId, date)) {
                 Long mealId = v.getVisit().getMealId();
                 if (mealId != null && photoMealIds.contains(mealId)) {
-                    placeByMealId.putIfAbsent(mealId, v.getPlaceName());
+                    placeByMealId.putIfAbsent(mealId, v);
                     continue;
                 }
                 // 방문은 등록 시각이 아니라 방문일 기준 — 어제 다녀와 오늘 등록해도 어제의 추억이다
@@ -185,7 +185,9 @@ public class MemoriesService {
             }
             // 사진 있는 끼니·오운완 — 사진첩과 같은 쿼리(같은 공개·중복 제거 규칙). 하루치라 상한은 넉넉히
             for (Meal m : meals) {
-                items.add(onDay(mapper.toItem(m, names, viewerId, placeByMealId.get(m.getId())), date));
+                VisitWithPlace at = placeByMealId.get(m.getId());
+                items.add(onDay(mapper.toItem(m, names, viewerId, at != null ? at.getPlaceName() : null,
+                        at != null ? at.getVisit().getPlaceId() : null), date));
             }
             for (Workout w : workoutRepository.findPhotosInDateRange(userIds, date, date, day)) {
                 items.add(onDay(mapper.toItem(w, names, viewerId), date));
@@ -204,7 +206,7 @@ public class MemoriesService {
     private static FeedItemResponse onDay(FeedItemResponse i, LocalDate date) {
         return new FeedItemResponse(i.type(), i.refId(), i.userId(), i.userName(), i.mine(), i.title(),
                 i.content(), i.imageUrl(), date.atStartOfDay(), i.reactions(), i.imageUrls(), i.shared(),
-                i.summary(), i.recordDate(), i.edited(), i.commentCount());
+                i.summary(), i.recordDate(), i.edited(), i.commentCount(), i.placeId());
     }
 
     /**
