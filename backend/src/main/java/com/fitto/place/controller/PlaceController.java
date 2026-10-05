@@ -7,6 +7,8 @@ import com.fitto.common.security.AuthUser;
 import com.fitto.place.dto.DateCourseResponse;
 import com.fitto.place.dto.LovelichelinPulseResponse;
 import com.fitto.place.dto.LovelichelinRecommendationResponse;
+import com.fitto.place.dto.MealVisitResponse;
+import com.fitto.place.dto.RecordMealVisitRequest;
 import com.fitto.place.dto.PlaceResponse;
 import com.fitto.place.dto.ResolvePlaceLinkRequest;
 import com.fitto.place.dto.ResolvePlaceLinkResponse;
@@ -19,6 +21,7 @@ import com.fitto.place.dto.UpdatePlaceRequest;
 import com.fitto.place.service.DateCourseService;
 import com.fitto.place.service.LovelichelinPulseService;
 import com.fitto.place.service.LovelichelinRecommendService;
+import com.fitto.place.service.MealVisitService;
 import com.fitto.place.service.PlaceLinkResolveService;
 import com.fitto.place.service.PlaceService;
 import jakarta.validation.Valid;
@@ -50,18 +53,21 @@ public class PlaceController {
     private final AiJobService aiJobService;
     private final PlaceLinkResolveService placeLinkResolveService;
     private final LovelichelinPulseService lovelichelinPulseService;
+    private final MealVisitService mealVisitService;
 
     public PlaceController(PlaceService placeService, DateCourseService dateCourseService,
                            LovelichelinRecommendService lovelichelinRecommendService,
                            AiJobService aiJobService,
                            PlaceLinkResolveService placeLinkResolveService,
-                           LovelichelinPulseService lovelichelinPulseService) {
+                           LovelichelinPulseService lovelichelinPulseService,
+                           MealVisitService mealVisitService) {
         this.placeService = placeService;
         this.dateCourseService = dateCourseService;
         this.lovelichelinRecommendService = lovelichelinRecommendService;
         this.aiJobService = aiJobService;
         this.placeLinkResolveService = placeLinkResolveService;
         this.lovelichelinPulseService = lovelichelinPulseService;
+        this.mealVisitService = mealVisitService;
     }
 
     @PostMapping
@@ -162,6 +168,17 @@ public class PlaceController {
                                            @PathVariable Long id,
                                            @Valid @RequestBody RatePlaceRequest request) {
         return ApiResponse.success(placeService.rate(user.id(), id, request), "럽슐랭 평가가 저장되었습니다.");
+    }
+
+    /**
+     * 외식 기록 — 장소 확정 + (선택) 식단 + 방문 + (선택) 평점을 한 번에. 같은 clientRequestId 의 재전송은 처음 결과를 돌려준다.
+     * 고정 경로라 /{id} 계열과 겹치지 않는다. 설계: docs/LOVEBODY_LOVELICHELIN_LINK_2026-10-05.md §4 P0-1.
+     */
+    @PostMapping("/meal-visits")
+    public ApiResponse<MealVisitResponse> recordMealVisit(@AuthenticationPrincipal AuthUser user,
+                                                          @Valid @RequestBody RecordMealVisitRequest request) {
+        MealVisitResponse res = mealVisitService.record(user.id(), request);
+        return ApiResponse.success(res, res.meal() != null ? "외식을 기록했어요." : "방문 기록이 저장되었습니다.");
     }
 
     @PostMapping("/{id}/visits")

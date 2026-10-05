@@ -164,7 +164,18 @@ public class MemoriesService {
             for (FeedPost p : posts) {
                 items.add(mapper.toItem(p, names, viewerId, null, photosByPost.getOrDefault(p.getId(), List.of())));
             }
+            // 사진 있는 끼니 — 아래에서 싣는다. 그 끼니에 붙은 방문은 같은 외식이라 한 번만 보인다(식사 쪽에 📍를 단다)
+            Pageable day = PageRequest.of(0, MAX_ITEMS);
+            List<Meal> meals = mealRepository.findPhotosInDateRange(userIds, date, date, day);
+            java.util.Set<Long> photoMealIds = new java.util.HashSet<>();
+            meals.forEach(m -> photoMealIds.add(m.getId()));
+            Map<Long, String> placeByMealId = new java.util.HashMap<>();
             for (VisitWithPlace v : placeVisitRepository.findByCoupleAndVisitedAt(coupleId, date)) {
+                Long mealId = v.getVisit().getMealId();
+                if (mealId != null && photoMealIds.contains(mealId)) {
+                    placeByMealId.putIfAbsent(mealId, v.getPlaceName());
+                    continue;
+                }
                 // 방문은 등록 시각이 아니라 방문일 기준 — 어제 다녀와 오늘 등록해도 어제의 추억이다
                 items.add(mapper.toItem(v, names, viewerId, true));
             }
@@ -173,10 +184,8 @@ public class MemoriesService {
                 items.add(mapper.toItem(l, names, viewerId, true));
             }
             // 사진 있는 끼니·오운완 — 사진첩과 같은 쿼리(같은 공개·중복 제거 규칙). 하루치라 상한은 넉넉히
-            Pageable day = PageRequest.of(0, MAX_ITEMS);
-            List<Meal> meals = mealRepository.findPhotosInDateRange(userIds, date, date, day);
             for (Meal m : meals) {
-                items.add(onDay(mapper.toItem(m, names, viewerId, null), date));
+                items.add(onDay(mapper.toItem(m, names, viewerId, placeByMealId.get(m.getId())), date));
             }
             for (Workout w : workoutRepository.findPhotosInDateRange(userIds, date, date, day)) {
                 items.add(onDay(mapper.toItem(w, names, viewerId), date));

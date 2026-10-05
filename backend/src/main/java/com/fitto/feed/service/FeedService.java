@@ -254,7 +254,9 @@ public class FeedService {
      */
     private Map<Long, String> placeNamesOf(List<Meal> meals) {
         Map<Long, String> byMealId = new LinkedHashMap<>();
-        placeLinksOf(meals).forEach((mealId, vp) -> byMealId.put(mealId, vp.getPlaceName()));
+        // 방문 카드를 타임라인에서 뺐으므로(findRecentForFeed) 그 별점은 식사 카드의 📍 줄이 싣는다 — "📍장소 ★4"
+        placeLinksOf(meals).forEach((mealId, vp) -> byMealId.put(mealId,
+                vp.getVisit().getRating() != null ? vp.getPlaceName() + " ★" + vp.getVisit().getRating() : vp.getPlaceName()));
         return byMealId;
     }
 

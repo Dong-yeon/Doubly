@@ -38,6 +38,12 @@ public interface PlaceVisitRepository extends JpaRepository<PlaceVisit, Long> {
     @Query("update PlaceVisit v set v.mealId = null where v.mealId in :mealIds")
     int detachMeals(@Param("mealIds") List<Long> mealIds);
 
+    /** 외식 기록 멱등 — 같은 사람이 같은 키로 이미 남긴 방문(V129 unique 인덱스와 짝) */
+    java.util.Optional<PlaceVisit> findByVisitedByAndClientRequestId(Long visitedBy, String clientRequestId);
+
+    /** 식단 삭제에서 "방문 기록도 지우기"를 골랐을 때 — 그 식단들에 붙은 방문 */
+    List<PlaceVisit> findAllByMealIdIn(java.util.Collection<Long> mealIds);
+
     /**
      * 럽슐랭 가이드 매거진 카드의 커버 사진/한줄평용 배치 조회 — 장소별로 최근 방문순.
      * place_id 로 in 절 하나만 날리고 "장소별 최근 방문(사진 있으면 그걸, 없으면 가장 최근
@@ -69,11 +75,15 @@ public interface PlaceVisitRepository extends JpaRepository<PlaceVisit, Long> {
     /**
      * 커플 피드 타임라인 — 커플 장소의 방문 기록(장소명 포함), 커서 (createdAt, id) 이전 최신순.
      * cursorAt 이 null 이면 첫 페이지(전체 조회)다.
+     *
+     * <p><b>식단에 붙은 방문은 뺀다</b>(2026-10-05) — 같은 외식이 식사 카드와 방문 카드로 두 번 떴다. 식사 카드가 📍장소 ★N 을
+     * 대신 싣는다(FeedService.placeNamesOf). 사진첩 격자({@link #findPhotosForFeed})와 같은 규칙이다.
      */
     @Query("""
             select v as visit, p.name as placeName
             from PlaceVisit v join Place p on p.id = v.placeId
             where p.coupleId = :coupleId
+              and v.mealId is null
               and (cast(:cursorAt as LocalDateTime) is null
                    or v.createdAt < :cursorAt
                    or (v.createdAt = :cursorAt and v.id < :cursorId))

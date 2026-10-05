@@ -270,7 +270,10 @@ class FeedFlowTest {
         FeedItemResponse meal = feedService.timeline(c[0], null, 20).items().stream()
                 .filter(i -> i.type() == FeedItemType.MEAL).findFirst().orElseThrow();
 
-        assertThat(meal.content()).isEqualTo("점심 · 📍트라토리아");
+        // 방문 별점도 함께 — 식단에 붙은 방문 카드는 타임라인에서 빠지고(같은 외식이 두 장이었다) 식사 카드가 싣는다(2026-10-05)
+        assertThat(meal.content()).isEqualTo("점심 · 📍트라토리아 ★5");
+        assertThat(feedService.timeline(c[0], null, 20).items())
+                .noneMatch(i -> i.type() == FeedItemType.PLACE_VISIT);
     }
 
     @Test
