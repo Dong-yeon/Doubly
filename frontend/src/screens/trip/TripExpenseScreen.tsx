@@ -371,10 +371,10 @@ const styles = themedStyles((colors) => ({
 
   settleBanner: { marginTop: spacing.md, padding: spacing.md, borderRadius: radius.lg },
   settleDone: { backgroundColor: colors.successBg },
-  settleOwe: { backgroundColor: colors.accentSoft },
+  settleOwe: { backgroundColor: colors.togetherBg },
   settleText: { fontSize: fontSize.body, fontWeight: '800', textAlign: 'center' },
   settleTextDone: { color: colors.success },
-  settleTextOwe: { color: colors.accent },
+  settleTextOwe: { color: colors.together },
 
   breakdown: {
     flexDirection: 'row',
@@ -455,11 +455,11 @@ const styles = themedStyles((colors) => ({
     borderColor: colors.border,
     alignItems: 'center',
   },
-  payerBtnOn: { backgroundColor: colors.secondary, borderColor: colors.secondary },
+  payerBtnOn: { backgroundColor: colors.primary, borderColor: colors.primary },
   payerText: { fontSize: fontSize.body, fontWeight: '800', color: colors.textSecondary },
-  // 다크의 secondary 는 파스텔이라 '#fff' 고정이 1.69:1 이었다 — 배경 휘도로 고른다.
+  // 선택 칩 채움 — 다크의 액센트는 파스텔이라 '#fff' 고정이 1.69:1 이었다 — 배경 휘도로 고른다.
   // 결제자 토글은 둘 중 하나만 켜져 이름이 안 보이면 누가 냈는지 판별이 안 된다.
-  payerTextOn: { color: onColor(colors.secondary) },
+  payerTextOn: { color: onColor(colors.primary) },
   catRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   catSelect: {
     paddingHorizontal: spacing.md,
@@ -469,8 +469,8 @@ const styles = themedStyles((colors) => ({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  catSelectOn: { backgroundColor: colors.accent, borderColor: colors.accent },
+  catSelectOn: { backgroundColor: colors.together, borderColor: colors.together },
   catSelectText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary },
   // accent 는 secondary 와 다른 토큰이라 별도로 계산한다 — 다크에서 1.50:1 이었다
-  catSelectTextOn: { color: onColor(colors.accent) },
+  catSelectTextOn: { color: onColor(colors.together) },
 }));

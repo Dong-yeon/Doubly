@@ -276,7 +276,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
           key: String(m.id),
           uri: m.imageUrl!,
           title: `${m.senderId === myId ? '나' : partnerName}  ·  ${chatDateDividerLabel(m.createdAt)}`,
-          titleColor: m.senderId === myId ? colors.coral : colors.indigo,
+          titleColor: m.senderId === myId ? colors.meText : colors.partnerText,
         })),
     [messages, myId, partnerName],
   );
@@ -2005,7 +2005,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             <MaterialCommunityIcons
               name={banner ? 'puzzle' : 'fire'}
               size={16}
-              color={banner ? colors.primary : colors.coral}
+              color={banner ? colors.primary : colors.achievement}
             />
             <Text style={styles.streakBannerText}>{item.content}</Text>
           </View>
@@ -2216,7 +2216,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             <MaterialCommunityIcons
               name={callCard.callType === 'VIDEO' ? 'video' : 'phone'}
               size={18}
-              color={callCard.outcome === 'ENDED' ? colors.textPrimary : colors.coral}
+              color={callCard.outcome === 'ENDED' ? colors.textPrimary : colors.danger}
             />
             {/*
               통화 기능은 2026-09-28 에 앱에서 뺐다(docs/CALL_REMOVAL_2026-09-28.md). 지난 통화
@@ -3158,7 +3158,7 @@ const styles = themedStyles((colors) => ({
   workoutBadge: { fontSize: fontSize.caption, fontWeight: '800', marginBottom: 2 },
   // PR 카드 — 같은 카드 레이아웃에 골드 강조만 얹는다(couple 토큰 = Gold, 성취를 나타내는 색)
   // 배경은 mePastelBg(파스텔) — 그 위 배지 글자는 couple 원색이면 대비가 안 나와 ink 를 쓴다
-  workoutCardPr: { borderColor: colors.couple, backgroundColor: colors.mePastelBg },
+  workoutCardPr: { borderColor: colors.achievement, backgroundColor: colors.achievementBg },
   workoutBadgePr: { color: colors.ink },
   workoutText: { fontSize: fontSize.subtitle, color: colors.textPrimary, fontWeight: '600' },
   workoutTextMine: { color: colors.textPrimary },
@@ -3200,7 +3200,7 @@ const styles = themedStyles((colors) => ({
   // 카드 보더(accent)와 같은 계열로 — 팔레트 밖 앰버는 다크에서 대비가 무너졌다
   mealBadge: { fontSize: fontSize.caption, fontWeight: '800' },
   // 목표 달성 카드 — 같은 카드 레이아웃에 골드 강조만 얹는다(PR 카드와 같은 톤)
-  mealCardGoal: { borderColor: colors.couple, backgroundColor: colors.mePastelBg },
+  mealCardGoal: { borderColor: colors.achievement, backgroundColor: colors.achievementBg },
   mealBadgeGoal: { color: colors.ink },
   mealImage: { width: 208, height: 156, borderRadius: radius.md, backgroundColor: colors.surfaceAlt },
   // inverted 목록의 footer = 맨 위(과거 방향) — 과거 페이지 로딩 스피너
@@ -3264,8 +3264,8 @@ const styles = themedStyles((colors) => ({
     marginBottom: 3,
     maxWidth: '100%',
   },
-  quoteMine: { borderLeftColor: colors.coral },
-  quoteTheirs: { borderLeftColor: colors.indigo },
+  quoteMine: { borderLeftColor: colors.me },
+  quoteTheirs: { borderLeftColor: colors.partner },
   quoteWho: { fontSize: fontSize.micro, fontWeight: '800', color: colors.textSecondary },
   quoteText: { fontSize: fontSize.caption, color: colors.textSecondary },
 

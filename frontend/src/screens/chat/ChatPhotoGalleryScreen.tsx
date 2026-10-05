@@ -56,7 +56,7 @@ export function ChatPhotoGalleryScreen({ route }: Props) {
           key: String(p.id),
           uri: p.imageUrl!,
           title: `${p.senderId === myId ? '나' : '상대'}  ·  ${chatDateDividerLabel(p.createdAt)}`,
-          titleColor: p.senderId === myId ? colors.coral : colors.indigo,
+          titleColor: p.senderId === myId ? colors.meText : colors.partnerText,
         })),
     [photos, myId],
   );

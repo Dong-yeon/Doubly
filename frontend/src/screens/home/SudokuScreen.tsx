@@ -422,7 +422,7 @@ export function SudokuScreen(_: Props) {
           <View style={styles.legend}>
             <View style={[styles.legendDot, { backgroundColor: colors.primary }]} />
             <Text style={styles.legendText}>나 {g.myCells}</Text>
-            <View style={[styles.legendDot, { backgroundColor: colors.accent }]} />
+            <View style={[styles.legendDot, { backgroundColor: colors.together }]} />
             <Text style={styles.legendText}>
               {g.partnerName ?? '상대'} {g.partnerCells}
             </Text>
@@ -692,7 +692,7 @@ const styles = themedStyles((colors) => ({
   cellText: { fontWeight: '600', color: colors.textSecondary },
   cellGiven: { fontWeight: '800', color: colors.textPrimary },
   cellMine: { color: colors.primary, fontWeight: '800' },
-  cellPartner: { color: colors.accent, fontWeight: '800' },
+  cellPartner: { color: colors.together, fontWeight: '800' },
   cellWrong: { color: colors.danger },
 
   pad: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, justifyContent: 'center', marginTop: spacing.md },

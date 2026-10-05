@@ -28,9 +28,9 @@ const tintColor = (tint: NonNullable<Props['tint']>): string =>
     /** 중립 강조 — 소유자와 무관한 카드 */
     neutral: colors.primaryBg,
     /** 상대(Indigo) 계열 배경 */
-    partner: colors.secondarySoft,
+    partner: colors.partnerBg,
     /** 함께(Violet) 계열 배경 */
-    together: colors.accentSoft,
+    together: colors.togetherBg,
   })[tint];
 
 /** 둥근 모서리 + 부드러운 그림자 카드 (radius 16 · 얇은 뉴트럴 보더 · elevation 2) */

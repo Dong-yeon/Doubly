@@ -62,7 +62,7 @@ export function BadgeCard({ maxStreak, currentStreak, title = '뱃지', badges =
                 <MaterialCommunityIcons
                   name={unlocked ? b.icon : 'lock-outline'}
                   size={unlocked ? 28 : 22}
-                  color={unlocked ? colors.accent : colors.textTertiary}
+                  color={unlocked ? colors.achievement : colors.textTertiary}
                 />
               </View>
               <Text style={[styles.label, unlocked && styles.labelOn]}>{b.label}</Text>
@@ -84,7 +84,7 @@ const styles = themedStyles((colors) => ({
   row: { flexDirection: 'row', justifyContent: 'space-around' },
   badge: { alignItems: 'center', gap: spacing.xs },
   circle: { width: 60, height: 60, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
-  circleOn: { backgroundColor: colors.accentSoft, borderWidth: 2, borderColor: colors.accent },
+  circleOn: { backgroundColor: colors.achievementBg, borderWidth: 2, borderColor: colors.achievement },
   circleOff: { backgroundColor: colors.surfaceAlt },
   emoji: { fontSize: 28 },
   emojiOff: { fontSize: 22, opacity: 0.5 },

@@ -554,7 +554,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
                 setAiOpen(true);
               }}
             >
-              <MaterialCommunityIcons name="auto-fix" size={18} color={colors.accent} />
+              <MaterialCommunityIcons name="auto-fix" size={18} color={colors.together} />
               <Text style={styles.aiButtonText}>AI로 일정 짜기</Text>
             </TouchableOpacity>
 
@@ -834,7 +834,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
 
             {aiLoading ? (
               <View style={styles.aiLoading}>
-                <ActivityIndicator color={colors.accent} />
+                <ActivityIndicator color={colors.together} />
                 <Text style={styles.aiLoadingText}>AI가 일정을 짜는 중이에요… 닫아도 계속 만들어져요</Text>
               </View>
             ) : (
@@ -943,12 +943,12 @@ const styles = themedStyles((colors) => ({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  travelModeRowOn: { backgroundColor: colors.accentSoft, borderColor: colors.accent },
+  travelModeRowOn: { backgroundColor: colors.togetherBg, borderColor: colors.together },
   travelModeText: { flex: 1, paddingRight: spacing.md },
   travelModeTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
-  travelModeTitleOn: { color: colors.accent },
+  travelModeTitleOn: { color: colors.together },
   travelModeDesc: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
-  travelModeDescOn: { color: colors.accent },
+  travelModeDescOn: { color: colors.together },
   travelModeSwitch: {
     width: 44,
     height: 26,
@@ -957,7 +957,7 @@ const styles = themedStyles((colors) => ({
     padding: 2,
     justifyContent: 'center',
   },
-  travelModeSwitchOn: { backgroundColor: colors.accent },
+  travelModeSwitchOn: { backgroundColor: colors.together },
   travelModeKnob: {
     width: 22,
     height: 22,
@@ -1008,11 +1008,11 @@ const styles = themedStyles((colors) => ({
     alignItems: 'center',
     minWidth: 64,
   },
-  dayChipOn: { backgroundColor: colors.secondary, borderColor: colors.secondary },
+  dayChipOn: { backgroundColor: colors.primary, borderColor: colors.primary },
   dayChipDay: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
   dayChipDate: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
-  // 다크의 secondary 는 파스텔이라 '#fff' 고정이 1.69:1 이었다 — 배경 휘도로 고른다
-  dayChipTextOn: { color: onColor(colors.secondary) },
+  // 선택 칩 채움 — 다크의 액센트는 파스텔이라 '#fff' 고정이 1.69:1 이었다 — 배경 휘도로 고른다
+  dayChipTextOn: { color: onColor(colors.primary) },
 
   mapWrap: { marginTop: spacing.xs, marginBottom: spacing.md, borderRadius: radius.lg, overflow: 'hidden' },
 
@@ -1021,15 +1021,15 @@ const styles = themedStyles((colors) => ({
     marginTop: spacing.md,
     paddingVertical: spacing.md,
     borderRadius: radius.md,
-    backgroundColor: colors.accentSoft,
+    backgroundColor: colors.togetherBg,
     borderWidth: 1,
-    borderColor: colors.accent,
+    borderColor: colors.together,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
   },
-  aiButtonText: { fontSize: fontSize.body, fontWeight: '800', color: colors.accent },
+  aiButtonText: { fontSize: fontSize.body, fontWeight: '800', color: colors.together },
   aiDesc: { fontSize: fontSize.body, color: colors.textSecondary, lineHeight: 21, marginBottom: spacing.sm },
   aiLoading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingVertical: spacing.lg },
   aiLoadingText: { fontSize: fontSize.body, color: colors.textSecondary, fontWeight: '700' },
@@ -1050,8 +1050,8 @@ const styles = themedStyles((colors) => ({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: colors.accentSoft,
-    color: colors.accent,
+    backgroundColor: colors.togetherBg,
+    color: colors.together,
     textAlign: 'center',
     lineHeight: 24,
     fontSize: fontSize.caption,
@@ -1064,7 +1064,7 @@ const styles = themedStyles((colors) => ({
   itemTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
   catChip: { paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.pill, backgroundColor: colors.primaryBg },
   catChipText: { fontSize: 11, color: colors.primary, fontWeight: '700' },
-  itemPlace: { fontSize: fontSize.caption, color: colors.secondary, marginTop: spacing.xs, fontWeight: '600' },
+  itemPlace: { fontSize: fontSize.caption, color: colors.primary, marginTop: spacing.xs, fontWeight: '600' },
   itemMemo: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xs, lineHeight: 18 },
   itemActions: { alignItems: 'center', justifyContent: 'flex-start' },
   /* 삭제는 이동 버튼과 붙여두지 않는다 — 오탭 비용이 되돌릴 수 없는 쪽이라 완충 여백을 준다 */
@@ -1130,7 +1130,7 @@ const styles = themedStyles((colors) => ({
     borderColor: colors.border,
     marginRight: spacing.sm,
   },
-  formDayChipOn: { backgroundColor: colors.secondary, borderColor: colors.secondary },
+  formDayChipOn: { backgroundColor: colors.primary, borderColor: colors.primary },
   formDayText: { fontSize: fontSize.caption, fontWeight: '800', color: colors.textPrimary },
   catRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   catSelect: {
@@ -1141,10 +1141,10 @@ const styles = themedStyles((colors) => ({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  catSelectOn: { backgroundColor: colors.accent, borderColor: colors.accent },
+  catSelectOn: { backgroundColor: colors.together, borderColor: colors.together },
   catSelectText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary },
   // accent 는 secondary 와 다른 토큰이라 별도로 계산한다 — 다크에서 1.50:1 이었다
-  catSelectTextOn: { color: onColor(colors.accent) },
+  catSelectTextOn: { color: onColor(colors.together) },
   linkRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1155,5 +1155,5 @@ const styles = themedStyles((colors) => ({
     borderTopColor: colors.border,
   },
   linkLabel: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
-  linkValue: { fontSize: fontSize.body, color: colors.secondary, fontWeight: '700' },
+  linkValue: { fontSize: fontSize.body, color: colors.primary, fontWeight: '700' },
 }));

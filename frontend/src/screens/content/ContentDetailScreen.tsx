@@ -554,7 +554,7 @@ const styles = themedStyles((colors) => ({
   },
   label: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700', marginBottom: spacing.sm },
   starRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
-  star: { fontSize: 32, color: colors.accent },
+  star: { fontSize: 32, color: colors.rating },
   // 별점이 대표 평점으로도 간다는 사실을 그 자리에서 알려준다 (PlaceDetailScreen 과 같은 문구)
   starHint: { fontSize: fontSize.caption, color: colors.textSecondary, marginBottom: spacing.md },
   photoBox: {
