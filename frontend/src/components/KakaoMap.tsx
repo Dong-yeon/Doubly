@@ -10,7 +10,20 @@ import { themedStyles } from '../theme/themedStyles';
 export type { KakaoMapHandle, KakaoMapProps };
 
 export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap(
-  { markers, path, selectable, centerLat, centerLng, height = 300, style, onSelect, onMarkerPress },
+  {
+    markers,
+    path,
+    icons,
+    selectable,
+    centerLat,
+    centerLng,
+    height = 300,
+    style,
+    onSelect,
+    onMarkerPress,
+    onFailed,
+    onBoundsChange,
+  },
   ref,
 ) {
   const webViewRef = useRef<WebView>(null);
@@ -25,30 +38,43 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
    * 이후 변경은 아래 effect 에서 injectJavaScript 로 마커만 다시 그린다.
    */
   const initialHtml = useRef(
-    buildKakaoMapHtml({ markers, path, selectable, centerLat, centerLng }),
+    buildKakaoMapHtml({ markers, path, selectable, centerLat, centerLng, icons }),
   ).current;
 
   const markersKey = JSON.stringify(markers);
   const pathKey = JSON.stringify(path);
+  const iconsKey = JSON.stringify(icons ?? null);
   const firstRender = useRef(true);
+  /*
+   * 시야 맞추기는 "처음 마커가 생겼을 때" 한 번 — 처음 그릴 때가 아니다. 목록이 서버에서 늦게 오면 첫 HTML 은
+   * 빈 마커로 그려지고, 예전엔 그 뒤 들어온 마커에 시야를 안 맞춰 서울시청에 머물렀다.
+   */
+  const fitted = useRef((markers?.length ?? 0) > 0 || (path?.length ?? 0) > 1);
   useEffect(() => {
     // 최초 그리기는 HTML 안에서 이미 끝났다 — 두 번 그리지 않는다
     if (firstRender.current) {
       firstRender.current = false;
       return;
     }
+    const fit = !fitted.current && markersKey !== undefined && markersKey !== '[]';
+    if (fit) fitted.current = true;
     webViewRef.current?.injectJavaScript(
-      `window.fittoSetMarkers && window.fittoSetMarkers(${markersKey}, ${pathKey}, false); true;`,
+      `window.fittoSetMarkers && window.fittoSetMarkers(${markersKey ?? '[]'}, ${pathKey ?? '[]'}, ${fit}, ${iconsKey}); true;`,
     );
-  }, [markersKey, pathKey]);
+  }, [markersKey, pathKey, iconsKey]);
 
+  const inject = (js: string) => webViewRef.current?.injectJavaScript(`${js}; true;`);
   useImperativeHandle(ref, () => ({
-    setPin: (lat: number, lng: number) => {
-      webViewRef.current?.injectJavaScript(
-        `window.fittoSetPin && window.fittoSetPin(${lat}, ${lng}); true;`,
-      );
-    },
+    setPin: (lat: number, lng: number) => inject(`window.fittoSetPin && window.fittoSetPin(${lat}, ${lng})`),
+    fitToMarkers: () => inject('window.fittoFitMarkers && window.fittoFitMarkers()'),
+    setPadding: (pad) => inject(`window.fittoSetPadding && window.fittoSetPadding(${JSON.stringify(pad)})`),
+    panTo: (lat: number, lng: number) => inject(`window.fittoPanTo && window.fittoPanTo(${lat}, ${lng})`),
   }));
+
+  const fail = () => {
+    setFailed(true);
+    onFailed?.();
+  };
 
   return (
     <View style={[styles.container, { height }, style]}>
@@ -79,21 +105,22 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
         domStorageEnabled
         onError={(e) => {
           console.warn('[KakaoMap] WebView onError:', e.nativeEvent);
-          setFailed(true);
+          fail();
         }}
         onHttpError={(e) => {
           console.warn('[KakaoMap] WebView onHttpError:', e.nativeEvent);
-          setFailed(true);
+          fail();
         }}
         onMessage={(e) => {
           const msg = parseKakaoMapMessage(e.nativeEvent.data);
           if (!msg) return;
           if (msg.type === 'select') onSelect?.({ lat: msg.lat, lng: msg.lng, address: msg.address });
           if (msg.type === 'marker') onMarkerPress?.(msg.id);
+          if (msg.type === 'bounds') onBoundsChange?.({ sw: msg.sw, ne: msg.ne, byUser: msg.byUser });
           if (msg.type === 'failed') {
             // WebView 내부 JS 콘솔은 RN 쪽 Metro 로그에 안 잡힌다 — 원인 문자열을 여기서 다시 찍어준다.
             console.warn('[KakaoMap] 지도 로드 실패:', msg.reason ?? '(원인 미상)');
-            setFailed(true);
+            fail();
           }
         }}
       />
@@ -127,3 +154,4 @@ const styles = themedStyles((colors) => ({
     lineHeight: 20,
   },
 }));
+
