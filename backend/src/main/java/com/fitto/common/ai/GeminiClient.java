@@ -13,13 +13,17 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
+import java.io.IOException;
+import java.net.SocketTimeoutException;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -154,9 +158,18 @@ public class GeminiClient {
     private record CallContext(Long userId, Feature feature, int imageCount) {
     }
 
+    @Autowired
     public GeminiClient(GeminiProperties properties, ObjectMapper objectMapper,
                         PlanGuard planGuard, UsageCounter usageCounter,
                         MeterRegistry meterRegistry, AiUsageRecorder usageRecorder) {
+        this(properties, objectMapper, planGuard, usageCounter, meterRegistry, usageRecorder,
+                READ_TIMEOUT_MILLIS);
+    }
+
+    /** 읽기 타임아웃을 바꿔 끼우는 자리 — 응답 없는 서버를 45초씩 기다릴 수 없는 테스트용이다. */
+    GeminiClient(GeminiProperties properties, ObjectMapper objectMapper,
+                 PlanGuard planGuard, UsageCounter usageCounter,
+                 MeterRegistry meterRegistry, AiUsageRecorder usageRecorder, int readTimeoutMillis) {
         this.properties = properties;
         this.objectMapper = objectMapper;
         this.planGuard = planGuard;
@@ -165,7 +178,7 @@ public class GeminiClient {
         this.usageRecorder = usageRecorder;
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(5_000);
-        factory.setReadTimeout(READ_TIMEOUT_MILLIS);
+        factory.setReadTimeout(readTimeoutMillis);
         this.restClient = RestClient.builder().requestFactory(factory).build();
     }
 
@@ -343,7 +356,7 @@ public class GeminiClient {
         JsonNode root;
         try {
             root = callModel(properties.getImageModel(), properties.imageApiKeyOrFallback(),
-                    body, BACKGROUND, deadline,
+                    body, BACKGROUND, deadline, false,
                     new CallContext(userId, feature, imagePartCount(parts)));
         } catch (ModelUnavailable unavailable) {
             throw unavailable.toBusinessException();
@@ -454,14 +467,15 @@ public class GeminiClient {
                 : start + policy.budgetMillis() * PRIMARY_BUDGET_PERCENT / 100;
 
         try {
-            return callModel(primary, properties.getApiKey(), body, policy, primaryDeadline, context);
+            return callModel(primary, properties.getApiKey(), body, policy, primaryDeadline,
+                    fallback != null, context);
         } catch (ModelUnavailable primaryFailure) {
             if (fallback == null || System.currentTimeMillis() >= deadline) {
                 throw primaryFailure.toBusinessException();
             }
             log.warn("Gemini 1차 모델({}) 계속 실패 — 폴백 모델({})로 다시 시도", primary, fallback);
             try {
-                return callModel(fallback, properties.getApiKey(), body, policy, deadline, context);
+                return callModel(fallback, properties.getApiKey(), body, policy, deadline, false, context);
             } catch (ModelUnavailable fallbackFailure) {
                 log.warn("Gemini 폴백 모델({})도 실패", fallback);
                 throw fallbackFailure.toBusinessException();
@@ -487,9 +501,15 @@ public class GeminiClient {
      * <p>모델을 바꿔서 달라질 수 있는 실패(서버가 처리 못 하겠다고 한 상태)만
      * {@link ModelUnavailable} 로 올린다. 잘못된 요청(4xx)이나 네트워크 오류는 모델을 바꿔도
      * 똑같으므로 여기서 바로 실패시킨다 — 폴백에 예산을 낭비할 이유가 없다.
+     * <b>응답이 없는 것(읽기 타임아웃)은 예외다</b> — 연결은 됐는데 모델이 붙잡혀 있다는 뜻이라
+     * 모델을 바꾸면 달라질 수 있다(아래 catch 주석).
+     *
+     * @param fallbackAvailable 이 호출이 실패하면 폴백 모델이 이어받는가 — 읽기 타임아웃에서
+     *                          같은 모델을 또 기다릴지, 바로 넘길지를 가른다
      */
     private JsonNode callModel(String model, String apiKey, Map<String, Object> body,
-                               RetryPolicy policy, long deadline, CallContext context) {
+                               RetryPolicy policy, long deadline, boolean fallbackAvailable,
+                               CallContext context) {
         long cooldown = cooldownRemaining(model);
         if (cooldown > 0) {
             log.info("Gemini {} 쿨다운 중 — {}ms 남아 호출하지 않는다", model, cooldown);
@@ -563,16 +583,42 @@ public class GeminiClient {
                 }
                 throw new ModelUnavailable(status == 429 || status == 503
                         ? ErrorCode.AI_RATE_LIMITED : ErrorCode.AI_ANALYSIS_FAILED);
-            } catch (ResourceAccessException e) {
+            } catch (RestClientException e) {
+                /*
+                 * 상태 코드를 받지 못한 실패 — 네트워크 오류와 <b>응답 없음(읽기 타임아웃)</b>.
+                 *
+                 * <p>ResourceAccessException 만 잡으면 안 된다. 본문이 있는 POST 는 HttpURLConnection 이
+                 * 상태 줄을 늦게 읽어서, 읽기 타임아웃이 응답을 읽는 단계에서 터지고
+                 * {@code RestClientException("Error while extracting response … octet-stream")} 로
+                 * 감싸져 온다. 운영에서 7일간 난 AI 실패 7건이 전부 이 모양이었는데, 이 catch 를
+                 * 비켜 가 재시도·폴백·지표가 모두 빠졌다(docs/server-stability-current-state.md §11-2).
+                 */
                 lastAttemptMillis = System.currentTimeMillis() - attemptStart;
-                record(model, "network", lastAttemptMillis);
+                boolean readTimeout = isReadTimeout(e);
+                if (!readTimeout && !(e instanceof ResourceAccessException) && !hasIoCause(e)) {
+                    // 응답은 받았는데 읽지 못했다(형식 등) — 다시 물어도 같다
+                    record(model, "error", lastAttemptMillis);
+                    log.warn("Gemini 응답 처리 실패({}): {}", model, e.toString());
+                    throw new BusinessException(ErrorCode.AI_ANALYSIS_FAILED);
+                }
+                record(model, readTimeout ? "timeout" : "network", lastAttemptMillis);
+                if (readTimeout && fallbackAvailable) {
+                    /*
+                     * 같은 모델에게 또 45초를 주면 앱이 2분에 기다리기를 그만두기 전에 폴백까지
+                     * 닿지 못한다(45초 × 2 + 백오프 + 폴백). 붙잡힌 모델은 두고 바로 넘긴다.
+                     */
+                    log.warn("Gemini {} 가 {}ms 동안 응답하지 않음 — 다시 기다리지 않고 폴백으로 넘긴다",
+                            model, lastAttemptMillis);
+                    throw new ModelUnavailable(ErrorCode.AI_ANALYSIS_FAILED);
+                }
                 /*
                  * 연결 실패(5초)면 예산이 남아 재시도할 값어치가 있고, 읽기 타임아웃(45초)이면
                  * 아래 검사가 걸러낸다 — 직전 시도가 얼마나 걸렸는지로 판단하기 때문이다.
-                 * 모델을 바꿔도 네트워크는 그대로라 폴백으로 넘기지 않는다.
+                 * 네트워크 오류는 모델을 바꿔도 그대로라 폴백으로 넘기지 않는다.
                  */
                 if (canRetry(attempt, policy.maxAttempts(), backoffMillis, lastAttemptMillis, deadline)) {
-                    log.info("Gemini 네트워크 오류({}) — {}ms 후 재시도 ({}/{}): {}",
+                    log.info("Gemini {}({}) — {}ms 후 재시도 ({}/{}): {}",
+                            readTimeout ? "응답 없음" : "네트워크 오류",
                             model, backoffMillis, attempt, policy.maxAttempts(), e.getMessage());
                     sleep(backoffMillis);
                     backoffMillis = Math.min(backoffMillis * 3, policy.maxBackoffMillis());
@@ -616,6 +662,30 @@ public class GeminiClient {
                 .tag("outcome", outcome)
                 .register(meterRegistry)
                 .record(elapsedMillis, TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * 연결은 됐는데 응답이 오지 않았는가 — 원인 사슬에 읽기 {@link SocketTimeoutException} 이 있는가.
+     * 연결 타임아웃("Connect timed out")도 같은 예외 타입이라 메시지로 걸러낸다(그건 네트워크 문제다).
+     */
+    private static boolean isReadTimeout(Throwable e) {
+        for (Throwable t = e; t != null; t = t.getCause()) {
+            if (t instanceof SocketTimeoutException) {
+                String message = t.getMessage();
+                return message == null || !message.toLowerCase(Locale.ROOT).contains("connect");
+            }
+        }
+        return false;
+    }
+
+    /** 원인 사슬에 I/O 오류가 있는가 — 응답을 읽다가 연결이 끊긴 경우다. */
+    private static boolean hasIoCause(Throwable e) {
+        for (Throwable t = e.getCause(); t != null; t = t.getCause()) {
+            if (t instanceof IOException) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** 서버가 "지금은 처리 못 했다"고 말한 상태 — 같은 요청을 다시 보내면 될 수 있다. */
