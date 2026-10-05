@@ -546,4 +546,5 @@ WARN [ai-job] AiJobService : AI 작업 오류(food-photo): org.springframework.w
   - 계측 로직은 mock 하네스로 8개 시나리오를 확인했다: 빠른 연결 미보고, 하트비트 유실 + 3회 시도 + 갱신 요약, 백그라운드 시간 제외, 붙기 전 이탈(bg), 로그아웃 후 미측정, 세션 상한.
   - 그 밖에 typecheck, lint, 웹 빌드, 백엔드 analytics 테스트가 통과했다.
   - 실기기 확인은 하지 않았다.
+- **배포**: 서버 `8cfae6fc` 배포, 앱 OTA 2026-10-05(iOS group `af5ee6b9`, Android group `24292148`, 1.0.6 런타임) — 이 시점 이후 데이터가 쌓인다.
 - **보는 법**: 며칠 뒤 `railway logs <배포ID> --lines 5000 | grep "채팅 소켓 재연결 지연"` 으로 센다. 원인(`hb`/`closeNNNN`/`resume`)과 시도 수 분포가 다음 수정 방향을 정한다. 예를 들어 `hb` 가 많으면 하트비트 감지 시간을 줄이고, `resume` + 갱신이 길면 토큰을 미리 갱신한다.
