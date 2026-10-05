@@ -11,7 +11,7 @@ import { colors, fontSize, radius, spacing } from '../constants/theme';
 import { themedStyles } from '../theme/themedStyles';
 
 interface Props {
-  /** 누구의 픽인지 — 색상(나=Gold/상대=Green)으로 구분한다 */
+  /** 누구의 픽인지 — 색상(나=코랄/상대=하늘)으로 구분한다 */
   who: 'me' | 'partner';
   /** 목록 카드처럼 좁은 자리에 쓸 때 */
   size?: 'sm' | 'md';

@@ -16,6 +16,7 @@ import {
   CLUSTER_MIN_LEVEL,
   CLUSTER_MIN_MARKERS,
   LABEL_MAX_LEVEL,
+  MAP_ROUTE_COLOR,
   pinIconKey,
   type KakaoMapMarker,
 } from '../utils/kakaoMapHtml';
@@ -277,7 +278,7 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
         map,
         path: path.map((p) => new kakao.maps.LatLng(p.lat, p.lng)),
         strokeWeight: 4,
-        strokeColor: '#4A5BFF',
+        strokeColor: MAP_ROUTE_COLOR,
         strokeOpacity: 0.85,
         strokeStyle: 'solid',
       });

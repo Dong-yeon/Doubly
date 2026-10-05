@@ -1159,7 +1159,7 @@ const styles = themedStyles((colors) => ({
     height: 24,
     borderRadius: 12,
     backgroundColor: colors.primary,
-    color: colors.white,
+    color: colors.onPrimary,
     fontWeight: '800',
     fontSize: fontSize.caption,
     textAlign: 'center',

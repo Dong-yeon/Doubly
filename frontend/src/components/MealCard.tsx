@@ -226,7 +226,7 @@ const styles = themedStyles((colors) => ({
   reactionEmoji: { fontSize: fontSize.caption },
   reactionCount: { fontSize: fontSize.micro, color: colors.textSecondary, fontWeight: '800' },
   // 채운 칩은 배경이 colors.primary — 라이트/다크 모두 흰 글씨가 대비를 만족한다(FeedCard 와 같은 근거)
-  reactionCountMine: { color: colors.white },
+  reactionCountMine: { color: colors.onPrimary },
   calPending: { fontSize: fontSize.caption, color: colors.textTertiary, fontWeight: '700' },
   date: { fontSize: fontSize.caption, color: colors.textSecondary },
   placeTag: {

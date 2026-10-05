@@ -6,21 +6,25 @@
  *
  * react-native-android-widget 의 위젯 프리미티브만 사용해야 한다
  * (일반 RN 컴포넌트·훅 사용 불가 — 네이티브 RemoteViews 로 변환된다).
- * 색은 Duo Color System: 나=Gold, 상대=Green, 배경=Cream, 텍스트=Ink.
- * 값은 theme/colors.ts 라이트 팔레트(me/partner)와 동일 — 위젯은 헤드리스 태스크로
- * 그려져 Appearance 기반 다크모드를 따르지 않으므로 라이트 값을 그대로 고정한다.
+ * 색은 앱과 같은 뜻 — 나 = 코랄, 상대 = 하늘(보는 사람 기준). 값은 theme/palette.ts 의 라이트 팔레트를
+ * <b>직접 import</b> 한다 — 예전엔 손으로 복사해 두었다가 배경·글자색이 구 팔레트로 남았다(2026-10-05).
+ * palette.ts 는 import 가 없는 순수 값 모듈이라 헤드리스 태스크에서도 안전하다(colors.ts 는 Appearance·
+ * AsyncStorage 를 불러 피한다). 위젯은 Appearance 기반 다크모드를 따르지 않으므로 라이트로 고정한다.
  */
 import React from 'react';
 import { FlexWidget, TextWidget } from 'react-native-android-widget';
 import type { WidgetData } from './widgetData';
 import { daysTogether } from './widgetData';
+import { palettes } from '../theme/palette';
 
+/** 위젯 프리미티브의 색 타입은 `#…` 리터럴이다 — 팔레트 값은 전부 hex 라 안전하다 */
+const hex = (v: string) => v as `#${string}`;
 const COLORS = {
-  background: '#FBF8F3' as const, // cream
-  ink: '#14162B' as const,
-  sub: '#62687A' as const,
-  me: '#8A6817' as const, // gold (theme.light.me)
-  partner: '#2C7D33' as const, // green (theme.light.partner)
+  background: hex(palettes.light.background),
+  ink: hex(palettes.light.textPrimary),
+  sub: hex(palettes.light.textSecondary),
+  me: hex(palettes.light.meText),
+  partner: hex(palettes.light.partnerText),
 };
 
 /** "보리 😴 “야근 중”" — 한마디가 없으면 이름과 이모지만 */

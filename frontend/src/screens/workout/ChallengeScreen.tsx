@@ -309,7 +309,7 @@ const styles = themedStyles((colors) => ({
   typeChip: { flex: 1, paddingVertical: spacing.sm, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, alignItems: 'center' },
   typeChipActive: { borderColor: colors.primary, backgroundColor: colors.primaryBg },
   typeText: { fontSize: fontSize.body, color: colors.textSecondary, fontWeight: '700' },
-  typeTextActive: { color: colors.primary },
+  typeTextActive: { color: colors.primary, fontWeight: '800' },
   formRow: { flexDirection: 'row', gap: spacing.sm },
   flex: { flex: 1 },
   modalBtn: { marginTop: spacing.md },

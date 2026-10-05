@@ -943,12 +943,13 @@ const styles = themedStyles((colors) => ({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  travelModeRowOn: { backgroundColor: colors.togetherBg, borderColor: colors.together },
+  // 켜짐/선택 상태는 크롬(primary) — "누구 것"이 아니라 "선택됨"이다(색 설계 원칙 3)
+  travelModeRowOn: { backgroundColor: colors.primaryBg, borderColor: colors.primary },
   travelModeText: { flex: 1, paddingRight: spacing.md },
   travelModeTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
-  travelModeTitleOn: { color: colors.together },
+  travelModeTitleOn: { color: colors.primary },
   travelModeDesc: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
-  travelModeDescOn: { color: colors.together },
+  travelModeDescOn: { color: colors.primary },
   travelModeSwitch: {
     width: 44,
     height: 26,
@@ -957,7 +958,7 @@ const styles = themedStyles((colors) => ({
     padding: 2,
     justifyContent: 'center',
   },
-  travelModeSwitchOn: { backgroundColor: colors.together },
+  travelModeSwitchOn: { backgroundColor: colors.primaryFill },
   travelModeKnob: {
     width: 22,
     height: 22,
@@ -965,7 +966,8 @@ const styles = themedStyles((colors) => ({
     // 하드코딩 색 리터럴 대신 테마 토큰 사용 (QA_CHECKLIST.md 전역 반복 패턴 8)
     backgroundColor: colors.white,
   },
-  travelModeKnobOn: { alignSelf: 'flex-end' },
+  // 켜진 트랙(primaryFill)은 다크에서 밝은 잉크 — 흰 손잡이가 묻히지 않게 onColor
+  travelModeKnobOn: { alignSelf: 'flex-end', backgroundColor: onColor(colors.primaryFill) },
 
   entryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
   entryCard: {
@@ -994,7 +996,7 @@ const styles = themedStyles((colors) => ({
   tabOn: { backgroundColor: colors.primary },
   tabText: { fontSize: fontSize.body, fontWeight: '800', color: colors.textSecondary },
   // 하드코딩 색 리터럴 대신 테마 토큰 사용 (QA_CHECKLIST.md 전역 반복 패턴 8)
-  tabTextOn: { color: colors.white },
+  tabTextOn: { color: colors.onPrimary },
 
   // Day 선택 바
   dayBar: { gap: spacing.sm, paddingVertical: spacing.md },
@@ -1141,10 +1143,10 @@ const styles = themedStyles((colors) => ({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  catSelectOn: { backgroundColor: colors.together, borderColor: colors.together },
+  catSelectOn: { backgroundColor: colors.primaryFill, borderColor: colors.primaryFill },
   catSelectText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary },
   // accent 는 secondary 와 다른 토큰이라 별도로 계산한다 — 다크에서 1.50:1 이었다
-  catSelectTextOn: { color: onColor(colors.together) },
+  catSelectTextOn: { color: onColor(colors.primaryFill) },
   linkRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

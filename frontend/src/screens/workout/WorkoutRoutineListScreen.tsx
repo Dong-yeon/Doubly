@@ -326,7 +326,7 @@ const styles = themedStyles((colors) => ({
     borderRadius: radius.pill,
     backgroundColor: colors.primary,
   },
-  todayBadgeText: { fontSize: 10, fontWeight: '800', color: colors.white },
+  todayBadgeText: { fontSize: 10, fontWeight: '800', color: colors.onPrimary },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   // 선물 버튼 — 카드 전체 탭(세션 시작)과 겹치지 않도록 별도 터치 영역을 넉넉히 준다
   giftBtn: { padding: spacing.xs },
@@ -346,7 +346,7 @@ const styles = themedStyles((colors) => ({
   },
   dayDotActive: { backgroundColor: colors.primaryBg, borderColor: colors.primary },
   dayDotText: { fontSize: 10, fontWeight: '700', color: colors.textTertiary },
-  dayDotTextActive: { color: colors.primary },
+  dayDotTextActive: { color: colors.primary, fontWeight: '800' },
   summary: { fontSize: fontSize.caption, color: colors.textPrimary, marginTop: spacing.xs, lineHeight: 18 },
   count: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xs },
   fabWrap: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: spacing.lg },

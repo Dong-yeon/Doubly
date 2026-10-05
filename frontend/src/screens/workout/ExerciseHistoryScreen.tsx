@@ -294,7 +294,7 @@ const styles = themedStyles((colors) => ({
   },
   metricTabActive: { borderColor: colors.primary, backgroundColor: colors.primaryBg },
   metricTabText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary },
-  metricTabTextActive: { color: colors.primary },
+  metricTabTextActive: { color: colors.primary, fontWeight: '800' },
 
   chartBars: { flexDirection: 'row', alignItems: 'flex-end', height: 130, gap: 4 },
   chartCol: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', gap: 2 },

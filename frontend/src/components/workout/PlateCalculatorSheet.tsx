@@ -138,7 +138,7 @@ const styles = themedStyles((colors) => ({
   },
   barChipActive: { borderColor: colors.primary, backgroundColor: colors.primaryBg },
   barChipText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
-  barChipTextActive: { color: colors.primary },
+  barChipTextActive: { color: colors.primary, fontWeight: '800' },
 
   sideLabel: { fontSize: fontSize.caption, color: colors.textSecondary },
   plateRow: { flexDirection: 'row', gap: spacing.xs, flexWrap: 'wrap' },

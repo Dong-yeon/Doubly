@@ -158,7 +158,7 @@ export function StickerShopScreen() {
             accessibilityRole="button"
             accessibilityLabel="PRO 안내 보기"
           >
-            <MaterialCommunityIcons name="crown" size={18} color={colors.primaryDark} />
+            <MaterialCommunityIcons name="crown" size={18} color={colors.primary} />
             <View style={styles.proBody}>
               <Text style={styles.proTitle}>PRO면 이것도 열려요</Text>
               <Text style={styles.proText}>확장 무드 · 프리미엄 터치 · 우리 이모지</Text>
@@ -323,7 +323,7 @@ function StatusChip({ pack }: { pack: StickerPack }) {
   // (확장 무드·프리미엄 터치는 price = 1200 이라 위 갈래로 간다 — V96 시드)
   return (
     <View style={[styles.chip, styles.chipPro]}>
-      <MaterialCommunityIcons name="crown" size={12} color={colors.primaryDark} />
+      <MaterialCommunityIcons name="crown" size={12} color={colors.primary} />
       <Text style={[styles.chipText, styles.chipProText]}>PRO</Text>
     </View>
   );
@@ -351,7 +351,7 @@ const styles = themedStyles((colors) => ({
   proBody: { flex: 1, gap: 1 },
   proTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
   proText: { fontSize: fontSize.caption, color: colors.textSecondary },
-  proMore: { fontSize: fontSize.caption, fontWeight: '700', color: colors.primaryDark },
+  proMore: { fontSize: fontSize.caption, fontWeight: '700', color: colors.primary },
 
   section: { gap: spacing.sm },
   sectionHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.xs },
@@ -409,9 +409,9 @@ const styles = themedStyles((colors) => ({
   chipOwned: { backgroundColor: colors.togetherBg },
   chipOwnedText: { color: colors.together },
   chipPrice: { backgroundColor: colors.primary },
-  chipPriceText: { color: colors.white },
+  chipPriceText: { color: colors.onPrimary },
   chipPro: { backgroundColor: colors.primaryBg },
-  chipProText: { color: colors.primaryDark },
+  chipProText: { color: colors.primary },
 
   /*
    * 미리보기 타일 — <b>고정 36dp</b>다. 예전엔 {@code flex: 1} 이라 폭이 넓을수록 칸이

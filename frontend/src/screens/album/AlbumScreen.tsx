@@ -558,7 +558,7 @@ export function AlbumScreen({ navigation }: Props) {
                 <MaterialCommunityIcons
                   name={v.icon}
                   size={20}
-                  color={view === v.key ? colors.white : colors.textSecondary}
+                  color={view === v.key ? colors.onPrimary : colors.textSecondary}
                 />
               </Pressable>
             ))}

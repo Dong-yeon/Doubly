@@ -158,7 +158,8 @@ export function AlbumCalendar({ month, items, loading, error, truncated, filtere
               <CachedImage uri={thumbnailUrl(cover.imageUrl, cell)} style={styles.cover} contentFit="cover" recyclingKey={date} />
               {/* 사진 위 글자 — 테마와 무관하게 흰 글자 + 어두운 알약 */}
               <View style={[styles.dayPill, isToday && styles.dayPillToday]}>
-                <Text style={styles.dayOnPhoto}>{day}</Text>
+                {/* 오늘 알약은 primary 면이라 다크에서 밝다 — 흰 글자 대신 onPrimary */}
+                <Text style={[styles.dayOnPhoto, isToday && { color: colors.onPrimary }]}>{day}</Text>
               </View>
               {count > 1 ? (
                 <View style={styles.countPill}>

@@ -243,7 +243,7 @@ const styles = themedStyles((colors) => ({
   dayCol: { alignItems: 'center', gap: spacing.xs },
   dayDot: { width: 34, height: 34, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   dayDotDone: { backgroundColor: colors.primary },
-  check: { color: colors.white, fontWeight: '800' },
+  check: { color: colors.onPrimary, fontWeight: '800' },
   dayLabel: { fontSize: fontSize.caption, color: colors.textSecondary },
   catRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   catName: { width: 48, fontSize: fontSize.body, color: colors.textPrimary, fontWeight: '700' },

@@ -202,7 +202,7 @@ export function WorkoutScreen({ navigation }: Props) {
       <View style={styles.weekHeader}>
         <View style={styles.weekHeaderRow}>
           <View style={styles.streakBadge}>
-            <MaterialCommunityIcons name="fire" size={16} color={colors.white} />
+            <MaterialCommunityIcons name="fire" size={16} color={colors.onPrimary} />
             <Text style={styles.streakBadgeText}>{myStreak?.currentCount ?? 0}</Text>
           </View>
           {/*
@@ -505,7 +505,7 @@ const styles = themedStyles((colors) => ({
     paddingHorizontal: spacing.sm,
     paddingVertical: 6,
   },
-  streakBadgeText: { color: colors.white, fontSize: fontSize.caption, fontWeight: '800' },
+  streakBadgeText: { color: colors.onPrimary, fontSize: fontSize.caption, fontWeight: '800' },
   weekStrip: { flex: 1 },
   recoveryCard: {
     flexDirection: 'row',

@@ -2018,7 +2018,7 @@ const styles = themedStyles((colors) => ({
   },
   restChipActive: { borderColor: colors.primary, backgroundColor: colors.primaryBg },
   restChipText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
-  restChipTextActive: { color: colors.primary },
+  restChipTextActive: { color: colors.primary, fontWeight: '800' },
   // FlatList/DragList 자체(=style)에 flex 가 없으면 종목이 몇 개만 늘어나도
   // 목록이 화면 높이를 넘는데 자기 안에서 스크롤 영역을 못 잡아, 목록 맨 아래(운동 추가
   // 버튼)가 하단 액션바 뒤로 밀려 잘린다. contentContainerStyle(list)과는 별개로 필요하다.
@@ -2252,7 +2252,7 @@ const styles = themedStyles((colors) => ({
   },
   catChipActive: { borderColor: colors.primary, backgroundColor: colors.primaryBg },
   catText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
-  catTextActive: { color: colors.primary },
+  catTextActive: { color: colors.primary, fontWeight: '800' },
   formRow: { flexDirection: 'row', gap: spacing.sm },
   modalBtn: { marginTop: spacing.sm },
   groupRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.sm },

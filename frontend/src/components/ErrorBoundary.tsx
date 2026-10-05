@@ -195,5 +195,5 @@ const styles = themedStyles((colors) => ({
     marginTop: spacing.sm,
   },
   pressed: { opacity: 0.8, transform: [{ scale: 0.98 }] },
-  buttonText: { color: '#FFFFFF', fontSize: fontSize.body, fontWeight: '800' },
+  buttonText: { color: colors.onPrimary, fontSize: fontSize.body, fontWeight: '800' },
 }));

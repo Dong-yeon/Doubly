@@ -119,6 +119,11 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
           }
         }}
       >
+        {/*
+          활성 표시 막대 — 크롬이 잉크(무채색)라 활성/비활성이 색상(hue)으로 갈리지 않는다(명도 대비 2.56).
+          색만으로 상태를 말하지 않도록 막대와 라벨 굵기를 더한다(docs/color-redesign-viewer-based_2026-10-05.md §2-5).
+        */}
+        {focused ? <View style={rail ? styles.railIndicator : styles.tabIndicator} /> : null}
         <View>
           {/* 비활성도 textSecondary — textMuted(#9A98A4)는 흰 탭바 위 2.84:1 로 WCAG 미달 */}
           <MaterialCommunityIcons
@@ -132,7 +137,7 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
             </View>
           ) : null}
         </View>
-        <Text style={[styles.tabLabel, { color: focused ? colors.primary : colors.textSecondary }]}>
+        <Text style={[styles.tabLabel, focused && styles.tabLabelFocused, { color: focused ? colors.primary : colors.textSecondary }]}>
           {meta.label}
         </Text>
       </Pressable>
@@ -292,7 +297,11 @@ const styles = themedStyles((colors) => ({
     minHeight: 64,
     paddingVertical: spacing.sm,
   },
-  tabLabel: { fontSize: 11, fontWeight: '700', lineHeight: 14 },
+  tabLabel: { fontSize: 11, fontWeight: '600', lineHeight: 14 },
+  tabLabelFocused: { fontWeight: '800' },
+  // 활성 탭 막대 — 하단 바는 칸 위쪽 가로, 레일은 칸 왼쪽 세로
+  tabIndicator: { position: 'absolute', top: 0, width: 24, height: 3, borderRadius: 2, backgroundColor: colors.primary },
+  railIndicator: { position: 'absolute', left: 0, width: 3, height: 28, borderRadius: 2, backgroundColor: colors.primary },
   tabBadge: {
     position: 'absolute',
     top: -4,
@@ -308,5 +317,5 @@ const styles = themedStyles((colors) => ({
     borderWidth: 1.5,
     borderColor: colors.surfaceCard,
   },
-  tabBadgeText: { color: colors.white, fontSize: 9, fontWeight: '800', lineHeight: 11 },
+  tabBadgeText: { color: colors.onPrimary, fontSize: 9, fontWeight: '800', lineHeight: 11 },
 }));

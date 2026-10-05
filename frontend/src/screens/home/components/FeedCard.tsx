@@ -463,5 +463,5 @@ const styles = themedStyles((colors) => ({
   chipEmoji: { fontSize: fontSize.body },
   chipCount: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '800' },
   // 내가 누른 칩은 배경이 colors.primary — 라이트/다크 모두 흰 글씨가 대비를 만족한다
-  chipCountMine: { color: colors.white },
+  chipCountMine: { color: colors.onPrimary },
 }));

@@ -19,18 +19,18 @@
  * </pre>
  */
 import { StyleSheet, type ImageStyle, type TextStyle, type ViewStyle } from 'react-native';
-import { getAccentVariant, getScheme, palette, type Palette } from './colors';
+import { getScheme, palette, type Palette } from './colors';
 import { chatPalette, getChatPhotoUri, getChatThemeId, type ChatPalette } from './chatTheme';
 
 type NamedStyles<T> = { [P in keyof T]: ViewStyle | TextStyle | ImageStyle };
 
 export function themedStyles<T extends NamedStyles<T>>(factory: (colors: Palette) => T): T {
-  // 캐시 키는 액센트 변형 + 스킴 (colors.ts 의 AccentVariant)
+  // 캐시 키는 스킴
   const cache: Record<string, T> = {};
 
   const resolve = (): T => {
     const scheme = getScheme();
-    const key = `${getAccentVariant()}:${scheme}`;
+    const key = scheme;
     if (!cache[key]) cache[key] = StyleSheet.create(factory(palette(scheme)));
     return cache[key];
   };
@@ -44,7 +44,7 @@ export function themedStyles<T extends NamedStyles<T>>(factory: (colors: Palette
 
 /**
  * 채팅방 배경 테마를 따라가는 스타일시트 — 위 {@link themedStyles} 와 같은 원리인데
- * 캐시 키가 <b>액센트 + 스킴 + 채팅 테마</b> 세 축이다.
+ * 캐시 키가 <b>스킴 + 채팅 테마 + 사진 유무</b>다.
  *
  * <p>채팅 화면의 스타일 전부가 아니라 <b>배경 위에 놓이는 것들만</b> 이걸로 만든다
  * (말풍선·시간·날짜 구분선). 나머지 크롬(입력바·트레이·헤더)은 앱 팔레트를 따르므로
@@ -62,12 +62,11 @@ export function chatThemedStyles<T extends NamedStyles<T>>(
     /*
      * 키는 <b>팔레트를 바꾸는 축 전부</b>여야 한다. 하나라도 빠지면 그 축을 바꿨을 때
      * 먼저 캐시된 스타일이 그대로 돌아온다 — 조용히, 화면만 안 바뀐다.
-     * · 액센트: '기본' 채팅 테마의 말풍선이 앱 액센트를 따른다
      * · 사진 유무: 맨살 글자가 캡슐을 얻고 구분선이 사라진다(chatTheme 의 withPhoto)
      *   uri <b>값</b>은 스타일을 바꾸지 않으므로 키에 넣지 않는다 — 넣으면 사진을 고를
      *   때마다 캐시가 한 벌씩 새로 쌓인다.
      */
-    const key = `${getAccentVariant()}:${scheme}:${getChatThemeId()}:${getChatPhotoUri() ? 'photo' : 'plain'}`;
+    const key = `${scheme}:${getChatThemeId()}:${getChatPhotoUri() ? 'photo' : 'plain'}`;
     if (!cache[key]) cache[key] = StyleSheet.create(factory(chatPalette(scheme)));
     return cache[key];
   };

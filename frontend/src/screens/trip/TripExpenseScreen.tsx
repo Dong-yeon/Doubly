@@ -469,8 +469,8 @@ const styles = themedStyles((colors) => ({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  catSelectOn: { backgroundColor: colors.together, borderColor: colors.together },
+  catSelectOn: { backgroundColor: colors.primaryFill, borderColor: colors.primaryFill },
   catSelectText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary },
   // accent 는 secondary 와 다른 토큰이라 별도로 계산한다 — 다크에서 1.50:1 이었다
-  catSelectTextOn: { color: onColor(colors.together) },
+  catSelectTextOn: { color: onColor(colors.primaryFill) },
 }));

@@ -3,6 +3,14 @@
  * 통신: 내부 → 외부 postMessage(JSON, source='fitto-kakao-map').
  */
 import { KAKAO_JS_KEY } from '../constants/config';
+import { palettes } from '../theme/palette';
+
+/*
+ * 지도 타일은 다크 모드에서도 밝은 지도라 라이트 팔레트로 고정한다.
+ * 경로선 = 지도 핀과 같은 "우리" 색(mapPin), 등급 배지 = 럽슐랭 왕관 금색. 예전엔 #4A5BFF·#D4A017 하드코딩.
+ */
+export const MAP_ROUTE_COLOR = palettes.light.mapPin;
+const MAP_TIER_COLOR = palettes.light.lovelichelinGold;
 
 export interface KakaoMapMarker {
   id: number;
@@ -268,7 +276,7 @@ kakao.maps.load(function () {
       ? '<circle cx="14" cy="14" r="10" fill="' + color + '" stroke="#ffffff" stroke-width="3"/>'
       : '<circle cx="14" cy="14" r="10" fill="#ffffff" stroke="' + color + '" stroke-width="3"/>';
     var badge = tier > 0
-      ? '<circle cx="23" cy="7" r="6.5" fill="#D4A017" stroke="#ffffff" stroke-width="1.5"/>' +
+      ? '<circle cx="23" cy="7" r="6.5" fill="${MAP_TIER_COLOR}" stroke="#ffffff" stroke-width="1.5"/>' +
         '<text x="23" y="10" font-size="8" font-weight="700" text-anchor="middle" fill="#ffffff">' + tier + '</text>'
       : '';
     var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32">' + circle + badge + '</svg>';
@@ -392,7 +400,7 @@ kakao.maps.load(function () {
       var linePath = path.map(function (p) { return new kakao.maps.LatLng(p.lat, p.lng); });
       var line = new kakao.maps.Polyline({
         map: map, path: linePath,
-        strokeWeight: 4, strokeColor: '#4A5BFF', strokeOpacity: 0.85, strokeStyle: 'solid'
+        strokeWeight: 4, strokeColor: '${MAP_ROUTE_COLOR}', strokeOpacity: 0.85, strokeStyle: 'solid'
       });
       drawn.push(line);
       path.forEach(function (p) { bounds.extend(new kakao.maps.LatLng(p.lat, p.lng)); });

@@ -14,7 +14,6 @@ import { Chip } from '../../components/Chip';
 import { SettingsGroup, SettingsInset, SettingsRow } from '../../components/SettingsList';
 import { useThemeStore } from '../../store/themeStore';
 import type { ThemeMode } from '../../theme/themePreference';
-import type { AccentVariant } from '../../theme/colors';
 import { authApi } from '../../api/auth';
 import {
   canAskPushPermission,
@@ -39,13 +38,6 @@ const THEME_OPTIONS: { value: ThemeMode; label: string }[] = [
   { value: 'system', label: '시스템' },
   { value: 'light', label: '라이트' },
   { value: 'dark', label: '다크' },
-];
-
-/* 앱 액센트 — 채팅 배경처럼 기기별 취향 설정 (colors.ts 의 AccentVariant 주석 참고) */
-const ACCENT_OPTIONS: { value: AccentVariant; label: string }[] = [
-  { value: 'green', label: '그린' },
-  { value: 'mint', label: '민트' },
-  { value: 'peach', label: '피치' },
 ];
 
 export function SettingsScreen({ navigation }: Props) {
@@ -100,8 +92,6 @@ export function SettingsScreen({ navigation }: Props) {
   /* 테마 — 고르는 즉시 화면에 반영된다 (RootNavigator 가 트리를 다시 그린다) */
   const themeMode = useThemeStore((s) => s.mode);
   const setThemeMode = useThemeStore((s) => s.setMode);
-  const accent = useThemeStore((s) => s.accent);
-  const setAccent = useThemeStore((s) => s.setAccent);
 
   const [savingNotification, setSavingNotification] = useState(false);
   const [savingMarketing, setSavingMarketing] = useState(false);
@@ -269,12 +259,13 @@ export function SettingsScreen({ navigation }: Props) {
 
         {/*
           채팅 배경은 2026-09-23 에 <b>채팅방 ⋮ 메뉴</b>로 옮겼다(ChatBackgroundSheet).
-          여기 나란히 두니 색 목록이 둘이라 "왜 색을 두 번 고르지"가 됐는데, 액센트는
-          앱 전체 정체성이고 배경은 그 방의 취향이라 층이 다르다. 다시 가져오지 말 것.
+          여기 나란히 두니 색 목록이 둘이라 "왜 색을 두 번 고르지"가 됐다. 앱 색은 나/상대/함께의
+          뜻을 지고 있어 고르는 항목이 아니고(액센트 선택은 2026-10-05 폐지), 배경은 그 방의 취향이다.
+          다시 가져오지 말 것.
         */}
         <SettingsGroup
           title="화면"
-          footer="테마에서 시스템을 고르면 기기 설정을 따라가요. 액센트는 이 기기에서만 바뀌어요."
+          footer="시스템을 고르면 기기 설정을 따라가요."
           style={styles.group}
         >
           <View>
@@ -282,14 +273,6 @@ export function SettingsScreen({ navigation }: Props) {
             <SettingsInset style={styles.chips}>
               {THEME_OPTIONS.map((o) => (
                 <Chip key={o.value} label={o.label} selected={themeMode === o.value} onPress={() => void setThemeMode(o.value)} fill />
-              ))}
-            </SettingsInset>
-          </View>
-          <View>
-            <SettingsRow title="액센트" />
-            <SettingsInset style={styles.chips}>
-              {ACCENT_OPTIONS.map((o) => (
-                <Chip key={o.value} label={o.label} selected={accent === o.value} onPress={() => void setAccent(o.value)} fill />
               ))}
             </SettingsInset>
           </View>
