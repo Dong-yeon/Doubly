@@ -38,6 +38,28 @@ public interface PlaceVisitRepository extends JpaRepository<PlaceVisit, Long> {
     @Query("update PlaceVisit v set v.mealId = null where v.mealId in :mealIds")
     int detachMeals(@Param("mealIds") List<Long> mealIds);
 
+    /**
+     * 장소 상세 "여기서 먹은 것" — 이 장소 방문에 연결된 식단의 음식 이름별 횟수·마지막 날짜.
+     * 같이 먹기는 방문이 작성자 몫 식단에만 붙으므로(결정 Q7) 한 끼가 두 번 세어지지 않는다.
+     * 인덱스: place_visits(place_id)(V8), meal_items(meal_id, order_no)(V39) — 한 장소 방문은 많아야 수십 건이다.
+     */
+    @Query("""
+            select mi.name as name, count(mi) as times, max(m.mealDate) as lastDate
+            from MealItem mi join mi.meal m, PlaceVisit v
+            where v.mealId = m.id and v.placeId = :placeId
+            group by mi.name
+            order by count(mi) desc, max(m.mealDate) desc
+            """)
+    List<MenuCount> countMenu(@Param("placeId") Long placeId, org.springframework.data.domain.Pageable pageable);
+
+    interface MenuCount {
+        String getName();
+
+        Long getTimes();
+
+        java.time.LocalDate getLastDate();
+    }
+
     /** 외식 기록 멱등 — 같은 사람이 같은 키로 이미 남긴 방문(V129 unique 인덱스와 짝) */
     java.util.Optional<PlaceVisit> findByVisitedByAndClientRequestId(Long visitedBy, String clientRequestId);
 

@@ -188,6 +188,13 @@ public class PlaceController {
         return ApiResponse.success(placeService.recordVisit(user.id(), id, request), "방문 기록이 저장되었습니다.");
     }
 
+    /** 장소 상세 "여기서 먹은 것" — 이 장소 방문에 붙은 식단의 음식 이름·횟수(칼로리 없음) + 대표 메뉴 제안 */
+    @GetMapping("/{id}/menu")
+    public ApiResponse<com.fitto.place.dto.PlaceMenuResponse> menu(@AuthenticationPrincipal AuthUser user,
+                                                                   @PathVariable Long id) {
+        return ApiResponse.success(placeService.menu(user.id(), id));
+    }
+
     @GetMapping("/{id}/visits")
     public ApiResponse<List<PlaceVisitResponse>> visits(@AuthenticationPrincipal AuthUser user,
                                                         @PathVariable Long id) {

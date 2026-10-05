@@ -258,6 +258,39 @@ class MealVisitTest {
     }
 
     @Test
+    void 여기서_먹은_것은_음식_이름별_횟수이고_두_번_이상이면_대표_메뉴로_제안한다() {
+        long[] u = couple("mv12");
+        Long placeId = place(u[0], "연남 파스타");
+        RecordMealVisitRequest.MealPart carbonara = new RecordMealVisitRequest.MealPart(MealType.LUNCH, null, null, null,
+                null, null, null, null, null, List.of(new MealItemRequest("까르보나라", null, 700, null, null, null),
+                new MealItemRequest("샐러드", null, 200, null, null, null)), false);
+        RecordMealVisitRequest.MealPart again = new RecordMealVisitRequest.MealPart(MealType.DINNER, null, null, null,
+                null, null, null, null, null, List.of(new MealItemRequest("까르보나라", null, 700, null, null, null)), true);
+        mealVisitService.record(u[0], req(UUID.randomUUID().toString(), placeId, null, carbonara));
+        // 같이 먹기 — 식단은 두 행이지만 방문은 내 몫에만 붙어 한 번만 센다
+        mealVisitService.record(u[0], req(UUID.randomUUID().toString(), placeId, null, again));
+
+        var menu = placeService.menu(u[1], placeId);
+
+        assertThat(menu.items()).extracting(i -> i.name() + ":" + i.times())
+                .containsExactly("까르보나라:2", "샐러드:1");
+        assertThat(menu.signature()).containsExactly("까르보나라");
+    }
+
+    @Test
+    void 타임라인_식사_카드는_장소_id_를_싣는다() {
+        long[] u = couple("mv13");
+        Long placeId = place(u[0], "북촌 칼국수");
+        MealVisitResponse res = mealVisitService.record(u[0], req(UUID.randomUUID().toString(), placeId, null, lunch(false)));
+
+        FeedItemResponse mealCard = feedService.timeline(u[1], null, 20).items().stream()
+                .filter(i -> i.type() == FeedItemType.MEAL && i.refId().equals(res.meal().id()))
+                .findFirst().orElseThrow();
+
+        assertThat(mealCard.placeId()).isEqualTo(placeId);
+    }
+
+    @Test
     void 이미_장소가_연결된_식단에_방문을_또_붙이면_거절한다() {
         long[] u = couple("mv11");
         Long placeId = place(u[0], "잠실 롯데");
