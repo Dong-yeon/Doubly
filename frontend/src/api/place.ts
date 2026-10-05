@@ -6,11 +6,14 @@ import type {
   DateCourse,
   LovelichelinPulse,
   LovelichelinRecommendation,
+  Meal,
+  MealType,
   Place,
   PlaceSearchResponse,
   PlaceVisit,
   ResolvePlaceLinkResponse,
 } from '../types';
+import type { SaveMealItemPayload } from './diet';
 
 export interface SavePlacePayload {
   name: string;
@@ -28,6 +31,52 @@ export interface RecordVisitPayload {
   memo?: string;
   imageUrl?: string;
   mealId?: number;
+}
+
+/**
+ * 외식 기록 — POST /places/meal-visits. 장소 확정 + (선택) 식단 + 방문 + (선택) 평점을 한 번에(서버 MealVisitService).
+ * 예전엔 식단 저장 → 방문 저장 → 평점 저장을 화면이 세 번 엮었다(docs/LOVEBODY_LOVELICHELIN_LINK_2026-10-05.md).
+ */
+export interface MealVisitPayload {
+  /** 재전송 멱등키 — 기록 화면을 열 때 한 번 만든다. 같은 키로 다시 보내면 처음 결과가 온다 */
+  clientRequestId: string;
+  /** 이미 있는 우리 장소 — place 와 둘 중 하나만 */
+  placeId?: number;
+  /** 검색 결과 그대로 — 저장 시점에 만든다(이미 있으면 그 장소) */
+  place?: SavePlacePayload;
+  /** 다녀온 날 = 먹은 날(KST YYYY-MM-DD). 생략하면 오늘 */
+  visitedAt?: string;
+  /** 사진 하나 — 식단·방문에 같은 URL 이 들어간다 */
+  photoUrl?: string;
+  /** 방문 메모 */
+  memo?: string;
+  /** 방문 별점. 내 대표 평점이 비어 있을 때만 대표 평점도 된다(결정 Q3) */
+  rating?: number;
+  /** 재방문 의사 — 고르지 않으면 보내지 않는다 */
+  revisitIntent?: boolean;
+  /** 먹은 것 — 없으면 "방문만" */
+  meal?: {
+    mealType: MealType;
+    memo?: string;
+    items?: SaveMealItemPayload[];
+    calories?: number;
+    sugar?: number;
+    sodium?: number;
+    fiber?: number;
+    sharedWithPartner?: boolean;
+  };
+}
+
+export interface MealVisitResult {
+  /** 같은 키의 재전송이었다 — 새로 저장하지 않았다 */
+  replayed: boolean;
+  /** 장소(나/상대 평점·등급 포함). created=true 면 이번에 새로 담긴 곳 */
+  place: Place;
+  visit: PlaceVisit;
+  /** 내 몫 식단 — "방문만"이면 null */
+  meal: Meal | null;
+  /** 이 기록으로 0 → 등급이 생겼다 */
+  tierUp: boolean;
 }
 
 export interface RatePlacePayload {
@@ -80,6 +129,8 @@ export const placeApi = {
     ),
 
   // 럽슐랭 대표 평점 등록/수정 — 장소당 1개, 재평가 시 덮어쓰며 등급이 재산정된다
+  recordMealVisit: (payload: MealVisitPayload) =>
+    unwrap(apiClient.post<ApiResponse<MealVisitResult>>('/places/meal-visits', payload)),
   rate: (placeId: number, payload: RatePlacePayload) =>
     unwrap(apiClient.put<ApiResponse<Place>>(`/places/${placeId}/rating`, payload)),
   // AI 맛집 추천 — 럽슐랭 취향 분석(Gemini) + 카카오 실존 장소 검색 (생성에 시간 걸려 timeout 상향)
