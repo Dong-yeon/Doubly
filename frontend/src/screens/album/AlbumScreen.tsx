@@ -286,7 +286,7 @@ export function AlbumScreen({ navigation }: Props) {
           thumbUri: i === 0 ? thumbnailUrl(uri, Math.round(CELL)) : undefined,
           // 기록일 — 월 머리말과 같은 날짜를 보여준다(먹은·다녀온 날). 일상은 서버가 올린 날 KST 로 준다
           title: `${p.mine ? '나' : p.authorName}  ·  ${relativeDateLabel(recordDateOf(p))}`,
-          titleColor: p.mine ? colors.coral : colors.indigo,
+          titleColor: p.mine ? colors.meText : colors.partnerText,
           caption: p.caption ?? undefined,
           action,
           reactions: { options: QUICK_EMOJIS, summary: p.reactions ?? [], onToggle: (emoji) => void onReact(p, emoji) },

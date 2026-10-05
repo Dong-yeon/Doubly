@@ -123,7 +123,7 @@ export function AlbumCalendar({ month, items, loading, error, truncated, filtere
 
       <View style={styles.weekRow}>
         {WEEKDAYS.map((w, i) => (
-          <Text key={w} style={[styles.weekday, { width: cell }, i === 0 && { color: colors.coral }]}>
+          <Text key={w} style={[styles.weekday, { width: cell }, i === 0 && { color: colors.sunday }]}>
             {w}
           </Text>
         ))}
@@ -140,7 +140,7 @@ export function AlbumCalendar({ month, items, loading, error, truncated, filtere
           if (!cover || !list) {
             return (
               <View key={date} style={[styles.cell, { width: cell, height: cell }]}>
-                <Text style={[styles.dayEmpty, sunday && { color: colors.coral }, isToday && styles.dayToday]}>
+                <Text style={[styles.dayEmpty, sunday && { color: colors.sunday }, isToday && styles.dayToday]}>
                   {day}
                 </Text>
               </View>

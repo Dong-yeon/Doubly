@@ -314,7 +314,7 @@ export function WorkoutScreen({ navigation }: Props) {
                 accessibilityRole="button"
                 accessibilityLabel="스트릭 복구권으로 어제 메우기"
               >
-                <MaterialCommunityIcons name="fire" size={20} color={colors.coral} />
+                <MaterialCommunityIcons name="fire" size={20} color={colors.achievement} />
                 <View style={styles.repairBody}>
                   <Text style={styles.repairTitle}>
                     어제 하루가 비었어요 — 이어붙일까요?
@@ -547,7 +547,7 @@ const styles = themedStyles((colors) => ({
     gap: spacing.sm,
     backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.coral,
+    borderColor: colors.achievement,
     borderRadius: radius.lg,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
@@ -557,7 +557,7 @@ const styles = themedStyles((colors) => ({
   repairBody: { flex: 1 },
   repairTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
   repairHint: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 1 },
-  repairAction: { fontSize: fontSize.caption, fontWeight: '800', color: colors.coral },
+  repairAction: { fontSize: fontSize.caption, fontWeight: '800', color: colors.achievement },
   sectionTitle: {
     fontSize: fontSize.subtitle,
     fontWeight: '700',
@@ -585,7 +585,7 @@ const styles = themedStyles((colors) => ({
     marginBottom: spacing.sm,
   },
   // 프로그램 카드 — 자유 루틴과 구분되도록 은은한 배경을 살짝 얹는다
-  programCard: { backgroundColor: colors.accentSoft },
+  programCard: { backgroundColor: colors.highlightBg },
   flex: { flex: 1 },
   routineTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   routineTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },

@@ -74,7 +74,7 @@ export function TripAlbumScreen({ route }: Props) {
           key: `${p.id}-${i}`,
           uri,
           title: `${p.mine ? '내가' : `${p.authorName}님이`}  ·  ${localDateOf(p.createdAt).slice(5)}`,
-          titleColor: p.mine ? colors.coral : colors.indigo,
+          titleColor: p.mine ? colors.meText : colors.partnerText,
           caption: p.content ?? undefined,
         });
       });

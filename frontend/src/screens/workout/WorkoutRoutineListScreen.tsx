@@ -316,7 +316,7 @@ const styles = themedStyles((colors) => ({
   // 삭제 진행 중인 카드 흐리게 (QA_CHECKLIST.md 전역 반복 패턴 7)
   cardDeleting: { opacity: 0.4 },
   // 프로그램 카드 — 자유 루틴과 구분되도록 은은한 배경을 살짝 얹는다
-  programCard: { backgroundColor: colors.accentSoft },
+  programCard: { backgroundColor: colors.highlightBg },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, flexShrink: 1 },
   title: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },

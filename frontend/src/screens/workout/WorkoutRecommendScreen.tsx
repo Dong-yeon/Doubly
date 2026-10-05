@@ -467,7 +467,7 @@ const styles = themedStyles((colors) => ({
   programRecommendBtn: { marginTop: spacing.md },
   saveProgramBtn: { marginTop: spacing.xs, marginBottom: spacing.md },
   overallCard: {
-    backgroundColor: colors.accentSoft,
+    backgroundColor: colors.highlightBg,
     borderRadius: radius.md,
     padding: spacing.md,
     marginBottom: spacing.md,
@@ -505,7 +505,7 @@ const styles = themedStyles((colors) => ({
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
     borderRadius: radius.pill,
-    backgroundColor: colors.accentSoft,
+    backgroundColor: colors.highlightBg,
   },
   setMethodText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
   exerciseComment: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },

@@ -81,7 +81,7 @@ function toneOf(level: NoticeLevel): { bg: string; fg: string } {
     case 'info':
       return { bg: colors.primaryBg, fg: colors.textPrimary };
     case 'warning':
-      return { bg: colors.meBg, fg: colors.meText };
+      return { bg: colors.warningBg, fg: colors.warning };
     case 'maintenance':
       return { bg: colors.dangerBg, fg: colors.dangerText };
   }

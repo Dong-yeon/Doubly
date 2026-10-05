@@ -227,7 +227,7 @@ export function PlaceScreen() {
       lat: p.lat as number,
       lng: p.lng as number,
       title: p.name,
-      color: colors.danger,
+      color: colors.mapPin,
       tier: p.lovelichelinTier,
     }));
 

@@ -209,10 +209,10 @@ const styles = themedStyles((colors) => ({
   dayCircle: { width: 36, height: 36, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
   /* 선택 표시는 테두리로 — 기록(채움)과 겹쳐도 둘 다 읽힌다 */
   daySelected: { borderWidth: 2, borderColor: colors.primary },
-  dayDone: { backgroundColor: colors.accent },
+  dayDone: { backgroundColor: colors.success },
   dayText: { fontSize: fontSize.body, color: colors.textPrimary },
   // 다크 accent 위 white 는 1.50:1 — 선택 여부와 무관하게 완료된 모든 날짜가 이랬다
-  dayTextDone: { color: onColor(colors.accent), fontWeight: '700' },
+  dayTextDone: { color: onColor(colors.success), fontWeight: '700' },
   legend: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.xl, gap: spacing.sm },
   selectedBox: { marginTop: spacing.xl, gap: spacing.sm },
   selectedText: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
