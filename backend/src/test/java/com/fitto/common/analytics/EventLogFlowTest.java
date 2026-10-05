@@ -41,6 +41,7 @@ class EventLogFlowTest {
     @Autowired EventLogRepository eventLogRepository;
     @Autowired EventLogService eventLogService;
     @Autowired PlatformTransactionManager txManager;
+    @Autowired AnalyticsController analyticsController;
 
     private Long register(String email) {
         return authService.register(
@@ -129,5 +130,31 @@ class EventLogFlowTest {
 
             assertThat(visibleElsewhere).hasSize(1);
         });
+    }
+
+    /**
+     * 식단 기록 화면 기준선 계측(2026-10-05) — 앱이 보내는 7개 이벤트를 서버가 받아 그대로 남긴다.
+     * 이 enum 이 운영에 먼저 나가 있어야 앱 계측이 400 으로 버려지지 않는다(ClientAnalyticsEventSyncTest 주석).
+     */
+    @Test
+    void 식단_기록_화면_이벤트를_받아_남긴다() {
+        Long user = register("event-meal@fitto.com");
+        com.fitto.common.security.AuthUser auth = new com.fitto.common.security.AuthUser(user, com.fitto.user.domain.Role.USER);
+
+        analyticsController.log(auth, new LogEventRequest(ClientAnalyticsEvent.MEAL_RECORD_OPENED, "main"));
+        analyticsController.log(auth, new LogEventRequest(ClientAnalyticsEvent.MEAL_INPUT_ADDED, "photo_gallery"));
+        analyticsController.log(auth, new LogEventRequest(ClientAnalyticsEvent.MEAL_ANALYZE_STARTED, "photo"));
+        analyticsController.log(auth, new LogEventRequest(ClientAnalyticsEvent.MEAL_ITEM_EDIT_OPENED, "macros"));
+        analyticsController.log(auth, new LogEventRequest(ClientAnalyticsEvent.MEAL_MULTIPLIER_CHANGED, "0.5"));
+        analyticsController.log(auth, new LogEventRequest(ClientAnalyticsEvent.MEAL_RECORD_SAVED, "new;t=34;i=3;p=1;d=0;a=0"));
+        analyticsController.log(auth, new LogEventRequest(ClientAnalyticsEvent.MEAL_RECORD_ABANDONED, "new;t=12;i=0;p=1"));
+
+        assertThat(eventLogRepository.findByUserIdAndEventType(user, AnalyticsEvent.MEAL_RECORD_SAVED))
+                .singleElement().extracting(EventLog::getDetail).isEqualTo("new;t=34;i=3;p=1;d=0;a=0");
+        for (String type : List.of(AnalyticsEvent.MEAL_RECORD_OPENED, AnalyticsEvent.MEAL_INPUT_ADDED,
+                AnalyticsEvent.MEAL_ANALYZE_STARTED, AnalyticsEvent.MEAL_ITEM_EDIT_OPENED,
+                AnalyticsEvent.MEAL_MULTIPLIER_CHANGED, AnalyticsEvent.MEAL_RECORD_ABANDONED)) {
+            assertThat(eventLogRepository.findByUserIdAndEventType(user, type)).as(type).hasSize(1);
+        }
     }
 }

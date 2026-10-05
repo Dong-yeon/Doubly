@@ -59,4 +59,13 @@ public final class AnalyticsEvent {
     public static final String JOURNAL_SAVED = "JOURNAL_SAVED";
     /** MoodPicker 2단계("한 줄 남기기")가 떴다 — 저장 수(JOURNAL_SAVED:MOOD_PICKER)와 나눠 입구 전환율을 본다. detail 없음 */
     public static final String JOURNAL_PROMPT_SHOWN = "JOURNAL_PROMPT_SHOWN";
+
+    /** 식단 기록 화면 계측(2026-10-05) — 값은 {@link ClientAnalyticsEvent} 와 같다. 화면 정리 전 기준선 */
+    public static final String MEAL_RECORD_OPENED = "MEAL_RECORD_OPENED";
+    public static final String MEAL_INPUT_ADDED = "MEAL_INPUT_ADDED";
+    public static final String MEAL_ANALYZE_STARTED = "MEAL_ANALYZE_STARTED";
+    public static final String MEAL_ITEM_EDIT_OPENED = "MEAL_ITEM_EDIT_OPENED";
+    public static final String MEAL_MULTIPLIER_CHANGED = "MEAL_MULTIPLIER_CHANGED";
+    public static final String MEAL_RECORD_SAVED = "MEAL_RECORD_SAVED";
+    public static final String MEAL_RECORD_ABANDONED = "MEAL_RECORD_ABANDONED";
 }

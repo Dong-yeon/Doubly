@@ -40,7 +40,7 @@ import { usePlaceStore } from '../../store/placeStore';
 import { usePlanStore } from '../../store/planStore';
 import { useRelationStore } from '../../store/relationStore';
 import { workoutApi } from '../../api/workout';
-import { analyticsApi } from '../../api/analytics';
+import { analyticsApi, track } from '../../api/analytics';
 import { dietApi } from '../../api/diet';
 import { streakApi } from '../../api/streak';
 import { feedApi } from '../../api/feed';
@@ -406,6 +406,8 @@ export function HomeScreen({ navigation }: Props) {
       photoUrl = await uploadImage(picked);
       const mealType = mealTypeForNow();
       const saved = await dietApi.save({ mealDate: todayKst(), mealType, photoUrl });
+      // 기록 화면과 경로를 비교하려고 같은 이벤트로 센다(시트는 열린 시간·항목이 없다 — 사진 한 장 저장)
+      track('MEAL_RECORD_SAVED', `sheet;i=0;p=1;d=0;a=${autoAnalyzeMealPhoto ? 1 : 0}`);
       haptics.success();
       setMealSheet(false);
       /*

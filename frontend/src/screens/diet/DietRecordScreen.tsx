@@ -41,6 +41,7 @@ import { pickImageAsset, takePhotoAsset, shrinkImage, uploadImage } from '../../
 import { getErrorMessage } from '../../utils/error';
 import { errorCodeOf } from '../../api/client';
 import { uploadApi, wasRejected } from '../../api/upload';
+import { track } from '../../api/analytics';
 import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
@@ -112,6 +113,8 @@ const num = (v: string) => (v.trim() ? Number(v) : undefined);
 const isFilled = (i: ItemForm) => i.name.trim().length > 0;
 /** 이름은 적었는데 칼로리가 빈 항목 — "0" 을 직접 적은 건 의도한 값이므로 빈 것으로 보지 않는다 */
 const lacksCalories = (i: ItemForm) => isFilled(i) && i.calories.trim() === '';
+/** 계측용 — 연 뒤 지난 초. 연 시각을 아직 못 적었으면 0 */
+const elapsedSec = (openedAt: number) => (openedAt > 0 ? Math.round((Date.now() - openedAt) / 1000) : 0);
 /** 한도 주기를 말로 — /plan/me 의 period 그대로(AI 음식 분석은 지금 DAY) */
 const PERIOD_WORD: Partial<Record<FeatureState['period'], string>> = { DAY: '오늘', WEEK: '이번 주', MONTH: '이번 달' };
 const NEXT_PERIOD_WORD: Partial<Record<FeatureState['period'], string>> = { DAY: '내일', WEEK: '다음 주', MONTH: '다음 달' };
@@ -168,6 +171,18 @@ export function DietRecordScreen({ navigation, route }: Props) {
    */
   const [chatPhotoUrl] = useState(() => (editing ? undefined : route.params?.photoUrl));
   const initialPhoto = editing?.photoUrl ?? chatPhotoUrl ?? null;
+  /** 어디서 들어왔나(계측) — 처음 연 파라미터로 정한다. 푸시·딥링크로 바로 열려도 파라미터가 없으면 main */
+  const [recordSource] = useState(() =>
+    editing
+      ? 'edit'
+      : chatPhotoUrl
+        ? 'chat'
+        : route.params?.date
+          ? 'calendar'
+          : route.params?.returnTo === 'Home'
+            ? 'home'
+            : 'main',
+  );
   const [mealType, setMealType] = useState<MealType>(editing?.mealType ?? defaultMealType());
   /** 기록할 날짜 — 수정이면 그 기록의 날짜, 캘린더에서 날짜를 골라 들어오면 그 날짜, 아니면 오늘 */
   const [mealDate, setMealDate] = useState(editing?.mealDate ?? route.params?.date ?? todayKst());
@@ -345,10 +360,27 @@ export function DietRecordScreen({ navigation, route }: Props) {
   );
   // 저장이 됐거나 됐을 수도 있으면(타임아웃) 나갈 때 사진을 치우지 않는다
   const maybeSavedRef = useRef(false);
+  /*
+   * 기준선 계측(docs/lovebody-record-screen-plan_2026-10-05.md §9) — 화면을 연 시각과, 나갈 때 읽을 "지금 상태".
+   * 연 시각은 렌더가 아니라 effect 에서 적는다(렌더 중 Date.now 는 순수성 위반).
+   */
+  const openedAtRef = useRef(0);
+  const latestRef = useRef({ items: 0, photo: false });
+  useEffect(() => {
+    latestRef.current = { items: items.filter(isFilled).length, photo: !!photoUri };
+  });
   useEffect(
-    () => () => {
-      // 저장 요청이 아직 가는 중이면 곧 기록이 될 사진일 수 있다 — 그때도 두고 간다
-      if (!maybeSavedRef.current && !savingRef.current) discardPreUpload(uploadedRef.current);
+    () => {
+      openedAtRef.current = Date.now();
+      track('MEAL_RECORD_OPENED', recordSource);
+      return () => {
+        // 저장 요청이 아직 가는 중이면 곧 기록이 될 사진일 수 있다 — 그때도 두고 간다
+        if (!maybeSavedRef.current && !savingRef.current) {
+          discardPreUpload(uploadedRef.current);
+          const { items: n, photo } = latestRef.current;
+          track('MEAL_RECORD_ABANDONED', `${editing ? 'edit' : 'new'};t=${elapsedSec(openedAtRef.current)};i=${n};p=${photo ? 1 : 0}`);
+        }
+      };
     },
     // 나갈 때 한 번 — 그 순간의 ref 를 읽는 게 목적이다
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -540,9 +572,13 @@ export function DietRecordScreen({ navigation, route }: Props) {
   };
   /** 먹은 양 배수 칩 — 기준 × 배수(utils/mealScale) */
   const scaleItem = (key: string, m: number) => {
+    track('MEAL_MULTIPLIER_CHANGED', String(m));
     setItems((prev) => prev.map((i) => (i.key === key ? applyMultiplier(i, m) : i)));
   };
-  const addItem = () => setItems((prev) => [...prev, newItem()]);
+  const addItem = () => {
+    track('MEAL_INPUT_ADDED', 'manual');
+    setItems((prev) => [...prev, newItem()]);
+  };
   const removeItem = (key: string) => {
     setItems((prev) => {
       const next = prev.filter((i) => i.key !== key);
@@ -618,6 +654,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
   useEffect(() => {
     const result = route.params?.barcodeResult;
     if (!result) return;
+    track('MEAL_INPUT_ADDED', 'barcode');
     appendFoods([
       {
         name: (result.foodName || `바코드 ${result.barcode}`).slice(0, MAX_NAME),
@@ -652,6 +689,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
   // 최근 항목 탭 — 즐겨찾기(addFavorite)와 같은 방식으로 항목 하나로 들어온다
   const addRecent = (food: RecentFood) => {
     haptics.light();
+    track('MEAL_INPUT_ADDED', 'recent');
     const created = appendFoods([
       {
         name: food.name.slice(0, MAX_NAME),
@@ -682,6 +720,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
   // 칼로리 없이 저장된 옛 즐겨찾기는 내 기록에서 찾아 채운다(backfillFromHistory).
   const addFavorite = (fav: FavoriteFood) => {
     haptics.light();
+    track('MEAL_INPUT_ADDED', 'favorite');
     const created = appendFoods(
       fav.items.map((i) => ({
         name: i.name,
@@ -812,6 +851,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
     try {
       const picked = source === 'camera' ? await takePhotoAsset() : await pickImageAsset();
       if (!picked) return;
+      track('MEAL_INPUT_ADDED', source === 'camera' ? 'photo_camera' : 'photo_gallery');
       // 고르자마자 줄인다 — 업로드·서버 다운로드·Gemini 전송이 한꺼번에 가벼워진다
       const uri = await shrinkImage(picked);
       // 다시 고른 것이면 앞서 미리 올린 사진은 버려진다
@@ -857,6 +897,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
   // AI 음식 분석 — 결과는 추정치라 항목으로 채워만 주고 확정(저장)은 사용자가 한다
   const onAnalyze = async () => {
     if (!photoUri) return;
+    track('MEAL_ANALYZE_STARTED', 'photo');
     setAnalyzing(true);
     try {
       const photoUrl = await uploadForSubmit(photoUri);
@@ -922,6 +963,8 @@ export function DietRecordScreen({ navigation, route }: Props) {
    * 사진을 덮어서도 안 된다. 그래서 {@link pickFrom} 을 거치지 않고 분석용으로만 올린다.
    */
   const analyzeLabelPhoto = async (uri: string, productName?: string) => {
+    track('MEAL_INPUT_ADDED', 'label');
+    track('MEAL_ANALYZE_STARTED', 'label');
     setAnalyzing(true);
     // 영양성분표 사진은 분석에만 쓰고 저장하지 않는다 — 분석이 <b>끝나면</b> 치운다(예전엔 항상 고아로 남았다).
     // "아직 만들고 있어요"(2분 대기 초과, status 0)면 서버 작업이 아직 그 파일을 받아야 할 수 있어 두고 간다.
@@ -966,6 +1009,8 @@ export function DietRecordScreen({ navigation, route }: Props) {
   const analyzeItemsWithAi = async (source: ItemForm[]): Promise<ItemForm[] | null> => {
     const text = describeItems(source);
     if (!text) return null;
+    // 공공 DB 로 다 찾으면 AI 를 부르지 않는다 — AI 를 실제로 부를 때만 센다
+    track('MEAL_ANALYZE_STARTED', 'text');
     setAnalyzingText(true);
     try {
       const result = await dietApi.analyzeText(text);
@@ -1173,6 +1218,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
       if (editing) {
         await update(editing.id, payload);
         maybeSavedRef.current = true;
+        track('MEAL_RECORD_SAVED', `edit;t=${elapsedSec(openedAtRef.current)};i=${payloadItems.length};p=${photoUrl ? 1 : 0};d=0;a=0`);
         haptics.success();
         toast.success('식단을 수정했어요');
         allowLeave();
@@ -1228,6 +1274,10 @@ export function DietRecordScreen({ navigation, route }: Props) {
        */
       const willAutoAnalyze =
         !!photoUrl && payloadItems.length === 0 && !num(totalCalories) && autoAnalyzeMealPhoto;
+      track(
+        'MEAL_RECORD_SAVED',
+        `new;t=${elapsedSec(openedAtRef.current)};i=${payloadItems.length};p=${photoUrl ? 1 : 0};d=${payload.sharedWithPartner ? 1 : 0};a=${willAutoAnalyze ? 1 : 0}`,
+      );
 
       const saveMessage =
         (payload.sharedWithPartner
@@ -1684,7 +1734,10 @@ export function DietRecordScreen({ navigation, route }: Props) {
               {/* 탄단지는 대개 AI가 채워두고 손대지 않는다 — 접어두되 값은 요약으로 보여준다 */}
               <TouchableOpacity
                 style={styles.macroToggle}
-                onPress={() => updateItem(item.key, { showMacros: !item.showMacros })}
+                onPress={() => {
+                  if (!item.showMacros) track('MEAL_ITEM_EDIT_OPENED', 'macros');
+                  updateItem(item.key, { showMacros: !item.showMacros });
+                }}
                 accessibilityRole="button"
               >
                 <MaterialCommunityIcons
