@@ -49,6 +49,12 @@ export const STORAGE_KEYS = {
  */
 export const SERVICE_STATUS_URL = 'https://dubly.co.kr/status.json';
 
+/**
+ * 커플 초대 링크 — 소개 사이트(landing/invite.html)가 코드를 보여 주고 "앱에서 열기"·스토어 설치로 잇는다.
+ * 2단계(App Links·Universal Links)부터는 앱이 깔려 있으면 이 주소로 앱이 바로 열린다.
+ */
+export const INVITE_LINK_BASE = 'https://dubly.co.kr/i/';
+
 /** 강제 업데이트 화면의 스토어 링크 */
 export const STORE_URLS = {
   android: 'https://play.google.com/store/apps/details?id=com.doubly.app',

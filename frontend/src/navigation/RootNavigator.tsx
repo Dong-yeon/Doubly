@@ -25,6 +25,9 @@ import {
   watchPushTokenChanges,
 } from '../utils/push';
 import { usePlanStore } from '../store/planStore';
+import { useRelationStore } from '../store/relationStore';
+import { toast } from '../store/toastStore';
+import { onPendingInvite, takePendingInvite } from '../utils/pendingInvite';
 import { ConsentGateScreen } from '../screens/onboarding/ConsentGateScreen';
 import { useAuthStore } from '../store/authStore';
 import { useThemeStore } from '../store/themeStore';
@@ -144,6 +147,7 @@ export function RootNavigator() {
    * 네이티브 호출을 매 프레임 하지 않는다.
    */
   const containerRef = useNavigationContainerRef<RootStackParamList>();
+  const [navReady, setNavReady] = useState(false);
   const dismissedPathRef = useRef<string | null>(null);
   const pathOf = useCallback((state: NavigationState | undefined): string | null => {
     if (!state) return null;
@@ -205,6 +209,43 @@ export function RootNavigator() {
     return () => sub.remove();
   }, [bootFailed, bootstrap]);
 
+  /*
+   * 초대 링크로 받아 둔 코드 — 메인 화면에 들어온 뒤에 연결 화면을 열고 코드를 채운다
+   * (utils/pendingInvite, docs/first-experience-audit.md #2). 로그인 전에 받은 링크는 로그인·가입이
+   * 끝난 이 시점에, 이미 메인에 있을 때 받은 링크는 받자마자 처리된다.
+   * 이미 커플이면 연결 화면을 열지 않는다 — 열어 봐야 "이미 연결된 관계"만 만난다.
+   */
+  const mainReady = navReady && isAuthenticated && !needsConsent;
+  useEffect(() => {
+    if (!mainReady) return undefined;
+    let alive = true;
+    const open = async (code: string) => {
+      const relations = useRelationStore.getState();
+      if (!relations.loaded) await relations.fetchAll().catch(() => undefined);
+      if (!alive) return;
+      if (useRelationStore.getState().couple?.partner) {
+        toast.info('이미 커플로 연결돼 있어요');
+        return;
+      }
+      containerRef.navigate('Main', {
+        screen: 'Home',
+        params: { screen: 'CoupleConnect', params: { code }, initial: false },
+      } as never);
+    };
+    void takePendingInvite().then((code) => {
+      if (code && alive) void open(code);
+    });
+    const off = onPendingInvite(() => {
+      void takePendingInvite().then((code) => {
+        if (code && alive) void open(code);
+      });
+    });
+    return () => {
+      alive = false;
+      off();
+    };
+  }, [mainReady, containerRef]);
+
   if (isLoading) {
     return <BootSpinner />;
   }
@@ -250,6 +291,7 @@ export function RootNavigator() {
          * 트레이에 남는다. 준비된 시점에 한 번 훑는다.
          */
         onReady={() => {
+          setNavReady(true);
           const path = pathOf(containerRef.getRootState());
           if (path == null) return;
           setCurrentPath(path);
