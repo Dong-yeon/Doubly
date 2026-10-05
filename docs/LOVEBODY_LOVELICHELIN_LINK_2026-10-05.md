@@ -415,11 +415,11 @@ order by visits desc;
 ```
 
 이 답으로 P0 마이그레이션은 2개로 정해진다: ① `place_visits.client_request_id` + UNIQUE(visited_by, client_request_id) ② `place_ratings.revisit_intent` NULL 초기화.
-③ `place_visits.meal_id` UNIQUE 는 위 SQL 결과를 받은 뒤 별도 마이그레이션.
+③ `place_visits.meal_id` UNIQUE — **운영 점검 결과 0행(2026-10-05, 사용자가 Railway 에서 실행)** → 정리할 데이터 없이 바로 넣는다. P0 마이그레이션에 함께 싣는다(H2·PG 공통 `CREATE UNIQUE INDEX`, NULL 은 여러 행 허용).
 
 ## 6. P0 구현 순서 (한 줄씩)
 
-1. 마이그레이션: `place_visits.client_request_id` + UNIQUE(visited_by, client_request_id), `place_ratings.revisit_intent` NULL 초기화 — 번호는 원격 기준으로 그때 센다. (`meal_id` UNIQUE 는 Q8 점검 SQL 결과 뒤)
+1. 마이그레이션: `place_visits.client_request_id` + UNIQUE(visited_by, client_request_id), `place_ratings.revisit_intent` NULL 초기화 — 번호는 원격 기준으로 그때 센다. + `place_visits.meal_id` UNIQUE(Q8 점검 0행 확인됨)
 2. 서버 `POST /places/meal-visits`: 장소 확정(별도 tx) → 식단·방문·평점(본 tx, 평점은 대표 평점이 없을 때만 — Q3) → 커밋 뒤 푸시 1회·이벤트 2종·자동 분석, 멱등 재전송 테스트를 먼저 실패시키고 구현.
 2-1. 서버 `DELETE /meal/{id}?withVisit=true`(Q4) — 기본은 지금처럼 끊기만.
 3. 서버 `withPlaces` 가 같이 먹기 짝(`shared_group_id`)으로 상대 몫 📍를 찾게, `recordVisit` 에 KST 미래 날짜 거부.
