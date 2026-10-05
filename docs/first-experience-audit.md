@@ -140,6 +140,8 @@ iOS 업데이트 그룹 `f7c26a04`·Android `c1b36ef8`). 소개 사이트는 **G
 
 **2026-10-05 — #10 사진 한도: 식단 사진을 별도 주머니로**
 
+서버 배포(`03b4c050`)·production OTA 완료(2026-10-05, 1.0.6 대상 — fingerprint 일치, iOS `c5cbc6a3`·Android `24a4d188`).
+
 - 새 기능 `MEAL_PHOTO`: 사람 단위 **하루 10장**, FREE·PRO 같음 → 비교표에서 빠지고 넘겨도 업셀하지 않는다(429).
   `JOURNAL_PHOTO` 와 같은 "기록은 무료" 원칙. 커플 공용 `PHOTO_UPLOAD`(월 60장)는 이제 일상·채팅 등에만 쓰인다.
 - 서버 `POST /uploads/meal-signature`. 폴더는 공용과 같다 — 버린 미리 올리기 사진 정리(`UploadDiscardPolicy`)가
