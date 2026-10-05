@@ -32,7 +32,9 @@
   .meta { font-size: 13px; color: #8a8f8a; margin-bottom: 28px; }
   p, li { font-size: 15px; word-break: keep-all; }
   ul { padding-left: 20px; }
-  a { color: #2f8f5b; }
+  /* 링크 — 소개 페이지(index.html --link)와 같은 하늘 계열. 예전 초록 #2f8f5b 는 앱이 초록이던 시절 값(2026-10-05 색 교체) */
+  a { color: #2a6aae; }
+  @media (prefers-color-scheme: dark) { a { color: #8cc2f5; } }
   .card {
     border: 1px solid #e6e6e3;
     background: #fff;
