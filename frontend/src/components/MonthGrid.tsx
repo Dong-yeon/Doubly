@@ -39,12 +39,25 @@ export function MonthGrid({
   dayLabel,
   disableAfterDay,
 }: Props) {
-  const cells = useMemo(() => {
+  /*
+   * 주 단위로 잘라 한 줄씩 그린다 — flexWrap 에 맡기지 않는다(2026-10-05).
+   *
+   * <p>예전엔 칸 폭을 `${100 / 7}%` 로 주고 flexWrap 으로 줄을 바꿨다. 100/7 은 문자열로 "14.285714285714286" 이라
+   * 1/7 보다 아주 조금 크고, Yoga 가 float 로 일곱 칸을 더하면 <b>폭에 따라</b> 줄 폭을 0.00003 넘는다 — 그러면 토요일
+   * 칸이 다음 줄로 떨어지고 그 뒤 날짜가 전부 한 칸씩 밀린다. 같은 계산을 흉내 내 보면 이 화면 폭(기기 폭 − 64)에서
+   * 384dp·412dp 기기(갤럭시 S 계열에 흔하다)가 걸리고 393·411 은 안 걸린다. 그래서 기기에 따라서만 깨졌다.
+   * 줄마다 flex:1 일곱 칸이면 남는 폭을 나눠 가질 뿐 넘칠 수가 없다.
+   */
+  const weeks = useMemo(() => {
     const firstDay = new Date(year, month - 1, 1).getDay();
     const daysInMonth = new Date(year, month, 0).getDate();
     const arr: (number | null)[] = Array(firstDay).fill(null);
     for (let d = 1; d <= daysInMonth; d++) arr.push(d);
-    return arr;
+    // 마지막 주도 일곱 칸을 채워야 flex:1 칸의 폭이 다른 줄과 같다
+    while (arr.length % 7 !== 0) arr.push(null);
+    const rows: (number | null)[][] = [];
+    for (let i = 0; i < arr.length; i += 7) rows.push(arr.slice(i, i + 7));
+    return rows;
   }, [year, month]);
 
   return (
@@ -56,50 +69,51 @@ export function MonthGrid({
           </Text>
         ))}
       </View>
-      <View style={styles.grid}>
-        {cells.map((day, i) => {
-          if (!day) return <View key={`pad-${i}`} style={styles.cell} />;
-          const disabled = disableAfterDay != null && day > disableAfterDay;
-          const selected = selectedDay === day;
-          return (
-            <View key={day} style={styles.cell}>
-              <Pressable
-                onPress={onPressDay && !disabled ? () => onPressDay(day) : undefined}
-                disabled={!onPressDay || disabled}
-                style={({ pressed }) => [
-                  styles.day,
-                  todayDay === day && styles.today,
-                  selected && styles.selected,
-                  pressed && styles.pressed,
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel={dayLabel ? dayLabel(day) : `${month}월 ${day}일`}
-                accessibilityState={{ selected, disabled }}
-              >
-                <Text style={[styles.dayText, disabled && styles.dayTextDisabled]}>{day}</Text>
-                <View style={styles.mark}>{renderMark ? renderMark(day) : null}</View>
-              </Pressable>
-            </View>
-          );
-        })}
-      </View>
+      {weeks.map((week, w) => (
+        <View key={w} style={styles.week}>
+          {week.map((day, i) => {
+            if (!day) return <View key={`pad-${w}-${i}`} style={styles.cell} />;
+            const disabled = disableAfterDay != null && day > disableAfterDay;
+            const selected = selectedDay === day;
+            return (
+              <View key={day} style={styles.cell}>
+                <Pressable
+                  onPress={onPressDay && !disabled ? () => onPressDay(day) : undefined}
+                  disabled={!onPressDay || disabled}
+                  style={({ pressed }) => [
+                    styles.day,
+                    todayDay === day && styles.today,
+                    selected && styles.selected,
+                    pressed && styles.pressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={dayLabel ? dayLabel(day) : `${month}월 ${day}일`}
+                  accessibilityState={{ selected, disabled }}
+                >
+                  <Text style={[styles.dayText, disabled && styles.dayTextDisabled]}>{day}</Text>
+                  <View style={styles.mark}>{renderMark ? renderMark(day) : null}</View>
+                </Pressable>
+              </View>
+            );
+          })}
+        </View>
+      ))}
     </View>
   );
 }
 
-const CELL = `${100 / 7}%` as const;
-
 const styles = themedStyles((colors) => ({
   weekRow: { flexDirection: 'row', marginBottom: spacing.xs },
   weekday: {
-    width: CELL,
+    flex: 1,
     textAlign: 'center',
     fontSize: fontSize.caption,
     fontWeight: '700',
     color: colors.textSecondary,
   },
-  grid: { flexDirection: 'row', flexWrap: 'wrap' },
-  cell: { width: CELL, padding: 2 },
+  week: { flexDirection: 'row' },
+  // minWidth 0 — 칸 안 내용(이모지 등)이 넓어도 일곱 칸이 같은 폭을 지킨다
+  cell: { flex: 1, minWidth: 0, padding: 2 },
   day: {
     alignItems: 'center',
     paddingVertical: spacing.xs,
