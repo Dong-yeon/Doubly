@@ -27,9 +27,9 @@ const tintColor = (tint: NonNullable<Props['tint']>): string =>
     surface: colors.surfaceCard,
     /** 중립 강조 — 소유자와 무관한 카드 */
     neutral: colors.primaryBg,
-    /** 상대(Indigo) 계열 배경 */
+    /** 상대(하늘) 계열 배경 */
     partner: colors.partnerBg,
-    /** 함께(Violet) 계열 배경 */
+    /** 함께(라벤더) 계열 배경 */
     together: colors.togetherBg,
   })[tint];
 
