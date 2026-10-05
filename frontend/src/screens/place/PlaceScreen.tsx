@@ -276,7 +276,7 @@ export function PlaceScreen() {
   );
   // 고른 장소 — 전체에서 찾는다. 검색에서 막 담은 곳은 검색어(=이름 필터)에 안 걸릴 수 있어서다. 지워졌으면 null
   const selectedPlace = selectedId != null ? (allPlaces.find((p) => p.id === selectedId) ?? null) : null;
-  const searchResults = search?.status === 'done' ? search.results : [];
+  const searchResults = useMemo(() => (search?.status === 'done' ? search.results : []), [search]);
   const pickedResult = selectedResult != null ? (searchResults[selectedResult] ?? null) : null;
 
   // 핀 이미지 — 테마 색이 바뀔 때만 다시 그린다(다크 모드에서도 지도 타일은 밝아 색은 그대로 쓴다)
