@@ -8,6 +8,7 @@ import type {
   LovelichelinRecommendation,
   Meal,
   MealType,
+  EatOutStats,
   Place,
   PlaceMenu,
   PlaceSearchResponse,
@@ -112,6 +113,9 @@ export const placeApi = {
 
   recordVisit: (placeId: number, payload: RecordVisitPayload) =>
     unwrap(apiClient.post<ApiResponse<PlaceVisit>>(`/places/${placeId}/visits`, payload)),
+  // 이번 달 외식(커플 단위) — month 는 YYYY-MM, 없으면 KST 이번 달
+  eatOutStats: (month?: string) =>
+    unwrap(apiClient.get<ApiResponse<EatOutStats>>('/places/eat-out/stats', month ? { params: { month } } : undefined)),
   // "여기서 먹은 것" — 이 장소 방문에 붙은 식단의 음식 이름·횟수 + 대표 메뉴 제안
   menu: (placeId: number) => unwrap(apiClient.get<ApiResponse<PlaceMenu>>(`/places/${placeId}/menu`)),
   visits: (placeId: number) =>

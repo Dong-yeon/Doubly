@@ -13,7 +13,8 @@ import { Card } from '../../components/Card';
 import { EmptyState } from '../../components/EmptyState';
 import { LockedCard } from '../../components/LockedCard';
 import { dietApi } from '../../api/diet';
-import type { DayNutrition, MealStats, NutritionTargets } from '../../types';
+import { placeApi } from '../../api/place';
+import type { DayNutrition, EatOutStats, MealStats, MealType, NutritionTargets } from '../../types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 
@@ -23,9 +24,12 @@ export function DietStatsScreen() {
   // 실패해도 stats 를 null 로 지우지 않는다 — 그러면 "0일" 카드들이 실제 0인 것처럼
   // 보인다(QA_CHECKLIST.md P1-7). error 로 별도 표시해 재시도할 수 있게 한다.
   const [error, setError] = useState(false);
+  // 이번 달 외식 — 부가 카드라 실패하면(커플 미연결 포함) 카드째 숨긴다
+  const [eatOut, setEatOut] = useState<EatOutStats | null>(null);
 
   const load = useCallback(() => {
     setError(false);
+    placeApi.eatOutStats().then(setEatOut, () => setEatOut(null));
     return dietApi
       .stats()
       .then(setStats)
@@ -126,6 +130,8 @@ export function DietStatsScreen() {
           </Card>
         ) : null}
 
+        {eatOut && (eatOut.visits > 0 || eatOut.previousOutings > 0) ? <EatOutCard stats={eatOut} /> : null}
+
         {/* ── 심화 통계 (PRO) ─────────────────────────────────────────── */}
         {stats?.locked ? (
           <LockedCard
@@ -143,6 +149,53 @@ export function DietStatsScreen() {
         ) : null}
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+const MEAL_TYPE_LABEL: Record<MealType, string> = { BREAKFAST: '아침', LUNCH: '점심', DINNER: '저녁', SNACK: '간식' };
+
+/**
+ * 이번 달 외식 — 둘이 함께 쌓은 기록이라 칼로리 없이 횟수·장소만(LOVEBODY_LOVELICHELIN_LINK P2-3).
+ * "외식"은 장소가 붙은 식단이다. 카페·전시처럼 식단 없이 다녀온 곳은 "다녀온 곳"에만 센다.
+ */
+function EatOutCard({ stats }: { stats: EatOutStats }) {
+  const diff = stats.outings - stats.previousOutings;
+  const meals = (Object.keys(MEAL_TYPE_LABEL) as MealType[])
+    .filter((t) => (stats.byMealType[t] ?? 0) > 0)
+    .map((t) => `${MEAL_TYPE_LABEL[t]} ${stats.byMealType[t]}`)
+    .join(' · ');
+  return (
+    <Card elevation="sm" style={styles.section}>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>이번 달 외식</Text>
+        {stats.previousOutings > 0 || stats.outings > 0 ? (
+          <Text style={styles.avg}>
+            {diff === 0 ? '지난달과 같아요' : diff > 0 ? `지난달보다 ${diff}번 더` : `지난달보다 ${-diff}번 덜`}
+          </Text>
+        ) : null}
+      </View>
+      <View style={styles.eatOutRow}>
+        <EatOutNumber label="외식" value={stats.outings} />
+        <EatOutNumber label="같이 먹음" value={stats.sharedOutings} />
+        <EatOutNumber label="처음 간 곳" value={stats.newPlaces} />
+        <EatOutNumber label="다녀온 곳" value={stats.visits} />
+      </View>
+      {meals ? <Text style={styles.eatOutMeta}>{meals}</Text> : null}
+      {stats.topPlaces.length > 0 ? (
+        <Text style={styles.eatOutMeta} numberOfLines={2}>
+          자주 간 곳 · {stats.topPlaces.map((p) => `${p.name} ${p.visits}번`).join(', ')}
+        </Text>
+      ) : null}
+    </Card>
+  );
+}
+
+function EatOutNumber({ label, value }: { label: string; value: number }) {
+  return (
+    <View style={styles.eatOutCell}>
+      <Text style={styles.eatOutValue}>{value}</Text>
+      <Text style={styles.summaryLabel}>{label}</Text>
+    </View>
   );
 }
 
@@ -277,4 +330,10 @@ const styles = themedStyles((colors) => ({
   trendSugar: { backgroundColor: colors.chart4 },
   legendRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
+
+  // 이번 달 외식 — 숫자 넷을 한 줄에
+  eatOutRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  eatOutCell: { flex: 1, alignItems: 'center' },
+  eatOutValue: { fontSize: fontSize.title, fontWeight: '800', color: colors.textPrimary },
+  eatOutMeta: { fontSize: fontSize.caption, color: colors.textSecondary },
 }));
