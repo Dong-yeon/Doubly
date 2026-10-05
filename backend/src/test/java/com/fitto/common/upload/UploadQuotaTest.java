@@ -159,4 +159,43 @@ class UploadQuotaTest {
         assertThatCode(() -> uploadController.signature(principal(b)))
                 .doesNotThrowAnyException();
     }
+
+    /**
+     * 식단 사진은 커플 공용 사진 한도를 깎지 않는다 — 사람 단위 하루 한도(MEAL_PHOTO)에서 센다.
+     * 예전엔 같은 주머니라 하루 세 끼를 찍으면 열흘 만에 일상·채팅 사진까지 막혔다(docs/first-experience-audit.md #10).
+     */
+    @Test
+    void 식단_사진은_커플_사진_한도와_따로_센다() {
+        Long a = register("upload-meal-a@fitto.com");
+        Long b = register("upload-meal-b@fitto.com");
+        relationService.connectCouple(b, relationService.createCoupleInvite(a).code());
+        int photoLimit = Feature.PHOTO_UPLOAD.quotaFor(Plan.FREE).limit();
+
+        // 커플 공용 사진 한도를 다 써도 식단 사진은 올라간다
+        for (int i = 0; i < photoLimit; i++) {
+            uploadController.signature(principal(a));
+        }
+        assertThatCode(() -> uploadController.mealSignature(principal(a))).doesNotThrowAnyException();
+        assertThatCode(() -> uploadController.mealSignature(principal(b))).doesNotThrowAnyException();
+    }
+
+    @Test
+    void 식단_사진_하루_한도는_사람마다_세고_결제를_권하지_않는다() {
+        Long a = register("upload-mealcap-a@fitto.com");
+        Long b = register("upload-mealcap-b@fitto.com");
+        relationService.connectCouple(b, relationService.createCoupleInvite(a).code());
+        int mealLimit = Feature.MEAL_PHOTO.quotaFor(Plan.FREE).limit();
+
+        for (int i = 0; i < mealLimit; i++) {
+            uploadController.mealSignature(principal(a));
+        }
+        // FREE 와 PRO 가 같은 한도라 402(결제 권유)가 아니라 429 다
+        assertThatThrownBy(() -> uploadController.mealSignature(principal(a)))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.USAGE_LIMIT_EXCEEDED);
+        // 상대 몫은 그대로고, 커플 공용 사진 한도도 그대로다
+        assertThatCode(() -> uploadController.mealSignature(principal(b))).doesNotThrowAnyException();
+        assertThatCode(() -> uploadController.signature(principal(a))).doesNotThrowAnyException();
+    }
 }

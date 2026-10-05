@@ -55,6 +55,22 @@ public class UploadController {
     }
 
     /**
+     * 식단 사진 서명 — 폴더는 공용 서명과 같고, 한도만 사람 단위 {@code MEAL_PHOTO} 에서 센다(Feature 주석).
+     *
+     * <p>폴더를 따로 두지 않는 이유: 식단 화면은 사진을 고르는 즉시 미리 올리고, 안 쓰면 {@link #discard} 로 치운다.
+     * 그 정리는 업로드 폴더 <b>바로 아래</b>의 파일만 허용한다({@link UploadDiscardPolicy}) — 하위 폴더로 옮기면 버린 사진이
+     * 쌓인다. 이 서명으로 올린 사진을 다른 화면에 써도 서버는 막지 못하지만, 그러려면 앱을 고쳐야 하고 얻는 건 사진 몇 장이다.
+     */
+    @PostMapping("/meal-signature")
+    public ApiResponse<UploadSignatureResponse> mealSignature(@AuthenticationPrincipal AuthUser user) {
+        if (!properties.isConfigured()) {
+            throw new BusinessException(ErrorCode.UPLOAD_NOT_CONFIGURED);
+        }
+        planGuard.consume(user.id(), Feature.MEAL_PHOTO);
+        return ApiResponse.success(CloudinarySigner.sign(properties));
+    }
+
+    /**
      * 올렸지만 쓰지 않은 사진 치우기 — 앱이 미리 올린 사진을 저장하지 않고 버렸을 때(다시 고르기·사진 빼기·화면 나가기)와
      * 분석에만 쓰고 저장하지 않는 사진(영양성분표)을 부른다. 예전엔 이런 파일이 Cloudinary 에 그대로 쌓였다
      * (docs/lovebody-current-state.md §4-6).

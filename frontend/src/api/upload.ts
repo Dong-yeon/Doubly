@@ -15,6 +15,12 @@ export const uploadApi = {
   signature: () =>
     unwrap(apiClient.post<ApiResponse<UploadSignature>>('/uploads/signature')),
   /**
+   * 식단 사진 서명 — 폴더는 같고 한도만 사람 단위 하루 한도(MEAL_PHOTO)에서 센다. 커플 공용 사진 한도(월 60장)를
+   * 식단 사진이 먹어서 일상·채팅 사진까지 막히던 문제(docs/first-experience-audit.md #10).
+   */
+  mealSignature: () =>
+    unwrap(apiClient.post<ApiResponse<UploadSignature>>('/uploads/meal-signature')),
+  /**
    * 올렸지만 쓰지 않은 사진 치우기 — 미리 올린 사진을 저장하지 않고 버렸을 때·분석에만 쓴 사진.
    * 서버가 "앱 업로드 폴더의 막 올린(24시간) 원본 + 아무 기록도 안 쓰는 것"만 지운다(UploadDiscardPolicy).
    * 화면 동작이 아니므로 결과를 기다리지 않고 실패도 삼킨다 — 못 지운 파일은 남을 뿐이다.

@@ -403,7 +403,7 @@ export function HomeScreen({ navigation }: Props) {
     try {
       const picked = source === 'camera' ? await takePhoto() : await pickImage();
       if (!picked) return;
-      photoUrl = await uploadImage(picked);
+      photoUrl = await uploadImage(picked, { purpose: 'meal' });
       const mealType = mealTypeForNow();
       const saved = await dietApi.save({ mealDate: todayKst(), mealType, photoUrl });
       // 기록 화면과 경로를 비교하려고 같은 이벤트로 센다(시트는 열린 시간·항목이 없다 — 사진 한 장 저장)

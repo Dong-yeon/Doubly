@@ -68,6 +68,7 @@ export type FeatureKey =
   | 'COUPLE_GAME'
   // 나만의 하루 기록 사진 — 사람 단위, FREE=PRO 하루 3(업셀 없음). docs/PERSONAL_JOURNAL_ANALYSIS_2026-10-02.md §5-1
   | 'JOURNAL_PHOTO'
+  | 'MEAL_PHOTO'
   // 나만의 하루 기록 — 게이팅 없음, 새 기록 생성 계측용
   | 'JOURNAL';
 
