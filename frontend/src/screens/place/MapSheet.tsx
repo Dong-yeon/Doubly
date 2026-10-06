@@ -7,7 +7,9 @@
  *
  * <p><b>끄는 곳은 손잡이·머리뿐이다.</b> 목록 본문까지 끌기를 받으면 목록 스크롤과 시트 끌기가 같은 손가락을
  * 다툰다(맨 위에서 아래로 끌면 시트, 아니면 스크롤 — 플랫폼마다 판정이 갈린다). 본문은 늘 스크롤만 한다.
- * 손잡이는 눌러도 한 단씩 바뀐다(끌기 어려운 사람·웹 마우스·스크린 리더용, 접근성 동작도 같다).
+ * 손잡이는 눌러도 바뀐다 — 미리보기 ↔ 중간을 오가고, 전체에서는 중간으로 내려온다(끌기 어려운 사람·웹 마우스용).
+ * 예전엔 미리보기→중간→전체→미리보기로 <b>위로만</b> 돌아서, 검색 뒤 중간에 선 시트를 내리려고 누르면 오히려
+ * 전체로 올라갔다("검색한 다음에 패널을 내리는 방법이 없다", 2026-10-06). 스크린 리더는 increment/decrement 로 세 단을 다 간다.
  *
  * <p>시트는 지도 <b>위에 겹친 형제 View</b> 라 시트 위의 터치는 지도(WebView/iframe)로 새지 않는다 —
  * 지도 팬·줌과 시트 끌기가 손가락을 나눠 갖지 않는다.
@@ -104,8 +106,8 @@ export function MapSheet({ containerHeight, fullTop, peekHeight, snap, onSnapCha
     const next = ORDER[Math.min(ORDER.length - 1, Math.max(0, i + dir))];
     onSnapChange(next);
   };
-  // 손잡이 탭 — 위로 한 단, 전체에서는 미리보기로 되돌아간다
-  const cycle = () => onSnapChange(snap === 'full' ? 'peek' : ORDER[ORDER.indexOf(snap) + 1]);
+  // 손잡이 탭 — 미리보기면 중간으로 올리고, 아니면 한 단 내린다(위 파일 주석)
+  const cycle = () => onSnapChange(snap === 'peek' ? 'half' : snap === 'full' ? 'half' : 'peek');
 
   if (containerHeight <= 0) return null;
 
@@ -118,7 +120,7 @@ export function MapSheet({ containerHeight, fullTop, peekHeight, snap, onSnapCha
             style={styles.handleHit}
             accessibilityRole="adjustable"
             accessibilityLabel={`장소 목록 크기 — ${SNAP_LABEL[snap]}`}
-            accessibilityHint="위아래로 끌거나 눌러서 목록 크기를 바꿔요"
+            accessibilityHint={snap === 'peek' ? '누르면 목록을 올려요. 위아래로 끌어도 돼요' : '누르면 목록을 내려요. 위아래로 끌어도 돼요'}
             accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
             onAccessibilityAction={(e) => step(e.nativeEvent.actionName === 'increment' ? 1 : -1)}
           >
