@@ -1,0 +1,10 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["D9F8L9VS2S.com.doubly.app.ios"],
+        "components": [{ "/": "/i/*", "comment": "커플 초대 링크 — docs/first-experience-audit.md #2" }]
+      }
+    ]
+  }
+}

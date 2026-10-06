@@ -13,11 +13,11 @@
   커플 초대 링크(https://dubly.co.kr/i/CODE)의 착지 페이지 — _redirects 가 /i/* 를 이 파일로 보낸다.
   docs/first-experience-audit.md #2.
 
-  1단계(지금): 링크를 누르면 브라우저로 여기 온다. 앱이 있으면 "앱에서 열기"(doubly:// 스킴)로 앱이
-  열리고, 앱이 그 코드를 연결 화면에 채운다(frontend/src/utils/pendingInvite.ts). 앱이 없으면 설치 후
-  "코드 복사"한 것을 붙여넣으면 된다(앱이 공유 문구째 붙여넣어도 코드를 골라낸다).
-  2단계(빌드 필요): App Links·Universal Links 가 켜지면 앱이 깔린 폰에서는 이 페이지를 거치지 않고
-  앱이 바로 열린다. Play 링크의 referrer 는 그때 설치 직후 코드를 이어받는 데 쓴다.
+  1.0.7 부터 앱이 깔린 폰에서는 App Links·Universal Links(.well-known/ 두 파일)로 이 페이지를 거치지 않고
+  앱이 바로 열린다. 그래도 여기 오는 경우 — 앱이 없거나 옛 버전이거나, 카카오톡 같은 인앱 브라우저가 링크를
+  가로챘을 때 — 를 위해 "앱에서 열기"(doubly:// 스킴)와 "코드 복사"를 그대로 둔다. 앱은 받은 코드를 연결
+  화면에 채운다(frontend/src/utils/pendingInvite.ts). Android 는 Play 링크의 referrer 로 설치 직후 첫 실행에
+  코드를 이어받는다(frontend/src/utils/installReferrer.ts). iOS 는 동등한 장치가 없어 코드 붙여넣기가 길이다.
 
   ⚠️ 코드 알파벳·길이는 백엔드 RelationService 와 같아야 한다(혼동 문자 I·O·0·1 제외 32자, 6자리).
 -->
@@ -102,7 +102,7 @@
     document.getElementById('valid').classList.remove('hidden');
     document.getElementById('code').textContent = code;
     document.getElementById('open').href = 'doubly://couple/connect/' + code;
-    // referrer 는 2단계(Play Install Referrer)에서 설치 직후 코드를 이어받는 데 쓴다 — 지금은 스토어가 무시한다
+    // referrer 는 설치 직후 첫 실행에 앱이 읽어 코드를 이어받는다(Play Install Referrer, 1.0.7 부터)
     document.getElementById('store-android').href =
       'https://play.google.com/store/apps/details?id=com.doubly.app&referrer=' + encodeURIComponent('invite=' + code);
 

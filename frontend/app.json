@@ -102,6 +102,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.doubly.app.ios",
+      "associatedDomains": ["applinks:dubly.co.kr"],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "CFBundleDevelopmentRegion": "ko"
@@ -118,6 +119,14 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": true,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [{ "scheme": "https", "host": "dubly.co.kr", "pathPrefix": "/i/" }],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ],
       "permissions": [
         "android.permission.RECORD_AUDIO"
       ],

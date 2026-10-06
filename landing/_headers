@@ -5,3 +5,9 @@
   Cache-Control: no-cache, no-store, must-revalidate
   Access-Control-Allow-Origin: *
   Content-Type: application/json; charset=utf-8
+# App Links·Universal Links 검증 파일 — OS 가 앱 설치 때 읽는다(docs/first-experience-audit.md #2 2단계).
+# AASA 는 확장자가 없어 Content-Type 을 직접 준다. 리다이렉트 없이 200 이어야 한다.
+/.well-known/apple-app-site-association
+  Content-Type: application/json
+/.well-known/assetlinks.json
+  Content-Type: application/json
