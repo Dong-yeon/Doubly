@@ -51,6 +51,19 @@ function holdIfInvite(url: string | null | undefined): boolean {
   return true;
 }
 
+/*
+ * 첫 화면 링크는 <b>앱 실행당 한 번만</b> 쓴다(네이티브).
+ *
+ * RootNavigator 는 테마·포인트 색을 바꾸면 NavigationContainer 를 key 로 다시 마운트하고 직전 상태를
+ * initialState 로 되돌린다. 그런데 다시 마운트될 때도 react-navigation 이 getInitialURL 을 다시 묻고, 아래
+ * 구현은 <b>마지막으로 탭한 알림</b>(getLastNotificationResponseAsync — 실행 내내 남는다)을 돌려준다. 링크가
+ * initialState 를 이기므로 설정에서 색을 바꾸면 예전에 눌렀던 채팅 알림의 방으로 튕겼다(2026-10-06).
+ * 콜드 스타트 링크는 처음 마운트에서 이미 처리됐으니 두 번째부터는 null 을 돌려 initialState 가 쓰이게 한다.
+ *
+ * 웹은 건드리지 않는다 — 기본 구현이 지금 주소(window.location)를 읽어 다시 마운트돼도 같은 화면이다.
+ */
+let initialUrlConsumed = false;
+
 export const linking: LinkingOptions<RootStackParamList> = {
   // 소개 사이트 주소는 2단계(App Links·Universal Links, 빌드 필요)부터 앱으로 바로 들어온다. 지금은 무해하다.
   prefixes: [PREFIX, 'https://dubly.co.kr', 'https://www.dubly.co.kr'],
@@ -64,6 +77,10 @@ export const linking: LinkingOptions<RootStackParamList> = {
    * 브라우저 히스토리 연동(위 주석)을 만드는데, 여기서 가로채면 그게 깨진다.
    */
   async getInitialURL() {
+    if (Platform.OS !== 'web') {
+      if (initialUrlConsumed) return null;
+      initialUrlConsumed = true;
+    }
     /*
      * 150ms 레이스는 react-navigation 기본 구현을 그대로 옮긴 것이다 — Android 에서
      * Linking.getInitialURL() 이 영영 resolve 되지 않는 경우가 있어(RN #25675), 이걸
