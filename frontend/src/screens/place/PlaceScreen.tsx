@@ -445,6 +445,15 @@ export function PlaceScreen() {
 
   // 지도 빈 곳 탭 — 고른 핀이 있으면 먼저 고름만 푼다(지도 앱의 "빈 곳 탭 = 닫기"), 없으면 그 자리에 추가할지 묻는다
   const onMapSelect = (pos: { lat: number; lng: number; address?: string | null }) => {
+    /*
+     * 검색 결과를 보는 중 빈 곳 탭 = 시트 내리기(지도 앱과 같다). 결과 핀을 보려고 지도를 누른 것이지
+     * 그 자리에 장소를 추가하려는 게 아니다 — 예전엔 "여기에 장소 추가" 카드가 떠 검색 목록을 덮었다(2026-10-06).
+     * 시트가 이미 내려가 있으면 아래 규칙대로 간다.
+     */
+    if (search && !selectedPlace && !pickedResult && snap !== 'peek') {
+      setSnap('peek');
+      return;
+    }
     if (selectedPlace || pickedResult) {
       setSelectedId(null);
       setSelectedResult(null);
@@ -654,6 +663,15 @@ export function PlaceScreen() {
         <Text style={styles.sheetTitle} numberOfLines={1}>
           ‘{search.query}’ 검색{search.status === 'done' ? ` ${search.results.length}곳` : ''}
         </Text>
+        {/*
+          목록 내리기/올리기 — 검색하면 시트가 중간으로 올라와 결과 핀을 가린다. 끌기(손잡이)는 눈에 잘 안 띄고
+          본문은 스크롤만 받으므로, 결과를 지도에서 보려면 누를 곳이 보여야 한다(2026-10-06).
+        */}
+        <IconButton
+          icon={snap === 'peek' ? 'chevron-up' : 'chevron-down'}
+          label={snap === 'peek' ? '검색 결과 목록 올리기' : '검색 결과 목록 내리기 — 지도 보기'}
+          onPress={() => setSnap(snap === 'peek' ? 'half' : 'peek')}
+        />
         <IconButton icon="close" label="검색 취소" onPress={cancelSearch} />
       </View>
     </View>
