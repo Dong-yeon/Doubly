@@ -197,13 +197,23 @@ public class OmokService {
         return toResponse(game, userId, couple);
     }
 
-    /** 포기 — 기록에 남지 않는다. */
+    /**
+     * 포기 — 기록에 남지 않는다.
+     *
+     * <p>상대에게 푸시로 알린다. 소켓 이벤트뿐이면 앱을 안 켠 상대는 판이 사라진 줄 모르고 "네 차례야"를
+     * 기다리고, 접힌 판이라 멈춘 판 리마인더도 가지 않는다(길막기 P1-2 와 같은 이유 — docs/game-current-state.md 8-1 #1).
+     */
     @Transactional
     public void giveUp(Long userId, Long gameId) {
         Relation couple = activeCouple(userId);
         OmokGame game = lockedGame(gameId, couple);
         if (!game.isInProgress()) return;
         game.abandon();
+        Long partnerId = couple.partnerOf(userId);
+        if (partnerId != null) {
+            notificationService.notify(partnerId, NotificationCategory.PARTNER, "오목 — 판을 접었어요",
+                    userName(userId) + "님이 하던 판을 접었어요. 새 판을 열어 볼까요?", PushLinks.GAME_OMOK);
+        }
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.GAME);
     }
 
