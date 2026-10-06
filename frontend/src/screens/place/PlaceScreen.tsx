@@ -24,6 +24,7 @@ import {
   ActivityIndicator,
   FlatList,
   Image,
+  Keyboard,
   Linking,
   Platform,
   Pressable,
@@ -217,6 +218,12 @@ export function PlaceScreen() {
   const [movedBounds, setMovedBounds] = useState<MapBounds | null>(null);
   const [areaBounds, setAreaBounds] = useState<MapBounds | null>(null);
   const [snap, setSnap] = useState<SheetSnap>('half');
+  // 손잡이를 끌거나 누른 것도 "목록을 보겠다"다 — 키보드가 시트를 덮고 있으면 내린다.
+  // 고정 참조로 둔다 — MapSheet 의 끌기 제스처가 이 값에 묶여 있어 렌더마다 새로 만들어지지 않게
+  const onSheetSnapChange = useCallback((next: SheetSnap) => {
+    Keyboard.dismiss();
+    setSnap(next);
+  }, []);
 
   // 지도를 못 쓰면(키 없음·로드 실패) 목록 화면으로 물러선다. 실패는 한 번 나면 이 화면 동안 유지한다
   const [mapFailed, setMapFailed] = useState(false);
@@ -420,7 +427,13 @@ export function PlaceScreen() {
     }
   };
 
+  /*
+   * 키보드 내리기 — 지도는 WebView 라 눌러도 입력창 포커스가 안 풀리고, iOS 키보드에는 내리는 키가 없다.
+   * 검색한 뒤 키보드가 결과 시트를 덮은 채 내릴 방법이 없었다(2026-10-06). 지도를 누르거나 옮기거나,
+   * 결과 목록을 끌거나, 검색을 실행하면 내린다.
+   */
   const onMarkerPress = (id: number) => {
+    Keyboard.dismiss();
     if (id < 0) {
       // 검색 결과 임시 핀
       const i = -id - 1;
@@ -445,6 +458,7 @@ export function PlaceScreen() {
 
   // 지도 빈 곳 탭 — 고른 핀이 있으면 먼저 고름만 푼다(지도 앱의 "빈 곳 탭 = 닫기"), 없으면 그 자리에 추가할지 묻는다
   const onMapSelect = (pos: { lat: number; lng: number; address?: string | null }) => {
+    Keyboard.dismiss();
     /*
      * 검색 결과를 보는 중 빈 곳 탭 = 시트 내리기(지도 앱과 같다). 결과 핀을 보려고 지도를 누른 것이지
      * 그 자리에 장소를 추가하려는 게 아니다 — 예전엔 "여기에 장소 추가" 카드가 떠 검색 목록을 덮었다(2026-10-06).
@@ -476,6 +490,8 @@ export function PlaceScreen() {
     const q = filter.search.trim();
     if (!q) return;
     const seq = ++searchSeq.current;
+    // [검색]을 눌렀으면 결과를 볼 차례다 — 웹·하드웨어 키보드는 제출해도 포커스가 남는다
+    Keyboard.dismiss();
     clearSheetCard();
     setSearch({ query: q, status: 'loading' });
     setSnap('half');
@@ -765,6 +781,7 @@ export function PlaceScreen() {
         keyExtractor={(r) => searchResultKey(r)}
         contentContainerStyle={styles.sheetList}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         renderItem={({ item, index }) => (
           <PlaceSearchResultCard
             result={item}
@@ -788,6 +805,8 @@ export function PlaceScreen() {
       data={sheetPlaces}
       keyExtractor={(p) => String(p.id)}
       contentContainerStyle={styles.sheetList}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
       refreshing={placeLoading}
       onRefresh={() => loadPlaces(true)}
       renderItem={({ item }) => renderPlaceCard(item, true)}
@@ -824,7 +843,10 @@ export function PlaceScreen() {
         onFailed={() => setMapFailed(true)}
         // 사용자가 움직였을 때만 버튼을 띄운다 — 앱이 맞춘 시야(처음 맞추기·핀 고르기·검색 결과)는 아니다
         onBoundsChange={(b) => {
-          if (b.byUser) setMovedBounds({ sw: b.sw, ne: b.ne });
+          if (b.byUser) {
+            Keyboard.dismiss();
+            setMovedBounds({ sw: b.sw, ne: b.ne });
+          }
         }}
       />
       {/* 지도 위 덮개 — 검색창 + 필터 칩 + 지도에 없는 N곳 안내. 시트 "전체" 높이의 위 끝이 이 아래다 */}
@@ -883,7 +905,7 @@ export function PlaceScreen() {
         fullTop={fullTop}
         peekHeight={peekHeight}
         snap={snap}
-        onSnapChange={setSnap}
+        onSnapChange={onSheetSnapChange}
         header={sheetHeader}
       >
         {sheetBody}
