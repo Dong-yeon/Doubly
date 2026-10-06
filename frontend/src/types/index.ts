@@ -728,6 +728,16 @@ export interface DailySudoku {
 }
 
 /** 같이 게임한 날의 연속 기록 — 스도쿠·오목을 가리지 않는다 */
+/**
+ * 한 종목의 전적 — 보는 사람 기준, 끝낸 판 전부(접은 판 제외). 기록 목록(최근 20판)으로 세면
+ * 21판째부터 줄어든다(docs/game-current-state.md 8-1 #9). 길막기는 draw 가 늘 0.
+ */
+export interface GameRecord {
+  me: number;
+  partner: number;
+  draw: number;
+}
+
 export interface GameStreak {
   current: number;
   best: number;
