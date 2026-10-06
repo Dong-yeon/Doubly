@@ -57,7 +57,30 @@ public class KakaoLocalClient {
      * PlaceService.save() 가 이 값으로 중복 등록을 막는 데 쓴다.
      */
     public record KakaoPlace(String id, String name, String address, String category,
-                             Double lat, Double lng, String placeUrl) {
+                             Double lat, Double lng, String placeUrl,
+                             /** 무엇을 파는 곳인지 — category_name 의 마지막 1~2단계("한식 · 냉면"). 없으면 null */
+                             String categoryDetail,
+                             /** 전화번호 — 없으면 null */
+                             String phone) {
+        /** 세부 분류·전화가 생기기 전의 호출부(테스트 등) 호환용 */
+        public KakaoPlace(String id, String name, String address, String category,
+                          Double lat, Double lng, String placeUrl) {
+            this(id, name, address, category, lat, lng, placeUrl, null, null);
+        }
+    }
+
+    /**
+     * 카카오 category_name → 세부 분류. "음식점 > 한식 > 냉면" 의 첫 단계(대분류 — 7종 카테고리가 이미 말한다)를 떼고
+     * 마지막 1~2단계만 " · " 로 잇는다: "한식 · 냉면". 단계가 하나뿐이면 그것만, 대분류뿐이면 null.
+     * 50자를 넘으면 자른다(places.category_detail varchar(50)).
+     */
+    static String categoryDetailOf(String categoryName) {
+        if (categoryName == null || categoryName.isBlank()) return null;
+        String[] parts = java.util.Arrays.stream(categoryName.split(">"))
+                .map(String::trim).filter(s -> !s.isEmpty()).toArray(String[]::new);
+        if (parts.length < 2) return null;
+        String detail = parts.length == 2 ? parts[1] : parts[parts.length - 2] + " · " + parts[parts.length - 1];
+        return detail.length() > 50 ? detail.substring(0, 50) : detail;
     }
 
     public List<KakaoPlace> searchKeyword(String query, int size) {
@@ -102,7 +125,15 @@ public class KakaoLocalClient {
                 mapCategory(doc.path("category_group_code").asText(null), doc.path("category_name").asText("")),
                 parseCoord(doc.path("y").asText(null)),  // 카카오는 y=위도, x=경도
                 parseCoord(doc.path("x").asText(null)),
-                doc.path("place_url").asText(null));
+                doc.path("place_url").asText(null),
+                categoryDetailOf(doc.path("category_name").asText("")),
+                blankToNull(doc.path("phone").asText("")));
+    }
+
+    private static String blankToNull(String s) {
+        if (s == null || s.isBlank()) return null;
+        String t = s.trim();
+        return t.length() > 30 ? t.substring(0, 30) : t;
     }
 
     /**

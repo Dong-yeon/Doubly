@@ -179,8 +179,11 @@ public class LovelichelinRecommendService {
                 if (!seenNames.add(normalize(k.name()))) {
                     continue;
                 }
+                // 링크는 장소 상세와 같은 규칙(카카오 id → PlaceLinks), id 가 없으면 검색이 준 주소
+                String link = PlaceLinks.detailUrl(k.id());
                 places.add(new RecommendedPlace(
-                        k.name(), k.address(), k.category(), k.lat(), k.lng(), reason, k.placeUrl()));
+                        k.name(), k.address(), k.category(), k.lat(), k.lng(), reason,
+                        link != null ? link : k.placeUrl(), k.id(), k.categoryDetail(), k.phone()));
                 if (places.size() - pickedBefore >= MAX_PER_SEARCH) {
                     break;
                 }

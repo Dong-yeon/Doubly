@@ -32,7 +32,11 @@ public record ResolvePlaceLinkResponse(
             Double lat,
             Double lng,
             String placeUrl,
-            Long existingPlaceId) {
+            Long existingPlaceId,
+            /** 무엇을 파는 곳·전화·카카오 상세(PlaceLinks) — 검색 결과와 같은 필드. 예전 앱은 무시한다 */
+            String categoryDetail,
+            String phone,
+            String detailUrl) {
     }
 
     /** 해석 실패 — 페이지를 못 열었거나 이름을 못 읽었다. ogTitle 이 있으면 앱이 그걸로 검색을 이어 간다 */
