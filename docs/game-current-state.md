@@ -375,3 +375,5 @@
 - **앱**: 허브(`MiniGamesScreen`)의 오목 전적과 오목·길막기 화면의 전적이 이 API 를 쓴다. 화면은 판이 끝날 때와 다시 읽을 때 함께 갱신하고, API 를 못 받으면 예전처럼 기록 목록으로 센다. 허브는 전적 실패가 다른 카드까지 비우지 않게 따로 받는다(#10 의 일부).
 - **검증**: `OmokFlowTest` 1건(22판을 두고 기록 목록 20판 대비 전적 21승 1패, DB 로 바꾼 무승부 1) + `WallRaceFlowTest` 1건. 게임 테스트가 H2·PostgreSQL 모두 통과했고 `*SyncTest` 도 통과했다. tsc·eslint 통과. 화면은 확인하지 않았다.
 
+
+**배포 (2026-10-06)**: #9 production OTA 게시 — 번들 소스 `c9d26548`, fingerprint 1.0.6 과 일치. 업데이트 그룹 android `5ff23bbc-bcbd-4df9-93d3-c05975560185`, ios `d3efcdf2-caf2-45e4-997d-a7f4dffca0f4`.
