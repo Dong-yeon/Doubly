@@ -583,7 +583,7 @@ const styles = themedStyles((colors) => ({
     gap: spacing.xxs,
     backgroundColor: colors.surface,
   },
-  termOptionActive: { borderColor: colors.primaryFill, backgroundColor: colors.primaryBg },
+  termOptionActive: { borderColor: colors.primary, backgroundColor: colors.primaryBg },
   termTitle: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary },
   termTitleActive: { color: colors.textPrimary },
   termPrice: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },

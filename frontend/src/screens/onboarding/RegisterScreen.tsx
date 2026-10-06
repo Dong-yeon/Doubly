@@ -208,7 +208,7 @@ const styles = themedStyles((colors) => ({
     backgroundColor: colors.surfaceAlt,
   },
   // 선택 상태는 앱 전체와 같은 값(primaryBg / primaryFill) — §6·§7 과 맞춘다
-  genderChipActive: { borderColor: colors.primaryFill, backgroundColor: colors.primaryBg },
+  genderChipActive: { borderColor: colors.primary, backgroundColor: colors.primaryBg },
   genderText: { color: colors.textSecondary, fontWeight: '700' },
   genderTextActive: { color: colors.textPrimary },
   pressed: { transform: [{ scale: 0.97 }] },
