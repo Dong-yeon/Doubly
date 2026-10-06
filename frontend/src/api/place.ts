@@ -11,7 +11,6 @@ import type {
   EatOutStats,
   Place,
   PlaceMenu,
-  MenuBoardAnalysis,
   PlaceSearchResponse,
   PlaceVisit,
   ResolvePlaceLinkResponse,
@@ -145,16 +144,6 @@ export const placeApi = {
     unwrap(apiClient.get<ApiResponse<EatOutStats>>('/places/eat-out/stats', month ? { params: { month } } : undefined)),
   // "여기서 먹은 것" — 이 장소 방문에 붙은 식단의 음식 이름·횟수 + 대표 메뉴 제안
   menu: (placeId: number) => unwrap(apiClient.get<ApiResponse<PlaceMenu>>(`/places/${placeId}/menu`)),
-  // 메뉴판 사진 읽기 — 접수증 → 폴링 → 결과(저장하지 않는다). 한도는 AI 음식 사진 분석과 같이 센다
-  analyzeMenuBoard: (placeId: number, photoUrl: string) =>
-    runAiJob<MenuBoardAnalysis>(
-      unwrap(apiClient.post<ApiResponse<AiJobStart>>(`/places/${placeId}/menu-board/analyze`, { photoUrl })),
-    ),
-  // 메뉴 저장 — 목록을 통째로 바꾼다(같은 요청을 다시 보내도 결과가 같다). photoUrl 은 이번에 찍은 메뉴판
-  saveMenuBoard: (placeId: number, payload: { items: { name: string; price: number | null }[]; photoUrl?: string }) =>
-    unwrap(apiClient.put<ApiResponse<PlaceMenu>>(`/places/${placeId}/menu-board`, payload)),
-  removeMenuBoardPhoto: (placeId: number, photoId: number) =>
-    unwrap(apiClient.delete<ApiResponse<PlaceMenu>>(`/places/${placeId}/menu-board/photos/${photoId}`)),
   visits: (placeId: number) =>
     unwrap(apiClient.get<ApiResponse<PlaceVisit[]>>(`/places/${placeId}/visits`)),
   removeVisit: (placeId: number, visitId: number) =>

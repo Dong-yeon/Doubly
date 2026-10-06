@@ -49,7 +49,6 @@ import { LovelichelinRuleSheet } from '../../components/LovelichelinRuleSheet';
 import { SoloPickBadge } from '../../components/SoloPickBadge';
 import { usePlaceStore } from '../../store/placeStore';
 import { SOLO_PICK_MIN_RATING } from './placeFilters';
-import { PlaceMenuBoardSection } from './PlaceMenuBoard';
 import { isKakaoMapConfigured } from '../../constants/config';
 import { placeApi } from '../../api/place';
 import { useDeleteAction } from '../../hooks/useDeleteAction';
@@ -698,12 +697,6 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
                   }}
                 />
               )}
-
-              {/*
-                메뉴 — 메뉴판을 찍어 둘이 쌓는 이름·가격(V131). 메뉴 응답을 받기 전(또는 실패)에는 그리지 않는다:
-                저장이 "통째로 바꾸기"라, 모르는 상태에서 고치면 남아 있던 메뉴를 지워 버린다.
-              */}
-              {menu ? <PlaceMenuBoardSection placeId={placeId} menu={menu} onMenuChange={setMenu} /> : null}
 
               {/*
                 여기서 먹은 것 — 이 장소 방문에 붙은 식단의 음식 이름·횟수(칼로리 없음 — 상대 식사 양 비노출 결정).
