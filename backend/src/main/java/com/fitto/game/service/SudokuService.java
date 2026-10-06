@@ -246,7 +246,12 @@ public class SudokuService {
         return toResponse(game, userId, couple);
     }
 
-    /** 포기 — 기록에 남지 않는다. 진행 중이 아니면 그대로 둔다(둘이 동시에 눌러도 오류 없음). */
+    /**
+     * 포기 — 기록에 남지 않는다. 진행 중이 아니면 그대로 둔다(둘이 동시에 눌러도 오류 없음).
+     *
+     * <p>상대에게 푸시로 알린다 — 같이 채우던 판이 앱을 안 켠 사이에 사라지면 상대는 그 판을 이어서 풀려고
+     * 들어왔다가 빈 화면을 본다(길막기 P1-2 와 같은 이유 — docs/game-current-state.md 8-1 #1).
+     */
     @Transactional
     public void giveUp(Long userId, Long gameId) {
         Relation couple = activeCouple(userId);
@@ -255,6 +260,12 @@ public class SudokuService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.GAME_NOT_FOUND));
         if (!game.isInProgress()) return;
         game.abandon();
+        Long partnerId = couple.partnerOf(userId);
+        if (partnerId != null) {
+            String what = game.isDaily() ? "오늘의 판" : "같이 풀던 판";
+            notificationService.notify(partnerId, NotificationCategory.PARTNER, "협동 스도쿠 — 판을 접었어요",
+                    userName(userId) + "님이 " + what + "을 접었어요. 새 판을 열어 볼까요?", PushLinks.GAME_SUDOKU);
+        }
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.GAME);
     }
 

@@ -320,4 +320,30 @@ class GamePlayNotifyTest {
         verify(notificationService).notify(eq(users[0]), eq(NotificationCategory.PARTNER),
                 contains("길막기"), contains("접었어요"), anyString());
     }
+
+    @Test
+    void 오목_판을_접으면_상대에게_알리고_이미_접힌_판은_다시_알리지_않는다() {
+        long[] users = couple("oga", "ogb");
+        OmokGameResponse game = omokService.start(users[0]);
+        clearInvocations(notificationService);
+
+        omokService.giveUp(users[0], game.id());
+        omokService.giveUp(users[1], game.id()); // 둘이 거의 동시에 접은 경우 — 두 번째는 아무 일도 없다
+
+        verify(notificationService).notify(eq(users[1]), eq(NotificationCategory.PARTNER),
+                contains("오목"), contains("접었어요"), anyString());
+        verify(notificationService, never()).notify(eq(users[0]), any(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void 스도쿠_판을_접으면_상대에게_알린다() {
+        long[] users = couple("sga", "sgb");
+        SudokuGameResponse game = sudokuService.start(users[0], new StartSudokuRequest(GameDifficulty.EASY));
+        clearInvocations(notificationService);
+
+        sudokuService.giveUp(users[1], game.id());
+
+        verify(notificationService).notify(eq(users[0]), eq(NotificationCategory.PARTNER),
+                contains("스도쿠"), contains("접었어요"), anyString());
+    }
 }
