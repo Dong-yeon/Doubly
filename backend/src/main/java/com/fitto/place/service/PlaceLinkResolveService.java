@@ -161,7 +161,8 @@ public class PlaceLinkResolveService {
     private Candidate toCandidate(KakaoPlace p, Long coupleId) {
         Long existing = p.id() == null ? null
                 : placeRepository.findFirstByCoupleIdAndKakaoPlaceId(coupleId, p.id()).map(Place::getId).orElse(null);
-        return new Candidate(p.id(), p.name(), p.address(), p.category(), p.lat(), p.lng(), p.placeUrl(), existing);
+        return new Candidate(p.id(), p.name(), p.address(), p.category(), p.lat(), p.lng(), p.placeUrl(), existing,
+                p.categoryDetail(), p.phone(), PlaceLinks.detailUrl(p.id()));
     }
 
     private static String providerName(String url) {

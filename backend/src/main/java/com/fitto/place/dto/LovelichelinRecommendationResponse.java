@@ -19,8 +19,12 @@ public record LovelichelinRecommendationResponse(
             Double lng,
             /** 이 장소를 찾은 검색 의도의 추천 이유 (AI 생성, 커플 취향과 연결된 한 문장) */
             String reason,
-            /** 카카오맵 상세 페이지 — 담기 전에 사용자가 직접 확인할 수 있게 */
-            String placeUrl) {
+            /** 카카오맵 상세 페이지 — 담기 전에 확인용. 장소 상세와 같은 규칙(PlaceLinks)으로 만든다 */
+            String placeUrl,
+            /** 담을 때 그대로 실어 보내면 중복 등록을 막는다(검색 결과와 같은 필드) */
+            String kakaoPlaceId,
+            String categoryDetail,
+            String phone) {
     }
 
     /** 인증된 럽슐랭 장소가 아직 없어 추천 근거가 없을 때 */
