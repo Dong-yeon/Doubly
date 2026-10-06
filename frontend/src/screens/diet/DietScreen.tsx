@@ -1403,7 +1403,7 @@ const styles = themedStyles((colors) => ({
   nutLabel: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
   nutTrack: { height: 8, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
   // 내 지표 — 소유자 의미가 없으므로 크롬 채움. 예전 accent(=함께)는 뜻이 없었다
-  // 막대(글자 없는 면)는 primary — 밝은 버튼 색 테마의 파스텔 채움은 트랙 위에서 1.4:1 로 안 보인다
+  // 막대(글자 없는 면)는 primary — 밝은 포인트 색 테마의 파스텔 채움은 트랙 위에서 1.4:1 로 안 보인다
   nutFill: { height: '100%', borderRadius: radius.pill, backgroundColor: colors.primary },
   nutFillOver: { backgroundColor: colors.primary },
   nutVal: { marginLeft: 'auto', textAlign: 'right', fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '700' },

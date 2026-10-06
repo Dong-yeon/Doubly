@@ -271,7 +271,7 @@ export function SettingsScreen({ navigation }: Props) {
         */}
         <SettingsGroup
           title="화면"
-          footer="시스템을 고르면 기기 설정을 따라가요. 버튼 색은 이 기기에서만 바뀌고, 나·상대 색은 그대로예요."
+          footer="시스템을 고르면 기기 설정을 따라가요. 포인트 색은 버튼·탭·선택 표시에 쓰여요. 이 기기에서만 바뀌고, 나·상대 색은 그대로예요."
           style={styles.group}
         >
           <View>
@@ -283,11 +283,11 @@ export function SettingsScreen({ navigation }: Props) {
             </SettingsInset>
           </View>
           {/*
-            버튼 색(palette.ts CHROME_THEMES) — 크롬만 바뀐다. 이름만으로는 색이 안 그려지므로 견본 원을 보여준다.
-            견본은 지금 스킴의 채움 값이라 다크에서는 밝은 원이 보인다(실제 다크 버튼 색).
+            포인트 색(palette.ts CHROME_THEMES) — 크롬만 바뀐다. 이름만으로는 색이 안 그려지므로 견본 원을 보여준다.
+            견본은 지금 스킴의 채움 값이라 다크에서는 밝은 원이 보인다(실제 다크 포인트 색).
           */}
           <View>
-            <SettingsRow title="버튼 색" />
+            <SettingsRow title="포인트 색" />
             <SettingsInset style={styles.swatches}>
               {CHROME_THEMES.map((t) => {
                 const fill = t[getScheme()].primaryFill;
@@ -299,7 +299,7 @@ export function SettingsScreen({ navigation }: Props) {
                     onPress={() => void setChrome(t.id)}
                     accessibilityRole="radio"
                     accessibilityState={{ selected }}
-                    accessibilityLabel={`버튼 색 ${t.label}`}
+                    accessibilityLabel={`포인트 색 ${t.label}`}
                   >
                     <View style={[styles.swatch, { backgroundColor: fill }, selected && styles.swatchSelected]}>
                       {selected ? <MaterialCommunityIcons name="check-circle" size={20} color={onColor(fill)} /> : null}
