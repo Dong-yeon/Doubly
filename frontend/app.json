@@ -81,6 +81,18 @@
       ],
       "expo-sharing",
       [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "지도에서 내 위치를 보여 주기 위해 위치 정보가 필요해요.",
+          "locationAlwaysAndWhenInUsePermission": false,
+          "locationAlwaysPermission": false,
+          "motionUsagePermission": false,
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false,
+          "isAndroidForegroundServiceEnabled": false
+        }
+      ],
+      [
         "expo-media-library",
         {
           "photosPermission": "받은 사진을 갤러리에 저장하기 위해 사진 접근 권한이 필요해요.",

@@ -39,4 +39,6 @@ export interface KakaoMapHandle {
   clearPin: () => void;
   /** 이 좌표들이 다 보이게 시야를 맞춘다(검색 결과) — 여백은 setPadding 값을 쓴다 */
   fitPoints: (points: KakaoLatLng[]) => void;
+  /** 내 위치 점을 놓고(이미 있으면 옮기고) 그리로 간다. offsetY 는 panTo 와 같다 */
+  showMyLocation: (lat: number, lng: number, offsetY?: number) => void;
 }
