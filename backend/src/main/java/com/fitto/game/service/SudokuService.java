@@ -135,6 +135,8 @@ public class SudokuService {
          */
         boolean blocked = shown == null && gameRepository
                 .findFirstByCoupleIdAndStatusOrderByCreatedAtDesc(couple.getId(), GameStatus.IN_PROGRESS)
+                // 지난 날의 오늘의 판은 막지 않는다 — 누르면 startDaily 가 그 판을 접고 오늘 것을 연다
+                .filter(g -> !g.isPastDaily(today))
                 .isPresent();
 
         GameDifficulty difficulty = DailyPuzzles.difficultyOf(today);
@@ -169,6 +171,15 @@ public class SudokuService {
         SudokuGame otherRunning = gameRepository
                 .findFirstByCoupleIdAndStatusOrderByCreatedAtDesc(locked.getId(), GameStatus.IN_PROGRESS)
                 .orElse(null);
+        /*
+         * 어제(또는 그 전)의 오늘의 판을 못 끝낸 채 남겨 뒀으면 접고 오늘 것을 연다. 예전에는 그 판이
+         * "진행 중인 다른 판"으로 잡혀 오늘의 판이 막히고, 누르면 어제 판이 열렸다(docs/game-current-state.md 8-1 #6).
+         * 자유 대국은 그대로 돌려준다 — 날짜에 묶인 판이 아니다.
+         */
+        if (otherRunning != null && otherRunning.isPastDaily(today)) {
+            otherRunning.abandon();
+            otherRunning = null;
+        }
         if (otherRunning != null) {
             return toResponse(otherRunning, userId, locked);
         }
