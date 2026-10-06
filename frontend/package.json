@@ -84,6 +84,8 @@
     "verify:sticker-codes": "node scripts/verify-sticker-codes.mjs",
     "verify:context-stickers": "node scripts/verify-context-stickers.mjs",
     "verify:service-status": "node scripts/verify-service-status.mjs",
+    "verify:place-link": "node scripts/verify-place-link.mjs",
+    "verify:home-event": "node --experimental-strip-types scripts/verify-home-event.mjs",
     "verify:export-zip": "node scripts/verify-export-zip.mjs",
     "build:android": "npx eas-cli build --platform android --profile production",
     "build:ios": "npx eas-cli build --platform ios --profile production",
@@ -91,8 +93,8 @@
     "submit:ios": "npx eas-cli submit --platform ios --profile production --latest",
     "submit:android": "npx eas-cli submit --platform android --profile production --latest",
     "submit:store": "npx eas-cli submit --platform all --profile production --latest",
-    "update:production": "npx eas-cli update --channel production --auto",
-    "update:preview": "npx eas-cli update --channel preview --auto"
+    "update:production": "npx eas-cli update --channel production --environment production --auto",
+    "update:preview": "npx eas-cli update --channel preview --environment preview --auto"
   },
   "private": true
 }
