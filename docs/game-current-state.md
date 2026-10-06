@@ -273,7 +273,7 @@
 | 4 | ~~중~~ **수정됨(2026-10-06) — 추정이 아니라 실제 버그로 재현 확인** | **채팅 카드 실패를 `try/catch` 로 막아도 게임 처리가 롤백될 수 있다.** `ChatService.postSystemCard` 는 프록시를 통해 바깥 트랜잭션에 참여한다(클래스 `@Transactional(readOnly=true)`, 4인자는 `@Transactional`). 그래서 안에서 RuntimeException 이 나면 바깥 트랜잭션이 rollback-only 로 표시되고, 커밋할 때 `UnexpectedRollbackException` 이 나서 완성·정답 처리 자체가 500 이 된다. 실제로 터질 경로(requireMember 실패, DB 오류)는 드물다 | `ChatService.java:63,422-447,569`, 호출 `SudokuService.java:308-314` 등. 주석 "되돌리면 안 되므로"(`CatchMindService.java:332-335`)와 실제 동작이 어긋남 |
 | 5 | ~~낮~중~~ **수정됨(2026-10-06, #4 와 함께)** | **채팅 결과 카드의 STOMP 전송이 커밋 전에 나간다.** 롤백되면 상대 화면에 DB 에 없는 말풍선이 남는다. 정상 경로에서도 커밋 전에 도착할 수 있다 | 5-1 참고 |
 | 6 | ~~낮~~ **수정됨(2026-10-06)** | **판 만료가 없다.** 7일이 넘은 판은 알림도 없이 IN_PROGRESS 로 영원히 남고, 새 판을 누르면 그 판이 열린다(캐치마인드는 409) | `GameNudgeService.java:46-50`, 각 `start` |
-| 7 | 낮 **(추정)** | **연쇄 퍼즐**: 결과를 클라이언트가 스스로 신고한다(조작 가능, 설계상 수용). 라이브에서 진 쪽이 결과를 내기 전에 앱을 끄면 같은 판을 고스트로 다시 칠 수 있다 | `PuzzleBattleGame.java:122-164`, `PuyoScreen.tsx:179-181,527` |
+| 7 | ~~낮~~ **수정됨(2026-10-06, V132)** | **연쇄 퍼즐**: 결과를 클라이언트가 스스로 신고한다(조작 가능, 설계상 수용). 라이브에서 진 쪽이 결과를 내기 전에 앱을 끄면 같은 판을 고스트로 다시 칠 수 있다 | `PuzzleBattleGame.java:122-164`, `PuyoScreen.tsx:179-181,527` |
 | 8 | 낮 **(추정)** | **연쇄 퍼즐 결과 재시도가 타임아웃에서도 다시 보낸다.** 첫 요청이 반영됐으면 409 "이미 보냈어요"로 실패처럼 보인다. 멱등키 없음 | `PuyoScreen.tsx:1097-1112` |
 | 9 | 낮 | **전적을 최근 20판으로만 센다**(오목·길막기의 허브와 화면). 21판째부터 실제 전적과 달라진다 | `MiniGamesScreen.tsx:68-71`, `OmokScreen.tsx:205-211`, `WallRaceScreen.tsx:333-338` |
 | 10 | 낮 | **허브의 `Promise.all`** — API 8개 중 하나만 실패해도 모든 카드의 진행 상태·스트릭·오늘의 판이 사라진다 | `MiniGamesScreen.tsx:51-79` |
@@ -342,4 +342,17 @@
 - **코드**: `B/game/service/GameExpiryService.java`(신규), `SudokuGame.isPastDaily`, `SudokuService.daily/startDaily`, 리포지토리 파생 쿼리 2개(`CoupleGameRepository.findByStatusAndUpdatedAtBefore`, `SudokuGameRepository.findByStatusAndDailyDateBefore`). 마이그레이션은 없다.
 - **검증**: `GameExpiryTest` 4건을 추가했다. 게임 테스트가 **H2·PostgreSQL 모두** 통과했다.
 - **남는 것**: 화면을 연 채로 정리 시각을 넘기면 앱이 그 판을 "○○님이 이 판을 접었어요"로 안내한다. 서버가 자동으로 접은 판인지 알려 주지 않기 때문이다. 새벽 4시에 판을 열어 둔 경우만 해당한다.
+
+### #7 수정 (2026-10-06, 브랜치 `fix/puzzle-restart-once`, V132)
+
+- **사용자 결정**: 끊긴 판(일부러 끈 경우·전화·크래시 모두)은 **한 번만 다시 칠 수 있다.** 두 번째로 끊기면 패배로 기록한다.
+- **서버**:
+  - 새 엔드포인트 `POST /games/puzzle/{id}/begin` — 앱이 내 판을 치기 직전에 부른다. 시작 시각은 `started_at_a/b`, 다시 친 횟수는 `restarts_a/b` 에 남긴다(V132).
+  - 결과 없이 begin 이 다시 오면 앞의 판이 끊긴 것으로 본다. 기회가 남았으면 `RESTARTED`, 없으면 `FORFEITED` 다. FORFEITED 는 0점·0ms 패배로 제출되고 상대에게 푸시가 간다. 0ms 로 둔 이유는 상대가 고스트로 칠 때 그 자리에서 바로 이기게 하려는 것이다.
+  - `finish`: 시작을 알린 판이면, 제출한 버틴 시간이 서버가 잰 경과 + 5초보다 길 때 `GAME_RUN_IMPLAUSIBLE`(400) 로 거절한다.
+  - **결과 조작은 여전히 막지 않는다.** 엔진을 서버에서 다시 돌리지 않는다는 설계(§2-5)는 그대로이고, 시간 검사는 가장 거친 조작만 거른다.
+- **앱**: `startBattle` 이 `startAt` 보다 먼저 begin 을 부른다. RESTARTED 면 "또 끊기면 패배" 토스트, FORFEITED 면 패배 안내를 띄운다. 대기 화면 버튼은 "끊긴 판 다시 하기" / "끊긴 판 마무리하기"로 바뀐다.
+- **호환**: 예전 앱은 begin 을 부르지 않으므로 두 검사를 모두 건너뛰고, 다시 치기 구멍도 예전 앱에는 남는다. 새 앱이 예전 서버를 만나면(404·405) 알림 없이 예전처럼 친다.
+- **검증**: `PuzzleBattleFlowTest` 3건 추가. 게임 테스트가 H2·PostgreSQL 모두 통과했고(V132 적용 확인), `*SyncTest` 도 통과했다. tsc·eslint 통과. **화면은 확인하지 않았다.**
+- **남는 것**: 한 번만 다시 칠 수 있는 기회 자체도 다시 치기에 쓸 수 있다(라이브에서 지다가 끄고 고스트로 한 번). 사용자가 "사고는 한 번 봐준다"를 택한 결과다.
 

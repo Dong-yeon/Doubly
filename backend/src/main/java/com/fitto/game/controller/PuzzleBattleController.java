@@ -3,6 +3,7 @@ package com.fitto.game.controller;
 import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
 import com.fitto.game.dto.FinishPuzzleBattleRequest;
+import com.fitto.game.dto.PuzzleBattleBeginResponse;
 import com.fitto.game.dto.PuzzleBattleResponse;
 import com.fitto.game.service.PuzzleBattleService;
 import jakarta.validation.Valid;
@@ -40,6 +41,16 @@ public class PuzzleBattleController {
     @PostMapping
     public ApiResponse<PuzzleBattleResponse> start(@AuthenticationPrincipal AuthUser user) {
         return ApiResponse.success(battleService.start(user.id()));
+    }
+
+    /**
+     * 내 판 시작 알림 — 치기 직전에 부른다. 결과 없이 다시 오면 앞의 판이 끊긴 것: 한 번은 다시 치게 하고,
+     * 그 뒤엔 패배로 기록한다(outcome = STARTED / RESTARTED / FORFEITED).
+     */
+    @PostMapping("/{id}/begin")
+    public ApiResponse<PuzzleBattleBeginResponse> begin(@AuthenticationPrincipal AuthUser user,
+                                                        @PathVariable Long id) {
+        return ApiResponse.success(battleService.begin(user.id(), id));
     }
 
     /** 내 결과 제출 — 한 판에 한 번 */

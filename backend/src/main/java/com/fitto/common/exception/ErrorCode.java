@@ -129,6 +129,7 @@ public enum ErrorCode {
     /* 연쇄 퍼즐 대전 — 결과는 한 판에 한 번. 두 번째 제출은 재시도가 아니라 덮어쓰기 시도다 */
     GAME_RUN_ALREADY_SUBMITTED(HttpStatus.CONFLICT, "이 판의 결과는 이미 보냈어요."),
     GAME_TIMELINE_INVALID(HttpStatus.BAD_REQUEST, "판 기록을 보내지 못했어요. 다시 시도해주세요."),
+    GAME_RUN_IMPLAUSIBLE(HttpStatus.BAD_REQUEST, "판 기록이 시간과 맞지 않아 결과를 받지 못했어요."),
     GAME_MOVE_ILLEGAL(HttpStatus.BAD_REQUEST, "그 자리로는 갈 수 없어요."),
     GAME_WALLS_EXHAUSTED(HttpStatus.CONFLICT, "남은 벽이 없어요. 말을 움직여야 해요."),
     GAME_WALL_OVERLAP(HttpStatus.BAD_REQUEST, "이미 벽이 있는 자리예요."),

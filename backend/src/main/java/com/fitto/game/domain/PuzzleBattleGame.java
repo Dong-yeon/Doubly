@@ -8,6 +8,9 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.time.Duration;
+import java.time.LocalDateTime;
+
 /**
  * 연쇄 퍼즐 대전 한 판 — docs/COUPLE_PUZZLE_BATTLE_2026-09-18.md.
  *
@@ -60,6 +63,28 @@ public class PuzzleBattleGame extends CoupleGame {
     /** '1'/'2'/DRAW — 끝난 판에만 값이 있다 */
     @Column(name = "battle_winner", length = 4)
     private String winner;
+
+    /**
+     * 지금 치고 있는 판을 시작한 시각(V132) — 앱이 {@code begin} 으로 알린다. 다시 치면 새 시각이 된다.
+     * 예전 앱은 알리지 않아 비어 있고, 그때는 끊김·결과 검사를 건너뛴다.
+     */
+    @Column(name = "started_at_a")
+    private LocalDateTime startedAtA;
+    @Column(name = "started_at_b")
+    private LocalDateTime startedAtB;
+    /** 끊겨서 다시 친 횟수 — {@link #MAX_RESTARTS} 를 넘겨 또 끊기면 패배로 기록한다 */
+    @Column(name = "restarts_a")
+    private Integer restartsA;
+    @Column(name = "restarts_b")
+    private Integer restartsB;
+
+    /** 끊긴 판을 다시 칠 수 있는 횟수 — 사고는 한 번 봐주고 반복은 막는다(사용자 결정, 2026-10-06) */
+    public static final int MAX_RESTARTS = 1;
+    /**
+     * 결과 검사 여유 — 앱이 재는 시간과 서버 시계는 네트워크 왕복만큼 어긋난다. 재시도(최대 1.5+4+9초)를
+     * 거쳐 늦게 도착해도 "버틴 시간"은 앱이 잰 값이므로 늦게 오는 쪽은 문제가 없고, 이른 쪽만 이만큼 봐준다.
+     */
+    static final Duration ELAPSED_SLACK = Duration.ofSeconds(5);
 
     @Builder
     private PuzzleBattleGame(Long coupleId, Long createdBy, int seed, int handicapA, int handicapB) {
@@ -117,6 +142,64 @@ public class PuzzleBattleGame extends CoupleGame {
 
     public boolean isDraw() {
         return WINNER_DRAW.equals(winner);
+    }
+
+    public LocalDateTime startedAtOf(char side) {
+        return side == OWNER_CREATOR ? startedAtA : startedAtB;
+    }
+
+    public int restartsOf(char side) {
+        Integer r = side == OWNER_CREATOR ? restartsA : restartsB;
+        return r == null ? 0 : r;
+    }
+
+    /** begin 이 어떻게 처리됐는가 */
+    public enum BeginOutcome {
+        /** 처음 시작 */
+        STARTED,
+        /** 끊긴 판을 다시 시작 — 남은 기회를 하나 썼다 */
+        RESTARTED,
+        /** 다시 칠 기회가 없어 패배로 기록했다 — 결과가 제출된 상태다 */
+        FORFEITED
+    }
+
+    /**
+     * 앱이 판을 시작한다고 알린다. 결과 없이 두 번째 begin 이 오면 앞의 판은 끊긴 것이다.
+     * 기회가 남았으면 다시 시작하고, 없으면 패배(0점·0ms)로 제출한다 — 0ms 인 이유는 상대가 고스트로
+     * 칠 때 그 시각에 바로 이기게 하려는 것이다(끊긴 시각까지 버티라고 하면 며칠이 될 수도 있다).
+     * 호출 전에 진행 중·미제출인지 서비스가 확인한다.
+     *
+     * @return 처리 결과. FORFEITED 면 {@link #submit} 이 이미 불렸다(판이 끝났을 수도 있다)
+     */
+    public BeginOutcome begin(char side, LocalDateTime now) {
+        LocalDateTime started = startedAtOf(side);
+        if (started == null) {
+            setStartedAt(side, now);
+            return BeginOutcome.STARTED;
+        }
+        int restarts = restartsOf(side);
+        if (restarts < MAX_RESTARTS) {
+            if (side == OWNER_CREATOR) restartsA = restarts + 1; else restartsB = restarts + 1;
+            setStartedAt(side, now);
+            return BeginOutcome.RESTARTED;
+        }
+        submit(side, new Run(0, 0, 0, true, ""));
+        return BeginOutcome.FORFEITED;
+    }
+
+    /**
+     * 결과가 서버 시계로 말이 되는가 — 시작을 알린 판이면, 시작부터 지금까지보다 오래 버텼다는 결과는 받지 않는다.
+     * 엔진을 서버가 다시 돌리지는 않는다(§2-5, 커플 앱이라 치팅 대응을 접었다) — 이건 가장 거친 조작만 거르는 선이다.
+     */
+    public boolean isPlausible(char side, int survivedMs, LocalDateTime now) {
+        LocalDateTime started = startedAtOf(side);
+        if (started == null) return true; // 예전 앱
+        long elapsed = Duration.between(started, now).plus(ELAPSED_SLACK).toMillis();
+        return survivedMs <= elapsed;
+    }
+
+    private void setStartedAt(char side, LocalDateTime at) {
+        if (side == OWNER_CREATOR) startedAtA = at; else startedAtB = at;
     }
 
     /**

@@ -7,6 +7,7 @@ import com.fitto.chat.domain.MessageType;
 import com.fitto.chat.repository.ChatMessageRepository;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
+import com.fitto.game.domain.GameStatus;
 import com.fitto.game.dto.FinishPuzzleBattleRequest;
 import com.fitto.game.dto.PuzzleBattleResponse;
 import com.fitto.game.repository.PuzzleBattleGameRepository;
@@ -37,6 +38,7 @@ class PuzzleBattleFlowTest {
     @Autowired GameStreakService streakService;
     @Autowired PuzzleBattleGameRepository gameRepository;
     @Autowired ChatMessageRepository chatMessageRepository;
+    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
     private Long register(String prefix) {
         String email = prefix + "-" + UUID.randomUUID().toString().substring(0, 8) + "@fitto.com";
@@ -205,4 +207,68 @@ class PuzzleBattleFlowTest {
 
         assertThat(gameRepository.findById(game.id())).isEmpty();
     }
+
+    // ── 끊긴 판은 한 번만 다시 (docs/game-current-state.md 8-1 #7, V132) ──────────────
+
+    @Test
+    void 끊긴_판은_한_번만_다시_칠_수_있고_또_끊기면_패배로_기록된다() {
+        Long a = register("ra");
+        Long b = register("rb");
+        connectCouple(a, b);
+        PuzzleBattleResponse game = battleService.start(a);
+
+        assertThat(battleService.begin(a, game.id()).outcome()).isEqualTo("STARTED");
+        // 결과 없이 다시 시작 = 앞의 판이 끊겼다 — 한 번은 봐준다
+        var restarted = battleService.begin(a, game.id());
+        assertThat(restarted.outcome()).isEqualTo("RESTARTED");
+        assertThat(restarted.game().myStarted()).isTrue();
+        assertThat(restarted.game().myRestartsLeft()).isZero();
+        assertThat(restarted.game().me()).isNull();
+
+        // 또 끊기면 패배 — 0점·0ms 라 상대는 고스트로 시작하자마자 이긴다
+        var forfeited = battleService.begin(a, game.id());
+        assertThat(forfeited.outcome()).isEqualTo("FORFEITED");
+        assertThat(forfeited.game().me().lost()).isTrue();
+        assertThat(forfeited.game().me().survivedMs()).isZero();
+        assertThat(forfeited.game().status()).isEqualTo(GameStatus.IN_PROGRESS); // 상대는 아직
+
+        assertThat(battleService.begin(b, game.id()).outcome()).isEqualTo("STARTED");
+        PuzzleBattleResponse done = battleService.finish(b, game.id(), run(300, 2, 1_000, false));
+        assertThat(done.status()).isEqualTo(GameStatus.COMPLETED);
+        assertThat(done.winner()).isEqualTo("ME");
+    }
+
+    @Test
+    void 결과를_낸_뒤에는_다시_시작할_수_없다() {
+        Long a = register("ea");
+        Long b = register("eb");
+        connectCouple(a, b);
+        PuzzleBattleResponse game = battleService.start(a);
+        battleService.finish(a, game.id(), run(100, 1, 3_000, true));
+
+        assertThatThrownBy(() -> battleService.begin(a, game.id()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.GAME_RUN_ALREADY_SUBMITTED);
+    }
+
+    @Test
+    void 시작부터_지난_시간보다_오래_버텼다는_결과는_받지_않는다() {
+        Long a = register("pa");
+        Long b = register("pb");
+        connectCouple(a, b);
+        PuzzleBattleResponse game = battleService.start(a);
+        battleService.begin(a, game.id());
+
+        // 방금 시작했는데 1분을 버텼다는 결과
+        assertThatThrownBy(() -> battleService.finish(a, game.id(), run(9_999, 9, 60_000, false)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.GAME_RUN_IMPLAUSIBLE);
+
+        // 실제로 2분 전에 시작한 판이면 받는다
+        jdbcTemplate.update("update couple_games set started_at_a = ? where id = ?",
+                java.sql.Timestamp.valueOf(java.time.LocalDateTime.now().minusMinutes(2)), game.id());
+        assertThat(battleService.finish(a, game.id(), run(9_999, 9, 60_000, false)).me().survivedMs())
+                .isEqualTo(60_000);
+    }
 }
+

@@ -14,6 +14,7 @@ import com.fitto.game.domain.CoupleGame;
 import com.fitto.game.domain.GameStatus;
 import com.fitto.game.domain.PuzzleBattleGame;
 import com.fitto.game.dto.FinishPuzzleBattleRequest;
+import com.fitto.game.dto.PuzzleBattleBeginResponse;
 import com.fitto.game.dto.PuzzleBattleResponse;
 import com.fitto.game.puzzle.Timeline;
 import com.fitto.game.repository.PuzzleBattleGameRepository;
@@ -23,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Random;
 
@@ -121,6 +123,38 @@ public class PuzzleBattleService {
     }
 
     /**
+     * 판 시작 알림 — 앱이 내 판을 치기 직전에 부른다. 판의 진행은 앱 메모리에만 있어 앱이 꺼지면 사라지므로,
+     * 결과 없이 두 번째 시작이 오면 앞의 판이 끊긴 것이다. 끊긴 판은 <b>한 번만</b> 다시 칠 수 있고 그 뒤에
+     * 또 끊기면 패배로 기록한다(사용자 결정 2026-10-06, docs/game-current-state.md 8-1 #7).
+     * 라이브에서 지던 쪽이 앱을 끄고 고스트로 다시 치던 길을 막는 것이 목적이다.
+     */
+    @Transactional
+    public PuzzleBattleBeginResponse begin(Long userId, Long gameId) {
+        Relation couple = couples.active(userId);
+        PuzzleBattleGame game = lockedGame(gameId, couple);
+        if (!game.isInProgress()) {
+            throw new BusinessException(ErrorCode.GAME_NOT_IN_PROGRESS);
+        }
+        char side = game.sideOf(userId);
+        if (game.hasSubmitted(side)) {
+            throw new BusinessException(ErrorCode.GAME_RUN_ALREADY_SUBMITTED);
+        }
+        PuzzleBattleGame.BeginOutcome outcome = game.begin(side, LocalDateTime.now());
+        if (outcome == PuzzleBattleGame.BeginOutcome.FORFEITED) {
+            Long partnerId = couple.partnerOf(userId);
+            if (game.getStatus() == GameStatus.COMPLETED) {
+                onFinished(userId, partnerId, game, couple);
+            } else if (partnerId != null) {
+                notificationService.notify(partnerId, NotificationCategory.PARTNER, "연쇄 퍼즐 — 상대 판이 끊겼어요 🧩",
+                        couples.userName(userId) + "님 판이 두 번 끊겨 패배로 기록됐어요. 이제 당신 차례!",
+                        PushLinks.GAME_PUZZLE);
+            }
+            coupleEventPublisher.publish(couple.getId(), CoupleEvent.GAME);
+        }
+        return new PuzzleBattleBeginResponse(outcome.name(), toResponse(game, userId, couple));
+    }
+
+    /**
      * 결과 제출 — 한 판에 한 번. 둘 다 내면 승자가 정해지고 카드가 남는다.
      * 먼저 낸 쪽의 기보는 상대 응답에 실려 고스트 대전(§2-6)의 재료가 된다.
      */
@@ -138,21 +172,30 @@ public class PuzzleBattleService {
         if (game.hasSubmitted(side)) {
             throw new BusinessException(ErrorCode.GAME_RUN_ALREADY_SUBMITTED);
         }
+        // 서버 시계로 잰 경과보다 오래 버텼다는 결과는 받지 않는다(시작을 알린 판만 — 예전 앱은 건너뛴다)
+        if (!game.isPlausible(side, req.survivedMs(), LocalDateTime.now())) {
+            throw new BusinessException(ErrorCode.GAME_RUN_IMPLAUSIBLE);
+        }
 
         boolean finished = game.submit(side, new PuzzleBattleGame.Run(
                 req.score(), req.maxChain(), req.survivedMs(), req.lost(),
                 req.timeline() == null ? "" : req.timeline()));
+        afterSubmit(userId, game, couple, finished, req.maxChain(), req.score());
+        return toResponse(game, userId, couple);
+    }
 
+    /** 한쪽 결과가 들어간 뒤 공통 — 판이 끝났으면 결과 카드, 아니면 상대에게 "이제 당신 차례" */
+    private void afterSubmit(Long userId, PuzzleBattleGame game, Relation couple,
+                             boolean finished, int maxChain, int score) {
         Long partnerId = couple.partnerOf(userId);
         if (finished) {
             onFinished(userId, partnerId, game, couple);
         } else if (partnerId != null) {
             notificationService.notify(partnerId, NotificationCategory.PARTNER, "연쇄 퍼즐 — 상대가 마쳤어요 🧩",
-                    couples.userName(userId) + "님이 " + req.maxChain() + "연쇄 · " + req.score()
+                    couples.userName(userId) + "님이 " + maxChain + "연쇄 · " + score
                             + "점으로 판을 마쳤어요. 이제 당신 차례!", PushLinks.GAME_PUZZLE);
         }
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.GAME);
-        return toResponse(game, userId, couple);
     }
 
     /** 접기 — 기록에 남지 않는다. 상대가 며칠째 안 치면 이걸로 다음 판을 열 수 있다. */
