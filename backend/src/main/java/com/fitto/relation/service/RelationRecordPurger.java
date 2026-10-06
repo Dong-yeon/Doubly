@@ -80,6 +80,11 @@ public class RelationRecordPurger {
 
         exec("delete from place_visits where place_id in "
                 + "(select p.id from places p where p.couple_id = :rid)", relationId);
+        // 우리가 쌓는 메뉴(V131) — places 를 CASCADE 로 참조하지만 순서를 여기서 읽을 수 있게 먼저 거둔다
+        exec("delete from place_menu_items where place_id in "
+                + "(select p.id from places p where p.couple_id = :rid)", relationId);
+        exec("delete from place_menu_photos where place_id in "
+                + "(select p.id from places p where p.couple_id = :rid)", relationId);
         exec("delete from places where couple_id = :rid", relationId);
 
         // 콘텐츠(영화·공연·드라마) — places 와 같은 모양(V65)
@@ -162,6 +167,8 @@ public class RelationRecordPurger {
                 + "where ph.post_id in (select p.id from feed_posts p where p.couple_id = :rid)", relationId));
         urls.addAll(select("select v.image_url from place_visits v "
                 + "where v.image_url is not null and v.place_id in "
+                + "(select p.id from places p where p.couple_id = :rid)", relationId));
+        urls.addAll(select("select ph.image_url from place_menu_photos ph where ph.place_id in "
                 + "(select p.id from places p where p.couple_id = :rid)", relationId));
         urls.addAll(select("select l.image_url from content_logs l "
                 + "where l.image_url is not null and l.content_id in "
