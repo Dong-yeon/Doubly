@@ -272,7 +272,7 @@
 | 3 | ~~중~~ **수정됨(2026-10-06 `d2b92e5a`, 실기기 미확인)** | **상대가 판을 끝내면 내 화면에 결과가 뜨지 않는다** — 스도쿠(상대가 마지막 칸을 채운 경우)와 캐치마인드 그린 사람(상대가 맞힌 경우)은 조용히 시작 화면으로 돌아간다. 결과는 푸시와 채팅 카드로만 안다 | `SudokuScreen.tsx:90-93`(`justCompleted` 는 자기 입력으로 끝났을 때만), `CatchMindScreen.tsx:102-103` **(코드상 확인, 실기기 미확인)** |
 | 4 | ~~중~~ **수정됨(2026-10-06) — 추정이 아니라 실제 버그로 재현 확인** | **채팅 카드 실패를 `try/catch` 로 막아도 게임 처리가 롤백될 수 있다.** `ChatService.postSystemCard` 는 프록시를 통해 바깥 트랜잭션에 참여한다(클래스 `@Transactional(readOnly=true)`, 4인자는 `@Transactional`). 그래서 안에서 RuntimeException 이 나면 바깥 트랜잭션이 rollback-only 로 표시되고, 커밋할 때 `UnexpectedRollbackException` 이 나서 완성·정답 처리 자체가 500 이 된다. 실제로 터질 경로(requireMember 실패, DB 오류)는 드물다 | `ChatService.java:63,422-447,569`, 호출 `SudokuService.java:308-314` 등. 주석 "되돌리면 안 되므로"(`CatchMindService.java:332-335`)와 실제 동작이 어긋남 |
 | 5 | ~~낮~중~~ **수정됨(2026-10-06, #4 와 함께)** | **채팅 결과 카드의 STOMP 전송이 커밋 전에 나간다.** 롤백되면 상대 화면에 DB 에 없는 말풍선이 남는다. 정상 경로에서도 커밋 전에 도착할 수 있다 | 5-1 참고 |
-| 6 | 낮 | **판 만료가 없다.** 7일이 넘은 판은 알림도 없이 IN_PROGRESS 로 영원히 남고, 새 판을 누르면 그 판이 열린다(캐치마인드는 409) | `GameNudgeService.java:46-50`, 각 `start` |
+| 6 | ~~낮~~ **수정됨(2026-10-06)** | **판 만료가 없다.** 7일이 넘은 판은 알림도 없이 IN_PROGRESS 로 영원히 남고, 새 판을 누르면 그 판이 열린다(캐치마인드는 409) | `GameNudgeService.java:46-50`, 각 `start` |
 | 7 | 낮 **(추정)** | **연쇄 퍼즐**: 결과를 클라이언트가 스스로 신고한다(조작 가능, 설계상 수용). 라이브에서 진 쪽이 결과를 내기 전에 앱을 끄면 같은 판을 고스트로 다시 칠 수 있다 | `PuzzleBattleGame.java:122-164`, `PuyoScreen.tsx:179-181,527` |
 | 8 | 낮 **(추정)** | **연쇄 퍼즐 결과 재시도가 타임아웃에서도 다시 보낸다.** 첫 요청이 반영됐으면 409 "이미 보냈어요"로 실패처럼 보인다. 멱등키 없음 | `PuyoScreen.tsx:1097-1112` |
 | 9 | 낮 | **전적을 최근 20판으로만 센다**(오목·길막기의 허브와 화면). 21판째부터 실제 전적과 달라진다 | `MiniGamesScreen.tsx:68-71`, `OmokScreen.tsx:205-211`, `WallRaceScreen.tsx:333-338` |
@@ -331,4 +331,15 @@
 - **수정**: `B/game/service/GameChatCards.java` 를 새로 만들었다. 카드는 게임 트랜잭션이 커밋된 뒤 새 트랜잭션(REQUIRES_NEW)에서 저장하고, 소켓 전송도 그 뒤에 한다. `StreakMilestoneNotifier` 와 같은 패턴이다. 5종 서비스가 모두 이걸 쓴다. 소켓 전송이 커밋 뒤로 옮겨지면서 #5도 함께 해소됐다.
 - **검증**: `GamePlayNotifyTest.채팅_카드가_실패해도_게임_트랜잭션은_커밋된다` 를 추가했다. 게임·채팅·스트릭 테스트가 전부 통과했다(H2). 기존 FlowTest 의 "결과 카드가 남는다" 단언도 그대로 통과한다(테스트 클래스가 @Transactional 이 아니라 afterCommit 이 실제로 돈다).
 - **남은 같은 모양**: `CallService.java:197` 도 트랜잭션 안에서 `postSystemCard` 를 부른다. 게임 밖이라 손대지 않았다.
+
+### #6 수정 (2026-10-06, 브랜치 `fix/game-expiry`)
+
+- **정한 규칙** (사용자 확인 전 기본값 — 바꾸려면 상수 하나):
+  - 7일 넘게 아무도 움직이지 않은 진행 중인 판은 **매일 04:00 KST** 에 접는다(ABANDONED — 사용자가 접은 판과 같아 기록·전적·스트릭에 남지 않는다). 기준은 리마인더가 "버려진 판"으로 보고 부르기를 멈추는 `GameNudgeService.ABANDONED`(7일)와 **같은 상수**다.
+  - 날짜가 지난 오늘의 판도 같은 시각에 접는다. 단 30분 안에 움직인 판은 자정을 넘겨 푸는 중일 수 있어 둔다.
+  - 정리할 때 푸시는 보내지 않는다(24시간째에 리마인더가 이미 불렀다). 열려 있는 화면은 `CoupleEvent.GAME` 으로 다시 읽는다.
+- **분석 때 놓친 버그도 함께 고쳤다**: 어제 못 끝낸 오늘의 판이 남아 있으면 그 판이 "진행 중인 다른 판"으로 잡혔다. 그래서 오늘의 판 카드가 "지금은 열 수 없어요"가 되고, 누르면 어제 판이 열렸다. 이제 `startDaily` 가 그 판을 그 자리에서 접고 오늘 것을 연다. `daily()` 도 지난 오늘의 판을 막힌 것으로 세지 않는다. 자유 대국은 예전처럼 돌려준다.
+- **코드**: `B/game/service/GameExpiryService.java`(신규), `SudokuGame.isPastDaily`, `SudokuService.daily/startDaily`, 리포지토리 파생 쿼리 2개(`CoupleGameRepository.findByStatusAndUpdatedAtBefore`, `SudokuGameRepository.findByStatusAndDailyDateBefore`). 마이그레이션은 없다.
+- **검증**: `GameExpiryTest` 4건을 추가했다. 게임 테스트가 **H2·PostgreSQL 모두** 통과했다.
+- **남는 것**: 화면을 연 채로 정리 시각을 넘기면 앱이 그 판을 "○○님이 이 판을 접었어요"로 안내한다. 서버가 자동으로 접은 판인지 알려 주지 않기 때문이다. 새벽 4시에 판을 열어 둔 경우만 해당한다.
 
