@@ -11,7 +11,16 @@
  * <p>"먹어 봤어요 N번"은 "여기서 먹은 것"(이 장소 방문에 붙은 식단)과 이름이 같은 메뉴에 붙는다 — 공백·대소문자만 무시한다.
  */
 import React, { useMemo, useRef, useState } from 'react';
-import { Image, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+  Image,
+  Platform,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+  type AccessibilityActionEvent,
+} from 'react-native';
 import { Alert } from '../../utils/alert';
 import { Button } from '../../components/Button';
 import { IconButton } from '../../components/IconButton';
@@ -113,8 +122,20 @@ export function PlaceMenuBoardSection({ placeId, menu, onMenuChange }: Props) {
   const board = useMemo(() => menu?.board ?? [], [menu]);
   const photos = useMemo(() => menu?.boardPhotos ?? [], [menu]);
   const [expanded, setExpanded] = useState(false);
-  const [editor, setEditor] = useState<Editor | null>(null);
+  const [editor, setEditorState] = useState<Editor | null>(null);
+  /*
+   * 최신 편집 상태 — 저장·닫기는 여기서 읽는다. 한글을 조합하던 칸에서 곧장 [저장]을 누르면 조합 확정(onChangeText)이
+   * 누름 직전에 오는데, 그 변경은 아직 그려지기 전이라 onSave 가 쥔 editor 는 한 박자 늦다 — 마지막 글자나 방금 적은
+   * 가격이 빠진 채 저장됐다(2026-10-06 웹 확인). 채팅 전송의 한글 조합 문제와 같은 계열이다.
+   */
+  const editorRef = useRef<Editor | null>(null);
+  const setEditor = (next: Editor | null | ((e: Editor | null) => Editor | null)) => {
+    const value = typeof next === 'function' ? next(editorRef.current) : next;
+    editorRef.current = value;
+    setEditorState(value);
+  };
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const [viewingIndex, setViewingIndex] = useState<number | null>(null);
   // 진행 중 촬영·분석 — 두 번 눌러 사진이 두 장 올라가지 않게
   const capturing = useRef(false);
@@ -178,10 +199,11 @@ export function PlaceMenuBoardSection({ placeId, menu, onMenuChange }: Props) {
   };
 
   const closeEditor = () => {
-    if (!editor) return;
-    const dirty = editor.photoUrl != null || snapshot(editor.rows) !== editor.initial;
+    const current = editorRef.current;
+    if (!current) return;
+    const dirty = current.photoUrl != null || snapshot(current.rows) !== current.initial;
     confirmDiscard(dirty, () => {
-      if (editor.photoUrl) uploadApi.discard(editor.photoUrl);
+      if (current.photoUrl) uploadApi.discard(current.photoUrl);
       setEditor(null);
     });
   };
@@ -194,13 +216,15 @@ export function PlaceMenuBoardSection({ placeId, menu, onMenuChange }: Props) {
     setEditor((e) => (e && e.rows.length < MAX_ITEMS ? { ...e, rows: [...e.rows, toRow('', null, false)] } : e));
 
   const onSave = async () => {
-    if (!editor) return;
-    const items = editor.rows
+    const current = editorRef.current;
+    if (!current || savingRef.current) return;
+    const items = current.rows
       .map((r) => ({ name: r.name.trim(), price: parsePrice(r.price) }))
       .filter((r) => r.name.length > 0);
+    savingRef.current = true;
     setSaving(true);
     try {
-      const res = await placeApi.saveMenuBoard(placeId, { items, photoUrl: editor.photoUrl });
+      const res = await placeApi.saveMenuBoard(placeId, { items, photoUrl: current.photoUrl });
       onMenuChange(res);
       setEditor(null);
       haptics.success();
@@ -209,6 +233,7 @@ export function PlaceMenuBoardSection({ placeId, menu, onMenuChange }: Props) {
       // 시트는 그대로 둔다 — 같은 목록으로 다시 누르면 된다(서버는 통째로 바꾸기라 두 번 저장돼도 같다)
       toast.error(getErrorMessage(e, '메뉴를 저장하지 못했어요.'));
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
@@ -370,7 +395,28 @@ export function PlaceMenuBoardSection({ placeId, menu, onMenuChange }: Props) {
             </ScrollView>
             <View style={styles.sheetActions}>
               <Button title="취소" variant="ghost" size="md" onPress={closeEditor} style={styles.flex} />
-              <Button title="저장" size="md" onPress={onSave} loading={saving} style={styles.flex} />
+              <Button
+                title="저장"
+                size="md"
+                /*
+                 * 앱은 누르는 순간(onPressIn) 저장한다 — 채팅 전송과 같은 이유(ChatRoomScreen 전송 버튼 주석). 메뉴 이름을 한글로
+                 * 적다 곧장 누르면 키보드가 조합 중인 글자를 확정하는 사이 누름이 취소돼 첫 탭이 먹지 않는다. 스크린리더의
+                 * 두 번 탭은 onPressIn 을 거치지 않으므로 activate 동작에도 단다. 연타는 savingRef 가 거른다.
+                 * 웹은 그 취소가 없고(조합은 blur 에서 끝나고 클릭은 그대로 온다) react-native-web 이 이 버튼의 onPressIn 을
+                 * 부르지 않아(2026-10-06 확인) 평소대로 onPress 다. 어느 쪽이든 값은 editorRef 에서 읽는다.
+                 */
+                {...(Platform.OS === 'web'
+                  ? { onPress: () => void onSave() }
+                  : {
+                      onPressIn: () => void onSave(),
+                      accessibilityActions: [{ name: 'activate' }],
+                      onAccessibilityAction: (e: AccessibilityActionEvent) => {
+                        if (e.nativeEvent.actionName === 'activate') void onSave();
+                      },
+                    })}
+                loading={saving}
+                style={styles.flex}
+              />
             </View>
           </>
         ) : null}
