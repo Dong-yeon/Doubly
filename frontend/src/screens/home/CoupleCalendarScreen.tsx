@@ -59,6 +59,7 @@ import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 import { onColor } from '../../theme/onColor';
 import { layout } from '../../theme/layout';
+import { toWeeks } from '../../utils/calendarWeeks';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'CoupleCalendar'>;
 
@@ -540,49 +541,53 @@ export function CoupleCalendarScreen({ navigation }: Props) {
             ))}
           </View>
           <View style={styles.grid}>
-            {cells.map((day, idx) => {
-              if (day === null) return <View key={`b${idx}`} style={styles.cell} />;
-              const dateStr = `${year}-${pad2(month)}-${pad2(day)}`;
-              const dayEvents = byDate.get(dateStr) ?? [];
-              const isToday = dateStr === todayStr;
-              const isSelected = dateStr === selectedDate;
-              // 여행 기간은 점(하루 단위 일정)이 아니라 셀 아래 액센트 바로 잇는다 — 연속된 날이
-              // 하나의 띠로 보인다. 배경 틴트로 하면 선택 하이라이트(surfaceAlt)와 명도가 겹쳐
-              // 어느 날을 골랐는지 안 보이고, 다크에서는 틴트 자체도 배경과 1.08:1 로 묻힌다.
-              const inTrip = tripDays.has(dateStr);
-              // 빨간 날 — 일요일과 공휴일. 칸 순서가 일요일부터라 idx % 7 === 0 이 일요일이다
-              const holiday = holidayByDate.get(dateStr);
-              const isRed = !!holiday || idx % 7 === 0;
-              return (
-                <Pressable
-                  key={dateStr}
-                  style={[styles.cell, isSelected && styles.cellSelected]}
-                  onPress={() => setSelectedDate(isSelected ? null : dateStr)}
-                  accessibilityState={{ selected: isSelected }}
-                  accessibilityLabel={`${month}월 ${day}일${holiday ? ` ${holiday}` : ''}`}
-                >
-                  <View style={[styles.dayWrap, isToday && styles.todayWrap]}>
-                    {/* 오늘은 채운 원 위 흰 글자가 우선 — 빨강을 얹으면 원 위에서 대비가 무너진다 */}
-                    <Text style={[styles.dayText, isRed && styles.redText, isToday && styles.todayText]}>{day}</Text>
-                  </View>
-                  <View style={styles.dotRow}>
-                    {dayEvents.slice(0, 3).map((e) => (
-                      <View
-                        key={e.id}
-                        style={[styles.dot, { backgroundColor: typeMeta(e.eventType).color }]}
-                      />
-                    ))}
-                    {/*
-                      다녀온 곳은 <b>속이 빈 점</b>으로 그린다 — 채워진 점(앞으로 있을 일정)과
-                      한눈에 갈라져야 한다. 색까지 달리하면 일정 종류 색과 섞여 범례가 늘어난다.
-                    */}
-                    {dateMealDays.has(dateStr) ? <View style={styles.dotRecord} /> : null}
-                  </View>
-                  {/* 여행 기간 띠 — 셀 폭을 꽉 채워 연속된 날끼리 이어져 보인다 */}
-                  <View style={[styles.tripBar, inTrip && styles.tripBarOn]} />
-                </Pressable>
-              );
-            })}
+            {toWeeks(cells).map((week, w) => (
+              <View key={w} style={styles.week}>
+                {week.map((day, j) => {
+                  if (day === null) return <View key={`b${j}`} style={styles.cell} />;
+                  const dateStr = `${year}-${pad2(month)}-${pad2(day)}`;
+                  const dayEvents = byDate.get(dateStr) ?? [];
+                  const isToday = dateStr === todayStr;
+                  const isSelected = dateStr === selectedDate;
+                  // 여행 기간은 점(하루 단위 일정)이 아니라 셀 아래 액센트 바로 잇는다 — 연속된 날이
+                  // 하나의 띠로 보인다. 배경 틴트로 하면 선택 하이라이트(surfaceAlt)와 명도가 겹쳐
+                  // 어느 날을 골랐는지 안 보이고, 다크에서는 틴트 자체도 배경과 1.08:1 로 묻힌다.
+                  const inTrip = tripDays.has(dateStr);
+                  // 빨간 날 — 일요일과 공휴일. 줄 안 위치(j)가 곧 요일이라 j === 0 이 일요일이다
+                  const holiday = holidayByDate.get(dateStr);
+                  const isRed = !!holiday || j === 0;
+                  return (
+                    <Pressable
+                      key={dateStr}
+                      style={[styles.cell, isSelected && styles.cellSelected]}
+                      onPress={() => setSelectedDate(isSelected ? null : dateStr)}
+                      accessibilityState={{ selected: isSelected }}
+                      accessibilityLabel={`${month}월 ${day}일${holiday ? ` ${holiday}` : ''}`}
+                    >
+                      <View style={[styles.dayWrap, isToday && styles.todayWrap]}>
+                        {/* 오늘은 채운 원 위 흰 글자가 우선 — 빨강을 얹으면 원 위에서 대비가 무너진다 */}
+                        <Text style={[styles.dayText, isRed && styles.redText, isToday && styles.todayText]}>{day}</Text>
+                      </View>
+                      <View style={styles.dotRow}>
+                        {dayEvents.slice(0, 3).map((e) => (
+                          <View
+                            key={e.id}
+                            style={[styles.dot, { backgroundColor: typeMeta(e.eventType).color }]}
+                          />
+                        ))}
+                        {/*
+                          다녀온 곳은 <b>속이 빈 점</b>으로 그린다 — 채워진 점(앞으로 있을 일정)과
+                          한눈에 갈라져야 한다. 색까지 달리하면 일정 종류 색과 섞여 범례가 늘어난다.
+                        */}
+                        {dateMealDays.has(dateStr) ? <View style={styles.dotRecord} /> : null}
+                      </View>
+                      {/* 여행 기간 띠 — 셀 폭을 꽉 채워 연속된 날끼리 이어져 보인다 */}
+                      <View style={[styles.tripBar, inTrip && styles.tripBarOn]} />
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ))}
           </View>
           {monthHolidays.length > 0 ? (
             <Text style={styles.holidayLine}>
@@ -995,7 +1000,6 @@ export function CoupleCalendarScreen({ navigation }: Props) {
   );
 }
 
-const CELL = `${100 / 7}%` as const;
 
 const styles = themedStyles((colors) => ({
   container: { flex: 1, backgroundColor: colors.background },
@@ -1022,14 +1026,16 @@ const styles = themedStyles((colors) => ({
   calendarCard: { paddingVertical: spacing.md, paddingHorizontal: spacing.sm },
   weekRow: { flexDirection: 'row', marginBottom: spacing.xs },
   weekday: {
-    width: CELL,
+    flex: 1,
     textAlign: 'center',
     fontSize: fontSize.caption,
     fontWeight: '700',
     color: colors.textSecondary,
   },
-  grid: { flexDirection: 'row', flexWrap: 'wrap' },
-  cell: { width: CELL, alignItems: 'center', paddingVertical: 4, borderRadius: radius.sm },
+  // 달력은 주 단위 줄로 그린다(utils/calendarWeeks 주석) — flexWrap + 100/7% 는 기기 폭에 따라 토요일이 다음 줄로 밀렸다
+  grid: {},
+  week: { flexDirection: 'row' },
+  cell: { flex: 1, minWidth: 0, alignItems: 'center', paddingVertical: 4, borderRadius: radius.sm },
   cellSelected: { backgroundColor: colors.surfaceAlt },
   // 여행 기간 띠 — 없는 날도 같은 높이를 차지해 그리드 행 높이가 흔들리지 않는다
   tripBar: { alignSelf: 'stretch', height: 3, marginTop: 3, borderRadius: 2 },

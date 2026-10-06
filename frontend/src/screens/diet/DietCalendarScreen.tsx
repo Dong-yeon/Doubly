@@ -8,6 +8,7 @@ import { Button } from '../../components/Button';
 import { dietApi } from '../../api/diet';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
+import { toWeeks } from '../../utils/calendarWeeks';
 import { onColor } from '../../theme/onColor';
 
 type Props = NativeStackScreenProps<DietStackParamList, 'DietCalendar'>;
@@ -134,29 +135,33 @@ export function DietCalendarScreen({ navigation }: Props) {
 
       {/* 날짜를 누를 수 있게 — 예전엔 View 라 눌러도 반응이 없었다 */}
       <View style={styles.grid}>
-        {cells.map((day, i) => (
-          <View key={i} style={styles.cell}>
-            {day ? (
-              <TouchableOpacity
-                onPress={() => setSelectedDay(day === selectedDay ? null : day)}
-                accessibilityRole="button"
-                accessibilityLabel={`${year}년 ${month}월 ${day}일`}
-                accessibilityState={{ selected: selectedDay === day }}
-                style={styles.dayTouch}
-              >
-                <View
-                  style={[
-                    styles.dayCircle,
-                    completedDays.has(day) && styles.dayDone,
-                    selectedDay === day && styles.daySelected,
-                  ]}
-                >
-                  <Text style={[styles.dayText, completedDays.has(day) && styles.dayTextDone]}>
-                    {day}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            ) : null}
+        {toWeeks(cells).map((week, w) => (
+          <View key={w} style={styles.week}>
+            {week.map((day, j) => (
+              <View key={j} style={styles.cell}>
+                {day ? (
+                  <TouchableOpacity
+                    onPress={() => setSelectedDay(day === selectedDay ? null : day)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${year}년 ${month}월 ${day}일`}
+                    accessibilityState={{ selected: selectedDay === day }}
+                    style={styles.dayTouch}
+                  >
+                    <View
+                      style={[
+                        styles.dayCircle,
+                        completedDays.has(day) && styles.dayDone,
+                        selectedDay === day && styles.daySelected,
+                      ]}
+                    >
+                      <Text style={[styles.dayText, completedDays.has(day) && styles.dayTextDone]}>
+                        {day}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            ))}
           </View>
         ))}
       </View>
@@ -186,7 +191,6 @@ export function DietCalendarScreen({ navigation }: Props) {
   );
 }
 
-const CELL = `${100 / 7}%`;
 
 const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background, padding: spacing.lg },
@@ -201,9 +205,11 @@ const styles = themedStyles((colors) => ({
   },
   errorBannerText: { color: colors.danger, fontSize: fontSize.caption, fontWeight: '700', textAlign: 'center' },
   weekRow: { flexDirection: 'row' },
-  weekday: { width: CELL, textAlign: 'center', color: colors.textSecondary, fontSize: fontSize.caption },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: spacing.sm },
-  cell: { width: CELL, aspectRatio: 1, alignItems: 'center', justifyContent: 'center' },
+  weekday: { flex: 1, textAlign: 'center', color: colors.textSecondary, fontSize: fontSize.caption },
+  // 달력은 주 단위 줄로 그린다(utils/calendarWeeks 주석) — flexWrap + 100/7% 는 기기 폭에 따라 토요일이 다음 줄로 밀렸다
+  grid: { marginTop: spacing.sm },
+  week: { flexDirection: 'row' },
+  cell: { flex: 1, minWidth: 0, aspectRatio: 1, alignItems: 'center', justifyContent: 'center' },
   /* 셀 전체를 터치 영역으로 — 36px 원만 누르게 하면 타깃이 작다 */
   dayTouch: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   dayCircle: { width: 36, height: 36, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },

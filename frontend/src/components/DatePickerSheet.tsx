@@ -14,6 +14,7 @@ import { RootOverlayModal } from './RootOverlayModal';
 import { MaterialCommunityIcons } from './Icon';
 import { useDatePickerStore } from '../store/datePickerStore';
 import { parseDateString, toDateString } from '../utils/date';
+import { toWeeks } from '../utils/calendarWeeks';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 import { themedStyles } from '../theme/themedStyles';
 import { layout } from '../theme/layout';
@@ -221,45 +222,49 @@ export function DatePickerSheet() {
               </View>
 
               <View style={styles.grid}>
-                {cells.map((day, i) => {
-                  if (day == null) return <View key={`b${i}`} style={styles.cell} />;
-                  const value = iso(year, month, day);
-                  const off = disabled(value);
-                  const selected = value === request.value;
-                  const isToday = value === todayStr;
-                  const weekday = i % 7;
-                  return (
-                    <Pressable
-                      key={value}
-                      style={styles.cell}
-                      disabled={off}
-                      onPress={() => close(value)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`${year}년 ${month}월 ${day}일`}
-                      accessibilityState={{ selected }}
-                    >
-                      <View
-                        style={[
-                          styles.dayBox,
-                          isToday && !selected && styles.todayBox,
-                          selected && styles.selectedBox,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.dayText,
-                            weekday === 0 && styles.sun,
-                            weekday === 6 && styles.sat,
-                            selected && styles.selectedText,
-                            off && styles.disabledText,
-                          ]}
+                {toWeeks(cells).map((week, w) => (
+                  <View key={w} style={styles.week}>
+                    {week.map((day, j) => {
+                      if (day == null) return <View key={`b${j}`} style={styles.cell} />;
+                      const value = iso(year, month, day);
+                      const off = disabled(value);
+                      const selected = value === request.value;
+                      const isToday = value === todayStr;
+                      const weekday = j;
+                      return (
+                        <Pressable
+                          key={value}
+                          style={styles.cell}
+                          disabled={off}
+                          onPress={() => close(value)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`${year}년 ${month}월 ${day}일`}
+                          accessibilityState={{ selected }}
                         >
-                          {day}
-                        </Text>
-                      </View>
-                    </Pressable>
-                  );
-                })}
+                          <View
+                            style={[
+                              styles.dayBox,
+                              isToday && !selected && styles.todayBox,
+                              selected && styles.selectedBox,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.dayText,
+                                weekday === 0 && styles.sun,
+                                weekday === 6 && styles.sat,
+                                selected && styles.selectedText,
+                                off && styles.disabledText,
+                              ]}
+                            >
+                              {day}
+                            </Text>
+                          </View>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                ))}
               </View>
             </>
           )}
@@ -324,9 +329,11 @@ const styles = themedStyles((colors) => ({
   sun: { color: colors.sunday },
   sat: { color: colors.saturday },
 
-  grid: { flexDirection: 'row', flexWrap: 'wrap' },
+  // 달력은 주 단위 줄로 그린다(utils/calendarWeeks 주석) — flexWrap + 100/7% 는 기기 폭에 따라 토요일이 다음 줄로 밀렸다
+  grid: {},
+  week: { flexDirection: 'row' },
   // 7칸 고정 — flex 대신 퍼센트를 써야 줄바꿈이 정확히 7개마다 일어난다
-  cell: { width: `${100 / 7}%`, aspectRatio: 1, alignItems: 'center', justifyContent: 'center' },
+  cell: { flex: 1, minWidth: 0, aspectRatio: 1, alignItems: 'center', justifyContent: 'center' },
   dayBox: {
     width: 36,
     height: 36,
