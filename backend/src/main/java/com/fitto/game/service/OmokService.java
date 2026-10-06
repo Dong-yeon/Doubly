@@ -1,8 +1,6 @@
 package com.fitto.game.service;
 
 import com.fitto.chat.domain.MessageType;
-import com.fitto.chat.dto.ChatMessageResponse;
-import com.fitto.chat.service.ChatService;
 import com.fitto.common.event.CoupleEvent;
 import com.fitto.common.event.CoupleEventPublisher;
 import com.fitto.common.exception.BusinessException;
@@ -18,9 +16,6 @@ import com.fitto.game.dto.OmokGameResponse;
 import com.fitto.game.repository.OmokGameRepository;
 import com.fitto.relation.domain.Relation;
 import com.fitto.relation.repository.RelationRepository;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,16 +32,13 @@ import java.util.List;
 @Transactional(readOnly = true)
 public class OmokService {
 
-    private static final Logger log = LoggerFactory.getLogger(OmokService.class);
-
     private final OmokGameRepository gameRepository;
     private final RelationRepository relationRepository;
     private final GameCouples couples;
     private final PlanGuard planGuard;
     private final NotificationService notificationService;
     private final CoupleEventPublisher coupleEventPublisher;
-    private final ChatService chatService;
-    private final SimpMessagingTemplate messagingTemplate;
+    private final GameChatCards chatCards;
 
     public OmokService(OmokGameRepository gameRepository,
                        RelationRepository relationRepository,
@@ -54,16 +46,14 @@ public class OmokService {
                        PlanGuard planGuard,
                        NotificationService notificationService,
                        CoupleEventPublisher coupleEventPublisher,
-                       ChatService chatService,
-                       SimpMessagingTemplate messagingTemplate) {
+                       GameChatCards chatCards) {
         this.gameRepository = gameRepository;
         this.relationRepository = relationRepository;
         this.couples = couples;
         this.planGuard = planGuard;
         this.notificationService = notificationService;
         this.coupleEventPublisher = coupleEventPublisher;
-        this.chatService = chatService;
-        this.messagingTemplate = messagingTemplate;
+        this.chatCards = chatCards;
     }
 
     /** 진행 중인 판 — 없으면 null */
@@ -254,13 +244,7 @@ public class OmokService {
             notificationService.notify(partnerId, NotificationCategory.PARTNER, title,
                     draw ? body : moverName + "님이 오목을 이겼어요. 한 판 더?", PushLinks.GAME_OMOK);
         }
-        try {
-            ChatMessageResponse saved = chatService.postSystemCard(
-                    moverId, couple.getId(), MessageType.GAME_CARD, title + " " + body);
-            messagingTemplate.convertAndSend("/sub/rooms/" + couple.getId(), saved);
-        } catch (Exception e) {
-            log.warn("오목 결과 채팅 카드 실패 couple={}: {}", couple.getId(), e.getMessage());
-        }
+        chatCards.post(moverId, couple.getId(), MessageType.GAME_CARD, title + " " + body, "오목 결과");
     }
 
     private OmokGameResponse toResponse(OmokGame game, Long viewerId, Relation couple) {

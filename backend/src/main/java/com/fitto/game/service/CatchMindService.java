@@ -1,8 +1,6 @@
 package com.fitto.game.service;
 
 import com.fitto.chat.domain.MessageType;
-import com.fitto.chat.dto.ChatMessageResponse;
-import com.fitto.chat.service.ChatService;
 import com.fitto.common.event.CoupleEvent;
 import com.fitto.common.event.CoupleEventPublisher;
 import com.fitto.common.exception.BusinessException;
@@ -30,7 +28,6 @@ import com.fitto.relation.domain.Relation;
 import com.fitto.relation.repository.RelationRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -85,8 +82,7 @@ public class CatchMindService {
     private final PlanGuard planGuard;
     private final NotificationService notificationService;
     private final CoupleEventPublisher coupleEventPublisher;
-    private final ChatService chatService;
-    private final SimpMessagingTemplate messagingTemplate;
+    private final GameChatCards chatCards;
     private final CloudinaryProperties cloudinaryProperties;
     private final CloudinaryImageDeleter imageDeleter;
     private final Random random = new SecureRandom();
@@ -97,8 +93,7 @@ public class CatchMindService {
                             PlanGuard planGuard,
                             NotificationService notificationService,
                             CoupleEventPublisher coupleEventPublisher,
-                            ChatService chatService,
-                            SimpMessagingTemplate messagingTemplate,
+                            GameChatCards chatCards,
                             CloudinaryProperties cloudinaryProperties,
                             CloudinaryImageDeleter imageDeleter) {
         this.gameRepository = gameRepository;
@@ -107,8 +102,7 @@ public class CatchMindService {
         this.planGuard = planGuard;
         this.notificationService = notificationService;
         this.coupleEventPublisher = coupleEventPublisher;
-        this.chatService = chatService;
-        this.messagingTemplate = messagingTemplate;
+        this.chatCards = chatCards;
         this.cloudinaryProperties = cloudinaryProperties;
         this.imageDeleter = imageDeleter;
     }
@@ -334,19 +328,10 @@ public class CatchMindService {
         postCard(drawerId, couple.getId(), MessageType.IMAGE, SHARE_CAPTION, imageUrl, "그림 공유");
     }
 
-    /**
-     * 카드 한 장을 남기고 방에 흘린다. <b>실패해도 게임 진행을 되돌리지 않는다</b> —
-     * 채팅 카드는 곁가지이고, 여기서 예외가 올라가면 정답 처리나 판 생성이 롤백된다.
-     */
+    /** 카드 한 장 — 커밋 뒤에 따로 쓰므로 실패해도 정답 처리·판 생성이 되돌아가지 않는다({@link GameChatCards}) */
     private void postCard(Long senderId, Long relationId, MessageType type,
                           String content, String imageUrl, String what) {
-        try {
-            ChatMessageResponse saved =
-                    chatService.postSystemCard(senderId, relationId, type, content, imageUrl);
-            messagingTemplate.convertAndSend("/sub/rooms/" + relationId, saved);
-        } catch (Exception e) {
-            log.warn("캐치마인드 {} 채팅 카드 실패 couple={}: {}", what, relationId, e.getMessage());
-        }
+        chatCards.post(senderId, relationId, type, content, imageUrl, "캐치마인드 " + what);
     }
 
     private String shareFolder() {

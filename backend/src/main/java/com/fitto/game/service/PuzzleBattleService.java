@@ -1,8 +1,6 @@
 package com.fitto.game.service;
 
 import com.fitto.chat.domain.MessageType;
-import com.fitto.chat.dto.ChatMessageResponse;
-import com.fitto.chat.service.ChatService;
 import com.fitto.common.event.CoupleEvent;
 import com.fitto.common.event.CoupleEventPublisher;
 import com.fitto.common.exception.BusinessException;
@@ -21,9 +19,6 @@ import com.fitto.game.puzzle.Timeline;
 import com.fitto.game.repository.PuzzleBattleGameRepository;
 import com.fitto.relation.domain.Relation;
 import com.fitto.relation.repository.RelationRepository;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,8 +41,6 @@ import java.util.Random;
 @Transactional(readOnly = true)
 public class PuzzleBattleService {
 
-    private static final Logger log = LoggerFactory.getLogger(PuzzleBattleService.class);
-
     /** 핸디캡 판정에 보는 최근 판 수 */
     static final int HANDICAP_LOOKBACK = 5;
     /** 2연패면 받는 방해 85%, 3연패부터 70%(§2-7 의 예시 수치를 그대로 채택) */
@@ -60,8 +53,7 @@ public class PuzzleBattleService {
     private final PlanGuard planGuard;
     private final NotificationService notificationService;
     private final CoupleEventPublisher coupleEventPublisher;
-    private final ChatService chatService;
-    private final SimpMessagingTemplate messagingTemplate;
+    private final GameChatCards chatCards;
     private final Random random = new SecureRandom();
 
     public PuzzleBattleService(PuzzleBattleGameRepository gameRepository,
@@ -70,16 +62,14 @@ public class PuzzleBattleService {
                                PlanGuard planGuard,
                                NotificationService notificationService,
                                CoupleEventPublisher coupleEventPublisher,
-                               ChatService chatService,
-                               SimpMessagingTemplate messagingTemplate) {
+                               GameChatCards chatCards) {
         this.gameRepository = gameRepository;
         this.relationRepository = relationRepository;
         this.couples = couples;
         this.planGuard = planGuard;
         this.notificationService = notificationService;
         this.coupleEventPublisher = coupleEventPublisher;
-        this.chatService = chatService;
-        this.messagingTemplate = messagingTemplate;
+        this.chatCards = chatCards;
     }
 
     /** 진행 중인 판 — 없으면 null */
@@ -248,13 +238,7 @@ public class PuzzleBattleService {
         if (partnerId != null) {
             notificationService.notify(partnerId, NotificationCategory.PARTNER, title, body, PushLinks.GAME_PUZZLE);
         }
-        try {
-            ChatMessageResponse saved = chatService.postSystemCard(
-                    finisherId, couple.getId(), MessageType.GAME_CARD, title + " " + body);
-            messagingTemplate.convertAndSend("/sub/rooms/" + couple.getId(), saved);
-        } catch (Exception e) {
-            log.warn("연쇄 퍼즐 결과 채팅 카드 실패 couple={}: {}", couple.getId(), e.getMessage());
-        }
+        chatCards.post(finisherId, couple.getId(), MessageType.GAME_CARD, title + " " + body, "연쇄 퍼즐 결과");
     }
 
     /** 행을 잠그고 이 커플의 판인지 확인해 가져온다 — 상태를 바꾸는 모든 경로가 여기를 지난다. */
