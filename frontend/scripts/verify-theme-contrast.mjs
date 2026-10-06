@@ -57,10 +57,22 @@ const chromeOf = (args) => {
 };
 const palettes = {};
 const themesBlock = src.slice(src.indexOf('export const CHROME_THEMES'));
-for (const m of themesBlock.matchAll(/id: '(\w+)'[\s\S]*?light: chrome\(([^)]*)\),\s*dark: chrome\(([^)]*)\)/g)) {
-  palettes[`${m[1]}/light`] = { ...light, ...chromeOf(m[2]) };
-  palettes[`${m[1]}/dark`] = { ...dark, ...chromeOf(m[3]) };
+// 라이트 바탕 물들임 — surface('#bg', '#card', '#alt', '#border', '#shell') 위치 인자(palette.ts 의 surface() 순서)
+const SURFACE_ARGS = ['background', 'surfaceCard', 'surfaceAlt', 'border', 'shellBackdrop'];
+const surfaceOf = (args) => {
+  if (!args) return {};
+  const hex = [...args.matchAll(/'(#[0-9a-fA-F]{6})'/g)].map((m) => m[1].toUpperCase());
+  if (hex.length !== SURFACE_ARGS.length) throw new Error(`surface() 인자 수가 ${SURFACE_ARGS.length} 가 아니다: ${args}`);
+  const o = Object.fromEntries(SURFACE_ARGS.map((k, i) => [k, hex[i]]));
+  o.surface = o.surfaceCard;
+  return o;
+};
+for (const m of themesBlock.matchAll(/id: '(\w+)'[\s\S]*?light: chrome\(([^)]*)\),(?:\s*lightSurface: surface\(([^)]*)\),)?\s*dark: chrome\(([^)]*)\)/g)) {
+  palettes[`${m[1]}/light`] = { ...light, ...chromeOf(m[2]), ...surfaceOf(m[3]) };
+  palettes[`${m[1]}/dark`] = { ...dark, ...chromeOf(m[4]) };
 }
+const tinted = Object.values(palettes).filter((p) => p.background !== light.background).length;
+if (tinted === 0) throw new Error('lightSurface 를 하나도 못 읽었다 — 정규식과 palette.ts 순서를 확인');
 if (Object.keys(palettes).length === 0) throw new Error('CHROME_THEMES 를 하나도 못 읽었다');
 
 const luminance = (hex) => {
