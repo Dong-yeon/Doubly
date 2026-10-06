@@ -25,10 +25,23 @@ public record SavePlaceRequest(
         String category,
 
         @Size(max = 50, message = "kakaoPlaceId 가 올바르지 않습니다.")
-        String kakaoPlaceId
+        String kakaoPlaceId,
+
+        /** 무엇을 파는 곳인지 — 검색 결과의 categoryDetail 그대로(V130). 예전 앱은 안 보낸다 */
+        @Size(max = 50, message = "세부 분류는 50자 이내예요.")
+        String categoryDetail,
+
+        @Size(max = 30, message = "전화번호가 너무 길어요.")
+        String phone
 ) {
     /** kakaoPlaceId 없이 저장하던 기존 호출부(테스트 등) 호환용 */
     public SavePlaceRequest(String name, String address, BigDecimal lat, BigDecimal lng, String category) {
-        this(name, address, lat, lng, category, null);
+        this(name, address, lat, lng, category, null, null, null);
+    }
+
+    /** 세부 분류·전화 이전 호출부 호환용 */
+    public SavePlaceRequest(String name, String address, BigDecimal lat, BigDecimal lng, String category,
+                            String kakaoPlaceId) {
+        this(name, address, lat, lng, category, kakaoPlaceId, null, null);
     }
 }

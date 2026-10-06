@@ -58,6 +58,14 @@ public class Place {
     @Column(name = "kakao_place_id", length = 50)
     private String kakaoPlaceId;
 
+    /** 무엇을 파는 곳인지 — 카카오 category_name 의 마지막 1~2단계(V130). 직접 추가·예전 행은 null */
+    @Column(name = "category_detail", length = 50)
+    private String categoryDetail;
+
+    /** 전화번호 — 카카오 검색에서 온 값(V130). 직접 추가·예전 행은 null */
+    @Column(length = 30)
+    private String phone;
+
     @Column(name = "added_by", nullable = false)
     private Long addedBy;
 
@@ -79,7 +87,7 @@ public class Place {
 
     @Builder
     private Place(Long coupleId, String name, String address, BigDecimal lat, BigDecimal lng,
-                  String category, String kakaoPlaceId, Long addedBy) {
+                  String category, String kakaoPlaceId, Long addedBy, String categoryDetail, String phone) {
         this.coupleId = coupleId;
         this.name = name;
         this.address = address;
@@ -88,6 +96,8 @@ public class Place {
         this.category = category;
         this.kakaoPlaceId = kakaoPlaceId;
         this.addedBy = addedBy;
+        this.categoryDetail = categoryDetail;
+        this.phone = phone;
     }
 
     /** 부분 수정 — null 이 아닌 값만 반영 (커플 둘 다 수정 가능) */

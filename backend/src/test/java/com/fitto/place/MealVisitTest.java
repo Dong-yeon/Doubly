@@ -343,6 +343,21 @@ class MealVisitTest {
     }
 
     @Test
+    void 장소에_세부_분류와_전화를_저장하고_상세_링크는_카카오_id_로_내려준다() {
+        long[] u = couple("mv16");
+        var saved = placeService.save(u[0], new SavePlaceRequest("을지면옥", "서울 중구 충무로14길 2-1", null, null,
+                "음식점", "11223344", "한식 · 냉면", "02-2266-7052"));
+        var manual = placeService.save(u[0], new SavePlaceRequest("동네 분식", null, null, null, "음식점"));
+
+        var got = placeService.get(u[1], saved.id());
+        assertThat(got.categoryDetail()).isEqualTo("한식 · 냉면");
+        assertThat(got.phone()).isEqualTo("02-2266-7052");
+        assertThat(got.detailUrl()).isEqualTo("https://place.map.kakao.com/11223344");
+        // 직접 추가(카카오 id 없음)는 링크를 만들지 않는다 — 앱이 이름+주소 검색으로 연다
+        assertThat(placeService.get(u[0], manual.id()).detailUrl()).isNull();
+    }
+
+    @Test
     void 이미_장소가_연결된_식단에_방문을_또_붙이면_거절한다() {
         long[] u = couple("mv11");
         Long placeId = place(u[0], "잠실 롯데");

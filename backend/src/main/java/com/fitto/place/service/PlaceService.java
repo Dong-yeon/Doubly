@@ -108,7 +108,8 @@ public class PlaceService {
         List<KakaoPlace> found = kakaoLocalClient.searchKeyword(query, Math.clamp(size, 1, 10));
         List<PlaceSearchResponse.PlaceSearchResult> results = found.stream()
                 .map(k -> new PlaceSearchResponse.PlaceSearchResult(
-                        k.id(), k.name(), k.address(), k.category(), k.lat(), k.lng(), k.placeUrl()))
+                        k.id(), k.name(), k.address(), k.category(), k.lat(), k.lng(), k.placeUrl(),
+                        k.categoryDetail(), k.phone(), PlaceLinks.detailUrl(k.id())))
                 .toList();
         return new PlaceSearchResponse(true, results);
     }
@@ -179,6 +180,8 @@ public class PlaceService {
                 .lng(request.lng())
                 .category(request.category())
                 .kakaoPlaceId(blankToNull(request.kakaoPlaceId()))
+                .phone(blankToNull(request.phone()))
+                .categoryDetail(blankToNull(request.categoryDetail()))
                 .addedBy(userId)
                 .build();
         // 즉시 INSERT — UNIQUE 위반이 커밋 시점이 아니라 여기서 터져야 위의 catch 가 받는다
