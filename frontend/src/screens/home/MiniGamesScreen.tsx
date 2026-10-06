@@ -53,7 +53,8 @@ export function MiniGamesScreen({ navigation }: Props) {
       const [s, o, h, d, st, cm, pz, wr] = await Promise.all([
         sudokuApi.current(),
         omokApi.current(),
-        omokApi.history(),
+        // 전적은 서버가 센다(끝낸 판 전부). 실패해도 카드 전체를 비우지 않게 따로 받는다
+        omokApi.record().catch(() => null),
         sudokuApi.daily(),
         gameStreakApi.get(),
         catchMindApi.current(),
@@ -65,10 +66,7 @@ export function MiniGamesScreen({ navigation }: Props) {
       setCatchMind(cm);
       setPuzzle(pz);
       setWallRace(wr);
-      setOmokRecord({
-        me: h.filter((g) => g.winner === 'ME').length,
-        partner: h.filter((g) => g.winner === 'PARTNER').length,
-      });
+      setOmokRecord(h ? { me: h.me, partner: h.partner } : null);
       setDaily(d);
       setStreak(st);
       setLoadError(false);

@@ -9,6 +9,7 @@ import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.game.domain.GameStatus;
 import com.fitto.game.domain.WallRaceGame;
+import com.fitto.game.dto.GameRecordResponse;
 import com.fitto.game.dto.WallRaceGameResponse;
 import com.fitto.game.repository.WallRaceGameRepository;
 import com.fitto.game.service.WallRaceService;
@@ -425,4 +426,22 @@ class WallRaceFlowTest {
         }
     }
 
+    @Test
+    void 전적은_보는_사람_기준으로_끝낸_판을_센다() {
+        long[] users = couple("kra", "krb");
+        Long a = users[0];
+        Long b = users[1];
+        WallRaceGameResponse first = wallRaceService.start(a);
+        walkCreatorToGoal(a, b, first.id());          // a 가 열고 a 가 이긴다
+        WallRaceGameResponse second = wallRaceService.start(b);
+        walkCreatorToGoal(b, a, second.id());         // b 가 열고 b 가 이긴다
+        WallRaceGameResponse third = wallRaceService.start(b);
+        walkCreatorToGoal(b, a, third.id());
+
+        GameRecordResponse fromA = wallRaceService.record(a);
+        assertThat(fromA.me()).isEqualTo(1);
+        assertThat(fromA.partner()).isEqualTo(2);
+        assertThat(fromA.draw()).isZero();
+        assertThat(wallRaceService.record(b).me()).isEqualTo(2);
+    }
 }

@@ -9,6 +9,7 @@ import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.game.domain.GameDifficulty;
 import com.fitto.game.domain.GameStatus;
+import com.fitto.game.dto.GameRecordResponse;
 import com.fitto.game.dto.OmokGameResponse;
 import com.fitto.game.dto.StartSudokuRequest;
 import com.fitto.game.repository.OmokGameRepository;
@@ -38,6 +39,7 @@ class OmokFlowTest {
     @Autowired SudokuService sudokuService;
     @Autowired OmokGameRepository gameRepository;
     @Autowired ChatMessageRepository chatMessageRepository;
+    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
     private Long register(String prefix) {
         String email = prefix + "-" + UUID.randomUUID().toString().substring(0, 8) + "@fitto.com";
@@ -243,5 +245,41 @@ class OmokFlowTest {
         relationService.purgeRecords(a, relationId);
 
         assertThat(gameRepository.findById(game.id())).isEmpty();
+    }
+
+    // ── 전적은 끝낸 판 전부 (docs/game-current-state.md 8-1 #9) ─────────────────────
+
+    /** opener 가 판을 열고 흑(상대 = black)이 7행 가로로 이긴다 */
+    private void blackWins(Long opener, Long black) {
+        OmokGameResponse game = omokService.start(opener);
+        for (int i = 0; i < 5; i++) {
+            omokService.place(black, game.id(), at(7, 3 + i));
+            if (i < 4) omokService.place(opener, game.id(), at(9, 3 + i));
+        }
+    }
+
+    @Test
+    void 전적은_최근_20판이_아니라_끝낸_판_전부를_센다() {
+        Long a = register("ka");
+        Long b = register("kb");
+        connectCouple(a, b);
+        for (int i = 0; i < 21; i++) blackWins(a, b); // a 가 열고 b 가 이긴 판 21개
+        blackWins(b, a);                              // b 가 열고 a 가 이긴 판 1개 — 열린 쪽이 바뀌어도 내 승리로 센다
+
+        assertThat(omokService.history(a)).hasSize(20); // 기록 목록은 여전히 20판
+        GameRecordResponse fromA = omokService.record(a);
+        assertThat(fromA.me()).isEqualTo(1);
+        assertThat(fromA.partner()).isEqualTo(21);
+        assertThat(fromA.draw()).isZero();
+        GameRecordResponse fromB = omokService.record(b);
+        assertThat(fromB.me()).isEqualTo(21);
+        assertThat(fromB.partner()).isEqualTo(1);
+
+        // 무승부(판이 가득 참)는 225수를 둬야 나오므로 한 판을 DB 에서 무승부로 바꿔 센다
+        Long anyGame = omokService.history(a).get(0).id();
+        jdbcTemplate.update("update couple_games set winner = 'DRAW' where id = ?", anyGame);
+        GameRecordResponse after = omokService.record(a);
+        assertThat(after.me() + after.partner()).isEqualTo(21);
+        assertThat(after.draw()).isEqualTo(1);
     }
 }

@@ -8,6 +8,7 @@ import type {
   CatchMindWordCandidate,
   DailySudoku,
   GameReactionOption,
+  GameRecord,
   GameStreak,
   GameTypeKey,
   OmokGame,
@@ -103,6 +104,8 @@ export const omokApi = {
   respondUndo: (id: number, accept: boolean) =>
     unwrap(apiClient.post<ApiResponse<OmokGame>>(`/games/omok/${id}/undo-response`, { accept })),
   giveUp: (id: number) => unwrap(apiClient.post<ApiResponse<void>>(`/games/omok/${id}/give-up`)),
+  /** 전적 — 끝낸 판 전부를 서버가 센다(history 는 최근 20판뿐이라 전적에 쓰면 안 된다) */
+  record: () => unwrap(apiClient.get<ApiResponse<GameRecord>>('/games/omok/record')),
   /** 끝난 판 최근 20개(승패 포함) */
   history: () => unwrap(apiClient.get<ApiResponse<OmokGame[]>>('/games/omok/history')),
 };
@@ -129,6 +132,8 @@ export const wallRaceApi = {
   respondUndo: (id: number, accept: boolean) =>
     unwrap(apiClient.post<ApiResponse<WallRaceGame>>(`/games/wall-race/${id}/undo-response`, { accept })),
   giveUp: (id: number) => unwrap(apiClient.post<ApiResponse<void>>(`/games/wall-race/${id}/give-up`)),
+  /** 전적 — 끝낸 판 전부를 서버가 센다(history 는 최근 20판뿐이라 전적에 쓰면 안 된다) */
+  record: () => unwrap(apiClient.get<ApiResponse<GameRecord>>('/games/wall-race/record')),
   /** 끝난 판 최근 20개(승패 포함) */
   history: () => unwrap(apiClient.get<ApiResponse<WallRaceGame[]>>('/games/wall-race/history')),
 };

@@ -12,6 +12,7 @@ import com.fitto.common.plan.Feature;
 import com.fitto.common.plan.PlanGuard;
 import com.fitto.game.domain.GameStatus;
 import com.fitto.game.domain.WallRaceGame;
+import com.fitto.game.dto.GameRecordResponse;
 import com.fitto.game.dto.WallRaceGameResponse;
 import com.fitto.game.repository.WallRaceGameRepository;
 import com.fitto.game.wallrace.WallRaceRules;
@@ -226,6 +227,15 @@ public class WallRaceService {
                     PushLinks.GAME_WALL_RACE);
         }
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.GAME);
+    }
+
+    /** 전적 — 끝낸 판 전부(최근 20판이 아니라). 보는 사람 기준. 무승부는 없다 */
+    public GameRecordResponse record(Long userId) {
+        Relation couple = activeCouple(userId);
+        return new GameRecordResponse(
+                gameRepository.countWins(couple.getId(), userId, GameStatus.COMPLETED),
+                gameRepository.countLosses(couple.getId(), userId, GameStatus.COMPLETED),
+                0);
     }
 
     /** 끝난 판 최근 20개(승패 포함) */

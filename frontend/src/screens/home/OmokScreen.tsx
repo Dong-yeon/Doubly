@@ -25,7 +25,7 @@ import { Alert } from '../../utils/alert';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { OmokGame } from '../../types';
+import type { GameRecord, OmokGame } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'Omok'>;
@@ -53,6 +53,11 @@ export function OmokScreen(_: Props) {
    */
   const watchingRef = useRef<OmokGame | null>(null);
   const [history, setHistory] = useState<OmokGame[]>([]);
+  /** 서버가 센 전적(끝낸 판 전부) — 못 받으면 null 이고 그때만 기록 목록으로 센다 */
+  const [serverRecord, setServerRecord] = useState<GameRecord | null>(null);
+  const refreshRecord = useCallback(() => {
+    omokApi.record().then(setServerRecord).catch(() => undefined);
+  }, []);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [starting, setStarting] = useState(false);
@@ -66,6 +71,7 @@ export function OmokScreen(_: Props) {
     setLoadError(false);
     try {
       const [g, h] = await Promise.all([omokApi.current(), omokApi.history()]);
+      refreshRecord();
       setGame(g);
       setHistory(h);
       /*
@@ -90,7 +96,7 @@ export function OmokScreen(_: Props) {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, []);
+  }, [refreshRecord]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -162,6 +168,7 @@ export function OmokScreen(_: Props) {
         setGame(null);
         if (updated.winner === 'ME') haptics.success();
         omokApi.history().then(setHistory).catch(() => undefined);
+        refreshRecord();
       } else {
         setGame(updated);
       }
@@ -235,13 +242,14 @@ export function OmokScreen(_: Props) {
   const cell = boardSize / SIZE;
   const stoneSize = Math.max(12, cell * 0.78);
 
+  // 전적은 서버가 센 값(끝낸 판 전부). 기록 목록은 최근 20판뿐이라 21판째부터 줄어든다(8-1 #9)
   const record = useMemo(
-    () => ({
+    () => serverRecord ?? {
       me: history.filter((g) => g.winner === 'ME').length,
       partner: history.filter((g) => g.winner === 'PARTNER').length,
       draw: history.filter((g) => g.winner === 'DRAW').length,
-    }),
-    [history],
+    },
+    [serverRecord, history],
   );
 
   const renderBoard = (g: OmokGame, interactive: boolean) => {

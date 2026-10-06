@@ -3,6 +3,7 @@ package com.fitto.game.controller;
 import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
 import com.fitto.game.dto.OmokGameResponse;
+import com.fitto.game.dto.GameRecordResponse;
 import com.fitto.game.dto.UndoResponseRequest;
 import com.fitto.game.service.OmokService;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -67,6 +68,12 @@ public class OmokController {
     public ApiResponse<Void> giveUp(@AuthenticationPrincipal AuthUser user, @PathVariable Long id) {
         omokService.giveUp(user.id(), id);
         return ApiResponse.success(null, "이 판은 접었어요.");
+    }
+
+    /** 전적 — 끝낸 판 전부를 센다(기록 목록은 최근 20판뿐이다) */
+    @GetMapping("/record")
+    public ApiResponse<GameRecordResponse> record(@AuthenticationPrincipal AuthUser user) {
+        return ApiResponse.success(omokService.record(user.id()));
     }
 
     @GetMapping("/history")

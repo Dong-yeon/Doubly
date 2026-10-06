@@ -31,7 +31,7 @@ import { Alert } from '../../utils/alert';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { fontSize, radius, spacing } from '../../constants/theme';
-import type { WallRaceGame } from '../../types';
+import type { GameRecord, WallRaceGame } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { palettes } from '../../theme/palette';
 
@@ -126,6 +126,11 @@ export function WallRaceScreen(_: Props) {
    */
   const watchingRef = useRef<WallRaceGame | null>(null);
   const [history, setHistory] = useState<WallRaceGame[]>([]);
+  /** 서버가 센 전적(끝낸 판 전부) — 못 받으면 null 이고 그때만 기록 목록으로 센다 */
+  const [serverRecord, setServerRecord] = useState<GameRecord | null>(null);
+  const refreshRecord = useCallback(() => {
+    wallRaceApi.record().then(setServerRecord).catch(() => undefined);
+  }, []);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [starting, setStarting] = useState(false);
@@ -140,6 +145,7 @@ export function WallRaceScreen(_: Props) {
     setLoadError(false);
     try {
       const [g, h] = await Promise.all([wallRaceApi.current(), wallRaceApi.history()]);
+      refreshRecord();
       setGame(g);
       setHistory(h);
       // 내 차례가 아니게 됐으면 고르던 벽은 의미가 없다 — 모드째 내린다
@@ -166,7 +172,7 @@ export function WallRaceScreen(_: Props) {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, []);
+  }, [refreshRecord]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -222,6 +228,7 @@ export function WallRaceScreen(_: Props) {
       setWallMode(false);
       if (updated.winner === 'ME') haptics.success();
       wallRaceApi.history().then(setHistory).catch(() => undefined);
+      refreshRecord();
     } else {
       setGame(updated);
     }
@@ -338,12 +345,14 @@ export function WallRaceScreen(_: Props) {
   /** 지난 판 카드에 들어가는 작은 판 — 훑어보는 용도라 조작은 없다 */
   const historyBoardSize = Math.min(boardSize * 0.55, 200);
 
+  // 전적은 서버가 센 값(끝낸 판 전부). 기록 목록은 최근 20판뿐이라 21판째부터 줄어든다(8-1 #9)
   const record = useMemo(
-    () => ({
+    () => serverRecord ?? {
       me: history.filter((g) => g.winner === 'ME').length,
       partner: history.filter((g) => g.winner === 'PARTNER').length,
-    }),
-    [history],
+      draw: 0,
+    },
+    [serverRecord, history],
   );
 
   const renderBoard = (g: WallRaceGame, interactive: boolean, size = boardSize) => {
