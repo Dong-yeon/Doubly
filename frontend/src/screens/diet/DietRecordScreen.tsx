@@ -31,12 +31,13 @@ import { useRelationStore } from '../../store/relationStore';
 import { useAuthStore } from '../../store/authStore';
 import { usePlanStore } from '../../store/planStore';
 import { usePlaceStore } from '../../store/placeStore';
+import { placeSubtitle } from '../../utils/placeLinks';
 import { useDirtyGuard } from '../../hooks/useDirtyGuard';
 import { useReturnToTab } from '../../hooks/useReturnToTab';
 import { useChatStore } from '../../store/chatStore';
 import { dietApi, SaveMealItemPayload } from '../../api/diet';
 import { foodDbApi } from '../../api/foodDb';
-import { placeApi } from '../../api/place';
+import { placeApi, toSavePlacePayload } from '../../api/place';
 import { pickImageAsset, takePhotoAsset, shrinkImage, uploadImage } from '../../utils/imageUpload';
 import { getErrorMessage } from '../../utils/error';
 import { errorCodeOf } from '../../api/client';
@@ -1235,16 +1236,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
         const res = await placeApi.recordMealVisit({
           clientRequestId,
           placeId: selectedPlace?.id,
-          place: pendingKakao
-            ? {
-                name: pendingKakao.name,
-                address: pendingKakao.address ?? undefined,
-                lat: pendingKakao.lat ?? undefined,
-                lng: pendingKakao.lng ?? undefined,
-                category: pendingKakao.category ?? undefined,
-                kakaoPlaceId: pendingKakao.kakaoPlaceId ?? undefined,
-              }
-            : undefined,
+          place: pendingKakao ? toSavePlacePayload(pendingKakao) : undefined,
           visitedAt: mealDate,
           photoUrl,
           rating: placeRating > 0 ? placeRating : undefined,
@@ -1970,8 +1962,9 @@ export function DietRecordScreen({ navigation, route }: Props) {
               <View style={styles.kakaoResultRow}>
                 <View style={styles.flex}>
                   <Text style={styles.placeCandidateName} numberOfLines={1}>{item.name}</Text>
+                  {/* "한식 · 냉면 · 연남동" — 무엇을 파는 곳인지와 동네(같은 이름 체인점을 가른다) */}
                   <Text style={styles.placeCandidateInfo} numberOfLines={1}>
-                    {item.category ?? item.address ?? ''}
+                    {placeSubtitle(item)}
                   </Text>
                 </View>
                 <Button title="고르기" size="sm" onPress={() => onAddFromKakao(item)} />

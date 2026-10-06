@@ -25,6 +25,32 @@ export interface SavePlacePayload {
   category?: string;
   /** 카카오 검색 결과의 고유 id — 실어 보내면 이미 등록된 같은 장소일 때 중복 대신 재사용된다 */
   kakaoPlaceId?: string;
+  /** 무엇을 파는 곳인지("한식 · 냉면")·전화 — 검색 결과에서 그대로(예전 서버는 무시) */
+  categoryDetail?: string;
+  phone?: string;
+}
+
+/** 검색 결과(카카오) → 저장 요청 — 화면마다 손으로 옮기다 필드가 빠지던 것을 한 곳으로 */
+export function toSavePlacePayload(r: {
+  name: string;
+  address?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  category?: string | null;
+  kakaoPlaceId?: string | null;
+  categoryDetail?: string | null;
+  phone?: string | null;
+}): SavePlacePayload {
+  return {
+    name: r.name,
+    address: r.address ?? undefined,
+    lat: r.lat ?? undefined,
+    lng: r.lng ?? undefined,
+    category: r.category ?? undefined,
+    kakaoPlaceId: r.kakaoPlaceId ?? undefined,
+    categoryDetail: r.categoryDetail ?? undefined,
+    phone: r.phone ?? undefined,
+  };
 }
 
 export interface RecordVisitPayload {

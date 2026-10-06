@@ -63,7 +63,7 @@ import { PlaceSearchResultCard, searchResultKey } from './PlaceSearchResultCard'
 import { errorCodeOf } from '../../api/client';
 import { getErrorMessage } from '../../utils/error';
 import { CONTENT_TYPE_FILTERS, contentTypeLabel } from '../../constants/contentTypes';
-import { placeApi } from '../../api/place';
+import { placeApi, toSavePlacePayload } from '../../api/place';
 import { contentApi } from '../../api/content';
 import { usePlaceStore } from '../../store/placeStore';
 import { useContentStore } from '../../store/contentStore';
@@ -464,14 +464,7 @@ export function PlaceScreen() {
     if (savingResultKey) return;
     setSavingResultKey(key);
     try {
-      const saved = await placeApi.save({
-        name: r.name,
-        address: r.address ?? undefined,
-        lat: r.lat ?? undefined,
-        lng: r.lng ?? undefined,
-        category: r.category ?? undefined,
-        kakaoPlaceId: r.kakaoPlaceId ?? undefined,
-      });
+      const saved = await placeApi.save(toSavePlacePayload(r));
       invalidatePlaces();
       await loadPlaces(true).catch(() => {});
       if (saved.created === false) {

@@ -10,7 +10,7 @@
 import React, { useState } from 'react';
 import { Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Button } from '../../components/Button';
-import { placeApi } from '../../api/place';
+import { placeApi, toSavePlacePayload } from '../../api/place';
 import { usePlaceStore } from '../../store/placeStore';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
@@ -35,13 +35,8 @@ export function LovelichelinRecommendCards({ data }: { data: LovelichelinRecomme
   const onAdd = async (place: LovelichelinRecommendedPlace) => {
     setSavingName(place.name);
     try {
-      await placeApi.save({
-        name: place.name,
-        address: place.address ?? undefined,
-        lat: place.lat ?? undefined,
-        lng: place.lng ?? undefined,
-        category: place.category ?? undefined,
-      });
+      // 카카오 id 까지 실어 보낸다 — 이미 담긴 곳이면 새로 만들지 않는다
+      await placeApi.save(toSavePlacePayload(place));
       haptics.success();
       toast.success('럽슐랭에 추가했어요!');
       // 모달을 닫고 돌아간 목록/지도가 새 장소를 반영하게
