@@ -24,6 +24,8 @@ import {
   ActivityIndicator,
   FlatList,
   Image,
+  Linking,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -58,6 +60,7 @@ import {
 } from './placeFilters';
 import { MapSheet, sheetTops, type SheetSnap } from './MapSheet';
 import { PlaceListCard, hasNoLocation, ratingHint } from './PlaceListCard';
+import { getMyLocation } from '../../utils/myLocation';
 import { PlacePinCard } from './PlacePinCard';
 import { PlaceSearchResultCard, searchResultKey } from './PlaceSearchResultCard';
 import { errorCodeOf } from '../../api/client';
@@ -219,6 +222,8 @@ export function PlaceScreen() {
   const [mapFailed, setMapFailed] = useState(false);
   const mapAvailable = isKakaoMapConfigured() && !mapFailed;
   const mapRef = useRef<KakaoMapHandle>(null);
+  // "내 위치" — 권한 묻기·위치 잡기에 몇 초 걸릴 수 있어 그동안 버튼에 스피너를 돌리고 연타를 막는다
+  const [locating, setLocating] = useState(false);
 
   // 지도 영역·위 덮개(검색창·칩)·시트 머리 높이 — 시트 단 높이와 지도 시야 여백을 정한다
   const [areaHeight, setAreaHeight] = useState(0);
@@ -381,10 +386,38 @@ export function PlaceScreen() {
   const fixLocation = (p: Place) => navigation.navigate('PlaceAdd', { place: p, focusLocation: true });
 
   // 핀 탭 → 그 한 곳의 카드를 미리보기 높이로. 핀은 시트에 가리지 않게 보이는 영역 가운데로 옮긴다
+  const visibleOffsetY = () => Math.round(areaHeight / 2 - (overlayHeight + tops.peek) / 2);
   const panToVisible = (lat: number, lng: number) => {
     if (!areaHeight) return;
-    const visibleCenter = (overlayHeight + tops.peek) / 2;
-    mapRef.current?.panTo(lat, lng, Math.round(areaHeight / 2 - visibleCenter));
+    mapRef.current?.panTo(lat, lng, visibleOffsetY());
+  };
+
+  /*
+   * 내 위치 — 점을 놓고 보이는 영역 가운데로 옮긴다. 시트는 미리보기로 내려 지도를 넓힌다(근처 핀이 보이게).
+   * 위치는 지도를 옮기는 데만 쓰고 어디에도 보내지 않는다(utils/myLocation).
+   */
+  const onMyLocation = async () => {
+    if (locating) return;
+    setLocating(true);
+    try {
+      const result = await getMyLocation();
+      if (result.kind === 'ok') {
+        if (snap === 'full') setSnap('peek');
+        mapRef.current?.showMyLocation(result.lat, result.lng, areaHeight ? visibleOffsetY() : 0);
+      } else if (result.kind === 'blocked' && Platform.OS !== 'web') {
+        Alert.alert('위치 권한이 꺼져 있어요', '설정에서 Dubly 의 위치 권한을 허용하면 지도에서 내 위치를 볼 수 있어요.', [
+          { text: '취소', style: 'cancel' },
+          { text: '설정 열기', onPress: () => void Linking.openSettings() },
+        ]);
+      } else if (result.kind === 'unavailable') {
+        toast.error('지금 위치를 찾지 못했어요. 위치 서비스가 켜져 있는지 확인해 주세요.');
+      } else {
+        // 방금 거절했거나(다시 물을 수 있다), 웹에서 브라우저가 막았다
+        toast.info('위치 권한을 허용하면 지도에서 내 위치를 볼 수 있어요.');
+      }
+    } finally {
+      setLocating(false);
+    }
   };
 
   const onMarkerPress = (id: number) => {
@@ -795,6 +828,21 @@ export function PlaceScreen() {
           </Pressable>
         ) : null}
       </View>
+      {/* 내 위치 — 덮개 바로 아래 오른쪽(지도 앱들의 자리). 가운데의 "이 지역 장소 보기"와 겹치지 않는다 */}
+      <Pressable
+        style={[styles.myLocationButton, { top: overlayHeight + spacing.xs }]}
+        onPress={() => void onMyLocation()}
+        disabled={locating}
+        accessibilityRole="button"
+        accessibilityLabel="내 위치로 지도 옮기기"
+        accessibilityState={{ busy: locating }}
+      >
+        {locating ? (
+          <ActivityIndicator size="small" color={colors.primary} />
+        ) : (
+          <MaterialCommunityIcons name="crosshairs-gps" size={22} color={colors.textPrimary} />
+        )}
+      </Pressable>
       {/* 덮개 밖에 둔다 — 덮개 높이(시트 '전체' 위 끝)가 버튼이 뜰 때마다 출렁이지 않게 */}
       {movedBounds && !search ? (
         <Pressable
@@ -1102,6 +1150,25 @@ const styles = themedStyles((colors) => ({
     elevation: 4,
   },
   areaButtonText: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '800' },
+  // 내 위치 — 덮개 아래 오른쪽 둥근 버튼. 시트(zIndex 위)가 '전체'로 올라오면 그 아래로 가려진다
+  myLocationButton: {
+    position: 'absolute',
+    right: spacing.md,
+    zIndex: 2,
+    width: layout.touchTarget,
+    height: layout.touchTarget,
+    borderRadius: layout.touchTarget / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
   // 시트 머리 — 제목 줄 + AI 버튼
   sheetHeader: { paddingHorizontal: spacing.lg },
   sheetTitleRow: {

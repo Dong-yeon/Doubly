@@ -91,6 +91,18 @@ export const CLUSTER_MIN_LEVEL = 5;
 /** 묶음을 쓸 때 이름표는 이 축척 이하(가까이)에서만 — 묶인 핀 위에 이름표만 떠 있지 않게 */
 export const LABEL_MAX_LEVEL = CLUSTER_MIN_LEVEL - 1;
 
+/**
+ * 내 위치 점 — 네이티브(WebView)·웹이 같은 모양을 쓴다. 지도 앱들의 관례대로 흰 테두리 파란 점 + 옅은 원.
+ * 우리 핀(코랄·하늘·금색)과 섞이지 않는 색이라 테마 팔레트를 따르지 않는다. 눌리지 않는다(pointer-events:none).
+ */
+export const MY_LOCATION_DOT_HTML =
+  '<div style="position:relative;width:44px;height:44px;pointer-events:none;">' +
+  '<div style="position:absolute;inset:0;border-radius:50%;background:rgba(26,115,232,.18);"></div>' +
+  '<div style="position:absolute;left:14px;top:14px;width:16px;height:16px;border-radius:50%;background:#1A73E8;' +
+  'border:3px solid #fff;box-sizing:border-box;box-shadow:0 1px 4px rgba(0,0,0,.35);"></div></div>';
+/** 내 위치로 갈 때 이보다 넓게 보고 있으면 동네 단위로 당긴다 — 전국을 보는 채로 옮기면 어디인지 안 보인다 */
+export const MY_LOCATION_MAX_LEVEL = 5;
+
 function svgUri(svg: string): string {
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
 }
@@ -265,6 +277,7 @@ kakao.maps.load(function () {
     if (d.type === 'panTo') { window.fittoPanTo(d.lat, d.lng, d.offsetY); }
     if (d.type === 'clearPin') { window.fittoClearPin(); }
     if (d.type === 'fitPoints') { window.fittoFitPoints(d.points); }
+    if (d.type === 'myLocation') { window.fittoShowMyLocation(d.lat, d.lng, d.offsetY); }
   });
 
   // 색상 지정 핀 — 원형 SVG 를 데이터 URI 로 인라인 렌더링 (외부 이미지 호스팅 불필요)
@@ -457,6 +470,15 @@ kakao.maps.load(function () {
   };
   // 좌표 고르기 핀 지우기 — 고른 걸 취소했을 때
   window.fittoClearPin = function () { if (selMarker) { selMarker.setMap(null); selMarker = null; } };
+  // 내 위치 — 점을 (다시) 놓고 그리로 간다. 너무 넓게 보고 있었으면 동네 단위로 당긴 뒤 옮긴다
+  var myDot = null;
+  window.fittoShowMyLocation = function (lat, lng, offsetY) {
+    var pos = new kakao.maps.LatLng(lat, lng);
+    if (myDot) { myDot.setPosition(pos); }
+    else { myDot = new kakao.maps.CustomOverlay({ map: map, position: pos, content: ${JSON.stringify(MY_LOCATION_DOT_HTML)}, xAnchor: 0.5, yAnchor: 0.5, zIndex: 1 }); }
+    if (map.getLevel() > ${MY_LOCATION_MAX_LEVEL}) { programmatic = true; map.setLevel(${MY_LOCATION_MAX_LEVEL}); }
+    window.fittoPanTo(lat, lng, offsetY);
+  };
 
   /*
    * 지도가 멈출 때마다(idle) 보이는 범위를 알린다. 사용자가 끌거나 확대했는지(byUser)를 같이 보낸다 —

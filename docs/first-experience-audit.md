@@ -138,6 +138,19 @@ iOS 업데이트 그룹 `f7c26a04`·Android `c1b36ef8`). 소개 사이트는 **G
   - 받아야 할 값: **Play 앱 서명 키 SHA-256**, **Apple Team ID**.
   - 할 일 목록은 `docs/EAS_BUILD.md` "다음 빌드에 묶을 것"에 있습니다.
 
+**2026-10-06 — #2 딥링크 2단계 (1.0.7 빌드)**
+
+- **App Links·Universal Links:** `https://dubly.co.kr/i/CODE` 를 누르면 앱이 깔린 폰에서는 브라우저 없이 앱이 열린다.
+  가로채는 경로는 `/i/` 뿐이다. 받은 URL 은 1단계에서 이미 만든 `holdIfInvite` → `pendingInvite` 로 그대로 흐른다(앱 쪽 새 경로 없음).
+  - `landing/.well-known/assetlinks.json`(Play 앱 서명 키 SHA-256) · `apple-app-site-association`(Team ID `D9F8L9VS2S`),
+    `_headers` 로 `Content-Type: application/json`.
+  - 소개 페이지의 "앱에서 열기"(스킴)·"코드 복사"는 남긴다 — 카카오톡 인앱 브라우저처럼 링크를 앱에 넘기지 않는 곳, 옛 버전, 앱 없는 폰.
+- **설치 후 코드 이어받기(Android):** 첫 실행에 Play 설치 리퍼러 `invite=CODE` 를 읽어 맡겨 둔다(`utils/installReferrer.ts`).
+  설치당 한 번만 읽고, 설치한 지 24시간(코드 유효기간)이 지난 앱은 보지 않는다 — 이 버전으로 **업데이트**한 기존 사용자가
+  처음 깔 때의 옛 코드를 받지 않게. iOS 는 동등한 장치가 없어 붙여넣기가 그대로 길이다.
+- 확인 못 한 것: 실제 도메인 검증(빌드 설치 후 `adb shell pm get-app-links com.doubly.app` 가 `verified`,
+  iOS 는 메모 앱에 링크를 붙여 길게 눌러 "Dubly에서 열기"), Play 리퍼러 실수신(내부 테스트 트랙 링크로 설치해 봐야 한다).
+
 **2026-10-05 — #10 사진 한도: 식단 사진을 별도 주머니로**
 
 서버 배포(`03b4c050`)·production OTA 완료(2026-10-05, 1.0.6 대상 — fingerprint 일치, iOS `c5cbc6a3`·Android `24a4d188`).
@@ -154,8 +167,7 @@ iOS 업데이트 그룹 `f7c26a04`·Android `c1b36ef8`). 소개 사이트는 **G
 **남은 것**
 
 - **#10 사진 한도(커플 합산 월 60장):** 식단 사진을 별도 주머니로 뺄지, 한도를 올릴지는 요금 정책 결정이 필요합니다.
-- **#2 딥링크·디퍼드 링크:** 네이티브 설정(`intentFilters`·`associatedDomains`, 즉 빌드)과 dubly.co.kr 의
-  `assetlinks.json`·`apple-app-site-association` 배포가 필요한 별도 작업입니다.
+- **#2 딥링크·디퍼드 링크:** 2026-10-06 구현(위 "#2 딥링크 2단계"). 소개 사이트 배포 → 1.0.7 빌드 → 실기기 검증이 남았습니다.
 - **운영 데이터:** 이미 쌓인 PENDING 행은 그대로 둡니다. 코드가 만료돼 있어 쓰일 길이 없고,
   다음에 "코드 만들기"를 누르면 그 사용자의 최신 행이 재사용되며 나머지는 코드가 비워집니다.
 

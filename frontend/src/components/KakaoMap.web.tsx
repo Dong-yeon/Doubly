@@ -17,6 +17,8 @@ import {
   CLUSTER_MIN_MARKERS,
   LABEL_MAX_LEVEL,
   MAP_ROUTE_COLOR,
+  MY_LOCATION_DOT_HTML,
+  MY_LOCATION_MAX_LEVEL,
   pinIconKey,
   type KakaoMapMarker,
 } from '../utils/kakaoMapHtml';
@@ -124,6 +126,8 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
   const mapRef = useRef<any>(null);
   const selMarkerRef = useRef<any>(null);
   const overlaysRef = useRef<any[]>([]);
+  /** 내 위치 점 — 마커 다시 그리기(overlaysRef)와 따로 산다 */
+  const myDotRef = useRef<any>(null);
   /** 화면 맞추기를 이미 했는지 — 갱신마다 시야를 다시 잡지 않기 위해 */
   const fittedRef = useRef(false);
   const [ready, setReady] = useState(false);
@@ -383,6 +387,33 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
       points.forEach((p) => bounds.extend(new kakao.maps.LatLng(p.lat, p.lng)));
       const pad = padRef.current;
       map.setBounds(bounds, pad.top, pad.right, pad.bottom, pad.left);
+    },
+    showMyLocation: (lat: number, lng: number, offsetY = 0) => {
+      // kakaoMapHtml 의 fittoShowMyLocation 과 같은 동작
+      const kakao = (window as any).kakao;
+      const map = mapRef.current;
+      if (!kakao?.maps || !map) return;
+      const pos = new kakao.maps.LatLng(lat, lng);
+      if (myDotRef.current) myDotRef.current.setPosition(pos);
+      else {
+        myDotRef.current = new kakao.maps.CustomOverlay({
+          map,
+          position: pos,
+          content: MY_LOCATION_DOT_HTML,
+          xAnchor: 0.5,
+          yAnchor: 0.5,
+          zIndex: 1,
+        });
+      }
+      programmaticRef.current = true;
+      if (map.getLevel() > MY_LOCATION_MAX_LEVEL) map.setLevel(MY_LOCATION_MAX_LEVEL);
+      let target = pos;
+      if (offsetY) {
+        const proj = map.getProjection();
+        const pt = proj.containerPointFromCoords(target);
+        target = proj.coordsFromContainerPoint(new kakao.maps.Point(pt.x, pt.y + offsetY));
+      }
+      map.panTo(target);
     },
     clearPin: () => {
       if (selMarkerRef.current) {

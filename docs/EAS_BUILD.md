@@ -465,27 +465,25 @@ console.log((total / 1024 / 1024).toFixed(1), 'MB');
 
 fingerprint 를 바꾸는 변경이라 지금 빌드에 업데이트를 계속 보내려면 미뤄야 하는 것들. 다음 네이티브 빌드 직전에 함께 넣는다.
 
-- `package.json` 의 `update:production` 에 `--environment production`(2026-10-02) — 없으면 `--non-interactive` 업데이트가
-  "The `--environment` flag must be set" 으로 실패한다. 넣어 보니 Android `5025c62d…`→`1a88b1bb…`, iOS `810b9a8b…`→`6b1a1a32…` 로 바뀌었다
-  (`fingerprint.config.js` 가 건너뛰는 건 `run` 이 없는 android/ios 스크립트뿐이다). `update:preview` 도 같이.
-- `package.json` 에 `"verify:place-link": "node scripts/verify-place-link.mjs"`(2026-10-02, 채팅 지도 링크 판별 검증) — 그때까지는
-  `node scripts/verify-place-link.mjs` 로 직접 돌린다. 등록하면 main 의 fingerprint 가 바뀌어 그 뒤 모든 업데이트가 지금 빌드에 안 간다
-  (docs/LOVELICHELIN_CHAT_LINK_2026-10-02.md §0).
-- `package.json` 에 `"verify:home-event": "node --experimental-strip-types scripts/verify-home-event.mjs"`(2026-10-02, 홈 다가오는 일정
-  날짜 경계 검증) — 그때까지는 그 명령으로 직접 돌린다. 등록을 미루는 이유는 위 verify:place-link 와 같다.
-- **커플 초대 App Links·Universal Links + 설치 후 코드 이어받기**(2026-10-05, docs/first-experience-audit.md #2 2단계).
-  1단계(초대 링크·소개 사이트 `/i/CODE`·`doubly://couple/connect/CODE`·로그인 뒤 코드 채우기)는 JS 라 업데이트로 나갔다.
-  빌드 때 넣을 것:
-  - `app.json` `android.intentFilters`: `https://dubly.co.kr/i/*`(`autoVerify: true`, `BROWSABLE`·`DEFAULT`)
-  - `app.json` `ios.associatedDomains`: `["applinks:dubly.co.kr"]` — App ID 에 Associated Domains 기능이 켜져야 한다(EAS 가 프로비저닝 갱신)
-  - `landing/.well-known/assetlinks.json`: 패키지 `com.doubly.app` + **Play 앱 서명 키** SHA-256(업로드 키가 아니다 —
-    Play Console › 테스트 및 출시 › 앱 무결성 › 앱 서명). `_headers` 로 `Content-Type: application/json`
-  - `landing/.well-known/apple-app-site-association`(확장자 없음): `appIDs: ["<TeamID>.com.doubly.app.ios"]`,
-    `components: [{ "/": "/i/*" }]`, `Content-Type: application/json`, 리다이렉트 없이 200
-  - 설치 후 코드 이어받기(Android): Play Install Referrer(`react-native-play-install-referrer` 등, 의존성 추가 = 빌드).
-    소개 사이트의 Play 링크가 이미 `referrer=invite%3DCODE` 를 싣는다. 첫 실행에 읽어 `savePendingInvite` 로 넘기면 된다.
-    iOS 는 동등한 장치가 없어 "코드 복사 → 붙여넣기"가 그대로 길이다.
-  - 소개 사이트 파일은 **빌드보다 먼저** 배포해 둔다 — 앱이 설치될 때 OS 가 도메인을 검증한다.
+(비어 있음 — 아래 1.0.7 묶음으로 전부 들어갔다.)
+
+### 1.0.7 에 묶은 것 (2026-10-06, 브랜치 `feat/invite-applinks-location`)
+
+- `package.json`: `update:production`·`update:preview` 에 `--environment`, `verify:place-link`·`verify:home-event` 등록.
+  이제 `npm run update:production` 을 비대화형으로 돌려도 된다.
+- **커플 초대 App Links·Universal Links + 설치 후 코드 이어받기** (docs/first-experience-audit.md #2 2단계):
+  - `app.json` `android.intentFilters`(`https://dubly.co.kr/i/*`, `autoVerify`) · `ios.associatedDomains`(`applinks:dubly.co.kr`).
+    번들 ID `com.doubly.app.ios` 에 Associated Domains 기능이 아직 꺼져 있었다(2026-10-06, ASC API 확인) — EAS 빌드가
+    entitlements 를 보고 켠다. 빌드 로그에서 "Synced capabilities" 를 확인한다.
+  - `landing/.well-known/assetlinks.json` — **Play 앱 서명 키** SHA-256 `DC:06:…:31:39`. Play Console 대신
+    `androidpublisher` `generatedApks/{versionCode}` 의 `certificateSha256Hash` 로 받았다(서비스 계정 키로 된다).
+  - `landing/.well-known/apple-app-site-association` — Team ID `D9F8L9VS2S`(ASC `bundleIds` 의 `seedId`).
+  - 설치 리퍼러: 새 의존성 없이 `expo-application` 의 `getInstallReferrerAsync()`(`src/utils/installReferrer.ts`).
+  - **소개 사이트를 빌드보다 먼저 배포한다** — OS 가 앱 설치·업데이트 때 도메인을 검증한다(Android 는 실패하면 다음 설치까지 다시 안 본다).
+- **럽슐랭 지도 "내 위치"** — `expo-location`(의존성) + `app.json` 플러그인(사용 중에만, 백그라운드·항상·동작 권한 끔).
+  Android 에 `ACCESS_COARSE/FINE_LOCATION` 이 생긴다 → **Play 데이터 보안 양식·App Store 개인정보 라벨 확인 필요**
+  (위치는 기기 안에서 지도를 옮기는 데만 쓰고 서버로 보내지 않는다 = "수집 안 함"으로 답할 수 있다).
+- 아이콘 서브셋 재생성 — `crosshairs-gps` 추가, 그동안 커밋된 서브셋에 빠져 있던 `head`·`home`·`barcode`·`refresh` 도 들어갔다.
 
 ## 다음 단계
 - iOS는 Apple 개발자 계정($99/년)이 있어야 ad-hoc/TestFlight 배포가 가능합니다. 준비되면

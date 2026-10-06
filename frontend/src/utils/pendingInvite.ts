@@ -17,11 +17,33 @@ const TTL_MS = 24 * 60 * 60 * 1000;
 /** 백엔드 RelationService 와 같은 알파벳 — 혼동 문자(I,O,0,1) 제외 32자, 6자리 */
 const CODE = '[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}';
 const INVITE_URL_PATTERNS = [
-  // 소개 사이트의 초대 링크 — 2단계(App Links·Universal Links)부터는 이 주소로 앱이 바로 열린다
+  // 소개 사이트의 초대 링크 — 1.0.7 부터 App Links·Universal Links 로 이 주소가 앱을 바로 연다
   new RegExp(`^https?://(?:www\\.)?dubly\\.co\\.kr/i/(${CODE})(?:[/?#].*)?$`, 'i'),
   // 소개 사이트의 "앱에서 열기"·웹 앱 주소 — 스킴이든 웹 경로든 couple/connect/CODE
   new RegExp(`(?:^doubly://|/)couple/connect/(${CODE})(?:[/?#].*)?$`, 'i'),
 ];
+
+const CODE_ONLY = new RegExp(`^${CODE}$`, 'i');
+
+/**
+ * Play 설치 리퍼러(`invite=CODE`)에서 코드(대문자)를, 없으면 null.
+ * 소개 사이트의 Play 링크가 `referrer=invite%3DCODE` 를 싣는다(landing/invite.html). 스토어·기기에 따라
+ * 한 번 더 인코딩된 채로 오기도 해 한 번 풀어 본다. 자연 유입은 `utm_source=google-play&utm_medium=organic`.
+ */
+export function inviteCodeFromReferrer(referrer: string | null | undefined): string | null {
+  if (!referrer) return null;
+  let text = referrer;
+  try {
+    if (!text.includes('=') && text.includes('%')) text = decodeURIComponent(text);
+  } catch {
+    return null;
+  }
+  for (const pair of text.split('&')) {
+    const [key, value] = pair.split('=');
+    if (key === 'invite' && value && CODE_ONLY.test(value)) return value.toUpperCase();
+  }
+  return null;
+}
 
 /** 초대 링크면 코드(대문자)를, 아니면 null */
 export function inviteCodeFromUrl(url: string | null | undefined): string | null {

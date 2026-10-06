@@ -65,7 +65,8 @@ function holdIfInvite(url: string | null | undefined): boolean {
 let initialUrlConsumed = false;
 
 export const linking: LinkingOptions<RootStackParamList> = {
-  // 소개 사이트 주소는 2단계(App Links·Universal Links, 빌드 필요)부터 앱으로 바로 들어온다. 지금은 무해하다.
+  // 소개 사이트의 초대 링크(/i/CODE)는 1.0.7 부터 App Links·Universal Links 로 앱에 바로 들어온다 — holdIfInvite 가 받는다.
+  // 앱이 가로채는 경로는 /i/ 뿐이다(app.json intentFilters·landing/.well-known).
   prefixes: [PREFIX, 'https://dubly.co.kr', 'https://www.dubly.co.kr'],
 
   /*
