@@ -2,6 +2,7 @@ package com.fitto.game;
 
 import com.fitto.auth.dto.RegisterRequest;
 import com.fitto.auth.service.AuthService;
+import com.fitto.chat.domain.MessageType;
 import com.fitto.common.notification.NotificationCategory;
 import com.fitto.common.notification.NotificationService;
 import com.fitto.game.domain.GameDifficulty;
@@ -10,6 +11,7 @@ import com.fitto.game.dto.StartSudokuRequest;
 import com.fitto.game.dto.SudokuGameResponse;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
+import com.fitto.game.service.GameChatCards;
 import com.fitto.game.service.GameNudgeService;
 import com.fitto.game.service.OmokService;
 import com.fitto.game.service.SudokuService;
@@ -23,6 +25,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -58,6 +62,8 @@ class GamePlayNotifyTest {
     @Autowired GameNudgeService nudgeService;
     @Autowired WallRaceService wallRaceService;
     @Autowired JdbcTemplate jdbcTemplate;
+    @Autowired GameChatCards chatCards;
+    @Autowired PlatformTransactionManager transactionManager;
 
     /** 실제 Expo 발송 대신 호출만 기록한다 — 발송 대상·문구를 그대로 검증할 수 있다. */
     @MockitoBean NotificationService notificationService;
@@ -345,5 +351,33 @@ class GamePlayNotifyTest {
 
         verify(notificationService).notify(eq(users[0]), eq(NotificationCategory.PARTNER),
                 contains("스도쿠"), contains("접었어요"), anyString());
+    }
+
+    /**
+     * 채팅 카드가 실패해도 게임은 그대로 커밋된다 — docs/game-current-state.md 8-1 #4.
+     *
+     * <p>예전엔 게임 트랜잭션 안에서 카드를 바로 저장해, 실패가 바깥 트랜잭션을 rollback-only 로 만들었다.
+     * try/catch 로 잡아도 커밋이 UnexpectedRollbackException 으로 터져 판(정답·승리·완성)이 통째로 사라졌다.
+     * 여기서는 관계 구성원이 아닌 사람 명의로 카드를 내서 일부러 실패시킨다.
+     */
+    @Test
+    void 채팅_카드가_실패해도_게임_트랜잭션은_커밋된다() {
+        long[] users = couple("cfa", "cfb");
+        Long stranger = register("cfs");
+
+        OmokGameResponse game = new TransactionTemplate(transactionManager).execute(status -> {
+            OmokGameResponse g = omokService.start(users[0]);
+            Long relationId = jdbcTemplate.queryForObject(
+                    "select couple_id from couple_games where id = ?", Long.class, g.id());
+            chatCards.post(stranger, relationId, MessageType.GAME_CARD, "실패할 카드", "테스트");
+            return g;
+        });
+
+        OmokGameResponse current = omokService.current(users[0]);
+        assertNotNull(current);
+        assertEquals(game.id(), current.id());
+        Integer cards = jdbcTemplate.queryForObject(
+                "select count(*) from chat_messages where sender_id = ?", Integer.class, stranger);
+        assertEquals(0, cards);
     }
 }

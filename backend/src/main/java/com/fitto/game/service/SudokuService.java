@@ -1,8 +1,6 @@
 package com.fitto.game.service;
 
 import com.fitto.chat.domain.MessageType;
-import com.fitto.chat.dto.ChatMessageResponse;
-import com.fitto.chat.service.ChatService;
 import com.fitto.common.event.CoupleEvent;
 import com.fitto.common.event.CoupleEventPublisher;
 import com.fitto.common.exception.BusinessException;
@@ -25,9 +23,6 @@ import com.fitto.game.sudoku.DailyPuzzles;
 import com.fitto.game.sudoku.SudokuGenerator;
 import com.fitto.relation.domain.Relation;
 import com.fitto.relation.repository.RelationRepository;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -50,16 +45,13 @@ import java.util.Random;
 @Transactional(readOnly = true)
 public class SudokuService {
 
-    private static final Logger log = LoggerFactory.getLogger(SudokuService.class);
-
     private final SudokuGameRepository gameRepository;
     private final RelationRepository relationRepository;
     private final GameCouples couples;
     private final PlanGuard planGuard;
     private final NotificationService notificationService;
     private final CoupleEventPublisher coupleEventPublisher;
-    private final ChatService chatService;
-    private final SimpMessagingTemplate messagingTemplate;
+    private final GameChatCards chatCards;
     private final Random random = new SecureRandom();
 
     public SudokuService(SudokuGameRepository gameRepository,
@@ -68,16 +60,14 @@ public class SudokuService {
                          PlanGuard planGuard,
                          NotificationService notificationService,
                          CoupleEventPublisher coupleEventPublisher,
-                         ChatService chatService,
-                         SimpMessagingTemplate messagingTemplate) {
+                         GameChatCards chatCards) {
         this.gameRepository = gameRepository;
         this.relationRepository = relationRepository;
         this.couples = couples;
         this.planGuard = planGuard;
         this.notificationService = notificationService;
         this.coupleEventPublisher = coupleEventPublisher;
-        this.chatService = chatService;
-        this.messagingTemplate = messagingTemplate;
+        this.chatCards = chatCards;
     }
 
     /** 진행 중인 판 — 없으면 null (응답의 data 가 null) */
@@ -314,15 +304,9 @@ public class SudokuService {
         /*
          * content 는 화면에 그대로 띄워도 말이 되는 문장이다(STREAK_CARD 와 같은 규칙) —
          * GAME_CARD 를 모르는 구버전 앱에서도 평범한 말풍선으로 읽힌다.
-         * 카드 실패가 완성 자체를 되돌리면 안 되므로 로그만 남긴다.
+         * 카드는 커밋 뒤에 따로 쓴다 — 실패해도 완성이 되돌아가지 않는다(GameChatCards).
          */
-        try {
-            ChatMessageResponse saved = chatService.postSystemCard(
-                    finisherId, couple.getId(), MessageType.GAME_CARD, title + " " + body);
-            messagingTemplate.convertAndSend("/sub/rooms/" + couple.getId(), saved);
-        } catch (Exception e) {
-            log.warn("스도쿠 완성 채팅 카드 실패 couple={}: {}", couple.getId(), e.getMessage());
-        }
+        chatCards.post(finisherId, couple.getId(), MessageType.GAME_CARD, title + " " + body, "스도쿠 완성");
     }
 
     private SudokuGameResponse toResponse(SudokuGame game, Long viewerId, Relation couple) {
