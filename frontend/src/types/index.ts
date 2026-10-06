@@ -1785,6 +1785,30 @@ export interface PlaceMenu {
   items: { name: string; times: number; lastDate: string }[];
   /** 대표 메뉴 제안 — 2번 이상 먹은 것 중 상위 3개(저장하지 않는다) */
   signature: string[];
+  /** 메뉴판에서 읽어 저장한 메뉴(V131) — 저장한 순서. 서버 배포 전 응답엔 없을 수 있다 */
+  board?: PlaceMenuBoardItem[];
+  /** 메뉴판 사진 — 최근 것 먼저 */
+  boardPhotos?: PlaceMenuBoardPhoto[];
+}
+
+/** 장소 메뉴 한 줄 — price 는 원 단위, 모르면 null */
+export interface PlaceMenuBoardItem {
+  id: number;
+  name: string;
+  price: number | null;
+}
+
+export interface PlaceMenuBoardPhoto {
+  id: number;
+  imageUrl: string;
+  uploadedBy: number;
+  createdAt: string;
+}
+
+/** 메뉴판 사진 분석 결과 — 저장 전, 확인·수정 화면에 펼친다 */
+export interface MenuBoardAnalysis {
+  isMenu: boolean;
+  items: { name: string; price: number | null }[];
 }
 
 /** 일상 댓글 하나(V124) */

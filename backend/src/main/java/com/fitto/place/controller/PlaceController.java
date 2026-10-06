@@ -26,6 +26,10 @@ import com.fitto.place.service.EatOutStatsService;
 import com.fitto.place.dto.EatOutStatsResponse;
 import com.fitto.place.service.PlaceLinkResolveService;
 import com.fitto.place.service.PlaceService;
+import com.fitto.place.service.MenuBoardService;
+import com.fitto.place.dto.AnalyzeMenuBoardRequest;
+import com.fitto.place.dto.PlaceMenuResponse;
+import com.fitto.place.dto.SaveMenuBoardRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -57,6 +61,7 @@ public class PlaceController {
     private final LovelichelinPulseService lovelichelinPulseService;
     private final MealVisitService mealVisitService;
     private final EatOutStatsService eatOutStatsService;
+    private final MenuBoardService menuBoardService;
 
     public PlaceController(PlaceService placeService, DateCourseService dateCourseService,
                            LovelichelinRecommendService lovelichelinRecommendService,
@@ -64,7 +69,8 @@ public class PlaceController {
                            PlaceLinkResolveService placeLinkResolveService,
                            LovelichelinPulseService lovelichelinPulseService,
                            MealVisitService mealVisitService,
-                           EatOutStatsService eatOutStatsService) {
+                           EatOutStatsService eatOutStatsService,
+                           MenuBoardService menuBoardService) {
         this.placeService = placeService;
         this.dateCourseService = dateCourseService;
         this.lovelichelinRecommendService = lovelichelinRecommendService;
@@ -73,6 +79,7 @@ public class PlaceController {
         this.lovelichelinPulseService = lovelichelinPulseService;
         this.mealVisitService = mealVisitService;
         this.eatOutStatsService = eatOutStatsService;
+        this.menuBoardService = menuBoardService;
     }
 
     /** 이번 달 외식 — 외식(식단이 붙은 방문)·같이 먹은 것·다녀온 곳·처음 간 곳·많이 간 곳·끼니별. month=YYYY-MM(기본 KST 이번 달) */
@@ -200,11 +207,47 @@ public class PlaceController {
         return ApiResponse.success(placeService.recordVisit(user.id(), id, request), "방문 기록이 저장되었습니다.");
     }
 
-    /** 장소 상세 "여기서 먹은 것" — 이 장소 방문에 붙은 식단의 음식 이름·횟수(칼로리 없음) + 대표 메뉴 제안 */
+    /**
+     * 장소 상세 메뉴 — "여기서 먹은 것"(식단의 음식 이름·횟수, 칼로리 없음)과 대표 메뉴 제안,
+     * 그리고 메뉴판에서 읽어 저장한 메뉴·메뉴판 사진(V131)
+     */
     @GetMapping("/{id}/menu")
-    public ApiResponse<com.fitto.place.dto.PlaceMenuResponse> menu(@AuthenticationPrincipal AuthUser user,
-                                                                   @PathVariable Long id) {
-        return ApiResponse.success(placeService.menu(user.id(), id));
+    public ApiResponse<PlaceMenuResponse> menu(@AuthenticationPrincipal AuthUser user,
+                                               @PathVariable Long id) {
+        return ApiResponse.success(menuBoardService.menu(user.id(), id));
+    }
+
+    /**
+     * 메뉴판 사진 읽기 — 접수증(jobId)만 주고 결과는 GET /ai/jobs/{jobId}(식단 사진 분석과 같은 방식). 저장하지 않는다:
+     * 앱이 확인·수정 화면에 펼치고, 사람이 고친 목록을 아래 PUT 으로 남긴다. 장소 권한은 작업을 만들기 전에 본다.
+     */
+    @PostMapping("/{id}/menu-board/analyze")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public ApiResponse<AiJobResponse> analyzeMenuBoard(@AuthenticationPrincipal AuthUser user,
+                                                       @PathVariable Long id,
+                                                       @Valid @RequestBody AnalyzeMenuBoardRequest request) {
+        Long userId = user.id();
+        menuBoardService.requireAccess(userId, id);
+        String photoUrl = request.photoUrl();
+        return ApiResponse.success(
+                new AiJobResponse(aiJobService.submit(userId, "menu-board",
+                        () -> menuBoardService.analyze(userId, photoUrl))),
+                "AI가 메뉴판을 읽고 있어요.");
+    }
+
+    /** 메뉴 저장 — 목록을 통째로 바꾸고, 이번에 찍은 메뉴판 사진이 있으면 붙인다 */
+    @PutMapping("/{id}/menu-board")
+    public ApiResponse<PlaceMenuResponse> saveMenuBoard(@AuthenticationPrincipal AuthUser user,
+                                                        @PathVariable Long id,
+                                                        @Valid @RequestBody SaveMenuBoardRequest request) {
+        return ApiResponse.success(menuBoardService.save(user.id(), id, request), "메뉴를 저장했어요.");
+    }
+
+    @DeleteMapping("/{id}/menu-board/photos/{photoId}")
+    public ApiResponse<PlaceMenuResponse> deleteMenuBoardPhoto(@AuthenticationPrincipal AuthUser user,
+                                                               @PathVariable Long id,
+                                                               @PathVariable Long photoId) {
+        return ApiResponse.success(menuBoardService.deletePhoto(user.id(), id, photoId), "메뉴판 사진을 지웠어요.");
     }
 
     @GetMapping("/{id}/visits")
