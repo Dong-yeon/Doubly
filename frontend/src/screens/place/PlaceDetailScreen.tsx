@@ -20,6 +20,7 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -48,6 +49,7 @@ import { LovelichelinRuleSheet } from '../../components/LovelichelinRuleSheet';
 import { SoloPickBadge } from '../../components/SoloPickBadge';
 import { usePlaceStore } from '../../store/placeStore';
 import { SOLO_PICK_MIN_RATING } from './placeFilters';
+import { PlaceMenuBoardSection } from './PlaceMenuBoard';
 import { isKakaoMapConfigured } from '../../constants/config';
 import { placeApi } from '../../api/place';
 import { useDeleteAction } from '../../hooks/useDeleteAction';
@@ -382,6 +384,34 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
           onRefresh={load}
           ListHeaderComponent={
             <View>
+              {/*
+                우리 사진 — 방문 기록에 남긴 사진을 최신순으로 가로로(네이버 지도 상세 맨 위 사진 줄처럼). 누르면 크게.
+                아래 방문 기록 카드에도 같은 사진이 있지만, 기록이 쌓이면 사진을 보려고 한참 내려가야 했다.
+              */}
+              {photoVisits.length > 0 ? (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.photoStrip}
+                  contentContainerStyle={styles.photoStripContent}
+                >
+                  {photoVisits.slice(0, PHOTO_STRIP_MAX).map((v, i) => (
+                    <TouchableOpacity
+                      key={v.id}
+                      onPress={() => setViewingIndex(i)}
+                      activeOpacity={0.85}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${v.visitedAt} 사진 크게 보기`}
+                    >
+                      <Image
+                        source={{ uri: v.imageUrl as string }}
+                        style={i === 0 ? styles.photoStripFirst : styles.photoStripItem}
+                        resizeMode="cover"
+                      />
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              ) : null}
               {place ? (
                 <View style={styles.infoCard}>
                   {/* 이름은 내비 헤더가 제목으로 이미 보여준다 — 카드에서 한 번 더 쓰지 않는다.
@@ -670,6 +700,12 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
               )}
 
               {/*
+                메뉴 — 메뉴판을 찍어 둘이 쌓는 이름·가격(V131). 메뉴 응답을 받기 전(또는 실패)에는 그리지 않는다:
+                저장이 "통째로 바꾸기"라, 모르는 상태에서 고치면 남아 있던 메뉴를 지워 버린다.
+              */}
+              {menu ? <PlaceMenuBoardSection placeId={placeId} menu={menu} onMenuChange={setMenu} /> : null}
+
+              {/*
                 여기서 먹은 것 — 이 장소 방문에 붙은 식단의 음식 이름·횟수(칼로리 없음 — 상대 식사 양 비노출 결정).
                 2번 이상 먹은 것은 "대표 메뉴"로 제안만 한다(저장하지 않는다). 연결된 식단이 없으면 섹션째 숨긴다.
               */}
@@ -781,8 +817,16 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
   );
 }
 
+/** 위쪽 사진 줄에 싣는 수 — 더 보려면 아래 방문 기록이 있다 */
+const PHOTO_STRIP_MAX = 20;
+
 const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
+  photoStrip: { marginHorizontal: -spacing.lg, marginBottom: spacing.md },
+  photoStripContent: { paddingHorizontal: spacing.lg, gap: spacing.xs },
+  // 첫 장은 조금 크게 — 대표 사진처럼 읽힌다
+  photoStripFirst: { width: 160, height: 120, borderRadius: radius.md, backgroundColor: colors.surfaceAlt },
+  photoStripItem: { width: 120, height: 120, borderRadius: radius.md, backgroundColor: colors.surfaceAlt },
   list: { padding: spacing.lg, paddingBottom: spacing.xl },
   infoCard: {
     backgroundColor: colors.surface,
