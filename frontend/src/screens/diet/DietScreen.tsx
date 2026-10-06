@@ -1209,110 +1209,115 @@ ${m.placeName} 방문 기록도 함께 지울 수 있어요.`, [
           </Pressable>
           </KeyboardAvoidingView>
         </Pressable>
-      </Modal>
+        {/*
+          자동 계산 마법사는 목표 모달 <b>안에</b> 둔다. 예전엔 형제 Modal 이라, 목표 모달이 떠 있는 동안 iOS 가
+          두 번째 모달을 띄우지 못해 "자동 계산"을 눌러도 아무것도 안 뜨고(서버에 계산 요청이 한 건도 없었다),
+          목표 모달을 닫은 뒤에야 마법사가 나타나 입력칸 없이 계산되는 식으로 꼬였다(2026-10-06). 마법사는
+          목표 모달에서만 열리므로(openWizard 호출처 둘 다 이 모달 안) 중첩이 맞다 — iOS·Android·웹 모두 지원한다.
+        */}
+        {/* 목표 칼로리 자동 계산(TDEE 마법사) — 계산만 하고, 위 목표 모달 입력칸을 채운다.
+            저장은 사용자가 위 모달의 "저장" 버튼을 눌러야 확정된다. */}
+        <Modal visible={nutModal && wizardModal} transparent animationType="fade" onRequestClose={() => setWizardModal(false)}>
+          <Pressable style={styles.modalBackdrop} onPress={() => setWizardModal(false)}>
+            <Pressable style={styles.modalCard} onPress={() => {}}>
+              <Text style={styles.modalTitle}>목표 칼로리 자동 계산</Text>
+              <Text style={styles.modalDesc}>
+                기초대사량(BMR) × 활동량으로 하루 소비 칼로리를 추정해 목표를 제안해요.
+              </Text>
 
-      {/* 목표 칼로리 자동 계산(TDEE 마법사) — 계산만 하고, 위 목표 모달 입력칸을 채운다.
-          저장은 사용자가 위 모달의 "저장" 버튼을 눌러야 확정된다. */}
-      <Modal visible={wizardModal} transparent animationType="fade" onRequestClose={() => setWizardModal(false)}>
-        <Pressable style={styles.modalBackdrop} onPress={() => setWizardModal(false)}>
-          <Pressable style={styles.modalCard} onPress={() => {}}>
-            <Text style={styles.modalTitle}>목표 칼로리 자동 계산</Text>
-            <Text style={styles.modalDesc}>
-              기초대사량(BMR) × 활동량으로 하루 소비 칼로리를 추정해 목표를 제안해요.
-            </Text>
+              <Text style={styles.wizardLabel}>활동량</Text>
+              <View style={styles.wizardChipRow}>
+                {(
+                  [
+                    ['SEDENTARY', '거의 안 함'],
+                    ['LIGHT', '가벼운 운동'],
+                    ['MODERATE', '보통'],
+                    ['ACTIVE', '활발함'],
+                    ['VERY_ACTIVE', '매우 활발'],
+                  ] as [ActivityLevel, string][]
+                ).map(([value, label]) => (
+                  <TouchableOpacity
+                    key={value}
+                    style={[styles.wizardChip, wizActivity === value && styles.wizardChipActive]}
+                    onPress={() => setWizActivity(value)}
+                    accessibilityState={{ selected: wizActivity === value }}
+                  >
+                    <Text style={[styles.wizardChipText, wizActivity === value && styles.wizardChipTextActive]}>
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
 
-            <Text style={styles.wizardLabel}>활동량</Text>
-            <View style={styles.wizardChipRow}>
-              {(
-                [
-                  ['SEDENTARY', '거의 안 함'],
-                  ['LIGHT', '가벼운 운동'],
-                  ['MODERATE', '보통'],
-                  ['ACTIVE', '활발함'],
-                  ['VERY_ACTIVE', '매우 활발'],
-                ] as [ActivityLevel, string][]
-              ).map(([value, label]) => (
-                <TouchableOpacity
-                  key={value}
-                  style={[styles.wizardChip, wizActivity === value && styles.wizardChipActive]}
-                  onPress={() => setWizActivity(value)}
-                  accessibilityState={{ selected: wizActivity === value }}
-                >
-                  <Text style={[styles.wizardChipText, wizActivity === value && styles.wizardChipTextActive]}>
-                    {label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+              <Text style={styles.wizardLabel}>목표</Text>
+              <View style={styles.wizardChipRow}>
+                {(
+                  [
+                    ['LOSE', '감량'],
+                    ['MAINTAIN', '유지'],
+                    ['GAIN', '증량'],
+                  ] as [DietGoalType, string][]
+                ).map(([value, label]) => (
+                  <TouchableOpacity
+                    key={value}
+                    style={[styles.wizardChip, wizGoalType === value && styles.wizardChipActive]}
+                    onPress={() => setWizGoalType(value)}
+                    accessibilityState={{ selected: wizGoalType === value }}
+                  >
+                    <Text style={[styles.wizardChipText, wizGoalType === value && styles.wizardChipTextActive]}>
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
 
-            <Text style={styles.wizardLabel}>목표</Text>
-            <View style={styles.wizardChipRow}>
-              {(
-                [
-                  ['LOSE', '감량'],
-                  ['MAINTAIN', '유지'],
-                  ['GAIN', '증량'],
-                ] as [DietGoalType, string][]
-              ).map(([value, label]) => (
-                <TouchableOpacity
-                  key={value}
-                  style={[styles.wizardChip, wizGoalType === value && styles.wizardChipActive]}
-                  onPress={() => setWizGoalType(value)}
-                  accessibilityState={{ selected: wizGoalType === value }}
-                >
-                  <Text style={[styles.wizardChipText, wizGoalType === value && styles.wizardChipTextActive]}>
-                    {label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+              <Text style={styles.wizardLabel}>탄단지 비율</Text>
+              <View style={styles.wizardChipRow}>
+                {(
+                  [
+                    ['BALANCED', '균형'],
+                    ['LOW_CARB', '저탄고지'],
+                    ['HIGH_PROTEIN', '고단백'],
+                    ['KETO', '키토'],
+                  ] as [MacroPreset, string][]
+                ).map(([value, label]) => (
+                  <TouchableOpacity
+                    key={value}
+                    style={[styles.wizardChip, wizPreset === value && styles.wizardChipActive]}
+                    onPress={() => setWizPreset(value)}
+                    accessibilityState={{ selected: wizPreset === value }}
+                  >
+                    <Text style={[styles.wizardChipText, wizPreset === value && styles.wizardChipTextActive]}>
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
 
-            <Text style={styles.wizardLabel}>탄단지 비율</Text>
-            <View style={styles.wizardChipRow}>
-              {(
-                [
-                  ['BALANCED', '균형'],
-                  ['LOW_CARB', '저탄고지'],
-                  ['HIGH_PROTEIN', '고단백'],
-                  ['KETO', '키토'],
-                ] as [MacroPreset, string][]
-              ).map(([value, label]) => (
-                <TouchableOpacity
-                  key={value}
-                  style={[styles.wizardChip, wizPreset === value && styles.wizardChipActive]}
-                  onPress={() => setWizPreset(value)}
-                  accessibilityState={{ selected: wizPreset === value }}
-                >
-                  <Text style={[styles.wizardChipText, wizPreset === value && styles.wizardChipTextActive]}>
-                    {label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+              {wizGoalType !== 'MAINTAIN' ? (
+                <>
+                  <Text style={styles.wizardLabel}>주당 {wizGoalType === 'LOSE' ? '감량' : '증량'} 속도</Text>
+                  <View style={styles.wizardChipRow}>
+                    {[0.25, 0.5, 0.75].map((rate) => (
+                      <TouchableOpacity
+                        key={rate}
+                        style={[styles.wizardChip, wizRate === rate && styles.wizardChipActive]}
+                        onPress={() => setWizRate(rate)}
+                        accessibilityState={{ selected: wizRate === rate }}
+                      >
+                        <Text style={[styles.wizardChipText, wizRate === rate && styles.wizardChipTextActive]}>
+                          {rate}kg
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </>
+              ) : null}
 
-            {wizGoalType !== 'MAINTAIN' ? (
-              <>
-                <Text style={styles.wizardLabel}>주당 {wizGoalType === 'LOSE' ? '감량' : '증량'} 속도</Text>
-                <View style={styles.wizardChipRow}>
-                  {[0.25, 0.5, 0.75].map((rate) => (
-                    <TouchableOpacity
-                      key={rate}
-                      style={[styles.wizardChip, wizRate === rate && styles.wizardChipActive]}
-                      onPress={() => setWizRate(rate)}
-                      accessibilityState={{ selected: wizRate === rate }}
-                    >
-                      <Text style={[styles.wizardChipText, wizRate === rate && styles.wizardChipTextActive]}>
-                        {rate}kg
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </>
-            ) : null}
-
-            <Button title="계산해서 채우기" onPress={onCalculateGoal} loading={calculating} style={styles.nutSaveBtn} />
+              <Button title="계산해서 채우기" onPress={onCalculateGoal} loading={calculating} style={styles.nutSaveBtn} />
+            </Pressable>
           </Pressable>
-        </Pressable>
+        </Modal>
       </Modal>
 
       {/* 간헐적 단식 시작 — 방식 선택. CUSTOM 만 목표 시간을 직접 입력한다 */}
