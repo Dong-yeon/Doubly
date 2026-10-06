@@ -52,6 +52,11 @@ export function CatchMindScreen(_: Props) {
   /** 보던 판을 상대가 접었다 — 안내 한 줄. 판이 사라진 이유를 알려 준다 */
   const [folded, setFolded] = useState<string | null>(null);
   /**
+   * 내가 "정답 보기"로 접은 판 — 정답과 그림을 한 번 보여준다. 접은 판은 기록에 남지 않아 다시 읽을 길이 없으므로
+   * 접기 응답을 그대로 든다(docs/game-current-state.md 8-1 #15).
+   */
+  const [revealed, setRevealed] = useState<CatchMindGame | null>(null);
+  /**
    * 지금 보고 있는 진행 중 판 — 사라졌을 때 맞혔는지(기록에 있음) 접혔는지(없음) 가르는 기준.
    * 그린 쪽은 상대가 맞혀도 결과 카드 없이 그리기 화면으로 조용히 돌아갔다
    * (docs/game-current-state.md 8-1 #3). 길막기(WallRaceScreen)와 같은 방식이다.
@@ -122,6 +127,7 @@ export function CatchMindScreen(_: Props) {
       if (g) {
         setJustFinished(null);
         setFolded(null);
+        setRevealed(null);
       }
     } catch (e) {
       if (!silent) toast.error(getErrorMessage(e, '판을 불러오지 못했어요.'));
@@ -213,6 +219,7 @@ export function CatchMindScreen(_: Props) {
       setGame(sent);
       setJustFinished(null);
       setFolded(null);
+      setRevealed(null);
       setWord('');
       setCustomWord(false);
       setCandidates([]);
@@ -281,7 +288,12 @@ export function CatchMindScreen(_: Props) {
             watchingRef.current = null;
             catchMindApi
               .giveUp(game.id)
-              .then(() => { setGame(null); void load(true); })
+              .then((ended) => {
+                setGame(null);
+                // 맞히는 쪽이면 정답을 띄운다. 그린 쪽은 이미 아는 답이라 그냥 접는다
+                if (!drawer && ended?.word) setRevealed(ended);
+                void load(true);
+              })
               .catch((e) => {
                 watchingRef.current = watching;
                 toast.error(getErrorMessage(e, '접지 못했어요.'));
@@ -510,6 +522,18 @@ export function CatchMindScreen(_: Props) {
               {renderDraw()}
             </>
           )
+          : revealed
+            ? (
+              <>
+                <View style={[styles.card, styles.doneCard]}>
+                  <MaterialCommunityIcons name="draw" size={28} color={colors.primary} />
+                  <Text style={styles.doneTitle}>정답은 {revealed.word}</Text>
+                  <Text style={styles.cardDesc}>접은 판은 기록에 남지 않아요. 이번엔 내가 그려 볼까요?</Text>
+                  <DrawingView strokes={revealed.strokes} size={boardSize - spacing.lg * 2} />
+                </View>
+                {renderDraw()}
+              </>
+            )
           : folded
             ? (
               <>

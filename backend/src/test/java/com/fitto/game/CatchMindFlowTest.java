@@ -7,6 +7,7 @@ import com.fitto.chat.domain.MessageType;
 import com.fitto.chat.repository.ChatMessageRepository;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
+import com.fitto.game.domain.GameStatus;
 import com.fitto.game.dto.CatchMindResponse;
 import com.fitto.game.dto.GuessResultResponse;
 import com.fitto.game.dto.StartCatchMindRequest;
@@ -167,8 +168,12 @@ class CatchMindFlowTest {
         connectCouple(a, b);
         CatchMindResponse first = catchMindService.start(a, new StartCatchMindRequest("바다", DRAWING, null));
 
-        catchMindService.giveUp(b, first.id());
-        catchMindService.giveUp(a, first.id());                 // 둘이 동시에 눌러도 오류 없음
+        // 맞히는 쪽의 "정답 보기" — 끝난 판이 돌아오고 제시어가 실린다
+        CatchMindResponse revealed = catchMindService.giveUp(b, first.id());
+        assertThat(revealed.word()).isEqualTo("바다");
+        assertThat(revealed.status()).isEqualTo(GameStatus.ABANDONED);
+        CatchMindResponse again = catchMindService.giveUp(a, first.id()); // 둘이 동시에 눌러도 오류 없음
+        assertThat(again.status()).isEqualTo(GameStatus.ABANDONED);
         assertThat(catchMindService.current(a)).isNull();
         assertThat(catchMindService.history(a)).isEmpty();
 

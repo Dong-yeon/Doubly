@@ -306,16 +306,24 @@ export function WallRaceScreen(_: Props) {
         text: '접기',
         style: 'destructive',
         onPress: () => {
+          /*
+           * 내가 접는다 — "상대가 접었어요" 안내가 뜨지 않게 보던 판을 잊는다. 응답을 받은 뒤에 잊으면
+           * 소켓 GAME 이벤트가 먼저 와서 load 가 "보던 판이 기록에 없다 = 상대가 접었다"로 읽는다
+           * (docs/game-current-state.md 8-1 #16). 그래서 요청 <b>전에</b> 잊고, 실패하면 되돌린다.
+           */
+          const watching = watchingRef.current;
+          watchingRef.current = null;
           wallRaceApi
             .giveUp(game.id)
             .then(() => {
-              // 내가 접었다 — "상대가 접었어요" 안내가 뜨지 않게 보던 판을 잊는다
-              watchingRef.current = null;
               setGame(null);
               setPending(null);
               toast.success('이 판은 접었어요.');
             })
-            .catch((e) => toast.error(getErrorMessage(e, '접지 못했어요.')));
+            .catch((e) => {
+              watchingRef.current = watching;
+              toast.error(getErrorMessage(e, '접지 못했어요.'));
+            });
         },
       },
     ]);
