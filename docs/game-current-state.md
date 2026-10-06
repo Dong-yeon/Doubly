@@ -322,3 +322,5 @@
 |---|---|---|
 | 15 | `POST /games/catch-mind/{id}/give-up` 이 끝난 판(`CatchMindResponse`, 제시어 포함)을 돌려준다. 이미 끝난 판이면 그 상태를 그대로 돌려준다. 앱은 맞히는 쪽이 "정답 보기"로 접으면 정답과 그림 카드를 한 번 띄운다. 예전 앱은 data 를 읽지 않으므로 그대로 동작하고, 새 앱이 예전 서버를 만나면 카드 없이 접기만 된다 | `CatchMindFlowTest` 에 단언 추가 — 게임 테스트 전부 통과. tsc·eslint 통과. 화면은 미확인 |
 | 16 | 길막기도 요청 **전에** 보던 판을 잊고, 실패하면 되돌린다(오목·스도쿠·캐치마인드와 같은 방식) | tsc·eslint 통과. 화면은 미확인 |
+
+**배포 (2026-10-06)**: 서버 `e20c3467` Railway 배포 SUCCESS. production OTA 게시 — fingerprint 가 1.0.6 빌드와 일치(android `5025c62d`, ios `810b9a8b`). 업데이트 그룹 android `c03c2906-4fb6-41fa-a571-b7ddf9b3db8f`, ios `0c6913d7-b95f-4a9e-8d8f-b1d46c96037c`. 실기기 확인은 아직.
