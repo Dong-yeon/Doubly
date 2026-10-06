@@ -4,7 +4,7 @@
  * <p>판을 연 사람이 백(후공), 상대가 흑(선공). 내 차례가 아니면 판이 잠기고, 상대의 수는
  * 커플 소켓 이벤트(GAME)로 즉시 따라온다. 순수 View 로 그린다 — 교차점마다 Pressable 하나.
  */
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
 import { useContentWidth } from '../../hooks/useContentWidth';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -45,6 +45,13 @@ export function OmokScreen(_: Props) {
   const [game, setGame] = useState<OmokGame | null>(null);
   /** 방금 끝난 판 — current 가 null 이 된 뒤에도 결과와 이긴 줄을 보여주기 위해 따로 든다 */
   const [justFinished, setJustFinished] = useState<OmokGame | null>(null);
+  /** 보던 판을 상대가 접었다 — 그 사람 이름. 판이 사라진 이유를 알려 준다 */
+  const [foldedBy, setFoldedBy] = useState<string | null>(null);
+  /**
+   * 지금 보고 있는 진행 중 판 — 사라졌을 때 끝났는지(기록에 있음) 접혔는지(없음) 가르는 기준.
+   * 길막기(WallRaceScreen)와 같은 방식이다. 보던 판이 없으면(처음 들어옴) 아무것도 올리지 않는다.
+   */
+  const watchingRef = useRef<OmokGame | null>(null);
   const [history, setHistory] = useState<OmokGame[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -61,11 +68,22 @@ export function OmokScreen(_: Props) {
       const [g, h] = await Promise.all([omokApi.current(), omokApi.history()]);
       setGame(g);
       setHistory(h);
-      // 상대가 이겨서 끝났으면 current 가 null 이 된다 — 최신 기록을 결과 화면으로 올린다
-      if (!g && h.length > 0) {
-        setJustFinished((prev) => (prev && prev.id === h[0].id ? prev : h[0]));
+      /*
+       * 보던 판이 사라졌다 — 기록에 있으면 끝난 것(상대가 이긴 수 포함)이라 결과로 올리고, 없으면 상대가 접은 것.
+       * 예전에는 "진행 판 없음 + 기록 있음"이면 무조건 h[0] 을 결과로 띄워, 며칠 만에 들어와도
+       * 상대가 접은 뒤에도 지난 "이겼어요!"가 다시 떴다(docs/game-current-state.md 8-1 #2).
+       */
+      const watching = watchingRef.current;
+      if (!g && watching) {
+        const done = h.find((x) => x.id === watching.id);
+        if (done) setJustFinished(done);
+        else setFoldedBy(watching.partnerName ?? '상대');
+        watchingRef.current = null;
       }
-      if (g) setJustFinished(null);
+      if (g) {
+        setJustFinished(null);
+        setFoldedBy(null);
+      }
     } catch (e) {
       if (!silent) toast.error(getErrorMessage(e, '판을 불러오지 못했어요.'));
       setLoadError(true);
@@ -75,6 +93,11 @@ export function OmokScreen(_: Props) {
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  // 진행 중 판을 볼 때마다 기억해 둔다 — 사라졌을 때 끝났는지 접혔는지 가르는 기준
+  useEffect(() => {
+    if (game) watchingRef.current = game;
+  }, [game]);
 
   useFocusEffect(
     useCallback(() => {
@@ -102,6 +125,7 @@ export function OmokScreen(_: Props) {
       const g = await omokApi.start();
       setGame(g);
       setJustFinished(null);
+      setFoldedBy(null);
       haptics.light();
       if (!g.myTurn) toast.success(`${g.partnerName ?? '상대'}에게 선공을 줬어요. 두면 알려드릴게요.`);
     } catch (e) {
@@ -187,10 +211,19 @@ export function OmokScreen(_: Props) {
         text: '접기',
         style: 'destructive',
         onPress: () => {
+          /*
+           * 내가 접는다 — 응답보다 소켓 GAME 이벤트가 먼저 와도 "상대가 접었어요"가 뜨지 않게
+           * 요청 <b>전에</b> 보던 판을 잊는다. 실패하면 되돌린다.
+           */
+          const watching = watchingRef.current;
+          watchingRef.current = null;
           omokApi
             .giveUp(game.id)
             .then(() => { setGame(null); toast.success('이 판은 접었어요.'); })
-            .catch((e) => toast.error(getErrorMessage(e, '접지 못했어요.')));
+            .catch((e) => {
+              watchingRef.current = watching;
+              toast.error(getErrorMessage(e, '접지 못했어요.'));
+            });
         },
       },
     ]);
@@ -483,6 +516,14 @@ export function OmokScreen(_: Props) {
         <>
           {renderResult(justFinished)}
           {renderStart('한 판 더?')}
+        </>
+      ) : foldedBy ? (
+        <>
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>{foldedBy}님이 이 판을 접었어요</Text>
+            <Text style={styles.cardDesc}>접은 판은 전적에 남지 않아요. 새 판을 열어 볼까요?</Text>
+          </View>
+          {renderStart('새 판 열까요?')}
         </>
       ) : !loading && !loadError ? (
         renderStart('한 판 둘까요?')

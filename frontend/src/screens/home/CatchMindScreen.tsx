@@ -11,7 +11,7 @@
  *   <li>상대가 낸 판이 진행 중 → <b>맞히기</b>(그림 + 입력창 + 초성)</li>
  * </ul>
  */
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FlatList, Pressable, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -49,6 +49,14 @@ export function CatchMindScreen(_: Props) {
   const [game, setGame] = useState<CatchMindGame | null>(null);
   /** 방금 끝난 판 — current 가 null 이 된 뒤에도 정답과 그림을 보여주려고 따로 든다 */
   const [justFinished, setJustFinished] = useState<CatchMindGame | null>(null);
+  /** 보던 판을 상대가 접었다 — 안내 한 줄. 판이 사라진 이유를 알려 준다 */
+  const [folded, setFolded] = useState<string | null>(null);
+  /**
+   * 지금 보고 있는 진행 중 판 — 사라졌을 때 맞혔는지(기록에 있음) 접혔는지(없음) 가르는 기준.
+   * 그린 쪽은 상대가 맞혀도 결과 카드 없이 그리기 화면으로 조용히 돌아갔다
+   * (docs/game-current-state.md 8-1 #3). 길막기(WallRaceScreen)와 같은 방식이다.
+   */
+  const watchingRef = useRef<CatchMindGame | null>(null);
   const [history, setHistory] = useState<CatchMindGame[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -100,7 +108,21 @@ export function CatchMindScreen(_: Props) {
       }
       setGame(g);
       setHistory(h);
-      if (g) setJustFinished(null);
+      const watching = watchingRef.current;
+      if (watching && (!g || g.id !== watching.id)) {
+        const done = h.find((x) => x.id === watching.id);
+        if (done) setJustFinished(done);
+        else {
+          const name = watching.partnerName ?? '상대';
+          // 내가 그린 판을 상대가 접었다 = 정답 보기를 눌렀다. 상대가 낸 판이면 그린 사람이 접은 것
+          setFolded(watching.role === 'DRAWER' ? `${name}님이 정답을 확인하고 이 판을 접었어요` : `${name}님이 이 판을 접었어요`);
+        }
+        watchingRef.current = null;
+      }
+      if (g) {
+        setJustFinished(null);
+        setFolded(null);
+      }
     } catch (e) {
       if (!silent) toast.error(getErrorMessage(e, '판을 불러오지 못했어요.'));
       setLoadError(true);
@@ -108,6 +130,11 @@ export function CatchMindScreen(_: Props) {
       if (!silent) setLoading(false);
     }
   }, []);
+
+  // 진행 중 판을 볼 때마다 기억해 둔다 — 사라졌을 때 맞혔는지 접혔는지 가르는 기준
+  useEffect(() => {
+    if (game) watchingRef.current = game;
+  }, [game]);
 
   const loadWords = useCallback(async () => {
     try {
@@ -185,6 +212,7 @@ export function CatchMindScreen(_: Props) {
       const sent = await catchMindApi.start(trimmed, strokes, shareImageUrl);
       setGame(sent);
       setJustFinished(null);
+      setFolded(null);
       setWord('');
       setCustomWord(false);
       setCandidates([]);
@@ -248,10 +276,16 @@ export function CatchMindScreen(_: Props) {
           text: drawer ? '접기' : '정답 보기',
           style: 'destructive',
           onPress: () => {
+            // 내가 접는다 — 소켓 이벤트가 응답보다 먼저 와도 "상대가 접었어요"가 뜨지 않게 요청 전에 잊는다
+            const watching = watchingRef.current;
+            watchingRef.current = null;
             catchMindApi
               .giveUp(game.id)
               .then(() => { setGame(null); void load(true); })
-              .catch((e) => toast.error(getErrorMessage(e, '접지 못했어요.')));
+              .catch((e) => {
+                watchingRef.current = watching;
+                toast.error(getErrorMessage(e, '접지 못했어요.'));
+              });
           },
         },
       ],
@@ -443,6 +477,8 @@ export function CatchMindScreen(_: Props) {
       <MaterialCommunityIcons name="check-circle" size={28} color={colors.primary} />
       <Text style={styles.doneTitle}>정답! {g.word}</Text>
       <Text style={styles.cardDesc}>
+        {/* 그린 쪽이면 맞힌 사람은 상대다 — 상대가 맞혀 끝난 판도 여기로 온다 */}
+        {g.role === 'DRAWER' ? `${g.partnerName ?? '상대'}님이 ` : ''}
         {g.guessCount}번 만에 맞혔어요{g.hintUsed ? ' (초성 힌트)' : ''} · 채팅에 카드를 남겼어요.
       </Text>
       <DrawingView strokes={g.strokes} size={boardSize - spacing.lg * 2} />
@@ -474,6 +510,15 @@ export function CatchMindScreen(_: Props) {
               {renderDraw()}
             </>
           )
+          : folded
+            ? (
+              <>
+                <View style={styles.card}>
+                  <Text style={styles.cardDesc}>{folded}. 접은 판은 기록에 남지 않아요.</Text>
+                </View>
+                {renderDraw()}
+              </>
+            )
           : !loading && !loadError
             ? renderDraw()
             : null}
