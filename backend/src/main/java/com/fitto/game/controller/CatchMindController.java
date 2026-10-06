@@ -77,11 +77,13 @@ public class CatchMindController {
         return ApiResponse.success(catchMindService.revealHint(user.id(), id));
     }
 
-    /** 포기·접기 — 기록에 남지 않고 정답이 상대에게 공개된다 */
+    /**
+     * 포기·접기 — 기록에 남지 않고 정답이 양쪽에 공개된다. 끝난 판(제시어 포함)을 돌려준다 —
+     * 맞히는 쪽의 "정답 보기"가 이 응답으로 정답을 띄운다. 예전 앱은 data 를 읽지 않으므로 그대로 동작한다.
+     */
     @PostMapping("/{id}/give-up")
-    public ApiResponse<Void> giveUp(@AuthenticationPrincipal AuthUser user, @PathVariable Long id) {
-        catchMindService.giveUp(user.id(), id);
-        return ApiResponse.success(null, "이 판은 접었어요.");
+    public ApiResponse<CatchMindResponse> giveUp(@AuthenticationPrincipal AuthUser user, @PathVariable Long id) {
+        return ApiResponse.success(catchMindService.giveUp(user.id(), id), "이 판은 접었어요.");
     }
 
     /** 맞힌 판 최근 20개 */

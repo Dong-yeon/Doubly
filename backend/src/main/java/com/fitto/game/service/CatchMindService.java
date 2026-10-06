@@ -230,12 +230,16 @@ public class CatchMindService {
     /**
      * 포기·접기 — 기록에 남지 않는다(두 게임과 같은 규칙).
      * 그린 쪽도 접을 수 있다. 상대가 며칠째 안 열면 그림 하나 때문에 다음 판을 못 낸다.
+     *
+     * <p><b>끝난 판을 돌려준다.</b> 맞히는 쪽에게 이 버튼은 "정답 보기"인데, 예전에는 아무것도 돌려주지 않아
+     * 정답이 그린 쪽 푸시에만 실리고 누른 사람 화면에는 끝내 안 나왔다(docs/game-current-state.md 8-1 #15).
+     * 판이 끝났으므로 {@link CatchMindResponse} 가 제시어를 싣는다. 이미 끝난 판이면 그 상태 그대로 돌려준다.
      */
     @Transactional
-    public void giveUp(Long userId, Long gameId) {
+    public CatchMindResponse giveUp(Long userId, Long gameId) {
         Relation couple = couples.active(userId);
         CatchMindGame game = lockedGame(gameId, couple);
-        if (!game.isInProgress()) return;
+        if (!game.isInProgress()) return toResponse(game, userId, couple);
         game.abandon();
 
         Long partnerId = couple.partnerOf(userId);
@@ -244,6 +248,7 @@ public class CatchMindService {
                     "정답은 '" + game.getWord() + "' 였어요.", PushLinks.GAME_CATCH_MIND);
         }
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.GAME);
+        return toResponse(game, userId, couple);
     }
 
     /** 맞힌 판 최근 20개 — 지난 그림을 다시 볼 수 있다 */
