@@ -67,6 +67,14 @@ public class SudokuGame extends CoupleGame {
         return dailyDate != null;
     }
 
+    /**
+     * 날짜가 지난 오늘의 판인가 — 그날의 판은 그날로 끝이다. 못 끝낸 채 남아 있으면 다음 날의 판을 막으므로
+     * (진행 중인 판은 하나) 오늘의 판을 열 때·새벽 정리 때 접는다.
+     */
+    public boolean isPastDaily(LocalDate today) {
+        return dailyDate != null && dailyDate.isBefore(today);
+    }
+
     @Override
     public GameType getGameType() {
         return GameType.SUDOKU;

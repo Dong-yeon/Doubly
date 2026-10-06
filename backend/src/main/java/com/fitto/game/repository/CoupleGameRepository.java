@@ -47,6 +47,12 @@ public interface CoupleGameRepository extends JpaRepository<CoupleGame, Long> {
     int markReminded(@Param("id") Long id, @Param("at") LocalDateTime at);
 
     /**
+     * 정리할 판 — 진행 중인데 {@code before} 전부터 아무도 움직이지 않은 판(GameExpiryService).
+     * 리마인더(findStalled)가 "버려진 판"으로 보고 더는 부르지 않는 바로 그 판들이다.
+     */
+    List<CoupleGame> findByStatusAndUpdatedAtBefore(GameStatus status, LocalDateTime before);
+
+    /**
      * 멈춘 판 — 진행 중인데 {@code before} 전부터 움직임이 없고, 이번 멈춤에는 아직 알리지 않은 판.
      * 리마인더를 보낸 뒤 판이 다시 움직이면 updated_at 이 reminded_at 을 앞질러 다음 멈춤에 또 알린다.
      * {@code after} 보다 오래 묵은 판은 버려진 판으로 보고 부르지 않는다.

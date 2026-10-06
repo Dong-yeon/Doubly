@@ -26,6 +26,9 @@ public interface SudokuGameRepository extends JpaRepository<SudokuGame, Long> {
      */
     List<SudokuGame> findByCoupleIdAndDailyDateOrderByCreatedAtDesc(Long coupleId, LocalDate dailyDate);
 
+    /** 날짜가 지난 "오늘의 판" 중 아직 진행 중인 것 — 그날이 지나면 정리한다(GameExpiryService) */
+    List<SudokuGame> findByStatusAndDailyDateBefore(GameStatus status, LocalDate date);
+
     /**
      * 행 잠금 재조회 (SELECT ... FOR UPDATE) — 칸 입력 직렬화용.
      * 둘이 동시에 다른 칸을 쓰면 board 문자열 전체를 덮어써 한쪽 입력이 사라진다(lost update).
