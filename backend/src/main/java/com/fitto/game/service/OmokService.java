@@ -12,6 +12,7 @@ import com.fitto.common.plan.Feature;
 import com.fitto.common.plan.PlanGuard;
 import com.fitto.game.domain.GameStatus;
 import com.fitto.game.domain.OmokGame;
+import com.fitto.game.dto.GameRecordResponse;
 import com.fitto.game.dto.OmokGameResponse;
 import com.fitto.game.repository.OmokGameRepository;
 import com.fitto.relation.domain.Relation;
@@ -205,6 +206,15 @@ public class OmokService {
                     userName(userId) + "님이 하던 판을 접었어요. 새 판을 열어 볼까요?", PushLinks.GAME_OMOK);
         }
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.GAME);
+    }
+
+    /** 전적 — 끝낸 판 전부(최근 20판이 아니라). 보는 사람 기준 */
+    public GameRecordResponse record(Long userId) {
+        Relation couple = activeCouple(userId);
+        return new GameRecordResponse(
+                gameRepository.countWins(couple.getId(), userId, GameStatus.COMPLETED),
+                gameRepository.countLosses(couple.getId(), userId, GameStatus.COMPLETED),
+                gameRepository.countDraws(couple.getId(), GameStatus.COMPLETED));
     }
 
     /** 끝난 판 최근 20개(승패 포함) */
