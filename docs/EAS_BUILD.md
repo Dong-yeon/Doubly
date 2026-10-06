@@ -469,6 +469,15 @@ fingerprint 를 바꾸는 변경이라 지금 빌드에 업데이트를 계속 �
 
 ### 1.0.7 에 묶은 것 (2026-10-06, 브랜치 `feat/invite-applinks-location`)
 
+**출시 기록(2026-10-06):** 소스 main `9c987965` = **다음 OTA 기준선**. runtime Android `700b96c0…`, iOS `d75619b0…`.
+- Android vc39 → production completed(즉시 전체 배포). 매니페스트에 `/i/`·`autoVerify`·위치 권한 2개 확인, 백그라운드 위치 없음.
+- iOS build 33 → App Store Connect 업로드. **심사 제출은 사용자가 ASC 에서.**
+- iOS 첫 시도(build 32)는 취소했다 — App ID 에 Associated Domains 가 꺼져 있었고, 저장소의 ASC 키(`5L85YB6A6G`)는 Admin 이 아니라
+  기능을 켜지 못한다(403). `--non-interactive` 빌드는 기능 동기화를 하지 않고 옛 프로필을 그대로 쓴다. **entitlement 를 새로 넣는 빌드는
+  사용자가 PowerShell 에서 대화형(`npx eas-cli build --platform ios --profile production`, Apple ID 로그인)으로 돌려야 한다.**
+- 발견: **iOS 1.0.6 은 심사 제출이 안 된 채(PREPARE_FOR_SUBMISSION) 남아 있었다** — App Store 판매 중은 1.0.5(build 30).
+  즉 10-02 이후 1.0.6 runtime 대상으로 올린 OTA 는 아이폰 사용자에게 한 번도 가지 않았다. 1.0.7 심사가 통과하면 한꺼번에 해소된다.
+
 - `package.json`: `update:production`·`update:preview` 에 `--environment`, `verify:place-link`·`verify:home-event` 등록.
   이제 `npm run update:production` 을 비대화형으로 돌려도 된다.
 - **커플 초대 App Links·Universal Links + 설치 후 코드 이어받기** (docs/first-experience-audit.md #2 2단계):
