@@ -364,3 +364,8 @@ mint·peach 사용자는 목적 토큰 자리가 green 값으로 보인다(변�
 **배포**: §11·§12 를 production OTA 로(2026-10-06, 소스 `fa98ebad`, iOS 그룹 `b1cb729c` · Android 그룹 `c179dc06`).
 fingerprint 1.0.6 그대로(Android `5025c62d…` · iOS `810b9a8b…`). 직전 OTA(`3d7b144b`) 이후 다른 세션 변경 — 달력 주 단위 줄 2건,
 장소 상세 [메뉴·정보][전화][네이버](서버 V130 선배포, docs/LOVELICHELIN_PLACE_INFO_2026-10-06.md §5), 식단 목표 자동 계산 모달 — 이 함께 나갔다.
+
+**배포 뒤 발견한 버그**(사용자 제보, 10-06): 포인트 색을 바꾸면 채팅방으로 이동했다. 테마 전환은 `NavigationContainer` 를 key 로 다시
+마운트하고 직전 상태를 `initialState` 로 돌리는데, 다시 마운트될 때도 `linking.getInitialURL` 이 불려 **마지막으로 탭한 알림**
+(`getLastNotificationResponseAsync`, 실행 내내 남음 — 대개 채팅)의 링크를 돌려줬고 링크가 initialState 를 이겼다. 다크 모드 전환에도
+있던 문제가 포인트 색으로 자주 바꾸며 드러났다. `navigation/linking.ts` 에서 네이티브는 첫 화면 링크를 실행당 한 번만 쓰도록 고침(main `5e70736a`).
