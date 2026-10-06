@@ -15,6 +15,8 @@ import java.time.LocalDateTime;
  * @param myHandicap      내가 받는 방해의 백분율(100 = 그대로). 숨기지 않고 화면에 띄운다
  * @param partnerHandicap 상대가 받는 방해의 백분율 — 상대에게 보낼 때 내가 곱하지는 않는다(받는 쪽이 곱한다)
  * @param winner          ME / PARTNER / DRAW / null(진행 중)
+ * @param myStarted       내가 이 판을 시작했다고 알렸는가(V132). 결과 없이 true 면 앞의 판이 끊긴 것이다
+ * @param myRestartsLeft  끊긴 판을 다시 칠 수 있는 남은 횟수 — 0 인데 또 시작하면 패배로 기록된다
  */
 public record PuzzleBattleResponse(
         Long id,
@@ -27,7 +29,9 @@ public record PuzzleBattleResponse(
         String winner,
         String partnerName,
         LocalDateTime createdAt,
-        LocalDateTime completedAt
+        LocalDateTime completedAt,
+        boolean myStarted,
+        int myRestartsLeft
 ) {
     public record Run(int score, int maxChain, int survivedMs, boolean lost, String timeline) {
         static Run of(PuzzleBattleGame.Run run) {
@@ -55,7 +59,9 @@ public record PuzzleBattleResponse(
                 winner,
                 partnerName,
                 game.getCreatedAt(),
-                game.getCompletedAt()
+                game.getCompletedAt(),
+                game.startedAtOf(mine) != null,
+                Math.max(0, PuzzleBattleGame.MAX_RESTARTS - game.restartsOf(mine))
         );
     }
 }
