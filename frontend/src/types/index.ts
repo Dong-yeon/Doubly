@@ -824,6 +824,16 @@ export interface PuzzleBattleGame {
   partnerName?: string | null;
   createdAt: string;
   completedAt?: string | null;
+  /** 내가 이 판을 시작했다고 알렸는가 — 결과 없이 true 면 앞의 판이 끊긴 것(V132, 예전 서버면 없음) */
+  myStarted?: boolean;
+  /** 끊긴 판을 다시 칠 수 있는 남은 횟수 — 0 인데 또 시작하면 패배로 기록된다 */
+  myRestartsLeft?: number;
+}
+
+/** 판 시작 알림의 결과 — STARTED(처음) / RESTARTED(끊긴 판 다시) / FORFEITED(두 번 끊겨 패배로 기록) */
+export interface PuzzleBattleBegin {
+  outcome: 'STARTED' | 'RESTARTED' | 'FORFEITED';
+  game: PuzzleBattleGame;
 }
 /** /sub/games/{relationId} 페이로드 — 백엔드 PuzzleBattleEvent 와 짝. senderId 는 서버가 채운다 */
 export interface PuzzleBattleEvent {

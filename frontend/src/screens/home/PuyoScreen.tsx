@@ -46,7 +46,7 @@ import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
-import type { PuzzleBattleEvent, PuzzleBattleGame, PuzzleBattleRun } from '../../types';
+import type { PuzzleBattleBegin, PuzzleBattleEvent, PuzzleBattleGame, PuzzleBattleRun } from '../../types';
 import {
   type Board,
   type ItemCode,
@@ -524,11 +524,28 @@ export function PuyoScreen({ navigation }: Props) {
     if (!relationId || battleBusy) return;
     setBattleBusy(true);
     try {
-      const g = battle && !battle.me && battle.status === 'IN_PROGRESS' ? battle : await puzzleApi.start();
+      let g = battle && !battle.me && battle.status === 'IN_PROGRESS' ? battle : await puzzleApi.start();
       setBattle(g);
       if (g.me) {
         toast.info('이 판의 결과는 이미 냈어요. 상대를 기다리는 중이에요.');
         return;
+      }
+      /*
+       * 치기 직전에 서버에 알린다 — 판의 진행은 이 화면 메모리에만 있어 앱이 꺼지면 사라진다. 결과 없이 다시
+       * 시작하면 서버가 "끊긴 판"으로 보고 한 번은 다시 치게, 그 뒤엔 패배로 기록한다(docs/game-current-state.md 8-1 #7).
+       * startAt 보다 먼저 불러야 서버 시계의 시작이 앱보다 앞서 결과 검사(버틴 시간 ≤ 경과)가 어긋나지 않는다.
+       */
+      const begun = await beginRun(g.id);
+      if (begun) {
+        g = begun.game;
+        setBattle(g);
+        if (begun.outcome === 'FORFEITED') {
+          toast.info(`이 판은 두 번 끊겨 패배로 기록됐어요. ${g.partnerName ?? '상대'}가 마치면 채팅으로 결과가 와요.`);
+          return;
+        }
+        if (begun.outcome === 'RESTARTED') {
+          toast.info('끊긴 판을 다시 시작해요. 또 끊기면 패배로 기록돼요.');
+        }
       }
       resetView();
       clearSession();
@@ -969,6 +986,12 @@ export function PuyoScreen({ navigation }: Props) {
         battleTitle = '상대를 기다리는 중';
         battleDesc = `내 결과(${battle.me.score}점 · ${battle.me.maxChain}연쇄)는 냈어요. ${partnerName}가 마치면 채팅으로 결과가 와요.`;
         battleDisabled = true;
+      } else if (battle.myStarted && (battle.myRestartsLeft ?? 0) > 0) {
+        battleTitle = '끊긴 판 다시 하기';
+        battleDesc = '지난 판이 중간에 끊겼어요. 한 번은 다시 칠 수 있어요 — 또 끊기면 패배로 기록돼요.';
+      } else if (battle.myStarted) {
+        battleTitle = '끊긴 판 마무리하기';
+        battleDesc = '이 판은 이미 한 번 다시 쳤어요. 누르면 패배로 기록되고 상대 차례가 돼요.';
       } else if (battle.partner) {
         battleTitle = '고스트 대전 시작';
         battleDesc = `${partnerName}의 기록(${battle.partner.score}점 · ${battle.partner.maxChain}연쇄)에 도전해요. 그때 보낸 방해가 같은 시각에 날아와요.`;
@@ -1087,6 +1110,20 @@ export function PuyoScreen({ navigation }: Props) {
 }
 
 /** 방금 착지한 조각은 위의 모듈 변수 lastLocked 에 있다 */
+
+/**
+ * 판 시작 알림. 예전 서버(begin 이 없어 404·405)면 null — 알림 없이 예전처럼 친다.
+ * 그 밖의 실패는 올린다: 알리지 못한 채 치면 끊김 규칙을 건너뛰게 된다.
+ */
+async function beginRun(gameId: number): Promise<PuzzleBattleBegin | null> {
+  try {
+    return await puzzleApi.begin(gameId);
+  } catch (e) {
+    const status = (e as { status?: number } | null)?.status ?? 0;
+    if (status === 404 || status === 405) return null;
+    throw e;
+  }
+}
 
 /**
  * 결과 제출 — 잠깐 끊겼거나 서버가 재배포 중이면(502·503·네트워크) 몇 번 더 보낸다.

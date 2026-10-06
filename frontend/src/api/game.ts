@@ -11,6 +11,7 @@ import type {
   GameStreak,
   GameTypeKey,
   OmokGame,
+  PuzzleBattleBegin,
   PuzzleBattleGame,
   PuzzleBattleRun,
   SudokuDifficulty,
@@ -141,6 +142,11 @@ export const puzzleApi = {
   current: () => unwrap(apiClient.get<ApiResponse<PuzzleBattleGame | null>>('/games/puzzle/current')),
   /** 새 판 — 진행 중인 판이 있으면 그걸 돌려준다. 시드·핸디캡은 서버가 정한다 */
   start: () => unwrap(apiClient.post<ApiResponse<PuzzleBattleGame>>('/games/puzzle')),
+  /**
+   * 내 판 시작 알림 — 치기 직전에 부른다. 결과 없이 다시 부르면 앞의 판이 끊긴 것으로 보고, 한 번은 다시
+   * 치게 하고 그 뒤엔 패배로 기록한다(docs/game-current-state.md 8-1 #7).
+   */
+  begin: (id: number) => unwrap(apiClient.post<ApiResponse<PuzzleBattleBegin>>(`/games/puzzle/${id}/begin`)),
   /** 내 결과 제출 — 한 판에 한 번(두 번째는 409) */
   finish: (id: number, run: PuzzleBattleRun) =>
     unwrap(apiClient.post<ApiResponse<PuzzleBattleGame>>(`/games/puzzle/${id}/finish`, run)),
