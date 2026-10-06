@@ -8,14 +8,15 @@
  * 함수가 아니라 컴포넌트인 이유는 담기 진행/완료 상태(state)가 필요해서다.
  */
 import React, { useState } from 'react';
-import { Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Button } from '../../components/Button';
 import { placeApi, toSavePlacePayload } from '../../api/place';
+import { openInAppBrowser } from '../../utils/placeLinks';
 import { usePlaceStore } from '../../store/placeStore';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
-import { fontSize, radius, spacing } from '../../constants/theme';
+import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { LovelichelinRecommendation, LovelichelinRecommendedPlace } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 
@@ -73,7 +74,11 @@ export function LovelichelinRecommendCards({ data }: { data: LovelichelinRecomme
               {p.reason ? <Text style={styles.reason}>{p.reason}</Text> : null}
               <View style={styles.actionRow}>
                 {p.placeUrl ? (
-                  <TouchableOpacity onPress={() => Linking.openURL(p.placeUrl!)} hitSlop={8}>
+                  <TouchableOpacity
+                    // 장소 상세의 [메뉴·정보 보기]와 같은 방식 — 앱 안 브라우저(웹은 새 탭)
+                    onPress={() => openInAppBrowser(p.placeUrl!, { toolbar: colors.surface, controls: colors.primary })}
+                    hitSlop={8}
+                  >
                     <Text style={styles.mapLink}>카카오맵에서 보기</Text>
                   </TouchableOpacity>
                 ) : (

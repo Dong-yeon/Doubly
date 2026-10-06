@@ -59,6 +59,7 @@ import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
 import { todayKst } from '../../utils/date';
+import { callPhone, kakaoSearchUrl, naverSearchUrl, openInAppBrowser } from '../../utils/placeLinks';
 import { uploadApi, wasRejected } from '../../api/upload';
 import { defaultMealType } from '../../utils/mealType';
 import { stars } from '../../utils/ratingStars';
@@ -391,6 +392,12 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
                         <Text style={styles.infoChipText}>{place.category}</Text>
                       </View>
                     ) : null}
+                    {/* 무엇을 파는 곳인지 — 카카오 세부 분류("한식 · 냉면"). 직접 추가·예전 장소는 없다 */}
+                    {place.categoryDetail ? (
+                      <View style={styles.infoChip}>
+                        <Text style={styles.infoChipText}>{place.categoryDetail}</Text>
+                      </View>
+                    ) : null}
                     {place.lovelichelinTier === 0 &&
                     ((place.myRating != null && place.myRating >= SOLO_PICK_MIN_RATING && place.partnerRating == null) ||
                       (place.partnerRating != null &&
@@ -400,6 +407,49 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
                     ) : null}
                   </View>
                   {place.address ? <Text style={styles.infoAddress}>{place.address}</Text> : null}
+                  {/*
+                    메뉴·정보는 앱 안 브라우저로 카카오 상세(서버가 카카오 id 로 만든 detailUrl), 없으면 카카오맵 검색.
+                    메뉴·사진은 공개 API 가 없어 그 페이지를 앱을 떠나지 않고 보게 한다(docs/LOVELICHELIN_PLACE_INFO_2026-10-06.md).
+                    전화는 번호가 있을 때만. 아이콘 없이 글자 버튼 — 새 글리프는 폰트(fingerprint 입력)를 바꾼다.
+                  */}
+                  <View style={styles.linkRow}>
+                    <Button
+                      title="메뉴·정보 보기"
+                      size="sm"
+                      variant="secondary"
+                      style={styles.linkBtn}
+                      accessibilityLabel={`${place.name} 메뉴·정보 보기`}
+                      onPress={() =>
+                        openInAppBrowser(place.detailUrl ?? kakaoSearchUrl(place.name, place.address), {
+                          toolbar: colors.surface,
+                          controls: colors.primary,
+                        })
+                      }
+                    />
+                    {place.phone ? (
+                      <Button
+                        title="전화"
+                        size="sm"
+                        variant="secondary"
+                        style={styles.linkBtn}
+                        accessibilityLabel={`${place.name}에 전화 걸기 ${place.phone}`}
+                        onPress={() => callPhone(place.phone as string)}
+                      />
+                    ) : null}
+                    <Button
+                      title="네이버에서 보기"
+                      size="sm"
+                      variant="secondary"
+                      style={styles.linkBtn}
+                      accessibilityLabel={`${place.name} 네이버 지도에서 보기`}
+                      onPress={() =>
+                        openInAppBrowser(naverSearchUrl(place.name, place.address), {
+                          toolbar: colors.surface,
+                          controls: colors.primary,
+                        })
+                      }
+                    />
+                  </View>
                   {place.visitCount > 0 ? (
                     <Text style={styles.infoStats}>
                       {place.avgRating ? `${place.avgRating.toFixed(1)} · ` : ''}
@@ -756,6 +806,9 @@ const styles = themedStyles((colors) => ({
   infoAddress: { fontSize: fontSize.body, color: colors.textSecondary, marginTop: spacing.xs },
   infoStats: { fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '700', marginTop: spacing.xs },
   infoMap: { marginTop: spacing.md },
+  // 외부 링크 버튼 줄 — 좁으면 두 줄로 접힌다
+  linkRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
+  linkBtn: { flexGrow: 1 },
   lovelichelinSection: {
     marginTop: spacing.md,
     paddingTop: spacing.md,
