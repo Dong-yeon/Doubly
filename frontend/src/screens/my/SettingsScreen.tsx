@@ -14,6 +14,10 @@ import { Chip } from '../../components/Chip';
 import { SettingsGroup, SettingsInset, SettingsRow } from '../../components/SettingsList';
 import { useThemeStore } from '../../store/themeStore';
 import type { ThemeMode } from '../../theme/themePreference';
+import { CHROME_THEMES } from '../../theme/palette';
+import { getScheme } from '../../theme/colors';
+import { onColor } from '../../theme/onColor';
+import { MaterialCommunityIcons } from '../../components/Icon';
 import { authApi } from '../../api/auth';
 import {
   canAskPushPermission,
@@ -92,6 +96,8 @@ export function SettingsScreen({ navigation }: Props) {
   /* 테마 — 고르는 즉시 화면에 반영된다 (RootNavigator 가 트리를 다시 그린다) */
   const themeMode = useThemeStore((s) => s.mode);
   const setThemeMode = useThemeStore((s) => s.setMode);
+  const chrome = useThemeStore((s) => s.chrome);
+  const setChrome = useThemeStore((s) => s.setChrome);
 
   const [savingNotification, setSavingNotification] = useState(false);
   const [savingMarketing, setSavingMarketing] = useState(false);
@@ -265,7 +271,7 @@ export function SettingsScreen({ navigation }: Props) {
         */}
         <SettingsGroup
           title="화면"
-          footer="시스템을 고르면 기기 설정을 따라가요."
+          footer="시스템을 고르면 기기 설정을 따라가요. 버튼 색은 이 기기에서만 바뀌고, 나·상대 색은 그대로예요."
           style={styles.group}
         >
           <View>
@@ -274,6 +280,36 @@ export function SettingsScreen({ navigation }: Props) {
               {THEME_OPTIONS.map((o) => (
                 <Chip key={o.value} label={o.label} selected={themeMode === o.value} onPress={() => void setThemeMode(o.value)} fill />
               ))}
+            </SettingsInset>
+          </View>
+          {/*
+            버튼 색(palette.ts CHROME_THEMES) — 크롬만 바뀐다. 이름만으로는 색이 안 그려지므로 견본 원을 보여준다.
+            견본은 지금 스킴의 채움 값이라 다크에서는 밝은 원이 보인다(실제 다크 버튼 색).
+          */}
+          <View>
+            <SettingsRow title="버튼 색" />
+            <SettingsInset style={styles.swatches}>
+              {CHROME_THEMES.map((t) => {
+                const fill = t[getScheme()].primaryFill;
+                const selected = chrome === t.id;
+                return (
+                  <Pressable
+                    key={t.id}
+                    style={styles.swatchItem}
+                    onPress={() => void setChrome(t.id)}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected }}
+                    accessibilityLabel={`버튼 색 ${t.label}`}
+                  >
+                    <View style={[styles.swatch, { backgroundColor: fill }, selected && styles.swatchSelected]}>
+                      {selected ? <MaterialCommunityIcons name="check-circle" size={20} color={onColor(fill)} /> : null}
+                    </View>
+                    <Text style={[styles.swatchLabel, selected && styles.swatchLabelSelected]} numberOfLines={1}>
+                      {t.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </SettingsInset>
           </View>
         </SettingsGroup>
@@ -360,6 +396,21 @@ const styles = themedStyles((colors) => ({
   container: { padding: spacing.lg, paddingBottom: spacing.xl },
   group: { marginTop: spacing.lg },
   chips: { flexDirection: 'row', gap: spacing.sm },
+  swatches: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  swatchItem: { alignItems: 'center', gap: spacing.xs, width: 56 },
+  swatch: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  // 선택 표시는 바깥 고리 — 견본 색이 바탕과 비슷해도(다크의 밝은 원 등) 고리로 갈린다
+  swatchSelected: { borderWidth: 3, borderColor: colors.textPrimary },
+  swatchLabel: { fontSize: fontSize.caption, color: colors.textSecondary },
+  swatchLabelSelected: { color: colors.textPrimary, fontWeight: '800' },
   appVersion: {
     textAlign: 'center',
     fontSize: fontSize.caption,

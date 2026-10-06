@@ -42,7 +42,26 @@ function tokensOf(block) {
 const light = tokensOf(objectAt('export const light = {'));
 const dark = tokensOf(objectAt('export const dark: typeof light = {'));
 
-const palettes = { light, dark };
+/*
+ * 버튼 색 테마(CHROME_THEMES) — 테마마다 크롬 일곱 키를 라이트/다크 위에 덮어 한 벌씩 만든다.
+ * palette.ts 는 chrome('#…', …) 위치 인자로 적으므로 그 순서(primary, primaryDark, primaryLight,
+ * primaryFill, primaryBg, onPrimary)를 여기서도 따른다. 순서를 바꾸면 여기도 바꾼다.
+ */
+const CHROME_ARGS = ['primary', 'primaryDark', 'primaryLight', 'primaryFill', 'primaryBg', 'onPrimary'];
+const chromeOf = (args) => {
+  const hex = [...args.matchAll(/'(#[0-9a-fA-F]{6})'/g)].map((m) => m[1].toUpperCase());
+  if (hex.length !== CHROME_ARGS.length) throw new Error(`chrome() 인자 수가 ${CHROME_ARGS.length} 가 아니다: ${args}`);
+  const o = Object.fromEntries(CHROME_ARGS.map((k, i) => [k, hex[i]]));
+  o.primarySoft = o.primaryBg;
+  return o;
+};
+const palettes = {};
+const themesBlock = src.slice(src.indexOf('export const CHROME_THEMES'));
+for (const m of themesBlock.matchAll(/id: '(\w+)'[\s\S]*?light: chrome\(([^)]*)\),\s*dark: chrome\(([^)]*)\)/g)) {
+  palettes[`${m[1]}/light`] = { ...light, ...chromeOf(m[2]) };
+  palettes[`${m[1]}/dark`] = { ...dark, ...chromeOf(m[3]) };
+}
+if (Object.keys(palettes).length === 0) throw new Error('CHROME_THEMES 를 하나도 못 읽었다');
 
 const luminance = (hex) => {
   const ch = [1, 3, 5]
@@ -153,6 +172,9 @@ const DISTINCT = [
   { name: '함께 ≠ 상대', pick: (p) => [p.together, p.partner], min: 20 },
   // 나 색이 따뜻한 계열이라 삭제·오류의 빨강과 붙을 수 있다
   { name: '나 ≠ danger', pick: (p) => [p.me, p.danger], min: 15 },
+  // 버튼 색 테마에 초록 계열(민트·세이지·라임)이 있다 — 탭·링크 글자가 완료 체크 색으로 읽히면 안 된다
+  { name: 'primary ≠ 완료(success)', pick: (p) => [p.primary, p.success], min: 15 },
+  { name: 'primary ≠ 성취(achievement)', pick: (p) => [p.primary, p.achievement], min: 15 },
 ];
 
 let failures = 0;

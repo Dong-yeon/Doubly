@@ -19,10 +19,16 @@
  */
 import { Appearance, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { DEFAULT_CHROME_THEME, isChromeThemeId, type ChromeThemeId } from './palette';
 
 export type ThemeMode = 'system' | 'light' | 'dark';
 
 const STORAGE_KEY = 'doubly.theme.mode';
+/*
+ * 버튼 색 테마(palette.ts CHROME_THEMES). 2026-10-05 에 폐지한 액센트 키(doubly.theme.accent)와 <b>다른 키</b>다 —
+ * 그 키에 남은 'mint'/'peach' 를 버튼 색으로 잘못 읽지 않게.
+ */
+const CHROME_KEY = 'doubly.theme.chrome';
 
 /** 웹에서만 존재하는 동기 저장소 — 네이티브에서는 null */
 function webStorage(): Storage | null {
@@ -66,6 +72,23 @@ export function applyToAppearance(mode: ThemeMode): void {
   // (ColorSchemeName 타입에도 null 이 없다) 네이티브 AppearanceModule.setColorScheme 이
   // null 로 호출되면 NPE 로 즉시 크래시한다(스플래시 화면에서 앱이 죽는 원인이었음).
   Appearance.setColorScheme(mode === 'system' ? 'unspecified' : mode);
+}
+
+/** 버튼 색 테마의 동기 조회 — 웹만 값을 준다(네이티브는 themeStore.load 가 덮어쓴다) */
+export function readChromeThemeSync(): ChromeThemeId {
+  const stored = webStorage()?.getItem(CHROME_KEY);
+  return isChromeThemeId(stored) ? stored : DEFAULT_CHROME_THEME;
+}
+
+export async function loadChromeTheme(): Promise<ChromeThemeId> {
+  if (Platform.OS === 'web') return readChromeThemeSync();
+  const stored = await AsyncStorage.getItem(CHROME_KEY);
+  return isChromeThemeId(stored) ? stored : DEFAULT_CHROME_THEME;
+}
+
+export async function saveChromeTheme(id: ChromeThemeId): Promise<void> {
+  webStorage()?.setItem(CHROME_KEY, id);
+  await AsyncStorage.setItem(CHROME_KEY, id);
 }
 
 /** 앱 시작 직후 저장된 선택을 네이티브 Appearance 에 복원한다 */
