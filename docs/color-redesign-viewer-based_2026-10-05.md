@@ -360,3 +360,7 @@ mint·peach 사용자는 목적 토큰 자리가 green 값으로 보인다(변�
 
 **검증**: verify:theme 가 `lightSurface` 를 읽어 28벌 × 33규칙 통과(카드 흰색 기준). verify:chat-theme · typecheck · build:web 통과.
 웹 미리보기는 §11 과 같은 이유로 못 봤다 — 실기기에서 민트·로즈 등으로 바꿔 홈·피드·설정 바탕을 볼 것.
+
+**배포**: §11·§12 를 production OTA 로(2026-10-06, 소스 `fa98ebad`, iOS 그룹 `b1cb729c` · Android 그룹 `c179dc06`).
+fingerprint 1.0.6 그대로(Android `5025c62d…` · iOS `810b9a8b…`). 직전 OTA(`3d7b144b`) 이후 다른 세션 변경 — 달력 주 단위 줄 2건,
+장소 상세 [메뉴·정보][전화][네이버](서버 V130 선배포, docs/LOVELICHELIN_PLACE_INFO_2026-10-06.md §5), 식단 목표 자동 계산 모달 — 이 함께 나갔다.
