@@ -1,18 +1,20 @@
 /**
- * 럽슐랭 장소 목록 카드 — 등급 있는 곳은 매거진 카드, 나머지는 한 줄 카드.
+ * 럽슐랭 장소 목록 한 줄 — 네이버 지도 모바일 목록처럼 <b>왼쪽 글자 + 오른쪽 작은 정사각 사진</b>(2026-10-06).
  *
- * <p>지도 기본 화면(하단 시트)과 지도를 못 쓸 때의 목록이 같은 카드를 쓴다 — 예전 PlaceScreen 목록의
- * renderItem 을 그대로 옮겼다(2026-10-05). 시트에서만 "위치 없음" 표시가 붙는다(지도에 핀이 없는 이유).
+ * <p>예전엔 등급 있는 곳이 16:9 커버 사진의 매거진 카드라, 지도 아래 40% 시트에서 사진 한 장이 목록을 다 먹었다
+ * (사용자: "사진이 너무 크게 나온다"). 이제 모든 곳이 같은 한 줄이고, 등급은 이름 옆 배지가 말한다. 카드 박스 대신
+ * 구분선 — 한 화면에 더 많이 보인다.
+ *
+ * <p>지도 시트와 지도를 못 쓸 때의 목록이 같이 쓴다. 시트에서만 "위치 없음"이 붙는다(지도에 핀이 없는 이유).
  */
 import React from 'react';
-import { Image, Pressable, Text, TouchableOpacity, View } from 'react-native';
-import { Card } from '../../components/Card';
+import { Image, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { LovelichelinBadge } from '../../components/LovelichelinBadge';
 import { SoloPickBadge } from '../../components/SoloPickBadge';
 import { isSoloPick } from './placeFilters';
 import { stars } from '../../utils/ratingStars';
-import { localDateOf } from '../../utils/date';
+import { neighborhoodOf } from '../../utils/placeLinks';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 import type { Place } from '../../types';
@@ -55,188 +57,114 @@ interface Props {
 
 export function PlaceListCard({ item, partnerName, deleting, onPress, onLongPress, onFixLocation }: Props) {
   const noLocation = onFixLocation != null && hasNoLocation(item);
-  // "위치 없음"은 카드 안의 버튼이 아니라 카드 아래 형제다 — 버튼 안 버튼(웹 마크업 오류)을 피한다
-  const locationFix = noLocation ? (
-    <Pressable
-      onPress={onFixLocation}
-      style={styles.noLocation}
-      accessibilityRole="button"
-      accessibilityLabel={`${item.name} 위치 없음 — 지도에 위치 지정하기`}
-    >
-      <MaterialCommunityIcons name="map-marker-outline" size={14} color={colors.textSecondary} />
-      <Text style={styles.noLocationText}>위치 없음 · 지도에 표시하기</Text>
-    </Pressable>
-  ) : null;
-
-  if (item.lovelichelinTier > 0) {
-    return (
-      <View style={styles.magazineWrap}>
-        <TouchableOpacity
-          activeOpacity={0.85}
-          // Card 의 style 은 ViewStyle 하나만 받아 배열 병합이 안 된다 — 삭제 중 흐림은 감싸는 쪽에 건다
-          style={deleting ? styles.cardDeleting : undefined}
-          disabled={deleting}
-          onPress={onPress}
-          onLongPress={onLongPress}
-        >
-          <Card elevation="sm" tint="together" style={styles.magazineCard}>
-            {item.coverImageUrl ? (
-              <Image source={{ uri: item.coverImageUrl }} style={styles.coverPhoto} resizeMode="cover" />
-            ) : (
-              <View style={styles.coverPlaceholder}>
-                <MaterialCommunityIcons name="crown" size={32} color={colors.togetherText} />
-              </View>
-            )}
-            <View style={styles.magazineBody}>
-              <View style={styles.magazineHeaderRow}>
-                <Text style={styles.magazineName} numberOfLines={2}>
-                  {item.name}
-                </Text>
-                <View style={styles.noShrink}>
-                  <LovelichelinBadge tier={item.lovelichelinTier} size="sm" />
-                </View>
-              </View>
-              {item.category ? <Text style={styles.magazineCategory}>{item.category}</Text> : null}
-              <View style={styles.magazineRatingRow}>
-                <Text style={[styles.magazineRating, { color: colors.me }]}>
-                  나 {item.myRating ? stars(item.myRating) : '미평가'}
-                </Text>
-                <Text style={[styles.magazineRating, { color: colors.partner }]}>
-                  상대 {item.partnerRating ? stars(item.partnerRating) : '미평가'}
-                </Text>
-              </View>
-              {item.coverMemo ? (
-                <Text style={styles.magazineMemo} numberOfLines={2}>
-                  “{item.coverMemo}”
-                </Text>
-              ) : null}
-              {item.lovelichelinCertifiedAt ? (
-                <Text style={styles.magazineDate}>{localDateOf(item.lovelichelinCertifiedAt)} 등극</Text>
-              ) : null}
-            </View>
-          </Card>
-        </TouchableOpacity>
-        {locationFix}
-      </View>
-    );
-  }
+  // 둘째 줄 — "냉면 · 연남동"(무엇을 파는 곳인지 + 동네)
+  const meta = [item.categoryDetail ?? item.category, neighborhoodOf(item.address)].filter(Boolean).join(' · ');
+  const partner = partnerName ?? '상대';
+  const bothRated = item.myRating != null && item.partnerRating != null;
 
   return (
-    <View style={styles.cardWrap}>
+    <View style={styles.wrap}>
       <TouchableOpacity
-        style={[styles.card, noLocation && styles.cardWithFix, deleting && styles.cardDeleting]}
+        style={[styles.row, deleting && styles.rowDeleting]}
         activeOpacity={0.7}
         disabled={deleting}
         onPress={onPress}
         onLongPress={onLongPress}
       >
-        {/* 이름 한 줄, 태그(카테고리·솔로 픽·여행)는 둘째 줄 — 한 줄에 wrap 하면 긴 이름 사이로 알약이 끼어들었다 */}
-        <Text style={styles.name} numberOfLines={2}>
-          {item.name}
-        </Text>
-        {item.category || isSoloPick(item) || item.tripId != null ? (
-          <View style={styles.tagRow}>
-            {item.category ? (
-              <View style={styles.categoryChip}>
-                <Text style={styles.categoryText}>{item.category}</Text>
-              </View>
+        <View style={styles.body}>
+          <View style={styles.titleRow}>
+            <Text style={styles.name} numberOfLines={1}>
+              {item.name}
+            </Text>
+            {item.lovelichelinTier > 0 ? <LovelichelinBadge tier={item.lovelichelinTier} size="sm" /> : null}
+            {item.lovelichelinTier === 0 && isSoloPick(item) ? (
+              <SoloPickBadge who={item.myRating != null ? 'me' : 'partner'} size="sm" />
             ) : null}
-            {isSoloPick(item) ? <SoloPickBadge who={item.myRating != null ? 'me' : 'partner'} size="sm" /> : null}
             {item.tripId != null ? (
-              <View style={styles.categoryChip}>
-                <MaterialCommunityIcons name="airplane" size={12} color={colors.textSecondary} />
-                <Text style={styles.categoryText}>여행에 담김</Text>
-              </View>
+              <MaterialCommunityIcons name="airplane" size={14} color={colors.textSecondary} />
             ) : null}
           </View>
-        ) : null}
-        {item.address ? <Text style={styles.address}>{item.address}</Text> : null}
-        <View style={styles.cardFooter}>
-          {item.visitCount > 0 ? (
-            <Text style={styles.visitInfo}>
-              {item.avgRating ? `${item.avgRating.toFixed(1)} · ` : ''}방문 {item.visitCount}회
-              {item.lastVisitedAt ? ` · 최근 ${item.lastVisitedAt}` : ''}
+          {meta ? (
+            <Text style={styles.meta} numberOfLines={1}>
+              {meta}
+            </Text>
+          ) : null}
+          {/* 별점 — 둘 다 매겼으면 나/상대 나란히, 한쪽만이면 누구 차례인지(ratingHint) */}
+          {bothRated ? (
+            <Text style={styles.ratings} numberOfLines={1}>
+              <Text style={{ color: colors.me }}>나 ★{item.myRating}</Text>
+              <Text style={styles.dot}> · </Text>
+              <Text style={{ color: colors.partner }}>
+                {partner} ★{item.partnerRating}
+              </Text>
+            </Text>
+          ) : item.myRating != null || item.partnerRating != null ? (
+            <Text style={styles.pendingHint} numberOfLines={1}>
+              {ratingHint(item, partnerName)}
+            </Text>
+          ) : null}
+          <Text style={styles.visit} numberOfLines={1}>
+            {item.visitCount > 0
+              ? `방문 ${item.visitCount}회${item.lastVisitedAt ? ` · 최근 ${item.lastVisitedAt.slice(5).replace('-', '/')}` : ''}`
+              : '아직 안 가봤어요'}
+          </Text>
+          {item.coverMemo ? (
+            <Text style={styles.memo} numberOfLines={1}>
+              “{item.coverMemo}”
             </Text>
           ) : null}
         </View>
-        {item.myRating != null || item.partnerRating != null ? (
-          <Text style={styles.pendingHint}>{ratingHint(item, partnerName)}</Text>
+        {/* 사진은 오른쪽 작은 정사각 하나 — 없으면 자리째 비운다(빈 회색 칸을 두지 않는다) */}
+        {item.coverImageUrl ? (
+          <Image source={{ uri: item.coverImageUrl }} style={styles.thumb} resizeMode="cover" />
         ) : null}
       </TouchableOpacity>
-      {locationFix}
+      {/* "위치 없음"은 행 안의 버튼이 아니라 아래 형제다 — 버튼 안 버튼(웹 마크업 오류)을 피한다 */}
+      {noLocation ? (
+        <Pressable
+          onPress={onFixLocation}
+          style={styles.noLocation}
+          accessibilityRole="button"
+          accessibilityLabel={`${item.name} 위치 없음 — 지도에 위치 지정하기`}
+        >
+          <MaterialCommunityIcons name="map-marker-outline" size={14} color={colors.textSecondary} />
+          <Text style={styles.noLocationText}>위치 없음 · 지도에 표시하기</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
 
 const styles = themedStyles((colors) => ({
-  noShrink: { flexShrink: 0 },
-  // 가이드 매거진 카드
-  magazineWrap: { marginBottom: spacing.md },
-  magazineCard: { padding: 0, overflow: 'hidden' },
-  coverPhoto: { width: '100%', aspectRatio: 16 / 9 },
-  coverPlaceholder: {
-    width: '100%',
-    aspectRatio: 16 / 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.togetherBg,
+  // 한 장소 = 한 줄. 카드 박스 대신 아래 구분선
+  wrap: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
-  magazineBody: { padding: spacing.md, gap: spacing.xs },
-  magazineHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
-  magazineName: { flex: 1, fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
-  magazineCategory: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
-  magazineRatingRow: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.xs },
-  magazineRating: { fontSize: fontSize.caption, fontWeight: '700' },
-  magazineMemo: { fontSize: fontSize.body, color: colors.textPrimary, fontStyle: 'italic', marginTop: spacing.xs },
-  magazineDate: { fontSize: fontSize.micro, color: colors.textSecondary, marginTop: spacing.xs },
-  // 장소 목록 카드
-  cardWrap: { marginBottom: spacing.sm },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
-  },
-  // 아래에 "위치 없음" 줄이 붙으면 카드와 한 덩어리로 보이게 아래 모서리를 편다
-  cardWithFix: { borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md },
   // 삭제 진행 중 표시 — useDeleteAction (QA_CHECKLIST.md 전역 반복 패턴 7)
-  cardDeleting: { opacity: 0.5 },
-  tagRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap', marginTop: spacing.xs },
-  name: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
-  categoryChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    borderRadius: radius.pill,
-    backgroundColor: colors.surfaceAlt,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  categoryText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
-  address: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xs },
-  cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.sm },
+  rowDeleting: { opacity: 0.5 },
+  body: { flex: 1, gap: 2 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  name: { flexShrink: 1, fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
+  meta: { fontSize: fontSize.caption, color: colors.textSecondary },
+  ratings: { fontSize: fontSize.caption, fontWeight: '700' },
+  dot: { color: colors.textSecondary },
+  pendingHint: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
   /*
-   * 평점·방문 횟수는 <b>정보 글자지 상태가 아니다</b> — 초록일 이유가 없다(2026-09-23).
-   * 선택 상태를 말하는 초록(필터 칩)과 소유자 색(pendingHint = togetherText)은 그대로 둔다.
+   * 방문 횟수는 <b>정보 글자지 상태가 아니다</b> — 색을 입히지 않는다(2026-09-23 화면 정리와 같은 원칙).
    */
-  visitInfo: { fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '700' },
-  pendingHint: { fontSize: fontSize.micro, color: colors.togetherText, fontWeight: '700', marginTop: spacing.xs },
-  // 위치 없음 — 카드 바로 아래 붙는 한 줄(44pt 터치)
+  visit: { fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '600' },
+  memo: { fontSize: fontSize.caption, color: colors.textSecondary, fontStyle: 'italic' },
+  // 네이버 지도 목록의 작은 사진 — 76px 정사각, 둥근 모서리
+  thumb: { width: 76, height: 76, borderRadius: radius.md, backgroundColor: colors.surfaceAlt },
+  // 위치 없음 — 행 아래 작은 줄(44pt 터치)
   noLocation: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
     minHeight: 44,
-    paddingHorizontal: spacing.md,
-    backgroundColor: colors.surfaceAlt,
-    borderWidth: 1,
-    borderTopWidth: 0,
-    borderColor: colors.border,
-    borderBottomLeftRadius: radius.lg,
-    borderBottomRightRadius: radius.lg,
+    marginTop: -spacing.sm,
   },
   noLocationText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
 }));
