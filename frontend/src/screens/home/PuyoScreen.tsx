@@ -1130,6 +1130,12 @@ async function beginRun(gameId: number): Promise<PuzzleBattleBegin | null> {
  * <p>2026-09-30 실제로 났다: 백엔드 재배포 30초 사이에 제출이 502 를 받아 "결과를 보내지 못했어요".
  * 결과는 판이 끝난 순간의 값이라 다시 만들 수 없으므로, 사용자가 누르기 전에 조용히 재시도한다.
  * 4xx(이미 냈음 등)는 재시도해도 같으니 바로 올린다.
+ *
+ * <p><b>409 는 서버 상태를 다시 읽고 판단한다.</b> 타임아웃(status 0)은 "서버가 못 받았다"가 아니라 "응답을
+ * 못 받았다"일 수 있다 — 첫 요청이 이미 들어간 뒤의 재전송은 "이미 보냈어요"(409)를 받는다. 예전에는 이것을
+ * 실패로 띄워 "결과를 보내지 못했어요"와 끝없이 409 를 받는 "다시 보내기" 버튼이 남았다(docs/game-current-state.md
+ * 8-1 #8). 서버에 내 결과가 있으면 성공이다. 에러 메시지 문구로 가르지 않는 이유: 같은 409 라도 "이미 끝난 판"
+ * (상대가 접음)일 수 있고, 문구는 바뀔 수 있다 — 상태를 보면 둘이 저절로 갈린다.
  */
 async function finishWithRetry(gameId: number, run: PuzzleBattleRun): Promise<PuzzleBattleGame> {
   let lastError: unknown;
@@ -1139,12 +1145,28 @@ async function finishWithRetry(gameId: number, run: PuzzleBattleRun): Promise<Pu
     } catch (e) {
       lastError = e;
       const status = (e as { status?: number } | null)?.status ?? 0;
+      if (status === 409) {
+        const submitted = await findSubmitted(gameId);
+        if (submitted) return submitted;
+        break;
+      }
       const retryable = status === 0 || status === 502 || status === 503 || status === 504;
       if (!retryable || attempt === SUBMIT_RETRY_MS.length) break;
       await new Promise((r) => setTimeout(r, SUBMIT_RETRY_MS[attempt]));
     }
   }
   throw lastError;
+}
+
+/**
+ * 내 결과가 이미 들어간 판을 서버에서 찾는다 — 상대가 아직이면 진행 중인 판(current), 내 제출로 끝났으면
+ * 기록(history)에 있다. 내 결과가 없으면 null(진짜 실패 — 예: 상대가 판을 접었다).
+ */
+async function findSubmitted(gameId: number): Promise<PuzzleBattleGame | null> {
+  const current = await puzzleApi.current().catch(() => null);
+  if (current && current.id === gameId && current.me) return current;
+  const history = await puzzleApi.history().catch(() => [] as PuzzleBattleGame[]);
+  return history.find((g) => g.id === gameId && g.me) ?? null;
 }
 
 /** 큰 연쇄의 판 흔들림 — 연쇄가 클수록 조금 더 세게(상한 있음) */
