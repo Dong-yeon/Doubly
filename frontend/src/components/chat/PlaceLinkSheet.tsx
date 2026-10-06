@@ -18,7 +18,8 @@ import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { Sheet } from '../Sheet';
 import { Button } from '../Button';
 import { MaterialCommunityIcons } from '../Icon';
-import { placeApi } from '../../api/place';
+import { placeApi, toSavePlacePayload } from '../../api/place';
+import { placeSubtitle } from '../../utils/placeLinks';
 import { errorCodeOf, isApiError } from '../../api/client';
 import { usePlaceStore } from '../../store/placeStore';
 import { toast } from '../../store/toastStore';
@@ -112,14 +113,7 @@ function PlaceLinkSheetBody({
     if (savingKey) return;
     setSavingKey(c.kakaoPlaceId ?? c.name);
     try {
-      const saved = await placeApi.save({
-        name: c.name,
-        address: c.address ?? undefined,
-        lat: c.lat ?? undefined,
-        lng: c.lng ?? undefined,
-        category: c.category ?? undefined,
-        kakaoPlaceId: c.kakaoPlaceId ?? undefined,
-      });
+      const saved = await placeApi.save(toSavePlacePayload(c));
       usePlaceStore.getState().invalidate();
       if (saved.created === false) {
         // 해석 뒤에 상대가 먼저 담았을 수 있다
@@ -197,9 +191,9 @@ function PlaceLinkSheetBody({
                   <Text style={styles.candidateName} numberOfLines={1}>
                     {c.name}
                   </Text>
-                  {c.address || c.category ? (
+                  {placeSubtitle(c) ? (
                     <Text style={styles.candidateMeta} numberOfLines={1}>
-                      {[c.category, c.address].filter(Boolean).join(' · ')}
+                      {placeSubtitle(c)}
                     </Text>
                   ) : null}
                 </View>

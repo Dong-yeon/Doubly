@@ -8,14 +8,15 @@
  * 함수가 아니라 컴포넌트인 이유는 담기 진행/완료 상태(state)가 필요해서다.
  */
 import React, { useState } from 'react';
-import { Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Button } from '../../components/Button';
-import { placeApi } from '../../api/place';
+import { placeApi, toSavePlacePayload } from '../../api/place';
+import { openInAppBrowser } from '../../utils/placeLinks';
 import { usePlaceStore } from '../../store/placeStore';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
-import { fontSize, radius, spacing } from '../../constants/theme';
+import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { LovelichelinRecommendation, LovelichelinRecommendedPlace } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 
@@ -35,13 +36,8 @@ export function LovelichelinRecommendCards({ data }: { data: LovelichelinRecomme
   const onAdd = async (place: LovelichelinRecommendedPlace) => {
     setSavingName(place.name);
     try {
-      await placeApi.save({
-        name: place.name,
-        address: place.address ?? undefined,
-        lat: place.lat ?? undefined,
-        lng: place.lng ?? undefined,
-        category: place.category ?? undefined,
-      });
+      // 카카오 id 까지 실어 보낸다 — 이미 담긴 곳이면 새로 만들지 않는다
+      await placeApi.save(toSavePlacePayload(place));
       haptics.success();
       toast.success('럽슐랭에 추가했어요!');
       // 모달을 닫고 돌아간 목록/지도가 새 장소를 반영하게
@@ -78,7 +74,11 @@ export function LovelichelinRecommendCards({ data }: { data: LovelichelinRecomme
               {p.reason ? <Text style={styles.reason}>{p.reason}</Text> : null}
               <View style={styles.actionRow}>
                 {p.placeUrl ? (
-                  <TouchableOpacity onPress={() => Linking.openURL(p.placeUrl!)} hitSlop={8}>
+                  <TouchableOpacity
+                    // 장소 상세의 [메뉴·정보 보기]와 같은 방식 — 앱 안 브라우저(웹은 새 탭)
+                    onPress={() => openInAppBrowser(p.placeUrl!, { toolbar: colors.surface, controls: colors.primary })}
+                    hitSlop={8}
+                  >
                     <Text style={styles.mapLink}>카카오맵에서 보기</Text>
                   </TouchableOpacity>
                 ) : (

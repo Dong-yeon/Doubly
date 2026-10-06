@@ -1064,6 +1064,11 @@ export interface Place {
   coverImageUrl?: string | null;
   coverMemo?: string | null;
   createdAt: string;
+  /** 무엇을 파는 곳인지 — 카카오 세부 분류 "한식 · 냉면"(예전 서버는 없다) */
+  categoryDetail?: string | null;
+  phone?: string | null;
+  /** 카카오 상세 링크 — 서버가 카카오 id 로 만든다(PlaceLinks). 없으면 검색 링크로 대신 연다 */
+  detailUrl?: string | null;
   /** 저장(POST /places) 응답에만 온다 — false 면 같은 커플에 이미 있던 장소를 돌려준 것(중복 방지) */
   created?: boolean;
 }
@@ -1386,8 +1391,12 @@ export interface LovelichelinRecommendedPlace {
   lat?: number | null;
   lng?: number | null;
   reason?: string | null;
-  /** 카카오맵 상세 페이지 — 담기 전에 직접 확인용 */
+  /** 카카오맵 상세 페이지 — 담기 전에 직접 확인용(서버가 장소 상세와 같은 규칙으로 만든다) */
   placeUrl?: string | null;
+  /** 담을 때 그대로 실어 보내면 중복 등록을 막는다 */
+  kakaoPlaceId?: string | null;
+  categoryDetail?: string | null;
+  phone?: string | null;
 }
 export interface LovelichelinRecommendation {
   /** false = 인증된 럽슐랭 장소가 아직 없어 추천 근거가 없음 */
@@ -1408,6 +1417,11 @@ export interface PlaceSearchResult {
   lat?: number | null;
   lng?: number | null;
   placeUrl?: string | null;
+  /** 무엇을 파는 곳인지 — 카카오 세부 분류 "한식 · 냉면"(예전 서버는 없다) */
+  categoryDetail?: string | null;
+  phone?: string | null;
+  /** 카카오 상세 링크 — 서버가 카카오 id 로 만든다(PlaceLinks). 없으면 검색 링크로 대신 연다 */
+  detailUrl?: string | null;
 }
 /** 홈 이름 옆 럽슐랭 왕관 — 백엔드 LovelichelinPulseResponse.Signal 과 짝 */
 export interface LovelichelinSignal {

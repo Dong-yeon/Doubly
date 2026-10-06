@@ -21,7 +21,8 @@ import { FormKeyboardView } from '../../components/FormKeyboardView';
 import { Chip } from '../../components/Chip';
 import { KakaoMap } from '../../components/KakaoMap';
 import type { KakaoMapHandle } from '../../components/KakaoMap.types';
-import { placeApi } from '../../api/place';
+import { placeApi, toSavePlacePayload } from '../../api/place';
+import { placeSubtitle } from '../../utils/placeLinks';
 import { errorCodeOf } from '../../api/client';
 import { usePlaceStore } from '../../store/placeStore';
 import { isKakaoMapConfigured } from '../../constants/config';
@@ -168,15 +169,8 @@ export function PlaceAddScreen({ navigation, route }: Props) {
     if (savingResultKey != null) return;
     setSavingResultKey(resultKeyOf(place));
     try {
-      const saved = await placeApi.save({
-        name: place.name,
-        address: place.address ?? undefined,
-        lat: place.lat ?? undefined,
-        lng: place.lng ?? undefined,
-        category: place.category ?? undefined,
-        // 이미 같은 커플에 있는 장소면(카카오 id 로 대조) 새로 만들지 않고 그 장소가 온다(created=false)
-        kakaoPlaceId: place.kakaoPlaceId ?? undefined,
-      });
+      // 이미 같은 커플에 있는 장소면(카카오 id 로 대조) 새로 만들지 않고 그 장소가 온다(created=false)
+      const saved = await placeApi.save(toSavePlacePayload(place));
       finishSaved(saved);
     } catch (e) {
       if (!isPlanError(e)) toast.error(getErrorMessage(e, '장소를 추가하지 못했어요.'));
@@ -257,7 +251,8 @@ export function PlaceAddScreen({ navigation, route }: Props) {
                 <View style={styles.resultRow}>
                   <View style={styles.flex}>
                     <Text style={styles.resultName}>{r.name}</Text>
-                    {r.address ? <Text style={styles.resultAddress}>{r.address}</Text> : null}
+                    {/* "한식 · 냉면 · 연남동" — 무엇을 파는 곳인지 + 동네. 전체 주소는 고른 뒤 아래 칸에 채워진다 */}
+                    {placeSubtitle(r) ? <Text style={styles.resultAddress}>{placeSubtitle(r)}</Text> : null}
                   </View>
                   {savingThis ? <ActivityIndicator size="small" color={colors.primary} /> : null}
                 </View>

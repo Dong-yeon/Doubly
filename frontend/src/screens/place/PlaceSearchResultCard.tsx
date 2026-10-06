@@ -11,6 +11,7 @@ import { Button } from '../../components/Button';
 import { fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 import type { PlaceSearchResult } from '../../types';
+import { placeSubtitle } from '../../utils/placeLinks';
 
 interface Props {
   result: PlaceSearchResult;
@@ -31,7 +32,8 @@ export function PlaceSearchResultCard({ result, saving, onFocus, onAdd }: Props)
       <Text style={styles.name} numberOfLines={1}>
         {result.name}
       </Text>
-      {result.category ? <Text style={styles.category}>{result.category}</Text> : null}
+      {/* "한식 · 냉면 · 연남동" — 무엇을 파는 곳인지 + 동네 */}
+      {placeSubtitle(result) ? <Text style={styles.category}>{placeSubtitle(result)}</Text> : null}
       {result.address ? (
         <Text style={styles.address} numberOfLines={1}>
           {result.address}
