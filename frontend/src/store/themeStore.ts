@@ -7,19 +7,29 @@
  */
 import { Appearance } from 'react-native';
 import { create } from 'zustand';
-import { getScheme, setScheme, type Scheme } from '../theme/colors';
-import { applyToAppearance, loadThemeMode, saveThemeMode, type ThemeMode } from '../theme/themePreference';
+import { getChromeTheme, getScheme, setChromeTheme, setScheme, type ChromeThemeId, type Scheme } from '../theme/colors';
+import {
+  applyToAppearance,
+  loadChromeTheme,
+  loadThemeMode,
+  saveChromeTheme,
+  saveThemeMode,
+  type ThemeMode,
+} from '../theme/themePreference';
 
 interface ThemeState {
   /** 사용자 선택 */
   mode: ThemeMode;
   /** 실제로 적용 중인 스킴 (system 이면 기기 설정을 따라간 결과) */
   scheme: Scheme;
+  /** 버튼 색 테마 — 사용자 선택(palette.ts CHROME_THEMES) */
+  chrome: ChromeThemeId;
   /** 테마가 바뀔 때마다 증가 — 화면 트리를 다시 그리는 키로 쓴다 */
   version: number;
   /** 저장된 선택을 불러와 적용 (앱 시작 시 1회) */
   load: () => Promise<void>;
   setMode: (mode: ThemeMode) => Promise<void>;
+  setChrome: (chrome: ChromeThemeId) => Promise<void>;
 }
 
 function resolve(mode: ThemeMode): Scheme {
@@ -30,18 +40,26 @@ function resolve(mode: ThemeMode): Scheme {
 export const useThemeStore = create<ThemeState>((set, get) => ({
   mode: 'system',
   scheme: getScheme(),
+  chrome: getChromeTheme(),
   version: 0,
 
   load: async () => {
-    const mode = await loadThemeMode();
+    const [mode, chrome] = await Promise.all([loadThemeMode(), loadChromeTheme()]);
     const scheme = resolve(mode);
     applyToAppearance(mode);
     setScheme(scheme);
+    setChromeTheme(chrome);
     // 시작 시점 팔레트와 같으면 굳이 다시 그리지 않는다
     set((s) => {
-      const changed = scheme !== s.scheme;
-      return { mode, scheme, version: changed ? s.version + 1 : s.version };
+      const changed = scheme !== s.scheme || chrome !== s.chrome;
+      return { mode, scheme, chrome, version: changed ? s.version + 1 : s.version };
     });
+  },
+
+  setChrome: async (chrome) => {
+    setChromeTheme(chrome);
+    set((s) => ({ chrome, version: s.version + 1 }));
+    await saveChromeTheme(chrome);
   },
 
   setMode: async (mode) => {

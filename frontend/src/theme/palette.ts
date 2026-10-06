@@ -236,5 +236,125 @@ export const dark: typeof light = {
 export type Palette = typeof light;
 export type Scheme = 'light' | 'dark';
 
-/** 스킴별 원본 — 위젯·게임판처럼 테마를 따르지 않는 자리와 검증 스크립트용 */
+/** 스킴별 원본(잉크 크롬) — 위젯·게임판처럼 테마를 따르지 않는 자리와 검증 스크립트용 */
 export const palettes: Record<Scheme, Palette> = { light, dark };
+
+/*
+ * ── 버튼 색 테마 (사용자 선택, 2026-10-06) ─────────────────────────────
+ * 설정 > 화면 > 버튼 색. <b>크롬(primary 계열)만</b> 갈아끼운다 — 나/상대/함께·목적 토큰은 그대로다.
+ * 2026-10-05 에 폐지한 액센트 변형은 소유자 색까지 바꿨다. 이것은 다르다: 색의 뜻은 고정하고
+ * "검은 버튼이 싫을 수 있다"는 취향만 연다(docs/color-redesign-viewer-based_2026-10-05.md §11).
+ *
+ * 후보는 무채색·저채도뿐이다 — 코랄·하늘·보라·초록은 나/상대/함께/완료가 쓴다. verify:theme 가
+ * 테마 × 스킴마다 대비와 "primary ≠ 소유자 색"(ΔE 15)을 본다.
+ *
+ *   primary      글자·테두리·탭 활성 — 바탕 위 4.5 이상
+ *   primaryFill  버튼·활성 칩 채움 — 위 글자는 onColor 가 고른다
+ *   primaryBg    선택 칩 바탕 — 위 primary 글자 4.5 이상
+ *   primaryDark  흰 글자를 얹는 진한 면(운동 요약 카드)
+ *   primaryLight 다크에서 primaryBg 위 밝은 글자(주간 리캡 공유 알약)
+ *   onPrimary    primary 면 위 글자
+ *
+ * 새 테마를 넣을 때는 light·dark 를 <b>둘 다, 일곱 키 모두</b> 채운다(Record 라 컴파일러가 잡는다).
+ */
+export type ChromeKey = 'primary' | 'primaryDark' | 'primaryLight' | 'primaryFill' | 'primaryBg' | 'primarySoft' | 'onPrimary';
+export type ChromeTheme = { id: string; label: string; light: Record<ChromeKey, string>; dark: Record<ChromeKey, string> };
+
+const chrome = (
+  primary: string, primaryDark: string, primaryLight: string, primaryFill: string, primaryBg: string, onPrimary: string,
+): Record<ChromeKey, string> => ({ primary, primaryDark, primaryLight, primaryFill, primaryBg, primarySoft: primaryBg, onPrimary });
+
+export const CHROME_THEMES = [
+  {
+    id: 'ink',
+    label: '잉크',
+    light: chrome('#1A1D1A', '#0E100E', '#585E58', '#1A1D1A', '#E0E2DE', '#FFFFFF'),
+    dark: chrome('#ECEEEA', '#3A3D36', '#C9CCC6', '#ECEEEA', '#40433C', '#1A1D1A'),
+  },
+  {
+    id: 'slate',
+    label: '슬레이트',
+    light: chrome('#334155', '#1E293B', '#64748B', '#334155', '#E2E8F0', '#FFFFFF'),
+    dark: chrome('#CBD5E1', '#3A4352', '#E2E8F0', '#CBD5E1', '#3A4352', '#1A1D1A'),
+  },
+  {
+    id: 'deepSlate',
+    label: '딥 슬레이트',
+    light: chrome('#283341', '#18202B', '#5B6878', '#283341', '#E1E6EC', '#FFFFFF'),
+    dark: chrome('#D5DCE5', '#38414D', '#E5E9EF', '#D5DCE5', '#38414D', '#1A1D1A'),
+  },
+  {
+    id: 'graphite',
+    label: '그래파이트',
+    light: chrome('#3B3F45', '#26292E', '#6B7078', '#3B3F45', '#E3E5E8', '#FFFFFF'),
+    dark: chrome('#DDE0E4', '#3F444B', '#ECEEF0', '#DDE0E4', '#3F444B', '#1A1D1A'),
+  },
+  {
+    id: 'stone',
+    label: '스톤',
+    light: chrome('#44403C', '#292524', '#78716C', '#44403C', '#E8E5E1', '#FFFFFF'),
+    dark: chrome('#E7E5E4', '#45403B', '#F0EEED', '#E7E5E4', '#45403B', '#1A1D1A'),
+  },
+  /*
+   * 밝은 버튼(2026-10-06 사용자 요청) — 채움은 파스텔(위 글자는 onColor → 잉크 11 이상), 글자·탭은 같은 hue 의
+   * 진한 값. 코랄·하늘·보라·초록 계열은 나/상대/함께/완료와 겹쳐 뺐고, 머스터드는 성취 금색과 ΔE 11 이라 뺐다.
+   */
+  {
+    id: 'mint',
+    label: '민트',
+    light: chrome('#007A61', '#006550', '#7BE6C6', '#7BE6C6', '#DBF5EC', '#FFFFFF'),
+    dark: chrome('#95DBC4', '#375E52', '#CBF2E4', '#95DBC4', '#1E3C33', '#1A1D1A'),
+  },
+  {
+    id: 'teal',
+    label: '틸',
+    light: chrome('#047879', '#006363', '#77E3E3', '#77E3E3', '#D8F5F5', '#FFFFFF'),
+    dark: chrome('#93D9D8', '#315E5E', '#CAF1F0', '#93D9D8', '#193C3C', '#1A1D1A'),
+  },
+  {
+    id: 'rose',
+    label: '로즈',
+    light: chrome('#A34E72', '#8F3C60', '#FEC2D8', '#FEC2D8', '#FFE7EF', '#FFFFFF'),
+    dark: chrome('#FEBAD3', '#6C4A57', '#FFDDE9', '#FEBAD3', '#462D36', '#1A1D1A'),
+  },
+  {
+    id: 'lime',
+    label: '라임',
+    light: chrome('#587503', '#486100', '#BCDF7D', '#BCDF7D', '#EAF2DD', '#FFFFFF'),
+    dark: chrome('#BDD694', '#4F5A3B', '#E0EFC9', '#BDD694', '#313922', '#1A1D1A'),
+  },
+  {
+    id: 'sand',
+    label: '샌드',
+    light: chrome('#7C674B', '#6A5539', '#E7CFAF', '#E7CFAF', '#FBECD9', '#FFFFFF'),
+    dark: chrome('#DCCBB5', '#665135', '#F0E6DA', '#DCCBB5', '#42321D', '#1A1D1A'),
+  },
+  {
+    id: 'sage',
+    label: '세이지',
+    light: chrome('#55725A', '#435F48', '#BADABF', '#BADABF', '#E1F5E4', '#FFFFFF'),
+    dark: chrome('#BCD3C0', '#415D47', '#DFECE1', '#BCD3C0', '#263B2A', '#1A1D1A'),
+  },
+  {
+    id: 'lilac',
+    label: '라일락',
+    light: chrome('#686882', '#56566F', '#D0D0ED', '#D0D0ED', '#ECEDFF', '#FFFFFF'),
+    dark: chrome('#CBCBDF', '#53526B', '#E6E7F2', '#CBCBDF', '#333349', '#1A1D1A'),
+  },
+  {
+    id: 'silver',
+    label: '실버',
+    light: chrome('#5E6C7C', '#4C5A69', '#CDD3DA', '#CDD3DA', '#E9EFF6', '#FFFFFF'),
+    dark: chrome('#C9CED2', '#50565C', '#E5E8EB', '#C9CED2', '#31363B', '#1A1D1A'),
+  },
+  {
+    id: 'warmSilver',
+    label: '웜실버',
+    light: chrome('#79675A', '#665548', '#DBD1CA', '#DBD1CA', '#F6ECE5', '#FFFFFF'),
+    dark: chrome('#D2CCC6', '#5C534D', '#EBE7E4', '#D2CCC6', '#3B342E', '#1A1D1A'),
+  },
+] as const satisfies readonly ChromeTheme[];
+
+export type ChromeThemeId = (typeof CHROME_THEMES)[number]['id'];
+export const DEFAULT_CHROME_THEME: ChromeThemeId = 'ink';
+export const isChromeThemeId = (v: unknown): v is ChromeThemeId => CHROME_THEMES.some((t) => t.id === v);
