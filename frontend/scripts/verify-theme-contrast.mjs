@@ -43,7 +43,7 @@ const light = tokensOf(objectAt('export const light = {'));
 const dark = tokensOf(objectAt('export const dark: typeof light = {'));
 
 /*
- * 버튼 색 테마(CHROME_THEMES) — 테마마다 크롬 일곱 키를 라이트/다크 위에 덮어 한 벌씩 만든다.
+ * 포인트 색 테마(CHROME_THEMES) — 테마마다 크롬 일곱 키를 라이트/다크 위에 덮어 한 벌씩 만든다.
  * palette.ts 는 chrome('#…', …) 위치 인자로 적으므로 그 순서(primary, primaryDark, primaryLight,
  * primaryFill, primaryBg, onPrimary)를 여기서도 따른다. 순서를 바꾸면 여기도 바꾼다.
  */
@@ -172,7 +172,7 @@ const DISTINCT = [
   { name: '함께 ≠ 상대', pick: (p) => [p.together, p.partner], min: 20 },
   // 나 색이 따뜻한 계열이라 삭제·오류의 빨강과 붙을 수 있다
   { name: '나 ≠ danger', pick: (p) => [p.me, p.danger], min: 15 },
-  // 버튼 색 테마에 초록 계열(민트·세이지·라임)이 있다 — 탭·링크 글자가 완료 체크 색으로 읽히면 안 된다
+  // 포인트 색 테마에 초록 계열(민트·세이지·라임)이 있다 — 탭·링크 글자가 완료 체크 색으로 읽히면 안 된다
   { name: 'primary ≠ 완료(success)', pick: (p) => [p.primary, p.success], min: 15 },
   { name: 'primary ≠ 성취(achievement)', pick: (p) => [p.primary, p.achievement], min: 15 },
 ];

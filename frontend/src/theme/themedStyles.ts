@@ -25,7 +25,7 @@ import { chatPalette, getChatPhotoUri, getChatThemeId, type ChatPalette } from '
 type NamedStyles<T> = { [P in keyof T]: ViewStyle | TextStyle | ImageStyle };
 
 export function themedStyles<T extends NamedStyles<T>>(factory: (colors: Palette) => T): T {
-  // 캐시 키는 버튼 색 테마 + 스킴 — 하나라도 빠지면 그 축을 바꿔도 먼저 캐시된 스타일이 돌아온다
+  // 캐시 키는 포인트 색 테마 + 스킴 — 하나라도 빠지면 그 축을 바꿔도 먼저 캐시된 스타일이 돌아온다
   const cache: Record<string, T> = {};
 
   const resolve = (): T => {
@@ -62,7 +62,7 @@ export function chatThemedStyles<T extends NamedStyles<T>>(
     /*
      * 키는 <b>팔레트를 바꾸는 축 전부</b>여야 한다. 하나라도 빠지면 그 축을 바꿨을 때
      * 먼저 캐시된 스타일이 그대로 돌아온다 — 조용히, 화면만 안 바뀐다.
-     * · 버튼 색: 채팅 화면의 크롬(입력바 전송 버튼 등)이 같은 스타일시트에 섞일 수 있다
+     * · 포인트 색: 채팅 화면의 크롬(입력바 전송 버튼 등)이 같은 스타일시트에 섞일 수 있다
      * · 사진 유무: 맨살 글자가 캡슐을 얻고 구분선이 사라진다(chatTheme 의 withPhoto)
      *   uri <b>값</b>은 스타일을 바꾸지 않으므로 키에 넣지 않는다 — 넣으면 사진을 고를
      *   때마다 캐시가 한 벌씩 새로 쌓인다.

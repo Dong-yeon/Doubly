@@ -22,7 +22,7 @@ interface ThemeState {
   mode: ThemeMode;
   /** 실제로 적용 중인 스킴 (system 이면 기기 설정을 따라간 결과) */
   scheme: Scheme;
-  /** 버튼 색 테마 — 사용자 선택(palette.ts CHROME_THEMES) */
+  /** 포인트 색 테마 — 사용자 선택(palette.ts CHROME_THEMES) */
   chrome: ChromeThemeId;
   /** 테마가 바뀔 때마다 증가 — 화면 트리를 다시 그리는 키로 쓴다 */
   version: number;

@@ -782,7 +782,7 @@ const styles = themedStyles((colors) => ({
   label: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700', marginBottom: spacing.sm },
   starRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
   // 입력 별은 크롬 채움 — accent(테마 강조)는 소유자 뜻이 없다. 요약 줄의 me/partner 와 헷갈리지 않게
-  // primaryFill 이 아니라 primary — 밝은 버튼 색 테마에서 채움은 파스텔이라 흰 카드 위 별이 1.5:1 로 흐려진다
+  // primaryFill 이 아니라 primary — 밝은 포인트 색 테마에서 채움은 파스텔이라 흰 카드 위 별이 1.5:1 로 흐려진다
   star: { fontSize: 32, color: colors.primary },
   // 별점이 대표 평점으로도 간다는 사실을 그 자리에서 알려준다 — 별 위젯을 하나로 합친 뒤
   // 이게 없으면 "등급은 어디서 매기지?" 가 된다

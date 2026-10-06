@@ -1,10 +1,10 @@
 /**
  * Dubly 컬러 토큰 — 런타임 진입점.
  *
- * <p>값은 {@link ./palette} 에 있다(색의 뜻·대비 실측도 거기). 이 파일은 <b>지금 어느 스킴·버튼 색인가</b>만 다룬다.
+ * <p>값은 {@link ./palette} 에 있다(색의 뜻·대비 실측도 거기). 이 파일은 <b>지금 어느 스킴·포인트 색인가</b>만 다룬다.
  * (constants/theme.ts 가 이 파일을 re-export)
  *
- * <p>축은 둘이다 — 스킴(라이트/다크)과 버튼 색 테마(palette.ts CHROME_THEMES). 버튼 색 테마는 크롬(primary 계열)만
+ * <p>축은 둘이다 — 스킴(라이트/다크)과 포인트 색 테마(palette.ts CHROME_THEMES). 포인트 색 테마는 크롬(primary 계열)만
  * 덮어쓰고 나/상대/함께는 건드리지 않는다. 2026-10-05 에 폐지한 액센트 변형(green·mint·peach, 소유자 색까지 바꿨다)과는
  * 다른 것이다(docs/color-redesign-viewer-based_2026-10-05.md 결정 D2·§11).
  *
@@ -19,7 +19,7 @@ import { CHROME_THEMES, palettes, type ChromeThemeId, type Palette, type Scheme 
 export { palettes };
 export type { ChromeThemeId, Palette, Scheme };
 
-/** 버튼 색 테마 × 스킴으로 미리 합쳐 둔 팔레트 — 읽기 경로(프록시·themedStyles)는 여기서 꺼낸다 */
+/** 포인트 색 테마 × 스킴으로 미리 합쳐 둔 팔레트 — 읽기 경로(프록시·themedStyles)는 여기서 꺼낸다 */
 const resolved = Object.fromEntries(
   CHROME_THEMES.map((t) => [
     t.id,
@@ -28,7 +28,7 @@ const resolved = Object.fromEntries(
 ) as Record<ChromeThemeId, Record<Scheme, Palette>>;
 
 /*
- * 현재 스킴·버튼 색 — <b>모듈 수준 가변값</b>이다.
+ * 현재 스킴·포인트 색 — <b>모듈 수준 가변값</b>이다.
  *
  * 팔레트를 상수로 고정하면(예전 방식) 90개 화면의 StyleSheet 가 시작 시점의 색을
  * 복사해 가버려, 테마를 바꿔도 앱을 다시 열기 전에는 반영되지 않았다.
@@ -57,12 +57,12 @@ export function getChromeTheme(): ChromeThemeId {
   return currentChrome;
 }
 
-/** 버튼 색 교체 — 화면 갱신은 themeStore 가 맡는다 */
+/** 포인트 색 교체 — 화면 갱신은 themeStore 가 맡는다 */
 export function setChromeTheme(id: ChromeThemeId): void {
   currentChrome = id;
 }
 
-/** 지금 적용 중인 팔레트(버튼 색 + 스킴). themedStyles 가 스타일을 만들 때 쓴다 */
+/** 지금 적용 중인 팔레트(포인트 색 + 스킴). themedStyles 가 스타일을 만들 때 쓴다 */
 export function palette(scheme: Scheme = currentScheme): Palette {
   return resolved[currentChrome][scheme];
 }

@@ -25,8 +25,8 @@ export type ThemeMode = 'system' | 'light' | 'dark';
 
 const STORAGE_KEY = 'doubly.theme.mode';
 /*
- * 버튼 색 테마(palette.ts CHROME_THEMES). 2026-10-05 에 폐지한 액센트 키(doubly.theme.accent)와 <b>다른 키</b>다 —
- * 그 키에 남은 'mint'/'peach' 를 버튼 색으로 잘못 읽지 않게.
+ * 포인트 색 테마(palette.ts CHROME_THEMES). 2026-10-05 에 폐지한 액센트 키(doubly.theme.accent)와 <b>다른 키</b>다 —
+ * 그 키에 남은 'mint'/'peach' 를 포인트 색으로 잘못 읽지 않게.
  */
 const CHROME_KEY = 'doubly.theme.chrome';
 
@@ -74,7 +74,7 @@ export function applyToAppearance(mode: ThemeMode): void {
   Appearance.setColorScheme(mode === 'system' ? 'unspecified' : mode);
 }
 
-/** 버튼 색 테마의 동기 조회 — 웹만 값을 준다(네이티브는 themeStore.load 가 덮어쓴다) */
+/** 포인트 색 테마의 동기 조회 — 웹만 값을 준다(네이티브는 themeStore.load 가 덮어쓴다) */
 export function readChromeThemeSync(): ChromeThemeId {
   const stored = webStorage()?.getItem(CHROME_KEY);
   return isChromeThemeId(stored) ? stored : DEFAULT_CHROME_THEME;
