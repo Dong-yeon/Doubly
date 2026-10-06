@@ -477,7 +477,7 @@ fingerprint 를 바꾸는 변경이라 지금 빌드에 업데이트를 계속 �
   `motionUsagePermission: false` 로 껐는데, expo-location 이 동작 API 를 참조해 Apple 은 쓰지 않아도 문구를 요구한다.
   한국어 문구를 넣고 fingerprint 는 훅으로 유지(Android `700b96c0`·iOS `d75619b0` 그대로) → iOS 만 다시 빌드.
   실패 사유는 ASC API `GET /v1/apps/{id}/buildUploads` 의 `state.errors` 로 바로 보인다.
-- iOS build 34(runtime `d75619b0`) → 업로드·처리 COMPLETE·VALID(경고 0). **심사 제출은 사용자가 ASC 에서 — 1.0.6 버전 기록을 1.0.7 로 바꾸고 build 34.**
+- iOS build 34(runtime `d75619b0`) → 업로드·처리 COMPLETE·VALID(경고 0). 1.0.6 버전 기록을 1.0.7 로 바꿔 build 34 로 심사 제출(2026-10-06, WAITING_FOR_REVIEW, 승인 후 자동 출시).
 - iOS 첫 시도(build 32)는 취소했다 — App ID 에 Associated Domains 가 꺼져 있었고, 저장소의 ASC 키(`5L85YB6A6G`)는 Admin 이 아니라
   기능을 켜지 못한다(403). `--non-interactive` 빌드는 기능 동기화를 하지 않고 옛 프로필을 그대로 쓴다. **entitlement 를 새로 넣는 빌드는
   사용자가 PowerShell 에서 대화형(`npx eas-cli build --platform ios --profile production`, Apple ID 로그인)으로 돌려야 한다.**
