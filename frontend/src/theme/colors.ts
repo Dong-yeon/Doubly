@@ -23,7 +23,11 @@ export type { ChromeThemeId, Palette, Scheme };
 const resolved = Object.fromEntries(
   CHROME_THEMES.map((t) => [
     t.id,
-    { light: { ...palettes.light, ...t.light }, dark: { ...palettes.dark, ...t.dark } } as Record<Scheme, Palette>,
+    {
+      // 라이트만 바탕을 옅게 물들인다(lightSurface) — 다크는 중립 유지(사용자 결정 2026-10-06)
+      light: { ...palettes.light, ...t.light, ...('lightSurface' in t ? t.lightSurface : {}) },
+      dark: { ...palettes.dark, ...t.dark },
+    } as Record<Scheme, Palette>,
   ]),
 ) as Record<ChromeThemeId, Record<Scheme, Palette>>;
 

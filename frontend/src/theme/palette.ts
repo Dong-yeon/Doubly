@@ -258,11 +258,31 @@ export const palettes: Record<Scheme, Palette> = { light, dark };
  * 새 테마를 넣을 때는 light·dark 를 <b>둘 다, 일곱 키 모두</b> 채운다(Record 라 컴파일러가 잡는다).
  */
 export type ChromeKey = 'primary' | 'primaryDark' | 'primaryLight' | 'primaryFill' | 'primaryBg' | 'primarySoft' | 'onPrimary';
-export type ChromeTheme = { id: string; label: string; light: Record<ChromeKey, string>; dark: Record<ChromeKey, string> };
+/*
+ * 라이트 바탕 물들임(2026-10-06) — 테마 색조로 <b>아주 옅게</b>(OKLCH C ≤ 0.010). 사용자 결정: 강도는 "아주 옅게",
+ * <b>다크는 중립 유지</b>. 이보다 진하면 나·상대 글자가 회색 칸 위에서 4.5 아래로 떨어진다(옅게 4.4 · 또렷하게 4.2) —
+ * 그러면 소유자 색을 테마마다 따로 어둡게 맞춰야 해서 "코랄 = 나"가 테마마다 달라진다. 잉크(기본)는 물들이지 않는다.
+ *
+ * <b>카드는 흰색 그대로</b>(surface() 둘째 인자 #FFFFFF) — 바탕·회색 칸·구분선·PC 바깥만 물든다. 카드까지 물들이면
+ * 삭제 글자(danger)가 카드 위 4.48~4.50, 파스텔 버튼 면이 1.49 로 기준 경계 아래로 내려갔다(verify:theme). 흰 카드가
+ * 물든 바탕 위에 떠서 분리감도 낫다. 채팅방 '기본' 배경은 chatTheme.ts 가 따로 가진다(중립 유지).
+ */
+export type SurfaceKey = 'background' | 'surface' | 'surfaceCard' | 'surfaceAlt' | 'border' | 'shellBackdrop';
+export type ChromeTheme = {
+  id: string;
+  label: string;
+  light: Record<ChromeKey, string>;
+  dark: Record<ChromeKey, string>;
+  lightSurface?: Record<SurfaceKey, string>;
+};
 
 const chrome = (
   primary: string, primaryDark: string, primaryLight: string, primaryFill: string, primaryBg: string, onPrimary: string,
 ): Record<ChromeKey, string> => ({ primary, primaryDark, primaryLight, primaryFill, primaryBg, primarySoft: primaryBg, onPrimary });
+
+const surface = (
+  background: string, surfaceCard: string, surfaceAlt: string, border: string, shellBackdrop: string,
+): Record<SurfaceKey, string> => ({ background, surface: surfaceCard, surfaceCard, surfaceAlt, border, shellBackdrop });
 
 export const CHROME_THEMES = [
   {
@@ -275,24 +295,28 @@ export const CHROME_THEMES = [
     id: 'slate',
     label: '슬레이트',
     light: chrome('#334155', '#1E293B', '#64748B', '#334155', '#E2E8F0', '#FFFFFF'),
+    lightSurface: surface('#F9FAFC', '#FFFFFF', '#EFF0F3', '#E2E4E6', '#ECEEF0'),
     dark: chrome('#CBD5E1', '#3A4352', '#E2E8F0', '#CBD5E1', '#3A4352', '#1A1D1A'),
   },
   {
     id: 'deepSlate',
     label: '딥 슬레이트',
     light: chrome('#283341', '#18202B', '#5B6878', '#283341', '#E1E6EC', '#FFFFFF'),
+    lightSurface: surface('#F9FAFC', '#FFFFFF', '#EFF0F3', '#E2E4E6', '#ECEEF0'),
     dark: chrome('#D5DCE5', '#38414D', '#E5E9EF', '#D5DCE5', '#38414D', '#1A1D1A'),
   },
   {
     id: 'graphite',
     label: '그래파이트',
     light: chrome('#3B3F45', '#26292E', '#6B7078', '#3B3F45', '#E3E5E8', '#FFFFFF'),
+    lightSurface: surface('#F9FAFC', '#FFFFFF', '#EFF0F3', '#E2E4E6', '#ECEDF0'),
     dark: chrome('#DDE0E4', '#3F444B', '#ECEEF0', '#DDE0E4', '#3F444B', '#1A1D1A'),
   },
   {
     id: 'stone',
     label: '스톤',
     light: chrome('#44403C', '#292524', '#78716C', '#44403C', '#E8E5E1', '#FFFFFF'),
+    lightSurface: surface('#FBFAF8', '#FFFFFF', '#F2F0EE', '#E5E3E1', '#EFEDEB'),
     dark: chrome('#E7E5E4', '#45403B', '#F0EEED', '#E7E5E4', '#45403B', '#1A1D1A'),
   },
   /*
@@ -303,54 +327,63 @@ export const CHROME_THEMES = [
     id: 'mint',
     label: '민트',
     light: chrome('#007A61', '#006550', '#7BE6C6', '#7BE6C6', '#DBF5EC', '#FFFFFF'),
+    lightSurface: surface('#F4FCF9', '#FFFFFF', '#EAF3EF', '#DDE6E3', '#E7F0EC'),
     dark: chrome('#95DBC4', '#375E52', '#CBF2E4', '#95DBC4', '#1E3C33', '#1A1D1A'),
   },
   {
     id: 'teal',
     label: '틸',
     light: chrome('#047879', '#006363', '#77E3E3', '#77E3E3', '#D8F5F5', '#FFFFFF'),
+    lightSurface: surface('#F4FCFC', '#FFFFFF', '#E9F3F2', '#DCE6E6', '#E6F0EF'),
     dark: chrome('#93D9D8', '#315E5E', '#CAF1F0', '#93D9D8', '#193C3C', '#1A1D1A'),
   },
   {
     id: 'rose',
     label: '로즈',
     light: chrome('#A34E72', '#8F3C60', '#FEC2D8', '#FEC2D8', '#FFE7EF', '#FFFFFF'),
+    lightSurface: surface('#FEF8FA', '#FFFFFF', '#F5EEF1', '#E8E2E4', '#F2EBEE'),
     dark: chrome('#FEBAD3', '#6C4A57', '#FFDDE9', '#FEBAD3', '#462D36', '#1A1D1A'),
   },
   {
     id: 'lime',
     label: '라임',
     light: chrome('#587503', '#486100', '#BCDF7D', '#BCDF7D', '#EAF2DD', '#FFFFFF'),
+    lightSurface: surface('#F8FBF4', '#FFFFFF', '#EFF2EA', '#E2E5DD', '#ECEFE7'),
     dark: chrome('#BDD694', '#4F5A3B', '#E0EFC9', '#BDD694', '#313922', '#1A1D1A'),
   },
   {
     id: 'sand',
     label: '샌드',
     light: chrome('#7C674B', '#6A5539', '#E7CFAF', '#E7CFAF', '#FBECD9', '#FFFFFF'),
+    lightSurface: surface('#FCFAF7', '#FFFFFF', '#F2F0ED', '#E5E3E0', '#EFEDEA'),
     dark: chrome('#DCCBB5', '#665135', '#F0E6DA', '#DCCBB5', '#42321D', '#1A1D1A'),
   },
   {
     id: 'sage',
     label: '세이지',
     light: chrome('#55725A', '#435F48', '#BADABF', '#BADABF', '#E1F5E4', '#FFFFFF'),
+    lightSurface: surface('#F8FBF8', '#FFFFFF', '#EEF1EF', '#E1E4E2', '#EBEEEC'),
     dark: chrome('#BCD3C0', '#415D47', '#DFECE1', '#BCD3C0', '#263B2A', '#1A1D1A'),
   },
   {
     id: 'lilac',
     label: '라일락',
     light: chrome('#686882', '#56566F', '#D0D0ED', '#D0D0ED', '#ECEDFF', '#FFFFFF'),
+    lightSurface: surface('#FAFAFC', '#FFFFFF', '#F0F0F3', '#E3E3E6', '#EDEDF0'),
     dark: chrome('#CBCBDF', '#53526B', '#E6E7F2', '#CBCBDF', '#333349', '#1A1D1A'),
   },
   {
     id: 'silver',
     label: '실버',
     light: chrome('#5E6C7C', '#4C5A69', '#CDD3DA', '#CDD3DA', '#E9EFF6', '#FFFFFF'),
+    lightSurface: surface('#F9FAFC', '#FFFFFF', '#EFF1F3', '#E2E4E6', '#ECEEF0'),
     dark: chrome('#C9CED2', '#50565C', '#E5E8EB', '#C9CED2', '#31363B', '#1A1D1A'),
   },
   {
     id: 'warmSilver',
     label: '웜실버',
     light: chrome('#79675A', '#665548', '#DBD1CA', '#DBD1CA', '#F6ECE5', '#FFFFFF'),
+    lightSurface: surface('#FCFAF8', '#FFFFFF', '#F2F0EE', '#E5E3E1', '#EFEDEB'),
     dark: chrome('#D2CCC6', '#5C534D', '#EBE7E4', '#D2CCC6', '#3B342E', '#1A1D1A'),
   },
 ] as const satisfies readonly ChromeTheme[];

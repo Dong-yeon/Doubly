@@ -84,7 +84,6 @@ import type {
   Trip,
 } from '../../types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import { isDarkMode } from '../../theme';
 import { onColor } from '../../theme/onColor';
 import { themedStyles } from '../../theme/themedStyles';
 import { WORKOUT_HOME_ENABLED } from '../../constants/config';
@@ -129,21 +128,23 @@ const WALLPAPER_DUO = require('../../../assets/stickers/duo_relaxed.png');
  * 값을 만질 때는 반드시 두 테마 모두에서 확인할 것.
  */
 const SCRIM_LOCATIONS: [number, number, number, number] = [0, 0.42, 0.62, 1];
-const scrim = (): [string, string, string, string] =>
-  isDarkMode()
-    ? ['rgba(30,32,28,0)', 'rgba(30,32,28,0)', 'rgba(30,32,28,0.96)', 'rgba(30,32,28,1)']
-    : ['rgba(250,250,249,0)', 'rgba(250,250,249,0)', 'rgba(250,250,249,0.96)', 'rgba(250,250,249,1)'];
+/*
+ * 배경색(colors.background)을 알파만 바꿔 쓴다 — 예전엔 #FAFAF9·#1E201C 를 rgba 로 손 복사해 두어,
+ * 포인트 색 테마가 라이트 바탕을 옅게 물들이자(2026-10-06) 스크림만 회백색으로 남을 뻔했다.
+ * 다크는 테마와 무관하게 중립이라 결과가 예전과 같다.
+ */
+const bgAlpha = (a: number): string => {
+  const h = colors.background.replace('#', '');
+  return `rgba(${parseInt(h.slice(0, 2), 16)},${parseInt(h.slice(2, 4), 16)},${parseInt(h.slice(4, 6), 16)},${a})`;
+};
+const scrim = (): [string, string, string, string] => [bgAlpha(0), bgAlpha(0), bgAlpha(0.96), bgAlpha(1)];
 
 /** 패널 위로 번지는 페이드 — 투명 → 패널 배경색(= colors.background). 패널 바로 위에 붙는다 */
-const panelFade = (): [string, string] =>
-  isDarkMode() ? ['rgba(30,32,28,0)', 'rgba(30,32,28,1)'] : ['rgba(250,250,249,0)', 'rgba(250,250,249,1)'];
+const panelFade = (): [string, string] => [bgAlpha(0), bgAlpha(1)];
 
 /** 상단 바 아이콘이 밝은 사진 위에서도 읽히게 — 위 14% 만, 배경색 0.7 → 0 */
 const TOP_SCRIM_LOCATIONS: [number, number] = [0, 0.14];
-const topScrim = (): [string, string] =>
-  isDarkMode()
-    ? ['rgba(30,32,28,0.7)', 'rgba(30,32,28,0)']
-    : ['rgba(250,250,249,0.7)', 'rgba(250,250,249,0)'];
+const topScrim = (): [string, string] => [bgAlpha(0.7), bgAlpha(0)];
 
 
 /**
