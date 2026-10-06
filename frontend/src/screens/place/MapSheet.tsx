@@ -24,7 +24,12 @@ import { useReduceMotion } from '../../hooks/useOneShotMotion';
 export type SheetSnap = 'peek' | 'half' | 'full';
 
 const ORDER: SheetSnap[] = ['peek', 'half', 'full'];
-const SNAP_LABEL: Record<SheetSnap, string> = { peek: '작게', half: '절반', full: '전체' };
+const SNAP_LABEL: Record<SheetSnap, string> = { peek: '작게', half: '중간', full: '전체' };
+
+/**
+ * 가운데 단의 시트 위 끝 — 지도 영역 높이의 60%. 지도 60 : 목록 40(2026-10-06 사용자 요청 — 50:50 이면 지도가 좁다).
+ */
+export const SHEET_HALF_RATIO = 0.6;
 
 interface Props {
   /** 시트가 놓인 영역(지도 영역) 높이 — 0 이면 아직 재지 못한 것 */
@@ -43,7 +48,7 @@ interface Props {
 /** 각 단의 시트 위 끝(y) — 영역 맨 위가 0 */
 export function sheetTops(containerHeight: number, fullTop: number, peekHeight: number): Record<SheetSnap, number> {
   const peek = Math.max(fullTop, containerHeight - peekHeight);
-  const half = Math.min(peek, Math.max(fullTop, Math.round(containerHeight * 0.5)));
+  const half = Math.min(peek, Math.max(fullTop, Math.round(containerHeight * SHEET_HALF_RATIO)));
   return { peek, half, full: fullTop };
 }
 

@@ -105,7 +105,8 @@ const MIN_CERTIFIED_FOR_RECOMMEND = 1;
 const MIN_PLACES_FOR_DATE_COURSE = 2;
 
 /** 시트 미리보기에서 목록이 보이는 몫 — 카드 반 장 */
-const PEEK_LIST_PEEK = 84;
+// 56 — 가운데 단을 지도 60% 로 내리자(SHEET_HALF_RATIO) 84 로는 미리보기와 가운데가 45px 차이라 단이 갈리지 않았다
+const PEEK_LIST_PEEK = 56;
 /** 시트 손잡이 + 제목 줄 — 미리보기 높이의 고정 몫. AI 버튼 줄은 미리보기에서 접는다(아래 sheetHeader) */
 const SHEET_HANDLE = 28;
 const SHEET_TITLE_ROW = layout.touchTarget + spacing.sm;
