@@ -76,7 +76,8 @@ export const catchMindApi = {
   /** 초성 힌트 — 열어도 실패로 치지 않는다 */
   hint: (id: number) =>
     unwrap(apiClient.post<ApiResponse<CatchMindGame>>(`/games/catch-mind/${id}/hint`)),
-  giveUp: (id: number) => unwrap(apiClient.post<ApiResponse<void>>(`/games/catch-mind/${id}/give-up`)),
+  /** 접기 — 끝난 판을 돌려준다(제시어 포함). 맞히는 쪽의 "정답 보기"가 이걸로 정답을 띄운다 */
+  giveUp: (id: number) => unwrap(apiClient.post<ApiResponse<CatchMindGame>>(`/games/catch-mind/${id}/give-up`)),
   /** 맞힌 판 최근 20개 */
   history: () => unwrap(apiClient.get<ApiResponse<CatchMindGame[]>>('/games/catch-mind/history')),
 };
