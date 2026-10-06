@@ -465,13 +465,19 @@ console.log((total / 1024 / 1024).toFixed(1), 'MB');
 
 fingerprint 를 바꾸는 변경이라 지금 빌드에 업데이트를 계속 보내려면 미뤄야 하는 것들. 다음 네이티브 빌드 직전에 함께 넣는다.
 
-(비어 있음 — 아래 1.0.7 묶음으로 전부 들어갔다.)
+- `fingerprint.config.js` 의 `fileHookTransform`(동작 권한 문구를 해시에서 false 로 세는 훅) 지우기 — 1.0.7 iOS 가
+  ITMS-90683 으로 거절돼 문구를 넣으면서, 이미 나간 Android 1.0.7 에 OTA 가 끊기지 않게 임시로 둔 것(2026-10-06).
+  다음 빌드는 어차피 런타임이 바뀌므로 그때 지운다.
 
 ### 1.0.7 에 묶은 것 (2026-10-06, 브랜치 `feat/invite-applinks-location`)
 
 **출시 기록(2026-10-06):** 소스 main `9c987965` = **다음 OTA 기준선**. runtime Android `700b96c0…`, iOS `d75619b0…`.
 - Android vc39 → production completed(즉시 전체 배포). 매니페스트에 `/i/`·`autoVerify`·위치 권한 2개 확인, 백그라운드 위치 없음.
-- iOS build 33 → App Store Connect 업로드. **심사 제출은 사용자가 ASC 에서.**
+- iOS build 33 → 업로드했으나 **처리 실패(ITMS-90683, NSMotionUsageDescription 누락)**. 영어 기본 문구를 막으려고
+  `motionUsagePermission: false` 로 껐는데, expo-location 이 동작 API 를 참조해 Apple 은 쓰지 않아도 문구를 요구한다.
+  한국어 문구를 넣고 fingerprint 는 훅으로 유지(Android `700b96c0`·iOS `d75619b0` 그대로) → iOS 만 다시 빌드.
+  실패 사유는 ASC API `GET /v1/apps/{id}/buildUploads` 의 `state.errors` 로 바로 보인다.
+- **심사 제출은 사용자가 ASC 에서.**
 - iOS 첫 시도(build 32)는 취소했다 — App ID 에 Associated Domains 가 꺼져 있었고, 저장소의 ASC 키(`5L85YB6A6G`)는 Admin 이 아니라
   기능을 켜지 못한다(403). `--non-interactive` 빌드는 기능 동기화를 하지 않고 옛 프로필을 그대로 쓴다. **entitlement 를 새로 넣는 빌드는
   사용자가 PowerShell 에서 대화형(`npx eas-cli build --platform ios --profile production`, Apple ID 로그인)으로 돌려야 한다.**
