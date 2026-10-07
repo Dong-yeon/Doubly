@@ -27,7 +27,7 @@ import { Sheet } from './Sheet';
 import { Button } from './Button';
 import { MaterialCommunityIcons } from './Icon';
 import { MOOD_EMOJIS, PREMIUM_MOOD_EMOJIS } from '../constants/moodEmojis';
-import { COUPLE_EMOJI_EMOTIONS } from '../constants/coupleEmojiEmotions';
+import { COUPLE_EMOJI_EMOTIONS, coupleEmojiEmotionOf, isFaceEmotion } from '../constants/coupleEmojiEmotions';
 import { usePlanStore } from '../store/planStore';
 import { useCoupleEmojiStore } from '../store/coupleEmojiStore';
 import { useAuthStore } from '../store/authStore';
@@ -139,17 +139,20 @@ export function MoodPicker({ visible, onClose, onSelect, connected, onOpenJourna
    * <p><b>어느 칸을 덮을지는 서버가 준 {@code moodEmoji} 가 정한다</b>(CoupleEmojiEmotion 의
    * 매핑). 앱이 같은 표를 또 들지 않는다 — 감정을 하나 더할 때 두 곳을 고쳐야 하는 걸 막는다.
    *
-   * <p><b>여러 감정이 같은 칸을 노린다</b>(😊 = 기쁨·씻고왔다·퇴근·마스크팩). 먼저 오는 것이
-   * 가져가고, {@code myLatestSet} 이 이미 감정 정의 순서(표정 6종이 앞)라 <b>표정이 우선</b>한다 —
-   * "좋음" 칸에는 상황 그림이 아니라 웃는 얼굴이 들어가는 편이 자연스럽다.
+   * <p><b>칸을 덮는 건 표정 6종뿐이다</b>({@link isFaceEmotion}). 예전엔 대역만 같으면 덮어서
+   * 배고파 얼굴이 "녹음" 칸에, 열일이 "고민" 칸에, 미안해가 "시무룩" 칸에 들어갔다(2026-10-07) —
+   * 그 감정들의 대역은 같은 뜻이 아니라 무료 12종 중 가장 가까운 것일 뿐이다. 표정 6종은 대역이
+   * 서로 겹치지 않으므로 칸 다툼도 없다.
    *
-   * <p>칸을 못 얻은 것은 <b>버리지 않고 뒤에 잇는다.</b> 상황 11종은 사용자가 트레이에서
-   * 일부러 켠 것이라(moodVisible), 덮어쓰기를 도입하면서 조용히 사라지면 기능이 줄어든다.
+   * <p>칸을 못 얻은 것은 <b>버리지 않고 뒤에 잇는다</b> — 자기 이름(배고파)으로. 자주 하는 말·상황은
+   * 사용자가 트레이에서 일부러 켠 것이라(moodVisible), 조용히 사라지면 기능이 줄어든다.
    */
   const { slots, extras } = useMemo(() => {
     const taken = new Set<number>();
     const filled = MOOD_EMOJIS.map((mood) => {
-      const hit = myLatestSet.find((e) => e.moodEmoji === mood.emoji && !taken.has(e.id));
+      const hit = myLatestSet.find(
+        (e) => isFaceEmotion(e.emotion) && e.moodEmoji === mood.emoji && !taken.has(e.id),
+      );
       if (hit) taken.add(hit.id);
       return { mood, emoji: hit };
     });
@@ -388,12 +391,23 @@ export function MoodPicker({ visible, onClose, onSelect, connected, onOpenJourna
               <Text style={styles.label}>{mood.label}</Text>
             </Pressable>
           ))}
-          {/* 칸을 못 얻은 우리 이모지(주로 상황 11종) — 뒤에 잇는다 */}
+          {/*
+            칸을 못 얻은 우리 이모지(자주 하는 말·상황) — 뒤에 잇는다. 기록에 남길 기분은 대역(배고파 → 🫠)이
+            아니라 그 감정의 자리표시(🍚)다 — 대역을 넣으면 나만의 기록에 "녹음"으로 남는다.
+          */}
           {extras.map((e) => (
             <Pressable
               key={e.id}
               style={({ pressed }) => [styles.cell, pressed && styles.cellPressed]}
-              onPress={() => onPress({ coupleEmojiId: e.id }, false, e.label, e.moodEmoji, e.imageUrl)}
+              onPress={() =>
+                onPress(
+                  { coupleEmojiId: e.id },
+                  false,
+                  e.label,
+                  coupleEmojiEmotionOf(e.emotion)?.placeholder ?? e.moodEmoji,
+                  e.imageUrl,
+                )
+              }
               accessibilityRole="button"
               accessibilityLabel={`내 얼굴 ${e.label} 무드로 남기기`}
             >

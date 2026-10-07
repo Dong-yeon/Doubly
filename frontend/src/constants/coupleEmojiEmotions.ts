@@ -79,3 +79,16 @@ export function coupleEmojiEmotionOf(
 ): CoupleEmojiEmotionDef | undefined {
   return COUPLE_EMOJI_EMOTIONS.find((e) => e.key === key);
 }
+
+/**
+ * 이 감정이 무드의 기본 칸과 <b>같은 뜻</b>인가 — 표정 6종만 그렇다.
+ *
+ * <p>서버의 {@code moodEmoji} 는 "같은 뜻의 칸"이 아니라 "무료 12종 안에서 가장 가까운 대역"이다
+ * (mood_statuses.emoji 가 NOT NULL 이라 무엇이든 채워야 한다). 표정 6종은 대역이 곧 같은 뜻이지만
+ * 나머지는 억지로 고른 것이라 — 배고파 → 🫠 녹음, 열일 → 🤔 고민, 미안해 → 😔 시무룩, 출근 → 😮‍💨 한숨 —
+ * 이 값으로 칸을 덮거나 라벨·추천을 고르면 뜻이 어긋난다(2026-10-07 리포트).
+ * 서버의 {@code CoupleEmojiEmotion.isFace} 와 같은 집합이다.
+ */
+export function isFaceEmotion(key: string | null | undefined): boolean {
+  return coupleEmojiEmotionOf(key)?.group === 'face';
+}

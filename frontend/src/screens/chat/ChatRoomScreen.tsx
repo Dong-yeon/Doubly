@@ -106,6 +106,7 @@ import { parseStickerCode, suggestStickers, type StickerSuggestion } from '../..
 import { anniversaryContextOf, kstDateKey } from '../../utils/anniversary';
 import { ANNIVERSARY_STICKERS, MOOD_REPLY, contextSuggestions } from '../../constants/contextStickers';
 import { MOOD_EMOJIS, PREMIUM_MOOD_EMOJIS } from '../../constants/moodEmojis';
+import { isFaceEmotion } from '../../constants/coupleEmojiEmotions';
 import { moodApi } from '../../api/mood';
 import { StickerPanel, type ContextPack } from '../../components/chat/StickerPanel';
 import { AnimatedCoupleEmoji } from '../../components/chat/AnimatedCoupleEmoji';
@@ -926,13 +927,19 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     void refreshPartnerMoodRef.current(false);
   }, [relationId]);
 
-  const moodItems = useMemo(
-    () =>
-      partnerMood && MOOD_REPLY[partnerMood.emoji]
-        ? contextSuggestions('MOOD', MOOD_REPLY[partnerMood.emoji], isSuggestAllowed)
-        : EMPTY_SUGGESTIONS,
-    [partnerMood, isSuggestAllowed],
-  );
+  /*
+   * 우리 이모지 무드는 표정 6종일 때만 대역(emoji)으로 추천·문구를 고른다 — 나머지의 대역은 같은 뜻이
+   * 아니다(배고파 → 🫠 이면 "지금 기분: 🫠 녹음"에 "수고했어"가, 열일 → 🤔 이면 "같이 생각"이 떴다 — isFaceEmotion).
+   * 목록이 아직 없거나 지워진 이모지라 감정을 모를 때도 추천하지 않는다 — 틀린 추천은 없는 것보다 나쁘다.
+   */
+  const moodItems = useMemo(() => {
+    if (!partnerMood || !MOOD_REPLY[partnerMood.emoji]) return EMPTY_SUGGESTIONS;
+    if (partnerMood.coupleEmojiId != null
+      && !isFaceEmotion(coupleEmojiById.get(partnerMood.coupleEmojiId)?.emotion)) {
+      return EMPTY_SUGGESTIONS;
+    }
+    return contextSuggestions('MOOD', MOOD_REPLY[partnerMood.emoji], isSuggestAllowed);
+  }, [partnerMood, coupleEmojiById, isSuggestAllowed]);
 
   /** 패널 맨 앞 맥락 칸 — 하나만 보인다. 기념일 > 상대 무드 */
   const contextPack = useMemo<ContextPack | null>(() => {
