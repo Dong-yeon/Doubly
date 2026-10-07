@@ -51,6 +51,8 @@ import { usePlaceStore } from '../../store/placeStore';
 import { SOLO_PICK_MIN_RATING } from './placeFilters';
 import { isKakaoMapConfigured } from '../../constants/config';
 import { placeApi } from '../../api/place';
+import { contentApi } from '../../api/content';
+import { contentTypeLabel } from '../../constants/contentTypes';
 import { useDeleteAction } from '../../hooks/useDeleteAction';
 import { useDietStore } from '../../store/dietStore';
 import { useAuthStore } from '../../store/authStore';
@@ -65,7 +67,7 @@ import { uploadApi, wasRejected } from '../../api/upload';
 import { defaultMealType } from '../../utils/mealType';
 import { stars } from '../../utils/ratingStars';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { MealType, Place, PlaceMenu, PlaceVisit } from '../../types';
+import type { MealType, Place, PlaceMenu, PlaceVisit, WatchedHere } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { useAndroidKeyboardHeight } from '../../hooks/useAndroidKeyboardHeight';
 
@@ -90,6 +92,8 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
   const [place, setPlace] = useState<Place | null>(null);
   const [visits, setVisits] = useState<PlaceVisit[]>([]);
   const [menu, setMenu] = useState<PlaceMenu | null>(null);
+  // 여기서 본 것(V133) — 관람 기록의 "어디서 봤어요?"로 이 장소를 고른 것
+  const [watchedHere, setWatchedHere] = useState<WatchedHere[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
   // 사진 있는 카드를 눌러 전체화면으로 본다 — 예전엔 onLongPress(삭제)만 있고
@@ -170,6 +174,8 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
       setVisits(v);
       // "여기서 먹은 것" — 부가 정보라 실패해도 화면은 그대로(빈 섹션 = 안 보임)
       placeApi.menu(placeId).then(setMenu, () => setMenu(null));
+      // 여기서 본 것 — 부가 정보라 실패하면 섹션만 안 보인다(옛 서버는 404)
+      contentApi.watchedAt(placeId).then(setWatchedHere, () => setWatchedHere([]));
       setMyRatingInput(p.myRating ?? 0);
       // 수정 후 돌아왔을 때도 헤더 타이틀이 최신 이름을 따라가도록
       navigation.setOptions({ title: p.name });
@@ -337,6 +343,19 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
           }),
       },
     ]);
+  };
+
+  /** 콘텐츠 상세 열기 — 이 스택에 콘텐츠 화면이 있으면 그대로, 없으면(홈·식단 스택) 럽슐랭 탭으로 건너가 연다 */
+  const openContent = (contentId: number, title: string) => {
+    const nav = navigation as unknown as {
+      getState: () => { routeNames: string[] };
+      navigate: (name: string, params?: object) => void;
+    };
+    if (nav.getState().routeNames.includes('ContentDetail')) {
+      nav.navigate('ContentDetail', { contentId, title });
+    } else {
+      nav.navigate('Place', { screen: 'ContentDetail', params: { contentId, title }, initial: false });
+    }
   };
 
   const onDeleteVisit = (visit: PlaceVisit) => {
@@ -728,6 +747,42 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
                 </View>
               ) : null}
 
+              {/*
+                여기서 본 것 — 영화·공연 관람 기록에서 "어디서 봤어요?"로 이 장소를 고른 것(있을 때만). 콘텐츠 화면은 럽슐랭 탭에만
+                있어서, 홈·식단 스택에서 연 장소 상세면 럽슐랭 탭으로 건너가 연다.
+              */}
+              {watchedHere.length > 0 ? (
+                <View>
+                  <Text style={styles.sectionTitle}>여기서 본 것</Text>
+                  {watchedHere.map((w) => (
+                    <TouchableOpacity
+                      key={w.logId}
+                      style={styles.watchedRow}
+                      onPress={() => openContent(w.contentId, w.title)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${w.title} 콘텐츠 상세 보기`}
+                    >
+                      {w.posterUrl ? (
+                        <Image source={{ uri: w.posterUrl }} style={styles.watchedPoster} resizeMode="cover" />
+                      ) : (
+                        <View style={[styles.watchedPoster, styles.watchedPosterEmpty]}>
+                          <MaterialCommunityIcons name="movie-open-outline" size={16} color={colors.textSecondary} />
+                        </View>
+                      )}
+                      <View style={styles.flex}>
+                        <Text style={styles.menuName} numberOfLines={1}>
+                          {w.title}
+                        </Text>
+                        <Text style={styles.menuMeta}>
+                          {contentTypeLabel(w.type)} · {w.watchedAt} · {w.loggedByName ?? '커플'}
+                          {w.rating ? ` · ${stars(w.rating)}` : ''}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              ) : null}
+
               <Text style={styles.sectionTitle}>방문 기록</Text>
               {/* 지울 기록이 있을 때만 의미가 있다 — 빈 목록에는 EmptyState 쪽 안내로 충분 */}
               {visits.length > 0 ? <Text style={styles.visitHint}>길게 눌러 삭제 · 사진은 탭해서 크게 보기</Text> : null}
@@ -814,6 +869,9 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
 const PHOTO_STRIP_MAX = 20;
 
 const styles = themedStyles((colors) => ({
+  watchedRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xs, minHeight: 44 },
+  watchedPoster: { width: 36, height: 54, borderRadius: radius.sm, backgroundColor: colors.surfaceAlt },
+  watchedPosterEmpty: { alignItems: 'center', justifyContent: 'center' },
   safe: { flex: 1, backgroundColor: colors.background },
   photoStrip: { marginHorizontal: -spacing.lg, marginBottom: spacing.md },
   photoStripContent: { paddingHorizontal: spacing.lg, gap: spacing.xs },

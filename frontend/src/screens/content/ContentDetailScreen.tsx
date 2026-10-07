@@ -49,6 +49,8 @@ import type { Content, ContentLog } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { useAndroidKeyboardHeight } from '../../hooks/useAndroidKeyboardHeight';
 import { useAuthStore } from '../../store/authStore';
+import { PlacePickerSheet } from '../place/PlacePickerSheet';
+import { MaterialCommunityIcons } from '../../components/Icon';
 
 type Props = NativeStackScreenProps<PlaceStackParamList, 'ContentDetail'>;
 
@@ -71,6 +73,9 @@ export function ContentDetailScreen({ route, navigation }: Props) {
   const [watchedAt, setWatchedAt] = useState(toDateString());
   const [memo, setMemo] = useState('');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+  // 어디서 봤어요?(선택, V133) — 저장한 장소 하나. 장소·콘텐츠 테이블은 합치지 않고 관람 기록이 장소를 가리킬 뿐이다
+  const [watchedPlace, setWatchedPlace] = useState<{ id: number; name: string } | null>(null);
+  const [placePickerOpen, setPlacePickerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // 럽슐랭 대표 평점 — 기본 동선("봤어요")이 이 값을 함께 쓰므로 평소엔 한 줄 요약으로 접어두고,
@@ -119,6 +124,7 @@ export function ContentDetailScreen({ route, navigation }: Props) {
     setWatchedAt(toDateString());
     setMemo('');
     setPhotoUri(null);
+    setWatchedPlace(null);
   };
 
   /*
@@ -139,6 +145,7 @@ export function ContentDetailScreen({ route, navigation }: Props) {
         rating: rating > 0 ? rating : undefined,
         memo: memo.trim() || undefined,
         imageUrl,
+        placeId: watchedPlace?.id,
       });
 
       setFormOpen(false);
@@ -392,6 +399,25 @@ export function ContentDetailScreen({ route, navigation }: Props) {
                     pickerTitle="언제 보셨나요?"
                   />
 
+                  {/* 어디서 봤어요?(선택) — 저장한 장소 중 고르거나 카카오에서 찾아 담는다. 장소 상세 "여기서 본 것"에 모인다 */}
+                  <Text style={styles.placeLabel}>어디서 봤어요? (선택)</Text>
+                  <View style={styles.placeRow}>
+                    <TouchableOpacity
+                      style={styles.placePick}
+                      onPress={() => setPlacePickerOpen(true)}
+                      accessibilityRole="button"
+                      accessibilityLabel={watchedPlace ? `본 장소 ${watchedPlace.name}, 바꾸기` : '본 장소 고르기'}
+                    >
+                      <MaterialCommunityIcons name="map-marker-outline" size={16} color={colors.textSecondary} />
+                      <Text style={watchedPlace ? styles.placePicked : styles.placeEmpty} numberOfLines={1}>
+                        {watchedPlace ? watchedPlace.name : '극장·공연장 고르기'}
+                      </Text>
+                    </TouchableOpacity>
+                    {watchedPlace ? (
+                      <IconButton icon="close" label="본 장소 지우기" size={18} onPress={() => setWatchedPlace(null)} />
+                    ) : null}
+                  </View>
+
                   <TouchableOpacity
                     style={[styles.photoBox, photoUri ? styles.photoBoxFilled : styles.photoBoxEmpty]}
                     onPress={onPickPhoto}
@@ -466,6 +492,12 @@ export function ContentDetailScreen({ route, navigation }: Props) {
               </View>
               {item.imageUrl ? <Image source={{ uri: item.imageUrl }} style={styles.logPhoto} resizeMode="cover" /> : null}
               {item.memo ? <Text style={styles.logMemo}>{item.memo}</Text> : null}
+              {item.placeId && item.placeName ? (
+                <View style={styles.logPlace}>
+                  <MaterialCommunityIcons name="map-marker-outline" size={12} color={colors.textSecondary} />
+                  <Text style={styles.logPlaceText}>{item.placeName}에서</Text>
+                </View>
+              ) : null}
             </TouchableOpacity>
           )}
           ListEmptyComponent={
@@ -503,11 +535,32 @@ export function ContentDetailScreen({ route, navigation }: Props) {
         onClose={() => setFanfareTier(0)}
       />
       <LovelichelinRuleSheet visible={ruleOpen} onClose={() => setRuleOpen(false)} />
+      <PlacePickerSheet
+        visible={placePickerOpen}
+        onClose={() => setPlacePickerOpen(false)}
+        onPick={setWatchedPlace}
+      />
     </SafeAreaView>
   );
 }
 
 const styles = themedStyles((colors) => ({
+  placeLabel: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700', marginBottom: spacing.xs },
+  placeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginBottom: spacing.md },
+  placePick: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    minHeight: 44,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceAlt,
+  },
+  placeEmpty: { flex: 1, fontSize: fontSize.body, color: colors.textSecondary },
+  placePicked: { flex: 1, fontSize: fontSize.body, color: colors.textPrimary, fontWeight: '700' },
+  logPlace: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: spacing.xs },
+  logPlaceText: { fontSize: fontSize.caption, color: colors.textSecondary },
   safe: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
   list: { padding: spacing.lg, paddingBottom: spacing.xl },

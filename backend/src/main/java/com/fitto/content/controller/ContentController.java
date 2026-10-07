@@ -61,6 +61,14 @@ public class ContentController {
         return ApiResponse.success(contentService.list(user.id()));
     }
 
+    /** 장소 상세 "여기서 본 것"(V133) — 관람 기록에서 이 장소를 고른 것 */
+    @GetMapping("/watched-at/{placeId}")
+    public com.fitto.common.response.ApiResponse<java.util.List<com.fitto.content.dto.WatchedHereResponse>> watchedAt(
+            @org.springframework.security.core.annotation.AuthenticationPrincipal com.fitto.common.security.AuthUser user,
+            @org.springframework.web.bind.annotation.PathVariable Long placeId) {
+        return com.fitto.common.response.ApiResponse.success(contentService.watchedAt(user.id(), placeId));
+    }
+
     @GetMapping("/{id}")
     public ApiResponse<ContentResponse> get(@AuthenticationPrincipal AuthUser user, @PathVariable Long id) {
         return ApiResponse.success(contentService.get(user.id(), id));

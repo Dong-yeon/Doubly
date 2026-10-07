@@ -15,6 +15,7 @@ import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * TMDB(The Movie Database) 제목 검색 — 콘텐츠 등록의 "제목부터 찾기" 공급원.
@@ -34,6 +35,18 @@ public class TmdbClient {
     private static final String SEARCH_URL =
             "https://api.themoviedb.org/3/search/multi?query={query}&language=ko-KR&api_key={apiKey}";
 
+    /**
+     * 지금 한국에서 상영 중인 영화 — AI 데이트 코스 "영화·공연"이 상영작만 후보로 두려고 쓴다(2026-10-07).
+     * region=KR 이라 한국 개봉 일정 기준이다. 콘텐츠에 TMDB id 가 없어 <b>제목으로</b> 대조한다(한계는
+     * docs/LOVELICHELIN_AI_COURSE_2026-10-07.md §4).
+     */
+    private static final String NOW_PLAYING_URL =
+            "https://api.themoviedb.org/3/movie/now_playing?language=ko-KR&region=KR&page={page}&api_key={apiKey}";
+    /** 상영작 목록은 하루에도 거의 안 바뀐다 — 코스 요청마다 TMDB 를 부르지 않게 잠깐 들고 있는다 */
+    private static final Duration NOW_PLAYING_TTL = Duration.ofHours(3);
+    /** 두 쪽(40편)이면 한국 상영작을 거의 다 덮는다 */
+    private static final int NOW_PLAYING_PAGES = 2;
+
     /** 포스터 이미지 베이스 — w342 는 목록 썸네일에 넉넉한 폭(원본은 w92~original 여러 단계) */
     private static final String POSTER_BASE = "https://image.tmdb.org/t/p/w342";
 
@@ -52,6 +65,60 @@ public class TmdbClient {
 
     public boolean isConfigured() {
         return properties.isConfigured();
+    }
+
+    /** 상영작 한 편 — 한국어 제목과 원제(둘 다로 대조한다) */
+    public record NowPlaying(String title, String originalTitle) {
+    }
+
+    private record Cached(java.time.Instant at, List<NowPlaying> movies) {
+    }
+
+    private final AtomicReference<Cached> nowPlayingCache = new AtomicReference<>();
+
+    /**
+     * 지금 상영 중인 영화. 설정이 없거나 실패하면 빈 목록 — 호출부(코스)는 "상영 여부를 모르니 영화는 후보에서 뺀다"로 읽는다.
+     * 실패는 캐시하지 않는다(다음 요청이 다시 시도한다).
+     */
+    public List<NowPlaying> nowPlaying() {
+        if (!properties.isConfigured()) {
+            return List.of();
+        }
+        Cached cached = nowPlayingCache.get();
+        if (cached != null && cached.at().plus(NOW_PLAYING_TTL).isAfter(java.time.Instant.now())) {
+            return cached.movies();
+        }
+        List<NowPlaying> movies = new ArrayList<>();
+        for (int page = 1; page <= NOW_PLAYING_PAGES; page++) {
+            JsonNode root;
+            try {
+                root = restClient.get()
+                        .uri(NOW_PLAYING_URL, page, properties.getApiKey())
+                        .retrieve()
+                        .body(JsonNode.class);
+            } catch (RestClientResponseException | ResourceAccessException e) {
+                log.warn("TMDB 상영작 조회 실패 (page={}): {}", page, e.getMessage());
+                return movies.isEmpty() ? List.of() : List.copyOf(movies);
+            }
+            if (root == null) break;
+            movies.addAll(mapNowPlaying(root));
+            if (page >= root.path("total_pages").asInt(1)) break;
+        }
+        List<NowPlaying> result = List.copyOf(movies);
+        nowPlayingCache.set(new Cached(java.time.Instant.now(), result));
+        return result;
+    }
+
+    /** package-private — HTTP 없이 매핑만 테스트한다 */
+    List<NowPlaying> mapNowPlaying(JsonNode root) {
+        List<NowPlaying> movies = new ArrayList<>();
+        for (JsonNode item : root.path("results")) {
+            String title = item.path("title").asText("");
+            String original = item.path("original_title").asText("");
+            if (title.isBlank() && original.isBlank()) continue;
+            movies.add(new NowPlaying(title, original));
+        }
+        return movies;
     }
 
     /** 검색 결과 1건 — TMDB results[] 필드를 앱에서 쓰는 모양으로 추린 것 */

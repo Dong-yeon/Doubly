@@ -1140,6 +1140,22 @@ export interface ContentLog {
   memo?: string | null;
   imageUrl?: string | null;
   createdAt: string;
+  /** 어디서 봤는지(V133) — 없거나 장소가 지워졌으면 null */
+  placeId?: number | null;
+  placeName?: string | null;
+}
+
+/** 장소 상세 "여기서 본 것"(V133) 한 줄 */
+export interface WatchedHere {
+  logId: number;
+  contentId: number;
+  title: string;
+  type: ContentType;
+  posterUrl?: string | null;
+  watchedAt: string;
+  rating?: number | null;
+  loggedBy: number;
+  loggedByName?: string | null;
 }
 
 // 콘텐츠 제목 검색 (TMDB) — 영화·드라마만 대상, 공연(PERFORMANCE)은 결과에 없다
@@ -1395,6 +1411,24 @@ export interface DateCourseStop {
   name: string;
   category?: string | null;
   reason?: string | null;
+  /** PLACE | CONTENT — 서버가 id 로 찾은 우리 기록(2026-10-07 전 응답엔 없다) */
+  kind?: 'PLACE' | 'CONTENT' | null;
+  /** places.id 또는 contents.id — 눌러서 상세로 간다 */
+  id?: number | null;
+  /** 다음 장소까지 직선 거리(km) — 서버가 좌표로 계산. 모르면 없음 */
+  nextDistanceKm?: number | null;
+  /** 콘텐츠 stop 의 포스터 */
+  posterUrl?: string | null;
+  contentType?: ContentType | null;
+}
+
+/** AI 데이트 코스 선택 입력 — 전부 선택(보내지 않으면 서버가 예전 코스: 밖에서·안 가본 곳 포함) */
+export type DateCourseType = 'OUTDOOR' | 'MOVIE_SHOW' | 'HOME';
+export interface DateCourseOptions {
+  type: DateCourseType;
+  timeSlot: 'LUNCH' | 'DINNER' | 'DAY' | null;
+  mood: 'CALM' | 'ACTIVE' | null;
+  includeUnvisited: boolean;
 }
 export interface DateCourse {
   hasData: boolean;

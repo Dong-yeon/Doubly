@@ -30,7 +30,13 @@ interface Props<T> {
    * 보고 싶다"는 요구는 아래 '다시 받기'로만 받는다.
    */
   fetcher: (refresh: boolean) => Promise<T>;
-  render: (data: T) => React.ReactNode;
+  /** 결과 그리기 — close 로 모달을 닫고 다른 화면으로 갈 수 있다(예: 데이트 코스 stop → 장소 상세) */
+  render: (data: T, helpers: { close: () => void }) => React.ReactNode;
+  /**
+   * 요청 전에 고를 것이 있을 때(데이트 코스의 유형·시간대 등) — 주면 버튼을 눌렀을 때 바로 요청하지 않고 이걸 먼저 보여 준다.
+   * 고르는 값은 호출부 state 에 두고 fetcher 가 그걸 읽는다. 결과 화면에는 [조건 바꾸기]가 붙는다.
+   */
+  setup?: { render: () => React.ReactNode; startLabel: string };
   style?: ViewStyle;
   /**
    * 재료가 아직 모자라 서버가 빈 결과를 돌려줄 것이 <b>화면에서 이미 보이는</b> 경우의 안내.
@@ -44,10 +50,12 @@ interface Props<T> {
   disabledReason?: string;
 }
 
-export function AiInsightButton<T>({ label, title, fetcher, render, style, disabledReason }: Props<T>) {
+export function AiInsightButton<T>({ label, title, fetcher, render, setup, style, disabledReason }: Props<T>) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<T | null>(null);
+  // setup 이 있으면 여는 순간은 '고르기' 단계 — 요청은 [시작]을 눌러야 간다(한도를 고르기 전에 쓰지 않게)
+  const [choosing, setChoosing] = useState(false);
 
   const load = async (refresh: boolean) => {
     setLoading(true);
@@ -58,7 +66,9 @@ export function AiInsightButton<T>({ label, title, fetcher, render, style, disab
       toast.error(getErrorMessage(e, 'AI 요청에 실패했어요.'));
       // 새로 받다 실패한 경우엔 모달을 닫지 않는다 — 방금까지 보던 결과가 있었는데
       // 통째로 사라지면 무엇 때문에 닫혔는지 알 수 없다. 다시 눌러볼 수 있게 열어둔다.
-      if (!refresh) setOpen(false);
+      // 고르기 단계가 있으면 그리로 돌려보낸다 — 조건을 바꿔 다시 해 볼 수 있게
+      if (setup) setChoosing(true);
+      else if (!refresh) setOpen(false);
     } finally {
       setLoading(false);
     }
@@ -74,8 +84,20 @@ export function AiInsightButton<T>({ label, title, fetcher, render, style, disab
     }
     haptics.light();
     setOpen(true);
+    if (setup) {
+      setChoosing(true);
+      return;
+    }
     void load(false);
   };
+
+  const onStart = () => {
+    haptics.light();
+    setChoosing(false);
+    void load(false);
+  };
+
+  const close = () => setOpen(false);
 
   const onRefresh = () => {
     haptics.light();
@@ -98,20 +120,34 @@ export function AiInsightButton<T>({ label, title, fetcher, render, style, disab
         <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
           <Pressable style={styles.card} onPress={() => {}}>
             <Text style={styles.title}>{title}</Text>
-            {loading ? (
+            {choosing && setup ? (
+              <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent}>
+                {setup.render()}
+              </ScrollView>
+            ) : loading ? (
               <View style={styles.loading}>
                 <ActivityIndicator color={colors.primary} />
                 <Text style={styles.loadingText}>AI가 생각 중이에요…</Text>
               </View>
             ) : data ? (
               <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent}>
-                {render(data)}
+                {render(data, { close })}
               </ScrollView>
             ) : null}
             <View style={styles.actions}>
               {/* 다시 받기는 결과가 있을 때만 — 로딩 중이거나 아직 아무것도 못 받았으면
                   누를 이유가 없다. 이걸 눌렀을 때만 AI 한도를 새로 쓴다. */}
-              {data && !loading ? (
+              {choosing && setup ? (
+                <TouchableOpacity style={styles.action} onPress={onStart} accessibilityRole="button">
+                  <Text style={styles.refreshText}>{setup.startLabel}</Text>
+                </TouchableOpacity>
+              ) : null}
+              {setup && !choosing && !loading ? (
+                <TouchableOpacity style={styles.action} onPress={() => setChoosing(true)} accessibilityRole="button">
+                  <Text style={styles.closeText}>조건 바꾸기</Text>
+                </TouchableOpacity>
+              ) : null}
+              {data && !loading && !choosing ? (
                 <TouchableOpacity style={styles.action} onPress={onRefresh}>
                   <Text style={styles.refreshText}>다시 받기</Text>
                 </TouchableOpacity>

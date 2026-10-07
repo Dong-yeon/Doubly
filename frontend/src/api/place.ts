@@ -4,6 +4,7 @@ import { runAiJob, type AiJobStart } from './aiJob';
 import type {
   ApiResponse,
   DateCourse,
+  DateCourseOptions,
   LovelichelinPulse,
   LovelichelinRecommendation,
   Meal,
@@ -152,11 +153,18 @@ export const placeApi = {
   // AI 데이트 코스 추천 — 저장한 장소로 코스 구성 (생성에 시간 걸려 timeout 상향).
   // refresh 를 넘기면 같은 장소로 다른 코스를 새로 짠다 (그때만 한도를 쓴다)
   // 접수증(jobId) -> 폴링 -> 결과. 호출부는 그대로다(api/aiJob.ts 참고)
-  dateCourse: (refresh?: boolean) =>
+  // options 는 전부 선택 — 서버가 모르는 값은 지정 안 함으로 본다(옛 서버도 모르는 파라미터는 무시한다)
+  dateCourse: (refresh?: boolean, options?: DateCourseOptions) =>
     runAiJob<DateCourse>(
       unwrap(
         apiClient.post<ApiResponse<AiJobStart>>('/places/date-course', undefined, {
-          params: { refresh: refresh || undefined },
+          params: {
+            refresh: refresh || undefined,
+            type: options?.type,
+            timeSlot: options?.timeSlot ?? undefined,
+            mood: options?.mood ?? undefined,
+            includeUnvisited: options ? options.includeUnvisited : undefined,
+          },
         }),
       ),
     ),
