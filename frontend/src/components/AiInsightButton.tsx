@@ -148,7 +148,11 @@ const styles = themedStyles((colors) => ({
   title: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary, marginBottom: spacing.md },
   loading: { alignItems: 'center', paddingVertical: spacing.xl, gap: spacing.sm },
   loadingText: { color: colors.textSecondary, fontSize: fontSize.caption },
-  body: { flexGrow: 0 },
+  /*
+   * 결과가 길면(맛집 추천 다섯 곳 등) 카드의 maxHeight 안에서 줄어들어야 스크롤이 생긴다. RN 의 flexShrink 기본값은 0 이라
+   * flexGrow:0 만 두면 ScrollView 가 내용 높이 그대로 카드 밖으로 넘쳐 아래로 스크롤되지 않았다(2026-10-07 사용자 보고).
+   */
+  body: { flexGrow: 0, flexShrink: 1 },
   bodyContent: { paddingBottom: spacing.sm },
   actions: { flexDirection: 'row', marginTop: spacing.sm },
   action: { flex: 1, alignItems: 'center', paddingVertical: spacing.md },
