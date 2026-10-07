@@ -1395,6 +1395,24 @@ export interface DateCourseStop {
   name: string;
   category?: string | null;
   reason?: string | null;
+  /** PLACE | CONTENT — 서버가 id 로 찾은 우리 기록(2026-10-07 전 응답엔 없다) */
+  kind?: 'PLACE' | 'CONTENT' | null;
+  /** places.id 또는 contents.id — 눌러서 상세로 간다 */
+  id?: number | null;
+  /** 다음 장소까지 직선 거리(km) — 서버가 좌표로 계산. 모르면 없음 */
+  nextDistanceKm?: number | null;
+  /** 콘텐츠 stop 의 포스터 */
+  posterUrl?: string | null;
+  contentType?: ContentType | null;
+}
+
+/** AI 데이트 코스 선택 입력 — 전부 선택(보내지 않으면 서버가 예전 코스: 밖에서·안 가본 곳 포함) */
+export type DateCourseType = 'OUTDOOR' | 'MOVIE_SHOW' | 'HOME';
+export interface DateCourseOptions {
+  type: DateCourseType;
+  timeSlot: 'LUNCH' | 'DINNER' | 'DAY' | null;
+  mood: 'CALM' | 'ACTIVE' | null;
+  includeUnvisited: boolean;
 }
 export interface DateCourse {
   hasData: boolean;

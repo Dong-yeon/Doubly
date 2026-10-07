@@ -51,6 +51,7 @@ import { AiInsightButton } from '../../components/AiInsightButton';
 import { LovelichelinBadge } from '../../components/LovelichelinBadge';
 import { SoloPickBadge } from '../../components/SoloPickBadge';
 import { LovelichelinRecommendCards } from './LovelichelinRecommendCards';
+import { DEFAULT_DATE_COURSE_OPTIONS, DateCourseResult, DateCourseSetup } from './DateCourse';
 import {
   isSoloPick,
   CATEGORY_FILTERS,
@@ -82,7 +83,7 @@ import { palettes } from '../../theme/palette';
 import type {
   Content,
   ContentType,
-  DateCourse,
+  DateCourseOptions,
   LovelichelinRecommendation,
   Place,
   PlaceSearchResult,
@@ -101,12 +102,12 @@ const MODES: { value: Mode; label: string }[] = [
 
 /*
  * AI 두 기능이 결과를 낼 수 있는 최소 재료 — 서버 판정과 같은 값이어야 한다
- * (LovelichelinRecommendService.MIN_CERTIFIED_PLACES, DateCourseService.MIN_PLACES).
+ * (LovelichelinRecommendService.MIN_CERTIFIED_PLACES). 데이트 코스는 유형마다 재료가 달라(장소 2곳·보고 싶은 작품 등)
+ * 고르기 단계 뒤 서버가 모자란 이유를 말한다 — 화면은 장소도 콘텐츠도 하나도 없을 때만 미리 막는다.
  * 서버도 모자라면 이유를 담은 빈 응답을 주지만, 그걸 들으려면 모달을 열고 AI 작업
  * 폴링이 한 바퀴 돌아야 한다 — 화면이 이미 아는 숫자라 누르기 전에 말해준다.
  */
 const MIN_CERTIFIED_FOR_RECOMMEND = 1;
-const MIN_PLACES_FOR_DATE_COURSE = 2;
 
 /** 시트 미리보기에서 목록이 보이는 몫 — 카드 반 장 */
 // 56 — 가운데 단을 지도 60% 로 내리자(SHEET_HALF_RATIO) 84 로는 미리보기와 가운데가 45px 차이라 단이 갈리지 않았다
@@ -116,26 +117,6 @@ const SHEET_HANDLE = 28;
 const SHEET_TITLE_ROW = layout.touchTarget + spacing.sm;
 /** 미리보기가 지도 영역을 이 비율 넘게 덮지 않는다 — 작은 화면에서 지도가 사라지지 않게 */
 const PEEK_MAX_RATIO = 0.62;
-
-function renderDateCourse(c: DateCourse) {
-  return (
-    <View style={{ gap: spacing.sm }}>
-      {c.comment ? <Text style={styles.courseComment}>{c.comment}</Text> : null}
-      {c.stops.map((s, i) => (
-        <View key={i} style={styles.courseStop}>
-          <Text style={styles.courseNum}>{i + 1}</Text>
-          <View style={styles.courseStopBody}>
-            <Text style={styles.courseName}>
-              {s.name}
-              {s.category ? ` · ${s.category}` : ''}
-            </Text>
-            {s.reason ? <Text style={styles.courseReason}>{s.reason}</Text> : null}
-          </View>
-        </View>
-      ))}
-    </View>
-  );
-}
 
 // 담기 진행/완료 상태가 필요해 렌더 함수가 아니라 컴포넌트(LovelichelinRecommendCards)로 그린다
 function renderRecommendation(data: LovelichelinRecommendation) {
@@ -173,6 +154,8 @@ function pinKind(p: Place): 'certified' | 'visited' | 'wish' {
 
 export function PlaceScreen() {
   const navigation = useNavigation<Nav>();
+  // AI 데이트 코스 조건 — 화면에 머무는 동안 기억한다(다시 열면 지난 조건 그대로)
+  const [courseOptions, setCourseOptions] = useState<DateCourseOptions>(DEFAULT_DATE_COURSE_OPTIONS);
   const [mode, setMode] = useState<Mode>('places');
 
   // 대기·의견 갈림 문구에 상대 이름을 쓴다 — "나머지 한 명" 보다 짧고 누구 차례인지가 분명하다
@@ -616,12 +599,29 @@ export function PlaceScreen() {
       <AiInsightButton
         label="AI 데이트 코스"
         title="AI 데이트 코스"
-        fetcher={placeApi.dateCourse}
-        render={renderDateCourse}
+        // 고른 조건으로 요청한다 — 조건이 같으면 서버 캐시가 지난 코스를 돌려준다(한도를 쓰지 않는다)
+        fetcher={(refresh) => placeApi.dateCourse(refresh, courseOptions)}
+        setup={{
+          render: () => <DateCourseSetup value={courseOptions} onChange={setCourseOptions} />,
+          startLabel: '코스 짜기',
+        }}
+        render={(course, { close }) => (
+          <DateCourseResult
+            course={course}
+            onOpenPlace={(placeId, name) => {
+              close();
+              navigation.navigate('PlaceDetail', { placeId, name });
+            }}
+            onOpenContent={(contentId, title) => {
+              close();
+              navigation.navigate('ContentDetail', { contentId, title });
+            }}
+          />
+        )}
         style={styles.aiBtn}
         disabledReason={
-          placeCount < MIN_PLACES_FOR_DATE_COURSE
-            ? `코스를 짜려면 저장한 장소가 ${MIN_PLACES_FOR_DATE_COURSE}곳 이상이어야 해요. 가고 싶은 곳을 먼저 담아보세요!`
+          placeCount === 0 && allContents.length === 0
+            ? '코스를 짜려면 가고 싶은 곳이나 보고 싶은 작품을 먼저 담아 주세요!'
             : undefined
         }
       />
@@ -1261,24 +1261,6 @@ const styles = themedStyles((colors) => ({
   cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.sm },
   visitInfo: { fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '700' },
   pendingHint: { fontSize: fontSize.micro, color: colors.togetherText, fontWeight: '700', marginTop: spacing.xs },
-  // AI 인사이트 렌더
-  courseComment: { fontSize: fontSize.body, color: colors.textSecondary, lineHeight: 22, marginBottom: spacing.xs },
-  courseStop: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start' },
-  courseNum: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: colors.primary,
-    color: colors.onPrimary,
-    fontWeight: '800',
-    fontSize: fontSize.caption,
-    textAlign: 'center',
-    lineHeight: 24,
-    overflow: 'hidden',
-  },
-  courseStopBody: { flex: 1 },
-  courseName: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
-  courseReason: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xxs, lineHeight: 18 },
   fabWrap: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: spacing.lg },
   // 지도에서 좌표를 고른 직후 시트에 뜨는 줄
   pendingPinBar: {
