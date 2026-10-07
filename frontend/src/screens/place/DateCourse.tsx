@@ -28,7 +28,7 @@ const TYPES: { value: DateCourseType; label: string; hint: string }[] = [
 ];
 
 const TIME_SLOTS: { value: DateCourseOptions['timeSlot']; label: string }[] = [
-  { value: null, label: '상관없음' },
+  { value: null, label: '언제든' },
   { value: 'LUNCH', label: '점심' },
   { value: 'DINNER', label: '저녁' },
   { value: 'DAY', label: '하루' },
@@ -64,13 +64,13 @@ export function DateCourseSetup({ value, onChange }: SetupProps) {
           <Text style={styles.label}>시간대</Text>
           <View style={styles.chipRow}>
             {TIME_SLOTS.map((t) => (
-              <Chip key={t.label} label={t.label} selected={value.timeSlot === t.value} onPress={() => set({ timeSlot: t.value })} fill />
+              <Chip key={t.label} label={t.label} selected={value.timeSlot === t.value} onPress={() => set({ timeSlot: t.value })} />
             ))}
           </View>
           <Text style={styles.label}>분위기</Text>
           <View style={styles.chipRow}>
             {MOODS.map((m) => (
-              <Chip key={m.label} label={m.label} selected={value.mood === m.value} onPress={() => set({ mood: m.value })} fill />
+              <Chip key={m.label} label={m.label} selected={value.mood === m.value} onPress={() => set({ mood: m.value })} />
             ))}
           </View>
           <Checkbox
@@ -153,7 +153,7 @@ function StopRow({
 const styles = themedStyles((colors) => ({
   setup: { gap: spacing.sm },
   label: { fontSize: fontSize.caption, fontWeight: '800', color: colors.textSecondary, marginTop: spacing.xs },
-  chipRow: { flexDirection: 'row', gap: spacing.xs },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
   hint: { fontSize: fontSize.caption, color: colors.textSecondary },
   comment: { fontSize: fontSize.body, color: colors.textSecondary, lineHeight: 22, marginBottom: spacing.xs },
   stop: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start', borderRadius: radius.md, paddingVertical: spacing.xs },
