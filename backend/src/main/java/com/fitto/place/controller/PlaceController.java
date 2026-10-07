@@ -103,7 +103,7 @@ public class PlaceController {
     }
 
     /**
-     * AI 데이트 코스 추천 — 저장한 장소로 코스 구성 (GET /places/date-course)
+     * AI 데이트 코스 추천 — 저장한 장소(·콘텐츠)로 코스 구성 (POST /places/date-course)
      *
      * <p>{@code refresh=true} 는 사용자가 "다른 코스" 를 눌렀을 때만 붙인다. 화면 진입은
      * 캐시를 태워야 한다 — 무료 한도가 월 1회라 들어갈 때마다 새로 만들면 곧바로 소진된다.
@@ -111,11 +111,18 @@ public class PlaceController {
     @PostMapping("/date-course")
     @ResponseStatus(HttpStatus.ACCEPTED)
     public ApiResponse<AiJobResponse> dateCourse(@AuthenticationPrincipal AuthUser user,
-                                                 @RequestParam(defaultValue = "false") boolean refresh) {
+                                                 @RequestParam(defaultValue = "false") boolean refresh,
+                                                 // 선택 입력(2026-10-07) — 옛 앱은 보내지 않는다. 모르는 값은 지정 안 함으로 본다
+                                                 @RequestParam(required = false) String type,
+                                                 @RequestParam(required = false) String timeSlot,
+                                                 @RequestParam(required = false) String mood,
+                                                 @RequestParam(required = false) Boolean includeUnvisited) {
         Long userId = user.id();
+        com.fitto.place.dto.DateCourseOptions options =
+                com.fitto.place.dto.DateCourseOptions.parse(type, timeSlot, mood, includeUnvisited);
         return ApiResponse.success(
                 new AiJobResponse(aiJobService.submit(userId, "date-course",
-                        () -> dateCourseService.recommend(userId, refresh))),
+                        () -> dateCourseService.recommend(userId, refresh, options))),
                 "코스를 짜고 있어요.");
     }
 
