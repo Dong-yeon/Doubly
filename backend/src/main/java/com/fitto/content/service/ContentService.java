@@ -320,7 +320,8 @@ public class ContentService {
         return 1;
     }
 
-    static RatingPair ratingPairOf(List<ContentRating> ratings, Long userId) {
+    /** AI 데이트 코스(place.service.DateCourseService)도 쓴다 — 장소의 PlaceService.ratingPairOf 와 같은 규칙 */
+    public static RatingPair ratingPairOf(List<ContentRating> ratings, Long userId) {
         Integer mine = null;
         Integer partner = null;
         for (ContentRating r : ratings) {
@@ -333,7 +334,7 @@ public class ContentService {
         return new RatingPair(mine, partner);
     }
 
-    record RatingPair(Integer mine, Integer partner) {
+    public record RatingPair(Integer mine, Integer partner) {
         static final RatingPair EMPTY = new RatingPair(null, null);
     }
 

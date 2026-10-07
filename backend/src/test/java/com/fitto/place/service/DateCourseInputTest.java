@@ -3,7 +3,10 @@ package com.fitto.place.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fitto.place.dto.DateCourseOptions;
 import com.fitto.place.dto.DateCourseResponse.Stop;
+import com.fitto.place.service.DateCourseInput.ContentCandidate;
 import com.fitto.place.service.DateCourseInput.PlaceCandidate;
+import com.fitto.content.service.TmdbClient.NowPlaying;
+import com.fitto.place.dto.DateCourseOptions.CourseType;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
@@ -127,5 +130,117 @@ class DateCourseInputTest {
         assertThat(o.timeSlot()).isEqualTo(DateCourseOptions.TimeSlot.DINNER);
         assertThat(o.mood()).isNull();
         assertThat(o.includeUnvisited()).isTrue();
+    }
+
+    // ---------------------------------------------------------------- 2단계: 콘텐츠
+
+    private static ContentCandidate content(long id, String title, String type, long logs,
+                                            Integer mine, Integer partner, boolean showing) {
+        return new ContentCandidate(id, title, type, "https://image.tmdb.org/p/" + id + ".jpg", logs, mine, partner, 0, showing);
+    }
+
+    private final List<NowPlaying> nowPlaying = List.of(
+            new NowPlaying("듄: 파트2", "Dune: Part Two"),
+            new NowPlaying("베테랑2", "베테랑2"));
+
+    @Test
+    void 상영작_대조는_정확히_같을_때만_상영_중이고_부분_일치는_애매로_본다() {
+        assertThat(DateCourseInput.screening("듄 파트2", nowPlaying)).isEqualTo(DateCourseInput.Screening.SHOWING);
+        assertThat(DateCourseInput.screening("Dune: Part Two", nowPlaying)).isEqualTo(DateCourseInput.Screening.SHOWING);
+        // "듄"은 "듄: 파트2"의 일부 — 1편인지 2편인지 모른다
+        assertThat(DateCourseInput.screening("듄", nowPlaying)).isEqualTo(DateCourseInput.Screening.NOT_SHOWING);
+        assertThat(DateCourseInput.screening("베테랑", nowPlaying)).isEqualTo(DateCourseInput.Screening.AMBIGUOUS);
+        assertThat(DateCourseInput.screening("인사이드 아웃", nowPlaying)).isEqualTo(DateCourseInput.Screening.NOT_SHOWING);
+        assertThat(DateCourseInput.screening("듄 파트2", List.of())).isEqualTo(DateCourseInput.Screening.NOT_SHOWING);
+    }
+
+    @Test
+    void 영화_공연_코스는_안_본_공연과_상영_중인_영화만() {
+        List<ContentCandidate> all = List.of(
+                content(1, "듄: 파트2", "MOVIE", 0, null, null, true),
+                content(2, "옛날 영화", "MOVIE", 0, null, null, false),
+                content(3, "레미제라블", "PERFORMANCE", 0, null, null, false),
+                content(4, "본 공연", "PERFORMANCE", 1, 5, 5, false),
+                content(5, "드라마", "DRAMA", 0, null, null, false),
+                content(6, "별로인 공연", "PERFORMANCE", 0, 2, null, false));
+
+        assertThat(DateCourseInput.filterContents(all, CourseType.MOVIE_SHOW))
+                .extracting(ContentCandidate::title).containsExactly("듄: 파트2", "레미제라블");
+        // 집콕: 드라마·영화(상영 무관), 본 것도 남긴다
+        assertThat(DateCourseInput.filterContents(all, CourseType.HOME))
+                .extracting(ContentCandidate::title).containsExactly("듄: 파트2", "옛날 영화", "드라마");
+        assertThat(DateCourseInput.filterContents(all, CourseType.OUTDOOR)).isEmpty();
+    }
+
+    @Test
+    void 집콕_장소는_음식점_카페만() {
+        PlaceCandidate cafe = new PlaceCandidate(7L, "카페", "카페·디저트", null, null, null, null, 0, null, null, null, 0);
+        PlaceCandidate museum = new PlaceCandidate(8L, "미술관", "박물관·전시", null, null, null, null, 0, null, null, null, 0);
+        DateCourseOptions home = new DateCourseOptions(CourseType.HOME, null, null, true);
+        assertThat(DateCourseInput.filterPlaces(List.of(eulmildae, cafe, museum), home))
+                .extracting(PlaceCandidate::name).containsExactly("을밀대", "카페");
+    }
+
+    @Test
+    void 콘텐츠_stop_은_kind_id_포스터를_싣고_영화_공연은_콘텐츠_1개_장소_2곳까지() throws Exception {
+        ContentCandidate dune = content(1, "듄: 파트2", "MOVIE", 0, null, null, true);
+        ContentCandidate musical = content(3, "레미제라블", "PERFORMANCE", 0, null, null, false);
+        var result = om.readTree("""
+                {"stops":[
+                  {"ref":"P1","reason":"먼저 냉면"},
+                  {"ref":"C1","reason":"영화"},
+                  {"ref":"C3","reason":"두 번째 작품은 넘친다"},
+                  {"ref":"P2","reason":"카페"},
+                  {"ref":"P4","reason":"세 번째 장소는 넘친다"}
+                ]}""");
+
+        List<Stop> stops = DateCourseInput.toStops(result,
+                DateCourseInput.byRef(List.of(eulmildae, yeonnam, gangnam)),
+                DateCourseInput.contentsByRef(List.of(dune, musical)), CourseType.MOVIE_SHOW);
+
+        assertThat(stops).extracting(Stop::kind).containsExactly("PLACE", "CONTENT", "PLACE");
+        assertThat(stops).extracting(Stop::id).containsExactly(1L, 1L, 2L);
+        Stop movie = stops.get(1);
+        assertThat(movie.name()).isEqualTo("듄: 파트2");
+        assertThat(movie.posterUrl()).isEqualTo("https://image.tmdb.org/p/1.jpg");
+        assertThat(movie.contentType()).isEqualTo("MOVIE");
+        assertThat(movie.category()).isEqualTo("영화");
+        // 사이에 콘텐츠가 끼면 장소 사이 거리를 넣지 않는다(극장 위치를 모른다)
+        assertThat(stops.get(0).nextDistanceKm()).isNull();
+    }
+
+    @Test
+    void 장소_P1_과_콘텐츠_C1_은_id_가_같아도_섞이지_않는다() throws Exception {
+        ContentCandidate c1 = content(1, "같은 번호 작품", "DRAMA", 0, null, null, false);
+        var result = om.readTree("""
+                {"stops":[{"ref":"C1","reason":"보기"},{"ref":"P1","reason":"포장"}]}""");
+        List<Stop> stops = DateCourseInput.toStops(result, DateCourseInput.byRef(List.of(eulmildae)),
+                DateCourseInput.contentsByRef(List.of(c1)), CourseType.HOME);
+        assertThat(stops).extracting(Stop::name).containsExactly("같은 번호 작품", "을밀대");
+    }
+
+    @Test
+    void 코스_유형별_프롬프트에_콘텐츠_목록과_개수_규칙이_실린다() {
+        ContentCandidate dune = content(1, "듄: 파트2", "MOVIE", 0, 5, null, true);
+        String movie = DateCourseInput.prompt(new DateCourseOptions(CourseType.MOVIE_SHOW, null, null, true),
+                List.of(eulmildae), List.of(dune));
+        assertThat(movie).contains("콘텐츠(C) 정확히 1개").contains("[콘텐츠]")
+                .contains("- C1 듄: 파트2 [영화] · 아직 안 봄 · 평점 나 5/상대 - · 지금 상영 중")
+                .contains("[저장된 장소]");
+
+        String home = DateCourseInput.prompt(new DateCourseOptions(CourseType.HOME, null, null, true),
+                List.of(), List.of(content(5, "드라마", "DRAMA", 0, null, null, false)));
+        assertThat(home).contains("포장해 올 장소(P) 0~1곳").doesNotContain("[저장된 장소]").doesNotContain("동선:");
+    }
+
+    @Test
+    void 재료가_모자라면_한도를_쓰지_않고_이유를_말한다() {
+        DateCourseOptions movie = new DateCourseOptions(CourseType.MOVIE_SHOW, null, null, true);
+        assertThat(DateCourseService.shortage(movie, List.of(eulmildae), List.of()).comment()).contains("상영 중인 영화");
+        assertThat(DateCourseService.shortage(movie, List.of(),
+                List.of(content(1, "듄", "MOVIE", 0, null, null, true))).comment()).contains("들를 장소");
+        assertThat(DateCourseService.shortage(new DateCourseOptions(CourseType.HOME, null, null, true),
+                List.of(), List.of(content(5, "드라마", "DRAMA", 0, null, null, false)))).isNull();
+        assertThat(DateCourseService.shortage(DateCourseOptions.defaults(), List.of(eulmildae), List.of())).isNotNull();
     }
 }
