@@ -78,6 +78,15 @@ public class RelationRecordPurger {
         // 식단 찌르기(V120) — relations 를 참조한다
         exec("delete from meal_nudges where relation_id = :rid", relationId);
 
+        // 콘텐츠(영화·공연·드라마) — places 와 같은 모양(V65). places 보다 먼저 지운다:
+        // content_logs.place_id(V133, "어디서 봤어요?")가 places 를 가리킨다(ON DELETE SET NULL 이라 순서가 바뀌어도
+        // 깨지진 않지만, 자식 → 부모 순서를 지켜 읽는 사람이 FK 를 따라갈 수 있게)
+        exec("delete from content_logs where content_id in "
+                + "(select c.id from contents c where c.couple_id = :rid)", relationId);
+        exec("delete from content_ratings where content_id in "
+                + "(select c.id from contents c where c.couple_id = :rid)", relationId);
+        exec("delete from contents where couple_id = :rid", relationId);
+
         exec("delete from place_visits where place_id in "
                 + "(select p.id from places p where p.couple_id = :rid)", relationId);
         // 우리가 쌓는 메뉴(V131) — places 를 CASCADE 로 참조하지만 순서를 여기서 읽을 수 있게 먼저 거둔다
@@ -86,13 +95,6 @@ public class RelationRecordPurger {
         exec("delete from place_menu_photos where place_id in "
                 + "(select p.id from places p where p.couple_id = :rid)", relationId);
         exec("delete from places where couple_id = :rid", relationId);
-
-        // 콘텐츠(영화·공연·드라마) — places 와 같은 모양(V65)
-        exec("delete from content_logs where content_id in "
-                + "(select c.id from contents c where c.couple_id = :rid)", relationId);
-        exec("delete from content_ratings where content_id in "
-                + "(select c.id from contents c where c.couple_id = :rid)", relationId);
-        exec("delete from contents where couple_id = :rid", relationId);
 
         exec("delete from couple_challenges where couple_id = :rid", relationId);
         exec("delete from couple_events where couple_id = :rid", relationId);

@@ -56,6 +56,7 @@ public class ContentService {
     private final PlanGuard planGuard;
     private final FeedReactionRepository feedReactionRepository;
     private final TmdbClient tmdbClient;
+    private final com.fitto.place.repository.PlaceRepository placeRepository;
 
     public ContentService(ContentRepository contentRepository,
                           ContentLogRepository contentLogRepository,
@@ -65,7 +66,8 @@ public class ContentService {
                           NotificationService notificationService,
                           PlanGuard planGuard,
                           FeedReactionRepository feedReactionRepository,
-                          TmdbClient tmdbClient) {
+                          TmdbClient tmdbClient,
+                          com.fitto.place.repository.PlaceRepository placeRepository) {
         this.contentRepository = contentRepository;
         this.contentLogRepository = contentLogRepository;
         this.contentRatingRepository = contentRatingRepository;
@@ -75,6 +77,7 @@ public class ContentService {
         this.planGuard = planGuard;
         this.feedReactionRepository = feedReactionRepository;
         this.tmdbClient = tmdbClient;
+        this.placeRepository = placeRepository;
     }
 
     /**
@@ -165,6 +168,7 @@ public class ContentService {
     @Transactional
     public ContentLogResponse recordLog(Long userId, Long contentId, RecordContentLogRequest request) {
         Content content = getCoupleContent(userId, contentId);
+        com.fitto.place.domain.Place place = request.placeId() == null ? null : couplePlace(content.getCoupleId(), request.placeId());
 
         ContentLog log = ContentLog.builder()
                 .contentId(content.getId())
@@ -173,6 +177,7 @@ public class ContentService {
                 .rating(request.rating())
                 .memo(request.memo())
                 .imageUrl(request.imageUrl())
+                .placeId(place != null ? place.getId() : null)
                 .build();
         contentLogRepository.save(log);
 
@@ -183,14 +188,44 @@ public class ContentService {
                             + (log.getRating() != null ? " ★" + log.getRating() : ""),
                     PushLinks.content(content.getId()));
         }
-        return ContentLogResponse.of(log, userName(userId));
+        return ContentLogResponse.of(log, userName(userId), place != null ? place.getName() : null);
+    }
+
+    /**
+     * "어디서 봤어요?"의 장소 — 같은 커플의 장소만. 남의 장소 id 를 넣어도 그 이름이 내 기록에 새지 않게 막는다.
+     */
+    private com.fitto.place.domain.Place couplePlace(Long coupleId, Long placeId) {
+        return placeRepository.findById(placeId)
+                .filter(p -> coupleId.equals(p.getCoupleId()))
+                .orElseThrow(() -> new BusinessException(ErrorCode.PLACE_NOT_FOUND));
+    }
+
+    /**
+     * 장소 상세 "여기서 본 것"(V133) — 이 장소를 "어디서 봤어요?"로 고른 관람 기록, 최근 본 순. 콘텐츠 제목·포스터를 함께.
+     */
+    public List<com.fitto.content.dto.WatchedHereResponse> watchedAt(Long userId, Long placeId) {
+        Relation couple = activeCouple(userId);
+        couplePlace(couple.getId(), placeId);
+        return contentLogRepository.findWatchedAtPlace(placeId).stream()
+                .map(r -> new com.fitto.content.dto.WatchedHereResponse(r.getLogId(), r.getContentId(), r.getTitle(),
+                        r.getType().name(), r.getPosterUrl(), r.getWatchedAt(), r.getRating(),
+                        r.getLoggedBy(), userName(r.getLoggedBy())))
+                .toList();
     }
 
     /** 콘텐츠의 관람 기록 목록 */
     public List<ContentLogResponse> logs(Long userId, Long contentId) {
         getCoupleContent(userId, contentId);
-        return contentLogRepository.findByContentIdOrderByIdDesc(contentId).stream()
-                .map(l -> ContentLogResponse.of(l, userName(l.getLoggedBy())))
+        List<ContentLog> logs = contentLogRepository.findByContentIdOrderByIdDesc(contentId);
+        // 어디서 봤는지 — 장소 이름을 한 번에(관람 기록마다 묻지 않는다)
+        List<Long> placeIds = logs.stream().map(ContentLog::getPlaceId).filter(java.util.Objects::nonNull).distinct().toList();
+        java.util.Map<Long, String> placeNames = placeIds.isEmpty() ? java.util.Map.of()
+                : placeRepository.findAllById(placeIds).stream()
+                .collect(java.util.stream.Collectors.toMap(com.fitto.place.domain.Place::getId,
+                        com.fitto.place.domain.Place::getName));
+        return logs.stream()
+                .map(l -> ContentLogResponse.of(l, userName(l.getLoggedBy()),
+                        l.getPlaceId() != null ? placeNames.get(l.getPlaceId()) : null))
                 .toList();
     }
 

@@ -15,10 +15,18 @@ public record ContentLogResponse(
         Integer rating,
         String memo,
         String imageUrl,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        /** 어디서 봤는지(V133) — 없거나 장소가 지워졌으면 null */
+        Long placeId,
+        String placeName
 ) {
     public static ContentLogResponse of(ContentLog l, String loggedByName) {
+        return of(l, loggedByName, null);
+    }
+
+    public static ContentLogResponse of(ContentLog l, String loggedByName, String placeName) {
         return new ContentLogResponse(l.getId(), l.getContentId(), l.getLoggedBy(), loggedByName,
-                l.getWatchedAt(), l.getRating(), l.getMemo(), l.getImageUrl(), l.getCreatedAt());
+                l.getWatchedAt(), l.getRating(), l.getMemo(), l.getImageUrl(), l.getCreatedAt(),
+                l.getPlaceId(), placeName);
     }
 }

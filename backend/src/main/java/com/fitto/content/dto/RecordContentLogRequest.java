@@ -15,6 +15,13 @@ public record RecordContentLogRequest(
 
         String memo,
 
-        String imageUrl
+        String imageUrl,
+
+        /** 어디서 봤어요?(선택, V133) — 이 커플이 저장한 장소 id */
+        Long placeId
 ) {
+    /** 옛 호출부(장소 없이) */
+    public RecordContentLogRequest(java.time.LocalDate watchedAt, Integer rating, String memo, String imageUrl) {
+        this(watchedAt, rating, memo, imageUrl, null);
+    }
 }
