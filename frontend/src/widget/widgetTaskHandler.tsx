@@ -10,7 +10,7 @@
 import React from 'react';
 import type { WidgetTaskHandlerProps } from 'react-native-android-widget';
 import { DoublyWidget } from './DoublyWidget';
-import { loadWidgetData, saveWidgetData, type WidgetData } from './widgetData';
+import { loadWidgetData, saveWidgetData, widgetMoodOf, type WidgetData } from './widgetData';
 
 /** 상대 무드를 새로 받아 캐시에 합친다. 실패하면 캐시 그대로 */
 async function withFreshPartnerMood(cached: WidgetData | null): Promise<WidgetData | null> {
@@ -24,7 +24,7 @@ async function withFreshPartnerMood(cached: WidgetData | null): Promise<WidgetDa
     const partner = res.partner;
     const next: WidgetData = {
       ...cached,
-      partnerMood: partner ? { emoji: partner.emoji, message: partner.message ?? null } : null,
+      partnerMood: partner ? widgetMoodOf(partner) : null,
     };
     await saveWidgetData(next);
     return next;

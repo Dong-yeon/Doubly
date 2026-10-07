@@ -1,5 +1,6 @@
 package com.fitto.mood.dto;
 
+import com.fitto.coupleemoji.domain.CoupleEmoji;
 import com.fitto.mood.domain.MoodStatus;
 
 import java.time.LocalDateTime;
@@ -11,21 +12,27 @@ import java.time.LocalDateTime;
  *                  화면은 예전처럼 동작한다.
  * @param imageUrl  우리 이모지를 걸었으면 그 이미지, 아니면 null. 앱은 <b>있으면 이미지·없으면
  *                  {@code emoji}</b> 로 그린다.
+ * @param moodText  그림을 못 그리고 <b>글자로만</b> 보여 주는 자리(안드로이드 홈 위젯)에 쓸 말. 대개 {@code emoji}
+ *                  와 같고, 표정이 아닌 우리 이모지면 그 이름(배고파)이다 — 대역(🫠 녹음)은 같은 뜻이 아니다
+ *                  ({@code CoupleEmojiEmotion.moodText}, 푸시 본문과 같은 값).
  */
 public record MoodEntry(
         String emoji,
         Long coupleEmojiId,
         String imageUrl,
+        String moodText,
         String message,
         LocalDateTime createdAt
 ) {
-    /** 우리 이모지가 아닌(또는 아직 URL 을 못 찾은) 무드 */
+    /** 우리 이모지가 아닌(또는 숨겨져 유니코드로 되돌린) 무드 */
     public static MoodEntry from(MoodStatus status) {
-        return of(status, null);
+        return new MoodEntry(status.getEmoji(), status.getCoupleEmojiId(), null, status.getEmoji(),
+                status.getMessage(), status.getCreatedAt());
     }
 
-    public static MoodEntry of(MoodStatus status, String imageUrl) {
-        return new MoodEntry(status.getEmoji(), status.getCoupleEmojiId(), imageUrl,
-                status.getMessage(), status.getCreatedAt());
+    /** 우리 이모지 무드 — 그림과 감정에서 나온 글자를 함께 싣는다 */
+    public static MoodEntry of(MoodStatus status, CoupleEmoji emoji) {
+        return new MoodEntry(status.getEmoji(), status.getCoupleEmojiId(), emoji.getImageUrl(),
+                emoji.getEmotion().moodText(), status.getMessage(), status.getCreatedAt());
     }
 }

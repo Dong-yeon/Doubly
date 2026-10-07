@@ -27,11 +27,15 @@ const COLORS = {
   partner: hex(palettes.light.partnerText),
 };
 
-/** "보리 😴 “야근 중”" — 한마디가 없으면 이름과 이모지만 */
-function moodLine(name: string | null, mood: { emoji: string; message?: string | null }): string {
+/**
+ * "보리 😴 “야근 중”" — 한마디가 없으면 이름과 이모지만. 표정이 아닌 우리 이모지면 이모지 자리에 이름이 온다
+ * ("보리 지금 배고파") — 대역(🫠)은 같은 뜻이 아니다. text 가 없는 옛 캐시는 이모지로 그린다.
+ */
+function moodLine(name: string | null, mood: NonNullable<WidgetData['partnerMood']>): string {
   const who = name ?? '상대';
+  const what = mood.text?.trim() || mood.emoji;
   const note = mood.message?.trim();
-  return note ? `${who} ${mood.emoji} “${note}”` : `${who} 지금 ${mood.emoji}`;
+  return note ? `${who} ${what} “${note}”` : `${who} 지금 ${what}`;
 }
 
 export function DoublyWidget({ data }: { data: WidgetData | null }) {

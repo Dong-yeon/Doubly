@@ -2015,6 +2015,12 @@ export interface MoodEntry {
    * 상대가 그 이모지를 지우면 서버가 다시 null 로 내려주므로 저절로 유니코드로 돌아간다.
    */
   imageUrl?: string | null;
+  /**
+   * 그림 없이 글자로만 보여 줄 자리(안드로이드 홈 위젯)에 쓸 말 — 대개 {@link emoji} 와 같고, 표정이 아닌
+   * 우리 이모지면 그 이름(배고파)이다. 대역(🫠 녹음)은 같은 뜻이 아니라서다(서버 MoodEntry.moodText).
+   * 2026-10-07 이전 서버엔 없다.
+   */
+  moodText?: string | null;
   message?: string | null;
   createdAt: string;
 }

@@ -69,7 +69,7 @@ import { uploadApi, wasRejected } from '../../api/upload';
 import { reportError } from '../../utils/errorReporter';
 import { updateHomeWidget } from '../../widget/updateHomeWidget';
 import { HOME_RECORD_EXCLUDE, feedSummary, isHomeRecord } from '../../utils/feedSummary';
-import { loadWidgetData } from '../../widget/widgetData';
+import { loadWidgetData, widgetMoodOf } from '../../widget/widgetData';
 import { touchGestureOf } from '../../constants/touchGestures';
 import { playTouchGesture } from '../../utils/haptics';
 import type {
@@ -516,7 +516,7 @@ export function HomeScreen({ navigation }: Props) {
         ? null
         : mood
           ? mood.partner
-            ? { emoji: mood.partner.emoji, message: mood.partner.message ?? null }
+            ? widgetMoodOf(mood.partner)
             : null
           : undefined,
       updatedAt: new Date().toISOString(),
