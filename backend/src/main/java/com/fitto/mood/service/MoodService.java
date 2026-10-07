@@ -110,6 +110,8 @@ public class MoodService {
         Relation couple = activeCouple(userId);
 
         String emoji;
+        // 푸시에 실을 기분 — 대개 emoji 와 같고, 표정이 아닌 우리 이모지만 이름이다(CoupleEmojiEmotion.moodText)
+        String moodText;
         Long coupleEmojiId = null;
         if (req.coupleEmojiId() != null) {
             // 우리 이모지 무드(V81) — 내 관계의, 숨기지 않은 것만. PRO 판정은 하지 않는다:
@@ -121,11 +123,13 @@ public class MoodService {
             coupleEmojiId = chosen.getId();
             // emoji 는 클라이언트 값을 믿지 않고 감정에서 채운다 — NOT NULL 이고 푸시가 그대로 읽는다.
             emoji = chosen.getEmotion().moodEmoji();
+            moodText = chosen.getEmotion().moodText();
         } else {
             if (req.emoji() == null || req.emoji().isBlank()) {
                 throw new BusinessException(ErrorCode.INVALID_INPUT, "무드를 선택해주세요.");
             }
             emoji = req.emoji();
+            moodText = emoji;
             // 확장 무드팩은 유료 팩(MOOD_PREMIUM) — 스티커와 같은 경로로 판정한다(둘 다 원가 0의
             // 꾸미기라 Feature.PREMIUM_STICKER 를 공유하고, 이제 낱개로도 살 수 있다).
             // 목록에 없는 이모지는 예전처럼 자유롭게 쓸 수 있다(StickerPacks.ofMoodEmoji 주석).
@@ -149,7 +153,7 @@ public class MoodService {
         Long partnerId = couple.partnerOf(userId);
         if (partnerId != null && shouldPush(previous, message, LocalDateTime.now())) {
             notificationService.notify(partnerId, NotificationCategory.PARTNER, "지금 기분",
-                    pushBody(userName(userId), emoji, req.message()), PushLinks.HOME);
+                    pushBody(userName(userId), moodText, req.message()), PushLinks.HOME);
         }
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.MOOD);
         return current(userId);
@@ -182,9 +186,11 @@ public class MoodService {
      * <p>예전엔 이모지만 보내서, 피커가 받은 "상대에게 한마디"(20자)가 상대의 알림에 실리지 않았다 —
      * 받는 사람이 앱을 열기 전에 보는 유일한 자리가 푸시다(docs/daily-mood-current-state.md §8-7).
      * 20자라 잘라낼 일은 없다(MoodRequest @Size).
+     *
+     * @param mood 이모지, 또는 표정이 아닌 우리 이모지면 그 이름(배고파) — {@code CoupleEmojiEmotion.moodText}
      */
-    static String pushBody(String name, String emoji, String message) {
-        String body = name + "님 지금 기분: " + emoji;
+    static String pushBody(String name, String mood, String message) {
+        String body = name + "님 지금 기분: " + mood;
         String note = message == null ? null : message.strip();
         return note == null || note.isEmpty() ? body : body + " “" + note + "”";
     }

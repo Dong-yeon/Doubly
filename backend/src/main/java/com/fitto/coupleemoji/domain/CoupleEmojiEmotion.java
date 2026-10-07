@@ -102,9 +102,32 @@ public enum CoupleEmojiEmotion {
      *
      * <p><b>확장팩(PRO) 이모지를 쓰면 안 된다</b> — {@code MoodService.set} 이 {@code MoodPack.isPremium}
      * 으로 PRO 판정을 하므로, 무료 사용자가 자기 우리 이모지를 무드로 걸 때 402 가 난다.
+     *
+     * <p><b>같은 뜻은 표정 6종({@link #isFace})뿐이다.</b> 나머지는 12종 안에 맞는 게 없어 가장 가까운 것을
+     * 고른 대역이라(배고파 → 🫠 녹음, 열일 → 🤔 고민) 이 값을 사람에게 "이 기분"이라고 보여 주면 어긋난다 —
+     * 글자로 보여 줄 자리는 {@link #moodText} 를 쓴다.
      */
     public String moodEmoji() {
         return moodEmoji;
+    }
+
+    /**
+     * 무드 기본 12종과 <b>같은 뜻</b>인 표정인가 — 표정 6종만. 앱의 {@code isFaceEmotion}
+     * (constants/coupleEmojiEmotions.ts)과 같은 집합이고, 무드 시트에서 기본 칸을 덮는 것도 이것뿐이다.
+     */
+    public boolean isFace() {
+        return switch (this) {
+            case ANGRY, HAPPY, EXCITED, SAD, SLEEPY, LOVE -> true;
+            default -> false;
+        };
+    }
+
+    /**
+     * 이 감정을 무드로 걸었을 때 글자 자리(푸시 본문)에 쓸 말 — 표정이면 대역 이모지, 아니면 이름.
+     * 예전엔 늘 대역을 실어서 "배고파"를 건 사람의 상대가 "지금 기분: 🫠"을 받았다(2026-10-07).
+     */
+    public String moodText() {
+        return isFace() ? moodEmoji : label;
     }
 
     /** 한국어 라벨 — 알림 미리보기·트레이 툴팁용 */
@@ -126,9 +149,6 @@ public enum CoupleEmojiEmotion {
      * 쓰고 싶으면 켜서 올린다(트레이에서 길게 눌러 토글).
      */
     public boolean defaultMoodVisible() {
-        return switch (this) {
-            case ANGRY, HAPPY, EXCITED, SAD, SLEEPY, LOVE -> true;
-            default -> false;
-        };
+        return isFace();
     }
 }
