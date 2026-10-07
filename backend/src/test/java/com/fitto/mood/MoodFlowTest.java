@@ -135,6 +135,30 @@ class MoodFlowTest {
     }
 
     /**
+     * 위젯처럼 그림 없이 글자만 그리는 자리에 쓸 말 — 표정이 아닌 우리 이모지면 대역(🫠 녹음)이 아니라
+     * 이름이 내려간다(2026-10-07). 저장 값(emoji)은 대역 그대로다.
+     */
+    @Test
+    void 글자로_보여_줄_말은_표정이_아니면_이름이다() {
+        Long a = register("mood-text-a@fitto.com");
+        Long b = register("mood-text-b@fitto.com");
+        Long relationId = connectCouple(a, b);
+        CoupleEmoji hungry = saveEmoji(relationId, a, a, CoupleEmojiEmotion.HUNGRY);
+        CoupleEmoji angry = saveEmoji(relationId, a, a, CoupleEmojiEmotion.ANGRY);
+
+        moodService.set(a, new MoodRequest(null, hungry.getId(), null));
+        MoodEntry seen = moodService.current(b).partner();
+        assertThat(seen.moodText()).isEqualTo("배고파");
+        assertThat(seen.emoji()).isEqualTo(CoupleEmojiEmotion.HUNGRY.moodEmoji());
+
+        moodService.set(a, new MoodRequest(null, angry.getId(), null));
+        assertThat(moodService.current(b).partner().moodText()).isEqualTo(CoupleEmojiEmotion.ANGRY.moodEmoji());
+
+        moodService.set(a, new MoodRequest("😊", null, null));
+        assertThat(moodService.current(b).partner().moodText()).isEqualTo("😊");
+    }
+
+    /**
      * 무드 대역은 <b>기본 12종 안에서</b> 골라야 한다 — 확장팩(PRO) 이모지를 쓰면 무료 사용자가
      * 자기 우리 이모지를 무드로 걸 때 402 가 난다(CoupleEmojiEmotion.moodEmoji 주석).
      */

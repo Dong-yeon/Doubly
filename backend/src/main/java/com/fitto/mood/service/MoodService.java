@@ -100,7 +100,7 @@ public class MoodService {
         }
         return coupleEmojiRepository
                 .findByIdAndRelationIdAndDeletedAtIsNull(status.getCoupleEmojiId(), relationId)
-                .map(emoji -> MoodEntry.of(status, emoji.getImageUrl()))
+                .map(emoji -> MoodEntry.of(status, emoji))
                 .orElseGet(() -> MoodEntry.from(status));
     }
 
