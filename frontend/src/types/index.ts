@@ -1140,6 +1140,22 @@ export interface ContentLog {
   memo?: string | null;
   imageUrl?: string | null;
   createdAt: string;
+  /** 어디서 봤는지(V133) — 없거나 장소가 지워졌으면 null */
+  placeId?: number | null;
+  placeName?: string | null;
+}
+
+/** 장소 상세 "여기서 본 것"(V133) 한 줄 */
+export interface WatchedHere {
+  logId: number;
+  contentId: number;
+  title: string;
+  type: ContentType;
+  posterUrl?: string | null;
+  watchedAt: string;
+  rating?: number | null;
+  loggedBy: number;
+  loggedByName?: string | null;
 }
 
 // 콘텐츠 제목 검색 (TMDB) — 영화·드라마만 대상, 공연(PERFORMANCE)은 결과에 없다
