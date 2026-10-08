@@ -44,6 +44,8 @@ import { errorCodeOf } from '../../api/client';
 import { uploadApi, wasRejected } from '../../api/upload';
 import { track } from '../../api/analytics';
 import { toast } from '../../store/toastStore';
+import { IconButton } from '../../components/IconButton';
+import { bareHeaderItems } from '../../navigation/headerOptions';
 import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
 import { todayKst } from '../../utils/date';
@@ -393,10 +395,58 @@ export function DietRecordScreen({ navigation, route }: Props) {
     [],
   );
 
+  const [deleting, setDeleting] = useState(false);
+  const onDeleteMeal = () => {
+    if (!editing || deleting) return;
+    const run = async (withVisit: boolean) => {
+      setDeleting(true);
+      try {
+        await useDietStore.getState().remove(editing.id, withVisit);
+        if (editing.placeId) usePlaceStore.getState().invalidate();
+        // 지웠으니 나갈 때 "작성 중 포기"로 세지 않는다
+        maybeSavedRef.current = true;
+        haptics.light();
+        toast.success('식단 기록을 삭제했어요.');
+        navigation.goBack();
+      } catch (e) {
+        toast.error(getErrorMessage(e, '식단 기록을 삭제하지 못했어요.'));
+      } finally {
+        setDeleting(false);
+      }
+    };
+    const label = editing.mealTypeLabel ?? '이';
+    if (editing.placeId && editing.placeName) {
+      Alert.alert('식단 기록 삭제', `${label} 기록을 삭제할까요?\n${editing.placeName} 방문 기록도 함께 지울 수 있어요.`, [
+        { text: '취소', style: 'cancel' },
+        { text: '식단만 삭제', onPress: () => void run(false) },
+        { text: '방문 기록도 삭제', style: 'destructive', onPress: () => void run(true) },
+      ]);
+      return;
+    }
+    Alert.alert('식단 기록 삭제', `${label} 기록을 삭제할까요?`, [
+      { text: '취소', style: 'cancel' },
+      { text: '삭제', style: 'destructive', onPress: () => void run(false) },
+    ]);
+  };
+
   // 헤더 제목은 스택 옵션이 "식단 기록"으로 고정돼 있어 수정일 때만 바꿔 단다
   useLayoutEffect(() => {
-    if (editing) navigation.setOptions({ title: '식단 수정' });
-  }, [editing, navigation]);
+    if (!editing) return;
+    /*
+     * 삭제 — 예전엔 목록에서 카드를 길게 눌러야만 지울 수 있었다(2026-10-08 사용자 보고: "식단 삭제 기능이 없어").
+     * 수정 화면 헤더에도 둔다. 장소가 붙은 끼니면 방문 기록도 지울지 묻는다(목록 길게 누르기와 같은 결정 Q4).
+     */
+    const deleteButton = (
+      <IconButton icon="delete-outline" label="식단 기록 삭제" color={colors.danger} onPress={onDeleteMeal} disabled={deleting} />
+    );
+    navigation.setOptions({
+      title: '식단 수정',
+      headerRight: () => deleteButton,
+      unstable_headerRightItems: () => bareHeaderItems(deleteButton),
+    });
+    // onDeleteMeal 은 editing·deleting 으로만 달라진다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing, navigation, deleting]);
 
   const filled = useMemo(() => items.filter(isFilled), [items]);
   /*

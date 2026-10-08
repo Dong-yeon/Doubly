@@ -307,6 +307,70 @@ class MealFlowTest {
         assertThat(mealService.findToday(user)).hasSize(2);
     }
 
+    /**
+     * 오늘 점심을 따로 기록한 뒤 불러오면 어제 점심이 한 끼 더 붙어 점심이 두 개가 됐다(2026-10-08 사용자 보고) —
+     * 예전엔 "내용이 똑같은 끼니"만 건너뛰었다. 이제 오늘 기록한 끼니는 통째로 건너뛴다.
+     */
+    @Test
+    void 오늘_이미_기록한_끼니는_어제_것을_불러오지_않는다() {
+        Long user = register("copy-type@fitto.com");
+        LocalDate yesterday = KstClock.today().minusDays(1);
+        mealService.save(user, sample(yesterday, MealType.BREAKFAST));
+        mealService.save(user, sample(yesterday, MealType.LUNCH));
+        mealService.save(user, new SaveMealRequest(KstClock.today(), MealType.LUNCH, "오늘은 다른 점심", null,
+                700, 80, 30, 20, null, null, null, null));
+
+        List<MealResponse> copied = mealService.copyFrom(user, yesterday);
+
+        assertThat(copied).extracting(MealResponse::mealType).containsExactly(MealType.BREAKFAST);
+        assertThat(mealService.findToday(user)).extracting(MealResponse::mealType)
+                .containsExactlyInAnyOrder(MealType.BREAKFAST, MealType.LUNCH);
+    }
+
+    /** 아침에 어제 하루를 통째로 불러오면 아직 안 먹은 저녁까지 기록됐다(2026-10-08) — 고른 끼니만 온다. */
+    @Test
+    void 고른_끼니만_불러온다() {
+        Long user = register("copy-pick@fitto.com");
+        LocalDate yesterday = KstClock.today().minusDays(1);
+        mealService.save(user, sample(yesterday, MealType.BREAKFAST));
+        mealService.save(user, sample(yesterday, MealType.LUNCH));
+        mealService.save(user, withItems(yesterday, MealType.DINNER));
+
+        List<MealResponse> copied = mealService.copyFrom(user, yesterday, java.util.Set.of(MealType.BREAKFAST));
+
+        assertThat(copied).extracting(MealResponse::mealType).containsExactly(MealType.BREAKFAST);
+        assertThat(mealService.findToday(user)).hasSize(1);
+
+        // 점심때 다시 — 점심만 고르면 점심만 더해진다
+        assertThat(mealService.copyFrom(user, yesterday, java.util.Set.of(MealType.LUNCH)))
+                .extracting(MealResponse::mealType).containsExactly(MealType.LUNCH);
+        assertThat(mealService.findToday(user)).hasSize(2);
+    }
+
+    @Test
+    void 고른_끼니가_오늘_이미_있으면_이유를_말한다() {
+        Long user = register("copy-pick-dup@fitto.com");
+        LocalDate yesterday = KstClock.today().minusDays(1);
+        mealService.save(user, sample(yesterday, MealType.DINNER));
+        mealService.save(user, sample(KstClock.today(), MealType.DINNER));
+
+        assertThatThrownBy(() -> mealService.copyFrom(user, yesterday, java.util.Set.of(MealType.DINNER)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("저녁")
+                .extracting("errorCode").isEqualTo(ErrorCode.MEAL_ALREADY_COPIED);
+    }
+
+    @Test
+    void 고른_끼니가_어제_없으면_없다고_말한다() {
+        Long user = register("copy-pick-none@fitto.com");
+        LocalDate yesterday = KstClock.today().minusDays(1);
+        mealService.save(user, sample(yesterday, MealType.LUNCH));
+
+        assertThatThrownBy(() -> mealService.copyFrom(user, yesterday, java.util.Set.of(MealType.SNACK)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.NOT_FOUND);
+    }
+
     /** 오늘을 "불러올 날짜"로 주면 오늘 식단이 그대로 한 벌 더 생겼다 — isAfter 만 보던 검사의 빈틈. */
     @Test
     void 오늘_식단은_오늘로_불러올_수_없다() {

@@ -148,18 +148,20 @@ public class MealController {
     }
 
     /**
-     * 지정한 날짜(기본: 어제)의 식단을 오늘 날짜로 통째로 복사 — "어제 식단 불러오기" 3초 퀵 로깅.
+     * 지정한 날짜(기본: 어제)의 식단을 오늘 날짜로 복사 — "어제 식단 불러오기" 3초 퀵 로깅. mealTypes 를 주면 그 끼니만
+     * (아침에 어제 저녁까지 기록되지 않게), 오늘 이미 기록한 끼니는 늘 건너뛴다.
      */
     @PostMapping("/copy")
     public ApiResponse<List<MealResponse>> copyFrom(@AuthenticationPrincipal AuthUser user,
-                                                     @RequestParam(required = false) LocalDate sourceDate) {
+                                                     @RequestParam(required = false) LocalDate sourceDate,
+                                                     @RequestParam(required = false) java.util.Set<com.fitto.diet.domain.MealType> mealTypes) {
         /*
          * 기본값의 "어제"는 KST 기준이다. 프런트는 sourceDate 를 보내지 않으므로(diet.ts
          * copyFromYesterday) 이 기본값이 실사용 경로다 — 존 없는 now() 였을 때는 서버가
          * UTC 라 한국 00:00~09:00 에 누르면 어제가 아니라 그저께 식단을 복사했다.
          */
         LocalDate from = sourceDate != null ? sourceDate : KstClock.today().minusDays(1);
-        return ApiResponse.success(mealService.copyFrom(user.id(), from), "어제 식단을 불러왔어요.");
+        return ApiResponse.success(mealService.copyFrom(user.id(), from, mealTypes), "어제 식단을 불러왔어요.");
     }
 
     @GetMapping("/today")
