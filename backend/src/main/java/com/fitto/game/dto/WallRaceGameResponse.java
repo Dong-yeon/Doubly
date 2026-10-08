@@ -22,6 +22,8 @@ import java.util.List;
  * @param moves        'P12' / 'W35H' 순서대로. 무르기가 이걸 재생해 한 수 전으로 돌아간다
  * @param undoRequest  MINE(내가 걸어둠) / PARTNER(상대가 걸어옴) / null(없음)
  * @param canUndo      지금 내가 무르기를 걸 수 있는가 — 직전에 둔 쪽만 걸 수 있다
+ * @param illegalWalls 지금 내가 놓을 수 없는 벽 자리(겹침·길 막힘) — 내 차례이고 벽이 남았을 때만. 드래그 미리보기를
+ *                     미리 빨갛게 칠하는 데 쓴다. 서버가 같은 규칙으로 계산하므로 앱에 규칙이 두 벌 생기지 않는다
  */
 public record WallRaceGameResponse(
         Long id,
@@ -44,8 +46,13 @@ public record WallRaceGameResponse(
         boolean canUndo,
         String partnerName,
         LocalDateTime createdAt,
-        LocalDateTime completedAt
+        LocalDateTime completedAt,
+        List<IllegalWall> illegalWalls
 ) {
+    /** @param kind "H" / "V" · @param reason OVERLAP / BLOCKS_PATH */
+    public record IllegalWall(int slot, String kind, String reason) {
+    }
+
     public static WallRaceGameResponse of(WallRaceGame game, Long viewerId, String partnerName) {
         char mine = game.sideOf(viewerId);
         char theirs = WallRaceGame.opponentOf(mine);
@@ -75,7 +82,12 @@ public record WallRaceGameResponse(
                 game.canRequestUndo(viewerId),
                 partnerName,
                 game.getCreatedAt(),
-                game.getCompletedAt()
+                game.getCompletedAt(),
+                myTurn && game.wallsLeftOf(mine) > 0
+                        ? game.illegalWalls().stream()
+                                .map(w -> new IllegalWall(w.slot(), String.valueOf(w.kind()), w.reason()))
+                                .toList()
+                        : List.of()
         );
     }
 }
