@@ -11,7 +11,7 @@
  * 바로 놓지 않는다 — 교차점을 누르면 미리보기가 뜨고 한 번 더 눌러야 확정된다.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Pressable, Text, View } from 'react-native';
+import { FlatList, PanResponder, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -58,7 +58,22 @@ const GOAL_PARTNER = palettes.light.partnerPastelBg;
 /** 수 요청 순번 — 옛 응답이 새 상태를 덮지 않도록(OmokScreen.placeSeq 와 같은 이유) */
 let moveSeq = 0;
 
-type Pending = { slot: number; kind: 'H' | 'V' };
+type WallKind = 'H' | 'V';
+type Pending = { slot: number; kind: WallKind };
+
+/**
+ * 끄는 벽 미리보기를 손가락보다 이만큼 위에 띄운다 — 손가락이 벽을 가리면 어디에 붙는지 보이지 않는다
+ * (Quoridor.II 리뷰의 "원하는 자리에 놓기가 거의 불가능"이 이것이다. docs/pathlock-ux-analysis_2026-10-08.md §3-4)
+ */
+const DRAG_LIFT = 48;
+/** 이 거리보다 덜 움직였으면 끈 게 아니라 누른 것이다 — 탭 모드로 들어간다 */
+const TAP_SLOP = 8;
+
+/** 놓을 수 없는 이유 — 서버 ErrorCode 의 문장과 같은 뜻으로 맞춘다 */
+const ILLEGAL_REASON: Record<string, string> = {
+  OVERLAP: '이미 벽이 있는 자리예요',
+  BLOCKS_PATH: '길을 완전히 막을 수는 없어요',
+};
 
 const PAD = 4;
 /** 홈(벽이 놓이는 칸 사이 틈)의 폭 — 칸 한 변에 대한 비율 */
@@ -106,6 +121,93 @@ function lastMoveOf(moves: string[]): { cell: number | null; slot: number | null
   return { cell: null, slot: null };
 }
 
+/**
+ * 대국판 View — 끌기를 시작할 때 화면 위치를 잰다. 트레이 처리기를 한 번만 만들려고 모듈 변수에 둔다
+ * (PuyoScreen 의 live·session 과 같은 이유 — 처리기는 만든 순간의 클로저를 든다). 대국판은 화면에 하나뿐이다.
+ */
+let boardNode: View | null = null;
+function setBoardNode(view: View | null) {
+  boardNode = view;
+}
+
+type TrayActions = {
+  setDrag: (d: { kind: WallKind; slot: number | null } | null) => void;
+  setTapKind: (k: WallKind) => void;
+  setWallMode: (on: boolean) => void;
+  setPending: (u: (prev: Pending | null) => Pending | null) => void;
+};
+
+/**
+ * 트레이 조각 하나의 제스처 — 끌면 판 위 교차점에 스냅된 미리보기, 손을 떼면 "놓을까요?"로 남긴다.
+ * 끌지 않고 누르면 탭 모드(교차점을 눌러 고르기). 판 밖에서 놓으면 취소.
+ * docs/pathlock-ux-analysis_2026-10-08.md §3-1.
+ */
+function createTrayResponder(kind: WallKind, a: TrayActions) {
+  // 한 번의 터치 동안만 사는 값 — 처리기와 같이 만들어져 ref 가 필요 없다(PuyoScreen 의 pan 과 같다)
+  const cur = { frame: null as { x: number; y: number; size: number } | null, slot: null as number | null, dragging: false };
+  const end = () => {
+    cur.dragging = false;
+    a.setDrag(null);
+  };
+  return PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    // 끄는 도중 목록·화면이 손가락을 가져가지 못하게 한다
+    onPanResponderTerminationRequest: () => false,
+    onPanResponderGrant: () => {
+      cur.frame = null;
+      cur.slot = null;
+      cur.dragging = false;
+      boardNode?.measure((_x, _y, w, _h, pageX, pageY) => {
+        cur.frame = { x: pageX, y: pageY, size: w };
+      });
+    },
+    onPanResponderMove: (e, g) => {
+      if (!cur.dragging && Math.abs(g.dx) < TAP_SLOP && Math.abs(g.dy) < TAP_SLOP) return;
+      const slot = snapToSlot(cur.frame, e.nativeEvent.pageX, e.nativeEvent.pageY);
+      if (cur.dragging && slot === cur.slot) return;
+      if (slot !== null) haptics.light();
+      cur.dragging = true;
+      cur.slot = slot;
+      a.setDrag({ kind, slot });
+    },
+    onPanResponderRelease: () => {
+      const { dragging, slot } = cur;
+      end();
+      if (!dragging) {
+        // 끌지 않고 눌렀다 — 탭 모드. 정밀 조작이 어려운 경우·스크린리더용
+        a.setTapKind(kind);
+        a.setWallMode(true);
+        a.setPending((prev) => (prev ? { slot: prev.slot, kind } : null));
+        return;
+      }
+      if (slot === null) return; // 판 밖에서 놓았다 — 취소
+      a.setTapKind(kind);
+      a.setWallMode(true);
+      a.setPending(() => ({ slot, kind }));
+    },
+    onPanResponderTerminate: end,
+  });
+}
+
+/**
+ * 손가락 위치를 가장 가까운 교차점으로 — 판 밖이면 null. 손가락보다 DRAG_LIFT 위를 겨눈다.
+ * 스냅 반경은 교차점 간격의 절반이라 판 안이면 어디서든 한 점에 붙는다(빈틈 없음).
+ */
+function snapToSlot(frame: { x: number; y: number; size: number } | null, pageX: number, pageY: number): number | null {
+  if (!frame) return null;
+  const x = pageX - frame.x;
+  const y = pageY - DRAG_LIFT - frame.y;
+  const margin = frame.size * 0.08;
+  if (x < -margin || y < -margin || x > frame.size + margin || y > frame.size + margin) return null;
+  const { pitch, gap } = geometry(frame.size);
+  // jointX(c) = PAD + (c + 1)·pitch − gap/2 를 거꾸로 푼다
+  const c = Math.round((x - PAD + gap / 2) / pitch - 1);
+  const r = Math.round((y - PAD + gap / 2) / pitch - 1);
+  const clamp = (v: number) => Math.max(0, Math.min(WALL_SIZE - 1, v));
+  return clamp(r) * WALL_SIZE + clamp(c);
+}
+
 function inRange(value: number, limit: number): boolean {
   return Number.isInteger(value) && value >= 0 && value < limit;
 }
@@ -139,6 +241,13 @@ export function WallRaceScreen(_: Props) {
   /** 벽 모드에서 고른 자리 — 확정 전이라 아직 서버에 가지 않았다 */
   const [pending, setPending] = useState<Pending | null>(null);
   const [wallMode, setWallMode] = useState(false);
+  /** 탭 모드에서 새로 고르는 자리에 쓸 방향 — 트레이에서 누른 조각 */
+  const [tapKind, setTapKind] = useState<WallKind>('H');
+  /**
+   * 트레이에서 끌고 있는 벽 — slot 은 지금 붙을 교차점(판 밖이면 null).
+   * 끄는 동안 목록 스크롤을 잠근다(캐치마인드 캔버스와 같은 이유 — 위아래로 끌면 화면이 같이 내려간다).
+   */
+  const [drag, setDrag] = useState<{ kind: WallKind; slot: number | null } | null>(null);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -254,6 +363,11 @@ export function WallRaceScreen(_: Props) {
 
   const confirmWall = async () => {
     if (!game || !pending || busy) return;
+    const reason = illegalReason(game, pending.slot, pending.kind);
+    if (reason) {
+      toast.error(reason);
+      return;
+    }
     haptics.light();
     setBusy(true);
     const seq = ++moveSeq;
@@ -270,6 +384,29 @@ export function WallRaceScreen(_: Props) {
     } finally {
       if (seq === moveSeq) setBusy(false);
     }
+  };
+
+  /*
+   * ── 드래그로 벽 놓기 (docs/pathlock-ux-analysis_2026-10-08.md §3) ─────────────────
+   * 트레이의 가로·세로 조각을 끌어 판에 놓는다. 손을 떼면 바로 서버에 보내지 않고 "놓을까요?"(판 위 [놓기]/✕)로
+   * 남긴다 — 벽은 되돌리기 어려운 자원이고 무르기는 상대 동의가 필요해서다(§3-2).
+   * 제스처 처리기는 한 번 만들고 최신 값은 ref 로 읽는다(PanResponder 는 만든 순간의 클로저를 든다).
+   */
+  const startTapMode = (kind: WallKind) => {
+    setTapKind(kind);
+    setWallMode(true);
+    // 이미 고른 자리가 있으면 방향만 바꾼다 — 트레이 조각이 곧 방향 토글이다
+    setPending((prev) => (prev ? { slot: prev.slot, kind } : null));
+  };
+
+  // 처리기는 한 번만 만든다 — 상태 setter 만 쓰므로 다시 만들 이유가 없다
+  const trayH = useMemo(() => createTrayResponder('H', { setDrag, setTapKind, setWallMode, setPending }), []);
+  const trayV = useMemo(() => createTrayResponder('V', { setDrag, setTapKind, setWallMode, setPending }), []);
+
+  /** 지금 판에서 그 자리에 벽을 놓을 수 없는 이유 — 서버가 내려준 목록에서 찾는다(규칙은 서버에 한 벌) */
+  const illegalReason = (g: WallRaceGame, slot: number, kind: WallKind): string | null => {
+    const hit = g.illegalWalls?.find((w) => w.slot === slot && w.kind === kind);
+    return hit ? (ILLEGAL_REASON[hit.reason] ?? '여기는 놓을 수 없어요') : null;
   };
 
   const askUndo = async () => {
@@ -357,6 +494,15 @@ export function WallRaceScreen(_: Props) {
 
   const renderBoard = (g: WallRaceGame, interactive: boolean, size = boardSize) => {
     const { cell, gap, pitch, cellX, cellY, jointX, jointY } = geometry(size);
+    // 끄는 중이면 끄는 벽이, 아니면 확정을 기다리는 벽이 미리보기다
+    const preview: Pending | null = !interactive
+      ? null
+      : drag
+        ? drag.slot === null
+          ? null
+          : { slot: drag.slot, kind: drag.kind }
+        : pending;
+    const previewIllegal = preview ? illegalReason(g, preview.slot, preview.kind) : null;
     const legal = new Set(interactive && !wallMode ? g.legalMoves : []);
     const pawnSize = cell * 0.62;
     const dotSize = cell * 0.3;
@@ -371,7 +517,7 @@ export function WallRaceScreen(_: Props) {
     const jointHit = pitch;
 
     return (
-      <View style={[styles.board, { width: size, height: size }]}>
+      <View ref={interactive ? setBoardNode : undefined} style={[styles.board, { width: size, height: size }]}>
         {/* 칸 — 목표 줄은 옅게 칠해 "어디로 가야 하는지"가 판에서 바로 읽히게 한다 */}
         {Array.from({ length: SIZE * SIZE }, (_, index) => {
           const row = Math.floor(index / SIZE);
@@ -473,16 +619,20 @@ export function WallRaceScreen(_: Props) {
           return <View key={`w${slot}`} style={[styles.wall, wallRect(slot, kind)]} />;
         })}
 
-        {/* 미리보기 — 아직 서버에 가지 않은 벽. 확정 버튼을 눌러야 놓인다 */}
-        {interactive && pending ? (
+        {/* 미리보기 — 아직 서버에 가지 않은 벽. 놓을 수 없는 자리면 빨갛게(서버가 내려준 목록) */}
+        {preview ? (
           <View
             pointerEvents="none"
-            style={[styles.wall, styles.wallPreview, wallRect(pending.slot, pending.kind)]}
+            style={[
+              styles.wall,
+              previewIllegal ? styles.wallIllegal : styles.wallPreview,
+              wallRect(preview.slot, preview.kind),
+            ]}
           />
         ) : null}
 
         {/* 벽 모드일 때만 교차점 탭 영역을 깐다 — 평소엔 말 이동을 가리지 않게 없앤다 */}
-        {interactive && wallMode
+        {interactive && wallMode && !drag
           ? Array.from({ length: WALL_SIZE * WALL_SIZE }, (_, slot) => {
               const r = Math.floor(slot / WALL_SIZE);
               const c = slot % WALL_SIZE;
@@ -495,7 +645,7 @@ export function WallRaceScreen(_: Props) {
                       // 같은 자리를 다시 누르면 방향이 바뀐다 — 손가락 하나로 둘 다 고를 수 있게
                       prev && prev.slot === slot
                         ? { slot, kind: prev.kind === 'H' ? 'V' : 'H' }
-                        : { slot, kind: 'H' },
+                        : { slot, kind: tapKind },
                     )
                   }
                   accessibilityRole="button"
@@ -521,8 +671,64 @@ export function WallRaceScreen(_: Props) {
               );
             })
           : null}
+
+        {/* 판 위 확인 — 놓을 자리 바로 옆에 [놓기]/✕. 끄는 중에는 숨긴다 */}
+        {interactive && pending && !drag ? renderConfirm(pending) : null}
       </View>
     );
+
+    /** 미리보기 벽 옆의 [놓기]/✕ — 가로 벽은 위(맨 윗줄이면 아래), 세로 벽은 오른쪽(오른쪽 끝이면 왼쪽)에 붙인다 */
+    function renderConfirm(p: Pending) {
+      const r = Math.floor(p.slot / WALL_SIZE);
+      const c = p.slot % WALL_SIZE;
+      const btn = Math.max(32, Math.min(40, cell * 1.1));
+      const okW = btn * 1.7;
+      const w = okW + btn + 6;
+      const cx = jointX(c);
+      const cy = jointY(r);
+      let left: number;
+      let top: number;
+      if (p.kind === 'H') {
+        left = cx - w / 2;
+        top = r === 0 ? cy + gap + 4 : cy - gap / 2 - btn - 6;
+      } else {
+        left = c >= WALL_SIZE - 2 ? cx - gap / 2 - w - 6 : cx + gap / 2 + 6;
+        top = cy - btn / 2;
+      }
+      left = Math.max(2, Math.min(size - w - 2, left));
+      top = Math.max(2, Math.min(size - btn - 2, top));
+      return (
+        <View style={[styles.confirmRow, { left, top }]}>
+          <Pressable
+            onPress={confirmWall}
+            disabled={busy || !!previewIllegal}
+            accessibilityRole="button"
+            accessibilityLabel={p.kind === 'H' ? '가로 벽 놓기' : '세로 벽 놓기'}
+            style={({ pressed }) => [
+              styles.confirmBtn,
+              { width: okW, height: btn, borderRadius: btn / 2 },
+              previewIllegal ? styles.confirmBtnOff : styles.confirmBtnOk,
+              pressed && styles.confirmPressed,
+            ]}
+          >
+            <Text style={styles.confirmText}>놓기</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setPending(null)}
+            accessibilityRole="button"
+            accessibilityLabel="이 자리 취소"
+            style={({ pressed }) => [
+              styles.confirmBtn,
+              styles.confirmBtnCancel,
+              { width: btn, height: btn, borderRadius: btn / 2 },
+              pressed && styles.confirmPressed,
+            ]}
+          >
+            <MaterialCommunityIcons name="close" size={btn * 0.55} color={WALL_COLOR} />
+          </Pressable>
+        </View>
+      );
+    }
 
     /** 벽 하나의 사각형 — 두 칸 길이로 홈을 덮는다. {@code grow} 는 사방으로 넓히는 여백(후광) */
     function wallRect(slot: number, kind: 'H' | 'V', grow = 0) {
@@ -576,45 +782,65 @@ export function WallRaceScreen(_: Props) {
     );
   };
 
+  /**
+   * 내 차례의 조작 줄 — 벽 트레이(가로·세로 조각)를 늘 보여 준다. 조각을 <b>끌어</b> 판에 놓거나, <b>눌러</b>
+   * 탭 모드(교차점 고르기)로 들어간다. 예전의 "벽 놓기 → 점 누르기 → 같은 점 다시 눌러 방향 → 확정" 4단계를
+   * 끌기·놓기 두 단계로 줄였다(docs/pathlock-ux-analysis_2026-10-08.md).
+   */
   const renderActionBar = (g: WallRaceGame) => {
     if (!g.myTurn) return <Text style={styles.hint}>상대가 두면 바로 보여요.</Text>;
-    if (!wallMode) {
-      return (
-        <View style={styles.actionRow}>
-          <Text style={styles.hint}>파란 점을 누르면 말이 움직여요.</Text>
-          <Button
-            title={g.myWallsLeft > 0 ? `벽 놓기 (${g.myWallsLeft})` : '벽 없음'}
-            size="sm"
-            variant="ghost"
-            disabled={g.myWallsLeft <= 0 || busy}
-            onPress={() => { setWallMode(true); setPending(null); }}
-          />
-        </View>
-      );
+    const hasWalls = g.myWallsLeft > 0;
+    const dragIllegal = drag && drag.slot !== null ? illegalReason(g, drag.slot, drag.kind) : null;
+    const pendingIllegal = pending ? illegalReason(g, pending.slot, pending.kind) : null;
+    let hint: string;
+    if (drag) {
+      hint = drag.slot === null
+        ? '판 위로 끌어 오세요. 판 밖에서 놓으면 취소돼요.'
+        : (dragIllegal ?? '손을 떼면 그 자리에 미리 놓여요.');
+    } else if (pending) {
+      hint = pendingIllegal ?? "'놓기'를 누르면 놓여요. 다른 자리면 다시 끌어 오세요.";
+    } else if (wallMode) {
+      hint = '칸과 칸이 만나는 점을 눌러도 돼요. 같은 점을 다시 누르면 방향이 바뀌어요.';
+    } else {
+      hint = hasWalls
+        ? '파란 점을 누르면 말이 움직여요. 벽은 아래 조각을 판으로 끌어 놓아요.'
+        : '벽을 다 썼어요. 말을 움직여요.';
     }
+    const activeKind = drag?.kind ?? (wallMode ? (pending?.kind ?? tapKind) : null);
     return (
       <View style={styles.wallPanel}>
-        <Text style={styles.hint}>
-          {pending
-            ? '같은 자리를 다시 누르면 가로·세로가 바뀌어요.'
-            : '칸과 칸이 만나는 점을 누르면 벽이 미리 보여요.'}
-        </Text>
-        <View style={styles.actionRow}>
-          <Button
-            title="취소"
-            size="sm"
-            variant="ghost"
-            onPress={() => { setWallMode(false); setPending(null); }}
-            disabled={busy}
-          />
-          <Button
-            title={pending ? (pending.kind === 'H' ? '가로로 놓기' : '세로로 놓기') : '자리를 고르세요'}
-            size="sm"
-            disabled={!pending || busy}
-            loading={busy}
-            onPress={confirmWall}
-          />
-        </View>
+        {hasWalls ? (
+          <View style={styles.tray}>
+            {(['H', 'V'] as const).map((kind) => (
+              <View
+                key={kind}
+                {...(kind === 'H' ? trayH : trayV).panHandlers}
+                accessible
+                accessibilityRole="button"
+                accessibilityLabel={kind === 'H' ? '가로 벽, 끌어서 놓거나 눌러서 자리 고르기' : '세로 벽, 끌어서 놓거나 눌러서 자리 고르기'}
+                onAccessibilityTap={() => startTapMode(kind)}
+                pointerEvents={busy ? 'none' : 'auto'}
+                style={[styles.trayPiece, activeKind === kind && styles.trayPieceOn, busy && styles.trayPieceOff]}
+              >
+                <View style={kind === 'H' ? styles.trayWallH : styles.trayWallV} />
+              </View>
+            ))}
+            <View style={styles.trayCount}>
+              <Text style={styles.trayCountNum}>{g.myWallsLeft}</Text>
+              <Text style={styles.trayCountLabel}>남은 벽</Text>
+            </View>
+            {wallMode ? (
+              <Button
+                title="벽 그만"
+                size="sm"
+                variant="ghost"
+                onPress={() => { setWallMode(false); setPending(null); }}
+                disabled={busy}
+              />
+            ) : null}
+          </View>
+        ) : null}
+        <Text style={[styles.hint, dragIllegal || pendingIllegal ? styles.hintBad : null]}>{hint}</Text>
       </View>
     );
   };
@@ -739,6 +965,7 @@ export function WallRaceScreen(_: Props) {
         windowSize={5}
         refreshing={loading}
         onRefresh={() => load()}
+        scrollEnabled={!drag}
         ListHeaderComponent={header}
         renderItem={({ item }) => (
           /*
@@ -836,6 +1063,41 @@ const styles = themedStyles((colors) => ({
   pawn: { position: 'absolute', borderWidth: 2, borderColor: '#FFFFFF' },
   wall: { position: 'absolute', backgroundColor: WALL_COLOR, borderRadius: 2 },
   wallPreview: { opacity: 0.45 },
+  wallIllegal: { backgroundColor: colors.danger, opacity: 0.7 },
+  confirmRow: { position: 'absolute', flexDirection: 'row', gap: 6 },
+  confirmBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+  },
+  confirmBtnOk: { backgroundColor: WALL_COLOR },
+  confirmBtnOff: { backgroundColor: GROOVE },
+  confirmBtnCancel: { backgroundColor: CELL_BG, borderWidth: 1, borderColor: GROOVE },
+  confirmPressed: { opacity: 0.7 },
+  confirmText: { color: '#FFFFFF', fontWeight: '800', fontSize: fontSize.caption },
+  tray: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xs },
+  trayPiece: {
+    width: 64,
+    height: 52,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  trayPieceOn: { borderColor: WALL_COLOR, borderWidth: 2 },
+  trayPieceOff: { opacity: 0.4 },
+  trayWallH: { width: 40, height: 8, borderRadius: 2, backgroundColor: WALL_COLOR },
+  trayWallV: { width: 8, height: 36, borderRadius: 2, backgroundColor: WALL_COLOR },
+  trayCount: { alignItems: 'center', marginLeft: spacing.xs },
+  trayCountNum: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
+  trayCountLabel: { fontSize: 10, color: colors.textSecondary, fontWeight: '700' },
+  hintBad: { color: colors.danger, fontWeight: '700' },
   /* 마지막 수 표시 — 말에는 테두리, 벽에는 후광. 둘 다 판 색과 다른 쪽으로 튀어야 눈에 걸린다 */
   lastRing: { position: 'absolute', borderWidth: 2, borderColor: '#F5A524' },
   lastWall: { position: 'absolute', backgroundColor: '#F5A524', borderRadius: 3 },

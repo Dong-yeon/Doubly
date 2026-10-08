@@ -72,7 +72,17 @@ export function HomeStackNavigator() {
       <Stack.Screen name="MiniGames" component={MiniGamesScreen} options={{ title: '미니게임' }} />
       <Stack.Screen name="Sudoku" component={SudokuScreen} options={{ title: '협동 스도쿠' }} />
       <Stack.Screen name="Omok" component={OmokScreen} options={{ title: '오목' }} />
-      <Stack.Screen name="WallRace" component={WallRaceScreen} options={{ title: '길막기' }} />
+      <Stack.Screen
+        name="WallRace"
+        component={WallRaceScreen}
+        options={{
+          title: '길막기',
+          // 캐치마인드·연쇄 퍼즐과 같은 이유 — 벽 조각을 판으로 끄는 것이 조작이라, 전역 스와이프백이 켜져 있으면
+          // 오른쪽으로 끄는 순간 화면이 닫힌다(docs/pathlock-ux-analysis_2026-10-08.md §3-4)
+          gestureEnabled: false,
+          fullScreenGestureEnabled: false,
+        }}
+      />
       <Stack.Screen
         name="CatchMind"
         component={CatchMindScreen}
