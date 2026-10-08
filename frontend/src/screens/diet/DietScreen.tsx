@@ -6,7 +6,7 @@
  * 루틴·회복·히스토리 같은 정밀 경로는 그 카드의 "운동 홈 ›"에 그대로 있다.
  * 세그먼트 토글은 만들지 않는다 — 식단 메인이 곧 럽바디 메인이다.
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import {
   FlatList,
   KeyboardAvoidingView,
@@ -44,6 +44,7 @@ import { summaryApi } from '../../api/summary';
 import { streakApi } from '../../api/streak';
 import { getErrorMessage } from '../../utils/error';
 import { yesterdayKst } from '../../utils/date';
+import { CopyYesterdaySheet } from './CopyYesterdaySheet';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { confirmDiscard } from '../../utils/discardGuard';
@@ -368,7 +369,8 @@ export function DietScreen({ navigation, route }: Props) {
   const [savingNut, setSavingNut] = useState(false);
   /** 마법사로 계산했을 때 고른 방향 — 목표 저장에 함께 실린다. 직접 숫자만 고쳤으면 undefined(서버가 기존 값 유지) */
   const [tDirection, setTDirection] = useState<DietGoalType | undefined>(undefined);
-  const [copyingYesterday, setCopyingYesterday] = useState(false);
+  // 어제 식단 불러오기 — 끼니를 고르는 시트(아침에 저녁까지 기록되지 않게)
+  const [copySheetOpen, setCopySheetOpen] = useState(false);
 
   // 목표 칼로리 자동 계산(TDEE 마법사) — 계산만 하고, 확정 저장은 기존 목표 모달의 "저장"으로 한다
   const [wizardModal, setWizardModal] = useState(false);
@@ -661,21 +663,7 @@ ${m.placeName} 방문 기록도 함께 지울 수 있어요.`, [
    */
   const hasYesterday = history.some((m) => m.mealDate === yesterdayKst());
 
-  // 어제 식단을 오늘 날짜로 통째로 복사 — 매일 비슷한 식단을 먹는 유저를 위한 3초 퀵 로깅
-  const onCopyYesterday = async () => {
-    setCopyingYesterday(true);
-    try {
-      const copied = await dietApi.copyFromYesterday();
-      haptics.success();
-      toast.success(`어제 식단 ${copied.length}개를 불러왔어요`);
-      fetchToday();
-      fetchHistory();
-    } catch (e) {
-      toast.error(getErrorMessage(e, '어제 식단을 불러오지 못했어요.'));
-    } finally {
-      setCopyingYesterday(false);
-    }
-  };
+  const yesterdayMeals = useMemo(() => history.filter((m) => m.mealDate === yesterdayKst()), [history]);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -841,8 +829,8 @@ ${m.placeName} 방문 기록도 함께 지울 수 있어요.`, [
               <View style={styles.todayHeaderRight}>
                 {todayCalories > 0 ? <Text style={styles.todayCal}>총 {formatKcal(todayCalories)}</Text> : null}
                 {hasYesterday ? (
-                  <TouchableOpacity onPress={onCopyYesterday} disabled={copyingYesterday} hitSlop={8} accessibilityRole="button">
-                    <Text style={styles.copyYesterday}>{copyingYesterday ? '불러오는 중…' : '어제 식단 불러오기'}</Text>
+                  <TouchableOpacity onPress={() => setCopySheetOpen(true)} hitSlop={8} accessibilityRole="button">
+                    <Text style={styles.copyYesterday}>어제 식단 불러오기</Text>
                   </TouchableOpacity>
                 ) : null}
               </View>
@@ -1365,6 +1353,17 @@ ${m.placeName} 방문 기록도 함께 지울 수 있어요.`, [
           </Pressable>
         </Pressable>
       </Modal>
+      <CopyYesterdaySheet
+        visible={copySheetOpen}
+        onClose={() => setCopySheetOpen(false)}
+        yesterday={yesterdayMeals}
+        today={today}
+        onCopied={() => {
+          fetchToday();
+          fetchHistory();
+          refreshExtras();
+        }}
+      />
     </SafeAreaView>
   );
 }

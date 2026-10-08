@@ -112,8 +112,13 @@ export const dietApi = {
    */
   partnerTodayMeals: () =>
     unwrap(apiClient.get<ApiResponse<FeedItem[]>>('/meal/partner/today/meals')),
-  copyFromYesterday: () =>
-    unwrap(apiClient.post<ApiResponse<Meal[]>>('/meal/copy')),
+  // 고른 끼니만(쉼표로 이어 보낸다 — 서버가 Set<MealType> 으로 받는다). 오늘 이미 기록한 끼니는 서버가 건너뛴다
+  copyFromYesterday: (mealTypes?: MealType[]) =>
+    unwrap(
+      apiClient.post<ApiResponse<Meal[]>>('/meal/copy', undefined, {
+        params: { mealTypes: mealTypes && mealTypes.length > 0 ? mealTypes.join(',') : undefined },
+      }),
+    ),
   /*
    * AI 분석 — 서버는 접수증(jobId)만 주고 생성은 백그라운드에서 한다(api/aiJob.ts 참고).
    * 폴링까지 여기서 끝내므로 호출부는 예전처럼 결과 Promise 를 받는다.
