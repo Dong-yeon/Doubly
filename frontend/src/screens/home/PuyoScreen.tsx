@@ -267,7 +267,7 @@ export function PuyoScreen({ navigation }: Props) {
    * 재기 전 첫 프레임만 어림값을 쓴다.
    */
   const [boardArea, setBoardArea] = useState<{ w: number; h: number } | null>(null);
-  const cell = useMemo(() => {
+  const measuredCell = useMemo(() => {
     const byWidth = Math.floor((width - spacing.lg * 2) / WIDTH);
     const byHeight = boardArea
       ? Math.floor((boardArea.h - BOARD_FRAME) / VISIBLE_HEIGHT)
@@ -275,6 +275,19 @@ export function PuyoScreen({ navigation }: Props) {
     // 큰 화면(태블릿·폴드)에서 판이 작게 떠 있지 않게 상한을 넉넉히 — 폰은 대개 높이가 먼저 막는다
     return Math.max(18, Math.min(byWidth, byHeight, 60));
   }, [width, height, mode, boardArea]);
+  /*
+   * 두는 동안에는 칸 크기를 고정한다. 판 크기가 판 밖의 줄(상대 패널·HUD·아이템 줄) 높이에 따라 정해지는데,
+   * 그 줄들의 너비는 다시 판 너비를 따른다 — 판이 줄면 글자가 꺾여 줄이 길어지고 판이 또 준다. 라이브에서는
+   * 상대 점수·대기 방해가 수마다 바뀌어 이 고리가 계속 돌았고, 판이 커졌다 줄었다 하며 보이지 않았다
+   * (2026-10-08 사용자 제보). 아래에서 줄들이 꺾이지 않게 고쳤지만, 두는 중의 크기 변화는 그 자체로 조작을
+   * 망치므로 시작할 때 잰 크기로 판이 끝날 때까지 간다.
+   */
+  const inPlay = phase === 'PLAYING' || phase === 'ANIMATING';
+  const [lockedCell, setLockedCell] = useState<number | null>(null);
+  // 렌더 중 조건부 조정(React 문서의 "이전 렌더의 정보 저장" 패턴) — effect 로 하면 한 프레임 늦어 그 사이 크기가 바뀐다
+  if (inPlay && lockedCell === null) setLockedCell(measuredCell);
+  if (!inPlay && lockedCell !== null) setLockedCell(null);
+  const cell = lockedCell ?? measuredCell;
   const onBoardAreaLayout = useCallback((e: LayoutChangeEvent) => {
     const { width: w, height: h } = e.nativeEvent.layout;
     setBoardArea((prev) => (prev && prev.w === w && prev.h === h ? prev : { w, h }));
@@ -869,10 +882,11 @@ export function PuyoScreen({ navigation }: Props) {
       <View style={[styles.itemRow, { width: boardW }]}>
         {slots}
         <View style={styles.itemHintBox}>
+          {/* 줄 높이를 슬롯(42)에 묶는다 — 판이 좁으면 안내가 여러 줄로 꺾여 판 크기를 흔들었다 */}
           {state.doubleNext ? (
-            <Text style={styles.itemHintOn}>⚡ 다음 공격 2배</Text>
+            <Text style={styles.itemHintOn} numberOfLines={2}>⚡ 다음 공격 2배</Text>
           ) : (
-            <Text style={styles.itemHint}>연쇄·상쇄로 아이템을 모아요</Text>
+            <Text style={styles.itemHint} numberOfLines={2}>연쇄·상쇄로 아이템을 모아요</Text>
           )}
         </View>
       </View>
@@ -889,23 +903,30 @@ export function PuyoScreen({ navigation }: Props) {
           ? '플레이 중'
           : '아직 안 들어왔어요';
     return (
-      <View style={[styles.opponent, { width: boardW }]}>
+      /*
+       * 너비를 판(boardW)에 묶지 않고 화면 폭을 다 쓴다. 판 너비에 묶여 있을 때는 글자 칸이 60px 남짓이라
+       * 줄마다 꺾였고, 꺾인 줄 수가 판 크기를 다시 흔들었다(위 lockedCell 주석). 줄은 전부 한 줄로 자르고,
+       * 대기 방해 줄은 늘 자리를 잡아 수마다 생겼다 사라지며 높이를 바꾸지 않게 한다.
+       */
+      <View style={styles.opponent}>
         <PuyoBoard board={opponent.board} cell={MINI_CELL} dim={opponent.lost} />
         <View style={styles.opponentBody}>
-          <Text style={styles.opponentName}>
+          <Text style={styles.opponentName} numberOfLines={1}>
             {opponent.name}
             {opponent.ghost ? ' · 고스트' : ''}
           </Text>
-          <Text style={styles.opponentLine}>
+          <Text style={styles.opponentLine} numberOfLines={1}>
             {opponent.score}점 · {opponent.maxChain}연쇄
           </Text>
-          <Text style={styles.opponentLine}>{status}</Text>
-          {opponent.pending > 0 ? <Text style={styles.opponentPending}>대기 방해 {opponent.pending}</Text> : null}
-          {state && state.pendingGarbage > 0 ? (
-            <Text style={styles.myPending}>내 대기 방해 {state.pendingGarbage} — 연쇄로 상쇄!</Text>
-          ) : null}
+          <Text style={styles.opponentLine} numberOfLines={1}>{status}</Text>
+          <Text style={styles.opponentPending} numberOfLines={1}>
+            {[
+              opponent.pending > 0 ? `상대 대기 방해 ${opponent.pending}` : null,
+              state && state.pendingGarbage > 0 ? `내 대기 방해 ${state.pendingGarbage} — 연쇄로 상쇄!` : null,
+            ].filter(Boolean).join(' · ') || ' '}
+          </Text>
           {battle && battle.myHandicap !== 100 ? (
-            <Text style={styles.handicap}>내 핸디캡 · 받는 방해 {battle.myHandicap}%</Text>
+            <Text style={styles.handicap} numberOfLines={1}>내 핸디캡 · 받는 방해 {battle.myHandicap}%</Text>
           ) : null}
         </View>
       </View>
@@ -1048,15 +1069,15 @@ export function PuyoScreen({ navigation }: Props) {
 
         <View style={[styles.hud, { width: boardW }]}>
           <View>
-            <Text style={styles.hudLabel}>점수</Text>
-            <Text style={styles.hudValue}>{state?.score ?? 0}</Text>
+            <Text numberOfLines={1} style={styles.hudLabel}>점수</Text>
+            <Text numberOfLines={1} style={styles.hudValue}>{state?.score ?? 0}</Text>
           </View>
           <View>
-            <Text style={styles.hudLabel}>최고 연쇄</Text>
-            <Text style={styles.hudValue}>{state?.maxChain ?? 0}</Text>
+            <Text numberOfLines={1} style={styles.hudLabel}>최고 연쇄</Text>
+            <Text numberOfLines={1} style={styles.hudValue}>{state?.maxChain ?? 0}</Text>
           </View>
           <View style={styles.nextBox}>
-            <Text style={styles.hudLabel}>다음</Text>
+            <Text numberOfLines={1} style={styles.hudLabel}>다음</Text>
             <View style={styles.nextRow}>{renderNext()}</View>
           </View>
         </View>
@@ -1270,12 +1291,12 @@ const styles = themedStyles((colors) => ({
     borderColor: colors.border,
     padding: spacing.sm,
     marginBottom: spacing.sm,
+    alignSelf: 'stretch',
   },
   opponentBody: { flex: 1, gap: spacing.xxs },
   opponentName: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
   opponentLine: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
   opponentPending: { fontSize: fontSize.caption, color: colors.danger, fontWeight: '800' },
-  myPending: { fontSize: fontSize.caption, color: colors.danger, fontWeight: '800', marginTop: spacing.xs },
   handicap: { fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '800', marginTop: spacing.xs },
 
   chainWrap: {
@@ -1322,7 +1343,7 @@ const styles = themedStyles((colors) => ({
   itemSlotFilled: { borderColor: colors.primary, backgroundColor: colors.surface },
   itemEmoji: { fontSize: fontSize.subtitle },
   itemEmojiEmpty: { color: colors.textMuted, fontSize: fontSize.body },
-  itemHintBox: { flex: 1, alignItems: 'flex-end' },
+  itemHintBox: { flex: 1, alignItems: 'flex-end', justifyContent: 'center', height: 42, overflow: 'hidden' },
   itemHint: { fontSize: fontSize.caption, color: colors.textMuted },
   itemHintOn: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '800' },
 
