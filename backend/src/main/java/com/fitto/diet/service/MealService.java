@@ -54,7 +54,9 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 import java.util.Optional;
 import java.util.Objects;
 import java.util.Map;
@@ -246,33 +248,46 @@ public class MealService {
         return mealRepository.findByUserIdAndClientRequestId(userId, clientRequestId).map(MealResponse::from);
     }
 
+    /** 옛 호출 — 끼니를 고르지 않으면 오늘 비어 있는 끼니 전부 */
     @Transactional
     public List<MealResponse> copyFrom(Long userId, LocalDate sourceDate) {
+        return copyFrom(userId, sourceDate, null);
+    }
+
+    /**
+     * @param mealTypes 불러올 끼니(2026-10-08). 아침에 어제 하루를 통째로 불러오면 아직 안 먹은 저녁까지 기록돼 버려서, 앱은 고른
+     *                  끼니만 보낸다. null 이면(옛 앱) 오늘 비어 있는 끼니 전부.
+     */
+    @Transactional
+    public List<MealResponse> copyFrom(Long userId, LocalDate sourceDate, Set<MealType> mealTypes) {
         LocalDate today = KstClock.today();
         // 오늘을 오늘로 불러오면 오늘 식단이 통째로 한 벌 더 생긴다 — 미래뿐 아니라 오늘도 막는다.
         if (!sourceDate.isBefore(today)) {
             throw new BusinessException(ErrorCode.INVALID_INPUT, "지난 날짜의 식단만 불러올 수 있어요.");
         }
-        List<Meal> sourceMeals = mealRepository.findByUserIdAndMealDateOrderByIdAsc(userId, sourceDate);
+        List<Meal> sourceMeals = mealRepository.findByUserIdAndMealDateOrderByIdAsc(userId, sourceDate).stream()
+                .filter(m -> mealTypes == null || mealTypes.isEmpty() || mealTypes.contains(m.getMealType()))
+                .toList();
         if (sourceMeals.isEmpty()) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "해당 날짜에는 식단 기록이 없어요.");
         }
         /*
-         * 이미 불러온 끼니는 건너뛴다 — 버튼은 요청 중에만 잠기므로 끝난 뒤 다시 누르면 그날 식단이
-         * 한 벌 더 생겼다. 복사본에는 표시가 따로 없어서 "내용이 같은 오늘 끼니"를 이미 불러온 것으로 본다.
-         * 하나씩 짝지어 지우므로(멀티셋) 어제 같은 간식을 두 번 먹었다면 오늘 하나만 있어도 하나는 더 온다.
-         * 손으로 고친 복사본은 더 이상 같지 않으니 다시 불러올 수 있다 — 막는 것보다 그쪽이 덜 놀랍다.
+         * 오늘 이미 기록한 끼니(아침·점심·저녁·간식)는 건너뛴다(2026-10-08 사용자 보고). 예전엔 "내용이 똑같은 오늘 끼니"만
+         * 건너뛰어서, 오늘 점심을 따로 기록한 뒤 누르면 어제 점심이 한 끼 더 붙어 점심이 두 개가 됐다 — 불러오기는 "오늘 아직
+         * 안 남긴 끼니를 어제처럼 채우기"다. 끼니 단위라 같은 것을 두 번 불러와도 두 번째는 막히고(이미 다 있다), 불러온 끼니
+         * 하나를 지우면 그 끼니만 다시 온다. 간식처럼 하루 여러 번인 끼니도 같다 — 오늘 간식이 하나라도 있으면 어제 간식은 안 온다.
          */
-        List<CopyKey> alreadyToday = mealRepository.findByUserIdAndMealDateOrderByIdAsc(userId, today)
-                .stream().map(CopyKey::of).collect(Collectors.toCollection(ArrayList::new));
-        List<Meal> toCopy = new ArrayList<>();
-        for (Meal source : sourceMeals) {
-            if (!alreadyToday.remove(CopyKey.of(source))) {
-                toCopy.add(source);
-            }
-        }
+        Set<MealType> recordedToday = mealRepository.findByUserIdAndMealDateOrderByIdAsc(userId, today).stream()
+                .map(Meal::getMealType)
+                .collect(Collectors.toCollection(() -> EnumSet.noneOf(MealType.class)));
+        List<Meal> toCopy = sourceMeals.stream()
+                .filter(m -> !recordedToday.contains(m.getMealType()))
+                .toList();
         if (toCopy.isEmpty()) {
-            throw new BusinessException(ErrorCode.MEAL_ALREADY_COPIED);
+            String types = sourceMeals.stream().map(m -> m.getMealType().label()).distinct()
+                    .collect(Collectors.joining("·"));
+            throw new BusinessException(ErrorCode.MEAL_ALREADY_COPIED,
+                    "오늘 이미 " + types + "을(를) 기록했어요. 비어 있는 끼니만 어제처럼 채울 수 있어요.");
         }
         boolean firstMealOfDay = !mealRepository.existsByUserIdAndMealDate(userId, today);
         List<Meal> copies = toCopy.stream().map(this::copyOf).toList();
@@ -451,27 +466,6 @@ public class MealService {
                     .build());
         }
         return copy;
-    }
-
-    /**
-     * "이미 불러온 끼니인가" 판정용 — {@link #copyOf} 가 옮기는 내용 그대로다. 날짜·id·짝 묶음은 뺀다
-     * (복사본은 날짜가 다르고, 데이트 식단을 불러오면 혼자 기록이 되므로).
-     */
-    private record CopyKey(MealType mealType, String memo, String photoUrl,
-                           Integer calories, Integer carbs, Integer protein, Integer fat,
-                           Integer sugar, Integer sodium, Integer fiber, List<ItemKey> items) {
-        private record ItemKey(String name, String portion,
-                               Integer calories, Integer carbs, Integer protein, Integer fat) {}
-
-        static CopyKey of(Meal m) {
-            return new CopyKey(m.getMealType(), m.getMemo(), m.getPhotoUrl(),
-                    m.getCalories(), m.getCarbs(), m.getProtein(), m.getFat(),
-                    m.getSugar(), m.getSodium(), m.getFiber(),
-                    m.getItems().stream()
-                            .map(i -> new ItemKey(i.getName(), i.getPortion(),
-                                    i.getCalories(), i.getCarbs(), i.getProtein(), i.getFat()))
-                            .toList());
-        }
     }
 
     private String blankToNull(String v) {
