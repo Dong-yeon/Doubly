@@ -365,7 +365,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     pendingTimers.forEach((t) => clearTimeout(t));
     pendingTimers.clear();
     outbox.clear();
-    set({ connected: false });
+    // 방 목록도 비운다 — 안 읽은 수(탭 배지·앱 아이콘 배지 소스)가 다음 계정·로그아웃 화면에 남지 않게
+    set({ connected: false, rooms: [] });
   },
 }));
 
