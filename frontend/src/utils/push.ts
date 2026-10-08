@@ -79,6 +79,52 @@ if (Platform.OS !== 'web') {
 }
 
 /**
+ * 앱이 떠 있는 동안 온 채팅 알림 — 하단 '채팅' 탭 배지를 바로 갱신한다.
+ *
+ * <p>소켓 구독은 채팅방 화면이 열려 있을 때만 살아 있어서(store/chatStore.ts openRoom), 홈 같은 다른
+ * 탭에 있는 동안 온 메시지는 앱을 내렸다 올리기 전까지 탭 배지에 잡히지 않았다 — "채팅이 왔는데 아이콘에
+ * 표시가 없다"(2026-10-08). 이 순간 앱이 아는 신호는 푸시뿐이라 그걸 계기로 방 목록을 다시 읽는다.
+ * 보고 있는 방이면 읽음 처리(markRead)가 어차피 다시 읽으므로 건너뛴다.
+ */
+if (Platform.OS !== 'web') {
+  try {
+    Notifications.addNotificationReceivedListener((notification) => {
+      const link = notification.request?.content?.data?.link;
+      if (typeof link !== 'string' || !/^chat\/\d+$/.test(link)) return;
+      if (isForActiveChatRoom(notification)) return;
+      void useChatStore.getState().loadRooms().catch(() => {});
+    });
+  } catch {
+    // 알림 모듈이 없는 환경 — 무시
+  }
+}
+
+/** 마지막으로 아이콘에 올린 숫자 — 같은 값이면 네이티브를 또 부르지 않는다 */
+let lastAppBadge: number | null = null;
+
+/**
+ * 휴대폰 앱 아이콘 배지 = 안 읽은 채팅 총수. 방 목록이 바뀔 때마다 맞춘다.
+ *
+ * <p>소스는 하단 탭 배지와 같은 {@code rooms[].unreadCount} 합이다 — 둘이 다른 숫자를 말하면 안 된다.
+ * 앱이 꺼져 있을 때의 숫자는 서버가 채팅 푸시 payload 의 {@code badge} 로 올리고(iOS, 같은 기준으로 센다:
+ * 백엔드 ChatUnreadCounter), 앱이 떠서 읽거나 복귀하면 여기서 실제 값으로 되돌린다.
+ *
+ * <p>Android 는 런처마다 다르다 — 삼성 One UI 등 숫자 배지를 지원하는 런처만 이 값을 쓰고, 픽셀 계열은
+ * 숫자 없이 "알림이 떠 있으면 점"만 찍는다. 그 점은 OS 가 트레이 알림으로 그리므로 여기와 무관하다.
+ * 이 함수는 JS 호출뿐이라 네이티브 설정(app.json)은 바뀌지 않는다 — 업데이트로 배포된다.
+ */
+if (Platform.OS !== 'web') {
+  useChatStore.subscribe((state) => {
+    const total = state.rooms.reduce((sum, r) => sum + r.unreadCount, 0);
+    if (total === lastAppBadge) return;
+    lastAppBadge = total;
+    Notifications.setBadgeCountAsync(total).catch(() => {
+      // 권한 없음·지원 안 하는 런처 — 아이콘 숫자는 부가 기능이라 조용히 넘어간다
+    });
+  });
+}
+
+/**
  * 지금 보고 있는 화면으로 오는 알림을, 트레이에 이미 떠 있는 것까지 지운다.
  *
  * <p>배너 억제(위 핸들러)는 <b>앞으로 올</b> 알림에만 걸린다. 화면에 들어오기 전에 이미

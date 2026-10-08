@@ -1,5 +1,6 @@
 package com.fitto.notification.service;
 
+import com.fitto.chat.service.ChatUnreadCounter;
 import com.fitto.common.notification.NotificationCategory;
 import com.fitto.common.notification.NotificationService;
 import com.fitto.notification.domain.DeviceToken;
@@ -49,6 +50,7 @@ public class ExpoPushNotificationService implements NotificationService {
     private final DeviceTokenRepository deviceTokenRepository;
     private final DeviceTokenService deviceTokenService;
     private final UserRepository userRepository;
+    private final ChatUnreadCounter chatUnreadCounter;
     private final RestClient restClient;
     /** 티켓을 받고 나서 영수증을 조회하기까지 기다리는 시간 — Expo 권장은 15분(테스트에서만 줄인다). */
     private final Duration receiptDelay;
@@ -77,10 +79,12 @@ public class ExpoPushNotificationService implements NotificationService {
     public ExpoPushNotificationService(DeviceTokenRepository deviceTokenRepository,
                                        DeviceTokenService deviceTokenService,
                                        UserRepository userRepository,
+                                       ChatUnreadCounter chatUnreadCounter,
                                        @Value("${fitto.push.receipt-delay:PT15M}") Duration receiptDelay) {
         this.deviceTokenRepository = deviceTokenRepository;
         this.deviceTokenService = deviceTokenService;
         this.userRepository = userRepository;
+        this.chatUnreadCounter = chatUnreadCounter;
         this.receiptDelay = receiptDelay;
         // 타임아웃 없는 기본 RestClient 는 exp.host 무응답 시 무한 대기한다 (Resend 와 동일 원칙)
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
@@ -137,8 +141,9 @@ public class ExpoPushNotificationService implements NotificationService {
             List<DeviceToken> tokens = deviceTokenRepository.findByUserId(recipientUserId);
             if (tokens.isEmpty()) return;
 
+            Integer badge = badgeFor(recipientUserId, category);
             List<Map<String, Object>> messages = tokens.stream()
-                    .map(t -> message(t.getToken(), title, body, link))
+                    .map(t -> message(t.getToken(), title, body, link, badge))
                     .toList();
             ExpoPushResponse response = restClient.post()
                     .uri(EXPO_PUSH_URL)
@@ -155,6 +160,25 @@ public class ExpoPushNotificationService implements NotificationService {
                 return;
             }
             log.warn("Expo push 발송 실패 recipient={}: {}", recipientUserId, e.getMessage());
+        }
+    }
+
+    /**
+     * 앱 아이콘 배지 숫자 — <b>채팅 알림에만</b> 싣는다. 모르면 null(필드를 아예 빼서 숫자를 건드리지 않는다).
+     *
+     * <p>iOS 아이콘 숫자는 payload {@code badge} 가 <b>절댓값으로</b> 덮어쓴다. 그래서 다른 종류의 알림에
+     * 0 이나 엉뚱한 값을 실으면 남아 있던 채팅 숫자가 지워진다 — 기준이 안 읽은 채팅 수이므로 채팅만 싣는다.
+     * 발송 스레드(커밋 이후)에서 세므로 방금 보낸 메시지까지 포함된다. Android 에서 Expo 는 이 필드를 쓰지 않고,
+     * 런처가 떠 있는 알림으로 점·숫자를 그린다(앱이 떠 있을 땐 앱이 setBadgeCountAsync 로 맞춘다).
+     */
+    private Integer badgeFor(Long recipientUserId, NotificationCategory category) {
+        if (category != NotificationCategory.CHAT) return null;
+        try {
+            return (int) Math.min(chatUnreadCounter.totalUnread(recipientUserId), Integer.MAX_VALUE);
+        } catch (Exception e) {
+            // 배지는 부가 정보다 — 세다 실패해도 알림 자체는 보낸다
+            log.warn("배지 수 계산 실패 recipient={}: {}", recipientUserId, e.getMessage());
+            return null;
         }
     }
 
@@ -317,8 +341,10 @@ public class ExpoPushNotificationService implements NotificationService {
      * <p>{@code data.link} 가 알림 탭 딥링크의 전부다 — 앱이 이 값 앞에 {@code doubly://} 를
      * 붙여 열고, 없으면 앱만 열린다({@code frontend/src/navigation/linking.ts}).
      * {@code Map.of} 를 못 쓰는 이유는 link 가 null 일 수 있어서다.
+     *
+     * <p>{@code badge} 가 null 이면 필드를 넣지 않는다 — 넣으면 iOS 가 그 값으로 아이콘 숫자를 덮어쓴다({@link #badgeFor}).
      */
-    private Map<String, Object> message(String token, String title, String body, String link) {
+    static Map<String, Object> message(String token, String title, String body, String link, Integer badge) {
         Map<String, Object> m = new HashMap<>();
         m.put("to", token);
         m.put("title", title);
@@ -326,6 +352,9 @@ public class ExpoPushNotificationService implements NotificationService {
         m.put("sound", "default");
         if (link != null) {
             m.put("data", Map.of("link", link));
+        }
+        if (badge != null) {
+            m.put("badge", badge);
         }
         return m;
     }
