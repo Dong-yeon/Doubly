@@ -149,3 +149,21 @@ PathLock 이 놓자마자 설치하는지는 확인하지 못했다(§6). 우리
 - Google Play: https://play.google.com/store/apps/details?id=com.bovasoft.pathlock
 - BlueStacks: https://www.bluestacks.com/apps/board/pathlock-strategy-board-game-on-pc.html
 - 비교: Quoridor Arena https://play.google.com/store/apps/details?id=com.quoridorarena.app · Quoridor.II https://play.google.com/store/apps/details?id=air.QuoridorBoardGame · 웹 Pathlock https://logic-puzzles-online.com/pathlock/ · Quoridor https://en.wikipedia.org/wiki/Quoridor
+
+---
+
+## 7. 구현 기록 (2026-10-08, 브랜치 `feat/wall-race-drag`)
+
+§3 대로 만들었다. 달라진 점과 확인한 것만 적는다.
+
+- **서버**: `WallRaceGame.illegalWalls()` 는 `placeWall` 과 **같은 두 검사**(`canPlaceWall` → `wallKeepsBothPaths`)로 128자리를 훑는다. `WallRaceGameResponse.illegalWalls` 는 내 차례이고 벽이 남았을 때만 채운다. `WallRaceFlowTest` 2건을 추가했다 — 목록 내용, 그리고 목록의 모든 자리를 실제로 놓아 보면 서버가 **같은 이유로** 거절하는지.
+- **앱** (`WallRaceScreen.tsx`):
+  - 내 차례면 판 아래에 트레이(가로·세로 조각 + 남은 벽 수)가 늘 보인다.
+  - 조각을 **끌면** 손가락 48px 위를 겨눈 교차점에 미리보기가 붙는다. 놓을 수 없으면 빨강 + 이유 한 줄. 판 밖에서 놓으면 취소다.
+  - 손을 떼면 벽 옆에 **[놓기]/✕** 가 뜬다. 처음 설계는 ✓ 아이콘이었는데, 아이콘 폰트가 쓰는 이름만 담은 부분 집합이라 `check` 가 없어서 글자 버튼으로 바꿨다.
+  - 조각을 **누르기만** 하면 예전 탭 모드(교차점 누르기, 같은 점 다시 누르면 방향 전환)로 들어간다. 스크린리더는 `onAccessibilityTap` 으로 같은 길을 탄다.
+  - 끄는 동안 `FlatList` 스크롤을 잠근다. 길막기 화면의 스와이프백은 껐다(`HomeStackNavigator`).
+  - 제스처 처리기는 한 번만 만든다. 판 View 는 모듈 변수로 잡는다 — React 컴파일러 lint 가 렌더 중 ref 접근을 막아서다(PuyoScreen 의 `live`·`session` 과 같은 방식).
+- **검증**: 스냅 계산은 node 로 따로 확인했다 — 판 4가지 크기 × 교차점 64 × 손가락 오차 4가지 모두 맞는 자리에 붙고, 판 밖은 취소된다. tsc·eslint 통과. 백엔드 게임·`*SyncTest` 통과(H2). **실기기 확인 전** — 특히 (1) iOS·Android 에서 `measure` 의 pageY 와 터치 pageY 기준이 맞는지(상태바·헤더), (2) 끄는 동안 스크롤·스와이프백이 실제로 안 먹는지, (3) 작은 폰에서 [놓기]/✕ 가 판 가장자리에서 잘 보이는지.
+- **아직 안 한 것**: 판 좌표 A–I/1–9, 벽 주인 색, 놓아 둔 미리보기를 끌어서 옮기기(지금은 트레이에서 다시 끈다).
+

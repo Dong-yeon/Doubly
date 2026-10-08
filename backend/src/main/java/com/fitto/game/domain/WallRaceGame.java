@@ -214,6 +214,32 @@ public class WallRaceGame extends CoupleGame {
         passTurn(side);
     }
 
+    /** 지금 놓을 수 없는 벽 자리 하나 — reason 은 OVERLAP(겹침) / BLOCKS_PATH(길을 완전히 막음) */
+    public record IllegalWall(int slot, char kind, String reason) {
+    }
+
+    /**
+     * 지금 판에서 놓을 수 없는 벽 자리 전부 — 앱이 드래그 미리보기를 미리 빨갛게 칠하는 데 쓴다
+     * (docs/pathlock-ux-analysis_2026-10-08.md §3-3). 판정은 {@link #placeWall} 과 <b>같은 두 검사</b>다.
+     * 그래서 규칙은 서버에 한 벌만 있다({@code legalMoves} 와 같은 방식).
+     *
+     * <p>64자리 × 2방향 = 128번의 BFS(81칸)라 응답마다 계산해도 가볍다.
+     */
+    public List<IllegalWall> illegalWalls() {
+        List<IllegalWall> out = new ArrayList<>();
+        for (int slot = 0; slot < WALL_SLOTS; slot++) {
+            for (char kind : new char[]{WallRaceRules.WALL_H, WallRaceRules.WALL_V}) {
+                if (!WallRaceRules.canPlaceWall(walls, slot, kind)) {
+                    out.add(new IllegalWall(slot, kind, "OVERLAP"));
+                } else if (!WallRaceRules.wallKeepsBothPaths(walls, slot, kind,
+                        pawnA, GOAL_ROW_CREATOR, pawnB, GOAL_ROW_PARTNER)) {
+                    out.add(new IllegalWall(slot, kind, "BLOCKS_PATH"));
+                }
+            }
+        }
+        return out;
+    }
+
     // ── 무르기 ────────────────────────────────────────────────────────
 
     public char undoRequestedSide() {

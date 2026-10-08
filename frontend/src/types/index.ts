@@ -904,6 +904,8 @@ export interface WallRaceGame {
   undoRequest?: GameUndoRequest | null;
   /** 지금 내가 무르기를 걸 수 있는가 — 직전에 둔 쪽만 걸 수 있다 */
   canUndo: boolean;
+  /** 지금 내가 놓을 수 없는 벽 자리(겹침·길 막힘) — 서버가 같은 규칙으로 계산한다. 예전 서버면 없음 */
+  illegalWalls?: { slot: number; kind: 'H' | 'V'; reason: string }[];
   partnerName?: string | null;
   createdAt: string;
   completedAt?: string | null;

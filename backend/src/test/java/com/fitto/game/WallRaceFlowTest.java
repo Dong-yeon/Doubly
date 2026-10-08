@@ -198,6 +198,50 @@ class WallRaceFlowTest {
         assertThat(after.myTurn()).isTrue();
     }
 
+    // ── 놓을 수 없는 자리 미리 알리기 (docs/pathlock-ux-analysis_2026-10-08.md §3-3) ──
+
+    @Test
+    void 놓을_수_없는_벽_자리를_이유와_함께_내려준다() {
+        long[] users = couple("ia", "ib");
+        WallRaceGameResponse game = wallRaceService.start(users[0]);
+        assertThat(game.illegalWalls()).as("빈 판 · 내 차례 아님 — 비어 있다").isEmpty();
+
+        wallRaceService.placeWall(users[1], game.id(), slot(0, 3), "V");
+        WallRaceGameResponse mine = wallRaceService.placeWall(users[0], game.id(), slot(0, 5), "V");
+        assertThat(mine.illegalWalls()).as("내 차례가 아니면 비어 있다").isEmpty();
+
+        WallRaceGameResponse turn = wallRaceService.current(users[1]);
+        // 같은 자리·같은 줄로 붙은 세로 벽은 겹침, 같은 교차점의 가로 벽도 겹침(십자)
+        assertThat(turn.illegalWalls()).contains(
+                new WallRaceGameResponse.IllegalWall(slot(0, 3), "V", "OVERLAP"),
+                new WallRaceGameResponse.IllegalWall(slot(1, 3), "V", "OVERLAP"),
+                new WallRaceGameResponse.IllegalWall(slot(0, 3), "H", "OVERLAP"),
+                // 위 길을_완전히_막는_벽은_거절한다 와 같은 자리 — 말을 가둔다
+                new WallRaceGameResponse.IllegalWall(slot(0, 4), "H", "BLOCKS_PATH"));
+        // 목록에 없는 자리는 실제로 놓인다 — 목록과 서버 거절이 같은 규칙이다
+        assertThat(turn.illegalWalls()).doesNotContain(
+                new WallRaceGameResponse.IllegalWall(slot(5, 5), "H", "OVERLAP"),
+                new WallRaceGameResponse.IllegalWall(slot(5, 5), "H", "BLOCKS_PATH"));
+        wallRaceService.placeWall(users[1], game.id(), slot(5, 5), "H");
+    }
+
+    @Test
+    void 놓을_수_없다는_목록과_서버_거절이_어긋나지_않는다() {
+        long[] users = couple("ja", "jb");
+        WallRaceGameResponse game = wallRaceService.start(users[0]);
+        wallRaceService.placeWall(users[1], game.id(), slot(0, 3), "V");
+        wallRaceService.placeWall(users[0], game.id(), slot(0, 5), "V");
+        WallRaceGameResponse turn = wallRaceService.current(users[1]);
+
+        // 목록에 오른 자리는 하나도 빠짐없이 서버가 같은 이유로 거절한다
+        for (WallRaceGameResponse.IllegalWall w : turn.illegalWalls()) {
+            ErrorCode expected = w.reason().equals("OVERLAP") ? ErrorCode.GAME_WALL_OVERLAP : ErrorCode.GAME_WALL_BLOCKS_PATH;
+            assertThatThrownBy(() -> wallRaceService.placeWall(users[1], game.id(), w.slot(), w.kind()))
+                    .isInstanceOf(BusinessException.class)
+                    .hasFieldOrPropertyWithValue("errorCode", expected);
+        }
+    }
+
     // ── 승리 ───────────────────────────────────────────────────────
 
     @Test
