@@ -79,8 +79,22 @@ import {
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'Puyo'>;
 
-/** 중력 — 이 간격마다 한 칸 내려간다 */
-const GRAVITY_MS = 800;
+/**
+ * 중력 — 이 간격마다 한 칸 내려간다. 처음부터 빠르고, 시간이 갈수록 더 빨라진다.
+ * 예전엔 800ms 고정이라 한 조각이 바닥까지 10초 가까이 걸려 "뿌요뿌요의 속도감이 없다"는 말을 들었다
+ * (2026-10-08 사용자). 30초마다 한 단계씩, 바닥은 150ms.
+ */
+const GRAVITY_START_MS = 500;
+const GRAVITY_STEP_MS = 50;
+const GRAVITY_STEP_EVERY_MS = 30_000;
+const GRAVITY_MIN_MS = 150;
+function gravityMs(playedMs: number): number {
+  const level = Math.floor(Math.max(0, playedMs) / GRAVITY_STEP_EVERY_MS);
+  return Math.max(GRAVITY_MIN_MS, GRAVITY_START_MS - level * GRAVITY_STEP_MS);
+}
+/** 아이템 칸 세로 줄의 폭 — 판 오른쪽에 붙는다 */
+const ITEM_COL = 48;
+const ITEM_GAP = 8;
 /** 연출 — 터지는 프레임 · 떨어지는 프레임 */
 const CLEAR_FLASH_MS = 260;
 const GRAVITY_FRAME_MS = 160;
@@ -177,6 +191,8 @@ interface BattleSession {
  * 마운트 때 초기화한다.
  */
 let live: PlayerState | null = null;
+/** 지금 판을 시작한 시각 — 중력 속도 단계를 정한다(혼자·대전 공통) */
+let playStartedAt = 0;
 let livePhase: Phase = 'IDLE';
 let session: BattleSession | null = null;
 /** 방금 착지한 조각 — 기보에 적을 값. 착지 직전에 갱신된다 */
@@ -268,7 +284,8 @@ export function PuyoScreen({ navigation }: Props) {
    */
   const [boardArea, setBoardArea] = useState<{ w: number; h: number } | null>(null);
   const measuredCell = useMemo(() => {
-    const byWidth = Math.floor((width - spacing.lg * 2) / WIDTH);
+    // 판 오른쪽에 아이템 칸 세로 줄이 붙는다 — 그 폭을 빼고 잰다
+    const byWidth = Math.floor((width - spacing.lg * 2 - ITEM_COL - ITEM_GAP) / WIDTH);
     const byHeight = boardArea
       ? Math.floor((boardArea.h - BOARD_FRAME) / VISIBLE_HEIGHT)
       : Math.floor((height - (mode === 'BATTLE' ? 420 + MINI_CELL * VISIBLE_HEIGHT : 420)) / VISIBLE_HEIGHT);
@@ -285,14 +302,21 @@ export function PuyoScreen({ navigation }: Props) {
   const inPlay = phase === 'PLAYING' || phase === 'ANIMATING';
   const [lockedCell, setLockedCell] = useState<number | null>(null);
   // 렌더 중 조건부 조정(React 문서의 "이전 렌더의 정보 저장" 패턴) — effect 로 하면 한 프레임 늦어 그 사이 크기가 바뀐다
-  if (inPlay && lockedCell === null) setLockedCell(measuredCell);
+  /*
+   * 고정은 "커지지 않게"만 한다. 자리가 줄면(대전 시작과 함께 상대 패널이 나타나는 순간 등) 바로 따라 줄인다 —
+   * 시작 순간의 값을 그대로 붙잡았더니 패널이 나타나기 전 크기로 굳어 판이 패널·버튼을 덮었다(2026-10-08 제보).
+   * 줄어드는 쪽으로만 움직이므로 예전처럼 커졌다 줄었다를 되풀이할 수 없다.
+   */
+  if (inPlay && (lockedCell === null || measuredCell < lockedCell)) setLockedCell(measuredCell);
   if (!inPlay && lockedCell !== null) setLockedCell(null);
-  const cell = lockedCell ?? measuredCell;
+  const cell = lockedCell === null ? measuredCell : Math.min(lockedCell, measuredCell);
   const onBoardAreaLayout = useCallback((e: LayoutChangeEvent) => {
     const { width: w, height: h } = e.nativeEvent.layout;
     setBoardArea((prev) => (prev && prev.w === w && prev.h === h ? prev : { w, h }));
   }, []);
   const boardW = cell * WIDTH;
+  /** 판 + 아이템 세로 줄 — HUD·조작 버튼 줄이 이 폭에 맞춘다 */
+  const rowW = boardW + ITEM_GAP + ITEM_COL;
 
   /* ─── 대전: 결과 제출 ─── */
   const submitRun = useCallback(
@@ -528,6 +552,7 @@ export function PuyoScreen({ navigation }: Props) {
     setOpponent(null);
     setMode('SOLO');
     commit(createPlayer(Date.now() % 2147483647));
+    playStartedAt = Date.now();
     setPhaseBoth('PLAYING');
     haptics.light();
   }, [commit, resetView, setPhaseBoth]);
@@ -603,6 +628,7 @@ export function PuyoScreen({ navigation }: Props) {
       }
       setMode('BATTLE');
       commit(createPlayer(g.seed));
+      playStartedAt = startAt;
       setPhaseBoth('PLAYING');
       haptics.light();
     } catch (e) {
@@ -730,7 +756,8 @@ export function PuyoScreen({ navigation }: Props) {
   /* 중력 — PLAYING 일 때만 돈다. 연출·게임오버·대기에서는 멈춘다 */
   useEffect(() => {
     if (phase !== 'PLAYING') return undefined;
-    const id = setInterval(onSoftDrop, GRAVITY_MS);
+    // 조각이 내려앉을 때마다(ANIMATING→PLAYING) 다시 잡히므로 그때마다 지금 단계의 속도가 된다
+    const id = setInterval(onSoftDrop, gravityMs(Date.now() - playStartedAt));
     return () => clearInterval(id);
   }, [phase, onSoftDrop]);
 
@@ -855,11 +882,15 @@ export function PuyoScreen({ navigation }: Props) {
    * 아이템 슬롯(§13) — 폭탄은 지금 조각을 바꾸므로 조각이 없으면(연출 중) 눌러도 안 먹는다.
    * 빈 칸도 자리를 잡아 둔다 — 아이템이 생길 때마다 판이 위아래로 흔들리지 않게.
    */
+  /**
+   * 아이템 칸 — 판 <b>오른쪽</b>에 세로로 쌓는다. 연쇄로 모일 때마다 판 옆에 하나씩 차오르는 게 보이게
+   * (2026-10-08 사용자 요청 — 예전엔 판 아래 줄이라 눈이 판에서 떨어졌다). 빈 칸도 자리를 잡아 판이 흔들리지 않게.
+   * 폭탄은 지금 조각을 바꾸므로 조각이 없으면(연출 중) 눌러도 안 먹는다.
+   */
   const renderItems = () => {
-    if (!state) return null;
     const slots: React.ReactNode[] = [];
     for (let i = 0; i < MAX_ITEMS; i++) {
-      const code = state.items[i];
+      const code = state?.items[i];
       const def = code === undefined ? undefined : itemOf(code);
       slots.push(
         <Pressable
@@ -879,16 +910,10 @@ export function PuyoScreen({ navigation }: Props) {
       );
     }
     return (
-      <View style={[styles.itemRow, { width: boardW }]}>
+      <View style={styles.itemCol}>
+        <Text style={styles.itemColLabel}>아이템</Text>
         {slots}
-        <View style={styles.itemHintBox}>
-          {/* 줄 높이를 슬롯(42)에 묶는다 — 판이 좁으면 안내가 여러 줄로 꺾여 판 크기를 흔들었다 */}
-          {state.doubleNext ? (
-            <Text style={styles.itemHintOn} numberOfLines={2}>⚡ 다음 공격 2배</Text>
-          ) : (
-            <Text style={styles.itemHint} numberOfLines={2}>연쇄·상쇄로 아이템을 모아요</Text>
-          )}
-        </View>
+        {state?.doubleNext ? <Text style={styles.itemHintOn}>⚡2배</Text> : null}
       </View>
     );
   };
@@ -1067,7 +1092,7 @@ export function PuyoScreen({ navigation }: Props) {
       <View style={styles.body}>
         {renderOpponent()}
 
-        <View style={[styles.hud, { width: boardW }]}>
+        <View style={[styles.hud, { width: rowW }]}>
           <View>
             <Text numberOfLines={1} style={styles.hudLabel}>점수</Text>
             <Text numberOfLines={1} style={styles.hudValue}>{state?.score ?? 0}</Text>
@@ -1083,6 +1108,7 @@ export function PuyoScreen({ navigation }: Props) {
         </View>
 
         <View style={styles.boardArea} onLayout={onBoardAreaLayout}>
+        <View style={styles.boardRow}>
         <Animated.View style={{ transform: [{ translateX: shake }] }}>
         <PuyoBoard
           board={board}
@@ -1103,11 +1129,11 @@ export function PuyoScreen({ navigation }: Props) {
           {renderOverlay()}
         </PuyoBoard>
         </Animated.View>
+        {renderItems()}
+        </View>
         </View>
 
-        {renderItems()}
-
-        <View style={[styles.controls, { width: boardW }]}>
+        <View style={[styles.controls, { width: rowW }]}>
           <ControlButton icon="chevron-left" label="왼쪽" onPress={onLeft} disabled={phase !== 'PLAYING'} />
           <ControlButton icon="restart" label="회전" onPress={onRotate} disabled={phase !== 'PLAYING'} />
           <ControlButton icon="chevron-right" label="오른쪽" onPress={onRight} disabled={phase !== 'PLAYING'} />
@@ -1329,7 +1355,9 @@ const styles = themedStyles((colors) => ({
   },
   itemToastText: { fontSize: fontSize.caption, fontWeight: '800', color: colors.textPrimary },
 
-  itemRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.sm },
+  boardRow: { flexDirection: 'row', alignItems: 'flex-start', gap: ITEM_GAP },
+  itemCol: { width: ITEM_COL, alignItems: 'center', gap: spacing.xs, paddingTop: spacing.xs },
+  itemColLabel: { fontSize: 10, fontWeight: '800', color: colors.textMuted },
   itemSlot: {
     width: 42,
     height: 42,
@@ -1343,8 +1371,6 @@ const styles = themedStyles((colors) => ({
   itemSlotFilled: { borderColor: colors.primary, backgroundColor: colors.surface },
   itemEmoji: { fontSize: fontSize.subtitle },
   itemEmojiEmpty: { color: colors.textMuted, fontSize: fontSize.body },
-  itemHintBox: { flex: 1, alignItems: 'flex-end', justifyContent: 'center', height: 42, overflow: 'hidden' },
-  itemHint: { fontSize: fontSize.caption, color: colors.textMuted },
   itemHintOn: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '800' },
 
   overlay: {
