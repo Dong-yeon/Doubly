@@ -180,6 +180,8 @@ function lastMoveOf(moves: string[]): { cell: number | null; slot: number | null
  * (PuyoScreen 의 live·session 과 같은 이유 — 처리기는 만든 순간의 클로저를 든다). 대국판은 화면에 하나뿐이다.
  */
 let boardNode: View | null = null;
+/** 대국판이 180° 돌려 그려졌는가 — 손가락이 가리킨 교차점(화면 좌표)을 저장 좌표로 되돌릴 때 쓴다 */
+let boardFlipped = false;
 function setBoardNode(view: View | null) {
   boardNode = view;
 }
@@ -218,7 +220,8 @@ function createTrayResponder(kind: WallKind, a: TrayActions) {
     },
     onPanResponderMove: (e, g) => {
       if (!cur.dragging && Math.abs(g.dx) < TAP_SLOP && Math.abs(g.dy) < TAP_SLOP) return;
-      const slot = snapToSlot(cur.frame, e.nativeEvent.pageX, e.nativeEvent.pageY);
+      const shown = snapToSlot(cur.frame, e.nativeEvent.pageX, e.nativeEvent.pageY);
+      const slot = shown === null ? null : boardFlipped ? WALL_SIZE * WALL_SIZE - 1 - shown : shown;
       if (cur.dragging && slot === cur.slot) return;
       if (slot !== null) haptics.light();
       cur.dragging = true;
@@ -353,6 +356,11 @@ export function WallRaceScreen({ navigation }: Props) {
   useEffect(() => {
     navigation.setOptions({ headerShown: !inGame });
   }, [navigation, inGame]);
+  // 트레이 제스처가 화면 좌표를 저장 좌표로 되돌릴 때 쓴다 — 판을 연 쪽이면 판을 180° 돌려 그린다(renderBoard)
+  const flipped = game !== null && game.myGoalRow === SIZE - 1;
+  useEffect(() => {
+    boardFlipped = flipped;
+  }, [flipped]);
 
   // 진행 중 판을 볼 때마다 기억해 둔다 — 사라졌을 때 끝났는지 접혔는지 가르는 기준
   useEffect(() => {
@@ -576,6 +584,16 @@ export function WallRaceScreen({ navigation }: Props) {
     const pawnSize = cell * 0.62;
     const dotSize = cell * 0.46;
     const iAmCreator = g.myGoalRow === SIZE - 1;
+    /*
+     * 나는 언제나 아래에서 출발한다(사용자 요청, 2026-10-08). 판을 연 쪽은 저장상 맨 윗줄에서 출발하므로 판을
+     * 180° 돌려 그린다. 180° 회전은 가로 벽을 가로로, 세로 벽을 세로로 남기므로 칸 번호(80−i)와 벽 자리(63−s)만
+     * 뒤집으면 된다. 상태·서버 요청은 전부 저장 좌표 그대로이고, 그리는 자리와 손가락 좌표만 바꾼다.
+     * (예전 §10-4 의 "판을 돌리지 않는다"는 좌표로 말을 주고받으려던 것인데, 좌표 표시는 넣지 않았다.)
+     */
+    const flip = iAmCreator;
+    const vc = (i: number) => (flip ? SIZE * SIZE - 1 - i : i);
+    const vs = (sl: number) => (flip ? WALL_SIZE * WALL_SIZE - 1 - sl : sl);
+    const shownMyGoalRow = flip ? SIZE - 1 - g.myGoalRow : g.myGoalRow;
     const owners = wallOwners(g.moves, iAmCreator);
     const over = g.winner != null;
     const meFace = pickFace(coupleEmojis, myId, over ? (g.winner === 'ME' ? FACE_WIN : FACE_LOSE) : g.myTurn ? FACE_THINKING : FACE_IDLE);
@@ -596,8 +614,8 @@ export function WallRaceScreen({ navigation }: Props) {
         {Array.from({ length: SIZE * SIZE }, (_, index) => {
           const row = Math.floor(index / SIZE);
           const col = index % SIZE;
-          const isMyGoal = row === g.myGoalRow;
-          const isPartnerGoal = row === (g.myGoalRow === 0 ? SIZE - 1 : 0);
+          const isMyGoal = row === shownMyGoalRow;
+          const isPartnerGoal = row === (shownMyGoalRow === 0 ? SIZE - 1 : 0);
           return (
             <View
               key={`c${index}`}
@@ -613,8 +631,8 @@ export function WallRaceScreen({ navigation }: Props) {
 
         {/* 갈 수 있는 자리 — 서버가 계산해 내려준 것만 찍는다 */}
         {[...legal].map((index) => {
-          const row = Math.floor(index / SIZE);
-          const col = index % SIZE;
+          const row = Math.floor(vc(index) / SIZE);
+          const col = vc(index) % SIZE;
           return (
             <Pressable
               key={`m${index}`}
@@ -650,8 +668,8 @@ export function WallRaceScreen({ navigation }: Props) {
                 width: ringSize,
                 height: ringSize,
                 borderRadius: ringSize / 2,
-                left: cellX(last.cell % SIZE) + (cell - ringSize) / 2,
-                top: cellY(Math.floor(last.cell / SIZE)) + (cell - ringSize) / 2,
+                left: cellX(vc(last.cell) % SIZE) + (cell - ringSize) / 2,
+                top: cellY(Math.floor(vc(last.cell) / SIZE)) + (cell - ringSize) / 2,
               },
             ]}
           />
@@ -666,9 +684,9 @@ export function WallRaceScreen({ navigation }: Props) {
             <View
               key={label}
               accessible
-              accessibilityLabel={`${label} ${Math.floor(pos / SIZE) + 1}행 ${(pos % SIZE) + 1}열`}
+              accessibilityLabel={`${label} ${Math.floor(vc(pos) / SIZE) + 1}행 ${(vc(pos) % SIZE) + 1}열`}
               pointerEvents="none"
-              style={[styles.pawnBox, { left: cellX(pos % SIZE), top: cellY(Math.floor(pos / SIZE)), width: cell, height: cell }]}
+              style={[styles.pawnBox, { left: cellX(vc(pos) % SIZE), top: cellY(Math.floor(vc(pos) / SIZE)), width: cell, height: cell }]}
             >
               <View
                 style={[
@@ -703,7 +721,7 @@ export function WallRaceScreen({ navigation }: Props) {
         {last.slot !== null && (g.walls[last.slot] === 'H' || g.walls[last.slot] === 'V') ? (
           <View
             pointerEvents="none"
-            style={[styles.lastWall, wallRect(last.slot, g.walls[last.slot] as 'H' | 'V', 3)]}
+            style={[styles.lastWall, wallRect(vs(last.slot), g.walls[last.slot] as 'H' | 'V', 3)]}
           />
         ) : null}
 
@@ -714,7 +732,7 @@ export function WallRaceScreen({ navigation }: Props) {
           // 벽은 놓은 사람 색 — 누가 어디를 막았는지 한눈에(기보로 주인을 찾는다)
           const owner = owners.get(slot);
           const color = owner === 'me' ? PAWN_ME : owner === 'partner' ? PAWN_PARTNER : WALL_COLOR;
-          return <View key={`w${slot}`} style={[styles.wall, { backgroundColor: color }, wallRect(slot, kind)]} />;
+          return <View key={`w${slot}`} style={[styles.wall, { backgroundColor: color }, wallRect(vs(slot), kind)]} />;
         })}
 
         {/* 미리보기 — 아직 서버에 가지 않은 벽. 놓을 수 없는 자리면 빨갛게(서버가 내려준 목록) */}
@@ -724,16 +742,17 @@ export function WallRaceScreen({ navigation }: Props) {
             style={[
               styles.wall,
               previewIllegal ? styles.wallIllegal : [styles.wallPreview, { backgroundColor: PAWN_ME }],
-              wallRect(preview.slot, preview.kind),
+              wallRect(vs(preview.slot), preview.kind),
             ]}
           />
         ) : null}
 
         {/* 벽 모드일 때만 교차점 탭 영역을 깐다 — 평소엔 말 이동을 가리지 않게 없앤다 */}
         {interactive && wallMode && !drag
-          ? Array.from({ length: WALL_SIZE * WALL_SIZE }, (_, slot) => {
-              const r = Math.floor(slot / WALL_SIZE);
-              const c = slot % WALL_SIZE;
+          ? Array.from({ length: WALL_SIZE * WALL_SIZE }, (_, shown) => {
+              const r = Math.floor(shown / WALL_SIZE);
+              const c = shown % WALL_SIZE;
+              const slot = vs(shown); // 저장 좌표 — 상태와 서버는 이것만 안다
               const chosen = pending?.slot === slot;
               return (
                 <Pressable
@@ -777,8 +796,8 @@ export function WallRaceScreen({ navigation }: Props) {
 
     /** 미리보기 벽 옆의 [놓기]/✕ — 가로 벽은 위(맨 윗줄이면 아래), 세로 벽은 오른쪽(오른쪽 끝이면 왼쪽)에 붙인다 */
     function renderConfirm(p: Pending) {
-      const r = Math.floor(p.slot / WALL_SIZE);
-      const c = p.slot % WALL_SIZE;
+      const r = Math.floor(vs(p.slot) / WALL_SIZE);
+      const c = vs(p.slot) % WALL_SIZE;
       const btn = Math.max(32, Math.min(40, cell * 1.1));
       const okW = btn * 1.7;
       const w = okW + btn + 6;
