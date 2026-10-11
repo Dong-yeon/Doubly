@@ -79,7 +79,7 @@ class MealPhotoAutoAnalysisTest {
     @Test
     void 사진만_올려_저장하면_백그라운드_분석이_칼로리를_채운다() {
         Long user = register("auto1@fitto.com");
-        when(foodAnalysisService.analyze(anyLong(), any())).thenReturn(twoFoods());
+        when(foodAnalysisService.analyze(anyLong(), any(), any())).thenReturn(twoFoods());
 
         MealResponse saved = mealService.save(user, photoOnly(false));
         // 저장 응답은 분석을 기다리지 않는다 — 그게 이 설계의 요점이다
@@ -104,7 +104,7 @@ class MealPhotoAutoAnalysisTest {
                 null, null, null, null, null, null, null,
                 List.of(new MealItemRequest("샐러드", "1인분", 200, 10, 5, 8))));
 
-        verify(foodAnalysisService, never()).analyze(anyLong(), any());
+        verify(foodAnalysisService, never()).analyze(anyLong(), any(), any());
     }
 
     @Test
@@ -116,7 +116,7 @@ class MealPhotoAutoAnalysisTest {
 
         mealService.save(user, photoOnly(false));
 
-        verify(foodAnalysisService, never()).analyze(anyLong(), any());
+        verify(foodAnalysisService, never()).analyze(anyLong(), any(), any());
     }
 
     @Test
@@ -126,7 +126,7 @@ class MealPhotoAutoAnalysisTest {
         mealService.save(user, new SaveMealRequest(LocalDate.now(), MealType.SNACK, "그냥 메모만",
                 null, null, null, null, null, null, null, null, null));
 
-        verify(foodAnalysisService, never()).analyze(anyLong(), any());
+        verify(foodAnalysisService, never()).analyze(anyLong(), any(), any());
     }
 
     /**
@@ -140,7 +140,7 @@ class MealPhotoAutoAnalysisTest {
         Long partner = register("auto6@fitto.com");
         InviteCodeResponse invite = relationService.createCoupleInvite(me);
         relationService.connectCouple(partner, invite.code());
-        when(foodAnalysisService.analyze(anyLong(), any())).thenReturn(twoFoods());
+        when(foodAnalysisService.analyze(anyLong(), any(), any())).thenReturn(twoFoods());
 
         mealService.save(me, photoOnly(true));
 
@@ -157,7 +157,7 @@ class MealPhotoAutoAnalysisTest {
     @Test
     void 사용자가_수정하면_AI_추정_표시가_사라진다() {
         Long user = register("auto7@fitto.com");
-        when(foodAnalysisService.analyze(anyLong(), any())).thenReturn(twoFoods());
+        when(foodAnalysisService.analyze(anyLong(), any(), any())).thenReturn(twoFoods());
 
         MealResponse saved = mealService.save(user, photoOnly(false));
         await().atMost(ANALYZED).untilAsserted(() ->

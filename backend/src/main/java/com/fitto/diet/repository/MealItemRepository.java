@@ -34,4 +34,19 @@ public interface MealItemRepository extends JpaRepository<MealItem, Long> {
             """)
     List<MealItem> findRecentWithCalories(@Param("userId") Long userId,
                                           @Param("names") Collection<String> names);
+
+    /**
+     * 이 장소에서 예전에 기록한 메뉴 이름 — 음식 사진 분석의 참고 정보({@code MealPlaceHintLoader}).
+     * 방문(place_visits.meal_id) → 항목을 한 번에 조인해 이름으로 묶고 가장 최근 방문순으로 자른다 —
+     * 방문마다 항목을 따로 읽지 않는다. 커플 장소라 상대가 남긴 방문의 메뉴도 들어온다(같이 먹은 상이
+     * 대부분이다).
+     */
+    @Query("""
+            select i.name from MealItem i
+            join PlaceVisit v on v.mealId = i.meal.id
+            where v.placeId = :placeId
+            group by i.name
+            order by max(v.visitedAt) desc, max(v.id) desc
+            """)
+    List<String> findRecentNamesAtPlace(@Param("placeId") Long placeId, Pageable pageable);
 }

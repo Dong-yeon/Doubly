@@ -48,6 +48,7 @@ public class MealPhotoAutoAnalysisService {
     private final MealRepository mealRepository;
     private final UserRepository userRepository;
     private final FoodAnalysisService foodAnalysisService;
+    private final MealPlaceHintLoader placeHintLoader;
     private final AiJobService aiJobService;
 
     /**
@@ -60,11 +61,13 @@ public class MealPhotoAutoAnalysisService {
     public MealPhotoAutoAnalysisService(MealRepository mealRepository,
                                         UserRepository userRepository,
                                         FoodAnalysisService foodAnalysisService,
+                                        MealPlaceHintLoader placeHintLoader,
                                         AiJobService aiJobService,
                                         PlatformTransactionManager transactionManager) {
         this.mealRepository = mealRepository;
         this.userRepository = userRepository;
         this.foodAnalysisService = foodAnalysisService;
+        this.placeHintLoader = placeHintLoader;
         this.aiJobService = aiJobService;
         this.newTransaction = new TransactionTemplate(transactionManager);
         this.newTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
@@ -116,13 +119,29 @@ public class MealPhotoAutoAnalysisService {
      * @return 작업 결과로 남길 요약 — 폴링하는 화면은 없지만 실패/성공 구분에 쓰인다
      */
     private Object analyzeAndApply(Long userId, Long mealId, String photoUrl) {
-        MealAnalysisResponse result = foodAnalysisService.analyze(userId, photoUrl);
+        MealAnalysisResponse result = foodAnalysisService.analyze(userId, photoUrl, linkedPlaceId(mealId));
         if (!result.isFood() || result.foods().isEmpty()) {
             log.info("자동 분석: 음식이 아니라고 판단 — 기록은 사진만 남긴다 (mealId={})", mealId);
             return java.util.Map.of("applied", false);
         }
         int applied = newTransaction.execute(status -> apply(mealId, result));
         return java.util.Map.of("applied", applied > 0, "meals", applied);
+    }
+
+    /**
+     * 끼니에 방문 기록으로 연결된 장소 — 있으면 사용자가 직접 분석할 때와 같은 장소 힌트를 쓴다.
+     * 접수 시점이 아니라 <b>작업이 돌 때</b> 찾는다. 조회가 실패해도 힌트 없이 분석한다(힌트는 덤이다).
+     *
+     * <p>주의: 식단 기록 화면은 저장 응답을 받은 <b>뒤에</b> 방문 기록을 따로 남긴다(recordVisit).
+     * 커밋 직후 걸린 이 작업이 그보다 먼저 돌면 아직 연결이 없어 힌트 없이 간다.
+     */
+    private Long linkedPlaceId(Long mealId) {
+        try {
+            return placeHintLoader.placeIdOfMeal(mealId).orElse(null);
+        } catch (RuntimeException e) {
+            log.warn("자동 분석: 연결된 장소 조회 실패 — 힌트 없이 분석 (mealId={}): {}", mealId, e.toString());
+            return null;
+        }
     }
 
     /**

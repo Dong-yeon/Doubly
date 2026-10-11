@@ -28,6 +28,9 @@ public interface PlaceVisitRepository extends JpaRepository<PlaceVisit, Long> {
             """)
     List<VisitWithPlace> findByMealIdIn(@Param("mealIds") List<Long> mealIds);
 
+    /** 식단 기록 하나에 붙은 방문 — 사진 자동 분석이 장소 힌트를 찾을 때 쓴다(같은 이유로 역방향 조회). */
+    java.util.Optional<PlaceVisit> findFirstByMealIdOrderByIdDesc(Long mealId);
+
     /**
      * 럽슐랭 가이드 매거진 카드의 커버 사진/한줄평용 배치 조회 — 장소별로 최근 방문순.
      * place_id 로 in 절 하나만 날리고 "장소별 최근 방문(사진 있으면 그걸, 없으면 가장 최근

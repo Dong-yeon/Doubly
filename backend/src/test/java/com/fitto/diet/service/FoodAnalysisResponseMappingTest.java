@@ -22,7 +22,7 @@ import static org.mockito.Mockito.when;
 class FoodAnalysisResponseMappingTest {
 
     private final GeminiClient geminiClient = mock(GeminiClient.class);
-    private final FoodAnalysisService service = new FoodAnalysisService(geminiClient);
+    private final FoodAnalysisService service = new FoodAnalysisService(geminiClient, null);
     private final ObjectMapper mapper = new ObjectMapper();
 
     private JsonNode json(String s) throws Exception {
