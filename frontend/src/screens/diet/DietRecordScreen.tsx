@@ -997,6 +997,9 @@ export function DietRecordScreen({ navigation, route }: Props) {
         fiber: extras?.fiber,
         // 커플이 아니면 서버가 조용히 무시하므로 editing 상태에서만 항상 false 로 둔다
         sharedWithPartner: !editing && dateMeal ? true : undefined,
+        // 사진만 올리면 서버가 곧바로 자동 분석을 거는데, 아래 recordVisit 은 그보다 늦다 —
+        // 가게 이름을 분석 힌트로 쓰려면 저장 요청에 같이 실어야 한다
+        placeId: selectedPlace?.id,
       };
 
       /*

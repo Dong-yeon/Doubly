@@ -62,6 +62,11 @@ export interface SaveMealPayload {
   fiber?: number;
   /** "데이트" 칩 — true 면 커플 상대방에게도 같은 끼니가 칼로리 절반으로 자동 등록된다 */
   sharedWithPartner?: boolean;
+  /**
+   * 고른 럽슐랭 장소 — 사진만 올린 기록의 서버 자동 분석 힌트로만 쓴다. 방문 기록은 저장 뒤에
+   * placeApi.recordVisit 으로 따로 남긴다(그 요청은 자동 분석보다 늦게 도착한다). 수정에서는 무시된다.
+   */
+  placeId?: number;
 }
 
 export interface NutritionGoalPayload {
