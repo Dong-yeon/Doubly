@@ -42,7 +42,7 @@ class DeviceTokenPruneTest {
     void 사용자당_최근_등록된_토큰만_남는다() throws Exception {
         Long user = register("token-prune@fitto.com");
         for (int i = 1; i <= DeviceTokenService.MAX_TOKENS_PER_USER + 2; i++) {
-            deviceTokenService.register(user, "ExponentPushToken[prune-" + i + "]", "android");
+            deviceTokenService.register(user, "ExponentPushToken[prune-" + i + "]", "android", null);
             Thread.sleep(5); // 등록 시각이 겹치지 않게
         }
 
@@ -54,15 +54,15 @@ class DeviceTokenPruneTest {
     @Test
     void 다시_등록한_토큰은_최근으로_올라가_살아남는다() throws Exception {
         Long user = register("token-refresh@fitto.com");
-        deviceTokenService.register(user, "ExponentPushToken[old-phone]", "android");
+        deviceTokenService.register(user, "ExponentPushToken[old-phone]", "android", null);
         for (int i = 1; i < DeviceTokenService.MAX_TOKENS_PER_USER; i++) {
             Thread.sleep(5);
-            deviceTokenService.register(user, "ExponentPushToken[refresh-" + i + "]", "android");
+            deviceTokenService.register(user, "ExponentPushToken[refresh-" + i + "]", "android", null);
         }
         Thread.sleep(5);
-        deviceTokenService.register(user, "ExponentPushToken[old-phone]", "android"); // 그 폰에서 앱을 다시 켰다
+        deviceTokenService.register(user, "ExponentPushToken[old-phone]", "android", null); // 그 폰에서 앱을 다시 켰다
         Thread.sleep(5);
-        deviceTokenService.register(user, "ExponentPushToken[new-phone]", "android");
+        deviceTokenService.register(user, "ExponentPushToken[new-phone]", "android", null);
 
         assertThat(tokensOf(user))
                 .hasSize(DeviceTokenService.MAX_TOKENS_PER_USER)
@@ -74,8 +74,8 @@ class DeviceTokenPruneTest {
     void 같은_기기에_다른_계정이_로그인하면_토큰_주인이_바뀐다() {
         Long first = register("token-owner-a@fitto.com");
         Long second = register("token-owner-b@fitto.com");
-        deviceTokenService.register(first, "ExponentPushToken[shared-device]", "ios");
-        deviceTokenService.register(second, "ExponentPushToken[shared-device]", "ios");
+        deviceTokenService.register(first, "ExponentPushToken[shared-device]", "ios", null);
+        deviceTokenService.register(second, "ExponentPushToken[shared-device]", "ios", null);
 
         assertThat(tokensOf(first)).doesNotContain("ExponentPushToken[shared-device]");
         assertThat(tokensOf(second)).contains("ExponentPushToken[shared-device]");

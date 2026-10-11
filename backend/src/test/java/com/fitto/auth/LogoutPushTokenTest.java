@@ -49,8 +49,8 @@ class LogoutPushTokenTest {
     void 로그아웃에_푸시_토큰을_주면_그_기기_토큰만_지운다() {
         TokenResponse me = register("logout-push-me@fitto.com");
         Long userId = me.user().id();
-        deviceTokenService.register(userId, "ExponentPushToken[phone]", "android");
-        deviceTokenService.register(userId, "ExponentPushToken[tablet]", "ios");
+        deviceTokenService.register(userId, "ExponentPushToken[phone]", "android", null);
+        deviceTokenService.register(userId, "ExponentPushToken[tablet]", "ios", null);
 
         authService.logout(me.refreshToken(), "ExponentPushToken[phone]");
 
@@ -63,7 +63,7 @@ class LogoutPushTokenTest {
     void 남의_토큰은_내_리프레시_토큰으로_지울_수_없다() {
         TokenResponse me = register("logout-push-attacker@fitto.com");
         TokenResponse other = register("logout-push-victim@fitto.com");
-        deviceTokenService.register(other.user().id(), "ExponentPushToken[victim]", "android");
+        deviceTokenService.register(other.user().id(), "ExponentPushToken[victim]", "android", null);
 
         authService.logout(me.refreshToken(), "ExponentPushToken[victim]");
 
@@ -75,7 +75,7 @@ class LogoutPushTokenTest {
         // 옛 앱은 본문 없이 부른다 — 지금까지와 같은 동작이어야 한다
         TokenResponse me = register("logout-push-legacy@fitto.com");
         Long userId = me.user().id();
-        deviceTokenService.register(userId, "ExponentPushToken[legacy]", "android");
+        deviceTokenService.register(userId, "ExponentPushToken[legacy]", "android", null);
 
         authService.logout(me.refreshToken(), null);
 

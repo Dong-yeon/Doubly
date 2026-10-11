@@ -14,13 +14,13 @@ class ExpoPushBadgeTest {
 
     @Test
     void 배지를_알면_싣는다() {
-        Map<String, Object> m = ExpoPushNotificationService.message("tok", "t", "b", "chat/1", 3);
+        Map<String, Object> m = ExpoPushNotificationService.message("tok", "t", "b", "chat/1", 3, null);
         assertThat(m).containsEntry("badge", 3);
     }
 
     @Test
     void 배지를_모르면_필드를_빼서_아이콘_숫자를_건드리지_않는다() {
-        Map<String, Object> m = ExpoPushNotificationService.message("tok", "t", "b", "feed", null);
+        Map<String, Object> m = ExpoPushNotificationService.message("tok", "t", "b", "feed", null, null);
         assertThat(m).doesNotContainKey("badge");
     }
 }

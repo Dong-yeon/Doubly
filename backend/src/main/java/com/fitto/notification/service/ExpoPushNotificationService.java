@@ -141,10 +141,7 @@ public class ExpoPushNotificationService implements NotificationService {
             List<DeviceToken> tokens = deviceTokenRepository.findByUserId(recipientUserId);
             if (tokens.isEmpty()) return;
 
-            Integer badge = badgeFor(recipientUserId, category);
-            List<Map<String, Object>> messages = tokens.stream()
-                    .map(t -> message(t.getToken(), title, body, link, badge))
-                    .toList();
+            List<Map<String, Object>> messages = messagesFor(recipientUserId, tokens, category, title, body, link);
             ExpoPushResponse response = restClient.post()
                     .uri(EXPO_PUSH_URL)
                     .contentType(MediaType.APPLICATION_JSON)
@@ -161,6 +158,46 @@ public class ExpoPushNotificationService implements NotificationService {
             }
             log.warn("Expo push 발송 실패 recipient={}: {}", recipientUserId, e.getMessage());
         }
+    }
+
+    /**
+     * 수신자의 기기마다 보낼 메시지. 배지는 사람 단위라 한 번만 세고, 채널은 기기 단위(그 기기 앱 버전)로 고른다.
+     * 발송 경로 그대로를 테스트하려고 {@link #send} 에서 떼어 냈다(ExpoPushChannelTest).
+     */
+    List<Map<String, Object>> messagesFor(Long recipientUserId, List<DeviceToken> tokens,
+                                          NotificationCategory category, String title, String body, String link) {
+        Integer badge = badgeFor(recipientUserId, category);
+        return tokens.stream()
+                .map(t -> message(t.getToken(), title, body, link, badge, channelIdFor(t, category)))
+                .toList();
+    }
+
+    /** 앱이 만든 첫 채널 세트의 버전 — frontend/src/utils/notificationChannels.ts 의 NOTIFICATION_CHANNELS_VERSION */
+    static final int CHANNELS_V1 = 1;
+
+    /**
+     * 안드로이드 알림 채널 id — 앱이 채널을 만든 기기에만 싣는다. 아니면 null(필드를 빼서 지금처럼 대체 채널로 간다).
+     *
+     * <p><b>왜 채널을 나누나</b>: 채널을 만들지 않던 동안 모든 푸시가 expo-notifications 의 대체 채널 하나(배지 켜짐)로
+     * 왔다. 삼성 런처는 앱이 꺼져 있으면 트레이 알림 수로 아이콘 숫자를 그려서, 채팅을 다 읽어도 럽슐랭·피드 알림이
+     * 숫자로 남았다(docs/chat-unread-badge_2026-10-08.md "채널 분리"). 앱이 채팅 채널만 배지를 켜고 나머지는 끈다.
+     *
+     * <p><b>왜 기기마다 묻나</b>: 채널을 만들기 전 버전의 앱엔 그 채널이 없고, Expo 문서는 없는 채널로 온 알림이
+     * 표시되지 않을 수 있다고 적고 있다. 그래서 앱이 채널을 만든 뒤 등록하며 보낸 버전(V134)이 있는 기기에만 싣는다.
+     * iOS 는 이 필드를 쓰지 않는다(앱도 iOS 에선 버전을 보내지 않는다).
+     *
+     * <p>id 는 앱의 채널 id 와 <b>같은 문자열</b>이다. 카테고리를 추가하면 이 switch 가 컴파일 에러로 알려 준다 —
+     * 이미 만들어진 채널은 바꿀 수 없으니, 그땐 앱에 채널을 추가하고 버전을 올린 뒤 버전별로 고른다.
+     */
+    static String channelIdFor(DeviceToken token, NotificationCategory category) {
+        Integer version = token.getChannelsVersion();
+        if (version == null || version < CHANNELS_V1) return null;
+        return switch (category) {
+            case CHAT -> "chat";
+            case ANNIVERSARY -> "anniversary";
+            case PARTNER -> "partner";
+            case REMINDER -> "reminder";
+        };
     }
 
     /**
@@ -343,8 +380,10 @@ public class ExpoPushNotificationService implements NotificationService {
      * {@code Map.of} 를 못 쓰는 이유는 link 가 null 일 수 있어서다.
      *
      * <p>{@code badge} 가 null 이면 필드를 넣지 않는다 — 넣으면 iOS 가 그 값으로 아이콘 숫자를 덮어쓴다({@link #badgeFor}).
+     * {@code channelId} 도 null 이면 넣지 않는다 — 채널을 만들기 전 앱은 지금처럼 대체 채널로 받는다({@link #channelIdFor}).
      */
-    static Map<String, Object> message(String token, String title, String body, String link, Integer badge) {
+    static Map<String, Object> message(String token, String title, String body, String link,
+                                       Integer badge, String channelId) {
         Map<String, Object> m = new HashMap<>();
         m.put("to", token);
         m.put("title", title);
@@ -355,6 +394,9 @@ public class ExpoPushNotificationService implements NotificationService {
         }
         if (badge != null) {
             m.put("badge", badge);
+        }
+        if (channelId != null) {
+            m.put("channelId", channelId);
         }
         return m;
     }
