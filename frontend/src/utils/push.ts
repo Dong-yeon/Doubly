@@ -7,9 +7,12 @@
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
+import { getPathFromState, getStateFromPath } from '@react-navigation/native';
 import { notificationApi } from '../api/notification';
 import { STORAGE_KEYS } from '../constants/config';
+import { linking } from '../navigation/linking';
 import { storage } from './storage';
+import { ensureNotificationChannels } from './notificationChannels';
 import { useChatStore } from '../store/chatStore';
 
 /**
@@ -21,6 +24,42 @@ import { useChatStore } from '../store/chatStore';
  */
 function normalizeLink(value: string): string {
   return value.split('?')[0].replace(/^\/+/, '').replace(/\/+$/, '');
+}
+
+/**
+ * 알림 링크를 <b>그 링크가 여는 화면의 경로</b>로 바꾼다 — 같은 화면이면 같은 문자열이 되게.
+ *
+ * <p>문자열만 비교하면 경로 맵의 alias 를 못 알아본다. 운동 홈을 가린 동안(config.ts WORKOUT_HOME_ENABLED)
+ * 서버의 'workout' 알림(상대 운동 완료·응원·스트릭)은 럽바디 메인이 여는데, 그 화면에 있는 동안의 경로는
+ * 'diet' 라서 화면에 들어가도 트레이에서 <b>한 번도 지워지지 않았다</b>. 링크를 경로 맵으로 화면 상태로
+ * 풀었다가 다시 경로로 만들면 alias 가 본래 경로로 바뀐다. 경로 맵에 없는 링크는 그대로 둔다.
+ */
+function screenPathOf(link: string): string {
+  const plain = normalizeLink(link);
+  try {
+    const state = getStateFromPath(plain, linking.config);
+    return state ? normalizeLink(getPathFromState(state, linking.config)) : plain;
+  } catch {
+    return plain;
+  }
+}
+
+/**
+ * 들어가면 <b>그 아래 상세 화면</b>으로 가는 알림까지 지우는 목록 화면.
+ *
+ * <p>럽슐랭 알림(방문 기록·평가 요청·등극)은 장소·콘텐츠 상세(place/12, place/content/3)를 여는데, 사람은 대개
+ * 탭으로 럽슐랭 메인에 들어와 목록에서 그 기록을 본다. 상세를 하나씩 열지 않으면 알림이 트레이에 남고, 그게
+ * 안드로이드 아이콘의 점·숫자로 이어졌다. 여행(trips/5)도 같은 모양이다.
+ *
+ * <p>채팅 목록('chat')은 넣지 않는다 — 채팅 알림은 방에 들어가 읽어야 안 읽은 수와 함께 사라지는 게 맞다.
+ * 피드·식단(선물 포함)·루틴 선물은 알림 링크가 곧 그 화면이라 넣을 필요가 없다.
+ */
+const SECTION_ROOTS = new Set(['place', 'trips']);
+
+/** 지금 화면({@code here})에 들어온 것으로 이 알림({@code link}, 화면 경로)을 본 셈인지 */
+function covers(here: string, link: string): boolean {
+  if (link === here) return true;
+  return SECTION_ROOTS.has(here) && link.startsWith(`${here}/`);
 }
 
 /**
@@ -57,10 +96,13 @@ export function setCurrentPath(path: string): void {
  * 지우면 한 번 깜빡이고, 무엇보다 "그 화면에 있는 동안 온 알림"은 아래
  * {@code dismissNotificationsForPath} 가 못 잡는다(경로가 안 바뀌므로 다시 안 돈다).
  * 보고 있는 화면의 소식은 화면이 이미 보여 주고 있다.
+ *
+ * <p>목록 화면이라도 그 아래 상세로 가는 새 알림({@link SECTION_ROOTS})은 억누르지 않는다 — 목록이 그 소식을
+ * 실시간으로 그려 준다는 보장이 없다. 이미 떠 있던 것을 들어올 때 지우는 것({@code dismissNotificationsForPath})과 다르다.
  */
 function isForCurrentScreen(notification: Notifications.Notification): boolean {
   const link = notification.request?.content?.data?.link;
-  return typeof link === 'string' && normalizeLink(link) === currentPath;
+  return typeof link === 'string' && screenPathOf(link) === currentPath;
 }
 
 // 포그라운드에서도 알림 배너 표시(네이티브) — 단, 지금 보고 있는 화면의 것이면 억누른다
@@ -138,6 +180,13 @@ if (Platform.OS !== 'web') {
  * 같은 링크를 가진 알림을 지우면 종류를 하나씩 나열하지 않아도 전부 걸린다 —
  * 새 알림이 생겨도 여기는 손댈 곳이 없다(linking.ts 의 "경로 맵 재사용"과 같은 원칙).
  *
+ * <p><b>화면 단위로 넓혔다(2026-10-11).</b> 링크를 화면 경로로 풀어 비교하고({@link screenPathOf} — alias 로
+ * 열리던 'workout' 알림이 안 지워지던 문제), 럽슐랭·여행 목록에 들어오면 그 아래 상세 알림까지 지운다
+ * ({@link SECTION_ROOTS}). 트레이에 남은 알림은 안드로이드 런처가 아이콘 점·숫자로 그리므로, 본 소식이
+ * 남아 있으면 "다 봤는데 아이콘에 표시가 있다"가 된다(docs/chat-unread-badge_2026-10-08.md "채널 분리").
+ * 알림 종류(data.category)로 거르지 않는 이유: '상대 활동' 하나가 운동·식단·맛집·게임 등 서른 가지라,
+ * 종류로 지우면 아직 안 본 다른 화면의 알림까지 사라진다. 어느 화면의 소식인지는 링크만 정확히 안다.
+ *
  * <p>호출은 {@code RootNavigator} 한 곳이다(경로가 바뀔 때 · 앱이 포그라운드로 돌아올 때).
  *
  * @param path {@code getPathFromState} 가 만든 현재 화면 경로
@@ -152,7 +201,7 @@ export async function dismissNotificationsForPath(path: string): Promise<void> {
       presented
         .filter((n) => {
           const link = n.request?.content?.data?.link;
-          return typeof link === 'string' && normalizeLink(link) === here;
+          return typeof link === 'string' && covers(here, screenPathOf(link));
         })
         .map((n) => Notifications.dismissNotificationAsync(n.request.identifier)),
     );
@@ -275,12 +324,17 @@ export async function requestPushPermission(): Promise<boolean> {
 
 /** Expo 푸시 토큰을 발급받아 서버에 등록한다. */
 async function registerToken(): Promise<void> {
+  /*
+   * 알림 채널을 <b>등록보다 먼저</b> 만든다 — 서버는 여기서 보낸 버전이 있는 기기에만 channelId 를 싣는다.
+   * 순서가 바뀌면 채널이 아직 없는 기기로 channelId 가 가는 틈이 생긴다(utils/notificationChannels.ts).
+   */
+  const channelsVersion = await ensureNotificationChannels();
   const projectId =
     Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
   const { data: token } = await Notifications.getExpoPushTokenAsync(
     projectId ? { projectId } : undefined,
   );
-  await notificationApi.registerToken(token, Platform.OS);
+  await notificationApi.registerToken(token, Platform.OS, channelsVersion);
   // 로그아웃 때 서버에서 지우려면 무엇을 등록했는지 알아야 한다(pushTokenForLogout)
   await storage.setItem(STORAGE_KEYS.pushToken, token).catch(() => {});
 }

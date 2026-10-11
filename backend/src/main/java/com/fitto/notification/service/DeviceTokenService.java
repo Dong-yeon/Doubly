@@ -32,15 +32,18 @@ public class DeviceTokenService {
      * <p>등록 뒤 이 사용자의 토큰이 {@link #MAX_TOKENS_PER_USER} 개를 넘으면 오래 등록되지 않은 것부터 지운다
      * (docs/first-experience-audit.md #28 — 운영에서 한 사람에게 52개가 쌓였다). 기간으로 지우지 않는 건
      * 오래 접속하지 않은 사람에게 가는 재방문 알림까지 끊기 때문이다.
+     *
+     * @param channelsVersion 앱이 이 기기에 만든 안드로이드 알림 채널 세트의 버전 — 없으면 null(V134)
      */
     @Transactional
-    public void register(Long userId, String token, String platform) {
+    public void register(Long userId, String token, String platform, Integer channelsVersion) {
         deviceTokenRepository.findByToken(token).ifPresentOrElse(
-                existing -> existing.reRegister(userId, platform),
+                existing -> existing.reRegister(userId, platform, channelsVersion),
                 () -> deviceTokenRepository.save(DeviceToken.builder()
                         .userId(userId)
                         .token(token)
                         .platform(platform)
+                        .channelsVersion(channelsVersion)
                         .build()));
         deviceTokenRepository.flush();
 
