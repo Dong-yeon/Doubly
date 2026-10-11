@@ -22,15 +22,16 @@
 sanitizeForPrompt`(조립·정리), `MealItemRepository.findRecentNamesAtPlace`(메뉴 조인 1쿼리).
 조회는 장소·관계·메뉴 고정 3회로, 방문 수와 무관하다.
 
-## 남은 한계 — 서버 자동 분석은 대부분 힌트 없이 돈다
+## 서버 자동 분석 — 저장 요청에 placeId 를 싣는 이유
 
-`MealPhotoAutoAnalysisService` 도 끼니에 연결된 장소가 있으면 같은 힌트를 쓰도록 했지만, 지금 흐름에서는
-거의 걸리지 않는다. 식단 기록 화면이 **저장 응답을 받은 뒤에** `recordVisit` 으로 방문을 따로 남기는데,
-자동 분석 작업은 저장 커밋 직후 바로 돌기 때문에 그 시점엔 연결이 아직 없다.
+`MealPhotoAutoAnalysisService` 는 처음엔 끼니에 방문 기록으로 연결된 장소(`place_visits.meal_id`)만
+찾았는데, 지금 흐름에서는 거의 걸리지 않았다. 식단 기록 화면이 **저장 응답을 받은 뒤에** `recordVisit` 으로
+방문을 따로 남기는 반면, 자동 분석 작업은 저장 커밋 직후 바로 돌아 그 시점엔 연결이 아직 없다.
 
-확실히 하려면 저장 요청(`SaveMealRequest`)에 `placeId` 를 실어 보내 `scheduleIfEligible` 에 넘기는
-방식이 필요하다(방문 기록 생성은 지금처럼 `recordVisit` 이 맡고, 저장 요청의 값은 분석 힌트로만 쓴다).
-API 계약이 바뀌는 일이라 이번에는 하지 않았다.
+그래서 `SaveMealRequest.placeId`(선택)를 추가해 `scheduleIfEligible` 로 넘긴다. **분석 힌트로만** 쓰고,
+방문 기록 생성은 지금처럼 `recordVisit` 이 맡는다(저장 API 가 방문까지 만들게 하면 방문 카드·푸시·평점
+흐름이 두 갈래가 된다). 접근 판정은 사용자가 직접 분석할 때와 같은 `MealPlaceHintLoader` 를 지난다.
+placeId 가 없으면(이전 앱 버전 등) 예전처럼 끼니→방문 역조회를 차선책으로 시도한다.
 
 ## 보류 — 분석 뒤 장소를 고르면 과거 메뉴 칩으로 이름 교체
 
