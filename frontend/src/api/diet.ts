@@ -96,9 +96,10 @@ export const dietApi = {
    * AI 분석 — 서버는 접수증(jobId)만 주고 생성은 백그라운드에서 한다(api/aiJob.ts 참고).
    * 폴링까지 여기서 끝내므로 호출부는 예전처럼 결과 Promise 를 받는다.
    */
-  analyze: (photoUrl: string) =>
+  // placeId — 고른 럽슐랭 장소. 서버가 가게 이름·과거 메뉴를 참고 정보로 붙인다(내 장소가 아니면 무시)
+  analyze: (photoUrl: string, placeId?: number) =>
     runAiJob<MealAnalysis>(
-      unwrap(apiClient.post<ApiResponse<AiJobStart>>('/meal/analyze', { photoUrl })),
+      unwrap(apiClient.post<ApiResponse<AiJobStart>>('/meal/analyze', { photoUrl, placeId })),
     ),
   // 텍스트로 적은 음식의 칼로리·매크로 추정 (사진 분석과 응답 형태 동일)
   analyzeText: (text: string) =>

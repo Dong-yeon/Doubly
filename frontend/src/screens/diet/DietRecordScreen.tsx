@@ -761,7 +761,8 @@ export function DietRecordScreen({ navigation, route }: Props) {
       const photoUrl = await uploadForSubmit(photoUri);
       // 전역 화면 잠금은 걷었다(대기가 분 단위까지 늘 수 있다). 이 경로는 결과를
       // 기존 항목 <b>뒤에 덧붙이므로</b>, 기다리는 동안 뭘 더 적어도 지워지지 않는다.
-      const result = await dietApi.analyze(photoUrl);
+      // 장소를 먼저 골랐으면 같이 보낸다 — 가게 이름이 사진만으로는 헷갈리는 메뉴(찌개류 등)를 가른다
+      const result = await dietApi.analyze(photoUrl, selectedPlace?.id);
       if (!result.isFood || result.foods.length === 0) {
         // 실제 음식·메뉴판·영양성분표 중 아무것도 못 찾았을 때만 여기로 온다(source 세 갈래 모두 실패)
         toast.error('음식 사진이 아닌 것 같아요');
