@@ -63,6 +63,7 @@ import type {
   MealAnalysisSource,
   MealType,
   Place,
+  PlaceMenu,
   PlaceSearchResult,
   RecentFood,
 } from '../../types';
@@ -108,6 +109,22 @@ interface ItemForm {
    * <b>지금 값이 기준 × 배수와 같은지</b>로 판단한다 — 다르면 누가 고친 것이니 지금 값이 새 1배다({@link activeMultiplier}).
    */
   scale?: { base: ScaleBase; multiplier: number };
+  /**
+   * 사진 분석(음식 사진·사진 속 글자)으로 들어온 이름 — 우리 장소를 고르면 그 가게 메뉴 칩으로 이름만 바꿀 수 있다.
+   * 사진만 보고 김치찌개집의 찌개를 부대찌개로 읽는 식의 오인을 다시 분석하지 않고 고치게 한다. 영양성분표 촬영은 제외.
+   */
+  fromPhoto?: boolean;
+}
+
+/** 메뉴 칩은 이 개수까지 — 가로로 밀어 보는 줄이라 더 많으면 고르기보다 찾기가 된다 */
+const MENU_CHIP_MAX = 10;
+
+/** 장소 메뉴 → 칩 후보: 여기서 먹은 것(많이 먹은 순) 다음 메뉴판, 공백 정리·중복 제거 */
+function menuChipNames(menu: PlaceMenu): string[] {
+  const names = [...menu.items.map((i) => i.name), ...(menu.board ?? []).map((b) => b.name)]
+    .map((n) => n.trim().slice(0, MAX_NAME))
+    .filter((n) => n.length > 0);
+  return [...new Set(names)].slice(0, MENU_CHIP_MAX);
 }
 
 
@@ -333,6 +350,31 @@ export function DietRecordScreen({ navigation, route }: Props) {
       }),
     );
   });
+
+  /*
+   * 고른 우리 장소의 메뉴 — 사진 분석으로 채운 음식 이름 아래에 칩으로 띄우고, 탭하면 이름만 바꾼다.
+   * 분석한 뒤에 장소를 골랐다고 다시 분석하지 않는다(쿼터를 또 쓰고 또 기다리게 된다) — 그 가게에서 먹었던 것·
+   * 메뉴판에서 고르게 한다. 사진 분석 항목이 있을 때만 받고, 실패하면 칩만 안 뜬다(덤이다).
+   * placeId 를 함께 들고 있어 장소를 바꾸는 사이 늦게 온 응답이 다른 장소의 칩으로 붙지 않는다.
+   * 카카오에서 막 고른 곳(pendingKakao)은 아직 우리 장소가 아니라 메뉴가 없다.
+   */
+  const [placeMenu, setPlaceMenu] = useState<{ placeId: number; names: string[] } | null>(null);
+  const menuPlaceId = selectedPlace?.id;
+  const hasPhotoItems = items.some((i) => i.fromPhoto);
+  useEffect(() => {
+    if (menuPlaceId == null || !hasPhotoItems || placeMenu?.placeId === menuPlaceId) return;
+    let stale = false;
+    placeApi.menu(menuPlaceId).then(
+      (menu) => {
+        if (!stale) setPlaceMenu({ placeId: menuPlaceId, names: menuChipNames(menu) });
+      },
+      () => undefined,
+    );
+    return () => {
+      stale = true;
+    };
+  }, [menuPlaceId, hasPhotoItems, placeMenu?.placeId]);
+  const menuChips = placeMenu && placeMenu.placeId === menuPlaceId ? placeMenu.names : [];
 
   /*
    * 업로드 캐시 — AI 분석과 저장이 같은 사진을 두 번 올리지 않도록.
@@ -976,7 +1018,8 @@ export function DietRecordScreen({ navigation, route }: Props) {
     // hasChips 계산(items 기반)이 이번 렌더에 바로 반영되게 한다.
     // 영양성분표 촬영은 끼니 사진이 아니므로 사진 아래 안내 문구를 바꾸지 않는다
     if (!label) setAnalysisSource(result.source ?? 'PHOTO_FOOD');
-    const forms = result.foods.map(toForm);
+    // 끼니 사진에서 읽은 이름만 장소 메뉴 칩 대상이다 — 영양성분표의 제품명은 가게 메뉴와 상관없다
+    const forms = result.foods.map((f) => ({ ...toForm(f), fromPhoto: !label }));
     // 표에는 제품명이 없어 AI 가 "영양성분표" 같은 이름을 붙이기 쉽다 — 바코드로 안 이름이 있으면 그걸 쓴다
     if (label?.productName && result.source === 'NUTRITION_LABEL' && forms.length === 1) {
       forms[0] = { ...forms[0], name: label.productName.slice(0, MAX_NAME) };
@@ -1753,6 +1796,36 @@ export function DietRecordScreen({ navigation, route }: Props) {
                 maxLength={MAX_NAME}
                 onChangeText={(t) => updateItem(item.key, { name: t })}
               />
+              {/*
+                고른 장소의 메뉴로 이름만 바꾸기 — 사진 분석 항목에만. 칼로리·탄단지·양은 그대로 둔다(같은 상을
+                다른 이름으로 읽었을 뿐이라 추정치는 사진 기준이 맞다). 지금 이름과 같은 메뉴는 칩에서 뺀다.
+              */}
+              {item.fromPhoto && menuChips.some((n) => n !== item.name.trim()) ? (
+                <View style={styles.menuChipBlock}>
+                  <Text style={styles.menuChipLabel} numberOfLines={1}>
+                    {selectedPlace?.name} 메뉴로 바꾸기
+                  </Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.quickPlaceRow}
+                    keyboardShouldPersistTaps="handled"
+                  >
+                    {menuChips
+                      .filter((n) => n !== item.name.trim())
+                      .map((n) => (
+                        <Chip
+                          key={n}
+                          label={n}
+                          onPress={() => {
+                            haptics.light();
+                            updateItem(item.key, { name: n });
+                          }}
+                        />
+                      ))}
+                  </ScrollView>
+                </View>
+              ) : null}
               <TextField
                 placeholder="양 (예: 1인분, 반 공기)"
                 value={item.portion}
@@ -2104,6 +2177,9 @@ const styles = themedStyles((colors) => ({
   // 빠른 장소 칩 — 가로 한 줄. 세로로 줄어들지 않게 flexGrow/Shrink 를 끈다(PlaceScreen.filterScroll 과 같은 처방)
   quickPlaceScroll: { flexGrow: 0, flexShrink: 0, marginTop: spacing.sm },
   quickPlaceRow: { flexDirection: 'row', gap: spacing.sm },
+  // 음식명 아래 "○○ 메뉴로 바꾸기" 칩 줄 — 입력칸 사이에 끼므로 위아래 여백을 작게
+  menuChipBlock: { gap: spacing.xs, marginBottom: spacing.sm },
+  menuChipLabel: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
   placeRatingHint: { color: colors.textSecondary, fontSize: fontSize.caption, marginTop: spacing.xs },
   placeSheetCard: { maxHeight: '80%' },
   sheetTitle: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary, marginBottom: spacing.md },
