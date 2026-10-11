@@ -73,6 +73,24 @@ public class GeminiProperties {
      */
     private String imageModel = "gemini-3.1-flash-image";
 
+    /**
+     * 생성 이미지 해상도 — {@code generationConfig.imageConfig.imageSize} 로 나간다.
+     *
+     * <p><b>이게 곧 단가다.</b> 같은 모델이어도 0.5K 는 장당 약 0.045 USD, 1K 는 약 0.067 USD 다.
+     * 지정하지 않으면 <b>기본이 1K</b> 라, 세트(감정 17종) 원가가 0.77 → 1.14 USD 로 벌어진다.
+     * 우리 이모지는 채팅 말풍선·무드 피커에 작게 들어가므로 512px 로 충분하다.
+     *
+     * <p><b>대문자 K 를 쓴다</b> — {@code 1k} 처럼 소문자로 보내면 API 가 거절한다. 512px 은
+     * {@code gemini-3.1-flash-image} 전용이다(Lite 이미지 모델은 1K 만 지원).
+     *
+     * <p><b>비워 두면 필드를 아예 보내지 않는다.</b> 이 이음매를 남긴 이유: 일부 모델·게이트웨이에서
+     * {@code imageSize} 가 400 으로 거절되거나 조용히 무시된다는 보고가 있다. 거절되면 이미지 생성이
+     * 통째로 멈추므로, 재배포 없이 {@code GEMINI_IMAGE_SIZE=} 로 끌 수 있어야 한다.
+     * <b>무시되는 쪽</b>은 조용해서 눈치채기 어려운데, {@code ai_usage_logs.candidates_tokens}
+     * 가 기대보다 크면 그게 신호다(V89) — 실제로 적용됐는지는 거기서 확인한다.
+     */
+    private String imageSize = "512px";
+
     public boolean isConfigured() {
         return apiKey != null && !apiKey.isBlank();
     }

@@ -2,6 +2,9 @@ package com.fitto.feed;
 
 import com.fitto.auth.dto.RegisterRequest;
 import com.fitto.auth.service.AuthService;
+import com.fitto.chat.domain.MessageType;
+import com.fitto.chat.dto.SendMessageRequest;
+import com.fitto.chat.service.ChatService;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.upload.CloudinaryImageDeleter;
 import com.fitto.diet.domain.MealType;
@@ -13,8 +16,15 @@ import com.fitto.feed.dto.FeedItemResponse;
 import com.fitto.feed.dto.FeedItemType;
 import com.fitto.feed.dto.FeedTimelineResponse;
 import com.fitto.feed.dto.ReactionSummary;
+import com.fitto.feed.dto.UpdatePostRequest;
+import com.fitto.common.exception.ErrorCode;
+import com.fitto.common.time.KstClock;
 import com.fitto.feed.service.FeedService;
+import com.fitto.place.dto.RecordVisitRequest;
+import com.fitto.place.dto.SavePlaceRequest;
+import com.fitto.place.service.PlaceService;
 import com.fitto.relation.dto.InviteCodeResponse;
+import com.fitto.relation.dto.RelationResponse;
 import com.fitto.relation.service.RelationService;
 import com.fitto.workout.dto.SaveWorkoutRequest;
 import com.fitto.workout.dto.WorkoutSetRequest;
@@ -31,6 +41,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.verify;
 
 /** 커플 일상 피드 통합 플로우 (PLAN.md Couple Feed) — H2 기반. */
@@ -48,9 +59,13 @@ class FeedFlowTest {
     WorkoutService workoutService;
     @Autowired
     MealService mealService;
+    @Autowired
+    PlaceService placeService;
     /** 스파이 — 테스트 프로필은 Cloudinary 미설정이라 실제 삭제는 no-op, 어떤 URL 을 넘기는지만 본다 */
     @MockitoSpyBean
     CloudinaryImageDeleter imageDeleter;
+    @Autowired
+    ChatService chatService;
 
     private Long register(String email) {
         return authService.register(
@@ -96,21 +111,45 @@ class FeedFlowTest {
     }
 
     /**
-     * 운동 인증샷은 <b>애인에게도 보이지 않는다</b> — 커플 피드에 이미지가 실리지 않는다.
+     * 운동 사진은 <b>오운완으로 올린 것만</b> 커플 피드에 실린다.
      *
-     * <p>인증샷은 대개 다른 앱의 완료 화면 캡처이고, 러닝 앱 화면에는 <b>달린 경로 지도</b>가
-     * 함께 찍혀 있다. 즉 집 근처 동선이 그대로 담긴 사진이다. 이걸 "커플 콘텐츠니까"라며
-     * 자동으로 피드에 흘리면, 사용자는 자기가 무엇을 공개했는지 모른 채 위치를 공유하게 된다.
-     * 공유하고 싶으면 사진을 직접 피드 포스트로 올리면 된다 — 그건 명시적인 행동이다.
+     * <p>예전 이 자리에는 "운동 인증샷은 애인에게도 보이지 않는다" 가 있었다. 그때 사진은
+     * 다른 앱의 완료 화면 캡처였고, 러닝 앱 화면에는 <b>달린 경로 지도</b>(대개 집 근처)가
+     * 함께 찍혀 있었기 때문이다. 그 테스트의 주석은 "나중에 운동 카드에도 사진을 붙이자는
+     * 개선이 들어올 때 실패해서 그 결정을 의식적으로 하게 만드는 것이 목적"이라고 적었고,
+     * 2026-09-14 에 실제로 그렇게 걸렸다 — 사진 기능이 오운완 인증샷으로 바뀌면서다.
      *
-     * <p>이 테스트는 나중에 "운동 카드에도 사진을 붙이자"는 개선이 들어올 때 <b>실패해서</b>
-     * 그 결정을 의식적으로 하게 만드는 것이 목적이다.
+     * <p>바뀐 규칙은 <b>사진마다 다르다</b>. 옛 사진은 "애인에게는 공유되지 않아요" 안내를
+     * 보고 올라왔으므로 소급해서 공개하지 않는다({@code Workout.imageShared} 기본값 false,
+     * V94). 구버전 앱은 이 필드를 보내지 않으므로 자동으로 안전한 쪽에 선다.
      */
     @Test
-    void 운동_인증샷은_커플_피드에_노출되지_않는다() {
+    void 오운완으로_올린_사진만_커플_피드에_실린다() {
         long[] c = couple("fwphoto1@fitto.com", "fwphoto2@fitto.com");
+        String selfie = "https://res.cloudinary.com/demo/image/upload/owoonwan.jpg";
+
+        workoutService.save(c[1], new SaveWorkoutRequest(LocalDate.now(), null, 32, null, null,
+                selfie, true, List.of()));
+
+        FeedItemResponse workout = feedService.timeline(c[0], null, 20).items().stream()
+                .filter(i -> i.type() == FeedItemType.WORKOUT)
+                .findFirst().orElseThrow();
+        assertThat(workout.imageUrl()).isEqualTo(selfie);
+    }
+
+    /**
+     * 공유 표시가 없는 사진은 안 실린다 — 옛 기록과 <b>구버전 앱</b>이 여기 걸린다.
+     *
+     * <p>구 앱은 {@code imageShared} 를 아예 보내지 않는다. 그 요청이 그대로 "공유"로 읽히면
+     * 스토어 앱을 쓰는 사람이 러닝 앱 화면을 올리는 순간 집 근처 경로가 애인에게 간다 —
+     * 백엔드가 앱보다 먼저 배포되는 동안 실제로 열리는 창이다.
+     */
+    @Test
+    void 공유_표시가_없는_운동_사진은_피드에_안_실린다() {
+        long[] c = couple("fwphoto3@fitto.com", "fwphoto4@fitto.com");
         String screenshot = "https://res.cloudinary.com/demo/image/upload/strava-map.jpg";
 
+        // imageShared 를 안 보내는 옛 호출부와 같은 모양
         workoutService.save(c[1], new SaveWorkoutRequest(LocalDate.now(), null, 32, null, null,
                 screenshot, List.of()));
 
@@ -121,8 +160,14 @@ class FeedFlowTest {
         assertThat(workout.imageUrls()).isEmpty();
     }
 
+    /**
+     * 제목이 <b>음식</b>을, 부제가 끼니·칼로리를 받는다.
+     *
+     * <p>예전에는 반대였다 — 제목이 늘 "저녁 식단 🍽️" 고정이고 음식은 회색 부제로 밀려 있어,
+     * 타임라인을 내리면 같은 글자만 반복해 읽혔다. 굵게 읽히는 자리에 실제 기록을 둔다.
+     */
     @Test
-    void 식단_카드는_음식_항목을_요약해_보여준다() {
+    void 식단_카드는_음식을_제목으로_끼니와_칼로리를_부제로_보여준다() {
         long[] c = couple("fm1@fitto.com", "fm2@fitto.com");
         mealService.save(c[0], new SaveMealRequest(
                 LocalDate.now(), MealType.DINNER, null, null, null, null, null, null, null, null, null, List.of(
@@ -133,13 +178,15 @@ class FeedFlowTest {
         FeedItemResponse meal = feedService.timeline(c[0], null, 20).items().stream()
                 .filter(i -> i.type() == FeedItemType.MEAL).findFirst().orElseThrow();
 
-        // 운동 카드("러닝 외 3개 · 40분")와 같은 요약 형태 — 단, 칼로리는 싣지 않는다
-        // (MEAL_CARD 와 같은 "수치는 본인 화면에만" 규칙, FeedItemMapper.toItem(Meal) 주석)
-        assertThat(meal.content()).isEqualTo("삼겹살 외 2개");
+        assertThat(meal.title()).isEqualTo("삼겹살 외 2개");
+        // 칼로리는 부제에서 빠진다 — 피드는 자동 노출이라 매 끼니 감시가 된다(FeedItemMapper 주석)
+        assertThat(meal.content()).isEqualTo("저녁");
+        assertThat(meal.content()).doesNotContain("kcal");
+        assertThat(meal.shared()).isFalse();
     }
 
     @Test
-    void 항목이_없는_식단_카드는_메모로_보여준다() {
+    void 항목이_없는_식단_카드는_메모를_제목으로_쓴다() {
         long[] c = couple("fm3@fitto.com", "fm4@fitto.com");
         mealService.save(c[0], new SaveMealRequest(
                 LocalDate.now(), MealType.LUNCH, "회식", null, 800, null, null, null, null, null, null, null));
@@ -147,7 +194,86 @@ class FeedFlowTest {
         FeedItemResponse meal = feedService.timeline(c[0], null, 20).items().stream()
                 .filter(i -> i.type() == FeedItemType.MEAL).findFirst().orElseThrow();
 
-        assertThat(meal.content()).isEqualTo("회식");
+        assertThat(meal.title()).isEqualTo("회식");
+        assertThat(meal.content()).isEqualTo("점심");
+    }
+
+    /**
+     * 운동도 식단과 같은 규칙 — 제목에 종목, 부제에 분량.
+     *
+     * <p>분량은 세트 수와 총 볼륨(무게 × 횟수 × 세트)이다. 예전 부제는 종목 수와 시간뿐이라
+     * "얼마나 했는지"가 빠져 있었다.
+     */
+    @Test
+    void 운동_카드는_종목을_제목으로_세트와_볼륨을_부제로_보여준다() {
+        long[] c = couple("fwv1@fitto.com", "fwv2@fitto.com");
+        workoutService.save(c[0], new SaveWorkoutRequest(LocalDate.now(), null, 40, null,
+                List.of(new WorkoutSetRequest("벤치프레스", "가슴", 4, 10, new BigDecimal("60"), 1),
+                        new WorkoutSetRequest("스쿼트", "하체", 3, 10, new BigDecimal("80"), 2))));
+
+        FeedItemResponse workout = feedService.timeline(c[0], null, 20).items().stream()
+                .filter(i -> i.type() == FeedItemType.WORKOUT).findFirst().orElseThrow();
+
+        assertThat(workout.title()).isEqualTo("벤치프레스 외 1개");
+        // 4×10×60 + 3×10×80 = 4,800
+        assertThat(workout.content()).isEqualTo("7세트 · 4,800kg · 40분");
+    }
+
+    /** 유산소만 한 날은 볼륨이 0 이다 — "0kg" 을 적으면 안 한 게 아니라 못 한 것처럼 읽힌다. */
+    @Test
+    void 유산소만_한_운동_카드에는_볼륨을_적지_않는다() {
+        long[] c = couple("fwc1@fitto.com", "fwc2@fitto.com");
+        workoutService.save(c[0], new SaveWorkoutRequest(LocalDate.now(), null, 30, null,
+                List.of(new WorkoutSetRequest("러닝", "유산소", 1, null, null, 1))));
+
+        FeedItemResponse workout = feedService.timeline(c[0], null, 20).items().stream()
+                .filter(i -> i.type() == FeedItemType.WORKOUT).findFirst().orElseThrow();
+
+        assertThat(workout.content()).isEqualTo("1세트 · 30분");
+    }
+
+    /**
+     * 데이트 식단(같이 먹기)은 커플 양쪽에 짝으로 저장되지만, 타임라인은 두 사람의 기록을
+     * 함께 읽으므로 그대로 두면 같은 한 끼가 카드 두 장으로 나온다 — 원본 한 장만 싣는다.
+     */
+    @Test
+    void 데이트_식단은_카드_한_장으로만_나온다() {
+        long[] c = couple("fshare1@fitto.com", "fshare2@fitto.com");
+        mealService.save(c[0], new SaveMealRequest(
+                LocalDate.now(), MealType.DINNER, "파스타", null, 900, null, null, null,
+                null, null, null, null, true));
+
+        // 등록한 쪽과 상대 쪽 어느 화면에서 봐도 한 장이다
+        for (long viewer : c) {
+            List<FeedItemResponse> meals = feedService.timeline(viewer, null, 20).items().stream()
+                    .filter(i -> i.type() == FeedItemType.MEAL).toList();
+            assertThat(meals).hasSize(1);
+            assertThat(meals.get(0).shared()).isTrue();
+        }
+    }
+
+    /**
+     * 어디서 먹었는지는 "무엇을 먹었는지" 다음으로 궁금한 값인데, 지금까지 럽슐랭 탭으로
+     * 따로 찾아가야만 볼 수 있었다 — 식단 카드 부제에 함께 싣는다.
+     */
+    @Test
+    void 식단_카드는_연결된_장소를_부제에_보여준다() {
+        long[] c = couple("fmp1@fitto.com", "fmp2@fitto.com");
+        Long mealId = mealService.save(c[0], new SaveMealRequest(
+                LocalDate.now(), MealType.LUNCH, "파스타", null, 700, null, null, null,
+                null, null, null, null)).id();
+        Long placeId = placeService.save(c[0], new SavePlaceRequest(
+                "트라토리아", "연남동", null, null, "양식")).id();
+        placeService.recordVisit(c[0], placeId,
+                new RecordVisitRequest(LocalDate.now(), 5, null, null, mealId));
+
+        FeedItemResponse meal = feedService.timeline(c[0], null, 20).items().stream()
+                .filter(i -> i.type() == FeedItemType.MEAL).findFirst().orElseThrow();
+
+        // 방문 별점도 함께 — 식단에 붙은 방문 카드는 타임라인에서 빠지고(같은 외식이 두 장이었다) 식사 카드가 싣는다(2026-10-05)
+        assertThat(meal.content()).isEqualTo("점심 · 📍트라토리아 ★5");
+        assertThat(feedService.timeline(c[0], null, 20).items())
+                .noneMatch(i -> i.type() == FeedItemType.PLACE_VISIT);
     }
 
     @Test
@@ -227,5 +353,136 @@ class FeedFlowTest {
         verify(imageDeleter).deleteAllAfterCommit(List.of(
                 "https://img.example.com/d1.jpg",
                 "https://img.example.com/d1.jpg", "https://img.example.com/d2.jpg", "https://img.example.com/d3.jpg"));
+    }
+    /**
+     * 식단을 "채팅에 공유"하면 MEAL_CARD 가 식사 사진 URL 을 그대로 싣는다. 예전엔 식사를 지우면 그 파일까지
+     * 지워 채팅 카드 사진이 깨졌다(LOVEBODY_REVIEW_2026-10-02 §3 A-3) — 같은 URL 을 쓰는 행이 남아 있으면 남긴다.
+     */
+    @Test
+    void 채팅에_공유한_식사를_지워도_채팅_카드가_쓰는_사진_파일은_남긴다() {
+        long[] c = couple("share-asset-a@fitto.com", "share-asset-b@fitto.com");
+        // couple() 은 relationId 를 돌려주지 않는다 — 내 관계 목록에서 찾는다
+        Long relationId = relationService.findMyRelations(c[0]).stream().map(RelationResponse::id).findFirst().orElseThrow();
+        String photo = "https://res.cloudinary.com/demo/image/upload/v1/fitto/shared-meal.jpg";
+        Long mealId = mealService.save(c[0], new SaveMealRequest(LocalDate.now(), MealType.LUNCH, "김밥", photo, 500,
+                null, null, null, null, null, null, null)).id();
+        chatService.send(c[0], relationId, new SendMessageRequest(MessageType.MEAL_CARD, "점심 · 김밥", photo, null, null, null));
+
+        mealService.delete(c[0], mealId);
+
+        // 삭제 경로는 지운 행의 URL 을 그대로 넘기고(호출부는 몰라도 된다), 지우기 직전 거르기가 남긴다
+        verify(imageDeleter).deleteAllAfterCommit(List.of(photo));
+        assertThat(imageDeleter.deletable(List.of(photo))).isEmpty();
+    }
+
+    /** 참조 확인은 TEXT 컬럼(meals.photo_url — H2 에선 CLOB)까지 본다. 아무도 안 쓰는 URL 만 지울 대상이다 */
+    @Test
+    void 아무_행도_쓰지_않는_URL만_지울_대상이다() {
+        long[] c = couple("share-asset-c@fitto.com", "share-asset-d@fitto.com");
+        String kept = "https://res.cloudinary.com/demo/image/upload/v1/fitto/still-used.jpg";
+        String orphan = "https://res.cloudinary.com/demo/image/upload/v1/fitto/orphan.jpg";
+        mealService.save(c[0], new SaveMealRequest(LocalDate.now(), MealType.DINNER, "파스타", kept, 700,
+                null, null, null, null, null, null, null));
+
+        assertThat(imageDeleter.deletable(List.of(kept, orphan, orphan))).containsExactly(orphan);
+    }
+
+    // ---- 고치기 (PUT /feed/posts/{id}) ----
+
+    @Test
+    void 고치면_글_사진_기록일이_바뀌고_빠진_사진만_지운다() {
+        long[] c = couple("edit-a@fitto.com", "edit-b@fitto.com");
+        String p1 = "https://img.example.com/e1.jpg";
+        String p2 = "https://img.example.com/e2.jpg";
+        String p3 = "https://img.example.com/e3.jpg";
+        String p4 = "https://img.example.com/e4.jpg";
+        FeedItemResponse post = feedService.createPost(c[0], new CreatePostRequest("처음 글", null, List.of(p1, p2, p3)));
+        LocalDate yesterday = KstClock.today().minusDays(1);
+
+        FeedItemResponse edited = feedService.updatePost(c[0], post.refId(),
+                new UpdatePostRequest("  고친 글  ", List.of(p2, p4), yesterday));
+
+        assertThat(edited.content()).isEqualTo("고친 글");
+        assertThat(edited.imageUrls()).containsExactly(p2, p4);
+        assertThat(edited.imageUrl()).isEqualTo(p2); // 대표 사진은 새 목록의 첫 장
+        assertThat(edited.recordDate()).isEqualTo(yesterday);
+
+        // 상대가 다시 읽어도 같다
+        FeedItemResponse fromPartner = feedService.getPost(c[1], post.refId());
+        assertThat(fromPartner.content()).isEqualTo("고친 글");
+        assertThat(fromPartner.imageUrls()).containsExactly(p2, p4);
+
+        // 빠진 p1(예전 대표)·p3 만 지운다 — 남긴 p2 와 새 p4 는 아니다
+        verify(imageDeleter).deleteAllAfterCommit(argThat(urls ->
+                urls.size() == 2 && urls.containsAll(List.of(p1, p3))));
+    }
+
+    @Test
+    void 고쳐도_반응은_그대로_남는다() {
+        long[] c = couple("edit-c@fitto.com", "edit-d@fitto.com");
+        FeedItemResponse post = feedService.createPost(c[0], new CreatePostRequest("반응 받을 글", null));
+        feedService.toggleReaction(c[1], FeedItemType.POST, post.refId(), "❤️");
+
+        FeedItemResponse edited = feedService.updatePost(c[0], post.refId(),
+                new UpdatePostRequest("고친 글", null, KstClock.today()));
+
+        assertThat(edited.reactions()).extracting(ReactionSummary::emoji).containsExactly("❤️");
+    }
+
+    @Test
+    void 남이_쓴_포스트는_고칠_수_없다() {
+        long[] c = couple("edit-e@fitto.com", "edit-f@fitto.com");
+        FeedItemResponse post = feedService.createPost(c[0], new CreatePostRequest("내 글", null));
+
+        assertThatThrownBy(() -> feedService.updatePost(c[1], post.refId(),
+                new UpdatePostRequest("남의 글 고치기", null, KstClock.today())))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.FORBIDDEN);
+    }
+
+    @Test
+    void 고칠_때도_작성과_같은_규칙으로_거른다() {
+        long[] c = couple("edit-g@fitto.com", "edit-h@fitto.com");
+        FeedItemResponse post = feedService.createPost(c[0], new CreatePostRequest("글", null));
+
+        // 글·사진을 다 비우면 안 된다
+        assertThatThrownBy(() -> feedService.updatePost(c[0], post.refId(),
+                new UpdatePostRequest("   ", List.of(), KstClock.today())))
+                .isInstanceOf(BusinessException.class);
+        // 미래 날짜
+        assertThatThrownBy(() -> feedService.updatePost(c[0], post.refId(),
+                new UpdatePostRequest("글", null, KstClock.today().plusDays(1))))
+                .isInstanceOf(BusinessException.class);
+        // 6장
+        List<String> six = List.of("https://img.example.com/1.jpg", "https://img.example.com/2.jpg",
+                "https://img.example.com/3.jpg", "https://img.example.com/4.jpg",
+                "https://img.example.com/5.jpg", "https://img.example.com/6.jpg");
+        assertThatThrownBy(() -> feedService.updatePost(c[0], post.refId(),
+                new UpdatePostRequest("글", six, KstClock.today())))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void 실제로_고친_글에만_수정됨이_붙는다() {
+        long[] c = couple("edited-a@fitto.com", "edited-b@fitto.com");
+        String photo = "https://img.example.com/ed1.jpg";
+        FeedItemResponse post = feedService.createPost(c[0], new CreatePostRequest("처음", null, List.of(photo)));
+        assertThat(post.edited()).isFalse();
+
+        // 아무것도 바꾸지 않고 다시 저장 — 거짓 "수정됨"은 붙지 않는다
+        FeedItemResponse same = feedService.updatePost(c[0], post.refId(),
+                new UpdatePostRequest("처음", List.of(photo), post.recordDate()));
+        assertThat(same.edited()).isFalse();
+
+        FeedItemResponse changed = feedService.updatePost(c[0], post.refId(),
+                new UpdatePostRequest("고쳤어", List.of(photo), post.recordDate()));
+        assertThat(changed.edited()).isTrue();
+
+        // 상대 타임라인에도 같은 표시가 간다
+        FeedItemResponse inPartnerTimeline = feedService.timeline(c[1], null, 20).items().stream()
+                .filter(i -> i.type() == FeedItemType.POST && i.refId().equals(post.refId()))
+                .findFirst().orElseThrow();
+        assertThat(inPartnerTimeline.edited()).isTrue();
+        assertThat(feedService.getPost(c[1], post.refId()).edited()).isTrue();
     }
 }

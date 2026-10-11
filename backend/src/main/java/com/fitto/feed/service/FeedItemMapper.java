@@ -10,14 +10,18 @@ import com.fitto.feed.dto.FeedItemResponse;
 import com.fitto.feed.dto.FeedItemType;
 import com.fitto.feed.dto.ReactionSummary;
 import com.fitto.feed.repository.FeedPostPhotoRepository;
+import com.fitto.feed.repository.FeedCommentRepository;
 import com.fitto.feed.repository.FeedReactionRepository;
 import com.fitto.place.repository.PlaceVisitRepository.VisitWithPlace;
 import com.fitto.place.domain.PlaceVisit;
 import com.fitto.user.domain.User;
 import com.fitto.user.repository.UserRepository;
 import com.fitto.workout.domain.Workout;
+import com.fitto.workout.domain.WorkoutSet;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -35,13 +39,16 @@ import java.util.Map;
 public class FeedItemMapper {
 
     private final FeedReactionRepository feedReactionRepository;
+    private final FeedCommentRepository feedCommentRepository;
     private final FeedPostPhotoRepository feedPostPhotoRepository;
     private final UserRepository userRepository;
 
     public FeedItemMapper(FeedReactionRepository feedReactionRepository,
+                          FeedCommentRepository feedCommentRepository,
                           FeedPostPhotoRepository feedPostPhotoRepository,
                           UserRepository userRepository) {
         this.feedReactionRepository = feedReactionRepository;
+        this.feedCommentRepository = feedCommentRepository;
         this.feedPostPhotoRepository = feedPostPhotoRepository;
         this.userRepository = userRepository;
     }
@@ -68,56 +75,114 @@ public class FeedItemMapper {
                                    List<ReactionSummary> reactions, List<String> imageUrls) {
         return new FeedItemResponse(FeedItemType.POST, p.getId(), p.getAuthorId(),
                 names.getOrDefault(p.getAuthorId(), "커플"), viewerId.equals(p.getAuthorId()),
-                null, p.getContent(), p.getImageUrl(), p.getCreatedAt(), reactions, imageUrls);
-    }
-
-    public FeedItemResponse toItem(Workout w, Map<Long, String> names, Long viewerId) {
-        StringBuilder summary = new StringBuilder();
-        if (!w.getSets().isEmpty()) {
-            summary.append(w.getSets().get(0).getExerciseName());
-            if (w.getSets().size() > 1) {
-                summary.append(" 외 ").append(w.getSets().size() - 1).append("개");
-            }
-        }
-        if (w.getTotalDurationMin() != null) {
-            if (summary.length() > 0) summary.append(" · ");
-            summary.append(w.getTotalDurationMin()).append("분");
-        }
-        return new FeedItemResponse(FeedItemType.WORKOUT, w.getId(), w.getUserId(),
-                names.getOrDefault(w.getUserId(), "커플"), viewerId.equals(w.getUserId()),
-                "운동 완료 💪", summary.length() > 0 ? summary.toString() : null,
-                null, w.getCreatedAt(), null, List.of());
+                null, p.getContent(), p.getImageUrl(), p.getCreatedAt(), reactions, imageUrls, false,
+                p.getContent() != null && !p.getContent().isBlank() ? p.getContent() : null, p.getRecordDate(),
+                p.getEditedAt() != null);
     }
 
     /**
-     * 식단 — 무엇을 먹었는지가 요약의 핵심이라 음식 항목 이름을 앞세운다
-     * ("삼겹살 외 2개"). 바로 위 운동 카드와 같은 타임라인에 나란히 서므로
-     * 요약 형태를 맞춘다("러닝 외 3개 · 40분").
+     * 운동 — <b>제목에 종목</b>, 부제에 분량(세트·볼륨·시간)을 둔다.
      *
-     * <p><b>칼로리 등 수치는 싣지 않는다.</b> 채팅 MEAL_CARD 가 "수치는 본인 화면에만"
-     * 으로 정한 결정(MealService.postMealCard — 상대가 내 칼로리를 다 보는 순간 감시로
-     * 느껴진다)과 같은 규칙이다. 예전엔 여기만 " · 820kcal" 을 붙여 카드에서 뺀 수치가
-     * 피드로 그대로 새고 있었다(docs/FEATURE_DUPLICATION_AUDIT_2026-09-13.md §5-C).
-     * 피드는 커플 공용 화면이라 본인 카드(mine)라고 예외를 두지 않는다 — 뷰어별로
-     * 갈라 두면 같은 카드가 두 사람에게 다르게 보여 이 규칙이 다시 흐려진다.
-     *
-     * <p>항목이 없는 기록(합계만 적었거나 항목 도입 이전)은 예전처럼 memo 로 보여준다.
+     * <p>예전에는 제목이 늘 "운동 완료 💪" 였고 종목은 회색 한 줄로 밀려 있었다. 타임라인을
+     * 내리면 같은 글자만 반복되고 정작 무엇을 했는지는 안 읽혔다. 카드 왼쪽 아이콘이 이미
+     * 종류를 말하므로 제목의 이모지도 뺀다(아이콘·이모지·문구가 같은 말을 세 번 했다).
      */
-    public FeedItemResponse toItem(Meal m, Map<Long, String> names, Long viewerId) {
-        StringBuilder summary = new StringBuilder();
-        if (!m.getItems().isEmpty()) {
-            summary.append(m.getItems().get(0).getName());
-            if (m.getItems().size() > 1) {
-                summary.append(" 외 ").append(m.getItems().size() - 1).append("개");
+    public FeedItemResponse toItem(Workout w, Map<Long, String> names, Long viewerId) {
+        String title = w.getSets().isEmpty()
+                ? "운동 완료"
+                : w.getSets().get(0).getExerciseName()
+                  + (w.getSets().size() > 1 ? " 외 " + (w.getSets().size() - 1) + "개" : "");
+        /*
+         * 오운완 인증샷만 싣는다(2026-09-14). 예전 운동 사진은 "다른 앱의 완료 화면을 AI 로
+         * 읽는" 용도였고 안내가 "애인에게는 공유되지 않아요" 라고 약속했다 — 러닝 앱 화면에는
+         * 집 근처 경로 지도가 함께 찍힌다. 그래서 여기는 오래도록 null 이었다. 사진의 성격이
+         * 바뀌었어도 <b>그때 올라온 사진에는 소급하지 않는다</b>(Workout.imageShared · V94).
+         */
+        return new FeedItemResponse(FeedItemType.WORKOUT, w.getId(), w.getUserId(),
+                names.getOrDefault(w.getUserId(), "커플"), viewerId.equals(w.getUserId()),
+                title, workoutSummary(w), w.isImageShared() ? w.getImageUrl() : null,
+                w.getCreatedAt(), null, List.of(), false);
+    }
+
+    /**
+     * 운동 분량 요약 — "4세트 · 2,400kg · 40분". 채울 게 없으면 {@code null}.
+     *
+     * <p>세트별 상세({@code WorkoutSetEntry})가 아니라 <b>요약 필드</b>(sets·reps·weightKg)로
+     * 계산한다. 한 줄 요약이라 근사치로 충분하고, 피드 한 페이지(최대 20건)마다 entries 를
+     * 훑으면 조회가 배로 늘어난다 — 정확한 볼륨이 필요한 곳은 {@code WorkoutService} 의
+     * 종목별 히스토리다.
+     */
+    private static String workoutSummary(Workout w) {
+        int setCount = 0;
+        BigDecimal volume = BigDecimal.ZERO;
+        for (WorkoutSet s : w.getSets()) {
+            int count = s.getSets() == null ? 1 : s.getSets();
+            setCount += count;
+            if (s.getWeightKg() != null && s.getReps() != null) {
+                volume = volume.add(s.getWeightKg().multiply(BigDecimal.valueOf((long) s.getReps() * count)));
             }
-        } else if (m.getMemo() != null && !m.getMemo().isBlank()) {
-            summary.append(m.getMemo());
         }
-        String content = summary.length() > 0 ? summary.toString() : null;
+        List<String> parts = new ArrayList<>();
+        if (setCount > 0) parts.add(setCount + "세트");
+        // 유산소만 한 날은 볼륨이 0 이다 — "0kg" 을 적으면 안 한 게 아니라 못 한 것처럼 읽힌다
+        if (volume.signum() > 0) {
+            parts.add(String.format("%,dkg", volume.setScale(0, RoundingMode.HALF_UP).longValue()));
+        }
+        if (w.getTotalDurationMin() != null) parts.add(w.getTotalDurationMin() + "분");
+        return parts.isEmpty() ? null : String.join(" · ", parts);
+    }
+
+    /**
+     * 식단 — <b>제목에 음식</b>, 부제에 끼니·장소를 둔다(운동 카드와 같은 규칙).
+     *
+     * <p><b>칼로리는 부제에 넣지 않는다</b> — 본문 주석 참고.
+     *
+     * <p>항목이 없는 기록(합계만 적었거나 항목 도입 이전)은 memo 를, 그마저 없으면
+     * "아침 식단" 처럼 끼니를 제목으로 쓴다 — 제목이 빈 카드는 만들지 않는다.
+     *
+     * @param placeName 이 끼니에 연결된 장소 이름 (없으면 {@code null}) — 어디서 먹었는지는
+     *                  "무엇을 먹었는지" 다음으로 궁금한 값인데, 지금까지 럽슐랭 탭으로
+     *                  따로 찾아가야만 볼 수 있었다.
+     */
+    public FeedItemResponse toItem(Meal m, Map<Long, String> names, Long viewerId, String placeName) {
+        return toItem(m, names, viewerId, placeName, null);
+    }
+
+    /** @param placeId 장소 id — 카드의 📍를 누르면 그 장소 상세로 간다(없으면 null) */
+    public FeedItemResponse toItem(Meal m, Map<Long, String> names, Long viewerId, String placeName, Long placeId) {
+        String food = null;
+        if (!m.getItems().isEmpty()) {
+            food = m.getItems().get(0).getName()
+                   + (m.getItems().size() > 1 ? " 외 " + (m.getItems().size() - 1) + "개" : "");
+        } else if (m.getMemo() != null && !m.getMemo().isBlank()) {
+            food = m.getMemo();
+        }
+
+        List<String> parts = new ArrayList<>();
+        // 제목이 음식 이름을 가져갔으므로 끼니는 부제가 받는다 — 어느 끼니인지가 사라지면 안 된다
+        if (food != null) parts.add(m.getMealType().label());
+        /*
+         * <b>칼로리는 싣지 않는다.</b> 피드는 기록하면 <b>자동으로</b> 커플 타임라인에 뜨는
+         * 자리다 — 사용자가 공유를 고르는 순간이 없다. 그런데 먹은 칼로리는 상대가 매 끼니
+         * 지켜보게 되면 응원이 아니라 감시로 읽히고, 그때 잃는 건 식단 기록 자체다.
+         *
+         * <p>채팅의 식단 카드(MEAL_CARD)도 같은 규칙이다 — 저장하면 서버가 자동으로 남기지만 수치는
+         * 싣지 않는다(MealService.postMealCard). 홈의 상대 식단 칩도 같은 원칙이다
+         * (PartnerTodayResponse 는 completed 불리언뿐). 피드는 커플 공용 화면이라 본인 카드라고
+         * 예외를 두지 않는다 — 뷰어별로 갈라 두면 같은 카드가 두 사람에게 다르게 보인다.
+         *
+         * <p>2026-09-13 결정. 무엇을 먹었는지는 남기고 얼마나 먹었는지만 뺀다. 2026-09-14 의
+         * 카드 재구성(제목=음식, 부제=끼니·칼로리·장소)은 이 결정을 모르는 채로 칼로리를
+         * 부제에 다시 넣었고, 병합하면서 그 한 줄만 뺐다 — 나머지 구조는 그대로 쓴다.
+         */
+        if (placeName != null) parts.add("📍" + placeName);
+
         return new FeedItemResponse(FeedItemType.MEAL, m.getId(), m.getUserId(),
                 names.getOrDefault(m.getUserId(), "커플"), viewerId.equals(m.getUserId()),
-                m.getMealType().label() + " 식단 🍽️", content, m.getPhotoUrl(),
-                m.getCreatedAt(), null, List.of());
+                food != null ? food : m.getMealType().label() + " 식단",
+                parts.isEmpty() ? null : String.join(" · ", parts),
+                m.getPhotoUrl(), m.getCreatedAt(), null, List.of(), m.isSharedMeal())
+                .withPlaceId(placeName != null ? placeId : null);
     }
 
     /**
@@ -143,8 +208,10 @@ public class FeedItemMapper {
                 : stars;
         return new FeedItemResponse(FeedItemType.PLACE_VISIT, v.getId(), v.getVisitedBy(),
                 names.getOrDefault(v.getVisitedBy(), "커플"), viewerId.equals(v.getVisitedBy()),
-                vp.getPlaceName() + " 방문 📍", content, v.getImageUrl(),
-                byVisitedAt ? v.getVisitedAt().atStartOfDay() : v.getCreatedAt(), null, List.of());
+                // 카드 왼쪽 아이콘이 이미 '장소'를 말한다 — 제목의 📍은 같은 말의 반복이었다
+                vp.getPlaceName() + " 방문", content, v.getImageUrl(),
+                byVisitedAt ? v.getVisitedAt().atStartOfDay() : v.getCreatedAt(), null, List.of(), false,
+                FeedItemResponse.ratedSummary(vp.getPlaceName(), v.getRating()));
     }
 
     /**
@@ -168,8 +235,9 @@ public class FeedItemMapper {
                 : stars;
         return new FeedItemResponse(FeedItemType.CONTENT_LOG, l.getId(), l.getLoggedBy(),
                 names.getOrDefault(l.getLoggedBy(), "커플"), viewerId.equals(l.getLoggedBy()),
-                lc.getContentTitle() + " 관람 🎬", content, l.getImageUrl(),
-                byWatchedAt ? l.getWatchedAt().atStartOfDay() : l.getCreatedAt(), null, List.of());
+                lc.getContentTitle() + " 관람", content, l.getImageUrl(),
+                byWatchedAt ? l.getWatchedAt().atStartOfDay() : l.getCreatedAt(), null, List.of(), false,
+                FeedItemResponse.ratedSummary(lc.getContentTitle(), l.getRating()));
     }
 
     // ---- 반응 ----
@@ -200,13 +268,24 @@ public class FeedItemMapper {
             }
             byTypeAndId.put(type, byId);
         });
+        // 댓글 수(V124) — 일상 포스트만, 한 페이지를 한 번에 센다
+        Map<Long, Long> commentCounts = new java.util.HashMap<>();
+        List<Long> postIds = idsByType.getOrDefault(FeedItemType.POST, List.of());
+        if (!postIds.isEmpty()) {
+            feedCommentRepository.countByPostIds(postIds)
+                    .forEach(c -> commentCounts.put(c.getPostId(), c.getCount()));
+        }
         return items.stream()
                 .map(i -> new FeedItemResponse(i.type(), i.refId(), i.userId(), i.userName(), i.mine(),
                         i.title(), i.content(), i.imageUrl(), i.occurredAt(),
                         summarize(byTypeAndId
                                 .getOrDefault(i.type(), Map.of())
                                 .getOrDefault(i.refId(), List.of()), viewerId),
-                        i.imageUrls()))
+                        i.imageUrls(), i.shared(), i.summary(), i.recordDate(), i.edited(),
+                        i.type() == FeedItemType.POST
+                                ? commentCounts.getOrDefault(i.refId(), 0L).intValue()
+                                : 0,
+                        i.placeId()))
                 .toList();
     }
 

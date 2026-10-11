@@ -2,14 +2,20 @@ package com.fitto.feed.controller;
 
 import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
+import com.fitto.feed.dto.CreateCommentRequest;
 import com.fitto.feed.dto.CreatePostRequest;
+import com.fitto.feed.dto.FeedCommentResponse;
 import com.fitto.feed.dto.FeedItemResponse;
 import com.fitto.feed.dto.FeedItemType;
+import com.fitto.feed.dto.FeedPhotoMapResponse;
+import com.fitto.feed.dto.FeedPhotoMonthResponse;
 import com.fitto.feed.dto.FeedPhotosResponse;
 import com.fitto.feed.dto.FeedTimelineResponse;
 import com.fitto.feed.dto.MemoriesResponse;
 import com.fitto.feed.dto.ReactRequest;
 import com.fitto.feed.dto.ReactionSummary;
+import com.fitto.feed.dto.UpdatePostRequest;
+import com.fitto.feed.service.FeedCommentService;
 import com.fitto.feed.service.FeedService;
 import com.fitto.feed.service.MemoriesService;
 import jakarta.validation.Valid;
@@ -19,13 +25,16 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 커플 일상 피드 API — PLAN.md Couple Feed.
@@ -35,9 +44,11 @@ import java.util.List;
 public class FeedController {
 
     private final FeedService feedService;
+    private final FeedCommentService feedCommentService;
     private final MemoriesService memoriesService;
 
-    public FeedController(FeedService feedService, MemoriesService memoriesService) {
+    public FeedController(FeedService feedService, MemoriesService memoriesService, FeedCommentService feedCommentService) {
+        this.feedCommentService = feedCommentService;
         this.feedService = feedService;
         this.memoriesService = memoriesService;
     }
@@ -47,17 +58,55 @@ public class FeedController {
             @AuthenticationPrincipal AuthUser user,
             // 커서는 서버가 만든 불투명 토큰 — 클라이언트는 받은 값을 그대로 되돌려준다
             @RequestParam(required = false) String cursor,
-            @RequestParam(defaultValue = "20") int limit) {
-        return ApiResponse.success(feedService.timeline(user.id(), cursor, limit));
+            @RequestParam(defaultValue = "20") int limit,
+            // 선택 — 빼고 볼 소스(예: ?exclude=PLACE_VISIT,CONTENT_LOG). 예전 앱은 안 보내므로 전부가 그대로다
+            @RequestParam(required = false) List<FeedItemType> exclude) {
+        return ApiResponse.success(feedService.timeline(user.id(), cursor, limit,
+                exclude == null || exclude.isEmpty() ? Set.of() : EnumSet.copyOf(exclude)));
     }
 
-    /** 전체 사진첩 — 사진 있는 커플 포스트만 keyset 페이징으로 모아본다. */
+    /**
+     * 사진첩("우리" 탭) — 일상·식단·운동·맛집 중 사진 있는 기록을 keyset 페이징으로 모아본다.
+     *
+     * <p>{@code sources} 는 상단 필터 칩용이며 생략하면 4소스 전부다
+     * (예: {@code ?sources=MEAL,WORKOUT}). 값이 잘못되면 400 — 화면의 칩이 보내는
+     * 고정 목록이라 조용히 무시하기보다 드러나는 편이 낫다.
+     *
+     * <p>{@code who} 는 작성자 필터 칩용이다({@code me} · {@code partner}, 생략하면 둘 다).
+     */
     @GetMapping("/photos")
     public ApiResponse<FeedPhotosResponse> photos(
             @AuthenticationPrincipal AuthUser user,
             @RequestParam(required = false) String cursor,
-            @RequestParam(defaultValue = "30") int limit) {
-        return ApiResponse.success(feedService.photos(user.id(), cursor, limit));
+            @RequestParam(defaultValue = "30") int limit,
+            @RequestParam(required = false) List<FeedItemType> sources,
+            @RequestParam(required = false) String who) {
+        return ApiResponse.success(feedService.photos(user.id(), cursor, limit, sources, who));
+    }
+
+    /**
+     * 사진첩 달력 — 한 달(기록일 기준)의 사진 전부. {@code month} 는 {@code YYYY-MM}, 생략하면 이번 달(KST).
+     * {@code sources}·{@code who} 는 위 목록과 같은 필터다.
+     */
+    /**
+     * 사진첩 지도 — 좌표가 있는 장소에 걸린 사진(맛집 방문·장소 붙은 끼니)을 장소별로.
+     * {@code sources}·{@code who} 는 목록과 같은 필터다(일상·운동은 위치가 없어 지도엔 없다).
+     */
+    @GetMapping("/photos/map")
+    public ApiResponse<FeedPhotoMapResponse> photoMap(
+            @AuthenticationPrincipal AuthUser user,
+            @RequestParam(required = false) List<FeedItemType> sources,
+            @RequestParam(required = false) String who) {
+        return ApiResponse.success(feedService.photoMap(user.id(), sources, who));
+    }
+
+    @GetMapping("/photos/month")
+    public ApiResponse<FeedPhotoMonthResponse> photoMonth(
+            @AuthenticationPrincipal AuthUser user,
+            @RequestParam(required = false) String month,
+            @RequestParam(required = false) List<FeedItemType> sources,
+            @RequestParam(required = false) String who) {
+        return ApiResponse.success(feedService.photoMonth(user.id(), month, sources, who));
     }
 
     /**
@@ -77,7 +126,47 @@ public class FeedController {
     @PostMapping("/posts")
     public ApiResponse<FeedItemResponse> createPost(@AuthenticationPrincipal AuthUser user,
                                                     @Valid @RequestBody CreatePostRequest request) {
-        return ApiResponse.success(feedService.createPost(user.id(), request), "일상이 기록되었습니다.");
+        try {
+            return ApiResponse.success(feedService.createPost(user.id(), request), "일상이 기록되었습니다.");
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            // 같은 멱등키의 저장이 동시에 도착해 unique 인덱스(V127)가 두 번째를 막았다 — 먼저 저장된 글을 돌려준다
+            return ApiResponse.success(feedService.findSavedByClientRequestId(user.id(), request.clientRequestIdOrNull())
+                    .orElseThrow(() -> e), "일상이 기록되었습니다.");
+        }
+    }
+
+    /** 일상 댓글 — 오래된 순(대화처럼 읽힌다), 최대 200개 */
+    @GetMapping("/posts/{id}/comments")
+    public ApiResponse<List<FeedCommentResponse>> comments(@AuthenticationPrincipal AuthUser user,
+                                                           @PathVariable Long id) {
+        return ApiResponse.success(feedCommentService.list(user.id(), id));
+    }
+
+    /** 일상 댓글 쓰기 — 상대에게 푸시(앞 40자)와 FEED 이벤트 */
+    @PostMapping("/posts/{id}/comments")
+    public ApiResponse<FeedCommentResponse> addComment(@AuthenticationPrincipal AuthUser user, @PathVariable Long id,
+                                                       @Valid @RequestBody CreateCommentRequest request) {
+        return ApiResponse.success(feedCommentService.add(user.id(), id, request.content()));
+    }
+
+    /** 일상 댓글 지우기 — 쓴 사람만 */
+    @DeleteMapping("/comments/{commentId}")
+    public ApiResponse<Void> deleteComment(@AuthenticationPrincipal AuthUser user, @PathVariable Long commentId) {
+        feedCommentService.delete(user.id(), commentId);
+        return ApiResponse.success(null, "댓글을 지웠어요.");
+    }
+
+    /** 포스트 하나 — 고치기 화면이 불러온다 */
+    @GetMapping("/posts/{id}")
+    public ApiResponse<FeedItemResponse> getPost(@AuthenticationPrincipal AuthUser user, @PathVariable Long id) {
+        return ApiResponse.success(feedService.getPost(user.id(), id));
+    }
+
+    /** 포스트 고치기 — 글·사진·기록일을 통째로 바꾼다(작성자 본인만) */
+    @PutMapping("/posts/{id}")
+    public ApiResponse<FeedItemResponse> updatePost(@AuthenticationPrincipal AuthUser user, @PathVariable Long id,
+                                                    @Valid @RequestBody UpdatePostRequest request) {
+        return ApiResponse.success(feedService.updatePost(user.id(), id, request), "일상을 고쳤어요.");
     }
 
     @DeleteMapping("/posts/{id}")
@@ -95,7 +184,12 @@ public class FeedController {
                                                           @PathVariable FeedItemType type,
                                                           @PathVariable Long refId,
                                                           @Valid @RequestBody ReactRequest request) {
-        return ApiResponse.success(feedService.toggleReaction(user.id(), type, refId, request.emoji()));
+        try {
+            return ApiResponse.success(feedService.toggleReaction(user.id(), type, refId, request.emoji()));
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            // 같은 반응이 동시에 두 번 도착했다 — 먼저 처리된 결과가 곧 원하는 상태다
+            return ApiResponse.success(feedService.currentReactions(user.id(), type, refId));
+        }
     }
 
     /**

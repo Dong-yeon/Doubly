@@ -6,15 +6,15 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  useWindowDimensions,
   View,
 } from 'react-native';
+import { usePhotoGrid } from '../../hooks/usePhotoGrid';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { HomeStackParamList } from '../../navigation/types';
+import type { AlbumStackParamList, HomeStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { TripSectionTabs } from './TripSectionTabs';
@@ -30,12 +30,22 @@ import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { AlbumPost } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 
-type Props = NativeStackScreenProps<HomeStackParamList, 'TripAlbum'>;
+/*
+ * 홈 스택과 "우리" 탭 스택 <b>양쪽에</b> 등록되는 화면이라 어느 쪽으로 열릴지 모른다
+ * (navigation/types.ts AlbumStackParamList 주석). 두 파람리스트를 합쳐 두면 어느 쪽에서
+ * 열려도 같은 타입으로 동작한다 — 경로 문자열만 블록마다 다르다.
+ */
+type Props = NativeStackScreenProps<HomeStackParamList & AlbumStackParamList, 'TripAlbum'>;
 
 export function TripAlbumScreen({ route }: Props) {
   const { tripId, title } = route.params;
-  const { width } = useWindowDimensions();
-  const cell = (width - spacing.lg * 2 - spacing.sm) / 2; // 2열 정사각형 셀
+  // 폰 2열 정사각형 셀. 태블릿·폴더블에서는 열을 늘려 칸이 판처럼 커지는 것을 막는다
+  // (폭 1200dp 에서 한 변 580dp 였다 — hooks/usePhotoGrid.ts 주석)
+  const { columns, cell } = usePhotoGrid({
+    gap: spacing.sm,
+    padding: spacing.lg,
+    phoneColumns: 2,
+  });
 
   const [photos, setPhotos] = useState<AlbumPost[]>([]);
   const [loading, setLoading] = useState(false);
@@ -64,7 +74,7 @@ export function TripAlbumScreen({ route }: Props) {
           key: `${p.id}-${i}`,
           uri,
           title: `${p.mine ? '내가' : `${p.authorName}님이`}  ·  ${localDateOf(p.createdAt).slice(5)}`,
-          titleColor: p.mine ? colors.coral : colors.indigo,
+          titleColor: p.mine ? colors.meText : colors.partnerText,
           caption: p.content ?? undefined,
         });
       });
@@ -138,7 +148,9 @@ export function TripAlbumScreen({ route }: Props) {
       <FlatList
         data={photos}
         keyExtractor={(p) => String(p.id)}
-        numColumns={2}
+        /* numColumns 런타임 변경은 지원되지 않는다 — 열이 바뀌면 목록을 새로 그린다 */
+        key={columns}
+        numColumns={columns}
         columnWrapperStyle={styles.columnWrap}
         contentContainerStyle={styles.list}
         refreshing={loading}

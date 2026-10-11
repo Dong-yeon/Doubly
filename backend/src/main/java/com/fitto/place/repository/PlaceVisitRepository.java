@@ -2,9 +2,11 @@ package com.fitto.place.repository;
 
 import com.fitto.place.domain.PlaceVisit;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 public interface PlaceVisitRepository extends JpaRepository<PlaceVisit, Long> {
@@ -27,6 +29,68 @@ public interface PlaceVisitRepository extends JpaRepository<PlaceVisit, Long> {
             where v.mealId in :mealIds
             """)
     List<VisitWithPlace> findByMealIdIn(@Param("mealIds") List<Long> mealIds);
+
+    /**
+     * 끼니를 지우기 전에 방문과의 연결을 끊는다 — {@code place_visits.meal_id} 는 ON DELETE 절 없는 FK 라(V8)
+     * 그대로 두면 끼니 삭제가 FK 위반으로 실패한다. 방문은 장소 별점·등급의 근거이므로 지우지 않는다.
+     */
+    @Modifying(flushAutomatically = true)
+    @Query("update PlaceVisit v set v.mealId = null where v.mealId in :mealIds")
+    int detachMeals(@Param("mealIds") List<Long> mealIds);
+
+    /**
+     * 장소 상세 "여기서 먹은 것" — 이 장소 방문에 연결된 식단의 음식 이름별 횟수·마지막 날짜.
+     * 같이 먹기는 방문이 작성자 몫 식단에만 붙으므로(결정 Q7) 한 끼가 두 번 세어지지 않는다.
+     * 인덱스: place_visits(place_id)(V8), meal_items(meal_id, order_no)(V39) — 한 장소 방문은 많아야 수십 건이다.
+     */
+    @Query("""
+            select mi.name as name, count(mi) as times, max(m.mealDate) as lastDate
+            from MealItem mi join mi.meal m, PlaceVisit v
+            where v.mealId = m.id and v.placeId = :placeId
+            group by mi.name
+            order by count(mi) desc, max(m.mealDate) desc
+            """)
+    List<MenuCount> countMenu(@Param("placeId") Long placeId, org.springframework.data.domain.Pageable pageable);
+
+    /**
+     * 커플이 최근(since 이후) 외식에서 먹은 음식 이름별 횟수 — AI 맛집 추천의 "요즘 이런 걸 먹었다" 재료(P2-2).
+     * {@link #countMenu} 와 같은 규칙이고 장소 하나 대신 커플 장소 전체·기간으로 거른다.
+     */
+    @Query("""
+            select mi.name as name, count(mi) as times, max(m.mealDate) as lastDate
+            from MealItem mi join mi.meal m, PlaceVisit v, Place p
+            where v.mealId = m.id and p.id = v.placeId and p.coupleId = :coupleId and v.visitedAt >= :since
+            group by mi.name
+            order by count(mi) desc, max(m.mealDate) desc
+            """)
+    List<MenuCount> countCoupleMenuSince(@Param("coupleId") Long coupleId,
+                                         @Param("since") java.time.LocalDate since,
+                                         org.springframework.data.domain.Pageable pageable);
+
+    /** 장소별 첫 방문일 — 외식 통계의 "이번 달 처음 가 본 곳"(P2-3). 빈 목록으로 부르지 않는다 */
+    @Query("select v.placeId as placeId, min(v.visitedAt) as firstDate from PlaceVisit v "
+            + "where v.placeId in :placeIds group by v.placeId")
+    List<FirstVisit> firstVisitDates(@Param("placeIds") java.util.Collection<Long> placeIds);
+
+    interface FirstVisit {
+        Long getPlaceId();
+
+        java.time.LocalDate getFirstDate();
+    }
+
+    interface MenuCount {
+        String getName();
+
+        Long getTimes();
+
+        java.time.LocalDate getLastDate();
+    }
+
+    /** 외식 기록 멱등 — 같은 사람이 같은 키로 이미 남긴 방문(V129 unique 인덱스와 짝) */
+    java.util.Optional<PlaceVisit> findByVisitedByAndClientRequestId(Long visitedBy, String clientRequestId);
+
+    /** 식단 삭제에서 "방문 기록도 지우기"를 골랐을 때 — 그 식단들에 붙은 방문 */
+    List<PlaceVisit> findAllByMealIdIn(java.util.Collection<Long> mealIds);
 
     /**
      * 럽슐랭 가이드 매거진 카드의 커버 사진/한줄평용 배치 조회 — 장소별로 최근 방문순.
@@ -59,11 +123,15 @@ public interface PlaceVisitRepository extends JpaRepository<PlaceVisit, Long> {
     /**
      * 커플 피드 타임라인 — 커플 장소의 방문 기록(장소명 포함), 커서 (createdAt, id) 이전 최신순.
      * cursorAt 이 null 이면 첫 페이지(전체 조회)다.
+     *
+     * <p><b>식단에 붙은 방문은 뺀다</b>(2026-10-05) — 같은 외식이 식사 카드와 방문 카드로 두 번 떴다. 식사 카드가 📍장소 ★N 을
+     * 대신 싣는다(FeedService.placeNamesOf). 사진첩 격자({@link #findPhotosForFeed})와 같은 규칙이다.
      */
     @Query("""
             select v as visit, p.name as placeName
             from PlaceVisit v join Place p on p.id = v.placeId
             where p.coupleId = :coupleId
+              and v.mealId is null
               and (cast(:cursorAt as LocalDateTime) is null
                    or v.createdAt < :cursorAt
                    or (v.createdAt = :cursorAt and v.id < :cursorId))
@@ -73,6 +141,61 @@ public interface PlaceVisitRepository extends JpaRepository<PlaceVisit, Long> {
                                            @Param("cursorAt") java.time.LocalDateTime cursorAt,
                                            @Param("cursorId") Long cursorId,
                                            org.springframework.data.domain.Pageable pageable);
+
+    /**
+     * 우리 탭(사진첩) — 사진이 붙은 방문만, <b>식단에서 파생된 방문은 제외</b>.
+     *
+     * <p>식단 기록에 장소를 붙이면 방문이 함께 만들어지고({@code meal_id} 가 그 끼니를 가리킨다)
+     * 사진도 같은 파일이 실린다. 그대로 두면 한 장의 사진이 식단·맛집 두 칸으로 뜨므로
+     * 식단 쪽만 남긴다 (docs/ALBUM_TAB_IA_2026-09-14.md 5-4 중복 제거 규칙).
+     *
+     * <p><b>정렬은 기록일 우선</b>(2026-10-02 결정) — (기록일, created_at, id) keyset 이다.
+     * 지난 날짜로 늦게 올린 기록이 올린 달이 아니라 그 날짜에 묶여야 달력·회고와 의미가 맞는다.
+     * 타임라인({@code findRecentForFeed})은 업로드 순서 그대로다 — 통일하지 말 것.
+     */
+    @Query("""
+            select v as visit, p.name as placeName
+            from PlaceVisit v join Place p on p.id = v.placeId
+            where p.coupleId = :coupleId
+              and v.imageUrl is not null
+              and v.mealId is null
+              and (cast(:cursorDate as LocalDate) is null
+                   or v.visitedAt < :cursorDate
+                   or (v.visitedAt = :cursorDate
+                       and (v.createdAt < :cursorAt
+                            or (v.createdAt = :cursorAt and v.id < :cursorId))))
+            order by v.visitedAt desc, v.createdAt desc, v.id desc
+            """)
+    List<VisitWithPlace> findPhotosForFeed(@Param("coupleId") Long coupleId,
+                                           @Param("cursorDate") java.time.LocalDate cursorDate,
+                                           @Param("cursorAt") java.time.LocalDateTime cursorAt,
+                                           @Param("cursorId") Long cursorId,
+                                           org.springframework.data.domain.Pageable pageable);
+
+    /**
+     * 사진첩 작성자 필터(나/상대) — {@link #findPhotosForFeed} 에 방문자 조건만 더한다.
+     * null 파라미터로 합치지 않는 이유는 {@code FeedPostRepository.findPhotosByAuthor} 와 같다.
+     */
+    @Query("""
+            select v as visit, p.name as placeName
+            from PlaceVisit v join Place p on p.id = v.placeId
+            where p.coupleId = :coupleId
+              and v.visitedBy = :visitedBy
+              and v.imageUrl is not null
+              and v.mealId is null
+              and (cast(:cursorDate as LocalDate) is null
+                   or v.visitedAt < :cursorDate
+                   or (v.visitedAt = :cursorDate
+                       and (v.createdAt < :cursorAt
+                            or (v.createdAt = :cursorAt and v.id < :cursorId))))
+            order by v.visitedAt desc, v.createdAt desc, v.id desc
+            """)
+    List<VisitWithPlace> findPhotosForFeedByVisitor(@Param("coupleId") Long coupleId,
+                                                    @Param("visitedBy") Long visitedBy,
+                                                    @Param("cursorDate") java.time.LocalDate cursorDate,
+                                                    @Param("cursorAt") java.time.LocalDateTime cursorAt,
+                                                    @Param("cursorId") Long cursorId,
+                                                    org.springframework.data.domain.Pageable pageable);
 
     /**
      * 추억 리마인드 — 그 날 방문한 기록 (PLAN.md Memories).
@@ -90,6 +213,21 @@ public interface PlaceVisitRepository extends JpaRepository<PlaceVisit, Long> {
             """)
     List<VisitWithPlace> findByCoupleAndVisitedAt(@Param("coupleId") Long coupleId,
                                                   @Param("visitedAt") java.time.LocalDate visitedAt);
+
+    /**
+     * 커플 캘린더의 "다녀온 곳" — 커플 장소의 방문 중 방문일이 기간 안인 것, 날짜순.
+     * 피드와 같은 범위(커플 장소 전체)라 캘린더에 올린다고 새로 드러나는 것은 없다.
+     */
+    @Query("""
+            select v as visit, p.name as placeName
+            from PlaceVisit v join Place p on p.id = v.placeId
+            where p.coupleId = :coupleId
+              and v.visitedAt between :start and :end
+            order by v.visitedAt asc, v.id asc
+            """)
+    List<VisitWithPlace> findByCoupleInPeriod(@Param("coupleId") Long coupleId,
+                                              @Param("start") java.time.LocalDate start,
+                                              @Param("end") java.time.LocalDate end);
 
     /** 추억 조회의 하한 연도용 — 커플의 첫 방문일 (없으면 null). */
     @Query("""
@@ -126,4 +264,57 @@ public interface PlaceVisitRepository extends JpaRepository<PlaceVisit, Long> {
 
         String getPlaceName();
     }
+
+    /** 홈 왕관 — 이 커플 장소에 [from, to) 사이 남긴 방문 기록 (to 배타) */
+    @Query("""
+            select v.placeId as targetId, p.name as targetName, v.visitedBy as userId, v.createdAt as at, v.rating as rating
+            from PlaceVisit v join Place p on p.id = v.placeId
+            where p.coupleId = :coupleId and v.createdAt >= :from and v.createdAt < :to
+            """)
+    List<LovelichelinActivityRow> findActivityBetween(@Param("coupleId") Long coupleId,
+                                                                                @Param("from") LocalDateTime from,
+                                                                                @Param("to") LocalDateTime to);
+
+    /**
+     * 사진첩 달력 — 방문일이 {@code [from, to]} 인 사진 방문(식단에서 파생된 방문 제외 —
+     * {@link #findPhotosForFeed} 와 같은 중복 제거 규칙).
+     */
+    @Query("""
+            select v as visit, p.name as placeName
+            from PlaceVisit v join Place p on p.id = v.placeId
+            where p.coupleId = :coupleId
+              and v.imageUrl is not null
+              and v.mealId is null
+              and v.visitedAt between :from and :to
+            order by v.visitedAt desc, v.createdAt desc, v.id desc
+            """)
+    List<VisitWithPlace> findPhotosInDateRange(@Param("coupleId") Long coupleId,
+                                               @Param("from") java.time.LocalDate from,
+                                               @Param("to") java.time.LocalDate to,
+                                               org.springframework.data.domain.Pageable pageable);
+
+    /** 사진 지도용 — 방문에 장소 좌표까지. 장소 이름은 {@link VisitWithPlace} 를 그대로 물려받는다 */
+    interface VisitOnMap extends VisitWithPlace {
+        java.math.BigDecimal getLat();
+
+        java.math.BigDecimal getLng();
+    }
+
+    /**
+     * 사진첩 지도 — 좌표가 있는 장소에 걸린 사진 방문 전부(식단에서 파생된 방문 <b>포함</b>).
+     *
+     * <p>파생 방문을 여기서 빼지 않는 이유: 식단 사진이 지도에 앉으려면 그 끼니가 어느 장소인지가
+     * 필요하고, 그 연결은 파생 방문({@code meal_id})뿐이다. 서비스가 둘을 갈라 파생 방문은 끼니
+     * 항목으로 바꿔 싣는다 — 사진첩과 같은 중복 제거 규칙(한 장은 한 칸).
+     */
+    @Query("""
+            select v as visit, p.name as placeName, p.lat as lat, p.lng as lng
+            from PlaceVisit v join Place p on p.id = v.placeId
+            where p.coupleId = :coupleId
+              and v.imageUrl is not null
+              and p.lat is not null and p.lng is not null
+            order by v.visitedAt desc, v.createdAt desc, v.id desc
+            """)
+    List<VisitOnMap> findPhotoVisitsOnMap(@Param("coupleId") Long coupleId,
+                                          org.springframework.data.domain.Pageable pageable);
 }

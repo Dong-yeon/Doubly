@@ -2,6 +2,7 @@ package com.fitto.game.controller;
 
 import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
+import com.fitto.game.dto.DailySudokuResponse;
 import com.fitto.game.dto.StartSudokuRequest;
 import com.fitto.game.dto.SudokuGameResponse;
 import com.fitto.game.dto.SudokuMoveRequest;
@@ -41,6 +42,18 @@ public class SudokuController {
     public ApiResponse<SudokuGameResponse> start(@AuthenticationPrincipal AuthUser user,
                                                  @Valid @RequestBody StartSudokuRequest request) {
         return ApiResponse.success(sudokuService.start(user.id(), request));
+    }
+
+    /** 오늘의 판 현황 — 열지 않고 상태만 본다 */
+    @GetMapping("/daily")
+    public ApiResponse<DailySudokuResponse> daily(@AuthenticationPrincipal AuthUser user) {
+        return ApiResponse.success(sudokuService.daily(user.id()));
+    }
+
+    /** 오늘의 판 열기 — 날짜가 시드라 그날은 모든 커플이 같은 문제를 푼다 */
+    @PostMapping("/daily")
+    public ApiResponse<SudokuGameResponse> startDaily(@AuthenticationPrincipal AuthUser user) {
+        return ApiResponse.success(sudokuService.startDaily(user.id()));
     }
 
     @PutMapping("/{id}/cells/{index}")

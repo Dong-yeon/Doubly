@@ -5,7 +5,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { CLOUDINARY, isCloudinaryConfigured } from '../constants/config';
 import { uploadApi, type UploadSignature } from '../api/upload';
-import { errorCodeOf } from '../api/client';
+import { errorCodeOf, isApiError } from '../api/client';
 import { toast } from '../store/toastStore';
 
 /** 고른 사진 한 장 — 원본 픽셀 크기까지. 크롭처럼 좌표를 계산하는 쪽이 크기를 알아야 한다 */
@@ -154,6 +154,38 @@ export async function shrinkImage(image: PickedImage, maxSide = 1024): Promise<s
   }
 }
 
+/**
+ * `URL.createObjectURL` 로 만든 uri 를 풀어준다 — 그 외(파일 경로·http)는 그냥 넘긴다.
+ *
+ * <p>붙여넣기·드래그앤드롭으로 들어온 사진은 브라우저 메모리에 blob 으로 남아 있고,
+ * 놓아주지 않으면 탭을 닫을 때까지 쌓인다. PC 앱은 탭을 며칠씩 켜 두는 물건이라
+ * (분석 문서 1절) 이게 실제로 문제가 된다.
+ */
+export function releaseObjectUrl(uri: string | null | undefined): void {
+  if (Platform.OS !== 'web' || !uri?.startsWith('blob:')) return;
+  URL.revokeObjectURL(uri);
+}
+
+/**
+ * 크기를 모르는 uri(붙여넣기·드래그앤드롭으로 들어온 blob)를 보낼 준비.
+ *
+ * <p>피커로 고른 사진은 expo-image-picker 가 quality 0.7 로 이미 압축해서 준다. 반면
+ * 클립보드의 스크린샷은 <b>무압축 PNG</b>에 화면 해상도 그대로(2560px 이상)라, 그냥 올리면
+ * 같은 "사진 한 장"인데 용량이 한 자릿수 배 차이가 난다. 재서 필요할 때만 줄인다.
+ *
+ * <p>1600 은 스크린샷의 글자가 뭉개지지 않는 선이다 — 채팅 사진은 1024 로도 충분하지만
+ * PC 에서 공유하는 사진의 상당수가 글자가 든 화면 캡처다(분석 문서 4절 2단계).
+ */
+export async function shrinkUnknownImage(uri: string, maxSide = 1600): Promise<string> {
+  try {
+    const size = await measure(uri);
+    return await shrinkImage({ uri, ...size }, maxSide);
+  } catch {
+    // 재기에 실패해도 업로드까지 막을 이유는 없다 — shrinkImage 주석과 같은 판단
+    return uri;
+  }
+}
+
 /** 갤러리에서 이미지 선택 → uri (취소/권한 거부 시 null) */
 export async function pickImage(): Promise<string | null> {
   return (await pickImageAsset())?.uri ?? null;
@@ -178,11 +210,32 @@ async function buildFileForm(uri: string): Promise<FormData> {
   return form;
 }
 
+/**
+ * 사진 한 장 업로드의 상한. 예전엔 타임아웃이 없어 네트워크가 멈추면 "사진 올리는 중…" 가림막이
+ * 끝나지 않았다(docs/first-experience-audit.md #11). 느린 회선에서 큰 사진도 넉넉히 올라가는 값이다.
+ */
+const UPLOAD_TIMEOUT_MS = 60_000;
+
 async function postToCloudinary(cloudName: string, form: FormData): Promise<string> {
-  const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
-    method: 'POST',
-    body: form,
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+      method: 'POST',
+      body: form,
+      signal: controller.signal,
+    });
+  } catch {
+    // 시간 초과(abort)·연결 끊김 모두 — fetch 의 영문 메시지("Network request failed")를 그대로 보이지 않는다
+    throw new Error(
+      controller.signal.aborted
+        ? '사진 올리기가 너무 오래 걸려 멈췄어요. 연결을 확인하고 다시 시도해 주세요.'
+        : '사진을 올리지 못했어요. 인터넷 연결을 확인해 주세요.',
+    );
+  } finally {
+    clearTimeout(timer);
+  }
   if (!res.ok) throw new Error('이미지 업로드에 실패했어요.');
   const data = (await res.json()) as { secure_url?: string };
   if (!data.secure_url) throw new Error('이미지 업로드 응답이 올바르지 않아요.');
@@ -206,6 +259,43 @@ export async function uploadImageWithSignature(uri: string, sig: UploadSignature
 }
 
 /**
+ * base64 data URI 를 업로드 → secure_url. 캐치마인드 그림 공유가 쓴다.
+ *
+ * <p><b>파일 경로가 없는 이미지 전용 경로다.</b> 위 {@link uploadImageWithSignature} 는
+ * {@code expo-file-system} 의 {@code File} 로 파트를 만들어 <b>실제 파일 URI</b>가 있어야
+ * 하는데, SVG 를 렌더한 PNG 는 메모리의 base64 로만 존재한다. Cloudinary 는 {@code file}
+ * 파라미터로 data URI 문자열을 그대로 받으므로 임시 파일을 만들 필요가 없다.
+ *
+ * <p>폴더는 서명에 박혀 있어 클라이언트가 바꿀 수 없다 — 서버가 URL 을 폴더로 검증한다
+ * (CatchMindService.isShareUrl). 그래서 unsigned 폴백이 없다.
+ */
+export async function uploadDataUriWithSignature(
+  dataUri: string,
+  sig: UploadSignature,
+): Promise<string> {
+  const form = new FormData();
+  form.append('file', dataUri);
+  form.append('api_key', sig.apiKey);
+  form.append('timestamp', String(sig.timestamp));
+  form.append('folder', sig.folder);
+  form.append('signature', sig.signature);
+  return postToCloudinary(sig.cloudName, form);
+}
+
+/**
+ * 식단 사진 서명 — 식단 전용 서명이 없는 옛 서버(404)면 공용 서명으로. 서버가 먼저 배포되므로 보통은 안 탄다.
+ * 한도 초과 등 다른 실패는 그대로 던진다(공용으로 넘어가면 식단 한도가 아무 일도 하지 않는다).
+ */
+async function mealSignatureOrShared(): Promise<UploadSignature> {
+  try {
+    return await uploadApi.mealSignature();
+  } catch (e) {
+    if (isApiError(e) && e.status === 404) return uploadApi.signature();
+    throw e;
+  }
+}
+
+/**
  * Cloudinary 업로드 → secure_url.
  *
  * <p>백엔드 서명(signed)을 우선 사용하고, <b>서명 기능이 꺼져 있을 때만</b>
@@ -217,12 +307,12 @@ export async function uploadImageWithSignature(uri: string, sig: UploadSignature
  * 운영에서 존재하지도 않는 unsigned preset 으로 가서 원인 모를 실패가 된다.
  * 폴백해도 되는 건 서버가 명시적으로 "설정 안 됨"이라고 답한 경우 하나뿐이다.
  */
-export async function uploadImage(uri: string): Promise<string> {
+export async function uploadImage(uri: string, options?: { purpose?: 'meal' }): Promise<string> {
   let sig: Awaited<ReturnType<typeof uploadApi.signature>> | null = null;
   try {
-    sig = await uploadApi.signature();
+    sig = options?.purpose === 'meal' ? await mealSignatureOrShared() : await uploadApi.signature();
   } catch (e) {
-    // 한도 초과(402)는 여기서 그대로 던진다 — api/client 가 이미 업그레이드 안내를 띄웠다.
+    // 한도 초과(402·429)는 여기서 그대로 던진다 — api/client 가 이미 업그레이드 안내를 띄웠다.
     if (errorCodeOf(e) !== 'UPLOAD_NOT_CONFIGURED') throw e;
   }
 

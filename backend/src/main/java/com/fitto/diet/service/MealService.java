@@ -12,31 +12,37 @@ import com.fitto.common.plan.PlanGuard;
 import com.fitto.common.notification.NotificationService;
 import com.fitto.common.notification.PushLinks;
 import com.fitto.common.time.KstClock;
+import com.fitto.common.upload.CloudinaryImageDeleter;
 import com.fitto.diet.domain.Meal;
 import com.fitto.diet.domain.MealItem;
+import com.fitto.diet.domain.MealType;
 import com.fitto.diet.domain.NutritionGoal;
 import com.fitto.diet.dto.CoupleMealGoalResponse;
 import com.fitto.diet.dto.FoodLookupRequest;
 import com.fitto.diet.dto.FoodLookupResponse;
 import com.fitto.diet.dto.MealItemRequest;
 import com.fitto.diet.dto.MealResponse;
+import com.fitto.diet.dto.PartnerMealTodayResponse;
+import com.fitto.diet.dto.PhotoRecordLookupResponse;
 import com.fitto.diet.dto.MealStatsResponse;
 import com.fitto.diet.dto.RecentFoodResponse;
 import com.fitto.diet.dto.SaveMealRequest;
 import com.fitto.diet.repository.MealItemRepository;
 import com.fitto.diet.repository.MealRepository;
 import com.fitto.diet.repository.NutritionGoalRepository;
+import com.fitto.place.domain.PlaceVisit;
 import com.fitto.place.repository.PlaceVisitRepository;
 import com.fitto.relation.domain.Relation;
 import com.fitto.relation.domain.RelationStatus;
 import com.fitto.relation.domain.RelationType;
 import com.fitto.relation.repository.RelationRepository;
 import com.fitto.feed.dto.FeedItemType;
+import com.fitto.feed.domain.FeedReaction;
+import com.fitto.feed.dto.ReactionSummary;
 import com.fitto.feed.repository.FeedReactionRepository;
 import com.fitto.streak.service.StreakService;
 import com.fitto.user.repository.UserRepository;
 import com.fitto.workout.dto.CalendarDayResponse;
-import com.fitto.workout.dto.PartnerTodayResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
@@ -51,7 +57,11 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
+import java.util.Optional;
+import java.util.Objects;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -85,6 +95,8 @@ public class MealService {
     /** 저장 즉시 커플 채팅에 MEAL_CARD 를 남긴다(자동 공유) — {@link #postMealCard} */
     private final ChatService chatService;
     private final SimpMessagingTemplate messagingTemplate;
+    /** 기록 삭제 시 사진까지 지운다 — DB 행만 지우면 이미지는 URL 로 계속 접근 가능하다 */
+    private final CloudinaryImageDeleter imageDeleter;
 
     /**
      * 채팅 카드 본문의 목표 달성 접두어 — 프론트 채팅 렌더러(dietShare.ts 의 GOAL_SHARE_PREFIX)가
@@ -105,7 +117,8 @@ public class MealService {
                        PlaceVisitRepository placeVisitRepository,
                        MealPhotoAutoAnalysisService autoAnalysisService,
                        ChatService chatService,
-                       SimpMessagingTemplate messagingTemplate) {
+                       SimpMessagingTemplate messagingTemplate,
+                       CloudinaryImageDeleter imageDeleter) {
         this.mealRepository = mealRepository;
         this.mealItemRepository = mealItemRepository;
         this.nutritionGoalRepository = nutritionGoalRepository;
@@ -120,12 +133,45 @@ public class MealService {
         this.autoAnalysisService = autoAnalysisService;
         this.chatService = chatService;
         this.messagingTemplate = messagingTemplate;
+        this.imageDeleter = imageDeleter;
     }
 
     @Transactional
     public MealResponse save(Long userId, SaveMealRequest req) {
+        return save(userId, req, null);
+    }
+
+    /**
+     * 외식 기록({@code MealVisitService})의 식단 저장 — {@code placeName} 이 있으면 상대에게 가는 식단 푸시가 장소를 같이 말한다.
+     * 외식은 방문 푸시를 따로 보내지 않으므로(식단 + 방문 = 두 번 울리던 것) 이 한 건이 그 외식의 알림이다.
+     */
+    @Transactional
+    public MealResponse save(Long userId, SaveMealRequest req, String placeName) {
+        /*
+         * 멱등 검사 — 다른 무엇보다 먼저 본다. 같은 키로 다시 온 저장은 "새 기록"이 아니라 응답을 못 받은 앱의
+         * 재시도이므로 스트릭·응원 푸시·목표 축하·자동 분석을 다시 태우지 않고 먼저 저장된 끼니를 그대로 돌려준다.
+         * 아래 사진 중복 검사보다 앞서야 한다 — 사진 기록의 재시도가 MEAL_PHOTO_ALREADY_RECORDED 로 실패하던 경로다.
+         * 동시에 도착한 두 요청은 (user_id, client_request_id) unique 인덱스가 두 번째 INSERT 를 막고 컨트롤러가 받는다.
+         */
+        String clientRequestId = req.clientRequestIdOrNull();
+        if (clientRequestId != null) {
+            Optional<Meal> already = mealRepository.findByUserIdAndClientRequestId(userId, clientRequestId);
+            if (already.isPresent()) {
+                return MealResponse.from(already.get());
+            }
+        }
         if (req.mealDate().isAfter(KstClock.today())) {
             throw new BusinessException(ErrorCode.INVALID_INPUT, "미래 날짜는 기록할 수 없습니다.");
+        }
+        /*
+         * 같은 사진으로 두 번 남기지 않는다. 새로 고른 사진은 매번 새 URL 로 올라가므로 이 조건에 걸리는 건
+         * 이미 올라가 있는 URL 을 다시 쓰는 경로뿐이다 — 채팅 사진 → 식단 기록(LOVEBODY_REVIEW §2-5)과,
+         * 저장 응답이 끊겨 같은 업로드 URL 로 다시 누른 경우. 둘 다 막는 게 맞다. 앱은 메뉴를 누를 때
+         * 먼저 묻고(findByPhoto) 안내하므로 여기는 안전망이다.
+         */
+        if (req.photoUrl() != null && !req.photoUrl().isBlank()
+                && !mealRepository.findByUserIdAndPhoto(userId, req.photoUrl(), PageRequest.of(0, 1)).isEmpty()) {
+            throw new BusinessException(ErrorCode.MEAL_PHOTO_ALREADY_RECORDED);
         }
 
         // "데이트" 칩 — 연결된 커플이 있을 때만 실제로 나눠 담는다. 없으면 플래그가 와도 조용히 무시(혼자 저장).
@@ -175,6 +221,7 @@ public class MealService {
                 .sodium(sodium)
                 .fiber(fiber)
                 .sharedGroupId(sharedGroupId)
+                .clientRequestId(clientRequestId)
                 .build();
         // 항목을 보냈으면 그게 기준 — 합계는 서버가 다시 더한다(요청의 합계값은 무시)
         items.forEach(meal::addItem);
@@ -188,11 +235,11 @@ public class MealService {
             // halving 은 위에서 이미 끝났다 — 파트너 몫은 내 기록을 그대로 복제만 한다(두 번 나누지 않도록).
             Meal partnerMeal = copyForPartner(meal, partnerId, userId);
             mealRepository.save(partnerMeal);
-            afterSharedMealAdded(couple, userId, partnerId, meal.getMealDate(), firstMealOfDay);
+            afterSharedMealAdded(couple, userId, partnerId, meal.getMealDate(), firstMealOfDay, placeName);
             // 데이트 식단은 두 사람 기록에 각각 insert 되지만 카드는 기록한 쪽 명의로 한 장만
             postMealCard(userId, couple.getId(), meal, goals, true);
         } else {
-            afterMealsAdded(userId, meal.getMealDate(), firstMealOfDay, false);
+            afterMealsAdded(userId, meal.getMealDate(), firstMealOfDay, false, placeName);
             relationRepository.findByUserAndTypeAndStatus(userId, RelationType.COUPLE, RelationStatus.ACTIVE)
                     .stream().findFirst()
                     .ifPresent(c -> postMealCard(userId, c.getId(), meal, goals, false));
@@ -259,18 +306,59 @@ public class MealService {
      * 지정한 날짜(기본: 어제)의 식단을 오늘 날짜로 통째로 복사 — 매일 비슷한 식단을 먹는
      * 운동 유저를 위한 3초 퀵 로깅. 사진/메모/칼로리/매크로를 그대로 들고 오고, 끼니 종류도 유지한다.
      */
+    /**
+     * 같은 멱등키의 저장이 동시에 들어와 unique 인덱스가 두 번째를 막았을 때 — 먼저 커밋된 끼니를 돌려준다.
+     * 없으면(다른 제약 위반이었다면) 빈 값이라 호출자가 원래 예외를 다시 던진다.
+     */
+    @Transactional(readOnly = true)
+    public Optional<MealResponse> findSavedByClientRequestId(Long userId, String clientRequestId) {
+        if (clientRequestId == null) return Optional.empty();
+        return mealRepository.findByUserIdAndClientRequestId(userId, clientRequestId).map(MealResponse::from);
+    }
+
+    /** 옛 호출 — 끼니를 고르지 않으면 오늘 비어 있는 끼니 전부 */
     @Transactional
     public List<MealResponse> copyFrom(Long userId, LocalDate sourceDate) {
-        if (sourceDate.isAfter(KstClock.today())) {
-            throw new BusinessException(ErrorCode.INVALID_INPUT, "미래 날짜는 불러올 수 없습니다.");
+        return copyFrom(userId, sourceDate, null);
+    }
+
+    /**
+     * @param mealTypes 불러올 끼니(2026-10-08). 아침에 어제 하루를 통째로 불러오면 아직 안 먹은 저녁까지 기록돼 버려서, 앱은 고른
+     *                  끼니만 보낸다. null 이면(옛 앱) 오늘 비어 있는 끼니 전부.
+     */
+    @Transactional
+    public List<MealResponse> copyFrom(Long userId, LocalDate sourceDate, Set<MealType> mealTypes) {
+        LocalDate today = KstClock.today();
+        // 오늘을 오늘로 불러오면 오늘 식단이 통째로 한 벌 더 생긴다 — 미래뿐 아니라 오늘도 막는다.
+        if (!sourceDate.isBefore(today)) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "지난 날짜의 식단만 불러올 수 있어요.");
         }
-        List<Meal> sourceMeals = mealRepository.findByUserIdAndMealDateOrderByIdAsc(userId, sourceDate);
+        List<Meal> sourceMeals = mealRepository.findByUserIdAndMealDateOrderByIdAsc(userId, sourceDate).stream()
+                .filter(m -> mealTypes == null || mealTypes.isEmpty() || mealTypes.contains(m.getMealType()))
+                .toList();
         if (sourceMeals.isEmpty()) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "해당 날짜에는 식단 기록이 없어요.");
         }
-        LocalDate today = KstClock.today();
+        /*
+         * 오늘 이미 기록한 끼니(아침·점심·저녁·간식)는 건너뛴다(2026-10-08 사용자 보고). 예전엔 "내용이 똑같은 오늘 끼니"만
+         * 건너뛰어서, 오늘 점심을 따로 기록한 뒤 누르면 어제 점심이 한 끼 더 붙어 점심이 두 개가 됐다 — 불러오기는 "오늘 아직
+         * 안 남긴 끼니를 어제처럼 채우기"다. 끼니 단위라 같은 것을 두 번 불러와도 두 번째는 막히고(이미 다 있다), 불러온 끼니
+         * 하나를 지우면 그 끼니만 다시 온다. 간식처럼 하루 여러 번인 끼니도 같다 — 오늘 간식이 하나라도 있으면 어제 간식은 안 온다.
+         */
+        Set<MealType> recordedToday = mealRepository.findByUserIdAndMealDateOrderByIdAsc(userId, today).stream()
+                .map(Meal::getMealType)
+                .collect(Collectors.toCollection(() -> EnumSet.noneOf(MealType.class)));
+        List<Meal> toCopy = sourceMeals.stream()
+                .filter(m -> !recordedToday.contains(m.getMealType()))
+                .toList();
+        if (toCopy.isEmpty()) {
+            String types = sourceMeals.stream().map(m -> m.getMealType().label()).distinct()
+                    .collect(Collectors.joining("·"));
+            throw new BusinessException(ErrorCode.MEAL_ALREADY_COPIED,
+                    "오늘 이미 " + types + "을(를) 기록했어요. 비어 있는 끼니만 어제처럼 채울 수 있어요.");
+        }
         boolean firstMealOfDay = !mealRepository.existsByUserIdAndMealDate(userId, today);
-        List<Meal> copies = sourceMeals.stream().map(this::copyOf).toList();
+        List<Meal> copies = toCopy.stream().map(this::copyOf).toList();
         mealRepository.saveAll(copies);
         afterMealsAdded(userId, today, firstMealOfDay, true);
         return copies.stream().map(MealResponse::from).toList();
@@ -296,7 +384,14 @@ public class MealService {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
 
+        // 사진을 바꾸거나 뺐으면 예전 파일을 커밋 뒤에 지운다 — 예전엔 남아 고아가 됐다(lovebody-current-state §4-6).
+        // 데이트 식단은 아래 syncSharedPair 가 짝의 사진도 새 것으로 바꾸므로 예전 URL 을 쥔 행이 없어진다.
+        // 채팅 MEAL_CARD 처럼 다른 행이 아직 쓰면 삭제기가 남긴다(StoredMediaReferences).
+        String previousPhoto = meal.getPhotoUrl();
         meal.update(req.mealDate(), req.mealType(), req.memo(), req.photoUrl());
+        if (previousPhoto != null && !previousPhoto.equals(req.photoUrl())) {
+            imageDeleter.deleteAllAfterCommit(List.of(previousPhoto));
+        }
         meal.replaceItems(toItems(req));
         if (meal.getItems().isEmpty()) {
             meal.applyTotals(req.calories(), req.carbs(), req.protein(), req.fat());
@@ -351,7 +446,19 @@ public class MealService {
          */
         boolean newlyQualifiesDate = !mealRepository.existsByUserIdAndMealDate(partnerId, meal.getMealDate());
 
-        meal.convertToShared(UUID.randomUUID().toString());
+        /*
+         * 위의 isSharedMeal 은 순차 재탭만 막는다 — 홈 토스트를 연달아 누르면 두 요청이 동시에 "혼자 기록"을
+         * 읽고 둘 다 나눴다. 조건부 UPDATE 로 먼저 선점한 요청만 나누고, 진 쪽은 이긴 쪽의 결과를 돌려준다.
+         */
+        String sharedGroupId = UUID.randomUUID().toString();
+        if (mealRepository.claimForSharing(mealId, sharedGroupId) == 0) {
+            return MealResponse.from(mealRepository.findById(mealId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND)));
+        }
+        // 선점 쿼리가 영속성 컨텍스트를 비웠다 — 다시 읽어서 나눈다
+        meal = mealRepository.findById(mealId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        meal.convertToShared(sharedGroupId);
         mealRepository.save(meal);
         mealRepository.save(copyForPartner(meal, partnerId, userId));
 
@@ -412,6 +519,8 @@ public class MealService {
                 .sugar(source.getSugar())
                 .sodium(source.getSodium())
                 .fiber(source.getFiber())
+                // "약"(AI 추정) 표시도 따라간다 — 같은 숫자를 옮겼다고 본인이 확인한 값이 되지는 않는다
+                .nutritionSource(source.getNutritionSource())
                 .build();
         for (MealItem item : source.getItems()) {
             copy.addItem(MealItem.builder()
@@ -497,6 +606,11 @@ public class MealService {
 
     /** 저장/복사 공통 후처리 — 스트릭 갱신 + 커플 실시간 반영/응원 푸시(+목표 달성 축하). */
     private void afterMealsAdded(Long userId, LocalDate mealDate, boolean firstMealOfDay, boolean copied) {
+        afterMealsAdded(userId, mealDate, firstMealOfDay, copied, null);
+    }
+
+    private void afterMealsAdded(Long userId, LocalDate mealDate, boolean firstMealOfDay, boolean copied,
+                                 String placeName) {
         // 식단 스트릭 갱신 (개인 + 커플) — 별도 트랜잭션, 실패해도 식단 저장은 유지
         try {
             streakService.updateOnMeal(userId, mealDate);
@@ -522,6 +636,11 @@ public class MealService {
                                 "오늘도 같은 식단!",
                                 myName + "님이 어제 식단을 그대로 기록했어요!",
                                 PushLinks.DIET);
+                    } else if (placeName != null) {
+                        notificationService.notify(partnerId, NotificationCategory.PARTNER,
+                                "오늘 뭐 먹었을까?",
+                                myName + "님이 " + placeName + "에서 먹은 걸 기록했어요!",
+                                PushLinks.DIET);
                     } else {
                         notificationService.notify(partnerId, NotificationCategory.PARTNER,
                                 "오늘 뭐 먹었을까?",
@@ -539,6 +658,11 @@ public class MealService {
      */
     private void afterSharedMealAdded(Relation couple, Long userId, Long partnerId,
                                       LocalDate mealDate, boolean firstMealOfDay) {
+        afterSharedMealAdded(couple, userId, partnerId, mealDate, firstMealOfDay, null);
+    }
+
+    private void afterSharedMealAdded(Relation couple, Long userId, Long partnerId,
+                                      LocalDate mealDate, boolean firstMealOfDay, String placeName) {
         try {
             streakService.updateOnMeal(userId, mealDate);
         } catch (RuntimeException e) {
@@ -562,7 +686,9 @@ public class MealService {
         } else {
             notificationService.notify(partnerId, NotificationCategory.PARTNER,
                     "함께 먹었어요 🍽",
-                    myName + "님과 데이트 식단을 함께 기록했어요!",
+                    placeName != null
+                            ? myName + "님과 " + placeName + "에서 먹은 걸 함께 기록했어요!"
+                            : myName + "님과 데이트 식단을 함께 기록했어요!",
                     PushLinks.DIET);
         }
     }
@@ -620,8 +746,29 @@ public class MealService {
         return withPlaces(mealRepository.findByUserIdAndMealDateOrderByIdAsc(userId, KstClock.today()));
     }
 
+    /**
+     * 히스토리 — 오늘 이전, 먹은 날짜 최신순. 오늘 식사는 {@link #findToday} 몫이다.
+     *
+     * <p><b>커서는 여전히 id 하나로 받는다(구버전·신버전 앱 공통).</b> 앱은 받은 목록의 마지막 카드 id 를
+     * 보내므로(dietStore.loadMoreHistory), 서버가 그 행을 찾아 (meal_date, id) 복합 커서로 바꾼다. API 모양이
+     * 그대로라 앱 업데이트 없이 정렬만 바뀐다. 그 기록이 그사이 지워졌으면 그보다 먼저 적은 가장 가까운
+     * 내 기록을 기준점으로 쓴다 — 드물게 경계 근처가 한두 건 겹치거나 빠질 수 있지만 목록이 끊기지는 않는다.
+     * 남의 기록 id 는 내 기록으로 찾지 않으므로 기준점이 되지 않는다.
+     */
     public List<MealResponse> findHistory(Long userId, Long cursor) {
-        return withPlaces(mealRepository.findHistory(userId, cursor, PageRequest.of(0, HISTORY_PAGE_SIZE)));
+        LocalDate today = KstClock.today();
+        PageRequest page = PageRequest.of(0, HISTORY_PAGE_SIZE);
+        if (cursor == null) {
+            return withPlaces(mealRepository.findHistoryFirstPage(userId, today, page));
+        }
+        Optional<Meal> anchor = mealRepository.findById(cursor)
+                .filter(m -> userId.equals(m.getUserId()))
+                .or(() -> mealRepository.findTopByUserIdAndIdLessThanOrderByIdDesc(userId, cursor));
+        if (anchor.isEmpty()) {
+            return List.of();
+        }
+        Meal a = anchor.get();
+        return withPlaces(mealRepository.findHistoryAfter(userId, today, a.getMealDate(), a.getId(), page));
     }
 
     /**
@@ -635,16 +782,84 @@ public class MealService {
     private List<MealResponse> withPlaces(List<Meal> meals) {
         if (meals.isEmpty()) return List.of();
         List<Long> mealIds = meals.stream().map(Meal::getId).toList();
-        Map<Long, PlaceVisitRepository.VisitWithPlace> byMealId = placeVisitRepository.findByMealIdIn(mealIds)
+        Map<Long, PlaceVisitRepository.VisitWithPlace> byMealId = new HashMap<>(placeVisitRepository.findByMealIdIn(mealIds)
                 .stream()
-                .collect(java.util.stream.Collectors.toMap(vp -> vp.getVisit().getMealId(), vp -> vp));
+                .collect(java.util.stream.Collectors.toMap(vp -> vp.getVisit().getMealId(), vp -> vp)));
+        /*
+         * 같이 먹기 외식은 방문이 1건(작성자 몫 식단에만 붙는다, 결정 Q7). 상대 몫 복제본에도 📍가 보이게 짝(shared_group_id)의
+         * 방문을 빌려 온다 — 스키마를 늘리지 않고 이 페이지의 짝만 한 번 더 묻는다(N+1 없음).
+         */
+        Map<String, Long> unlinkedGroups = new HashMap<>();
+        for (Meal m : meals) {
+            if (!byMealId.containsKey(m.getId()) && m.getSharedGroupId() != null) {
+                unlinkedGroups.put(m.getSharedGroupId(), m.getId());
+            }
+        }
+        if (!unlinkedGroups.isEmpty()) {
+            Map<Long, String> groupOfPairMeal = new HashMap<>();
+            for (Meal pair : mealRepository.findBySharedGroupIdIn(unlinkedGroups.keySet())) {
+                if (!byMealId.containsKey(pair.getId())) groupOfPairMeal.put(pair.getId(), pair.getSharedGroupId());
+            }
+            if (!groupOfPairMeal.isEmpty()) {
+                for (PlaceVisitRepository.VisitWithPlace vp
+                        : placeVisitRepository.findByMealIdIn(new ArrayList<>(groupOfPairMeal.keySet()))) {
+                    Long mine = unlinkedGroups.get(groupOfPairMeal.get(vp.getVisit().getMealId()));
+                    if (mine != null) byMealId.putIfAbsent(mine, vp);
+                }
+            }
+        }
+        Map<Long, Long> reactionTarget = reactionTargets(meals);
+        Map<Long, List<FeedReaction>> reactionsByTarget = new HashMap<>();
+        for (FeedReaction r : feedReactionRepository.findByTargetTypeAndTargetIdIn(
+                FeedItemType.MEAL, new HashSet<>(reactionTarget.values()))) {
+            reactionsByTarget.computeIfAbsent(r.getTargetId(), k -> new ArrayList<>()).add(r);
+        }
         return meals.stream()
                 .map(m -> {
                     PlaceVisitRepository.VisitWithPlace vp = byMealId.get(m.getId());
-                    return vp == null
+                    MealResponse res = vp == null
                             ? MealResponse.from(m)
                             : MealResponse.from(m, vp.getVisit().getPlaceId(), vp.getPlaceName());
+                    return res.withReactions(summarizeReactions(
+                            reactionsByTarget.getOrDefault(reactionTarget.get(m.getId()), List.of()), m.getUserId()));
                 })
+                .toList();
+    }
+
+    /**
+     * 끼니 id → 반응이 달려 있는 id. 보통은 자기 자신이고, <b>상대가 등록한 데이트 식단의 내 몫(복사본)</b>만
+     * 원본 id 다 — 피드는 원본만 보여주므로(created_by 필터, MealRepository) 반응도 원본에 달린다
+     * (LOVEBODY_REVIEW §2-4). 짝은 이 페이지의 복사본 그룹만 한 번에 묻는다(N+1 없음).
+     */
+    private Map<Long, Long> reactionTargets(List<Meal> meals) {
+        Map<Long, Long> target = new HashMap<>();
+        Map<String, Long> copyGroups = new HashMap<>();
+        for (Meal m : meals) {
+            target.put(m.getId(), m.getId());
+            boolean partnerCopy = m.isSharedMeal() && m.getCreatedBy() != null && !m.getCreatedBy().equals(m.getUserId());
+            if (partnerCopy) copyGroups.put(m.getSharedGroupId(), m.getId());
+        }
+        if (!copyGroups.isEmpty()) {
+            for (Meal other : mealRepository.findBySharedGroupIdIn(copyGroups.keySet())) {
+                boolean original = other.getCreatedBy() == null || other.getCreatedBy().equals(other.getUserId());
+                Long copyId = copyGroups.get(other.getSharedGroupId());
+                if (original && copyId != null && !other.getId().equals(copyId)) {
+                    target.put(copyId, other.getId());
+                }
+            }
+        }
+        return target;
+    }
+
+    /** 이모지별 요약 — 피드(FeedItemMapper.summarize)와 같은 모양. mine 은 이 목록 주인 기준 */
+    private static List<ReactionSummary> summarizeReactions(List<FeedReaction> reactions, Long viewerId) {
+        Map<String, List<FeedReaction>> byEmoji = new LinkedHashMap<>();
+        for (FeedReaction r : reactions) {
+            byEmoji.computeIfAbsent(r.getEmoji(), k -> new ArrayList<>()).add(r);
+        }
+        return byEmoji.entrySet().stream()
+                .map(e -> new ReactionSummary(e.getKey(), e.getValue().size(),
+                        e.getValue().stream().anyMatch(r -> viewerId.equals(r.getUserId()))))
                 .toList();
     }
 
@@ -796,11 +1011,34 @@ public class MealService {
 
     @Transactional
     public void delete(Long userId, Long mealId) {
+        delete(userId, mealId, false);
+    }
+
+    /**
+     * {@code withVisit} — 결정 Q4(2026-10-05): 장소가 붙은 식단을 지울 때 앱이 "방문 기록도 지울까요?"를 묻고, 그렇다고 하면
+     * 이 식단(짝 포함)에 붙은 <b>내가 남긴</b> 방문도 함께 지운다. 기본(false)은 예전처럼 방문은 남기고 연결만 끊는다 —
+     * 방문은 장소 별점·방문 횟수의 근거라 말없이 지우면 안 된다. 상대가 남긴 방문(같이 먹기 짝)은 늘 남긴다.
+     */
+    @Transactional
+    public void delete(Long userId, Long mealId, boolean withVisit) {
         Meal meal = mealRepository.findById(mealId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
         if (!meal.getUserId().equals(userId)) {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
+        /*
+         * 사진도 함께 지운다 — 행만 지우면 이미지는 URL 로 계속 접근 가능하다
+         * (WorkoutService.delete 와 같은 처방). 식단은 가장 자주 찍는 사진이라 여기가
+         * 비어 있으면 고아 파일이 제일 빠르게 쌓인다.
+         *
+         * <p>탈퇴는 이미 거두고 있었다({@code UserDataPurger} 가 meals.photo_url 을 모은다).
+         * 비어 있던 건 <b>기록 한 건을 지우는 이 경로</b>뿐이다 — 관계 종료
+         * ({@code RelationRecordPurger})는 식단 <b>행 자체를 지우지 않으므로</b>(개인 데이터라
+         * 관계가 끝나도 남는다) 사진을 남기는 것이 맞다.
+         *
+         * 커밋 이후에 지운다(deleteAllAfterCommit): 외부 호출 실패가 DB 삭제를 되돌리면 안 된다.
+         */
+        List<String> photoUrls;
         if (meal.isSharedMeal()) {
             // 데이트 식단은 커플 양쪽에 짝이 있다 — 한쪽만 지우면 남은 쪽이 존재하지 않는
             // 짝을 계속 가리켜(sharedGroupId 가 그대로 남아) "같이 먹기" 배지가 잘못 뜬다.
@@ -808,29 +1046,72 @@ public class MealService {
             List<Long> pairIds = pair.stream().map(Meal::getId).toList();
             // 피드 카드 응원 반응 — 다형 참조라 FK 가 없어 직접 지운다 (V60 주석 참고)
             feedReactionRepository.deleteByTargetTypeAndTargetIdIn(FeedItemType.MEAL, pairIds);
-            // 채팅에 자동으로 남은 MEAL_CARD — meal_id FK(V90) 를 끊지 않으면 아래 delete 가 실패한다
+            // 채팅에 자동으로 남은 MEAL_CARD — meal_id FK(V135) 를 끊지 않으면 아래 delete 가 실패한다
             chatService.detachMealCards(pairIds);
+            /*
+             * 나눠 담은 짝은 같은 사진 URL 을 복사해 갖는다 — 한 번만 지우면 되지만 중복이
+             * 있어도 무방하다(지운 자산을 다시 지우는 호출은 멱등이다. Purger 주석과 같은 근거).
+             */
+            photoUrls = new ArrayList<>(pair.stream().map(Meal::getPhotoUrl).filter(Objects::nonNull).distinct().toList());
+            if (withVisit) photoUrls.addAll(deleteMyVisitsOf(userId, pairIds));
+            // 장소를 붙인 끼니면 방문이 이 행을 가리킨다(FK) — 남은 방문은 두고 연결만 끊는다
+            placeVisitRepository.detachMeals(pairIds);
             mealRepository.deleteAll(pair);
             publishDietEvent(userId);
         } else {
             feedReactionRepository.deleteByTargetTypeAndTargetId(FeedItemType.MEAL, mealId);
             chatService.detachMealCards(List.of(mealId));
+            photoUrls = new ArrayList<>(meal.getPhotoUrl() != null ? List.of(meal.getPhotoUrl()) : List.of());
+            if (withVisit) photoUrls.addAll(deleteMyVisitsOf(userId, List.of(mealId)));
+            placeVisitRepository.detachMeals(List.of(mealId));
             mealRepository.delete(meal);
         }
+        // 채팅에 공유한 MEAL_CARD 처럼 같은 URL 을 쓰는 다른 행이 남아 있으면 삭제기가 파일을 남긴다
+        // (StoredMediaReferences) — 여기서는 지운 행의 URL 만 넘긴다
+        if (!photoUrls.isEmpty()) {
+            imageDeleter.deleteAllAfterCommit(photoUrls);
+        }
+    }
+
+    /**
+     * 이 식단들에 붙은 방문 중 <b>내가 남긴 것</b>을 지운다(방문 삭제 권한과 같은 규칙 — PlaceService.deleteVisit).
+     * 방문 카드 반응은 다형 참조라 직접 지우고, 상대 앱의 럽슐랭·캘린더가 다시 받게 PLACE 이벤트를 보낸다.
+     *
+     * @return 지운 방문의 사진 URL — 호출자가 식단 사진과 함께 커밋 뒤 삭제기에 넘긴다(다른 행이 쓰면 남는다)
+     */
+    private List<String> deleteMyVisitsOf(Long userId, List<Long> mealIds) {
+        List<PlaceVisit> mine = placeVisitRepository.findAllByMealIdIn(mealIds).stream()
+                .filter(v -> userId.equals(v.getVisitedBy()))
+                .toList();
+        if (mine.isEmpty()) return List.of();
+        feedReactionRepository.deleteByTargetTypeAndTargetIdIn(FeedItemType.PLACE_VISIT,
+                mine.stream().map(PlaceVisit::getId).toList());
+        placeVisitRepository.deleteAll(mine);
+        relationRepository.findByUserAndTypeAndStatus(userId, RelationType.COUPLE, RelationStatus.ACTIVE)
+                .stream().findFirst()
+                .ifPresent(c -> coupleEventPublisher.publish(c.getId(), CoupleEvent.PLACE));
+        return mine.stream().map(PlaceVisit::getImageUrl).filter(Objects::nonNull).distinct().toList();
+    }
+
+    /** 이 사진(URL)으로 남긴 내 식단 — 채팅 사진 → 식단 기록 메뉴가 먼저 묻는다(중복 안내) */
+    public PhotoRecordLookupResponse findByPhoto(Long userId, String photoUrl) {
+        return mealRepository.findByUserIdAndPhoto(userId, photoUrl, PageRequest.of(0, 1)).stream().findFirst()
+                .map(m -> new PhotoRecordLookupResponse(true, m.getId(), m.getMealDate(), m.getMealType().label()))
+                .orElseGet(PhotoRecordLookupResponse::none);
     }
 
     /** 커플 공동 식단 목표 진행률 — 이번 주(월~) 둘 다 기록한 날 수. */
     public CoupleMealGoalResponse coupleGoal(Long userId) {
+        LocalDate today = KstClock.today();
+        LocalDate weekStart = today.with(DayOfWeek.MONDAY);
         List<Relation> couples = relationRepository
                 .findByUserAndTypeAndStatus(userId, RelationType.COUPLE, RelationStatus.ACTIVE);
         if (couples.isEmpty()) {
-            return CoupleMealGoalResponse.notConnected();
+            // 미연결 — 스트립은 나만 그리므로 내 날짜만 싣는다
+            return CoupleMealGoalResponse.notConnected(weekStart, sorted(mealRepository.findMealDates(userId, weekStart, today)));
         }
         Relation couple = couples.get(0);
         Long partnerId = couple.partnerOf(userId);
-
-        LocalDate today = KstClock.today();
-        LocalDate weekStart = today.with(DayOfWeek.MONDAY);
 
         var myDates = new HashSet<>(mealRepository.findMealDates(userId, weekStart, today));
         var partnerDates = partnerId == null
@@ -843,23 +1124,31 @@ public class MealService {
         Integer goalDays = couple.getDietGoalDays();
         boolean achieved = goalDays != null && both.size() >= goalDays;
         return new CoupleMealGoalResponse(true, goalDays, weekStart,
-                myDates.size(), partnerDates.size(), both.size(), achieved);
+                myDates.size(), partnerDates.size(), both.size(), achieved,
+                sorted(myDates), sorted(partnerDates));
     }
 
-    /** 커플 상대방의 오늘 식단 기록 여부 — 홈 커플 카드용. */
-    public PartnerTodayResponse partnerToday(Long userId) {
+    private static List<LocalDate> sorted(java.util.Collection<LocalDate> dates) {
+        return dates.stream().distinct().sorted().toList();
+    }
+
+    /**
+     * 커플 상대의 오늘 식단 — 기록 여부 + 끼니 종류(홈 "오늘 챙김" 링). 예전의 존재 확인 쿼리를 끼니 종류
+     * 조회 하나로 바꿨다(completed 는 그 목록이 비었는지) — 쿼리 수는 그대로 1회, 날짜는 KstClock.
+     */
+    public PartnerMealTodayResponse partnerToday(Long userId) {
         List<Relation> couples = relationRepository
                 .findByUserAndTypeAndStatus(userId, RelationType.COUPLE, RelationStatus.ACTIVE);
         if (couples.isEmpty()) {
-            return new PartnerTodayResponse(false, null, false);
+            return PartnerMealTodayResponse.notConnected();
         }
         Long partnerId = couples.get(0).partnerOf(userId);
         if (partnerId == null) {
-            return new PartnerTodayResponse(false, null, false);
+            return PartnerMealTodayResponse.notConnected();
         }
         String partnerName = userRepository.findById(partnerId)
                 .map(u -> u.getName()).orElse(null);
-        boolean completed = mealRepository.existsByUserIdAndMealDate(partnerId, KstClock.today());
-        return new PartnerTodayResponse(true, partnerName, completed);
+        List<MealType> mealTypes = mealRepository.findMealTypes(partnerId, KstClock.today()).stream().sorted().toList();
+        return new PartnerMealTodayResponse(true, partnerName, !mealTypes.isEmpty(), mealTypes);
     }
 }

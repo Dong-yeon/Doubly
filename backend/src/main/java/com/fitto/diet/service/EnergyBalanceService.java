@@ -48,11 +48,11 @@ public class EnergyBalanceService {
     /** consumedCalories 는 호출자(NutritionService)가 이미 계산해둔 값을 그대로 받아 중복 조회를 피한다. */
     public EnergyBalance compute(Long userId, int consumedCalories) {
         User user = userRepository.findById(userId).orElse(null);
-        BigDecimal weightKg = bodyMetricRepository.findTopByUserIdOrderByMeasuredDateDescIdDesc(userId)
-                .map(BodyMetric::getWeightKg)
+        BodyMetric metric = bodyMetricRepository.findTopByUserIdAndWeightKgIsNotNullOrderByMeasuredDateDescIdDesc(userId)
                 .orElse(null);
+        BigDecimal weightKg = metric != null ? metric.getWeightKg() : null;
 
-        Integer bmr = BmrCalculator.calc(user, weightKg);
+        Integer bmr = BmrCalculator.calc(user, metric);
         int exerciseCalories = weightKg != null ? todayExerciseCalories(userId, weightKg) : 0;
         Integer energyBalance = bmr != null ? bmr + exerciseCalories - consumedCalories : null;
 

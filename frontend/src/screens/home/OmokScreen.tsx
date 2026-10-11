@@ -4,25 +4,28 @@
  * <p>판을 연 사람이 백(후공), 상대가 흑(선공). 내 차례가 아니면 판이 잠기고, 상대의 수는
  * 커플 소켓 이벤트(GAME)로 즉시 따라온다. 순수 View 로 그린다 — 교차점마다 Pressable 하나.
  */
-import React, { useCallback, useMemo, useState } from 'react';
-import { FlatList, Pressable, Text, View, useWindowDimensions } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FlatList, Pressable, Text, View } from 'react-native';
+import { useContentWidth } from '../../hooks/useContentWidth';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../navigation/types';
+import { GameNudgeButton } from '../../components/GameNudgeButton';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
+import { GameReactionBar } from '../../components/GameReactionBar';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { omokApi } from '../../api/game';
-import { connectSocket, subscribeCouple, unsubscribeCouple } from '../../api/chatSocket';
+import { connectSocket, subscribeCouple } from '../../api/chatSocket';
 import { useRelationStore } from '../../store/relationStore';
 import { getErrorMessage } from '../../utils/error';
-import { localDateOf, relativeDateLabel } from '../../utils/date';
+import { relativeTimestampLabel } from '../../utils/date';
 import { Alert } from '../../utils/alert';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { OmokGame } from '../../types';
+import type { GameRecord, OmokGame } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'Omok'>;
@@ -36,55 +39,88 @@ const STAR_POINTS = new Set([3 * SIZE + 3, 3 * SIZE + 11, 7 * SIZE + 7, 11 * SIZ
 let placeSeq = 0;
 
 export function OmokScreen(_: Props) {
-  const { width } = useWindowDimensions();
+  const width = useContentWidth();
   const relationId = useRelationStore((s) => s.couple?.id);
 
   const [game, setGame] = useState<OmokGame | null>(null);
   /** 방금 끝난 판 — current 가 null 이 된 뒤에도 결과와 이긴 줄을 보여주기 위해 따로 든다 */
   const [justFinished, setJustFinished] = useState<OmokGame | null>(null);
+  /** 보던 판을 상대가 접었다 — 그 사람 이름. 판이 사라진 이유를 알려 준다 */
+  const [foldedBy, setFoldedBy] = useState<string | null>(null);
+  /**
+   * 지금 보고 있는 진행 중 판 — 사라졌을 때 끝났는지(기록에 있음) 접혔는지(없음) 가르는 기준.
+   * 길막기(WallRaceScreen)와 같은 방식이다. 보던 판이 없으면(처음 들어옴) 아무것도 올리지 않는다.
+   */
+  const watchingRef = useRef<OmokGame | null>(null);
   const [history, setHistory] = useState<OmokGame[]>([]);
+  /** 서버가 센 전적(끝낸 판 전부) — 못 받으면 null 이고 그때만 기록 목록으로 센다 */
+  const [serverRecord, setServerRecord] = useState<GameRecord | null>(null);
+  const refreshRecord = useCallback(() => {
+    omokApi.record().then(setServerRecord).catch(() => undefined);
+  }, []);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [starting, setStarting] = useState(false);
   const [placing, setPlacing] = useState(false);
+  const [undoBusy, setUndoBusy] = useState(false);
+  /** 복기 — 끝난 판을 처음부터 재생한다. step 은 "지금까지 둔 수" 개수 */
+  const [replay, setReplay] = useState<{ game: OmokGame; step: number } | null>(null);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     setLoadError(false);
     try {
       const [g, h] = await Promise.all([omokApi.current(), omokApi.history()]);
+      refreshRecord();
       setGame(g);
       setHistory(h);
-      // 상대가 이겨서 끝났으면 current 가 null 이 된다 — 최신 기록을 결과 화면으로 올린다
-      if (!g && h.length > 0) {
-        setJustFinished((prev) => (prev && prev.id === h[0].id ? prev : h[0]));
+      /*
+       * 보던 판이 사라졌다 — 기록에 있으면 끝난 것(상대가 이긴 수 포함)이라 결과로 올리고, 없으면 상대가 접은 것.
+       * 예전에는 "진행 판 없음 + 기록 있음"이면 무조건 h[0] 을 결과로 띄워, 며칠 만에 들어와도
+       * 상대가 접은 뒤에도 지난 "이겼어요!"가 다시 떴다(docs/game-current-state.md 8-1 #2).
+       */
+      const watching = watchingRef.current;
+      if (!g && watching) {
+        const done = h.find((x) => x.id === watching.id);
+        if (done) setJustFinished(done);
+        else setFoldedBy(watching.partnerName ?? '상대');
+        watchingRef.current = null;
       }
-      if (g) setJustFinished(null);
+      if (g) {
+        setJustFinished(null);
+        setFoldedBy(null);
+      }
     } catch (e) {
       if (!silent) toast.error(getErrorMessage(e, '판을 불러오지 못했어요.'));
       setLoadError(true);
     } finally {
       if (!silent) setLoading(false);
     }
-  }, []);
+  }, [refreshRecord]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  // 진행 중 판을 볼 때마다 기억해 둔다 — 사라졌을 때 끝났는지 접혔는지 가르는 기준
+  useEffect(() => {
+    if (game) watchingRef.current = game;
+  }, [game]);
 
   useFocusEffect(
     useCallback(() => {
       if (!relationId) return undefined;
       let active = true;
+      let offCouple: (() => void) | undefined;
       connectSocket()
         .then(() => {
           if (!active) return;
-          subscribeCouple(relationId, (type) => {
+          offCouple = subscribeCouple(relationId, (type) => {
             if (type === 'GAME') void load(true);
           });
         })
         .catch(() => undefined);
       return () => {
         active = false;
-        unsubscribeCouple(relationId);
+        offCouple?.();
       };
     }, [relationId, load]),
   );
@@ -95,6 +131,7 @@ export function OmokScreen(_: Props) {
       const g = await omokApi.start();
       setGame(g);
       setJustFinished(null);
+      setFoldedBy(null);
       haptics.light();
       if (!g.myTurn) toast.success(`${g.partnerName ?? '상대'}에게 선공을 줬어요. 두면 알려드릴게요.`);
     } catch (e) {
@@ -131,6 +168,7 @@ export function OmokScreen(_: Props) {
         setGame(null);
         if (updated.winner === 'ME') haptics.success();
         omokApi.history().then(setHistory).catch(() => undefined);
+        refreshRecord();
       } else {
         setGame(updated);
       }
@@ -143,6 +181,35 @@ export function OmokScreen(_: Props) {
     }
   };
 
+  const askUndo = async () => {
+    if (!game || undoBusy) return;
+    setUndoBusy(true);
+    try {
+      setGame(await omokApi.requestUndo(game.id));
+      toast.success('무르기를 부탁했어요. 상대가 받아주면 다시 둘 수 있어요.');
+    } catch (e) {
+      toast.error(getErrorMessage(e, '무르기를 부탁하지 못했어요.'));
+      void load(true);
+    } finally {
+      setUndoBusy(false);
+    }
+  };
+
+  const answerUndo = async (accept: boolean) => {
+    if (!game || undoBusy) return;
+    setUndoBusy(true);
+    try {
+      setGame(await omokApi.respondUndo(game.id, accept));
+      if (accept) haptics.light();
+      toast.success(accept ? '한 수 물러줬어요.' : '그냥 두기로 했어요.');
+    } catch (e) {
+      toast.error(getErrorMessage(e, '응답하지 못했어요.'));
+      void load(true);
+    } finally {
+      setUndoBusy(false);
+    }
+  };
+
   const confirmGiveUp = () => {
     if (!game) return;
     Alert.alert('이 판을 접을까요?', '접은 판은 전적에 남지 않고, 상대 화면에서도 사라져요.', [
@@ -151,10 +218,19 @@ export function OmokScreen(_: Props) {
         text: '접기',
         style: 'destructive',
         onPress: () => {
+          /*
+           * 내가 접는다 — 응답보다 소켓 GAME 이벤트가 먼저 와도 "상대가 접었어요"가 뜨지 않게
+           * 요청 <b>전에</b> 보던 판을 잊는다. 실패하면 되돌린다.
+           */
+          const watching = watchingRef.current;
+          watchingRef.current = null;
           omokApi
             .giveUp(game.id)
             .then(() => { setGame(null); toast.success('이 판은 접었어요.'); })
-            .catch((e) => toast.error(getErrorMessage(e, '접지 못했어요.')));
+            .catch((e) => {
+              watchingRef.current = watching;
+              toast.error(getErrorMessage(e, '접지 못했어요.'));
+            });
         },
       },
     ]);
@@ -166,19 +242,27 @@ export function OmokScreen(_: Props) {
   const cell = boardSize / SIZE;
   const stoneSize = Math.max(12, cell * 0.78);
 
+  // 전적은 서버가 센 값(끝낸 판 전부). 기록 목록은 최근 20판뿐이라 21판째부터 줄어든다(8-1 #9)
   const record = useMemo(
-    () => ({
+    () => serverRecord ?? {
       me: history.filter((g) => g.winner === 'ME').length,
       partner: history.filter((g) => g.winner === 'PARTNER').length,
       draw: history.filter((g) => g.winner === 'DRAW').length,
-    }),
-    [history],
+    },
+    [serverRecord, history],
   );
 
   const renderBoard = (g: OmokGame, interactive: boolean) => {
     const winning = new Set(g.winningLine ?? []);
     // 색은 내 돌/상대 돌이 아니라 흑/백으로 그린다 — 오목의 관행이고 둘의 화면이 같아 보여야 대화가 된다
     const myIsBlack = g.myColor === 'BLACK';
+    /*
+     * 최근 세 수에 옅은 테두리를 남긴다 — 며칠 만에 들어왔을 때 "어디까지 뒀더라"가
+     * 마지막 점 하나로는 안 읽힌다. 가장 최근 수는 이미 점이 있으므로 2·3번째만 그린다.
+     */
+    const recentRank = new Map<number, number>();
+    (g.moves ?? []).slice(-3).forEach((idx, i, arr) => recentRank.set(idx, arr.length - 1 - i));
+    const ringSize = Math.min(cell, stoneSize + 4);
     return (
       <View style={[styles.board, { width: boardSize, height: boardSize }]}>
         {Array.from({ length: CELLS }, (_, index) => {
@@ -211,6 +295,21 @@ export function OmokScreen(_: Props) {
               />
               {STAR_POINTS.has(index) && s === '0' ? (
                 <View style={[styles.star, { left: half - 2.5, top: half - 2.5 }]} />
+              ) : null}
+              {recentRank.get(index) ? (
+                <View
+                  style={[
+                    styles.recentRing,
+                    {
+                      width: ringSize,
+                      height: ringSize,
+                      borderRadius: ringSize / 2,
+                      left: half - ringSize / 2,
+                      top: half - ringSize / 2,
+                      opacity: recentRank.get(index) === 1 ? 0.5 : 0.25,
+                    },
+                  ]}
+                />
               ) : null}
               {s !== '0' ? (
                 <View
@@ -255,6 +354,115 @@ export function OmokScreen(_: Props) {
     </View>
   );
 
+  /**
+   * 무르기 줄 — 상대가 걸어왔으면 답할 버튼 둘, 내가 걸었으면 기다리는 문구,
+   * 아무것도 없고 내가 직전에 뒀으면 "한 수 무르기".
+   */
+  const renderUndoBar = (g: OmokGame) => {
+    if (g.undoRequest === 'PARTNER') {
+      return (
+        <View style={styles.undoAsk}>
+          <Text style={styles.undoAskText}>
+            {g.partnerName ?? '상대'}님이 방금 둔 수를 무르고 싶대요.
+          </Text>
+          <View style={styles.undoBtnRow}>
+            <Button title="물러주기" size="sm" onPress={() => answerUndo(true)} loading={undoBusy} />
+            <Button title="그냥 두기" size="sm" variant="ghost" onPress={() => answerUndo(false)} disabled={undoBusy} />
+          </View>
+        </View>
+      );
+    }
+    if (g.undoRequest === 'MINE') {
+      return <Text style={styles.undoWaiting}>무르기를 부탁했어요. {g.partnerName ?? '상대'}의 답을 기다리는 중…</Text>;
+    }
+    if (g.canUndo) {
+      return (
+        <Button
+          title="한 수 무르기"
+          variant="ghost"
+          size="sm"
+          onPress={askUndo}
+          loading={undoBusy}
+          style={styles.undoBtn}
+        />
+      );
+    }
+    return null;
+  };
+
+  /** 복기 — moves 를 step 개까지 재생한 판. 첫 수가 흑이고 이후 번갈아 두므로 색은 순번이 정한다 */
+  const renderReplay = (r: { game: OmokGame; step: number }) => {
+    const { game: g, step } = r;
+    const total = g.moves.length;
+    const myIsBlack = g.myColor === 'BLACK';
+    let stones = '0'.repeat(CELLS);
+    for (let i = 0; i < step; i += 1) {
+      const blackTurn = i % 2 === 0; // 0번째가 흑(선공)
+      const mine = blackTurn === myIsBlack;
+      const idx = g.moves[i];
+      stones = stones.slice(0, idx) + (mine ? 'M' : 'P') + stones.slice(idx + 1);
+    }
+    const shown: OmokGame = {
+      ...g,
+      stones,
+      lastMove: step > 0 ? g.moves[step - 1] : null,
+      // 이긴 다섯 돌은 끝까지 재생했을 때만 강조한다
+      winningLine: step === total ? g.winningLine : [],
+      moves: g.moves.slice(0, step),
+    };
+    const setStep = (next: number) => setReplay({ game: g, step: Math.max(0, Math.min(total, next)) });
+
+    return (
+      <View style={styles.replayWrap}>
+        <View style={styles.replayHead}>
+          <Text style={styles.replayTitle}>복기 · {step}/{total}수</Text>
+          <Pressable onPress={() => setReplay(null)} accessibilityRole="button" accessibilityLabel="복기 닫기">
+            <Text style={styles.replayClose}>닫기</Text>
+          </Pressable>
+        </View>
+        {renderBoard(shown, false)}
+        <View style={styles.replayControls}>
+          <Pressable
+            onPress={() => setStep(0)}
+            disabled={step === 0}
+            accessibilityRole="button"
+            accessibilityLabel="처음으로"
+            style={({ pressed }) => [styles.replayKey, step === 0 && styles.replayKeyOff, pressed && styles.pressed]}
+          >
+            <MaterialCommunityIcons name="skip-backward" size={20} color={colors.textPrimary} />
+          </Pressable>
+          <Pressable
+            onPress={() => setStep(step - 1)}
+            disabled={step === 0}
+            accessibilityRole="button"
+            accessibilityLabel="한 수 뒤로"
+            style={({ pressed }) => [styles.replayKey, step === 0 && styles.replayKeyOff, pressed && styles.pressed]}
+          >
+            <MaterialCommunityIcons name="chevron-left" size={24} color={colors.textPrimary} />
+          </Pressable>
+          <Pressable
+            onPress={() => setStep(step + 1)}
+            disabled={step === total}
+            accessibilityRole="button"
+            accessibilityLabel="한 수 앞으로"
+            style={({ pressed }) => [styles.replayKey, step === total && styles.replayKeyOff, pressed && styles.pressed]}
+          >
+            <MaterialCommunityIcons name="chevron-right" size={24} color={colors.textPrimary} />
+          </Pressable>
+          <Pressable
+            onPress={() => setStep(total)}
+            disabled={step === total}
+            accessibilityRole="button"
+            accessibilityLabel="끝으로"
+            style={({ pressed }) => [styles.replayKey, step === total && styles.replayKeyOff, pressed && styles.pressed]}
+          >
+            <MaterialCommunityIcons name="skip-forward" size={20} color={colors.textPrimary} />
+          </Pressable>
+        </View>
+      </View>
+    );
+  };
+
   const renderResult = (g: OmokGame) => {
     const title = g.winner === 'ME' ? '이겼어요!' : g.winner === 'PARTNER' ? `${g.partnerName ?? '상대'}가 이겼어요` : '무승부';
     return (
@@ -267,6 +475,14 @@ export function OmokScreen(_: Props) {
         <Text style={styles.resultTitle}>{title}</Text>
         <Text style={styles.cardDesc}>{g.moveCount}수 · 채팅에 결과 카드를 남겼어요.</Text>
         {renderBoard(g, false)}
+        {g.moves.length > 0 ? (
+          <Button
+            title="복기 보기"
+            variant="ghost"
+            size="sm"
+            onPress={() => setReplay({ game: g, step: 0 })}
+          />
+        ) : null}
       </View>
     );
   };
@@ -289,19 +505,33 @@ export function OmokScreen(_: Props) {
 
   const header = (
     <View>
-      {game ? (
+      {replay ? (
+        renderReplay(replay)
+      ) : game ? (
         <View>
           {renderTurnBar(game)}
-          {renderBoard(game, game.myTurn && !placing)}
+          {/* 상대 차례에 기다리는 쪽만 — 하루 한 번(docs/GAME_NUDGE_2026-09-30.md) */}
+          {!game.myTurn && !game.undoRequest ? <GameNudgeButton gameId={game.id} partnerName={game.partnerName} /> : null}
+          {renderBoard(game, game.myTurn && !placing && !game.undoRequest)}
           <Text style={styles.hint}>
             {game.myTurn ? '교차점을 누르면 돌이 놓여요.' : '상대가 두면 바로 보여요. 2분 넘게 조용하면 상대에게 알림이 가요.'}
           </Text>
+          {renderUndoBar(game)}
+          <GameReactionBar gameType="OMOK" />
           <Button title="이 판 접기" variant="ghost" size="sm" onPress={confirmGiveUp} style={styles.giveUp} />
         </View>
       ) : justFinished ? (
         <>
           {renderResult(justFinished)}
           {renderStart('한 판 더?')}
+        </>
+      ) : foldedBy ? (
+        <>
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>{foldedBy}님이 이 판을 접었어요</Text>
+            <Text style={styles.cardDesc}>접은 판은 전적에 남지 않아요. 새 판을 열어 볼까요?</Text>
+          </View>
+          {renderStart('새 판 열까요?')}
         </>
       ) : !loading && !loadError ? (
         renderStart('한 판 둘까요?')
@@ -319,19 +549,32 @@ export function OmokScreen(_: Props) {
         refreshing={loading}
         onRefresh={() => load()}
         ListHeaderComponent={header}
-        renderItem={({ item }) => (
-          <View style={styles.histCard}>
-            <View style={styles.histRow}>
-              <Text style={styles.histDate}>{item.completedAt ? relativeDateLabel(localDateOf(item.completedAt)) : ''}</Text>
-              <Text style={[styles.histResult, item.winner === 'ME' && styles.histWin]}>
-                {item.winner === 'ME' ? '승' : item.winner === 'PARTNER' ? '패' : '무'}
-              </Text>
-            </View>
-            <Text style={styles.histText}>
-              {item.moveCount}수 · 나 {item.myColor === 'BLACK' ? '흑' : '백'}
-            </Text>
-          </View>
-        )}
+        renderItem={({ item }) => {
+          // V91 이전 판은 수 이력이 없어 복기할 수 없다 — 눌러도 빈 판이 뜨지 않게 막는다
+          const replayable = item.moves.length > 0;
+          return (
+            <Pressable
+              onPress={() => replayable && setReplay({ game: item, step: item.moves.length })}
+              disabled={!replayable}
+              accessibilityRole={replayable ? 'button' : undefined}
+              accessibilityLabel={replayable ? `${item.moveCount}수 판 복기 보기` : undefined}
+              style={({ pressed }) => [styles.histCard, pressed && styles.pressed]}
+            >
+              <View style={styles.histRow}>
+                <Text style={styles.histDate}>{item.completedAt ? relativeTimestampLabel(item.completedAt) : ''}</Text>
+                <Text style={[styles.histResult, item.winner === 'ME' && styles.histWin]}>
+                  {item.winner === 'ME' ? '승' : item.winner === 'PARTNER' ? '패' : '무'}
+                </Text>
+              </View>
+              <View style={styles.histRow}>
+                <Text style={styles.histText}>
+                  {item.moveCount}수 · 나 {item.myColor === 'BLACK' ? '흑' : '백'}
+                </Text>
+                {replayable ? <Text style={styles.histReplay}>복기 ▸</Text> : null}
+              </View>
+            </Pressable>
+          );
+        }}
         ListEmptyComponent={
           !loading && loadError && !game ? (
             <EmptyState error onRetry={() => load()} title="불러오지 못했어요" description="네트워크 상태를 확인하고 다시 시도해주세요." />
@@ -403,6 +646,52 @@ const styles = themedStyles((colors) => ({
 
   hint: { fontSize: fontSize.caption, color: colors.textSecondary, textAlign: 'center', marginTop: spacing.md, lineHeight: 18 },
   giveUp: { alignSelf: 'center', marginTop: spacing.xs },
+  pressed: { opacity: 0.6 },
+
+  /* 최근 세 수 표시 — 가장 최근 수는 점이 있으므로 2·3번째만 옅은 테두리로 남긴다 */
+  recentRing: { position: 'absolute', borderWidth: 2, borderColor: colors.primary },
+
+  undoBtn: { alignSelf: 'center', marginTop: spacing.sm },
+  undoWaiting: {
+    fontSize: fontSize.caption,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.sm,
+    fontWeight: '700',
+  },
+  undoAsk: {
+    marginTop: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryBg,
+    gap: spacing.sm,
+  },
+  undoAskText: { fontSize: fontSize.body, color: colors.textPrimary, fontWeight: '700', textAlign: 'center' },
+  undoBtnRow: { flexDirection: 'row', justifyContent: 'center', gap: spacing.sm },
+
+  replayWrap: { marginBottom: spacing.md },
+  replayHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
+  },
+  replayTitle: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
+  replayClose: { fontSize: fontSize.caption, fontWeight: '800', color: colors.primary },
+  replayControls: { flexDirection: 'row', justifyContent: 'center', gap: spacing.sm, marginTop: spacing.md },
+  replayKey: {
+    width: 52,
+    height: 44,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  replayKeyOff: { opacity: 0.35 },
 
   sectionTitle: { fontSize: fontSize.subtitle, fontWeight: '700', color: colors.textPrimary, marginTop: spacing.lg, marginBottom: spacing.sm },
   histCard: {
@@ -417,5 +706,6 @@ const styles = themedStyles((colors) => ({
   histDate: { fontSize: fontSize.caption, color: colors.textMuted, fontWeight: '700' },
   histResult: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '800' },
   histWin: { color: colors.primary },
+  histReplay: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '800', marginTop: 2 },
   histText: { fontSize: fontSize.body, color: colors.textPrimary, marginTop: 2, fontWeight: '600' },
 }));

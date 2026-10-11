@@ -55,3 +55,26 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run typecheck
+
+  # tsc 는 네이티브 파일(.ts) 기준으로 해석하므로 "웹 번들에서만 터지는 import" 를 못 잡는다.
+  # 실제로 f221b13(9/7) 이후 웹이 부팅 직후 흰 화면이었는데 일주일 동안 CI 가 초록이었다
+  # (a29459f 에서 수정, docs/PC_APP_ANALYSIS_2026-09-14.md 0절). 번들을 만들어 보는 것만으로
+  # 네이티브 모듈 import 해석 실패는 잡힌다 — 런타임 크래시까지는 못 잡는다.
+  frontend-web-build:
+    name: Frontend web bundle (expo export)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: Export web bundle
+        run: npm run build:web
+      - name: Report bundle size
+        run: du -sh dist && du -sh dist/_expo/static/js/web 2>/dev/null || true

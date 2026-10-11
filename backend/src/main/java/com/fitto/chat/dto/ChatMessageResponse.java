@@ -15,7 +15,7 @@ public record ChatMessageResponse(
         String content,
         String imageUrl,
         Long workoutId,
-        /** 럽슐랭 카드의 원본 장소 — 탭하면 장소 상세로(V91). 다른 타입은 null */
+        /** 럽슐랭 카드의 원본 장소 — 탭하면 장소 상세로(V136). 다른 타입은 null */
         Long placeId,
         Long routineId,
         boolean isRead,
@@ -34,7 +34,9 @@ public record ChatMessageResponse(
          * 보낸 앱이 붙인 멱등키 — 그 앱이 낙관적 말풍선을 이 에코와 짝짓는 데 쓴다.
          * 옛 메시지·시스템 카드는 null(ChatMessage.clientMessageId 주석).
          */
-        String clientMessageId
+        String clientMessageId,
+        /** 문구 스티커(TEXT_STICKER)의 캐릭터 스티커 코드 — 다른 타입이면 null. content 는 문구다 */
+        String stickerCode
 ) {
     public static ChatMessageResponse from(ChatMessage m) {
         return from(m, null, List.of(), false);
@@ -46,6 +48,7 @@ public record ChatMessageResponse(
                 m.getMessageType(), m.getContent(), m.getImageUrl(), m.getWorkoutId(), m.getPlaceId(),
                 m.getRoutineId(), m.isRead(), m.getCreatedAt(),
                 replyTo, reactions != null ? reactions : List.of(),
-                m.getEditedAt() != null, m.isDeleted(), bookmarked, m.getClientMessageId());
+                m.getEditedAt() != null, m.isDeleted(), bookmarked, m.getClientMessageId(),
+                m.getStickerCode());
     }
 }

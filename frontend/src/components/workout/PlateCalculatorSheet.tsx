@@ -138,7 +138,7 @@ const styles = themedStyles((colors) => ({
   },
   barChipActive: { borderColor: colors.primary, backgroundColor: colors.primaryBg },
   barChipText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
-  barChipTextActive: { color: colors.primary },
+  barChipTextActive: { color: colors.primary, fontWeight: '800' },
 
   sideLabel: { fontSize: fontSize.caption, color: colors.textSecondary },
   plateRow: { flexDirection: 'row', gap: spacing.xs, flexWrap: 'wrap' },
@@ -154,7 +154,7 @@ const styles = themedStyles((colors) => ({
     alignItems: 'center',
   },
   plateText: { fontSize: fontSize.body, fontWeight: '800', color: colors.primary },
-  remainder: { fontSize: fontSize.caption, color: colors.coral },
+  remainder: { fontSize: fontSize.caption, color: colors.warning },
   hint: { fontSize: fontSize.caption, color: colors.textSecondary, paddingVertical: spacing.md },
 
   close: { alignItems: 'center', paddingVertical: spacing.sm },

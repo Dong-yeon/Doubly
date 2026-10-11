@@ -2,6 +2,8 @@ package com.fitto.place.service;
 
 import com.fitto.chat.dto.ChatMessageResponse;
 import com.fitto.chat.service.ChatService;
+import com.fitto.common.event.CoupleEvent;
+import com.fitto.common.event.CoupleEventPublisher;
 import com.fitto.common.plan.Feature;
 import com.fitto.common.plan.PlanGuard;
 import com.fitto.common.exception.BusinessException;
@@ -11,6 +13,7 @@ import com.fitto.feed.dto.FeedItemType;
 import com.fitto.feed.repository.FeedReactionRepository;
 import com.fitto.common.notification.NotificationService;
 import com.fitto.common.notification.PushLinks;
+import com.fitto.common.time.KstClock;
 import com.fitto.diet.repository.MealRepository;
 import com.fitto.place.domain.Place;
 import com.fitto.place.domain.PlaceRating;
@@ -35,9 +38,13 @@ import com.fitto.user.domain.User;
 import com.fitto.user.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -67,6 +74,8 @@ public class PlaceService {
     /** 찜·방문·첫 평점·등극을 커플 채팅에 PLACE_CARD 로 남긴다(자동 공유) — {@link #postPlaceCard} */
     private final ChatService chatService;
     private final SimpMessagingTemplate messagingTemplate;
+    private final TransactionTemplate tx;
+    private final CoupleEventPublisher coupleEventPublisher;
 
     private static final Logger log = LoggerFactory.getLogger(PlaceService.class);
 
@@ -87,7 +96,9 @@ public class PlaceService {
                         FeedReactionRepository feedReactionRepository,
                         KakaoLocalClient kakaoLocalClient,
                         ChatService chatService,
-                        SimpMessagingTemplate messagingTemplate) {
+                        SimpMessagingTemplate messagingTemplate,
+                        PlatformTransactionManager transactionManager,
+                        CoupleEventPublisher coupleEventPublisher) {
         this.placeRepository = placeRepository;
         this.placeVisitRepository = placeVisitRepository;
         this.placeRatingRepository = placeRatingRepository;
@@ -100,6 +111,8 @@ public class PlaceService {
         this.kakaoLocalClient = kakaoLocalClient;
         this.chatService = chatService;
         this.messagingTemplate = messagingTemplate;
+        this.tx = new TransactionTemplate(transactionManager);
+        this.coupleEventPublisher = coupleEventPublisher;
     }
 
     /**
@@ -115,7 +128,8 @@ public class PlaceService {
         List<KakaoPlace> found = kakaoLocalClient.searchKeyword(query, Math.clamp(size, 1, 10));
         List<PlaceSearchResponse.PlaceSearchResult> results = found.stream()
                 .map(k -> new PlaceSearchResponse.PlaceSearchResult(
-                        k.id(), k.name(), k.address(), k.category(), k.lat(), k.lng(), k.placeUrl()))
+                        k.id(), k.name(), k.address(), k.category(), k.lat(), k.lng(), k.placeUrl(),
+                        k.categoryDetail(), k.phone(), PlaceLinks.detailUrl(k.id())))
                 .toList();
         return new PlaceSearchResponse(true, results);
     }
@@ -126,16 +140,54 @@ public class PlaceService {
      * 저장하는 경로에서, 이미 등록된 맛집을 다시 검색해 추가할 때 똑같은 장소가 중복
      * 생성되던 문제를 막는다. 재사용일 때는 플랜 한도({@link Feature#PLACE_PIN})도
      * 소모하지 않는다 — 실제로 늘어난 핀이 없으므로.
+     *
+     * <p>응답의 {@code created} 로 둘을 가른다 — 화면이 중복일 때 "추가했어요" 대신 "이미 럽슐랭에
+     * 있어요"를 띄운다.
+     *
+     * <p><b>동시 저장</b>: 두 사람이 같은 카카오 장소를 거의 동시에 담으면 둘 다 "없다"를 보고 넣으려
+     * 한다. 늦은 쪽은 {@code UNIQUE (couple_id, kakao_place_id)}(V117)에 막힌다. {@code ON CONFLICT}
+     * 는 쓸 수 없으므로(CLAUDE.md 4절) 그 위반을 잡아 <b>새 트랜잭션에서</b> 먼저 들어간 행을 돌려준다 —
+     * 같은 트랜잭션은 이미 롤백 표시가 붙어 다시 쓸 수 없다({@code JournalService.save} 와 같은 이유).
+     * 그래서 이 메서드는 스스로 트랜잭션을 열지 않는다(클래스 기본값 readOnly 도 끈다).
+     *
+     * <p><b>SUPPORTS 인 이유</b>: 바깥 트랜잭션이 있으면 거기에 합류한다. NOT_SUPPORTED 로 바깥을 끊으면 호출자가
+     * 아직 커밋하지 않은 데이터(방금 만든 커플 등)가 보이지 않는다 — 처음엔 그렇게 했다가 바깥 트랜잭션 안에서
+     * save 를 부르는 테스트 6건이 "커플 연결 후 사용할 수 있는 기능"으로 깨졌다. 운영의 호출자는 컨트롤러뿐이라
+     * 바깥 트랜잭션이 없고, 경합 재시도는 그 경우에 동작한다. 바깥 트랜잭션 안에서 경합이 나면 예전처럼 실패한다.
      */
-    @Transactional
+    @Transactional(propagation = Propagation.SUPPORTS, readOnly = false)
     public PlaceResponse save(Long userId, SavePlaceRequest request) {
+        try {
+            Saved saved = tx.execute(status -> saveOnce(userId, request));
+            if (Boolean.TRUE.equals(saved.response().created())) {
+                // 커밋이 끝난 뒤에 알린다 — 상대 앱이 럽슐랭 목록 캐시를 비우고 다음에 다시 받는다
+                coupleEventPublisher.publish(saved.coupleId(), CoupleEvent.PLACE);
+            }
+            return saved.response();
+        } catch (DataIntegrityViolationException raced) {
+            PlaceResponse winner = tx.execute(status -> {
+                Place existing = findExisting(activeCouple(userId).getId(), request.kakaoPlaceId(),
+                        request.name().trim(), request.address(), request.lat(), request.lng());
+                return existing == null ? null : withSummary(existing, userId).withCreated(false);
+            });
+            if (winner == null) {
+                throw raced;
+            }
+            return winner;
+        }
+    }
+
+    private record Saved(PlaceResponse response, Long coupleId) {
+    }
+
+    private Saved saveOnce(Long userId, SavePlaceRequest request) {
         Relation couple = activeCouple(userId);
         String name = request.name().trim();
 
         Place existing = findExisting(couple.getId(), request.kakaoPlaceId(), name,
                 request.address(), request.lat(), request.lng());
         if (existing != null) {
-            return withSummary(existing, userId);
+            return new Saved(withSummary(existing, userId).withCreated(false), couple.getId());
         }
 
         planGuard.requireCapacity(userId, Feature.PLACE_PIN,
@@ -147,16 +199,24 @@ public class PlaceService {
                 .lat(request.lat())
                 .lng(request.lng())
                 .category(request.category())
-                .kakaoPlaceId(request.kakaoPlaceId())
+                .kakaoPlaceId(blankToNull(request.kakaoPlaceId()))
+                .phone(blankToNull(request.phone()))
+                .categoryDetail(blankToNull(request.categoryDetail()))
                 .addedBy(userId)
                 .build();
-        placeRepository.save(place);
+        // 즉시 INSERT — UNIQUE 위반이 커밋 시점이 아니라 여기서 터져야 위의 catch 가 받는다
+        placeRepository.saveAndFlush(place);
         // 찜은 "여기 가볼래?"라는 제안이다 — 상대의 ❤️ 한 탭이 "가자"가 된다. 재사용(existing)은 찜이
         // 아니고, 방문 기록의 일부로 추가하는 경우(visiting)도 찜이 아니다(SavePlaceRequest.visiting).
+        // INSERT 가 성공한 뒤에만 남긴다 — 경합에서 진 쪽(위 flush 에서 UNIQUE 위반)은 카드를 만들지 않는다.
         if (!request.visitingOrDefault()) {
             postPlaceCard(userId, couple.getId(), place, "📍 " + place.getName() + " 찜! 여기 가볼래?", null, null, false);
         }
-        return toResponse(place, null, RatingPair.EMPTY, null);
+        return new Saved(toResponse(place, null, RatingPair.EMPTY, null).withCreated(true), couple.getId());
+    }
+
+    private static String blankToNull(String s) {
+        return s == null || s.isBlank() ? null : s;
     }
 
     /**
@@ -264,7 +324,7 @@ public class PlaceService {
         feedReactionRepository.deleteByTargetTypeAndTargetIdIn(FeedItemType.PLACE_VISIT,
                 placeVisitRepository.findByPlaceIdOrderByIdDesc(placeId).stream()
                         .map(PlaceVisit::getId).toList());
-        // 채팅에 자동으로 남은 럽슐랭 카드 — place_id FK(V91) 를 끊지 않으면 아래 delete 가 실패한다.
+        // 채팅에 자동으로 남은 럽슐랭 카드 — place_id FK(V136) 를 끊지 않으면 아래 delete 가 실패한다.
         // 장소가 덧붙은 식단 카드는 place_id 만 달렸을 뿐 식단 카드이므로 여기서 지우지 않는다.
         chatService.detachPlaceCards(placeId);
         placeRepository.delete(place);
@@ -274,40 +334,65 @@ public class PlaceService {
     @Transactional
     public PlaceVisitResponse recordVisit(Long userId, Long placeId, RecordVisitRequest request) {
         Place place = getCouplePlace(userId, placeId);
-        if (request.mealId() != null) {
-            boolean myMeal = mealRepository.findById(request.mealId())
+        PlaceVisit visit = createVisit(userId, place, request.visitedAt(), request.rating(), request.memo(),
+                request.imageUrl(), request.mealId(), null, true);
+        return PlaceVisitResponse.of(visit, userName(userId));
+    }
+
+    /**
+     * 방문 한 건을 만든다 — {@link #recordVisit} 와 외식 기록({@link MealVisitService})이 같이 쓴다.
+     *
+     * <p>{@code notifyPartner=false} 는 외식 기록에서 식단 푸시가 장소 이름을 실어 대신 나갈 때다 — 외식 한 번에
+     * 상대 폰이 두 번 울리던 것(식단 + 방문)을 한 번으로 줄인다(LOVEBODY_LOVELICHELIN_LINK §1-4).
+     */
+    @Transactional
+    public PlaceVisit createVisit(Long userId, Place place, java.time.LocalDate visitedAt, Integer rating, String memo,
+                           String imageUrl, Long mealId, String clientRequestId, boolean notifyPartner) {
+        if (mealId != null) {
+            boolean myMeal = mealRepository.findById(mealId)
                     .map(m -> userId.equals(m.getUserId()))
                     .orElse(false);
             if (!myMeal) {
                 throw new BusinessException(ErrorCode.INVALID_INPUT, "내 식단 기록만 연동할 수 있습니다.");
             }
+            // 식단 하나에 방문 하나(V129 unique) — 인덱스에 맡기면 500 이라 먼저 말한다
+            if (!placeVisitRepository.findByMealIdIn(List.of(mealId)).isEmpty()) {
+                throw new BusinessException(ErrorCode.INVALID_INPUT, "이미 장소가 연결된 식단이에요.");
+            }
+        }
+        // 다녀온 날은 미래일 수 없다 — 식단 저장과 같은 기준(KST). 예전엔 방문만 검사가 없었다
+        if (visitedAt != null && visitedAt.isAfter(KstClock.today())) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "미래 날짜는 기록할 수 없습니다.");
         }
 
         PlaceVisit visit = PlaceVisit.builder()
                 .placeId(place.getId())
                 .visitedBy(userId)
-                .visitedAt(request.visitedAt())
-                .rating(request.rating())
-                .memo(request.memo())
-                .imageUrl(request.imageUrl())
-                .mealId(request.mealId())
+                .visitedAt(visitedAt)
+                .rating(rating)
+                .memo(memo)
+                .imageUrl(imageUrl)
+                .mealId(mealId)
+                .clientRequestId(clientRequestId)
                 .build();
         placeVisitRepository.save(visit);
+        publishVisitChanged(place.getCoupleId());
 
         Relation couple = activeCouple(userId);
-        Long partnerId = couple.partnerOf(userId);
+        Long partnerId = notifyPartner ? couple.partnerOf(userId) : null;
         /*
-         * 방문 카드. 식단 경로(mealId 연동)는 식단 카드가 방금 남아 있으므로 거기에 장소를 덧붙이고
-         * 끝낸다 — 한 끼가 카드 두 장이 되지 않게. 덧붙일 식단 카드가 없으면(그 뒤로 대화가 이어졌거나
-         * 커플 미연결 시절의 식단) 별도 카드도 만들지 않는다. 그 외 경로는 찜 카드 위에 접히거나 새 카드.
+         * 방문 카드. 식단 경로(mealId 연동 — 식단 기록 화면·외식 기록)는 식단 카드가 방금 남아 있으므로
+         * 거기에 장소를 덧붙이고 끝낸다 — 한 끼가 카드 두 장이 되지 않게. 덧붙일 식단 카드가 없으면(그 뒤로
+         * 대화가 이어졌거나 커플 미연결 시절의 식단) 별도 카드도 만들지 않는다. 그 외 경로는 찜 카드 위에
+         * 접히거나 새 카드.
          */
         String visitLine = "📍 " + place.getName() + stars(visit.getRating());
-        if (request.mealId() != null) {
-            chatService.appendPlaceToLastMealCard(userId, couple.getId(), request.mealId(), place.getId(), visitLine)
+        if (mealId != null) {
+            chatService.appendPlaceToLastMealCard(userId, couple.getId(), mealId, place.getId(), visitLine)
                     .ifPresent(m -> broadcast(couple.getId(), m, true));
         } else {
-            String memo = visit.getMemo() != null && !visit.getMemo().isBlank() ? " · " + visit.getMemo().trim() : "";
-            postPlaceCard(userId, couple.getId(), place, visitLine + memo, null, visit.getImageUrl(), false);
+            String visitMemo = visit.getMemo() != null && !visit.getMemo().isBlank() ? " · " + visit.getMemo().trim() : "";
+            postPlaceCard(userId, couple.getId(), place, visitLine + visitMemo, null, visit.getImageUrl(), false);
         }
 
         if (partnerId != null) {
@@ -316,7 +401,41 @@ public class PlaceService {
                             + (visit.getRating() != null ? " ★" + visit.getRating() : ""),
                     PushLinks.place(place.getId()));
         }
-        return PlaceVisitResponse.of(visit, userName(userId));
+        return visit;
+    }
+
+    /** 외식 기록이 방문을 붙일 장소 — 커플 장소인지 확인까지 */
+    public Place couplePlace(Long userId, Long placeId) {
+        return getCouplePlace(userId, placeId);
+    }
+
+    /** 방문 응답 조립(외식 기록 응답·재전송용) */
+    public PlaceVisitResponse visitResponse(PlaceVisit visit) {
+        return PlaceVisitResponse.of(visit, userName(visit.getVisitedBy()));
+    }
+
+    /** "여기서 먹은 것"에 보여 줄 음식 수 — 그 이상은 화면이 길어지기만 한다 */
+    static final int MENU_MAX_ITEMS = 8;
+    /** 대표 메뉴로 제안하는 최소 횟수 — 한 번 먹은 건 그날의 선택이지 그 집의 대표가 아니다 */
+    static final int SIGNATURE_MIN_TIMES = 2;
+
+    /**
+     * 장소 상세 "여기서 먹은 것" + 대표 메뉴 제안(LOVEBODY_LOVELICHELIN_LINK P1-1). 대표 메뉴는 저장하지 않는다 —
+     * 저장하려면 장소에 컬럼이 필요하고, 그건 태그(분위기·가격대) 백로그와 함께 정한다.
+     */
+    public com.fitto.place.dto.PlaceMenuResponse menu(Long userId, Long placeId) {
+        getCouplePlace(userId, placeId);
+        List<com.fitto.place.dto.PlaceMenuResponse.MenuItem> items = placeVisitRepository
+                .countMenu(placeId, org.springframework.data.domain.PageRequest.of(0, MENU_MAX_ITEMS))
+                .stream()
+                .map(c -> new com.fitto.place.dto.PlaceMenuResponse.MenuItem(c.getName(), c.getTimes(), c.getLastDate()))
+                .toList();
+        List<String> signature = items.stream()
+                .filter(i -> i.times() >= SIGNATURE_MIN_TIMES)
+                .limit(3)
+                .map(com.fitto.place.dto.PlaceMenuResponse.MenuItem::name)
+                .toList();
+        return new com.fitto.place.dto.PlaceMenuResponse(items, signature);
     }
 
     /** 장소의 방문 기록 목록 (PLACE-05) */
@@ -330,7 +449,7 @@ public class PlaceService {
     /** 방문 기록 삭제 — 기록한 본인만 */
     @Transactional
     public void deleteVisit(Long userId, Long placeId, Long visitId) {
-        getCouplePlace(userId, placeId);
+        Place place = getCouplePlace(userId, placeId);
         PlaceVisit visit = placeVisitRepository.findById(visitId)
                 .filter(v -> placeId.equals(v.getPlaceId()))
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "방문 기록을 찾을 수 없습니다."));
@@ -340,6 +459,19 @@ public class PlaceService {
         // 피드 카드 응원 반응 — 다형 참조라 FK 가 없어 직접 지운다 (V60 주석 참고)
         feedReactionRepository.deleteByTargetTypeAndTargetId(FeedItemType.PLACE_VISIT, visitId);
         placeVisitRepository.delete(visit);
+        publishVisitChanged(place.getCoupleId());
+    }
+
+    /**
+     * 방문 기록이 바뀌었음을 상대 앱에 알린다 — 열려 있는 캘린더의 "다녀온 곳"과 럽슐랭 목록이
+     * 다시 받는다. 장소 저장({@link #save})과 같은 {@code PLACE} 이벤트를 쓴다: 받는 쪽이 하는 일
+     * (목록 다시 받기)이 같아서 종류를 늘릴 이유가 없다.
+     *
+     * <p>커밋 뒤에 보내는 일은 이제 발행기가 한다({@link CoupleEventPublisher} 주석) — 여기서 따로
+     * afterCommit 을 걸면 그 콜백 안에서 발행기가 다시 예약해 이벤트가 사라진다.
+     */
+    private void publishVisitChanged(Long coupleId) {
+        coupleEventPublisher.publish(coupleId, CoupleEvent.PLACE);
     }
 
     /**
@@ -349,6 +481,39 @@ public class PlaceService {
      */
     @Transactional
     public PlaceResponse rate(Long userId, Long placeId, RatePlaceRequest request) {
+        return rate(userId, placeId, request, true);
+    }
+
+    /**
+     * 외식 기록의 평점 — 결정 Q3(2026-10-05): <b>내 대표 평점이 아직 없을 때만</b> 방문 별점으로 채운다. 이미 있으면
+     * 건드리지 않는다("오늘은 별로였다"가 등급을 내리지 않게). 재방문 의사만 왔으면 그것만 고친다.
+     *
+     * <p>{@code nudgePartner=false} — "평가를 기다려요" 재촉은 외식 기록의 식단 푸시 문구가 대신 말한다(푸시 한 번).
+     * 등극 푸시는 드물고 따로 알릴 가치가 있어 그대로 보낸다.
+     *
+     * @return 평점을 새로 매겼으면 그 결과, 아니면 null
+     */
+    @Transactional
+    public PlaceResponse rateIfUnrated(Long userId, Long placeId, Integer rating, Boolean revisitIntent) {
+        PlaceRating mine = placeRatingRepository.findByPlaceIdAndUserId(placeId, userId).orElse(null);
+        if (mine != null) {
+            if (revisitIntent != null) {
+                mine.update(mine.getRating(), revisitIntent);
+            }
+            return null;
+        }
+        if (rating == null) {
+            return null;
+        }
+        return rate(userId, placeId, new RatePlaceRequest(rating, revisitIntent), false);
+    }
+
+    /** 장소 응답(요약·평점·커버 포함) — 외식 기록 응답용 */
+    public PlaceResponse placeResponse(Long userId, Long placeId) {
+        return withSummary(getCouplePlace(userId, placeId), userId);
+    }
+
+    private PlaceResponse rate(Long userId, Long placeId, RatePlaceRequest request, boolean nudgePartner) {
         Place place = getCouplePlace(userId, placeId);
 
         PlaceRating mine = placeRatingRepository.findByPlaceIdAndUserId(placeId, userId)
@@ -405,11 +570,12 @@ public class PlaceService {
         if (firstRating && pair.partner() == null) {
             Relation couple = activeCouple(userId);
             // 첫 평점 카드 — 반응이 아니라 상대의 행동(평점)을 요구하는 CTA. 탭하면 장소 상세로 간다.
-            // 찜·방문 직후의 평점이면 그 카드 위에 접힌다(장소 추가 → 바로 별점이 주 경로다).
+            // 찜·방문 직후의 평점이면 그 카드 위에 접힌다(장소 추가 → 바로 별점이 주 경로다). 외식 기록
+            // (nudgePartner=false)도 카드는 남긴다 — 줄이려던 건 푸시 중복이지 채팅 카드가 아니다.
             postPlaceCard(userId, couple.getId(), place,
                     "📍 " + place.getName() + stars(request.rating()) + " · 당신의 평점이 등급을 결정해요",
                     "당신의 평점이 등급을 결정해요", null, false);
-            Long partnerId = couple.partnerOf(userId);
+            Long partnerId = nudgePartner ? couple.partnerOf(userId) : null;
             if (partnerId != null) {
                 notificationService.notify(partnerId, NotificationCategory.PARTNER, "럽슐랭 평가를 기다려요 ⭐",
                         userName(userId) + "이(가) " + place.getName()

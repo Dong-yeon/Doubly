@@ -144,7 +144,20 @@ public class FoodAnalysisService {
     public MealAnalysisResponse analyze(Long userId, String photoUrl) {
         geminiClient.requireConfiguredAndCountUsage(userId, Feature.AI_FOOD_PHOTO);
 
-        CloudinaryImageFetcher.Image image = imageFetcher.fetch(photoUrl);
+        /*
+         * 사진을 못 받으면 한도를 돌려준다(LOVEBODY_REVIEW_2026-10-02 §3 A-5). Gemini 실패는 GeminiClient 가
+         * 환불하지만, 다운로드(INVALID_PHOTO_URL·PHOTO_DOWNLOAD_FAILED·PHOTO_TOO_LARGE)는 그 try 밖이라
+         * 한 번도 분석하지 못하고 한도만 깎였다. 차감을 다운로드 뒤로 미루지 않은 이유: 한도가 찬 사용자의
+         * 요청까지 최대 10MB 를 받게 된다 — "비싼 준비 전에 막는다"(GeminiClient.generateJson 주석).
+         * 사진 자동 분석(MealPhotoAutoAnalysisService)도 이 메서드를 타므로 함께 고쳐진다.
+         */
+        CloudinaryImageFetcher.Image image;
+        try {
+            image = imageFetcher.fetch(photoUrl);
+        } catch (RuntimeException e) {
+            geminiClient.refund(userId, Feature.AI_FOOD_PHOTO);
+            throw e;
+        }
         JsonNode result = geminiClient.generateJsonInBackground(userId, Feature.AI_FOOD_PHOTO,
                 List.of(GeminiClient.imagePart(image.mimeType(), image.bytes()), GeminiClient.textPart(PROMPT)),
                 RESPONSE_SCHEMA);

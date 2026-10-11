@@ -6,6 +6,9 @@ export const relationApi = {
   // 커플
   createCoupleInvite: () =>
     unwrap(apiClient.post<ApiResponse<InviteCode>>('/relations/couple/invite')),
+  /** 지금 살아 있는 내 초대코드 — 없거나 만료됐으면 null */
+  findCoupleInvite: () =>
+    unwrap(apiClient.get<ApiResponse<InviteCode | null>>('/relations/couple/invite')),
   connectCouple: (code: string) =>
     unwrap(apiClient.post<ApiResponse<Relation>>('/relations/couple/connect', { code })),
 

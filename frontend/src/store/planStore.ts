@@ -11,9 +11,17 @@ import { setPlanGateHandler, type PlanGateInfo } from '../api/client';
 import type { FeatureKey, FeatureState, Plan, PlanInfo } from '../types';
 
 interface PlanState {
+  /** 개인 등급 — 개인 기능(AI 음식 분석·심화 통계 등)의 기준 */
   plan: Plan;
-  /** 무료 체험 기간 — "체험 중" 배지 노출 여부 */
+  /**
+   * 커플 기능에 적용되는 등급 — 상대가 결제했으면 PRO. "PRO 다"를 화면에 말할 때 개인 등급만 보면
+   * 상대 덕분에 열린 커플 기능을 숨기고 결제를 또 권하게 된다(docs/my-current-state.md §7-1).
+   */
+  couplePlan: Plan;
+  /** 체험 중 — "체험 중" 배지 노출 여부 */
   freeTrial: boolean;
+  /** 체험 종료 시각(ISO). 끝이 정해져 있지 않으면 null */
+  trialEndsAt: string | null;
   features: Partial<Record<FeatureKey, FeatureState>>;
   isLoaded: boolean;
   /** 한도에 걸린 직후의 안내 — 업그레이드 시트를 띄우고 dismissGate 로 닫는다 */
@@ -43,8 +51,14 @@ function indexByFeature(info: PlanInfo): Partial<Record<FeatureKey, FeatureState
 
 export const usePlanStore = create<PlanState>((set, get) => ({
   plan: 'FREE',
-  // 체험 기간이 기본값이라 초기값도 true 로 둔다 — 로드 전에 배지가 깜빡이지 않는다.
-  freeTrial: true,
+  couplePlan: 'FREE',
+  /*
+   * 2026-09-22 에 전역 체험을 껐다(PLAN_FREE_TRIAL=false) — 이제 기본 상태는 "체험 중이
+   * 아님"이다. true 로 두면 로드 전 한 프레임 동안 있지도 않은 "체험 중" 배지가 스친다.
+   * 잠금 표시와 달리 이건 안전한 쪽이 false 다: 없는 혜택을 알리는 실수가 더 나쁘다.
+   */
+  freeTrial: false,
+  trialEndsAt: null,
   features: {},
   isLoaded: false,
   gate: null,
@@ -54,13 +68,18 @@ export const usePlanStore = create<PlanState>((set, get) => ({
       const info = await planApi.me();
       set({
         plan: info.plan,
+        // 옛 서버는 couplePlan 을 모른다 — 그때는 지금까지처럼 개인 등급으로 말한다
+        couplePlan: info.couplePlan ?? info.plan,
         freeTrial: info.freeTrial,
+        trialEndsAt: info.trialEndsAt ?? null,
         features: indexByFeature(info),
         isLoaded: true,
       });
     } catch {
       // 플랜을 못 받아도 앱은 그대로 동작해야 한다. 서버가 어차피 최종 판정을 한다.
-      set({ isLoaded: false });
+      // 이미 받아 둔 값이 있으면 그대로 둔다 — 화면 포커스·앱 복귀 때도 다시 읽으므로, 잠깐의 끊김에
+      // "모름"으로 돌아가면 멀쩡한 PRO 화면이 깜빡인다.
+      if (!get().isLoaded) set({ isLoaded: false });
     }
   },
 

@@ -1,5 +1,6 @@
 package com.fitto.relation.service;
 
+import com.fitto.chat.domain.MessageType;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.springframework.stereotype.Component;
@@ -60,6 +61,9 @@ public class RelationRecordPurger {
                 + "(select w.id from workouts w where w.user_id in " + MEMBER_IDS + ")", relationId);
         exec("delete from feed_reactions where target_type = 'MEAL' and target_id in "
                 + "(select m.id from meals m where m.user_id in " + MEMBER_IDS + ")", relationId);
+        // 일상 댓글(V124) — feed_posts 삭제가 CASCADE 로 함께 지우지만, 순서를 여기서 읽을 수 있게 먼저 거둔다
+        exec("delete from feed_comments where post_id in "
+                + "(select p.id from feed_posts p where p.couple_id = :rid)", relationId);
         // feed_posts.trip_id 가 trips 를 참조하므로 피드를 먼저 지운다
         exec("delete from feed_posts where couple_id = :rid", relationId);
 
@@ -71,19 +75,29 @@ public class RelationRecordPurger {
                 + "(select t.id from trips t where t.couple_id = :rid)", relationId);
         exec("delete from trips where couple_id = :rid", relationId);
 
-        exec("delete from place_visits where place_id in "
-                + "(select p.id from places p where p.couple_id = :rid)", relationId);
-        // 럽슐랭 카드(chat_messages.place_id, V91)가 places 를 참조한다 — 채팅은 아래에서 통째로
-        // 지워지지만 places 가 먼저이므로 여기서 참조를 끊어 둔다.
-        exec("update chat_messages set place_id = null where relation_id = :rid", relationId);
-        exec("delete from places where couple_id = :rid", relationId);
+        // 식단 찌르기(V120) — relations 를 참조한다
+        exec("delete from meal_nudges where relation_id = :rid", relationId);
 
-        // 콘텐츠(영화·공연·드라마) — places 와 같은 모양(V65)
+        // 콘텐츠(영화·공연·드라마) — places 와 같은 모양(V65). places 보다 먼저 지운다:
+        // content_logs.place_id(V133, "어디서 봤어요?")가 places 를 가리킨다(ON DELETE SET NULL 이라 순서가 바뀌어도
+        // 깨지진 않지만, 자식 → 부모 순서를 지켜 읽는 사람이 FK 를 따라갈 수 있게)
         exec("delete from content_logs where content_id in "
                 + "(select c.id from contents c where c.couple_id = :rid)", relationId);
         exec("delete from content_ratings where content_id in "
                 + "(select c.id from contents c where c.couple_id = :rid)", relationId);
         exec("delete from contents where couple_id = :rid", relationId);
+
+        exec("delete from place_visits where place_id in "
+                + "(select p.id from places p where p.couple_id = :rid)", relationId);
+        // 우리가 쌓는 메뉴(V131) — places 를 CASCADE 로 참조하지만 순서를 여기서 읽을 수 있게 먼저 거둔다
+        exec("delete from place_menu_items where place_id in "
+                + "(select p.id from places p where p.couple_id = :rid)", relationId);
+        exec("delete from place_menu_photos where place_id in "
+                + "(select p.id from places p where p.couple_id = :rid)", relationId);
+        // 럽슐랭 카드(chat_messages.place_id, V136)가 places 를 참조한다 — 채팅은 아래에서 통째로
+        // 지워지지만 places 가 먼저이므로 여기서 참조를 끊어 둔다.
+        exec("update chat_messages set place_id = null where relation_id = :rid", relationId);
+        exec("delete from places where couple_id = :rid", relationId);
 
         exec("delete from couple_challenges where couple_id = :rid", relationId);
         exec("delete from couple_events where couple_id = :rid", relationId);
@@ -124,6 +138,19 @@ public class RelationRecordPurger {
         // 운동 기록은 개인 소유다 — 삭제하지 않고 관계 참조만 끊는다
         exec("update workouts set relation_id = null where relation_id = :rid", relationId);
 
+        /*
+         * 스티커 팩 낱개 구매(V96, user_sticker_purchases)는 <b>여기서 지우지 않는다</b> —
+         * 일부러 그렇다. 일회성 상품이라 산 사람에게 영구 귀속되고, 관계가 끝났다고 자기가
+         * 낸 돈으로 산 팩을 회수하면 그건 환불 없는 몰수다. 관계 참조도 없어서 FK 위반이
+         * 날 일도 없다(테이블에 relation_id 컬럼 자체가 없다).
+         *
+         * 헤어진 뒤 달라지는 건 <b>사용 범위</b>뿐이다 — 상대 것까지 퍼져 있던 판정이
+         * 본인 것만 보게 되고, 그건 StickerService.ownedPackIds 가 활성 커플을 다시
+         * 조회하므로 저절로 반영된다.
+         *
+         * 탈퇴 시 정리는 UserDataPurger 가 한다(개인 데이터이므로 거기가 맞는 자리다).
+         */
+
         exec("delete from relation_members where relation_id = :rid", relationId);
 
         exec("delete from relations where id = :rid", relationId);
@@ -146,6 +173,8 @@ public class RelationRecordPurger {
         urls.addAll(select("select v.image_url from place_visits v "
                 + "where v.image_url is not null and v.place_id in "
                 + "(select p.id from places p where p.couple_id = :rid)", relationId));
+        urls.addAll(select("select ph.image_url from place_menu_photos ph where ph.place_id in "
+                + "(select p.id from places p where p.couple_id = :rid)", relationId));
         urls.addAll(select("select l.image_url from content_logs l "
                 + "where l.image_url is not null and l.content_id in "
                 + "(select c.id from contents c where c.couple_id = :rid)", relationId));
@@ -153,6 +182,20 @@ public class RelationRecordPurger {
                 + "where t.couple_id = :rid and t.cover_image_url is not null", relationId));
         urls.addAll(select("select m.image_url from chat_messages m "
                 + "where m.relation_id = :rid and m.image_url is not null", relationId));
+        // 음성 메시지는 파일 URL 이 image_url 이 아니라 content("{audioUrl}|{초}")에 들어 있다.
+        // 오디오는 /video/upload 자산이다 — 삭제기가 URL 을 보고 video/destroy 로 보낸다.
+        for (String content : select("select m.content from chat_messages m "
+                + "where m.relation_id = :rid and m.message_type = 'VOICE_MESSAGE'", relationId)) {
+            String audioUrl = MessageType.voiceAudioUrl(content);
+            if (audioUrl != null) {
+                urls.add(audioUrl);
+            }
+        }
+        // 예약 전송(V76) — 아직 안 보낸 사진은 chat_messages 에 없다. 이미 보낸 건은 위와 겹치지만 멱등이라 둔다.
+        urls.addAll(select("select s.image_url from scheduled_chat_messages s "
+                + "where s.relation_id = :rid and s.image_url is not null", relationId));
+        // 운동 부스터(V61) 녹음 — 보낼 때마다 새로 올린 파일이라 음성 응원(voice_clips)과 공유하지 않는다
+        urls.addAll(select("select b.audio_url from workout_boosters b where b.relation_id = :rid", relationId));
         // 우리 이모지(V80) — 트레이에서 숨긴 것(deleted_at)도 파일은 아직 있으므로 조건 없이 전부 모은다.
         // 채팅 메시지가 같은 URL 을 image_url 로 복사해 두므로 위 chat_messages 와 중복될 수 있지만,
         // 지운 자산을 다시 지우는 호출은 무시되므로(멱등) 걸러내지 않는다(feed_post_photos 와 같은 이유).

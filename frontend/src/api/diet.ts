@@ -5,6 +5,7 @@ import type {
   ActivityLevel,
   ApiResponse,
   CalendarDay,
+  FeedItem,
   CoupleMealGoal,
   DietCoach,
   DietGoalType,
@@ -62,6 +63,19 @@ export interface SaveMealPayload {
   fiber?: number;
   /** "데이트" 칩 — true 면 커플 상대방에게도 같은 끼니가 칼로리 절반으로 자동 등록된다 */
   sharedWithPartner?: boolean;
+  /**
+   * 저장 멱등키(V118) — 같은 키로 이미 저장된 끼니가 있으면 서버가 새로 만들지 않고 그걸 돌려준다.
+   * 새 기록 저장(POST)에만 보낸다.
+   */
+  clientRequestId?: string;
+}
+
+/** POST /meal/photo-record — 같은 사진으로 남긴 식단 */
+export interface PhotoRecordLookup {
+  recorded: boolean;
+  mealId?: number | null;
+  mealDate?: string | null;
+  mealTypeLabel?: string | null;
 }
 
 export interface NutritionGoalPayload {
@@ -69,6 +83,8 @@ export interface NutritionGoalPayload {
   targetCarbs?: number;
   targetProtein?: number;
   targetFat?: number;
+  /** 마법사에서 고른 방향 — 보내지 않으면 서버가 기존 값을 그대로 둔다 */
+  goalDirection?: DietGoalType;
 }
 
 export interface NutritionGoalSuggestionPayload {
@@ -90,8 +106,19 @@ export const dietApi = {
   update: (id: number, payload: SaveMealPayload) =>
     unwrap(apiClient.put<ApiResponse<Meal>>(`/meal/${id}`, payload)),
   // 어제(기본) 식단을 오늘 날짜로 통째로 복사 — 3초 퀵 로깅
-  copyFromYesterday: () =>
-    unwrap(apiClient.post<ApiResponse<Meal[]>>('/meal/copy')),
+  /**
+   * 럽바디 "○○님 오늘" — 상대가 오늘 혼자 남긴 식사. 피드 카드와 같은 모양·같은 노출(칼로리 없음)이고,
+   * 반응은 feedApi.react('MEAL', refId, emoji) 로 단다. 커플이 아니면 빈 배열.
+   */
+  partnerTodayMeals: () =>
+    unwrap(apiClient.get<ApiResponse<FeedItem[]>>('/meal/partner/today/meals')),
+  // 고른 끼니만(쉼표로 이어 보낸다 — 서버가 Set<MealType> 으로 받는다). 오늘 이미 기록한 끼니는 서버가 건너뛴다
+  copyFromYesterday: (mealTypes?: MealType[]) =>
+    unwrap(
+      apiClient.post<ApiResponse<Meal[]>>('/meal/copy', undefined, {
+        params: { mealTypes: mealTypes && mealTypes.length > 0 ? mealTypes.join(',') : undefined },
+      }),
+    ),
   /*
    * AI 분석 — 서버는 접수증(jobId)만 주고 생성은 백그라운드에서 한다(api/aiJob.ts 참고).
    * 폴링까지 여기서 끝내므로 호출부는 예전처럼 결과 Promise 를 받는다.
@@ -110,8 +137,18 @@ export const dietApi = {
     unwrap(apiClient.get<ApiResponse<Meal[]>>('/meal/history', { params: { cursor } })),
   calendar: (year: number, month: number) =>
     unwrap(apiClient.get<ApiResponse<CalendarDay[]>>('/meal/calendar', { params: { year, month } })),
-  remove: (id: number) => unwrap(apiClient.delete<ApiResponse<void>>(`/meal/${id}`)),
+  // withVisit — 장소가 붙은 식단에서 "방문 기록도 지우기"를 골랐을 때만(결정 Q4). 기본은 방문은 남기고 연결만 끊는다
+  remove: (id: number, withVisit = false) =>
+    unwrap(apiClient.delete<ApiResponse<void>>(`/meal/${id}`, withVisit ? { params: { withVisit: true } } : undefined)),
+  // 이 사진(URL)으로 남긴 내 식단 — 채팅 사진 → 식단 기록 전에 묻는다. URL 은 본문으로(접속 로그에 안 남게)
+  photoRecord: (photoUrl: string) =>
+    unwrap(apiClient.post<ApiResponse<PhotoRecordLookup>>('/meal/photo-record', { photoUrl })),
   partnerToday: () => unwrap(apiClient.get<ApiResponse<PartnerToday>>('/meal/partner/today')),
+  /**
+   * 식단 찌르기 — 상대가 오늘 안 남겼을 때 "뭐 먹었어?" 푸시 한 번(하루 한 번, KST 8~22시). 채팅엔 남지 않는다.
+   * 오늘 이미 물어봤거나 상대가 이미 남겼으면 409, 밤이면 400 — 서버 문구를 그대로 보여주면 된다.
+   */
+  nudgePartner: () => unwrap(apiClient.post<ApiResponse<null>>('/meal/partner/nudge')),
   stats: () => unwrap(apiClient.get<ApiResponse<MealStats>>('/meal/stats')),
   coupleGoal: () => unwrap(apiClient.get<ApiResponse<CoupleMealGoal>>('/meal/couple/goal')),
   // 주간 식단 AI 코칭 — 최근 7일 기반, 시간이 걸려 timeout 상향.
@@ -129,6 +166,9 @@ export const dietApi = {
   nutrition: () => unwrap(apiClient.get<ApiResponse<NutritionSummary>>('/meal/nutrition')),
   setNutritionGoal: (payload: NutritionGoalPayload) =>
     unwrap(apiClient.put<ApiResponse<NutritionSummary>>('/meal/nutrition/goal', payload)),
+  // 목표 방향만 바꾼다(신체 정보 시트) — null 이면 미설정으로 되돌린다. 칼로리·매크로 목표는 그대로
+  setGoalDirection: (goalDirection: DietGoalType | null) =>
+    unwrap(apiClient.put<ApiResponse<NutritionSummary>>('/meal/nutrition/direction', { goalDirection })),
   // 목표 칼로리 자동 계산(TDEE 마법사) — 계산만 하고 저장은 안 한다. 확정은 setNutritionGoal 로.
   suggestNutritionGoal: (payload: NutritionGoalSuggestionPayload) =>
     unwrap(apiClient.post<ApiResponse<NutritionGoalSuggestion>>('/meal/nutrition/goal/suggest', payload)),

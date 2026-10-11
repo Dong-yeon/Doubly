@@ -1,5 +1,6 @@
 package com.fitto.auth.service;
 
+import com.fitto.auth.dto.EmailNormalizer;
 import com.fitto.auth.dto.LoginRequest;
 import com.fitto.auth.dto.NotificationCategorySettingRequest;
 import com.fitto.auth.dto.RegisterRequest;
@@ -11,10 +12,10 @@ import com.fitto.common.analytics.EventLogService;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.security.AuthRateLimiter;
-import com.fitto.common.upload.CloudinaryImageDeleter;
 import com.fitto.common.policy.PolicyVersion;
 import com.fitto.common.security.JwtTokenProvider;
 import com.fitto.common.security.RefreshTokenStore;
+import com.fitto.notification.service.DeviceTokenService;
 import com.fitto.user.domain.Role;
 import com.fitto.user.domain.SocialType;
 import com.fitto.user.domain.User;
@@ -27,11 +28,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-
 /**
  * 인증 서비스 — 설계서 3.1 / 4.2.
- * 이메일 회원가입/로그인, 토큰 발급/갱신/회전, 로그아웃, 회원 탈퇴.
+ * 이메일 회원가입/로그인, 토큰 발급/갱신/회전, 로그아웃. 회원 탈퇴는 {@link AccountWithdrawalService}.
  */
 @Service
 @Transactional(readOnly = true)
@@ -40,14 +39,14 @@ public class AuthService {
     private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
     private final UserRepository userRepository;
-    private final UserDataPurger userDataPurger;
-    private final CloudinaryImageDeleter imageDeleter;
+    private final AccountWithdrawalService withdrawalService;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider tokenProvider;
     private final RefreshTokenStore refreshTokenStore;
     private final AuthRateLimiter rateLimiter;
     private final GoogleTokenVerifier googleTokenVerifier;
     private final EventLogService eventLogService;
+    private final DeviceTokenService deviceTokenService;
 
     /**
      * 존재하지 않는 이메일 로그인 시에도 BCrypt 매칭을 수행해 응답 시간을 균일화한다
@@ -56,24 +55,30 @@ public class AuthService {
     private final String timingDummyHash;
 
     public AuthService(UserRepository userRepository,
-                       UserDataPurger userDataPurger,
-                       CloudinaryImageDeleter imageDeleter,
+                       AccountWithdrawalService withdrawalService,
                        PasswordEncoder passwordEncoder,
                        JwtTokenProvider tokenProvider,
                        RefreshTokenStore refreshTokenStore,
                        AuthRateLimiter rateLimiter,
                        GoogleTokenVerifier googleTokenVerifier,
-                       EventLogService eventLogService) {
+                       EventLogService eventLogService,
+                       DeviceTokenService deviceTokenService) {
         this.userRepository = userRepository;
-        this.userDataPurger = userDataPurger;
-        this.imageDeleter = imageDeleter;
+        this.withdrawalService = withdrawalService;
         this.passwordEncoder = passwordEncoder;
         this.tokenProvider = tokenProvider;
         this.refreshTokenStore = refreshTokenStore;
         this.rateLimiter = rateLimiter;
         this.googleTokenVerifier = googleTokenVerifier;
         this.eventLogService = eventLogService;
+        this.deviceTokenService = deviceTokenService;
         this.timingDummyHash = passwordEncoder.encode("timing-equalization-dummy");
+    }
+
+    /** 이 이메일(정규화된 값)로 가입된 계정이 있는지 — 가입 경합 판정용 */
+    @Transactional(readOnly = true)
+    public boolean isRegistered(String email) {
+        return userRepository.existsByEmail(email);
     }
 
     @Transactional
@@ -99,6 +104,7 @@ public class AuthService {
         return issueTokens(user);
     }
 
+    @Transactional   // 탈퇴 유예 중이면 로그인이 탈퇴를 취소한다(쓰기)
     public TokenResponse login(LoginRequest request, String clientIp) {
         rateLimiter.checkLogin(clientIp, request.email());
 
@@ -115,7 +121,7 @@ public class AuthService {
         }
         rateLimiter.resetLogin(clientIp, request.email());
         eventLogService.log(user.getId(), AnalyticsEvent.LOGIN, SocialType.EMAIL.name());
-        return issueTokens(user);
+        return issueTokensOnLogin(user);
     }
 
     /**
@@ -131,15 +137,16 @@ public class AuthService {
         rateLimiter.checkRefresh(clientIp);   // 토큰 검증 남용 방지 — 갱신과 같은 완만한 한도
         GoogleTokenVerifier.GoogleProfile profile = googleTokenVerifier.verify(idToken);
 
+        String email = EmailNormalizer.normalize(profile.email());
         User user = userRepository
                 .findBySocialTypeAndSocialId(SocialType.GOOGLE, profile.sub())
-                .or(() -> userRepository.findByEmail(profile.email()))
+                .or(() -> userRepository.findByEmail(email))
                 .orElse(null);
         if (user == null) {
             String name = profile.name() != null && !profile.name().isBlank()
                     ? profile.name() : "사용자";
             user = userRepository.save(User.builder()
-                    .email(profile.email())
+                    .email(email)
                     .name(name.length() > 50 ? name.substring(0, 50) : name)
                     .profileImageUrl(profile.picture())
                     .role(Role.USER)
@@ -150,7 +157,7 @@ public class AuthService {
         } else {
             eventLogService.log(user.getId(), AnalyticsEvent.LOGIN, SocialType.GOOGLE.name());
         }
-        return issueTokens(user);
+        return issueTokensOnLogin(user);
     }
 
     /**
@@ -188,12 +195,23 @@ public class AuthService {
         return tokens;
     }
 
-    /** 로그아웃 — 제시된 리프레시 토큰을 폐기한다(만료 전이라도 재사용 불가). */
-    public void logout(String refreshToken) {
+    /**
+     * 로그아웃 — 제시된 리프레시 토큰을 폐기하고(만료 전이라도 재사용 불가), 이 기기의 푸시 토큰이
+     * 오면 함께 지운다.
+     *
+     * <p>푸시 토큰은 리프레시 토큰의 주인 것일 때만 지운다({@link DeviceTokenService#unregister}).
+     * 액세스 토큰이 아니라 리프레시 토큰으로 사용자를 정하는 이유: 로그아웃은 액세스 토큰이 만료된
+     * 뒤에도 끝까지 되어야 하는 동작이다.
+     */
+    public void logout(String refreshToken, String pushToken) {
         Claims claims = parseRefreshClaims(refreshToken);
+        Long userId = Long.valueOf(claims.getSubject());
         String jti = claims.getId();
         if (jti != null) {
-            refreshTokenStore.revoke(Long.valueOf(claims.getSubject()), jti);
+            refreshTokenStore.revoke(userId, jti);
+        }
+        if (pushToken != null && !pushToken.isBlank()) {
+            deviceTokenService.unregister(userId, pushToken);
         }
     }
 
@@ -274,21 +292,6 @@ public class AuthService {
         return UserResponse.from(user);
     }
 
-    /** 회원 탈퇴 — 연결된 관계를 종료한 뒤 계정 삭제 (AUTH-06). */
-    @Transactional
-    public void withdraw(Long userId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
-        // 의존 데이터 정리 — 삭제 순서와 대상은 UserDataPurger 에 모여 있다.
-        // (커플 콘텐츠까지 지우지 않으면 relations 삭제가 외래키 위반으로 실패한다)
-        List<String> imageUrls = userDataPurger.purgeFor(userId);
-        userRepository.delete(user);
-        // 업로드된 이미지는 커밋 이후에 지운다 — DB 롤백이 나도 파일은 되돌릴 수 없기 때문
-        imageDeleter.deleteAllAfterCommit(imageUrls);
-        // 탈퇴 후에는 남은 리프레시 토큰으로 재로그인할 수 없도록 전부 폐기
-        refreshTokenStore.revokeAll(userId);
-    }
-
     // ---- helpers ----
 
     /** 리프레시 토큰 서명/만료/타입 검증 후 Claims 반환. */
@@ -305,12 +308,22 @@ public class AuthService {
         return claims;
     }
 
+    /**
+     * 로그인 성공 시 발급 — 탈퇴 유예기간 중이던 계정이면 탈퇴를 먼저 취소한다.
+     * 리프레시 토큰은 탈퇴 요청 때 전부 폐기됐으므로, 다시 들어오는 길은 로그인뿐이다.
+     */
+    private TokenResponse issueTokensOnLogin(User user) {
+        boolean canceled = withdrawalService.cancelIfPending(user);
+        TokenResponse tokens = issueTokens(user);
+        return canceled ? tokens.withWithdrawalCanceled() : tokens;
+    }
+
     private TokenResponse issueTokens(User user) {
         String access = tokenProvider.createAccessToken(user.getId(), user.getRole());
         String refresh = tokenProvider.createRefreshToken(user.getId());
         // 발급된 리프레시 토큰을 화이트리스트에 등록 — 회전/무효화의 기준점
         String jti = tokenProvider.parse(refresh).getId();
         refreshTokenStore.store(user.getId(), jti, tokenProvider.refreshTokenTtl());
-        return new TokenResponse(access, refresh, UserResponse.from(user));
+        return new TokenResponse(access, refresh, UserResponse.from(user), false);
     }
 }

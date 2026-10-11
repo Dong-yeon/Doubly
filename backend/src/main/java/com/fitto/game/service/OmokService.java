@@ -1,8 +1,6 @@
 package com.fitto.game.service;
 
 import com.fitto.chat.domain.MessageType;
-import com.fitto.chat.dto.ChatMessageResponse;
-import com.fitto.chat.service.ChatService;
 import com.fitto.common.event.CoupleEvent;
 import com.fitto.common.event.CoupleEventPublisher;
 import com.fitto.common.exception.BusinessException;
@@ -14,21 +12,14 @@ import com.fitto.common.plan.Feature;
 import com.fitto.common.plan.PlanGuard;
 import com.fitto.game.domain.GameStatus;
 import com.fitto.game.domain.OmokGame;
+import com.fitto.game.dto.GameRecordResponse;
 import com.fitto.game.dto.OmokGameResponse;
 import com.fitto.game.repository.OmokGameRepository;
 import com.fitto.relation.domain.Relation;
-import com.fitto.relation.domain.RelationStatus;
-import com.fitto.relation.domain.RelationType;
 import com.fitto.relation.repository.RelationRepository;
-import com.fitto.user.domain.User;
-import com.fitto.user.repository.UserRepository;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -36,42 +27,34 @@ import java.util.List;
  * 오목 — docs/COUPLE_GAMES_DESIGN_2026-09-09.md 5절.
  *
  * <p>커플당 진행 중인 판 하나. 판을 연 사람이 백(후공), 상대가 흑(선공). 차례가 아니면 거절한다.
- * "네 차례야" 푸시는 <b>상대가 2분 넘게 조용했을 때만</b> 보낸다 — 같이 접속해 두는 중에
- * 수마다 푸시가 오면 소음이고, 떨어져 있을 때는 이 푸시가 곧 게임의 리듬이다.
+ * "네 차례야" 푸시는 판이 {@link GameQuiet#TURN} 만큼 조용했을 때만 보낸다 — 판단 기준은 {@link GameQuiet}.
  */
 @Service
 @Transactional(readOnly = true)
 public class OmokService {
 
-    private static final Logger log = LoggerFactory.getLogger(OmokService.class);
-    /** 이 시간 넘게 수가 없었으면 상대는 화면을 보고 있지 않다고 본다 */
-    static final Duration QUIET_BEFORE_TURN_PUSH = Duration.ofMinutes(2);
-
     private final OmokGameRepository gameRepository;
     private final RelationRepository relationRepository;
-    private final UserRepository userRepository;
+    private final GameCouples couples;
     private final PlanGuard planGuard;
     private final NotificationService notificationService;
     private final CoupleEventPublisher coupleEventPublisher;
-    private final ChatService chatService;
-    private final SimpMessagingTemplate messagingTemplate;
+    private final GameChatCards chatCards;
 
     public OmokService(OmokGameRepository gameRepository,
                        RelationRepository relationRepository,
-                       UserRepository userRepository,
+                       GameCouples couples,
                        PlanGuard planGuard,
                        NotificationService notificationService,
                        CoupleEventPublisher coupleEventPublisher,
-                       ChatService chatService,
-                       SimpMessagingTemplate messagingTemplate) {
+                       GameChatCards chatCards) {
         this.gameRepository = gameRepository;
         this.relationRepository = relationRepository;
-        this.userRepository = userRepository;
+        this.couples = couples;
         this.planGuard = planGuard;
         this.notificationService = notificationService;
         this.coupleEventPublisher = coupleEventPublisher;
-        this.chatService = chatService;
-        this.messagingTemplate = messagingTemplate;
+        this.chatCards = chatCards;
     }
 
     /** 진행 중인 판 — 없으면 null */
@@ -119,9 +102,7 @@ public class OmokService {
             throw new BusinessException(ErrorCode.INVALID_INPUT, "자리가 잘못됐어요.");
         }
         Relation couple = activeCouple(userId);
-        OmokGame game = gameRepository.findByIdForUpdate(gameId)
-                .filter(g -> g.getCoupleId().equals(couple.getId()))
-                .orElseThrow(() -> new BusinessException(ErrorCode.GAME_NOT_FOUND));
+        OmokGame game = lockedGame(gameId, couple);
         if (!game.isInProgress()) {
             throw new BusinessException(ErrorCode.GAME_NOT_IN_PROGRESS);
         }
@@ -138,7 +119,7 @@ public class OmokService {
 
         if (finished) {
             onFinished(userId, partnerId, game, couple);
-        } else if (partnerId != null && quietLongEnough(previousMoveAt, game.getCreatedAt())) {
+        } else if (partnerId != null && GameQuiet.longEnough(previousMoveAt, game.getCreatedAt(), GameQuiet.TURN)) {
             notificationService.notify(partnerId, NotificationCategory.PARTNER, "오목 — 네 차례야",
                     userName(userId) + "님이 " + game.moveCount() + "수째를 뒀어요.", PushLinks.GAME_OMOK);
         }
@@ -146,24 +127,102 @@ public class OmokService {
         return toResponse(game, userId, couple);
     }
 
-    /** 포기 — 기록에 남지 않는다. */
+    /**
+     * 무르기 요청 — 직전에 둔 사람이 "한 수만 무르자"를 건다. 되돌리는 건 상대가 받아준 뒤다.
+     *
+     * <p>서버가 바로 무르지 않는 이유: 오목에서 무르기는 규칙이 아니라 <b>부탁</b>이다.
+     * 상대 동의 없이 판이 바뀌면 둔 사람이 "내가 뭘 본 거지"가 된다.
+     */
+    @Transactional
+    public OmokGameResponse requestUndo(Long userId, Long gameId) {
+        Relation couple = activeCouple(userId);
+        OmokGame game = lockedGame(gameId, couple);
+        if (!game.canRequestUndo(userId)) {
+            throw new BusinessException(ErrorCode.GAME_UNDO_NOT_ALLOWED);
+        }
+        game.requestUndo(game.sideOf(userId));
+
+        Long partnerId = couple.partnerOf(userId);
+        if (partnerId != null) {
+            notificationService.notify(partnerId, NotificationCategory.PARTNER, "오목 — 한 수만 무르자 🙏",
+                    userName(userId) + "님이 방금 둔 수를 무르고 싶대요.", PushLinks.GAME_OMOK);
+        }
+        coupleEventPublisher.publish(couple.getId(), CoupleEvent.GAME);
+        return toResponse(game, userId, couple);
+    }
+
+    /**
+     * 무르기 응답 — 받아주면 마지막 수 하나가 사라지고 차례가 되돌아간다. 거절하면 요청만 지운다.
+     * 어느 쪽이든 판이 다시 흐르므로 상대에게 결과를 알린다.
+     */
+    @Transactional
+    public OmokGameResponse respondUndo(Long userId, Long gameId, boolean accept) {
+        Relation couple = activeCouple(userId);
+        OmokGame game = lockedGame(gameId, couple);
+        if (!game.isInProgress()) {
+            throw new BusinessException(ErrorCode.GAME_NOT_IN_PROGRESS);
+        }
+        if (!game.hasUndoRequest()) {
+            throw new BusinessException(ErrorCode.GAME_UNDO_NOT_REQUESTED);
+        }
+        if (game.undoRequestedSide() == game.sideOf(userId)) {
+            throw new BusinessException(ErrorCode.GAME_UNDO_NOT_YOURS);
+        }
+
+        if (accept) {
+            game.undoLastMove();
+        } else {
+            game.clearUndoRequest();
+        }
+
+        Long partnerId = couple.partnerOf(userId);
+        if (partnerId != null) {
+            notificationService.notify(partnerId, NotificationCategory.PARTNER,
+                    accept ? "오목 — 무르기 OK 👌" : "오목 — 무르기는 안 된대요",
+                    accept
+                            ? userName(userId) + "님이 무르기를 받아줬어요. 다시 두세요."
+                            : userName(userId) + "님이 그냥 두자고 해요.",
+                    PushLinks.GAME_OMOK);
+        }
+        coupleEventPublisher.publish(couple.getId(), CoupleEvent.GAME);
+        return toResponse(game, userId, couple);
+    }
+
+    /**
+     * 포기 — 기록에 남지 않는다.
+     *
+     * <p>상대에게 푸시로 알린다. 소켓 이벤트뿐이면 앱을 안 켠 상대는 판이 사라진 줄 모르고 "네 차례야"를
+     * 기다리고, 접힌 판이라 멈춘 판 리마인더도 가지 않는다(길막기 P1-2 와 같은 이유 — docs/game-current-state.md 8-1 #1).
+     */
     @Transactional
     public void giveUp(Long userId, Long gameId) {
         Relation couple = activeCouple(userId);
-        OmokGame game = gameRepository.findByIdForUpdate(gameId)
-                .filter(g -> g.getCoupleId().equals(couple.getId()))
-                .orElseThrow(() -> new BusinessException(ErrorCode.GAME_NOT_FOUND));
+        OmokGame game = lockedGame(gameId, couple);
         if (!game.isInProgress()) return;
         game.abandon();
+        Long partnerId = couple.partnerOf(userId);
+        if (partnerId != null) {
+            notificationService.notify(partnerId, NotificationCategory.PARTNER, "오목 — 판을 접었어요",
+                    userName(userId) + "님이 하던 판을 접었어요. 새 판을 열어 볼까요?", PushLinks.GAME_OMOK);
+        }
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.GAME);
+    }
+
+    /** 전적 — 끝낸 판 전부(최근 20판이 아니라). 보는 사람 기준 */
+    public GameRecordResponse record(Long userId) {
+        Relation couple = activeCouple(userId);
+        return new GameRecordResponse(
+                gameRepository.countWins(couple.getId(), userId, GameStatus.COMPLETED),
+                gameRepository.countLosses(couple.getId(), userId, GameStatus.COMPLETED),
+                gameRepository.countDraws(couple.getId(), GameStatus.COMPLETED));
     }
 
     /** 끝난 판 최근 20개(승패 포함) */
     public List<OmokGameResponse> history(Long userId) {
         Relation couple = activeCouple(userId);
-        String partnerName = partnerName(couple, userId);
+        String partnerName = couples.partnerName(couple, userId);
         return gameRepository
-                .findTop20ByCoupleIdAndStatusOrderByCompletedAtDesc(couple.getId(), GameStatus.COMPLETED)
+                .findTop20ByCoupleIdAndStatusOrderByCompletedAtDescIdDesc(couple.getId(), GameStatus.COMPLETED)
                 .stream()
                 .map(g -> OmokGameResponse.of(g, userId, partnerName))
                 .toList();
@@ -171,16 +230,17 @@ public class OmokService {
 
     // ── 내부 ─────────────────────────────────────────────────────────────
 
+    /** 행을 잠그고 이 커플의 판인지 확인해 가져온다 — 상태를 바꾸는 모든 경로가 여기를 지난다. */
+    private OmokGame lockedGame(Long gameId, Relation couple) {
+        return gameRepository.findByIdForUpdate(gameId)
+                .filter(g -> g.getCoupleId().equals(couple.getId()))
+                .orElseThrow(() -> new BusinessException(ErrorCode.GAME_NOT_FOUND));
+    }
+
     /**
      * 직전 수가 2분 넘게 전이면(또는 첫 수면) 상대는 화면 밖에 있다고 보고 푸시한다.
      * 첫 수는 판이 열린 시각을 기준으로 잰다 — 열자마자 선공이 두면 상대(판을 연 사람)는 아직 보고 있다.
      */
-    private boolean quietLongEnough(LocalDateTime previousMoveAt, LocalDateTime createdAt) {
-        LocalDateTime since = previousMoveAt != null ? previousMoveAt : createdAt;
-        if (since == null) return true;
-        return Duration.between(since, LocalDateTime.now()).compareTo(QUIET_BEFORE_TURN_PUSH) >= 0;
-    }
-
     private void onFinished(Long moverId, Long partnerId, OmokGame game, Relation couple) {
         String moverName = userName(moverId);
         String partnerName = partnerId == null ? "상대" : userName(partnerId);
@@ -194,33 +254,18 @@ public class OmokService {
             notificationService.notify(partnerId, NotificationCategory.PARTNER, title,
                     draw ? body : moverName + "님이 오목을 이겼어요. 한 판 더?", PushLinks.GAME_OMOK);
         }
-        try {
-            ChatMessageResponse saved = chatService.postSystemCard(
-                    moverId, couple.getId(), MessageType.GAME_CARD, title + " " + body);
-            messagingTemplate.convertAndSend("/sub/rooms/" + couple.getId(), saved);
-        } catch (Exception e) {
-            log.warn("오목 결과 채팅 카드 실패 couple={}: {}", couple.getId(), e.getMessage());
-        }
+        chatCards.post(moverId, couple.getId(), MessageType.GAME_CARD, title + " " + body, "오목 결과");
     }
 
     private OmokGameResponse toResponse(OmokGame game, Long viewerId, Relation couple) {
-        return OmokGameResponse.of(game, viewerId, partnerName(couple, viewerId));
-    }
-
-    private String partnerName(Relation couple, Long viewerId) {
-        Long partnerId = couple.partnerOf(viewerId);
-        return partnerId == null ? null : userName(partnerId);
+        return OmokGameResponse.of(game, viewerId, couples.partnerName(couple, viewerId));
     }
 
     private Relation activeCouple(Long userId) {
-        return relationRepository
-                .findByUserAndTypeAndStatus(userId, RelationType.COUPLE, RelationStatus.ACTIVE)
-                .stream().findFirst()
-                .orElseThrow(() -> new BusinessException(ErrorCode.RELATION_NOT_FOUND,
-                        "커플 연결 후 사용할 수 있는 기능이에요."));
+        return couples.active(userId);
     }
 
     private String userName(Long userId) {
-        return userRepository.findById(userId).map(User::getName).orElse("커플");
+        return couples.userName(userId);
     }
 }

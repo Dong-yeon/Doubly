@@ -1,16 +1,17 @@
 /** 회원가입 — 미니멀·발랄 톤. 설계서 2.1 / 3.1 AUTH-03 */
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { OnboardingStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
 import { FormKeyboardView } from '../../components/FormKeyboardView';
-import { Card } from '../../components/Card';
 import { Checkbox } from '../../components/Checkbox';
 import { useAuthStore } from '../../store/authStore';
 import { getErrorMessage } from '../../utils/error';
+import { errorCodeOf, isApiError } from '../../api/client';
+import { Alert } from '../../utils/alert';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { Gender } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
@@ -54,6 +55,24 @@ export function RegisterScreen({ navigation }: Props) {
         agreeMarketing,
       });
     } catch (e) {
+      /*
+       * 이전 시도가 타임아웃으로 끊겼지만 서버에선 가입이 끝난 경우가 대표적이다 — 다시 누르면 409 가
+       * 온다. 오류 문구만 띄우면 사용자는 가입이 안 된 줄 안다. 로그인으로 보내고 이메일을 채워 준다.
+       * (first-experience-audit.md #19)
+       */
+      if (errorCodeOf(e) === 'EMAIL_ALREADY_EXISTS') {
+        const typed = email.trim();
+        Alert.alert('이미 가입된 이메일이에요', '로그인해 주세요.', [
+          { text: '로그인하기', onPress: () => navigation.popTo('Login', { email: typed }, { merge: true }) },
+        ]);
+        return;
+      }
+      // 공용 타임아웃 문구는 AI 화면용("다시 시도하면 대개 바로 나와요")이라 가입엔 맞지 않는다.
+      // 서버는 이미 가입을 끝냈을 수 있으니 그 가능성을 함께 알린다 (#19)
+      if (isApiError(e) && e.timedOut) {
+        setError('응답이 늦어 기다리다 멈췄어요. 잠시 후 다시 시도해 주세요. 이미 가입됐다면 로그인할 수 있어요.');
+        return;
+      }
       setError(getErrorMessage(e));
     } finally {
       setLoading(false);
@@ -67,10 +86,11 @@ export function RegisterScreen({ navigation }: Props) {
     // 헤더가 상단 인셋을 처리하므로 top 을 빼서 이중 여백을 막는다
     <SafeAreaView style={styles.safe} edges={['bottom', 'left', 'right']}>
       <FormKeyboardView contentContainerStyle={styles.container}>
-          <Text style={styles.title}>반가워요! </Text>
-          <Text style={styles.subtitle}>함께 운동할 준비를 시작해요</Text>
+          {/* "함께 운동할 준비를 시작해요"는 피트니스 시절 문구였다 — 인트로 4장과 같은 어휘로 */}
+          <Text style={styles.title}>반가워요!</Text>
+          <Text style={styles.subtitle}>둘의 기록을 시작해요</Text>
 
-          <Card elevation="md" style={styles.card}>
+          <View style={styles.form}>
             <TextField
               label="이메일"
               value={email}
@@ -156,9 +176,14 @@ export function RegisterScreen({ navigation }: Props) {
             {error ? <Text style={styles.error}>{error}</Text> : null}
 
             <Button title="가입하고 시작하기" onPress={onSubmit} loading={loading} disabled={!canSubmit} style={styles.submit} />
-          </Card>
+          </View>
 
-          <Button title="이미 계정이 있어요" variant="ghost" size="md" onPress={() => navigation.goBack()} />
+          <View style={styles.linkRow}>
+            <Text style={styles.linkLead}>이미 계정이 있나요?</Text>
+            <Pressable onPress={() => navigation.goBack()} hitSlop={8} accessibilityRole="link">
+              <Text style={styles.link}>로그인</Text>
+            </Pressable>
+          </View>
       </FormKeyboardView>
     </SafeAreaView>
   );
@@ -166,11 +191,10 @@ export function RegisterScreen({ navigation }: Props) {
 
 const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
-  flex: { flex: 1 },
   container: { flexGrow: 1, justifyContent: 'center', padding: spacing.lg },
   title: { fontSize: fontSize.heading, fontWeight: '800', color: colors.textPrimary },
   subtitle: { fontSize: fontSize.body, color: colors.textSecondary, marginTop: spacing.xs, marginBottom: spacing.lg },
-  card: { gap: spacing.xs },
+  form: { gap: spacing.xs },
   fieldLabel: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700', marginBottom: spacing.sm },
   genderRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
   genderChip: {
@@ -183,9 +207,10 @@ const styles = themedStyles((colors) => ({
     justifyContent: 'center',
     backgroundColor: colors.surfaceAlt,
   },
-  genderChipActive: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
+  // 선택 상태는 앱 전체와 같은 값(primaryBg / primaryFill) — §6·§7 과 맞춘다
+  genderChipActive: { borderColor: colors.primary, backgroundColor: colors.primaryBg },
   genderText: { color: colors.textSecondary, fontWeight: '700' },
-  genderTextActive: { color: colors.primaryDark },
+  genderTextActive: { color: colors.textPrimary },
   pressed: { transform: [{ scale: 0.97 }] },
   consent: { marginTop: spacing.sm, marginBottom: spacing.sm },
   consentDivider: {
@@ -201,4 +226,7 @@ const styles = themedStyles((colors) => ({
   },
   error: { color: colors.danger, fontSize: fontSize.caption, marginBottom: spacing.sm },
   submit: { marginTop: spacing.sm },
+  linkRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: spacing.xs, minHeight: 44, marginTop: spacing.sm },
+  linkLead: { color: colors.textSecondary, fontSize: fontSize.body },
+  link: { color: colors.primary, fontSize: fontSize.body, fontWeight: '700' },
 }));

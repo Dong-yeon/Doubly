@@ -117,7 +117,7 @@ const styles = themedStyles((colors) => ({
     borderColor: colors.border,
     alignItems: 'center',
   },
-  dateChipActive: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
+  dateChipActive: { borderColor: colors.primary, backgroundColor: colors.primaryBg },
   dateText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
   dateTextActive: { color: colors.textPrimary, fontWeight: '800' },
   submit: { marginTop: spacing.lg },

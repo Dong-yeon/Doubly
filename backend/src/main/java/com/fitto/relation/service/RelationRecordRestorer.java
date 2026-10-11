@@ -55,6 +55,26 @@ public class RelationRecordRestorer {
         moved += move("daily_answers", "couple_id", oldRelationId, newRelationId);
         moved += move("chat_messages", "relation_id", oldRelationId, newRelationId);
         /*
+         * 채팅에 매달린 것들 — relation_id 를 따로 들고 있고 relations FK 가 ON DELETE CASCADE 라, 옮기지 않으면
+         * 아래 "옛 관계 삭제"에서 <b>오류 없이 조용히</b> 사라진다. 메시지는 돌아왔는데 저장한 대화·공지만 빈 채였다
+         * (docs/chat-current-state.md §7). 건수에는 넣지 않는다 — 메시지에 딸린 표시라 따로 세면 과장이다.
+         *
+         * 저장한 대화(V75): UNIQUE(message_id) 이고 메시지가 함께 옮겨지므로 겹칠 일이 없다.
+         * 공지 고정(V77): 관계당 하나(UNIQUE(relation_id)). 재회 후 이미 새로 고정한 게 있으면 그쪽이 지금의
+         * 공지라 남기고 옛 것은 버린다.
+         * 예약 전송(V76)은 <b>옮기지 않는다</b> — 헤어지기 전에 걸어 둔 메시지가 재회 뒤 갑자기 나가면 안 된다.
+         * 발송·취소된 행은 화면에 보이지 않는 이력이라 옛 관계와 함께 지워져도 잃는 것이 없다.
+         */
+        move("chat_message_bookmarks", "relation_id", oldRelationId, newRelationId);
+        em.createNativeQuery("""
+                        delete from chat_pinned_messages
+                        where relation_id = :old
+                          and exists (select 1 from chat_pinned_messages p where p.relation_id = :new)
+                        """)
+                .setParameter("old", oldRelationId).setParameter("new", newRelationId)
+                .executeUpdate();
+        move("chat_pinned_messages", "relation_id", oldRelationId, newRelationId);
+        /*
          * 무드(V44)·우리 이모지(V80)도 relations FK 를 가진다 — 옮기지 않으면 아래 "옛 관계 삭제"가
          * FK 위반으로 실패해 복원 전체가 되돌아간다(2026-09-08 점검 #1: 무드를 한 번이라도 남긴 커플은
          * 재회 후 복원이 500 이었다). 우리 이모지는 커플 공용 자산(설계 §9)이라 되살리는 게 맞고,

@@ -3,6 +3,7 @@ package com.fitto.diet;
 import com.fitto.auth.dto.RegisterRequest;
 import com.fitto.auth.service.AuthService;
 import com.fitto.common.exception.BusinessException;
+import com.fitto.diet.domain.DietGoalType;
 import com.fitto.diet.domain.MealType;
 import com.fitto.diet.dto.MealItemRequest;
 import com.fitto.diet.dto.MealResponse;
@@ -10,18 +11,46 @@ import com.fitto.diet.dto.NutritionGoalRequest;
 import com.fitto.diet.dto.SaveMealRequest;
 import com.fitto.diet.service.MealService;
 import com.fitto.diet.service.NutritionService;
+import com.fitto.chat.domain.MessageType;
+import com.fitto.chat.dto.ChatMessageResponse;
+import com.fitto.chat.dto.SendMessageRequest;
+import com.fitto.chat.service.ChatService;
+import com.fitto.common.exception.ErrorCode;
+import com.fitto.common.upload.CloudinaryImageDeleter;
+import com.fitto.diet.dto.PhotoRecordLookupResponse;
+import com.fitto.diet.dto.CoupleMealGoalResponse;
+import com.fitto.feed.dto.FeedItemResponse;
+import com.fitto.feed.dto.FeedItemType;
+import com.fitto.feed.dto.ReactionSummary;
+import com.fitto.feed.service.FeedService;
 import com.fitto.relation.dto.InviteCodeResponse;
 import com.fitto.relation.service.RelationService;
-import com.fitto.workout.dto.PartnerTodayResponse;
+import com.fitto.diet.dto.PartnerMealTodayResponse;
+import com.fitto.common.time.KstClock;
+import com.fitto.place.domain.PlaceVisit;
+import com.fitto.place.dto.RecordVisitRequest;
+import com.fitto.place.dto.SavePlaceRequest;
+import com.fitto.place.repository.PlaceVisitRepository;
+import com.fitto.place.service.PlaceService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
+import com.fitto.common.security.AuthUser;
+import com.fitto.diet.controller.MealController;
+import com.fitto.user.domain.Role;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** 식단 기록 통합 플로우 — H2 기반. */
@@ -37,6 +66,18 @@ class MealFlowTest {
     MealService mealService;
     @Autowired
     NutritionService nutritionService;
+    @Autowired
+    FeedService feedService;
+    @Autowired
+    ChatService chatService;
+    @Autowired
+    CloudinaryImageDeleter imageDeleter;
+    @Autowired
+    PlaceService placeService;
+    @Autowired
+    PlaceVisitRepository placeVisitRepository;
+    @Autowired
+    MealController mealController;
 
     private Long register(String email) {
         return authService.register(
@@ -71,6 +112,65 @@ class MealFlowTest {
         assertThat(mealService.findToday(user)).hasSize(1);
     }
 
+    /** 오늘 식사는 럽바디 "오늘" 섹션 몫 — 히스토리 맨 위에 또 나오던 중복(LOVEBODY_REVIEW §3 A-2) */
+    @Test
+    void 오늘_식사는_히스토리에_나오지_않는다() {
+        Long user = register("hist-today@fitto.com");
+        mealService.save(user, sample(LocalDate.now(), MealType.LUNCH));
+        MealResponse yesterday = mealService.save(user, sample(LocalDate.now().minusDays(1), MealType.DINNER));
+
+        assertThat(mealService.findHistory(user, null)).extracting(MealResponse::id).containsExactly(yesterday.id());
+    }
+
+    /** 지난 날짜로 나중에 적은 기록 — id 순이면 맨 위로 튀어 올랐다. 먹은 날짜 순, 같은 날은 나중에 적은 것 먼저 */
+    @Test
+    void 지난_날짜로_나중에_적은_기록도_먹은_날짜_순서대로_나온다() {
+        Long user = register("hist-order@fitto.com");
+        LocalDate today = LocalDate.now();
+        mealService.save(user, sample(today.minusDays(1), MealType.LUNCH));
+        mealService.save(user, sample(today.minusDays(5), MealType.DINNER)); // 나중에 적은 5일 전
+        mealService.save(user, sample(today.minusDays(3), MealType.BREAKFAST));
+        MealResponse laterSameDay = mealService.save(user, sample(today.minusDays(1), MealType.DINNER));
+
+        List<MealResponse> history = mealService.findHistory(user, null);
+        assertThat(history).extracting(MealResponse::mealDate).containsExactly(
+                today.minusDays(1), today.minusDays(1), today.minusDays(3), today.minusDays(5));
+        assertThat(history.get(0).id()).isEqualTo(laterSameDay.id());
+    }
+
+    /**
+     * 페이지 경계 — 커서는 여전히 id 하나(구버전 앱과 같은 요청)인데, 정렬이 날짜 우선이라 서버가 그 행의
+     * (meal_date, id) 로 경계를 잡는다. 같은 날짜가 경계를 걸치고, 입력 순서가 날짜와 뒤섞여도 겹치거나 빠지지 않는다.
+     */
+    @Test
+    void 히스토리_페이지_경계에서_중복도_누락도_없다() {
+        Long user = register("hist-page@fitto.com");
+        LocalDate today = LocalDate.now();
+        int[] daysAgo = {3, 1, 7, 2, 2, 5, 1, 9, 4, 4, 4, 6, 8, 2, 3, 10, 1, 5, 7, 4, 6, 3, 2, 8, 9};
+        for (int d : daysAgo) {
+            mealService.save(user, sample(today.minusDays(d), MealType.SNACK));
+        }
+        mealService.save(user, sample(today, MealType.LUNCH)); // 오늘 — 어느 페이지에도 없어야 한다
+
+        List<MealResponse> first = mealService.findHistory(user, null);
+        assertThat(first).hasSize(20);
+        List<MealResponse> second = mealService.findHistory(user, first.get(first.size() - 1).id());
+        List<MealResponse> all = new java.util.ArrayList<>(first);
+        all.addAll(second);
+
+        assertThat(all).hasSize(daysAgo.length);
+        assertThat(all).extracting(MealResponse::id).doesNotHaveDuplicates();
+        // 이어 붙인 결과가 그대로 (날짜 desc, id desc) 정렬이어야 한다
+        for (int i = 1; i < all.size(); i++) {
+            MealResponse prev = all.get(i - 1);
+            MealResponse cur = all.get(i);
+            boolean ordered = prev.mealDate().isAfter(cur.mealDate())
+                    || (prev.mealDate().isEqual(cur.mealDate()) && prev.id() > cur.id());
+            assertThat(ordered).as("%d번째 경계 %s/%d → %s/%d", i, prev.mealDate(), prev.id(), cur.mealDate(), cur.id()).isTrue();
+        }
+        assertThat(mealService.findHistory(user, all.get(all.size() - 1).id())).isEmpty();
+    }
+
     @Test
     void 히스토리는_최신순으로_조회된다() {
         Long user = register("m2@fitto.com");
@@ -80,6 +180,31 @@ class MealFlowTest {
         List<MealResponse> history = mealService.findHistory(user, null);
         assertThat(history).hasSize(2);
         assertThat(history.get(0).id()).isGreaterThan(history.get(1).id());
+    }
+
+    /**
+     * 목표 방향(감량·유지·증량) — 마법사가 계산에만 쓰고 버리던 값을 저장한다(V115, LOVEBODY_REVIEW §2-1-1).
+     * 방향을 싣지 않는 구버전 앱의 목표 저장이 방향을 지우면 안 되고, 비우기는 전용 경로로만 한다.
+     */
+    @Test
+    void 목표_방향은_저장되고_방향_없는_목표_저장은_그것을_지우지_않는다() {
+        Long user = register("dir1@fitto.com");
+        assertThat(nutritionService.today(user).goalDirection()).isNull();
+
+        nutritionService.setGoal(user, new NutritionGoalRequest(1600, null, 100, null, DietGoalType.LOSE));
+        assertThat(nutritionService.today(user).goalDirection()).isEqualTo(DietGoalType.LOSE);
+
+        // 구버전 앱 — 방향 없이 목표만 바꾼다
+        nutritionService.setGoal(user, new NutritionGoalRequest(1700, null, 100, null));
+        assertThat(nutritionService.today(user).goalDirection()).isEqualTo(DietGoalType.LOSE);
+        assertThat(nutritionService.today(user).targetCalories()).isEqualTo(1700);
+
+        // 신체 정보 시트 — 방향만 바꾸고, 비우면 미설정. 칼로리 목표는 그대로
+        nutritionService.setGoalDirection(user, DietGoalType.GAIN);
+        assertThat(nutritionService.today(user).goalDirection()).isEqualTo(DietGoalType.GAIN);
+        nutritionService.setGoalDirection(user, null);
+        assertThat(nutritionService.today(user).goalDirection()).isNull();
+        assertThat(nutritionService.today(user).targetCalories()).isEqualTo(1700);
     }
 
     @Test
@@ -146,6 +271,153 @@ class MealFlowTest {
         assertThat(breakfast.calories()).isEqualTo(420);
     }
 
+    /**
+     * 같은 날을 두 번 불러오면 그날 식단이 통째로 한 벌 더 생겼다 — 버튼은 요청 중에만 잠겨서
+     * 다 끝난 뒤 다시 누르면 막을 수단이 없었다(lovebody-current-state §4-3).
+     */
+    @Test
+    void 어제_식단을_두_번_불러와도_한_벌만_생긴다() {
+        Long user = register("copy-twice@fitto.com");
+        LocalDate yesterday = KstClock.today().minusDays(1);
+        mealService.save(user, sample(yesterday, MealType.BREAKFAST));
+        mealService.save(user, withItems(yesterday, MealType.DINNER));
+        mealService.copyFrom(user, yesterday);
+
+        assertThatThrownBy(() -> mealService.copyFrom(user, yesterday))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.MEAL_ALREADY_COPIED);
+        assertThat(mealService.findToday(user)).hasSize(2);
+    }
+
+    /** 불러온 것 중 하나를 지웠다면 다시 불러올 때 그 하나만 돌아온다 — 이미 있는 건 건너뛴다. */
+    @Test
+    void 불러온_식단_하나를_지운_뒤_다시_불러오면_그것만_다시_생긴다() {
+        Long user = register("copy-partial@fitto.com");
+        LocalDate yesterday = KstClock.today().minusDays(1);
+        mealService.save(user, sample(yesterday, MealType.BREAKFAST));
+        mealService.save(user, withItems(yesterday, MealType.DINNER));
+        List<MealResponse> first = mealService.copyFrom(user, yesterday);
+        Long dinnerCopy = first.stream().filter(m -> m.mealType() == MealType.DINNER).findFirst().orElseThrow().id();
+        mealService.delete(user, dinnerCopy);
+
+        List<MealResponse> again = mealService.copyFrom(user, yesterday);
+
+        assertThat(again).extracting(MealResponse::mealType).containsExactly(MealType.DINNER);
+        assertThat(again.get(0).items()).hasSize(3);
+        assertThat(mealService.findToday(user)).hasSize(2);
+    }
+
+    /**
+     * 오늘 점심을 따로 기록한 뒤 불러오면 어제 점심이 한 끼 더 붙어 점심이 두 개가 됐다(2026-10-08 사용자 보고) —
+     * 예전엔 "내용이 똑같은 끼니"만 건너뛰었다. 이제 오늘 기록한 끼니는 통째로 건너뛴다.
+     */
+    @Test
+    void 오늘_이미_기록한_끼니는_어제_것을_불러오지_않는다() {
+        Long user = register("copy-type@fitto.com");
+        LocalDate yesterday = KstClock.today().minusDays(1);
+        mealService.save(user, sample(yesterday, MealType.BREAKFAST));
+        mealService.save(user, sample(yesterday, MealType.LUNCH));
+        mealService.save(user, new SaveMealRequest(KstClock.today(), MealType.LUNCH, "오늘은 다른 점심", null,
+                700, 80, 30, 20, null, null, null, null));
+
+        List<MealResponse> copied = mealService.copyFrom(user, yesterday);
+
+        assertThat(copied).extracting(MealResponse::mealType).containsExactly(MealType.BREAKFAST);
+        assertThat(mealService.findToday(user)).extracting(MealResponse::mealType)
+                .containsExactlyInAnyOrder(MealType.BREAKFAST, MealType.LUNCH);
+    }
+
+    /** 아침에 어제 하루를 통째로 불러오면 아직 안 먹은 저녁까지 기록됐다(2026-10-08) — 고른 끼니만 온다. */
+    @Test
+    void 고른_끼니만_불러온다() {
+        Long user = register("copy-pick@fitto.com");
+        LocalDate yesterday = KstClock.today().minusDays(1);
+        mealService.save(user, sample(yesterday, MealType.BREAKFAST));
+        mealService.save(user, sample(yesterday, MealType.LUNCH));
+        mealService.save(user, withItems(yesterday, MealType.DINNER));
+
+        List<MealResponse> copied = mealService.copyFrom(user, yesterday, java.util.Set.of(MealType.BREAKFAST));
+
+        assertThat(copied).extracting(MealResponse::mealType).containsExactly(MealType.BREAKFAST);
+        assertThat(mealService.findToday(user)).hasSize(1);
+
+        // 점심때 다시 — 점심만 고르면 점심만 더해진다
+        assertThat(mealService.copyFrom(user, yesterday, java.util.Set.of(MealType.LUNCH)))
+                .extracting(MealResponse::mealType).containsExactly(MealType.LUNCH);
+        assertThat(mealService.findToday(user)).hasSize(2);
+    }
+
+    @Test
+    void 고른_끼니가_오늘_이미_있으면_이유를_말한다() {
+        Long user = register("copy-pick-dup@fitto.com");
+        LocalDate yesterday = KstClock.today().minusDays(1);
+        mealService.save(user, sample(yesterday, MealType.DINNER));
+        mealService.save(user, sample(KstClock.today(), MealType.DINNER));
+
+        assertThatThrownBy(() -> mealService.copyFrom(user, yesterday, java.util.Set.of(MealType.DINNER)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("저녁")
+                .extracting("errorCode").isEqualTo(ErrorCode.MEAL_ALREADY_COPIED);
+    }
+
+    @Test
+    void 고른_끼니가_어제_없으면_없다고_말한다() {
+        Long user = register("copy-pick-none@fitto.com");
+        LocalDate yesterday = KstClock.today().minusDays(1);
+        mealService.save(user, sample(yesterday, MealType.LUNCH));
+
+        assertThatThrownBy(() -> mealService.copyFrom(user, yesterday, java.util.Set.of(MealType.SNACK)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.NOT_FOUND);
+    }
+
+    /** 오늘을 "불러올 날짜"로 주면 오늘 식단이 그대로 한 벌 더 생겼다 — isAfter 만 보던 검사의 빈틈. */
+    @Test
+    void 오늘_식단은_오늘로_불러올_수_없다() {
+        Long user = register("copy-today@fitto.com");
+        mealService.save(user, sample(KstClock.today(), MealType.LUNCH));
+
+        assertThatThrownBy(() -> mealService.copyFrom(user, KstClock.today()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_INPUT);
+        assertThat(mealService.findToday(user)).hasSize(1);
+    }
+
+    /**
+     * 홈의 "같이 먹었어요"를 연달아 누르면 두 요청이 동시에 "아직 혼자 기록"을 읽고 둘 다 나눴다 —
+     * 내 몫이 1/4 이 되고 상대에게 복제본이 두 장 생긴다. 순차 재탭은 이미 막혀 있었다.
+     */
+    @Test
+    void 같이_먹었어요를_동시에_두_번_눌러도_한_번만_나눈다() throws Exception {
+        Long a = register("share-race-a@fitto.com");
+        Long b = register("share-race-b@fitto.com");
+        relationService.connectCouple(b, relationService.createCoupleInvite(a).code());
+        MealResponse solo = mealService.save(a, sample(KstClock.today(), MealType.DINNER)); // 420kcal
+
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            List<Future<MealResponse>> results = new ArrayList<>();
+            for (int i = 0; i < 2; i++) {
+                results.add(pool.submit(() -> {
+                    start.await();
+                    return mealService.share(a, solo.id());
+                }));
+            }
+            start.countDown();
+            for (Future<MealResponse> r : results) {
+                assertThat(r.get(30, TimeUnit.SECONDS).sharedWithPartner()).isTrue();
+            }
+        } finally {
+            pool.shutdownNow();
+        }
+
+        assertThat(mealService.findToday(a)).singleElement()
+                .extracting(MealResponse::calories).isEqualTo(210);
+        assertThat(mealService.findToday(b)).singleElement()
+                .extracting(MealResponse::calories).isEqualTo(210);
+    }
+
     @Test
     void 복사할_기록이_없는_날짜는_예외를_던진다() {
         Long user = register("m6@fitto.com");
@@ -161,13 +433,23 @@ class MealFlowTest {
         InviteCodeResponse invite = relationService.createCoupleInvite(a);
         relationService.connectCouple(b, invite.code());
 
-        PartnerTodayResponse before = mealService.partnerToday(a);
+        PartnerMealTodayResponse before = mealService.partnerToday(a);
         assertThat(before.connected()).isTrue();
         assertThat(before.completed()).isFalse();
+        assertThat(before.mealTypes()).isEmpty();
 
         mealService.save(b, sample(LocalDate.now(), MealType.LUNCH));
-        PartnerTodayResponse after = mealService.partnerToday(a);
+        PartnerMealTodayResponse after = mealService.partnerToday(a);
         assertThat(after.completed()).isTrue();
+        assertThat(after.mealTypes()).containsExactly(MealType.LUNCH);
+
+        // 홈 "오늘 챙김" 링 — 끼니 종류만, 중복 없이 아침→저녁→간식 순. 어제 기록은 오늘이 아니다
+        mealService.save(b, sample(LocalDate.now(), MealType.SNACK));
+        mealService.save(b, sample(LocalDate.now(), MealType.BREAKFAST));
+        mealService.save(b, sample(LocalDate.now(), MealType.LUNCH));
+        mealService.save(b, sample(LocalDate.now().minusDays(1), MealType.DINNER));
+        assertThat(mealService.partnerToday(a).mealTypes())
+                .containsExactly(MealType.BREAKFAST, MealType.LUNCH, MealType.SNACK);
     }
 
     @Test
@@ -409,5 +691,339 @@ class MealFlowTest {
         assertThat(updated.sugar()).isEqualTo(8);
         assertThat(updated.sodium()).isEqualTo(150);
         assertThat(updated.fiber()).isEqualTo(3);
+    }
+
+    // ---- 럽바디 3단계(LOVEBODY_REVIEW §2-3·§2-4) ----
+
+    /** 주간 스트립 — 개수만 내던 coupleGoal 이 이번 주 날짜 목록도 싣는다. 미연결이면 내 날짜만 */
+    @Test
+    void 커플_식단_목표에_이번_주_기록_날짜가_실리고_미연결이면_상대는_비어_있다() {
+        Long solo = register("week-solo@fitto.com");
+        mealService.save(solo, sample(LocalDate.now(), MealType.LUNCH));
+        mealService.save(solo, sample(LocalDate.now(), MealType.DINNER)); // 같은 날 두 끼 — 날짜는 하나
+        CoupleMealGoalResponse alone = mealService.coupleGoal(solo);
+        assertThat(alone.connected()).isFalse();
+        assertThat(alone.myDates()).containsExactly(LocalDate.now());
+        assertThat(alone.partnerDates()).isEmpty();
+
+        Long a = register("week-a@fitto.com");
+        Long b = register("week-b@fitto.com");
+        relationService.connectCouple(b, relationService.createCoupleInvite(a).code());
+        mealService.save(b, sample(LocalDate.now(), MealType.BREAKFAST));
+        CoupleMealGoalResponse goal = mealService.coupleGoal(a);
+        assertThat(goal.connected()).isTrue();
+        assertThat(goal.myDates()).isEmpty();
+        assertThat(goal.partnerDates()).containsExactly(LocalDate.now());
+        assertThat(goal.partnerDays()).isEqualTo(1);
+    }
+
+    /** 내 식사 카드에 상대가 피드에서 남긴 반응이 실린다 — 우리 탭 피드와 같은 데이터 */
+    @Test
+    void 식사_목록에_피드_반응이_실린다() {
+        Long a = register("react-a@fitto.com");
+        Long b = register("react-b@fitto.com");
+        relationService.connectCouple(b, relationService.createCoupleInvite(a).code());
+        MealResponse meal = mealService.save(a, sample(LocalDate.now(), MealType.LUNCH));
+
+        feedService.toggleReaction(b, FeedItemType.MEAL, meal.id(), "❤️");
+
+        List<ReactionSummary> reactions = mealService.findToday(a).get(0).reactions();
+        assertThat(reactions).containsExactly(new ReactionSummary("❤️", 1, false));
+    }
+
+    /**
+     * 데이트 식단 함정(§2-4) — 상대가 등록한 데이트 식단은 피드에 <b>원본</b>만 나오고 반응도 원본에 달린다.
+     * 내 몫(복사본) 카드가 자기 id 로만 반응을 찾으면 "피드엔 하트가 있는데 럽바디 카드엔 없다"가 된다.
+     */
+    @Test
+    void 상대가_등록한_데이트_식단의_내_몫은_원본에_달린_반응을_보여준다() {
+        Long registrant = register("react-date-a@fitto.com");
+        Long me = register("react-date-b@fitto.com");
+        relationService.connectCouple(me, relationService.createCoupleInvite(registrant).code());
+        MealResponse original = mealService.save(registrant, sharedWithItems(LocalDate.now(), MealType.DINNER));
+        MealResponse myCopy = mealService.findToday(me).get(0);
+        assertThat(myCopy.id()).isNotEqualTo(original.id());
+
+        // 피드에서 나는 상대(등록자)의 원본 카드에 반응한다 — 복사본은 피드에 없다
+        feedService.toggleReaction(me, FeedItemType.MEAL, original.id(), "😋");
+
+        assertThat(mealService.findToday(me).get(0).reactions())
+                .containsExactly(new ReactionSummary("😋", 1, true));
+        assertThat(mealService.findToday(registrant).get(0).reactions())
+                .containsExactly(new ReactionSummary("😋", 1, false));
+    }
+
+    // ---- 4단계: 채팅 사진 → 식단 기록(LOVEBODY_REVIEW §2-5) ----
+
+    private SaveMealRequest withPhoto(String photoUrl) {
+        // 칼로리를 채워 둔다 — 자동 분석 대상이 되면 백그라운드 작업이 이 테스트와 무관하게 돈다
+        return new SaveMealRequest(LocalDate.now(), MealType.LUNCH, null, photoUrl, 500, null, null, null, null, null, null, null);
+    }
+
+    private Long couple(String a, String b, Long[] out) {
+        out[0] = register(a);
+        out[1] = register(b);
+        return relationService.connectCouple(out[1], relationService.createCoupleInvite(out[0]).code()).id();
+    }
+
+    /** 채팅 사진을 식단으로 옮기면 같은 URL 을 둘이 쓴다 — 식사를 지워도 채팅 이미지 파일은 남아야 한다(A-3 경로) */
+    @Test
+    void 채팅_사진으로_만든_식사를_지워도_채팅_이미지가_남는다() {
+        Long[] u = new Long[2];
+        Long relationId = couple("c2m-a@fitto.com", "c2m-b@fitto.com", u);
+        String photo = "https://res.cloudinary.com/demo/image/upload/v1/fitto/chat-lunch.jpg";
+        chatService.send(u[0], relationId, new SendMessageRequest(MessageType.IMAGE, null, photo, null, null, null));
+        MealResponse meal = mealService.save(u[0], withPhoto(photo));
+
+        mealService.delete(u[0], meal.id());
+
+        assertThat(imageDeleter.deletable(List.of(photo))).as("채팅이 아직 쓰는 파일").isEmpty();
+    }
+
+    /** 반대로 채팅 메시지를 지워도 식사 사진은 남는다 — 채팅 삭제는 소프트 삭제라 파일을 지우지 않고, 식사가 계속 참조한다 */
+    @Test
+    void 채팅_메시지를_지워도_식사_사진은_남는다() {
+        Long[] u = new Long[2];
+        Long relationId = couple("c2m-c@fitto.com", "c2m-d@fitto.com", u);
+        String photo = "https://res.cloudinary.com/demo/image/upload/v1/fitto/chat-dinner.jpg";
+        ChatMessageResponse sent = chatService.send(u[0], relationId,
+                new SendMessageRequest(MessageType.IMAGE, null, photo, null, null, null));
+        mealService.save(u[0], withPhoto(photo));
+
+        chatService.delete(u[0], sent.id());
+
+        assertThat(mealService.findToday(u[0]).get(0).photoUrl()).isEqualTo(photo);
+        assertThat(imageDeleter.deletable(List.of(photo))).as("식사가 아직 쓰는 파일").isEmpty();
+    }
+
+    /** 같은 사진으로 두 번 남기지 않는다 — 메뉴가 먼저 묻고(findByPhoto), 저장도 막는다. 남의 기록과는 무관 */
+    @Test
+    void 같은_사진으로_두_번_식단을_남기면_막힌다() {
+        Long[] u = new Long[2];
+        couple("c2m-e@fitto.com", "c2m-f@fitto.com", u);
+        String photo = "https://res.cloudinary.com/demo/image/upload/v1/fitto/twice.jpg";
+        assertThat(mealService.findByPhoto(u[0], photo).recorded()).isFalse();
+
+        MealResponse first = mealService.save(u[0], withPhoto(photo));
+
+        PhotoRecordLookupResponse found = mealService.findByPhoto(u[0], photo);
+        assertThat(found.recorded()).isTrue();
+        assertThat(found.mealId()).isEqualTo(first.id());
+        assertThat(found.mealTypeLabel()).isEqualTo("점심");
+        assertThatThrownBy(() -> mealService.save(u[0], withPhoto(photo)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.MEAL_PHOTO_ALREADY_RECORDED);
+        // 상대는 자기 기록이 없으니 같은 URL 이어도 걸리지 않는다
+        assertThat(mealService.findByPhoto(u[1], photo).recorded()).isFalse();
+    }
+
+    // ---- 장소를 붙인 식단 삭제 (lovebody-current-state §4-1) ----
+
+    /** 식단에 럽슐랭 장소를 붙여 저장한다 — 앱의 저장 직후 recordVisit(mealId) 와 같은 순서. 방문 id 를 돌려준다. */
+    private Long attachPlace(Long userId, Long mealId) {
+        Long placeId = placeService.save(userId, new SavePlaceRequest("트라토리아", "서울", null, null, "양식")).id();
+        return placeService.recordVisit(userId, placeId,
+                new RecordVisitRequest(KstClock.today(), 4, null, null, mealId)).id();
+    }
+
+    /**
+     * place_visits.meal_id 는 ON DELETE 절 없는 FK 다(V8). 끼니만 지우면 방문이 그 끼니를 계속 가리켜
+     * 삭제가 FK 위반으로 실패했다. 방문은 장소의 별점·등급 근거라 끼니와 함께 사라지면 안 된다 — 연결만 끊는다.
+     */
+    @Test
+    void 장소를_붙인_식단을_지우면_방문_기록은_남고_연결만_끊긴다() {
+        Long[] u = new Long[2];
+        couple("meal-place-a@fitto.com", "meal-place-b@fitto.com", u);
+        MealResponse meal = mealService.save(u[0], sample(KstClock.today(), MealType.DINNER));
+        Long visitId = attachPlace(u[0], meal.id());
+
+        assertThatCode(() -> mealService.delete(u[0], meal.id())).doesNotThrowAnyException();
+
+        assertThat(mealService.findToday(u[0])).isEmpty();
+        assertThat(placeVisitRepository.findById(visitId)).get()
+                .satisfies(v -> {
+                    assertThat(v.getMealId()).isNull();
+                    assertThat(v.getRating()).isEqualTo(4);
+                });
+    }
+
+    /** 데이트 식단은 짝을 통째로 지운다(deleteAll 경로) — 상대 몫을 지워도 내 끼니에 붙은 방문이 막지 않아야 한다. */
+    @Test
+    void 장소를_붙인_데이트_식단을_상대가_지워도_실패하지_않는다() {
+        Long[] u = new Long[2];
+        couple("meal-place-c@fitto.com", "meal-place-d@fitto.com", u);
+        MealResponse mine = mealService.save(u[0], sharedWithItems(KstClock.today(), MealType.DINNER));
+        Long visitId = attachPlace(u[0], mine.id());
+        Long partnerCopyId = mealService.findToday(u[1]).get(0).id();
+
+        assertThatCode(() -> mealService.delete(u[1], partnerCopyId)).doesNotThrowAnyException();
+
+        assertThat(mealService.findToday(u[0])).isEmpty();
+        assertThat(mealService.findToday(u[1])).isEmpty();
+        assertThat(placeVisitRepository.findById(visitId)).get()
+                .extracting(PlaceVisit::getMealId).isNull();
+    }
+
+    // ---- 저장 멱등키 (lovebody-current-state §4-3, V118) ----
+
+    /** 앱이 보내는 모양 그대로 — 기록 화면을 열 때 만든 키를 재시도에도 같이 보낸다. */
+    private SaveMealRequest withRequestId(String requestId, String photoUrl, boolean shared) {
+        return new SaveMealRequest(KstClock.today(), MealType.LUNCH, "비빔밥", photoUrl, 600,
+                null, null, null, null, null, null, null, shared, requestId);
+    }
+
+    /**
+     * 앱은 저장 요청을 10초에 끊는다 — 서버가 그보다 늦게 커밋하면 앱은 실패로 보고 사용자는 다시 누른다.
+     * 같은 키로 다시 오면 새로 만들지 않고 먼저 저장된 끼니를 돌려줘야 한다.
+     */
+    @Test
+    void 같은_요청_ID로_다시_저장하면_새로_만들지_않고_먼저_것을_돌려준다() {
+        Long user = register("reqid-1@fitto.com");
+
+        MealResponse first = mealService.save(user, withRequestId("req-abc", null, false));
+        MealResponse retried = mealService.save(user, withRequestId("req-abc", null, false));
+
+        assertThat(retried.id()).isEqualTo(first.id());
+        assertThat(mealService.findToday(user)).hasSize(1);
+        // 키가 다르면 다른 끼니다
+        mealService.save(user, withRequestId("req-def", null, false));
+        assertThat(mealService.findToday(user)).hasSize(2);
+    }
+
+    /** 사진 기록의 재시도는 예전엔 "이 사진으로 이미 남긴 식단이 있어요"(409)로 실패했다 — 멱등 검사가 그보다 먼저다. */
+    @Test
+    void 사진_기록을_같은_요청_ID로_다시_보내도_사진_중복_오류가_나지_않는다() {
+        Long user = register("reqid-2@fitto.com");
+        String photo = "https://res.cloudinary.com/demo/image/upload/v1/fitto/reqid-lunch.jpg";
+
+        MealResponse first = mealService.save(user, withRequestId("req-photo", photo, false));
+
+        assertThatCode(() -> mealService.save(user, withRequestId("req-photo", photo, false)))
+                .doesNotThrowAnyException();
+        assertThat(mealService.findToday(user)).singleElement()
+                .extracting(MealResponse::id).isEqualTo(first.id());
+    }
+
+    /** 키는 사람마다 따로다 — 두 사람이 우연히 같은 키를 만들어도 서로를 막지 않는다. */
+    @Test
+    void 요청_ID는_사람마다_따로_센다() {
+        Long a = register("reqid-3a@fitto.com");
+        Long b = register("reqid-3b@fitto.com");
+
+        mealService.save(a, withRequestId("same-key", null, false));
+        mealService.save(b, withRequestId("same-key", null, false));
+
+        assertThat(mealService.findToday(a)).hasSize(1);
+        assertThat(mealService.findToday(b)).hasSize(1);
+    }
+
+    /** 데이트 식단 재시도 — 상대에게 복제본이 한 장만 생기고 내 몫도 한 번만 나뉜다. */
+    @Test
+    void 데이트_식단을_같은_요청_ID로_다시_보내도_상대_몫은_한_장이다() {
+        Long a = register("reqid-4a@fitto.com");
+        Long b = register("reqid-4b@fitto.com");
+        relationService.connectCouple(b, relationService.createCoupleInvite(a).code());
+
+        mealService.save(a, withRequestId("req-date", null, true));
+        MealResponse retried = mealService.save(a, withRequestId("req-date", null, true));
+
+        assertThat(retried.calories()).isEqualTo(300);
+        assertThat(mealService.findToday(a)).hasSize(1);
+        assertThat(mealService.findToday(b)).singleElement()
+                .extracting(MealResponse::calories).isEqualTo(300);
+    }
+
+    /**
+     * 사전 조회를 둘 다 통과하는 동시 도착 — unique 인덱스(V118)가 두 번째 INSERT 를 막고, 컨트롤러가 그걸 받아
+     * 먼저 저장된 끼니를 돌려준다. 컨트롤러 빈을 직접 불러야 그 경로를 탄다.
+     */
+    @Test
+    void 같은_요청_ID가_동시에_두_번_와도_한_건만_저장된다() throws Exception {
+        Long user = register("reqid-5@fitto.com");
+        AuthUser auth = new AuthUser(user, Role.USER);
+
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        List<Long> ids = new ArrayList<>();
+        try {
+            List<Future<MealResponse>> results = new ArrayList<>();
+            for (int i = 0; i < 2; i++) {
+                results.add(pool.submit(() -> {
+                    start.await();
+                    return mealController.save(auth, withRequestId("req-race", null, false)).data();
+                }));
+            }
+            start.countDown();
+            for (Future<MealResponse> r : results) {
+                ids.add(r.get(30, TimeUnit.SECONDS).id());
+            }
+        } finally {
+            pool.shutdownNow();
+        }
+
+        assertThat(ids.get(0)).isEqualTo(ids.get(1));
+        assertThat(mealService.findToday(user)).hasSize(1);
+    }
+
+    // ---- 럽바디 "○○님 오늘" (docs/lovebody-direction_2026-10-02.md 1순위) ----
+
+    /**
+     * 상대가 오늘 남긴 식사가 피드 카드 모양으로 온다 — <b>칼로리는 어디에도 없다</b>(사용자 결정 2026-10-02,
+     * 피드 매퍼 2026-09-13 결정과 같은 선). 음식 이름·끼니는 있다.
+     */
+    @Test
+    void 상대_오늘_식사가_칼로리_없이_보인다() {
+        Long[] u = new Long[2];
+        couple("ptoday-a@fitto.com", "ptoday-b@fitto.com", u);
+        mealService.save(u[1], withItems(KstClock.today(), MealType.DINNER)); // 820kcal
+
+        List<FeedItemResponse> seen = feedService.partnerMealsToday(u[0]);
+
+        assertThat(seen).singleElement().satisfies(item -> {
+            assertThat(item.type()).isEqualTo(FeedItemType.MEAL);
+            assertThat(item.mine()).isFalse();
+            assertThat(item.title()).isEqualTo("삼겹살 외 2개");
+            assertThat(item.content()).contains("저녁");
+            assertThat(String.valueOf(item)).doesNotContain("820").doesNotContain("kcal");
+        });
+    }
+
+    /** 오늘 것만, 혼자 먹은 것만 — 어제 식사는 빠지고, 데이트 식단은 내 "오늘"에 이미 있어 빠진다. 내 식사는 당연히 없다. */
+    @Test
+    void 상대_오늘_식사에는_어제_것과_데이트_식단과_내_것이_빠진다() {
+        Long[] u = new Long[2];
+        couple("ptoday-c@fitto.com", "ptoday-d@fitto.com", u);
+        mealService.save(u[1], sample(KstClock.today().minusDays(1), MealType.LUNCH));
+        mealService.save(u[1], sharedWithItems(KstClock.today(), MealType.DINNER));
+        mealService.save(u[0], sample(KstClock.today(), MealType.BREAKFAST));
+        MealResponse solo = mealService.save(u[1], sample(KstClock.today(), MealType.LUNCH));
+
+        assertThat(feedService.partnerMealsToday(u[0]))
+                .extracting(FeedItemResponse::refId).containsExactly(solo.id());
+    }
+
+    /** 반응은 피드와 같은 행이다 — 럽바디에서 단 하트가 상대 식사 카드(그리고 우리 탭)에 그대로 보인다. */
+    @Test
+    void 상대_오늘_식사에_단_반응이_내_것으로_표시된다() {
+        Long[] u = new Long[2];
+        couple("ptoday-e@fitto.com", "ptoday-f@fitto.com", u);
+        MealResponse meal = mealService.save(u[1], sample(KstClock.today(), MealType.LUNCH));
+
+        feedService.toggleReaction(u[0], FeedItemType.MEAL, meal.id(), "❤️");
+
+        assertThat(feedService.partnerMealsToday(u[0])).singleElement()
+                .extracting(FeedItemResponse::reactions).asList()
+                .containsExactly(new ReactionSummary("❤️", 1, true));
+        // 상대 쪽 럽바디 카드에도 받은 반응으로 보인다(3단계 reactions 경로)
+        assertThat(mealService.findToday(u[1]).get(0).reactions())
+                .containsExactly(new ReactionSummary("❤️", 1, false));
+    }
+
+    /** 혼자 쓰는 사람에게도 럽바디는 열린다 — 커플이 아니면 오류가 아니라 빈 목록. */
+    @Test
+    void 커플이_아니면_상대_오늘_식사는_빈_목록이다() {
+        Long solo = register("ptoday-solo@fitto.com");
+
+        assertThat(feedService.partnerMealsToday(solo)).isEmpty();
     }
 }

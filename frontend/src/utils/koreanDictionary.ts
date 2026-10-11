@@ -13,6 +13,7 @@
  */
 import KoreanSpell from '../../modules/korean-spell';
 
+import { DICTIONARY_ALLOWLIST } from './koreanAllowlist';
 import {
   DICTIONARY_REASON,
   collectTokens,
@@ -65,24 +66,40 @@ function lookup(words: string[]): boolean[] {
 export async function checkWithDictionary(text: string): Promise<SpellSuggestion[]> {
   if (!text || !isDictionaryReady()) return [];
 
-  const tokens = collectTokens(text);
+  // 사전에 없지만 맞는 말(외래어·신조어·운동 용어)은 묻지 않는다 — 왕복 앞에서 걸러 비용도 준다
+  const tokens = collectTokens(text).filter((t) => !DICTIONARY_ALLOWLIST.has(t.text));
   if (tokens.length === 0) return [];
 
   const known = lookup(tokens.map((t) => t.text));
 
-  // 애교체로 보이는 것들은 받침을 벗겨 한 번에 다시 물어본다(왕복 한 번 더로 끝낸다)
+  /*
+   * 두 가지 변형을 한 번에 다시 물어본다(왕복 한 번 더로 끝낸다).
+   *  - 애교체: 받침 'ㅇ'을 벗긴 형태(뭐했어용→뭐했어)
+   *  - 부정 부사 붙여쓰기: '안/못'을 뗀 형태(안가→가, 못봤어→봤어). 사전이 붙여 쓴 꼴을 몰라
+   *    안가→난가·못가→모가·못봤어→맛봤어 같은 오답이 나갔다(감사 H2). 채팅 띄어쓰기는 지적하지
+   *    않으므로, 뗀 나머지가 사전에 있으면 그 어절은 그냥 붙여 쓴 것으로 본다.
+   */
   const retry = tokens
-    .map((t, i) => (known[i] ? null : stripNasalEnding(t.text)))
-    .map((stripped, i) => ({ index: i, stripped }))
-    .filter((entry): entry is { index: number; stripped: string } => entry.stripped !== null);
-  const retryKnown = retry.length > 0 ? lookup(retry.map((r) => r.stripped)) : [];
-  const excusedByNasal = new Set(
-    retry.filter((_, i) => retryKnown[i]).map((entry) => entry.index),
-  );
+    .map((t, i) => {
+      if (known[i]) return null;
+      const nasal = stripNasalEnding(t.text);
+      const negation = /^[안못]/.test(t.text) && t.text.length >= 3 ? t.text.slice(1) : null;
+      return { index: i, forms: [nasal, negation].filter((f): f is string => f !== null) };
+    })
+    .filter((entry): entry is { index: number; forms: string[] } => entry !== null && entry.forms.length > 0);
+  const retryWords = retry.flatMap((r) => r.forms);
+  const retryKnown = retryWords.length > 0 ? lookup(retryWords) : [];
+  const excused = new Set<number>();
+  let cursor = 0;
+  for (const entry of retry) {
+    const slice = retryKnown.slice(cursor, cursor + entry.forms.length);
+    cursor += entry.forms.length;
+    if (slice.some(Boolean)) excused.add(entry.index);
+  }
 
   const found: SpellSuggestion[] = [];
   for (let i = 0; i < tokens.length; i++) {
-    if (known[i] || excusedByNasal.has(i)) continue;
+    if (known[i] || excused.has(i)) continue;
     const token = tokens[i];
 
     let candidates: string[];

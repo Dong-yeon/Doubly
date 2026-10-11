@@ -9,6 +9,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { colors, fonts, fontSize, radius, shadow, spacing } from '../constants/theme';
+import { onColor } from '../theme/onColor';
 import { themedStyles } from '../theme/themedStyles';
 
 interface Props extends PressableProps {
@@ -49,7 +50,7 @@ export function Button({
       {...rest}
     >
       {loading ? (
-        <ActivityIndicator color={filled ? colors.white : colors.primary} />
+        <ActivityIndicator color={filled ? onColor(colors.primaryFill) : colors.primary} />
       ) : (
         <View style={styles.content}>
           {leftIcon ? <View style={styles.icon}>{leftIcon}</View> : null}
@@ -65,7 +66,8 @@ export function Button({
 const textStyle = (variant: Props['variant']) => {
   switch (variant) {
     case 'primary':
-      return { color: colors.white };
+      // 밝은 채움 위에는 흰 글자가 2.x 로 떨어진다 — onColor 가 ink 로 뒤집는다
+      return { color: onColor(colors.primaryFill) };
     case 'soft':
       return { color: colors.primary };
     default:
@@ -86,7 +88,11 @@ const styles = themedStyles((colors) => ({
   sm: { height: 38, paddingHorizontal: spacing.md },
   md: { height: 46 },
   lg: { height: 54 },
-  primary: { backgroundColor: colors.primary },
+  /*
+   * 채움은 primaryFill — 글자용 primary 보다 밝다(2026-09-23, colors.ts 주석).
+   * 위에 얹는 글자는 onColor 가 배경 휘도로 고르므로 라이트·다크 모두 자동으로 맞는다.
+   */
+  primary: { backgroundColor: colors.primaryFill },
   secondary: {
     backgroundColor: colors.surfaceCard,
     borderWidth: 1,

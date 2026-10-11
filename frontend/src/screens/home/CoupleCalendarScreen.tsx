@@ -3,12 +3,18 @@
  * 월 그리드(일정 있는 날 점 표시) + 일정 목록(D-day 배지) + 추가/수정 모달.
  * 매일 아침(KST) 당일 일정은 서버가 커플 양쪽에 푸시한다.
  *
+ * <p><b>한 달력에 둘의 일정과 각자의 일정이 함께 놓인다</b>(V101 · `CalendarEventVisibility`).
+ * 달력에 적고 싶은 것의 절반은 회식·야근·병원처럼 각자의 일정이라, 그걸 넣을 자리가
+ * 없으면 캘린더가 기념일 보관함으로만 쓰인다. 내 일정은 기본적으로 <b>상대에게 보인다</b> —
+ * 그래야 서로 바쁜 날을 알 수 있고, 그게 달력을 같이 보는 이유다. 숨기고 싶은 날만
+ * '나만 보기'로 돌린다(그 일정은 상대 응답에 아예 내려가지 않는다).
+ *
  * <p>여행(PLAN.md Trip)이 럽슐랭(장소) 탭에서 홈 스택으로 이관되면서, 이 화면이 여행의
  * <b>상시 진입점</b>이 됐다 — 그리드에 여행 기간을 띠로 잇고, 그리드 아래 '우리 여행'
  * 섹션에서 상세·전체 목록·만들기로 들어간다. (홈의 D-day 카드는 여행이 있는 기간에만
  * 뜨는 조건부 표면이라, 여행이 하나도 없을 때의 생성 진입로는 여기뿐이다.)
  */
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Modal,
@@ -32,15 +38,28 @@ import { EmptyState } from '../../components/EmptyState';
 import { IconButton } from '../../components/IconButton';
 import { calendarApi } from '../../api/calendar';
 import { tripApi } from '../../api/trip';
+import { connectSocket, subscribeCouple } from '../../api/chatSocket';
 import { tripStatusLabel } from '../trip/TripListScreen';
 import { toast } from '../../store/toastStore';
 import { getErrorMessage } from '../../utils/error';
-import type { CalendarEventType, CoupleCalendarEvent, Trip } from '../../types';
+import type {
+  CalendarDateMeal,
+  CalendarEventType,
+  CalendarEventVisibility,
+  CoupleCalendarEvent,
+  HolidayYear,
+  Trip,
+} from '../../types';
+import { useAuthStore } from '../../store/authStore';
+import { useRelationStore } from '../../store/relationStore';
+import { MaterialCommunityIcons } from '../../components/Icon';
 import { confirmDiscard } from '../../utils/discardGuard';
+import { kstDateOf } from '../../utils/anniversary';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 import { onColor } from '../../theme/onColor';
 import { layout } from '../../theme/layout';
+import { toWeeks } from '../../utils/calendarWeeks';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'CoupleCalendar'>;
 
@@ -49,9 +68,9 @@ const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 /** 렌더 시점에 현재 팔레트를 읽는다 — 객체로 굳히면 테마 전환을 못 따라온다 */
 const typeMeta = (type: CalendarEventType): { label: string; color: string } =>
   ({
-    ANNIVERSARY: { label: '기념일', color: colors.violet },
-    BIRTHDAY: { label: '생일', color: colors.coral },
-    DATE: { label: '데이트', color: colors.indigo },
+    ANNIVERSARY: { label: '기념일', color: colors.eventAnniversary },
+    BIRTHDAY: { label: '생일', color: colors.eventBirthday },
+    DATE: { label: '데이트', color: colors.eventDate },
     ETC: { label: '기타', color: colors.textSecondary },
   })[type];
 
@@ -62,6 +81,23 @@ const TYPE_LABEL: Record<CalendarEventType, string> = {
   DATE: '데이트',
   ETC: '기타',
 };
+
+/**
+ * 카드에 붙는 주인 표시 — 우리 일정은 아무것도 붙이지 않는다.
+ * 기본이 '우리 일정'이라 그쪽에 배지를 달면 거의 모든 카드에 같은 배지가 붙어 정보가 없다.
+ */
+function ownerBadge(
+  event: CoupleCalendarEvent,
+  myId: number | undefined,
+  partnerName: string | undefined,
+): { label: string; locked: boolean } | null {
+  if (event.visibility === 'SHARED') return null;
+  if (event.createdBy === myId) {
+    return { label: event.visibility === 'PRIVATE' ? '나만 보기' : '내 일정', locked: event.visibility === 'PRIVATE' };
+  }
+  // 상대의 '나만 보기'는 애초에 내려오지 않으므로 여기 오는 것은 PERSONAL 뿐이다
+  return { label: partnerName ? `${partnerName} 일정` : '상대 일정', locked: false };
+}
 
 function pad2(n: number): string {
   return String(n).padStart(2, '0');
@@ -83,6 +119,7 @@ interface FormState {
   endDate: string;
   eventType: CalendarEventType;
   repeatYearly: boolean;
+  visibility: CalendarEventVisibility;
   memo: string;
 }
 
@@ -93,15 +130,25 @@ const EMPTY_FORM: FormState = {
   endDate: '',
   eventType: 'DATE',
   repeatYearly: false,
+  // 기본은 우리 일정 — 커플 달력에서 더 흔한 쪽이고, 지금까지의 동작이다
+  visibility: 'SHARED',
   memo: '',
 };
 
 export function CoupleCalendarScreen({ navigation }: Props) {
-  const today = new Date();
-  const todayStr = `${today.getFullYear()}-${pad2(today.getMonth() + 1)}-${pad2(today.getDate())}`;
+  // 누구의 일정인지 가르려면 "나"를 알아야 한다 — 서버는 createdBy 만 내려준다
+  const myId = useAuthStore((s) => s.user?.id);
+  const partnerName = useRelationStore((s) => s.couple?.partner?.name);
+  /*
+   * "오늘"은 KST 로 판단한다 — 서버가 dday 를 KstClock.today() 로 세기 때문이다. 기기 현지
+   * 날짜를 쓰면 해외(기기 시간대 ≠ KST)에서 오늘 테두리·첫 화면의 달·추가 기본 날짜·'진행 중'이
+   * 서버 D-day 배지와 하루 어긋났다(docs/calendar-current-state.md 7절 #1).
+   */
+  const today = kstDateOf(new Date());
+  const todayStr = `${today.y}-${pad2(today.m)}-${pad2(today.d)}`;
 
-  const [year, setYear] = useState(today.getFullYear());
-  const [month, setMonth] = useState(today.getMonth() + 1); // 1~12
+  const [year, setYear] = useState(today.y);
+  const [month, setMonth] = useState(today.m); // 1~12
   const [events, setEvents] = useState<CoupleCalendarEvent[]>([]);
   // 여행 전체 목록 — 월과 무관하게 한 번 받고, 그리드 띠·'우리 여행' 섹션은 보이는 달로 거른다
   const [trips, setTrips] = useState<Trip[]>([]);
@@ -112,6 +159,18 @@ export function CoupleCalendarScreen({ navigation }: Props) {
    * TripListScreen 이 같은 이유로 "실패해도 목록은 비우지 않는다"를 지킨다.
    */
   const [tripsLoaded, setTripsLoaded] = useState(false);
+  /*
+   * 다녀온 곳 — 커플 장소의 방문(같이 먹기 식단 + "다녀왔어요"). 일정과 달리 여기서 만들거나 지우지 않는다
+   * (원본은 식단 기록이고 이 화면은 겹쳐 그리기만 한다 — 여행 띠와 같은 방식).
+   * 여행과 달리 월 단위로 받는다: 식단은 여행보다 훨씬 자주 쌓여 전체를 들고 있을 이유가 없다.
+   */
+  const [dateMeals, setDateMeals] = useState<CalendarDateMeal[]>([]);
+  /*
+   * 공휴일 — 해마다 한 번만 받는다(사용자와 무관한 공용 표). 해 단위로 쥐고 있어 12월↔1월을 오가도
+   * 다시 받지 않는다. 실패하거나 서버가 그 해 표를 아직 모르면(covered=false) 빨간 날 없이 그린다 —
+   * 공휴일은 덧칠이라, 없다고 일정 표시를 막거나 재시도를 권할 일이 아니다.
+   */
+  const [holidayYears, setHolidayYears] = useState<Record<number, HolidayYear>>({});
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
   const [saving, setSaving] = useState(false);
@@ -150,22 +209,108 @@ export function CoupleCalendarScreen({ navigation }: Props) {
     }
   }, []);
 
+  /*
+   * 다녀온 곳은 일정과 따로 받는다 — 소스가 다르고(방문·식단), 실패해도 일정 표시를
+   * 막으면 안 된다. 같은 요청 토큰을 쓰면 둘 중 하나의 지연이 다른 쪽을 버리게 되므로
+   * 토큰도 따로 둔다. 실패 시 조용히 비운다: 이 화면의 주인공은 일정이고, 오버레이가
+   * 없다고 재시도를 권하면 정작 보러 온 일정 위에 에러가 얹힌다.
+   */
+  const latestMealRequestRef = useRef(0);
+  const loadDateMeals = useCallback(async (y: number, m: number) => {
+    const requestId = ++latestMealRequestRef.current;
+    try {
+      const data = await calendarApi.dateMeals(y, m);
+      if (latestMealRequestRef.current !== requestId) return;
+      setDateMeals(data);
+    } catch {
+      if (latestMealRequestRef.current !== requestId) return;
+      setDateMeals([]);
+    }
+  }, []);
+
   useFocusEffect(useCallback(() => void load(year, month), [load, year, month]));
+  useFocusEffect(useCallback(() => void loadDateMeals(year, month), [loadDateMeals, year, month]));
 
   // 여행은 월 이동과 무관하게 전체를 받는다.
   // 성공했을 때만 목록을 갈아끼운다 — 실패(일시적 네트워크 오류 등)면 직전 목록을 그대로 둔다.
   // 커플 미연결(RELATION_NOT_FOUND)도 실패로 들어오지만, 그 경우 애초에 받아둔 목록이 없어
   // 빈 상태 그대로다(아래 tripsLoaded 로 '아직 모름'과 구분해 CTA 를 늦춘다).
+  useEffect(() => {
+    if (holidayYears[year]) return;
+    let active = true;
+    calendarApi
+      .holidays(year)
+      .then((h) => {
+        if (active) setHolidayYears((prev) => ({ ...prev, [year]: h }));
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [year, holidayYears]);
+
+  /** 보이는 해의 공휴일 — 날짜(YYYY-MM-DD) → 이름 */
+  const holidayByDate = useMemo(() => {
+    const map = new Map<string, string>();
+    holidayYears[year]?.holidays.forEach((h) => map.set(h.date, h.name));
+    return map;
+  }, [holidayYears, year]);
+
+  /** 이번 달 공휴일 — 격자 아래 한 줄로 이름을 보여준다(칸이 좁아 칸 안에는 이름을 못 넣는다) */
+  const monthHolidays = useMemo(() => {
+    const prefix = `${year}-${pad2(month)}-`;
+    return [...holidayByDate.entries()].filter(([d]) => d.startsWith(prefix));
+  }, [holidayByDate, year, month]);
+
+  const loadTrips = useCallback(() => {
+    tripApi
+      .list()
+      .then((list) => {
+        setTrips(list);
+        setTripsLoaded(true);
+      })
+      .catch(() => {});
+  }, []);
+  useFocusEffect(loadTrips);
+
+  /*
+   * 실시간 갱신 — 상대가 일정을 고치거나 여행·식단·장소를 바꾸면 이 화면을 연 채로도 바로 보인다.
+   * 예전엔 포커스 때만 다시 받아서, 같이 달력을 보며 약속을 잡는 중에 상대 화면은 낡은 채였다.
+   *
+   * <p><b>포커스 동안만 구독한다</b>(홈·캐치마인드와 같은 규칙). chatSocket 은 경로 하나에
+   * 핸들러 하나라, 이 화면이 같은 `/sub/couple/{id}` 를 계속 쥐고 있으면 아래 깔린 홈의
+   * 핸들러를 밀어내고, 나갈 때 해제하면 홈 구독까지 끊긴다. 포커스를 가진 화면은 하나뿐이라
+   * 포커스 단위로 주고받으면 충돌하지 않는다.
+   *
+   * <p>보이는 달은 ref 로 읽는다 — 의존성에 넣으면 달을 넘길 때마다 구독을 끊었다 다시 건다.
+   * 방문 기록("다녀왔어요")은 서버가 이벤트를 보내지 않아 여기서 잡히지 않는다(포커스 때 갱신).
+   */
+  const relationId = useRelationStore((s) => s.couple?.id);
+  const visibleMonthRef = useRef({ year, month });
+  useEffect(() => {
+    visibleMonthRef.current = { year, month };
+  }, [year, month]);
   useFocusEffect(
     useCallback(() => {
-      tripApi
-        .list()
-        .then((list) => {
-          setTrips(list);
-          setTripsLoaded(true);
+      if (!relationId) return undefined;
+      let active = true;
+      let offCouple: (() => void) | undefined;
+      connectSocket()
+        .then(() => {
+          if (!active) return;
+          offCouple = subscribeCouple(relationId, (type) => {
+            const { year: y, month: m } = visibleMonthRef.current;
+            if (type === 'CALENDAR') void load(y, m);
+            if (type === 'DIET' || type === 'PLACE') void loadDateMeals(y, m);
+            if (type === 'TRIP') loadTrips();
+          });
         })
-        .catch(() => {});
-    }, []),
+        .catch(() => undefined);
+      return () => {
+        active = false;
+        offCouple?.();
+      };
+    }, [relationId, load, loadDateMeals, loadTrips]),
   );
 
   const moveMonth = (delta: number) => {
@@ -242,6 +387,17 @@ export function CoupleCalendarScreen({ navigation }: Props) {
     ? monthTrips.filter((t) => t.startDate <= selectedDate && selectedDate <= t.endDate)
     : monthTrips;
 
+  /** 다녀온 곳이 있는 날짜 집합 — 셀마다 배열을 훑지 않게 미리 편다(tripDays 와 같은 이유) */
+  const dateMealDays = useMemo(
+    () => new Set(dateMeals.map((m) => m.date)),
+    [dateMeals],
+  );
+
+  // 날짜를 고르면 그 날 기록만, 아니면 이번 달 전부
+  const listDateMeals = selectedDate
+    ? dateMeals.filter((m) => m.date === selectedDate)
+    : dateMeals;
+
   /*
    * 모달을 연 시점의 폼 스냅샷 — 백드롭으로 닫을 때 "달라진 게 있는지"를 판단한다.
    * 수정 모달은 열자마자 값이 차 있으므로, 단순히 "비어있지 않음"으로는
@@ -256,6 +412,14 @@ export function CoupleCalendarScreen({ navigation }: Props) {
   };
 
   const openEdit = (event: CoupleCalendarEvent) => {
+    /*
+     * 상대의 개인 일정은 보이기만 한다 — 서버가 403 으로 막으므로(CalendarService),
+     * 폼을 열어 고치게 해놓고 저장할 때 튕기면 적어둔 내용만 날아간다.
+     */
+    if (event.visibility !== 'SHARED' && event.createdBy !== myId) {
+      toast.info(`${partnerName ?? '상대'}의 일정이라 볼 수만 있어요.`);
+      return;
+    }
     const initial = {
       id: event.id,
       title: event.title,
@@ -263,6 +427,7 @@ export function CoupleCalendarScreen({ navigation }: Props) {
       endDate: event.endDate ? event.endDate.slice(0, 10) : '',
       eventType: event.eventType,
       repeatYearly: event.repeatYearly,
+      visibility: event.visibility,
       memo: event.memo ?? '',
     };
     formInitialRef.current = JSON.stringify(initial);
@@ -299,6 +464,7 @@ export function CoupleCalendarScreen({ navigation }: Props) {
         endDate: !form.repeatYearly && form.endDate ? form.endDate : undefined,
         eventType: form.eventType,
         repeatYearly: form.repeatYearly,
+        visibility: form.visibility,
         memo: form.memo.trim() || undefined,
       };
       if (form.id == null) {
@@ -368,47 +534,66 @@ export function CoupleCalendarScreen({ navigation }: Props) {
             {WEEKDAYS.map((w, i) => (
               <Text
                 key={w}
-                style={[styles.weekday, i === 0 && { color: colors.coral }]}
+                style={[styles.weekday, i === 0 && styles.redText]}
               >
                 {w}
               </Text>
             ))}
           </View>
           <View style={styles.grid}>
-            {cells.map((day, idx) => {
-              if (day === null) return <View key={`b${idx}`} style={styles.cell} />;
-              const dateStr = `${year}-${pad2(month)}-${pad2(day)}`;
-              const dayEvents = byDate.get(dateStr) ?? [];
-              const isToday = dateStr === todayStr;
-              const isSelected = dateStr === selectedDate;
-              // 여행 기간은 점(하루 단위 일정)이 아니라 셀 아래 액센트 바로 잇는다 — 연속된 날이
-              // 하나의 띠로 보인다. 배경 틴트로 하면 선택 하이라이트(surfaceAlt)와 명도가 겹쳐
-              // 어느 날을 골랐는지 안 보이고, 다크에서는 틴트 자체도 배경과 1.08:1 로 묻힌다.
-              const inTrip = tripDays.has(dateStr);
-              return (
-                <Pressable
-                  key={dateStr}
-                  style={[styles.cell, isSelected && styles.cellSelected]}
-                  onPress={() => setSelectedDate(isSelected ? null : dateStr)}
-                  accessibilityState={{ selected: isSelected }}
-                >
-                  <View style={[styles.dayWrap, isToday && styles.todayWrap]}>
-                    <Text style={[styles.dayText, isToday && styles.todayText]}>{day}</Text>
-                  </View>
-                  <View style={styles.dotRow}>
-                    {dayEvents.slice(0, 3).map((e) => (
-                      <View
-                        key={e.id}
-                        style={[styles.dot, { backgroundColor: typeMeta(e.eventType).color }]}
-                      />
-                    ))}
-                  </View>
-                  {/* 여행 기간 띠 — 셀 폭을 꽉 채워 연속된 날끼리 이어져 보인다 */}
-                  <View style={[styles.tripBar, inTrip && styles.tripBarOn]} />
-                </Pressable>
-              );
-            })}
+            {toWeeks(cells).map((week, w) => (
+              <View key={w} style={styles.week}>
+                {week.map((day, j) => {
+                  if (day === null) return <View key={`b${j}`} style={styles.cell} />;
+                  const dateStr = `${year}-${pad2(month)}-${pad2(day)}`;
+                  const dayEvents = byDate.get(dateStr) ?? [];
+                  const isToday = dateStr === todayStr;
+                  const isSelected = dateStr === selectedDate;
+                  // 여행 기간은 점(하루 단위 일정)이 아니라 셀 아래 액센트 바로 잇는다 — 연속된 날이
+                  // 하나의 띠로 보인다. 배경 틴트로 하면 선택 하이라이트(surfaceAlt)와 명도가 겹쳐
+                  // 어느 날을 골랐는지 안 보이고, 다크에서는 틴트 자체도 배경과 1.08:1 로 묻힌다.
+                  const inTrip = tripDays.has(dateStr);
+                  // 빨간 날 — 일요일과 공휴일. 줄 안 위치(j)가 곧 요일이라 j === 0 이 일요일이다
+                  const holiday = holidayByDate.get(dateStr);
+                  const isRed = !!holiday || j === 0;
+                  return (
+                    <Pressable
+                      key={dateStr}
+                      style={[styles.cell, isSelected && styles.cellSelected]}
+                      onPress={() => setSelectedDate(isSelected ? null : dateStr)}
+                      accessibilityState={{ selected: isSelected }}
+                      accessibilityLabel={`${month}월 ${day}일${holiday ? ` ${holiday}` : ''}`}
+                    >
+                      <View style={[styles.dayWrap, isToday && styles.todayWrap]}>
+                        {/* 오늘은 채운 원 위 흰 글자가 우선 — 빨강을 얹으면 원 위에서 대비가 무너진다 */}
+                        <Text style={[styles.dayText, isRed && styles.redText, isToday && styles.todayText]}>{day}</Text>
+                      </View>
+                      <View style={styles.dotRow}>
+                        {dayEvents.slice(0, 3).map((e) => (
+                          <View
+                            key={e.id}
+                            style={[styles.dot, { backgroundColor: typeMeta(e.eventType).color }]}
+                          />
+                        ))}
+                        {/*
+                          다녀온 곳은 <b>속이 빈 점</b>으로 그린다 — 채워진 점(앞으로 있을 일정)과
+                          한눈에 갈라져야 한다. 색까지 달리하면 일정 종류 색과 섞여 범례가 늘어난다.
+                        */}
+                        {dateMealDays.has(dateStr) ? <View style={styles.dotRecord} /> : null}
+                      </View>
+                      {/* 여행 기간 띠 — 셀 폭을 꽉 채워 연속된 날끼리 이어져 보인다 */}
+                      <View style={[styles.tripBar, inTrip && styles.tripBarOn]} />
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ))}
           </View>
+          {monthHolidays.length > 0 ? (
+            <Text style={styles.holidayLine}>
+              {monthHolidays.map(([d, name]) => `${Number(d.slice(8, 10))}일 ${name}`).join(' · ')}
+            </Text>
+          ) : null}
         </Card>
 
         {/* 우리 여행 — 여행의 상시 진입점 (파일 상단 주석 참고). 목록·상세는 홈 스택의 Trip* 화면 */}
@@ -442,7 +627,7 @@ export function CoupleCalendarScreen({ navigation }: Props) {
               onPress={() => navigation.navigate('TripDetail', { tripId: trip.id, title: trip.title })}
             >
               <Card elevation="sm" style={styles.eventCard}>
-                <View style={[styles.typeBar, { backgroundColor: colors.accent }]} />
+                <View style={[styles.typeBar, { backgroundColor: colors.together }]} />
                 <View style={styles.eventBody}>
                   <View style={styles.eventTitleRow}>
                     <Text style={styles.eventTitle} numberOfLines={1}>
@@ -461,10 +646,68 @@ export function CoupleCalendarScreen({ navigation }: Props) {
           ))
         )}
 
+        {/*
+          다녀온 곳 — 커플 장소의 방문(같이 먹기 식단 + "다녀왔어요"). 없으면 섹션째 숨긴다:
+          여행처럼 여기서 만들 수 있는 게 아니라(럽슐랭·식단에서 남긴다) 빈 상태를 보여줘도
+          할 일이 없고, 화면만 길어진다. 예전 이름 '데이트'는 같이 먹기 식단만 실을 때의 것이다 —
+          "다녀왔어요"는 혼자 다녀온 곳일 수 있어, 데이트라고 부르는 대신 누구 기록인지 붙인다.
+        */}
+        {listDateMeals.length > 0 ? (
+          <>
+            <View style={styles.listHeader}>
+              <Text style={styles.listTitle}>
+                {selectedDate ? `${Number(selectedDate.slice(8, 10))}일 다녀온 곳` : '이번 달 다녀온 곳'}
+              </Text>
+            </View>
+            {listDateMeals.map((meal) => (
+              <TouchableOpacity
+                // visitId 가 없는 응답(서버 2026-10-02 이전)은 같이 먹기 식단뿐이라 mealId 가 있다
+                key={meal.visitId ?? `meal-${meal.mealId}`}
+                activeOpacity={0.8}
+                onPress={() =>
+                  navigation.navigate('PlaceDetail', { placeId: meal.placeId, name: meal.placeName })
+                }
+              >
+                <Card elevation="sm" style={styles.eventCard}>
+                  <View style={[styles.typeBar, { backgroundColor: colors.together }]} />
+                  <View style={styles.eventBody}>
+                    <View style={styles.eventTitleRow}>
+                      <Text style={styles.eventTitle} numberOfLines={1}>
+                        📍 {meal.placeName}
+                      </Text>
+                      {meal.lovelichelinTier ? (
+                        <View style={styles.ddayBadge}>
+                          <Text style={styles.ddayText}>{'★'.repeat(meal.lovelichelinTier)}</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    <View style={styles.metaRow}>
+                      {/* 한 사람만 남긴 기록이면 누구 것인지 — 둘이 함께(같이 먹기·둘 다 기록)면 붙이지 않는다 */}
+                      {meal.visitedBy != null ? (
+                        <View style={styles.ownerBadge}>
+                          <Text style={styles.ownerBadgeText}>
+                            {meal.visitedBy === myId ? '내 기록' : `${partnerName ?? '상대'} 기록`}
+                          </Text>
+                        </View>
+                      ) : null}
+                      <Text style={styles.eventMeta} numberOfLines={1}>
+                        {/* 날짜를 고른 상태면 헤더가 이미 그 날을 말하고 있다 */}
+                        {selectedDate ? meal.title : `${Number(meal.date.slice(8, 10))}일 · ${meal.title}`}
+                      </Text>
+                    </View>
+                  </View>
+                </Card>
+              </TouchableOpacity>
+            ))}
+          </>
+        ) : null}
+
         {/* 일정 목록 */}
         <View style={styles.listHeader}>
           <Text style={styles.listTitle}>
-            {selectedDate ? `${Number(selectedDate.slice(8, 10))}일 일정` : '이번 달 일정'}
+            {selectedDate
+              ? `${Number(selectedDate.slice(8, 10))}일 일정${holidayByDate.has(selectedDate) ? ` · ${holidayByDate.get(selectedDate)}` : ''}`
+              : '이번 달 일정'}
           </Text>
           {selectedDate ? (
             <Pressable onPress={() => setSelectedDate(null)} hitSlop={8}>
@@ -488,7 +731,7 @@ export function CoupleCalendarScreen({ navigation }: Props) {
             <EmptyState
               icon="calendar-heart"
               title="일정이 없어요"
-              description="생일, 데이트 약속, 기념일을 등록하면 당일 아침에 둘 다 알림을 받아요."
+              description="기념일·데이트 약속은 둘 다, 회식·야근 같은 내 일정은 나만 아침에 알림을 받아요."
             />
           )
         ) : (
@@ -496,6 +739,7 @@ export function CoupleCalendarScreen({ navigation }: Props) {
             const meta = typeMeta(event.eventType);
             // 시작일 당일은 D-day 로(강조 포함), 그 다음 날부터 종료일까지는 "진행 중"으로 읽는다
             const ongoing = !!event.endDate && event.date < todayStr && todayStr <= event.endDate;
+            const owner = ownerBadge(event, myId, partnerName);
             return (
               <TouchableOpacity key={`${event.id}-${event.date}`} activeOpacity={0.8} onPress={() => openEdit(event)}>
                 <Card elevation="sm" style={styles.eventCard}>
@@ -509,28 +753,43 @@ export function CoupleCalendarScreen({ navigation }: Props) {
                       <View
                         style={[
                           styles.ddayBadge,
-                          event.dday === 0 && { backgroundColor: colors.coral },
+                          event.dday === 0 && { backgroundColor: colors.achievement },
                         ]}
                       >
                         <Text
                           // 다크의 coral 은 파스텔이라 흰 글자가 1.55:1 이었다 — 배경 휘도로 고른다
                           style={[
                             styles.ddayText,
-                            event.dday === 0 && { color: onColor(colors.coral) },
+                            event.dday === 0 && { color: onColor(colors.achievement) },
                           ]}
                         >
                           {ddayLabel(event.dday, ongoing)}
                         </Text>
                       </View>
                     </View>
-                    <Text style={styles.eventMeta}>
-                      {Number(event.date.slice(5, 7))}월 {Number(event.date.slice(8, 10))}일
-                      {event.endDate
-                        ? ` ~ ${Number(event.endDate.slice(5, 7))}월 ${Number(event.endDate.slice(8, 10))}일`
-                        : ''}{' '}
-                      · {meta.label}
-                      {event.memo ? ` · ${event.memo}` : ''}
-                    </Text>
+                    <View style={styles.metaRow}>
+                      {/* 주인 표시는 종류·날짜보다 먼저 읽혀야 한다 — "누구 일정인가"가 첫 질문이다 */}
+                      {owner ? (
+                        <View style={styles.ownerBadge}>
+                          {owner.locked ? (
+                            <MaterialCommunityIcons
+                              name="lock-outline"
+                              size={11}
+                              color={colors.textSecondary}
+                            />
+                          ) : null}
+                          <Text style={styles.ownerBadgeText}>{owner.label}</Text>
+                        </View>
+                      ) : null}
+                      <Text style={styles.eventMeta} numberOfLines={1}>
+                        {Number(event.date.slice(5, 7))}월 {Number(event.date.slice(8, 10))}일
+                        {event.endDate
+                          ? ` ~ ${Number(event.endDate.slice(5, 7))}월 ${Number(event.endDate.slice(8, 10))}일`
+                          : ''}{' '}
+                        · {meta.label}
+                        {event.memo ? ` · ${event.memo}` : ''}
+                      </Text>
+                    </View>
                   </View>
                 </Card>
               </TouchableOpacity>
@@ -556,11 +815,16 @@ export function CoupleCalendarScreen({ navigation }: Props) {
                 <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.modalScroll}>
                   <Text style={styles.modalTitle}>{form?.id == null ? '일정 추가' : '일정 수정'}</Text>
 
+                  {/*
+                    <b>예시 placeholder 를 두지 않는다</b>(2026-09-22). "예: 우리 200일, 수인 생일"
+                    처럼 써 두면 그 예시가 곧 이 칸의 용도로 읽힌다 — 실제로 이 달력에는 회식·
+                    미용실 예약 같은 각자의 일정이 훨씬 많이 들어오는데, 예시는 기념일만 가리켰다.
+                    칸 이름(제목·메모)이 이미 무엇을 넣는지 말하므로 예시는 안내가 아니라 한정이다.
+                  */}
                   <TextField
                     label="제목"
                     value={form?.title ?? ''}
                     onChangeText={(t) => setForm((f) => (f ? { ...f, title: t } : f))}
-                    placeholder="예: 우리 200일, 수인 생일"
                     maxLength={100}
                   />
                   <DateField
@@ -621,6 +885,74 @@ export function CoupleCalendarScreen({ navigation }: Props) {
                     })}
                   </View>
 
+                  {/*
+                    누구 일정인가 — '우리'와 '내 것'만 고르게 하고, 숨기기는 아래 스위치로
+                    따로 둔다. 칩 세 개로 늘어놓으면 "누구 것인가"와 "보여줄 것인가"라는
+                    다른 두 질문이 한 줄에 섞인다.
+                  */}
+                  <Text style={styles.fieldLabel}>누구 일정</Text>
+                  <View style={styles.typeRow}>
+                    {([
+                      { key: 'SHARED', label: '우리 일정' },
+                      { key: 'PERSONAL', label: '내 일정' },
+                    ] as const).map(({ key, label }) => {
+                      const active =
+                        key === 'SHARED'
+                          ? form?.visibility === 'SHARED'
+                          : form?.visibility !== 'SHARED';
+                      return (
+                        <Pressable
+                          key={key}
+                          style={[
+                            styles.typeChip,
+                            active && { borderColor: colors.primary, backgroundColor: colors.surfaceAlt },
+                          ]}
+                          onPress={() =>
+                            setForm((f) =>
+                              f
+                                ? {
+                                    ...f,
+                                    // '내 일정'으로 돌아올 때 켜 뒀던 숨기기를 잃지 않는다
+                                    visibility:
+                                      key === 'SHARED' ? 'SHARED' : f.visibility === 'PRIVATE' ? 'PRIVATE' : 'PERSONAL',
+                                  }
+                                : f,
+                            )
+                          }
+                          accessibilityState={{ selected: active }}
+                        >
+                          <Text
+                            style={[
+                              styles.typeChipText,
+                              active && { color: colors.textPrimary, fontWeight: '700' },
+                            ]}
+                          >
+                            {label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+
+                  {form?.visibility !== 'SHARED' ? (
+                    <View style={styles.repeatRow}>
+                      <View style={styles.flex}>
+                        <Text style={styles.fieldLabel}>나만 보기</Text>
+                        <Text style={styles.repeatHint}>
+                          꺼두면 상대도 이 일정을 봐요 · 알림은 어느 쪽이든 나만 받아요
+                        </Text>
+                      </View>
+                      <Switch
+                        value={form?.visibility === 'PRIVATE'}
+                        onValueChange={(v) =>
+                          setForm((f) => (f ? { ...f, visibility: v ? 'PRIVATE' : 'PERSONAL' } : f))
+                        }
+                        trackColor={{ true: colors.primaryFill }}
+                        thumbColor={form?.visibility === 'PRIVATE' ? onColor(colors.primaryFill) : colors.white}
+                      />
+                    </View>
+                  ) : null}
+
                   <View style={styles.repeatRow}>
                     <View style={styles.flex}>
                       <Text style={styles.fieldLabel}>매년 반복</Text>
@@ -632,7 +964,8 @@ export function CoupleCalendarScreen({ navigation }: Props) {
                       onValueChange={(v) =>
                         setForm((f) => (f ? { ...f, repeatYearly: v, endDate: v ? '' : f.endDate } : f))
                       }
-                      trackColor={{ true: colors.coral }}
+                      trackColor={{ true: colors.primaryFill }}
+                      thumbColor={form?.repeatYearly ? onColor(colors.primaryFill) : colors.white}
                     />
                   </View>
 
@@ -640,7 +973,6 @@ export function CoupleCalendarScreen({ navigation }: Props) {
                     label="메모 (선택)"
                     value={form?.memo ?? ''}
                     onChangeText={(t) => setForm((f) => (f ? { ...f, memo: t } : f))}
-                    placeholder="예: 레스토랑 예약해두기"
                     maxLength={500}
                   />
 
@@ -668,7 +1000,6 @@ export function CoupleCalendarScreen({ navigation }: Props) {
   );
 }
 
-const CELL = `${100 / 7}%` as const;
 
 const styles = themedStyles((colors) => ({
   container: { flex: 1, backgroundColor: colors.background },
@@ -695,18 +1026,20 @@ const styles = themedStyles((colors) => ({
   calendarCard: { paddingVertical: spacing.md, paddingHorizontal: spacing.sm },
   weekRow: { flexDirection: 'row', marginBottom: spacing.xs },
   weekday: {
-    width: CELL,
+    flex: 1,
     textAlign: 'center',
     fontSize: fontSize.caption,
     fontWeight: '700',
     color: colors.textSecondary,
   },
-  grid: { flexDirection: 'row', flexWrap: 'wrap' },
-  cell: { width: CELL, alignItems: 'center', paddingVertical: 4, borderRadius: radius.sm },
+  // 달력은 주 단위 줄로 그린다(utils/calendarWeeks 주석) — flexWrap + 100/7% 는 기기 폭에 따라 토요일이 다음 줄로 밀렸다
+  grid: {},
+  week: { flexDirection: 'row' },
+  cell: { flex: 1, minWidth: 0, alignItems: 'center', paddingVertical: 4, borderRadius: radius.sm },
   cellSelected: { backgroundColor: colors.surfaceAlt },
   // 여행 기간 띠 — 없는 날도 같은 높이를 차지해 그리드 행 높이가 흔들리지 않는다
   tripBar: { alignSelf: 'stretch', height: 3, marginTop: 3, borderRadius: 2 },
-  tripBarOn: { backgroundColor: colors.accent },
+  tripBarOn: { backgroundColor: colors.together },
   dayWrap: {
     width: 28,
     height: 28,
@@ -716,9 +1049,27 @@ const styles = themedStyles((colors) => ({
   },
   todayWrap: { backgroundColor: colors.primary },
   dayText: { fontSize: fontSize.body, color: colors.textPrimary },
-  todayText: { color: colors.white, fontWeight: '800' },
+  // 빨간 날 — danger 는 라이트·다크 모두 카드 위 4.5:1 이 검증된 빨강이다(verify:theme).
+  // 소유자 색(나 = 코랄)은 "빨간 날"이 아니다 — 요일·공휴일은 sunday/danger 를 쓴다.
+  redText: { color: colors.danger },
+  holidayLine: {
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.xs,
+    fontSize: fontSize.caption,
+    color: colors.danger,
+    fontWeight: '600',
+  },
+  todayText: { color: colors.onPrimary, fontWeight: '800' },
   dotRow: { flexDirection: 'row', gap: 3, height: 6, marginTop: 2 },
   dot: { width: 6, height: 6, borderRadius: 3 },
+  // 지난 기록 — 속이 빈 점. 앞으로 있을 일정(채워진 점)과 갈라 읽힌다
+  dotRecord: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    borderWidth: 1.5,
+    borderColor: colors.together,
+  },
 
   listHeader: {
     flexDirection: 'row',
@@ -742,7 +1093,21 @@ const styles = themedStyles((colors) => ({
     backgroundColor: colors.surfaceAlt,
   },
   ddayText: { fontSize: fontSize.caption, fontWeight: '800', color: colors.textPrimary },
-  eventMeta: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
+  eventMeta: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2, flexShrink: 1 },
+
+  // 주인 표시 — 우리 일정에는 붙지 않으므로(대부분이 그렇다) 눈에 띄는 쪽이 예외다
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  ownerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    marginTop: 2,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceAlt,
+  },
+  ownerBadgeText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary },
 
   // 여행이 없을 때의 생성 진입점 — 카드 대신 점선 상자로 "비어 있음 + 행동"을 한 줄에
   tripCreate: {
@@ -765,11 +1130,11 @@ const styles = themedStyles((colors) => ({
     bottom: spacing.lg,
     height: 52,
     borderRadius: radius.lg,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primaryFill,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  addBtnText: { color: colors.white, fontSize: fontSize.body, fontWeight: '800' },
+  addBtnText: { color: onColor(colors.primaryFill), fontSize: fontSize.body, fontWeight: '800' },
 
   modalBackdrop: {
     flex: 1,
@@ -825,8 +1190,8 @@ const styles = themedStyles((colors) => ({
   modalSave: {
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.lg,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primaryFill,
     borderRadius: radius.md,
   },
-  modalSaveText: { color: colors.white, fontWeight: '800' },
+  modalSaveText: { color: onColor(colors.primaryFill), fontWeight: '800' },
 }));

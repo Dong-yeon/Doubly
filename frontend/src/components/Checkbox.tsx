@@ -3,6 +3,7 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 import { themedStyles } from '../theme/themedStyles';
+import { onColor } from '../theme/onColor';
 
 interface Props {
   checked: boolean;
@@ -56,8 +57,9 @@ const styles = themedStyles((colors) => ({
     justifyContent: 'center',
     backgroundColor: colors.surfaceAlt,
   },
-  boxChecked: { borderColor: colors.primary, backgroundColor: colors.primary },
-  check: { color: '#FFFFFF', fontSize: fontSize.caption, fontWeight: '800' },
+  // 채움은 primaryFill — 선택 상태 색을 앱 전체와 맞춘다(2026-09-24). 위 흰 글자는 onColor 로
+  boxChecked: { borderColor: colors.primaryFill, backgroundColor: colors.primaryFill },
+  check: { color: onColor(colors.primaryFill), fontSize: fontSize.caption, fontWeight: '800' },
   label: { flex: 1, fontSize: fontSize.body, color: colors.textSecondary },
   labelEmphasized: { color: colors.textPrimary, fontWeight: '600' },
 }));

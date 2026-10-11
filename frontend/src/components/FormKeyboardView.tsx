@@ -39,10 +39,12 @@ interface Props {
   style?: StyleProp<ViewStyle>;
   /** 나머지 ScrollView 속성 (ref, refreshControl 등) */
   scrollProps?: Omit<ScrollViewProps, 'contentContainerStyle' | 'children'>;
+  /** 안쪽 ScrollView ref — 특정 칸으로 스크롤해 줄 때(scrollTo) */
+  scrollRef?: React.Ref<ScrollView>;
 }
 
 /** 헤더가 없는 화면에서도 안전하다 — useHeaderHeight 는 헤더가 없으면 0 을 준다. */
-export function FormKeyboardView({ children, contentContainerStyle, style, scrollProps }: Props) {
+export function FormKeyboardView({ children, contentContainerStyle, style, scrollProps, scrollRef }: Props) {
   const headerHeight = useHeaderHeight();
 
   return (
@@ -52,6 +54,7 @@ export function FormKeyboardView({ children, contentContainerStyle, style, scrol
       keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
     >
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={contentContainerStyle}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}

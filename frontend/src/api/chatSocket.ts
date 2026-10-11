@@ -15,7 +15,16 @@ import { Client, IMessage, StompSubscription } from '@stomp/stompjs';
 import { STORAGE_KEYS, WS_BASE_URL } from '../constants/config';
 import { storage } from '../utils/storage';
 import { refreshAccessToken } from './client';
-import type { ChatMessage, MessageType } from '../types';
+import {
+  noteClosed,
+  noteConnectAttempt,
+  noteConnected,
+  noteDeactivated,
+  noteHeartbeatLost,
+  noteStompError,
+  noteTokenRefresh,
+} from '../utils/socketTelemetry';
+import type { ChatMessage, GameReactionEvent, MessageType, PuzzleBattleEvent } from '../types';
 
 /** /sub/rooms/{relationId}/pin 페이로드 — 백엔드 ChatPinResponse 와 짝. */
 export interface PinEvent {
@@ -83,6 +92,8 @@ export interface OutgoingMessage {
    * 서버가 두 번째를 저장하지 않고 먼저 저장한 메시지를 다시 브로드캐스트한다.
    */
   clientMessageId?: string;
+  /** 문구 스티커(TEXT_STICKER)가 얹힐 캐릭터 스티커 코드 — 다른 타입에서는 서버가 무시한다 */
+  stickerCode?: string;
 }
 
 /** 연결돼 있으면 즉시 구독하고, 아니면 다음 연결 때 {@link applyDesiredSubscriptions} 가 건다. */
@@ -142,13 +153,17 @@ function createClient(): Client {
    */
   c.beforeConnect = async () => {
     setStatus('connecting');
+    noteConnectAttempt();
     if (rejectedByServer && refreshAttempts < MAX_REFRESH_ATTEMPTS) {
       rejectedByServer = false;
       refreshAttempts += 1;
+      const refreshStartedAt = Date.now();
       try {
         await refreshAccessToken();
+        noteTokenRefresh(Date.now() - refreshStartedAt, true);
       } catch {
         // 갱신 실패 — 아래에서 기존 토큰으로 시도한다
+        noteTokenRefresh(Date.now() - refreshStartedAt, false);
       }
     }
     const token = await storage.getItem(STORAGE_KEYS.accessToken);
@@ -160,16 +175,24 @@ function createClient(): Client {
     refreshAttempts = 0;
     applyDesiredSubscriptions(c);
     setStatus('connected');
+    noteConnected();
   };
 
   // 서버가 CONNECT/SUBSCRIBE 를 거절 — 토큰 만료가 가장 흔한 원인이다
-  c.onStompError = () => {
+  c.onStompError = (frame) => {
     rejectedByServer = true;
+    noteStompError(frame.headers['message']);
   };
 
-  c.onWebSocketClose = () => {
+  // 하트비트가 끊겨 stompjs 가 연결을 죽은 것으로 판정 — 곧 onWebSocketClose 가 따라온다(계측용 구분)
+  c.onHeartbeatLost = () => {
+    noteHeartbeatLost();
+  };
+
+  c.onWebSocketClose = (evt) => {
     active.clear(); // 이 소켓의 구독 객체는 전부 무효 (desired 는 그대로 둔다)
     setStatus('disconnected');
+    noteClosed(evt?.code);
   };
 
   return c;
@@ -183,6 +206,7 @@ function createClient(): Client {
  * 되어 같은 메시지를 두 번 받는다.
  */
 export async function connectSocket(): Promise<Client> {
+  ensureSendErrorSubscription();
   if (client?.connected) return client;
   if (connecting) return connecting; // 진행 중인 연결 공유 (중복 Client 생성 방지)
 
@@ -219,6 +243,40 @@ export async function connectSocket(): Promise<Client> {
   });
 
   return connecting;
+}
+
+/**
+ * 전송 거절 알림 — 서버가 STOMP 전송을 거절하면 보낸 사람에게만 온다(백엔드 ChatSendError, /user/queue/chat-errors).
+ * 예전엔 이 길이 없어 거절된 말풍선이 "보내는 중"에 멈췄다(docs/chat-current-state.md §8-2 ③).
+ */
+export interface ChatSendError {
+  /** 거절된 프레임의 멱등키 — 어느 말풍선인지 짝짓는다 */
+  clientMessageId: string | null;
+  /** 서버 ErrorCode 이름 */
+  code: string;
+  /** 사용자에게 보여 줄 문구 */
+  message: string;
+}
+
+const SEND_ERRORS_DESTINATION = '/user/queue/chat-errors';
+const sendErrorListeners = new Set<(e: ChatSendError) => void>();
+
+/** 전송 거절을 듣는다 — 해제 함수를 돌려준다. 구독 자체는 connectSocket 이 챙긴다. */
+export function onSendError(listener: (e: ChatSendError) => void): () => void {
+  sendErrorListeners.add(listener);
+  return () => sendErrorListeners.delete(listener);
+}
+
+/**
+ * 거절 큐 구독을 "걸려 있어야 하는 것"에 올린다. 방 구독과 달리 방에 묶이지 않는다 — 식단 카드처럼 채팅방
+ * 밖에서 보내는 것도 있다. disconnectSocket(로그아웃)이 desired 를 비우므로 연결할 때마다 다시 확인한다.
+ */
+function ensureSendErrorSubscription() {
+  if (desired.has(SEND_ERRORS_DESTINATION)) return;
+  register(
+    SEND_ERRORS_DESTINATION,
+    jsonHandler<ChatSendError>((e) => sendErrorListeners.forEach((l) => l(e))),
+  );
 }
 
 export function subscribeRoom(relationId: number, onMessage: (msg: ChatMessage) => void) {
@@ -261,19 +319,93 @@ export function subscribeRoomPin(relationId: number, onPin: (event: PinEvent) =>
   register(`/sub/rooms/${relationId}/pin`, jsonHandler(onPin));
 }
 
-/** 커플 실시간 이벤트 구독 (/sub/couple/{relationId}) — 배경/기념일/운동 변경 알림 */
-export function subscribeCouple(relationId: number, onEvent: (type: string) => void) {
-  register(`/sub/couple/${relationId}`, (frame) => {
-    try {
-      onEvent((JSON.parse(frame.body) as { type?: string }).type ?? '');
-    } catch {
-      onEvent('');
+/** 커플 채널을 듣는 화면들 — 관계 id 마다 리스너 묶음 */
+const coupleListeners = new Map<number, Set<(type: string) => void>>();
+
+/**
+ * 커플 실시간 이벤트 구독 (/sub/couple/{relationId}) — 배경/기념일/운동/기록 변경 알림.
+ * 돌려받은 함수를 부르면 <b>이 리스너만</b> 빠진다.
+ *
+ * <p>여러 화면이 같은 채널을 동시에 듣는다(홈·기록 목록·채팅방·게임). 예전엔 목적지 하나에 핸들러
+ * 하나라 나중에 구독한 화면이 앞의 것을 덮어썼고, 한 화면이 해제하면 남은 화면의 구독까지 끊겼다.
+ * 이제 STOMP 구독은 채널마다 하나만 두고, 들어온 이벤트를 모든 리스너에 나눠 준다.
+ */
+export function subscribeCouple(relationId: number, onEvent: (type: string) => void): () => void {
+  let listeners = coupleListeners.get(relationId);
+  if (!listeners) {
+    const set = new Set<(type: string) => void>();
+    listeners = set;
+    coupleListeners.set(relationId, set);
+    register(`/sub/couple/${relationId}`, (frame) => {
+      let type = '';
+      try {
+        type = (JSON.parse(frame.body) as { type?: string }).type ?? '';
+      } catch {
+        // 깨진 프레임 — 타입 없이 "뭔가 바뀌었다"로만 알린다
+      }
+      // 리스너 하나가 던져도 나머지 화면은 받아야 한다
+      [...set].forEach((fn) => {
+        try {
+          fn(type);
+        } catch {
+          // 무시
+        }
+      });
+    });
+  }
+  listeners.add(onEvent);
+  return () => {
+    const current = coupleListeners.get(relationId);
+    if (!current) return;
+    current.delete(onEvent);
+    if (current.size === 0) {
+      coupleListeners.delete(relationId);
+      unregister(`/sub/couple/${relationId}`);
     }
-  });
+  };
 }
 
-export function unsubscribeCouple(relationId: number) {
-  unregister(`/sub/couple/${relationId}`);
+/**
+ * 게임 판 위 즉석 반응 구독 (/sub/couple/{relationId}/game-reaction).
+ *
+ * <p>커플 공용 채널과 목적지를 나눈 이유는 서버 {@code GameReactionEvent} 주석 참고 —
+ * 저장하지 않는 신호라 "타입만 보내고 다시 조회한다"는 공용 채널 규칙을 쓸 수 없다.
+ */
+export function subscribeGameReaction(relationId: number, onReaction: (e: GameReactionEvent) => void) {
+  register(`/sub/couple/${relationId}/game-reaction`, jsonHandler(onReaction));
+}
+
+export function unsubscribeGameReaction(relationId: number) {
+  unregister(`/sub/couple/${relationId}/game-reaction`);
+}
+
+/**
+ * 연쇄 퍼즐 대전 수(手) 중계 구독 (/sub/games/{relationId}) — docs/COUPLE_PUZZLE_BATTLE §3-2.
+ *
+ * <p>커플 공용 채널의 "타입만 보내고 REST 로 재조회" 규칙을 쓰지 않는다 — 수마다 재조회하면
+ * 그 왕복이 곧 게임의 지연이다. 채팅처럼 페이로드(결과 판)를 그대로 싣는다. 내가 보낸 것도
+ * 되돌아오므로 화면이 senderId 로 거른다.
+ */
+export function subscribeGames(relationId: number, onEvent: (e: PuzzleBattleEvent) => void) {
+  register(`/sub/games/${relationId}`, jsonHandler(onEvent));
+}
+
+export function unsubscribeGames(relationId: number) {
+  unregister(`/sub/games/${relationId}`);
+}
+
+/**
+ * 수(手) 하나를 흘린다 — 연결이 없으면 <b>그냥 버린다</b>(false). 채팅과 달리 재연결을
+ * 기다리지 않는다: 프레임마다 결과 판 전체가 실리므로 놓친 프레임은 다음 프레임이 덮고,
+ * 상대가 아예 없으면(고스트 대전) 어차피 받을 사람이 없다. 기다리면 게임 루프가 멈춘다.
+ */
+export function publishGameEvent(relationId: number, payload: Omit<PuzzleBattleEvent, 'senderId'>): boolean {
+  if (!client?.connected) return false;
+  client.publish({
+    destination: `/pub/games/${relationId}`,
+    body: JSON.stringify(payload),
+  });
+  return true;
 }
 
 /** 저수준 발행 — 연결이 없으면 false. 화면은 아래 publishEnsuringConnection 을 쓴다. */
@@ -297,13 +429,31 @@ export async function publishEnsuringConnection(
   relationId: number,
   payload: OutgoingMessage,
 ): Promise<boolean> {
-  if (client?.connected) return publishMessage(relationId, payload);
+  /*
+   * 멱등키가 없으면 여기서 붙인다 — 전송 경로가 여럿(텍스트·스티커·사진·음성·터치·식단 카드…)이라
+   * 호출부마다 챙기게 두면 빠진다. 예전엔 TEXT 만 실어서 나머지는 서버 중복 방어(V89)를 못 받았다
+   * (docs/chat-current-state.md §3-3). 낙관적 말풍선과 짝지어야 하는 호출부는 직접 만들어 넣는다.
+   */
+  const keyed = payload.clientMessageId ? payload : { ...payload, clientMessageId: newClientMessageId() };
+  ensureSendErrorSubscription(); // 이미 붙은 소켓으로 바로 보내는 경로도 거절을 들을 수 있게
+  if (client?.connected) return publishMessage(relationId, keyed);
   try {
     await withTimeout(connectSocket(), CONNECT_WAIT_MS);
   } catch {
     return false;
   }
-  return publishMessage(relationId, payload);
+  return publishMessage(relationId, keyed);
+}
+
+/**
+ * 전송 멱등키 — 서버가 {@code (relation_id, client_message_id)} 로 중복을 거른다(V89).
+ *
+ * <p>UUID 라이브러리를 쓰지 않는 이유: 이 값이 유일해야 하는 범위는 <b>한 관계의 몇 초</b>
+ * 뿐이고, 그 안에서 시각(ms)과 난수 8자가 겹칠 일은 없다. 의존성을 하나 더 들이는 대신
+ * 필요한 만큼만 만든다. 컬럼 길이는 64 — 이 형식은 20자 안쪽이다.
+ */
+export function newClientMessageId(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 /**
@@ -320,6 +470,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 }
 
 export function disconnectSocket() {
+  noteDeactivated(); // 일부러 내리는 것 — 끊김으로 재지 않는다
   active.forEach((s) => s.unsubscribe());
   active.clear();
   desired.clear();

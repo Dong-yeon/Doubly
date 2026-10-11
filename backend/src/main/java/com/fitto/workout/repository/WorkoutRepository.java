@@ -2,6 +2,7 @@ package com.fitto.workout.repository;
 
 import com.fitto.workout.domain.Workout;
 import com.fitto.workout.dto.CategoryCount;
+import com.fitto.workout.dto.DeepStatRow;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -66,6 +67,30 @@ public interface WorkoutRepository extends JpaRepository<Workout, Long> {
     List<CategoryCount> categoryBreakdown(@Param("userId") Long userId,
                                           @Param("since") LocalDate since);
 
+    /**
+     * 심화 통계의 원본 — 최근 기간의 <b>완료된</b> 세트 하나하나.
+     *
+     * <p>요약 필드({@code WorkoutSet.weightKg}·{@code reps})가 아니라 entries 를 본다.
+     * 요약은 마지막 세트 값이라 백오프 세트에서 최고 무게와 총 볼륨을 둘 다 놓친다
+     * ({@code WorkoutSetRepository.findPersonalBests} 가 같은 이유로 같은 선택을 했다).
+     *
+     * <p>{@code completed = true} 만 센다 — 진행 중인 세션의 체크 안 된 세트가 볼륨에
+     * 섞이면 오늘 숫자가 실제보다 커진다(CLAUDE.md 4절 "상태 필터링"과 같은 취지).
+     */
+    @Query("""
+            select s.workout.workoutDate as workoutDate,
+                   s.exerciseName as exerciseName,
+                   s.muscleGroup as muscleGroup,
+                   s.category as category,
+                   e.weightKg as weightKg,
+                   e.reps as reps
+            from WorkoutSet s join s.entries e
+            where s.workout.userId = :userId
+              and s.workout.workoutDate >= :since
+              and e.completed = true
+            """)
+    List<DeepStatRow> findDeepStatRows(@Param("userId") Long userId, @Param("since") LocalDate since);
+
     /** 마지막 운동 날짜 (기록 없으면 null) — 트레이너 대시보드용. */
     @Query("select max(w.workoutDate) from Workout w where w.userId = :userId")
     LocalDate findLastWorkoutDate(@Param("userId") Long userId);
@@ -87,8 +112,70 @@ public interface WorkoutRepository extends JpaRepository<Workout, Long> {
                                     @Param("cursorId") Long cursorId,
                                     Pageable pageable);
 
+    /**
+     * 우리 탭(사진첩) — 인증샷이 붙은 운동만. {@link #findRecentForFeed} 와 같은 keyset 에
+     * {@code image_url is not null} 만 더한다 (docs/ALBUM_TAB_IA_2026-09-14.md 5-4).
+     *
+     * <p><b>{@code image_shared = true} 인 사진만</b>이다(V94). 예전 운동 사진은 "애인에게는
+     * 공유되지 않아요" 약속 아래 올라왔고 러닝 경로 지도가 찍혀 있을 수 있다. 타임라인
+     * ({@code FeedItemMapper.toItem(Workout, ...)})과 같이 <b>올린 본인에게도</b> 싣지 않는다 —
+     * 우리 탭은 둘이 같은 것을 보는 자리이고, 그 사진은 처음부터 앨범감이 아니었다.
+     *
+     * <p><b>진행 중 상태를 걸러낼 조건이 없다</b>(CLAUDE.md 4절의 {@code status='COMPLETED'}).
+     * {@code workouts} 테이블에는 status 컬럼이 없고, 끝내지 않은 운동은 행으로 저장되지 않는다
+     * — 기기에만 남는 초안(프론트 {@code activeWorkoutStore})이고 저장 시점에 비로소 행이 된다.
+     * 즉 이 테이블의 행은 전부 완료분이라 필터가 필요 없다. status 컬럼이 생기면 여기도 함께 고칠 것.
+     *
+     * <p><b>정렬은 기록일 우선</b>(2026-10-02 결정) — (기록일, created_at, id) keyset 이다.
+     * 지난 날짜로 늦게 올린 기록이 올린 달이 아니라 그 날짜에 묶여야 달력·회고와 의미가 맞는다.
+     * 타임라인({@code findRecentForFeed})은 업로드 순서 그대로다 — 통일하지 말 것.
+     */
+    @Query("""
+            select w from Workout w
+            where w.userId in :userIds
+              and w.imageUrl is not null
+              and w.imageShared = true
+              and (cast(:cursorDate as LocalDate) is null
+                   or w.workoutDate < :cursorDate
+                   or (w.workoutDate = :cursorDate
+                       and (w.createdAt < :cursorAt
+                            or (w.createdAt = :cursorAt and w.id < :cursorId))))
+            order by w.workoutDate desc, w.createdAt desc, w.id desc
+            """)
+    List<Workout> findPhotosForFeed(@Param("userIds") List<Long> userIds,
+                                    @Param("cursorDate") java.time.LocalDate cursorDate,
+                                    @Param("cursorAt") java.time.LocalDateTime cursorAt,
+                                    @Param("cursorId") Long cursorId,
+                                    Pageable pageable);
+
     /** 회원 탈퇴 시 본인 운동 기록 삭제 (workout_sets 는 DB ON DELETE CASCADE). */
     @Modifying
     @Query("delete from Workout w where w.userId = :userId")
     void deleteAllByUserId(@Param("userId") Long userId);
+
+    /**
+     * 사진첩 달력 — 기록일이 {@code [from, to]} 인 공유된 운동 사진. 공개 조건({@code image_shared})은
+     * {@link #findPhotosForFeed} 와 같다 — 달력이라고 비공개 사진이 새면 안 된다.
+     */
+    @Query("""
+            select w from Workout w
+            where w.userId in :userIds
+              and w.imageUrl is not null
+              and w.imageShared = true
+              and w.workoutDate between :from and :to
+            order by w.workoutDate desc, w.createdAt desc, w.id desc
+            """)
+    List<Workout> findPhotosInDateRange(@Param("userIds") List<Long> userIds,
+                                        @Param("from") LocalDate from,
+                                        @Param("to") LocalDate to,
+                                        Pageable pageable);
+
+    /** 추억의 하한 연도용 — 공유된 운동 사진 중 가장 이른 기록일(없으면 null). 공개 조건은 사진첩과 같다 */
+    @Query("""
+            select min(w.workoutDate) from Workout w
+            where w.userId in :userIds
+              and w.imageUrl is not null
+              and w.imageShared = true
+            """)
+    LocalDate findEarliestPhotoWorkoutDate(@Param("userIds") List<Long> userIds);
 }

@@ -24,7 +24,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * 등급 분기 자체가 실행되지 않아 아무것도 검증하지 못한다.
  * 켜진 경우의 동작은 {@link PlanFreeTrialTest} 에서 따로 본다.
  */
-@SpringBootTest(properties = "fitto.plan.free-trial=false")
+@SpringBootTest(properties = {
+        "fitto.plan.free-trial=false",
+        // 가입 직후 N일 체험을 끈다 — 여기서 검증하는 건 등급 게이팅이지 체험이 아니다.
+        // 켜 두면 방금 register() 한 사용자가 전부 PRO 로 판정돼 FREE 분기가 실행되지 않는다.
+        "fitto.plan.trial-days=0"})
 @ActiveProfiles("test")
 class PlanFlowTest {
 
@@ -33,6 +37,8 @@ class PlanFlowTest {
     @Autowired
     AuthService authService;
     @Autowired
+    com.fitto.auth.service.AccountWithdrawalService withdrawalService;
+    @Autowired
     RelationService relationService;
     @Autowired
     PlanResolver planResolver;
@@ -40,6 +46,8 @@ class PlanFlowTest {
     PlanGuard planGuard;
     @Autowired
     SubscriptionRepository subscriptionRepository;
+    @Autowired
+    FeatureCreditRepository creditRepository;
 
     private Long register(String email) {
         return authService.register(
@@ -209,6 +217,109 @@ class PlanFlowTest {
         assertThat(state.allowed()).isTrue();
     }
 
+    @Test
+    void 무료가_막힌_기능은_상태조회도_업셀을_권한다() {
+        Long user = register("plan-state-free-blocked@fitto.com");
+
+        FeatureState state = planGuard.state(user, Feature.AI_COUPLE_EMOJI);
+        assertThat(state.allowed()).isFalse();
+        assertThat(state.upgradable()).isTrue();
+    }
+
+    @Test
+    void 유료가_한도를_다_쓰면_상태조회는_업셀을_권하지_않는다() {
+        // 실행 시점(429)과 같은 근거를 표시에도 준다. 이게 없어서 영구 PRO 계정이
+        // 우리 이모지 월 4회를 다 쓰면 "PRO에서 만들 수 있어요"가 떴다.
+        Long user = register("plan-state-pro-exhausted@fitto.com");
+        givePro(user, LocalDateTime.now().plusDays(30));
+        int limit = Feature.AI_COUPLE_EMOJI.quotaFor(Plan.PRO).limit();
+
+        for (int i = 0; i < limit; i++) {
+            planGuard.consume(user, Feature.AI_COUPLE_EMOJI);
+        }
+
+        FeatureState state = planGuard.state(user, Feature.AI_COUPLE_EMOJI);
+        assertThat(state.allowed()).isFalse();
+        assertThat(state.upgradable()).isFalse();
+    }
+
+    /* ── 크레딧 (V106) — 정액 밖에서 산 "한 세트 더" ───────────────────────── */
+
+    private FeatureCredit giveCredits(Long userId, Feature feature, int credits) {
+        return creditRepository.save(FeatureCredit.builder()
+                .userId(userId)
+                .feature(feature)
+                .store(Store.MANUAL)
+                .productId(CreditProduct.EMOJI_SET_1.productId())
+                .transactionId("credit-" + userId + "-" + System.nanoTime())
+                .credits(credits)
+                .build());
+    }
+
+    @Test
+    void 무료라_막힌_기능도_크레딧이_있으면_크레딧으로_열린다() {
+        Long user = register("plan-credit-free@fitto.com");
+        giveCredits(user, Feature.AI_COUPLE_EMOJI, 1);
+
+        // 표시도 판정도 같은 답 — 잠금이 아니고 잔여 1회, 그중 1회가 산 것
+        FeatureState before = planGuard.state(user, Feature.AI_COUPLE_EMOJI);
+        assertThat(before.allowed()).isTrue();
+        assertThat(before.remaining()).isEqualTo(1);
+        assertThat(before.credits()).isEqualTo(1);
+
+        assertThat(planGuard.consumeOrCredit(user, Feature.AI_COUPLE_EMOJI)).isEqualTo(PlanGuard.Charge.CREDIT);
+
+        FeatureState after = planGuard.state(user, Feature.AI_COUPLE_EMOJI);
+        assertThat(after.allowed()).isFalse();
+        assertThat(after.credits()).isZero();
+        // 다 쓰면 원래대로 402 — 크레딧이 플랜을 바꾸지는 않는다
+        assertThatThrownBy(() -> planGuard.consumeOrCredit(user, Feature.AI_COUPLE_EMOJI))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PLAN_UPGRADE_REQUIRED);
+    }
+
+    @Test
+    void 유료는_플랜_한도를_먼저_쓰고_넘치면_크레딧을_쓴다() {
+        Long user = register("plan-credit-pro@fitto.com");
+        givePro(user, LocalDateTime.now().plusDays(30));
+        giveCredits(user, Feature.AI_COUPLE_EMOJI, 1);
+        int limit = Feature.AI_COUPLE_EMOJI.quotaFor(Plan.PRO).limit();
+
+        for (int i = 0; i < limit; i++) {
+            assertThat(planGuard.consumeOrCredit(user, Feature.AI_COUPLE_EMOJI)).isEqualTo(PlanGuard.Charge.QUOTA);
+        }
+        // 한도를 다 쓴 뒤의 한 번은 크레딧에서 — 플랜 카운터는 한도 위로 남지 않는다
+        assertThat(planGuard.consumeOrCredit(user, Feature.AI_COUPLE_EMOJI)).isEqualTo(PlanGuard.Charge.CREDIT);
+        assertThat(planGuard.state(user, Feature.AI_COUPLE_EMOJI).used()).isEqualTo(limit);
+
+        assertThatThrownBy(() -> planGuard.consumeOrCredit(user, Feature.AI_COUPLE_EMOJI))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.USAGE_LIMIT_EXCEEDED);
+    }
+
+    @Test
+    void 크레딧으로_쓴_것은_크레딧으로_되돌린다() {
+        Long user = register("plan-credit-refund@fitto.com");
+        giveCredits(user, Feature.AI_COUPLE_EMOJI, 1);
+
+        PlanGuard.Charge charge = planGuard.consumeOrCredit(user, Feature.AI_COUPLE_EMOJI);
+        assertThat(charge).isEqualTo(PlanGuard.Charge.CREDIT);
+        planGuard.refund(user, Feature.AI_COUPLE_EMOJI, charge);
+
+        assertThat(planGuard.state(user, Feature.AI_COUPLE_EMOJI).credits()).isEqualTo(1);
+    }
+
+    @Test
+    void 크레딧이_있어도_탈퇴할_수_있다() {
+        // feature_credits 가 users FK 를 물고 있다 — subscriptions 와 같은 사고를 미리 막는다
+        Long user = register("plan-credit-withdraw@fitto.com");
+        giveCredits(user, Feature.AI_COUPLE_EMOJI, 2);
+
+        assertThatCode(() -> withdrawalService.purgeNow(user)).doesNotThrowAnyException();
+    }
+
     /* ── 탈퇴 (FK) ────────────────────────────────────────────────────────── */
 
     @Test
@@ -218,6 +329,6 @@ class PlanFlowTest {
         Long user = register("plan-withdraw@fitto.com");
         givePro(user, LocalDateTime.now().plusDays(30));
 
-        assertThatCode(() -> authService.withdraw(user)).doesNotThrowAnyException();
+        assertThatCode(() -> withdrawalService.purgeNow(user)).doesNotThrowAnyException();
     }
 }

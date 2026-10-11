@@ -1,5 +1,6 @@
 package com.fitto.feed.dto;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -24,6 +25,90 @@ public record FeedItemResponse(
         String imageUrl,
         LocalDateTime occurredAt,
         List<ReactionSummary> reactions,
-        List<String> imageUrls
+        List<String> imageUrls,
+        /**
+         * 데이트 식단(같이 먹기)으로 남긴 기록인지 — MEAL 타입에서만 참이 될 수 있다.
+         * 타임라인은 이런 끼니를 커플 한쪽 카드로 합쳐 내리므로({@code FeedService.timeline}),
+         * 화면은 "누가" 대신 "둘이 함께"로 읽어야 한다.
+         */
+        boolean shared,
+        /**
+         * 한 줄 요약 — 홈 열처럼 <b>한 줄만</b> 보여 주는 자리용. 카드 본문(title/content)은 그대로 둔다.
+         *
+         * <p>장소 방문·콘텐츠 관람은 "이름 ★4" 다. 그 둘의 {@code content} 는 "★★★★ 메모" 라, 메모가 없으면
+         * 한 줄 자리에 별만 남았다(2026-10-02). 나머지 타입은 예전 홈 규칙 그대로 content, 없으면 title.
+         * 예전 앱은 이 필드를 모른 채 무시한다.
+         */
+        String summary,
+        /**
+         * 일상 포스트의 기록일(KST, V119) — 이 일이 있었던 날. 올린 날({@code occurredAt})과 다르면 카드가
+         * "N월 N일의 일상"으로 알려 준다. 다른 타입은 null(제목·부제가 이미 날짜를 말한다).
+         */
+        LocalDate recordDate,
+        /** 일상 포스트를 고친 적이 있는가(V123) — 카드가 "수정됨"을 붙인다. 다른 타입은 false */
+        boolean edited,
+        /**
+         * 일상 포스트의 댓글 수(V124) — 카드가 "댓글 N"을 보여 준다. 다른 타입은 0.
+         * {@code FeedItemMapper.attachReactions} 가 반응과 함께 한 번에 채운다.
+         */
+        int commentCount,
+        /**
+         * 식사 카드에 붙은 장소 id — 부제의 "📍장소"를 누르면 그 장소 상세로 간다(2026-10-05, LOVEBODY_LOVELICHELIN_LINK P1-2).
+         * MEAL 타입에서만 값이 있다. 예전 앱은 이 필드를 모른 채 무시한다.
+         */
+        Long placeId
 ) {
+    /** 장소 id 가 없는 경우 — MEAL 외 전부, 그리고 예전 호출부 */
+    public FeedItemResponse(FeedItemType type, Long refId, Long userId, String userName, boolean mine,
+                            String title, String content, String imageUrl, LocalDateTime occurredAt,
+                            List<ReactionSummary> reactions, List<String> imageUrls, boolean shared, String summary,
+                            LocalDate recordDate, boolean edited, int commentCount) {
+        this(type, refId, userId, userName, mine, title, content, imageUrl, occurredAt, reactions, imageUrls, shared,
+                summary, recordDate, edited, commentCount, null);
+    }
+
+    /** 장소를 붙인다 — 식사 카드 */
+    public FeedItemResponse withPlaceId(Long id) {
+        return new FeedItemResponse(type, refId, userId, userName, mine, title, content, imageUrl, occurredAt,
+                reactions, imageUrls, shared, summary, recordDate, edited, commentCount, id);
+    }
+
+    /** 댓글 수를 아직 모르는 단계 — attachReactions 가 채운다 */
+    public FeedItemResponse(FeedItemType type, Long refId, Long userId, String userName, boolean mine,
+                            String title, String content, String imageUrl, LocalDateTime occurredAt,
+                            List<ReactionSummary> reactions, List<String> imageUrls, boolean shared, String summary,
+                            LocalDate recordDate, boolean edited) {
+        this(type, refId, userId, userName, mine, title, content, imageUrl, occurredAt, reactions, imageUrls, shared,
+                summary, recordDate, edited, 0);
+    }
+
+    /** 고침 표시가 없는 경우 — 일상 포스트 외 전부, 그리고 예전 호출부 */
+    public FeedItemResponse(FeedItemType type, Long refId, Long userId, String userName, boolean mine,
+                            String title, String content, String imageUrl, LocalDateTime occurredAt,
+                            List<ReactionSummary> reactions, List<String> imageUrls, boolean shared, String summary,
+                            LocalDate recordDate) {
+        this(type, refId, userId, userName, mine, title, content, imageUrl, occurredAt, reactions, imageUrls, shared,
+                summary, recordDate, false);
+    }
+
+    /** 기록일이 없는 타입 — 일상 포스트 외 전부 */
+    public FeedItemResponse(FeedItemType type, Long refId, Long userId, String userName, boolean mine,
+                            String title, String content, String imageUrl, LocalDateTime occurredAt,
+                            List<ReactionSummary> reactions, List<String> imageUrls, boolean shared, String summary) {
+        this(type, refId, userId, userName, mine, title, content, imageUrl, occurredAt, reactions, imageUrls, shared,
+                summary, null);
+    }
+
+    /** summary 를 따로 정하지 않는 타입 — content, 없으면 title */
+    public FeedItemResponse(FeedItemType type, Long refId, Long userId, String userName, boolean mine,
+                            String title, String content, String imageUrl, LocalDateTime occurredAt,
+                            List<ReactionSummary> reactions, List<String> imageUrls, boolean shared) {
+        this(type, refId, userId, userName, mine, title, content, imageUrl, occurredAt, reactions, imageUrls, shared,
+                content != null && !content.isBlank() ? content : title);
+    }
+
+    /** 장소·콘텐츠 한 줄 요약 — "이름 ★4", 별점이 없으면 이름만 */
+    public static String ratedSummary(String name, Integer rating) {
+        return rating != null ? name + " ★" + rating : name;
+    }
 }

@@ -38,7 +38,8 @@ class GeminiClientQuotaTest {
     private final UsageCounter usageCounter = mock(UsageCounter.class);
     private final GeminiProperties properties = new GeminiProperties();
     private final GeminiClient client =
-            new GeminiClient(properties, new ObjectMapper(), planGuard, usageCounter, new SimpleMeterRegistry());
+            new GeminiClient(properties, new ObjectMapper(), planGuard, usageCounter,
+                    new SimpleMeterRegistry(), mock(AiUsageRecorder.class));
 
     @BeforeEach
     void setUp() {

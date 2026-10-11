@@ -19,4 +19,9 @@ public interface CoupleEmojiRepository extends JpaRepository<CoupleEmoji, Long> 
     Optional<CoupleEmoji> findByIdAndRelationIdAndDeletedAtIsNull(Long id, Long relationId);
 
     List<CoupleEmoji> findAllByRelationIdAndBatchIdAndDeletedAtIsNull(Long relationId, String batchId);
+
+    /**
+     * 배경 따내기 백필 대상 — 숨긴 이모지도 포함한다. 채팅 메시지는 URL 을 복사해 두므로 숨긴 뒤에도 대화에 그려진다.
+     */
+    List<CoupleEmoji> findTop20ByBgRemovedIsNullOrderByIdAsc();
 }

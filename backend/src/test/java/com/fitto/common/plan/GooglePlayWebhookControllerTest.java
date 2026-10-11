@@ -34,6 +34,8 @@ class GooglePlayWebhookControllerTest {
     MockMvc mockMvc;
     @MockitoBean
     GooglePlaySubscriptionSyncService syncService;
+    @MockitoBean
+    FeatureCreditService creditService;
 
     @Test
     void 토큰이_없으면_403이고_동기화하지_않는다() throws Exception {
@@ -80,6 +82,46 @@ class GooglePlayWebhookControllerTest {
                         .content("{ \"message\": { \"data\": \"" + data + "\" } }"))
                 .andExpect(status().isOk());
         verify(syncService).sync(eq("test-purchase-token"));
+    }
+
+    /** 일회성 상품(크레딧)의 무효 결제 알림 — 예전엔 읽지 않아 환불받은 사람이 크레딧을 그대로 썼다(§7-2). */
+    @Test
+    void 일회성_상품_무효_알림은_크레딧_회수로_보낸다() throws Exception {
+        String data = encode("""
+                {
+                  "packageName": "com.fitto.app",
+                  "voidedPurchaseNotification": {
+                    "purchaseToken": "voided-token",
+                    "orderId": "GPA.0000",
+                    "productType": 2,
+                    "refundType": 1
+                  }
+                }
+                """);
+
+        mockMvc.perform(post(URL + "?token=test-secret")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{ \"message\": { \"data\": \"" + data + "\" } }"))
+                .andExpect(status().isOk());
+        verify(creditService).revokeIfVoidedOnGooglePlay("voided-token");
+        verify(syncService, never()).sync(anyString());
+    }
+
+    @Test
+    void 구독_무효_알림은_구독_동기화로_보낸다() throws Exception {
+        String data = encode("""
+                {
+                  "packageName": "com.fitto.app",
+                  "voidedPurchaseNotification": { "purchaseToken": "voided-sub", "productType": 1, "refundType": 1 }
+                }
+                """);
+
+        mockMvc.perform(post(URL + "?token=test-secret")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{ \"message\": { \"data\": \"" + data + "\" } }"))
+                .andExpect(status().isOk());
+        verify(syncService).sync("voided-sub");
+        verify(creditService, never()).revokeIfVoidedOnGooglePlay(anyString());
     }
 
     private String encode(String json) {

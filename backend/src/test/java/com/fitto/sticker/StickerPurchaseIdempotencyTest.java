@@ -1,0 +1,196 @@
+package com.fitto.sticker;
+
+import com.fitto.common.plan.GooglePlayDeveloperApiClient;
+import com.fitto.common.plan.GooglePlaySubscriptionState;
+import com.fitto.common.plan.GooglePlaySubscriptionSyncService;
+import com.fitto.common.plan.Plan;
+import com.fitto.common.plan.Store;
+import com.fitto.common.plan.Subscription;
+import com.fitto.common.plan.SubscriptionRepository;
+import com.fitto.common.plan.SubscriptionStatus;
+import com.fitto.user.domain.Role;
+import com.fitto.user.domain.User;
+import com.fitto.user.repository.UserRepository;
+import jakarta.persistence.EntityManager;
+import com.fitto.common.plan.StoreProductPurchase;
+import com.fitto.sticker.domain.UserStickerPurchase;
+import com.fitto.sticker.repository.UserStickerPurchaseRepository;
+import com.fitto.sticker.service.StickerPurchaseService;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.when;
+
+/**
+ * 같은 팩의 결제 검증이 <b>겹쳐 들어와도</b> 500 이 아니라 성공으로 끝나는가.
+ *
+ * <p>막는 사고는 이것이다 — 앱이 결제 후 검증을 두 번 보내면(연타·재시도·복원) 두 요청이
+ * 모두 "아직 없다"를 보고 INSERT 로 간다. unique 인덱스가 뒤의 하나를 막는 건 맞지만,
+ * <b>거기서 500 이 나가면 사용자는 "결제는 빠져나갔는데 에러"를 본다.</b> 팩은 이미 열려
+ * 있으므로 그건 거짓 실패다.
+ *
+ * <p><b>왜 스파이로 찌르나</b>: 실제 사고는 두 스레드가 나란히 달릴 때 나는데, 그걸 그대로
+ * 재현하면 타이밍에 기대는 깜빡이는 테스트가 된다. 대신 <b>먼저 들어온 요청이 이미 행을
+ * 남긴 상태</b>를 만들고 조회만 "없다"로 눌러, 뒤 요청이 실제로 밟는 경로(중복 INSERT →
+ * {@code DataIntegrityViolationException})를 결정적으로 태운다.
+ *
+ * <p>이 테스트는 {@code StickerPurchaseService.verifyGoogle} 에 {@code @Transactional} 이
+ * 붙어 있으면 <b>실패한다</b>. IDENTITY 채번이라 {@code save()} 가 즉시 INSERT 를 날리고,
+ * 위반이 나면 Hibernate 가 트랜잭션을 rollback-only 로 표시하기 때문이다 — 예외를 잡아도
+ * 커밋에서 {@code UnexpectedRollbackException} 이 뜬다. 그게 이 테스트가 지키는 것이다.
+ *
+ * <p><b>가입하지 않는다.</b> {@code user_sticker_purchases.user_id} 에는 FK 가 없고(V96)
+ * 이 경로는 사용자 행을 읽지도 않으므로, 그냥 쓰지 않는 id 를 쓴다. 굳이 가입시키면
+ * {@code AuthRateLimiter.checkRegister}(IP 기준 시간당 한도) 카운트를 같은 컨텍스트를
+ * 공유하는 다른 테스트와 나눠 쓰게 되어, 무관한 클래스가 429 로 무너진다 — 실제로 그렇게
+ * 깨뜨려 보고 되돌린 결정이다.
+ */
+@SpringBootTest(properties = {
+        "fitto.plan.free-trial=false",
+        "fitto.plan.trial-days=0"})
+@ActiveProfiles("test")
+class StickerPurchaseIdempotencyTest {
+
+    /**
+     * <b>이 테스트가 쓰는 유료 팩은 이 테스트가 만든다.</b>
+     *
+     * <p>예전에는 시드의 {@code MOOD_PREMIUM}(1,200원)을 빌려 썼는데, 2026-09-22 에 낱개
+     * 판매를 접으면서(V105) 시드에 값이 붙은 팩이 한 개도 없어졌다. 그러자 결제 <b>기계장치</b>를
+     * 보는 이 테스트가 <b>가격 정책</b> 때문에 깨졌다 — 서로 다른 두 가지가 묶여 있었던 것이다.
+     *
+     * <p>팩 행은 Flyway 시드로만 생긴다는 규칙({@code StickerPack} 주석)은 런타임 경로에 대한
+     * 것이라, 테스트가 픽스처를 네이티브 SQL 로 직접 넣는 것과 어긋나지 않는다.
+     */
+    private static final String PACK = "TEST_PAID_PACK";
+    private static final String PRODUCT_ID = "sticker_pack_test_paid_pack";
+
+    /** 가입 없이 쓰는 합성 id — 다른 테스트와 겹치지 않게 멀리 떨어뜨린다 */
+    private static final long USER_DUP = 990_001L;
+    private static final long USER_REPLAY = 990_002L;
+
+    @Autowired StickerPurchaseService purchaseService;
+    @Autowired JdbcTemplate jdbc;
+
+    /**
+     * 유료 팩 픽스처를 넣는다 — 같은 H2 를 공유하는 다른 클래스에도 보이지만, id 가
+     * {@code TEST_} 로 시작해 어느 카탈로그(앱·서버 enum)에도 없으므로 판정에 걸리지 않는다.
+     *
+     * <p>JdbcTemplate 을 쓰는 이유가 둘이다 — 테스트 메서드에 트랜잭션이 없어 JPA 의
+     * {@code executeUpdate} 는 못 쓰고, H2 전용 {@code MERGE} 를 피해야 PostgreSQL 로 돌릴 때도
+     * 같은 코드가 돈다(docs/RUNNING.md). 이미 있으면 넣지 않는다 — 팩을 지우면 앞선 메서드가
+     * 남긴 구매 행의 FK 에 걸린다.
+     */
+    @BeforeEach
+    void 유료_팩을_하나_만든다() {
+        Integer exists = jdbc.queryForObject(
+                "select count(*) from sticker_packs where id = ?", Integer.class, PACK);
+        if (exists != null && exists > 0) return;
+        jdbc.update("insert into sticker_packs (id, title, category, is_pro_only, price)"
+                + " values (?, ?, 'IMAGE', false, 1200)", PACK, "테스트 유료 팩");
+    }
+
+    /** 실제 빈을 감싼다 — 저장은 진짜 DB 로 가고, 조회만 눌러 중복 경로를 만든다 */
+    @MockitoSpyBean UserStickerPurchaseRepository purchaseRepository;
+    /** 스토어 키가 없는 테스트 환경에서는 실제 클라이언트가 null 을 돌려준다 */
+    @MockitoBean GooglePlayDeveloperApiClient googlePlayClient;
+
+    /*
+     * 구독 검증도 같은 사고를 겪어서 여기 함께 둔다 — 새 클래스로 빼면 빈 교체 조합이 달라 스프링 컨텍스트가
+     * 하나 더 생긴다(CLAUDE.md 6절, 2026-09-22 OOM). 스파이·모킹 대상이 이미 이 클래스에 모여 있다.
+     */
+    @MockitoSpyBean SubscriptionRepository subscriptionRepository;
+    @Autowired GooglePlaySubscriptionSyncService subscriptionSync;
+    @Autowired UserRepository userRepository;
+    /** 재시도 조회를 실제 DB 로 보내는 통로 — 인터페이스 스파이는 실제 메서드를 부를 수 없다 */
+    @Autowired EntityManager em;
+
+    /**
+     * 같은 구독 영수증이 겹쳐 들어온 경우 — 검증 연타, 또는 검증 API 와 웹훅(RTDN)이 같은 순간에 도착.
+     *
+     * <p>예전엔 sync 전체가 한 트랜잭션이라 INSERT 가 커밋 때에야 나갔고, 늦은 쪽의 유니크 위반이 메서드
+     * 밖에서 터져 500 이 됐다 — PRO 는 이미 들어가 있는데 앱은 "구매를 확인하지 못했어요"를 띄웠다
+     * (docs/my-current-state.md §7-2). 위 팩 테스트와 같은 방식으로, 먼저 들어온 요청이 이미 행을 남긴
+     * 상태에서 첫 조회만 "없다"로 눌러 뒤 요청의 실제 경로(중복 INSERT → 재시도)를 결정적으로 태운다.
+     *
+     * <p>사용자는 리포지토리로 직접 만든다 — {@code subscriptions.user_id} 에 FK 가 있고, 가입 API 는
+     * IP 한도를 다른 클래스와 나눠 쓴다(위 클래스 주석).
+     */
+    @Test
+    void 구독_검증이_겹쳐_들어와도_성공으로_끝나고_먼저_생긴_행에_반영한다() {
+        Long userId = userRepository.save(User.builder()
+                .email("sub-race@fitto.com").name("U").role(Role.USER).build()).getId();
+        String token = "sub-race-token";
+        LocalDateTime renewedUntil = LocalDateTime.now().plusDays(30).truncatedTo(ChronoUnit.SECONDS);
+        when(googlePlayClient.fetch(token))
+                .thenReturn(new GooglePlaySubscriptionState(SubscriptionStatus.ACTIVE, "pro_monthly",
+                        renewedUntil, true, userId));
+
+        // 먼저 들어온 요청이 이미 행을 남겼다
+        subscriptionRepository.save(Subscription.builder()
+                .userId(userId).plan(Plan.PRO).status(SubscriptionStatus.ACTIVE).store(Store.GOOGLE_PLAY)
+                .productId("pro_monthly").purchaseToken(token)
+                .expiresAt(LocalDateTime.now().plusDays(1)).build());
+
+        // 뒤 요청의 첫 조회는 그 행을 아직 못 본다. 재시도 때는 실제 DB 에서 그 행을 찾는다 — 재시도 트랜잭션의
+        // 영속성 컨텍스트로 읽으므로, sync 가 바꾼 상태가 커밋에 실린다(실제 finder 와 같은 조건)
+        doReturn(Optional.empty())
+                .doAnswer(inv -> em.createQuery(
+                                "select s from Subscription s where s.purchaseToken = :t", Subscription.class)
+                        .setParameter("t", token).getResultStream().findFirst())
+                .when(subscriptionRepository).findByPurchaseToken(token);
+
+        assertThatCode(() -> subscriptionSync.sync(token)).doesNotThrowAnyException();
+
+        // 스텁을 지나 DB 를 직접 본다 — 행은 하나이고, 늦은 요청이 가져온 만료일로 갱신돼 있어야 한다
+        List<LocalDateTime> expiries = jdbc.queryForList(
+                "select expires_at from subscriptions where purchase_token = ?", LocalDateTime.class, token);
+        assertThat(expiries).containsExactly(renewedUntil);
+    }
+
+    @Test
+    void 검증이_겹쳐_들어와도_성공으로_끝나고_행은_하나다() {
+        when(googlePlayClient.fetchProduct(anyString(), anyString()))
+                .thenReturn(new StoreProductPurchase(PRODUCT_ID, USER_DUP, true));
+
+        // 먼저 들어온 검증이 이미 행을 남겼다
+        purchaseRepository.save(UserStickerPurchase.builder()
+                .userId(USER_DUP).stickerPackId(PACK).transactionId("tx-first").build());
+
+        // 뒤 요청은 그 행을 아직 못 본다 — 실제 동시 요청이 겪는 상태
+        doReturn(Optional.empty()).when(purchaseRepository).findByUserIdAndStickerPackId(USER_DUP, PACK);
+
+        assertThatCode(() -> purchaseService.verifyGoogle(USER_DUP, PACK, "purchase-token"))
+                .doesNotThrowAnyException();
+
+        // 스텁을 건 건 finder 하나뿐이라 나머지는 실제 빈으로 내려간다 — 두 줄이 되면 안 된다
+        assertThat(purchaseRepository.findPackIdsByUserIds(List.of(USER_DUP)))
+                .containsExactly(PACK);
+    }
+
+    @Test
+    void 같은_요청을_두_번_보내도_멱등이다() {
+        when(googlePlayClient.fetchProduct(anyString(), anyString()))
+                .thenReturn(new StoreProductPurchase(PRODUCT_ID, USER_REPLAY, true));
+
+        purchaseService.verifyGoogle(USER_REPLAY, PACK, "purchase-token");
+        assertThatCode(() -> purchaseService.verifyGoogle(USER_REPLAY, PACK, "purchase-token"))
+                .doesNotThrowAnyException();
+
+        assertThat(purchaseRepository.findPackIdsByUserIds(List.of(USER_REPLAY))).containsExactly(PACK);
+    }
+}

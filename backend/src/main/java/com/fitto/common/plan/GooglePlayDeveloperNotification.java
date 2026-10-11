@@ -13,7 +13,17 @@ public record GooglePlayDeveloperNotification(
         String packageName,
         String eventTimeMillis,
         SubscriptionNotification subscriptionNotification,
+        VoidedPurchaseNotification voidedPurchaseNotification,
         TestNotification testNotification) {
+
+    /**
+     * 결제가 무효가 됐다(환불·지불 거절·취소) — 구독과 일회성 상품 모두 온다.
+     *
+     * @param productType 1 = 구독, 2 = 일회성 상품
+     * @param refundType  1 = 전액, 2 = 부분(번들 일부)
+     */
+    public record VoidedPurchaseNotification(String purchaseToken, String orderId, int productType, int refundType) {
+    }
 
     /** 정기결제 관련 알림. notificationType 코드는 참고용으로만 남기고 분기에는 쓰지 않는다. */
     public record SubscriptionNotification(int notificationType, String purchaseToken, String subscriptionId) {

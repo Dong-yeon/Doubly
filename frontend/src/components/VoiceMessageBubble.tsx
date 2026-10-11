@@ -10,8 +10,8 @@ import { Pressable, Text } from 'react-native';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { MaterialCommunityIcons } from './Icon';
 import { formatVoiceDuration } from '../utils/chatVoice';
-import { colors, radius, spacing } from '../constants/theme';
-import { themedStyles } from '../theme/themedStyles';
+import { radius, spacing } from '../constants/theme';
+import { chatThemedStyles } from '../theme/themedStyles';
 
 interface Props {
   url: string;
@@ -49,14 +49,20 @@ export function VoiceMessageBubble({ url, durationSec, mine }: Props) {
       <MaterialCommunityIcons
         name={status.playing ? 'pause-circle' : 'play-circle'}
         size={32}
-        color={mine ? colors.white : colors.primary}
+        color={mine ? styles.durationMine.color : styles.duration.color}
       />
       <Text style={[styles.duration, mine && styles.durationMine]}>{formatVoiceDuration(remaining)}</Text>
     </Pressable>
   );
 }
 
-const styles = themedStyles((colors) => ({
+/*
+ * 채팅 배경 테마를 따른다(2026-10-02). 그전에는 앱 팔레트(primary + 흰 글자 / surfaceAlt)라서
+ * 로즈·인디고 방에서도 음성 말풍선만 초록이었고, 다크에서는 흰 글자 대 primary 가 3.28 로 AA 미달이었다
+ * (docs/THEME_ICON_ANALYSIS_2026-10-01.md §1-2). 글 말풍선과 같은 네 토큰을 쓰므로 대비는
+ * verify:chat-theme 이 이미 잰 쌍 그대로다 — 아이콘도 글자색을 따라 새 색을 지어내지 않는다.
+ */
+const styles = chatThemedStyles((chat) => ({
   bubble: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -66,8 +72,8 @@ const styles = themedStyles((colors) => ({
     borderRadius: radius.lg,
     minWidth: 96,
   },
-  bubbleMine: { backgroundColor: colors.primary, borderBottomRightRadius: 6 },
-  bubbleTheirs: { backgroundColor: colors.surfaceAlt, borderBottomLeftRadius: 6 },
-  duration: { fontSize: 13, fontWeight: '700', color: colors.textPrimary },
-  durationMine: { color: colors.white },
+  bubbleMine: { backgroundColor: chat.bubbleMine, borderBottomRightRadius: 6 },
+  bubbleTheirs: { backgroundColor: chat.bubbleTheirs, borderBottomLeftRadius: 6 },
+  duration: { fontSize: 13, fontWeight: '700', color: chat.bubbleTheirsText },
+  durationMine: { color: chat.bubbleMineText },
 }));

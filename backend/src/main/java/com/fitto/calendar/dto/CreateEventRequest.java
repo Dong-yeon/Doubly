@@ -1,6 +1,7 @@
 package com.fitto.calendar.dto;
 
 import com.fitto.calendar.domain.EventType;
+import com.fitto.calendar.domain.EventVisibility;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -23,7 +24,18 @@ public record CreateEventRequest(
 
         boolean repeatYearly,
 
+        /** 공개 범위 — 생략하면 우리 일정(SHARED). 지금까지의 모든 일정이 그랬다 */
+        EventVisibility visibility,
+
         @Size(max = 500)
         String memo
 ) {
+    /**
+     * 공개 범위가 없던 시절의 형태 — 생략은 "우리 일정"을 뜻한다(JSON 에서 필드를 빼는 것과 같다).
+     * 개인 일정과 무관한 호출부가 인자 하나를 더 끌고 다니지 않게 남겨 둔다.
+     */
+    public CreateEventRequest(String title, LocalDate eventDate, LocalDate endDate,
+                              EventType eventType, boolean repeatYearly, String memo) {
+        this(title, eventDate, endDate, eventType, repeatYearly, null, memo);
+    }
 }

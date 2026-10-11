@@ -30,6 +30,7 @@ import React from 'react';
 import { View, type StyleProp, type ViewStyle } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useNavigation } from '@react-navigation/native';
+import { isCoarsePointer } from '../utils/pointer';
 
 const DISMISS_DISTANCE = 80;
 const DISMISS_VELOCITY = 800;
@@ -48,6 +49,13 @@ export function SwipeBackView({
   };
 
   const pan = Gesture.Pan()
+    /*
+     * 마우스에서는 끈다. PC 에서 이 제스처는 발견할 수도 없고(스와이프를 아무도
+     * 시도하지 않는다), 메시지를 긁어 복사하려는 오른쪽 드래그가 그대로 "뒤로 가기"로
+     * 먹혔다. 데스크톱에는 헤더 뒤로가기 버튼과 브라우저 뒤로가기(navigation/linking.ts)가
+     * 이미 있어 잃는 게 없다. 같은 웹이라도 모바일 브라우저는 coarse 라 그대로 남는다.
+     */
+    .enabled(isCoarsePointer())
     // 리액트 훅이 아니라 일반 콜백이라 JS 스레드에서 그대로 돌려도 된다 —
     // navigation.goBack() 은 UI(워클릿) 스레드에서 직접 부를 수 없는 JS 전용 API다.
     .runOnJS(true)

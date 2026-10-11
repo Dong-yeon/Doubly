@@ -3,12 +3,18 @@ package com.fitto.diet.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fitto.common.ai.GeminiClient;
+import com.fitto.common.exception.BusinessException;
+import com.fitto.common.plan.Feature;
 import com.fitto.diet.dto.MealAnalysisResponse;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -81,5 +87,21 @@ class FoodAnalysisResponseMappingTest {
         MealAnalysisResponse response = service.analyzeText(1L, "계란 하나");
 
         assertThat(response.source()).isEqualTo("NUTRITION_LABEL");
+    }
+
+    /**
+     * 사진을 받지 못하면 한도를 돌려준다(LOVEBODY_REVIEW §3 A-5) — 차감 직후 다운로드가 실패하면 예전엔
+     * Gemini 를 한 번도 못 부르고 AI_FOOD_PHOTO 만 깎였다. 여기선 Cloudinary 가 아닌 주소로
+     * INVALID_PHOTO_URL 을 낸다(네트워크 없이 재현되는 다운로드 실패).
+     */
+    @Test
+    void 사진을_받지_못하면_차감한_한도를_돌려주고_분석은_부르지_않는다() {
+        assertThatThrownBy(() -> service.analyze(7L, "https://example.com/not-cloudinary.jpg"))
+                .isInstanceOf(BusinessException.class);
+
+        var order = inOrder(geminiClient);
+        order.verify(geminiClient).requireConfiguredAndCountUsage(7L, Feature.AI_FOOD_PHOTO);
+        order.verify(geminiClient).refund(7L, Feature.AI_FOOD_PHOTO);
+        verify(geminiClient, never()).generateJsonInBackground(any(), any(), any(), any());
     }
 }

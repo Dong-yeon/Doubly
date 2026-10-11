@@ -1,0 +1,13 @@
+# 앱이 읽는 장애 공지 파일 — docs/INCIDENT_NOTICE_2026-09-30.md
+# no-cache: 공지를 올리고 내리는 즉시 반영돼야 한다(CDN·브라우저 캐시 금지).
+# CORS: 앱 웹 버전은 별개 Netlify 사이트(다른 오리진)에서 이 파일을 fetch 한다.
+/status.json
+  Cache-Control: no-cache, no-store, must-revalidate
+  Access-Control-Allow-Origin: *
+  Content-Type: application/json; charset=utf-8
+# App Links·Universal Links 검증 파일 — OS 가 앱 설치 때 읽는다(docs/first-experience-audit.md #2 2단계).
+# AASA 는 확장자가 없어 Content-Type 을 직접 준다. 리다이렉트 없이 200 이어야 한다.
+/.well-known/apple-app-site-association
+  Content-Type: application/json
+/.well-known/assetlinks.json
+  Content-Type: application/json

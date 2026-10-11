@@ -51,18 +51,23 @@ public class ContentLog {
     @Column(name = "image_url", length = 500)
     private String imageUrl;
 
+    /** 어디서 봤는지(V133, 선택) — places.id. 장소를 지우면 DB 가 null 로 비운다(ON DELETE SET NULL) */
+    @Column(name = "place_id")
+    private Long placeId;
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
     @Builder
     private ContentLog(Long contentId, Long loggedBy, LocalDate watchedAt,
-                       Integer rating, String memo, String imageUrl) {
+                       Integer rating, String memo, String imageUrl, Long placeId) {
         this.contentId = contentId;
         this.loggedBy = loggedBy;
         this.watchedAt = watchedAt != null ? watchedAt : KstClock.today();
         this.rating = rating;
         this.memo = memo;
         this.imageUrl = imageUrl;
+        this.placeId = placeId;
     }
 }

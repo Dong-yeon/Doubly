@@ -88,18 +88,54 @@ dependencies {
 tasks.named('test') {
     useJUnitPlatform()
 
+    /*
+     * 테스트 JVM 힙 — Gradle 기본값(512MB)으로는 모자란다.
+     *
+     * 왜: 이 스위트는 @SpringBootTest 가 대부분이고, properties·@MockitoBean 조합이 다르면
+     * 스프링이 <b>컨텍스트를 새로 만들어 캐시에 쌓아둔다</b>(같은 JVM 에서 끝까지 살아 있다).
+     * 테스트가 늘수록 캐시된 컨텍스트가 늘고, 그 안의 Hikari 풀·EntityManagerFactory·
+     * HttpClient 셀렉터 스레드가 함께 산다. 2026-09-22 에 컨텍스트가 하나 더 생기자
+     * (StickerPurchaseIdempotencyTest) 512MB 를 넘겨 <b>CI 가 OutOfMemoryError 로 빨개졌다</b> —
+     * 터진 테스트가 원인이 아니라 그 시점에 마지막 한 칸을 넘긴 것뿐이라, 테스트를 지우는
+     * 것은 답이 아니다(다음에 추가되는 테스트가 같은 자리에서 또 터진다).
+     *
+     * 2g 인 근거: GitHub Actions 러너가 16GB 이고 로컬 개발 PC 도 그 언저리다. 넉넉히 주되
+     * 러너 메모리를 다 물지는 않는 값이다. 여기가 다시 모자라면 힙을 더 키우기 전에
+     * <b>컨텍스트 가짓수</b>를 먼저 본다 — properties 를 조금씩 다르게 준 테스트가 범인이다.
+     */
+    maxHeapSize = '2g'
+
+    /*
+     * 테스트 JVM 의 기본 시간대를 KST 로 고정한다.
+     *
+     * 왜: 운영 코드는 "오늘"을 KstClock(Asia/Seoul)으로 판단하는데, 테스트는 존 없는
+     * LocalDate.now() 로 날짜를 만든다(229곳). 개발 PC 는 KST 라 둘이 같지만 CI 러너는
+     * UTC 라, 15:00~24:00 UTC(= 한국 00:00~09:00)에는 테스트가 만든 "오늘"이 서비스가
+     * 보는 "오늘"보다 하루 이르다 → "오늘_…" 계열 20여 건이 통째로 깨진다. 실제로
+     * 2026-09-15 까지 그 시간대의 CI 런은 전부 빨갛고(22~23시 UTC 8실패/1성공),
+     * 자정을 넘기면 같은 커밋이 그대로 초록이었다. 한국 새벽~오전에 올린 커밋은 무조건
+     * 빨갛게 보였다는 뜻이다.
+     *
+     * 왜 이게 맞는 해결인가: 이 앱의 "하루"는 정의상 KST 다(KstClock 주석). 테스트 시계를
+     * 운영 시계에 맞추는 것이지, 실패를 가리는 게 아니다. 대신 이렇게 고정하면 운영 코드가
+     * 존 없는 now() 를 쓰는 진짜 버그를 덮을 수 있으므로 KstClockGuardTest 가 그걸 막는다.
+     * 같은 테스트가 이 고정이 실제로 먹었는지도 검증한다(CI 가 UTC 이므로 거기서 증명된다).
+     */
+    systemProperty 'user.timezone', 'Asia/Seoul'
+
     // `-Dspring.*` 를 테스트 JVM 으로 넘긴다 — 데이터소스를 갈아끼워 돌리기 위한 통로다.
     // 기본은 H2 지만 운영은 PostgreSQL 이고, 둘은 SQL 해석이 달라
     // H2 에서 통과한 쿼리가 운영에서만 500 을 내는 일이 실제로 있었다(피드 타임라인).
     // 실행법은 docs/RUNNING.md 참고.
     systemProperties System.getProperties().findAll { k, v -> k.toString().startsWith('spring.') }
 
-    // 동기화 테스트(PlanFeatureSyncTest·PolicyVersionSyncTest·StickerImageSyncTest)는 프론트 소스를
+    // 동기화 테스트(PlanFeatureSyncTest·PolicyVersionSyncTest·StickerImageSyncTest·StoreProductIdSyncTest·ClientAnalyticsEventSyncTest)는 프론트 소스를
     // 읽어 백엔드 enum 과 대조한다. Gradle 이 그 파일을 입력으로 모르면 프론트만 고쳤을 때 test 태스크가
     // UP-TO-DATE 로 건너뛰고, 어긋난 채 로컬에서 조용히 통과한다(CI 는 새 체크아웃이라 늘 돈다).
     // 여기 적힌 파일이 바뀌면 테스트를 다시 돌린다 — 새 동기화 테스트를 추가하면 경로도 같이 추가할 것.
     inputs.files(
-            ['src/types/index.ts', 'src/constants/legal.ts', 'src/constants/stickerImages.ts']
+            ['src/types/index.ts', 'src/constants/legal.ts', 'src/constants/stickerImages.ts',
+             'src/constants/config.ts', 'src/api/analytics.ts']
                     .collect { file("../frontend/$it") }
                     .findAll { it.exists() }
     ).withPropertyName('frontendSyncSources').optional()

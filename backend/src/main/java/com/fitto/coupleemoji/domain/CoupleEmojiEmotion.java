@@ -1,7 +1,11 @@
 package com.fitto.coupleemoji.domain;
 
 /**
- * 우리 이모지 감정 17종 — 사용자가 고르지 않는다. 사진 한 장 → 세트 한 벌.
+ * 우리 이모지 감정 23종(표정 6 + 자주 하는 말 6 + 상황 11) — 사진 한 장으로 여러 번 나눠 만든다.
+ *
+ * <p><b>2026-09-29: "자주 하는 말" 6종 추가</b>(미안해·고마워·보고싶어·잘자·배고파·화이팅). 커플 대화에서 가장 자주
+ * 쓰는 말인데 17종에 없었다 — 스티커 추천 키워드를 짤 때 맞는 그림이 없던 말들이다(docs/STICKER_SUGGEST_REVIVE_2026-09-28.md).
+ * 표정 바로 뒤에 둬서, "아직 없는 것부터" 기본값으로 두 번째 세트(6장)가 정확히 이 여섯이 된다.
  *
  * <p>앞의 <b>표정 6종</b>은 기존 무드 12종({@code moodEmojis.ts})과 겹치는 결로 골랐고
  * (빡침·행복·신남·슬픔·졸림 + 사랑), 뒤의 <b>상황 11종</b>은 커플 대화에서 실제로 자주 쓰는
@@ -27,6 +31,24 @@ public enum CoupleEmojiEmotion {
             "sleepy: eyes closed, yawning, head tilted, \"zzz\" letters floating above"),
     LOVE("사랑", "🥰",
             "in love: heart-shaped eyes, blushing, hands making a finger heart, small hearts floating around"),
+
+    /*
+     * 자주 하는 말 6종(2026-09-29) — 표정만으로는 안 되는, 말을 대신하는 그림. 상황과 같은 규칙으로
+     * 소품은 가슴 위로 들어오는 것만, 옷은 사진 그대로(앵커 OUTFIT) — 수면 모자처럼 덧붙이는 것만 쓴다.
+     * moodEmoji 는 무료 12종 안에서 고른다(아래 moodEmoji 주석). 무드 피커에는 기본으로 올리지 않는다.
+     */
+    SORRY("미안해", "😔",
+            "apologizing: both palms pressed together in front of the chest, eyebrows drawn up in apology, a small guilty smile, a single sweat drop on the temple"),
+    THANKS("고마워", "🥰",
+            "grateful: a small polite bow with both hands placed over the heart, warm closed-eye smile, a few tiny sparkles"),
+    MISS_YOU("보고싶어", "😔",
+            "missing someone: hugging a small heart-shaped cushion to the chest, wistful longing eyes looking slightly upward, a little pout"),
+    GOOD_NIGHT("잘자", "😴",
+            "saying good night: wearing a soft sleeping cap, holding a small pillow under one arm, gentle sleepy smile, one hand giving a small wave"),
+    HUNGRY("배고파", "🫠",
+            "starving: holding a spoon and chopsticks up in both hands, sparkling eager eyes, mouth watering with a tiny drool, a small rice bowl floating beside the face"),
+    CHEER("화이팅", "🥳",
+            "cheering you on: one fist raised high in a 'fighting!' pose, bright determined grin, small starburst lines around"),
 
     /*
      * 상황 11종(2026-09-10 추가) — 위 6종이 순수한 "표정"이라면 이쪽은 <b>소품이 있는 상황</b>이다.
@@ -80,9 +102,32 @@ public enum CoupleEmojiEmotion {
      *
      * <p><b>확장팩(PRO) 이모지를 쓰면 안 된다</b> — {@code MoodService.set} 이 {@code MoodPack.isPremium}
      * 으로 PRO 판정을 하므로, 무료 사용자가 자기 우리 이모지를 무드로 걸 때 402 가 난다.
+     *
+     * <p><b>같은 뜻은 표정 6종({@link #isFace})뿐이다.</b> 나머지는 12종 안에 맞는 게 없어 가장 가까운 것을
+     * 고른 대역이라(배고파 → 🫠 녹음, 열일 → 🤔 고민) 이 값을 사람에게 "이 기분"이라고 보여 주면 어긋난다 —
+     * 글자로 보여 줄 자리는 {@link #moodText} 를 쓴다.
      */
     public String moodEmoji() {
         return moodEmoji;
+    }
+
+    /**
+     * 무드 기본 12종과 <b>같은 뜻</b>인 표정인가 — 표정 6종만. 앱의 {@code isFaceEmotion}
+     * (constants/coupleEmojiEmotions.ts)과 같은 집합이고, 무드 시트에서 기본 칸을 덮는 것도 이것뿐이다.
+     */
+    public boolean isFace() {
+        return switch (this) {
+            case ANGRY, HAPPY, EXCITED, SAD, SLEEPY, LOVE -> true;
+            default -> false;
+        };
+    }
+
+    /**
+     * 이 감정을 무드로 걸었을 때 글자 자리(푸시 본문)에 쓸 말 — 표정이면 대역 이모지, 아니면 이름.
+     * 예전엔 늘 대역을 실어서 "배고파"를 건 사람의 상대가 "지금 기분: 🫠"을 받았다(2026-10-07).
+     */
+    public String moodText() {
+        return isFace() ? moodEmoji : label;
     }
 
     /** 한국어 라벨 — 알림 미리보기·트레이 툴팁용 */
@@ -98,15 +143,12 @@ public enum CoupleEmojiEmotion {
     /**
      * 새로 만든 장을 무드 피커에 바로 올릴 것인가 — {@code couple_emojis.mood_visible} 의 초기값.
      *
-     * <p><b>표정 6종만 켜고 상황 11종은 끈다.</b> 무드는 "지금 내 기분"인데 출근·마스크팩·화장은
+     * <p><b>표정 6종만 켜고 자주 하는 말 6종·상황 11종은 끈다.</b> 무드는 "지금 내 기분"인데 출근·마스크팩·화장은
      * 기분이 아니라 활동이고, 전부 올리면 무드 선택지가 기본 12 + 17 = 29개가 된다 —
      * {@code moodEmojis.ts} 의 12종 원칙이 "처음부터 다 만들면 선택 마비만 생긴다"에서 나왔다.
      * 쓰고 싶으면 켜서 올린다(트레이에서 길게 눌러 토글).
      */
     public boolean defaultMoodVisible() {
-        return switch (this) {
-            case ANGRY, HAPPY, EXCITED, SAD, SLEEPY, LOVE -> true;
-            default -> false;
-        };
+        return isFace();
     }
 }

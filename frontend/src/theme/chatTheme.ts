@@ -1,0 +1,594 @@
+/**
+ * 채팅방 배경 테마 — <b>채팅 화면에서만</b> 쓰는 별도 팔레트.
+ *
+ * <p><b>왜 앱 팔레트({@link ./colors})와 분리했나</b>: 앱 전체 색은 나/상대/함께를
+ * 구분하는 <b>의미</b>를 지고 있어서(me=코랄, partner=하늘 …) 취향으로 갈아끼울 수
+ * 없다. 반면 채팅방 배경은 카톡처럼 순전히 취향 문제다. 둘을 한 팔레트에 섞으면
+ * "핑크 배경을 골랐더니 기록 화면의 소유자 색이 같이 바뀐다"가 되므로 아예 나눈다.
+ *
+ * <p><b>왜 배경 하나가 아니라 한 묶음인가</b>: 배경만 바꾸면 그 위에 <b>말풍선 없이</b>
+ * 얹혀 있는 것들이 전부 깨진다 — 시간(10px)·"보내는 중"·"수정됨"·날짜 구분선, 그리고
+ * 상대 말풍선(기존 surfaceAlt #F1F2F0 은 거의 흰색이라 연한 틴트 배경에 묻힌다).
+ * 그래서 테마 하나가 {배경, 내 말풍선, 상대 말풍선, 글자, 구분선}을 통째로 갖는다.
+ *
+ * <p><b>두 계열이 있다</b>: 연한 배경 + 색 있는 내 말풍선(기본·로즈·스카이·라벤더·피치·민트)과,
+ * <b>진한 배경 + 연한 말풍선</b>(차콜·포레스트·인디고·플럼). 뒤쪽은 말풍선 글자가 흰색이
+ * 아니라 어두운 색이라 대비 계산의 방향이 반대다 — 검증 규칙은 색 쌍만 보므로 그대로 통과한다.
+ *
+ * ── 대비 검증 (scripts/verify-chat-theme-contrast.mjs 로 재현) ─────────────
+ * 10종 × 라이트/다크 모두 아래 기준을 통과한다.
+ *   내 말풍선 위 흰 글자 ≥ 4.5 · 상대 말풍선 글자 ≥ 4.5 · 배경 위 meta ≥ 4.5
+ *   상대 말풍선 vs 배경 ≥ 1.10 · 구분선 vs 배경 ≥ 1.18 · 강조 행 vs 배경 ≥ 1.20
+ *   입력칸 글자·플레이스홀더 ≥ 4.5 · 입력칸 vs 입력바 ≥ 1.10(목표 3:1, 진한 배경 8벌만 닿는다) ·
+ *   안 읽음 하트 vs 배경 ≥ 3
+ *
+ * <p><b>강조 행(highlight) 은 2026-09-18 까지 검증 대상이 아니었다</b> — 그래서 20벌 중
+ * 절반이 기준 미달이었고, 기본/다크는 1.02 로 <b>사실상 보이지 않았다</b>(게다가 혼자만
+ * 배경보다 어두운 방향이었다). 검색에서 골라 온 메시지를 짚어 주는 것이 이 색의 유일한
+ * 일이라, 안 보이면 기능이 없는 것과 같다. 열두 벌의 값을 올리고 규칙을 추가했다.
+ *
+ * <p><b>고르는 자리는 채팅방 안이다</b>(2026-09-23). 그전에는 설정에 앱 테마·액센트와
+ * 나란히 있었는데, 같은 높이에 색 목록이 둘이라 "왜 색을 두 번 고르지"가 됐다. 둘은
+ * 층이 다르다 — 액센트는 앱 정체성(3종), 이건 방 취향(10종)이다. 카톡·라인도 배경은
+ * 방 안에서 고른다. 옮기면서 액센트와 겹치던 라벨 둘(민트·피치)도 실제 색에 맞게 바꿨다.
+ *
+ * <p>앱 기본 팔레트를 그대로 옮긴 'default' 는 두 군데가 기준 미달이라
+ * <b>채팅에서만</b> 값을 고쳤다(앱 전체 primary/textTertiary 는 안 건드린다).
+ * <ul>
+ *   <li>meta: textTertiary(#767C76)가 배경 #FAFAF9 위에서 4.09 → #6A706A 로 4.86</li>
+ *   <li>다크 내 말풍선: primary(#3E8E6B) 위 흰 글자가 3.97 → #2F7A55 로 5.20.
+ *       colors.ts 의 primary 는 "버튼 배경"과 "링크 글자"를 겸해 밝기를 낮출 수 없지만
+ *       (그 파일 primary 주석 참고), 말풍선은 버튼 역할만 하므로 여기서는 낮출 수 있다.</li>
+ * </ul>
+ * <p>'default' 의 상대 말풍선은 원래 앱 팔레트의 {@code surfaceAlt}(#F1F2F0) 였고, 배경
+ * #FAFAF9 위에서 대비가 <b>1.08</b> 이라 말풍선 경계가 거의 사라졌다. 기존 출시값이라
+ * 면제로 두고 있었는데(2026-09-18 까지), 기본 테마라 <b>대부분이 보는 화면</b>이어서
+ * 고쳤다 — #E9EAE7 로 1.16. 흰색으로 올리는 방향은 오히려 나빠진다(1.04): 배경이 이미
+ * 흰색에 가까우므로 말풍선은 <b>어두워져야</b> 갈린다(iMessage 의 회색 말풍선과 같은 방향).
+ * 이제 면제 항목은 하나도 없다.
+ */
+import { palette, type Scheme } from './colors';
+import { onColor } from './onColor';
+
+export type ChatThemeId =
+  | 'default'
+  | 'rose'
+  | 'sky'
+  | 'lavender'
+  | 'peach'
+  | 'mint'
+  /*
+   * 아래 넷은 <b>진한 배경 + 연한 말풍선</b> 계열이다(2026-09-18). 위 여섯은 전부 연한
+   * 배경에 색 있는 내 말풍선인데, "배경을 진하게 하고 말풍선을 연하게" 쓰고 싶다는
+   * 요청이 들어왔다. 기존 여섯의 값을 바꾸면 이미 고른 사람 화면이 예고 없이 변하므로
+   * (파일 상단 주석의 같은 이유) 갈아끼우지 않고 새로 넣는다.
+   *
+   * <p>id 는 <b>소문자 한 단어</b>여야 한다 — 대비 검증 스크립트가
+   * {@code id:\s*'([a-z]+)'} 로 읽는다(scripts/verify-chat-theme-contrast.mjs).
+   */
+  | 'charcoal'
+  | 'forest'
+  | 'indigo'
+  | 'plum';
+
+/** 아래 CHAT_THEMES 의 리터럴이 직접 갖는 값 — 열 벌이 손으로 맞춰 둔 여덟 가지다 */
+export interface ChatPaletteBase {
+  /** 대화 목록 바탕 */
+  background: string;
+  /** 내 말풍선 — 위에 bubbleMineText 를 얹는다 */
+  bubbleMine: string;
+  bubbleMineText: string;
+  /** 상대 말풍선 — 사진·우리 이모지의 로딩 배경으로도 쓴다 */
+  bubbleTheirs: string;
+  bubbleTheirsText: string;
+  /** 배경 위에 직접 놓이는 작은 글자 — 시간·"보내는 중"·"수정됨"·날짜 라벨 */
+  meta: string;
+  /** 날짜 구분선의 가로 줄 */
+  dividerLine: string;
+  /** 검색에서 골라 온 메시지를 잠깐 강조하는 행 배경 */
+  highlight: string;
+  /*
+   * ── 입력바 (2026-10-01, docs/CHAT_UX_REVIEW_2026-10-01.md §1-2 E) ──────────────
+   * 그전에는 입력바·입력칸이 앱 팔레트(background·surfaceAlt)였다. 라이트 앱 + 진한 채팅 테마에서
+   * 바 대 대화 대비가 14~15:1 — 어두운 대화 아래 흰 판이 깔려 "입력칸이 너무 크다"로 읽혔다.
+   * 반대로 입력칸 대 바는 1.08 이라 칸 윤곽이 없어서, 눈이 칸(44)이 아니라 바 전체를 하나로 봤다.
+   *
+   * <p>바는 대화 바탕과 같은 값에서 출발한다(떠 있는 판이 없다). 칸은 상대 말풍선과 같은 값이라
+   * 그 위 글자는 이미 검증된 bubbleTheirsText 를 쓴다 — 새 글자색을 지어내지 않는다.
+   * 별도 토큰으로 두는 이유는 나중에 바를 대화와 갈라야 할 때 이 자리만 고치면 되게 하려는 것이다.
+   */
+  /** 입력바 바탕 — safe-area 아래 띠도 같은 색으로 칠한다 */
+  inputBar: string;
+  /** 입력칸 채움 — 글자는 bubbleTheirsText */
+  inputField: string;
+  /** 입력칸 플레이스홀더 — inputField 위 4.5 이상 */
+  inputPlaceholder: string;
+  /**
+   * 안 읽음 하트. 예전엔 앱 팔레트 partner 라 라이트 앱 + 진한 채팅 테마에서 배경 대비 2.9~3.1
+   * (비텍스트 3:1 경계)이었다. 상대 색 계열은 유지하고 배경 명도에 맞는 쪽을 고른다.
+   */
+  readMark: string;
+}
+
+/**
+ * 화면이 실제로 받는 팔레트 — {@link chatPalette} 만 만든다.
+ *
+ * <p>{@code metaCapsule} 은 리터럴에 없다. 열 벌 전부 단색 배경이라 항상 투명이고,
+ * <b>사진 배경일 때만</b> 값이 생기기 때문이다. 리터럴에 20번 `'transparent'` 를 적는
+ * 대신 파생 단계에서 붙인다 — 새 테마를 추가하는 사람이 빠뜨릴 수 있는 칸을 만들지 않는다.
+ */
+export interface ChatPalette extends ChatPaletteBase {
+  /**
+   * 배경 위 맨살 글자(시간·"보내는 중"·"수정됨"·날짜 라벨)를 감싸는 캡슐 색.
+   *
+   * <p>단색 배경에서는 {@code 'transparent'} 다 — 배경 휘도를 알고 {@code meta} 를 거기
+   * 맞춰 뒀으므로(파일 상단 대비 검증) 캡슐이 필요 없다. <b>사진 배경에서는 그 전제가
+   * 깨진다</b>: 픽셀마다 휘도가 달라 어떤 값을 골라도 어딘가에서는 묻힌다. 스크림을
+   * 덮어도 <b>보장</b>은 안 된다(흰 사진에 45% 검정을 씌워도 여전히 밝다). 그래서 배경이
+   * 아니라 <b>글자 쪽</b>을 고친다 — 캡슐을 깔면 대비가 사진과 무관해진다(카톡의 날짜
+   * 라벨과 같은 방식).
+   */
+  metaCapsule: string;
+  /**
+   * 입력바의 "+"·이모티콘 아이콘 — 테마 리터럴의 {@code meta} 그대로다.
+   *
+   * <p>{@code meta} 를 직접 쓰지 않는 이유: 사진 배경에서 {@code meta} 는 흰색으로 바뀌는데
+   * (캡슐 위 글자라서), 입력바는 사진 위가 아니라 불투명한 inputBar 위에 있다. 덮어쓰기 전 값을
+   * 따로 들고 있어야 연한 테마 + 사진에서 흰 아이콘이 흰 바에 사라지지 않는다.
+   * inputBar 가 background 와 같으므로 검증된 "배경 위 meta ≥ 4.5" 가 그대로 성립한다.
+   */
+  inputIcon: string;
+}
+
+export interface ChatTheme {
+  id: ChatThemeId;
+  label: string;
+  light: ChatPaletteBase;
+  dark: ChatPaletteBase;
+}
+
+export const CHAT_THEMES: ChatTheme[] = [
+  {
+    id: 'default',
+    label: '기본',
+    light: {
+      background: '#FAFAF9',
+      // 앱 팔레트의 meFill — 런타임에 chatPalette 가 같은 값으로 덮는다(검증 스크립트는 이 리터럴을 잰다)
+      bubbleMine: '#FC7961',
+      bubbleMineText: '#1A1D1A',
+      bubbleTheirs: '#E9EAE7',
+      bubbleTheirsText: '#1A1D1A',
+      meta: '#6A706A',
+      dividerLine: '#E1E3E0',
+      highlight: '#C9E3FE', // = partnerPastelBg
+      inputBar: '#FAFAF9',
+      inputField: '#E9EAE7',
+      inputPlaceholder: '#626562',
+      readMark: '#2470B5',
+    },
+    dark: {
+      background: '#1E201C',
+      bubbleMine: '#FEC6BB', // = 다크 meFill
+      bubbleMineText: '#1A1D1A',
+      bubbleTheirs: '#31332D',
+      bubbleTheirsText: '#ECEEEA',
+      meta: '#868C84',
+      dividerLine: '#3A3D36',
+      highlight: '#243A52', // 상대(하늘) 계열 — 배경 대비 1.41
+      inputBar: '#1E201C',
+      inputField: '#31332D',
+      inputPlaceholder: '#9FA19D',
+      readMark: '#B2D7FF',
+    },
+  },
+  {
+    id: 'rose',
+    label: '로즈',
+    light: {
+      background: '#FDEEF1',
+      bubbleMine: '#F7C6D6',
+      bubbleMineText: '#4A0E2A',
+      bubbleTheirs: '#FFFFFF',
+      bubbleTheirsText: '#1A1D1A',
+      meta: '#7A5C62',
+      dividerLine: '#F0D0D8',
+      highlight: '#F4D2DC',
+      inputBar: '#FDEEF1',
+      inputField: '#FFFFFF',
+      inputPlaceholder: '#6F716F',
+      readMark: '#2470B5',
+    },
+    dark: {
+      background: '#221A1D',
+      bubbleMine: '#A8365F',
+      bubbleMineText: '#FFFFFF',
+      bubbleTheirs: '#332A2D',
+      bubbleTheirsText: '#ECEEEA',
+      meta: '#A08E93',
+      dividerLine: '#3F3338',
+      highlight: '#3A2830',
+      inputBar: '#221A1D',
+      inputField: '#332A2D',
+      inputPlaceholder: '#9B9897',
+      readMark: '#B2D7FF',
+    },
+  },
+  {
+    id: 'sky',
+    label: '스카이',
+    light: {
+      background: '#ECF3FB',
+      bubbleMine: '#BCD7F5',
+      bubbleMineText: '#0D2F57',
+      bubbleTheirs: '#FFFFFF',
+      bubbleTheirsText: '#1A1D1A',
+      meta: '#556B80',
+      dividerLine: '#C9DCEF',
+      highlight: '#C8DCF2',
+      inputBar: '#ECF3FB',
+      inputField: '#FFFFFF',
+      inputPlaceholder: '#6F716F',
+      readMark: '#2470B5',
+    },
+    dark: {
+      background: '#171B21',
+      bubbleMine: '#2A6DB5',
+      bubbleMineText: '#FFFFFF',
+      bubbleTheirs: '#262C33',
+      bubbleTheirsText: '#ECEEEA',
+      meta: '#8B98A5',
+      dividerLine: '#333A42',
+      highlight: '#22303F',
+      inputBar: '#171B21',
+      inputField: '#262C33',
+      inputPlaceholder: '#959999',
+      readMark: '#B2D7FF',
+    },
+  },
+  {
+    id: 'lavender',
+    label: '라벤더',
+    light: {
+      background: '#F2EFFB',
+      bubbleMine: '#D6C9F4',
+      bubbleMineText: '#2D1B5C',
+      bubbleTheirs: '#FFFFFF',
+      bubbleTheirsText: '#1A1D1A',
+      meta: '#67607F',
+      dividerLine: '#DAD1F0',
+      highlight: '#DED3F3',
+      inputBar: '#F2EFFB',
+      inputField: '#FFFFFF',
+      inputPlaceholder: '#6F716F',
+      readMark: '#2470B5',
+    },
+    dark: {
+      background: '#1C1A23',
+      bubbleMine: '#6B4BB8',
+      bubbleMineText: '#FFFFFF',
+      bubbleTheirs: '#302C3D',
+      bubbleTheirsText: '#ECEEEA',
+      meta: '#958DA8',
+      dividerLine: '#383345',
+      highlight: '#302847',
+      inputBar: '#1C1A23',
+      inputField: '#302C3D',
+      inputPlaceholder: '#9B9BA0',
+      readMark: '#B2D7FF',
+    },
+  },
+  /*
+   * 라벨이 '피치'→'앰버' 다(2026-09-23). 액센트에도 '피치'가 있는데 <b>같은 이름이 다른
+   * 색을 내고 있었다</b> — 액센트 피치는 §3-1 때문에 primary 계열이 초록이라(colors.ts)
+   * 그걸 고르면 '기본' 말풍선이 초록 #62B16B 로 나오고, 이 테마의 말풍선은 주황
+   * #B25500 이다. 설정 한 화면에 두 줄로 나란히 있을 때 특히 헷갈렸다. 채팅 배경을
+   * 채팅방으로 옮기면서 겹치는 이름만 실제 색에 맞게 바꾼다 — <b>id 는 그대로</b>라
+   * 이미 고른 사람의 선택은 유지된다(검증 스크립트도 id 로 읽는다).
+   *
+   * <p><b>주석을 블록 밖에 둔다</b>: 검증 스크립트의 정규식이 {@code id → label → light}
+   * 를 한 덩어리로 훑어서, 그 사이에 주석을 끼우면 <b>그 테마가 조용히 검사에서 빠진다</b>.
+   * 실제로 여기서 한 번 그랬고 "10종"이 "8종"으로 줄어 들킨 것이라, 다음 사람도 똑같이
+   * 한다. 테마 하나에 붙이는 말은 전부 이 자리에.
+   */
+  {
+    id: 'peach',
+    label: '앰버',
+    light: {
+      background: '#FDF2E9',
+      bubbleMine: '#F9D2AE',
+      bubbleMineText: '#4F2800',
+      bubbleTheirs: '#FFFFFF',
+      bubbleTheirsText: '#1A1D1A',
+      meta: '#7C6550',
+      dividerLine: '#EFD9BE',
+      highlight: '#F2D4B4',
+      inputBar: '#FDF2E9',
+      inputField: '#FFFFFF',
+      inputPlaceholder: '#6F716F',
+      readMark: '#2470B5',
+    },
+    dark: {
+      background: '#221D18',
+      bubbleMine: '#A35C1A',
+      bubbleMineText: '#FFFFFF',
+      bubbleTheirs: '#332C25',
+      bubbleTheirsText: '#ECEEEA',
+      meta: '#A0918A',
+      dividerLine: '#3F372E',
+      highlight: '#3A2E20',
+      inputBar: '#221D18',
+      inputField: '#332C25',
+      inputPlaceholder: '#9B9993',
+      readMark: '#B2D7FF',
+    },
+  },
+  /* 위 'peach' 와 같은 이유 — 액센트 '민트'(#49CAA5)와 달리 이건 진한 청록이다 */
+  {
+    id: 'mint',
+    label: '에메랄드',
+    light: {
+      background: '#EAF5F0',
+      bubbleMine: '#B5E2D3',
+      bubbleMineText: '#0B3B33',
+      bubbleTheirs: '#FFFFFF',
+      bubbleTheirsText: '#1A1D1A',
+      meta: '#556B63',
+      dividerLine: '#C4DED2',
+      highlight: '#C2DFD1',
+      inputBar: '#EAF5F0',
+      inputField: '#FFFFFF',
+      inputPlaceholder: '#6F716F',
+      readMark: '#2470B5',
+    },
+    dark: {
+      background: '#171F1C',
+      bubbleMine: '#2E7D6B',
+      bubbleMineText: '#FFFFFF',
+      bubbleTheirs: '#252E2A',
+      bubbleTheirsText: '#ECEEEA',
+      meta: '#8A9B94',
+      dividerLine: '#333E39',
+      highlight: '#1E322B',
+      inputBar: '#171F1C',
+      inputField: '#252E2A',
+      inputPlaceholder: '#949A96',
+      readMark: '#B2D7FF',
+    },
+  },
+
+/*
+ * ── 진한 배경 계열 ────────────────────────────────────────────────────────
+ * 관계가 위 여섯과 <b>뒤집혀</b> 있다. 배경이 가장 어둡고 말풍선 둘이 모두 밝으며,
+ * 말풍선 글자는 흰색이 아니라 <b>어두운 색</b>이다.
+ *
+ * <p>둘 다 밝은 말풍선이라 나/상대가 안 갈릴까 싶지만, 좌우 정렬이 이미 갈라 주고
+ * 있고 내 말풍선에만 색을 준다(상대는 무채에 가깝게) — 카톡의 진한 테마와 같은 방식이다.
+ *
+ * <p>라이트/다크 차이는 크지 않다. 테마 자체가 어두운 쪽이라 배경만 한 단계 더
+ * 내리고 말풍선 채도를 조금 낮춘다. 여기서 라이트를 밝게 만들면 "진한 배경"이라는
+ * 고른 이유가 시스템 설정에 따라 사라진다.
+ */
+  {
+    id: 'charcoal',
+    label: '차콜',
+    light: {
+      background: '#23262B',
+      bubbleMine: '#FFE9A8',
+      bubbleMineText: '#1F1B0E',
+      bubbleTheirs: '#F2F4F7',
+      bubbleTheirsText: '#1A1D22',
+      meta: '#A9AEB6',
+      dividerLine: '#3A3F47',
+      highlight: '#343A42',
+      inputBar: '#23262B',
+      inputField: '#F2F4F7',
+      inputPlaceholder: '#686A6F',
+      readMark: '#B2D7FF',
+    },
+    dark: {
+      background: '#17191D',
+      bubbleMine: '#F2DC9E',
+      bubbleMineText: '#1F1B0E',
+      bubbleTheirs: '#E6E9ED',
+      bubbleTheirsText: '#1A1D22',
+      meta: '#9BA0A8',
+      dividerLine: '#2C2F35',
+      highlight: '#282C32',
+      inputBar: '#17191D',
+      inputField: '#E6E9ED',
+      inputPlaceholder: '#616469',
+      readMark: '#B2D7FF',
+    },
+  },
+  {
+    id: 'forest',
+    label: '포레스트',
+    light: {
+      background: '#1C2A20',
+      bubbleMine: '#CDEBD6',
+      bubbleMineText: '#10251A',
+      bubbleTheirs: '#F1F4F0',
+      bubbleTheirsText: '#1A1D1A',
+      meta: '#9FB3A4',
+      dividerLine: '#2E4235',
+      highlight: '#2A3C31',
+      inputBar: '#1C2A20',
+      inputField: '#F1F4F0',
+      inputPlaceholder: '#676A67',
+      readMark: '#B2D7FF',
+    },
+    dark: {
+      background: '#131E17',
+      bubbleMine: '#BFE0C9',
+      bubbleMineText: '#10251A',
+      bubbleTheirs: '#E4E9E3',
+      bubbleTheirsText: '#1A1D1A',
+      meta: '#94A898',
+      dividerLine: '#23332A',
+      highlight: '#213228',
+      inputBar: '#131E17',
+      inputField: '#E4E9E3',
+      inputPlaceholder: '#616460',
+      readMark: '#B2D7FF',
+    },
+  },
+  {
+    id: 'indigo',
+    label: '인디고',
+    light: {
+      background: '#1B2440',
+      bubbleMine: '#D8E2FF',
+      bubbleMineText: '#131A2E',
+      bubbleTheirs: '#F2F4FA',
+      bubbleTheirsText: '#1A1D2A',
+      meta: '#A3AECB',
+      dividerLine: '#2E3A5C',
+      highlight: '#293354',
+      inputBar: '#1B2440',
+      inputField: '#F2F4FA',
+      inputPlaceholder: '#686A75',
+      readMark: '#B2D7FF',
+    },
+    dark: {
+      background: '#131A2E',
+      bubbleMine: '#C9D6F7',
+      bubbleMineText: '#131A2E',
+      bubbleTheirs: '#E5E9F2',
+      bubbleTheirsText: '#1A1D2A',
+      meta: '#97A2BE',
+      dividerLine: '#232C47',
+      highlight: '#212C49',
+      inputBar: '#131A2E',
+      inputField: '#E5E9F2',
+      inputPlaceholder: '#616470',
+      readMark: '#B2D7FF',
+    },
+  },
+  {
+    id: 'plum',
+    label: '플럼',
+    light: {
+      background: '#2A1E2E',
+      bubbleMine: '#F5DCEC',
+      bubbleMineText: '#2A1226',
+      bubbleTheirs: '#F5F2F6',
+      bubbleTheirsText: '#201A22',
+      meta: '#B7A4BB',
+      dividerLine: '#3E2E44',
+      highlight: '#3E2D45',
+      inputBar: '#2A1E2E',
+      inputField: '#F5F2F6',
+      inputPlaceholder: '#6D686E',
+      readMark: '#B2D7FF',
+    },
+    dark: {
+      background: '#1D1420',
+      bubbleMine: '#E9CFE0',
+      bubbleMineText: '#2A1226',
+      bubbleTheirs: '#E9E4EB',
+      bubbleTheirsText: '#201A22',
+      meta: '#A992AD',
+      dividerLine: '#332438',
+      highlight: '#33243B',
+      inputBar: '#1D1420',
+      inputField: '#E9E4EB',
+      inputPlaceholder: '#666168',
+      readMark: '#B2D7FF',
+    },
+  },
+];
+
+export const DEFAULT_CHAT_THEME_ID: ChatThemeId = 'default';
+
+const byId = new Map(CHAT_THEMES.map((t) => [t.id, t]));
+
+export function isChatThemeId(value: unknown): value is ChatThemeId {
+  return typeof value === 'string' && byId.has(value as ChatThemeId);
+}
+
+/*
+ * 현재 선택 — colors.ts 의 currentScheme 과 같은 이유로 <b>모듈 수준 가변값</b>이다.
+ * 아래 chatThemedStyles 가 <b>읽는 시점</b>에 이 값을 참조해야 즉시 전환이 된다.
+ * 화면을 다시 그리는 건 chatThemeStore 가 맡는다.
+ */
+let currentId: ChatThemeId = DEFAULT_CHAT_THEME_ID;
+
+/*
+ * 사진 배경 — 테마를 <b>대체하지 않고 배경만 덮는다</b>. "인디고 + 사진"이 가능하다는 뜻이고,
+ * 말풍선·글자는 고른 테마의 검증된 값을 그대로 쓴다. 사진 때문에 값을 새로 지어내면
+ * 위 대비 검증이 통째로 무의미해지므로, 사진이 건드리는 것은 아래 photoOverrides 뿐이다.
+ */
+let currentPhotoUri: string | null = null;
+
+export function getChatPhotoUri(): string | null {
+  return currentPhotoUri;
+}
+
+export function setChatPhotoUri(uri: string | null): void {
+  currentPhotoUri = uri;
+}
+
+/**
+ * 맨살 글자를 감싸는 캡슐 — <b>가장 밝은 사진(순백)에서도</b> 흰 글자가 4.76:1 이다.
+ * 0.55 는 거기서 나온 값이다: 순백 위 55% 검정 = #737373 이고 흰 글자가 4.76,
+ * 0.45 로 낮추면 4.48 로 AA 아래다. 더 올리면 사진이 안 보이기 시작한다.
+ */
+const PHOTO_CAPSULE = 'rgba(0, 0, 0, 0.55)';
+
+/** 사진 위 맨살 글자 — 캡슐이 어둡다고 보장되므로 테마와 무관하게 흰색이다 */
+const PHOTO_META = '#FFFFFF';
+
+/**
+ * 사진 전체에 덮는 옅은 막. 대비를 <b>보장하지는 않는다</b>(그 일은 캡슐이 한다) —
+ * 번잡한 사진에서 말풍선 경계가 덜 싸우게 하는 미관용이라 한 단계로 고정한다.
+ */
+export const CHAT_PHOTO_SCRIM = 'rgba(0, 0, 0, 0.18)';
+
+export function getChatThemeId(): ChatThemeId {
+  return currentId;
+}
+
+export function setChatThemeId(id: ChatThemeId): void {
+  currentId = id;
+}
+
+/**
+ * 사진 배경일 때의 덮어쓰기.
+ *
+ * <p>{@code background} 는 <b>일부러 안 건드린다</b> — 사진 레이어는 그 색 <b>위에</b>
+ * 깔리므로, 사진이 안 뜨거나 파일이 사라져도 고른 테마의 배경색으로 떨어진다.
+ * 구분선은 지운다: 날짜 라벨이 캡슐을 얻으면 좌우 줄이 오히려 사진과 싸운다(카톡도 캡슐만 쓴다).
+ */
+function withPhoto(base: ChatPalette): ChatPalette {
+  if (!currentPhotoUri) return base;
+  return { ...base, meta: PHOTO_META, metaCapsule: PHOTO_CAPSULE, dividerLine: 'transparent' };
+}
+
+export function chatPalette(scheme: Scheme, id: ChatThemeId = currentId): ChatPalette {
+  const theme = byId.get(id) ?? byId.get(DEFAULT_CHAT_THEME_ID)!;
+  const base: ChatPalette = { ...theme[scheme], metaCapsule: 'transparent', inputIcon: theme[scheme].meta };
+  if (id !== DEFAULT_CHAT_THEME_ID) return withPhoto(base);
+  /*
+   * '기본' 테마는 앱 팔레트의 소유자 색을 그대로 쓴다 — <b>내 말풍선 = 나(meFill)</b>, 하트 = 상대.
+   * 2026-10-05 까지는 내 말풍선이 크롬(primaryFill)이었다. "선택됨은 크롬, 누구 것은 소유자 색"
+   * (docs/color-redesign-viewer-based_2026-10-05.md 원칙 3)에 따라 소유자 색으로 옮겼다.
+   * 위 CHAT_THEMES 의 'default' 리터럴은 같은 값이다(검증 스크립트는 리터럴을 잰다).
+   *   말풍선: meFill + 그 위에 onColor 가 고른 글자
+   *   강조행: 상대 계열 파스텔(배경 대비 1.25 이상)
+   *
+   * <p><b>2026-09-23 에 한 단계 밝혔다.</b> 그전에는 라이트가 primary, 다크가
+   * primaryDark 였고 위에 흰 글자를 얹었다 — 말풍선이 화면에서 가장 넓은 색면인데
+   * 글자 대비를 맞추느라 어두운 값을 쓰고 있었다(colors.ts 의 primaryFill 주석과 같은
+   * 상충). 채움 전용 토큰이 생겼으므로 버튼과 같은 값을 쓰고, 글자는 흰색 고정이 아니라
+   * {@code onColor} 가 배경 휘도로 고른다 — 라이트·다크 모두 ink 로 뒤집힌다.
+   */
+  const app = palette(scheme);
+  return withPhoto({
+    ...base,
+    bubbleMine: app.meFill,
+    bubbleMineText: onColor(app.meFill),
+    highlight: scheme === 'light' ? app.partnerPastelBg : base.highlight,
+    // 하트는 "상대" 색이다
+    readMark: app.partner,
+  });
+}

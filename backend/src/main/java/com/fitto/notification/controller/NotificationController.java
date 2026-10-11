@@ -25,7 +25,7 @@ public class NotificationController {
     @PostMapping("/token")
     public ApiResponse<Void> registerToken(@AuthenticationPrincipal AuthUser user,
                                            @Valid @RequestBody RegisterTokenRequest request) {
-        deviceTokenService.register(user.id(), request.token(), request.platform());
+        deviceTokenService.register(user.id(), request.token(), request.platform(), request.channelsVersion());
         return ApiResponse.success(null);
     }
 }

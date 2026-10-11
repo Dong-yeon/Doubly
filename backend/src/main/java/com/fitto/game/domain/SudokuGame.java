@@ -10,6 +10,8 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDate;
+
 /**
  * 협동 스도쿠 한 판 — 판 전체를 81자 문자열 넷(puzzle·solution·board·ownerMap)으로 든다.
  * docs/COUPLE_GAMES_DESIGN_2026-09-09.md 3-2절.
@@ -42,19 +44,46 @@ public class SudokuGame extends CoupleGame {
     @Column(name = "owner_map", length = CELLS)
     private String ownerMap;
 
+    /**
+     * 오늘의 판이면 그 날짜 — 자유 대국은 null.
+     * 시드는 저장하지 않는다. 날짜만 있으면 {@code DailyPuzzles} 가 같은 판을 다시 만든다.
+     */
+    @Column(name = "daily_date")
+    private LocalDate dailyDate;
+
     @Builder
-    private SudokuGame(Long coupleId, GameDifficulty difficulty, String puzzle, String solution, Long createdBy) {
+    private SudokuGame(Long coupleId, GameDifficulty difficulty, String puzzle, String solution,
+                       Long createdBy, LocalDate dailyDate) {
         super(coupleId, createdBy);
         this.difficulty = difficulty;
         this.puzzle = puzzle;
         this.solution = solution;
         this.board = puzzle;
         this.ownerMap = String.valueOf(OWNER_NONE).repeat(CELLS);
+        this.dailyDate = dailyDate;
+    }
+
+    public boolean isDaily() {
+        return dailyDate != null;
+    }
+
+    /**
+     * 날짜가 지난 오늘의 판인가 — 그날의 판은 그날로 끝이다. 못 끝낸 채 남아 있으면 다음 날의 판을 막으므로
+     * (진행 중인 판은 하나) 오늘의 판을 열 때·새벽 정리 때 접는다.
+     */
+    public boolean isPastDaily(LocalDate today) {
+        return dailyDate != null && dailyDate.isBefore(today);
     }
 
     @Override
     public GameType getGameType() {
         return GameType.SUDOKU;
+    }
+
+    /** 같이 푸는 판이라 차례가 없다 — 누구든 상대를 부를 수 있다 */
+    @Override
+    public char awaitedSide() {
+        return OWNER_NONE;
     }
 
     public boolean isGiven(int index) {

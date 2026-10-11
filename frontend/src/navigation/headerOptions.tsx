@@ -14,6 +14,7 @@ import React from 'react';
 import { Platform, Pressable, StyleSheet } from 'react-native';
 import { MaterialCommunityIcons } from '../components/Icon';
 import { useNavigation } from '@react-navigation/native';
+import type { NativeStackHeaderItem } from '@react-navigation/native-stack';
 import { colors, spacing } from '../constants/theme';
 import { layout } from '../theme/layout';
 
@@ -34,6 +35,19 @@ function HeaderIconButton({ icon, label }: { icon: IconName; label: string }) {
       <MaterialCommunityIcons name={icon} size={26} color={colors.textPrimary} />
     </Pressable>
   );
+}
+
+/**
+ * iOS 26 유리 배경 없는 헤더 항목 — `unstable_headerLeftItems`/`unstable_headerRightItems` 에 넘긴다.
+ *
+ * iOS 26 은 헤더 버튼(UIBarButtonItem)마다 흰 유리 알약을 씌워, 뒤로 가기·검색·메뉴가 제목보다 먼저 눈에
+ * 들어왔다(비트윈 비교, 2026-09-30). `headerLeft`/`headerRight` 로는 이걸 끌 수 없고 항목 API 의
+ * `hidesSharedBackground` 로만 끈다. 네이티브 쪽은 react-native-screens 4.25 에 이미 있어 빌드 없이 된다.
+ * iOS 전용 API 라 안드로이드·웹은 계속 `headerLeft`/`headerRight` 를 쓴다 — 두 옵션을 함께 둔다.
+ * `unstable_` 이라 라이브러리를 올릴 때 이름이 바뀌었는지 먼저 본다.
+ */
+export function bareHeaderItems(element: React.ReactElement): NativeStackHeaderItem[] {
+  return [{ type: 'custom', element, hidesSharedBackground: true }];
 }
 
 /**
@@ -60,6 +74,9 @@ export const stackScreenOptions = {
   headerShadowVisible: false,
   headerBackVisible: false,
   headerLeft: () => <HeaderIconButton icon="arrow-left" label="뒤로 가기" />,
+  // 돌아갈 곳이 없으면 빈 항목도 두지 않는다 — 빈 자리가 제목을 밀지 않게
+  unstable_headerLeftItems: ({ canGoBack }: { canGoBack?: boolean }) =>
+    canGoBack ? bareHeaderItems(<HeaderIconButton icon="arrow-left" label="뒤로 가기" />) : [],
   /*
    * iOS 스와이프백 보장 — 커스텀 headerLeft 는 UIKit 의
    * interactivePopGestureRecognizer 를 꺼뜨리는 고전 패턴이다.
@@ -76,6 +93,24 @@ export const modalOptions = {
   presentation: 'modal',
   headerBackVisible: false,
   headerLeft: () => <HeaderIconButton icon="close" label="닫기" />,
+  unstable_headerLeftItems: ({ canGoBack }: { canGoBack?: boolean }) =>
+    canGoBack ? bareHeaderItems(<HeaderIconButton icon="close" label="닫기" />) : [],
+} as const;
+
+/**
+ * <b>다른 탭에서 연</b> 모달 화면 옵션 — 모양(닫기 ✕·아래에서 올라옴)은 같고 iOS 네이티브 모달만 뺀다.
+ *
+ * <p>홈 칩이 {@code navigate('Health', { screen: 'DietRecord' })} 로 <b>탭 전환과 모달 띄우기를
+ * 한 번에</b> 하면, iOS 는 아직 화면에 올라오지 않은 탭 위에 모달을 띄우려다 조용히 실패하거나,
+ * 닫을 때 useReturnToTab 의 jumpTo 가 모달이 내려가는 도중에 탭을 바꿔 네이티브 스택이
+ * 어긋난다. 그 뒤로 럽바디의 "식단 기록하기"가 아무 반응이 없었다(2026-10-01, iPhone 만 —
+ * 안드로이드의 modal 은 그냥 push 라 멀쩡했다). 일반 push 로 바꾸면 둘 다 생기지 않는다.
+ */
+export const crossTabModalOptions = {
+  headerBackVisible: false,
+  animation: 'slide_from_bottom',
+  headerLeft: modalOptions.headerLeft,
+  unstable_headerLeftItems: modalOptions.unstable_headerLeftItems,
 } as const;
 
 const styles = StyleSheet.create({

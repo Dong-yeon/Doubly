@@ -54,7 +54,7 @@
 
 ### 3-3. 삭제 정리용 참조
 
-운동(`workout_id`)·식단(`meal_id`, V90)처럼 카드 → 원본 참조가 있어야 기록을 지울 때 카드를 삭제 표시할
+운동(`workout_id`)·식단(`meal_id`, V135 — 원래 V90, origin/main 병합 때 재번호)처럼 카드 → 원본 참조가 있어야 기록을 지울 때 카드를 삭제 표시할
 수 있다. 방문 카드는 `place_visit_id`, 등극 카드는 `place_id` 를 가리켜야 하므로 **컬럼이 둘**이거나,
 `place_id` 하나만 두고 방문 삭제 시엔 카드를 남기는 절충이 필요하다. 장소 삭제(`PlaceService.delete`)는
 `places` 행을 지우고 방문은 DB CASCADE 로 사라지므로, 카드 detach 를 먼저 하지 않으면 FK 위반이 난다
@@ -125,7 +125,7 @@
 
 | 층 | 변경 | 커밋 |
 |---|---|---|
-| 백엔드 | `MessageType.PLACE_CARD`, **V91** `chat_messages.place_id`(FK → places), `foldOrPostPlaceCard` / `appendPlaceToLastMealCard` / `detachPlaceCards`, `PlaceService` 네 지점. 장소 삭제 시 PLACE_CARD 는 삭제 표시·장소가 덧붙은 MEAL_CARD 는 참조만 끊음. `RelationRecordPurger` 는 places 가 chat_messages 보다 먼저 지워지므로 `place_id` 를 먼저 끊음 | `baf5c89` |
+| 백엔드 | `MessageType.PLACE_CARD`, **V136**(원래 V91, origin/main 병합 때 재번호) `chat_messages.place_id`(FK → places), `foldOrPostPlaceCard` / `appendPlaceToLastMealCard` / `detachPlaceCards`, `PlaceService` 네 지점. 장소 삭제 시 PLACE_CARD 는 삭제 표시·장소가 덧붙은 MEAL_CARD 는 참조만 끊음. `RelationRecordPurger` 는 places 가 chat_messages 보다 먼저 지워지므로 `place_id` 를 먼저 끊음 | `baf5c89` |
 | 프론트 | `PLACE_CARD` 렌더러(등극 골드 강조), 카드 탭 → `doubly://place/{id}` 딥링크(푸시와 같은 경로, `linking.ts` 가 라우팅 — 채팅 스택에서 럽슐랭 스택으로 건너가는 네비게이션을 따로 짜지 않음). `placeId` 있는 식단 카드도 탭 가능. 식단 장소 시트 `visiting: true` | `4d9af32` |
 
 참조 컬럼은 `place_id` 하나다(§3-3 의 절충) — 방문 하나를 지우면 카드는 남고, 장소를 지우면 정리된다.

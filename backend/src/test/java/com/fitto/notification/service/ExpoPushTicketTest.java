@@ -92,9 +92,9 @@ class ExpoPushTicketTest {
                         new RegisterRequest("push-receipt@fitto.com", "password123", "테스터",
                                 null, null, true, true, false), "127.0.0.1")
                 .user().id();
-        deviceTokenService.register(userId, "ExponentPushToken[receipt-alive]", "ios");
-        deviceTokenService.register(userId, "ExponentPushToken[receipt-dead]", "android");
-        deviceTokenService.register(userId, "ExponentPushToken[receipt-badkey]", "ios");
+        deviceTokenService.register(userId, "ExponentPushToken[receipt-alive]", "ios", null);
+        deviceTokenService.register(userId, "ExponentPushToken[receipt-dead]", "android", null);
+        deviceTokenService.register(userId, "ExponentPushToken[receipt-badkey]", "ios", null);
         Map<String, DeviceToken> accepted = new LinkedHashMap<>();
         for (DeviceToken t : deviceTokenRepository.findByUserId(userId)) {
             accepted.put("ticket-" + t.getToken(), t);
@@ -121,8 +121,8 @@ class ExpoPushTicketTest {
                         new RegisterRequest("push-ticket@fitto.com", "password123", "테스터",
                                 null, null, true, true, false), "127.0.0.1")
                 .user().id();
-        deviceTokenService.register(userId, "ExponentPushToken[alive]", "ios");
-        deviceTokenService.register(userId, "ExponentPushToken[dead]", "ios");
+        deviceTokenService.register(userId, "ExponentPushToken[alive]", "ios", null);
+        deviceTokenService.register(userId, "ExponentPushToken[dead]", "ios", null);
         assertThat(deviceTokenRepository.findByUserId(userId)).hasSize(2);
 
         deviceTokenService.removeDeadTokens(List.of("ExponentPushToken[dead]"));

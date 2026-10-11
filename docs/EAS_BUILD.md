@@ -339,6 +339,115 @@ npm run submit:store          # iOS + 안드로이드 한 번에
   수동으로 해야 하며, 그 이후부터 API 제출이 열린다.
 - 제출 이력은 `npx eas-cli status` 의 Submissions 항목에서 확인한다.
 
+## 11. 업로드 아카이브 줄이기 — `.easignore` (2026-09-17)
+
+빌드마다 CLI 가 이런 경고를 냈다.
+
+> Your project archive is 1.3 GB. You can reduce its size … in `.easignore` file.
+
+업로드에만 48초가 걸렸고, 이 계정은 이미 포함 크레딧을 44 빌드 초과해 **빌드 건당 과금** 중이라
+아카이브를 줄이는 게 실질 이득이었다. 정리 후 **1.3 GB → 108 MB** (원본 2367 MB → 182 MB,
+여기에 `.git` 113 MB 제거). 경고 임계값(150 MiB) 아래라 경고 자체가 사라진다.
+
+### 11-1. 아카이브에 실제로 뭐가 들어가는가
+
+eas-cli 24.7.0 의 `vcs/clients/git.js` · `vcs/local.js` 를 읽고 확인한 순서다. 추측하지 말 것 —
+문서에 안 적힌 동작이 세 개나 있다.
+
+1. **아카이브 루트는 `git rev-parse --show-toplevel`**, 즉 `frontend/` 가 아니라 **저장소 루트**다.
+   모노레포 전체가 올라간다. 따라서 `.easignore` 도 저장소 루트에만 둔다 —
+   **`frontend/.easignore` 는 아예 읽히지 않는다.**
+2. `git clone --depth 1 --no-checkout file:///<루트>` 로 껍데기를 만든다. 여기서 생긴
+   **`.git` 이 113 MB** 이고 그대로 아카이브에 들어간다.
+3. 그다음 `git ls-files --exclude-from .easignore --ignored --cached` 로 지울 파일을 고르는데,
+   `--no-checkout` 이라 **인덱스가 비어 있어 이 단계는 아무것도 지우지 않는다**
+   (`git -C <clone> ls-files --cached | wc -l` → 0). 즉 `.easignore` 가 실제로 일하는 곳은 4번뿐이다.
+4. `fs.cp(루트, 클론, { filter })` 로 **워킹 디렉터리를 통째로** 덮어쓴다. 커밋 여부와 무관하게
+   지금 디스크에 있는 파일이 올라간다는 뜻이다. 필터는
+   기본 규칙(`.git`, `node_modules` — 둘 다 모든 깊이) + `.easignore` 뿐이고,
+   **`.gitignore` 도 `.git/info/exclude` 도 읽지 않는다.**
+5. `.git` 은 예외적으로 "`.easignore` 에 `.git` 이 적혀 있을 때만" 지운다.
+6. tar.gz 로 압축. 150 MiB 초과 시 경고, **2 GiB 초과 시 빌드 실패**.
+
+4번이 이 작업의 핵심이다. `.easignore` 가 생긴 순간 `.gitignore` 의 보호가 전부 사라지므로,
+**`.gitignore`·`.git/info/exclude` 로 가려 두었던 것을 `.easignore` 에 다시 적어야 한다.**
+안 적으면 아카이브가 오히려 커진다.
+
+### 11-2. 2367 MB 의 내역 (정리 전)
+
+| 크기 | 경로 | 왜 들어갔나 |
+| --- | --- | --- |
+| 1012 MB | `frontend/modules/korean-spell/android/{build,.cxx}` | `frontend/.gitignore` 가 막고 있었지만 `.easignore` 모드에선 무효 |
+| 627 MB | `.claude/worktrees/` | `.git/info/exclude` 로만 가려져 있었다. 다른 세션 워크트리마다 `frontend/android/`·`modules/` 산출물이 통째로 딸려 온다 |
+| 385 MB | `frontend/doubly-main.apk`, `doubly-main2.apk` | `*.apk` 는 `.gitignore` 에만 있었다 |
+| 185 MB | `frontend/build/` (내려받은 AAB) | 〃 |
+| 93 MB | `frontend/dist/` (웹 export) | 〃 |
+| 44 MB | `scripts/couple-emoji-experiment/{out,photos}` | 〃 — **실제 얼굴 사진이 외부로 업로드되고 있었다** |
+| 113 MB | 얕은 클론의 `.git` | `.easignore` 에 `.git` 이 없으면 항상 포함 |
+
+### 11-3. 앵커(`/`)를 빼먹으면 빌드가 깨진다
+
+`.easignore` 는 gitignore 문법이라 **슬래시가 안 들어간 패턴은 모든 깊이에서 걸린다.**
+
+| 패턴 | `scripts/a.mjs` | `frontend/scripts/build.mjs` |
+| --- | --- | --- |
+| `scripts/` | 제외 | **제외 (빌드에 필요한데 사라진다)** |
+| `/scripts/` | 제외 | 포함 |
+
+`store/` 도 마찬가지로 `frontend/src/store/`(Zustand 스토어 전부)를 지운다. 루트 전용으로 뺄
+디렉터리는 반드시 `/store/` 처럼 앵커를 붙인다. 반대로 `.claude/`·`*.apk`·`.git` 은 모든 깊이에서
+걸려야 하므로 앵커를 붙이지 않는다.
+
+### 11-4. 런타임 버전(fingerprint)은 바뀌지 않는다
+
+`modules/korean-spell` 은 fingerprint 소스다(8-5, 트러블슈팅의 줄바꿈 항목 참고). 여기서 뭘 빼면
+서버 해시가 로컬과 어긋나 `Runtime version calculated on local machine not equal…` 로 빌드가
+죽는다. 그런데 `@expo/fingerprint` 의 `DEFAULT_IGNORE_PATHS`(build/Options.js)가
+`**/android/build/**/*` · `**/android/.cxx/**/*` · `**/android/.gradle/**/*` 을 이미 무시하므로
+이번에 뺀 것들은 애초에 해시에 안 들어간다. 실제로 확인했다 — 제외 후보를 `ignorePaths` 에
+추가해도 해시가 `ce811a6e…` 로 동일했다.
+
+**절대 빼면 안 되는 것** (전부 fingerprint 소스이거나 빌드 입력이다):
+`frontend/.gitignore`(!), `frontend/eas.json`, `app.json`·`app.config.js`, `google-services.json`,
+`frontend/assets/`(폰트·아이콘), `frontend/package-lock.json`,
+`modules/korean-spell/` 의 `cpp/`·`dict/`·`kiwi-model/`·`android/src/`(jniLibs 의 `libkiwi.so` 71 MB 포함).
+남은 182 MB 중 168 MB 가 이 네이티브 모듈 소스다 — 더 줄이려면 여기를 손대야 하는데,
+그건 빌드 입력이라 아카이브 문제가 아니다.
+
+### 11-5. 다시 재는 법 — 빌드를 돌리지 않고
+
+`eas build` 에 `--dry-run` 은 **없다**(`--local`, `--clear-cache` 등만 있다). 확인하려고 빌드를
+돌리면 그대로 과금된다. 대신 CLI 와 같은 규칙으로 로컬에서 재현한다.
+
+```bash
+# eas-cli 의 ignore/tar 를 그대로 빌려 쓴다 (npx 캐시 경로는 환경마다 다르다)
+EAS=$(ls -d "$LOCALAPPDATA"/npm-cache/_npx/*/node_modules/eas-cli | tail -1)
+```
+
+```js
+// sim.js — 아카이브에 들어갈 파일과 크기를 계산한다. node sim.js <저장소루트> <.easignore 경로>
+const fs = require('fs'), path = require('path');
+const ignore = require('<EAS>/../ignore');           // eas-cli 옆의 ignore 패키지
+const [root, easignore] = process.argv.slice(2);
+const rules = [ignore().add('\n.git\nnode_modules\n'), ignore().add(fs.readFileSync(easignore, 'utf-8'))];
+const ignores = (rel) => rules.some((r) => r.ignores(rel));
+let total = 0;
+(function walk(dir) {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, e.name), rel = path.relative(root, full);
+    if (ignores(rel) || e.isSymbolicLink()) continue;   // fs.cp 필터와 같다 — 디렉터리면 하위까지 통째로
+    if (e.isDirectory()) walk(full); else total += fs.statSync(full).size;
+  }
+})(root);
+console.log((total / 1024 / 1024).toFixed(1), 'MB');
+```
+
+압축 후 크기까지 보려면 같은 필터로 `fs.cp` 한 뒤 `tar.create({ gzip: true, portable: true, prefix: 'project' })`
+를 돌린다 — 이게 CLI 가 "Compressed project files" 로 출력하는 값이다. 이 절차로 잰 값이 108.2 MB 였다.
+
+추적 파일 중 빠지는 게 없는지는 `git ls-files` 결과를 같은 필터에 통과시켜 대조한다.
+정리 후 `frontend/` 아래 추적 파일은 **하나도 빠지지 않았다**(빠진 것은 backend·docs·store·scripts·.claude 뿐).
+
 ## 트러블슈팅
 
 | 증상 | 원인 / 해결 |
@@ -348,7 +457,48 @@ npm run submit:store          # iOS + 안드로이드 한 번에
 | 설치 후 앱이 흰 화면 | 최신 코드로 다시 빌드했는지 확인 (오래된 APK 캐시일 수 있음) — 설정 화면 하단의 커밋 해시로 판별, 6-1 참고 |
 | Configure expo-updates 단계에서 `Runtime version calculated on local machine not equal…` | 로컬·서버 fingerprint 불일치 — 8-5 참고. ① `npm install` 로 node_modules 를 lock 과 맞추고 ② `fingerprint.config.js` 가 있는지, ③ 두 번 돌려 같은 해시가 나오는지 확인. 빌드 로그의 "Difference between local and EAS fingerprints" 가 정확한 범인을 알려준다 |
 | `eas update` 가 기존 빌드에 배달되지 않음 / `eas fingerprint:compare --build-id <id>` 가 `modules/korean-spell` 만 다르다고 함 | **줄바꿈 차이**(2026-09-10). EAS 는 git 이 아니라 로컬 파일을 그대로 올리므로 fingerprint 는 워크트리의 CRLF/LF 상태를 따른다. 주 워크트리는 `*.sh eol=lf` 규칙(9/9) 이전에 체크아웃된 파일이 CRLF 로 남아 있고, 새로 만든 워크트리는 LF 라 같은 커밋인데도 iOS 해시가 달랐다(`scripts/check-elf-align.mjs` 한 파일). 업데이트는 **빌드를 올린 워크트리와 같은 줄바꿈 상태**에서 올려야 한다 — `git ls-files --eol frontend/modules/korean-spell` 로 두 워크트리를 비교하면 범인이 나온다. 다음 빌드부터는 어느 쪽이든 그 상태가 기준이 된다 |
+| 빌드 로그에 로컬엔 있는 파일이 "없다"고 나옴 / 아카이브가 갑자기 커지거나 작아짐 | 루트 `.easignore` 를 본다. `.easignore` 가 있으면 `.gitignore` 는 전혀 안 읽히고, 슬래시 없는 패턴은 모든 깊이에서 걸린다(`scripts/` 가 `frontend/scripts/` 까지 지운다). 11절 참고 — 크기는 빌드를 돌리지 않고 11-5 로 잰다 |
 | "출처를 알 수 없는 앱" 이 계속 막힘 | 설정 → 보안 → 해당 브라우저/파일관리자 앱의 "알 수 없는 앱 설치" 권한 허용 |
+| `eas update` 가 `Asset processing timed out for assets:` 목록과 `Error: update command failed.` 로 죽음 | **서버측 에셋 처리 타임아웃 — 그냥 재시도하면 된다**(2026-09-18 확인). 코드·에셋 문제가 아니다: `번들 export ✔` → `assetmap.json 업로드 ✔` 까지 지나고 그다음 단계에서 죽으며, 목록에 iOS·안드로이드 `.hbc` 가 **둘 다** 들어 있다(특정 에셋이 큰 게 아니라 처리 단계 전체가 못 끝난 것). `frontend/assets` 는 113개·12MB(폰트 4개가 6MB)로 타임아웃을 낼 규모가 아니다. **중요: 이때 업데이트는 발행되지 않는다** — EAS 는 에셋 처리가 끝난 뒤에 업데이트 레코드를 만들므로 채널은 이전 업데이트를 그대로 가리킨다(앱이 깨지지 않고, 수정도 반영되지 않는다). `npx eas-cli channel:view production` 으로 먼저 확인하고 재시도한다. 에셋은 해시로 중복 제거되므로 두 번째가 더 빠르다. 계속 실패하면 `rm -rf dist .expo` 후 재시도 → <https://status.expo.dev> 확인 → 불안정한 네트워크(테더링 등)면 다른 회선에서 시도 |
+
+## 다음 빌드에 묶을 것
+
+fingerprint 를 바꾸는 변경이라 지금 빌드에 업데이트를 계속 보내려면 미뤄야 하는 것들. 다음 네이티브 빌드 직전에 함께 넣는다.
+
+- `fingerprint.config.js` 의 `fileHookTransform`(동작 권한 문구를 해시에서 false 로 세는 훅) 지우기 — 1.0.7 iOS 가
+  ITMS-90683 으로 거절돼 문구를 넣으면서, 이미 나간 Android 1.0.7 에 OTA 가 끊기지 않게 임시로 둔 것(2026-10-06).
+  다음 빌드는 어차피 런타임이 바뀌므로 그때 지운다.
+
+### 1.0.7 에 묶은 것 (2026-10-06, 브랜치 `feat/invite-applinks-location`)
+
+**출시 기록(2026-10-06):** 소스 main `9c987965` = **다음 OTA 기준선**. runtime Android `700b96c0…`, iOS `d75619b0…`.
+- Android vc39 → production completed(즉시 전체 배포). 매니페스트에 `/i/`·`autoVerify`·위치 권한 2개 확인, 백그라운드 위치 없음.
+- iOS build 33 → 업로드했으나 **처리 실패(ITMS-90683, NSMotionUsageDescription 누락)**. 영어 기본 문구를 막으려고
+  `motionUsagePermission: false` 로 껐는데, expo-location 이 동작 API 를 참조해 Apple 은 쓰지 않아도 문구를 요구한다.
+  한국어 문구를 넣고 fingerprint 는 훅으로 유지(Android `700b96c0`·iOS `d75619b0` 그대로) → iOS 만 다시 빌드.
+  실패 사유는 ASC API `GET /v1/apps/{id}/buildUploads` 의 `state.errors` 로 바로 보인다.
+- iOS build 34(runtime `d75619b0`) → 업로드·처리 COMPLETE·VALID(경고 0). 1.0.6 버전 기록을 1.0.7 로 바꿔 build 34 로 심사 제출(2026-10-06, WAITING_FOR_REVIEW, 승인 후 자동 출시).
+- iOS 첫 시도(build 32)는 취소했다 — App ID 에 Associated Domains 가 꺼져 있었고, 저장소의 ASC 키(`5L85YB6A6G`)는 Admin 이 아니라
+  기능을 켜지 못한다(403). `--non-interactive` 빌드는 기능 동기화를 하지 않고 옛 프로필을 그대로 쓴다. **entitlement 를 새로 넣는 빌드는
+  사용자가 PowerShell 에서 대화형(`npx eas-cli build --platform ios --profile production`, Apple ID 로그인)으로 돌려야 한다.**
+- 발견: **iOS 1.0.6 은 심사 제출이 안 된 채(PREPARE_FOR_SUBMISSION) 남아 있었다** — App Store 판매 중은 1.0.5(build 30).
+  즉 10-02 이후 1.0.6 runtime 대상으로 올린 OTA 는 아이폰 사용자에게 한 번도 가지 않았다. 1.0.7 심사가 통과하면 한꺼번에 해소된다.
+
+- `package.json`: `update:production`·`update:preview` 에 `--environment`, `verify:place-link`·`verify:home-event` 등록.
+  이제 `npm run update:production` 을 비대화형으로 돌려도 된다.
+- **커플 초대 App Links·Universal Links + 설치 후 코드 이어받기** (docs/first-experience-audit.md #2 2단계):
+  - `app.json` `android.intentFilters`(`https://dubly.co.kr/i/*`, `autoVerify`) · `ios.associatedDomains`(`applinks:dubly.co.kr`).
+    번들 ID `com.doubly.app.ios` 에 Associated Domains 기능이 아직 꺼져 있었다(2026-10-06, ASC API 확인) — EAS 빌드가
+    entitlements 를 보고 켠다. 빌드 로그에서 "Synced capabilities" 를 확인한다.
+  - `landing/.well-known/assetlinks.json` — **Play 앱 서명 키** SHA-256 `DC:06:…:31:39`. Play Console 대신
+    `androidpublisher` `generatedApks/{versionCode}` 의 `certificateSha256Hash` 로 받았다(서비스 계정 키로 된다).
+  - `landing/.well-known/apple-app-site-association` — Team ID `D9F8L9VS2S`(ASC `bundleIds` 의 `seedId`).
+  - 설치 리퍼러: 새 의존성 없이 `expo-application` 의 `getInstallReferrerAsync()`(`src/utils/installReferrer.ts`).
+  - **소개 사이트를 빌드보다 먼저 배포한다** — OS 가 앱 설치·업데이트 때 도메인을 검증한다(Android 는 실패하면 다음 설치까지 다시 안 본다).
+- **럽슐랭 지도 "내 위치"** — `expo-location`(의존성) + `app.json` 플러그인(사용 중에만, 백그라운드·항상·동작 권한 끔).
+  Android 에 `ACCESS_COARSE/FINE_LOCATION` 이 생긴다 → **Play 데이터 보안 양식·App Store 개인정보 라벨 확인 필요**
+  (위치는 기기 안에서 지도를 옮기는 데만 쓰고 서버로 보내지 않는다 = "수집 안 함"으로 답할 수 있다).
+- 아이콘 서브셋 재생성 — `crosshairs-gps` 추가, 그동안 커밋된 서브셋에 빠져 있던 `head`·`home`·`barcode`·`refresh` 도 들어갔다.
 
 ## 다음 단계
 - iOS는 Apple 개발자 계정($99/년)이 있어야 ad-hoc/TestFlight 배포가 가능합니다. 준비되면

@@ -7,9 +7,11 @@ package com.fitto.common.plan;
  * 있나"를 아무도 한눈에 못 본다. 가격 정책은 자주 바뀌는데, 바꿀 때마다 20개 파일을
  * 뒤져야 하면 반드시 어긋난다.
  *
- * <p><b>⚠️ 아래 FREE 숫자는 아직 근거가 없는 자리표시자다.</b> 무료 체험 기간
- * ({@code fitto.plan.free-trial=true}) 동안은 전원 PRO 로 판정되므로 이 값들은 쓰이지 않는다.
- * 실사용 분포(p60~p75)를 측정한 뒤에 확정한다 — 그때 고칠 곳은 이 파일 하나다.
+ * <p><b>⚠️ 아래 FREE 숫자는 2026-09-22 부터 실제로 강제된다.</b> 그전까지는 전역 무료
+ * 체험({@code fitto.plan.free-trial=true})이라 한 줄도 실행되지 않는 자리표시자였다.
+ * 체험을 끄면서 <b>숫자는 그대로 둔 채</b> 켰다 — 실사용 분포(p60~p75)를 재려면 먼저
+ * 무료 사용자가 존재해야 하고, 지금은 그 상태를 만드는 단계다. 처음 막히는 자리가
+ * 나오면 여기 숫자부터 의심할 것. 고칠 곳은 이 파일 하나다.
  *
  * <p>클라이언트에는 {@code GET /api/v1/plan/me} 로 내려간다. 앱에 한도를 하드코딩하면
  * 숫자를 바꿀 때마다 스토어 심사를 기다려야 하므로, <b>판정도 표시도 서버가 한다.</b>
@@ -34,12 +36,6 @@ public enum Feature {
     AI_FOOD_PHOTO("AI 음식 사진 분석", Quota.perDay(5), Quota.perDay(30)),
     /** 음식 이름 텍스트 분석 — 사진보다 가벼워 한도도 같이 준다. */
     AI_FOOD_TEXT("AI 음식 분석", Quota.perDay(2), Quota.perDay(30)),
-    /**
-     * 운동 인증샷 분석 — 다른 앱(스트라바·삼성헬스·애플워치)의 완료 화면이나 트레드밀
-     * 사진에서 시간·거리를 읽어 기록을 채운다. 음식 사진과 같은 성격의 훅이라 한도도 같게 둔다:
-     * 막아버리면 "사진만 올리면 기록된다"는 이 앱의 이유를 무료 사용자가 체험할 수 없다.
-     */
-    AI_WORKOUT_PHOTO("AI 운동 사진 분석", Quota.perDay(2), Quota.perDay(30)),
     AI_DIET_COACH("AI 식단 코치", Quota.blocked(), Quota.perDay(10)),
     AI_DATE_COURSE("AI 데이트 코스 추천", Quota.perMonth(1), Quota.perDay(10)),
     /**
@@ -98,10 +94,21 @@ public enum Feature {
     /**
      * 사진 업로드(피드·앨범·맛집·식단·체중·프로필 공통) — 서명 발급 시점에 센다.
      *
+     * <p><b>한도는 커플이 함께 쓴다</b>({@link #isCoupleScoped()} · {@code PlanGuard.scopeOf}).
+     * 사진은 대부분 커플 공간에 쌓이고, 둘 중 한 명이 주로 찍는 게 보통이다 — 사람마다 따로
+     * 세면 같은 앨범을 보면서 한쪽만 먼저 막힌다.
+     *
+     * <p>그래서 무료 한도가 <b>30 → 60</b> 이 됐다. 숫자를 늘린 게 아니라 <b>총량을 보존</b>한
+     * 것이다: 예전엔 각자 30장(커플 합 60)이었고 지금은 둘이 합쳐 60장이다. 혼자 쓰는 동안에는
+     * 커플이 없어 본인 주머니로 떨어지므로, 연결 전 사용자에게는 실질 상향이다(그만큼이 이
+     * 기능의 체험이 된다).
+     *
      * <p>PRO 의 1000장은 판매 문구가 아니라 <b>사고 방지선</b>이다. 앱 버그나 자동화로
-     * 무한 업로드가 돌면 요금이 그대로 청구되므로, "무제한"이라도 절대 상한은 둔다.
+     * 무한 업로드가 돌면 요금이 그대로 청구되므로, "무제한"이라도 절대 상한은 둔다. 이 값은
+     * 커플 단위로 두는 편이 원래 의도에 더 맞는다 — 요금 폭탄 방지는 계정 수와 무관하고,
+     * 커플 월 1000장이면 실사용에서는 닿지 않는다.
      */
-    PHOTO_UPLOAD("사진 업로드", Quota.perMonth(30), Quota.perMonth(1000)),
+    PHOTO_UPLOAD("사진 업로드", Quota.perMonth(60), Quota.perMonth(1000)),
 
     /* ── 저장 · 개수형 (DB 개수로 판정) ───────────────────────────────────── */
 
@@ -112,7 +119,12 @@ public enum Feature {
     CONTENT_ITEM("콘텐츠", Quota.upTo(20), Quota.unlimited()),
     /** PRO 의 30은 기존 {@code MAX_ROUTINES} 를 옮겨온 것 — 상한의 단일 출처를 여기로 모았다. */
     WORKOUT_ROUTINE("내 운동 루틴", Quota.upTo(3), Quota.upTo(30)),
-    CALENDAR_EVENT("커플 캘린더 일정", Quota.perMonth(10), Quota.unlimited()),
+    /**
+     * 다가오는 일정 수 — 매년 반복(기념일·생일)과 아직 끝나지 않은 일정만 센다.
+     * 예전엔 월 10건 소비형이라 지워도 돌아오지 않았고, 첫날 기념일·생일·약속을 넣다 보면 그 달이 끝났다
+     * (docs/first-experience-audit.md #33). 지난 일정은 세지 않는다 — 세면 기록이 쌓일수록 지워야만 새로 넣을 수 있다.
+     */
+    CALENDAR_EVENT("다가오는 캘린더 일정", Quota.upTo(10), Quota.unlimited()),
     /** PRO 의 50은 기존 {@code MAX_FAVORITES} 를 옮겨온 것. */
     FAVORITE_FOOD("즐겨찾는 음식", Quota.upTo(10), Quota.upTo(50)),
     /**
@@ -144,6 +156,24 @@ public enum Feature {
     MOOD_CALENDAR_FULL("무드 캘린더 전체 기간", Quota.blocked(), Quota.unlimited()),
     /** 회복 완료 부위 전체 카드 + 파트너 회복 상태 비교(현재는 "최근 부위 한 줄"만 무료로 노출). */
     WORKOUT_RECOVERY_FULL("회복 부위 전체 보기", Quota.blocked(), Quota.unlimited()),
+    /**
+     * 운동 심화 통계 — 볼륨 추이 · 추정 1RM · 부위 밸런스. <b>PRO 대표 기능 세 개 중 하나</b>
+     * ({@link #isHero()}).
+     *
+     * <p><b>왜 {@link #FULL_STATS} 와 따로 두나</b>: 저쪽은 "무료는 최근 구간만"이라는 <b>기간</b>
+     * 게이트이고 실제 적용도 식단 통계 한 곳뿐이다. 이쪽은 기간이 아니라 <b>지표 자체</b>를
+     * 연다 — 무료도 전체 기간의 "며칠 운동했나"는 계속 본다. 한 게이트로 합치면 식단 통계의
+     * 기간 제한을 풀 때 운동 지표까지 같이 열리거나 그 반대가 된다.
+     *
+     * <p><b>무료에서 무엇도 회수하지 않는다.</b> 지금 무료로 보이는 주·월 운동일수, 최근 7일
+     * 그래프, 30일 부위별 세트 수는 그대로다. 잠그는 건 <b>새로 계산해서 얹는</b> 볼륨·1RM·
+     * 밸런스뿐이다 — 쓰던 것을 뺏으면 새 상품이 아니라 기능 회수로 체감된다
+     * (docs/STICKER_PACK_OVERLAP_2026-09-14.md 가 그 실패를 기록하고 있다).
+     *
+     * <p>개인 판정이다(커플 아님) — 볼륨·1RM 은 내 몸의 기록이고, 상대 데이터가 있어야
+     * 성립하는 {@link #WORKOUT_RECOVERY_FULL}(파트너 회복 비교)과 다르다.
+     */
+    WORKOUT_V2_STATS("운동 심화 통계", Quota.blocked(), Quota.unlimited()),
     /** 사귄 지 1년·연말 자동 생성 연간 결산 — WEEKLY_RECAP·AI_WEEKLY_LETTER 의 연 단위 확장. */
     ANNIVERSARY_RECAP("우리의 1년 리캡", Quota.blocked(), Quota.unlimited()),
     /**
@@ -186,8 +216,46 @@ public enum Feature {
     VOICE_MESSAGE("채팅 음성 메시지", Quota.perDay(5), Quota.perDay(100)),
     /** 럽슐랭 매거진의 읽기 전용 공개 웹페이지 — 바이럴 자산이라 무료도 1개는 준다. */
     PUBLIC_GUIDE_LINK("럽슐랭 공개 가이드", Quota.upTo(1), Quota.unlimited()),
-    /** 운동·식단·체중·럽슐랭 기록 CSV 내보내기 — "데이터 인질 금지" 원칙상 무료도 반드시 제공. */
-    CSV_EXPORT("기록 내보내기", Quota.perMonth(1), Quota.perWeek(1)),
+    /**
+     * 기록 전체 내보내기(사진 포함 ZIP) — "내 기록은 언제든 가져갈 수 있다".
+     *
+     * <p><b>FREE 와 PRO 가 같다</b>(2026-10-01, docs/DATA_EXPORT_2026-10-01.md). 내보내기를 결제로
+     * 풀어 주는 순간 "추억을 보려면 결제" 가 된다. 한도는 원가 방어선일 뿐이라 플랜과 무관하고,
+     * 두 값이 같으니 {@link #isListed()} 가 false 가 되어 결제 화면 비교표에서도 빠진다.
+     * 넘겨도 업셀하지 않는다({@code PlanGuard} 의 upsells). 키 이름은 사용량·이벤트가 문자열로
+     * 들고 있어 그대로 둔다(CSV 는 처음 계획의 흔적).
+     */
+    CSV_EXPORT("기록 내보내기", Quota.perWeek(2), Quota.perWeek(2)),
+
+    /**
+     * 나만의 하루 기록 사진(최대 1장/일) — 전용 서명({@code JournalService.photoSignature})에서 센다.
+     *
+     * <p><b>{@link #PHOTO_UPLOAD} 에서 세지 않는다.</b> 그쪽은 커플이 함께 쓰는 주머니라, 매일 사진을 붙이는
+     * 사람이 커플 무료 한도(월 60)의 절반을 먹고 상대가 피드에서 402 를 만난다. 사람 단위로 따로 센다.
+     *
+     * <p>하루 3 = "1장 + 바꾸기 2번"의 사고 방지선일 뿐이다. FREE 와 PRO 가 같아 결제 비교표에서 빠지고
+     * ({@link #isListed()}) 넘겨도 업셀하지 않는다 — 기록은 무료가 원칙이다("데이터 인질 금지").
+     * docs/PERSONAL_JOURNAL_ANALYSIS_2026-10-02.md §5-1.
+     */
+    JOURNAL_PHOTO("기록 사진", Quota.perDay(3), Quota.perDay(3)),
+
+    /**
+     * 식단 사진(끼니 사진·영양성분표) — 전용 서명({@code UploadController.mealSignature})에서 센다.
+     *
+     * <p><b>{@link #PHOTO_UPLOAD} 에서 세지 않는다.</b> 예전엔 같은 주머니라, 둘이 하루 세 끼를 찍으면 커플 무료 한도
+     * 월 60장이 열흘 안에 바닥나고 그 뒤로는 일상·채팅 사진까지 402 가 떴다(docs/first-experience-audit.md #10 —
+     * 우리 커플 실측 30일 209장, 대부분 식단). AI 음식 분석이 하루 5회로 "끼니마다"를 전제로 한 것과도 어긋났다.
+     *
+     * <p>사람 단위·하루 10장 = 세 끼 + 간식 + 영양성분표 + 다시 찍기의 사고 방지선이다. FREE 와 PRO 가 같아
+     * 결제 비교표에서 빠지고({@link #isListed()}) 넘겨도 업셀하지 않는다 — {@link #JOURNAL_PHOTO} 와 같은 원칙(기록은 무료).
+     * 옛 앱은 공용 서명을 쓰므로 지금처럼 {@link #PHOTO_UPLOAD} 에서 빠진다.
+     */
+    MEAL_PHOTO("식단 사진", Quota.perDay(10), Quota.perDay(10)),
+    /*
+     * 나만의 하루 기록 — 게이팅 없음(둘 다 무제한). COUPLE_GAME 과 같은 이유로 Feature 로 둔다: <b>새 기록을
+     * 만들 때만</b> PlanGuard.require 를 지나 FEATURE_USED 가 남는다(수정은 세지 않는다). 본문은 어디에도 싣지 않는다.
+     */
+    JOURNAL("나만의 하루 기록", Quota.unlimited(), Quota.unlimited()),
 
     /*
      * 협동 게임(스도쿠) — 게이팅 없음(둘 다 무제한). 그래도 Feature 로 두는 이유는 새 판 생성이
@@ -214,12 +282,106 @@ public enum Feature {
         return plan == Plan.PRO ? pro : free;
     }
 
+    /** FREE 한도 — 플랜 비교 화면이 두 값을 나란히 보여줘야 해서 따로 연다. */
+    public Quota free() {
+        return free;
+    }
+
+    /** PRO 한도 — {@link #free()} 와 짝. */
+    public Quota pro() {
+        return pro;
+    }
+
+    /**
+     * 플랜 비교 화면에 보여줄 기능인가.
+     *
+     * <p>두 플랜의 한도가 같으면 비교할 게 없다 — 지금은 {@code AI_TOTAL}(플랜과 무관한
+     * 안전망)과 {@code COUPLE_GAME}(게이팅 없음)이 여기 걸린다. <b>이름을 나열하지 않고
+     * 값으로 판정</b>하므로, 나중에 한도가 갈라지면 저절로 화면에 나타난다.
+     */
+    public boolean isComparable() {
+        return !free.equals(pro);
+    }
+
+    /**
+     * 앱에서 내린 기능인가 — 게이팅은 그대로 두고 <b>파는 목록에서만</b> 뺀다.
+     *
+     * <p>{@link #VIDEO_CALL}: 통화는 2026-09-28 에 앱에서 뺐다(docs/CALL_REMOVAL_2026-09-28.md).
+     * 상수를 지우지 않는 이유는 둘이다 — 스토어의 1.0.4 는 여전히 통화 API 를 부르며 이 게이트를
+     * 지나고, {@code usage_counters}·분석 이벤트가 이 이름을 문자열로 들고 있다.
+     */
+    public boolean isWithdrawn() {
+        return this == VIDEO_CALL;
+    }
+
+    /** 결제 화면 비교표에 올리는가 — 한도가 갈리고({@link #isComparable()}) 내린 기능이 아닌 것. */
+    public boolean isListed() {
+        return isComparable() && !isWithdrawn();
+    }
+
+    /**
+     * PRO 를 대표하는 세 기능인가 — 결제 화면이 <b>맨 위에 크게</b> 보여줄 것들.
+     *
+     * <p>비교 화면은 {@link #isComparable()} 로 30줄 가까이 나열되는데, 30줄을 다 읽고
+     * 결제를 결정하는 사람은 없다. "무엇을 사는가"는 세 문장으로 끝나야 한다.
+     * <ol>
+     *   <li>{@link #AI_COUPLE_EMOJI} — 사진 한 장으로 우리 얼굴 이모지를 만든다.
+     *       <b>기획 문서의 {@code AI_EMOJI_CREATOR} 가 이것이다</b> — 이름을 바꾸지 않은 것은
+     *       {@code usage_counters}·{@code ai_usage_logs}·분석 이벤트가 전부 이 enum 이름을
+     *       문자열로 들고 있어서다. 상수만 갈면 과거 사용량과 원가 집계가 통째로 끊긴다</li>
+     *   <li>{@link #AI_FOOD_PHOTO} — 음식 사진을 찍으면 칼로리·매크로가 붙는다.
+     *       <b>이것만 무료에도 한도를 준다</b>(하루 5회). 대표 기능이 전부 잠겨 있으면
+     *       PRO 의 가치를 체험할 길이 없다 — 이 파일 맨 위 "체감가치 훅" 원칙</li>
+     *   <li>{@link #WORKOUT_V2_STATS} — 볼륨·1RM·부위 밸런스</li>
+     * </ol>
+     *
+     * <p>{@link #isCoupleScoped()} 와 같은 모양으로 switch 에 둔다 — 상수 선언에 인자를
+     * 하나 더 받으면 정작 중요한 한도 숫자가 파묻힌다.
+     */
+    public boolean isHero() {
+        return switch (this) {
+            case AI_COUPLE_EMOJI, AI_FOOD_PHOTO, WORKOUT_V2_STATS -> true;
+            default -> false;
+        };
+    }
+
+    /**
+     * 비교 화면에서 묶이는 단위 — 이 파일의 주석 섹션과 같다.
+     *
+     * <p>{@link #isCoupleScoped()} 와 같은 모양(상수 선언은 건드리지 않고 switch 로 분류)을
+     * 따른다. 40개 선언마다 인자를 하나씩 더 받으면 정작 중요한 한도 숫자가 파묻힌다.
+     */
+    public FeatureGroup group() {
+        return switch (this) {
+            case AI_FOOD_PHOTO, AI_FOOD_TEXT, AI_DIET_COACH, AI_DATE_COURSE, AI_RESTAURANT_RECOMMEND,
+                 AI_WEEKLY_LETTER, AI_TRIP_ITINERARY, AI_WORKOUT_RECOMMEND, AI_NEXT_MEAL,
+                 AI_COUPLE_EMOJI, AI_TOTAL -> FeatureGroup.AI;
+            case MEMORIES, FULL_STATS, WEEKLY_RECAP, TRIP_EXPENSE, TRIP_CHECKLIST,
+                 MOOD_CALENDAR_FULL, WORKOUT_RECOVERY_FULL, WORKOUT_V2_STATS, ANNIVERSARY_RECAP,
+                 VIDEO_CALL, STREAK_REPAIR -> FeatureGroup.DEPTH;
+            case PHOTO_UPLOAD, TRIP_ACTIVE, PLACE_PIN, CONTENT_ITEM, WORKOUT_ROUTINE,
+                 CALENDAR_EVENT, FAVORITE_FOOD, CUSTOM_EXERCISE, CHALLENGE_ACTIVE,
+                 COOP_GOAL_ACTIVE, JOURNAL_PHOTO, MEAL_PHOTO -> FeatureGroup.STORAGE;
+            case WORKOUT_BOOSTER, CUSTOM_QUESTION, VOICE_MESSAGE, PUBLIC_GUIDE_LINK,
+                 CSV_EXPORT, COUPLE_GAME, JOURNAL -> FeatureGroup.ENGAGEMENT;
+            case CUSTOM_BACKGROUND, PREMIUM_STICKER, TOUCH_GESTURE_PREMIUM -> FeatureGroup.DECORATION;
+        };
+    }
+
     /**
      * 커플 공간의 기능인가 — 판정을 관계 단위(둘 중 높은 플랜)로 해야 하는 것들.
      *
      * <p>공동 콘텐츠는 {@code couple_id} 에 매달려 있어서 개인 단위로 판정하면
      * 같은 여행을 한 명은 보고 한 명은 못 보는 상태가 된다.
      */
+    /**
+     * 정액 구독 밖에서 <b>회수 추가</b>를 파는 기능인가 — {@link CreditProduct} 에 상품이 있는 기능.
+     * 판정({@code PlanGuard.consumeOrCredit})과 표시({@code PlanGuard.state})가 같은 답을 본다.
+     */
+    public boolean sellsCredits() {
+        return java.util.Arrays.stream(CreditProduct.values()).anyMatch(p -> p.feature() == this);
+    }
+
     public boolean isCoupleScoped() {
         return switch (this) {
             case AI_DATE_COURSE, AI_RESTAURANT_RECOMMEND, AI_TRIP_ITINERARY, AI_WEEKLY_LETTER,
@@ -235,8 +397,10 @@ public enum Feature {
                  WORKOUT_RECOVERY_FULL, VIDEO_CALL,
                  // 무드 캘린더는 두 사람의 무드를 나란히 보여준다.
                  MOOD_CALENDAR_FULL,
-                 // 연간 리캡·스트릭 복구권·기록 내보내기는 커플 단위 데이터(관계 전체 이력)를 다룬다.
-                 ANNIVERSARY_RECAP, STREAK_REPAIR, CSV_EXPORT,
+                 // 연간 리캡·스트릭 복구권은 커플 단위 데이터(관계 전체 이력)를 다룬다.
+                 // 기록 내보내기는 여기 없다 — 한도가 플랜과 무관하고, 상대가 쓴 횟수 때문에
+                 // 내가 못 받는 일이 없어야 한다(탈퇴 유예 중인 상대의 기록을 받는 경우 등).
+                 ANNIVERSARY_RECAP, STREAK_REPAIR,
                  // 보내는/만드는 사람은 한 명이어도 "선물하는 결제" 프레임 — 한쪽만 PRO 여도 함께 쓴다.
                  WORKOUT_BOOSTER, CUSTOM_QUESTION, VOICE_MESSAGE,
                  // 매거진(럽슐랭)은 이미 커플 소유 콘텐츠 — PLACE_PIN 과 같은 판정.

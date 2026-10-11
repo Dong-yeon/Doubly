@@ -1,71 +1,114 @@
 /**
- * 첫 실행 인트로 — 서비스 소개 3장 (AUTH-10 / 온보딩).
+ * 첫 실행 인트로 — 서비스 소개 4장 (AUTH-10 / 온보딩).
  *
  * 가입 직후 아무 안내 없이 홈에 떨어지던 문제를 완화한다.
  * 한 번 보면 doubly.onboardingSeen 플래그로 다시 보여주지 않는다(Splash 에서 분기).
+ *
+ * <p><b>실제 화면 캡처를 쓰지 않는 이유</b>: 하단 탭바 재구성(홈·럽바디·채팅·우리·럽슐랭,
+ * docs/ALBUM_TAB_IA_2026-09-14.md)이 확정돼 있어 지금 찍은 스크린샷은 곧 낡는다.
+ * 아이콘+문구는 화면 구조가 바뀌어도 살아남고, 문구만 고쳐 OTA 로 내보낼 수 있다.
+ * 같은 이유로 아래 문구에 <b>탭 이름을 쓰지 않는다</b> — 브랜드 조어(럽슐랭)만 쓴다.
  */
 import React, { useRef, useState } from 'react';
 import {
   FlatList,
+  Image,
+  type ImageSourcePropType,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
+  Platform,
   Pressable,
-  StyleSheet,
   Text,
-  useWindowDimensions,
   View,
 } from 'react-native';
+import { useContentWidth } from '../../hooks/useContentWidth';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MaterialCommunityIcons } from '../../components/Icon';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { OnboardingStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { storage } from '../../utils/storage';
 import { STORAGE_KEYS } from '../../constants/config';
-import { colors, fontSize, radius, spacing } from '../../constants/theme';
+import { colors, fontSize, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, 'Onboarding'>;
 
-type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+/**
+ * 액센트는 <b>팔레트 키</b>로 들고 있다가 렌더 시점에 푼다.
+ *
+ * <p>모듈 최상위에서 {@code colors.me} 처럼 값을 꺼내 굳히면, 다크모드를 즉시 전환해도
+ * (3fa4742) 이 배열은 앱 시작 시점의 색을 그대로 들고 있는다 — theme/colors.ts 의
+ * "colors 프록시는 <b>읽는 시점</b>에 현재 팔레트를 참조한다" 주석과 같은 이유다.
+ * 배경 토큰은 `<키>Bg` 규칙을 따르므로 키 하나로 둘 다 얻는다.
+ */
+type AccentKey = 'me' | 'partner' | 'together' | 'primary';
 
 interface Slide {
-  icon: IconName;
-  accent: string;
-  accentBg: string;
+  /**
+   * 자체 캐릭터(assets/stickers, 달걀 커플 "duo") — 2026-09-24 에 140px 원 안의 Material 아이콘을
+   * 걷어냈다(docs/SCREEN_DESIGN_PASS_2026-09-23.md §8-3 1번). 아이콘 원은 LLM 이 온보딩을 만들면
+   * 반드시 나오는 모양이고, 이 앱은 캐릭터가 다섯 세트나 있는데 첫인상에서 안 쓰고 있었다.
+   * 화면 캡처와 달리 캐릭터는 탭 구조가 바뀌어도 낡지 않는다. 이미 번들에 있는 파일이라 OTA.
+   */
+  image: ImageSourcePropType;
+  accent: AccentKey;
   title: string;
   desc: string;
 }
 
-// 나=Coral / 상대=Indigo / 함께=Violet 순서로 Duo 팔레트를 따라간다
+/*
+ * 나=코랄 / 상대=하늘 / 함께=라벤더 순서로 소유자 팔레트를 따라가고, 마지막 한 장만
+ * 크롬 색(primary)을 쓴다 — 럽슐랭은 소유자 구분이 아니라 브랜드 면이라서다.
+ *
+ * <p><b>이 문구는 기능보다 먼저 낡는다</b> — 2026-09-15 에 하루 만에 두 곳이 어긋났다.
+ * ①운동 사진은 AI 판독을 <b>걷어내고</b> 오운완 인증샷이 됐는데(사진 자체가 기록) 문구는
+ * 여전히 "운동도 식단도 AI가 채워준다"고 약속했다 — 첫 화면이 하는 거짓말은 첫인상을
+ * 정확히 깎는다. ②게임이 셋(스도쿠·오목·캐치마인드)인데 둘만 적혀 있었다.
+ * 기능을 넣고 빼면 <b>이 배열을 같이 본다</b>. 문구만 바뀌면 OTA 로 나간다.
+ *
+ * 문구는 "지금 이 앱에 있는 것"만 적는다. 2026-08 판 3장(기록·응원·계획)은 그 뒤 한 달간
+ * 붙은 것(우리 이모지·협동 게임·사진 한 장 기록·AI 자동 분석)을 하나도 담지 못했다.
+ */
 const SLIDES: Slide[] = [
   {
-    icon: 'clipboard-text-outline',
-    accent: colors.coral,
-    accentBg: colors.meBg,
-    title: '함께 기록해요',
-    desc: '운동·식단·일상을 둘이 함께 남겨요.\n오늘 하루가 우리의 기록이 됩니다.',
+    image: require('../../../assets/stickers/duo_idea.png'),
+    accent: 'me',
+    title: '사진 한 장이 기록이 돼요',
+    desc: '식단은 AI가 칼로리를 채우고,\n운동은 오운완 한 장이면 끝.\n그 사진들은 둘의 앨범에 쌓여요.',
   },
   {
-    icon: 'hand-heart-outline',
-    accent: colors.indigo,
-    accentBg: colors.partnerBg,
-    title: '서로 응원해요',
-    desc: '상대의 기록에 반응하고,\n함께한 날들을 스트릭으로 이어가요.',
+    image: require('../../../assets/stickers/duo_heart_eyes.png'),
+    accent: 'partner',
+    title: '우리 얼굴로 만든 이모티콘',
+    desc: '애인 사진으로 감정 이모지를 그려\n채팅에 보내고 오늘의 기분으로 걸어요.',
   },
   {
-    icon: 'map-marker-radius-outline',
-    accent: colors.violet,
-    accentBg: colors.togetherBg,
-    title: '함께 계획해요',
-    desc: '가고 싶은 맛집과 여행을 같이 담고,\n둘만의 추억을 쌓아가요.',
+    image: require('../../../assets/stickers/duo_wink.png'),
+    accent: 'together',
+    title: '같이 놀고, 서로 응원해요',
+    desc: '스도쿠·오목·캐치마인드를 같이 하고,\n서로의 기록에 반응하며 스트릭을 이어가요.',
+  },
+  {
+    image: require('../../../assets/stickers/duo_drool.png'),
+    accent: 'primary',
+    title: '우리만의 맛집 가이드',
+    desc: '둘이 함께 매긴 별점이 등급이 되고,\n가고 싶은 곳이 우리 지도에 쌓여요.',
   },
 ];
 
 export function OnboardingScreen({ navigation }: Props) {
-  const { width } = useWindowDimensions();
+  const width = useContentWidth();
   const listRef = useRef<FlatList<Slide>>(null);
   const [index, setIndex] = useState(0);
+  /*
+   * 슬라이드 높이를 재서 직접 준다.
+   *
+   * VirtualizedList 가 각 항목을 감싸는 셀 View 는 <b>내용 높이</b>에 머물고 flex 로는
+   * 늘어나지 않는다(실측: 리스트 666 / 셀 274). 그 안에서 justifyContent:'center' 를
+   * 아무리 줘도 짧은 높이 안에서만 돌아, 내용이 화면 위쪽에 몰리고 아래에 빈 공간이
+   * 절반쯤 남았다. 높이를 명시하면 셀도 따라 늘어나 세로 중앙 정렬이 성립한다.
+   */
+  const [listHeight, setListHeight] = useState(0);
   const isLast = index === SLIDES.length - 1;
 
   const finish = async () => {
@@ -80,6 +123,37 @@ export function OnboardingScreen({ navigation }: Props) {
     navigation.replace('Login');
   };
 
+  /**
+   * 해당 장으로 스크롤한다.
+   *
+   * <p><b>웹에서는 RN 의 명령형 스크롤이 먹지 않았다</b> — 2026-09-15 실측: 다음을 세 번
+   * 누르면 버튼은 '시작하기'로 바뀌는데(=index 는 전진) 스크롤 위치는 0 에 붙어 있었다.
+   * 사용자는 첫 장만 보다가 갑자기 로그인 화면을 만나는 셈이었다. {@code scrollToIndex} 도
+   * {@code scrollToOffset} 도 같았다.
+   *
+   * <p>그래서 웹에서는 <b>스크롤 노드를 직접</b> 움직인다({@code getScrollableNode} 는
+   * react-native-web 에서 실제 DOM 요소를 준다). 네이티브는 기존 경로를 그대로 쓴다 —
+   * 그쪽은 정상 동작하고, DOM API 도 없다.
+   */
+  const goTo = (page: number) => {
+    const list = listRef.current;
+    list?.scrollToOffset({ offset: page * width, animated: true });
+    if (Platform.OS !== 'web') {
+      return;
+    }
+    /*
+     * 웹에서는 <b>scrollLeft 를 직접 대입</b>한다. 같은 노드에 대고
+     * {@code scrollTo({ behavior: 'smooth' })} 도 {@code scrollToOffset} 도 아무 일도
+     * 하지 않았다(2026-09-15 실측: 노드는 제대로 잡히고 scrollWidth 1500·clientWidth 375
+     * 인데 호출 뒤에도 scrollLeft 가 0). 대입 경로만 확실히 움직인다.
+     * 웹에선 애니메이션 없이 즉시 넘어가지만, 점·버튼과 어긋나지 않는 게 먼저다.
+     */
+    const node = list?.getScrollableNode?.() as unknown as HTMLElement | undefined;
+    if (node) {
+      node.scrollLeft = page * width;
+    }
+  };
+
   const onNext = () => {
     if (isLast) {
       finish();
@@ -92,7 +166,7 @@ export function OnboardingScreen({ navigation }: Props) {
      */
     const next = index + 1;
     setIndex(next);
-    listRef.current?.scrollToIndex({ index: next, animated: true });
+    goTo(next);
   };
 
   /**
@@ -130,16 +204,16 @@ export function OnboardingScreen({ navigation }: Props) {
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
+        style={styles.list}
+        onLayout={(e) => setListHeight(e.nativeEvent.layout.height)}
         onScroll={syncIndex}
         scrollEventThrottle={32}
         onMomentumScrollEnd={syncIndex}
         // scrollToIndex 는 레이아웃을 모르면 무시될 수 있다 — 슬라이드 폭이 고정이므로 명시
         getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
         renderItem={({ item }) => (
-          <View style={[styles.slide, { width }]}>
-            <View style={[styles.iconCircle, { backgroundColor: item.accentBg }]}>
-              <MaterialCommunityIcons name={item.icon} size={64} color={item.accent} />
-            </View>
+          <View style={[styles.slide, { width, height: listHeight || undefined }]}>
+            <Image source={item.image} style={styles.picture} resizeMode="contain" />
             <Text style={styles.title}>{item.title}</Text>
             <Text style={styles.desc}>{item.desc}</Text>
           </View>
@@ -152,7 +226,7 @@ export function OnboardingScreen({ navigation }: Props) {
             key={s.title}
             style={[
               styles.dot,
-              i === index && { backgroundColor: SLIDES[index].accent, width: 20 },
+              i === index && { backgroundColor: colors[SLIDES[index].accent], width: 20 },
             ]}
           />
         ))}
@@ -171,15 +245,9 @@ const styles = themedStyles((colors) => ({
   skip: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.sm },
   skipText: { fontSize: fontSize.body, color: colors.textSecondary, fontWeight: '600' },
   pressed: { opacity: 0.6 },
+  list: { flex: 1 },
   slide: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl },
-  iconCircle: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.xl,
-  },
+  picture: { width: 180, height: 180, marginBottom: spacing.xl },
   title: {
     fontSize: fontSize.heading,
     fontWeight: '800',

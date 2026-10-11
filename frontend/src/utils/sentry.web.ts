@@ -17,3 +17,12 @@
 export function initSentry(): void {
   // no-op
 }
+
+/** 채팅 소켓 계측 — 웹은 Sentry 가 없으므로 아무것도 하지 않는다(서버 이벤트는 socketTelemetry 가 따로 보낸다). */
+export function addSocketBreadcrumb(_message: string, _data?: Record<string, unknown>): void {
+  // no-op
+}
+
+export function reportSlowSocket(_summary: string, _tags: Record<string, string>, _timeline: string[]): void {
+  // no-op
+}

@@ -5,6 +5,7 @@ import type { ChatStackParamList } from './types';
 import { ChatScreen } from '../screens/chat/ChatScreen';
 import { ChatRoomScreen } from '../screens/chat/ChatRoomScreen';
 import { ChatPhotoGalleryScreen } from '../screens/chat/ChatPhotoGalleryScreen';
+import { StickerSettingsScreen } from '../screens/chat/StickerSettingsScreen';
 import { SavedMessagesScreen } from '../screens/chat/SavedMessagesScreen';
 import { ScheduledMessagesScreen } from '../screens/chat/ScheduledMessagesScreen';
 import { CoupleEmojiCreateScreen } from '../screens/chat/CoupleEmojiCreateScreen';
@@ -45,6 +46,7 @@ export function ChatStackNavigator() {
           fullScreenGestureEnabled: false,
         })}
       />
+      <Stack.Screen name="StickerSettings" component={StickerSettingsScreen} options={{ title: '이모티콘 설정' }} />
       <Stack.Screen
         name="ChatPhotoGallery"
         component={ChatPhotoGalleryScreen}

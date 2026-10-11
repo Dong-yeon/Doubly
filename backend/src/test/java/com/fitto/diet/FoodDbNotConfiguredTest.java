@@ -2,6 +2,7 @@ package com.fitto.diet;
 
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
+import com.fitto.diet.service.BarcodeLookupService;
 import com.fitto.diet.service.FoodDbClient;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,6 +22,8 @@ class FoodDbNotConfiguredTest {
 
     @Autowired
     FoodDbClient foodDbClient;
+    @Autowired
+    BarcodeLookupService barcodeLookupService;
 
     @Test
     void 키가_없으면_설정_안됨으로_판정된다() {
@@ -35,12 +38,12 @@ class FoodDbNotConfiguredTest {
     }
 
     /**
-     * 바코드 조회는 키가 있어도 지원하지 않는다 — 현재 데이터셋에 바코드 필드가 없다.
-     * 조회 실패를 "등록되지 않은 바코드"로 번역하던 예전 동작을 되돌리지 않기 위해 못박아 둔다.
+     * 테스트 프로파일은 식품안전나라 키가 없고 Open Food Facts 도 꺼 두었다 — 바코드 출처가 하나도 없으면
+     * "준비되지 않았다"고 말한다. 출처가 있는데 못 찾은 경우(FOOD_DB_NOT_FOUND)와 섞지 않는다.
      */
     @Test
-    void 바코드_조회는_준비되지_않았다고_알린다() {
-        assertThatThrownBy(() -> foodDbClient.lookup("8801234567890"))
+    void 바코드_출처가_하나도_없으면_준비되지_않았다고_알린다() {
+        assertThatThrownBy(() -> barcodeLookupService.lookup("8801234567890"))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.FOOD_DB_NOT_CONFIGURED);
     }

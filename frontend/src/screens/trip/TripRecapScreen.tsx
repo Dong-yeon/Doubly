@@ -63,7 +63,7 @@ export function TripRecapScreen({ route }: Props) {
     return (
       <SafeAreaView style={[styles.safe, styles.center]} edges={['bottom']}>
         {loading ? (
-          <ActivityIndicator color={colors.accent} />
+          <ActivityIndicator color={colors.together} />
         ) : loadError ? (
           <EmptyState
             icon="cloud-off-outline"
@@ -134,7 +134,7 @@ const styles = themedStyles((colors) => ({
   scroll: { padding: spacing.lg, paddingBottom: spacing.xxl },
 
   hero: {
-    backgroundColor: colors.accentSoft,
+    backgroundColor: colors.togetherBg,
     borderRadius: radius.xl,
     padding: spacing.lg,
     alignItems: 'center',

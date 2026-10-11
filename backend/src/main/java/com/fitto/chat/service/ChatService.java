@@ -1,13 +1,13 @@
 package com.fitto.chat.service;
 
-import com.fitto.auth.dto.UserResponse;
+import com.fitto.auth.dto.PartnerUserResponse;
 import com.fitto.chat.domain.AnimatedSticker;
 import com.fitto.chat.domain.ChatMessage;
 import com.fitto.chat.domain.ChatMessageReaction;
 import com.fitto.chat.domain.ChatPinnedMessage;
 import com.fitto.chat.domain.MessageType;
-import com.fitto.chat.domain.StickerPack;
 import com.fitto.chat.domain.StickerImage;
+import com.fitto.chat.domain.StickerPacks;
 import com.fitto.chat.domain.TouchGesture;
 import com.fitto.chat.dto.ChatBookmarkResponse;
 import com.fitto.chat.dto.ChatExportResponse;
@@ -30,12 +30,12 @@ import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.notification.NotificationCategory;
 import com.fitto.common.notification.NotificationService;
 import com.fitto.common.notification.PushLinks;
-import com.fitto.common.plan.Feature;
-import com.fitto.common.plan.PlanGuard;
 import com.fitto.coupleemoji.domain.CoupleEmoji;
 import com.fitto.coupleemoji.repository.CoupleEmojiRepository;
 import com.fitto.relation.domain.Relation;
 import com.fitto.relation.repository.RelationRepository;
+import com.fitto.sticker.service.RemoteStickerCatalog;
+import com.fitto.sticker.service.StickerService;
 import com.fitto.user.domain.User;
 import com.fitto.user.repository.UserRepository;
 import org.springframework.data.domain.PageRequest;
@@ -79,9 +79,10 @@ public class ChatService {
     private final RelationRepository relationRepository;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
-    private final PlanGuard planGuard;
+    private final StickerService stickerService;
     private final CoupleEventPublisher coupleEventPublisher;
     private final CoupleEmojiRepository coupleEmojiRepository;
+    private final RemoteStickerCatalog remoteStickerCatalog;
 
     public ChatService(ChatMessageRepository chatMessageRepository,
                        ChatMessageReactionRepository reactionRepository,
@@ -90,9 +91,10 @@ public class ChatService {
                        RelationRepository relationRepository,
                        UserRepository userRepository,
                        NotificationService notificationService,
-                       PlanGuard planGuard,
+                       StickerService stickerService,
                        CoupleEventPublisher coupleEventPublisher,
-                       CoupleEmojiRepository coupleEmojiRepository) {
+                       CoupleEmojiRepository coupleEmojiRepository,
+                       RemoteStickerCatalog remoteStickerCatalog) {
         this.chatMessageRepository = chatMessageRepository;
         this.reactionRepository = reactionRepository;
         this.bookmarkRepository = bookmarkRepository;
@@ -100,9 +102,10 @@ public class ChatService {
         this.relationRepository = relationRepository;
         this.userRepository = userRepository;
         this.notificationService = notificationService;
-        this.planGuard = planGuard;
+        this.stickerService = stickerService;
         this.coupleEventPublisher = coupleEventPublisher;
         this.coupleEmojiRepository = coupleEmojiRepository;
+        this.remoteStickerCatalog = remoteStickerCatalog;
     }
 
     /** 내 채팅방 목록 (활성 관계별 1개). */
@@ -111,8 +114,8 @@ public class ChatService {
                 .filter(Relation::isActive)
                 .map(r -> {
                     Long partnerId = r.partnerOf(userId);
-                    UserResponse partner = partnerId == null ? null
-                            : userRepository.findById(partnerId).map(UserResponse::from).orElse(null);
+                    PartnerUserResponse partner = partnerId == null ? null
+                            : userRepository.findById(partnerId).map(PartnerUserResponse::from).orElse(null);
                     ChatMessageResponse last = chatMessageRepository
                             .findTopByRelationIdOrderByIdDesc(r.getId())
                             .map(ChatMessageResponse::from).orElse(null);
@@ -305,11 +308,28 @@ public class ChatService {
         if (messageType == MessageType.TOUCH) {
             requireValidTouch(senderId, req.content());
         }
-        if (messageType == MessageType.STICKER
-                && (StickerPack.isPremium(req.content()) || AnimatedSticker.isPremiumContent(req.content()))) {
-            // 시즌 스티커·움직이는 이모티콘은 PRO 전용 — 터치 프리미엄 제스처와 같은 방어선이다
-            // (아래 주석 참고). 둘 다 같은 Feature 로 판정한다(AnimatedSticker 주석).
-            planGuard.require(senderId, Feature.PREMIUM_STICKER);
+        if (messageType == MessageType.STICKER) {
+            /*
+             * 팩 단위로 판정한다(2026-09-21). 예전에는 AnimatedSticker.premium 한 칸만 봤는데,
+             * 낱개 구매가 붙으면서 "PRO 인가"로는 답이 모자라게 됐다 — 산 팩 하나만 열어야 한다.
+             * 움직이는 이모티콘은 이제 8팩 전부 무료라 여기서 걸리지 않는다. 걸리는 건
+             * 캐릭터 스티커(상점에서 산 것)와 확장 무드뿐이다(StickerService 주석).
+             *
+             * <p><b>유니코드 이모지는 무엇이든 무료다</b>(2026-09-14). 예전엔 시즌 팩 40종을
+             * 유료로 잠갔는데, 파는 것이 폰 키보드에 이미 있는 글자라 상품으로서 근거가 약했고
+             * (AnimatedSticker 주석이 이미 그렇게 적고 있었다), 실제로 무료 이모지 시트 96종과
+             * 12종이 겹쳐 "무료라고 보여 준 것을 서버가 막는" 상태였다. STOMP 는 402 를 화면으로
+             * 되돌릴 수 없어 말풍선이 "전송 중"에서 멈췄다 —
+             * docs/STICKER_PACK_OVERLAP_2026-09-14.md. 팩에 없는 코드가 통과하는 규칙
+             * (StickerPacks 주석)이 그 재발을 막는 자리다.
+             */
+            stickerService.requireUsable(senderId, stickerPackOf(req.content()));
+        }
+        String content = req.content();
+        String stickerCode = null;
+        if (messageType == MessageType.TEXT_STICKER) {
+            content = requireValidTextSticker(senderId, req.stickerCode(), req.content());
+            stickerCode = req.stickerCode();
         }
         String imageUrl = req.imageUrl();
         if (messageType == MessageType.COUPLE_EMOJI) {
@@ -323,12 +343,13 @@ public class ChatService {
                 .relationId(relationId)
                 .senderId(senderId)
                 .messageType(messageType)
-                .content(req.content())
+                .content(content)
                 .imageUrl(imageUrl)
                 .workoutId(req.workoutId())
                 .routineId(req.routineId())
                 .replyToId(resolveReplyTarget(req.replyToId(), relationId))
                 .clientMessageId(clientMessageId)
+                .stickerCode(stickerCode)
                 .build();
         chatMessageRepository.save(message);
 
@@ -340,6 +361,43 @@ public class ChatService {
         }
         // 방금 만든 메시지라 북마크됐을 수 없다
         return ChatMessageResponse.from(message, replyPreview(message.getReplyToId()), List.of(), false);
+    }
+
+    /** 이 멱등키로 저장된 메시지가 있는가 — STOMP 컨트롤러가 unique 위반이 동시 도착 경합인지 가른다. */
+    public boolean isSaved(Long relationId, String rawClientMessageId) {
+        String key = normalizeClientMessageId(rawClientMessageId);
+        return key != null && chatMessageRepository.findByRelationIdAndClientMessageId(relationId, key).isPresent();
+    }
+
+    /** 문구 스티커 문구의 최대 길이 — 코드포인트 기준(앱의 {@code Array.from(text).length} 와 같은 셈) */
+    static final int TEXT_STICKER_MAX_LENGTH = 12;
+
+    /**
+     * 문구 스티커 검증 — 통과하면 저장할 문구(앞뒤 공백 제거)를 돌려준다.
+     *
+     * <ul>
+     *   <li>스티커는 <b>피커에 있는</b> 캐릭터 스티커여야 한다 — 내린 스티커(`StickerImage.isRetired`)는
+     *       그릴 줄은 알아도 새로 고를 수 없다. 움직이는 이모티콘·유니코드 이모지 위에는 얹지 않는다.</li>
+     *   <li>팩 사용권은 STICKER 와 같은 판정(`requireUsable`)이다.</li>
+     *   <li>문구는 1~{@value #TEXT_STICKER_MAX_LENGTH}자, 줄바꿈 금지 — 스티커 아래 띠 두 줄에 들어가는 길이다.
+     *       코드포인트로 센다: 대부분의 이모지는 1자지만 ❤️ 처럼 변형 선택자가 붙은 것은 2자로 센다(앱도 같다).</li>
+     * </ul>
+     */
+    private String requireValidTextSticker(Long senderId, String stickerCode, String content) {
+        StickerImage sticker = StickerImage.from(stickerCode)
+                .filter(s -> !s.isRetired())
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_INPUT, "쓸 수 없는 스티커예요."));
+        stickerService.requireUsable(senderId, sticker.packId());
+        String text = content == null ? "" : content.strip();
+        int length = text.codePointCount(0, text.length());
+        if (length == 0 || length > TEXT_STICKER_MAX_LENGTH) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT,
+                    "문구는 1~" + TEXT_STICKER_MAX_LENGTH + "자로 써주세요.");
+        }
+        if (text.indexOf('\n') >= 0 || text.indexOf('\r') >= 0) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "문구에는 줄바꿈을 넣을 수 없어요.");
+        }
+        return text;
     }
 
     /**
@@ -364,19 +422,42 @@ public class ChatService {
      */
     @Transactional
     public ChatMessageResponse postSystemCard(Long senderId, Long relationId, MessageType type, String content) {
-        return postSystemCard(senderId, relationId, type, content, null);
+        return saveSystemCard(senderId, relationId, type, content, null, null);
     }
 
     /** {@link #postSystemCard(Long, Long, MessageType, String)} + 원본 기록 참조(WORKOUT_CARD 의 workoutId). */
     @Transactional
     public ChatMessageResponse postSystemCard(Long senderId, Long relationId, MessageType type, String content,
                                               Long workoutId) {
+        return saveSystemCard(senderId, relationId, type, content, null, workoutId);
+    }
+
+    /**
+     * 이미지를 함께 싣는 시스템 카드 — 캐치마인드 그림 공유가 쓴다.
+     *
+     * <p>사진 한도({@code PHOTO_UPLOAD})를 여기서 세지 않는다. 한도는 <b>업로드 서명 발급
+     * 시점</b>에 소비하는 것이 이 코드베이스의 규칙이고(UploadController·ChatController),
+     * 캐치마인드는 그 서명을 한도 없이 내준다(CatchMindService.shareUploadSignature).
+     * 여기서 또 세면 같은 사진을 두 번 세게 된다.
+     */
+    public ChatMessageResponse postSystemCard(Long senderId, Long relationId, MessageType type,
+                                              String content, String imageUrl) {
+        return saveSystemCard(senderId, relationId, type, content, imageUrl, null);
+    }
+
+    /**
+     * 위 시스템 카드 오버로드들의 본체. 오버로드가 (…, Long workoutId) 와 (…, String imageUrl) 둘이라
+     * {@code postSystemCard(…, null)} 은 모호해진다 — 그래서 서로를 부르지 않고 여기로 모은다.
+     */
+    private ChatMessageResponse saveSystemCard(Long senderId, Long relationId, MessageType type, String content,
+                                               String imageUrl, Long workoutId) {
         requireMember(senderId, relationId);
         ChatMessage message = ChatMessage.builder()
                 .relationId(relationId)
                 .senderId(senderId)
                 .messageType(type)
                 .content(content)
+                .imageUrl(imageUrl)
                 .workoutId(workoutId)
                 .build();
         chatMessageRepository.save(message);
@@ -395,7 +476,7 @@ public class ChatService {
 
     /**
      * 식단 카드 — {@link #postSystemCard} 와 같은 원칙(자동 알림 없음, 브로드캐스트는 호출자)이며
-     * 사진(imageUrl)과 원본 기록 참조(mealId, V90)를 함께 싣는다. MealService.postMealCard 참고.
+     * 사진(imageUrl)과 원본 기록 참조(mealId, V135)를 함께 싣는다. MealService.postMealCard 참고.
      */
     @Transactional
     public ChatMessageResponse postMealCard(Long senderId, Long relationId, String content, String imageUrl,
@@ -520,11 +601,12 @@ public class ChatService {
      * 여기 검증은 그 우회 방지용 방어선이다.
      */
     private void requireValidTouch(Long senderId, String content) {
-        TouchGesture gesture = TouchGesture.from(content)
+        // 코드 자체가 유효한지는 여전히 여기서 본다 — 팩 판정은 "쓸 수 있나"만 답하고
+        // 없는 제스처를 400 으로 거절하지 않는다(팩 없는 코드는 통과가 기본값이다).
+        TouchGesture.from(content)
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_INPUT, "알 수 없는 터치 제스처예요."));
-        if (gesture.isPremium()) {
-            planGuard.require(senderId, Feature.TOUCH_GESTURE_PREMIUM);
-        }
+        // 프리미엄 제스처도 팩으로 판정한다 — 스티커와 같은 "구독이거나 낱개이거나" 경로를 탄다.
+        stickerService.requireUsable(senderId, StickerPacks.ofTouchGesture(content));
     }
 
     /** 내가 받은(상대가 보낸) 가장 최근 터치 — 홈 화면이 CoupleEvent.TOUCH 수신 시 조회한다. */
@@ -728,6 +810,20 @@ public class ChatService {
                 .toList();
     }
 
+    /**
+     * 스티커 content 가 속한 팩 — 번들 카탈로그(enum) 다음에 서버 배포 카탈로그를 본다.
+     *
+     * <p>둘 다 아니면 {@code null}(무료로 통과)인 규칙은 그대로다({@link StickerPacks} 주석). 서버
+     * 배포 팩을 여기서 빠뜨리면 유료 팩을 서버에 올렸을 때 <b>조용히 공짜로 샌다</b>.
+     */
+    private String stickerPackOf(String content) {
+        String bundled = StickerPacks.ofStickerContent(content);
+        if (bundled != null) {
+            return bundled;
+        }
+        return remoteStickerCatalog.find(content).map(RemoteStickerCatalog.RemoteSticker::packId).orElse(null);
+    }
+
     /** 브로드캐스트용 메시지 상세 — 뷰어에 따라 달라지는 값이 없다. */
     public java.util.Optional<ChatMessageResponse> findForBroadcast(Long messageId) {
         return chatMessageRepository.findById(messageId).map(this::detailOf);
@@ -744,16 +840,27 @@ public class ChatService {
     private String stickerPreview(String content) {
         return AnimatedSticker.from(content)
                 .map(s -> "[이모티콘] " + s.label())
+                // 서버 배포 이모티콘 — 번들 카탈로그에 없어도 라벨을 안다(RemoteStickerCatalog)
+                .or(() -> remoteStickerCatalog.find(content).map(s -> "[이모티콘] " + s.label()))
                 .or(() -> StickerImage.from(content).map(s -> "[스티커] " + s.label()))
                 .orElse(content != null ? content : "[스티커]");
     }
 
     private String preview(ChatMessage message) {
         return switch (message.getMessageType()) {
-            case IMAGE -> "[이미지]";
+            /*
+             * 사진은 보통 본문이 없어 "[이미지]" 가 최선인데, 캐치마인드 그림 공유처럼
+             * 캡션을 실어 보내는 경우가 있다. 그때 인용 미리보기가 "[이미지]" 로 나오면
+             * 본문이 멀쩡히 있는 메시지가 빈 것처럼 보인다.
+             */
+            case IMAGE -> message.getContent() != null && !message.getContent().isBlank()
+                    ? message.getContent()
+                    : "[이미지]";
             // 이모지 스티커는 이모지 자체가 가장 좋은 미리보기다. 이미지 스티커(StickerImage)는
             // content 가 "LOVE_BEAR" 같은 코드라 그대로 보여주면 안 되고 라벨로 바꿔야 한다.
             case STICKER -> stickerPreview(message.getContent());
+            // 문구가 곧 내용이다 — 스티커 라벨보다 사용자가 쓴 말이 알림에서 더 의미 있다
+            case TEXT_STICKER -> "[스티커] " + message.getContent();
             case WORKOUT_CARD -> "[운동 기록]";
             case MEAL_CARD -> "[식단]";
             case ROUTINE_CARD -> "[루틴]";

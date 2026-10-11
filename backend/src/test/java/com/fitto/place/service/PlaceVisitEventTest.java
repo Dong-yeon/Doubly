@@ -1,0 +1,139 @@
+package com.fitto.place.service;
+
+import com.fitto.chat.service.ChatService;
+import com.fitto.common.event.CoupleEvent;
+import com.fitto.common.event.CoupleEventPublisher;
+import com.fitto.common.notification.NotificationService;
+import com.fitto.common.plan.PlanGuard;
+import com.fitto.diet.repository.MealRepository;
+import com.fitto.feed.repository.FeedReactionRepository;
+import com.fitto.place.domain.Place;
+import com.fitto.place.domain.PlaceVisit;
+import com.fitto.place.dto.RecordVisitRequest;
+import com.fitto.place.repository.PlaceRatingRepository;
+import com.fitto.place.repository.PlaceRepository;
+import com.fitto.place.repository.PlaceVisitRepository;
+import com.fitto.relation.domain.Relation;
+import com.fitto.relation.repository.RelationRepository;
+import com.fitto.user.repository.UserRepository;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Optional;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+/**
+ * 방문 기록이 바뀌면 상대 앱에 {@code PLACE} 이벤트가 간다 — 열린 캘린더의 "다녀온 곳"이 다시 받는다.
+ *
+ * <p>스프링 없이 조립한다. 실시간 이벤트를 보려고 {@code CoupleEventPublisher} 를 {@code @MockitoBean}
+ * 으로 바꾸면 컨텍스트가 하나 더 생겨 JVM 끝까지 캐시된다(CLAUDE.md — 2026-09-22 CI OOM).
+ * 확인할 것은 "언제 보내는가"뿐이라 트랜잭션 동기화를 직접 켜서 커밋 전후를 가른다.
+ *
+ * <p>커밋 뒤로 미루는 일은 발행기({@link CoupleEventPublisher})가 하므로 발행기는 진짜를 쓰고, 그 아래
+ * 메시지 템플릿만 가짜로 둔다 — 실제로 소켓으로 나가는 시점을 본다.
+ */
+class PlaceVisitEventTest {
+
+    private static final long USER = 1L;
+    private static final long PARTNER = 2L;
+    private static final long COUPLE = 7L;
+    private static final long PLACE_ID = 30L;
+    private static final long VISIT_ID = 40L;
+
+    private final PlaceRepository placeRepository = mock(PlaceRepository.class);
+    private final PlaceVisitRepository placeVisitRepository = mock(PlaceVisitRepository.class);
+    private final RelationRepository relationRepository = mock(RelationRepository.class);
+    private final UserRepository userRepository = mock(UserRepository.class);
+    private final SimpMessagingTemplate messaging = mock(SimpMessagingTemplate.class);
+    private final CoupleEventPublisher publisher = new CoupleEventPublisher(messaging);
+
+    /** 럽슐랭 카드(자동 공유)는 방 토픽으로 바로 나간다 — 이 테스트가 보는 PLACE 이벤트와 섞이지 않게 템플릿을 따로 둔다 */
+    private final ChatService chatService = mock(ChatService.class);
+    private final SimpMessagingTemplate cardMessaging = mock(SimpMessagingTemplate.class);
+
+    private final PlaceService service = new PlaceService(placeRepository, placeVisitRepository,
+            mock(PlaceRatingRepository.class), relationRepository, userRepository, mock(MealRepository.class),
+            mock(NotificationService.class), mock(PlanGuard.class), mock(FeedReactionRepository.class),
+            mock(KakaoLocalClient.class), chatService, cardMessaging, mock(PlatformTransactionManager.class),
+            publisher);
+
+    @BeforeEach
+    void setUp() {
+        Place place = mock(Place.class);
+        when(place.getId()).thenReturn(PLACE_ID);
+        when(place.getCoupleId()).thenReturn(COUPLE);
+        when(place.getName()).thenReturn("트라토리아");
+        when(placeRepository.findById(PLACE_ID)).thenReturn(Optional.of(place));
+
+        Relation couple = mock(Relation.class);
+        when(couple.getId()).thenReturn(COUPLE);
+        when(couple.partnerOf(USER)).thenReturn(PARTNER);
+        when(relationRepository.findByUserAndTypeAndStatus(anyLong(), any(), any())).thenReturn(List.of(couple));
+        when(userRepository.findById(anyLong())).thenReturn(Optional.empty());
+
+        PlaceVisit visit = mock(PlaceVisit.class);
+        when(visit.getPlaceId()).thenReturn(PLACE_ID);
+        when(visit.getVisitedBy()).thenReturn(USER);
+        when(placeVisitRepository.findById(VISIT_ID)).thenReturn(Optional.of(visit));
+
+        when(chatService.foldOrPostPlaceCard(anyLong(), anyLong(), anyLong(), any(), any(), any(), anyBoolean()))
+                .thenReturn(new ChatService.CardPost(null, false));
+    }
+
+    @AfterEach
+    void tearDown() {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    void 방문을_기록하면_커밋_뒤에_PLACE_이벤트를_보낸다() {
+        TransactionSynchronizationManager.initSynchronization();
+
+        service.recordVisit(USER, PLACE_ID, new RecordVisitRequest(LocalDate.now(), 5, null, null, null));
+
+        // 커밋 전에 보내면 상대 앱이 다시 조회해도 방금 남긴 방문이 아직 안 보인다
+        verify(messaging, never()).convertAndSend(any(String.class), any(Object.class));
+        commit();
+        verify(messaging).convertAndSend("/sub/couple/" + COUPLE, new CoupleEvent(CoupleEvent.PLACE));
+    }
+
+    @Test
+    void 방문을_지우면_커밋_뒤에_PLACE_이벤트를_보낸다() {
+        TransactionSynchronizationManager.initSynchronization();
+
+        service.deleteVisit(USER, PLACE_ID, VISIT_ID);
+
+        verify(messaging, never()).convertAndSend(any(String.class), any(Object.class));
+        commit();
+        verify(messaging).convertAndSend("/sub/couple/" + COUPLE, new CoupleEvent(CoupleEvent.PLACE));
+    }
+
+    /** 트랜잭션 밖(테스트·배치)이면 기다릴 커밋이 없다 — 바로 보낸다. */
+    @Test
+    void 트랜잭션_밖이면_바로_보낸다() {
+        service.recordVisit(USER, PLACE_ID, new RecordVisitRequest(LocalDate.now(), null, null, null, null));
+
+        verify(messaging).convertAndSend("/sub/couple/" + COUPLE, new CoupleEvent(CoupleEvent.PLACE));
+    }
+
+    private static void commit() {
+        List<TransactionSynchronization> syncs = TransactionSynchronizationManager.getSynchronizations();
+        syncs.forEach(TransactionSynchronization::afterCommit);
+    }
+}

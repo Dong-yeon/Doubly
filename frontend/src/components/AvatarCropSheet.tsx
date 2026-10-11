@@ -58,6 +58,8 @@ interface Props {
   onCancel: () => void;
   /** 잘라낸 로컬 이미지 uri — 업로드는 호출부 책임 */
   onConfirm: (uri: string) => void;
+  /** 머리 제목 — 우리 이모지처럼 프로필이 아닌 곳에서 쓸 때 바꾼다 */
+  title?: string;
 }
 
 interface Transform {
@@ -68,7 +70,7 @@ interface Transform {
 
 const IDENTITY: Transform = { scale: 1, x: 0, y: 0 };
 
-export function AvatarCropSheet({ source, onCancel, onConfirm }: Props) {
+export function AvatarCropSheet({ source, onCancel, onConfirm, title = '프로필 사진' }: Props) {
   const insets = useSafeAreaInsets();
   const [canvas, setCanvas] = useState({ width: 0, height: 0 });
   const [working, setWorking] = useState(false);
@@ -220,7 +222,7 @@ export function AvatarCropSheet({ source, onCancel, onConfirm }: Props) {
       }}
     >
       {/* Modal 은 별도 네이티브 창이라 바깥의 GestureHandlerRootView 컨텍스트가 안 이어진다 —
-          CallOverlay 와 같은 이유로 여기서 다시 감싼다. 빠뜨리면 안드로이드에서 제스처가
+          그래서 여기서 다시 감싼다. 빠뜨리면 안드로이드에서 제스처가
           아예 먹지 않는다. */}
       <GestureHandlerRootView style={styles.root}>
         <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
@@ -234,7 +236,7 @@ export function AvatarCropSheet({ source, onCancel, onConfirm }: Props) {
           >
             <Text style={styles.headerText}>취소</Text>
           </Pressable>
-          <Text style={styles.headerTitle}>프로필 사진</Text>
+          <Text style={styles.headerTitle}>{title}</Text>
           <Pressable
             onPress={onDone}
             disabled={working || !geometry}

@@ -30,6 +30,7 @@ public enum ErrorCode {
     INVITE_CODE_EXPIRED(HttpStatus.BAD_REQUEST, "만료된 초대코드입니다."),
     INVITE_CODE_INVALID(HttpStatus.BAD_REQUEST, "유효하지 않은 초대코드입니다."),
     ALREADY_CONNECTED(HttpStatus.CONFLICT, "이미 연결된 관계입니다."),
+    JOURNAL_ALREADY_SHARED(HttpStatus.CONFLICT, "이 기록은 이미 우리 기록에 공유했어요."),
     RELATION_NOT_FOUND(HttpStatus.NOT_FOUND, "관계를 찾을 수 없습니다."),
     // 연결이 끊긴 뒤의 접근 — 상대가 종료된 관계로 계속 메시지를 보내는 것을 막는다
     RELATION_NOT_ACTIVE(HttpStatus.FORBIDDEN, "연결이 끊긴 관계입니다."),
@@ -56,6 +57,13 @@ public enum ErrorCode {
     // 커플 루틴 선물 (ROUTINE GIFT)
     GIFT_NOT_FOUND(HttpStatus.NOT_FOUND, "선물을 찾을 수 없습니다."),
     GIFT_ALREADY_RESPONDED(HttpStatus.CONFLICT, "이미 응답한 선물이에요."),
+    /** 같은 사진으로 만든 식단이 이미 있다 — 채팅 사진 → 식단 기록을 두 번 누른 경우(LOVEBODY_REVIEW §2-5) */
+    MEAL_PHOTO_ALREADY_RECORDED(HttpStatus.CONFLICT, "이 사진으로 이미 남긴 식단이 있어요."),
+    MEAL_ALREADY_COPIED(HttpStatus.CONFLICT, "이미 불러온 식단이에요."),
+    /** 식단 찌르기(V120) — 하루 한 번, 상대가 아직 안 남겼을 때만, 밤에는 안 보낸다 */
+    MEAL_NUDGE_TOO_SOON(HttpStatus.CONFLICT, "오늘은 이미 물어봤어요. 내일 다시 물어볼 수 있어요."),
+    MEAL_NUDGE_ALREADY_RECORDED(HttpStatus.CONFLICT, "오늘 식사를 이미 남겼어요."),
+    MEAL_NUDGE_QUIET_HOURS(HttpStatus.BAD_REQUEST, "밤에는 알리지 않아요. 아침 8시부터 물어볼 수 있어요."),
 
     // 맛집 지도 (PLACE)
     PLACE_NOT_FOUND(HttpStatus.NOT_FOUND, "장소를 찾을 수 없습니다."),
@@ -110,6 +118,25 @@ public enum ErrorCode {
     GAME_CELL_FIXED(HttpStatus.BAD_REQUEST, "처음부터 주어진 숫자는 바꿀 수 없어요."),
     GAME_NOT_YOUR_TURN(HttpStatus.CONFLICT, "지금은 상대 차례예요."),
     GAME_CELL_OCCUPIED(HttpStatus.BAD_REQUEST, "이미 돌이 놓인 자리예요."),
+    GAME_UNDO_NOT_ALLOWED(HttpStatus.CONFLICT, "지금은 무르기를 부탁할 수 없어요."),
+    GAME_UNDO_NOT_REQUESTED(HttpStatus.CONFLICT, "무르기 요청이 없어요."),
+    GAME_UNDO_NOT_YOURS(HttpStatus.CONFLICT, "내가 건 무르기는 내가 받을 수 없어요."),
+    GAME_DAILY_ALREADY_DONE(HttpStatus.CONFLICT, "오늘의 판은 이미 마쳤어요. 내일 새 판이 열려요."),
+    GAME_DRAWING_INVALID(HttpStatus.BAD_REQUEST, "그림을 보내지 못했어요. 다시 그려볼까요?"),
+    /* 그린 사람이 자기 문제를 맞히는 것 — 앱에서는 버튼이 아예 없지만 API 로는 올 수 있다 */
+    GAME_NOT_GUESSER(HttpStatus.CONFLICT, "내가 낸 문제는 내가 맞힐 수 없어요."),
+    GAME_ALREADY_DRAWING(HttpStatus.CONFLICT, "상대가 아직 맞히는 중이에요. 이 판이 끝나면 새로 낼 수 있어요."),
+    /* 연쇄 퍼즐 대전 — 결과는 한 판에 한 번. 두 번째 제출은 재시도가 아니라 덮어쓰기 시도다 */
+    GAME_RUN_ALREADY_SUBMITTED(HttpStatus.CONFLICT, "이 판의 결과는 이미 보냈어요."),
+    GAME_TIMELINE_INVALID(HttpStatus.BAD_REQUEST, "판 기록을 보내지 못했어요. 다시 시도해주세요."),
+    GAME_RUN_IMPLAUSIBLE(HttpStatus.BAD_REQUEST, "판 기록이 시간과 맞지 않아 결과를 받지 못했어요."),
+    GAME_MOVE_ILLEGAL(HttpStatus.BAD_REQUEST, "그 자리로는 갈 수 없어요."),
+    GAME_WALLS_EXHAUSTED(HttpStatus.CONFLICT, "남은 벽이 없어요. 말을 움직여야 해요."),
+    GAME_WALL_OVERLAP(HttpStatus.BAD_REQUEST, "이미 벽이 있는 자리예요."),
+    GAME_WALL_BLOCKS_PATH(HttpStatus.BAD_REQUEST, "길을 완전히 막을 수는 없어요. 돌아갈 길은 남겨야 해요."),
+    // 429 가 아니라 409 다 — 429 는 PlanGuard 의 "사용 한도" 의미라 앱이 결제 안내로 읽을 수 있다
+    GAME_NUDGE_MY_TURN(HttpStatus.CONFLICT, "지금은 내 차례예요. 두고 나면 상대에게 알림이 가요."),
+    GAME_NUDGE_TOO_SOON(HttpStatus.CONFLICT, "오늘은 이미 알렸어요. 내일 다시 찌를 수 있어요."),
     // 사진 관련 — 원인별로 분리해 어떤 문제인지 바로 보이게 한다
     INVALID_PHOTO_URL(HttpStatus.BAD_REQUEST, "앱에서 촬영·선택해 올린 사진만 분석할 수 있어요."),
     PHOTO_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "사진 용량이 너무 커요 (최대 10MB). 더 작은 사진으로 시도해주세요."),
@@ -118,9 +145,8 @@ public enum ErrorCode {
 
     // 바코드 식품 DB 조회 (FOOD-DB)
     FOOD_DB_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "바코드 조회 기능이 아직 준비되지 않았어요."),
-    // 현재는 쓰이지 않는다 — 바코드 조회 자체가 비활성이다(FoodDbClient.lookup 주석 참고).
-    // 바코드 경로를 되살리면 다시 쓰인다. 그때까지 이 문구가 뜨면 잘못 쓴 것이다.
-    FOOD_DB_NOT_FOUND(HttpStatus.NOT_FOUND, "등록되지 않은 바코드예요. 직접 입력해주세요."),
+    // 모든 출처(식품안전나라·Open Food Facts)에 없을 때 — 앱은 영양성분표 촬영으로 안내한다(BarcodeLookupService)
+    FOOD_DB_NOT_FOUND(HttpStatus.NOT_FOUND, "이 바코드의 영양정보를 찾지 못했어요."),
     FOOD_DB_LOOKUP_FAILED(HttpStatus.BAD_GATEWAY, "바코드 조회에 실패했어요. 잠시 후 다시 시도해주세요."),
 
     // 통화·영상통화 (PLAN.md "통화·영상통화" — Stream Video)
@@ -130,7 +156,10 @@ public enum ErrorCode {
     CALL_INVALID_STATE(HttpStatus.CONFLICT, "이미 끝났거나 받을 수 없는 통화예요."),
     // 영상통화는 PRO 전용(Feature.VIDEO_CALL) — PLAN_UPGRADE_REQUIRED 를 그대로 쓴다(별도 코드 불필요).
     // 통화 시간 안전망은 판매 문구가 아니라 Stream Video 무료 티어 보호용이라 402(업셀)가 아닌 429.
-    CALL_TIME_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "이번 달 통화 가능 시간을 모두 사용했어요. 다음 달에 다시 이용해주세요.");
+    CALL_TIME_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "이번 달 통화 가능 시간을 모두 사용했어요. 다음 달에 다시 이용해주세요."),
+
+    // 나만의 하루 기록 — 남의 기록은 지목할 수단이 없어서 403 이 나올 자리가 없다. 없으면 404 하나다.
+    JOURNAL_NOT_FOUND(HttpStatus.NOT_FOUND, "이 날의 기록이 없어요.");
 
     private final HttpStatus status;
     private final String message;

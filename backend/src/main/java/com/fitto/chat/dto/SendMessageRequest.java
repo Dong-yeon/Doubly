@@ -19,11 +19,19 @@ public record SendMessageRequest(
         Long workoutId,
         Long routineId,
         Long replyToId,
-        String clientMessageId
+        String clientMessageId,
+        /** 문구 스티커(TEXT_STICKER)가 얹힐 캐릭터 스티커 코드 — 다른 타입에서는 무시한다 */
+        String stickerCode
 ) {
+    /** 스티커 코드 없이 — 문구 스티커가 아닌 모든 경로(구버전 앱·시스템 카드·테스트) */
+    public SendMessageRequest(MessageType messageType, String content, String imageUrl,
+                              Long workoutId, Long routineId, Long replyToId, String clientMessageId) {
+        this(messageType, content, imageUrl, workoutId, routineId, replyToId, clientMessageId, null);
+    }
+
     /** 멱등키 없이 — 키를 싣지 않는 경로(테스트·구버전 앱)를 위한 오버로드 */
     public SendMessageRequest(MessageType messageType, String content, String imageUrl,
                               Long workoutId, Long routineId, Long replyToId) {
-        this(messageType, content, imageUrl, workoutId, routineId, replyToId, null);
+        this(messageType, content, imageUrl, workoutId, routineId, replyToId, null, null);
     }
 }

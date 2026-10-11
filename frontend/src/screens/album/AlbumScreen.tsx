@@ -1,0 +1,847 @@
+/**
+ * "우리" 탭 메인 — 지금까지의 우리(docs/ALBUM_TAB_IA_2026-09-14.md 5-3).
+ *
+ * <p>구 "우리 사진첩"(일상 포스트의 사진만 보는 3열 그리드)을 그대로 승격한 화면이 아니다.
+ * 일상·식단·운동·맛집 <b>네 소스</b>의 사진을 한 곳에 모으고(그래서 매일 자란다),
+ * 같은 데이터의 다른 모양인 타임라인·여행 앨범·작년 오늘의 입구를 함께 둔다.
+ *
+ * <p>그리드 칸은 기록 하나(대표 사진)이고, 탭하면 그 기록의 사진을 전부 펴서 좌우로 넘긴다.
+ */
+import React, { useCallback, useMemo, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  FlatList,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { usePhotoGrid } from '../../hooks/usePhotoGrid';
+import { useFocusEffect } from '@react-navigation/native';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { AlbumStackParamList } from '../../navigation/types';
+import { Chip } from '../../components/Chip';
+import { EmptyState } from '../../components/EmptyState';
+import { LinearGradient } from 'expo-linear-gradient';
+import { MaterialCommunityIcons } from '../../components/Icon';
+import { ImageViewer, type ViewerAction, type ViewerImage } from '../../components/ImageViewer';
+import { MemoryPeek, hasMemories } from '../home/components/MemoryPeek';
+import { CachedImage } from '../../components/CachedImage';
+import { AlbumCalendar, currentMonth, shiftMonth } from './AlbumCalendar';
+import { AlbumMap } from './AlbumMap';
+import { LockedCard } from '../../components/LockedCard';
+import { feedApi } from '../../api/feed';
+import { tripApi } from '../../api/trip';
+import { toast } from '../../store/toastStore';
+import { getErrorMessage } from '../../utils/error';
+import { useRelationStore } from '../../store/relationStore';
+import { haptics } from '../../utils/haptics';
+import { QUICK_EMOJIS } from '../feed/FeedTimelineScreen';
+import { localDateOf, relativeDateLabel } from '../../utils/date';
+import { thumbnailUrl } from '../../utils/imageUrl';
+import type { FeedPhoto, FeedPhotoMapPlace, FeedPhotoSource, Memories, Trip } from '../../types';
+import { colors, fontSize, radius, spacing } from '../../constants/theme';
+import { themedStyles } from '../../theme/themedStyles';
+import { layout } from '../../theme/layout';
+
+type Props = NativeStackScreenProps<AlbumStackParamList, 'AlbumMain'>;
+
+/** 폰에서의 열 수 — 태블릿·폴더블에서는 usePhotoGrid 가 칸 크기를 보고 늘린다 */
+const PHONE_COLUMNS = 3;
+const GAP = 2;
+
+/** 소스 필터 칩 — 값이 없는 '전체'는 서버 기본값(4소스)과 같아 파라미터를 안 보낸다 */
+const FILTERS: { key: string; label: string; sources?: FeedPhotoSource[] }[] = [
+  { key: 'all', label: '전체' },
+  { key: 'post', label: '일상', sources: ['POST'] },
+  { key: 'meal', label: '식단', sources: ['MEAL'] },
+  { key: 'workout', label: '운동', sources: ['WORKOUT'] },
+  { key: 'place', label: '맛집', sources: ['PLACE_VISIT'] },
+];
+
+/** 보기 — 그리드(시간순) · 달력(한 달) · 지도(장소별) */
+type AlbumView = 'grid' | 'calendar' | 'map';
+const VIEWS: { key: AlbumView; label: string; icon: 'grid' | 'calendar-month-outline' | 'map-marker-outline' }[] = [
+  { key: 'grid', label: '사진 모아보기', icon: 'grid' },
+  { key: 'calendar', label: '달력', icon: 'calendar-month-outline' },
+  { key: 'map', label: '지도', icon: 'map-marker-outline' },
+];
+
+/** 작성자 필터 — '둘 다'는 파라미터를 안 보낸다. 상대 칩의 라벨은 상대 이름으로 그린다 */
+type Who = 'all' | 'me' | 'partner';
+
+/** 기록 하나를 가리키는 키 — 테이블마다 id 공간이 달라 type 까지 묶어야 유일하다 */
+const keyOf = (p: FeedPhoto) => `${p.type}:${p.refId}`;
+
+/**
+ * 기록일 — 사진첩의 정렬·월 묶음 기준(2026-10-02 결정: 올린 날이 아니라 먹은·운동한·다녀온 날).
+ * 서버가 'YYYY-MM-DD' 로 주므로 그대로 쓴다(localDateOf 는 시각 전용이라 여기 쓰면 안 된다).
+ * 구 서버 응답에 없으면 올린 시각의 기기 날짜로 대신한다.
+ */
+const recordDateOf = (p: FeedPhoto) => p.recordDate ?? localDateOf(p.createdAt);
+
+/** 서버 병합과 같은 정렬키 (기록일, 올린 시각) 비교 — a 가 b 보다 최신이면 음수 */
+function compareNewestFirst(a: FeedPhoto, b: FeedPhoto): number {
+  const da = recordDateOf(a);
+  const db = recordDateOf(b);
+  if (da !== db) return da > db ? -1 : 1;
+  return Date.parse(b.createdAt) - Date.parse(a.createdAt);
+}
+
+interface PhotoPage {
+  items: FeedPhoto[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
+const EMPTY_PAGE: PhotoPage = { items: [], nextCursor: null, hasMore: false };
+
+/**
+ * 탭에 돌아왔을 때 — 첫 페이지만 다시 받아 <b>머리 부분만</b> 갈아 끼운다.
+ *
+ * <p>예전엔 포커스마다 첫 페이지로 목록을 통째로 덮어써, 깊이 내려가 보던 사진첩이 여행 앨범에
+ * 다녀오면 30장으로 잘렸다. 첫 페이지는 서버 기준으로 "가장 최근 N건 전부"이므로, 그 구간
+ * (가장 오래된 항목의 정렬 위치까지)은 새 페이지가 정답이다 — 새로 올라온 것은 들어오고 지워진
+ * 것은 빠진다. 그보다 오래된 꼬리는 이미 받은 것을 그대로 두고, 다음 페이지 커서도 그대로 쓴다
+ * (커서는 소스별로 꼬리 끝을 가리키므로 머리가 바뀌어도 유효하다).
+ *
+ * <p>한계: 기록일 정렬이라 <b>지난 날짜로 새로 올린 기록</b>이 머리 구간보다 뒤에 놓이면 이
+ * 갱신으로는 안 들어온다 — 당겨서 새로고침하면 보인다. 대부분의 새 기록은 오늘 날짜라 머리에 온다.
+ */
+function mergeHead(prev: PhotoPage, head: PhotoPage): PhotoPage {
+  if (!head.hasMore || prev.items.length === 0) return head; // 첫 페이지가 전부면 그게 전부다
+  const oldest = head.items[head.items.length - 1];
+  if (!oldest) return head;
+  const inHead = new Set(head.items.map(keyOf));
+  // 경계보다 오래된(정렬상 뒤인) 것만 꼬리로 남긴다 — 같은 위치면 남긴다(경계에서 잘린 것일 수 있다)
+  const tail = prev.items.filter((p) => !inHead.has(keyOf(p)) && compareNewestFirst(p, oldest) >= 0);
+  return { items: [...head.items, ...tail], nextCursor: prev.nextCursor, hasMore: prev.hasMore };
+}
+
+/**
+ * 그리드 줄 — 월 머리말 또는 사진 N칸.
+ *
+ * <p><b>왜 numColumns 를 안 쓰나</b>: 이 탭은 "지금까지의 우리"인데 3열 그리드가 날짜 구분
+ * 없이 무한히 이어져 스크롤 중엔 언제 찍은 사진인지 알 수 없었다
+ * (docs/SCREEN_DESIGN_PASS_2026-09-23.md §4-2). 애플·구글 포토처럼 <b>월 머리말</b>로
+ * 끊는다. FlatList 의 numColumns 는 머리말을 끼울 수 없으므로 줄 단위 데이터로 바꿨다 —
+ * 회전·창 크기로 열 수가 바뀌면 줄이 다시 묶이므로 key 를 갈 필요도 없어졌다.
+ */
+type GridRow =
+  | { kind: 'month'; key: string; label: string }
+  | { kind: 'photos'; key: string; items: FeedPhoto[] };
+
+function monthLabelOf(p: FeedPhoto): string {
+  const d = recordDateOf(p); // YYYY-MM-DD
+  const year = d.slice(0, 4);
+  const month = Number(d.slice(5, 7));
+  return `${year}년 ${month}월`;
+}
+
+function toGridRows(photos: FeedPhoto[], columns: number): GridRow[] {
+  const rows: GridRow[] = [];
+  let currentMonth: string | null = null;
+  let bucket: FeedPhoto[] = [];
+  const flush = () => {
+    if (bucket.length > 0 && currentMonth) {
+      rows.push({ kind: 'photos', key: `${currentMonth}:${rows.length}`, items: bucket });
+      bucket = [];
+    }
+  };
+  for (const p of photos) {
+    const month = monthLabelOf(p);
+    if (month !== currentMonth) {
+      flush();
+      currentMonth = month;
+      rows.push({ kind: 'month', key: `m:${month}`, label: month });
+    }
+    bucket.push(p);
+    if (bucket.length === columns) flush();
+  }
+  flush();
+  return rows;
+}
+
+export function AlbumScreen({ navigation }: Props) {
+  // Dimensions.get() 은 정적 스냅샷이라 회전·창 크기 변경에 반응하지 않았다.
+  // usePhotoGrid 는 매 렌더마다 최신 폭(웹은 셸 폭)으로 열 수와 칸을 다시 계산한다.
+  const { columns, cell: CELL } = usePhotoGrid({ gap: GAP, phoneColumns: PHONE_COLUMNS });
+
+  const partnerName = useRelationStore((s) => s.couple?.partner?.name) ?? '상대';
+
+  const [filter, setFilter] = useState('all');
+  const [who, setWho] = useState<Who>('all');
+  const [page, setPage] = useState<PhotoPage>(EMPTY_PAGE);
+  const photos = page.items;
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  /* 뷰어는 인덱스로 연다 — 좌우 스와이프로 옆 사진까지 이어 보려면 목록 위치가 필요하다 */
+  const [viewingIndex, setViewingIndex] = useState<number | null>(null);
+  /*
+   * 보기 — 그리드(시간순 무한 스크롤) / 달력(한 달 단위). 필터 칩은 둘이 공유한다.
+   * 달력은 한 달치를 통째로 받는다(GET /feed/photos/month) — 그리드의 페이지와는 따로 둔다.
+   */
+  const [view, setView] = useState<AlbumView>('grid');
+  const [month, setMonth] = useState(currentMonth);
+  const [monthData, setMonthData] = useState<{ items: FeedPhoto[]; truncated: boolean }>({
+    items: [],
+    truncated: false,
+  });
+  const [monthLoading, setMonthLoading] = useState(false);
+  const [monthError, setMonthError] = useState(false);
+  /* 달 요청 세대 — 달을 빠르게 넘길 때 늦게 온 이전 달 응답이 이번 달을 덮지 않게(그리드의 generationRef 와 같은 이유) */
+  const monthGenerationRef = useRef(0);
+  /* 지도 — null 은 "아직 못 받음"(지도를 마운트하지 않는다 — AlbumMap 주석: 첫 그리기에만 핀에 시야를 맞춘다) */
+  const [mapPlaces, setMapPlaces] = useState<FeedPhotoMapPlace[] | null>(null);
+  const [mapTruncated, setMapTruncated] = useState(false);
+  const [mapLoading, setMapLoading] = useState(false);
+  const [mapError, setMapError] = useState(false);
+  const mapGenerationRef = useRef(0);
+  /*
+   * 요청 세대 — 첫 페이지 요청마다 올린다. 응답이 왔을 때 세대가 바뀌어 있으면 버린다.
+   *
+   * <p>예전엔 "진행 중이면 새 요청을 무시"하는 잠금 하나였다. 스크롤 끝에서 다음 페이지를
+   * 받는 중에 칩을 바꾸면 새 필터 요청이 버려지고, 늦게 온 <b>이전 필터의 사진</b>이 새 칩
+   * 아래에 붙었다. 이제는 새 요청이 항상 이기고, 늦게 온 옛 응답이 진다.
+   */
+  const generationRef = useRef(0);
+  const loadingMoreRef = useRef(false);
+  /* 지금 목록이 어느 필터 조합으로 받은 것인지 — 탭 복귀 때 머리만 갈지, 처음부터 받을지 가른다 */
+  const loadedKeyRef = useRef<string | null>(null);
+  // 로드 실패가 빈 상태로 위장하지 않게 구분한다 (QA_CHECKLIST.md 전역 반복 패턴 1)
+  const [loadError, setLoadError] = useState(false);
+  /* 다음 페이지 실패 — 끝까지 다시 스크롤할 공간이 없을 수 있어 꼬리에 재시도 버튼을 둔다 */
+  const [loadMoreError, setLoadMoreError] = useState(false);
+  /* 머리글의 두 섹션 — 있는 날/있을 때만 그린다. 부가 정보라 실패해도 그리드는 정상 동작 */
+  const [memories, setMemories] = useState<Memories | null>(null);
+  const [trips, setTrips] = useState<Trip[]>([]);
+
+  const sourcesOf = useCallback(
+    (key: string) => FILTERS.find((f) => f.key === key)?.sources,
+    [],
+  );
+
+  /*
+   * 뷰어 반응 — 타임라인과 같은 API·같은 행. 응답(갱신된 요약)으로 그리드·달력 양쪽 사본을
+   * 함께 고친다(같은 기록이 둘에 있을 수 있다). 같은 칸에서 연달아 누르면 앞 요청이 끝날 때까지
+   * 무시한다 — 토글이라 두 번 가면 상쇄된다.
+   */
+  // 진행 중인 칸 — useRef(...).current 대신 useState 초기화(ImageViewer 의 dragY 와 같은 이유: 렌더 중 ref 접근 규칙)
+  const [reacting] = useState(() => new Set<string>());
+  const onReact = useCallback(async (p: FeedPhoto, emoji: string) => {
+    const key = keyOf(p);
+    if (reacting.has(key)) return;
+    reacting.add(key);
+    haptics.light();
+    try {
+      const reactions = await feedApi.react(p.type, p.refId, emoji);
+      const patch = (items: FeedPhoto[]) => items.map((i) => (keyOf(i) === key ? { ...i, reactions } : i));
+      setPage((prev) => ({ ...prev, items: patch(prev.items) }));
+      setMonthData((prev) => ({ ...prev, items: patch(prev.items) }));
+    } catch (e) {
+      toast.error(getErrorMessage(e, '반응을 남기지 못했어요.'));
+    } finally {
+      reacting.delete(key);
+    }
+  }, [reacting]);
+
+  const openPlace = useCallback(
+    (placeId: number, name: string) => {
+      setViewingIndex(null);
+      navigation.navigate('PlaceDetail', { placeId, name });
+    },
+    [navigation],
+  );
+
+  /*
+   * 뷰어용 형태로 변환 — 그리드 칸은 기록당 하나(대표 사진)지만, 뷰어는 그 기록의
+   * 사진을 전부 편다. 계속 스와이프하면 다음 기록의 사진으로 자연스럽게 넘어간다.
+   * firstIndexByKey 는 "이 칸을 탭하면 뷰어의 몇 번째부터 열지"를 알려준다.
+   */
+  // 뷰어는 지금 보이는 모양의 사진을 넘긴다 — 달력이면 그 달, 그리드면 받아 둔 목록
+  // 지도는 장소 순서대로 이어 붙인다 — 핀을 누르면 그 장소부터, 넘기면 다음 장소로 간다
+  const mapItems = useMemo(() => (mapPlaces ?? []).flatMap((p) => p.items), [mapPlaces]);
+  const viewerSource = view === 'calendar' ? monthData.items : view === 'map' ? mapItems : photos;
+  const { viewerImages, firstIndexByKey } = useMemo(() => {
+    const images: ViewerImage[] = [];
+    const firstIndexByKey = new Map<string, number>();
+    for (const p of viewerSource) {
+      const uris = p.imageUrls && p.imageUrls.length > 0 ? p.imageUrls : [p.imageUrl];
+      firstIndexByKey.set(keyOf(p), images.length);
+      // 럽슐랭 장소가 걸린 사진(맛집 방문·장소 붙은 끼니)은 그 장소 상세로 이어 간다
+      const { placeId, placeName } = p;
+      const action: ViewerAction | undefined =
+        placeId != null && placeName
+          ? { label: `${placeName} 보기`, icon: 'map-marker-outline', onPress: () => openPlace(placeId, placeName) }
+          : undefined;
+      uris.forEach((uri, i) => {
+        images.push({
+          key: `${keyOf(p)}-${i}`,
+          // 뷰어는 원본을 쓴다 — 크게 보는 자리에서 썸네일을 늘리면 뭉갠다. 대표 사진은 그리드에서 이미
+          // 받은 썸네일을 먼저 깔고(같은 URL 이라 캐시 적중) 원본으로 바꿔 끼운다
+          uri,
+          thumbUri: i === 0 ? thumbnailUrl(uri, Math.round(CELL)) : undefined,
+          // 기록일 — 월 머리말과 같은 날짜를 보여준다(먹은·다녀온 날). 일상은 서버가 올린 날 KST 로 준다
+          title: `${p.mine ? '나' : p.authorName}  ·  ${relativeDateLabel(recordDateOf(p))}`,
+          titleColor: p.mine ? colors.meText : colors.partnerText,
+          caption: p.caption ?? undefined,
+          action,
+          reactions: { options: QUICK_EMOJIS, summary: p.reactions ?? [], onToggle: (emoji) => void onReact(p, emoji) },
+        });
+      });
+    }
+    return { viewerImages: images, firstIndexByKey };
+  }, [viewerSource, openPlace, onReact, CELL]);
+
+  const gridRows = useMemo(() => toGridRows(photos, columns), [photos, columns]);
+
+  /**
+   * 첫 페이지 — `replace` 는 목록을 새로 받고(필터 변경·당겨서 새로고침), `head` 는 탭 복귀 때
+   * 머리만 갈아 끼운다({@link mergeHead}). head 는 조용히 돈다(스피너·실패 토스트 없음 —
+   * 보던 목록이 그대로 있으므로).
+   */
+  const load = useCallback(
+    async (filterKey: string, whoKey: Who, mode: 'replace' | 'head') => {
+      const generation = ++generationRef.current;
+      if (mode === 'replace') {
+        setRefreshing(true);
+        setLoadError(false);
+      }
+      setLoadMoreError(false);
+      try {
+        const next = await feedApi.photos(null, 30, sourcesOf(filterKey), whoKey === 'all' ? undefined : whoKey);
+        if (generation !== generationRef.current) return; // 더 새 요청이 있다 — 이 응답은 낡았다
+        setPage((prev) => (mode === 'head' ? mergeHead(prev, next) : next));
+        loadedKeyRef.current = `${filterKey}|${whoKey}`;
+      } catch (e) {
+        if (generation !== generationRef.current || mode === 'head') return;
+        // 커플 미연결 등 — 빈 상태 안내로 대체하되, "진짜 빈 앨범"과는 loadError 로 구분한다
+        toast.error(getErrorMessage(e, '사진을 불러오지 못했어요.'));
+        setPage(EMPTY_PAGE);
+        loadedKeyRef.current = null;
+        setLoadError(true);
+      } finally {
+        if (generation === generationRef.current) setRefreshing(false);
+      }
+    },
+    [sourcesOf],
+  );
+
+  const loadMore = useCallback(async () => {
+    if (loadingMoreRef.current || refreshing || !page.hasMore || !page.nextCursor) return;
+    const generation = generationRef.current;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    setLoadMoreError(false);
+    try {
+      const more = await feedApi.photos(page.nextCursor, 30, sourcesOf(filter), who === 'all' ? undefined : who);
+      if (generation !== generationRef.current) return; // 그 사이 필터가 바뀌었거나 새로 받았다
+      setPage((prev) => {
+        const seen = new Set(prev.items.map(keyOf));
+        return {
+          items: [...prev.items, ...more.items.filter((p) => !seen.has(keyOf(p)))],
+          nextCursor: more.nextCursor,
+          hasMore: more.hasMore,
+        };
+      });
+    } catch {
+      if (generation === generationRef.current) setLoadMoreError(true);
+    } finally {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+    }
+  }, [page, refreshing, filter, who, sourcesOf]);
+
+  /* 머리글 데이터 — 사진 목록과 독립이라 실패는 조용히 넘긴다(섹션만 안 뜬다) */
+  const loadHeader = useCallback(() => {
+    feedApi.memories().then(setMemories).catch(() => setMemories(null));
+    tripApi.list().then(setTrips).catch(() => setTrips([]));
+  }, []);
+
+  /** 달력 한 달 — 칸은 그대로 두고 제목 옆 스피너만 돈다(달을 넘길 때 격자가 깜빡이지 않게) */
+  const loadMonth = useCallback(
+    async (monthKey: string, filterKey: string, whoKey: Who) => {
+      const generation = ++monthGenerationRef.current;
+      setMonthLoading(true);
+      setMonthError(false);
+      try {
+        const res = await feedApi.photoMonth(monthKey, sourcesOf(filterKey), whoKey === 'all' ? undefined : whoKey);
+        if (generation !== monthGenerationRef.current) return;
+        setMonthData({ items: res.items, truncated: res.truncated });
+      } catch {
+        if (generation !== monthGenerationRef.current) return;
+        setMonthData({ items: [], truncated: false });
+        setMonthError(true);
+      } finally {
+        if (generation === monthGenerationRef.current) setMonthLoading(false);
+      }
+    },
+    [sourcesOf],
+  );
+
+  /** 지도 — 다시 받을 때 이미 있는 핀은 그대로 둔다(필터를 바꿀 때만 비운다 — onPick*) */
+  const loadMap = useCallback(
+    async (filterKey: string, whoKey: Who) => {
+      const generation = ++mapGenerationRef.current;
+      setMapLoading(true);
+      setMapError(false);
+      try {
+        const res = await feedApi.photoMap(sourcesOf(filterKey), whoKey === 'all' ? undefined : whoKey);
+        if (generation !== mapGenerationRef.current) return;
+        setMapPlaces(res.places);
+        setMapTruncated(res.truncated);
+      } catch {
+        if (generation !== mapGenerationRef.current) return;
+        setMapError(true);
+      } finally {
+        if (generation === mapGenerationRef.current) setMapLoading(false);
+      }
+    },
+    [sourcesOf],
+  );
+
+  /*
+   * 포커스·필터·보기·달 변경 모두 여기로 온다(deps 라 포커스 중에 바뀌면 다시 돈다).
+   * 그리드: 이미 같은 조합으로 받아 둔 목록이 있으면 머리만 갈고, 아니면 처음부터 받는다.
+   * 달력: 보이는 달을 다시 받는다(한 달치라 가볍다).
+   */
+  useFocusEffect(
+    useCallback(() => {
+      if (view === 'calendar') {
+        void loadMonth(month, filter, who);
+        return;
+      }
+      if (view === 'map') {
+        void loadMap(filter, who);
+        return;
+      }
+      const mode = loadedKeyRef.current === `${filter}|${who}` ? 'head' : 'replace';
+      void load(filter, who, mode);
+      loadHeader();
+    }, [view, month, load, loadMonth, loadMap, filter, who, loadHeader]),
+  );
+
+  /** 달력 칸 → 그날 가장 최근 사진부터 뷰어. 넘기면 그 달의 다른 날로 이어진다 */
+  const onPressDay = (date: string) => {
+    const first = monthData.items.find((p) => p.recordDate === date);
+    if (first) setViewingIndex(firstIndexByKey.get(keyOf(first)) ?? 0);
+  };
+
+  /** 지도 핀 → 그 장소의 가장 최근 사진부터 뷰어 */
+  const onPressPlace = (placeId: number) => {
+    const first = mapPlaces?.find((p) => p.placeId === placeId)?.items[0];
+    if (first) setViewingIndex(firstIndexByKey.get(keyOf(first)) ?? 0);
+  };
+
+  const onPickFilter = (key: string) => {
+    if (key === filter) return;
+    setFilter(key);
+    setPage(EMPTY_PAGE);
+    setMapPlaces(null); // 새 조건의 핀에 시야를 다시 맞추도록 지도를 새로 띄운다
+  };
+
+  const onPickWho = (key: Who) => {
+    if (key === who) return;
+    setWho(key);
+    setMapPlaces(null);
+    setPage(EMPTY_PAGE);
+  };
+
+  const filtered = filter !== 'all' || who !== 'all';
+
+  const listHeader = (
+    <View>
+      {/*
+        작년 오늘 — 있는 날만. 홈의 MemoryPeek 과 같은 카드를 쓴다(같은 것이 두 모양이면
+        같은 카드여야 한다). PRO 잠금은 서버 응답의 locked 를 그대로 따른다.
+      */}
+      {/*
+        잠김(FREE)은 groups 가 <b>빈 채로</b> 온다(Memories.locked 주석) — MemoryPeek 에 넘기면 가장 오래된 해를
+        찾다가 undefined.label 로 우리 탭 전체가 죽었다(9/15 부터, 2026-09-28 발견). 홈과 같은 잠금 카드로 가른다.
+      */}
+      {memories?.locked ? (
+        <View style={styles.section}>
+          <LockedCard
+            title="작년 오늘"
+            description="함께한 기록을 해마다 다시 꺼내볼 수 있어요"
+            upgradeMessage="작년 오늘의 추억은 PRO에서 볼 수 있어요."
+          />
+        </View>
+      ) : hasMemories(memories) ? (
+        <View style={styles.section}>
+          <MemoryPeek memories={memories} onPress={() => navigation.navigate('Memories')} />
+        </View>
+      ) : null}
+
+      {/* 여행 앨범 — 여행이 있을 때만. 가로로 훑고 탭하면 그 여행의 사진만 본다 */}
+      {trips.length > 0 ? (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>여행</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tripRow}>
+            {trips.map((t) => (
+              <Pressable
+                key={t.id}
+                style={[styles.tripCard, t.coverImageUrl ? styles.tripCardCover : null]}
+                onPress={() => navigation.navigate('TripAlbum', { tripId: t.id, title: t.title })}
+                accessibilityRole="button"
+                accessibilityLabel={`${t.title} 여행 앨범`}
+              >
+                {/*
+                  커버 사진이 있으면 사진 타일 + 하단 그라데이션 위 제목(구글 포토·비트윈 앨범 문법).
+                  없으면 아이콘 카드 — 여행에 사진이 한 장도 없을 때만이다.
+                */}
+                {t.coverImageUrl ? (
+                  <>
+                    <CachedImage uri={thumbnailUrl(t.coverImageUrl, 280)} style={StyleSheet.absoluteFill} contentFit="cover" />
+                    <LinearGradient
+                      colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.55)']}
+                      locations={[0.4, 1]}
+                      style={StyleSheet.absoluteFill}
+                      pointerEvents="none"
+                    />
+                    <View style={styles.tripCoverText}>
+                      <Text style={styles.tripTitleOnCover} numberOfLines={1}>
+                        {t.title}
+                      </Text>
+                      <Text style={styles.tripDateOnCover}>{t.startDate?.slice(0, 7) ?? ''}</Text>
+                    </View>
+                  </>
+                ) : (
+                  <>
+                    <MaterialCommunityIcons name="airplane" size={18} color={colors.textSecondary} />
+                    <Text style={styles.tripTitle} numberOfLines={1}>
+                      {t.title}
+                    </Text>
+                    <Text style={styles.tripDate}>{t.startDate?.slice(0, 7) ?? ''}</Text>
+                  </>
+                )}
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      ) : null}
+    </View>
+  );
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {/*
+        화면 안 헤더 — native 헤더를 쓰지 않는다. 탭의 첫 화면이라 뒤로가기 버튼이 없어
+        제목이 화면 벽에 붙고(headerLeft 가 null 이면 native 헤더는 여백을 주지 않는다),
+        다른 탭 첫 화면들도 전부 headerShown:false 라 이 화면만 헤더를 달면 탭을 옮길 때
+        상단 높이가 들썩인다. 제목·버튼을 본문과 같은 좌우 여백(screenPadding)에 맞춘다.
+      */}
+      <View style={styles.topBar}>
+        <Text style={styles.topTitle}>우리</Text>
+        <View style={styles.topButtons}>
+          {/*
+            보기 전환 — 셋이라 토글 대신 묶음 버튼이다(누를 때마다 다음 모양으로 도는 토글은 지금 어느
+            모양인지, 다음이 무엇인지 둘 다 숨긴다). 고른 것은 채운 칸.
+          */}
+          <View style={styles.viewSwitch} accessibilityRole="tablist">
+            {VIEWS.map((v) => (
+              <Pressable
+                key={v.key}
+                onPress={() => setView(v.key)}
+                style={({ pressed }) => [
+                  styles.viewBtn,
+                  view === v.key && styles.viewBtnOn,
+                  pressed && styles.topBtnPressed,
+                ]}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: view === v.key }}
+                accessibilityLabel={`${v.label}로 보기`}
+              >
+                <MaterialCommunityIcons
+                  name={v.icon}
+                  size={20}
+                  color={view === v.key ? colors.onPrimary : colors.textSecondary}
+                />
+              </Pressable>
+            ))}
+          </View>
+          <Pressable
+            onPress={() => navigation.navigate('FeedTimeline')}
+            hitSlop={8}
+            style={({ pressed }) => [styles.topBtn, pressed && styles.topBtnPressed]}
+            accessibilityRole="button"
+            accessibilityLabel="목록으로 보기"
+          >
+            <MaterialCommunityIcons name="format-list-bulleted" size={24} color={colors.textPrimary} />
+          </Pressable>
+          <Pressable
+            onPress={() => navigation.navigate('FeedCompose')}
+            hitSlop={8}
+            style={({ pressed }) => [styles.topBtn, pressed && styles.topBtnPressed]}
+            accessibilityRole="button"
+            accessibilityLabel="일상 남기기"
+          >
+            <MaterialCommunityIcons name="plus" size={24} color={colors.textPrimary} />
+          </Pressable>
+        </View>
+      </View>
+
+      {/*
+        소스 필터 — <b>고정</b>이다. 리스트 머리글에 넣었더니 빈 앨범에서 리스트가 내용을
+        세로 가운데로 모으면서 칩까지 화면 중앙으로 내려갔다(2026-09-15 리포트).
+        필터는 목록의 일부가 아니라 목록을 고르는 장치라 위에 붙여 둔다.
+      */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.chipScroll}
+        contentContainerStyle={styles.chipRow}
+      >
+        {/* 공용 Chip — 직접 만든 알약(≈28px)은 터치 타깃 44 에 못 미쳤다 */}
+        {FILTERS.map((f) => (
+          <Chip key={f.key} label={f.label} selected={f.key === filter} onPress={() => onPickFilter(f.key)} />
+        ))}
+        {/* 작성자 — 소스와 다른 축이라 구분선으로 떼어 둔다 */}
+        <View style={styles.chipDivider} />
+        <Chip label="둘 다" selected={who === 'all'} onPress={() => onPickWho('all')} />
+        <Chip label="나" selected={who === 'me'} onPress={() => onPickWho('me')} />
+        <Chip label={partnerName} selected={who === 'partner'} onPress={() => onPickWho('partner')} />
+      </ScrollView>
+
+      {view === 'map' ? (
+        <AlbumMap
+          key={`${filter}|${who}`}
+          places={mapPlaces}
+          loading={mapLoading}
+          error={mapError}
+          truncated={mapTruncated}
+          filtered={filtered}
+          onPressPlace={onPressPlace}
+          onRetry={() => void loadMap(filter, who)}
+        />
+      ) : view === 'calendar' ? (
+        <ScrollView
+          contentContainerStyle={styles.list}
+          refreshControl={
+            <RefreshControl
+              refreshing={false}
+              onRefresh={() => void loadMonth(month, filter, who)}
+              tintColor={colors.primary}
+            />
+          }
+        >
+          <AlbumCalendar
+            month={month}
+            items={monthData.items}
+            loading={monthLoading}
+            error={monthError}
+            truncated={monthData.truncated}
+            filtered={filtered}
+            onMove={(delta) => setMonth((m) => shiftMonth(m, delta))}
+            onPressDay={onPressDay}
+            onRetry={() => void loadMonth(month, filter, who)}
+          />
+        </ScrollView>
+      ) : (
+        <FlatList
+          data={gridRows}
+          keyExtractor={(row) => row.key}
+          ListHeaderComponent={listHeader}
+          contentContainerStyle={styles.list}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => void load(filter, who, 'replace')}
+              tintColor={colors.primary}
+            />
+          }
+          // 실패한 뒤에는 자동으로 다시 부르지 않는다 — 꼬리의 재시도 버튼으로만
+          onEndReached={loadMoreError ? undefined : loadMore}
+          onEndReachedThreshold={0.4}
+          renderItem={({ item: row }) =>
+            row.kind === 'month' ? (
+              <Text style={styles.monthHeader}>{row.label}</Text>
+            ) : (
+              <View style={styles.row}>
+                {row.items.map((item) => (
+                  <Pressable
+                    key={keyOf(item)}
+                    onPress={() => setViewingIndex(firstIndexByKey.get(keyOf(item)) ?? 0)}
+                    accessibilityRole="imagebutton"
+                    accessibilityLabel={
+                      item.imageUrls && item.imageUrls.length > 1
+                        ? `${item.mine ? '내' : item.authorName} 사진 ${item.imageUrls.length}장 크게 보기`
+                        : `${item.mine ? '내' : item.authorName} 사진 크게 보기`
+                    }
+                  >
+                    {/* 그리드는 썸네일 — 원본을 3열에 그대로 깔면 한 화면에 수 MB 를 받는다 */}
+                    <CachedImage
+                      uri={thumbnailUrl(item.imageUrl, Math.round(CELL))}
+                      style={[styles.cell, { width: CELL, height: CELL }]}
+                      contentFit="cover"
+                      recyclingKey={keyOf(item)}
+                    />
+                    {/* 여러 장 표시 — Instagram류 앱과 같은 자리(우상단)의 스택 아이콘 */}
+                    {item.imageUrls && item.imageUrls.length > 1 ? (
+                      <View style={styles.multiBadge}>
+                        <MaterialCommunityIcons name="image-multiple-outline" size={14} color={colors.white} />
+                      </View>
+                    ) : null}
+                  </Pressable>
+                ))}
+              </View>
+            )
+          }
+          ListEmptyComponent={
+            refreshing ? null : loadError ? (
+              <EmptyState
+                icon="cloud-off-outline"
+                title="사진을 불러오지 못했어요"
+                description="네트워크 상태를 확인하고 다시 시도해주세요."
+                error
+                onRetry={() => void load(filter, who, 'replace')}
+              />
+            ) : filtered ? (
+              <EmptyState
+                title="조건에 맞는 사진이 없어요"
+                description="다른 필터를 골라 보세요."
+              />
+            ) : (
+              <EmptyState
+                illustration="duo"
+                title="아직 사진이 없어요"
+                description={'일상·식단·운동·맛집에 사진을 남기면\n여기에 모두 모여요.'}
+              />
+            )
+          }
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={styles.footer}>
+                <ActivityIndicator color={colors.primary} />
+              </View>
+            ) : loadMoreError ? (
+              <View style={styles.footer}>
+                <Text style={styles.footerError}>사진을 더 불러오지 못했어요.</Text>
+                <Pressable
+                  onPress={() => void loadMore()}
+                  style={({ pressed }) => [styles.retryBtn, pressed && styles.topBtnPressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel="사진 더 불러오기 다시 시도"
+                >
+                  <Text style={styles.retryText}>다시 시도</Text>
+                </Pressable>
+              </View>
+            ) : null
+          }
+        />
+      )}
+
+      {/* 큰 보기 — 좌우 스와이프로 앨범을 이어서 넘긴다 */}
+      <ImageViewer
+        images={viewerImages}
+        initialIndex={viewingIndex}
+        onClose={() => setViewingIndex(null)}
+      />
+    </SafeAreaView>
+  );
+}
+
+const styles = themedStyles((colors) => ({
+  container: { flex: 1, backgroundColor: colors.background },
+  /*
+   * FAB 이 없는 화면이라 listBottomWithFab(120)은 과했는데, 그렇다고 0 이면 마지막 줄이
+   * 탭바에 가렸다(UX_UI_AUDIT.md 지적). 탭바 높이만큼만 남긴다.
+   */
+  list: { paddingBottom: layout.listBottom + layout.touchTarget },
+  // 빈 상태는 위에서 조금 내려온 자리에 둔다 — flexGrow+center 로 감싸면 위의 섹션까지
+  // 함께 가운데로 끌려간다(2026-09-15 리포트: 칩이 화면 중앙으로 내려갔다)
+  emptyPad: { paddingTop: spacing.xxl },
+  row: { flexDirection: 'row', gap: GAP, marginBottom: GAP },
+  // 월 머리말 — 그리드 위에서 시간축을 만든다. 첫 머리말은 칩 바로 아래라 위 여백을 줄인다
+  monthHeader: {
+    fontSize: fontSize.body,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
+  },
+  // width/height 는 렌더 시점의 useContentWidth 값으로 인라인 적용한다
+  cell: { backgroundColor: colors.surfaceAlt },
+  multiBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  footer: { paddingVertical: spacing.lg, alignItems: 'center', gap: spacing.xs },
+  footerError: { fontSize: fontSize.caption, color: colors.textSecondary },
+  retryBtn: {
+    minHeight: layout.touchTarget,
+    paddingHorizontal: spacing.lg,
+    justifyContent: 'center',
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  retryText: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
+  chipDivider: { width: 1, alignSelf: 'stretch', marginVertical: spacing.sm, backgroundColor: colors.border },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xs,
+  },
+  topTitle: { fontSize: fontSize.title, fontWeight: '800', color: colors.textPrimary },
+  topButtons: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  topBtn: { minWidth: layout.touchTarget, minHeight: layout.touchTarget, alignItems: 'center', justifyContent: 'center' },
+  topBtnPressed: { opacity: 0.6 },
+  viewSwitch: {
+    flexDirection: 'row',
+    padding: 2,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceAlt,
+  },
+  // 칸 하나는 터치 타깃 44 — 묶음이라 작아 보여도 누르는 면적은 줄이지 않는다
+  viewBtn: {
+    width: layout.touchTarget,
+    height: layout.touchTarget - 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.md,
+  },
+  viewBtnOn: { backgroundColor: colors.primary },
+  /*
+   * flexGrow:0 — 세로 flex 컨테이너 안의 ScrollView 는 남은 높이를 전부 먹는다. 없으면
+   * 칩이 화면 높이만큼 늘어난 알약이 됐다(2026-09-15 리포트). 내용 높이만 쓰게 한다.
+   */
+  chipScroll: { flexGrow: 0, flexShrink: 0 },
+  chipRow: { gap: spacing.xs, paddingHorizontal: layout.screenPadding, paddingBottom: spacing.xs },
+  section: { paddingHorizontal: layout.screenPadding, paddingBottom: spacing.sm, gap: spacing.xs },
+  sectionTitle: { fontSize: fontSize.caption, fontWeight: '800', color: colors.textSecondary },
+  tripRow: { gap: spacing.sm, paddingVertical: spacing.xs },
+  tripCard: {
+    width: 140,
+    height: 140,
+    gap: spacing.xxs,
+    padding: spacing.sm,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    justifyContent: 'flex-end',
+    overflow: 'hidden',
+  },
+  tripCardCover: { borderWidth: 0, backgroundColor: colors.surfaceAlt },
+  tripTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
+  tripDate: { fontSize: fontSize.caption, color: colors.textSecondary },
+  // 커버 위 글자 — 검은 그라데이션(0.55) 위라 테마와 무관하게 흰색
+  tripCoverText: { gap: 1 },
+  tripTitleOnCover: { fontSize: fontSize.body, fontWeight: '800', color: '#FFFFFF' },
+  tripDateOnCover: { fontSize: fontSize.caption, color: 'rgba(255,255,255,0.85)' },
+}));

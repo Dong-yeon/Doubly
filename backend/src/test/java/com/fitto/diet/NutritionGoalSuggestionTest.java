@@ -115,4 +115,44 @@ class NutritionGoalSuggestionTest {
         assertThat(highProtein.targetProtein()).isGreaterThan(balanced.targetProtein());
         assertThat(keto.targetFat()).isGreaterThan(balanced.targetFat());
     }
+
+    @Test
+    void 체지방률이_있으면_제지방량_기준으로_계산한다() {
+        Long user = register("ngs6@fitto.com");
+        authService.updateMe(user, new UpdateProfileRequest(null, null, LocalDate.of(1995, 1, 1), Gender.MALE, 175));
+        // 80kg · 체지방 15% → 제지방 68kg → 370 + 21.6 × 68 = 1838.8
+        bodyMetricService.save(user, new SaveBodyMetricRequest(LocalDate.now(), new BigDecimal("80.0"), new BigDecimal("15.0"), null, null, null));
+
+        NutritionGoalSuggestionResponse res = nutritionService.suggestGoal(user,
+                new NutritionGoalSuggestionRequest(ActivityLevel.MODERATE, DietGoalType.MAINTAIN, null, null));
+
+        assertThat(res.bmr()).isEqualTo(1839);
+        assertThat(res.usedBodyFat()).isTrue();
+    }
+
+    @Test
+    void 체지방률만_있으면_프로필_없이도_계산한다() {
+        Long user = register("ngs7@fitto.com");
+        bodyMetricService.save(user, new SaveBodyMetricRequest(LocalDate.now(), new BigDecimal("60.0"), new BigDecimal("25.0"), null, null, null));
+
+        NutritionGoalSuggestionResponse res = nutritionService.suggestGoal(user,
+                new NutritionGoalSuggestionRequest(ActivityLevel.LIGHT, DietGoalType.MAINTAIN, null, null));
+
+        assertThat(res.bmr()).isEqualTo((int) Math.round(370 + 21.6 * 45));
+    }
+
+    @Test
+    void 최신_기록에_체중이_없으면_그_전_체중을_쓴다() {
+        Long user = register("ngs8@fitto.com");
+        authService.updateMe(user, new UpdateProfileRequest(null, null, LocalDate.of(1995, 1, 1), Gender.FEMALE, 160));
+        bodyMetricService.save(user, new SaveBodyMetricRequest(LocalDate.now().minusDays(3), new BigDecimal("55.0"), null, null, null, null));
+        // 허리둘레만 잰 오늘 기록 — 예전엔 이 행이 "최신"이라 체중 null 로 계산이 꺼졌다
+        bodyMetricService.save(user, new SaveBodyMetricRequest(LocalDate.now(), null, null, new BigDecimal("70.0"), null, null));
+
+        NutritionGoalSuggestionResponse res = nutritionService.suggestGoal(user,
+                new NutritionGoalSuggestionRequest(ActivityLevel.LIGHT, DietGoalType.MAINTAIN, null, null));
+
+        assertThat(res.bmr()).isNotNull();
+        assertThat(res.usedBodyFat()).isFalse();
+    }
 }

@@ -6,11 +6,11 @@
  * 홈은 스크롤 없는 고정 화면으로 두고, 쌓이는 목록은 이 화면으로 분리했다.
  */
 import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, FlatList, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { HomeStackParamList } from '../../navigation/types';
+import type { AlbumStackParamList } from '../../navigation/types';
 import { Alert } from '../../utils/alert';
 import { EmptyState } from '../../components/EmptyState';
 import { FeedCard } from '../home/components/FeedCard';
@@ -21,11 +21,12 @@ import { relativeDateLabel, toDateString } from '../../utils/date';
 import { haptics } from '../../utils/haptics';
 import { useDeleteAction } from '../../hooks/useDeleteAction';
 import { useRelationStore } from '../../store/relationStore';
+import { connectSocket, subscribeCouple } from '../../api/chatSocket';
 import type { FeedItem } from '../../types';
 import { colors, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
 
-type Props = NativeStackScreenProps<HomeStackParamList, 'FeedTimeline'>;
+type Props = NativeStackScreenProps<AlbumStackParamList, 'FeedTimeline'>;
 
 export const QUICK_EMOJIS = ['❤️', '🥰', '😆', '👍', '💪'];
 
@@ -84,6 +85,13 @@ export function FeedTimelineScreen({ navigation, route }: Props) {
     if (who === 'me') navigation.setOptions({ title: '내 기록' });
     else if (who === 'partner') navigation.setOptions({ title: `${partnerName}님의 기록` });
     // who 가 없으면(전체) 네비게이터에 정의된 기본 타이틀('우리 기록')을 그대로 둔다
+
+    /*
+     * 사진첩 진입 버튼은 <b>없다</b>. 2026-09-14 까지는 이 헤더가 유일한 진입점이었는데
+     * (홈 칩을 셋으로 줄일 때 인앱 경로가 0이 된 적이 있어 여기 달았다), 사진 그리드가
+     * "우리" 탭의 <b>첫 화면</b>이 되면서 이 목록의 부모가 됐다 — 뒤로가기가 곧 사진첩이다.
+     * 탭 안에서 부모로 가는 버튼을 또 두면 같은 자리를 두 번 말하게 된다.
+     */
   }, [navigation, who, partnerName]);
 
   const load = useCallback(async () => {
@@ -128,15 +136,71 @@ export function FeedTimelineScreen({ navigation, route }: Props) {
 
   useFocusEffect(useCallback(() => void load(), [load]));
 
+  /**
+   * 상대가 기록을 남기거나 반응·댓글을 달았을 때 — 첫 페이지만 다시 받아 위에 합친다.
+   * load() 로 갈아끼우면 더 읽어 둔 아래쪽이 사라지고 스크롤이 튄다. 첫 페이지 안에서 지워진 글은
+   * 더 읽기 전(첫 페이지만 있을 때)에만 걷어낸다 — 그 너머는 다음 진입 때 맞춰진다.
+   */
+  const refreshTop = useCallback(async () => {
+    if (busy.current) return;
+    try {
+      const page = await feedApi.timeline(null, pageLimit);
+      const fresh = page.items.filter(matches);
+      setItems((prev) => {
+        if (prev.length <= fresh.length) return fresh;
+        const seen = new Set(fresh.map(feedItemKey));
+        return [...fresh, ...prev.filter((i) => !seen.has(feedItemKey(i)))];
+      });
+    } catch {
+      // 조용히 — 다음 이벤트나 다음 진입 때 다시 맞춰진다
+    }
+  }, [pageLimit, matches]);
+
+  /*
+   * 실시간 갱신 — 예전엔 이 화면이 커플 채널을 듣지 않았다. 그런데 이 화면을 보고 있으면 같은 경로의
+   * 푸시 배너는 "지금 보는 화면"이라 억제되어, 상대의 새 일상이 아무 신호 없이 묻혔다
+   * (docs/first-experience-audit.md #9). 목록에 실리는 일상·식단·운동의 변경을 듣는다.
+   */
+  const relationId = useRelationStore((s) => s.couple?.id);
+  useFocusEffect(
+    useCallback(() => {
+      if (!relationId) return undefined;
+      let active = true;
+      let offCouple: (() => void) | undefined;
+      connectSocket()
+        .then(() => {
+          if (!active) return;
+          offCouple = subscribeCouple(relationId, (type) => {
+            if (type === 'FEED' || type === 'DIET' || type === 'WORKOUT' || type === '') void refreshTop();
+          });
+        })
+        .catch(() => undefined);
+      return () => {
+        active = false;
+        offCouple?.();
+      };
+    }, [relationId, refreshTop]),
+  );
+
+  /*
+   * 반응 전송 중인 카드 — 반응은 토글이라 연달아 두 번 가면 켰다 바로 꺼진다. 앞 요청이 끝날 때까지
+   * 같은 카드의 탭은 무시한다(AlbumScreen.onReact 와 같은 방식, first-experience-audit.md #26)
+   */
+  const [reacting] = useState(() => new Set<string>());
   const onReact = async (item: FeedItem, emoji: string) => {
+    const key = feedItemKey(item);
+    if (reacting.has(key)) return;
+    reacting.add(key);
     haptics.light();
     try {
       const reactions = await feedApi.react(item.type, item.refId, emoji);
       setItems((prev) =>
-        prev.map((i) => (feedItemKey(i) === feedItemKey(item) ? { ...i, reactions } : i)),
+        prev.map((i) => (feedItemKey(i) === key ? { ...i, reactions } : i)),
       );
     } catch (e) {
       toast.error(getErrorMessage(e, '반응을 남기지 못했어요.'));
+    } finally {
+      reacting.delete(key);
     }
   };
 
@@ -146,9 +210,18 @@ export function FeedTimelineScreen({ navigation, route }: Props) {
     // 걸러지는 건 "POST 인데 내 글이 아닌" 경우뿐이라, 그 경우에만 피드백을 준다.
     if (item.type !== 'POST') return;
     if (!item.mine) {
-      toast.info('내가 쓴 글만 삭제할 수 있어요.');
+      toast.info('내가 쓴 글만 고치거나 지울 수 있어요.');
       return;
     }
+    // 고치기는 작성 화면을 그대로 쓴다 — 돌아오면 포커스 때 다시 읽어 바뀐 글이 보인다
+    Alert.alert('내 일상', undefined, [
+      { text: '고치기', onPress: () => navigation.navigate('FeedCompose', { postId: item.refId }) },
+      { text: '삭제', style: 'destructive', onPress: () => confirmDelete(item) },
+      { text: '취소', style: 'cancel' },
+    ]);
+  };
+
+  const confirmDelete = (item: FeedItem) => {
     Alert.alert('포스트 삭제', '이 일상 기록을 삭제할까요?', [
       { text: '취소', style: 'cancel' },
       {
@@ -184,6 +257,12 @@ export function FeedTimelineScreen({ navigation, route }: Props) {
               quickEmojis={QUICK_EMOJIS}
               onReact={onReact}
               onLongPress={onLongPress}
+              onOpenComments={(i) => navigation.navigate('FeedComments', { postId: i.refId })}
+              onOpenPlace={(i) => {
+                // 부제 "끼니 · 📍장소 ★N" 에서 이름만 — 헤더 제목용(상세가 불러온 뒤 실제 이름으로 바꾼다)
+                const name = i.content?.split('📍')[1]?.replace(/ ★\d$/, '') ?? '장소';
+                if (i.placeId != null) navigation.navigate('PlaceDetail', { placeId: i.placeId, name });
+              }}
             />
           </View>
         )}
@@ -199,7 +278,7 @@ export function FeedTimelineScreen({ navigation, route }: Props) {
             />
           ) : (
             <EmptyState
-              icon="timeline-text-outline"
+              illustration="duo"
               title="아직 기록이 없어요"
               description={'운동·식단·맛집을 기록하거나\n첫 일상을 남겨보세요!'}
             />
@@ -223,4 +302,5 @@ const styles = themedStyles((colors) => ({
   loadMore: { paddingVertical: spacing.md },
   tail: { height: spacing.lg },
   cardDeleting: { opacity: 0.4 },
+  // 헤더 우측 사진첩 버튼 — 최소 터치 타깃을 헤더 안에서도 보장한다
 }));

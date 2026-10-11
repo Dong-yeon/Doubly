@@ -143,6 +143,21 @@ async function readBody(response: Response): Promise<unknown> {
   }
 }
 
+const REFRESH_TOKEN_MISSING = 'refresh token 없음';
+
+/**
+ * 이 에러가 "세션이 정말 끝났다"는 뜻인가 — <b>이때만</b> 토큰을 지우고 로그아웃한다.
+ *
+ * <p>서버가 401/403 으로 거절했거나 refresh token 자체가 없을 때만 true. 네트워크 끊김
+ * (status 0)·타임아웃·5xx(재배포 중 502 등)는 false — 토큰은 아직 유효할 수 있다.
+ * 예전엔 이 구분 없이 모든 실패를 로그아웃으로 바꿔서, 앱을 켜는 순간 연결이 잠깐
+ * 끊기기만 해도 로그인 화면으로 튕겼다(2026-10-01, /auth/me 499 직후 재로그인 로그).
+ */
+export function isSessionRejected(e: unknown): boolean {
+  if (e instanceof ApiError) return e.status === 401 || e.status === 403;
+  return e instanceof Error && e.message === REFRESH_TOKEN_MISSING;
+}
+
 // 진행 중인 refresh 를 공유해 동시 401 을 한 번만 갱신
 let refreshPromise: Promise<string> | null = null;
 
@@ -171,22 +186,42 @@ export function refreshAccessToken(): Promise<string> {
 
 async function requestNewTokens(): Promise<string> {
   const refreshToken = await storage.getItem(STORAGE_KEYS.refreshToken);
-  if (!refreshToken) throw new Error('refresh token 없음');
+  if (!refreshToken) throw new Error(REFRESH_TOKEN_MISSING);
 
-  const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${refreshToken}`,
-    },
-    body: '{}',
-  });
-  if (!response.ok) throw new ApiError(response.status, await readBody(response), 'refresh 실패');
+  /*
+   * 타임아웃을 건다 — 예전엔 없어서, 응답이 멈추면 갱신이 <b>끝나지 않았다</b>. 그 갱신을 기다리는
+   * 소켓 재연결(chatSocket beforeConnect)이 통째로 멈추고, 진행 중 연결을 공유하는 이후 connectSocket
+   * 호출도 전부 같은 약속에 묶여 "연결 중이에요"가 무기한 남았다(docs/server-stability-current-state.md §5-3 C).
+   * 본문을 다 읽을 때까지 잰다 — 헤더만 오고 본문이 멈추는 경우도 같은 결과라서다.
+   */
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT);
+  let response: Response;
+  let body: unknown;
+  try {
+    response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${refreshToken}`,
+      },
+      body: '{}',
+      signal: controller.signal,
+    });
+    body = await readBody(response);
+  } catch (e) {
+    // 네트워크 끊김·시간 초과 — 세션이 죽은 게 아니다(isSessionRejected 가 status 0 을 false 로 본다)
+    const aborted = e instanceof Error && e.name === 'AbortError';
+    throw new ApiError(0, undefined, aborted ? `refresh 시간 초과 (${DEFAULT_TIMEOUT}ms)` : '네트워크 오류', aborted);
+  } finally {
+    clearTimeout(timer);
+  }
+  if (!response.ok) throw new ApiError(response.status, body, 'refresh 실패');
 
-  const body = (await readBody(response)) as ApiResponse<AuthTokens>;
-  await storage.setItem(STORAGE_KEYS.accessToken, body.data.accessToken);
-  await storage.setItem(STORAGE_KEYS.refreshToken, body.data.refreshToken);
-  return body.data.accessToken;
+  const tokens = (body as ApiResponse<AuthTokens>).data;
+  await storage.setItem(STORAGE_KEYS.accessToken, tokens.accessToken);
+  await storage.setItem(STORAGE_KEYS.refreshToken, tokens.refreshToken);
+  return tokens.accessToken;
 }
 
 async function request<T>(
@@ -237,10 +272,13 @@ async function request<T>(
       await refreshAccessToken();
       return request<T>(method, url, body, config, true);
     } catch (refreshError) {
-      // refresh 실패 → 세션 종료
-      await storage.removeItem(STORAGE_KEYS.accessToken);
-      await storage.removeItem(STORAGE_KEYS.refreshToken);
-      onAuthFailure?.();
+      // 서버가 refresh token 을 거절했을 때만 세션 종료. 네트워크·5xx 는 토큰을 지키고
+      // 에러만 올린다 — 여기서 지우면 잠깐 끊긴 것만으로 로그인 화면으로 튕긴다.
+      if (isSessionRejected(refreshError)) {
+        await storage.removeItem(STORAGE_KEYS.accessToken);
+        await storage.removeItem(STORAGE_KEYS.refreshToken);
+        onAuthFailure?.();
+      }
       throw refreshError;
     }
   }

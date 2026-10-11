@@ -2,7 +2,7 @@
   "expo": {
     "name": "Dubly",
     "slug": "doubly",
-    "version": "1.0.2",
+    "version": "1.0.7",
     "runtimeVersion": {
       "policy": "fingerprint"
     },
@@ -13,8 +13,16 @@
     "icon": "./assets/icon.png",
     "scheme": "doubly",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "imageWidth": 220,
+          "backgroundColor": "#FFFFFF"
+        }
+      ],
       [
         "expo-image-picker",
         {
@@ -64,8 +72,26 @@
         }
       ],
       "expo-audio",
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#F28472"
+        }
+      ],
       "expo-sharing",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "지도에서 내 위치를 보여 주기 위해 위치 정보가 필요해요.",
+          "locationAlwaysAndWhenInUsePermission": false,
+          "locationAlwaysPermission": false,
+          "motionUsagePermission": "지도에서 내 위치를 보여 주는 위치 기능에 함께 들어 있는 권한이에요. Dubly 는 동작 정보를 읽지 않아요.",
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false,
+          "isAndroidForegroundServiceEnabled": false
+        }
+      ],
       [
         "expo-media-library",
         {
@@ -73,20 +99,6 @@
           "savePhotosPermission": "받은 사진을 갤러리에 저장하기 위해 사진 저장 권한이 필요해요.",
           "isAccessMediaLocationEnabled": false,
           "granularPermissions": []
-        }
-      ],
-      [
-        "@stream-io/video-react-native-sdk",
-        {
-          "ringing": true,
-          "androidMessagingServiceBaseClass": null
-        }
-      ],
-      [
-        "@config-plugins/react-native-webrtc",
-        {
-          "cameraPermission": "영상통화를 위해 카메라 접근 권한이 필요해요.",
-          "microphonePermission": "통화를 위해 마이크 접근 권한이 필요해요."
         }
       ],
       [
@@ -99,15 +111,10 @@
         }
       ]
     ],
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "imageWidth": 220,
-      "backgroundColor": "#FFFFFF"
-    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.doubly.app.ios",
+      "associatedDomains": ["applinks:dubly.co.kr"],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "CFBundleDevelopmentRegion": "ko"
@@ -124,6 +131,14 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": true,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [{ "scheme": "https", "host": "dubly.co.kr", "pathPrefix": "/i/" }],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ],
       "permissions": [
         "android.permission.RECORD_AUDIO"
       ],

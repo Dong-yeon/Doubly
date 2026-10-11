@@ -20,52 +20,77 @@ import type { CompositeScreenProps } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList, MainTabParamList } from '../../navigation/types';
 import { Avatar } from '../../components/Avatar';
+import { Button } from '../../components/Button';
+import { EmptyState } from '../../components/EmptyState';
 import { Card } from '../../components/Card';
+import { SettingsGroup, SettingsRow } from '../../components/SettingsList';
 import { DateField } from '../../components/DateField';
 import { CoupleHero } from './components/CoupleHero';
 import { QuickActions } from './components/QuickActions';
-import { MemoryPeek } from './components/MemoryPeek';
+import { MemoryPeek, hasMemories } from './components/MemoryPeek';
 import { TripPeek, isTripLive, isTripOngoing, pickHomeTrip } from './components/TripPeek';
+import { EventPeek, isEventToday, pickHomeEvent } from './components/EventPeek';
 import { LockedCard } from '../../components/LockedCard';
+import { ServiceStatusBanner } from '../../components/ServiceStatusBanner';
 import { MoodPicker } from '../../components/MoodPicker';
 import { QuickMealSheet } from './components/QuickMealSheet';
 import { useAuthStore } from '../../store/authStore';
 import { useCoupleEmojiStore } from '../../store/coupleEmojiStore';
+import { usePlaceStore } from '../../store/placeStore';
 import { usePlanStore } from '../../store/planStore';
 import { useRelationStore } from '../../store/relationStore';
 import { workoutApi } from '../../api/workout';
-import { analyticsApi } from '../../api/analytics';
+import { analyticsApi, track } from '../../api/analytics';
 import { dietApi } from '../../api/diet';
 import { streakApi } from '../../api/streak';
 import { feedApi } from '../../api/feed';
 import { chatApi } from '../../api/chat';
 import { moodApi } from '../../api/mood';
+import { journalApi, journalToday } from '../../api/journal';
 import type { MoodChoice } from '../../api/mood';
 import { tripApi } from '../../api/trip';
+import { calendarApi } from '../../api/calendar';
+import { placeApi } from '../../api/place';
 import { feedTimeLabel } from '../feed/FeedTimelineScreen';
 import {
   connectSocket,
   subscribeCouple,
-  unsubscribeCouple,
 } from '../../api/chatSocket';
 import { pickImage, takePhoto, uploadImage } from '../../utils/imageUpload';
-import { daysSince, localDateOf, toDateString } from '../../utils/date';
+import { daysSince, formatMonthDay, localDateOf, todayKst } from '../../utils/date';
 import { mealTypeForNow, mealTypeLabel } from '../../utils/mealTimeSlot';
 import { haptics } from '../../utils/haptics';
 import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { getErrorMessage } from '../../utils/error';
 import { Alert } from '../../utils/alert';
-import { errorCodeOf } from '../../api/client';
+import { errorCodeOf, isApiError } from '../../api/client';
+import { uploadApi, wasRejected } from '../../api/upload';
+import { reportError } from '../../utils/errorReporter';
 import { updateHomeWidget } from '../../widget/updateHomeWidget';
-import { loadWidgetData } from '../../widget/widgetData';
+import { HOME_RECORD_EXCLUDE, feedSummary, isHomeRecord } from '../../utils/feedSummary';
+import { loadWidgetData, widgetMoodOf } from '../../widget/widgetData';
 import { touchGestureOf } from '../../constants/touchGestures';
 import { playTouchGesture } from '../../utils/haptics';
-import type { FeedItem, Meal, Memories, MoodResponse, PartnerToday, Streak, Trip } from '../../types';
+import type {
+  CoupleCalendarEvent,
+  FeedItem,
+  LovelichelinPulse,
+  Meal,
+  Memories,
+  MoodResponse,
+  PartnerToday,
+  Streak,
+  Trip,
+} from '../../types';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import { isDarkMode } from '../../theme';
+import { onColor } from '../../theme/onColor';
 import { themedStyles } from '../../theme/themedStyles';
+import { WORKOUT_HOME_ENABLED } from '../../constants/config';
 import { layout } from '../../theme/layout';
+
+// 미연결 홈의 캐릭터 — 인트로(OnboardingScreen)와 같은 달걀 커플
+const CONNECT_PICTURE = require('../../../assets/stickers/duo_love.png');
 
 type Props = CompositeScreenProps<
   NativeStackScreenProps<HomeStackParamList, 'HomeMain'>,
@@ -73,38 +98,54 @@ type Props = CompositeScreenProps<
 >;
 
 /**
- * 배경 사진이 없을 때의 기본 벽지 — 테마를 따른다.
+ * 배경 사진이 없을 때의 기본 벽지 — 소유자 색의 연한 틴트 두 장을 대각으로 섞는다.
+ *
+ * <p>예전에는 흰→회색 그라데이션이라 사실상 흰 화면이었고, 그 위에 D+ 만 떠 있어 화면의 절반이
+ * 비었다(docs/SCREEN_DESIGN_PASS_2026-09-23.md §1-2 P10). 지금은 틴트 위에 달걀 캐릭터 둘을
+ * 앉히고(아래 wallpaper), "우리 사진 넣기"로 사진을 부른다.
  */
-const gradient = (): [string, string, string] =>
-  isDarkMode()
-    ? ['#262823', '#1E201C', '#151713']
-    : ['#FFFFFF', '#FAFAF9', '#F1F2F0'];
+const wallpaper = (): [string, string] => [colors.meBg, colors.partnerBg];
+
+/** 사진 없을 때 벽지에 앉는 캐릭터 — 스티커 자산을 그대로 쓴다(새 그림 없음) */
+const WALLPAPER_DUO = require('../../../assets/stickers/duo_relaxed.png');
 
 /**
- * 배경 사진 위 스크림 — 사진이 밝든 어둡든 그 위의 글씨가 읽혀야 한다.
+ * 사진 위 스크림 — <b>사진을 지우지 않는다.</b>
  *
- * <p>예전에는 <b>검정 기반 + 흰 글씨</b> 고정이었다. 안전했지만 앱에서 홈만 늘 어두워
- * 커플앱치고 무거웠다. 지금은 스크림도 테마를 따르고, 글씨는 테마색을 그대로 쓴다 —
- * 라이트에서는 크림 스크림 + 어두운 글씨(= 밝은 홈), 다크에서는 반대다.
+ * <p>예전에는 화면 전체에 흰색 84→97% 를 깔았다. 글자(D+·두 열·최근 기록)가 사진 전면에
+ * 퍼져 있어 어떤 사진이 와도 AA 를 맞추려면 사진을 지워야 했기 때문이다. 결과는
+ * "배경 사진 위의 우리 화면"인데 사진이 안 보이는 홈이었다.
+ *
+ * <p>지금은 글자가 <b>하단 패널</b>에만 있다(CoupleHero·슬롯·바로가기). 2026-09-28 부터 패널이 스스로
+ * 불투명 배경을 깔고, 그 위로 짧은 페이드(panelFade)만 사진 쪽으로 번진다 — <b>화면 높이 비율이 아니라
+ * 패널에 붙어 있어서</b> 패널이 길어져도(가운데 D+ 히어로) 글자는 늘 불투명 구간 위에 놓인다.
+ * 예전처럼 화면 42%~62% 에 고정된 스크림이면, 키 큰 히어로의 윗부분이 반투명 구간에 걸려 밝은
+ * 사진 위에서 안 읽힌다. 전체 스크림(scrim)은 이제 미연결 화면(글자가 화면 전체에 있다)에서만 쓴다.
+ * 맨 위에는 상단 바 아이콘용으로 짧은 스크림을 따로 깐다(topScrim).
  *
  * <p><b>⚠️ 스크림과 글씨의 테마가 어긋나면 안 된다.</b> 스크림만 크림으로 고정했다가
  * 다크 모드에서 밝은 글씨가 크림 위에 올라가 <b>대비 1.3:1</b> 로 안 읽힌 적이 있다.
  * 값을 만질 때는 반드시 두 테마 모두에서 확인할 것.
- *
- * <p><b>0.84 아래로 내리지 말 것.</b> 최악(순흑 사진 · 라이트)에서도 보조 텍스트가
- * AA(4.5)를 넘겨야 한다. 맨 위는 topBar(자체 배경이 있는 칩·아바타)만 있어 조금 옅어도 된다.
  */
-const scrim = (): [string, string, string] =>
-  isDarkMode()
-    // 다크는 하한이 더 높아야 한다 — 순백 사진 위 0.84 면 보조 텍스트가 4.35 로 미달이다
-    ? ['rgba(30,32,28,0.88)', 'rgba(30,32,28,0.93)', 'rgba(30,32,28,0.97)']
-    : ['rgba(255,255,255,0.84)', 'rgba(255,255,255,0.92)', 'rgba(255,255,255,0.97)'];
+const SCRIM_LOCATIONS: [number, number, number, number] = [0, 0.42, 0.62, 1];
+/*
+ * 배경색(colors.background)을 알파만 바꿔 쓴다 — 예전엔 #FAFAF9·#1E201C 를 rgba 로 손 복사해 두어,
+ * 포인트 색 테마가 라이트 바탕을 옅게 물들이자(2026-10-06) 스크림만 회백색으로 남을 뻔했다.
+ * 다크는 테마와 무관하게 중립이라 결과가 예전과 같다.
+ */
+const bgAlpha = (a: number): string => {
+  const h = colors.background.replace('#', '');
+  return `rgba(${parseInt(h.slice(0, 2), 16)},${parseInt(h.slice(2, 4), 16)},${parseInt(h.slice(4, 6), 16)},${a})`;
+};
+const scrim = (): [string, string, string, string] => [bgAlpha(0), bgAlpha(0), bgAlpha(0.96), bgAlpha(1)];
 
-/** 열에 들어갈 최근 기록 한 줄 — 종류마다 제목/본문 중 있는 쪽을 쓴다 */
-function recordLabel(item: FeedItem | null): string | null {
-  if (!item) return null;
-  return item.content || item.title || '기록을 남겼어요';
-}
+/** 패널 위로 번지는 페이드 — 투명 → 패널 배경색(= colors.background). 패널 바로 위에 붙는다 */
+const panelFade = (): [string, string] => [bgAlpha(0), bgAlpha(1)];
+
+/** 상단 바 아이콘이 밝은 사진 위에서도 읽히게 — 위 14% 만, 배경색 0.7 → 0 */
+const TOP_SCRIM_LOCATIONS: [number, number] = [0, 0.14];
+const topScrim = (): [string, string] => [bgAlpha(0.7), bgAlpha(0)];
+
 
 /**
  * 위젯 캐시의 숫자를 화면이 쓰는 스트릭 모양으로 감싼다.
@@ -119,7 +160,8 @@ function cachedStreak(currentCount: number): Streak {
 
 export function HomeScreen({ navigation }: Props) {
   const user = useAuthStore((s) => s.user);
-  const { couple, loading: relationLoading, fetchAll, setBackground, setAnniversary } = useRelationStore();
+  const { couple, loading: relationLoading, loaded: relationLoaded, fetchAll, setBackground, setAnniversary } =
+    useRelationStore();
   // 표시용 판정 — 모르면 열린 것으로 본다(planStore 주석 참고). 최종 판정은 서버가 한다.
   const canUse = usePlanStore((s) => s.can);
   const showUpgrade = usePlanStore((s) => s.showUpgrade);
@@ -134,16 +176,44 @@ export function HomeScreen({ navigation }: Props) {
   const myMealDone = myMeals.length > 0;
   const [partnerMeal, setPartnerMeal] = useState<PartnerToday | null>(null);
   /*
+   * 오늘 챙김 링(LOVEBODY_REVIEW §2-2) — 아침·점심·저녁·운동. 내 쪽은 이미 받는 오늘 식단·운동에서 만들고(새 호출 없음),
+   * 상대 쪽은 식단 응답의 끼니 종류(mealTypes)와 운동 응답의 completed 로 만든다. 상대가 기록하면 커플 소켓 이벤트가
+   * refresh() 를 돌려 둘 다 다시 읽으므로 링도 따라온다. 구서버(mealTypes 없음)면 상대 링은 그리지 않는다.
+   * 간식은 조각이 없다(4조각 고정) — 간식만 먹은 날 링은 비어 있고, 식단 배지(✓)와 스크린리더 문장이 기록을 말한다.
+   */
+  const myMealTypes = new Set(myMeals.map((m) => m.mealType));
+  const mySlices = {
+    breakfast: myMealTypes.has('BREAKFAST'),
+    lunch: myMealTypes.has('LUNCH'),
+    dinner: myMealTypes.has('DINNER'),
+    workout: myWorkoutDone,
+  };
+  const mySnack = myMealTypes.has('SNACK');
+  const partnerMealTypes = partnerMeal?.mealTypes;
+  const partnerSlices = partnerMealTypes
+    ? {
+        breakfast: partnerMealTypes.includes('BREAKFAST'),
+        lunch: partnerMealTypes.includes('LUNCH'),
+        dinner: partnerMealTypes.includes('DINNER'),
+        workout: !!partner?.completed,
+      }
+    : null;
+  const partnerSnack = !!partnerMealTypes?.includes('SNACK');
+  /*
    * 최근 기록 — 좌우 열이 <b>각자의</b> 마지막 기록을 보여주므로 두 건이 필요하다.
    * 타임라인은 시간순 한 줄이라 사람별로 나눠 받을 수 없어, 한 페이지를 받아
    * mine 으로 갈라 각각 첫 건만 쓴다.
    */
   const [myLatest, setMyLatest] = useState<FeedItem | null>(null);
   const [partnerLatest, setPartnerLatest] = useState<FeedItem | null>(null);
+  // 아바타 위 럽슐랭 왕관 — 오늘 럽슐랭에 기록했거나 막 등극한 사람에게만(AvatarCrown)
+  const [lovelichelinPulse, setLovelichelinPulse] = useState<LovelichelinPulse | null>(null);
   // 작년 오늘 — 있는 날에만 최근 기록 자리를 대신 차지한다 (PLAN.md Memories)
   const [memories, setMemories] = useState<Memories | null>(null);
   // 다가오는/진행 중 여행 — 있는 기간에만 조건부 한 줄 슬롯에 D-day 카드를 띄운다 (PLAN.md Trip)
   const [homeTrip, setHomeTrip] = useState<Trip | null>(null);
+  // 다가오는 일정 — 서버 upcoming 을 그대로 들고 있고, 띄울지(7일 안)는 렌더 시점에 고른다(EventPeek)
+  const [upcomingEvents, setUpcomingEvents] = useState<CoupleCalendarEvent[]>([]);
 
   const [annModal, setAnnModal] = useState(false);
   const [annInput, setAnnInput] = useState('');
@@ -170,6 +240,11 @@ export function HomeScreen({ navigation }: Props) {
    */
   const [mood, setMood] = useState<MoodResponse | null>(null);
   const [showMoodPicker, setShowMoodPicker] = useState(false);
+  /*
+   * 미연결일 때 무드 버튼에 그릴 오늘 기분 — 무드(mood_statuses)는 관계 소유라 미연결이면 없다.
+   * 그때 고른 기분은 나만의 하루 기록에 남으므로(MoodPicker 주석) 오늘 기록의 기분을 대신 그린다.
+   */
+  const [soloMood, setSoloMood] = useState<string | null>(null);
   /* 오늘 식단 시트 — 히어로의 내 식단 칩에서 연다(아래 onPressToday 참고) */
   const [mealSheet, setMealSheet] = useState(false);
   const [mealSaving, setMealSaving] = useState(false);
@@ -181,17 +256,54 @@ export function HomeScreen({ navigation }: Props) {
   // 잠깐 스쳤다 사라지는 깜빡임(P2-13)을 막는다. 로딩이 끝나면 실제 값을 따른다.
   const connected = relationLoading ? true : !!couple?.partner;
   const bgUrl = couple?.backgroundImageUrl ?? null;
+  /*
+   * 배경 사진이 실제로 보이는 높이 — 화면 맨 위부터 하단 패널 윗선까지.
+   *
+   * <p>사진을 화면 전체(absoluteFill)에 cover 로 깔면 <b>화면 비율로 확대·크롭된 뒤 아래 절반 이상이
+   * 불투명 패널에 가려진다</b>(9/28 에 패널이 제 배경을 깔면서 생긴 어긋남). 보이는 건 확대된 사진의
+   * 윗부분뿐이라 사진의 주인공(보통 가운데)이 패널 뒤에 숨는다 — 2026-09-29 "배경이 이상하다".
+   * 그래서 사진을 보이는 자리에만 맞춰 그린다. 패널 위 페이드(panelFade)가 경계를 덮는다.
+   * 재기 전(첫 프레임)에는 화면 전체로 그린다.
+   */
+  const [bodyTop, setBodyTop] = useState(0);
+  const [panelTop, setPanelTop] = useState<number | null>(null);
+  const photoHeight = panelTop == null ? null : bodyTop + panelTop;
   const dday = daysSince(couple?.anniversaryDate ?? couple?.connectedAt);
 
   /*
    * 오프라인 안내는 한 번만 — 홈은 포커스마다 refresh 가 돌고 그 안에서 여러 요청이
    * 각각 실패하므로, 안내를 그대로 흘리면 지하철 한 정거장에 토스트가 열 번 뜬다.
+   *
+   * <p><b>원인별로 문구를 가른다.</b> 예전엔 인자 없는 콜백이라 서버 500 도
+   * "연결이 불안정해요"로 나갔다 — 사용자는 멀쩡한 자기 네트워크를 의심하고,
+   * 제보를 받아도 어느 쪽인지 가릴 수 없었다. 이 실패는 리포터로도 안 갔으므로
+   * 앱에도 서버에도 흔적이 남지 않았다.
+   *
+   * <p>구분은 새로 만들 것이 없다 — {@link ApiError} 가 이미 담고 있다
+   * (api/client.ts: 네트워크 끊김·타임아웃은 status 0, 타임아웃만 timedOut).
    */
   const offlineNoticeShown = useRef(false);
-  const noteOffline = useCallback(() => {
+  const noteOffline = useCallback((error: unknown) => {
     if (offlineNoticeShown.current) return;
     offlineNoticeShown.current = true;
-    toast.info('연결이 불안정해요. 마지막으로 본 기록을 보여주고 있어요.');
+
+    const status = isApiError(error) ? error.status : 0;
+    if (status === 0) {
+      // 서버 응답이 아예 없다. 우리가 기다리다 끊은 것과 연결이 없는 것은 할 말이 다르다.
+      toast.info(
+        isApiError(error) && error.timedOut
+          ? '서버 응답이 느려요. 마지막으로 본 기록을 보여주고 있어요.'
+          : '연결이 불안정해요. 마지막으로 본 기록을 보여주고 있어요.',
+      );
+      return;
+    }
+
+    /*
+     * 서버가 응답은 했다 — 네트워크 탓으로 돌리면 안 된다. 5xx 는 우리 쪽 결함이므로
+     * 문구만 바꾸고 끝내지 않고 기록까지 남긴다(4xx 는 토큰 만료·플랜 한도라 소음이 된다).
+     */
+    if (status >= 500) reportError(error, { source: 'global', boundary: 'HomeScreen.refresh' });
+    toast.info(`기록을 불러오지 못했어요 (${status}). 마지막으로 본 기록을 보여주고 있어요.`);
   }, []);
 
   const refresh = useCallback(() => {
@@ -216,30 +328,48 @@ export function HomeScreen({ navigation }: Props) {
     /*
      * 좌우 열이 각자의 마지막 기록을 보여주므로 <b>두 사람 몫</b>이 필요하다.
      * 12건이면 한쪽이 연속으로 기록한 날에도 반대쪽 한 건이 대개 들어온다 —
-     * 그래도 없으면 그 열은 "아직 기록이 없어요" 로 둔다(추가 호출은 하지 않는다).
+     * 그래도 없으면 그 열의 기록 줄은 비워 둔다(추가 호출은 하지 않는다).
      * (커플 미연결이면 피드가 404 다 — 조용히 비운다)
+     *
+     * <p>럽슐랭 방문·콘텐츠 관람은 뺀다(utils/feedSummary 의 HOME_RECORD_EXCLUDE) — 그날의 식단·운동
+     * 글이 맛집 기록에 밀려나던 자리다. 서버가 쿼리에서 빼고, 모르는 서버였을 때를 위해 여기서도 거른다.
      */
     feedApi
-      .timeline(null, 12)
+      .timeline(null, 12, HOME_RECORD_EXCLUDE)
       .then((page) => {
-        setMyLatest(page.items.find((i) => i.mine) ?? null);
-        setPartnerLatest(page.items.find((i) => !i.mine) ?? null);
+        const items = page.items.filter(isHomeRecord);
+        setMyLatest(items.find((i) => i.mine) ?? null);
+        setPartnerLatest(items.find((i) => !i.mine) ?? null);
       })
       .catch(() => {
         setMyLatest(null);
         setPartnerLatest(null);
       });
+    // 럽슐랭 왕관 — 실패하면 조용히 없앤다(홈의 다른 줄을 막을 정보가 아니다)
+    placeApi
+      .lovelichelinPulse()
+      .then(setLovelichelinPulse)
+      .catch(() => setLovelichelinPulse(null));
     // 추억은 대부분의 날에 비어 있다 — 없으면 최근 기록이 그대로 남는다
     feedApi
       .memories()
       // 잠긴 응답(locked)도 들고 있는다 — 빈 결과와 구분해서 잠금 카드를 그려야 한다
-      .then((res) => setMemories(res.locked || res.groups.length > 0 ? res : null))
+      .then((res) => setMemories(res.locked || hasMemories(res) ? res : null))
       .catch(() => setMemories(null));
     // 여행 — 진행 중 > 가장 가까운 예정 하나만 고른다. 없거나 실패(미연결 404 포함)면 카드도 없다
     tripApi
       .list()
       .then((trips) => setHomeTrip(pickHomeTrip(trips)))
       .catch(() => setHomeTrip(null));
+    /*
+     * 다가오는 일정 — 커플 이벤트가 오면 이 refresh() 가 통째로 다시 불리므로(구독부 참고) 상대가
+     * 일정을 고쳐도 따라온다. 실패(미연결 404 포함)면 조용히 비운다 — 슬롯 후보 하나가 없어질 뿐이다.
+     * 진행 중인 기간 일정이 앞에 오므로 5건이면 7일 안의 것을 놓치지 않는다.
+     */
+    calendarApi
+      .upcoming(5)
+      .then(setUpcomingEvents)
+      .catch(() => setUpcomingEvents([]));
   }, [fetchAll, noteOffline]);
 
   /**
@@ -262,7 +392,7 @@ export function HomeScreen({ navigation }: Props) {
    *
    * <p>기록 화면을 거치지 않는다. 끼니는 시각으로 정하고(mealTimeSlot), 칼로리는 저장 뒤
    * 서버가 알아서 채우므로(MealPhotoAutoAnalysisService) 확인할 화면 자체가 필요 없다.
-   * 운동 탭의 "📷 사진으로"가 기록 화면으로 넘어가는 것과 갈리는 지점이다 — 거기서는
+   * 운동 체크인 카드의 "📷 사진으로"가 기록 화면으로 넘어가는 것과 갈리는 지점이다 — 거기서는
    * 읽어낸 시간·거리를 확인할 자리가 필요했다.
    *
    * <p>시트를 닫는 건 저장이 <b>끝난 뒤</b>다. 사진을 고르자마자 닫으면 업로드가 도는 동안
@@ -270,12 +400,15 @@ export function HomeScreen({ navigation }: Props) {
    */
   const saveMealFromPhoto = async (source: 'camera' | 'library') => {
     setMealSaving(true);
+    let photoUrl: string | null = null;
     try {
       const picked = source === 'camera' ? await takePhoto() : await pickImage();
       if (!picked) return;
-      const photoUrl = await uploadImage(picked);
+      photoUrl = await uploadImage(picked, { purpose: 'meal' });
       const mealType = mealTypeForNow();
-      const saved = await dietApi.save({ mealDate: toDateString(), mealType, photoUrl });
+      const saved = await dietApi.save({ mealDate: todayKst(), mealType, photoUrl });
+      // 기록 화면과 경로를 비교하려고 같은 이벤트로 센다(시트는 열린 시간·항목이 없다 — 사진 한 장 저장)
+      track('MEAL_RECORD_SAVED', `sheet;i=0;p=1;d=0;a=${autoAnalyzeMealPhoto ? 1 : 0}`);
       haptics.success();
       setMealSheet(false);
       /*
@@ -300,6 +433,8 @@ export function HomeScreen({ navigation }: Props) {
       refresh();
     } catch (e) {
       toast.error(getErrorMessage(e, '기록하지 못했어요.'));
+      // 올렸는데 저장이 거절됐으면 그 사진은 어디에도 안 쓰인다 — 치운다(lovebody-current-state §4-6)
+      if (photoUrl && wasRejected(e)) uploadApi.discard(photoUrl);
     } finally {
       setMealSaving(false);
     }
@@ -319,10 +454,18 @@ export function HomeScreen({ navigation }: Props) {
    *
    * 서버 값이 도착하면 그쪽이 이긴다 — 여기서는 아직 null 일 때만 채운다.
    */
+  /**
+   * 마지막으로 캐시에 남아 있던 스트릭 숫자 — 위젯을 다시 구울 때 <b>모르는 쪽의 폴백</b>이다.
+   * state 와 따로 드는 이유: state 는 서버 값이 오면 덮이지만, 여기 필요한 건 "직전에
+   * 위젯에 쓰여 있던 값"이라서다(아래 위젯 갱신 effect 참고).
+   */
+  const cachedStreakRef = useRef<{ my: number; partner: number } | null>(null);
+
   useEffect(() => {
     let cancelled = false;
     void loadWidgetData().then((cached) => {
       if (cancelled || !cached) return;
+      cachedStreakRef.current = { my: cached.myStreak, partner: cached.partnerStreak };
       setMyStreak((prev) => prev ?? cachedStreak(cached.myStreak));
       setPartnerStreak((prev) => prev ?? cachedStreak(cached.partnerStreak));
     });
@@ -337,20 +480,48 @@ export function HomeScreen({ navigation }: Props) {
     analyticsApi.log('HOME_VIEWED').catch(() => {});
   }, []));
 
-  // 홈 위젯 갱신 (Android) — 홈 데이터가 바뀔 때마다 위젯 캐시를 남기고 다시 그린다
+  /*
+   * 홈 위젯 갱신 (Android) — 홈 데이터가 바뀔 때마다 위젯 캐시를 남기고 다시 그린다.
+   *
+   * <p><b>모르는 값을 0으로 굽지 않는다. 두 사람 각각에 대해 그렇다.</b> 예전 가드는
+   * {@code myStreak === null && partnerStreak === null} 이었는데, AND 라서 내 값만 도착하면
+   * 통과해 버렸다 — 그 아래 {@code ?? 0} 이 <b>상대 스트릭을 0으로 캐시</b>했고, 위젯은
+   * 앱을 닫은 동안 그 0을 계속 보여줬다. 위 refresh 의 주석이 경계한 상황(숫자가 갑자기
+   * 0이 되는 건 "끊겼다"로 읽힌다)이 상대 쪽에만 그대로 남아 있던 셈이다.
+   *
+   * <p>커플 앱에서 이건 표시 오류로 끝나지 않는다 — <b>상대가 오늘 안 했다고 잘못
+   * 알려주는 것</b>이라, 상대의 기록을 보러 다시 여는 이유 자체를 없앤다.
+   *
+   * <p>그래서 모르는 쪽은 마지막으로 캐시에 있던 값으로 메우고, 그것도 없으면(첫 설치 +
+   * 조회 실패) 아예 쓰지 않는다. 미연결일 때 상대 값이 0인 것은 오류가 아니라 사실이다.
+   */
   useEffect(() => {
-    // 아직 한 번도 못 불러온 상태(null)를 0으로 캐시하면, 앱을 안 열어둔 동안
-    // 위젯이 계속 "스트릭 0"을 보여준다 — 값을 실제로 알기 전까진 캐시를 건드리지 않는다.
-    if (myStreak === null && partnerStreak === null) return;
+    const myCount = myStreak?.currentCount ?? cachedStreakRef.current?.my ?? null;
+    const partnerCount = !connected
+      ? 0
+      : partnerStreak?.currentCount ?? cachedStreakRef.current?.partner ?? null;
+    if (myCount === null || partnerCount === null) return;
+    cachedStreakRef.current = { my: myCount, partner: partnerCount };
     updateHomeWidget({
       connected,
       anniversaryDate: couple?.anniversaryDate ?? couple?.connectedAt ?? null,
       partnerName: couple?.partner?.name ?? null,
-      myStreak: myStreak?.currentCount ?? 0,
-      partnerStreak: partnerStreak?.currentCount ?? 0,
+      myStreak: myCount,
+      partnerStreak: partnerCount,
+      /*
+       * 상대 무드 — 무드 조회가 실패하면 mood 가 null 이라 "모름"(undefined)으로 넘겨 위젯이 지난 값을 지키게 한다.
+       * 받았는데 상대가 아직 안 골랐으면 null(없음). MOOD 실시간 이벤트로 refresh 되면 여기도 다시 돈다.
+       */
+      partnerMood: !connected
+        ? null
+        : mood
+          ? mood.partner
+            ? widgetMoodOf(mood.partner)
+            : null
+          : undefined,
       updatedAt: new Date().toISOString(),
     });
-  }, [connected, couple, myStreak, partnerStreak]);
+  }, [connected, couple, myStreak, partnerStreak, mood]);
 
   // 커플 실시간 이벤트 — 상대가 기록하면 바로 반영
   const relationId = couple?.id;
@@ -377,10 +548,11 @@ export function HomeScreen({ navigation }: Props) {
     useCallback(() => {
       if (!relationId) return;
       let active = true;
+      let offCouple: (() => void) | undefined;
       connectSocket()
         .then(() => {
           if (!active) return;
-          subscribeCouple(relationId, (type) => {
+          offCouple = subscribeCouple(relationId, (type) => {
             refresh();
             // 가상 터치는 새로고침 대상이 아니라 즉시 반응(진동) 대상이다
             if (type === 'TOUCH') onIncomingTouch();
@@ -390,23 +562,50 @@ export function HomeScreen({ navigation }: Props) {
              * 채팅방이 하는 것과 같은 규칙(2026-09-08 점검 #14).
              */
             if (type === 'COUPLE_EMOJI') void useCoupleEmojiStore.getState().load(true).catch(() => undefined);
+            // 상대가 럽슐랭에 장소를 담았다 — 목록 캐시만 비운다(다음에 럽슐랭 탭이 다시 받는다)
+            if (type === 'PLACE') usePlaceStore.getState().invalidate();
           });
         })
         .catch(() => undefined);
       return () => {
         active = false;
-        unsubscribeCouple(relationId);
+        offCouple?.();
       };
     }, [relationId, refresh, onIncomingTouch]),
   );
 
   // moodApi.set 이 갱신된 나/상대 무드를 함께 돌려주므로, 소켓 이벤트를 기다리지 않고
   // 응답으로 바로 반영한다(홈을 나가지 않고 연달아 바꿔도 배지가 즉시 따라온다).
+  // 미연결 — 오늘 기록의 기분을 무드 버튼에 그린다(연결되면 상대에게 보이는 무드가 그 자리를 쓴다)
+  useFocusEffect(
+    useCallback(() => {
+      if (connected) return;
+      let active = true;
+      journalApi
+        .day(journalToday())
+        .then((entry) => {
+          if (active) setSoloMood(entry?.moodEmoji ?? null);
+        })
+        .catch(() => undefined);
+      return () => {
+        active = false;
+      };
+    }, [connected]),
+  );
+
+  /*
+   * 전송 중 가드 — 빠르게 연달아 누르면 같은 무드가 두 번 가고 상대에게 푸시도 두 번 간다.
+   * state 는 다음 렌더 전까지 바뀌지 않으므로 ref 로 즉시 막는다 (first-experience-audit.md #25)
+   */
+  const sendingMoodRef = useRef(false);
   const sendMood = (choice: MoodChoice, message?: string) => {
+    if (sendingMoodRef.current) return;
+    sendingMoodRef.current = true;
     moodApi
       .set(choice, message)
       .then((res) => { setMood(res); haptics.light(); toast.success('무드를 남겼어요'); })
-      .catch((e) => toast.error(getErrorMessage(e, '무드를 남기지 못했어요.')));
+      .catch((e) => toast.error(getErrorMessage(e, '무드를 남기지 못했어요.')))
+      .finally(() => { sendingMoodRef.current = false; });
   };
 
   /*
@@ -510,31 +709,46 @@ export function HomeScreen({ navigation }: Props) {
    */
   const topBar = (
     <View style={styles.topBar}>
+      {/*
+        무드 — 아이콘 버튼. 예전엔 "🙂 기분 남기기" 회색 알약이었는데, 기본 이모지가 아이콘
+        자리를 대신하고 배경 버튼과 같은 옷을 입어 무엇이 주 액션인지 읽히지 않았다
+        (docs/SCREEN_DESIGN_PASS_2026-09-23.md §1-2 P2·P9). 무드를 걸어 두었으면 그 이모지가
+        곧 아이콘이고, 아니면 빈 얼굴 아이콘이다. 라벨은 접근성으로만 남긴다.
+      */}
       <Pressable
-        style={styles.moodBtn}
+        style={styles.iconBtn}
         onPress={() => setShowMoodPicker(true)}
         hitSlop={8}
         accessibilityRole="button"
-        accessibilityLabel={mood?.mine ? `지금 기분 ${mood.mine.emoji} — 눌러서 바꾸기` : '지금 기분 남기기'}
+        accessibilityLabel={
+          mood?.mine
+            ? `지금 기분 ${mood.mine.emoji} — 눌러서 바꾸기`
+            : !connected && soloMood
+              ? `오늘 기분 ${soloMood} — 눌러서 남기기`
+              : '지금 기분 남기기'
+        }
       >
         {mood?.mine?.imageUrl ? (
-          <Image source={{ uri: mood.mine.imageUrl }} style={styles.moodBtnImage} resizeMode="contain" />
+          <Image source={{ uri: mood.mine.imageUrl }} style={styles.moodImage} resizeMode="contain" />
+        ) : mood?.mine?.emoji ? (
+          <Text style={styles.moodEmoji}>{mood.mine.emoji}</Text>
+        ) : !connected && soloMood ? (
+          <Text style={styles.moodEmoji}>{soloMood}</Text>
         ) : (
-          <Text style={styles.moodBtnEmoji}>{mood?.mine?.emoji ?? '🙂'}</Text>
+          <MaterialCommunityIcons name="emoticon-outline" size={24} color={colors.textPrimary} style={styles.iconHalo} />
         )}
-        <Text style={styles.moodBtnText}>{mood?.mine ? '기분 바꾸기' : '기분 남기기'}</Text>
       </Pressable>
       <View style={styles.topBarRight}>
         {connected ? (
           <Pressable
-            style={styles.bgBtn}
+            style={styles.iconBtn}
             onPress={onBackgroundPress}
             hitSlop={8}
             accessibilityRole="button"
             accessibilityLabel={bgUrl ? '배경 사진 변경' : '배경 사진 설정'}
             accessibilityHint="화면을 길게 눌러도 바꿀 수 있어요"
           >
-            <MaterialCommunityIcons name="image-outline" size={20} color={colors.textPrimary} />
+            <MaterialCommunityIcons name="image-outline" size={24} color={colors.textPrimary} style={styles.iconHalo} />
           </Pressable>
         ) : null}
         <Pressable
@@ -544,11 +758,14 @@ export function HomeScreen({ navigation }: Props) {
           accessibilityRole="button"
           accessibilityLabel="내 프로필"
         >
-          <Avatar name={user?.name} imageUrl={user?.profileImageUrl} size={32} color={colors.primaryDark} />
+          <Avatar name={user?.name} imageUrl={user?.profileImageUrl} size={32} color={colors.meFill} />
         </Pressable>
       </View>
     </View>
   );
+
+  // 렌더 시점에 고른다 — 앱을 켜둔 채 자정을 넘기면 어제 일정이 '오늘'로 남지 않게(isTripLive 와 같은 이유)
+  const homeEvent = pickHomeEvent(upcomingEvents);
 
   return (
     <View style={styles.root}>
@@ -587,18 +804,31 @@ export function HomeScreen({ navigation }: Props) {
         {/* 배경화면은 화면 전체를 채운다 — 그 위 레이어는 모두 투명이다.
             배경이 있든 없든(그라데이션) 길게 눌러 정하거나 바꿀 수 있어야 한다. */}
         {bgUrl ? (
-          <Image source={{ uri: bgUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+          <Image
+            source={{ uri: bgUrl }}
+            style={photoHeight != null && connected ? [styles.bgPhoto, { height: photoHeight }] : StyleSheet.absoluteFill}
+            resizeMode="cover"
+          />
         ) : (
           <LinearGradient
-            colors={gradient()}
+            colors={wallpaper()}
             style={StyleSheet.absoluteFill}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
           />
         )}
+        {/* 연결된 홈은 패널이 제 배경을 깐다(panelFade) — 전체 스크림은 글자가 화면 전체에 있는 미연결 화면만 */}
+        {!connected ? (
+          <LinearGradient
+            colors={scrim()}
+            locations={SCRIM_LOCATIONS}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
+        ) : null}
         <LinearGradient
-          colors={scrim()}
-          locations={[0, 0.45, 1]}
+          colors={topScrim()}
+          locations={TOP_SCRIM_LOCATIONS}
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
         />
@@ -606,9 +836,60 @@ export function HomeScreen({ navigation }: Props) {
         <SafeAreaView style={styles.safe} edges={['top']}>
           {topBar}
 
+          {/* 장애 공지·점검 — 백엔드가 아니라 dubly.co.kr/status.json 에서 온다(백엔드가 죽어도 뜬다) */}
+          <ServiceStatusBanner />
+
+          {/*
+            상대가 탈퇴를 요청한 상태(유예기간) — 14일 뒤 함께한 기록까지 지워지므로,
+            남기고 싶은 것을 저장할 시간이 있다는 걸 푸시 말고 홈에서도 알린다.
+            푸시는 꺼 뒀을 수 있고, 지나가면 다시 볼 수 없기 때문이다.
+          */}
+          {connected && couple?.partner?.withdrawalScheduledDate ? (
+            <View style={styles.withdrawalNotice} accessibilityRole="alert">
+              <Text style={styles.withdrawalNoticeTitle}>
+                {couple.partner.name}님이 탈퇴를 요청했어요
+              </Text>
+              <Text style={styles.withdrawalNoticeBody}>
+                {formatMonthDay(couple.partner.withdrawalScheduledDate)}에 함께한 기록이 삭제돼요.
+                남기고 싶은 기록은 그 전에 받아 두세요.
+              </Text>
+              {/* 유예기간 중에도 관계는 ACTIVE 라 공동 기록 전부를 받을 수 있다(docs/DATA_EXPORT_2026-10-01.md) */}
+              <Pressable
+                onPress={() => navigation.navigate('RecordExport')}
+                accessibilityRole="button"
+                hitSlop={8}
+                style={styles.withdrawalNoticeAction}
+              >
+                <Text style={styles.withdrawalNoticeActionText}>사진·채팅까지 기록 받기 ›</Text>
+              </Pressable>
+            </View>
+          ) : null}
+
           {connected ? (
-            <View style={styles.body}>
-              {/* 남는 세로 공간을 히어로가 먹는다 → 아래 두 줄은 항상 바닥에 붙는다 */}
+            <View style={styles.body} onLayout={(e) => setBodyTop(e.nativeEvent.layout.y)}>
+              {/*
+                남는 세로 공간은 <b>사진 자리</b>가 먹는다 → 패널(히어로·슬롯·바로가기)은 항상
+                바닥에 붙고, 사진은 그 위에서 그대로 보인다. 사진이 없으면 이 자리에 캐릭터가 앉고
+                "우리 사진 넣기"가 사진을 부른다 — 상단 바의 배경 버튼과 같은 동작이다.
+              */}
+              <View style={styles.photoArea}>
+                {/*
+                  사진이 없을 때는 달걀이 둘이 <b>배경 그림</b>으로 앉아 있을 뿐이다 — 버튼이 아니다.
+                  9/23 에 "우리 사진 넣기" 알약을 여기 뒀다가 뺐다(2026-09-28, 동연님: "원래 배경으로 존재하던 것").
+                  사진은 예전처럼 상단 바의 배경 버튼으로 넣는다.
+                */}
+                {!bgUrl ? (
+                  <Image
+                    source={WALLPAPER_DUO}
+                    style={styles.wallpaperDuoImage}
+                    resizeMode="contain"
+                    accessibilityElementsHidden
+                    importantForAccessibility="no"
+                  />
+                ) : null}
+              </View>
+              <View style={styles.panel} onLayout={(e) => setPanelTop(e.nativeEvent.layout.y)}>
+              <LinearGradient colors={panelFade()} style={styles.panelFade} pointerEvents="none" />
               <View style={styles.heroSlot}>
                 <CoupleHero
                   me={{
@@ -617,10 +898,14 @@ export function HomeScreen({ navigation }: Props) {
                     workoutDone: myWorkoutDone,
                     mealDone: myMealDone,
                     streak: myStreak?.currentCount ?? 0,
-                    latestLabel: recordLabel(myLatest),
+                    latestLabel: feedSummary(myLatest),
                     latestTime: myLatest ? feedTimeLabel(myLatest.occurredAt) : null,
                     moodEmoji: mood?.mine?.emoji,
                     moodImageUrl: mood?.mine?.imageUrl,
+                    moodMessage: mood?.mine?.message,
+                    crown: lovelichelinPulse?.me ?? null,
+                    today: mySlices,
+                    snack: mySnack,
                   }}
                   partner={{
                     name: partner?.partnerName ?? couple?.partner?.name ?? '상대방',
@@ -628,10 +913,14 @@ export function HomeScreen({ navigation }: Props) {
                     workoutDone: !!partner?.completed,
                     mealDone: !!partnerMeal?.completed,
                     streak: partnerStreak?.currentCount ?? 0,
-                    latestLabel: recordLabel(partnerLatest),
+                    latestLabel: feedSummary(partnerLatest),
                     latestTime: partnerLatest ? feedTimeLabel(partnerLatest.occurredAt) : null,
                     moodEmoji: mood?.partner?.emoji,
                     moodImageUrl: mood?.partner?.imageUrl,
+                    moodMessage: mood?.partner?.message,
+                    crown: lovelichelinPulse?.partner ?? null,
+                    today: partnerSlices,
+                    snack: partnerSnack,
                   }}
                   dday={dday}
                   anniversaryDate={couple?.anniversaryDate ?? null}
@@ -639,40 +928,84 @@ export function HomeScreen({ navigation }: Props) {
                   // 예전엔 어느 열을 눌러도 똑같이 전체 '우리 기록'으로 갔다 —
                   // 그 화면은 바로 아래 바로가기에도 있어 버튼 기능이 겹쳤다.
                   // 열을 누르면 그 사람 기록만 거른 화면으로 간다.
-                  onPressPerson={(who) => navigation.navigate('FeedTimeline', { who })}
+                  /*
+                   * 기록은 "우리" 탭으로 이관됐다 — 탭을 건너뛰되 initial:false 로 그 탭의
+                   * 첫 화면(AlbumMain)을 아래에 깔아 뒤로가기가 탭 안에 남게 한다.
+                   */
+                  /*
+                   * 아바타 위 럽슐랭 왕관의 말풍선 — 그 장소·콘텐츠 상세로(럽슐랭 탭 스택). 상대 왕관인데 내 대표 평점이 아직
+                   * 없으면 평가 영역을 펼친 채 들어간다 — "상대가 매겼으니 내 차례"를 한 번에 잇는다.
+                   */
+                  onPressCrown={(who) => {
+                    const signal = who === 'me' ? lovelichelinPulse?.me : lovelichelinPulse?.partner;
+                    if (!signal) return;
+                    const openRating = who === 'partner' && !signal.viewerRated ? true : undefined;
+                    if (signal.kind === 'PLACE') {
+                      navigation.navigate('Place', {
+                        screen: 'PlaceDetail',
+                        params: { placeId: signal.targetId, name: signal.targetName, openRating },
+                        initial: false,
+                      });
+                    } else {
+                      navigation.navigate('Place', {
+                        screen: 'ContentDetail',
+                        params: { contentId: signal.targetId, title: signal.targetName, openRating },
+                        initial: false,
+                      });
+                    }
+                  }}
+                  onPressPerson={(who) =>
+                    navigation.navigate('Album', { screen: 'FeedTimeline', params: { who }, initial: false })
+                  }
                   /*
                    * 운동/식단 칩 — 예전엔 중앙 FAB 로 "탭 안 옮기고 바로 기록"이 가능했다.
                    * FAB 를 없앤 대신 이 칩이 그 역할을 물려받았고, 아래 분기가 그 약속을 지킨다.
                    */
                   onPressToday={(who, kind) => {
                     if (kind === 'workout') {
-                      navigation.navigate('Workout', { screen: myWorkoutDone ? 'WorkoutMain' : 'WorkoutRecord' });
+                      /*
+                       * 아직 안 했으면 럽바디 메인의 체크인 카드로 — 시간 칩("얼마나 했나요?")을 펼친 채로
+                       * 연다. 예전엔 운동 기록 화면(종목·세트 폼)을 열었는데, 운동은 "챙겼다" 원탭으로
+                       * 가기로 했고(WORKOUT_CHECKIN_DURATION_2026-09-27) 이 칩도 그 약속을 따른다.
+                       */
+                      // 이미 했으면 운동 홈 — 가려 둔 동안(WORKOUT_HOME_ENABLED)은 체크인 카드가 있는 럽바디 메인
+                      // pop: 스택은 같은 화면이 맨 위일 때만 재사용한다 — 캘린더 등을 열어 둔 채 오면 DietMain 이
+                      // 하나 더 쌓여 뒤로가기 없는 첫 화면처럼 보였다. 이 파일의 DietMain 이동은 전부 같은 이유로 pop
+                      navigation.navigate('Health', myWorkoutDone
+                        ? WORKOUT_HOME_ENABLED
+                          ? { screen: 'WorkoutMain', initial: false }
+                          : { screen: 'DietMain', pop: true }
+                        : { screen: 'DietMain', params: { checkin: Date.now() }, pop: true });
                       return;
                     }
                     /*
                      * 식단만 시트를 연다 — 끼니는 하루 세 번이라 "오늘 했다/안 했다"로 목적지를
                      * 가르면 아침 이후로는 빠른 경로가 사라진다. 시트는 기록 여부와 무관하게
-                     * 같은 모양이고(사진 두 갈래 + 직접 적기 + 오늘 기록 보기) ✓ 는 잠금이
-                     * 아니라 상태 표시로 남는다. 운동은 하루 한 번에 가깝고 운동 탭 자체에
+                     * 같은 모양이고(사진 두 갈래 + 오늘 기록 보기) ✓ 는 잠금이
+                     * 아니라 상태 표시로 남는다. 운동은 하루 한 번에 가깝고 럽바디 메인의 체크인 카드에
                      * 원탭·사진 버튼이 이미 있어 여기서 겹칠 이유가 없다.
                      *
                      * 다만 상대 열에서는 열지 않는다 — 내 사진을 상대 이름으로 남길 수는 없다.
                      * (기존 주석대로 두 화면 모두 내 기록만 보여주므로 목적지는 그대로 DietMain)
                      */
                     if (who === 'partner') {
-                      navigation.navigate('Diet', { screen: 'DietMain' });
+                      navigation.navigate('Health', { screen: 'DietMain', pop: true });
                       return;
                     }
                     setMealSheet(true);
                   }}
                 />
               </View>
+              {/* 남는 높이는 히어로와 바로가기 사이가 먹는다 — 히어로는 화면 가운데쯤, 바로가기는 바닥에 */}
+              <View style={styles.panelSpacer} />
 
               {/*
                 조건부 한 줄 슬롯 — 홈은 스크롤 없는 고정 화면이라(MemoryPeek 주석 참고) 줄을
                 쌓지 않고 하나만 고른다. 우선순위: ① 여행 중(일정표가 지금 필요한 순간) >
-                ② 작년 오늘(그날 하루뿐인 희소 콘텐츠) > ③ 여행 D-day(기간 내내 노출되므로
-                하루 양보해도 잃는 게 없다). 대부분의 날은 셋 다 없어 비어 있다.
+                ② 오늘 일정(기념일·약속 당일·진행 중 — 그날 놓치면 끝이다) >
+                ③ 작년 오늘(그날 하루뿐인 희소 콘텐츠) > ④ 여행 D-day(기간 내내 노출되므로
+                하루 양보해도 잃는 게 없다) > ⑤ 7일 안 일정(미리 보기라 맨 뒤 — 그 주 내내 뜬다).
+                대부분의 날은 다섯 다 없어 비어 있다.
                 공용 "최근 기록" 줄은 없앴다 — 좌우 열이 각자의 마지막 기록을 이미 보여준다.
               */}
               {homeTrip && isTripLive(homeTrip) && isTripOngoing(homeTrip) ? (
@@ -680,6 +1013,8 @@ export function HomeScreen({ navigation }: Props) {
                   trip={homeTrip}
                   onPress={() => navigation.navigate('TripDetail', { tripId: homeTrip.id, title: homeTrip.title })}
                 />
+              ) : homeEvent && isEventToday(homeEvent) ? (
+                <EventPeek event={homeEvent} onPress={() => navigation.navigate('CoupleCalendar')} />
               ) : memories ? (
                 memories.locked ? (
                   <LockedCard
@@ -688,13 +1023,22 @@ export function HomeScreen({ navigation }: Props) {
                     upgradeMessage="작년 오늘의 추억은 PRO에서 볼 수 있어요."
                   />
                 ) : (
-                  <MemoryPeek memories={memories} onPress={() => navigation.navigate('Memories')} />
+                  /* 카드는 홈에 그대로 둔다(희소 콘텐츠라 홈 노출이 발견성에 유리) —
+                     화면만 "우리" 탭으로 옮겨가 탭을 건너뛴다 */
+                  <MemoryPeek
+                    memories={memories}
+                    onPress={() =>
+                      navigation.navigate('Album', { screen: 'Memories', initial: false })
+                    }
+                  />
                 )
               ) : homeTrip && isTripLive(homeTrip) ? (
                 <TripPeek
                   trip={homeTrip}
                   onPress={() => navigation.navigate('TripDetail', { tripId: homeTrip.id, title: homeTrip.title })}
                 />
+              ) : homeEvent ? (
+                <EventPeek event={homeEvent} onPress={() => navigation.navigate('CoupleCalendar')} />
               ) : null}
 
               {/*
@@ -709,18 +1053,51 @@ export function HomeScreen({ navigation }: Props) {
                 유일한 길이다(CoupleCalendarScreen).
 
                 내린 것들이 닿는 길: 질문·게임은 전용 푸시 링크(PushLinks.QUESTION·
-                GAME_SUDOKU·GAME_OMOK)와 딥링크, 사진첩은 딥링크('album'), 여행은 캘린더
-                안의 링크, 터치는 <b>채팅 트레이</b>(2026-09-12 이동 — ChatRoomScreen 의
-                sendTouch 주석). 홈은 터치를 <b>받는 곳</b>으로는 남는다(onIncomingTouch).
+                GAME_SUDOKU·GAME_OMOK)와 딥링크, 여행은 캘린더 안의 링크, 터치는
+                <b>채팅 트레이</b>(2026-09-12 이동 — ChatRoomScreen 의 sendTouch 주석).
+                홈은 터치를 <b>받는 곳</b>으로는 남는다(onIncomingTouch).
+
+                '우리 기록'·'사진첩'은 2026-09-14 에 <b>"우리" 탭</b>이 생겨 여기서 뺐다 —
+                탭바에 상시 자리가 있으니 바로가기로 중복시킬 이유가 없다. 남은 '일상'은
+                피드 쓰기의 유일한 진입점이라 그대로 둔다(우리 탭 헤더의 + 와 두 곳).
+
+                <b>'스티커'는 2026-09-22 에 헤더 아이콘에서 여기로 옮겼다.</b> 그때는 "칩 줄에
+                넣지 않았다"고 적었는데, 그 판단의 근거였던 "칸이 7개까지 불어난다"가 지금은
+                맞지 않는다 — 둘까지 줄어든 줄에 하나 더는 <b>칸이 좁아지지도 않는다</b>
+                (QuickActions 가 셋까지는 라벨을 줄이지 않는다). 그리고 헤더 아이콘은 배경
+                버튼과 같은 모양이라 <b>무엇인지 눌러봐야 알았다</b>. 라벨이 붙은 칩이
+                "스티커 상점이 있다"를 먼저 알린다 — 찾지 못하면 아무것도 안 팔린다는
+                원래 문제의식에는 이쪽이 더 맞는다.
               */}
               <QuickActions
                 actions={[
-                  { icon: 'timeline-text-outline', label: '우리 기록', onPress: () => navigation.navigate('FeedTimeline') },
                   { icon: 'image-plus', label: '일상', onPress: () => navigation.navigate('FeedCompose') },
                   { icon: 'calendar-heart', label: '캘린더', onPress: () => navigation.navigate('CoupleCalendar') },
+                  {
+                    /*
+                     * 이모티콘 얼굴이 아니라 <b>가게 모양</b>이다. 얼굴은 "스티커를 보낸다"로
+                     * 읽혀 채팅 패널과 구분이 안 됐다 — 여기서 하는 일은 고르는 게 아니라
+                     * 사는 것이다. 라벨도 '스티커'가 아니라 '스티커 상점'으로 끝까지 적는다.
+                     */
+                    icon: 'storefront-outline',
+                    label: '스티커 상점',
+                    onPress: () => navigation.navigate('StickerShop'),
+                  },
                 ]}
               />
+              </View>
             </View>
+          ) : !relationLoaded ? (
+            /*
+             * 관계를 한 번도 못 불러왔다 — 미연결인지 알 수 없다. 연결된 사람에게 "커플을 연결해보세요"를
+             * 보이면 이미 연결돼 있는데 코드를 만들게 되고 409 를 만난다(docs/first-experience-audit.md #13).
+             */
+            <EmptyState
+              error
+              title="연결 상태를 불러오지 못했어요"
+              description="인터넷 연결을 확인하고 다시 시도해 주세요."
+              onRetry={refresh}
+            />
           ) : (
             /*
              * 미연결 상태만 스크롤을 허용한다 — 연결 안내 + 혼자 시작하기 목록이
@@ -728,46 +1105,47 @@ export function HomeScreen({ navigation }: Props) {
              */
             <ScrollView contentContainerStyle={styles.disconnected} showsVerticalScrollIndicator={false}>
               <View style={styles.connectWrap}>
-                <MaterialCommunityIcons name="account-multiple-plus-outline" size={40} color={colors.primary} />
+                {/* 아이콘 40 이 아니라 캐릭터 — 인트로와 같은 달걀 커플(§8-3 5번) */}
+                <Image source={CONNECT_PICTURE} style={styles.connectPicture} resizeMode="contain" />
                 <Text style={styles.connectTitle}>커플을 연결해보세요</Text>
                 <Text style={styles.connectDesc}>초대코드로 연결하면 우리의 기록이 시작돼요.</Text>
-                <TouchableOpacity style={styles.connectBtn} onPress={() => navigation.navigate('CoupleConnect')}>
-                  <Text style={styles.connectBtnText}>커플 연결하기</Text>
-                </TouchableOpacity>
+                <Button title="커플 연결하기" onPress={() => navigation.navigate('CoupleConnect')} style={styles.connectBtn} />
               </View>
 
-              <Text style={styles.soloTitle}>연결을 기다리는 동안, 혼자서도 시작할 수 있어요</Text>
-              <Card elevation="sm" style={styles.soloCard}>
+              {/*
+                혼자 시작 — 설정과 같은 묶음 목록 문법. 예전엔 40px 회색 상자 아이콘 + 라벨 + 설명 문장
+                + 셰브론의 카드였다. 라벨 셋이 스스로 설명하므로 설명 줄은 뺐다.
+                initial: false — 럽슐랭 탭을 아직 안 연 세션에서 이 행을 누르면 그 탭이
+                PlaceAdd <b>하나</b>로 시작돼, 저장 후 goBack 할 곳도 가이드로 나갈 길도 없었다.
+                아래에 PlaceMain 을 깔아둔다.
+              */}
+              <SettingsGroup title="혼자서도 시작할 수 있어요" style={styles.soloGroup}>
                 {/*
-                  initial: false — 럽슐랭 탭을 아직 안 연 세션에서 이 카드를 누르면 그 탭이
-                  PlaceAdd <b>하나</b>로 시작돼, 저장 후 goBack 할 곳도 가이드로 나갈 길도 없었다.
-                  아래에 PlaceMain 을 깔아둔다.
+                  나만의 하루 기록 — 맨 위에 둔다. 연결 없이 <b>매일</b> 할 수 있는 유일한 행이다
+                  (나머지는 운동·식사 때만 쓴다). docs/PERSONAL_JOURNAL_ANALYSIS_2026-10-02.md §4-4
                 */}
-                {(
-                  [
-                    { icon: 'dumbbell', label: '운동 기록하기', desc: '오늘 운동을 남기면 스트릭이 시작돼요', go: () => navigation.navigate('Workout', { screen: 'WorkoutRecord' }) },
-                    { icon: 'silverware-fork-knife', label: '식단 기록하기', desc: '사진이나 글로 적으면 AI가 칼로리를 계산해요', go: () => navigation.navigate('Diet', { screen: 'DietRecord' }) },
-                    { icon: 'map-marker-plus-outline', label: '가고 싶은 장소 저장', desc: '맛집, 여행지, 전시… 둘이 함께 갈 곳을 미리 담아두세요', go: () => navigation.navigate('Place', { screen: 'PlaceAdd', initial: false }) },
-                  ] as const
-                ).map((a, i, arr) => (
-                  <React.Fragment key={a.label}>
-                    <Pressable
-                      style={({ pressed }) => [styles.soloItem, pressed && styles.soloPressed]}
-                      onPress={a.go}
-                    >
-                      <View style={styles.soloIcon}>
-                        <MaterialCommunityIcons name={a.icon} size={22} color={colors.primary} />
-                      </View>
-                      <View style={styles.soloBody}>
-                        <Text style={styles.soloLabel}>{a.label}</Text>
-                        <Text style={styles.soloDesc}>{a.desc}</Text>
-                      </View>
-                      <Text style={styles.soloChevron}>›</Text>
-                    </Pressable>
-                    {i < arr.length - 1 ? <View style={styles.soloDivider} /> : null}
-                  </React.Fragment>
-                ))}
-              </Card>
+                <SettingsRow
+                  title="오늘 하루 남기기"
+                  note="나만 보는 기록이에요"
+                  leading={<MaterialCommunityIcons name="text-box-outline" size={22} color={colors.textSecondary} />}
+                  onPress={() => navigation.navigate('JournalDay', { date: journalToday(), source: 'UNCONNECTED_HOME' })}
+                />
+                <SettingsRow
+                  title="운동 챙기기"
+                  leading={<MaterialCommunityIcons name="dumbbell" size={22} color={colors.textSecondary} />}
+                  onPress={() => navigation.navigate('Health', { screen: 'DietMain', params: { checkin: Date.now() }, pop: true })}
+                />
+                <SettingsRow
+                  title="식단 기록하기"
+                  leading={<MaterialCommunityIcons name="silverware-fork-knife" size={22} color={colors.textSecondary} />}
+                  onPress={() => navigation.navigate('Health', { screen: 'DietRecord', params: { returnTo: 'Home' }, initial: false })}
+                />
+                <SettingsRow
+                  title="가고 싶은 장소 저장"
+                  leading={<MaterialCommunityIcons name="map-marker-plus-outline" size={22} color={colors.textSecondary} />}
+                  onPress={() => navigation.navigate('Place', { screen: 'PlaceAdd', params: { returnTo: 'Home' }, initial: false })}
+                />
+              </SettingsGroup>
             </ScrollView>
           )}
         </SafeAreaView>
@@ -804,6 +1182,12 @@ export function HomeScreen({ navigation }: Props) {
         visible={showMoodPicker}
         onClose={() => setShowMoodPicker(false)}
         onSelect={sendMood}
+        connected={connected}
+        onOpenJournal={(date) => navigation.navigate('JournalDay', { date, source: 'MOOD_PICKER' })}
+        onOpenCalendar={() => navigation.navigate('MoodCalendar')}
+        onJournalSaved={(entry) => {
+          if (!connected) setSoloMood(entry.moodEmoji ?? null);
+        }}
       />
       {/* 오늘 식단 — 히어로의 내 식단 칩에서 연다(위 onPressToday 주석 참고) */}
       <QuickMealSheet
@@ -813,13 +1197,9 @@ export function HomeScreen({ navigation }: Props) {
         busy={mealSaving}
         onTakePhoto={() => void saveMealFromPhoto('camera')}
         onPickPhoto={() => void saveMealFromPhoto('library')}
-        onWriteManually={() => {
-          setMealSheet(false);
-          navigation.navigate('Diet', { screen: 'DietRecord' });
-        }}
         onViewToday={() => {
           setMealSheet(false);
-          navigation.navigate('Diet', { screen: 'DietMain' });
+          navigation.navigate('Health', { screen: 'DietMain', pop: true });
         }}
       />
     </View>
@@ -831,7 +1211,22 @@ const styles = themedStyles((colors) => ({
   // 배경·스크림·콘텐츠를 함께 담는 무대 — 길게 누르기 Pressable 이 여기다(위 주석 참고).
   // absoluteFill 이 아니라 flex 로 자리를 잡는다: 형제가 아니라 조상이어야 터치가 닿는다.
   stage: { flex: 1 },
+  // 배경 사진 — 보이는 자리(패널 윗선까지)에만 맞춘다. 높이는 onLayout 으로 잰다(photoHeight 주석)
+  bgPhoto: { position: 'absolute', top: 0, left: 0, right: 0 },
   safe: { flex: 1, backgroundColor: 'transparent' },
+  withdrawalNotice: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.dangerBg,
+    gap: 2,
+  },
+  withdrawalNoticeTitle: { fontSize: fontSize.body, fontWeight: '700', color: colors.dangerText },
+  withdrawalNoticeBody: { fontSize: fontSize.caption, color: colors.dangerText },
+  withdrawalNoticeAction: { alignSelf: 'flex-start', paddingVertical: 4, marginTop: 2 },
+  withdrawalNoticeActionText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.dangerText, textDecorationLine: 'underline' },
 
   topBar: {
     flexDirection: 'row',
@@ -842,16 +1237,17 @@ const styles = themedStyles((colors) => ({
   },
   // 우측 묶음 — [배경][프로필]
   topBarRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  // 배경 변경 — 사진 위에 놓이므로 아이콘만 두면 밝은 배경에서 묻힌다. 무드 버튼과
-  // 같은 표면색 알약으로 깔아 대비를 만든다(크기는 프로필과 같은 최소 터치 타깃).
-  bgBtn: {
+  // 사진 위 아이콘 버튼 — 알약 배경 없이 아이콘만. 밝은 사진 위 가독성은 topScrim + 헤일로가 맡는다
+  iconBtn: {
     minWidth: layout.touchTarget,
     minHeight: layout.touchTarget,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: radius.pill,
-    backgroundColor: colors.surfaceAlt,
   },
+  // 아이콘 글리프 뒤에 배경색 번짐 — 사진의 밝기와 무관하게 윤곽을 살린다
+  iconHalo: { textShadowColor: colors.background, textShadowRadius: 8, textShadowOffset: { width: 0, height: 0 } },
+  moodEmoji: { fontSize: 20, lineHeight: 24 },
+  moodImage: { width: 26, height: 26 },
   // 아바타는 32px 이라 테두리를 더해도 36px 이다 — hitSlop 이 안 먹는 웹을 위해 크기를 보장한다
   profileBtn: {
     minWidth: layout.touchTarget,
@@ -862,66 +1258,43 @@ const styles = themedStyles((colors) => ({
     borderWidth: 2,
     borderColor: colors.borderStrong,
   },
-  // topBar 좌측 — 배경 버튼은 우측(topBarRight)으로 갔고 이 자리는 무드가 쓴다
-  moodBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: colors.surfaceAlt,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.md,
-    // hitSlop 은 웹에서 무효라 높이를 직접 확보한다 (실측 25px 였다)
-    minHeight: layout.touchTarget,
-  },
-  moodBtnEmoji: { fontSize: 15, lineHeight: 18 },
-  /** 우리 이모지 무드 — 옆 글자(15px)와 시각 무게를 맞춘다 */
-  moodBtnImage: { width: 18, height: 18 },
-  moodBtnText: { color: colors.textPrimary, fontSize: fontSize.caption, fontWeight: '700' },
 
   body: { flex: 1, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, gap: spacing.md },
-  // 히어로가 남는 공간을 다 먹는다. 그 안의 분배는 CoupleHero 가 한다
-  heroSlot: { flex: 1 },
+  /*
+   * 사진 자리 — 남는 세로 공간을 패널과 <b>나눠</b> 먹는다(3 : 1). 예전(9/23~)엔 전부 먹어서 패널이 바닥에
+   * 붙었고, 가운데 히어로(9/28)가 화면 아래 1/3 까지 내려갔다 — "너무 아래쪽". 패널 몫은 히어로와 바로가기
+   * 사이 틈이 된다: 1.4 : 1 이면 1080×2340 폰에서 틈이 화면의 ~19% 로 비어 보였고, 3 : 1 이면 D+ 가 세로 가운데쯤,
+   * 틈은 그 절반쯤이다. 패널은 내용 높이(flexBasis auto)에서 출발해 나머지를 받으므로 작은 폰에서 잘리지 않는다.
+   */
+  photoArea: { flexGrow: 3, flexBasis: 0, alignItems: 'center', justifyContent: 'center' },
+  // 스티커 원본은 정사각에 가깝다. 폭 기준 절반 정도가 캐릭터 둘이 "앉아 있는" 크기다
+  wallpaperDuoImage: { width: 180, height: 180 },
+  // 패널 — 스크림의 불투명 구간 위에 놓인다
+  heroSlot: {},
+  /*
+   * 하단 패널 — 히어로·슬롯·바로가기. 제 배경을 깔아 사진과 무관하게 읽힌다(scrim 주석).
+   * 좌우 여백을 음수 마진으로 되돌려 배경이 화면 끝까지 닿게 하고, 바닥 여백도 같은 식으로 채운다.
+   */
+  panel: {
+    flexGrow: 1,
+    gap: spacing.md,
+    marginHorizontal: -spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xs,
+    marginBottom: -spacing.sm,
+    paddingBottom: spacing.sm,
+    backgroundColor: colors.background,
+  },
+  panelFade: { position: 'absolute', left: 0, right: 0, top: -72, height: 72 },
+  panelSpacer: { flexGrow: 1, marginTop: -spacing.md },
 
   disconnected: { padding: spacing.lg },
   connectWrap: { alignItems: 'center', paddingVertical: spacing.lg },
+  connectPicture: { width: 140, height: 140 },
   connectTitle: { color: colors.textPrimary, fontSize: fontSize.title, fontWeight: '800', marginTop: spacing.sm },
   connectDesc: { color: colors.textSecondary, fontSize: fontSize.body, textAlign: 'center', marginTop: spacing.xs },
-  connectBtn: {
-    marginTop: spacing.md,
-    backgroundColor: colors.primary,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.sm,
-    minHeight: 44, // 터치 타깃 — 텍스트+패딩만으론 36px
-    justifyContent: 'center',
-  },
-  // 버튼 배경이 primary(딥 포레스트)라 글자는 흰색 — white 위 10.61:1
-  connectBtnText: { color: colors.white, fontWeight: '800', fontSize: fontSize.body },
-
-  soloTitle: {
-    fontSize: fontSize.caption,
-    fontWeight: '700',
-    // 배경 사진 위에 놓이므로 테마색이 아니라 흰색 고정
-    color: colors.textSecondary,
-    marginTop: spacing.lg,
-    marginBottom: spacing.sm,
-  },
-  soloCard: { paddingVertical: spacing.xs, paddingHorizontal: spacing.md },
-  soloItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, minHeight: 44 },
-  soloPressed: { opacity: 0.6 },
-  soloIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.md,
-    backgroundColor: colors.primaryBg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  soloBody: { flex: 1 },
-  soloLabel: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
-  soloDesc: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 2 },
-  soloChevron: { fontSize: fontSize.title, color: colors.textMuted, fontWeight: '700' },
-  soloDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
+  connectBtn: { alignSelf: 'stretch', marginTop: spacing.md },
+  soloGroup: { marginTop: spacing.md },
 
   // spacing.lg 로 통일 — 앱의 다른 모달 8곳과 맞춘다
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: spacing.lg },
@@ -931,6 +1304,6 @@ const styles = themedStyles((colors) => ({
   modalActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
   modalCancel: { flex: 1, alignItems: 'center', paddingVertical: spacing.md, borderRadius: radius.md, backgroundColor: colors.surfaceAlt },
   modalCancelText: { color: colors.textSecondary, fontWeight: '700' },
-  modalSave: { flex: 1, alignItems: 'center', paddingVertical: spacing.md, borderRadius: radius.md, backgroundColor: colors.primary },
-  modalSaveText: { color: colors.white, fontWeight: '800' },
+  modalSave: { flex: 1, alignItems: 'center', paddingVertical: spacing.md, borderRadius: radius.md, backgroundColor: colors.primaryFill },
+  modalSaveText: { color: onColor(colors.primaryFill), fontWeight: '800' },
 }));

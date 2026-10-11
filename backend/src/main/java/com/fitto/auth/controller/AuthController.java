@@ -5,6 +5,7 @@ import com.fitto.auth.dto.ConsentRequest;
 import com.fitto.auth.dto.ForgotPasswordRequest;
 import com.fitto.auth.dto.GoogleLoginRequest;
 import com.fitto.auth.dto.LoginRequest;
+import com.fitto.auth.dto.LogoutRequest;
 import com.fitto.auth.dto.MarketingConsentRequest;
 import com.fitto.auth.dto.MealPhotoAnalysisSettingRequest;
 import com.fitto.auth.dto.NotificationCategorySettingRequest;
@@ -14,6 +15,8 @@ import com.fitto.auth.dto.ResetPasswordRequest;
 import com.fitto.auth.dto.TokenResponse;
 import com.fitto.auth.dto.UpdateProfileRequest;
 import com.fitto.auth.dto.UserResponse;
+import com.fitto.auth.dto.WithdrawalResponse;
+import com.fitto.auth.service.AccountWithdrawalService;
 import com.fitto.auth.service.AuthService;
 import com.fitto.auth.service.PasswordResetService;
 import com.fitto.common.exception.BusinessException;
@@ -44,8 +47,11 @@ public class AuthController {
 
     private final AuthService authService;
     private final PasswordResetService passwordResetService;
+    private final AccountWithdrawalService withdrawalService;
 
-    public AuthController(AuthService authService, PasswordResetService passwordResetService) {
+    public AuthController(AuthService authService, PasswordResetService passwordResetService,
+                          AccountWithdrawalService withdrawalService) {
+        this.withdrawalService = withdrawalService;
         this.authService = authService;
         this.passwordResetService = passwordResetService;
     }
@@ -53,8 +59,21 @@ public class AuthController {
     @PostMapping("/register")
     public ApiResponse<TokenResponse> register(@Valid @RequestBody RegisterRequest request,
                                                HttpServletRequest http) {
-        return ApiResponse.success(
-                authService.register(request, clientIp(http)), "회원가입이 완료되었습니다.");
+        try {
+            return ApiResponse.success(
+                    authService.register(request, clientIp(http)), "회원가입이 완료되었습니다.");
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            /*
+             * 같은 이메일의 가입이 동시에 들어와 존재 확인을 둘 다 통과했고, users.email unique 가 두 번째를 막았다.
+             * 예전엔 일반 500("서버 오류")으로 나갔다 — 실제 상태 그대로 "이미 가입된 이메일"로 답한다
+             * (docs/first-experience-audit.md #18). 다른 제약 위반이면 원래 예외를 던진다.
+             */
+            if (authService.isRegistered(request.email())) {
+                throw new com.fitto.common.exception.BusinessException(
+                        com.fitto.common.exception.ErrorCode.EMAIL_ALREADY_EXISTS);
+            }
+            throw e;
+        }
     }
 
     /** 구글 로그인 — AUTH-11. 기존 계정이면 로그인, 없으면 가입까지 한 번에. */
@@ -76,10 +95,14 @@ public class AuthController {
         return ApiResponse.success(authService.refresh(bearerToken(authorization), clientIp(http)));
     }
 
-    /** 로그아웃 — 리프레시 토큰을 서버에서 폐기한다(만료 전이라도 재사용 불가). */
+    /**
+     * 로그아웃 — 리프레시 토큰을 서버에서 폐기하고, 본문에 이 기기의 푸시 토큰이 있으면 함께 지운다.
+     * 본문은 없어도 된다(옛 앱).
+     */
     @PostMapping("/logout")
-    public ApiResponse<Void> logout(@RequestHeader("Authorization") String authorization) {
-        authService.logout(bearerToken(authorization));
+    public ApiResponse<Void> logout(@RequestHeader("Authorization") String authorization,
+                                    @Valid @RequestBody(required = false) LogoutRequest request) {
+        authService.logout(bearerToken(authorization), request == null ? null : request.pushToken());
         return ApiResponse.success(null, "로그아웃되었습니다.");
     }
 
@@ -176,9 +199,10 @@ public class AuthController {
     }
 
     @DeleteMapping("/withdraw")
-    public ApiResponse<Void> withdraw(@AuthenticationPrincipal AuthUser user) {
-        authService.withdraw(user.id());
-        return ApiResponse.success(null, "탈퇴가 완료되었습니다.");
+    public ApiResponse<WithdrawalResponse> withdraw(@AuthenticationPrincipal AuthUser user) {
+        // 바로 지우지 않는다 — 유예기간 뒤 삭제되고, 그 전에 다시 로그인하면 취소된다
+        return ApiResponse.success(new WithdrawalResponse(withdrawalService.request(user.id())),
+                "탈퇴가 접수되었습니다.");
     }
 
     // ---- helpers ----

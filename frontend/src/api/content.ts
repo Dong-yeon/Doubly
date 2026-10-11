@@ -1,6 +1,7 @@
 /** 커플 콘텐츠(영화·공연·드라마) API — api/place.ts 와 같은 모양이나 지도·AI 추천은 없다 */
 import { apiClient, unwrap } from './client';
 import type {
+  WatchedHere,
   ApiResponse,
   Content,
   ContentLog,
@@ -19,6 +20,8 @@ export interface RecordContentLogPayload {
   rating?: number; // 1~5
   memo?: string;
   imageUrl?: string;
+  /** 어디서 봤어요?(선택, V133) — 저장한 장소 id */
+  placeId?: number;
 }
 
 export interface RateContentPayload {
@@ -40,6 +43,9 @@ export const contentApi = {
 
   recordLog: (contentId: number, payload: RecordContentLogPayload) =>
     unwrap(apiClient.post<ApiResponse<ContentLog>>(`/contents/${contentId}/logs`, payload)),
+  // 장소 상세 "여기서 본 것"(V133)
+  watchedAt: (placeId: number) =>
+    unwrap(apiClient.get<ApiResponse<WatchedHere[]>>(`/contents/watched-at/${placeId}`)),
   logs: (contentId: number) =>
     unwrap(apiClient.get<ApiResponse<ContentLog[]>>(`/contents/${contentId}/logs`)),
   removeLog: (contentId: number, logId: number) =>

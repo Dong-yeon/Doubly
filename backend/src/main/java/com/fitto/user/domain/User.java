@@ -2,6 +2,7 @@ package com.fitto.user.domain;
 
 import com.fitto.common.domain.BaseTimeEntity;
 import com.fitto.common.notification.NotificationCategory;
+import com.fitto.common.time.KstClock;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -17,6 +18,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 /**
  * 회원 — 설계서 5.2 users.
@@ -119,6 +121,13 @@ public class User extends BaseTimeEntity {
     @Column(name = "auto_analyze_meal_photo", nullable = false)
     private boolean autoAnalyzeMealPhoto = true;
 
+    /**
+     * 탈퇴 삭제 예정 시각 (V110) — NULL 이면 정상 계정. 값이 있으면 탈퇴 유예기간 중이며,
+     * 그 전에 다시 로그인하면 취소되고 지나면 스위퍼가 계정과 기록을 영구 삭제한다.
+     */
+    @Column(name = "withdrawal_scheduled_at")
+    private LocalDateTime withdrawalScheduledAt;
+
     @Builder
     private User(String email, String password, String name, LocalDate birthDate, Gender gender,
                  String profileImageUrl, Role role, SocialType socialType, String socialId) {
@@ -143,6 +152,30 @@ public class User extends BaseTimeEntity {
         if (birthDate != null) this.birthDate = birthDate;
         if (gender != null) this.gender = gender;
         if (heightCm != null) this.heightCm = heightCm;
+    }
+
+    /** 탈퇴 요청 — 삭제 예정 시각만 남긴다. 이미 요청된 상태면 기존 예정 시각을 유지한다. */
+    public void scheduleWithdrawal(LocalDateTime scheduledAt) {
+        if (this.withdrawalScheduledAt == null) this.withdrawalScheduledAt = scheduledAt;
+    }
+
+    /** 탈퇴 취소 — 유예기간 중 다시 로그인했을 때. 취소할 게 있었으면 true. */
+    public boolean cancelWithdrawal() {
+        if (this.withdrawalScheduledAt == null) return false;
+        this.withdrawalScheduledAt = null;
+        return true;
+    }
+
+    public boolean isWithdrawalPending() {
+        return this.withdrawalScheduledAt != null;
+    }
+
+    /** 삭제 예정일 (KST 달력 기준) — 탈퇴 요청 전이면 null. */
+    public LocalDate withdrawalScheduledDate() {
+        if (this.withdrawalScheduledAt == null) return null;
+        // 저장값은 서버 로컬 시각이다(운영 JVM 은 UTC) — 사용자에게 보여줄 날짜는 KST 로 바꾼다
+        return this.withdrawalScheduledAt.atZone(ZoneId.systemDefault())
+                .withZoneSameInstant(KstClock.ZONE).toLocalDate();
     }
 
     /** 필수 약관(이용약관·개인정보) 동의 기록 — 가입 시점에 호출된다. */

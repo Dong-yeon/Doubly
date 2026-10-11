@@ -19,17 +19,57 @@
  * </pre>
  */
 import { StyleSheet, type ImageStyle, type TextStyle, type ViewStyle } from 'react-native';
-import { getScheme, palettes, type Palette, type Scheme } from './colors';
+import { getChromeTheme, getScheme, palette, type Palette } from './colors';
+import { chatPalette, getChatPhotoUri, getChatThemeId, type ChatPalette } from './chatTheme';
 
 type NamedStyles<T> = { [P in keyof T]: ViewStyle | TextStyle | ImageStyle };
 
 export function themedStyles<T extends NamedStyles<T>>(factory: (colors: Palette) => T): T {
-  const cache = {} as Record<Scheme, T>;
+  // 캐시 키는 포인트 색 테마 + 스킴 — 하나라도 빠지면 그 축을 바꿔도 먼저 캐시된 스타일이 돌아온다
+  const cache: Record<string, T> = {};
 
   const resolve = (): T => {
     const scheme = getScheme();
-    if (!cache[scheme]) cache[scheme] = StyleSheet.create(factory(palettes[scheme]));
-    return cache[scheme];
+    const key = `${getChromeTheme()}:${scheme}`;
+    if (!cache[key]) cache[key] = StyleSheet.create(factory(palette(scheme)));
+    return cache[key];
+  };
+
+  return new Proxy({} as T, {
+    get: (_target, key: string) => resolve()[key as keyof T],
+    ownKeys: () => Reflect.ownKeys(resolve() as object),
+    getOwnPropertyDescriptor: () => ({ enumerable: true, configurable: true }),
+  });
+}
+
+/**
+ * 채팅방 배경 테마를 따라가는 스타일시트 — 위 {@link themedStyles} 와 같은 원리인데
+ * 캐시 키가 <b>스킴 + 채팅 테마 + 사진 유무</b>다.
+ *
+ * <p>채팅 화면의 스타일 전부가 아니라 <b>배경 위에 놓이는 것들만</b> 이걸로 만든다
+ * (말풍선·시간·날짜 구분선). 나머지 크롬(입력바·트레이·헤더)은 앱 팔레트를 따르므로
+ * 기존 themedStyles 를 그대로 쓴다 — 한 화면이 두 스타일시트를 나눠 갖는 이유다.
+ *
+ * <p>화면 갱신은 chatThemeStore 구독이 맡는다. 여기서는 값만 최신으로 돌려준다.
+ */
+export function chatThemedStyles<T extends NamedStyles<T>>(
+  factory: (chat: ChatPalette) => T,
+): T {
+  const cache: Record<string, T> = {};
+
+  const resolve = (): T => {
+    const scheme = getScheme();
+    /*
+     * 키는 <b>팔레트를 바꾸는 축 전부</b>여야 한다. 하나라도 빠지면 그 축을 바꿨을 때
+     * 먼저 캐시된 스타일이 그대로 돌아온다 — 조용히, 화면만 안 바뀐다.
+     * · 포인트 색: 채팅 화면의 크롬(입력바 전송 버튼 등)이 같은 스타일시트에 섞일 수 있다
+     * · 사진 유무: 맨살 글자가 캡슐을 얻고 구분선이 사라진다(chatTheme 의 withPhoto)
+     *   uri <b>값</b>은 스타일을 바꾸지 않으므로 키에 넣지 않는다 — 넣으면 사진을 고를
+     *   때마다 캐시가 한 벌씩 새로 쌓인다.
+     */
+    const key = `${getChromeTheme()}:${scheme}:${getChatThemeId()}:${getChatPhotoUri() ? 'photo' : 'plain'}`;
+    if (!cache[key]) cache[key] = StyleSheet.create(factory(chatPalette(scheme)));
+    return cache[key];
   };
 
   return new Proxy({} as T, {

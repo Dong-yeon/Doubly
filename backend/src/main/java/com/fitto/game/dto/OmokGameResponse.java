@@ -15,6 +15,10 @@ import java.util.List;
  * @param myTurn      지금 내 차례인가(진행 중일 때만 의미 있음)
  * @param winner      ME / PARTNER / DRAW / null(진행 중)
  * @param winningLine 이긴 다섯 칸 인덱스(끝난 판만)
+ * @param moves       둔 순서대로의 인덱스. 복기 재생과 "최근 몇 수" 표시가 이걸 쓴다.
+ *                    색은 순번의 홀짝으로 정해진다 — 0번째(첫 수)가 흑, 다음이 백
+ * @param undoRequest MINE(내가 걸어둠) / PARTNER(상대가 걸어옴) / null(없음)
+ * @param canUndo     지금 내가 무르기를 걸 수 있는가 — 직전에 둔 쪽만 걸 수 있다
  */
 public record OmokGameResponse(
         Long id,
@@ -27,6 +31,9 @@ public record OmokGameResponse(
         int moveCount,
         String winner,
         List<Integer> winningLine,
+        List<Integer> moves,
+        String undoRequest,
+        boolean canUndo,
         String partnerName,
         LocalDateTime createdAt,
         LocalDateTime completedAt
@@ -44,6 +51,10 @@ public record OmokGameResponse(
             winner = OmokGame.WINNER_DRAW.equals(game.getWinner()) ? "DRAW"
                     : game.getWinner().charAt(0) == mine ? "ME" : "PARTNER";
         }
+        String undoRequest = null;
+        if (game.hasUndoRequest()) {
+            undoRequest = game.undoRequestedSide() == mine ? "MINE" : "PARTNER";
+        }
         return new OmokGameResponse(
                 game.getId(),
                 game.getStatus(),
@@ -55,6 +66,9 @@ public record OmokGameResponse(
                 game.moveCount(),
                 winner,
                 game.winningLineIndexes(),
+                game.moveIndexes(),
+                undoRequest,
+                game.canRequestUndo(viewerId),
                 partnerName,
                 game.getCreatedAt(),
                 game.getCompletedAt()

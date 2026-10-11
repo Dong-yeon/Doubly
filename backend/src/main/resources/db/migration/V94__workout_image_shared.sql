@@ -1,0 +1,12 @@
+-- 오운완 사진을 커플 피드에 실을지 (2026-09-14)
+--
+-- 운동 사진은 원래 "다른 앱의 완료 화면을 AI 로 읽는" 용도라, 안내 문구가
+-- "이 사진은 내 운동 기록에만 붙고 애인에게는 공유되지 않아요" 라고 약속했고
+-- FeedItemMapper 도 실제로 사진 자리에 null 을 넣어 그 약속을 지켰다.
+--
+-- 이제 오운완 인증샷으로 성격이 바뀌어 피드에 싣는다. 다만 <b>기존 사진에는 소급하지
+-- 않는다</b> — 그 약속을 보고 올린 사진들이라 뒤늦게 애인에게 띄우면 약속을 깨는 것이다.
+-- 그래서 기본값을 false 로 두고, 새 기록만 true 로 저장한다.
+--
+-- H2/PostgreSQL 양립: boolean + default 만 쓴다(CLAUDE.md 4절).
+alter table workouts add column image_shared boolean not null default false;

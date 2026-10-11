@@ -175,7 +175,7 @@ class PlaceAutoShareFlowTest {
         MealResponse meal = mealService.save(c[0], pastaLunch());
         placeService.recordVisit(c[0], placeId, new RecordVisitRequest(LocalDate.now(), 4, null, null, meal.id()));
 
-        // chat_messages.place_id → places FK(V91) — 카드를 정리하지 않으면 여기서 위반이 난다
+        // chat_messages.place_id → places FK(V136) — 카드를 정리하지 않으면 여기서 위반이 난다
         placeService.delete(c[0], placeId);
 
         List<ChatMessageResponse> messages = room(c);

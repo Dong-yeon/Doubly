@@ -22,8 +22,13 @@ public record PlaceSearchResponse(
             String category,
             Double lat,
             Double lng,
-            /** 카카오맵 상세 페이지 — 담기 전에 사용자가 직접 확인할 수 있게 */
-            String placeUrl) {
+            /** 카카오맵 상세 페이지 — 담기 전에 사용자가 직접 확인할 수 있게(예전 앱이 쓴다. 새 앱은 detailUrl) */
+            String placeUrl,
+            /** 무엇을 파는 곳인지 — "한식 · 냉면". 저장 요청에 그대로 실어 보낸다 */
+            String categoryDetail,
+            String phone,
+            /** 카카오 상세 — PlaceLinks 규칙(카카오 id 로 만든다). 예전 앱은 이 필드를 모른 채 무시한다 */
+            String detailUrl) {
     }
 
     public static PlaceSearchResponse unavailable() {

@@ -1,19 +1,18 @@
 /** 커플 일상 피드 API — PLAN.md Couple Feed */
 import { apiClient, unwrap } from './client';
-import type {
-  ApiResponse,
-  FeedItem,
-  FeedItemType,
-  FeedPhotosPage,
-  FeedTimeline,
-  Memories,
-  ReactionSummary,
-} from '../types';
+import type { ApiResponse, FeedItem, FeedItemType, FeedPhotoMap, FeedPhotoMonth, FeedPhotoSource, FeedPhotosPage, FeedTimeline, Memories, ReactionSummary, FeedComment } from '../types';
 
 export interface CreatePostPayload {
   content?: string;
   /** 최대 5장 — 서버가 photosOrEmpty()로 검사한다(FeedService.MAX_PHOTOS_PER_POST). */
   imageUrls?: string[];
+  /** 기록일 YYYY-MM-DD(KST) — 이 일이 있었던 날. 없으면 서버가 오늘로 둔다. 미래는 서버가 거절한다(V119) */
+  recordDate?: string;
+  /**
+   * 저장 멱등키(≤64자) — 응답이 늦어 앱이 실패로 보고 다시 눌러도 같은 키면 서버가 먼저 만든 포스트를
+   * 돌려준다(식단 V118 과 같은 방식). 새 포스트에만 보낸다 (first-experience-audit.md #24)
+   */
+  clientRequestId?: string;
 }
 
 export const feedApi = {
@@ -21,18 +20,63 @@ export const feedApi = {
    * 통합 타임라인 — cursor 는 이전 페이지의 nextCursor 를 그대로 넘긴다.
    * 서버가 만든 불투명 토큰이므로 해석하거나 가공하지 말 것(내부 형식은 바뀔 수 있다).
    */
-  timeline: (cursor?: string | null, limit = 20) =>
+  /*
+   * exclude — 빼고 받을 종류(선택). 홈 열은 utils/feedSummary 의 HOME_RECORD_EXCLUDE 를 보낸다.
+   * 서버가 쿼리 단계에서 빼므로 그 종류가 limit 을 다 채운 날에도 나머지가 실린다.
+   */
+  timeline: (cursor?: string | null, limit = 20, exclude?: readonly FeedItemType[]) =>
     unwrap(
       apiClient.get<ApiResponse<FeedTimeline>>('/feed', {
-        params: { cursor: cursor ?? undefined, limit },
+        params: {
+          cursor: cursor ?? undefined,
+          limit,
+          exclude: exclude && exclude.length > 0 ? exclude.join(',') : undefined,
+        },
       }),
     ),
 
-  /** 전체 사진첩 — 사진 있는 커플 포스트만. cursor 규칙은 timeline 과 동일 */
-  photos: (cursor?: string | null, limit = 30) =>
+  /**
+   * 사진첩("우리" 탭) — 일상·식단·운동·맛집 중 사진 있는 기록. cursor 규칙은 timeline 과 동일.
+   *
+   * <p>`sources` 를 주면 그 소스만 받는다(상단 필터 칩). 생략하면 4소스 전부 —
+   * 서버 기본값과 같으므로 "전체" 칩은 파라미터를 아예 보내지 않는다.
+   * `who` 는 작성자 필터(나/상대) — 서버가 거르므로 한쪽만 볼 때도 페이지가 꽉 찬다.
+   */
+  photos: (cursor?: string | null, limit = 30, sources?: FeedPhotoSource[], who?: 'me' | 'partner') =>
     unwrap(
       apiClient.get<ApiResponse<FeedPhotosPage>>('/feed/photos', {
-        params: { cursor: cursor ?? undefined, limit },
+        params: {
+          cursor: cursor ?? undefined,
+          limit,
+          sources: sources && sources.length > 0 ? sources.join(',') : undefined,
+          who,
+        },
+      }),
+    ),
+
+  /**
+   * 사진첩 달력 — 한 달(기록일 기준)의 사진 전부. month 는 'YYYY-MM'.
+   * sources·who 는 photos 와 같은 필터다.
+   */
+  photoMonth: (month: string, sources?: FeedPhotoSource[], who?: 'me' | 'partner') =>
+    unwrap(
+      apiClient.get<ApiResponse<FeedPhotoMonth>>('/feed/photos/month', {
+        params: {
+          month,
+          sources: sources && sources.length > 0 ? sources.join(',') : undefined,
+          who,
+        },
+      }),
+    ),
+
+  /** 사진첩 지도 — 좌표 있는 장소별 사진 묶음. sources·who 는 photos 와 같은 필터 */
+  photoMap: (sources?: FeedPhotoSource[], who?: 'me' | 'partner') =>
+    unwrap(
+      apiClient.get<ApiResponse<FeedPhotoMap>>('/feed/photos/map', {
+        params: {
+          sources: sources && sources.length > 0 ? sources.join(',') : undefined,
+          who,
+        },
       }),
     ),
 
@@ -49,6 +93,21 @@ export const feedApi = {
 
   createPost: (payload: CreatePostPayload) =>
     unwrap(apiClient.post<ApiResponse<FeedItem>>('/feed/posts', payload)),
+
+  /** 일상 댓글 — 오래된 순(V124) */
+  comments: (postId: number) => unwrap(apiClient.get<ApiResponse<FeedComment[]>>(`/feed/posts/${postId}/comments`)),
+  /** 댓글 쓰기 — 상대에게 푸시가 간다 */
+  addComment: (postId: number, content: string) =>
+    unwrap(apiClient.post<ApiResponse<FeedComment>>(`/feed/posts/${postId}/comments`, { content })),
+  /** 댓글 지우기 — 쓴 사람만 */
+  removeComment: (commentId: number) => unwrap(apiClient.delete<ApiResponse<null>>(`/feed/comments/${commentId}`)),
+
+  /** 포스트 하나 — 고치기 화면이 불러온다 */
+  getPost: (postId: number) => unwrap(apiClient.get<ApiResponse<FeedItem>>(`/feed/posts/${postId}`)),
+
+  /** 포스트 고치기 — 글·사진·기록일을 통째로 보낸다. imageUrls 가 빈 배열이면 사진을 전부 뺀 것이다 */
+  updatePost: (postId: number, payload: { content?: string; imageUrls: string[]; recordDate: string }) =>
+    unwrap(apiClient.put<ApiResponse<FeedItem>>(`/feed/posts/${postId}`, payload)),
 
   removePost: (postId: number) =>
     unwrap(apiClient.delete<ApiResponse<void>>(`/feed/posts/${postId}`)),

@@ -52,6 +52,10 @@ public class UserDataPurger {
         imageUrls.addAll(selectStrings(
                 "select m.photo_url from meals m "
                         + "where m.user_id = :uid and m.photo_url is not null", userId));
+        // 나만의 하루 기록 사진(V116) — 관계가 아니라 사람 소유라 위 1단계(관계 단위 삭제)가 건드리지 않는다.
+        imageUrls.addAll(selectStrings(
+                "select j.photo_url from journal_entries j "
+                        + "where j.user_id = :uid and j.photo_url is not null", userId));
         /*
          * 운동 인증샷(V84) — 다른 앱의 완료 화면 캡처가 대부분이라 <b>지도(달린 경로)가 함께
          * 찍혀 있을 수 있다</b>. 즉 집 근처 경로가 그대로 담긴 이미지다. DB 행만 지우고 파일을
@@ -60,6 +64,18 @@ public class UserDataPurger {
         imageUrls.addAll(selectStrings(
                 "select w.image_url from workouts w "
                         + "where w.user_id = :uid and w.image_url is not null", userId));
+        // 음성 응원 녹음(V43) — 오디오(/video/upload). 목소리는 사진만큼 그 사람을 특정한다.
+        imageUrls.addAll(selectStrings(
+                "select v.audio_url from voice_clips v where v.user_id = :uid", userId));
+        // 운동 부스터(V61) — 관계에 걸린 건 RelationRecordPurger 가 이미 모았다. 관계가 먼저 사라져
+        // 남은 행만 아래에서 지우는데, 그 파일도 여기서 함께 거둔다(겹치면 멱등이라 무해).
+        imageUrls.addAll(selectStrings(
+                "select b.audio_url from workout_boosters b "
+                        + "where b.sender_id = :uid or b.receiver_id = :uid", userId));
+        // 프로필 사진 — 소셜 가입은 카카오·구글 주소를 그대로 들고 있을 수 있어 우리 Cloudinary 것만 모은다
+        imageUrls.addAll(selectStrings(
+                "select u.profile_image_url from users u "
+                        + "where u.id = :uid and u.profile_image_url like '%res.cloudinary.com%'", userId));
 
         /*
          * 내가 남긴 피드 반응 — feed_reactions.user_id 가 users 를 참조한다.
@@ -68,6 +84,8 @@ public class UserDataPurger {
          * — 하나라도 남으면 users 삭제가 FK 위반으로 실패한다.
          */
         exec("delete from feed_reactions where user_id = :uid", userId);
+        // 내가 쓴 일상 댓글(V124) — author_id 가 users 를 참조한다. 관계 단위 정리 뒤에도 남을 수 있어 같은 이유로 훑는다
+        exec("delete from feed_comments where author_id = :uid", userId);
 
         exec("delete from workout_sets where workout_id in "
                 + "(select w.id from workouts w where w.user_id = :uid)", userId);
@@ -80,14 +98,31 @@ public class UserDataPurger {
         exec("delete from workout_programs where user_id = :uid", userId);
 
         exec("delete from streaks where user_id = :uid", userId);
-        // chat_messages.meal_id(V90)·workout_id 가 여길 참조하지만, 카드가 놓이는 관계 채팅은
+        // chat_messages.meal_id(V135)·workout_id 가 여길 참조하지만, 카드가 놓이는 관계 채팅은
         // 1단계(RelationRecordPurger)에서 이미 지워졌으므로 FK 위반이 나지 않는다.
+        /*
+         * 데이트 식단(V50)의 상대 몫 — 상대 명의 행이 created_by 로 나를 가리킨다(users FK). user_id 로만
+         * 지우면 그 행이 남아 users 삭제가 FK 위반으로 실패한다. 상대 몫은 상대의 기록이므로 지우지 않고
+         * 짝을 풀어 혼자 기록으로 남긴다 — shared_group_id 까지 비워야 사라진 짝을 가리키는 "같이 먹기"
+         * 배지가 뜨지 않는다(내가 상대 기록의 몫을 가진 반대 방향도 같은 그룹이라 함께 풀린다).
+         */
+        exec("update meals set created_by = null, shared_group_id = null "
+                + "where user_id <> :uid and shared_group_id in "
+                + "(select m.shared_group_id from meals m "
+                + "where m.user_id = :uid and m.shared_group_id is not null)", userId);
+        exec("update meals set created_by = null where created_by = :uid", userId);
         exec("delete from meals where user_id = :uid", userId);
         exec("delete from meal_reminders where user_id = :uid", userId);
+        // 하루 기록 리마인드(V125) — user_id 가 users 를 참조한다
+        exec("delete from journal_reminders where user_id = :uid", userId);
+        // 식단 찌르기(V120) — 관계 단위 정리에서 이미 지워졌지만 users FK 가 보낸·받은 쪽 둘 다 걸려 있어 한 번 더 훑는다
+        exec("delete from meal_nudges where sender_id = :uid or receiver_id = :uid", userId);
         exec("delete from water_logs where user_id = :uid", userId);
         exec("delete from fasting_sessions where user_id = :uid", userId);
         exec("delete from favorite_foods where user_id = :uid", userId);
         exec("delete from body_metrics where user_id = :uid", userId);
+        // 나만의 하루 기록(V116) — 자식 테이블도, 이 테이블을 참조하는 곳도 없는 말단이다.
+        exec("delete from journal_entries where user_id = :uid", userId);
         exec("delete from nutrition_goals where user_id = :uid", userId);
         exec("delete from device_tokens where user_id = :uid", userId);
         exec("delete from password_reset_tokens where user_id = :uid", userId);
@@ -104,6 +139,23 @@ public class UserDataPurger {
         // 구독 이력 — users FK 를 물고 있어서 빠뜨리면 탈퇴 전체가 FK 위반으로 실패한다.
         // (환불·정산 근거는 스토어 콘솔에 남으므로 여기서 지워도 된다)
         exec("delete from subscriptions where user_id = :uid", userId);
+        // 기능 크레딧(V106) — subscriptions 와 같은 판단. users FK 라 빠뜨리면 탈퇴가 FK 위반으로 실패한다.
+        exec("delete from feature_credits where user_id = :uid", userId);
+        /*
+         * AI 토큰 사용량(V89) — user_id 에 FK 가 없어서 탈퇴를 막지는 않지만, 그래서 오히려
+         * 여기서 빠뜨리면 조용히 남는다. 탈퇴한 사람의 사용 이력을 들고 있을 이유가 없다
+         * (원가 집계는 이미 지나간 달의 합계로 남고, 개인 행이 필요하지 않다).
+         */
+        exec("delete from ai_usage_logs where user_id = :uid", userId);
+        /*
+         * 스티커 팩 낱개 구매(V96) — ai_usage_logs 와 같은 이유로 user_id 에 FK 가 없다.
+         * 탈퇴를 막지는 않지만 그래서 오히려 빠뜨리면 조용히 남는다. 환불·정산 근거는
+         * 스토어 콘솔에 남으므로(subscriptions 와 같은 판단) 여기서 지워도 된다.
+         *
+         * 다만 sticker_pack_id 는 sticker_packs 를 참조한다 — 팩 행은 시드라 사라지지
+         * 않으므로 순서를 신경 쓸 필요가 없다.
+         */
+        exec("delete from user_sticker_purchases where user_id = :uid", userId);
 
         em.flush();
         em.clear();

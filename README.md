@@ -54,7 +54,7 @@ src/
 ├── components/   # 공용 UI (Button, Card, TextField, KakaoMap, …)
 ├── constants/    # theme(컬러/스페이싱), config(API URL·Cloudinary·카카오맵 키)
 ├── hooks/        # 커스텀 훅
-├── navigation/   # Root / Onboarding / MainTab(홈·운동+식단·FAB·채팅·맛집) 네비게이터
+├── navigation/   # Root / Onboarding / MainTab(홈·우리·채팅·럽바디·럽슐랭) 네비게이터
 ├── screens/      # onboarding, home, workout, diet, chat, place, trip, feed, trainer, my
 ├── store/        # Zustand 스토어 (auth, relation, chat, diet, toast)
 ├── types/        # 공용 도메인 타입
@@ -653,11 +653,19 @@ point_ledger              -- 포인트 적립·사용 내역 (잔액을 컬럼�
 
 ## 요금제 — FREE / PRO
 
-> **상태: 판정 경로 + 인앱결제 연동 코드 완료. 지금은 전원 PRO 다** (`PLAN_FREE_TRIAL=true`).
-> Google Play 구독 결제(`react-native-iap` 클라이언트 + 서버 즉시 검증 +
-> RTDN 웹훅)는 코드상 준비됐지만 `PURCHASE_ENABLED=false`로 꺼져 있다 — 남은 건
-> Play Console에서 사람이 직접 해야 하는 설정(구독 상품 생성·서비스 계정 발급 등)뿐이다.
-> 절차는 [docs/GOOGLE_PLAY_BILLING.md](docs/GOOGLE_PLAY_BILLING.md) 참고.
+> **상태: 2026-09-22 부터 결제한 사람만 PRO 다** (`PLAN_FREE_TRIAL=false`, `PLAN_TRIAL_DAYS=0`).
+> 가입하면 FREE 로 시작하고, `Feature.java` 의 FREE 한도가 실제로 강제된다.
+> 기존 사용자에게 영구 PRO 를 주는 안(`docs/FREE_TIER_AND_ADS.md`)은 보류했다 — 전원 FREE 다.
+>
+> 구독 결제는 Google·Apple 양쪽 모두 구현돼 있고 앱에서도 열려 있다
+> (`PURCHASE_ENABLED = Platform.OS !== 'web'`). **`pro_monthly` 는 App Store 에 등록됐고
+> iOS 실결제까지 확인했다(2026-09-22).**
+>
+> 다만 서버가 그 결제를 받으려면 스토어 키가 있어야 한다 — 없으면 동기화가 조용히 아무 일도
+> 하지 않고 증상은 "결제는 됐는데 PRO 가 안 열림" 하나뿐이다. 애플은 `APP_STORE_ISSUER_ID`·
+> `APP_STORE_KEY_ID`·`APP_STORE_PRIVATE_KEY_BASE64`·`APP_STORE_BUNDLE_ID`,
+> 구글은 서비스 계정 키다([docs/FREE_TIER_AND_ADS.md](docs/FREE_TIER_AND_ADS.md) ·
+> [docs/GOOGLE_PLAY_BILLING.md](docs/GOOGLE_PLAY_BILLING.md)).
 
 ### 왜 지금 넣었나
 
@@ -770,7 +778,7 @@ point_ledger              -- 포인트 적립·사용 내역 (잔액을 컬럼�
 | 기능 | 왜 |
 | --- | --- |
 | `FULL_STATS` | 지금 "전체 기간" 값은 `totalDays` 하나뿐이다. 총 운동 일수를 가리는 건 값어치도 없고 쩨쩨하다. 이 게이트의 실제 대상은 **운동 v2 의 볼륨·1RM·부위별 밸런스**이고, 그건 아직 없다 |
-| `PREMIUM_STICKER` | 프리미엄 스티커 팩이 아직 없다. 현재 16종은 전부 무료 |
+| `PREMIUM_STICKER` | 유니코드 이모지는 전부 무료다(2026-09-14 시즌 팩 폐지). 이 게이트가 실제로 막는 건 움직이는 이모티콘 24종과 확장 무드팩 |
 
 > ⚠️ **`imageUpload.ts` 의 폴백 조건을 넓히지 말 것.** 예전에는 서명 발급이 실패하면
 > 무조건 unsigned preset 으로 넘어갔는데, 그러면 한도 초과(402)를 받아도 조용히 우회해서
@@ -794,15 +802,20 @@ point_ledger              -- 포인트 적립·사용 내역 (잔액을 컬럼�
 한도의 "오늘"은 **KST 기준**이다. 서버가 UTC 라 `LocalDate.now()` 를 쓰면 일일 한도가
 한국 시간 **오전 9시**에 리셋된다.
 
-### 켤 때 해야 할 일
+### 켤 때 해야 할 일 — 5번을 먼저 했다(2026-09-22)
 
-1. 이벤트 로깅으로 실사용 분포(p60~p75) 측정 → `Feature.java` 의 FREE 숫자 확정
-2. 약관에 **유료 서비스·환불 조항** 추가 — 사용자가 적은 지금이 `PolicyVersion` 상향
+순서를 뒤집었다. 1번(실사용 분포 측정)은 **무료 사용자가 존재해야** 잴 수 있는데, 전원
+PRO 인 동안은 그런 사용자가 만들어지지 않는다. 그래서 자리표시자 숫자인 채로 먼저 켜고,
+막히는 자리가 나오면 그때 `Feature.java` 를 고친다.
+
+1. ~~이벤트 로깅으로 실사용 분포(p60~p75) 측정~~ → **켠 뒤에 잰다**(위 문단)
+2. 약관에 **유료 서비스·환불 조항** 추가 — ⚠️ **아직 없다**(`legal.ts` 에 '환불' 0건).
+   유료 상품을 실제로 팔기 전에 필요하다. 사용자가 적은 지금이 `PolicyVersion` 상향
    비용이 가장 싸다 (아래 "약관 본문" 절 참고. 버전을 올리면 전원 재동의 게이트가 뜬다)
-3. ~~`react-native-iap` + 서버 영수증 검증 + 스토어 웹훅 → `subscriptions` 갱신~~ →
-   **완료**: 코드는 준비됐고, 남은 건 [Play Console 수동 설정](docs/GOOGLE_PLAY_BILLING.md)뿐이다
-4. Play Console 설정을 마친 뒤 `PURCHASE_ENABLED=true` (`GOOGLE_PLAY_BILLING.md` 5번) + EAS 재빌드
-5. `PLAN_FREE_TRIAL=false`
+3. ~~`react-native-iap` + 서버 영수증 검증 + 스토어 웹훅 → `subscriptions` 갱신~~ → **완료**
+4. 구독 상품(`pro_monthly` / base plan `monthly`) 등록·활성화 — **App Store 완료(2026-09-22)**,
+   Play Console 쪽은 확인 필요([GOOGLE_PLAY_BILLING.md](docs/GOOGLE_PLAY_BILLING.md))
+5. ~~`PLAN_FREE_TRIAL=false`~~ → **완료(2026-09-22)**. `PLAN_TRIAL_DAYS=0` 도 함께.
 
 > **만료 시 원칙: 읽기는 남기고 쓰기만 막는다.** PRO 때 만든 여행 5개를 만료 후
 > 숨기거나 지우면 안 된다. 조회는 유지하고 신규 생성만 차단한다.
@@ -912,7 +925,7 @@ point_ledger              -- 포인트 적립·사용 내역 (잔액을 컬럼�
 | 확장 | 오프라인 홈 안정화 (첫 진입 위젯 캐시 시드 + 실패 시 기존 값 유지·안내 1회) | ✅ 완료 |
 | 요금제 | 스트릭 복구권 (`STREAK_REPAIR` 실동작 — 어제 하루만 비었을 때 이어붙이기, PRO 월 2회) | ✅ 완료 |
 | 요금제 | 심화 영양 통계 (`FULL_STATS` 실동작 — 30일 매크로 달성률·나트륨·당 추이. 7일 요약은 무료) | ✅ 완료 |
-| 요금제 | 시즌 스티커 5팩 + 확장 무드팩 (`PREMIUM_STICKER` 실동작 — 원가 0, 커플 단위 판정) | ✅ 완료 |
+| 요금제 | 움직이는 이모티콘 24종 + 확장 무드팩 (`PREMIUM_STICKER` 실동작 — 원가 0, 커플 단위 판정). 시즌 스티커 5팩은 2026-09-14 폐지 | ✅ 완료 |
 | 요금제 | 운동 부스터 (`WORKOUT_BOOSTER` 실동작 — 일회성 응원, V61 · 음성 응원 문구 3→5종) | ✅ 완료 |
 | 확장 | 채팅 예약 전송(scheduled send) — 시각 지정, 발송 전 취소 가능 | ✅ 완료 |
 | 확장 | 채팅 대화 내보내기 — 텍스트로 저장/공유, 상한 초과 시 최근 대화가 남도록 자름 | ✅ 완료 |

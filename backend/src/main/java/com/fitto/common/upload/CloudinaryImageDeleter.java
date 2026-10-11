@@ -43,11 +43,21 @@ public class CloudinaryImageDeleter {
     private static final Pattern PUBLIC_ID = Pattern.compile(
             "/upload/(?:[^/]+/)*?(?:v\\d+/)?(.+?)(?:\\.[a-zA-Z0-9]+)?$");
 
+    /**
+     * URL 의 리소스 종류 — {@code .../video/upload/...} 이면 video.
+     * 오디오(음성 응원·음성 메시지)는 앱이 {@code /video/upload} 로 올린다(Cloudinary 는 오디오를
+     * video 로 다룬다). destroy 도 같은 종류의 엔드포인트로 보내야 지워진다 — image/destroy 로
+     * 보내면 "not found" 로 끝나고 파일은 그대로 남는다.
+     */
+    private static final Pattern RESOURCE_TYPE = Pattern.compile("/(image|video)/upload/");
+
     private final CloudinaryProperties properties;
+    private final StoredMediaReferences references;
     private final RestClient restClient;
 
-    public CloudinaryImageDeleter(CloudinaryProperties properties) {
+    public CloudinaryImageDeleter(CloudinaryProperties properties, StoredMediaReferences references) {
         this.properties = properties;
+        this.references = references;
         this.restClient = RestClient.builder().build();
     }
 
@@ -75,8 +85,20 @@ public class CloudinaryImageDeleter {
         });
     }
 
-    /** 여러 이미지 삭제 — 하나가 실패해도 나머지는 계속 시도한다. */
-    public void deleteAll(Collection<String> imageUrls) {
+    /**
+     * 여러 이미지 삭제 — 하나가 실패해도 나머지는 계속 시도한다.
+     *
+     * <p><b>아직 다른 행이 쓰는 파일은 남긴다</b>({@link #deletable}). 모든 삭제 경로(식사·피드·운동 삭제,
+     * 지난 기록 삭제, 탈퇴)가 여기를 지나므로 호출부는 "내가 지운 행의 URL"만 넘기면 된다.
+     */
+    public void deleteAll(Collection<String> requestedUrls) {
+        if (requestedUrls.isEmpty()) {
+            return;
+        }
+        List<String> imageUrls = deletable(requestedUrls);
+        if (imageUrls.size() < requestedUrls.size()) {
+            log.info("다른 기록이 함께 쓰는 파일 {}건은 남깁니다", requestedUrls.size() - imageUrls.size());
+        }
         if (imageUrls.isEmpty()) {
             return;
         }
@@ -95,13 +117,43 @@ public class CloudinaryImageDeleter {
         log.info("이미지 삭제 완료: {}/{}건", deleted, imageUrls.size());
     }
 
+    /**
+     * 지워도 되는 URL — 넘겨받은 것 중 어떤 행도 더 이상 가리키지 않는 것만.
+     *
+     * <p>커밋 이후({@link #deleteAllAfterCommit})에 부르므로 방금 지운 행은 이미 빠져 있다. 예: 식사를
+     * 지워도 채팅에 공유한 MEAL_CARD 가 같은 URL 을 들고 있으면 파일은 남는다.
+     * 조회가 실패하면 <b>지우지 않는 쪽</b>으로 기운다 — 남은 파일은 나중에 치울 수 있지만,
+     * 쓰이던 파일을 지우면 되돌릴 수 없다.
+     */
+    public List<String> deletable(Collection<String> imageUrls) {
+        List<String> distinct = imageUrls.stream().distinct().toList();
+        try {
+            var inUse = references.stillReferenced(distinct);
+            return distinct.stream().filter(u -> !inUse.contains(u)).toList();
+        } catch (Exception e) {
+            log.error("파일 참조 확인 실패 — 이번에는 {}건을 지우지 않습니다 ({})", distinct.size(), e.getMessage());
+            return List.of();
+        }
+    }
+
     /** 단건 삭제. 성공 여부 반환 — 예외는 밖으로 던지지 않는다. */
     public boolean delete(String imageUrl) {
+        /*
+         * 우리 클라우드·루트 폴더의 원본 URL 만 지운다 — 변형 URL(다른 cloud 이름, 변환 세그먼트, "..")로
+         * 남의 원본을 지우는 경로를 막는다(CloudinaryUrls 주석). 기록마다 저장 시점 검증이 제각각이라
+         * (운동·식단·방문 사진은 URL 을 따로 보지 않는다) 모든 삭제가 지나는 이 자리에서 한 번에 막는다.
+         * 걸러진 파일은 남을 뿐이다 — 남은 파일은 치울 수 있지만 잘못 지운 파일은 되돌릴 수 없다.
+         */
+        if (!CloudinaryUrls.isOwnOriginal(imageUrl, properties)) {
+            log.warn("우리가 올린 원본 URL 이 아니어서 지우지 않습니다: {}", imageUrl);
+            return false;
+        }
         String publicId = extractPublicId(imageUrl);
         if (publicId == null) {
             log.warn("Cloudinary URL 형식이 아니어서 건너뜁니다: {}", imageUrl);
             return false;
         }
+        String resourceType = extractResourceType(imageUrl);
         try {
             long timestamp = Instant.now().getEpochSecond();
             // 서명 규칙은 업로드와 동일 — 파라미터 알파벳순 '&' 연결 후 api_secret 붙여 SHA-1
@@ -115,15 +167,15 @@ public class CloudinaryImageDeleter {
             form.add("signature", signature);
 
             restClient.post()
-                    .uri("https://api.cloudinary.com/v1_1/{cloud}/image/destroy",
-                            properties.getCloudName())
+                    .uri("https://api.cloudinary.com/v1_1/{cloud}/{type}/destroy",
+                            properties.getCloudName(), resourceType)
                     .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                     .body(form)
                     .retrieve()
                     .toBodilessEntity();
             return true;
         } catch (Exception e) {
-            log.error("이미지 삭제 실패 — 수동 정리 필요: publicId={} ({})", publicId, e.getMessage());
+            log.error("이미지 삭제 실패 — 수동 정리 필요: {}/{} ({})", resourceType, publicId, e.getMessage());
             return false;
         }
     }
@@ -135,6 +187,12 @@ public class CloudinaryImageDeleter {
         }
         Matcher matcher = PUBLIC_ID.matcher(imageUrl);
         return matcher.find() ? matcher.group(1) : null;
+    }
+
+    /** destroy 엔드포인트의 리소스 종류. 경로에 종류가 없으면 Cloudinary 기본값인 image. */
+    public String extractResourceType(String url) {
+        Matcher matcher = RESOURCE_TYPE.matcher(url);
+        return matcher.find() ? matcher.group(1) : "image";
     }
 
     private String sha1Hex(String value) {

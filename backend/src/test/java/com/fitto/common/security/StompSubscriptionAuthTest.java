@@ -109,6 +109,18 @@ class StompSubscriptionAuthTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    /**
+     * 전송 거절 알림 큐(/user/queue/chat-errors) — "/user/" 로 구독하면 스프링이 이 세션 전용으로 바꿔 준다.
+     * 바뀐 실제 이름("/queue/chat-errors-user{세션id}")을 직접 구독하면 남의 세션 큐를 엿들을 수 있으니 막는다.
+     */
+    @Test
+    void 사용자_큐는_user_경로로만_구독할_수_있다() {
+        Long me = register("stomp-queue@fitto.com");
+        assertThatCode(() -> subscribe(me, "/user/queue/chat-errors")).doesNotThrowAnyException();
+        assertThatThrownBy(() -> subscribe(me, "/queue/chat-errors-usersomeoneelse"))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
     @Test
     void 존재하지_않는_관계_구독은_거부된다() {
         Long a = register("stomp-missing@fitto.com");

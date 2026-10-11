@@ -720,7 +720,7 @@ const styles = themedStyles((colors) => ({
   catChipSmall: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border },
   catChipActive: { borderColor: colors.primary, backgroundColor: colors.primaryBg },
   catText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
-  catTextActive: { color: colors.primary },
+  catTextActive: { color: colors.primary, fontWeight: '800' },
   formRow: { flexDirection: 'row', gap: spacing.sm },
   modalBtn: { marginTop: spacing.md },
   groupRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
@@ -734,7 +734,7 @@ const styles = themedStyles((colors) => ({
   },
   presetChipText: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '700' },
   presetHint: { fontSize: fontSize.caption, color: colors.textTertiary, marginTop: spacing.xs },
-  restRecommendHint: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '600', marginBottom: spacing.xs },
+  restRecommendHint: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600', marginBottom: spacing.xs },
   emptyHint: { fontSize: fontSize.caption, color: colors.textSecondary },
 
   // 이름 자동완성 — 카탈로그 종목 후보 칩
@@ -752,7 +752,7 @@ const styles = themedStyles((colors) => ({
   },
   suggestChipText: { fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '700' },
   suggestChipMeta: { fontSize: 10, color: colors.textSecondary, fontWeight: '700' },
-  catalogHint: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '600', marginTop: spacing.xs },
+  catalogHint: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600', marginTop: spacing.xs },
   catalogHintMuted: { fontSize: fontSize.caption, color: colors.textTertiary, marginTop: spacing.xs },
 
   // 세트별 목표 편집 — 세션 화면의 세트 행과 같은 형태로 통일한다

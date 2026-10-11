@@ -6,6 +6,7 @@ import com.fitto.body.dto.SaveBodyMetricRequest;
 import com.fitto.body.repository.BodyMetricRepository;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
+import com.fitto.common.upload.CloudinaryImageDeleter;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,9 +20,11 @@ import java.util.List;
 public class BodyMetricService {
 
     private final BodyMetricRepository repository;
+    private final CloudinaryImageDeleter imageDeleter;
 
-    public BodyMetricService(BodyMetricRepository repository) {
+    public BodyMetricService(BodyMetricRepository repository, CloudinaryImageDeleter imageDeleter) {
         this.repository = repository;
+        this.imageDeleter = imageDeleter;
     }
 
     /** 시간순(오래된→최신) — 그래프용 */
@@ -55,5 +58,9 @@ public class BodyMetricService {
         BodyMetric metric = repository.findByIdAndUserId(id, userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "측정 기록을 찾을 수 없습니다."));
         repository.delete(metric);
+        // 몸 변화 사진도 함께 — 예전엔 행만 지워 파일이 남았다(탈퇴 때만 거뒀다). 커밋 뒤에, 다른 행이 쓰면 남긴다
+        if (metric.getPhotoUrl() != null && !metric.getPhotoUrl().isBlank()) {
+            imageDeleter.deleteAllAfterCommit(List.of(metric.getPhotoUrl()));
+        }
     }
 }

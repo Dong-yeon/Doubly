@@ -27,6 +27,13 @@ public record SavePlaceRequest(
         @Size(max = 50, message = "kakaoPlaceId 가 올바르지 않습니다.")
         String kakaoPlaceId,
 
+        /** 무엇을 파는 곳인지 — 검색 결과의 categoryDetail 그대로(V130). 예전 앱은 안 보낸다 */
+        @Size(max = 50, message = "세부 분류는 50자 이내예요.")
+        String categoryDetail,
+
+        @Size(max = 30, message = "전화번호가 너무 길어요.")
+        String phone,
+
         /**
          * 방문 기록의 일부로 추가하는 경우(식단 기록 화면의 장소 시트) true — 찜 카드를 남기지 않는다.
          * 그 경로는 곧이어 식단 카드에 장소가 덧붙으므로(PlaceService.recordVisit) 찜 카드까지 남기면
@@ -36,16 +43,33 @@ public record SavePlaceRequest(
 ) {
     /** kakaoPlaceId 없이 저장하던 기존 호출부(테스트 등) 호환용 */
     public SavePlaceRequest(String name, String address, BigDecimal lat, BigDecimal lng, String category) {
-        this(name, address, lat, lng, category, null, null);
+        this(name, address, lat, lng, category, null, null, null, null);
     }
 
-    /** visiting 이전부터 쓰던 6개짜리 호출부 호환용 */
+    /** 세부 분류·전화·visiting 이전 호출부 호환용 */
     public SavePlaceRequest(String name, String address, BigDecimal lat, BigDecimal lng, String category,
                             String kakaoPlaceId) {
-        this(name, address, lat, lng, category, kakaoPlaceId, null);
+        this(name, address, lat, lng, category, kakaoPlaceId, null, null, null);
+    }
+
+    /** visiting 이전, 세부 분류·전화를 싣는 호출부 호환용 */
+    public SavePlaceRequest(String name, String address, BigDecimal lat, BigDecimal lng, String category,
+                            String kakaoPlaceId, String categoryDetail, String phone) {
+        this(name, address, lat, lng, category, kakaoPlaceId, categoryDetail, phone, null);
+    }
+
+    /** 세부 분류·전화 없이 visiting 만 싣는 호출부 호환용 */
+    public SavePlaceRequest(String name, String address, BigDecimal lat, BigDecimal lng, String category,
+                            String kakaoPlaceId, Boolean visiting) {
+        this(name, address, lat, lng, category, kakaoPlaceId, null, null, visiting);
     }
 
     public boolean visitingOrDefault() {
         return Boolean.TRUE.equals(visiting);
+    }
+
+    /** 방문 기록의 일부로 만드는 사본 — 외식 기록(MealVisitService)이 장소를 만들 때 찜 카드가 남지 않게 한다 */
+    public SavePlaceRequest asVisiting() {
+        return new SavePlaceRequest(name, address, lat, lng, category, kakaoPlaceId, categoryDetail, phone, true);
     }
 }

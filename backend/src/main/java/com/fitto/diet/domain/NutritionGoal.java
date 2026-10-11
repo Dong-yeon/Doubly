@@ -2,6 +2,8 @@ package com.fitto.diet.domain;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
@@ -37,6 +39,14 @@ public class NutritionGoal {
     @Column(name = "target_water_ml")
     private Integer targetWaterMl;
 
+    /**
+     * 목표 방향(감량·유지·증량) — null 이면 미설정. 본인 영양 요약에만 실린다(상대에게는 나가지 않는다).
+     * 칼로리 링 문구("남았어요" / "더 드세요")와 마법사 기본값이 이 값을 본다.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "goal_direction", length = 10)
+    private DietGoalType goalDirection;
+
     public NutritionGoal(Long userId) {
         this.userId = userId;
     }
@@ -46,6 +56,10 @@ public class NutritionGoal {
         this.targetCarbs = carbs;
         this.targetProtein = protein;
         this.targetFat = fat;
+    }
+
+    public void updateGoalDirection(DietGoalType goalDirection) {
+        this.goalDirection = goalDirection;
     }
 
     public void updateWaterGoal(Integer targetWaterMl) {
