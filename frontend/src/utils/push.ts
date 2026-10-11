@@ -10,6 +10,7 @@ import Constants from 'expo-constants';
 import { notificationApi } from '../api/notification';
 import { STORAGE_KEYS } from '../constants/config';
 import { storage } from './storage';
+import { ensureNotificationChannels } from './notificationChannels';
 import { useChatStore } from '../store/chatStore';
 
 /**
@@ -275,12 +276,17 @@ export async function requestPushPermission(): Promise<boolean> {
 
 /** Expo 푸시 토큰을 발급받아 서버에 등록한다. */
 async function registerToken(): Promise<void> {
+  /*
+   * 알림 채널을 <b>등록보다 먼저</b> 만든다 — 서버는 여기서 보낸 버전이 있는 기기에만 channelId 를 싣는다.
+   * 순서가 바뀌면 채널이 아직 없는 기기로 channelId 가 가는 틈이 생긴다(utils/notificationChannels.ts).
+   */
+  const channelsVersion = await ensureNotificationChannels();
   const projectId =
     Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
   const { data: token } = await Notifications.getExpoPushTokenAsync(
     projectId ? { projectId } : undefined,
   );
-  await notificationApi.registerToken(token, Platform.OS);
+  await notificationApi.registerToken(token, Platform.OS, channelsVersion);
   // 로그아웃 때 서버에서 지우려면 무엇을 등록했는지 알아야 한다(pushTokenForLogout)
   await storage.setItem(STORAGE_KEYS.pushToken, token).catch(() => {});
 }
