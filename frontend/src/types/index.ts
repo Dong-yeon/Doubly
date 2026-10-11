@@ -1841,6 +1841,8 @@ export interface PlaceMenu {
   items: { name: string; times: number; lastDate: string }[];
   /** 대표 메뉴 제안 — 2번 이상 먹은 것 중 상위 3개(저장하지 않는다) */
   signature: string[];
+  /** 메뉴판에서 읽어 저장한 메뉴(V131, 저장한 순서) — 서버가 늘 싣지만 옛 서버를 위해 선택으로 둔다 */
+  board?: { id: number; name: string; price: number | null }[];
 }
 
 /** 일상 댓글 하나(V124) */
