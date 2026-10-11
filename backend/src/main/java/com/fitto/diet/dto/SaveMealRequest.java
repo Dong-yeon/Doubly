@@ -57,8 +57,25 @@ public record SaveMealRequest(
          * 끼니가 있으면 새로 만들지 않고 그걸 돌려준다(응답이 늦어 앱이 끊었는데 서버는 저장한 경우). 선택 — 옛 앱은 보내지 않는다.
          */
         @Size(max = 64, message = "요청 ID 가 너무 깁니다.")
-        String clientRequestId
+        String clientRequestId,
+
+        /**
+         * 이 끼니를 먹은 럽슐랭 장소(선택) — <b>사진 자동 분석의 힌트로만</b> 쓴다({@code MealPhotoAutoAnalysisService}).
+         * 외식 기록({@code MealVisitService})이 장소를 확정한 뒤 실어 보낸다 — 방문은 같은 트랜잭션에서 만들어지지만
+         * 자동 분석에 장소를 직접 넘겨 두면 방문을 역으로 찾지 않아도 된다. 내 관계의 장소가 아니면 분석 쪽에서
+         * 조용히 무시한다. 방문 기록을 만들지는 않는다. 수정(PUT)에서는 쓰지 않는다.
+         */
+        Long placeId
 ) {
+    /** 장소 힌트 이전부터 쓰던 14개짜리 호출부 호환용 — placeId 없음. */
+    public SaveMealRequest(LocalDate mealDate, MealType mealType, String memo, String photoUrl,
+                           Integer calories, Integer carbs, Integer protein, Integer fat,
+                           Integer sugar, Integer sodium, Integer fiber, List<MealItemRequest> items,
+                           Boolean sharedWithPartner, String clientRequestId) {
+        this(mealDate, mealType, memo, photoUrl, calories, carbs, protein, fat,
+                sugar, sodium, fiber, items, sharedWithPartner, clientRequestId, null);
+    }
+
     /** 멱등키 이전부터 쓰던 13개짜리 호출부(기존 테스트 등) 호환용 — 키 없음. */
     public SaveMealRequest(LocalDate mealDate, MealType mealType, String memo, String photoUrl,
                            Integer calories, Integer carbs, Integer protein, Integer fat,

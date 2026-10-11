@@ -28,7 +28,7 @@ import static org.mockito.Mockito.when;
 class FoodAnalysisResponseMappingTest {
 
     private final GeminiClient geminiClient = mock(GeminiClient.class);
-    private final FoodAnalysisService service = new FoodAnalysisService(geminiClient);
+    private final FoodAnalysisService service = new FoodAnalysisService(geminiClient, null);
     private final ObjectMapper mapper = new ObjectMapper();
 
     private JsonNode json(String s) throws Exception {
@@ -96,7 +96,7 @@ class FoodAnalysisResponseMappingTest {
      */
     @Test
     void 사진을_받지_못하면_차감한_한도를_돌려주고_분석은_부르지_않는다() {
-        assertThatThrownBy(() -> service.analyze(7L, "https://example.com/not-cloudinary.jpg"))
+        assertThatThrownBy(() -> service.analyze(7L, "https://example.com/not-cloudinary.jpg", null))
                 .isInstanceOf(BusinessException.class);
 
         var order = inOrder(geminiClient);

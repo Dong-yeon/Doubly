@@ -76,14 +76,18 @@ public class MealPhotoAutoAnalysisService {
      * <p>커밋 전에 걸면 작업이 먼저 돌아 아직 보이지 않는 행을 조회하게 된다
      * (저장이 롤백되면 유령 작업까지 남는다). 대상이 아니면 조용히 아무 일도 하지 않는다 —
      * 자동 경로라 사용자에게 알릴 실패가 없다.
+     *
+     * @param placeId 저장 요청에 실려 온 럽슐랭 장소(nullable) — 분석 힌트로만 쓴다. 접근 판정은
+     *                {@link FoodAnalysisService} 쪽에서 한다(남의 장소면 힌트 없이 분석).
      */
-    public void scheduleIfEligible(Long userId, Meal meal) {
+    public void scheduleIfEligible(Long userId, Meal meal, Long placeId) {
         if (!isEligible(userId, meal)) {
             return;
         }
         Long mealId = meal.getId();
         String photoUrl = meal.getPhotoUrl();
-        afterCommit(() -> aiJobService.submit(userId, JOB_LABEL, () -> analyzeAndApply(userId, mealId, photoUrl)));
+        afterCommit(() -> aiJobService.submit(userId, JOB_LABEL,
+                () -> analyzeAndApply(userId, mealId, photoUrl, placeId)));
     }
 
     /**
@@ -115,8 +119,8 @@ public class MealPhotoAutoAnalysisService {
      *
      * @return 작업 결과로 남길 요약 — 폴링하는 화면은 없지만 실패/성공 구분에 쓰인다
      */
-    private Object analyzeAndApply(Long userId, Long mealId, String photoUrl) {
-        MealAnalysisResponse result = foodAnalysisService.analyze(userId, photoUrl);
+    private Object analyzeAndApply(Long userId, Long mealId, String photoUrl, Long placeId) {
+        MealAnalysisResponse result = foodAnalysisService.analyze(userId, photoUrl, placeId);
         if (!result.isFood() || result.foods().isEmpty()) {
             log.info("자동 분석: 음식이 아니라고 판단 — 기록은 사진만 남긴다 (mealId={})", mealId);
             return java.util.Map.of("applied", false);

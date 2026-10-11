@@ -11,6 +11,10 @@ import com.fitto.diet.dto.MealResponse;
 import com.fitto.diet.dto.SaveMealRequest;
 import com.fitto.diet.service.FoodAnalysisService;
 import com.fitto.diet.service.MealService;
+import com.fitto.place.dto.RecordMealVisitRequest;
+import com.fitto.place.dto.SavePlaceRequest;
+import com.fitto.place.service.MealVisitService;
+import com.fitto.place.service.PlaceService;
 import com.fitto.relation.dto.InviteCodeResponse;
 import com.fitto.relation.service.RelationService;
 import com.fitto.user.domain.User;
@@ -28,7 +32,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -53,6 +60,8 @@ class MealPhotoAutoAnalysisTest {
     @Autowired AuthService authService;
     @Autowired RelationService relationService;
     @Autowired MealService mealService;
+    @Autowired PlaceService placeService;
+    @Autowired MealVisitService mealVisitService;
     @Autowired UserRepository userRepository;
 
     @MockitoBean FoodAnalysisService foodAnalysisService;
@@ -80,7 +89,7 @@ class MealPhotoAutoAnalysisTest {
     @Test
     void 사진만_올려_저장하면_백그라운드_분석이_칼로리를_채운다() {
         Long user = register("auto1@fitto.com");
-        when(foodAnalysisService.analyze(anyLong(), any())).thenReturn(twoFoods());
+        when(foodAnalysisService.analyze(anyLong(), any(), any())).thenReturn(twoFoods());
 
         MealResponse saved = mealService.save(user, photoOnly(false));
         // 저장 응답은 분석을 기다리지 않는다 — 그게 이 설계의 요점이다
@@ -105,7 +114,7 @@ class MealPhotoAutoAnalysisTest {
                 null, null, null, null, null, null, null,
                 List.of(new MealItemRequest("샐러드", "1인분", 200, 10, 5, 8))));
 
-        verify(foodAnalysisService, never()).analyze(anyLong(), any());
+        verify(foodAnalysisService, never()).analyze(anyLong(), any(), any());
     }
 
     @Test
@@ -117,7 +126,7 @@ class MealPhotoAutoAnalysisTest {
 
         mealService.save(user, photoOnly(false));
 
-        verify(foodAnalysisService, never()).analyze(anyLong(), any());
+        verify(foodAnalysisService, never()).analyze(anyLong(), any(), any());
     }
 
     @Test
@@ -127,7 +136,7 @@ class MealPhotoAutoAnalysisTest {
         mealService.save(user, new SaveMealRequest(LocalDate.now(), MealType.SNACK, "그냥 메모만",
                 null, null, null, null, null, null, null, null, null));
 
-        verify(foodAnalysisService, never()).analyze(anyLong(), any());
+        verify(foodAnalysisService, never()).analyze(anyLong(), any(), any());
     }
 
     /**
@@ -141,7 +150,7 @@ class MealPhotoAutoAnalysisTest {
         Long partner = register("auto6@fitto.com");
         InviteCodeResponse invite = relationService.createCoupleInvite(me);
         relationService.connectCouple(partner, invite.code());
-        when(foodAnalysisService.analyze(anyLong(), any())).thenReturn(twoFoods());
+        when(foodAnalysisService.analyze(anyLong(), any(), any())).thenReturn(twoFoods());
 
         mealService.save(me, photoOnly(true));
 
@@ -158,7 +167,7 @@ class MealPhotoAutoAnalysisTest {
     @Test
     void 사용자가_수정하면_AI_추정_표시가_사라진다() {
         Long user = register("auto7@fitto.com");
-        when(foodAnalysisService.analyze(anyLong(), any())).thenReturn(twoFoods());
+        when(foodAnalysisService.analyze(anyLong(), any(), any())).thenReturn(twoFoods());
 
         MealResponse saved = mealService.save(user, photoOnly(false));
         await().atMost(ANALYZED).untilAsserted(() ->
@@ -175,11 +184,46 @@ class MealPhotoAutoAnalysisTest {
         assertThat(after.calories()).isEqualTo(450);
     }
 
+    // ---- 럽슐랭 장소 힌트 ----
+
+    /**
+     * 외식 기록(장소를 고른 식단 저장 — POST /places/meal-visits)은 장소를 확정한 뒤 식단을 저장하므로, 사진만 남긴
+     * 끼니의 자동 분석에 그 장소를 넘겨 가게 이름·여기서 먹은 메뉴를 힌트로 쓰게 한다
+     * (접근 판정과 프롬프트는 FoodAnalysisService 쪽 — FoodAnalysisPhotoPromptTest).
+     */
+    @Test
+    void 외식_기록의_사진_식단은_그_장소를_분석_힌트로_넘긴다() {
+        Long me = register("auto8@fitto.com");
+        Long partner = register("auto9@fitto.com");
+        InviteCodeResponse invite = relationService.createCoupleInvite(me);
+        relationService.connectCouple(partner, invite.code());
+        Long placeId = placeService.save(me, new SavePlaceRequest("을지로 김치찌개", null, null, null, "음식점")).id();
+        when(foodAnalysisService.analyze(anyLong(), any(), any())).thenReturn(twoFoods());
+
+        mealVisitService.record(me, new RecordMealVisitRequest("auto8-stew", placeId, null, LocalDate.now(),
+                "https://res.cloudinary.com/demo/image/upload/stew.jpg", null, null, null,
+                new RecordMealVisitRequest.MealPart(MealType.LUNCH, null, null, null, null, null,
+                        null, null, null, null, false)));
+
+        verify(foodAnalysisService, timeout(ANALYZED.toMillis()))
+                .analyze(eq(me), eq("https://res.cloudinary.com/demo/image/upload/stew.jpg"), eq(placeId));
+    }
+
+    @Test
+    void 장소를_고르지_않으면_힌트_없이_분석한다() {
+        Long user = register("auto10@fitto.com");
+        when(foodAnalysisService.analyze(anyLong(), any(), any())).thenReturn(twoFoods());
+
+        mealService.save(user, photoOnly(false));
+
+        verify(foodAnalysisService, timeout(ANALYZED.toMillis())).analyze(eq(user), any(), isNull());
+    }
+
     /** 어제 사진 기록이 "약"(AI 추정)으로 채워졌다면 오늘로 불러온 복사본도 같은 표시여야 한다 — 복사가 출처를 떨어뜨렸었다. */
     @Test
     void 불러온_식단은_AI_추정_표시를_그대로_가져간다() {
         Long user = register("auto-copy@fitto.com");
-        when(foodAnalysisService.analyze(anyLong(), any())).thenReturn(twoFoods());
+        when(foodAnalysisService.analyze(anyLong(), any(), any())).thenReturn(twoFoods());
         LocalDate yesterday = KstClock.today().minusDays(1);
         mealService.save(user, new SaveMealRequest(yesterday, MealType.LUNCH, null,
                 "https://res.cloudinary.com/demo/image/upload/yesterday-lunch.jpg",

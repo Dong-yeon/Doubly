@@ -117,7 +117,9 @@ public class MealVisitService {
         if (part != null) {
             SaveMealRequest saveMeal = new SaveMealRequest(visitedAt, part.mealType(), blankToNull(part.memo()), photoUrl,
                     part.calories(), part.carbs(), part.protein(), part.fat(),
-                    part.sugar(), part.sodium(), part.fiber(), part.items(), part.sharedWithPartner(), key);
+                    part.sugar(), part.sodium(), part.fiber(), part.items(), part.sharedWithPartner(), key,
+                    // 사진만 남긴 끼니면 서버가 뒤이어 자동 분석한다 — 가게 이름·여기서 먹은 메뉴를 힌트로 쓰게 장소를 넘긴다
+                    placeId);
             meal = mealService.save(userId, saveMeal, place.getName());
         }
 

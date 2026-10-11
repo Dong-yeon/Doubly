@@ -128,9 +128,10 @@ public class MealController {
                                               @Valid @RequestBody AnalyzeMealRequest request) {
         Long userId = user.id();
         String photoUrl = request.photoUrl();
+        Long placeId = request.placeId();
         return ApiResponse.success(
                 new AiJobResponse(aiJobService.submit(userId, "food-photo",
-                        () -> foodAnalysisService.analyze(userId, photoUrl))),
+                        () -> foodAnalysisService.analyze(userId, photoUrl, placeId))),
                 "AI가 사진을 보고 있어요.");
     }
 

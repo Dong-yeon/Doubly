@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 class FoodAnalysisTextPromptTest {
 
     // 프롬프트 조립만 검증하므로 협력자는 필요 없다
-    private final FoodAnalysisService service = new FoodAnalysisService(null);
+    private final FoodAnalysisService service = new FoodAnalysisService(null, null);
 
     @Test
     void 메모가_프롬프트에_치환된다() {

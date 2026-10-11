@@ -16,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class FoodAnalysisCloudinaryTransformTest {
 
-    private final FoodAnalysisService service = new FoodAnalysisService(null);
+    private final FoodAnalysisService service = new FoodAnalysisService(null, null);
 
     @Test
     void upload_바로_뒤에_변환_세그먼트가_들어간다() {

@@ -949,7 +949,9 @@ export function DietRecordScreen({ navigation, route }: Props) {
       const photoUrl = await uploadForSubmit(photoUri);
       // 전역 화면 잠금은 걷었다(대기가 분 단위까지 늘 수 있다). 이 경로는 결과를
       // 기존 항목 <b>뒤에 덧붙이므로</b>, 기다리는 동안 뭘 더 적어도 지워지지 않는다.
-      const result = await dietApi.analyze(photoUrl);
+      // 이미 있는 우리 장소를 골랐으면 같이 보낸다 — 가게 이름·여기서 먹은 메뉴가 사진만으로는 헷갈리는
+      // 메뉴(찌개류 등)를 가른다. 카카오에서 막 고른 곳(pendingKakao)은 아직 저장 전이라 id 가 없다
+      const result = await dietApi.analyze(photoUrl, selectedPlace?.id);
       applyPhotoAnalysis(result);
     } catch (e) {
       toast.error(getErrorMessage(e, 'AI 분석에 실패했어요.'));
