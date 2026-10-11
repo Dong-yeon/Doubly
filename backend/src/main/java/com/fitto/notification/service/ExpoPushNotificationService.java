@@ -1,5 +1,6 @@
 package com.fitto.notification.service;
 
+import com.fitto.chat.service.ChatUnreadCounter;
 import com.fitto.common.notification.NotificationCategory;
 import com.fitto.common.notification.NotificationService;
 import com.fitto.notification.domain.DeviceToken;
@@ -49,6 +50,7 @@ public class ExpoPushNotificationService implements NotificationService {
     private final DeviceTokenRepository deviceTokenRepository;
     private final DeviceTokenService deviceTokenService;
     private final UserRepository userRepository;
+    private final ChatUnreadCounter chatUnreadCounter;
     private final RestClient restClient;
     /** 티켓을 받고 나서 영수증을 조회하기까지 기다리는 시간 — Expo 권장은 15분(테스트에서만 줄인다). */
     private final Duration receiptDelay;
@@ -77,10 +79,12 @@ public class ExpoPushNotificationService implements NotificationService {
     public ExpoPushNotificationService(DeviceTokenRepository deviceTokenRepository,
                                        DeviceTokenService deviceTokenService,
                                        UserRepository userRepository,
+                                       ChatUnreadCounter chatUnreadCounter,
                                        @Value("${fitto.push.receipt-delay:PT15M}") Duration receiptDelay) {
         this.deviceTokenRepository = deviceTokenRepository;
         this.deviceTokenService = deviceTokenService;
         this.userRepository = userRepository;
+        this.chatUnreadCounter = chatUnreadCounter;
         this.receiptDelay = receiptDelay;
         // 타임아웃 없는 기본 RestClient 는 exp.host 무응답 시 무한 대기한다 (Resend 와 동일 원칙)
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
@@ -101,17 +105,26 @@ public class ExpoPushNotificationService implements NotificationService {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
-                    executor.execute(() -> send(recipientUserId, category, title, body, link));
+                    executor.execute(() -> send(recipientUserId, category, title, body, link, 0));
                 }
             });
         } else {
-            executor.execute(() -> send(recipientUserId, category, title, body, link));
+            executor.execute(() -> send(recipientUserId, category, title, body, link, 0));
         }
     }
 
+    /**
+     * Expo 발송 재시도 간격 — 1차 실패 뒤 5초, 2차 실패 뒤 30초. 그 뒤엔 포기한다.
+     *
+     * <p>예전엔 한 번 실패하면 WARN 한 줄로 사라졌다(docs/first-experience-audit.md #27). 재시도는
+     * <b>Expo 가 받지 않은 게 확실한 실패</b>(5xx·연결 실패)에만 한다. 응답 대기 시간 초과는 Expo 가 이미
+     * 받았을 수 있어서 다시 보내면 같은 알림이 두 번 간다 — 놓치는 것보다 그게 더 나쁘다.
+     */
+    private static final long[] RETRY_DELAYS_MS = {5_000, 30_000};
+
     /** 발송 스레드에서 실행 — 어떤 실패도 앱 흐름에 전파하지 않는다. */
     private void send(Long recipientUserId, NotificationCategory category,
-                      String title, String body, String link) {
+                      String title, String body, String link, int attempt) {
         try {
             /*
              * 수신 거부 확인은 발송 직전 이 지점에서 한 번만 한다 (SET-01).
@@ -128,9 +141,7 @@ public class ExpoPushNotificationService implements NotificationService {
             List<DeviceToken> tokens = deviceTokenRepository.findByUserId(recipientUserId);
             if (tokens.isEmpty()) return;
 
-            List<Map<String, Object>> messages = tokens.stream()
-                    .map(t -> message(t.getToken(), title, body, link))
-                    .toList();
+            List<Map<String, Object>> messages = messagesFor(recipientUserId, tokens, category, title, body, link);
             ExpoPushResponse response = restClient.post()
                     .uri(EXPO_PUSH_URL)
                     .contentType(MediaType.APPLICATION_JSON)
@@ -139,7 +150,94 @@ public class ExpoPushNotificationService implements NotificationService {
                     .body(ExpoPushResponse.class);
             handleTickets(recipientUserId, tokens, response);
         } catch (Exception e) {
+            if (attempt < RETRY_DELAYS_MS.length && isSafeToRetry(e)) {
+                log.warn("Expo push 발송 실패 recipient={} — {}ms 뒤 재시도({}회째): {}",
+                        recipientUserId, RETRY_DELAYS_MS[attempt], attempt + 1, e.getMessage());
+                scheduleRetry(recipientUserId, category, title, body, link, attempt + 1);
+                return;
+            }
             log.warn("Expo push 발송 실패 recipient={}: {}", recipientUserId, e.getMessage());
+        }
+    }
+
+    /**
+     * 수신자의 기기마다 보낼 메시지. 배지는 사람 단위라 한 번만 세고, 채널은 기기 단위(그 기기 앱 버전)로 고른다.
+     * 발송 경로 그대로를 테스트하려고 {@link #send} 에서 떼어 냈다(ExpoPushChannelTest).
+     */
+    List<Map<String, Object>> messagesFor(Long recipientUserId, List<DeviceToken> tokens,
+                                          NotificationCategory category, String title, String body, String link) {
+        Integer badge = badgeFor(recipientUserId, category);
+        return tokens.stream()
+                .map(t -> message(t.getToken(), title, body, link, badge, channelIdFor(t, category)))
+                .toList();
+    }
+
+    /** 앱이 만든 첫 채널 세트의 버전 — frontend/src/utils/notificationChannels.ts 의 NOTIFICATION_CHANNELS_VERSION */
+    static final int CHANNELS_V1 = 1;
+
+    /**
+     * 안드로이드 알림 채널 id — 앱이 채널을 만든 기기에만 싣는다. 아니면 null(필드를 빼서 지금처럼 대체 채널로 간다).
+     *
+     * <p><b>왜 채널을 나누나</b>: 채널을 만들지 않던 동안 모든 푸시가 expo-notifications 의 대체 채널 하나(배지 켜짐)로
+     * 왔다. 삼성 런처는 앱이 꺼져 있으면 트레이 알림 수로 아이콘 숫자를 그려서, 채팅을 다 읽어도 럽슐랭·피드 알림이
+     * 숫자로 남았다(docs/chat-unread-badge_2026-10-08.md "채널 분리"). 앱이 채팅 채널만 배지를 켜고 나머지는 끈다.
+     *
+     * <p><b>왜 기기마다 묻나</b>: 채널을 만들기 전 버전의 앱엔 그 채널이 없고, Expo 문서는 없는 채널로 온 알림이
+     * 표시되지 않을 수 있다고 적고 있다. 그래서 앱이 채널을 만든 뒤 등록하며 보낸 버전(V134)이 있는 기기에만 싣는다.
+     * iOS 는 이 필드를 쓰지 않는다(앱도 iOS 에선 버전을 보내지 않는다).
+     *
+     * <p>id 는 앱의 채널 id 와 <b>같은 문자열</b>이다. 카테고리를 추가하면 이 switch 가 컴파일 에러로 알려 준다 —
+     * 이미 만들어진 채널은 바꿀 수 없으니, 그땐 앱에 채널을 추가하고 버전을 올린 뒤 버전별로 고른다.
+     */
+    static String channelIdFor(DeviceToken token, NotificationCategory category) {
+        Integer version = token.getChannelsVersion();
+        if (version == null || version < CHANNELS_V1) return null;
+        return switch (category) {
+            case CHAT -> "chat";
+            case ANNIVERSARY -> "anniversary";
+            case PARTNER -> "partner";
+            case REMINDER -> "reminder";
+        };
+    }
+
+    /**
+     * 앱 아이콘 배지 숫자 — <b>채팅 알림에만</b> 싣는다. 모르면 null(필드를 아예 빼서 숫자를 건드리지 않는다).
+     *
+     * <p>iOS 아이콘 숫자는 payload {@code badge} 가 <b>절댓값으로</b> 덮어쓴다. 그래서 다른 종류의 알림에
+     * 0 이나 엉뚱한 값을 실으면 남아 있던 채팅 숫자가 지워진다 — 기준이 안 읽은 채팅 수이므로 채팅만 싣는다.
+     * 발송 스레드(커밋 이후)에서 세므로 방금 보낸 메시지까지 포함된다. Android 에서 Expo 는 이 필드를 쓰지 않고,
+     * 런처가 떠 있는 알림으로 점·숫자를 그린다(앱이 떠 있을 땐 앱이 setBadgeCountAsync 로 맞춘다).
+     */
+    private Integer badgeFor(Long recipientUserId, NotificationCategory category) {
+        if (category != NotificationCategory.CHAT) return null;
+        try {
+            return (int) Math.min(chatUnreadCounter.totalUnread(recipientUserId), Integer.MAX_VALUE);
+        } catch (Exception e) {
+            // 배지는 부가 정보다 — 세다 실패해도 알림 자체는 보낸다
+            log.warn("배지 수 계산 실패 recipient={}: {}", recipientUserId, e.getMessage());
+            return null;
+        }
+    }
+
+    /** Expo 가 메시지를 받지 않은 게 확실한 실패인지 — 서버 오류 응답이거나 연결 자체가 안 됐을 때 */
+    static boolean isSafeToRetry(Exception e) {
+        if (e instanceof org.springframework.web.client.HttpServerErrorException) return true;
+        if (e instanceof org.springframework.web.client.ResourceAccessException) {
+            Throwable cause = e.getCause();
+            return cause instanceof java.net.ConnectException || cause instanceof java.net.UnknownHostException;
+        }
+        return false;
+    }
+
+    /** 대기는 영수증 스케줄러에 맡긴다 — 발송 스레드(2개)를 sleep 으로 붙잡으면 다른 알림이 밀린다 */
+    private void scheduleRetry(Long recipientUserId, NotificationCategory category,
+                               String title, String body, String link, int attempt) {
+        try {
+            receiptScheduler.schedule(
+                    () -> executor.execute(() -> send(recipientUserId, category, title, body, link, attempt)),
+                    RETRY_DELAYS_MS[attempt - 1], TimeUnit.MILLISECONDS);
+        } catch (Exception e) {
+            log.warn("Expo push 재시도 예약 실패 recipient={}: {}", recipientUserId, e.getMessage());
         }
     }
 
@@ -280,8 +378,12 @@ public class ExpoPushNotificationService implements NotificationService {
      * <p>{@code data.link} 가 알림 탭 딥링크의 전부다 — 앱이 이 값 앞에 {@code doubly://} 를
      * 붙여 열고, 없으면 앱만 열린다({@code frontend/src/navigation/linking.ts}).
      * {@code Map.of} 를 못 쓰는 이유는 link 가 null 일 수 있어서다.
+     *
+     * <p>{@code badge} 가 null 이면 필드를 넣지 않는다 — 넣으면 iOS 가 그 값으로 아이콘 숫자를 덮어쓴다({@link #badgeFor}).
+     * {@code channelId} 도 null 이면 넣지 않는다 — 채널을 만들기 전 앱은 지금처럼 대체 채널로 받는다({@link #channelIdFor}).
      */
-    private Map<String, Object> message(String token, String title, String body, String link) {
+    static Map<String, Object> message(String token, String title, String body, String link,
+                                       Integer badge, String channelId) {
         Map<String, Object> m = new HashMap<>();
         m.put("to", token);
         m.put("title", title);
@@ -289,6 +391,12 @@ public class ExpoPushNotificationService implements NotificationService {
         m.put("sound", "default");
         if (link != null) {
             m.put("data", Map.of("link", link));
+        }
+        if (badge != null) {
+            m.put("badge", badge);
+        }
+        if (channelId != null) {
+            m.put("channelId", channelId);
         }
         return m;
     }

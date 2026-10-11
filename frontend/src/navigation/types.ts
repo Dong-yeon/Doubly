@@ -1,13 +1,16 @@
 /** 네비게이션 파라미터 타입 — 설계서 2. 화면 설계 */
 import type { NavigatorScreenParams } from '@react-navigation/native';
 import type { BarcodeLookup, Content, Meal, Place, Trip, WeekDay } from '../types';
+import type { JournalSource } from '../api/journal';
 
 // 2.1 온보딩 플로우 (인증 전)
 export type OnboardingStackParamList = {
   Splash: undefined;
   // 첫 실행 인트로 (서비스 소개 3장)
   Onboarding: undefined;
-  Login: undefined;
+  // email — 가입 화면이 "이미 가입된 이메일"을 받고 돌려보낼 때 입력칸을 채워 준다
+  // (first-experience-audit.md #19)
+  Login: { email?: string } | undefined;
   Register: undefined;
   // 비밀번호 재설정 — 코드 발송 → 코드 입력+새 비밀번호 설정
   ForgotPassword: undefined;
@@ -19,14 +22,16 @@ export type OnboardingStackParamList = {
 // 홈 탭 내부 스택 — 홈 / 커플 연결 / 우리 기록(피드) / MY(프로필·트레이너) / 여행(TRIP)
 export type HomeStackParamList = PlaceScreensParamList & {
   HomeMain: undefined;
-  CoupleConnect: undefined;
-  // 우리 기록 — 포스트·운동·식단·맛집 통합 타임라인.
-  // 홈에 붙어 있었으나, 기록이 쌓일수록 배경 사진을 덮어서 별도 화면으로 분리했다.
-  // who 를 주면 그 사람 기록만 거른다 — 홈 히어로의 좌/우 열을 누르면 각자의 기록으로 간다
-  // (없으면 기존처럼 둘 다 섞인 전체 타임라인).
-  FeedTimeline: { who?: 'me' | 'partner' } | undefined;
-  // 커플 일상 피드 작성
-  FeedCompose: undefined;
+  // code — 초대 링크로 들어왔을 때 입력칸을 채운다(utils/pendingInvite, docs/first-experience-audit.md #2)
+  CoupleConnect: { code?: string } | undefined;
+  /*
+   * 기록(타임라인)·사진첩·작년 오늘은 <b>"우리" 탭으로 이관됐다</b>
+   * (AlbumStackParamList). 홈에서 갈 때는 탭을 건너뛴다 — 예: 히어로의 좌/우 열은
+   * navigate('Album', { screen: 'FeedTimeline', params: { who }, initial: false }).
+   */
+  // 커플 일상 피드 작성 — 홈의 "일상 남기기"가 여기서 바로 열어야 해서 양쪽 스택에 둔다
+  /** postId 가 있으면 그 포스트 고치기 — 본문은 넘기지 않고 화면이 서버에서 다시 읽는다(웹은 파라미터를 URL 에 굽는다) */
+  FeedCompose: { postId?: number } | undefined;
   // 데일리 질문 (커플 Q&A)
   DailyQuestion: undefined;
   // 미니게임 허브 — 협동 스도쿠·오목 선택 (docs/COUPLE_GAMES_DESIGN_2026-09-09.md 5절)
@@ -35,17 +40,38 @@ export type HomeStackParamList = PlaceScreensParamList & {
   Sudoku: undefined;
   // 오목 — 번갈아 두는 5목. 판을 연 사람이 백(후공)
   Omok: undefined;
+  // 캐치마인드 — 한 명이 그리고 한 명이 맞힌다(비동기). docs/CATCH_MIND_2026-09-14.md
+  CatchMind: undefined;
+  // 연쇄 퍼즐(뿌요뿌요형) — 지금은 로컬 1인 플레이. docs/COUPLE_PUZZLE_BATTLE_2026-09-18.md
+  Puyo: undefined;
+  /** 길막기 — 9×9 벽쌓기 턴제 */
+  WallRace: undefined;
   // 커플 캘린더 — 기념일 외 일정·생일·데이트 약속 + D-day 푸시
   CoupleCalendar: undefined;
-  // 우리 사진첩 — 피드 사진 전체 모아보기
-  PhotoAlbum: undefined;
-  // 추억 — 작년 오늘. on 을 주면 그 날짜 기준(생략 시 오늘)
-  Memories: { on?: string } | undefined;
   // MY (구 MY 탭에서 이전) — 홈 헤더 프로필 아이콘으로 진입
   My: undefined;
+  // 플랜 — FREE/PRO 비교와 구독 (docs/PRO_UPSELL_AND_ADS_2026-09-17.md §6)
+  Plan: undefined;
+  // 스티커 상점 — 팩 둘러보기와 낱개 구매. 채팅 패널의 잠금 해제 줄에서도 들어온다
+  StickerShop: undefined;
   // 설정 — 알림·마케팅 수신, 비밀번호 변경, 약관 열람
   Settings: undefined;
+  StickerSettings: undefined;
+  NotificationCategories: undefined;
+  MealReminders: undefined;
   ChangePassword: undefined;
+  // 내 기록 내보내기 — 사진까지 ZIP 한 파일로 (docs/DATA_EXPORT_2026-10-01.md)
+  RecordExport: undefined;
+  /*
+   * 나만의 하루 기록 — 상대에게 보이지 않는 개인 기록(docs/PERSONAL_JOURNAL_ANALYSIS_2026-10-02.md §4).
+   * MY 의 "나의 하루"에서 들어오는 월 달력·목록과, 그날 페이지(쓰기·고치기·지우기).
+   * <b>본문·기분을 파라미터로 넘기지 않는다</b> — 웹은 파라미터를 URL 에 굽는다. 무드 시트의 초안은
+   * store/journalDraft 로 건넨다.
+   */
+  Journal: undefined;
+  JournalDay: { date: string; source?: JournalSource };
+  /** 무드 달력 — 두 사람의 지난 무드를 날짜별로 나란히. 홈 무드 시트의 "지난 기분 보기"에서 */
+  MoodCalendar: undefined;
   // 약관 전문 (온보딩 스택과 동일 화면을 재사용)
   LegalDocument: { doc: 'terms' | 'privacy' | 'oss' };
   TrainerRegister: undefined;
@@ -137,15 +163,27 @@ export interface RoutineFormDraft {
   scheduledDays?: WeekDay[];
 }
 
-// 운동 탭 내부 스택 — 운동 전용 (식단은 별도 탭인 DietStackParamList 로 분리)
+/*
+ * 운동 화면들 — 2026-09-14 부터 <b>독립 탭이 아니다</b>. 식단과 함께 "럽바디"(Health) 탭
+ * 하나에 올라간다(docs/ALBUM_TAB_IA_2026-09-14.md). 이 타입은 지우지 않고 남긴다:
+ * 운동 화면들이 각자 이 좁은 파람리스트로 자기 Props 를 타이핑하고 있고, 아래
+ * HealthStackParamList 가 이 둘의 교집합이라 넓은 쪽으로 등록해도 그대로 맞는다.
+ */
 export type WorkoutStackParamList = {
   WorkoutMain: undefined;
   // date: 캘린더에서 특정 날짜를 골라 들어올 때 그 날짜로 시작한다 (없으면 오늘)
   /**
-   * 직접 기록 화면. `imageUrl` 이 있으면 운동 인증샷을 붙인 채로 열리고, 화면이 그 사진을
-   * AI 로 읽어 시간·거리를 채운다(읽지 못해도 사진만 붙은 기록으로 저장할 수 있다).
+   * 직접 기록 화면. `imageUrl` 이 있으면 오운완 인증샷을 붙인 채로 열린다 — 세트나 메모는
+   * 안 적어도 되고, 사진만 있는 기록도 그대로 저장된다.
    */
-  WorkoutRecord: { date?: string; imageUrl?: string } | undefined;
+  WorkoutRecord:
+    | {
+        date?: string;
+        imageUrl?: string;
+        /** 다른 탭에서 열렸으면 그 탭 이름 — 닫을 때 거기로 돌아간다(useReturnToTab) */
+        returnTo?: keyof MainTabParamList;
+      }
+    | undefined;
   WorkoutCalendar: undefined;
   // 운동 기록 상세 — 세트별 실기록·RPE. id 만 넘기고 화면이 다시 불러온다(딥링크로도 열린다)
   WorkoutDetail: { workoutId: number };
@@ -185,16 +223,21 @@ export type WorkoutStackParamList = {
   Challenge: undefined;
 };
 
-// 식단 탭 내부 스택 — 구 "건강" 탭에서 운동과 세그먼트로 묶여 있던 걸 별도 탭으로 분리
+// 식단 화면들 — 운동과 함께 럽바디(Health) 탭에 올라간다(위 WorkoutStackParamList 주석)
 export type DietStackParamList = {
-  DietMain: undefined;
+  /**
+   * checkin — 홈 운동 칩에서 왔다. 체크인 카드가 시간 칩을 펼친 채로 뜬다. 값은 누를 때마다
+   * 바뀌는 수(Date.now())라, 이미 떠 있는 화면에 다시 와도 한 번 더 펼쳐진다.
+   */
+  DietMain: { checkin?: number } | undefined;
   /*
    * 럽슐랭 탭과 공유하는 장소 상세 — 식단 기록에 붙은 장소를 탭했을 때 이 스택에 그대로
    * 쌓는다(크로스탭으로 보내면 뒤로가기가 식단 목록으로 안 돌아온다 — PlaceScreensParamList
-   * 주석과 같은 이유). PlaceAdd 는 여기서 안 쓴다 — 식단의 장소 픽커는 새 장소를
-   * placeApi.save() 로 바로 등록하지 PlaceAddScreen 으로 이동하지 않는다.
+   * 주석과 같은 이유). PlaceAdd 도 함께 둔다 — 식단의 장소 픽커는 PlaceAdd 로 가지 않지만, 여기서 연
+   * 장소 상세의 수정 버튼(연필)이 PlaceAdd 로 간다. 예전엔 이 스택에 없어 그 버튼이 막혔다(2026-10-05).
    */
   PlaceDetail: PlaceScreensParamList['PlaceDetail'];
+  PlaceAdd: PlaceScreensParamList['PlaceAdd'];
   /*
    * date: 캘린더에서 특정 날짜를 골라 들어올 때 그 날짜로 시작한다 (없으면 오늘)
    * meal: 이미 저장한 기록을 고치러 들어올 때 그 기록. id 만 넘기지 않는 이유는
@@ -202,13 +245,76 @@ export type DietStackParamList = {
    *   다시 받아올 게 없기 때문이다 — 로딩·실패 상태가 통째로 사라진다.
    * barcodeResult: BarcodeScan 에서 스캔·조회를 마치고 돌아올 때만 채워짐(같은 화면 인스턴스로 복귀)
    */
-  DietRecord: { date?: string; meal?: Meal; barcodeResult?: BarcodeLookup } | undefined;
+  DietRecord:
+    | {
+        date?: string;
+        meal?: Meal;
+        barcodeResult?: BarcodeLookup;
+        /**
+         * 바코드 스캔 화면에서 찍은(고른) 영양성분표 — 돌아오자마자 올려서 AI 로 읽는다.
+         * productName 은 바코드로 알아낸 제품명 — 읽은 결과가 한 항목이면 그 이름으로 쓴다.
+         */
+        labelPhoto?: { uri: string; productName?: string };
+        /**
+         * 이미 올라가 있는 사진 URL — 채팅에서 내가 보낸 사진을 "식단으로 남기기"로 열 때(LOVEBODY_REVIEW §2-5).
+         * 재업로드 없이 그대로 쓴다. 수정(meal)과 함께 오지 않는다.
+         */
+        photoUrl?: string;
+        /** 다른 탭에서 열렸으면 그 탭 이름 — 닫을 때 거기로 돌아간다(useReturnToTab) */
+        returnTo?: keyof MainTabParamList;
+      }
+    | undefined;
   DietCalendar: undefined;
   // 바코드로 포장식품 조회 — 결과를 들고 DietRecord 로 돌아간다
   BarcodeScan: undefined;
   DietStats: undefined;
   // 즐겨찾기 음식 선물함 — 받은/보낸 즐겨찾기 선물
   FavoriteFoodGiftInbox: undefined;
+};
+
+/*
+ * 럽바디 탭 내부 스택 — 식단 + 운동 (docs/ALBUM_TAB_IA_2026-09-14.md 5-2).
+ *
+ * <p>운동은 조회 빈도가 낮아 탭 하나를 유지할 이유가 없었고(9/9 사용성 분석), 식단 메인
+ * 상단의 <b>체크인 카드</b>로 흡수됐다. 첫 화면은 `DietMain` 이고 운동 홈(`WorkoutMain`)은
+ * 그 위에 쌓이는 2차 화면이다 — 구 "건강" 탭의 세그먼트 토글로 돌아간 것이 <b>아니다</b>.
+ *
+ * <p>교집합으로 만드는 이유: 각 화면이 자기 도메인 파람리스트로 좁게
+ * 타이핑돼 있어도 넓은 쪽으로 등록하면 그대로 맞는다(navigate 의 인자 반공변성). 덕분에
+ * 화면 20여 개의 Props 타입을 일괄 교체하지 않아도 된다 — 두 도메인을 넘나드는 화면
+ * (식단 메인의 운동 카드)만 이 타입으로 타이핑한다.
+ */
+export type HealthStackParamList = DietStackParamList & WorkoutStackParamList;
+
+/*
+ * "우리" 탭 내부 스택 — 지금까지의 우리(docs/ALBUM_TAB_IA_2026-09-14.md 5-3).
+ *
+ * <p>없어진 운동 탭 자리에 들어간다. 사진 그리드가 첫 화면이고, 같은 데이터의 다른 모양인
+ * 타임라인(기록)·여행 앨범·작년 오늘이 그 안에 있다. 홈 스택에 흩어져 있던 세 화면
+ * (FeedTimeline·PhotoAlbum·Memories)을 여기로 모은 것 — 홈은 "오늘의 우리"만 남는다.
+ *
+ * <p>화면 제목에서 '우리' 접두어를 뗀다: 탭이 이미 "우리"라 "우리 > 우리 기록"이 겹친다.
+ */
+export type AlbumStackParamList = {
+  AlbumMain: undefined;
+  /** 기록(구 '우리 기록') — 같은 4소스를 시간순 목록으로. who 로 한 사람만 거를 수 있다 */
+  FeedTimeline: { who?: 'me' | 'partner' } | undefined;
+  /** 일상 남기기 — 홈에서도 열 수 있어 양쪽 스택에 등록된다(HomeStackParamList 참고) */
+  /** postId 가 있으면 그 포스트 고치기 — 본문은 넘기지 않고 화면이 서버에서 다시 읽는다(웹은 파라미터를 URL 에 굽는다) */
+  FeedCompose: { postId?: number } | undefined;
+  /** 작년 오늘 — 홈의 MemoryPeek 카드가 탭을 건너 이 화면으로 보낸다 */
+  Memories: { on?: string } | undefined;
+  /** 일상 댓글(V124) — 카드의 "댓글 N"에서 연다 */
+  FeedComments: { postId: number };
+  /** 여행 앨범 — 홈 스택(여행 상세)에도 같은 화면이 등록돼 있다 */
+  TripAlbum: { tripId: number; title: string };
+  /**
+   * 사진첩의 맛집 사진 → 장소 상세. 럽슐랭 탭으로 건너지 않고 이 스택에 쌓는다
+   * (PlaceScreensParamList 주석 — 뒤로가기가 사진첩으로 돌아와야 한다). 상세의 수정 버튼이
+   * PlaceAdd 로 가므로 둘 다 등록한다.
+   */
+  PlaceDetail: PlaceScreensParamList['PlaceDetail'];
+  PlaceAdd: PlaceScreensParamList['PlaceAdd'];
 };
 
 // 채팅 탭 내부 스택 — 방 목록 / 대화 (CHAT-01/02)
@@ -220,7 +326,10 @@ export type ChatStackParamList = {
     /** 검색·저장한 대화 목록에서 골라 돌아올 때만 채워진다 — 도착하면 스스로 지운다 */
     scrollToMessageId?: number;
   };
-  ChatPhotoGallery: { relationId: number; myId: number | undefined };
+  /** initialPhotoId — "⋮" 시트의 사진 줄에서 한 장을 눌러 왔을 때, 그 장을 크게 연 채로 시작한다 */
+  ChatPhotoGallery: { relationId: number; myId: number | undefined; initialPhotoId?: number };
+  // 이모티콘 설정 — 받기·숨기기·순서(카카오톡 방식). 설정 화면에서도 들어온다(HomeStack 에 같은 이름)
+  StickerSettings: undefined;
   SavedMessages: { relationId: number; title: string; myId: number | undefined };
   ScheduledMessages: { relationId: number };
   /** 우리 이모지 만들기 — 사진 선택 → 크롭 → 생성 대기 → 미리보기 */
@@ -241,8 +350,27 @@ export type ChatStackParamList = {
 export type PlaceScreensParamList = {
   // place: 기존 장소를 수정하러 들어올 때만 채워짐 (없으면 새 장소 추가)
   // initialCoords: 지도 탭에서 빈 곳을 탭해 "여기에 추가"로 들어올 때만 채워짐 (좌표·주소 미리 채움)
-  PlaceAdd: { place?: Place; initialCoords?: { lat: number; lng: number; address?: string | null } } | undefined;
-  PlaceDetail: { placeId: number; name: string };
+  PlaceAdd:
+    | {
+        place?: Place;
+        initialCoords?: { lat: number; lng: number; address?: string | null };
+        /** 다른 탭에서 열렸으면 그 탭 이름 — 닫을 때 거기로 돌아간다(useReturnToTab) */
+        returnTo?: keyof MainTabParamList;
+        /** 채팅 링크를 해석하지 못했을 때 — 링크에서 읽은 이름으로 카카오 검색을 바로 돌린다 */
+        initialKeyword?: string;
+        /** 럽슐랭 지도의 "위치 없음"에서 왔다 — 열리자마자 위치(지도) 칸으로 내려간다 */
+        focusLocation?: boolean;
+      }
+    | undefined;
+  /*
+   * openRating: 들어오자마자 럽슐랭 평가 영역을 펼친다 — 홈에서 상대 왕관을 눌렀는데 내 대표 평점이 아직
+   * 없을 때(HomeScreen.onPressCrown). 웹은 URL 에 실려 문자열 'true' 로 올 수 있다.
+   */
+  /*
+   * openVisit: 들어오자마자 "다녀왔어요" 폼을 펼친다 — 럽슐랭 지도의 핀 카드 [다녀왔어요](2026-10-05).
+   * openRating 과 같이 웹은 URL 에 실려 문자열 'true' 로 올 수 있다.
+   */
+  PlaceDetail: { placeId: number; name: string; openRating?: boolean; openVisit?: boolean };
 };
 
 // 콘텐츠(영화·공연·드라마) 추가/상세 — Place 와 별개 도메인이라 지도·좌표 파라미터가 없다.
@@ -250,7 +378,8 @@ export type PlaceScreensParamList = {
 export type ContentScreensParamList = {
   // content: 기존 콘텐츠를 수정하러 들어올 때만 채워짐 (없으면 새 콘텐츠 추가)
   ContentAdd: { content?: Content } | undefined;
-  ContentDetail: { contentId: number; title: string };
+  // openRating: PlaceDetail 과 같다
+  ContentDetail: { contentId: number; title: string; openRating?: boolean };
 };
 
 // 럽슐랭 탭 내부 스택 — 가이드/둘러보기(목록·지도)/콘텐츠(한 화면, Chip 세그먼트) + 추가 / 상세 (PLACE)
@@ -260,13 +389,24 @@ export type PlaceStackParamList = PlaceScreensParamList & ContentScreensParamLis
   PlaceMain: undefined;
 };
 
-// 2.2 메인 탭 (홈 / 운동 / 채팅 / 식단 / 장소) — FAB 없음
+/*
+ * 2.2 메인 탭 — FAB 없음. <b>홈 · 우리 · 채팅 · 럽바디 · 럽슐랭</b>
+ * (docs/ALBUM_TAB_IA_2026-09-14.md 5-1).
+ *
+ * <p>운동·식단 두 탭이 럽바디(Health) 하나로 합쳐지고, 비운 자리에 "우리"(Album)가 왔다.
+ * 럽바디가 <b>식단이 있던 4번</b>을 물려받는 이유는 그 탭의 첫 화면이 식단 메인이기
+ * 때문이다(손버릇이 걸린 자리) — 같은 문서 5-1 "탭 순서".
+ *
+ * <p>파라미터는 전부 <b>선택</b>이다. 필수로 두면 "탭만 바꾸고 그 탭이 보던 자리는 그대로"가
+ * 타입상 불가능해진다(`jumpTo('Home')` 이 두 번째 인자를 요구한다). 안쪽 화면을 지정하지
+ * 않는 탭 이동은 정상적인 사용이고, 그때 스택은 이전 상태를 유지한다.
+ */
 export type MainTabParamList = {
-  Home: NavigatorScreenParams<HomeStackParamList>;
-  Workout: NavigatorScreenParams<WorkoutStackParamList>;
-  Chat: NavigatorScreenParams<ChatStackParamList>;
-  Diet: NavigatorScreenParams<DietStackParamList>;
-  Place: NavigatorScreenParams<PlaceStackParamList>;
+  Home: NavigatorScreenParams<HomeStackParamList> | undefined;
+  Album: NavigatorScreenParams<AlbumStackParamList> | undefined;
+  Chat: NavigatorScreenParams<ChatStackParamList> | undefined;
+  Health: NavigatorScreenParams<HealthStackParamList> | undefined;
+  Place: NavigatorScreenParams<PlaceStackParamList> | undefined;
 };
 
 export type RootStackParamList = {

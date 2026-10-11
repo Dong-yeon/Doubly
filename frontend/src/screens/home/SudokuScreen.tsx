@@ -11,26 +11,29 @@
  *
  * <p>메모(연필 표시)는 서버에 올리지 않는다 — {@code sudokuMemo} 주석 참고.
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { FlatList, Pressable, Text, View, useWindowDimensions } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FlatList, Pressable, Text, View } from 'react-native';
+import { useContentWidth } from '../../hooks/useContentWidth';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../navigation/types';
+import { GameNudgeButton } from '../../components/GameNudgeButton';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
+import { GameReactionBar } from '../../components/GameReactionBar';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { sudokuApi } from '../../api/game';
 import { clearMemos, loadMemos, pruneMemos, saveMemos, type SudokuMemos } from './sudokuMemo';
-import { connectSocket, subscribeCouple, unsubscribeCouple } from '../../api/chatSocket';
+import { connectSocket, subscribeCouple } from '../../api/chatSocket';
 import { useRelationStore } from '../../store/relationStore';
 import { getErrorMessage } from '../../utils/error';
-import { localDateOf, relativeDateLabel } from '../../utils/date';
+import { relativeTimestampLabel } from '../../utils/date';
 import { Alert } from '../../utils/alert';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
-import type { SudokuDifficulty, SudokuGame } from '../../types';
+import type { DailySudoku, SudokuDifficulty, SudokuGame } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'Sudoku'>;
@@ -51,13 +54,22 @@ const DIGITS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 let moveSeq = 0;
 
 export function SudokuScreen(_: Props) {
-  const { width } = useWindowDimensions();
+  const width = useContentWidth();
   const relationId = useRelationStore((s) => s.couple?.id);
 
   const [game, setGame] = useState<SudokuGame | null>(null);
   /** 방금 완성한 판 — current 가 null 이 된 뒤에도 축하 카드를 보여주기 위해 따로 든다 */
   const [justCompleted, setJustCompleted] = useState<SudokuGame | null>(null);
+  /** 같이 풀던 판을 상대가 접었다 — 그 사람 이름. 판이 사라진 이유를 알려 준다 */
+  const [foldedBy, setFoldedBy] = useState<string | null>(null);
+  /**
+   * 지금 보고 있는 진행 중 판 — 사라졌을 때 완성됐는지(기록에 있음) 접혔는지(없음) 가르는 기준.
+   * 상대가 마지막 칸을 채워 완성되면 예전에는 축하 카드 없이 피커로 조용히 돌아갔다
+   * (docs/game-current-state.md 8-1 #3). 길막기(WallRaceScreen)와 같은 방식이다.
+   */
+  const watchingRef = useRef<SudokuGame | null>(null);
   const [history, setHistory] = useState<SudokuGame[]>([]);
+  const [daily, setDaily] = useState<DailySudoku | null>(null);
   const [loading, setLoading] = useState(false);
   // 로드 실패가 "판이 없는 빈 상태"로 위장하지 않도록 별도로 추적한다 (QA_CHECKLIST.md 패턴 1)
   const [loadError, setLoadError] = useState(false);
@@ -82,10 +94,21 @@ export function SudokuScreen(_: Props) {
     if (!silent) setLoading(true);
     setLoadError(false);
     try {
-      const [g, h] = await Promise.all([sudokuApi.current(), sudokuApi.history()]);
+      const [g, h, d] = await Promise.all([sudokuApi.current(), sudokuApi.history(), sudokuApi.daily()]);
       setGame(g);
       setHistory(h);
-      if (g) setJustCompleted(null);
+      setDaily(d);
+      const watching = watchingRef.current;
+      if (!g && watching) {
+        const done = h.find((x) => x.id === watching.id);
+        if (done) setJustCompleted(done);
+        else setFoldedBy(watching.partnerName ?? '상대');
+        watchingRef.current = null;
+      }
+      if (g) {
+        setJustCompleted(null);
+        setFoldedBy(null);
+      }
     } catch (e) {
       if (!silent) toast.error(getErrorMessage(e, '판을 불러오지 못했어요.'));
       setLoadError(true);
@@ -96,22 +119,28 @@ export function SudokuScreen(_: Props) {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
+  // 진행 중 판을 볼 때마다 기억해 둔다 — 사라졌을 때 완성됐는지 접혔는지 가르는 기준
+  useEffect(() => {
+    if (game) watchingRef.current = game;
+  }, [game]);
+
   // 상대의 입력·새 판·포기는 커플 소켓 이벤트로 온다 — 데이터는 싣지 않으므로 다시 읽는다
   useFocusEffect(
     useCallback(() => {
       if (!relationId) return undefined;
       let active = true;
+      let offCouple: (() => void) | undefined;
       connectSocket()
         .then(() => {
           if (!active) return;
-          subscribeCouple(relationId, (type) => {
+          offCouple = subscribeCouple(relationId, (type) => {
             if (type === 'GAME') void load(true);
           });
         })
         .catch(() => undefined);
       return () => {
         active = false;
-        unsubscribeCouple(relationId);
+        offCouple?.();
       };
     }, [relationId, load]),
   );
@@ -164,9 +193,27 @@ export function SudokuScreen(_: Props) {
       const g = await sudokuApi.start(difficulty);
       setGame(g);
       setJustCompleted(null);
+      setFoldedBy(null);
       haptics.light();
     } catch (e) {
       toast.error(getErrorMessage(e, '새 판을 열지 못했어요.'));
+    } finally {
+      setStarting(false);
+    }
+  };
+
+  const startDaily = async () => {
+    setStarting(true);
+    try {
+      const g = await sudokuApi.startDaily();
+      setGame(g);
+      setJustCompleted(null);
+      setFoldedBy(null);
+      haptics.light();
+      sudokuApi.daily().then(setDaily).catch(() => undefined);
+    } catch (e) {
+      toast.error(getErrorMessage(e, '오늘의 판을 열지 못했어요.'));
+      sudokuApi.daily().then(setDaily).catch(() => undefined);
     } finally {
       setStarting(false);
     }
@@ -236,10 +283,16 @@ export function SudokuScreen(_: Props) {
         text: '접기',
         style: 'destructive',
         onPress: () => {
+          // 내가 접는다 — 소켓 이벤트가 응답보다 먼저 와도 "상대가 접었어요"가 뜨지 않게 요청 전에 잊는다
+          const watching = watchingRef.current;
+          watchingRef.current = null;
           sudokuApi
             .giveUp(game.id)
             .then(() => { setGame(null); toast.success('이 판은 접었어요.'); })
-            .catch((e) => toast.error(getErrorMessage(e, '접지 못했어요.')));
+            .catch((e) => {
+              watchingRef.current = watching;
+              toast.error(getErrorMessage(e, '접지 못했어요.'));
+            });
         },
       },
     ]);
@@ -335,6 +388,26 @@ export function SudokuScreen(_: Props) {
       <Text style={styles.cardLabel}>협동 스도쿠</Text>
       <Text style={styles.cardTitle}>{title}</Text>
       <Text style={styles.cardDesc}>{subtitle}</Text>
+      {/* 오늘의 판은 난이도 버튼과 나란히 두지 않는다 — 고르는 게 아니라 정해져 있는 판이다 */}
+      {daily && daily.state !== 'COMPLETED' && !daily.blockedByOtherGame ? (
+        <Pressable
+          onPress={startDaily}
+          disabled={starting}
+          accessibilityRole="button"
+          accessibilityLabel={`오늘의 판 열기. ${daily.difficultyLabel}`}
+          style={({ pressed }) => [styles.dailyRow, pressed && styles.pressed]}
+        >
+          <MaterialCommunityIcons name="calendar-today" size={20} color={colors.primary} />
+          <View style={styles.dailyBody}>
+            <Text style={styles.dailyTitle}>오늘의 판 · {daily.difficultyLabel}</Text>
+            <Text style={styles.dailyDesc}>오늘은 모든 커플이 같은 문제를 풀어요</Text>
+          </View>
+          <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textMuted} />
+        </Pressable>
+      ) : null}
+      {daily?.state === 'COMPLETED' ? (
+        <Text style={styles.dailyDone}>오늘의 판은 마쳤어요 ✓ 내일 새 판이 열려요.</Text>
+      ) : null}
       <View style={styles.pickerRow}>
         {DIFFICULTIES.map((d) => (
           <Pressable
@@ -370,15 +443,17 @@ export function SudokuScreen(_: Props) {
       <View>
         <View style={styles.statusRow}>
           <View style={styles.statusLeft}>
-            <Text style={styles.statusDifficulty}>{g.difficultyLabel}</Text>
+            <Text style={styles.statusDifficulty}>
+              {g.dailyDate ? `오늘의 판 · ${g.difficultyLabel}` : g.difficultyLabel}
+            </Text>
             <Text style={styles.statusCount}>
               {done}/{total}칸
             </Text>
           </View>
           <View style={styles.legend}>
-            <View style={[styles.legendDot, { backgroundColor: colors.primary }]} />
+            <View style={[styles.legendDot, { backgroundColor: colors.me }]} />
             <Text style={styles.legendText}>나 {g.myCells}</Text>
-            <View style={[styles.legendDot, { backgroundColor: colors.accent }]} />
+            <View style={[styles.legendDot, { backgroundColor: colors.partner }]} />
             <Text style={styles.legendText}>
               {g.partnerName ?? '상대'} {g.partnerCells}
             </Text>
@@ -387,6 +462,8 @@ export function SudokuScreen(_: Props) {
         <View style={styles.progressTrack}>
           <View style={[styles.progressFill, { width: `${Math.round((done / total) * 100)}%` }]} />
         </View>
+        {/* 같이 푸는 판이라 차례가 없다 — 오늘의 판은 그날로 끝나므로 부르지 않는다 */}
+        {g.dailyDate ? null : <GameNudgeButton gameId={g.id} partnerName={g.partnerName} />}
 
         <View style={[styles.board, { width: boardSize, height: boardSize }]}>
           {Array.from({ length: 81 }, (_, i) => renderCell(i))}
@@ -479,6 +556,7 @@ export function SudokuScreen(_: Props) {
                 ? '빈칸을 누르고 숫자를 고르세요. 차례 없이 아무 칸이나 괜찮아요.'
                 : '맞았는지 궁금하면 "확인"을 눌러요. 상대가 고쳐줄 수도 있어요.'}
         </Text>
+        <GameReactionBar gameType="SUDOKU" />
         <Button title="이 판 접기" variant="ghost" size="sm" onPress={confirmGiveUp} style={styles.giveUp} />
       </View>
     );
@@ -495,6 +573,16 @@ export function SudokuScreen(_: Props) {
               {renderPicker('한 판 더?', '난이도를 고르면 상대에게도 알려줘요.')}
             </>
           )
+          : foldedBy
+            ? (
+              <>
+                <View style={styles.card}>
+                  <Text style={styles.cardTitle}>{foldedBy}님이 이 판을 접었어요</Text>
+                  <Text style={styles.cardDesc}>접은 판은 기록에 남지 않아요. 새 판을 열어 볼까요?</Text>
+                </View>
+                {renderPicker('새 판 열까요?', '난이도를 고르면 상대에게도 알려줘요.')}
+              </>
+            )
           : !loading && !loadError
             ? renderPicker('같이 풀 판을 열어볼까요?', '둘이 같은 판을 채워요. 차례 없이, 아무 칸이나.')
             : null}
@@ -515,7 +603,7 @@ export function SudokuScreen(_: Props) {
           <View style={styles.histCard}>
             <View style={styles.histRow}>
               <Text style={styles.histDate}>
-                {item.completedAt ? relativeDateLabel(localDateOf(item.completedAt)) : ''}
+                {item.completedAt ? relativeTimestampLabel(item.completedAt) : ''}
               </Text>
               <Text style={styles.histDifficulty}>{item.difficultyLabel}</Text>
             </View>
@@ -559,6 +647,22 @@ const styles = themedStyles((colors) => ({
   cardLabel: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '800' },
   cardTitle: { fontSize: fontSize.title, fontWeight: '800', color: colors.textPrimary, marginTop: spacing.xs },
   cardDesc: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xs, lineHeight: 18 },
+  dailyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    backgroundColor: colors.surface,
+  },
+  dailyBody: { flex: 1 },
+  dailyTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
+  dailyDesc: { fontSize: 10, color: colors.textMuted, fontWeight: '600', marginTop: 2 },
+  dailyDone: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700', marginTop: spacing.sm },
+
   pickerRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
   pickerItem: {
     flex: 1,
@@ -578,7 +682,7 @@ const styles = themedStyles((colors) => ({
 
   statusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   statusLeft: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm },
-  statusDifficulty: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '800' },
+  statusDifficulty: { fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '800' },
   statusCount: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
   legend: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   legendDot: { width: 8, height: 8, borderRadius: 4, marginLeft: spacing.xs },
@@ -628,8 +732,9 @@ const styles = themedStyles((colors) => ({
   cellSelected: { backgroundColor: colors.primaryBg, borderColor: colors.primary },
   cellText: { fontWeight: '600', color: colors.textSecondary },
   cellGiven: { fontWeight: '800', color: colors.textPrimary },
-  cellMine: { color: colors.primary, fontWeight: '800' },
-  cellPartner: { color: colors.accent, fontWeight: '800' },
+  // 누가 채운 칸인가 — 소유자 색(선택 칸·같은 숫자 강조는 크롬 primary 가 맡는다)
+  cellMine: { color: colors.meText, fontWeight: '800' },
+  cellPartner: { color: colors.partnerText, fontWeight: '800' },
   cellWrong: { color: colors.danger },
 
   pad: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, justifyContent: 'center', marginTop: spacing.md },
@@ -678,6 +783,6 @@ const styles = themedStyles((colors) => ({
   },
   histRow: { flexDirection: 'row', justifyContent: 'space-between' },
   histDate: { fontSize: fontSize.caption, color: colors.textMuted, fontWeight: '700' },
-  histDifficulty: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '800' },
+  histDifficulty: { fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '800' },
   histText: { fontSize: fontSize.body, color: colors.textPrimary, marginTop: 2, fontWeight: '600' },
 }));

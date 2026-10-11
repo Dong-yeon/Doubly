@@ -11,14 +11,17 @@ import { BusyOverlay } from './src/components/BusyOverlay';
 import { ConfirmDialog } from './src/components/ConfirmDialog';
 import { DatePickerSheet } from './src/components/DatePickerSheet';
 import { UpgradeSheet } from './src/components/UpgradeSheet';
-import { CallOverlay } from './src/components/CallOverlay';
+import { ForceUpdateGate } from './src/components/ForceUpdateGate';
+import { useServiceStatusSync } from './src/hooks/useServiceStatusSync';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
+import { AppShell } from './src/components/AppShell';
 import { installGlobalErrorHandlers } from './src/utils/globalErrorHandler';
 import { initSentry } from './src/utils/sentry';
 import { initIap, endIap } from './src/utils/iap';
 import { useSettingsStore } from './src/store/settingsStore';
 import { colors } from './src/constants/theme';
 import { PURCHASE_ENABLED } from './src/constants/config';
+import { claimInviteFromInstallReferrer } from './src/utils/installReferrer';
 
 // Sentry 를 먼저 붙여야 이후 발생하는 예외가 리포터로 전달된다.
 // (미설정·웹에서는 콘솔 출력으로 폴백)
@@ -27,6 +30,8 @@ initSentry();
 installGlobalErrorHandlers();
 // 기기에 저장된 설정(맞춤법 제안 on/off) 복원 — 실패해도 기본값으로 진행한다.
 useSettingsStore.getState().load();
+// 초대 링크로 Play 에서 설치했으면 첫 실행에 그 코드를 맡겨 둔다(Android, 설치당 한 번) — 로그인 뒤 연결 화면이 연다.
+void claimInviteFromInstallReferrer();
 /* 저장된 테마 선택 복원은 RootNavigator 가 themeStore.load() 로 처리한다 */
 
 export default function App() {
@@ -82,6 +87,9 @@ export default function App() {
     };
   }, []);
 
+  // 장애 공지·점검·최소 버전(landing/status.json) — 폰트보다 먼저 걸어 둔다. 기다리지 않는다.
+  useServiceStatusSync();
+
   if (!fontsLoaded && !fontError) {
     // 아이콘 폰트만 기다린다 — 배경색만 깔아 깜빡임을 줄인다
     return <View style={{ flex: 1, backgroundColor: colors.background }} />;
@@ -97,29 +105,35 @@ export default function App() {
       <SafeAreaProvider>
         {/* 시스템 테마를 따라 아이콘 색 반전 (다크모드에서 style="dark" 는 아이콘이 안 보인다) */}
         <StatusBar style="auto" />
-        <ErrorBoundary label="root">
-          <RootNavigator />
-        </ErrorBoundary>
-        <Toast />
-        {/* 업로드·AI 작업 중 화면 잠금 — 네비게이터 밖이라 탭바까지 덮는다 */}
-        <BusyOverlay />
-        {/* 확인 다이얼로그 — utils/alert 의 Alert.alert 이 여기로 들어온다 */}
-        <ConfirmDialog />
         {/*
-          날짜 선택 달력 — pickDate() 가 여기로 들어온다.
-          화면 쪽 Modal(일정 추가·대결 만들기 등) 안에서 열려도 가려지지 않도록 최상단에 둔다.
+          PC(웹)에서 넓은 창을 "창 하나"로 묶는다 — 네이티브에서는 아무 것도 하지 않는다.
+          토스트·다이얼로그까지 안에 넣어야 1920px 바탕이 아니라 셸 기준으로 뜬다.
         */}
-        <DatePickerSheet />
-        {/*
-          플랜 한도 안내 — api/client 가 402 를 가로채 planStore 에 담으면 여기서 뜬다.
-          어느 화면에서 걸렸든 한 곳에서만 그린다.
-        */}
-        <UpgradeSheet />
-        {/*
-          통화 수신 벨/통화 중 화면 — Stream 클라이언트가 연결돼 있는 한 어느 화면에서든
-          뜬다. callStore.client 가 없으면(미로그인·미설정) 아무것도 렌더하지 않는다.
-        */}
-        <CallOverlay />
+        <AppShell>
+          <ErrorBoundary label="root">
+            <RootNavigator />
+          </ErrorBoundary>
+          <Toast />
+          {/* 업로드·AI 작업 중 화면 잠금 — 네비게이터 밖이라 탭바까지 덮는다 */}
+          <BusyOverlay />
+          {/* 확인 다이얼로그 — utils/alert 의 Alert.alert 이 여기로 들어온다 */}
+          <ConfirmDialog />
+          {/*
+            날짜 선택 달력 — pickDate() 가 여기로 들어온다.
+            화면 쪽 Modal(일정 추가·대결 만들기 등) 안에서 열려도 가려지지 않도록 최상단에 둔다.
+          */}
+          <DatePickerSheet />
+          {/*
+            플랜 한도 안내 — api/client 가 402 를 가로채 planStore 에 담으면 여기서 뜬다.
+            어느 화면에서 걸렸든 한 곳에서만 그린다.
+          */}
+          <UpgradeSheet />
+          {/*
+            강제 업데이트 — 설치 빌드가 status.json 의 minAppVersion 보다 낮을 때만. 맨 위에 덮는다.
+            웹은 판정하지 않는다(utils/appVersion.web.ts).
+          */}
+          <ForceUpdateGate />
+        </AppShell>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

@@ -2,6 +2,8 @@ package com.fitto.streak;
 
 import com.fitto.auth.dto.RegisterRequest;
 import com.fitto.auth.service.AuthService;
+import com.fitto.common.plan.SubscriptionRepository;
+import com.fitto.common.plan.TestPro;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.time.KstClock;
 import com.fitto.relation.dto.InviteCodeResponse;
@@ -39,15 +41,22 @@ class StreakRepairTest {
 
     @Autowired AuthService authService;
     @Autowired RelationService relationService;
+    @Autowired SubscriptionRepository subscriptionRepository;
     @Autowired WorkoutService workoutService;
     @Autowired StreakService streakService;
     @Autowired StreakRepairService repairService;
     @Autowired StreakRepository streakRepository;
 
     private Long register(String email) {
-        return authService.register(
+        Long id = authService.register(
                 new RegisterRequest(email, "password123", "테스터", null, null, true, true, false),
                 "127.0.0.1").user().id();
+        /*
+         * 스트릭 복구권은 PRO 전용이다 — 전역 무료 체험을 끈 뒤로는 구독이 있어야 열린다
+         * (TestPro 주석). 이 클래스가 보는 건 복구 계산이지 잠금이 아니다.
+         */
+        TestPro.grant(subscriptionRepository, id);
+        return id;
     }
 
     private long[] couple(String emailA, String emailB) {

@@ -55,12 +55,14 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
     /**
      * 대화 검색 — 텍스트 메시지 본문에 키워드가 포함된 것만, 최신순 커서 페이징.
      * STICKER/TOUCH 등은 content 가 사람이 읽는 문장이 아니라 코드값이라 검색 대상에서 뺀다.
+     * 문구 스티커(TEXT_STICKER)는 content 가 사용자가 쓴 문구라 TEXT 와 같이 찾는다.
      * keyword 는 호출자(ChatService)가 LIKE 와일드카드를 이스케이프해서 넘긴다.
      */
     @Query("""
             select m from ChatMessage m
             where m.relationId = :relationId
-              and m.messageType = com.fitto.chat.domain.MessageType.TEXT
+              and m.messageType in (com.fitto.chat.domain.MessageType.TEXT,
+                                    com.fitto.chat.domain.MessageType.TEXT_STICKER)
               and m.deletedAt is null
               and lower(m.content) like lower(concat('%', :keyword, '%')) escape '\\'
               and (cast(:cursor as Long) is null or m.id < :cursor)
@@ -132,4 +134,12 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
      * {@code (relation_id, client_message_id)} unique 인덱스가 이 조회를 받쳐 준다(V89).
      */
     Optional<ChatMessage> findByRelationIdAndClientMessageId(Long relationId, String clientMessageId);
+
+    /**
+     * 우리 이모지 이미지를 배경 따낸 것으로 바꿀 때 — 보낼 때 URL 을 복사해 둔 지난 메시지도 같이 바꾼다
+     * (docs/COUPLE_EMOJI_CUTOUT_2026-09-30.md). 안 바꾸면 옛 대화에만 흰 원판이 남는다.
+     */
+    @Modifying
+    @Query("update ChatMessage m set m.imageUrl = :to where m.imageUrl = :from and m.messageType = :type")
+    int replaceImageUrl(@Param("from") String from, @Param("to") String to, @Param("type") MessageType type);
 }

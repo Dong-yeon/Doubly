@@ -1,6 +1,6 @@
 package com.fitto.trainer.dto;
 
-import com.fitto.auth.dto.UserResponse;
+import com.fitto.auth.dto.PartnerUserResponse;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -13,7 +13,7 @@ public record TrainerDashboardResponse(
 ) {
     /** 회원 1명 요약 — 오늘 운동 완료 여부 + 마지막 운동일 */
     public record MemberSummary(
-            UserResponse member,
+            PartnerUserResponse member,
             boolean todayCompleted,
             LocalDate lastWorkoutDate
     ) {

@@ -8,12 +8,12 @@ interface Props {
   name?: string | null;
   imageUrl?: string | null;
   size?: number;
-  /** 배경색 (기본 코랄) */
+  /** 배경색 — 사람이면 meFill/partnerFill 을 넘긴다. 기본은 중립(surfaceAlt) */
   color?: string;
 }
 
 /** 프로필 아바타 — 이미지 없으면 이름 첫 글자 */
-export function Avatar({ name, imageUrl, size = 48, color = colors.primary }: Props) {
+export function Avatar({ name, imageUrl, size = 48, color = colors.surfaceAlt }: Props) {
   const dim = { width: size, height: size, borderRadius: radius.pill };
   if (imageUrl) {
     return <Image source={{ uri: imageUrl }} style={[dim, styles.img]} />;

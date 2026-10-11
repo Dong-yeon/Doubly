@@ -86,7 +86,8 @@ class GeminiModelFallbackTest {
         properties.setApiKey("test-key");
         properties.setModel(PRIMARY);
         properties.setFallbackModel(FALLBACK);
-        client = new GeminiClient(properties, new ObjectMapper(), planGuard, usageCounter, new SimpleMeterRegistry());
+        client = new GeminiClient(properties, new ObjectMapper(), planGuard, usageCounter,
+                new SimpleMeterRegistry(), mock(AiUsageRecorder.class));
     }
 
     @AfterEach

@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 
 /**
  * 가족 멤버 응답.
- * 커플의 partner(UserResponse)와 달리 이메일 등 계정 정보는 내리지 않는다 —
+ * 커플의 partner(PartnerUserResponse)와 마찬가지로 이메일 등 계정 정보는 내리지 않는다 —
  * 가족은 N인이라 노출 범위를 표시용 최소(이름·사진)로 좁힌다.
  */
 public record FamilyMemberResponse(

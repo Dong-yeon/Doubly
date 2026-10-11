@@ -77,6 +77,11 @@ public class CoupleEmojiService {
      */
     static final String SOURCE_SUBFOLDER = "emoji-source";
     static final String RESULT_SUBFOLDER = "couple-emoji";
+    /**
+     * 배경을 따낸 투명 PNG 폴더 — <b>앱이 이 폴더 이름으로 원판 없이 그린다</b>(frontend utils/coupleEmoji.ts).
+     * 채팅 메시지는 URL 만 들고 있어서 "따낸 이미지인가"를 URL 로 알 수 있어야 한다.
+     */
+    static final String CUTOUT_SUBFOLDER = "couple-emoji-cut";
 
     /**
      * 한 세트 안에서 동시에 그릴 장 수. {@code AiJobService} 풀을 4로 둔 것과 같은 이유 —
@@ -96,10 +101,14 @@ public class CoupleEmojiService {
      * <p>5장이면 한 요청이 약 15~20초에 끝나고 실비도 0.2 USD 선이다. 17종을 다 갖고 싶으면
      * 여러 번 나눠 만들면 된다 — 부분 재생성(이번에 그릴 감정만 보내기)이 이미 그 경로다.
      *
+     * <p><b>2026-09-29: 5 → 6.</b> 기본 표정이 6종(화남·기쁨·신남·슬픔·졸림·사랑)인데 한 번에 5장이라 첫 세트로
+     * 기본 표정조차 다 못 채웠다(docs/COUPLE_EMOJI_CREATE_UX_2026-09-29.md §2). 한 장 더(약 0.045 USD)로
+     * 첫 세트가 "기본 표정 한 벌"로 딱 떨어진다. 동시 4장이라 대기 시간은 한 바퀴(약 5초) 늘어난다.
+     *
      * <p>상한은 <b>요청 경계</b>({@link #prepare})에서만 본다. 그 아래 생성 로직은 장 수에
      * 제한이 없다 — 정책이 바뀌면 여기 숫자만 바꾼다.
      */
-    static final int MAX_EMOTIONS_PER_REQUEST = 5;
+    static final int MAX_EMOTIONS_PER_REQUEST = 6;
 
     private final CoupleEmojiRepository repository;
     private final RelationRepository relationRepository;
@@ -144,7 +153,7 @@ public class CoupleEmojiService {
 
     /** 요청 스레드 → 백그라운드 작업으로 넘기는 것 — 검증이 끝난 값만 담는다 */
     public record GenerationTicket(Long relationId, Long userId, Long subjectUserId, String sourceImageUrl,
-                                   List<CoupleEmojiEmotion> emotions) {
+                                   List<CoupleEmojiEmotion> emotions, PlanGuard.Charge charge) {
     }
 
     /**
@@ -179,8 +188,9 @@ public class CoupleEmojiService {
              * 아무것도 못 받고 한도만 잃는다.
              */
             List<CoupleEmojiEmotion> emotions = resolveEmotions(request.emotions());
-            geminiClient.requireImageConfiguredAndCountUsage(userId, FEATURE);
-            return new GenerationTicket(couple.getId(), userId, subject, request.sourceImageUrl(), emotions);
+            // 플랜 한도에 막히면 산 세트(크레딧)를 쓴다 — 어디서 차감했는지 티켓이 들고 있어야 되돌릴 수 있다
+            PlanGuard.Charge charge = geminiClient.requireImageConfiguredAndCharge(userId, FEATURE);
+            return new GenerationTicket(couple.getId(), userId, subject, request.sourceImageUrl(), emotions, charge);
         } catch (RuntimeException e) {
             /*
              * 앱은 업로드 → 접수 순서라, 여기서 거절(402·429·관계 없음·대상 오류)해도 원본은 이미
@@ -247,10 +257,14 @@ public class CoupleEmojiService {
     /** 한 장 — 생성·업로드·저장. 스레드마다 따로 돌고 서로를 참조하지 않는다. */
     private CoupleEmoji generateOne(GenerationTicket ticket, CloudinaryImageFetcher.Image source,
                                     String facts, String batchId, CoupleEmojiEmotion emotion) {
-        GeneratedImage image = geminiClient.generateImageInBackground(List.of(
+        GeneratedImage image = geminiClient.generateImageInBackground(ticket.userId(), FEATURE, List.of(
                 GeminiClient.imagePart(source.mimeType(), source.bytes()),
                 GeminiClient.textPart(CoupleEmojiPrompts.imagePrompt(facts, emotion))));
-        String url = imageUploader.upload(image.bytes(), image.mimeType(), RESULT_SUBFOLDER);
+        // 흰 배경을 따낸 투명 PNG 로 올린다 — 수상하면(EmojiCutout 이 비워 돌려주면) 원본 그대로
+        java.util.Optional<byte[]> cutout = EmojiCutout.cut(image.bytes());
+        String url = cutout.isPresent()
+                ? imageUploader.upload(cutout.get(), "image/png", CUTOUT_SUBFOLDER)
+                : imageUploader.upload(image.bytes(), image.mimeType(), RESULT_SUBFOLDER);
         return transactionTemplate.execute(status -> repository.save(CoupleEmoji.builder()
                 .relationId(ticket.relationId())
                 .createdBy(ticket.userId())
@@ -260,6 +274,7 @@ public class CoupleEmojiService {
                 .imageUrl(url)
                 .promptVersion(CoupleEmojiPrompts.VERSION)
                 .identityFacts(facts)
+                .bgRemoved(cutout.isPresent())
                 .build()));
     }
 
@@ -268,7 +283,7 @@ public class CoupleEmojiService {
         try {
             source = imageFetcher.fetch(ticket.sourceImageUrl());
         } catch (RuntimeException e) {
-            geminiClient.refund(ticket.userId(), FEATURE);
+            geminiClient.refund(ticket.userId(), FEATURE, ticket.charge());
             throw e;
         }
         String facts = describe(ticket.userId(), source);
@@ -327,7 +342,7 @@ public class CoupleEmojiService {
         }
 
         if (saved.isEmpty()) {
-            geminiClient.refund(ticket.userId(), FEATURE);
+            geminiClient.refund(ticket.userId(), FEATURE, ticket.charge());
             // 사용자에게는 BusinessException 의 한국어만 보여준다 — 그 밖의 예외는 일반 실패 문구로 감싼다
             throw lastFailure instanceof BusinessException be ? be : new BusinessException(ErrorCode.AI_ANALYSIS_FAILED);
         }
@@ -432,7 +447,7 @@ public class CoupleEmojiService {
      * {@code AiJobService.submit} 의 거절 콜백으로 부른다.
      */
     public void abandon(GenerationTicket ticket) {
-        geminiClient.refund(ticket.userId(), FEATURE);
+        geminiClient.refund(ticket.userId(), FEATURE, ticket.charge());
         imageDeleter.deleteAll(List.of(ticket.sourceImageUrl()));
     }
 

@@ -19,4 +19,7 @@ public record ResetPasswordRequest(
         @Size(min = 8, max = 64, message = "비밀번호는 8자 이상이어야 합니다.")
         String newPassword
 ) {
+    public ResetPasswordRequest {
+        email = EmailNormalizer.normalize(email);
+    }
 }

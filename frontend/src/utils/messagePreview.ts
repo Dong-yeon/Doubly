@@ -9,6 +9,7 @@ import type { MessageType } from '../types';
 import { touchGestureOf } from '../constants/touchGestures';
 import { animatedStickerOf } from '../constants/animatedStickers';
 import { stickerImageOf } from '../constants/stickerImages';
+import { looksLikeStickerCode, remoteStickerOf } from '../store/remoteStickerStore';
 import { callCardLabel, parseCallCard } from './callCard';
 import { formatVoiceDuration, parseVoiceContent } from './chatVoice';
 
@@ -20,7 +21,12 @@ export function messagePreview(type: MessageType, content?: string | null): stri
     // 'LOVE_BEAR' 같은 코드라 라벨로 바꿔야 한다(TOUCH 와 같은 이유).
     case 'STICKER':
       return (
-        animatedStickerOf(content)?.label ?? stickerImageOf(content)?.label ?? content ?? '스티커'
+        animatedStickerOf(content)?.label ??
+        stickerImageOf(content)?.label ??
+        remoteStickerOf(content)?.label ??
+        // 서버 배포 이모티콘인데 카탈로그가 아직 없다 — 코드 글자를 방 목록에 흘리지 않는다
+        (looksLikeStickerCode(content) ? '이모티콘' : content) ??
+        '스티커'
       );
     case 'WORKOUT_CARD':
       return '운동 기록';
@@ -42,6 +48,9 @@ export function messagePreview(type: MessageType, content?: string | null): stri
     // 들고 있지 않다 — 서버 preview() 도 같은 이유로 "[우리 이모지]" 한 문구다.
     case 'COUPLE_EMOJI':
       return '우리 이모지';
+    // 문구가 곧 내용이다 — 방 목록·답장 배너는 문구만 보여 준다(서버 알림은 "[스티커] 문구")
+    case 'TEXT_STICKER':
+      return content ?? '스티커';
     case 'VOICE_MESSAGE': {
       const parsed = parseVoiceContent(content);
       return parsed ? `음성 메시지 ${formatVoiceDuration(parsed.durationSec)}` : '음성 메시지';

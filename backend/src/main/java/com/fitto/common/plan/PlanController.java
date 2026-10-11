@@ -17,9 +17,10 @@ import java.util.List;
 /**
  * 플랜 조회 + 구매 직후 즉시 검증.
  *
- * <p><b>왜 {@code /auth/me} 에 얹지 않았나</b>: {@code UserResponse} 는 커플 상대
- * ({@code RelationResponse.partner})와 트레이너 회원 목록에도 그대로 실려 나간다.
- * 거기에 플랜을 넣으면 <b>남의 구독 여부가 노출</b>된다. 그리고 결제 직후에는 플랜만
+ * <p><b>왜 {@code /auth/me} 에 얹지 않았나</b>: 처음 만들 때 {@code UserResponse} 는 커플 상대
+ * ({@code RelationResponse.partner})와 트레이너 회원 목록에도 그대로 실려 나갔다 — 거기에 플랜을
+ * 넣으면 <b>남의 구독 여부가 노출</b>된다. 2026-10-02 에 상대 쪽은 {@code PartnerUserResponse} 로
+ * 분리됐지만, 플랜을 본인 응답과 떼어 두는 이유는 그대로다. 그리고 결제 직후에는 플랜만
  * 다시 받으면 되는데, 그 때문에 프로필 전체를 재조회할 이유도 없다.
  */
 @RestController
@@ -28,15 +29,39 @@ public class PlanController {
 
     private final PlanGuard planGuard;
     private final GooglePlaySubscriptionSyncService googlePlaySyncService;
+    private final AppStoreSubscriptionSyncService appStoreSyncService;
+    private final FeatureCreditService creditService;
 
-    public PlanController(PlanGuard planGuard, GooglePlaySubscriptionSyncService googlePlaySyncService) {
+    public PlanController(PlanGuard planGuard, GooglePlaySubscriptionSyncService googlePlaySyncService,
+                          AppStoreSubscriptionSyncService appStoreSyncService,
+                          FeatureCreditService creditService) {
         this.planGuard = planGuard;
         this.googlePlaySyncService = googlePlaySyncService;
+        this.appStoreSyncService = appStoreSyncService;
+        this.creditService = creditService;
     }
 
     @GetMapping("/me")
     public ApiResponse<PlanResponse> me(@AuthenticationPrincipal AuthUser user) {
         return ApiResponse.success(currentPlanOf(user));
+    }
+
+    /**
+     * 플랜 비교 — FREE 와 PRO 의 한도를 나란히. 로그인만 하면 누구나 본다.
+     *
+     * <p>{@link #me} 와 나눈 이유는 {@link PlanCatalogEntry} 주석에 있다. 요약하면 저쪽은
+     * "지금 내 상태"고 이쪽은 "상품 설명"이라, 한 응답에 섞으면 게이팅에 쓰이는 값이
+     * 카탈로그까지 짊어지게 된다.
+     *
+     * <p>두 플랜의 한도가 같은 기능은 빼고 준다({@code Feature.isComparable}) — 비교 화면에
+     * "무제한 / 무제한" 줄이 섞이면 무엇이 다른지가 묻힌다. 앱에서 내린 기능({@code Feature.isWithdrawn})도 뺀다.
+     */
+    @GetMapping("/catalog")
+    public ApiResponse<List<PlanCatalogEntry>> catalog() {
+        return ApiResponse.success(Arrays.stream(Feature.values())
+                .filter(Feature::isListed)
+                .map(PlanCatalogEntry::of)
+                .toList());
     }
 
     /**
@@ -62,11 +87,58 @@ public class PlanController {
         return ApiResponse.success(currentPlanOf(user));
     }
 
+    /**
+     * 애플 결제 완료 직후 클라이언트가 부른다 — {@link #verifyGooglePurchase} 의 짝.
+     *
+     * <p>영수증이 아니라 거래 id 하나만 받는다. 서버가 그 id 로 App Store Server API 에
+     * 되묻기 때문에 앱이 보낸 내용을 믿을 필요가 없고, 귀속도 앱 말이 아니라 애플이 돌려주는
+     * {@code appAccountToken} 으로만 정해진다({@link AppAccountTokens}) — 남의 거래 id 를
+     * 보내도 자기 계정에 PRO 가 붙지 않는다.
+     */
+    @PostMapping("/purchases/apple")
+    public ApiResponse<PlanResponse> verifyApplePurchase(@AuthenticationPrincipal AuthUser user,
+                                                          @RequestBody ApplePurchaseVerifyRequest request) {
+        if (request == null || request.transactionId() == null || request.transactionId().isBlank()) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT);
+        }
+        appStoreSyncService.sync(request.transactionId());
+        return ApiResponse.success(currentPlanOf(user));
+    }
+
+    /**
+     * 크레딧 상품(소모성) 결제 직후 — 구독과 달리 웹훅이 없으므로 <b>이 호출이 유일한 반영 경로</b>다.
+     * 실패하면 예외로 알린다(구독 검증처럼 조용히 지금 플랜을 돌려주지 않는다 — 스티커와 같은 판단).
+     * 반영된 최신 플랜(크레딧이 합산된 잔여 횟수)을 돌려준다.
+     */
+    @PostMapping("/credits/purchases/google")
+    public ApiResponse<PlanResponse> verifyGoogleCredit(@AuthenticationPrincipal AuthUser user,
+                                                         @RequestBody CreditPurchaseVerifyRequest request) {
+        requireReceipt(request);
+        creditService.verifyGoogle(user.id(), request.productId(), request.receipt());
+        return ApiResponse.success(currentPlanOf(user));
+    }
+
+    @PostMapping("/credits/purchases/apple")
+    public ApiResponse<PlanResponse> verifyAppleCredit(@AuthenticationPrincipal AuthUser user,
+                                                        @RequestBody CreditPurchaseVerifyRequest request) {
+        requireReceipt(request);
+        creditService.verifyApple(user.id(), request.productId(), request.receipt());
+        return ApiResponse.success(currentPlanOf(user));
+    }
+
+    private void requireReceipt(CreditPurchaseVerifyRequest request) {
+        if (request == null || request.receipt() == null || request.receipt().isBlank()) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT);
+        }
+    }
+
     private PlanResponse currentPlanOf(AuthUser user) {
         List<FeatureState> features = Arrays.stream(Feature.values())
                 .filter(feature -> feature != Feature.AI_TOTAL)   // 내부 안전망 — 표시하지 않는다
                 .map(feature -> planGuard.state(user.id(), feature))
                 .toList();
-        return new PlanResponse(planGuard.planOf(user.id()), planGuard.isFreeTrial(), features);
+        return new PlanResponse(planGuard.planOf(user.id()), planGuard.couplePlanOf(user.id()),
+                planGuard.isInTrial(user.id()),
+                planGuard.trialEndsAt(user.id()), features);
     }
 }

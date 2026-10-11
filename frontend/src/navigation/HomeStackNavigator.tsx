@@ -5,18 +5,27 @@ import type { HomeStackParamList } from './types';
 import { HomeScreen } from '../screens/home/HomeScreen';
 import { CoupleConnectScreen } from '../screens/home/CoupleConnectScreen';
 import { MyScreen } from '../screens/my/MyScreen';
+import { PlanScreen } from '../screens/my/PlanScreen';
+import { StickerShopScreen } from '../screens/home/StickerShopScreen';
 import { SettingsScreen } from '../screens/my/SettingsScreen';
+import { StickerSettingsScreen } from '../screens/chat/StickerSettingsScreen';
+import { NotificationCategoriesScreen } from '../screens/my/NotificationCategoriesScreen';
+import { MealRemindersScreen } from '../screens/my/MealRemindersScreen';
 import { ChangePasswordScreen } from '../screens/my/ChangePasswordScreen';
+import { RecordExportScreen } from '../screens/my/RecordExportScreen';
+import { JournalScreen } from '../screens/journal/JournalScreen';
+import { JournalDayScreen } from '../screens/journal/JournalDayScreen';
+import { MoodCalendarScreen } from '../screens/mood/MoodCalendarScreen';
 import { LegalDocumentScreen } from '../screens/onboarding/LegalDocumentScreen';
 import { FeedComposeScreen } from '../screens/feed/FeedComposeScreen';
-import { FeedTimelineScreen } from '../screens/feed/FeedTimelineScreen';
 import { DailyQuestionScreen } from '../screens/home/DailyQuestionScreen';
 import { MiniGamesScreen } from '../screens/home/MiniGamesScreen';
 import { SudokuScreen } from '../screens/home/SudokuScreen';
 import { OmokScreen } from '../screens/home/OmokScreen';
+import { CatchMindScreen } from '../screens/home/CatchMindScreen';
+import { PuyoScreen } from '../screens/home/PuyoScreen';
+import { WallRaceScreen } from '../screens/home/WallRaceScreen';
 import { CoupleCalendarScreen } from '../screens/home/CoupleCalendarScreen';
-import { PhotoAlbumScreen } from '../screens/feed/PhotoAlbumScreen';
-import { MemoriesScreen } from '../screens/feed/MemoriesScreen';
 // 커플 여행 — 장소(럽슐랭) 스택에서 이관 (navigation/types.ts 의 Trip* 주석 참고)
 import { TripListScreen } from '../screens/trip/TripListScreen';
 import { TripFormScreen } from '../screens/trip/TripFormScreen';
@@ -54,7 +63,6 @@ export function HomeStackNavigator() {
         component={CoupleConnectScreen}
         options={{ title: '커플 연결' }}
       />
-      <Stack.Screen name="FeedTimeline" component={FeedTimelineScreen} options={{ title: '우리 기록' }} />
       <Stack.Screen
         name="FeedCompose"
         component={FeedComposeScreen}
@@ -64,16 +72,69 @@ export function HomeStackNavigator() {
       <Stack.Screen name="MiniGames" component={MiniGamesScreen} options={{ title: '미니게임' }} />
       <Stack.Screen name="Sudoku" component={SudokuScreen} options={{ title: '협동 스도쿠' }} />
       <Stack.Screen name="Omok" component={OmokScreen} options={{ title: '오목' }} />
+      <Stack.Screen
+        name="WallRace"
+        component={WallRaceScreen}
+        options={{
+          title: '길막기',
+          // 캐치마인드·연쇄 퍼즐과 같은 이유 — 벽 조각을 판으로 끄는 것이 조작이라, 전역 스와이프백이 켜져 있으면
+          // 오른쪽으로 끄는 순간 화면이 닫힌다(docs/pathlock-ux-analysis_2026-10-08.md §3-4)
+          gestureEnabled: false,
+          fullScreenGestureEnabled: false,
+        }}
+      />
+      <Stack.Screen
+        name="CatchMind"
+        component={CatchMindScreen}
+        options={{
+          title: '캐치마인드',
+          /*
+           * 스와이프백을 이 화면만 완전히 끈다(ChatStackNavigator 의 ChatRoom 과 같은 조치).
+           *
+           * <p>이유가 채팅방보다 단순하고 심각하다 — stackScreenOptions 가
+           * fullScreenGestureEnabled 를 전역으로 켜 두어 <b>화면 어디서든 오른쪽으로 긋기만
+           * 하면 pop</b> 되는데, 이 화면의 절반은 그림 캔버스다. 오른쪽으로 긋는 획마다
+           * 화면이 닫히고, 그 순간 미전송 그림이 사라진다(DrawingCanvas 의 state 뿐이다).
+           *
+           * <p>"그리는 중에만" 끄는 방식은 쓰지 않는다. 제스처 인식이 PanResponder 의 grant
+           * 보다 먼저 붙으면 경쟁에서 지는데, 지는 대가가 <b>화면 이탈 + 그림 소실</b>이라
+           * 스크롤 잠금(그래도 몇 px 흔들림에서 끝난다)과 위험의 크기가 다르다.
+           *
+           * <p>SwipeBackView 도 붙이지 않는다. 그건 화면 전체에서 오른쪽 스와이프를 받는
+           * 커스텀 제스처라, 방금 끈 문제를 JS 로 다시 만드는 셈이다. 뒤로가기는
+           * 커스텀 headerLeft 버튼(headerOptions.tsx)과 안드로이드 시스템 백으로 충분하다.
+           */
+          gestureEnabled: false,
+          fullScreenGestureEnabled: false,
+        }}
+      />
+      <Stack.Screen
+        name="Puyo"
+        component={PuyoScreen}
+        options={{
+          title: '연쇄 퍼즐',
+          // 캐치마인드와 같은 이유 — 판 위에서 좌우로 끄는 것이 조작이라 전역 스와이프백과 충돌한다
+          gestureEnabled: false,
+          fullScreenGestureEnabled: false,
+        }}
+      />
       <Stack.Screen name="CoupleCalendar" component={CoupleCalendarScreen} options={{ title: '커플 캘린더' }} />
-      <Stack.Screen name="PhotoAlbum" component={PhotoAlbumScreen} options={{ title: '우리 사진첩' }} />
-      <Stack.Screen name="Memories" component={MemoriesScreen} options={{ title: '추억' }} />
       <Stack.Screen name="My" component={MyScreen} options={{ title: 'MY' }} />
+      <Stack.Screen name="Plan" component={PlanScreen} options={{ title: '플랜' }} />
+      <Stack.Screen name="StickerShop" component={StickerShopScreen} options={{ title: '스티커 상점' }} />
       <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: '설정' }} />
+      <Stack.Screen name="StickerSettings" component={StickerSettingsScreen} options={{ title: '이모티콘 설정' }} />
+      <Stack.Screen name="NotificationCategories" component={NotificationCategoriesScreen} options={{ title: '알림 종류' }} />
+      <Stack.Screen name="MealReminders" component={MealRemindersScreen} options={{ title: '식사 알림' }} />
       <Stack.Screen
         name="ChangePassword"
         component={ChangePasswordScreen}
         options={{ title: '비밀번호 변경' }}
       />
+      <Stack.Screen name="RecordExport" component={RecordExportScreen} options={{ title: '내 기록 내보내기' }} />
+      <Stack.Screen name="Journal" component={JournalScreen} options={{ title: '나의 하루' }} />
+      <Stack.Screen name="JournalDay" component={JournalDayScreen} options={{ title: '' }} />
+      <Stack.Screen name="MoodCalendar" component={MoodCalendarScreen} options={{ title: '우리 무드 달력' }} />
       <Stack.Screen
         name="LegalDocument"
         component={LegalDocumentScreen}

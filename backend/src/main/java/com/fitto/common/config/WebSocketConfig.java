@@ -84,7 +84,12 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer, Dispos
          * 하트비트가 끊겨 서버가 연결을 정리하는데, 그건 좀비 연결을 남기는 것보다 낫다 —
          * 포그라운드로 돌아오면 클라이언트가 다시 붙는다.
          */
-        registry.enableSimpleBroker("/sub")
+        /*
+         * "/queue" 는 사용자 전용 큐(/user/queue/…)의 실제 목적지다 — 전송 거절 알림
+         * (ChatStompController.reject)이 쓴다. 클라이언트가 /queue/… 를 직접 구독하는 것은
+         * StompAuthChannelInterceptor 가 막는다(/user/ 경유로만, 세션별로 풀린다).
+         */
+        registry.enableSimpleBroker("/sub", "/queue")
                 .setHeartbeatValue(new long[] {HEARTBEAT_MILLIS, HEARTBEAT_MILLIS})
                 .setTaskScheduler(heartbeatScheduler);
         registry.setApplicationDestinationPrefixes("/pub");

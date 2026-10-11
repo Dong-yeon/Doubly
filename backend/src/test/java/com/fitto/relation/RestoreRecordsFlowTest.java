@@ -2,6 +2,8 @@ package com.fitto.relation;
 
 import com.fitto.auth.dto.RegisterRequest;
 import com.fitto.auth.service.AuthService;
+import com.fitto.chat.dto.SendMessageRequest;
+import com.fitto.chat.service.ChatService;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.place.dto.SavePlaceRequest;
@@ -35,6 +37,7 @@ class RestoreRecordsFlowTest {
     @Autowired AuthService authService;
     @Autowired RelationService relationService;
     @Autowired PlaceService placeService;
+    @Autowired ChatService chatService;
 
     @PersistenceContext EntityManager em;
 
@@ -192,6 +195,95 @@ class RestoreRecordsFlowTest {
         assertThat(count("mood_statuses", "couple_id", newRelationId)).isEqualTo(1);
         assertThat(count("couple_emojis", "relation_id", newRelationId)).isEqualTo(1);
         assertThat(count("relations", "id", oldRelationId)).isZero();
+    }
+
+    private Long sendText(Long sender, Long relationId, String text) {
+        return chatService.send(sender, relationId,
+                new SendMessageRequest(null, text, null, null, null, null)).id();
+    }
+
+    /**
+     * 저장한 대화·공지 고정도 메시지와 함께 돌아온다. 예전엔 relations CASCADE 로 옛 관계와 함께 조용히 지워져,
+     * 메시지는 복원됐는데 "저장한 대화"·공지 배너만 비어 있었다(docs/chat-current-state.md §7).
+     */
+    @Test
+    @Transactional
+    void 저장한_대화와_공지_고정도_복원된다() {
+        Long me = register("restore-chat-a@fitto.com");
+        Long partner = register("restore-chat-b@fitto.com");
+        Long oldRelationId = connect(me, partner);
+        Long saved = sendText(me, oldRelationId, "우리 첫 여행 날짜");
+        Long pinned = sendText(partner, oldRelationId, "비밀번호 0423");
+        chatService.toggleBookmark(me, saved);
+        chatService.togglePin(partner, pinned);
+
+        relationService.endRelation(me, oldRelationId);
+        Long newRelationId = connect(me, partner);
+        em.flush();
+        em.clear();
+
+        relationService.requestRestore(me);
+        relationService.requestRestore(partner);
+        em.flush();
+        em.clear();
+
+        assertThat(chatService.getBookmarks(me, newRelationId, null))
+                .extracting(b -> b.message().id()).containsExactly(saved);
+        assertThat(chatService.getPinned(me, newRelationId).id()).isEqualTo(pinned);
+        assertThat(count("relations", "id", oldRelationId)).isZero();
+    }
+
+    /** 재회 후 이미 새 공지를 고정했다면 그게 지금의 공지다 — 옛 공지가 덮지 않고, 관계당 하나 제약도 깨지지 않는다. */
+    @Test
+    @Transactional
+    void 재회_후_새로_고정한_공지가_있으면_그것을_남긴다() {
+        Long me = register("restore-pin-a@fitto.com");
+        Long partner = register("restore-pin-b@fitto.com");
+        Long oldRelationId = connect(me, partner);
+        chatService.togglePin(me, sendText(me, oldRelationId, "옛 공지"));
+
+        relationService.endRelation(me, oldRelationId);
+        Long newRelationId = connect(me, partner);
+        Long current = sendText(me, newRelationId, "새 공지");
+        chatService.togglePin(me, current);
+        em.flush();
+        em.clear();
+
+        relationService.requestRestore(me);
+        RestoreRecordsResponse result = relationService.requestRestore(partner);
+        em.flush();
+        em.clear();
+
+        assertThat(result.status()).isEqualTo(RestoreRecordsResponse.Status.RESTORED);
+        assertThat(chatService.getPinned(me, newRelationId).id()).isEqualTo(current);
+        assertThat(count("chat_pinned_messages", "relation_id", newRelationId)).isEqualTo(1);
+    }
+
+    /** 헤어지기 전에 걸어 둔 예약 메시지는 재회 뒤 되살아나 발송되지 않는다(의도). */
+    @Test
+    @Transactional
+    void 대기_중이던_예약_메시지는_복원하지_않는다() {
+        Long me = register("restore-sched-a@fitto.com");
+        Long partner = register("restore-sched-b@fitto.com");
+        Long oldRelationId = connect(me, partner);
+        em.createNativeQuery("insert into scheduled_chat_messages (relation_id, sender_id, message_type, content, scheduled_at) "
+                        + "values (:rid, :me, 'TEXT', '기념일 축하해', :at)")
+                .setParameter("rid", oldRelationId).setParameter("me", me)
+                .setParameter("at", java.time.LocalDateTime.now().plusDays(30))
+                .executeUpdate();
+
+        relationService.endRelation(me, oldRelationId);
+        Long newRelationId = connect(me, partner);
+        em.flush();
+        em.clear();
+
+        relationService.requestRestore(me);
+        relationService.requestRestore(partner);
+        em.flush();
+        em.clear();
+
+        assertThat(count("scheduled_chat_messages", "relation_id", newRelationId)).isZero();
+        assertThat(count("scheduled_chat_messages", "relation_id", oldRelationId)).isZero();
     }
 
     private long count(String table, String column, Long id) {

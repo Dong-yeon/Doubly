@@ -48,6 +48,34 @@ class KakaoLocalClientMappingTest {
     }
 
     @Test
+    void 세부_분류는_대분류를_떼고_마지막_1_2단계만_전화는_빈칸이면_null() throws Exception {
+        assertThat(KakaoLocalClient.categoryDetailOf("음식점 > 한식 > 냉면")).isEqualTo("한식 · 냉면");
+        assertThat(KakaoLocalClient.categoryDetailOf("음식점 > 카페 > 커피전문점 > 스타벅스")).isEqualTo("커피전문점 · 스타벅스");
+        assertThat(KakaoLocalClient.categoryDetailOf("음식점 > 분식")).isEqualTo("분식");
+        assertThat(KakaoLocalClient.categoryDetailOf("음식점")).isNull();
+        assertThat(KakaoLocalClient.categoryDetailOf("")).isNull();
+
+        KakaoPlace place = client.mapDocument(doc("""
+                {"id": "1", "place_name": "을지면옥", "category_name": "음식점 > 한식 > 냉면",
+                 "phone": "02-1234-5678", "x": "127", "y": "37.5"}
+                """));
+        assertThat(place.categoryDetail()).isEqualTo("한식 · 냉면");
+        assertThat(place.phone()).isEqualTo("02-1234-5678");
+        assertThat(client.mapDocument(doc("""
+                {"place_name": "전화 없는 곳", "phone": "", "x": "127", "y": "37.5"}
+                """)).phone()).isNull();
+    }
+
+    @Test
+    void 상세_링크는_카카오_id_로_만들고_숫자가_아니면_만들지_않는다() {
+        assertThat(PlaceLinks.detailUrl("987654321")).isEqualTo("https://place.map.kakao.com/987654321");
+        assertThat(PlaceLinks.detailUrl(" 12 ")).isEqualTo("https://place.map.kakao.com/12");
+        assertThat(PlaceLinks.detailUrl(null)).isNull();
+        assertThat(PlaceLinks.detailUrl("")).isNull();
+        assertThat(PlaceLinks.detailUrl("12/../evil")).isNull();
+    }
+
+    @Test
     void 도로명이_없으면_지번_주소로_폴백한다() throws Exception {
         JsonNode document = doc("""
                 {

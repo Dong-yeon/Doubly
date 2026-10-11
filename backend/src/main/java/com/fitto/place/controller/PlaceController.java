@@ -5,8 +5,13 @@ import com.fitto.common.ai.AiJobService;
 import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
 import com.fitto.place.dto.DateCourseResponse;
+import com.fitto.place.dto.LovelichelinPulseResponse;
 import com.fitto.place.dto.LovelichelinRecommendationResponse;
+import com.fitto.place.dto.MealVisitResponse;
+import com.fitto.place.dto.RecordMealVisitRequest;
 import com.fitto.place.dto.PlaceResponse;
+import com.fitto.place.dto.ResolvePlaceLinkRequest;
+import com.fitto.place.dto.ResolvePlaceLinkResponse;
 import com.fitto.place.dto.PlaceSearchResponse;
 import com.fitto.place.dto.PlaceVisitResponse;
 import com.fitto.place.dto.RatePlaceRequest;
@@ -14,8 +19,17 @@ import com.fitto.place.dto.RecordVisitRequest;
 import com.fitto.place.dto.SavePlaceRequest;
 import com.fitto.place.dto.UpdatePlaceRequest;
 import com.fitto.place.service.DateCourseService;
+import com.fitto.place.service.LovelichelinPulseService;
 import com.fitto.place.service.LovelichelinRecommendService;
+import com.fitto.place.service.MealVisitService;
+import com.fitto.place.service.EatOutStatsService;
+import com.fitto.place.dto.EatOutStatsResponse;
+import com.fitto.place.service.PlaceLinkResolveService;
 import com.fitto.place.service.PlaceService;
+import com.fitto.place.service.MenuBoardService;
+import com.fitto.place.dto.AnalyzeMenuBoardRequest;
+import com.fitto.place.dto.PlaceMenuResponse;
+import com.fitto.place.dto.SaveMenuBoardRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -43,20 +57,44 @@ public class PlaceController {
     private final DateCourseService dateCourseService;
     private final LovelichelinRecommendService lovelichelinRecommendService;
     private final AiJobService aiJobService;
+    private final PlaceLinkResolveService placeLinkResolveService;
+    private final LovelichelinPulseService lovelichelinPulseService;
+    private final MealVisitService mealVisitService;
+    private final EatOutStatsService eatOutStatsService;
+    private final MenuBoardService menuBoardService;
 
     public PlaceController(PlaceService placeService, DateCourseService dateCourseService,
                            LovelichelinRecommendService lovelichelinRecommendService,
-                           AiJobService aiJobService) {
+                           AiJobService aiJobService,
+                           PlaceLinkResolveService placeLinkResolveService,
+                           LovelichelinPulseService lovelichelinPulseService,
+                           MealVisitService mealVisitService,
+                           EatOutStatsService eatOutStatsService,
+                           MenuBoardService menuBoardService) {
         this.placeService = placeService;
         this.dateCourseService = dateCourseService;
         this.lovelichelinRecommendService = lovelichelinRecommendService;
         this.aiJobService = aiJobService;
+        this.placeLinkResolveService = placeLinkResolveService;
+        this.lovelichelinPulseService = lovelichelinPulseService;
+        this.mealVisitService = mealVisitService;
+        this.eatOutStatsService = eatOutStatsService;
+        this.menuBoardService = menuBoardService;
+    }
+
+    /** 이번 달 외식 — 외식(식단이 붙은 방문)·같이 먹은 것·다녀온 곳·처음 간 곳·많이 간 곳·끼니별. month=YYYY-MM(기본 KST 이번 달) */
+    @GetMapping("/eat-out/stats")
+    public ApiResponse<EatOutStatsResponse> eatOutStats(@AuthenticationPrincipal AuthUser user,
+                                                        @RequestParam(required = false) String month) {
+        return ApiResponse.success(eatOutStatsService.stats(user.id(), month));
     }
 
     @PostMapping
     public ApiResponse<PlaceResponse> save(@AuthenticationPrincipal AuthUser user,
                                            @Valid @RequestBody SavePlaceRequest request) {
-        return ApiResponse.success(placeService.save(user.id(), request), "장소가 등록되었습니다.");
+        PlaceResponse saved = placeService.save(user.id(), request);
+        return ApiResponse.success(saved,
+                Boolean.TRUE.equals(saved.created()) ? "장소가 등록되었습니다." : "이미 럽슐랭에 있는 장소예요.");
     }
 
     @GetMapping
@@ -65,7 +103,7 @@ public class PlaceController {
     }
 
     /**
-     * AI 데이트 코스 추천 — 저장한 장소로 코스 구성 (GET /places/date-course)
+     * AI 데이트 코스 추천 — 저장한 장소(·콘텐츠)로 코스 구성 (POST /places/date-course)
      *
      * <p>{@code refresh=true} 는 사용자가 "다른 코스" 를 눌렀을 때만 붙인다. 화면 진입은
      * 캐시를 태워야 한다 — 무료 한도가 월 1회라 들어갈 때마다 새로 만들면 곧바로 소진된다.
@@ -73,11 +111,18 @@ public class PlaceController {
     @PostMapping("/date-course")
     @ResponseStatus(HttpStatus.ACCEPTED)
     public ApiResponse<AiJobResponse> dateCourse(@AuthenticationPrincipal AuthUser user,
-                                                 @RequestParam(defaultValue = "false") boolean refresh) {
+                                                 @RequestParam(defaultValue = "false") boolean refresh,
+                                                 // 선택 입력(2026-10-07) — 옛 앱은 보내지 않는다. 모르는 값은 지정 안 함으로 본다
+                                                 @RequestParam(required = false) String type,
+                                                 @RequestParam(required = false) String timeSlot,
+                                                 @RequestParam(required = false) String mood,
+                                                 @RequestParam(required = false) Boolean includeUnvisited) {
         Long userId = user.id();
+        com.fitto.place.dto.DateCourseOptions options =
+                com.fitto.place.dto.DateCourseOptions.parse(type, timeSlot, mood, includeUnvisited);
         return ApiResponse.success(
                 new AiJobResponse(aiJobService.submit(userId, "date-course",
-                        () -> dateCourseService.recommend(userId, refresh))),
+                        () -> dateCourseService.recommend(userId, refresh, options))),
                 "코스를 짜고 있어요.");
     }
 
@@ -106,6 +151,25 @@ public class PlaceController {
         return ApiResponse.success(placeService.search(query, size));
     }
 
+    /**
+     * 채팅 링크 해석 — 지도 링크(카카오·네이버)를 장소 후보로 바꾼다. 저장은 하지 않는다: 앱이 고른 후보를
+     * {@link #save} 로 넘겨야 플랜 한도·중복 방지를 장소 추가와 똑같이 탄다. 칩을 눌렀을 때만 부른다.
+     */
+    @PostMapping("/resolve-link")
+    public ApiResponse<ResolvePlaceLinkResponse> resolveLink(@AuthenticationPrincipal AuthUser user,
+                                                             @Valid @RequestBody ResolvePlaceLinkRequest request) {
+        return ApiResponse.success(placeLinkResolveService.resolve(user.id(), request.url(), request.messageText()));
+    }
+
+    /**
+     * 홈 이름 옆 럽슐랭 왕관 — 나·상대 각각 "오늘 럽슐랭에 기록함" / "막 등극함" 신호(없으면 null).
+     * 홈이 화면에 올 때마다 부른다. 미연결이면 빈 신호다(404 아님).
+     */
+    @GetMapping("/lovelichelin/pulse")
+    public ApiResponse<LovelichelinPulseResponse> lovelichelinPulse(@AuthenticationPrincipal AuthUser user) {
+        return ApiResponse.success(lovelichelinPulseService.pulse(user.id()));
+    }
+
     @GetMapping("/{id}")
     public ApiResponse<PlaceResponse> get(@AuthenticationPrincipal AuthUser user, @PathVariable Long id) {
         return ApiResponse.success(placeService.get(user.id(), id));
@@ -132,11 +196,65 @@ public class PlaceController {
         return ApiResponse.success(placeService.rate(user.id(), id, request), "럽슐랭 평가가 저장되었습니다.");
     }
 
+    /**
+     * 외식 기록 — 장소 확정 + (선택) 식단 + 방문 + (선택) 평점을 한 번에. 같은 clientRequestId 의 재전송은 처음 결과를 돌려준다.
+     * 고정 경로라 /{id} 계열과 겹치지 않는다. 설계: docs/LOVEBODY_LOVELICHELIN_LINK_2026-10-05.md §4 P0-1.
+     */
+    @PostMapping("/meal-visits")
+    public ApiResponse<MealVisitResponse> recordMealVisit(@AuthenticationPrincipal AuthUser user,
+                                                          @Valid @RequestBody RecordMealVisitRequest request) {
+        MealVisitResponse res = mealVisitService.record(user.id(), request);
+        return ApiResponse.success(res, res.meal() != null ? "외식을 기록했어요." : "방문 기록이 저장되었습니다.");
+    }
+
     @PostMapping("/{id}/visits")
     public ApiResponse<PlaceVisitResponse> recordVisit(@AuthenticationPrincipal AuthUser user,
                                                        @PathVariable Long id,
                                                        @Valid @RequestBody RecordVisitRequest request) {
         return ApiResponse.success(placeService.recordVisit(user.id(), id, request), "방문 기록이 저장되었습니다.");
+    }
+
+    /**
+     * 장소 상세 메뉴 — "여기서 먹은 것"(식단의 음식 이름·횟수, 칼로리 없음)과 대표 메뉴 제안,
+     * 그리고 메뉴판에서 읽어 저장한 메뉴·메뉴판 사진(V131)
+     */
+    @GetMapping("/{id}/menu")
+    public ApiResponse<PlaceMenuResponse> menu(@AuthenticationPrincipal AuthUser user,
+                                               @PathVariable Long id) {
+        return ApiResponse.success(menuBoardService.menu(user.id(), id));
+    }
+
+    /**
+     * 메뉴판 사진 읽기 — 접수증(jobId)만 주고 결과는 GET /ai/jobs/{jobId}(식단 사진 분석과 같은 방식). 저장하지 않는다:
+     * 앱이 확인·수정 화면에 펼치고, 사람이 고친 목록을 아래 PUT 으로 남긴다. 장소 권한은 작업을 만들기 전에 본다.
+     */
+    @PostMapping("/{id}/menu-board/analyze")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public ApiResponse<AiJobResponse> analyzeMenuBoard(@AuthenticationPrincipal AuthUser user,
+                                                       @PathVariable Long id,
+                                                       @Valid @RequestBody AnalyzeMenuBoardRequest request) {
+        Long userId = user.id();
+        menuBoardService.requireAccess(userId, id);
+        String photoUrl = request.photoUrl();
+        return ApiResponse.success(
+                new AiJobResponse(aiJobService.submit(userId, "menu-board",
+                        () -> menuBoardService.analyze(userId, photoUrl))),
+                "AI가 메뉴판을 읽고 있어요.");
+    }
+
+    /** 메뉴 저장 — 목록을 통째로 바꾸고, 이번에 찍은 메뉴판 사진이 있으면 붙인다 */
+    @PutMapping("/{id}/menu-board")
+    public ApiResponse<PlaceMenuResponse> saveMenuBoard(@AuthenticationPrincipal AuthUser user,
+                                                        @PathVariable Long id,
+                                                        @Valid @RequestBody SaveMenuBoardRequest request) {
+        return ApiResponse.success(menuBoardService.save(user.id(), id, request), "메뉴를 저장했어요.");
+    }
+
+    @DeleteMapping("/{id}/menu-board/photos/{photoId}")
+    public ApiResponse<PlaceMenuResponse> deleteMenuBoardPhoto(@AuthenticationPrincipal AuthUser user,
+                                                               @PathVariable Long id,
+                                                               @PathVariable Long photoId) {
+        return ApiResponse.success(menuBoardService.deletePhoto(user.id(), id, photoId), "메뉴판 사진을 지웠어요.");
     }
 
     @GetMapping("/{id}/visits")

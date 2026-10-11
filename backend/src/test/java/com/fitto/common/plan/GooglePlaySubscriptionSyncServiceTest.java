@@ -7,12 +7,17 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.PlatformTransactionManager;
+
 import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -29,12 +34,18 @@ class GooglePlaySubscriptionSyncServiceTest {
     GooglePlayDeveloperApiClient apiClient;
     @Mock
     SubscriptionRepository subscriptionRepository;
+    @Mock
+    com.fitto.common.analytics.EventLogService eventLogService;
+    /** 트랜잭션 경계는 여기서 보지 않는다 — 모킹으로 통과시키고 저장·경합 처리만 본다 */
+    @Mock
+    PlatformTransactionManager transactionManager;
 
     GooglePlaySubscriptionSyncService service;
 
     @BeforeEach
     void setUp() {
-        service = new GooglePlaySubscriptionSyncService(apiClient, subscriptionRepository);
+        service = new GooglePlaySubscriptionSyncService(apiClient, subscriptionRepository, eventLogService,
+                transactionManager);
     }
 
     @Test
@@ -44,37 +55,37 @@ class GooglePlaySubscriptionSyncServiceTest {
         service.sync(TOKEN);
 
         verify(subscriptionRepository, never()).findByPurchaseToken(any());
-        verify(subscriptionRepository, never()).save(any());
+        verify(subscriptionRepository, never()).saveAndFlush(any());
     }
 
     @Test
     void 이미_있는_구독은_최신_상태로_갱신한다() {
         Subscription existing = Subscription.builder()
                 .userId(1L).plan(Plan.PRO).status(SubscriptionStatus.ACTIVE)
-                .store(Store.GOOGLE_PLAY).productId("pro.monthly").purchaseToken(TOKEN)
+                .store(Store.GOOGLE_PLAY).productId("pro_monthly").purchaseToken(TOKEN)
                 .build();
         LocalDateTime newExpiry = LocalDateTime.now().plusMonths(1);
         when(subscriptionRepository.findByPurchaseToken(TOKEN)).thenReturn(Optional.of(existing));
         when(apiClient.fetch(TOKEN))
-                .thenReturn(new GooglePlaySubscriptionState(SubscriptionStatus.ACTIVE, "pro.monthly",
+                .thenReturn(new GooglePlaySubscriptionState(SubscriptionStatus.ACTIVE, "pro_monthly",
                         newExpiry, true, null));
 
         service.sync(TOKEN);
 
         assertThat(existing.getExpiresAt()).isEqualTo(newExpiry);
         assertThat(existing.isAutoRenew()).isTrue();
-        verify(subscriptionRepository, never()).save(any());
+        verify(subscriptionRepository, never()).saveAndFlush(any());
     }
 
     @Test
     void 만료로_판정되면_기존_구독을_만료시킨다() {
         Subscription existing = Subscription.builder()
                 .userId(1L).plan(Plan.PRO).status(SubscriptionStatus.ACTIVE)
-                .store(Store.GOOGLE_PLAY).productId("pro.monthly").purchaseToken(TOKEN)
+                .store(Store.GOOGLE_PLAY).productId("pro_monthly").purchaseToken(TOKEN)
                 .build();
         when(subscriptionRepository.findByPurchaseToken(TOKEN)).thenReturn(Optional.of(existing));
         when(apiClient.fetch(TOKEN))
-                .thenReturn(new GooglePlaySubscriptionState(SubscriptionStatus.EXPIRED, "pro.monthly",
+                .thenReturn(new GooglePlaySubscriptionState(SubscriptionStatus.EXPIRED, "pro_monthly",
                         null, false, null));
 
         service.sync(TOKEN);
@@ -87,13 +98,13 @@ class GooglePlaySubscriptionSyncServiceTest {
         LocalDateTime expiry = LocalDateTime.now().plusMonths(1);
         when(subscriptionRepository.findByPurchaseToken(TOKEN)).thenReturn(Optional.empty());
         when(apiClient.fetch(TOKEN))
-                .thenReturn(new GooglePlaySubscriptionState(SubscriptionStatus.ACTIVE, "pro.monthly",
+                .thenReturn(new GooglePlaySubscriptionState(SubscriptionStatus.ACTIVE, "pro_monthly",
                         expiry, true, 42L));
 
         service.sync(TOKEN);
 
         ArgumentCaptor<Subscription> captor = ArgumentCaptor.forClass(Subscription.class);
-        verify(subscriptionRepository).save(captor.capture());
+        verify(subscriptionRepository).saveAndFlush(captor.capture());
         Subscription saved = captor.getValue();
         assertThat(saved.getUserId()).isEqualTo(42L);
         assertThat(saved.getPlan()).isEqualTo(Plan.PRO);
@@ -106,23 +117,103 @@ class GooglePlaySubscriptionSyncServiceTest {
     void 사용자_식별자가_없으면_새로_만들지_않는다() {
         when(subscriptionRepository.findByPurchaseToken(TOKEN)).thenReturn(Optional.empty());
         when(apiClient.fetch(TOKEN))
-                .thenReturn(new GooglePlaySubscriptionState(SubscriptionStatus.ACTIVE, "pro.monthly",
+                .thenReturn(new GooglePlaySubscriptionState(SubscriptionStatus.ACTIVE, "pro_monthly",
                         LocalDateTime.now().plusMonths(1), true, null));
 
         service.sync(TOKEN);
 
-        verify(subscriptionRepository, never()).save(any());
+        verify(subscriptionRepository, never()).saveAndFlush(any());
     }
 
     @Test
     void 활성이_아닌_첫_알림은_새로_만들지_않는다() {
         when(subscriptionRepository.findByPurchaseToken(TOKEN)).thenReturn(Optional.empty());
         when(apiClient.fetch(TOKEN))
-                .thenReturn(new GooglePlaySubscriptionState(SubscriptionStatus.EXPIRED, "pro.monthly",
+                .thenReturn(new GooglePlaySubscriptionState(SubscriptionStatus.EXPIRED, "pro_monthly",
                         null, false, 42L));
 
         service.sync(TOKEN);
 
-        verify(subscriptionRepository, never()).save(any());
+        verify(subscriptionRepository, never()).saveAndFlush(any());
+    }
+
+    /**
+     * 같은 영수증이 동시에 들어온 경우 — 검증 연타, 또는 검증 API 와 웹훅이 같은 순간에 도착.
+     * 늦은 쪽이 유니크에 막혀도 500 이 아니라, 먼저 들어간 행에 상태를 반영하고 끝나야 한다.
+     */
+    @Test
+    void 동시에_들어와_유니크에_막히면_먼저_생긴_구독에_반영하고_시작_계측은_남기지_않는다() {
+        LocalDateTime expiry = LocalDateTime.now().plusMonths(1);
+        Subscription winner = Subscription.builder()
+                .userId(42L).plan(Plan.PRO).status(SubscriptionStatus.ACTIVE)
+                .store(Store.GOOGLE_PLAY).productId("pro_monthly").purchaseToken(TOKEN)
+                .build();
+        when(apiClient.fetch(TOKEN))
+                .thenReturn(new GooglePlaySubscriptionState(SubscriptionStatus.ACTIVE, "pro_monthly",
+                        expiry, true, 42L));
+        // 처음엔 없다고 보고 넣다가 막히고, 다시 보면 다른 요청이 넣은 행이 있다
+        when(subscriptionRepository.findByPurchaseToken(TOKEN))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(winner));
+        when(subscriptionRepository.saveAndFlush(any()))
+                .thenThrow(new DataIntegrityViolationException("uk_subscriptions_purchase_token"));
+
+        service.sync(TOKEN);
+
+        verify(subscriptionRepository, times(1)).saveAndFlush(any());
+        assertThat(winner.getExpiresAt()).isEqualTo(expiry);
+        // 구독 시작은 이긴 쪽이 이미 남겼다 — 두 번 세면 결제 퍼널이 부풀려진다
+        verify(eventLogService, never()).log(any(Long.class), anyString(), anyString());
+    }
+
+    @Test
+    void 새로_만들면_구독_시작을_한_번_남긴다() {
+        when(subscriptionRepository.findByPurchaseToken(TOKEN)).thenReturn(Optional.empty());
+        when(apiClient.fetch(TOKEN))
+                .thenReturn(new GooglePlaySubscriptionState(SubscriptionStatus.ACTIVE, "pro_monthly",
+                        LocalDateTime.now().plusMonths(1), true, 42L));
+
+        service.sync(TOKEN);
+
+        verify(eventLogService, times(1)).log(42L, com.fitto.common.analytics.AnalyticsEvent.SUBSCRIPTION_STARTED,
+                Store.GOOGLE_PLAY.name());
+    }
+
+    /** 스토어가 돌려준 상품이 PRO 상품이 아니면 구독을 만들지 않는다 — 예전엔 무조건 PRO 였다(§7-2). */
+    @Test
+    void PRO_상품이_아니면_새로_만들지_않는다() {
+        when(subscriptionRepository.findByPurchaseToken(TOKEN)).thenReturn(Optional.empty());
+        when(apiClient.fetch(TOKEN))
+                .thenReturn(new GooglePlaySubscriptionState(SubscriptionStatus.ACTIVE, "some_other_sub",
+                        LocalDateTime.now().plusMonths(1), true, 42L));
+
+        service.sync(TOKEN);
+
+        verify(subscriptionRepository, never()).saveAndFlush(any());
+    }
+
+    /** 앱이 승인 전에 꺼져도 3일 자동 환불이 나지 않게 — 검증을 통과한 미승인 결제는 서버가 승인한다. */
+    @Test
+    void 미승인_결제는_서버가_승인한다() {
+        when(subscriptionRepository.findByPurchaseToken(TOKEN)).thenReturn(Optional.empty());
+        when(apiClient.fetch(TOKEN))
+                .thenReturn(new GooglePlaySubscriptionState(SubscriptionStatus.ACTIVE, "pro_monthly",
+                        LocalDateTime.now().plusMonths(1), true, 42L, false));
+
+        service.sync(TOKEN);
+
+        verify(apiClient).acknowledgeSubscription("pro_monthly", TOKEN);
+    }
+
+    @Test
+    void 이미_승인된_결제는_다시_승인하지_않는다() {
+        when(subscriptionRepository.findByPurchaseToken(TOKEN)).thenReturn(Optional.empty());
+        when(apiClient.fetch(TOKEN))
+                .thenReturn(new GooglePlaySubscriptionState(SubscriptionStatus.ACTIVE, "pro_monthly",
+                        LocalDateTime.now().plusMonths(1), true, 42L));
+
+        service.sync(TOKEN);
+
+        verify(apiClient, never()).acknowledgeSubscription(anyString(), anyString());
     }
 }

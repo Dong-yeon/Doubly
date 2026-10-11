@@ -20,6 +20,48 @@ public interface RelationRepository extends JpaRepository<Relation, Long> {
     boolean existsByInviteCode(String inviteCode);
 
     /**
+     * 코드의 초대자만 먼저 읽는다 — 엔티티를 영속성 컨텍스트에 올리지 않기 위해서다.
+     * 연결은 두 사용자를 잠근 <b>뒤에</b> 관계 행을 읽어야 하는데, 잠그기 전에 엔티티로 읽어 두면
+     * 잠금 뒤 재조회가 1차 캐시의 낡은 값을 돌려준다.
+     */
+    @Query("select r.userAId from Relation r where r.inviteCode = :code")
+    Optional<Long> findInviterByInviteCode(@Param("code") String code);
+
+    /** 행 잠금 조회 — 커플 연결 직렬화용. 잠금 대기 중 상대가 연결해 코드가 비워졌으면 empty. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select r from Relation r where r.inviteCode = :code")
+    Optional<Relation> findByInviteCodeForUpdate(@Param("code") String code);
+
+    /** 이 사용자가 낸 대기 중 커플 초대 — 최신이 앞. 재발급 시 같은 행을 다시 쓰기 위해 본다. */
+    @Query("""
+            select r from Relation r
+            where r.relationType = com.fitto.relation.domain.RelationType.COUPLE
+              and r.status = com.fitto.relation.domain.RelationStatus.PENDING
+              and r.userAId = :userId
+            order by r.id desc
+            """)
+    List<Relation> findPendingCoupleInvites(@Param("userId") Long userId);
+
+    /**
+     * 이 사용자가 낸 대기 중 커플 초대의 코드를 전부 무효화한다({@code keepId} 제외).
+     *
+     * <p>예전엔 "새 코드 만들기"마다 PENDING 행이 새로 생기고 옛 코드도 24시간 그대로 살아 있어서,
+     * 이미 연결된 사람의 옛 코드로 제3자가 연결해 <b>활성 커플 두 개</b>가 생길 수 있었다.
+     * 행은 지우지 않는다 — relation_members 가 매달려 있고, 코드만 비우면 다시 쓰일 길이 없다.
+     *
+     * <p>flushAutomatically: 같은 트랜잭션에서 바뀐 엔티티(재발급한 코드 등)를 먼저 내보낸다.
+     * clearAutomatically 는 쓰지 않는다 — 호출자가 들고 있는 관계 엔티티가 분리되면 그 뒤 변경이 사라진다.
+     */
+    @Modifying(flushAutomatically = true)
+    @Query("""
+            update Relation r set r.inviteCode = null, r.codeExpiresAt = null
+            where r.relationType = com.fitto.relation.domain.RelationType.COUPLE
+              and r.status = com.fitto.relation.domain.RelationStatus.PENDING
+              and r.userAId = :userId and r.id <> :keepId
+            """)
+    int clearOtherCoupleInvites(@Param("userId") Long userId, @Param("keepId") Long keepId);
+
+    /**
      * 내가 속한 관계 전체.
      * A/B 슬롯 외에 relation_members 멤버십도 본다 — FAMILY 는 3번째 이후 멤버가
      * A/B 컬럼에 존재하지 않는다. (커플/트레이너는 이중 기록이라 어느 쪽으로도 잡힌다)

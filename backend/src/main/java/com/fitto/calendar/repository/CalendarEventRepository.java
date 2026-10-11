@@ -31,6 +31,18 @@ public interface CalendarEventRepository extends JpaRepository<CalendarEvent, Lo
 
     List<CalendarEvent> findByCoupleId(Long coupleId);
 
+    /**
+     * 다가오는 일정 수 — FREE 개수 한도(Feature.CALENDAR_EVENT)의 기준.
+     * 매년 반복은 늘 다가오므로 세고, 단발·기간 일정은 끝나는 날이 오늘 이후인 것만 센다.
+     * "나만 보기" 일정도 센다 — 한도는 커플 공용 주머니다.
+     */
+    @Query("""
+            select count(e) from CalendarEvent e
+            where e.coupleId = :coupleId
+              and (e.repeatYearly = true or coalesce(e.endDate, e.eventDate) >= :today)
+            """)
+    long countUpcoming(@Param("coupleId") Long coupleId, @Param("today") LocalDate today);
+
     /** D-day 푸시 대상 후보 — 오늘 날짜의 단발 일정 + 반복 일정 전체 */
     List<CalendarEvent> findByEventDate(LocalDate date);
 

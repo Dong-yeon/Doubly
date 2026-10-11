@@ -161,18 +161,28 @@ public class AiJobService {
         return jobId;
     }
 
+    /*
+     * 실패 로그에 jobId·userId·소요 시간을 함께 남긴다 — 앱이 2분에 기다리기를 그만두는데, 서버에서
+     * 작업이 얼마나 걸렸는지를 로그로 볼 수 없어 "앱이 먼저 포기했는가"를 가를 수 없었다.
+     * 예상 못 한 예외는 스택트레이스(원인 사슬)까지 남긴다 — 예전엔 toString() 한 줄뿐이라,
+     * 2026-10-05 "Error while extracting response … octet-stream" 7건의 진짜 원인(읽기 타임아웃)을
+     * 스프링 바이트코드까지 내려가서야 알았다(docs/server-stability-current-state.md §11-2).
+     */
     private void run(String jobId, Long userId, String label, Supplier<?> work) {
+        long startedAt = System.currentTimeMillis();
         try {
             Object result = work.get();
             save(jobId, AiJob.pending(userId).done(objectMapper.writeValueAsString(result)));
             countFinished(label, "done");
         } catch (BusinessException e) {
             // 사용자에게 보여줄 말이 이미 정해진 실패 — 그대로 전달한다
-            log.info("AI 작업 실패({}): {} — {}", label, e.getErrorCode(), e.getMessage());
+            log.info("AI 작업 실패({}): {} — {} (job={}, userId={}, {}ms)", label, e.getErrorCode(),
+                    e.getMessage(), jobId, userId, System.currentTimeMillis() - startedAt);
             save(jobId, AiJob.pending(userId).failed(e.getErrorCode().name(), e.getMessage()));
             countFinished(label, e.getErrorCode().name());
         } catch (Exception e) {
-            log.warn("AI 작업 오류({}): {}", label, e.toString());
+            log.warn("AI 작업 오류({}): {} (job={}, userId={}, {}ms)", label, e,
+                    jobId, userId, System.currentTimeMillis() - startedAt, e);
             save(jobId, AiJob.pending(userId).failed(
                     ErrorCode.AI_ANALYSIS_FAILED.name(), ErrorCode.AI_ANALYSIS_FAILED.getMessage()));
             countFinished(label, "error");

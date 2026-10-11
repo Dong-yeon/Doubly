@@ -1,10 +1,9 @@
 /** 운동 메인 — 설계서 2.4 (오늘 기록 + 히스토리 + 캘린더 진입). WORKOUT-02/03
  *  트레이너가 배정한 루틴은 이 화면에서 뺐다 — 필요하면 git 히스토리(이 파일의 이전 버전)에서
  *  복원할 수 있다. 트레이너 기능 자체는 src/screens/trainer 에 살아있다. */
-import React, { useCallback, useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { FlatList, Pressable, Text, TouchableOpacity, View } from 'react-native';
 import { Alert } from '../../utils/alert';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { WorkoutStackParamList } from '../../navigation/types';
@@ -24,10 +23,8 @@ import { analyticsApi } from '../../api/analytics';
 import { getErrorMessage } from '../../utils/error';
 import { haptics } from '../../utils/haptics';
 import { useDeleteAction } from '../../hooks/useDeleteAction';
-import { todayWeekDay, toDateString } from '../../utils/date';
+import { todayWeekDay } from '../../utils/date';
 import { routineToSessionParams } from '../../utils/routine';
-import { pickImage, uploadImage } from '../../utils/imageUpload';
-import { confirmPhotoPrivacy } from '../../utils/photoPrivacy';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type {
   CoupleWeek,
@@ -39,12 +36,11 @@ import type {
   WorkoutRoutine,
 } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
-import { useActiveWorkoutStore } from '../../store/activeWorkoutStore';
+import { WorkoutCheckinCard } from '../../components/workout/WorkoutCheckinCard';
+import { WeekStrip } from '../../components/WeekStrip';
 import { layout } from '../../theme/layout';
 
 type Props = NativeStackScreenProps<WorkoutStackParamList, 'WorkoutMain'>;
-
-const WEEKDAY_LETTERS = ['일', '월', '화', '수', '목', '금', '토'];
 
 /** N시간 전 → "6시간 전"/"어제"/"3일 전". 회복 카드는 시간 단위까지만 다루므로 이 정도 정밀도면 충분 */
 function hoursAgoLabel(hoursAgo: number): string {
@@ -54,35 +50,16 @@ function hoursAgoLabel(hoursAgo: number): string {
   return days === 1 ? '어제' : `${days}일 전`;
 }
 
-/** 이번 주(월~일) 날짜 7개 — 상단 요일 스트립용. 일요일이면 지난주로 안 넘어가게 월요일 기준으로 계산 */
-function thisWeekDates(): Date[] {
-  const today = new Date();
-  const day = today.getDay(); // 0=일 … 6=토
-  const mondayOffset = day === 0 ? -6 : 1 - day;
-  const monday = new Date(today);
-  monday.setDate(today.getDate() + mondayOffset);
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
-    return d;
-  });
-}
-
 export function WorkoutScreen({ navigation }: Props) {
-  const { today, history, loading, loadingMore, error, fetchToday, fetchHistory, loadMoreHistory, remove, save } =
+  const { today, history, loading, loadingMore, error, fetchToday, fetchHistory, loadMoreHistory, remove } =
     useWorkoutStore();
   // 삭제 in-flight 가드 — 공용 훅으로 중복 DELETE 방지 + 해당 카드 흐리게 (QA_CHECKLIST.md 전역 반복 패턴 7)
   const { deletingId, runDelete } = useDeleteAction<number>();
-  // 커플 연결 여부 — "함께 N일"은 연결됐을 때만 의미가 있다 (식단 탭과 동일한 기준)
+  // 커플 연결 여부 — "함께 N일"은 연결됐을 때만 의미가 있다 (럽바디 메인과 동일한 기준)
   const couple = useRelationStore((s) => s.couple);
   const connected = !!couple?.partner;
-  /* 끝내지 않은 운동 — 하단 고정 바와 같은 원본(기기에 저장된 초안)을 본다 */
-  const activeWorkout = useActiveWorkoutStore((s) => s.active);
   const [myStreak, setMyStreak] = useState<Streak | null>(null);
   const [coupleStreak, setCoupleStreak] = useState<Streak | null>(null);
-  // 화면이 떠 있는 동안(자정을 넘기지 않는 한) 매번 다시 계산할 필요 없음
-  const weekDates = useMemo(() => thisWeekDates(), []);
-  const todayKey = useMemo(() => new Date().toDateString(), []);
 
   // 내 루틴 — 홈 화면에 직접 몇 개 보여주고 탭하면 바로 시작한다(WorkoutRoutineListScreen 과
   // 같은 패턴: 별도 스토어 없이 화면 로컬 state + API 직접 호출). 전체 목록·수정·삭제는
@@ -98,7 +75,7 @@ export function WorkoutScreen({ navigation }: Props) {
    * 스트릭 복구권 — 어제 하루만 비어 오늘 0으로 보이는 상태일 때만 뜬다.
    *
    * 잠겨 있어도(무료 플랜) 서버가 402 를 던지지 않고 locked 로 알려준다 — 화면이 자동으로
-   * 부르는 조회에서 402 가 나가면 운동 탭을 열 때마다 업그레이드 시트가 뜬다.
+   * 부르는 조회에서 402 가 나가면 이 화면을 열 때마다 업그레이드 시트가 뜬다.
    */
   const [repair, setRepair] = useState<StreakRepairInfo | null>(null);
   const [repairing, setRepairing] = useState(false);
@@ -207,61 +184,6 @@ export function WorkoutScreen({ navigation }: Props) {
     navigation.navigate('WorkoutSession', routineToSessionParams(routine));
   };
 
-  /** 오늘 이미 기록이 있는가 — 체크인 카드의 상태를 가른다(중복 기록 방지도 겸한다) */
-  const doneToday = today.length > 0;
-  const [checkingIn, setCheckingIn] = useState(false);
-  const [photoBusy, setPhotoBusy] = useState(false);
-
-  /**
-   * 원탭 체크인 — 종목 없이 "오늘 운동했다"만 남긴다.
-   *
-   * <p>서버가 세트를 필수로 두지 않으므로 빈 배열로 저장하면 끝이다. 스트릭 갱신·커플 알림·
-   * 캘린더는 전부 이 저장 하나로 지금까지와 똑같이 동작한다(WorkoutService.save 참고).
-   */
-  const onQuickCheckIn = async () => {
-    setCheckingIn(true);
-    try {
-      await save({ workoutDate: toDateString(), sets: [] });
-      haptics.success();
-      toast.success('오늘 운동 완료! 💪');
-      fetchToday();
-      fetchHistory();
-      refreshStreaks();
-    } catch (e) {
-      toast.error(getErrorMessage(e, '기록에 실패했어요.'));
-    } finally {
-      setCheckingIn(false);
-    }
-  };
-
-  /**
-   * 사진으로 기록 — 다른 앱의 운동 완료 화면이나 트레드밀 사진을 그대로 올린다.
-   *
-   * <p>업로드까지만 여기서 하고, AI 분석과 확인·저장은 기록 화면에 맡긴다. 분석은 몇십 초가
-   * 걸릴 수 있는데 그동안 이 화면을 잡아두면 다른 것도 못 하고, 무엇보다 <b>읽은 값을 확인할
-   * 자리</b>가 기록 화면이기 때문이다. 분석에 실패해도 사진이 붙은 기록은 그대로 남길 수 있다.
-   */
-  /*
-   * 올리기 전에 한 번 알린다 — 러닝 앱 화면에는 <b>달린 경로 지도</b>가 함께 찍혀 있고,
-   * 그건 대개 집 근처다. 사진이 어디까지 가는지(내 기록에만, 애인에게는 안 감) 모른 채
-   * 위치가 담긴 이미지를 올리게 두면 안 된다. 확인한 뒤에야 갤러리가 열린다(안내는 첫 1회).
-   */
-  const onPhotoRecord = () => void confirmPhotoPrivacy(() => void startPhotoRecord());
-
-  const startPhotoRecord = async () => {
-    setPhotoBusy(true);
-    try {
-      const picked = await pickImage();
-      if (!picked) return;
-      const imageUrl = await uploadImage(picked);
-      navigation.navigate('WorkoutRecord', { imageUrl });
-    } catch (e) {
-      toast.error(getErrorMessage(e, '사진을 올리지 못했어요.'));
-    } finally {
-      setPhotoBusy(false);
-    }
-  };
-
   const onLongPress = (w: Workout) => {
     Alert.alert('운동 기록 삭제', `${w.workoutDate} 기록을 삭제할까요?`, [
       { text: '취소', style: 'cancel' },
@@ -274,106 +196,48 @@ export function WorkoutScreen({ navigation }: Props) {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    /* 헤더가 있는 2차 화면이라 상단 인셋을 따로 잡지 않는다 — 헤더가 이미 처리한다
+       (탭 첫 화면이던 시절에는 SafeAreaView edges={['top']} 였다) */
+    <View style={styles.safe}>
       {/* 이번 주 한눈에 보기 — 연속 기록 배지 + 요일별 날짜. 특정 날짜를 눌러 그날 기록으로
           바로 가는 기능까진 아직 없고(캘린더 화면이 그 역할), 지금은 "이번 주 어디쯤인가"를
           보여주는 용도로만 쓴다. */}
       <View style={styles.weekHeader}>
         <View style={styles.weekHeaderRow}>
           <View style={styles.streakBadge}>
-            <MaterialCommunityIcons name="fire" size={16} color={colors.white} />
+            <MaterialCommunityIcons name="fire" size={16} color={colors.onPrimary} />
             <Text style={styles.streakBadgeText}>{myStreak?.currentCount ?? 0}</Text>
           </View>
+          {/*
+            주간 스트립 — 럽바디와 같은 공용 컴포넌트. 예전엔 점 하나의 색(나/상대/함께)만으로 사람을 갈랐는데,
+            소유자 3색은 명도가 같아 색약·흑백에서 구별이 안 됐다(§3-2). 이제 자리(왼쪽 나·오른쪽 상대)와
+            모양(●/○)이 말한다.
+          */}
           <View style={styles.weekStrip}>
-            {weekDates.map((d) => {
-              const isToday = d.toDateString() === todayKey;
-              // 서버 날짜(YYYY-MM-DD)와 비교 — 네이티브 toDateString() 은 "Mon Jan 01 2026"
-              // 형식이라 그대로 못 견준다(위 isToday 판정과는 다른 문자열이 필요하다).
-              const key = toDateString(d);
-              const mine = coupleWeek?.myDates.includes(key) ?? false;
-              const partner = coupleWeek?.partnerDates.includes(key) ?? false;
-              // 둘 다 했으면 "함께"(WeeklyRecapCard 와 같은 색 규칙) — 하나만 했으면 그 사람 색
-              const dotColor = mine && partner ? colors.together : mine ? colors.me : partner ? colors.partner : null;
-              return (
-                <View key={d.toISOString()} style={styles.weekCell}>
-                  <Text style={styles.weekCellLabel}>{WEEKDAY_LETTERS[d.getDay()]}</Text>
-                  <View style={[styles.weekCellDateWrap, isToday && styles.weekCellDateWrapToday]}>
-                    <Text style={[styles.weekCellDate, isToday && styles.weekCellDateToday]}>
-                      {d.getDate()}
-                    </Text>
-                  </View>
-                  <View style={styles.weekCellDot}>
-                    {dotColor ? <View style={[styles.weekDot, { backgroundColor: dotColor }]} /> : null}
-                  </View>
-                </View>
-              );
-            })}
+            <WeekStrip
+              myDates={coupleWeek?.myDates ?? []}
+              partnerDates={coupleWeek?.partnerDates}
+              showPartner={connected}
+              what="운동"
+            />
           </View>
         </View>
-        {/* 점 색의 뜻 — WeeklyRecapCard 와 같은 규칙(나/상대/together)이지만 처음 보는
-            자리라 한 번은 풀어 적는다. 연결 안 됐으면 상대 점이 영영 안 뜨니 숨긴다. */}
-        {connected ? (
-          <View style={styles.weekLegend}>
-            {(
-              [
-                { color: colors.me, label: '나' },
-                { color: colors.partner, label: couple?.partner?.name ?? '상대' },
-                { color: colors.together, label: '함께' },
-              ] as const
-            ).map((item) => (
-              <View key={item.label} style={styles.weekLegendItem}>
-                <View style={[styles.weekLegendDot, { backgroundColor: item.color }]} />
-                <Text style={styles.weekLegendLabel} numberOfLines={1}>
-                  {item.label}
-                </Text>
-              </View>
-            ))}
-          </View>
-        ) : null}
+        {/* 점 색 범례는 뺐다 — 나/상대/함께는 앱 전체의 소유자 색 규칙이라 여기서만 설명하지 않는다(§6-3) */}
       </View>
 
       {/*
-        오늘 운동 체크 — <b>가장 느슨한 기록 경로</b>.
-
-        세트·횟수·무게를 요구하면 "오늘 운동했다"는 사실 하나만 남기고 싶은 사람은 아무것도
-        남길 수 없다. 그런데 스트릭·캘린더·커플 카드가 보는 건 세트가 아니라 <b>기록의 존재</b>라,
-        빈 기록만으로도 그 목적은 전부 충족된다. 자세히 남기고 싶으면 아래 버튼들이 그대로 있다.
-
-        이미 오늘 기록이 있으면 버튼 대신 완료 상태를 보여준다 — 같은 날 두 번 눌러 기록이
-        중복되는 걸 막는 가장 단순한 방법이고, 확인 자체가 이 카드의 목적이기도 하다.
+        오늘 운동 체크인 + 하던 운동 재개 — 럽바디 메인(DietScreen)과 <b>같은 카드</b>를 쓴다.
+        두 화면이 같은 체크인을 보여줘야 해서 컴포넌트로 뽑았다(WorkoutCheckinCard 주석).
+        여기서는 "운동 홈 ›" 링크를 넘기지 않는다 — 이미 그 화면이다.
       */}
-      {doneToday ? (
-        <View style={[styles.recoveryCard, styles.checkinDone]}>
-          {/* 서브셋 글리프맵에 있는 아이콘만 쓴다(Icon.tsx 주석) — check-circle 은 목록에 없다 */}
-          <MaterialCommunityIcons name="calendar-check-outline" size={20} color={colors.success} />
-          <Text style={styles.recoveryLabel}>오늘 운동</Text>
-          <Text style={styles.checkinDoneValue}>완료했어요 💪</Text>
-        </View>
-      ) : (
-        <View style={styles.checkinCard}>
-          <Text style={styles.checkinTitle}>오늘 운동했나요?</Text>
-          <View style={styles.checkinRow}>
-            <Button
-              title={checkingIn ? '기록 중…' : '✓ 운동 완료'}
-              size="md"
-              onPress={onQuickCheckIn}
-              loading={checkingIn}
-              style={styles.checkinBtn}
-            />
-            <Button
-              title="📷 사진으로"
-              variant="secondary"
-              size="md"
-              onPress={onPhotoRecord}
-              loading={photoBusy}
-              style={styles.checkinBtn}
-            />
-          </View>
-          <Text style={styles.checkinHint}>
-            자세한 기록 없이 눌러도 돼요. 다른 앱 운동 화면을 찍어 올리면 시간·거리도 채워드려요.
-          </Text>
-        </View>
-      )}
+      <WorkoutCheckinCard
+        onOpenRecord={(params) => navigation.navigate('WorkoutRecord', params)}
+        onResume={() => navigation.navigate('WorkoutSession', { resume: true })}
+        onCheckedIn={() => {
+          fetchHistory();
+          refreshStreaks();
+        }}
+      />
 
       {/* 근육 회복 — 가장 최근에 훈련한 부위·경과시간 요약 카드(MVP: 이 한 줄만, 부위별
           상세 회복률 화면은 다음 단계). 기록이 하나도 없으면(mostRecent=null) 아예 숨긴다 —
@@ -404,7 +268,7 @@ export function WorkoutScreen({ navigation }: Props) {
         </Pressable>
       ) : null}
 
-      {/* 아이콘 칩 — 식단 탭과 같은 QuickLinkChips 를 써서 톤을 맞춘다. "내 루틴"·"AI 추천"은
+      {/* 아이콘 칩 — 럽바디 메인과 같은 QuickLinkChips 를 써서 톤을 맞춘다. "내 루틴"·"AI 추천"은
           이제 이 화면 안에 각각 목록 섹션·하단 버튼으로 직접 있어서 칩에서 뺐다(중복 진입점
           제거 + 상단이 덜 복잡해 보이도록). 나머지는 자주는 안 쓰지만 여전히 필요한 이동. */}
       <QuickLinkChips
@@ -432,35 +296,10 @@ export function WorkoutScreen({ navigation }: Props) {
         onEndReached={loadMoreHistory}
         ListHeaderComponent={
           <View>
-            {/*
-              끝내지 않은 운동 — 있으면 <b>맨 위, 가장 눈에 띄는 자리</b>에 둔다.
-              하단 고정 바로도 돌아갈 수 있지만, 운동을 하러 이 탭에 들어온 사람이
-              가장 먼저 보게 될 곳은 여기다. "새로 시작"보다 "이어서 하기"가 먼저다.
-            */}
-            {activeWorkout ? (
-              <Pressable
-                style={({ pressed }) => [styles.resumeCard, pressed && styles.resumePressed]}
-                onPress={() =>
-                  navigation.navigate('WorkoutSession', { resume: true })
-                }
-                accessibilityRole="button"
-                accessibilityLabel={`하던 운동 ${activeWorkout.label} 이어서 하기`}
-              >
-                <MaterialCommunityIcons name="play-circle-outline" size={28} color={colors.primary} />
-                <View style={styles.resumeTexts}>
-                  <Text style={styles.resumeTitle}>하던 운동이 남아 있어요</Text>
-                  <Text style={styles.resumeDetail} numberOfLines={1}>
-                    {activeWorkout.label} ·{' '}
-                    {activeWorkout.doneSets > 0
-                      ? `${activeWorkout.doneSets}세트 완료`
-                      : `${activeWorkout.exerciseCount}종목 담김`}
-                  </Text>
-                </View>
-                <Text style={styles.resumeAction}>이어서 하기</Text>
-              </Pressable>
-            ) : null}
+            {/* 하던 운동 재개는 화면 상단의 체크인 카드가 맡는다 — 같은 카드를 럽바디
+                메인에서도 쓰므로 재개 카드만 여기 따로 두면 두 화면이 갈라진다 */}
 
-            {/* 운동 스트릭 — 식단 탭과 같은 표시 형식(연속/함께/최고) */}
+            {/* 운동 스트릭 — 럽바디 메인의 식단 스트릭과 같은 표시 형식(연속/함께/최고) */}
             <View style={styles.streakRow}>
               <Text style={styles.streakText}>연속 {myStreak?.currentCount ?? 0}일</Text>
               {connected ? (
@@ -478,7 +317,7 @@ export function WorkoutScreen({ navigation }: Props) {
                 accessibilityRole="button"
                 accessibilityLabel="스트릭 복구권으로 어제 메우기"
               >
-                <MaterialCommunityIcons name="fire" size={20} color={colors.coral} />
+                <MaterialCommunityIcons name="fire" size={20} color={colors.achievement} />
                 <View style={styles.repairBody}>
                   <Text style={styles.repairTitle}>
                     어제 하루가 비었어요 — 이어붙일까요?
@@ -639,14 +478,15 @@ export function WorkoutScreen({ navigation }: Props) {
             style={styles.fabBtn}
           />
           <Button
-            title="✨ 맞춤 운동"
+            title="맞춤 운동"
+            leftIcon={<MaterialCommunityIcons name="auto-fix" size={18} color={colors.textPrimary} />}
             variant="secondary"
             onPress={() => navigation.navigate('WorkoutRecommend')}
             style={styles.fabBtn}
           />
         </View>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -668,28 +508,8 @@ const styles = themedStyles((colors) => ({
     paddingHorizontal: spacing.sm,
     paddingVertical: 6,
   },
-  streakBadgeText: { color: colors.white, fontSize: fontSize.caption, fontWeight: '800' },
-  weekStrip: { flex: 1, flexDirection: 'row', justifyContent: 'space-between' },
-  weekCell: { alignItems: 'center', gap: 4 },
-  weekCellLabel: { fontSize: fontSize.micro, color: colors.textMuted, fontWeight: '600' },
-  weekCellDateWrap: {
-    width: 26,
-    height: 26,
-    borderRadius: radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  weekCellDateWrapToday: { backgroundColor: colors.primary },
-  weekCellDate: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
-  weekCellDateToday: { color: colors.white },
-  // 날짜 아래 완료 점 한 칸 — 점이 없는 날에도 높이를 고정해야 있는 날 없는 날 사이에서
-  // 요일 숫자들이 위아래로 들썩이지 않는다.
-  weekCellDot: { height: 6, alignItems: 'center', justifyContent: 'center' },
-  weekDot: { width: 6, height: 6, borderRadius: 3 },
-  weekLegend: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, paddingLeft: 2 },
-  weekLegendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  weekLegendDot: { width: 6, height: 6, borderRadius: 3 },
-  weekLegendLabel: { fontSize: fontSize.micro, color: colors.textTertiary, fontWeight: '600' },
+  streakBadgeText: { color: colors.onPrimary, fontSize: fontSize.caption, fontWeight: '800' },
+  weekStrip: { flex: 1 },
   recoveryCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -704,23 +524,7 @@ const styles = themedStyles((colors) => ({
     paddingVertical: spacing.sm,
   },
 
-  // 오늘 운동 체크 — 회복/음성 카드와 같은 자리·같은 톤이되, 누르는 카드라 조금 더 큼직하게
-  checkinCard: {
-    marginHorizontal: spacing.lg,
-    marginBottom: spacing.md,
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
-    gap: spacing.sm,
-  },
-  checkinTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
-  checkinRow: { flexDirection: 'row', gap: spacing.sm },
-  checkinBtn: { flex: 1 },
-  checkinHint: { fontSize: fontSize.caption, color: colors.textSecondary, lineHeight: 18 },
-  checkinDone: { borderColor: colors.success },
-  checkinDoneValue: { fontSize: fontSize.caption, fontWeight: '800', color: colors.success },
+  // 체크인·재개 카드 스타일은 공용 컴포넌트(WorkoutCheckinCard)로 함께 옮겨갔다
   recoveryLabel: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
   // flexShrink — 회복 카드는 "부위 · N시간 전"처럼 항상 짧지만, 음성 응원 카드는
   // "내가 남긴 응원 3/5 · OO님의 응원을 기다리는 중"처럼 길어질 수 있다. 없으면 좁은
@@ -734,23 +538,8 @@ const styles = themedStyles((colors) => ({
     textAlign: 'right',
   },
   list: { padding: spacing.lg, paddingBottom: layout.listBottomWithFab },
-  // 재개 카드 — 복구권 카드와 같은 형태를 쓰되 색으로 "지금 할 일"임을 구분한다
-  resumeCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    backgroundColor: colors.primaryBg,
-  },
+  // 누름 상태 — 음성 응원 카드가 쓴다(재개 카드는 공용 컴포넌트로 옮겨갔다)
   resumePressed: { opacity: 0.85 },
-  resumeTexts: { flex: 1 },
-  resumeTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
-  resumeDetail: { fontSize: fontSize.caption, color: colors.textSecondary },
-  resumeAction: { fontSize: fontSize.caption, fontWeight: '800', color: colors.primary },
 
   streakRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
   streakText: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
@@ -761,7 +550,7 @@ const styles = themedStyles((colors) => ({
     gap: spacing.sm,
     backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.coral,
+    borderColor: colors.achievement,
     borderRadius: radius.lg,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
@@ -771,7 +560,7 @@ const styles = themedStyles((colors) => ({
   repairBody: { flex: 1 },
   repairTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
   repairHint: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 1 },
-  repairAction: { fontSize: fontSize.caption, fontWeight: '800', color: colors.coral },
+  repairAction: { fontSize: fontSize.caption, fontWeight: '800', color: colors.achievement },
   sectionTitle: {
     fontSize: fontSize.subtitle,
     fontWeight: '700',
@@ -799,7 +588,7 @@ const styles = themedStyles((colors) => ({
     marginBottom: spacing.sm,
   },
   // 프로그램 카드 — 자유 루틴과 구분되도록 은은한 배경을 살짝 얹는다
-  programCard: { backgroundColor: colors.accentSoft },
+  programCard: { backgroundColor: colors.highlightBg },
   flex: { flex: 1 },
   routineTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   routineTitle: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },

@@ -74,6 +74,10 @@ public class SecurityConfig {
                                 // 발신자 확인은 GooglePlayWebhookController 내부의 공유 비밀
                                 // 토큰(?token=)이 담당한다.
                                 "/api/v1/webhooks/google-play",
+                                // 애플 알림 — 발신자 확인은 컨트롤러의 ?token= 으로 한다
+                                "/api/v1/webhooks/app-store",
+                                // 서버 배포 스티커 파일 — 썸네일은 expo-image 가 헤더 없이 받는다(StickerAssetConfig)
+                                "/sticker-assets/**",
                                 "/ws/**")
                         .permitAll()
                         /*

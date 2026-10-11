@@ -1,11 +1,13 @@
 package com.fitto.content.repository;
 
 import com.fitto.content.domain.ContentLog;
+import com.fitto.place.repository.LovelichelinActivityRow;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 public interface ContentLogRepository extends JpaRepository<ContentLog, Long> {
@@ -24,6 +26,34 @@ public interface ContentLogRepository extends JpaRepository<ContentLog, Long> {
             group by l.contentId
             """)
     List<LogSummary> summarize(@Param("contentIds") List<Long> contentIds);
+
+    /** 장소 상세 "여기서 본 것"(V133) — 이 장소에서 본 관람 기록, 최근 본 순 */
+    @Query("""
+            select l.id as logId, c.id as contentId, c.title as title, c.type as type, c.posterUrl as posterUrl,
+                   l.watchedAt as watchedAt, l.rating as rating, l.loggedBy as loggedBy
+            from ContentLog l join Content c on c.id = l.contentId
+            where l.placeId = :placeId
+            order by l.watchedAt desc, l.id desc
+            """)
+    List<WatchedAtPlaceRow> findWatchedAtPlace(@Param("placeId") Long placeId);
+
+    interface WatchedAtPlaceRow {
+        Long getLogId();
+
+        Long getContentId();
+
+        String getTitle();
+
+        com.fitto.content.domain.ContentType getType();
+
+        String getPosterUrl();
+
+        java.time.LocalDate getWatchedAt();
+
+        Integer getRating();
+
+        Long getLoggedBy();
+    }
 
     interface LogSummary {
         Long getContentId();
@@ -101,4 +131,14 @@ public interface ContentLogRepository extends JpaRepository<ContentLog, Long> {
 
         String getContentTitle();
     }
+
+    /** 홈 왕관 — 이 커플 콘텐츠에 [from, to) 사이 남긴 관람 기록 */
+    @Query("""
+            select l.contentId as targetId, c.title as targetName, l.loggedBy as userId, l.createdAt as at, l.rating as rating
+            from ContentLog l join Content c on c.id = l.contentId
+            where c.coupleId = :coupleId and l.createdAt >= :from and l.createdAt < :to
+            """)
+    List<LovelichelinActivityRow> findActivityBetween(@Param("coupleId") Long coupleId,
+                                                                                @Param("from") LocalDateTime from,
+                                                                                @Param("to") LocalDateTime to);
 }

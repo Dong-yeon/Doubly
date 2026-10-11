@@ -48,7 +48,6 @@ public class MealPhotoAutoAnalysisService {
     private final MealRepository mealRepository;
     private final UserRepository userRepository;
     private final FoodAnalysisService foodAnalysisService;
-    private final MealPlaceHintLoader placeHintLoader;
     private final AiJobService aiJobService;
 
     /**
@@ -61,13 +60,11 @@ public class MealPhotoAutoAnalysisService {
     public MealPhotoAutoAnalysisService(MealRepository mealRepository,
                                         UserRepository userRepository,
                                         FoodAnalysisService foodAnalysisService,
-                                        MealPlaceHintLoader placeHintLoader,
                                         AiJobService aiJobService,
                                         PlatformTransactionManager transactionManager) {
         this.mealRepository = mealRepository;
         this.userRepository = userRepository;
         this.foodAnalysisService = foodAnalysisService;
-        this.placeHintLoader = placeHintLoader;
         this.aiJobService = aiJobService;
         this.newTransaction = new TransactionTemplate(transactionManager);
         this.newTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
@@ -123,32 +120,13 @@ public class MealPhotoAutoAnalysisService {
      * @return 작업 결과로 남길 요약 — 폴링하는 화면은 없지만 실패/성공 구분에 쓰인다
      */
     private Object analyzeAndApply(Long userId, Long mealId, String photoUrl, Long placeId) {
-        Long hintPlaceId = placeId != null ? placeId : linkedPlaceId(mealId);
-        MealAnalysisResponse result = foodAnalysisService.analyze(userId, photoUrl, hintPlaceId);
+        MealAnalysisResponse result = foodAnalysisService.analyze(userId, photoUrl, placeId);
         if (!result.isFood() || result.foods().isEmpty()) {
             log.info("자동 분석: 음식이 아니라고 판단 — 기록은 사진만 남긴다 (mealId={})", mealId);
             return java.util.Map.of("applied", false);
         }
         int applied = newTransaction.execute(status -> apply(mealId, result));
         return java.util.Map.of("applied", applied > 0, "meals", applied);
-    }
-
-    /**
-     * 저장 요청에 장소가 없을 때의 차선책 — 끼니에 방문 기록으로 연결된 장소를 <b>작업이 돌 때</b>
-     * 찾는다. 조회가 실패해도 힌트 없이 분석한다(힌트는 덤이다).
-     *
-     * <p>타이밍상 대부분 못 찾는다: 앱은 저장 응답을 받은 <b>뒤에</b> 방문 기록을 따로 남기고
-     * (recordVisit), 이 작업은 커밋 직후 돈다. 그래서 1순위는 저장 요청의 placeId 이고
-     * ({@link com.fitto.diet.dto.SaveMealRequest#placeId}), 이건 placeId 를 안 보내는
-     * 이전 앱 버전 등을 위해 남겨둔다.
-     */
-    private Long linkedPlaceId(Long mealId) {
-        try {
-            return placeHintLoader.placeIdOfMeal(mealId).orElse(null);
-        } catch (RuntimeException e) {
-            log.warn("자동 분석: 연결된 장소 조회 실패 — 힌트 없이 분석 (mealId={}): {}", mealId, e.toString());
-            return null;
-        }
     }
 
     /**

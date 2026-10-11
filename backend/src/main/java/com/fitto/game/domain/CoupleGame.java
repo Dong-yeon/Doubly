@@ -61,6 +61,19 @@ public abstract class CoupleGame extends BaseTimeEntity {
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
+    /**
+     * 재촉·리마인더 시각(V108) — 판이 움직인 게 아니라서 엔티티로 고치지 않는다(그러면 updated_at 이 바뀐다).
+     * 쓰기는 {@code CoupleGameRepository} 의 벌크 update 로만 한다.
+     */
+    @Column(name = "nudged_by_creator_at")
+    private LocalDateTime nudgedByCreatorAt;
+
+    @Column(name = "nudged_by_partner_at")
+    private LocalDateTime nudgedByPartnerAt;
+
+    @Column(name = "reminded_at")
+    private LocalDateTime remindedAt;
+
     protected CoupleGame(Long coupleId, Long createdBy) {
         this.coupleId = coupleId;
         this.createdBy = createdBy;
@@ -68,6 +81,19 @@ public abstract class CoupleGame extends BaseTimeEntity {
     }
 
     public abstract GameType getGameType();
+
+    /**
+     * 지금 이 판이 <b>누구를 기다리는가</b> — 재촉·리마인더가 누구에게 갈지 정한다(docs/GAME_NUDGE_2026-09-30.md).
+     *
+     * @return {@link #OWNER_CREATOR}·{@link #OWNER_PARTNER}, 또는 차례가 없으면(같이 푸는 스도쿠, 아직 아무도
+     *         안 둔 대전) {@link #OWNER_NONE} — 그때는 누구든 상대를 부를 수 있다
+     */
+    public abstract char awaitedSide();
+
+    /** 이 쪽이 마지막으로 찌른 시각 — 없으면 null */
+    public LocalDateTime nudgedAtBy(char side) {
+        return side == OWNER_CREATOR ? nudgedByCreatorAt : nudgedByPartnerAt;
+    }
 
     public boolean isInProgress() {
         return status == GameStatus.IN_PROGRESS;

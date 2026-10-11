@@ -36,11 +36,64 @@ public class PlanGuard {
     private final PlanResolver planResolver;
     private final UsageCounter usageCounter;
     private final EventLogService eventLogService;
+    private final FeatureCreditService creditService;
 
-    public PlanGuard(PlanResolver planResolver, UsageCounter usageCounter, EventLogService eventLogService) {
+    public PlanGuard(PlanResolver planResolver, UsageCounter usageCounter, EventLogService eventLogService,
+                     FeatureCreditService creditService) {
         this.planResolver = planResolver;
         this.usageCounter = usageCounter;
         this.eventLogService = eventLogService;
+        this.creditService = creditService;
+    }
+
+    /**
+     * {@link #consumeOrCredit} 가 무엇에서 차감했나 — 되돌릴 때 같은 곳에서 되돌리기 위해.
+     * {@code NONE} 은 무제한·비계수 기능이라 센 적이 없다는 뜻이다.
+     */
+    public enum Charge { QUOTA, CREDIT, NONE }
+
+    /**
+     * 이 기능의 사용량을 <b>어느 주머니에서</b> 셀지 — 사람인가 커플인가.
+     *
+     * <p>{@link Feature#isCoupleScoped()} 인 기능은 결과물이 커플 공간에 쌓이므로 누가
+     * 올렸는지가 중요하지 않다. 사람마다 따로 세면 한 명이 주로 찍는 실제 사용 패턴에서
+     * <b>한쪽만 먼저 막힌다</b> — 같은 앨범을 같이 보는데 한 사람만 못 올리는 상태다.
+     *
+     * <p>판정({@link PlanResolver#resolveFor})이 이미 관계 단위인 기능들이라, 계측도 같은
+     * 관계를 봐야 한다. 둘이 어긋나면 "둘 다 PRO 인데 한 명만 한도에 걸린다"가 된다.
+     *
+     * <p>커플이 없으면 본인 주머니로 떨어진다 — 판정과 같은 폴백이다.
+     */
+    private UsageScope scopeOf(Long userId, Feature feature) {
+        if (!feature.isCoupleScoped()) {
+            return UsageScope.user(userId);
+        }
+        return planResolver.activeCoupleIdOf(userId)
+                .map(UsageScope::relation)
+                .orElseGet(() -> UsageScope.user(userId));
+    }
+
+    /** 사용량을 셀 주머니 — 사람이거나 관계이거나. */
+    private record UsageScope(Long userId, Long relationId) {
+        static UsageScope user(Long userId) {
+            return new UsageScope(userId, null);
+        }
+
+        static UsageScope relation(Long relationId) {
+            return new UsageScope(null, relationId);
+        }
+    }
+
+    private int peekUsage(UsageScope scope, Feature feature, Quota quota) {
+        return scope.relationId() != null
+                ? usageCounter.peekForRelation(scope.relationId(), feature, quota)
+                : usageCounter.peek(scope.userId(), feature, quota);
+    }
+
+    private int incrementUsage(UsageScope scope, Feature feature, Quota quota) {
+        return scope.relationId() != null
+                ? usageCounter.incrementForRelation(scope.relationId(), feature, quota)
+                : usageCounter.increment(scope.userId(), feature, quota);
     }
 
     /** 기능이 이 사용자에게 열려 있는지만 확인한다 (사용량은 건드리지 않음). */
@@ -52,7 +105,7 @@ public class PlanGuard {
             throw upgradeRequired(feature);
         }
         if (quota.isCounted()) {
-            int used = usageCounter.peek(userId, feature, quota);
+            int used = peekUsage(scopeOf(userId, feature), feature, quota);
             if (used >= quota.limit()) {
                 logBlocked(userId, feature);
                 throw limitExceeded(feature, plan, quota);
@@ -78,12 +131,61 @@ public class PlanGuard {
             logUsed(userId, feature);
             return;
         }
-        int used = usageCounter.increment(userId, feature, quota);
+        int used = incrementUsage(scopeOf(userId, feature), feature, quota);
         if (used > quota.limit()) {
             logBlocked(userId, feature);
             throw limitExceeded(feature, plan, quota);
         }
         logUsed(userId, feature);
+    }
+
+    /**
+     * {@link #consume} 와 같되, 플랜 한도에 막히면 <b>산 크레딧</b>({@link FeatureCredit})에서 한 회를 쓴다.
+     *
+     * <p>정액 구독 밖에서 "한 세트 더"를 파는 기능(우리 이모지)이 쓴다. FREE 라 막힌 사람도
+     * 크레딧이 있으면 열린다 — 구독 없이 세트 하나를 사 보는 "체험 구매"가 이 경로다.
+     * 크레딧도 없으면 {@link #consume} 와 같은 402/429 를 던진다.
+     *
+     * @return 어디서 차감했나 — 되돌릴 때 {@link #refund(Long, Feature, Charge)} 에 그대로 넘긴다
+     */
+    public Charge consumeOrCredit(Long userId, Feature feature) {
+        Plan plan = planResolver.resolveFor(userId, feature);
+        Quota quota = feature.quotaFor(plan);
+        if (quota.isBlocked()) {
+            if (creditService.consumeOne(userId, feature)) {
+                logUsed(userId, feature);
+                return Charge.CREDIT;
+            }
+            logBlocked(userId, feature);
+            throw upgradeRequired(feature);
+        }
+        if (quota.isUnlimited() || !quota.isCounted()) {
+            logUsed(userId, feature);
+            return Charge.NONE;
+        }
+        UsageScope scope = scopeOf(userId, feature);
+        int used = incrementUsage(scope, feature, quota);
+        if (used <= quota.limit()) {
+            logUsed(userId, feature);
+            return Charge.QUOTA;
+        }
+        // 한도 초과 — 방금 올린 1을 도로 내리고 크레딧을 본다(카운터를 한도 위로 남기지 않는다)
+        decrementUsage(scope, feature, quota);
+        if (creditService.consumeOne(userId, feature)) {
+            logUsed(userId, feature);
+            return Charge.CREDIT;
+        }
+        logBlocked(userId, feature);
+        throw limitExceeded(feature, plan, quota);
+    }
+
+    /** {@link #consumeOrCredit} 의 되돌리기 — 차감한 곳에서 되돌린다. */
+    public void refund(Long userId, Feature feature, Charge charge) {
+        switch (charge) {
+            case QUOTA -> refund(userId, feature);
+            case CREDIT -> creditService.refundOne(userId, feature);
+            case NONE -> { }
+        }
     }
 
     /**
@@ -104,7 +206,16 @@ public class PlanGuard {
         if (quota.isBlocked() || quota.isUnlimited() || !quota.isCounted()) {
             return; // 애초에 센 적이 없다
         }
-        usageCounter.decrement(userId, feature, quota);
+        // 올린 주머니에서 깎는다 — consume 과 같은 scopeOf 를 쓴다(다르면 한도가 안 줄어든다)
+        decrementUsage(scopeOf(userId, feature), feature, quota);
+    }
+
+    private void decrementUsage(UsageScope scope, Feature feature, Quota quota) {
+        if (scope.relationId() != null) {
+            usageCounter.decrementForRelation(scope.relationId(), feature, quota);
+        } else {
+            usageCounter.decrement(scope.userId(), feature, quota);
+        }
     }
 
     /**
@@ -150,35 +261,61 @@ public class PlanGuard {
         Plan plan = planResolver.resolveFor(userId, feature);
         Quota quota = feature.quotaFor(plan);
         if (quota.isBlocked()) {
-            return false;
+            return feature.sellsCredits() && creditService.remaining(userId, feature) > 0;
         }
         if (!quota.isCounted()) {
             return true;
         }
-        return usageCounter.peek(userId, feature, quota) < quota.limit();
+        if (peekUsage(scopeOf(userId, feature), feature, quota) < quota.limit()) {
+            return true;
+        }
+        return feature.sellsCredits() && creditService.remaining(userId, feature) > 0;
     }
 
     /** 표시용 — 앱의 잔여 횟수·잠금 배지에 쓴다. */
     public FeatureState state(Long userId, Feature feature) {
         Plan plan = planResolver.resolveFor(userId, feature);
         Quota quota = feature.quotaFor(plan);
-        int used = quota.isCounted() ? usageCounter.peek(userId, feature, quota) : 0;
+        int used = quota.isCounted() ? peekUsage(scopeOf(userId, feature), feature, quota) : 0;
         boolean allowed = !quota.isBlocked()
                 && (quota.isUnlimited() || !quota.isCounted() || used < quota.limit());
         Integer remaining = quota.isUnlimited() || quota.isBlocked() || !quota.isCounted()
                 ? null
                 : Math.max(0, quota.limit() - used);
+        /*
+         * 산 크레딧은 플랜 한도 위에 얹힌다 — 잠금 표시·잔여 횟수가 같은 값을 봐야 "살 수 있다고
+         * 해서 샀는데 여전히 잠겨 있다"가 안 생긴다. 판정({@link #consumeOrCredit})과 같은 규칙.
+         */
+        int credits = feature.sellsCredits() ? creditService.remaining(userId, feature) : 0;
+        if (credits > 0) {
+            allowed = allowed || quota.isBlocked() || (quota.isCounted() && used >= quota.limit());
+            remaining = (remaining == null ? 0 : remaining) + credits;
+        }
         return new FeatureState(
                 feature.name(), feature.displayName(), allowed,
-                quota.limit(), used, remaining, quota.window().name());
+                quota.limit(), used, remaining, quota.window().name(),
+                // limitExceeded 와 같은 근거 — 결제로 풀리지 않으면 팔 것이 없다.
+                upsells(feature, plan),
+                credits);
     }
 
     public Plan planOf(Long userId) {
         return planResolver.resolve(userId);
     }
 
-    public boolean isFreeTrial() {
-        return planResolver.isFreeTrial();
+    /** 커플 기능에 적용되는 플랜 — 상대가 결제했으면 PRO. 커플이 없으면 {@link #planOf} 와 같다. */
+    public Plan couplePlanOf(Long userId) {
+        return planResolver.resolveCouple(userId);
+    }
+
+    /** 이 사람이 체험 중인가 — 전역 플래그 또는 가입 후 N일. */
+    public boolean isInTrial(Long userId) {
+        return planResolver.isInTrial(userId);
+    }
+
+    /** 이 사람의 체험 종료 시각. 전역 체험 중이면 null(끝이 정해져 있지 않다). */
+    public java.time.LocalDateTime trialEndsAt(Long userId) {
+        return planResolver.trialEndsAt(userId);
     }
 
     private BusinessException upgradeRequired(Feature feature) {
@@ -221,6 +358,17 @@ public class PlanGuard {
         return (last - 0xAC00) % 28 == 0 ? Jongseong.NO : Jongseong.YES;
     }
 
+    /**
+     * 이 한도가 <b>결제로 풀리는가</b> — 402(업셀)와 429(그냥 한도)를 가르는 단 하나의 근거.
+     *
+     * <p>최상위 플랜이면 팔 것이 없고, FREE·PRO 한도가 같은 기능({@link Feature#isComparable()}
+     * 이 false — 기록 내보내기)은 결제해도 똑같이 막힌다. 그런데도 402 를 주면 앱이 결제 시트를
+     * 띄워 "돈을 내면 풀린다"는 거짓말을 한다.
+     */
+    private static boolean upsells(Feature feature, Plan plan) {
+        return !plan.isAtLeast(Plan.PRO) && feature.isComparable();
+    }
+
     private BusinessException limitExceeded(Feature feature, Plan plan, Quota quota) {
         String period = switch (quota.window()) {
             case DAY -> "하루";
@@ -228,8 +376,8 @@ public class PlanGuard {
             case MONTH -> "한 달";
             case TOTAL, NONE -> null;
         };
-        if (plan.isAtLeast(Plan.PRO)) {
-            // 이미 최상위 플랜 — 업셀할 것이 없다. 남용 방지 한도에 걸린 것뿐이다.
+        if (!upsells(feature, plan)) {
+            // 이미 최상위 플랜이거나 PRO 도 한도가 같다 — 업셀할 것이 없다. 남용 방지 한도에 걸린 것뿐이다.
             return new BusinessException(ErrorCode.USAGE_LIMIT_EXCEEDED,
                     period == null
                             ? "%s 이용 한도를 모두 사용했어요.".formatted(feature.displayName())

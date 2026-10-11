@@ -32,6 +32,33 @@ export const STORAGE_KEYS = {
   onboardingSeen: 'doubly.onboardingSeen',
   // 푸시 권한 사전 설명을 한 번 보여준 뒤로는 다시 묻지 않기 위한 플래그
   pushPrimed: 'doubly.pushPrimed',
+  // 이 기기에서 마지막으로 서버에 등록한 Expo 푸시 토큰 — 로그아웃 때 서버에서 지우려고 둔다(utils/push)
+  pushToken: 'doubly.pushToken',
+  // 처리한 스토어 구매(반영 완료 / 미반영 안내 완료) — utils/iap 가 매 실행마다 같은 구매를 다시 알리지 않게
+  iapHandled: 'doubly.iapHandled',
+  // 사용자가 닫은 서비스 공지의 updatedAt — 같은 공지를 다시 띄우지 않기 위해(store/serviceStatusStore)
+  dismissedNotice: 'doubly.dismissedNotice',
+  // 서버 배포 스티커 카탈로그 — 오프라인으로 켜도 지난 말풍선이 그려지게(store/remoteStickerStore)
+  stickerCatalog: 'doubly.stickerCatalog',
+} as const;
+
+/**
+ * 장애 공지·점검·최소 버전 — 백엔드가 아니라 소개 사이트(Netlify, landing/status.json)에서 읽는다.
+ * 장애는 대개 백엔드가 죽은 때라, 백엔드가 주는 공지는 정작 필요할 때 오지 않는다.
+ * 운영 절차: docs/INCIDENT_NOTICE_2026-09-30.md
+ */
+export const SERVICE_STATUS_URL = 'https://dubly.co.kr/status.json';
+
+/**
+ * 커플 초대 링크 — 소개 사이트(landing/invite.html)가 코드를 보여 주고 "앱에서 열기"·스토어 설치로 잇는다.
+ * 2단계(App Links·Universal Links)부터는 앱이 깔려 있으면 이 주소로 앱이 바로 열린다.
+ */
+export const INVITE_LINK_BASE = 'https://dubly.co.kr/i/';
+
+/** 강제 업데이트 화면의 스토어 링크 */
+export const STORE_URLS = {
+  android: 'https://play.google.com/store/apps/details?id=com.doubly.app',
+  ios: 'https://apps.apple.com/app/id6807249370', // eas.json 의 ascAppId
 } as const;
 
 /**
@@ -143,20 +170,91 @@ export const BUILD_STAMP = [
 export const BUILD_LABEL = `v${APP_VERSION} · ${BUILD_STAMP}`;
 
 /**
- * 인앱결제가 붙었는가.
+ * 인앱결제를 열 수 있는가 — <b>안드로이드만</b>.
  *
- * <p>`react-native-iap` 연동(구매 흐름, 서버 검증)은 되어 있다({@code utils/iap.ts} 참고).
- * 그런데도 기본값이 여전히 `false`인 이유는 <b>Google Play Console에 구독 상품
- * ({@link PRO_SUBSCRIPTION_SKU})이 아직 등록되지 않았기 때문</b>이다 — 스토어에 없는
- * SKU로 결제창을 열면 "상품을 찾을 수 없음" 에러만 난다.
+ * <p>2026-09-17 에 Play Console 구독 상품(`pro_monthly` / 기본 요금제 `monthly`, 월 4,900원)
+ * 등록과 백엔드 `GOOGLE_PLAY_*` 설정이 끝나 안드로이드는 열었다.
  *
- * <p>Play Console에서 구독 상품을 만들고(id가 {@link PRO_SUBSCRIPTION_SKU}와 일치해야
- * 함) 라이선스 테스터를 등록한 뒤 이 값을 켠다.
+ * <p><b>iOS 도 함께 연다(2026-09-17).</b> 서버에 App Store Server API 검증
+ * (`POST /plan/purchases/apple`)과 Server Notifications V2 수신이 들어가면서 구글과 같은
+ * 수준이 됐다. 애플은 <b>첫 자동 갱신 구독을 앱 바이너리와 묶어 심사</b>하므로, 결제가
+ * 동작하지 않는 빌드로는 구독을 심사에 올릴 수조차 없다 — 켜는 것 말고 선택지가 없다.
+ *
+ * <p>웹은 결제 SDK 가 없어 계속 닫아 둔다(`utils/iap` 가 전부 no-op).
  */
-export const PURCHASE_ENABLED = false;
+export const PURCHASE_ENABLED = Platform.OS !== 'web';
+
+/**
+ * 운동 홈(`WorkoutMain`)으로 가는 길을 보여주는가 — <b>2026-09-27 에 일단 가렸다.</b>
+ *
+ * <p>운동은 럽바디 메인의 체크인 카드(원탭 + 시간 칩 · 오운완 사진)로 충분히 남길 수 있다.
+ * 운동 홈은 루틴·통계·자유 운동 세션까지 담은 "트래커" 화면이라, "느슨하게"(9/9 결정)와
+ * 결이 다르다. 화면과 코드는 그대로 두고 <b>들어가는 길만</b> 닫는다 — 되돌릴 때 이 값만 true 로.
+ *
+ * <p>닫는 자리 넷: 체크인 카드의 "운동 홈" 링크, 홈의 운동 칩(오늘 운동했을 때), 푸시 딥링크
+ * `workout`(스트릭·재참여 알림 — 럽바디 메인으로 받는다), 음성 응원 녹음 딥링크
+ * `workout/voice-clips`(입구가 운동 홈에만 있다 — 서버도 녹음 알림을 멈췄다, 2026-09-28).
+ * 이미 녹음된 상대 응원은 기록 화면·세션에서 계속 재생된다. 기록 화면·하던 운동 이어하기·
+ * 루틴 선물·챌린지처럼 **자기 경로가 따로 있는 화면**은 그대로 열린다.
+ */
+export const WORKOUT_HOME_ENABLED = false;
+
+/**
+ * 스티커 팩 <b>낱개</b> 구매를 열 수 있는가 — 구독({@link PURCHASE_ENABLED})과 따로 둔다.
+ *
+ * <p><b>닫혀 있고, 당분간 그대로 둔다</b>(2026-09-22). 처음에는 "스토어 콘솔에 상품을 아직
+ * 안 올려서"였는데, 이제는 <b>낱개로 팔지 않기로 한 것</b>이다 — 팩마다 스토어 상품을
+ * 등록·심사하는 비용이 팩보다 비쌌다. 스티커는 PRO 구독으로만 연다(V105 주석).
+ * 그에 맞춰 유료 팩의 {@code price} 도 0 이 됐으므로, 지금은 이 값을 켜도 살 수 있는 팩이
+ * 하나도 없다.
+ *
+ * <p><b>왜 플래그를 남기나</b>: 팩이 수십 개가 되면 낱개(또는 자체 캐시)가 다시 필요해진다.
+ * 그때 값을 켜는 것만으로 값 칩·구매 흐름이 살아나도록 경로를 지워두지 않았다. 반대로
+ * 이 값이 없으면 "아직 못 산다"가 코드 여러 곳에 흩어진다 — 실제로 채팅 패널은 잠금 해제
+ * 줄을 상점으로 보내고 상점은 가격 버튼을 그렸다가 누르면 "연결되지 않았어요"를 띄웠다.
+ * 살 수 없는 것에 값을 붙여 놓는 건 상점이 아니라 미끼다.
+ *
+ * <p>다시 열 때 할 일: 팩에 {@code price} 부여 → 스토어에 {@code sticker_pack_<id 소문자>}
+ * 상품 등록(비소모성/인앱 상품) → 이 값을 `PURCHASE_ENABLED` 로 → `StickerShopScreen.onBuy`
+ * 에서 결제 SDK 호출(계정 식별자 필수 — `iap.ts` 의 구독 흐름과 같은 방식).
+ */
+export const STICKER_PURCHASE_ENABLED = false;
 
 /**
  * PRO 정기결제 상품 id. Google Play Console(수익 창출 → 구독)에서 만드는 상품의
  * "제품 ID"와 정확히 같아야 한다. Apple도 동일 id로 등록해 플랫폼 분기를 없앤다.
  */
 export const PRO_SUBSCRIPTION_SKU = 'pro_monthly';
+
+/**
+ * 결제 주기별 구독 상품 id — 연간(2026-09-25 추가, 39,000원 권장). 스토어에 없는 상품은
+ * `fetchProducts` 가 돌려주지 않으므로 플랜 화면이 그 선택지를 그리지 않는다 — 콘솔에
+ * 등록하기 전까지 "연간"이 없는 채로 안전하게 동작한다(docs/GOOGLE_PLAY_BILLING.md §1-2).
+ */
+export type ProTerm = 'monthly' | 'yearly';
+export const PRO_SUBSCRIPTION_SKUS: Record<ProTerm, string> = {
+  monthly: PRO_SUBSCRIPTION_SKU,
+  yearly: 'pro_yearly',
+};
+
+/**
+ * 소모성 크레딧 상품 — 우리 이모지 한 세트(요청 1회 = 최대 6장) 추가. 서버의
+ * `CreditProduct.EMOJI_SET_1` 과 값이 같아야 한다. 구독과 달리 플랜을 바꾸지 않고 잔여 횟수만
+ * 더한다 — FREE 도 구독 없이 하나 살 수 있다(docs/BILLING_STATUS_2026-09-25.md §7).
+ */
+export const EMOJI_SET_PRODUCT_ID = 'emoji_set_1';
+
+/**
+ * 결제할 기본 요금제(base plan)의 id — Play Console 의 "기본 요금제 및 혜택" 표에 보이는 ID.
+ *
+ * <p><b>왜 지정해야 하나</b>: 한 구독 상품 아래에 기본 요금제가 여러 개 달릴 수 있다
+ * (2026-09-17 현재 `monthly`(매월, 활성) 와 `base`(매주, 비활성) 둘). 예전 코드는
+ * `subscriptionOffers[0]` 를 그냥 집었는데, 그러면 <b>어떤 주기로 청구될지가 Play 가
+ * 돌려주는 순서에 달리게 된다</b> — 비활성 요금제를 켜는 순간 월 구독을 누른 사람이
+ * 주 단위로 청구될 수 있다. 돈이 걸린 자리라 순서에 맡기지 않는다.
+ *
+ * <p>여기 적힌 id 를 못 찾으면 결제를 시작하지 않는다(조용히 다른 걸 팔지 않는다).
+ */
+export const PRO_BASE_PLAN_ID = 'monthly';
+/** 주기별 기본 요금제 id — Play Console 의 "기본 요금제 및 혜택" 표의 ID 와 같아야 한다. */
+export const PRO_BASE_PLAN_IDS: Record<ProTerm, string> = { monthly: PRO_BASE_PLAN_ID, yearly: 'yearly' };

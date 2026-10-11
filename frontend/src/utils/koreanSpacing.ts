@@ -14,6 +14,8 @@
  * <p>모델이 3~4초 로딩에 240MB 를 쓴다 — 화면에 들어올 때 미리 올리고 나갈 때 반드시
  * 내린다({@link useSpacingCorrection}).
  */
+import { Platform } from 'react-native';
+
 import KoreanSpell from '../../modules/korean-spell';
 
 /** 준비 상태 — 화면이 버튼을 어떻게 보여줄지 정하는 데 쓴다 */
@@ -22,12 +24,25 @@ export type SpacingStatus = 'idle' | 'loading' | 'ready' | 'unavailable';
 let loadPromise: Promise<boolean> | null = null;
 
 /**
+ * 이 기기의 네이티브 모듈에 띄어쓰기 교정이 들어 있는가.
+ *
+ * <p>Kiwi 는 Android 에만 빌드했다 — <b>iOS 모듈에는 함수 자체가 없다</b>. 없는 함수를
+ * 부르면 Promise 가 생기기도 전에 그 자리에서 TypeError 가 나서 {@code .catch} 가 못 잡고,
+ * 글쓰기 화면이 통째로 ErrorBoundary 로 떨어졌다(2026-10-02, iOS 빌드 31 "일상 남기기").
+ * 웹 스텁은 함수는 있지만 늘 false 라 버튼이 아무 일도 안 하므로 함께 뺀다.
+ */
+export function isSpacingSupported(): boolean {
+  return Platform.OS !== 'web' && typeof KoreanSpell.loadSpacing === 'function';
+}
+
+/**
  * 모델을 준비한다. 여러 번 불러도 실제 로딩은 한 번만 일어난다.
  *
  * <p>실패해도 던지지 않는다 — 32비트 기기에는 모델이 없고, 그렇다고 글쓰기 화면이
  * 망가질 이유는 없다. 그냥 이 기능만 빠진다.
  */
 export function loadSpacing(): Promise<boolean> {
+  if (!isSpacingSupported()) return Promise.resolve(false);
   if (!loadPromise) {
     loadPromise = KoreanSpell.loadSpacing().catch(() => false);
   }
@@ -39,6 +54,7 @@ export function loadSpacing(): Promise<boolean> {
  */
 export async function unloadSpacing(): Promise<void> {
   loadPromise = null;
+  if (!isSpacingSupported()) return;
   try {
     await KoreanSpell.unloadSpacing();
   } catch {
@@ -48,7 +64,7 @@ export async function unloadSpacing(): Promise<void> {
 
 /** 띄어쓰기를 고친 문장. 준비 전이거나 실패하면 원문 그대로 */
 export async function correctSpacing(text: string): Promise<string> {
-  if (!text.trim()) return text;
+  if (!text.trim() || !isSpacingSupported()) return text;
   try {
     return await KoreanSpell.correctSpacing(text);
   } catch {

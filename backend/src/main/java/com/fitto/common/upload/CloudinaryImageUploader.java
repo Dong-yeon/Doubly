@@ -60,7 +60,8 @@ public class CloudinaryImageUploader {
             log.warn("Cloudinary 미설정 — 서버 업로드 불가");
             throw new BusinessException(ErrorCode.IMAGE_UPLOAD_FAILED);
         }
-        String folder = properties.getFolder() + "/" + subfolder;
+        // null 이면 기본 폴더 바로 아래 — 앱의 공용 업로드와 같은 자리라 일상 사진 검증(CloudinaryUrls)을 지난다
+        String folder = subfolder == null ? properties.getFolder() : properties.getFolder() + "/" + subfolder;
         long timestamp = Instant.now().getEpochSecond();
         String signature = CloudinarySigner.sha1Hex(
                 "folder=" + folder + "&timestamp=" + timestamp + properties.getApiSecret());

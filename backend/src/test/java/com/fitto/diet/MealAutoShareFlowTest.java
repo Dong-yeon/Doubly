@@ -136,7 +136,7 @@ class MealAutoShareFlowTest {
         RelationResponse couple = connect(a, b);
 
         MealResponse saved = mealService.save(a, lunch(null, false, new MealItemRequest("김밥", "1줄", 300, 50, 8, 6)));
-        // chat_messages.meal_id → meals FK(V90) — 카드를 정리하지 않으면 여기서 위반이 난다
+        // chat_messages.meal_id → meals FK(V135) — 카드를 정리하지 않으면 여기서 위반이 난다
         mealService.delete(a, saved.id());
 
         assertThat(mealService.findToday(a)).isEmpty();

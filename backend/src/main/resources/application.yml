@@ -120,11 +120,17 @@ fitto:
   plan:
     # true 면 전원 PRO 로 판정된다(출시 초기 무료 체험).
     #
-    # 한도 숫자는 실사용 분포를 재기 전에는 근거가 없어서, 제한을 켜는 대신 "판정 경로"만
-    # 먼저 깔아두는 상태다. 결제를 붙이고 한도를 확정한 뒤 PLAN_FREE_TRIAL=false 로 끈다.
-    # 이 플래그가 켜져 있는 동안 PlanResolver 는 DB 조회 없이 즉시 PRO 를 돌려주므로
-    # 성능 부담도 없다.
-    free-trial: ${PLAN_FREE_TRIAL:true}
+    # 2026-09-22 에 껐다. 그전까지는 한도 숫자에 근거가 없어 "판정 경로만 깔고 값은
+    # 열어두는" 상태였는데, 그동안 매출은 0인데 AI 원가 문은 열려 있었다
+    # (docs/AI_COST_ANALYSIS_2026-09-14.md). 이제 <b>결제한 사람만 PRO</b> 다.
+    #
+    # 되돌리려면 환경변수 PLAN_FREE_TRIAL=true 하나면 된다 — 코드 배포가 필요 없다.
+    free-trial: ${PLAN_FREE_TRIAL:false}
+    # free-trial 을 끈 뒤부터 적용되는 <b>가입 후 N일</b> 체험. 0 이면 체험 없음.
+    #
+    # 0 으로 둔다 — "가입하면 FREE 로 시작"이 지금의 방침이다. 체험을 주려면 숫자만
+    # 올리면 되고(PLAN_TRIAL_DAYS=3), 기준 시각은 users.created_at 이라 소급 적용된다.
+    trial-days: ${PLAN_TRIAL_DAYS:0}
 
   # Google Play 구독 웹훅(RTDN) — 서비스 계정 키(base64) 미설정 시 기능 전체 비활성,
   # 웹훅 요청은 전부 403(GooglePlayProperties 참고). 패키지명·서비스 계정 키는 스토어
@@ -134,6 +140,19 @@ fitto:
     service-account-json-base64: ${GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_BASE64:}
     webhook-token: ${GOOGLE_PLAY_WEBHOOK_TOKEN:}
 
+  # App Store 구독(Server API + Server Notifications V2) — 구글 쪽과 같은 구조.
+  # 키는 App Store Connect > 사용자 및 액세스 > 통합 > "인앱 구입" 에서 발급한다
+  # (앱 제출용 키와 다르다 — AppStoreProperties 주석 참고). 미설정이면 기능 전체가 꺼지고
+  # 알림 요청은 전부 403 이다.
+  app-store:
+    issuer-id: ${APP_STORE_ISSUER_ID:}
+    key-id: ${APP_STORE_KEY_ID:}
+    private-key-base64: ${APP_STORE_PRIVATE_KEY_BASE64:}
+    bundle-id: ${APP_STORE_BUNDLE_ID:}
+    notification-token: ${APP_STORE_NOTIFICATION_TOKEN:}
+    # auto | production | sandbox — auto 는 프로덕션 먼저, 없으면 샌드박스로 한 번 더.
+    environment: ${APP_STORE_ENVIRONMENT:auto}
+
   # 음식 사진 AI 분석 (Google AI Studio 무료 티어) — 키 미설정 시 기능만 비활성, 앱은 정상 동작
   gemini:
     api-key: ${GEMINI_API_KEY:}
@@ -142,6 +161,10 @@ fitto:
     # 미설정 시 텍스트 키로 폴백하지만 그 키가 무료 등급이면 이미지 호출만 실패한다.
     image-api-key: ${GEMINI_IMAGE_API_KEY:}
     image-model: ${GEMINI_IMAGE_MODEL:gemini-3.1-flash-image}
+    # 해상도가 곧 단가다 — 0.5K ≈ $0.045/장, 1K ≈ $0.067/장. 미지정 시 기본이 1K 라 반드시 박아둔다.
+    # 이모지는 말풍선·무드 피커에 작게 들어가므로 512px 로 충분하다. 대문자 K 필수(1k 는 거절됨).
+    # 이 값이 400 을 유발하면 GEMINI_IMAGE_SIZE= (빈 값)으로 두면 필드를 보내지 않는다.
+    image-size: ${GEMINI_IMAGE_SIZE:512px}
     # 한도 두 개는 역할이 다르다 — GeminiClient 클래스 주석 참고.
     #  · total    = Google 프로젝트 일일 쿼터 방어. 쓰는 모델의 RPD 를 콘솔에서 확인하고
     #               그보다 조금 낮게 잡아야, 구글이 먼저 막아 원인 불명으로 전원 실패하는
@@ -157,6 +180,11 @@ fitto:
   food-db:
     api-key: ${FOOD_DB_API_KEY:}
     base-url: ${FOOD_DB_BASE_URL:https://apis.data.go.kr/1471000/FoodNtrCpntDbInfo02}
+    # 바코드 1단계 — 식품안전나라 I2570(유통바코드)/C005(바코드연계제품정보). 위 키와 다른 키다.
+    # 비어 있으면 이 단계만 건너뛰고 Open Food Facts 로 간다(docs/BARCODE_LOOKUP_2026-09-29.md).
+    food-safety-api-key: ${FOOD_SAFETY_API_KEY:}
+    # 바코드 2단계 — Open Food Facts(무료·키 없음). 수입 다이어트 식품이 많다.
+    open-food-facts-enabled: ${OPEN_FOOD_FACTS_ENABLED:true}
 
   # 카카오 로컬 REST API (AI 맛집 추천의 실존 장소 검색) — 프론트 지도용 JS 키와 별개.
   # 카카오 개발자 콘솔의 같은 앱에서 "REST API 키"를 복사한다. 미설정 시 맛집 추천만 비활성.

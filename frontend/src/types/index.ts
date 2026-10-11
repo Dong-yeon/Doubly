@@ -26,8 +26,6 @@ export type Plan = 'FREE' | 'PRO';
 export type FeatureKey =
   | 'AI_FOOD_PHOTO'
   | 'AI_FOOD_TEXT'
-  /** 운동 인증샷 분석 — 다른 앱의 완료 화면을 읽어 기록을 채운다 */
-  | 'AI_WORKOUT_PHOTO'
   | 'AI_DIET_COACH'
   | 'AI_DATE_COURSE'
   | 'AI_RESTAURANT_RECOMMEND'
@@ -54,6 +52,7 @@ export type FeatureKey =
   | 'TRIP_CHECKLIST'
   | 'MOOD_CALENDAR_FULL'
   | 'WORKOUT_RECOVERY_FULL'
+  | 'WORKOUT_V2_STATS'
   | 'ANNIVERSARY_RECAP'
   | 'VIDEO_CALL'
   | 'STREAK_REPAIR'
@@ -66,10 +65,92 @@ export type FeatureKey =
   | 'PUBLIC_GUIDE_LINK'
   | 'CSV_EXPORT'
   // 협동 게임(스도쿠) — 게이팅 없음, 계측용. docs/COUPLE_GAMES_DESIGN_2026-09-09.md 3-5
-  | 'COUPLE_GAME';
+  | 'COUPLE_GAME'
+  // 나만의 하루 기록 사진 — 사람 단위, FREE=PRO 하루 3(업셀 없음). docs/PERSONAL_JOURNAL_ANALYSIS_2026-10-02.md §5-1
+  | 'JOURNAL_PHOTO'
+  | 'MEAL_PHOTO'
+  // 나만의 하루 기록 — 게이팅 없음, 새 기록 생성 계측용
+  | 'JOURNAL';
 
 /** 한도 주기 — TOTAL 은 리셋되지 않는 보유 개수 상한 */
 export type QuotaPeriod = 'DAY' | 'WEEK' | 'MONTH' | 'TOTAL' | 'NONE';
+
+/** 플랜 비교 화면의 묶음 — 서버 FeatureGroup 과 같다 */
+export type FeatureGroupKey = 'AI' | 'DEPTH' | 'STORAGE' | 'ENGAGEMENT' | 'DECORATION';
+
+/**
+ * 플랜 비교 한 줄 — {@code GET /plan/catalog}.
+ *
+ * FeatureState 와 나눈 이유: 저건 "지금 내 상태"(요청마다 달라짐)고 이건 "상품 설명"이다.
+ * 숫자는 여기서도 서버가 준다 — 앱에 박으면 한도를 바꿀 때마다 스토어 심사를 기다린다.
+ */
+export interface PlanCatalogEntry {
+  feature: FeatureKey;
+  name: string;
+  group: FeatureGroupKey;
+  /** 섹션 제목으로 그대로 쓴다 */
+  groupName: string;
+  /** -1 무제한, 0 차단 */
+  freeLimit: number;
+  freePeriod: QuotaPeriod;
+  proLimit: number;
+  proPeriod: QuotaPeriod;
+  /** 커플이 함께 쓰는 한도 — "둘이 합쳐"라고 써야 오해가 없다 */
+  coupleScoped: boolean;
+  /**
+   * PRO 대표 기능 세 개 중 하나인가 — 비교표 맨 위로 끌어올린다.
+   *
+   * 30줄을 다 읽고 결제를 결정하는 사람은 없다. "무엇을 사는가"는 세 문장이어야 한다:
+   * 우리 이모지(AI_COUPLE_EMOJI) · 음식 사진 분석(AI_FOOD_PHOTO) · 운동 심화 통계
+   * (WORKOUT_V2_STATS). 목록은 서버 `Feature.isHero()` 가 갖는다.
+   */
+  hero: boolean;
+}
+
+/** 스티커 팩 카테고리 — 서버 StickerPackCategory 와 같다 */
+export type StickerPackCategory = 'ANIMATED' | 'IMAGE' | 'MOOD' | 'TOUCH';
+
+/**
+ * 스티커 팩 한 개 + 내 잠금 상태 — `GET /stickers/packs`.
+ *
+ * 어느 그림이 이 팩에 속하는지는 오지 않는다. 앱이 번들로 들고 있고
+ * (`constants/stickerPacks.ts`) 서버가 또 내리면 같은 표가 두 곳에 생긴다.
+ */
+export interface StickerPack {
+  id: string;
+  title: string;
+  category: StickerPackCategory;
+  proOnly: boolean;
+  /** 낱개 구매가(KRW). 0 이면 낱개로 팔지 않는다 */
+  price: number;
+  /** 스토어 상품 id — 낱개로 살 수 없으면 null */
+  productId: string | null;
+  /** 지금 쓸 수 있는가 — 무료이거나, 샀거나, PRO 이거나 */
+  usable: boolean;
+  /**
+   * 낱개로 샀는가. usable 과 나눠 두는 이유는 구독이 끊겼을 때 화면이 달라져야 하기
+   * 때문이다 — 산 팩은 그대로 열려 있고, 구독으로만 열려 있던 팩은 잠긴다.
+   */
+  purchased: boolean;
+}
+
+/**
+ * 서버 배포 스티커 한 장 — `GET /stickers/catalog` (2026-10-01, docs/SERVER_STICKER_PACKS_2026-10-01.md).
+ *
+ * `url`·`thumbUrl` 은 오리진 없는 경로(`/sticker-assets/...`)다 — `store/remoteStickerStore` 가 API 오리진을 붙인다.
+ */
+export interface RemoteStickerItem {
+  code: string;
+  label: string;
+  url: string;
+  thumbUrl: string;
+}
+
+export interface StickerCatalog {
+  /** 카탈로그 내용 해시 — 같으면 저장해 둔 것을 그대로 쓴다 */
+  version: string;
+  packs: { id: string; items: RemoteStickerItem[] }[];
+}
 
 export interface FeatureState {
   feature: FeatureKey;
@@ -82,12 +163,32 @@ export interface FeatureState {
   /** 무제한·차단·개수형이면 null */
   remaining: number | null;
   period: QuotaPeriod;
+  /**
+   * 이 잠금이 결제로 풀리는가 — false 면 업그레이드를 권하지 않는다.
+   *
+   * allowed=false 에는 "플랜이 낮아서 막힘"과 "이미 PRO인데 이번 기간 한도 소진"이
+   * 섞여 있다. 후자에 PRO 유도 문구를 띄우면 돈 낸 사람에게 결제를 또 권하는 꼴이다.
+   */
+  upgradable: boolean;
+  /** 따로 산 크레딧 잔량 — remaining 에 이미 합산돼 있다. 이 기능이 크레딧을 팔지 않으면 0 */
+  credits: number;
 }
 
 export interface PlanInfo {
+  /** 개인 등급 — 내 구독으로만 정해진다. 개인 기능(AI 음식 분석·심화 통계 등)이 이 값을 따른다 */
   plan: Plan;
-  /** 무료 체험 기간 — true 면 "체험 중" 배지를 띄운다(나중에 "뺏겼다"로 읽히지 않게) */
+  /**
+   * 커플 기능에 적용되는 등급 — 두 사람 중 높은 쪽. 커플이 없으면 plan 과 같다.
+   * plan=FREE · couplePlan=PRO 면 "상대 덕분에 커플 기능은 PRO". 옛 서버는 보내지 않는다(undefined).
+   */
+  couplePlan?: Plan;
+  /** 체험 중 — true 면 "체험 중" 배지를 띄운다(나중에 "뺏겼다"로 읽히지 않게) */
   freeTrial: boolean;
+  /**
+   * 체험이 끝나는 시각(ISO). 끝이 정해져 있지 않으면 null —
+   * 출시 초기의 전역 체험이 그렇다. null 을 "곧 끝남"으로 그리면 없는 마감을 안내하게 된다.
+   */
+  trialEndsAt: string | null;
   features: FeatureState[];
 }
 
@@ -116,20 +217,53 @@ export interface User {
   autoAnalyzeMealPhoto?: boolean;
   /** 필수 약관 재동의 필요 여부 — 약관 개정 또는 동의 이력 없는 기존 가입자면 true */
   requiresConsent?: boolean;
+  /**
+   * 탈퇴 삭제 예정일 'YYYY-MM-DD'(KST) — 탈퇴 유예기간 중이면 값이 있다.
+   * 상대 쪽 홈이 couple.partner 의 이 값으로 "기록이 삭제돼요" 배너를 띄운다.
+   */
+  withdrawalScheduledDate?: string | null;
 }
 
+/**
+ * 남에게 보이는 사용자 — 커플·채팅 상대, 트레이너의 회원 목록(서버 PartnerUserResponse).
+ * 이메일·생년월일·성별·키·설정은 서버가 내리지 않는다. 필드를 늘리려면 서버 DTO 부터.
+ */
+export type PartnerUser = Pick<User, 'id' | 'name' | 'profileImageUrl' | 'withdrawalScheduledDate'>;
+
 // 전체 사진첩 — 사진 있는 피드 포스트 모아보기
+/**
+ * 사진첩이 모으는 소스 — 타임라인의 FeedItemType 중 "우리가 찍은 사진"이 달리는 넷.
+ * 관람 기록(CONTENT_LOG)은 이미지가 포스터라 제외한다(서버 PHOTO_SOURCES 와 같은 목록).
+ */
+export type FeedPhotoSource = 'POST' | 'MEAL' | 'WORKOUT' | 'PLACE_VISIT';
+
 export interface FeedPhoto {
-  postId: number;
+  /** 어느 기록에서 온 사진인지 — 상단 필터 칩과 뷰어 캡션의 성격을 가른다 */
+  type: FeedPhotoSource;
+  /** 원본 기록의 id. 같은 type 안에서만 유일하다 — 키는 `${type}:${refId}` 로 만든다 */
+  refId: number;
   imageUrl: string;
-  /** 이 포스트의 사진 전체 목록([0]이 imageUrl과 같은 값). 그리드 칸은 여전히 대표 사진 하나만 쓴다 */
+  /** 이 기록의 사진 전체 목록([0]이 imageUrl과 같은 값). 여러 장은 일상 포스트만 가능 */
   imageUrls?: string[] | null;
-  content?: string | null;
+  /** 뷰어 하단 한 줄 설명 — 서버가 타임라인 카드의 제목·부제로 만든다 */
+  caption?: string | null;
   authorName: string;
   mine: boolean;
   /** 여행 앨범에 담긴 사진이면 그 여행 id */
   tripId?: number | null;
+  /** 럽슐랭 장소 — 맛집 방문, 또는 장소를 붙여 기록한 끼니. 뷰어의 "장소 보기"가 쓴다 */
+  placeId?: number | null;
+  /** 장소 상세 화면 제목용 — placeId 와 함께만 온다 */
+  placeName?: string | null;
+  /**
+   * 기록일 'YYYY-MM-DD' — 사진첩의 정렬·월 묶음 기준(식단·운동·방문은 고른 날짜, 일상은 올린 날 KST).
+   * 날짜만 담긴 값이라 시간대 변환 없이 그대로 쓴다. 구 서버 응답에는 없을 수 있다.
+   */
+  recordDate?: string | null;
+  /** 올린 시각(UTC 인스턴트) — 같은 기록일 안의 순서 */
   createdAt: string;
+  /** 이모지 반응 — 타임라인 카드와 같은 행이라 어디서 남겨도 같다. 구 서버 응답엔 없다 */
+  reactions?: ReactionSummary[];
 }
 
 export interface FeedPhotosPage {
@@ -138,8 +272,42 @@ export interface FeedPhotosPage {
   hasMore: boolean;
 }
 
+/** 사진첩 지도의 장소 하나 — 좌표와 그 장소에 걸린 사진(최신순) */
+export interface FeedPhotoMapPlace {
+  placeId: number;
+  name: string;
+  lat: number;
+  lng: number;
+  items: FeedPhoto[];
+}
+
+/** 사진첩 지도 — 장소별 사진 묶음(가장 최근 기록일 순). 맛집 방문·장소 붙은 끼니만 */
+export interface FeedPhotoMap {
+  places: FeedPhotoMapPlace[];
+  /** 서버 상한에 걸려 오래된 일부가 빠졌다 */
+  truncated: boolean;
+}
+
+/** 사진첩 달력 한 달 — 그 달(기록일 기준) 사진 전부, 목록과 같은 순서. 페이징 없음 */
+export interface FeedPhotoMonth {
+  /** 'YYYY-MM' */
+  month: string;
+  items: FeedPhoto[];
+  /** 서버 상한에 걸려 일부가 빠졌다 */
+  truncated: boolean;
+}
+
 // 커플 캘린더 — 기념일 외 일정(생일·데이트 약속) + D-day 푸시
 export type CalendarEventType = 'ANNIVERSARY' | 'BIRTHDAY' | 'DATE' | 'ETC';
+
+/**
+ * 일정의 공개 범위 — 누구의 일정이고 누가 보는가 (백엔드 EventVisibility).
+ *
+ * - `SHARED` 우리 일정: 둘 다 보고 둘 다 알림을 받는다. 지금까지의 모든 일정.
+ * - `PERSONAL` 내 일정: 상대도 보지만(누구 것인지 표시된다) 알림은 주인만.
+ * - `PRIVATE` 나만 보기: 상대에게 내려가지 않는다 — 목록에 없는 것이지 숨긴 게 아니다.
+ */
+export type CalendarEventVisibility = 'SHARED' | 'PERSONAL' | 'PRIVATE';
 
 export interface CoupleCalendarEvent {
   id: number;
@@ -152,10 +320,47 @@ export interface CoupleCalendarEvent {
   endDate?: string | null;
   eventType: CalendarEventType;
   repeatYearly: boolean;
+  /** 우리 일정인지 각자의 일정인지 — 누구 것인지는 createdBy 와 함께 읽는다 */
+  visibility: CalendarEventVisibility;
   memo?: string | null;
   /** 오늘 기준 D-day — 0=오늘, 양수=N일 남음, 음수=지남 */
   dday: number;
   createdBy: number;
+}
+
+/**
+ * 캘린더에 겹쳐 그리는 다녀온 곳 — 커플 장소의 방문(같은 날·같은 곳은 한 줄).
+ *
+ * 일정(CoupleCalendarEvent)과 달리 캘린더에서 만들거나 지우지 않는다. 원본은 방문·식단 기록이고
+ * 캘린더는 읽어서 겹쳐 그리기만 한다(여행 기간 띠와 같은 방식) — 그래서 D-day 도 없다.
+ * 이름이 DateMeal 인 것은 처음엔 장소가 붙은 같이 먹기 식단만 실었기 때문이다(2026-10-02 확장).
+ */
+export interface CalendarDateMeal {
+  /** YYYY-MM-DD */
+  date: string;
+  /** 연결된 식단 — 식단 없이 남긴 방문이면 null */
+  mealId?: number | null;
+  /** 무엇을 했는지 — 식단이면 음식, 식단 없는 방문이면 방문 메모(없으면 '다녀왔어요') */
+  title: string;
+  placeId: number;
+  placeName: string;
+  /** 럽슐랭 등급 — 0=일반, 1~3=럽스타 */
+  lovelichelinTier?: number | null;
+  photoUrl?: string | null;
+  /** 방문 기록 id — 목록 키. 서버가 2026-10-02 이전이면 없다 */
+  visitId?: number | null;
+  /** 한 사람만 다녀간 기록이면 그 사람, 둘이 함께면 null — "누가 갔는지" 배지의 근거 */
+  visitedBy?: number | null;
+}
+
+/**
+ * 한 해의 관공서 공휴일(일요일 제외) — 서버 표(holidays-kr.json)에서 온다.
+ * covered=false 면 그 해 표가 아직 없다는 뜻이다(공휴일이 없는 게 아니다 — 다음 해 월력요항은 6월 말에 나온다).
+ */
+export interface HolidayYear {
+  year: number;
+  covered: boolean;
+  holidays: { date: string; name: string }[];
 }
 
 /** 지난 기록 불러오기 결과 — 양쪽이 모두 요청해야 RESTORED 가 된다 */
@@ -173,7 +378,7 @@ export interface Relation {
   relationType: RelationType;
   status: RelationStatus;
   // 상대방(커플 파트너 / 트레이너 입장에선 회원, 회원 입장에선 트레이너)
-  partner: User | null;
+  partner: PartnerUser | null;
   connectedAt?: string | null;
   backgroundImageUrl?: string | null;
   anniversaryDate?: string | null;
@@ -254,7 +459,7 @@ export interface Workout {
   memo?: string | null;
   /** 이 기록이 시작된 내 루틴 템플릿 id — 스마트 루틴 동기화(Save-on-Finish)의 전제 */
   sourceRoutineId?: number | null;
-  /** 운동 인증샷 — 다른 앱 완료 화면·트레드밀 사진. 사진만 있는 기록도 유효하다 */
+  /** 오운완 인증샷 — 사진만 있는 기록도 유효하다. 커플 피드 노출은 imageShared 가 가른다 */
   imageUrl?: string | null;
   /** 종목 목록 — 비어 있을 수 있다("오늘 운동 완료"만 남긴 기록) */
   sets: WorkoutSet[];
@@ -336,6 +541,13 @@ export interface PartnerToday {
   connected: boolean;
   partnerName: string | null;
   completed: boolean;
+  /**
+   * 상대가 오늘 기록한 끼니 종류 — <b>식단</b> 응답(/meal/partner/today)에만 있다(운동 응답엔 없음).
+   * 홈 아바타 "오늘 챙김" 링. 구서버 응답엔 없다(옵셔널).
+   */
+  mealTypes?: MealType[];
+  /** 오늘 내가 상대에게 "뭐 먹었어?"를 이미 보냈는지(식단 찌르기, V120) — 식단 응답에만, 구서버엔 없다 */
+  nudgedToday?: boolean;
 }
 
 /**
@@ -387,6 +599,26 @@ export interface WorkoutStats {
   totalDays: number;
   last7Days: { date: string; weekday: string; completed: boolean }[];
   categoryBreakdown: { category: string; count: number }[];
+  /**
+   * 심화 통계(PRO — `WORKOUT_V2_STATS`). 잠겨 있으면 null 이다.
+   *
+   * 402 가 아니라 null 로 오는 이유: 화면이 자동으로 부르는 조회라 던지면 통계 화면이
+   * 통째로 못 뜬다. 잠김은 값으로 내려오고 화면이 그 자리에 안내를 그린다
+   * (`MuscleRecoveryStatus.locked` 와 같은 패턴).
+   *
+   * 위의 무료 구간에서는 <b>아무것도 빠지지 않았다</b> — 여기 있는 건 전부 새로 얹은 값이다.
+   */
+  deep?: WorkoutDeepStats | null;
+}
+
+/** 볼륨 · 추정 1RM · 부위 밸런스 — PRO 대표 기능 셋 중 하나 */
+export interface WorkoutDeepStats {
+  /** 최근 8주 주별 총 볼륨(kg) — 오래된 주가 먼저. 기록 없는 주도 0 으로 온다 */
+  weeklyVolume: { weekStart: string; volumeKg: number }[];
+  /** 추정 1RM(Epley) 상위 종목 — 많아야 5개 */
+  topLifts: { exerciseName: string; bestWeightKg: number; bestE1rmKg: number }[];
+  /** 최근 30일 부위별 비중 — 많이 한 순 */
+  muscleBalance: { muscleGroup: string; setCount: number; sharePercent: number }[];
 }
 
 // 근육 회복 현황 (GET /workout/recovery) — 부위별 마지막 수행 이후 경과 시간·추정 회복률
@@ -444,6 +676,12 @@ export interface DailyQuestion {
   partnerName?: string | null;
   bothAnswered: boolean;
 }
+/** 답을 기다리는 지난 질문 — 상대는 답했고 나는 아직인 날. 상대 답은 내가 답해야 보인다 */
+export interface PendingQuestion {
+  questionDate: string;
+  question: string;
+  partnerName?: string | null;
+}
 export interface QuestionHistory {
   questionDate: string;
   question: string;
@@ -470,9 +708,41 @@ export interface SudokuGame {
   filled: number;
   myCells: number;
   partnerCells: number;
+  /** 오늘의 판이면 그 날짜(YYYY-MM-DD) — 자유 대국은 null */
+  dailyDate?: string | null;
   partnerName?: string | null;
   createdAt: string;
   completedAt?: string | null;
+}
+
+// 오늘의 판 / 게임 스트릭 — docs/COUPLE_GAMES_EXPANSION_2026-09-14.md 3절
+export type DailySudokuState = 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED';
+export interface DailySudoku {
+  date: string;
+  difficulty: SudokuDifficulty;
+  difficultyLabel: string;
+  state: DailySudokuState;
+  gameId?: number | null;
+  /** 자유 대국이 진행 중이라, 지금 열면 그 판이 열린다("진행 중인 판은 하나") */
+  blockedByOtherGame: boolean;
+}
+
+/** 같이 게임한 날의 연속 기록 — 스도쿠·오목을 가리지 않는다 */
+/**
+ * 한 종목의 전적 — 보는 사람 기준, 끝낸 판 전부(접은 판 제외). 기록 목록(최근 20판)으로 세면
+ * 21판째부터 줄어든다(docs/game-current-state.md 8-1 #9). 길막기는 draw 가 늘 0.
+ */
+export interface GameRecord {
+  me: number;
+  partner: number;
+  draw: number;
+}
+
+export interface GameStreak {
+  current: number;
+  best: number;
+  playedToday: boolean;
+  lastPlayedDate?: string | null;
 }
 
 // 오목 — docs/COUPLE_GAMES_DESIGN_2026-09-09.md 5절. 15×15, 판을 연 사람이 WHITE(후공)
@@ -490,9 +760,170 @@ export interface OmokGame {
   moveCount: number;
   winner?: OmokWinner | null;
   winningLine: number[];
+  /**
+   * 둔 순서대로의 인덱스 — 복기 재생과 "최근 몇 수" 표시가 쓴다.
+   * 색은 순번의 홀짝으로 정해진다: 0번째(첫 수)가 흑, 다음이 백.
+   * V91 이전에 시작된 판은 비어 있다.
+   */
+  moves: number[];
+  /** MINE(내가 걸어둠) · PARTNER(상대가 걸어옴) · null(없음) */
+  undoRequest?: OmokUndoRequest | null;
+  /** 지금 내가 무르기를 걸 수 있는가 — 직전에 둔 쪽만 걸 수 있다 */
+  canUndo: boolean;
   partnerName?: string | null;
   createdAt: string;
   completedAt?: string | null;
+}
+/** 무르기 표시 — MINE(내가 걸어둠) · PARTNER(상대가 걸어옴). 오목·길막기 공용 */
+export type GameUndoRequest = 'MINE' | 'PARTNER';
+export type OmokUndoRequest = GameUndoRequest;
+
+// 캐치마인드 — 한 명이 그리고 한 명이 맞힌다(비동기). docs/CATCH_MIND_2026-09-14.md
+export type CatchMindRole = 'DRAWER' | 'GUESSER';
+export interface CatchMindGame {
+  id: number;
+  status: SudokuStatus;
+  role: CatchMindRole;
+  /** "색,굵기,x1,y1,x2,y2;..." — 좌표는 0~1000 정규화 정수 */
+  strokes: string;
+  /** 맞히는 사람에게는 끝나기 전까지 null */
+  word?: string | null;
+  wordLength: number;
+  /** 초성 — 열었을 때만. 그린 사람에게는 항상 온다 */
+  hint?: string | null;
+  hintUsed: boolean;
+  /** 틀린 시도(최신 순) */
+  wrongGuesses: string[];
+  guessCount: number;
+  partnerName?: string | null;
+  createdAt: string;
+  completedAt?: string | null;
+}
+export interface CatchMindWordCandidate {
+  category: string;
+  word: string;
+}
+export interface CatchMindGuessResult {
+  correct: boolean;
+  game: CatchMindGame;
+}
+
+// 연쇄 퍼즐 대전 — docs/COUPLE_PUZZLE_BATTLE_2026-09-18.md §11. 서버는 심판이 아니라 보관자다
+export interface PuzzleBattleRun {
+  score: number;
+  maxChain: number;
+  /** 버틴 시간(ms). 살아남은 제출이면 상대가 끝난 시점 */
+  survivedMs: number;
+  lost: boolean;
+  /** 기보 "ms,열,회전,축색,자식색,보낸방해,받은방해;..." — 상대 것이 고스트 대전의 재료 */
+  timeline: string;
+}
+export interface PuzzleBattleGame {
+  id: number;
+  status: SudokuStatus;
+  /** 조각 순서 시드 — 둘 다 같은 값 */
+  seed: number;
+  /** 내 결과 — 아직 안 냈으면 null */
+  me: PuzzleBattleRun | null;
+  /** 상대 결과 — 아직 안 냈으면 null */
+  partner: PuzzleBattleRun | null;
+  /** 내가 받는 방해의 백분율(100 = 그대로). 숨기지 않는다 */
+  myHandicap: number;
+  partnerHandicap: number;
+  winner?: 'ME' | 'PARTNER' | 'DRAW' | null;
+  partnerName?: string | null;
+  createdAt: string;
+  completedAt?: string | null;
+  /** 내가 이 판을 시작했다고 알렸는가 — 결과 없이 true 면 앞의 판이 끊긴 것(V132, 예전 서버면 없음) */
+  myStarted?: boolean;
+  /** 끊긴 판을 다시 칠 수 있는 남은 횟수 — 0 인데 또 시작하면 패배로 기록된다 */
+  myRestartsLeft?: number;
+}
+
+/** 판 시작 알림의 결과 — STARTED(처음) / RESTARTED(끊긴 판 다시) / FORFEITED(두 번 끊겨 패배로 기록) */
+export interface PuzzleBattleBegin {
+  outcome: 'STARTED' | 'RESTARTED' | 'FORFEITED';
+  game: PuzzleBattleGame;
+}
+/** /sub/games/{relationId} 페이로드 — 백엔드 PuzzleBattleEvent 와 짝. senderId 는 서버가 채운다 */
+export interface PuzzleBattleEvent {
+  senderId: number;
+  gameId: number;
+  seq: number;
+  elapsedMs: number;
+  /** 78자리 숫자열 — 받는 쪽은 이걸 신뢰한다 */
+  board: string;
+  garbageSent: number;
+  pendingGarbage: number;
+  score: number;
+  maxChain: number;
+  lost: boolean;
+  /** 이 수에 쓴 아이템(§13) — 상대 화면에 "쏜" 순간을 띄운다. 0 이면 안 썼다 */
+  item: number;
+}
+
+// 게임 판 위 즉석 반응 — docs/COUPLE_GAMES_EXPANSION_2026-09-14.md 1절. 저장되지 않는 신호다
+/** 길막기 승패 — 이 게임에 무승부는 없다(길이 언제나 남아 있으므로) */
+export type WallRaceWinner = 'ME' | 'PARTNER';
+
+/**
+ * 길막기 한 판 — 9×9, 반대편 끝줄에 먼저 닿으면 승리. 매 턴 한 칸 이동 또는 벽 하나.
+ * 백엔드 WallRaceGameResponse 와 짝. docs/PATH_LOCK_ANALYSIS_2026-09-21.md.
+ *
+ * 판은 돌리지 않는다 — 둘이 같은 좌표를 보고 "3행 4열"이라고 말할 수 있어야 한다.
+ * 대신 myPawn/myGoalRow 가 내가 어느 쪽인지 알려준다.
+ */
+export interface WallRaceGame {
+  id: number;
+  status: SudokuStatus;
+  /** 9 */
+  size: number;
+  /** 칸 인덱스 0~80 (row * 9 + col, row 0 이 위) */
+  myPawn: number;
+  partnerPawn: number;
+  /** 내가 닿아야 하는 줄 — 0 또는 8 */
+  myGoalRow: number;
+  /** 64자. '0' 없음 · 'H' 가로 · 'V' 세로. 벽 하나가 두 통로를 막는다 */
+  walls: string;
+  myWallsLeft: number;
+  partnerWallsLeft: number;
+  /** 시작 벽 개수 — 핸디캡으로 접어준 만큼이 여기 드러난다 */
+  myWallsStart: number;
+  partnerWallsStart: number;
+  myTurn: boolean;
+  /**
+   * 지금 내가 갈 수 있는 칸 — 서버가 점프·대각선까지 계산해 내려준다.
+   * 내 차례가 아니면 빈 배열. 규칙이 Java·TS 두 벌이 되지 않게 하는 절충이다.
+   */
+  legalMoves: number[];
+  moveCount: number;
+  winner?: WallRaceWinner | null;
+  /** 'P12'(이동) · 'W35H'(벽) 순서대로. 무르기가 이걸 재생해 한 수 전으로 돌아간다 */
+  moves: string[];
+  /** MINE(내가 걸어둠) · PARTNER(상대가 걸어옴) · null(없음) */
+  undoRequest?: GameUndoRequest | null;
+  /** 지금 내가 무르기를 걸 수 있는가 — 직전에 둔 쪽만 걸 수 있다 */
+  canUndo: boolean;
+  /** 지금 내가 놓을 수 없는 벽 자리(겹침·길 막힘) — 서버가 같은 규칙으로 계산한다. 예전 서버면 없음 */
+  illegalWalls?: { slot: number; kind: 'H' | 'V'; reason: string }[];
+  partnerName?: string | null;
+  createdAt: string;
+  completedAt?: string | null;
+}
+
+export type GameTypeKey = 'SUDOKU' | 'OMOK' | 'CATCH_MIND' | 'PUZZLE_BATTLE' | 'WALL_RACE';
+export interface GameReactionOption {
+  key: string;
+  emoji: string;
+  label: string;
+}
+/** /sub/couple/{relationId}/game-reaction 페이로드 — 백엔드 GameReactionEvent 와 짝 */
+export interface GameReactionEvent {
+  gameType: GameTypeKey;
+  reaction: string;
+  emoji: string;
+  senderId: number;
+  senderName: string;
 }
 
 // 커플 챌린지/대결 — 기간 내 운동/식단 기록일로 겨루기
@@ -655,6 +1086,13 @@ export interface Place {
   coverImageUrl?: string | null;
   coverMemo?: string | null;
   createdAt: string;
+  /** 무엇을 파는 곳인지 — 카카오 세부 분류 "한식 · 냉면"(예전 서버는 없다) */
+  categoryDetail?: string | null;
+  phone?: string | null;
+  /** 카카오 상세 링크 — 서버가 카카오 id 로 만든다(PlaceLinks). 없으면 검색 링크로 대신 연다 */
+  detailUrl?: string | null;
+  /** 저장(POST /places) 응답에만 온다 — false 면 같은 커플에 이미 있던 장소를 돌려준 것(중복 방지) */
+  created?: boolean;
 }
 export interface PlaceVisit {
   id: number;
@@ -704,6 +1142,22 @@ export interface ContentLog {
   memo?: string | null;
   imageUrl?: string | null;
   createdAt: string;
+  /** 어디서 봤는지(V133) — 없거나 장소가 지워졌으면 null */
+  placeId?: number | null;
+  placeName?: string | null;
+}
+
+/** 장소 상세 "여기서 본 것"(V133) 한 줄 */
+export interface WatchedHere {
+  logId: number;
+  contentId: number;
+  title: string;
+  type: ContentType;
+  posterUrl?: string | null;
+  watchedAt: string;
+  rating?: number | null;
+  loggedBy: number;
+  loggedByName?: string | null;
 }
 
 // 콘텐츠 제목 검색 (TMDB) — 영화·드라마만 대상, 공연(PERFORMANCE)은 결과에 없다
@@ -779,6 +1233,8 @@ export interface Meal {
   placeId?: number | null;
   placeName?: string | null;
   createdAt: string;
+  /** 이 끼니에 달린 응원 반응(우리 탭 피드와 같은 데이터, 읽기 전용) — 구서버 응답엔 없다 */
+  reactions?: ReactionSummary[] | null;
 }
 
 // 오늘 영양 요약 (목표 대비 섭취) — GET /meal/nutrition
@@ -804,6 +1260,8 @@ export interface NutritionSummary {
   // 여행 모드 중이면(PLAN.md Travel Mode) target* 는 전부 null — travelModeTripTitle 이 그 이유
   travelMode: boolean;
   travelModeTripTitle?: string | null;
+  /** 목표 방향(감량·유지·증량) — null 이면 미설정. 본인 응답에만 있다(V115). 구서버면 필드 자체가 없다 */
+  goalDirection?: DietGoalType | null;
 }
 
 // AI 음식 사진 분석 (POST /meal/analyze) — 칼로리·매크로는 추정치, 사용자가 수정 후 저장
@@ -841,24 +1299,6 @@ export interface MealAnalysis {
   totalFiber: number;
   comment?: string | null;
   source?: MealAnalysisSource | null;
-}
-
-/**
- * 운동 인증샷 분석 결과 (POST /workout/analyze-photo) — 전부 추정치다.
- * 기록 화면의 칸을 채워줄 뿐이고 저장은 사용자가 확인한 뒤 한다.
- */
-export interface WorkoutPhotoAnalysis {
-  isWorkout: boolean;
-  exerciseName?: string | null;
-  /** 근력 / 유산소 / 유연성 — 앱의 카테고리 칩과 같은 값 */
-  category?: string | null;
-  durationMin?: number | null;
-  distanceKm?: number | null;
-  /** 참고용 — 앱마다 추정 공식이 달라 기록에는 저장하지 않는다 */
-  calories?: number | null;
-  /** 무엇을 읽었는지("스트라바", "트레드밀 계기판") — 사용자에게 그대로 보여준다 */
-  sourceApp?: string | null;
-  comment?: string | null;
 }
 
 // 최근 먹은 음식 자동완성 (GET /meal/recent-foods) — 즐겨찾기와 달리 저장 없이 자동으로 뽑힌다
@@ -899,6 +1339,8 @@ export interface NutritionGoalSuggestion {
   targetCarbs?: number | null;
   targetProtein?: number | null;
   targetFat?: number | null;
+  /** 체지방률로 제지방량 기준 계산을 했는가(Katch-McArdle) — 아니면 키·나이·성별 기준 */
+  usedBodyFat?: boolean;
   /** 계산 불가 시(프로필/체중 미등록) 안내 문구 */
   message?: string | null;
 }
@@ -948,6 +1390,8 @@ export interface BarcodeLookup {
   sugar?: number | null;
   sodium?: number | null;
   fiber?: number | null;
+  /** 어디서 찾았나 — 영양 필드가 전부 비어 있으면 "제품명만 찾음" */
+  source?: 'FOOD_DB' | 'OPEN_FOOD_FACTS' | null;
 }
 
 // 주간 식단 AI 코칭 (GET /meal/coach)
@@ -969,6 +1413,24 @@ export interface DateCourseStop {
   name: string;
   category?: string | null;
   reason?: string | null;
+  /** PLACE | CONTENT — 서버가 id 로 찾은 우리 기록(2026-10-07 전 응답엔 없다) */
+  kind?: 'PLACE' | 'CONTENT' | null;
+  /** places.id 또는 contents.id — 눌러서 상세로 간다 */
+  id?: number | null;
+  /** 다음 장소까지 직선 거리(km) — 서버가 좌표로 계산. 모르면 없음 */
+  nextDistanceKm?: number | null;
+  /** 콘텐츠 stop 의 포스터 */
+  posterUrl?: string | null;
+  contentType?: ContentType | null;
+}
+
+/** AI 데이트 코스 선택 입력 — 전부 선택(보내지 않으면 서버가 예전 코스: 밖에서·안 가본 곳 포함) */
+export type DateCourseType = 'OUTDOOR' | 'MOVIE_SHOW' | 'HOME';
+export interface DateCourseOptions {
+  type: DateCourseType;
+  timeSlot: 'LUNCH' | 'DINNER' | 'DAY' | null;
+  mood: 'CALM' | 'ACTIVE' | null;
+  includeUnvisited: boolean;
 }
 export interface DateCourse {
   hasData: boolean;
@@ -985,8 +1447,12 @@ export interface LovelichelinRecommendedPlace {
   lat?: number | null;
   lng?: number | null;
   reason?: string | null;
-  /** 카카오맵 상세 페이지 — 담기 전에 직접 확인용 */
+  /** 카카오맵 상세 페이지 — 담기 전에 직접 확인용(서버가 장소 상세와 같은 규칙으로 만든다) */
   placeUrl?: string | null;
+  /** 담을 때 그대로 실어 보내면 중복 등록을 막는다 */
+  kakaoPlaceId?: string | null;
+  categoryDetail?: string | null;
+  phone?: string | null;
 }
 export interface LovelichelinRecommendation {
   /** false = 인증된 럽슐랭 장소가 아직 없어 추천 근거가 없음 */
@@ -1007,11 +1473,53 @@ export interface PlaceSearchResult {
   lat?: number | null;
   lng?: number | null;
   placeUrl?: string | null;
+  /** 무엇을 파는 곳인지 — 카카오 세부 분류 "한식 · 냉면"(예전 서버는 없다) */
+  categoryDetail?: string | null;
+  phone?: string | null;
+  /** 카카오 상세 링크 — 서버가 카카오 id 로 만든다(PlaceLinks). 없으면 검색 링크로 대신 연다 */
+  detailUrl?: string | null;
+}
+/** 홈 이름 옆 럽슐랭 왕관 — 백엔드 LovelichelinPulseResponse.Signal 과 짝 */
+export interface LovelichelinSignal {
+  /** CERTIFIED: 관여한 곳이 24시간 안에 등극(처음 볼 때 한 번 반짝) / TODAY: 오늘 럽슐랭에 기록함(정지) */
+  state: 'CERTIFIED' | 'TODAY';
+  kind: 'PLACE' | 'CONTENT';
+  targetId: number;
+  targetName: string;
+  tier: number;
+  /** CERTIFIED 일 때만 — 본 등극을 기기에 기억하는 열쇠 */
+  certificationKey?: string | null;
+  /** 보는 사람(나)이 그 곳에 대표 평점을 남겼는가 */
+  viewerRated: boolean;
+  /** 왕관 주인이 그 곳에 준 별점(1~5) — 말풍선 "장소명 ★N". 없으면(별점 없이 기록·예전 서버) 별을 빼고 쓴다 */
+  rating?: number | null;
+  /** 이 신호 한 번의 열쇠 — 처음 보는 신호에만 내려앉는다. 등극은 certificationKey 와 같다(예전 서버는 없음) */
+  signalKey?: string | null;
+}
+export interface LovelichelinPulse {
+  me?: LovelichelinSignal | null;
+  partner?: LovelichelinSignal | null;
 }
 export interface PlaceSearchResponse {
   /** false = 카카오 REST API 키 미설정 — places 는 항상 빈 배열 */
   available: boolean;
   places: PlaceSearchResult[];
+}
+/** 채팅 지도 링크 해석 후보 — 카카오 검색 결과라 그대로 placeApi.save 에 넘긴다 */
+export interface PlaceLinkCandidate extends PlaceSearchResult {
+  /** 이미 이 커플 럽슐랭에 있으면 그 장소 id */
+  existingPlaceId?: number | null;
+}
+/** POST /places/resolve-link — 백엔드 ResolvePlaceLinkResponse 와 짝 */
+export interface ResolvePlaceLinkResponse {
+  provider?: 'KAKAO' | 'NAVER' | null;
+  /** 카카오 링크의 장소 id 와 같은 곳을 찾았다 → 후보는 그 하나 */
+  matched: boolean;
+  /** 페이지(또는 공유 문구)에서 읽은 가게 이름 — 후보가 없으면 장소 추가 화면의 검색어로 쓴다 */
+  ogTitle?: string | null;
+  /** matched 후보가 이미 럽슐랭에 있으면 그 장소 id */
+  existingPlaceId?: number | null;
+  candidates: PlaceLinkCandidate[];
 }
 
 // 식단 즐겨찾기 — 자주 먹는 음식 "세트" (원탭 추가). 여러 음식을 한 번에 등록해둘 수 있다.
@@ -1144,6 +1652,10 @@ export interface CoupleMealGoal {
   partnerDays: number;
   bothDays: number;
   achieved: boolean;
+  /** 이번 주 내가 기록한 날짜(YYYY-MM-DD) — 주간 스트립. 구서버 응답엔 없다(옵셔널) */
+  myDates?: string[];
+  /** 이번 주 상대가 기록한 날짜 — 미연결이면 빈 목록. 구서버 응답엔 없다 */
+  partnerDates?: string[];
 }
 
 // 커플 여행 (PLAN.md Trip) — 장소(places)를 여행 단위로 그룹핑
@@ -1288,6 +1800,58 @@ export interface FeedItem {
   occurredAt: string;
   /** 모든 타입에 붙는다 — 반응이 없으면 빈 배열 */
   reactions?: ReactionSummary[] | null;
+  /**
+   * 데이트 식단(같이 먹기)으로 남긴 끼니 — MEAL 타입만 true 가 될 수 있다.
+   * 서버가 커플 양쪽 짝 중 원본 한 장만 내려주므로, 카드는 "누가"가 아니라 "함께"로 읽힌다.
+   */
+  shared?: boolean;
+  /** 한 줄 요약 — 장소·콘텐츠는 "이름 ★4". 한 줄 자리는 utils/feedSummary 로 읽는다(예전 서버는 없다) */
+  summary?: string | null;
+  /**
+   * 일상 포스트의 기록일 YYYY-MM-DD(KST, V119) — 이 일이 있었던 날. 올린 날과 다르면 카드가
+   * "N월 N일의 일상"으로 알린다. 다른 타입·예전 서버는 없다.
+   */
+  recordDate?: string | null;
+  /** 일상 포스트를 고친 적이 있는가(V123) — 카드가 "수정됨"을 붙인다. 다른 타입·예전 서버는 없다 */
+  edited?: boolean;
+  /** 일상 포스트의 댓글 수(V124) — 카드가 "댓글 N"을 보여 준다. 다른 타입·예전 서버는 없다 */
+  commentCount?: number;
+  /** 식사 카드에 붙은 장소 id — 부제의 📍를 누르면 그 장소 상세로(2026-10-05). MEAL 외·예전 서버는 없다 */
+  placeId?: number | null;
+}
+
+/** 이번 달 외식 — GET /places/eat-out/stats. 커플 단위, 칼로리 없음 */
+export interface EatOutStats {
+  month: string;
+  /** 식단이 붙은 방문 수(같이 먹기는 한 번) */
+  outings: number;
+  sharedOutings: number;
+  /** 다녀온 곳 전체(식단 없는 방문 포함) */
+  visits: number;
+  /** 이번 달 처음 가 본 곳 */
+  newPlaces: number;
+  topPlaces: { placeId: number; name: string; visits: number }[];
+  /** 끼니별 외식 횟수 — 0 인 끼니는 없다 */
+  byMealType: Partial<Record<MealType, number>>;
+  previousOutings: number;
+}
+
+/** 장소 상세 "여기서 먹은 것" — GET /places/{id}/menu. 칼로리는 싣지 않는다(상대 식사 양 비노출 결정) */
+export interface PlaceMenu {
+  items: { name: string; times: number; lastDate: string }[];
+  /** 대표 메뉴 제안 — 2번 이상 먹은 것 중 상위 3개(저장하지 않는다) */
+  signature: string[];
+}
+
+/** 일상 댓글 하나(V124) */
+export interface FeedComment {
+  id: number;
+  authorId: number;
+  authorName: string;
+  /** 내가 쓴 댓글 — 길게 눌러 지울 수 있다 */
+  mine: boolean;
+  content: string;
+  createdAt: string;
 }
 export interface FeedTimeline {
   items: FeedItem[];
@@ -1319,6 +1883,20 @@ export interface Memories {
    * `groups` 가 비었을 때 "추억이 없음"과 "잠김"을 구분하는 유일한 값이다.
    */
   locked?: boolean;
+  /**
+   * 오늘의 기념일 — 사귄 지 N주년·N백일, 캘린더 반복 기념일, 몇 년 전 오늘의 일정.
+   * 기록(groups)이 없어도 기념일만 있는 날이 있다. 구 서버 응답엔 없다.
+   */
+  anniversaries?: MemoryAnniversary[];
+}
+
+export interface MemoryAnniversary {
+  kind: 'COUPLE_YEARS' | 'COUPLE_DAYS' | 'EVENT_YEARLY' | 'EVENT_PAST';
+  /** 화면 문구 그대로 — "오늘은 우리 2주년" · "1년 전 오늘 · 제주 여행" */
+  label: string;
+  years?: number | null;
+  days?: number | null;
+  eventId?: number | null;
 }
 
 // 5.8 chat_messages
@@ -1340,7 +1918,12 @@ export type MessageType =
   /** 우리 이모지 — content 에 couple_emojis.id, imageUrl 에 그 행의 URL(서버가 복사). PRO 판정 없음 */
   | 'COUPLE_EMOJI'
   /** 커플 게임 결과 카드(협동 스도쿠 완성) — STREAK_CARD 처럼 content 가 그대로 읽히는 문장이다 */
-  | 'GAME_CARD';
+  | 'GAME_CARD'
+  /**
+   * 문구 스티커 — 캐릭터 스티커 위에 짧은 문구를 얹는다. content 는 문구 그대로, 스티커는 stickerCode.
+   * 이 타입을 모르는 옛 앱은 content 를 글 말풍선으로 그려 문구가 그대로 읽힌다(STREAK_CARD 와 같은 규칙).
+   */
+  | 'TEXT_STICKER';
 /** 메시지 이모지 리액션 — mine 은 userIds 에 내 id 가 있는지로 판단한다(브로드캐스트 공용) */
 export interface ChatReactionSummary {
   emoji: string;
@@ -1380,11 +1963,20 @@ export interface ChatMessage {
    * (내용으로 짝지으면 같은 말을 두 번 보낼 때 깨진다). 옛 메시지·시스템 카드는 없다.
    */
   clientMessageId?: string | null;
+  /** 문구 스티커(TEXT_STICKER)의 캐릭터 스티커 코드 — 다른 타입이면 없다 */
+  stickerCode?: string | null;
   /**
    * 아직 서버 에코가 오지 않은 <b>내 화면에만 있는</b> 말풍선. id 는 임시 음수다.
    * 서버가 준 메시지에는 절대 붙지 않는다 — 읽음 처리·리액션·수정 같은 경로가 이 값을 보고 비켜난다.
    */
   pending?: boolean;
+  /**
+   * 보내지 못한 말풍선 — 서버가 거절했거나(/user/queue/chat-errors) 기다려도 확인이 안 왔다. pending 과 마찬가지로
+   * 내 화면에만 있다. 누르면 같은 멱등키로 다시 보내거나 지운다(같은 키라 서버가 사실 저장했어도 두 번 생기지 않는다).
+   */
+  failed?: boolean;
+  /** 실패 이유 — 서버 문구 그대로(없으면 화면이 기본 문구를 쓴다) */
+  failReason?: string;
 }
 
 /** 저장한 대화 목록 항목 — bookmarkId 를 다음 페이지 커서로 쓴다(ChatMessage.id 아님) */
@@ -1429,6 +2021,12 @@ export interface MoodEntry {
    * 상대가 그 이모지를 지우면 서버가 다시 null 로 내려주므로 저절로 유니코드로 돌아간다.
    */
   imageUrl?: string | null;
+  /**
+   * 그림 없이 글자로만 보여 줄 자리(안드로이드 홈 위젯)에 쓸 말 — 대개 {@link emoji} 와 같고, 표정이 아닌
+   * 우리 이모지면 그 이름(배고파)이다. 대역(🫠 녹음)은 같은 뜻이 아니라서다(서버 MoodEntry.moodText).
+   * 2026-10-07 이전 서버엔 없다.
+   */
+  moodText?: string | null;
   message?: string | null;
   createdAt: string;
 }
@@ -1437,6 +2035,38 @@ export interface MoodEntry {
 export interface MoodResponse {
   mine: MoodEntry | null;
   partner: MoodEntry | null;
+}
+
+/** 무드 달력 한 칸의 한 사람 — 그날 마지막으로 고른 무드 */
+export interface MoodMark {
+  emoji: string;
+  /** 우리 이모지면 그 이미지(숨긴 이모지면 null) */
+  imageUrl?: string | null;
+  /** 그날 바꾼 횟수 */
+  count: number;
+}
+
+/** GET /mood/calendar?month=YYYY-MM */
+export interface MoodCalendar {
+  month: string;
+  /** 이 날짜(YYYY-MM-DD)보다 앞은 잠김 — 무료는 최근 30일. 전체 열림이면 null */
+  lockedBefore: string | null;
+  /** 무드가 있는 날만, 날짜 오름차순 */
+  days: { date: string; mine: MoodMark | null; partner: MoodMark | null }[];
+}
+
+/** GET /mood/days/{date} — 그날 두 사람의 무드 흐름(시간순) */
+export interface MoodDay {
+  date: string;
+  locked: boolean;
+  entries: {
+    mine: boolean;
+    emoji: string;
+    imageUrl?: string | null;
+    message?: string | null;
+    /** KST HH:mm — 서버가 맞춰 준다 */
+    time: string;
+  }[];
 }
 
 /** 가상 터치 제스처 코드 — constants/touchGestures.ts 의 TOUCH_GESTURES 와 짝 */
@@ -1454,19 +2084,21 @@ export interface LatestTouch {
 export interface ChatRoom {
   relationId: number;
   relationType: RelationType;
-  partner: User | null;
+  partner: PartnerUser | null;
   lastMessage?: ChatMessage | null;
   unreadCount: number;
 }
 
 // 5.8b couple_emojis — 애인 얼굴로 만든 감정 이모지 세트
 /**
- * 감정 17종(표정 6 + 상황 11) — 서버 {@code CoupleEmojiEmotion} 과 순서·이름이 같다. 사용자가 고르지 않는다
+ * 감정 23종(표정 6 + 자주 하는 말 6 + 상황 11) — 서버 {@code CoupleEmojiEmotion} 과 순서·이름이 같다. 사용자가 고르지 않는다
  * (사진 한 장 → 세트 한 벌). 생성 대기 화면의 "칸이 채워지는" 순서가 이 순서다.
  */
 export type CoupleEmojiEmotion =
   // 표정 6종
   | 'ANGRY' | 'HAPPY' | 'EXCITED' | 'SAD' | 'SLEEPY' | 'LOVE'
+  // 자주 하는 말 6종 (2026-09-29 추가)
+  | 'SORRY' | 'THANKS' | 'MISS_YOU' | 'GOOD_NIGHT' | 'HUNGRY' | 'CHEER'
   // 상황 11종 (2026-09-10 추가)
   | 'FRESHLY_WASHED' | 'BOUQUET' | 'KISS' | 'HARD_AT_WORK' | 'COMMUTING' | 'OFF_WORK'
   | 'DRAINED' | 'SHOWING_OFF' | 'DRESSED_UP' | 'FACE_MASK' | 'DOING_MAKEUP';
@@ -1485,6 +2117,16 @@ export interface CoupleEmoji {
   createdBy: number;
   /** 무드 선택지에 올라가는가 — 트레이에서 길게 눌러 토글한다 */
   moodVisible: boolean;
+  /**
+   * 이 감정이 대신하는 기본 무드 유니코드 — 무드 피커가 어느 칸을 덮을지 정한다.
+   * 매핑은 서버(CoupleEmojiEmotion)가 갖고 우리는 받기만 한다. 여러 감정이 같은 값을 가질 수 있다.
+   */
+  moodEmoji: string;
+  /**
+   * 그린 프롬프트 버전(v1~v5…). v4 이하는 효과가 그림 안에 그려져 있어 앱이 효과 레이어를
+   * 얹지 않는다(constants/coupleEmojiMotion.ts). 옛 서버는 이 필드를 안 보낸다.
+   */
+  promptVersion?: string | null;
   createdAt: string;
 }
 
@@ -1513,4 +2155,37 @@ export interface AuthTokens {
   accessToken: string;
   refreshToken: string;
   user: User;
+  /** 탈퇴 유예기간 중 로그인해 탈퇴가 취소됐으면 true */
+  withdrawalCanceled?: boolean;
+}
+
+// 기록 내보내기 (docs/DATA_EXPORT_2026-10-01.md) — 백엔드 com.fitto.dataexport.dto 대응.
+export interface ExportSectionCount {
+  /** 섹션 키 — feed_posts, chat_messages … (ZIP 안 data/<key>.json) */
+  key: string;
+  scope: 'COUPLE' | 'PERSONAL';
+  count: number;
+  mediaCount: number;
+}
+
+export interface ExportSummary {
+  /** 연결된 커플이 있는가 — 없으면 개인 기록만 나간다 */
+  coupled: boolean;
+  sections: ExportSectionCount[];
+  mediaCount: number;
+  /** 장당 평균으로 잡은 어림값(바이트) — 저장공간 확인용 */
+  estimatedBytes: number;
+  /** 이번 주에 새로 시작할 수 있는 횟수(이어받기는 세지 않는다) */
+  remaining: number | null;
+  limit: number;
+  period: string;
+}
+
+export interface ExportPage {
+  section: string;
+  /** 테이블 행 그대로 — 컬럼 이름은 소문자 snake_case */
+  items: Record<string, unknown>[];
+  /** 모양은 utils/exportPaths.ts 의 ExportMediaRef(검증 스크립트가 그 파일만 읽어서 거기 둔다) */
+  media: { section: string; rowId: number; column: string; url: string; kind: 'IMAGE' | 'AUDIO' }[];
+  nextCursor: number | null;
 }

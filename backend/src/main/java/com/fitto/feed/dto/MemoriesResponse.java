@@ -22,14 +22,19 @@ public record MemoriesResponse(
          * 막아버리면 앱을 열 때마다 업그레이드 시트가 뜬다. 대신 빈 결과에 이 표시를 달아
          * 홈이 그 자리에 안내를 그리게 한다.
          */
-        boolean locked
+        boolean locked,
+        /**
+         * 오늘의 기념일 — 사귄 지 N주년·N백일, 캘린더 반복 기념일, 몇 년 전 오늘의 일정.
+         * 기록({@code groups})이 없어도 기념일만 있는 날이 있다. 잠겨 있으면 빈 목록.
+         */
+        List<MemoryAnniversaryResponse> anniversaries
 ) {
 
     public static MemoriesResponse empty(LocalDate on) {
-        return new MemoriesResponse(on, 0, List.of(), false);
+        return new MemoriesResponse(on, 0, List.of(), false, List.of());
     }
 
     public static MemoriesResponse locked(LocalDate on) {
-        return new MemoriesResponse(on, 0, List.of(), true);
+        return new MemoriesResponse(on, 0, List.of(), true, List.of());
     }
 }

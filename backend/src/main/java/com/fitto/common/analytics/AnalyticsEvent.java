@@ -35,4 +35,51 @@ public final class AnalyticsEvent {
     public static final String FEATURE_USED = "FEATURE_USED";
     /** PlanGuard 게이팅에 막힘(업그레이드 유도) — detail 에 Feature.name(). */
     public static final String FEATURE_BLOCKED = "FEATURE_BLOCKED";
+
+    /* ── 결제 퍼널(2026-09-25) — FEATURE_BLOCKED 와 짝을 이뤄 "막힌 사람 중 몇이 샀는가"를 센다.
+     * 앞 셋은 프론트가 보낸다(ClientAnalyticsEvent). 뒤 둘은 서버가 결제를 확인한 지점에서 남긴다. */
+    /** 페이월을 봤다 — detail 에 어디서(upgrade_sheet / plan_screen). */
+    public static final String PAYWALL_VIEWED = "PAYWALL_VIEWED";
+    /** 결제창을 열었다 — detail 에 상품(monthly / yearly / emoji_set_1). */
+    public static final String PURCHASE_STARTED = "PURCHASE_STARTED";
+    /** 결제창을 닫았다(사용자 취소). */
+    public static final String PURCHASE_CANCELLED = "PURCHASE_CANCELLED";
+    /** 스토어가 결제 실패를 돌려줬다 — detail 에 스토어 오류 코드. */
+    public static final String PURCHASE_FAILED = "PURCHASE_FAILED";
+    /** 구독이 새로 생겼다(검증·웹훅 경로 공통) — detail 에 스토어. */
+    public static final String SUBSCRIPTION_STARTED = "SUBSCRIPTION_STARTED";
+    /** 크레딧 상품을 샀다 — detail 에 상품 id. */
+    public static final String CREDIT_PURCHASED = "CREDIT_PURCHASED";
+    /** 환불된 크레딧 결제에서 안 쓴 크레딧을 거뒀다 — detail 에 "상품 id:거둔 수". */
+    public static final String CREDIT_REVOKED = "CREDIT_REVOKED";
+
+    /* ── 입력 중 스티커 추천(2026-09-28) — 프론트가 보낸다(ClientAnalyticsEvent).
+     * 노출 대비 선택으로 추천 표가 쓸모 있는지 본다. 원문 입력은 싣지 않는다. */
+    /** 추천 막대가 떴다 — detail 에 "키워드:코드,코드,…". */
+    public static final String STICKER_SUGGEST_SHOWN = "STICKER_SUGGEST_SHOWN";
+    /** 추천 막대에서 골라 보냈다 — detail 에 "키워드:코드". */
+    public static final String STICKER_SUGGEST_PICKED = "STICKER_SUGGEST_PICKED";
+    /**
+     * 나만의 하루 기록 저장 — detail 은 {@code JournalSource} 이름 + ":NEW"/":EDIT" 뿐이다(서버가 enum 으로 만든다).
+     * <b>본문·무드·사진은 절대 싣지 않는다</b> — event_logs 는 탈퇴해도 남는 익명 집계 테이블이다.
+     */
+    public static final String JOURNAL_SAVED = "JOURNAL_SAVED";
+    /** MoodPicker 2단계("한 줄 남기기")가 떴다 — 저장 수(JOURNAL_SAVED:MOOD_PICKER)와 나눠 입구 전환율을 본다. detail 없음 */
+    public static final String JOURNAL_PROMPT_SHOWN = "JOURNAL_PROMPT_SHOWN";
+
+    /** 식단 기록 화면 계측(2026-10-05) — 값은 {@link ClientAnalyticsEvent} 와 같다. 화면 정리 전 기준선 */
+    public static final String MEAL_RECORD_OPENED = "MEAL_RECORD_OPENED";
+    public static final String MEAL_INPUT_ADDED = "MEAL_INPUT_ADDED";
+    public static final String MEAL_ANALYZE_STARTED = "MEAL_ANALYZE_STARTED";
+    public static final String MEAL_ITEM_EDIT_OPENED = "MEAL_ITEM_EDIT_OPENED";
+    public static final String MEAL_MULTIPLIER_CHANGED = "MEAL_MULTIPLIER_CHANGED";
+    public static final String MEAL_RECORD_SAVED = "MEAL_RECORD_SAVED";
+    public static final String MEAL_RECORD_ABANDONED = "MEAL_RECORD_ABANDONED";
+
+    /**
+     * 채팅 소켓이 앱 포그라운드에서 5초 넘게 끊겨 있었다(2026-10-05) — "연결 중이에요"가 오래 뜨는 원인을 가르는 계측.
+     * detail 예: {@code 13.2s close1006 a3 r1/420 ok cell room}(초·원인·시도 수·토큰 갱신 횟수/ms·끝난 방식·네트워크·채팅방 여부).
+     * docs/server-stability-current-state.md §12.
+     */
+    public static final String CHAT_SOCKET_SLOW = "CHAT_SOCKET_SLOW";
 }

@@ -25,7 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * 장소 힌트 조회 쿼리 — H2 에서 실제로 돌린다. 프롬프트 조립은 {@code FoodAnalysisPhotoPromptTest}
  * 가 저장소를 모킹해 검증하므로, 여기서는 모킹으로는 못 잡는 <b>JPQL 의 의미</b>(방문→항목 조인,
- * 이름 중복 제거, 최근 방문순, 10개 제한, 커플 상대의 방문 포함)만 본다.
+ * 이름 중복 제거, 많이 먹은 순, 10개 제한, 커플 상대의 방문 포함)과 세부 분류가 실리는지만 본다.
  */
 @SpringBootTest
 @ActiveProfiles("test")
@@ -63,10 +63,10 @@ class MealPlaceHintQueryTest {
     }
 
     @Test
-    void 방문한_끼니의_메뉴를_중복_없이_최근_방문순으로_가져오고_상대의_방문도_포함한다() {
+    void 방문한_끼니의_메뉴를_중복_없이_많이_먹은_순으로_가져오고_상대의_방문도_포함한다() {
         long[] users = couple("hint1a@fitto.com", "hint1b@fitto.com");
-        Long placeId = placeService.save(users[0],
-                new SavePlaceRequest("을지로 김치찌개", null, null, null, "음식점")).id();
+        Long placeId = placeService.save(users[0], new SavePlaceRequest(
+                "을지로 김치찌개", null, null, null, "음식점", null, "한식 · 찌개,전골", null)).id();
         LocalDate today = LocalDate.now();
         eatAt(users[0], placeId, today.minusDays(3), MealType.LUNCH, "김치찌개", "공기밥");
         eatAt(users[1], placeId, today.minusDays(1), MealType.DINNER, "계란말이", "김치찌개");
@@ -75,9 +75,9 @@ class MealPlaceHintQueryTest {
 
         assertThat(hint.name()).isEqualTo("을지로 김치찌개");
         assertThat(hint.category()).isEqualTo("음식점");
-        // 계란말이·김치찌개는 같은 (가장 최근) 방문에 있어 둘의 순서는 정하지 않는다
-        assertThat(hint.menus()).hasSize(3).endsWith("공기밥")
-                .containsExactlyInAnyOrder("김치찌개", "계란말이", "공기밥");
+        assertThat(hint.categoryDetail()).isEqualTo("한식 · 찌개,전골");
+        // 장소 상세 "여기서 먹은 것"과 같은 순서 — 많이 먹은 것 먼저(김치찌개 2번), 같으면 최근 것 먼저
+        assertThat(hint.menus()).containsExactly("김치찌개", "계란말이", "공기밥");
     }
 
     @Test
@@ -92,15 +92,14 @@ class MealPlaceHintQueryTest {
     }
 
     @Test
-    void 남의_장소는_빈_값이고_끼니에서_장소를_역으로_찾을_수_있다() {
+    void 남의_장소는_빈_값이고_커플_상대에게는_힌트가_나온다() {
         long[] users = couple("hint3a@fitto.com", "hint3b@fitto.com");
         Long outsider = register("hint3c@fitto.com");
         Long placeId = placeService.save(users[0],
                 new SavePlaceRequest("성수 브런치", null, null, null, null)).id();
-        Long mealId = eatAt(users[0], placeId, LocalDate.now(), MealType.BREAKFAST, "에그베네딕트");
+        eatAt(users[0], placeId, LocalDate.now(), MealType.BREAKFAST, "에그베네딕트");
 
         assertThat(loader.forPlace(outsider, placeId)).isEmpty();
         assertThat(loader.forPlace(users[1], placeId)).isPresent();
-        assertThat(loader.placeIdOfMeal(mealId)).contains(placeId);
     }
 }

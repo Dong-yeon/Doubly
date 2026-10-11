@@ -35,6 +35,7 @@ import { toast } from '../../store/toastStore';
 import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
 import { usePlanStore } from '../../store/planStore';
+import { isQuotaExhausted, quotaExhaustedNotice } from '../../utils/planNotice';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import type { VoiceClip, VoicePhrase } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
@@ -78,6 +79,7 @@ export function VoiceClipsScreen() {
   /* 부스터는 PRO 전용 + 주간 한도 — 표시용 판정이다(최종 판정은 서버) */
   const boosterAllowed = usePlanStore((s) => s.can('WORKOUT_BOOSTER'));
   const boosterRemaining = usePlanStore((s) => s.remainingOf('WORKOUT_BOOSTER'));
+  const boosterState = usePlanStore((s) => s.stateOf('WORKOUT_BOOSTER'));
   const showUpgrade = usePlanStore((s) => s.showUpgrade);
   const boosterActive = activePhrase === BOOSTER;
 
@@ -157,6 +159,11 @@ export function VoiceClipsScreen() {
   /** 부스터 녹음 시작 — PRO 전용이라 먼저 막고 이유를 알려준다(서버도 다시 판정한다). */
   const startBooster = () => {
     if (!boosterAllowed) {
+      // PRO 도 주 3회다. 다 쓴 사람에게 결제를 권하면 안 되므로 언제 풀리는지만 알려준다.
+      if (isQuotaExhausted(boosterState)) {
+        toast.info(quotaExhaustedNotice(boosterState));
+        return;
+      }
       showUpgrade('운동 부스터는 PRO에서 보낼 수 있어요.');
       return;
     }

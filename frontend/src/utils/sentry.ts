@@ -51,3 +51,20 @@ export function initSentry() {
     });
   });
 }
+
+/*
+ * 채팅 소켓 계측 — "연결 중이에요"가 오래 뜨는 원인을 가르려고 둔다(docs/server-stability-current-state.md §11-3).
+ * 서버 로그로는 앱이 언제 끊김을 알아채고 몇 번 다시 붙으려 했는지 보이지 않는다. 브레드크럼은 다른 에러가 날 때
+ * 함께 실려 가고, 느린 재연결은 아래 경고 이벤트로 따로 보낸다. 사용자 입력·토큰은 싣지 않는다.
+ */
+export function addSocketBreadcrumb(message: string, data?: Record<string, unknown>): void {
+  Sentry.addBreadcrumb({ category: 'chat.socket', level: 'info', message, data });
+}
+
+export function reportSlowSocket(summary: string, tags: Record<string, string>, timeline: string[]): void {
+  Sentry.captureMessage('채팅 소켓 재연결 지연', {
+    level: 'warning',
+    tags,
+    extra: { summary, timeline },
+  });
+}

@@ -1,6 +1,13 @@
 /** 커플 캘린더 API — 일정 CRUD + 월/다가오는 조회 */
 import { apiClient, unwrap } from './client';
-import type { ApiResponse, CalendarEventType, CoupleCalendarEvent } from '../types';
+import type {
+  ApiResponse,
+  CalendarDateMeal,
+  CalendarEventType,
+  CalendarEventVisibility,
+  CoupleCalendarEvent,
+  HolidayYear,
+} from '../types';
 
 export interface SaveEventPayload {
   title: string;
@@ -14,6 +21,11 @@ export interface SaveEventPayload {
   endDate?: string;
   eventType?: CalendarEventType;
   repeatYearly: boolean;
+  /**
+   * 공개 범위 — 생략하면 우리 일정(SHARED). 수정 시에는 <b>만든 사람만</b> 바꿀 수 있다
+   * (상대가 내 일정을 '나만 보기'로 돌려 내 달력에서 지우지 못하게).
+   */
+  visibility?: CalendarEventVisibility;
   memo?: string;
 }
 
@@ -25,11 +37,24 @@ export const calendarApi = {
         `/calendar/events?year=${year}&month=${month}`,
       ),
     ),
+  /**
+   * 데이트 기록 — 장소가 연결된 데이트 식단(캘린더 오버레이).
+   * 일정과 달리 조회만 있다 — 고치려면 원본 식단 기록을 고친다.
+   */
+  dateMeals: (year: number, month: number) =>
+    unwrap(
+      apiClient.get<ApiResponse<CalendarDateMeal[]>>(
+        `/calendar/date-meals?year=${year}&month=${month}`,
+      ),
+    ),
   /** 다가오는 일정 — D-day 오름차순 */
   upcoming: (limit = 5) =>
     unwrap(
       apiClient.get<ApiResponse<CoupleCalendarEvent[]>>(`/calendar/events/upcoming?limit=${limit}`),
     ),
+  /** 한 해의 공휴일 — 사용자와 무관한 공용 표라 해마다 한 번만 받으면 된다 */
+  holidays: (year: number) =>
+    unwrap(apiClient.get<ApiResponse<HolidayYear>>(`/calendar/holidays?year=${year}`)),
   create: (payload: SaveEventPayload) =>
     unwrap(apiClient.post<ApiResponse<CoupleCalendarEvent>>('/calendar/events', payload)),
   update: (id: number, payload: Partial<SaveEventPayload>) =>

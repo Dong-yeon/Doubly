@@ -1,6 +1,6 @@
 /** 트레이너 API — 설계서 v2.0 4.6 (등록·프로필·대시보드·회원 기록·루틴) */
 import { apiClient, unwrap } from './client';
-import type { ApiResponse, TrainerProfile, TrainerRoutine, User, Workout } from '../types';
+import type { ApiResponse, PartnerUser, TrainerProfile, TrainerRoutine, Workout } from '../types';
 
 export interface AssignRoutinePayload {
   memberId: number;
@@ -19,7 +19,7 @@ export interface TrainerProfilePayload {
 }
 
 export interface MemberSummary {
-  member: User;
+  member: PartnerUser;
   todayCompleted: boolean;
   lastWorkoutDate?: string | null;
 }

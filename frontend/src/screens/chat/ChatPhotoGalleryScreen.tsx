@@ -1,6 +1,6 @@
 /**
  * 채팅 사진 모아보기 — docs/CHAT_RETENTION_AND_KAKAO_BENCHMARK_2026-09-03.md §6 2순위.
- * PhotoAlbumScreen(피드 사진)과 같은 3열 그리드 패턴이지만, 대상은 이 방의 IMAGE
+ * AlbumScreen("우리" 탭)과 같은 3열 그리드 패턴이지만, 대상은 이 방의 IMAGE
  * 메시지다. 전면 무료(PRO_PLAN_DESIGN.md "우리 대화 갤러리") — 게이팅 없음.
  */
 import React, { useCallback, useMemo, useRef, useState } from 'react';
@@ -11,8 +11,8 @@ import {
   Pressable,
   RefreshControl,
   View,
-  useWindowDimensions,
 } from 'react-native';
+import { usePhotoGrid } from '../../hooks/usePhotoGrid';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { ChatStackParamList } from '../../navigation/types';
@@ -22,6 +22,7 @@ import { chatApi } from '../../api/chat';
 import { toast } from '../../store/toastStore';
 import { getErrorMessage } from '../../utils/error';
 import { chatDateDividerLabel } from '../../utils/date';
+import { thumbnailUrl } from '../../utils/imageUrl';
 import type { ChatMessage } from '../../types';
 import { colors } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
@@ -29,13 +30,15 @@ import { layout } from '../../theme/layout';
 
 type Props = NativeStackScreenProps<ChatStackParamList, 'ChatPhotoGallery'>;
 
-const COLUMNS = 3;
+/** 폰에서의 열 수 — 태블릿·폴더블에서는 usePhotoGrid 가 칸 크기를 보고 늘린다 */
+const PHONE_COLUMNS = 3;
 const GAP = 2;
 
 export function ChatPhotoGalleryScreen({ route }: Props) {
-  const { relationId, myId } = route.params;
-  const { width: windowWidth } = useWindowDimensions();
-  const CELL = useMemo(() => (windowWidth - GAP * (COLUMNS - 1)) / COLUMNS, [windowWidth]);
+  const { relationId, myId, initialPhotoId } = route.params;
+  // 시트 사진 줄에서 고른 장 — 첫 로드에서 한 번만 연다(다시 포커스될 때 또 열리면 안 된다)
+  const initialPhotoIdRef = useRef<number | undefined>(initialPhotoId);
+  const { columns, cell: CELL } = usePhotoGrid({ gap: GAP, phoneColumns: PHONE_COLUMNS });
 
   const [photos, setPhotos] = useState<ChatMessage[]>([]);
   const [hasMore, setHasMore] = useState(false);
@@ -53,7 +56,7 @@ export function ChatPhotoGalleryScreen({ route }: Props) {
           key: String(p.id),
           uri: p.imageUrl!,
           title: `${p.senderId === myId ? '나' : '상대'}  ·  ${chatDateDividerLabel(p.createdAt)}`,
-          titleColor: p.senderId === myId ? colors.coral : colors.indigo,
+          titleColor: p.senderId === myId ? colors.meText : colors.partnerText,
         })),
     [photos, myId],
   );
@@ -67,6 +70,12 @@ export function ChatPhotoGalleryScreen({ route }: Props) {
       const page = await chatApi.photos(relationId);
       setPhotos(page);
       setHasMore(page.length > 0);
+      if (initialPhotoIdRef.current != null) {
+        // 뷰어의 목록은 imageUrl 이 있는 것만이라(viewerImages) 같은 기준으로 위치를 센다
+        const i = page.filter((p) => !!p.imageUrl).findIndex((p) => p.id === initialPhotoIdRef.current);
+        initialPhotoIdRef.current = undefined;
+        if (i >= 0) setViewingIndex(i);
+      }
     } catch (e) {
       toast.error(getErrorMessage(e, '사진을 불러오지 못했어요.'));
       setPhotos([]);
@@ -105,7 +114,9 @@ export function ChatPhotoGalleryScreen({ route }: Props) {
       <FlatList
         data={photos}
         keyExtractor={(p) => String(p.id)}
-        numColumns={COLUMNS}
+        /* numColumns 런타임 변경은 지원되지 않는다 — 열이 바뀌면 목록을 새로 그린다 */
+        key={columns}
+        numColumns={columns}
         columnWrapperStyle={styles.row}
         contentContainerStyle={photos.length === 0 ? styles.emptyWrap : styles.list}
         refreshControl={
@@ -119,7 +130,11 @@ export function ChatPhotoGalleryScreen({ route }: Props) {
             accessibilityRole="imagebutton"
             accessibilityLabel={`${item.senderId === myId ? '내' : '상대'} 사진 크게 보기`}
           >
-            <Image source={{ uri: item.imageUrl ?? undefined }} style={[styles.cell, { width: CELL, height: CELL }]} />
+            {/* 격자는 썸네일 — 원본을 깔면 한 화면에 수 MB 를 받는다(AlbumScreen 과 같은 규칙) */}
+            <Image
+              source={{ uri: item.imageUrl ? thumbnailUrl(item.imageUrl, Math.round(CELL)) : undefined }}
+              style={[styles.cell, { width: CELL, height: CELL }]}
+            />
           </Pressable>
         )}
         ListEmptyComponent={

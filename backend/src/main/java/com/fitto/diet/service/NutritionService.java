@@ -85,13 +85,27 @@ public class NutritionService {
                 travelMode || goal == null ? null : goal.getTargetFat(),
                 cal, carbs, protein, fat, sugar, sodium, fiber,
                 energy.bmr(), energy.exerciseCalories(), energy.energyBalance(),
-                travelMode, travelMode ? travelTrip.getTitle() : null);
+                travelMode, travelMode ? travelTrip.getTitle() : null,
+                goal == null ? null : goal.getGoalDirection());
     }
 
     @Transactional
     public NutritionSummaryResponse setGoal(Long userId, NutritionGoalRequest req) {
         NutritionGoal goal = goalRepository.findById(userId).orElseGet(() -> new NutritionGoal(userId));
         goal.update(req.targetCalories(), req.targetCarbs(), req.targetProtein(), req.targetFat());
+        // 마법사에서 고른 방향 — 계산에만 쓰고 버리던 값이다. null 은 "안 보냄"(구버전 앱)이라 건드리지 않는다
+        if (req.goalDirection() != null) {
+            goal.updateGoalDirection(req.goalDirection());
+        }
+        goalRepository.save(goal);
+        return today(userId);
+    }
+
+    /** 목표 방향만 바꾼다(신체 정보 시트). null 이면 미설정으로 되돌린다 — 칼로리·매크로 목표는 그대로 */
+    @Transactional
+    public NutritionSummaryResponse setGoalDirection(Long userId, DietGoalType goalDirection) {
+        NutritionGoal goal = goalRepository.findById(userId).orElseGet(() -> new NutritionGoal(userId));
+        goal.updateGoalDirection(goalDirection);
         goalRepository.save(goal);
         return today(userId);
     }
@@ -106,14 +120,14 @@ public class NutritionService {
      */
     public NutritionGoalSuggestionResponse suggestGoal(Long userId, NutritionGoalSuggestionRequest req) {
         User user = userRepository.findById(userId).orElse(null);
-        BigDecimal weightKg = bodyMetricRepository.findTopByUserIdOrderByMeasuredDateDescIdDesc(userId)
-                .map(BodyMetric::getWeightKg)
+        BodyMetric metric = bodyMetricRepository.findTopByUserIdAndWeightKgIsNotNullOrderByMeasuredDateDescIdDesc(userId)
                 .orElse(null);
-        Integer bmr = BmrCalculator.calc(user, weightKg);
+        Integer bmr = BmrCalculator.calc(user, metric);
         if (bmr == null) {
             return NutritionGoalSuggestionResponse.unavailable(
                     "MY 탭 → 신체 정보에서 키·생년월일·성별과 체중을 등록하면 목표를 자동으로 계산해드려요.");
         }
+        BigDecimal weightKg = metric.getWeightKg();
         int tdee = (int) Math.round(bmr * req.activityLevel().multiplier());
 
         double weeklyRateKg = req.goalType() == DietGoalType.MAINTAIN ? 0
@@ -135,7 +149,8 @@ public class NutritionService {
         double carbsG = Math.max(0, (targetCalories - proteinG * 4 - fatG * 9) / 4);
 
         return new NutritionGoalSuggestionResponse(bmr, tdee, targetCalories,
-                (int) Math.round(carbsG), (int) Math.round(proteinG), (int) Math.round(fatG), null);
+                (int) Math.round(carbsG), (int) Math.round(proteinG), (int) Math.round(fatG),
+                BmrCalculator.usesBodyFat(metric), null);
     }
 
     /** 커플이 여행 모드를 켜둔 여행 중 오늘이 그 기간 안인 것 — 없으면(미연결 포함) empty. */

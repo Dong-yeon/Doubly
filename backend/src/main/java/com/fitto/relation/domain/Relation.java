@@ -123,9 +123,9 @@ public class Relation {
     }
 
     /**
-     * 초대코드 재발급 — FAMILY 전용.
-     * 커플과 달리 참여해도 코드를 비우지 않으므로(여러 명이 같은 코드로 참여),
-     * 만료되면 이 메서드로 새 코드를 발급한다.
+     * 초대코드 재발급.
+     * FAMILY 는 참여해도 코드를 비우지 않으므로(여러 명이 같은 코드로 참여) 만료되면 이걸로 새로 발급한다.
+     * COUPLE 은 "새 코드 만들기"가 대기 중인 같은 행의 코드를 바꾼다 — 옛 코드는 그 순간 무효가 된다.
      */
     public void issueInviteCode(String code, LocalDateTime expiresAt) {
         this.inviteCode = code;

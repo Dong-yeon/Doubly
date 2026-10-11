@@ -22,7 +22,9 @@ interface DietState {
   loadMoreHistory: () => Promise<void>;
   save: (payload: SaveMealPayload) => Promise<Meal>;
   update: (id: number, payload: SaveMealPayload) => Promise<Meal>;
-  remove: (id: number) => Promise<void>;
+  remove: (id: number, withVisit?: boolean) => Promise<void>;
+  /** 다른 API(외식 기록 POST /places/meal-visits)로 저장했을 때 — 오늘·히스토리를 다시 받는다 */
+  reload: () => Promise<void>;
 }
 
 export const useDietStore = create<DietState>((set, get) => ({
@@ -86,8 +88,13 @@ export const useDietStore = create<DietState>((set, get) => ({
     return updated;
   },
 
-  remove: async (id) => {
-    await dietApi.remove(id);
+  reload: async () => {
+    await get().fetchToday();
+    await get().fetchHistory();
+  },
+
+  remove: async (id, withVisit) => {
+    await dietApi.remove(id, withVisit);
     set({
       today: get().today.filter((m) => m.id !== id),
       history: get().history.filter((m) => m.id !== id),

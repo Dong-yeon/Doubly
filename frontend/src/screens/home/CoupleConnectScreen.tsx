@@ -1,6 +1,8 @@
 /** 커플 연결 — 설계서 3.2 REL-01/REL-02 (초대코드 생성 / 코드 입력 연결) */
-import React, { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState, Text, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import { MaterialCommunityIcons } from '../../components/Icon';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -9,8 +11,11 @@ import { Button } from '../../components/Button';
 import { FormKeyboardView } from '../../components/FormKeyboardView';
 import { TextField } from '../../components/TextField';
 import { useRelationStore } from '../../store/relationStore';
+import { relationApi } from '../../api/relation';
+import { errorCodeOf } from '../../api/client';
 import { getErrorMessage } from '../../utils/error';
 import { copyText, shareText } from '../../utils/share';
+import { INVITE_LINK_BASE } from '../../constants/config';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
@@ -33,12 +38,88 @@ function extractInviteCode(text: string): string {
   return match ? match[0] : upper.trim().slice(0, 6);
 }
 
-export function CoupleConnectScreen({ navigation }: Props) {
-  const { createInvite, connectCouple } = useRelationStore();
+/** 코드를 띄워 둔 동안 상대가 연결했는지 확인하는 간격 */
+const CONNECT_POLL_MS = 4000;
+
+/*
+ * 내 코드는 서버에서 받아 온다(GET /relations/couple/invite). 예전엔 모듈 변수에만 들고 있어서
+ * 앱을 재시작하면 사라졌고, 로그아웃해도 비워지지 않아 같은 기기의 다음 계정에게 앞 계정의 코드가
+ * 보였다 — 그 코드를 공유하면 상대는 앞 계정과 연결됐다(docs/first-experience-audit.md #6·#16).
+ * 진입 시 자동 생성은 여전히 하지 않는다 — 코드를 <b>입력</b>하러 온 사람에게도 초대가 생긴다.
+ */
+export function CoupleConnectScreen({ navigation, route }: Props) {
+  // 초대 링크로 들어왔으면 받은 코드를 채워 둔다 — 누르는 건 사용자 몫이다(누구와 연결되는지 확인하고 누르게)
+  const linkedCode = route.params?.code ? extractInviteCode(route.params.code) : null;
+  const { createInvite, findInvite, connectCouple, fetchAll } = useRelationStore();
   const [code, setCode] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
+  const closedRef = useRef(false);
 
-  const [input, setInput] = useState('');
+  useEffect(() => {
+    let alive = true;
+    findInvite()
+      .then((invite) => {
+        // 불러오는 사이 새로 만들었으면 그쪽이 최신이다
+        if (alive && invite) setCode((current) => current ?? invite.code);
+      })
+      .catch(() => undefined); // 못 불러와도 "초대코드 만들기"로 새로 받으면 된다
+    return () => {
+      alive = false;
+    };
+  }, [findInvite]);
+
+  /** 연결이 확인되면 한 번만 — 목록을 갱신하고 화면을 닫는다 */
+  const finishConnected = useCallback(async () => {
+    if (closedRef.current) return;
+    closedRef.current = true;
+    await fetchAll().catch(() => undefined);
+    haptics.success();
+    toast.success('커플로 연결되었어요! ');
+    navigation.goBack();
+  }, [fetchAll, navigation]);
+
+  /*
+   * 초대한 쪽은 연결돼도 알 길이 없었다 — 아직 관계 id 가 없어 실시간 채널을 구독할 수 없고, 홈은
+   * 포커스될 때만 다시 불러온다. 코드를 띄워 둔 동안만 가볍게 확인하고, 앱으로 돌아온 순간(공유하러
+   * 메신저에 다녀온 뒤)에도 바로 확인한다. 서버는 연결 시 초대한 쪽에 푸시도 보낸다.
+   */
+  useFocusEffect(
+    useCallback(() => {
+      if (!code) return undefined;
+      let busy = false;
+      const check = async () => {
+        if (busy || closedRef.current) return;
+        busy = true;
+        try {
+          const relations = await relationApi.list();
+          const connected = relations.some(
+            (r) => r.relationType === 'COUPLE' && r.status === 'ACTIVE' && r.partner,
+          );
+          if (connected) await finishConnected();
+        } catch {
+          // 일시적 실패는 다음 차례에 다시 본다
+        } finally {
+          busy = false;
+        }
+      };
+      const timer = setInterval(check, CONNECT_POLL_MS);
+      const sub = AppState.addEventListener('change', (state) => {
+        if (state === 'active') void check();
+      });
+      return () => {
+        clearInterval(timer);
+        sub.remove();
+      };
+    }, [code, finishConnected]),
+  );
+
+  const [input, setInput] = useState(linkedCode ?? '');
+  // 화면이 열려 있는 채로 새 초대 링크가 들어오면 그 코드로 바꾼다
+  const [seenLinkedCode, setSeenLinkedCode] = useState(linkedCode);
+  if (linkedCode !== seenLinkedCode) {
+    setSeenLinkedCode(linkedCode);
+    if (linkedCode) setInput(linkedCode);
+  }
   const [error, setError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
 
@@ -68,7 +149,11 @@ export function CoupleConnectScreen({ navigation }: Props) {
   const onShare = async () => {
     if (!code) return;
     try {
-      await shareText(`Dubly에서 커플로 연결해요! 초대코드: ${code} (24시간 유효)`);
+      // 링크를 누르면 소개 사이트가 앱 열기·설치로 잇고, 앱이 받은 코드를 연결 화면에 채운다(#2).
+      // 코드도 함께 적는다 — 링크를 못 여는 환경이면 직접 입력하거나 문구째 붙여넣으면 된다(extractInviteCode)
+      await shareText(
+        `Dubly에서 커플로 연결해요!\n${INVITE_LINK_BASE}${code}\n초대코드: ${code} (24시간 유효)`,
+      );
     } catch (e) {
       // 공유 시트를 사용자가 그냥 닫아도 일부 플랫폼은 reject 한다 — 진짜 실패만 알린다
       toast.error(getErrorMessage(e, '공유에 실패했어요.'));
@@ -80,10 +165,17 @@ export function CoupleConnectScreen({ navigation }: Props) {
     setConnecting(true);
     try {
       await connectCouple(input.trim().toUpperCase());
-      haptics.success();
-      toast.success('커플로 연결되었어요! ');
-      navigation.goBack();
+      await finishConnected();
     } catch (e) {
+      // 이미 연결된 상태 — 앞선 요청이 서버에선 성공했는데 응답만 못 받은 경우가 대부분이다.
+      // 실패 문구 대신 실제 상태를 다시 보고, 연결돼 있으면 성공으로 마무리한다.
+      if (errorCodeOf(e) === 'ALREADY_CONNECTED') {
+        await fetchAll().catch(() => undefined);
+        if (useRelationStore.getState().couple?.partner) {
+          await finishConnected();
+          return;
+        }
+      }
       setError(getErrorMessage(e));
     } finally {
       setConnecting(false);
@@ -96,26 +188,30 @@ export function CoupleConnectScreen({ navigation }: Props) {
       <FormKeyboardView contentContainerStyle={styles.container}>
           {/* 초대코드 생성 */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>내 초대코드 만들기</Text>
-            <Text style={styles.desc}>코드를 상대방에게 공유하세요. (24시간 동안 유효)</Text>
+            <Text style={styles.sectionTitle}>내 초대코드</Text>
             {code ? (
               <>
                 <View style={styles.codeBox}>
                   <Text style={styles.code}>{code}</Text>
                 </View>
+                {/* 설명은 코드 아래 캡션 한 줄 — 예전엔 제목 아래 안내문 + 괄호 */}
+                <Text style={styles.codeCaption}>24시간 동안 유효 · 상대가 이 코드를 입력하면 연결돼요</Text>
                 <View style={styles.codeActions}>
                   <Button title="복사" variant="soft" size="md" onPress={onCopy} style={styles.actionBtn} />
-                  <Button title="공유" variant="soft" size="md" onPress={onShare} style={styles.actionBtn} />
+                  <Button
+                    title="공유"
+                    leftIcon={<MaterialCommunityIcons name="share-variant" size={18} color={colors.primary} />}
+                    variant="soft"
+                    size="md"
+                    onPress={onShare}
+                    style={styles.actionBtn}
+                  />
                 </View>
+                <Button title="새 코드 만들기" variant="ghost" size="md" onPress={onGenerate} loading={generating} />
               </>
-            ) : null}
-            <Button
-              title={code ? '새 코드 생성' : '초대코드 생성'}
-              variant="secondary"
-              onPress={onGenerate}
-              loading={generating}
-              style={styles.gap}
-            />
+            ) : (
+              <Button title="초대코드 만들기" onPress={onGenerate} loading={generating} style={styles.gap} />
+            )}
           </View>
 
           <View style={styles.divider} />
@@ -123,15 +219,17 @@ export function CoupleConnectScreen({ navigation }: Props) {
           {/* 코드 입력 연결 */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>상대방 코드 입력</Text>
-            <Text style={styles.desc}>받은 6자리 코드를 입력해 연결하세요.</Text>
             <TextField
               value={input}
               onChangeText={(t) => setInput(extractInviteCode(t))}
-              placeholder="예: ABC234"
+              placeholder="받은 6자리 코드"
               autoCapitalize="characters"
               errorText={error ?? undefined}
               style={styles.codeInput}
             />
+            {linkedCode && input === linkedCode && !error ? (
+              <Text style={styles.codeCaption}>초대 링크의 코드를 채워 뒀어요 · 연결하기를 누르면 연결돼요</Text>
+            ) : null}
             <Button
               title="연결하기"
               onPress={onConnect}
@@ -146,11 +244,10 @@ export function CoupleConnectScreen({ navigation }: Props) {
 
 const styles = themedStyles((colors) => ({
   safe: { flex: 1, backgroundColor: colors.background },
-  flex: { flex: 1 },
   container: { padding: spacing.lg },
   section: { marginBottom: spacing.lg },
-  sectionTitle: { fontSize: fontSize.subtitle, fontWeight: '700', color: colors.textPrimary },
-  desc: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xs, marginBottom: spacing.md },
+  sectionTitle: { fontSize: fontSize.subtitle, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.md },
+  codeCaption: { fontSize: fontSize.caption, color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.md },
   codeBox: {
     backgroundColor: colors.primarySoft,
     borderRadius: radius.lg,
@@ -158,10 +255,10 @@ const styles = themedStyles((colors) => ({
     alignItems: 'center',
     marginBottom: spacing.sm,
   },
-  code: { fontSize: 40, fontWeight: '800', color: colors.primaryDark, letterSpacing: 8 },
+  code: { fontSize: 40, fontWeight: '800', color: colors.textPrimary, letterSpacing: 8 },
   codeActions: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
   actionBtn: { flex: 1 },
-  gap: { marginTop: spacing.sm },
+  gap: { marginTop: 0 },
   divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
   codeInput: { letterSpacing: 4, fontWeight: '700' },
 }));

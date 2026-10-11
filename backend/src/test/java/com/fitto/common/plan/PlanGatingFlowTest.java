@@ -54,7 +54,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * 막아 업그레이드를 안내하고, 화면이 자동으로 부르는 조회(홈의 추억, MY 탭의 주간 결산)는
  * 잠김 표시로 내린다 — 그러지 않으면 앱을 열 때마다 업그레이드 시트가 뜬다.
  */
-@SpringBootTest(properties = "fitto.plan.free-trial=false")
+@SpringBootTest(properties = {
+        "fitto.plan.free-trial=false",
+        // 가입 직후 N일 체험을 끈다 — 여기서 검증하는 건 등급 게이팅이지 체험이 아니다.
+        // 켜 두면 방금 register() 한 사용자가 전부 PRO 로 판정돼 FREE 분기가 실행되지 않는다.
+        "fitto.plan.trial-days=0"})
 @ActiveProfiles("test")
 class PlanGatingFlowTest {
 
@@ -193,7 +197,7 @@ class PlanGatingFlowTest {
     }
 
     @Test
-    void 무료_캘린더_월_한도를_넘기면_막힌다() {
+    void 무료_캘린더는_다가오는_일정이_한도만큼_있으면_막힌다() {
         Long user = couple("gate-cal-a@fitto.com", "gate-cal-b@fitto.com");
         int limit = Feature.CALENDAR_EVENT.quotaFor(Plan.FREE).limit();
         LocalDate today = LocalDate.now();
@@ -201,6 +205,63 @@ class PlanGatingFlowTest {
         for (int i = 0; i < limit; i++) {
             calendarService.create(user, new CreateEventRequest("일정" + i, today, null, null, false, null));
         }
+
+        assertThatThrownBy(() -> calendarService.create(user,
+                new CreateEventRequest("한도초과", today, null, null, false, null)))
+                .isInstanceOf(BusinessException.class)
+                .extracting(this::errorCodeOf)
+                .isEqualTo(ErrorCode.PLAN_LIMIT_EXCEEDED);
+    }
+
+    /**
+     * 개수형 — 지우면 바로 다시 넣을 수 있다. 상대가 지워도 같다(커플 공용 주머니).
+     * 예전 월 소비형은 지난달 일정을 지워도 돌려주지 않았다(docs/first-experience-audit.md #33).
+     */
+    @Test
+    void 무료_캘린더는_일정을_지우면_그만큼_다시_넣을_수_있다() {
+        Long user = register("gate-calref-a@fitto.com");
+        Long partner = register("gate-calref-b@fitto.com");
+        relationService.connectCouple(partner, relationService.createCoupleInvite(user).code());
+        int limit = Feature.CALENDAR_EVENT.quotaFor(Plan.FREE).limit();
+        LocalDate today = LocalDate.now();
+
+        Long last = null;
+        for (int i = 0; i < limit; i++) {
+            last = calendarService.create(user,
+                    new CreateEventRequest("일정" + i, today, null, null, false, null)).id();
+        }
+        calendarService.delete(partner, last);
+
+        // 한 칸이 비었으니 하나는 더 만들 수 있고, 그다음은 다시 막힌다
+        calendarService.create(user, new CreateEventRequest("다시", today, null, null, false, null));
+        assertThatThrownBy(() -> calendarService.create(user,
+                new CreateEventRequest("한도초과", today, null, null, false, null)))
+                .isInstanceOf(BusinessException.class)
+                .extracting(this::errorCodeOf)
+                .isEqualTo(ErrorCode.PLAN_LIMIT_EXCEEDED);
+    }
+
+    /**
+     * 지나간 단발 일정은 세지 않는다 — 세면 기록이 쌓일수록 옛 일정을 지워야만 새로 넣을 수 있다.
+     * 매년 반복(기념일·생일)은 날짜가 지나도 늘 다가오므로 센다.
+     */
+    @Test
+    void 무료_캘린더는_지난_일정은_세지_않고_매년_반복은_센다() {
+        Long user = couple("gate-calold-a@fitto.com", "gate-calold-b@fitto.com");
+        int limit = Feature.CALENDAR_EVENT.quotaFor(Plan.FREE).limit();
+        LocalDate today = LocalDate.now();
+
+        // 지난 단발 일정은 한도만큼 넣어도 새 일정을 막지 않는다
+        for (int i = 0; i < limit; i++) {
+            calendarService.create(user,
+                    new CreateEventRequest("지난 일정" + i, today.minusDays(10 + i), null, null, false, null));
+        }
+        // 매년 반복은 날짜가 지났어도 센다 — 한도-1 개를 채우면 단발 하나만 더 들어간다
+        for (int i = 1; i < limit; i++) {
+            calendarService.create(user,
+                    new CreateEventRequest("기념일" + i, today.minusYears(1).minusDays(i), null, null, true, null));
+        }
+        calendarService.create(user, new CreateEventRequest("다가오는 약속", today.plusDays(3), null, null, false, null));
 
         assertThatThrownBy(() -> calendarService.create(user,
                 new CreateEventRequest("한도초과", today, null, null, false, null)))

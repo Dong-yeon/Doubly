@@ -11,7 +11,7 @@
  * 저장 시 PUT 으로 보낸다. 폼이 완전히 같아서 화면을 나누면 두 벌을 같이 고쳐야 한다.
  */
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Image, Platform, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, Image, InteractionManager, Platform, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -29,18 +29,26 @@ import { ImageViewer } from '../../components/ImageViewer';
 import { useDietStore } from '../../store/dietStore';
 import { useRelationStore } from '../../store/relationStore';
 import { useAuthStore } from '../../store/authStore';
+import { usePlanStore } from '../../store/planStore';
 import { usePlaceStore } from '../../store/placeStore';
+import { placeSubtitle } from '../../utils/placeLinks';
 import { useDirtyGuard } from '../../hooks/useDirtyGuard';
+import { useReturnToTab } from '../../hooks/useReturnToTab';
 import { dietApi, SaveMealItemPayload } from '../../api/diet';
 import { foodDbApi } from '../../api/foodDb';
-import { placeApi } from '../../api/place';
+import { placeApi, toSavePlacePayload } from '../../api/place';
 import { pickImageAsset, takePhotoAsset, shrinkImage, uploadImage } from '../../utils/imageUpload';
 import { getErrorMessage } from '../../utils/error';
 import { errorCodeOf } from '../../api/client';
+import { uploadApi, wasRejected } from '../../api/upload';
+import { track } from '../../api/analytics';
 import { toast } from '../../store/toastStore';
+import { IconButton } from '../../components/IconButton';
+import { bareHeaderItems } from '../../navigation/headerOptions';
 import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
-import { toDateString } from '../../utils/date';
+import { todayKst } from '../../utils/date';
+import { MULTIPLIERS, activeMultiplier, applyMultiplier, type ScaleBase } from '../../utils/mealScale';
 import { defaultMealType } from '../../utils/mealType';
 import { colors, fontSize, radius, shadow, spacing } from '../../constants/theme';
 import { onColor } from '../../theme/onColor';
@@ -48,7 +56,10 @@ import type {
   AnalyzedFood,
   BarcodeLookup,
   FavoriteFood,
+  FeatureState,
   FoodLookupResult,
+  Meal,
+  MealAnalysis,
   MealAnalysisSource,
   MealType,
   Place,
@@ -91,12 +102,34 @@ interface ItemForm {
    * (바코드·즐겨찾기 등 다른 경로로 들어온 항목은 항상 undefined — 칩이 안 뜬다).
    */
   box?: number[] | null;
+  /**
+   * 먹은 양 배수 칩(0.5·1·1.5·2) — 처음 칩을 누를 때의 값을 1배 기준으로 잡아 둔다. 칩은 기준 × 배수로 값을 바꾼다.
+   * 값이 출처(AI·공공 DB·내 기록·바코드·직접 입력)마다 다른 경로로 바뀌므로 그 경로들을 다 추적하지 않고,
+   * <b>지금 값이 기준 × 배수와 같은지</b>로 판단한다 — 다르면 누가 고친 것이니 지금 값이 새 1배다({@link activeMultiplier}).
+   */
+  scale?: { base: ScaleBase; multiplier: number };
 }
+
 
 const num = (v: string) => (v.trim() ? Number(v) : undefined);
 const isFilled = (i: ItemForm) => i.name.trim().length > 0;
 /** 이름은 적었는데 칼로리가 빈 항목 — "0" 을 직접 적은 건 의도한 값이므로 빈 것으로 보지 않는다 */
 const lacksCalories = (i: ItemForm) => isFilled(i) && i.calories.trim() === '';
+/** 계측용 — 연 뒤 지난 초. 연 시각을 아직 못 적었으면 0 */
+const elapsedSec = (openedAt: number) => (openedAt > 0 ? Math.round((Date.now() - openedAt) / 1000) : 0);
+/** 한도 주기를 말로 — /plan/me 의 period 그대로(AI 음식 분석은 지금 DAY) */
+const PERIOD_WORD: Partial<Record<FeatureState['period'], string>> = { DAY: '오늘', WEEK: '이번 주', MONTH: '이번 달' };
+const NEXT_PERIOD_WORD: Partial<Record<FeatureState['period'], string>> = { DAY: '내일', WEEK: '다음 주', MONTH: '다음 달' };
+/**
+ * 남은 AI 횟수 한 줄 — 예전엔 다 쓰고 나서야 알았다(무료 사진 하루 5회). 무제한·차단이면 remaining 이 null 이라 말하지 않는다.
+ * 다 썼을 때 결제로 풀리는 경우(무료)는 버튼을 그대로 둔다 — 누르면 업그레이드 안내가 뜬다. PRO 는 내일을 말한다.
+ */
+function quotaLine(q: FeatureState | undefined): string | null {
+  if (!q || q.remaining == null) return null;
+  const when = PERIOD_WORD[q.period] ?? '';
+  if (q.remaining > 0) return `${when} ${q.remaining}회 더 분석할 수 있어요`.trim();
+  return q.upgradable ? `${when} 분석 횟수를 다 썼어요`.trim() : `${when} 분석 횟수를 다 썼어요 · ${NEXT_PERIOD_WORD[q.period] ?? '다음에'} 다시 쓸 수 있어요`.trim();
+}
 /**
  * 한 번의 "칼로리 계산"에서 공공 DB(식품안전나라)를 부를 이름 개수 상한 — 배치 엔드포인트가
  * 없어 이름마다 한 번씩 부른다. 넘는 항목은 AI 가 함께 받으므로 빠지는 값은 없다.
@@ -120,11 +153,41 @@ export function DietRecordScreen({ navigation, route }: Props) {
   const couple = useRelationStore((s) => s.couple);
   /* 설정이 생기기 전 세션(값 undefined)은 서버 기본값과 맞춰 켜진 것으로 본다 */
   const autoAnalyzeMealPhoto = useAuthStore((s) => s.user?.autoAnalyzeMealPhoto) !== false;
+  // 남은 AI 횟수 — /plan/me 의 기능별 상태 그대로(앱은 한도를 하드코딩하지 않는다, FeatureState 주석)
+  const photoQuota = usePlanStore((s) => s.features.AI_FOOD_PHOTO);
+  const textQuota = usePlanStore((s) => s.features.AI_FOOD_TEXT);
+  // 결제로 못 푸는 소진(PRO 한도)이면 눌러도 429 뿐이다 — 버튼을 잠근다. 무료는 눌러야 업그레이드 안내가 뜬다
+  const photoQuotaSpent = photoQuota?.remaining === 0 && !photoQuota.upgradable;
+  // 분석을 하거나 실패할 때마다(그리고 화면을 열 때) 다시 읽는다 — 자동 분석도 같은 횟수를 쓰므로 앱 시작 때 값은 낡는다
+  const refreshAiQuota = useCallback(() => {
+    void usePlanStore.getState().load();
+  }, []);
+  useEffect(() => {
+    refreshAiQuota();
+  }, [refreshAiQuota]);
   /** 수정할 기록 — 없으면 새 기록 작성 */
   const editing = route.params?.meal;
+  /**
+   * 채팅에서 가져온 사진(이미 올라가 있는 URL) — 사진 칸·업로드 캐시를 이 값으로 시작해 재업로드하지 않는다.
+   * 수정 화면에는 오지 않는다. 처음 연 값만 쓴다(바코드 화면을 다녀오며 파라미터가 바뀌어도 그대로).
+   */
+  const [chatPhotoUrl] = useState(() => (editing ? undefined : route.params?.photoUrl));
+  const initialPhoto = editing?.photoUrl ?? chatPhotoUrl ?? null;
+  /** 어디서 들어왔나(계측) — 처음 연 파라미터로 정한다. 푸시·딥링크로 바로 열려도 파라미터가 없으면 main */
+  const [recordSource] = useState(() =>
+    editing
+      ? 'edit'
+      : chatPhotoUrl
+        ? 'chat'
+        : route.params?.date
+          ? 'calendar'
+          : route.params?.returnTo === 'Home'
+            ? 'home'
+            : 'main',
+  );
   const [mealType, setMealType] = useState<MealType>(editing?.mealType ?? defaultMealType());
   /** 기록할 날짜 — 수정이면 그 기록의 날짜, 캘린더에서 날짜를 골라 들어오면 그 날짜, 아니면 오늘 */
-  const [mealDate, setMealDate] = useState(editing?.mealDate ?? route.params?.date ?? toDateString());
+  const [mealDate, setMealDate] = useState(editing?.mealDate ?? route.params?.date ?? todayKst());
   const [memo, setMemo] = useState(editing?.memo ?? '');
   /**
    * 항목을 하나도 안 쓰고 총 칼로리만 적는 경로 — 사진만 찍고 끝낼 때.
@@ -133,7 +196,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
   const [totalCalories, setTotalCalories] = useState(
     editing && !editing.items?.length && editing.calories ? String(editing.calories) : '',
   );
-  const [photoUri, setPhotoUri] = useState<string | null>(editing?.photoUrl ?? null);
+  const [photoUri, setPhotoUri] = useState<string | null>(initialPhoto);
   /**
    * 크게 보기·저장(다운로드)·공유 — 원격(Cloudinary) 사진에만 의미가 있다. 방금 고른
    * 로컬 사진(file://)은 이미 기기 안에 있어 "다운로드"할 대상이 아니다. 데이트 식단으로
@@ -192,24 +255,37 @@ export function DietRecordScreen({ navigation, route }: Props) {
   const [dateMeal, setDateMeal] = useState(false);
   /*
    * 어디서 먹었는지(럽슐랭 장소 연동) — 식단 기록 = 그 장소를 다녀왔다는 뜻이라, 고르면
-   * 저장 시 방문 기록으로도 남는다. 별점은 그 김에 럽슐랭 대표 평점까지 같이 매기는
-   * 선택 사항(방문만 남기고 평가는 건너뛸 수 있다). 수정 화면에서는 dateMeal 과 같은
-   * 이유로 노출하지 않는다.
+   * 저장 시 방문 기록으로도 남는다(외식 기록 API 한 번 — onSave). 별점은 선택이고, 내 대표
+   * 평점이 아직 없을 때만 대표 평점도 된다(결정 Q3, 2026-10-05). 수정 화면에서는 dateMeal 과
+   * 같은 이유로 노출하지 않는다.
+   *
+   * <p>고른 장소는 둘 중 하나다 — 이미 있는 우리 장소(selectedPlace) 또는 카카오 검색 결과(pendingKakao).
+   * 검색 결과는 고르는 순간이 아니라 <b>저장할 때</b> 서버가 장소로 만든다 — 예전엔 [추가]를 누르는 순간
+   * 장소가 생겨, 식단을 저장하지 않고 나가도 장소만 남았다.
    */
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
+  const [pendingKakao, setPendingKakao] = useState<PlaceSearchResult | null>(null);
+  const pickedPlaceName = selectedPlace?.name ?? pendingKakao?.name ?? null;
   const [placeRating, setPlaceRating] = useState(0);
   const [placeSheetOpen, setPlaceSheetOpen] = useState(false);
   const [placeSearch, setPlaceSearch] = useState('');
   /*
    * 카카오 장소 검색(새 장소 추가) — 저장된 장소 목록에 없을 때의 경로. 검색어를 그대로
    * 재사용해 "검색" 버튼 한 번으로 저장된 목록 필터와 카카오 조회를 동시에 돌린다.
-   * addingPlaceName 은 어느 결과를 지금 담는 중인지(버튼별 로딩 표시) 판별용.
    */
   const [kakaoResults, setKakaoResults] = useState<PlaceSearchResult[] | null>(null);
   const [kakaoSearching, setKakaoSearching] = useState(false);
   const [kakaoUnavailable, setKakaoUnavailable] = useState(false);
-  const [addingPlaceName, setAddingPlaceName] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // 버튼 비활성은 saving 이 렌더된 뒤에야 걸린다 — 그 사이 두 번째 탭이 같은 끼니를 한 번 더 저장했다
+  const savingRef = useRef(false);
+  /*
+   * 저장 멱등키 — 이 화면을 연 동안 한 번만 만든다. 저장 요청은 10초에 끊기는데 서버가 그보다 늦게 커밋하면
+   * 앱은 실패로 보고 사용자는 다시 누른다. 같은 키를 다시 보내면 서버가 먼저 저장된 끼니를 돌려줘 두 번 생기지 않는다.
+   * 그 사이 내용을 고쳤다면 먼저 저장된 쪽이 남는다 — 실제로 저장된 걸 보여주는 게 중복보다 낫다.
+   * UUID 대신 채팅 client_message_id 와 같은 형식이다: 사람 한 명 안에서만 유일하면 된다.
+   */
+  const [clientRequestId] = useState(() => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`);
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzingText, setAnalyzingText] = useState(false);
   /** DB 이름 검색 — 어느 항목에 대한 결과인지(key)와 후보 목록. 한 번에 한 항목만 연다. */
@@ -264,22 +340,111 @@ export function DietRecordScreen({ navigation, route }: Props) {
    * 올리기 시작하는데(pickFrom), 그게 끝나기 전에 분석을 눌러도 그 업로드를 같이
    * 기다리게 하려면 진행 중인 Promise 자체가 캐시에 있어야 한다.
    *
-   * 수정으로 들어왔으면 이미 올라가 있는 사진이라 그 URL 을 이미 끝난 Promise 로 넣어둔다
-   * (photoUri === photoUrl 이므로 ensureUploaded 가 재업로드 없이 통과한다).
+   * 수정으로 들어왔거나 채팅 사진으로 열었으면 이미 올라가 있는 사진이라 그 URL 을 이미 끝난 Promise 로
+   * 넣어둔다(photoUri === photoUrl 이므로 ensureUploaded 가 재업로드 없이 통과한다).
    */
   const uploadedRef = useRef<{ uri: string; url: Promise<string> } | null>(
-    editing?.photoUrl ? { uri: editing.photoUrl, url: Promise.resolve(editing.photoUrl) } : null,
+    initialPhoto ? { uri: initialPhoto, url: Promise.resolve(initialPhoto) } : null,
   );
   /**
    * 선업로드가 <b>이미 끝난</b> uri. 분석·저장에서 화면 잠금을 걸지 말지 판단한다 —
    * 올릴 게 남지 않았는데 "사진 올리는 중…" 이 한 프레임 번쩍이면 오히려 느려 보인다.
    */
-  const uploadedDoneRef = useRef<string | null>(editing?.photoUrl ?? null);
+  const uploadedDoneRef = useRef<string | null>(initialPhoto);
+  /*
+   * Cloudinary 고아 정리(lovebody-current-state §4-6) — 이 화면에서 <b>새로 올린</b> 사진을 저장하지 않고 버리면
+   * 서버에 치워 달라고 한다(다시 고르기·사진 빼기·저장 없이 나가기). initialPhoto(고치는 기록의 사진·채팅 사진)는
+   * 이미 다른 기록이 쓰는 파일이라 건드리지 않는다 — 고치면서 바꾼 예전 사진은 서버가 저장 때 지운다.
+   * 서버도 "아무 기록도 안 쓰는 막 올린 사진"만 지우므로 여기서 실수해도 쓰이는 파일은 남는다.
+   */
+  const discardPreUpload = useCallback(
+    (entry: { uri: string; url: Promise<string> } | null) => {
+      if (!entry || entry.uri === initialPhoto) return;
+      entry.url.then(uploadApi.discard, () => undefined);
+    },
+    [initialPhoto],
+  );
+  // 저장이 됐거나 됐을 수도 있으면(타임아웃) 나갈 때 사진을 치우지 않는다
+  const maybeSavedRef = useRef(false);
+  /*
+   * 기준선 계측(docs/lovebody-record-screen-plan_2026-10-05.md §9) — 화면을 연 시각과, 나갈 때 읽을 "지금 상태".
+   * 연 시각은 렌더가 아니라 effect 에서 적는다(렌더 중 Date.now 는 순수성 위반).
+   */
+  const openedAtRef = useRef(0);
+  const latestRef = useRef({ items: 0, photo: false });
+  useEffect(() => {
+    latestRef.current = { items: items.filter(isFilled).length, photo: !!photoUri };
+  });
+  useEffect(
+    () => {
+      openedAtRef.current = Date.now();
+      track('MEAL_RECORD_OPENED', recordSource);
+      return () => {
+        // 저장 요청이 아직 가는 중이면 곧 기록이 될 사진일 수 있다 — 그때도 두고 간다
+        if (!maybeSavedRef.current && !savingRef.current) {
+          discardPreUpload(uploadedRef.current);
+          const { items: n, photo } = latestRef.current;
+          track('MEAL_RECORD_ABANDONED', `${editing ? 'edit' : 'new'};t=${elapsedSec(openedAtRef.current)};i=${n};p=${photo ? 1 : 0}`);
+        }
+      };
+    },
+    // 나갈 때 한 번 — 그 순간의 ref 를 읽는 게 목적이다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  const [deleting, setDeleting] = useState(false);
+  const onDeleteMeal = () => {
+    if (!editing || deleting) return;
+    const run = async (withVisit: boolean) => {
+      setDeleting(true);
+      try {
+        await useDietStore.getState().remove(editing.id, withVisit);
+        if (editing.placeId) usePlaceStore.getState().invalidate();
+        // 지웠으니 나갈 때 "작성 중 포기"로 세지 않는다
+        maybeSavedRef.current = true;
+        haptics.light();
+        toast.success('식단 기록을 삭제했어요.');
+        navigation.goBack();
+      } catch (e) {
+        toast.error(getErrorMessage(e, '식단 기록을 삭제하지 못했어요.'));
+      } finally {
+        setDeleting(false);
+      }
+    };
+    const label = editing.mealTypeLabel ?? '이';
+    if (editing.placeId && editing.placeName) {
+      Alert.alert('식단 기록 삭제', `${label} 기록을 삭제할까요?\n${editing.placeName} 방문 기록도 함께 지울 수 있어요.`, [
+        { text: '취소', style: 'cancel' },
+        { text: '식단만 삭제', onPress: () => void run(false) },
+        { text: '방문 기록도 삭제', style: 'destructive', onPress: () => void run(true) },
+      ]);
+      return;
+    }
+    Alert.alert('식단 기록 삭제', `${label} 기록을 삭제할까요?`, [
+      { text: '취소', style: 'cancel' },
+      { text: '삭제', style: 'destructive', onPress: () => void run(false) },
+    ]);
+  };
 
   // 헤더 제목은 스택 옵션이 "식단 기록"으로 고정돼 있어 수정일 때만 바꿔 단다
   useLayoutEffect(() => {
-    if (editing) navigation.setOptions({ title: '식단 수정' });
-  }, [editing, navigation]);
+    if (!editing) return;
+    /*
+     * 삭제 — 예전엔 목록에서 카드를 길게 눌러야만 지울 수 있었다(2026-10-08 사용자 보고: "식단 삭제 기능이 없어").
+     * 수정 화면 헤더에도 둔다. 장소가 붙은 끼니면 방문 기록도 지울지 묻는다(목록 길게 누르기와 같은 결정 Q4).
+     */
+    const deleteButton = (
+      <IconButton icon="delete-outline" label="식단 기록 삭제" color={colors.danger} onPress={onDeleteMeal} disabled={deleting} />
+    );
+    navigation.setOptions({
+      title: '식단 수정',
+      headerRight: () => deleteButton,
+      unstable_headerRightItems: () => bareHeaderItems(deleteButton),
+    });
+    // onDeleteMeal 은 editing·deleting 으로만 달라진다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing, navigation, deleting]);
 
   const filled = useMemo(() => items.filter(isFilled), [items]);
   /*
@@ -326,6 +491,9 @@ export function DietRecordScreen({ navigation, route }: Props) {
   const initialSnapshot = useRef<string | null>(null);
   if (initialSnapshot.current === null) initialSnapshot.current = snapshot;
   const allowLeave = useDirtyGuard(snapshot !== initialSnapshot.current);
+
+  // 홈처럼 다른 탭에서 열렸으면 닫을 때 그 탭으로 돌려보낸다(훅 주석에 경위)
+  useReturnToTab(route.params?.returnTo);
 
   // 즐겨찾는 음식
   const [favorites, setFavorites] = useState<FavoriteFood[]>([]);
@@ -389,6 +557,21 @@ export function DietRecordScreen({ navigation, route }: Props) {
       (p) => p.name.toLowerCase().includes(q) || (p.address ?? '').toLowerCase().includes(q),
     );
   }, [places, placeSearch]);
+  /*
+   * 빠른 칩 — 시트를 열지 않고 고른다(LOVEBODY_LOVELICHELIN_LINK P1-3). 최근 다녀온 3곳 + 아직 안 가본 곳(방문 0건 파생,
+   * 상태 컬럼 없음 — V70 결정) 2곳. 외식은 대개 "자주 가는 곳"이나 "가 보자던 곳"이라 검색까지 갈 일이 줄어든다.
+   */
+  const quickPlaces = useMemo(() => {
+    const recent = places
+      .filter((p) => p.visitCount > 0 && p.lastVisitedAt)
+      .sort((a, b) => (b.lastVisitedAt ?? '').localeCompare(a.lastVisitedAt ?? ''))
+      .slice(0, 3);
+    const wish = places
+      .filter((p) => p.visitCount === 0)
+      .sort((a, b) => b.id - a.id)
+      .slice(0, 2);
+    return [...recent, ...wish];
+  }, [places]);
 
   // 시트를 닫을 때(백드롭·닫기 버튼 공통) 검색 상태까지 비운다 — 다음에 열었을 때
   // 이전 카카오 검색 결과가 엉뚱하게 남아 있지 않게.
@@ -418,45 +601,30 @@ export function DietRecordScreen({ navigation, route }: Props) {
     }
   };
 
-  /*
-   * 카카오 검색 결과를 바로 럽슐랭 장소로 추가 — 식단 기록에서 등록하는 흐름이라
-   * 추가 즉시 선택 상태로 만들어 별점까지 이어서 매길 수 있게 한다.
+  /**
+   * 카카오 검색 결과를 고른다 — 저장은 하지 않는다. 식단을 저장할 때 외식 기록 API 가 장소까지 만든다
+   * (이미 같은 곳이 있으면 그 장소에 붙는다 — 서버 PlaceService.findExisting). 고르기만 하고 나가면 아무것도 안 남는다.
    */
-  const onAddFromKakao = async (result: PlaceSearchResult) => {
-    setAddingPlaceName(result.name);
-    try {
-      const saved = await placeApi.save({
-        name: result.name,
-        address: result.address ?? undefined,
-        lat: result.lat ?? undefined,
-        lng: result.lng ?? undefined,
-        category: result.category ?? undefined,
-        // 이미 등록된 같은 장소면(카카오 id로 대조) 새로 만들지 않고 그 장소가 그대로 온다
-        kakaoPlaceId: result.kakaoPlaceId ?? undefined,
-        // 방문 기록의 일부로 추가하는 것 — 서버가 "여기 가볼래?" 찜 카드를 남기지 않는다(식단 카드에 장소가 덧붙는다)
-        visiting: true,
-      });
-      haptics.success();
-      toast.success(`${saved.name}을(를) 럽슐랭에 추가했어요`);
-      usePlaceStore.getState().invalidate();
-      setSelectedPlace(saved);
-      setPlaceRating(0);
-      closePlaceSheet();
-    } catch (e) {
-      // 402(플랜 한도)는 api/client 가 이미 업그레이드 시트를 열었다 — 여기서 또 띄우면
-      // 같은 사실을 두 번 알리게 된다 (HomeScreen.notifyUnless402 와 같은 이유).
-      const code = errorCodeOf(e);
-      if (code === 'PLAN_UPGRADE_REQUIRED' || code === 'PLAN_LIMIT_EXCEEDED') return;
-      toast.error(getErrorMessage(e, '장소를 추가하지 못했어요.'));
-    } finally {
-      setAddingPlaceName(null);
-    }
+  const onAddFromKakao = (result: PlaceSearchResult) => {
+    haptics.light();
+    setSelectedPlace(null);
+    setPendingKakao(result);
+    setPlaceRating(0);
+    closePlaceSheet();
   };
 
   const updateItem = (key: string, patch: Partial<ItemForm>) => {
     setItems((prev) => prev.map((i) => (i.key === key ? { ...i, ...patch } : i)));
   };
-  const addItem = () => setItems((prev) => [...prev, newItem()]);
+  /** 먹은 양 배수 칩 — 기준 × 배수(utils/mealScale) */
+  const scaleItem = (key: string, m: number) => {
+    track('MEAL_MULTIPLIER_CHANGED', String(m));
+    setItems((prev) => prev.map((i) => (i.key === key ? applyMultiplier(i, m) : i)));
+  };
+  const addItem = () => {
+    track('MEAL_INPUT_ADDED', 'manual');
+    setItems((prev) => [...prev, newItem()]);
+  };
   const removeItem = (key: string) => {
     setItems((prev) => {
       const next = prev.filter((i) => i.key !== key);
@@ -532,6 +700,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
   useEffect(() => {
     const result = route.params?.barcodeResult;
     if (!result) return;
+    track('MEAL_INPUT_ADDED', 'barcode');
     appendFoods([
       {
         name: (result.foodName || `바코드 ${result.barcode}`).slice(0, MAX_NAME),
@@ -552,7 +721,13 @@ export function DietRecordScreen({ navigation, route }: Props) {
       }));
     }
     haptics.success();
-    toast.success(result.foodName ? `${result.foodName} 정보를 불러왔어요` : '바코드 정보를 불러왔어요');
+    const hasNutrition = result.calories != null || result.carbs != null || result.protein != null;
+    if (hasNutrition) {
+      toast.success(result.foodName ? `${result.foodName} 정보를 불러왔어요` : '바코드 정보를 불러왔어요');
+    } else {
+      // "이름만 넣기" — 스캔 화면에서 영양정보가 없다는 걸 이미 보고 고른 경로다
+      toast.info('이름만 넣었어요. 칼로리는 직접 적거나 AI로 계산해보세요.');
+    }
     navigation.setParams({ barcodeResult: undefined });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route.params?.barcodeResult]);
@@ -560,6 +735,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
   // 최근 항목 탭 — 즐겨찾기(addFavorite)와 같은 방식으로 항목 하나로 들어온다
   const addRecent = (food: RecentFood) => {
     haptics.light();
+    track('MEAL_INPUT_ADDED', 'recent');
     const created = appendFoods([
       {
         name: food.name.slice(0, MAX_NAME),
@@ -590,6 +766,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
   // 칼로리 없이 저장된 옛 즐겨찾기는 내 기록에서 찾아 채운다(backfillFromHistory).
   const addFavorite = (fav: FavoriteFood) => {
     haptics.light();
+    track('MEAL_INPUT_ADDED', 'favorite');
     const created = appendFoods(
       fav.items.map((i) => ({
         name: i.name,
@@ -690,7 +867,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
    */
   const ensureUploaded = (uri: string): Promise<string> => {
     if (uploadedRef.current?.uri === uri) return uploadedRef.current.url;
-    const url = uploadImage(uri).then(
+    const url = uploadImage(uri, { purpose: 'meal' }).then(
       (uploaded) => {
         // 그사이 사진이 바뀌었다면 이건 남의 결과다 — 지금 캐시된 uri 일 때만 "끝남"으로 적는다
         if (uploadedRef.current?.uri === uri) uploadedDoneRef.current = uri;
@@ -720,8 +897,12 @@ export function DietRecordScreen({ navigation, route }: Props) {
     try {
       const picked = source === 'camera' ? await takePhotoAsset() : await pickImageAsset();
       if (!picked) return;
+      track('MEAL_INPUT_ADDED', source === 'camera' ? 'photo_camera' : 'photo_gallery');
       // 고르자마자 줄인다 — 업로드·서버 다운로드·Gemini 전송이 한꺼번에 가벼워진다
       const uri = await shrinkImage(picked);
+      // 다시 고른 것이면 앞서 미리 올린 사진은 버려진다
+      const previous = uploadedRef.current;
+      if (previous && previous.uri !== uri) discardPreUpload(previous);
       setPhotoUri(uri);
       // 새 사진이니 이전 사진의 분석 안내(추정치/표기값 문구)는 더 이상 안 맞는다
       setAnalysisSource(null);
@@ -733,8 +914,14 @@ export function DietRecordScreen({ navigation, route }: Props) {
        * 실패는 여기서 삼킨다 — ensureUploaded 가 캐시를 비워두므로 분석/저장 때 다시 시도하며
        * 그때 제대로 알린다. 아직 아무것도 누르지 않은 사용자에게 업로드 오류를 띄우면
        * 무엇 때문에 뜬 건지 알 수 없다.
+       *
+       * 단 오늘 식단 사진 한도(MEAL_PHOTO, 사람 단위 하루 10장)가 0이면 선업로드하지 않는다 — 고르기만 해도
+       * 한 장이 깎이고, 저장도 안 누른 사용자 앞에 한도 안내가 뜬다. 그 경우는 저장 때 올리며 그때 알린다.
+       * 잔여치는 표시용이라 최종 판정은 여전히 서버다 (first-experience-audit.md #10·#30)
        */
-      void ensureUploaded(uri).catch(() => {});
+      if (usePlanStore.getState().remainingOf('MEAL_PHOTO') !== 0) {
+        void ensureUploaded(uri).catch(() => {});
+      }
     } catch (e) {
       toast.error(getErrorMessage(e, '사진 선택에 실패했어요.'));
     }
@@ -756,43 +943,109 @@ export function DietRecordScreen({ navigation, route }: Props) {
   // AI 음식 분석 — 결과는 추정치라 항목으로 채워만 주고 확정(저장)은 사용자가 한다
   const onAnalyze = async () => {
     if (!photoUri) return;
+    track('MEAL_ANALYZE_STARTED', 'photo');
     setAnalyzing(true);
     try {
       const photoUrl = await uploadForSubmit(photoUri);
       // 전역 화면 잠금은 걷었다(대기가 분 단위까지 늘 수 있다). 이 경로는 결과를
       // 기존 항목 <b>뒤에 덧붙이므로</b>, 기다리는 동안 뭘 더 적어도 지워지지 않는다.
-      // 장소를 먼저 골랐으면 같이 보낸다 — 가게 이름이 사진만으로는 헷갈리는 메뉴(찌개류 등)를 가른다
+      // 이미 있는 우리 장소를 골랐으면 같이 보낸다 — 가게 이름·여기서 먹은 메뉴가 사진만으로는 헷갈리는
+      // 메뉴(찌개류 등)를 가른다. 카카오에서 막 고른 곳(pendingKakao)은 아직 저장 전이라 id 가 없다
       const result = await dietApi.analyze(photoUrl, selectedPlace?.id);
-      if (!result.isFood || result.foods.length === 0) {
-        // 실제 음식·메뉴판·영양성분표 중 아무것도 못 찾았을 때만 여기로 온다(source 세 갈래 모두 실패)
-        toast.error('음식 사진이 아닌 것 같아요');
-        return;
-      }
-      // 다음 안내 문구·사진 위 칩 표시를 여기서 정한다 — appendFoods 보다 먼저 둬서
-      // hasChips 계산(items 기반)이 이번 렌더에 바로 반영되게 한다
-      setAnalysisSource(result.source ?? 'PHOTO_FOOD');
-      appendFoods(result.foods.map(toForm));
-      if (result.foods.every((f) => !f.calories)) {
-        // 음식은 알아봤지만 양을 가늠하지 못한 경우 — 빈 칸으로 두면 실패로 오해한다
-        toast.info('칼로리는 추정하지 못했어요. 직접 입력해주세요.');
-      }
-      // 탄단지는 항목이 들고 있으니 끼니 레벨 값(당류/나트륨/식이섬유)만 담는다
-      setExtras({ sugar: result.totalSugar, sodium: result.totalSodium, fiber: result.totalFiber });
-      haptics.success();
-      toast.success(
-        result.comment?.trim() ||
-          (result.source === 'NUTRITION_LABEL'
-            ? '영양성분표를 읽었어요!'
-            : result.source === 'TEXT_IN_PHOTO'
-              ? '사진 속 글자로 알아냈어요!'
-              : 'AI 분석 완료! '),
-      );
+      applyPhotoAnalysis(result);
     } catch (e) {
       toast.error(getErrorMessage(e, 'AI 분석에 실패했어요.'));
     } finally {
+      refreshAiQuota();
       setAnalyzing(false);
     }
   };
+
+  /**
+   * 사진 분석 결과를 항목으로 — "AI로 음식 분석"과 영양성분표 촬영(바코드 폴백)이 함께 쓴다.
+   *
+   * @param label 영양성분표 촬영 경로일 때 — 바코드로 알아낸 제품명을 함께 받는다
+   */
+  const applyPhotoAnalysis = (result: MealAnalysis, label?: { productName?: string }) => {
+    if (!result.isFood || result.foods.length === 0) {
+      // 실제 음식·메뉴판·영양성분표 중 아무것도 못 찾았을 때만 여기로 온다(source 세 갈래 모두 실패)
+      toast.error(label ? '영양성분표를 읽지 못했어요. 표가 잘 보이게 다시 찍어주세요.' : '음식 사진이 아닌 것 같아요');
+      return;
+    }
+    // 다음 안내 문구·사진 위 칩 표시를 여기서 정한다 — appendFoods 보다 먼저 둬서
+    // hasChips 계산(items 기반)이 이번 렌더에 바로 반영되게 한다.
+    // 영양성분표 촬영은 끼니 사진이 아니므로 사진 아래 안내 문구를 바꾸지 않는다
+    if (!label) setAnalysisSource(result.source ?? 'PHOTO_FOOD');
+    const forms = result.foods.map(toForm);
+    // 표에는 제품명이 없어 AI 가 "영양성분표" 같은 이름을 붙이기 쉽다 — 바코드로 안 이름이 있으면 그걸 쓴다
+    if (label?.productName && result.source === 'NUTRITION_LABEL' && forms.length === 1) {
+      forms[0] = { ...forms[0], name: label.productName.slice(0, MAX_NAME) };
+    }
+    appendFoods(forms);
+    if (result.foods.every((f) => !f.calories)) {
+      // 음식은 알아봤지만 양을 가늠하지 못한 경우 — 빈 칸으로 두면 실패로 오해한다
+      toast.info('칼로리는 추정하지 못했어요. 직접 입력해주세요.');
+    }
+    // 탄단지는 항목이 들고 있으니 끼니 레벨 값(당류/나트륨/식이섬유)만 담는다
+    setExtras({ sugar: result.totalSugar, sodium: result.totalSodium, fiber: result.totalFiber });
+    haptics.success();
+    if (label && result.source !== 'NUTRITION_LABEL') {
+      // 표가 아니라 음식으로 읽혔다 — 표기값이 아니라 추정치라는 걸 분명히 한다
+      toast.info('영양성분표가 잘 안 보여서 음식 사진으로 추정했어요.');
+      return;
+    }
+    toast.success(
+      result.comment?.trim() ||
+        (result.source === 'NUTRITION_LABEL'
+          ? '영양성분표를 읽었어요!'
+          : result.source === 'TEXT_IN_PHOTO'
+            ? '사진 속 글자로 알아냈어요!'
+            : 'AI 분석 완료! '),
+    );
+  };
+
+  /**
+   * 영양성분표 사진 → AI 로 읽기 — 바코드로 영양정보를 못 찾았을 때 스캔 화면에서 찍어 넘긴다.
+   *
+   * <p><b>끼니 사진으로 쓰지 않는다.</b> 표 사진이 식단 앨범에 남으면 이상하고, 이미 찍어 둔 음식
+   * 사진을 덮어서도 안 된다. 그래서 {@link pickFrom} 을 거치지 않고 분석용으로만 올린다.
+   */
+  const analyzeLabelPhoto = async (uri: string, productName?: string) => {
+    track('MEAL_INPUT_ADDED', 'label');
+    track('MEAL_ANALYZE_STARTED', 'label');
+    setAnalyzing(true);
+    // 영양성분표 사진은 분석에만 쓰고 저장하지 않는다 — 분석이 <b>끝나면</b> 치운다(예전엔 항상 고아로 남았다).
+    // "아직 만들고 있어요"(2분 대기 초과, status 0)면 서버 작업이 아직 그 파일을 받아야 할 수 있어 두고 간다.
+    let url: string | null = null;
+    try {
+      url = await runBusy('영양성분표 올리는 중…', () => uploadImage(uri, { purpose: 'meal' }));
+      const result = await dietApi.analyze(url);
+      uploadApi.discard(url);
+      applyPhotoAnalysis(result, { productName });
+    } catch (e) {
+      if (url && wasRejected(e)) uploadApi.discard(url);
+      toast.error(getErrorMessage(e, '영양성분표를 읽지 못했어요.'));
+    } finally {
+      refreshAiQuota();
+      setAnalyzing(false);
+    }
+  };
+
+  // 바코드 스캔 화면에서 찍은 영양성분표 — 원래 이 인스턴스로 popTo 되어 돌아온다
+  useEffect(() => {
+    const label = route.params?.labelPhoto;
+    if (!label) return;
+    navigation.setParams({ labelPhoto: undefined });
+    /*
+     * 스캔 화면이 닫히는 전환이 끝난 뒤에 올린다 — 전환 도중에 전역 잠금이 뜨면 화면이 겹쳐 보인다.
+     * <b>정리 함수로 취소하지 않는다.</b> 바로 위 setParams 가 이 effect 를 다시 돌리고, 그때 정리 함수가
+     * 불려 예약한 분석을 지워 버린다(2026-09-30 웹에서 분석 요청이 아예 안 나가던 원인).
+     */
+    InteractionManager.runAfterInteractions(() => {
+      void analyzeLabelPhoto(label.uri, label.productName);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route.params?.labelPhoto]);
 
   /**
    * 적어둔 항목(source)을 AI 에 보내 칼로리·매크로를 채운 새 목록으로 교체한다.
@@ -804,6 +1057,8 @@ export function DietRecordScreen({ navigation, route }: Props) {
   const analyzeItemsWithAi = async (source: ItemForm[]): Promise<ItemForm[] | null> => {
     const text = describeItems(source);
     if (!text) return null;
+    // 공공 DB 로 다 찾으면 AI 를 부르지 않는다 — AI 를 실제로 부를 때만 센다
+    track('MEAL_ANALYZE_STARTED', 'text');
     setAnalyzingText(true);
     try {
       const result = await dietApi.analyzeText(text);
@@ -832,6 +1087,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
       toast.error(getErrorMessage(e, 'AI 계산에 실패했어요.'));
       return null;
     } finally {
+      refreshAiQuota();
       setAnalyzingText(false);
     }
   };
@@ -969,6 +1225,8 @@ export function DietRecordScreen({ navigation, route }: Props) {
       Alert.alert('알림', '음식이나 사진을 하나 이상 입력해주세요.');
       return;
     }
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     try {
       let photoUrl: string | undefined;
@@ -997,9 +1255,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
         fiber: extras?.fiber,
         // 커플이 아니면 서버가 조용히 무시하므로 editing 상태에서만 항상 false 로 둔다
         sharedWithPartner: !editing && dateMeal ? true : undefined,
-        // 사진만 올리면 서버가 곧바로 자동 분석을 거는데, 아래 recordVisit 은 그보다 늦다 —
-        // 가게 이름을 분석 힌트로 쓰려면 저장 요청에 같이 실어야 한다
-        placeId: selectedPlace?.id,
+        clientRequestId: editing ? undefined : clientRequestId,
       };
 
       /*
@@ -1008,6 +1264,8 @@ export function DietRecordScreen({ navigation, route }: Props) {
        */
       if (editing) {
         await update(editing.id, payload);
+        maybeSavedRef.current = true;
+        track('MEAL_RECORD_SAVED', `edit;t=${elapsedSec(openedAtRef.current)};i=${payloadItems.length};p=${photoUrl ? 1 : 0};d=0;a=0`);
         haptics.success();
         toast.success('식단을 수정했어요');
         allowLeave();
@@ -1015,44 +1273,48 @@ export function DietRecordScreen({ navigation, route }: Props) {
         return;
       }
 
-      const saved = await save(payload);
-      haptics.success();
-
       /*
-       * 장소를 골랐으면 이 식단 기록을 그 장소 방문 기록으로도 남긴다 — "식단에 등록했다"는
-       * 곧 "거기 다녀왔다"는 뜻이라 두 번 입력받지 않는다. 별점을 같이 매겼으면 럽슐랭 대표
-       * 평점도 그 자리에서 upsert 한다(재평가라도 안전 — PlaceService.rate 참고). 이 연동이
-       * 실패해도 식단 기록 자체는 이미 저장됐으므로 전체 저장을 실패로 되돌리지 않는다.
+       * 장소를 골랐으면 외식 기록 API 한 번으로 식단·방문·평점을 같이 남긴다(서버 MealVisitService) —
+       * "식단에 등록했다"는 곧 "거기 다녀왔다"는 뜻이라 두 번 입력받지 않는다. 예전엔 식단 저장 → 방문 저장 →
+       * 평점 저장을 여기서 엮어, 뒤의 둘이 실패하면 식단만 남고 다시 시도할 길이 없었다. 이제 실패하면 아무것도
+       * 안 남고(같은 clientRequestId 로 다시 누르면 된다), 사진은 한 번 올린 URL 이 식단·방문에 같이 들어간다.
        */
       let placeToastSuffix = '';
-      // 장소 연동이 실패해도 식단 기록 자체는 이미 저장됐다 — 하지만 바로 아래서 성공
-      // 토스트를 또 띄우면(둘 다 단일 슬롯 toastStore라 나중 호출이 앞 걸 그냥 덮어써서)
-      // 이 실패 토스트는 화면에 뜰 새도 없이 사라졌다(2026-08-31). 실패 여부를 들고 있다가
-      // 토스트를 딱 한 번만 — 실패했으면 타입도 error 로 — 보낸다.
-      let placeLinkFailed = false;
-      if (selectedPlace) {
-        try {
-          await placeApi.recordVisit(selectedPlace.id, {
-            visitedAt: mealDate,
-            mealId: saved.id,
-            rating: placeRating > 0 ? placeRating : undefined,
-          });
-          if (placeRating > 0) {
-            const previousTier = selectedPlace.lovelichelinTier;
-            const updated = await placeApi.rate(selectedPlace.id, { rating: placeRating });
-            placeToastSuffix =
-              previousTier === 0 && updated.lovelichelinTier > 0
-                ? ` · 럽슐랭 ${updated.lovelichelinTier}스타 등극! 🎉`
-                : ` · ${selectedPlace.name} 럽슐랭 평가 완료`;
-          } else {
-            placeToastSuffix = ` · ${selectedPlace.name} 방문 기록 완료`;
-          }
-          usePlaceStore.getState().invalidate();
-        } catch (e) {
-          placeLinkFailed = true;
-          placeToastSuffix = ` · ${getErrorMessage(e, '장소 방문 기록 연동에 실패했어요. 럽슐랭에서 다시 시도해주세요.')}`;
-        }
+      let saved: Meal;
+      if (pickedPlaceName) {
+        const res = await placeApi.recordMealVisit({
+          clientRequestId,
+          placeId: selectedPlace?.id,
+          place: pendingKakao ? toSavePlacePayload(pendingKakao) : undefined,
+          visitedAt: mealDate,
+          photoUrl,
+          rating: placeRating > 0 ? placeRating : undefined,
+          meal: {
+            mealType,
+            memo: payload.memo,
+            items: payload.items,
+            calories: payload.calories,
+            sugar: payload.sugar,
+            sodium: payload.sodium,
+            fiber: payload.fiber,
+            sharedWithPartner: payload.sharedWithPartner,
+          },
+        });
+        // 식단 목록은 이 API 가 아니라 식단 스토어가 들고 있다 — 저장(save)이 하던 다시 받기를 대신 한다
+        await useDietStore.getState().reload();
+        usePlaceStore.getState().invalidate();
+        saved = res.meal as Meal;
+        const name = res.place.name;
+        placeToastSuffix = res.tierUp
+          ? ` · 럽슐랭 ${res.place.lovelichelinTier}스타 등극! 🎉`
+          : pendingKakao && res.place.created === false
+            ? ` · ${name}은(는) 이미 럽슐랭에 있어서 거기에 남겼어요`
+            : ` · ${name} 방문 기록 완료`;
+      } else {
+        saved = await save(payload);
       }
+      maybeSavedRef.current = true;
+      haptics.success();
 
       /*
        * 사진만 올리고 영양 정보를 비워두면 서버가 뒤이어 칼로리를 채운다
@@ -1062,6 +1324,10 @@ export function DietRecordScreen({ navigation, route }: Props) {
        */
       const willAutoAnalyze =
         !!photoUrl && payloadItems.length === 0 && !num(totalCalories) && autoAnalyzeMealPhoto;
+      track(
+        'MEAL_RECORD_SAVED',
+        `new;t=${elapsedSec(openedAtRef.current)};i=${payloadItems.length};p=${photoUrl ? 1 : 0};d=${payload.sharedWithPartner ? 1 : 0};a=${willAutoAnalyze ? 1 : 0}`,
+      );
 
       /*
        * 커플이 연결돼 있으면 서버가 저장과 동시에 채팅에 MEAL_CARD 를 남긴다(MealService.postMealCard —
@@ -1077,19 +1343,32 @@ export function DietRecordScreen({ navigation, route }: Props) {
             ? '🎯 단백질 목표 달성! '
             : '식단 기록 완료! ') +
         (couple?.id && !payload.sharedWithPartner ? '채팅에 공유했어요. ' : '') +
-        (willAutoAnalyze ? '칼로리는 곧 채워져요.' : '') +
+        (willAutoAnalyze
+          ? photoQuota?.remaining === 0
+            // 자동 분석도 사진 분석 횟수를 쓴다 — 다 썼으면 서버가 조용히 건너뛰므로 "곧 채워져요"는 거짓말이 된다
+            ? '오늘 AI 분석 횟수를 다 써서 칼로리는 직접 적어주세요.'
+            : '칼로리는 곧 채워져요.'
+          : '') +
         placeToastSuffix;
-      if (placeLinkFailed) {
-        toast.error(saveMessage);
-      } else {
-        toast.success(saveMessage);
-      }
+      toast.success(saveMessage);
 
       allowLeave();
       navigation.goBack();
     } catch (e) {
-      Alert.alert('오류', getErrorMessage(e));
+      // 타임아웃·끊김이면 서버가 뒤늦게 저장했을 수 있다 — 나갈 때 사진을 치우지 않는다
+      if (!wasRejected(e)) maybeSavedRef.current = true;
+      /*
+       * 새 장소를 담다 FREE 장소 한도(402)에 걸렸다 — 업그레이드 안내는 api/client 가 이미 열었다. 같은 말을 또 하지
+       * 않고, 장소만 빼면 식단은 저장할 수 있다는 것만 알린다(외식 기록은 한 덩어리라 식단도 함께 저장되지 않았다).
+       */
+      const code = errorCodeOf(e);
+      if (code === 'PLAN_UPGRADE_REQUIRED' || code === 'PLAN_LIMIT_EXCEEDED') {
+        if (pendingKakao) toast.info('장소를 빼면 식단은 바로 저장할 수 있어요.');
+      } else {
+        Alert.alert('오류', getErrorMessage(e));
+      }
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
@@ -1106,7 +1385,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
             label="먹은 날"
             value={mealDate}
             onChange={setMealDate}
-            max={toDateString()}
+            max={todayKst()}
             pickerTitle="언제 먹은 식단인가요?"
           />
 
@@ -1171,13 +1450,14 @@ export function DietRecordScreen({ navigation, route }: Props) {
                       리포트). 시트를 열어야 "카카오에서 찾기"가 보이므로, 닫힌 상태 문구부터
                       "검색"을 앞세운다.
                     */}
-                    {selectedPlace ? selectedPlace.name : '장소 검색하기'}
+                    {pickedPlaceName ?? '장소 검색하기'}
                   </Text>
                 </TouchableOpacity>
-                {selectedPlace ? (
+                {pickedPlaceName ? (
                   <TouchableOpacity
                     onPress={() => {
                       setSelectedPlace(null);
+                      setPendingKakao(null);
                       setPlaceRating(0);
                     }}
                     hitSlop={8}
@@ -1198,7 +1478,30 @@ export function DietRecordScreen({ navigation, route }: Props) {
                 )}
               </View>
 
-              {selectedPlace ? (
+              {!pickedPlaceName && quickPlaces.length > 0 ? (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.quickPlaceScroll}
+                  contentContainerStyle={styles.quickPlaceRow}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  {quickPlaces.map((p) => (
+                    <Chip
+                      key={p.id}
+                      label={p.visitCount > 0 ? p.name : `${p.name} · 가고 싶은 곳`}
+                      onPress={() => {
+                        // 별은 미리 채우지 않는다 — 건드리지 않은 값이 방문 별점으로 저장되던 문제(P0)
+                        setSelectedPlace(p);
+                        setPendingKakao(null);
+                        setPlaceRating(0);
+                      }}
+                    />
+                  ))}
+                </ScrollView>
+              ) : null}
+
+              {pickedPlaceName ? (
                 <>
                   <Text style={styles.label}>같이 별점도 남길까요? (선택)</Text>
                   <View style={styles.starRow}>
@@ -1213,10 +1516,17 @@ export function DietRecordScreen({ navigation, route }: Props) {
                       </TouchableOpacity>
                     ))}
                   </View>
+                  {/*
+                    대표 평점은 비어 있을 때만 이 별점으로 정해진다(결정 Q3) — 이미 있으면 그대로 두고,
+                    이 별점은 이번 방문 기록에만 남는다. 그래서 기존 대표 평점으로 별을 미리 채우지 않는다
+                    (채워 두면 건드리지 않아도 그 값이 방문 별점으로 저장됐다).
+                  */}
                   <Text style={styles.placeRatingHint}>
-                    {placeRating > 0
-                      ? '방문 기록과 함께 럽슐랭 평가에도 반영돼요.'
-                      : '별점 없이 저장하면 방문 기록만 남아요.'}
+                    {selectedPlace?.myRating != null
+                      ? `내 대표 평점 ${'★'.repeat(selectedPlace.myRating)}은 그대로예요 — 이 별점은 이번 방문 기록에 남아요.`
+                      : placeRating > 0
+                        ? '방문 기록과 함께 내 럽슐랭 평점이 돼요.'
+                        : '별점 없이 저장하면 방문 기록만 남아요.'}
                   </Text>
                 </>
               ) : null}
@@ -1295,6 +1605,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
               onPress={() => {
                 setPhotoUri(null);
                 setAnalysisSource(null);
+                discardPreUpload(uploadedRef.current);
                 // 업로드 캐시만 버린다. 분석으로 들어온 음식 항목은 그대로 둔다 —
                 // 사진을 지워도 먹은 건 먹은 것이고, 틀렸으면 항목별로 지울 수 있다.
                 uploadedRef.current = null;
@@ -1312,10 +1623,12 @@ export function DietRecordScreen({ navigation, route }: Props) {
                 title="AI로 음식 분석"
                 variant="soft"
                 size="md"
-                onPress={onAnalyze}
+                onPress={() => void onAnalyze()}
                 loading={analyzing}
+                disabled={photoQuotaSpent}
                 style={styles.analyzeButton}
               />
+              {quotaLine(photoQuota) ? <Text style={styles.analyzeHint}>{quotaLine(photoQuota)}</Text> : null}
               {/*
                 신뢰도 표현 — NUTRITION_LABEL 은 추정이 아니라 표기값을 그대로 읽은 것이라
                 바코드·DB 조회와 같은 급으로 다르게 말한다(추정치라고 하면 신뢰도를 낮춰 보인다).
@@ -1455,10 +1768,28 @@ export function DietRecordScreen({ navigation, route }: Props) {
                 step={10}
               />
 
+              {/* 먹은 양 — 칼로리가 있을 때만. 기준 × 배수로 칼로리·탄단지·양 글자를 함께 바꾼다 */}
+              {Number(item.calories) > 0 ? (
+                <View style={styles.typeRow} accessibilityLabel="먹은 양">
+                  {MULTIPLIERS.map((m) => (
+                    <Chip
+                      key={m}
+                      label={`× ${m}`}
+                      selected={activeMultiplier(item) === m}
+                      onPress={() => scaleItem(item.key, m)}
+                      fill
+                    />
+                  ))}
+                </View>
+              ) : null}
+
               {/* 탄단지는 대개 AI가 채워두고 손대지 않는다 — 접어두되 값은 요약으로 보여준다 */}
               <TouchableOpacity
                 style={styles.macroToggle}
-                onPress={() => updateItem(item.key, { showMacros: !item.showMacros })}
+                onPress={() => {
+                  if (!item.showMacros) track('MEAL_ITEM_EDIT_OPENED', 'macros');
+                  updateItem(item.key, { showMacros: !item.showMacros });
+                }}
                 accessibilityRole="button"
               >
                 <MaterialCommunityIcons
@@ -1517,6 +1848,8 @@ export function DietRecordScreen({ navigation, route }: Props) {
               <Text style={styles.analyzeHint}>
                 표기값이 있는 음식은 그 값으로, 없으면 AI가 추정해요. 항목별로 수정할 수 있어요.
               </Text>
+              {/* 표기값 조회는 횟수를 안 쓰므로 버튼은 잠그지 않는다 — AI 추정 몫만 남은 횟수를 말한다 */}
+              {quotaLine(textQuota) ? <Text style={styles.analyzeHint}>{quotaLine(textQuota)}</Text> : null}
             </>
           ) : null}
 
@@ -1577,8 +1910,8 @@ export function DietRecordScreen({ navigation, route }: Props) {
       </FormKeyboardView>
 
       {/*
-        럽슐랭 장소 선택 시트 — 저장된 장소 중에서 고르거나, 없으면 카카오에서 찾아 바로
-        추가한다(다녀온 곳이니 곧장 방문완료로 생긴다 — onAddFromKakao 참고).
+        럽슐랭 장소 선택 시트 — 저장된 장소 중에서 고르거나, 없으면 카카오에서 찾아 고른다.
+        카카오 결과는 식단을 저장할 때 장소로 만들어진다(onAddFromKakao 참고).
       */}
       <Sheet visible={placeSheetOpen} onClose={closePlaceSheet} cardStyle={styles.placeSheetCard}>
         <Text style={styles.sheetTitle}>어디서 드셨어요?</Text>
@@ -1603,7 +1936,8 @@ export function DietRecordScreen({ navigation, route }: Props) {
                   activeOpacity={0.7}
                   onPress={() => {
                     setSelectedPlace(item);
-                    setPlaceRating(item.myRating ?? 0);
+                    setPendingKakao(null);
+                    setPlaceRating(0);
                     closePlaceSheet();
                   }}
                 >
@@ -1643,16 +1977,12 @@ export function DietRecordScreen({ navigation, route }: Props) {
               <View style={styles.kakaoResultRow}>
                 <View style={styles.flex}>
                   <Text style={styles.placeCandidateName} numberOfLines={1}>{item.name}</Text>
+                  {/* "한식 · 냉면 · 연남동" — 무엇을 파는 곳인지와 동네(같은 이름 체인점을 가른다) */}
                   <Text style={styles.placeCandidateInfo} numberOfLines={1}>
-                    {item.category ?? item.address ?? ''}
+                    {placeSubtitle(item)}
                   </Text>
                 </View>
-                <Button
-                  title="추가"
-                  size="sm"
-                  loading={addingPlaceName === item.name}
-                  onPress={() => onAddFromKakao(item)}
-                />
+                <Button title="고르기" size="sm" onPress={() => onAddFromKakao(item)} />
               </View>
             )}
             ListEmptyComponent={<Text style={styles.empty}>검색 결과가 없어요.</Text>}
@@ -1770,7 +2100,10 @@ const styles = themedStyles((colors) => ({
   placePickerMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   placePickerText: { flex: 1, fontSize: fontSize.body, color: colors.textPrimary, fontWeight: '600' },
   starRow: { flexDirection: 'row', gap: spacing.sm },
-  star: { fontSize: 32, color: colors.accent },
+  star: { fontSize: 32, color: colors.rating },
+  // 빠른 장소 칩 — 가로 한 줄. 세로로 줄어들지 않게 flexGrow/Shrink 를 끈다(PlaceScreen.filterScroll 과 같은 처방)
+  quickPlaceScroll: { flexGrow: 0, flexShrink: 0, marginTop: spacing.sm },
+  quickPlaceRow: { flexDirection: 'row', gap: spacing.sm },
   placeRatingHint: { color: colors.textSecondary, fontSize: fontSize.caption, marginTop: spacing.xs },
   placeSheetCard: { maxHeight: '80%' },
   sheetTitle: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary, marginBottom: spacing.md },
@@ -1816,7 +2149,7 @@ const styles = themedStyles((colors) => ({
   itemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
   itemHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   itemNo: { fontSize: fontSize.body, fontWeight: '700', color: colors.primary },
-  itemKcal: { fontSize: fontSize.caption, fontWeight: '800', color: colors.accent },
+  itemKcal: { fontSize: fontSize.caption, fontWeight: '800', color: colors.textPrimary },
   remove: { color: colors.danger, fontSize: fontSize.caption },
   macroToggle: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, minHeight: 44 },
   macroToggleText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },

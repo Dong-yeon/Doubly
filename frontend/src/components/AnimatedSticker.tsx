@@ -6,7 +6,7 @@
  * 있지 않다. 화면에서 `lottie-react-native` 를 직접 import 하면 그 한 줄 때문에
  * <b>웹 번들 전체가 resolve 실패</b>로 깨진다(`npm run build:web` 포함).
  * 그래서 이 파일(네이티브)과 AnimatedSticker.web.tsx(웹)로 나눠, 웹 번들에는
- * lottie 가 아예 들어가지 않게 한다 — callStore.ts / callStore.web.ts 와 같은 패턴.
+ * lottie 가 아예 들어가지 않게 한다.
  */
 import React, { useRef } from 'react';
 import { Pressable, StyleProp, ImageStyle } from 'react-native';

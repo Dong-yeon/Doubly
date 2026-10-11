@@ -3,6 +3,14 @@
  * 통신: 내부 → 외부 postMessage(JSON, source='fitto-kakao-map').
  */
 import { KAKAO_JS_KEY } from '../constants/config';
+import { palettes } from '../theme/palette';
+
+/*
+ * 지도 타일은 다크 모드에서도 밝은 지도라 라이트 팔레트로 고정한다.
+ * 경로선 = 지도 핀과 같은 "우리" 색(mapPin), 등급 배지 = 럽슐랭 왕관 금색. 예전엔 #4A5BFF·#D4A017 하드코딩.
+ */
+export const MAP_ROUTE_COLOR = palettes.light.mapPin;
+const MAP_TIER_COLOR = palettes.light.lovelichelinGold;
 
 export interface KakaoMapMarker {
   id: number;
@@ -15,24 +23,38 @@ export interface KakaoMapMarker {
   filled?: boolean;
   /** 럽슐랭 등급(1~3) — 지정하면 핀 우상단에 금색 등급 뱃지가 덧그려진다. 0/미지정 시 없음 */
   tier?: number;
+  /**
+   * 사진 핀 — 주면 동그란 핀 대신 이 사진을 52px 둥근 사각형으로 꽂는다(사진첩 지도).
+   * 작은 썸네일 URL 을 넘길 것 — 지도 위에 원본 수십 장을 받으면 무겁다.
+   */
+  imageUrl?: string;
+  /** 사진 핀 우상단 장수 뱃지 — 2 이상일 때만 그린다(imageUrl 이 있을 때만 의미) */
+  count?: number;
+  /**
+   * 미리 그려 둔 핀 모양의 키 — {@link KakaoMapOptions.icons} 에서 찾는다. 주면 color/filled/tier 대신 쓴다.
+   * 럽슐랭 지도의 등극·다녀옴·안 가봄·검색 결과 핀(buildPlacePinIcons).
+   */
+  icon?: string;
+  /** 고른 핀 — 다른 핀 위에 그린다(z-index). 모양은 icon 키의 `-selected` 짝을 쓴다 */
+  selected?: boolean;
 }
 
-/** 카카오 플레이스 키워드 검색 결과 1건 */
-export interface KakaoPlaceResult {
-  name: string;
-  address?: string | null;
-  /** 카카오 category_group_code (FD6=음식점, CE7=카페 등) */
-  categoryGroup?: string | null;
-  lat: number;
-  lng: number;
+/** 핀 이미지 한 벌 — SVG 데이터 URI + 크기 + 좌표가 닿는 점(앵커) */
+export interface KakaoPinIcon {
+  url: string;
+  width: number;
+  height: number;
+  anchorX: number;
+  anchorY: number;
 }
 
 export type KakaoMapMessage =
   | { source: 'fitto-kakao-map'; type: 'select'; lat: number; lng: number; address?: string | null }
   | { source: 'fitto-kakao-map'; type: 'marker'; id: number }
-  | { source: 'fitto-kakao-map'; type: 'search-results'; keyword: string; results: KakaoPlaceResult[] }
   /** SDK 로드 실패·도메인 미등록 등 — 지도가 정상 동작하지 않는다는 신호 (buildKakaoMapHtml 하단 주석 참고) */
-  | { source: 'fitto-kakao-map'; type: 'failed'; reason?: string };
+  | { source: 'fitto-kakao-map'; type: 'failed'; reason?: string }
+  /** 지도가 멈췄다(idle) — 지금 보이는 범위. 사용자가 움직였을 때만 byUser=true("이 지역 장소 보기"를 띄울지) */
+  | { source: 'fitto-kakao-map'; type: 'bounds'; sw: KakaoLatLng; ne: KakaoLatLng; byUser: boolean };
 
 /** 동선 폴리라인 좌표 (정렬 순서대로 이어 그린다) */
 export interface KakaoLatLng {
@@ -49,11 +71,127 @@ export interface KakaoMapOptions {
   centerLat?: number;
   centerLng?: number;
   level?: number;
+  /** 마커의 icon 키가 가리키는 핀 이미지들 — buildPlacePinIcons 결과 */
+  icons?: Record<string, KakaoPinIcon>;
 }
 
 // 기본 중심: 서울 시청
 const DEFAULT_LAT = 37.5665;
 const DEFAULT_LNG = 126.978;
+
+/**
+ * 핀을 묶기(MarkerClusterer) 시작하는 개수 — 21(20곳 초과).
+ *
+ * <p>FREE 커플의 장소 한도가 20곳이라(PLACE_PIN, Feature.java) 무료 커플의 지도는 늘 낱개 핀 + 이름표 그대로다.
+ * 그 이상은 PRO 커플인데, 서울 한 화면(축척 5~7)에 20개가 넘는 이름표가 겹치면 핀도 이름도 못 읽는다.
+ * 묶음은 축척 {@link CLUSTER_MIN_LEVEL} 이상(넓게 볼 때)만 — 동네 단위로 당겨 보면 낱개로 풀린다.
+ */
+export const CLUSTER_MIN_MARKERS = 21;
+export const CLUSTER_MIN_LEVEL = 5;
+/** 묶음을 쓸 때 이름표는 이 축척 이하(가까이)에서만 — 묶인 핀 위에 이름표만 떠 있지 않게 */
+export const LABEL_MAX_LEVEL = CLUSTER_MIN_LEVEL - 1;
+
+/**
+ * 내 위치 점 — 네이티브(WebView)·웹이 같은 모양을 쓴다. 지도 앱들의 관례대로 흰 테두리 파란 점 + 옅은 원.
+ * 우리 핀(코랄·하늘·금색)과 섞이지 않는 색이라 테마 팔레트를 따르지 않는다. 눌리지 않는다(pointer-events:none).
+ */
+export const MY_LOCATION_DOT_HTML =
+  '<div style="position:relative;width:44px;height:44px;pointer-events:none;">' +
+  '<div style="position:absolute;inset:0;border-radius:50%;background:rgba(26,115,232,.18);"></div>' +
+  '<div style="position:absolute;left:14px;top:14px;width:16px;height:16px;border-radius:50%;background:#1A73E8;' +
+  'border:3px solid #fff;box-sizing:border-box;box-shadow:0 1px 4px rgba(0,0,0,.35);"></div></div>';
+/** 내 위치로 갈 때 이보다 넓게 보고 있으면 동네 단위로 당긴다 — 전국을 보는 채로 옮기면 어디인지 안 보인다 */
+export const MY_LOCATION_MAX_LEVEL = 5;
+
+function svgUri(svg: string): string {
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+}
+
+/**
+ * 럽슐랭 장소 핀(+ 고른 상태) — 네이티브(WebView)와 웹(KakaoMap.web.tsx)이 <b>같은 이미지</b>를 쓴다.
+ *
+ * <p>왜 앱 쪽에서 그리나: 지도는 두 벌(WebView HTML / 웹 메인 문서)이라 핀을 각자 그리면 모양이 갈린다 —
+ * 실제로 웹 핀에는 등급 배지가 빠져 있었다. SVG 문자열을 여기서 한 번 만들어 둘 다에 넘긴다.
+ * 아이콘 폰트 글리프는 쓰지 않는다(폰트는 fingerprint 입력이라 업데이트가 막힌다) — 왕관도 SVG 도형으로 그린다.
+ *
+ * <ul>
+ *   <li>certified — 금색 원 + 흰 왕관(럽슐랭 등극)</li>
+ *   <li>visited — 채운 원(다녀옴)</li>
+ *   <li>wish — 흰 원 + 색 테두리(아직 안 가봄 = 방문 0건)</li>
+ *   <li>search — 검색 결과 임시 핀. 우리 장소와 헷갈리지 않게 원이 아니라 꼬리 달린 물방울 모양</li>
+ * </ul>
+ */
+export function buildPlacePinIcons(palette: { gold: string; visited: string; search: string }): Record<string, KakaoPinIcon> {
+  const icons: Record<string, KakaoPinIcon> = {};
+  // 왕관 — 가운데 (cx, cy), 폭 12k. 봉우리 셋 + 받침
+  const crown = (cx: number, cy: number, k: number) => {
+    const p = (x: number, y: number) => `${(cx + x * k).toFixed(1)},${(cy + y * k).toFixed(1)}`;
+    const pts = [p(-6, 3), p(-6, -3), p(-3, 0), p(0, -5), p(3, 0), p(6, -3), p(6, 3)].join(' ');
+    return (
+      `<polygon points="${pts}" fill="#ffffff"/>` +
+      `<rect x="${(cx - 6 * k).toFixed(1)}" y="${(cy + 3.6 * k).toFixed(1)}" width="${(12 * k).toFixed(1)}" height="${(1.8 * k).toFixed(1)}" fill="#ffffff"/>`
+    );
+  };
+  const circlePin = (key: string, scale: number, body: (c: number, r: number) => string) => {
+    const size = Math.round(28 * scale);
+    const c = size / 2;
+    icons[key] = {
+      url: svgUri(`<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}">${body(c, 10 * scale)}</svg>`),
+      width: size,
+      height: size,
+      anchorX: c,
+      anchorY: c,
+    };
+  };
+  for (const [suffix, scale] of [['', 1], ['-selected', 1.35]] as const) {
+    circlePin(
+      `certified${suffix}`,
+      scale,
+      (c, r) =>
+        `<circle cx="${c}" cy="${c}" r="${r + 1}" fill="${palette.gold}" stroke="#ffffff" stroke-width="${2.5 * scale}"/>` +
+        crown(c, c - 0.5 * scale, 0.75 * scale),
+    );
+    circlePin(
+      `visited${suffix}`,
+      scale,
+      (c, r) => `<circle cx="${c}" cy="${c}" r="${r}" fill="${palette.visited}" stroke="#ffffff" stroke-width="${3 * scale}"/>`,
+    );
+    circlePin(
+      `wish${suffix}`,
+      scale,
+      (c, r) => `<circle cx="${c}" cy="${c}" r="${r}" fill="#ffffff" stroke="${palette.visited}" stroke-width="${3 * scale}"/>`,
+    );
+    // 검색 결과 — 물방울(꼬리 끝이 좌표). 원 핀과 실루엣이 달라 "아직 우리 장소가 아님"이 보인다
+    const w = Math.round(26 * scale);
+    const h = Math.round(34 * scale);
+    const cx = w / 2;
+    const r = 10 * scale;
+    const cy = r + 2 * scale;
+    const d =
+      `M${cx} ${h - 1} C ${cx - 3 * scale} ${cy + r * 0.9}, ${cx - r} ${cy + r * 0.55}, ${cx - r} ${cy} ` +
+      `A ${r} ${r} 0 1 1 ${cx + r} ${cy} C ${cx + r} ${cy + r * 0.55}, ${cx + 3 * scale} ${cy + r * 0.9}, ${cx} ${h - 1} Z`;
+    icons[`search${suffix}`] = {
+      url: svgUri(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">` +
+          `<path d="${d}" fill="${palette.search}" stroke="#ffffff" stroke-width="${2 * scale}"/>` +
+          `<circle cx="${cx}" cy="${cy}" r="${3.5 * scale}" fill="#ffffff"/></svg>`,
+      ),
+      width: w,
+      height: h,
+      anchorX: cx,
+      anchorY: h - 1,
+    };
+  }
+  return icons;
+}
+
+/** 고른 핀이면 `-selected` 짝 키 — 짝이 없으면 원래 키, 키가 없으면 null(기존 color 핀) */
+export function pinIconKey(m: KakaoMapMarker, icons: Record<string, KakaoPinIcon> | undefined): string | null {
+  if (!m.icon || !icons) return null;
+  const sel = `${m.icon}-selected`;
+  if (m.selected && icons[sel]) return sel;
+  return icons[m.icon] ? m.icon : null;
+}
 
 export function parseKakaoMapMessage(raw: unknown): KakaoMapMessage | null {
   if (typeof raw !== 'string') return null;
@@ -99,7 +237,7 @@ setTimeout(function () {
   if (!fittoMapReady) { post({ type: 'failed', reason: 'timeout' }); }
 }, 6000);
 </script>
-<script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_JS_KEY}&libraries=services&autoload=false"
+<script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_JS_KEY}&libraries=services,clusterer&autoload=false"
         onerror="post({ type: 'failed', reason: 'sdk-load-error' })"></script>
 <script>
 kakao.maps.load(function () {
@@ -123,35 +261,23 @@ kakao.maps.load(function () {
     if (map.getLevel() > 4) { map.setLevel(4); }
   };
 
-  // 카카오 플레이스 키워드 검색 (SDK services 라이브러리 — 별도 REST 키 불필요)
-  var places = new kakao.maps.services.Places();
-  window.fittoSearch = function (keyword) {
-    if (!keyword) { return; }
-    places.keywordSearch(keyword, function (res, status) {
-      var results = [];
-      if (status === kakao.maps.services.Status.OK) {
-        results = res.slice(0, 10).map(function (p) {
-          return {
-            name: p.place_name,
-            address: p.road_address_name || p.address_name || null,
-            categoryGroup: p.category_group_code || null,
-            lat: parseFloat(p.y),
-            lng: parseFloat(p.x)
-          };
-        });
-      }
-      post({ type: 'search-results', keyword: keyword, results: results });
-    });
-  };
+  // 장소 검색은 지도가 하지 않는다 — 서버 GET /places/search(카카오 로컬 REST)가 카카오 장소 id 까지
+  // 돌려줘 중복 방지가 된다. SDK keywordSearch 는 id 를 버려 같은 장소가 두 번 생기곤 했다
+  // (docs/LOVELICHELIN_CHAT_LINK_2026-10-02.md). 지도는 표시와 좌표 고르기만 맡는다.
 
   // 웹(iframe)은 postMessage 명령으로 호출
   window.addEventListener('message', function (e) {
     var d = e.data;
     try { if (typeof d === 'string') { d = JSON.parse(d); } } catch (err) { return; }
     if (!d || d.source !== 'fitto-kakao-map-cmd') { return; }
-    if (d.type === 'search') { window.fittoSearch(d.keyword); }
     if (d.type === 'pin') { window.fittoSetPin(d.lat, d.lng); }
     if (d.type === 'markers') { window.fittoSetMarkers(d.markers, d.path, false); }
+    if (d.type === 'fit') { window.fittoFitMarkers(); }
+    if (d.type === 'padding') { window.fittoSetPadding(d.padding); }
+    if (d.type === 'panTo') { window.fittoPanTo(d.lat, d.lng, d.offsetY); }
+    if (d.type === 'clearPin') { window.fittoClearPin(); }
+    if (d.type === 'fitPoints') { window.fittoFitPoints(d.points); }
+    if (d.type === 'myLocation') { window.fittoShowMyLocation(d.lat, d.lng, d.offsetY); }
   });
 
   // 색상 지정 핀 — 원형 SVG 를 데이터 URI 로 인라인 렌더링 (외부 이미지 호스팅 불필요)
@@ -163,7 +289,7 @@ kakao.maps.load(function () {
       ? '<circle cx="14" cy="14" r="10" fill="' + color + '" stroke="#ffffff" stroke-width="3"/>'
       : '<circle cx="14" cy="14" r="10" fill="#ffffff" stroke="' + color + '" stroke-width="3"/>';
     var badge = tier > 0
-      ? '<circle cx="23" cy="7" r="6.5" fill="#D4A017" stroke="#ffffff" stroke-width="1.5"/>' +
+      ? '<circle cx="23" cy="7" r="6.5" fill="${MAP_TIER_COLOR}" stroke="#ffffff" stroke-width="1.5"/>' +
         '<text x="23" y="10" font-size="8" font-weight="700" text-anchor="middle" fill="#ffffff">' + tier + '</text>'
       : '';
     var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32">' + circle + badge + '</svg>';
@@ -181,43 +307,196 @@ kakao.maps.load(function () {
    * (여행 상세에서 Day 를 누를 때마다 지도가 하얗게 깜빡였다).
    * 이제 fittoSetMarkers 만 호출해 그린 것만 바꾼다.
    */
+  /*
+   * 사진 핀 — 52px 둥근 사진 + 흰 테두리 + 아래 꼬리(꼭짓점이 좌표). 장수 뱃지는 우상단.
+   * KakaoMap.web.tsx 의 photoPinElement 와 <b>같은 모양</b>이어야 한다(네이티브·웹이 따로 그린다).
+   * URL·글자는 innerHTML 로 잇지 않고 DOM 속성으로 넣는다 — 이름에 따옴표·꺾쇠가 있어도 안전하다.
+   */
+  function photoPin(m, color) {
+    var root = document.createElement('div');
+    root.style.cssText = 'position:relative;display:flex;flex-direction:column;align-items:center;cursor:pointer;';
+    var box = document.createElement('div');
+    box.style.cssText = 'width:52px;height:52px;border-radius:12px;border:3px solid #fff;overflow:hidden;' +
+      'background:#eee;box-shadow:0 2px 6px rgba(0,0,0,.3);box-sizing:border-box;';
+    var img = document.createElement('img');
+    img.src = m.imageUrl;
+    img.alt = '';
+    img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
+    box.appendChild(img);
+    var tail = document.createElement('div');
+    tail.style.cssText = 'width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;' +
+      'border-top:8px solid #fff;margin-top:-1px;filter:drop-shadow(0 2px 1px rgba(0,0,0,.2));';
+    root.appendChild(box);
+    root.appendChild(tail);
+    if (m.count && m.count > 1) {
+      var badge = document.createElement('div');
+      badge.textContent = m.count > 99 ? '99+' : String(m.count);
+      badge.style.cssText = 'position:absolute;top:-7px;right:-9px;min-width:20px;height:20px;padding:0 5px;' +
+        'border-radius:10px;border:2px solid #fff;box-sizing:border-box;background:' + (color || '#333') + ';' +
+        'color:#fff;font-size:11px;font-weight:700;line-height:16px;text-align:center;';
+      root.appendChild(badge);
+    }
+    root.addEventListener('click', function (e) { e.stopPropagation(); post({ type: 'marker', id: m.id }); });
+    return root;
+  }
+
   var drawn = [];
-  window.fittoSetMarkers = function (markers, path, fit) {
+  var icons = ${JSON.stringify(options.icons ?? {})};
+  function iconImage(m) {
+    if (!m.icon) { return null; }
+    var key = (m.selected && icons[m.icon + '-selected']) ? m.icon + '-selected' : m.icon;
+    var ic = icons[key];
+    if (!ic) { return null; }
+    return new kakao.maps.MarkerImage(ic.url, new kakao.maps.Size(ic.width, ic.height), {
+      offset: new kakao.maps.Point(ic.anchorX, ic.anchorY)
+    });
+  }
+  // 핀 묶기 — 핀이 많을 때만(CLUSTER_MIN_MARKERS). 이름표는 묶음이 풀리는 축척에서만 보인다
+  var clusterer = null;
+  var labels = [];
+  var clustering = false;
+  function updateLabels() {
+    var show = !clustering || map.getLevel() <= ${LABEL_MAX_LEVEL};
+    labels.forEach(function (l) { l.setMap(show ? map : null); });
+  }
+  kakao.maps.event.addListener(map, 'zoom_changed', updateLabels);
+
+  window.fittoSetMarkers = function (markers, path, fit, nextIcons) {
+    if (nextIcons) { icons = nextIcons; }
     drawn.forEach(function (o) { o.setMap(null); });
     drawn = [];
+    labels = [];
+    if (clusterer) { clusterer.clear(); }
+    clustering = markers.length >= ${CLUSTER_MIN_MARKERS} && !!kakao.maps.MarkerClusterer;
+    var clustered = [];
 
     var bounds = new kakao.maps.LatLngBounds();
     markers.forEach(function (m) {
       var pos = new kakao.maps.LatLng(m.lat, m.lng);
       bounds.extend(pos);
-      var markerOpts = { map: map, position: pos, title: m.title };
-      if (m.color) { markerOpts.image = pinImage(m.color, m.filled !== false, m.tier || 0); }
-      var marker = new kakao.maps.Marker(markerOpts);
-      kakao.maps.event.addListener(marker, 'click', function () { post({ type: 'marker', id: m.id }); });
-      drawn.push(marker);
+      if (m.imageUrl) {
+        // 사진 핀 — 아래 꼭짓점이 좌표에 오도록 yAnchor 1. clickable 이라 지도 탭(좌표 선택)으로 새지 않는다
+        drawn.push(new kakao.maps.CustomOverlay({
+          map: map, position: pos, xAnchor: 0.5, yAnchor: 1, clickable: true, content: photoPin(m, m.color)
+        }));
+      } else {
+        // 묶을 때는 지도에 직접 올리지 않고 clusterer 에 맡긴다
+        var markerOpts = { map: clustering ? null : map, position: pos, title: m.title };
+        var ic = iconImage(m);
+        if (ic) { markerOpts.image = ic; }
+        else if (m.color) { markerOpts.image = pinImage(m.color, m.filled !== false, m.tier || 0); }
+        if (m.selected) { markerOpts.zIndex = 10; }
+        var marker = new kakao.maps.Marker(markerOpts);
+        kakao.maps.event.addListener(marker, 'click', function () { post({ type: 'marker', id: m.id }); });
+        drawn.push(marker);
+        if (clustering) { clustered.push(marker); }
+      }
       var label = new kakao.maps.CustomOverlay({
-        map: map, position: pos, yAnchor: 0,
+        map: null, position: pos, yAnchor: 0,
         content: '<div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:2px 8px;' +
                  'font-size:11px;font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.15);white-space:nowrap;">' +
                  m.title.replace(/</g, '&lt;') + '</div>'
       });
       drawn.push(label);
+      labels.push(label);
     });
+    if (clustering) {
+      if (!clusterer) {
+        clusterer = new kakao.maps.MarkerClusterer({ map: map, averageCenter: true, minLevel: ${CLUSTER_MIN_LEVEL} });
+      }
+      clusterer.addMarkers(clustered);
+    }
+    updateLabels();
 
     // 동선 폴리라인 — 일정 순서대로 이어 그린다 (2점 이상)
     if (path.length > 1) {
       var linePath = path.map(function (p) { return new kakao.maps.LatLng(p.lat, p.lng); });
       var line = new kakao.maps.Polyline({
         map: map, path: linePath,
-        strokeWeight: 4, strokeColor: '#4A5BFF', strokeOpacity: 0.85, strokeStyle: 'solid'
+        strokeWeight: 4, strokeColor: '${MAP_ROUTE_COLOR}', strokeOpacity: 0.85, strokeStyle: 'solid'
       });
       drawn.push(line);
       path.forEach(function (p) { bounds.extend(new kakao.maps.LatLng(p.lat, p.lng)); });
     }
 
-    // 화면 맞추기는 처음 그릴 때만 — 갱신마다 하면 사용자가 옮긴 시야를 뺏는다
-    if (fit && (markers.length > 1 || path.length > 1)) { map.setBounds(bounds, 40, 40, 40, 40); }
+    // 화면 맞추기는 부른 쪽이 정한다(처음 그릴 때·검색 결과) — 갱신마다 하면 사용자가 옮긴 시야를 뺏는다
+    if (fit && (markers.length > 1 || path.length > 1)) { fitTo(bounds); }
+    else if (fit && markers.length === 1) {
+      programmatic = true;
+      map.setCenter(new kakao.maps.LatLng(markers[0].lat, markers[0].lng));
+    }
   };
+
+  /*
+   * 시야 맞추기. 아래 여백은 하단 시트가 덮는 높이다 — 그만큼 비워 맞춰야 시트에 가린 핀이 없다.
+   * 앱이 시트 높이를 바꿀 때 fittoSetPadding 으로 알려 준다.
+   */
+  var fitPad = { top: 40, right: 40, bottom: 40, left: 40 };
+  window.fittoSetPadding = function (pad) { fitPad = Object.assign(fitPad, pad || {}); };
+  // 처음 지도가 멈추는 것(로드 직후 idle)은 사용자가 움직인 게 아니다
+  var programmatic = true;
+  function fitTo(bounds) {
+    programmatic = true;
+    map.setBounds(bounds, fitPad.top, fitPad.right, fitPad.bottom, fitPad.left);
+  }
+  window.fittoFitMarkers = function () {
+    var bounds = new kakao.maps.LatLngBounds();
+    var n = 0;
+    drawn.forEach(function (o) { if (o instanceof kakao.maps.Marker) { bounds.extend(o.getPosition()); n++; } });
+    if (n > 1) { fitTo(bounds); }
+    else if (n === 1) { programmatic = true; map.setCenter(bounds.getSouthWest()); }
+  };
+  /*
+   * 고른 핀으로 시야 옮기기 — 확대 단계는 그대로 둔다(사용자가 맞춘 축척을 뺏지 않는다).
+   * offsetY(px): 핀을 지도 한가운데보다 이만큼 위에 둔다 — 아래쪽을 하단 시트가 덮고 있어서다.
+   */
+  window.fittoPanTo = function (lat, lng, offsetY) {
+    programmatic = true;
+    var target = new kakao.maps.LatLng(lat, lng);
+    if (offsetY) {
+      var proj = map.getProjection();
+      var pt = proj.containerPointFromCoords(target);
+      target = proj.coordsFromContainerPoint(new kakao.maps.Point(pt.x, pt.y + offsetY));
+    }
+    map.panTo(target);
+  };
+  // 주어진 좌표들이 다 보이게(검색 결과만 맞출 때 — 우리 핀까지 넣으면 결과가 작아진다)
+  window.fittoFitPoints = function (points) {
+    if (!points || !points.length) { return; }
+    if (points.length === 1) { programmatic = true; map.setCenter(new kakao.maps.LatLng(points[0].lat, points[0].lng)); return; }
+    var bounds = new kakao.maps.LatLngBounds();
+    points.forEach(function (p) { bounds.extend(new kakao.maps.LatLng(p.lat, p.lng)); });
+    fitTo(bounds);
+  };
+  // 좌표 고르기 핀 지우기 — 고른 걸 취소했을 때
+  window.fittoClearPin = function () { if (selMarker) { selMarker.setMap(null); selMarker = null; } };
+  // 내 위치 — 점을 (다시) 놓고 그리로 간다. 너무 넓게 보고 있었으면 동네 단위로 당긴 뒤 옮긴다
+  var myDot = null;
+  window.fittoShowMyLocation = function (lat, lng, offsetY) {
+    var pos = new kakao.maps.LatLng(lat, lng);
+    if (myDot) { myDot.setPosition(pos); }
+    else { myDot = new kakao.maps.CustomOverlay({ map: map, position: pos, content: ${JSON.stringify(MY_LOCATION_DOT_HTML)}, xAnchor: 0.5, yAnchor: 0.5, zIndex: 1 }); }
+    if (map.getLevel() > ${MY_LOCATION_MAX_LEVEL}) { programmatic = true; map.setLevel(${MY_LOCATION_MAX_LEVEL}); }
+    window.fittoPanTo(lat, lng, offsetY);
+  };
+
+  /*
+   * 지도가 멈출 때마다(idle) 보이는 범위를 알린다. 사용자가 끌거나 확대했는지(byUser)를 같이 보낸다 —
+   * 앱이 setBounds·panTo 로 움직인 건 "이 지역 장소 보기" 버튼을 띄울 이유가 아니다.
+   * "사용자가 움직였다"는 idle 이 아니라 그 앞의 dragstart(끌기는 늘 사용자다)·zoom_start(앱이 안 움직일 때)로
+   * 판단한다 — 로드 직후와 시야 맞추기가 idle 을 두 번 내면 두 번째가 사용자 것으로 읽혔다(2026-10-05 웹 확인).
+   */
+  var userMoved = false;
+  kakao.maps.event.addListener(map, 'dragstart', function () { userMoved = true; });
+  kakao.maps.event.addListener(map, 'zoom_start', function () { if (!programmatic) { userMoved = true; } });
+  kakao.maps.event.addListener(map, 'idle', function () {
+    var b = map.getBounds();
+    var sw = b.getSouthWest();
+    var ne = b.getNorthEast();
+    post({ type: 'bounds', sw: { lat: sw.getLat(), lng: sw.getLng() }, ne: { lat: ne.getLat(), lng: ne.getLng() }, byUser: userMoved });
+    userMoved = false;
+    programmatic = false;
+  });
 
   window.fittoSetMarkers(${JSON.stringify(markers)}, ${JSON.stringify(path)}, true);
 

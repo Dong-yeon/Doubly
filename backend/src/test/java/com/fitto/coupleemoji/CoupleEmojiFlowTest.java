@@ -67,10 +67,10 @@ class CoupleEmojiFlowTest {
      */
     private static final int ALL_EMOTIONS = CoupleEmojiEmotion.values().length;
 
-    /** 한 요청 상한(5) 이하의 평범한 요청 — prepare 를 통과시키는 것이 목적이다. */
+    /** 한 요청 상한(6) — 기본 표정 한 벌. prepare 를 통과시키는 것이 목적이다. */
     private static final List<CoupleEmojiEmotion> WITHIN_LIMIT = List.of(
             CoupleEmojiEmotion.ANGRY, CoupleEmojiEmotion.HAPPY, CoupleEmojiEmotion.EXCITED,
-            CoupleEmojiEmotion.SAD, CoupleEmojiEmotion.SLEEPY);
+            CoupleEmojiEmotion.SAD, CoupleEmojiEmotion.SLEEPY, CoupleEmojiEmotion.LOVE);
 
     private static final String SOURCE_URL =
             "https://res.cloudinary.com/demo/image/upload/v1712345678/fitto/emoji-source/abc123.jpg";
@@ -103,7 +103,7 @@ class CoupleEmojiFlowTest {
                          "faceShape":"round","eyes":"almond","eyebrows":"thin","glasses":"no glasses",
                          "facialHair":"none","marks":"none","outfit":"white collared shirt"}
                         """));
-        when(geminiClient.generateImageInBackground(anyList()))
+        when(geminiClient.generateImageInBackground(any(), eq(Feature.AI_COUPLE_EMOJI), anyList()))
                 .thenReturn(new GeneratedImage(new byte[] {9, 9}, "image/jpeg"));
         when(imageUploader.upload(any(), anyString(), anyString()))
                 .thenAnswer(inv -> "https://res.cloudinary.com/demo/image/upload/v1/fitto/couple-emoji/"
@@ -125,18 +125,18 @@ class CoupleEmojiFlowTest {
     /**
      * 17종을 한 번에 그린다 — <b>요청 상한을 우회하는 게 아니라 그 아래를 보기 위해서다.</b>
      *
-     * <p>한 요청 5장 상한({@code MAX_EMOTIONS_PER_REQUEST})은 요청 경계(prepare)의 정책이고,
+     * <p>한 요청 6장 상한({@code MAX_EMOTIONS_PER_REQUEST})은 요청 경계(prepare)의 정책이고,
      * 이 헬퍼를 쓰는 테스트들이 보는 건 그 아래 도메인 동작 — 트레이 공유, 무드 플래그, 부분
      * 실패, 배치 삭제 — 이라 17종이 한 배치에 있어야 의미가 있다. 그래서 prepare 는 정상 요청
      * (검증·한도 차감)으로 통과시키고, 생성만 전체 감정으로 다시 묶어 부른다.
-     * 상한 자체는 {@code 한_번에_다섯_장까지만_받는다} 가 본다.
+     * 상한 자체는 {@code 한_번에_여섯_장까지만_받는다} 가 본다.
      */
     private CoupleEmojiBatchResponse generateFor(Long userId, Long subjectId) {
         CoupleEmojiService.GenerationTicket accepted =
                 service.prepare(userId, new GenerateCoupleEmojiRequest(SOURCE_URL, subjectId, WITHIN_LIMIT));
         return service.generate(new CoupleEmojiService.GenerationTicket(
                 accepted.relationId(), accepted.userId(), accepted.subjectUserId(),
-                accepted.sourceImageUrl(), List.of(CoupleEmojiEmotion.values())));
+                accepted.sourceImageUrl(), List.of(CoupleEmojiEmotion.values()), accepted.charge()));
     }
 
     /**
@@ -147,8 +147,8 @@ class CoupleEmojiFlowTest {
      * "HAPPY 가 실패해야 하는데 SAD 가 실패했다"로 깨졌다. 프롬프트에 감정별 문구가 들어가므로 그걸 본다.
      */
     private void failOnly(CoupleEmojiEmotion emotion, RuntimeException failure) {
-        when(geminiClient.generateImageInBackground(anyList())).thenAnswer(invocation -> {
-            List<Map<String, Object>> parts = invocation.getArgument(0);
+        when(geminiClient.generateImageInBackground(any(), eq(Feature.AI_COUPLE_EMOJI), anyList())).thenAnswer(invocation -> {
+            List<Map<String, Object>> parts = invocation.getArgument(2);
             boolean target = parts.stream()
                     .map(part -> String.valueOf(part.get("text")))
                     .anyMatch(text -> text.contains(emotion.expressionPrompt()));
@@ -203,7 +203,7 @@ class CoupleEmojiFlowTest {
         assertThat(ticket.relationId()).isEqualTo(relationId);
         assertThat(ticket.subjectUserId()).isEqualTo(b);
         // 한도 차감은 요청 스레드(prepare)에서 — 비싼 준비 전에 402 를 즉시 돌려주기 위해
-        verify(geminiClient).requireImageConfiguredAndCountUsage(a, Feature.AI_COUPLE_EMOJI);
+        verify(geminiClient).requireImageConfiguredAndCharge(a, Feature.AI_COUPLE_EMOJI);
         // 접수가 됐으면 원본은 백그라운드 작업이 지운다 — 여기서는 안 지운다
         verify(imageDeleter, times(2)).deleteAll(List.of(SOURCE_URL));
     }
@@ -219,7 +219,7 @@ class CoupleEmojiFlowTest {
 
         service.abandon(ticket);
 
-        verify(geminiClient).refund(a, Feature.AI_COUPLE_EMOJI);
+        verify(geminiClient).refund(eq(a), eq(Feature.AI_COUPLE_EMOJI), any());
         verify(imageDeleter).deleteAll(List.of(SOURCE_URL));
     }
 
@@ -229,7 +229,7 @@ class CoupleEmojiFlowTest {
         Long b = register("ce-limit-b@fitto.com");
         connectCouple(a, b);
         doThrow(new BusinessException(ErrorCode.PLAN_LIMIT_EXCEEDED))
-                .when(geminiClient).requireImageConfiguredAndCountUsage(a, Feature.AI_COUPLE_EMOJI);
+                .when(geminiClient).requireImageConfiguredAndCharge(a, Feature.AI_COUPLE_EMOJI);
 
         assertThatThrownBy(() -> service.prepare(a, new GenerateCoupleEmojiRequest(SOURCE_URL, null, WITHIN_LIMIT)))
                 .isInstanceOf(BusinessException.class)
@@ -240,22 +240,23 @@ class CoupleEmojiFlowTest {
     }
 
     /**
-     * 한 요청 5장 상한 — 17종을 한 번에 받지 않는다.
+     * 한 요청 6장 상한 — 17종을 한 번에 받지 않는다.
      *
      * <p>거절은 <b>한도 차감 전</b>이어야 한다. 차감 뒤에 거절하면 사용자는 아무것도 못 받고
      * 세트만 잃는다. 올라간 원본도 같이 지운다(사진은 저장하지 않는다, §9).
      */
     @Test
-    void 한_번에_다섯_장까지만_받는다() {
+    void 한_번에_여섯_장까지만_받는다() {
         Long a = register("ce-cap-a@fitto.com");
         Long b = register("ce-cap-b@fitto.com");
         connectCouple(a, b);
 
-        List<CoupleEmojiEmotion> six = List.of(
+        List<CoupleEmojiEmotion> seven = List.of(
                 CoupleEmojiEmotion.ANGRY, CoupleEmojiEmotion.HAPPY, CoupleEmojiEmotion.EXCITED,
-                CoupleEmojiEmotion.SAD, CoupleEmojiEmotion.SLEEPY, CoupleEmojiEmotion.LOVE);
+                CoupleEmojiEmotion.SAD, CoupleEmojiEmotion.SLEEPY, CoupleEmojiEmotion.LOVE,
+                CoupleEmojiEmotion.FRESHLY_WASHED);
 
-        assertThatThrownBy(() -> service.prepare(a, new GenerateCoupleEmojiRequest(SOURCE_URL, null, six)))
+        assertThatThrownBy(() -> service.prepare(a, new GenerateCoupleEmojiRequest(SOURCE_URL, null, seven)))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.INVALID_INPUT);
@@ -266,13 +267,13 @@ class CoupleEmojiFlowTest {
                 .isEqualTo(ErrorCode.INVALID_INPUT);
 
         // 거절이 한도보다 먼저다 — 한 번도 차감하지 않았다
-        verify(geminiClient, never()).requireImageConfiguredAndCountUsage(any(), any());
+        verify(geminiClient, never()).requireImageConfiguredAndCharge(any(), any());
         // 두 번 거절했으니 올라간 원본도 두 번 지운다
         verify(imageDeleter, times(2)).deleteAll(List.of(SOURCE_URL));
 
-        // 딱 5장은 통과한다
+        // 딱 6장(기본 표정 한 벌)은 통과한다
         assertThat(service.prepare(a, new GenerateCoupleEmojiRequest(SOURCE_URL, null, WITHIN_LIMIT)).emotions())
-                .hasSize(5);
+                .hasSize(6);
     }
 
     /**
@@ -312,11 +313,22 @@ class CoupleEmojiFlowTest {
         assertThat(batch.emojis()).extracting(CoupleEmojiResponse::emotion)
                 .containsExactly(CoupleEmojiEmotion.values());
         assertThat(batch.emojis()).extracting(CoupleEmojiResponse::label).contains("화남", "사랑");
+        /*
+         * 무드 피커가 "어느 기본 칸을 덮을지" 정하는 열쇠 — 앱이 같은 매핑표를 또 들지 않도록
+         * 서버가 실어 보낸다. 비면 덮어쓰기가 통째로 조용히 멈춘다(MoodPicker.slots).
+         */
+        assertThat(batch.emojis()).allSatisfy(e -> assertThat(e.moodEmoji()).isNotBlank());
+        assertThat(batch.emojis())
+                .filteredOn(e -> e.emotion() == CoupleEmojiEmotion.ANGRY)
+                .extracting(CoupleEmojiResponse::moodEmoji)
+                .containsExactly(CoupleEmojiEmotion.ANGRY.moodEmoji());
         assertThat(batch.emojis()).allSatisfy(e -> {
             assertThat(e.batchId()).isEqualTo(batch.batchId());
             assertThat(e.subjectUserId()).isEqualTo(b);
             assertThat(e.createdBy()).isEqualTo(a);
             assertThat(e.imageUrl()).contains("/couple-emoji/");
+            // 앱이 효과 레이어를 얹을지 이 값으로 가른다 — 비면 새 세트도 효과 없이 보인다
+            assertThat(e.promptVersion()).matches("v\\d+");
         });
 
         // 커플 공용 — 만든 사람이 아닌 상대도 같은 목록을 본다
@@ -329,7 +341,7 @@ class CoupleEmojiFlowTest {
                 .setParameter("b", batch.batchId()).getSingleResult();
         assertThat(facts).contains("Male").contains("short above ears hair");
         // 살렸으므로 환불은 없다
-        verify(geminiClient, never()).refund(any(), any());
+        verify(geminiClient, never()).refund(any(), any(), any());
     }
 
     /**
@@ -379,7 +391,7 @@ class CoupleEmojiFlowTest {
         assertThat(batch.emojis()).extracting(CoupleEmojiResponse::emotion)
                 .containsExactly(CoupleEmojiEmotion.ANGRY, CoupleEmojiEmotion.LOVE);
         // 지정하지 않은 감정은 아예 호출되지 않는다 — 그게 곧 절약이다
-        verify(geminiClient, times(2)).generateImageInBackground(anyList());
+        verify(geminiClient, times(2)).generateImageInBackground(any(), eq(Feature.AI_COUPLE_EMOJI), anyList());
     }
 
     @Test
@@ -395,7 +407,7 @@ class CoupleEmojiFlowTest {
         assertThat(batch.emojis()).hasSize(ALL_EMOTIONS - 1);
         assertThat(batch.failedEmotions()).containsExactly("HAPPY");
         assertThat(service.list(b)).hasSize(ALL_EMOTIONS - 1);
-        verify(geminiClient, never()).refund(any(), any());
+        verify(geminiClient, never()).refund(any(), any(), any());
     }
 
     @Test
@@ -404,7 +416,7 @@ class CoupleEmojiFlowTest {
         Long b = register("ce9@fitto.com");
         connectCouple(a, b);
         doThrow(new BusinessException(ErrorCode.AI_IMAGE_REJECTED))
-                .when(geminiClient).generateImageInBackground(anyList());
+                .when(geminiClient).generateImageInBackground(any(), eq(Feature.AI_COUPLE_EMOJI), anyList());
 
         assertThatThrownBy(() -> generateFor(a, null))
                 .isInstanceOf(BusinessException.class)
@@ -412,7 +424,7 @@ class CoupleEmojiFlowTest {
                 .isEqualTo(ErrorCode.AI_IMAGE_REJECTED);
 
         assertThat(service.list(a)).isEmpty();
-        verify(geminiClient).refund(a, Feature.AI_COUPLE_EMOJI);
+        verify(geminiClient).refund(eq(a), eq(Feature.AI_COUPLE_EMOJI), any());
         // 실패해도 원본은 지운다(§9)
         verify(imageDeleter).deleteAll(List.of(SOURCE_URL));
     }
@@ -430,7 +442,7 @@ class CoupleEmojiFlowTest {
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.PHOTO_TOO_LARGE);
 
-        verify(geminiClient).refund(a, Feature.AI_COUPLE_EMOJI);
+        verify(geminiClient).refund(eq(a), eq(Feature.AI_COUPLE_EMOJI), any());
         verify(imageDeleter).deleteAll(List.of(SOURCE_URL));
     }
 
@@ -446,7 +458,7 @@ class CoupleEmojiFlowTest {
 
         assertThat(batch.emojis()).hasSize(ALL_EMOTIONS - 1);
         assertThat(batch.failedEmotions()).containsExactly("ANGRY");
-        verify(geminiClient, never()).refund(any(), any());
+        verify(geminiClient, never()).refund(any(), any(), any());
         verify(imageDeleter).deleteAll(List.of(SOURCE_URL));
     }
 

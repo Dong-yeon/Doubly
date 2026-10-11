@@ -2,6 +2,8 @@ package com.fitto.trip;
 
 import com.fitto.auth.dto.RegisterRequest;
 import com.fitto.auth.service.AuthService;
+import com.fitto.common.plan.SubscriptionRepository;
+import com.fitto.common.plan.TestPro;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.relation.dto.InviteCodeResponse;
@@ -32,6 +34,8 @@ class TripChecklistFlowTest {
     @Autowired
     RelationService relationService;
     @Autowired
+    SubscriptionRepository subscriptionRepository;
+    @Autowired
     TripService tripService;
     @Autowired
     TripChecklistService checklistService;
@@ -46,6 +50,8 @@ class TripChecklistFlowTest {
         Long b = register(emailB);
         InviteCodeResponse invite = relationService.createCoupleInvite(a);
         relationService.connectCouple(b, invite.code());
+        // PRO 기능을 쓰는 테스트다 — 전역 무료 체험을 끈 뒤로는 구독이 있어야 열린다(TestPro 주석)
+        TestPro.grant(subscriptionRepository, a, b);
         return new long[]{a, b};
     }
 

@@ -9,6 +9,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+
 /**
  * 예약 메시지 한 건 발송/실패 처리 — {@link ScheduledChatMessageSweeper} 에서 분리한 이유는
  * 트랜잭션 경계 때문이다.
@@ -40,13 +42,16 @@ class ScheduledChatMessageDispatcher {
     /** 발송 시도 — 실패하면 이 메서드의 트랜잭션(발송 포함) 전체가 롤백되고 예외가 호출자에게 전파된다. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     void dispatch(Long scheduledId) {
-        ScheduledChatMessage scheduled = scheduledRepository.findById(scheduledId).orElse(null);
-        // 이미 다른 사이클/경로에서 처리됐으면 조용히 넘어간다(중복 발송 방지).
-        if (scheduled == null || !scheduled.isPending()) return;
+        // 먼저 선점한다 — 조회 후 isPending() 을 보고 발송하면 스위퍼가 둘일 때 둘 다 통과해
+        // 같은 메시지가 두 번 나간다(ScheduledChatMessageRepository#claimForDispatch 주석 참고).
+        if (scheduledRepository.claimForDispatch(scheduledId, LocalDateTime.now()) == 0) return;
 
+        ScheduledChatMessage scheduled = scheduledRepository.findById(scheduledId).orElseThrow();
+        // 멱등키는 예약 id 에서 결정적으로 만든다 — 선점을 어떻게든 뚫고 두 번 들어와도
+        // (relation_id, client_message_id) unique 인덱스가 중복 행 자체를 막는다(V89).
         SendMessageRequest request = new SendMessageRequest(
                 scheduled.getMessageType(), scheduled.getContent(), scheduled.getImageUrl(),
-                null, null, null);
+                null, null, null, "sched-" + scheduledId);
         ChatMessageResponse sent = chatService.send(scheduled.getSenderId(), scheduled.getRelationId(), request);
         scheduled.markSent(sent.id());
         messagingTemplate.convertAndSend("/sub/rooms/" + scheduled.getRelationId(), sent);

@@ -95,6 +95,13 @@ public class Meal {
     @Column(name = "created_by")
     private Long createdBy;
 
+    /**
+     * 앱이 만든 저장 멱등키 — {@code (user_id, client_request_id)} 에 unique 인덱스가 있다(V118).
+     * 같은 키로 다시 온 저장은 새로 만들지 않고 이 행을 돌려준다. 옛 앱의 기록·파트너 복제본·어제 복사본은 null.
+     */
+    @Column(name = "client_request_id", length = 64)
+    private String clientRequestId;
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -114,7 +121,7 @@ public class Meal {
                 Integer carbs, Integer protein, Integer fat,
                 Integer sugar, Integer sodium, Integer fiber,
                 NutritionSource nutritionSource,
-                String sharedGroupId, Long createdBy) {
+                String sharedGroupId, Long createdBy, String clientRequestId) {
         this.nutritionSource = nutritionSource;
         this.userId = userId;
         this.mealDate = mealDate;
@@ -130,6 +137,7 @@ public class Meal {
         this.fiber = fiber;
         this.sharedGroupId = sharedGroupId;
         this.createdBy = createdBy;
+        this.clientRequestId = clientRequestId;
     }
 
     /** 데이트 식단(같이 먹기)으로 등록된 기록인지 — 커플 양쪽에 짝이 있다. */

@@ -12,9 +12,11 @@ public record NutritionGoalSuggestionResponse(
         Integer targetCarbs,
         Integer targetProtein,
         Integer targetFat,
+        /** 체지방률로 제지방량 기준(Katch-McArdle) 계산을 했는가 — 없으면 키·나이·성별 기준 */
+        boolean usedBodyFat,
         String message
 ) {
     public static NutritionGoalSuggestionResponse unavailable(String message) {
-        return new NutritionGoalSuggestionResponse(null, null, null, null, null, null, message);
+        return new NutritionGoalSuggestionResponse(null, null, null, null, null, null, false, message);
     }
 }

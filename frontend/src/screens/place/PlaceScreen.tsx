@@ -1,103 +1,165 @@
 /**
- * 럽슐랭 — 가이드(인증 장소 매거진)/둘러보기(전체 장소, 목록↔지도)/콘텐츠(영화·공연·드라마)를
- * 한 화면 안에서 Chip 세그먼트로 전환한다.
+ * 럽슐랭 — 장소(지도 + 하단 시트) / 콘텐츠(영화·공연·드라마) 두 모드.
  *
- * <p><b>왜 "위시리스트"가 없어졌나(2026-08-24)</b>: 예전엔 위시리스트(tier===0)와 지도(전체)가
- * 분리된 모드였는데, 지도가 꺼져 있으면(카카오 키 미설정) tier===0 이면서 좌표 없는 장소가
- * 갈 곳이 없었다 — 가이드는 tier>0 만, 위시리스트는 없어졌으니 어디에도 안 뜨는 구멍이었다.
- * "둘러보기"는 인증 여부와 무관하게 전체 장소를 목록↔지도 토글로 보여줘 그 구멍을 없앤다.
+ * <p><b>왜 장소 모드의 첫 화면이 지도인가(2026-10-05)</b>: 장소는 "어디"가 본질인데 첫 화면이 목록이라 지도는 제목 줄
+ * 아이콘 뒤에 숨어 있었고, 지도로 넘기면 목록이 사라졌다. 지도 앱들(네이버·카카오)처럼 지도를 바닥에 깔고 목록을
+ * 하단 시트로 올리면 둘을 동시에 본다 — 핀을 누르면 시트가 그 한 곳의 카드가 되고, 끌어올리면 다시 목록이다.
+ * 목록↔지도 토글은 없앴다. 결정 기록: docs/LOVELICHELIN_MAP_FIRST_2026-10-05.md.
+ *
+ * <p>지도를 쓸 수 없으면(카카오 키 없음·SDK/도메인 실패) 예전 목록 화면으로 물러선다 — 같은 카드·같은 필터다.
+ *
+ * <p><b>목록은 하나다(2026-09-14)</b>: 예전 "가이드"(인증만)와 "둘러보기"(전체)는 같은 장소들의 부분집합이라 한
+ * 목록으로 합치고 정렬이 그 역할을 맡는다 — <b>인증 등급 → 솔로 픽 → 최근 방문 → 등록</b>(placeFilters.ts).
+ * 분석: docs/LOVELICHELIN_UX_REANALYSIS_2026-09-14.md 3-2 · 5-4.
+ *
+ * <p><b>필터는 장소 수와 상관없이 늘 보인다</b>(2026-10-05): 예전엔 8곳 이상일 때만 나타났는데(FILTER_MIN_PLACES),
+ * 지도가 첫 화면이 되자 검색창이 곧 "장소 찾기"의 입구라 0곳일 때가 가장 필요하다.
  *
  * <p><b>왜 "콘텐츠"가 별개 모드인가</b>: 영화·공연·드라마는 좌표가 없는 게 정상이라
- * Place 도메인에 안 섞는다(constants/contentTypes.ts, api/content.ts 참고) — 그래서 둘러보기의
+ * Place 도메인에 안 섞는다(constants/contentTypes.ts, api/content.ts 참고) — 그래서 장소 쪽의
  * 지도·카테고리 필터와는 다른 자기만의 목록·타입 필터를 갖는다.
  */
-import React, { useCallback, useMemo, useState } from 'react';
-import { FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  FlatList,
+  Image,
+  Keyboard,
+  Linking,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { Alert } from '../../utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { PlaceStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
-import { Card } from '../../components/Card';
 import { Chip } from '../../components/Chip';
 import { EmptyState } from '../../components/EmptyState';
 import { IconButton } from '../../components/IconButton';
 import { KakaoMap } from '../../components/KakaoMap';
+import type { KakaoMapHandle } from '../../components/KakaoMap.types';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { TextField } from '../../components/TextField';
 import { AiInsightButton } from '../../components/AiInsightButton';
 import { LovelichelinBadge } from '../../components/LovelichelinBadge';
 import { SoloPickBadge } from '../../components/SoloPickBadge';
 import { LovelichelinRecommendCards } from './LovelichelinRecommendCards';
-import { SoloPickSection } from './SoloPickSection';
-import { SOLO_PICK_MIN_RATING, CATEGORY_FILTERS } from './placeFilters';
+import { DEFAULT_DATE_COURSE_OPTIONS, DateCourseResult, DateCourseSetup } from './DateCourse';
+import {
+  isSoloPick,
+  CATEGORY_FILTERS,
+  EMPTY_PLACE_FILTER,
+  filterAndSortPlaces,
+  isPlaceFilterActive,
+  type PlaceFilterState,
+} from './placeFilters';
+import { MapSheet, sheetTops, type SheetSnap } from './MapSheet';
+import { PlaceListCard, hasNoLocation, ratingHint } from './PlaceListCard';
+import { getMyLocation } from '../../utils/myLocation';
+import { PlacePinCard } from './PlacePinCard';
+import { PlaceSearchResultCard, searchResultKey } from './PlaceSearchResultCard';
+import { errorCodeOf } from '../../api/client';
+import { getErrorMessage } from '../../utils/error';
 import { CONTENT_TYPE_FILTERS, contentTypeLabel } from '../../constants/contentTypes';
-import { placeApi } from '../../api/place';
+import { placeApi, toSavePlacePayload } from '../../api/place';
 import { contentApi } from '../../api/content';
 import { usePlaceStore } from '../../store/placeStore';
 import { useContentStore } from '../../store/contentStore';
+import { useRelationStore } from '../../store/relationStore';
 import { useDeleteAction } from '../../hooks/useDeleteAction';
 import { isKakaoMapConfigured } from '../../constants/config';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
-import { localDateOf } from '../../utils/date';
-import { stars } from '../../utils/ratingStars';
+import { buildPlacePinIcons, type KakaoLatLng, type KakaoMapMarker } from '../../utils/kakaoMapHtml';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
+import { palettes } from '../../theme/palette';
 import type {
   Content,
   ContentType,
-  DateCourse,
+  DateCourseOptions,
   LovelichelinRecommendation,
   Place,
+  PlaceSearchResult,
 } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
+import { onColor } from '../../theme/onColor';
 import { layout } from '../../theme/layout';
 
 type Nav = NativeStackNavigationProp<PlaceStackParamList>;
-type Mode = 'guide' | 'browse' | 'content';
-type BrowseView = 'list' | 'map';
+type Mode = 'places' | 'content';
 
 const MODES: { value: Mode; label: string }[] = [
-  { value: 'guide', label: '가이드' },
-  { value: 'browse', label: '둘러보기' },
+  { value: 'places', label: '장소' },
   { value: 'content', label: '콘텐츠' },
 ];
 
-const BROWSE_VIEWS: { value: BrowseView; label: string; icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'] }[] = [
-  { value: 'list', label: '목록', icon: 'format-list-bulleted' },
-  { value: 'map', label: '지도', icon: 'map-outline' },
-];
+/*
+ * AI 두 기능이 결과를 낼 수 있는 최소 재료 — 서버 판정과 같은 값이어야 한다
+ * (LovelichelinRecommendService.MIN_CERTIFIED_PLACES). 데이트 코스는 유형마다 재료가 달라(장소 2곳·보고 싶은 작품 등)
+ * 고르기 단계 뒤 서버가 모자란 이유를 말한다 — 화면은 장소도 콘텐츠도 하나도 없을 때만 미리 막는다.
+ * 서버도 모자라면 이유를 담은 빈 응답을 주지만, 그걸 들으려면 모달을 열고 AI 작업
+ * 폴링이 한 바퀴 돌아야 한다 — 화면이 이미 아는 숫자라 누르기 전에 말해준다.
+ */
+const MIN_CERTIFIED_FOR_RECOMMEND = 1;
 
-function renderDateCourse(c: DateCourse) {
-  return (
-    <View style={{ gap: spacing.sm }}>
-      {c.comment ? <Text style={styles.courseComment}>{c.comment}</Text> : null}
-      {c.stops.map((s, i) => (
-        <View key={i} style={styles.courseStop}>
-          <Text style={styles.courseNum}>{i + 1}</Text>
-          <View style={styles.courseStopBody}>
-            <Text style={styles.courseName}>
-              {s.name}
-              {s.category ? ` · ${s.category}` : ''}
-            </Text>
-            {s.reason ? <Text style={styles.courseReason}>{s.reason}</Text> : null}
-          </View>
-        </View>
-      ))}
-    </View>
-  );
-}
+/** 시트 미리보기에서 목록이 보이는 몫 — 카드 반 장 */
+// 56 — 가운데 단을 지도 60% 로 내리자(SHEET_HALF_RATIO) 84 로는 미리보기와 가운데가 45px 차이라 단이 갈리지 않았다
+const PEEK_LIST_PEEK = 56;
+/** 시트 손잡이 + 제목 줄 — 미리보기 높이의 고정 몫. AI 버튼 줄은 미리보기에서 접는다(아래 sheetHeader) */
+const SHEET_HANDLE = 28;
+const SHEET_TITLE_ROW = layout.touchTarget + spacing.sm;
+/** 미리보기가 지도 영역을 이 비율 넘게 덮지 않는다 — 작은 화면에서 지도가 사라지지 않게 */
+const PEEK_MAX_RATIO = 0.62;
 
 // 담기 진행/완료 상태가 필요해 렌더 함수가 아니라 컴포넌트(LovelichelinRecommendCards)로 그린다
 function renderRecommendation(data: LovelichelinRecommendation) {
   return <LovelichelinRecommendCards data={data} />;
 }
 
+/** 402 는 api/client 가 이미 업그레이드 시트를 열었다 — 화면이 또 알리면 같은 말을 두 번 한다(PlaceAddScreen 과 같다) */
+function isPlanError(e: unknown): boolean {
+  const code = errorCodeOf(e);
+  return code === 'PLAN_UPGRADE_REQUIRED' || code === 'PLAN_LIMIT_EXCEEDED';
+}
+
+/**
+ * 지도 위 검색(서버 GET /places/search — 카카오 로컬 REST). WebView SDK 의 keywordSearch 는 쓰지 않는다:
+ * 카카오 장소 id 를 버려 같은 곳이 두 번 담기곤 했다(docs/LOVELICHELIN_CHAT_LINK_2026-10-02.md).
+ */
+type PlaceSearch =
+  | { query: string; status: 'loading' }
+  | { query: string; status: 'error'; message: string }
+  | { query: string; status: 'unavailable' }
+  | { query: string; status: 'done'; results: PlaceSearchResult[] };
+
+type MapBounds = { sw: KakaoLatLng; ne: KakaoLatLng };
+const inBounds = (b: MapBounds, lat: number, lng: number) =>
+  lat >= b.sw.lat && lat <= b.ne.lat && lng >= b.sw.lng && lng <= b.ne.lng;
+
+/** 검색 결과 임시 핀의 id — 우리 장소 id(양수)와 겹치지 않게 음수 */
+const resultPinId = (i: number) => -(i + 1);
+
+/** 핀 모양 — 등극 > 다녀옴 > 안 가봄. kakaoMapHtml.buildPlacePinIcons 의 키 */
+function pinKind(p: Place): 'certified' | 'visited' | 'wish' {
+  if (p.lovelichelinTier > 0) return 'certified';
+  return p.visitCount > 0 ? 'visited' : 'wish';
+}
+
 export function PlaceScreen() {
   const navigation = useNavigation<Nav>();
-  const [mode, setMode] = useState<Mode>('guide');
-  const [browseView, setBrowseView] = useState<BrowseView>('list');
+  // AI 데이트 코스 조건 — 화면에 머무는 동안 기억한다(다시 열면 지난 조건 그대로)
+  const [courseOptions, setCourseOptions] = useState<DateCourseOptions>(DEFAULT_DATE_COURSE_OPTIONS);
+  const [mode, setMode] = useState<Mode>('places');
+
+  // 대기·의견 갈림 문구에 상대 이름을 쓴다 — "나머지 한 명" 보다 짧고 누구 차례인지가 분명하다
+  const partnerName = useRelationStore((s) => s.couple?.partner?.name ?? null);
 
   const allPlaces = usePlaceStore((s) => s.places);
   const placeLoading = usePlaceStore((s) => s.loading);
@@ -111,24 +173,57 @@ export function PlaceScreen() {
   const loadContents = useContentStore((s) => s.load);
   const invalidateContents = useContentStore((s) => s.invalidate);
 
-  // 둘러보기(목록·지도)가 공유하는 검색·카테고리 필터 — 가이드엔 없다(등급순 정렬 하나뿐)
-  const [search, setSearch] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
+  // 지도·시트(·물러선 목록)가 공유하는 필터 하나
+  const [filter, setFilter] = useState<PlaceFilterState>(EMPTY_PLACE_FILTER);
+  // 필터를 바꾸면 고른 핀은 푼다 — 걸러져 사라진 핀의 카드가 남지 않게
+  const patchFilter = (patch: Partial<PlaceFilterState>) => {
+    setFilter((f) => ({ ...f, ...patch }));
+    setSelectedId(null);
+  };
 
   // 콘텐츠 모드가 쓰는 검색·타입 필터 — 장소 쪽과 도메인이 달라 따로 둔다
   const [contentSearch, setContentSearch] = useState('');
   const [contentTypeFilter, setContentTypeFilter] = useState<ContentType | 'ALL'>('ALL');
 
-  // 지도 탭에서 빈 자리를 탭해 고른 좌표 — 확정 전까지는 "여기에 추가" 바만 뜬다
-  const [pendingPin, setPendingPin] = useState<{ lat: number; lng: number; address?: string | null } | null>(
-    null,
-  );
+  // 지도 빈 자리를 탭해 고른 좌표 — 확정 전까지는 시트에 "여기에 추가" 바만 뜬다
+  const [pendingPin, setPendingPin] = useState<{ lat: number; lng: number; address?: string | null } | null>(null);
+  // 지도에서 고른 핀(우리 장소) — 시트가 그 한 곳의 카드가 된다
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  // 지도 위 검색 — 결과는 임시 핀 + 시트 목록. 고른 결과(인덱스)가 있으면 시트가 그 한 곳이 된다
+  const [search, setSearch] = useState<PlaceSearch | null>(null);
+  const [selectedResult, setSelectedResult] = useState<number | null>(null);
+  const [savingResultKey, setSavingResultKey] = useState<string | null>(null);
+  const searchSeq = useRef(0);
+  /*
+   * "이 지역 장소 보기" — 사용자가 지도를 움직이면 버튼만 띄우고, 누르면 그때의 범위로 시트 목록을 거른다.
+   * 움직일 때마다 목록이 저절로 바뀌면 보던 카드가 사라지고 스크롤이 튄다 — 그래서 자동으로 거르지 않는다.
+   */
+  const [movedBounds, setMovedBounds] = useState<MapBounds | null>(null);
+  const [areaBounds, setAreaBounds] = useState<MapBounds | null>(null);
+  const [snap, setSnap] = useState<SheetSnap>('half');
+  // 손잡이를 끌거나 누른 것도 "목록을 보겠다"다 — 키보드가 시트를 덮고 있으면 내린다.
+  // 고정 참조로 둔다 — MapSheet 의 끌기 제스처가 이 값에 묶여 있어 렌더마다 새로 만들어지지 않게
+  const onSheetSnapChange = useCallback((next: SheetSnap) => {
+    Keyboard.dismiss();
+    setSnap(next);
+  }, []);
+
+  // 지도를 못 쓰면(키 없음·로드 실패) 목록 화면으로 물러선다. 실패는 한 번 나면 이 화면 동안 유지한다
+  const [mapFailed, setMapFailed] = useState(false);
+  const mapAvailable = isKakaoMapConfigured() && !mapFailed;
+  const mapRef = useRef<KakaoMapHandle>(null);
+  // "내 위치" — 권한 묻기·위치 잡기에 몇 초 걸릴 수 있어 그동안 버튼에 스피너를 돌리고 연타를 막는다
+  const [locating, setLocating] = useState(false);
+
+  // 지도 영역·위 덮개(검색창·칩)·시트 머리 높이 — 시트 단 높이와 지도 시야 여백을 정한다
+  const [areaHeight, setAreaHeight] = useState(0);
+  const [overlayHeight, setOverlayHeight] = useState(0);
+  const [pinCardHeight, setPinCardHeight] = useState(0);
 
   /*
    * 삭제 in-flight 가드 — 이 화면엔 장소(Place)/콘텐츠(Content) 두 개의 서로 다른
-   * 엔티티를 지우는 흐름이 따로 있어(가이드+둘러보기 목록 vs 콘텐츠 목록), 인스턴스를
-   * 하나만 쓰면 한쪽을 지우는 동안 다른 쪽 삭제까지 막혀버린다 — 각자 따로 둔다
-   * (QA_CHECKLIST.md 전역 반복 패턴 7).
+   * 엔티티를 지우는 흐름이 따로 있어, 인스턴스를 하나만 쓰면 한쪽을 지우는 동안
+   * 다른 쪽 삭제까지 막혀버린다 — 각자 따로 둔다(QA_CHECKLIST.md 전역 반복 패턴 7).
    */
   const { deletingId: deletingPlaceId, runDelete: runDeletePlace } = useDeleteAction<number>();
   const { deletingId: deletingContentId, runDelete: runDeleteContent } = useDeleteAction<number>();
@@ -137,87 +232,107 @@ export function PlaceScreen() {
     useCallback(() => {
       loadPlaces().catch(() => {}); // 에러는 loadError 로 화면에 이미 반영된다
       loadContents().catch(() => {});
+      /*
+       * 지도 실패는 이 화면에 다시 들어올 때 한 번 더 시도한다. 실패 판정의 하나가 "6초 안에 타일이 안 그려짐"이라
+       * 첫 진입 중 앱이 뒤로 갔거나 망이 잠깐 끊긴 것만으로도 목록으로 물러선다 — 그대로 굳히면 지도를 영영 못 본다.
+       */
+      setMapFailed(false);
     }, [loadPlaces, loadContents]),
   );
 
-  const guidePlaces = useMemo(
-    () =>
-      allPlaces
-        .filter((p) => p.lovelichelinTier > 0)
-        .filter((p) => categoryFilter === 'ALL' || p.category === categoryFilter)
-        .sort((a, b) => {
-          if (b.lovelichelinTier !== a.lovelichelinTier) return b.lovelichelinTier - a.lovelichelinTier;
-          return (b.lovelichelinCertifiedAt ?? '').localeCompare(a.lovelichelinCertifiedAt ?? '');
-        }),
-    [allPlaces, categoryFilter],
-  );
+  // 인증(tier>0) 장소 수 — AI 맛집 추천이 결과를 낼 수 있는지. 필터와 무관하게 전체에서 센다
+  const certifiedCount = useMemo(() => allPlaces.filter((p) => p.lovelichelinTier > 0).length, [allPlaces]);
 
-  /*
-   * 솔로 픽 — 아직 둘 다 안 매겨(tier 0) 럽슐랭 인증엔 못 미치지만, 한쪽이 강력 추천(4점
-   * 이상)한 곳. "혼자 간 인생 맛집"도 인정받을 방법이 있어야 한다는 결정(2026-08-24).
-   *
-   * categoryFilter 도 같이 건다 — 처음엔 "카테고리와 무관하게 항상 노출"로 만들었는데,
-   * 카페 카테고리만 골랐는데 여행지 픽이 그대로 떠 있어 실사용에서 헷갈린다는 리포트
-   * (2026-09-01). guidePlaces 와 같은 필터를 써서 "지금 보고 있는 카테고리 안에서"라는
-   * 기대에 맞춘다.
-   */
-  const soloPicks = useMemo(
-    () =>
-      allPlaces
-        .filter((p) => p.lovelichelinTier === 0)
-        .filter((p) => categoryFilter === 'ALL' || p.category === categoryFilter)
-        .filter(
-          (p) =>
-            (p.myRating != null && p.myRating >= SOLO_PICK_MIN_RATING && p.partnerRating == null) ||
-            (p.partnerRating != null && p.partnerRating >= SOLO_PICK_MIN_RATING && p.myRating == null),
-        )
-        .sort((a, b) => (b.myRating ?? b.partnerRating ?? 0) - (a.myRating ?? a.partnerRating ?? 0)),
-    [allPlaces, categoryFilter],
-  );
+  const sortedPlaces = useMemo(() => filterAndSortPlaces(allPlaces, filter), [allPlaces, filter]);
 
-  // 둘러보기 = 인증 여부와 무관하게 전체 장소. 목록·지도가 이 하나의 필터링 결과를 같이 쓴다
-  // (예전엔 위시리스트=tier0/지도=전체로 갈려서, 지도가 꺼져 있으면 tier0+좌표없음 장소가
-  // 갈 곳이 없었다 — 파일 상단 주석 참고).
-  const browsePlaces = useMemo(
-    () =>
-      allPlaces
-        .filter((p) => !search.trim() || p.name.toLowerCase().includes(search.trim().toLowerCase()))
-        .filter((p) => categoryFilter === 'ALL' || p.category === categoryFilter),
-    [allPlaces, search, categoryFilter],
-  );
-  const markers = browsePlaces
-    .filter((p) => p.lat != null && p.lng != null)
-    .map((p) => ({
-      id: p.id,
-      lat: p.lat as number,
-      lng: p.lng as number,
-      title: p.name,
-      color: colors.danger,
-      tier: p.lovelichelinTier,
-    }));
-
+  // 콘텐츠도 장소와 같은 순서 규칙을 쓴다 — 인증 → 솔로 픽 → 최근 관람 → 등록
   const browseContents = useMemo(
     () =>
       allContents
         .filter((c) => !contentSearch.trim() || c.title.toLowerCase().includes(contentSearch.trim().toLowerCase()))
-        .filter((c) => contentTypeFilter === 'ALL' || c.type === contentTypeFilter),
+        .filter((c) => contentTypeFilter === 'ALL' || c.type === contentTypeFilter)
+        .sort((a, b) => {
+          if (b.lovelichelinTier !== a.lovelichelinTier) return b.lovelichelinTier - a.lovelichelinTier;
+          const pick = Number(isSoloPick(b)) - Number(isSoloPick(a));
+          if (pick !== 0) return pick;
+          const watched = (b.lastWatchedAt ?? '').localeCompare(a.lastWatchedAt ?? '');
+          if (watched !== 0) return watched;
+          return b.id - a.id;
+        }),
     [allContents, contentSearch, contentTypeFilter],
   );
-
-  // 콘텐츠 솔로 픽 — 장소 쪽(soloPicks)과 완전히 같은 규칙. 콘텐츠 모드는 가이드/둘러보기로
-  // 나뉘지 않은 단일 목록이라, 필터·검색에 걸리지 않은 목록 맨 위 가로 스크롤로 얹는다.
-  const contentSoloPicks = useMemo(
+  // 걸러진 것 중 좌표가 없어 지도에 못 꽂는 곳 — 지도 위 안내 "지도에 없는 N곳"
+  const unmappedCount = useMemo(() => sortedPlaces.filter(hasNoLocation).length, [sortedPlaces]);
+  // 시트 목록 — "이 지역 장소 보기"를 눌렀으면 그 범위 안만(지도 핀은 그대로 다 보인다)
+  const sheetPlaces = useMemo(
     () =>
-      allContents
-        .filter((c) => c.lovelichelinTier === 0)
-        .filter(
-          (c) =>
-            (c.myRating != null && c.myRating >= SOLO_PICK_MIN_RATING && c.partnerRating == null) ||
-            (c.partnerRating != null && c.partnerRating >= SOLO_PICK_MIN_RATING && c.myRating == null),
-        )
-        .sort((a, b) => (b.myRating ?? b.partnerRating ?? 0) - (a.myRating ?? a.partnerRating ?? 0)),
-    [allContents],
+      areaBounds
+        ? sortedPlaces.filter((p) => p.lat != null && p.lng != null && inBounds(areaBounds, p.lat, p.lng))
+        : sortedPlaces,
+    [sortedPlaces, areaBounds],
   );
+  // 고른 장소 — 전체에서 찾는다. 검색에서 막 담은 곳은 검색어(=이름 필터)에 안 걸릴 수 있어서다. 지워졌으면 null
+  const selectedPlace = selectedId != null ? (allPlaces.find((p) => p.id === selectedId) ?? null) : null;
+  const searchResults = useMemo(() => (search?.status === 'done' ? search.results : []), [search]);
+  const pickedResult = selectedResult != null ? (searchResults[selectedResult] ?? null) : null;
+
+  // 핀 이미지 — 테마 색이 바뀔 때만 다시 그린다(다크 모드에서도 지도 타일은 밝아 색은 그대로 쓴다)
+  const pinIcons = useMemo(
+    /*
+     * 지도 타일은 다크 모드에서도 밝은 지도다 — 다크 팔레트의 파스텔 핀(라벤더 #E1C9FF)·밝은 잉크 검색 핀은
+     * 타일 위에서 흐려진다. 핀 색은 라이트 팔레트로 고정한다(utils/kakaoMapHtml.ts 의 경로선과 같은 이유).
+     */
+    () =>
+      buildPlacePinIcons({
+        gold: palettes.light.lovelichelinGold,
+        visited: palettes.light.mapPin,
+        search: palettes.light.textPrimary,
+      }),
+    [],
+  );
+
+  // 지도도 시트와 같은 결과를 쓴다 — 시트에서 '카페'만 보면 지도에도 카페만 찍힌다
+  const markers = useMemo<KakaoMapMarker[]>(() => {
+    const ours = sortedPlaces.some((p) => p.id === selectedPlace?.id) || !selectedPlace
+      ? sortedPlaces
+      : [selectedPlace, ...sortedPlaces]; // 필터에 안 걸려도 고른 곳의 핀은 보인다(검색에서 막 담은 곳)
+    const placePins = ours
+      .filter((p) => !hasNoLocation(p))
+      .map((p) => ({
+        id: p.id,
+        lat: p.lat as number,
+        lng: p.lng as number,
+        title: p.name,
+        icon: pinKind(p),
+        selected: p.id === selectedPlace?.id,
+      }));
+    // 검색 결과 — 우리 핀과 다른 모양(물방울). 담으면 결과에서 빠지고 우리 핀으로 다시 그려진다
+    const resultPins = searchResults.flatMap((r, i) =>
+      r.lat != null && r.lng != null
+        ? [{ id: resultPinId(i), lat: r.lat, lng: r.lng, title: r.name, icon: 'search', selected: i === selectedResult }]
+        : [],
+    );
+    return [...placePins, ...resultPins];
+  }, [sortedPlaces, selectedPlace, searchResults, selectedResult]);
+
+  // ---- 시트 단 높이 ----
+  const showSheetCard = selectedPlace != null || pendingPin != null || pickedResult != null;
+  const fullTop = overlayHeight + spacing.sm;
+  /*
+   * 미리보기 높이 = 손잡이 + 제목 줄 + (카드 한 장 | 목록 반 장). 머리의 AI 버튼 줄은 미리보기에서 접는다 —
+   * 넣어 두면 375×667 에서 미리보기와 절반이 37px 차이밖에 안 나 세 단이 갈리지 않았다(2026-10-05 웹 실측).
+   */
+  const peekHeight = useMemo(() => {
+    const body = showSheetCard ? pinCardHeight + spacing.md : PEEK_LIST_PEEK;
+    return Math.min(SHEET_HANDLE + SHEET_TITLE_ROW + body, Math.round(areaHeight * PEEK_MAX_RATIO));
+  }, [showSheetCard, pinCardHeight, areaHeight]);
+  const tops = useMemo(() => sheetTops(areaHeight, fullTop, peekHeight), [areaHeight, fullTop, peekHeight]);
+
+  // 지도 시야 여백 — 위는 검색창·칩, 아래는 시트가 덮는 몫. 그래야 "모두 보이게 맞추기"가 가린 핀을 안 만든다
+  useEffect(() => {
+    if (!areaHeight) return;
+    mapRef.current?.setPadding({ top: overlayHeight + 24, bottom: Math.max(40, areaHeight - tops[snap] + 24) });
+  }, [areaHeight, overlayHeight, tops, snap]);
 
   const onDeletePlace = (place: Place) => {
     Alert.alert('장소 삭제', `"${place.name}"을(를) 삭제할까요?\n방문 기록도 함께 삭제돼요.`, [
@@ -255,96 +370,602 @@ export function PlaceScreen() {
     ]);
   };
 
+  const openDetail = (p: Place, extra?: { openVisit?: boolean }) =>
+    navigation.navigate('PlaceDetail', { placeId: p.id, name: p.name, ...extra });
+  // 위치 없음 → 수정 화면의 위치 칸으로(지도 탭으로 좌표를 고른다)
+  const fixLocation = (p: Place) => navigation.navigate('PlaceAdd', { place: p, focusLocation: true });
+
+  // 핀 탭 → 그 한 곳의 카드를 미리보기 높이로. 핀은 시트에 가리지 않게 보이는 영역 가운데로 옮긴다
+  const visibleOffsetY = () => Math.round(areaHeight / 2 - (overlayHeight + tops.peek) / 2);
+  const panToVisible = (lat: number, lng: number) => {
+    if (!areaHeight) return;
+    mapRef.current?.panTo(lat, lng, visibleOffsetY());
+  };
+
+  /*
+   * 내 위치 — 점을 놓고 보이는 영역 가운데로 옮긴다. 시트는 미리보기로 내려 지도를 넓힌다(근처 핀이 보이게).
+   * 위치는 지도를 옮기는 데만 쓰고 어디에도 보내지 않는다(utils/myLocation).
+   */
+  const onMyLocation = async () => {
+    if (locating) return;
+    setLocating(true);
+    try {
+      const result = await getMyLocation();
+      if (result.kind === 'ok') {
+        if (snap === 'full') setSnap('peek');
+        mapRef.current?.showMyLocation(result.lat, result.lng, areaHeight ? visibleOffsetY() : 0);
+      } else if (result.kind === 'blocked' && Platform.OS !== 'web') {
+        Alert.alert('위치 권한이 꺼져 있어요', '설정에서 Dubly 의 위치 권한을 허용하면 지도에서 내 위치를 볼 수 있어요.', [
+          { text: '취소', style: 'cancel' },
+          { text: '설정 열기', onPress: () => void Linking.openSettings() },
+        ]);
+      } else if (result.kind === 'unavailable') {
+        toast.error('지금 위치를 찾지 못했어요. 위치 서비스가 켜져 있는지 확인해 주세요.');
+      } else {
+        // 방금 거절했거나(다시 물을 수 있다), 웹에서 브라우저가 막았다
+        toast.info('위치 권한을 허용하면 지도에서 내 위치를 볼 수 있어요.');
+      }
+    } finally {
+      setLocating(false);
+    }
+  };
+
+  /*
+   * 키보드 내리기 — 지도는 WebView 라 눌러도 입력창 포커스가 안 풀리고, iOS 키보드에는 내리는 키가 없다.
+   * 검색한 뒤 키보드가 결과 시트를 덮은 채 내릴 방법이 없었다(2026-10-06). 지도를 누르거나 옮기거나,
+   * 결과 목록을 끌거나, 검색을 실행하면 내린다.
+   */
+  const onMarkerPress = (id: number) => {
+    Keyboard.dismiss();
+    if (id < 0) {
+      // 검색 결과 임시 핀
+      const i = -id - 1;
+      const r = searchResults[i];
+      if (!r) return;
+      setSelectedId(null);
+      setPendingPin(null);
+      setSelectedResult(i);
+      setSnap('peek');
+      if (r.lat != null && r.lng != null) panToVisible(r.lat, r.lng);
+      return;
+    }
+    const p = allPlaces.find((x) => x.id === id);
+    if (!p) return;
+    setSelectedResult(null);
+    setPendingPin(null);
+    mapRef.current?.clearPin();
+    setSelectedId(id);
+    setSnap('peek');
+    if (p.lat != null && p.lng != null) panToVisible(p.lat, p.lng);
+  };
+
+  // 지도 빈 곳 탭 — 고른 핀이 있으면 먼저 고름만 푼다(지도 앱의 "빈 곳 탭 = 닫기"), 없으면 그 자리에 추가할지 묻는다
+  const onMapSelect = (pos: { lat: number; lng: number; address?: string | null }) => {
+    Keyboard.dismiss();
+    /*
+     * 검색 결과를 보는 중 빈 곳 탭 = 시트 내리기(지도 앱과 같다). 결과 핀을 보려고 지도를 누른 것이지
+     * 그 자리에 장소를 추가하려는 게 아니다 — 예전엔 "여기에 장소 추가" 카드가 떠 검색 목록을 덮었다(2026-10-06).
+     * 시트가 이미 내려가 있으면 아래 규칙대로 간다.
+     */
+    if (search && !selectedPlace && !pickedResult && snap !== 'peek') {
+      setSnap('peek');
+      return;
+    }
+    if (selectedPlace || pickedResult) {
+      setSelectedId(null);
+      setSelectedResult(null);
+      mapRef.current?.clearPin();
+      return;
+    }
+    setPendingPin(pos);
+    setSnap('peek');
+  };
+
+  const clearSheetCard = () => {
+    setSelectedId(null);
+    setPendingPin(null);
+    setSelectedResult(null);
+    mapRef.current?.clearPin();
+  };
+
+  // ---- 지도 위 검색 ----
+  const runSearch = async () => {
+    const q = filter.search.trim();
+    if (!q) return;
+    const seq = ++searchSeq.current;
+    // [검색]을 눌렀으면 결과를 볼 차례다 — 웹·하드웨어 키보드는 제출해도 포커스가 남는다
+    Keyboard.dismiss();
+    clearSheetCard();
+    setSearch({ query: q, status: 'loading' });
+    setSnap('half');
+    try {
+      const res = await placeApi.search(q, 10);
+      if (seq !== searchSeq.current) return; // 그 사이 다시 검색했거나 취소했다
+      if (!res.available) {
+        setSearch({ query: q, status: 'unavailable' });
+        return;
+      }
+      setSearch({ query: q, status: 'done', results: res.places });
+      const pts = res.places.flatMap((r) => (r.lat != null && r.lng != null ? [{ lat: r.lat, lng: r.lng }] : []));
+      mapRef.current?.fitPoints(pts);
+    } catch (e) {
+      if (seq !== searchSeq.current) return;
+      setSearch({ query: q, status: 'error', message: getErrorMessage(e, '검색하지 못했어요.') });
+    }
+  };
+
+  // 검색 취소 — 임시 핀은 결과에서 파생되므로 결과를 비우면 같이 사라진다
+  const cancelSearch = () => {
+    searchSeq.current += 1;
+    setSearch(null);
+    setSelectedResult(null);
+  };
+
+  const addResult = async (r: PlaceSearchResult) => {
+    const key = searchResultKey(r);
+    if (savingResultKey) return;
+    setSavingResultKey(key);
+    try {
+      const saved = await placeApi.save(toSavePlacePayload(r));
+      invalidatePlaces();
+      await loadPlaces(true).catch(() => {});
+      if (saved.created === false) {
+        haptics.light();
+        toast.info('이미 럽슐랭에 있어요');
+      } else {
+        haptics.success();
+        toast.success('럽슐랭에 담았어요');
+      }
+      // 담은 결과는 임시 핀에서 빼고 우리 핀으로 고른다 — 같은 자리에 핀이 두 개 겹치지 않게
+      setSearch((s) =>
+        s?.status === 'done' ? { ...s, results: s.results.filter((x) => searchResultKey(x) !== key) } : s,
+      );
+      setSelectedResult(null);
+      setSelectedId(saved.id);
+      setSnap('peek');
+      if (saved.lat != null && saved.lng != null) panToVisible(saved.lat, saved.lng);
+    } catch (e) {
+      if (!isPlanError(e)) toast.error(getErrorMessage(e, '장소를 담지 못했어요.'));
+    } finally {
+      setSavingResultKey(null);
+    }
+  };
+
+  const placeCount = allPlaces.length;
+  const searchPlaceholder = placeCount === 0 ? '가보고 싶은 곳을 찾아보세요' : '우리 장소 이름·주소로 찾기';
+
+  // ---- 필터 줄(지도 위 덮개 · 물러선 목록 공용) ----
+  const renderPlaceFilters = (overMap: boolean) => (
+    <>
+      <View style={overMap ? styles.searchOverMap : styles.searchWrap}>
+        <TextField
+          placeholder={searchPlaceholder}
+          value={filter.search}
+          onChangeText={(t) => {
+            patchFilter({ search: t });
+            // 글자를 다 지우면 검색도 끝난다 — 남은 임시 핀이 빈 검색창과 어긋나지 않게
+            if (overMap && !t.trim()) cancelSearch();
+          }}
+          // 쓰는 동안은 우리 장소를 거르고, [검색]을 누르면 카카오에서 새 장소를 찾는다(지도 화면만)
+          onSubmitEditing={overMap ? runSearch : undefined}
+          returnKeyType="search"
+          accessibilityLabel={overMap ? '장소 찾기 — 검색을 누르면 새 장소도 찾아요' : '장소 찾기'}
+          style={overMap ? styles.searchInputOverMap : undefined}
+        />
+      </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.filterScroll}
+        contentContainerStyle={overMap ? styles.filterRowOverMap : styles.filterRow}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Chip
+          label="럽슐랭 인증"
+          selected={filter.certifiedOnly}
+          onPress={() => patchFilter({ certifiedOnly: !filter.certifiedOnly })}
+        />
+        <Chip
+          label="아직 안 가본 곳"
+          selected={filter.unvisitedOnly}
+          onPress={() => patchFilter({ unvisitedOnly: !filter.unvisitedOnly })}
+        />
+        {CATEGORY_FILTERS.map((f) => (
+          <Chip
+            key={f.value}
+            label={f.label}
+            selected={filter.category === f.value}
+            onPress={() => patchFilter({ category: f.value })}
+          />
+        ))}
+      </ScrollView>
+    </>
+  );
+
+  const aiButtons = (
+    <View style={styles.aiRow}>
+      <AiInsightButton
+        label="AI 맛집 추천"
+        title="럽슐랭 취향 맞춤 추천"
+        fetcher={placeApi.lovelichelinRecommend}
+        render={renderRecommendation}
+        style={styles.aiBtn}
+        disabledReason={
+          certifiedCount < MIN_CERTIFIED_FOR_RECOMMEND
+            ? '둘 다 평점을 매긴 곳이 한 곳이라도 있어야 취향을 읽을 수 있어요. 다녀온 곳에 별점을 남겨보세요!'
+            : undefined
+        }
+      />
+      <AiInsightButton
+        label="AI 데이트 코스"
+        title="AI 데이트 코스"
+        // 고른 조건으로 요청한다 — 조건이 같으면 서버 캐시가 지난 코스를 돌려준다(한도를 쓰지 않는다)
+        fetcher={(refresh) => placeApi.dateCourse(refresh, courseOptions)}
+        setup={{
+          render: () => <DateCourseSetup value={courseOptions} onChange={setCourseOptions} />,
+          startLabel: '코스 짜기',
+        }}
+        render={(course, { close }) => (
+          <DateCourseResult
+            course={course}
+            onOpenPlace={(placeId, name) => {
+              close();
+              navigation.navigate('PlaceDetail', { placeId, name });
+            }}
+            onOpenContent={(contentId, title) => {
+              close();
+              navigation.navigate('ContentDetail', { contentId, title });
+            }}
+          />
+        )}
+        style={styles.aiBtn}
+        disabledReason={
+          placeCount === 0 && allContents.length === 0
+            ? '코스를 짜려면 가고 싶은 곳이나 보고 싶은 작품을 먼저 담아 주세요!'
+            : undefined
+        }
+      />
+    </View>
+  );
+
+  const renderPlaceCard = (item: Place, inSheet: boolean) => (
+    <PlaceListCard
+      item={item}
+      partnerName={partnerName}
+      deleting={deletingPlaceId === item.id}
+      onPress={() => openDetail(item)}
+      onLongPress={() => onDeletePlace(item)}
+      onFixLocation={inSheet ? () => fixLocation(item) : undefined}
+    />
+  );
+
+  const placeEmpty = !placeLoading ? (
+    placeLoadError ? (
+      <EmptyState
+        icon="cloud-off-outline"
+        title="장소를 불러오지 못했어요"
+        description="네트워크 상태를 확인하고 다시 시도해주세요."
+        error
+        onRetry={() => loadPlaces()}
+      />
+    ) : placeCount > 0 ? (
+      <EmptyState icon="map-marker-outline" title="조건에 맞는 장소가 없어요" description="검색어나 필터를 바꿔보세요." />
+    ) : (
+      /*
+        절차(담기 → 다녀오기 → 둘 다 평점)를 앱 내부 어휘로 설명하던 자리다.
+        처음 온 사람이 할 일은 하나뿐이라 하나만 말한다.
+      */
+      <EmptyState
+        icon="map-marker-outline"
+        title="둘이 가고 싶은 곳을 먼저 담아보세요"
+        description="다녀오면 별점을 매기고, 둘 다 좋았던 곳이 우리 럽슐랭이 돼요."
+      />
+    )
+  ) : null;
+
+  // ---- 장소 · 지도 + 시트 ----
+  const sheetHeader = showSheetCard ? (
+    <View style={styles.sheetHeader}>
+      <View style={styles.sheetTitleRow}>
+        <Text style={styles.sheetTitle} numberOfLines={1}>
+          {pendingPin ? '여기에 장소 추가' : pickedResult ? '검색 결과' : '고른 장소'}
+        </Text>
+        <IconButton icon="close" label="목록으로 돌아가기" onPress={clearSheetCard} />
+      </View>
+    </View>
+  ) : search ? (
+    <View style={styles.sheetHeader}>
+      <View style={styles.sheetTitleRow}>
+        <Text style={styles.sheetTitle} numberOfLines={1}>
+          ‘{search.query}’ 검색{search.status === 'done' ? ` ${search.results.length}곳` : ''}
+        </Text>
+        {/*
+          목록 내리기/올리기 — 검색하면 시트가 중간으로 올라와 결과 핀을 가린다. 끌기(손잡이)는 눈에 잘 안 띄고
+          본문은 스크롤만 받으므로, 결과를 지도에서 보려면 누를 곳이 보여야 한다(2026-10-06).
+        */}
+        <IconButton
+          icon={snap === 'peek' ? 'chevron-up' : 'chevron-down'}
+          label={snap === 'peek' ? '검색 결과 목록 올리기' : '검색 결과 목록 내리기 — 지도 보기'}
+          onPress={() => setSnap(snap === 'peek' ? 'half' : 'peek')}
+        />
+        <IconButton icon="close" label="검색 취소" onPress={cancelSearch} />
+      </View>
+    </View>
+  ) : (
+    <View style={styles.sheetHeader}>
+      <View style={styles.sheetTitleRow}>
+        <Text style={styles.sheetTitle} numberOfLines={1}>
+          {areaBounds
+            ? `이 지역 ${sheetPlaces.length}곳`
+            : isPlaceFilterActive(filter)
+              ? `${sortedPlaces.length}곳`
+              : `우리 장소 ${placeCount}곳`}
+        </Text>
+        {areaBounds ? (
+          <IconButton icon="close" label="지역 거르기 풀기" onPress={() => setAreaBounds(null)} />
+        ) : null}
+        {/* 하단 고정 [장소 추가하기]를 여기로 옮겼다 — 시트와 겹치지 않는다(2026-10-05 결정) */}
+        <Button
+          title="직접 추가"
+          size="sm"
+          variant="secondary"
+          leftIcon={<MaterialCommunityIcons name="plus" size={16} color={colors.textPrimary} />}
+          onPress={() => navigation.navigate('PlaceAdd')}
+        />
+      </View>
+      {snap !== 'peek' ? aiButtons : null}
+    </View>
+  );
+
+  const sheetBody = pendingPin ? (
+    <View style={styles.pendingPinBar} onLayout={(e) => setPinCardHeight(e.nativeEvent.layout.height)}>
+      <View style={styles.pendingPinInfo}>
+        <MaterialCommunityIcons name="map-marker" size={18} color={colors.primary} />
+        <Text style={styles.pendingPinText} numberOfLines={2}>
+          {pendingPin.address ?? `${pendingPin.lat.toFixed(5)}, ${pendingPin.lng.toFixed(5)}`}
+        </Text>
+      </View>
+      <Button
+        title="여기에 추가"
+        size="sm"
+        onPress={() => {
+          navigation.navigate('PlaceAdd', { initialCoords: pendingPin });
+          clearSheetCard();
+        }}
+      />
+    </View>
+  ) : selectedPlace ? (
+    <View onLayout={(e) => setPinCardHeight(e.nativeEvent.layout.height)}>
+      <PlacePinCard
+        place={selectedPlace}
+        partnerName={partnerName}
+        onOpen={() => openDetail(selectedPlace)}
+        onVisit={() => openDetail(selectedPlace, { openVisit: true })}
+      />
+    </View>
+  ) : pickedResult ? (
+    <View style={styles.resultSingle} onLayout={(e) => setPinCardHeight(e.nativeEvent.layout.height)}>
+      <PlaceSearchResultCard
+        result={pickedResult}
+        saving={savingResultKey === searchResultKey(pickedResult)}
+        onAdd={() => addResult(pickedResult)}
+      />
+    </View>
+  ) : search ? (
+    search.status === 'loading' ? (
+      <View style={styles.searchState}>
+        <ActivityIndicator color={colors.primary} />
+        <Text style={styles.searchStateText}>‘{search.query}’ 찾는 중…</Text>
+      </View>
+    ) : search.status === 'error' ? (
+      <EmptyState icon="cloud-off-outline" title="검색하지 못했어요" description={search.message} error onRetry={runSearch} />
+    ) : search.status === 'unavailable' ? (
+      <EmptyState
+        icon="map-marker-outline"
+        title="지금은 새 장소 검색을 쓸 수 없어요"
+        description="[직접 추가]로 이름만 넣어 담을 수 있어요."
+      />
+    ) : search.results.length === 0 ? (
+      <View style={styles.searchState}>
+        <Text style={styles.searchStateText}>‘{search.query}’에 맞는 곳을 찾지 못했어요.</Text>
+        <Button
+          title="이름으로 직접 추가"
+          size="sm"
+          variant="secondary"
+          onPress={() => navigation.navigate('PlaceAdd', { initialKeyword: search.query })}
+        />
+      </View>
+    ) : (
+      <FlatList
+        data={search.results}
+        keyExtractor={(r) => searchResultKey(r)}
+        contentContainerStyle={styles.sheetList}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        renderItem={({ item, index }) => (
+          <PlaceSearchResultCard
+            result={item}
+            saving={savingResultKey === searchResultKey(item)}
+            onFocus={
+              item.lat != null && item.lng != null
+                ? () => {
+                    setSelectedResult(index);
+                    setSnap('peek');
+                    panToVisible(item.lat as number, item.lng as number);
+                  }
+                : undefined
+            }
+            onAdd={() => addResult(item)}
+          />
+        )}
+      />
+    )
+  ) : (
+    <FlatList
+      data={sheetPlaces}
+      keyExtractor={(p) => String(p.id)}
+      contentContainerStyle={styles.sheetList}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+      refreshing={placeLoading}
+      onRefresh={() => loadPlaces(true)}
+      renderItem={({ item }) => renderPlaceCard(item, true)}
+      ListEmptyComponent={
+        // 장소 0곳 — 시트에는 짧은 안내만. 할 일(검색)은 위 검색창이 말한다
+        areaBounds ? (
+          <Text style={styles.sheetEmpty}>이 지역에는 우리 장소가 없어요. 지도를 옮겨 다시 눌러 보세요.</Text>
+        ) : placeCount === 0 && !placeLoading && !placeLoadError ? (
+          <Text style={styles.sheetEmpty}>
+            위에서 가보고 싶은 곳을 찾아 담거나, 지도 빈 곳을 눌러 직접 추가해보세요.{'\n'}
+            다녀와서 둘 다 별점을 남기면 우리 럽슐랭이 돼요.
+          </Text>
+        ) : (
+          placeEmpty
+        )
+      }
+    />
+  );
+
+  const mapScreen = (
+    <View style={styles.mapArea} onLayout={(e) => setAreaHeight(e.nativeEvent.layout.height)}>
+      {/*
+        지도는 영역을 잰 뒤가 아니라 <b>바로</b> 그린다(style 로 꽉 채운다) — 재는 걸 기다리면 SDK 로드가 그만큼 늦고,
+        웹은 화면이 가려진 동안 크기 이벤트가 안 와 지도가 아예 안 떴다(2026-10-05 웹 확인).
+      */}
+      <KakaoMap
+        ref={mapRef}
+        markers={markers}
+        icons={pinIcons}
+        style={styles.fullMap}
+        selectable
+        onSelect={onMapSelect}
+        onMarkerPress={onMarkerPress}
+        onFailed={() => setMapFailed(true)}
+        // 사용자가 움직였을 때만 버튼을 띄운다 — 앱이 맞춘 시야(처음 맞추기·핀 고르기·검색 결과)는 아니다
+        onBoundsChange={(b) => {
+          if (b.byUser) {
+            Keyboard.dismiss();
+            setMovedBounds({ sw: b.sw, ne: b.ne });
+          }
+        }}
+      />
+      {/* 지도 위 덮개 — 검색창 + 필터 칩 + 지도에 없는 N곳 안내. 시트 "전체" 높이의 위 끝이 이 아래다 */}
+      <View
+        style={styles.overlay}
+        pointerEvents="box-none"
+        onLayout={(e) => setOverlayHeight(e.nativeEvent.layout.height)}
+      >
+        {renderPlaceFilters(true)}
+        {unmappedCount > 0 ? (
+          <Pressable
+            style={styles.unmapped}
+            onPress={() => setSnap('half')}
+            accessibilityRole="button"
+            accessibilityLabel={`지도에 없는 ${unmappedCount}곳 — 목록에서 위치를 정해요`}
+          >
+            <MaterialCommunityIcons name="map-marker-outline" size={14} color={colors.textSecondary} />
+            <Text style={styles.unmappedText}>지도에 없는 {unmappedCount}곳 · 목록에서 위치를 정해요</Text>
+          </Pressable>
+        ) : null}
+      </View>
+      {/* 내 위치 — 덮개 바로 아래 오른쪽(지도 앱들의 자리). 가운데의 "이 지역 장소 보기"와 겹치지 않는다 */}
+      <Pressable
+        style={[styles.myLocationButton, { top: overlayHeight + spacing.xs }]}
+        onPress={() => void onMyLocation()}
+        disabled={locating}
+        accessibilityRole="button"
+        accessibilityLabel="내 위치로 지도 옮기기"
+        accessibilityState={{ busy: locating }}
+      >
+        {locating ? (
+          <ActivityIndicator size="small" color={colors.primary} />
+        ) : (
+          <MaterialCommunityIcons name="crosshairs-gps" size={22} color={colors.textPrimary} />
+        )}
+      </Pressable>
+      {/* 덮개 밖에 둔다 — 덮개 높이(시트 '전체' 위 끝)가 버튼이 뜰 때마다 출렁이지 않게 */}
+      {movedBounds && !search ? (
+        <Pressable
+          style={[styles.areaButton, { top: overlayHeight + spacing.xs }]}
+          onPress={() => {
+            setAreaBounds(movedBounds);
+            setMovedBounds(null);
+            clearSheetCard();
+            setSnap('half');
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="이 지역 장소 보기 — 지금 지도 범위의 장소만 목록에 보여요"
+        >
+          <MaterialCommunityIcons name="restart" size={16} color={colors.primary} />
+          <Text style={styles.areaButtonText}>이 지역 장소 보기</Text>
+        </Pressable>
+      ) : null}
+      <MapSheet
+        containerHeight={areaHeight}
+        fullTop={fullTop}
+        peekHeight={peekHeight}
+        snap={snap}
+        onSnapChange={onSheetSnapChange}
+        header={sheetHeader}
+      >
+        {sheetBody}
+      </MapSheet>
+    </View>
+  );
+
+  // ---- 장소 · 지도를 못 쓸 때의 목록(예전 화면) ----
+  const fallbackList = (
+    <>
+      {renderPlaceFilters(false)}
+      <FlatList
+        data={sortedPlaces}
+        keyExtractor={(p) => String(p.id)}
+        contentContainerStyle={styles.list}
+        refreshing={placeLoading}
+        onRefresh={() => loadPlaces(true)}
+        ListHeaderComponent={aiButtons}
+        /*
+         * 카드 두 종류가 한 목록에 섞인다 — 인증된 곳은 커버 사진이 있는 매거진 카드,
+         * 나머지는 한 줄짜리 일반 카드. 정렬이 등급 우선이라 매거진 카드가 위에 모인다.
+         */
+        renderItem={({ item }) => renderPlaceCard(item, false)}
+        ListEmptyComponent={placeEmpty}
+      />
+    </>
+  );
+
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <View style={styles.titleRow}>
         <Text style={styles.screenTitle}>럽슐랭</Text>
-        <View style={styles.titleActions}>
-          {mode === 'guide' ? (
-            <AiInsightButton
-              label="AI 맛집 추천"
-              title="럽슐랭 취향 맞춤 추천"
-              fetcher={placeApi.lovelichelinRecommend}
-              render={renderRecommendation}
-            />
-          ) : null}
-          {mode === 'browse' && browseView === 'map' ? (
-            <AiInsightButton
-              label="AI 데이트 코스"
-              title="AI 데이트 코스"
-              fetcher={placeApi.dateCourse}
-              render={renderDateCourse}
-            />
-          ) : null}
-          {/* 여행(Trip)은 홈 스택으로 이관 — 진입은 홈 D-day 카드·커플 캘린더 (navigation/types.ts 참고) */}
-        </View>
+        {/* 여행(Trip)은 홈 스택으로 이관 — 진입은 홈 D-day 카드·커플 캘린더 (navigation/types.ts 참고) */}
       </View>
 
+      {/*
+        모드는 필터가 아니라 내비게이션이다 — 칩 둘(fill)로 그리면 아래 카테고리 칩의 선택 상태와
+        같은 옷이라 무엇이 모드이고 무엇이 필터인지 갈리지 않았다. 밑줄 탭 한 줄로 그린다(§7-3 3번).
+      */}
       <View style={styles.modeRow}>
-        {MODES.map((m) => (
-          <Chip
-            key={m.value}
-            label={m.label}
-            selected={mode === m.value}
-            onPress={() => {
-              setMode(m.value);
-              // 둘러보기를 벗어나면 지도에서 고르던 좌표는 의미가 없다 — 다음에 돌아왔을 때
-              // 엉뚱한 위치에 "여기에 추가" 바가 떠 있지 않게 비운다.
-              if (m.value !== 'browse') setPendingPin(null);
-            }}
-            fill
-          />
-        ))}
+        {MODES.map((m) => {
+          const active = mode === m.value;
+          return (
+            <Pressable
+              key={m.value}
+              onPress={() => {
+                setMode(m.value);
+                if (m.value !== 'places') clearSheetCard();
+              }}
+              style={[styles.modeTab, active && styles.modeTabActive]}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+            >
+              <Text style={[styles.modeText, active && styles.modeTextActive]}>{m.label}</Text>
+            </Pressable>
+          );
+        })}
       </View>
 
-      {mode === 'browse' ? (
-        <View style={styles.browseViewRow}>
-          {BROWSE_VIEWS.map((v) => (
-            <TouchableOpacity
-              key={v.value}
-              style={[styles.browseViewBtn, browseView === v.value && styles.browseViewBtnActive]}
-              onPress={() => {
-                setBrowseView(v.value);
-                if (v.value !== 'map') setPendingPin(null);
-              }}
-              accessibilityState={{ selected: browseView === v.value }}
-            >
-              <MaterialCommunityIcons
-                name={v.icon}
-                size={16}
-                color={browseView === v.value ? colors.white : colors.textSecondary}
-              />
-              <Text style={[styles.browseViewText, browseView === v.value && styles.browseViewTextActive]}>
-                {v.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      ) : null}
-
-      {(mode === 'guide' || mode === 'browse') && allPlaces.length > 0 ? (
-        <View style={styles.filterRow}>
-          {CATEGORY_FILTERS.map((f) => (
-            <Chip
-              key={f.value}
-              label={f.label}
-              selected={categoryFilter === f.value}
-              onPress={() => setCategoryFilter(f.value)}
-            />
-          ))}
-        </View>
-      ) : null}
-
-      {mode === 'browse' && allPlaces.length > 0 ? (
-        <View style={styles.searchWrap}>
-          <TextField
-            placeholder="장소 이름으로 검색"
-            value={search}
-            onChangeText={setSearch}
-            returnKeyType="search"
-          />
-        </View>
-      ) : null}
+      {mode === 'places' ? (mapAvailable ? mapScreen : fallbackList) : null}
 
       {mode === 'content' ? (
         <>
@@ -358,7 +979,7 @@ export function PlaceScreen() {
                   returnKeyType="search"
                 />
               </View>
-              <View style={styles.filterRow}>
+              <View style={styles.contentFilterRow}>
                 {CONTENT_TYPE_FILTERS.map((f) => (
                   <Chip
                     key={f.value}
@@ -370,358 +991,83 @@ export function PlaceScreen() {
               </View>
             </>
           ) : null}
+          <FlatList
+            data={browseContents}
+            keyExtractor={(c) => String(c.id)}
+            contentContainerStyle={styles.list}
+            refreshing={contentLoading}
+            onRefresh={() => loadContents(true)}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={[styles.card, styles.contentCard, deletingContentId === item.id && styles.cardDeleting]}
+                activeOpacity={0.7}
+                disabled={deletingContentId === item.id}
+                onPress={() => navigation.navigate('ContentDetail', { contentId: item.id, title: item.title })}
+                onLongPress={() => onDeleteContent(item)}
+              >
+                {item.posterUrl ? (
+                  <Image source={{ uri: item.posterUrl }} style={styles.contentPoster} resizeMode="cover" />
+                ) : null}
+                <View style={styles.flex}>
+                  <View style={styles.cardHeader}>
+                    <Text style={styles.name}>{item.title}</Text>
+                    {item.lovelichelinTier > 0 ? <LovelichelinBadge tier={item.lovelichelinTier} size="sm" /> : null}
+                    <View style={styles.categoryChip}>
+                      <Text style={styles.categoryText}>{contentTypeLabel(item.type)}</Text>
+                    </View>
+                    {item.lovelichelinTier === 0 && isSoloPick(item) ? (
+                      <SoloPickBadge who={item.myRating != null ? 'me' : 'partner'} size="sm" />
+                    ) : null}
+                  </View>
+                  <View style={styles.cardFooter}>
+                    {item.logCount > 0 ? (
+                      <Text style={styles.visitInfo}>
+                        {item.avgRating ? `${item.avgRating.toFixed(1)} · ` : ''}관람 {item.logCount}회
+                        {item.lastWatchedAt ? ` · 최근 ${item.lastWatchedAt}` : ''}
+                      </Text>
+                    ) : null}
+                  </View>
+                  {item.lovelichelinTier === 0 && (item.myRating != null || item.partnerRating != null) ? (
+                    <Text style={styles.pendingHint}>{ratingHint(item, partnerName)}</Text>
+                  ) : null}
+                </View>
+              </TouchableOpacity>
+            )}
+            ListEmptyComponent={
+              !contentLoading ? (
+                contentLoadError ? (
+                  <EmptyState
+                    icon="cloud-off-outline"
+                    title="콘텐츠를 불러오지 못했어요"
+                    description="네트워크 상태를 확인하고 다시 시도해주세요."
+                    error
+                    onRetry={() => loadContents()}
+                  />
+                ) : allContents.length > 0 ? (
+                  <EmptyState icon="movie-open-outline" title="조건에 맞는 콘텐츠가 없어요" description="검색어나 필터를 바꿔보세요." />
+                ) : (
+                  <EmptyState
+                    icon="movie-open-outline"
+                    title="아직 저장한 콘텐츠가 없어요"
+                    description="둘이 함께 보고 싶은 영화·공연·드라마를 담아보세요."
+                  />
+                )
+              ) : null
+            }
+          />
         </>
       ) : null}
 
-      {mode === 'guide' ? (
-        <FlatList
-          data={guidePlaces}
-          keyExtractor={(p) => String(p.id)}
-          contentContainerStyle={styles.list}
-          refreshing={placeLoading}
-          onRefresh={() => loadPlaces(true)}
-          ListHeaderComponent={
-            <SoloPickSection
-              title="내 픽 · 상대 픽"
-              subtitle="아직 둘 다 안 가봤지만, 한 명은 인정한 곳이에요"
-              items={soloPicks}
-              keyExtractor={(p) => String(p.id)}
-              renderCard={(p) => {
-                const who: 'me' | 'partner' = p.myRating != null ? 'me' : 'partner';
-                const rating = p.myRating ?? p.partnerRating ?? 0;
-                return (
-                  <TouchableOpacity
-                    activeOpacity={0.85}
-                    onPress={() => navigation.navigate('PlaceDetail', { placeId: p.id, name: p.name })}
-                  >
-                    <Card elevation="sm" style={styles.soloPickCard}>
-                      <SoloPickBadge who={who} size="sm" />
-                      <Text style={styles.soloPickName} numberOfLines={1}>
-                        {p.name}
-                      </Text>
-                      <Text style={[styles.soloPickStars, { color: who === 'me' ? colors.me : colors.partner }]}>
-                        {stars(rating)}
-                      </Text>
-                    </Card>
-                  </TouchableOpacity>
-                );
-              }}
-            />
-          }
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => navigation.navigate('PlaceDetail', { placeId: item.id, name: item.name })}
-            >
-              <Card elevation="sm" tint="together" style={styles.magazineCard}>
-                {item.coverImageUrl ? (
-                  <Image source={{ uri: item.coverImageUrl }} style={styles.coverPhoto} resizeMode="cover" />
-                ) : (
-                  <View style={styles.coverPlaceholder}>
-                    <MaterialCommunityIcons name="crown" size={32} color={colors.togetherText} />
-                  </View>
-                )}
-                <View style={styles.magazineBody}>
-                  <View style={styles.magazineHeaderRow}>
-                    <Text style={styles.magazineName}>{item.name}</Text>
-                    <LovelichelinBadge tier={item.lovelichelinTier} size="sm" />
-                  </View>
-                  {item.category ? <Text style={styles.magazineCategory}>{item.category}</Text> : null}
-                  <View style={styles.magazineRatingRow}>
-                    <Text style={[styles.magazineRating, { color: colors.me }]}>
-                      나 {item.myRating ? stars(item.myRating) : '미평가'}
-                    </Text>
-                    <Text style={[styles.magazineRating, { color: colors.partner }]}>
-                      상대 {item.partnerRating ? stars(item.partnerRating) : '미평가'}
-                    </Text>
-                  </View>
-                  {item.coverMemo ? (
-                    <Text style={styles.magazineMemo} numberOfLines={2}>
-                      “{item.coverMemo}”
-                    </Text>
-                  ) : null}
-                  {item.lovelichelinCertifiedAt ? (
-                    <Text style={styles.magazineDate}>{localDateOf(item.lovelichelinCertifiedAt)} 등극</Text>
-                  ) : null}
-                </View>
-              </Card>
-            </TouchableOpacity>
-          )}
-          ListEmptyComponent={
-            !placeLoading ? (
-              placeLoadError ? (
-                <EmptyState
-                  icon="cloud-off-outline"
-                  title="가이드를 불러오지 못했어요"
-                  description="네트워크 상태를 확인하고 다시 시도해주세요."
-                  error
-                  onRetry={() => loadPlaces()}
-                />
-              ) : allPlaces.some((p) => p.lovelichelinTier > 0) ? (
-                <EmptyState icon="crown" title="조건에 맞는 장소가 없어요" description="카테고리 필터를 바꿔보세요." />
-              ) : (
-                <EmptyState
-                  icon="crown"
-                  title="아직 럽슐랭으로 인증된 장소가 없어요"
-                  description="둘러보기에 담은 곳을 다녀온 뒤, 둘 다 평점을 매기면 등급이 매겨져요!"
-                />
-              )
-            ) : null
-          }
-        />
+      {/* 하단 고정 버튼 — 콘텐츠와, 지도를 못 쓸 때의 장소 목록에만. 지도 화면에서는 시트 머리 [직접 추가] */}
+      {mode === 'content' || !mapAvailable ? (
+        <View style={styles.fabWrap}>
+          <Button
+            title={mode === 'content' ? '콘텐츠 추가하기' : '장소 추가하기'}
+            leftIcon={<MaterialCommunityIcons name="plus" size={20} color={onColor(colors.primaryFill)} />}
+            onPress={() => navigation.navigate(mode === 'content' ? 'ContentAdd' : 'PlaceAdd')}
+          />
+        </View>
       ) : null}
-
-      {mode === 'browse' && browseView === 'list' ? (
-        <FlatList
-          data={browsePlaces}
-          keyExtractor={(p) => String(p.id)}
-          contentContainerStyle={styles.list}
-          refreshing={placeLoading}
-          onRefresh={() => loadPlaces(true)}
-          ListHeaderComponent={
-            browsePlaces.length > 0 ? <Text style={styles.deleteHint}>카드를 길게 눌러 삭제할 수 있어요</Text> : null
-          }
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[styles.card, deletingPlaceId === item.id && styles.cardDeleting]}
-              activeOpacity={0.7}
-              disabled={deletingPlaceId === item.id}
-              onPress={() => navigation.navigate('PlaceDetail', { placeId: item.id, name: item.name })}
-              onLongPress={() => onDeletePlace(item)}
-            >
-              <View style={styles.cardHeader}>
-                <Text style={styles.name}>{item.name}</Text>
-                {item.lovelichelinTier > 0 ? <LovelichelinBadge tier={item.lovelichelinTier} size="sm" /> : null}
-                {item.category ? (
-                  <View style={styles.categoryChip}>
-                    <Text style={styles.categoryText}>{item.category}</Text>
-                  </View>
-                ) : null}
-                {item.lovelichelinTier === 0 &&
-                ((item.myRating != null && item.myRating >= SOLO_PICK_MIN_RATING && item.partnerRating == null) ||
-                  (item.partnerRating != null && item.partnerRating >= SOLO_PICK_MIN_RATING && item.myRating == null)) ? (
-                  <SoloPickBadge who={item.myRating != null ? 'me' : 'partner'} size="sm" />
-                ) : null}
-                {item.tripId != null ? (
-                  <View style={styles.categoryChip}>
-                    <Text style={styles.categoryText}>✈️ 여행에 담김</Text>
-                  </View>
-                ) : null}
-              </View>
-              {item.address ? <Text style={styles.address}>{item.address}</Text> : null}
-              <View style={styles.cardFooter}>
-                {item.visitCount > 0 ? (
-                  <Text style={styles.visitInfo}>
-                    {item.avgRating ? `${item.avgRating.toFixed(1)} · ` : ''}방문 {item.visitCount}회
-                    {item.lastVisitedAt ? ` · 최근 ${item.lastVisitedAt}` : ''}
-                  </Text>
-                ) : null}
-              </View>
-              {item.lovelichelinTier === 0 && (item.myRating != null || item.partnerRating != null) ? (
-                <Text style={styles.pendingHint}>
-                  {item.myRating != null && item.partnerRating != null
-                    ? '럽슐랭 탈락 — 재평가하면 다시 등급이 매겨져요'
-                    : `${item.myRating != null ? '내' : '상대'} 평점만 매겨졌어요 — 나머지 한 명의 평가를 기다리는 중`}
-                </Text>
-              ) : null}
-            </TouchableOpacity>
-          )}
-          ListEmptyComponent={
-            !placeLoading ? (
-              placeLoadError ? (
-                <EmptyState
-                  icon="cloud-off-outline"
-                  title="장소를 불러오지 못했어요"
-                  description="네트워크 상태를 확인하고 다시 시도해주세요."
-                  error
-                  onRetry={() => loadPlaces()}
-                />
-              ) : allPlaces.length > 0 ? (
-                <EmptyState icon="map-marker-outline" title="조건에 맞는 장소가 없어요" description="검색어나 필터를 바꿔보세요." />
-              ) : (
-                <EmptyState
-                  icon="map-marker-outline"
-                  title="아직 저장한 장소가 없어요"
-                  description="함께 가고 싶은 맛집, 여행지, 전시를 추가해보세요! (카드를 길게 눌러 삭제)"
-                />
-              )
-            ) : null
-          }
-        />
-      ) : null}
-
-      {mode === 'browse' && browseView === 'map' ? (
-        !isKakaoMapConfigured() ? (
-          <View style={styles.mapUnavailable}>
-            <EmptyState
-              icon="map-marker-outline"
-              title="지도를 아직 쓸 수 없어요"
-              description="카카오맵 키가 설정되면 지도에서 장소를 한눈에 볼 수 있어요."
-            />
-          </View>
-        ) : (
-          <View style={styles.mapWrap}>
-            <View style={styles.legendRow}>
-              <View style={styles.legendItem}>
-                <Text style={styles.legendCrown}>👑</Text>
-                <Text style={styles.legendText}>럽슐랭 인증</Text>
-              </View>
-            </View>
-            <KakaoMap
-              markers={markers}
-              height={0}
-              style={styles.map}
-              selectable
-              onSelect={(pos) => setPendingPin(pos)}
-              onMarkerPress={(id) => {
-                const place = browsePlaces.find((p) => p.id === id);
-                if (place) navigation.navigate('PlaceDetail', { placeId: place.id, name: place.name });
-              }}
-            />
-            <Text style={styles.mapHint}>
-              {pendingPin
-                ? '이 위치로 장소를 추가할까요?'
-                : markers.length === 0
-                  ? '위치가 등록된 장소가 없어요. 빈 곳을 탭해 장소를 추가해보세요!'
-                  : '핀을 탭하면 상세로, 빈 곳을 탭하면 그 자리에 장소를 추가할 수 있어요.'}
-            </Text>
-          </View>
-        )
-      ) : null}
-
-      {mode === 'content' ? (
-        <FlatList
-          data={browseContents}
-          keyExtractor={(c) => String(c.id)}
-          contentContainerStyle={styles.list}
-          refreshing={contentLoading}
-          onRefresh={() => loadContents(true)}
-          ListHeaderComponent={
-            <View>
-              <SoloPickSection
-                title="내 픽 · 상대 픽"
-                subtitle="아직 둘 다 안 봤지만, 한 명은 인정한 콘텐츠예요"
-                items={contentSoloPicks}
-                keyExtractor={(c) => String(c.id)}
-                renderCard={(c) => {
-                  const who: 'me' | 'partner' = c.myRating != null ? 'me' : 'partner';
-                  const rating = c.myRating ?? c.partnerRating ?? 0;
-                  return (
-                    <TouchableOpacity
-                      activeOpacity={0.85}
-                      onPress={() => navigation.navigate('ContentDetail', { contentId: c.id, title: c.title })}
-                    >
-                      <Card elevation="sm" style={styles.soloPickCard}>
-                        <SoloPickBadge who={who} size="sm" />
-                        <Text style={styles.soloPickName} numberOfLines={1}>
-                          {c.title}
-                        </Text>
-                        <Text style={[styles.soloPickStars, { color: who === 'me' ? colors.me : colors.partner }]}>
-                          {stars(rating)}
-                        </Text>
-                      </Card>
-                    </TouchableOpacity>
-                  );
-                }}
-              />
-              {browseContents.length > 0 ? (
-                <Text style={styles.deleteHint}>카드를 길게 눌러 삭제할 수 있어요</Text>
-              ) : null}
-            </View>
-          }
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[styles.card, styles.contentCard, deletingContentId === item.id && styles.cardDeleting]}
-              activeOpacity={0.7}
-              disabled={deletingContentId === item.id}
-              onPress={() => navigation.navigate('ContentDetail', { contentId: item.id, title: item.title })}
-              onLongPress={() => onDeleteContent(item)}
-            >
-              {item.posterUrl ? (
-                <Image source={{ uri: item.posterUrl }} style={styles.contentPoster} resizeMode="cover" />
-              ) : null}
-              <View style={styles.flex}>
-                <View style={styles.cardHeader}>
-                  <Text style={styles.name}>{item.title}</Text>
-                  {item.lovelichelinTier > 0 ? <LovelichelinBadge tier={item.lovelichelinTier} size="sm" /> : null}
-                  <View style={styles.categoryChip}>
-                    <Text style={styles.categoryText}>{contentTypeLabel(item.type)}</Text>
-                  </View>
-                  {item.lovelichelinTier === 0 &&
-                  ((item.myRating != null && item.myRating >= SOLO_PICK_MIN_RATING && item.partnerRating == null) ||
-                    (item.partnerRating != null && item.partnerRating >= SOLO_PICK_MIN_RATING && item.myRating == null)) ? (
-                    <SoloPickBadge who={item.myRating != null ? 'me' : 'partner'} size="sm" />
-                  ) : null}
-                </View>
-                <View style={styles.cardFooter}>
-                  {item.logCount > 0 ? (
-                    <Text style={styles.visitInfo}>
-                      {item.avgRating ? `${item.avgRating.toFixed(1)} · ` : ''}관람 {item.logCount}회
-                      {item.lastWatchedAt ? ` · 최근 ${item.lastWatchedAt}` : ''}
-                    </Text>
-                  ) : null}
-                </View>
-                {item.lovelichelinTier === 0 && (item.myRating != null || item.partnerRating != null) ? (
-                  <Text style={styles.pendingHint}>
-                    {item.myRating != null && item.partnerRating != null
-                      ? '럽슐랭 탈락 — 재평가하면 다시 등급이 매겨져요'
-                      : `${item.myRating != null ? '내' : '상대'} 평점만 매겨졌어요 — 나머지 한 명의 평가를 기다리는 중`}
-                  </Text>
-                ) : null}
-              </View>
-            </TouchableOpacity>
-          )}
-          ListEmptyComponent={
-            !contentLoading ? (
-              contentLoadError ? (
-                <EmptyState
-                  icon="cloud-off-outline"
-                  title="콘텐츠를 불러오지 못했어요"
-                  description="네트워크 상태를 확인하고 다시 시도해주세요."
-                  error
-                  onRetry={() => loadContents()}
-                />
-              ) : allContents.length > 0 ? (
-                <EmptyState icon="movie-open-outline" title="조건에 맞는 콘텐츠가 없어요" description="검색어나 필터를 바꿔보세요." />
-              ) : (
-                <EmptyState
-                  icon="movie-open-outline"
-                  title="아직 저장한 콘텐츠가 없어요"
-                  description="함께 보고 싶은 영화·공연·드라마를 추가해보세요! (카드를 길게 눌러 삭제)"
-                />
-              )
-            ) : null
-          }
-        />
-      ) : null}
-
-      <View style={styles.fabWrap}>
-        {mode === 'browse' && browseView === 'map' && pendingPin ? (
-          <View style={styles.pendingPinBar}>
-            <View style={styles.pendingPinInfo}>
-              <MaterialCommunityIcons name="map-marker" size={18} color={colors.primary} />
-              <Text style={styles.pendingPinText} numberOfLines={1}>
-                {pendingPin.address ?? `${pendingPin.lat.toFixed(5)}, ${pendingPin.lng.toFixed(5)}`}
-              </Text>
-            </View>
-            <View style={styles.pendingPinActions}>
-              <IconButton icon="close" label="위치 선택 취소" onPress={() => setPendingPin(null)} />
-              <Button
-                title="여기에 추가"
-                size="sm"
-                onPress={() => {
-                  navigation.navigate('PlaceAdd', { initialCoords: pendingPin });
-                  setPendingPin(null);
-                }}
-              />
-            </View>
-          </View>
-        ) : mode === 'content' ? (
-          <Button title="＋ 콘텐츠 추가하기" onPress={() => navigation.navigate('ContentAdd')} />
-        ) : (
-          <Button title="＋ 장소 추가하기" onPress={() => navigation.navigate('PlaceAdd')} />
-        )}
-      </View>
     </SafeAreaView>
   );
 }
@@ -732,30 +1078,48 @@ const styles = themedStyles((colors) => ({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
   },
   screenTitle: { fontSize: fontSize.title, fontWeight: '800', color: colors.textPrimary },
-  titleActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  modeRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.md },
-  // 둘러보기 안의 목록↔지도 서브 토글 — 모드 칩보다 한 단 작게, 필터 줄과 같은 위치에 둔다
-  browseViewRow: { flexDirection: 'row', gap: spacing.xs, paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
-  browseViewBtn: {
+  // 모드 탭 — 밑줄 한 줄. 선택은 글자색 + 2px 밑줄이고 알약을 쓰지 않는다
+  modeRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
+    gap: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xs,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
-  browseViewBtnActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  browseViewText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary },
-  browseViewTextActive: { color: colors.white },
+  modeTab: {
+    paddingVertical: spacing.sm,
+    minHeight: layout.touchTarget,
+    justifyContent: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+    marginBottom: -StyleSheet.hairlineWidth,
+  },
+  modeTabActive: { borderBottomColor: colors.textPrimary },
+  modeText: { fontSize: fontSize.subtitle, fontWeight: '600', color: colors.textSecondary },
+  modeTextActive: { color: colors.textPrimary, fontWeight: '800' },
+  // AI 인사이트 둘 — 시트 머리(지도) / 목록 머리(물러선 목록)
+  aiRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
+  aiBtn: { flex: 1 },
   searchWrap: { paddingHorizontal: spacing.lg, paddingTop: spacing.md },
+  /*
+   * flexGrow/flexShrink 를 직접 끈다. RN 의 horizontal ScrollView 기본 스타일이
+   * `{ flexGrow: 1, flexShrink: 1 }` 이라, 칩 줄이 아래 목록과 세로 공간을 나눠 갖는 형제가 되어
+   * 목록이 넘치면 칩 줄까지 줄어들어 44pt 칩이 잘렸다(iOS 실기기). 가로 스크롤이라 세로는 내용 높이 그대로.
+   */
+  filterScroll: { flexGrow: 0, flexShrink: 0 },
   filterRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+  },
+  contentFilterRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
@@ -763,30 +1127,110 @@ const styles = themedStyles((colors) => ({
     paddingTop: spacing.md,
   },
   list: { padding: spacing.lg, paddingBottom: layout.listBottomWithFab },
-  // 가이드 매거진 카드
-  magazineCard: { padding: 0, overflow: 'hidden', marginBottom: spacing.md },
-  coverPhoto: { width: '100%', aspectRatio: 16 / 9 },
-  coverPlaceholder: {
-    width: '100%',
-    aspectRatio: 16 / 9,
+  // ---- 지도 화면 ----
+  mapArea: { flex: 1 },
+  // 지도는 영역을 꽉 채운다 — 카드형 지도의 테두리·모서리는 끈다
+  fullMap: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, height: '100%', borderRadius: 0, borderWidth: 0 },
+  overlay: { position: 'absolute', top: 0, left: 0, right: 0, paddingTop: spacing.sm },
+  /*
+   * 지도 위 검색창 — TextField 의 아래 여백(md)을 되돌려 칩 줄과 붙인다. 지도 위라 면을 surface 로 띄우고
+   * 그림자를 준다(기본 surfaceAlt 는 지도 타일과 섞인다). 높이 46 — 지도를 덜 가린다.
+   */
+  searchOverMap: { marginHorizontal: spacing.lg, marginBottom: -(spacing.md - spacing.xs) },
+  searchInputOverMap: {
+    height: 46,
+    fontSize: fontSize.body,
+    backgroundColor: colors.surface,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  filterRowOverMap: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.xs,
+  },
+  unmapped: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginLeft: spacing.lg,
+    marginTop: spacing.xs,
+    minHeight: 32,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  unmappedText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '700' },
+  // 지도를 움직이면 뜨는 "이 지역 장소 보기" — 덮개 가운데, 지도 앱들의 "이 지역 재검색" 자리
+  areaButton: {
+    position: 'absolute',
+    alignSelf: 'center',
+    zIndex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    minHeight: layout.touchTarget,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  areaButtonText: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '800' },
+  // 내 위치 — 덮개 아래 오른쪽 둥근 버튼. 시트(zIndex 위)가 '전체'로 올라오면 그 아래로 가려진다
+  myLocationButton: {
+    position: 'absolute',
+    right: spacing.md,
+    zIndex: 2,
+    width: layout.touchTarget,
+    height: layout.touchTarget,
+    borderRadius: layout.touchTarget / 2,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.togetherBg,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
   },
-  magazineBody: { padding: spacing.md, gap: spacing.xs },
-  magazineHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
-  magazineName: { flex: 1, fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
-  magazineCategory: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
-  magazineRatingRow: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.xs },
-  magazineRating: { fontSize: fontSize.caption, fontWeight: '700' },
-  magazineMemo: { fontSize: fontSize.body, color: colors.textPrimary, fontStyle: 'italic', marginTop: spacing.xs },
-  magazineDate: { fontSize: fontSize.micro, color: colors.textSecondary, marginTop: spacing.xs },
-  // 내 픽 · 상대 픽 (솔로 트랙) 카드 — 섹션 레이아웃 자체는 SoloPickSection 이 맡는다
-  soloPickCard: { width: 140, gap: spacing.xs },
-  soloPickName: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
-  soloPickStars: { fontSize: fontSize.caption, fontWeight: '700' },
-  // 둘러보기·콘텐츠 목록 카드
-  deleteHint: { fontSize: fontSize.caption, color: colors.textSecondary, marginBottom: spacing.sm },
+  // 시트 머리 — 제목 줄 + AI 버튼
+  sheetHeader: { paddingHorizontal: spacing.lg },
+  sheetTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    minHeight: layout.touchTarget,
+    marginBottom: spacing.sm,
+  },
+  sheetTitle: { flexShrink: 1, fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
+  sheetList: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl },
+  resultSingle: { paddingHorizontal: spacing.lg },
+  searchState: { alignItems: 'center', gap: spacing.md, paddingVertical: spacing.xl, paddingHorizontal: spacing.lg },
+  searchStateText: { fontSize: fontSize.body, color: colors.textSecondary, textAlign: 'center' },
+  sheetEmpty: {
+    fontSize: fontSize.body,
+    color: colors.textSecondary,
+    lineHeight: 22,
+    paddingVertical: spacing.md,
+  },
+  // 콘텐츠 목록 카드
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -795,15 +1239,17 @@ const styles = themedStyles((colors) => ({
     padding: spacing.md,
     marginBottom: spacing.sm,
   },
-  // 삭제 진행 중 표시 — useDeleteAction, 장소·콘텐츠 카드 공용 (QA_CHECKLIST.md 전역 반복 패턴 7)
+  // 삭제 진행 중 표시 — useDeleteAction (QA_CHECKLIST.md 전역 반복 패턴 7)
   cardDeleting: { opacity: 0.5 },
-  // 콘텐츠 카드만 포스터가 왼쪽에 붙는 가로 레이아웃 — 장소 카드는 그대로 세로 하나
   contentCard: { flexDirection: 'row', gap: spacing.sm },
   contentPoster: { width: 52, height: 74, borderRadius: radius.sm },
   flex: { flex: 1 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
   name: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
   categoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
     borderRadius: radius.pill,
@@ -812,52 +1258,22 @@ const styles = themedStyles((colors) => ({
     borderColor: colors.border,
   },
   categoryText: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
-  address: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xs },
   cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.sm },
-  visitInfo: { fontSize: fontSize.caption, color: colors.primary, fontWeight: '700' },
+  visitInfo: { fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '700' },
   pendingHint: { fontSize: fontSize.micro, color: colors.togetherText, fontWeight: '700', marginTop: spacing.xs },
-  // AI 인사이트 렌더
-  courseComment: { fontSize: fontSize.body, color: colors.textSecondary, lineHeight: 22, marginBottom: spacing.xs },
-  courseStop: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start' },
-  courseNum: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: colors.primary,
-    color: colors.white,
-    fontWeight: '800',
-    fontSize: fontSize.caption,
-    textAlign: 'center',
-    lineHeight: 24,
-    overflow: 'hidden',
-  },
-  courseStopBody: { flex: 1 },
-  courseName: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
-  courseReason: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xxs, lineHeight: 18 },
-  // 지도
-  mapUnavailable: { flex: 1, justifyContent: 'center', padding: spacing.lg },
-  mapWrap: { flex: 1, padding: spacing.lg, paddingBottom: layout.listBottomWithFab },
-  legendRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, marginBottom: spacing.sm },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  legendCrown: { fontSize: 12 },
-  legendText: { fontSize: fontSize.caption, color: colors.textSecondary },
-  map: { flex: 1 },
-  mapHint: { fontSize: fontSize.caption, color: colors.textSecondary, textAlign: 'center', marginTop: spacing.sm },
   fabWrap: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: spacing.lg },
-  // 지도에서 좌표를 고른 직후 뜨는 바 — 기본 FAB 자리를 그대로 대체한다
+  // 지도에서 좌표를 고른 직후 시트에 뜨는 줄
   pendingPinBar: {
+    marginHorizontal: spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    backgroundColor: colors.surfaceCard,
-    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: colors.borderStrong,
-    paddingLeft: spacing.md,
-    paddingRight: spacing.xs,
-    paddingVertical: spacing.xs,
+    borderColor: colors.border,
+    padding: spacing.md,
   },
   pendingPinInfo: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   pendingPinText: { flex: 1, fontSize: fontSize.caption, color: colors.textPrimary, fontWeight: '600' },
-  pendingPinActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
 }));

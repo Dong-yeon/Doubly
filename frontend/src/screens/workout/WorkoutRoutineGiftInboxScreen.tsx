@@ -222,7 +222,7 @@ const styles = themedStyles((colors) => ({
   tabBtn: { flex: 1, paddingVertical: spacing.sm, borderRadius: radius.pill, alignItems: 'center' },
   tabBtnActive: { backgroundColor: colors.surface },
   tabText: { fontSize: fontSize.body, fontWeight: '700', color: colors.textSecondary },
-  tabTextActive: { color: colors.primary },
+  tabTextActive: { color: colors.primary, fontWeight: '800' },
   list: { padding: spacing.lg, paddingBottom: 40 },
   card: {
     backgroundColor: colors.surface,
@@ -250,5 +250,5 @@ const styles = themedStyles((colors) => ({
   declineBtn: { backgroundColor: colors.surfaceAlt },
   declineBtnText: { fontSize: fontSize.caption, fontWeight: '800', color: colors.textSecondary },
   acceptBtn: { backgroundColor: colors.primary },
-  acceptBtnText: { fontSize: fontSize.caption, fontWeight: '800', color: colors.white },
+  acceptBtnText: { fontSize: fontSize.caption, fontWeight: '800', color: colors.onPrimary },
 }));

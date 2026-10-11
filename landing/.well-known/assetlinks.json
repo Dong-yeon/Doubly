@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.doubly.app",
+      "sha256_cert_fingerprints": [
+        "DC:06:1D:79:D8:11:FD:DA:1C:BF:F9:2D:24:FA:DA:F7:88:62:B8:0C:D8:B7:50:3D:99:CA:09:A4:E1:FB:31:39"
+      ]
+    }
+  }
+]

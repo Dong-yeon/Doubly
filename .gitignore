@@ -7,3 +7,13 @@ secrets/
 # 우리 이모지 프롬프트 실험 산출물(생성 이미지·run.json) — 실제 얼굴 사진이 섞이므로 커밋 금지
 scripts/couple-emoji-experiment/out/
 scripts/couple-emoji-experiment/photos/
+
+# 파이썬 캐시
+__pycache__/
+
+# Claude Code 워크트리 — 병렬 세션이 여기에 격리된 체크아웃을 만든다(CLAUDE.md 5절).
+# 저장소 안의 저장소라 커밋되면 안 된다. .claude/launch.json 등 설정 파일은 계속 추적된다.
+.claude/worktrees/
+
+# 아이콘 후보 렌더 — 저장소에 넣지 않는다(APP_ICON_DIRECTION §10)
+.icon-candidates/

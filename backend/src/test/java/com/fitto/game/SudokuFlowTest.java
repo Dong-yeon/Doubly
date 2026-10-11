@@ -7,13 +7,17 @@ import com.fitto.chat.domain.MessageType;
 import com.fitto.chat.repository.ChatMessageRepository;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
+import com.fitto.common.time.KstClock;
 import com.fitto.game.domain.SudokuGame;
 import com.fitto.game.domain.GameDifficulty;
 import com.fitto.game.domain.GameStatus;
+import com.fitto.game.dto.DailySudokuResponse;
 import com.fitto.game.dto.StartSudokuRequest;
 import com.fitto.game.dto.SudokuGameResponse;
 import com.fitto.game.repository.SudokuGameRepository;
+import com.fitto.game.service.GameStreakService;
 import com.fitto.game.service.SudokuService;
+import com.fitto.game.sudoku.DailyPuzzles;
 import com.fitto.relation.dto.InviteCodeResponse;
 import com.fitto.relation.service.RelationService;
 import org.junit.jupiter.api.Test;
@@ -35,6 +39,7 @@ class SudokuFlowTest {
     @Autowired AuthService authService;
     @Autowired RelationService relationService;
     @Autowired SudokuService sudokuService;
+    @Autowired GameStreakService streakService;
     @Autowired SudokuGameRepository gameRepository;
     @Autowired ChatMessageRepository chatMessageRepository;
 
@@ -157,6 +162,93 @@ class SudokuFlowTest {
         SudokuGameResponse second = sudokuService.start(b, new StartSudokuRequest(GameDifficulty.HARD));
         assertThat(second.id()).isNotEqualTo(first.id());
         assertThat(second.difficulty()).isEqualTo(GameDifficulty.HARD);
+    }
+
+    @Test
+    void 오늘의_판은_커플이_달라도_같은_문제고_스트릭에_잡힌다() {
+        Long a = register("da");
+        Long b = register("db");
+        connectCouple(a, b);
+        Long c = register("dc");
+        Long d = register("dd");
+        connectCouple(c, d);
+
+        DailySudokuResponse before = sudokuService.daily(a);
+        assertThat(before.state()).isEqualTo("NOT_STARTED");
+        assertThat(before.gameId()).isNull();
+        assertThat(before.blockedByOtherGame()).isFalse();
+        assertThat(before.date()).isEqualTo(KstClock.today());
+        assertThat(before.difficulty()).isEqualTo(DailyPuzzles.difficultyOf(KstClock.today()));
+
+        SudokuGameResponse mine = sudokuService.startDaily(a);
+        SudokuGameResponse theirs = sudokuService.startDaily(c);
+        assertThat(mine.dailyDate()).isEqualTo(KstClock.today());
+        assertThat(theirs.puzzle()).isEqualTo(mine.puzzle());     // 같은 날 = 같은 문제
+        assertThat(theirs.id()).isNotEqualTo(mine.id());          // 판은 커플마다 따로
+
+        // 둘째가 눌러도 판은 하나
+        assertThat(sudokuService.startDaily(b).id()).isEqualTo(mine.id());
+        assertThat(sudokuService.daily(b).state()).isEqualTo("IN_PROGRESS");
+
+        assertThat(streakService.streak(a).current()).isZero();   // 아직 끝내지 않았다
+        assertThat(streakService.streak(a).playedToday()).isFalse();
+
+        solveAll(a, mine);
+        assertThat(sudokuService.daily(a).state()).isEqualTo("COMPLETED");
+        assertThat(streakService.streak(a).current()).isEqualTo(1);
+        assertThat(streakService.streak(a).playedToday()).isTrue();
+        assertThat(streakService.streak(b).current()).isEqualTo(1); // 스트릭은 커플 공용
+
+        // 오늘 것을 마쳤으면 내일까지 기다린다
+        assertThatThrownBy(() -> sudokuService.startDaily(b))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.GAME_DAILY_ALREADY_DONE);
+    }
+
+    @Test
+    void 자유_대국이_진행_중이면_오늘의_판이_막힌_것으로_보인다() {
+        Long a = register("ba");
+        Long b = register("bb");
+        connectCouple(a, b);
+
+        SudokuGameResponse free = sudokuService.start(a, new StartSudokuRequest(GameDifficulty.EASY));
+        DailySudokuResponse daily = sudokuService.daily(a);
+        assertThat(daily.state()).isEqualTo("NOT_STARTED");
+        assertThat(daily.blockedByOtherGame()).isTrue();
+
+        // 눌러도 진행 중인 자유 대국이 열린다 — 판은 여전히 하나다
+        assertThat(sudokuService.startDaily(b).id()).isEqualTo(free.id());
+
+        sudokuService.giveUp(a, free.id());
+        assertThat(sudokuService.daily(a).blockedByOtherGame()).isFalse();
+        assertThat(sudokuService.startDaily(a).dailyDate()).isEqualTo(KstClock.today());
+    }
+
+    @Test
+    void 접은_오늘의_판은_다시_열_수_있다() {
+        Long a = register("ra");
+        Long b = register("rb");
+        connectCouple(a, b);
+
+        SudokuGameResponse first = sudokuService.startDaily(a);
+        sudokuService.giveUp(a, first.id());
+        assertThat(sudokuService.daily(a).state()).isEqualTo("NOT_STARTED");
+
+        SudokuGameResponse again = sudokuService.startDaily(b);
+        assertThat(again.id()).isNotEqualTo(first.id());
+        assertThat(again.puzzle()).isEqualTo(first.puzzle());      // 문제는 그대로 — "다시 도전"
+    }
+
+    /** 판을 정답으로 끝까지 채운다 — solution 은 응답에 없으므로 엔티티에서 읽는다 */
+    private void solveAll(Long userId, SudokuGameResponse game) {
+        SudokuGame entity = gameRepository.findById(game.id()).orElseThrow();
+        String solution = entity.getSolution();
+        String puzzle = entity.getPuzzle();
+        for (int i = 0; i < 81; i++) {
+            if (puzzle.charAt(i) == '0') {
+                sudokuService.move(userId, game.id(), i, solution.charAt(i) - '0');
+            }
+        }
     }
 
     @Test

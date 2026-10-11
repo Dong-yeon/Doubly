@@ -14,8 +14,9 @@
  * <p><b>응원 리액션은 두 종류 모두에 붙는다.</b> 예전에는 일상 포스트에만 달렸는데,
  * 정작 매일 쌓이는 건 운동·식단·맛집 카드다 — "기록을 상대가 봐주고 응원해주는 순간"이
  * 이 앱의 존재 이유라, 거기에 반응할 방법이 없으면 루프가 닫히지 않는다.
- * 다만 자동 기록은 카드가 작으므로 <b>상대의 기록</b>이거나 이미 반응이 달린 경우에만
- * 이모지 줄을 편다 — 내 기록 밑에 응원 버튼이 줄줄이 뜨는 건 소음이다.
+ * <p>다만 <b>펼치는 방식이 다르다</b>. 사진 포스트는 카드가 크니 이모지 줄을 그대로 깔고,
+ * 자동 기록은 버튼 하나로 접는다({@link RecordCard} 주석 참고) — 작은 카드에 칩 다섯 개를
+ * 늘어놓으면 응원이 기록보다 커진다.
  */
 import React, { useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -23,24 +24,25 @@ import { MaterialCommunityIcons } from '../../../components/Icon';
 import type { FeedItem, FeedItemType, ReactionSummary } from '../../../types';
 import { colors, fontSize, radius, spacing } from '../../../constants/theme';
 import { themedStyles } from '../../../theme/themedStyles';
+import { isHovered } from '../../../utils/pointer';
 import { layout } from '../../../theme/layout';
-import { onColor } from '../../../theme/onColor';
+import { kstDateKey } from '../../../utils/anniversary';
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 /**
- * 자동 기록의 종류별 아이콘·색 — 한눈에 무슨 기록인지 구분되게.
- * 함수로 두어 렌더 시점에 현재 팔레트를 읽는다(객체로 굳히면 테마 전환을 못 따라온다).
+ * 자동 기록의 종류별 아이콘 — 한눈에 무슨 기록인지 구분되게.
+ *
+ * <p>색은 <b>중립</b>이다. 예전엔 종류마다 소유자 색(indigo=상대·violet=함께·coral=나)을
+ * 빌려 써서 상대의 식단이 "함께" 색 원으로, 내 운동이 "상대" 색 원으로 나왔다
+ * (docs/SCREEN_DESIGN_PASS_2026-09-23.md §4-2). 종류는 아이콘이 이미 말한다.
  */
-const typeMeta = (
-  type: Exclude<FeedItemType, 'POST'>,
-): { icon: IconName; color: string } =>
-  ({
-    WORKOUT: { icon: 'dumbbell' as IconName, color: colors.indigo },
-    MEAL: { icon: 'silverware-fork-knife' as IconName, color: colors.violet },
-    PLACE_VISIT: { icon: 'map-marker' as IconName, color: colors.coral },
-    CONTENT_LOG: { icon: 'movie-open-outline' as IconName, color: colors.danger },
-  })[type];
+const TYPE_ICON: Record<Exclude<FeedItemType, 'POST'>, IconName> = {
+  WORKOUT: 'dumbbell',
+  MEAL: 'silverware-fork-knife',
+  PLACE_VISIT: 'map-marker',
+  CONTENT_LOG: 'movie-open-outline',
+};
 
 export interface FeedCardProps {
   item: FeedItem;
@@ -48,17 +50,36 @@ export interface FeedCardProps {
   quickEmojis: readonly string[];
   onReact: (item: FeedItem, emoji: string) => void;
   onLongPress: (item: FeedItem) => void;
+  /** 댓글 열기(V124) — 넘겨준 화면에서만 일상 카드에 "댓글 N"이 보인다(댓글 화면이 같은 스택에 있어야 한다) */
+  onOpenComments?: (item: FeedItem) => void;
+  /** 식사 카드의 📍 줄을 눌렀다 — 그 장소 상세로. 안 주면(장소 상세가 없는 스택) 글자만 보인다 */
+  onOpenPlace?: (item: FeedItem) => void;
 }
 
-export function FeedCard({ item, timeLabel, quickEmojis, onReact, onLongPress }: FeedCardProps) {
+export function FeedCard({
+  item,
+  timeLabel,
+  quickEmojis,
+  onReact,
+  onLongPress,
+  onOpenComments,
+  onOpenPlace,
+}: FeedCardProps) {
   if (item.type !== 'POST') {
     return (
-      <RecordCard item={item} timeLabel={timeLabel} quickEmojis={quickEmojis} onReact={onReact} />
+      <RecordCard
+        item={item}
+        timeLabel={timeLabel}
+        quickEmojis={quickEmojis}
+        onReact={onReact}
+        onOpenPlace={onOpenPlace}
+      />
     );
   }
   return (
     <PostCard
       item={item}
+      onOpenComments={onOpenComments}
       timeLabel={timeLabel}
       quickEmojis={quickEmojis}
       onReact={onReact}
@@ -67,29 +88,67 @@ export function FeedCard({ item, timeLabel, quickEmojis, onReact, onLongPress }:
   );
 }
 
-/** 운동·식단·맛집 — 자동으로 쌓이는 기록이라 작게 */
+/**
+ * 운동·식단·맛집 — 자동으로 쌓이는 기록이라 작게.
+ *
+ * <p><b>응원은 접어 둔다.</b> 예전엔 상대 기록마다 빈 이모지 칩 5개가 항상 펼쳐져 있었다.
+ * 칩이 터치 타깃(44px)을 지키느라 리액션 줄만 48px — 기록 본문(34px)보다 커서 카드의
+ * 절반을 먹었고, 가로로도 콘텐츠 폭의 2/3 를 차지했다. 정작 보러 온 기록이 눌린 것이다.
+ * 이제는 본문 행 안의 <b>버튼 하나</b>로 접고, 누를 때만 이모지를 편다 — 버튼이 행 높이
+ * 안에 들어가므로 카드가 세로로 자라지 않는다(98px → 60px).
+ *
+ * <p>카드를 길게 눌러도 같은 피커가 열린다 — 버튼을 못 찾은 사람을 위한 두 번째 길이다.
+ */
 function RecordCard({
   item,
   timeLabel,
   quickEmojis,
   onReact,
-}: Pick<FeedCardProps, 'item' | 'timeLabel' | 'quickEmojis' | 'onReact'>) {
-  const meta = typeMeta(item.type as Exclude<FeedItemType, 'POST'>);
+  onOpenPlace,
+}: Pick<FeedCardProps, 'item' | 'timeLabel' | 'quickEmojis' | 'onReact' | 'onOpenPlace'>) {
+  const icon = TYPE_ICON[item.type as Exclude<FeedItemType, 'POST'>];
   const reactions = item.reactions ?? [];
-  // 상대 기록엔 응원할 자리를 열어 두고, 내 기록은 이미 받은 응원만 보여준다
-  const showReactions = !item.mine || reactions.length > 0;
+  const [picking, setPicking] = useState(false);
+  // 내 기록엔 응원 버튼을 열지 않는다 — 받은 응원만 보여준다(내 기록 밑의 응원 버튼은 소음)
+  const canReact = !item.mine;
   return (
-    <View style={styles.record}>
+    <Pressable
+      style={styles.record}
+      onLongPress={canReact ? () => setPicking(true) : undefined}
+      delayLongPress={400}
+    >
       <View style={styles.recordRow}>
-        <View style={[styles.recordIcon, { backgroundColor: meta.color }]}>
-          {/* 다크의 소유자 색은 파스텔이라 흰 아이콘이 1.50~1.69:1 이었다 — 배경 휘도로 고른다 */}
-          <MaterialCommunityIcons name={meta.icon} size={18} color={onColor(meta.color)} />
+        <View style={styles.recordIcon}>
+          <MaterialCommunityIcons name={icon} size={18} color={colors.textSecondary} />
         </View>
         <View style={styles.recordBody}>
-          <Text style={styles.recordTitle} numberOfLines={1}>
-            {item.title}
-          </Text>
-          {item.content ? (
+          <View style={styles.recordTitleRow}>
+            <Text style={styles.recordTitle} numberOfLines={1}>
+              {item.title}
+            </Text>
+            {/* 데이트 식단 — 커플 양쪽 짝 중 한 장만 내려오므로 "누가" 대신 "함께"로 읽힌다 */}
+            {item.shared ? (
+              <View style={styles.sharedBadge}>
+                <Text style={styles.sharedBadgeText}>함께</Text>
+              </View>
+            ) : null}
+          </View>
+          {/*
+            식사 카드의 "끼니 · 📍장소 ★N" — 장소가 붙어 있으면 줄을 눌러 그 장소 상세로 간다(2026-10-05).
+            카드 자체는 길게 누르기(응원)만 받으므로 응원 버튼과 같은 자리 규칙이다(버튼 안 버튼 아님).
+          */}
+          {item.content && item.placeId != null && onOpenPlace ? (
+            <Pressable
+              onPress={() => onOpenPlace(item)}
+              hitSlop={6}
+              accessibilityRole="link"
+              accessibilityLabel={`${item.content} — 장소 보기`}
+            >
+              <Text style={[styles.recordContent, styles.recordContentLink]} numberOfLines={1}>
+                {item.content}
+              </Text>
+            </Pressable>
+          ) : item.content ? (
             <Text style={styles.recordContent} numberOfLines={1}>
               {item.content}
             </Text>
@@ -97,23 +156,86 @@ function RecordCard({
         </View>
         <View style={styles.recordMeta}>
           <Text style={styles.recordWho} numberOfLines={1}>
-            {item.mine ? '나' : item.userName}
+            {item.shared ? '둘이' : item.mine ? '나' : item.userName}
           </Text>
           <Text style={styles.recordTime}>{timeLabel}</Text>
         </View>
         {/* 사진이 있는 식단·맛집은 작은 썸네일까지만 */}
         {item.imageUrl ? <Image source={{ uri: item.imageUrl }} style={styles.thumb} /> : null}
+        <ReactionTrigger
+          reactions={reactions}
+          canReact={canReact}
+          open={picking}
+          onPress={() => setPicking((v) => !v)}
+        />
       </View>
-      {showReactions ? (
+      {picking ? (
         <Reactions
           reactions={reactions}
-          // 내 기록에서는 받은 응원만 — 빈 이모지 버튼을 늘어놓지 않는다
-          quickEmojis={item.mine ? [] : quickEmojis}
-          onPress={(emoji) => onReact(item, emoji)}
+          quickEmojis={quickEmojis}
+          onPress={(emoji) => {
+            onReact(item, emoji);
+            setPicking(false);
+          }}
           compact
         />
       ) : null}
-    </View>
+    </Pressable>
+  );
+}
+
+/**
+ * 자동 기록 카드의 응원 버튼 — 본문 행 오른쪽 끝에 선다.
+ *
+ * <p>세 가지 모습이다. 받은 응원이 있으면 <b>이모지 요약</b>(내가 누른 게 있으면 강조),
+ * 없고 응원할 수 있으면 <b>빈 웃는 얼굴</b>, 내 기록인데 응원도 없으면 <b>아무것도</b>
+ * 그리지 않는다(자리만 비운다).
+ *
+ * <p>크기를 {@code layout.touchTarget}(44)로 잡은 건 접근성 때문만이 아니다 — 카드가
+ * 기존에도 썸네일·아이콘으로 그만한 높이를 쓰고 있어, 이 안에 들어가면 행이 안 자란다.
+ */
+function ReactionTrigger({
+  reactions,
+  canReact,
+  open,
+  onPress,
+}: {
+  reactions: ReactionSummary[];
+  canReact: boolean;
+  open: boolean;
+  onPress: () => void;
+}) {
+  const total = reactions.reduce((sum, r) => sum + r.count, 0);
+  const mine = reactions.some((r) => r.mine);
+  if (total === 0 && !canReact) {
+    return null;
+  }
+  return (
+    <Pressable
+      style={({ pressed }) => [
+        styles.trigger,
+        total > 0 && styles.triggerFilled,
+        mine && styles.triggerMine,
+        (pressed || open) && styles.chipPressed,
+      ]}
+      onPress={onPress}
+      hitSlop={6}
+      accessibilityRole="button"
+      accessibilityLabel={total > 0 ? `응원 ${total}개, 눌러서 응원 남기기` : '응원 남기기'}
+      accessibilityState={{ expanded: open }}
+    >
+      {total > 0 ? (
+        <Text style={styles.triggerEmoji} numberOfLines={1}>
+          {/* 종류가 많아도 두 개까지만 — 나머지는 숫자가 대신한다 */}
+          {reactions.slice(0, 2).map((r) => r.emoji).join('')}
+          {total > 1 ? (
+            <Text style={[styles.triggerCount, mine && styles.chipCountMine]}> {total}</Text>
+          ) : null}
+        </Text>
+      ) : (
+        <MaterialCommunityIcons name="emoticon-outline" size={20} color={colors.textMuted} />
+      )}
+    </Pressable>
   );
 }
 
@@ -160,11 +282,13 @@ function PostPhotos({ uris }: { uris: string[] }) {
 }
 
 /** 직접 남긴 일상 — 사진이 있으면 사진이 주인공 */
-function PostCard({ item, timeLabel, quickEmojis, onReact, onLongPress }: FeedCardProps) {
+function PostCard({ item, timeLabel, quickEmojis, onReact, onLongPress, onOpenComments }: FeedCardProps) {
   const photos = item.imageUrls && item.imageUrls.length > 0
     ? item.imageUrls
     : item.imageUrl ? [item.imageUrl] : [];
   const hasPhoto = photos.length > 0;
+  // 지난 날짜로 남긴 일상 — 올린 시각(timeLabel)만 보이면 "오늘 일"로 읽힌다. 기록일이 다를 때만 덧붙인다
+  const pastDay = pastRecordDayLabel(item);
   return (
     <Pressable
       style={[styles.post, hasPhoto && styles.postPhoto]}
@@ -175,10 +299,12 @@ function PostCard({ item, timeLabel, quickEmojis, onReact, onLongPress }: FeedCa
 
       <View style={[styles.postBody, hasPhoto && styles.postBodyOnPhoto]}>
         <View style={styles.postHeader}>
-          <View style={[styles.whoDot, { backgroundColor: item.mine ? colors.coral : colors.indigo }]} />
+          {/* 색 점은 뺐다 — 이름이 있으니 점은 정보를 더하지 않는다 */}
           <Text style={styles.who}>{item.mine ? '나' : item.userName}</Text>
-          <Text style={styles.time}>{timeLabel}</Text>
+          {/* 수정됨 — 고칠 때 상대에게 푸시가 가지 않으니(소음) 대신 카드에 흔적을 남긴다. 반응한 내용이 조용히 바뀌지 않게 */}
+          <Text style={styles.time}>{item.edited ? `${timeLabel} · 수정됨` : timeLabel}</Text>
         </View>
+        {pastDay ? <Text style={styles.pastDay}>{pastDay}</Text> : null}
 
         {item.content ? <Text style={styles.content}>{item.content}</Text> : null}
 
@@ -187,9 +313,32 @@ function PostCard({ item, timeLabel, quickEmojis, onReact, onLongPress }: FeedCa
           quickEmojis={quickEmojis}
           onPress={(emoji) => onReact(item, emoji)}
         />
+        {onOpenComments ? (
+          <Pressable
+            onPress={() => onOpenComments(item)}
+            style={({ pressed }) => [styles.commentBtn, pressed && styles.commentBtnPressed]}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel={item.commentCount ? `댓글 ${item.commentCount}개 보기` : '댓글 남기기'}
+          >
+            <MaterialCommunityIcons name="chat-outline" size={16} color={colors.textSecondary} />
+            <Text style={styles.commentBtnText}>
+              {item.commentCount ? `댓글 ${item.commentCount}` : '댓글 남기기'}
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
     </Pressable>
   );
+}
+
+/** 기록일이 올린 날(KST)과 다르면 "10월 1일의 일상", 같거나 모르면 null */
+function pastRecordDayLabel(item: FeedItem): string | null {
+  if (!item.recordDate) return null;
+  const uploaded = new Date(item.occurredAt);
+  if (Number.isNaN(uploaded.getTime()) || kstDateKey(uploaded) === item.recordDate) return null;
+  const [, m, d] = item.recordDate.split('-').map(Number);
+  return `${m}월 ${d}일의 일상`;
 }
 
 /**
@@ -216,10 +365,12 @@ function Reactions({
         return (
           <Pressable
             key={emoji}
-            style={({ pressed }) => [
+            style={(state) => [
               styles.chip,
               summary?.mine && styles.chipMine,
-              pressed && styles.chipPressed,
+              // 마우스에는 "누를 수 있다"는 신호가 커서 말고 없다 — 칩이 라벨처럼 읽힌다
+              isHovered(state) && !summary?.mine && styles.chipHovered,
+              state.pressed && styles.chipPressed,
             ]}
             onPress={() => onPress(emoji)}
             // 높이 30px — 칩 크기는 유지하고 터치 영역만 넓힌다
@@ -249,14 +400,47 @@ const styles = themedStyles((colors) => ({
     marginBottom: spacing.sm,
   },
   recordRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  recordIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  recordIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceAlt,
+  },
   recordBody: { flex: 1 },
-  recordTitle: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
+  recordTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  // flexShrink 가 있어야 긴 제목이 '함께' 배지를 행 밖으로 밀지 않고 자기가 줄어든다
+  recordTitle: { flexShrink: 1, fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
+  sharedBadge: {
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceAlt,
+    paddingHorizontal: spacing.xs + 2,
+    paddingVertical: 1,
+  },
+  sharedBadgeText: { fontSize: fontSize.micro, fontWeight: '800', color: colors.textSecondary },
   recordContent: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: 1 },
+  // 누를 수 있는 📍 줄 — 밑줄로만 표시한다(색은 그대로 — 정보 글자다)
+  recordContentLink: { textDecorationLine: 'underline' },
   recordMeta: { alignItems: 'flex-end' },
   recordWho: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary },
-  recordTime: { fontSize: 11, color: colors.textMuted, marginTop: 1 },
+  recordTime: { fontSize: fontSize.micro, color: colors.textMuted, marginTop: 1 },
   thumb: { width: 38, height: 38, borderRadius: radius.sm, backgroundColor: colors.surfaceAlt },
+
+  // 응원 버튼 — 본문 행 안에 들어가 카드를 세로로 키우지 않는다(위 RecordCard 주석 참고)
+  trigger: {
+    minWidth: layout.touchTarget,
+    height: layout.touchTarget,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.xs,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // 받은 응원이 있으면 배경을 깔아 "눌러서 볼 것"이 아니라 "이미 달린 것"으로 읽히게 한다
+  triggerFilled: { backgroundColor: colors.surfaceAlt },
+  triggerMine: { backgroundColor: colors.primary },
+  triggerEmoji: { fontSize: fontSize.body },
+  triggerCount: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '800' },
 
   // ---- 일상 포스트 ----
   post: {
@@ -283,9 +467,13 @@ const styles = themedStyles((colors) => ({
   postBodyOnPhoto: { padding: spacing.md },
 
   postHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  whoDot: { width: 7, height: 7, borderRadius: 4 },
   who: { flex: 1, fontSize: fontSize.caption, fontWeight: '800', color: colors.textSecondary },
   time: { fontSize: fontSize.caption, color: colors.textMuted },
+  // 지난 날짜로 남긴 일상의 기록일 — 올린 시각 줄 바로 아래, 본문보다 한 단계 옅게
+  commentBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, alignSelf: 'flex-start', marginTop: spacing.sm, minHeight: 32 },
+  commentBtnPressed: { opacity: 0.6 },
+  commentBtnText: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary },
+  pastDay: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary, marginTop: -spacing.xxs },
   content: { fontSize: fontSize.subtitle, color: colors.textPrimary, marginTop: spacing.xs, lineHeight: 24 },
 
   reactionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.sm },
@@ -303,9 +491,11 @@ const styles = themedStyles((colors) => ({
     minHeight: layout.touchTarget,
   },
   chipMine: { backgroundColor: colors.primary },
+  // 내가 이미 누른 칩은 primary 로 채워져 있어 hover 를 덧대면 오히려 흐려진다 — 비선택에만
+  chipHovered: { backgroundColor: colors.border },
   chipPressed: { opacity: 0.6 },
   chipEmoji: { fontSize: fontSize.body },
   chipCount: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '800' },
   // 내가 누른 칩은 배경이 colors.primary — 라이트/다크 모두 흰 글씨가 대비를 만족한다
-  chipCountMine: { color: colors.white },
+  chipCountMine: { color: colors.onPrimary },
 }));

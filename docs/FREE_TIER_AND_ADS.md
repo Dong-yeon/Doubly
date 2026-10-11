@@ -4,7 +4,33 @@
 한도 숫자의 **설계 의도**는 [PRO_PLAN_DESIGN.md](PRO_PLAN_DESIGN.md)에, 실제 판정값은
 `backend/src/main/java/com/fitto/common/plan/Feature.java` 한 곳에 있습니다.
 
-## 가장 중요한 전제 — Free 티어는 아직 꺼져 있습니다
+## ✅ Free 티어를 켰습니다 (2026-09-22)
+
+```yaml
+# backend/src/main/resources/application.yml
+free-trial: ${PLAN_FREE_TRIAL:false}   # 전원 PRO → 결제한 사람만 PRO
+trial-days: ${PLAN_TRIAL_DAYS:0}       # 가입하면 FREE 로 시작
+```
+
+**이제 `Feature.java` 의 FREE 한도가 실제로 강제됩니다.** 그 숫자들은 여전히 실사용 분포
+측정 전의 자리표시자지만, 재려면 먼저 무료 사용자가 존재해야 합니다 — 순서를 바꾼 것이
+이번 결정입니다. 되돌리는 비용은 환경변수 하나(`PLAN_FREE_TRIAL=true`)입니다.
+
+> 아래 "아직 꺼져 있습니다" 이후의 서술은 **전환 전 기준**으로 남겨 둡니다(왜 그렇게
+> 설계했는지가 지워지면 안 되므로). 지금 상태는 이 절이 기준입니다.
+
+### 기존 사용자도 FREE 입니다 — 2026-08-27 결정을 뒤집었습니다
+
+아래 §"전환 시 기존 사용자 처리"는 초기 가입자에게 **영구 PRO(얼리 커플 혜택)** 를 주기로
+한 결정이었습니다. 2026-09-22 에 "결제한 사람만 PRO, 나머지는 전원 FREE"로 방침이
+바뀌었으므로 **그 일회성 SQL 은 실행하지 않습니다.**
+
+바뀐 이유는 실사용 상황입니다 — 실제 사용자가 사실상 개발자 커플뿐이라 "지켜야 할 초기
+사용자"가 아직 없고, 오히려 **FREE 를 직접 겪어봐야** 한도 숫자와 잠금 화면을 고칠 수
+있습니다. 나중에 혜택을 주기로 다시 정하면 아래 SQL 을 그대로 쓰면 됩니다(`Store.MANUAL`
+경로는 그대로 살아 있습니다).
+
+## 전환 전 기준 — Free 티어는 아직 꺼져 있습니다 (2026-08-25 시점)
 
 ```yaml
 # backend/src/main/resources/application.yml:116
@@ -18,7 +44,7 @@ free-trial: ${PLAN_FREE_TRIAL:true}
 아무 효과가 없습니다.** 그리고 켜기 전에 한도 숫자부터 정해야 하는데, `Feature.java` 상단
 주석이 스스로 밝히듯 현재 값은 실사용 분포(p60~p75) 측정 전의 **자리표시자**입니다.
 
-## 전환 시 기존 사용자 처리 — 결정: 영구 PRO (2026-08-27)
+## 전환 시 기존 사용자 처리 — 결정: 영구 PRO (2026-08-27, **2026-09-22 에 보류**)
 
 `PLAN_FREE_TRIAL=false`로 끄는 순간, 그 이전에 가입해 무료 체험 기간 동안 PRO로 써온
 사용자들이 일제히 Free 한도에 부딪힙니다. **소급 Free 강등이 아니라 영구 PRO로
@@ -149,17 +175,30 @@ Railway psql 접속: Railway 대시보드 → Postgres 서비스 → `Connect` �
 
 ## 결제(IAP) 구조
 
-- **스토어 인앱결제** 방식(자체 결제 아님). 현재 실제 구현된 건 **Google Play뿐**입니다.
-  - `GooglePlayWebhookController` — Play RTDN(Pub/Sub) 수신, `GOOGLE_PLAY_WEBHOOK_TOKEN`으로 인증. 실제 상태 판정은 `GooglePlaySubscriptionSyncService`가 Play Developer API 재조회로 확정
-  - `POST /api/v1/plan/purchases/google` — 결제 직후 `purchaseToken` 즉시 동기화(웹훅 지연 대비)
-  - 서비스 계정 키 미설정 시 웹훅 전부 403 (기능 전체 비활성)
-- **App Store 쪽은 백엔드 대응 코드 없음** — `Store.APP_STORE` enum 값만 존재
-- 클라이언트: `frontend/src/utils/iap.ts` (`react-native-iap`). 서버 검증 성공 후에만
-  `finishTransaction` — 실패 시 트랜잭션을 유지해 재시도 가능하게 함
-- SKU: `PRO_SUBSCRIPTION_SKU = 'pro_monthly'` (스토어 미등록 상태)
+- **스토어 인앱결제** 방식(자체 결제 아님). **양쪽 스토어 모두 구현돼 있습니다.**
+  - Google: `GooglePlayWebhookController`(RTDN) + `POST /api/v1/plan/purchases/google`.
+    상태 판정은 알림 내용이 아니라 `GooglePlaySubscriptionSyncService` 의 Play Developer API 재조회로 확정
+  - Apple: `AppStoreNotificationController`(Server Notifications V2) + `POST /api/v1/plan/purchases/apple`.
+    앱은 **거래 id 하나만** 보내고 서버가 App Store Server API 로 되묻는다
+  - **키가 비어 있으면 기능 전체가 조용히 꺼진다** — 웹훅은 403, 동기화는 아무 일도 하지 않는다
+    (`GooglePlayProperties` / `AppStoreProperties` 의 `isConfigured()`)
+- 클라이언트: `frontend/src/utils/iap.ts` (`react-native-iap`). **응답의 플랜이 PRO 로 바뀐 것까지
+  확인한 뒤에만** `finishTransaction` — 200 은 "반영됐다"가 아니다(위 항목). 닫지 않은 트랜잭션은
+  다음 앱 실행의 `getAvailablePurchases()` 가 다시 처리한다
+- SKU: `PRO_SUBSCRIPTION_SKU = 'pro_monthly'` — **App Store 등록 완료, iOS 실결제 확인(2026-09-22)**.
+  Play Console 쪽 등록 상태는 별도 확인 필요
 - **커플당 결제 1건** — 한쪽만 결제해도 `PlanResolver`가 둘 다 PRO로 취급
 
+> ⚠️ **애플 결제가 실제로 반영되려면 Railway 에 네 개가 있어야 합니다** —
+> `APP_STORE_ISSUER_ID` · `APP_STORE_KEY_ID` · `APP_STORE_PRIVATE_KEY_BASE64` ·
+> `APP_STORE_BUNDLE_ID`. 하나라도 비면 `isConfigured()` 가 false 라 동기화가 조용히
+> 아무 일도 하지 않고, 증상은 **"결제는 됐는데 PRO 가 안 열림"** 하나뿐입니다.
+> 이 키는 앱 <b>제출</b>용(`eas.json` 의 `ascApiKeyPath`)과 다른 <b>인앱 구입</b> 키입니다.
+
 ## Play Console 출시 — 남은 작업
+
+> **2026-09-25 갱신본은 [PLAY_LAUNCH_AUDIT_2026-09-25.md](PLAY_LAUNCH_AUDIT_2026-09-25.md)** 다 — 아래 표는 8/18 시점이라
+> 개인정보 링크 항목은 낡았고(정적 페이지로 해결), OAuth 항목은 "앱에서 구글 로그인이 꺼져 있다"가 실체다.
 
 8/18 세션에서 대부분 진행했고, 아래가 미완입니다.
 

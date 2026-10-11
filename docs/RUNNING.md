@@ -89,6 +89,24 @@ docker rm -f doubly-pg
 > `build.gradle` 이 `-Dspring.*` 시스템 프로퍼티를 테스트 JVM 으로 넘겨주므로
 > 테스트 설정 파일을 고치지 않고도 데이터소스만 바꿔 끼울 수 있습니다.
 
+#### 로컬 Redis 가 떠 있으면 테스트가 무더기로 깨집니다
+
+테스트 프로파일은 Redis 없이 돌도록 되어 있고(`AuthRateLimiter` 는 Redis 장애 시
+fail-open), CI 에도 Redis 가 없습니다. 그런데 **로컬 개발용 Redis(6379)가 떠 있으면**
+레이트리밋이 진짜로 동작합니다 — 테스트는 `127.0.0.1` 에서 사용자를 계속 만들어대므로
+가입 한도(IP 당 시간당 10회)를 금방 넘기고, 그 시점부터 모든 테스트가
+`요청이 너무 많습니다` 로 깨집니다. 카운터는 **1시간짜리**라 다시 돌려도 계속 빨갛습니다.
+
+닿지 않는 포트를 주면 CI 와 같은 조건(fail-open)이 됩니다.
+
+```bash
+./gradlew test -Dspring.data.redis.port=6399
+```
+
+> 로컬 스택을 끄고 싶지 않을 때 쓰는 방법입니다. 이미 갇혔다면
+> `docker exec fitto-redis redis-cli DEL rl:register:127.0.0.1` 로 풀 수도 있지만,
+> 한 번 더 돌리면 다시 걸립니다.
+
 ### 빠른 스모크 테스트 (선택)
 
 ```bash

@@ -57,7 +57,30 @@ public class KakaoLocalClient {
      * PlaceService.save() 가 이 값으로 중복 등록을 막는 데 쓴다.
      */
     public record KakaoPlace(String id, String name, String address, String category,
-                             Double lat, Double lng, String placeUrl) {
+                             Double lat, Double lng, String placeUrl,
+                             /** 무엇을 파는 곳인지 — category_name 의 마지막 1~2단계("한식 · 냉면"). 없으면 null */
+                             String categoryDetail,
+                             /** 전화번호 — 없으면 null */
+                             String phone) {
+        /** 세부 분류·전화가 생기기 전의 호출부(테스트 등) 호환용 */
+        public KakaoPlace(String id, String name, String address, String category,
+                          Double lat, Double lng, String placeUrl) {
+            this(id, name, address, category, lat, lng, placeUrl, null, null);
+        }
+    }
+
+    /**
+     * 카카오 category_name → 세부 분류. "음식점 > 한식 > 냉면" 의 첫 단계(대분류 — 7종 카테고리가 이미 말한다)를 떼고
+     * 마지막 1~2단계만 " · " 로 잇는다: "한식 · 냉면". 단계가 하나뿐이면 그것만, 대분류뿐이면 null.
+     * 50자를 넘으면 자른다(places.category_detail varchar(50)).
+     */
+    static String categoryDetailOf(String categoryName) {
+        if (categoryName == null || categoryName.isBlank()) return null;
+        String[] parts = java.util.Arrays.stream(categoryName.split(">"))
+                .map(String::trim).filter(s -> !s.isEmpty()).toArray(String[]::new);
+        if (parts.length < 2) return null;
+        String detail = parts.length == 2 ? parts[1] : parts[parts.length - 2] + " · " + parts[parts.length - 1];
+        return detail.length() > 50 ? detail.substring(0, 50) : detail;
     }
 
     public List<KakaoPlace> searchKeyword(String query, int size) {
@@ -102,13 +125,22 @@ public class KakaoLocalClient {
                 mapCategory(doc.path("category_group_code").asText(null), doc.path("category_name").asText("")),
                 parseCoord(doc.path("y").asText(null)),  // 카카오는 y=위도, x=경도
                 parseCoord(doc.path("x").asText(null)),
-                doc.path("place_url").asText(null));
+                doc.path("place_url").asText(null),
+                categoryDetailOf(doc.path("category_name").asText("")),
+                blankToNull(doc.path("phone").asText("")));
+    }
+
+    private static String blankToNull(String s) {
+        if (s == null || s.isBlank()) return null;
+        String t = s.trim();
+        return t.length() > 30 ? t.substring(0, 30) : t;
     }
 
     /**
-     * 카카오 category_group_code → 앱 카테고리. 프론트 constants/placeCategories.ts 의
-     * KAKAO_CATEGORY_AUTO(지도 SDK 검색용)와 반드시 같은 값을 써야 한다 — 둘 다
-     * PLACE_CATEGORIES(7개, docs/LOVELICHELIN_IA_SIMPLIFICATION.md) 밖의 값을 내보내면
+     * 카카오 category_group_code → 앱 카테고리. <b>매핑은 여기 한 곳뿐이다</b> — 프론트에 있던
+     * 같은 표(KAKAO_CATEGORY_AUTO, 지도 SDK 검색용)는 장소 검색을 이 서버 경로로 모으면서 지웠다
+     * (docs/LOVELICHELIN_CHAT_LINK_2026-10-02.md). 값은 프론트 constants/placeCategories.ts 의
+     * PLACE_CATEGORIES(7개, docs/LOVELICHELIN_IA_SIMPLIFICATION.md) 안에 있어야 한다 — 밖의 값을 내보내면
      * 그 장소가 목록의 특정 카테고리 칩에서 안 보이고 "전체"에만 뜬다(2026-08-31에
      * 실제로 이 매핑이 없어서 생긴 문제 — 텍스트(category_name)로 대충 추측하던 예전
      * 방식은 카카오의 2차 분류 문구가 그대로 나와 7개 중 어디에도 안 맞을 수 있었다).

@@ -139,6 +139,8 @@ public class FoodAnalysisService {
     static final String PLACE_HINT_HEADER = "[참고 정보 — 사진과 맞지 않으면 무시]";
     static final int MAX_PLACE_NAME_LENGTH = 50;
     static final int MAX_CATEGORY_LENGTH = 30;
+    /** 세부 분류(V130, 예: "한식 · 김치찌개") — 저장 컬럼 길이와 같다 */
+    static final int MAX_CATEGORY_DETAIL_LENGTH = 50;
     static final int MAX_MENU_LENGTH = 30;
 
     /** 줄바꿈(\n·\r·U+2028/2029 포함)과 제어문자 — 사용자가 입력한 가게 이름·메뉴가 프롬프트의 줄 구조를 깨지 못하게 지운다. */
@@ -162,7 +164,20 @@ public class FoodAnalysisService {
     public MealAnalysisResponse analyze(Long userId, String photoUrl, Long placeId) {
         geminiClient.requireConfiguredAndCountUsage(userId, Feature.AI_FOOD_PHOTO);
 
-        CloudinaryImageFetcher.Image image = imageFetcher.fetch(photoUrl);
+        /*
+         * 사진을 못 받으면 한도를 돌려준다(LOVEBODY_REVIEW_2026-10-02 §3 A-5). Gemini 실패는 GeminiClient 가
+         * 환불하지만, 다운로드(INVALID_PHOTO_URL·PHOTO_DOWNLOAD_FAILED·PHOTO_TOO_LARGE)는 그 try 밖이라
+         * 한 번도 분석하지 못하고 한도만 깎였다. 차감을 다운로드 뒤로 미루지 않은 이유: 한도가 찬 사용자의
+         * 요청까지 최대 10MB 를 받게 된다 — "비싼 준비 전에 막는다"(GeminiClient.generateJson 주석).
+         * 사진 자동 분석(MealPhotoAutoAnalysisService)도 이 메서드를 타므로 함께 고쳐진다.
+         */
+        CloudinaryImageFetcher.Image image;
+        try {
+            image = imageFetcher.fetch(photoUrl);
+        } catch (RuntimeException e) {
+            geminiClient.refund(userId, Feature.AI_FOOD_PHOTO);
+            throw e;
+        }
         JsonNode result = geminiClient.generateJsonInBackground(userId, Feature.AI_FOOD_PHOTO,
                 List.of(GeminiClient.imagePart(image.mimeType(), image.bytes()),
                         GeminiClient.textPart(buildPhotoPrompt(userId, placeId))),
@@ -202,7 +217,11 @@ public class FoodAnalysisService {
             return null;
         }
         String name = sanitizeForPrompt(hint.name(), MAX_PLACE_NAME_LENGTH);
-        String category = sanitizeForPrompt(hint.category(), MAX_CATEGORY_LENGTH);
+        String category = String.join(" · ", java.util.stream.Stream.of(
+                        sanitizeForPrompt(hint.category(), MAX_CATEGORY_LENGTH),
+                        sanitizeForPrompt(hint.categoryDetail(), MAX_CATEGORY_DETAIL_LENGTH))
+                .filter(s -> !s.isEmpty())
+                .toList());
         List<String> menus = hint.menus() == null ? List.of() : hint.menus().stream()
                 .map(m -> sanitizeForPrompt(m, MAX_MENU_LENGTH))
                 .filter(m -> !m.isEmpty())

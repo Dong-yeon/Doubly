@@ -49,7 +49,7 @@
 | 층 | 변경 | 커밋 |
 | --- | --- | --- |
 | 백엔드 | `MealService.save` 가 `ChatService.postMealCard(내용, 사진, mealId)` 로 `MEAL_CARD` 자동 insert. **카드에 수치가 없다** — 사진·끼니·음식명만("점심 · 파스타, 샐러드"). 단백질 목표 달성은 `🎯 단백질 목표 달성!` 배지 문구만, g 은 뺀다. 데이트 식단은 두 기록이 생겨도 카드는 기록한 쪽 명의 한 장("점심 (데이트) · 피자"). `copyFrom`(어제 복사)·`update` 는 카드 없음 | `c0b81c7` |
-| 백엔드 | **V90** `chat_messages.meal_id` (FK → meals) — 운동의 `workout_id` 와 같은 역할. 기록 삭제 시 `detachMealCards` 로 FK 를 끊고 삭제 표시(데이트 짝은 어느 쪽이 지워도 함께) | 〃 |
+| 백엔드 | **V135**(원래 V90, origin/main 병합 때 재번호) `chat_messages.meal_id` (FK → meals) — 운동의 `workout_id` 와 같은 역할. 기록 삭제 시 `detachMealCards` 로 FK 를 끊고 삭제 표시(데이트 짝은 어느 쪽이 지워도 함께) | 〃 |
 | 프론트 | `DietRecordScreen` 확인창 + 소켓 발행 제거, 토스트에 "채팅에 공유했어요" | `3e7ce40` |
 | 계측 | `DIET_VIEWED` | `6da94ed` |
 

@@ -54,13 +54,17 @@ public class PlaceVisit {
     @Column(name = "meal_id")
     private Long mealId;
 
+    /** 외식 기록 멱등키(V129) — POST /places/meal-visits 재전송이 방문을 두 번 만들지 않게. 옛 경로는 null */
+    @Column(name = "client_request_id", length = 64)
+    private String clientRequestId;
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
     @Builder
     private PlaceVisit(Long placeId, Long visitedBy, LocalDate visitedAt,
-                       Integer rating, String memo, String imageUrl, Long mealId) {
+                       Integer rating, String memo, String imageUrl, Long mealId, String clientRequestId) {
         this.placeId = placeId;
         this.visitedBy = visitedBy;
         this.visitedAt = visitedAt != null ? visitedAt : KstClock.today();
@@ -68,5 +72,6 @@ public class PlaceVisit {
         this.memo = memo;
         this.imageUrl = imageUrl;
         this.mealId = mealId;
+        this.clientRequestId = clientRequestId;
     }
 }

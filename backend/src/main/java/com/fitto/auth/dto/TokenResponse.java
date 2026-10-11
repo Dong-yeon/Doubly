@@ -4,6 +4,11 @@ package com.fitto.auth.dto;
 public record TokenResponse(
         String accessToken,
         String refreshToken,
-        UserResponse user
+        UserResponse user,
+        /** 탈퇴 유예기간 중 로그인해 탈퇴가 취소됐으면 true — 앱이 취소 사실을 알린다 */
+        boolean withdrawalCanceled
 ) {
+    public TokenResponse withWithdrawalCanceled() {
+        return new TokenResponse(accessToken, refreshToken, user, true);
+    }
 }

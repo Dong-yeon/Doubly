@@ -23,6 +23,8 @@ import { Linking, Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import type { LinkingOptions } from '@react-navigation/native';
 import type { RootStackParamList } from './types';
+import { WORKOUT_HOME_ENABLED } from '../constants/config';
+import { inviteCodeFromUrl, savePendingInvite } from '../utils/pendingInvite';
 
 export const PREFIX = 'doubly://';
 
@@ -38,8 +40,34 @@ function linkFrom(notification: Notifications.Notification | undefined | null): 
   return typeof link === 'string' ? PREFIX + link : null;
 }
 
+/**
+ * 초대 링크는 내비게이션에 넘기지 않고 맡겨 둔다 — 로그인 전이면 연결 화면이 없어 버려지기 때문이다.
+ * 로그인이 끝나면 RootNavigator 가 꺼내 연결 화면을 연다(utils/pendingInvite). 초대 링크였으면 true.
+ */
+function holdIfInvite(url: string | null | undefined): boolean {
+  const code = inviteCodeFromUrl(url);
+  if (!code) return false;
+  void savePendingInvite(code);
+  return true;
+}
+
+/*
+ * 첫 화면 링크는 <b>앱 실행당 한 번만</b> 쓴다(네이티브).
+ *
+ * RootNavigator 는 테마·포인트 색을 바꾸면 NavigationContainer 를 key 로 다시 마운트하고 직전 상태를
+ * initialState 로 되돌린다. 그런데 다시 마운트될 때도 react-navigation 이 getInitialURL 을 다시 묻고, 아래
+ * 구현은 <b>마지막으로 탭한 알림</b>(getLastNotificationResponseAsync — 실행 내내 남는다)을 돌려준다. 링크가
+ * initialState 를 이기므로 설정에서 색을 바꾸면 예전에 눌렀던 채팅 알림의 방으로 튕겼다(2026-10-06).
+ * 콜드 스타트 링크는 처음 마운트에서 이미 처리됐으니 두 번째부터는 null 을 돌려 initialState 가 쓰이게 한다.
+ *
+ * 웹은 건드리지 않는다 — 기본 구현이 지금 주소(window.location)를 읽어 다시 마운트돼도 같은 화면이다.
+ */
+let initialUrlConsumed = false;
+
 export const linking: LinkingOptions<RootStackParamList> = {
-  prefixes: [PREFIX],
+  // 소개 사이트의 초대 링크(/i/CODE)는 1.0.7 부터 App Links·Universal Links 로 앱에 바로 들어온다 — holdIfInvite 가 받는다.
+  // 앱이 가로채는 경로는 /i/ 뿐이다(app.json intentFilters·landing/.well-known).
+  prefixes: [PREFIX, 'https://dubly.co.kr', 'https://www.dubly.co.kr'],
 
   /*
    * 알림을 탭해서 앱이 <b>처음 뜨는</b> 경우 — 콜드 스타트에는 아래 subscribe 리스너가
@@ -50,6 +78,10 @@ export const linking: LinkingOptions<RootStackParamList> = {
    * 브라우저 히스토리 연동(위 주석)을 만드는데, 여기서 가로채면 그게 깨진다.
    */
   async getInitialURL() {
+    if (Platform.OS !== 'web') {
+      if (initialUrlConsumed) return null;
+      initialUrlConsumed = true;
+    }
     /*
      * 150ms 레이스는 react-navigation 기본 구현을 그대로 옮긴 것이다 — Android 에서
      * Linking.getInitialURL() 이 영영 resolve 되지 않는 경우가 있어(RN #25675), 이걸
@@ -59,7 +91,7 @@ export const linking: LinkingOptions<RootStackParamList> = {
       Linking.getInitialURL(),
       new Promise<undefined>((resolve) => setTimeout(resolve, 150)),
     ]);
-    if (url != null) return url;
+    if (url != null) return holdIfInvite(url) ? null : url;
     if (Platform.OS === 'web') return null;
     try {
       return linkFrom((await Notifications.getLastNotificationResponseAsync())?.notification);
@@ -71,7 +103,9 @@ export const linking: LinkingOptions<RootStackParamList> = {
 
   /* 앱이 떠 있는 동안(백그라운드 포함) 알림을 탭한 경우. */
   subscribe(listener) {
-    const urlSub = Linking.addEventListener('url', ({ url }) => listener(url));
+    const urlSub = Linking.addEventListener('url', ({ url }) => {
+      if (!holdIfInvite(url)) listener(url);
+    });
     if (Platform.OS === 'web') {
       return () => urlSub.remove();
     }
@@ -127,16 +161,21 @@ export const linking: LinkingOptions<RootStackParamList> = {
             initialRouteName: 'HomeMain',
             screens: {
               HomeMain: '',
-              CoupleConnect: 'couple/connect',
-              FeedTimeline: 'feed',
+              // 푸시 data.link = PushLinks.JOURNAL — 하루 기록 리마인드가 연다. 목록 화면이라 URL 에 본문이 실리지 않는다
+              Journal: 'me/journal',
+              // 코드는 초대 링크(utils/pendingInvite)가 채운다 — 웹 새로고침에도 남게 경로에 둔다
+              CoupleConnect: 'couple/connect/:code?',
               FeedCompose: 'feed/new',
+              MoodCalendar: 'mood/calendar',
               DailyQuestion: 'question',
               MiniGames: 'games',
               // 푸시 data.link = PushLinks.GAME_SUDOKU / GAME_OMOK
               Sudoku: 'game/sudoku',
               Omok: 'game/omok',
+              CatchMind: 'game/catch-mind',
+              Puyo: 'game/puzzle',
+              WallRace: 'game/wall-race',
               CoupleCalendar: 'calendar',
-              PhotoAlbum: 'album',
               My: 'my',
               Settings: 'settings',
               ChangePassword: 'settings/password',
@@ -193,10 +232,75 @@ export const linking: LinkingOptions<RootStackParamList> = {
               PlaceAdd: 'trips/place/edit',
             },
           },
-          Workout: {
-            initialRouteName: 'WorkoutMain',
+          /*
+           * "우리" 탭 — 홈 스택에 있던 feed·album 경로를 그대로 물려받는다.
+           * 문자열을 유지하는 이유는 배포된 딥링크·푸시 링크(PushLinks)가 계속 열려야 하기
+           * 때문이다(럽바디 블록과 같은 규칙).
+           *
+           * <b>FeedCompose·TripAlbum 은 홈 블록에도 있어 경로를 나눈다.</b> 같은 경로를 두
+           * 블록에 쓰면 새로고침 때 어느 탭으로 복원될지 모호해진다(Home 블록 PlaceDetail 주석).
+           */
+          Album: {
+            initialRouteName: 'AlbumMain',
             screens: {
-              WorkoutMain: 'workout',
+              AlbumMain: 'album',
+              FeedTimeline: 'feed',
+              FeedCompose: 'album/new',
+              Memories: 'memories',
+              TripAlbum: {
+                path: 'album/trips/:tripId',
+                parse: { tripId: Number },
+              },
+              // 사진첩의 "장소 보기" — 경로를 album/ 아래로 나누는 이유는 Home 블록 PlaceDetail 주석과 같다
+              PlaceDetail: {
+                path: 'album/place/:placeId',
+                parse: { placeId: Number },
+              },
+              PlaceAdd: 'album/place/edit',
+            },
+          },
+          Chat: {
+            initialRouteName: 'ChatRooms',
+            screens: {
+              ChatRooms: 'chat',
+              ChatRoom: {
+                path: 'chat/:relationId',
+                parse: { relationId: Number },
+              },
+            },
+          },
+          /*
+           * 럽바디(식단 + 운동) — 두 탭이 하나로 합쳐졌지만 <b>경로 문자열은 그대로 둔다</b>:
+           * 이미 배포된 딥링크·브라우저 북마크(doubly://workout/*, doubly://diet/*)와
+           * 서버가 푸시에 싣는 경로(PushLinks)가 계속 열려야 한다.
+           *
+           * initialRouteName 은 탭의 첫 화면인 `DietMain` 이다 — workout/session 같은
+           * 깊은 링크로 들어와도 그 아래에 럽바디 메인이 깔려서 뒤로가기가 탭 밖으로
+           * 튕기지 않는다(ActiveWorkoutBar 의 initial:false 와 같은 이유).
+           */
+          Health: {
+            initialRouteName: 'DietMain',
+            screens: {
+              /*
+               * 운동 홈을 가린 동안(config.ts WORKOUT_HOME_ENABLED)은 'workout' 푸시(스트릭·재참여 알림)를
+               * 럽바디 메인이 받는다 — 체크인 카드가 거기 있다. 켜면 아래 WorkoutMain 이 다시 받는다.
+               * 음성 응원 녹음 화면('workout/voice-clips')도 입구가 운동 홈에만 있어 같이 닫는다 —
+               * 1.0.4 사용자의 옛 푸시·알림함 링크가 여기로 오므로 경로를 지우지 않고 메인으로 돌린다.
+               */
+              DietMain: WORKOUT_HOME_ENABLED
+                ? 'diet'
+                : { path: 'diet', alias: ['workout', 'workout/voice-clips'] },
+              DietRecord: 'diet/record',
+              DietCalendar: 'diet/calendar',
+              DietStats: 'diet/stats',
+              // 식단 기록에서 연 장소 화면 — 럽슐랭 탭에도 같은 화면이 있지만 경로는 나눈다
+              // (같은 'place/:placeId' 를 여러 블록에 쓰면 새로고침 때 어느 탭으로 복원될지
+              // 모호해진다 — Home 블록의 PlaceDetail 주석과 같은 이유).
+              PlaceDetail: {
+                path: 'diet/place/:placeId',
+                parse: { placeId: Number },
+              },
+              ...(WORKOUT_HOME_ENABLED ? { WorkoutMain: 'workout' } : {}),
               WorkoutRecord: 'workout/record',
               WorkoutCalendar: 'workout/calendar',
               WorkoutDetail: {
@@ -214,33 +318,7 @@ export const linking: LinkingOptions<RootStackParamList> = {
               WorkoutRoutineForm: 'workout/routines/new',
               BodyMetric: 'workout/body',
               Challenge: 'workout/challenge',
-              VoiceClips: 'workout/voice-clips',
-            },
-          },
-          Chat: {
-            initialRouteName: 'ChatRooms',
-            screens: {
-              ChatRooms: 'chat',
-              ChatRoom: {
-                path: 'chat/:relationId',
-                parse: { relationId: Number },
-              },
-            },
-          },
-          Diet: {
-            initialRouteName: 'DietMain',
-            screens: {
-              DietMain: 'diet',
-              DietRecord: 'diet/record',
-              DietCalendar: 'diet/calendar',
-              DietStats: 'diet/stats',
-              // 식단 기록에서 연 장소 화면 — 럽슐랭 탭에도 같은 화면이 있지만 경로는 나눈다
-              // (같은 'place/:placeId' 를 여러 블록에 쓰면 새로고침 때 어느 탭으로 복원될지
-              // 모호해진다 — Home 블록의 PlaceDetail 주석과 같은 이유).
-              PlaceDetail: {
-                path: 'diet/place/:placeId',
-                parse: { placeId: Number },
-              },
+              ...(WORKOUT_HOME_ENABLED ? { VoiceClips: 'workout/voice-clips' } : {}),
             },
           },
           Place: {

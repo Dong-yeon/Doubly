@@ -1,5 +1,6 @@
 /** 날짜 유틸 */
 import type { WeekDay } from '../types';
+import { daysSinceKst, kstDateKey } from './anniversary';
 
 /** YYYY-MM-DD (로컬 기준) */
 export function toDateString(date: Date = new Date()): string {
@@ -7,6 +8,23 @@ export function toDateString(date: Date = new Date()): string {
   const m = String(date.getMonth() + 1).padStart(2, '0');
   const d = String(date.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
+}
+
+/**
+ * 오늘(KST) 'YYYY-MM-DD' — 서버가 "오늘"을 판단하는 기준(KstClock.today())과 같은 날.
+ *
+ * <p>서버로 보내는 기록 날짜는 이걸 쓴다. {@link toDateString} 은 기기 현지 날짜라 해외에 있거나
+ * 기기 시간대가 다르면 서버와 하루 어긋난다 — 앞서가면 "미래 날짜"로 거절되고, 뒤처지면 오늘 기록이
+ * 어제로 들어가 오늘 목록에서 빠진다(docs/lovebody-current-state.md §4-2).
+ */
+export function todayKst(): string {
+  return kstDateKey(new Date());
+}
+
+/** 어제(KST) 'YYYY-MM-DD' — 서버의 "어제 식단 불러오기" 기본값(KstClock.today().minusDays(1))과 같은 날 */
+export function yesterdayKst(): string {
+  // KST 는 서머타임이 없어 하루가 늘 24시간이다
+  return kstDateKey(new Date(Date.now() - 86400000));
 }
 
 /** 'YYYY-MM-DD' → Date (로컬 자정). 형식이 틀리거나 없는 날짜면 null */
@@ -66,6 +84,13 @@ export function formatDateCompact(value: string | null | undefined): string {
   return `${d.getFullYear()}.${m}.${day} (${WEEKDAY_NAMES[d.getDay()]})`;
 }
 
+/** 'YYYY-MM-DD' → 'M월 D일' — 달력 날짜 그대로(시간대 변환 없음). 형식이 아니면 원문. */
+export function formatMonthDay(value: string | null | undefined): string {
+  const d = parseDateString(value);
+  if (!d) return value ?? '';
+  return `${d.getMonth() + 1}월 ${d.getDate()}일`;
+}
+
 /** 'YYYY-MM-DD' → 오늘/어제/그제/N일 전, 7일 이상은 'M월 D일' */
 export function relativeDateLabel(dateStr: string): string {
   const today = new Date();
@@ -81,6 +106,39 @@ export function relativeDateLabel(dateStr: string): string {
 }
 
 /**
+ * 서버 타임스탬프(UTC + 'Z') → <b>기기 로컬</b> 'YYYY-MM-DD'.
+ *
+ * <p><b>{@code iso.slice(0, 10)} 을 쓰면 안 된다.</b> 백엔드는 모든 {@code LocalDateTime} 을
+ * {@code Z} 를 붙여 UTC 인스턴트로 내보낸다(JacksonConfig). 그래서 앞 10자는 <b>UTC 날짜</b>이고,
+ * KST 00:00~09:00 에 남긴 기록은 <b>전날로 표시된다</b> — 새벽에 올린 사진이 어제 날짜로 묶인다.
+ *
+ * <p>{@code new Date(iso)} 로 파싱하면 기기가 로컬로 변환해준다({@link isSameLocalDay} ·
+ * {@code FeedTimelineScreen.feedTimeLabel} 과 같은 규칙). 날짜만 필요한 자리는 이 함수를 쓴다.
+ *
+ * <p>파싱에 실패하면 앞 10자를 그대로 돌려준다.
+ *
+ * <p>{@code LocalDate}('YYYY-MM-DD')처럼 시각이 없는 값은 이미 날짜라 <b>그대로</b> 돌려준다 —
+ * {@code new Date('2026-09-12')} 는 UTC 자정으로 파싱돼 UTC 서쪽 기기에서는 하루 밀리기 때문이다.
+ * 날짜만 담은 필드(mealDate·workoutDate 등)는 애초에 이 함수가 필요 없다 — 이 함수는
+ * <b>시각까지 담긴 타임스탬프</b>용이다.
+ */
+export function localDateOf(iso: string | null | undefined): string {
+  if (!iso) return '';
+  if (!iso.includes('T')) return iso.slice(0, 10);
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso.slice(0, 10) : toDateString(d);
+}
+
+/**
+ * 서버 타임스탬프 → '오늘/어제/…' 라벨. {@link localDateOf} + {@link relativeDateLabel} 이다.
+ * 앨범·기록 목록이 {@code relativeDateLabel(iso.slice(0, 10))} 으로 쓰던 자리를 대신한다.
+ */
+export function relativeTimestampLabel(iso: string | null | undefined): string {
+  const date = localDateOf(iso);
+  return date ? relativeDateLabel(date) : '';
+}
+
+/**
  * 두 ISO 타임스탬프가 로컬 기준 같은 날짜인지 — 채팅 날짜 구분선/메시지 그룹핑에 쓴다.
  * `new Date(iso)` 의 getFullYear/getMonth/getDate 는 이미 로컬 기준이라(UTC 메서드가
  * 아님) 별도 타임존 보정이 필요 없다 — V27 "오늘 판정 UTC/KST 버그" 와 같은 함정을
@@ -91,38 +149,20 @@ export function isSameLocalDay(isoA: string, isoB: string): boolean {
 }
 
 /**
- * 서버 타임스탬프(ISO, `…Z`) → 기기 로컬 'YYYY-MM-DD'.
+ * 커플 D-day — 사귄 날이 1일이다(홈 "D+n"·안드로이드 위젯).
  *
- * <p>서버는 LocalDateTime 을 UTC 인스턴트(`2026-09-12T23:30:00.000000Z`)로 내보낸다
- * (JacksonConfig). 이 문자열을 `slice(0, 10)` 하면 <b>UTC 날짜</b>가 나와 KST 00~09시
- * 기록이 전날로 묶인다 — 사진첩·여행 앨범·게임 기록·럽슐랭 등극일이 그렇게 어긋나
- * 있었다(docs/FEATURE_DUPLICATION_AUDIT_2026-09-13.md §1-C). 날짜만 필요한 자리는 slice
- * 대신 반드시 이걸 거친다. LocalDate('2026-09-12')처럼 시각이 없는 값은 이미 날짜라
- * 그대로 돌려준다(`new Date('2026-09-12')` 는 UTC 자정으로 파싱돼 오히려 하루 밀린다).
- */
-export function localDateOf(iso: string): string {
-  if (!iso.includes('T')) return iso.slice(0, 10);
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso.slice(0, 10) : toDateString(d);
-}
-
-/**
- * D+ 일수 — 시작일을 1일차로 센다 (홈 D+ 히어로 · 홈 위젯 공용).
+ * <p><b>오늘은 KST 로 센다</b>(2026-09-28). 예전에는 기기 현지 자정으로 셌는데, 그러면 해외에 있거나 기기 시간대가
+ * 다르면 D-day 가 하루 어긋났고, 스티커 패널의 기념일 칸(KST)과 다른 날을 가리켰다. 셈은 `utils/anniversary.ts`
+ * 의 {@link daysSinceKst} 하나다 — 기념일 칸과 같은 함수라 어긋날 수 없다.
  *
- * `new Date('2026-08-21')` 은 <b>UTC 자정</b>으로 파싱돼 KST 로는 09:00 이 된다 —
- * 그대로 오늘과 빼면 KST 00:00~09:00 사이에는 D+ 가 하루 적게 나온다(백엔드 KstClock
- * 도입 사유였던 "UTC 서버에서 00~09시에 어제로 판정"과 같은 함정, V27 참고). 그래서
- * {@link localDateOf} 로 로컬 날짜부를 얻어 {@link parseDateString} 으로 로컬 자정을
- * 만들고, 오늘도 로컬 자정으로 맞춰 뺀다. 예전엔 "앞 10자는 날짜이므로 안전"이라며
- * 그냥 잘랐는데, LocalDateTime(`connectedAt`, 기념일 미설정 커플의 폴백)은 UTC 라
- * 00~09시에 연결한 커플의 D+ 가 하루 적었다.
+ * <p>`new Date('2026-08-21')` 은 UTC 자정으로 파싱돼 KST 로는 09:00 이 된다 — 그대로 빼면 KST 00~09시에 하루
+ * 적게 나온다(백엔드 KstClock 도입 사유와 같은 함정, V27 참고). 그래서 날짜부만 떼어 <b>연·월·일끼리</b> 뺀다.
+ * 단 시각이 붙은 값(LocalDateTime `connectedAt` — 기념일 미설정 커플의 폴백)은 UTC 인스턴트라 앞 10자가
+ * UTC 날짜다 — KST 00~09시에 연결한 커플이 전날로 잡히지 않게 <b>KST 날짜로 바꾼 뒤</b> 센다.
  */
 export function daysSince(baseDate: string | null | undefined): number {
-  const start = parseDateString(baseDate ? localDateOf(baseDate) : undefined);
-  if (!start) return 0;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return Math.max(1, Math.round((today.getTime() - start.getTime()) / 86400000) + 1);
+  const base = baseDate && baseDate.includes('T') ? kstDateKey(new Date(baseDate)) : baseDate;
+  return daysSinceKst(base, new Date());
 }
 
 /**

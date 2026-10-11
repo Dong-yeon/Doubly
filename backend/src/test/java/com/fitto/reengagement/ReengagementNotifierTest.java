@@ -118,7 +118,7 @@ class ReengagementNotifierTest {
     @Test
     void 상대가_답한_질문에_아직_답하지_않았으면_알린다() {
         long[] c = couple("re-q-a@fitto.com", "re-q-b@fitto.com");
-        dailyQuestionService.answer(c[0], new AnswerRequest("나는 답했어"));
+        dailyQuestionService.answer(c[0], new AnswerRequest("나는 답했어", null));
         clearInvocations(notificationService);
 
         notifier.remind(LocalDate.now(), LocalDateTime.now());
@@ -179,7 +179,7 @@ class ReengagementNotifierTest {
         for (int i = 3; i >= 1; i--) {
             workoutOn(c[0], today.minusDays(i));       // 스트릭 위기
         }
-        dailyQuestionService.answer(c[1], new AnswerRequest("나는 답했어"));  // 질문 미답변도 해당
+        dailyQuestionService.answer(c[1], new AnswerRequest("나는 답했어", null));  // 질문 미답변도 해당
         clearInvocations(notificationService);
 
         notifier.remind(today, LocalDateTime.now());

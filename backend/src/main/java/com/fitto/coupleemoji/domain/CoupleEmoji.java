@@ -77,6 +77,10 @@ public class CoupleEmoji {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    /** 배경을 따냈나(V109) — null 이면 아직 안 해 봤다(백필 대상), false 면 원본을 그대로 둔다 */
+    @Column(name = "bg_removed")
+    private Boolean bgRemoved;
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -84,7 +88,7 @@ public class CoupleEmoji {
     @Builder
     private CoupleEmoji(Long relationId, Long createdBy, Long subjectUserId, String batchId,
                         CoupleEmojiEmotion emotion, String imageUrl, String promptVersion,
-                        String identityFacts) {
+                        String identityFacts, Boolean bgRemoved) {
         this.relationId = relationId;
         this.createdBy = createdBy;
         this.subjectUserId = subjectUserId;
@@ -94,6 +98,18 @@ public class CoupleEmoji {
         this.promptVersion = promptVersion;
         this.identityFacts = identityFacts;
         this.moodVisible = emotion != null && emotion.defaultMoodVisible();
+        this.bgRemoved = bgRemoved;
+    }
+
+    /** 배경을 따낸 이미지로 바꾼다(백필) */
+    public void replaceWithCutout(String cutoutUrl) {
+        this.imageUrl = cutoutUrl;
+        this.bgRemoved = true;
+    }
+
+    /** 따내기를 포기했다 — 원본을 그대로 쓰고 다시 시도하지 않는다 */
+    public void keepOriginal() {
+        this.bgRemoved = false;
     }
 
     public boolean isDeleted() {

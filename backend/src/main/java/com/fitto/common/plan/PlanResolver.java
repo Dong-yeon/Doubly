@@ -6,6 +6,7 @@ import com.fitto.relation.domain.RelationStatus;
 import com.fitto.relation.domain.RelationType;
 import com.fitto.relation.repository.RelationMemberRepository;
 import com.fitto.relation.repository.RelationRepository;
+import com.fitto.user.repository.UserRepository;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,20 +31,46 @@ public class PlanResolver {
     private final SubscriptionRepository subscriptionRepository;
     private final RelationRepository relationRepository;
     private final RelationMemberRepository relationMemberRepository;
+    private final UserRepository userRepository;
 
     public PlanResolver(PlanProperties properties,
                         SubscriptionRepository subscriptionRepository,
                         RelationRepository relationRepository,
-                        RelationMemberRepository relationMemberRepository) {
+                        RelationMemberRepository relationMemberRepository,
+                        UserRepository userRepository) {
         this.properties = properties;
         this.subscriptionRepository = subscriptionRepository;
         this.relationRepository = relationRepository;
         this.relationMemberRepository = relationMemberRepository;
+        this.userRepository = userRepository;
     }
 
-    /** 무료 체험 기간인가 — 앱의 "체험 중" 배지 표시에 쓴다. */
+    /** 전역 무료 체험 플래그 — 켜져 있으면 <b>전원</b>이 PRO 다(출시 초기). */
     public boolean isFreeTrial() {
         return properties.isFreeTrial();
+    }
+
+    /**
+     * 이 사람이 지금 체험 중인가 — 앱의 "체험 중" 배지.
+     *
+     * <p>두 가지가 합쳐져 있다: 전역 플래그(출시 초기, 전원)와 <b>가입 후 N일</b>
+     * ({@code fitto.plan.trial-days}). 앱 입장에서는 둘 다 "아직 돈 낼 때가 아니다"로
+     * 같은 뜻이라 한 값으로 내린다.
+     */
+    @Transactional(readOnly = true)
+    public boolean isInTrial(Long userId) {
+        return properties.isFreeTrial() || inTrial(List.of(userId));
+    }
+
+    /**
+     * 이 사람의 체험이 끝나는 시각 — 앱이 "체험 D-2" 를 그리는 데 쓴다.
+     *
+     * <p>전역 플래그가 켜져 있으면 {@code null} 이다. 끝이 정해져 있지 않기 때문이다 —
+     * 여기에 임의의 날짜를 만들어 주면 앱이 없는 마감을 안내하게 된다.
+     */
+    @Transactional(readOnly = true)
+    public LocalDateTime trialEndsAt(Long userId) {
+        return properties.isFreeTrial() ? null : trialEndOf(List.of(userId));
     }
 
     /** 개인 플랜. */
@@ -53,6 +80,24 @@ public class PlanResolver {
             return Plan.PRO;
         }
         return highestOf(List.of(userId));
+    }
+
+    /**
+     * 커플 기능에 적용되는 플랜 — 활성 커플이 있으면 두 사람 중 높은 쪽, 없으면 본인 플랜.
+     *
+     * <p>{@link #resolve} 와 따로 두는 이유: 상대가 결제하면 커플 기능은 열리지만 개인 기능은
+     * 그대로 FREE 다. 앱이 개인 플랜만 받으면 상대 화면은 "FREE"로 보이고 결제 버튼이 그대로
+     * 열려, 상대가 이미 PRO 인 줄 모른 채 한 번 더 결제하게 된다(docs/my-current-state.md §7-1).
+     * {@link #resolveFor} 의 커플 분기와 같은 판정이다.
+     */
+    @Transactional(readOnly = true)
+    public Plan resolveCouple(Long userId) {
+        if (properties.isFreeTrial()) {
+            return Plan.PRO;
+        }
+        return activeCoupleIdOf(userId)
+                .map(this::resolveForRelation)
+                .orElseGet(() -> highestOf(List.of(userId)));
     }
 
     /**
@@ -84,12 +129,17 @@ public class PlanResolver {
         if (!feature.isCoupleScoped()) {
             return highestOf(List.of(userId));
         }
-        return activeCoupleIdOf(userId)
-                .map(this::resolveForRelation)
-                .orElseGet(() -> highestOf(List.of(userId)));
+        return resolveCouple(userId);
     }
 
-    private java.util.Optional<Long> activeCoupleIdOf(Long userId) {
+    /**
+     * 이 사용자의 활성 커플 관계 id — 없으면 비어 있다(혼자 쓰는 중).
+     *
+     * <p>{@link PlanGuard} 가 <b>사용량을 어느 주머니에서 셀지</b> 정할 때 쓴다. 판정과
+     * 계측이 같은 관계를 봐야 "둘 다 PRO 인데 한 명만 막힌다" 같은 어긋남이 안 생긴다.
+     */
+    @Transactional(readOnly = true)
+    public java.util.Optional<Long> activeCoupleIdOf(Long userId) {
         return relationRepository
                 .findByUserAndTypeAndStatus(userId, RelationType.COUPLE, RelationStatus.ACTIVE)
                 .stream()
@@ -115,9 +165,40 @@ public class PlanResolver {
         if (userIds.isEmpty()) {
             return Plan.FREE;
         }
+        /*
+         * 체험을 구독보다 먼저 본다 — 체험 중이면 구독 조회가 통째로 불필요하고,
+         * 가입 직후에는 어차피 구독이 없다. 반대로 체험이 지난 사람은 두 질의를 다 타는데,
+         * 둘 다 인덱스 조회(PK / user_id+status)라 비용이 크지 않다.
+         */
+        if (inTrial(userIds)) {
+            return Plan.PRO;
+        }
         return subscriptionRepository.findEffective(userIds, LocalDateTime.now())
                 .stream()
                 .map(Subscription::getPlan)
                 .reduce(Plan.FREE, Plan::max);
+    }
+
+    /** 이 사람들 중 누구라도 아직 체험 기간 안인가. */
+    private boolean inTrial(List<Long> userIds) {
+        LocalDateTime endsAt = trialEndOf(userIds);
+        return endsAt != null && endsAt.isAfter(LocalDateTime.now());
+    }
+
+    /**
+     * 체험이 끝나는 시각 = <b>가장 늦게 가입한 사람</b>의 가입 시각 + trialDays.
+     *
+     * <p>커플에서 나중에 들어온 쪽 기준인 것은 "둘 중 높은 등급" 규칙과 같은 방향이다 —
+     * 한 명의 체험이 끝났다고 공동 콘텐츠가 반쪽만 잠기면 안 된다.
+     *
+     * <p>{@code trialDays <= 0}(체험 없음)이거나 대상이 없으면 null.
+     */
+    private LocalDateTime trialEndOf(List<Long> userIds) {
+        int days = properties.getTrialDays();
+        if (days <= 0 || userIds.isEmpty()) {
+            return null;
+        }
+        LocalDateTime latestJoin = userRepository.findLatestCreatedAt(userIds);
+        return latestJoin == null ? null : latestJoin.plusDays(days);
     }
 }

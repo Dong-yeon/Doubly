@@ -8,7 +8,7 @@
  * <p><b>문구는 서버가 준다.</b> "무료 플랜은 맛집 핀을 20개까지 만들 수 있어요" 같은
  * 숫자가 들어간 문장을 앱에 박아두면, 한도를 조정할 때마다 스토어 심사를 기다려야 한다.
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { Sheet } from './Sheet';
 import { MaterialCommunityIcons } from './Icon';
@@ -16,15 +16,22 @@ import { usePlanStore } from '../store/planStore';
 import { useAuthStore } from '../store/authStore';
 import { requestProPurchase } from '../utils/iap';
 import { toast } from '../store/toastStore';
+import { analyticsApi } from '../api/analytics';
 import { PURCHASE_ENABLED } from '../constants/config';
 import { colors, fontSize, radius, spacing } from '../constants/theme';
 import { themedStyles } from '../theme/themedStyles';
+import { onColor } from '../theme/onColor';
 
 export function UpgradeSheet() {
   const gate = usePlanStore((s) => s.gate);
   const dismiss = usePlanStore((s) => s.dismissGate);
   const userId = useAuthStore((s) => s.user?.id);
   const [purchasing, setPurchasing] = useState(false);
+
+  // 결제 퍼널의 첫 칸 — 시트가 열릴 때 한 번. 어느 문구(한도)로 열렸는지는 서버의 FEATURE_BLOCKED 가 이미 안다
+  useEffect(() => {
+    if (gate) analyticsApi.log('PAYWALL_VIEWED', gate.errorCode === 'PLAN_LIMIT_EXCEEDED' ? 'sheet_limit' : 'sheet_upgrade').catch(() => {});
+  }, [gate]);
 
   if (!gate) return null;
 
@@ -73,7 +80,7 @@ export function UpgradeSheet() {
           accessibilityRole="button"
         >
           {purchasing ? (
-            <ActivityIndicator color="#FFFFFF" />
+            <ActivityIndicator color={onColor(colors.primaryFill)} />
           ) : (
             <Text style={styles.primaryText}>PRO 시작하기</Text>
           )}
@@ -134,12 +141,13 @@ const styles = themedStyles((colors) => ({
   primary: {
     minHeight: 50,
     borderRadius: radius.lg,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primaryFill,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: spacing.lg,
   },
-  primaryText: { fontSize: fontSize.body, fontWeight: '800', color: '#FFFFFF' },
+  // 채움은 primaryFill, 글자는 바탕 휘도로 — 주 Button 과 같은 규칙. white/primary 는 다크에서 3.3 이었다
+  primaryText: { fontSize: fontSize.body, fontWeight: '800', color: onColor(colors.primaryFill) },
   notice: {
     minHeight: 50,
     borderRadius: radius.lg,

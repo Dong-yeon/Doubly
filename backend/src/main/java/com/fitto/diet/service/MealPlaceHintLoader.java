@@ -1,8 +1,6 @@
 package com.fitto.diet.service;
 
-import com.fitto.diet.repository.MealItemRepository;
 import com.fitto.place.domain.Place;
-import com.fitto.place.domain.PlaceVisit;
 import com.fitto.place.repository.PlaceRepository;
 import com.fitto.place.repository.PlaceVisitRepository;
 import com.fitto.relation.domain.Relation;
@@ -16,15 +14,16 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * 음식 사진 분석에 붙일 럽슐랭 장소 힌트 — 가게 이름·분류·이 가게에서 예전에 기록한 메뉴.
+ * 음식 사진 분석에 붙일 럽슐랭 장소 힌트 — 가게 이름·분류·이 가게에서 예전에 먹은 메뉴.
  *
  * <p><b>왜 필요한가.</b> 사진만 보면 김치찌개집에서 찍은 찌개를 부대찌개로 읽는 식의 오인이
  * 생긴다. 사용자가 이미 "어디서 먹었는지"를 골라뒀다면 그게 가장 강한 단서다. 다만 사진과
  * 어긋날 수 있으므로(같은 가게의 다른 메뉴, 잘못 고른 장소) 프롬프트에서는 참고로만 쓴다
  * ({@link FoodAnalysisService#placeHintBlock}).
  *
- * <p>여기서는 <b>원본 값</b>만 돌려준다 — 줄바꿈 제거·길이 자르기는 프롬프트를 조립하는 쪽 몫이다.
- * 조회는 장소·관계·메뉴 고정 3회이고 방문 수와 무관하다(메뉴는 조인 한 번).
+ * <p>메뉴는 장소 상세 "여기서 먹은 것"과 같은 집계를 쓴다({@link PlaceVisitRepository#countMenu} — 방문에
+ * 연결된 식단의 음식 이름, 많이 먹은 순·같으면 최근 순). 여기서는 <b>원본 값</b>만 돌려준다 — 줄바꿈 제거·길이
+ * 자르기는 프롬프트를 조립하는 쪽 몫이다. 조회는 장소·관계·메뉴 고정 3회이고 방문 수와 무관하다.
  */
 @Component
 public class MealPlaceHintLoader {
@@ -36,20 +35,20 @@ public class MealPlaceHintLoader {
     private final PlaceRepository placeRepository;
     private final RelationRepository relationRepository;
     private final PlaceVisitRepository placeVisitRepository;
-    private final MealItemRepository mealItemRepository;
 
     public MealPlaceHintLoader(PlaceRepository placeRepository,
                                RelationRepository relationRepository,
-                               PlaceVisitRepository placeVisitRepository,
-                               MealItemRepository mealItemRepository) {
+                               PlaceVisitRepository placeVisitRepository) {
         this.placeRepository = placeRepository;
         this.relationRepository = relationRepository;
         this.placeVisitRepository = placeVisitRepository;
-        this.mealItemRepository = mealItemRepository;
     }
 
-    /** @param category 저장된 분류(없으면 null) */
-    public record PlaceHint(String name, String category, List<String> menus) {
+    /**
+     * @param category       앱 분류(음식점·카페 등, 없으면 null)
+     * @param categoryDetail 무엇을 파는 곳인지(카카오 세부 분류, V130 — 예: "한식 · 김치찌개", 없으면 null)
+     */
+    public record PlaceHint(String name, String category, String categoryDetail, List<String> menus) {
     }
 
     /**
@@ -68,13 +67,10 @@ public class MealPlaceHintLoader {
             log.info("사진 분석 장소 힌트 무시 — 없거나 내 관계의 장소가 아님 (userId={}, placeId={})", userId, placeId);
             return Optional.empty();
         }
-        List<String> menus = mealItemRepository.findRecentNamesAtPlace(placeId, PageRequest.of(0, MAX_MENUS));
-        return Optional.of(new PlaceHint(place.getName(), place.getCategory(), menus));
-    }
-
-    /** 저장된 끼니에 방문 기록으로 연결된 장소 — 사진 자동 분석용. 없으면 빈 값. */
-    public Optional<Long> placeIdOfMeal(Long mealId) {
-        return placeVisitRepository.findFirstByMealIdOrderByIdDesc(mealId).map(PlaceVisit::getPlaceId);
+        List<String> menus = placeVisitRepository.countMenu(placeId, PageRequest.of(0, MAX_MENUS)).stream()
+                .map(PlaceVisitRepository.MenuCount::getName)
+                .toList();
+        return Optional.of(new PlaceHint(place.getName(), place.getCategory(), place.getCategoryDetail(), menus));
     }
 
     private boolean accessible(Long userId, Place place) {

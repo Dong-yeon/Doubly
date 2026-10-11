@@ -4,6 +4,7 @@ import com.fitto.common.ai.AiJobResponse;
 import com.fitto.common.ai.AiJobService;
 import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
+import com.fitto.common.time.KstClock;
 import com.fitto.diet.dto.AnalyzeMealRequest;
 import com.fitto.diet.dto.AnalyzeMealTextRequest;
 import com.fitto.diet.dto.CoupleMealGoalResponse;
@@ -12,7 +13,11 @@ import com.fitto.diet.dto.FoodLookupRequest;
 import com.fitto.diet.dto.FoodLookupResponse;
 import com.fitto.diet.dto.MealAnalysisResponse;
 import com.fitto.diet.dto.MealResponse;
+import com.fitto.diet.dto.PartnerMealTodayResponse;
 import com.fitto.diet.dto.MealStatsResponse;
+import com.fitto.diet.dto.NutritionGoalDirectionRequest;
+import com.fitto.diet.dto.PhotoRecordLookupRequest;
+import com.fitto.diet.dto.PhotoRecordLookupResponse;
 import com.fitto.diet.dto.NutritionGoalRequest;
 import com.fitto.diet.dto.NutritionGoalSuggestionRequest;
 import com.fitto.diet.dto.NutritionGoalSuggestionResponse;
@@ -25,8 +30,11 @@ import com.fitto.diet.service.MealService;
 import com.fitto.diet.service.NutritionService;
 import org.springframework.web.bind.annotation.PutMapping;
 import com.fitto.workout.dto.CalendarDayResponse;
-import com.fitto.workout.dto.PartnerTodayResponse;
 import jakarta.validation.Valid;
+import org.springframework.dao.DataIntegrityViolationException;
+import com.fitto.feed.dto.FeedItemResponse;
+import com.fitto.feed.service.FeedService;
+import com.fitto.diet.service.MealNudgeService;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -54,10 +62,14 @@ public class MealController {
     private final DietCoachService dietCoachService;
     private final NutritionService nutritionService;
     private final AiJobService aiJobService;
+    private final FeedService feedService;
+    private final MealNudgeService mealNudgeService;
 
     public MealController(MealService mealService, FoodAnalysisService foodAnalysisService,
                           DietCoachService dietCoachService, NutritionService nutritionService,
-                          AiJobService aiJobService) {
+                          AiJobService aiJobService, FeedService feedService, MealNudgeService mealNudgeService) {
+        this.feedService = feedService;
+        this.mealNudgeService = mealNudgeService;
         this.mealService = mealService;
         this.foodAnalysisService = foodAnalysisService;
         this.dietCoachService = dietCoachService;
@@ -68,7 +80,17 @@ public class MealController {
     @PostMapping
     public ApiResponse<MealResponse> save(@AuthenticationPrincipal AuthUser user,
                                           @Valid @RequestBody SaveMealRequest request) {
-        return ApiResponse.success(mealService.save(user.id(), request), "식단이 기록되었습니다.");
+        try {
+            return ApiResponse.success(mealService.save(user.id(), request), "식단이 기록되었습니다.");
+        } catch (DataIntegrityViolationException e) {
+            /*
+             * 같은 멱등키의 저장이 동시에 도착해 (user_id, client_request_id) unique 인덱스가 두 번째 INSERT 를
+             * 막은 경우다(V118). 서비스의 사전 조회가 놓치는 좁은 경합이고, 먼저 처리된 쪽이 이미 저장했으므로
+             * 그 끼니를 돌려준다(채팅 client_message_id 와 같은 처방). 다른 제약 위반이면 그대로 던진다.
+             */
+            return ApiResponse.success(mealService.findSavedByClientRequestId(user.id(), request.clientRequestIdOrNull())
+                    .orElseThrow(() -> e), "식단이 기록되었습니다.");
+        }
     }
 
     /**
@@ -127,18 +149,32 @@ public class MealController {
     }
 
     /**
-     * 지정한 날짜(기본: 어제)의 식단을 오늘 날짜로 통째로 복사 — "어제 식단 불러오기" 3초 퀵 로깅.
+     * 지정한 날짜(기본: 어제)의 식단을 오늘 날짜로 복사 — "어제 식단 불러오기" 3초 퀵 로깅. mealTypes 를 주면 그 끼니만
+     * (아침에 어제 저녁까지 기록되지 않게), 오늘 이미 기록한 끼니는 늘 건너뛴다.
      */
     @PostMapping("/copy")
     public ApiResponse<List<MealResponse>> copyFrom(@AuthenticationPrincipal AuthUser user,
-                                                     @RequestParam(required = false) LocalDate sourceDate) {
-        LocalDate from = sourceDate != null ? sourceDate : LocalDate.now().minusDays(1);
-        return ApiResponse.success(mealService.copyFrom(user.id(), from), "어제 식단을 불러왔어요.");
+                                                     @RequestParam(required = false) LocalDate sourceDate,
+                                                     @RequestParam(required = false) java.util.Set<com.fitto.diet.domain.MealType> mealTypes) {
+        /*
+         * 기본값의 "어제"는 KST 기준이다. 프런트는 sourceDate 를 보내지 않으므로(diet.ts
+         * copyFromYesterday) 이 기본값이 실사용 경로다 — 존 없는 now() 였을 때는 서버가
+         * UTC 라 한국 00:00~09:00 에 누르면 어제가 아니라 그저께 식단을 복사했다.
+         */
+        LocalDate from = sourceDate != null ? sourceDate : KstClock.today().minusDays(1);
+        return ApiResponse.success(mealService.copyFrom(user.id(), from, mealTypes), "어제 식단을 불러왔어요.");
     }
 
     @GetMapping("/today")
     public ApiResponse<List<MealResponse>> today(@AuthenticationPrincipal AuthUser user) {
         return ApiResponse.success(mealService.findToday(user.id()));
+    }
+
+    /** 이 사진으로 남긴 식단이 있는지 — 채팅 사진을 식단으로 옮기기 전 중복 안내. URL 은 본문으로(로그에 안 남게) */
+    @PostMapping("/photo-record")
+    public ApiResponse<PhotoRecordLookupResponse> photoRecord(@AuthenticationPrincipal AuthUser user,
+                                                              @Valid @RequestBody PhotoRecordLookupRequest request) {
+        return ApiResponse.success(mealService.findByPhoto(user.id(), request.photoUrl()));
     }
 
     @GetMapping("/history")
@@ -160,14 +196,38 @@ public class MealController {
     }
 
     @DeleteMapping("/{id}")
-    public ApiResponse<Void> delete(@AuthenticationPrincipal AuthUser user, @PathVariable Long id) {
-        mealService.delete(user.id(), id);
+    public ApiResponse<Void> delete(@AuthenticationPrincipal AuthUser user, @PathVariable Long id,
+                                    // 장소가 붙은 식단에서 "방문 기록도 지우기"를 골랐을 때만 true(결정 Q4). 옛 앱은 안 보낸다
+                                    @RequestParam(defaultValue = "false") boolean withVisit) {
+        mealService.delete(user.id(), id, withVisit);
         return ApiResponse.success(null, "식단 기록이 삭제되었습니다.");
     }
 
     @GetMapping("/partner/today")
-    public ApiResponse<PartnerTodayResponse> partnerToday(@AuthenticationPrincipal AuthUser user) {
-        return ApiResponse.success(mealService.partnerToday(user.id()));
+    public ApiResponse<PartnerMealTodayResponse> partnerToday(@AuthenticationPrincipal AuthUser user) {
+        PartnerMealTodayResponse today = mealService.partnerToday(user.id());
+        return ApiResponse.success(today.connected()
+                ? today.withNudgedToday(mealNudgeService.nudgedToday(user.id()))
+                : today);
+    }
+
+    /**
+     * 식단 찌르기 — 상대가 오늘 식사를 안 남겼을 때 "뭐 먹었어?" 푸시를 한 번 보낸다(하루 한 번, KST 8~22시).
+     * 채팅에는 남지 않는다. 막히면 409(오늘 이미 물어봄·상대가 이미 남김) / 400(밤).
+     */
+    @PostMapping("/partner/nudge")
+    public ApiResponse<Void> nudgePartner(@AuthenticationPrincipal AuthUser user) {
+        mealNudgeService.nudge(user.id());
+        return ApiResponse.success(null, "물어봤어요");
+    }
+
+    /**
+     * 럽바디 "○○님 오늘" — 상대가 오늘 혼자 남긴 식사 카드. 피드 카드와 같은 모양·같은 노출(칼로리 없음)이고
+     * 반응은 기존 {@code POST /feed/items/MEAL/{id}/reactions} 로 단다.
+     */
+    @GetMapping("/partner/today/meals")
+    public ApiResponse<List<FeedItemResponse>> partnerTodayMeals(@AuthenticationPrincipal AuthUser user) {
+        return ApiResponse.success(feedService.partnerMealsToday(user.id()));
     }
 
     @GetMapping("/couple/goal")
@@ -198,6 +258,13 @@ public class MealController {
     public ApiResponse<NutritionSummaryResponse> setGoal(@AuthenticationPrincipal AuthUser user,
                                                          @jakarta.validation.Valid @RequestBody NutritionGoalRequest request) {
         return ApiResponse.success(nutritionService.setGoal(user.id(), request), "목표를 저장했어요.");
+    }
+
+    /** 목표 방향(감량·유지·증량)만 바꾼다 — 신체 정보 시트. 본문 goalDirection 이 null 이면 미설정 */
+    @PutMapping("/nutrition/direction")
+    public ApiResponse<NutritionSummaryResponse> setGoalDirection(@AuthenticationPrincipal AuthUser user,
+                                                                  @RequestBody NutritionGoalDirectionRequest request) {
+        return ApiResponse.success(nutritionService.setGoalDirection(user.id(), request.goalDirection()));
     }
 
     /**

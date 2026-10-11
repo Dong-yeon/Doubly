@@ -34,7 +34,7 @@ public enum MessageType {
      * 우리 이모지(AI 가 애인 얼굴로 그린 감정 이모지, V80) — content 에 {@code couple_emojis.id},
      * image_url 에 그 행의 URL 을 <b>복사</b>해 담는다. 트레이에서 숨긴 뒤에도 지난 메시지가 조인 없이
      * 그려져야 해서다. STICKER 에 얹지 않은 이유: STICKER 의 content 는 로컬 번들 코드이고 서버가
-     * StickerPack/AnimatedSticker 로 프리미엄 판정을 하는데, 원격 URL 을 섞으면 그 판정·알림 미리보기·
+     * AnimatedSticker 로 프리미엄 판정을 하는데, 원격 URL 을 섞으면 그 판정·알림 미리보기·
      * 검색 제외·예약 전송 검증이 전부 분기해야 한다. 전송 시 PRO 판정은 하지 않는다 — 만들 때 이미
      * 게이팅했고 커플 공용이라 상대(무료일 수도)도 쓴다. docs/COUPLE_EMOJI_AI_DESIGN_2026-09-08.md §5-6.
      */
@@ -46,12 +46,33 @@ public enum MessageType {
      */
     GAME_CARD,
     /**
-     * 럽슐랭 카드(V91) — 장소 찜·방문·첫 평점·등극을 서버가 자동으로 남긴다(PlaceService, 자동 공유).
+     * 럽슐랭 카드(V136) — 장소 찜·방문·첫 평점·등극을 서버가 자동으로 남긴다(PlaceService, 자동 공유).
      * STREAK_CARD 와 같은 규칙으로 content 에 <b>그대로 읽히는 문장</b>을 담고, 접두어로 종류를
      * 가른다(등극은 "👑 럽슐랭 N스타 등극!"). place_id 로 원본을 가리켜 탭하면 장소 상세로 가고,
      * 장소 삭제 시 함께 정리한다. 같은 사람이 같은 장소로 연달아 남기는 카드는 방의 마지막 메시지일 때
      * 새로 만들지 않고 본문을 갱신한다(ChatService.foldOrPostPlaceCard) — 한 행동이 찜→평점처럼
      * 이벤트 여럿을 연쇄로 내기 때문이다. docs/AUTO_SHARE_LOVELICHELIN_ANALYSIS_2026-09-13.md.
      */
-    PLACE_CARD
+    PLACE_CARD,
+    /**
+     * 문구 스티커(V107) — 캐릭터 스티커 위에 사용자가 쓴 짧은 문구(최대 12자)를 얹는다.
+     * content 에는 <b>문구 그대로</b>, 스티커 코드는 {@code chat_messages.sticker_code} 에 담는다.
+     * STREAK_CARD 와 같은 규칙이다 — 이 타입을 모르는 구버전 앱에서도 문구가 평범한 말풍선으로 읽힌다.
+     * 그림은 앱이 합성해 그린다(서버 이미지 생성·업로드 없음). 검증은 {@code ChatService.requireValidTextSticker}.
+     */
+    TEXT_STICKER;
+
+    /**
+     * 음성 메시지 본문({@code "{audioUrl}|{durationSec}"})에서 오디오 URL 만 꺼낸다.
+     * 내보내기(파일 받기)와 탈퇴·기록 삭제(Cloudinary 정리)가 같은 규칙으로 읽어야 해서 여기 둔다.
+     * URL 이 아니면 null.
+     */
+    public static String voiceAudioUrl(Object content) {
+        if (!(content instanceof String s) || s.isBlank()) {
+            return null;
+        }
+        int bar = s.lastIndexOf('|');
+        String url = bar > 0 ? s.substring(0, bar) : s;
+        return url.startsWith("http") ? url : null;
+    }
 }

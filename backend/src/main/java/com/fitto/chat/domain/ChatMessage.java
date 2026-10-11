@@ -51,11 +51,11 @@ public class ChatMessage {
     @Column(name = "workout_id")
     private Long workoutId;
 
-    /** 식단 카드(MEAL_CARD)의 원본 기록 — 기록 삭제 시 카드를 정리하기 위한 참조(V90) */
+    /** 식단 카드(MEAL_CARD)의 원본 기록 — 기록 삭제 시 카드를 정리하기 위한 참조(V135) */
     @Column(name = "meal_id")
     private Long mealId;
 
-    /** 럽슐랭 카드(PLACE_CARD)의 원본 장소 — 탭 이동·삭제 정리·접기 판정용 참조(V91) */
+    /** 럽슐랭 카드(PLACE_CARD)의 원본 장소 — 탭 이동·삭제 정리·접기 판정용 참조(V136) */
     @Column(name = "place_id")
     private Long placeId;
 
@@ -79,6 +79,13 @@ public class ChatMessage {
     @Column(name = "client_message_id", length = 64)
     private String clientMessageId;
 
+    /**
+     * 문구 스티커({@link MessageType#TEXT_STICKER})가 얹힌 캐릭터 스티커 코드(StickerImage 이름).
+     * 다른 타입에서는 null 이다. content 에 섞지 않는 이유는 MessageType.TEXT_STICKER 주석 참고.
+     */
+    @Column(name = "sticker_code", length = 40)
+    private String stickerCode;
+
     /** 수정 시각 — null 이면 수정된 적 없음 */
     @Column(name = "edited_at")
     private LocalDateTime editedAt;
@@ -98,8 +105,9 @@ public class ChatMessage {
     @Builder
     private ChatMessage(Long relationId, Long senderId, MessageType messageType,
                         String content, String imageUrl, Long workoutId, Long mealId, Long placeId, Long routineId,
-                        Long replyToId, String clientMessageId) {
+                        Long replyToId, String clientMessageId, String stickerCode) {
         this.clientMessageId = clientMessageId;
+        this.stickerCode = stickerCode;
         this.relationId = relationId;
         this.senderId = senderId;
         this.messageType = messageType != null ? messageType : MessageType.TEXT;
@@ -132,6 +140,7 @@ public class ChatMessage {
         this.deletedAt = LocalDateTime.now();
         this.content = null;
         this.imageUrl = null;
+        this.stickerCode = null;
     }
 
     /**

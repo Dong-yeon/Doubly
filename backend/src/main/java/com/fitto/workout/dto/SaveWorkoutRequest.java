@@ -21,8 +21,17 @@ public record SaveWorkoutRequest(
         /** 이 세션이 시작된 내 루틴 템플릿 id — 스마트 루틴 동기화(Save-on-Finish)의 전제. 자유 운동은 생략 */
         Long sourceRoutineId,
 
-        /** 운동 인증샷(선택) — 다른 앱의 완료 화면이나 트레드밀 사진 */
+        /** 오운완 인증샷(선택) — 찍거나 앨범에서 고른다 */
         String imageUrl,
+
+        /**
+         * 이 사진을 커플 피드에 실을지 — 오운완 인증샷이면 {@code true}.
+         *
+         * <p>안 보내면 {@code false} 다. 예전 운동 사진(다른 앱 화면 AI 판독)은
+         * "애인에게는 공유되지 않아요" 약속 아래 올라왔고, 그 약속을 소급해 깨지 않는다
+         * (Workout.imageShared 주석 · V94).
+         */
+        Boolean imageShared,
 
         /**
          * 종목 목록 — <b>비어 있어도 된다</b>.
@@ -38,13 +47,20 @@ public record SaveWorkoutRequest(
     /** sourceRoutineId·사진 없이 넘기던 이전 호출부와의 호환용 */
     public SaveWorkoutRequest(LocalDate workoutDate, Long relationId, Integer totalDurationMin,
                               String memo, List<WorkoutSetRequest> sets) {
-        this(workoutDate, relationId, totalDurationMin, memo, null, null, sets);
+        this(workoutDate, relationId, totalDurationMin, memo, null, null, null, sets);
     }
 
     /** 사진 없이 넘기던 호출부와의 호환용 */
     public SaveWorkoutRequest(LocalDate workoutDate, Long relationId, Integer totalDurationMin,
                               String memo, Long sourceRoutineId, List<WorkoutSetRequest> sets) {
-        this(workoutDate, relationId, totalDurationMin, memo, sourceRoutineId, null, sets);
+        this(workoutDate, relationId, totalDurationMin, memo, sourceRoutineId, null, null, sets);
+    }
+
+    /** imageShared 가 없던 호출부와의 호환용 — 안 보내면 피드에 싣지 않는다 */
+    public SaveWorkoutRequest(LocalDate workoutDate, Long relationId, Integer totalDurationMin,
+                              String memo, Long sourceRoutineId, String imageUrl,
+                              List<WorkoutSetRequest> sets) {
+        this(workoutDate, relationId, totalDurationMin, memo, sourceRoutineId, imageUrl, null, sets);
     }
 
     /** 세트는 생략 가능하다 — 호출부가 null 검사를 반복하지 않게 여기서 흡수한다. */

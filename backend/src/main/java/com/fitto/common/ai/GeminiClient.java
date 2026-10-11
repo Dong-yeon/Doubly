@@ -13,14 +13,19 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
+import java.io.IOException;
+import java.net.SocketTimeoutException;
 import java.util.Base64;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -141,18 +146,39 @@ public class GeminiClient {
     private final PlanGuard planGuard;
     private final UsageCounter usageCounter;
     private final MeterRegistry meterRegistry;
+    private final AiUsageRecorder usageRecorder;
 
+    /**
+     * 토큰 사용량을 남기려면 "누가·어느 기능으로" 부른 호출인지가 HTTP 를 실제로 보내는
+     * 자리까지 따라와야 한다 — 한도 차감은 이미 {@link #requireConfiguredAndCountUsage} 에서
+     * 끝난 뒤라 그 정보가 아래로 내려오지 않고 있었다.
+     *
+     * @param imageCount 이번 요청에 <b>보낸</b> 이미지 파트 수(입력 토큰이 튀는 경로를 찾는 단서)
+     */
+    private record CallContext(Long userId, Feature feature, int imageCount) {
+    }
+
+    @Autowired
     public GeminiClient(GeminiProperties properties, ObjectMapper objectMapper,
                         PlanGuard planGuard, UsageCounter usageCounter,
-                        MeterRegistry meterRegistry) {
+                        MeterRegistry meterRegistry, AiUsageRecorder usageRecorder) {
+        this(properties, objectMapper, planGuard, usageCounter, meterRegistry, usageRecorder,
+                READ_TIMEOUT_MILLIS);
+    }
+
+    /** 읽기 타임아웃을 바꿔 끼우는 자리 — 응답 없는 서버를 45초씩 기다릴 수 없는 테스트용이다. */
+    GeminiClient(GeminiProperties properties, ObjectMapper objectMapper,
+                 PlanGuard planGuard, UsageCounter usageCounter,
+                 MeterRegistry meterRegistry, AiUsageRecorder usageRecorder, int readTimeoutMillis) {
         this.properties = properties;
         this.objectMapper = objectMapper;
         this.planGuard = planGuard;
         this.usageCounter = usageCounter;
         this.meterRegistry = meterRegistry;
+        this.usageRecorder = usageRecorder;
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(5_000);
-        factory.setReadTimeout(READ_TIMEOUT_MILLIS);
+        factory.setReadTimeout(readTimeoutMillis);
         this.restClient = RestClient.builder().requestFactory(factory).build();
     }
 
@@ -178,7 +204,7 @@ public class GeminiClient {
         if (!properties.isConfigured()) {
             throw new BusinessException(ErrorCode.AI_NOT_CONFIGURED);
         }
-        countUsage(userId, feature);
+        countUsage(userId, feature, false);
     }
 
     /**
@@ -190,10 +216,21 @@ public class GeminiClient {
         if (!properties.isImageConfigured()) {
             throw new BusinessException(ErrorCode.AI_NOT_CONFIGURED);
         }
-        countUsage(userId, feature);
+        countUsage(userId, feature, false);
     }
 
-    private void countUsage(Long userId, Feature feature) {
+    /**
+     * {@link #requireImageConfiguredAndCountUsage} 와 같되 플랜 한도에 막히면 산 크레딧을 쓴다
+     * ({@link PlanGuard#consumeOrCredit}). 되돌릴 때는 {@link #refund(Long, Feature, PlanGuard.Charge)}.
+     */
+    public PlanGuard.Charge requireImageConfiguredAndCharge(Long userId, Feature feature) {
+        if (!properties.isImageConfigured()) {
+            throw new BusinessException(ErrorCode.AI_NOT_CONFIGURED);
+        }
+        return countUsage(userId, feature, true);
+    }
+
+    private PlanGuard.Charge countUsage(Long userId, Feature feature, boolean allowCredit) {
         Quota serviceWide = Quota.perDay(properties.getDailyLimitTotal());
         if (usageCounter.peekGlobal(Feature.AI_TOTAL, serviceWide) >= serviceWide.limit()) {
             log.warn("AI 서비스 전체 일일 한도 도달 — limit={}", serviceWide.limit());
@@ -205,12 +242,19 @@ public class GeminiClient {
             throw new BusinessException(ErrorCode.AI_DAILY_LIMIT_EXCEEDED);
         }
 
-        planGuard.consume(userId, feature);
+        PlanGuard.Charge charge;
+        if (allowCredit) {
+            charge = planGuard.consumeOrCredit(userId, feature);
+        } else {
+            planGuard.consume(userId, feature);
+            charge = PlanGuard.Charge.QUOTA;
+        }
 
         if (usageCounter.increment(userId, Feature.AI_TOTAL, backstop) > backstop.limit()) {
             throw new BusinessException(ErrorCode.AI_DAILY_LIMIT_EXCEEDED);
         }
         usageCounter.incrementGlobal(Feature.AI_TOTAL, serviceWide);
+        return charge;
     }
 
     /**
@@ -226,6 +270,13 @@ public class GeminiClient {
      */
     public void refund(Long userId, Feature feature) {
         refundUsage(userId, feature);
+    }
+
+    /** {@link #requireImageConfiguredAndCharge} 의 되돌리기 — 크레딧에서 썼으면 크레딧으로 돌려준다. */
+    public void refund(Long userId, Feature feature, PlanGuard.Charge charge) {
+        planGuard.refund(userId, feature, charge);
+        usageCounter.decrement(userId, Feature.AI_TOTAL,
+                Quota.perDay(properties.getDailyLimitPerUser()));
     }
 
     private void refundUsage(Long userId, Feature feature) {
@@ -278,18 +329,35 @@ public class GeminiClient {
      * <p>{@code responseModalities} 는 JSON 모드와 같이 쓸 수 없어 본문을 따로 만든다.
      * 온도 0.4 는 실험값(docs/COUPLE_EMOJI_AI_DESIGN_2026-09-08.md §12) — 낮추면 표정이 밋밋해지고
      * 높이면 세트 일관성이 떨어졌다.
+     *
+     * <p><b>해상도를 명시한다.</b> 빼면 기본 1K 로 나가고 그게 곧 장당 단가 1.5배다
+     * ({@code GeminiProperties.imageSize}). {@code aspectRatio} 는 <b>일부러 두지 않는다</b> —
+     * 지금 그림체는 비율을 지정하지 않은 상태로 실험해 확정한 것이라, 여기서 끼워 넣으면
+     * 원가가 아니라 결과물이 바뀐다.
+     *
+     * <p>{@code userId}·{@code feature} 는 한도가 아니라 <b>토큰 기록</b>용이다 — 차감은 호출 전에
+     * {@link #requireImageConfiguredAndCountUsage} 가 이미 했고, 되돌리기는 세트 단위라
+     * 호출자가 {@link #refund} 로 한다(위 2번). 이미지 생성이 유일하게 원가가 0이 아닌 경로라
+     * 여기를 못 남기면 계측의 의미가 없다.
      */
-    public GeneratedImage generateImageInBackground(List<Map<String, Object>> parts) {
+    public GeneratedImage generateImageInBackground(Long userId, Feature feature,
+                                                    List<Map<String, Object>> parts) {
+        Map<String, Object> generationConfig = new LinkedHashMap<>();
+        generationConfig.put("responseModalities", List.of("IMAGE"));
+        generationConfig.put("temperature", 0.4);
+        String imageSize = properties.getImageSize();
+        if (imageSize != null && !imageSize.isBlank()) {
+            generationConfig.put("imageConfig", Map.of("imageSize", imageSize));
+        }
         Map<String, Object> body = Map.of(
                 "contents", List.of(Map.of("parts", parts)),
-                "generationConfig", Map.of(
-                        "responseModalities", List.of("IMAGE"),
-                        "temperature", 0.4));
+                "generationConfig", generationConfig);
         long deadline = System.currentTimeMillis() + BACKGROUND.budgetMillis();
         JsonNode root;
         try {
             root = callModel(properties.getImageModel(), properties.imageApiKeyOrFallback(),
-                    body, BACKGROUND, deadline);
+                    body, BACKGROUND, deadline, false,
+                    new CallContext(userId, feature, imagePartCount(parts)));
         } catch (ModelUnavailable unavailable) {
             throw unavailable.toBusinessException();
         }
@@ -327,16 +395,22 @@ public class GeminiClient {
     private JsonNode generateJson(Long userId, Feature feature, List<Map<String, Object>> parts,
                                   Map<String, Object> responseSchema, RetryPolicy policy) {
         try {
-            return generateJsonOrThrow(parts, responseSchema, policy);
+            return generateJsonOrThrow(parts, responseSchema, policy,
+                    new CallContext(userId, feature, imagePartCount(parts)));
         } catch (RuntimeException e) {
             refundUsage(userId, feature);
             throw e;
         }
     }
 
+    /** 이번 요청에 실어 보내는 이미지 파트 수 — {@link #imagePart} 가 만든 모양만 센다. */
+    private static int imagePartCount(List<Map<String, Object>> parts) {
+        return (int) parts.stream().filter(p -> p.containsKey("inlineData")).count();
+    }
+
     private JsonNode generateJsonOrThrow(List<Map<String, Object>> parts,
                                          Map<String, Object> responseSchema,
-                                         RetryPolicy policy) {
+                                         RetryPolicy policy, CallContext context) {
         Map<String, Object> body = Map.of(
                 "contents", List.of(Map.of("parts", parts)),
                 "generationConfig", Map.of(
@@ -344,7 +418,7 @@ public class GeminiClient {
                         "responseMimeType", "application/json",
                         "responseSchema", responseSchema));
 
-        JsonNode root = callWithRetry(body, policy);
+        JsonNode root = callWithRetry(body, policy, context);
 
         String text = root == null ? null
                 : root.path("candidates").path(0).path("content")
@@ -382,7 +456,7 @@ public class GeminiClient {
      * <p>얼마나 오래 버틸지는 {@link RetryPolicy} 가 정한다. 폴백이 설정돼 있으면 1차 모델에
      * 예산을 다 쓰게 두지 않는다 — 남겨두지 않으면 폴백이 한 번도 돌아보지 못하고 끝난다.
      */
-    private JsonNode callWithRetry(Map<String, Object> body, RetryPolicy policy) {
+    private JsonNode callWithRetry(Map<String, Object> body, RetryPolicy policy, CallContext context) {
         long start = System.currentTimeMillis();
         long deadline = start + policy.budgetMillis();
         String primary = properties.getModel();
@@ -393,14 +467,15 @@ public class GeminiClient {
                 : start + policy.budgetMillis() * PRIMARY_BUDGET_PERCENT / 100;
 
         try {
-            return callModel(primary, properties.getApiKey(), body, policy, primaryDeadline);
+            return callModel(primary, properties.getApiKey(), body, policy, primaryDeadline,
+                    fallback != null, context);
         } catch (ModelUnavailable primaryFailure) {
             if (fallback == null || System.currentTimeMillis() >= deadline) {
                 throw primaryFailure.toBusinessException();
             }
             log.warn("Gemini 1차 모델({}) 계속 실패 — 폴백 모델({})로 다시 시도", primary, fallback);
             try {
-                return callModel(fallback, properties.getApiKey(), body, policy, deadline);
+                return callModel(fallback, properties.getApiKey(), body, policy, deadline, false, context);
             } catch (ModelUnavailable fallbackFailure) {
                 log.warn("Gemini 폴백 모델({})도 실패", fallback);
                 throw fallbackFailure.toBusinessException();
@@ -426,9 +501,15 @@ public class GeminiClient {
      * <p>모델을 바꿔서 달라질 수 있는 실패(서버가 처리 못 하겠다고 한 상태)만
      * {@link ModelUnavailable} 로 올린다. 잘못된 요청(4xx)이나 네트워크 오류는 모델을 바꿔도
      * 똑같으므로 여기서 바로 실패시킨다 — 폴백에 예산을 낭비할 이유가 없다.
+     * <b>응답이 없는 것(읽기 타임아웃)은 예외다</b> — 연결은 됐는데 모델이 붙잡혀 있다는 뜻이라
+     * 모델을 바꾸면 달라질 수 있다(아래 catch 주석).
+     *
+     * @param fallbackAvailable 이 호출이 실패하면 폴백 모델이 이어받는가 — 읽기 타임아웃에서
+     *                          같은 모델을 또 기다릴지, 바로 넘길지를 가른다
      */
     private JsonNode callModel(String model, String apiKey, Map<String, Object> body,
-                               RetryPolicy policy, long deadline) {
+                               RetryPolicy policy, long deadline, boolean fallbackAvailable,
+                               CallContext context) {
         long cooldown = cooldownRemaining(model);
         if (cooldown > 0) {
             log.info("Gemini {} 쿨다운 중 — {}ms 남아 호출하지 않는다", model, cooldown);
@@ -447,6 +528,9 @@ public class GeminiClient {
                         .retrieve()
                         .body(JsonNode.class);
                 record(model, "success", System.currentTimeMillis() - attemptStart);
+                // 과금되는 건 성공한 응답뿐이다 — 실패 응답에는 usageMetadata 자체가 없다.
+                usageRecorder.recordUsage(context.userId(), context.feature(), model, response,
+                        context.imageCount(), attempt);
                 return response;
             } catch (RestClientResponseException e) {
                 lastAttemptMillis = System.currentTimeMillis() - attemptStart;
@@ -499,16 +583,42 @@ public class GeminiClient {
                 }
                 throw new ModelUnavailable(status == 429 || status == 503
                         ? ErrorCode.AI_RATE_LIMITED : ErrorCode.AI_ANALYSIS_FAILED);
-            } catch (ResourceAccessException e) {
+            } catch (RestClientException e) {
+                /*
+                 * 상태 코드를 받지 못한 실패 — 네트워크 오류와 <b>응답 없음(읽기 타임아웃)</b>.
+                 *
+                 * <p>ResourceAccessException 만 잡으면 안 된다. 본문이 있는 POST 는 HttpURLConnection 이
+                 * 상태 줄을 늦게 읽어서, 읽기 타임아웃이 응답을 읽는 단계에서 터지고
+                 * {@code RestClientException("Error while extracting response … octet-stream")} 로
+                 * 감싸져 온다. 운영에서 7일간 난 AI 실패 7건이 전부 이 모양이었는데, 이 catch 를
+                 * 비켜 가 재시도·폴백·지표가 모두 빠졌다(docs/server-stability-current-state.md §11-2).
+                 */
                 lastAttemptMillis = System.currentTimeMillis() - attemptStart;
-                record(model, "network", lastAttemptMillis);
+                boolean readTimeout = isReadTimeout(e);
+                if (!readTimeout && !(e instanceof ResourceAccessException) && !hasIoCause(e)) {
+                    // 응답은 받았는데 읽지 못했다(형식 등) — 다시 물어도 같다
+                    record(model, "error", lastAttemptMillis);
+                    log.warn("Gemini 응답 처리 실패({}): {}", model, e.toString());
+                    throw new BusinessException(ErrorCode.AI_ANALYSIS_FAILED);
+                }
+                record(model, readTimeout ? "timeout" : "network", lastAttemptMillis);
+                if (readTimeout && fallbackAvailable) {
+                    /*
+                     * 같은 모델에게 또 45초를 주면 앱이 2분에 기다리기를 그만두기 전에 폴백까지
+                     * 닿지 못한다(45초 × 2 + 백오프 + 폴백). 붙잡힌 모델은 두고 바로 넘긴다.
+                     */
+                    log.warn("Gemini {} 가 {}ms 동안 응답하지 않음 — 다시 기다리지 않고 폴백으로 넘긴다",
+                            model, lastAttemptMillis);
+                    throw new ModelUnavailable(ErrorCode.AI_ANALYSIS_FAILED);
+                }
                 /*
                  * 연결 실패(5초)면 예산이 남아 재시도할 값어치가 있고, 읽기 타임아웃(45초)이면
                  * 아래 검사가 걸러낸다 — 직전 시도가 얼마나 걸렸는지로 판단하기 때문이다.
-                 * 모델을 바꿔도 네트워크는 그대로라 폴백으로 넘기지 않는다.
+                 * 네트워크 오류는 모델을 바꿔도 그대로라 폴백으로 넘기지 않는다.
                  */
                 if (canRetry(attempt, policy.maxAttempts(), backoffMillis, lastAttemptMillis, deadline)) {
-                    log.info("Gemini 네트워크 오류({}) — {}ms 후 재시도 ({}/{}): {}",
+                    log.info("Gemini {}({}) — {}ms 후 재시도 ({}/{}): {}",
+                            readTimeout ? "응답 없음" : "네트워크 오류",
                             model, backoffMillis, attempt, policy.maxAttempts(), e.getMessage());
                     sleep(backoffMillis);
                     backoffMillis = Math.min(backoffMillis * 3, policy.maxBackoffMillis());
@@ -552,6 +662,30 @@ public class GeminiClient {
                 .tag("outcome", outcome)
                 .register(meterRegistry)
                 .record(elapsedMillis, TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * 연결은 됐는데 응답이 오지 않았는가 — 원인 사슬에 읽기 {@link SocketTimeoutException} 이 있는가.
+     * 연결 타임아웃("Connect timed out")도 같은 예외 타입이라 메시지로 걸러낸다(그건 네트워크 문제다).
+     */
+    private static boolean isReadTimeout(Throwable e) {
+        for (Throwable t = e; t != null; t = t.getCause()) {
+            if (t instanceof SocketTimeoutException) {
+                String message = t.getMessage();
+                return message == null || !message.toLowerCase(Locale.ROOT).contains("connect");
+            }
+        }
+        return false;
+    }
+
+    /** 원인 사슬에 I/O 오류가 있는가 — 응답을 읽다가 연결이 끊긴 경우다. */
+    private static boolean hasIoCause(Throwable e) {
+        for (Throwable t = e.getCause(); t != null; t = t.getCause()) {
+            if (t instanceof IOException) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** 서버가 "지금은 처리 못 했다"고 말한 상태 — 같은 요청을 다시 보내면 될 수 있다. */
