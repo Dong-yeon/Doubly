@@ -10,6 +10,8 @@ import com.fitto.diet.dto.MealResponse;
 import com.fitto.diet.dto.SaveMealRequest;
 import com.fitto.diet.service.FoodAnalysisService;
 import com.fitto.diet.service.MealService;
+import com.fitto.place.dto.SavePlaceRequest;
+import com.fitto.place.service.PlaceService;
 import com.fitto.relation.dto.InviteCodeResponse;
 import com.fitto.relation.service.RelationService;
 import com.fitto.user.domain.User;
@@ -27,7 +29,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -52,6 +57,7 @@ class MealPhotoAutoAnalysisTest {
     @Autowired AuthService authService;
     @Autowired RelationService relationService;
     @Autowired MealService mealService;
+    @Autowired PlaceService placeService;
     @Autowired UserRepository userRepository;
 
     @MockitoBean FoodAnalysisService foodAnalysisService;
@@ -172,5 +178,39 @@ class MealPhotoAutoAnalysisTest {
         MealResponse after = mealService.findToday(user).get(0);
         assertThat(after.nutritionSource()).isEqualTo(NutritionSource.USER);
         assertThat(after.calories()).isEqualTo(450);
+    }
+
+    // ---- 럽슐랭 장소 힌트 ----
+
+    /**
+     * 앱은 저장 응답을 받은 뒤에 방문 기록을 남기므로, 커밋 직후 도는 이 작업은 끼니→방문 역조회로
+     * 장소를 찾지 못한다. 그래서 저장 요청에 실린 placeId 를 그대로 힌트로 넘겨야 한다
+     * (접근 판정은 FoodAnalysisService 쪽 — FoodAnalysisPhotoPromptTest).
+     */
+    @Test
+    void 저장_요청에_고른_장소가_있으면_그_장소를_분석_힌트로_넘긴다() {
+        Long me = register("auto8@fitto.com");
+        Long partner = register("auto9@fitto.com");
+        InviteCodeResponse invite = relationService.createCoupleInvite(me);
+        relationService.connectCouple(partner, invite.code());
+        Long placeId = placeService.save(me, new SavePlaceRequest("을지로 김치찌개", null, null, null, "음식점")).id();
+        when(foodAnalysisService.analyze(anyLong(), any(), any())).thenReturn(twoFoods());
+
+        mealService.save(me, new SaveMealRequest(LocalDate.now(), MealType.LUNCH, null,
+                "https://res.cloudinary.com/demo/image/upload/stew.jpg",
+                null, null, null, null, null, null, null, null, false, placeId));
+
+        verify(foodAnalysisService, timeout(ANALYZED.toMillis()))
+                .analyze(eq(me), eq("https://res.cloudinary.com/demo/image/upload/stew.jpg"), eq(placeId));
+    }
+
+    @Test
+    void 장소를_고르지_않으면_힌트_없이_분석한다() {
+        Long user = register("auto10@fitto.com");
+        when(foodAnalysisService.analyze(anyLong(), any(), any())).thenReturn(twoFoods());
+
+        mealService.save(user, photoOnly(false));
+
+        verify(foodAnalysisService, timeout(ANALYZED.toMillis())).analyze(eq(user), any(), isNull());
     }
 }

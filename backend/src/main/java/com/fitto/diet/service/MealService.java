@@ -202,9 +202,9 @@ public class MealService {
          * 사진만 올리고 영양 정보를 비워둔 기록이면 커밋 이후 백그라운드로 분석을 건다.
          * 여기서는 조건 판정도 하지 않는다 — 대상 여부와 반영 규칙을 한 곳에 모아둬야
          * 어긋나지 않는다(MealPhotoAutoAnalysisService 참고). 데이트 식단이면 파트너 몫까지
-         * 그쪽에서 함께 채우므로 이 호출 하나로 끝난다.
+         * 그쪽에서 함께 채우므로 이 호출 하나로 끝난다. 고른 장소(placeId)는 분석 힌트로만 넘긴다.
          */
-        autoAnalysisService.scheduleIfEligible(userId, meal);
+        autoAnalysisService.scheduleIfEligible(userId, meal, req.placeId());
         return MealResponse.from(meal, goals);
     }
 

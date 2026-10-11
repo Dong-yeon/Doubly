@@ -79,14 +79,18 @@ public class MealPhotoAutoAnalysisService {
      * <p>커밋 전에 걸면 작업이 먼저 돌아 아직 보이지 않는 행을 조회하게 된다
      * (저장이 롤백되면 유령 작업까지 남는다). 대상이 아니면 조용히 아무 일도 하지 않는다 —
      * 자동 경로라 사용자에게 알릴 실패가 없다.
+     *
+     * @param placeId 저장 요청에 실려 온 럽슐랭 장소(nullable) — 분석 힌트로만 쓴다. 접근 판정은
+     *                {@link FoodAnalysisService} 쪽에서 한다(남의 장소면 힌트 없이 분석).
      */
-    public void scheduleIfEligible(Long userId, Meal meal) {
+    public void scheduleIfEligible(Long userId, Meal meal, Long placeId) {
         if (!isEligible(userId, meal)) {
             return;
         }
         Long mealId = meal.getId();
         String photoUrl = meal.getPhotoUrl();
-        afterCommit(() -> aiJobService.submit(userId, JOB_LABEL, () -> analyzeAndApply(userId, mealId, photoUrl)));
+        afterCommit(() -> aiJobService.submit(userId, JOB_LABEL,
+                () -> analyzeAndApply(userId, mealId, photoUrl, placeId)));
     }
 
     /**
@@ -118,8 +122,9 @@ public class MealPhotoAutoAnalysisService {
      *
      * @return 작업 결과로 남길 요약 — 폴링하는 화면은 없지만 실패/성공 구분에 쓰인다
      */
-    private Object analyzeAndApply(Long userId, Long mealId, String photoUrl) {
-        MealAnalysisResponse result = foodAnalysisService.analyze(userId, photoUrl, linkedPlaceId(mealId));
+    private Object analyzeAndApply(Long userId, Long mealId, String photoUrl, Long placeId) {
+        Long hintPlaceId = placeId != null ? placeId : linkedPlaceId(mealId);
+        MealAnalysisResponse result = foodAnalysisService.analyze(userId, photoUrl, hintPlaceId);
         if (!result.isFood() || result.foods().isEmpty()) {
             log.info("자동 분석: 음식이 아니라고 판단 — 기록은 사진만 남긴다 (mealId={})", mealId);
             return java.util.Map.of("applied", false);
@@ -129,11 +134,13 @@ public class MealPhotoAutoAnalysisService {
     }
 
     /**
-     * 끼니에 방문 기록으로 연결된 장소 — 있으면 사용자가 직접 분석할 때와 같은 장소 힌트를 쓴다.
-     * 접수 시점이 아니라 <b>작업이 돌 때</b> 찾는다. 조회가 실패해도 힌트 없이 분석한다(힌트는 덤이다).
+     * 저장 요청에 장소가 없을 때의 차선책 — 끼니에 방문 기록으로 연결된 장소를 <b>작업이 돌 때</b>
+     * 찾는다. 조회가 실패해도 힌트 없이 분석한다(힌트는 덤이다).
      *
-     * <p>주의: 식단 기록 화면은 저장 응답을 받은 <b>뒤에</b> 방문 기록을 따로 남긴다(recordVisit).
-     * 커밋 직후 걸린 이 작업이 그보다 먼저 돌면 아직 연결이 없어 힌트 없이 간다.
+     * <p>타이밍상 대부분 못 찾는다: 앱은 저장 응답을 받은 <b>뒤에</b> 방문 기록을 따로 남기고
+     * (recordVisit), 이 작업은 커밋 직후 돈다. 그래서 1순위는 저장 요청의 placeId 이고
+     * ({@link com.fitto.diet.dto.SaveMealRequest#placeId}), 이건 placeId 를 안 보내는
+     * 이전 앱 버전 등을 위해 남겨둔다.
      */
     private Long linkedPlaceId(Long mealId) {
         try {
