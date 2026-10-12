@@ -190,6 +190,7 @@ backend/src/main/resources/
 - 수정: 미리보기가 서버 카탈로그(`remoteStickerStore`)도 본다 + 모든 카드가 팩 상세(`StickerPackDetailScreen`)로
   간다. 상세는 크게 보기 한 칸 + 전부 격자 + 아래 단추 하나(서버 팩 받기 / PRO 안내 / 구매 / 바로 쓸 수 있음).
   받기는 이모티콘 설정과 같은 흐름(`hooks/useRemotePackDownload`)이라 어느 쪽에서 받아도 패널에 선다.
+- 배포: production OTA 완료(2026-10-12, 소스 a9b01dec, Android 1.0.7 vc39 `700b96c0` · iOS 1.0.7 (34) `d75619b0`).
 - 검증: 웹에서 실제 catalog.json·운영 썸네일로 상점 → 상세 → 받기 → PRO 잠긴 팩까지 확인(로그인 없이 스토어를
   채운 임시 하네스, 커밋 안 함). 네이티브 Lottie 크게 보기 재생은 실기기 미확인.
 - 함정: `kind: 'remote'` 처럼 따옴표 문자열이 MDI 아이콘 이름과 같으면 아이콘 폰트 서브셋이 바뀐다
