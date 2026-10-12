@@ -45,7 +45,7 @@ class FoodAnalysisResponseMappingTest {
                   "totalCalories": 70, "totalCarbs": 1, "totalProtein": 6, "totalFat": 5
                 }
                 """);
-        when(geminiClient.generateJsonInBackground(any(), any(), any(), any())).thenReturn(result);
+        when(geminiClient.generateJsonWhileWaiting(any(), any(), any(), any())).thenReturn(result);
 
         MealAnalysisResponse response = service.analyzeText(1L, "계란 하나");
 
@@ -64,7 +64,7 @@ class FoodAnalysisResponseMappingTest {
                   "source": "UNKNOWN_MADE_UP_VALUE"
                 }
                 """);
-        when(geminiClient.generateJsonInBackground(any(), any(), any(), any())).thenReturn(result);
+        when(geminiClient.generateJsonWhileWaiting(any(), any(), any(), any())).thenReturn(result);
 
         MealAnalysisResponse response = service.analyzeText(1L, "계란 하나");
 
@@ -82,7 +82,7 @@ class FoodAnalysisResponseMappingTest {
                   "source": "NUTRITION_LABEL"
                 }
                 """);
-        when(geminiClient.generateJsonInBackground(any(), any(), any(), any())).thenReturn(result);
+        when(geminiClient.generateJsonWhileWaiting(any(), any(), any(), any())).thenReturn(result);
 
         MealAnalysisResponse response = service.analyzeText(1L, "계란 하나");
 
@@ -102,6 +102,6 @@ class FoodAnalysisResponseMappingTest {
         var order = inOrder(geminiClient);
         order.verify(geminiClient).requireConfiguredAndCountUsage(7L, Feature.AI_FOOD_PHOTO);
         order.verify(geminiClient).refund(7L, Feature.AI_FOOD_PHOTO);
-        verify(geminiClient, never()).generateJsonInBackground(any(), any(), any(), any());
+        verify(geminiClient, never()).generateJsonWhileWaiting(any(), any(), any(), any());
     }
 }

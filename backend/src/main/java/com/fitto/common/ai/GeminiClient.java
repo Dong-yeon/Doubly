@@ -109,6 +109,37 @@ public class GeminiClient {
     private static final RetryPolicy BACKGROUND = new RetryPolicy(6, 2_000, 60_000, 240_000);
 
     /**
+     * 백그라운드 작업이지만 <b>사람이 화면 앞에서 결과를 기다리는</b> 호출 — 음식 사진·글 분석.
+     *
+     * <p>{@link #BACKGROUND} 를 그대로 쓰면 1차 모델이 503 일 때 2→6→18→54초로 물러서다 예산의 60%(≈144초)를
+     * 다 쓰고서야 폴백으로 넘어간다. 앱은 2분에 기다리기를 그만두므로(aiJob.ts) 폴백 결과는 아무도 못 본다.
+     * 여기선 모델당 두 번만 묻고(0.7초 쉬고) 바로 폴백으로 넘긴다 — 분 단위 503 은 같은 모델로 기다려서
+     * 넘는 게 아니라 다른 모델에게 물어서 넘는다({@link #callWithRetry} 주석). 예산 50초 = 1차 30초 + 폴백.
+     * (docs/meal-photo-slowness_2026-10-12.md #3)
+     */
+    private static final RetryPolicy WAITING = new RetryPolicy(2, 700, 3_000, 50_000);
+
+    /**
+     * JSON 호출 한 건의 설정 — 재시도 정책 + 요청 본문에 얹는 것들.
+     *
+     * @param maxOutputTokens 출력 상한(null = 모델 기본). 음식 분석에서 {@code totalSugar} 자리에 0 이 끝없이 이어지는
+     *                        퇴행 출력이 실패의 전부였는데(server-stability §13), 상한이 없어 끝까지 생성했다
+     * @param thinkingOff     생각(thinking)을 끈다 — 지원하는 모델에만 싣는다({@link #supportsThinkingOff})
+     * @param retryBrokenJson 결과 JSON 이 깨지면 폴백 모델(없으면 같은 모델)에게 한 번 더 묻는다
+     */
+    private record CallProfile(RetryPolicy retry, Integer maxOutputTokens, boolean thinkingOff,
+                               boolean retryBrokenJson) {
+    }
+
+    private static final CallProfile SYNC_CALL = new CallProfile(SYNC, null, false, false);
+    private static final CallProfile BACKGROUND_CALL = new CallProfile(BACKGROUND, null, false, false);
+    /**
+     * 기다리는 사람용 — 음식 분석 출력은 평균 711 토큰(meal-photo-auto-analyze-metrics)이라 2048 이면 항목이 많은
+     * 한 상도 넉넉하다. 폴백 gemini-2.5-flash 는 thinking 이 기본으로 켜져 있어 넘어가는 순간 느려졌다.
+     */
+    private static final CallProfile WAITING_CALL = new CallProfile(WAITING, 2048, true, true);
+
+    /**
      * 폴백 모델이 있을 때 1차 모델에 내주는 예산 비율(%).
      *
      * <p>100 을 주면(=전부) 1차 모델이 예산을 다 태우고 폴백은 한 번도 못 돌아본다.
@@ -295,7 +326,7 @@ public class GeminiClient {
      */
     public JsonNode generateJson(Long userId, Feature feature,
                                  List<Map<String, Object>> parts, Map<String, Object> responseSchema) {
-        return generateJson(userId, feature, parts, responseSchema, SYNC);
+        return generateJson(userId, feature, parts, responseSchema, SYNC_CALL);
     }
 
     /**
@@ -307,7 +338,18 @@ public class GeminiClient {
     public JsonNode generateJsonInBackground(Long userId, Feature feature,
                                              List<Map<String, Object>> parts,
                                              Map<String, Object> responseSchema) {
-        return generateJson(userId, feature, parts, responseSchema, BACKGROUND);
+        return generateJson(userId, feature, parts, responseSchema, BACKGROUND_CALL);
+    }
+
+    /**
+     * 백그라운드 작업이지만 <b>사람이 결과를 기다리는</b> 호출용 — 음식 사진·글 분석.
+     * 폴백으로 빨리 넘기고, 출력 길이에 상한을 두고, 결과 JSON 이 깨지면 한 번 더 묻는다({@link #WAITING_CALL}).
+     * {@link #generateJsonInBackground} 와 마찬가지로 {@link AiJobService#submit} 안에서만 쓴다.
+     */
+    public JsonNode generateJsonWhileWaiting(Long userId, Feature feature,
+                                             List<Map<String, Object>> parts,
+                                             Map<String, Object> responseSchema) {
+        return generateJson(userId, feature, parts, responseSchema, WAITING_CALL);
     }
 
     /**
@@ -393,9 +435,9 @@ public class GeminiClient {
     }
 
     private JsonNode generateJson(Long userId, Feature feature, List<Map<String, Object>> parts,
-                                  Map<String, Object> responseSchema, RetryPolicy policy) {
+                                  Map<String, Object> responseSchema, CallProfile profile) {
         try {
-            return generateJsonOrThrow(parts, responseSchema, policy,
+            return generateJsonOrThrow(parts, responseSchema, profile,
                     new CallContext(userId, feature, imagePartCount(parts)));
         } catch (RuntimeException e) {
             refundUsage(userId, feature);
@@ -410,29 +452,88 @@ public class GeminiClient {
 
     private JsonNode generateJsonOrThrow(List<Map<String, Object>> parts,
                                          Map<String, Object> responseSchema,
-                                         RetryPolicy policy, CallContext context) {
+                                         CallProfile profile, CallContext context) {
+        Map<String, Object> generationConfig = new LinkedHashMap<>();
+        generationConfig.put("temperature", 0.2);
+        generationConfig.put("responseMimeType", "application/json");
+        generationConfig.put("responseSchema", responseSchema);
+        if (profile.maxOutputTokens() != null) {
+            generationConfig.put("maxOutputTokens", profile.maxOutputTokens());
+        }
         Map<String, Object> body = Map.of(
                 "contents", List.of(Map.of("parts", parts)),
-                "generationConfig", Map.of(
-                        "temperature", 0.2,
-                        "responseMimeType", "application/json",
-                        "responseSchema", responseSchema));
+                "generationConfig", generationConfig);
 
-        JsonNode root = callWithRetry(body, policy, context);
+        JsonNode parsed = parseJsonResult(callWithRetry(body, profile, context));
+        if (parsed != null) {
+            return parsed;
+        }
+        if (!profile.retryBrokenJson()) {
+            throw new BusinessException(ErrorCode.AI_ANALYSIS_FAILED);
+        }
+        /*
+         * 결과가 깨졌다(빈 응답·퇴행 출력이 상한에 잘림·형식 오류) — 같은 입력을 같은 모델에 다시 주면 같은 퇴행을
+         * 되풀이하기 쉬우니 폴백 모델(없으면 같은 모델)에게 한 번만 더 묻는다. 503 재시도와 달리 한 번뿐이다.
+         */
+        String retryModel = fallbackModelFor(properties.getModel());
+        if (retryModel == null) {
+            retryModel = properties.getModel();
+        }
+        log.warn("Gemini 결과가 깨져 {} 에게 한 번 더 묻는다", retryModel);
+        try {
+            JsonNode retried = parseJsonResult(callModel(retryModel, properties.getApiKey(),
+                    bodyFor(body, retryModel, profile), profile.retry(),
+                    System.currentTimeMillis() + profile.retry().budgetMillis(), false, context));
+            if (retried != null) {
+                return retried;
+            }
+        } catch (ModelUnavailable unavailable) {
+            throw unavailable.toBusinessException();
+        }
+        throw new BusinessException(ErrorCode.AI_ANALYSIS_FAILED);
+    }
 
-        String text = root == null ? null
-                : root.path("candidates").path(0).path("content")
-                        .path("parts").path(0).path("text").asText(null);
+    /** 결과 텍스트를 JSON 으로 — 없거나 깨졌으면 로그를 남기고 null */
+    private JsonNode parseJsonResult(JsonNode root) {
+        JsonNode candidate = root == null ? null : root.path("candidates").path(0);
+        String text = candidate == null ? null
+                : candidate.path("content").path("parts").path(0).path("text").asText(null);
         if (text == null || text.isBlank()) {
             log.warn("Gemini 응답에 결과 텍스트 없음: {}", root);
-            throw new BusinessException(ErrorCode.AI_ANALYSIS_FAILED);
+            return null;
         }
         try {
             return objectMapper.readTree(text);
         } catch (Exception e) {
-            log.warn("Gemini 결과 JSON 파싱 실패: {}", text);
-            throw new BusinessException(ErrorCode.AI_ANALYSIS_FAILED);
+            // 퇴행 출력은 수천 글자라 앞부분만 — finishReason=MAX_TOKENS 면 출력 상한에 잘린 것이다
+            log.warn("Gemini 결과 JSON 파싱 실패(finishReason={}): {}",
+                    candidate.path("finishReason").asText(""), truncateBody(text));
+            return null;
         }
+    }
+
+    /**
+     * 모델에 맞춘 요청 본문 — 생각 끄기는 그걸 받아 주는 모델에만 싣는다.
+     * 다른 설정은 그대로라 생각 끄기가 없는 호출은 원래 본문을 그대로 돌려준다.
+     */
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> bodyFor(Map<String, Object> body, String model, CallProfile profile) {
+        if (!profile.thinkingOff() || !supportsThinkingOff(model)) {
+            return body;
+        }
+        Map<String, Object> config = new LinkedHashMap<>((Map<String, Object>) body.get("generationConfig"));
+        config.put("thinkingConfig", Map.of("thinkingBudget", 0));
+        Map<String, Object> copy = new LinkedHashMap<>(body);
+        copy.put("generationConfig", config);
+        return copy;
+    }
+
+    /**
+     * 생각 예산 0(끄기)을 받아 주는 모델인가 — 2.5 Flash 계열만. 2.5 Pro 는 끌 수 없어 0 을 보내면 400 이고,
+     * 3 세대는 다른 필드(thinkingLevel)를 쓴다. 모르는 모델엔 아무것도 싣지 않는 쪽이 안전하다.
+     */
+    static boolean supportsThinkingOff(String model) {
+        return model != null && model.startsWith("gemini-2.5-flash");
     }
 
     /**
@@ -456,7 +557,8 @@ public class GeminiClient {
      * <p>얼마나 오래 버틸지는 {@link RetryPolicy} 가 정한다. 폴백이 설정돼 있으면 1차 모델에
      * 예산을 다 쓰게 두지 않는다 — 남겨두지 않으면 폴백이 한 번도 돌아보지 못하고 끝난다.
      */
-    private JsonNode callWithRetry(Map<String, Object> body, RetryPolicy policy, CallContext context) {
+    private JsonNode callWithRetry(Map<String, Object> body, CallProfile profile, CallContext context) {
+        RetryPolicy policy = profile.retry();
         long start = System.currentTimeMillis();
         long deadline = start + policy.budgetMillis();
         String primary = properties.getModel();
@@ -467,15 +569,16 @@ public class GeminiClient {
                 : start + policy.budgetMillis() * PRIMARY_BUDGET_PERCENT / 100;
 
         try {
-            return callModel(primary, properties.getApiKey(), body, policy, primaryDeadline,
-                    fallback != null, context);
+            return callModel(primary, properties.getApiKey(), bodyFor(body, primary, profile), policy,
+                    primaryDeadline, fallback != null, context);
         } catch (ModelUnavailable primaryFailure) {
             if (fallback == null || System.currentTimeMillis() >= deadline) {
                 throw primaryFailure.toBusinessException();
             }
             log.warn("Gemini 1차 모델({}) 계속 실패 — 폴백 모델({})로 다시 시도", primary, fallback);
             try {
-                return callModel(fallback, properties.getApiKey(), body, policy, deadline, false, context);
+                return callModel(fallback, properties.getApiKey(), bodyFor(body, fallback, profile), policy,
+                        deadline, false, context);
             } catch (ModelUnavailable fallbackFailure) {
                 log.warn("Gemini 폴백 모델({})도 실패", fallback);
                 throw fallbackFailure.toBusinessException();
