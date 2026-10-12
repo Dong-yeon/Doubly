@@ -55,7 +55,7 @@ const pendingSeenAt = new Map<number, number>();
  *   <li>이름만 적고 칼로리를 비워 둔 항목이 있다(MealCalorieFillService, 2026-10-12)
  * </ul>
  */
-function isFillingCalories(meal: Meal): boolean {
+export function isFillingCalories(meal: Meal): boolean {
   const items = meal.items ?? [];
   const photoOnly = !!meal.photoUrl && meal.calories == null && items.length === 0;
   const typedWithoutCalories = items.some((i) => i.calories == null);

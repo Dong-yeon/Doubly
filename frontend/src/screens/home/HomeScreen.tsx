@@ -66,7 +66,7 @@ import {
   connectSocket,
   subscribeCouple,
 } from '../../api/chatSocket';
-import { pickImage, takePhoto, uploadImage } from '../../utils/imageUpload';
+import { pickImage, pickImageAsset, shrinkImage, takePhotoAsset, uploadImage } from '../../utils/imageUpload';
 import { daysSince, formatMonthDay, localDateOf, todayKst } from '../../utils/date';
 import { mealTypeForNow, mealTypeLabel } from '../../utils/mealTimeSlot';
 import { haptics } from '../../utils/haptics';
@@ -507,8 +507,13 @@ export function HomeScreen({ navigation }: Props) {
     let photoUrl: string | null = null;
     let stashed: PendingMealPhoto | null = null;
     try {
-      const picked = source === 'camera' ? await takePhoto() : await pickImage();
-      if (!picked) return;
+      const asset = source === 'camera' ? await takePhotoAsset() : await pickImageAsset();
+      if (!asset) return;
+      /*
+       * 기록 화면처럼 고르자마자 1024px 로 줄인다 — 예전엔 원본(1.5~3MB)을 그대로 올려 업로드·서버 다운로드·Gemini
+       * 전송이 모두 무거웠다(meal-photo-slowness_2026-10-12 #8). 보관함에도 줄인 사진이 들어가 기기 공간도 덜 쓴다.
+       */
+      const picked = await shrinkImage(asset);
       const mealType = mealTypeForNow();
       let saved: Meal;
       if (CAN_KEEP_PENDING_MEAL_PHOTOS && user?.id) {

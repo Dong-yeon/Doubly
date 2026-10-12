@@ -28,6 +28,27 @@ interface AiJobStatus<T> {
 const POLL_INTERVAL_MS = [300, 700, 1200, 2000, 2000, 3000];
 
 /**
+ * 빠른 폴링 — 몇 초 안에 끝나는 작업(음식 사진·글 분석)용. 위 간격이면 4.3초에 끝난 결과를 6.2초에야 알았다
+ * (meal-photo-slowness_2026-10-12 #6). 처음 {@link QUICK_POLL_WINDOW_MS} 동안만 1초마다 묻고, 그 뒤로 길어지는
+ * 작업(503 재시도·폴백)은 기본 간격의 끝값으로 돌아간다 — 오래 걸리는 판에 자주 물어도 빨라지지 않는다.
+ */
+const QUICK_POLL_FIRST_MS = 500;
+const QUICK_POLL_MS = 1000;
+const QUICK_POLL_WINDOW_MS = 20_000;
+
+export interface AwaitAiJobOptions {
+  /** 몇 초 안에 끝나는 작업이면 true — 처음 20초는 1초마다 묻는다 */
+  quickPoll?: boolean;
+}
+
+function pollInterval(attempt: number, elapsedMs: number, quickPoll: boolean): number {
+  if (quickPoll && elapsedMs < QUICK_POLL_WINDOW_MS) {
+    return attempt === 0 ? QUICK_POLL_FIRST_MS : QUICK_POLL_MS;
+  }
+  return POLL_INTERVAL_MS[Math.min(attempt, POLL_INTERVAL_MS.length - 1)];
+}
+
+/**
  * 화면 앞에서 기다려 줄 <b>사람</b>의 한계. 서버 예산(백그라운드 4분)보다 <b>짧다</b> —
  * 일부러 그렇게 뒀다.
  *
@@ -49,11 +70,11 @@ const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, 
  * 실패는 서버가 준 문구를 담은 {@link ApiError} 로 던져, 화면의 기존
  * {@code getErrorMessage} 처리에 그대로 얹힌다.
  */
-export async function awaitAiJob<T>(jobId: string): Promise<T> {
+export async function awaitAiJob<T>(jobId: string, options: AwaitAiJobOptions = {}): Promise<T> {
   const startedAt = Date.now();
   let consecutiveErrors = 0;
   for (let attempt = 0; ; attempt++) {
-    await wait(POLL_INTERVAL_MS[Math.min(attempt, POLL_INTERVAL_MS.length - 1)]);
+    await wait(pollInterval(attempt, Date.now() - startedAt, options.quickPoll === true));
 
     let job: AiJobStatus<T>;
     try {
@@ -104,7 +125,7 @@ export async function awaitAiJob<T>(jobId: string): Promise<T> {
 }
 
 /** 접수 응답에서 jobId 를 꺼내 결과가 나올 때까지 기다린다 — 호출부 한 줄용 헬퍼. */
-export async function runAiJob<T>(start: Promise<AiJobStart>): Promise<T> {
+export async function runAiJob<T>(start: Promise<AiJobStart>, options?: AwaitAiJobOptions): Promise<T> {
   const { jobId } = await start;
-  return awaitAiJob<T>(jobId);
+  return awaitAiJob<T>(jobId, options);
 }

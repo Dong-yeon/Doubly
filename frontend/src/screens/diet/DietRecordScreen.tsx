@@ -1040,7 +1040,12 @@ export function DietRecordScreen({ navigation, route }: Props) {
     track('MEAL_ANALYZE_STARTED', trigger === 'auto' ? 'photo_auto' : 'photo');
     setAnalyzing(true);
     try {
-      const photoUrl = await uploadForSubmit(uri);
+      /*
+       * 자동 분석은 사진을 고른 바로 그 순간에 돈다 — 선업로드가 아직 끝났을 리 없어서 uploadForSubmit 이면
+       * 매번 "사진 올리는 중…" 전체 화면 잠금이 떴다(fedac843 이후, meal-photo-slowness_2026-10-12 #2).
+       * 진행 중인 선업로드를 그대로 기다린다(ensureUploaded 가 Promise 를 공유) — 진행 표시는 분석 버튼의 로딩이 한다.
+       */
+      const photoUrl = trigger === 'auto' ? await ensureUploaded(uri) : await uploadForSubmit(uri);
       // 전역 화면 잠금은 걷었다(대기가 분 단위까지 늘 수 있다). 이 경로는 결과를
       // 기존 항목 <b>뒤에 덧붙이므로</b>, 기다리는 동안 뭘 더 적어도 지워지지 않는다.
       // 이미 있는 우리 장소를 골랐으면 같이 보낸다 — 가게 이름·여기서 먹은 메뉴가 사진만으로는 헷갈리는
