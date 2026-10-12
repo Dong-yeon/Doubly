@@ -25,7 +25,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HealthStackParamList } from '../../navigation/types';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
-import { MealCard } from '../../components/MealCard';
+import { MealCard, isFillingCalories } from '../../components/MealCard';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { EmptyState } from '../../components/EmptyState';
 import { AiInsightButton } from '../../components/AiInsightButton';
@@ -118,6 +118,12 @@ function NutritionBar({
     </View>
   );
 }
+
+/**
+ * "칼로리 채우는 중" 기록을 다시 읽는 간격 — 서버 분석은 보통 3~6초, 503·폴백이 끼면 1분 안쪽이다.
+ * 처음은 촘촘히, 뒤로 갈수록 성기게(합계 약 2분 20초).
+ */
+const FILL_REFRESH_DELAYS_MS = [3000, 5000, 8000, 12000, 20000, 30000, 30000, 30000];
 
 /** 자동 계산 활동량 칩 — 결과 카드도 같은 이름을 쓴다 */
 const ACTIVITY_OPTIONS: [ActivityLevel, string][] = [
@@ -624,6 +630,37 @@ export function DietScreen({ navigation, route }: Props) {
       const relations = useRelationStore.getState();
       if (!relations.loaded && !relations.loading) void relations.fetchAll().catch(() => undefined);
     }, [fetchToday, fetchHistory, refreshExtras, loadPartnerMeals]),
+  );
+
+  /*
+   * "칼로리 채우는 중"인 오늘 기록이 있으면 잠깐씩 다시 읽는다. 서버(사진 자동 분석·글 칼로리 채우기)는 몇 초 만에
+   * 채우는데 그걸 앱에 알리는 이벤트가 없어, 다시 들어오거나 당겨서 새로고침하기 전까지 "채우는 중"으로 남았다
+   * (meal-photo-slowness_2026-10-12 #1). 화면이 보일 때만 돌고, 하나가 채워지면(개수가 바뀌면) 처음 간격부터 다시 잰다.
+   * 채우는 중 표시 자체가 10분 뒤 걷히므로(MealCard PENDING_WINDOW_MS) 끝없이 묻지 않는다.
+   */
+  const fillingCount = today.filter(isFillingCalories).length;
+  useFocusEffect(
+    useCallback(() => {
+      if (fillingCount === 0) return undefined;
+      let step = 0;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let cancelled = false;
+      const schedule = () => {
+        if (step >= FILL_REFRESH_DELAYS_MS.length) return;
+        timer = setTimeout(async () => {
+          await fetchToday();
+          if (cancelled) return;
+          refreshNutrition();
+          step += 1;
+          schedule();
+        }, FILL_REFRESH_DELAYS_MS[step]);
+      };
+      schedule();
+      return () => {
+        cancelled = true;
+        if (timer) clearTimeout(timer);
+      };
+    }, [fillingCount, fetchToday, refreshNutrition]),
   );
 
   const onPickGoal = async (days: number) => {
