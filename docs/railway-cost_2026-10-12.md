@@ -20,8 +20,12 @@
    에이전트의 `railway down` 은 권한 분류기에 막혔다.
 2. **JVM 메모리 상한** — `backend/Dockerfile` 에 `JAVA_TOOL_OPTIONS`(-Xmx384m, SerialGC, 메타스페이스·코드캐시·다이렉트 메모리 상한,
    OOM 이면 즉시 종료 → Railway 가 재시작). Railway 변수 `JAVA_TOOL_OPTIONS` 로 코드 배포 없이 덮어쓸 수 있다.
-   로컬 측정은 Docker Desktop 이 이 PC 에서 시작되지 않아 못 했다 — 배포 뒤 `railway metrics` 와 로그(OutOfMemoryError)로 본다.
-   예상: Back 0.5~0.6GB + Postgres 0.1GB ≈ 월 $6~7.
+   **로컬 실측**(Docker 엔진이 안 떠서 테스트 프로파일 = H2 로 같은 상한을 걸고 실제 서버를 띄움): 기동 23초,
+   가입·커플 연결 뒤 식단 저장 240건 + 조회 1,200건을 동시 40개로 몰아넣음 → OutOfMemoryError 0건
+   (실패 175건은 전부 H2 커넥션 풀 대기 초과 — 동시 40 쓰기라는 인위적 부하 탓, 메모리와 무관).
+   부하 뒤 살아 있는 데이터(tenured used) 105MB, 힙 committed 263MB / 상한 384MB, 메타스페이스 139MB / 192MB,
+   JVM 전체 committed 544MB(NMT), 프로세스 RSS 631MB. → 운영 2.71GB 의 약 1/4. 여유가 있어 -Xmx256m 까지도 가능하지만 384 로 둔다.
+   예상: Back ~0.6GB + Postgres 0.1GB ≈ 월 $7.
 3. 한도는 $10 유지(사용자 결정). 남은 16일 예산 $1.97 → 평균 0.37GB 이하여야 해서, 1·2 를 해도 기간 말에 한도에 닿을 수 있다 — 닿으면 10/28 까지 서비스가 멈춘다.
 
 ## 더 싼 서버로 옮긴다면 (비교 — 미결정)
