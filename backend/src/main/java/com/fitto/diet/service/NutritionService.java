@@ -133,13 +133,15 @@ public class NutritionService {
         double weeklyRateKg = req.goalType() == DietGoalType.MAINTAIN ? 0
                 : (req.weeklyRateKg() != null ? req.weeklyRateKg() : DEFAULT_WEEKLY_RATE_KG);
         int dailyDelta = (int) Math.round(weeklyRateKg * KCAL_PER_KG_FAT / 7.0);
-        int targetCalories = switch (req.goalType()) {
-            case LOSE -> tdee - dailyDelta;
-            case GAIN -> tdee + dailyDelta;
-            case MAINTAIN -> tdee;
+        int goalAdjustment = switch (req.goalType()) {
+            case LOSE -> -dailyDelta;
+            case GAIN -> dailyDelta;
+            case MAINTAIN -> 0;
         };
+        int calculated = tdee + goalAdjustment;
         // 기초대사량 아래 · 절대 하한(1200kcal) 아래로는 내려가지 않는다 — 극단적 저칼로리 방지
-        targetCalories = Math.max(targetCalories, Math.max(MIN_TARGET_CALORIES, bmr));
+        int targetCalories = Math.max(calculated, Math.max(MIN_TARGET_CALORIES, bmr));
+        Integer raisedFrom = targetCalories != calculated ? calculated : null;
 
         // 매크로 — 프리셋(균형/저탄고지/고단백/키토)에 따라 단백질(체중 기준 g/kg)·지방(칼로리 비율)을
         // 정하고 탄수화물이 나머지를 채운다. KETO 는 별도 계산식 없이 지방 비율만 높여 자연히 저탄수가 된다.
@@ -148,9 +150,13 @@ public class NutritionService {
         double fatG = targetCalories * preset.fatRatio() / 9;
         double carbsG = Math.max(0, (targetCalories - proteinG * 4 - fatG * 9) / 4);
 
+        boolean usedBodyFat = BmrCalculator.usesBodyFat(metric);
         return new NutritionGoalSuggestionResponse(bmr, tdee, targetCalories,
                 (int) Math.round(carbsG), (int) Math.round(proteinG), (int) Math.round(fatG),
-                BmrCalculator.usesBodyFat(metric), null);
+                usedBodyFat, null,
+                weightKg, usedBodyFat ? metric.getBodyFatPct() : null, metric.getMeasuredDate(),
+                req.activityLevel().multiplier(), goalAdjustment, raisedFrom,
+                preset.proteinPerKg(), (int) Math.round(preset.fatRatio() * 100));
     }
 
     /** 커플이 여행 모드를 켜둔 여행 중 오늘이 그 기간 안인 것 — 없으면(미연결 포함) empty. */
