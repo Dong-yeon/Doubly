@@ -1,4 +1,4 @@
-/** 이미지 업로드 서명 API — Cloudinary signed upload */
+/** 이미지 업로드 발급 API — Cloudinary 서명 업로드, 또는 R2 서명된 PUT 주소(2026-10-12~) */
 import { apiClient, isApiError, unwrap } from './client';
 import type { ApiResponse } from '../types';
 
@@ -8,18 +8,38 @@ export interface UploadSignature {
   timestamp: number;
   folder: string;
   signature: string;
+  /**
+   * 어디로 올리나 — 없으면(옛 서버) cloudinary. r2 면 {@link uploadUrl} 로 {@link contentType} 을 붙여 PUT 하고,
+   * 저장할 주소는 {@link publicUrl} 이다(docs/r2-migration-plan_2026-10-12.md).
+   */
+  provider?: 'cloudinary' | 'r2';
+  uploadUrl?: string | null;
+  publicUrl?: string | null;
+  contentType?: string | null;
+}
+
+/** R2 로 받을 수 있다고 서버에 알린다 — 서버 스위치가 꺼져 있으면 서버는 그래도 Cloudinary 서명을 준다 */
+export interface UploadAccept {
+  r2: boolean;
+  contentType?: string;
+}
+
+function acceptQuery(accept?: UploadAccept): string {
+  if (!accept?.r2) return '';
+  const type = accept.contentType ? `&contentType=${encodeURIComponent(accept.contentType)}` : '';
+  return `?accept=r2${type}`;
 }
 
 export const uploadApi = {
   /** 서명 발급 — 백엔드 미설정(503) 시 throw → 호출부에서 unsigned 폴백 */
-  signature: () =>
-    unwrap(apiClient.post<ApiResponse<UploadSignature>>('/uploads/signature')),
+  signature: (accept?: UploadAccept) =>
+    unwrap(apiClient.post<ApiResponse<UploadSignature>>(`/uploads/signature${acceptQuery(accept)}`)),
   /**
    * 식단 사진 서명 — 폴더는 같고 한도만 사람 단위 하루 한도(MEAL_PHOTO)에서 센다. 커플 공용 사진 한도(월 60장)를
    * 식단 사진이 먹어서 일상·채팅 사진까지 막히던 문제(docs/first-experience-audit.md #10).
    */
-  mealSignature: () =>
-    unwrap(apiClient.post<ApiResponse<UploadSignature>>('/uploads/meal-signature')),
+  mealSignature: (accept?: UploadAccept) =>
+    unwrap(apiClient.post<ApiResponse<UploadSignature>>(`/uploads/meal-signature${acceptQuery(accept)}`)),
   /**
    * 올렸지만 쓰지 않은 사진 치우기 — 미리 올린 사진을 저장하지 않고 버렸을 때·분석에만 쓴 사진.
    * 서버가 "앱 업로드 폴더의 막 올린(24시간) 원본 + 아무 기록도 안 쓰는 것"만 지운다(UploadDiscardPolicy).

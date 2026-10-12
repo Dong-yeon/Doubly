@@ -4,7 +4,7 @@ import { File as FsFile } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { CLOUDINARY, isCloudinaryConfigured } from '../constants/config';
-import { uploadApi, type UploadSignature } from '../api/upload';
+import { uploadApi, type UploadAccept, type UploadSignature } from '../api/upload';
 import { errorCodeOf, isApiError } from '../api/client';
 import { toast } from '../store/toastStore';
 
@@ -250,6 +250,7 @@ async function postToCloudinary(cloudName: string, form: FormData): Promise<stri
  * 의 unsigned 폴백을 타면 안 된다 — 폴더가 달라 어차피 거절된다. 그래서 폴백이 없다.
  */
 export async function uploadImageWithSignature(uri: string, sig: UploadSignature): Promise<string> {
+  if (sig.provider === 'r2') return putToR2(uri, sig);
   const form = await buildFileForm(uri);
   form.append('api_key', sig.apiKey);
   form.append('timestamp', String(sig.timestamp));
@@ -286,13 +287,64 @@ export async function uploadDataUriWithSignature(
  * 식단 사진 서명 — 식단 전용 서명이 없는 옛 서버(404)면 공용 서명으로. 서버가 먼저 배포되므로 보통은 안 탄다.
  * 한도 초과 등 다른 실패는 그대로 던진다(공용으로 넘어가면 식단 한도가 아무 일도 하지 않는다).
  */
-async function mealSignatureOrShared(): Promise<UploadSignature> {
+async function mealSignatureOrShared(accept?: UploadAccept): Promise<UploadSignature> {
   try {
-    return await uploadApi.mealSignature();
+    return await uploadApi.mealSignature(accept);
   } catch (e) {
-    if (isApiError(e) && e.status === 404) return uploadApi.signature();
+    if (isApiError(e) && e.status === 404) return uploadApi.signature(accept);
     throw e;
   }
+}
+
+/** 파일 확장자로 고른 이미지 형식 — 서버가 이 형식을 서명에 묶는다. 모르면 JPEG(앱이 줄인 사진은 JPEG 다) */
+function imageContentType(uri: string): string {
+  const ext = uri.split('?')[0].split('.').pop()?.toLowerCase();
+  switch (ext) {
+    case 'png':
+      return 'image/png';
+    case 'webp':
+      return 'image/webp';
+    case 'heic':
+    case 'heif':
+      return 'image/heic';
+    case 'gif':
+      return 'image/gif';
+    default:
+      return 'image/jpeg';
+  }
+}
+
+/**
+ * R2 로 올리기(2026-10-12~) — 서버가 준 서명된 주소로 파일 그대로 PUT. 서명에 Content-Type 이 묶여 있어
+ * 서버가 돌려준 형식을 그대로 보내야 한다(다르면 R2 가 403). 저장할 주소는 서버가 미리 알려 준 publicUrl.
+ *
+ * <p>웹은 쓰지 않는다 — 브라우저에서 R2 로 직접 올리려면 버킷 CORS 설정이 필요한데 지금 키에 그 권한이 없다.
+ */
+async function putToR2(uri: string, sig: UploadSignature): Promise<string> {
+  if (!sig.uploadUrl || !sig.publicUrl) throw new Error('이미지 업로드 응답이 올바르지 않아요.');
+  // 바이트로 읽어 보낸다 — 파일 객체를 본문으로 넘기는 건 런타임마다 지원이 갈린다. 앱이 줄여 올리는 사진이라 수백 KB 다
+  const body = await new FsFile(uri).bytes();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(sig.uploadUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': sig.contentType ?? 'image/jpeg' },
+      body,
+      signal: controller.signal,
+    });
+  } catch {
+    throw new Error(
+      controller.signal.aborted
+        ? '사진 올리기가 너무 오래 걸려 멈췄어요. 연결을 확인하고 다시 시도해 주세요.'
+        : '사진을 올리지 못했어요. 인터넷 연결을 확인해 주세요.',
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+  if (!res.ok) throw new Error('이미지 업로드에 실패했어요.');
+  return sig.publicUrl;
 }
 
 /**
@@ -309,8 +361,11 @@ async function mealSignatureOrShared(): Promise<UploadSignature> {
  */
 export async function uploadImage(uri: string, options?: { purpose?: 'meal' }): Promise<string> {
   let sig: Awaited<ReturnType<typeof uploadApi.signature>> | null = null;
+  // 네이티브만 R2 를 받겠다고 알린다 — 웹은 CORS 때문에 계속 Cloudinary(putToR2 주석)
+  const accept: UploadAccept | undefined =
+    Platform.OS === 'web' ? undefined : { r2: true, contentType: imageContentType(uri) };
   try {
-    sig = options?.purpose === 'meal' ? await mealSignatureOrShared() : await uploadApi.signature();
+    sig = options?.purpose === 'meal' ? await mealSignatureOrShared(accept) : await uploadApi.signature(accept);
   } catch (e) {
     // 한도 초과(402·429)는 여기서 그대로 던진다 — api/client 가 이미 업그레이드 안내를 띄웠다.
     if (errorCodeOf(e) !== 'UPLOAD_NOT_CONFIGURED') throw e;
