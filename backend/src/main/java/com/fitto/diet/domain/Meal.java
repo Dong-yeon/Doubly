@@ -245,6 +245,18 @@ public class Meal {
     }
 
     /**
+     * 이름만 적고 칼로리를 비워 둔 항목을 서버가 채웠다({@code MealCalorieFillService}) — 항목을 교체하고 합계를 다시 낸다.
+     * AI 추정이 하나라도 섞였으면 "약" 배지를 단다. 공공 DB 표기값만으로 채웠으면 출처를 그대로 둔다(추정이 아니다).
+     */
+    public void applyFilledItems(List<MealItem> filled, boolean estimated) {
+        replaceItems(filled);
+        recalcTotals();
+        if (estimated) {
+            this.nutritionSource = NutritionSource.AI_ESTIMATED;
+        }
+    }
+
+    /**
      * 사용자가 이 기록을 직접 저장/수정했다 — AI 추정 배지를 걷어낸다.
      * 수정 화면을 열어 저장했다는 건 화면에 뜬 값을 <b>본인이 확인했다</b>는 뜻이다.
      */

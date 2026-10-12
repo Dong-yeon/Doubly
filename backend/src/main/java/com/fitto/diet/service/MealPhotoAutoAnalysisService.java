@@ -45,6 +45,9 @@ public class MealPhotoAutoAnalysisService {
     /** {@link AiJobService} 지표 태그 — {@code job=meal-auto-analyze} 로 성공/실패를 센다. */
     private static final String JOB_LABEL = "meal-auto-analyze";
 
+    /** 글로 적은 항목의 빈 칼로리 채우기 — 저장 경로 한 곳(scheduleIfEligible)에서 함께 건다 */
+    private final MealCalorieFillService calorieFillService;
+
     private final MealRepository mealRepository;
     private final UserRepository userRepository;
     private final FoodAnalysisService foodAnalysisService;
@@ -61,7 +64,9 @@ public class MealPhotoAutoAnalysisService {
                                         UserRepository userRepository,
                                         FoodAnalysisService foodAnalysisService,
                                         AiJobService aiJobService,
-                                        PlatformTransactionManager transactionManager) {
+                                        PlatformTransactionManager transactionManager,
+                                        MealCalorieFillService calorieFillService) {
+        this.calorieFillService = calorieFillService;
         this.mealRepository = mealRepository;
         this.userRepository = userRepository;
         this.foodAnalysisService = foodAnalysisService;
@@ -82,6 +87,11 @@ public class MealPhotoAutoAnalysisService {
      */
     public void scheduleIfEligible(Long userId, Meal meal, Long placeId) {
         if (!isEligible(userId, meal)) {
+            /*
+             * 사진 분석 대상이 아니면(항목이 있다) — 이름만 적고 칼로리를 비워 둔 항목은 따로 채운다.
+             * 둘은 겹치지 않는다: 사진 분석은 항목이 하나도 없을 때만, 칼로리 채우기는 항목이 있을 때만 돈다.
+             */
+            calorieFillService.scheduleIfEligible(userId, meal);
             return;
         }
         Long mealId = meal.getId();

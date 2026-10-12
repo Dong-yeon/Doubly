@@ -34,6 +34,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.after;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
@@ -237,5 +238,65 @@ class MealPhotoAutoAnalysisTest {
             assertThat(m.calories()).isEqualTo(800);
             assertThat(m.nutritionSource()).isEqualTo(NutritionSource.AI_ESTIMATED);
         });
+    }
+
+    // ---- 글로 적은 음식의 빈 칼로리 채우기 (MealCalorieFillService, 2026-10-12) ----
+
+    private SaveMealRequest typed(MealItemRequest... items) {
+        return new SaveMealRequest(LocalDate.now(), MealType.LUNCH, null, null,
+                null, null, null, null, null, null, null, List.of(items));
+    }
+
+    @Test
+    void 이름만_적고_저장하면_빈_칼로리를_뒤에서_채운다_적은_값은_그대로() {
+        Long user = register("fill1@fitto.com");
+        // 빈 것 두 개를 보냈고 AI 가 두 개를 돌려준다 → 순서대로 짝짓는다
+        when(foodAnalysisService.analyzeText(anyLong(), eq("김치찌개 1인분, 공기밥"))).thenReturn(twoFoods());
+
+        MealResponse saved = mealService.save(user, typed(
+                new MealItemRequest("김치찌개", "1인분", null, null, null, null),
+                new MealItemRequest("계란후라이", null, 90, 1, 6, 7),
+                new MealItemRequest("공기밥", null, null, null, null, null)));
+        assertThat(saved.calories()).isEqualTo(90);
+
+        await().atMost(ANALYZED).untilAsserted(() -> {
+            MealResponse after = mealService.findToday(user).get(0);
+            assertThat(after.items()).extracting(i -> i.name()).containsExactly("김치찌개", "계란후라이", "공기밥");
+            assertThat(after.items()).extracting(i -> i.calories()).containsExactly(500, 90, 300);
+            // 사용자가 portion 을 적지 않은 줄만 AI 의 양을 받는다
+            assertThat(after.items()).extracting(i -> i.portion()).containsExactly("1인분", null, "1공기");
+            assertThat(after.calories()).isEqualTo(890);
+            assertThat(after.nutritionSource()).isEqualTo(NutritionSource.AI_ESTIMATED);
+        });
+    }
+
+    @Test
+    void AI_가_다르게_나누면_빈_항목들을_AI_목록으로_바꾼다() {
+        Long user = register("fill2@fitto.com");
+        when(foodAnalysisService.analyzeText(anyLong(), eq("김치찌개랑 밥"))).thenReturn(twoFoods());
+
+        mealService.save(user, typed(
+                new MealItemRequest("샐러드", null, 200, null, null, null),
+                new MealItemRequest("김치찌개랑 밥", null, null, null, null, null)));
+
+        await().atMost(ANALYZED).untilAsserted(() -> {
+            MealResponse after = mealService.findToday(user).get(0);
+            assertThat(after.items()).extracting(i -> i.name()).containsExactly("샐러드", "김치찌개", "공기밥");
+            assertThat(after.calories()).isEqualTo(1000);
+        });
+    }
+
+    @Test
+    void 칼로리를_다_적었거나_설정을_끄면_부르지_않는다() {
+        Long full = register("fill3@fitto.com");
+        mealService.save(full, typed(new MealItemRequest("샐러드", null, 200, null, null, null)));
+
+        Long off = register("fill4@fitto.com");
+        User u = userRepository.findById(off).orElseThrow();
+        u.setAutoAnalyzeMealPhoto(false);
+        userRepository.save(u);
+        mealService.save(off, typed(new MealItemRequest("떡볶이", null, null, null, null, null)));
+
+        verify(foodAnalysisService, after(500).never()).analyzeText(anyLong(), any());
     }
 }
