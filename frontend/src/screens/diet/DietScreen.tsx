@@ -46,6 +46,7 @@ import { streakApi } from '../../api/streak';
 import { getErrorMessage } from '../../utils/error';
 import { yesterdayKst } from '../../utils/date';
 import { CopyYesterdaySheet } from './CopyYesterdaySheet';
+import { GoalSuggestionResult } from './GoalSuggestionResult';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { confirmDiscard } from '../../utils/discardGuard';
@@ -65,6 +66,7 @@ import type {
   FastingStatus,
   MacroPreset,
   Meal,
+  NutritionGoalSuggestion,
   NutritionSummary,
   PartnerFasting,
   Streak,
@@ -116,6 +118,15 @@ function NutritionBar({
     </View>
   );
 }
+
+/** 자동 계산 활동량 칩 — 결과 카드도 같은 이름을 쓴다 */
+const ACTIVITY_OPTIONS: [ActivityLevel, string][] = [
+  ['SEDENTARY', '거의 안 함'],
+  ['LIGHT', '가벼운 운동'],
+  ['MODERATE', '보통'],
+  ['ACTIVE', '활발함'],
+  ['VERY_ACTIVE', '매우 활발'],
+];
 
 /** 계산식 시트의 한 줄 */
 function FormulaRow({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
@@ -380,6 +391,8 @@ export function DietScreen({ navigation, route }: Props) {
   const [wizRate, setWizRate] = useState(0.5);
   const [wizPreset, setWizPreset] = useState<MacroPreset>('BALANCED');
   const [calculating, setCalculating] = useState(false);
+  /** 계산 결과 — 있으면 마법사가 고르는 칸 대신 "어떻게 나왔나" 카드를 보여준다 */
+  const [wizResult, setWizResult] = useState<NutritionGoalSuggestion | null>(null);
   /** 목표 모달이 뜨고 나서 마법사를 이어 연다 — 모달 둘을 한 번에 띄우면 iOS 가 뒤의 것을 버린다 */
   const wizardAfterNutRef = useRef(false);
 
@@ -474,6 +487,7 @@ export function DietScreen({ navigation, route }: Props) {
   /** 마법사를 연다 — 저장해 둔 방향이 있으면 그 칩부터 선택해 둔다 */
   const openWizard = () => {
     if (nutrition?.goalDirection) setWizGoalType(nutrition.goalDirection);
+    setWizResult(null);
     setWizardModal(true);
   };
 
@@ -509,7 +523,10 @@ export function DietScreen({ navigation, route }: Props) {
     }
   };
 
-  // 목표 칼로리 자동 계산 — 결과를 목표 모달 입력칸에 채워만 준다. 저장은 사용자가 "저장" 버튼으로.
+  /*
+   * 목표 칼로리 자동 계산 — 결과 카드("어떻게 나왔나")를 먼저 보여주고, "목표 칸에 채우기"를 눌러야 입력칸을 채운다.
+   * 저장은 그 뒤 목표 모달의 "저장" 버튼으로(계산=미리보기, 저장=별도 동작은 그대로).
+   */
   const onCalculateGoal = async () => {
     setCalculating(true);
     try {
@@ -523,20 +540,27 @@ export function DietScreen({ navigation, route }: Props) {
         toast.error(res.message || '계산에 필요한 정보가 부족해요.');
         return;
       }
-      setTCal(String(res.targetCalories));
-      setTCarbs(String(res.targetCarbs));
-      setTProtein(String(res.targetProtein));
-      setTFat(String(res.targetFat));
-      // 계산에 쓴 방향을 저장 버튼까지 들고 간다 — 예전엔 계산에만 쓰고 버려 앱이 감량 중인지 몰랐다
-      setTDirection(wizGoalType);
-      haptics.success();
-      toast.success(res.usedBodyFat ? '체지방률까지 반영해 계산했어요. 확인 후 저장해주세요' : '계산했어요. 확인 후 저장해주세요');
-      setWizardModal(false);
+      haptics.light();
+      setWizResult(res);
     } catch (e) {
       toast.error(getErrorMessage(e, '계산에 실패했어요.'));
     } finally {
       setCalculating(false);
     }
+  };
+
+  /** 결과 카드의 "목표 칸에 채우기" — 입력칸만 채우고 마법사를 닫는다. 저장은 목표 모달에서 */
+  const onApplyWizResult = () => {
+    if (!wizResult || wizResult.targetCalories == null) return;
+    setTCal(String(wizResult.targetCalories));
+    setTCarbs(wizResult.targetCarbs != null ? String(wizResult.targetCarbs) : '');
+    setTProtein(wizResult.targetProtein != null ? String(wizResult.targetProtein) : '');
+    setTFat(wizResult.targetFat != null ? String(wizResult.targetFat) : '');
+    // 계산에 쓴 방향을 저장 버튼까지 들고 간다 — 예전엔 계산에만 쓰고 버려 앱이 감량 중인지 몰랐다
+    setTDirection(wizGoalType);
+    haptics.success();
+    toast.success('채웠어요. 확인 후 저장해주세요');
+    setWizardModal(false);
   };
 
   // 물 섭취 +/- — 실패해도 조용히 되돌리지 않고 에러만 안내(연타 시 중복 요청은 서버가 누적 처리)
@@ -1211,22 +1235,25 @@ ${m.placeName} 방문 기록도 함께 지울 수 있어요.`, [
         <Modal visible={nutModal && wizardModal} transparent animationType="fade" onRequestClose={() => setWizardModal(false)}>
           <Pressable style={styles.modalBackdrop} onPress={() => setWizardModal(false)}>
             <Pressable style={styles.modalCard} onPress={() => {}}>
+              {wizResult ? (
+                <GoalSuggestionResult
+                  result={wizResult}
+                  activityLabel={ACTIVITY_OPTIONS.find(([v]) => v === wizActivity)?.[1] ?? ''}
+                  goalType={wizGoalType}
+                  weeklyRateKg={wizGoalType === 'MAINTAIN' ? undefined : wizRate}
+                  onApply={onApplyWizResult}
+                  onBack={() => setWizResult(null)}
+                />
+              ) : (
+              <>
               <Text style={styles.modalTitle}>목표 칼로리 자동 계산</Text>
               <Text style={styles.modalDesc}>
-                기초대사량(BMR) × 활동량으로 하루 소비 칼로리를 추정해 목표를 제안해요.
+                기초대사량(BMR) × 활동량으로 하루 소비 칼로리를 추정하고, 감량·증량이면 그만큼 빼거나 더해 하루에 먹을 목표를 제안해요.
               </Text>
 
               <Text style={styles.wizardLabel}>활동량</Text>
               <View style={styles.wizardChipRow}>
-                {(
-                  [
-                    ['SEDENTARY', '거의 안 함'],
-                    ['LIGHT', '가벼운 운동'],
-                    ['MODERATE', '보통'],
-                    ['ACTIVE', '활발함'],
-                    ['VERY_ACTIVE', '매우 활발'],
-                  ] as [ActivityLevel, string][]
-                ).map(([value, label]) => (
+                {ACTIVITY_OPTIONS.map(([value, label]) => (
                   <TouchableOpacity
                     key={value}
                     style={[styles.wizardChip, wizActivity === value && styles.wizardChipActive]}
@@ -1305,7 +1332,9 @@ ${m.placeName} 방문 기록도 함께 지울 수 있어요.`, [
                 </>
               ) : null}
 
-              <Button title="계산해서 채우기" onPress={onCalculateGoal} loading={calculating} style={styles.nutSaveBtn} />
+              <Button title="계산하기" onPress={onCalculateGoal} loading={calculating} style={styles.nutSaveBtn} />
+              </>
+              )}
             </Pressable>
           </Pressable>
         </Modal>
