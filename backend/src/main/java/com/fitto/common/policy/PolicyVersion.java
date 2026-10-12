@@ -25,8 +25,10 @@ public final class PolicyVersion {
      * 종전의 "유상 거래 기능을 제공하지 않으므로 보존 의무가 없다"는 문장은 사실이 아니게 됐다.
      * 1.4 (2026-09-30): 탈퇴 유예기간 14일 — "탈퇴 시 지체 없이 파기"가 "유예기간 뒤 파기"로 바뀌고,
      * 상대방에게 탈퇴 요청 사실과 삭제 예정일이 알려진다는 점을 고지.
+     * 1.5 (2026-10-12): 사진 저장 수탁사에 Cloudflare(R2) 추가 — 새 사진은 R2, Cloudinary 는 옛 사진·일부 기능
+     * (docs/r2-migration-plan_2026-10-12.md).
      */
-    public static final String PRIVACY = "1.4";
+    public static final String PRIVACY = "1.5";
 
     private PolicyVersion() {
     }
