@@ -92,6 +92,48 @@ class NutritionGoalSuggestionTest {
                 new NutritionGoalSuggestionRequest(ActivityLevel.SEDENTARY, DietGoalType.LOSE, 1.5, null));
 
         assertThat(res.targetCalories()).isGreaterThanOrEqualTo(1200);
+        // 올렸다는 사실과 올리기 전 값이 함께 온다 — 앱이 "하한에 맞춰 올렸어요"를 말할 수 있게
+        assertThat(res.raisedFrom()).isNotNull().isLessThan(res.targetCalories());
+        assertThat(res.raisedFrom()).isEqualTo(res.tdee() + res.goalAdjustment());
+    }
+
+    @Test
+    void 계산_근거를_함께_준다() {
+        Long user = register("ngs9@fitto.com");
+        authService.updateMe(user, new UpdateProfileRequest(null, null, LocalDate.of(1995, 1, 1), Gender.MALE, 175));
+        LocalDate measured = LocalDate.of(2026, 10, 1);
+        // 80kg · 체지방 15% → BMR 1839(Katch-McArdle) × 1.375 = 2529, 주 0.5kg 감량 −550 → 1979
+        bodyMetricService.save(user, new SaveBodyMetricRequest(measured, new BigDecimal("80.0"), new BigDecimal("15.0"), null, null, null));
+
+        NutritionGoalSuggestionResponse res = nutritionService.suggestGoal(user,
+                new NutritionGoalSuggestionRequest(ActivityLevel.LIGHT, DietGoalType.LOSE, 0.5, MacroPreset.BALANCED));
+
+        assertThat(res.bmr()).isEqualTo(1839);
+        assertThat(res.tdee()).isEqualTo(2529);
+        assertThat(res.goalAdjustment()).isEqualTo(-550);
+        assertThat(res.targetCalories()).isEqualTo(1979);
+        assertThat(res.raisedFrom()).isNull();
+        assertThat(res.weightKg()).isEqualByComparingTo("80.0");
+        assertThat(res.bodyFatPct()).isEqualByComparingTo("15.0");
+        assertThat(res.measuredDate()).isEqualTo(measured);
+        assertThat(res.activityMultiplier()).isEqualTo(1.375);
+        assertThat(res.proteinPerKg()).isEqualTo(1.8);
+        assertThat(res.fatPercent()).isEqualTo(25);
+    }
+
+    @Test
+    void 체지방률을_안_쓰면_근거에도_싣지_않는다() {
+        Long user = register("ngs10@fitto.com");
+        authService.updateMe(user, new UpdateProfileRequest(null, null, LocalDate.of(1995, 1, 1), Gender.MALE, 175));
+        // 체지방률 70% — 현실 범위 밖이라 Mifflin 으로 돌아간다. 근거에 70% 가 실리면 "반영됐다"로 읽힌다
+        bodyMetricService.save(user, new SaveBodyMetricRequest(LocalDate.now(), new BigDecimal("70.0"), new BigDecimal("70.0"), null, null, null));
+
+        NutritionGoalSuggestionResponse res = nutritionService.suggestGoal(user,
+                new NutritionGoalSuggestionRequest(ActivityLevel.MODERATE, DietGoalType.MAINTAIN, null, null));
+
+        assertThat(res.usedBodyFat()).isFalse();
+        assertThat(res.bodyFatPct()).isNull();
+        assertThat(res.goalAdjustment()).isZero();
     }
 
     @Test

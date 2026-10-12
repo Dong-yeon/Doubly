@@ -1354,6 +1354,23 @@ export interface NutritionGoalSuggestion {
   usedBodyFat?: boolean;
   /** 계산 불가 시(프로필/체중 미등록) 안내 문구 */
   message?: string | null;
+  // ↓ 계산 근거 — 서버가 실제로 쓴 값(2026-10-12). 구버전 서버엔 없으므로 전부 선택
+  /** 계산에 쓴 체중(kg) */
+  weightKg?: number | null;
+  /** 반영한 체지방률(%) — usedBodyFat 일 때만 */
+  bodyFatPct?: number | null;
+  /** 그 체중을 잰 날(YYYY-MM-DD) */
+  measuredDate?: string | null;
+  /** BMR 에 곱한 활동량 배수 */
+  activityMultiplier?: number | null;
+  /** 하루 소비량에 더하거나 뺀 양 — 감량이면 음수, 유지면 0(하한 적용 전) */
+  goalAdjustment?: number | null;
+  /** 하한(1,200 kcal·기초대사량)에 걸려 올렸으면 올리기 전 값 */
+  raisedFrom?: number | null;
+  /** 단백질 목표 기준 g/kg */
+  proteinPerKg?: number | null;
+  /** 지방 목표 기준 — 목표 칼로리 중 % */
+  fatPercent?: number | null;
 }
 
 // 물 섭취 트래커 (GET /water/today)
