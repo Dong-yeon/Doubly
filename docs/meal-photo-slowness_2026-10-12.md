@@ -73,5 +73,6 @@
 | 6·8 | 음식 분석 폴링: 처음 20초는 0.5초 → 1초 간격(`awaitAiJob(…, { quickPoll })`), 그 뒤는 기본 간격 끝값(3초). 홈 사진 기록도 고르자마자 `shrinkImage`(1024px) 후 보관함·업로드 | `0374ef50` | OTA |
 
 - 테스트: `GeminiWaitingCallTest` 6건(503 → 2회 뒤 폴백·5초 안, 본문의 상한·생각 끄기, 깨진 JSON → 폴백 1회, 둘 다 깨지면 실패+환불, 백그라운드 호출 본문 불변, 모델 판정), 기존 `common.ai.*`·`diet.service.*`·`MealPhotoAutoAnalysisTest` 전부 통과. 앱은 타입 검사 통과, 린트 오류 4건은 손대지 않은 기존 줄.
+- **OTA 발행 완료(2026-10-12)** — production, 1.0.7 runtime(iOS `d75619b0` / Android `700b96c0`, fingerprint 일치 확인), 업데이트 그룹 iOS `506c888f` / Android `b1ea39e7`. EAS 기록 커밋은 `06af4cb1*` 인데 `f2cc3e51` 뒤 다른 세션 병합 2건(백엔드 Dockerfile·문서)이라 앱 번들은 같다(* = 앱 밖 미추적 `store/faces/`).
 - **화면은 실기기·웹에서 보지 않았다** — Docker Desktop 이 시작되지 않아 로컬 스택을 못 띄웠고, 웹 미리보기는 로그인 전이다.
 - 남은 것: 표 #5(항목별 sugar/sodium/fiber 스키마 축소), #7(피커 이중 인코딩), #9(서버 Cloudinary 변환 제거 — #8 이 나간 뒤), §4 지표(`MEAL_ANALYZE_FINISHED` 등). 서버가 반영 시 이벤트를 쏘는 방식(#1 의 "중")은 폴링이 부족할 때.
