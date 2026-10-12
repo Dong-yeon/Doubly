@@ -17,6 +17,7 @@ import { EmptyState } from '../../components/EmptyState';
 import { GameReactionBar } from '../../components/GameReactionBar';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { omokApi } from '../../api/game';
+import { GameHelpButton, GameHelpSheet, useGameHelp } from '../../components/GameHelpSheet';
 import { connectSocket, subscribeCouple } from '../../api/chatSocket';
 import { useRelationStore } from '../../store/relationStore';
 import { getErrorMessage } from '../../utils/error';
@@ -41,6 +42,8 @@ let placeSeq = 0;
 export function OmokScreen(_: Props) {
   const width = useContentWidth();
   const relationId = useRelationStore((s) => s.couple?.id);
+  // 처음 들어오면 하는 법이 한 번 뜬다(2026-10-12 — 처음 하는 사람에겐 규칙이 가장 큰 벽)
+  const help = useGameHelp('OMOK');
 
   const [game, setGame] = useState<OmokGame | null>(null);
   /** 방금 끝난 판 — current 가 null 이 된 뒤에도 결과와 이긴 줄을 보여주기 위해 따로 든다 */
@@ -505,6 +508,7 @@ export function OmokScreen(_: Props) {
 
   const header = (
     <View>
+      <GameHelpButton onPress={help.open} />
       {replay ? (
         renderReplay(replay)
       ) : game ? (
@@ -581,6 +585,7 @@ export function OmokScreen(_: Props) {
           ) : null
         }
       />
+      <GameHelpSheet game="OMOK" visible={help.visible} onClose={help.close} />
     </SafeAreaView>
   );
 }

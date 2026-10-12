@@ -24,10 +24,11 @@ import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { GameReactionBar } from '../../components/GameReactionBar';
 import { MaterialCommunityIcons } from '../../components/Icon';
-import { wallRaceApi } from '../../api/game';
+import { gamePieceApi, wallRaceApi } from '../../api/game';
+import { GameHelpButton, GameHelpSheet, useGameHelp } from '../../components/GameHelpSheet';
+import { GamePieceSheet } from '../../components/GamePieceSheet';
 import { connectSocket, subscribeCouple } from '../../api/chatSocket';
 import { useRelationStore } from '../../store/relationStore';
-import { useAuthStore } from '../../store/authStore';
 import { useCoupleEmojiStore } from '../../store/coupleEmojiStore';
 import { getErrorMessage } from '../../utils/error';
 import { relativeTimestampLabel } from '../../utils/date';
@@ -35,7 +36,7 @@ import { Alert } from '../../utils/alert';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
 import { fontSize, radius, spacing } from '../../constants/theme';
-import type { CoupleEmoji, GameRecord, WallRaceGame } from '../../types';
+import type { GamePieces, GameRecord, WallRaceGame } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 import { palettes } from '../../theme/palette';
 
@@ -93,21 +94,6 @@ function wallOwners(moves: string[], iAmCreator: boolean): Map<number, 'me' | 'p
   return owners;
 }
 
-/** 말 얼굴 — 그 사람의 우리 이모지 중 상황에 맞는 표정. 최신 세트부터 찾고, 없으면 그 사람 아무 표정이나 */
-function pickFace(emojis: CoupleEmoji[], subjectId: number | undefined, prefs: string[]): string | null {
-  if (subjectId == null) return null;
-  const mine = emojis.filter((e) => e.subjectUserId === subjectId).sort((a, b) => b.id - a.id);
-  if (mine.length === 0) return null;
-  for (const emotion of prefs) {
-    const hit = mine.find((e) => e.emotion === emotion);
-    if (hit) return hit.imageUrl;
-  }
-  return mine[0].imageUrl;
-}
-const FACE_THINKING = ['HARD_AT_WORK', 'HAPPY'];
-const FACE_IDLE = ['HAPPY', 'LOVE', 'EXCITED'];
-const FACE_WIN = ['EXCITED', 'CHEER', 'HAPPY'];
-const FACE_LOSE = ['SAD', 'SORRY', 'HAPPY'];
 
 /** 수 요청 순번 — 옛 응답이 새 상태를 덮지 않도록(OmokScreen.placeSeq 와 같은 이유) */
 let moveSeq = 0;
@@ -272,8 +258,6 @@ function inRange(value: number, limit: number): boolean {
 export function WallRaceScreen({ navigation }: Props) {
   const width = useContentWidth();
   const relationId = useRelationStore((s) => s.couple?.id);
-  const partnerId = useRelationStore((s) => s.couple?.partner?.id);
-  const myId = useAuthStore((s) => s.user?.id);
   const coupleEmojis = useCoupleEmojiStore((s) => s.emojis);
   const loadCoupleEmojis = useCoupleEmojiStore((s) => s.load);
 
@@ -291,6 +275,23 @@ export function WallRaceScreen({ navigation }: Props) {
   const [history, setHistory] = useState<WallRaceGame[]>([]);
   /** 서버가 센 전적(끝낸 판 전부) — 못 받으면 null 이고 그때만 기록 목록으로 센다 */
   const [serverRecord, setServerRecord] = useState<GameRecord | null>(null);
+  /*
+   * 말 얼굴 — 사람이 고른 우리 이모지 하나(서버 저장, 상대도 같은 얼굴을 본다). 예전엔 판 상황마다 표정을
+   * 바꿨는데 어지럽다는 의견이 있었다(2026-10-12). 비었거나 지워졌으면 기본 말.
+   */
+  const [pieces, setPieces] = useState<GamePieces | null>(null);
+  const [pieceSheet, setPieceSheet] = useState(false);
+  const refreshPieces = useCallback(() => {
+    gamePieceApi.get().then(setPieces).catch(() => undefined);
+  }, []);
+  const choosePiece = (emojiId: number | null) => {
+    setPieceSheet(false);
+    gamePieceApi
+      .set(emojiId)
+      .then(setPieces)
+      .catch((e) => toast.error(getErrorMessage(e, '말을 바꾸지 못했어요.')));
+  };
+  const help = useGameHelp('WALL_RACE');
   const refreshRecord = useCallback(() => {
     wallRaceApi.record().then(setServerRecord).catch(() => undefined);
   }, []);
@@ -316,6 +317,7 @@ export function WallRaceScreen({ navigation }: Props) {
     try {
       const [g, h] = await Promise.all([wallRaceApi.current(), wallRaceApi.history()]);
       refreshRecord();
+      refreshPieces();
       setGame(g);
       setHistory(h);
       // 내 차례가 아니게 됐으면 고르던 벽은 의미가 없다 — 모드째 내린다
@@ -342,7 +344,7 @@ export function WallRaceScreen({ navigation }: Props) {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [refreshRecord]);
+  }, [refreshRecord, refreshPieces]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
   // 말 얼굴(우리 이모지) — 없거나 실패하면 말 모양으로 그린다
@@ -595,9 +597,8 @@ export function WallRaceScreen({ navigation }: Props) {
     const vs = (sl: number) => (flip ? WALL_SIZE * WALL_SIZE - 1 - sl : sl);
     const shownMyGoalRow = flip ? SIZE - 1 - g.myGoalRow : g.myGoalRow;
     const owners = wallOwners(g.moves, iAmCreator);
-    const over = g.winner != null;
-    const meFace = pickFace(coupleEmojis, myId, over ? (g.winner === 'ME' ? FACE_WIN : FACE_LOSE) : g.myTurn ? FACE_THINKING : FACE_IDLE);
-    const partnerFace = pickFace(coupleEmojis, partnerId, over ? (g.winner === 'PARTNER' ? FACE_WIN : FACE_LOSE) : !g.myTurn ? FACE_THINKING : FACE_IDLE);
+    const meFace = pieces?.myImageUrl ?? null;
+    const partnerFace = pieces?.partnerImageUrl ?? null;
     const last = lastMoveOf(g.moves);
     // 말보다 충분히 커야 테가 남는다. 칸을 넘지 않는 선(0.62 × 1.45 ≈ 0.9칸)에서 잡았다
     const ringSize = pawnSize * 1.45;
@@ -677,7 +678,7 @@ export function WallRaceScreen({ navigation }: Props) {
 
         {/*
           말 — 우리 이모지가 있으면 그 사람의 얼굴, 없으면 말 모양. 발밑 받침은 주인 색이라 얼굴이어도 누구 말인지 읽힌다.
-          표정은 판 상황을 따른다(차례면 고민, 이기면 신남, 지면 슬픔).
+          얼굴은 각자 고른 하나로 고정이다(GamePieceSheet) — 상황마다 바꾸면 어지러웠다.
         */}
         {([[g.myPawn, PAWN_ME, '내 말', meFace], [g.partnerPawn, PAWN_PARTNER, '상대 말', partnerFace]] as const).map(
           ([pos, color, label, face]) => (
@@ -959,6 +960,7 @@ export function WallRaceScreen({ navigation }: Props) {
 
   const renderStart = (title: string) => (
     <View style={styles.card}>
+      <GameHelpButton onPress={help.open} />
       <Text style={styles.cardLabel}>길막기</Text>
       <Text style={styles.cardTitle}>{title}</Text>
       <Text style={styles.cardDesc}>
@@ -984,7 +986,7 @@ export function WallRaceScreen({ navigation }: Props) {
 
   /** 상대 카드(위) — 남은 벽 · 이름 · 얼굴. 기다리는 쪽이면 살짝 찌르기 */
   const renderOpponentCard = (g: WallRaceGame) => {
-    const face = pickFace(coupleEmojis, partnerId, FACE_IDLE);
+    const face = pieces?.partnerImageUrl ?? null;
     return (
       <View style={[styles.dCard, !g.myTurn && { borderColor: PAWN_PARTNER }]}>
         <View style={styles.dCount}>
@@ -993,7 +995,10 @@ export function WallRaceScreen({ navigation }: Props) {
         </View>
         <View style={styles.dCardBody}>
           <Text style={styles.dName} numberOfLines={1}>{g.partnerName ?? '상대'}</Text>
-          <Text style={[styles.dSub, !g.myTurn && { color: PAWN_PARTNER }]}>{g.myTurn ? '기다리는 중' : '두는 중'}</Text>
+          <Text style={[styles.dSub, !g.myTurn && { color: PAWN_PARTNER }]}>
+            {g.myTurn ? '기다리는 중' : '두는 중'}
+            {g.partnerDistance != null && g.partnerDistance >= 0 ? ` · 도착까지 ${g.partnerDistance}칸` : ''}
+          </Text>
         </View>
         {face ? (
           <Image source={{ uri: face }} style={styles.dAvatar} contentFit="contain" />
@@ -1006,18 +1011,23 @@ export function WallRaceScreen({ navigation }: Props) {
 
   /** 내 카드(아래) — 얼굴 · 차례 · 남은 벽. 내 차례면 테두리가 켜진다 */
   const renderMyCard = (g: WallRaceGame) => {
-    const face = pickFace(coupleEmojis, myId, FACE_IDLE);
+    const face = pieces?.myImageUrl ?? null;
     return (
       <View style={[styles.dCard, g.myTurn && { borderColor: PAWN_ME }]}>
-        {face ? (
-          <Image source={{ uri: face }} style={styles.dAvatar} contentFit="contain" />
-        ) : (
-          <View style={[styles.dAvatar, { backgroundColor: PAWN_ME, borderRadius: 22 }]} />
-        )}
+        {/* 얼굴을 누르면 내 말을 고른다 */}
+        <Pressable onPress={() => setPieceSheet(true)} accessibilityRole="button" accessibilityLabel="내 말 고르기" hitSlop={6}>
+          {face ? (
+            <Image source={{ uri: face }} style={styles.dAvatar} contentFit="contain" />
+          ) : (
+            <View style={[styles.dAvatar, { backgroundColor: PAWN_ME, borderRadius: 22 }]} />
+          )}
+          <Text style={styles.dAvatarHint}>바꾸기</Text>
+        </Pressable>
         <View style={styles.dCardBody}>
           <Text style={styles.dName}>나</Text>
           <Text style={[styles.dSub, g.myTurn && { color: PAWN_ME }]}>
             {g.myTurn ? '내 차례' : `${g.partnerName ?? '상대'} 차례`} · {g.moveCount}수
+            {g.myDistance != null && g.myDistance >= 0 ? ` · 도착까지 ${g.myDistance}칸` : ''}
           </Text>
         </View>
         <View style={[styles.dCount, styles.dCountRight]}>
@@ -1057,6 +1067,9 @@ export function WallRaceScreen({ navigation }: Props) {
           <MaterialCommunityIcons name="arrow-left" size={24} color={D_TEXT} />
         </Pressable>
         <Text style={styles.dTitle}>길막기</Text>
+        <Pressable onPress={help.open} accessibilityRole="button" accessibilityLabel="게임 하는 법" hitSlop={10} style={styles.dMenu}>
+          <MaterialCommunityIcons name="comment-question-outline" size={20} color={D_TEXT} />
+        </Pressable>
         <Pressable onPress={() => openMenu(g)} accessibilityRole="button" accessibilityLabel="메뉴" hitSlop={10} style={styles.dMenu}>
           <MaterialCommunityIcons name="dots-horizontal" size={22} color={D_TEXT} />
         </Pressable>
@@ -1141,6 +1154,15 @@ export function WallRaceScreen({ navigation }: Props) {
             />
           ) : null
         }
+      />
+      <GameHelpSheet game="WALL_RACE" visible={help.visible} onClose={help.close} />
+      <GamePieceSheet
+        visible={pieceSheet}
+        onClose={() => setPieceSheet(false)}
+        emojis={coupleEmojis}
+        selectedId={pieces?.myImageUrl ? pieces.myEmojiId : null}
+        onSelect={choosePiece}
+        baseColor={PAWN_ME}
       />
     </SafeAreaView>
   );
@@ -1285,6 +1307,7 @@ const styles = themedStyles((colors) => ({
   dCountNum: { fontSize: 24, fontWeight: '800', color: D_TEXT, lineHeight: 28 },
   dCountLabel: { fontSize: 11, fontWeight: '700', color: D_SUB },
   dAvatar: { width: 44, height: 44 },
+  dAvatarHint: { fontSize: 10, fontWeight: '700', color: D_SUB, textAlign: 'center', marginTop: 2 },
   dBoardWrap: { alignItems: 'center', paddingVertical: spacing.xs },
   dHint: { fontSize: fontSize.caption, color: D_SUB, lineHeight: 18 },
   dTextBtn: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },

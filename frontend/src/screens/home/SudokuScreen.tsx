@@ -24,6 +24,7 @@ import { EmptyState } from '../../components/EmptyState';
 import { GameReactionBar } from '../../components/GameReactionBar';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { sudokuApi } from '../../api/game';
+import { GameHelpButton, GameHelpSheet, useGameHelp } from '../../components/GameHelpSheet';
 import { clearMemos, loadMemos, pruneMemos, saveMemos, type SudokuMemos } from './sudokuMemo';
 import { connectSocket, subscribeCouple } from '../../api/chatSocket';
 import { useRelationStore } from '../../store/relationStore';
@@ -56,6 +57,8 @@ let moveSeq = 0;
 export function SudokuScreen(_: Props) {
   const width = useContentWidth();
   const relationId = useRelationStore((s) => s.couple?.id);
+  // 처음 들어오면 하는 법이 한 번 뜬다(2026-10-12 — 처음 하는 사람에겐 규칙이 가장 큰 벽)
+  const help = useGameHelp('SUDOKU');
 
   const [game, setGame] = useState<SudokuGame | null>(null);
   /** 방금 완성한 판 — current 가 null 이 된 뒤에도 축하 카드를 보여주기 위해 따로 든다 */
@@ -564,6 +567,7 @@ export function SudokuScreen(_: Props) {
 
   const header = (
     <View>
+      <GameHelpButton onPress={help.open} />
       {game
         ? renderBoard(game)
         : justCompleted
@@ -623,6 +627,7 @@ export function SudokuScreen(_: Props) {
           ) : null
         }
       />
+      <GameHelpSheet game="SUDOKU" visible={help.visible} onClose={help.close} />
     </SafeAreaView>
   );
 }
