@@ -60,3 +60,18 @@
 - 넣을 것: 앱 `MEAL_ANALYZE_FINISHED up=업로드ms;job=접수→결과ms;ok|fail|still`(2·6 판정, 새 이벤트는 서버 `ClientAnalyticsEvent` enum 먼저),
   서버 `fitto.ai.job.duration{job}`(대기·실행 분리, 성공 건도), 사진 다운로드 Timer(9), "채우는 중" 표시→칼로리 표시까지(1).
 - event_logs `created_at` 은 날짜 단위 — 같은 날 순서는 id 로.
+
+---
+
+## 5. 구현 기록 (2026-10-12, 사용자 "1~5번까지 다 해도 된다" — 대화에서 줄인 1~5번 = 위 표 #1·#2·#3·#4·#6·#8)
+
+| # | 무엇 | 커밋 | 배포 |
+| --- | --- | --- | --- |
+| 1 | 럽바디가 "칼로리 채우는 중" 오늘 기록이 있으면 화면이 보일 때만 3→5→8→12→20→30×3초(약 2분 20초) 간격으로 오늘 목록·영양을 다시 읽는다. 하나가 채워지면 처음 간격부터. 판정은 `MealCard.isFillingCalories`(10분 창) 공유 | `a37f2b3d` | OTA |
+| 2 | 자동 분석 경로는 `uploadForSubmit`(전체 잠금) 대신 진행 중인 선업로드 Promise 를 그대로 기다린다. 버튼 경로·저장 경로는 그대로 | `fe75a1bc` | OTA |
+| 3·4 | `GeminiClient.generateJsonWhileWaiting` — `WAITING`(모델당 2회·0.7초·예산 50초 → 1차 30초 뒤 폴백), `thinkingBudget: 0`(2.5 Flash 계열만 — Pro 는 400, 3 세대는 다른 필드), `maxOutputTokens: 2048`, 결과 JSON 이 깨지면 폴백 모델(없으면 같은 모델)에게 **한 번만** 더. 음식 사진·글 분석(`FoodAnalysisService`)만 옮겼고 다른 기능은 그대로 — 사진 자동 분석도 같은 `analyze` 를 타므로 함께 빨라진다 | `08131a3f` | 서버 |
+| 6·8 | 음식 분석 폴링: 처음 20초는 0.5초 → 1초 간격(`awaitAiJob(…, { quickPoll })`), 그 뒤는 기본 간격 끝값(3초). 홈 사진 기록도 고르자마자 `shrinkImage`(1024px) 후 보관함·업로드 | `0374ef50` | OTA |
+
+- 테스트: `GeminiWaitingCallTest` 6건(503 → 2회 뒤 폴백·5초 안, 본문의 상한·생각 끄기, 깨진 JSON → 폴백 1회, 둘 다 깨지면 실패+환불, 백그라운드 호출 본문 불변, 모델 판정), 기존 `common.ai.*`·`diet.service.*`·`MealPhotoAutoAnalysisTest` 전부 통과. 앱은 타입 검사 통과, 린트 오류 4건은 손대지 않은 기존 줄.
+- **화면은 실기기·웹에서 보지 않았다** — Docker Desktop 이 시작되지 않아 로컬 스택을 못 띄웠고, 웹 미리보기는 로그인 전이다.
+- 남은 것: 표 #5(항목별 sugar/sodium/fiber 스키마 축소), #7(피커 이중 인코딩), #9(서버 Cloudinary 변환 제거 — #8 이 나간 뒤), §4 지표(`MEAL_ANALYZE_FINISHED` 등). 서버가 반영 시 이벤트를 쏘는 방식(#1 의 "중")은 폴링이 부족할 때.
