@@ -152,6 +152,10 @@ public class FoodAnalysisService {
     /** 설정 의존이 없어 직접 만든다 — 생성자 인자를 늘리지 않기 위해. */
     private final CloudinaryImageFetcher imageFetcher = new CloudinaryImageFetcher();
 
+    /** 같은 사진 분석 공유 — 끝난 결과는 10분 둔다(그 안에 저장·다시 누르기가 일어난다) */
+    private final SharedPhotoAnalyses<MealAnalysisResponse> sharedPhotoAnalyses =
+            new SharedPhotoAnalyses<>(java.time.Duration.ofMinutes(10), System::currentTimeMillis);
+
     public FoodAnalysisService(GeminiClient geminiClient, MealPlaceHintLoader placeHintLoader) {
         this.geminiClient = geminiClient;
         this.placeHintLoader = placeHintLoader;
@@ -162,6 +166,16 @@ public class FoodAnalysisService {
      *                접근할 수 없거나 조회가 실패하면 힌트 없이 분석한다({@link #buildPhotoPrompt}).
      */
     public MealAnalysisResponse analyze(Long userId, String photoUrl, Long placeId) {
+        /*
+         * 같은 사진이 이미 분석 중이거나 막 끝났으면 거기에 올라탄다 — 한도를 다시 쓰지 않는다.
+         * 기록 화면이 사진을 붙이자마자 분석하고, 사용자는 기다리지 않고 저장할 수 있어서
+         * 앱 분석과 저장 뒤 자동 분석이 같은 사진으로 겹친다(SharedPhotoAnalyses 주석).
+         */
+        return sharedPhotoAnalyses.getOrRun(userId, photoUrl, placeId,
+                () -> analyzeNow(userId, photoUrl, placeId));
+    }
+
+    private MealAnalysisResponse analyzeNow(Long userId, String photoUrl, Long placeId) {
         geminiClient.requireConfiguredAndCountUsage(userId, Feature.AI_FOOD_PHOTO);
 
         /*
