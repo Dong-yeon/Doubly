@@ -8,7 +8,7 @@
  * <p>정리는 보내는 쪽(패널)만 바꾼다 — 숨기거나 지운 팩도 받은 말풍선은 그대로 보인다(stickerPrefsStore 주석).
  * 우리 이모지는 여기서 다루지 않는다: 패널 끝에 늘 서고, 만들기·삭제는 그 칸에서 한다.
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '../../components/Icon';
@@ -19,17 +19,16 @@ import { useRemoteStickerStore } from '../../store/remoteStickerStore';
 import { useStickerStore } from '../../store/stickerStore';
 import { applyOrder, useStickerPrefsStore } from '../../store/stickerPrefsStore';
 import { managedPacks, type ManagedPack } from '../../utils/stickerPackList';
-import { deleteRemoteLotties, downloadRemoteLotties } from '../../utils/remoteStickerFiles';
+import { deleteRemoteLotties } from '../../utils/remoteStickerFiles';
 import { Alert } from '../../utils/alert';
-import { toast } from '../../store/toastStore';
+import { useRemotePackDownload } from '../../hooks/useRemotePackDownload';
 
 export function StickerSettingsScreen() {
   const remotePacks = useRemoteStickerStore((s) => s.packs);
   const packOf = useStickerStore((s) => s.packOf);
   const loadPacks = useStickerStore((s) => s.load);
   const { order, hidden, downloaded, setHidden, move, markDownloaded, markSeen, load } = useStickerPrefsStore();
-  /** 받는 중인 팩 → 받은 개수 */
-  const [progress, setProgress] = useState<Record<string, number>>({});
+  const { progress, download: downloadPack } = useRemotePackDownload();
 
   useEffect(() => {
     void load();
@@ -52,22 +51,7 @@ export function StickerSettingsScreen() {
 
   const labelOf = (p: ManagedPack) => (p.packId ? packOf(p.packId)?.title : undefined) ?? p.fallbackLabel;
 
-  const download = async (p: ManagedPack) => {
-    setProgress((s) => ({ ...s, [p.key]: 0 }));
-    const ok = await downloadRemoteLotties(p.urls, (done) => setProgress((s) => ({ ...s, [p.key]: done })));
-    setProgress((s) => {
-      const next = { ...s };
-      delete next[p.key];
-      return next;
-    });
-    markDownloaded(p.key, true);
-    if (ok < p.urls.length) {
-      // 반만 받아도 쓸 수는 있다 — 못 받은 장은 처음 보낼 때·받을 때 다시 받는다
-      toast.info(`${labelOf(p)} — ${p.urls.length - ok}개는 나중에 받아요`);
-    } else {
-      toast.success(`${labelOf(p)} 받았어요`);
-    }
-  };
+  const download = (p: ManagedPack) => downloadPack(p, labelOf(p));
 
   const remove = (p: ManagedPack) => {
     Alert.alert(`${labelOf(p)} 삭제`, '이 기기에서 지우고 패널에서 뺄게요. 받은 대화의 이모티콘은 그대로 보여요.', [
