@@ -390,6 +390,17 @@ export function DietRecordScreen({ navigation, route }: Props) {
    * 버튼으로 다시 누르는 건 막지 않는다.
    */
   const autoAnalyzedUriRef = useRef<string | null>(null);
+  /**
+   * 화면을 떠났는지 — 사진 분석 중에도 새 기록은 저장할 수 있어서(서버가 같은 분석을 이어받아 칼로리를 채운다),
+   * 저장하고 나간 뒤에 앱 쪽 결과가 도착할 수 있다. 그때 "AI 분석 완료!"·실패 토스트를 띄우면 엉뚱한 화면에 뜬다.
+   */
+  const leftScreenRef = useRef(false);
+  useEffect(
+    () => () => {
+      leftScreenRef.current = true;
+    },
+    [],
+  );
 
   const uploadedRef = useRef<{ uri: string; url: Promise<string> } | null>(
     initialPhoto ? { uri: initialPhoto, url: Promise.resolve(initialPhoto) } : null,
@@ -1035,10 +1046,12 @@ export function DietRecordScreen({ navigation, route }: Props) {
       // 이미 있는 우리 장소를 골랐으면 같이 보낸다 — 가게 이름·여기서 먹은 메뉴가 사진만으로는 헷갈리는
       // 메뉴(찌개류 등)를 가른다. 카카오에서 막 고른 곳(pendingKakao)은 아직 저장 전이라 id 가 없다
       const result = await dietApi.analyze(photoUrl, selectedPlace?.id);
+      if (leftScreenRef.current) return;
       // 자동 분석을 기다리는 사이 사진을 바꾸거나 지웠으면 이 결과는 지금 사진의 것이 아니다
       if (trigger === 'auto' && autoAnalyzedUriRef.current !== uri) return;
       applyPhotoAnalysis(result);
     } catch (e) {
+      if (leftScreenRef.current) return;
       if (trigger === 'auto' && autoAnalyzedUriRef.current !== uri) return;
       toast.error(getErrorMessage(e, 'AI 분석에 실패했어요.'));
     } finally {
@@ -1439,6 +1452,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
         placeToastSuffix;
       toast.success(saveMessage);
 
+      leftScreenRef.current = true;
       allowLeave();
       navigation.goBack();
     } catch (e) {
@@ -1459,6 +1473,12 @@ export function DietRecordScreen({ navigation, route }: Props) {
       setSaving(false);
     }
   };
+
+  /**
+   * 지금 저장하면 서버가 진행 중인 사진 분석을 이어받는가 — 새 기록 · 자동 분석 켜짐 · 적어 둔 음식 없음.
+   * 서버 MealPhotoAutoAnalysisService 의 대상 판정과 같다. 아니면 앱 결과를 기다려야 버려지지 않는다.
+   */
+  const serverTakesOverAnalysis = !editing && autoAnalyzeMealPhoto && !items.some(isFilled);
 
   // 사진 위 칩(음식 위치 표시)을 하나라도 그릴지 — box 를 가진 항목이 하나도 없으면
   // 사진 컨테이너를 기존 정사각 크롭 그대로 둔다(레이아웃이 괜히 흔들리지 않게)
@@ -1722,7 +1742,10 @@ export function DietRecordScreen({ navigation, route }: Props) {
                 바코드·DB 조회와 같은 급으로 다르게 말한다(추정치라고 하면 신뢰도를 낮춰 보인다).
               */}
               <Text style={styles.analyzeHint}>
-                {analysisSource === 'NUTRITION_LABEL'
+                {/* 기다리지 않아도 된다는 걸 말해야 기다리지 않는다 — 조건은 저장 버튼 잠금·서버 자동 분석 판정과 같다 */}
+                {analyzing && serverTakesOverAnalysis
+                  ? '분석 중이에요. 기다리지 않고 저장해도 칼로리는 저장 뒤에 채워져요.'
+                  : analysisSource === 'NUTRITION_LABEL'
                   ? '영양성분표를 읽었어요. 표기값 그대로예요 — 저장 전에 확인해주세요.'
                   : analysisSource === 'TEXT_IN_PHOTO'
                     ? '사진 속 글자로 알아낸 추정치예요. 저장 전에 항목별로 수정할 수 있어요.'
@@ -2020,9 +2043,13 @@ export function DietRecordScreen({ navigation, route }: Props) {
             title={editing ? '수정 완료' : '완료!'}
             onPress={onSave}
             loading={saving}
-            /* 분석 중 저장하면 곧 도착할 결과를 못 받은 채 화면을 떠난다 — 잠금을 걷어낸
-               지금은 눌릴 수 있으므로 여기서 막는다 */
-            disabled={analyzing || analyzingText}
+            /*
+              새 기록은 사진 분석 중에도 저장할 수 있다(2026-10-12, "분석을 기다리는 게 싫다") — 서버 자동 분석이
+              진행 중인 같은 사진 분석에 올라타 한도를 다시 쓰지 않고 칼로리를 채운다(backend SharedPhotoAnalyses).
+              서버가 이어받지 않는 경우(serverTakesOverAnalysis 가 아님 — 수정·설정 꺼짐·음식을 적어 둠)는 결과를 기다린다.
+              글로 분석(analyzingText)은 이어받을 서버 경로가 없어 그대로 막는다.
+            */
+            disabled={analyzingText || (analyzing && !serverTakesOverAnalysis)}
             style={styles.save}
           />
       </FormKeyboardView>
