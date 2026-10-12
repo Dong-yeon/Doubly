@@ -201,3 +201,5 @@ PathLock 이 놓자마자 설치하는지는 확인하지 못했다(§6). 우리
 - **하는 법**: `constants/gameHelp.ts`(다섯 게임 — 목표 한 줄, 규칙, "처음이라면" 요령)와 `GameHelpSheet`. 게임 화면에 처음 들어가면 한 번 저절로 뜨고(기기에 기억 `doubly.gameHelpSeen.*`), "하는 법" 단추(길막기는 상단 `?`, 연쇄 퍼즐은 시작 화면)로 다시 본다.
 - **검증**: 백엔드 게임 테스트 H2·PostgreSQL 통과(V137 적용 확인). tsc·eslint(바꾼 파일)·`verify:puyo`·`verify:spellcheck` 통과. 화면은 실기기 확인 전.
 
+
+**배포 (2026-10-12)**: 서버 배포 SUCCESS(6a6a4d52 에 포함), production OTA 게시 — 번들 소스 `6a6a4d52`, 1.0.7 fingerprint 일치. 업데이트 그룹 android `e4f902a8-3cd8-4c32-a10b-fe63a52226f6`, ios `0311141c-205a-4156-86be-bf9a3fc70cce`. 실기기 확인 전.
