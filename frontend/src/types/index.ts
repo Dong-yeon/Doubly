@@ -738,6 +738,14 @@ export interface GameRecord {
   draw: number;
 }
 
+/** 게임 말 얼굴(우리 이모지) — 비었거나 지워졌으면 기본 말 */
+export interface GamePieces {
+  myEmojiId: number | null;
+  myImageUrl: string | null;
+  partnerEmojiId: number | null;
+  partnerImageUrl: string | null;
+}
+
 export interface GameStreak {
   current: number;
   best: number;
@@ -906,6 +914,9 @@ export interface WallRaceGame {
   canUndo: boolean;
   /** 지금 내가 놓을 수 없는 벽 자리(겹침·길 막힘) — 서버가 같은 규칙으로 계산한다. 예전 서버면 없음 */
   illegalWalls?: { slot: number; kind: 'H' | 'V'; reason: string }[];
+  /** 내 말이 목표 줄까지 최소 몇 칸(벽만 보고) — 초보용 길잡이. 예전 서버면 없음 */
+  myDistance?: number;
+  partnerDistance?: number;
   partnerName?: string | null;
   createdAt: string;
   completedAt?: string | null;
