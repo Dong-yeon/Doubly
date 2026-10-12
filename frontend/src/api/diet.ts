@@ -124,14 +124,17 @@ export const dietApi = {
    * 폴링까지 여기서 끝내므로 호출부는 예전처럼 결과 Promise 를 받는다.
    */
   // placeId — 고른 럽슐랭 장소. 서버가 가게 이름·과거 메뉴를 참고 정보로 붙인다(내 장소가 아니면 무시)
+  // 음식 분석은 보통 몇 초 안에 끝나므로 처음 20초는 1초마다 묻는다(quickPoll)
   analyze: (photoUrl: string, placeId?: number) =>
     runAiJob<MealAnalysis>(
       unwrap(apiClient.post<ApiResponse<AiJobStart>>('/meal/analyze', { photoUrl, placeId })),
+      { quickPoll: true },
     ),
   // 텍스트로 적은 음식의 칼로리·매크로 추정 (사진 분석과 응답 형태 동일)
   analyzeText: (text: string) =>
     runAiJob<MealAnalysis>(
       unwrap(apiClient.post<ApiResponse<AiJobStart>>('/meal/analyze-text', { text })),
+      { quickPoll: true },
     ),
   today: () => unwrap(apiClient.get<ApiResponse<Meal[]>>('/meal/today')),
   history: (cursor?: number) =>
