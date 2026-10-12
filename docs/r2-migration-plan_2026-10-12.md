@@ -77,3 +77,8 @@
 2. 앱 OTA(accept=r2 를 보내는 번들).
 3. Railway `R2_UPLOADS_ENABLED=true` → 새 사진이 R2 로. 되돌리기는 false.
 4. 며칠 뒤 확인: R2 객체 수·Cloudinary 크레딧 추이, 업로드 실패 로그.
+
+### 켬 (같은 날)
+- 개인정보처리방침 1.5(Cloudflare 추가) — 앱 `legal.ts`·서버 `PolicyVersion`(becc6bfb 배포)·`landing/privacy.html`(앱 본문과 다시 맞춤, **Netlify 수동 업로드는 사용자 몫**).
+- production OTA(iOS 8d219ec8 / Android 788ebad6) → Railway `R2_UPLOADS_ENABLED=true`(08:06 UTC 재시작 정상).
+- 남은 확인: 업데이트 받은 폰에서 채팅·식단 사진 → 버킷에 `fitto/{초}-{hex}.jpg` 가 생기고 주소가 media.dubly.co.kr 인지. 문제면 변수를 false 로.
