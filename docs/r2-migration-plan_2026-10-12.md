@@ -82,3 +82,13 @@
 - 개인정보처리방침 1.5(Cloudflare 추가) — 앱 `legal.ts`·서버 `PolicyVersion`(becc6bfb 배포)·`landing/privacy.html`(앱 본문과 다시 맞춤, **Netlify 수동 업로드는 사용자 몫**).
 - production OTA(iOS 8d219ec8 / Android 788ebad6) → Railway `R2_UPLOADS_ENABLED=true`(08:06 UTC 재시작 정상).
 - 남은 확인: 업데이트 받은 폰에서 채팅·식단 사진 → 버킷에 `fitto/{초}-{hex}.jpg` 가 생기고 주소가 media.dubly.co.kr 인지. 문제면 변수를 false 로.
+
+### 장애: 상대가 보낸 R2 사진이 안 보임 (같은 날 22시)
+- 증상: iPhone 채팅에서 R2 로 올라간 사진이 빈칸. 전체화면에서 저장하면 `Unable to download a file: 특정 호스트 이름을 가진 서버를 찾을 수 없습니다.`
+  → iOS `NSURLErrorCannotFindHost`(-1003), 즉 **`media.dubly.co.kr` DNS 조회 실패**. 앱·서버 코드 문제가 아니다
+  (서버는 imageUrl 을 그대로 저장·브로드캐스트하고, 앱은 Cloudinary 가 아닌 주소를 변환 없이 그린다).
+- 추정 원인: 오늘 옮긴 네임서버(가비아 → Cloudflare)가 통신사 DNS 에 아직 반영되지 않았다. 옛 위임을 들고 있는
+  리졸버는 가비아에 묻는데, 가비아에는 사이트·메일 레코드만 있고 `media` 가 없다. 그래서 사이트는 되고 사진만 안 된다.
+  `media` 를 조회했다가 실패한 결과가 네거티브 캐시로 남았을 수도 있다.
+- 조치: 반영될 때까지 `R2_UPLOADS_ENABLED=false`(새 사진은 Cloudinary로). 이미 R2 에 올라간 사진은 지워지지 않았고
+  DNS 가 반영되면 보인다. 다시 켜는 조건은 통신사 DNS(LTE·집 Wi-Fi)에서 `media.dubly.co.kr` 이 조회되는 것이다.
