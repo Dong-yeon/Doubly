@@ -385,6 +385,12 @@ export function DietRecordScreen({ navigation, route }: Props) {
    * 수정으로 들어왔거나 채팅 사진으로 열었으면 이미 올라가 있는 사진이라 그 URL 을 이미 끝난 Promise 로
    * 넣어둔다(photoUri === photoUrl 이므로 ensureUploaded 가 재업로드 없이 통과한다).
    */
+  /**
+   * 자동 분석을 시작한 사진 — 사진당 한 번만 돌리고, 그사이 사진을 바꾸거나 지웠으면 늦게 온 결과를 버리는 데 쓴다.
+   * 버튼으로 다시 누르는 건 막지 않는다.
+   */
+  const autoAnalyzedUriRef = useRef<string | null>(null);
+
   const uploadedRef = useRef<{ uri: string; url: Promise<string> } | null>(
     initialPhoto ? { uri: initialPhoto, url: Promise.resolve(initialPhoto) } : null,
   );
@@ -948,6 +954,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
       setPhotoUri(uri);
       // 새 사진이니 이전 사진의 분석 안내(추정치/표기값 문구)는 더 이상 안 맞는다
       setAnalysisSource(null);
+      autoAnalyzedUriRef.current = null;
       /*
        * 선업로드 — 사용자가 "AI로 음식 분석"이나 "저장"을 누를 때쯤이면 이미 끝나 있게 한다.
        * 업로드는 어차피 두 경로 모두의 앞 단계고, 사진을 고른 직후는 사용자가 화면을 보며
@@ -964,6 +971,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
       if (usePlanStore.getState().remainingOf('MEAL_PHOTO') !== 0) {
         void ensureUploaded(uri).catch(() => {});
       }
+      maybeAutoAnalyze(uri);
     } catch (e) {
       toast.error(getErrorMessage(e, '사진 선택에 실패했어요.'));
     }
@@ -982,20 +990,56 @@ export function DietRecordScreen({ navigation, route }: Props) {
     ]);
   };
 
+  /**
+   * 새 사진을 붙이면 "AI로 음식 분석"을 누르지 않아도 바로 분석한다(2026-10-12).
+   *
+   * <p>근거: 1주 계측에서 기록 화면에 사진을 붙인 기록은 <b>10건 전부</b> 같은 화면에서 분석을 눌렀다
+   * (docs/meal-photo-auto-analyze-metrics_2026-10-12.md). 버튼이 선택이 아니라 매번 거치는 단계였으므로
+   * 자동으로 돌려도 분석 횟수는 늘지 않는다. 다음 중 하나면 돌리지 않고 지금처럼 버튼으로 남긴다.
+   * <ul>
+   *   <li>설정의 "음식 사진 자동 분석"을 껐다 — 같은 뜻의 스위치다.
+   *   <li>이미 적어 둔 음식이 있다 — 사진은 곁들이는 것일 수 있고, 결과가 덧붙어 목록이 불어난다.
+   *   <li>남은 사진 분석 횟수가 0 이거나 플랜 상태를 아직 모른다 — 누르지도 않은 사람 앞에 한도·결제 안내를 띄우지 않는다.
+   *   <li>다른 분석이 진행 중이다.
+   * </ul>
+   * 수정 화면을 열 때 이미 있던 사진으로는 돌지 않는다 — 이 함수는 새로 붙인 사진에서만 불린다.
+   */
+  const maybeAutoAnalyze = (uri: string) => {
+    if (!autoAnalyzeMealPhoto || analyzing || analyzingText) return;
+    if (items.some(isFilled)) return;
+    const quota = usePlanStore.getState().stateOf('AI_FOOD_PHOTO');
+    if (!quota?.allowed || quota.remaining === 0) return;
+    autoAnalyzedUriRef.current = uri;
+    void onAnalyze(uri, 'auto');
+  };
+
+  /*
+   * 채팅 사진으로 새 기록을 열었을 때도 새로 붙인 사진이다 — 같은 규칙으로 한 번 돌린다.
+   * 처음 연 값만 보므로(chatPhotoUrl 은 고정) 화면을 다시 그려도 다시 돌지 않는다.
+   */
+  useEffect(() => {
+    if (chatPhotoUrl) maybeAutoAnalyze(chatPhotoUrl);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // AI 음식 분석 — 결과는 추정치라 항목으로 채워만 주고 확정(저장)은 사용자가 한다
-  const onAnalyze = async () => {
-    if (!photoUri) return;
-    track('MEAL_ANALYZE_STARTED', 'photo');
+  const onAnalyze = async (uri: string | null = photoUri, trigger: 'button' | 'auto' = 'button') => {
+    if (!uri) return;
+    // 자동 시작은 photo_auto 로 따로 센다 — 버튼을 계속 누르는지(=자동이 못 미더운지) 갈라 보려고
+    track('MEAL_ANALYZE_STARTED', trigger === 'auto' ? 'photo_auto' : 'photo');
     setAnalyzing(true);
     try {
-      const photoUrl = await uploadForSubmit(photoUri);
+      const photoUrl = await uploadForSubmit(uri);
       // 전역 화면 잠금은 걷었다(대기가 분 단위까지 늘 수 있다). 이 경로는 결과를
       // 기존 항목 <b>뒤에 덧붙이므로</b>, 기다리는 동안 뭘 더 적어도 지워지지 않는다.
       // 이미 있는 우리 장소를 골랐으면 같이 보낸다 — 가게 이름·여기서 먹은 메뉴가 사진만으로는 헷갈리는
       // 메뉴(찌개류 등)를 가른다. 카카오에서 막 고른 곳(pendingKakao)은 아직 저장 전이라 id 가 없다
       const result = await dietApi.analyze(photoUrl, selectedPlace?.id);
+      // 자동 분석을 기다리는 사이 사진을 바꾸거나 지웠으면 이 결과는 지금 사진의 것이 아니다
+      if (trigger === 'auto' && autoAnalyzedUriRef.current !== uri) return;
       applyPhotoAnalysis(result);
     } catch (e) {
+      if (trigger === 'auto' && autoAnalyzedUriRef.current !== uri) return;
       toast.error(getErrorMessage(e, 'AI 분석에 실패했어요.'));
     } finally {
       refreshAiQuota();
@@ -1648,6 +1692,7 @@ export function DietRecordScreen({ navigation, route }: Props) {
               onPress={() => {
                 setPhotoUri(null);
                 setAnalysisSource(null);
+                autoAnalyzedUriRef.current = null;
                 discardPreUpload(uploadedRef.current);
                 // 업로드 캐시만 버린다. 분석으로 들어온 음식 항목은 그대로 둔다 —
                 // 사진을 지워도 먹은 건 먹은 것이고, 틀렸으면 항목별로 지울 수 있다.
