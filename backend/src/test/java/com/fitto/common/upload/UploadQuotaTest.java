@@ -79,7 +79,7 @@ class UploadQuotaTest {
     void 한도_안에서는_서명이_발급된다() {
         Long user = register("upload-ok@fitto.com");
 
-        UploadSignatureResponse signature = uploadController.signature(principal(user)).data();
+        UploadSignatureResponse signature = uploadController.signature(principal(user), null, null).data();
 
         assertThat(signature.cloudName()).isEqualTo("test-cloud");
         assertThat(signature.signature()).isNotBlank();
@@ -91,10 +91,10 @@ class UploadQuotaTest {
         int limit = Feature.PHOTO_UPLOAD.quotaFor(Plan.FREE).limit();
 
         for (int i = 0; i < limit; i++) {
-            uploadController.signature(principal(user));
+            uploadController.signature(principal(user), null, null);
         }
 
-        assertThatThrownBy(() -> uploadController.signature(principal(user)))
+        assertThatThrownBy(() -> uploadController.signature(principal(user), null, null))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.PLAN_LIMIT_EXCEEDED);
@@ -116,11 +116,11 @@ class UploadQuotaTest {
         int limit = Feature.PHOTO_UPLOAD.quotaFor(Plan.FREE).limit();
         // A 가 한도를 통째로 쓴다
         for (int i = 0; i < limit; i++) {
-            uploadController.signature(principal(a));
+            uploadController.signature(principal(a), null, null);
         }
 
         // B 는 한 장도 안 올렸지만 주머니가 비었다
-        assertThatThrownBy(() -> uploadController.signature(principal(b)))
+        assertThatThrownBy(() -> uploadController.signature(principal(b), null, null))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.PLAN_LIMIT_EXCEEDED);
@@ -134,11 +134,11 @@ class UploadQuotaTest {
         int limit = Feature.PHOTO_UPLOAD.quotaFor(Plan.FREE).limit();
 
         for (int i = 0; i < limit; i++) {
-            uploadController.signature(principal(solo1));
+            uploadController.signature(principal(solo1), null, null);
         }
 
         // 남남이라 solo1 이 다 써도 solo2 는 멀쩡하다
-        assertThatCode(() -> uploadController.signature(principal(solo2)))
+        assertThatCode(() -> uploadController.signature(principal(solo2), null, null))
                 .doesNotThrowAnyException();
     }
 
@@ -153,10 +153,10 @@ class UploadQuotaTest {
 
         int freeLimit = Feature.PHOTO_UPLOAD.quotaFor(Plan.FREE).limit();
         for (int i = 0; i < freeLimit; i++) {
-            uploadController.signature(principal(b));
+            uploadController.signature(principal(b), null, null);
         }
 
-        assertThatCode(() -> uploadController.signature(principal(b)))
+        assertThatCode(() -> uploadController.signature(principal(b), null, null))
                 .doesNotThrowAnyException();
     }
 
@@ -173,10 +173,10 @@ class UploadQuotaTest {
 
         // 커플 공용 사진 한도를 다 써도 식단 사진은 올라간다
         for (int i = 0; i < photoLimit; i++) {
-            uploadController.signature(principal(a));
+            uploadController.signature(principal(a), null, null);
         }
-        assertThatCode(() -> uploadController.mealSignature(principal(a))).doesNotThrowAnyException();
-        assertThatCode(() -> uploadController.mealSignature(principal(b))).doesNotThrowAnyException();
+        assertThatCode(() -> uploadController.mealSignature(principal(a), null, null)).doesNotThrowAnyException();
+        assertThatCode(() -> uploadController.mealSignature(principal(b), null, null)).doesNotThrowAnyException();
     }
 
     @Test
@@ -187,15 +187,15 @@ class UploadQuotaTest {
         int mealLimit = Feature.MEAL_PHOTO.quotaFor(Plan.FREE).limit();
 
         for (int i = 0; i < mealLimit; i++) {
-            uploadController.mealSignature(principal(a));
+            uploadController.mealSignature(principal(a), null, null);
         }
         // FREE 와 PRO 가 같은 한도라 402(결제 권유)가 아니라 429 다
-        assertThatThrownBy(() -> uploadController.mealSignature(principal(a)))
+        assertThatThrownBy(() -> uploadController.mealSignature(principal(a), null, null))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.USAGE_LIMIT_EXCEEDED);
         // 상대 몫은 그대로고, 커플 공용 사진 한도도 그대로다
-        assertThatCode(() -> uploadController.mealSignature(principal(b))).doesNotThrowAnyException();
-        assertThatCode(() -> uploadController.signature(principal(a))).doesNotThrowAnyException();
+        assertThatCode(() -> uploadController.mealSignature(principal(b), null, null)).doesNotThrowAnyException();
+        assertThatCode(() -> uploadController.signature(principal(a), null, null)).doesNotThrowAnyException();
     }
 }

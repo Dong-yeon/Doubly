@@ -49,3 +49,31 @@
 | 장점 | 주소가 우리 것 → 나중에 저장소를 또 바꿔도 DB 주소 유지. CDN 캐시 | 오늘 바로 가능 |
 | 단점 | 네임서버 변경(전파 수 시간)·한 번의 신중한 작업 | 주소가 Cloudflare 하위 도메인에 묶임(나중에 도메인 바꾸면 DB 주소를 다시 써야), Workers 무료는 하루 10만 요청 |
 | 비용 | 0원 | 0원 |
+
+---
+
+## 진행 (2026-10-12)
+
+### 인프라 — 완료
+- R2 버킷 `dubly-media`(Standard, 자동 위치), API 토큰(그 버킷 Object Read & Write) → Railway `R2_ACCOUNT_ID`·`R2_ACCESS_KEY_ID`·`R2_SECRET_ACCESS_KEY`·`R2_BUCKET`.
+  키 끝에 줄바꿈이 붙어 들어갔다(길이 33/65) — 서버가 trim 한다.
+- **결정: 공개 주소 A안 `media.dubly.co.kr`.** dubly.co.kr 네임서버를 가비아 → Cloudflare(`archer`/`nancy`)로 옮겼다.
+  가비아 레코드 6개(@ A Netlify, www CNAME Netlify, send MX·TXT, resend._domainkey TXT, _dmarc TXT)를 그대로 옮기고 @·www 는 **DNS only**(Netlify 인증서).
+  전환 뒤 사이트·/privacy·/invite·assetlinks.json·status.json 200, 메일 레코드 동일 확인. AI 학습 크롤러 Block.
+- R2 커스텀 도메인 연결 → Universal SSL 발급(약 15분) 뒤 `https://media.dubly.co.kr/…` 200 확인.
+- **결정: Cloudinary 옛 사진은 옮기지 않는다**(사용자). 새 업로드만 R2 로 가면 Cloudinary 는 저장 ~1GB + 옛 사진 보기만 남는다.
+
+### 코드 — 1단계(일반 사진·식단 사진)
+- 서버 `common/upload`: `R2Properties`(fitto.r2.*, 스위치 `R2_UPLOADS_ENABLED` 기본 false), `R2Signer`(SigV4 쿼리 서명 직접 구현 — SDK 는 256MB 힙에 무겁다, AWS 문서 예제로 테스트 고정),
+  `R2Storage`(서명된 PUT 발급 10분·이미지 5종만·content-type 서명 / 서명된 DELETE), `R2Urls`(키 `{폴더}/{업로드초}-{무작위24hex}.{ext}` 판정).
+- `/uploads/signature`·`/uploads/meal-signature`: 앱이 `accept=r2` 를 보내고 스위치가 켜졌을 때만 R2(옛 앱·웹은 Cloudinary). 응답에 `provider/uploadUrl/publicUrl/contentType` 추가(옛 필드 유지).
+- R2 주소도 우리 파일로: 버리기(`UploadDiscardPolicy` — 이름의 업로드 시각으로 24시간), 삭제기, AI 다운로드(`CloudinaryImageFetcher` 호스트 허용, 변환 없음), 피드 저장 검증, 탈퇴 시 프로필 사진.
+- 앱 `utils/imageUpload.ts`: 네이티브만 `accept=r2`, r2 응답이면 파일 바이트를 PUT 하고 publicUrl 저장. 썸네일 변환은 Cloudinary 주소에만 걸리므로 R2 는 원본(1024px).
+- 검증: `R2StorageTest`(AWS 예제 서명·주소 판정·버리기), `R2LiveTest`(R2_LIVE=1 일 때 실제 PUT→공개 GET→DELETE; HTML 로 바꿔 PUT 하면 403) 통과.
+- **아직 Cloudinary 에 남는 경로(2단계)**: 채팅·응원 음성, 우리 이모지 원본/생성물, 캐치마인드 그림, 하루 기록 사진(전용 폴더·서명), 메뉴판(앱에서 뺌).
+
+### 켜는 순서 (남음)
+1. 개인정보처리방침에 Cloudflare 추가 + 버전 1.4→1.5 — 서버 `PolicyVersion`·앱 `legal.ts`·`landing/privacy.html` 을 **함께**(버전을 올리면 다음 실행에 재동의 화면).
+2. 앱 OTA(accept=r2 를 보내는 번들).
+3. Railway `R2_UPLOADS_ENABLED=true` → 새 사진이 R2 로. 되돌리기는 false.
+4. 며칠 뒤 확인: R2 객체 수·Cloudinary 크레딧 추이, 업로드 실패 로그.

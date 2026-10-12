@@ -29,15 +29,27 @@ public final class UploadDiscardPolicy {
     private UploadDiscardPolicy() {
     }
 
-    public static boolean isDiscardable(String url, CloudinaryProperties properties, Instant now) {
-        if (!CloudinaryUrls.isImageDirectlyIn(url, properties, properties.getFolder())) {
-            return false;
+    public static boolean isDiscardable(String url, CloudinaryProperties properties, R2Properties r2, Instant now) {
+        Instant uploadedAt;
+        if (R2Urls.isR2Url(url, r2)) {
+            // R2 는 파일 이름 앞에 업로드 시각(초)을 박아 둔다(R2Storage.presignUpload) — 버전 세그먼트의 짝
+            if (!R2Urls.isImageDirectlyIn(url, r2, properties.getFolder())) {
+                return false;
+            }
+            uploadedAt = R2Urls.uploadedAt(url, r2).orElse(null);
+            if (uploadedAt == null) {
+                return false;
+            }
+        } else {
+            if (!CloudinaryUrls.isImageDirectlyIn(url, properties, properties.getFolder())) {
+                return false;
+            }
+            Matcher m = VERSION.matcher(url);
+            if (!m.find()) {
+                return false;
+            }
+            uploadedAt = Instant.ofEpochSecond(Long.parseLong(m.group(1)));
         }
-        Matcher m = VERSION.matcher(url);
-        if (!m.find()) {
-            return false;
-        }
-        Instant uploadedAt = Instant.ofEpochSecond(Long.parseLong(m.group(1)));
         Duration age = Duration.between(uploadedAt, now);
         // 시계가 조금 어긋나 미래로 찍힌 것은 막 올린 것으로 본다(5분까지)
         return !age.isNegative() ? age.compareTo(Duration.ofHours(FRESH_HOURS)) <= 0
