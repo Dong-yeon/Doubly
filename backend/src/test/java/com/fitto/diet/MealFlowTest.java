@@ -418,6 +418,27 @@ class MealFlowTest {
                 .extracting(MealResponse::calories).isEqualTo(210);
     }
 
+    /**
+     * "같이 먹었어요"를 누르면 채팅 카드도 데이트 카드가 된다(2026-10-12 제보 — 채팅에는 아무 변화가 없었다).
+     * 새 카드를 또 쌓지 않고 저장 때 올라간 카드를 제자리에서 바꾼다. 두 번 눌러도 한 번만 붙는다.
+     */
+    @Test
+    void 같이_먹었어요를_누르면_채팅_카드가_데이트_카드로_바뀐다() {
+        Long a = register("share-card-a@fitto.com");
+        Long b = register("share-card-b@fitto.com");
+        Long relationId = relationService.connectCouple(b, relationService.createCoupleInvite(a).code()).id();
+        MealResponse solo = mealService.save(a, sample(KstClock.today(), MealType.DINNER));
+
+        mealService.share(a, solo.id());
+        mealService.share(a, solo.id());
+
+        List<String> cards = chatService.getMessages(a, relationId, null).stream()
+                .filter(m -> m.messageType() == com.fitto.chat.domain.MessageType.MEAL_CARD)
+                .map(m -> m.content())
+                .toList();
+        assertThat(cards).containsExactly("저녁 (데이트) · 닭가슴살 샐러드");
+    }
+
     @Test
     void 복사할_기록이_없는_날짜는_예외를_던진다() {
         Long user = register("m6@fitto.com");

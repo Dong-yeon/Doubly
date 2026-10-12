@@ -494,6 +494,35 @@ public class ChatService {
         return ChatMessageResponse.from(message);
     }
 
+    /**
+     * 이미 올라간 식단 카드를 데이트 식단 카드로 바꾼다 — 홈에서 사진 한 장으로 저장한 뒤 "같이 먹었어요"를 누른 경로
+     * (MealService.share). 저장 때 카드는 혼자 기록으로 올라갔으므로 끼니 이름 뒤에 "(데이트)"만 붙인다 —
+     * 본문을 통째로 다시 만들지 않는 건 뒤에 붙은 럽슐랭 조각(appendPlaceFragment)을 잃지 않기 위해서다.
+     *
+     * @return 바꾼 카드(제자리 교체 방송용). 이 끼니의 살아 있는 카드가 없으면(자동 공유 이전에 저장한 기록 등) 빈 값
+     */
+    @Transactional
+    public java.util.Optional<ChatMessageResponse> markMealCardAsDate(Long relationId, Long mealId, String mealTypeLabel) {
+        return chatMessageRepository.findByMealIdIn(List.of(mealId)).stream()
+                .filter(m -> relationId.equals(m.getRelationId())
+                        && m.getMessageType() == MessageType.MEAL_CARD && !m.isDeleted())
+                .findFirst()
+                .map(m -> {
+                    m.foldCard(withDateMark(m.getContent(), mealTypeLabel), null);
+                    return detailOf(m);
+                });
+    }
+
+    /** "점심 · 파스타" → "점심 (데이트) · 파스타". 이미 붙어 있으면 그대로(두 번 눌러도 한 번). */
+    static String withDateMark(String content, String mealTypeLabel) {
+        String marked = mealTypeLabel + " (데이트)";
+        if (content == null || content.isBlank()) return marked;
+        if (content.contains(marked)) return content;
+        int at = content.indexOf(mealTypeLabel);
+        return at < 0 ? marked + " · " + content
+                : content.substring(0, at) + marked + content.substring(at + mealTypeLabel.length());
+    }
+
     /** {@link #detachWorkoutCards} 의 식단판 — 데이트 식단은 짝이 둘이라 id 목록을 받는다. */
     @Transactional
     public void detachMealCards(Collection<Long> mealIds) {
