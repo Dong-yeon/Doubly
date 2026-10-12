@@ -20,12 +20,12 @@
  */
 
 export const TERMS_VERSION = '1.2';
-export const PRIVACY_VERSION = '1.4';
+export const PRIVACY_VERSION = '1.5';
 
 /** 현재 버전(TERMS_VERSION/PRIVACY_VERSION)의 시행일 — 유료 구독(PRO) 개시 시점 */
 const EFFECTIVE_DATE = '2026년 9월 22일';
-/** 개인정보처리방침만 따로 개정된 시행일 — 1.4: 탈퇴 유예기간(14일) 도입 */
-const PRIVACY_EFFECTIVE_DATE = '2026년 9월 30일';
+/** 개인정보처리방침만 따로 개정된 시행일 — 1.4: 탈퇴 유예기간(14일) 도입, 1.5: 사진 저장 수탁사 Cloudflare(R2) 추가 */
+const PRIVACY_EFFECTIVE_DATE = '2026년 10월 12일';
 
 /** 문의·개인정보 연락처 (설정의 문의하기, 약관 문의처 등 단일 출처) */
 export const CONTACT_EMAIL = 'ehddus5712@gmail.com';
@@ -159,7 +159,8 @@ export const PRIVACY_POLICY = `Dubly(이하 "서비스")는 이용자의 개인�
  서비스는 아래 업체에 개인정보 처리를 위탁하고 있습니다.
  - Railway Corporation (미국) : 서버·데이터베이스 인프라 운영
  - Google (Gemini) : 음식 사진·운동 데이터 AI 분석
- - Cloudinary : 이미지 저장
+ - Cloudflare, Inc. (미국) : 사진 저장·전송
+ - Cloudinary, Inc. (미국) : 이미지 저장 (2026년 10월 이전 사진·일부 기능)
  - Expo : 푸시 알림 발송
  - Sentry (Functional Software, Inc., 미국) : 앱 오류·장애 정보 수집
  - Apple Inc. (미국) · Google LLC (미국) : 인앱결제 처리 및 구독 상태 확인
