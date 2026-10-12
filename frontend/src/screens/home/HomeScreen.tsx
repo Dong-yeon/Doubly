@@ -10,7 +10,7 @@
  * 크든 작든 아래 두 줄은 항상 바닥에 붙고 스크롤이 생기지 않는다.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { AppState, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '../../components/Icon';
@@ -34,6 +34,16 @@ import { LockedCard } from '../../components/LockedCard';
 import { ServiceStatusBanner } from '../../components/ServiceStatusBanner';
 import { MoodPicker } from '../../components/MoodPicker';
 import { QuickMealSheet } from './components/QuickMealSheet';
+import { PendingMealPhotoPeek } from './components/PendingMealPhotoPeek';
+import {
+  CAN_KEEP_PENDING_MEAL_PHOTOS,
+  discardPendingMealPhoto,
+  isPendingMealPhotoBusy,
+  listPendingMealPhotos,
+  stashMealPhoto,
+  submitPendingMealPhoto,
+  type PendingMealPhoto,
+} from '../../utils/pendingMealPhotos';
 import { useAuthStore } from '../../store/authStore';
 import { useCoupleEmojiStore } from '../../store/coupleEmojiStore';
 import { usePlaceStore } from '../../store/placeStore';
@@ -77,6 +87,7 @@ import type {
   FeedItem,
   LovelichelinPulse,
   Meal,
+  MealType,
   Memories,
   MoodResponse,
   PartnerToday,
@@ -398,43 +409,136 @@ export function HomeScreen({ navigation }: Props) {
    * <p>시트를 닫는 건 저장이 <b>끝난 뒤</b>다. 사진을 고르자마자 닫으면 업로드가 도는 동안
    * 아무 일도 안 일어나는 것처럼 보이고, 실패했을 때 되돌아갈 자리도 사라진다.
    */
+  /** 저장 성공 뒤 안내 — 바로 저장했을 때와 보관함에서 다시 올렸을 때가 같은 말을 쓴다 */
+  const announceMealSaved = (saved: Meal, mealType: MealType, retried: boolean) => {
+    /*
+     * 칼로리를 약속하는 건 설정이 켜져 있을 때뿐이다 — 꺼둔 사람에게 "곧 채워져요"는
+     * 지키지 못할 말이고, 안 채워진 카드를 보고 고장으로 읽는다. 서버 판정과 같은 조건.
+     */
+    const filling = autoAnalyzeMealPhoto ? ' 칼로리는 곧 채워져요.' : '';
+    const head = retried ? `올리지 못했던 ${mealTypeLabel(mealType)} 사진을 기록했어요!` : `${mealTypeLabel(mealType)} 기록했어요!`;
+    /*
+     * 둘이 먹었는지는 저장하고 <b>나서</b> 묻는다. 사진을 고르기 전에 물으면 시트가 두 단이
+     * 되는데, 이 경로의 존재 이유가 탭을 줄이는 것이라 그 순간 의미가 없어진다. 안 누르고
+     * 지나가도 그냥 혼자 기록이라 잃는 게 없다 — 그래서 덤으로 얹을 수 있다.
+     * 외식이야말로 음식 사진을 찍는 순간이고, "같이 먹기"는 상대 몫까지 같이 남겨준다.
+     */
+    if (couple?.id) {
+      toast.success(`${head}${filling} 같이 드셨나요?`, {
+        label: '같이 먹었어요',
+        onPress: () => void shareMeal(saved.id),
+      });
+    } else {
+      toast.success(`${head}${filling}`);
+    }
+  };
+
+  /**
+   * 올리지 못한 식단 사진(보관함) — 홈 한 줄 슬롯 맨 앞에 띄운다(utils/pendingMealPhotos 주석).
+   * 앱을 열 때·돌아올 때 연결 문제로 실패했던 것은 자동으로 다시 보낸다.
+   */
+  const [pendingPhotos, setPendingPhotos] = useState<PendingMealPhoto[]>([]);
+  const myUserId = user?.id;
+  const reloadPendingPhotos = async () => {
+    if (!CAN_KEEP_PENDING_MEAL_PHOTOS || !myUserId) return [];
+    const list = await listPendingMealPhotos(myUserId);
+    setPendingPhotos(list);
+    return list;
+  };
+
+  const retryPendingPhotos = async (mode: 'auto' | 'manual') => {
+    const list = await reloadPendingPhotos();
+    // 자동은 연결 문제로 실패한 것만 — 서버가 거절한 건 같은 답이 돌아올 뿐이라 사용자가 누를 때만 다시 보낸다
+    const targets =
+      mode === 'auto' ? list.filter((p) => !p.rejected && !isPendingMealPhotoBusy(p)) : list;
+    if (targets.length === 0) return;
+    let savedAny = false;
+    for (const entry of targets) {
+      try {
+        const saved = await submitPendingMealPhoto(entry);
+        savedAny = true;
+        announceMealSaved(saved, entry.mealType, true);
+      } catch (e) {
+        if (mode === 'manual') toast.error(getErrorMessage(e, '이번에도 기록하지 못했어요. 사진은 그대로 남겨 뒀어요.'));
+        // 자동은 조용히 — 연결이 돌아오면 다음 복귀 때 또 시도한다
+      }
+    }
+    await reloadPendingPhotos();
+    if (savedAny) refresh();
+  };
+
+  useEffect(() => {
+    // 첫 시도는 홈이 자기 기록을 먼저 그린 뒤로 조금 미룬다 — 업로드가 화면 첫 로딩과 회선을 다투지 않게
+    const first = setTimeout(() => void retryPendingPhotos('auto'), 1500);
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') void retryPendingPhotos('auto');
+    });
+    return () => {
+      clearTimeout(first);
+      sub.remove();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myUserId]);
+
+  const onPressPendingPhotos = () => {
+    const n = pendingPhotos.length;
+    Alert.alert(`올리지 못한 식단 사진 ${n}장`, '찍어 둔 사진은 그대로 남아 있어요. 찍은 때의 끼니·날짜로 기록돼요.', [
+      { text: '다시 올리기', onPress: () => void retryPendingPhotos('manual') },
+      {
+        text: '버리기',
+        style: 'destructive',
+        onPress: () =>
+          Alert.alert('사진을 버릴까요?', '버리면 이 사진으로는 다시 기록할 수 없어요.', [
+            { text: '취소', style: 'cancel' },
+            {
+              text: '버리기',
+              style: 'destructive',
+              onPress: () =>
+                void Promise.all(pendingPhotos.map((p) => discardPendingMealPhoto(p))).then(() => reloadPendingPhotos()),
+            },
+          ]),
+      },
+      { text: '취소', style: 'cancel' },
+    ]);
+  };
+
   const saveMealFromPhoto = async (source: 'camera' | 'library') => {
     setMealSaving(true);
     let photoUrl: string | null = null;
+    let stashed: PendingMealPhoto | null = null;
     try {
       const picked = source === 'camera' ? await takePhoto() : await pickImage();
       if (!picked) return;
-      photoUrl = await uploadImage(picked, { purpose: 'meal' });
       const mealType = mealTypeForNow();
-      const saved = await dietApi.save({ mealDate: todayKst(), mealType, photoUrl });
+      let saved: Meal;
+      if (CAN_KEEP_PENDING_MEAL_PHOTOS && user?.id) {
+        /*
+         * 올리기 <b>전에</b> 보관함에 적는다 — 찍고 바로 앱을 꺼도, 업로드·저장이 실패해도 사진이 남아
+         * 다음에 열 때 다시 올라간다. 카메라 사진은 갤러리에 없어 여기서 놓치면 되살릴 길이 없다(2026-10-12 제보).
+         */
+        stashed = await stashMealPhoto(user.id, picked, todayKst(), mealType);
+        saved = await submitPendingMealPhoto(stashed);
+      } else {
+        photoUrl = await uploadImage(picked, { purpose: 'meal' });
+        saved = await dietApi.save({ mealDate: todayKst(), mealType, photoUrl });
+      }
       // 기록 화면과 경로를 비교하려고 같은 이벤트로 센다(시트는 열린 시간·항목이 없다 — 사진 한 장 저장)
       track('MEAL_RECORD_SAVED', `sheet;i=0;p=1;d=0;a=${autoAnalyzeMealPhoto ? 1 : 0}`);
       haptics.success();
       setMealSheet(false);
-      /*
-       * 칼로리를 약속하는 건 설정이 켜져 있을 때뿐이다 — 꺼둔 사람에게 "곧 채워져요"는
-       * 지키지 못할 말이고, 안 채워진 카드를 보고 고장으로 읽는다. 서버 판정과 같은 조건.
-       */
-      const filling = autoAnalyzeMealPhoto ? ' 칼로리는 곧 채워져요.' : '';
-      /*
-       * 둘이 먹었는지는 저장하고 <b>나서</b> 묻는다. 사진을 고르기 전에 물으면 시트가 두 단이
-       * 되는데, 이 경로의 존재 이유가 탭을 줄이는 것이라 그 순간 의미가 없어진다. 안 누르고
-       * 지나가도 그냥 혼자 기록이라 잃는 게 없다 — 그래서 덤으로 얹을 수 있다.
-       * 외식이야말로 음식 사진을 찍는 순간이고, "같이 먹기"는 상대 몫까지 같이 남겨준다.
-       */
-      if (couple?.id) {
-        toast.success(`${mealTypeLabel(mealType)} 기록했어요!${filling} 같이 드셨나요?`, {
-          label: '같이 먹었어요',
-          onPress: () => void shareMeal(saved.id),
-        });
-      } else {
-        toast.success(`${mealTypeLabel(mealType)} 기록했어요!${filling}`);
-      }
+      announceMealSaved(saved, mealType, false);
       refresh();
     } catch (e) {
-      toast.error(getErrorMessage(e, '기록하지 못했어요.'));
-      // 올렸는데 저장이 거절됐으면 그 사진은 어디에도 안 쓰인다 — 치운다(lovebody-current-state §4-6)
-      if (photoUrl && wasRejected(e)) uploadApi.discard(photoUrl);
+      if (stashed) {
+        // 사진은 보관함에 남았다 — 시트를 닫고 홈 슬롯에서 다시 올리게 한다
+        setMealSheet(false);
+        toast.error(getErrorMessage(e, '기록하지 못했어요.') + ' 사진은 남겨 뒀어요 — 홈에서 다시 올릴 수 있어요.');
+        void reloadPendingPhotos();
+      } else {
+        toast.error(getErrorMessage(e, '기록하지 못했어요.'));
+        // 올렸는데 저장이 거절됐으면 그 사진은 어디에도 안 쓰인다 — 치운다(lovebody-current-state §4-6)
+        if (photoUrl && wasRejected(e)) uploadApi.discard(photoUrl);
+      }
     } finally {
       setMealSaving(false);
     }
@@ -1008,7 +1112,10 @@ export function HomeScreen({ navigation }: Props) {
                 대부분의 날은 다섯 다 없어 비어 있다.
                 공용 "최근 기록" 줄은 없앴다 — 좌우 열이 각자의 마지막 기록을 이미 보여준다.
               */}
-              {homeTrip && isTripLive(homeTrip) && isTripOngoing(homeTrip) ? (
+              {/* ⓪ 올리지 못한 식단 사진 — 놓치면 사진째 사라지는 유일한 항목이라 맨 앞이다 */}
+              {pendingPhotos.length > 0 ? (
+                <PendingMealPhotoPeek count={pendingPhotos.length} onPress={onPressPendingPhotos} />
+              ) : homeTrip && isTripLive(homeTrip) && isTripOngoing(homeTrip) ? (
                 <TripPeek
                   trip={homeTrip}
                   onPress={() => navigation.navigate('TripDetail', { tripId: homeTrip.id, title: homeTrip.title })}

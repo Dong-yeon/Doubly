@@ -17,6 +17,7 @@ import { useContentStore } from './contentStore';
 import { useCoupleEmojiStore } from './coupleEmojiStore';
 import { useRelationStore } from './relationStore';
 import { clearAllWritingDrafts } from '../utils/writingDraft';
+import { clearPendingMealPhotos } from '../utils/pendingMealPhotos';
 import { discardExportFiles } from '../utils/exportStorage';
 import type { AuthTokens, Gender, User } from '../types';
 
@@ -57,6 +58,8 @@ async function clearTokens() {
   useChatStore.getState().teardown();
   // 쓰다 만 글(하루 기록은 나만 보는 글이다)이 다음 계정에 보이지 않게 지운다
   await clearAllWritingDrafts();
+  // 올리지 못한 식단 사진 보관함도 — 다음 계정에 남의 끼니 사진이 뜨거나 그 계정으로 올라가면 안 된다
+  await clearPendingMealPhotos().catch(() => {});
   // 받아 둔 기록 내보내기(사진·채팅이 든 ZIP)도 — 폴더가 기기 공용이라 다음 계정에 보였다
   discardExportFiles();
   /*
