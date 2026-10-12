@@ -54,6 +54,8 @@ export type HomeStackParamList = PlaceScreensParamList & {
   Plan: undefined;
   // 스티커 상점 — 팩 둘러보기와 낱개 구매. 채팅 패널의 잠금 해제 줄에서도 들어온다
   StickerShop: undefined;
+  // 스티커 팩 상세 — 상점 카드를 누르면 팩에 든 이모티콘 전부와 받기·PRO 안내
+  StickerPackDetail: { packId: string };
   // 설정 — 알림·마케팅 수신, 비밀번호 변경, 약관 열람
   Settings: undefined;
   StickerSettings: undefined;
