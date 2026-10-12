@@ -48,9 +48,18 @@ const PENDING_WINDOW_MS = 10 * 60 * 1000;
 /** meal id → 처음 대기 상태로 본 시각. 화면이 다시 마운트돼도 이어지도록 모듈에 둔다 */
 const pendingSeenAt = new Map<number, number>();
 
-/** 사진은 있는데 칼로리가 아직 없는 오늘 기록 — 자동 분석을 기다리는 중으로 본다 */
+/**
+ * 서버가 칼로리를 채우는 중으로 보이는 오늘 기록 — 두 경우다.
+ * <ul>
+ *   <li>사진만 있고 칼로리·항목이 없다(MealPhotoAutoAnalysisService)
+ *   <li>이름만 적고 칼로리를 비워 둔 항목이 있다(MealCalorieFillService, 2026-10-12)
+ * </ul>
+ */
 function isFillingCalories(meal: Meal): boolean {
-  if (!meal.photoUrl || meal.calories != null || (meal.items?.length ?? 0) > 0) {
+  const items = meal.items ?? [];
+  const photoOnly = !!meal.photoUrl && meal.calories == null && items.length === 0;
+  const typedWithoutCalories = items.some((i) => i.calories == null);
+  if (!photoOnly && !typedWithoutCalories) {
     pendingSeenAt.delete(meal.id);
     return false;
   }
@@ -99,14 +108,17 @@ export const MealCard = React.memo(function MealCard({ meal, onPress, onLongPres
               값이 아니라 추정이라는 걸 배지 같은 별도 장치 없이 숫자 자체로 말한다.
               수정 화면에서 저장하면 서버가 USER 로 바꾸므로 "약"이 사라진다.
             */}
-            {meal.calories ? (
+            {/*
+              채우는 중을 먼저 본다 — 일부 항목만 칼로리가 있으면 합계가 0 이 아니라서, 칼로리부터 보면
+              모자란 합계를 확정값처럼 보여 준다. 저장 토스트("칼로리는 곧 채워져요")와 같은 말이다.
+            */}
+            {isFillingCalories(meal) ? (
+              <Text style={styles.calPending}>칼로리 채우는 중</Text>
+            ) : meal.calories ? (
               <Text style={styles.cal}>
                 {meal.nutritionSource === 'AI_ESTIMATED' ? '약 ' : ''}
                 {formatKcal(meal.calories)}
               </Text>
-            ) : isFillingCalories(meal) ? (
-              // 저장 토스트("칼로리는 곧 채워져요")와 같은 말 — 0kcal 로 남은 카드를 "저장이 반쪽 났다"로 읽지 않게
-              <Text style={styles.calPending}>칼로리 채우는 중</Text>
             ) : null}
             {showDate ? <Text style={styles.date}>{relativeDateLabel(meal.mealDate)}</Text> : null}
           </View>

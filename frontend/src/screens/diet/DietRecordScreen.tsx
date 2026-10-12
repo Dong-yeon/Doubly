@@ -1424,9 +1424,16 @@ export function DietRecordScreen({ navigation, route }: Props) {
        */
       const willAutoAnalyze =
         !!photoUrl && payloadItems.length === 0 && !num(totalCalories) && autoAnalyzeMealPhoto;
+      /*
+       * 이름만 적고 칼로리를 비운 항목이 있으면 서버가 뒤이어 채운다(MealCalorieFillService, 2026-10-12) —
+       * 공공 DB 표기값 먼저, 못 찾은 것만 AI. 사진 분석과는 겹치지 않는다(그쪽은 항목이 하나도 없을 때만).
+       */
+      const willFillCalories =
+        !willAutoAnalyze && autoAnalyzeMealPhoto && payloadItems.some((i) => i.calories == null);
       track(
         'MEAL_RECORD_SAVED',
-        `new;t=${elapsedSec(openedAtRef.current)};i=${payloadItems.length};p=${photoUrl ? 1 : 0};d=${payload.sharedWithPartner ? 1 : 0};a=${willAutoAnalyze ? 1 : 0}`,
+                // a: 1 = 사진 자동 분석, 2 = 빈 칼로리 자동 채우기, 0 = 없음
+        `new;t=${elapsedSec(openedAtRef.current)};i=${payloadItems.length};p=${photoUrl ? 1 : 0};d=${payload.sharedWithPartner ? 1 : 0};a=${willAutoAnalyze ? 1 : willFillCalories ? 2 : 0}`,
       );
 
       /*
@@ -1448,7 +1455,12 @@ export function DietRecordScreen({ navigation, route }: Props) {
             // 자동 분석도 사진 분석 횟수를 쓴다 — 다 썼으면 서버가 조용히 건너뛰므로 "곧 채워져요"는 거짓말이 된다
             ? '오늘 AI 분석 횟수를 다 써서 칼로리는 직접 적어주세요.'
             : '칼로리는 곧 채워져요.'
-          : '') +
+          : willFillCalories
+            ? textQuota?.remaining === 0
+              // AI 횟수를 다 써도 표기값으로 찾는 건 된다 — 다 채워진다고 약속하지 않는다
+              ? '표기값이 있는 음식은 칼로리를 곧 채워요.'
+              : '칼로리는 곧 채워져요.'
+            : '') +
         placeToastSuffix;
       toast.success(saveMessage);
 
@@ -1987,7 +1999,10 @@ export function DietRecordScreen({ navigation, route }: Props) {
                 style={styles.analyzeButton}
               />
               <Text style={styles.analyzeHint}>
-                표기값이 있는 음식은 그 값으로, 없으면 AI가 추정해요. 항목별로 수정할 수 있어요.
+                {/* 누르지 않아도 된다는 걸 말해야 누르지 않는다 — 조건은 onSave 의 willFillCalories 와 같다 */}
+                {!editing && autoAnalyzeMealPhoto && filled.some(lacksCalories)
+                  ? '칼로리를 비워 두고 저장해도 뒤에서 채워져요. 저장 전에 보고 고치려면 눌러 주세요.'
+                  : '표기값이 있는 음식은 그 값으로, 없으면 AI가 추정해요. 항목별로 수정할 수 있어요.'}
               </Text>
               {/* 표기값 조회는 횟수를 안 쓰므로 버튼은 잠그지 않는다 — AI 추정 몫만 남은 횟수를 말한다 */}
               {quotaLine(textQuota) ? <Text style={styles.analyzeHint}>{quotaLine(textQuota)}</Text> : null}

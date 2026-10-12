@@ -316,13 +316,13 @@ export function SettingsScreen({ navigation }: Props) {
 
         <SettingsGroup
           title="기능"
-          footer="사진 칼로리는 직접 적은 값이 있으면 건드리지 않아요."
+          footer="사진만 올리거나 음식 이름만 적고 저장하면 칼로리를 뒤에서 채워요. 직접 적은 값은 건드리지 않아요."
           style={styles.group}
         >
           {/* 카카오톡처럼 이모티콘 패널을 정리하는 곳 — 채팅 패널 탭 줄 끝에서도 들어온다 */}
           <SettingsRow title="이모티콘 설정" onPress={() => navigation.navigate('StickerSettings')} />
           <SettingsRow
-            title="사진으로 칼로리 채우기"
+            title="칼로리 자동으로 채우기"
             switchValue={user?.autoAnalyzeMealPhoto !== false}
             onSwitch={(next) => void onToggleMealPhotoAnalysis(next)}
             disabled={savingMealPhotoAnalysis}
