@@ -463,7 +463,28 @@ public class MealService {
         mealRepository.save(copyForPartner(meal, partnerId, userId));
 
         afterSharedMealAdded(couple, userId, partnerId, meal.getMealDate(), newlyQualifiesDate);
+        markCardAsDate(userId, couple.getId(), meal);
         return MealResponse.from(meal);
+    }
+
+    /**
+     * 채팅 카드도 데이트 식단으로 — 예전엔 "같이 먹었어요"를 눌러도 채팅에는 아무 변화가 없었다(2026-10-12 제보).
+     * 저장 때 올라간 카드가 있으면 그 자리에서 "(데이트)"로 바꾸고(/updates 로 제자리 교체), 없으면(자동 공유 이전에
+     * 저장한 기록) 데이트 카드를 새로 남긴다.
+     */
+    private void markCardAsDate(Long userId, Long relationId, Meal meal) {
+        java.util.Optional<ChatMessageResponse> updated =
+                chatService.markMealCardAsDate(relationId, meal.getId(), meal.getMealType().label());
+        if (updated.isEmpty()) {
+            postMealCard(userId, relationId, meal, null, true);
+            return;
+        }
+        try {
+            messagingTemplate.convertAndSend("/sub/rooms/" + relationId + "/updates", updated.get());
+        } catch (RuntimeException e) {
+            log.warn("식단 카드 갱신 브로드캐스트 실패 (카드는 바뀜) relationId={}, messageId={}: {}",
+                    relationId, updated.get().id(), e.getMessage());
+        }
     }
 
     /** 데이트 식단 짝 동기화 — 자기 자신을 뺀 나머지(파트너 몫)에 내용만 반영한다. */
