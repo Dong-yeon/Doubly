@@ -28,6 +28,7 @@ import {
   type DrawingCanvasHandle,
 } from '../../components/DrawingCanvas';
 import { catchMindApi } from '../../api/game';
+import { GameHelpButton, GameHelpSheet, useGameHelp } from '../../components/GameHelpSheet';
 import { uploadDataUriWithSignature } from '../../utils/imageUpload';
 import { connectSocket, subscribeCouple } from '../../api/chatSocket';
 import { useRelationStore } from '../../store/relationStore';
@@ -45,6 +46,8 @@ type Props = NativeStackScreenProps<HomeStackParamList, 'CatchMind'>;
 export function CatchMindScreen(_: Props) {
   const { width } = useWindowDimensions();
   const relationId = useRelationStore((s) => s.couple?.id);
+  // 처음 들어오면 하는 법이 한 번 뜬다(2026-10-12 — 처음 하는 사람에겐 규칙이 가장 큰 벽)
+  const help = useGameHelp('CATCH_MIND');
 
   const [game, setGame] = useState<CatchMindGame | null>(null);
   /** 방금 끝난 판 — current 가 null 이 된 뒤에도 정답과 그림을 보여주려고 따로 든다 */
@@ -511,6 +514,7 @@ export function CatchMindScreen(_: Props) {
 
   const header = (
     <View>
+      <GameHelpButton onPress={help.open} />
       {game
         ? game.role === 'DRAWER'
           ? renderWaiting(game)
@@ -586,6 +590,7 @@ export function CatchMindScreen(_: Props) {
           ) : null
         }
       />
+      <GameHelpSheet game="CATCH_MIND" visible={help.visible} onClose={help.close} />
     </SafeAreaView>
   );
 }

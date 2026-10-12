@@ -136,6 +136,29 @@ public final class WallRaceRules {
         return hasPath(next, pawnA, goalRowA) && hasPath(next, pawnB, goalRowB);
     }
 
+    /**
+     * {@code pawn} 에서 {@code goalRow} 까지 최소 몇 칸인가 — 벽만 보고 상대 말은 무시한다({@link #hasPath} 와 같다).
+     * 길이 없으면 -1. 초보에게 "벽이 얼마나 먹혔나"를 보여 주는 숫자다(docs/pathlock-ux-analysis_2026-10-08.md §10).
+     */
+    public static int distance(String walls, int pawn, int goalRow) {
+        if (row(pawn) == goalRow) return 0;
+        int[] dist = new int[CELLS];
+        java.util.Arrays.fill(dist, -1);
+        Deque<Integer> queue = new ArrayDeque<>();
+        dist[pawn] = 0;
+        queue.add(pawn);
+        while (!queue.isEmpty()) {
+            int cur = queue.poll();
+            for (int next : orthogonalNeighbors(walls, cur)) {
+                if (dist[next] >= 0) continue;
+                dist[next] = dist[cur] + 1;
+                if (row(next) == goalRow) return dist[next];
+                queue.add(next);
+            }
+        }
+        return -1;
+    }
+
     /** {@code pawn} 에서 {@code goalRow} 의 아무 칸까지 갈 수 있는가 — 너비 우선 탐색 */
     public static boolean hasPath(String walls, int pawn, int goalRow) {
         if (row(pawn) == goalRow) return true;

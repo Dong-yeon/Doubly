@@ -8,6 +8,7 @@ import type {
   CatchMindWordCandidate,
   DailySudoku,
   GameReactionOption,
+  GamePieces,
   GameRecord,
   GameStreak,
   GameTypeKey,
@@ -174,6 +175,12 @@ export const gameReactionApi = {
  * 게임 재촉 — 기다리는 쪽이 상대를 한 번 부른다(판마다 한 사람당 하루 한 번). 종목 공통.
  * docs/GAME_NUDGE_2026-09-30.md
  */
+/** 게임 말 얼굴(우리 이모지) — 고른 하나를 나도 상대도 본다(V137) */
+export const gamePieceApi = {
+  get: () => unwrap(apiClient.get<ApiResponse<GamePieces>>('/games/pieces')),
+  set: (emojiId: number | null) => unwrap(apiClient.put<ApiResponse<GamePieces>>('/games/pieces', { emojiId })),
+};
+
 export const gameNudgeApi = {
   nudge: (gameId: number) =>
     unwrap(apiClient.post<ApiResponse<{ nudgedAt: string }>>(`/games/nudge/${gameId}`)),

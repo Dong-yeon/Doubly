@@ -31,6 +31,7 @@ import { MaterialCommunityIcons } from '../../components/Icon';
 import { PIECE_COLORS, PuyoBoard } from '../../components/PuyoBoard';
 import { useContentWidth } from '../../hooks/useContentWidth';
 import { puzzleApi } from '../../api/game';
+import { GameHelpButton, GameHelpSheet, useGameHelp } from '../../components/GameHelpSheet';
 import {
   connectSocket,
   publishGameEvent,
@@ -214,6 +215,8 @@ export function PuyoScreen({ navigation }: Props) {
   const width = useContentWidth();
   const { height } = useWindowDimensions();
   const relationId = useRelationStore((s) => s.couple?.id);
+  // 처음 들어오면 하는 법이 한 번 뜬다(2026-10-12 — 처음 하는 사람에겐 규칙이 가장 큰 벽)
+  const help = useGameHelp('PUZZLE');
   const myId = useAuthStore((s) => s.user?.id);
 
   const [phase, setPhase] = useState<Phase>('IDLE');
@@ -1049,6 +1052,7 @@ export function PuyoScreen({ navigation }: Props) {
     return (
       <View style={styles.overlay}>
         <Text style={styles.overlayTitle}>연쇄 퍼즐</Text>
+        <GameHelpButton onPress={help.open} />
         <Text style={styles.overlayDesc}>
           같은 색 4개를 붙이면 사라져요.{'\n'}위의 조각이 내려오며 또 터지면 연쇄!
         </Text>
@@ -1152,6 +1156,7 @@ export function PuyoScreen({ navigation }: Props) {
           </Text>
         )}
       </View>
+      <GameHelpSheet game="PUZZLE" visible={help.visible} onClose={help.close} />
     </SafeAreaView>
   );
 }

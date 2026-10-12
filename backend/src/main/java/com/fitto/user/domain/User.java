@@ -128,6 +128,12 @@ public class User extends BaseTimeEntity {
     @Column(name = "withdrawal_scheduled_at")
     private LocalDateTime withdrawalScheduledAt;
 
+    /**
+     * 게임 말로 쓸 우리 이모지(V137) — 비면 기본 말. FK 없음: 이모지가 지워지면 앱이 기본 말로 그린다.
+     */
+    @Column(name = "game_piece_emoji_id")
+    private Long gamePieceEmojiId;
+
     @Builder
     private User(String email, String password, String name, LocalDate birthDate, Gender gender,
                  String profileImageUrl, Role role, SocialType socialType, String socialId) {
@@ -211,6 +217,10 @@ public class User extends BaseTimeEntity {
     }
 
     /** 음식 사진 자동 분석 켜기/끄기. */
+    public void setGamePieceEmojiId(Long emojiId) {
+        this.gamePieceEmojiId = emojiId;
+    }
+
     public void setAutoAnalyzeMealPhoto(boolean enabled) {
         this.autoAnalyzeMealPhoto = enabled;
     }

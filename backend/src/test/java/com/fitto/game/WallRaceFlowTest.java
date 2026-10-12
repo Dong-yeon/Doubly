@@ -242,6 +242,19 @@ class WallRaceFlowTest {
         }
     }
 
+    @Test
+    void 목표_줄까지_남은_칸을_양쪽_모두_내려준다() {
+        long[] users = couple("da", "db");
+        WallRaceGameResponse game = wallRaceService.start(users[0]);
+        assertThat(game.myDistance()).isEqualTo(8);
+        assertThat(game.partnerDistance()).isEqualTo(8);
+
+        // 판을 연 쪽 말 (0,4) 바로 아래를 가로 벽으로 막으면 옆으로 한 칸 돌아야 한다
+        WallRaceGameResponse after = wallRaceService.placeWall(users[1], game.id(), slot(0, 3), "H");
+        assertThat(after.partnerDistance()).isEqualTo(9);
+        assertThat(wallRaceService.current(users[0]).myDistance()).isEqualTo(9);
+    }
+
     // ── 승리 ───────────────────────────────────────────────────────
 
     @Test

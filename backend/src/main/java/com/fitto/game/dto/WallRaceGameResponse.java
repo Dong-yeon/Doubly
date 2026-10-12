@@ -2,6 +2,7 @@ package com.fitto.game.dto;
 
 import com.fitto.game.domain.GameStatus;
 import com.fitto.game.domain.WallRaceGame;
+import com.fitto.game.wallrace.WallRaceRules;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -22,6 +23,8 @@ import java.util.List;
  * @param moves        'P12' / 'W35H' 순서대로. 무르기가 이걸 재생해 한 수 전으로 돌아간다
  * @param undoRequest  MINE(내가 걸어둠) / PARTNER(상대가 걸어옴) / null(없음)
  * @param canUndo      지금 내가 무르기를 걸 수 있는가 — 직전에 둔 쪽만 걸 수 있다
+ * @param myDistance      내 말이 목표 줄까지 최소 몇 칸(벽만 보고, 상대 말은 무시) — 초보용 길잡이 숫자
+ * @param partnerDistance 상대 말이 목표 줄까지 최소 몇 칸
  * @param illegalWalls 지금 내가 놓을 수 없는 벽 자리(겹침·길 막힘) — 내 차례이고 벽이 남았을 때만. 드래그 미리보기를
  *                     미리 빨갛게 칠하는 데 쓴다. 서버가 같은 규칙으로 계산하므로 앱에 규칙이 두 벌 생기지 않는다
  */
@@ -47,7 +50,9 @@ public record WallRaceGameResponse(
         String partnerName,
         LocalDateTime createdAt,
         LocalDateTime completedAt,
-        List<IllegalWall> illegalWalls
+        List<IllegalWall> illegalWalls,
+        int myDistance,
+        int partnerDistance
 ) {
     /** @param kind "H" / "V" · @param reason OVERLAP / BLOCKS_PATH */
     public record IllegalWall(int slot, String kind, String reason) {
@@ -87,7 +92,9 @@ public record WallRaceGameResponse(
                         ? game.illegalWalls().stream()
                                 .map(w -> new IllegalWall(w.slot(), String.valueOf(w.kind()), w.reason()))
                                 .toList()
-                        : List.of()
+                        : List.of(),
+                WallRaceRules.distance(game.getWalls(), game.pawnOf(mine), game.goalRowOf(mine)),
+                WallRaceRules.distance(game.getWalls(), game.pawnOf(theirs), game.goalRowOf(theirs))
         );
     }
 }
