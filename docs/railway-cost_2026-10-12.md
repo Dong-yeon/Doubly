@@ -39,3 +39,10 @@
 
 이전 시 공통 작업: DB 덤프·복원, Redis, 환경변수, 앱의 서버 주소(`fitto-production…` — 앱 설정이라 OTA 필요, 옛 주소는 이전 기간 동안 살려 둬야 함),
 CORS·도메인, 배포 파이프라인. 하루 이상 걸리고 장애 위험이 있다.
+
+## 적용 결과 (같은 날)
+
+- 06af4cb1 배포(-Xmx384m) → Doubly-Back 2.71GB → 681MB. 사용자가 대시보드에서 Doubly-Spike·Postgres-8osF 를 내림.
+- Railway 변수 `JAVA_TOOL_OPTIONS` 로 **-Xmx256m** 덮어씀(코드 배포 없음) → 재시작 직후 591MB, 요청 오류 0%. Dockerfile 기본값은 384m 그대로(변수를 지우면 384m 로 돌아간다).
+- 합계 약 0.69GB ≈ 하루 $0.23 → 이번 기간(~10/28) 약 $12 예상. 한도: 하드 $15·알림 $10 (사용자 설정). 다음 기간부터 월 약 $7.
+- 256m 가 모자라면 로그에 OutOfMemoryError 가 남고 즉시 재시작된다(ExitOnOutOfMemoryError) — 그때 변수의 -Xmx 만 올린다.
