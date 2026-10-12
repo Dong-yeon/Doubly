@@ -30,42 +30,38 @@
  * 같은 자리). 지금 시드에는 값이 붙은 팩이 없으므로 이 화면에 가격표도 없다.
  *
  * <p>낱개를 다시 열 자리는 남겨 뒀다 — 팩에 {@code price} 를 주고 스토어에 상품을 등록한 뒤
- * `STICKER_PURCHASE_ENABLED` 를 켜면 값 칩과 구매 흐름이 그대로 살아난다. 백엔드 검증
- * (`POST /stickers/purchases/google|apple`)은 손대지 않았다.
+ * `STICKER_PURCHASE_ENABLED` 를 켜면 값 칩과 구매 흐름이 그대로 살아난다(팩 상세의 아래 단추).
+ * 백엔드 검증(`POST /stickers/purchases/google|apple`)은 손대지 않았다.
+ *
+ * <p><b>카드를 누르면 팩 상세로 간다</b>(2026-10-12, StickerPackDetailScreen). 그 전엔 살 수 있는
+ * 팩만 눌렸는데, 낱개 판매를 닫은 뒤로는 <b>어느 카드도 눌리지 않았다</b> — 이미 가진 팩은
+ * 미리보기도 접혀 있어 "안에 뭐가 들었나"를 알 길이 상점 안에 없었다.
  */
 import React, { useCallback, useState } from 'react';
-import { Alert, Image, Pressable, ScrollView, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { EmptyState } from '../../components/EmptyState';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { stickerApi } from '../../api/stickers';
-import { STICKER_PURCHASE_ENABLED } from '../../constants/config';
 import { previewOf } from '../../constants/stickerPackPreview';
 import { usePlanStore } from '../../store/planStore';
+import { useRemoteStickerStore, type RemotePack } from '../../store/remoteStickerStore';
 import { useStickerStore } from '../../store/stickerStore';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
+import type { HomeStackParamList } from '../../navigation/types';
 import type { StickerPack } from '../../types';
+import { PACK_CATEGORY, StatusChip } from './components/StickerPackStatus';
 
-type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+type Props = NativeStackScreenProps<HomeStackParamList, 'StickerShop'>;
 
-/**
- * 카테고리 — 한국어 이름과 아이콘.
- *
- * <p>서버 enum 을 그대로 보여줄 수는 없고, 아이콘이 있으면 <b>그림 없는 팩</b>(무드·터치)도
- * 카드가 비어 보이지 않는다. 그 둘은 유니코드/제스처라 썸네일이 없다.
- */
-const CATEGORY: Record<StickerPack['category'], { label: string; icon: IconName }> = {
-  ANIMATED: { label: '움직이는 이모티콘', icon: 'play-circle' },
-  IMAGE: { label: '캐릭터 스티커', icon: 'emoticon-outline' },
-  MOOD: { label: '무드', icon: 'face-woman-shimmer-outline' },
-  TOUCH: { label: '가상 터치', icon: 'hand-heart-outline' },
-};
-
-export function StickerShopScreen() {
+export function StickerShopScreen({ navigation }: Props) {
   const packs = useStickerStore((s) => s.packs);
   const replace = useStickerStore((s) => s.replace);
+  // 서버에서 받는 팩의 그림 — 이게 없으면 그 팩은 카테고리 아이콘만 선다(stickerPackPreview 주석)
+  const remotePacks = useRemoteStickerStore((s) => s.packs);
   // 여기서 권하는 것(확장 무드·프리미엄 터치·우리 이모지)은 전부 커플 기능이라 상대가 결제했어도 이미 열려 있다
   const isPro = usePlanStore((s) => s.couplePlan === 'PRO');
   const showUpgrade = usePlanStore((s) => s.showUpgrade);
@@ -79,6 +75,8 @@ export function StickerShopScreen() {
    */
   const load = useCallback(() => {
     setError(false);
+    // 그림 카탈로그는 간격 제한이 걸린 캐시라 자주 불러도 된다 — 새 팩이 올라온 뒤 들어왔을 때만 실제로 묻는다
+    void useRemoteStickerStore.getState().refresh();
     return stickerApi.packs()
       .then(replace)
       .catch(() => setError(true))
@@ -87,13 +85,7 @@ export function StickerShopScreen() {
 
   useFocusEffect(useCallback(() => { void load(); }, [load]));
 
-  const onBuy = (pack: StickerPack) => {
-    Alert.alert(
-      pack.title,
-      `${pack.price.toLocaleString()}원에 살 수 있어요.\n\n`
-      + '인앱결제가 아직 연결되지 않았어요. 스토어에 상품이 등록되면 바로 구매할 수 있어요.',
-    );
-  };
+  const onOpen = (pack: StickerPack) => navigation.navigate('StickerPackDetail', { packId: pack.id });
 
   if (loaded && error && packs.length === 0) {
     return (
@@ -140,8 +132,8 @@ export function StickerShopScreen() {
           </Text>
         </View>
 
-        <Section title="가지고 있어요" packs={mine} onBuy={onBuy} />
-        <Section title="더 있어요" packs={locked} onBuy={onBuy} />
+        <Section title="가지고 있어요" packs={mine} remotePacks={remotePacks} onOpen={onOpen} />
+        <Section title="더 있어요" packs={locked} remotePacks={remotePacks} onOpen={onOpen} />
 
         {/*
           PRO 안내 — 목록 아래에 한 줄. 무드·터치 팩은 여기서 고르는 물건이 아니라
@@ -178,11 +170,13 @@ export function StickerShopScreen() {
 function Section({
   title,
   packs,
-  onBuy,
+  remotePacks,
+  onOpen,
 }: {
   title: string;
   packs: StickerPack[];
-  onBuy: (pack: StickerPack) => void;
+  remotePacks: RemotePack[];
+  onOpen: (pack: StickerPack) => void;
 }) {
   if (packs.length === 0) return null;
   return (
@@ -192,17 +186,23 @@ function Section({
         <Text style={styles.sectionCount}>{packs.length}</Text>
       </View>
       {packs.map((pack) => (
-        <PackCard key={pack.id} pack={pack} onBuy={onBuy} />
+        <PackCard key={pack.id} pack={pack} remotePacks={remotePacks} onOpen={onOpen} />
       ))}
     </View>
   );
 }
 
-function PackCard({ pack, onBuy }: { pack: StickerPack; onBuy: (pack: StickerPack) => void }) {
-  const { thumbs, count } = previewOf(pack.id);
-  const meta = CATEGORY[pack.category];
-  // 낱개 결제가 닫혀 있으면 카드를 누르게 두지 않는다 — 눌러서 "못 산다"를 알게 되면 늦다
-  const buyable = !pack.usable && pack.price > 0 && STICKER_PURCHASE_ENABLED;
+function PackCard({
+  pack,
+  remotePacks,
+  onOpen,
+}: {
+  pack: StickerPack;
+  remotePacks: RemotePack[];
+  onOpen: (pack: StickerPack) => void;
+}) {
+  const { thumbs, count } = previewOf(pack.id, remotePacks);
+  const meta = PACK_CATEGORY[pack.category];
 
   /*
    * <b>카카오톡 이모티콘샵 목록의 모양</b>을 따른다(2026-09-22) — 왼쪽에 대표 그림 하나,
@@ -213,11 +213,17 @@ function PackCard({ pack, onBuy }: { pack: StickerPack; onBuy: (pack: StickerPac
    * 미리보기도 <b>고정 크기</b>라, 넓은 화면은 더 크게가 아니라 <b>더 많이</b> 보여준다
    * (StickerPanel.CELL_SIZE 와 같은 판단).
    *
-   * <p>카드 전체가 눌린다 — 살 수 있는 팩만. 오른쪽 칩만 누르게 하면 표적이 작고, 카드를
-   * 눌러도 아무 일이 없으면 "고장"으로 읽힌다. 이미 가진 팩은 Pressable 로 감싸지 않는다.
+   * <p>카드 전체가 눌린다 — <b>모든 팩이</b> 상세로 간다(2026-10-12). 예전엔 살 수 있는 팩만
+   * 눌렸는데, 낱개 판매를 닫자 눌리는 카드가 하나도 남지 않았고 "안에 뭐가 들었나"를 볼
+   * 길도 함께 사라졌다. 오른쪽 칩만 누르게 하면 표적이 작아서 카드 전체를 쓴다.
    */
-  const body = (
-    <>
+  return (
+    <Pressable
+      style={({ pressed }) => [styles.card, !pack.usable && styles.cardLocked, pressed && styles.pressed]}
+      onPress={() => onOpen(pack)}
+      accessibilityRole="button"
+      accessibilityLabel={`${pack.title}${count > 0 ? ` ${count}개` : ''}, 들어 있는 이모티콘 보기`}
+    >
       <View style={styles.cardHead}>
         {/* 대표 그림 — 첫 장. 팩을 알아보는 건 이름이 아니라 그림이다 */}
         {thumbs.length > 0 ? (
@@ -240,6 +246,7 @@ function PackCard({ pack, onBuy }: { pack: StickerPack; onBuy: (pack: StickerPac
           </View>
         </View>
         <StatusChip pack={pack} />
+        <MaterialCommunityIcons name="chevron-right" size={18} color={colors.textTertiary} />
       </View>
 
       {/*
@@ -247,8 +254,8 @@ function PackCard({ pack, onBuy }: { pack: StickerPack; onBuy: (pack: StickerPac
         몇 장이 보이는지는 화면 폭이 정하고, 전부 보여주는 것이 목적이 아니다.
 
         <p><b>이미 가진 팩에는 그리지 않는다</b>(2026-09-22). 미리보기는 "무엇을 사는가"에
-        답하는 그림인데, 이미 가진 팩에는 그 질문이 없다 — 내용이 궁금하면 채팅 패널에서
-        바로 열어 본다. 가진 팩까지 펼치면 <b>살 수 있는 팩이 목록에 파묻힌다</b>.
+        답하는 그림인데, 이미 가진 팩에는 그 질문이 없다 — 내용이 궁금하면 카드를 눌러
+        상세에서 본다. 가진 팩까지 펼치면 <b>살 수 있는 팩이 목록에 파묻힌다</b>.
       */}
       {!pack.usable && thumbs.length > 1 ? (
         <View style={styles.tiles}>
@@ -264,68 +271,7 @@ function PackCard({ pack, onBuy }: { pack: StickerPack; onBuy: (pack: StickerPac
           ) : null}
         </View>
       ) : null}
-    </>
-  );
-
-  if (!buyable) {
-    return <View style={[styles.card, !pack.usable && styles.cardLocked]}>{body}</View>;
-  }
-  return (
-    <Pressable
-      style={({ pressed }) => [styles.card, styles.cardLocked, pressed && styles.pressed]}
-      onPress={() => onBuy(pack)}
-      accessibilityRole="button"
-      accessibilityLabel={`${pack.title} ${pack.price.toLocaleString()}원에 구매`}
-    >
-      {body}
     </Pressable>
-  );
-}
-
-/**
- * 오른쪽 한 칸이 상태 전부다 — 무료 / 보유 / 구매함 / 가격 / PRO.
- *
- * <p>다섯을 한자리에 모으는 이유는 목록을 훑을 때 눈이 <b>한 열만</b> 따라가면 되게
- * 하기 위해서다. 상태마다 다른 자리에 두면 카드마다 눈이 다시 헤맨다.
- */
-function StatusChip({ pack }: { pack: StickerPack }) {
-  if (!pack.proOnly && pack.price === 0) {
-    return (
-      <View style={[styles.chip, styles.chipFree]}>
-        <Text style={[styles.chipText, styles.chipFreeText]}>무료</Text>
-      </View>
-    );
-  }
-  if (pack.usable) {
-    return (
-      <View style={[styles.chip, styles.chipOwned]}>
-        <MaterialCommunityIcons name="check-circle" size={12} color={colors.together} />
-        <Text style={[styles.chipText, styles.chipOwnedText]}>
-          {pack.purchased ? '구매완료' : '보유'}
-        </Text>
-      </View>
-    );
-  }
-  if (pack.price > 0) {
-    /*
-     * 값은 보여주되, 아직 못 사면 그것도 같이 적는다(`STICKER_PURCHASE_ENABLED`).
-     * 값만 붙여 두면 살 수 있다는 약속이 되고, 눌렀을 때 못 사면 그게 곧 배신이다.
-     */
-    return (
-      <View style={[styles.chip, styles.chipPrice]}>
-        <Text style={[styles.chipText, styles.chipPriceText]}>
-          {pack.price.toLocaleString()}원{STICKER_PURCHASE_ENABLED ? '' : ' · 준비 중'}
-        </Text>
-      </View>
-    );
-  }
-  // 가격이 없는 잠긴 팩 = 구독으로만 열린다. 지금 시드에는 없지만 스키마가 허용한다
-  // (확장 무드·프리미엄 터치는 price = 1200 이라 위 갈래로 간다 — V96 시드)
-  return (
-    <View style={[styles.chip, styles.chipPro]}>
-      <MaterialCommunityIcons name="crown" size={12} color={colors.primary} />
-      <Text style={[styles.chipText, styles.chipProText]}>PRO</Text>
-    </View>
   );
 }
 
@@ -395,23 +341,6 @@ const styles = themedStyles((colors) => ({
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xxs },
   metaText: { fontSize: fontSize.caption, color: colors.textTertiary, fontWeight: '600' },
 
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 5,
-    borderRadius: radius.pill,
-  },
-  chipText: { fontSize: fontSize.caption, fontWeight: '800' },
-  chipFree: { backgroundColor: colors.surfaceAlt },
-  chipFreeText: { color: colors.textSecondary },
-  chipOwned: { backgroundColor: colors.togetherBg },
-  chipOwnedText: { color: colors.together },
-  chipPrice: { backgroundColor: colors.primary },
-  chipPriceText: { color: colors.onPrimary },
-  chipPro: { backgroundColor: colors.primaryBg },
-  chipProText: { color: colors.primary },
 
   /*
    * 미리보기 타일 — <b>고정 36dp</b>다. 예전엔 {@code flex: 1} 이라 폭이 넓을수록 칸이

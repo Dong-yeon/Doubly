@@ -7,6 +7,7 @@ import { CoupleConnectScreen } from '../screens/home/CoupleConnectScreen';
 import { MyScreen } from '../screens/my/MyScreen';
 import { PlanScreen } from '../screens/my/PlanScreen';
 import { StickerShopScreen } from '../screens/home/StickerShopScreen';
+import { StickerPackDetailScreen } from '../screens/home/StickerPackDetailScreen';
 import { SettingsScreen } from '../screens/my/SettingsScreen';
 import { StickerSettingsScreen } from '../screens/chat/StickerSettingsScreen';
 import { NotificationCategoriesScreen } from '../screens/my/NotificationCategoriesScreen';
@@ -122,6 +123,7 @@ export function HomeStackNavigator() {
       <Stack.Screen name="My" component={MyScreen} options={{ title: 'MY' }} />
       <Stack.Screen name="Plan" component={PlanScreen} options={{ title: '플랜' }} />
       <Stack.Screen name="StickerShop" component={StickerShopScreen} options={{ title: '스티커 상점' }} />
+      <Stack.Screen name="StickerPackDetail" component={StickerPackDetailScreen} options={{ title: '이모티콘' }} />
       <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: '설정' }} />
       <Stack.Screen name="StickerSettings" component={StickerSettingsScreen} options={{ title: '이모티콘 설정' }} />
       <Stack.Screen name="NotificationCategories" component={NotificationCategoriesScreen} options={{ title: '알림 종류' }} />
