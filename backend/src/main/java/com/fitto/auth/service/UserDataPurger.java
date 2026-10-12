@@ -26,8 +26,12 @@ public class UserDataPurger {
     private EntityManager em;
 
     private final RelationRecordPurger relationRecordPurger;
+    /** 프로필 사진이 R2 에 있으면(2026-10-12~) 그 주소도 거둔다 */
+    private final com.fitto.common.upload.R2Properties r2Properties;
 
-    public UserDataPurger(RelationRecordPurger relationRecordPurger) {
+    public UserDataPurger(RelationRecordPurger relationRecordPurger,
+                          com.fitto.common.upload.R2Properties r2Properties) {
+        this.r2Properties = r2Properties;
         this.relationRecordPurger = relationRecordPurger;
     }
 
@@ -72,10 +76,13 @@ public class UserDataPurger {
         imageUrls.addAll(selectStrings(
                 "select b.audio_url from workout_boosters b "
                         + "where b.sender_id = :uid or b.receiver_id = :uid", userId));
-        // 프로필 사진 — 소셜 가입은 카카오·구글 주소를 그대로 들고 있을 수 있어 우리 Cloudinary 것만 모은다
+        // 프로필 사진 — 소셜 가입은 카카오·구글 주소를 그대로 들고 있을 수 있어 우리 Cloudinary·R2 것만 모은다
         imageUrls.addAll(selectStrings(
                 "select u.profile_image_url from users u "
                         + "where u.id = :uid and u.profile_image_url like '%res.cloudinary.com%'", userId));
+        imageUrls.addAll(selectStrings(
+                "select u.profile_image_url from users u where u.id = :uid and u.profile_image_url like '"
+                        + r2Properties.getPublicBaseUrl().replace("'", "") + "/%'", userId));
 
         /*
          * 내가 남긴 피드 반응 — feed_reactions.user_id 가 users 를 참조한다.

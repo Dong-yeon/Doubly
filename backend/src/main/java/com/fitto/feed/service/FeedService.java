@@ -11,6 +11,8 @@ import com.fitto.common.time.KstClock;
 import com.fitto.common.upload.CloudinaryImageDeleter;
 import com.fitto.common.upload.CloudinaryProperties;
 import com.fitto.common.upload.CloudinaryUrls;
+import com.fitto.common.upload.R2Properties;
+import com.fitto.common.upload.R2Urls;
 import com.fitto.content.domain.ContentLog;
 import com.fitto.content.repository.ContentLogRepository;
 import com.fitto.content.repository.ContentLogRepository.LogWithContent;
@@ -119,6 +121,7 @@ public class FeedService {
     private final FeedItemMapper mapper;
     private final CloudinaryImageDeleter imageDeleter;
     private final CloudinaryProperties cloudinaryProperties;
+    private final R2Properties r2Properties;
 
     /**
      * 반응 푸시 간격 — 같은 사람이 같은 기록에 반응을 달았다 지웠다 반복해도 상대에게 푸시는 이 간격에 한 번이다
@@ -143,9 +146,11 @@ public class FeedService {
                        CoupleEventPublisher coupleEventPublisher,
                        FeedItemMapper mapper,
                        CloudinaryImageDeleter imageDeleter,
-                       CloudinaryProperties cloudinaryProperties) {
+                       CloudinaryProperties cloudinaryProperties,
+                       R2Properties r2Properties) {
         this.imageDeleter = imageDeleter;
         this.cloudinaryProperties = cloudinaryProperties;
+        this.r2Properties = r2Properties;
         this.feedPostRepository = feedPostRepository;
         this.feedPostPhotoRepository = feedPostPhotoRepository;
         this.feedReactionRepository = feedReactionRepository;
@@ -776,7 +781,10 @@ public class FeedService {
         }
         if (cloudinaryProperties.isConfigured()) {
             for (String url : photos) {
-                if (!CloudinaryUrls.isImageDirectlyIn(url, cloudinaryProperties, cloudinaryProperties.getFolder())) {
+                // R2(2026-10-12~)도 같은 규칙 — 업로드 폴더 바로 아래, 앱이 올린 이름 모양
+                boolean own = CloudinaryUrls.isImageDirectlyIn(url, cloudinaryProperties, cloudinaryProperties.getFolder())
+                        || R2Urls.isImageDirectlyIn(url, r2Properties, cloudinaryProperties.getFolder());
+                if (!own) {
                     throw new BusinessException(ErrorCode.INVALID_INPUT, "앱에서 올린 사진만 남길 수 있어요.");
                 }
             }

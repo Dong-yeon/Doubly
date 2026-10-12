@@ -71,7 +71,7 @@ class CloudinaryUrlsTest {
     @Test
     void 삭제기는_변형_URL_을_지우지_않는다() {
         StoredMediaReferences references = mock(StoredMediaReferences.class);
-        CloudinaryImageDeleter deleter = new CloudinaryImageDeleter(props(), references);
+        CloudinaryImageDeleter deleter = new CloudinaryImageDeleter(props(), references, new R2Properties(), new R2Storage(new R2Properties()));
 
         // 원본이 아니면 Cloudinary 를 부르기 전에 거절한다(HTTP 호출 없이 false)
         assertThat(deleter.delete("https://res.cloudinary.com/other/image/upload/v1/fitto/victim.jpg")).isFalse();

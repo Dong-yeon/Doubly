@@ -43,6 +43,12 @@ public class CloudinaryImageFetcher {
     /** Cloudinary 업로드 결과만 허용 — 임의 URL 페치(SSRF) 방지 */
     private static final String ALLOWED_HOST_SUFFIX = "cloudinary.com";
 
+    /**
+     * R2 공개 주소(2026-10-12~) — 정확히 이 호스트만. {@code new} 로도 만드는 클래스라 설정을 받지 않고 상수로 둔다
+     * (R2Properties.publicBaseUrl 기본값과 같다). R2 는 변환이 없어 원본을 받는다 — 앱이 이미 1024px 로 줄여 올린다.
+     */
+    static final String R2_PUBLIC_HOST = "media.dubly.co.kr";
+
     private static final int MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
     /**
@@ -83,13 +89,17 @@ public class CloudinaryImageFetcher {
             throw new BusinessException(ErrorCode.INVALID_PHOTO_URL);
         }
         String host = uri.getHost();
-        if (!"https".equals(uri.getScheme()) || host == null
-                || !(host.equals(ALLOWED_HOST_SUFFIX) || host.endsWith("." + ALLOWED_HOST_SUFFIX))) {
+        boolean cloudinary = host != null
+                && (host.equals(ALLOWED_HOST_SUFFIX) || host.endsWith("." + ALLOWED_HOST_SUFFIX));
+        boolean r2 = R2_PUBLIC_HOST.equals(host) && uri.getPort() == -1;
+        if (!"https".equals(uri.getScheme()) || !(cloudinary || r2)) {
             throw new BusinessException(ErrorCode.INVALID_PHOTO_URL);
         }
         // 호스트 검증을 통과한 뒤에만 변환을 건다 — 임의 URL 에 변환 세그먼트를 끼워 넣어봐야
         // 애초에 cloudinary.com 이 아니면 위에서 이미 막힌 뒤다.
-        uri = withTransform(uri);
+        if (cloudinary) {
+            uri = withTransform(uri);
+        }
 
         try {
             // 리다이렉트(3xx)는 팩토리에서 미추종이므로 2xx 가 아니면 전부 거부된다.

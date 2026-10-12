@@ -54,10 +54,16 @@ public class CloudinaryImageDeleter {
     private final CloudinaryProperties properties;
     private final StoredMediaReferences references;
     private final RestClient restClient;
+    /** R2 로 올라간 파일(2026-10-12~) — 같은 삭제 경로를 지나 저장소만 갈린다 */
+    private final R2Properties r2Properties;
+    private final R2Storage r2Storage;
 
-    public CloudinaryImageDeleter(CloudinaryProperties properties, StoredMediaReferences references) {
+    public CloudinaryImageDeleter(CloudinaryProperties properties, StoredMediaReferences references,
+                                  R2Properties r2Properties, R2Storage r2Storage) {
         this.properties = properties;
         this.references = references;
+        this.r2Properties = r2Properties;
+        this.r2Storage = r2Storage;
         this.restClient = RestClient.builder().build();
     }
 
@@ -102,7 +108,7 @@ public class CloudinaryImageDeleter {
         if (imageUrls.isEmpty()) {
             return;
         }
-        if (!properties.isConfigured()) {
+        if (!properties.isConfigured() && !r2Properties.isConfigured()) {
             // unsigned 폴백으로 올라간 이미지는 서버가 지울 수 없다 — 운영에서는 설정 필수.
             log.warn("Cloudinary 미설정 — 이미지 {}건을 삭제하지 못했습니다. 수동 정리가 필요합니다.",
                     imageUrls.size());
@@ -138,6 +144,17 @@ public class CloudinaryImageDeleter {
 
     /** 단건 삭제. 성공 여부 반환 — 예외는 밖으로 던지지 않는다. */
     public boolean delete(String imageUrl) {
+        if (R2Urls.isR2Url(imageUrl, r2Properties)) {
+            // 루트 폴더 아래의 우리 파일만 — Cloudinary 쪽 isOwnOriginal 과 같은 이유(아래 주석)
+            if (!R2Urls.isOwnOriginal(imageUrl, r2Properties, properties.getFolder())) {
+                log.warn("우리가 올린 R2 원본 주소가 아니어서 지우지 않습니다: {}", imageUrl);
+                return false;
+            }
+            return r2Storage.delete(imageUrl);
+        }
+        if (!properties.isConfigured()) {
+            return false;
+        }
         /*
          * 우리 클라우드·루트 폴더의 원본 URL 만 지운다 — 변형 URL(다른 cloud 이름, 변환 세그먼트, "..")로
          * 남의 원본을 지우는 경로를 막는다(CloudinaryUrls 주석). 기록마다 저장 시점 검증이 제각각이라
