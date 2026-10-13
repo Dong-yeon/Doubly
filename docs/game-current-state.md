@@ -399,3 +399,30 @@
 - **검증**: tsc·eslint·`verify:puyo`(149) 통과. 화면은 실기기 확인 전.
 - **더 할 수 있는 것(속도감)**: 조각이 칸 단위로 뚝뚝 내려오는 대신 부드럽게 미끄러지는 낙하 애니메이션, 아래 버튼 누르고 있으면 빨리 내리기, 연쇄 연출 단축. 이번엔 넣지 않았다.
 
+
+---
+
+## 10. 길막기(쿼리도) 구현 요약 — 새 턴제 게임의 기준선 (2026-10-13)
+
+새 턴제 대결(넷이 같아, 11절)을 얹기 전에 길막기가 실제로 어떻게 돌아가는지 다시 읽었다. 기준 커밋 `539b1d4c`.
+코드에서 직접 확인한 것만 적는다.
+
+| 항목 | 길막기의 실제 | 위치 |
+|---|---|---|
+| 종목 키 | `GameType.WALL_RACE` — enum 값 = 단일 테이블 상속 구분자(`@DiscriminatorValue("WALL_RACE")`) | `B/game/domain/GameType.java`, `WallRaceGame.java:28-29` |
+| 세션 테이블·엔티티 | `couple_games` 한 테이블(`CoupleGame` 추상 루트) + 종목 컬럼(V97 `pawn_a/b`·`walls`·`walls_left/start_a/b`·`race_turn`·`race_winner`·`race_moves`, V98 `race_undo_by`). 별도 수 테이블 없음 — 기보는 문자열 칸 하나 | `M/V97__wall_race.sql`, `M/V98__wall_race_undo.sql` |
+| 상태 머신 | 초대 단계 **없음**: `start` = 즉시 `IN_PROGRESS`(상대에게 푸시) → 도착하면 `COMPLETED`(`complete()`) / 누구든 `giveUp` → `ABANDONED` / 7일 무활동 → `GameExpiryService` 가 `ABANDONED`. 선공은 **판을 연 사람의 상대**(`race_turn = '2'`) | `WallRaceGame.java:93-105`, `CoupleGame.java:111-118`, `GameExpiryService` |
+| 수 제출 API | `PUT /api/v1/games/wall-race/{id}/pawn/{target}`, `POST …/{id}/walls {slot,kind}` — 응답은 판 전체(`WallRaceGameResponse`, 보는 사람 기준) | `WallRaceController.java` |
+| 동시성 | **조건부 UPDATE·`@Version` 아님.** 모든 쓰기 경로가 `findByIdForUpdate`(PESSIMISTIC_WRITE)로 행을 잠근 뒤 차례를 본다 → 동시에 두면 뒤 요청은 `GAME_NOT_YOUR_TURN`(409). `start` 는 관계 행을 잠가 커플당 진행 판 1개를 지킨다 | `WallRaceGameRepository.java:46-49`, `WallRaceService.turnOf` |
+| 멱등키 | **없다**(`client_move_id` 없음). 더블탭은 앱의 `busy` 상태와 서버의 "차례 아님"이 막는다 | 4-1 |
+| 승패 판정 | **서버**(엔티티 `movePawn` 이 도착 줄 판정, 벽은 겹침·BFS 경로 검사). 앱은 응답의 `legalMoves`·`illegalWalls` 를 그대로 그릴 뿐 규칙을 갖지 않는다 | `WallRaceGame.java:167-215`, 4-2 |
+| 전적 | `GET …/record` — `countWins/countLosses` 로 끝낸 판 전부를 보는 사람 기준으로 센다. 무승부 0 | `WallRaceGameRepository.java:28-44` |
+| 턴 알림 | `GameQuiet.longEnough(…, TURN=2분)` — 판이 2분 넘게 조용했을 때만 "네 차례야". 재촉·멈춘 판 리마인더는 `GameNudgeService` 공통(종목 라벨·링크만 `labelOf/linkOf` switch) | `WallRaceService.after`, `GameNudgeService.java:165-184` |
+| 채팅 카드 | 초대 카드는 **없다**(푸시만). 결과는 `GameChatCards.post(…, GAME_CARD, …)` — 커밋 뒤 새 트랜잭션 | `WallRaceService.onFinished`, `GameChatCards` |
+| 앱 화면 | 허브 `MiniGamesScreen`(진행 판 카드·"내 차례" 배지) → `WallRaceScreen`(시작 카드·판·결과·복기·지난 판 목록). 갱신은 **포커스 때 `load()` + 커플 소켓 `GAME` 이벤트 때 `load(true)`**, 사라진 판은 `watchingRef` 로 끝남/접힘 구분. AppState(포그라운드 복귀) 훅은 없다 | `F/screens/home/WallRaceScreen.tsx:274,314-390` |
+| 딥링크 | `PushLinks.GAME_WALL_RACE = "game/wall-race"` ↔ `linking.ts` `WallRace` | |
+| Flyway 마지막 번호 | origin/main 기준 **V138** (`V138__couple_emoji_set_regen.sql`) | |
+
+**결론**: 공통 프레임워크(단일 테이블 상속 + `GameCouples`·`GameChatCards`·`GameQuiet`·재촉/리마인더/만료/스트릭)가 있고
+판정도 서버에 있으므로, 새 턴제 게임은 종목 컬럼 + 규칙 + 화면만 얹으면 된다. 다만 요구된 "조건부 UPDATE·멱등키"는
+길막기에 없는 것이라, 넷이 같아는 **길막기와 같은 행 잠금**을 쓰고 멱등키는 새 수 테이블에서만 지킨다(11절).
