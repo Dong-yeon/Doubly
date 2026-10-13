@@ -520,3 +520,5 @@
 ### 11-9. 이름 (2026-10-13)
 
 표시명 "넷이 같아(가칭)" → **러뷰포**(사용자 결정). 앱 `F/constants/quarto.ts`·서버 `QuartoGame.DISPLAY_NAME` 두 곳. 내부 키 `QUARTO`·웹 경로 `game/four` 는 그대로.
+
+- 2026-10-13 러뷰포 이름: 서버 Railway `64852b97`(커밋 `1ed5afe0`) SUCCESS. 앱 production OTA Android `2d1c2de9`·iOS `58b4fb66` — **소스는 태그 `ota/2026-10-13-loveufour`(= `27e646d2` + 이름 커밋 cherry-pick `1ea2d671`)**. main 의 재화 P1("OTA 보류")을 빼기 위해서다. 다음에 main 에서 OTA 하면 재화 P1 이 같이 나간다.
