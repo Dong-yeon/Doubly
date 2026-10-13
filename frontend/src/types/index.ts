@@ -2158,6 +2158,11 @@ export interface CoupleEmoji {
    */
   promptVersion?: string | null;
   createdAt: string;
+  /**
+   * 이 장이 속한 세트의 남은 다시 그리기 횟수 — 같은 세트의 장은 같은 값이다(세트당 3번, 첫 무료 세트는 0).
+   * 옛 서버는 보내지 않는다(undefined 면 다시 그리기를 그리지 않는다).
+   */
+  regenRemaining?: number | null;
 }
 
 /**

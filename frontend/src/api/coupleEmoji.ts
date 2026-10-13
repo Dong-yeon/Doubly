@@ -52,6 +52,21 @@ export const coupleEmojiApi = {
   remove: (emojiId: number) =>
     unwrap(apiClient.delete<ApiResponse<void>>(`/couple-emojis/${emojiId}`)),
 
+  /**
+   * 세트 안에서 한 장 다시 그리기 — 접수증(jobId)을 받고 결과는 새 장 하나다. 세트당 3번이고 플랜 한도는
+   * 쓰지 않는다. 그 감정이 세트에 있으면 대신하고, 없으면(만들다 실패한 칸) 채운다.
+   */
+  regenerate: (batchId: string, emotion: CoupleEmojiEmotion, requestId: string) =>
+    unwrap(
+      apiClient.post<ApiResponse<AiJobStart>>(`/couple-emojis/batches/${batchId}/regenerate`, {
+        emotion,
+        requestId,
+      }),
+    ),
+
+  /** 커플당 첫 1회 무료가 남았나 */
+  welcome: () => unwrap(apiClient.get<ApiResponse<{ available: boolean }>>('/couple-emojis/welcome')),
+
   /** 세트 통째로 숨기기 */
   removeBatch: (batchId: string) =>
     unwrap(apiClient.delete<ApiResponse<void>>(`/couple-emojis/batches/${batchId}`)),
