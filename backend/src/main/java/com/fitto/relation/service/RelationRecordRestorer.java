@@ -83,6 +83,9 @@ public class RelationRecordRestorer {
          */
         moved += move("mood_statuses", "couple_id", oldRelationId, newRelationId);
         moved += move("couple_emojis", "relation_id", oldRelationId, newRelationId);
+        // 세트 메타(V138)도 relations FK 를 가진다 — 같은 이유로 함께 옮긴다. 남기면 옛 관계 삭제가 실패하고,
+        // 옮겨지지 않은 세트는 다시 그리기 잔량을 잃는다(2026-10-13, docs/CURRENCY_EMOJI_2026-10-13.md §10 4-1)
+        move("couple_emoji_sets", "relation_id", oldRelationId, newRelationId);
         // 운동 기록은 개인 소유지만 관계 참조는 되살려준다 (커플 통계에 다시 잡히도록)
         move("workouts", "relation_id", oldRelationId, newRelationId);
 
