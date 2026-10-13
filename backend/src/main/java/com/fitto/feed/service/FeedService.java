@@ -1,5 +1,7 @@
 package com.fitto.feed.service;
 
+import com.fitto.chat.dto.ChatMessageResponse;
+import com.fitto.chat.service.ChatService;
 import com.fitto.common.event.CoupleEvent;
 import com.fitto.common.event.CoupleEventPublisher;
 import com.fitto.common.exception.BusinessException;
@@ -46,8 +48,10 @@ import com.fitto.relation.domain.RelationType;
 import com.fitto.relation.repository.RelationRepository;
 import com.fitto.workout.domain.Workout;
 import com.fitto.workout.repository.WorkoutRepository;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -67,6 +71,7 @@ import java.util.Set;
  * 커플 일상 피드 — PLAN.md Couple Feed. 포스트 + 운동/식단/맛집 방문을
  * 원본 테이블에서 병합해 하나의 타임라인으로 만든다 (복제 테이블 없음).
  */
+@Slf4j
 @Service
 @Transactional(readOnly = true)
 public class FeedService {
@@ -122,6 +127,9 @@ public class FeedService {
     private final CloudinaryImageDeleter imageDeleter;
     private final CloudinaryProperties cloudinaryProperties;
     private final R2Properties r2Properties;
+    /** 일상을 올리면 커플 채팅에 FEED_CARD 를 남긴다(자동 공유) — {@link #postFeedCard} */
+    private final ChatService chatService;
+    private final SimpMessagingTemplate messagingTemplate;
 
     /**
      * 반응 푸시 간격 — 같은 사람이 같은 기록에 반응을 달았다 지웠다 반복해도 상대에게 푸시는 이 간격에 한 번이다
@@ -147,7 +155,11 @@ public class FeedService {
                        FeedItemMapper mapper,
                        CloudinaryImageDeleter imageDeleter,
                        CloudinaryProperties cloudinaryProperties,
-                       R2Properties r2Properties) {
+                       R2Properties r2Properties,
+                       ChatService chatService,
+                       SimpMessagingTemplate messagingTemplate) {
+        this.chatService = chatService;
+        this.messagingTemplate = messagingTemplate;
         this.imageDeleter = imageDeleter;
         this.cloudinaryProperties = cloudinaryProperties;
         this.r2Properties = r2Properties;
@@ -735,8 +747,43 @@ public class FeedService {
                     authorName + "님의 새 일상", preview, PushLinks.FEED);
         }
         coupleEventPublisher.publish(couple.getId(), CoupleEvent.FEED);
+        postFeedCard(userId, couple.getId(), post.getId(), content, photos);
 
         return mapper.toItem(post, Map.of(userId, authorName), userId, List.of(), photos);
+    }
+
+    /**
+     * 올린 일상을 커플 채팅에 FEED_CARD 로 남긴다 — <b>자동 공유</b>(식단 MealService.postMealCard 와 같은 결정).
+     * 일상은 "상대에게 보여 주려고" 남기는 기록이라 채팅에서도 바로 이어 얘기할 수 있어야 한다(2026-10-13 사용자 결정).
+     *
+     * <p>카드는 첫 사진 + 글. 상대 푸시는 위의 "새 일상" 하나뿐이다(카드는 알림을 내지 않는다).
+     * 카드 INSERT 는 일상 저장과 같은 트랜잭션이다(예외를 삼키면 커밋 시점에 UnexpectedRollbackException —
+     * 브로드캐스트만 감싼다). 하루 기록 공유(JournalShareService)도 이 길을 지나므로 함께 카드가 남는다.
+     */
+    private void postFeedCard(Long userId, Long relationId, Long postId, String content, List<String> photos) {
+        ChatMessageResponse card = chatService.postFeedCard(userId, relationId,
+                feedCardContent(content, photos.size()), photos.isEmpty() ? null : photos.get(0), postId);
+        broadcast("/sub/rooms/" + relationId, card);
+    }
+
+    /** 카드 본문 — 글 그대로(채팅에서 길면 앞부분만), 글 없이 사진만이면 "사진 N장". 구버전 앱엔 이 글이 말풍선으로 보인다. */
+    static String feedCardContent(String content, int photoCount) {
+        if (content == null || content.isBlank()) {
+            return photoCount > 1 ? "사진 " + photoCount + "장" : "사진";
+        }
+        return content.length() > FEED_CARD_MAX ? content.substring(0, FEED_CARD_MAX) + "…" : content;
+    }
+
+    /** 카드에 싣는 글 상한 — 일상 글은 최대 2000자라 채팅 화면을 덮지 않게 자른다 */
+    static final int FEED_CARD_MAX = 300;
+
+    private void broadcast(String destination, ChatMessageResponse card) {
+        try {
+            messagingTemplate.convertAndSend(destination, card);
+        } catch (RuntimeException e) {
+            log.warn("일상 카드 브로드캐스트 실패 (카드는 저장됨) dest={}, messageId={}: {}",
+                    destination, card.id(), e.getMessage());
+        }
     }
 
     /**
@@ -857,6 +904,11 @@ public class FeedService {
                     FeedPostPhoto.builder().postId(postId).url(photos.get(i)).orderNo(i).build());
         }
         post.edit(content, photos.isEmpty() ? null : photos.get(0), recordDate, changed);
+        // 채팅의 일상 카드도 같은 글·첫 사진으로 — 뺀 사진을 카드가 들고 있으면 아래 삭제기가 파일을 남긴다
+        for (ChatMessageResponse card : chatService.syncFeedCards(postId,
+                feedCardContent(content, photos.size()), photos.isEmpty() ? null : photos.get(0))) {
+            broadcast("/sub/rooms/" + post.getCoupleId() + "/updates", card);
+        }
 
         coupleEventPublisher.publish(post.getCoupleId(), CoupleEvent.FEED);
         imageDeleter.deleteAllAfterCommit(removed);
@@ -886,6 +938,10 @@ public class FeedService {
 
         // 반응은 더 이상 FK CASCADE 로 지워지지 않는다 (V60 — 대상이 4개 테이블이라 FK 불가)
         feedReactionRepository.deleteByTargetTypeAndTargetId(FeedItemType.POST, postId);
+        // 채팅의 일상 카드 — feed_post_id FK(V141)를 끊지 않으면 아래 delete 가 실패한다. 사진도 비워 삭제기가 지우게 한다
+        for (ChatMessageResponse card : chatService.detachFeedCards(postId)) {
+            broadcast("/sub/rooms/" + post.getCoupleId() + "/updates", card);
+        }
         feedPostRepository.delete(post);
         coupleEventPublisher.publish(post.getCoupleId(), CoupleEvent.FEED);
         // 외부 삭제는 커밋 뒤 — 실패해도 DB 삭제를 되돌리지 않는다(RelationService 와 같은 규칙)

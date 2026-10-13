@@ -59,6 +59,10 @@ public class ChatMessage {
     @Column(name = "place_id")
     private Long placeId;
 
+    /** 일상 카드(FEED_CARD)의 원본 포스트 — 고치기·삭제 때 카드를 따라 바꾸기 위한 참조(V141) */
+    @Column(name = "feed_post_id")
+    private Long feedPostId;
+
     @Column(name = "routine_id")
     private Long routineId;
 
@@ -105,7 +109,8 @@ public class ChatMessage {
     @Builder
     private ChatMessage(Long relationId, Long senderId, MessageType messageType,
                         String content, String imageUrl, Long workoutId, Long mealId, Long placeId, Long routineId,
-                        Long replyToId, String clientMessageId, String stickerCode) {
+                        Long replyToId, String clientMessageId, String stickerCode, Long feedPostId) {
+        this.feedPostId = feedPostId;
         this.clientMessageId = clientMessageId;
         this.stickerCode = stickerCode;
         this.relationId = relationId;
@@ -162,6 +167,22 @@ public class ChatMessage {
     public void detachDeletedPlace() {
         this.placeId = null;
         softDelete();
+    }
+
+    /** 원본 일상이 지워졌을 때 — {@link #detachDeletedWorkout} 와 같은 규칙(FeedService.deletePost). */
+    public void detachDeletedFeedPost() {
+        this.feedPostId = null;
+        softDelete();
+    }
+
+    /**
+     * 원본 일상을 고쳤을 때 — 글·첫 사진을 그대로 따라간다. {@link #foldCard} 와 달리 사진이 빠지면
+     * 비운다: 일상에서 뺀 사진을 카드가 계속 들고 있으면 삭제기가 그 파일을 남긴다(StoredMediaReferences).
+     * 사람이 채팅에서 고친 게 아니므로 editedAt 은 남기지 않는다.
+     */
+    public void syncFeedCard(String newContent, String newImageUrl) {
+        this.content = newContent;
+        this.imageUrl = newImageUrl;
     }
 
     /** 장소가 덧붙은 식단 카드에서 장소 참조만 끊는다 — 식단 카드는 장소가 지워져도 식단 기록으로 남는다. */
