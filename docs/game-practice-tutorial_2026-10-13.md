@@ -99,3 +99,4 @@
 - 2026-10-13 production OTA: 연습 판 Android `48ecf182`·iOS `dd7ca644`(소스 `236481c8`, 1.0.7 대상).
 - 같은 날 게임 화면 7개에서 하단 탭바를 숨김(main `fd7645bc`) — production OTA Android `b973c15c`·iOS `e3ab2662` — 사용자: "게임 중심의 전체화면이어야 하기 편하다".
 - 2026-10-13 오목 연습 판 production OTA: Android `a6a42ab8`·iOS `317e9855`(소스 `526be520`, 1.0.7 대상).
+- 2026-10-13 길막기 연습 판 production OTA: Android `43e5e35b`·iOS `638e552f` — **소스 `27e646d2`(main 최신 아님)**. 그 위에 다른 세션의 재화 P1(`d70087bc`, "OTA 보류")이 병합돼 있어 그걸 빼고 올렸다(분리 워크트리 + `npm ci` — junction node_modules 는 fingerprint 를 바꾼다). 다음에 main 에서 OTA 하면 재화 P1 이 같이 나간다.
