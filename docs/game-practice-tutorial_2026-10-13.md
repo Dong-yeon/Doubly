@@ -77,3 +77,4 @@
 
 - 2026-10-13 production OTA: 연습 판 Android `48ecf182`·iOS `dd7ca644`(소스 `236481c8`, 1.0.7 대상).
 - 같은 날 게임 화면 7개에서 하단 탭바를 숨김(main `fd7645bc`) — production OTA Android `b973c15c`·iOS `e3ab2662` — 사용자: "게임 중심의 전체화면이어야 하기 편하다".
+- 2026-10-13 오목 연습 판 production OTA: Android `a6a42ab8`·iOS `317e9855`(소스 `526be520`, 1.0.7 대상).
