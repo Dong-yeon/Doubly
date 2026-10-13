@@ -358,3 +358,24 @@ UPDATE feature_credits SET used = credits, updated_at = now()
 
 **남은 것(P1)**: 앱 지갑·충전 시트·"재화 39로 만들기" 버튼, `config.ts` 재화 SKU(+ `StoreProductIdSyncTest` 대조 추가),
 콘솔 SKU 등록(사람), `emoji_set_1` 판매 중단 시점, §8 이전 SQL(사람, 대조 후), 이름(가칭 currency) 결정.
+
+## 13. P1 앱 구현 결과 (2026-10-13)
+
+| 커밋 | 내용 |
+|---|---|
+| `53974be1` (서버) | PRO 가 이번 달 세트를 다 써서 429 를 받아도 **재화로 한 세트 더** 만들 수 있게(옛 크레딧이 열던 자리). 첫 무료는 여전히 402 에만 |
+| `2f54c3d9` | `config.ts` `CURRENCY_PACK_PRODUCT_IDS` + `StoreProductIdSyncTest` 에 서버 `CurrencyPack` 대조 |
+| `b9b602e4` | `api/currency.ts`·`store/currencyStore.ts`(잔액·가격, 로그아웃 시 비움)·`utils/iap.ts`(묶음 조회·결제·**서버 반영 뒤 소비**, 앱 시작 재처리)·`CurrencyChargeSheet`·`constants/currency.ts`(`CURRENCY_NAME = '코인'` **가칭** — 한 줄로 바꾼다. 문구는 이름 뒤에 조사를 붙이지 않게 썼다) |
+| `718bf9ae` | 만들기 화면: 막혔고 첫 무료가 없으면 "코인 39개로 한 세트 만들기" 카드 — 잔액이 되면 "코인 39개 쓰기"(골라야 `payWithCurrency` 로 보냄, 접수되면 선택 해제), 모자라면 "코인 충전하기" → 충전 시트. 재화 묶음이 스토어에 있으면 옛 `emoji_set_1` 버튼은 숨김 |
+| `21d7a324` | **웹에서 충전 시트를 열면 화면이 죽던 문제** — `iap.web.ts` 에 새 함수가 없었다(tsc·build:web 둘 다 못 잡는 종류). 재화 카드가 뜨면 "PRO에서…" 잠금 카드는 숨김(같은 자리에서 길을 둘 권하지 않게) |
+
+**검증(로컬 스택, 운영 무관 — 끝나고 컨테이너·계정·서버 삭제)**: 첫 무료를 쓴 FREE 커플, 잔액 39 → 카드·"코인 39개 쓰기" 표시,
+선택 전 사진 버튼 비활성 → 선택 후 활성 · 잔액 0 → "코인 충전하기" → 시트(웹은 묶음 없음 안내). typecheck·eslint·build:web 통과.
+**실제 결제·소비·실기기는 미확인** — 콘솔에 묶음이 없다.
+
+**OTA 는 아직 하지 않는다**: 묶음 SKU 가 콘솔에 없는 지금 올리면, 첫 무료를 쓴 FREE 사용자가 "코인 충전하기 → 상품 없음"에
+막힌다(옛 `emoji_set_1` 버튼은 묶음이 없으면 계속 보이므로 살 길은 남지만 화면이 어지럽다). 순서: 이름 확정 → 콘솔에 묶음 등록 →
+OTA → `emoji_set_1` 판매 중단.
+
+**다음에 막을 것**: `X.ts` 와 `X.web.ts` 의 export 목록을 대조하는 verify 스크립트 — 이번 결함이 정확히 그 틈이다.
+`package.json` scripts 는 fingerprint 입력이라 다음 네이티브 빌드 때 함께 넣는다(CLAUDE.md §6).
