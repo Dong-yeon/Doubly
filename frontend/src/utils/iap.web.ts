@@ -40,3 +40,16 @@ export async function requestEmojiSetPurchase(_userId: number): Promise<void> {
 export async function restorePurchases(): Promise<'reflected' | 'pending' | 'none' | 'error'> {
   return 'none';
 }
+
+/*
+ * 유료 재화 충전 — 웹에는 스토어가 없다. 묶음이 없으면 충전 시트가 "지금은 충전할 수 있는 상품이 없어요"를 그린다.
+ * iap.ts 에 함수를 더하면 여기에도 같은 이름을 둬야 한다 — 빠지면 웹에서만 "is not a function" 으로 화면이 죽는다
+ * (2026-10-13 충전 시트에서 실제로 났다. tsc 는 iap.ts 를 보고 웹 export 는 빌드도 따지지 않아 잡지 못한다).
+ */
+export async function fetchCurrencyPacks(): Promise<never[]> {
+  return [];
+}
+
+export async function requestCurrencyPurchase(_userId: number, _productId: string): Promise<void> {
+  throw new Error('웹에서는 인앱결제를 지원하지 않아요.');
+}

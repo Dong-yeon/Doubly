@@ -284,10 +284,15 @@ public class CoupleEmojiService {
         } catch (BusinessException refused) {
             boolean payable = refused.getErrorCode() == ErrorCode.PLAN_UPGRADE_REQUIRED
                     || refused.getErrorCode() == ErrorCode.PLAN_LIMIT_EXCEEDED;
-            if (!payable) {
+            /*
+             * PRO 가 이번 달 세트를 다 썼다(429) — 업셀은 아니지만 "한 세트 더"는 살 수 있어야 한다(옛 크레딧도 이 자리를
+             * 열었다). 그래서 재화는 429 도 받는다. 첫 무료는 402 에만 — PRO 에게 무료를 줄 이유가 없다.
+             */
+            boolean overMonthly = refused.getErrorCode() == ErrorCode.USAGE_LIMIT_EXCEEDED;
+            if (!payable && !overMonthly) {
                 throw refused;
             }
-            if (planGuard.claimWelcome(userId, partnerId, FEATURE)) {
+            if (payable && planGuard.claimWelcome(userId, partnerId, FEATURE)) {
                 countBackstopOrUndo(userId, () -> planGuard.refund(userId, FEATURE, PlanGuard.Charge.WELCOME));
                 return Payment.of(PlanGuard.Charge.WELCOME);
             }

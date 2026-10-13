@@ -31,7 +31,10 @@ import { Alert } from '../../utils/alert';
 import { getErrorMessage } from '../../utils/error';
 import { haptics } from '../../utils/haptics';
 import { pickImageAsset, takePhotoAsset, type PickedImage } from '../../utils/imageUpload';
-import { fetchEmojiSetProduct, requestEmojiSetPurchase } from '../../utils/iap';
+import { fetchCurrencyPacks, fetchEmojiSetProduct, requestEmojiSetPurchase } from '../../utils/iap';
+import { useCurrencyStore } from '../../store/currencyStore';
+import { CurrencyChargeSheet } from '../../components/CurrencyChargeSheet';
+import { CURRENCY_NAME } from '../../constants/currency';
 import { PURCHASE_ENABLED } from '../../constants/config';
 import {
   COUPLE_EMOJI_EMOTIONS,
@@ -79,10 +82,27 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
    * 옛 서버(엔드포인트 없음)면 조용히 false — 지금처럼 잠금을 그린다. 값은 아래 mounted 다음에서 채운다.
    */
   const [welcomeAvailable, setWelcomeAvailable] = useState(false);
-  /** 지금 만들 수 있나 — 플랜·산 세트로 열렸거나, 막혔어도 첫 무료가 남았거나 */
-  const canStart = allowed || welcomeAvailable;
+  /*
+   * 유료 재화로 만들기(docs/CURRENCY_EMOJI_2026-10-13.md) — 막혔고 첫 무료도 없을 때만 보인다. 가격은 서버 카탈로그
+   * (shop_items.EMOJI_SET), 잔액은 내 지갑. 사용자가 "재화로 만들기"를 골라야(payWithCurrency) 서버가 뺀다 — 사진만 고르면
+   * 빠지지 않는다. 충전 묶음이 스토어에 있으면 옛 "세트 1개 추가"(emoji_set_1)는 숨긴다(대체 상품).
+   */
+  const balance = useCurrencyStore((s) => s.balance);
+  const emojiPrice = useCurrencyStore((s) => s.prices.EMOJI_SET);
+  const [payWithCurrency, setPayWithCurrency] = useState(false);
+  const [chargeOpen, setChargeOpen] = useState(false);
+  const [hasPacks, setHasPacks] = useState(false);
+  useEffect(() => {
+    void useCurrencyStore.getState().load();
+    if (!PURCHASE_ENABLED) return;
+    void fetchCurrencyPacks().then((packs) => setHasPacks(packs.length > 0));
+  }, []);
   const exhausted = !allowed || emojiState?.remaining === 0;
-  const canBuySet = PURCHASE_ENABLED && !!setPrice && !!buyerId && exhausted && !welcomeAvailable;
+  const currencyOffer = exhausted && !welcomeAvailable && emojiPrice != null;
+  const canPayWithCurrency = currencyOffer && balance != null && balance >= emojiPrice;
+  /** 지금 만들 수 있나 — 플랜·산 세트로 열렸거나, 첫 무료가 남았거나, 재화로 내기로 골랐고 잔액이 있거나 */
+  const canStart = allowed || welcomeAvailable || (payWithCurrency && canPayWithCurrency);
+  const canBuySet = PURCHASE_ENABLED && !!setPrice && !!buyerId && exhausted && !welcomeAvailable && !hasPacks;
   const onBuySet = async () => {
     if (!buyerId || buying) return;
     setBuying(true);
@@ -275,10 +295,14 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
           subjectUserId,
           targets.map((e) => e.key),
           requestIdRef.current,
+          // 사용자가 "재화로 만들기"를 골랐을 때만 — 서버는 그래도 쿼터·첫 무료를 먼저 본다
+          payWithCurrency,
         );
         // 접수가 확정됐다 — 이 작업의 결과와 무관하게 다음 누름은 새 시도다. 접수 전 실패(업로드·네트워크·409)는
         // 키를 그대로 두어, 다시 눌렀을 때 서버가 이미 받은 접수를 돌려줄 수 있게 한다.
         requestIdRef.current = null;
+        // 재화 선택도 이번 접수로 끝났다 — 다음 만들기에서 다시 고른다(모르는 사이 두 번째 세트에 빠지지 않게)
+        setPayWithCurrency(false);
         void pollProgress();
         const batch = await awaitAiJob<CoupleEmojiBatch>(jobId);
         // 결과가 확정됐으니 트레이 캐시도 이번 세트를 포함하게 맞춘다
@@ -297,9 +321,10 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
         // 쓴 것(무료·산 세트·월 한도)을 화면에 반영한다 — 실패로 되돌려진 경우도 같은 조회로 맞춰진다
         refreshWelcome();
         void usePlanStore.getState().load();
+        void useCurrencyStore.getState().load();
       }
     },
-    [subjectUserId, effectiveSelected, refreshWelcome],
+    [subjectUserId, effectiveSelected, refreshWelcome, payWithCurrency],
   );
 
   /*
@@ -408,7 +433,8 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
         </View>
       ) : null}
 
-      {!canStart ? (
+      {/* 재화로 만들 수 있으면 그 카드가 길이다 — 잠금 카드("PRO에서…")까지 띄우면 같은 자리에서 길을 둘 권한다 */}
+      {!canStart && !currencyOffer ? (
         <LockedCard
           title="우리 이모지"
           description="애인 얼굴로 감정 이모지를 만들어 채팅에서 써요."
@@ -427,6 +453,34 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
       ) : null}
       {emojiState && emojiState.credits > 0 ? (
         <Text style={styles.creditNote}>추가로 산 세트 {emojiState.credits}개가 남아 있어요.</Text>
+      ) : null}
+
+      {currencyOffer && !startedOrDone ? (
+        <View style={styles.creditBox}>
+          <Text style={styles.creditTitle}>
+            {CURRENCY_NAME} {emojiPrice}개로 한 세트 만들기
+          </Text>
+          <Text style={styles.hint}>
+            12장 + 다시 그리기 3번 · 지금 {CURRENCY_NAME} {balance ?? 0}개
+            {' '}— 사진을 고르기 전에 골라 두면, 만들기를 시작할 때 빠져요. 한 장도 못 만들면 돌려드려요.
+          </Text>
+          {canPayWithCurrency ? (
+            <Button
+              title={payWithCurrency ? `${CURRENCY_NAME} ${emojiPrice}개 쓰기 · 선택됨 ✓` : `${CURRENCY_NAME} ${emojiPrice}개 쓰기`}
+              variant={payWithCurrency ? 'primary' : 'secondary'}
+              size="md"
+              onPress={() => setPayWithCurrency((v) => !v)}
+              accessibilityState={{ selected: payWithCurrency }}
+            />
+          ) : (
+            <Button
+              title={`${CURRENCY_NAME} 충전하기`}
+              variant="secondary"
+              size="md"
+              onPress={() => setChargeOpen(true)}
+            />
+          )}
+        </View>
       ) : null}
 
       {!startedOrDone ? (
@@ -705,6 +759,12 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
       </Sheet>
 
       {/* 정사각 512 JPEG 로 잘라 넘긴다 — 업로드는 확정 후 한 번뿐(AvatarCropSheet 주석) */}
+      <CurrencyChargeSheet
+        visible={chargeOpen}
+        onClose={() => setChargeOpen(false)}
+        reason={emojiPrice != null ? `우리 이모지 한 세트(12장 + 다시 그리기 3번)는 ${CURRENCY_NAME} ${emojiPrice}개예요.` : undefined}
+      />
+
       <AvatarCropSheet
         title="얼굴 맞추기"
         source={picked}
