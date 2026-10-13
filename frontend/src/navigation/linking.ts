@@ -172,6 +172,7 @@ export const linking: LinkingOptions<RootStackParamList> = {
               // 푸시 data.link = PushLinks.GAME_SUDOKU / GAME_OMOK
               Sudoku: 'game/sudoku',
               Omok: 'game/omok',
+              OmokPractice: 'game/omok/practice',
               CatchMind: 'game/catch-mind',
               Puyo: 'game/puzzle',
               WallRace: 'game/wall-race',
