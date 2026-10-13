@@ -32,6 +32,8 @@ export const coupleEmojiApi = {
     sourceImageUrl: string;
     subjectUserId?: number;
     emotions?: CoupleEmojiEmotion[];
+    /** 같은 시도를 두 번 접수하지 않게 하는 키 — 서버가 같은 키면 차감 없이 처음 작업을 돌려준다 */
+    requestId?: string;
   }) =>
     unwrap(apiClient.post<ApiResponse<AiJobStart>>('/couple-emojis/generate', payload)),
 
@@ -65,9 +67,18 @@ export async function startCoupleEmojiGeneration(
   croppedUri: string,
   subjectUserId?: number,
   emotions?: CoupleEmojiEmotion[],
+  requestId?: string,
 ): Promise<string> {
   const signature = await coupleEmojiApi.uploadSignature();
   const sourceImageUrl = await uploadImageWithSignature(croppedUri, signature);
-  const { jobId } = await coupleEmojiApi.generate({ sourceImageUrl, subjectUserId, emotions });
+  const { jobId } = await coupleEmojiApi.generate({ sourceImageUrl, subjectUserId, emotions, requestId });
   return jobId;
+}
+
+/**
+ * 생성 요청 키 — 서버 형식 `[A-Za-z0-9_-]{8,64}`. 유일해야 하는 범위가 "한 사람의 몇 분"이라
+ * 시각과 난수로 충분하다(chatSocket 의 newClientMessageId 와 같은 판단).
+ */
+export function newCoupleEmojiRequestId(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }

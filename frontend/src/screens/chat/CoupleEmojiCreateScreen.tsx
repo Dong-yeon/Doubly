@@ -21,7 +21,7 @@ import { MaterialCommunityIcons } from '../../components/Icon';
 import { LockedCard } from '../../components/LockedCard';
 import { Sheet } from '../../components/Sheet';
 import { awaitAiJob } from '../../api/aiJob';
-import { startCoupleEmojiGeneration } from '../../api/coupleEmoji';
+import { newCoupleEmojiRequestId, startCoupleEmojiGeneration } from '../../api/coupleEmoji';
 import { useAuthStore } from '../../store/authStore';
 import { useCoupleEmojiStore } from '../../store/coupleEmojiStore';
 import { usePlanStore } from '../../store/planStore';
@@ -107,6 +107,12 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
   // 화면을 떠난 뒤에도 폴링이 돌면 사라진 화면의 상태를 건드린다 — 두 곳에서 끊는다
   const mounted = useRef(true);
   const polling = useRef(false);
+  /**
+   * 이번 시도의 요청 키 — 접수가 확정될 때까지 같은 값을 쓴다. 더블탭이나 "응답이 안 와서 다시 누르기"가 서버에
+   * 두 번 닿아도 한 번만 차감되고 같은 작업을 받는다(docs/EMOJI_12_REGEN_2026-10-13.md §1-3). 작업이 끝나면
+   * (성공·실패 모두) 비워서 다음 만들기는 새 시도가 된다.
+   */
+  const requestIdRef = useRef<string | null>(null);
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -240,12 +246,17 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
         }
       };
 
+      if (!requestIdRef.current) requestIdRef.current = newCoupleEmojiRequestId();
       try {
         const jobId = await startCoupleEmojiGeneration(
           croppedUri,
           subjectUserId,
           targets.map((e) => e.key),
+          requestIdRef.current,
         );
+        // 접수가 확정됐다 — 이 작업의 결과와 무관하게 다음 누름은 새 시도다. 접수 전 실패(업로드·네트워크·409)는
+        // 키를 그대로 두어, 다시 눌렀을 때 서버가 이미 받은 접수를 돌려줄 수 있게 한다.
+        requestIdRef.current = null;
         void pollProgress();
         const batch = await awaitAiJob<CoupleEmojiBatch>(jobId);
         // 결과가 확정됐으니 트레이 캐시도 이번 세트를 포함하게 맞춘다
