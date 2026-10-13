@@ -334,3 +334,27 @@ UPDATE feature_credits SET used = credits, updated_at = now()
 
 **P2**
 7. 스티커 팩을 `shop_items` 로, 첫 무료 생성권 표 분리, `feature_credits` 정리.
+
+---
+
+## 12. P0 구현 결과 (2026-10-13)
+
+결정: §10 은 권장안대로 — 잔액 음수 허용, 선물 없음, 쿼터 → (옛 크레딧) → 첫 무료 → 재화. 원장은 탈퇴 시 삭제(법무 확인 전 —
+보존이 필요해지면 익명화로 바꾼다).
+
+| 커밋 | 내용 |
+|---|---|
+| `56816416` (V140) | `currency_wallets`·`currency_store_purchases`·`currency_ledger`·`shop_items`(EMOJI_SET=39) + `couple_emoji_sets.paid_price`. `CurrencyService`(파사드: 원장 UNIQUE 위반 → "이미 처리됨") + `CurrencyTx`(지갑 조건부 UPDATE + 원장 INSERT 한 트랜잭션, 전부 `REQUIRES_NEW`). `UserDataPurger` 3표. 에러 `CURRENCY_INSUFFICIENT`(402 — 앱 업그레이드 시트는 PLAN_* 만 보므로 안 뜬다)·`SHOP_ITEM_UNAVAILABLE` |
+| `0534b09b` | `CurrencyPack`(currency_39/99/299 — **잠정**, Apple 원화 단계 확인 전), `CurrencyPurchaseService`(스토어 재확인·상품·귀속 대조, Google acknowledge), `GET /currency/wallet`·`POST /currency/purchases/{google,apple}`·`GET /shop/items`. 웹훅: Google voided(productType 2)·Apple 환불 알림에 재화 갈래 — 스토어 재확인 후 회수(잔액 부족 시 음수) |
+| (P0-3) | 우리 이모지: **앱이 `payWithCurrency=true` 로 보낼 때만** 재화로 낸다(서버가 잔액을 보고 알아서 빼지 않는다). 지출 키 = `spend:emoji:{user}:{requestId}`, 한 장도 못 남기면 같은 키로 1회 환불. 세트 `charge_source=CURRENCY`·다시 그리기 3·`paid_price` |
+
+**구현 중 막은 구멍**: 요청 키 선점(Redis 15분)이 끝난 뒤 같은 요청 키가 다시 오면, 지출은 "이미 냈다"로 지나가고 생성은 또 돌아
+**한 번 내고 두 번 받는** 길이 있었다 → `CurrencyService.spend` 가 새로 뺐는지 돌려주고, 이미 낸 키면 거절(테스트 고정).
+
+**검증**: H2 전체 1433건·PostgreSQL 16 전체 1433건 통과(건너뜀 1). 재화 서비스 7(동시 지출·멱등·음수 회수·탈퇴 삭제),
+검증 5, 이모지 흐름 재화 6건.
+
+**옛 앱 영향 없음**: 새 API 는 부르는 앱이 없고, `payWithCurrency` 를 안 보내면 지금과 같다. 운영에는 V140 만 적용된다.
+
+**남은 것(P1)**: 앱 지갑·충전 시트·"재화 39로 만들기" 버튼, `config.ts` 재화 SKU(+ `StoreProductIdSyncTest` 대조 추가),
+콘솔 SKU 등록(사람), `emoji_set_1` 판매 중단 시점, §8 이전 SQL(사람, 대조 후), 이름(가칭 currency) 결정.
