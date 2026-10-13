@@ -35,12 +35,16 @@ import {
   type Product,
 } from 'react-native-iap';
 import { planApi } from '../api/plan';
+import { currencyApi } from '../api/currency';
 import { analyticsApi } from '../api/analytics';
+import { useCurrencyStore } from '../store/currencyStore';
+import { CURRENCY_NAME, currencyAmountOf } from '../constants/currency';
 import type { PlanInfo } from '../types';
 import { usePlanStore } from '../store/planStore';
 import { toast } from '../store/toastStore';
 import { storage } from './storage';
 import {
+  CURRENCY_PACK_PRODUCT_IDS,
   EMOJI_SET_PRODUCT_ID,
   PRO_BASE_PLAN_IDS,
   PRO_SUBSCRIPTION_SKUS,
@@ -282,6 +286,42 @@ export async function requestEmojiSetPurchase(userId: number): Promise<void> {
 }
 
 /**
+ * 유료 재화 묶음(소모성) — 충전 시트에 그릴 것. 스토어에 등록된 것만 오고 양이 작은 것부터. 웹·미등록이면 빈 배열 —
+ * 그때 화면은 충전 대신 옛 "세트 1개 추가"(emoji_set_1)를 그린다.
+ */
+export async function fetchCurrencyPacks(): Promise<Product[]> {
+  if (Platform.OS === 'web') return [];
+  try {
+    const products = await fetchProducts({ skus: CURRENCY_PACK_PRODUCT_IDS, type: 'in-app' });
+    const list = Array.isArray(products) ? (products as Product[]) : [];
+    return list
+      .filter((p) => currencyAmountOf(p.id) != null)
+      .sort((a, b) => (currencyAmountOf(a.id) ?? 0) - (currencyAmountOf(b.id) ?? 0));
+  } catch {
+    return [];
+  }
+}
+
+/** 재화 묶음 결제창을 연다 — 결과는 {@link attachPurchaseListeners} 로 와 재화 검증 경로를 탄다. */
+export async function requestCurrencyPurchase(userId: number, productId: string): Promise<void> {
+  if (Platform.OS === 'web') {
+    throw new Error('웹에서는 인앱결제를 지원하지 않아요.');
+  }
+  if (!CURRENCY_PACK_PRODUCT_IDS.includes(productId)) {
+    throw new Error('없는 상품이에요.');
+  }
+  analyticsApi.log('PURCHASE_STARTED', productId).catch(() => {});
+  beginPurchaseFlow();
+  await requestPurchase({
+    type: 'in-app',
+    request: {
+      google: { skus: [productId], obfuscatedAccountId: String(userId) },
+      apple: { sku: productId, appAccountToken: appAccountTokenOf(userId) },
+    },
+  });
+}
+
+/**
  * PRO 구독 결제창을 연다. 실제 결제 성공/실패는 {@link attachPurchaseListeners} 로 온다 —
  * 이 함수가 끝났다고 결제가 끝난 게 아니다(결제창을 여는 요청을 보냈을 뿐).
  */
@@ -361,6 +401,40 @@ async function verifyCreditAndFinish(purchase: Purchase, trigger: Trigger): Prom
 }
 
 /**
+ * 유료 재화 묶음(소모성) — 크레딧과 같은 규칙: 서버가 지갑에 넣은 뒤에만 <b>소비</b>한다. 서버가 거절하면 소비하지 않는다 —
+ * 다음 실행의 getAvailablePurchases 가 다시 가져와 재시도하고, 안드로이드는 서버가 승인(acknowledge)해 두어 3일 자동
+ * 환불도 막힌다. 같은 거래를 두 번 보내도 서버가 한 번만 넣는다(transaction_id UNIQUE).
+ */
+async function verifyCurrencyAndFinish(purchase: Purchase, trigger: Trigger): Promise<Outcome> {
+  const receipt = Platform.OS === 'android' ? purchase.purchaseToken : purchase.id;
+  if (!receipt) return 'error';
+  try {
+    if (Platform.OS === 'android') {
+      await currencyApi.verifyGoogle(purchase.productId, receipt);
+    } else {
+      await currencyApi.verifyApple(purchase.productId, receipt);
+    }
+  } catch (e) {
+    if (trigger !== 'launch') {
+      toast.error(e instanceof Error && e.message ? e.message : '충전을 확인하지 못했어요. 잠시 후 다시 시도해주세요.');
+    }
+    return 'error';
+  }
+  try {
+    await finishTransaction({ purchase, isConsumable: true });
+  } catch {
+    // 이미 소비됐거나 스토어가 잠시 응답하지 않음 — 재화는 서버가 이미 넣었다
+  }
+  await useCurrencyStore.getState().load();
+  if (trigger !== 'launch') {
+    const amount = currencyAmountOf(purchase.productId);
+    // 조사를 이름에 붙이지 않는다 — 이름이 바뀌면(가칭) "을/를"이 어긋난다
+    toast.success(amount ? `${CURRENCY_NAME} ${amount}개를 충전했어요!` : `${CURRENCY_NAME} 충전을 마쳤어요!`);
+  }
+  return 'reflected';
+}
+
+/**
  * 서버에 구매를 검증시키고, 반영된 뒤에만 스토어 트랜잭션을 닫는다.
  *
  * <p>실패를 셋으로 나눈다 — 예전엔 catch 하나가 전부 "반영이 늦어지고 있어요"였다.
@@ -375,6 +449,9 @@ async function verifyCreditAndFinish(purchase: Purchase, trigger: Trigger): Prom
 async function verifyAndFinish(purchase: Purchase, trigger: Trigger): Promise<Outcome> {
   if (purchase.productId === EMOJI_SET_PRODUCT_ID) {
     return verifyCreditAndFinish(purchase, trigger);
+  }
+  if (CURRENCY_PACK_PRODUCT_IDS.includes(purchase.productId)) {
+    return verifyCurrencyAndFinish(purchase, trigger);
   }
   const key = keyOf(purchase);
   const handled = key ? await readHandled() : {};

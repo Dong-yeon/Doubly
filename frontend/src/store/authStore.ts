@@ -15,6 +15,7 @@ import { usePlanStore } from './planStore';
 import { usePlaceStore } from './placeStore';
 import { useContentStore } from './contentStore';
 import { useCoupleEmojiStore } from './coupleEmojiStore';
+import { useCurrencyStore } from './currencyStore';
 import { useRelationStore } from './relationStore';
 import { clearAllWritingDrafts } from '../utils/writingDraft';
 import { clearPendingMealPhotos } from '../utils/pendingMealPhotos';
@@ -71,6 +72,8 @@ async function clearTokens() {
   usePlaceStore.getState().reset();
   useContentStore.getState().reset();
   useCoupleEmojiStore.getState().reset();
+  // 재화 잔액은 개인 것 — 다음 계정에 남의 잔액이 보이면 안 된다
+  useCurrencyStore.getState().reset();
   useRelationStore.getState().reset();
 }
 
