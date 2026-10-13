@@ -56,6 +56,27 @@ class StoreProductIdSyncTest {
         assertThat(backend).as("앱 EMOJI_SET_PRODUCT_ID 가 서버 CreditProduct 에 없음").contains(emojiSet);
     }
 
+    /**
+     * 재화 묶음 — 앱이 모르는 묶음은 충전 시트에 안 나오고, 서버가 모르는 묶음은 결제해도 "없는 상품"으로 거절돼 돈만 빠진다
+     * (스토어 트랜잭션은 닫히지 않아 3일 뒤 자동 환불되지만, 그동안 사용자는 충전이 안 된 걸로 본다).
+     */
+    @Test
+    void 앱의_재화_묶음_id_가_서버_CurrencyPack_과_같다() throws IOException {
+        Matcher block = Pattern.compile("export const CURRENCY_PACK_PRODUCT_IDS[^=]*=\\s*\\[([^\\]]+)]")
+                .matcher(readConfigTs());
+        assertThat(block.find()).as("config.ts 에서 CURRENCY_PACK_PRODUCT_IDS 를 찾지 못함").isTrue();
+        Set<String> frontend = new LinkedHashSet<>();
+        Matcher literal = Pattern.compile("'([a-z0-9_.]+)'").matcher(block.group(1));
+        while (literal.find()) {
+            frontend.add(literal.group(1));
+        }
+
+        assertThat(frontend)
+                .as("앱 CURRENCY_PACK_PRODUCT_IDS 와 서버 CurrencyPack 불일치")
+                .containsExactlyInAnyOrderElementsOf(Arrays.stream(com.fitto.common.currency.CurrencyPack.values())
+                        .map(com.fitto.common.currency.CurrencyPack::productId).toList());
+    }
+
     private String single(String source, String regex) {
         Matcher m = Pattern.compile(regex).matcher(source);
         assertThat(m.find()).as("config.ts 에서 찾지 못함: " + regex).isTrue();

@@ -245,6 +245,13 @@ export const PRO_SUBSCRIPTION_SKUS: Record<ProTerm, string> = {
 export const EMOJI_SET_PRODUCT_ID = 'emoji_set_1';
 
 /**
+ * 유료 재화 묶음(소모성) — 서버 `CurrencyPack` 과 값이 같아야 한다(`StoreProductIdSyncTest`). 1 재화 = 100원 고정이라
+ * 묶음 크기 = 가격 ÷ 100. 스토어에 아직 없는 묶음은 `fetchProducts` 가 돌려주지 않아 충전 시트에 안 나온다 —
+ * 콘솔에 올리기 전에도 안전하다(docs/CURRENCY_EMOJI_2026-10-13.md). 크기는 잠정(Apple 원화 단계 확인 전).
+ */
+export const CURRENCY_PACK_PRODUCT_IDS = ['currency_39', 'currency_99', 'currency_299'];
+
+/**
  * 결제할 기본 요금제(base plan)의 id — Play Console 의 "기본 요금제 및 혜택" 표에 보이는 ID.
  *
  * <p><b>왜 지정해야 하나</b>: 한 구독 상품 아래에 기본 요금제가 여러 개 달릴 수 있다
