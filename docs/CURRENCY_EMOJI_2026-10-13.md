@@ -3,7 +3,7 @@
 > **상태: 분석만. 코드·DB·설정 변경 없음.** 근거는 `origin/main` **`a1696f68`**(같은 날 병합한 "12장 + 다시 그리기 3번" 포함).
 > 표기: 근거가 있으면 `파일:라인`, 코드로 판정할 수 없으면 **미확인**.
 >
-> 목표(확정): 결제로만 얻는 재화(가칭 `currency`, 1 = 100원 고정), 개인 지갑, 스토어엔 재화 묶음 SKU 만,
+> 목표(확정): 결제로만 얻는 재화(이름 **크라운** — 2026-10-13 결정, 코드에서는 `currency`, 1 = 100원 고정), 개인 지갑, 스토어엔 재화 묶음 SKU 만,
 > 앱 안 상품은 서버 카탈로그에서 재화 가격으로. `emoji_set_1` 직판을 재화 39개로 대체.
 >
 > 선행: [EMOJI_12_REGEN_2026-10-13.md](EMOJI_12_REGEN_2026-10-13.md)(§10~11 구현 결과),
@@ -365,7 +365,7 @@ UPDATE feature_credits SET used = credits, updated_at = now()
 |---|---|
 | `53974be1` (서버) | PRO 가 이번 달 세트를 다 써서 429 를 받아도 **재화로 한 세트 더** 만들 수 있게(옛 크레딧이 열던 자리). 첫 무료는 여전히 402 에만 |
 | `2f54c3d9` | `config.ts` `CURRENCY_PACK_PRODUCT_IDS` + `StoreProductIdSyncTest` 에 서버 `CurrencyPack` 대조 |
-| `b9b602e4` | `api/currency.ts`·`store/currencyStore.ts`(잔액·가격, 로그아웃 시 비움)·`utils/iap.ts`(묶음 조회·결제·**서버 반영 뒤 소비**, 앱 시작 재처리)·`CurrencyChargeSheet`·`constants/currency.ts`(`CURRENCY_NAME = '코인'` **가칭** — 한 줄로 바꾼다. 문구는 이름 뒤에 조사를 붙이지 않게 썼다) |
+| `b9b602e4` | `api/currency.ts`·`store/currencyStore.ts`(잔액·가격, 로그아웃 시 비움)·`utils/iap.ts`(묶음 조회·결제·**서버 반영 뒤 소비**, 앱 시작 재처리)·`CurrencyChargeSheet`·`constants/currency.ts`(`CURRENCY_NAME` — 처음엔 가칭 '코인', 같은 날 **'크라운'** 으로 확정. 문구는 이름 뒤에 조사를 붙이지 않게 썼다) |
 | `718bf9ae` | 만들기 화면: 막혔고 첫 무료가 없으면 "코인 39개로 한 세트 만들기" 카드 — 잔액이 되면 "코인 39개 쓰기"(골라야 `payWithCurrency` 로 보냄, 접수되면 선택 해제), 모자라면 "코인 충전하기" → 충전 시트. 재화 묶음이 스토어에 있으면 옛 `emoji_set_1` 버튼은 숨김 |
 | `21d7a324` | **웹에서 충전 시트를 열면 화면이 죽던 문제** — `iap.web.ts` 에 새 함수가 없었다(tsc·build:web 둘 다 못 잡는 종류). 재화 카드가 뜨면 "PRO에서…" 잠금 카드는 숨김(같은 자리에서 길을 둘 권하지 않게) |
 
@@ -374,7 +374,7 @@ UPDATE feature_credits SET used = credits, updated_at = now()
 **실제 결제·소비·실기기는 미확인** — 콘솔에 묶음이 없다.
 
 **OTA 는 아직 하지 않는다**: 묶음 SKU 가 콘솔에 없는 지금 올리면, 첫 무료를 쓴 FREE 사용자가 "코인 충전하기 → 상품 없음"에
-막힌다(옛 `emoji_set_1` 버튼은 묶음이 없으면 계속 보이므로 살 길은 남지만 화면이 어지럽다). 순서: 이름 확정 → 콘솔에 묶음 등록 →
+막힌다(옛 `emoji_set_1` 버튼은 묶음이 없으면 계속 보이므로 살 길은 남지만 화면이 어지럽다). 순서: ~~이름 확정~~(크라운, 왕관 아이콘 — 완료) → 콘솔에 묶음 등록 →
 OTA → `emoji_set_1` 판매 중단.
 
 **다음에 막을 것**: `X.ts` 와 `X.web.ts` 의 export 목록을 대조하는 verify 스크립트 — 이번 결함이 정확히 그 틈이다.

@@ -457,9 +457,13 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
 
       {currencyOffer && !startedOrDone ? (
         <View style={styles.creditBox}>
-          <Text style={styles.creditTitle}>
-            {CURRENCY_NAME} {emojiPrice}개로 한 세트 만들기
-          </Text>
+          {/* 크라운 = 럽슐랭 왕관과 같은 아이콘(LovelichelinBadge) — 같은 결로 읽히게 */}
+          <View style={styles.currencyTitleRow}>
+            <MaterialCommunityIcons name="crown" size={16} color={colors.togetherText} />
+            <Text style={styles.creditTitle}>
+              {CURRENCY_NAME} {emojiPrice}개로 한 세트 만들기
+            </Text>
+          </View>
           <Text style={styles.hint}>
             12장 + 다시 그리기 3번 · 지금 {CURRENCY_NAME} {balance ?? 0}개
             {' '}— 사진을 고르기 전에 골라 두면, 만들기를 시작할 때 빠져요. 한 장도 못 만들면 돌려드려요.
@@ -830,6 +834,7 @@ const styles = themedStyles((colors) => ({
     backgroundColor: colors.surface,
   },
   creditTitle: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
+  currencyTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   creditNote: { fontSize: fontSize.caption, color: colors.togetherText, fontWeight: '700' },
 
   subjectRow: { flexDirection: 'row', gap: spacing.sm },
