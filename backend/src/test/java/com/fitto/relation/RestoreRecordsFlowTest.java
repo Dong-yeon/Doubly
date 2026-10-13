@@ -180,6 +180,11 @@ class RestoreRecordsFlowTest {
                         + "values (:rid, :me, '😊', :eid)")
                 .setParameter("rid", oldRelationId).setParameter("me", me).setParameter("eid", emojiId.longValue())
                 .executeUpdate();
+        // 세트 메타(V138)도 relations FK 를 가진다 — 안 옮기면 옛 관계 삭제가 실패해 복원 전체가 되돌아간다(2026-10-13)
+        em.createNativeQuery("insert into couple_emoji_sets (batch_id, relation_id, created_by, charge_source, regen_total) "
+                        + "values ('batch-1', :rid, :me, 'CREDIT', 3)")
+                .setParameter("rid", oldRelationId).setParameter("me", me)
+                .executeUpdate();
 
         relationService.endRelation(me, oldRelationId);
         Long newRelationId = connect(me, partner);
@@ -194,6 +199,8 @@ class RestoreRecordsFlowTest {
         assertThat(result.status()).isEqualTo(RestoreRecordsResponse.Status.RESTORED);
         assertThat(count("mood_statuses", "couple_id", newRelationId)).isEqualTo(1);
         assertThat(count("couple_emojis", "relation_id", newRelationId)).isEqualTo(1);
+        // 세트도 같이 와야 복원한 세트에서 다시 그리기를 쓸 수 있다
+        assertThat(count("couple_emoji_sets", "relation_id", newRelationId)).isEqualTo(1);
         assertThat(count("relations", "id", oldRelationId)).isZero();
     }
 
