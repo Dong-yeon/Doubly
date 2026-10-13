@@ -943,6 +943,21 @@ class CoupleEmojiFlowTest {
         assertThat(currencyService.balance(a)).isEqualTo(60);
     }
 
+    /** PRO 가 이번 달 세트를 다 썼다(429) — 재화로 한 세트 더 살 수 있다. 첫 무료는 PRO 에게 안 쓴다. */
+    @Test
+    void PRO_월_한도를_다_써도_재화로는_만들_수_있다() {
+        Long a = register("ce-cur7-a@fitto.com");
+        Long b = register("ce-cur7-b@fitto.com");
+        connectCouple(a, b);
+        doThrow(new BusinessException(ErrorCode.USAGE_LIMIT_EXCEEDED))
+                .when(geminiClient).requireImageConfiguredAndCharge(any(), eq(Feature.AI_COUPLE_EMOJI));
+        currencyService.grantPurchase(a, com.fitto.common.plan.Store.GOOGLE_PLAY, "currency_39", "tx-ce-cur-7", 39);
+
+        assertThat(service.prepare(a, payRequest("req-cur-0007")).charge()).isEqualTo(PlanGuard.Charge.CURRENCY);
+        assertThat(currencyService.balance(a)).isZero();
+        assertThat(service.welcomeAvailable(a)).isTrue();
+    }
+
     /** 첫 무료가 남았으면 재화보다 무료가 먼저다 — 무료가 있는데 돈을 빼면 사용자 손해다. */
     @Test
     void 첫_무료가_남았으면_재화로_내겠다고_해도_무료를_쓴다() {
