@@ -112,7 +112,7 @@ public enum ErrorCode {
      * 재화가 모자란다 — 충전으로 풀리므로 402. 앱의 업그레이드 시트는 PLAN_* 코드만 보므로 이 코드로는 뜨지 않는다
      * (api/client.ts) — 화면이 충전을 권한다.
      */
-    CURRENCY_INSUFFICIENT(HttpStatus.PAYMENT_REQUIRED, "재화가 모자라요. 충전한 뒤 다시 시도해주세요."),
+    CURRENCY_INSUFFICIENT(HttpStatus.PAYMENT_REQUIRED, "크라운이 모자라요. 충전한 뒤 다시 시도해주세요."),
     /** 카탈로그에 없거나 내린 상품 */
     SHOP_ITEM_UNAVAILABLE(HttpStatus.NOT_FOUND, "지금은 살 수 없는 상품이에요."),
     AI_ANALYSIS_FAILED(HttpStatus.BAD_GATEWAY, "AI 분석에 실패했어요. 잠시 후 다시 시도해주세요."),
