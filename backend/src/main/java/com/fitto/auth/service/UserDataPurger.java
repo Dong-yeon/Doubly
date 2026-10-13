@@ -142,6 +142,7 @@ public class UserDataPurger {
          */
         exec("delete from workout_boosters where sender_id = :uid or receiver_id = :uid", userId);
         // 커플 게임(V86) — 관계가 먼저 지워지면 남는 행이 없지만 created_by 가 users 를 참조하므로 안전하게
+        exec("delete from quarto_moves where game_id in (select id from couple_games where created_by = :uid)", userId);
         exec("delete from couple_games where created_by = :uid", userId);
         // 구독 이력 — users FK 를 물고 있어서 빠뜨리면 탈퇴 전체가 FK 위반으로 실패한다.
         // (환불·정산 근거는 스토어 콘솔에 남으므로 여기서 지워도 된다)
