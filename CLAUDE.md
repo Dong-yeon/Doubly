@@ -94,6 +94,10 @@ npm run verify:linkify                     # 링크 분리 검증 — utils/link
 npm run verify:puyo                        # 연쇄 퍼즐 엔진 검증 — games/puyo 규칙 수정 시
 npm run verify:sticker-codes               # 스티커 텍스트 코드·키워드 추천 검증 — utils/stickerCodes.ts 수정 시
 npm run verify:service-status              # 장애 공지 status.json 해석 검증 — utils/serviceStatus.ts·landing/status.json 수정 시
+npm run verify:context-stickers            # 기념일 날짜 경계·맥락 스티커 코드 — utils/anniversary.ts·constants/contextStickers.ts 수정 시
+npm run verify:place-link                  # 채팅 지도 링크 판별(정탐+오탐 방지) — utils/placeLinkHosts.ts 수정 시
+npm run verify:home-event                  # 홈 다가오는 일정 KST 경계 — utils/homeEvent.ts 수정 시
+npm run verify:export-zip                  # 내보내기 ZIP 을 외부 도구로 풀어 대조 — utils/zipWriter.ts·utils/exportPaths.ts 수정 시
 npm run build:web                          # 아이콘 폰트 서브셋 + 웹 export
 npm run build:android / build:ios          # EAS production 빌드 (건당 과금 — 네이티브가 바뀔 때만)
 npm run update:production                  # EAS Update — JS/에셋만 바뀐 변경을 빌드 없이 배포
@@ -183,8 +187,10 @@ game, sticker, coupleemoji) 아래에 controller/domain/dto/repository/service�
 서버 enum 과 앱 상수가 어긋나면 에러 없이 조용히 깨지는 것들(플랜 기능 키, 약관 버전, 스티커 코드·팩,
 캐치마인드 공유 캡션)은 백엔드 테스트가 `../frontend/src/...` 를 직접 읽어 대조합니다 —
 `PlanFeatureSyncTest`, `PolicyVersionSyncTest`, `StickerImageSyncTest`, `StickerPackSyncTest`,
-`CatchMindShareCaptionSyncTest`, `StoreProductIdSyncTest`(스토어 상품 id). 따라서 **프론트의 `types/index.ts`·
-`constants/legal.ts`·`constants/stickerImages.ts`·`constants/config.ts` 를 고치면 백엔드 테스트가 빨개질 수 있습니다.** `build.gradle` 이 이
+`CatchMindShareCaptionSyncTest`, `StoreProductIdSyncTest`(스토어 상품 id), `ClientAnalyticsEventSyncTest`
+(클라이언트 이벤트명 ↔ `ClientAnalyticsEvent` enum), `ExpoPushChannelTest`(알림 채널 id). 따라서 **프론트의 `types/index.ts`·
+`constants/legal.ts`·`constants/stickerImages.ts`·`constants/config.ts`·`api/analytics.ts`·`utils/notificationChannels.ts`
+를 고치면 백엔드 테스트가 빨개질 수 있습니다.** `build.gradle` 이 이
 파일들을 test 태스크 입력으로 등록해 두어 프론트만 고쳐도 테스트가 다시 돕니다 — 동기화 테스트를
 새로 만들면 그 경로도 `build.gradle` 의 `frontendSyncSources` 에 추가합니다.
 
