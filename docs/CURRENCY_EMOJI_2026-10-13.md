@@ -156,12 +156,12 @@ SELECT event_type, detail, count(*) FROM event_logs
 
 **재화 도입 후 1번의 "산 크레딧" 칸이 "지갑에서 39 차감"이 되고, 4번이 "재화 묶음 → 지갑 충전"이 된다. 2·3번은 바뀌지 않는다.**
 
-## 6. 제안 스키마 (V139 — 작성 직전 CLAUDE.md §7 명령으로 재확인)
+## 6. 제안 스키마 (V140 — V139 는 넷이 같아(fd2aa2ad)가 썼다. 작성 직전 CLAUDE.md §7 명령으로 재확인)
 
 H2·PostgreSQL 공통 문법만 쓴다(`ON CONFLICT`·`JSONB` 금지, CLAUDE.md §4).
 
 ```sql
--- V139__currency_wallet.sql (초안)
+-- V140__currency_wallet.sql (초안)
 
 -- 지갑 — 사람당 한 행. 차감은 조건부 UPDATE 한 줄(balance >= :cost)로만.
 CREATE TABLE currency_wallets (
@@ -290,7 +290,7 @@ UPDATE feature_credits SET used = credits, updated_at = now()
 
 | 영역 | 파일 | 변경 내용 | 난이도 |
 |---|---|---|---|
-| 스키마 | `V139__currency_wallet.sql` | §6 | M |
+| 스키마 | `V140__currency_wallet.sql` | §6 | M |
 | 지갑·원장 | 신규 `common/currency/*`(Wallet·Ledger·StorePurchase 엔티티, `CurrencyService` — 충전/지출/환불/회수, 조건부 UPDATE) | | L |
 | 스토어 검증 | `FeatureCreditService` 의 검증부를 `CurrencyPurchaseService` 로 옮겨 재사용, `CurrencyPack` 상수 | | M |
 | 웹훅 | `GooglePlayWebhookController.java:69`, `AppStoreNotificationController.java:79` 갈래에 재화 SKU | | S |
@@ -323,7 +323,7 @@ UPDATE feature_credits SET used = credits, updated_at = now()
 ## 11. 2단계 구현 순서 제안
 
 **P0 — 서버만으로 안전하게 (OTA 불필요, 옛 앱 영향 없음)**
-1. V139 + `CurrencyService`(충전·지출·환불·회수, 조건부 UPDATE, 원장 키) + 동시성·멱등 테스트(H2·PG).
+1. V140 + `CurrencyService`(충전·지출·환불·회수, 조건부 UPDATE, 원장 키) + 동시성·멱등 테스트(H2·PG).
 2. 재화 묶음 검증 API + 웹훅 갈래(SKU 미등록이어도 무해).
 3. `chargeOrWelcome` 에 재화 갈래(쿼터 → 무료 → 재화) — 옛 크레딧 갈래와 공존(옛 앱의 `emoji_set_1` 결제 유지).
 
