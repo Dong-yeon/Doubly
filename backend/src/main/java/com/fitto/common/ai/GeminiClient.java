@@ -261,7 +261,32 @@ public class GeminiClient {
         return countUsage(userId, feature, true);
     }
 
+    /**
+     * 이미지 생성의 <b>안전망만</b> 센다 — 플랜 한도·크레딧은 건드리지 않는다.
+     *
+     * <p>이미 다른 것으로 값을 치른 호출용이다: 산 세트 안의 다시 그리기(세트 잔량이 따로 센다), 커플당 첫 세트 무료.
+     * 서비스 전체·사용자별 하루 상한은 그대로 지난다 — 그 둘은 결제와 무관한 사고 방지선이다.
+     * 되돌릴 때는 {@link #refund(Long, Feature, PlanGuard.Charge)} 에 {@link PlanGuard.Charge#NONE} 을 넘긴다.
+     */
+    public void requireImageConfiguredAndCountBackstop(Long userId) {
+        if (!properties.isImageConfigured()) {
+            throw new BusinessException(ErrorCode.AI_NOT_CONFIGURED);
+        }
+        countBackstop(userId, () -> PlanGuard.Charge.NONE);
+    }
+
     private PlanGuard.Charge countUsage(Long userId, Feature feature, boolean allowCredit) {
+        return countBackstop(userId, () -> {
+            if (allowCredit) {
+                return planGuard.consumeOrCredit(userId, feature);
+            }
+            planGuard.consume(userId, feature);
+            return PlanGuard.Charge.QUOTA;
+        });
+    }
+
+    /** 안전망 두 겹을 먼저 보고(부작용 없이) → 플랜 단계 → 안전망 커밋. 순서의 이유는 GeminiClientQuotaTest. */
+    private PlanGuard.Charge countBackstop(Long userId, java.util.function.Supplier<PlanGuard.Charge> planStep) {
         Quota serviceWide = Quota.perDay(properties.getDailyLimitTotal());
         if (usageCounter.peekGlobal(Feature.AI_TOTAL, serviceWide) >= serviceWide.limit()) {
             log.warn("AI 서비스 전체 일일 한도 도달 — limit={}", serviceWide.limit());
@@ -273,13 +298,7 @@ public class GeminiClient {
             throw new BusinessException(ErrorCode.AI_DAILY_LIMIT_EXCEEDED);
         }
 
-        PlanGuard.Charge charge;
-        if (allowCredit) {
-            charge = planGuard.consumeOrCredit(userId, feature);
-        } else {
-            planGuard.consume(userId, feature);
-            charge = PlanGuard.Charge.QUOTA;
-        }
+        PlanGuard.Charge charge = planStep.get();
 
         if (usageCounter.increment(userId, Feature.AI_TOTAL, backstop) > backstop.limit()) {
             throw new BusinessException(ErrorCode.AI_DAILY_LIMIT_EXCEEDED);
@@ -339,6 +358,27 @@ public class GeminiClient {
                                              List<Map<String, Object>> parts,
                                              Map<String, Object> responseSchema) {
         return generateJson(userId, feature, parts, responseSchema, BACKGROUND_CALL);
+    }
+
+    /**
+     * {@link #generateJsonInBackground} 와 같되 실패 시 <b>차감한 곳에서</b> 되돌린다 —
+     * {@link #requireImageConfiguredAndCharge} 로 연 작업(우리 이모지의 외형 추출)용.
+     *
+     * <p>위 메서드는 쿼터 경로로만 되돌린다. 산 크레딧으로 연 회차가 여기서 실패하면 FREE 는 "센 적 없음"으로
+     * 그냥 지나가 크레딧이 사라졌고, PRO 는 크레딧 대신 커플 공용 쿼터가 하나 돌아왔다
+     * (docs/EMOJI_12_REGEN_2026-10-13.md §2-5).
+     */
+    public JsonNode generateJsonInBackground(Long userId, Feature feature,
+                                             List<Map<String, Object>> parts,
+                                             Map<String, Object> responseSchema,
+                                             PlanGuard.Charge charge) {
+        try {
+            return generateJsonOrThrow(parts, responseSchema, BACKGROUND_CALL,
+                    new CallContext(userId, feature, imagePartCount(parts)));
+        } catch (RuntimeException e) {
+            refund(userId, feature, charge);
+            throw e;
+        }
     }
 
     /**

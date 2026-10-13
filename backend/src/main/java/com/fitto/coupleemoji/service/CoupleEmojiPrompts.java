@@ -96,4 +96,31 @@ final class CoupleEmojiPrompts {
         }
         return sb.append("\nExpression: ").append(emotion.expressionPrompt()).append('.').toString();
     }
+
+    /* ── 다시 그리기: 원본 사진 없이, 같은 세트의 다른 장을 참조로 ─────────────────── */
+
+    /**
+     * 다시 그리기 앵커 — 참조가 <b>사진이 아니라 이미 그린 스티커</b>다.
+     *
+     * <p>원본 사진은 생성 직후 지운다("사진은 저장하지 않아요", §9). 그래서 다시 그릴 때 손에 남은 건 같은 세트의
+     * 다른 장과 외형 사실(identity facts)뿐이다. 참조가 이미 우리 그림체라 "사진을 캐릭터로 바꿔라"가 아니라
+     * "이 캐릭터를 그대로 두고 표정만 바꿔라"를 시킨다(docs/EMOJI_12_REGEN_2026-10-13.md §8-D2 ⓑ).
+     * <b>그림체 일관성은 실기기·실모델로 확인하기 전이다</b> — 어긋나면 이 문장부터 고친다.
+     */
+    static final String REGEN_ANCHOR = String.join(" ",
+            "The attached image is an existing chibi emoticon sticker of a character.",
+            "Draw the SAME character again: identical face, hairstyle, hair length and color, skin tone, eyebrows,",
+            "glasses or facial hair if any, every small mark at the same position, and the exact same outfit.",
+            "Keep the exact same art style: same head-to-body proportion, same eye style and size, same line thickness,",
+            "same pastel shading, thick white sticker outline, upper body only, head centered at the same size.",
+            "Change ONLY the facial expression and pose to match the expression below.",
+            "Plain solid pure white (#FFFFFF) background, square composition. No text, no letters, no watermark, no speech bubbles.");
+
+    static String regenPrompt(String identityFacts, CoupleEmojiEmotion emotion) {
+        StringBuilder sb = new StringBuilder(REGEN_ANCHOR);
+        if (identityFacts != null && !identityFacts.isBlank()) {
+            sb.append("\nIDENTITY FACTS (copy these exactly): ").append(identityFacts);
+        }
+        return sb.append("\nExpression: ").append(emotion.expressionPrompt()).append('.').toString();
+    }
 }

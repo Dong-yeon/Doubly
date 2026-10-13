@@ -23,7 +23,9 @@ import com.fitto.coupleemoji.domain.CoupleEmojiEmotion;
 import com.fitto.coupleemoji.dto.CoupleEmojiBatchResponse;
 import com.fitto.coupleemoji.dto.CoupleEmojiResponse;
 import com.fitto.coupleemoji.dto.GenerateCoupleEmojiRequest;
+import com.fitto.coupleemoji.domain.CoupleEmojiSet;
 import com.fitto.coupleemoji.repository.CoupleEmojiRepository;
+import com.fitto.coupleemoji.repository.CoupleEmojiSetRepository;
 import com.fitto.relation.domain.Relation;
 import com.fitto.relation.domain.RelationStatus;
 import com.fitto.relation.domain.RelationType;
@@ -40,8 +42,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -105,12 +109,17 @@ public class CoupleEmojiService {
      * 기본 표정조차 다 못 채웠다(docs/COUPLE_EMOJI_CREATE_UX_2026-09-29.md §2). 한 장 더(약 0.045 USD)로
      * 첫 세트가 "기본 표정 한 벌"로 딱 떨어진다. 동시 4장이라 대기 시간은 한 바퀴(약 5초) 늘어난다.
      *
+     * <p><b>2026-10-13: 6 → 12.</b> 상품이 "한 세트 = 12장 + 다시 그리기 3번"이 됐다(3,900원,
+     * docs/EMOJI_12_REGEN_2026-10-13.md). 23종이라 두 세트면 거의 다 갖춘다(12 + 11). 원가는 다시 그리기까지 세트당
+     * 최대 15장 ≈ 0.68 USD. 동시 4장이라 대기는 약 3바퀴(40~45초)다.
+     *
      * <p>상한은 <b>요청 경계</b>({@link #prepare})에서만 본다. 그 아래 생성 로직은 장 수에
-     * 제한이 없다 — 정책이 바뀌면 여기 숫자만 바꾼다.
+     * 제한이 없다 — 정책이 바뀌면 여기 숫자만 바꾼다. 앱의 {@code MAX_EMOJI_PER_REQUEST} 와 같아야 한다.
      */
-    static final int MAX_EMOTIONS_PER_REQUEST = 6;
+    static final int MAX_EMOTIONS_PER_REQUEST = 12;
 
     private final CoupleEmojiRepository repository;
+    private final CoupleEmojiSetRepository setRepository;
     private final RelationRepository relationRepository;
     private final UserRepository userRepository;
     private final GeminiClient geminiClient;
@@ -124,6 +133,7 @@ public class CoupleEmojiService {
     private final TransactionTemplate transactionTemplate;
 
     public CoupleEmojiService(CoupleEmojiRepository repository,
+                              CoupleEmojiSetRepository setRepository,
                               RelationRepository relationRepository,
                               UserRepository userRepository,
                               GeminiClient geminiClient,
@@ -136,6 +146,7 @@ public class CoupleEmojiService {
                               CoupleEventPublisher coupleEventPublisher,
                               PlatformTransactionManager transactionManager) {
         this.repository = repository;
+        this.setRepository = setRepository;
         this.relationRepository = relationRepository;
         this.userRepository = userRepository;
         this.geminiClient = geminiClient;
@@ -172,6 +183,8 @@ public class CoupleEmojiService {
     /**
      * 요청 스레드: 관계·대상 검증 + 한도 차감. 여기서 던지는 402/429 는 그대로 HTTP 응답이 된다.
      */
+    // 클래스 기본값(읽기 전용 트랜잭션) 밖에서 돈다 — 안에서 차감하면 flush 되지 않아 산 세트가 줄지 않았다(consumeOne 주석)
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public GenerationTicket prepare(Long userId, GenerateCoupleEmojiRequest request) {
         // 폴더 검사가 먼저다 — 아래 실패 경로에서 이 URL 을 지우는데, 우리 폴더의 것만 지워야 한다.
         if (!isSourceUrl(request.sourceImageUrl())) {
@@ -189,7 +202,7 @@ public class CoupleEmojiService {
              */
             List<CoupleEmojiEmotion> emotions = resolveEmotions(request.emotions());
             // 플랜 한도에 막히면 산 세트(크레딧)를 쓴다 — 어디서 차감했는지 티켓이 들고 있어야 되돌릴 수 있다
-            PlanGuard.Charge charge = geminiClient.requireImageConfiguredAndCharge(userId, FEATURE);
+            PlanGuard.Charge charge = chargeOrWelcome(userId, couple.partnerOf(userId));
             return new GenerationTicket(couple.getId(), userId, subject, request.sourceImageUrl(), emotions, charge);
         } catch (RuntimeException e) {
             /*
@@ -229,6 +242,38 @@ public class CoupleEmojiService {
              */
             imageDeleter.deleteAll(List.of(ticket.sourceImageUrl()));
         }
+    }
+
+    /**
+     * 값을 치른다 — 플랜 한도 → 산 세트 → <b>커플당 첫 1회 무료</b> 순.
+     *
+     * <p>무료는 마지막이다. 한도나 산 세트로 만들 수 있는 사람이 무료를 먼저 쓰면 정작 막혔을 때 쓸 게 없다.
+     * 결제로 풀리는 거절(402)일 때만 무료를 본다 — 429(PRO 남용 방지)·AI 안전망 거절은 무료로도 풀지 않는다.
+     * 무료 세트에는 다시 그리기가 없다(docs/EMOJI_12_REGEN_2026-10-13.md §8-D10 — 구매 유인).
+     */
+    private PlanGuard.Charge chargeOrWelcome(Long userId, Long partnerId) {
+        try {
+            return geminiClient.requireImageConfiguredAndCharge(userId, FEATURE);
+        } catch (BusinessException refused) {
+            boolean payable = refused.getErrorCode() == ErrorCode.PLAN_UPGRADE_REQUIRED
+                    || refused.getErrorCode() == ErrorCode.PLAN_LIMIT_EXCEEDED;
+            if (!payable || !planGuard.claimWelcome(userId, partnerId, FEATURE)) {
+                throw refused;
+            }
+            try {
+                geminiClient.requireImageConfiguredAndCountBackstop(userId);
+            } catch (RuntimeException backstop) {
+                planGuard.refund(userId, FEATURE, PlanGuard.Charge.WELCOME);
+                throw backstop;
+            }
+            return PlanGuard.Charge.WELCOME;
+        }
+    }
+
+    /** 첫 1회 무료를 받을 수 있나 — 만들기 화면이 잠금 대신 "첫 세트는 무료"를 그린다. */
+    public boolean welcomeAvailable(Long userId) {
+        Relation couple = activeCouple(userId);
+        return planGuard.welcomeAvailable(userId, couple.partnerOf(userId), FEATURE);
     }
 
     /**
@@ -286,65 +331,65 @@ public class CoupleEmojiService {
             geminiClient.refund(ticket.userId(), FEATURE, ticket.charge());
             throw e;
         }
-        String facts = describe(ticket.userId(), source);
+        String facts = describe(ticket, source);
 
         String batchId = UUID.randomUUID().toString();
         List<CoupleEmojiEmotion> targets = ticket.emotions();
 
+        // 세트 행을 먼저 만든다 — 장이 하나씩 커밋되는 동안에도 세트가 있어야 다시 그리기 잔량을 물을 수 있다
+        transactionTemplate.executeWithoutResult(status -> setRepository.save(CoupleEmojiSet.builder()
+                .batchId(batchId)
+                .relationId(ticket.relationId())
+                .createdBy(ticket.userId())
+                .chargeSource(ticket.charge() == null ? PlanGuard.Charge.NONE.name() : ticket.charge().name())
+                // 첫 1회 무료 세트에는 다시 그리기가 없다(chargeOrWelcome 주석)
+                .regenTotal(ticket.charge() == PlanGuard.Charge.WELCOME ? 0 : CoupleEmojiSet.REGEN_PER_SET)
+                .build()));
+
+        Map<CoupleEmojiEmotion, Object> results = drawRound(ticket, source, facts, batchId, targets);
+
         /*
-         * 감정별 생성을 <b>동시에</b> 돌린다. 장당 약 13초라 순차로는 감정 수에 그대로 비례해
-         * 늘어난다 — 6종 80초는 견뎠지만 17종이면 약 220초로, 대기 화면으로 버틸 길이가 아니다.
-         * 각 장은 서로를 전혀 참조하지 않고(같은 source·facts 를 읽기만 한다) 대부분 외부 응답
-         * 대기라, 동시에 돌리는 것이 자연스럽다.
-         *
-         * <p>동시 실행 수는 {@link #IMAGE_CONCURRENCY} 로 묶는다. 전부 한꺼번에 던지면 Gemini
-         * 이미지 한도를 그만큼 빨리 건드리고(AiJobService 풀을 4로 둔 것과 같은 이유), 여러 커플이
-         * 동시에 만들면 그 배수가 된다. 세트 안에서 4장씩이면 17종 기준 약 60초다.
-         *
-         * <p>결과 순서는 {@code targets} 순서 그대로 유지한다 — 트레이·대기 화면이 감정 순서를
-         * 전제로 칸을 그린다(coupleEmojiEmotions.ts 주석).
+         * 실패한 장은 <b>한 번 더</b> 그린다 — 다시 그리기 횟수를 쓰지 않는다(docs/EMOJI_12_REGEN_2026-10-13.md §8-D6).
+         * 원본이 아직 있는 지금이 같은 사진으로 다시 그릴 수 있는 유일한 때다(generate 의 finally 가 지운다).
+         * 안전 필터 거절은 빼고 — 같은 사진엔 같은 답이라 돈만 든다. 일시 장애(503·429)는 호출 안에서 이미
+         * 분 단위로 재시도했으니, 여기 남은 건 그 예산을 넘긴 것들이다.
          */
+        List<CoupleEmojiEmotion> retry = targets.stream()
+                .filter(e -> results.get(e) instanceof Throwable t && !isRejection(t))
+                .toList();
+        if (!retry.isEmpty()) {
+            log.info("우리 이모지 {}장 한 번 더 그린다(relation={}): {}", retry.size(), ticket.relationId(), retry);
+            results.putAll(drawRound(ticket, source, facts, batchId, retry));
+        }
+
+        // 결과 순서는 targets 순서 그대로 — 트레이·대기 화면이 감정 순서를 전제로 칸을 그린다(coupleEmojiEmotions.ts 주석)
         List<CoupleEmoji> saved = new ArrayList<>();
         List<String> failed = new ArrayList<>();
         RuntimeException lastFailure = null;
-        ExecutorService pool = Executors.newFixedThreadPool(
-                Math.min(IMAGE_CONCURRENCY, Math.max(1, targets.size())),
-                r -> {
-                    Thread t = new Thread(r, "couple-emoji");
-                    t.setDaemon(true);
-                    return t;
-                });
-        try {
-            List<Future<CoupleEmoji>> futures = targets.stream()
-                    .map(emotion -> pool.submit(() -> generateOne(ticket, source, facts, batchId, emotion)))
-                    .toList();
-            for (int i = 0; i < targets.size(); i++) {
-                try {
-                    saved.add(futures.get(i).get());
-                } catch (ExecutionException | InterruptedException e) {
-                    /*
-                     * BusinessException 만 잡으면 base64 디코드(IllegalArgumentException)·DB 예외가
-                     * 새어 나간다 — 그러면 이미 커밋된 장들은 이벤트·푸시 없는 반쪽 세트로 남고,
-                     * 한 장도 못 살렸어도 환불이 없다. 어떤 예외든 "이 장 실패"로 분류한다.
-                     */
-                    if (e instanceof InterruptedException) Thread.currentThread().interrupt();
-                    Throwable cause = e instanceof ExecutionException ee && ee.getCause() != null ? ee.getCause() : e;
-                    lastFailure = cause instanceof RuntimeException re ? re
-                            : new BusinessException(ErrorCode.AI_ANALYSIS_FAILED);
-                    CoupleEmojiEmotion emotion = targets.get(i);
-                    failed.add(emotion.name());
-                    log.warn("우리 이모지 {} 생성 실패(relation={}): {}", emotion, ticket.relationId(),
-                            cause instanceof BusinessException be ? be.getErrorCode() : cause.toString());
-                }
+        for (CoupleEmojiEmotion emotion : targets) {
+            Object result = results.get(emotion);
+            if (result instanceof CoupleEmoji emoji) {
+                saved.add(emoji);
+            } else {
+                failed.add(emotion.name());
+                lastFailure = result instanceof RuntimeException re ? re
+                        : new BusinessException(ErrorCode.AI_ANALYSIS_FAILED);
             }
-        } finally {
-            pool.shutdown();
         }
 
         if (saved.isEmpty()) {
             geminiClient.refund(ticket.userId(), FEATURE, ticket.charge());
+            transactionTemplate.executeWithoutResult(status -> setRepository.deleteById(batchId));
             // 사용자에게는 BusinessException 의 한국어만 보여준다 — 그 밖의 예외는 일반 실패 문구로 감싼다
             throw lastFailure instanceof BusinessException be ? be : new BusinessException(ErrorCode.AI_ANALYSIS_FAILED);
+        }
+        if (!failed.isEmpty()) {
+            /*
+             * 한 번 더 그려도 못 살린 장만큼 다시 그리기를 보충한다 — 회차는 환불하지 않되(살린 장이 있다) 빈 칸을
+             * 사용자가 채울 수 있게 한다(§8-D5). 산 12장 중 몇 장을 잃는 일이 없어진다.
+             */
+            int missing = failed.size();
+            transactionTemplate.executeWithoutResult(status -> setRepository.addRegen(batchId, missing));
         }
 
         coupleEventPublisher.publish(ticket.relationId(), CoupleEvent.COUPLE_EMOJI);
@@ -353,12 +398,179 @@ public class CoupleEmojiService {
                 saved.stream().map(CoupleEmojiResponse::from).toList(), failed);
     }
 
+    /**
+     * 감정들을 <b>동시에</b> 그린다 — 감정마다 저장된 {@link CoupleEmoji} 또는 실패 예외.
+     *
+     * <p>장당 약 13초라 순차로는 감정 수에 그대로 비례해 늘어난다. 각 장은 서로를 참조하지 않고(같은 source·facts 를
+     * 읽기만 한다) 대부분 외부 응답 대기라, 동시에 돌리는 것이 자연스럽다. 동시 실행 수는 {@link #IMAGE_CONCURRENCY} 로
+     * 묶는다 — 전부 한꺼번에 던지면 Gemini 이미지 한도를 그만큼 빨리 건드리고, 여러 커플이 동시에 만들면 그 배수가 된다.
+     */
+    private Map<CoupleEmojiEmotion, Object> drawRound(GenerationTicket ticket, CloudinaryImageFetcher.Image source,
+                                                     String facts, String batchId, List<CoupleEmojiEmotion> emotions) {
+        Map<CoupleEmojiEmotion, Object> results = new EnumMap<>(CoupleEmojiEmotion.class);
+        ExecutorService pool = Executors.newFixedThreadPool(
+                Math.min(IMAGE_CONCURRENCY, Math.max(1, emotions.size())),
+                r -> {
+                    Thread t = new Thread(r, "couple-emoji");
+                    t.setDaemon(true);
+                    return t;
+                });
+        try {
+            List<Future<CoupleEmoji>> futures = emotions.stream()
+                    .map(emotion -> pool.submit(() -> generateOne(ticket, source, facts, batchId, emotion)))
+                    .toList();
+            for (int i = 0; i < emotions.size(); i++) {
+                CoupleEmojiEmotion emotion = emotions.get(i);
+                try {
+                    results.put(emotion, futures.get(i).get());
+                } catch (ExecutionException | InterruptedException e) {
+                    /*
+                     * BusinessException 만 잡으면 base64 디코드(IllegalArgumentException)·DB 예외가
+                     * 새어 나간다 — 그러면 이미 커밋된 장들은 이벤트·푸시 없는 반쪽 세트로 남고,
+                     * 한 장도 못 살렸어도 환불이 없다. 어떤 예외든 "이 장 실패"로 분류한다.
+                     */
+                    if (e instanceof InterruptedException) Thread.currentThread().interrupt();
+                    Throwable cause = e instanceof ExecutionException ee && ee.getCause() != null ? ee.getCause() : e;
+                    results.put(emotion, cause);
+                    log.warn("우리 이모지 {} 생성 실패(relation={}): {}", emotion, ticket.relationId(),
+                            cause instanceof BusinessException be ? be.getErrorCode() : cause.toString());
+                }
+            }
+        } finally {
+            pool.shutdown();
+        }
+        return results;
+    }
+
+    /** 안전 필터 거절 — 같은 사진으로 다시 그려도 같은 답이다. */
+    private static boolean isRejection(Throwable failure) {
+        return failure instanceof BusinessException be && be.getErrorCode() == ErrorCode.AI_IMAGE_REJECTED;
+    }
+
     /** 트레이 — 관계의 살아 있는 이모지 전부(최근 세트가 위). 둘 다 같은 목록을 본다. */
     public List<CoupleEmojiResponse> list(Long userId) {
         Relation couple = activeCouple(userId);
-        return repository.findAllByRelationIdAndDeletedAtIsNullOrderByIdDesc(couple.getId()).stream()
-                .map(CoupleEmojiResponse::from)
+        List<CoupleEmoji> emojis = repository.findAllByRelationIdAndDeletedAtIsNullOrderByIdDesc(couple.getId());
+        // 세트마다 남은 다시 그리기 — 한 번에 읽는다(장마다 묻지 않는다)
+        Map<String, Integer> regen = new java.util.HashMap<>();
+        setRepository.findAllByBatchIdIn(emojis.stream().map(CoupleEmoji::getBatchId).distinct().toList())
+                .forEach(set -> regen.put(set.getBatchId(), set.regenRemaining()));
+        return emojis.stream()
+                .map(e -> CoupleEmojiResponse.from(e, regen.getOrDefault(e.getBatchId(), 0)))
                 .toList();
+    }
+
+    // ---- 다시 그리기 ----
+
+    /**
+     * 요청 스레드 → 백그라운드로 넘기는 다시 그리기 한 장.
+     *
+     * @param replacesId     대신할 장 — null 이면 세트의 빈 칸(만들다 실패한 감정)을 채운다
+     * @param referenceUrl   참조 이미지 — 같은 세트의 다른 장(원본 사진은 이미 지웠다)
+     */
+    public record RegenTicket(Long relationId, Long userId, String batchId, CoupleEmojiEmotion emotion,
+                              Long replacesId, Long subjectUserId, String referenceUrl, String facts,
+                              boolean moodVisible) {
+    }
+
+    /**
+     * 다시 그리기 접수 — 세트 잔량을 <b>먼저 원자적으로</b> 하나 쓰고, AI 안전망을 센다. 플랜 한도·크레딧은 건드리지
+     * 않는다 — 세트를 살 때 이미 값을 치렀다(docs/EMOJI_12_REGEN_2026-10-13.md, "인생네컷처럼 세트당 3번").
+     *
+     * <p>고른 감정이 세트에 살아 있으면 그 장을 대신하고, 없으면(만들다 실패한 칸) 채운다. 어느 쪽이든 그 세트의 장이 된다.
+     */
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)   // prepare 와 같은 이유 — 잔량 UPDATE 가 읽기 전용에 합류하면 안 된다
+    public RegenTicket prepareRegen(Long userId, String batchId, CoupleEmojiEmotion emotion) {
+        if (emotion == null) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "다시 그릴 감정을 골라주세요.");
+        }
+        Relation couple = activeCouple(userId);
+        CoupleEmojiSet set = setRepository.findByBatchIdAndRelationId(batchId, couple.getId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.COUPLE_EMOJI_NOT_FOUND));
+        List<CoupleEmoji> live = repository.findAllByRelationIdAndBatchIdAndDeletedAtIsNull(couple.getId(), batchId);
+        if (live.isEmpty()) {
+            throw new BusinessException(ErrorCode.COUPLE_EMOJI_NOT_FOUND, "세트에 남은 이모지가 없어요.");
+        }
+        CoupleEmoji target = live.stream().filter(e -> e.getEmotion() == emotion).findFirst().orElse(null);
+        CoupleEmoji reference = referenceFor(live, target);
+
+        if (setRepository.consumeRegen(set.getBatchId()) == 0) {
+            throw new BusinessException(ErrorCode.COUPLE_EMOJI_REGEN_EXHAUSTED);
+        }
+        try {
+            geminiClient.requireImageConfiguredAndCountBackstop(userId);
+        } catch (RuntimeException e) {
+            setRepository.refundRegen(set.getBatchId());
+            throw e;
+        }
+        return new RegenTicket(couple.getId(), userId, batchId, emotion,
+                target == null ? null : target.getId(),
+                reference.getSubjectUserId(), reference.getImageUrl(), reference.getIdentityFacts(),
+                target != null ? target.isMoodVisible() : emotion.defaultMoodVisible());
+    }
+
+    /**
+     * 참조로 쓸 장 — 대신할 장이 <b>아닌</b> 것 중 표정 장을 먼저(그림체가 가장 기본에 가깝다). 대신할 장밖에 없으면
+     * 그 장을 쓴다(그림은 마음에 안 들어도 캐릭터는 같다).
+     */
+    private static CoupleEmoji referenceFor(List<CoupleEmoji> live, CoupleEmoji target) {
+        return live.stream()
+                .filter(e -> e != target)
+                .sorted(java.util.Comparator.comparing((CoupleEmoji e) -> !e.getEmotion().isFace())
+                        .thenComparing(CoupleEmoji::getId))
+                .findFirst()
+                .orElse(target);
+    }
+
+    /**
+     * 백그라운드: 참조 장 → 한 장 → 컷아웃 → 업로드 → 새 행 저장 + 옛 장 숨김(한 트랜잭션).
+     * 실패하면 세트 잔량과 AI 안전망을 되돌린다 — 아무것도 못 받았는데 횟수만 잃으면 안 된다.
+     */
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public CoupleEmojiResponse regenerate(RegenTicket ticket) {
+        try {
+            CloudinaryImageFetcher.Image reference = imageFetcher.fetch(ticket.referenceUrl());
+            GeneratedImage image = geminiClient.generateImageInBackground(ticket.userId(), FEATURE, List.of(
+                    GeminiClient.imagePart(reference.mimeType(), reference.bytes()),
+                    GeminiClient.textPart(CoupleEmojiPrompts.regenPrompt(ticket.facts(), ticket.emotion()))));
+            java.util.Optional<byte[]> cutout = EmojiCutout.cut(image.bytes());
+            String url = cutout.isPresent()
+                    ? imageUploader.upload(cutout.get(), "image/png", CUTOUT_SUBFOLDER)
+                    : imageUploader.upload(image.bytes(), image.mimeType(), RESULT_SUBFOLDER);
+            CoupleEmoji saved = transactionTemplate.execute(status -> {
+                CoupleEmoji fresh = CoupleEmoji.builder()
+                        .relationId(ticket.relationId())
+                        .createdBy(ticket.userId())
+                        .subjectUserId(ticket.subjectUserId())
+                        .batchId(ticket.batchId())
+                        .emotion(ticket.emotion())
+                        .imageUrl(url)
+                        .promptVersion(CoupleEmojiPrompts.VERSION)
+                        .identityFacts(ticket.facts())
+                        .bgRemoved(cutout.isPresent())
+                        .replacesId(ticket.replacesId())
+                        .build();
+                fresh.setMoodVisible(ticket.moodVisible());
+                if (ticket.replacesId() != null) {
+                    // 옛 장은 숨기기만 — 이미 보낸 메시지가 그 URL 을 들고 있다(파일은 관계가 끝날 때 Purger 가 지운다)
+                    repository.findByIdAndRelationIdAndDeletedAtIsNull(ticket.replacesId(), ticket.relationId())
+                            .ifPresent(CoupleEmoji::hide);
+                }
+                return repository.save(fresh);
+            });
+            coupleEventPublisher.publish(ticket.relationId(), CoupleEvent.COUPLE_EMOJI);
+            int remaining = setRepository.findById(ticket.batchId()).map(CoupleEmojiSet::regenRemaining).orElse(0);
+            return CoupleEmojiResponse.from(saved, remaining);
+        } catch (RuntimeException e) {
+            abandonRegen(ticket);
+            throw e instanceof BusinessException ? e : new BusinessException(ErrorCode.AI_ANALYSIS_FAILED);
+        }
+    }
+
+    /** 다시 그리기가 결과 없이 끝났다(실패·큐 포화) — 세트 잔량과 AI 안전망을 되돌린다. */
+    public void abandonRegen(RegenTicket ticket) {
+        setRepository.refundRegen(ticket.batchId());
+        geminiClient.refund(ticket.userId(), FEATURE, PlanGuard.Charge.NONE);
     }
 
     /** 한 장 숨기기 — 만든 사람이 아니어도 관계 멤버면 누구나(§9 "상대가 언제든 지울 수 있다") */
@@ -402,12 +614,15 @@ public class CoupleEmojiService {
 
     // ---- 내부 ----
 
-    /** 1단계 — 외형 사실 추출. 실패하면 GeminiClient 가 한도를 되돌리고 던진다(클래스 주석). */
-    private String describe(Long userId, CloudinaryImageFetcher.Image source) {
-        JsonNode facts = geminiClient.generateJsonInBackground(userId, FEATURE,
+    /**
+     * 1단계 — 외형 사실 추출. 실패하면 GeminiClient 가 <b>티켓의 차감 출처대로</b> 되돌리고 던진다 — 쿼터로만
+     * 되돌리면 크레딧으로 연 회차가 사라진다(docs/EMOJI_12_REGEN_2026-10-13.md §2-5).
+     */
+    private String describe(GenerationTicket ticket, CloudinaryImageFetcher.Image source) {
+        JsonNode facts = geminiClient.generateJsonInBackground(ticket.userId(), FEATURE,
                 List.of(GeminiClient.imagePart(source.mimeType(), source.bytes()),
                         GeminiClient.textPart(CoupleEmojiPrompts.DESCRIBE)),
-                CoupleEmojiPrompts.DESCRIBE_SCHEMA);
+                CoupleEmojiPrompts.DESCRIBE_SCHEMA, ticket.charge());
         return CoupleEmojiPrompts.factsOf(facts);
     }
 
@@ -439,6 +654,16 @@ public class CoupleEmojiService {
         }
         String publicId = imageDeleter.extractPublicId(url);
         return publicId != null && publicId.startsWith(sourceFolder() + "/");
+    }
+
+    /**
+     * 쓰이지 않을 원본을 치운다 — 같은 요청이 두 번 와서 두 번째가 올린 사진(컨트롤러 멱등 처리).
+     * 전용 폴더의 것만 지운다({@link #isSourceUrl}) — 아무 URL 이나 받아 지우면 남의 사진을 지우는 경로가 된다.
+     */
+    public void discardSource(String sourceImageUrl) {
+        if (isSourceUrl(sourceImageUrl)) {
+            imageDeleter.deleteAll(List.of(sourceImageUrl));
+        }
     }
 
     /**

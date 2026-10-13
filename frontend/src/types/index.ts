@@ -2158,10 +2158,15 @@ export interface CoupleEmoji {
    */
   promptVersion?: string | null;
   createdAt: string;
+  /**
+   * 이 장이 속한 세트의 남은 다시 그리기 횟수 — 같은 세트의 장은 같은 값이다(세트당 3번, 첫 무료 세트는 0).
+   * 옛 서버는 보내지 않는다(undefined 면 다시 그리기를 그리지 않는다).
+   */
+  regenRemaining?: number | null;
 }
 
 /**
- * 생성 결과 — 6장 중 일부만 성공할 수 있다(안전필터). 실패한 감정이 있어도
+ * 생성 결과 — 한 세트 중 일부만 성공할 수 있다(안전필터). 실패한 감정이 있어도
  * 나머지는 이미 저장됐고 한도는 환불되지 않는다.
  */
 export interface CoupleEmojiBatch {

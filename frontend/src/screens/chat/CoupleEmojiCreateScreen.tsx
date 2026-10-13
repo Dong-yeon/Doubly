@@ -21,7 +21,7 @@ import { MaterialCommunityIcons } from '../../components/Icon';
 import { LockedCard } from '../../components/LockedCard';
 import { Sheet } from '../../components/Sheet';
 import { awaitAiJob } from '../../api/aiJob';
-import { startCoupleEmojiGeneration } from '../../api/coupleEmoji';
+import { coupleEmojiApi, newCoupleEmojiRequestId, startCoupleEmojiGeneration } from '../../api/coupleEmoji';
 import { useAuthStore } from '../../store/authStore';
 import { useCoupleEmojiStore } from '../../store/coupleEmojiStore';
 import { usePlanStore } from '../../store/planStore';
@@ -73,8 +73,16 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
     if (!PURCHASE_ENABLED) return;
     void fetchEmojiSetProduct().then((product) => setSetPrice(product?.displayPrice ?? null));
   }, []);
+  /*
+   * 커플당 첫 세트 무료 — 막힌 사람에게 잠금 대신 "첫 세트는 무료"를 보여 준다. 서버는 결제로 풀리는 거절(402)
+   * 뒤에만 무료를 쓰므로, 한도나 산 세트가 있는 사람에게는 이 값이 있어도 무료가 먼저 나가지 않는다.
+   * 옛 서버(엔드포인트 없음)면 조용히 false — 지금처럼 잠금을 그린다. 값은 아래 mounted 다음에서 채운다.
+   */
+  const [welcomeAvailable, setWelcomeAvailable] = useState(false);
+  /** 지금 만들 수 있나 — 플랜·산 세트로 열렸거나, 막혔어도 첫 무료가 남았거나 */
+  const canStart = allowed || welcomeAvailable;
   const exhausted = !allowed || emojiState?.remaining === 0;
-  const canBuySet = PURCHASE_ENABLED && !!setPrice && !!buyerId && exhausted;
+  const canBuySet = PURCHASE_ENABLED && !!setPrice && !!buyerId && exhausted && !welcomeAvailable;
   const onBuySet = async () => {
     if (!buyerId || buying) return;
     setBuying(true);
@@ -107,6 +115,12 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
   // 화면을 떠난 뒤에도 폴링이 돌면 사라진 화면의 상태를 건드린다 — 두 곳에서 끊는다
   const mounted = useRef(true);
   const polling = useRef(false);
+  /**
+   * 이번 시도의 요청 키 — 접수가 확정될 때까지 같은 값을 쓴다. 더블탭이나 "응답이 안 와서 다시 누르기"가 서버에
+   * 두 번 닿아도 한 번만 차감되고 같은 작업을 받는다(docs/EMOJI_12_REGEN_2026-10-13.md §1-3). 작업이 끝나면
+   * (성공·실패 모두) 비워서 다음 만들기는 새 시도가 된다.
+   */
+  const requestIdRef = useRef<string | null>(null);
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -119,6 +133,18 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
   useEffect(() => {
     loadEmojis().catch(() => undefined);
   }, [loadEmojis]);
+
+  const refreshWelcome = useCallback(() => {
+    coupleEmojiApi
+      .welcome()
+      .then((r) => {
+        if (mounted.current) setWelcomeAvailable(r.available);
+      })
+      .catch(() => undefined);
+  }, []);
+  useEffect(() => {
+    refreshWelcome();
+  }, [refreshWelcome]);
 
   /**
    * 이 얼굴로 이미 가지고 있는 감정 — 다시 만들 필요가 없는 것들.
@@ -172,7 +198,9 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
 
   /** 고른 감정(표 순서) — 접힌 줄의 이모지 미리보기와 접근성 라벨 */
   const selectedDefs = COUPLE_EMOJI_EMOTIONS.filter((e) => effectiveSelected.has(e.key));
-  /** "아직 없는 것부터 6개" — 기본값과 같은 규칙. 시트의 "6개 고르기" */
+  /** 아직 없는 감정 수 — 한 세트보다 적으면 기본 선택이 그만큼만 된다는 안내에 쓴다 */
+  const missingCount = COUPLE_EMOJI_EMOTIONS.filter((e) => !existingEmotions.has(e.key)).length;
+  /** "아직 없는 것부터 한 세트만큼" — 기본값과 같은 규칙. 시트의 "N개 고르기" */
   const fillDefault = () => {
     const missing = COUPLE_EMOJI_EMOTIONS.filter((e) => !existingEmotions.has(e.key)).map((e) => e.key);
     const pool = missing.length > 0 ? missing : COUPLE_EMOJI_EMOTIONS.map((e) => e.key);
@@ -240,12 +268,17 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
         }
       };
 
+      if (!requestIdRef.current) requestIdRef.current = newCoupleEmojiRequestId();
       try {
         const jobId = await startCoupleEmojiGeneration(
           croppedUri,
           subjectUserId,
           targets.map((e) => e.key),
+          requestIdRef.current,
         );
+        // 접수가 확정됐다 — 이 작업의 결과와 무관하게 다음 누름은 새 시도다. 접수 전 실패(업로드·네트워크·409)는
+        // 키를 그대로 두어, 다시 눌렀을 때 서버가 이미 받은 접수를 돌려줄 수 있게 한다.
+        requestIdRef.current = null;
         void pollProgress();
         const batch = await awaitAiJob<CoupleEmojiBatch>(jobId);
         // 결과가 확정됐으니 트레이 캐시도 이번 세트를 포함하게 맞춘다
@@ -261,10 +294,73 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
       } finally {
         polling.current = false;
         if (mounted.current) setGenerating(false);
+        // 쓴 것(무료·산 세트·월 한도)을 화면에 반영한다 — 실패로 되돌려진 경우도 같은 조회로 맞춰진다
+        refreshWelcome();
+        void usePlanStore.getState().load();
       }
     },
-    [subjectUserId, effectiveSelected],
+    [subjectUserId, effectiveSelected, refreshWelcome],
   );
+
+  /*
+   * 다시 그리기 — 세트당 3번(첫 무료 세트는 0). 결과 칸을 눌러 고른다. 그 감정이 세트에 있으면 대신하고,
+   * 만들다 실패한 칸이면 채운다. 이미 보낸 채팅 메시지는 옛 그림 그대로다(서버가 옛 장을 숨기기만 한다).
+   */
+  const [regenerating, setRegenerating] = useState<CoupleEmojiEmotion | null>(null);
+  const regenRequestRef = useRef<{ key: string; emotion: CoupleEmojiEmotion } | null>(null);
+  const regenLeft = useMemo(() => {
+    if (!done) return 0;
+    const inSet = allEmojis.find((e) => e.batchId === done.batchId);
+    return inSet?.regenRemaining ?? 0;
+  }, [allEmojis, done]);
+
+  const regenerate = async (emotion: CoupleEmojiEmotion) => {
+    if (!done || regenerating) return;
+    // 같은 칸을 다시 누른 재시도는 같은 키 — 응답을 못 받고 다시 눌러도 횟수가 한 번만 줄어든다
+    if (regenRequestRef.current?.emotion !== emotion) {
+      regenRequestRef.current = { key: newCoupleEmojiRequestId(), emotion };
+    }
+    setRegenerating(emotion);
+    try {
+      const { jobId } = await coupleEmojiApi.regenerate(done.batchId, emotion, regenRequestRef.current.key);
+      regenRequestRef.current = null;
+      const drawn = await awaitAiJob<CoupleEmoji>(jobId);
+      await useCoupleEmojiStore.getState().load(true).catch(() => undefined);
+      if (!mounted.current) return;
+      setFresh((prev) => [...prev.filter((f) => f.emotion !== drawn.emotion), drawn]);
+      setDone((prev) =>
+        prev ? { ...prev, failedEmotions: prev.failedEmotions.filter((f) => f !== drawn.emotion) } : prev,
+      );
+      haptics.light();
+    } catch (e) {
+      if (mounted.current) toast.error(getErrorMessage(e, '다시 그리지 못했어요.'));
+      await useCoupleEmojiStore.getState().load(true).catch(() => undefined);
+    } finally {
+      if (mounted.current) setRegenerating(null);
+    }
+  };
+
+  /** 결과 칸을 눌렀을 때 — 다시 그리기 / 지우기 */
+  const onCellPress = (emotion: CoupleEmojiEmotionDef, emoji: CoupleEmoji | null) => {
+    const canRegen = !!done && regenLeft > 0;
+    if (!emoji) {
+      if (!canRegen) return;
+      Alert.alert(`${emotion.label} 칸을 채울까요?`, `다시 그리기를 한 번 써요. 남은 횟수 ${regenLeft}번.`, [
+        { text: '취소', style: 'cancel' },
+        { text: '그리기', onPress: () => void regenerate(emotion.key) },
+      ]);
+      return;
+    }
+    if (!canRegen) {
+      confirmRemove(emoji);
+      return;
+    }
+    Alert.alert(`${emotion.label} 이모지`, `마음에 안 들면 다시 그릴 수 있어요. 남은 횟수 ${regenLeft}번.`, [
+      { text: '취소', style: 'cancel' },
+      { text: '지우기', style: 'destructive', onPress: () => confirmRemove(emoji) },
+      { text: '다시 그리기', onPress: () => void regenerate(emotion.key) },
+    ]);
+  };
 
   const confirmRemove = (emoji: CoupleEmoji) => {
     Alert.alert('이 이모지를 지울까요?', '지우면 채팅 트레이에서도 사라져요.', [
@@ -303,7 +399,16 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
         </Text>
       </View>
 
-      {!allowed ? (
+      {!allowed && welcomeAvailable ? (
+        <View style={styles.creditBox}>
+          <Text style={styles.creditTitle}>첫 세트는 무료예요</Text>
+          <Text style={styles.hint}>
+            우리 둘이 한 번, {MAX_EMOJI_PER_REQUEST}장까지 만들어 볼 수 있어요. 무료 세트에는 다시 그리기가 없어요.
+          </Text>
+        </View>
+      ) : null}
+
+      {!canStart ? (
         <LockedCard
           title="우리 이모지"
           description="애인 얼굴로 감정 이모지를 만들어 채팅에서 써요."
@@ -316,7 +421,7 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
       {canBuySet ? (
         <View style={styles.creditBox}>
           <Text style={styles.creditTitle}>세트를 하나만 더 만들고 싶다면</Text>
-          <Text style={styles.hint}>구독 없이 세트 하나(6장까지)를 살 수 있어요. 산 세트는 이번 달이 지나도 남아요.</Text>
+          <Text style={styles.hint}>구독 없이 한 세트(12장 + 다시 그리기 3번)를 살 수 있어요. 산 세트는 이번 달이 지나도 남아요.</Text>
           <Button title={`세트 1개 추가 · ${setPrice}`} variant="secondary" size="md" onPress={() => void onBuySet()} loading={buying} />
         </View>
       ) : null}
@@ -388,9 +493,15 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
           </View>
           <Text style={styles.hint}>
             {existingEmotions.size === 0
-              ? `기본 표정 ${MAX_EMOJI_PER_REQUEST}가지를 골라 뒀어요.`
-              : '아직 없는 감정부터 골라 뒀어요.'}
-            {` 한 번에 ${MAX_EMOJI_PER_REQUEST}장까지 — 나머지는 다음에 이어서 만들면 돼요.`}
+              ? '표정과 자주 하는 말을 골라 뒀어요.'
+              : missingCount > 0 && missingCount < MAX_EMOJI_PER_REQUEST
+                ? /*
+                   * 남은 감정이 한 세트보다 적다(23종 = 12 + 11) — 예전 "6장인데 5장만 된다"가 여기서 나왔다
+                   * (docs/EMOJI_12_REGEN_2026-10-13.md §2-1). 의도된 숫자임을 말하고, 채우는 방법도 같이 둔다.
+                   */
+                  `아직 없는 ${missingCount}가지를 골라 뒀어요. 이미 있는 감정을 더 고르면 한 장씩 새로 생겨요.`
+                : '아직 없는 감정부터 골라 뒀어요.'}
+            {` 한 세트에 ${MAX_EMOJI_PER_REQUEST}장까지 — 마음에 안 드는 장은 다시 그릴 수 있어요.`}
           </Text>
         </>
       ) : (
@@ -405,28 +516,45 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
             {/* 이번에 그리는 감정만 칸으로 — slots 는 drawing 순서라 17종 전체를 돌면 라벨이 어긋난다 */}
             {drawing.map((emotion, i) => {
               const emoji = slots[i];
+              const busy = regenerating === emotion.key;
               return (
                 <View key={emotion.key} style={styles.cell}>
-                  {emoji ? (
+                  {emoji && !busy ? (
                     <Pressable
-                      onPress={() => confirmRemove(emoji)}
+                      onPress={() => onCellPress(emotion, emoji)}
+                      disabled={!!regenerating}
                       accessibilityRole="button"
-                      accessibilityLabel={`${emotion.label} 이모지 지우기`}
+                      accessibilityLabel={
+                        done && regenLeft > 0
+                          ? `${emotion.label} 이모지, 다시 그리기 또는 지우기`
+                          : `${emotion.label} 이모지 지우기`
+                      }
                       style={({ pressed }) => [styles.cellBox, pressed && styles.cellPressed]}
                     >
                       <Image source={{ uri: emoji.imageUrl }} style={styles.cellImage} resizeMode="cover" />
                       <View style={styles.removeBadge}>
-                        <MaterialCommunityIcons name="close" size={12} color="#FFFFFF" />
+                        <MaterialCommunityIcons
+                          name={done && regenLeft > 0 ? 'refresh' : 'close'}
+                          size={12}
+                          color="#FFFFFF"
+                        />
                       </View>
                     </Pressable>
                   ) : (
-                    <View style={[styles.cellBox, styles.cellEmpty]}>
-                      {generating ? (
+                    <Pressable
+                      // 만들다 실패한 칸 — 다시 그리기로 채운다(남은 횟수가 있을 때만)
+                      onPress={() => onCellPress(emotion, null)}
+                      disabled={generating || !!regenerating || !done || regenLeft === 0}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${emotion.label} 칸 채우기`}
+                      style={[styles.cellBox, styles.cellEmpty]}
+                    >
+                      {generating || busy ? (
                         <ActivityIndicator size="small" color={colors.textSecondary} />
                       ) : (
                         <Text style={styles.cellPlaceholder}>{emotion.placeholder}</Text>
                       )}
-                    </View>
+                    </Pressable>
                   )}
                   <Text style={styles.cellLabel}>{emotion.label}</Text>
                 </View>
@@ -451,7 +579,15 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
           {done && done.failedEmotions.length > 0 ? (
             <Text style={styles.hint}>
               {done.failedEmotions.map((f) => coupleEmojiEmotionOf(f)?.label ?? f).join('·')}은(는) 만들지
-              못했어요. 다른 사진으로 다시 만들면 채워져요.
+              못했어요.
+              {regenLeft > 0
+                ? ' 빈 칸을 누르면 다시 그려 채울 수 있어요 — 못 만든 장만큼 횟수를 더 드렸어요.'
+                : ' 다른 사진으로 다시 만들면 채워져요.'}
+            </Text>
+          ) : null}
+          {done && regenLeft > 0 ? (
+            <Text style={styles.hint}>
+              마음에 안 드는 장은 눌러서 다시 그릴 수 있어요. 남은 횟수 {regenLeft}번 — 이미 보낸 이모지는 그대로예요.
             </Text>
           ) : null}
         </>
@@ -468,7 +604,7 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
                 기본값은 다시 "아직 없는 것부터"라 방금 만든 감정은 빠진다.
               */}
               {existingEmotions.size < COUPLE_EMOJI_EMOTIONS.length && emojiState?.remaining !== 0 ? (
-                <Button title="이어서 더 만들기" variant="secondary" onPress={startAnother} disabled={!allowed} />
+                <Button title="이어서 더 만들기" variant="secondary" onPress={startAnother} disabled={!canStart} />
               ) : null}
               {/*
                 부분 실패 안내가 "다른 사진으로 다시 만들면 채워져요" 라고 말하는데 그 버튼이 없었다
@@ -479,7 +615,7 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
                   title="다른 사진으로 다시 만들기"
                   variant="secondary"
                   onPress={() => pick('library')}
-                  disabled={!allowed}
+                  disabled={!canStart}
                 />
               ) : null}
             </>
@@ -489,14 +625,14 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
                 title={fresh.length > 0 ? '다른 사진으로 다시 만들기' : '사진 고르기'}
                 onPress={() => pick('library')}
                 // 감정을 하나도 안 고르면 그릴 것이 없다
-                disabled={!allowed || effectiveSelected.size === 0}
+                disabled={!canStart || effectiveSelected.size === 0}
               />
               <Button
                 title="촬영하기"
                 variant="secondary"
                 onPress={() => pick('camera')}
                 // 사진 고르기와 같은 조건 — 감정을 하나도 안 고르면 그릴 것이 없다
-                disabled={!allowed || effectiveSelected.size === 0}
+                disabled={!canStart || effectiveSelected.size === 0}
               />
               {/* 남은 횟수 — 예전엔 다 쓰고 나서야 알았다. remaining 에는 산 세트가 이미 합산돼 있다 */}
               {allowed && emojiState?.remaining != null ? (

@@ -49,8 +49,10 @@ public class PlanGuard {
     /**
      * {@link #consumeOrCredit} 가 무엇에서 차감했나 — 되돌릴 때 같은 곳에서 되돌리기 위해.
      * {@code NONE} 은 무제한·비계수 기능이라 센 적이 없다는 뜻이다.
+     * {@code WELCOME} 은 커플당 첫 1회 무료({@link FeatureCreditService#claimWelcome})로 열었다는 뜻이다 — 되돌리면
+     * 무료 자격도 돌아간다.
      */
-    public enum Charge { QUOTA, CREDIT, NONE }
+    public enum Charge { QUOTA, CREDIT, NONE, WELCOME }
 
     /**
      * 이 기능의 사용량을 <b>어느 주머니에서</b> 셀지 — 사람인가 커플인가.
@@ -179,11 +181,30 @@ public class PlanGuard {
         throw limitExceeded(feature, plan, quota);
     }
 
+    /**
+     * 커플당 첫 1회 무료를 쓴다 — 결제로 풀리는 거절(402) 뒤에만 호출자가 부른다({@code CoupleEmojiService}).
+     * 받았으면 {@code FEATURE_USED} 를 남긴다: 그 직전 거절이 남긴 BLOCKED 만 있으면 "막혀서 못 썼다"로 읽힌다.
+     * 되돌릴 때는 {@link #refund(Long, Feature, Charge)} 에 {@link Charge#WELCOME}.
+     */
+    public boolean claimWelcome(Long userId, Long partnerId, Feature feature) {
+        boolean claimed = creditService.claimWelcome(userId, partnerId, feature);
+        if (claimed) {
+            logUsed(userId, feature);
+        }
+        return claimed;
+    }
+
+    /** 첫 1회 무료가 남았나 — 화면 표시용, 로그 없음({@link #allows} 와 같은 이유). */
+    public boolean welcomeAvailable(Long userId, Long partnerId, Feature feature) {
+        return creditService.welcomeAvailable(userId, partnerId, feature);
+    }
+
     /** {@link #consumeOrCredit} 의 되돌리기 — 차감한 곳에서 되돌린다. */
     public void refund(Long userId, Feature feature, Charge charge) {
         switch (charge) {
             case QUOTA -> refund(userId, feature);
             case CREDIT -> creditService.refundOne(userId, feature);
+            case WELCOME -> creditService.releaseWelcome(userId, feature);
             case NONE -> { }
         }
     }

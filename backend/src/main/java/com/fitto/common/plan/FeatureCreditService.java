@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -46,8 +47,15 @@ public class FeatureCreditService {
         return (int) repository.sumRemaining(userId, feature);
     }
 
-    /** 한 회 차감 — 남은 묶음이 없으면 {@code false}. 먼저 산 것부터 쓴다. */
-    @Transactional
+    /**
+     * 한 회 차감 — 남은 묶음이 없으면 {@code false}. 먼저 산 것부터 쓴다.
+     *
+     * <p><b>자기 트랜잭션에서 돈다(REQUIRES_NEW).</b> 부르는 쪽이 읽기 전용 트랜잭션이면(우리 이모지 서비스가 클래스
+     * 기본값으로 그렇다) 합류한 순간 Hibernate 가 flush 하지 않아 {@code true} 를 돌려주고도 {@code used} 가 그대로였다
+     * — 산 세트가 한 번도 차감되지 않았다. PostgreSQL 에서는 행 잠금(FOR UPDATE)이 읽기 전용 트랜잭션에서 거절된다
+     * (docs/EMOJI_12_REGEN_2026-10-13.md, FeatureCreditReadOnlyTest).
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean consumeOne(Long userId, Feature feature) {
         for (FeatureCredit credit : repository.findAvailable(userId, feature)) {
             if (credit.consumeOne()) {
@@ -58,13 +66,83 @@ public class FeatureCreditService {
     }
 
     /** {@link #consumeOne} 을 되돌린다 — 결과를 하나도 주지 못한 실패 뒤에만. */
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void refundOne(Long userId, Feature feature) {
         for (FeatureCredit credit : repository.findConsumed(userId, feature)) {
             if (credit.refundOne()) {
                 return;
             }
         }
+    }
+
+    // ---- 커플당 첫 1회 무료 ----
+
+    /** 쓴 사람 행의 상품 id — 크레딧 판매 상품과 겹치지 않는다(CreditProduct 에 없으므로 검증 경로로는 못 만든다). */
+    static final String WELCOME_PRODUCT = "welcome";
+
+    /**
+     * 첫 1회 무료를 받을 수 있나 — <b>두 사람 모두</b> 받은 적이 없을 때만.
+     *
+     * <p>관계가 아니라 사람으로 센다: 재연결은 새 {@code relations} 행을 만들어서, 관계로 세면 헤어졌다 다시 연결할
+     * 때마다 무료가 생긴다(docs/MONETIZATION_LIFETIME_2026-10-13.md §4-e). 쓸 때 두 사람 몫을 함께 남긴다.
+     */
+    @Transactional(readOnly = true)
+    public boolean welcomeAvailable(Long userId, Long partnerId, Feature feature) {
+        if (partnerId == null) {
+            return false;   // 커플 기능의 "커플당" 무료 — 혼자일 때는 없다
+        }
+        return !repository.existsByTransactionIdIn(java.util.List.of(
+                welcomeTransactionId(userId, feature), welcomeTransactionId(partnerId, feature)));
+    }
+
+    /**
+     * 첫 1회 무료를 쓴다 — 받았으면 {@code true}. 상대 몫 표지를 <b>먼저</b> 남겨, 둘이 동시에 눌러도
+     * {@code transaction_id} UNIQUE 가 한쪽만 통과시킨다(먼저 쓴 사람이 상대 id 로 표지를 넣었으므로).
+     *
+     * <p>두 행 모두 {@code used == credits} 라 잔량({@link #remaining})에는 잡히지 않는다 — 산 크레딧과 섞이지 않는다.
+     */
+    public boolean claimWelcome(Long userId, Long partnerId, Feature feature) {
+        if (!welcomeAvailable(userId, partnerId, feature)) {
+            return false;
+        }
+        try {
+            repository.saveAndFlush(FeatureCredit.builder()
+                    .userId(partnerId).feature(feature).store(Store.MANUAL)
+                    .productId(welcomeMarkerProduct(userId))
+                    .transactionId(welcomeTransactionId(partnerId, feature))
+                    .credits(0).build());
+        } catch (DataIntegrityViolationException e) {
+            return false;   // 상대가 방금 받았다
+        }
+        try {
+            FeatureCredit mine = FeatureCredit.builder()
+                    .userId(userId).feature(feature).store(Store.MANUAL)
+                    .productId(WELCOME_PRODUCT)
+                    .transactionId(welcomeTransactionId(userId, feature))
+                    .credits(1).build();
+            mine.consumeOne();
+            repository.saveAndFlush(mine);
+        } catch (DataIntegrityViolationException e) {
+            // 내 몫이 이미 있었다(거의 동시에 상대가 나를 표지로 남김) — 방금 넣은 상대 표지만 거두고 거절
+            repository.deleteWelcome("-", welcomeMarkerProduct(userId));
+            return false;
+        }
+        return true;
+    }
+
+    /** 첫 1회 무료로 연 작업이 한 장도 못 남겼다 — 두 사람 다 다시 받을 수 있게 되돌린다. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void releaseWelcome(Long userId, Feature feature) {
+        repository.deleteWelcome(welcomeTransactionId(userId, feature), welcomeMarkerProduct(userId));
+    }
+
+    private static String welcomeTransactionId(Long userId, Feature feature) {
+        return "welcome:" + feature.name() + ":" + userId;
+    }
+
+    /** 상대 몫 표지의 상품 id — 누가 써서 생긴 표지인지 남겨 되돌릴 때 같이 거둔다. */
+    private static String welcomeMarkerProduct(Long usedBy) {
+        return "welcome_by:" + usedBy;
     }
 
     /** Play 결제 직후 앱이 부른다. 검증을 통과하면 준 크레딧 수를 돌려준다. */
