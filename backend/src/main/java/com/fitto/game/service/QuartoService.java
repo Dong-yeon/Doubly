@@ -243,7 +243,7 @@ public class QuartoService {
         if (partnerId != null) {
             notificationService.notify(partnerId, NotificationCategory.PARTNER, title, push, PushLinks.GAME_QUARTO);
         }
-        chatCards.post(moverId, couple.getId(), MessageType.GAME_CARD, title + " " + body, "넷이 같아 결과");
+        chatCards.post(moverId, couple.getId(), MessageType.GAME_CARD, title + " " + body, "러뷰포 결과");
     }
 
     private QuartoGameResponse toResponse(QuartoGame game, Long viewerId, Relation couple) {
