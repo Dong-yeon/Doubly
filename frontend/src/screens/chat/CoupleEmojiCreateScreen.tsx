@@ -433,7 +433,8 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
         </View>
       ) : null}
 
-      {!canStart ? (
+      {/* 재화로 만들 수 있으면 그 카드가 길이다 — 잠금 카드("PRO에서…")까지 띄우면 같은 자리에서 길을 둘 권한다 */}
+      {!canStart && !currencyOffer ? (
         <LockedCard
           title="우리 이모지"
           description="애인 얼굴로 감정 이모지를 만들어 채팅에서 써요."
