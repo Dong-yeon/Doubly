@@ -178,7 +178,9 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
 
   /** 고른 감정(표 순서) — 접힌 줄의 이모지 미리보기와 접근성 라벨 */
   const selectedDefs = COUPLE_EMOJI_EMOTIONS.filter((e) => effectiveSelected.has(e.key));
-  /** "아직 없는 것부터 6개" — 기본값과 같은 규칙. 시트의 "6개 고르기" */
+  /** 아직 없는 감정 수 — 한 세트보다 적으면 기본 선택이 그만큼만 된다는 안내에 쓴다 */
+  const missingCount = COUPLE_EMOJI_EMOTIONS.filter((e) => !existingEmotions.has(e.key)).length;
+  /** "아직 없는 것부터 한 세트만큼" — 기본값과 같은 규칙. 시트의 "N개 고르기" */
   const fillDefault = () => {
     const missing = COUPLE_EMOJI_EMOTIONS.filter((e) => !existingEmotions.has(e.key)).map((e) => e.key);
     const pool = missing.length > 0 ? missing : COUPLE_EMOJI_EMOTIONS.map((e) => e.key);
@@ -327,7 +329,7 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
       {canBuySet ? (
         <View style={styles.creditBox}>
           <Text style={styles.creditTitle}>세트를 하나만 더 만들고 싶다면</Text>
-          <Text style={styles.hint}>구독 없이 세트 하나(6장까지)를 살 수 있어요. 산 세트는 이번 달이 지나도 남아요.</Text>
+          <Text style={styles.hint}>구독 없이 한 세트(12장 + 다시 그리기 3번)를 살 수 있어요. 산 세트는 이번 달이 지나도 남아요.</Text>
           <Button title={`세트 1개 추가 · ${setPrice}`} variant="secondary" size="md" onPress={() => void onBuySet()} loading={buying} />
         </View>
       ) : null}
@@ -399,9 +401,15 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
           </View>
           <Text style={styles.hint}>
             {existingEmotions.size === 0
-              ? `기본 표정 ${MAX_EMOJI_PER_REQUEST}가지를 골라 뒀어요.`
-              : '아직 없는 감정부터 골라 뒀어요.'}
-            {` 한 번에 ${MAX_EMOJI_PER_REQUEST}장까지 — 나머지는 다음에 이어서 만들면 돼요.`}
+              ? '표정과 자주 하는 말을 골라 뒀어요.'
+              : missingCount > 0 && missingCount < MAX_EMOJI_PER_REQUEST
+                ? /*
+                   * 남은 감정이 한 세트보다 적다(23종 = 12 + 11) — 예전 "6장인데 5장만 된다"가 여기서 나왔다
+                   * (docs/EMOJI_12_REGEN_2026-10-13.md §2-1). 의도된 숫자임을 말하고, 채우는 방법도 같이 둔다.
+                   */
+                  `아직 없는 ${missingCount}가지를 골라 뒀어요. 이미 있는 감정을 더 고르면 한 장씩 새로 생겨요.`
+                : '아직 없는 감정부터 골라 뒀어요.'}
+            {` 한 세트에 ${MAX_EMOJI_PER_REQUEST}장까지 — 마음에 안 드는 장은 다시 그릴 수 있어요.`}
           </Text>
         </>
       ) : (

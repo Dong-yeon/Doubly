@@ -2161,7 +2161,7 @@ export interface CoupleEmoji {
 }
 
 /**
- * 생성 결과 — 6장 중 일부만 성공할 수 있다(안전필터). 실패한 감정이 있어도
+ * 생성 결과 — 한 세트 중 일부만 성공할 수 있다(안전필터). 실패한 감정이 있어도
  * 나머지는 이미 저장됐고 한도는 환불되지 않는다.
  */
 export interface CoupleEmojiBatch {

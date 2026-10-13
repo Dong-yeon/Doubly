@@ -36,8 +36,11 @@ export const COUPLE_EMOJI_GROUP_LABEL: Record<CoupleEmojiEmotionDef['group'], st
  *
  * <p>2026-09-29: 5 → 6. 표정이 6종인데 한 번에 5장이라 첫 세트로 기본 표정조차 다 못 채웠다
  * (docs/COUPLE_EMOJI_CREATE_UX_2026-09-29.md §2). 이제 첫 세트 기본값이 "표정 한 벌"이다.
+ *
+ * <p>2026-10-13: 6 → 12. 상품이 "한 세트 = 12장 + 다시 그리기 3번"이 됐다(docs/EMOJI_12_REGEN_2026-10-13.md).
+ * 첫 세트 기본값은 표정 6 + 자주 하는 말 6 이고, 두 번째 세트는 남은 11종이다.
  */
-export const MAX_EMOJI_PER_REQUEST = 6;
+export const MAX_EMOJI_PER_REQUEST = 12;
 
 export const COUPLE_EMOJI_EMOTIONS: CoupleEmojiEmotionDef[] = [
   { key: 'ANGRY', label: '화남', placeholder: '😠', group: 'face' },
