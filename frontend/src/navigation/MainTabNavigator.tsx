@@ -54,8 +54,21 @@ const TAB_META: Record<keyof MainTabParamList, { label: string; icon: IconName }
  * <p>채팅방은 입력창이 화면 바닥에 붙는다. 탭바가 남아 있으면 키보드가 올라올 때
  * 탭바까지 같이 밀려 올라와 입력창 아래에 떠 있는 꼴이 됐다. 대화 중에는 탭 이동도
  * 필요 없으므로(카톡·라인도 대화방에선 하단 내비가 없다) 아예 감춘다.
+ *
+ * <p>게임 화면도 감춘다(2026-10-13, 사용자: "게임 중심의 전체화면이어야 하기 편하다"). 판·건넬 말 줄이
+ * 탭바만큼 위로 밀려 작아지고, 판을 두다 바닥 탭을 잘못 눌러 화면을 벗어나는 일도 있었다. 허브(MiniGames)는
+ * 고르는 화면이라 그대로 둔다. 나갈 때는 상단 뒤로 가기를 쓴다.
  */
-const HIDE_TAB_BAR_ON = new Set(['ChatRoom']);
+const HIDE_TAB_BAR_ON = new Set([
+  'ChatRoom',
+  'Sudoku',
+  'Omok',
+  'WallRace',
+  'CatchMind',
+  'Puyo',
+  'Quarto',
+  'QuartoPractice',
+]);
 
 /**
  * 진행 중 운동 바를 숨길 화면 — 이미 그 운동 안에 있으면 "이어서 하기"는 의미가 없다.
