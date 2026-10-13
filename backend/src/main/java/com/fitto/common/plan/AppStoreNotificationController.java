@@ -35,15 +35,18 @@ public class AppStoreNotificationController {
     private final AppStoreProperties properties;
     private final AppStoreSubscriptionSyncService syncService;
     private final FeatureCreditService creditService;
+    private final com.fitto.common.currency.CurrencyPurchaseService currencyPurchaseService;
     private final ObjectMapper objectMapper;
 
     public AppStoreNotificationController(AppStoreProperties properties,
                                            AppStoreSubscriptionSyncService syncService,
                                            FeatureCreditService creditService,
+                                           com.fitto.common.currency.CurrencyPurchaseService currencyPurchaseService,
                                            ObjectMapper objectMapper) {
         this.properties = properties;
         this.syncService = syncService;
         this.creditService = creditService;
+        this.currencyPurchaseService = currencyPurchaseService;
         this.objectMapper = objectMapper;
     }
 
@@ -80,6 +83,14 @@ public class AppStoreNotificationController {
             String transactionId = transaction.path("transactionId").asText(null);
             if (transactionId != null) {
                 creditService.revokeIfRefundedOnAppStore(transactionId);
+            }
+            return ResponseEntity.ok().build();
+        }
+        // 재화 묶음의 환불 — 크레딧과 같은 갈래(상품 id 는 갈래만 정하고, 환불 여부는 애플에 되물어 정한다)
+        if (productId != null && com.fitto.common.currency.CurrencyPack.byProductId(productId).isPresent()) {
+            String transactionId = transaction.path("transactionId").asText(null);
+            if (transactionId != null) {
+                currencyPurchaseService.revokeIfRefundedOnAppStore(transactionId);
             }
             return ResponseEntity.ok().build();
         }

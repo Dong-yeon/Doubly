@@ -85,6 +85,7 @@ class CoupleEmojiFlowTest {
     @Autowired RelationRecordPurger purger;
     @Autowired CoupleEmojiSetRepository setRepository;
     @Autowired PlanGuard planGuard;
+    @Autowired com.fitto.common.currency.CurrencyService currencyService;
     @Autowired PlatformTransactionManager transactionManager;
     @Autowired ObjectMapper objectMapper;
     @PersistenceContext EntityManager em;
@@ -837,5 +838,122 @@ class CoupleEmojiFlowTest {
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.USAGE_LIMIT_EXCEEDED);
         assertThat(service.welcomeAvailable(a)).isTrue();
+    }
+
+    // ---- 유료 재화로 내기 (docs/CURRENCY_EMOJI_2026-10-13.md) ----
+
+    /** 막힌 FREE 커플 — 플랜이 402 를 던지고, 첫 무료도 이미 썼다. 재화 39 를 충전해 둔다. */
+    private void blockedWithoutWelcome(Long a, Long b) {
+        doThrow(new BusinessException(ErrorCode.PLAN_UPGRADE_REQUIRED))
+                .when(geminiClient).requireImageConfiguredAndCharge(any(), eq(Feature.AI_COUPLE_EMOJI));
+        assertThat(planGuard.claimWelcome(a, b, Feature.AI_COUPLE_EMOJI)).isTrue();
+    }
+
+    private GenerateCoupleEmojiRequest payRequest(String requestId) {
+        return new GenerateCoupleEmojiRequest(SOURCE_URL, null, WITHIN_LIMIT, requestId, true);
+    }
+
+    @Test
+    void 재화로_내면_39가_빠지고_다시_그리기_세_번인_세트가_된다() {
+        Long a = register("ce-cur-a@fitto.com");
+        Long b = register("ce-cur-b@fitto.com");
+        connectCouple(a, b);
+        blockedWithoutWelcome(a, b);
+        currencyService.grantPurchase(a, com.fitto.common.plan.Store.GOOGLE_PLAY, "currency_39", "tx-ce-cur-1", 39);
+
+        CoupleEmojiService.GenerationTicket ticket = service.prepare(a, payRequest("req-cur-0001"));
+        assertThat(ticket.charge()).isEqualTo(PlanGuard.Charge.CURRENCY);
+        assertThat(currencyService.balance(a)).isZero();
+        CoupleEmojiBatchResponse batch = service.generate(ticket);
+
+        CoupleEmojiSet set = setRepository.findById(batch.batchId()).orElseThrow();
+        assertThat(set.getChargeSource()).isEqualTo("CURRENCY");
+        assertThat(set.getRegenTotal()).isEqualTo(CoupleEmojiSet.REGEN_PER_SET);
+        assertThat(set.getPaidPrice()).isEqualTo(39L);
+        // 상대(b)는 자기 돈을 안 냈지만 세트는 커플 것 — 같이 본다
+        assertThat(service.list(b)).hasSize(WITHIN_LIMIT.size());
+    }
+
+    /** 재화는 앱이 "재화로 만들기"를 눌렀을 때만 — 잔액이 있어도 요청 없이는 빼지 않는다. */
+    @Test
+    void 재화로_내겠다고_하지_않으면_잔액이_있어도_402_다() {
+        Long a = register("ce-cur2-a@fitto.com");
+        Long b = register("ce-cur2-b@fitto.com");
+        connectCouple(a, b);
+        blockedWithoutWelcome(a, b);
+        currencyService.grantPurchase(a, com.fitto.common.plan.Store.GOOGLE_PLAY, "currency_39", "tx-ce-cur-2", 39);
+
+        assertThatThrownBy(() -> service.prepare(a, new GenerateCoupleEmojiRequest(SOURCE_URL, null, WITHIN_LIMIT, "req-cur-0002")))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PLAN_UPGRADE_REQUIRED);
+        assertThat(currencyService.balance(a)).isEqualTo(39);
+    }
+
+    @Test
+    void 재화가_모자라면_402_이고_원본을_지운다() {
+        Long a = register("ce-cur3-a@fitto.com");
+        Long b = register("ce-cur3-b@fitto.com");
+        connectCouple(a, b);
+        blockedWithoutWelcome(a, b);
+        currencyService.grantPurchase(a, com.fitto.common.plan.Store.GOOGLE_PLAY, "currency_39", "tx-ce-cur-3", 20);
+
+        assertThatThrownBy(() -> service.prepare(a, payRequest("req-cur-0003")))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.CURRENCY_INSUFFICIENT);
+        assertThat(currencyService.balance(a)).isEqualTo(20);
+        verify(imageDeleter).deleteAll(List.of(SOURCE_URL));
+        // 안전망 1회는 되돌렸다
+        verify(geminiClient).refund(a, Feature.AI_COUPLE_EMOJI, PlanGuard.Charge.NONE);
+    }
+
+    @Test
+    void 재화로_냈는데_한_장도_못_만들면_돌려준다() {
+        Long a = register("ce-cur4-a@fitto.com");
+        Long b = register("ce-cur4-b@fitto.com");
+        connectCouple(a, b);
+        blockedWithoutWelcome(a, b);
+        currencyService.grantPurchase(a, com.fitto.common.plan.Store.GOOGLE_PLAY, "currency_39", "tx-ce-cur-4", 39);
+        doThrow(new BusinessException(ErrorCode.AI_IMAGE_REJECTED))
+                .when(geminiClient).generateImageInBackground(any(), eq(Feature.AI_COUPLE_EMOJI), anyList());
+
+        CoupleEmojiService.GenerationTicket ticket = service.prepare(a, payRequest("req-cur-0004"));
+        assertThatThrownBy(() -> service.generate(ticket)).isInstanceOf(BusinessException.class);
+        // 두 번 되돌려도 한 번만
+        service.abandon(ticket);
+
+        assertThat(currencyService.balance(a)).isEqualTo(39);
+    }
+
+    /** 요청 키 선점(15분)이 끝난 뒤 같은 요청이 다시 오면 — 한 번 내고 두 번 받지 않는다. */
+    @Test
+    void 이미_낸_요청_키로는_다시_만들지_않는다() {
+        Long a = register("ce-cur5-a@fitto.com");
+        Long b = register("ce-cur5-b@fitto.com");
+        connectCouple(a, b);
+        blockedWithoutWelcome(a, b);
+        currencyService.grantPurchase(a, com.fitto.common.plan.Store.GOOGLE_PLAY, "currency_99", "tx-ce-cur-5", 99);
+
+        service.prepare(a, payRequest("req-cur-0005"));
+        assertThatThrownBy(() -> service.prepare(a, payRequest("req-cur-0005")))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_INPUT);
+        assertThat(currencyService.balance(a)).isEqualTo(60);
+    }
+
+    /** 첫 무료가 남았으면 재화보다 무료가 먼저다 — 무료가 있는데 돈을 빼면 사용자 손해다. */
+    @Test
+    void 첫_무료가_남았으면_재화로_내겠다고_해도_무료를_쓴다() {
+        Long a = register("ce-cur6-a@fitto.com");
+        Long b = register("ce-cur6-b@fitto.com");
+        connectCouple(a, b);
+        doThrow(new BusinessException(ErrorCode.PLAN_UPGRADE_REQUIRED))
+                .when(geminiClient).requireImageConfiguredAndCharge(any(), eq(Feature.AI_COUPLE_EMOJI));
+        currencyService.grantPurchase(a, com.fitto.common.plan.Store.GOOGLE_PLAY, "currency_39", "tx-ce-cur-6", 39);
+
+        assertThat(service.prepare(a, payRequest("req-cur-0006")).charge()).isEqualTo(PlanGuard.Charge.WELCOME);
+        assertThat(currencyService.balance(a)).isEqualTo(39);
     }
 }
