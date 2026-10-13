@@ -48,6 +48,8 @@ export type HomeStackParamList = PlaceScreensParamList & {
   WallRace: undefined;
   /** 넷이 같아(내부 키 QUARTO) — 4×4, 상대가 준 말을 놓고 줄 말을 고르는 턴제 */
   Quarto: undefined;
+  /** 넷이 같아 연습 — 튜토리얼 + AI 대전, 앱 안에서만(기록 없음) */
+  QuartoPractice: undefined;
   // 커플 캘린더 — 기념일 외 일정·생일·데이트 약속 + D-day 푸시
   CoupleCalendar: undefined;
   // MY (구 MY 탭에서 이전) — 홈 헤더 프로필 아이콘으로 진입
