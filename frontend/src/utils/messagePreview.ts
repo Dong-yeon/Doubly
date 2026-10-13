@@ -32,6 +32,9 @@ export function messagePreview(type: MessageType, content?: string | null): stri
       return '운동 기록';
     case 'MEAL_CARD':
       return '식단';
+    // 글이 곧 내용이다 — 서버 알림 미리보기도 "[일상] 글"
+    case 'FEED_CARD':
+      return content ? `일상 · ${content}` : '일상';
     case 'ROUTINE_CARD':
       return '루틴';
     // 럽슐랭 카드는 문장 자체가 미리보기다("📍 이태리식당 찜! 여기 가볼래?")
