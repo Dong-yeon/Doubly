@@ -110,6 +110,8 @@ public class RelationRecordPurger {
         // 우리 이모지(V80) — relations/users 를 참조. 채팅 메시지가 content 로 id 를 들고 있지만
         // FK 는 아니다(트레이에서 숨겨도 지난 메시지는 보여야 해서). 숨긴 행(deleted_at)도 여기서 같이 지운다.
         exec("delete from couple_emojis where relation_id = :rid", relationId);
+        // 우리 이모지 세트(V138) — relations/users 만 참조하고 자식이 없다. couple_emojis 와는 FK 가 없어 순서 무관
+        exec("delete from couple_emoji_sets where relation_id = :rid", relationId);
         exec("delete from call_sessions where couple_id = :rid", relationId);
         // 운동 부스터(V61) — relations/users 를 함께 참조하므로 관계와 함께 지운다
         exec("delete from workout_boosters where relation_id = :rid", relationId);

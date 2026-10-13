@@ -16,6 +16,8 @@ import com.fitto.common.upload.CloudinaryImageDeleter;
 import com.fitto.common.upload.CloudinaryImageFetcher;
 import com.fitto.common.upload.CloudinaryImageUploader;
 import com.fitto.coupleemoji.domain.CoupleEmojiEmotion;
+import com.fitto.coupleemoji.domain.CoupleEmojiSet;
+import com.fitto.coupleemoji.repository.CoupleEmojiSetRepository;
 import com.fitto.coupleemoji.dto.CoupleEmojiBatchResponse;
 import com.fitto.coupleemoji.dto.CoupleEmojiResponse;
 import com.fitto.coupleemoji.dto.GenerateCoupleEmojiRequest;
@@ -80,6 +82,7 @@ class CoupleEmojiFlowTest {
     @Autowired CoupleEmojiService service;
     @Autowired ChatService chatService;
     @Autowired RelationRecordPurger purger;
+    @Autowired CoupleEmojiSetRepository setRepository;
     @Autowired PlatformTransactionManager transactionManager;
     @Autowired ObjectMapper objectMapper;
     @PersistenceContext EntityManager em;
@@ -551,5 +554,86 @@ class CoupleEmojiFlowTest {
                 "select count(*) from couple_emojis where relation_id = :r").setParameter("r", relationId)
                 .getSingleResult();
         assertThat(remaining.longValue()).isZero();
+        // 세트 메타(V138)도 같이 — 남기면 relations FK 때문에 관계 삭제가 실패한다
+        assertThat(setRepository.findById(batch.batchId())).isEmpty();
+    }
+
+    /** 세트 메타(V138) — 새 세트는 다시 그리기 3번을 갖고 태어난다(docs/EMOJI_12_REGEN_2026-10-13.md). */
+    @Test
+    void 새_세트는_다시_그리기_세_번을_갖고_만들어진다() {
+        Long a = register("ce-set-a@fitto.com");
+        Long b = register("ce-set-b@fitto.com");
+        Long relationId = connectCouple(a, b);
+
+        CoupleEmojiBatchResponse batch = generateFor(a, b);
+
+        CoupleEmojiSet set = setRepository.findById(batch.batchId()).orElseThrow();
+        assertThat(set.getRelationId()).isEqualTo(relationId);
+        assertThat(set.getCreatedBy()).isEqualTo(a);
+        assertThat(set.getRegenTotal()).isEqualTo(CoupleEmojiSet.REGEN_PER_SET);
+        assertThat(set.getRegenUsed()).isZero();
+    }
+
+    /**
+     * 실패한 장은 다시 그리기 횟수를 쓰지 않고 서버가 한 번 더 그린다(§8-D6). 원본이 아직 있는 동안이라 같은 사진으로.
+     */
+    @Test
+    void 일시_실패한_장은_한_번_더_그려_채운다() {
+        Long a = register("ce-retry-a@fitto.com");
+        Long b = register("ce-retry-b@fitto.com");
+        connectCouple(a, b);
+        AtomicInteger sadCalls = new AtomicInteger();
+        when(geminiClient.generateImageInBackground(any(), eq(Feature.AI_COUPLE_EMOJI), anyList())).thenAnswer(inv -> {
+            List<Map<String, Object>> parts = inv.getArgument(2);
+            boolean sad = parts.stream().map(p -> String.valueOf(p.get("text")))
+                    .anyMatch(t -> t.contains(CoupleEmojiEmotion.SAD.expressionPrompt()));
+            if (sad && sadCalls.incrementAndGet() == 1) throw new BusinessException(ErrorCode.AI_RATE_LIMITED);
+            return new GeneratedImage(new byte[] {1}, "image/png");
+        });
+
+        CoupleEmojiBatchResponse batch = generateFor(a, null);
+
+        assertThat(batch.failedEmotions()).isEmpty();
+        assertThat(batch.emojis()).hasSize(ALL_EMOTIONS);
+        assertThat(sadCalls.get()).isEqualTo(2);
+        // 채웠으니 보충할 것도 없다
+        assertThat(setRepository.findById(batch.batchId()).orElseThrow().getRegenTotal())
+                .isEqualTo(CoupleEmojiSet.REGEN_PER_SET);
+    }
+
+    /**
+     * 한 번 더 그려도 못 살린 장은 그 수만큼 다시 그리기를 보충한다(§8-D5) — 회차는 환불하지 않지만 빈 칸을 채울 수 있다.
+     * 안전 필터 거절은 같은 사진엔 같은 답이라 한 번 더 그리지 않는다(돈만 든다).
+     */
+    @Test
+    void 끝내_못_살린_장만큼_다시_그리기를_보충하고_거절은_다시_그리지_않는다() {
+        Long a = register("ce-topup-a@fitto.com");
+        Long b = register("ce-topup-b@fitto.com");
+        connectCouple(a, b);
+        failOnly(CoupleEmojiEmotion.HAPPY, new BusinessException(ErrorCode.AI_IMAGE_REJECTED));
+
+        CoupleEmojiBatchResponse batch = generateFor(a, null);
+
+        assertThat(batch.failedEmotions()).containsExactly("HAPPY");
+        // 거절은 한 번만 — 전체 감정 수만큼만 불렀다
+        verify(geminiClient, times(ALL_EMOTIONS)).generateImageInBackground(any(), eq(Feature.AI_COUPLE_EMOJI), anyList());
+        assertThat(setRepository.findById(batch.batchId()).orElseThrow().getRegenTotal())
+                .isEqualTo(CoupleEmojiSet.REGEN_PER_SET + 1);
+    }
+
+    @Test
+    void 한_장도_못_살리면_세트_메타도_남기지_않는다() {
+        Long a = register("ce-noset-a@fitto.com");
+        Long b = register("ce-noset-b@fitto.com");
+        Long relationId = connectCouple(a, b);
+        doThrow(new BusinessException(ErrorCode.AI_IMAGE_REJECTED))
+                .when(geminiClient).generateImageInBackground(any(), eq(Feature.AI_COUPLE_EMOJI), anyList());
+
+        assertThatThrownBy(() -> generateFor(a, null)).isInstanceOf(BusinessException.class);
+
+        Number sets = (Number) em.createNativeQuery(
+                "select count(*) from couple_emoji_sets where relation_id = :r").setParameter("r", relationId)
+                .getSingleResult();
+        assertThat(sets.longValue()).isZero();
     }
 }

@@ -23,7 +23,9 @@ import com.fitto.coupleemoji.domain.CoupleEmojiEmotion;
 import com.fitto.coupleemoji.dto.CoupleEmojiBatchResponse;
 import com.fitto.coupleemoji.dto.CoupleEmojiResponse;
 import com.fitto.coupleemoji.dto.GenerateCoupleEmojiRequest;
+import com.fitto.coupleemoji.domain.CoupleEmojiSet;
 import com.fitto.coupleemoji.repository.CoupleEmojiRepository;
+import com.fitto.coupleemoji.repository.CoupleEmojiSetRepository;
 import com.fitto.relation.domain.Relation;
 import com.fitto.relation.domain.RelationStatus;
 import com.fitto.relation.domain.RelationType;
@@ -40,8 +42,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -111,6 +115,7 @@ public class CoupleEmojiService {
     static final int MAX_EMOTIONS_PER_REQUEST = 6;
 
     private final CoupleEmojiRepository repository;
+    private final CoupleEmojiSetRepository setRepository;
     private final RelationRepository relationRepository;
     private final UserRepository userRepository;
     private final GeminiClient geminiClient;
@@ -124,6 +129,7 @@ public class CoupleEmojiService {
     private final TransactionTemplate transactionTemplate;
 
     public CoupleEmojiService(CoupleEmojiRepository repository,
+                              CoupleEmojiSetRepository setRepository,
                               RelationRepository relationRepository,
                               UserRepository userRepository,
                               GeminiClient geminiClient,
@@ -136,6 +142,7 @@ public class CoupleEmojiService {
                               CoupleEventPublisher coupleEventPublisher,
                               PlatformTransactionManager transactionManager) {
         this.repository = repository;
+        this.setRepository = setRepository;
         this.relationRepository = relationRepository;
         this.userRepository = userRepository;
         this.geminiClient = geminiClient;
@@ -291,36 +298,92 @@ public class CoupleEmojiService {
         String batchId = UUID.randomUUID().toString();
         List<CoupleEmojiEmotion> targets = ticket.emotions();
 
+        // 세트 행을 먼저 만든다 — 장이 하나씩 커밋되는 동안에도 세트가 있어야 다시 그리기 잔량을 물을 수 있다
+        transactionTemplate.executeWithoutResult(status -> setRepository.save(CoupleEmojiSet.builder()
+                .batchId(batchId)
+                .relationId(ticket.relationId())
+                .createdBy(ticket.userId())
+                .chargeSource(ticket.charge() == null ? PlanGuard.Charge.NONE.name() : ticket.charge().name())
+                .regenTotal(CoupleEmojiSet.REGEN_PER_SET)
+                .build()));
+
+        Map<CoupleEmojiEmotion, Object> results = drawRound(ticket, source, facts, batchId, targets);
+
         /*
-         * 감정별 생성을 <b>동시에</b> 돌린다. 장당 약 13초라 순차로는 감정 수에 그대로 비례해
-         * 늘어난다 — 6종 80초는 견뎠지만 17종이면 약 220초로, 대기 화면으로 버틸 길이가 아니다.
-         * 각 장은 서로를 전혀 참조하지 않고(같은 source·facts 를 읽기만 한다) 대부분 외부 응답
-         * 대기라, 동시에 돌리는 것이 자연스럽다.
-         *
-         * <p>동시 실행 수는 {@link #IMAGE_CONCURRENCY} 로 묶는다. 전부 한꺼번에 던지면 Gemini
-         * 이미지 한도를 그만큼 빨리 건드리고(AiJobService 풀을 4로 둔 것과 같은 이유), 여러 커플이
-         * 동시에 만들면 그 배수가 된다. 세트 안에서 4장씩이면 17종 기준 약 60초다.
-         *
-         * <p>결과 순서는 {@code targets} 순서 그대로 유지한다 — 트레이·대기 화면이 감정 순서를
-         * 전제로 칸을 그린다(coupleEmojiEmotions.ts 주석).
+         * 실패한 장은 <b>한 번 더</b> 그린다 — 다시 그리기 횟수를 쓰지 않는다(docs/EMOJI_12_REGEN_2026-10-13.md §8-D6).
+         * 원본이 아직 있는 지금이 같은 사진으로 다시 그릴 수 있는 유일한 때다(generate 의 finally 가 지운다).
+         * 안전 필터 거절은 빼고 — 같은 사진엔 같은 답이라 돈만 든다. 일시 장애(503·429)는 호출 안에서 이미
+         * 분 단위로 재시도했으니, 여기 남은 건 그 예산을 넘긴 것들이다.
          */
+        List<CoupleEmojiEmotion> retry = targets.stream()
+                .filter(e -> results.get(e) instanceof Throwable t && !isRejection(t))
+                .toList();
+        if (!retry.isEmpty()) {
+            log.info("우리 이모지 {}장 한 번 더 그린다(relation={}): {}", retry.size(), ticket.relationId(), retry);
+            results.putAll(drawRound(ticket, source, facts, batchId, retry));
+        }
+
+        // 결과 순서는 targets 순서 그대로 — 트레이·대기 화면이 감정 순서를 전제로 칸을 그린다(coupleEmojiEmotions.ts 주석)
         List<CoupleEmoji> saved = new ArrayList<>();
         List<String> failed = new ArrayList<>();
         RuntimeException lastFailure = null;
+        for (CoupleEmojiEmotion emotion : targets) {
+            Object result = results.get(emotion);
+            if (result instanceof CoupleEmoji emoji) {
+                saved.add(emoji);
+            } else {
+                failed.add(emotion.name());
+                lastFailure = result instanceof RuntimeException re ? re
+                        : new BusinessException(ErrorCode.AI_ANALYSIS_FAILED);
+            }
+        }
+
+        if (saved.isEmpty()) {
+            geminiClient.refund(ticket.userId(), FEATURE, ticket.charge());
+            transactionTemplate.executeWithoutResult(status -> setRepository.deleteById(batchId));
+            // 사용자에게는 BusinessException 의 한국어만 보여준다 — 그 밖의 예외는 일반 실패 문구로 감싼다
+            throw lastFailure instanceof BusinessException be ? be : new BusinessException(ErrorCode.AI_ANALYSIS_FAILED);
+        }
+        if (!failed.isEmpty()) {
+            /*
+             * 한 번 더 그려도 못 살린 장만큼 다시 그리기를 보충한다 — 회차는 환불하지 않되(살린 장이 있다) 빈 칸을
+             * 사용자가 채울 수 있게 한다(§8-D5). 산 12장 중 몇 장을 잃는 일이 없어진다.
+             */
+            int missing = failed.size();
+            transactionTemplate.executeWithoutResult(status -> setRepository.addRegen(batchId, missing));
+        }
+
+        coupleEventPublisher.publish(ticket.relationId(), CoupleEvent.COUPLE_EMOJI);
+        notifyPartner(ticket);
+        return new CoupleEmojiBatchResponse(batchId,
+                saved.stream().map(CoupleEmojiResponse::from).toList(), failed);
+    }
+
+    /**
+     * 감정들을 <b>동시에</b> 그린다 — 감정마다 저장된 {@link CoupleEmoji} 또는 실패 예외.
+     *
+     * <p>장당 약 13초라 순차로는 감정 수에 그대로 비례해 늘어난다. 각 장은 서로를 참조하지 않고(같은 source·facts 를
+     * 읽기만 한다) 대부분 외부 응답 대기라, 동시에 돌리는 것이 자연스럽다. 동시 실행 수는 {@link #IMAGE_CONCURRENCY} 로
+     * 묶는다 — 전부 한꺼번에 던지면 Gemini 이미지 한도를 그만큼 빨리 건드리고, 여러 커플이 동시에 만들면 그 배수가 된다.
+     */
+    private Map<CoupleEmojiEmotion, Object> drawRound(GenerationTicket ticket, CloudinaryImageFetcher.Image source,
+                                                     String facts, String batchId, List<CoupleEmojiEmotion> emotions) {
+        Map<CoupleEmojiEmotion, Object> results = new EnumMap<>(CoupleEmojiEmotion.class);
         ExecutorService pool = Executors.newFixedThreadPool(
-                Math.min(IMAGE_CONCURRENCY, Math.max(1, targets.size())),
+                Math.min(IMAGE_CONCURRENCY, Math.max(1, emotions.size())),
                 r -> {
                     Thread t = new Thread(r, "couple-emoji");
                     t.setDaemon(true);
                     return t;
                 });
         try {
-            List<Future<CoupleEmoji>> futures = targets.stream()
+            List<Future<CoupleEmoji>> futures = emotions.stream()
                     .map(emotion -> pool.submit(() -> generateOne(ticket, source, facts, batchId, emotion)))
                     .toList();
-            for (int i = 0; i < targets.size(); i++) {
+            for (int i = 0; i < emotions.size(); i++) {
+                CoupleEmojiEmotion emotion = emotions.get(i);
                 try {
-                    saved.add(futures.get(i).get());
+                    results.put(emotion, futures.get(i).get());
                 } catch (ExecutionException | InterruptedException e) {
                     /*
                      * BusinessException 만 잡으면 base64 디코드(IllegalArgumentException)·DB 예외가
@@ -329,10 +392,7 @@ public class CoupleEmojiService {
                      */
                     if (e instanceof InterruptedException) Thread.currentThread().interrupt();
                     Throwable cause = e instanceof ExecutionException ee && ee.getCause() != null ? ee.getCause() : e;
-                    lastFailure = cause instanceof RuntimeException re ? re
-                            : new BusinessException(ErrorCode.AI_ANALYSIS_FAILED);
-                    CoupleEmojiEmotion emotion = targets.get(i);
-                    failed.add(emotion.name());
+                    results.put(emotion, cause);
                     log.warn("우리 이모지 {} 생성 실패(relation={}): {}", emotion, ticket.relationId(),
                             cause instanceof BusinessException be ? be.getErrorCode() : cause.toString());
                 }
@@ -340,17 +400,12 @@ public class CoupleEmojiService {
         } finally {
             pool.shutdown();
         }
+        return results;
+    }
 
-        if (saved.isEmpty()) {
-            geminiClient.refund(ticket.userId(), FEATURE, ticket.charge());
-            // 사용자에게는 BusinessException 의 한국어만 보여준다 — 그 밖의 예외는 일반 실패 문구로 감싼다
-            throw lastFailure instanceof BusinessException be ? be : new BusinessException(ErrorCode.AI_ANALYSIS_FAILED);
-        }
-
-        coupleEventPublisher.publish(ticket.relationId(), CoupleEvent.COUPLE_EMOJI);
-        notifyPartner(ticket);
-        return new CoupleEmojiBatchResponse(batchId,
-                saved.stream().map(CoupleEmojiResponse::from).toList(), failed);
+    /** 안전 필터 거절 — 같은 사진으로 다시 그려도 같은 답이다. */
+    private static boolean isRejection(Throwable failure) {
+        return failure instanceof BusinessException be && be.getErrorCode() == ErrorCode.AI_IMAGE_REJECTED;
     }
 
     /** 트레이 — 관계의 살아 있는 이모지 전부(최근 세트가 위). 둘 다 같은 목록을 본다. */
