@@ -97,7 +97,7 @@ class CoupleEmojiFlowTest {
         uploads.set(0);
         when(imageFetcher.fetch(anyString()))
                 .thenReturn(new CloudinaryImageFetcher.Image(new byte[] {1, 2, 3}, "image/jpeg"));
-        when(geminiClient.generateJsonInBackground(any(), eq(Feature.AI_COUPLE_EMOJI), anyList(), any()))
+        when(geminiClient.generateJsonInBackground(any(), eq(Feature.AI_COUPLE_EMOJI), anyList(), any(), any()))
                 .thenReturn(objectMapper.readTree("""
                         {"gender":"Male","hairLength":"short above ears","hairStyle":"parted","hairColor":"dark brown",
                          "faceShape":"round","eyes":"almond","eyebrows":"thin","glasses":"no glasses",

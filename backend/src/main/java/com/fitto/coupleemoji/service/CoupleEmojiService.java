@@ -286,7 +286,7 @@ public class CoupleEmojiService {
             geminiClient.refund(ticket.userId(), FEATURE, ticket.charge());
             throw e;
         }
-        String facts = describe(ticket.userId(), source);
+        String facts = describe(ticket, source);
 
         String batchId = UUID.randomUUID().toString();
         List<CoupleEmojiEmotion> targets = ticket.emotions();
@@ -402,12 +402,15 @@ public class CoupleEmojiService {
 
     // ---- 내부 ----
 
-    /** 1단계 — 외형 사실 추출. 실패하면 GeminiClient 가 한도를 되돌리고 던진다(클래스 주석). */
-    private String describe(Long userId, CloudinaryImageFetcher.Image source) {
-        JsonNode facts = geminiClient.generateJsonInBackground(userId, FEATURE,
+    /**
+     * 1단계 — 외형 사실 추출. 실패하면 GeminiClient 가 <b>티켓의 차감 출처대로</b> 되돌리고 던진다 — 쿼터로만
+     * 되돌리면 크레딧으로 연 회차가 사라진다(docs/EMOJI_12_REGEN_2026-10-13.md §2-5).
+     */
+    private String describe(GenerationTicket ticket, CloudinaryImageFetcher.Image source) {
+        JsonNode facts = geminiClient.generateJsonInBackground(ticket.userId(), FEATURE,
                 List.of(GeminiClient.imagePart(source.mimeType(), source.bytes()),
                         GeminiClient.textPart(CoupleEmojiPrompts.DESCRIBE)),
-                CoupleEmojiPrompts.DESCRIBE_SCHEMA);
+                CoupleEmojiPrompts.DESCRIBE_SCHEMA, ticket.charge());
         return CoupleEmojiPrompts.factsOf(facts);
     }
 

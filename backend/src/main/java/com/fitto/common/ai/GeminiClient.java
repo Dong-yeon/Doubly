@@ -342,6 +342,27 @@ public class GeminiClient {
     }
 
     /**
+     * {@link #generateJsonInBackground} 와 같되 실패 시 <b>차감한 곳에서</b> 되돌린다 —
+     * {@link #requireImageConfiguredAndCharge} 로 연 작업(우리 이모지의 외형 추출)용.
+     *
+     * <p>위 메서드는 쿼터 경로로만 되돌린다. 산 크레딧으로 연 회차가 여기서 실패하면 FREE 는 "센 적 없음"으로
+     * 그냥 지나가 크레딧이 사라졌고, PRO 는 크레딧 대신 커플 공용 쿼터가 하나 돌아왔다
+     * (docs/EMOJI_12_REGEN_2026-10-13.md §2-5).
+     */
+    public JsonNode generateJsonInBackground(Long userId, Feature feature,
+                                             List<Map<String, Object>> parts,
+                                             Map<String, Object> responseSchema,
+                                             PlanGuard.Charge charge) {
+        try {
+            return generateJsonOrThrow(parts, responseSchema, BACKGROUND_CALL,
+                    new CallContext(userId, feature, imagePartCount(parts)));
+        } catch (RuntimeException e) {
+            refund(userId, feature, charge);
+            throw e;
+        }
+    }
+
+    /**
      * 백그라운드 작업이지만 <b>사람이 결과를 기다리는</b> 호출용 — 음식 사진·글 분석.
      * 폴백으로 빨리 넘기고, 출력 길이에 상한을 두고, 결과 JSON 이 깨지면 한 번 더 묻는다({@link #WAITING_CALL}).
      * {@link #generateJsonInBackground} 와 마찬가지로 {@link AiJobService#submit} 안에서만 쓴다.
